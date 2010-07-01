@@ -1,9 +1,9 @@
-<article>
+<book>
 
-
-<articleinfo>
 <title>Sphinx 1.10.1 reference manual</title>
 <subtitle>Free open-source SQL full-text search engine</subtitle>
+
+<bookinfo>
 <copyright>
 <year>2001-2010</year>
 <holder>Andrew Aksyonoff</holder>
@@ -13,13 +13,13 @@
 <holder>Sphinx Technologies Inc, <ulink 
 url="http://sphinxsearch.com">http://sphinxsearch.com</ulink></holder>
 </copyright>
-</articleinfo>
+</bookinfo>
 
 
-<sect1 id="intro"><title>Introduction</title>
+<chapter id="intro"><title>Introduction</title>
 
 
-<sect2 id="about"><title>About</title>
+<sect1 id="about"><title>About</title>
 <para>
 Sphinx is a full-text search engine, publicly distributed under GPL version 2.
 Commercial licensing (eg. for embedded use) is available upon request. 
@@ -65,10 +65,10 @@ can only be populated using SphinxQL.
 As for the name, Sphinx is an acronym which is officially decoded
 as SQL Phrase Index. Yes, I know about CMU's Sphinx project. 
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="features"><title>Sphinx features</title>
+<sect1 id="features"><title>Sphinx features</title>
 <para>
 Key Sphinx features are:
 <itemizedlist>
@@ -104,10 +104,10 @@ are available by building third party <ulink ref="http://snowball.tartarus.org/"
 <listitem>...has 50+ other features not listed here, refer to API and configuration manual!</listitem>
 </itemizedlist>
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="getting"><title>Where to get Sphinx</title>
+<sect1 id="getting"><title>Where to get Sphinx</title>
 <para>Sphinx is available through its official Web site at <ulink url="http://sphinxsearch.com/">http://sphinxsearch.com/</ulink>.
 </para>
 <para>Currently, Sphinx distribution tarball includes the following software:
@@ -121,10 +121,10 @@ are available by building third party <ulink ref="http://snowball.tartarus.org/"
 <listitem><filename>indextool</filename>: an utility to dump miscellaneous debug information about the index, added in version 0.9.9-rc2.</listitem>
 </itemizedlist>
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="license"><title>License</title>
+<sect1 id="license"><title>License</title>
 <para>
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -147,10 +147,10 @@ Non-GPL licensing (for OEM/ISV embedded use) can also be arranged, please
 <ulink url="http://sphinxsearch.com/contacts.html">contact us</ulink> to discuss
 commercial licensing possibilities.
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="credits"><title>Credits</title>
+<sect1 id="credits"><title>Credits</title>
 <bridgehead>Author</bridgehead>
 <para>
 Sphinx initial author (and a benevolent dictator ever since):
@@ -182,10 +182,10 @@ noted on their work on Sphinx (in alphabetical order):
 Many other people have contributed ideas, bug reports, fixes, etc.
 Thank you!
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="history"><title>History</title>
+<sect1 id="history"><title>History</title>
 <para>
 Sphinx development was started back in 2001, because I didn't manage
 to find an acceptable search solution (for a database driven Web site)
@@ -212,14 +212,14 @@ Considering that and a lot of positive feedback received from Sphinx users
 during last years, the obvious decision is to continue developing Sphinx
 (and, eventually, to take over the world).
 </para>
-</sect2>
-
-
 </sect1>
-<sect1 id="installation"><title>Installation</title>
 
 
-<sect2 id="supported-system"><title>Supported systems</title>
+</chapter>
+<chapter id="installation"><title>Installation</title>
+
+
+<sect1 id="supported-system"><title>Supported systems</title>
 <para>
 Most modern UNIX systems with a C++ compiler should be able
 to compile and run Sphinx without any modifications.
@@ -242,10 +242,10 @@ CPU architectures known to work include X86, X86-64, SPARC64, ARM.
 Chance are good that Sphinx should work on other Unix platforms as well;
 please report any platforms missing from this list that worked for you!
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="required-tools"><title>Required tools</title>
+<sect1 id="required-tools"><title>Required tools</title>
 <para>
 On UNIX, you will need the following tools to build
 and install Sphinx:
@@ -260,10 +260,10 @@ Other compilers/environments will probably work as well, but for the
 time being, you will have to build makefile (or other environment
 specific project files) manually.
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="installing"><title>Installing Sphinx on Linux</title>
+<sect1 id="installing"><title>Installing Sphinx on Linux</title>
 <para><orderedlist>
 <listitem>
 	<para>
@@ -300,9 +300,9 @@ $ cd sphinx
 	<para><userinput><literallayout>$ make install</literallayout></userinput></para>
 </listitem>
 </orderedlist></para>
-</sect2>
+</sect1>
 
-<sect2 id="installing-windows"><title>Installing Sphinx on Windows</title>
+<sect1 id="installing-windows"><title>Installing Sphinx on Windows</title>
 <para>Installing Sphinx on a Windows server is often easier than installing on a Linux environment;
 unless you are preparing code patches, you can use the pre-compiled binary files from the Downloads
 area on the website.</para>
@@ -335,9 +335,9 @@ area on the website.</para>
 	do receive an error please copy libmysql.dll into the bin directory.</para>
 </listitem>
 </orderedlist>
-</sect2>
+</sect1>
 
-<sect2 id="install-problems"><title>Known installation issues</title>
+<sect1 id="install-problems"><title>Known installation issues</title>
 <para>
 If <filename>configure</filename> fails to locate MySQL headers and/or libraries,
 try checking for and installing <filename>mysql-devel</filename> package. On some systems,
@@ -369,10 +369,10 @@ compiler/OS details, so I could properly fix them in next releases.
 If you keep getting any other error, or the suggestions above
 do not seem to help you, please don't hesitate to contact me.
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="quick-tour"><title>Quick Sphinx usage tour</title>
+<sect1 id="quick-tour"><title>Quick Sphinx usage tour</title>
 <para>
 All the example commands below assume that you installed Sphinx
 in <filename>/usr/local/sphinx</filename>, so <filename>searchd</filename> can
@@ -445,14 +445,14 @@ $ php test.php test</literallayout></userinput></para>
 <para>
 Happy searching!
 </para>
-</sect2>
-
-
 </sect1>
-<sect1 id="indexing"><title>Indexing</title>
 
 
-<sect2 id="sources"><title>Data sources</title>
+</chapter>
+<chapter id="indexing"><title>Indexing</title>
+
+
+<sect1 id="sources"><title>Data sources</title>
 <para>
 The data to be indexed can generally come from very different
 sources: SQL databases, plain text files, HTML files, mailboxes,
@@ -481,10 +481,10 @@ sequentially processed in the very same order which was specifed in
 index definition. All the documents coming from those sources
 will be merged as if they were coming from a single source.
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="attributes"><title>Attributes</title>
+<sect1 id="attributes"><title>Attributes</title>
 <para>
 Attributes are additional values associated with each document
 that can be used to perform additional filtering and sorting during search.
@@ -593,10 +593,10 @@ will allocate 160 MB on startup, read the data and keep it shared between querie
 The children will <emphasis>NOT</emphasis> allocate any additional
 copies of this data.
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="mva"><title>MVA (multi-valued attributes)</title>
+<sect1 id="mva"><title>MVA (multi-valued attributes)</title>
 <para>
 MVAs, or multi-valued attributes, are an important special type of per-document attributes in Sphinx.
 MVAs make it possible to attach lists of values to every document.
@@ -633,10 +633,10 @@ uses ordered hash on the document ID for the resulting rows; so you'll also need
 <link linkend="api-func-setarrayresult">SetArrayResult()</link> in order
 to employ group-by on MVA with PHP API.
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="indexes"><title>Indexes</title>
+<sect1 id="indexes"><title>Indexes</title>
 <para>
 To be able to answer full-text search queries fast, Sphinx needs
 to build a special data structure optimized for such queries from
@@ -670,10 +670,10 @@ specified subset. <filename>searchd</filename> utility will serve all
 the specified indexes, and the clients can specify what indexes to
 search in run time.
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="data-restrictions"><title>Restrictions on the source data</title>
+<sect1 id="data-restrictions"><title>Restrictions on the source data</title>
 <para>
 There are a few different restrictions imposed on the source data
 which is going to be indexed by Sphinx, of which the single most
@@ -689,10 +689,10 @@ or produce strange results when searching due to conflicting IDs.
 Also, a 1000-pound gorilla might eventually come out of your
 display and start throwing barrels at you. You've been warned.
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="charsets"><title>Charsets, case folding, and translation tables</title>
+<sect1 id="charsets"><title>Charsets, case folding, and translation tables</title>
 <para>
 When indexing some index, Sphinx fetches documents from
 the specified sources, splits the text into words, and does
@@ -728,10 +728,10 @@ word sets would index as a <emphasis>single</emphasis> search query term.
 Default tables currently include English and Russian characters.
 Please do submit your tables for other languages!
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="sql"><title>SQL data sources (MySQL, PostgreSQL)</title>
+<sect1 id="sql"><title>SQL data sources (MySQL, PostgreSQL)</title>
 <para>
 With all the SQL drivers, indexing generally works as follows.
 <itemizedlist>
@@ -792,10 +792,10 @@ by the time the post-index query gets executed, it is <emphasis role="bold">guar
 that the indexing was succesful. Database connection is dropped and re-established
 because sorting phase can be very lengthy and would just timeout otherwise.
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="xmlpipe"><title>xmlpipe data source</title>
+<sect1 id="xmlpipe"><title>xmlpipe data source</title>
 <para>
 xmlpipe data source was designed to enable users to plug data into
 Sphinx without having to implement new data sources drivers themselves.
@@ -853,10 +853,10 @@ be present, formatted <emphasis>exactly</emphasis> as in this example, and
 occur <emphasis>exactly</emphasis> in the same order. The only optional
 field is <option>timestamp</option>; it defaults to 1.
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="xmlpipe2"><title>xmlpipe2 data source</title>
+<sect1 id="xmlpipe2"><title>xmlpipe2 data source</title>
 <para>
 xmlpipe2 lets you pass arbitrary full-text and attribute data to Sphinx
 in yet another custom XML format. It also allows to specify the schema
@@ -993,10 +993,10 @@ XML elements (tags) recognized by xmlpipe2 (and their attributes where applicabl
 </varlistentry>
 </variablelist>
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="live-updates"><title>Live index updates</title>
+<sect1 id="live-updates"><title>Live index updates</title>
 <para>
 There are two major approaches to maintaining the full-text index
 contents up to date. Note, however, that both these approaches deal
@@ -1022,10 +1022,10 @@ full-text data. Updates on a RT index can appear in the search results in
 efficient for bulk indexing huge amounts of data. Refer to 
 <xref linkend="rt-indexes"/> for details.
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="delta-updates"><title>Delta index updates</title>
+<sect1 id="delta-updates"><title>Delta index updates</title>
 <para>
 There's a frequent situation when the total dataset is too big
 to be reindexed from scratch often, but the amount of new records
@@ -1104,10 +1104,10 @@ when we issue the directive in the inherited source for the first time, it remov
 So <code>sql_query_pre</code> in the delta can not just be empty; and we need
 to issue the encoding setup query explicitly once again.
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="rt-indexes"><title>Real-time indexes overview</title>
+<sect1 id="rt-indexes"><title>Real-time indexes overview</title>
 <para>
 RT indexes should be declared in <filename>sphinx.conf</filename>,
 just as every other index type. Notable differences from the regular, 
@@ -1228,10 +1228,10 @@ Data stored in RT index should survive clean shutdown. When binary logging
 is enabled, it should also survive crash and/or dirty shutdown, and recover
 on subsequent startup.
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="index-merging"><title>Index merging</title>
+<sect1 id="index-merging"><title>Index merging</title>
 <para>
 Merging two existing indexes can be more efficient that indexing the data
 from scratch, and desired in some cases (such as merging 'main' and 'delta'
@@ -1268,20 +1268,20 @@ the filter passes only those records where 'deleted' is 0, eliminating all
 records that were flagged as deleted (for instance, using
 <link linkend="api-func-updateatttributes">UpdateAttributes()</link> call).
 </para>
-</sect2>
-
-
 </sect1>
-<sect1 id="searching"><title>Searching</title>
+
+
+</chapter>
+<chapter id="searching"><title>Searching</title>
 
 
 <!-- TODO 
-<sect2 id="searching-overview"><title>Overview</title>
-</sect2>
+<sect1 id="searching-overview"><title>Overview</title>
+</sect1>
 -->
 
 
-<sect2 id="matching-modes"><title>Matching modes</title>
+<sect1 id="matching-modes"><title>Matching modes</title>
 <para>
 There are the following matching modes available:
 <itemizedlist>
@@ -1315,9 +1315,9 @@ Sphinx will match every document (i.e. every post) where <code>SetFilter()</code
 in this case providing every post from that user. By default this will be ordered by relevancy,
 followed by Sphinx document ID in ascending order (earliest first).
 </para>
-</sect2>
+</sect1>
 
-<sect2 id="boolean-syntax"><title>Boolean query syntax</title>
+<sect1 id="boolean-syntax"><title>Boolean query syntax</title>
 <para>
 Boolean queries allow the following special operators to be used:
 <itemizedlist>
@@ -1354,10 +1354,10 @@ reasons. Technically, Sphinx does not always keep a list of all IDs.
 Performance-wise, when the collection is huge (ie. 10-100M documents),
 evaluating such queries could take very long.
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="extended-syntax"><title>Extended query syntax</title>
+<sect1 id="extended-syntax"><title>Extended query syntax</title>
 <para>
 The following special operators and modifiers can be used when using the extended matching mode:
 <itemizedlist>
@@ -1481,10 +1481,10 @@ aaa -(bbb -(ccc ddd))
 aaa | -bbb
 </programlisting>
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="weighting"><title>Weighting</title>
+<sect1 id="weighting"><title>Weighting</title>
 <para>
 Specific weighting function (currently) depends on the search mode.
 </para>
@@ -1545,10 +1545,10 @@ experience is that this phrase proximity based ranking provides noticeably
 better search quality than any statistical scheme alone (such as BM25,
 which is commonly used in other search engines).
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="sorting-modes"><title>Sorting modes</title>
+<sect1 id="sorting-modes"><title>Sorting modes</title>
 <para>
 There are the following result sorting modes available:
 <itemizedlist>
@@ -1741,10 +1741,10 @@ of the four coordinates. An optimized path will be selected when one pair
 of the arguments refers directly to a pair attributes and the other one
 is constant.
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="clustering"><title>Grouping (clustering) search results </title>
+<sect1 id="clustering"><title>Grouping (clustering) search results </title>
 <para>
 Sometimes it could be useful to group (or in other terms, cluster)
 search results and/or count per-group match counts - for instance,
@@ -1819,10 +1819,10 @@ Starting with version 0.9.9-rc2, aggregate functions (AVG(), MIN(),
 MAX(), SUM()) are supported through <link linkend="api-func-setselect">SetSelect()</link> API call
 when using GROUP BY.
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="distributed"><title>Distributed searching</title>
+<sect1 id="distributed"><title>Distributed searching</title>
 <para>
 To scale well, Sphinx has distributed searching capabilities.
 Distributed searching is useful to improve query latency (ie. search
@@ -1892,10 +1892,10 @@ It is scheduled to implement better HA support which would allow
 to specify which agents mirror each other, do health checks, keep track
 of alive agents, load-balance requests, etc.
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="query-log-format"><title><filename>searchd</filename> query log format</title>
+<sect1 id="query-log-format"><title><filename>searchd</filename> query log format</title>
 <para>
 <filename>searchd</filename> logs all succesfully executed search queries
 into query log file. Here's an example:
@@ -1946,10 +1946,10 @@ the number of file I/O operations carried out, the amount of data in kilobytes r
 the index files and time spent on I/O operations (although there is a background processing
 component, the bulk of this time is the I/O operation time).
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="sphinxql"><title>MySQL protocol support and SphinxQL</title>
+<sect1 id="sphinxql"><title>MySQL protocol support and SphinxQL</title>
 <para>
 Starting with version 0.9.9-rc2, Sphinx searchd daemon supports MySQL binary
 network protocol and can be accessed with regular MySQL API. For instance,
@@ -2193,10 +2193,10 @@ mysql> SHOW META;
 12 rows in set (0.00 sec)
 </programlisting>
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="multi-queries"><title>Multi-queries</title>
+<sect1 id="multi-queries"><title>Multi-queries</title>
 <para>
 Multi-queries, or query batches, let you send multiple queries to Sphinx
 in one go (more formally, one network request).
@@ -2323,15 +2323,15 @@ common query and common subtree optimizations, there were reports of 3x and
 even more improvements, and that's from production instances, not just
 synthetic tests.
 </para>
-</sect2>
-
-
 </sect1>
-<sect1 id="command-line-tools"><title>Command line tools reference</title>
+
+
+</chapter>
+<chapter id="command-line-tools"><title>Command line tools reference</title>
 <para>As mentioned elsewhere, Sphinx is not a single program called 'sphinx',
 but a collection of 4 separate programs which collectively form Sphinx. This section
 covers these tools and how to use them.</para>
-<sect2 id="ref-indexer"><title><filename>indexer</filename> command reference</title>
+<sect1 id="ref-indexer"><title><filename>indexer</filename> command reference</title>
 <para><filename>indexer</filename> is the first of the two principle tools
 as part of Sphinx. Invoked from either the command line directly, or as part
 of a larger script, <filename>indexer</filename> is solely responsible
@@ -2495,10 +2495,10 @@ for a document to become part of the final index.
 
 </itemizedlist>
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="ref-searchd"><title><filename>searchd</filename> command reference</title>
+<sect1 id="ref-searchd"><title><filename>searchd</filename> command reference</title>
 <para><filename>searchd</filename> is the second of the two principle tools as part of Sphinx.
 <filename>searchd</filename> is the part of the system which actually handles searches;
 it functions as a server and is responsible for receiving queries, processing them and
@@ -2731,10 +2731,10 @@ Last but not least, as every other daemon, <filename>searchd</filename> supports
 </varlistentry>
 </variablelist>
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="ref-search"><title><filename>search</filename> command reference</title>
+<sect1 id="ref-search"><title><filename>search</filename> command reference</title>
 <para><filename>search</filename> is one of the helper tools within the 
 Sphinx package. Whereas <filename>searchd</filename> is responsible for 
 searches in a server-type environment, <filename>search</filename> is 
@@ -2877,7 +2877,7 @@ determined by an arithmetic expression, stated in expr. For example:
 (again noting that this will have to be quoted to avoid the shell dealing 
 with the asterisk). Extended sort mode is discussed in more detail under 
 the <option>SPH_SORT_EXTENDED</option> entry under the <link 
-linkend="sorting-modes">Sorting modes</link> chapter of the 
+linkend="sorting-modes">Sorting modes</link> section of the 
 manual.</listitem>
 <listitem><option>--sort=date</option> specifies that the results should 
 be sorted by descending (i.e. most recent first) date. This requires that 
@@ -2891,7 +2891,7 @@ timestamp is within the last hour, then sorted within that bracket for
 relevance. After, it would return the documents from the last day, sorted 
 by relevance, then the last week and then the last month. It is discussed 
 in more detail under the <option>SPH_SORT_TIME_SEGMENTS</option> entry 
-under the <link linkend="sorting-modes">Sorting modes</link> chapter of 
+under the <link linkend="sorting-modes">Sorting modes</link> section of 
 the manual.</listitem>
 </itemizedlist>
 </para>
@@ -2906,10 +2906,10 @@ more detail under the <link
 linkend="conf-sql-query-info">sql_query_info</link> directive.</listitem>
 </itemizedlist>
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="ref-spelldump"><title><filename>spelldump</filename> command reference</title>
+<sect1 id="ref-spelldump"><title><filename>spelldump</filename> command reference</title>
 <para><filename>spelldump</filename> is one of the helper tools within the Sphinx package.</para>
 <para>It is used to extract the contents of a dictionary file that uses 
 <filename>ispell</filename> or <filename>MySpell</filename> format, which 
@@ -2944,10 +2944,10 @@ zone &gt; zone
 zoned &gt; zoned
 zoning &gt; zoning
 </programlisting>
-</sect2>
+</sect1>
 
 
-<sect2 id="ref-indextool"><title><filename>indextool</filename> command reference</title>
+<sect1 id="ref-indextool"><title><filename>indextool</filename> command reference</title>
 <para>
 <filename>indextool</filename> is one of the helper tools within
 the Sphinx package, introduced in version 0.9.9-rc2. It is used to
@@ -3004,11 +3004,11 @@ files for consistency errors that might be introduced either by bugs
 in <filename>indexer</filename> and/or hardware faults.
 </listitem>
 </itemizedlist>
-</sect2>
-
-
 </sect1>
-<sect1 id="api-reference"><title>API reference</title>
+
+
+</chapter>
+<chapter id="api-reference"><title>API reference</title>
 
 
 <para>
@@ -3032,10 +3032,10 @@ But the provided functionality must not differ across languages.
 </para>
 
 
-<sect2 id="api-funcgroup-general"><title>General API functions</title>
+<sect1 id="api-funcgroup-general"><title>General API functions</title>
 
 
-<sect3 id="api-func-getlasterror"><title>GetLastError</title>
+<sect2 id="api-func-getlasterror"><title>GetLastError</title>
 <para><b>Prototype:</b> function GetLastError()</para>
 <para>
 Returns last error message, as a string, in human readable format.
@@ -3050,9 +3050,9 @@ contain the error description.
 The error message is <emphasis>not</emphasis> reset by this call; so you can safely
 call it several times if needed.
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="api-func-getlastwarning"><title>GetLastWarning</title>
+<sect2 id="api-func-getlastwarning"><title>GetLastWarning</title>
 <para><b>Prototype:</b> function GetLastWarning ()</para>
 <para>
 Returns last warning message, as a string, in human readable format.
@@ -3069,18 +3069,18 @@ a warning message would be produced.
 The warning message is <emphasis>not</emphasis> reset by this call; so you can safely
 call it several times if needed.
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="api-func-setserver"><title>SetServer</title>
+<sect2 id="api-func-setserver"><title>SetServer</title>
 <para><b>Prototype:</b> function SetServer ( $host, $port )</para>
 <para>
 Sets <filename>searchd</filename> host name and TCP port.
 All subsequent requests will use the new host and port settings.
 Default host and port are 'localhost' and 9312, respectively.
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="api-func-setretries"><title>SetRetries</title>
+<sect2 id="api-func-setretries"><title>SetRetries</title>
 <para><b>Prototype:</b> function SetRetries ( $count, $delay=0 )</para>
 <para>
 Sets distributed retry count and delay.
@@ -3094,9 +3094,9 @@ temporary failure; it only tells <filename>searchd</filename> to do so.
 Currently, the list of temporary failures includes all kinds of connect()
 failures and maxed out (too busy) remote agents.
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="api-func-setconnecttimeout"><title>SetConnectTimeout</title>
+<sect2 id="api-func-setconnecttimeout"><title>SetConnectTimeout</title>
 <para><b>Prototype:</b> function SetConnectTimeout ( $timeout )</para>
 <para>
 Sets the time allowed to spend connecting to the server before giving up.
@@ -3112,9 +3112,9 @@ the script execution limits (especially in PHP).
 be returned back to the application in order for application-level error handling
 to advise the user.
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="api-func-setarrayresult"><title>SetArrayResult</title>
+<sect2 id="api-func-setarrayresult"><title>SetArrayResult</title>
 <para><b>Prototype:</b> function SetArrayResult ( $arrayresult )</para>
 <para>
 PHP specific. Controls matches format in the search results set
@@ -3134,10 +3134,10 @@ Group-by-MVA result sets may contain duplicate document IDs.
 Thus they need to be returned as plain arrays, because hashes
 will only keep one entry per document ID.
 </para>
-</sect3>
+</sect2>
 
 
-<sect3 id="api-func-isconnecterror"><title>IsConnectError</title>
+<sect2 id="api-func-isconnecterror"><title>IsConnectError</title>
 <para><b>Prototype:</b> function IsConnectError ()</para>
 <para>
 Checks whether the last error was a network error on API side, or a remote error
@@ -3145,14 +3145,14 @@ reported by searchd. Returns true if the last connection attempt to searchd fail
 false otherwise (if the error was remote, or there were no connection attempts at all).
 Introduced in version 0.9.9-rc1.
 </para>
-</sect3>
-
-
 </sect2>
-<sect2 id="api-funcgroup-general-query-settings"><title>General query settings</title>
 
 
-<sect3 id="api-func-setlimits"><title>SetLimits</title>
+</sect1>
+<sect1 id="api-funcgroup-general-query-settings"><title>General query settings</title>
+
+
+<sect2 id="api-func-setlimits"><title>SetLimits</title>
 <para><b>Prototype:</b> function SetLimits ( $offset, $limit, $max_matches=0, $cutoff=0 )</para>
 <para>
 Sets offset into server-side result set (<code>$offset</code>) and amount of matches
@@ -3193,9 +3193,9 @@ if performed on Sphinx side.
 It tells <filename>searchd</filename> to forcibly stop search query
 once <code>$cutoff</code> matches had been found and processed.
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="api-func-setmaxquerytime"><title>SetMaxQueryTime</title>
+<sect2 id="api-func-setmaxquerytime"><title>SetMaxQueryTime</title>
 <para><b>Prototype:</b> function SetMaxQueryTime ( $max_query_time )</para>
 <para>
 Sets maximum search query time, in milliseconds. Parameter must be
@@ -3207,9 +3207,9 @@ will be stopped once that much time has elapsed. Note that if you're performing
 a search which queries several local indexes, this limit applies to each index
 separately.
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="api-func-setoverride"><title>SetOverride</title>
+<sect2 id="api-func-setoverride"><title>SetOverride</title>
 <para><b>Prototype:</b> function SetOverride ( $attrname, $attrtype, $values )</para>
 <para>
 Sets temporary (per-query) per-document attribute value overrides.
@@ -3228,10 +3228,10 @@ So you can, say, setup a "friends_weight" value for every document, defaulting t
 then temporary override it with 1 for documents 123, 456 and 789 (recommended by
 exactly the friends of current user), and use that value when ranking.
 </para>
-</sect3>
+</sect2>
 
 
-<sect3 id="api-func-setselect"><title>SetSelect</title>
+<sect2 id="api-func-setselect"><title>SetSelect</title>
 <para><b>Prototype:</b> function SetSelect ( $clause )</para>
 <para>
 Sets the select clause, listing specific attributes to fetch, and <link linkend="sort-expr">expressions</link>
@@ -3268,14 +3268,14 @@ $cl->SetSelect ( "exp_years, salary_gbp*{$gbp_usd_rate} AS salary_usd,
    IF(age>40,1,0) AS over40" );
 $cl->SetSelect ( "*, AVG(price) AS avgprice" );
 </programlisting>
-</sect3>
-
-
 </sect2>
-<sect2 id="api-funcgroup-fulltext-query-settings"><title>Full-text search query settings</title>
 
 
-<sect3 id="api-func-setmatchmode"><title>SetMatchMode</title>
+</sect1>
+<sect1 id="api-funcgroup-fulltext-query-settings"><title>Full-text search query settings</title>
+
+
+<sect2 id="api-func-setmatchmode"><title>SetMatchMode</title>
 <para><b>Prototype:</b> function SetMatchMode ( $mode )</para>
 <para>
 Sets full-text query matching mode, as described in <xref linkend="matching-modes"/>.
@@ -3289,9 +3289,9 @@ $cl->SetMatchMode ( "SPH_MATCH_ANY" ); // INCORRECT! will not work as expected
 $cl->SetMatchMode ( SPH_MATCH_ANY ); // correct, works OK
 </programlisting>
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="api-func-setrankingmode"><title>SetRankingMode</title>
+<sect2 id="api-func-setrankingmode"><title>SetRankingMode</title>
 <para><b>Prototype:</b> function SetRankingMode ( $ranker )</para>
 <para>
 Sets ranking mode. Only available in SPH_MATCH_EXTENDED2 matching
@@ -3358,10 +3358,10 @@ higher than a one entitled "Hyde Park, London" or "The Hyde Park Cafe".)
 </listitem>
 </itemizedlist>
 </para>
-</sect3>
+</sect2>
 
 
-<sect3 id="api-func-setsortmode"><title>SetSortMode</title>
+<sect2 id="api-func-setsortmode"><title>SetSortMode</title>
 <para><b>Prototype:</b> function SetSortMode ( $mode, $sortby="" )</para>
 <para>
 Set matches sorting mode, as described in <xref linkend="sorting-modes"/>.
@@ -3375,17 +3375,17 @@ $cl->SetSortMode ( "SPH_SORT_ATTR_DESC" ); // INCORRECT! will not work as expect
 $cl->SetSortMode ( SPH_SORT_ATTR_ASC ); // correct, works OK
 </programlisting>
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="api-func-setweights"><title>SetWeights</title>
+<sect2 id="api-func-setweights"><title>SetWeights</title>
 <para><b>Prototype:</b> function SetWeights ( $weights )</para>
 <para>
 Binds per-field weights in the order of appearance in the index.
 <b>DEPRECATED</b>, use <link linkend="api-func-setfieldweights">SetFieldWeights()</link> instead.
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="api-func-setfieldweights"><title>SetFieldWeights</title>
+<sect2 id="api-func-setfieldweights"><title>SetFieldWeights</title>
 <para><b>Prototype:</b> function SetFieldWeights ( $weights )</para>
 <para>
 Binds per-field weights by name. Parameter must be a hash (associative array)
@@ -3413,9 +3413,9 @@ by 1 or more (phrase proximity rank). The result is at least 10 billion
 that does not fit in 32 bits and will be wrapped around, producing
 unexpected results.
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="api-func-setindexweights"><title>SetIndexWeights</title>
+<sect2 id="api-func-setindexweights"><title>SetIndexWeights</title>
 <para><b>Prototype:</b> function SetIndexWeights ( $weights )</para>
 <para>
 Sets per-index weights, and enables weighted summing of match weights
@@ -3440,14 +3440,14 @@ index A with the weight of 2, and also in index B with the weight of 3,
 and you called <code>SetIndexWeights ( array ( "A"=>100, "B"=>10 ) )</code>,
 the final weight return to the client will be 2*100+3*10 = 230.
 </para>
-</sect3>
-
-
 </sect2>
-<sect2 id="api-funcgroup-filtering"><title>Result set filtering settings</title>
 
 
-<sect3 id="api-func-setidrange"><title>SetIDRange</title>
+</sect1>
+<sect1 id="api-funcgroup-filtering"><title>Result set filtering settings</title>
+
+
+<sect2 id="api-func-setidrange"><title>SetIDRange</title>
 <para><b>Prototype:</b> function SetIDRange ( $min, $max )</para>
 <para>
 Sets an accepted range of document IDs. Parameters must be integers.
@@ -3459,9 +3459,9 @@ between <code>$min</code> and <code>$max</code> (including IDs
 exactly equal to <code>$min</code> or <code>$max</code>)
 will be matched.
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="api-func-setfilter"><title>SetFilter</title>
+<sect2 id="api-func-setfilter"><title>SetFilter</title>
 <para><b>Prototype:</b> function SetFilter ( $attribute, $values, $exclude=false )</para>
 <para>
 Adds new integer values set filter. 
@@ -3479,9 +3479,9 @@ Only those documents where <code>$attribute</code> column value
 stored in the index matches any of the values from <code>$values</code>
 array will be matched (or rejected, if <code>$exclude</code> is true).
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="api-func-setfilterrange"><title>SetFilterRange</title>
+<sect2 id="api-func-setfilterrange"><title>SetFilterRange</title>
 <para><b>Prototype:</b> function SetFilterRange ( $attribute, $min, $max, $exclude=false )</para>
 <para>
 Adds new integer range filter.
@@ -3501,9 +3501,9 @@ stored in the index is between <code>$min</code> and <code>$max</code>
 (including values that are exactly equal to <code>$min</code> or <code>$max</code>)
 will be matched (or rejected, if <code>$exclude</code> is true).
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="api-func-setfilterfloatrange"><title>SetFilterFloatRange</title>
+<sect2 id="api-func-setfilterfloatrange"><title>SetFilterFloatRange</title>
 <para><b>Prototype:</b> function SetFilterFloatRange ( $attribute, $min, $max, $exclude=false )</para>
 <para>
 Adds new float range filter.
@@ -3523,9 +3523,9 @@ stored in the index is between <code>$min</code> and <code>$max</code>
 (including values that are exactly equal to <code>$min</code> or <code>$max</code>)
 will be matched (or rejected, if <code>$exclude</code> is true).
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="api-func-setgeoanchor"><title>SetGeoAnchor</title>
+<sect2 id="api-func-setgeoanchor"><title>SetGeoAnchor</title>
 <para><b>Prototype:</b> function SetGeoAnchor ( $attrlat, $attrlong, $lat, $long )</para>
 <para>
 Sets anchor point for and geosphere distance (geodistance) calculations, and enable them.
@@ -3544,14 +3544,14 @@ The latitude and longitude values both in <code>SetGeoAnchor</code> and the inde
 attribute data are expected to be in radians. The result will be returned in meters,
 so geodistance value of 1000.0 means 1 km. 1 mile is approximately 1609.344 meters.
 </para>
-</sect3>
-
-
 </sect2>
-<sect2 id="api-funcgroup-groupby"><title>GROUP BY settings</title>
 
 
-<sect3 id="api-func-setgroupby"><title>SetGroupBy</title>
+</sect1>
+<sect1 id="api-funcgroup-groupby"><title>GROUP BY settings</title>
+
+
+<sect2 id="api-func-setgroupby"><title>SetGroupBy</title>
 <para><b>Prototype:</b> function SetGroupBy ( $attribute, $func, $groupsort="@group desc" )</para>
 <para>
 Sets grouping attribute, function, and groups sorting mode; and enables grouping
@@ -3582,9 +3582,9 @@ Starting with version 0.9.9-rc2, aggregate functions (AVG(), MIN(),
 MAX(), SUM()) are supported through <link linkend="api-func-setselect">SetSelect()</link> API call
 when using GROUP BY.
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="api-func-setgroupdistinct"><title>SetGroupDistinct</title>
+<sect2 id="api-func-setgroupdistinct"><title>SetGroupDistinct</title>
 <para><b>Prototype:</b> function SetGroupDistinct ( $attribute )</para>
 <para>
 Sets attribute name for per-group distinct values count calculations.
@@ -3617,14 +3617,14 @@ will return one matching row for each category. In addition to indexed attribute
 matches will also contain total per-category matches count, and the count
 of distinct vendor IDs within each category.
 </para>
-</sect3>
-
-
 </sect2>
-<sect2 id="api-funcgroup-querying"><title>Querying</title>
 
 
-<sect3 id="api-func-query"><title>Query</title>
+</sect1>
+<sect1 id="api-funcgroup-querying"><title>Querying</title>
+
+
+<sect2 id="api-func-query"><title>Query</title>
 <para><b>Prototype:</b> function Query ( $query, $index="*", $comment="" )</para>
 <para>
 Connects to <filename>searchd</filename> server, runs given search query
@@ -3701,9 +3701,9 @@ it is analoguous to a single <code>AddQuery()</code> call, followed by a corresp
 <code>RunQueries()</code>, then returning the first array element of matches
 (from the first, and only, query.)
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="api-func-addquery"><title>AddQuery</title>
+<sect2 id="api-func-addquery"><title>AddQuery</title>
 <para><b>Prototype:</b> function AddQuery ( $query, $index="*", $comment="" )</para>
 <para>
 Adds additional query with current settings to multi-query batch.
@@ -3775,9 +3775,9 @@ a sequentially increasing 0-based integer, ie. first call will return 0,
 second will return 1, and so on. Just a small helper so you won't have
 to track the indexes manualy if you need then.
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="api-func-runqueries"><title>RunQueries</title>
+<sect2 id="api-func-runqueries"><title>RunQueries</title>
 <para><b>Prototype:</b> function RunQueries ()</para>
 <para>
 Connect to searchd, runs a batch of all queries added using <code>AddQuery()</code>,
@@ -3803,9 +3803,9 @@ could fail. There still will be no general error reported, because API was able 
 succesfully connect to <filename>searchd</filename>, submit the batch, and receive
 the results - but every result set will have a specific error message.
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="api-func-resetfilters"><title>ResetFilters</title>
+<sect2 id="api-func-resetfilters"><title>ResetFilters</title>
 <para><b>Prototype:</b> function ResetFilters ()</para>
 <para>
 Clears all currently set filters.
@@ -3816,9 +3816,9 @@ to set different filters for different queries in the batch. To do that,
 you should call <code>ResetFilters()</code> and add new filters using
 the respective calls.
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="api-func-resetgroupby"><title>ResetGroupBy</title>
+<sect2 id="api-func-resetgroupby"><title>ResetGroupBy</title>
 <para><b>Prototype:</b> function ResetGroupBy ()</para>
 <para>
 Clears all currently group-by settings, and disables group-by.
@@ -3832,14 +3832,14 @@ fully resets previous group-by settings and disables group-by mode
 in the current state, so that subsequent <code>AddQuery()</code>
 calls can perform non-grouping searches.
 </para>
-</sect3>
-
-
 </sect2>
-<sect2 id="api-funcgroup-additional-functionality"><title>Additional functionality</title>
 
 
-<sect3 id="api-func-buildexcerpts"><title>BuildExcerpts</title>
+</sect1>
+<sect1 id="api-funcgroup-additional-functionality"><title>Additional functionality</title>
+
+
+<sect2 id="api-func-buildexcerpts"><title>BuildExcerpts</title>
 <para><b>Prototype:</b> function BuildExcerpts ( $docs, $index, $words, $opts=array() )</para>
 <para>
 Excerpts (snippets) builder function. Connects to <filename>searchd</filename>,
@@ -3911,9 +3911,9 @@ Starting with version 0.9.9-rc1, keywords can contain wildcards, that work simil
 <para>
 Returns false on failure. Returns a plain array of strings with excerpts (snippets) on success.
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="api-func-updateatttributes"><title>UpdateAttributes</title>
+<sect2 id="api-func-updateatttributes"><title>UpdateAttributes</title>
 <para><b>Prototype:</b> function UpdateAttributes ( $index, $attrs, $values )</para>
 <para>
 Instantly updates given attribute values in given documents.
@@ -3951,10 +3951,10 @@ The second one will update documents 1001, 1002 and 1003 in index "products". Fo
 the new price will be set to 123 and the new amount in stock to 5; for document 1002, the new price
 will be 37 and the new amount will be 11; etc.
 </para>
-</sect3>
+</sect2>
 
 
-<sect3 id="api-func-buildkeywords"><title>BuildKeywords</title>
+<sect2 id="api-func-buildkeywords"><title>BuildKeywords</title>
 <para><b>Prototype:</b> function BuildKeywords ( $query, $index, $hits )</para>
 <para>
 Extracts keywords from query using tokenizer settings for given index, optionally with per-keyword occurrence statistics.
@@ -3971,10 +3971,10 @@ Usage example:
 <programlisting>
 $keywords = $cl->BuildKeywords ( "this.is.my query", "test1", false );
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="api-func-escapestring"><title>EscapeString</title>
+<sect2 id="api-func-escapestring"><title>EscapeString</title>
 <para><b>Prototype:</b> function EscapeString ( $string )</para>
 <para>
 Escapes characters that are treated as special operators by the query language parser.
@@ -3994,10 +3994,10 @@ Usage example:
 <programlisting>
 $escaped = $cl->EscapeString ( "escaping-sample@query/string" );
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="api-func-status"><title>Status</title>
+<sect2 id="api-func-status"><title>Status</title>
 <para><b>Prototype:</b> function Status ()</para>
 <para>
 Queries searchd status, and returns an array of status variable name and value pairs.
@@ -4010,10 +4010,10 @@ $status = $cl->Status ();
 foreach ( $status as $row )
 	print join ( ": ", $row ) . "\n";
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="api-func-flushattributes"><title>FlushAttributes</title>
+<sect2 id="api-func-flushattributes"><title>FlushAttributes</title>
 <para><b>Prototype:</b> function FlushAttributes ()</para>
 <para>
 Forces <filename>searchd</filename> to flush pending attribute updates
@@ -4047,38 +4047,38 @@ $status = $cl->FlushAttributes ();
 if ( $status&lt;0 )
 	print "ERROR: " . $cl->GetLastError(); 
 </programlisting>
-</sect3>
-
-
 </sect2>
 
-<sect2 id="api-funcgroup-pconn"><title>Persistent connections</title>
+
+</sect1>
+
+<sect1 id="api-funcgroup-pconn"><title>Persistent connections</title>
 <para>
 Persistent connections allow to use single network connection to run
 multiple commands that would otherwise require reconnects.
 </para>
 
-<sect3 id="api-func-open"><title>Open</title>
+<sect2 id="api-func-open"><title>Open</title>
 <para><b>Prototype:</b> function Open ()</para>
 <para>
 Opens persistent connection to the server.
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="api-func-close"><title>Close</title>
+<sect2 id="api-func-close"><title>Close</title>
 <para><b>Prototype:</b> function Close ()</para>
 <para>
 Closes previously opened persistent connection.
 </para>
-</sect3>
-
 </sect2>
 
 </sect1>
-<sect1 id="sphinxse"><title>MySQL storage engine (SphinxSE)</title>
+
+</chapter>
+<chapter id="sphinxse"><title>MySQL storage engine (SphinxSE)</title>
 
 
-<sect2 id="sphinxse-overview"><title>SphinxSE overview</title>
+<sect1 id="sphinxse-overview"><title>SphinxSE overview</title>
 <para>
 SphinxSE is MySQL storage engine which can be compiled
 into MySQL server 5.x using its pluggable architecure.
@@ -4102,10 +4102,10 @@ Obvious SphinxSE applications include:
 	(eg. JOINs with original document tables, additional MySQL-side filtering, etc).</listitem>
 </itemizedlist>
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="sphinxse-installing"><title>Installing SphinxSE</title>
+<sect1 id="sphinxse-installing"><title>Installing SphinxSE</title>
 <para>
 You will need to obtain a copy of MySQL sources, prepare those,
 and then recompile MySQL binary.
@@ -4126,7 +4126,7 @@ to do that.
 </para>
 
 
-<sect3 id="sphinxse-mysql50"><title>Compiling MySQL 5.0.x with SphinxSE</title>
+<sect2 id="sphinxse-mysql50"><title>Compiling MySQL 5.0.x with SphinxSE</title>
 <para>
 Skips steps 1-3 if using already prepared delta tarball.
 </para>
@@ -4166,10 +4166,10 @@ make install
 </programlisting>
 </listitem>
 </orderedlist>
-</sect3>
+</sect2>
 
 
-<sect3 id="sphinxse-mysql51"><title>Compiling MySQL 5.1.x with SphinxSE</title>
+<sect2 id="sphinxse-mysql51"><title>Compiling MySQL 5.1.x with SphinxSE</title>
 <para>
 Skip steps 1-2 if using already prepared delta tarball.
 </para>
@@ -4200,10 +4200,10 @@ make install
 </programlisting>
 </listitem>
 </orderedlist>
-</sect3>
+</sect2>
 
 
-<sect3 id="sphinxse-checking"><title>Checking SphinxSE installation</title>
+<sect2 id="sphinxse-checking"><title>Checking SphinxSE installation</title>
 To check whether SphinxSE has been succesfully compiled
 into MySQL, launch newly built servers, run mysql client and
 issue <code>SHOW ENGINES</code> query. You should see a list
@@ -4222,11 +4222,11 @@ mysql> show engines;
 +------------+----------+-------------------------------------------------------------+
 13 rows in set (0.00 sec)
 </programlisting>     
-</sect3>
 </sect2>
+</sect1>
 
 
-<sect2 id="sphinxse-using"><title>Using SphinxSE</title>
+<sect1 id="sphinxse-using"><title>Using SphinxSE</title>
 <para>
 To search via SphinxSE, you would need to create special ENGINE=SPHINX "search table",
 and then SELECT from it with full text query put into WHERE clause for query column.
@@ -4435,10 +4435,10 @@ mysql> SHOW ENGINE SPHINX STATUS;
 2 rows in set (0.00 sec)
 </programlisting>
 </para>
-</sect2>
+</sect1>
 
 
-<sect2 id="sphinxse-snippets"><title>Building snippets (excerpts) via MySQL</title>
+<sect1 id="sphinxse-snippets"><title>Building snippets (excerpts) via MySQL</title>
 <para>
 Starting with version 0.9.9-rc2, SphinxSE also includes a UDF function
 that lets you create snippets through MySQL. The functionality is fully
@@ -4484,11 +4484,11 @@ SELECT title, sphinx_snippets(text, 'index', 'mysql php') AS text
     WHERE query='mysql php' AND sphinx.id=documents.id;
 </programlisting>
 </para>
-</sect2>
-
-
 </sect1>
-<sect1 id="reporting-bugs"><title>Reporting bugs</title>
+
+
+</chapter>
+<chapter id="reporting-bugs"><title>Reporting bugs</title>
 
 
 <para>
@@ -4648,14 +4648,14 @@ you a few additional questions about it.
 </para>
 
 
-</sect1>
-<sect1 id="conf-reference"><title><filename>sphinx.conf</filename> options reference</title>
+</chapter>
+<chapter id="conf-reference"><title><filename>sphinx.conf</filename> options reference</title>
 
 
-<sect2 id="confgroup-source"><title>Data source configuration options</title>
+<sect1 id="confgroup-source"><title>Data source configuration options</title>
 
 
-<sect3 id="conf-source-type"><title>type</title>
+<sect2 id="conf-source-type"><title>type</title>
 <para>
 Data source type.
 Mandatory, no default value.
@@ -4676,10 +4676,10 @@ Linux through <ulink url="http://www.unixodbc.org/">UnixODBC library</ulink>.
 <programlisting>
 type = mysql
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-host"><title>sql_host</title>
+<sect2 id="conf-sql-host"><title>sql_host</title>
 <para>
 SQL server host to connect to.
 Mandatory, no default value.
@@ -4699,10 +4699,10 @@ for more details.
 <programlisting>
 sql_host = localhost
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-port"><title>sql_port</title>
+<sect2 id="conf-sql-port"><title>sql_port</title>
 <para>
 SQL server IP port to connect to.
 Optional, default is 3306 for <option>mysql</option> source type and 5432 for <option>pgsql</option> type.
@@ -4713,10 +4713,10 @@ Note that it depends on <link linkend="conf-sql-host">sql_host</link> setting wh
 <programlisting>
 sql_port = 3306
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-user"><title>sql_user</title>
+<sect2 id="conf-sql-user"><title>sql_user</title>
 <para>
 SQL user to use when connecting to <link linkend="conf-sql-host">sql_host</link>.
 Mandatory, no default value.
@@ -4726,10 +4726,10 @@ Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <op
 <programlisting>
 sql_user = test
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-pass"><title>sql_pass</title>
+<sect2 id="conf-sql-pass"><title>sql_pass</title>
 <para>
 SQL user password to use when connecting to <link linkend="conf-sql-host">sql_host</link>.
 Mandatory, no default value.
@@ -4739,10 +4739,10 @@ Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <op
 <programlisting>
 sql_pass = mysecretpassword
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-db"><title>sql_db</title>
+<sect2 id="conf-sql-db"><title>sql_db</title>
 <para>
 SQL database (in MySQL terms) to use after the connection and perform further queries within.
 Mandatory, no default value.
@@ -4752,10 +4752,10 @@ Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <op
 <programlisting>
 sql_db = test
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-sock"><title>sql_sock</title>
+<sect2 id="conf-sql-sock"><title>sql_sock</title>
 <para>
 UNIX socket name to connect to for local SQL servers.
 Optional, default value is empty (use client library default settings).
@@ -4770,10 +4770,10 @@ Note that it depends on <link linkend="conf-sql-host">sql_host</link> setting wh
 <programlisting>
 sql_sock = /tmp/mysql.sock
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-mysql-connect-flags"><title>mysql_connect_flags</title>
+<sect2 id="conf-mysql-connect-flags"><title>mysql_connect_flags</title>
 <para>
 MySQL client connection flags.
 Optional, default value is 0 (do not set any flags).
@@ -4802,10 +4802,10 @@ improvement was reported). Your mileage may vary.
 <programlisting>
 mysql_connect_flags = 32 # enable compression
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-mysql-ssl"><title>mysql_ssl_cert, mysql_ssl_key, mysql_ssl_ca</title>
+<sect2 id="conf-mysql-ssl"><title>mysql_ssl_cert, mysql_ssl_key, mysql_ssl_ca</title>
 <para>
 SSL certificate settings to use for connecting to MySQL server.
 Optional, default values are empty strings (do not use SSL).
@@ -4823,10 +4823,10 @@ mysql_ssl_cert = /etc/ssl/client-cert.pem
 mysql_ssl_key = /etc/ssl/client-key.pem
 mysql_ssl_ca = /etc/ssl/cacert.pem
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-odbc-dsn"><title>odbc_dsn</title>
+<sect2 id="conf-odbc-dsn"><title>odbc_dsn</title>
 <para>
 ODBC DSN to connect to.
 Mandatory, no default value.
@@ -4841,10 +4841,10 @@ driver used.
 <programlisting>
 odbc_dsn = Driver={Oracle ODBC Driver};Dbq=myDBName;Uid=myUsername;Pwd=myPassword
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-query-pre"><title>sql_query_pre</title>
+<sect2 id="conf-sql-query-pre"><title>sql_query_pre</title>
 <para>
 Pre-fetch query, or pre-query.
 Multi-value, optional, default is empty list of queries.
@@ -4884,10 +4884,10 @@ sql_query_pre = SET SESSION query_cache_type=OFF
 sql_query_pre = SET NAMES utf8
 sql_query_pre = SET SESSION query_cache_type=OFF
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-query"><title>sql_query</title>
+<sect2 id="conf-sql-query"><title>sql_query</title>
 <para>
 Main document fetch query.
 Mandatory, no default value.
@@ -4914,10 +4914,10 @@ sql_query = \
 		title, content \
 	FROM documents
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-joined-field"><title>sql_joined_field</title>
+<sect2 id="conf-sql-joined-field"><title>sql_joined_field</title>
 <para>
 Joined/payload field fetch query.
 Multi-value, optional, default is empty list of queries.
@@ -4992,10 +4992,10 @@ sql_joined_field = \
 	tagstext from query; \
 	SELECT docid, CONCAT('tag',tagid) FROM tags ORDER BY docid ASC
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-query-range"><title>sql_query_range</title>
+<sect2 id="conf-sql-query-range"><title>sql_query_range</title>
 <para>
 Range query setup.
 Optional, default is empty.
@@ -5027,10 +5027,10 @@ uses greater-or-equal and less-or-equal comparisons.
 <programlisting>
 sql_query_range = SELECT MIN(id),MAX(id) FROM documents
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-range-step"><title>sql_range_step</title>
+<sect2 id="conf-sql-range-step"><title>sql_range_step</title>
 <para>
 Range query step.
 Optional, default is 1024.
@@ -5054,10 +5054,10 @@ following substitutions:
 <programlisting>
 sql_range_step = 1000
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-query-killlist"><title>sql_query_killlist</title>
+<sect2 id="conf-sql-query-killlist"><title>sql_query_killlist</title>
 <para>
 Kill-list query.
 Optional, default is empty (no query).
@@ -5105,10 +5105,10 @@ sql_query_killlist = \
 	SELECT id FROM documents WHERE updated_ts>=@last_reindex UNION \
 	SELECT id FROM documents_deleted WHERE deleted_ts>=@last_reindex
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-attr-uint"><title>sql_attr_uint</title>
+<sect2 id="conf-sql-attr-uint"><title>sql_attr_uint</title>
 <para>
 Unsigned integer <link linkend="attributes">attribute</link> declaration.
 Multi-value (there might be multiple attributes declared), optional.
@@ -5133,10 +5133,10 @@ attribute data file. Bit size settings are ignored if using
 sql_attr_uint = group_id
 sql_attr_uint = forum_id:9 # 9 bits for forum_id
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-attr-bool"><title>sql_attr_bool</title>
+<sect2 id="conf-sql-attr-bool"><title>sql_attr_bool</title>
 <para>
 Boolean <link linkend="attributes">attribute</link> declaration.
 Multi-value (there might be multiple attributes declared), optional.
@@ -5147,10 +5147,10 @@ Equivalent to <link linkend="conf-sql-attr-uint">sql_attr_uint</link> declaratio
 <programlisting>
 sql_attr_bool = is_deleted # will be packed to 1 bit
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-attr-bigint"><title>sql_attr_bigint</title>
+<sect2 id="conf-sql-attr-bigint"><title>sql_attr_bigint</title>
 <para>
 64-bit signed integer <link linkend="attributes">attribute</link> declaration.
 Multi-value (there might be multiple attributes declared), optional.
@@ -5163,10 +5163,10 @@ Introduced in version 0.9.9-rc1.
 <programlisting>
 sql_attr_bigint = my_bigint_id
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-attr-timestamp"><title>sql_attr_timestamp</title>
+<sect2 id="conf-sql-attr-timestamp"><title>sql_attr_timestamp</title>
 <para>
 UNIX timestamp <link linkend="attributes">attribute</link> declaration.
 Multi-value (there might be multiple attributes declared), optional.
@@ -5187,10 +5187,10 @@ UNIX_TIMESTAMP function.
 <programlisting>
 sql_attr_timestamp = UNIX_TIMESTAMP(added_datetime) AS added_ts
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-attr-str2ordinal"><title>sql_attr_str2ordinal</title>
+<sect2 id="conf-sql-attr-str2ordinal"><title>sql_attr_str2ordinal</title>
 <para>
 Ordinal string number <link linkend="attributes">attribute</link> declaration.
 Multi-value (there might be multiple attributes declared), optional.
@@ -5241,10 +5241,10 @@ original strings, ordinals will not be necessary any more).
 <programlisting>
 sql_attr_str2ordinal = author_name
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-attr-float"><title>sql_attr_float</title>
+<sect2 id="conf-sql-attr-float"><title>sql_attr_float</title>
 <para>
 Floating point <link linkend="attributes">attribute</link> declaration.
 Multi-value (there might be multiple attributes declared), optional.
@@ -5263,10 +5263,10 @@ geosphere distance calculations.
 sql_attr_float = lat_radians
 sql_attr_float = long_radians
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-attr-multi"><title>sql_attr_multi</title>
+<sect2 id="conf-sql-attr-multi"><title>sql_attr_multi</title>
 <para>
 <link linkend="mva">Multi-valued attribute</link> (MVA) declaration.
 Multi-value (ie. there may be more than one such attribute declared), optional.
@@ -5301,10 +5301,10 @@ sql_attr_multi = uint tag from ranged-query; \
 	SELECT id, tag FROM tags WHERE id&gt;=$start AND id&lt;=$end; \
 	SELECT MIN(id), MAX(id) FROM tags
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-attr-string"><title>sql_attr_string</title>
+<sect2 id="conf-sql-attr-string"><title>sql_attr_string</title>
 <para>
 String attribute declaration.
 Multi-value (ie. there may be more than one such attribute declared), optional.
@@ -5328,10 +5328,10 @@ directive for that.
 <programlisting>
 sql_attr_string = title # will be stored but will not be indexed
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-attr-str2wordcount"><title>sql_attr_str2wordcount</title>
+<sect2 id="conf-sql-attr-str2wordcount"><title>sql_attr_str2wordcount</title>
 <para>
 Word-count attribute declaration.
 Multi-value (ie. there may be more than one such attribute declared), optional.
@@ -5349,10 +5349,10 @@ help identify exact field matches, etc).
 <programlisting>
 sql_attr_str2wordcount = title_wc
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-field-string"><title>sql_field_string</title>
+<sect2 id="conf-sql-field-string"><title>sql_field_string</title>
 <para>
 Combined string attribute and full-text field declaration.
 Multi-value (ie. there may be more than one such attribute declared), optional.
@@ -5369,10 +5369,10 @@ exactly that. Both the field and the attribute will be named the same.
 <programlisting>
 sql_field_string = title # will be both indexed and stored
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-field-str2wordcount"><title>sql_field_str2wordcount</title>
+<sect2 id="conf-sql-field-str2wordcount"><title>sql_field_str2wordcount</title>
 <para>
 Combined word-count attribute and full-text field declaration.
 Multi-value (ie. there may be more than one such attribute declared), optional.
@@ -5387,10 +5387,10 @@ exactly that. Both the field and the attribute will be named the same.
 <programlisting>
 sql_field_str2wordcount = title # will be indexed, and counted/stored
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-query-post"><title>sql_query_post</title>
+<sect2 id="conf-sql-query-post"><title>sql_query_post</title>
 <para>
 Post-fetch query.
 Optional, default value is empty.
@@ -5411,10 +5411,10 @@ query; they should be run from <link linkend="conf-sql-query-post-index">post-in
 <programlisting>
 sql_query_post = DROP TABLE my_tmp_table
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-query-post-index"><title>sql_query_post_index</title>
+<sect2 id="conf-sql-query-post-index"><title>sql_query_post_index</title>
 <para>
 Post-index query.
 Optional, default value is empty.
@@ -5433,10 +5433,10 @@ from the database during indexing.
 sql_query_post_index = REPLACE INTO counters ( id, val ) \
     VALUES ( 'max_indexed_id', $maxid )
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-ranged-throttle"><title>sql_ranged_throttle</title>
+<sect2 id="conf-sql-ranged-throttle"><title>sql_ranged_throttle</title>
 <para>
 Ranged query throttling period, in milliseconds.
 Optional, default is 0 (no throttling).
@@ -5452,10 +5452,10 @@ and is performed before the fetch query.
 <programlisting>
 sql_ranged_throttle = 1000 # sleep for 1 sec before each query step
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-sql-query-info"><title>sql_query_info</title>
+<sect2 id="conf-sql-query-info"><title>sql_query_info</title>
 <para>
 Document info query.
 Optional, default is empty.
@@ -5472,10 +5472,10 @@ that expands to the queried document ID.
 <programlisting>
 sql_query_info = SELECT * FROM documents WHERE id=$id
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-xmlpipe-command"><title>xmlpipe_command</title>
+<sect2 id="conf-xmlpipe-command"><title>xmlpipe_command</title>
 <para>
 Shell command that invokes xmlpipe stream producer.
 Mandatory.
@@ -5490,10 +5490,10 @@ or <xref linkend="xmlpipe2"/> for specific format description.
 <programlisting>
 xmlpipe_command = cat /home/sphinx/test.xml
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-xmlpipe-field"><title>xmlpipe_field</title>
+<sect2 id="conf-xmlpipe-field"><title>xmlpipe_field</title>
 <para>
 xmlpipe field declaration.
 Multi-value, optional.
@@ -5504,10 +5504,10 @@ Applies to <option>xmlpipe2</option> source type only. Refer to <xref linkend="x
 xmlpipe_field = subject
 xmlpipe_field = content
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-xmlpipe-field-string"><title>xmlpipe_field_string</title>
+<sect2 id="conf-xmlpipe-field-string"><title>xmlpipe_field_string</title>
 <para>
 xmlpipe field and string attribute declaration.
 Multi-value, optional.
@@ -5522,10 +5522,10 @@ Equivalent to <![CDATA[<sphinx:field name="field" attr="string"/>]]> declaration
 <programlisting>
 xmlpipe_field_string = subject
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-xmlpipe-field-wordcount"><title>xmlpipe_field_wordcount</title>
+<sect2 id="conf-xmlpipe-field-wordcount"><title>xmlpipe_field_wordcount</title>
 <para>
 xmlpipe field and word count attribute declaration.
 Multi-value, optional.
@@ -5540,10 +5540,10 @@ Equivalent to <![CDATA[<sphinx:field name="field" attr="wordcount"/>]]> declarat
 <programlisting>
 xmlpipe_field_wordcount = subject
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-xmlpipe-attr-uint"><title>xmlpipe_attr_uint</title>
+<sect2 id="conf-xmlpipe-attr-uint"><title>xmlpipe_attr_uint</title>
 <para>
 xmlpipe integer attribute declaration.
 Multi-value, optional.
@@ -5554,10 +5554,10 @@ Syntax fully matches that of <link linkend="conf-sql-attr-uint">sql_attr_uint</l
 <programlisting>
 xmlpipe_attr_uint = author
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-xmlpipe-attr-bool"><title>xmlpipe_attr_bool</title>
+<sect2 id="conf-xmlpipe-attr-bool"><title>xmlpipe_attr_bool</title>
 <para>
 xmlpipe boolean attribute declaration.
 Multi-value, optional.
@@ -5568,10 +5568,10 @@ Syntax fully matches that of <link linkend="conf-sql-attr-bool">sql_attr_bool</l
 <programlisting>
 xmlpipe_attr_bool = is_deleted # will be packed to 1 bit
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-xmlpipe-attr-timestamp"><title>xmlpipe_attr_timestamp</title>
+<sect2 id="conf-xmlpipe-attr-timestamp"><title>xmlpipe_attr_timestamp</title>
 <para>
 xmlpipe UNIX timestamp attribute declaration.
 Multi-value, optional.
@@ -5582,10 +5582,10 @@ Syntax fully matches that of <link linkend="conf-sql-attr-timestamp">sql_attr_ti
 <programlisting>
 xmlpipe_attr_timestamp = published
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-xmlpipe-attr-str2ordinal"><title>xmlpipe_attr_str2ordinal</title>
+<sect2 id="conf-xmlpipe-attr-str2ordinal"><title>xmlpipe_attr_str2ordinal</title>
 <para>
 xmlpipe string ordinal attribute declaration.
 Multi-value, optional.
@@ -5596,10 +5596,10 @@ Syntax fully matches that of <link linkend="conf-sql-attr-str2ordinal">sql_attr_
 <programlisting>
 xmlpipe_attr_str2ordinal = author_sort
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-xmlpipe-attr-float"><title>xmlpipe_attr_float</title>
+<sect2 id="conf-xmlpipe-attr-float"><title>xmlpipe_attr_float</title>
 <para>
 xmlpipe floating point attribute declaration.
 Multi-value, optional.
@@ -5611,10 +5611,10 @@ Syntax fully matches that of <link linkend="conf-sql-attr-float">sql_attr_float<
 xmlpipe_attr_float = lat_radians
 xmlpipe_attr_float = long_radians
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-xmlpipe-attr-multi"><title>xmlpipe_attr_multi</title>
+<sect2 id="conf-xmlpipe-attr-multi"><title>xmlpipe_attr_multi</title>
 <para>
 xmlpipe MVA attribute declaration.
 Multi-value, optional.
@@ -5631,10 +5631,10 @@ SQL column contents when 'field' MVA source type is specified.
 <programlisting>
 xmlpipe_attr_multi = taglist
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-xmlpipe-attr-string"><title>xmlpipe_attr_string</title>
+<sect2 id="conf-xmlpipe-attr-string"><title>xmlpipe_attr_string</title>
 <para>
 xmlpipe string declaration.
 Multi-value, optional.
@@ -5649,10 +5649,10 @@ The contents of the specified tag will be parsed and stored as a string value.
 <programlisting>
 xmlpipe_attr_string = subject
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-xmlpipe-fixup-utf8"><title>xmlpipe_fixup_utf8</title>
+<sect2 id="conf-xmlpipe-fixup-utf8"><title>xmlpipe_fixup_utf8</title>
 <para>
 Perform Sphinx-side UTF-8 validation and filtering to prevent XML parser from choking on non-UTF-8 documents.
 Optional, default is 0.
@@ -5672,10 +5672,10 @@ XML parser and replace invalid UTF-8 sequences with spaces.
 <programlisting>
 xmlpipe_fixup_utf8 = 1
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-mssql-winauth"><title>mssql_winauth</title>
+<sect2 id="conf-mssql-winauth"><title>mssql_winauth</title>
 <para>
 MS SQL Windows authentication flag.
 Boolean, optional, default value is 0 (false).
@@ -5692,10 +5692,10 @@ from the account you used to install the service.
 <programlisting>
 mssql_winauth = 1
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-mssql-unicode"><title>mssql_unicode</title>
+<sect2 id="conf-mssql-unicode"><title>mssql_unicode</title>
 <para>
 MS SQL encoding type flag.
 Boolean, optional, default value is 0 (false).
@@ -5714,10 +5714,10 @@ but Sphinx will automatically handle that.
 <programlisting>
 mssql_unicode = 1
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-unpack-zlib"><title>unpack_zlib</title>
+<sect2 id="conf-unpack-zlib"><title>unpack_zlib</title>
 <para>
 Columns to unpack using zlib (aka deflate, aka gunzip).
 Multi-value, optional, default value is empty list of columns.
@@ -5735,10 +5735,10 @@ The feature is only available if zlib and zlib-devel were both available during 
 unpack_zlib = col1
 unpack_zlib = col2
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-unpack-mysqlcompress"><title>unpack_mysqlcompress</title>
+<sect2 id="conf-unpack-mysqlcompress"><title>unpack_mysqlcompress</title>
 <para>
 Columns to unpack using MySQL UNCOMPRESS() algorithm.
 Multi-value, optional, default value is empty list of columns.
@@ -5756,10 +5756,10 @@ The feature is only available if zlib and zlib-devel were both available during 
 unpack_mysqlcompress = body_compressed
 unpack_mysqlcompress = description_compressed
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-unpack-mysqlcompress-maxsize"><title>unpack_mysqlcompress_maxsize</title>
+<sect2 id="conf-unpack-mysqlcompress-maxsize"><title>unpack_mysqlcompress_maxsize</title>
 <para>
 Buffer size for UNCOMPRESS()ed data.
 Optional, default value is 16M.
@@ -5777,14 +5777,14 @@ of really long data fields if necessary.
 <programlisting>
 unpack_mysqlcompress_maxsize = 1M
 </programlisting>
-</sect3>
-
-
 </sect2>
-<sect2 id="confgroup-index"><title>Index configuration options</title>
 
 
-<sect3 id="conf-index-type"><title>type</title>
+</sect1>
+<sect1 id="confgroup-index"><title>Index configuration options</title>
+
+
+<sect2 id="conf-index-type"><title>type</title>
 <para>
 Index type.
 Known values are 'plain', 'distributed', and 'rt'.
@@ -5811,10 +5811,10 @@ By default, plain local index type will be assumed.
 <programlisting>
 type = distributed
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-source"><title>source</title>
+<sect2 id="conf-source"><title>source</title>
 <para>
 Adds document source to local index.
 Multi-value, mandatory.
@@ -5880,10 +5880,10 @@ source = srcpart1
 source = srcpart2
 source = srcpart3
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-path"><title>path</title>
+<sect2 id="conf-path"><title>path</title>
 <para>
 Index files path and file name (without extension).
 Mandatory.
@@ -5912,10 +5912,10 @@ For reference, different index files store the following data:
 <programlisting>
 path = /var/data/test1
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-docinfo"><title>docinfo</title>
+<sect2 id="conf-docinfo"><title>docinfo</title>
 <para>
 Document attribute values (docinfo) storage mode.
 Optional, default is 'extern'.
@@ -5943,10 +5943,10 @@ and RAM usage estimates.
 <programlisting>
 docinfo = inline
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-mlock"><title>mlock</title>
+<sect2 id="conf-mlock"><title>mlock</title>
 <para>
 Memory locking for cached data.
 Optional, default is 0 (do not call mlock()).
@@ -5973,10 +5973,10 @@ working.
 <programlisting>
 mlock = 1
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-morphology"><title>morphology</title>
+<sect2 id="conf-morphology"><title>morphology</title>
 <para>
 A list of morphology preprocessors to apply.
 Optional, default is empty (do not apply any preprocessor).
@@ -6022,10 +6022,10 @@ used to implement stemming exceptions.
 <programlisting>
 morphology = stem_en, libstemmer_sv
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-min-stemming-len"><title>min_stemming_len</title>
+<sect2 id="conf-min-stemming-len"><title>min_stemming_len</title>
 <para>
 Minimum word length at which to enable stemming.
 Optional, default is 1 (stem everything).
@@ -6046,10 +6046,10 @@ For more finely grained control, refer to <link linkend="conf-wordforms">wordfor
 <programlisting>
 min_stemming_len = 4
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-stopwords"><title>stopwords</title>
+<sect2 id="conf-stopwords"><title>stopwords</title>
 <para>
 Stopword files list (space separated).
 Optional, default is empty.
@@ -6080,10 +6080,10 @@ as for exact phrase will only return the first document, as expected, even thoug
 stopwords = /usr/local/sphinx/data/stopwords.txt
 stopwords = stopwords-ru.txt stopwords-en.txt
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-wordforms"><title>wordforms</title>
+<sect2 id="conf-wordforms"><title>wordforms</title>
 <para>
 Word forms dictionary.
 Optional, default is empty.
@@ -6148,10 +6148,10 @@ core 2duo &gt; c2d
 <programlisting>
 wordforms = /usr/local/sphinx/data/wordforms.txt
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-exceptions"><title>exceptions</title>
+<sect2 id="conf-exceptions"><title>exceptions</title>
 <para>
 Tokenizing exceptions file.
 Optional, default is empty.
@@ -6238,10 +6238,10 @@ changes in the file it's required to reindex and restart
 <programlisting>
 exceptions = /usr/local/sphinx/data/exceptions.txt
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-min-word-len"><title>min_word_len</title>
+<sect2 id="conf-min-word-len"><title>min_word_len</title>
 <para>
 Minimum indexed word length.
 Optional, default is 1 (index everything).
@@ -6254,10 +6254,10 @@ For instance, if min_word_len is 4, then 'the' won't be indexed, but 'they' will
 <programlisting>
 min_word_len = 4
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-charset-type"><title>charset_type</title>
+<sect2 id="conf-charset-type"><title>charset_type</title>
 <para>
 Character set encoding type.
 Optional, default is 'sbcs'.
@@ -6284,10 +6284,10 @@ depending on whether koi-8r or windows-1251 encoding is used.
 <programlisting>
 charset_type = utf-8
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-charset-table"><title>charset_table</title>
+<sect2 id="conf-charset-table"><title>charset_table</title>
 <para>
 Accepted characters table, with case folding rules.
 Optional, default value depends on <link linkend="conf-charset-type">charset_type</link> value.
@@ -6380,10 +6380,10 @@ charset_table = 0..9, A..Z-&gt;a..z, _, a..z, \
 charset_table = 0..9, A..Z-&gt;a..z, _, a..z, \
 	U+410..U+42F-&gt;U+430..U+44F, U+430..U+44F
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-ignore-chars"><title>ignore_chars</title>
+<sect2 id="conf-ignore-chars"><title>ignore_chars</title>
 <para>
 Ignored characters list.
 Optional, default is empty.
@@ -6405,10 +6405,10 @@ the ignored characters must not be present in charset_table.
 <programlisting>
 ignore_chars = U+AD
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-min-prefix-len"><title>min_prefix_len</title>
+<sect2 id="conf-min-prefix-len"><title>min_prefix_len</title>
 <para>
 Minimum word prefix length to index.
 Optional, default is 0 (do not index prefixes).
@@ -6449,10 +6449,10 @@ $cl->Query ( "( keyword | keyword* ) other keywords" );
 <programlisting>
 min_prefix_len = 3
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-min-infix-len"><title>min_infix_len</title>
+<sect2 id="conf-min-infix-len"><title>min_infix_len</title>
 <para>
 Minimum infix prefix length to index.
 Optional, default is 0 (do not index infixes).
@@ -6480,10 +6480,10 @@ can be applied.
 <programlisting>
 min_infix_len = 3
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-prefix-fields"><title>prefix_fields</title>
+<sect2 id="conf-prefix-fields"><title>prefix_fields</title>
 <para>
 The list of full-text fields to limit prefix indexing to.
 Optional, default is empty (index all fields in prefix mode).
@@ -6500,10 +6500,10 @@ comma-separated list of field names.
 <programlisting>
 prefix_fields = url, domain
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-infix-fields"><title>infix_fields</title>
+<sect2 id="conf-infix-fields"><title>infix_fields</title>
 <para>
 The list of full-text fields to limit infix indexing to.
 Optional, default is empty (index all fields in infix mode).
@@ -6516,10 +6516,10 @@ but lets you limit infix-indexing to given fields.
 <programlisting>
 infix_fields = url, domain
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-enable-star"><title>enable_star</title>
+<sect2 id="conf-enable-star"><title>enable_star</title>
 <para>
 Enables star-syntax (or wildcard syntax) when searching through prefix/infix indexes.
 Optional, default is is 0 (do not use wildcard syntax), for compatibility with 0.9.7.
@@ -6559,10 +6559,10 @@ contain the exact "def" word only).</listitem>
 <programlisting>
 enable_star = 1
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-ngram-len"><title>ngram_len</title>
+<sect2 id="conf-ngram-len"><title>ngram_len</title>
 <para>
 N-gram lengths for N-gram indexing.
 Optional, default is 0 (disable n-gram indexing).
@@ -6608,10 +6608,10 @@ word matches) to the top.
 <programlisting>
 ngram_len = 1
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-ngram-chars"><title>ngram_chars</title>
+<sect2 id="conf-ngram-chars"><title>ngram_chars</title>
 <para>
 N-gram characters list.
 Optional, default is empty.
@@ -6626,10 +6626,10 @@ feature. The value format is identical to <link linkend="conf-charset-table">cha
 <programlisting>
 ngram_chars = U+3000..U+2FA1F
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-phrase-boundary"><title>phrase_boundary</title>
+<sect2 id="conf-phrase-boundary"><title>phrase_boundary</title>
 <para>
 Phrase boundary characters list.
 Optional, default is empty.
@@ -6660,10 +6660,10 @@ S.T.A.L.K.E.R or URLs being treated as several phrases.
 <programlisting>
 phrase_boundary = ., ?, !, U+2026 # horizontal ellipsis
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-phrase-boundary-step"><title>phrase_boundary_step</title>
+<sect2 id="conf-phrase-boundary-step"><title>phrase_boundary_step</title>
 <para>
 Phrase boundary word position increment.
 Optional, default is 0.
@@ -6676,10 +6676,10 @@ by this number. See <link linkend="conf-phrase-boundary">phrase_boundary</link> 
 <programlisting>
 phrase_boundary_step = 100
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-html-strip"><title>html_strip</title>
+<sect2 id="conf-html-strip"><title>html_strip</title>
 <para>
 Whether to strip HTML markup from incoming full-text data.
 Optional, default is 0.
@@ -6704,10 +6704,10 @@ will be stripped.
 <programlisting>
 html_strip = 1
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-html-index-attrs"><title>html_index_attrs</title>
+<sect2 id="conf-html-index-attrs"><title>html_index_attrs</title>
 <para>
 A list of markup attributes to index when stripping HTML.
 Optional, default is empty (do not index markup attributes).
@@ -6721,10 +6721,10 @@ indexable attributes, as shown in the example below.
 <programlisting>
 html_index_attrs = img=alt,title; a=title;
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-html-remove-elements"><title>html_remove_elements</title>
+<sect2 id="conf-html-remove-elements"><title>html_remove_elements</title>
 <para>
 A list of HTML elements for which to strip contents along with the elements themselves.
 Optional, default is empty string (do not strip contents of any elements).
@@ -6744,10 +6744,10 @@ contents should be removed. Tag names are case insensitive.
 <programlisting>
 html_remove_elements = style, script
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-local"><title>local</title>
+<sect2 id="conf-local"><title>local</title>
 <para>
 Local index declaration in the <link linkend="distributed">distributed index</link>.
 Multi-value, optional, default is empty.
@@ -6766,10 +6766,10 @@ several times in other distributed indexes.
 local = chunk1
 local = chunk2
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-agent"><title>agent</title>
+<sect2 id="conf-agent"><title>agent</title>
 <para>
 Remote agent declaration in the <link linkend="distributed">distributed index</link>.
 Multi-value, optional, default is empty.
@@ -6835,10 +6835,10 @@ agent = localhost:9312:chunk2 # contact itself
 agent = /var/run/searchd.s:chunk2
 agent = searchbox2:9312:chunk3,chunk4 # search remote indexes
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-agent-blackhole"><title>agent_blackhole</title>
+<sect2 id="conf-agent-blackhole"><title>agent_blackhole</title>
 <para>
 Remote blackhole agent declaration in the <link linkend="distributed">distributed index</link>.
 Multi-value, optional, default is empty.
@@ -6860,10 +6860,10 @@ The value format is completely identical to regular
 <programlisting>
 agent_blackhole = testbox:9312:testindex1,testindex2
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-agent-connect-timeout"><title>agent_connect_timeout</title>
+<sect2 id="conf-agent-connect-timeout"><title>agent_connect_timeout</title>
 <para>
 Remote agent connection timeout, in milliseconds.
 Optional, default is 1000 (ie. 1 second).
@@ -6879,10 +6879,10 @@ retry will be initiated.
 <programlisting>
 agent_connect_timeout = 300
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-agent-query-timeout"><title>agent_query_timeout</title>
+<sect2 id="conf-agent-query-timeout"><title>agent_query_timeout</title>
 <para>
 Remote agent query timeout, in milliseconds.
 Optional, default is 3000 (ie. 3 seconds).
@@ -6899,10 +6899,10 @@ if this timeout is reached; a warning will be produced instead.
 <programlisting>
 agent_query_timeout = 10000 # our query can be long, allow up to 10 sec
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-preopen"><title>preopen</title>
+<sect2 id="conf-preopen"><title>preopen</title>
 <para>
 Whether to pre-open all index files, or open them per each query.
 Optional, default is 0 (do not preopen).
@@ -6926,10 +6926,10 @@ it only affects <filename>searchd</filename>.
 <programlisting>
 preopen = 1
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-ondisk-dict"><title>ondisk_dict</title>
+<sect2 id="conf-ondisk-dict"><title>ondisk_dict</title>
 <para>
 Whether to keep the dictionary file (.spi) for this index on disk, or precache it in RAM.
 Optional, default is 0 (precache in RAM).
@@ -6950,10 +6950,10 @@ it only affects <filename>searchd</filename>.
 <programlisting>
 ondisk_dict = 1
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-inplace-enable"><title>inplace_enable</title>
+<sect2 id="conf-inplace-enable"><title>inplace_enable</title>
 <para>
 Whether to enable in-place index inversion.
 Optional, default is 0 (use separate temporary files).
@@ -6989,10 +6989,10 @@ it only affects <filename>indexer</filename>.
 <programlisting>
 inplace_enable = 1
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-inplace-hit-gap"><title>inplace_hit_gap</title>
+<sect2 id="conf-inplace-hit-gap"><title>inplace_hit_gap</title>
 <para>
 <link linkend="conf-inplace-enable">In-place inversion</link> fine-tuning option.
 Controls preallocated hitlist gap size.
@@ -7007,10 +7007,10 @@ it only affects <filename>indexer</filename>.
 <programlisting>
 inplace_hit_gap = 1M
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-inplace-docinfo-gap"><title>inplace_docinfo_gap</title>
+<sect2 id="conf-inplace-docinfo-gap"><title>inplace_docinfo_gap</title>
 <para>
 <link linkend="conf-inplace-enable">In-place inversion</link> fine-tuning option.
 Controls preallocated docinfo gap size.
@@ -7025,10 +7025,10 @@ it only affects <filename>indexer</filename>.
 <programlisting>
 inplace_docinfo_gap = 1M
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-inplace-reloc-factor"><title>inplace_reloc_factor</title>
+<sect2 id="conf-inplace-reloc-factor"><title>inplace_reloc_factor</title>
 <para>
 <link linkend="conf-inplace-reloc-factor">In-place inversion</link> fine-tuning option.
 Controls relocation buffer size within indexing memory arena.
@@ -7043,10 +7043,10 @@ it only affects <filename>indexer</filename>.
 <programlisting>
 inplace_reloc_factor = 0.1
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-inplace-write-factor"><title>inplace_write_factor</title>
+<sect2 id="conf-inplace-write-factor"><title>inplace_write_factor</title>
 <para>
 <link linkend="conf-inplace-write-factor">In-place inversion</link> fine-tuning option.
 Controls in-place write buffer size within indexing memory arena.
@@ -7061,10 +7061,10 @@ it only affects <filename>indexer</filename>.
 <programlisting>
 inplace_write_factor = 0.1
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-index-exact-words"><title>index_exact_words</title>
+<sect2 id="conf-index-exact-words"><title>index_exact_words</title>
 <para>
 Whether to index the original keywords along with the stemmed/remapped versions.
 Optional, default is 0 (do not index).
@@ -7081,10 +7081,10 @@ is not impacted at all.
 <programlisting>
 index_exact_words = 1
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-overshort-step"><title>overshort_step</title>
+<sect2 id="conf-overshort-step"><title>overshort_step</title>
 <para>
 Position increment on overshort (less that <link linkend="conf-min-word-len">min_word_len</link>) keywords.
 Optional, allowed values are 0 and 1, default is 1.
@@ -7098,10 +7098,10 @@ it only affects <filename>indexer</filename>.
 <programlisting>
 overshort_step = 1
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-stopword-step"><title>stopword_step</title>
+<sect2 id="conf-stopword-step"><title>stopword_step</title>
 <para>
 Position increment on <link linkend="conf-stopwords">stopwords</link>.
 Optional, allowed values are 0 and 1, default is 1.
@@ -7115,10 +7115,10 @@ it only affects <filename>indexer</filename>.
 <programlisting>
 stopword_step = 1
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-hitless-words"><title>hitless_words</title>
+<sect2 id="conf-hitless-words"><title>hitless_words</title>
 <para>
 Hitless words list.
 Optional, allowed values are 'all', or a list file name.
@@ -7158,10 +7158,10 @@ hello &amp; world) query, matching all documents that contain "hello" and
 <programlisting>
 hitless_words = all
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-expand-keywords"><title>expand_keywords</title>
+<sect2 id="conf-expand-keywords"><title>expand_keywords</title>
 <para>
 Expand keywords with exact forms and/or stars when possible.
 Optional, default is 0 (do not expand keywords).
@@ -7200,10 +7200,10 @@ it only affects <filename>searchd</filename>.
 <programlisting>
 expand_keywords = 1
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-blend-chars"><title>blend_chars</title>
+<sect2 id="conf-blend-chars"><title>blend_chars</title>
 <para>
 Blended characters list.
 Optional, default is empty.
@@ -7232,10 +7232,10 @@ escape the query terms.
 <programlisting>
 blend_chars = +, &amp;, U+23
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-rt-mem-limit"><title>rt_mem_limit</title>
+<sect2 id="conf-rt-mem-limit"><title>rt_mem_limit</title>
 <para>
 RAM chunk size limit.
 Optional, default is empty.
@@ -7260,10 +7260,10 @@ should result in allocating 3 MB, not 512 MB.
 <programlisting>
 rt_mem_limit = 512M
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-rt-field"><title>rt_field</title>
+<sect2 id="conf-rt-field"><title>rt_field</title>
 <para>
 Full-text field declaration.
 Multi-value, mandatory
@@ -7283,10 +7283,10 @@ rt_field = author
 rt_field = title
 rt_field = content
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-rt-attr-uint"><title>rt_attr_uint</title>
+<sect2 id="conf-rt-attr-uint"><title>rt_attr_uint</title>
 <para>
 Unsigned integer attribute declaration.
 Multi-value (an arbitrary number of attributes is allowed), optional.
@@ -7297,10 +7297,10 @@ Introduced in version 1.10.1.
 <programlisting>
 rt_attr_uint = gid
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-rt-attr-bigint"><title>rt_attr_bigint</title>
+<sect2 id="conf-rt-attr-bigint"><title>rt_attr_bigint</title>
 <para>
 BIGINT attribute declaration.
 Multi-value (an arbitrary number of attributes is allowed), optional.
@@ -7311,10 +7311,10 @@ Introduced in version 1.10.1.
 <programlisting>
 rt_attr_bigint = guid
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-rt-attr-float"><title>rt_attr_float</title>
+<sect2 id="conf-rt-attr-float"><title>rt_attr_float</title>
 <para>
 Floating point attribute declaration.
 Multi-value (an arbitrary number of attributes is allowed), optional.
@@ -7325,14 +7325,14 @@ Introduced in version 1.10.1.
 <programlisting>
 rt_attr_float = gpa
 </programlisting>
-</sect3>
-
-
 </sect2>
-<sect2 id="confgroup-indexer"><title><filename>indexer</filename> program configuration options</title>
 
 
-<sect3 id="conf-mem-limit"><title>mem_limit</title>
+</sect1>
+<sect1 id="confgroup-indexer"><title><filename>indexer</filename> program configuration options</title>
+
+
+<sect2 id="conf-mem-limit"><title>mem_limit</title>
 <para>
 Indexing RAM usage limit.
 Optional, default is 32M.
@@ -7363,10 +7363,10 @@ mem_limit = 256M
 # mem_limit = 262144K # same, but in KB
 # mem_limit = 268435456 # same, but in bytes
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-max-iops"><title>max_iops</title>
+<sect2 id="conf-max-iops"><title>max_iops</title>
 <para>
 Maximum I/O operations per second, for I/O throttling.
 Optional, default is 0 (unlimited).
@@ -7391,10 +7391,10 @@ caused by indexing.
 <programlisting>
 max_iops = 40
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-max-iosize"><title>max_iosize</title>
+<sect2 id="conf-max-iosize"><title>max_iosize</title>
 <para>
 Maximum allowed I/O operation size, in bytes, for I/O throttling.
 Optional, default is 0 (unlimited).
@@ -7413,10 +7413,10 @@ anyway, so <code>max_iosize</code> values higher than 256 KB must not affect any
 <programlisting>
 max_iosize = 1048576
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-max-xmlpipe2-field"><title>max_xmlpipe2_field</title>
+<sect2 id="conf-max-xmlpipe2-field"><title>max_xmlpipe2_field</title>
 <para>
 Maximum allowed field size for XMLpipe2 source type, bytes.
 Optional, default is 2 MB.
@@ -7425,10 +7425,10 @@ Optional, default is 2 MB.
 <programlisting>
 max_xmlpipe2_field = 8M
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-write-buffer"><title>write_buffer</title>
+<sect2 id="conf-write-buffer"><title>write_buffer</title>
 <para>
 Write buffer size, bytes.
 Optional, default is 1 MB.
@@ -7445,14 +7445,14 @@ proportionally increasing the RAM usage.
 <programlisting>
 write_buffer = 4M
 </programlisting>
-</sect3>
-
-
 </sect2>
-<sect2 id="confgroup-searchd"><title><filename>searchd</filename> program configuration options</title>
 
 
-<sect3 id="conf-listen"><title>listen</title>
+</sect1>
+<sect1 id="confgroup-searchd"><title><filename>searchd</filename> program configuration options</title>
+
+
+<sect2 id="conf-listen"><title>listen</title>
 <para>
 This setting lets you specify IP address and port, or Unix-domain
 socket path, that <code>searchd</code> will listen on.
@@ -7494,9 +7494,9 @@ on all available interfaces using the default port (which is 9312).
 <para>
 Unix-domain sockets are not supported on Windows.
 </para>
-</sect3>
+</sect2>
 
-<sect3 id="conf-address"><title>address</title>
+<sect2 id="conf-address"><title>address</title>
 <para>
 Interface IP address to bind on.
 Optional, default is 0.0.0.0 (ie. listen on all interfaces).
@@ -7512,10 +7512,10 @@ on all interfaces. At the time, you can <b>not</b> specify multiple interfaces.
 <programlisting>
 address = 192.168.0.1
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-port"><title>port</title>
+<sect2 id="conf-port"><title>port</title>
 <para>
 <filename>searchd</filename> TCP port number.
 <b>DEPRECATED</b>, use <link linkend="conf-listen">listen</link> instead.
@@ -7525,10 +7525,10 @@ Used to be mandatory. Default port number is 9312.
 <programlisting>
 port = 9312
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-log"><title>log</title>
+<sect2 id="conf-log"><title>log</title>
 <para>
 Log file name.
 Optional, default is 'searchd.log'.
@@ -7538,10 +7538,10 @@ All <filename>searchd</filename> run time events will be logged in this file.
 <programlisting>
 log = /var/log/searchd.log
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-query-log"><title>query_log</title>
+<sect2 id="conf-query-log"><title>query_log</title>
 <para>
 Query log file name.
 Optional, default is empty (do not log queries).
@@ -7551,10 +7551,10 @@ All search queries will be logged in this file. The format is described in <xref
 <programlisting>
 query_log = /var/log/query.log
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-read-timeout"><title>read_timeout</title>
+<sect2 id="conf-read-timeout"><title>read_timeout</title>
 <para>
 Network client request read timeout, in seconds.
 Optional, default is 5 seconds.
@@ -7564,10 +7564,10 @@ Optional, default is 5 seconds.
 <programlisting>
 read_timeout = 1
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-client-timeout"><title>client_timeout</title>
+<sect2 id="conf-client-timeout"><title>client_timeout</title>
 <para>
 Maximum time to wait between requests (in seconds) when using
 persistent connections. Optional, default is five minutes.
@@ -7576,10 +7576,10 @@ persistent connections. Optional, default is five minutes.
 <programlisting>
 client_timeout = 3600
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-max-children"><title>max_children</title>
+<sect2 id="conf-max-children"><title>max_children</title>
 <para>
 Maximum amount of children to fork (or in other words, concurrent searches to run in parallel).
 Optional, default is 0 (unlimited).
@@ -7594,10 +7594,10 @@ and a message stating that the server is maxed out.
 <programlisting>
 max_children = 10
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-pid-file"><title>pid_file</title>
+<sect2 id="conf-pid-file"><title>pid_file</title>
 <para>
 <filename>searchd</filename> process ID file name.
 Mandatory.
@@ -7615,10 +7615,10 @@ different external automation scripts.
 <programlisting>
 pid_file = /var/run/searchd.pid
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-max-matches"><title>max_matches</title>
+<sect2 id="conf-max-matches"><title>max_matches</title>
 <para>
 Maximum amount of matches that the daemon keeps in RAM for each index and can return to the client.
 Optional, default is 1000.
@@ -7663,10 +7663,10 @@ against malicious and/or malformed requests.
 <programlisting>
 max_matches = 10000
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-seamless-rotate"><title>seamless_rotate</title>
+<sect2 id="conf-seamless-rotate"><title>seamless_rotate</title>
 <para>
 Prevents <filename>searchd</filename> stalls while rotating indexes with huge amounts of data to precache.
 Optional, default is 1 (enable seamless rotation).
@@ -7711,10 +7711,10 @@ preloading new copy). Average usage stays the same.
 <programlisting>
 seamless_rotate = 1
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-preopen-indexes"><title>preopen_indexes</title>
+<sect2 id="conf-preopen-indexes"><title>preopen_indexes</title>
 <para>
 Whether to forcibly preopen all indexes on startup.
 Optional, default is 0 (do not preopen).
@@ -7725,10 +7725,10 @@ to avoid manually specifying it in every index.
 <programlisting>
 preopen_indexes = 1
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-unlink-old"><title>unlink_old</title>
+<sect2 id="conf-unlink-old"><title>unlink_old</title>
 <para>
 Whether to unlink .old index copies on succesful rotation.
 Optional, default is 1 (do unlink).
@@ -7737,9 +7737,9 @@ Optional, default is 1 (do unlink).
 <programlisting>
 unlink_old = 0
 </programlisting>
-</sect3>
+</sect2>
 
-<sect3 id="conf-attr-flush-period"><title>attr_flush_period</title>
+<sect2 id="conf-attr-flush-period"><title>attr_flush_period</title>
 <para>
 When calling <code>UpdateAttributes()</code> to update document attributes in
 real-time, changes are first written to the in-memory copy of attributes
@@ -7759,10 +7759,10 @@ still occur at normal shut-down.
 <programlisting>
 attr_flush_period = 900 # persist updates to disk every 15 minutes
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-ondisk-dict-default"><title>ondisk_dict_default</title>
+<sect2 id="conf-ondisk-dict-default"><title>ondisk_dict_default</title>
 <para>
 Instance-wide defaults for <link linkend="conf-ondisk-dict">ondisk_dict</link> directive.
 Optional, default it 0 (precache dictionaries in RAM).
@@ -7779,10 +7779,10 @@ allowing for fine-grain control.
 <programlisting>
 ondisk_dict_default = 1 # keep all dictionaries on disk
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-max-packet-size"><title>max_packet_size</title>
+<sect2 id="conf-max-packet-size"><title>max_packet_size</title>
 <para>
 Maximum allowed network packet size.
 Limits both query packets from clients, and response packets from remote agents in distributed environment.
@@ -7794,10 +7794,10 @@ Introduced in version 0.9.9-rc1.
 <programlisting>
 max_packet_size = 32M
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-mva-updates-pool"><title>mva_updates_pool</title>
+<sect2 id="conf-mva-updates-pool"><title>mva_updates_pool</title>
 <para>
 Shared pool size for in-memory MVA updates storage.
 Optional, default size is 1M.
@@ -7818,10 +7818,10 @@ not as a persistent storage mechanism.
 <programlisting>
 mva_updates_pool = 16M
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-crash-log-path"><title>crash_log_path</title>
+<sect2 id="conf-crash-log-path"><title>crash_log_path</title>
 <para>
 Path (formally prefix) for the crash log files.
 Optional, default is empty (do not create crash logs).
@@ -7838,10 +7838,10 @@ such as SIGSEGV, and dump offending query packets to files named
 <programlisting>
 crash_log_path = /home/sphinx/log/crashlog
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-max-filters"><title>max_filters</title>
+<sect2 id="conf-max-filters"><title>max_filters</title>
 <para>
 Maximum allowed per-query filter count.
 Only used for internal sanity checks, does not directly affect RAM use or performance.
@@ -7852,10 +7852,10 @@ Introduced in version 0.9.9-rc1.
 <programlisting>
 max_filters = 1024
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-max-filter-values"><title>max_filter_values</title>
+<sect2 id="conf-max-filter-values"><title>max_filter_values</title>
 <para>
 Maximum allowed per-filter values count.
 Only used for internal sanity checks, does not directly affect RAM use or performance.
@@ -7866,10 +7866,10 @@ Introduced in version 0.9.9-rc1.
 <programlisting>
 max_filter_values = 16384
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-listen-backlog"><title>listen_backlog</title>
+<sect2 id="conf-listen-backlog"><title>listen_backlog</title>
 <para>
 TCP listen backlog.
 Optional, default is 5.
@@ -7886,10 +7886,10 @@ should work fine with the default value.
 <programlisting>
 listen_backlog = 20
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-read-buffer"><title>read_buffer</title>
+<sect2 id="conf-read-buffer"><title>read_buffer</title>
 <para>
 Per-keyword read buffer size.
 Optional, default is 256K.
@@ -7904,10 +7904,10 @@ per-query RAM use, but possibly decreasing IO time.
 <programlisting>
 read_buffer = 1M
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-read-unhinted"><title>read_unhinted</title>
+<sect2 id="conf-read-unhinted"><title>read_unhinted</title>
 <para>
 Unhinted read size.
 Optional, default is 32K.
@@ -7926,10 +7926,10 @@ allocated. So it should be not greater than read_buffer.
 <programlisting>
 read_unhinted = 32K
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-max-batch-queries"><title>max_batch_queries</title>
+<sect2 id="conf-max-batch-queries"><title>max_batch_queries</title>
 <para>
 Limits the amount of queries per batch.
 Optional, default is 32.
@@ -7943,10 +7943,10 @@ Set it to 0 to skip the check.
 <programlisting>
 max_batch_queries = 256
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-subtree-docs-cache"><title>subtree_docs_cache</title>
+<sect2 id="conf-subtree-docs-cache"><title>subtree_docs_cache</title>
 <para>
 Max common subtree document cache size, per-query.
 Optional, default is 512K.
@@ -7960,10 +7960,10 @@ Setting the limit to 0 disables the optimizer.
 <programlisting>
 subtree_docs_cache = 8M
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-subtree-hits-cache"><title>subtree_hits_cache</title>
+<sect2 id="conf-subtree-hits-cache"><title>subtree_hits_cache</title>
 <para>
 Max common subtree hit cache size, per-query.
 Optional, default is 1M.
@@ -7977,10 +7977,10 @@ Setting the limit to 0 disables the optimizer.
 <programlisting>
 subtree_hits_cache = 16M
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-workers"><title>workers</title>
+<sect2 id="conf-workers"><title>workers</title>
 <para>
 Multi-processing mode (MPM).
 Optional; allowed values are none, fork, prefork, and threads; default is fork.
@@ -8036,10 +8036,10 @@ available modes.)
 <programlisting>
 workers = threads
 </programlisting>
-</sect3>
+</sect2>
 
 
-<sect3 id="conf-dist-threads"><title>dist_threads</title>
+<sect2 id="conf-dist-threads"><title>dist_threads</title>
 <para>
 Max local search threads to use when searching a distributed index.
 Optional, default is 0, which means to disable multi-threaded distributed searching.
@@ -8084,35 +8084,35 @@ index dist_test
 
 dist_threads = 4
 </programlisting>
-</sect3>
-
-
 </sect2>
 
 
 </sect1>
+
+
+</chapter>
 
 <!--
-<sect1 id="developers"><title>Developer's corner</title>
+<chapter id="developers"><title>Developer's corner</title>
 
-<sect2 id="architecture-overview"><title>Sphinx architecture overview</title>
+<sect1 id="architecture-overview"><title>Sphinx architecture overview</title>
 (to be added)
-</sect2>
-
-<sect2 id="adding-data-sources"><title>Adding new data source drivers</title>
-(to be added)
-</sect2>
-
-<sect2 id="adding-data-sources"><title>API porting guidelines</title>
-(to be added)
-</sect2>
-
 </sect1>
+
+<sect1 id="adding-data-sources"><title>Adding new data source drivers</title>
+(to be added)
+</sect1>
+
+<sect1 id="adding-data-sources"><title>API porting guidelines</title>
+(to be added)
+</sect1>
+
+</chapter>
 -->
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 
-<sect2 id="rel1101"><title>Version 1.10.1-alpha, ??? jan 2010</title>
+<sect1 id="rel1101"><title>Version 1.10.1-alpha, ??? jan 2010</title>
 <itemizedlist>
 <listitem>added RT indexes support (<link linkend="conf-rt-mem-limit">rt_mem_limit</link>,
 	<link linkend="conf-rt-field">rt_field</link>, <link linkend="conf-rt-attr-uint">rt_attr_uint</link> etc directives)</listitem>
@@ -8147,9 +8147,9 @@ dist_threads = 4
 <listitem>optimized MySQL protocol overheads</listitem>
 <listitem>changed attribute handling, duplicate names are strictly forbidden now</listitem>
 </itemizedlist>
-</sect2>
+</sect1>
 
-<sect2 id="rel099"><title>Version 0.9.9-release, 02 dec 2009</title>
+<sect1 id="rel099"><title>Version 0.9.9-release, 02 dec 2009</title>
 <itemizedlist>
 <listitem>added Open, Close, Status calls to libsphinxclient (C API)</listitem>
 <listitem>added automatic persistent connection reopening to PHP, Python APIs</listitem>
@@ -8205,9 +8205,9 @@ dist_threads = 4
 <listitem>fixed #344 (invalid checkpoints after merge)</listitem>
 <listitem>fixed #326 (missing CLOCK_xxx on FreeBSD)</listitem>
 </itemizedlist>
-</sect2>
+</sect1>
 
-<sect2 id="rel099rc2"><title>Version 0.9.9-rc2, 08 apr 2009</title>
+<sect1 id="rel099rc2"><title>Version 0.9.9-rc2, 08 apr 2009</title>
 <itemizedlist>
 <listitem>added IsConnectError(), Open(), Close() calls to Java API (bug #240)</listitem>
 <listitem>added <link linkend="conf-read-buffer">read_buffer</link>, <link linkend="conf-read-unhinted">read_unhinted</link> directives</listitem>
@@ -8282,9 +8282,9 @@ dist_threads = 4
 <listitem>fixed stupid bug in escaping code, fixed EscapeString() and made it static</listitem>
 <listitem>fixed parser vs @field -keyword, foo|@field bar, "" queries (bug #310)</listitem>
 </itemizedlist>
-</sect2>
+</sect1>
 
-<sect2 id="rel099rc1"><title>Version 0.9.9-rc1, 17 nov 2008</title>
+<sect1 id="rel099rc1"><title>Version 0.9.9-rc1, 17 nov 2008</title>
 <itemizedlist>
 <listitem>added <link linkend="conf-min-stemming-len">min_stemming_len</link> directive</listitem>
 <listitem>added <link linkend="api-func-isconnecterror">IsConnectError()</link> API call (helps distingusih API vs remote errors)</listitem>
@@ -8328,9 +8328,9 @@ dist_threads = 4
 <listitem>fixed backslash escaping, added backslash to EscapeString()</listitem>
 <listitem>fixed handling of over-2GB dictionary files (.spi)</listitem>
 </itemizedlist>
-</sect2>
+</sect1>
 
-<sect2 id="rel0981"><title>Version 0.9.8.1, 30 oct 2008</title>
+<sect1 id="rel0981"><title>Version 0.9.8.1, 30 oct 2008</title>
 <itemizedlist>
 <listitem>added configure script to libsphinxclient</listitem>
 <listitem>changed proximity/quorum operator syntax to require whitespace after length</listitem>
@@ -8352,9 +8352,9 @@ dist_threads = 4
 <listitem>fixed Python API to accept offset/limit of 'long' type</listitem>
 <listitem>fixed default ID range (that filtered out all 64-bit values) in Java and Python APIs</listitem>
 </itemizedlist>
-</sect2>
+</sect1>
 
-<sect2 id="rel098"><title>Version 0.9.8, 14 jul 2008</title>
+<sect1 id="rel098"><title>Version 0.9.8, 14 jul 2008</title>
 <bridgehead>Indexing</bridgehead>
 <itemizedlist>
 <listitem>added support for 64-bit document and keyword IDs, --enable-id64 switch to configure</listitem>
@@ -8483,9 +8483,9 @@ dist_threads = 4
 <listitem>fixed rare count(distinct) vs. querying multiple local indexes vs. reusable sorter issue</listitem>
 <listitem>fixed sorting of negative floats in SPH_SORT_EXTENDED mode</listitem>
 </itemizedlist>
-</sect2>
+</sect1>
 
-<sect2 id="rel097"><title>Version 0.9.7, 02 apr 2007</title>
+<sect1 id="rel097"><title>Version 0.9.7, 02 apr 2007</title>
 <itemizedlist>
 <listitem>added support for <option>sql_str2ordinal_column</option></listitem>
 <listitem>added support for upto 5 sort-by attrs (in extended sorting mode)</listitem>
@@ -8524,9 +8524,9 @@ dist_threads = 4
 <listitem>fixed wrong assertion in SBCS encoder</listitem>
 <listitem>fixed crashes with no-attribute indexes after rotate</listitem>
 </itemizedlist>
-</sect2>
+</sect1>
 
-<sect2 id="rel097rc2"><title>Version 0.9.7-rc2, 15 dec 2006</title>
+<sect1 id="rel097rc2"><title>Version 0.9.7-rc2, 15 dec 2006</title>
 <itemizedlist>
 <listitem>added support for extended matching mode (query language)</listitem>
 <listitem>added support for extended sorting mode (sorting clauses)</listitem>
@@ -8544,9 +8544,9 @@ dist_threads = 4
 <listitem>fixed <option>--with-mysql-includes/libs</option> (they conflicted with well-known paths)</listitem>
 <listitem>fixes for 64-bit platforms</listitem>
 </itemizedlist>
-</sect2>
+</sect1>
 
-<sect2 id="rel097rc"><title>Version 0.9.7-rc1, 26 oct 2006</title>
+<sect1 id="rel097rc"><title>Version 0.9.7-rc1, 26 oct 2006</title>
 <itemizedlist>
 <listitem>added alpha index merging code</listitem>
 <listitem>added an option to decrease <option>max_matches</option> per-query</listitem>
@@ -8571,9 +8571,9 @@ dist_threads = 4
 <listitem>fixed line numbering in config parser</listitem>
 <listitem>fixed some issues with index rotation</listitem>
 </itemizedlist>
-</sect2>
+</sect1>
 
-<sect2 id="rel096"><title>Version 0.9.6, 24 jul 2006</title>
+<sect1 id="rel096"><title>Version 0.9.6, 24 jul 2006</title>
 <itemizedlist>
 <listitem>added support for empty indexes</listitem>
 <listitem>added support for multiple sql_query_pre/post/post_index</listitem>
@@ -8581,9 +8581,9 @@ dist_threads = 4
 <listitem>fixed configure issues with --without-mysql and --with-pgsql options</listitem>
 <listitem>fixed building on Solaris 9</listitem>
 </itemizedlist>
-</sect2>
+</sect1>
 
-<sect2 id="rel096rc1"><title>Version 0.9.6-rc1, 26 jun 2006</title>
+<sect1 id="rel096rc1"><title>Version 0.9.6-rc1, 26 jun 2006</title>
 <itemizedlist>
 <listitem>added boolean queries support (experimental, beta version)</listitem>
 <listitem>added simple file-based query cache (experimental, beta version)</listitem>
@@ -8607,8 +8607,8 @@ dist_threads = 4
 <listitem>fixed config parser to handle empty values properly</listitem>
 <listitem>fixed redundant <code>time(NULL)</code> calls in time-segments mode</listitem>
 </itemizedlist>
-</sect2>
+</sect1>
 
 </appendix>
 
-</article>
+</book>

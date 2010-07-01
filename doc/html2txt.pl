@@ -168,7 +168,7 @@ while ( $html =~ s/^(.*?)<([\/]*\w+)(\s+.*?)*>//ms )
 	if ( $tag eq "h1" ) { $hdr = "="; next; }
 	if ( $tag eq "h2" ) { $hdr = "="; next; }
 	if ( $tag eq "h3" ) { $hdr = "-"; next; }
-	if ( $tag eq "h4" ) { $hdr = "-"; next; }
+	if ( $tag eq "h4" ) { $hdr = ""; next; }
 
 	die ( "unknown tag='$tag' attrs='$attrs'\n" );
 }

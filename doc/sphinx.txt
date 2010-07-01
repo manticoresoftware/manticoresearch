@@ -2,7 +2,7 @@ Sphinx 1.10.1 reference manual
 ==============================
 
 Free open-source SQL full-text search engine
---------------------------------------------
+============================================
 
 Copyright (c) 2001-2010 Andrew Aksyonoff
 
@@ -267,12 +267,42 @@ Table of Contents
       9.4.28. dist_threads
 
 A. Sphinx revision history
+   A.1. Version 1.10.1-alpha, ??? jan 2010
+   A.2. Version 0.9.9-release, 02 dec 2009
+   A.3. Version 0.9.9-rc2, 08 apr 2009
+   A.4. Version 0.9.9-rc1, 17 nov 2008
+   A.5. Version 0.9.8.1, 30 oct 2008
+   A.6. Version 0.9.8, 14 jul 2008
+   A.7. Version 0.9.7, 02 apr 2007
+   A.8. Version 0.9.7-rc2, 15 dec 2006
+   A.9. Version 0.9.7-rc1, 26 oct 2006
+   A.10. Version 0.9.6, 24 jul 2006
+   A.11. Version 0.9.6-rc1, 26 jun 2006
 
-1. Introduction
-===============
+List of Examples
+
+3.1. Ranged query usage example
+3.2. XMLpipe document stream
+3.3. xmlpipe2 document stream
+3.4. Fully automated live updates
+3.5. RT index declaration
+4.1. Boolean query example
+4.2. Extended matching mode: query example
+
+Chapter 1. Introduction
+=======================
+
+Table of Contents
 
 1.1. About
-----------
+1.2. Sphinx features
+1.3. Where to get Sphinx
+1.4. License
+1.5. Credits
+1.6. History
+
+1.1. About
+==========
 
 Sphinx is a full-text search engine, publicly distributed under GPL version
 2. Commercial licensing (eg. for embedded use) is available upon request.
@@ -312,7 +342,7 @@ As for the name, Sphinx is an acronym which is officially decoded as SQL
 Phrase Index. Yes, I know about CMU's Sphinx project.
 
 1.2. Sphinx features
---------------------
+====================
 
 Key Sphinx features are:
 
@@ -362,7 +392,7 @@ To expand a bit, Sphinx:
      configuration manual!
 
 1.3. Where to get Sphinx
-------------------------
+========================
 
 Sphinx is available through its official Web site at
 http://sphinxsearch.com/.
@@ -383,7 +413,7 @@ Currently, Sphinx distribution tarball includes the following software:
      the index, added in version 0.9.9-rc2.
 
 1.4. License
-------------
+============
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the Free
@@ -403,7 +433,7 @@ Non-GPL licensing (for OEM/ISV embedded use) can also be arranged, please
 contact us to discuss commercial licensing possibilities.
 
 1.5. Credits
-------------
+============
 
 Author
 ------
@@ -439,7 +469,7 @@ Many other people have contributed ideas, bug reports, fixes, etc. Thank
 you!
 
 1.6. History
-------------
+============
 
 Sphinx development was started back in 2001, because I didn't manage to
 find an acceptable search solution (for a database driven Web site) which
@@ -469,11 +499,20 @@ Considering that and a lot of positive feedback received from Sphinx users
 during last years, the obvious decision is to continue developing Sphinx
 (and, eventually, to take over the world).
 
-2. Installation
-===============
+Chapter 2. Installation
+=======================
+
+Table of Contents
 
 2.1. Supported systems
-----------------------
+2.2. Required tools
+2.3. Installing Sphinx on Linux
+2.4. Installing Sphinx on Windows
+2.5. Known installation issues
+2.6. Quick Sphinx usage tour
+
+2.1. Supported systems
+======================
 
 Most modern UNIX systems with a C++ compiler should be able to compile and
 run Sphinx without any modifications.
@@ -493,7 +532,7 @@ Chance are good that Sphinx should work on other Unix platforms as well;
 please report any platforms missing from this list that worked for you!
 
 2.2. Required tools
--------------------
+===================
 
 On UNIX, you will need the following tools to build and install Sphinx:
 
@@ -506,7 +545,7 @@ being, you will have to build makefile (or other environment specific
 project files) manually.
 
 2.3. Installing Sphinx on Linux
--------------------------------
+===============================
 
    1. Extract everything from the distribution tarball (haven't you
       already?) and go to the sphinx subdirectory:
@@ -539,7 +578,7 @@ project files) manually.
       | $ make install
 
 2.4. Installing Sphinx on Windows
----------------------------------
+=================================
 
 Installing Sphinx on a Windows server is often easier than installing on
 a Linux environment; unless you are preparing code patches, you can use the
@@ -580,7 +619,7 @@ pre-compiled binary files from the Downloads area on the website.
       libmysql.dll into the bin directory.
 
 2.5. Known installation issues
-------------------------------
+==============================
 
 If configure fails to locate MySQL headers and/or libraries, try checking
 for and installing mysql-devel package. On some systems, it is not
@@ -610,7 +649,7 @@ If you keep getting any other error, or the suggestions above do not seem
 to help you, please don't hesitate to contact me.
 
 2.6. Quick Sphinx usage tour
-----------------------------
+============================
 
 All the example commands below assume that you installed Sphinx in
 /usr/local/sphinx, so searchd can be found in
@@ -668,11 +707,27 @@ To query the index from your PHP scripts, you need to:
 
 Happy searching!
 
-3. Indexing
-===========
+Chapter 3. Indexing
+===================
+
+Table of Contents
 
 3.1. Data sources
------------------
+3.2. Attributes
+3.3. MVA (multi-valued attributes)
+3.4. Indexes
+3.5. Restrictions on the source data
+3.6. Charsets, case folding, and translation tables
+3.7. SQL data sources (MySQL, PostgreSQL)
+3.8. xmlpipe data source
+3.9. xmlpipe2 data source
+3.10. Live index updates
+3.11. Delta index updates
+3.12. Real-time indexes overview
+3.13. Index merging
+
+3.1. Data sources
+=================
 
 The data to be indexed can generally come from very different sources: SQL
 databases, plain text files, HTML files, mailboxes, and so on. From Sphinx
@@ -696,7 +751,7 @@ definition. All the documents coming from those sources will be merged as
 if they were coming from a single source.
 
 3.2. Attributes
----------------
+===============
 
 Attributes are additional values associated with each document that can be
 used to perform additional filtering and sorting during search.
@@ -801,7 +856,7 @@ the data and keep it shared between queries. The children will NOT allocate
 any additional copies of this data.
 
 3.3. MVA (multi-valued attributes)
-----------------------------------
+==================================
 
 MVAs, or multi-valued attributes, are an important special type of
 per-document attributes in Sphinx. MVAs make it possible to attach lists of
@@ -836,7 +891,7 @@ rows; so you'll also need to use SetArrayResult() in order to employ
 group-by on MVA with PHP API.
 
 3.4. Indexes
-------------
+============
 
 To be able to answer full-text search queries fast, Sphinx needs to build
 a special data structure optimized for such queries from your text data.
@@ -865,7 +920,7 @@ specified indexes, and the clients can specify what indexes to search in
 run time.
 
 3.5. Restrictions on the source data
-------------------------------------
+====================================
 
 There are a few different restrictions imposed on the source data which is
 going to be indexed by Sphinx, of which the single most important one is:
@@ -880,7 +935,7 @@ a 1000-pound gorilla might eventually come out of your display and start
 throwing barrels at you. You've been warned.
 
 3.6. Charsets, case folding, and translation tables
----------------------------------------------------
+===================================================
 
 When indexing some index, Sphinx fetches documents from the specified
 sources, splits the text into words, and does case folding so that "Abc",
@@ -909,7 +964,7 @@ Default tables currently include English and Russian characters. Please do
 submit your tables for other languages!
 
 3.7. SQL data sources (MySQL, PostgreSQL)
------------------------------------------
+=========================================
 
 With all the SQL drivers, indexing generally works as follows.
 
@@ -944,7 +999,7 @@ fetches min and max document IDs from the table, and then substitutes
 different ID intervals into main query text and runs the modified query to
 fetch another chunk of documents. Here's an example.
 
-Example 1. Ranged query usage example
+Example 3.1. Ranged query usage example
 
    | # in sphinx.conf
    | 
@@ -974,7 +1029,7 @@ indexing was succesful. Database connection is dropped and re-established
 because sorting phase can be very lengthy and would just timeout otherwise.
 
 3.8. xmlpipe data source
-------------------------
+========================
 
 xmlpipe data source was designed to enable users to plug data into Sphinx
 without having to implement new data sources drivers themselves. It is
@@ -998,7 +1053,7 @@ a pipe to given command and then reads from that pipe.
 indexer will expect one or more documents in custom XML format. Here's the
 example document stream, consisting of two documents:
 
-Example 2. XMLpipe document stream
+Example 3.2. XMLpipe document stream
 
    | <document>
    | <id>123</id>
@@ -1027,7 +1082,7 @@ exactly in the same order. The only optional field is timestamp; it
 defaults to 1.
 
 3.9. xmlpipe2 data source
--------------------------
+=========================
 
 xmlpipe2 lets you pass arbitrary full-text and attribute data to Sphinx in
 yet another custom XML format. It also allows to specify the schema (ie.
@@ -1038,7 +1093,7 @@ When indexing xmlpipe2 source, indexer runs the given command, opens a pipe
 to its stdout, and expects well-formed XML stream. Here's sample stream
 data:
 
-Example 3. xmlpipe2 document stream
+Example 3.3. xmlpipe2 document stream
 
    | <?xml version="1.0" encoding="utf-8"?>
    | <sphinx:docset>
@@ -1151,7 +1206,7 @@ sphinx:killlist
    this index.
 
 3.10. Live index updates
-------------------------
+========================
 
 There are two major approaches to maintaining the full-text index contents
 up to date. Note, however, that both these approaches deal with the task of
@@ -1175,7 +1230,7 @@ efficient for bulk indexing huge amounts of data. Refer to Section 3.12,
 <<Real-time indexes overview>> for details.
 
 3.11. Delta index updates
--------------------------
+=========================
 
 There's a frequent situation when the total dataset is too big to be
 reindexed from scratch often, but the amount of new records is rather
@@ -1197,7 +1252,7 @@ index could also be made fully automatical. One option would be to make
 a counter table which would track the ID which would split the documents,
 and update it whenever the main index is reindexed.
 
-Example 4. Fully automated live updates
+Example 3.4. Fully automated live updates
 
    | # in MySQL
    | CREATE TABLE sph_counter
@@ -1247,14 +1302,14 @@ in the delta can not just be empty; and we need to issue the encoding setup
 query explicitly once again.
 
 3.12. Real-time indexes overview
---------------------------------
+================================
 
 RT indexes should be declared in sphinx.conf, just as every other index
 type. Notable differences from the regular, disk-based indexes are that a)
 data sources are not required and ignored, and b) you should explicitly
 enumerate all the text fields, not just attributes. Here's an example:
 
-Example 5. RT index declaration
+Example 3.5. RT index declaration
 
    | index rt
    | {
@@ -1360,7 +1415,7 @@ is enabled, it should also survive crash and/or dirty shutdown, and recover
 on subsequent startup.
 
 3.13. Index merging
--------------------
+===================
 
 Merging two existing indexes can be more efficient that indexing the data
 from scratch, and desired in some cases (such as merging 'main' and 'delta'
@@ -1397,11 +1452,24 @@ example above, the filter passes only those records where 'deleted' is 0,
 eliminating all records that were flagged as deleted (for instance, using
 UpdateAttributes() call).
 
-4. Searching
-============
+Chapter 4. Searching
+====================
+
+Table of Contents
 
 4.1. Matching modes
--------------------
+4.2. Boolean query syntax
+4.3. Extended query syntax
+4.4. Weighting
+4.5. Sorting modes
+4.6. Grouping (clustering) search results
+4.7. Distributed searching
+4.8. searchd query log format
+4.9. MySQL protocol support and SphinxQL
+4.10. Multi-queries
+
+4.1. Matching modes
+===================
 
 There are the following matching modes available:
 
@@ -1442,7 +1510,7 @@ from that user. By default this will be ordered by relevancy, followed by
 Sphinx document ID in ascending order (earliest first).
 
 4.2. Boolean query syntax
--------------------------
+=========================
 
 Boolean queries allow the following special operators to be used:
 
@@ -1465,7 +1533,7 @@ Boolean queries allow the following special operators to be used:
 
 Here's an example query which uses all these operators:
 
-Example 6. Boolean query example
+Example 4.1. Boolean query example
 
    | ( cat -dog ) | ( cat -mouse)
 
@@ -1483,7 +1551,7 @@ IDs. Performance-wise, when the collection is huge (ie. 10-100M documents),
 evaluating such queries could take very long.
 
 4.3. Extended query syntax
---------------------------
+==========================
 
 The following special operators and modifiers can be used when using the
 extended matching mode:
@@ -1539,7 +1607,7 @@ extended matching mode:
 
 Here's an example query that uses some of these operators:
 
-Example 7. Extended matching mode: query example
+Example 4.2. Extended matching mode: query example
 
    | "hello world" @title "example program"~5 @body python -(php|perl) @* code
 
@@ -1630,7 +1698,7 @@ an implicit list of all documents:
    | aaa | -bbb
 
 4.4. Weighting
---------------
+==============
 
 Specific weighting function (currently) depends on the search mode.
 
@@ -1680,7 +1748,7 @@ noticeably better search quality than any statistical scheme alone (such as
 BM25, which is commonly used in other search engines).
 
 4.5. Sorting modes
-------------------
+==================
 
 There are the following result sorting modes available:
 
@@ -1872,7 +1940,7 @@ the arguments refers directly to a pair attributes and the other one is
 constant.
 
 4.6. Grouping (clustering) search results
------------------------------------------
+=========================================
 
 Sometimes it could be useful to group (or in other terms, cluster) search
 results and/or count per-group match counts - for instance, to draw a nice
@@ -1933,7 +2001,7 @@ Starting with version 0.9.9-rc2, aggregate functions (AVG(), MIN(), MAX(),
 SUM()) are supported through SetSelect() API call when using GROUP BY.
 
 4.7. Distributed searching
---------------------------
+==========================
 
 To scale well, Sphinx has distributed searching capabilities. Distributed
 searching is useful to improve query latency (ie. search time) and
@@ -1993,7 +2061,7 @@ which agents mirror each other, do health checks, keep track of alive
 agents, load-balance requests, etc.
 
 4.8. searchd query log format
------------------------------
+=============================
 
 searchd logs all succesfully executed search queries into query log file.
 Here's an example:
@@ -2041,7 +2109,7 @@ operations (although there is a background processing component, the bulk
 of this time is the I/O operation time).
 
 4.9. MySQL protocol support and SphinxQL
-----------------------------------------
+========================================
 
 Starting with version 0.9.9-rc2, Sphinx searchd daemon supports MySQL
 binary network protocol and can be accessed with regular MySQL API. For
@@ -2265,7 +2333,7 @@ query time and keyword statistics:
    | 12 rows in set (0.00 sec)
 
 4.10. Multi-queries
--------------------
+===================
 
 Multi-queries, or query batches, let you send multiple queries to Sphinx in
 one go (more formally, one network request).
@@ -2374,15 +2442,23 @@ common query and common subtree optimizations, there were reports of 3x and
 even more improvements, and that's from production instances, not just
 synthetic tests.
 
-5. Command line tools reference
-===============================
+Chapter 5. Command line tools reference
+=======================================
+
+Table of Contents
+
+5.1. indexer command reference
+5.2. searchd command reference
+5.3. search command reference
+5.4. spelldump command reference
+5.5. indextool command reference
 
 As mentioned elsewhere, Sphinx is not a single program called 'sphinx', but
 a collection of 4 separate programs which collectively form Sphinx. This
 section covers these tools and how to use them.
 
 5.1. indexer command reference
-------------------------------
+==============================
 
 indexer is the first of the two principle tools as part of Sphinx. Invoked
 from either the command line directly, or as part of a larger script,
@@ -2531,7 +2607,7 @@ performed. These options are:
      must be met in order for a document to become part of the final index.
 
 5.2. searchd command reference
-------------------------------
+==============================
 
 searchd is the second of the two principle tools as part of Sphinx. searchd
 is the part of the system which actually handles searches; it functions as
@@ -2727,7 +2803,7 @@ SIGUSR1
    log file rotation.
 
 5.3. search command reference
------------------------------
+=============================
 
 search is one of the helper tools within the Sphinx package. Whereas
 searchd is responsible for searches in a server-type environment, search is
@@ -2846,7 +2922,7 @@ Options for handling the results:
      user_karma + ln(pageviews) )*0.1" (again noting that this will have to
      be quoted to avoid the shell dealing with the asterisk). Extended sort
      mode is discussed in more detail under the SPH_SORT_EXTENDED entry
-     under the Sorting modes chapter of the manual.
+     under the Sorting modes section of the manual.
    * --sort=date specifies that the results should be sorted by descending
      (i.e. most recent first) date. This requires that there is an
      attribute in the index that is set as a timestamp.
@@ -2859,7 +2935,7 @@ Options for handling the results:
      it would return the documents from the last day, sorted by relevance,
      then the last week and then the last month. It is discussed in more
      detail under the SPH_SORT_TIME_SEGMENTS entry under the Sorting modes
-     chapter of the manual.
+     section of the manual.
 
 Other options:
 
@@ -2870,7 +2946,7 @@ Other options:
      sql_query_info directive.
 
 5.4. spelldump command reference
---------------------------------
+================================
 
 spelldump is one of the helper tools within the Sphinx package.
 
@@ -2909,7 +2985,7 @@ file:
    | zoning > zoning
 
 5.5. indextool command reference
---------------------------------
+================================
 
 indextool is one of the helper tools within the Sphinx package, introduced
 in version 0.9.9-rc2. It is used to dump miscellaneous debug information
@@ -2949,8 +3025,63 @@ The commands are as follows:
      that might be introduced either by bugs in indexer and/or hardware
      faults.
 
-6. API reference
-================
+Chapter 6. API reference
+========================
+
+Table of Contents
+
+6.1. General API functions
+   6.1.1. GetLastError
+   6.1.2. GetLastWarning
+   6.1.3. SetServer
+   6.1.4. SetRetries
+   6.1.5. SetConnectTimeout
+   6.1.6. SetArrayResult
+   6.1.7. IsConnectError
+
+6.2. General query settings
+   6.2.1. SetLimits
+   6.2.2. SetMaxQueryTime
+   6.2.3. SetOverride
+   6.2.4. SetSelect
+
+6.3. Full-text search query settings
+   6.3.1. SetMatchMode
+   6.3.2. SetRankingMode
+   6.3.3. SetSortMode
+   6.3.4. SetWeights
+   6.3.5. SetFieldWeights
+   6.3.6. SetIndexWeights
+
+6.4. Result set filtering settings
+   6.4.1. SetIDRange
+   6.4.2. SetFilter
+   6.4.3. SetFilterRange
+   6.4.4. SetFilterFloatRange
+   6.4.5. SetGeoAnchor
+
+6.5. GROUP BY settings
+   6.5.1. SetGroupBy
+   6.5.2. SetGroupDistinct
+
+6.6. Querying
+   6.6.1. Query
+   6.6.2. AddQuery
+   6.6.3. RunQueries
+   6.6.4. ResetFilters
+   6.6.5. ResetGroupBy
+
+6.7. Additional functionality
+   6.7.1. BuildExcerpts
+   6.7.2. UpdateAttributes
+   6.7.3. BuildKeywords
+   6.7.4. EscapeString
+   6.7.5. Status
+   6.7.6. FlushAttributes
+
+6.8. Persistent connections
+   6.8.1. Open
+   6.8.2. Close
 
 There is a number of native searchd client API implementations for Sphinx.
 As of time of this writing, we officially support our own PHP, Python, and
@@ -2969,7 +3100,7 @@ or specific data structures used. But the provided functionality must not
 differ across languages.
 
 6.1. General API functions
---------------------------
+==========================
 
 6.1.1. GetLastError
 -------------------
@@ -3074,7 +3205,7 @@ searchd failed on API side, false otherwise (if the error was remote, or
 there were no connection attempts at all). Introduced in version 0.9.9-rc1.
 
 6.2. General query settings
----------------------------
+===========================
 
 6.2.1. SetLimits
 ----------------
@@ -3189,7 +3320,7 @@ Example:
    | $cl->SetSelect ( "*, AVG(price) AS avgprice" );
 
 6.3. Full-text search query settings
-------------------------------------
+====================================
 
 6.3.1. SetMatchMode
 -------------------
@@ -3333,7 +3464,7 @@ array ( "A"=>100, "B"=>10 ) ), the final weight return to the client will
 be 2*100+3*10 = 230.
 
 6.4. Result set filtering settings
-----------------------------------
+==================================
 
 6.4.1. SetIDRange
 -----------------
@@ -3423,7 +3554,7 @@ The result will be returned in meters, so geodistance value of 1000.0 means
 1 km. 1 mile is approximately 1609.344 meters.
 
 6.5. GROUP BY settings
-----------------------
+======================
 
 6.5.1. SetGroupBy
 -----------------
@@ -3491,7 +3622,7 @@ indexed attributes, matches will also contain total per-category matches
 count, and the count of distinct vendor IDs within each category.
 
 6.6. Querying
--------------
+=============
 
 6.6.1. Query
 ------------
@@ -3684,7 +3815,7 @@ group-by mode in the current state, so that subsequent AddQuery() calls can
 perform non-grouping searches.
 
 6.7. Additional functionality
------------------------------
+=============================
 
 6.7.1. BuildExcerpts
 --------------------
@@ -3867,7 +3998,7 @@ Usage example:
    | 	print "ERROR: " . $cl->GetLastError(); 
 
 6.8. Persistent connections
----------------------------
+===========================
 
 Persistent connections allow to use single network connection to run
 multiple commands that would otherwise require reconnects.
@@ -3886,11 +4017,22 @@ Prototype: function Close ()
 
 Closes previously opened persistent connection.
 
-7. MySQL storage engine (SphinxSE)
-==================================
+Chapter 7. MySQL storage engine (SphinxSE)
+==========================================
+
+Table of Contents
 
 7.1. SphinxSE overview
-----------------------
+7.2. Installing SphinxSE
+   7.2.1. Compiling MySQL 5.0.x with SphinxSE
+   7.2.2. Compiling MySQL 5.1.x with SphinxSE
+   7.2.3. Checking SphinxSE installation
+
+7.3. Using SphinxSE
+7.4. Building snippets (excerpts) via MySQL
+
+7.1. SphinxSE overview
+======================
 
 SphinxSE is MySQL storage engine which can be compiled into MySQL server
 5.x using its pluggable architecure. It is not available for MySQL 4.x
@@ -3912,7 +4054,7 @@ Obvious SphinxSE applications include:
      MySQL-side filtering, etc).
 
 7.2. Installing SphinxSE
-------------------------
+========================
 
 You will need to obtain a copy of MySQL sources, prepare those, and then
 recompile MySQL binary. MySQL sources (mysql-5.x.yy.tar.gz) could be
@@ -4003,7 +4145,7 @@ should see a list of all available engines. Sphinx should be present and
    | 13 rows in set (0.00 sec)
 
 7.3. Using SphinxSE
--------------------
+===================
 
 To search via SphinxSE, you would need to create special ENGINE=SPHINX
 "search table", and then SELECT from it with full text query put into WHERE
@@ -4120,6 +4262,16 @@ number of options can be specified. Available options are:
 
       | ... WHERE query='test;indexweights=idx_exact,2,idx_stemmed,1;';
 
+   * comment - a string to mark this query in query log (mapping to
+     $comment parameter in Query() API call):
+
+      | ... WHERE query='test;comment=marker001;';
+
+   * select - a string with expressions to compute (mapping to SetSelect()
+     API call):
+
+      | ... WHERE query='test;select=2*a+3*b as myexpr;';
+
 One very important note that it is much more efficient to allow Sphinx to
 perform sorting, filtering and slicing the result set than to raise max
 matches count and use WHERE, ORDER BY and LIMIT clauses on MySQL side. This
@@ -4178,7 +4330,7 @@ engines. Here's an example with "documents" from example.sql:
    | 2 rows in set (0.00 sec)
 
 7.4. Building snippets (excerpts) via MySQL
--------------------------------------------
+===========================================
 
 Starting with version 0.9.9-rc2, SphinxSE also includes a UDF function that
 lets you create snippets through MySQL. The functionality is fully similar
@@ -4215,8 +4367,8 @@ Usage examples:
    |     FROM sphinx, documents
    |     WHERE query='mysql php' AND sphinx.id=documents.id;
 
-8. Reporting bugs
-=================
+Chapter 8. Reporting bugs
+=========================
 
 Unfortunately, Sphinx is not yet 100% bug free (even though I'm working
 hard towards that), so you might occasionally run into some issues.
@@ -4227,7 +4379,7 @@ deduce what's causing it from the information that you provide. So here are
 some instructions on how to do that.
 
 Build-time issues
------------------
+=================
 
 If Sphinx fails to build for some reason, please do the following:
 
@@ -4246,7 +4398,7 @@ If Sphinx fails to build for some reason, please do the following:
       log).
 
 Run-time issues
----------------
+===============
 
 If Sphinx builds and runs, but there are any problems running it, please do
 the following:
@@ -4285,7 +4437,7 @@ the following:
    9. if any program dies with an assertion, provide the assertion message.
 
 Debugging assertions, crashes and hangups
------------------------------------------
+=========================================
 
 If any program dies with an assertion, crashes without an assertion or
 hangs up, you would additionally need to generate a core dump and examine
@@ -4334,11 +4486,151 @@ additional helpful information which could be retrieved from it. You do not
 need to send me this file (as the debug info there is closely tied to your
 system) but I might need to ask you a few additional questions about it.
 
-9. sphinx.conf options reference
-================================
+Chapter 9. sphinx.conf options reference
+========================================
+
+Table of Contents
 
 9.1. Data source configuration options
---------------------------------------
+   9.1.1. type
+   9.1.2. sql_host
+   9.1.3. sql_port
+   9.1.4. sql_user
+   9.1.5. sql_pass
+   9.1.6. sql_db
+   9.1.7. sql_sock
+   9.1.8. mysql_connect_flags
+   9.1.9. mysql_ssl_cert, mysql_ssl_key, mysql_ssl_ca
+   9.1.10. odbc_dsn
+   9.1.11. sql_query_pre
+   9.1.12. sql_query
+   9.1.13. sql_joined_field
+   9.1.14. sql_query_range
+   9.1.15. sql_range_step
+   9.1.16. sql_query_killlist
+   9.1.17. sql_attr_uint
+   9.1.18. sql_attr_bool
+   9.1.19. sql_attr_bigint
+   9.1.20. sql_attr_timestamp
+   9.1.21. sql_attr_str2ordinal
+   9.1.22. sql_attr_float
+   9.1.23. sql_attr_multi
+   9.1.24. sql_attr_string
+   9.1.25. sql_attr_str2wordcount
+   9.1.26. sql_field_string
+   9.1.27. sql_field_str2wordcount
+   9.1.28. sql_query_post
+   9.1.29. sql_query_post_index
+   9.1.30. sql_ranged_throttle
+   9.1.31. sql_query_info
+   9.1.32. xmlpipe_command
+   9.1.33. xmlpipe_field
+   9.1.34. xmlpipe_field_string
+   9.1.35. xmlpipe_field_wordcount
+   9.1.36. xmlpipe_attr_uint
+   9.1.37. xmlpipe_attr_bool
+   9.1.38. xmlpipe_attr_timestamp
+   9.1.39. xmlpipe_attr_str2ordinal
+   9.1.40. xmlpipe_attr_float
+   9.1.41. xmlpipe_attr_multi
+   9.1.42. xmlpipe_attr_string
+   9.1.43. xmlpipe_fixup_utf8
+   9.1.44. mssql_winauth
+   9.1.45. mssql_unicode
+   9.1.46. unpack_zlib
+   9.1.47. unpack_mysqlcompress
+   9.1.48. unpack_mysqlcompress_maxsize
+
+9.2. Index configuration options
+   9.2.1. type
+   9.2.2. source
+   9.2.3. path
+   9.2.4. docinfo
+   9.2.5. mlock
+   9.2.6. morphology
+   9.2.7. min_stemming_len
+   9.2.8. stopwords
+   9.2.9. wordforms
+   9.2.10. exceptions
+   9.2.11. min_word_len
+   9.2.12. charset_type
+   9.2.13. charset_table
+   9.2.14. ignore_chars
+   9.2.15. min_prefix_len
+   9.2.16. min_infix_len
+   9.2.17. prefix_fields
+   9.2.18. infix_fields
+   9.2.19. enable_star
+   9.2.20. ngram_len
+   9.2.21. ngram_chars
+   9.2.22. phrase_boundary
+   9.2.23. phrase_boundary_step
+   9.2.24. html_strip
+   9.2.25. html_index_attrs
+   9.2.26. html_remove_elements
+   9.2.27. local
+   9.2.28. agent
+   9.2.29. agent_blackhole
+   9.2.30. agent_connect_timeout
+   9.2.31. agent_query_timeout
+   9.2.32. preopen
+   9.2.33. ondisk_dict
+   9.2.34. inplace_enable
+   9.2.35. inplace_hit_gap
+   9.2.36. inplace_docinfo_gap
+   9.2.37. inplace_reloc_factor
+   9.2.38. inplace_write_factor
+   9.2.39. index_exact_words
+   9.2.40. overshort_step
+   9.2.41. stopword_step
+   9.2.42. hitless_words
+   9.2.43. expand_keywords
+   9.2.44. blend_chars
+   9.2.45. rt_mem_limit
+   9.2.46. rt_field
+   9.2.47. rt_attr_uint
+   9.2.48. rt_attr_bigint
+   9.2.49. rt_attr_float
+
+9.3. indexer program configuration options
+   9.3.1. mem_limit
+   9.3.2. max_iops
+   9.3.3. max_iosize
+   9.3.4. max_xmlpipe2_field
+   9.3.5. write_buffer
+
+9.4. searchd program configuration options
+   9.4.1. listen
+   9.4.2. address
+   9.4.3. port
+   9.4.4. log
+   9.4.5. query_log
+   9.4.6. read_timeout
+   9.4.7. client_timeout
+   9.4.8. max_children
+   9.4.9. pid_file
+   9.4.10. max_matches
+   9.4.11. seamless_rotate
+   9.4.12. preopen_indexes
+   9.4.13. unlink_old
+   9.4.14. attr_flush_period
+   9.4.15. ondisk_dict_default
+   9.4.16. max_packet_size
+   9.4.17. mva_updates_pool
+   9.4.18. crash_log_path
+   9.4.19. max_filters
+   9.4.20. max_filter_values
+   9.4.21. listen_backlog
+   9.4.22. read_buffer
+   9.4.23. read_unhinted
+   9.4.24. max_batch_queries
+   9.4.25. subtree_docs_cache
+   9.4.26. subtree_hits_cache
+   9.4.27. workers
+   9.4.28. dist_threads
+
+9.1. Data source configuration options
+======================================
 
 9.1.1. type
 -----------
@@ -5259,7 +5551,7 @@ Example:
    | unpack_mysqlcompress_maxsize = 1M
 
 9.2. Index configuration options
---------------------------------
+================================
 
 9.2.1. type
 -----------
@@ -6501,7 +6793,7 @@ Example:
    | rt_attr_float = gpa
 
 9.3. indexer program configuration options
-------------------------------------------
+==========================================
 
 9.3.1. mem_limit
 ----------------
@@ -6596,7 +6888,7 @@ Example:
    | write_buffer = 4M
 
 9.4. searchd program configuration options
-------------------------------------------
+==========================================
 
 9.4.1. listen
 -------------
@@ -7112,11 +7404,25 @@ Example:
    | 
    | dist_threads = 4
 
-A. Sphinx revision history
-==========================
+Appendix A. Sphinx revision history
+===================================
+
+Table of Contents
 
 A.1. Version 1.10.1-alpha, ??? jan 2010
----------------------------------------
+A.2. Version 0.9.9-release, 02 dec 2009
+A.3. Version 0.9.9-rc2, 08 apr 2009
+A.4. Version 0.9.9-rc1, 17 nov 2008
+A.5. Version 0.9.8.1, 30 oct 2008
+A.6. Version 0.9.8, 14 jul 2008
+A.7. Version 0.9.7, 02 apr 2007
+A.8. Version 0.9.7-rc2, 15 dec 2006
+A.9. Version 0.9.7-rc1, 26 oct 2006
+A.10. Version 0.9.6, 24 jul 2006
+A.11. Version 0.9.6-rc1, 26 jun 2006
+
+A.1. Version 1.10.1-alpha, ??? jan 2010
+=======================================
 
    * added RT indexes support (rt_mem_limit, rt_field, rt_attr_uint etc
      directives)
@@ -7158,7 +7464,7 @@ A.1. Version 1.10.1-alpha, ??? jan 2010
    * changed attribute handling, duplicate names are strictly forbidden now
 
 A.2. Version 0.9.9-release, 02 dec 2009
----------------------------------------
+=======================================
 
    * added Open, Close, Status calls to libsphinxclient (C API)
    * added automatic persistent connection reopening to PHP, Python APIs
@@ -7221,7 +7527,7 @@ A.2. Version 0.9.9-release, 02 dec 2009
    * fixed #326 (missing CLOCK_xxx on FreeBSD)
 
 A.3. Version 0.9.9-rc2, 08 apr 2009
------------------------------------
+===================================
 
    * added IsConnectError(), Open(), Close() calls to Java API (bug #240)
    * added read_buffer, read_unhinted directives
@@ -7320,7 +7626,7 @@ A.3. Version 0.9.9-rc2, 08 apr 2009
    * fixed parser vs @field -keyword, foo|@field bar, "" queries (bug #310)
 
 A.4. Version 0.9.9-rc1, 17 nov 2008
------------------------------------
+===================================
 
    * added min_stemming_len directive
    * added IsConnectError() API call (helps distingusih API vs remote
@@ -7383,7 +7689,7 @@ A.4. Version 0.9.9-rc1, 17 nov 2008
    * fixed handling of over-2GB dictionary files (.spi)
 
 A.5. Version 0.9.8.1, 30 oct 2008
----------------------------------
+=================================
 
    * added configure script to libsphinxclient
    * changed proximity/quorum operator syntax to require whitespace after
@@ -7420,7 +7726,7 @@ A.5. Version 0.9.8.1, 30 oct 2008
      and Python APIs
 
 A.6. Version 0.9.8, 14 jul 2008
--------------------------------
+===============================
 
 Indexing
 --------
@@ -7600,7 +7906,7 @@ Changes and fixes since 0.9.8-rc2
    * fixed sorting of negative floats in SPH_SORT_EXTENDED mode
 
 A.7. Version 0.9.7, 02 apr 2007
--------------------------------
+===============================
 
    * added support for sql_str2ordinal_column
    * added support for upto 5 sort-by attrs (in extended sorting mode)
@@ -7650,7 +7956,7 @@ A.7. Version 0.9.7, 02 apr 2007
    * fixed crashes with no-attribute indexes after rotate
 
 A.8. Version 0.9.7-rc2, 15 dec 2006
------------------------------------
+===================================
 
    * added support for extended matching mode (query language)
    * added support for extended sorting mode (sorting clauses)
@@ -7672,7 +7978,7 @@ A.8. Version 0.9.7-rc2, 15 dec 2006
    * fixes for 64-bit platforms
 
 A.9. Version 0.9.7-rc1, 26 oct 2006
------------------------------------
+===================================
 
    * added alpha index merging code
    * added an option to decrease max_matches per-query
@@ -7701,7 +8007,7 @@ A.9. Version 0.9.7-rc1, 26 oct 2006
    * fixed some issues with index rotation
 
 A.10. Version 0.9.6, 24 jul 2006
---------------------------------
+================================
 
    * added support for empty indexes
    * added support for multiple sql_query_pre/post/post_index
@@ -7710,7 +8016,7 @@ A.10. Version 0.9.6, 24 jul 2006
    * fixed building on Solaris 9
 
 A.11. Version 0.9.6-rc1, 26 jun 2006
-------------------------------------
+====================================
 
    * added boolean queries support (experimental, beta version)
    * added simple file-based query cache (experimental, beta version)

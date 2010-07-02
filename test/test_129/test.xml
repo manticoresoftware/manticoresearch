@@ -3,6 +3,10 @@
 
 <name>MVA updates</name>
 
+<requires>
+<non-rt/>
+</requires>
+
 <config>
 indexer
 {

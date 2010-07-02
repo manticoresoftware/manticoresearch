@@ -39,6 +39,12 @@ index idx
 	<query index="idx" mode="extended2" ranker="wordcount" >"e f" NEAR/2 "g h"</query>
 	<!-- expect 511 matches, the first with the weithg=512 -->
 	<query index="idx" mode="extended2" ranker="wordcount" >"i j" NEAR/2 "k l"</query>
+	
+	<query index="idx" mode="all" >"ARE NEAR"</query>
+	<query index="idx" mode="any" >"ARE NEAR"</query>
+	<query index="idx" mode="phrase" >"ARE NEAR"</query>
+	<query index="idx" mode="extended" >"ARE NEAR"</query>
+	<query index="idx" mode="extended2" >"ARE NEAR"</query>
 </queries>
 
 <db_create>
@@ -70,6 +76,13 @@ $line = "";
 for ( $i=0; $i<512; ++$i )
 	$line .= " y i j x x k l";
 mysql_query ( "INSERT INTO test_table VALUES ( 0, '$line')" );
+
+mysql_query ( "INSERT INTO test_table VALUES ( 0, 'NEAR ARE STUFF')" );
+mysql_query ( "INSERT INTO test_table VALUES ( 0, 'ARE STUFF NEAR')" );
+mysql_query ( "INSERT INTO test_table VALUES ( 0, 'ARE NEAR STUFF')" );
+mysql_query ( "INSERT INTO test_table VALUES ( 0, '\NEAR ARE STUFF')" );
+mysql_query ( "INSERT INTO test_table VALUES ( 0, 'ARE STUFF \NEAR')" );
+mysql_query ( "INSERT INTO test_table VALUES ( 0, 'ARE \NEAR STUFF')" );
 
 ]]></custom_insert>
 <db_drop>DROP TABLE IF EXISTS test_table</db_drop>

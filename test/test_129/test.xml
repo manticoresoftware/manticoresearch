@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>MVA updates</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT id, text, mva, tag FROM test_table
+
+	sql_attr_multi	= uint mva from field
+	sql_attr_uint	= tag
+}
+
+index idx
+{
+	source			= src
+	path			= <data_path/>/main
+    charset_type 	= utf-8
+    docinfo			= extern
+}
+
+</config>
+
+<custom_test><![CDATA[
+$results[] = $client->Query ( "" );
+if ( !$results[0] )
+{
+	$results = false; // maybe its temporary; lets retry
+	return;
+}
+
+for ( $i=0; $i<2; $i++ )
+{
+	$updata = null;
+	if ( $i==0 )
+		$updata = array(1=>array(1001), 3=>array(3001), 2=>array(2001));
+	else
+		$updata = array(1=>array(array(101)), 3=>array(array(301, 302, 303)),2=>array(array(201, 202)));
+		
+	$up = $client->UpdateAttributes ( "idx", array("mva"), $updata, $i==1 );
+	
+	$results[] = sprintf("up.count=%d", $up);
+
+	$results[] = $client->Query ( "" );
+}
+
+// final fixup; we don't want to compare times
+for ( $i=0; $i<count($results); $i++ )
+	if ( is_array ( $results[$i] ) )
+		unset ( $results[$i]["time"] );
+]]></custom_test>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11),
+  `text` varchar(255) NOT NULL,
+  `mva` varchar(255) NOT NULL,
+  `tag` int(11)
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 'test1',  '1',			11 ),
+( 2, 'test2',  '2,3',		22 ),
+( 3, 'test3',  '4,5,6',		33 ),
+( 4, 'test4',  '7,8,9,10', 	44 ),
+( 5, 'test5',  '',			55 )
+</db_insert>
+  
+</test>

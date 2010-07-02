@@ -6575,6 +6575,12 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 			return -1;
 		}
 
+		if ( ( tCol.m_eAttrType & SPH_ATTR_MULTI)!=( tUpd.m_dAttrs[i].m_eAttrType & SPH_ATTR_MULTI ) )
+		{
+			sError.SetSprintf ( "attribute '%s' MVA flag mismatch", tUpd.m_dAttrs[i].m_sName.cstr() );
+			return -1;
+		}
+
 		dLocators.Add ( tCol.m_tLocator );
 	}
 	assert ( dLocators.GetLength()==tUpd.m_dAttrs.GetLength() );

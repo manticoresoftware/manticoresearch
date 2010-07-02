@@ -690,7 +690,7 @@ class SphinxConfig
 		$this->_name			= GetFirstChildValue ( $xml, "name" );
 		$this->_query_settings	= GetFirstChildValue ( $xml, "query_settings" );
 		$this->_num_agents		= GetFirstChildValue ( $xml, "num_agents", 1 );
-		$this->_skip_indexer	= GetFirstChildValue ( $xml, "skip_indexer", false );
+		$this->_skip_indexer	= GetFirstChildValue ( $xml, "skip_indexer", false )!==false;
 
 		$this->_prereqs = array();
 		$prereqs = GetFirstChild ( $xml, "requires", false );
@@ -722,7 +722,7 @@ class SphinxConfig
 		return 0;
 	}
 
-	function RunQuerySphinxQL ( &$error )
+	function RunQuerySphinxQL ( &$error, $bench=false )
 	{
 		global $sd_address, $sd_sphinxql_port, $action_retries, $action_wait_timeout;
 		$query_results = array ();
@@ -734,10 +734,19 @@ class SphinxConfig
 		$connection = @mysql_connect ( $connect_string );
 		if ( $connection === false )
 			return false;
-		for ( $n=0; $n<count($this->_sphqueries); $n++ )
+		$qcount = count($this->_sphqueries);
+		if ( $bench === true )
+			$qcount *= 2;
+		for ( $n=0; $n<$qcount; $n++ )
 		{
+			$query = 'show meta';
+			if ( $bench === false )
+				$query = $this->_sphqueries[$n]["query"];
+			else if ( ($n%2)==0 )
+				$query = $this->_sphqueries[$n/2]["query"];
+		
 			$query_result = array ();
-			$query = $this->_sphqueries[$n]["query"];
+				
 			$query_result["sphinxql"]=$query;
 			$result = @mysql_query ($query,$connection);
 			if ($result===true)

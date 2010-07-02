@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>RT:Ranker reset vs NEAR</name>
+
+<skip_indexer/>
+<requires>
+	<force-rt/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit = 32M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+index rt
+{
+	type			= rt
+	path			= <local>data</local>/rt
+	rt_attr_uint	= id1
+	rt_field		= title	
+}
+</config>
+
+<sphqueries>
+<sphinxql>insert into rt (id, id1, title) values (1, 1, 'test text')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (2, 2, 'testy texts')</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+<sphinxql>select * from rt where match('\"the\" NEAR/15 \"home\" | \"one\" NEAR/15 perfume | \"one million\" NEAR/15 perfumes | \"one million\" NEAR/15 fragrance | \"one million\" NEAR/15 fragrances | \"one million\" NEAR/15 cologne | \"one million\" NEAR/15 essence | \"one million\" NEAR/15 aroma | \"one million\" NEAR/15 scent | \"one million\" NEAR/15 scents | \"one million\" NEAR/15 balm | \"one million\" NEAR/15 balms | \"one million\" NEAR/15 odor | \"one million\" NEAR/15 odour | \"one million\" NEAR/15 smell | \"one million\" NEAR/15 fragrant | \"one million\" NEAR/15 flavour | \"one million\" NEAR/15 flavor | \"one million\" NEAR/15 flavours | \"one million\" NEAR/15 flavors | \"one million\" NEAR/15 \"eau de toilette\" | \"one million\" NEAR/15 \"shower\" \"one million\" NEAR/15 fragrances | \"one million\" NEAR/15 cologne | \"one million\" NEAR/15 essence | \"one million\" NEAR/15 aroma | \"one million\" NEAR/15 scent | \"one million\" NEAR/15 scents | \"one million\" NEAR/15 balm | \"one million\" NEAR/15 balms | \"one million\" NEAR/15 odor | \"one million\" NEAR/15 odour | \"one million\" NEAR/15 smell | \"one million\" NEAR/15 fragrant | \"one million\" NEAR/15 flavour | \"one million\" NEAR/15 flavor \"the\" NEAR/15 \"home\" | \"one\" NEAR/15 perfume | \"one million\" NEAR/15 perfumes | \"one million\" NEAR/15 fragrance | \"one million\" NEAR/15 fragrances | \"one million\" NEAR/15 cologne | \"one million\" NEAR/15 essence | \"one million\" NEAR/15 aroma | \"one million\" NEAR/15 scent | \"one million\" NEAR/15 scents | \"one million\" NEAR/15 balm | \"one million\" NEAR/15 balms | \"one million\" NEAR/15 odor | \"one million\" NEAR/15 odour | \"one million\" NEAR/15 smell | \"one million\" NEAR/15 fragrant | \"one million\" NEAR/15 flavour | \"one million\" NEAR/15 flavor | \"one million\" NEAR/15 flavours | \"one million\" NEAR/15 flavors | \"one million\" NEAR/15 \"eau de toilette\" | \"one million\" NEAR/15 \"shower\" \"one million\" NEAR/15 fragrances | \"one million\" NEAR/15 cologne | \"one million\" NEAR/15 essence | \"one million\" NEAR/15 aroma | \"one million\" NEAR/15 scent | \"one million\" NEAR/15 scents | \"one million\" NEAR/15 balm | \"one million\" NEAR/15 balms | \"one million\" NEAR/15 odor | \"one million\" NEAR/15 odour | \"one million\" NEAR/15 smell | \"one million\" NEAR/15 fragrant | \"one million\" NEAR/15 flavour | \"one million\" NEAR/15 flavor')</sphinxql>
+</sphqueries>
+
+</test>

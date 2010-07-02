@@ -185,6 +185,26 @@ function sphTextReport ( $report )
 
 ////////////////////////////////////////////////////////////////////////////////
 
+/// erases rt index
+function EraseRtIndex ( $path, $name )
+{
+	$fp = opendir ( $path );
+
+	if ( $fp )
+	{
+		$name .= '.';
+		while ( ( $file = readdir ( $fp ) ) !== false )
+		{ 
+		if ( $file != "." && $file != ".." && !is_dir ( $file ) && strripos ( $file, $name ) !==false )
+				unlink ( "$file" ); 
+		} 
+
+		closedir ( $fp );
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 /// returns results file name on success; false on failure
 function sphBenchmark ( $name, $locals, $force_reindex )
 {
@@ -193,6 +213,9 @@ function sphBenchmark ( $name, $locals, $force_reindex )
 	if ( !( $config->Load ( "bench/$name.xml" ) && CheckConfig ( $config, $name ) ) )
 		return false;
 
+	global $g_locals;	
+	$g_locals['rt_mode']= $config->Requires('force-rt');
+		
 	// temporary limitations
 	assert ( $config->SubtestCount()==1 );
 	assert ( $config->IsQueryTest() );
@@ -206,7 +229,8 @@ function sphBenchmark ( $name, $locals, $force_reindex )
 
 	// grab index names and paths
 	$msg = '';
-	$config->EnableCompat098 ();
+	if ( !$config->IsRt() ) // enable only in non rt-mode
+		$config->EnableCompat098 ();
 	$config->WriteConfig ( 'config.conf', 'all', $msg );
 	$indexes = array();
 	$text = file_get_contents('config.conf');
@@ -216,14 +240,17 @@ function sphBenchmark ( $name, $locals, $force_reindex )
 	
 	// checksum/reindex as needed
 	$hash = null;
-	foreach ( $indexes as $name => $path )
+	foreach ( $indexes as $indexName => $path )
 	{
-		printf ( "index: %s - ", $name );
-		if ( !is_readable ( "$path.spa" ) || !is_readable ( "$path.spi" ) || $force_reindex )
+		printf ( "index: %s - ", $indexName );
+		if ( $config->IsRt() && $force_reindex )
+			EraseRtIndex ( $locals['data'], $path );
+
+		if ( !$config->IsRt() && ( !is_readable ( "$path.spa" ) || !is_readable ( "$path.spi" ) || $force_reindex ) )
 		{
 			printf ( "indexing... " );
 			$tm = MyMicrotime();
-			$result = RunIndexer ( $error, $name );
+			$result = RunIndexer ( $error, $indexName );
 			$tm = MyMicrotime() - $tm;
 			if ( $result==1 )
 			{
@@ -235,9 +262,17 @@ function sphBenchmark ( $name, $locals, $force_reindex )
 			else
 				printf ( "done in %s - ", sphFormatTime($tm) );
 		}
-		$hash = array ( 'spi' => md5_file ( "$path.spi" ),
-						'spa' => md5_file ( "$path.spa" ) );
-		printf ( "%s\n", $hash['spi'] );
+		if ( !$config->IsRt() )
+		{
+			$hash = array ( 'spi' => md5_file ( "$path.spi" ),
+							'spa' => md5_file ( "$path.spa" ) );
+			printf ( "%s\n", $hash['spi'] );
+		}
+		else
+		{
+			$hash = array ( 'xml'=>md5_file ("bench/$name.xml") );
+			printf ( "%s\n", $hash['xml'] );
+		}
 	}
 
 	// start searchd
@@ -254,8 +289,14 @@ function sphBenchmark ( $name, $locals, $force_reindex )
 	}
 
 	// run the benchmark
-	if ( $config->RunQuery ( '*', $error, 'warming-up:' ) &&
-		 $config->RunQuery ( '*', $error, 'profiling:' ) )
+	$isOK = false;
+	if ( $config->IsSphinxqlTest () )
+		$isOK = $config->RunQuerySphinxQL ( $error, true );
+	else
+		$isOK = $config->RunQuery ( '*', $error, 'warming-up:' ) &&
+			$config->RunQuery ( '*', $error, 'profiling:' );
+	
+	if ( $isOK )
 	{
 		$report = array (
 			'results' => array(),
@@ -263,22 +304,36 @@ function sphBenchmark ( $name, $locals, $force_reindex )
 			'hash' => $hash,
 			'version' => GetVersion()
 		);
-		$i = 0; $q = null;
+		$i = 0; $q = null; $last = '';
 		foreach ( $config->Results() as $result )
 		{
-			if ( $result[0] !== $q )
+			if ( $config->IsSphinxqlTest () )
 			{
-				$i = 0;
-				$q = $result[0];
+				if ( $result['sphinxql']=='show meta' )
+				{
+					$report['results'][] =
+						array ( 'total'			=> $result['rows'][0]['Value'],
+								'total_found'	=> $result['rows'][1]['Value'],
+								'time'			=> $result['rows'][2]['Value'],
+								'query'			=> $last,
+								'tag'			=> $last );
+				}
+				$last = $result['sphinxql'];
+			} else
+			{
+				if ( $result[0] !== $q )
+				{
+					$i = 0;
+					$q = $result[0];
+				}
+				$query = $config->GetQuery ( $q );
+				$report['results'][] =
+					array ( 'total'			=> $result[1],
+							'total_found'	=> $result[2],
+							'time'			=> $result[3],
+							'query'			=> $query['query'][$i++],
+							'tag'			=> $query['tag'] );
 			}
-			$query = $config->GetQuery ( $q );
-			$report['results'][] =
-				array ( 'total'			=> $result[1],
-						'total_found'	=> $result[2],
-						'time'			=> $result[3],
-						'query'			=> $query['query'][$i++],
-						'tag'			=> $query['tag'] );
-			
 		}
 		file_put_contents ( "$output.bin", serialize ( $report ) );
 		printf ( "results saved to: $output.bin\n" );

@@ -6291,12 +6291,13 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 			return;
 		}
 
+		CSphHTMLStripper tStripper;
+		const CSphHTMLStripper * pStripper = NULL;
 		const CSphIndexSettings & tSettings = pIndex->GetSettings ();
 		if ( q.m_sStripMode=="strip"
 			|| ( q.m_sStripMode=="index" && tSettings.m_bHtmlStrip ) )
 		{
 			CSphString sError;
-			CSphHTMLStripper tStripper;
 			if ( q.m_sStripMode=="index" )
 			{
 				if (
@@ -6308,11 +6309,11 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 					return;
 				}
 			}
-			tStripper.Strip ( (BYTE*)q.m_sSource.cstr() );
+			pStripper = &tStripper;
 		}
 
 		CSphString sError;
-		char * sResult = sphBuildExcerpt ( q, pDict, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError );
+		char * sResult = sphBuildExcerpt ( q, pDict, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError, pStripper );
 		if ( !sResult )
 		{
 			tReq.SendErrorReply ( "highlighting failed: %s", sError.cstr() );
@@ -7539,11 +7540,12 @@ void HandleCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt_t & 
 
 	// FIXME? cut-paste
 	const CSphIndexSettings & tSettings = pIndex->GetSettings ();
+	CSphHTMLStripper tStripper;
+	CSphHTMLStripper * pStripper = NULL;
 	if ( q.m_sStripMode=="strip"
 		|| ( q.m_sStripMode=="index" && tSettings.m_bHtmlStrip ) )
 	{
 		CSphString sError;
-		CSphHTMLStripper tStripper;
 		if ( q.m_sStripMode=="index" )
 		{
 			if (
@@ -7556,10 +7558,10 @@ void HandleCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt_t & 
 				return;
 			}
 		}
-		tStripper.Strip ( (BYTE*)q.m_sSource.cstr() );
+		pStripper = &tStripper;
 	}
 
-	char * sResult = sphBuildExcerpt ( q, pDict, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError );
+	char * sResult = sphBuildExcerpt ( q, pDict, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError, pStripper );
 	if ( !sResult )
 	{
 		sError.SetSprintf ( "highlighting failed: %s", sError.cstr() );

@@ -1101,7 +1101,7 @@ public:
 								CSphHTMLStripper ();
 	bool						SetIndexedAttrs ( const char * sConfig, CSphString & sError );
 	bool						SetRemovedElements ( const char * sConfig, CSphString & sError );
-	void						Strip ( BYTE * sData );
+	void						Strip ( BYTE * sData ) const;
 
 protected:
 	struct StripperTag_t
@@ -1134,7 +1134,7 @@ protected:
 	int							m_dEnd[MAX_CHAR_INDEX];		///< maps index of the first tag name char to end offset in m_dTags
 
 protected:
-	int							GetCharIndex ( int iCh );	///< calcs index by raw char
+	int							GetCharIndex ( int iCh ) const;	///< calcs index by raw char
 	void						UpdateTags ();				///< sorts tags, updates internal helpers
 };
 

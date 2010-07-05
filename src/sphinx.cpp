@@ -15184,7 +15184,7 @@ CSphHTMLStripper::CSphHTMLStripper ()
 }
 
 
-int CSphHTMLStripper::GetCharIndex ( int iCh )
+int CSphHTMLStripper::GetCharIndex ( int iCh ) const
 {
 	if ( iCh>='a' && iCh<='z' ) return iCh-'a';
 	if ( iCh>='A' && iCh<='Z' ) return iCh-'A';
@@ -15798,7 +15798,7 @@ static inline int HtmlEntityLookup ( const BYTE * str, int len )
 }
 
 
-void CSphHTMLStripper::Strip ( BYTE * sData )
+void CSphHTMLStripper::Strip ( BYTE * sData ) const
 {
 	const BYTE * s = sData;
 	BYTE * d = sData;
@@ -16103,7 +16103,19 @@ void CSphHTMLStripper::Strip ( BYTE * sData )
 
 		if ( !tTag.m_bInline ) *d++ = ' ';
 	}
+	*d++ = '\0';
 
+	// double space's character elimination pass
+	s = sData;
+	d = sData;
+	bool bIsLastSpace = false;
+	while ( const char c = *s++ )
+	{
+		const bool bIsSpace = sphIsSpace ( c );
+		*d = ( bIsSpace ? ' ' : c );
+		d += !( bIsSpace && bIsLastSpace );
+		bIsLastSpace = bIsSpace;
+	}
 	*d++ = '\0';
 }
 

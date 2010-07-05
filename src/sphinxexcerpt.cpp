@@ -531,6 +531,9 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokeni
 	DWORD uPosition = 0; // hit position in document
 	while ( ( sWord = pTokenizer->GetToken() )!=NULL )
 	{
+		if ( pTokenizer->TokenIsBlended() )
+			continue;
+
 		const char * pTokenStart = pTokenizer->GetTokenStart ();
 
 		if ( pTokenStart!=pStartPtr && pTokenStart>pLastTokenEnd )
@@ -1104,7 +1107,7 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 	// our best passages
 	CSphVector<Passage_t> dShow;
 	DWORD uWords = 0; // mask of words in dShow so far
-	int iTotalCodes = 0; // 
+	int iTotalCodes = 0;
 	int iTotalWords = 0;
 
 	CSphVector<int> dWeights ( m_dPassages.GetLength() );
@@ -1128,7 +1131,7 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 		Passage_t & tBest = m_dPassages[iBest];
 
 		// does this passage fit the limits?
-		bool bFits = ( iTotalCodes + tBest.m_iCodes <= iMaxCp ) && ( iTotalWords + tBest.m_iWords <= iMaxWords );
+		bool bFits = ( iTotalCodes + tBest.m_iCodes<=iMaxCp ) && ( iTotalWords + tBest.m_iWords<=iMaxWords );
 
 		// all words will be shown and we're outta limit
 		if ( uWords==m_uFoundWords && !bFits )
@@ -1330,7 +1333,7 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 
 /////////////////////////////////////////////////////////////////////////////
 
-char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphIndex *pIndex, CSphString & sError )
+char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphIndex *pIndex, CSphString & sError, const CSphHTMLStripper * pStripper )
 {
 	if ( tOptions.m_sStripMode=="retain"
 		&& !( tOptions.m_iLimit==0 && tOptions.m_iLimitPassages==0 && tOptions.m_iLimitWords==0 ) )
@@ -1352,7 +1355,7 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 			return NULL;
 
 		// will this ever trigger? time will tell; email me if it does!
-		if ( tFile.GetSize() >= (SphOffset_t)INT_MAX )
+		if ( tFile.GetSize()>=(SphOffset_t)INT_MAX )
 		{
 			sError.SetSprintf ( "%s too big for snippet (over 2 GB)", pData );
 			return NULL;
@@ -1368,6 +1371,10 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 
 		pData = (char*) pBuffer.Ptr();
 	}
+
+	// strip if we have to
+	if ( pStripper )
+		pStripper->Strip ( (BYTE*)pData );
 
 	if ( !tOptions.m_bHighlightQuery )
 	{

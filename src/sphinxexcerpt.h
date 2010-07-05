@@ -68,7 +68,7 @@ public:
 /// an excerpt generator
 /// returns a newly allocated string in encoding specified by tokenizer on success
 /// returns NULL on failure
-char * sphBuildExcerpt ( ExcerptQuery_t &, CSphDict *, ISphTokenizer *, const CSphSchema *, CSphIndex *, CSphString & sError );
+char * sphBuildExcerpt ( ExcerptQuery_t &, CSphDict *, ISphTokenizer *, const CSphSchema *, CSphIndex *, CSphString & sError, const CSphHTMLStripper * );
 
 #endif // _sphinxexcerpt_
 

@@ -379,7 +379,7 @@ void TestStripper ()
 		// source-data, index-attrs, remove-elements, expected-results
 		{ "<html>trivial test</html>", "", "", " trivial test " },
 		{ "<html>lets <img src=\"g/smth.jpg\" alt=\"nice picture\">index attrs</html>", "img=alt", "", " lets nice picture index attrs " },
-		{ "<html>   lets  also<script> whatever here; a<b</script>remove scripts", "", "script, style", "    lets  also remove scripts" },
+		{ "<html>   lets  also<script> whatever here; a<b</script>remove scripts", "", "script, style", " lets also remove scripts" },
 		{ "testing in<b><font color='red'>line</font> ele<em>men</em>ts", "", "", "testing inline elements" },
 		{ "testing non<p>inline</h1>elements", "", "", "testing non inline elements" },
 		{ "testing&nbsp;entities&amp;stuff", "", "", "testing entities&stuff" },
@@ -388,7 +388,7 @@ void TestStripper ()
 		{ "testing comm<!--comm-->ents", "", "", "testing comments" },
 		{ "&lt; &gt; &thetasym; &somethingverylong; &the", "", "", "< > \xCF\x91 &somethingverylong; &the" },
 		{ "testing <img src=\"g/smth.jpg\" alt=\"nice picture\" rel=anotherattr junk=throwaway>inline tags vs attr indexing", "img=alt,rel", "", "testing nice picture anotherattr inline tags vs attr indexing" },
-		{ "this <?php $code = \"must be stripped\"; ?> away", "", "", "this  away" },
+		{ "this <?php $code = \"must be stripped\"; ?> away", "", "", "this away" },
 		{ "<a href=\"http://www.com\">content1</a>", "a=title", "", "content1" },
 		{ "<a href=\"http://www.com\" title=\"my test title\">content2</a>", "a=title", "", "my test title content2" },
 		{ "testing <img src=\"g/smth.jpg\" alt=\"nice picture\" rel=anotherattr junk=\"throwaway\">inline tags vs attr indexing", "img=alt,rel", "", "testing nice picture anotherattr inline tags vs attr indexing" },

@@ -22,7 +22,7 @@ index test
 	path			= <data_path/>/test
 
 	charset_type	= utf-8
-	blend_chars 		= +, U+23,U+40	
+	blend_chars 		= +, -, ., U+23,U+40
 }
 </config>
 
@@ -34,6 +34,7 @@ $results = array();
 
 $docs = array();
 $docs[0] = '+ben is bad';
+$docs[1] = 'who is ben. green-nice is... as no-body bad.';
 
 $query="ben is nice";
 

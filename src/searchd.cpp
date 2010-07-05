@@ -307,6 +307,18 @@ static CSphMutex							g_tRotateConfigMutex;
 static SphThread_t							g_tRotateThread;
 static volatile bool						g_bRotateShutdown = false;
 
+struct DistributedMutex_t
+{
+	void Init ();
+	void Done ();
+	void Lock ();
+	void Unlock ();
+
+private:
+	CSphMutex m_tLock;
+};
+static DistributedMutex_t					g_tDistLock;
+
 enum
 {
 	SPH_PIPE_UPDATED_ATTRS,
@@ -648,6 +660,31 @@ static void DoUnlockClear ( CSphVector< const ServedIndex_t * > & dLocked )
 		dLocked[i]->Unlock();
 	}
 	dLocked.Resize(0);
+}
+//////////////////////////////////////////////////////////////////////////
+
+void DistributedMutex_t::Init ()
+{
+	if ( g_eWorkers==MPM_THREADS )
+		m_tLock.Init();
+}
+
+void DistributedMutex_t::Done ()
+{
+	if ( g_eWorkers==MPM_THREADS )
+		m_tLock.Done();
+}
+
+void DistributedMutex_t::Lock ()
+{
+	if ( g_eWorkers==MPM_THREADS )
+		m_tLock.Lock();
+}
+
+void DistributedMutex_t::Unlock()
+{
+	if ( g_eWorkers==MPM_THREADS )
+		m_tLock.Unlock();
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1169,6 +1206,7 @@ void Shutdown ()
 		g_pIndexes->Reset();
 
 		// clear shut down of rt indexes + binlog
+		g_tDistLock.Done();
 		SafeDelete ( g_pIndexes );
 		sphRTDone();
 
@@ -5178,7 +5216,13 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// build local indexes list
 	////////////////////////////
 
+	g_tDistLock.Lock();
 	DistributedIndex_t * pDist = g_hDistIndexes ( tFirst.m_sIndexes );
+	CSphVector<CSphString> dDistLocal;
+	if ( pDist )
+		dDistLocal = pDist->m_dLocal;
+	g_tDistLock.Unlock();
+
 	if ( !pDist )
 	{
 		// they're all local, build the list
@@ -5223,13 +5267,13 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	} else
 	{
 		// copy local indexes list from distributed definition, but filter out disabled ones
-		ARRAY_FOREACH ( i, pDist->m_dLocal )
+		ARRAY_FOREACH ( i, dDistLocal )
 		{
-			const ServedIndex_t * pServedIndex = g_pIndexes->GetRlockedEntry ( pDist->m_dLocal[i] );
+			const ServedIndex_t * pServedIndex = g_pIndexes->GetRlockedEntry ( dDistLocal[i] );
 			if ( pServedIndex )
 			{
 				if ( pServedIndex->m_bEnabled )
-					m_dLocal.Add ( pDist->m_dLocal[i] );
+					m_dLocal.Add ( dDistLocal[i] );
 
 				pServedIndex->Unlock();
 			}
@@ -6525,12 +6569,30 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 		return;
 	}
 
+	CSphVector<DistributedIndex_t> dDistributed ( dIndexNames.GetLength() ); // lock safe storage for distributed indexes
 	ARRAY_FOREACH ( i, dIndexNames )
 	{
-		if ( !g_pIndexes->Exists ( dIndexNames[i] ) && !g_hDistIndexes ( dIndexNames[i] ) )
+		if ( !g_pIndexes->Exists ( dIndexNames[i] ) )
 		{
-			tReq.SendErrorReply ( "unknown index '%s' in update request", dIndexNames[i].cstr() );
-			return;
+			// search amongst distributed and copy for further processing
+			g_tDistLock.Lock();
+			const DistributedIndex_t * pDistIndex = g_hDistIndexes ( dIndexNames[i] );
+
+			if ( pDistIndex )
+			{
+				dDistributed[i] = *pDistIndex;
+				dDistributed[i].m_bToDelete = true; // our presence flag
+			}
+
+			g_tDistLock.Unlock();
+
+			if ( pDistIndex )
+				continue;
+			else
+			{
+				tReq.SendErrorReply ( "unknown index '%s' in update request", dIndexNames[i].cstr() );
+				return;
+			}
 		}
 	}
 
@@ -6553,8 +6615,8 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 			pLocked->Unlock();
 		} else
 		{
-			assert ( g_hDistIndexes ( sReqIndex ) );
-			CSphVector<CSphString>& dLocal = g_hDistIndexes[sReqIndex].m_dLocal;
+			assert ( dDistributed[iIdx].m_bToDelete );
+			CSphVector<CSphString>& dLocal = dDistributed[iIdx].m_dLocal;
 
 			ARRAY_FOREACH ( i, dLocal )
 			{
@@ -6567,9 +6629,9 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 		}
 
 		// update remote agents
-		if ( g_hDistIndexes ( sReqIndex ) )
+		if ( dDistributed[iIdx].m_bToDelete )
 		{
-			DistributedIndex_t & tDist = g_hDistIndexes[sReqIndex];
+			DistributedIndex_t & tDist = dDistributed[iIdx];
 			dFailuresSet.SetIndex ( sReqIndex );
 
 			// connect to remote agents and query them
@@ -6667,6 +6729,7 @@ void BuildStatus ( CSphVector<CSphString> & dStatus )
 	dStatus.Add ( "queries" );					dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iQueries );
 	dStatus.Add ( "dist_queries" );				dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iDistQueries );
 
+	g_tDistLock.Lock();
 	g_hDistIndexes.IterateStart();
 	while ( g_hDistIndexes.IterateNext() )
 	{
@@ -6682,6 +6745,7 @@ void BuildStatus ( CSphVector<CSphString> & dStatus )
 			dStatus.Add().SetSprintf ( "ag_%s_%d_unexpected_closings", sIdx, i );	dStatus.Add().SetSprintf ( FMT64, dAgents[i].m_iUnexpectedClose );
 		}
 	}
+	g_tDistLock.Unlock();
 
 	dStatus.Add ( "query_wall" );				FormatMsec ( dStatus.Add(), g_pStats->m_iQueryTime );
 
@@ -7600,7 +7664,7 @@ void HandleCallKeywords ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt_t & 
 	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
 }
 
-	
+
 void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 {
 	MEMORY ( SPH_MEM_HANDLE_SQL );
@@ -9180,6 +9244,59 @@ bool ConfigureAgent ( Agent_t & tAgent, const CSphVariant * pAgent, const char *
 	return true;
 }
 
+static DistributedIndex_t ConfigureDistributedIndex ( const char * szIndexName, const CSphConfigSection & hIndex )
+{
+	assert ( hIndex("type") && hIndex["type"]=="distributed" );
+
+	DistributedIndex_t tIdx;
+
+	// add local agents
+	for ( CSphVariant * pLocal = hIndex("local"); pLocal; pLocal = pLocal->m_pNext )
+	{
+		if ( !g_pIndexes->Exists ( pLocal->cstr() ) )
+		{
+			sphWarning ( "index '%s': no such local index '%s' - SKIPPING LOCAL INDEX",
+				szIndexName, pLocal->cstr() );
+			continue;
+		}
+		tIdx.m_dLocal.Add ( pLocal->cstr() );
+	}
+
+	// add remote agents
+	for ( CSphVariant * pAgent = hIndex("agent"); pAgent; pAgent = pAgent->m_pNext )
+	{
+		Agent_t tAgent;
+		if ( ConfigureAgent ( tAgent, pAgent, szIndexName, false ) )
+			tIdx.m_dAgents.Add ( tAgent );
+	}
+
+	for ( CSphVariant * pAgent = hIndex("agent_blackhole"); pAgent; pAgent = pAgent->m_pNext )
+	{
+		Agent_t tAgent;
+		if ( ConfigureAgent ( tAgent, pAgent, szIndexName, true ) )
+			tIdx.m_dAgents.Add ( tAgent );
+	}
+
+	// configure options
+	if ( hIndex("agent_connect_timeout") )
+	{
+		if ( hIndex["agent_connect_timeout"].intval()<=0 )
+			sphWarning ( "index '%s': connect_timeout must be positive, ignored", szIndexName );
+		else
+			tIdx.m_iAgentConnectTimeout = hIndex["agent_connect_timeout"].intval();
+	}
+
+	if ( hIndex("agent_query_timeout") )
+	{
+		if ( hIndex["agent_query_timeout"].intval()<=0 )
+			sphWarning ( "index '%s': query_timeout must be positive, ignored", szIndexName );
+		else
+			tIdx.m_iAgentQueryTimeout = hIndex["agent_query_timeout"].intval();
+	}
+
+	return tIdx;
+}
+
 
 ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex )
 {
@@ -9189,57 +9306,12 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		// configure distributed index
 		///////////////////////////////
 
-		DistributedIndex_t tIdx;
-
-		// add local agents
-		for ( CSphVariant * pLocal = hIndex("local"); pLocal; pLocal = pLocal->m_pNext )
-		{
-			if ( !g_pIndexes->Exists ( pLocal->cstr() ) )
-			{
-				sphWarning ( "index '%s': no such local index '%s' - SKIPPING LOCAL INDEX",
-					szIndexName, pLocal->cstr() );
-				continue;
-			}
-			tIdx.m_dLocal.Add ( pLocal->cstr() );
-		}
-
-		// add remote agents
-		for ( CSphVariant * pAgent = hIndex("agent"); pAgent; pAgent = pAgent->m_pNext )
-		{
-			Agent_t tAgent;
-			if ( ConfigureAgent ( tAgent, pAgent, szIndexName, false ) )
-				tIdx.m_dAgents.Add ( tAgent );
-		}
-
-		for ( CSphVariant * pAgent = hIndex("agent_blackhole"); pAgent; pAgent = pAgent->m_pNext )
-		{
-			Agent_t tAgent;
-			if ( ConfigureAgent ( tAgent, pAgent, szIndexName, true ) )
-				tIdx.m_dAgents.Add ( tAgent );
-		}
-
-		// configure options
-		if ( hIndex("agent_connect_timeout") )
-		{
-			if ( hIndex["agent_connect_timeout"].intval()<=0 )
-				sphWarning ( "index '%s': connect_timeout must be positive, ignored", szIndexName );
-			else
-				tIdx.m_iAgentConnectTimeout = hIndex["agent_connect_timeout"].intval();
-		}
-
-		if ( hIndex("agent_query_timeout") )
-		{
-			if ( hIndex["agent_query_timeout"].intval()<=0 )
-				sphWarning ( "index '%s': query_timeout must be positive, ignored", szIndexName );
-			else
-				tIdx.m_iAgentQueryTimeout = hIndex["agent_query_timeout"].intval();
-		}
+		DistributedIndex_t tIdx = ConfigureDistributedIndex ( szIndexName, hIndex );
 
 		// finally, check and add distributed index to global table
 		if ( tIdx.m_dAgents.GetLength()==0 && tIdx.m_dLocal.GetLength()==0 )
 		{
-			sphWarning ( "index '%s': no valid local/remote indexes in distributed index - NOT SERVING",
-				szIndexName );
+			sphWarning ( "index '%s': no valid local/remote indexes in distributed index - NOT SERVING", szIndexName );
 			return ADD_ERROR;
 		} else
 		{
@@ -9444,10 +9516,22 @@ void ReloadIndexSettings ( CSphConfigParser * pCP )
 			nChecked++;
 			pServedIndex->Unlock();
 
-		} else if ( g_hDistIndexes.Exists ( sIndexName ) )
+		} else if ( g_hDistIndexes.Exists ( sIndexName ) && hIndex.Exists("type") && hIndex["type"]=="distributed" )
 		{
-			DistributedIndex_t & tIndex = g_hDistIndexes[sIndexName];
-			tIndex.m_bToDelete = false;
+			DistributedIndex_t tIdx = ConfigureDistributedIndex ( sIndexName, hIndex );
+
+			// finally, check and add distributed index to global table
+			if ( tIdx.m_dAgents.GetLength()==0 && tIdx.m_dLocal.GetLength()==0 )
+			{
+				sphWarning ( "index '%s': no valid local/remote indexes in distributed index - using last succeed", sIndexName );
+				g_hDistIndexes[sIndexName].m_bToDelete = false;
+			} else
+			{
+				g_tDistLock.Lock();
+				g_hDistIndexes[sIndexName] = tIdx;
+				g_tDistLock.Unlock();
+			}
+
 			nChecked++;
 
 		} else if ( AddIndex ( sIndexName, hIndex )==ADD_LOCAL )
@@ -9497,8 +9581,12 @@ void CheckDelete ()
 	ARRAY_FOREACH ( i, dToDelete )
 		g_pIndexes->Delete ( *dToDelete[i] ); // should result in automatic CSphIndex::Unlock() via dtor call
 
+	g_tDistLock.Lock();
+
 	ARRAY_FOREACH ( i, dDistToDelete )
 		g_hDistIndexes.Delete ( *dDistToDelete[i] );
+
+	g_tDistLock.Unlock();
 
 	g_bDoDelete = false;
 }
@@ -11323,6 +11411,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 		// reserving max to keep memory consumption constant between frames
 		g_dThd.Reserve ( g_iMaxChildren*2 );
+
+		g_tDistLock.Init();
 	}
 
 	// prepare data and replay last binlog

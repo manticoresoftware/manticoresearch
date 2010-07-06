@@ -365,3 +365,36 @@ diff -r 319c65835581 win/configure.js
              case "__NT__":
              case "DISABLE_GRANT_OPTIONS":
              case "EMBED_MANIFESTS":
+--- mysql-5.0.67/config/ac-macros/ha_sphinx.m4	1970-01-01 10:00:00.000000000 +1000
++++ mysql-5.0.67-sphinx/config/ac-macros/ha_sphinx.m4	2009-02-14 09:15:48.000000000 +1000
+@@ -0,0 +1,30 @@
++dnl ---------------------------------------------------------------------------
++dnl Macro: MYSQL_CHECK_EXAMPLEDB
++dnl Sets HAVE_SPHINX_DB if --with-sphinx-storage-engine is used
++dnl ---------------------------------------------------------------------------
++AC_DEFUN([MYSQL_CHECK_SPHINXDB], [
++  AC_ARG_WITH([sphinx-storage-engine],
++              [
++  --with-sphinx-storage-engine
++                          Enable the Sphinx Storage Engine],
++              [sphinxdb="$withval"],
++              [sphinxdb=no])
++  AC_MSG_CHECKING([for example storage engine])
++
++  case "$sphinxdb" in
++    yes )
++      AC_DEFINE([HAVE_SPHINX_DB], [1], [Builds Sphinx Engine])
++      AC_MSG_RESULT([yes])
++      [sphinxdb=yes]
++      ;;
++    * )
++      AC_MSG_RESULT([no])
++      [sphinxdb=no]
++      ;;
++  esac
++
++])
++dnl ---------------------------------------------------------------------------
++dnl END OF MYSQL_CHECK_EXAMPLE SECTION
++dnl ---------------------------------------------------------------------------
++

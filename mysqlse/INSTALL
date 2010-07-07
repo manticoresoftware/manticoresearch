@@ -1,6 +1,26 @@
 Building MySQL with SphinxSE
 =============================
 
+Note: BUILD/autorun.sh step on Linux might malfunction with some
+versions of automake; autorun.sh will not fail but the build will.
+automake 1.9.6 is known to work.
+
+
+
+MySQL 5.0.x on Linux
+---------------------
+
+tar zxvf mysql-5.0.91.tar.gz
+cp -R mysqlse mysql-5.0.91/sql/sphinx
+cd mysql-5.0.91
+
+patch -p1 -i sql/sphinx/sphinx.5.0.91.diff
+sh BUILD/autorun.sh
+./configure --with-sphinx-storage-engine
+make
+
+
+
 MySQL 5.1.x on Linux
 ---------------------
 
@@ -10,10 +30,7 @@ cd mysql-5.1.47
 
 sh BUILD/autorun.sh
 ./configure --with-plugins=sphinx
-
-Note: BUILD/autorun.sh might malfunction with some versions of automake;
-autorun.sh will not fail but the build will.  automake 1.9.6 is known
-to work.
+make
 
 
 

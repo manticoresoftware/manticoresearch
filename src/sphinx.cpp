@@ -16377,7 +16377,7 @@ bool CSphSource_Document::BuildHits ( BYTE ** dFields, int iFieldIndex, int iSta
 			if ( !iFieldBytes )
 				continue;
 
-			int iBufSize = Max ( m_iReadFileBufferSize, 1 << sphLog2 ( iFieldBytes-1 ) );
+			int iBufSize = Max ( m_iReadFileBufferSize, 1 << sphLog2 ( iFieldBytes+15 ) );
 			if ( m_iReadFileBufferSize < iBufSize )
 				SafeDeleteArray ( m_pReadFileBuffer );
 
@@ -16392,6 +16392,8 @@ bool CSphSource_Document::BuildHits ( BYTE ** dFields, int iFieldIndex, int iSta
 				sphCallWarningCallback ( "failed to read file '%s', error '%s'", (const char *)sField, sError.cstr() );
 				continue;
 			}
+
+			m_pReadFileBuffer[iFieldBytes] = '\0';
 
 			sField = (BYTE*)m_pReadFileBuffer;
 			tFileSource.Close();

@@ -621,7 +621,7 @@ handlerton sphinx_hton =
 	NULL,	// create_cursor_read_view
 	NULL,	// set_cursor_read_view
 	NULL,	// close_cursor_read_view
-	HTON_CAN_RECREATE | HTON_ALTER_NOT_SUPPORTED
+	HTON_CAN_RECREATE
 };
 #else
 static handlerton * sphinx_hton_ptr = NULL;
@@ -674,7 +674,7 @@ static int sphinx_init_func ( void * p )
 		hton->close_connection = sphinx_close_connection;
 		hton->show_status = sphinx_show_status;
 		hton->panic = sphinx_panic;
-		hton->flags = HTON_CAN_RECREATE | HTON_ALTER_NOT_SUPPORTED;
+		hton->flags = HTON_CAN_RECREATE;
 		#endif
 	}
 	SPH_RET(0);

@@ -669,7 +669,7 @@ static int sphinx_init_func ( void * p )
 		#if MYSQL_VERSION_ID > 50100
 		handlerton * hton = (handlerton*) p;
 		hton->state = SHOW_OPTION_YES;
-		hton->db_type = DB_TYPE_DEFAULT;
+		hton->db_type = DB_TYPE_FIRST_DYNAMIC;
 		hton->create = sphinx_create_handler;
 		hton->close_connection = sphinx_close_connection;
 		hton->show_status = sphinx_show_status;

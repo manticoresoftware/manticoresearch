@@ -44,7 +44,7 @@ $g_site_defaults = array
 	'malloc-scribble'	=> false,
 
 	'db-host'			=> 'localhost',
-	'db-user'			=> 'test',
+	'db-user'			=> 'root',
 	'db-password'		=> '',
 	'db-name'			=> 'test',
 	'db-port'			=> 3306

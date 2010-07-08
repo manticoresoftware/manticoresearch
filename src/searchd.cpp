@@ -5474,7 +5474,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		{
 			const Agent_t & tAgent = pDist->m_dAgents[i];
 			if ( !tAgent.m_bSuccess && !tAgent.m_sFailure.IsEmpty() )
-				m_dFailuresSet.Submit ( "agent %s: %s", tAgent.GetName().cstr(), tAgent.m_sFailure.cstr() );
+				m_dFailuresSet.Submit ( tAgent.m_bBlackhole?"blackhole %s: %s":"agent %s: %s", tAgent.GetName().cstr(), tAgent.m_sFailure.cstr() );
 		}
 	}
 

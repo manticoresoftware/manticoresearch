@@ -2107,205 +2107,10 @@ listen = localhost:9306:mysql41
 </para>
 <para>
 Just supporting the protocol and not the SQL syntax would be useless
-so Sphinx now also supports a tiny subset of SQL that we dubbed SphinxQL.
-Currently implemented statements are:
-<itemizedlist>
-<listitem>SELECT</listitem>
-<listitem>SHOW WARNINGS</listitem>
-<listitem>SHOW STATUS</listitem>
-<listitem>SHOW META</listitem>
-</itemizedlist>
-</para>
-<para>
-<b>SELECT</b> syntax is based upon regular SQL but adds several Sphinx-specific
-extensions and has a few omissions (such as (currently) missing support for JOINs).
-Specifically,
-<itemizedlist>
-<listitem>Column list clause. Column names, arbitrary expressions,
-and star ('*') are all allowed (ie. "SELECT @id, group_id*123+456 FROM test1"
-will work). Unlike in regular SQL, all computed expressions must be aliased with
-a valid identifier. Special names such as @id and @weight should currently
-be used with leading at-sign. This at-sign requirement will be lifted in
-the future.</listitem>
-<listitem>FROM clause. FROM clause should contain the list of indexes
-to search through. Unlike in regular SQL, comma means enumeration of
-full-text indexes as in <link linkend="api-func-query">Query()</link>
-API call rather than JOIN.
-</listitem>
-<listitem>WHERE clause. This clause will map both to fulltext query
-and filters. Comparison operators (=, !=, &lt;, &gt;, &lt;=, &gt;=), IN(),
-AND, NOT, and BETWEEN are all supported and map directly to filters.
-OR is not supported yet but will be in the future. MATCH('query')
-is supported and maps to fulltext query. Query will be interpreted
-according to <link linkend="extended-syntax">full-text query language rules</link>.
-There must be at most one MATCH() in the clause.
-</listitem>
-<listitem>GROUP BY clause. Currently only supports grouping by a single
-column. The column however can be a computed expression:
-<programlisting>
-SELECT *, group_id*1000+article_type AS gkey FROM example GROUP BY gkey
-</programlisting>
-Aggregate functions (AVG(), MIN(), MAX(), SUM()) in column list
-clause are supported. Arguments to aggregate functions can be either
-plain attributes or arbitrary expressions. COUNT(*) is implicitly
-supported as using GROUP BY will add @count column to result set.
-Explicit support might be added in the future. COUNT(DISTINCT attr)
-is supported. Currently there can be at most one COUNT(DISTINCT)
-per query and an argument needs to be an attribute. Both current
-restrictions on COUNT(DISTINCT) might be lifted in the future.
-<programlisting>
-SELECT *, AVG(price) AS avgprice, COUNT(DISTINCT storeid)
-FROM products
-WHERE MATCH('ipod')
-GROUP BY vendorid
-</programlisting>
-</listitem>
-<listitem>WITHIN GROUP ORDER BY clause. This is a Sphinx specific
-extension that lets you control how the best row within a group
-will to be selected. The syntax matches that of regular ORDER BY
-clause:
-<programlisting>
-SELECT *, INTERVAL(posted,NOW()-7*86400,NOW()-86400) AS timeseg
-FROM example WHERE MATCH('my search query')
-GROUP BY siteid
-WITHIN GROUP ORDER BY @weight DESC
-ORDER BY timeseg DESC, @weight DESC
-</programlisting>
-</listitem>
-<listitem>ORDER BY clause. Unlike in regular SQL, only column names
-(not expressions) are allowed and explicit ASC and DESC are required.
-The columns however can be computed expressions:
-<programlisting>
-SELECT *, @weight*10+docboost AS skey FROM example ORDER BY skey
-</programlisting>
-</listitem>
-<listitem>LIMIT clause. Both LIMIT N and LIMIT M,N forms are supported.
-Unlike in regular SQL (but like in Sphinx API), an implicit LIMIT 0,20
-is present by default.
-</listitem>
-<listitem>OPTION clause. This is a Sphinx specific extension that
-lets you control a number of per-query options. The syntax is:
-<programlisting>
-OPTION &lt;optionname&gt;=&lt;value&gt; [ , ... ]
-</programlisting>
-Supported options and respectively allowed values are:
-<itemizedlist>
-<listitem>'ranker' - any of 'proximity_bm25', 'bm25', 'none', 'wordcount', 'proximity', 'matchany', or 'fieldmask'</listitem>
-<listitem>'max_matches' - integer (per-query max matches value)</listitem>
-<listitem>'cutoff' - integer (max found matches threshold)</listitem>
-<listitem>'max_query_time' - integer (max search time threshold, msec)</listitem>
-<listitem>'retry_count' - integer (distributed retries count)</listitem>
-<listitem>'retry_delay' - integer (distributed retry delay, msec)</listitem>
-</itemizedlist>
-Example:
-<programlisting>
-SELECT * FROM test WHERE MATCH('@title hello @body world')
-OPTION ranker=bm25, max_matches=3000
-</programlisting>
-</listitem>
-</itemizedlist>
-</para>
-<para><b>SHOW WARNINGS</b> statement can be used to retrieve the warning
-produced by the latest query. The error message will be returned along with
-the query itself:
-<programlisting>
-mysql&gt; SELECT * FROM test1 WHERE MATCH('@@title hello') \G
-ERROR 1064 (42000): index test1: syntax error, unexpected TOK_FIELDLIMIT
-near '@title hello'
-
-mysql&gt; SELECT * FROM test1 WHERE MATCH('@title -hello') \G
-ERROR 1064 (42000): index test1: query is non-computable (single NOT operator)
-
-mysql&gt; SELECT * FROM test1 WHERE MATCH('"test doc"/3') \G
-*************************** 1. row ***************************
-        id: 4
-    weight: 2500
-  group_id: 2
-date_added: 1231721236
-1 row in set, 1 warning (0.00 sec)
-
-mysql> SHOW WARNINGS \G
-*************************** 1. row ***************************
-  Level: warning
-   Code: 1000
-Message: quorum threshold too high (words=2, thresh=3); replacing quorum operator
-         with AND operator
-1 row in set (0.00 sec)
-</programlisting>
-</para>
-<para><b>SHOW STATUS</b> shows a number of useful performance counters. IO and CPU
-counters will only be available if searchd was started with --iostats and --cpustats
-switches respectively.
-<programlisting>
-mysql> SHOW STATUS;
-+--------------------+-------+
-| Variable_name      | Value |
-+--------------------+-------+
-| uptime             | 216   |
-| connections        | 3     |
-| maxed_out          | 0     |
-| command_search     | 0     |
-| command_excerpt    | 0     |
-| command_update     | 0     |
-| command_keywords   | 0     |
-| command_persist    | 0     |
-| command_status     | 0     |
-| agent_connect      | 0     |
-| agent_retry        | 0     |
-| queries            | 10    |
-| dist_queries       | 0     |
-| query_wall         | 0.075 |
-| query_cpu          | OFF   |
-| dist_wall          | 0.000 |
-| dist_local         | 0.000 |
-| dist_wait          | 0.000 |
-| query_reads        | OFF   |
-| query_readkb       | OFF   |
-| query_readtime     | OFF   |
-| avg_query_wall     | 0.007 |
-| avg_query_cpu      | OFF   |
-| avg_dist_wall      | 0.000 |
-| avg_dist_local     | 0.000 |
-| avg_dist_wait      | 0.000 |
-| avg_query_reads    | OFF   |
-| avg_query_readkb   | OFF   |
-| avg_query_readtime | OFF   |
-+--------------------+-------+
-29 rows in set (0.00 sec)
-</programlisting>
-</para>
-<para><b>SHOW META</b> shows additional meta-information about the latest
-query such as query time and keyword statistics:
-<programlisting>
-mysql> SELECT * FROM test1 WHERE MATCH('test|one|two');
-+------+--------+----------+------------+
-| id   | weight | group_id | date_added |
-+------+--------+----------+------------+
-|    1 |   3563 |      456 | 1231721236 |
-|    2 |   2563 |      123 | 1231721236 |
-|    4 |   1480 |        2 | 1231721236 |
-+------+--------+----------+------------+
-3 rows in set (0.01 sec)
-
-mysql> SHOW META;
-+---------------+-------+
-| Variable_name | Value |
-+---------------+-------+
-| total         | 3     |
-| total_found   | 3     |
-| time          | 0.005 |
-| keyword[0]    | test  |
-| docs[0]       | 3     |
-| hits[0]       | 5     |
-| keyword[1]    | one   |
-| docs[1]       | 1     |
-| hits[1]       | 2     |
-| keyword[2]    | two   |
-| docs[2]       | 1     |
-| hits[2]       | 2     |
-+---------------+-------+
-12 rows in set (0.00 sec)
-</programlisting>
+so Sphinx now also supports a subset of SQL that we dubbed SphinxQL.
+It supports the standard querying all the index types with SELECT,
+modifying RT indexes with INSERT, REPLACE, and DELETE, and much more.
+Full SphinxQL reference is available in <xref linkend="sphinxql-reference"/>.
 </para>
 </sect1>
 
@@ -2442,6 +2247,8 @@ synthetic tests.
 
 </chapter>
 <chapter id="command-line-tools"><title>Command line tools reference</title>
+
+
 <para>As mentioned elsewhere, Sphinx is not a single program called 'sphinx',
 but a collection of 4 separate programs which collectively form Sphinx. This section
 covers these tools and how to use them.</para>
@@ -3118,6 +2925,270 @@ files for consistency errors that might be introduced either by bugs
 in <filename>indexer</filename> and/or hardware faults.
 </listitem>
 </itemizedlist>
+</sect1>
+
+
+</chapter>
+<chapter id="sphinxql-reference"><title>SphinxQL reference</title>
+
+
+<para>
+SphinxQL is our SQL dialect that exposes all of the search daemon
+functionality using a standard SQL syntax with a few Sphinx-specific
+extensions.  Everything available via the SphinxAPI is also available
+SphinxQL but not vice versa; for instance, writes into RT indexes
+are only available via SphinxQL.  This chapter documents supported
+SphinxQL statements.
+</para>
+
+
+<sect1 id="sphinxql-select"><title>SELECT</title>
+<para>
+<b>SELECT</b> statement was introduced in version 0.9.9-rc2.
+It's syntax is based upon regular SQL but adds several Sphinx-specific
+extensions and has a few omissions (such as (currently) missing support for JOINs).
+Specifically,
+<itemizedlist>
+<listitem>Column list clause. Column names, arbitrary expressions,
+and star ('*') are all allowed (ie. "SELECT @id, group_id*123+456 FROM test1"
+will work). Unlike in regular SQL, all computed expressions must be aliased with
+a valid identifier. Special names such as @id and @weight should currently
+be used with leading at-sign. This at-sign requirement will be lifted in
+the future.</listitem>
+<listitem>FROM clause. FROM clause should contain the list of indexes
+to search through. Unlike in regular SQL, comma means enumeration of
+full-text indexes as in <link linkend="api-func-query">Query()</link>
+API call rather than JOIN.
+</listitem>
+<listitem>WHERE clause. This clause will map both to fulltext query
+and filters. Comparison operators (=, !=, &lt;, &gt;, &lt;=, &gt;=), IN(),
+AND, NOT, and BETWEEN are all supported and map directly to filters.
+OR is not supported yet but will be in the future. MATCH('query')
+is supported and maps to fulltext query. Query will be interpreted
+according to <link linkend="extended-syntax">full-text query language rules</link>.
+There must be at most one MATCH() in the clause.
+</listitem>
+<listitem>GROUP BY clause. Currently only supports grouping by a single
+column. The column however can be a computed expression:
+<programlisting>
+SELECT *, group_id*1000+article_type AS gkey FROM example GROUP BY gkey
+</programlisting>
+Aggregate functions (AVG(), MIN(), MAX(), SUM()) in column list
+clause are supported. Arguments to aggregate functions can be either
+plain attributes or arbitrary expressions. COUNT(*) is implicitly
+supported as using GROUP BY will add @count column to result set.
+Explicit support might be added in the future. COUNT(DISTINCT attr)
+is supported. Currently there can be at most one COUNT(DISTINCT)
+per query and an argument needs to be an attribute. Both current
+restrictions on COUNT(DISTINCT) might be lifted in the future.
+<programlisting>
+SELECT *, AVG(price) AS avgprice, COUNT(DISTINCT storeid)
+FROM products
+WHERE MATCH('ipod')
+GROUP BY vendorid
+</programlisting>
+</listitem>
+<listitem>WITHIN GROUP ORDER BY clause. This is a Sphinx specific
+extension that lets you control how the best row within a group
+will to be selected. The syntax matches that of regular ORDER BY
+clause:
+<programlisting>
+SELECT *, INTERVAL(posted,NOW()-7*86400,NOW()-86400) AS timeseg
+FROM example WHERE MATCH('my search query')
+GROUP BY siteid
+WITHIN GROUP ORDER BY @weight DESC
+ORDER BY timeseg DESC, @weight DESC
+</programlisting>
+</listitem>
+<listitem>ORDER BY clause. Unlike in regular SQL, only column names
+(not expressions) are allowed and explicit ASC and DESC are required.
+The columns however can be computed expressions:
+<programlisting>
+SELECT *, @weight*10+docboost AS skey FROM example ORDER BY skey
+</programlisting>
+</listitem>
+<listitem>LIMIT clause. Both LIMIT N and LIMIT M,N forms are supported.
+Unlike in regular SQL (but like in Sphinx API), an implicit LIMIT 0,20
+is present by default.
+</listitem>
+<listitem>OPTION clause. This is a Sphinx specific extension that
+lets you control a number of per-query options. The syntax is:
+<programlisting>
+OPTION &lt;optionname&gt;=&lt;value&gt; [ , ... ]
+</programlisting>
+Supported options and respectively allowed values are:
+<itemizedlist>
+<listitem>'ranker' - any of 'proximity_bm25', 'bm25', 'none', 'wordcount', 'proximity', 'matchany', or 'fieldmask'</listitem>
+<listitem>'max_matches' - integer (per-query max matches value)</listitem>
+<listitem>'cutoff' - integer (max found matches threshold)</listitem>
+<listitem>'max_query_time' - integer (max search time threshold, msec)</listitem>
+<listitem>'retry_count' - integer (distributed retries count)</listitem>
+<listitem>'retry_delay' - integer (distributed retry delay, msec)</listitem>
+</itemizedlist>
+Example:
+<programlisting>
+SELECT * FROM test WHERE MATCH('@title hello @body world')
+OPTION ranker=bm25, max_matches=3000
+</programlisting>
+</listitem>
+</itemizedlist>
+</para>
+</sect1>
+
+
+<sect1 id="sphinxql-show-meta"><title>SHOW META</title>
+<para><b>SHOW META</b> shows additional meta-information about the latest
+query such as query time and keyword statistics:
+<programlisting>
+mysql> SELECT * FROM test1 WHERE MATCH('test|one|two');
++------+--------+----------+------------+
+| id   | weight | group_id | date_added |
++------+--------+----------+------------+
+|    1 |   3563 |      456 | 1231721236 |
+|    2 |   2563 |      123 | 1231721236 |
+|    4 |   1480 |        2 | 1231721236 |
++------+--------+----------+------------+
+3 rows in set (0.01 sec)
+
+mysql> SHOW META;
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| total         | 3     |
+| total_found   | 3     |
+| time          | 0.005 |
+| keyword[0]    | test  |
+| docs[0]       | 3     |
+| hits[0]       | 5     |
+| keyword[1]    | one   |
+| docs[1]       | 1     |
+| hits[1]       | 2     |
+| keyword[2]    | two   |
+| docs[2]       | 1     |
+| hits[2]       | 2     |
++---------------+-------+
+12 rows in set (0.00 sec)
+</programlisting>
+</para>
+</sect1>
+
+
+<sect1 id="sphinxql-show-warnings"><title>SHOW WARNINGS</title>
+<para><b>SHOW WARNINGS</b> statement, introduced in version 0.9.9-rc2,
+can be used to retrieve the warning
+produced by the latest query. The error message will be returned along with
+the query itself:
+<programlisting>
+mysql&gt; SELECT * FROM test1 WHERE MATCH('@@title hello') \G
+ERROR 1064 (42000): index test1: syntax error, unexpected TOK_FIELDLIMIT
+near '@title hello'
+
+mysql&gt; SELECT * FROM test1 WHERE MATCH('@title -hello') \G
+ERROR 1064 (42000): index test1: query is non-computable (single NOT operator)
+
+mysql&gt; SELECT * FROM test1 WHERE MATCH('"test doc"/3') \G
+*************************** 1. row ***************************
+        id: 4
+    weight: 2500
+  group_id: 2
+date_added: 1231721236
+1 row in set, 1 warning (0.00 sec)
+
+mysql> SHOW WARNINGS \G
+*************************** 1. row ***************************
+  Level: warning
+   Code: 1000
+Message: quorum threshold too high (words=2, thresh=3); replacing quorum operator
+         with AND operator
+1 row in set (0.00 sec)
+</programlisting>
+</para>
+</sect1>
+
+
+<sect1 id="sphinxql-show-status"><title>SHOW STATUS</title>
+<para><b>SHOW STATUS</b>, introduced in version 0.9.9-rc2,
+displays a number of useful performance counters. IO and CPU
+counters will only be available if searchd was started with --iostats and --cpustats
+switches respectively.
+<programlisting>
+mysql> SHOW STATUS;
++--------------------+-------+
+| Variable_name      | Value |
++--------------------+-------+
+| uptime             | 216   |
+| connections        | 3     |
+| maxed_out          | 0     |
+| command_search     | 0     |
+| command_excerpt    | 0     |
+| command_update     | 0     |
+| command_keywords   | 0     |
+| command_persist    | 0     |
+| command_status     | 0     |
+| agent_connect      | 0     |
+| agent_retry        | 0     |
+| queries            | 10    |
+| dist_queries       | 0     |
+| query_wall         | 0.075 |
+| query_cpu          | OFF   |
+| dist_wall          | 0.000 |
+| dist_local         | 0.000 |
+| dist_wait          | 0.000 |
+| query_reads        | OFF   |
+| query_readkb       | OFF   |
+| query_readtime     | OFF   |
+| avg_query_wall     | 0.007 |
+| avg_query_cpu      | OFF   |
+| avg_dist_wall      | 0.000 |
+| avg_dist_local     | 0.000 |
+| avg_dist_wait      | 0.000 |
+| avg_query_reads    | OFF   |
+| avg_query_readkb   | OFF   |
+| avg_query_readtime | OFF   |
++--------------------+-------+
+29 rows in set (0.00 sec)
+</programlisting>
+</para>
+</sect1>
+
+
+<sect1 id="sphinxql-insert"><title>INSERT</title>
+!COMMIT writeme
+</sect1>
+
+
+<sect1 id="sphinxql-delete"><title>DELETE</title>
+!COMMIT writeme
+</sect1>
+
+
+<sect1 id="sphinxql-set"><title>SET</title>
+!COMMIT writeme
+</sect1>
+
+
+<sect1 id="sphinxql-begin"><title>BEGIN</title>
+!COMMIT writeme
+</sect1>
+
+
+<sect1 id="sphinxql-commit"><title>COMMIT</title>
+!COMMIT writeme
+</sect1>
+
+
+<sect1 id="sphinxql-rollback"><title>ROLLBACK</title>
+!COMMIT writeme
+</sect1>
+
+
+<sect1 id="sphinxql-call-snippets"><title>CALL SNIPPETS</title>
+!COMMIT writeme
+</sect1>
+
+
+<sect1 id="sphinxql-call-keywords"><title>CALL KEYWORDS</title>
+!COMMIT writeme
 </sect1>
 
 

@@ -275,12 +275,10 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "subtree_docs_cache",		0, NULL },
 	{ "subtree_hits_cache",		0, NULL },
 	{ "workers",				0, NULL },
-	{ "prefork",				0, NULL },
 	{ "dist_threads",			0, NULL },
 	{ "binlog_flush",			0, NULL },
-	{ "binlog_buffer_size",		0, NULL },
 	{ "binlog_path",			0, NULL },
-	{ "binlog_restart_limit",	0, NULL },
+	{ "binlog_max_log_size",	0, NULL },
 	{ NULL,						0, NULL }
 };
 

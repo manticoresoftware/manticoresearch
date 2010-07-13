@@ -36,6 +36,10 @@
 #define	COMPRESSED_DOCLIST		1
 #define COMPRESSED_HITLIST		1
 
+#define BINLOG_WRITE_BUFFER		256*1024
+#define BINLOG_AUTO_FLUSH		1000000
+#define BINLOG_RESTART_SIZE		128*1024*1024
+
 #if USE_64BIT
 #define WORDID_MAX				U64C(0xffffffffffffffff)
 #else
@@ -4126,9 +4130,6 @@ bool BinlogReader_c::CheckCrc ( const char * sOp, const char * sIndexName, int64
 
 //////////////////////////////////////////////////////////////////////////
 
-#define MIN_BINLOG_SIZE 262144
-#define BINLOG_AUTO_FLUSH 1000000
-
 RtBinlog_c::RtBinlog_c ()
 	: m_iFlushTimeLeft ( 0 )
 	, m_iFlushPeriod ( BINLOG_AUTO_FLUSH )
@@ -4142,7 +4143,7 @@ RtBinlog_c::RtBinlog_c ()
 
 	Verify ( m_tWriteLock.Init() );
 
-	m_tWriter.SetBufferSize ( MIN_BINLOG_SIZE );
+	m_tWriter.SetBufferSize ( BINLOG_WRITE_BUFFER );
 }
 
 RtBinlog_c::~RtBinlog_c ()
@@ -4345,8 +4346,8 @@ void RtBinlog_c::Configure ( const CSphConfigSection & hSearchd )
 		m_sLogPath = hSearchd.GetStr ( "binlog_path", "." );
 		m_bDisabled = false;
 	}
-	if ( hSearchd ( "binlog_restart_limit" ) )
-		m_iRestartSize = hSearchd.GetSize ( "binlog_restart_limit", m_iRestartSize );
+	if ( hSearchd ( "binlog_max_log_size" ) )
+		m_iRestartSize = hSearchd.GetSize ( "binlog_max_log_size", m_iRestartSize );
 
 	if ( !m_bDisabled )
 	{

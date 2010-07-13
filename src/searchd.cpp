@@ -177,8 +177,8 @@ static const char *		g_sPidFile		= NULL;
 static int				g_iPidFD		= -1;
 static int				g_iMaxMatches	= 1000;
 
-static int				g_iMaxCachedDocs	= 512*1024;		// in bytes
-static int				g_iMaxCachedHits	= 1024*1024;	// in bytes
+static int				g_iMaxCachedDocs	= 0;	// in bytes
+static int				g_iMaxCachedHits	= 0;	// in bytes
 
 static int				g_iAttrFlushPeriod	= 0;			// in seconds; 0 means "do not flush"
 static int				g_iMaxPacketSize	= 8*1024*1024;	// in bytes; for both query packets from clients and response packets from agents

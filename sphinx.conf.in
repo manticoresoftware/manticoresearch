@@ -96,6 +96,17 @@ source src1
 	# sql_joined_field			= wtags from payload-query; SELECT docid, tag, tagweight FROM tags ORDER BY docid ASC
 
 
+	# file based field declaration
+	#
+	# content of this field is treated as a file name
+	# and the file gets loaded and indexed in place of a field
+	#
+	# max file size is limited by max_file_field_buffer indexer setting
+	# file IO errors are non-fatal and get reported as warnings
+	#
+	# sql_file_field			= content_file_path
+
+
 	# range query setup, query that must return min and max ID values
 	# optional, default is empty
 	#
@@ -615,20 +626,15 @@ index rt
 	# unsigned integer attribute declaration
 	# multi-value (an arbitrary number of attributes is allowed), optional
 	# declares an unsigned 32-bit attribute
-	rt_attr_uint			= gid
+	rt_attr_uint		= gid
 
-	# bigint attribute declaration
-	# multi-value (an arbitrary number of attributes is allowed), optional
-	# declares a signed 64-bit attribute
+	# RT indexes currently support the following attribute types:
+	# uint, bigint, float, timestamp, string
 	#
 	# rt_attr_bigint		= guid
-
-
-	# floating point attribute declaration
-	# multi-value (an arbitrary number of attributes is allowed), optional
-	# declares a single precision, 32-bit IEEE 754 format float attribute
-	#
 	# rt_attr_float		= gpa
+	# rt_attr_timestamp	= ts_added
+	# rt_attr_string		= author
 }
 
 #############################################################################
@@ -665,6 +671,12 @@ indexer
 	# optional, default is 1M
 	#
 	# write_buffer		= 1M
+
+
+	# maximum file field adaptive buffer size
+	# optional, default is 8M, minimum is 1M
+	#
+	# max_file_field_buffer	=
 }
 
 #############################################################################
@@ -787,13 +799,13 @@ searchd
 
 
 	# max common subtree document cache size, per-query
-	# optional, default is 512K, 0 means disable subtree optimization
+	# optional, default is 0 (disable subtree optimization)
 	#
 	# subtree_docs_cache	= 4M
 
 
 	# max common subtree hit cache size, per-query
-	# optional, default is 1M, 0 means disable subtree optimization
+	# optional, default is 0 (disable subtree optimization)
 	#
 	# subtree_hits_cache	= 8M
 
@@ -810,6 +822,27 @@ searchd
 	# should work with all MPMs (ie. does NOT require workers=threads)
 	#
 	# dist_threads		= 4
+
+
+	# binlog files path and name prefix
+	# optional, default is empty string (disable binlogging)
+	#
+	# binlog_path			= @CONFDIR@/data/binlog
+
+
+	# binlog flush/sync mode
+	# 0 means flush and sync every second
+	# 1 means flush and sync every transaction
+	# 2 means flush every transaction, sync every second
+	# optional, default is 2
+	#
+	# binlog_flush		= 2
+
+
+	# binlog per-file size limit
+	# optional, default is 128M, 0 means no limit
+	#
+	# binlog_max_log_size	= 256M
 }
 
 # --eof--

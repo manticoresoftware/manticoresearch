@@ -1107,7 +1107,56 @@ to issue the encoding setup query explicitly once again.
 </sect1>
 
 
-<sect1 id="rt-indexes"><title>Real-time indexes overview</title>
+<sect1 id="index-merging"><title>Index merging</title>
+<para>
+Merging two existing indexes can be more efficient that indexing the data
+from scratch, and desired in some cases (such as merging 'main' and 'delta'
+indexes instead of simply reindexing 'main' in 'main+delta' partitioning
+scheme). So <filename>indexer</filename> has an option to do that.
+Merging the indexes is normally faster than reindexing but still
+<emphasis>not</emphasis> instant on huge indexes. Basically,
+it will need to read the contents of both indexes once and write
+the result once. Merging 100 GB and 1 GB index, for example,
+will result in 202 GB of IO (but that's still likely less than
+the indexing from scratch requires).
+</para>
+<para>
+The basic command syntax is as follows:
+<programlisting>
+indexer --merge DSTINDEX SRCINDEX [--rotate]
+</programlisting>
+Only the DSTINDEX index will be affected: the contents of SRCINDEX will be merged into it.
+<option>--rotate</option> switch will be required if DSTINDEX is already being served by <filename>searchd</filename>.
+The initially devised usage pattern is to merge a smaller update from SRCINDEX into DSTINDEX.
+Thus, when merging the attributes, values from SRCINDEX will win if duplicate document IDs are encountered.
+Note, however, that the "old" keywords will <emphasis>not</emphasis> be automatically removed in such cases.
+For example, if there's a keyword "old" associated with document 123 in DSTINDEX, and a keyword "new" associated
+with it in SRCINDEX, document 123 will be found by <emphasis>both</emphasis> keywords after the merge.
+You can supply an explicit condition to remove documents from DSTINDEX to mitigate that;
+the relevant switch is <option>--merge-dst-range</option>:
+<programlisting>
+indexer --merge main delta --merge-dst-range deleted 0 0
+</programlisting>
+This switch lets you apply filters to the destination index along with merging.
+There can be several filters; all of their conditions must be met in order
+to include the document in the resulting mergid index. In the example above,
+the filter passes only those records where 'deleted' is 0, eliminating all
+records that were flagged as deleted (for instance, using
+<link linkend="api-func-updateatttributes">UpdateAttributes()</link> call).
+</para>
+</sect1>
+
+
+</chapter>
+<chapter id="rt-indexes"><title>Real-time indexes</title>
+<para>
+Real-time indexes (or RT indexes for brevity) are a new backend
+that lets you insert, update, or delete documents (rows) on the fly.
+RT indexes were added in version 1.10.1.
+</para>
+
+
+<sect1 id="rt-overview"><title>RT indexes overview</title>
 <para>
 RT indexes should be declared in <filename>sphinx.conf</filename>,
 just as every other index type. Notable differences from the regular, 
@@ -1131,10 +1180,11 @@ index rt
 <para>
 RT INDEXES ARE CURRENTLY (AS OF VERSION 1.10.1) A WORK IN PROGRESS.
 Therefore, they might lack certain features: for instance, prefix/infix
-indexing, MVA and string attributes, etc are not supported yet. There also
-might be performance and stability issues. However, regular indexing features
-and most of the searching features are already in place, and our (limited)
-internal testing passes.
+indexing, MVA attributes, etc are not supported yet.  There also might be
+performance and stability issues.  However, all the regular indexing features
+and most of the searching features are already in place, our internal
+testing passes, and last but not least a number of production instances
+are already using RT indexes with good results.
 </para>
 <para>
 RT index can be accessed using MySQL protocol. INSERT, DELETE, and
@@ -1231,42 +1281,106 @@ on subsequent startup.
 </sect1>
 
 
-<sect1 id="index-merging"><title>Index merging</title>
+<sect1 id="rt-operators"><title>RT index operators</title>
+!COMMIT writeme
+</sect1>
+
+
+<sect1 id="rt-internals"><title>RT index internals</title>
 <para>
-Merging two existing indexes can be more efficient that indexing the data
-from scratch, and desired in some cases (such as merging 'main' and 'delta'
-indexes instead of simply reindexing 'main' in 'main+delta' partitioning
-scheme). So <filename>indexer</filename> has an option to do that.
-Merging the indexes is normally faster than reindexing but still
-<emphasis>not</emphasis> instant on huge indexes. Basically,
-it will need to read the contents of both indexes once and write
-the result once. Merging 100 GB and 1 GB index, for example,
-will result in 202 GB of IO (but that's still likely less than
-the indexing from scratch requires).
+RT index is internally chunked.  It keeps a so-called RAM chunk
+that stores all the most recent changes.  RAM chunk memory usage
+is rather strictly limited with per-index
+<link linkend="rt-mem-limit">rt_mem_limit</link> directive.
+Once RAM chunk grows over this limit, a new disk chunk is created
+from its data, and RAM chunk is reset.  Thus, while most changes
+on the RT index will be performed in RAM only and complete instantly
+(in milliseconds), those changes that overflow the RAM chunk will
+stall for the duration of disk chunk creation (a few seconds).
 </para>
 <para>
-The basic command syntax is as follows:
-<programlisting>
-indexer --merge DSTINDEX SRCINDEX [--rotate]
-</programlisting>
-Only the DSTINDEX index will be affected: the contents of SRCINDEX will be merged into it.
-<option>--rotate</option> switch will be required if DSTINDEX is already being served by <filename>searchd</filename>.
-The initially devised usage pattern is to merge a smaller update from SRCINDEX into DSTINDEX.
-Thus, when merging the attributes, values from SRCINDEX will win if duplicate document IDs are encountered.
-Note, however, that the "old" keywords will <emphasis>not</emphasis> be automatically removed in such cases.
-For example, if there's a keyword "old" associated with document 123 in DSTINDEX, and a keyword "new" associated
-with it in SRCINDEX, document 123 will be found by <emphasis>both</emphasis> keywords after the merge.
-You can supply an explicit condition to remove documents from DSTINDEX to mitigate that;
-the relevant switch is <option>--merge-dst-range</option>:
-<programlisting>
-indexer --merge main delta --merge-dst-range deleted 0 0
-</programlisting>
-This switch lets you apply filters to the destination index along with merging.
-There can be several filters; all of their conditions must be met in order
-to include the document in the resulting mergid index. In the example above,
-the filter passes only those records where 'deleted' is 0, eliminating all
-records that were flagged as deleted (for instance, using
-<link linkend="api-func-updateatttributes">UpdateAttributes()</link> call).
+Disk chunks are, in fact, just regular disk-based indexes.
+But they're a part of an RT index and automatically managed by it,
+so you need not configure nor manage them manually.  Because a new
+disk chunk is created every time RT chunk overflows the limit, and
+because in-memory chunk format is close to on-disk format, the disk
+chunks will be approximately <option>rt_mem_limit</option> bytes
+in size each.
+</para>
+<para>
+Generally, it is better to set the limit bigger, to minimize both
+the frequency of flushes, and the index fragmentation (number of disk
+chunks).  For instance, on a dedicated search server that handles
+a big RT index, it can be advised to set <option>rt_mem_limit</option>
+to 1-3 GB.  A global limit on all indexes is also planned, but not yet
+implemented yet as of 1.10.1.
+</para>
+<para>
+Disk chunk full-text index data can not be actually modified,
+so the full-text field changes (ie. row deletions and updates)
+suppress a previous row version from a disk chunk using a kill-list,
+but do not actually physicall purge the data.  Therefore, on workloads
+with high full-text updates ratio index might eventually get polluted
+by these previous row versions, and searching performance would
+degrade.  Physical index purging that would improve the performance
+is planned, but not yet implemented as of 1.10.1.
+</para>
+<para>
+Data in RAM chunk gets saved to disk on clean daemon shutdown, and
+then loaded back on startup.  However, on daemon or server crash,
+updates from RAM chunk might be lost.  To prevent that, binary logging
+of transactions can be used; see <xref linkend="rt-binlog"/> for details.
+</para>
+<para>
+Full-text changes in RT index are transactional.  They are stored
+in a per-thread accumulator until COMMIT, then applied at once.
+Bigger batches per single COMMIT should result in faster indexing.
+</para>
+</sect1>
+
+
+<sect1 id="rt-binlog"><title>Binary logging</title>
+<para>
+Binary logs are essentially a recovery mechanism.  With binary logs
+enabled, <filename>searchd</filename> writes every given transaction
+to the binlog file, and uses that for recovery after an unclean shutdown.
+On clean shutdown, RAM chunks are saved to disk, and then all the binlog
+files are unlinked.
+</para>
+<para>
+During normal operation, a new binlog file will be opened every time
+when <option>binlog_max_log_size</option> limit (which defaults to 128M)
+is reached.  Older, already closed binlog files are kept until all of the
+transactions stored in them (from all indexes) are flushed as a disk chunk.
+Setting the limit to 0 pretty much prevents binlog from being unlinked
+at all while <filename>searchd</filename> is running; however, it will
+still be unlinked on clean shutdown.
+</para>
+<para>
+There are 3 different binlog flushing strategies, controlled by
+<link linkend="conf-binlog-flush">binlog_flush</link> directive
+which takes the values of 0, 1, or 2. 0 means to flush the log
+to OS and sync it to disk every second; 1 means flush and sync
+every transaction; and 2 (the default mode) means flush every
+transaction but sync every second. Sync is relatively slow because
+it has to perform physical disk writes, so mode 1 is the safest
+(every committed transaction is guaranteed to be written on disk)
+but the slowest. Flushing log to OS prevents from data loss on
+<filename>searchd</filename> crashes but not system crashes.
+Mode 2 is the default.
+</para>
+<para>
+On recovery after an unclean shutdown, binlogs are replayed
+and all logged transactions since the last good on-disk state
+are restored. Transactions are checksummed so in case of binlog
+file corruption garbage data will <b>not</b> be replayed; such
+a broken transaction will be detected and, currently, will stop
+replay. Transactions also start with a magic marker and timestamped,
+so in case of binlog damage in the middle of the file, it's technically
+possible to skip broken transactions and keep replaying from the next
+good one, and/or it's possible to replay transactions until a given
+timestamp (point-in-time recovery), but none of that is implemented yet
+as of 1.10.1.
 </para>
 </sect1>
 
@@ -5390,6 +5504,27 @@ sql_field_str2wordcount = title # will be indexed, and counted/stored
 </sect2>
 
 
+<sect2 id="conf-sql-file-field"><title>sql_file_field</title>
+<para>
+File based field declaration.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
+Introduced in version 1.10.1.
+</para>
+<para>
+This directive makes <filename>indexer</filename> interpret field contents
+as a file name, and load and index the referred file.  Files larger than
+<link linkend="conf-max-file-field-buffer">max_file_field_buffer</link>
+in size are skipped.  Any errors during the file loading (IO errors, missed
+limits, etc) will be reported as indexing warnings and will <b>not</b> early
+terminate the indexing.  No content will be indexed for such files.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_file_field = my_file_path # load and index files referred to by my_file_path
+</programlisting>
+</sect2>
+
+
 <sect2 id="conf-sql-query-post"><title>sql_query_post</title>
 <para>
 Post-fetch query.
@@ -7328,6 +7463,32 @@ rt_attr_float = gpa
 </sect2>
 
 
+<sect2 id="conf-rt-attr-timestamp"><title>rt_attr_timestamp</title>
+<para>
+Timestamp attribute declaration.
+Multi-value (an arbitrary number of attributes is allowed), optional.
+Introduced in version 1.10.1.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+rt_attr_timestamp = date_added
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-rt-attr-string"><title>rt_attr_string</title>
+<para>
+String attribute declaration.
+Multi-value (an arbitrary number of attributes is allowed), optional.
+Introduced in version 1.10.1.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+rt_attr_string = author
+</programlisting>
+</sect2>
+
+
 </sect1>
 <sect1 id="confgroup-indexer"><title><filename>indexer</filename> program configuration options</title>
 
@@ -7444,6 +7605,33 @@ proportionally increasing the RAM usage.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 write_buffer = 4M
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-max-file-field-buffer"><title>max_file_field_buffer</title>
+<para>
+Maximum file field adaptive buffer size, bytes.
+Optional, default is 8 MB, minimum is 1 MB.
+</para>
+<para>
+File field buffer is used to load files referred to from
+<link linkend="conf-sql-file-field">sql_file_field</link> columns.
+This buffer is adaptive, starting at 1 MB at first allocation,
+and growing in 2x steps until either file contents can be loaded,
+or maximum buffer size, specified by <option>max_file_field_buffer</option>
+directive, is reached.
+</para>
+<para>
+Thus, if there are no file fields are specified, no buffer
+is allocated at all.  If all files loaded during indexing are under
+(for example) 2 MB in size, but <option>max_file_field_buffer</option> 
+value is 128 MB, peak buffer usage would still be only 2 MB. However,
+files over 128 MB would be entirely skipped.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+max_file_field_buffer = 128M
 </programlisting>
 </sect2>
 
@@ -7949,7 +8137,7 @@ max_batch_queries = 256
 <sect2 id="conf-subtree-docs-cache"><title>subtree_docs_cache</title>
 <para>
 Max common subtree document cache size, per-query.
-Optional, default is 512K.
+Optional, default is 0 (disabled).
 </para>
 <para>
 Limits RAM usage of a common subtree optimizer (see <xref linkend="multi-queries"/>).
@@ -7966,7 +8154,7 @@ subtree_docs_cache = 8M
 <sect2 id="conf-subtree-hits-cache"><title>subtree_hits_cache</title>
 <para>
 Max common subtree hit cache size, per-query.
-Optional, default is 1M.
+Optional, default is 0 (disabled).
 </para>
 <para>
 Limits RAM usage of a common subtree optimizer (see <xref linkend="multi-queries"/>).
@@ -8083,6 +8271,89 @@ index dist_test
 # ...
 
 dist_threads = 4
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-binlog-path"><title>binlog_path</title>
+<para>
+Binary log (aka transaction log) files path and name prefix.
+Optional, default is empty string, which means to disable logging.
+Introduced in version 1.10.1.
+</para>
+<para>
+Binary logs are used for crash recovery of RT index data that
+would otherwise only be stored in RAM.  When logging is enabled,
+every transaction COMMIT-ted into RT index gets written into
+a log file.  Logs are then automatically replayed on startup
+after an unclean shutdown, recovering the logged changes.
+</para>
+<para>
+<option>binlog_path</option> directive specifies the binary log
+files location.  It should contain both the path and a file name
+but not an extension nor a trailing dot; <option>searchd</option>
+will append a current log number as an extension (.001, .002, .003,
+and so on) to generate a file name.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+binlog_path = /var/data/binlog # /var/data/binlog.001 etc will be created
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-binlog-flush"><title>binlog_flush</title>
+<para>
+Binary log transaction flush/sync mode.
+Optional, default is 2 (flush every transaction, sync every second).
+Introduced in version 1.10.1.
+</para>
+<para>
+This directive controls how frequently will binary log be flushed
+to OS and synced to disk. Three modes are supported:
+<itemizedlist>
+<listitem>0, flush and sync every second. Best performance,
+but up to 1 second worth of committed transactions can be lost
+both on daemon crash, or OS/hardware crash.
+</listitem>
+<listitem>1, flush and sync every transaction. Worst performance,
+but every committed transaction data is guaranteed to be saved.
+</listitem>
+<listitem>2, flush every transaction, sync every second.
+Good performance, and every committed transaction is guaranteed
+to be saved in case of daemon crash. However, in case of OS/hardware
+crash up to 1 second worth of committed transactions can be lost.
+</listitem>
+</itemizedlist>
+</para>
+<para>
+For those familiar with MySQL and InnoDB, this directive is entirely
+similar to <option>innodb_flush_log_at_trx_commit</option>. In most
+cases, the default hybrid mode 2 provides a nice balance of speed
+and safety, with full RT index data protection against daemon crashes,
+and some protection against hardware ones.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+binlog_flush = 1 # ultimate safety, low speed
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-binlog-max-log-size"><title>binlog_max_log_size</title>
+<para>
+Maximum binary log file size.
+Optional, default is 0 (do not reopen binlog file based on size).
+Introduced in version 1.10.1.
+</para>
+<para>
+A new binlog file will be forcibly opened once the current binlog file
+reaches this limit. This achieves a finer granularity of logs and can yield
+more efficient binlog disk usage under certain borderline workloads.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+binlog_max_log_size = 16M
 </programlisting>
 </sect2>
 

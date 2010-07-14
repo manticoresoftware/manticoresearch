@@ -1355,7 +1355,7 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 			return NULL;
 
 		// will this ever trigger? time will tell; email me if it does!
-		if ( tFile.GetSize()>=(SphOffset_t)INT_MAX )
+		if ( tFile.GetSize()+1>=(SphOffset_t)INT_MAX )
 		{
 			sError.SetSprintf ( "%s too big for snippet (over 2 GB)", pData );
 			return NULL;
@@ -1365,10 +1365,11 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 		if ( iFileSize<=0 )
 			return "";
 
-		pBuffer = new BYTE [ iFileSize ];
+		pBuffer = new BYTE [ iFileSize+1 ];
 		if ( !tFile.Read ( pBuffer.Ptr(), iFileSize, sError ) )
 			return NULL;
 
+		pBuffer.Ptr()[iFileSize] = 0;
 		pData = (char*) pBuffer.Ptr();
 	}
 

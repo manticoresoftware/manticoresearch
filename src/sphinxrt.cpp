@@ -1427,7 +1427,7 @@ const RtWord_t * RtIndex_t::CopyWord ( RtSegment_t * pDst, RtWordWriter_t & tOut
 
 	// if flag is there, acc must be there
 	// however, NOT vice versa (newly created segments are unaffected by TLS klist)
-	assert (!( pSrc->m_bTlsKlist && !pAccKlist )); 
+	assert (!( pSrc->m_bTlsKlist && !pAccKlist ));
 #if 0
 	// index *must* be holding acc during merge
 	assert ( !pAcc || pAcc->m_pIndex==this );
@@ -3260,7 +3260,7 @@ bool RtIndex_t::RtQwordSetup ( RtQword_t * pQword, RtSegment_t * pSeg ) const
 		bRes &= RtQwordSetupSegment ( pQword, m_pSegments[i], false );
 
 	// sanity check
-	assert ( !( bRes==true && pQword->m_iDocs==0 ) );
+	assert ( !( m_pSegments.GetLength()!=0 && bRes==true && pQword->m_iDocs==0 ) );
 	return bRes;
 }
 
@@ -3308,14 +3308,6 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	assert ( pQuery );
 	assert ( pResult );
 	assert ( iTag==0 );
-
-	// empty index, empty result
-	if ( !m_pSegments.GetLength() && !m_pDiskChunks.GetLength() )
-	{
-		pResult->m_iQueryTime = 0;
-		m_tRwlock.Unlock ();
-		return true;
-	}
 
 	MEMORY ( SPH_MEM_IDX_RT_MULTY_QUERY );
 
@@ -3397,62 +3389,70 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// search RAM chunk
 	////////////////////
 
+	// select the sorter with max schema
+	int iMaxSchemaSize = -1;
+	int iMaxSchemaIndex = -1;
+	ARRAY_FOREACH ( i, dSorters )
+		if ( dSorters[i]->GetSchema().GetRowSize() > iMaxSchemaSize )
+		{
+			iMaxSchemaSize = dSorters[i]->GetSchema().GetRowSize();
+			iMaxSchemaIndex = i;
+		}
+
+	// setup calculations and result schema
+	CSphQueryContext tCtx;
+	if ( !tCtx.SetupCalc ( pResult, dSorters[iMaxSchemaIndex]->GetSchema(), m_tOutboundSchema, NULL ) )
+	{
+		m_tRwlock.Unlock ();
+		return false;
+	}
+
+	// setup search terms
+	RtQwordSetup_t tTermSetup;
+	tTermSetup.m_pDict = m_pDict;
+	tTermSetup.m_pIndex = this;
+	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
+	tTermSetup.m_iDynamicRowitems = pResult->m_tSchema.GetDynamicSize();
+	if ( pQuery->m_uMaxQueryMsec>0 )
+		tTermSetup.m_iMaxTimer = sphMicroTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
+	tTermSetup.m_pWarning = &pResult->m_sWarning;
+	tTermSetup.m_pSeg = NULL;
+	tTermSetup.m_pCtx = &tCtx;
+
+	// bind weights
+	tCtx.BindWeights ( pQuery, m_tOutboundSchema );
+
+	// parse query
+	XQQuery_t tParsed;
+	if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), GetTokenizer(), &m_tOutboundSchema, m_pDict ) )
+	{
+		pResult->m_sError = tParsed.m_sParseError;
+		m_tRwlock.Unlock ();
+		return false;
+	}
+
+	// fixup stat's order
+	sphDoStatsOrder ( tParsed.m_pRoot, *pResult );
+
+	// setup query
+	// must happen before index-level reject, in order to build proper keyword stats
+	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tParsed.m_pRoot, pQuery->m_eRanker, pResult, tTermSetup ) );
+	if ( !pRanker.Ptr() )
+	{
+		m_tRwlock.Unlock ();
+		return false;
+	}
+
+	// empty index, empty result
+	if ( !m_pSegments.GetLength() && !m_pDiskChunks.GetLength() )
+	{
+		pResult->m_iQueryTime = 0;
+		m_tRwlock.Unlock ();
+		return true;
+	}
+
 	if ( m_pSegments.GetLength() )
 	{
-		// select the sorter with max schema
-		int iMaxSchemaSize = -1;
-		int iMaxSchemaIndex = -1;
-		ARRAY_FOREACH ( i, dSorters )
-			if ( dSorters[i]->GetSchema().GetRowSize() > iMaxSchemaSize )
-			{
-				iMaxSchemaSize = dSorters[i]->GetSchema().GetRowSize();
-				iMaxSchemaIndex = i;
-			}
-
-		// setup calculations and result schema
-		CSphQueryContext tCtx;
-		if ( !tCtx.SetupCalc ( pResult, dSorters[iMaxSchemaIndex]->GetSchema(), m_tOutboundSchema, NULL ) )
-		{
-			m_tRwlock.Unlock ();
-			return false;
-		}
-
-		// setup search terms
-		RtQwordSetup_t tTermSetup;
-		tTermSetup.m_pDict = m_pDict;
-		tTermSetup.m_pIndex = this;
-		tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
-		tTermSetup.m_iDynamicRowitems = pResult->m_tSchema.GetDynamicSize();
-		if ( pQuery->m_uMaxQueryMsec>0 )
-			tTermSetup.m_iMaxTimer = sphMicroTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
-		tTermSetup.m_pWarning = &pResult->m_sWarning;
-		tTermSetup.m_pSeg = NULL;
-		tTermSetup.m_pCtx = &tCtx;
-
-		// bind weights
-		tCtx.BindWeights ( pQuery, m_tOutboundSchema );
-
-		// parse query
-		XQQuery_t tParsed;
-		if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), GetTokenizer(), &m_tOutboundSchema, m_pDict ) )
-		{
-			pResult->m_sError = tParsed.m_sParseError;
-			m_tRwlock.Unlock ();
-			return false;
-		}
-
-		// fixup stat's order
-		sphDoStatsOrder ( tParsed.m_pRoot, *pResult );
-
-		// setup query
-		// must happen before index-level reject, in order to build proper keyword stats
-		CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tParsed.m_pRoot, pQuery->m_eRanker, pResult, tTermSetup ) );
-		if ( !pRanker.Ptr() )
-		{
-			m_tRwlock.Unlock ();
-			return false;
-		}
-
 		// setup filters
 		// FIXME! setup filters MVA pool
 		bool bFullscan = ( pQuery->m_eMode==SPH_MATCH_FULLSCAN || pQuery->m_sQuery.IsEmpty() );

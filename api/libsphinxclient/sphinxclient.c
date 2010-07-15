@@ -176,6 +176,7 @@ struct st_sphinx_client
 	sphinx_result			results [ MAX_REQS ];
 
 	int						sock;			///< open socket for pconns; -1 if none
+	sphinx_bool				persist;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -259,6 +260,7 @@ sphinx_client * sphinx_create ( sphinx_bool copy_args )
 	}
 
 	client->sock = -1;
+	client->persist = SPH_FALSE;
 	return client;
 }
 
@@ -784,7 +786,7 @@ sphinx_bool sphinx_set_groupby_distinct ( sphinx_client * client, const char * a
 {
 	if ( !client || !attr )
 	{
-		if ( !attr)		set_error ( client, "invalid arguments (attr must not be empty)" );
+		if ( !attr )	set_error ( client, "invalid arguments (attr must not be empty)" );
 		else			set_error ( client, "invalid arguments" );
 		return SPH_FALSE;
 	}
@@ -1315,7 +1317,7 @@ static sphinx_bool net_read ( int fd, char * buf, int len, sphinx_client * clien
 }
 
 
-static int net_connect ( sphinx_client * client )
+static int net_connect_get ( sphinx_client * client )
 {
 	struct hostent * hp;
 	struct sockaddr_in sa;
@@ -1392,7 +1394,7 @@ static int net_connect ( sphinx_client * client )
 			sock_set_blocking ( sock );
 
 			// now send major client protocol version
-			my_proto = htonl ( 1 ); 
+			my_proto = htonl ( 1 );
 			if ( !net_write ( sock, (char*)&my_proto, sizeof(my_proto), client ) )
 			{
 				sock_close ( sock );
@@ -1426,6 +1428,17 @@ static int net_connect ( sphinx_client * client )
 	}
 }
 
+static int net_connect_ex ( sphinx_client * client )
+{
+	if ( client->sock>=0 )
+		return client->sock;
+
+	if ( !client->persist )
+		return net_connect_get ( client );
+
+	sphinx_open ( client );
+	return client->sock;
+}
 
 static unsigned short unpack_short ( char ** cur )
 {
@@ -1572,7 +1585,7 @@ sphinx_bool sphinx_open ( sphinx_client * client )
 		return SPH_FALSE;
 	}
 
-	client->sock = net_connect ( client );
+	client->sock = net_connect_get ( client );
 	if ( client->sock<0 )
 		return SPH_FALSE;
 
@@ -1587,6 +1600,7 @@ sphinx_bool sphinx_open ( sphinx_client * client )
 		client->sock = -1;
 		return SPH_FALSE;
 	}
+	client->persist = SPH_TRUE;
 	return SPH_TRUE;
 }
 
@@ -1601,6 +1615,7 @@ sphinx_bool sphinx_close ( sphinx_client * client )
 
 	sock_close ( client->sock );
 	client->sock = -1;
+	client->persist = SPH_FALSE;
 	return SPH_TRUE;
 }
 
@@ -1639,7 +1654,7 @@ sphinx_result * sphinx_run_queries ( sphinx_client * client )
 		return NULL;
 	}
 
-	fd = net_connect ( client );
+	fd = net_connect_ex ( client );
 	if ( fd<0 )
 		return NULL;
 
@@ -1692,7 +1707,7 @@ sphinx_result * sphinx_run_queries ( sphinx_client * client )
 			if ( res->status==SEARCHD_WARNING )
 			{
 				res->warning = unpack_str ( &p );
-			} else 
+			} else
 			{
 				res->error = unpack_str ( &p );
 				continue;
@@ -1710,11 +1725,11 @@ sphinx_result * sphinx_run_queries ( sphinx_client * client )
 
 		// attrs
 		res->num_attrs = unpack_int ( &p );
-		res->attr_names = sphinx_malloc ( res->num_attrs*sizeof(const char*), client  );
+		res->attr_names = sphinx_malloc ( res->num_attrs*sizeof(const char*), client );
 		if ( !res->attr_names )
 			return NULL;
 
-		res->attr_types = sphinx_malloc ( res->num_attrs*sizeof(int), client  );
+		res->attr_types = sphinx_malloc ( res->num_attrs*sizeof(int), client );
 		if ( !res->attr_types )
 			return NULL;
 
@@ -1754,7 +1769,7 @@ sphinx_result * sphinx_run_queries ( sphinx_client * client )
 				{
 					case SPH_ATTR_MULTI | SPH_ATTR_INTEGER:
 						/*!COMMIT this is totally unsafe on some arches (eg. SPARC)*/
-						pval->mva_value = (unsigned int *) p; 
+						pval->mva_value = (unsigned int *) p;
 						len = unpack_int ( &p );
 						for ( l=0; l<=len; l++ ) // including first one that is len
 							pval->mva_value[l] = ntohl ( pval->mva_value[l] );
@@ -1762,7 +1777,7 @@ sphinx_result * sphinx_run_queries ( sphinx_client * client )
 						break;
 
 					case SPH_ATTR_FLOAT:	pval->float_value = unpack_float ( &p ); break;
-					case  SPH_ATTR_BIGINT:	pval->int_value = unpack_qword ( &p ); break;
+					case SPH_ATTR_BIGINT:	pval->int_value = unpack_qword ( &p ); break;
 					case SPH_ATTR_STRING:	pval->string = unpack_str ( &p ); break;
 					default:				pval->int_value = unpack_int ( &p ); break;
 				}
@@ -1862,7 +1877,7 @@ static sphinx_bool net_simple_query ( sphinx_client * client, char * buf, int re
 {
 	int fd;
 
-	fd = net_connect ( client );
+	fd = net_connect_ex ( client );
 	if ( fd<0 )
 	{
 		free ( buf );

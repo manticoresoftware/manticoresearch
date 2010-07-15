@@ -135,7 +135,7 @@ void test_excerpt ( sphinx_client * client )
 	sphinx_excerpt_options opts;
 	char ** res;
 	int i, j;
-	
+
 	sphinx_init_excerpt_options ( &opts );
 	opts.limit = 60;
 	opts.around = 3;

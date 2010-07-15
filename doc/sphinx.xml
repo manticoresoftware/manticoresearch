@@ -1152,7 +1152,10 @@ records that were flagged as deleted (for instance, using
 <para>
 Real-time indexes (or RT indexes for brevity) are a new backend
 that lets you insert, update, or delete documents (rows) on the fly.
-RT indexes were added in version 1.10.1.
+RT indexes were added in version 1.10.1.  While querying of RT indexes
+is possible using any of the SphinxAPI, SphinxQL, or SphinxSE, updating
+them is only possible via SphinxQL at the moment.  Full SphinxQL
+reference is available in <xref linkend="sphinxql-reference"/>.
 </para>
 
 
@@ -1278,11 +1281,6 @@ Data stored in RT index should survive clean shutdown. When binary logging
 is enabled, it should also survive crash and/or dirty shutdown, and recover
 on subsequent startup.
 </para>
-</sect1>
-
-
-<sect1 id="rt-operators"><title>RT index operators</title>
-!COMMIT writeme
 </sect1>
 
 
@@ -2938,11 +2936,11 @@ functionality using a standard SQL syntax with a few Sphinx-specific
 extensions.  Everything available via the SphinxAPI is also available
 SphinxQL but not vice versa; for instance, writes into RT indexes
 are only available via SphinxQL.  This chapter documents supported
-SphinxQL statements.
+SphinxQL statements syntax.
 </para>
 
 
-<sect1 id="sphinxql-select"><title>SELECT</title>
+<sect1 id="sphinxql-select"><title>SELECT syntax</title>
 <para>
 <b>SELECT</b> statement was introduced in version 0.9.9-rc2.
 It's syntax is based upon regular SQL but adds several Sphinx-specific
@@ -3024,11 +3022,14 @@ Supported options and respectively allowed values are:
 <listitem>'max_query_time' - integer (max search time threshold, msec)</listitem>
 <listitem>'retry_count' - integer (distributed retries count)</listitem>
 <listitem>'retry_delay' - integer (distributed retry delay, msec)</listitem>
+<listitem>'field_weights' - a named integer list (per-field user weights for ranking)</listitem>
+<listitem>'index_weights' - a named integer list (per-index user weights for ranking)</listitem>
 </itemizedlist>
 Example:
 <programlisting>
 SELECT * FROM test WHERE MATCH('@title hello @body world')
-OPTION ranker=bm25, max_matches=3000
+OPTION ranker=bm25, max_matches=3000,
+    field_weights=(title=10, body=3)
 </programlisting>
 </listitem>
 </itemizedlist>
@@ -3036,7 +3037,7 @@ OPTION ranker=bm25, max_matches=3000
 </sect1>
 
 
-<sect1 id="sphinxql-show-meta"><title>SHOW META</title>
+<sect1 id="sphinxql-show-meta"><title>SHOW META syntax</title>
 <para><b>SHOW META</b> shows additional meta-information about the latest
 query such as query time and keyword statistics:
 <programlisting>
@@ -3073,7 +3074,7 @@ mysql> SHOW META;
 </sect1>
 
 
-<sect1 id="sphinxql-show-warnings"><title>SHOW WARNINGS</title>
+<sect1 id="sphinxql-show-warnings"><title>SHOW WARNINGS syntax</title>
 <para><b>SHOW WARNINGS</b> statement, introduced in version 0.9.9-rc2,
 can be used to retrieve the warning
 produced by the latest query. The error message will be returned along with
@@ -3106,7 +3107,7 @@ Message: quorum threshold too high (words=2, thresh=3); replacing quorum operato
 </sect1>
 
 
-<sect1 id="sphinxql-show-status"><title>SHOW STATUS</title>
+<sect1 id="sphinxql-show-status"><title>SHOW STATUS syntax</title>
 <para><b>SHOW STATUS</b>, introduced in version 0.9.9-rc2,
 displays a number of useful performance counters. IO and CPU
 counters will only be available if searchd was started with --iostats and --cpustats
@@ -3152,43 +3153,133 @@ mysql> SHOW STATUS;
 </sect1>
 
 
-<sect1 id="sphinxql-insert"><title>INSERT</title>
-!COMMIT writeme
+<sect1 id="sphinxql-insert"><title>INSERT syntax</title>
+<programlisting>
+INSERT INTO index [(column, ...)]
+	VALUES (value, ...)
+	[, (...)]
+</programlisting>
+<para>
+INSERT statement, introduced in version 1.10.1, is only supported for RT indexes.
+It inserts new rows (documents) into an existing index, with the provided column values.
+</para>
+<para>
+ID column must be present in all cases. Rows with duplicate IDs will <b>not</b>
+be overwritten; use <link linkend="sphinxql-replace">REPLACE</link> to do that.
+</para>
+<para>
+<option>index</option> is the name of RT index into which the new row(s)
+should be inserted. The optional column names list lets you only explicitly specify
+values for some of the columns present in the index. All the other columns will be
+filled with their default values (0 for scalar types, empty string for text types).
+</para>
+<para>
+Expressions are not currently supported in INSERT and values should be explicitly
+specified.
+</para>
+<para>
+Multiple rows can be inserted using a single INSERT statement by providing
+several comma-separated, parens-enclosed lists of rows values.
+</para>
 </sect1>
 
 
-<sect1 id="sphinxql-delete"><title>DELETE</title>
-!COMMIT writeme
+<sect1 id="sphinxql-delete"><title>DELETE syntax</title>
+<programlisting>
+DELETE FROM index WHERE id = value
+</programlisting>
+<para>
+DELETE statement, introduced in version 1.10.1, is only supported for RT indexes.
+It deletes existing rows (documents) from an existing index based on ID.
+</para>
+<para>
+<option>index</option> is the name of RT index from which the row should be deleted.
+<option>value</option> is the row ID to be deleted.
+</para>
+<para>
+Additional types of WHERE conditions (such as IN, conditions on attributes, etc)
+are planned, but not supported yet as of 1.10.1.
+</para>
 </sect1>
 
 
-<sect1 id="sphinxql-set"><title>SET</title>
-!COMMIT writeme
+<sect1 id="sphinxql-set"><title>SET syntax</title>
+<programlisting>
+SET variable_name = value
+</programlisting>
+<para>
+SET statement, introduced in version 1.10.1, modifies a server variable value.
+The only variable supported as of 1.10.1 is AUTOCOMMIT, and its allowed values
+are 0 and 1.
+</para>
 </sect1>
 
 
-<sect1 id="sphinxql-begin"><title>BEGIN</title>
-!COMMIT writeme
+<sect1 id="sphinxql-commit"><title>BEGIN, COMMIT, and ROLLBACK syntax</title>
+<programlisting>
+START TRANSACTION | BEGIN
+COMMIT
+ROLLBACK
+SET AUTOCOMMIT = {0 | 1}
+</programlisting>
+<para>
+BEGIN, COMMIT, and ROLLBACK statements were introduced in version 1.10.1.
+BEGIN statement (or its START TRANSACTION alias) forcibly commits pending
+transaction, if any, and begins a new one. COMMIT statement commits the current
+transaction, making all its changes permanent. ROLLBACK statement rolls back the
+current transaction, canceling all its changes. SET AUTOCOMMIT controls the
+autocommit mode in the active session.
+</para>
+<para>
+AUTOCOMMIT is set to 1 by default, meaning that every statement that perfoms
+any changes on any index is implicitly wrapped in BEGIN and COMMIT.
+</para>
+<para>
+Transactions are limited to a single RT index, and also limited in size.
+They are atomic, consistent, overly isolated, and durable. Overly isolated
+means that the changes are not only invisible to the concurrent transactions
+but even to the current session itself.
+</para>
 </sect1>
 
 
-<sect1 id="sphinxql-commit"><title>COMMIT</title>
-!COMMIT writeme
+<sect1 id="sphinxql-call-snippets"><title>CALL SNIPPETS syntax</title>
+<programlisting>
+CALL SNIPPETS(data, index, query[, opt_value AS opt_name[, ...]])
+</programlisting>
+<para>
+CALL SNIPPETS statement, introduced in version 1.10.1, builds a snippet
+from provided data and query, using specified index settings.
+</para>
+<para>
+<option>data</option> is the source data string to extract a snippet from.
+<option>index</option> is the name of the index from which to take the text
+processing settings. <option>query</option> is the full-text query to build
+snippets for. Additional options are documented in
+<xref linkend="api-func-buildexcerpts"/>. Usage example:
+</para>
+<programlisting>
+CALL SNIPPETS('this is my document text', 'test1', 'hello world',
+    5 AS around, 200 AS limit)
+</programlisting>
 </sect1>
 
 
-<sect1 id="sphinxql-rollback"><title>ROLLBACK</title>
-!COMMIT writeme
-</sect1>
-
-
-<sect1 id="sphinxql-call-snippets"><title>CALL SNIPPETS</title>
-!COMMIT writeme
-</sect1>
-
-
-<sect1 id="sphinxql-call-keywords"><title>CALL KEYWORDS</title>
-!COMMIT writeme
+<sect1 id="sphinxql-call-keywords"><title>CALL KEYWORDS syntax</title>
+<programlisting>
+CALL KEYWORDS(text, index, [hits])
+</programlisting>
+<para>
+CALL KEYWORDS statement, introduced in version 1.10.1, splits text
+into particular keywords. It returns tokenized and normalized forms
+of the keywords, and, optionally, keyword statistics.
+</para>
+<para>
+<option>text</option> is the text to break down to keywords.
+<option>index</option> is the name of the index from which to take the text
+processing settings. <option>hits</option> is an optional boolean parameter
+that specifies whether to return document and hit occurrence statistics.
+</para>
 </sect1>
 
 

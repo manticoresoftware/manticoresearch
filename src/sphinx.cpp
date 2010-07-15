@@ -1328,6 +1328,8 @@ private:
 	int							m_iIndexTag;			///< my ids for MVA updates pool
 	static int					m_iIndexTagSeq;			///< static ids sequence
 
+	bool						m_bIsEmpty;				///< is index not able to search - replacement for check m_tStats.m_iTotalDocuments
+
 private:
 	CSphString					GetIndexFileName ( const char * sExt ) const;
 
@@ -6511,6 +6513,8 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 
 	m_iIndexTag = -1;
 	m_iMergeInfinum = 0;
+
+	m_bIsEmpty = true;
 }
 
 
@@ -10549,10 +10553,10 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 	}
 
 	// FIXME!
-	if ( m_tSettings.m_eDocinfo!=pSrcIndex->m_tSettings.m_eDocinfo && !( !m_tStats.m_iTotalDocuments || !pSrcIndex->m_tStats.m_iTotalDocuments ) )
+	if ( m_tSettings.m_eDocinfo!=pSrcIndex->m_tSettings.m_eDocinfo && !( m_bIsEmpty || pSrcIndex->m_bIsEmpty ) )
 	{
-		m_sLastError.SetSprintf ( "docinfo storage on non-empty indexes must be the same (dst docinfo %d, docs %d, src docinfo %d, docs %d",
-			m_tSettings.m_eDocinfo, m_tStats.m_iTotalDocuments, pSrcIndex->m_tSettings.m_eDocinfo, pSrcIndex->m_tStats.m_iTotalDocuments );
+		m_sLastError.SetSprintf ( "docinfo storage on non-empty indexes must be the same (dst docinfo %d, empty %d, src docinfo %d, empty %d",
+			m_tSettings.m_eDocinfo, m_bIsEmpty, pSrcIndex->m_tSettings.m_eDocinfo, pSrcIndex->m_bIsEmpty );
 		return false;
 	}
 
@@ -10742,10 +10746,10 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 		if ( wrRows.IsError() )
 			return false;
 
-	} else if ( !m_tStats.m_iTotalDocuments || !pSrcIndex->m_tStats.m_iTotalDocuments )
+	} else if ( m_bIsEmpty || pSrcIndex->m_bIsEmpty )
 	{
 		// one of the indexes has no documents; copy the .spa file from the other one
-		CSphString sSrc = m_tStats.m_iTotalDocuments ? GetIndexFileName("spa") : pSrcIndex->GetIndexFileName("spa");
+		CSphString sSrc = !m_bIsEmpty ? GetIndexFileName("spa") : pSrcIndex->GetIndexFileName("spa");
 		CSphString sDst = GetIndexFileName("spa.tmp");
 
 		if ( !CopyFile ( sSrc.cstr(), sDst.cstr(), m_sLastError ) )
@@ -11290,7 +11294,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	}
 
 	// check if index has data
-	if ( !m_tStats.m_iTotalDocuments || m_uDocinfo<=0 || m_pDocinfo.IsEmpty() )
+	if ( m_bIsEmpty || m_uDocinfo<=0 || m_pDocinfo.IsEmpty() )
 		return true;
 
 	// start counting
@@ -12085,10 +12089,62 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 		return false;
 
 	/////////////////////
+	// prealloc wordlist
+	/////////////////////
+
+	// try to open wordlist file in all cases
+	CSphAutofile tWordlist ( GetIndexFileName("spi"), SPH_O_READ, m_sLastError );
+	if ( tWordlist.GetFD()<0 )
+		return false;
+
+	m_iWordlistSize = tWordlist.GetSize ( 1, true, m_sLastError );
+	if ( m_iWordlistSize<0 )
+		return false;
+
+	m_bIsEmpty = ( m_iWordlistSize<=1 );
+	if ( m_bIsEmpty!=( m_dWordlistCheckpoints.GetLength()==0 ) )
+		sphWarning ( "wordlist size mismatch (size="INT64_FMT", checkpoints=%d)", m_iWordlistSize, m_dWordlistCheckpoints.GetLength() );
+
+	// make sure checkpoints are loadable
+	// pre-11 indices use different offset type (this is fixed up later during the loading)
+	assert ( m_iCheckpointsPos>0 );
+
+	int64_t iCheckpointSize = 2*sizeof(int64_t);
+	if ( m_uVersion<14 )
+		iCheckpointSize = sizeof(CSphWordlistCheckpoint);
+	if ( m_uVersion<11 )
+		iCheckpointSize = sizeof(CSphWordlistCheckpoint_v10);
+
+	if ( ( (int64_t)m_iWordlistSize - (int64_t)m_iCheckpointsPos )!=( (int64_t)m_dWordlistCheckpoints.GetLength() * iCheckpointSize ) )
+	{
+		m_sLastError = "checkpoint segment size mismatch (rebuild the index)";
+		return false;
+	}
+
+	// prealloc wordlist
+	if ( m_bPreloadWordlist )
+		if ( !m_pWordlist.Alloc ( DWORD(m_iWordlistSize), m_sLastError, sWarning ) )
+			return false;
+
+	// preopen
+	if ( m_bKeepFilesOpen )
+	{
+		if ( m_tDoclistFile.Open ( GetIndexFileName("spd"), SPH_O_READ, m_sLastError ) < 0 )
+			return false;
+
+		if ( m_tHitlistFile.Open ( GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), SPH_O_READ, m_sLastError ) < 0 )
+			return false;
+
+		if ( !m_bPreloadWordlist && m_tWordlistFile.Open ( GetIndexFileName("spi"), SPH_O_READ, m_sLastError ) < 0 )
+			return false;
+	}
+
+
+	/////////////////////
 	// prealloc docinfos
 	/////////////////////
 
-	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && m_tStats.m_iTotalDocuments )
+	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && !m_bIsEmpty )
 	{
 		/////////////
 		// attr data
@@ -12192,54 +12248,17 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 				if ( !m_pStrings.Alloc ( DWORD(iStringsSize), m_sLastError, sWarning ) )
 					return false;
 		}
+	} else if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && m_bIsEmpty )
+		{
+			CSphAutofile tDocinfo ( GetIndexFileName("spa"), SPH_O_READ, m_sLastError );
+			if ( tDocinfo.GetFD()>0 )
+			{
+				SphOffset_t iDocinfoSize = tDocinfo.GetSize ( 0, false, m_sLastError );
+				if ( iDocinfoSize )
+					sphWarning ( "IsEmpty != attribute size ("INT64_FMT")", iDocinfoSize );
+			}
 	}
 
-	/////////////////////
-	// prealloc wordlist
-	/////////////////////
-
-	// try to open wordlist file in all cases
-	CSphAutofile tWordlist ( GetIndexFileName("spi"), SPH_O_READ, m_sLastError );
-	if ( tWordlist.GetFD()<0 )
-		return false;
-
-	m_iWordlistSize = tWordlist.GetSize ( 1, true, m_sLastError );
-	if ( m_iWordlistSize<0 )
-		return false;
-
-	// make sure checkpoints are loadable
-	// pre-11 indices use different offset type (this is fixed up later during the loading)
-	assert ( m_iCheckpointsPos>0 );
-
-	int64_t iCheckpointSize = 2*sizeof(int64_t);
-	if ( m_uVersion<14 )
-		iCheckpointSize = sizeof(CSphWordlistCheckpoint);
-	if ( m_uVersion<11 )
-		iCheckpointSize = sizeof(CSphWordlistCheckpoint_v10);
-
-	if ( ( (int64_t)m_iWordlistSize - (int64_t)m_iCheckpointsPos )!=( (int64_t)m_dWordlistCheckpoints.GetLength() * iCheckpointSize ) )
-	{
-		m_sLastError = "checkpoint segment size mismatch (rebuild the index)";
-		return false;
-	}
-
-	// prealloc wordlist
-	if ( m_bPreloadWordlist )
-		if ( !m_pWordlist.Alloc ( DWORD(m_iWordlistSize), m_sLastError, sWarning ) )
-			return false;
-
-	// preopen
-	if ( m_bKeepFilesOpen )
-	{
-		if ( m_tDoclistFile.Open ( GetIndexFileName("spd"), SPH_O_READ, m_sLastError ) < 0 )
-			return false;
-
-		if ( m_tHitlistFile.Open ( GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), SPH_O_READ, m_sLastError ) < 0 )
-			return false;
-
-		if ( !m_bPreloadWordlist && m_tWordlistFile.Open ( GetIndexFileName("spi"), SPH_O_READ, m_sLastError ) < 0 )
-			return false;
-	}
 
 	// prealloc killlist
 	if ( m_uVersion>=10 )
@@ -13331,7 +13350,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 		return false;
 
 	// empty index, empty response!
-	if ( !m_tStats.m_iTotalDocuments )
+	if ( m_bIsEmpty )
 		return true;
 	assert ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN || !m_pDocinfo.IsEmpty() ); // check that docinfo is preloaded
 
@@ -13494,7 +13513,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	CSphVector<CSphWordlistCheckpoint> dCheckpoints;
 
 	rdDict.SeekTo ( 1, READ_NO_SIZE_HINT );
-	for ( ;; )
+	for ( ; !m_bIsEmpty; )
 	{
 		// sanity checks
 		if ( rdDict.GetPos()>=m_iCheckpointsPos )

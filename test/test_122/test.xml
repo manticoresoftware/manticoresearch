@@ -23,6 +23,18 @@ index rt
 	rt_attr_string = author
 	rt_field = title
 } 
+
+index rt_multy_str
+{
+	type = rt
+	path = data/rt_multy_str
+	rt_field = title
+	rt_attr_uint = gid
+	rt_attr_string = place
+	rt_attr_string = some
+	rt_attr_string = time
+} 
+
 </config>
 
 <sphqueries>
@@ -32,6 +44,12 @@ index rt
 <sphinxql>insert into rt (id, gid, author, title) values (2, 123, 'Lewis Carrol', 'Through the looking glass')</sphinxql>
 <sphinxql>insert into rt (id, gid, author, title) values (3, 234, 'O.Henry', 'Cabbages and Kings')</sphinxql>
 <sphinxql>select * from rt</sphinxql>
+
+<sphinxql>insert into rt_multy_str values (1, 'lewis carrol', 1001, 'rabit hole', 'looking glass', 'at 1890')</sphinxql>
+<sphinxql>insert into rt_multy_str values (10, 'mad max', 1010, 'post future', 'fuel less world', 'at 2100')</sphinxql>
+<sphinxql>insert into rt_multy_str values (11, 'n. perumov', 1011, 'realm of meln', 'war of magican', 'at 650')</sphinxql>
+<sphinxql>select * from rt_multy_str</sphinxql>
+
 </sphqueries>
 
 </test>

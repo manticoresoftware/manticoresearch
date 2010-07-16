@@ -1072,16 +1072,21 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 
 	m_tOutboundSchema = m_tSchema;
 	if ( bReplaceSchema )
-		for ( int i=m_tOutboundSchema.GetAttrsCount()-1; i>=0; i-- )
+	{
+		m_tOutboundSchema.ResetAttrs();
+		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 		{
-			CSphColumnInfo tCol = m_tOutboundSchema.GetAttr(i);
+			CSphColumnInfo tCol = m_tSchema.GetAttr(i);
+			bool bDynamic = tCol.m_tLocator.m_bDynamic;
 			if ( tCol.m_eAttrType==SPH_ATTR_STRING && !tCol.m_tLocator.m_bDynamic )
 			{
 				tCol.m_eStage = SPH_EVAL_OVERRIDE;
-				m_tOutboundSchema.RemoveAttr ( i );
-				m_tOutboundSchema.AddAttr ( tCol, true );
+				bDynamic = true;
 			}
+
+			m_tOutboundSchema.AddAttr ( tCol, bDynamic );
 		}
+	}
 
 #ifndef NDEBUG
 	// check that index cols are static
@@ -1284,7 +1289,7 @@ void RtAccum_t::AddDocument ( const CSphVector<CSphWordHit> & dHits, const CSphM
 		const CSphColumnInfo & tColumn = pSchema.GetAttr(i);
 		if ( tColumn.m_eAttrType==SPH_ATTR_STRING )
 		{
-			const char * pStr = ppStr ? ppStr[iAttr] : NULL;
+			const char * pStr = ppStr ? ppStr[iAttr++] : NULL;
 			const int iLen = pStr ? strlen ( pStr ) : 0;
 
 			if ( iLen )

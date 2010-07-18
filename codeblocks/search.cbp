@@ -46,6 +46,7 @@
 			<Add library="rt" />
 			<Add library="expat" />
 			<Add library="mysqlclient" />
+			<Add library="odbc" />
 		</Linker>
 		<Unit filename="../src/search.cpp" />
 		<Extensions>
@@ -53,6 +54,7 @@
 				<Scheme minor_max="10" build_max="0" rev_max="0" rev_rand_max="10" build_times_to_increment_minor="100" />
 				<Settings autoincrement="1" date_declarations="1" do_auto_increment="0" ask_to_increment="0" language="C++" svn="0" svn_directory="" header_path="version.h" />
 				<Changes_Log show_changes_editor="0" app_title="released version %M.%m.%b of %p" changeslog_path="ChangesLog.txt" />
+				<Code header_guard="VERSION_H" namespace="AutoVersion" prefix="" />
 			</AutoVersioning>
 			<envvars />
 			<code_completion />

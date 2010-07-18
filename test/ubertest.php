@@ -6,6 +6,7 @@
 
 require_once ( "settings.inc" );
 $sd_managed_searchd	= false;
+$sd_skip_indexer = false;
 
 //////////////////////
 // parse command line
@@ -27,6 +28,7 @@ if ( !is_array($args) || empty($args) )
 	print ( "-s, --searchd <PATH>\tpath to searchd\n" );
 	print ( "--strict\t\tterminate on the first failure (for automatic runs)\n" );
 	print ( "--managed\t\tdon't run searchd during test (for debugging)\n" );
+	print ( "--skip-indexer\t\tskip DB creation and indexer stages and go directly to queries/custom tests\n");
 	print ( "--rt\t\t\ttest RT backend (auto-convert all local indexes)\n" );
 	print ( "\nEnvironment vriables are:\n" );
 	print ( "DBUSER\t\t\tuse 'USER' as MySQL user\n" );
@@ -61,6 +63,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="g" || $arg=="gen" )			{ $g_model = true; $run = true; }
 	else if ( $arg=="t" || $arg=="test" )			{ $g_model = false; $run = true; }
 	else if ( $arg=="--managed" )					$sd_managed_searchd = true;
+	else if ( $arg=="--skip-indexer")				$sd_skip_indexer = true;
 	else if ( $arg=="-u" || $arg=="--user" )		$locals['db-user'] = $args[++$i];
 	else if ( $arg=="-p" || $arg=="--password" )	$locals['db-password'] = $args[++$i];
 	else if ( $arg=="-i" || $arg=="--indexer" )		$locals['indexer'] = $args[++$i];

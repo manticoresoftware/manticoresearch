@@ -1907,7 +1907,7 @@ function CheckConfig ( $config, $path )
 
 function RunTest ( $test_dir )
 {
-	global $indexer_data_path, $agents, $sd_pid_file, $sd_managed_searchd, $g_id64, $windows;
+	global $indexer_data_path, $agents, $sd_pid_file, $sd_managed_searchd, $sd_skip_indexer, $g_id64, $windows;
 
 	$model_file = $test_dir."/model.bin";
 	$conf_dir 	= $test_dir."/Conf";
@@ -1929,7 +1929,7 @@ function RunTest ( $test_dir )
 		return;
 	}
 
-	if ( $config->IsNeedDB() )
+	if ( $config->IsNeedDB() && !$sd_skip_indexer )
 	{
 		$connection = CreateDB ( $config->DB_Drop(), $config->DB_Create(), $config->DB_Insert(), $config->DB_CustomInsert() );
 		if ( $connection === false )
@@ -1978,7 +1978,7 @@ function RunTest ( $test_dir )
 
 		EraseDirContents ( $indexer_data_path );
 
-		if ( $config->IsSkipIndexer()===false )
+		if ( $config->IsSkipIndexer()===false && $sd_skip_indexer===false )
 		{
 			// standard run
 			if ( !$config->IsRt() )

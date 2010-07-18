@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>block index vs cutoff, updates, ranges</name>
+<name>naive guess about the block index</name>
 
 <config>
 indexer

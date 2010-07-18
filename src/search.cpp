@@ -165,7 +165,8 @@ int main ( int argc, char ** argv )
 				iLeft -= iLen;
 			} else
 			{
-				fread ( sThrowaway, 1, sizeof(sThrowaway), stdin );
+				int iDummy; // to avoid gcc unused result warning
+				iDummy = fread ( sThrowaway, 1, sizeof(sThrowaway), stdin );
 			}
 		}
 

@@ -1227,7 +1227,8 @@ void Shutdown ()
 		if ( hFile!=-1 )
 		{
 			DWORD uStatus = bAttrsSaveOk;
-			::write ( hFile, &uStatus, sizeof(DWORD) );
+			int iDummy; // to avoid gcc unused result warning
+			iDummy = ::write ( hFile, &uStatus, sizeof(DWORD) );
 			::close ( hFile );
 		}
 	}
@@ -1282,7 +1283,6 @@ void StackTraceDump ( int )
 #endif
 
 #elif !HAVE_BACKTRACE
-
 	BYTE ** pFramePointer = NULL;
 
 	int iFrameCount = 0;
@@ -1336,9 +1336,10 @@ void StackTraceDump ( int )
 	if ( !bOk )
 		sphWarning ( "Something wrong in frame pointers. BackTrace failed (failed FP was %p)", pNewFP );
 	else
-#endif
+#endif // !HAVE_BACKTRACE
 		sphInfo ( "Stack trace seems to be succesfull. Now you have to resolve the numbers above and attach resolved values to the bugreport. See the section about resolving in the documentation" );
-		sphInfo ( "-------------- cut here ---------------" );
+
+	sphInfo ( "-------------- cut here ---------------" );
 }
 
 void HandleCrash ( int )
@@ -10156,7 +10157,7 @@ void SetWatchDog()
 {
 	bool bReincarnate = true;
 	bool bShutdown = false;
-	int iRes;
+	int iRes = 0;
 	for ( ;; )
 	{
 		if ( bReincarnate )
@@ -10683,14 +10684,15 @@ void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 }
 
 
-void InitSharedBuffer ( CSphSharedBuffer<BYTE> & tBuffer, void ** ppBuffer, int iLen )
+void * InitSharedBuffer ( CSphSharedBuffer<BYTE> & tBuffer, int iLen )
 {
 	CSphString sError, sWarning;
 	if ( !tBuffer.Alloc ( iLen, sError, sWarning ) )
 		sphDie ( "failed to allocate shared buffer (msg=%s)", sError.cstr() );
 
-	*ppBuffer = tBuffer.GetWritePtr(); // FIXME? should be ok even on strange platforms but..
-	memset ( *ppBuffer, 0, iLen ); // reset
+	void * pRes = tBuffer.GetWritePtr();
+	memset ( pRes, 0, iLen ); // reset
+	return pRes;
 }
 
 
@@ -11106,8 +11108,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	// shared stuff (perf counters, flushing) startup
 	//////////////////////////////////////////////////
 
-	InitSharedBuffer ( g_tStatsBuffer, (void**)&g_pStats, sizeof(SearchdStats_t) );
-	InitSharedBuffer ( g_tFlushBuffer, (void**)&g_pFlush, sizeof(FlushState_t) );
+	g_pStats = (SearchdStats_t*) InitSharedBuffer ( g_tStatsBuffer, sizeof(SearchdStats_t) );
+	g_pFlush = (FlushState_t*) InitSharedBuffer ( g_tFlushBuffer, sizeof(FlushState_t) );
 	g_pStats->m_uStarted = (DWORD)time(NULL);
 
 	////////////////////

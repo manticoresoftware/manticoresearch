@@ -554,7 +554,7 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokeni
 			}
 		}
 
-		SphWordID_t iWord = iWord = pDict->GetWordID ( sWord );
+		SphWordID_t iWord = pDict->GetWordID ( sWord );
 
 		pLastTokenEnd = pTokenizer->GetTokenEnd ();
 
@@ -1363,7 +1363,10 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 
 		int iFileSize = (int)tFile.GetSize();
 		if ( iFileSize<=0 )
-			return "";
+		{
+			static char sEmpty[] = "";
+			return sEmpty;
+		}
 
 		pBuffer = new BYTE [ iFileSize+1 ];
 		if ( !tFile.Read ( pBuffer.Ptr(), iFileSize, sError ) )

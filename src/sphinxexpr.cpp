@@ -961,7 +961,7 @@ void ExprParser_t::Dump ( int iNode )
 	switch ( tNode.m_iToken )
 	{
 		case TOK_CONST_INT:
-			printf ( "%d", tNode.m_iConst );
+			printf ( INT64_FMT, tNode.m_iConst );
 			break;
 
 		case TOK_CONST_FLOAT:
@@ -1395,7 +1395,7 @@ public:
 	{
 		return (float) DoEval ( tMatch );
 	}
-		 
+
 	virtual int IntEval ( const CSphMatch & tMatch ) const
 	{
 		return (int) DoEval ( tMatch );
@@ -1815,7 +1815,7 @@ int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 
 	} else if ( iOp==TOK_LTE || iOp==TOK_GTE || iOp==TOK_EQ || iOp==TOK_NE
 		|| iOp=='<' || iOp=='>' || iOp==TOK_AND || iOp==TOK_OR
-		|| iOp=='+' || iOp=='-' || iOp=='*' || iOp==',' 
+		|| iOp=='+' || iOp=='-' || iOp=='*' || iOp==','
 		|| iOp=='&' || iOp=='|' )
 	{
 		tNode.m_uArgType = GetWidestRet ( iLeft, iRight );

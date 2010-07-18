@@ -1213,7 +1213,7 @@ public:
 		return m_pIterator->m_tKey;
 	}
 
-	// go to next existing entry in terms of external independed iterator
+	/// go to next existing entry in terms of external independed iterator
 	bool IterateNext ( void ** ppCookie ) const
 	{
 		HashEntry_t ** ppIterator = reinterpret_cast < HashEntry_t** > ( ppCookie );

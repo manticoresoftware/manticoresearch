@@ -4481,7 +4481,8 @@ int SelectParser_t::GetToken ( YYSTYPE * lvalp )
 	if ( isdigit ( *m_pCur ) )
 	{
 		char * pEnd = NULL;
-		strtod ( m_pCur, &pEnd );
+		double fDummy; // to avoid gcc unused result warning
+		fDummy = strtod ( m_pCur, &pEnd );
 
 		m_pCur = pEnd;
 		lvalp->m_iEnd = m_pCur-m_pStart;
@@ -10217,6 +10218,7 @@ public:
 					CSphMatch tMatch;
 					tMatch.m_iDocID = tQword.m_tDoc.m_iDocID;
 					if ( pFilter->UsesAttrs() )
+					{
 						if ( pInline )
 							tMatch.m_pDynamic = pInline;
 						else
@@ -10224,6 +10226,7 @@ public:
 							const DWORD * pInfo = pSourceIndex->FindDocinfo ( tQword.m_tDoc.m_iDocID );
 							tMatch.m_pStatic = pInfo?DOCINFO2ATTRS ( pInfo ):NULL;
 						}
+					}
 					bool bResult = pFilter->Eval ( tMatch );
 					tMatch.m_pDynamic = NULL;
 					if ( !bResult )
@@ -12763,6 +12766,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const CSphSchema &
 					case SPH_EVAL_PREFILTER:	m_dCalcFilter.Add ( tCalc ); break;
 					case SPH_EVAL_PRESORT:		m_dCalcSort.Add ( tCalc ); break;
 					case SPH_EVAL_FINAL:		m_dCalcFinal.Add ( tCalc ); break;
+					default:					break;
 				}
 				break;
 			}
@@ -16344,7 +16348,7 @@ static void FormatEscaped ( FILE * fp, const char * sLine )
 	char * sMaxibuffer = NULL;
 	char * sBuffer = sMinibuffer;
 
-	if ( iOut>sizeof(sMinibuffer) )
+	if ( iOut>(int)sizeof(sMinibuffer) )
 	{
 		sMaxibuffer = new char [ iOut+4 ]; // 4 is just my safety gap
 		sBuffer = sMaxibuffer;

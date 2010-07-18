@@ -995,14 +995,14 @@ bool sphIsLtLib()
 {
 #ifndef _CS_GNU_LIBPTHREAD_VERSION
 	return false;
-#endif
-
+#else
 	char buff[64];
 	confstr ( _CS_GNU_LIBPTHREAD_VERSION, buff, 64 );
 
 	if ( !strncasecmp ( buff, "linuxthreads", 12 ) )
 		return true;
 	return false;
+#endif
 }
 #endif
 

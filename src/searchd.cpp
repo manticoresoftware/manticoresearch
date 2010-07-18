@@ -8466,7 +8466,7 @@ void CheckLeaks ()
 		const float fMB = 1024.0f*1024.0f;
 		sphInfo ( "--- allocs-count=%d, mem-total=%.4f Mb, active-threads=%d", iAllocCount, fMemTotal/fMB, iThdsCount );
 		sphMemStatDump();
-		sphLog ( LOG_INFO, NULL, NULL );
+		sphInfo ( NULL ); // flush dupes
 	}
 #endif
 }
@@ -10589,7 +10589,7 @@ void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 	CheckRotate ();
 	CheckReopen ();
 	CheckFlush ();
-	sphLog ( LOG_INFO, NULL, NULL ); // flush dupes
+	sphInfo ( NULL ); // flush dupes
 
 	if ( pAcceptMutex )
 	{

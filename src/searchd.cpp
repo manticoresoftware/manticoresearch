@@ -37,7 +37,7 @@
 #define SEARCHD_DEFAULT_PORT	9312
 
 // uncomment to switch the watchdog on
-// #define WATCHDOG_FORK	1
+#define WATCHDOG_FORK	1
 
 #define SPH_ADDRESS_SIZE		sizeof("000.000.000.000")
 
@@ -1254,8 +1254,18 @@ void StackTraceDump ( int )
 {
 	void * pMyStack = sphMyStack();
 	int iStackSize = sphMyStackSize();
+
+	sphInfo ( "-------------- cut here ---------------" );
+	sphInfo ( "Searchd " SPHINX_VERSION );
+#ifdef COMPILER
+	sphInfo ( "Program compiled with " COMPILER );
+#endif
+
+#ifdef OS_UNAME
+	sphInfo ( "Host OS is "OS_UNAME );
+#endif
+
 	sphInfo ( "Stack bottom = %p, thread stack size = 0x%x", pMyStack, iStackSize );
-	bool bOk = true;
 
 #if HAVE_BACKTRACE
 	void *pAddresses [128];
@@ -1310,6 +1320,7 @@ void StackTraceDump ( int )
 	sphInfo ( "Stack is OK. Backtrace:" );
 
 	BYTE** pNewFP;
+	bool bOk = true;
 	while ( pFramePointer < (BYTE**) pMyStack )
 	{
 		pNewFP = (BYTE**) *pFramePointer;
@@ -1327,6 +1338,7 @@ void StackTraceDump ( int )
 	else
 #endif
 		sphInfo ( "Stack trace seems to be succesfull. Now you have to resolve the numbers above and attach resolved values to the bugreport. See the section about resolving in the documentation" );
+		sphInfo ( "-------------- cut here ---------------" );
 }
 
 void HandleCrash ( int )

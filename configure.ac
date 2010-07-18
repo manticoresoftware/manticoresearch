@@ -57,6 +57,9 @@ AC_PROG_CC
 AC_PROG_CXX
 AC_PROG_RANLIB
 
+AC_DEFINE_UNQUOTED([COMPILER],"$CC `$CC -dumpversion`",[Define to be the name of the compiler.])
+AC_DEFINE_UNQUOTED([OS_UNAME],"`uname -a`",[Full name OS])
+
 dnl --------------------------------------------------------------------------
 
 SPHINX_CONFIGURE_PART([checking for header files])

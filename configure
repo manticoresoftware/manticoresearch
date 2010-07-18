@@ -4353,6 +4353,17 @@ fi
 
 
 
+cat >>confdefs.h <<_ACEOF
+#define COMPILER "$CC `$CC -dumpversion`"
+_ACEOF
+
+
+cat >>confdefs.h <<_ACEOF
+#define OS_UNAME "`uname -a`"
+_ACEOF
+
+
+
 
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: " >&5
 $as_echo "" >&6; }

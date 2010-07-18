@@ -1289,7 +1289,7 @@ on subsequent startup.
 RT index is internally chunked.  It keeps a so-called RAM chunk
 that stores all the most recent changes.  RAM chunk memory usage
 is rather strictly limited with per-index
-<link linkend="rt-mem-limit">rt_mem_limit</link> directive.
+<link linkend="conf-rt-mem-limit">rt_mem_limit</link> directive.
 Once RAM chunk grows over this limit, a new disk chunk is created
 from its data, and RAM chunk is reset.  Thus, while most changes
 on the RT index will be performed in RAM only and complete instantly
@@ -2250,6 +2250,8 @@ synthetic tests.
 <para>As mentioned elsewhere, Sphinx is not a single program called 'sphinx',
 but a collection of 4 separate programs which collectively form Sphinx. This section
 covers these tools and how to use them.</para>
+
+
 <sect1 id="ref-indexer"><title><filename>indexer</filename> command reference</title>
 <para><filename>indexer</filename> is the first of the two principle tools
 as part of Sphinx. Invoked from either the command line directly, or as part
@@ -2410,6 +2412,18 @@ Any documents marked as deleted (value 1) would be removed from the newly-merged
 destination index. It can be added several times to the command line,
 to add successive filters to the merge, all of which must be met in order
 for a document to become part of the final index.
+</listitem>
+
+<listitem><option>--dump-rows &lt;FILE&gt;</option> dumps rows fetched
+by SQL source(s) into the specified file, in a MySQL compatible syntax.
+Resulting dumps are the exact representation of data as received by
+<filename>indexer</filename> and help to repeat indexing-time issues.
+</listitem>
+
+<listitem><option>--verbose</option> guarantees that every row that
+caused problems indexing (duplicate, zero, or missing document ID;
+or file field IO issues; etc) will be reported. By default, this option
+is off, and problem summaries may be reported instead.
 </listitem>
 
 </itemizedlist>
@@ -2922,6 +2936,11 @@ and not the index header.
 files for consistency errors that might be introduced either by bugs
 in <filename>indexer</filename> and/or hardware faults.
 </listitem>
+<listitem><option>--strip-path</option> strips the path names from
+all the file names referenced from the index (stopwords, wordforms,
+exceptions, etc). This is useful for checking indexes built on another
+machine with possibly different path layouts.
+</listitem>
 </itemizedlist>
 </sect1>
 
@@ -2941,6 +2960,17 @@ SphinxQL statements syntax.
 
 
 <sect1 id="sphinxql-select"><title>SELECT syntax</title>
+<programlisting>
+SELECT
+    select_expr [, select_expr ...]
+    FROM index [, index2 ...]
+    [WHERE where_condition]
+    [GROUP BY {col_name | expr_alias}]
+    [ORDER BY {col_name | expr_alias} {ASC | DESC} [, ...]]
+    [WITHIN GROUP ORDER BY {col_name | expr_alias} {ASC | DESC}]
+    [LIMIT offset, row_count]
+    [OPTION opt_name = opt_value [, ...]]
+</programlisting>
 <para>
 <b>SELECT</b> statement was introduced in version 0.9.9-rc2.
 It's syntax is based upon regular SQL but adds several Sphinx-specific
@@ -3038,6 +3068,9 @@ OPTION ranker=bm25, max_matches=3000,
 
 
 <sect1 id="sphinxql-show-meta"><title>SHOW META syntax</title>
+<programlisting>
+SHOW META
+</programlisting>
 <para><b>SHOW META</b> shows additional meta-information about the latest
 query such as query time and keyword statistics:
 <programlisting>
@@ -3075,6 +3108,9 @@ mysql> SHOW META;
 
 
 <sect1 id="sphinxql-show-warnings"><title>SHOW WARNINGS syntax</title>
+<programlisting>
+SHOW WARNINGS
+</programlisting>
 <para><b>SHOW WARNINGS</b> statement, introduced in version 0.9.9-rc2,
 can be used to retrieve the warning
 produced by the latest query. The error message will be returned along with
@@ -3153,9 +3189,9 @@ mysql> SHOW STATUS;
 </sect1>
 
 
-<sect1 id="sphinxql-insert"><title>INSERT syntax</title>
+<sect1 id="sphinxql-insert"><title>INSERT and REPLACE syntax</title>
 <programlisting>
-INSERT INTO index [(column, ...)]
+{INSERT | REPLACE} INTO index [(column, ...)]
 	VALUES (value, ...)
 	[, (...)]
 </programlisting>
@@ -3165,7 +3201,7 @@ It inserts new rows (documents) into an existing index, with the provided column
 </para>
 <para>
 ID column must be present in all cases. Rows with duplicate IDs will <b>not</b>
-be overwritten; use <link linkend="sphinxql-replace">REPLACE</link> to do that.
+be overwritten by INSERT; use REPLACE to do that.
 </para>
 <para>
 <option>index</option> is the name of RT index into which the new row(s)
@@ -8545,40 +8581,79 @@ binlog_max_log_size = 16M
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 
-<sect1 id="rel1101"><title>Version 1.10.1-alpha, ??? jan 2010</title>
+<sect1 id="rel1101"><title>Version 1.10.1-alpha, 19 jul 2010</title>
 <itemizedlist>
-<listitem>added RT indexes support (<link linkend="conf-rt-mem-limit">rt_mem_limit</link>,
-	<link linkend="conf-rt-field">rt_field</link>, <link linkend="conf-rt-attr-uint">rt_attr_uint</link> etc directives)</listitem>
-<listitem>added preforked and threaded workers support (<link linkend="conf-workers">workers</link> directives)</listitem>
+<listitem>added RT indexes support (<xref linkend="rt-indexes"/>)</listitem>
+<listitem>added prefork and threads support (<link linkend="conf-workers">workers</link> directives)</listitem>
 <listitem>added multi-threaded local searches in distributed indexes (<link linkend="conf-dist-threads">dist_threads</link> directive)</listitem>
-<listitem>added subquery cache (<link linkend="conf-subtree-docs-cache">subtree_docs_cache</link>,
+<listitem>added common subquery cache (<link linkend="conf-subtree-docs-cache">subtree_docs_cache</link>,
 	<link linkend="conf-subtree-hits-cache">subtree_hits_cache</link> directives)</listitem>
 <listitem>added string attributes support (<link linkend="conf-sql-attr-string">sql_attr_string</link>,
 	<link linkend="conf-sql-field-string">sql_field_string</link>,
 	<link linkend="conf-xmlpipe-attr-string">xml_attr_string</link>,
 	<link linkend="conf-xmlpipe-field-string">xml_field_string</link> directives)</listitem>
-<listitem>added hitless indexing support (hitless_words directive)</listitem>
-<listitem>added --check, --htmlstrip, --dumphitlist INDEX --wordid switches to <link linkend="ref-indextool">indextool</link></listitem>
-<listitem>added --stopwait, --logdebug switches to <link linkend="ref-searchd">searchd</link></listitem>
-<listitem>added "blended" characters indexing mode (<link linkend="conf-blend-chars">blend_chars</link> directive)</listitem>
-<listitem>added <link linkend="conf-sql-joined-field">sql_joined_field</link> directive
-	(enables GROUP_CONCAT() emulation and/or payload indexing)</listitem>
-<listitem>added word count indexing feature (<link linkend="conf-sql-attr-str2wordcount">sql_attr_str2wordcount</link>,
+<listitem>added indexing-time word counter (<link linkend="conf-sql-attr-str2wordcount">sql_attr_str2wordcount</link>,
 	<link linkend="conf-sql-field-str2wordcount">sql_field_str2wordcount</link> directives)</listitem>
-<listitem>added <link linkend="api-func-flushattributes">FlushAttributes() API call</link>, updated PHP/Python/Java APIs</listitem>
+<listitem>added <link linkend="sphinxql-call-snippets">CALL SNIPPETS()</link>,
+	<link linkend="sphinxql-call-keywords">CALL KEYWORDS()</link> SphinxQL statements</listitem>
+<listitem>added <option>field_weights</option>, <option>index_weights</option> options to
+	SphinxQL <link linkend="sphinxql-select">SELECT</link> statement</listitem>
+<listitem>added insert-only SphinxQL-talking tables to SphinxSE (connection='sphinxql://host[:port]/index')</listitem>
+<listitem>added <option>select</option> option to SphinxSE queries</listitem>
+<listitem>added backtrace on crash to <filename>searchd</filename></listitem>
+<listitem>added SQL+FS indexing, aka loading files by names fetched from SQL
+	(<link linkend="conf-sql-file-field">sql_file_field</link> directive)</listitem>
+<listitem>added a watchdog in threads mode to <filename>searchd</filename></listitem>
+<listitem>added automatic row phantoms elimination to index merge</listitem>
+<listitem>added hitless indexing support (hitless_words directive)</listitem>
+<listitem>added --check, --strip-path, --htmlstrip, --dumphitlist ... --wordid switches to <link linkend="ref-indextool">indextool</link></listitem>
+<listitem>added --stopwait, --logdebug switches to <link linkend="ref-searchd">searchd</link></listitem>
+<listitem>added --dump-rows, --verbose switches to <link linkend="ref-indexer">indexer</link></listitem>
+<listitem>added "blended" characters indexing support (<link linkend="conf-blend-chars">blend_chars</link> directive)</listitem>
+<listitem>added joined/payload field indexing (<link linkend="conf-sql-joined-field">sql_joined_field</link> directive)</listitem>
+<listitem>added <link linkend="api-func-flushattributes">FlushAttributes() API call</link></listitem>
 <listitem>added query_mode, force_all_words options to <link linkend="api-func-buildexcerpts">BuildExcerpts()</link> API call</listitem>
 <listitem>added @groupby/@count/@distinct columns support to SELECT (but not to expressions)</listitem>
 <listitem>added query-time keyword expansion support (<link linkend="conf-expand-keywords">expand_keywords</link> directive,
 	<link linkend="api-func-setrankingmode">SPH_RANK_SPH04</link> ranker)</listitem>
-<listitem>added query batch size limit option (<link linkend="conf-max-batch-queries">max_batch_queries</link> directive; was previously hardcoded)</listitem>
+<listitem>added query batch size limit option (<link linkend="conf-max-batch-queries">max_batch_queries</link> directive; was hardcoded)</listitem>
 <listitem>added SINT() function to expressions</listitem>
+<listitem>improved SphinxQL syntax error reporting</listitem>
+<listitem>improved expression optimizer (better constant handling)</listitem>
+<listitem>improved dash handling within keywords (no longer treated as an operator)</listitem>
+<listitem>improved snippets (better passage selection/trimming, around option now a hard limit)</listitem>
 <listitem>optimized index format that yields ~20-30% smaller indexes</listitem>
 <listitem>optimized sorting code (indexing time 1-5% faster on average; 100x faster in worst case)</listitem>
 <listitem>optimized searchd startup time (moved .spa preindexing to indexer), added a progress bar</listitem>
 <listitem>optimized queries against indexes with many attributes (eliminated redundant copying)</listitem>
 <listitem>optimized 1-keyword queries (performace regression introduced in 0.9.9)</listitem>
-<listitem>optimized MySQL protocol overheads</listitem>
+<listitem>optimized SphinxQL protocol overheads, and performance on bigger result sets</listitem>
+<listitem>optimized unbuffered attributes writes on index merge</listitem>
 <listitem>changed attribute handling, duplicate names are strictly forbidden now</listitem>
+<listitem>fixed that SphinxQL sessions could stall shutdown</listitem>
+<listitem>fixed consts with leading minus in SphinxQL</listitem>
+<listitem>fixed AND/OR precedence in expressions</listitem>
+<listitem>fixed #334, AVG() on integers was not computed in floats</listitem>
+<listitem>fixed #371, attribute flush vs 2+ GB files</listitem>
+<listitem>fixed #373, segfault on distributed queries vs certain libc versions</listitem>
+<listitem>fixed #398, stopwords not stopped in prefix/infix indexes</listitem>
+<listitem>fixed #404, erroneous MVA failures in indextool --check</listitem>
+<listitem>fixed #408, segfault on certain query batches (regular scan, plus a scan with MVA groupby)</listitem>
+<listitem>fixed #431, occasional shutdown hangs in preforked workers</listitem>
+<listitem>fixed #436, trunk checkout builds vs Solaris sh</listitem>
+<listitem>fixed #440, escaping vs parentheses declared as valid in charset_table</listitem>
+<listitem>fixed #442, occasional non-aligned free in MVA indexing</listitem>
+<listitem>fixed #447, occasional crashes in MVA indexing</listitem>
+<listitem>fixed #449, pconn busyloop on aborted clients on certain arches</listitem>
+<listitem>fixed #465, build issue on Alpha</listitem>
+<listitem>fixed #468, build issue in libsphinxclient</listitem>
+<listitem>fixed #472, multiple stopword files failing to load</listitem>
+<listitem>fixed #489, buffer overflow in query logging</listitem>
+<listitem>fixed #493, Python API assertion after error returned from Query()</listitem>
+<listitem>fixed #500, malformed MySQL packet when sending MVAs</listitem>
+<listitem>fixed #504, SIGPIPE in libsphinxclient</listitem>
+<listitem>fixed #506, better MySQL protocol commands support in SphinxQL (PING etc)</listitem>
+<listitem>fixed #509, indexing ranged results from stored procedures</listitem>
 </itemizedlist>
 </sect1>
 
@@ -8875,19 +8950,19 @@ binlog_max_log_size = 16M
 <listitem>added pure C API (libsphinxclient)</listitem>
 <listitem>added Ruby API</listitem>
 <listitem>added SetConnectTimeout() PHP API call</listitem>
-<listitem>added allowed type check to UpdateAttributes() handler (issue #174)</listitem>
-<listitem>added defensive MVA checks on index preload (protection against broken indexes, issue #168)</listitem>
+<listitem>added allowed type check to UpdateAttributes() handler (bug #174)</listitem>
+<listitem>added defensive MVA checks on index preload (protection against broken indexes, bug #168)</listitem>
 <listitem>added sphinx-min.conf sample file</listitem>
 <listitem>added --without-iconv switch to configure</listitem>
 <listitem>removed redundant -lz dependency in searchd</listitem>
 <listitem>removed erroneous "xmlpipe2 deprecated" warning</listitem>
-<listitem>fixed EINTR handling in piped read (issue #166)</listitem>
-<listitem>fixup query time before logging and sending to client (issue #153)</listitem>
-<listitem>fixed attribute updates vs full-scan early-reject index (issue #149)</listitem>
-<listitem>fixed gcc warnings (issue #160)</listitem>
-<listitem>fixed mysql connection attempt vs pgsql source type (issue #165)</listitem>
+<listitem>fixed EINTR handling in piped read (bug #166)</listitem>
+<listitem>fixup query time before logging and sending to client (bug #153)</listitem>
+<listitem>fixed attribute updates vs full-scan early-reject index (bug #149)</listitem>
+<listitem>fixed gcc warnings (bug #160)</listitem>
+<listitem>fixed mysql connection attempt vs pgsql source type (bug #165)</listitem>
 <listitem>fixed 32-bit wraparound when preloading over 2 GB files</listitem>
-<listitem>fixed "out of memory" message vs over 2 GB allocs (issue #116)</listitem>
+<listitem>fixed "out of memory" message vs over 2 GB allocs (bug #116)</listitem>
 <listitem>fixed unaligned RAM access detection on ARM (where unaligned reads do not crash but produce wrong results)</listitem>
 <listitem>fixed missing full scan results in some cases</listitem>
 <listitem>fixed several bugs in --merge, --merge-dst-range</listitem>

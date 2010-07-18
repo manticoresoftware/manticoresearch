@@ -159,43 +159,43 @@ fi
 ])
 
 # check for needed cflags
-AC_CACHE_CHECK([for CFLAGS needed for pthreads], [pthreads_cflags],
+AC_CACHE_CHECK([for CFLAGS needed for pthreads], [sphinx_cv_pthreads_cflags],
 [
 	save_cflags=$CFLAGS
 	for flag in none -kthread -pthread -pthreads -mt -mthreads -Kthread -threads; do
 		CFLAGS=$save_cflags
 	test "x$flag" != "xnone" && CFLAGS="$CFLAGS $flag"
 		PTHREADS_TRY_RUN([
-			pthreads_cflags="$flag"
+			sphinx_cv_pthreads_cflags="$flag"
 			break
 		])
 	done
 	CFLAGS=$save_cflags
 ])
 
-if test -n "$pthreads_cflags"; then
+if test -n "$sphinx_cv_pthreads_cflags"; then
 	have_pthreads=yes
-	if test "x$pthreads_cflags" != "xnone"; then
-		CPPFLAGS="$CPPFLAGS $pthreads_cflags"
+	if test "x$sphinx_cv_pthreads_cflags" != "xnone"; then
+		CPPFLAGS="$CPPFLAGS $sphinx_cv_pthreads_cflags"
 	fi
 fi
 
 # check for needed libs
-AC_CACHE_CHECK([for LIBS needed for pthreads], [pthreads_libs], [
+AC_CACHE_CHECK([for LIBS needed for pthreads], [sphinx_cv_pthreads_libs], [
 	save_libs=$LIBS
 	for lib in -lpthread -lpthreads -lc_r; do
 	LIBS="$save_libs $lib"
 	PTHREADS_TRY_RUN([
-		pthreads_libs=$lib
+		sphinx_cv_pthreads_libs=$lib
 		break
 	])
 	done
 	LIBS=$save_libs
 ])
 
-if test -n "$pthreads_libs"; then
+if test -n "$sphinx_cv_pthreads_libs"; then
 	have_pthreads=yes
-	LIBS="$LIBS $pthreads_libs"
+	LIBS="$LIBS $sphinx_cv_pthreads_libs"
 fi
 
 # final check

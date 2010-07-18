@@ -6303,7 +6303,7 @@ $as_echo "" >&6; }
 # check for needed cflags
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for CFLAGS needed for pthreads" >&5
 $as_echo_n "checking for CFLAGS needed for pthreads... " >&6; }
-if test "${pthreads_cflags+set}" = set; then :
+if test "${sphinx_cv_pthreads_cflags+set}" = set; then :
   $as_echo_n "(cached) " >&6
 else
 
@@ -6350,7 +6350,7 @@ fi
 
 if test $pthreads_try_run = yes; then
 
-			pthreads_cflags="$flag"
+			sphinx_cv_pthreads_cflags="$flag"
 			break
 
 fi
@@ -6359,20 +6359,20 @@ fi
 	CFLAGS=$save_cflags
 
 fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $pthreads_cflags" >&5
-$as_echo "$pthreads_cflags" >&6; }
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $sphinx_cv_pthreads_cflags" >&5
+$as_echo "$sphinx_cv_pthreads_cflags" >&6; }
 
-if test -n "$pthreads_cflags"; then
+if test -n "$sphinx_cv_pthreads_cflags"; then
 	have_pthreads=yes
-	if test "x$pthreads_cflags" != "xnone"; then
-		CPPFLAGS="$CPPFLAGS $pthreads_cflags"
+	if test "x$sphinx_cv_pthreads_cflags" != "xnone"; then
+		CPPFLAGS="$CPPFLAGS $sphinx_cv_pthreads_cflags"
 	fi
 fi
 
 # check for needed libs
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for LIBS needed for pthreads" >&5
 $as_echo_n "checking for LIBS needed for pthreads... " >&6; }
-if test "${pthreads_libs+set}" = set; then :
+if test "${sphinx_cv_pthreads_libs+set}" = set; then :
   $as_echo_n "(cached) " >&6
 else
 
@@ -6418,7 +6418,7 @@ fi
 
 if test $pthreads_try_run = yes; then
 
-		pthreads_libs=$lib
+		sphinx_cv_pthreads_libs=$lib
 		break
 
 fi
@@ -6427,12 +6427,12 @@ fi
 	LIBS=$save_libs
 
 fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $pthreads_libs" >&5
-$as_echo "$pthreads_libs" >&6; }
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $sphinx_cv_pthreads_libs" >&5
+$as_echo "$sphinx_cv_pthreads_libs" >&6; }
 
-if test -n "$pthreads_libs"; then
+if test -n "$sphinx_cv_pthreads_libs"; then
 	have_pthreads=yes
-	LIBS="$LIBS $pthreads_libs"
+	LIBS="$LIBS $sphinx_cv_pthreads_libs"
 fi
 
 # final check

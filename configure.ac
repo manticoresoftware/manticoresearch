@@ -1,7 +1,7 @@
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.59)
-AC_INIT([sphinx], [0.9.9], [shodan(at)shodan.ru])
+AC_INIT([sphinx], [1.10], [shodan(at)shodan.ru])
 
 dnl --------------------------------------------------------------------------
 
@@ -452,6 +452,11 @@ dnl --------------------------------------------------------------------------
 
 SPHINX_CONFIGURE_PART([configuration done])
 
-echo You can now run \'make\' to build Sphinx binaries,
-echo and then run \'make install\' to install them.
+echo "You can now run 'make install' to build and install Sphinx binaries."
+echo "On a multi-core machine, try 'make -j4 install' to speed up the build."
+echo
+echo "Updates, articles, help forum, and commercial support, consulting, training,"
+echo "and development services are available at http://sphinxsearch.com/"
+echo
+echo "Thank you for choosing Sphinx!"
 echo

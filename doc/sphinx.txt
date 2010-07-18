@@ -1,5 +1,5 @@
-Sphinx 1.10.1 reference manual
-==============================
+Sphinx 1.10-beta reference manual
+=================================
 
 Free open-source SQL full-text search engine
 ============================================
@@ -44,8 +44,9 @@ Table of Contents
 
 4. Real-time indexes
    4.1. RT indexes overview
-   4.2. RT index internals
-   4.3. Binary logging
+   4.2. Known caveats with RT indexes
+   4.3. RT index internals
+   4.4. Binary logging
 
 5. Searching
    5.1. Matching modes
@@ -290,7 +291,7 @@ Table of Contents
       11.4.31. binlog_max_log_size
 
 A. Sphinx revision history
-   A.1. Version 1.10.1-alpha, 19 jul 2010
+   A.1. Version 1.10-beta, 19 jul 2010
    A.2. Version 0.9.9-release, 02 dec 2009
    A.3. Version 0.9.9-rc2, 08 apr 2009
    A.4. Version 0.9.9-rc1, 17 nov 2008
@@ -348,18 +349,19 @@ porting it to a new language is known to take a few hours or days. Third
 party API ports and plugins exist for Perl, C#, Haskell, Ruby-on-Rails, and
 possibly other languages and frameworks.
 
-Starting version 1.10.1, Sphinx supports two different indexing backends:
-"disk" index backend, and "realtime" (RT) index backend. Disk indexes
-support online full-text index rebuilds, but online updates can only be
-done on non-text (attribute) data. RT indexes additionally allow for online
-full-text index updates. Previous versions only supported disk indexes.
+Starting version 1.10-beta, Sphinx supports two different indexing
+backends: "disk" index backend, and "realtime" (RT) index backend. Disk
+indexes support online full-text index rebuilds, but online updates can
+only be done on non-text (attribute) data. RT indexes additionally allow
+for online full-text index updates. Previous versions only supported disk
+indexes.
 
 Data can be loaded into disk indexes using a so-called data source.
 Built-in sources can fetch data directly from MySQL, PostgreSQL, ODBC
 compliant database (MS SQL, Oracle, etc), or a pipe in a custom XML format.
 Adding new data sources drivers (eg. to natively support other DBMSes) is
-designed to be as easy as possible. RT indexes, as of 1.10.1, can only be
-populated using SphinxQL.
+designed to be as easy as possible. RT indexes, as of 1.10-beta, can only
+be populated using SphinxQL.
 
 As for the name, Sphinx is an acronym which is officially decoded as SQL
 Phrase Index. Yes, I know about CMU's Sphinx project.
@@ -846,7 +848,7 @@ supported attribute types are:
    * UNIX timestamps;
    * floating point values (32-bit, IEEE 754 single precision);
    * string ordinals (specially computed integers);
-   * strings (since 1.10.1);
+   * strings (since 1.10-beta);
    * MVA, multi-value attributes (variable-length lists of 32-bit unsigned
      integers).
 
@@ -1199,7 +1201,7 @@ sphinx:field
         a full-text field in the subsequent documents.
       * "attr", specifies whether to also index this field as a string or
         word count attribute. Possible values are "string" and "wordcount".
-        Introduced in version 1.10.1.
+        Introduced in version 1.10-beta.
 
 sphinx:attr
    Optional element, child of sphinx:schema. Declares an attribute. Known
@@ -1244,7 +1246,7 @@ available in versions 0.9.x. On huge collections it actually might be the
 most efficient one. Refer to Section 3.11, <<Delta index updates>> for
 details.
 
-Second, versions 1.x (starting with 1.10.1) add support for so-called
+Second, versions 1.x (starting with 1.10-beta) add support for so-called
 real-time indexes (RT indexes for short) that on-the-fly updates of the
 full-text data. Updates on a RT index can appear in the search results in
 1-2 milliseconds, ie. 0.001-0.002 seconds. However, RT index are less
@@ -1367,15 +1369,16 @@ Chapter 4. Real-time indexes
 Table of Contents
 
 4.1. RT indexes overview
-4.2. RT index internals
-4.3. Binary logging
+4.2. Known caveats with RT indexes
+4.3. RT index internals
+4.4. Binary logging
 
 Real-time indexes (or RT indexes for brevity) are a new backend that lets
 you insert, update, or delete documents (rows) on the fly. RT indexes were
-added in version 1.10.1. While querying of RT indexes is possible using any
-of the SphinxAPI, SphinxQL, or SphinxSE, updating them is only possible via
-SphinxQL at the moment. Full SphinxQL reference is available in Chapter 7,
-SphinxQL reference.
+added in version 1.10-beta. While querying of RT indexes is possible using
+any of the SphinxAPI, SphinxQL, or SphinxSE, updating them is only possible
+via SphinxQL at the moment. Full SphinxQL reference is available in
+Chapter 7, SphinxQL reference.
 
 4.1. RT indexes overview
 ========================
@@ -1396,7 +1399,7 @@ Example 4.1. RT index declaration
    | 	rt_attr_uint = gid
    | }
 
-RT INDEXES ARE CURRENTLY (AS OF VERSION 1.10.1) A WORK IN PROGRESS.
+RT INDEXES ARE CURRENTLY (AS OF VERSION 1.10-beta) A WORK IN PROGRESS.
 Therefore, they might lack certain features: for instance, prefix/infix
 indexing, MVA attributes, etc are not supported yet. There also might be
 performance and stability issues. However, all the regular indexing
@@ -1411,7 +1414,7 @@ session with the sample index above:
    | $ mysql -h 127.0.0.1 -P 9306
    | Welcome to the MySQL monitor.  Commands end with ; or \g.
    | Your MySQL connection id is 1
-   | Server version: 1.10.1-dev (r2153)
+   | Server version: 1.10-dev (r2153)
    | 
    | Type 'help;' or '\h' for help. Type '\c' to clear the buffer.
    | 
@@ -1491,7 +1494,37 @@ Data stored in RT index should survive clean shutdown. When binary logging
 is enabled, it should also survive crash and/or dirty shutdown, and recover
 on subsequent startup.
 
-4.2. RT index internals
+4.2. Known caveats with RT indexes
+==================================
+
+As of 1.10-beta, RT indexes are a beta quality feature: while no major,
+showstopper-class issues are known, there still are a few known usage
+quirks. Those quirks are listed in this section.
+
+   * Prefix and infix indexing are not supported yet.
+   * MVAs are not supported yet.
+   * Disk chunks optimization routine is not implemented yet.
+   * On initial index creation, attributes are reordered by type, in the
+     following order: uint, bigint, float, timestamp, string. So when using
+     INSERT without an explicit column names list, specify all uint column
+     values first, then bigint, etc.
+   * Default conservative RAM chunk limit (rt_mem_limit) of 32M can lead to
+     poor performance on bigger indexes, you should raise it to 256..1024M
+     if you're planning to index gigabytes.
+   * High DELETE/REPLACE rate can lead to kill-list fragmentation and
+     impact searching performance.
+   * No transaction size limits are currently imposed; too many concurrent
+     INSERT/REPLACE transactions might therefore consume a lot of RAM.
+   * In case of a damaged binlog, recovery will stop on the first damaged
+     transaction, even though it's technically possible to keep looking
+     further for subsequent undamaged transactions, and recover those. This
+     mid-file damage case (due to flaky HDD/CDD/tape?) is supposed to be
+     extremely rare, though.
+   * Multiple INSERTs grouped in a single transaction perform better than
+     equivalent single-row transactions and are recommended for batch
+     loading of data.
+
+4.3. RT index internals
 =======================
 
 RT index is internally chunked. It keeps a so-called RAM chunk that stores
@@ -1514,7 +1547,7 @@ Generally, it is better to set the limit bigger, to minimize both the
 frequency of flushes, and the index fragmentation (number of disk chunks).
 For instance, on a dedicated search server that handles a big RT index, it
 can be advised to set rt_mem_limit to 1-3 GB. A global limit on all indexes
-is also planned, but not yet implemented yet as of 1.10.1.
+is also planned, but not yet implemented yet as of 1.10-beta.
 
 Disk chunk full-text index data can not be actually modified, so the
 full-text field changes (ie. row deletions and updates) suppress a previous
@@ -1523,18 +1556,18 @@ physicall purge the data. Therefore, on workloads with high full-text
 updates ratio index might eventually get polluted by these previous row
 versions, and searching performance would degrade. Physical index purging
 that would improve the performance is planned, but not yet implemented as
-of 1.10.1.
+of 1.10-beta.
 
 Data in RAM chunk gets saved to disk on clean daemon shutdown, and then
 loaded back on startup. However, on daemon or server crash, updates from
 RAM chunk might be lost. To prevent that, binary logging of transactions
-can be used; see Section 4.3, <<Binary logging>> for details.
+can be used; see Section 4.4, <<Binary logging>> for details.
 
 Full-text changes in RT index are transactional. They are stored in
 a per-thread accumulator until COMMIT, then applied at once. Bigger batches
 per single COMMIT should result in faster indexing.
 
-4.3. Binary logging
+4.4. Binary logging
 ===================
 
 Binary logs are essentially a recovery mechanism. With binary logs enabled,
@@ -1568,7 +1601,7 @@ timestamped, so in case of binlog damage in the middle of the file, it's
 technically possible to skip broken transactions and keep replaying from
 the next good one, and/or it's possible to replay transactions until
 a given timestamp (point-in-time recovery), but none of that is implemented
-yet as of 1.10.1.
+yet as of 1.10-beta.
 
 Chapter 5. Searching
 ====================
@@ -2020,7 +2053,7 @@ integer argument to 64-bit type, and does nothing on floating point
 argument. It's intended to help enforce evaluation of certain expressions
 (such as "a*b") in 64-bit mode even though all the arguments are 32-bit.
 
-SINT() function, introduced in version 1.10.1, forcibly reinterprets its
+SINT() function, introduced in version 1.10-beta, forcibly reinterprets its
 32-bit unsigned integer argument as signed, and also expands it to 64-bit
 type (because 32-bit type is unsigned). It's easily illustrated by the
 following example: 1-2 normally evaluates to 4294967295, but SINT(1-2)
@@ -2922,7 +2955,7 @@ Examples of its usage are:
    | spelldump ru.dict ru.aff ru.txt .1251
 
 The results file will contain a list of all the words in the dictionary in
-alphabetic order, output in the format of a wordforms file, which you can
+alphabetical order, output in the format of a wordforms file, which you can
 use to customise for your specific circumstances. An example of the result
 file:
 
@@ -3213,7 +3246,7 @@ was started with --iostats and --cpustats switches respectively.
    | 	VALUES (value, ...)
    | 	[, (...)]
 
-INSERT statement, introduced in version 1.10.1, is only supported for RT
+INSERT statement, introduced in version 1.10-beta, is only supported for RT
 indexes. It inserts new rows (documents) into an existing index, with the
 provided column values.
 
@@ -3237,7 +3270,7 @@ several comma-separated, parens-enclosed lists of rows values.
 
    | DELETE FROM index WHERE id = value
 
-DELETE statement, introduced in version 1.10.1, is only supported for RT
+DELETE statement, introduced in version 1.10-beta, is only supported for RT
 indexes. It deletes existing rows (documents) from an existing index based
 on ID.
 
@@ -3245,15 +3278,15 @@ index is the name of RT index from which the row should be deleted. value
 is the row ID to be deleted.
 
 Additional types of WHERE conditions (such as IN, conditions on attributes,
-etc) are planned, but not supported yet as of 1.10.1.
+etc) are planned, but not supported yet as of 1.10-beta.
 
 7.7. SET syntax
 ===============
 
    | SET variable_name = value
 
-SET statement, introduced in version 1.10.1, modifies a server variable
-value. The only variable supported as of 1.10.1 is AUTOCOMMIT, and its
+SET statement, introduced in version 1.10-beta, modifies a server variable
+value. The only variable supported as of 1.10-beta is AUTOCOMMIT, and its
 allowed values are 0 and 1.
 
 7.8. BEGIN, COMMIT, and ROLLBACK syntax
@@ -3264,12 +3297,12 @@ allowed values are 0 and 1.
    | ROLLBACK
    | SET AUTOCOMMIT = {0 | 1}
 
-BEGIN, COMMIT, and ROLLBACK statements were introduced in version 1.10.1.
-BEGIN statement (or its START TRANSACTION alias) forcibly commits pending
-transaction, if any, and begins a new one. COMMIT statement commits the
-current transaction, making all its changes permanent. ROLLBACK statement
-rolls back the current transaction, canceling all its changes. SET
-AUTOCOMMIT controls the autocommit mode in the active session.
+BEGIN, COMMIT, and ROLLBACK statements were introduced in version
+1.10-beta. BEGIN statement (or its START TRANSACTION alias) forcibly
+commits pending transaction, if any, and begins a new one. COMMIT statement
+commits the current transaction, making all its changes permanent. ROLLBACK
+statement rolls back the current transaction, canceling all its changes.
+SET AUTOCOMMIT controls the autocommit mode in the active session.
 
 AUTOCOMMIT is set to 1 by default, meaning that every statement that
 perfoms any changes on any index is implicitly wrapped in BEGIN and COMMIT.
@@ -3284,7 +3317,7 @@ transactions but even to the current session itself.
 
    | CALL SNIPPETS(data, index, query[, opt_value AS opt_name[, ...]])
 
-CALL SNIPPETS statement, introduced in version 1.10.1, builds a snippet
+CALL SNIPPETS statement, introduced in version 1.10-beta, builds a snippet
 from provided data and query, using specified index settings.
 
 data is the source data string to extract a snippet from. index is the name
@@ -3300,7 +3333,7 @@ Section 8.7.1, <<BuildExcerpts>>. Usage example:
 
    | CALL KEYWORDS(text, index, [hits])
 
-CALL KEYWORDS statement, introduced in version 1.10.1, splits text into
+CALL KEYWORDS statement, introduced in version 1.10-beta, splits text into
 particular keywords. It returns tokenized and normalized forms of the
 keywords, and, optionally, keyword statistics.
 
@@ -3665,7 +3698,7 @@ Currently implemented modes are:
      with N-th bit corresponding to N-th fulltext field, numbering from 0.
      The bit will only be set when the respective field has any keyword
      occurences satisfiying the query.
-   * SPH_RANK_SPH04, added in version 1.10.1, is generally based on the
+   * SPH_RANK_SPH04, added in version 1.10-beta, is generally based on the
      default SPH_RANK_PROXIMITY_BM25 ranker, but additionally boosts the
      matches when they occur in the very beginning or the very end of
      a text field. Thus, if a field equals the exact query, SPH04 should
@@ -4149,16 +4182,16 @@ additional optional highlighting parameters:
    position). Boolean, default is false.
 
 "query_mode":
-   Added in version 1.10.1. Whether to handle $words as a query in extended
-   syntax, or as a bag of words (default behavior). For instance, in query
-   mode ("one two" | "three four") will only highlight and include those
-   occurrences "one two" or "three four" when the two words from each pair
-   are adjacent to each other. In default mode, any single occurrence of
-   "one", "two", "three", or "four" would be highlighted. Boolean, default
-   is false.
+   Added in version 1.10-beta. Whether to handle $words as a query in
+   extended syntax, or as a bag of words (default behavior). For instance,
+   in query mode ("one two" | "three four") will only highlight and include
+   those occurrences "one two" or "three four" when the two words from each
+   pair are adjacent to each other. In default mode, any single occurrence
+   of "one", "two", "three", or "four" would be highlighted. Boolean,
+   default is false.
 
 "force_all_words":
-   Added in version 1.10.1. Ignores the snippet length limit until it
+   Added in version 1.10-beta. Ignores the snippet length limit until it
    includes all the keywords. Boolean, default is false.
 
 Returns false on failure. Returns a plain array of strings with excerpts
@@ -4258,7 +4291,7 @@ Prototype: function FlushAttributes ()
 
 Forces searchd to flush pending attribute updates to disk, and blocks until
 completion. Returns a non-negative internal "flush tag" on success. Returns
--1 and sets an error message on error. Introduced in version 1.10.1.
+-1 and sets an error message on error. Introduced in version 1.10-beta.
 
 Attribute values updated using UpdateAttributes() API call are only kept in
 RAM until a so-called flush (which writes the current, possibly updated
@@ -5466,17 +5499,17 @@ Example:
 
 String attribute declaration. Multi-value (ie. there may be more than one
 such attribute declared), optional. Applies to SQL source types (mysql,
-pgsql, mssql) only. Introduced in version 1.10.1.
+pgsql, mssql) only. Introduced in version 1.10-beta.
 
 String attributes can store arbitrary strings attached to every document.
 There's a fixed size limit of 4 MB per value. Also, searchd will currently
 cache all the values in RAM, which is an additional implicit limit.
 
-As of 1.10.1, strings can only be used for storage and retrieval. They can
-not participate in expressions, be used for filtering, sorting, or grouping
-(ie. in WHERE, ORDER or GROUP clauses). Note that attributes declared using
-sql_attr_string will not be full-text indexed; you can use sql_field_string
-directive for that.
+As of 1.10-beta, strings can only be used for storage and retrieval. They
+can not participate in expressions, be used for filtering, sorting, or
+grouping (ie. in WHERE, ORDER or GROUP clauses). Note that attributes
+declared using sql_attr_string will not be full-text indexed; you can use
+sql_field_string directive for that.
 
 Example:
 
@@ -5487,7 +5520,7 @@ Example:
 
 Word-count attribute declaration. Multi-value (ie. there may be more than
 one such attribute declared), optional. Applies to SQL source types (mysql,
-pgsql, mssql) only. Introduced in version 1.10.1.
+pgsql, mssql) only. Introduced in version 1.10-beta.
 
 Word-count attribute takes a string column, tokenizes it according to index
 settings, and stores the resulting number of tokens in an attribute. This
@@ -5504,7 +5537,8 @@ Example:
 
 Combined string attribute and full-text field declaration. Multi-value (ie.
 there may be more than one such attribute declared), optional. Applies to
-SQL source types (mysql, pgsql, mssql) only. Introduced in version 1.10.1.
+SQL source types (mysql, pgsql, mssql) only. Introduced in version
+1.10-beta.
 
 sql_attr_string only stores the column value but does not full-text index
 it. In some cases it might be desired to both full-text index the column
@@ -5521,7 +5555,7 @@ Example:
 Combined word-count attribute and full-text field declaration. Multi-value
 (ie. there may be more than one such attribute declared), optional. Applies
 to SQL source types (mysql, pgsql, mssql) only. Introduced in version
-1.10.1.
+1.10-beta.
 
 sql_attr_str2wordcount only stores the column word count but does not
 full-text index it. In some cases it might be desired to both full-text
@@ -5535,7 +5569,7 @@ Example:
 -----------------------
 
 File based field declaration. Applies to SQL source types (mysql, pgsql,
-mssql) only. Introduced in version 1.10.1.
+mssql) only. Introduced in version 1.10-beta.
 
 This directive makes indexer interpret field contents as a file name, and
 load and index the referred file. Files larger than max_file_field_buffer
@@ -5644,7 +5678,7 @@ Example:
 
 xmlpipe field and string attribute declaration. Multi-value, optional.
 Applies to xmlpipe2 source type only. Refer to Section 3.9, <<xmlpipe2 data
-source>>. Introduced in version 1.10.1.
+source>>. Introduced in version 1.10-beta.
 
 Makes the specified XML element indexed as both a full-text field and
 a string attribute. Equivalent to <sphinx:field name="field"
@@ -5659,7 +5693,7 @@ Example:
 
 xmlpipe field and word count attribute declaration. Multi-value, optional.
 Applies to xmlpipe2 source type only. Refer to Section 3.9, <<xmlpipe2 data
-source>>. Introduced in version 1.10.1.
+source>>. Introduced in version 1.10-beta.
 
 Makes the specified XML element indexed as both a full-text field and
 a word count attribute. Equivalent to <sphinx:field name="field"
@@ -5742,7 +5776,7 @@ Example:
 ----------------------------
 
 xmlpipe string declaration. Multi-value, optional. Applies to xmlpipe2
-source type only. Introduced in version 1.10.1.
+source type only. Introduced in version 1.10-beta.
 
 This setting declares a string attribute tag in xmlpipe2 stream. The
 contents of the specified tag will be parsed and stored as a string value.
@@ -5870,9 +5904,9 @@ Sphinx supports several different types of indexes. Versions 0.9.x
 supported two index types: plain local indexes that are stored and
 processed on the local machine; and distributed indexes, that involve not
 only local searching but querying remote searchd instances over the network
-as well (see Section 5.7, <<Distributed searching>>). Version 1.10.1 also
-adds support for so-called real-time indexes (or RT indexes for short) that
-are also stored and processed locally, but additionally allow for
+as well (see Section 5.7, <<Distributed searching>>). Version 1.10-beta
+also adds support for so-called real-time indexes (or RT indexes for short)
+that are also stored and processed locally, but additionally allow for
 on-the-fly updates of the full-text index (see Chapter 4, Real-time
 indexes). Note that attributes can be updated on-the-fly using either plain
 local indexes or RT ones.
@@ -6936,7 +6970,7 @@ Example:
 ----------------------
 
 Hitless words list. Optional, allowed values are 'all', or a list file
-name. Introduced in version 1.10.1.
+name. Introduced in version 1.10-beta.
 
 By default, Sphinx full-text index stores not only a list of matching
 documents for every given keyword, but also a list of its in-document
@@ -6973,7 +7007,7 @@ Example:
 ------------------------
 
 Expand keywords with exact forms and/or stars when possible. Optional,
-default is 0 (do not expand keywords). Introduced in version 1.10.1.
+default is 0 (do not expand keywords). Introduced in version 1.10-beta.
 
 Queries against indexes with expand_keywords feature enabled are internally
 expanded as follows. If the index was built with prefix or infix indexing
@@ -7005,7 +7039,7 @@ Example:
 --------------------
 
 Blended characters list. Optional, default is empty. Introduced in version
-1.10.1.
+1.10-beta.
 
 Blended characters are indexed both as separators and valid characters. For
 instance, assume that & is configured as blended and AT&T occurs in an
@@ -7032,7 +7066,7 @@ Example:
 ---------------------
 
 RAM chunk size limit. Optional, default is empty. Introduced in version
-1.10.1.
+1.10-beta.
 
 RT index keeps some data in memory (so-called RAM chunk) and also maintains
 a number of on-disk indexes (so-called disk chunks). This directive lets
@@ -7053,7 +7087,7 @@ Example:
 -----------------
 
 Full-text field declaration. Multi-value, mandatory Introduced in version
-1.10.1.
+1.10-beta.
 
 Full-text fields to be indexed are declared using rt_field directive. The
 names must be unique. The order is preserved; and so field values in INSERT
@@ -7071,7 +7105,7 @@ Example:
 
 Unsigned integer attribute declaration. Multi-value (an arbitrary number of
 attributes is allowed), optional. Declares an unsigned 32-bit attribute.
-Introduced in version 1.10.1.
+Introduced in version 1.10-beta.
 
 Example:
 
@@ -7082,7 +7116,7 @@ Example:
 
 BIGINT attribute declaration. Multi-value (an arbitrary number of
 attributes is allowed), optional. Declares a signed 64-bit attribute.
-Introduced in version 1.10.1.
+Introduced in version 1.10-beta.
 
 Example:
 
@@ -7093,7 +7127,7 @@ Example:
 
 Floating point attribute declaration. Multi-value (an arbitrary number of
 attributes is allowed), optional. Declares a single precision, 32-bit IEEE
-754 format float attribute. Introduced in version 1.10.1.
+754 format float attribute. Introduced in version 1.10-beta.
 
 Example:
 
@@ -7103,7 +7137,7 @@ Example:
 --------------------------
 
 Timestamp attribute declaration. Multi-value (an arbitrary number of
-attributes is allowed), optional. Introduced in version 1.10.1.
+attributes is allowed), optional. Introduced in version 1.10-beta.
 
 Example:
 
@@ -7113,7 +7147,7 @@ Example:
 -----------------------
 
 String attribute declaration. Multi-value (an arbitrary number of
-attributes is allowed), optional. Introduced in version 1.10.1.
+attributes is allowed), optional. Introduced in version 1.10-beta.
 
 Example:
 
@@ -7674,7 +7708,7 @@ Example:
 ----------------
 
 Multi-processing mode (MPM). Optional; allowed values are none, fork,
-prefork, and threads; default is fork. Introduced in version 1.10.1.
+prefork, and threads; default is fork. Introduced in version 1.10-beta.
 
 Lets you choose how searchd processes multiple concurrent requests. The
 possible values are:
@@ -7714,7 +7748,7 @@ Example:
 
 Max local search threads to use when searching a distributed index.
 Optional, default is 0, which means to disable multi-threaded distributed
-searching. Introduced in version 1.10.1.
+searching. Introduced in version 1.10-beta.
 
 Distributed index can include several local indexes. dist_threads lets you
 easily utilize multiple CPUs/cores for that (previously existing
@@ -7757,7 +7791,7 @@ Example:
 
 Binary log (aka transaction log) files path and name prefix. Optional,
 default is empty string, which means to disable logging. Introduced in
-version 1.10.1.
+version 1.10-beta.
 
 Binary logs are used for crash recovery of RT index data that would
 otherwise only be stored in RAM. When logging is enabled, every transaction
@@ -7778,7 +7812,7 @@ Example:
 ---------------------
 
 Binary log transaction flush/sync mode. Optional, default is 2 (flush every
-transaction, sync every second). Introduced in version 1.10.1.
+transaction, sync every second). Introduced in version 1.10-beta.
 
 This directive controls how frequently will binary log be flushed to OS and
 synced to disk. Three modes are supported:
@@ -7807,7 +7841,7 @@ Example:
 ----------------------------
 
 Maximum binary log file size. Optional, default is 0 (do not reopen binlog
-file based on size). Introduced in version 1.10.1.
+file based on size). Introduced in version 1.10-beta.
 
 A new binlog file will be forcibly opened once the current binlog file
 reaches this limit. This achieves a finer granularity of logs and can yield
@@ -7822,7 +7856,7 @@ Appendix A. Sphinx revision history
 
 Table of Contents
 
-A.1. Version 1.10.1-alpha, 19 jul 2010
+A.1. Version 1.10-beta, 19 jul 2010
 A.2. Version 0.9.9-release, 02 dec 2009
 A.3. Version 0.9.9-rc2, 08 apr 2009
 A.4. Version 0.9.9-rc1, 17 nov 2008
@@ -7834,8 +7868,8 @@ A.9. Version 0.9.7-rc1, 26 oct 2006
 A.10. Version 0.9.6, 24 jul 2006
 A.11. Version 0.9.6-rc1, 26 jun 2006
 
-A.1. Version 1.10.1-alpha, 19 jul 2010
-======================================
+A.1. Version 1.10-beta, 19 jul 2010
+===================================
 
    * added RT indexes support (Chapter 4, Real-time indexes)
    * added prefork and threads support (workers directives)

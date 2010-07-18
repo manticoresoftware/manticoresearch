@@ -11761,6 +11761,19 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 	if ( m_uVersion>=2 )
 		m_bUse64 = ( rdInfo.GetDword ()!=0 );
 
+	if ( m_bUse64!=USE_64BIT )
+	{
+#if 0
+		// TODO: may be do this param conditional and push it into the config?
+		m_bId32to64 = true;
+#else
+		m_sLastError.SetSprintf ( "'%s' is id%d, and this binary is id%d",
+			GetIndexFileName("sph").cstr(),
+			m_bUse64 ? 64 : 32, USE_64BIT ? 64 : 32 );
+		return false;
+#endif
+	}
+
 	// docinfo
 	m_tSettings.m_eDocinfo = (ESphDocinfo) rdInfo.GetDword();
 
@@ -11821,6 +11834,8 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 		// dictionary stuff
 		CSphDictSettings tDictSettings;
 		LoadDictionarySettings ( rdInfo, tDictSettings, m_uVersion, sWarning );
+		if ( m_bId32to64 )
+			tDictSettings.m_bCrc32 = true;
 
 		if ( bStripPath )
 		{
@@ -11836,6 +11851,13 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 
 		ISphTokenizer * pTokenFilter = ISphTokenizer::CreateTokenFilter ( pTokenizer, pDict->GetMultiWordforms () );
 		SetTokenizer ( pTokenFilter ? pTokenFilter : pTokenizer );
+	} else
+	{
+		if ( m_bId32to64 )
+		{
+			m_sLastError.SetSprintf ( "too old id32 index; can not be loaded by this id64 binary" );
+			return false;
+		}
 	}
 
 	if ( m_uVersion>=10 )
@@ -12082,19 +12104,6 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 	// preload schema
 	if ( !LoadHeader ( GetIndexFileName("sph").cstr(), bStripPath, sWarning ) )
 		return false;
-
-	if ( m_bUse64!=USE_64BIT )
-	{
-#if USE_64BIT
-		// TODO: may be do this param conditional and push it into the config?
-		m_bId32to64 = true;
-#else
-		m_sLastError.SetSprintf ( "'%s' is id%d, and this binary is id%d",
-			GetIndexFileName("sph").cstr(),
-			m_bUse64 ? 64 : 32, USE_64BIT ? 64 : 32 );
-		return false;
-#endif
-	}
 
 	// verify that data files are readable
 	if ( !sphIsReadable ( GetIndexFileName("spd").cstr(), &m_sLastError ) )
@@ -14286,19 +14295,33 @@ enum
 // CRC32/64 DICTIONARIES
 /////////////////////////////////////////////////////////////////////////////
 
-/// CRC32/64 dictionary
-struct CSphDictCRC : CSphDict
+/// wordform container
+struct WordformContainer_t
 {
-						CSphDictCRC ();
-	virtual				~CSphDictCRC ();
+	int							m_iRefCount;
+	CSphString					m_sFilename;
+	struct_stat					m_tStat;
+	DWORD						m_uCRC32;
+	CSphVector <CSphString>		m_dNormalForms;
+	CSphMultiformContainer * m_pMultiWordforms;
+	CSphOrderedHash < int, CSphString, CSphStrHashFunc, 1048576, 117 >	m_dHash;
 
-	virtual SphWordID_t	GetWordID ( BYTE * pWord );
-	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops );
+	WordformContainer_t ();
+	~WordformContainer_t ();
+
+	bool						IsEqual ( const char * szFile, DWORD uCRC32 );
+};
+
+
+/// common CRC32/64 dictionary stuff
+struct CSphDictCRCTraits : CSphDict
+{
+						CSphDictCRCTraits ();
+	virtual				~CSphDictCRCTraits ();
+
 	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer );
 	virtual bool		LoadWordforms ( const char * szFile, ISphTokenizer * pTokenizer );
 	virtual bool		SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError );
-	virtual SphWordID_t	GetWordIDWithMarkers ( BYTE * pWord );
-	virtual SphWordID_t	GetWordIDNonStemmed ( BYTE * pWord );
 	virtual void		ApplyStemmers ( BYTE * pWord );
 
 	virtual void		Setup ( const CSphDictSettings & tSettings ) { m_tSettings = tSettings; }
@@ -14308,8 +14331,6 @@ struct CSphDictCRC : CSphDict
 	virtual const CSphMultiformContainer * GetMultiWordforms () const { return m_pWordforms ? m_pWordforms->m_pMultiWordforms : NULL; }
 
 	static void			SweepWordformContainers ( const char * szFile, DWORD uCRC32 );
-
-	virtual bool IsStopWord ( const BYTE * pWord ) const;
 
 protected:
 	CSphVector < int >	m_dMorph;
@@ -14326,40 +14347,37 @@ protected:
 	SphWordID_t			FilterStopword ( SphWordID_t uID ) const;	///< filter ID against stopwords list
 
 private:
-	typedef CSphOrderedHash < int, CSphString, CSphStrHashFunc, 1048576, 117 > CWordHash;
+	WordformContainer_t *		m_pWordforms;
+	CSphVector<CSphSavedFile>	m_dSWFileInfos;
+	CSphSavedFile				m_tWFFileInfo;
+	CSphDictSettings			m_tSettings;
 
-	struct WordformContainer
-	{
-		int							m_iRefCount;
-		CSphString					m_sFilename;
-		struct_stat					m_tStat;
-		DWORD						m_uCRC32;
-		CSphVector <CSphString>		m_dNormalForms;
-		CSphMultiformContainer * m_pMultiWordforms;
-		CWordHash					m_dHash;
+	static CSphVector<WordformContainer_t*>		m_dWordformContainers;
 
-									WordformContainer ();
-									~WordformContainer ();
-
-		bool						IsEqual ( const char * szFile, DWORD uCRC32 );
-	};
-
-	WordformContainer *	m_pWordforms;
-	CSphVector <CSphSavedFile> m_dSWFileInfos;
-	CSphSavedFile		m_tWFFileInfo;
-	CSphDictSettings	m_tSettings;
-
-	static CSphVector <WordformContainer*> m_dWordformContainers;
-
-	static WordformContainer *	GetWordformContainer ( const char * szFile, DWORD uCRC32, const ISphTokenizer * pTokenizer );
-	static WordformContainer *	LoadWordformContainer ( const char * szFile, DWORD uCRC32, const ISphTokenizer * pTokenizer );
+	static WordformContainer_t *	GetWordformContainer ( const char * szFile, DWORD uCRC32, const ISphTokenizer * pTokenizer );
+	static WordformContainer_t *	LoadWordformContainer ( const char * szFile, DWORD uCRC32, const ISphTokenizer * pTokenizer );
 
 	bool				InitMorph ( const char * szMorph, int iLength, bool bUseUTF8, CSphString & sError );
 	bool				AddMorph ( int iMorph );
 	bool				StemById ( BYTE * pWord, int iStemmer );
 };
 
-CSphVector <CSphDictCRC::WordformContainer*> CSphDictCRC::m_dWordformContainers;
+CSphVector < WordformContainer_t * > CSphDictCRCTraits::m_dWordformContainers;
+
+
+/// specialized CRC32/64 implementations
+template < bool CRC32DICT > 
+struct CSphDictCRC : public CSphDictCRCTraits
+{
+	inline SphWordID_t		DoCrc ( const BYTE * pWord ) const;
+	inline SphWordID_t		DoCrc ( const BYTE * pWord, int iLen ) const;
+
+	virtual SphWordID_t		GetWordID ( BYTE * pWord );
+	virtual SphWordID_t		GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops );
+	virtual SphWordID_t		GetWordIDWithMarkers ( BYTE * pWord );
+	virtual SphWordID_t		GetWordIDNonStemmed ( BYTE * pWord );
+	virtual bool			IsStopWord ( const BYTE * pWord ) const;
+};
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -14491,6 +14509,7 @@ uint64_t sphFNV64 ( const BYTE * s, int iLen )
 }
 
 /////////////////////////////////////////////////////////////////////////////
+
 bool sphCalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 )
 {
 	uCRC32 = 0;
@@ -14550,14 +14569,14 @@ static void GetFileStats ( const char * szFilename, CSphSavedFile & tInfo )
 
 /////////////////////////////////////////////////////////////////////////////
 
-CSphDictCRC::WordformContainer::WordformContainer ()
-	: m_iRefCount 		( 0 )
-	, m_pMultiWordforms	( NULL )
+WordformContainer_t::WordformContainer_t ()
+	: m_iRefCount ( 0 )
+	, m_pMultiWordforms ( NULL )
 {
 }
 
 
-CSphDictCRC::WordformContainer::~WordformContainer ()
+WordformContainer_t::~WordformContainer_t ()
 {
 	if ( m_pMultiWordforms )
 	{
@@ -14576,7 +14595,7 @@ CSphDictCRC::WordformContainer::~WordformContainer ()
 }
 
 
-bool CSphDictCRC::WordformContainer::IsEqual ( const char * szFile, DWORD uCRC32 )
+bool WordformContainer_t::IsEqual ( const char * szFile, DWORD uCRC32 )
 {
 	if ( !szFile )
 		return false;
@@ -14591,7 +14610,7 @@ bool CSphDictCRC::WordformContainer::IsEqual ( const char * szFile, DWORD uCRC32
 
 /////////////////////////////////////////////////////////////////////////////
 
-CSphDictCRC::CSphDictCRC ()
+CSphDictCRCTraits::CSphDictCRCTraits ()
 	: m_iStopwords	( 0 )
 	, m_pStopwords	( NULL )
 	, m_pWordforms	( NULL )
@@ -14599,7 +14618,7 @@ CSphDictCRC::CSphDictCRC ()
 }
 
 
-CSphDictCRC::~CSphDictCRC ()
+CSphDictCRCTraits::~CSphDictCRCTraits ()
 {
 #if USE_LIBSTEMMER
 	ARRAY_FOREACH ( i, m_dStemmers )
@@ -14611,7 +14630,7 @@ CSphDictCRC::~CSphDictCRC ()
 }
 
 
-SphWordID_t CSphDictCRC::FilterStopword ( SphWordID_t uID ) const
+SphWordID_t CSphDictCRCTraits::FilterStopword ( SphWordID_t uID ) const
 {
 	if ( !m_iStopwords )
 		return uID;
@@ -14641,7 +14660,7 @@ SphWordID_t CSphDictCRC::FilterStopword ( SphWordID_t uID ) const
 }
 
 
-bool CSphDictCRC::ToNormalForm ( BYTE * pWord )
+bool CSphDictCRCTraits::ToNormalForm ( BYTE * pWord )
 {
 	if ( !m_pWordforms )
 		return false;
@@ -14660,7 +14679,8 @@ bool CSphDictCRC::ToNormalForm ( BYTE * pWord )
 	return true;
 }
 
-bool CSphDictCRC::ParseMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError )
+
+bool CSphDictCRCTraits::ParseMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError )
 {
 	const char * szStart = szMorph;
 
@@ -14688,7 +14708,7 @@ bool CSphDictCRC::ParseMorphology ( const char * szMorph, bool bUseUTF8, CSphStr
 }
 
 
-bool CSphDictCRC::InitMorph ( const char * szMorph, int iLength, bool bUseUTF8, CSphString & sError )
+bool CSphDictCRCTraits::InitMorph ( const char * szMorph, int iLength, bool bUseUTF8, CSphString & sError )
 {
 	if ( iLength==0 )
 		return true;
@@ -14779,7 +14799,7 @@ bool CSphDictCRC::InitMorph ( const char * szMorph, int iLength, bool bUseUTF8, 
 }
 
 
-bool CSphDictCRC::AddMorph ( int iMorph )
+bool CSphDictCRCTraits::AddMorph ( int iMorph )
 {
 	ARRAY_FOREACH ( i, m_dMorph )
 		if ( m_dMorph[i]==iMorph )
@@ -14789,18 +14809,8 @@ bool CSphDictCRC::AddMorph ( int iMorph )
 	return true;
 }
 
-/////////////////////////////////////////////////////////////////////////////
 
-template < typename T > T sphCRCWord ( const BYTE * pWord );
-template<> uint64_t sphCRCWord ( const BYTE * pWord ) { return sphFNV64 ( pWord ); }
-template<> DWORD sphCRCWord ( const BYTE * pWord ) { return sphCRC32 ( pWord ); }
-
-template < typename T > T sphCRCWord ( const BYTE * pWord, int iLen );
-template<> uint64_t sphCRCWord ( const BYTE * pWord, int iLen ) { return sphFNV64 ( pWord, iLen ); }
-template<> DWORD sphCRCWord ( const BYTE * pWord, int iLen ) { return sphCRC32 ( pWord, iLen ); }
-
-
-void CSphDictCRC::ApplyStemmers ( BYTE * pWord )
+void CSphDictCRCTraits::ApplyStemmers ( BYTE * pWord )
 {
 	// try wordforms
 	if ( ToNormalForm ( pWord ) )
@@ -14817,57 +14827,84 @@ void CSphDictCRC::ApplyStemmers ( BYTE * pWord )
 			break;
 }
 
+/////////////////////////////////////////////////////////////////////////////
 
-SphWordID_t CSphDictCRC::GetWordID ( BYTE * pWord )
+template<>
+SphWordID_t CSphDictCRC<true>::DoCrc ( const BYTE * pWord ) const
 {
-	ApplyStemmers ( pWord );
-	return FilterStopword ( sphCRCWord<SphWordID_t> ( pWord ) );
+	return sphCRC32 ( pWord );
 }
 
 
-SphWordID_t CSphDictCRC::GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops )
+template<>
+SphWordID_t CSphDictCRC<false>::DoCrc ( const BYTE * pWord ) const
 {
-	SphWordID_t uId = sphCRCWord<SphWordID_t> ( pWord, iLen );
+	return (SphWordID_t) sphFNV64 ( pWord );
+}
+
+
+template<>
+SphWordID_t CSphDictCRC<true>::DoCrc ( const BYTE * pWord, int iLen ) const
+{
+	return sphCRC32 ( pWord, iLen );
+}
+
+
+template<>
+SphWordID_t CSphDictCRC<false>::DoCrc ( const BYTE * pWord, int iLen ) const
+{
+	return (SphWordID_t) sphFNV64 ( pWord, iLen );
+}
+
+
+template < bool CRC32DICT >
+SphWordID_t CSphDictCRC<CRC32DICT>::GetWordID ( BYTE * pWord )
+{
+	ApplyStemmers ( pWord );
+	return FilterStopword ( DoCrc ( pWord ) );
+}
+
+
+template < bool CRC32DICT >
+SphWordID_t CSphDictCRC<CRC32DICT>::GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops )
+{
+	SphWordID_t uId = DoCrc ( pWord, iLen );
 	return bFilterStops ? FilterStopword ( uId ) : uId;
 }
 
 
-SphWordID_t	CSphDictCRC::GetWordIDWithMarkers ( BYTE * pWord )
+template < bool CRC32DICT >
+SphWordID_t CSphDictCRC<CRC32DICT>::GetWordIDWithMarkers ( BYTE * pWord )
 {
 	ApplyStemmers ( pWord + 1 );
-	SphWordID_t uWordId = sphCRCWord<SphWordID_t> ( pWord + 1 );
+	SphWordID_t uWordId = DoCrc ( pWord + 1 );
 	int iLength = strlen ( (const char *)(pWord + 1) );
 	pWord [iLength + 1] = MAGIC_WORD_TAIL;
 	pWord [iLength + 2] = '\0';
-	return FilterStopword ( uWordId ) ? sphCRCWord<SphWordID_t> ( pWord ) : 0;
+	return FilterStopword ( uWordId ) ? DoCrc ( pWord ) : 0;
 }
 
 
-SphWordID_t	CSphDictCRC::GetWordIDNonStemmed ( BYTE * pWord )
+template < bool CRC32DICT >
+SphWordID_t CSphDictCRC<CRC32DICT>::GetWordIDNonStemmed ( BYTE * pWord )
 {
-	SphWordID_t uWordId = sphCRCWord<SphWordID_t> ( pWord + 1 );
+	SphWordID_t uWordId = DoCrc ( pWord + 1 );
 	if ( !FilterStopword ( uWordId ) )
 		return 0;
 
-	return sphCRCWord<SphWordID_t> ( pWord );
+	return DoCrc ( pWord );
 }
 
 
-struct DwordCmp_fn
+template < bool CRC32DICT >
+bool CSphDictCRC<CRC32DICT>::IsStopWord ( const BYTE * pWord ) const
 {
-	inline int operator () ( DWORD b, DWORD a )
-	{
-		if ( a<b )
-			return -1;
-		else if ( a==b )
-			return 0;
-		else
-			return 1;
-	}
-};
+	return FilterStopword ( DoCrc ( pWord ) )==0;
+}
 
+//////////////////////////////////////////////////////////////////////////
 
-void CSphDictCRC::LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer )
+void CSphDictCRCTraits::LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer )
 {
 	assert ( !m_pStopwords );
 	assert ( !m_iStopwords );
@@ -14951,11 +14988,11 @@ void CSphDictCRC::LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenize
 }
 
 
-void CSphDictCRC::SweepWordformContainers ( const char * szFile, DWORD uCRC32 )
+void CSphDictCRCTraits::SweepWordformContainers ( const char * szFile, DWORD uCRC32 )
 {
 	for ( int i = 0; i < m_dWordformContainers.GetLength (); )
 	{
-		WordformContainer * WC = m_dWordformContainers[i];
+		WordformContainer_t * WC = m_dWordformContainers[i];
 		if ( WC->m_iRefCount==0 && !WC->IsEqual ( szFile, uCRC32 ) )
 		{
 			delete WC;
@@ -14965,18 +15002,14 @@ void CSphDictCRC::SweepWordformContainers ( const char * szFile, DWORD uCRC32 )
 	}
 }
 
-bool CSphDictCRC::IsStopWord ( const BYTE * pWord ) const
-{
-	return FilterStopword ( sphCRCWord<SphWordID_t> ( pWord ) )==0;
-}
 
-CSphDictCRC::WordformContainer * CSphDictCRC::GetWordformContainer ( const char * szFile, DWORD uCRC32, const ISphTokenizer * pTokenizer )
+WordformContainer_t * CSphDictCRCTraits::GetWordformContainer ( const char * szFile, DWORD uCRC32, const ISphTokenizer * pTokenizer )
 {
 	ARRAY_FOREACH ( i, m_dWordformContainers )
 		if ( m_dWordformContainers[i]->IsEqual ( szFile, uCRC32 ) )
 			return m_dWordformContainers[i];
 
-	WordformContainer * pContainer = LoadWordformContainer ( szFile, uCRC32, pTokenizer );
+	WordformContainer_t * pContainer = LoadWordformContainer ( szFile, uCRC32, pTokenizer );
 	if ( pContainer )
 		m_dWordformContainers.Add ( pContainer );
 
@@ -14984,7 +15017,7 @@ CSphDictCRC::WordformContainer * CSphDictCRC::GetWordformContainer ( const char 
 }
 
 
-CSphDictCRC::WordformContainer * CSphDictCRC::LoadWordformContainer ( const char * szFile, DWORD uCRC32, const ISphTokenizer * pTokenizer )
+WordformContainer_t * CSphDictCRCTraits::LoadWordformContainer ( const char * szFile, DWORD uCRC32, const ISphTokenizer * pTokenizer )
 {
 	// stat it; we'll store stats for later checks
 	struct_stat FileStat;
@@ -14992,7 +15025,7 @@ CSphDictCRC::WordformContainer * CSphDictCRC::LoadWordformContainer ( const char
 		return NULL;
 
 	// allocate it
-	WordformContainer * pContainer = new WordformContainer;
+	WordformContainer_t * pContainer = new WordformContainer_t;
 	if ( !pContainer )
 		return NULL;
 	pContainer->m_sFilename = szFile;
@@ -15086,7 +15119,7 @@ CSphDictCRC::WordformContainer * CSphDictCRC::LoadWordformContainer ( const char
 }
 
 
-bool CSphDictCRC::LoadWordforms ( const char * szFile, ISphTokenizer * pTokenizer )
+bool CSphDictCRCTraits::LoadWordforms ( const char * szFile, ISphTokenizer * pTokenizer )
 {
 	GetFileStats ( szFile, m_tWFFileInfo );
 
@@ -15101,7 +15134,7 @@ bool CSphDictCRC::LoadWordforms ( const char * szFile, ISphTokenizer * pTokenize
 }
 
 
-bool CSphDictCRC::SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError )
+bool CSphDictCRCTraits::SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError )
 {
 	m_dMorph.Reset ();
 
@@ -15133,7 +15166,7 @@ bool CSphDictCRC::SetMorphology ( const char * szMorph, bool bUseUTF8, CSphStrin
 }
 
 /// common id-based stemmer
-bool CSphDictCRC::StemById ( BYTE * pWord, int iStemmer )
+bool CSphDictCRCTraits::StemById ( BYTE * pWord, int iStemmer )
 {
 	char szBuf [4*SPH_MAX_WORD_LEN];
 	strncpy ( szBuf, (char *)pWord, sizeof(szBuf) );
@@ -15196,7 +15229,11 @@ CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, ISphToke
 {
 	assert ( pTokenizer );
 
-	CSphDict * pDict = new CSphDictCRC ();
+	CSphDict * pDict = NULL;
+	if ( tSettings.m_bCrc32 )
+		pDict = new CSphDictCRC<true> ();
+	else
+		pDict = new CSphDictCRC<false> ();
 	if ( !pDict )
 		return NULL;
 
@@ -15214,7 +15251,7 @@ CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, ISphToke
 
 void sphShutdownWordforms ()
 {
-	CSphDictCRC::SweepWordformContainers ( NULL, 0 );
+	CSphDictCRCTraits::SweepWordformContainers ( NULL, 0 );
 }
 
 /////////////////////////////////////////////////////////////////////////////

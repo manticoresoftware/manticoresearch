@@ -534,9 +534,11 @@ struct CSphDictSettings
 	CSphString		m_sStopwords;
 	CSphString		m_sWordforms;
 	int				m_iMinStemmingLen;
+	bool			m_bCrc32;
 
 	CSphDictSettings ()
 		: m_iMinStemmingLen ( 1 )
+		, m_bCrc32 ( !USE_64BIT )
 	{}
 
 	bool HasMorphology () const

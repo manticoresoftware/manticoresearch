@@ -508,7 +508,7 @@ struct RtWordWriter_t
 	CSphTightVector<BYTE> *				m_pWords;
 	CSphVector<RtWordCheckpoint_t> *	m_pCheckpoints;
 	SphWordID_t							m_uLastWordID;
-	SphDocID_t							m_uLastDoc;
+	DWORD								m_uLastDoc;
 	int									m_iWords;
 
 	explicit RtWordWriter_t ( RtSegment_t * pSeg )
@@ -539,7 +539,7 @@ struct RtWordWriter_t
 		ZipWordid ( tWords, tWord.m_uWordID - m_uLastWordID );
 		ZipDword ( tWords, tWord.m_uDocs );
 		ZipDword ( tWords, tWord.m_uHits );
-		ZipDocid ( tWords, tWord.m_uDoc - m_uLastDoc );
+		ZipDword ( tWords, tWord.m_uDoc - m_uLastDoc );
 		m_uLastWordID = tWord.m_uWordID;
 		m_uLastDoc = tWord.m_uDoc;
 	}
@@ -576,11 +576,11 @@ struct RtWordReader_t
 
 		const BYTE * pIn = m_pCur;
 		SphWordID_t uDeltaID;
-		SphDocID_t uDeltaDoc;
+		DWORD uDeltaDoc;
 		pIn = UnzipWordid ( &uDeltaID, pIn );
 		pIn = UnzipDword ( &m_tWord.m_uDocs, pIn );
 		pIn = UnzipDword ( &m_tWord.m_uHits, pIn );
-		pIn = UnzipDocid ( &uDeltaDoc, pIn );
+		pIn = UnzipDword ( &uDeltaDoc, pIn );
 		m_pCur = pIn;
 
 		m_tWord.m_uWordID += uDeltaID;

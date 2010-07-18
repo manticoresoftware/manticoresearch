@@ -1217,7 +1217,7 @@ public:
 	virtual void				Dealloc ();
 
 	virtual bool				Preread ();
-	template<typename T> bool	PrereadSharedBuffer ( CSphSharedBuffer<T> & pBuffer, const char * sExt, size_t uExpected=0 );
+	template<typename T> bool	PrereadSharedBuffer ( CSphSharedBuffer<T> & pBuffer, const char * sExt, size_t uExpected=0, DWORD uOffset=0 );
 
 	virtual void				SetBase ( const char * sNewBase );
 	virtual bool				Rename ( const char * sNewBase );
@@ -1328,7 +1328,8 @@ private:
 	int							m_iIndexTag;			///< my ids for MVA updates pool
 	static int					m_iIndexTagSeq;			///< static ids sequence
 
-	bool						m_bIsEmpty;				///< is index not able to search - replacement for check m_tStats.m_iTotalDocuments
+	bool						m_bId32to64;			///< did we convert id32 to id64 on startup
+	bool						m_bIsEmpty;				///< do we have actually indexed documents (m_iTotalDocuments is just fetched documents, not indexed!)
 
 private:
 	CSphString					GetIndexFileName ( const char * sExt ) const;
@@ -6513,7 +6514,7 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 
 	m_iIndexTag = -1;
 	m_iMergeInfinum = 0;
-
+	m_bId32to64 = false;
 	m_bIsEmpty = true;
 }
 
@@ -7114,6 +7115,12 @@ bool CSphIndex_VLN::SaveAttributes ()
 	if ( m_uAttrsStatus & ATTRS_MVA_UPDATED )
 	{
 		m_sLastError.SetSprintf ( "MVA updates are RAM-based only, saving is not (yet) possible" );
+		return false;
+	}
+
+	if ( m_bId32to64 )
+	{
+		m_sLastError.SetSprintf ( "id32 index loaded by id64 binary; saving is not (yet) possible" );
 		return false;
 	}
 
@@ -12075,10 +12082,15 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 
 	if ( m_bUse64!=USE_64BIT )
 	{
+#if USE_64BIT
+		// TODO: may be do this param conditional and push it into the config?
+		m_bId32to64 = true;
+#else
 		m_sLastError.SetSprintf ( "'%s' is id%d, and this binary is id%d",
 			GetIndexFileName("sph").cstr(),
 			m_bUse64 ? 64 : 32, USE_64BIT ? 64 : 32 );
 		return false;
+#endif
 	}
 
 	// verify that data files are readable
@@ -12166,18 +12178,31 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 
 		// intentionally losing data; we don't support more than 4B documents per instance yet
 		m_uDocinfo = (DWORD)( iRealDocinfoSize / iStride );
-		if ( iRealDocinfoSize!=m_uDocinfo*iStride )
+		if ( iRealDocinfoSize!=m_uDocinfo*iStride && !m_bId32to64 )
 		{
 			m_sLastError.SetSprintf ( "docinfo size check mismatch (4B document limit hit?)" );
 			return false;
 		}
+
+		if ( m_bId32to64 )
+		{
+			// check also the case of id32 here, and correct m_uDocinfo for it
+			int iStride2 = iStride-1; // id64 - 1 DWORD = id32
+			m_uDocinfo = (DWORD)( iRealDocinfoSize / iStride2 );
+			if ( iRealDocinfoSize!=m_uDocinfo*iStride2 )
+			{
+				m_sLastError.SetSprintf ( "docinfo size check mismatch (4B document limit hit?)" );
+				return false;
+			}
+		}
+
 
 		if ( m_uVersion < 20 )
 		{
 			m_uDocinfoIndex = ( m_uDocinfo+DOCINFO_INDEX_FREQ-1 ) / DOCINFO_INDEX_FREQ;
 
 			// prealloc docinfo
-			if ( !m_pDocinfo.Alloc ( iDocinfoSize + 2*(1+m_uDocinfoIndex)*iStride, m_sLastError, sWarning ) )
+			if ( !m_pDocinfo.Alloc ( iDocinfoSize + 2*(1+m_uDocinfoIndex)*iStride + ( m_bId32to64 ? m_uDocinfo : 0 ), m_sLastError, sWarning ) )
 				return false;
 
 			m_pDocinfoIndex = const_cast < DWORD * > ( &m_pDocinfo [ iDocinfoSize ] );
@@ -12189,11 +12214,11 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 				return false;
 			}
 
-			// prealloc docinfo
-			if ( !m_pDocinfo.Alloc ( iDocinfoSize, m_sLastError, sWarning ) )
-				return false;
-
 			m_uDocinfoIndex = ( ( iDocinfoSize - iRealDocinfoSize ) / iStride / 2 ) - 1;
+
+			// prealloc docinfo
+			if ( !m_pDocinfo.Alloc ( iDocinfoSize + ( m_bId32to64 ? ( 2 + m_uDocinfo + 2*m_uDocinfoIndex ) : 0 ), m_sLastError, sWarning ) )
+				return false;
 
 #if PARANOID
 			DWORD uDocinfoIndex = ( m_uDocinfo+DOCINFO_INDEX_FREQ-1 ) / DOCINFO_INDEX_FREQ;
@@ -12340,7 +12365,7 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 }
 
 
-template < typename T > bool CSphIndex_VLN::PrereadSharedBuffer ( CSphSharedBuffer<T> & pBuffer, const char * sExt, size_t uExpected )
+template < typename T > bool CSphIndex_VLN::PrereadSharedBuffer ( CSphSharedBuffer<T> & pBuffer, const char * sExt, size_t uExpected, DWORD uOffset )
 {
 	if ( !pBuffer.GetLength() )
 		return true;
@@ -12351,8 +12376,8 @@ template < typename T > bool CSphIndex_VLN::PrereadSharedBuffer ( CSphSharedBuff
 
 	fdBuf.SetProgressCallback ( m_pProgress, &m_tProgress );
 	if ( uExpected==0 )
-		uExpected = size_t ( pBuffer.GetLength() );
-	return fdBuf.Read ( pBuffer.GetWritePtr(), uExpected, m_sLastError );
+		uExpected = size_t ( pBuffer.GetLength() ) - uOffset*sizeof(T);
+	return fdBuf.Read ( pBuffer.GetWritePtr() + uOffset, uExpected, m_sLastError );
 }
 
 
@@ -12384,7 +12409,7 @@ bool CSphIndex_VLN::Preread ()
 
 	sphLogDebug ( "Prereading .spa" );
 	if ( !PrereadSharedBuffer ( m_pDocinfo, "spa",
-		( m_uVersion<20 )? m_uDocinfo * ( DOCINFO_IDSIZE + m_tSchema.GetRowSize() ) * sizeof(DWORD) : 0 ) )
+		( m_uVersion<20 )? m_uDocinfo * ( DOCINFO_IDSIZE + m_tSchema.GetRowSize() ) * sizeof(DWORD) : 0 , m_bId32to64 ? ( 2 + m_uDocinfo + 2 * m_uDocinfoIndex ) : 0 ) )
 		return false;
 
 	sphLogDebug ( "Prereading .spm" );
@@ -12419,6 +12444,25 @@ bool CSphIndex_VLN::Preread ()
 	//////////////////////
 	// precalc everything
 	//////////////////////
+
+	// convert id32 to id64
+	if ( m_pDocinfo.GetLength() && m_bId32to64 )
+	{
+		DWORD *pTarget = m_pDocinfo.GetWritePtr();
+		DWORD *pSource = pTarget + 2 + m_uDocinfo + 2 * m_uDocinfoIndex;
+		int iStride = m_tSchema.GetRowSize();
+		SphDocID_t uDoc;
+		DWORD uLimit = m_uDocinfo + ( ( m_uVersion < 20 ) ? 0 : 2 + 2 * m_uDocinfoIndex );
+		for ( DWORD u=0; u<uLimit; u++ )
+		{
+			uDoc = *pSource; ///< wide id32 to id64
+			DOCINFOSETID ( pTarget, uDoc );
+			memcpy ( pTarget + DOCINFO_IDSIZE, pSource + 1, iStride * sizeof(DWORD) );
+			pSource += iStride+1;
+			pTarget += iStride+DOCINFO_IDSIZE;
+		}
+		sphWarning ( "id32 index loaded by id64 binary; attributes converted" );
+	}
 
 	// build attributes hash
 	if ( m_pDocinfo.GetLength() && m_pDocinfoHash.GetLength() )

@@ -9816,8 +9816,12 @@ void CheckFlush ()
 		const ServedIndex_t & tServed = it.Get();
 		tServed.ReadLock();
 		if ( tServed.m_bEnabled && tServed.m_iUpdateTag > g_pFlush->m_iFlushTag )
-			if ( tServed.m_pIndex->SaveAttributes () ) // FIXME? report errors somehow?
+		{
+			if ( tServed.m_pIndex->SaveAttributes () )
 				dSaved.Add ( it.GetKey() );
+			else
+				sphWarning ( "index %s: attrs save failed: %s", it.GetKey().cstr(), tServed.m_pIndex->GetLastError().cstr() );
+		}
 		tServed.Unlock();
 	}
 

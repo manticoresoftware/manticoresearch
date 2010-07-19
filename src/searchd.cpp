@@ -11236,7 +11236,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	// startup
 	///////////
 
-	sphRTInit ( hSearchd );
+	if ( g_eWorkers==MPM_THREADS )
+		sphRTInit ( hSearchd );
 
 	// handle my signals
 	SetSignalHandlers ();
@@ -11446,7 +11447,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		}
 	}
 
-	sphReplayBinlog ( dRtIndices );
+	if ( g_eWorkers==MPM_THREADS )
+		sphReplayBinlog ( dRtIndices );
 
 	if ( !g_bOptNoDetach )
 		g_bLogStdout = false;

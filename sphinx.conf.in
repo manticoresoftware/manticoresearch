@@ -819,10 +819,11 @@ searchd
 	# dist_threads		= 4
 
 
-	# binlog files path and name prefix
-	# optional, default is empty string (disable binlogging)
+	# binlog files path; use empty string to disable binlog
+	# optional, default is build-time configured data directory
 	#
-	# binlog_path		= @CONFDIR@/data/binlog
+	# binlog_path		= # disable logging
+	# binlog_path		= @CONFDIR@/data # binlog.001 etc will be created there
 
 
 	# binlog flush/sync mode

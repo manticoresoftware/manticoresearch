@@ -8460,7 +8460,8 @@ subtree_hits_cache = 16M
 <sect2 id="conf-workers"><title>workers</title>
 <para>
 Multi-processing mode (MPM).
-Optional; allowed values are none, fork, prefork, and threads; default is fork.
+Optional; allowed values are none, fork, prefork, and threads.
+Default is fork on Unix based systems, and threads on Windows.
 Introduced in version 1.10-beta.
 </para>
 <para>
@@ -8566,8 +8567,8 @@ dist_threads = 4
 
 <sect2 id="conf-binlog-path"><title>binlog_path</title>
 <para>
-Binary log (aka transaction log) files path and name prefix.
-Optional, default is empty string, which means to disable logging.
+Binary log (aka transaction log) files path.
+Optional, default is build-time configured data directory.
 Introduced in version 1.10-beta.
 </para>
 <para>
@@ -8579,14 +8580,18 @@ after an unclean shutdown, recovering the logged changes.
 </para>
 <para>
 <option>binlog_path</option> directive specifies the binary log
-files location.  It should contain both the path and a file name
-but not an extension nor a trailing dot; <option>searchd</option>
-will append a current log number as an extension (.001, .002, .003,
-and so on) to generate a file name.
+files location.  It should contain just the path; <option>searchd</option>
+will create and unlink multiple binlog.* files in that path as necessary
+(binlog data, metadata, and lock files, etc).
+</para>
+<para>
+Empty value disables binary logging. That improves performance,
+but puts RT index data at risk.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
-binlog_path = /var/data/binlog # /var/data/binlog.001 etc will be created
+binlog_path = # disable logging
+binlog_path = /var/data # /var/data/binlog.001 etc will be created
 </programlisting>
 </sect2>
 

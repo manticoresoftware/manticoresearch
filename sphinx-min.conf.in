@@ -4,50 +4,65 @@
 
 source src1
 {
-	type					= mysql
+	type			= mysql
 
-	sql_host				= localhost
-	sql_user				= test
-	sql_pass				=
-	sql_db					= test
-	sql_port				= 3306	# optional, default is 3306
+	sql_host		= localhost
+	sql_user		= test
+	sql_pass		=
+	sql_db			= test
+	sql_port		= 3306	# optional, default is 3306
 
-	sql_query				= \
+	sql_query		= \
 		SELECT id, group_id, UNIX_TIMESTAMP(date_added) AS date_added, title, content \
 		FROM documents
 
-	sql_attr_uint			= group_id
-	sql_attr_timestamp		= date_added
+	sql_attr_uint		= group_id
+	sql_attr_timestamp	= date_added
 
-	sql_query_info			= SELECT * FROM documents WHERE id=$id
+	sql_query_info		= SELECT * FROM documents WHERE id=$id
 }
 
 
 index test1
 {
-	source					= src1
-	path					= @CONFDIR@/data/test1
-	docinfo					= extern
-	charset_type			= sbcs
+	source			= src1
+	path			= @CONFDIR@/data/test1
+	docinfo			= extern
+	charset_type		= sbcs
+}
+
+
+index testrt
+{
+	type			= rt
+	rt_mem_limit		= 32M
+
+	path			= @CONFDIR@/data/testrt
+	charset_type		= utf-8
+
+	rt_field		= title
+	rt_field		= content
+	rt_attr_uint		= gid
 }
 
 
 indexer
 {
-	mem_limit				= 32M
+	mem_limit		= 32M
 }
 
 
 searchd
 {
-	port					= 9312
-	log						= @CONFDIR@/log/searchd.log
-	query_log				= @CONFDIR@/log/query.log
-	read_timeout			= 5
-	max_children			= 30
-	pid_file				= @CONFDIR@/log/searchd.pid
-	max_matches				= 1000
-	seamless_rotate			= 1
-	preopen_indexes			= 0
-	unlink_old				= 1
+	listen			= 9312
+	listen			= 9306:mysql41
+	log			= @CONFDIR@/log/searchd.log
+	query_log		= @CONFDIR@/log/query.log
+	read_timeout		= 5
+	max_children		= 30
+	pid_file		= @CONFDIR@/log/searchd.pid
+	max_matches		= 1000
+	seamless_rotate		= 1
+	preopen_indexes		= 0
+	unlink_old		= 1
 }

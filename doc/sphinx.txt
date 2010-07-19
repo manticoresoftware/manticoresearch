@@ -4153,10 +4153,17 @@ to star-syntax available in queries. $opts is a hash which contains
 additional optional highlighting parameters:
 
 "before_match":
-   A string to insert before a keyword match. Default is "<b>".
+   A string to insert before a keyword match. Starting with version
+   1.10-beta, a %PASSAGE_ID% macro can be used in this string. The macro is
+   replaced with an incrementing passage number within a current snippet.
+   Numbering starts at 1 by default but can be overridden with
+   "start_passage_id" option. In a multi-document call, %PASSAGE_ID% would
+   restart at every given document. Default is "<b>".
 
 "after_match":
-   A string to insert after a keyword match. Default is "<b>".
+   A string to insert after a keyword match. Starting with version
+   1.10-beta, a %PASSAGE_ID% macro can be used in this string. Default is
+   "<b>".
 
 "chunk_separator":
    A string to insert between snippet chunks (passages). Default is
@@ -4193,6 +4200,41 @@ additional optional highlighting parameters:
 "force_all_words":
    Added in version 1.10-beta. Ignores the snippet length limit until it
    includes all the keywords. Boolean, default is false.
+
+"limit_passages":
+   Added in version 1.10-beta. Limits the maximum number of passages that
+   can be included into the snippet. Integer, default is 0 (no limit).
+
+"limit_words":
+   Added in version 1.10-beta. Limits the maximum number of keywords that
+   can be included into the snippet. Integer, default is 0 (no limit).
+
+"start_passage_id":
+   Added in version 1.10-beta. Specifies the starting value of %PASSAGE_ID%
+   macro (that gets detected and expanded in before_match, after_match
+   strings). Integer, default is 1.
+
+"load_files":
+   Added in version 1.10-beta. Whether to handle $docs as data to extract
+   snippets from (default behavior), or to treat it as file names, and load
+   data from specified files on the server side. Boolean, default is false.
+
+"html_strip_mode":
+   Added in version 1.10-beta. HTML stripping mode setting. Defaults to
+   "index", which means that index settings will be used. The other values
+   are "none" and "strip", that forcibly skip or apply stripping
+   irregardless of index settings; and "retain", that retains HTML markup
+   and protects it from highlighting. The "retain" mode can only be used
+   when highlighting full documents and thus requires that no snippet size
+   limits are set. String, allowed values are "none", "strip", "index", and
+   "retain".
+
+"allow_empty":
+   Added in version 1.10-beta. Allows empty string to be returned as
+   highlighting result when a snippet could not be generated (no keywords
+   match, or no passages fit the limit). By default, the beginning of
+   original text would be returned instead of an empty string. Boolean,
+   default is false.
 
 Returns false on failure. Returns a plain array of strings with excerpts
 (snippets) on success.
@@ -7900,7 +7942,10 @@ A.1. Version 1.10-beta, 19 jul 2010
    * added "blended" characters indexing support (blend_chars directive)
    * added joined/payload field indexing (sql_joined_field directive)
    * added FlushAttributes() API call
-   * added query_mode, force_all_words options to BuildExcerpts() API call
+   * added query_mode, force_all_words, limit_passages, limit_words,
+     start_passage_id, load_files, html_strip_mode, allow_empty options,
+     and %PASSAGE_ID% macro in before_match, after_match options to
+     BuildExcerpts() API call
    * added @groupby/@count/@distinct columns support to SELECT (but not to
      expressions)
    * added query-time keyword expansion support (expand_keywords directive,

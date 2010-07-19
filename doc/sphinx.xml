@@ -4204,11 +4204,16 @@ Starting with version 0.9.9-rc1, keywords can contain wildcards, that work simil
 <variablelist>
 <varlistentry>
 	<term>"before_match":</term>
-	<listitem>A string to insert before a keyword match. Default is "&lt;b&gt;".</listitem>
+	<listitem>A string to insert before a keyword match. Starting with version 1.10-beta,
+	a %PASSAGE_ID% macro can be used in this string. The macro is replaced with an incrementing
+	passage number within a current snippet. Numbering starts at 1 by default but can be
+	overridden with "start_passage_id" option. In a multi-document call, %PASSAGE_ID% would
+	restart at every given document. Default is "&lt;b&gt;".</listitem>
 </varlistentry>
 <varlistentry>
 	<term>"after_match":</term>
-	<listitem>A string to insert after a keyword match. Default is "&lt;b&gt;".</listitem>
+	<listitem>A string to insert after a keyword match. Starting with version 1.10-beta,
+	a %PASSAGE_ID% macro can be used in this string. Default is "&lt;b&gt;".</listitem>
 </varlistentry>
 <varlistentry>
 	<term>"chunk_separator":</term>
@@ -4250,6 +4255,53 @@ Starting with version 0.9.9-rc1, keywords can contain wildcards, that work simil
 	<term>"force_all_words":</term>
 	<listitem>Added in version 1.10-beta. Ignores the snippet length limit until it
 	includes all the keywords. Boolean, default is false.
+	</listitem>
+</varlistentry>
+<varlistentry>
+	<term>"limit_passages":</term>
+	<listitem>Added in version 1.10-beta. Limits the maximum number of passages
+	that can be included into the snippet. Integer, default is 0 (no limit).
+	</listitem>
+</varlistentry>
+<varlistentry>
+	<term>"limit_words":</term>
+	<listitem>Added in version 1.10-beta. Limits the maximum number of keywords
+	that can be included into the snippet. Integer, default is 0 (no limit).
+	</listitem>
+</varlistentry>
+<varlistentry>
+	<term>"start_passage_id":</term>
+	<listitem>Added in version 1.10-beta. Specifies the starting value of
+	%PASSAGE_ID% macro (that gets detected and expanded in <option>before_match</option>,
+	<option>after_match</option> strings). Integer, default is 1.
+	</listitem>
+</varlistentry>
+<varlistentry>
+	<term>"load_files":</term>
+	<listitem>Added in version 1.10-beta. Whether to handle $docs as data
+	to extract snippets from (default behavior), or to treat it as file names,
+	and load data from specified files on the server side. Boolean, default is false.
+	</listitem>
+</varlistentry>
+<varlistentry>
+	<term>"html_strip_mode":</term>
+	<listitem>Added in version 1.10-beta. HTML stripping mode setting.
+	Defaults to "index", which means that index settings will be used.
+	The other values are "none" and "strip", that forcibly skip or apply
+	stripping irregardless of index settings; and "retain", that retains
+	HTML markup and protects it from highlighting. The "retain" mode can
+	only be used when highlighting full documents and thus requires that
+	no snippet size limits are set. String, allowed values are "none",
+	"strip", "index", and "retain".
+	</listitem>
+</varlistentry>
+<varlistentry>
+	<term>"allow_empty":</term>
+	<listitem>Added in version 1.10-beta. Allows empty string to be
+	returned as highlighting result when a snippet could not be generated
+	(no keywords match, or no passages fit the limit). By default,
+	the beginning of original text would be returned instead of an empty
+	string. Boolean, default is false.
 	</listitem>
 </varlistentry>
 </variablelist>
@@ -8646,7 +8698,9 @@ binlog_max_log_size = 16M
 <listitem>added "blended" characters indexing support (<link linkend="conf-blend-chars">blend_chars</link> directive)</listitem>
 <listitem>added joined/payload field indexing (<link linkend="conf-sql-joined-field">sql_joined_field</link> directive)</listitem>
 <listitem>added <link linkend="api-func-flushattributes">FlushAttributes() API call</link></listitem>
-<listitem>added query_mode, force_all_words options to <link linkend="api-func-buildexcerpts">BuildExcerpts()</link> API call</listitem>
+<listitem>added query_mode, force_all_words, limit_passages, limit_words, start_passage_id, load_files, html_strip_mode,
+	allow_empty options, and %PASSAGE_ID% macro in before_match, after_match options
+	to <link linkend="api-func-buildexcerpts">BuildExcerpts()</link> API call</listitem>
 <listitem>added @groupby/@count/@distinct columns support to SELECT (but not to expressions)</listitem>
 <listitem>added query-time keyword expansion support (<link linkend="conf-expand-keywords">expand_keywords</link> directive,
 	<link linkend="api-func-setrankingmode">SPH_RANK_SPH04</link> ranker)</listitem>

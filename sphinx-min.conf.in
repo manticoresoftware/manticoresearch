@@ -65,4 +65,5 @@ searchd
 	seamless_rotate		= 1
 	preopen_indexes		= 0
 	unlink_old		= 1
+	workers			= threads # for RT to work
 }

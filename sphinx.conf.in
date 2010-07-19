@@ -14,25 +14,25 @@ source src1
 {
 	# data source type. mandatory, no default value
 	# known types are mysql, pgsql, mssql, xmlpipe, xmlpipe2, odbc
-	type					= mysql
+	type			= mysql
 
 	#####################################################################
 	## SQL settings (for 'mysql' and 'pgsql' types)
 	#####################################################################
 
 	# some straightforward parameters for SQL source types
-	sql_host				= localhost
-	sql_user				= test
-	sql_pass				=
-	sql_db					= test
-	sql_port				= 3306	# optional, default is 3306
+	sql_host		= localhost
+	sql_user		= test
+	sql_pass		=
+	sql_db			= test
+	sql_port		= 3306	# optional, default is 3306
 
 	# UNIX socket name
 	# optional, default is empty (reuse client library defaults)
 	# usually '/var/lib/mysql/mysql.sock' on Linux
 	# usually '/tmp/mysql.sock' on FreeBSD
 	#
-	# sql_sock				= /tmp/mysql.sock
+	# sql_sock		= /tmp/mysql.sock
 
 
 	# MySQL specific client connection flags
@@ -51,32 +51,32 @@ source src1
 	# MUST be in sync with charset_type index-level setting
 	# optional, default is 0
 	#
-	# mssql_winauth			= 1 # use currently logged on user credentials
+	# mssql_winauth		= 1 # use currently logged on user credentials
 
 
 	# MS SQL specific Unicode indexing flag
 	# optional, default is 0 (request SBCS data)
 	#
-	# mssql_unicode			= 1 # request Unicode data from server
+	# mssql_unicode		= 1 # request Unicode data from server
 
 
 	# ODBC specific DSN (data source name)
 	# mandatory for odbc source type, no default value
 	#
-	# odbc_dsn				= DBQ=C:\data;DefaultDir=C:\data;Driver={Microsoft Text Driver (*.txt; *.csv)};
-	# sql_query				= SELECT id, data FROM documents.csv
+	# odbc_dsn		= DBQ=C:\data;DefaultDir=C:\data;Driver={Microsoft Text Driver (*.txt; *.csv)};
+	# sql_query		= SELECT id, data FROM documents.csv
 
 
 	# pre-query, executed before the main fetch query
 	# multi-value, optional, default is empty list of queries
 	#
-	# sql_query_pre			= SET NAMES utf8
-	# sql_query_pre			= SET SESSION query_cache_type=OFF
+	# sql_query_pre		= SET NAMES utf8
+	# sql_query_pre		= SET SESSION query_cache_type=OFF
 
 
 	# main document fetch query
 	# mandatory, integer document ID field MUST be the first selected column
-	sql_query				= \
+	sql_query		= \
 		SELECT id, group_id, UNIX_TIMESTAMP(date_added) AS date_added, title, content \
 		FROM documents
 
@@ -92,8 +92,8 @@ source src1
 	# REQUIRES that query results are in ascending document ID order!
 	# multi-value, optional, default is empty list of queries
 	#
-	# sql_joined_field			= tags from query; SELECT docid, CONCAT('tag',tagid) FROM tags ORDER BY docid ASC
-	# sql_joined_field			= wtags from payload-query; SELECT docid, tag, tagweight FROM tags ORDER BY docid ASC
+	# sql_joined_field	= tags from query; SELECT docid, CONCAT('tag',tagid) FROM tags ORDER BY docid ASC
+	# sql_joined_field	= wtags from payload-query; SELECT docid, tag, tagweight FROM tags ORDER BY docid ASC
 
 
 	# file based field declaration
@@ -104,7 +104,7 @@ source src1
 	# max file size is limited by max_file_field_buffer indexer setting
 	# file IO errors are non-fatal and get reported as warnings
 	#
-	# sql_file_field			= content_file_path
+	# sql_file_field		= content_file_path
 
 
 	# range query setup, query that must return min and max ID values
@@ -113,7 +113,7 @@ source src1
 	# sql_query will need to reference $start and $end boundaries
 	# if using ranged query:
 	#
-	# sql_query				= \
+	# sql_query		= \
 	#	SELECT doc.id, doc.id AS group, doc.title, doc.data \
 	#	FROM documents doc \
 	#	WHERE id>=$start AND id<=$end
@@ -131,22 +131,22 @@ source src1
 	# multi-value (an arbitrary number of attributes is allowed), optional
 	# optional bit size can be specified, default is 32
 	#
-	# sql_attr_uint			= author_id
-	# sql_attr_uint			= forum_id:9 # 9 bits for forum_id
-	sql_attr_uint			= group_id
+	# sql_attr_uint		= author_id
+	# sql_attr_uint		= forum_id:9 # 9 bits for forum_id
+	sql_attr_uint		= group_id
 
 	# boolean attribute declaration
 	# multi-value (an arbitrary number of attributes is allowed), optional
 	# equivalent to sql_attr_uint with 1-bit size
 	#
-	# sql_attr_bool			= is_deleted
+	# sql_attr_bool		= is_deleted
 
 
 	# bigint attribute declaration
 	# multi-value (an arbitrary number of attributes is allowed), optional
 	# declares a signed (unlike uint!) 64-bit attribute
 	#
-	# sql_attr_bigint			= my_bigint_id
+	# sql_attr_bigint		= my_bigint_id
 
 
 	# UNIX timestamp attribute declaration
@@ -155,7 +155,7 @@ source src1
 	#
 	# sql_attr_timestamp	= posted_ts
 	# sql_attr_timestamp	= last_edited_ts
-	sql_attr_timestamp		= date_added
+	sql_attr_timestamp	= date_added
 
 	# string ordinal attribute declaration
 	# multi-value (an arbitrary number of attributes is allowed), optional
@@ -169,8 +169,8 @@ source src1
 	# multi-value (an arbitrary number of attributes is allowed), optional
 	# values are stored in single precision, 32-bit IEEE 754 format
 	#
-	# sql_attr_float = lat_radians
-	# sql_attr_float = long_radians
+	# sql_attr_float		= lat_radians
+	# sql_attr_float		= long_radians
 
 
 	# multi-valued attribute (MVA) attribute declaration
@@ -183,8 +183,8 @@ source src1
 	# QUERY is SQL query used to fetch all ( docid, attrvalue ) pairs
 	# RANGE-QUERY is SQL query used to fetch min and max ID values, similar to 'sql_query_range'
 	#
-	# sql_attr_multi	= uint tag from query; SELECT id, tag FROM tags
-	# sql_attr_multi	= uint tag from ranged-query; \
+	# sql_attr_multi		= uint tag from query; SELECT id, tag FROM tags
+	# sql_attr_multi		= uint tag from ranged-query; \
 	#	SELECT id, tag FROM tags WHERE id>=$start AND id<=$end; \
 	#	SELECT MIN(id), MAX(id) FROM tags
 
@@ -193,7 +193,7 @@ source src1
 	# multi-value (an arbitrary number of these is allowed), optional
 	# lets you store and retrieve strings
 	#
-	# sql_attr_string			= stitle
+	# sql_attr_string		= stitle
 
 
 	# wordcount attribute declaration
@@ -206,7 +206,7 @@ source src1
 	# combined field plus attribute declaration (from a single column)
 	# stores column as an attribute, but also indexes it as a full-text field
 	#
-	# sql_field_string			= author
+	# sql_field_string	= author
 	# sql_field_str2wordcount	= title
 
 	
@@ -220,7 +220,7 @@ source src1
 	# optional, default is empty
 	# $maxid expands to max document ID actually fetched from DB
 	#
-	# sql_query_post_index = REPLACE INTO counters ( id, val ) \
+	# sql_query_post_index	= REPLACE INTO counters ( id, val ) \
 	#	VALUES ( 'max_indexed_id', $maxid )
 
 
@@ -244,41 +244,33 @@ source src1
 	# columns to unpack on indexer side when indexing
 	# multi-value, optional, default is empty list
 	#
-	# unpack_zlib = zlib_column
-	# unpack_mysqlcompress = compressed_column
-	# unpack_mysqlcompress = compressed_column_2
+	# unpack_zlib		= zlib_column
+	# unpack_mysqlcompress	= compressed_column
+	# unpack_mysqlcompress	= compressed_column_2
 
 
 	# maximum unpacked length allowed in MySQL COMPRESS() unpacker
 	# optional, default is 16M
 	#
-	# unpack_mysqlcompress_maxsize = 16M
+	# unpack_mysqlcompress_maxsize	= 16M
 
-
-	#####################################################################
-	## xmlpipe settings
-	#####################################################################
-
-	# type				= xmlpipe
-
-	# shell command to invoke xmlpipe stream producer
-	# mandatory
-	#
-	# xmlpipe_command	= cat @CONFDIR@/test.xml
 
 	#####################################################################
 	## xmlpipe2 settings
 	#####################################################################
 
-	# type				= xmlpipe2
-	# xmlpipe_command	= cat @CONFDIR@/test2.xml
+	# type			= xmlpipe
 
+	# shell command to invoke xmlpipe stream producer
+	# mandatory
+	#
+	# xmlpipe_command		= cat @CONFDIR@/test.xml
 
 	# xmlpipe2 field declaration
 	# multi-value, optional, default is empty
 	#
-	# xmlpipe_field				= subject
-	# xmlpipe_field				= content
+	# xmlpipe_field		= subject
+	# xmlpipe_field		= content
 
 
 	# xmlpipe2 attribute declaration
@@ -286,14 +278,14 @@ source src1
 	# all xmlpipe_attr_XXX options are fully similar to sql_attr_XXX
 	#
 	# xmlpipe_attr_timestamp	= published
-	# xmlpipe_attr_uint			= author_id
+	# xmlpipe_attr_uint	= author_id
 
 
 	# perform UTF-8 validation, and filter out incorrect codes
 	# avoids XML parser choking on non-UTF-8 documents
 	# optional, default is 0
 	#
-	# xmlpipe_fixup_utf8		= 1
+	# xmlpipe_fixup_utf8	= 1
 }
 
 
@@ -303,7 +295,7 @@ source src1
 # and may then be overridden in this source definition
 source src1throttled : src1
 {
-	sql_ranged_throttle			= 100
+	sql_ranged_throttle	= 100
 }
 
 #############################################################################
@@ -350,9 +342,9 @@ index test1
 	# libstemmer are 'libstemmer_XXX', where XXX is algorithm code
 	# (see libstemmer_c/libstemmer/modules.txt)
 	#
-	# morphology 	= stem_en, stem_ru, soundex
-	# morphology	= libstemmer_german
-	# morphology	= libstemmer_sv
+	# morphology		= stem_en, stem_ru, soundex
+	# morphology		= libstemmer_german
+	# morphology		= libstemmer_sv
 	morphology		= none
 
 	# minimum word length at which to enable stemming
@@ -365,13 +357,13 @@ index test1
 	# optional, default is empty
 	# contents are plain text, charset_table and stemming are both applied
 	#
-	# stopwords			= @CONFDIR@/data/stopwords.txt
+	# stopwords		= @CONFDIR@/data/stopwords.txt
 
 
 	# wordforms file, in "mapfrom > mapto" plain text format
 	# optional, default is empty
 	#
-	# wordforms			= @CONFDIR@/data/wordforms.txt
+	# wordforms		= @CONFDIR@/data/wordforms.txt
 
 
 	# tokenizing exceptions file
@@ -415,7 +407,7 @@ index test1
 	# minimum word prefix length to index
 	# optional, default is 0 (do not index prefixes)
 	#
-	# min_prefix_len	= 0
+	# min_prefix_len		= 0
 
 
 	# minimum word infix length to index
@@ -449,13 +441,13 @@ index test1
 	# only supports 0 and 1 for now, other lengths to be implemented
 	# optional, default is 0 (disable n-grams)
 	#
-	# ngram_len				= 1
+	# ngram_len		= 1
 
 
 	# n-gram characters list, for CJK indexing
 	# optional, default is empty
 	#
-	# ngram_chars			= U+3000..U+2FA1F
+	# ngram_chars		= U+3000..U+2FA1F
 
 
 	# phrase boundary characters list
@@ -475,18 +467,18 @@ index test1
 	# for instance, AT&T will results in 3 tokens ("at", "t", and "at&t")
 	# optional, default is empty
 	#
-	# blend_chars				= +, &, U+23
+	# blend_chars		= +, &, U+23
 
 
 	# whether to strip HTML tags from incoming documents
 	# known values are 0 (do not strip) and 1 (do strip)
 	# optional, default is 0
-	html_strip				= 0
+	html_strip		= 0
 
 	# what HTML attributes to index if stripping HTML
 	# optional, default is empty (do not index anything)
 	#
-	# html_index_attrs		= img=alt,title; a=title;
+	# html_index_attrs	= img=alt,title; a=title;
 
 
 	# what HTML elements contents to strip
@@ -498,55 +490,55 @@ index test1
 	# whether to preopen index data files on startup
 	# optional, default is 0 (do not preopen), searchd-only
 	#
-	# preopen					= 1
+	# preopen			= 1
 
 
 	# whether to keep dictionary (.spi) on disk, or cache it in RAM
 	# optional, default is 0 (cache in RAM), searchd-only
 	#
-	# ondisk_dict				= 1
+	# ondisk_dict		= 1
 
 
 	# whether to enable in-place inversion (2x less disk, 90-95% speed)
 	# optional, default is 0 (use separate temporary files), indexer-only
 	#
-	# inplace_enable			= 1
+	# inplace_enable		= 1
 
 
 	# in-place fine-tuning options
 	# optional, defaults are listed below
 	#
-	# inplace_hit_gap			= 0		# preallocated hitlist gap size
-	# inplace_docinfo_gap		= 0		# preallocated docinfo gap size
-	# inplace_reloc_factor	= 0.1	# relocation buffer size within arena
-	# inplace_write_factor	= 0.1	# write buffer size within arena
+	# inplace_hit_gap		= 0 # preallocated hitlist gap size
+	# inplace_docinfo_gap	= 0 # preallocated docinfo gap size
+	# inplace_reloc_factor	= 0.1 # relocation buffer size within arena
+	# inplace_write_factor	= 0.1 # write buffer size within arena
 
 
 	# whether to index original keywords along with stemmed versions
 	# enables "=exactform" operator to work
 	# optional, default is 0
 	#
-	# index_exact_words		= 1
+	# index_exact_words	= 1
 
 
 	# position increment on overshort (less that min_word_len) words
 	# optional, allowed values are 0 and 1, default is 1
 	#
-	# overshort_step			= 1
+	# overshort_step		= 1
 
 
 	# position increment on stopword
 	# optional, allowed values are 0 and 1, default is 1
 	#
-	# stopword_step			= 1
+	# stopword_step		= 1
 
 
 	# hitless words list
 	# positions for these keywords will not be stored in the index
 	# optional, allowed values are 'all', or a list file name
 	#
-	# hitless_words			= all
-	# hitless_words			= hitless.txt
+	# hitless_words		= all
+	# hitless_words		= hitless.txt
 }
 
 
@@ -568,20 +560,20 @@ index test1stemmed : test1
 index dist1
 {
 	# 'distributed' index type MUST be specified
-	type				= distributed
+	type			= distributed
 
 	# local index to be searched
 	# there can be many local indexes configured
-	local				= test1
-	local				= test1stemmed
+	local			= test1
+	local			= test1stemmed
 
 	# remote agent
 	# multiple remote agents may be specified
 	# syntax for TCP connections is 'hostname:port:index1,[index2[,...]]'
 	# syntax for local UNIX connections is '/path/to/socket:index1,[index2[,...]]'
-	agent				= localhost:9313:remote1
-	agent				= localhost:9314:remote2,remote3
-	# agent				= /var/run/searchd.sock:remote4
+	agent			= localhost:9313:remote1
+	agent			= localhost:9314:remote2,remote3
+	# agent			= /var/run/searchd.sock:remote4
 
 	# blackhole remote agent, for debugging/testing
 	# network errors and search results will be ignored
@@ -595,7 +587,7 @@ index dist1
 
 	# remote agent query timeout, milliseconds
 	# optional, default is 3000 ms, ie. 3 sec
-	agent_query_timeout		= 3000
+	agent_query_timeout	= 3000
 }
 
 
@@ -606,11 +598,11 @@ index dist1
 index rt
 {
 	# 'rt' index type must be specified to use RT index
-	type				= rt
+	type			= rt
 
 	# index files path and file name, without extension
 	# mandatory, path must be writable, extensions will be auto-appended
-	path				= @CONFDIR@/data/rt
+	path			= @CONFDIR@/data/rt
 
 	# RAM chunk size limit
 	# RT index will keep at most this much data in RAM, then flush to disk
@@ -620,8 +612,8 @@ index rt
 
 	# full-text field declaration
 	# multi-value, mandatory
-	rt_field			= title
-	rt_field			= content
+	rt_field		= title
+	rt_field		= content
 
 	# unsigned integer attribute declaration
 	# multi-value (an arbitrary number of attributes is allowed), optional
@@ -645,12 +637,12 @@ indexer
 {
 	# memory limit, in bytes, kiloytes (16384K) or megabytes (256M)
 	# optional, default is 32M, max is 2047M, recommended is 256M to 1024M
-	mem_limit			= 32M
+	mem_limit		= 32M
 
 	# maximum IO calls per second (for I/O throttling)
 	# optional, default is 0 (unlimited)
 	#
-	# max_iops			= 40
+	# max_iops		= 40
 
 
 	# maximum IO call size, bytes (for I/O throttling)
@@ -676,7 +668,7 @@ indexer
 	# maximum file field adaptive buffer size
 	# optional, default is 8M, minimum is 1M
 	#
-	# max_file_field_buffer	=
+	# max_file_field_buffer	= 32M
 }
 
 #############################################################################
@@ -691,20 +683,20 @@ searchd
 	# multi-value, multiple listen points are allowed
 	# optional, defaults are 9312:sphinx and 9306:mysql41, as below
 	#
-	# listen				= 127.0.0.1
-	# listen				= 192.168.0.1:9312
-	# listen				= 9312
-	# listen				= /var/run/searchd.sock
-	listen				= 9312
-	listen				= 9306:mysql41
+	# listen			= 127.0.0.1
+	# listen			= 192.168.0.1:9312
+	# listen			= 9312
+	# listen			= /var/run/searchd.sock
+	listen			= 9312
+	listen			= 9306:mysql41
 
 	# log file, searchd run info is logged here
 	# optional, default is 'searchd.log'
-	log					= @CONFDIR@/log/searchd.log
+	log			= @CONFDIR@/log/searchd.log
 
 	# query log file, all search queries are logged here
 	# optional, default is empty (do not log queries)
-	query_log			= @CONFDIR@/log/query.log
+	query_log		= @CONFDIR@/log/query.log
 
 	# client read timeout, seconds
 	# optional, default is 5
@@ -720,12 +712,12 @@ searchd
 
 	# PID file, searchd process ID file name
 	# mandatory
-	pid_file			= @CONFDIR@/log/searchd.pid
+	pid_file		= @CONFDIR@/log/searchd.pid
 
 	# max amount of matches the daemon ever keeps in RAM, per-index
 	# WARNING, THERE'S ALSO PER-QUERY LIMIT, SEE SetLimits() API CALL
 	# default is 1000 (just like Google)
-	max_matches			= 1000
+	max_matches		= 1000
 
 	# seamless rotate, prevents rotate stalls if precaching huge datasets
 	# optional, default is 1
@@ -737,7 +729,7 @@ searchd
 
 	# whether to unlink .old index copies on succesful rotation.
 	# optional, default is 1 (do unlink)
-	unlink_old			= 1
+	unlink_old		= 1
 
 	# attribute updates periodic flush timeout, seconds
 	# updates will be automatically dumped to disk this frequently
@@ -771,7 +763,7 @@ searchd
 
 	# max allowed per-query filter count
 	# optional, default is 256
-	max_filters			= 256
+	max_filters		= 256
 
 	# max allowed per-filter values count
 	# optional, default is 4096
@@ -787,7 +779,7 @@ searchd
 	# per-keyword read buffer size
 	# optional, default is 256K
 	#
-	# read_buffer			= 256K
+	# read_buffer		= 256K
 
 
 	# unhinted read size (currently used when reading hits)
@@ -817,7 +809,7 @@ searchd
 	# known values are none, fork, prefork, and threads
 	# optional, default is fork
 	#
-	# workers				= fork
+	workers			= threads # for RT to work
 
 
 	# max threads to create for searching local parts of a distributed index
@@ -830,7 +822,7 @@ searchd
 	# binlog files path and name prefix
 	# optional, default is empty string (disable binlogging)
 	#
-	# binlog_path			= @CONFDIR@/data/binlog
+	# binlog_path		= @CONFDIR@/data/binlog
 
 
 	# binlog flush/sync mode

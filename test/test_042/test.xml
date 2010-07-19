@@ -18,7 +18,10 @@ searchd
 	</dynamic>
 <dynamic>
 <variant>workers = none</variant>
-<variant>workers = threads</variant>
+<variant>
+	workers = threads
+	binlog_path =
+</variant>
 </dynamic>
 	
 }

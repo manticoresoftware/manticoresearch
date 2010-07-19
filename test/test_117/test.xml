@@ -8,7 +8,8 @@
 searchd
 {
 	<searchd_settings/>
-	workers=threads	
+	workers = threads	
+	binlog_path =
 }
 
 index rt0

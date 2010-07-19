@@ -19,7 +19,10 @@ searchd
 	<searchd_settings/>
 	<dynamic>
 	<variant>workers = none</variant>
-	<variant>workers = threads</variant>
+	<variant>
+		workers = threads
+		binlog_path =
+	</variant>
 	<variant>workers = fork</variant>
 	<variant>workers = prefork</variant>
 	</dynamic>

@@ -13,6 +13,7 @@ searchd
 {
 <Searchd_Settings/>
 	workers				= threads
+	binlog_path			=
 }
 
 index test92

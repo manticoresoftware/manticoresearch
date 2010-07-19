@@ -6,6 +6,7 @@ searchd
 {
 <searchd_settings/>
 	workers = threads
+	binlog_path =
 }
 
 index test

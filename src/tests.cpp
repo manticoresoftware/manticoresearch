@@ -1551,6 +1551,19 @@ static void DeleteIndexFiles ( const char * sIndex )
 }
 
 
+void TestRTInit ()
+{
+	CSphConfigSection tRTConfig;
+	CSphVariant tEmpty ( "" );
+	tRTConfig.Add ( tEmpty, "binlog_path" ); // explicitly disable binlog
+
+	sphRTInit ( tRTConfig );
+
+	CSphVector< ISphRtIndex * > dTemp;
+	sphReplayBinlog ( dTemp );
+}
+
+
 #define RT_INDEX_FILE_NAME "test_temp"
 #define RT_PASS_COUNT 5
 static const int g_iWeights[RT_PASS_COUNT] = { 1500, 1500, 1500, 1500, 1500 }; // { 1500, 1302, 1252, 1230, 1219 };
@@ -1561,11 +1574,7 @@ void TestRTWeightBoundary ()
 	for ( int iPass = 0; iPass < RT_PASS_COUNT; ++iPass )
 	{
 		printf ( "testing rt indexing, test %d/%d... ", 1+iPass, RT_PASS_COUNT );
-
-		CSphConfigSection tRTConfig;
-		sphRTInit ( tRTConfig );
-		CSphVector< ISphRtIndex * > dTemp;
-		sphReplayBinlog ( dTemp );
+		TestRTInit ();
 
 		CSphString sError;
 		CSphDictSettings tDictSettings;
@@ -1719,10 +1728,7 @@ void TestRTSendVsMerge ()
 	DeleteIndexFiles ( RT_INDEX_FILE_NAME );
 	printf ( "testing rt send result during merge... " );
 
-	CSphConfigSection tRTConfig;
-	sphRTInit ( tRTConfig );
-	CSphVector< ISphRtIndex * > dTemp;
-	sphReplayBinlog ( dTemp );
+	TestRTInit ();
 
 	CSphString sError;
 	CSphDictSettings tDictSettings;

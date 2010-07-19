@@ -14366,7 +14366,7 @@ CSphVector < WordformContainer_t * > CSphDictCRCTraits::m_dWordformContainers;
 
 
 /// specialized CRC32/64 implementations
-template < bool CRC32DICT > 
+template < bool CRC32DICT >
 struct CSphDictCRC : public CSphDictCRCTraits
 {
 	inline SphWordID_t		DoCrc ( const BYTE * pWord ) const;

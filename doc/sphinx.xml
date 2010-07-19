@@ -97,7 +97,7 @@ To expand a bit, Sphinx:
 <listitem>supports both single-byte encodings and UTF-8;</listitem>
 <listitem>supports stemming (stemmers for English, Russian and Czech are built-in; and stemmers for
 French, Spanish, Portuguese, Italian, Romanian, German, Dutch, Swedish, Norwegian, Danish, Finnish, Hungarian,
-are available by building third party <ulink ref="http://snowball.tartarus.org/">libstemmer library</ulink>);</listitem>
+are available by building third party <ulink url="http://snowball.tartarus.org/">libstemmer library</ulink>);</listitem>
 <listitem>supports MySQL natively (all types of tables, including MyISAM, InnoDB, NDB, Archive, etc are supported);</listitem>
 <listitem>supports PostgreSQL natively;</listitem>
 <listitem>supports ODBC compliant databases (MS SQL, Oracle, etc) natively;</listitem>
@@ -7960,13 +7960,18 @@ listen = localhost:9306:mysql41
 <para>
 There can be multiple listen directives, <code>searchd</code> will
 listen for client connections on all specified ports and sockets.  If
-no <code>listen</code> directive is found then the server will listen
-on all available interfaces using the default port (which is 9312).
+no <code>listen</code> directives are found then the server will listen
+on all available interfaces using the default SphinxAPI port 9312.
+Starting with 1.10-beta, it will also listen on default SphinxQL 
+port 9306. Both port numbers are assigned by IANA (see
+<ulink url="http://www.iana.org/assignments/port-numbers">http://www.iana.org/assignments/port-numbers</ulink>
+for details) and should therefore be available.
 </para>
 <para>
 Unix-domain sockets are not supported on Windows.
 </para>
 </sect2>
+
 
 <sect2 id="conf-address"><title>address</title>
 <para>

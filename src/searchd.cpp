@@ -34,11 +34,8 @@
 #endif
 
 #define SEARCHD_BACKLOG			5
-#define SEARCHD_DEFAULT_PORT	9312
-
-// uncomment to switch the watchdog on
-#define WATCHDOG_FORK	1
-
+#define SPHINXAPI_PORT			9312
+#define SPHINXQL_PORT			9306
 #define SPH_ADDRESS_SIZE		sizeof("000.000.000.000")
 
 /////////////////////////////////////////////////////////////////////////////
@@ -158,11 +155,7 @@ static int				g_iMaxChildren	= 0;
 static bool				g_bPreopenIndexes = false;
 static bool				g_bOnDiskDicts	= false;
 static bool				g_bUnlinkOld	= true;
-#ifdef WATCHDOG_FORK
 static bool				g_bWatchdog		= true;
-#else
-static bool				g_bWatchdog		= false;
-#endif
 
 struct Listener_t
 {
@@ -1681,7 +1674,7 @@ ListenerDesc_t ParseListener ( const char * sSpec )
 	tRes.m_eProto = PROTO_SPHINX;
 	tRes.m_sUnix = "";
 	tRes.m_uIP = htonl ( INADDR_ANY );
-	tRes.m_iPort = SEARCHD_DEFAULT_PORT;
+	tRes.m_iPort = SPHINXAPI_PORT;
 
 	// split by colon
 	int iParts = 0;
@@ -1750,7 +1743,7 @@ ListenerDesc_t ParseListener ( const char * sSpec )
 		{
 			// host name on itself
 			tRes.m_uIP = sphGetAddress ( sSpec, GETADDR_STRICT );
-			tRes.m_iPort = SEARCHD_DEFAULT_PORT;
+			tRes.m_iPort = SPHINXAPI_PORT;
 		}
 		return tRes;
 	}
@@ -11139,7 +11132,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( hSearchd("port") )
 		{
 			DWORD uAddr = hSearchd.Exists("address") ?
-				sphGetAddress ( hSearchd["address"].cstr(), GETADDR_STRICT ) : htonl(INADDR_ANY);
+				sphGetAddress ( hSearchd["address"].cstr(), GETADDR_STRICT ) : htonl ( INADDR_ANY );
 
 			int iPort = hSearchd["port"].intval();
 			CheckPort(iPort);
@@ -11148,10 +11141,15 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			g_dListeners.Add ( tListener );
 		}
 
-		// still nothing? listen on INADDR_ANY, default port
+		// still nothing? default is to listen on our two ports
 		if ( !g_dListeners.GetLength() )
 		{
-			tListener.m_iSock = sphCreateInetSocket ( htonl ( INADDR_ANY ), SEARCHD_DEFAULT_PORT );
+			tListener.m_iSock = sphCreateInetSocket ( htonl ( INADDR_ANY ), SPHINXAPI_PORT );
+			tListener.m_eProto = PROTO_SPHINX;
+			g_dListeners.Add ( tListener );
+
+			tListener.m_iSock = sphCreateInetSocket ( htonl ( INADDR_ANY ), SPHINXQL_PORT );
+			tListener.m_eProto = PROTO_MYSQL41;
 			g_dListeners.Add ( tListener );
 		}
 	}

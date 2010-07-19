@@ -7345,9 +7345,12 @@ Examples:
    | listen = localhost:9306:mysql41
 
 There can be multiple listen directives, searchd will listen for client
-connections on all specified ports and sockets. If no listen directive is
+connections on all specified ports and sockets. If no listen directives are
 found then the server will listen on all available interfaces using the
-default port (which is 9312).
+default SphinxAPI port 9312. Starting with 1.10-beta, it will also listen
+on default SphinxQL port 9306. Both port numbers are assigned by IANA (see
+http://www.iana.org/assignments/port-numbers for details) and should
+therefore be available.
 
 Unix-domain sockets are not supported on Windows.
 

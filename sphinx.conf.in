@@ -685,15 +685,18 @@ indexer
 
 searchd
 {
-	# hostname, port, or hostname:port, or /unix/socket/path to listen on
+	# [hostname:]port[:protocol], or /unix/socket/path to listen on
+	# known protocols are 'sphinx' (SphinxAPI) and 'mysql41' (SphinxQL)
+	#
 	# multi-value, multiple listen points are allowed
-	# optional, default is 0.0.0.0:9312 (listen on all interfaces, port 9312)
+	# optional, defaults are 9312:sphinx and 9306:mysql41, as below
 	#
 	# listen				= 127.0.0.1
 	# listen				= 192.168.0.1:9312
 	# listen				= 9312
 	# listen				= /var/run/searchd.sock
-
+	listen				= 9312
+	listen				= 9306:mysql41
 
 	# log file, searchd run info is logged here
 	# optional, default is 'searchd.log'

@@ -155,7 +155,7 @@ static int				g_iMaxChildren	= 0;
 static bool				g_bPreopenIndexes = false;
 static bool				g_bOnDiskDicts	= false;
 static bool				g_bUnlinkOld	= true;
-static bool				g_bWatchdog		= true;
+static bool				g_bWatchdog		= false;
 
 struct Listener_t
 {

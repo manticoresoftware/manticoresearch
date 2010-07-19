@@ -4337,22 +4337,23 @@ void RtBinlog_c::Configure ( const CSphConfigSection & hSearchd )
 {
 	MEMORY ( SPH_MEM_BINLOG );
 
-	if ( hSearchd ( "binlog_flush" ) )
+	const int iMode = hSearchd.GetInt ( "binlog_flush", 2 );
+	switch ( iMode )
 	{
-		const int iMode = hSearchd.GetInt ( "binlog_flush", 2 );
-		if ( iMode==1 )
-			m_eOnCommit = ACTION_FSYNC;
-		else if ( iMode==2 )
-			m_eOnCommit = ACTION_WRITE;
+		case 0:		m_eOnCommit = ACTION_NONE; break;
+		case 1:		m_eOnCommit = ACTION_FSYNC; break;
+		case 2:		m_eOnCommit = ACTION_WRITE; break;
+		default:	sphDie ( "unknown binlog flush mode %d (must be 0, 1, or 2)\n", iMode );
 	}
 
-	if ( hSearchd ( "binlog_path" ) )
-	{
-		m_sLogPath = hSearchd.GetStr ( "binlog_path", "." );
-		m_bDisabled = false;
-	}
-	if ( hSearchd ( "binlog_max_log_size" ) )
-		m_iRestartSize = hSearchd.GetSize ( "binlog_max_log_size", m_iRestartSize );
+#ifndef DATADIR
+#define DATADIR "."
+#endif
+
+	m_sLogPath = hSearchd.GetStr ( "binlog_path", DATADIR );
+	m_bDisabled = m_sLogPath.IsEmpty();
+
+	m_iRestartSize = hSearchd.GetSize ( "binlog_max_log_size", m_iRestartSize );
 
 	if ( !m_bDisabled )
 	{

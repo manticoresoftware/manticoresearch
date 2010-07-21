@@ -1,7 +1,7 @@
-<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1"><title>Sphinx 1.10-beta reference manual</title><meta name="generator" content="DocBook XSL Stylesheets V1.70.1">
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1"><title>Sphinx 1.11-beta reference manual</title><meta name="generator" content="DocBook XSL Stylesheets V1.70.1">
 <style type="text/css">pre.programlisting { background-color: #f0f0f0; padding: 0.5em; margin-left: 2em; margin-right: 2em; }</style>
 </head>
-<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="book" lang="en"><div class="titlepage"><div><div><h1 class="title">Sphinx 1.10-beta reference manual</h1></div>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="book" lang="en"><div class="titlepage"><div><div><h1 class="title">Sphinx 1.11-beta reference manual</h1></div>
 <div><h2 class="subtitle">Free open-source SQL full-text search engine</h2></div>
 <div><p class="copyright">Copyright &copy; 2001-2010 Andrew Aksyonoff</p></div>
 <div><p class="copyright">Copyright &copy; 2008-2010 Sphinx Technologies Inc, <a href="http://sphinxsearch.com" target="_top">http://sphinxsearch.com</a></p></div></div>
@@ -7146,7 +7146,8 @@ subtree_hits_cache = 16M
 <div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="conf-workers"></a>11.4.27.&nbsp;workers</h3></div></div></div>
 <p>
 Multi-processing mode (MPM).
-Optional; allowed values are none, fork, prefork, and threads; default is fork.
+Optional; allowed values are none, fork, prefork, and threads.
+Default is fork on Unix based systems, and threads on Windows.
 Introduced in version 1.10-beta.
 </p><p>
 Lets you choose how <code class="filename">searchd</code> processes multiple
@@ -7223,8 +7224,8 @@ dist_threads = 4
 </pre></div>
 <div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="conf-binlog-path"></a>11.4.29.&nbsp;binlog_path</h3></div></div></div>
 <p>
-Binary log (aka transaction log) files path and name prefix.
-Optional, default is empty string, which means to disable logging.
+Binary log (aka transaction log) files path.
+Optional, default is build-time configured data directory.
 Introduced in version 1.10-beta.
 </p><p>
 Binary logs are used for crash recovery of RT index data that
@@ -7234,12 +7235,15 @@ a log file.  Logs are then automatically replayed on startup
 after an unclean shutdown, recovering the logged changes.
 </p><p>
 <code class="option">binlog_path</code> directive specifies the binary log
-files location.  It should contain both the path and a file name
-but not an extension nor a trailing dot; <code class="option">searchd</code>
-will append a current log number as an extension (.001, .002, .003,
-and so on) to generate a file name.
+files location.  It should contain just the path; <code class="option">searchd</code>
+will create and unlink multiple binlog.* files in that path as necessary
+(binlog data, metadata, and lock files, etc).
+</p><p>
+Empty value disables binary logging. That improves performance,
+but puts RT index data at risk.
 </p><h4>Example:</h4><pre class="programlisting">
-binlog_path = /var/data/binlog # /var/data/binlog.001 etc will be created
+binlog_path = # disable logging
+binlog_path = /var/data # /var/data/binlog.001 etc will be created
 </pre></div>
 <div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="conf-binlog-flush"></a>11.4.30.&nbsp;binlog_flush</h3></div></div></div>
 <p>

@@ -1,4 +1,4 @@
-Sphinx 1.10-beta reference manual
+Sphinx 1.11-beta reference manual
 =================================
 
 Free open-source SQL full-text search engine
@@ -7753,7 +7753,8 @@ Example:
 ----------------
 
 Multi-processing mode (MPM). Optional; allowed values are none, fork,
-prefork, and threads; default is fork. Introduced in version 1.10-beta.
+prefork, and threads. Default is fork on Unix based systems, and threads on
+Windows. Introduced in version 1.10-beta.
 
 Lets you choose how searchd processes multiple concurrent requests. The
 possible values are:
@@ -7834,9 +7835,8 @@ Example:
 11.4.29. binlog_path
 --------------------
 
-Binary log (aka transaction log) files path and name prefix. Optional,
-default is empty string, which means to disable logging. Introduced in
-version 1.10-beta.
+Binary log (aka transaction log) files path. Optional, default is
+build-time configured data directory. Introduced in version 1.10-beta.
 
 Binary logs are used for crash recovery of RT index data that would
 otherwise only be stored in RAM. When logging is enabled, every transaction
@@ -7845,13 +7845,17 @@ automatically replayed on startup after an unclean shutdown, recovering the
 logged changes.
 
 binlog_path directive specifies the binary log files location. It should
-contain both the path and a file name but not an extension nor a trailing
-dot; searchd will append a current log number as an extension (.001, .002,
-.003, and so on) to generate a file name.
+contain just the path; searchd will create and unlink multiple binlog.*
+files in that path as necessary (binlog data, metadata, and lock files,
+etc).
+
+Empty value disables binary logging. That improves performance, but puts RT
+index data at risk.
 
 Example:
 
-   | binlog_path = /var/data/binlog # /var/data/binlog.001 etc will be created
+   | binlog_path = # disable logging
+   | binlog_path = /var/data # /var/data/binlog.001 etc will be created
 
 11.4.30. binlog_flush
 ---------------------

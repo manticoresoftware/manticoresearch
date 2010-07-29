@@ -1000,27 +1000,21 @@ static void send_bytes ( char ** pp, const char * bytes, int len )
 
 static void send_int ( char ** pp, unsigned int value )
 {
-	union
-	{
-		unsigned int n;
-		char c[sizeof(int)];
-	} u;
-
-	u.n = htonl ( value );
-	send_bytes ( pp, u.c, (int)sizeof(int) );
+	unsigned char * b = (unsigned char*) *pp;
+	b[0] = ( value >> 24 ) & 0xff;
+	b[1] = ( value >> 16 ) & 0xff;
+	b[2] = ( value >> 8 ) & 0xff;
+	b[3] = ( value & 0xFF );
+	*pp += 4;
 }
 
 
 static void send_word ( char ** pp, unsigned short value )
 {
-	union
-	{
-		unsigned short n;
-		char c[sizeof(short)];
-	} u;
-
-	u.n = htons ( value );
-	send_bytes ( pp, u.c, (int)sizeof(short) );
+	unsigned char * b = (unsigned char*) *pp;
+	b[0] = ( value >> 8 );
+	b[1] = ( value & 0xFF );
+	*pp += 2;
 }
 
 

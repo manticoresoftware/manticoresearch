@@ -1262,7 +1262,11 @@ void SPH_FD_SET ( int fd, fd_set * fdset ) { FD_SET ( fd, fdset ); }
 static sphinx_bool net_write ( int fd, const char * bytes, int len, sphinx_client * client )
 {
 	int res;
+#if defined(_WIN32) || defined(SO_NOSIGPIPE)
 	res = send ( fd, bytes, len, 0 );
+#else
+	res = send ( fd, bytes, len, MSG_NOSIGNAL );
+#endif
 
 	if ( res<0 )
 	{
@@ -1348,7 +1352,7 @@ static int net_connect_get ( sphinx_client * client )
 	}
 
 	optval = 1;
-#ifndef _WIN32
+#if defined(SO_NOSIGPIPE)
 	if ( setsockopt ( sock, SOL_SOCKET, SO_NOSIGPIPE, (void *)&optval, (socklen_t)sizeof(optval) ) < 0 )
 	{
 		set_error ( client, "setsockopt() failed: %s", sock_error() );

@@ -1415,6 +1415,12 @@ int main ( int argc, char ** argv )
 		return 1;
 	}
 
+	if ( !bMerge && !bIndexAll && !dIndexes.GetLength() )
+	{
+		fprintf ( stdout, "ERROR: nothing to do.\n" );
+		return 1;
+	}
+
 	sphSetupSignals();
 
 	///////////////

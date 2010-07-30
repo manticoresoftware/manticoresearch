@@ -57,26 +57,29 @@ function ConnectDB ()
 }
 
 
-function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert )
+function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $skip )
 {
 	$conn = ConnectDB ();
 
-	foreach ( $db_drop as $q )
-		if ( !@mysql_query ( $q, $conn ) )
-			return false;
-
-	foreach ( $db_create as $q )
-		if ( !@mysql_query ( $q, $conn ) )
-			return false;
-
-	foreach ( $db_insert as $q )
-		if ( !@mysql_query ( $q, $conn ) )
-			return false;
-
-	foreach ( $custom_insert as $code )
+	if (!$skip)
 	{
-		$function = create_function( '', $code );
-		$function();
+		foreach ( $db_drop as $q )
+			if ( !@mysql_query ( $q, $conn ) )
+				return false;
+
+		foreach ( $db_create as $q )
+			if ( !@mysql_query ( $q, $conn ) )
+				return false;
+
+		foreach ( $db_insert as $q )
+			if ( !@mysql_query ( $q, $conn ) )
+				return false;
+
+		foreach ( $custom_insert as $code )
+		{
+			$function = create_function( '', $code );
+			$function();
+		}
 	}
 
 	return $conn;
@@ -1139,6 +1142,7 @@ class SphinxConfig
 
 	function FormatResultSet ( $nquery, $result, $opts=array() )
 	{
+		global $sd_skip_indexer;
 		if ( !$this->IsQueryTest () || !is_array($result) )
 			return var_export ( $result, true )."\n";
 
@@ -1235,6 +1239,7 @@ class SphinxConfig
 
 		// check our table for well-known id column names
 		$idcol = "";
+
 		if ( $this->IsNeedDB() )
 			$r = mysql_query ( "DESC test_table", $this->_connection );
 		else
@@ -1929,9 +1934,9 @@ function RunTest ( $test_dir )
 		return;
 	}
 
-	if ( $config->IsNeedDB() && !$sd_skip_indexer )
+	if ( $config->IsNeedDB() )
 	{
-		$connection = CreateDB ( $config->DB_Drop(), $config->DB_Create(), $config->DB_Insert(), $config->DB_CustomInsert() );
+		$connection = CreateDB ( $config->DB_Drop(), $config->DB_Create(), $config->DB_Insert(), $config->DB_CustomInsert(), $sd_skip_indexer );
 		if ( $connection === false )
 		{
 			printf ( "$prefix FAILED, error creating test DB: %s\n", mysql_error() );
@@ -1958,8 +1963,9 @@ function RunTest ( $test_dir )
 	do
 	{
 		// stop them all
-		foreach ( $stop as $conf=>$pid )
-			StopSearchd ( $conf, $pid );
+		if ( !$sd_managed_searchd )
+			foreach ( $stop as $conf=>$pid )
+				StopSearchd ( $conf, $pid );
 		$stop = array();
 
 		// do the dew
@@ -2125,8 +2131,9 @@ function RunTest ( $test_dir )
 	}
 	while ( $config->CreateNextConfig () );
 
-	foreach ( $stop as $conf=>$pid )
-		StopSearchd ( $conf, $pid );
+	if ( !$sd_managed_searchd )
+		foreach ( $stop as $conf=>$pid )
+			StopSearchd ( $conf, $pid );
 
 	$total = $config->SubtestNo()+1;
 	if ( IsModelGenMode () )

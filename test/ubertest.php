@@ -4,9 +4,10 @@
 // $Id$
 //
 
-require_once ( "settings.inc" );
 $sd_managed_searchd	= false;
 $sd_skip_indexer = false;
+
+require_once ( "settings.inc" );
 
 //////////////////////
 // parse command line

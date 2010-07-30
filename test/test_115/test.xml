@@ -31,15 +31,19 @@ index idx
 </config>
 
 <queries>
-	<!-- expect 3 matches -->
-	<query index="idx" mode="extended2" ranker="wordcount" >"a b" NEAR/2 "c d"</query>
-	<query index="idx" mode="extended2" ranker="wordcount" >a b NEAR/2 c d</query>
-	<query index="idx" mode="extended2" ranker="wordcount" >a NEAR/2 b NEAR/2 c NEAR/2 d</query>
-	<!-- expect 511 matches, the first with the weithg=2 -->
-	<query index="idx" mode="extended2" ranker="wordcount" >"e f" NEAR/2 "g h"</query>
-	<!-- expect 511 matches, the first with the weithg=512 -->
-	<query index="idx" mode="extended2" ranker="wordcount" >"i j" NEAR/2 "k l"</query>
-	
+	<query index="idx" mode="extended2">"a b" NEAR/2 "c d"</query>
+	<query index="idx" mode="extended2">"c d" NEAR/2 "a b"</query>
+	<query index="idx" mode="extended2">a b NEAR/2 c d</query>
+	<query index="idx" mode="extended2">a NEAR/2 b NEAR/5 c NEAR/2 d</query>
+	<query index="idx" mode="extended2">a NEAR/3 b NEAR/3 c NEAR/3 d</query>
+	<query index="idx" mode="extended2">a NEAR/3 d NEAR/3 b NEAR/3 c</query>
+	<query index="idx" mode="extended2">(a b c) NEAR/3 d</query>
+	<query index="idx" mode="extended2">burden NEAR/2 (financial share)</query>
+	<query index="idx" mode="extended2">burden NEAR/2 (share financial) </query>
+	<query index="idx" mode="extended2">(share financial) NEAR/2 burden</query>
+	<query index="idx" mode="extended2">(financial share) NEAR/2 burden</query>
+	<query index="idx" mode="extended2">"a b" NEAR/2 "c d" NEAR/2 "f g"</query>
+	<query index="idx" mode="extended2">a NEAR/3 b NEAR/3 c NEAR/3 d</query>
 	<query index="idx" mode="all" >"ARE NEAR"</query>
 	<query index="idx" mode="any" >"ARE NEAR"</query>
 	<query index="idx" mode="phrase" >"ARE NEAR"</query>
@@ -54,37 +58,12 @@ CREATE TABLE test_table
 	title text NOT NULL
 );
 </db_create>
-
-<custom_insert><![CDATA[
-
-$line = "";
-for ( $i=0; $i<10; ++$i )
-{
-	mysql_query ( "INSERT INTO test_table VALUES ( 0, 'a b $line c d')" );
-	$line .="x ";
-}
-
-mysql_query ( "INSERT INTO test_table VALUES ( 0, 'a b c d')" );
-mysql_query ( "INSERT INTO test_table VALUES ( 0, 'x a x b x c x d x')" );
-mysql_query ( "INSERT INTO test_table VALUES ( 0, 'x x a x x b x x c x x d x x')" );
-
-for ( $i=0; $i<510; ++$i )
-	mysql_query ( "INSERT INTO test_table VALUES ( 0, 'e f x x g h y i j x x k l')" );
-mysql_query ( "INSERT INTO test_table VALUES ( 0, 'e f x x g h y e f x x g h')" );
-
-$line = "";
-for ( $i=0; $i<512; ++$i )
-	$line .= " y i j x x k l";
-mysql_query ( "INSERT INTO test_table VALUES ( 0, '$line')" );
-
-mysql_query ( "INSERT INTO test_table VALUES ( 0, 'NEAR ARE STUFF')" );
-mysql_query ( "INSERT INTO test_table VALUES ( 0, 'ARE STUFF NEAR')" );
-mysql_query ( "INSERT INTO test_table VALUES ( 0, 'ARE NEAR STUFF')" );
-mysql_query ( "INSERT INTO test_table VALUES ( 0, '\NEAR ARE STUFF')" );
-mysql_query ( "INSERT INTO test_table VALUES ( 0, 'ARE STUFF \NEAR')" );
-mysql_query ( "INSERT INTO test_table VALUES ( 0, 'ARE \NEAR STUFF')" );
-
-]]></custom_insert>
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 0, 'a b c d'), (0, 'a x b c d'), (0,'a x x b c d'), ( 0, 'a b x c d'), ( 0, 'a b x x c d'), ( 0, 'a b x x x c d'), ( 0, 'a b x x x x c d'), (0, 'a x b x x x x c x d'), (0, 'a x x b x x x c x x d'),
+( 0, 'c d x x x x a b'), ( 0, 'c d x x x a b'), ( 0, 'c d x x a b'), ( 0, 'c d x a b'), ( 0, 'c d a b'),
+( 0, '... is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial burden resulting from the non-performance by one of their members and, as such, should significantly reduce this credit risk. In cases where the clearinghouse... is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial burden resulting from the non-performance by one of their members and, as such, should significantly reduce this credit risk. In cases where the clearinghouse... be able to meet its obligations to a Trading Company. The counterparty for futures contracts traded in the United States and on most foreign exchanges is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial...')
+</db_insert>
 <db_drop>DROP TABLE IF EXISTS test_table</db_drop>
 
 </test>

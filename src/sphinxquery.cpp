@@ -47,7 +47,7 @@ public:
 	void			AddQuery ( XQNode_t * pNode );
 	XQNode_t *		AddKeyword ( const char * sKeyword, DWORD uStar = STAR_NONE );
 	XQNode_t *		AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight );
-	XQNode_t *		AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pRight );
+	XQNode_t *		AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pRight, int iOpArg=0 );
 
 	void			Cleanup ();
 	XQNode_t *		SweepNulls ( XQNode_t * pNode );
@@ -632,7 +632,7 @@ XQNode_t * XQParser_t::AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight )
 }
 
 
-XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pRight )
+XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pRight, int iOpArg )
 {
 	/////////
 	// unary
@@ -660,7 +660,7 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 
 	// build a new node
 	XQNode_t * pResult = NULL;
-	if ( pLeft->m_dChildren.GetLength() && pLeft->GetOp()==eOp )
+	if ( pLeft->m_dChildren.GetLength() && pLeft->GetOp()==eOp && pLeft->m_iOpArg==iOpArg )
 	{
 		pLeft->m_dChildren.Add ( pRight );
 		pResult = pLeft;
@@ -668,6 +668,7 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 	{
 		XQNode_t * pNode = new XQNode_t();
 		pNode->SetOp ( eOp, pLeft, pRight );
+		pNode->m_iOpArg = iOpArg;
 		m_dSpawned.Add ( pNode );
 		pResult = pNode;
 	}

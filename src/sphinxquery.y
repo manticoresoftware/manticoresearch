@@ -105,7 +105,7 @@ orlistf:
 beforelist:
 	orlistf
 	| beforelist TOK_BEFORE orlistf		{ $$ = pParser->AddOp ( SPH_QUERY_BEFORE, $1, $3 ); }
-	| beforelist TOK_NEAR orlistf		{ $$ = pParser->AddOp ( SPH_QUERY_NEAR, $1, $3 ); $$->m_iOpArg = $2.iValue; }
+	| beforelist TOK_NEAR orlistf		{ $$ = pParser->AddOp ( SPH_QUERY_NEAR, $1, $3, $2.iValue ); }
 	;
 
 expr:

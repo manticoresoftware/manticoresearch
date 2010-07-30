@@ -55,7 +55,8 @@ struct ExtHit_t
 	SphDocID_t	m_uDocid;
 	DWORD		m_uHitpos;
 	DWORD		m_uQuerypos;
-	DWORD		m_uSpanlen;
+	WORD		m_uSpanlen;
+	WORD		m_uMatchlen;
 	DWORD		m_uWeight;
 };
 
@@ -412,8 +413,9 @@ public:
 		return pLeft && pRight															///< both members exist
 			&& pLeft->m_uDocid!=DOCID_MAX && pRight->m_uDocid!=DOCID_MAX				///< both members are valid
 			&& pLeft->m_uDocid==pRight->m_uDocid										///< both are about the same doc
-			&& pLeft->m_uHitpos<pRight->m_uHitpos										///< left is before the right
-			&& ( pLeft->m_uHitpos + pLeft->m_uSpanlen + m_iMaxDistance )>=pRight->m_uHitpos;	///< the right is NEAR the left
+			/// and the main NEAR condition-filter
+			&& ( ( ( HIT2LCS ( pLeft->m_uHitpos )<HIT2LCS ( pRight->m_uHitpos ) ) && ( HIT2LCS ( pLeft->m_uHitpos ) + pLeft->m_uMatchlen + m_iMaxDistance>HIT2LCS ( pRight->m_uHitpos ) ) )
+				| ( ( HIT2LCS ( pLeft->m_uHitpos )>=HIT2LCS ( pRight->m_uHitpos ) ) && ( HIT2LCS ( pRight->m_uHitpos ) + pRight->m_uMatchlen + m_iMaxDistance>HIT2LCS ( pLeft->m_uHitpos ) ) ) );
 	}
 
 private:
@@ -1102,7 +1104,7 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t
 		tHit.m_uDocid = pDoc->m_uDocid;
 		tHit.m_uHitpos = uHit;
 		tHit.m_uQuerypos = m_iAtomPos;
-		tHit.m_uSpanlen = tHit.m_uWeight = 1;
+		tHit.m_uMatchlen = tHit.m_uSpanlen = tHit.m_uWeight = 1;
 	}
 
 	m_pHitDoc = pDoc;
@@ -1198,7 +1200,7 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, Sph
 				tHit.m_uDocid = pDoc->m_uDocid;
 				tHit.m_uHitpos = HIT_PACK ( m_uFieldPos, -1 );
 				tHit.m_uQuerypos = m_iAtomPos;
-				tHit.m_uSpanlen = tHit.m_uWeight = 1;
+				tHit.m_uMatchlen = tHit.m_uSpanlen = tHit.m_uWeight = 1;
 
 				if ( iHit==MAX_HITS-1 )
 					break;
@@ -1776,11 +1778,14 @@ const ExtDoc_t * ExtNear_c::GetDocsChunk ( SphDocID_t * pMaxID )
 					eState = ST_DOCFINISHED;
 					break;
 				}
-				DWORD uSpanlen = pHitRight->m_uSpanlen + pHitRight->m_uHitpos - pHitLeft->m_uHitpos;
+				int iDistance = HIT2LCS ( pHitRight->m_uHitpos ) - HIT2LCS ( pHitLeft->m_uHitpos );
+				const ExtHit_t *&pL = (iDistance>0)?pHitLeft:pHitRight;
+				const ExtHit_t *&pR = (iDistance>0)?pHitRight:pHitLeft;
+				iDistance = (iDistance>0)?iDistance:-iDistance;
 				m_dMyHits[iHit].m_uDocid = uCurDocID;
-				m_dMyHits[iHit].m_uHitpos = pHitLeft->m_uHitpos;
-				m_dMyHits[iHit].m_uQuerypos = pHitLeft->m_uQuerypos;
-				m_dMyHits[iHit].m_uSpanlen = uSpanlen;
+				m_dMyHits[iHit].m_uHitpos = pL->m_uHitpos;
+				m_dMyHits[iHit].m_uQuerypos = pL->m_uQuerypos;
+				m_dMyHits[iHit].m_uMatchlen = iDistance + pR->m_uMatchlen;
 				m_dMyHits[iHit++].m_uWeight = pHitLeft->m_uWeight + pHitRight->m_uWeight;
 				if ( iHit==MAX_HITS-1 )
 				{
@@ -1964,11 +1969,14 @@ const ExtHit_t * ExtNear_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uM
 			}
 			if ( IsAppropriateHit ( pHitLeft, pHitRight ) )
 			{
-				DWORD uSpanlen = pHitRight->m_uSpanlen + pHitRight->m_uHitpos - pHitLeft->m_uHitpos;
+				int iDistance = HIT2LCS ( pHitRight->m_uHitpos ) - HIT2LCS ( pHitLeft->m_uHitpos );
+				const ExtHit_t *&pL = (iDistance>0)?pHitLeft:pHitRight;
+				const ExtHit_t *&pR = (iDistance>0)?pHitRight:pHitLeft;
+				iDistance = (iDistance>0)?iDistance:-iDistance;
 				m_dHits[iHit].m_uDocid = uMatchedDocid;
-				m_dHits[iHit].m_uHitpos = pHitLeft->m_uHitpos;
-				m_dHits[iHit].m_uQuerypos = pHitLeft->m_uQuerypos;
-				m_dHits[iHit].m_uSpanlen = uSpanlen;
+				m_dHits[iHit].m_uHitpos = pL->m_uHitpos;
+				m_dHits[iHit].m_uQuerypos = pL->m_uQuerypos;
+				m_dHits[iHit].m_uMatchlen = iDistance + pR->m_uMatchlen;
 				m_dHits[iHit++].m_uWeight = pHitLeft->m_uWeight + pHitRight->m_uWeight;
 				if ( iHit==MAX_HITS-1 )
 				{
@@ -2465,7 +2473,7 @@ const ExtDoc_t * ExtPhrase_c::GetDocsChunk ( SphDocID_t * pMaxID )
 				m_dMyHits[iMyHit].m_uDocid = pHit->m_uDocid;
 				m_dMyHits[iMyHit].m_uHitpos = HIT2LCS ( pHit->m_uHitpos ) - uSpanlen;
 				m_dMyHits[iMyHit].m_uQuerypos = m_uMinQpos;
-				m_dMyHits[iMyHit].m_uSpanlen = uSpanlen + 1;
+				m_dMyHits[iMyHit].m_uSpanlen = m_dMyHits[iMyHit].m_uMatchlen = uSpanlen + 1; ///< since it is exact phrase, the hitlen will be same as queried spanlen.
 				m_dMyHits[iMyHit].m_uWeight = m_uWords;
 				iMyHit++;
 
@@ -2687,7 +2695,7 @@ bool ExtPhrase_c::EmitTail ( int & iHit )
 				m_dHits[iHit].m_uDocid = pHit->m_uDocid;
 				m_dHits[iHit].m_uHitpos = HIT2LCS ( pHit->m_uHitpos ) - uSpanlen;
 				m_dHits[iHit].m_uQuerypos = m_uMinQpos;
-				m_dHits[iHit].m_uSpanlen = uSpanlen + 1;
+				m_dHits[iHit].m_uSpanlen = m_dHits[iHit].m_uMatchlen = uSpanlen + 1;
 				m_dHits[iHit++].m_uWeight = m_uWords;
 				m_uExpPos = m_uExpQpos = 0;
 
@@ -2895,7 +2903,7 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ( SphDocID_t * pMaxID )
 			m_dMyHits[iHit].m_uDocid = pHit->m_uDocid;
 			m_dMyHits[iHit].m_uHitpos = dProx[iProxMinEntry];
 			m_dMyHits[iHit].m_uQuerypos = m_uMinQpos;
-			m_dMyHits[iHit].m_uSpanlen = uMax-dProx[iProxMinEntry]+1;
+			m_dMyHits[iHit].m_uSpanlen = m_dMyHits[iHit].m_uMatchlen = uMax-dProx[iProxMinEntry]+1;
 			m_dMyHits[iHit].m_uWeight = uWeight;
 			iHit++;
 
@@ -3055,7 +3063,7 @@ bool ExtProximity_c::EmitTail ( int & iHit )
 			m_dHits[iHit].m_uDocid = pHit->m_uDocid;
 			m_dHits[iHit].m_uHitpos = dProx[iProxMinEntry];
 			m_dHits[iHit].m_uQuerypos = m_uMinQpos;
-			m_dHits[iHit].m_uSpanlen = uMax-dProx[iProxMinEntry]+1;
+			m_dHits[iHit].m_uSpanlen = m_dHits[iHit].m_uMatchlen = uMax-dProx[iProxMinEntry]+1;
 			m_dHits[iHit].m_uWeight = uWeight;
 			iHit++;
 

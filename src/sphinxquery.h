@@ -107,6 +107,7 @@ public:
 		, m_bFieldSpec ( false )
 		, m_uFieldMask ( 0xFFFFFFFFUL )
 		, m_iFieldMaxPos ( 0 )
+		, m_iOpArg ( 0 )
 		, m_iAtomPos ( -1 )
 		, m_bVirtuallyPlain ( false )
 	{}

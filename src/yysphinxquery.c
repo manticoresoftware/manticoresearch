@@ -1191,7 +1191,7 @@ yyreduce:
 
   case 35:
 
-    { yyval.pNode = pParser->AddOp ( SPH_QUERY_NEAR, yyvsp[-2].pNode, yyvsp[0].pNode ); yyval.pNode->m_iOpArg = yyvsp[-1].tInt.iValue; ;}
+    { yyval.pNode = pParser->AddOp ( SPH_QUERY_NEAR, yyvsp[-2].pNode, yyvsp[0].pNode, yyvsp[-1].tInt.iValue ); ;}
     break;
 
   case 36:

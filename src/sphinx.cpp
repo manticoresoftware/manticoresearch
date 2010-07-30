@@ -13158,6 +13158,59 @@ static void TransformQuorum ( XQNode_t ** ppNode )
 	pNode->SetOp ( SPH_QUERY_OR, dArgs );
 }
 
+// transform the (A B) NEAR C into A NEAR B NEAR C
+static void TransformNear ( XQNode_t ** ppNode )
+{
+	XQNode_t *& pNode = *ppNode;
+	if ( pNode->GetOp()==SPH_QUERY_NEAR )
+	{
+		assert ( pNode->m_dWords.GetLength()==0 );
+		CSphVector<XQNode_t*> dArgs;
+		int iStartFrom = 0;
+
+		// transform all (A B C) NEAR D into A NEAR B NEAR C NEAR D
+		do
+		{
+			dArgs.Reset();
+			iStartFrom = 0;
+			ARRAY_FOREACH ( i, pNode->m_dChildren )
+			{
+				XQNode_t * pChild = pNode->m_dChildren[i]; ///< shortcut
+				if ( pChild->GetOp()==SPH_QUERY_AND && pChild->m_dChildren.GetLength()>0 )
+				{
+					ARRAY_FOREACH ( j, pChild->m_dChildren )
+						if ( j==0 && iStartFrom==0 )
+						{
+							// we will remove the node anyway, so just replace it with 1-st child instead
+							pNode->m_dChildren[i] = pChild->m_dChildren[j];
+							iStartFrom = i+1;
+						} else
+							dArgs.Add ( pChild->m_dChildren[j] );
+					pChild->m_dChildren.Reset();
+					SafeDelete ( pChild );
+				} else if ( iStartFrom!=0 )
+					dArgs.Add ( pChild );
+			}
+
+			if ( iStartFrom!=0 )
+			{
+				pNode->m_dChildren.Resize ( iStartFrom + dArgs.GetLength() );
+				ARRAY_FOREACH ( i, dArgs )
+					pNode->m_dChildren [ i + iStartFrom ] = dArgs[i];
+			}
+		} while ( iStartFrom!=0 );
+	}
+
+	ARRAY_FOREACH ( i, pNode->m_dChildren )
+		TransformNear ( &pNode->m_dChildren[i] );
+}
+
+inline static void Transform ( XQNode_t ** ppNode )
+{
+	TransformQuorum ( ppNode );
+	TransformNear ( ppNode );
+}
+
 struct CmpPSortersByRandom_fn
 {
 	inline bool IsLess ( const ISphMatchSorter * a, const ISphMatchSorter * b ) const
@@ -13217,7 +13270,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	sphDoStatsOrder ( tParsed.m_pRoot, *pResult );
 
 	// transform query if needed (quorum transform, keyword expansion, etc.)
-	TransformQuorum ( &tParsed.m_pRoot );
+	Transform ( &tParsed.m_pRoot );
 	if ( m_bExpandKeywords )
 		tParsed.m_pRoot = ExpandKeywords ( tParsed.m_pRoot, m_tSettings );
 
@@ -13292,7 +13345,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 			sphDoStatsOrder ( tParsed.m_pRoot, *ppResults[i] );
 
 			// transform query if needed (quorum transform, keyword expansion, etc.)
-			TransformQuorum ( &tParsed.m_pRoot );
+			Transform ( &tParsed.m_pRoot );
 			if ( m_bExpandKeywords )
 				tParsed.m_pRoot = ExpandKeywords ( tParsed.m_pRoot, m_tSettings );
 

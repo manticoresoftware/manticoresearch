@@ -46,7 +46,6 @@
 			<Add library="rt" />
 			<Add library="expat" />
 			<Add library="mysqlclient" />
-			<Add library="odbc" />
 		</Linker>
 		<Unit filename="../src/search.cpp" />
 		<Extensions>

@@ -5722,7 +5722,9 @@ enum SqlStmt_e
 	STMT_BEGIN,
 	STMT_COMMIT,
 	STMT_ROLLBACK,
-	STMT_CALL
+	STMT_CALL,
+	STMT_DESC,
+	STMT_SHOW_TABLES
 };
 
 
@@ -5762,14 +5764,15 @@ struct SqlStmt_t
 	// SELECT specific
 	CSphQuery *				m_pQuery;
 
+	// used by INSERT, DELETE, CALL, DESC
+	CSphString				m_sIndex;
+
 	// INSERT (and CALL) specific
-	CSphString				m_sInsertIndex;
 	CSphVector<SqlInsert_t>	m_dInsertValues; // reused by CALL
 	CSphVector<CSphString>	m_dInsertSchema;
 	int						m_iSchemaSz;
 
 	// DELETE specific
-	CSphString				m_sDeleteIndex;
 	SphDocID_t				m_iDeleteID;
 
 	// SET specific
@@ -7118,7 +7121,8 @@ enum MysqlErrors_e
 	MYSQL_ERR_UNKNOWN_COM_ERROR			= 1047,
 	MYSQL_ERR_SERVER_SHUTDOWN			= 1053,
 	MYSQL_ERR_PARSE_ERROR				= 1064,
-	MYSQL_ERR_FIELD_SPECIFIED_TWICE		= 1110
+	MYSQL_ERR_FIELD_SPECIFIED_TWICE		= 1110,
+	MYSQL_ERR_NO_SUCH_TABLE				= 1146
 };
 
 
@@ -7131,14 +7135,28 @@ void SendMysqlErrorPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char
 	int iLen = 9 + iErrorLen;
 	int iError = iErr; // pretend to be mysql syntax error for now
 
+	// send packet header
 	tOut.SendLSBDword ( (uPacketID<<24) + iLen );
 	tOut.SendByte ( 0xff ); // field count, always 0xff for error packet
 	tOut.SendByte ( (BYTE)( iError & 0xff ) );
 	tOut.SendByte ( (BYTE)( iError>>8 ) );
-	if ( iErr==MYSQL_ERR_SERVER_SHUTDOWN || iErr==MYSQL_ERR_UNKNOWN_COM_ERROR )
-		tOut.SendBytes ( "#08S01", 6 ); // sqlstate marker (1 byte), sqlstate (5 bytes)
-	else
-		tOut.SendBytes ( "#42000", 6 ); // sqlstate marker (1 byte), sqlstate (5 bytes)
+
+	// send sqlstate (1 byte marker, 5 byte state)
+	switch ( iErr )
+	{
+		case MYSQL_ERR_SERVER_SHUTDOWN:
+		case MYSQL_ERR_UNKNOWN_COM_ERROR:
+			tOut.SendBytes ( "#08S01", 6 );
+			break;
+		case MYSQL_ERR_NO_SUCH_TABLE:
+			tOut.SendBytes ( "#42S02", 6 );
+			break;
+		default:
+			tOut.SendBytes ( "#42000", 6 );
+			break;
+	}
+
+	// send error message
 	tOut.SendBytes ( sError, iErrorLen );
 }
 
@@ -7191,10 +7209,10 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 	CSphString sError;
 
 	// get that index
-	const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( tStmt.m_sInsertIndex );
+	const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( tStmt.m_sIndex );
 	if ( !pServed )
 	{
-		sError.SetSprintf ( "no such index '%s'", tStmt.m_sInsertIndex.cstr() );
+		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
 		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
 		return;
 	}
@@ -7202,7 +7220,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 	if ( !pServed->m_bRT )
 	{
 		pServed->Unlock();
-		sError.SetSprintf ( "index '%s' does not support INSERT", tStmt.m_sInsertIndex.cstr() );
+		sError.SetSprintf ( "index '%s' does not support INSERT", tStmt.m_sIndex.cstr() );
 		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
 		return;
 	}
@@ -7673,6 +7691,132 @@ void HandleCallKeywords ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt_t & 
 }
 
 
+void HandleDescribe ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt_t & tStmt )
+{
+	const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( tStmt.m_sIndex );
+	if ( !pServed || !pServed->m_bEnabled || !pServed->m_pIndex )
+	{
+		CSphString sError;
+		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr(), MYSQL_ERR_NO_SUCH_TABLE );
+		return;
+	}
+
+	// result set header packet	
+	tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
+	tOut.SendByte ( 2 ); // field count (field, type)
+	tOut.SendByte ( 0 ); // extra
+
+	// fields
+	SendMysqlFieldPacket ( tOut, uPacketID++, "Field", MYSQL_COL_STRING );
+	SendMysqlFieldPacket ( tOut, uPacketID++, "Type", MYSQL_COL_STRING );
+	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+
+	// data
+	const char * sIdType = USE_64BIT ? "bigint" : "integer";
+	tOut.SendLSBDword ( ((uPacketID++)<<24) + 3 + MysqlPackedLen ( sIdType ) );
+	tOut.SendMysqlString ( "id" );
+	tOut.SendMysqlString ( sIdType );
+
+	const CSphSchema & tSchema = pServed->m_pIndex->GetMatchSchema();
+	ARRAY_FOREACH ( i, tSchema.m_dFields )
+	{
+		const CSphColumnInfo & tCol = tSchema.m_dFields[i];
+		tOut.SendLSBDword ( ((uPacketID++)<<24) + MysqlPackedLen ( tCol.m_sName.cstr() ) + 6 );
+		tOut.SendMysqlString ( tCol.m_sName.cstr() );
+		tOut.SendMysqlString ( "field" );
+	}
+
+	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
+
+		const char * sType = "?";
+		switch ( tCol.m_eAttrType )
+		{
+			case SPH_ATTR_NONE:							sType = "none"; break;
+			case SPH_ATTR_INTEGER:						sType = "integer"; break;
+			case SPH_ATTR_TIMESTAMP:					sType = "timestamp"; break;
+			case SPH_ATTR_ORDINAL:						sType = "ordinal"; break;
+			case SPH_ATTR_BOOL:							sType = "bool"; break;
+			case SPH_ATTR_FLOAT:						sType = "float"; break;
+			case SPH_ATTR_BIGINT:						sType = "bigint"; break;
+			case SPH_ATTR_STRING:						sType = "string"; break;
+			case SPH_ATTR_INTEGER | SPH_ATTR_MULTI:		sType = "mva"; break;
+		}
+
+		tOut.SendLSBDword ( ((uPacketID++)<<24) + MysqlPackedLen ( tCol.m_sName.cstr() ) + MysqlPackedLen ( sType ) );
+		tOut.SendMysqlString ( tCol.m_sName.cstr() );
+		tOut.SendMysqlString ( sType );
+	}
+
+	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+}
+
+
+struct IndexNameLess_fn
+{
+	inline bool IsLess ( const CSphNamedInt & a, const CSphNamedInt & b ) const
+	{
+		return strcasecmp ( a.m_sName.cstr(), b.m_sName.cstr() )<0;
+	}
+};
+
+
+void HandleShowTables ( NetOutputBuffer_c & tOut, BYTE uPacketID )
+{
+	// result set header packet	
+	tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
+	tOut.SendByte ( 2 ); // field count (index, type)
+	tOut.SendByte ( 0 ); // extra
+
+	// fields
+	SendMysqlFieldPacket ( tOut, uPacketID++, "Index", MYSQL_COL_STRING );
+	SendMysqlFieldPacket ( tOut, uPacketID++, "Type", MYSQL_COL_STRING );
+	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+
+	// all the indexes
+	// 0 local, 1 distributed, 2 rt
+	CSphVector<CSphNamedInt> dIndexes;
+
+	for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
+		if ( it.Get().m_bEnabled )
+	{
+		CSphNamedInt & tIdx = dIndexes.Add();
+		tIdx.m_sName = it.GetKey();
+		tIdx.m_iValue = it.Get().m_bRT ? 2 : 0;
+	}
+
+	g_tDistLock.Lock();
+	g_hDistIndexes.IterateStart();
+	while ( g_hDistIndexes.IterateNext() )
+	{
+		CSphNamedInt & tIdx = dIndexes.Add();
+		tIdx.m_sName = g_hDistIndexes.IterateGetKey();
+		tIdx.m_iValue = 1;
+	}
+	g_tDistLock.Unlock();
+
+	dIndexes.Sort ( IndexNameLess_fn() );
+	ARRAY_FOREACH ( i, dIndexes )
+	{
+		const char * sType = "?";
+		switch ( dIndexes[i].m_iValue )
+		{
+			case 0: sType = "local"; break;
+			case 1: sType = "distributed"; break;
+			case 2: sType = "rt"; break;
+		}
+
+		tOut.SendLSBDword ( ((uPacketID++)<<24) + MysqlPackedLen ( dIndexes[i].m_sName.cstr() ) + MysqlPackedLen ( sType ) );
+		tOut.SendMysqlString ( dIndexes[i].m_sName.cstr() );
+		tOut.SendMysqlString ( sType );
+	}
+
+	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+}
+
+
 void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 {
 	MEMORY ( SPH_MEM_HANDLE_SQL );
@@ -8031,10 +8175,10 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 		{
 			MEMORY ( SPH_MEM_DELETE_SQL );
 
-			const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( tStmt.m_sDeleteIndex );
+			const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( tStmt.m_sIndex );
 			if ( !pServed )
 			{
-				sError.SetSprintf ( "no such index '%s'", tStmt.m_sDeleteIndex.cstr() );
+				sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
 				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
 				continue;
 			}
@@ -8042,7 +8186,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 			if ( !pServed->m_bRT )
 			{
 				pServed->Unlock();
-				sError.SetSprintf ( "index '%s' does not support INSERT", tStmt.m_sDeleteIndex.cstr() );
+				sError.SetSprintf ( "index '%s' does not support DELETE", tStmt.m_sIndex.cstr() );
 				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
 				continue;
 			}
@@ -8120,25 +8264,32 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 				continue;
 			}
 		case STMT_CALL:
+			tStmt.m_sCallProc.ToUpper();
+			if ( tStmt.m_sCallProc=="SNIPPETS" )
+				HandleCallSnippets ( tOut, uPacketID, tStmt );
+			else if ( tStmt.m_sCallProc=="KEYWORDS" )
+				HandleCallKeywords ( tOut, uPacketID, tStmt );
+			else
 			{
-				tStmt.m_sCallProc.ToUpper();
-				if ( tStmt.m_sCallProc=="SNIPPETS" )
-					HandleCallSnippets ( tOut, uPacketID, tStmt );
-				else if ( tStmt.m_sCallProc=="KEYWORDS" )
-					HandleCallKeywords ( tOut, uPacketID, tStmt );
-				else
-				{
-					sError.SetSprintf ( "no such builtin procedure %s", tStmt.m_sCallProc.cstr() );
-					SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
-				}
-				continue;
+				sError.SetSprintf ( "no such builtin procedure %s", tStmt.m_sCallProc.cstr() );
+				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
 			}
+			continue;
+
+		case STMT_DESC:
+			HandleDescribe ( tOut, uPacketID, tStmt );
+			continue;
+
+		case STMT_SHOW_TABLES:
+			HandleShowTables ( tOut, uPacketID );
+			continue;
+
 		default:
-		{
 			sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );
 			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
-		}
+			break;
 		} // switch
+
 	} // for ( ;; )
 
 	SafeClose ( iPipeFD );

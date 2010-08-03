@@ -26,6 +26,7 @@
 %token	TOK_COUNT
 %token	TOK_DELETE
 %token	TOK_DESC
+%token	TOK_DESCRIBE
 %token	TOK_DISTINCT
 %token	TOK_FALSE
 %token	TOK_FROM
@@ -49,6 +50,7 @@
 %token	TOK_START
 %token	TOK_STATUS
 %token	TOK_SUM
+%token	TOK_TABLES
 %token	TOK_TRANSACTION
 %token	TOK_TRUE
 %token	TOK_VALUES
@@ -112,6 +114,8 @@ statement:
 	| set_clause
 	| transact_op
 	| call_proc
+	| describe
+	| show_tables
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -514,7 +518,7 @@ insert_into:
 	insert_or_replace TOK_INTO TOK_IDENT opt_column_list TOK_VALUES insert_rows_list
 		{
 			// everything else is pushed directly into parser within the rules
-			pParser->m_pStmt->m_sInsertIndex = $3.m_sValue;
+			pParser->m_pStmt->m_sIndex = $3.m_sValue;
 		}
 	;
 
@@ -559,7 +563,7 @@ delete_from:
 	TOK_DELETE TOK_FROM TOK_IDENT TOK_WHERE TOK_ID '=' const_int
 		{
 			pParser->m_pStmt->m_eStmt = STMT_DELETE;
-			pParser->m_pStmt->m_sDeleteIndex = $3.m_sValue;
+			pParser->m_pStmt->m_sIndex = $3.m_sValue;
 			pParser->m_pStmt->m_iDeleteID = $7.m_iValue;
 		}
 	;
@@ -599,6 +603,27 @@ call_opt:
 call_opt_name:
 	TOK_IDENT
 	| TOK_LIMIT		{ $$.m_sValue = "limit"; }
+	;
+
+//////////////////////////////////////////////////////////////////////////
+
+describe:
+	describe_tok TOK_IDENT
+		{
+			pParser->m_pStmt->m_eStmt = STMT_DESC;
+			pParser->m_pStmt->m_sIndex = $2.m_sValue;
+		}
+	;
+
+describe_tok:
+	TOK_DESCRIBE
+	| TOK_DESC
+	;
+
+//////////////////////////////////////////////////////////////////////////
+
+show_tables:
+	TOK_SHOW TOK_TABLES		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_TABLES; }
 	;
 
 %%

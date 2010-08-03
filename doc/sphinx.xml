@@ -3353,6 +3353,66 @@ that specifies whether to return document and hit occurrence statistics.
 </sect1>
 
 
+<sect1 id="sphinxql-show-tables"><title>SHOW TABLES syntax</title>
+<programlisting>
+SHOW TABLES
+</programlisting>
+<para>
+SHOW TABLES statement, introduced in version 1.11-beta, enumerates
+all currently active indexes along with their types. As of 1.11-beta,
+existing index types are <option>local</option>, <option>distributed</option>,
+and <option>rt</option> respectively.
+Example:
+<programlisting>
+mysql> SHOW TABLES;
++-------+-------------+
+| Index | Type        |
++-------+-------------+
+| dist1 | distributed |
+| rt    | rt          |
+| test1 | local       |
+| test2 | local       |
++-------+-------------+
+4 rows in set (0.00 sec)
+</programlisting>
+</para>
+</sect1>
+
+
+<sect1 id="sphinxql-describe"><title>DESCRIBE syntax</title>
+<programlisting>
+{DESC | DESCRIBE} index
+</programlisting>
+<para>
+DESCRIBE statement, introduced in version 1.11-beta, lists
+index columns and their associated types. Columns are document ID,
+full-text fields, and attributes. The order matches that in which
+fields and attributes are expected by INSERT and REPLACE statements.
+As of 1.11-beta, column types are <option>field</option>,
+<option>integer</option>, <option>timestamp</option>,
+<option>ordinal</option>, <option>bool</option>,
+<option>float</option>, <option>bigint</option>,
+<option>string</option>, and <option>mva</option>.
+ID column will be typed either <option>integer</option>
+or <option>bigint</option> based on whether the binaries
+were built with 32-bit or 64-bit document ID support.
+Example:
+</para>
+<programlisting>
+mysql> DESC rt;
++---------+---------+
+| Field   | Type    |
++---------+---------+
+| id      | integer |
+| title   | field   |
+| content | field   |
+| gid     | integer |
++---------+---------+
+4 rows in set (0.00 sec)
+</programlisting>
+</sect1>
+
+
 </chapter>
 <chapter id="api-reference"><title>API reference</title>
 
@@ -8676,6 +8736,12 @@ binlog_max_log_size = 16M
 -->
 
 <appendix id="changelog"><title>Sphinx revision history</title>
+
+<sect1 id="rel111"><title>Version 1.11-beta, ???</title>
+<itemizedlist>
+<listitem>added <link linkend="sphinxql-show-tables">SHOW TABLES</link>, <link linkend="sphinxql-describe">DESCRIBE</link> SphinxQL statements</listitem>
+</itemizedlist>
+</sect1>
 
 <sect1 id="rel110"><title>Version 1.10-beta, 19 jul 2010</title>
 <itemizedlist>

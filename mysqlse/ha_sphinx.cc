@@ -411,10 +411,20 @@ struct CSphSEThreadData
 
 	CHARSET_INFO *		m_pQueryCharset;
 
+	bool				m_bReplace;		///< are we doing an INSERT or REPLACE
+
+	bool				m_bCondId;		///< got a value from condition pushdown
+	longlong			m_iCondId;		///< value acquired from id=value condition pushdown
+	bool				m_bCondDone;	///< index_read() is now over
+
 	CSphSEThreadData ()
 		: m_bStats ( false )
 		, m_bQuery ( false )
 		, m_pQueryCharset ( NULL )
+		, m_bReplace ( false )
+		, m_bCondId ( false )
+		, m_iCondId ( 0 )
+		, m_bCondDone ( false )
 	{}
 };
 
@@ -2180,6 +2190,20 @@ int ha_sphinx::HandleMysqlError ( MYSQL * pConn, int iErrCode )
 }
 
 
+int ha_sphinx::extra ( enum ha_extra_function op )
+{
+	CSphSEThreadData * pTls = GetTls();
+	if ( pTls )
+	{
+		if ( op==HA_EXTRA_WRITE_CAN_REPLACE )
+			pTls->m_bReplace = true;
+		else if ( op==HA_EXTRA_WRITE_CANNOT_REPLACE )
+			pTls->m_bReplace = false;
+	}
+	return 0;
+}
+
+
 int ha_sphinx::write_row ( byte * )
 {
 	SPH_ENTER_METHOD();
@@ -2195,7 +2219,8 @@ int ha_sphinx::write_row ( byte * )
 	sQuery.length ( 0 );
 	sValue.length ( 0 );
 
-	sQuery.append ( "INSERT INTO " );
+	CSphSEThreadData * pTls = GetTls ();
+	sQuery.append ( pTls && pTls->m_bReplace ? "REPLACE INTO " : "INSERT INTO " );
 	sQuery.append ( m_pShare->m_sIndex );
 	sQuery.append ( " (" );
 
@@ -2261,14 +2286,66 @@ int ha_sphinx::write_row ( byte * )
 }
 
 
-int ha_sphinx::update_row ( const byte *, byte * )
+static inline bool IsIntegerFieldType ( enum_field_types eType )
 {
-	SPH_ENTER_METHOD();
-	SPH_RET ( HA_ERR_WRONG_COMMAND );
+	return eType==MYSQL_TYPE_LONG || eType==MYSQL_TYPE_LONGLONG;
+}
+
+
+static inline bool IsIDField ( Field * pField )
+{
+	enum_field_types eType = pField->type(); 
+
+	if ( eType==MYSQL_TYPE_LONGLONG )
+		return true;
+
+	if ( eType==MYSQL_TYPE_LONG && ((Field_num*)pField)->unsigned_flag )
+		return true;
+
+	return false;
 }
 
 
 int ha_sphinx::delete_row ( const byte * )
+{
+	SPH_ENTER_METHOD();
+	if ( !m_pShare || !m_pShare->m_bSphinxQL )
+		SPH_RET ( HA_ERR_WRONG_COMMAND );
+
+	char sQueryBuf[1024];
+	String sQuery ( sQueryBuf, sizeof(sQueryBuf), &my_charset_bin );
+	sQuery.length ( 0 );
+
+	sQuery.append ( "DELETE FROM " );
+	sQuery.append ( m_pShare->m_sIndex );
+	sQuery.append ( " WHERE id=" );
+
+	char sValue[32];
+	snprintf ( sValue, sizeof(sValue), "%lld", table->field[0]->val_int() );
+	sQuery.append ( sValue );
+
+	// FIXME? pretty inefficient to reconnect every time under high load,
+	// but this was intentionally written for a low load scenario..
+	MYSQL * pConn = mysql_init ( NULL );
+	if ( !pConn )
+		SPH_RET ( ER_OUT_OF_RESOURCES );
+
+	unsigned int uTimeout = 1;
+	mysql_options ( pConn, MYSQL_OPT_CONNECT_TIMEOUT, (const char*)&uTimeout );
+
+	if ( !mysql_real_connect ( pConn, m_pShare->m_sHost, "root", "", "", m_pShare->m_iPort, m_pShare->m_sSocket, 0 ) )
+		SPH_RET ( HandleMysqlError ( pConn, ER_CONNECT_TO_FOREIGN_DATA_SOURCE ) );
+
+	if ( mysql_real_query ( pConn, sQuery.ptr(), sQuery.length() ) )
+		SPH_RET ( HandleMysqlError ( pConn, ER_QUERY_ON_FOREIGN_DATA_SOURCE ) );
+
+	// all ok!
+	mysql_close ( pConn );
+	SPH_RET(0);
+}
+
+
+int ha_sphinx::update_row ( const byte *, byte * )
 {
 	SPH_ENTER_METHOD();
 	SPH_RET ( HA_ERR_WRONG_COMMAND );
@@ -2281,6 +2358,11 @@ int ha_sphinx::index_init ( uint keynr, bool )
 {
 	SPH_ENTER_METHOD();
 	active_index = keynr;
+
+	CSphSEThreadData * pTls = GetTls();
+	if ( pTls )
+		pTls->m_bCondDone = false;
+
 	SPH_RET(0);
 }
 
@@ -2523,25 +2605,45 @@ const COND * ha_sphinx::cond_push ( const COND * cond )
 		if ( condf->functype()!=Item_func::EQ_FUNC || condf->argument_count()!=2 )
 			break;
 
-		Item ** args = condf->arguments();
-		if ( args[0]->type()!=COND::FIELD_ITEM || args[1]->type()!=COND::STRING_ITEM )
-			break;
-
-		Item_field * pField = (Item_field *) args[0];
-		if ( pField->field->field_index!=2 ) // FIXME! magic key index
-			break;
-
 		// get my tls
 		CSphSEThreadData * pTls = GetTls ();
 		if ( !pTls )
 			break;
 
-		// copy the query, and let know that we intercepted this condition
-		Item_string * pString = (Item_string *) args[1];
-		pTls->m_bQuery = true;
-		strncpy ( pTls->m_sQuery, pString->str_value.c_ptr(), sizeof(pTls->m_sQuery) );
-		pTls->m_sQuery[sizeof(pTls->m_sQuery)-1] = '\0';
-		pTls->m_pQueryCharset = pString->str_value.charset();
+		Item ** args = condf->arguments();
+		if ( !m_pShare->m_bSphinxQL )
+		{
+			// on non-QL tables, intercept query=value condition for SELECT
+			if (!( args[0]->type()==COND::FIELD_ITEM && args[1]->type()==COND::STRING_ITEM ))
+				break;
+
+			Item_field * pField = (Item_field *) args[0];
+			if ( pField->field->field_index!=2 ) // FIXME! magic key index
+				break;
+
+			// copy the query, and let know that we intercepted this condition
+			Item_string * pString = (Item_string *) args[1];
+			pTls->m_bQuery = true;
+			strncpy ( pTls->m_sQuery, pString->str_value.c_ptr(), sizeof(pTls->m_sQuery) );
+			pTls->m_sQuery[sizeof(pTls->m_sQuery)-1] = '\0';
+			pTls->m_pQueryCharset = pString->str_value.charset();
+
+		} else
+		{
+			if (!( args[0]->type()==COND::FIELD_ITEM && args[1]->type()==COND::INT_ITEM ))
+				break;
+
+			// on QL tables, intercept id=value condition for DELETE
+			Item_field * pField = (Item_field *) args[0];
+			if ( pField->field->field_index!=0 ) // FIXME! magic key index
+				break;
+
+			Item_int * pVal = (Item_int *) args[1];
+			pTls->m_iCondId = pVal->val_int();
+			pTls->m_bCondId = true;
+		}
+
+		// we intercepted this condition
 		return NULL;
 	}
 
@@ -2554,9 +2656,8 @@ const COND * ha_sphinx::cond_push ( const COND * cond )
 void ha_sphinx::cond_pop ()
 {
 	CSphSEThreadData * pTls = GetTls ();
-	if ( pTls && pTls->m_bQuery )
+	if ( pTls )
 		pTls->m_bQuery = false;
-	return;
 }
 
 
@@ -2596,6 +2697,38 @@ int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len, enum ha_
 		SPH_RET ( HA_ERR_END_OF_FILE );
 	}
 	pTls->m_tStats.Reset ();
+
+	// sphinxql table, just return the key once
+	if ( m_pShare->m_bSphinxQL )
+	{
+		// over and out
+		if ( pTls->m_bCondDone )
+			SPH_RET ( HA_ERR_END_OF_FILE );
+
+		// return a value from pushdown, if any
+		if ( pTls->m_bCondId )
+		{
+			table->field[0]->store ( pTls->m_iCondId, 1 );
+			pTls->m_bCondDone = true;
+			SPH_RET(0);
+		}
+
+		// return a value from key
+		longlong iRef = 0;
+		if ( key_len==4 )
+			iRef = uint4korr ( key );
+		else if ( key_len==8 )
+			iRef = uint8korr ( key );
+		else
+		{
+			my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "INTERNAL ERROR: unexpected key length" );
+			SPH_RET ( HA_ERR_END_OF_FILE );
+		}
+
+		table->field[0]->store ( iRef, 1 );
+		pTls->m_bCondDone = true;
+		SPH_RET(0);
+	}
 
 	// parse query
 	if ( pTls->m_bQuery )
@@ -3054,12 +3187,6 @@ ha_rows ha_sphinx::records_in_range ( uint, key_range *, key_range * )
 }
 
 
-static inline bool IsIntegerFieldType ( enum_field_types eType )
-{
-	return eType==MYSQL_TYPE_LONG || eType==MYSQL_TYPE_LONGLONG;
-}
-
-
 // create() is called to create a database. The variable name will have the name
 // of the table. When create() is called you do not need to worry about opening
 // the table. Also, the FRM file will have already been created so adjusting
@@ -3088,7 +3215,7 @@ int ha_sphinx::create ( const char * name, TABLE * table, HA_CREATE_INFO * )
 			break;
 		}
 
-		if ( !IsIntegerFieldType ( table->field[0]->type() ) || !((Field_num *)table->field[0])->unsigned_flag )
+		if ( !IsIDField ( table->field[0] ) )
 		{
 			my_snprintf ( sError, sizeof(sError), "%s: 1st column (docid) MUST be unsigned integer or bigint", name );
 			break;
@@ -3144,10 +3271,32 @@ int ha_sphinx::create ( const char * name, TABLE * table, HA_CREATE_INFO * )
 	for ( ; tInfo.m_bSphinxQL; )
 	{
 		sError[0] = '\0';
-		bool bId = false;
 
-		// check column types, and also for presence of an id column
-		for ( int i=0; i<(int)table->s->fields; i++ )
+		// check that 1st column is id, is of int type, and has an index
+		if ( strcmp ( table->field[0]->field_name, "id" ) )
+		{
+			my_snprintf ( sError, sizeof(sError), "%s: 1st column must be called 'id'", name );
+			break;
+		}
+
+		if ( !IsIDField ( table->field[0] ) )
+		{
+			my_snprintf ( sError, sizeof(sError), "%s: 'id' column must be INT UNSIGNED or BIGINT", name );
+			break;
+		}
+
+		// check index
+		if (
+			table->s->keys!=1 ||
+			table->key_info[0].key_parts!=1 ||
+			strcasecmp ( table->key_info[0].key_part[0].field->field_name, "id" ) )
+		{
+			my_snprintf ( sError, sizeof(sError), "%s: 'id' column must be indexed", name );
+			break;
+		}
+
+		// check column types
+		for ( int i=1; i<(int)table->s->fields; i++ )
 		{
 			enum_field_types eType = table->field[i]->type();
 			if ( eType!=MYSQL_TYPE_TIMESTAMP && !IsIntegerFieldType(eType) && eType!=MYSQL_TYPE_VARCHAR && eType!=MYSQL_TYPE_FLOAT )
@@ -3156,17 +3305,9 @@ int ha_sphinx::create ( const char * name, TABLE * table, HA_CREATE_INFO * )
 					name, i+1, table->field[i]->field_name );
 				break;
 			}
-			if ( strcmp ( table->field[i]->field_name, "id" )==0 )
-				bId = true;
 		}
 		if ( sError[0] )
 			break;
-
-		if ( !bId )
-		{
-			my_snprintf ( sError, sizeof(sError), "%s: id column not found", name );
-			break;
-		}
 
 		// all good
 		break;

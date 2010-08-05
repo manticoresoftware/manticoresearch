@@ -11763,7 +11763,7 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 
 	if ( m_bUse64!=USE_64BIT )
 	{
-#if 0
+#if USE_64BIT
 		// TODO: may be do this param conditional and push it into the config?
 		m_bId32to64 = true;
 #else
@@ -12175,6 +12175,7 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 		/////////////
 
 		int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+		int iStride2 = iStride-1; // id64 - 1 DWORD = id32
 		int iEntrySize = sizeof(DWORD)*iStride;
 
 		CSphAutofile tDocinfo ( GetIndexFileName("spa"), SPH_O_READ, m_sLastError );
@@ -12199,18 +12200,20 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 		if ( m_bId32to64 )
 		{
 			// check also the case of id32 here, and correct m_uDocinfo for it
-			int iStride2 = iStride-1; // id64 - 1 DWORD = id32
 			m_uDocinfo = (DWORD)( iRealDocinfoSize / iStride2 );
 			if ( iRealDocinfoSize!=m_uDocinfo*iStride2 )
 			{
 				m_sLastError.SetSprintf ( "docinfo size check mismatch (4B document limit hit?)" );
 				return false;
 			}
+			m_uMinMaxIndex = m_uMinMaxIndex / iStride2 * iStride;
 		}
 
 
 		if ( m_uVersion < 20 )
 		{
+			if ( m_bId32to64 )
+				iDocinfoSize = iDocinfoSize / iStride2 * iStride;
 			m_uDocinfoIndex = ( m_uDocinfo+DOCINFO_INDEX_FREQ-1 ) / DOCINFO_INDEX_FREQ;
 
 			// prealloc docinfo
@@ -12226,7 +12229,7 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 				return false;
 			}
 
-			m_uDocinfoIndex = ( ( iDocinfoSize - iRealDocinfoSize ) / iStride / 2 ) - 1;
+			m_uDocinfoIndex = ( ( iDocinfoSize - iRealDocinfoSize ) / (m_bId32to64?iStride2:iStride) / 2 ) - 1;
 
 			// prealloc docinfo
 			if ( !m_pDocinfo.Alloc ( iDocinfoSize + ( m_bId32to64 ? ( 2 + m_uDocinfo + 2*m_uDocinfoIndex ) : 0 ), m_sLastError, sWarning ) )
@@ -12421,7 +12424,7 @@ bool CSphIndex_VLN::Preread ()
 
 	sphLogDebug ( "Prereading .spa" );
 	if ( !PrereadSharedBuffer ( m_pDocinfo, "spa",
-		( m_uVersion<20 )? m_uDocinfo * ( DOCINFO_IDSIZE + m_tSchema.GetRowSize() ) * sizeof(DWORD) : 0 , m_bId32to64 ? ( 2 + m_uDocinfo + 2 * m_uDocinfoIndex ) : 0 ) )
+		( m_uVersion<20 )? m_uDocinfo * ( ( m_bId32to64 ? 1 : DOCINFO_IDSIZE ) + m_tSchema.GetRowSize() ) * sizeof(DWORD) : 0 , m_bId32to64 ? ( 2 + m_uDocinfo + 2 * m_uDocinfoIndex ) : 0 ) )
 		return false;
 
 	sphLogDebug ( "Prereading .spm" );

@@ -7702,7 +7702,7 @@ void HandleDescribe ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt_t & tStm
 		return;
 	}
 
-	// result set header packet	
+	// result set header packet
 	tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
 	tOut.SendByte ( 2 ); // field count (field, type)
 	tOut.SendByte ( 0 ); // extra
@@ -7765,7 +7765,7 @@ struct IndexNameLess_fn
 
 void HandleShowTables ( NetOutputBuffer_c & tOut, BYTE uPacketID )
 {
-	// result set header packet	
+	// result set header packet
 	tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
 	tOut.SendByte ( 2 ); // field count (index, type)
 	tOut.SendByte ( 0 ); // extra
@@ -8289,7 +8289,6 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
 			break;
 		} // switch
-
 	} // for ( ;; )
 
 	SafeClose ( iPipeFD );
@@ -9507,6 +9506,12 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		if ( !tSchema.m_dFields.GetLength() )
 		{
 			sphWarning ( "index '%s': no fields configured (use rt_field directive) - NOT SERVING", szIndexName );
+			return ADD_ERROR;
+		}
+
+		if ( tSchema.m_dFields.GetLength()>SPH_MAX_FIELDS )
+		{
+			sphWarning ( "index '%s': too many fields (fields=%d, max=%d) - NOT SERVING", szIndexName, tSchema.m_dFields.GetLength(), SPH_MAX_FIELDS );
 			return ADD_ERROR;
 		}
 

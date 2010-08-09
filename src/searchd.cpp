@@ -33,6 +33,12 @@
 #include <execinfo.h>
 #endif
 
+#if USE_WINDOWS
+#include <dbghelp.h>
+#pragma comment(linker, "/defaultlib:dbghelp.lib")
+#pragma message("Automatically linking with dbghelp.lib")
+#endif
+
 #define SEARCHD_BACKLOG			5
 #define SPHINXAPI_PORT			9312
 #define SPHINXQL_PORT			9306
@@ -144,7 +150,11 @@ public:
 	static void Init ();
 	static void Done ();
 
+#if !USE_WINDOWS
 	static void HandleCrash ( int );
+#else
+	static LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc );
+#endif
 	static void SetLastQuery ( const BYTE * pQuery, int iSize, bool bMySQL );
 	static void SetupTimePID ();
 	void SetupTLS ();
@@ -1383,6 +1393,27 @@ void sigusr1 ( int )
 
 #endif // !USE_WINDOWS
 
+#if USE_WINDOWS
+void StackTraceDump ( EXCEPTION_POINTERS * pExc, const char * sFile )
+{
+	if ( !pExc || !sFile || !(*sFile) )
+		return;
+
+	HANDLE hFile;
+	hFile = CreateFile ( sFile, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0 );
+	if ( !hFile )
+		return;
+
+	MINIDUMP_EXCEPTION_INFORMATION tExcInfo;
+	tExcInfo.ExceptionPointers = pExc;
+	tExcInfo.ClientPointers = FALSE;
+	tExcInfo.ThreadId = GetCurrentThreadId();
+
+	MiniDumpWriteDump ( GetCurrentProcess(), GetCurrentProcessId(), hFile, MiniDumpNormal, &tExcInfo, 0, 0 );
+	CloseHandle ( hFile );
+}
+#endif
+
 
 // crash query handle
 static const char g_dEncodeBase64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -1425,6 +1456,8 @@ const char		g_sCrashedBannerMySQL[] = "\n--- crashed SphinxMYSQL request dump --
 static BYTE		g_dEncoded[ 2*Max ( sizeof(g_sCrashedBannerAPI), sizeof(g_sCrashedBannerMySQL) )+SPH_LAST_QUERY_MAX_SIZE*4/3 ];
 static char		g_sCrashInfo [SPH_TIME_PID_MAX_SIZE] = "[none]\n";
 static int		g_iCrashInfoLen = 0;
+static char		g_sMinidump[SPH_TIME_PID_MAX_SIZE] = "\0";
+static int		g_iMinidumpLen = 0;
 
 SphCrashLogger_c SphCrashLogger_c::m_tLastQuery = SphCrashLogger_c ();
 SphThreadKey_t SphCrashLogger_c::m_tLastQueryTLS = SphThreadKey_t ();
@@ -1448,18 +1481,42 @@ void SphCrashLogger_c::Done ()
 		sphThreadKeyDelete ( m_tLastQueryTLS );
 }
 
+#if !USE_WINDOWS // UNIX case
+	#ifndef NDEBUG // has also to generate core
+		#define CRASH_EXIT signal ( sig, SIG_DFL ); kill ( getpid(), sig )
+	#else // simple exit
+		#define CRASH_EXIT exit ( 1 )
+	#endif
+#else // WINDOWS case
+	#ifndef NDEBUG // show prompt to attach debugger
+		#define CRASH_EXIT return EXCEPTION_CONTINUE_SEARCH
+	#else // simple exit
+		#define CRASH_EXIT return EXCEPTION_EXECUTE_HANDLER
+	#endif
+#endif
+
+#if !USE_WINDOWS
+#ifndef NDEBUG
+void SphCrashLogger_c::HandleCrash ( int sig )
+#else
 void SphCrashLogger_c::HandleCrash ( int )
+#endif // NDEBUG
+#else
+LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
+#endif // !USE_WINDOWS
 {
 	lseek ( g_iLogFile, 0, SEEK_END );
 	sphWrite ( g_iLogFile, g_sCrashInfo, g_iCrashInfoLen );
 
-#if !USE_WINDOWS // !COMMIT
+#if !USE_WINDOWS
 	StackTraceDump(0);
+#else
+	StackTraceDump ( pExc, g_sMinidump );
 #endif
 
 	// log crashed query
 	if ( g_iLogFile<=0 )
-		return;
+		CRASH_EXIT;
 
 	SphCrashLogger_c tQuery = m_tLastQuery;
 	if ( g_eWorkers==MPM_THREADS )
@@ -1470,7 +1527,7 @@ void SphCrashLogger_c::HandleCrash ( int )
 	}
 
 	if ( !tQuery.m_pQuery || !tQuery.m_iSize )
-		return;
+		CRASH_EXIT;
 
 	const char * sBanner = g_sCrashedBannerAPI;
 	int iBannerLen = sizeof( g_sCrashedBannerAPI )-1; // no need to append tail 0
@@ -1480,10 +1537,29 @@ void SphCrashLogger_c::HandleCrash ( int )
 		iBannerLen = sizeof ( g_sCrashedBannerMySQL )-1;
 	}
 
+	tQuery.m_iSize = Min ( tQuery.m_iSize, SPH_LAST_QUERY_MAX_SIZE );
+
 	BYTE * pEncoded = g_dEncoded;
+
+#if USE_WINDOWS
+	// mini-dump reference
+	memcpy ( pEncoded, g_sMinidump, g_iMinidumpLen );
+	pEncoded += g_iMinidumpLen;
+#endif
+
+	// BANNER head
 	memcpy ( pEncoded, sBanner, iBannerLen );
 	pEncoded += iBannerLen;
-	pEncoded = sphEncodeBase64 ( pEncoded, tQuery.m_pQuery, Min ( tQuery.m_iSize, SPH_LAST_QUERY_MAX_SIZE ) );
+
+	// query
+	if ( tQuery.m_bMySQL )
+	{
+		memcpy ( pEncoded, tQuery.m_pQuery, tQuery.m_iSize );
+		pEncoded += tQuery.m_iSize;
+	} else
+		pEncoded = sphEncodeBase64 ( pEncoded, tQuery.m_pQuery, tQuery.m_iSize );
+
+	// BANNER tail
 	memcpy ( pEncoded, sBanner, iBannerLen );
 	pEncoded += iBannerLen;
 
@@ -1492,9 +1568,7 @@ void SphCrashLogger_c::HandleCrash ( int )
 	lseek ( g_iLogFile, 0, SEEK_END );
 	sphWrite ( g_iLogFile, g_dEncoded, iSize );
 
-#if !USE_WINDOWS
-	exit ( 1 );
-#endif
+	CRASH_EXIT;
 }
 
 void SphCrashLogger_c::SetLastQuery ( const BYTE * pQuery, int iSize, bool bMySQL )
@@ -1532,6 +1606,29 @@ void SphCrashLogger_c::SetupTLS ()
 	Verify ( sphThreadSet ( m_tLastQueryTLS, this ) );
 }
 
+#if USE_WINDOWS
+LONG WINAPI WinCrashHandler ( EXCEPTION_POINTERS * pExc )
+{
+	if ( !pExc )
+		return EXCEPTION_EXECUTE_HANDLER;
+
+	HANDLE hFile;
+	hFile = CreateFile ( "c:/searchd.dmp", GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0 );
+	if ( !hFile )
+		return EXCEPTION_EXECUTE_HANDLER;
+
+	MINIDUMP_EXCEPTION_INFORMATION tExcInfo;
+	tExcInfo.ExceptionPointers = pExc;
+	tExcInfo.ClientPointers = FALSE;
+	tExcInfo.ThreadId = GetCurrentThreadId();
+
+	MiniDumpWriteDump ( GetCurrentProcess(), GetCurrentProcessId(), hFile, MiniDumpNormal, &tExcInfo, 0, 0 );
+	CloseHandle ( hFile );
+
+	return EXCEPTION_EXECUTE_HANDLER;
+}
+#endif
+
 
 void SetSignalHandlers ()
 {
@@ -1562,6 +1659,9 @@ void SetSignalHandlers ()
 	}
 	if ( !bSignalsSet )
 		sphFatal ( "sigaction(): %s", strerror(errno) );
+#else
+	g_iMinidumpLen = snprintf ( g_sMinidump, SPH_TIME_PID_MAX_SIZE-1, "%s.%d.mdmp", g_sPidFile ? g_sPidFile : "", (int)getpid() );
+	SetUnhandledExceptionFilter ( SphCrashLogger_c::HandleCrash );
 #endif
 }
 

@@ -265,7 +265,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "attr_flush_period",		0, NULL },
 	{ "max_packet_size",		0, NULL },
 	{ "mva_updates_pool",		0, NULL },
-	{ "crash_log_path",			0, NULL },
+	{ "crash_log_path",			KEY_DEPRECATED, NULL },
 	{ "max_filters",			0, NULL },
 	{ "max_filter_values",		0, NULL },
 	{ "listen_backlog",			0, NULL },

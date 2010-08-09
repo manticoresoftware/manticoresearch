@@ -136,11 +136,27 @@ static CSphVector<CSphString>	g_dArgs;
 static bool				g_bHeadDaemon	= false;
 static bool				g_bLogStdout	= true;
 
-static bool				g_bCrashLog_Enabled			= false;
-static const char *		g_sCrashLog_Path			= NULL;
-static const BYTE *		g_pCrashLog_LastQuery		= NULL;
-static int				g_iCrashLog_LastQuerySize	= 0;
-static BYTE				g_dCrashLog_LastHello[12];
+class SphCrashLogger_c
+{
+public:
+	SphCrashLogger_c ();
+
+	static void Init ();
+	static void Done ();
+
+	static void HandleCrash ( int );
+	static void SetLastQuery ( const BYTE * pQuery, int iSize, bool bMySQL );
+	static void SetupTimePID ();
+	void SetupTLS ();
+
+private:
+	const BYTE *			m_pQuery; // last query
+	int						m_iSize; // last query size
+	bool					m_bMySQL; // is query from MySQL or API
+
+	static SphCrashLogger_c	m_tLastQuery; // non threaded mode last query
+	static SphThreadKey_t	m_tLastQueryTLS; // threaded mode last query
+};
 
 static ESphLogLevel		g_eLogLevel		= LOG_INFO;
 static int				g_iLogFile		= STDOUT_FILENO;	// log file descriptor
@@ -1293,7 +1309,7 @@ void StackTraceDump ( int )
 
 	if ( !pFramePointer )
 	{
-		sphLogFatal ( "Frame pointer is null. Unable to backtrace the stack. Did you build the searchd with -fomit-frame-pointer?" );
+		sphWarning ( "Frame pointer is null. Unable to backtrace the stack. Did you build the searchd with -fomit-frame-pointer?" );
 		return;
 	}
 
@@ -1335,29 +1351,6 @@ void StackTraceDump ( int )
 	sphInfo ( "-------------- cut here ---------------" );
 }
 
-void HandleCrash ( int )
-{
-	StackTraceDump(0);
-
-	if ( !g_pCrashLog_LastQuery )
-		return;
-
-	static char sBuffer[1024];
-	snprintf ( sBuffer, sizeof(sBuffer), "%s.%d", g_sCrashLog_Path, (int)getpid() );
-
-	bool bOK = false;
-	int iFD = ::open ( sBuffer, O_WRONLY | O_CREAT | O_TRUNC, 0644 );
-	if ( iFD>=0 )
-	{
-		const int iSize = Min ( g_iCrashLog_LastQuerySize, g_iMaxPacketSize );
-		bOK = sphWrite ( iFD, g_dCrashLog_LastHello, sizeof(g_dCrashLog_LastHello) );
-		bOK &= sphWrite ( iFD, g_pCrashLog_LastQuery, iSize );
-		::close ( iFD );
-	}
-
-	if ( !bOK )
-		sphWarning ( "crash log creation failed, errno=%d\n", errno );
-}
 
 void sighup ( int )
 {
@@ -1390,6 +1383,156 @@ void sigusr1 ( int )
 
 #endif // !USE_WINDOWS
 
+
+// crash query handle
+static const char g_dEncodeBase64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+BYTE * sphEncodeBase64 ( BYTE * pDst, const BYTE * pSrc, int iLen )
+{
+	for ( int i=0; i<iLen/3; i++ )
+	{
+		// Convert to big endian
+		DWORD uSrc = ( pSrc[i*3+0] << 16 ) | ( pSrc[i*3+1] << 8 ) | ( pSrc[i*3+2] );
+
+		*pDst++ = g_dEncodeBase64 [ ( uSrc & 0x00FC0000 ) >> 18 ];
+		*pDst++ = g_dEncodeBase64 [ ( uSrc & 0x0003F000 ) >> 12 ];
+		*pDst++ = g_dEncodeBase64 [ ( uSrc & 0x00000FC0 ) >> 6 ];
+		*pDst++ = g_dEncodeBase64 [ ( uSrc & 0x0000003F ) ];
+	}
+
+	if ( iLen%3==1 )
+	{
+		DWORD uSrc = pSrc[iLen-1]<<16;
+		*pDst++ = g_dEncodeBase64 [ ( uSrc & 0x00FC0000 ) >> 18 ];
+		*pDst++ = g_dEncodeBase64 [ ( uSrc & 0x0003F000 ) >> 12 ];
+		*pDst++ = '=';
+		*pDst++ = '=';
+	} else if ( iLen%3==2 )
+	{
+		DWORD uSrc = ( pSrc[iLen-2]<<16 ) | ( pSrc[iLen-1] << 8 );
+		*pDst++ = g_dEncodeBase64 [ ( uSrc & 0x00FC0000 ) >> 18 ];
+		*pDst++ = g_dEncodeBase64 [ ( uSrc & 0x0003F000 ) >> 12 ];
+		*pDst++ = g_dEncodeBase64 [ ( uSrc & 0x00000FC0 ) >> 6 ];
+		*pDst++ = '=';
+	}
+
+	return pDst;
+}
+
+#define SPH_LAST_QUERY_MAX_SIZE 4096
+#define SPH_TIME_PID_MAX_SIZE 256
+const char		g_sCrashedBannerAPI[] = "\n--- crashed SphinxAPI request dump ---\n";
+const char		g_sCrashedBannerMySQL[] = "\n--- crashed SphinxMYSQL request dump ---\n";
+static BYTE		g_dEncoded[ 2*Max ( sizeof(g_sCrashedBannerAPI), sizeof(g_sCrashedBannerMySQL) )+SPH_LAST_QUERY_MAX_SIZE*4/3 ];
+static char		g_sCrashInfo [SPH_TIME_PID_MAX_SIZE] = "[none]\n";
+static int		g_iCrashInfoLen = 0;
+
+SphCrashLogger_c SphCrashLogger_c::m_tLastQuery = SphCrashLogger_c ();
+SphThreadKey_t SphCrashLogger_c::m_tLastQueryTLS = SphThreadKey_t ();
+
+SphCrashLogger_c::SphCrashLogger_c ()
+	: m_pQuery ( NULL )
+	, m_iSize ( 0 )
+	, m_bMySQL ( false )
+{
+}
+
+void SphCrashLogger_c::Init ()
+{
+	if ( g_eWorkers==MPM_THREADS )
+		Verify ( sphThreadKeyCreate ( &m_tLastQueryTLS ) );
+}
+
+void SphCrashLogger_c::Done ()
+{
+	if ( g_eWorkers==MPM_THREADS )
+		sphThreadKeyDelete ( m_tLastQueryTLS );
+}
+
+void SphCrashLogger_c::HandleCrash ( int )
+{
+	lseek ( g_iLogFile, 0, SEEK_END );
+	sphWrite ( g_iLogFile, g_sCrashInfo, g_iCrashInfoLen );
+
+#if !USE_WINDOWS // !COMMIT
+	StackTraceDump(0);
+#endif
+
+	// log crashed query
+	if ( g_iLogFile<=0 )
+		return;
+
+	SphCrashLogger_c tQuery = m_tLastQuery;
+	if ( g_eWorkers==MPM_THREADS )
+	{
+		const SphCrashLogger_c * pQueryTLS = (SphCrashLogger_c *)sphThreadGet ( m_tLastQueryTLS );
+		if ( pQueryTLS )
+			tQuery = *pQueryTLS;
+	}
+
+	if ( !tQuery.m_pQuery || !tQuery.m_iSize )
+		return;
+
+	const char * sBanner = g_sCrashedBannerAPI;
+	int iBannerLen = sizeof( g_sCrashedBannerAPI )-1; // no need to append tail 0
+	if ( tQuery.m_bMySQL )
+	{
+		sBanner = g_sCrashedBannerMySQL;
+		iBannerLen = sizeof ( g_sCrashedBannerMySQL )-1;
+	}
+
+	BYTE * pEncoded = g_dEncoded;
+	memcpy ( pEncoded, sBanner, iBannerLen );
+	pEncoded += iBannerLen;
+	pEncoded = sphEncodeBase64 ( pEncoded, tQuery.m_pQuery, Min ( tQuery.m_iSize, SPH_LAST_QUERY_MAX_SIZE ) );
+	memcpy ( pEncoded, sBanner, iBannerLen );
+	pEncoded += iBannerLen;
+
+	int iSize = pEncoded-g_dEncoded;
+
+	lseek ( g_iLogFile, 0, SEEK_END );
+	sphWrite ( g_iLogFile, g_dEncoded, iSize );
+
+#if !USE_WINDOWS
+	exit ( 1 );
+#endif
+}
+
+void SphCrashLogger_c::SetLastQuery ( const BYTE * pQuery, int iSize, bool bMySQL )
+{
+	if ( g_eWorkers==MPM_THREADS )
+	{
+		SphCrashLogger_c * pQueryTLS = (SphCrashLogger_c *)sphThreadGet ( m_tLastQueryTLS );
+		if ( pQueryTLS )
+		{
+			pQueryTLS->m_pQuery = pQuery;
+			pQueryTLS->m_iSize = iSize;
+			pQueryTLS->m_bMySQL = bMySQL;
+		}
+	} else
+	{
+		m_tLastQuery.m_pQuery = pQuery;
+		m_tLastQuery.m_iSize = iSize;
+		m_tLastQuery.m_bMySQL = bMySQL;
+	}
+}
+
+void SphCrashLogger_c::SetupTimePID ()
+{
+	char sTimeBuf[SPH_TIME_PID_MAX_SIZE];
+	sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
+
+	g_iCrashInfoLen = snprintf ( g_sCrashInfo, SPH_TIME_PID_MAX_SIZE-1, "[%s] [%5d] FATAL: crash log\n", sTimeBuf, (int)getpid() );
+}
+
+void SphCrashLogger_c::SetupTLS ()
+{
+	if ( g_eWorkers!=MPM_THREADS )
+		return;
+
+	Verify ( sphThreadSet ( m_tLastQueryTLS, this ) );
+}
+
+
 void SetSignalHandlers ()
 {
 #if !USE_WINDOWS
@@ -1406,23 +1549,14 @@ void SetSignalHandlers ()
 		sa.sa_handler = sigusr1;	if ( sigaction ( SIGUSR1, &sa, NULL )!=0 ) break;
 		sa.sa_handler = sigchld;	if ( sigaction ( SIGCHLD, &sa, NULL )!=0 ) break;
 		sa.sa_handler = SIG_IGN;	if ( sigaction ( SIGPIPE, &sa, NULL )!=0 ) break;
-		if ( g_bCrashLog_Enabled )
-		{
-			sa.sa_flags |= SA_RESETHAND;
-			sa.sa_handler = HandleCrash;	if ( sigaction ( SIGSEGV, &sa, NULL )!=0 ) break;
-			sa.sa_handler = HandleCrash;	if ( sigaction ( SIGBUS, &sa, NULL )!=0 ) break;
-			sa.sa_handler = HandleCrash;	if ( sigaction ( SIGABRT, &sa, NULL )!=0 ) break;
-			sa.sa_handler = HandleCrash;	if ( sigaction ( SIGILL, &sa, NULL )!=0 ) break;
-			sa.sa_handler = HandleCrash;	if ( sigaction ( SIGFPE, &sa, NULL )!=0 ) break;
-		} else
-		{
-			sa.sa_flags |= SA_RESETHAND;
-			sa.sa_handler = StackTraceDump;	if ( sigaction ( SIGSEGV, &sa, NULL )!=0 ) break;
-			sa.sa_handler = StackTraceDump;	if ( sigaction ( SIGBUS, &sa, NULL )!=0 ) break;
-			sa.sa_handler = StackTraceDump;	if ( sigaction ( SIGABRT, &sa, NULL )!=0 ) break;
-			sa.sa_handler = StackTraceDump;	if ( sigaction ( SIGILL, &sa, NULL )!=0 ) break;
-			sa.sa_handler = StackTraceDump;	if ( sigaction ( SIGFPE, &sa, NULL )!=0 ) break;
-		}
+
+		sa.sa_flags |= SA_RESETHAND;
+		sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGSEGV, &sa, NULL )!=0 ) break;
+		sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGBUS, &sa, NULL )!=0 ) break;
+		sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGABRT, &sa, NULL )!=0 ) break;
+		sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGILL, &sa, NULL )!=0 ) break;
+		sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGFPE, &sa, NULL )!=0 ) break;
+
 		bSignalsSet = true;
 		break;
 	}
@@ -6949,9 +7083,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD )
 	tBuf.GetInt (); // client version is for now unused
 	do
 	{
-		g_pCrashLog_LastQuery = NULL;
-
-		// in "persistent connection" mode, we want interruptable waits
+		// in "persistent connection" mode, we want interruptible waits
 		// so that the worker child could be forcibly restarted
 		if ( !tBuf.ReadFrom ( 8, iTimeout, bPersist ) && g_bGotSigterm )
 			break;
@@ -6977,9 +7109,6 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD )
 			// sphWarning ( "failed to receive client version and request (client=%s, error=%s)", sClientIP, sphSockError() );
 			return;
 		}
-
-		if ( g_bCrashLog_Enabled )
-			memcpy ( g_dCrashLog_LastHello + 4, tBuf.GetBufferPtr(), sizeof(g_dCrashLog_LastHello) - 4 );
 
 		// check request
 		if ( iCommand<0 || iCommand>=SEARCHD_COMMAND_TOTAL
@@ -7012,11 +7141,8 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD )
 			return;
 		}
 
-		if ( g_bCrashLog_Enabled )
-		{
-			g_pCrashLog_LastQuery = tBuf.GetBufferPtr();
-			g_iCrashLog_LastQuerySize = iLength;
-		}
+		// set on query guard
+		SphCrashLogger_c::SetLastQuery ( tBuf.GetBufferPtr(), iLength, false );
 
 		// handle known commands
 		assert ( iCommand>=0 && iCommand<SEARCHD_COMMAND_TOTAL );
@@ -7032,6 +7158,9 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD )
 			case SEARCHD_COMMAND_FLUSHATTRS:HandleCommandFlush ( iSock, iCommandVer, tBuf ); break;
 			default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
 		}
+
+		// set off query guard
+		SphCrashLogger_c::SetLastQuery ( NULL, 0, false );
 	} while ( bPersist );
 	SafeClose ( iPipeFD );
 }
@@ -7860,8 +7989,14 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 	bool bAutoCommit = true;
 	bool bInTransaction = false; // ignores bAutoCommit inside transaction
 
+	// to keep data alive for SphCrashQuery_c
+	CSphString sQuery;
+
 	for ( ;; )
 	{
+		// set off query guard
+		SphCrashLogger_c::SetLastQuery ( NULL, 0, true );
+
 		CSphString sError;
 
 		// send the packet formed on the previous cycle
@@ -7913,7 +8048,10 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 
 		// handle query packet
 		assert ( uMysqlCmd==MYSQL_COM_QUERY );
-		CSphString sQuery = tIn.GetRawString ( iPacketLen-1 );
+		sQuery = tIn.GetRawString ( iPacketLen-1 );
+
+		// set on query guard
+		SphCrashLogger_c::SetLastQuery ( (const BYTE *)sQuery.cstr(), sQuery.Length(), true );
 
 		// parse SQL query
 		SearchHandler_c tHandler ( 1 );
@@ -8290,6 +8428,9 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 			break;
 		} // switch
 	} // for ( ;; )
+
+	// set off query guard
+	SphCrashLogger_c::SetLastQuery ( NULL, 0, true );
 
 	SafeClose ( iPipeFD );
 }
@@ -10713,6 +10854,10 @@ void FailClient ( int iSock, SearchdStatus_e eStatus, const char * sMessage )
 
 void HandlerThread ( void * pArg )
 {
+	// setup query guard for threaded mode
+	SphCrashLogger_c tQueryTLS;
+	tQueryTLS.SetupTLS ();
+
 	// handle that client
 	ThdDesc_t * pThd = (ThdDesc_t*) pArg;
 	HandleClient ( pThd->m_eProto, pThd->m_iClientSock, pThd->m_sClientName.cstr(), -1 );
@@ -11236,22 +11381,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			sphFatal ( "failed to lock pid file '%s': %s (searchd already running?)", g_sPidFile, strerror(errno) );
 	}
 
-	if ( hSearchd("crash_log_path") )
-	{
-		g_sCrashLog_Path = hSearchd["crash_log_path"].cstr();
-		g_bCrashLog_Enabled = true;
-
-		char sPath[1024];
-		snprintf ( sPath, sizeof(sPath), "%s.test", g_sCrashLog_Path );
-		int iFd = open ( sPath, O_CREAT | O_WRONLY, 0644 );
-		if ( iFd==-1 )
-			sphWarning ( "unable to create files in crash_log_path: %s", strerror(errno) );
-		else
-		{
-			close ( iFd );
-			unlink ( sPath );
-		}
-	}
 
 	//////////////////////////////////////////////////
 	// shared stuff (perf counters, flushing) startup
@@ -11613,6 +11742,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	for ( ;; )
 	{
+		SphCrashLogger_c::SetupTimePID();
+
 		if ( !g_bHeadDaemon && pAcceptMutex )
 			TickPreforked ( pAcceptMutex );
 		else

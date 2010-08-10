@@ -1270,6 +1270,216 @@ void Shutdown ()
 }
 
 
+template <typename Uint>
+void UItoA ( char** ppOutput, Uint uVal, int iBase=10, int iWidth=0, int iPrec=0, const char cFill=' ' )
+{
+	assert ( ppOutput );
+	assert ( *ppOutput );
+
+	const char cDigits[] = "0123456789abcdef";
+
+	if ( iWidth && iPrec )
+	{
+		iPrec = iWidth;
+		iWidth = 0;
+	}
+
+	if ( !uVal )
+	{
+		if ( !iPrec && !iWidth )
+			*(*ppOutput)++ = cDigits[0];
+		else
+		{
+			while ( iPrec-- )
+				*(*ppOutput)++ = cDigits[0];
+			if ( iWidth )
+			{
+				while ( --iWidth )
+					*(*ppOutput)++ = cFill;
+				*(*ppOutput)++ = cDigits[0];
+			}
+		}
+		return;
+	}
+
+	const BYTE uMaxIndex = 31; // 20 digits for MAX_INT64 in decimal; let it be 31 (32 digits max).
+	char CBuf[uMaxIndex+1];
+	char *pRes = &CBuf[uMaxIndex];
+	char *& pOutput = *ppOutput;
+
+	while ( uVal )
+	{
+		*pRes-- = cDigits [ uVal % iBase ];
+		uVal /= iBase;
+	}
+
+	BYTE uLen = uMaxIndex - (pRes-CBuf);
+
+	if ( iWidth )
+		while ( uLen < iWidth )
+		{
+			*pOutput++=cFill;
+			iWidth--;
+		}
+
+	if ( iPrec )
+	{
+		while ( uLen < iPrec )
+		{
+			*pOutput++=cDigits[0];
+			iPrec--;
+		}
+		iPrec = uLen-iPrec;
+	}
+
+	while ( pRes<CBuf+uMaxIndex-iPrec )
+		*pOutput++=*++pRes;
+}
+
+void myVSprintf ( char* pOutput, const char* sFmt, va_list ap )
+{
+	char c;
+	enum eStates { SNORMAL, SPERCENT, SHAVEFILL, SINWIDTH, SINPERC };
+	eStates state = SNORMAL;
+	int iPrec = 0;
+	int iWidth = 0;
+	char cFill = ' ';
+	while ( (c = *sFmt++) )
+		switch ( c )
+		{
+			case '%':
+				if ( state==SNORMAL )
+				{
+					state = SPERCENT;
+					iPrec = 0;
+					iWidth = 0;
+					cFill = ' ';
+				} else
+				{
+					state = SNORMAL;
+					*pOutput++ = c;
+				}
+				break;
+			case '0':
+				if ( state==SPERCENT )
+				{
+					cFill = '0';
+					state = SHAVEFILL;
+					break;
+				};
+			case '1': case '2': case '3':
+			case '4': case '5': case '6':
+			case '7': case '8': case '9':
+				if ( state==SNORMAL )
+				{
+					*pOutput++ = c;
+					break;
+				}
+				if ( state==SPERCENT || state==SHAVEFILL )
+				{
+					state = SINWIDTH;
+					iWidth = c - '0';
+				} else if ( state==SINWIDTH )
+					iWidth = iWidth * 10 + c - '0';
+				else if ( state==SINPERC )
+					iPrec = iPrec * 10 + c - '0';
+				break;
+			case '.':
+				if ( state==SNORMAL )
+					*pOutput++ = c;
+				else
+				{
+					state = SINPERC;
+					iPrec = 0;
+				}
+				break;
+			case 's': // string
+				if ( state==SNORMAL )
+				{
+					*pOutput++ = c;
+					break;
+				}
+				{
+					const char* pValue = va_arg ( ap, const char* );
+					int iValue = strlen ( pValue );
+					if ( iWidth )
+						while ( iValue < iWidth-- )
+							*pOutput++ = ' ';
+					if ( iPrec && iPrec < iValue )
+						while ( iPrec-- )
+							*pOutput++ = *pValue++;
+					else
+						while ( *pValue )
+							*pOutput++ = *pValue++;
+					state = SNORMAL;
+					break;
+				}
+			case 'p': // pointer
+				if ( state==SNORMAL )
+				{
+					*pOutput++ = c;
+					break;
+				}
+				{
+					void* pValue = va_arg ( ap, void* );
+					uint64_t uValue = uint64_t ( pValue );
+					UItoA ( &pOutput, uValue, 16, iWidth, iPrec, cFill );
+					state = SNORMAL;
+					break;
+				}
+			case 'x': // hex integer
+				if ( state==SNORMAL )
+				{
+					*pOutput++ = c;
+					break;
+				}
+				{
+					DWORD uValue = va_arg ( ap, DWORD );
+					UItoA ( &pOutput, uValue, 16, iWidth, iPrec, cFill );
+					state = SNORMAL;
+					break;
+				}
+			case 'd': // decimal integer
+				if ( state==SNORMAL )
+				{
+					*pOutput++ = c;
+					break;
+				}
+				{
+					DWORD uValue = va_arg ( ap, DWORD );
+					UItoA ( &pOutput, uValue, 10, iWidth, iPrec, cFill );
+					state = SNORMAL;
+					break;
+				}
+			default:
+				state = SNORMAL;
+				*pOutput++ = c;
+		}
+	// final zero char
+	*pOutput++ = c;
+}
+
+void mySrpintf ( char* sBuf, const char * sFmt, ... )
+{
+	assert ( sFmt );
+	va_list ap;
+	va_start ( ap, sFmt );
+	myVSprintf ( sBuf, sFmt, ap );
+	va_end ( ap );
+}
+
+void sphSafeInfo ( const char * sFmt, ... )
+{
+	assert ( sFmt );
+	char sBuf [ 1024 ];
+	va_list ap;
+	va_start ( ap, sFmt );
+	myVSprintf ( sBuf, sFmt, ap );
+	va_end ( ap );
+	sphLogEntry ( LOG_INFO, sBuf, sBuf );
+}
+
+
 #if !USE_WINDOWS
 
 void StackTraceDump ( int )
@@ -1277,17 +1487,17 @@ void StackTraceDump ( int )
 	void * pMyStack = sphMyStack();
 	int iStackSize = sphMyStackSize();
 
-	sphInfo ( "-------------- cut here ---------------" );
-	sphInfo ( "Searchd " SPHINX_VERSION );
+	sphSafeInfo ( "-------------- cut here ---------------" );
+	sphSafeInfo ( "Searchd " SPHINX_VERSION );
 #ifdef COMPILER
-	sphInfo ( "Program compiled with " COMPILER );
+	sphSafeInfo ( "Program compiled with " COMPILER );
 #endif
 
 #ifdef OS_UNAME
-	sphInfo ( "Host OS is "OS_UNAME );
+	sphSafeInfo ( "Host OS is "OS_UNAME );
 #endif
 
-	sphInfo ( "Stack bottom = %p, thread stack size = 0x%x", pMyStack, iStackSize );
+	sphSafeInfo ( "Stack bottom = 0x%p, thread stack size = 0x%x", pMyStack, iStackSize );
 
 #if HAVE_BACKTRACE
 	void *pAddresses [128];
@@ -1296,11 +1506,11 @@ void StackTraceDump ( int )
 #if HAVE_BACKTRACE_SYMBOLS
 	pszStrings = backtrace_symbols ( pAddresses, iDepth );
 	for ( int i=0; i<iDepth; i++ )
-		sphInfo ( "%s", pszStrings[i] );
+		sphSafeInfo ( "%s", pszStrings[i] );
 	free ( pszStrings );
 #elif !HAVE_BACKTRACE_SYMBOLS
 	for ( int i=0; i<Depth; i++ )
-		sphInfo ( "%p", pAddresses[i] );
+		sphSafeInfo ( "%p", pAddresses[i] );
 #endif
 
 #elif !HAVE_BACKTRACE
@@ -1338,14 +1548,14 @@ void StackTraceDump ( int )
 		}
 	}
 
-	sphInfo ( "Stack is OK. Backtrace:" );
+	sphSafeInfo ( "Stack is OK. Backtrace:" );
 
 	BYTE** pNewFP;
 	bool bOk = true;
 	while ( pFramePointer < (BYTE**) pMyStack )
 	{
 		pNewFP = (BYTE**) *pFramePointer;
-		sphInfo ( "%p", iFrameCount==iReturnFrameCount? *(pFramePointer + SIGRETURN_FRAME_OFFSET) : *(pFramePointer + 1) );
+		sphSafeInfo ( "%p", iFrameCount==iReturnFrameCount? *(pFramePointer + SIGRETURN_FRAME_OFFSET) : *(pFramePointer + 1) );
 
 		bOk = pNewFP > pFramePointer;
 		if ( !bOk ) break;
@@ -1358,9 +1568,9 @@ void StackTraceDump ( int )
 		sphWarning ( "Something wrong in frame pointers. BackTrace failed (failed FP was %p)", pNewFP );
 	else
 #endif // !HAVE_BACKTRACE
-		sphInfo ( "Stack trace seems to be succesfull. Now you have to resolve the numbers above and attach resolved values to the bugreport. See the section about resolving in the documentation" );
+		sphSafeInfo ( "Stack trace seems to be succesfull. Now you have to resolve the numbers above and attach resolved values to the bugreport. See the section about resolving in the documentation" );
 
-	sphInfo ( "-------------- cut here ---------------" );
+	sphSafeInfo ( "-------------- cut here ---------------" );
 }
 
 

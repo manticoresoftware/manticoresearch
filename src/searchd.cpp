@@ -1229,6 +1229,8 @@ void Shutdown ()
 		SafeDelete ( g_pIndexes );
 		sphRTDone();
 
+		SphCrashLogger_c::Done();
+
 		sphShutdownWordforms ();
 	}
 
@@ -1456,8 +1458,11 @@ const char		g_sCrashedBannerMySQL[] = "\n--- crashed SphinxMYSQL request dump --
 static BYTE		g_dEncoded[ 2*Max ( sizeof(g_sCrashedBannerAPI), sizeof(g_sCrashedBannerMySQL) )+SPH_LAST_QUERY_MAX_SIZE*4/3 ];
 static char		g_sCrashInfo [SPH_TIME_PID_MAX_SIZE] = "[none]\n";
 static int		g_iCrashInfoLen = 0;
+
+#if USE_WINDOWS
 static char		g_sMinidump[SPH_TIME_PID_MAX_SIZE] = "\0";
 static int		g_iMinidumpLen = 0;
+#endif
 
 SphCrashLogger_c SphCrashLogger_c::m_tLastQuery = SphCrashLogger_c ();
 SphThreadKey_t SphCrashLogger_c::m_tLastQueryTLS = SphThreadKey_t ();
@@ -1606,32 +1611,11 @@ void SphCrashLogger_c::SetupTLS ()
 	Verify ( sphThreadSet ( m_tLastQueryTLS, this ) );
 }
 
-#if USE_WINDOWS
-LONG WINAPI WinCrashHandler ( EXCEPTION_POINTERS * pExc )
-{
-	if ( !pExc )
-		return EXCEPTION_EXECUTE_HANDLER;
-
-	HANDLE hFile;
-	hFile = CreateFile ( "c:/searchd.dmp", GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0 );
-	if ( !hFile )
-		return EXCEPTION_EXECUTE_HANDLER;
-
-	MINIDUMP_EXCEPTION_INFORMATION tExcInfo;
-	tExcInfo.ExceptionPointers = pExc;
-	tExcInfo.ClientPointers = FALSE;
-	tExcInfo.ThreadId = GetCurrentThreadId();
-
-	MiniDumpWriteDump ( GetCurrentProcess(), GetCurrentProcessId(), hFile, MiniDumpNormal, &tExcInfo, 0, 0 );
-	CloseHandle ( hFile );
-
-	return EXCEPTION_EXECUTE_HANDLER;
-}
-#endif
-
 
 void SetSignalHandlers ()
 {
+	SphCrashLogger_c::Init();
+
 #if !USE_WINDOWS
 	struct sigaction sa;
 	sigfillset ( &sa.sa_mask );

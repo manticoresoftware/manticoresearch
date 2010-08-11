@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <test>
-<name>snippets vs exact_phrase</name>
+<name>snippets vs exact_phrase
+snippets vs passage duplication</name>
 
 <config>
 searchd
@@ -60,6 +61,16 @@ foreach ( $words as $query )
 	$results [] = $query;
 	$results [] = $reply;
 }
+
+$text = 'A native of Honolulu, Hawaii, Obama is a graduate of Columbia University and Harvard Law School, where he waas the president of the Harvard Law Review. He was a community organizer in Chicago before earning his law degree. He worrked as a civil rights attorney in Chicago and taught constitutional law at the University of Chicago Law School from 19992 to 2004.Obama served three terms in the Illinois Senate from 1997 to 2004.';
+
+$query = '"University and Harvard Law School" obama';
+
+$reply = $client->BuildExcerpts (array($text), 'idx', $query ,array ('query_mode'=>true, "around"=> 2));
+
+$results [] = $query;
+$results [] = $reply;
+
 ]]></custom_test>
 
 </test>

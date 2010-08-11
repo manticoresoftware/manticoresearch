@@ -1323,7 +1323,7 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 			}
 		}
 
-		iLast = iEnd;
+		iLast = tQuery.m_bWeightOrder ? iEnd : Max ( iLast, iEnd );
 	}
 	if ( m_dTokens[iLast].m_eType!=TOK_NONE && m_dTokens[iLast+1].m_eType!=TOK_NONE )
 		ResultEmit ( tQuery.m_sChunkSeparator.cstr() );

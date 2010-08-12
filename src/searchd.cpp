@@ -155,14 +155,16 @@ public:
 #else
 	static LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc );
 #endif
-	static void SetLastQuery ( const BYTE * pQuery, int iSize, bool bMySQL );
+	static void SetLastQuery ( const BYTE * pQuery, int iSize, bool bMySQL, int uCmd=0, int uVer=0 );
 	static void SetupTimePID ();
 	void SetupTLS ();
 
 private:
-	const BYTE *			m_pQuery; // last query
-	int						m_iSize; // last query size
-	bool					m_bMySQL; // is query from MySQL or API
+	const BYTE *			m_pQuery;	// last query
+	int						m_iSize;	// last query size
+	WORD					m_uCMD;		// last command (header)
+	WORD					m_uVer;		// last command's version (header)
+	bool					m_bMySQL;	// is query from MySQL or API
 
 	static SphCrashLogger_c	m_tLastQuery; // non threaded mode last query
 	static SphThreadKey_t	m_tLastQueryTLS; // threaded mode last query
@@ -1264,6 +1266,7 @@ void Shutdown ()
 		sphThreadDone();
 }
 
+#if !USE_WINDOWS
 
 template <typename Uint>
 void UItoA ( char** ppOutput, Uint uVal, int iBase=10, int iWidth=0, int iPrec=0, const char cFill=' ' )
@@ -1331,7 +1334,7 @@ void UItoA ( char** ppOutput, Uint uVal, int iBase=10, int iWidth=0, int iPrec=0
 		*pOutput++=*++pRes;
 }
 
-void myVSprintf ( char* pOutput, const char* sFmt, va_list ap )
+static int sphVSprintf ( char* pOutput, const char* sFmt, va_list ap )
 {
 	char c;
 	enum eStates { SNORMAL, SPERCENT, SHAVEFILL, SINWIDTH, SINPERC };
@@ -1339,6 +1342,7 @@ void myVSprintf ( char* pOutput, const char* sFmt, va_list ap )
 	int iPrec = 0;
 	int iWidth = 0;
 	char cFill = ' ';
+	const char * pBegin = pOutput;
 	while ( (c = *sFmt++) )
 		switch ( c )
 		{
@@ -1450,62 +1454,51 @@ void myVSprintf ( char* pOutput, const char* sFmt, va_list ap )
 				state = SNORMAL;
 				*pOutput++ = c;
 		}
-	// final zero char
-	*pOutput++ = c;
+	// final zero to EOL
+	*pOutput++ = '\n';
+	return pOutput-pBegin;
 }
 
-void mySrpintf ( char* sBuf, const char * sFmt, ... )
+static bool sphSafeInfo ( int iFD, const char * sFmt, ... )
 {
-	assert ( sFmt );
-	va_list ap;
-	va_start ( ap, sFmt );
-	myVSprintf ( sBuf, sFmt, ap );
-	va_end ( ap );
-}
-
-void sphSafeInfo ( const char * sFmt, ... )
-{
-	assert ( sFmt );
+	assert ( iFD>=0 && sFmt );
 	char sBuf [ 1024 ];
 	va_list ap;
 	va_start ( ap, sFmt );
-	myVSprintf ( sBuf, sFmt, ap );
+	int iLen = sphVSprintf ( sBuf, sFmt, ap );
 	va_end ( ap );
-	sphLogEntry ( LOG_INFO, sBuf, sBuf );
+
+	return ::write ( iFD, sBuf, iLen )==iLen;
 }
 
-
-#if !USE_WINDOWS
-
-void StackTraceDump ( int )
+void StackTraceDump ( int iFD )
 {
+	if ( iFD<0 )
+		return;
+
 	void * pMyStack = sphMyStack();
 	int iStackSize = sphMyStackSize();
 
-	sphSafeInfo ( "-------------- cut here ---------------" );
-	sphSafeInfo ( "Searchd " SPHINX_VERSION );
+	sphSafeInfo ( iFD, "-------------- cut here ---------------" );
+	sphSafeInfo ( iFD, "Searchd " SPHINX_VERSION );
 #ifdef COMPILER
-	sphSafeInfo ( "Program compiled with " COMPILER );
+	sphSafeInfo ( iFD, "Program compiled with " COMPILER );
 #endif
 
 #ifdef OS_UNAME
-	sphSafeInfo ( "Host OS is "OS_UNAME );
+	sphSafeInfo ( iFD, "Host OS is "OS_UNAME );
 #endif
 
-	sphSafeInfo ( "Stack bottom = 0x%p, thread stack size = 0x%x", pMyStack, iStackSize );
+	sphSafeInfo ( iFD, "Stack bottom = 0x%p, thread stack size = 0x%x", pMyStack, iStackSize );
 
 #if HAVE_BACKTRACE
 	void *pAddresses [128];
-	char **pszStrings = NULL;
 	int iDepth = backtrace ( pAddresses, 128 );
 #if HAVE_BACKTRACE_SYMBOLS
-	pszStrings = backtrace_symbols ( pAddresses, iDepth );
-	for ( int i=0; i<iDepth; i++ )
-		sphSafeInfo ( "%s", pszStrings[i] );
-	free ( pszStrings );
+	backtrace_symbols_fd ( pAddresses, iDepth, iFD );
 #elif !HAVE_BACKTRACE_SYMBOLS
 	for ( int i=0; i<Depth; i++ )
-		sphSafeInfo ( "%p", pAddresses[i] );
+		sphSafeInfo ( iFD, "%p", pAddresses[i] );
 #endif
 
 #elif !HAVE_BACKTRACE
@@ -1526,7 +1519,7 @@ void StackTraceDump ( int )
 
 	if ( !pFramePointer )
 	{
-		sphWarning ( "Frame pointer is null. Unable to backtrace the stack. Did you build the searchd with -fomit-frame-pointer?" );
+		sphSafeInfo ( iFD, "Frame pointer is null. Unable to backtrace the stack. Did you build the searchd with -fomit-frame-pointer?" );
 		return;
 	}
 
@@ -1534,23 +1527,23 @@ void StackTraceDump ( int )
 	{
 		int iRound = Min ( 65536, iStackSize );
 		pMyStack = (void *) ( ( (size_t) &pFramePointer + iRound ) & ~(size_t)65535 );
-		sphWarning ( "Something wrong with thread's stack, the trace may be incorrect (FramePointer=%p)", pFramePointer );
+		sphSafeInfo ( iFD, "Something wrong with thread's stack, the trace may be incorrect (FramePointer=%p)", pFramePointer );
 
 		if ( pFramePointer > (BYTE**) pMyStack || pFramePointer < (BYTE**) pMyStack - iStackSize )
 		{
-			sphLogFatal ( "Wrong stack limit or frame pointer (fp=%p, stack=%p, stack size=%d). Unable to backtrace", pFramePointer, pMyStack, iStackSize );
+			sphSafeInfo ( iFD, "Wrong stack limit or frame pointer (fp=%p, stack=%p, stack size=%d). Unable to backtrace", pFramePointer, pMyStack, iStackSize );
 			return;
 		}
 	}
 
-	sphSafeInfo ( "Stack is OK. Backtrace:" );
+	sphSafeInfo ( iFD, "Stack is OK. Backtrace:" );
 
 	BYTE** pNewFP;
 	bool bOk = true;
 	while ( pFramePointer < (BYTE**) pMyStack )
 	{
 		pNewFP = (BYTE**) *pFramePointer;
-		sphSafeInfo ( "%p", iFrameCount==iReturnFrameCount? *(pFramePointer + SIGRETURN_FRAME_OFFSET) : *(pFramePointer + 1) );
+		sphSafeInfo ( iFD, "%p", iFrameCount==iReturnFrameCount? *(pFramePointer + SIGRETURN_FRAME_OFFSET) : *(pFramePointer + 1) );
 
 		bOk = pNewFP > pFramePointer;
 		if ( !bOk ) break;
@@ -1560,12 +1553,12 @@ void StackTraceDump ( int )
 	}
 
 	if ( !bOk )
-		sphWarning ( "Something wrong in frame pointers. BackTrace failed (failed FP was %p)", pNewFP );
+		sphSafeInfo ( iFD, "Something wrong in frame pointers. BackTrace failed (failed FP was %p)", pNewFP );
 	else
 #endif // !HAVE_BACKTRACE
-		sphSafeInfo ( "Stack trace seems to be succesfull. Now you have to resolve the numbers above and attach resolved values to the bugreport. See the section about resolving in the documentation" );
+		sphSafeInfo ( iFD, "Stack trace seems to be succesfull. Now you have to resolve the numbers above and attach resolved values to the bugreport. See the section about resolving in the documentation" );
 
-	sphSafeInfo ( "-------------- cut here ---------------" );
+	sphSafeInfo ( iFD, "-------------- cut here ---------------" );
 }
 
 
@@ -1661,6 +1654,7 @@ BYTE * sphEncodeBase64 ( BYTE * pDst, const BYTE * pSrc, int iLen )
 const char		g_sCrashedBannerAPI[] = "\n--- crashed SphinxAPI request dump ---\n";
 const char		g_sCrashedBannerMySQL[] = "\n--- crashed SphinxMYSQL request dump ---\n";
 static BYTE		g_dEncoded[ 2*Max ( sizeof(g_sCrashedBannerAPI), sizeof(g_sCrashedBannerMySQL) )+SPH_LAST_QUERY_MAX_SIZE*4/3 ];
+static BYTE		g_dQuery [SPH_LAST_QUERY_MAX_SIZE*4/3];
 static char		g_sCrashInfo [SPH_TIME_PID_MAX_SIZE] = "[none]\n";
 static int		g_iCrashInfoLen = 0;
 
@@ -1675,6 +1669,8 @@ SphThreadKey_t SphCrashLogger_c::m_tLastQueryTLS = SphThreadKey_t ();
 SphCrashLogger_c::SphCrashLogger_c ()
 	: m_pQuery ( NULL )
 	, m_iSize ( 0 )
+	, m_uCMD ( 0 )
+	, m_uVer ( 0 )
 	, m_bMySQL ( false )
 {
 }
@@ -1719,7 +1715,7 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 	sphWrite ( g_iLogFile, g_sCrashInfo, g_iCrashInfoLen );
 
 #if !USE_WINDOWS
-	StackTraceDump(0);
+	StackTraceDump ( g_iLogFile );
 #else
 	StackTraceDump ( pExc, g_sMinidump );
 #endif
@@ -1767,7 +1763,19 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 		memcpy ( pEncoded, tQuery.m_pQuery, tQuery.m_iSize );
 		pEncoded += tQuery.m_iSize;
 	} else
-		pEncoded = sphEncodeBase64 ( pEncoded, tQuery.m_pQuery, tQuery.m_iSize );
+	{
+		int iSize = Min ( tQuery.m_iSize, SPH_LAST_QUERY_MAX_SIZE-8 );
+		*(g_dQuery+0) = (BYTE)( tQuery.m_uCMD>>8 );
+		*(g_dQuery+1) = (BYTE)( tQuery.m_uCMD );
+		*(g_dQuery+2) = (BYTE)( tQuery.m_uVer>>8 );
+		*(g_dQuery+3) = (BYTE)( tQuery.m_uVer );
+		*(g_dQuery+4) = (BYTE)( iSize>>24 );
+		*(g_dQuery+5) = (BYTE)( iSize>>16 );
+		*(g_dQuery+6) = (BYTE)( iSize>>8 );
+		*(g_dQuery+7) = (BYTE)( iSize );
+		memcpy ( g_dQuery+8, tQuery.m_pQuery, iSize );
+		pEncoded = sphEncodeBase64 ( pEncoded, g_dQuery, Min ( tQuery.m_iSize+8, SPH_LAST_QUERY_MAX_SIZE ) );
+	}
 
 	// BANNER tail
 	memcpy ( pEncoded, sBanner, iBannerLen );
@@ -1781,23 +1789,17 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 	CRASH_EXIT;
 }
 
-void SphCrashLogger_c::SetLastQuery ( const BYTE * pQuery, int iSize, bool bMySQL )
+void SphCrashLogger_c::SetLastQuery ( const BYTE * pQuery, int iSize, bool bMySQL, int uCmd, int uVer )
 {
+	SphCrashLogger_c * pLastQuery = &m_tLastQuery;
 	if ( g_eWorkers==MPM_THREADS )
-	{
-		SphCrashLogger_c * pQueryTLS = (SphCrashLogger_c *)sphThreadGet ( m_tLastQueryTLS );
-		if ( pQueryTLS )
-		{
-			pQueryTLS->m_pQuery = pQuery;
-			pQueryTLS->m_iSize = iSize;
-			pQueryTLS->m_bMySQL = bMySQL;
-		}
-	} else
-	{
-		m_tLastQuery.m_pQuery = pQuery;
-		m_tLastQuery.m_iSize = iSize;
-		m_tLastQuery.m_bMySQL = bMySQL;
-	}
+		pLastQuery = (SphCrashLogger_c *)sphThreadGet ( m_tLastQueryTLS );
+
+	pLastQuery->m_pQuery = pQuery;
+	pLastQuery->m_iSize = iSize;
+	pLastQuery->m_uCMD = (WORD)uCmd;
+	pLastQuery->m_uVer = (WORD)uVer;
+	pLastQuery->m_bMySQL = bMySQL;
 }
 
 void SphCrashLogger_c::SetupTimePID ()
@@ -1805,7 +1807,7 @@ void SphCrashLogger_c::SetupTimePID ()
 	char sTimeBuf[SPH_TIME_PID_MAX_SIZE];
 	sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
 
-	g_iCrashInfoLen = snprintf ( g_sCrashInfo, SPH_TIME_PID_MAX_SIZE-1, "[%s] [%5d] FATAL: crash log\n", sTimeBuf, (int)getpid() );
+	g_iCrashInfoLen = snprintf ( g_sCrashInfo, SPH_TIME_PID_MAX_SIZE-1, "-------FATAL: CRASH LOG DUMP-------\n[%s] [%5d]\n", sTimeBuf, (int)getpid() );
 }
 
 void SphCrashLogger_c::SetupTLS ()
@@ -6634,6 +6636,9 @@ void HandleCommandQuery ( int iSock, int iVer, InputBuffer_c & tReq )
 
 int sphGetPassageBoundary ( const CSphString & sPassageBoundaryMode )
 {
+	if ( sPassageBoundaryMode.IsEmpty() )
+		return 0;
+
 	int iMode = 0;
 	if ( sPassageBoundaryMode=="sentence" )
 		iMode = MAGIC_CODE_SENTENCE;
@@ -7503,7 +7508,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD )
 		}
 
 		// set on query guard
-		SphCrashLogger_c::SetLastQuery ( tBuf.GetBufferPtr(), iLength, false );
+		SphCrashLogger_c::SetLastQuery ( tBuf.GetBufferPtr(), iLength, false, iCommand, iCommandVer );
 
 		// handle known commands
 		assert ( iCommand>=0 && iCommand<SEARCHD_COMMAND_TOTAL );

@@ -22825,14 +22825,28 @@ int CSphStrHashFunc::Hash ( const CSphString & sKey )
 
 void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int iDocs, int iHits, bool bUntouched )
 {
-	WordStat_t * pStats = m_hWordStats ( sWord );
+	CSphString sFixed;
+	const CSphString * pFixed = &sWord;
+	if ( sWord.cstr()[0]==MAGIC_WORD_HEAD )
+	{
+		sFixed = sWord;
+		*(char *)( sFixed.cstr() ) = '*';
+		pFixed = &sFixed;
+	} else if ( sWord.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
+	{
+		sFixed = sWord;
+		*(char *)( sFixed.cstr() ) = '=';
+		pFixed = &sFixed;
+	}
+
+	WordStat_t * pStats = m_hWordStats ( *pFixed );
 	if ( !pStats )
 	{
 		CSphQueryResult::WordStat_t tStats;
 		tStats.m_iDocs = iDocs;
 		tStats.m_iHits = iHits;
 		tStats.m_bUntouched = bUntouched;
-		m_hWordStats.Add ( tStats, sWord );
+		m_hWordStats.Add ( tStats, *pFixed );
 	} else
 	{
 		pStats->m_iDocs += iDocs;

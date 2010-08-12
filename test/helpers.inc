@@ -152,7 +152,7 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error )
 		// using cmd /c for redirection to work
 		if ( file_exists ( $pidfile ) )
 			unlink ( $pidfile );
-		$process = popen ("start /min cmd /c \"$path --config $config_file --pidfile > $error_file\"", "r" );
+		$process = popen ("start /min cmd /c \"$path --config $config_file --pidfile --console > $error_file\"", "r" );
 		pclose ( $process );
 	}
 	else

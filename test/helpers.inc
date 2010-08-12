@@ -218,6 +218,28 @@ function StopSearchd ( $config, $pidfile )
 	}
 }
 
+function KillSearchd ( $config, $pidfile, $signal )
+{
+	global $windows, $action_wait_timeout;
+	
+	if ( file_exists($pidfile) && count(file($pidfile)) )
+	{
+		if ( !$windows )
+		{
+			$fp = fopen($pidfile,"r");
+			$pid = fread ( $fp, filesize ( $pidfile ) );
+			fclose ($fp);
+
+			exec ("kill -s $signal $pid");
+			if ( file_exists ( $pidfile ) )
+			{
+			    usleep ( $action_wait_timeout );
+			    unlink ( $pidfile );
+			}
+		} else
+			StopSearchd ($config, $pidfile);
+	}
+}
 
 function IsModelGenMode ()
 {
@@ -1051,6 +1073,7 @@ class SphinxConfig
 					$set["matches"][$id]["attrs"][$name] );
 		}
 
+		//foreach ( preg_split ( "/\\W+/", "time warning status fields resarray roundoff words" ) as $key )
 		foreach ( preg_split ( "/\\W+/", "time warning status fields resarray roundoff" ) as $key )
 			unset ( $set[$key] );
 	}
@@ -1984,7 +2007,7 @@ function RunTest ( $test_dir )
 
 		EraseDirContents ( $indexer_data_path );
 
-		if ( $config->IsSkipIndexer()===false && $sd_skip_indexer===false )
+		if ( $config->IsSkipIndexer()===false && $sd_managed_searchd===false && $sd_skip_indexer===false )
 		{
 			// standard run
 			if ( !$config->IsRt() )

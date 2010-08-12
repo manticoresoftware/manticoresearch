@@ -148,6 +148,7 @@ typedef struct st_sphinx_excerpt_options
 	const char *			after_match;
 	const char *			chunk_separator;
 	const char *			html_strip_mode;
+	const char *			passage_boundary;
 
 	int						limit;
 	int						limit_passages;
@@ -163,6 +164,7 @@ typedef struct st_sphinx_excerpt_options
 	sphinx_bool				force_all_words;
 	sphinx_bool				load_files;
 	sphinx_bool				allow_empty;
+	sphinx_bool				emit_zones;
 } sphinx_excerpt_options;
 
 

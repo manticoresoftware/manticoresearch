@@ -74,7 +74,7 @@ enum
 
 enum
 {
-	VER_COMMAND_EXCERPT			= 0x102,
+	VER_COMMAND_EXCERPT			= 0x103,
 	VER_COMMAND_UPDATE			= 0x102,
 	VER_COMMAND_KEYWORDS		= 0x100,
 	VER_COMMAND_STATUS			= 0x100
@@ -1906,6 +1906,7 @@ void sphinx_init_excerpt_options ( sphinx_excerpt_options * opts )
 	opts->after_match		= "</b>";
 	opts->chunk_separator	= " ... ";
 	opts->html_strip_mode	= "index";
+	opts->passage_boundary	= "none";
 
 	opts->limit				= 256;
 	opts->limit_passages	= 0;
@@ -1921,6 +1922,7 @@ void sphinx_init_excerpt_options ( sphinx_excerpt_options * opts )
 	opts->force_all_words	= SPH_FALSE;
 	opts->load_files		= SPH_FALSE;
 	opts->allow_empty		= SPH_FALSE;
+	opts->emit_zones		= SPH_FALSE;
 }
 
 
@@ -1947,13 +1949,14 @@ char ** sphinx_build_excerpts ( sphinx_client * client, int num_docs, const char
 	}
 
 	// alloc buffer
-	req_len = (int)( 56
+	req_len = (int)( 60
 		+ strlen(index)
 		+ strlen(words)
 		+ safestrlen(opts->before_match)
 		+ safestrlen(opts->after_match)
 		+ safestrlen(opts->chunk_separator)
-		+ safestrlen(opts->html_strip_mode) );
+		+ safestrlen(opts->html_strip_mode)
+		+ safestrlen(opts->passage_boundary) );
 	for ( i=0; i<num_docs; i++ )
 		req_len += (int)( 4 + safestrlen(docs[i]) );
 
@@ -1980,6 +1983,7 @@ char ** sphinx_build_excerpts ( sphinx_client * client, int num_docs, const char
 	if ( opts->force_all_words )	flags |= 64;
 	if ( opts->load_files )			flags |= 128;
 	if ( opts->allow_empty )		flags |= 256;
+	if ( opts->emit_zones )			flags |= 512;
 
 	send_int ( &req, 0 );
 	send_int ( &req, flags );
@@ -1996,6 +2000,7 @@ char ** sphinx_build_excerpts ( sphinx_client * client, int num_docs, const char
 	send_int ( &req, opts->limit_words );
 	send_int ( &req, opts->start_passage_id );
 	send_str ( &req, opts->html_strip_mode );
+	send_str ( &req, opts->passage_boundary );
 
 	send_int ( &req, num_docs );
 	for ( i=0; i<num_docs; i++ )

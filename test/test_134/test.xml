@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>snippets vs SPZ</name>
+
+<requires>
+<non-rt/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'text';
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+
+	charset_type	= utf-8
+	html_strip		= 1
+	index_sp		= 1
+	index_zones		= zone_	
+	dict			= keywords
+}
+</config>
+
+<db_insert>select 1;</db_insert>
+
+<custom_test><![CDATA[
+
+$results = array();
+
+$query="it is";
+
+$refs = array();
+$opts = array();
+
+// 0 test
+$refs[] = array(
+		"doc"=>array (
+			"<P>The institutional investment manager it. Is Filing this report and. It is signed hereby represent. That it is all information. Statements are considered integral parts of this form.</P>" ),
+		"opt"=>array (
+			"limit"=>150
+			, "limit_words"=>60
+			, "limit_passages"=>4
+			, "around"=>7
+			, "html_strip_mode"=>"strip"
+			, 'chunk_separator'=>"\n<--->\n"
+			, "passage_boundary"=>"sentence"
+			, "emit_zones"=>false
+			, "exact_phrase"=>false )
+		);
+
+// 1 test
+$refs[] = array(
+		"doc"=>array (
+			"<P>The institutional investment manager it. Is Filing this report and. It is signed hereby represent. That it is all information. Statements are considered integral parts of this form.</P>" ),
+		"opt"=>array (
+			"limit"=>150
+			, "limit_words"=>60
+			, "limit_passages"=>4
+			, "around"=>7
+			, "html_strip_mode"=>"strip"
+			, 'chunk_separator'=>"\n<--->\n"
+			, "passage_boundary"=>"sentence"
+			, "emit_zones"=>false
+			, "exact_phrase"=>true )
+		);
+		
+// 2 test
+$refs[] = array(
+		"doc"=>array (
+			'<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<zone_unidentified_table>
+The institutional investment manager it. Is Filing this report and.
+<zone_test>
+It is signed hereby represent. That it is all information.
+are It or is
+</zone_test>
+<zone_2>
+cool It is cooler
+</zone_2>
+It is another place!
+</zone_unidentified_table>
+</HTML>' ),
+		"opt"=>array (
+			"limit"=>150
+			, "limit_words"=>60
+			, "limit_passages"=>8
+			, "around"=>8
+			, "html_strip_mode"=>"strip"
+			, 'chunk_separator'=>"\n<--->\n"
+			, "passage_boundary"=>"zone"
+			, "emit_zones"=>true
+			, "exact_phrase"=>false )
+		);
+
+// 3 test
+$refs[] = array(
+		"doc"=>array (
+			'<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<zone_unidentified_table>
+The institutional investment manager it. Is Filing this report and.
+<zone_test>
+It is signed hereby represent. That it is all information.
+are It or is
+</zone_test>
+<zone_2>
+cool It is cooler
+</zone_2>
+It is another place!
+</zone_unidentified_table>
+</HTML>' ),
+		"opt"=>array (
+			"limit"=>150
+			, "limit_words"=>60
+			, "limit_passages"=>8
+			, "around"=>8
+			, "html_strip_mode"=>"strip"
+			, 'chunk_separator'=>"\n<--->\n"
+			, "passage_boundary"=>"zone"
+			, "emit_zones"=>true
+			, "exact_phrase"=>true )
+		);
+
+// 4 test
+$refs[] = array(
+		"doc"=>array (
+			'<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<zone_unidentified_table>
+The institutional investment manager it. Is Filing this report and.
+<zone_test>
+It is signed hereby represent. That it is all information.
+are It or is
+</zone_test>
+<zone_2>
+cool It is cooler
+</zone_2>
+It is another place!
+</zone_unidentified_table>
+</HTML>' ),
+		"opt"=>array (
+			"limit"=>150
+			, "limit_words"=>60
+			, "limit_passages"=>8
+			, "around"=>8
+			, "html_strip_mode"=>"strip"
+			, 'chunk_separator'=>"\n<--->\n"
+			, "passage_boundary"=>"zone"
+			, "emit_zones"=>false
+			, "exact_phrase"=>false )
+		);
+
+// 5 test - HighlightAll path - no passages
+$refs[] = array(
+		"doc"=>array (
+			"The institutional investment manager it. Is Filing this report and. It is signed hereby represent. That it is all information. Statements are considered integral parts of this form." ),
+		"opt"=>array (
+			"limit"=>0
+			, "limit_passages"=>4
+			, "around"=>7
+			, "html_strip_mode"=>"strip"
+			, 'chunk_separator'=>"\n<--->\n"
+			, "passage_boundary"=>"sentence"
+			, "emit_zones"=>false
+			, "exact_phrase"=>false )
+		);
+		
+		
+foreach ( $refs as $ref )
+{
+	$results[] = $client->BuildExcerpts($ref["doc"], 'test', $query, $ref["opt"] );
+}
+
+// last test - nothing found - HighlightStart path
+$results[] = $client->BuildExcerpts($refs[3]["doc"], 'test', "nothing found", $refs[3]["opt"] );
+
+]]></custom_test>
+
+</test>

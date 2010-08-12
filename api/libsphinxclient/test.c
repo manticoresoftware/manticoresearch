@@ -165,6 +165,57 @@ void test_excerpt ( sphinx_client * client )
 }
 
 
+void test_excerpt_spz ( sphinx_client * client )
+{
+	const char * docs[] =
+	{
+		"<efx_unidentified_table>"
+		"The institutional investment manager it. Is Filing this report and."
+		"<efx_test>"
+		"It is signed hereby represent. That it is all information."
+		"are It or is"
+		"</efx_test>"
+		"<efx_2>"
+		"cool It is cooler"
+		"</efx_2>"
+		"It is another place!"
+		"</efx_unidentified_table>"
+	};
+	const int ndocs = sizeof(docs)/sizeof(docs[0]);
+	const char * words = "it is";
+	const char * index = "test1";
+	sphinx_excerpt_options opts;
+	char ** res;
+	int i, j;
+
+	sphinx_init_excerpt_options ( &opts );
+	opts.limit = 150;
+	opts.limit_passages = 8;
+	opts.around = 8;
+	opts.html_strip_mode = "strip";
+	opts.passage_boundary = "zone";
+	opts.emit_zones = SPH_TRUE;
+
+	for ( j=0; j<2; j++ )
+	{
+		if ( j==1 )
+		{
+			opts.passage_boundary = "sentence";
+			opts.emit_zones = SPH_FALSE;
+		}
+		printf ( "passage_boundary=%s\n", opts.passage_boundary );
+
+		res = sphinx_build_excerpts ( client, ndocs, docs, index, words, &opts );
+		if ( !res )
+			die ( "query failed: %s", sphinx_error(client) );
+
+		for ( i=0; i<ndocs; i++ )
+			printf ( "n=%d, res=%s\n", 1+i, res[i] );
+		printf ( "\n" );
+	}
+}
+
+
 void test_update ( sphinx_client * client, sphinx_uint64_t id )
 {
 	const char * attr = "group_id";
@@ -317,6 +368,8 @@ int main ( int argc, char ** argv )
 	// excerpt + keywords
 	title ( "excerpt" );
 	test_excerpt ( client );
+	test_excerpt_spz ( client );
+
 	title ( "keywords" );
 	test_keywords ( client );
 

@@ -13,5 +13,7 @@ done
 
 # clean files
 rm -f data/*.sp*
+rm -f data/*.mvp
 rm -f data/*.meta data/*.lock data/*.kill data/*.ram
+rm -f data/binlog.*
 rm -f *.log

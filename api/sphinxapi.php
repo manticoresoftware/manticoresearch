@@ -31,7 +31,7 @@ define ( "SEARCHD_COMMAND_FLUSHATTRS",	7 );
 
 /// current client-side command implementation versions
 define ( "VER_COMMAND_SEARCH",		0x117 );
-define ( "VER_COMMAND_EXCERPT",		0x102 );
+define ( "VER_COMMAND_EXCERPT",		0x103 );
 define ( "VER_COMMAND_UPDATE",		0x102 );
 define ( "VER_COMMAND_KEYWORDS",	0x100 );
 define ( "VER_COMMAND_STATUS",		0x100 );
@@ -1325,6 +1325,8 @@ class SphinxClient
 		if ( !isset($opts["load_files"]) )			$opts["load_files"] = false;
 		if ( !isset($opts["html_strip_mode"]) )		$opts["html_strip_mode"] = "index";
 		if ( !isset($opts["allow_empty"]) )			$opts["allow_empty"] = false;
+		if ( !isset($opts["passage_boundary"]) )	$opts["passage_boundary"] = "none";
+		if ( !isset($opts["emit_zones"]) )			$opts["emit_zones"] = false;
 
 		/////////////////
 		// build request
@@ -1340,6 +1342,7 @@ class SphinxClient
 		if ( $opts["force_all_words"] )	$flags |= 64;
 		if ( $opts["load_files"] )		$flags |= 128;
 		if ( $opts["allow_empty"] )		$flags |= 256;
+		if ( $opts["emit_zones"] )		$flags |= 512;
 		$req = pack ( "NN", 0, $flags ); // mode=0, flags=$flags
 		$req .= pack ( "N", strlen($index) ) . $index; // req index
 		$req .= pack ( "N", strlen($words) ) . $words; // req words
@@ -1351,6 +1354,7 @@ class SphinxClient
 		$req .= pack ( "NN", (int)$opts["limit"], (int)$opts["around"] );
 		$req .= pack ( "NNN", (int)$opts["limit_passages"], (int)$opts["limit_words"], (int)$opts["start_passage_id"] ); // v.1.2
 		$req .= pack ( "N", strlen($opts["html_strip_mode"]) ) . $opts["html_strip_mode"];
+		$req .= pack ( "N", strlen($opts["passage_boundary"]) ) . $opts["passage_boundary"];
 
 		// documents
 		$req .= pack ( "N", count($docs) );

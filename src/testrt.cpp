@@ -78,11 +78,12 @@ void DoIndexing ( CSphSource * pSrc, ISphRtIndex * pIndex )
 	int iCommits = 0;
 	for ( ;; )
 	{
-		if ( !pSrc->IterateHitsNext ( sError ) )
+		ISphHits * pHitsNext = pSrc->IterateHitsNext ( sError );
+		if ( !pHitsNext )
 			sphDie ( "iterate-next failed: %s", sError.cstr() );
 
 		if ( pSrc->m_tDocInfo.m_iDocID )
-			pIndex->AddDocument ( pSrc->m_dHits, pSrc->m_tDocInfo, NULL, sError );
+			pIndex->AddDocument ( pHitsNext, pSrc->m_tDocInfo, NULL, sError );
 
 		if ( ( pSrc->GetStats().m_iTotalDocuments % COMMIT_STEP )==0 || !pSrc->m_tDocInfo.m_iDocID )
 		{
@@ -190,7 +191,7 @@ int main ()
 
 	CSphConfigSection tRTConfig;
 	sphRTInit ( tRTConfig );
-	CSphVector< ISphRtIndex * > dTemp;
+	SmallStringHash_T< CSphIndex * > dTemp;
 	sphReplayBinlog ( dTemp );
 	ISphRtIndex * pIndex = sphCreateIndexRT ( tSchema, "testrt", 32*1024*1024, "data/dump" );
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on

@@ -46,6 +46,9 @@
 #define	WORDID_MAX				0xffffffffUL
 #endif
 
+// RT hitman
+typedef Hitman_c<8> HITMAN;
+
 //////////////////////////////////////////////////////////////////////////
 
 #ifndef NDEBUG
@@ -746,7 +749,7 @@ struct RtAccum_t
 	CSphTightVector<BYTE>		m_dStrings;
 
 					RtAccum_t() : m_pIndex ( NULL ), m_iAccumDocs ( 0 ) { m_dStrings.Add ( 0 ); }
-	void			AddDocument ( const CSphVector<CSphWordHit> & dHits, const CSphMatch & tDoc, int iRowSize, const char ** ppStr );
+	void			AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, int iRowSize, const char ** ppStr );
 	RtSegment_t *	CreateSegment ( int iRowSize );
 };
 
@@ -764,7 +767,8 @@ struct BinlogIndexInfo_t
 	int64_t		m_tmMin;			///< min TID timestamp
 	int64_t		m_tmMax;			///< max TID timestamp
 
-	RtIndex_t *	m_pIndex;			///< replay only; associated index (might be NULL if we don't serve it anymore!)
+	CSphIndex *	m_pIndex;			///< replay only; associated index (might be NULL if we don't serve it anymore!)
+	RtIndex_t *	m_pRT;				///< replay only; RT index handle (might be NULL if N/A or non-RT)
 	int64_t		m_iPreReplayTID;	///< replay only; index TID at the beginning of this file replay
 
 	BinlogIndexInfo_t ()
@@ -812,8 +816,8 @@ class BinlogWriter_c : protected CSphWriter
 public:
 					BinlogWriter_c ();
 	virtual			~BinlogWriter_c () {}
-	virtual	void	Flush ();
 
+	virtual	void	Flush ();
 	void			Write ();
 	void			Fsync ();
 	bool			HasUnwrittenData () const { return m_iPoolUsed>0; }
@@ -863,7 +867,7 @@ private:
 	DWORD			m_uCRC;
 };
 
-class RtBinlog_c : public ISphNoncopyable
+class RtBinlog_c : public ISphBinlog
 {
 public:
 	RtBinlog_c ();
@@ -871,11 +875,10 @@ public:
 
 	void	BinlogCommit ( const char * sIndexName, int64_t iTID, const RtSegment_t * pSeg, const CSphVector<SphDocID_t> & dKlist );
 	void	BinlogUpdateAttributes ( const char * sIndexName, int64_t iTID, const CSphAttrUpdate & tUpd );
-
 	void	NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool bShutdown );
 
 	void	Configure ( const CSphConfigSection & hSearchd );
-	void	Replay ( const CSphVector < ISphRtIndex * > & dRtIndices );
+	void	Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes );
 
 	void	CreateTimerThread ();
 
@@ -925,12 +928,12 @@ private:
 	void					DoCacheWrite ();
 	void					CheckDoRestart ();
 	void					CheckDoFlush ();
-	void					OpenNewLog ();
+	void					OpenNewLog ( int iLastState=0 );
 
-	void					ReplayBinlog ( const CSphVector < RtIndex_t * > & dRtIndices, int iBinlog );
+	int						ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int iBinlog );
 	bool					ReplayCommit ( int iBinlog, BinlogReader_c & tReader ) const;
 	bool					ReplayUpdateAttributes ( int iBinlog, BinlogReader_c & tReader ) const;
-	bool					ReplayIndexAdd ( int iBinlog, const CSphVector < RtIndex_t * > & dIn, BinlogReader_c & tReader ) const;
+	bool					ReplayIndexAdd ( int iBinlog, const SmallStringHash_T<CSphIndex*> & hIndexes, BinlogReader_c & tReader ) const;
 	bool					ReplayCacheAdd ( int iBinlog, BinlogReader_c & tReader ) const;
 };
 
@@ -958,7 +961,6 @@ private:
 	int							m_iLockFD;
 	mutable RtDiskKlist_t		m_tKlist;
 
-	CSphString					m_sIndexName;
 	CSphSchema					m_tOutboundSchema;
 
 public:
@@ -966,7 +968,7 @@ public:
 	virtual						~RtIndex_t ();
 
 	bool						AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const char ** ppStr, CSphString & sError );
-	bool						AddDocument ( const CSphVector<CSphWordHit> & dHits, const CSphMatch & tDoc, const char ** ppStr, CSphString & sError );
+	bool						AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, const char ** ppStr, CSphString & sError );
 	bool						DeleteDocument ( SphDocID_t uDoc, CSphString & sError );
 	void						Commit ();
 	void						RollBack ();
@@ -1015,6 +1017,7 @@ public:
 	virtual bool				Lock () { return true; }
 	virtual void				Unlock () {}
 	virtual bool				Mlock () { return true; }
+	virtual bool				IsRT() const { return true; }
 
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError );
 	virtual bool				SaveAttributes () { return true; }
@@ -1046,20 +1049,15 @@ public:
 
 protected:
 	CSphSourceStats				m_tStats;
-
-public:
-	int64_t						m_iTID;
 };
 
 
 RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath )
-	: ISphRtIndex ( "rtindex" )
+	: ISphRtIndex ( sIndexName, "rtindex" )
 	, m_iStride ( DOCINFO_IDSIZE + tSchema.GetRowSize() )
 	, m_iRamSize ( iRamSize )
 	, m_sPath ( sPath )
 	, m_iLockFD ( -1 )
-	, m_sIndexName ( sIndexName )
-	, m_iTID ( 0 )
 {
 	MEMORY ( SPH_MEM_IDX_RT );
 
@@ -1156,7 +1154,8 @@ public:
 	virtual BYTE **		NextDocument ( CSphString & ) { return &m_dFields[0]; }
 
 protected:
-	CSphVector<BYTE *>	m_dFields;
+	CSphVector<BYTE *>			m_dFields;
+	CSphVector<CSphWordHit>		m_dHits;
 };
 
 
@@ -1204,10 +1203,11 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 	tSrc.SetDict ( m_pDict );
 
 	tSrc.m_tDocInfo.Clone ( tDoc, m_tOutboundSchema.GetRowSize() );
-	if ( !tSrc.IterateHitsNext ( sError ) )
+	ISphHits * pHits = tSrc.IterateHitsNext ( sError );
+	if ( !pHits )
 		return false;
 
-	return AddDocument ( tSrc.m_dHits, tDoc, ppStr, sError );
+	return AddDocument ( pHits, tDoc, ppStr, sError );
 }
 
 
@@ -1243,18 +1243,18 @@ RtAccum_t * RtIndex_t::AcquireAccum ( CSphString * sError )
 	return pAcc;
 }
 
-bool RtIndex_t::AddDocument ( const CSphVector<CSphWordHit> & dHits, const CSphMatch & tDoc, const char ** ppStr, CSphString & sError )
+bool RtIndex_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, const char ** ppStr, CSphString & sError )
 {
 	assert ( g_bRTChangesAllowed );
 
 	RtAccum_t * pAcc = AcquireAccum ( &sError );
 	if ( pAcc )
-		pAcc->AddDocument ( dHits, tDoc, m_tOutboundSchema.GetRowSize(), ppStr );
+		pAcc->AddDocument ( pHits, tDoc, m_tOutboundSchema.GetRowSize(), ppStr );
 
 	return ( pAcc!=NULL );
 }
 
-void RtAccum_t::AddDocument ( const CSphVector<CSphWordHit> & dHits, const CSphMatch & tDoc, int iRowSize, const char ** ppStr )
+void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, int iRowSize, const char ** ppStr )
 {
 	MEMORY ( SPH_MEM_IDX_RT_ACCUM );
 
@@ -1262,7 +1262,7 @@ void RtAccum_t::AddDocument ( const CSphVector<CSphWordHit> & dHits, const CSphM
 	m_dAccumKlist.Add ( tDoc.m_iDocID );
 
 	// no pain, no gain!
-	if ( !dHits.GetLength() )
+	if ( !pHits->Length() )
 		return;
 
 	// reserve some hit space on first use
@@ -1308,8 +1308,8 @@ void RtAccum_t::AddDocument ( const CSphVector<CSphWordHit> & dHits, const CSphM
 	}
 
 	// accumulate hits
-	ARRAY_FOREACH ( i, dHits )
-		m_dAccum.Add ( dHits[i] );
+	for ( const CSphWordHit * pHit = pHits->First(); pHit <= pHits->Last(); pHit++ )
+		m_dAccum.Add ( *pHit );
 
 	m_iAccumDocs++;
 }
@@ -1327,7 +1327,7 @@ RtSegment_t * RtAccum_t::CreateSegment ( int iRowSize )
 	CSphWordHit tClosingHit;
 	tClosingHit.m_iWordID = WORDID_MAX;
 	tClosingHit.m_iDocID = DOCID_MAX;
-	tClosingHit.m_iWordPos = 1;
+	tClosingHit.m_iWordPos = EMPTY_HIT;
 	m_dAccum.Add ( tClosingHit );
 
 	RtDoc_t tDoc;
@@ -1346,7 +1346,7 @@ RtSegment_t * RtAccum_t::CreateSegment ( int iRowSize )
 	RtWordWriter_t tOutWord ( pSeg );
 	RtHitWriter_t tOutHit ( pSeg );
 
-	DWORD uEmbeddedHit = 0;
+	Hitpos_t uEmbeddedHit = EMPTY_HIT;
 	ARRAY_FOREACH ( i, m_dAccum )
 	{
 		const CSphWordHit & tHit = m_dAccum[i];
@@ -1404,7 +1404,7 @@ RtSegment_t * RtAccum_t::CreateSegment ( int iRowSize )
 			tOutHit.ZipHit ( tHit.m_iWordPos );
 		}
 
-		tDoc.m_uFields |= 1UL << HIT2FIELD ( tHit.m_iWordPos );
+		tDoc.m_uFields |= 1UL << HITMAN::GetField ( tHit.m_iWordPos );
 		tDoc.m_uHits++;
 	}
 
@@ -2710,7 +2710,7 @@ CSphIndex * RtIndex_t::LoadDiskChunk ( int iChunk )
 	CSphString sChunk, sError;
 	sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), iChunk );
 
-	CSphIndex * pDiskChunk = sphCreateIndexPhrase ( sChunk.cstr() );
+	CSphIndex * pDiskChunk = sphCreateIndexPhrase ( m_sIndexName.cstr(), sChunk.cstr() );
 	if ( pDiskChunk )
 	{
 		if ( !pDiskChunk->Prealloc ( false, false, sError ) || !pDiskChunk->Preread() )
@@ -3025,21 +3025,21 @@ public:
 		}
 	}
 
-	virtual DWORD GetNextHit ()
+	virtual Hitpos_t GetNextHit ()
 	{
 		if ( m_uNextHit==0 )
 		{
-			return m_tHitReader.UnzipHit();
+			return Hitpos_t ( m_tHitReader.UnzipHit() );
 
 		} else if ( m_uNextHit==0xffffffffUL )
 		{
-			return 0;
+			return EMPTY_HIT;
 
 		} else
 		{
 			DWORD uRes = m_uNextHit;
 			m_uNextHit = 0xffffffffUL;
-			return uRes;
+			return Hitpos_t ( uRes );
 		}
 	}
 };
@@ -3441,7 +3441,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tParsed.m_pRoot, pQuery->m_eRanker, pResult, tTermSetup ) );
+	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tParsed.m_pRoot, tParsed.m_dZones, pQuery->m_eRanker, pResult, tTermSetup ) );
 	if ( !pRanker.Ptr() )
 	{
 		m_tRwlock.Unlock ();
@@ -4362,20 +4362,16 @@ void RtBinlog_c::Configure ( const CSphConfigSection & hSearchd )
 	}
 }
 
-void RtBinlog_c::Replay ( const CSphVector < ISphRtIndex * > & dRtIndices )
+void RtBinlog_c::Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes )
 {
-	if ( m_bDisabled || !dRtIndices.GetLength() )
+	if ( m_bDisabled || !hIndexes.GetLength() )
 		return;
-
-	// we'll need to access some internals
-	CSphVector < RtIndex_t * > dIndexes ( dRtIndices.GetLength() );
-	ARRAY_FOREACH ( i, dRtIndices )
-		dIndexes[i] = (RtIndex_t *)dRtIndices[i];
 
 	// do replay
 	m_bReplayMode = true;
+	int iLastLogState = 0;
 	ARRAY_FOREACH ( i, m_dLogFiles )
-		ReplayBinlog ( dIndexes, i );
+		iLastLogState = ReplayBinlog ( hIndexes, i );
 
 	// FIXME?
 	// in some cases, indexes might had been flushed during replay
@@ -4384,7 +4380,7 @@ void RtBinlog_c::Replay ( const CSphVector < ISphRtIndex * > & dRtIndices )
 
 	// resume normal operation
 	m_bReplayMode = false;
-	OpenNewLog ();
+	OpenNewLog ( iLastLogState );
 }
 
 void RtBinlog_c::CreateTimerThread ()
@@ -4536,6 +4532,7 @@ void RtBinlog_c::SaveMeta ()
 	if ( ::rename ( sMeta.cstr(), sMetaOld.cstr() ) )
 		sphDie ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)",
 			sMeta.cstr(), sMetaOld.cstr(), errno, strerror(errno) ); // !COMMIT handle this gracefully
+	sphLogDebug ( "SaveMeta: Done." );
 }
 
 void RtBinlog_c::LockFile ( bool bLock )
@@ -4562,14 +4559,18 @@ void RtBinlog_c::LockFile ( bool bLock )
 	}
 }
 
-void RtBinlog_c::OpenNewLog ()
+void RtBinlog_c::OpenNewLog ( int iLastState )
 {
 	MEMORY ( SPH_MEM_BINLOG );
 
 	// calc new ext
 	int iExt = 1;
 	if ( m_dLogFiles.GetLength() )
-		iExt = m_dLogFiles.Last().m_iExt + 1;
+	{
+		iExt = m_dLogFiles.Last().m_iExt;
+		if ( !iLastState )
+			iExt++;
+	}
 
 	// create entry
 	// we need to reset it, otherwise there might be leftover data after last Remove()
@@ -4579,6 +4580,10 @@ void RtBinlog_c::OpenNewLog ()
 
 	// create file
 	CSphString sLog = MakeBinlogName ( m_sLogPath.cstr(), tLog.m_iExt );
+
+	if ( !iLastState ) // reuse the last binlog since it is empty or useless.
+		::unlink ( sLog.cstr() );
+
 	if ( !m_tWriter.OpenFile ( sLog.cstr(), m_sWriterError ) )
 		sphDie ( "failed to create %s: errno=%d, error=%s", sLog.cstr(), errno, strerror(errno) );
 
@@ -4645,7 +4650,7 @@ void RtBinlog_c::CheckDoFlush ()
 	}
 }
 
-void RtBinlog_c::ReplayBinlog ( const CSphVector < RtIndex_t * > & dRtIndices, int iBinlog )
+int RtBinlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int iBinlog )
 {
 	assert ( iBinlog>=0 && iBinlog<m_dLogFiles.GetLength() );
 	CSphString sError;
@@ -4661,6 +4666,12 @@ void RtBinlog_c::ReplayBinlog ( const CSphVector < RtIndex_t * > & dRtIndices, i
 		sphDie ( "binlog: log open error: %s", sError.cstr() );
 
 	const SphOffset_t iFileSize = tReader.GetFilesize();
+
+	if ( !iFileSize )
+	{
+		sphWarning ( "binlog: empty binlog detected. Skipping %s", sLog.cstr() );
+		return -1;
+	}
 
 	if ( tReader.GetDword()!=BINLOG_HEADER_MAGIC )
 		sphDie ( "binlog: log missing magic header (corrupted?)", sLog.cstr() );
@@ -4682,6 +4693,7 @@ void RtBinlog_c::ReplayBinlog ( const CSphVector < RtIndex_t * > & dRtIndices, i
 	tLog.m_dIndexInfos.Reset();
 
 	bool bReplayOK = true;
+	bool bHaveCacheOp = false;
 	int64_t iPos = -1;
 
 	m_iReplayedRows = 0;
@@ -4714,11 +4726,13 @@ void RtBinlog_c::ReplayBinlog ( const CSphVector < RtIndex_t * > & dRtIndices, i
 				break;
 
 			case BLOP_ADD_INDEX:
-				bReplayOK = ReplayIndexAdd ( iBinlog, dRtIndices, tReader );
+				bReplayOK = ReplayIndexAdd ( iBinlog, hIndexes, tReader );
 				break;
 
 			case BLOP_ADD_CACHE:
-				// !COMMIT this must only happen once in the very end; add a check
+				if ( bHaveCacheOp )
+					sphDie ( "binlog: internal error, second BLOP_ADD_CACHE detected (corruption?)" );
+				bHaveCacheOp = true;
 				bReplayOK = ReplayCacheAdd ( iBinlog, tReader );
 				break;
 
@@ -4726,7 +4740,7 @@ void RtBinlog_c::ReplayBinlog ( const CSphVector < RtIndex_t * > & dRtIndices, i
 				sphDie ( "binlog: internal error, unhandled entry (blop=%d)", (int)uOp );
 		}
 
-		dTotal [ uOp ] += bReplayOK;
+		dTotal [ uOp ] += bReplayOK?1:0;
 		dTotal [ BLOP_TOTAL ]++;
 	}
 
@@ -4742,16 +4756,7 @@ void RtBinlog_c::ReplayBinlog ( const CSphVector < RtIndex_t * > & dRtIndices, i
 	ARRAY_FOREACH ( i, tLog.m_dIndexInfos )
 	{
 		const BinlogIndexInfo_t & tIndex = tLog.m_dIndexInfos[i];
-
-		RtIndex_t * pIndex = NULL;
-		ARRAY_FOREACH ( j, dRtIndices )
-			if ( tIndex.m_sName==dRtIndices[j]->GetName() )
-		{
-			pIndex = dRtIndices[j];
-			break;
-		}
-
-		if ( !pIndex )
+		if ( !hIndexes ( tIndex.m_sName.cstr() ) )
 		{
 			sphWarning ( "binlog: index %s: missing; tids "INT64_FMT" to "INT64_FMT" skipped!",
 				tIndex.m_sName.cstr(), tIndex.m_iMinTID, tIndex.m_iMaxTID );
@@ -4774,6 +4779,11 @@ void RtBinlog_c::ReplayBinlog ( const CSphVector < RtIndex_t * > & dRtIndices, i
 		sLog.cstr(),
 		(int)(iFileSize/1048576), (int)((iFileSize*10/1048576)%10),
 		(int)(tmReplay/1000000), (int)((tmReplay/1000)%1000) );
+
+	if ( bHaveCacheOp && dTotal[BLOP_TOTAL]==1 ) // only one operation, that is Add Cache - by the fact, empty binlog
+		return 1;
+
+	return 0;
 }
 
 
@@ -4838,7 +4848,7 @@ bool RtBinlog_c::ReplayCommit ( int iBinlog, BinlogReader_c & tReader ) const
 			tIndex.m_sName.cstr(), tIndex.m_tmMax, tmStamp, iTxnPos );
 
 	// only replay transaction when index exists and does not have it yet (based on TID)
-	if ( tIndex.m_pIndex && iTID > tIndex.m_pIndex->m_iTID )
+	if ( tIndex.m_pRT && iTID > tIndex.m_pIndex->m_iTID )
 	{
 		// we normally expect per-index TIDs to be sequential
 		// but let's be graceful about that
@@ -4847,10 +4857,10 @@ bool RtBinlog_c::ReplayCommit ( int iBinlog, BinlogReader_c & tReader ) const
 				tIndex.m_sName.cstr(), tIndex.m_pIndex->m_iTID, iTID, iTxnPos );
 
 		// actually replay
-		tIndex.m_pIndex->CommitReplayable ( pSeg, dKlist );
+		tIndex.m_pRT->CommitReplayable ( pSeg, dKlist );
 
 		// update committed tid on replay in case of unexpected / mismatched tid
-		tIndex.m_pIndex->m_iTID = iTID;
+		tIndex.m_pRT->m_iTID = iTID;
 	}
 
 	// update info
@@ -4861,7 +4871,7 @@ bool RtBinlog_c::ReplayCommit ( int iBinlog, BinlogReader_c & tReader ) const
 	return true;
 }
 
-bool RtBinlog_c::ReplayIndexAdd ( int iBinlog, const CSphVector < RtIndex_t * > & dIn, BinlogReader_c & tReader ) const
+bool RtBinlog_c::ReplayIndexAdd ( int iBinlog, const SmallStringHash_T<CSphIndex*> & hIndexes, BinlogReader_c & tReader ) const
 {
 	// load and check index
 	const int64_t iTxnPos = tReader.GetPos();
@@ -4893,14 +4903,15 @@ bool RtBinlog_c::ReplayIndexAdd ( int iBinlog, const CSphVector < RtIndex_t * > 
 	tIndex.m_sName = sName;
 
 	// lookup index in the list of currently served ones
-	// OPTIMIZE? but then again, this operation is rather rare..
-	ARRAY_FOREACH ( i, dIn )
-		if ( sName==dIn[i]->GetName() )
+	CSphIndex ** ppIndex = hIndexes ( sName.cstr() );
+	CSphIndex * pIndex = ppIndex ? (*ppIndex) : NULL;
+	if ( pIndex )
 	{
-		tIndex.m_pIndex = dIn[i];
-		tIndex.m_iPreReplayTID = dIn[i]->m_iTID;
-		tIndex.m_iFlushedTID = dIn[i]->m_iTID;
-		break;
+		tIndex.m_pIndex = pIndex;
+		if ( pIndex->IsRT() )
+			tIndex.m_pRT = (RtIndex_t*)pIndex;
+		tIndex.m_iPreReplayTID = pIndex->m_iTID;
+		tIndex.m_iFlushedTID = pIndex->m_iTID;
 	}
 
 	// all ok
@@ -5044,10 +5055,13 @@ void sphRTInit ( const CSphConfigSection & hSearchd )
 	g_bRTChangesAllowed = false;
 	Verify ( RtSegment_t::m_tSegmentSeq.Init() );
 	Verify ( sphThreadKeyCreate ( &g_tTlsAccumKey ) );
+
 	g_pBinlog = new RtBinlog_c();
 	if ( !g_pBinlog )
 		sphDie ( "binlog: failed to create binlog" );
+
 	g_pBinlog->Configure ( hSearchd );
+	sphSetBinLog ( g_pBinlog );
 }
 
 void sphRTDone ()
@@ -5058,16 +5072,11 @@ void sphRTDone ()
 	SafeDelete ( g_pBinlog );
 }
 
-void sphReplayBinlog ( const CSphVector < ISphRtIndex * > & dRtIndices )
+void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes )
 {
 	MEMORY ( SPH_MEM_BINLOG );
 
-#ifndef _NDEBUG
-	ARRAY_FOREACH ( i, dRtIndices )
-		assert ( dynamic_cast< RtIndex_t * > ( dRtIndices[i] ) );
-#endif
-
-	g_pBinlog->Replay ( dRtIndices );
+	g_pBinlog->Replay ( hIndexes );
 	g_pBinlog->CreateTimerThread();
 	g_bRTChangesAllowed = true;
 }

@@ -255,7 +255,7 @@ int main ( int argc, char ** argv )
 		tQuery.m_sQuery = sQuery;
 		CSphQueryResult * pResult = NULL;
 
-		CSphIndex * pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
+		CSphIndex * pIndex = sphCreateIndexPhrase ( NULL, hIndex["path"].cstr() );
 		pIndex->m_bEnableStar = ( hIndex.GetInt("enable_star")!=0 );
 		pIndex->SetWordlistPreload ( hIndex.GetInt("ondisk_dict")==0 );
 
@@ -435,11 +435,12 @@ int main ( int argc, char ** argv )
 		int iWord = 1;
 		while ( pResult->m_hWordStats.IterateNext() )
 		{
+			const CSphQueryResultMeta::WordStat_t & tStat = pResult->m_hWordStats.IterateGet();
 			fprintf ( stdout, "%d. '%s': %d documents, %d hits\n",
 				iWord,
 				pResult->m_hWordStats.IterateGetKey().cstr(),
-				pResult->m_hWordStats.IterateGet().m_iDocs,
-				pResult->m_hWordStats.IterateGet().m_iHits );
+				tStat.m_iDocs,
+				tStat.m_iHits );
 			iWord++;
 		}
 		fprintf ( stdout, "\n" );

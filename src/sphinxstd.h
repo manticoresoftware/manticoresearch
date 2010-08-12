@@ -1139,6 +1139,10 @@ public:
 		else
 			m_pLastByOrder = pToDelete->m_pPrevByOrder;
 
+		// step the iterator one item back - to gracefully hold deletion in iteration cycle
+		if ( pToDelete==m_pIterator )
+			m_pIterator = pToDelete->m_pPrevByOrder;
+
 		SafeDelete ( pToDelete );
 		--m_iLength;
 
@@ -1540,6 +1544,7 @@ public:
 		return *this;
 	}
 };
+
 
 /////////////////////////////////////////////////////////////////////////////
 

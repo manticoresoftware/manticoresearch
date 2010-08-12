@@ -388,7 +388,7 @@ enum SearchdCommand_e
 enum
 {
 	VER_COMMAND_SEARCH		= 0x117,
-	VER_COMMAND_EXCERPT		= 0x102,
+	VER_COMMAND_EXCERPT		= 0x103,
 	VER_COMMAND_UPDATE		= 0x102,
 	VER_COMMAND_KEYWORDS	= 0x100,
 	VER_COMMAND_STATUS		= 0x100,
@@ -892,11 +892,6 @@ void sphFatal ( const char * sFmt, ... )
 	exit ( 1 );
 }
 
-void LogInternalError ( const char * sError )
-{
-	sphWarning ( "INTERNAL ERROR: %s", sError );
-}
-
 #if !USE_WINDOWS
 static CSphString GetNamedPipeName ( int iPid )
 {
@@ -1313,7 +1308,7 @@ void UItoA ( char** ppOutput, Uint uVal, int iBase=10, int iWidth=0, int iPrec=0
 		uVal /= iBase;
 	}
 
-	BYTE uLen = uMaxIndex - (pRes-CBuf);
+	BYTE uLen = (BYTE)( uMaxIndex - (pRes-CBuf) );
 
 	if ( iWidth )
 		while ( uLen < iWidth )
@@ -3797,9 +3792,9 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent
 		// read per-word stats
 		for ( int i=0; i<iWordsCount; i++ )
 		{
-			CSphString sWord = tReq.GetString ();
-			int iDocs = tReq.GetInt ();
-			int iHits = tReq.GetInt ();
+			const CSphString sWord = tReq.GetString ();
+			const int iDocs = tReq.GetInt ();
+			const int iHits = tReq.GetInt ();
 
 			tRes.AddStat ( sWord, iDocs, iHits );
 		}
@@ -6636,8 +6631,56 @@ void HandleCommandQuery ( int iSock, int iVer, InputBuffer_c & tReq )
 }
 
 /////////////////////////////////////////////////////////////////////////////
+
+int sphGetPassageBoundary ( const CSphString & sPassageBoundaryMode )
+{
+	int iMode = 0;
+	if ( sPassageBoundaryMode=="sentence" )
+		iMode = MAGIC_CODE_SENTENCE;
+	else if ( sPassageBoundaryMode=="paragraph" )
+		iMode = MAGIC_CODE_PARAGRAPH;
+	else if ( sPassageBoundaryMode=="zone" )
+		iMode = MAGIC_CODE_ZONE;
+
+	return iMode;
+}
+
+bool sphCheckOptionsSPZ ( const ExcerptQuery_t & q, const CSphString & sPassageBoundaryMode, CSphString & sError )
+{
+	if ( q.m_iPassageBoundary )
+	{
+		if ( q.m_iAround==0 )
+		{
+			sError.SetSprintf ( "invalid combination of passage_boundary=%s and around=%d", sPassageBoundaryMode.cstr(), q.m_iAround );
+			return false;
+		} else if ( q.m_bUseBoundaries )
+		{
+			sError.SetSprintf ( "invalid combination of passage_boundary=%s and use_boundaries", sPassageBoundaryMode.cstr() );
+			return false;
+		}
+	}
+
+	if ( q.m_bEmitZones )
+	{
+		if ( q.m_iPassageBoundary!=MAGIC_CODE_ZONE )
+		{
+			sError.SetSprintf ( "invalid combination of passage_boundary=%s and emit_zones", sPassageBoundaryMode.cstr() );
+			return false;
+		}
+		if ( !( q.m_sStripMode=="strip" || q.m_sStripMode=="index" ) )
+		{
+			sError.SetSprintf ( "invalid combination of strip=%s and emit_zones", q.m_sStripMode.cstr(), sPassageBoundaryMode.cstr() );
+			return false;
+		}
+	}
+
+	return true;
+}
+
+/////////////////////////////////////////////////////////////////////////////
 // EXCERPTS HANDLER
 /////////////////////////////////////////////////////////////////////////////
+
 
 void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 {
@@ -6658,6 +6701,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	const int EXCERPT_FLAG_FORCE_ALL_WORDS	= 64;
 	const int EXCERPT_FLAG_LOAD_FILES		= 128;
 	const int EXCERPT_FLAG_ALLOW_EMPTY		= 256;
+	const int EXCERPT_FLAG_EMIT_ZONES		= 512;
 
 	// v.1.1
 	ExcerptQuery_t q;
@@ -6698,6 +6742,10 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		}
 	}
 
+	CSphString sPassageBoundaryMode;
+	if ( iVer>=0x103 )
+		sPassageBoundaryMode = tReq.GetString();
+
 	q.m_bRemoveSpaces = ( iFlags & EXCERPT_FLAG_REMOVESPACES )!=0;
 	q.m_bExactPhrase = ( iFlags & EXCERPT_FLAG_EXACTPHRASE )!=0;
 	q.m_bUseBoundaries = ( iFlags & EXCERPT_FLAG_USEBOUNDARIES )!=0;
@@ -6708,12 +6756,30 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		q.m_iLimitPassages = 1;
 	q.m_bLoadFiles = ( iFlags & EXCERPT_FLAG_LOAD_FILES )!=0;
 	q.m_bAllowEmpty = ( iFlags & EXCERPT_FLAG_ALLOW_EMPTY )!=0;
+	q.m_bEmitZones = ( iFlags & EXCERPT_FLAG_EMIT_ZONES )!=0;
 
 	int iCount = tReq.GetInt ();
 	if ( iCount<0 || iCount>EXCERPT_MAX_ENTRIES )
 	{
 		tReq.SendErrorReply ( "invalid entries count %d", iCount );
 		pServed->Unlock();
+		return;
+	}
+
+	q.m_iPassageBoundary = sphGetPassageBoundary ( sPassageBoundaryMode );
+
+	CSphString sError;
+
+	if ( !sphCheckOptionsSPZ ( q, sPassageBoundaryMode, sError ) )
+	{
+		tReq.SendErrorReply ( "%s", sError.cstr() );
+		return;
+	}
+
+	if ( q.m_iPassageBoundary &&
+		( !pTokenizer->EnableSentenceIndexing ( sError ) || !pTokenizer->EnableZoneIndexing ( sError ) ) )
+	{
+		tReq.SendErrorReply ( "%s", sError.cstr() );
 		return;
 	}
 
@@ -6734,7 +6800,6 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		if ( q.m_sStripMode=="strip"
 			|| ( q.m_sStripMode=="index" && tSettings.m_bHtmlStrip ) )
 		{
-			CSphString sError;
 			if ( q.m_sStripMode=="index" )
 			{
 				if (
@@ -6747,9 +6812,11 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 				}
 			}
 			pStripper = &tStripper;
+
+			if ( !tSettings.m_sZonePrefix.IsEmpty() )
+				tStripper.SetZonePrefix ( tSettings.m_sZonePrefix.cstr() );
 		}
 
-		CSphString sError;
 		char * sResult = sphBuildExcerpt ( q, pDict, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError, pStripper );
 		if ( !sResult )
 		{
@@ -7935,6 +8002,8 @@ void HandleCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt_t & 
 	q.m_sSource = tStmt.m_dInsertValues[0].m_sVal; // OPTIMIZE?
 	q.m_sWords = tStmt.m_dInsertValues[2].m_sVal;
 
+	CSphString sPassageBoundaryMode;
+
 	ARRAY_FOREACH ( i, tStmt.m_dCallOptNames )
 	{
 		CSphString & sOpt = tStmt.m_dCallOptNames[i];
@@ -7947,6 +8016,7 @@ void HandleCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt_t & 
 		else if ( sOpt=="after_match" )			{ q.m_sAfterMatch = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
 		else if ( sOpt=="chunk_separator" )		{ q.m_sChunkSeparator = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
 		else if ( sOpt=="html_strip_mode" )		{ q.m_sStripMode = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
+		else if ( sOpt=="passage_boundary" )	{ sPassageBoundaryMode = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
 
 		else if ( sOpt=="limit" )				{ q.m_iLimit = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="limit_words" )			{ q.m_iLimitWords = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
@@ -7961,6 +8031,7 @@ void HandleCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt_t & 
 		else if ( sOpt=="force_all_words" )		{ q.m_bForceAllWords = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="load_files" )			{ q.m_bLoadFiles = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="allow_empty" )			{ q.m_bAllowEmpty = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
+		else if ( sOpt=="emit_zones" )			{ q.m_bEmitZones = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
 
 		else
 		{
@@ -7978,12 +8049,30 @@ void HandleCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt_t & 
 	if ( !sError.IsEmpty() )
 	{
 		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		pServed->Unlock();
+		return;
+	}
+
+	q.m_iPassageBoundary = sphGetPassageBoundary ( sPassageBoundaryMode );
+
+	if ( !sphCheckOptionsSPZ ( q, sPassageBoundaryMode, sError ) )
+	{
+		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		pServed->Unlock();
 		return;
 	}
 
 	CSphIndex * pIndex = pServed->m_pIndex;
 	CSphDict * pDict = pIndex->GetDictionary ();
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( pIndex->GetTokenizer()->Clone ( true ) );
+
+	if ( q.m_iPassageBoundary &&
+		( !pTokenizer->EnableSentenceIndexing ( sError ) || !pTokenizer->EnableZoneIndexing ( sError ) ) )
+	{
+		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		pServed->Unlock();
+		return;
+	}
 
 	// FIXME? cut-paste
 	const CSphIndexSettings & tSettings = pIndex->GetSettings ();
@@ -8005,6 +8094,10 @@ void HandleCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt_t & 
 				return;
 			}
 		}
+
+		if ( !tSettings.m_sZonePrefix.IsEmpty() )
+			tStripper.SetZonePrefix ( tSettings.m_sZonePrefix.cstr() );
+
 		pStripper = &tStripper;
 	}
 
@@ -9120,7 +9213,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	ServedIndex_t tNewIndex;
 	tNewIndex.m_bOnlyNew = pRotating->m_bOnlyNew;
 
-	tNewIndex.m_pIndex = sphCreateIndexPhrase ( NULL ); // FIXME! check if it's ok
+	tNewIndex.m_pIndex = sphCreateIndexPhrase ( NULL, NULL ); // FIXME! check if it's ok
 	tNewIndex.m_pIndex->m_bEnableStar = pRotating->m_bStar;
 	tNewIndex.m_pIndex->m_bExpandKeywords = pRotating->m_bExpand;
 	tNewIndex.m_pIndex->SetPreopen ( pRotating->m_bPreopen || g_bPreopenIndexes );
@@ -9307,7 +9400,7 @@ void SeamlessTryToForkPrereader ()
 
 	// alloc buffer index (once per run)
 	if ( !g_pPrereading )
-		g_pPrereading = sphCreateIndexPhrase ( NULL ); // FIXME! check if it's ok
+		g_pPrereading = sphCreateIndexPhrase ( NULL, NULL ); // FIXME! check if it's ok
 
 	g_pPrereading->m_bEnableStar = tServed.m_bStar;
 	g_pPrereading->m_bExpandKeywords = tServed.m_bExpand;
@@ -10031,7 +10124,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 
 		// try to create index
 		CSphString sWarning;
-		tIdx.m_pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
+		tIdx.m_pIndex = sphCreateIndexPhrase ( szIndexName, hIndex["path"].cstr() );
 		tIdx.m_pIndex->m_bEnableStar = tIdx.m_bStar;
 		tIdx.m_pIndex->m_bExpandKeywords = tIdx.m_bExpand;
 		tIdx.m_pIndex->SetPreopen ( tIdx.m_bPreopen || g_bPreopenIndexes );
@@ -11745,6 +11838,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	// build indexes hash
 	//////////////////////
 
+	// setup mva updates arena here, since we could have saved persistent mva updates
+	sphArenaInit ( hSearchd.GetSize ( "mva_updates_pool", 1048576 ) );
+
 	// configure and preload
 	int iValidIndexes = 0;
 	int iCounter = 1;
@@ -11820,9 +11916,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	// handle my signals
 	SetSignalHandlers ();
-
-	// setup mva updates arena
-	sphArenaInit ( hSearchd.GetSize ( "mva_updates_pool", 1048576 ) );
 
 	// create logs
 	if ( !g_bOptNoLock )
@@ -11980,8 +12073,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		MySetServiceStatus ( SERVICE_RUNNING, NO_ERROR, 0 );
 #endif
 
-	sphSetInternalErrorCallback ( LogInternalError );
-	sphSetWarningCallback ( LogWarning );
 	sphSetReadBuffers ( hSearchd.GetSize ( "read_buffer", 0 ), hSearchd.GetSize ( "read_unhinted", 0 ) );
 
 	CSphProcessSharedMutex * pAcceptMutex = NULL;
@@ -12013,21 +12104,13 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		g_tDistLock.Init();
 	}
 
-	// prepare data and replay last binlog
-	CSphVector< ISphRtIndex * > dRtIndices;
+	// replay last binlog
+	SmallStringHash_T<CSphIndex*> hIndexes;
 	for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
-	{
-		const ServedIndex_t & tServed = it.Get ();
-		if ( tServed.m_bRT )
-		{
-			ISphRtIndex * pRt = dynamic_cast < ISphRtIndex * > ( tServed.m_pIndex );
-			assert ( pRt );
-			dRtIndices.Add ( pRt );
-		}
-	}
+		hIndexes.Add ( it.Get().m_pIndex, it.GetKey() );
 
 	if ( g_eWorkers==MPM_THREADS )
-		sphReplayBinlog ( dRtIndices );
+		sphReplayBinlog ( hIndexes );
 
 	if ( !g_bOptNoDetach )
 		g_bLogStdout = false;
@@ -12060,7 +12143,7 @@ int main ( int argc, char **argv )
 	sphThreadInit();
 	MemorizeStack ( &cTopOfMainStack );
 	sphSetDieCallback ( DieCallback );
-	sphSetLogger ( ( const void* ) ( &sphLog ) );
+	sphSetLogger ( sphLog );
 
 #if USE_WINDOWS
 	int iNameIndex = -1;

@@ -182,7 +182,7 @@ int main ( int argc, char ** argv )
 			sphDie ( "index '%s': missing 'path' in config'\n", sIndex.cstr() );
 
 		// preload that index
-		pIndex = sphCreateIndexPhrase ( hConf["index"][sIndex]["path"].cstr() );
+		pIndex = sphCreateIndexPhrase ( sIndex.cstr(), hConf["index"][sIndex]["path"].cstr() );
 		if ( !pIndex )
 			sphDie ( "index '%s': failed to create", sIndex.cstr() );
 
@@ -215,7 +215,7 @@ int main ( int argc, char ** argv )
 			}
 
 			fprintf ( stdout, "dumping header file '%s'...\n", sDumpHeader.cstr() );
-			CSphIndex * pIndex = sphCreateIndexPhrase ( "" );
+			CSphIndex * pIndex = sphCreateIndexPhrase ( NULL, "" );
 			pIndex->DebugDumpHeader ( stdout, sDumpHeader.cstr() );
 			break;
 		}

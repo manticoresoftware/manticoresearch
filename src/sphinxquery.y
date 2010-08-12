@@ -21,17 +21,24 @@
 		DWORD		uMask;			// acceptable fields mask
 		int			iMaxPos;		// max allowed position within field
 	} tFieldLimit;
+	int				iZoneVec;
 };
 
 %token <pNode>			TOK_KEYWORD
 %token <tInt>			TOK_NEAR
 %token <tInt>			TOK_INT
 %token <tFieldLimit>	TOK_FIELDLIMIT
+%token <iZoneVec>		TOK_ZONE
 %token					TOK_BEFORE
+%token					TOK_SENTENCE
+%token					TOK_PARAGRAPH
 %type <pNode>			rawkeyword
 %type <pNode>			keyword
 %type <pNode>			phrasetoken
 %type <pNode>			phrase
+%type <pNode>			sp_item
+%type <pNode>			sentence
+%type <pNode>			paragraph
 %type <pNode>			atom
 %type <pNode>			atomf
 %type <pNode>			orlist
@@ -74,9 +81,25 @@ phrase:
 	| phrase phrasetoken				{ $$ = pParser->AddKeyword ( $1, $2 ); }
 	;
 
+sp_item:
+	keyword								{ $$ = $1; }
+	| '"' phrase '"'					{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_PHRASE); } }
+	;
+
+sentence:
+	sp_item TOK_SENTENCE sp_item		{ $$ = pParser->AddOp ( SPH_QUERY_SENTENCE, $1, $3 ); }
+	| sentence TOK_SENTENCE sp_item		{ $$ = pParser->AddOp ( SPH_QUERY_SENTENCE, $1, $3 ); }
+	;
+
+paragraph:
+	sp_item TOK_PARAGRAPH sp_item		{ $$ = pParser->AddOp ( SPH_QUERY_PARAGRAPH, $1, $3 ); }
+	| paragraph TOK_PARAGRAPH sp_item	{ $$ = pParser->AddOp ( SPH_QUERY_PARAGRAPH, $1, $3 ); }
+	;
 
 atom:
 	keyword								{ $$ = $1; }
+	| sentence							{ $$ = $1; }
+	| paragraph							{ $$ = $1; }
 	| '"' '"'							{ $$ = NULL; }
 	| '"' '"' '~' TOK_INT				{ $$ = NULL; }
 	| '"' '"' '/' TOK_INT				{ $$ = NULL; }
@@ -89,6 +112,7 @@ atom:
 atomf:
 	atom								{ $$ = $1; }
 	| TOK_FIELDLIMIT atom				{ $$ = $2; if ( $$ ) $$->SetFieldSpec ( $1.uMask, $1.iMaxPos ); }
+	| TOK_ZONE atom						{ $$ = $2; if ( $$ ) $$->SetZoneSpec ( pParser->GetZoneVec ( $1 ) ); }
 	;
 
 orlist:

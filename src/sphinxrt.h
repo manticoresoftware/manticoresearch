@@ -17,12 +17,13 @@
 #define _sphinxrt_
 
 #include "sphinx.h"
+#include "sphinxutils.h"
 
 /// RAM based updateable backend interface
 class ISphRtIndex : public CSphIndex
 {
 public:
-	explicit ISphRtIndex ( const char * sName ) : CSphIndex ( sName ) {}
+	explicit ISphRtIndex ( const char * sIndexName, const char * sName ) : CSphIndex ( sIndexName, sName ) {}
 
 	/// get internal schema (to use for Add calls)
 	virtual const CSphSchema & GetInternalSchema () const { return m_tSchema; }
@@ -33,7 +34,7 @@ public:
 
 	/// insert/update document in current txn
 	/// fails in case of two open txns to different indexes
-	virtual bool AddDocument ( const CSphVector<CSphWordHit> & dHits, const CSphMatch & tDoc, const char ** ppStr, CSphString & sError ) = 0;
+	virtual bool AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, const char ** ppStr, CSphString & sError ) = 0;
 
 	/// delete document in current txn
 	/// fails in case of two open txns to different indexes
@@ -66,7 +67,7 @@ ISphRtIndex * sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndex
 ISphRtIndex * sphGetCurrentIndexRT();
 
 /// replay stored binlog
-void sphReplayBinlog ( const CSphVector < ISphRtIndex * > & dRtIndices );
+void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes );
 
 #endif // _sphinxrt_
 

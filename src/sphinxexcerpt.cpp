@@ -39,7 +39,7 @@ public:
 	char *	BuildExcerpt ( const ExcerptQuery_t &, CSphDict * pDict, ISphTokenizer * pTokenizer );
 
 	void	TokenizeQuery ( const ExcerptQuery_t &, CSphDict * pDict, ISphTokenizer * pTokenizer );
-	void	TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks, bool bRetainHtml );
+	void	TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks, bool bRetainHtml, int iSPZ );
 
 	void	SetMarker ( CSphHitMarker * pMarker ) { m_pMarker = pMarker; }
 
@@ -49,7 +49,8 @@ public:
 		TOK_NONE = 0,		///< unspecified type, also used as the end marker
 		TOK_WORD,			///< just a word
 		TOK_SPACE,			///< whitespace chars seq
-		TOK_BREAK			///< non-word chars seq which delimit a phrase part or boundary
+		TOK_BREAK,			///< non-word chars seq which delimit a phrase part or boundary
+		TOK_SPZ				///< SENTENCE, PARAGRAPH, ZONE
 	};
 
 	struct Token_t
@@ -120,6 +121,32 @@ public:
 		int		m_iLength;
 	};
 
+	struct Span_t
+	{
+		int m_iStart;
+		int m_iName;
+		int m_iLen;
+
+		bool operator<( const Span_t & a ) const
+		{
+			return m_iStart<a.m_iStart;
+		}
+
+		bool operator==( const Span_t & a ) const
+		{
+			return m_iStart==a.m_iStart;
+		}
+
+		Token_t Token () const
+		{
+			Token_t tRes;
+			tRes.m_iStart = m_iName;
+			tRes.m_iLengthBytes = m_iLen;
+			tRes.m_iLengthCP = 0;
+			return tRes;
+		}
+	};
+
 protected:
 	CSphVector<Token_t>		m_dTokens;		///< source text tokens
 	CSphVector<Token_t>		m_dWords;		///< query words tokens
@@ -143,6 +170,8 @@ protected:
 	CSphVector<char>		m_dKeywordsBuffer;
 	CSphVector<Keyword_t>	m_dKeywords;
 
+	CSphVector<Span_t>		m_dSpans;
+
 protected:
 	void					CalcPassageWeight ( const CSphVector<int> & dPassage, Passage_t & tPass, int iMaxWords, int iWordCountCoeff );
 	bool					ExtractPassages ( const ExcerptQuery_t & q );
@@ -160,6 +189,9 @@ protected:
 	void					AddBoundary ();
 
 	void					MarkHits ();
+
+	bool					SetupWindow ( CSphVector<int> & dPass, Passage_t & tPass, int iFrom, int iCpLimit, int iMaxWords );
+	void					FlushPassage ( const Passage_t & tPass, int iLCSThresh );
 };
 
 // find string sFind in first iLimit characters of sBuffer
@@ -191,8 +223,10 @@ static BYTE * FindString ( BYTE * sBuffer, BYTE * sFind, int iLimit )
 	return NULL;
 }
 
-/// snippets query words for different cases
+/// hitman used here in snippets
+typedef Hitman_c<8> HITMAN;
 
+/// snippets query words for different cases
 class ISnippetsQword: public ISphQword
 {
 public:
@@ -224,7 +258,7 @@ public:
 		m_uFields = 0xFFFFFFFFUL;
 		if ( ( m_iChunk++ )==0 )
 		{
-			if ( GetNextHit() )
+			if ( GetNextHit()!=EMPTY_HIT )
 			{
 				m_tMatch.m_iDocID = 1;
 				m_iToken--;
@@ -240,7 +274,7 @@ public:
 
 struct SnippetsQword_Exact_c: public ISnippetsQword
 {
-	virtual DWORD GetNextHit ()
+	virtual Hitpos_t GetNextHit ()
 	{
 		while ( m_iToken < m_dTokens->GetLength() )
 		{
@@ -251,18 +285,17 @@ struct SnippetsQword_Exact_c: public ISnippetsQword
 			if ( tToken.m_iWordID==m_iWordID )
 			{
 				tToken.m_uWords |= m_uWordMask;
-				return HIT_PACK ( 0, tToken.m_uPosition ) | ( ( m_iToken-1 )==m_iLastIndex ? HIT_FIELD_END : 0 );
+				return HITMAN::Create ( 0, tToken.m_uPosition, ( m_iToken-1 )==m_iLastIndex );
 			}
 		}
-		return 0;
+		return EMPTY_HIT;
 	}
 };
 
 /// partial matches
-
 template < typename COMPARE > struct SnippetsQword_c: public ISnippetsQword
 {
-	virtual DWORD GetNextHit ()
+	virtual Hitpos_t GetNextHit ()
 	{
 		while ( m_iToken < m_dTokens->GetLength() )
 		{
@@ -275,10 +308,10 @@ template < typename COMPARE > struct SnippetsQword_c: public ISnippetsQword
 			if ( (*(COMPARE *)this).Match ( tToken, sToken ) )
 			{
 				tToken.m_uWords |= m_uWordMask;
-				return HIT_PACK ( 0, tToken.m_uPosition ) | ( ( m_iToken-1 )==m_iLastIndex ? HIT_FIELD_END : 0 );
+				return HITMAN::Create ( 0, tToken.m_uPosition, ( m_iToken-1 )==m_iLastIndex );
 			}
 		}
-		return 0;
+		return EMPTY_HIT;
 	}
 };
 
@@ -310,7 +343,6 @@ struct SnippetsQword_StarBoth_c: public SnippetsQword_c<SnippetsQword_StarBoth_c
 };
 
 /// snippets query word setup
-
 class SnippetsQwordSetup: public ISphQwordSetup
 {
 	ExcerptGen_c *		m_pGenerator;
@@ -513,7 +545,7 @@ static int FindTagEnd ( const char * sData )
 	return s-sData;
 }
 
-void ExcerptGen_c::TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks, bool bRetainHtml )
+void ExcerptGen_c::TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks, bool bRetainHtml, int iSPZ )
 {
 	m_iDocumentWords = 0;
 	m_dTokens.Reserve ( 1024 );
@@ -529,6 +561,7 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokeni
 
 	BYTE * sWord;
 	DWORD uPosition = 0; // hit position in document
+	CSphVector<int> dSpanStack;
 	while ( ( sWord = pTokenizer->GetToken() )!=NULL )
 	{
 		if ( pTokenizer->TokenIsBlended() )
@@ -552,6 +585,76 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokeni
 				pLastTokenEnd = pTokenStart+iTagEnd+1; // fix it up to prevent adding last chunk on exit
 				continue;
 			}
+		}
+
+		// handle SPZ tokens GE then needed
+		// add SENTENCE, PARAGRAPH, ZONE token, do junks and tokenizer and pLastTokenEnd fix up
+		// FIXME!!! it heavily depends on such this attitude MAGIC_CODE_SENTENCE < MAGIC_CODE_PARAGRAPH < MAGIC_CODE_ZONE
+		if ( iSPZ && *sWord>=iSPZ && *sWord<=MAGIC_CODE_ZONE )
+		{
+			if ( m_dTokens.GetLength()==0 || m_dTokens.Last().m_eType!=TOK_SPZ )
+			{
+				Token_t & tLast = m_dTokens.Add();
+				tLast.m_eType = TOK_SPZ;
+				tLast.m_iStart = 0;
+				tLast.m_iLengthBytes = 0;
+				tLast.m_iWordID = 0;
+				tLast.m_uWords = 0;
+				tLast.m_uPosition = 0;
+
+				if ( *sWord==MAGIC_CODE_SENTENCE )
+				{
+					tLast.m_iStart = pTokenStart-pStartPtr;
+					tLast.m_iLengthBytes = 1;
+				}
+
+				pLastTokenEnd = pTokenizer->GetTokenEnd(); // fix it up to prevent adding last chunk on exit
+			}
+
+			if ( *sWord==MAGIC_CODE_ZONE && iSPZ==MAGIC_CODE_ZONE )
+			{
+				const char * pEnd = pTokenizer->GetBufferPtr();
+				const char * pTagStart = pEnd;
+				while ( *pEnd!=MAGIC_CODE_ZONE )
+					pEnd++;
+				pEnd++; // skip zone token too
+				pTokenizer->SetBufferPtr ( pEnd );
+				pLastTokenEnd = pEnd; // fix it up to prevent adding last chunk on exit
+
+				// span's management
+				if ( *pTagStart!='/' )
+				{
+					dSpanStack.Add ( m_dSpans.GetLength() );
+
+					Span_t & tSpan = m_dSpans.Add();
+					tSpan.m_iStart = pTagStart-pStartPtr;
+					tSpan.m_iName = pTagStart-pStartPtr;
+					tSpan.m_iLen = pEnd-pTagStart-1;
+				} else
+				{
+#ifndef NDEBUG
+					// lets check open - closed tag match
+					assert ( dSpanStack.GetLength() && dSpanStack.Last()<m_dSpans.GetLength() );
+					Span_t & tOpening = m_dSpans [ dSpanStack.Last() ];
+					assert ( tOpening.m_iStart<pEnd-pStartPtr
+						&& strncmp ( pStartPtr+tOpening.m_iStart, pTagStart+1, pEnd-pTagStart-2 )==0 );
+#endif
+					// pop up last span from the stack
+					dSpanStack.Resize ( dSpanStack.GetLength()-1 );
+
+					Span_t & tSpan = m_dSpans.Add();
+					tSpan.m_iStart = pTagStart-pStartPtr;
+					tSpan.m_iName = tSpan.m_iLen = 0;
+					if ( dSpanStack.GetLength() )
+					{
+						const Span_t & tParent = m_dSpans [ dSpanStack.Last() ];
+						tSpan.m_iName = tParent.m_iName;
+						tSpan.m_iLen = tParent.m_iLen;
+					}
+				}
+			}
+
+			continue;
 		}
 
 		SphWordID_t iWord = pDict->GetWordID ( sWord );
@@ -916,6 +1019,61 @@ void ExcerptGen_c::CalcPassageWeight ( const CSphVector<int> & dPassage, Passage
 	tPass.m_iQwordCount *= iWordCountCoeff;
 }
 
+bool ExcerptGen_c::SetupWindow ( CSphVector<int> & dPass, Passage_t & tPass, int i, int iCpLimit, int iMaxWords )
+{
+	assert ( i>=0 && i<m_dTokens.GetLength() );
+
+	tPass.Reset();
+	tPass.m_iStart = i;
+
+	for ( ; i<m_dTokens.GetLength(); i++ )
+	{
+		const Token_t & tToken = m_dTokens[i];
+
+		// skip starting whitespace
+		if ( tPass.m_iTokens==0 && tToken.m_eType!=TOK_WORD )
+		{
+			tPass.m_iStart++;
+			continue;
+		}
+
+		// stop when the window is large enough or meet SPZ
+		if ( ( tPass.m_iCodes + tToken.m_iLengthCP > iCpLimit ) || dPass.GetLength()==iMaxWords || tToken.m_eType==TOK_SPZ )
+		{
+			tPass.m_iTokens += ( tToken.m_eType==TOK_SPZ && tToken.m_iLengthBytes>0 ); // only MAGIC_CODE_SENTENCE has length
+			return ( tToken.m_eType==TOK_SPZ );
+		}
+
+		// got token, update passage
+		tPass.m_iTokens++;
+		tPass.m_iCodes += tToken.m_iLengthCP;
+
+		if ( tToken.m_eType==TOK_WORD )
+			dPass.Add(i);
+	}
+
+	return false;
+}
+
+void ExcerptGen_c::FlushPassage ( const Passage_t & tPass, int iLCSThresh )
+{
+	if ( tPass.m_uQwords && tPass.m_iMaxLCS>=iLCSThresh )
+	{
+		// if it's the very first one, do add
+		if ( !m_dPassages.GetLength() )
+		{
+			m_dPassages.Add ( tPass );
+		} else
+		{
+			// check if it's new or better
+			Passage_t & tLast = m_dPassages.Last();
+			if ( tLast.m_uQwords!=tPass.m_uQwords || tLast.m_iStart + tLast.m_iTokens - 1 < tPass.m_iStart )
+				m_dPassages.Add ( tPass );
+			else if ( tLast.GetWeight() < tPass.GetWeight() )
+				tLast = tPass; // better
+		}
+	}
+}
 
 bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 {
@@ -937,31 +1095,7 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 	int iCpLimit = q.m_iLimit ? q.m_iLimit : INT_MAX;
 
 	// setup initial window
-	ARRAY_FOREACH ( i, m_dTokens )
-	{
-		const Token_t & tToken = m_dTokens[i];
-
-		// skip starting whitespace
-		if ( tPass.m_iTokens==0 && tToken.m_eType!=TOK_WORD )
-		{
-			tPass.m_iStart++;
-			continue;
-		}
-
-		// stop when the window is large enough
-		if ( ( tPass.m_iCodes + tToken.m_iLengthCP > iCpLimit ) || dPass.GetLength()==iMaxWords )
-			break;
-
-		// got token, update passage
-		tPass.m_iTokens++;
-		tPass.m_iCodes += tToken.m_iLengthCP;
-
-		if ( tToken.m_eType==TOK_WORD )
-		{
-			dPass.Add(i);
-			tPass.m_uQwords |= tToken.m_uWords;
-		}
-	}
+	bool bSPZ = SetupWindow ( dPass, tPass, 0, iCpLimit, iMaxWords );
 
 	// move our window until the end of document
 	const int iCount = m_dTokens.GetLength();
@@ -971,27 +1105,19 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 		CalcPassageWeight ( dPass, tPass, iMaxWords, 0 );
 		tPass.m_iWords = dPass.GetLength();
 
-		if ( tPass.m_uQwords && tPass.m_iMaxLCS>=iLCSThresh )
-		{
-			// if it's the very first one, do add
-			if ( !m_dPassages.GetLength() )
-			{
-				m_dPassages.Add ( tPass );
-			} else
-			{
-				// check if it's new or better
-				Passage_t & tLast = m_dPassages.Last();
-				if ( tLast.m_uQwords!=tPass.m_uQwords || tLast.m_iStart + tLast.m_iTokens - 1 < tPass.m_iStart )
-					m_dPassages.Add ( tPass );
-				else if ( tLast.GetWeight() < tPass.GetWeight() )
-					tLast = tPass; // better
-			}
-		}
+		FlushPassage ( tPass, iLCSThresh );
 
 		int iToken = tPass.m_iStart + tPass.m_iTokens;
 		assert ( iToken<=iCount );
 		if ( iToken==iCount )
 			break;
+
+		if ( bSPZ )
+		{
+			dPass.Resize ( 0 );
+			bSPZ = SetupWindow ( dPass, tPass, iToken, iCpLimit, iMaxWords );
+			continue;
+		}
 
 		// add another word
 		for ( ; iToken < iCount; iToken++ )
@@ -1003,9 +1129,15 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 				dPass.Add ( iToken );
 				break;
 			}
+
+			if ( m_dTokens[iToken].m_eType==TOK_SPZ )
+			{
+				bSPZ = true;
+				break;
+			}
 		}
-		if ( iToken==iCount )
-			continue;
+		if ( iToken==iCount || bSPZ )
+				continue;
 
 		// drop front tokens until the window fits into both word and CP limits
 		while ( ( tPass.m_iCodes > iCpLimit || dPass.GetLength() > iMaxWords ) && tPass.m_iTokens!=1 )
@@ -1293,15 +1425,31 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 	if ( !tQuery.m_bWeightOrder )
 		dShow.Sort ( PassageOrder_fn() );
 
+
 	/// show
 	int iLast = -1;
+	bool bEmitZones = tQuery.m_bEmitZones && m_dSpans.GetLength();
 	ARRAY_FOREACH ( i, dShow )
 	{
 		int iTok = dShow[i].m_iStart;
 		int iEnd = iTok + dShow[i].m_iTokens - 1;
 
 		if ( iTok>1+iLast || tQuery.m_bWeightOrder )
+		{
 			ResultEmit ( tQuery.m_sChunkSeparator.cstr() );
+			if ( bEmitZones )
+			{
+				Span_t tSpan;
+				tSpan.m_iStart = m_dTokens[iTok].m_iStart;
+				int iSpan = FindSpan ( m_dSpans, tSpan );
+				if ( iSpan>=0 )
+				{
+					ResultEmit ( "<" );
+					ResultEmit ( m_dSpans[iSpan].Token() );
+					ResultEmit ( ">" );
+				}
+			}
+		}
 
 		if ( m_bExactPhrase )
 			HighlightPhrase ( tQuery, iTok, iEnd );
@@ -1330,6 +1478,32 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 
 	return true;
 }
+
+/////////////////////////////////////////////////////////////////////////////
+
+ExcerptQuery_t::ExcerptQuery_t ()
+	: m_sBeforeMatch ( "<b>" )
+	, m_sAfterMatch ( "</b>" )
+	, m_sChunkSeparator ( " ... " )
+	, m_sStripMode ( "index" )
+	, m_iLimit ( 256 )
+	, m_iLimitWords ( 0 )
+	, m_iLimitPassages ( 0 )
+	, m_iAround ( 5 )
+	, m_iPassageId ( 1 )
+	, m_iPassageBoundary ( 0 )
+	, m_bRemoveSpaces ( false )
+	, m_bExactPhrase ( false )
+	, m_bUseBoundaries ( false )
+	, m_bWeightOrder ( false )
+	, m_bHighlightQuery ( false )
+	, m_bForceAllWords ( false )
+	, m_bLoadFiles ( false )
+	, m_bAllowEmpty ( false )
+	, m_bEmitZones ( false )
+{
+}
+
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -1385,7 +1559,7 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 		// legacy highlighting
 		ExcerptGen_c tGenerator;
 		tGenerator.TokenizeQuery ( tOptions, pDict, pTokenizer );
-		tGenerator.TokenizeDocument ( pData, pDict, pTokenizer, true, tOptions.m_sStripMode=="retain" );
+		tGenerator.TokenizeDocument ( pData, pDict, pTokenizer, true, tOptions.m_sStripMode=="retain", tOptions.m_iPassageBoundary );
 		return tGenerator.BuildExcerpt ( tOptions, pDict, pTokenizer );
 	}
 
@@ -1401,7 +1575,7 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 	SnippetsQwordSetup tSetup ( &tGenerator, pTokenizer );
 	CSphString sWarning;
 
-	tGenerator.TokenizeDocument ( pData, pDict, pTokenizer, false, tOptions.m_sStripMode=="retain" );
+	tGenerator.TokenizeDocument ( pData, pDict, pTokenizer, false, tOptions.m_sStripMode=="retain", tOptions.m_iPassageBoundary );
 
 	tSetup.m_pDict = pDict;
 	tSetup.m_pIndex = pIndex;

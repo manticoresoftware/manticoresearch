@@ -40,6 +40,7 @@ public:
 
 	bool			AddField ( DWORD & uFields, const char * szField, int iLen );
 	bool			ParseFields ( DWORD & uFields, int & iMaxFieldPos );
+	int				ParseZone ( const char * pZone );
 
 	bool			IsSpecial ( char c );
 	int				GetToken ( YYSTYPE * lvalp );
@@ -52,6 +53,12 @@ public:
 	void			Cleanup ();
 	XQNode_t *		SweepNulls ( XQNode_t * pNode );
 	bool			FixupNots ( XQNode_t * pNode );
+
+public:
+	const CSphVector<int> & GetZoneVec ( int iZoneVec ) const
+	{
+		return m_dZoneVecs[iZoneVec];
+	}
 
 public:
 	XQQuery_t *				m_pParsed;
@@ -82,6 +89,8 @@ public:
 	bool					m_bQuoted;
 
 	CSphVector<CSphString>	m_dIntTokens;
+
+	CSphVector < CSphVector<int> >	m_dZoneVecs;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -115,6 +124,17 @@ void XQNode_t::SetFieldSpec ( DWORD uMask, int iMaxPos )
 	// eg. 'hello @title world' (whole node has '@title' spec but 'hello' node does not have any!)
 	ARRAY_FOREACH ( i, m_dChildren )
 		m_dChildren[i]->SetFieldSpec ( uMask, iMaxPos );
+}
+
+void XQNode_t::SetZoneSpec ( const CSphVector<int> & dZones )
+{
+	// set it, if we do not yet have one
+	if ( !m_dZones.GetLength() )
+		m_dZones = dZones;
+
+	// some of the children might not yet have a spec, even if the node itself has
+	ARRAY_FOREACH ( i, m_dChildren )
+		m_dChildren[i]->SetZoneSpec ( dZones );
 }
 
 void XQNode_t::ClearFieldMask ()
@@ -424,6 +444,95 @@ bool XQParser_t::ParseFields ( DWORD & uFields, int & iMaxFieldPos )
 }
 
 
+/// helper find-or-add (make it generic and move to sphinxstd?)
+static int GetZoneIndex ( XQQuery_t * pQuery, const CSphString & sZone )
+{
+	ARRAY_FOREACH ( i, pQuery->m_dZones )
+		if ( pQuery->m_dZones[i]==sZone )
+			return i;
+	
+	pQuery->m_dZones.Add ( sZone );
+	return pQuery->m_dZones.GetLength()-1;
+}
+
+
+/// parse zone
+int XQParser_t::ParseZone ( const char * pZone )
+{
+	const char * p = pZone;
+
+	// case one, just a single zone name
+	if ( sphIsAlpha ( *pZone ) )
+	{
+		// find zone name
+		while ( sphIsAlpha(*p) )
+			p++;
+		m_pTokenizer->SetBufferPtr ( p );
+
+		// extract and lowercase it
+		CSphString sZone;
+		sZone.SetBinary ( pZone, p-pZone );
+		sZone.ToLower();
+
+		// register it in zones list
+		int iZone = GetZoneIndex ( m_pParsed, sZone );
+
+		// create new 1-zone vector
+		m_dZoneVecs.Add().Add ( iZone );
+		return m_dZoneVecs.GetLength()-1;
+	}
+
+	// case two, zone block
+	// it must follow strict (name1,name2,...) syntax
+	if ( *pZone=='(' )
+	{
+		// create new zone vector
+		CSphVector<int> & dZones = m_dZoneVecs.Add();
+		p = ++pZone;
+
+		// scan names
+		for ( ;; )
+		{
+			// syntax error, name expected!
+			if ( !sphIsAlpha(*p) )
+			{
+				Error ( "unexpected character '%c' in zone block operator", *p );
+				return -1;
+			}
+
+			// scan next name
+			while ( sphIsAlpha(*p) )
+				p++;
+
+			// extract and lowercase it
+			CSphString sZone;
+			sZone.SetBinary ( pZone, p-pZone );
+			sZone.ToLower();
+
+			// register it in zones list
+			dZones.Add ( GetZoneIndex ( m_pParsed, sZone ) );
+
+			// must be either followed by comma, or closing paren
+			// everything else will cause syntax error
+			if ( *p==')' )
+			{
+				m_pTokenizer->SetBufferPtr ( p+1 );
+				break;
+			}
+
+			if ( *p==',' )
+				pZone = ++p;
+		}
+
+		return m_dZoneVecs.GetLength()-1;
+	}
+
+	// unhandled case
+	Error ( "internal error, unhandled case in ParseZone()" );
+	return -1;
+}
+
+
 /// a lexer of my own
 int XQParser_t::GetToken ( YYSTYPE * lvalp )
 {
@@ -507,6 +616,40 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			m_tPendingToken.tInt.iValue = iVal;
 			m_tPendingToken.tInt.iStrIndex = -1;
 			m_iAtomPos -= 1; // skip NEAR
+			break;
+		}
+
+		// handle SENTENCE
+		if ( sToken && p && !m_pTokenizer->m_bPhrase && !strcasecmp ( sToken, "sentence" ) && !strncmp ( p, "SENTENCE", 8 ) )
+		{
+			// we just lexed our next token
+			m_iPendingType = TOK_SENTENCE;
+			m_iAtomPos -= 1;
+			break;
+		}
+
+		// handle PARAGRAPH
+		if ( sToken && p && !m_pTokenizer->m_bPhrase && !strcasecmp ( sToken, "paragraph" ) && !strncmp ( p, "PARAGRAPH", 9 ) )
+		{
+			// we just lexed our next token
+			m_iPendingType = TOK_PARAGRAPH;
+			m_iAtomPos -= 1;
+			break;
+		}
+
+		// handle ZONE
+		if ( sToken && p && !m_pTokenizer->m_bPhrase && !strncmp ( p, "ZONE:", 5 )
+			&& ( sphIsAlpha(p[5]) || p[5]=='(' ) )
+		{
+			// ParseZone() will update tokenizer buffer ptr as needed
+			int iVec = ParseZone ( p+5 );
+			if ( iVec<0 )
+				return -1;
+
+			// we just lexed our next token
+			m_iPendingType = TOK_ZONE;
+			m_tPendingToken.iZoneVec = iVec;
+			m_iAtomPos -= 1;
 			break;
 		}
 
@@ -657,6 +800,9 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 	// eg. '@title hello' vs 'world'
 	if ( pLeft->m_bFieldSpec )
 		pRight->SetFieldSpec ( pLeft->m_uFieldMask, pLeft->m_iFieldMaxPos );
+
+	if ( pLeft->m_dZones.GetLength() )
+		pRight->SetZoneSpec ( pLeft->m_dZones );
 
 	// build a new node
 	XQNode_t * pResult = NULL;

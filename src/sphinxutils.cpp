@@ -230,6 +230,9 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "rt_attr_timestamp",		KEY_LIST, NULL },
 	{ "rt_attr_string",			KEY_LIST, NULL },
 	{ "rt_mem_limit",			0, NULL },
+	{ "dict",					0, NULL },
+	{ "index_sp",				0, NULL },
+	{ "index_zones",			0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -832,6 +835,15 @@ void sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tS
 	tSettings.m_sStopwords = hIndex.GetStr ( "stopwords" );
 	tSettings.m_sWordforms = hIndex.GetStr ( "wordforms" );
 	tSettings.m_iMinStemmingLen = hIndex.GetInt ( "min_stemming_len", 1 );
+
+	if ( hIndex("dict") )
+	{
+		tSettings.m_bWordDict = false; // default to crc
+		if ( hIndex["dict"]=="keywords" )
+			tSettings.m_bWordDict = true;
+		else if ( hIndex["dict"]!="crc" )
+			fprintf ( stdout, "WARNING: unknown dict=%s, defaulting to crc\n", hIndex["dict"].cstr() );
+	}
 }
 
 
@@ -886,6 +898,10 @@ void sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 			}
 		}
 	}
+
+	// sentence and paragraph indexing
+	tSettings.m_bIndexSP = ( hIndex.GetInt ( "index_sp" )!=0 );
+	tSettings.m_sZonePrefix = hIndex.GetStr ( "index_zones" );
 }
 
 
@@ -935,6 +951,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 			tSettings.m_sHtmlIndexAttrs = hIndex.GetStr ( "html_index_attrs" );
 			tSettings.m_sHtmlRemoveElements = hIndex.GetStr ( "html_remove_elements" );
 		}
+		tSettings.m_sZonePrefix = hIndex.GetStr ( "index_zones" );
 
 		pIndex->Setup ( tSettings );
 	}
@@ -1011,8 +1028,7 @@ void sphSetupSignals ()
 
 #endif
 
-typedef void ( * pLogger ) ( ESphLogLevel, const char *, va_list );
-static pLogger g_pLogger = NULL;
+static SphLogger_fn g_pLogger = NULL;
 
 inline void Log ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 {
@@ -1053,9 +1069,9 @@ void sphLogDebug ( const char * sFmt, ... )
 	va_end ( ap );
 }
 
-void sphSetLogger ( const void * pVoid )
+void sphSetLogger ( SphLogger_fn fnLog )
 {
-	g_pLogger = (pLogger) pVoid;
+	g_pLogger = fnLog;
 }
 
 //

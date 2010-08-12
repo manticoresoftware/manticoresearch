@@ -14,6 +14,7 @@
 //
 
 #include "sphinx.h"
+#include "sphinxint.h"
 #include "sphinxutils.h"
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -276,9 +277,21 @@ void ShowProgress ( const CSphIndexProgress * pProgress, bool bPhaseEnd )
 	fflush ( stdout );
 }
 
-static void LogWarning ( const char * sWarning )
+static void Logger ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 {
-	fprintf ( stdout, "WARNING: %s\n", sWarning );
+	if ( eLevel>=LOG_DEBUG )
+		return;
+
+	switch ( eLevel )
+	{
+		case LOG_FATAL: fprintf ( stdout, "FATAL: " ); break;
+		case LOG_WARNING: fprintf ( stdout, "WARNING: " ); break;
+		case LOG_INFO: fprintf ( stdout, "WARNING: " ); break;
+		case LOG_DEBUG: fprintf ( stdout, "DEBUG: " ); break;
+	}
+
+	vfprintf ( stdout, sFmt, ap );
+	fprintf ( stdout, "\n" );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -845,24 +858,16 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	if ( !pTokenizer )
 		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
-	CSphDict * pDict = NULL;
-	CSphDictSettings tDictSettings;
-
-	if ( !g_sBuildStops )
-	{
-		ISphTokenizer * pTokenFilter = NULL;
-
-		sphConfDictionary ( hIndex, tDictSettings );
-		pDict = sphCreateDictionaryCRC ( tDictSettings, pTokenizer, sError );
-		if ( !pDict )
+	// enable sentence indexing on tokenizer
+	// (not in Create() because search time tokenizer does not care)
+	bool bIndexSP = ( hIndex.GetInt ( "index_sp" )!=0 );
+	if ( bIndexSP )
+		if ( !pTokenizer->EnableSentenceIndexing ( sError ) )
 			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
-		if ( !sError.IsEmpty () )
-			fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sError.cstr() );
-
-		pTokenFilter = ISphTokenizer::CreateTokenFilter ( pTokenizer, pDict->GetMultiWordforms () );
-		pTokenizer = pTokenFilter ? pTokenFilter : pTokenizer;
-	}
+	if ( hIndex("index_zones") )
+		if ( !pTokenizer->EnableZoneIndexing ( sError ) )
+			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
 	// prefix/infix indexing
 	int iPrefix = hIndex("min_prefix_len") ? hIndex["min_prefix_len"].intval() : 0;
@@ -883,6 +888,34 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 
 	if ( iInfix==0 && !sInfixFields.IsEmpty () )
 		fprintf ( stdout, "WARNING: min_infix_len = 0. infix_fields are ignored\n" );
+
+	CSphDict * pDict = NULL;
+	CSphDictSettings tDictSettings;
+
+	if ( !g_sBuildStops )
+	{
+		ISphTokenizer * pTokenFilter = NULL;
+		sphConfDictionary ( hIndex, tDictSettings );
+
+		// FIXME! no support for infixes in keywords dict yet
+		if ( tDictSettings.m_bWordDict && iInfix>0 )
+		{
+			tDictSettings.m_bWordDict = false;
+			fprintf ( stdout, "WARNING: min_infix_len=%d is not supported yet with dict=keywords; using dict=crc\n", iInfix );
+		}
+
+		pDict = tDictSettings.m_bWordDict
+			? sphCreateDictionaryKeywords ( tDictSettings, pTokenizer, sError )
+			: sphCreateDictionaryCRC ( tDictSettings, pTokenizer, sError );
+		if ( !pDict )
+			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
+
+		if ( !sError.IsEmpty () )
+			fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sError.cstr() );
+
+		pTokenFilter = ISphTokenizer::CreateTokenFilter ( pTokenizer, pDict->GetMultiWordforms () );
+		pTokenizer = pTokenFilter ? pTokenFilter : pTokenizer;
+	}
 
 	// boundary
 	bool bInplaceEnable = hIndex.GetInt ( "inplace_enable", 0 )!=0;
@@ -930,6 +963,13 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		bHtmlStrip = hIndex.GetInt ( "html_strip" )!=0;
 		sHtmlIndexAttrs = hIndex.GetStr ( "html_index_attrs" );
 		sHtmlRemoveElements = hIndex.GetStr ( "html_remove_elements" );
+	} else
+	{
+		if ( bIndexSP )
+			sphWarning ( "index '%s': index_sp=1 requires html_strip=1 to index paragraphs", sIndexName );
+
+		if ( hIndex("index_zones") )
+			sphDie ( "index '%s': index_zones requires html_strip=1", sIndexName );
 	}
 
 	// parse all sources
@@ -969,7 +1009,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 			// apply per-index overrides
 			if ( bHtmlStrip )
 			{
-				if ( !pSource->SetStripHTML ( sHtmlIndexAttrs.cstr(), sHtmlRemoveElements.cstr(), sError ) )
+				if ( !pSource->SetStripHTML ( sHtmlIndexAttrs.cstr(), sHtmlRemoveElements.cstr(), bIndexSP, hIndex.GetStr("index_zones"), sError ) )
 				{
 					fprintf ( stdout, "ERROR: source '%s': %s.\n", pSourceName->cstr(), sError.cstr() );
 					return false;
@@ -979,7 +1019,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		} else if ( hSource.GetInt ( "strip_html" ) )
 		{
 			// apply deprecated per-source settings if there are no overrides
-			if ( !pSource->SetStripHTML ( hSource.GetStr ( "index_html_attrs" ), "", sError ) )
+			if ( !pSource->SetStripHTML ( hSource.GetStr ( "index_html_attrs" ), "", false, NULL, sError ) )
 			{
 				fprintf ( stdout, "ERROR: source '%s': %s.\n", pSourceName->cstr(), sError.cstr() );
 				return false;
@@ -1050,7 +1090,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		sIndexPath.SetSprintf ( g_bRotate ? "%s.tmp" : "%s", hIndex["path"].cstr() );
 
 		// do index
-		CSphIndex * pIndex = sphCreateIndexPhrase ( sIndexPath.cstr() );
+		CSphIndex * pIndex = sphCreateIndexPhrase ( NULL, sIndexPath.cstr() );
 		assert ( pIndex );
 
 		// check lock file
@@ -1155,8 +1195,8 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	}
 
 	// do the merge
-	CSphIndex * pSrc = sphCreateIndexPhrase ( hSrc["path"].cstr() );
-	CSphIndex * pDst = sphCreateIndexPhrase ( hDst["path"].cstr() );
+	CSphIndex * pSrc = sphCreateIndexPhrase ( NULL, hSrc["path"].cstr() );
+	CSphIndex * pDst = sphCreateIndexPhrase ( NULL, hDst["path"].cstr() );
 	assert ( pSrc );
 	assert ( pDst );
 
@@ -1274,7 +1314,7 @@ void ReportIOStats ( const char * sType, int iReads, int64_t iReadTime, int64_t 
 
 int main ( int argc, char ** argv )
 {
-	sphSetWarningCallback ( LogWarning );
+	sphSetLogger ( Logger );
 
 	const char * sOptConfig = NULL;
 	bool bMerge = false;

@@ -23,21 +23,6 @@
 // PACKED HIT MACROS
 //////////////////////////////////////////////////////////////////////////
 
-/// pack hit
-#define HIT_PACK(_field,_pos)	( ((_field)<<24) | ((_pos)&0x7fffffUL) )
-
-/// extract in-field position from packed hit
-#define HIT2POS(_hit)			((_hit)&0x7fffffUL)
-
-/// extract field number from packed hit
-#define HIT2FIELD(_hit)			((_hit)>>24)
-
-/// prepare hit for LCS counting
-#define HIT2LCS(_hit)			(_hit & 0xff7fffffUL)
-
-/// field end flag
-#define HIT_FIELD_END			0x800000UL
-
 //////////////////////////////////////////////////////////////////////////
 
 /// term modifiers
@@ -46,7 +31,8 @@ enum TermPosFilter_e
 	TERM_POS_FIELD_LIMIT = 1,
 	TERM_POS_FIELD_START,
 	TERM_POS_FIELD_END,
-	TERM_POS_FIELD_STARTEND
+	TERM_POS_FIELD_STARTEND,
+	TERM_POS_ZONES
 };
 
 
@@ -87,7 +73,7 @@ public:
 
 	virtual const CSphMatch &	GetNextDoc ( DWORD * pInlineDocinfo ) = 0;
 	virtual void				SeekHitlist ( SphOffset_t uOff ) = 0;
-	virtual DWORD				GetNextHit () = 0;
+	virtual Hitpos_t			GetNextHit () = 0;
 
 	virtual void Reset ()
 	{
@@ -115,6 +101,7 @@ public:
 	CSphString *			m_pWarning;
 	CSphQueryContext *		m_pCtx;
 	CSphQueryNodeCache *	m_pNodeCache;
+	mutable void *			m_pRanker;
 
 	ISphQwordSetup ()
 		: m_pDict ( NULL )
@@ -125,6 +112,8 @@ public:
 		, m_iMaxTimer ( 0 )
 		, m_pWarning ( NULL )
 		, m_pCtx ( NULL )
+		, m_pNodeCache ( NULL )
+		, m_pRanker ( NULL )
 	{}
 	virtual ~ISphQwordSetup () {}
 
@@ -145,7 +134,7 @@ public:
 };
 
 /// factory
-ISphRanker * sphCreateRanker ( const XQNode_t * pRoot, ESphRankMode eRankMode, CSphQueryResult * pResult, const ISphQwordSetup & tTermSetup );
+ISphRanker * sphCreateRanker ( const XQNode_t * pRoot, const CSphVector<CSphString> & dZones, ESphRankMode eRankMode, CSphQueryResult * pResult, const ISphQwordSetup & tTermSetup );
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -169,9 +158,6 @@ public:
 	void					Mark ( CSphVector<SphHitMark_t> & );
 	static CSphHitMarker *	Create ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup );
 };
-
-/// factory for parsed query trees
-ISphRanker * sphCreateRanker ( const XQNode_t * pRoot, ESphRankMode eRankMode, CSphQueryResult * pResult, const ISphQwordSetup & tTermSetup );
 
 //////////////////////////////////////////////////////////////////////////
 

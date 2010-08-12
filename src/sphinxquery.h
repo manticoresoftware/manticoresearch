@@ -65,7 +65,9 @@ enum XQOperator_e
 	SPH_QUERY_PHRASE,
 	SPH_QUERY_PROXIMITY,
 	SPH_QUERY_QUORUM,
-	SPH_QUERY_NEAR
+	SPH_QUERY_NEAR,
+	SPH_QUERY_SENTENCE,
+	SPH_QUERY_PARAGRAPH
 };
 
 
@@ -91,10 +93,13 @@ public:
 	DWORD					m_uFieldMask;	///< fields mask (spec part)
 	int						m_iFieldMaxPos;	///< max position within field (spec part)
 
+	CSphVector<int>			m_dZones;		///< zone indexes in per-query zones list
+
 	CSphVector<XQKeyword_t>	m_dWords;		///< query words (plain node)
 	int						m_iOpArg;		///< operator argument (proximity distance, quorum count)
 	int						m_iAtomPos;		///< atom position override (currently only used within expanded nodes)
 	bool					m_bVirtuallyPlain;	///< "virtually plain" flag (currently only used by expanded nodes)
+	bool					m_bNotWeighted;	///< this our expanded but empty word's node
 
 public:
 	/// ctor
@@ -110,6 +115,7 @@ public:
 		, m_iOpArg ( 0 )
 		, m_iAtomPos ( -1 )
 		, m_bVirtuallyPlain ( false )
+		, m_bNotWeighted ( false )
 	{}
 
 	/// dtor
@@ -128,6 +134,9 @@ public:
 
 	/// setup field limits
 	void SetFieldSpec ( DWORD uMask, int iMaxPos );
+
+	/// setup zone limits
+	void SetZoneSpec ( const CSphVector<int> & dZones );
 
 	/// unconditionally clear field mask
 	void ClearFieldMask ();
@@ -198,9 +207,11 @@ public:
 /// extended query
 struct XQQuery_t : public ISphNoncopyable
 {
-	CSphString	m_sParseError;
-	CSphString	m_sParseWarning;
-	XQNode_t *	m_pRoot;
+	CSphString				m_sParseError;
+	CSphString				m_sParseWarning;
+
+	CSphVector<CSphString>	m_dZones;
+	XQNode_t *				m_pRoot;
 
 	/// ctor
 	XQQuery_t ()

@@ -1559,8 +1559,8 @@ void TestRTInit ()
 
 	sphRTInit ( tRTConfig );
 
-	CSphVector< ISphRtIndex * > dTemp;
-	sphReplayBinlog ( dTemp );
+	SmallStringHash_T<CSphIndex*> hIndexes;
+	sphReplayBinlog ( hIndexes );
 }
 
 
@@ -1620,9 +1620,14 @@ void TestRTWeightBoundary ()
 		pIndex->SetDictionary ( pDict );
 		assert ( pIndex->Prealloc ( false, false, sError ) );
 
-		while ( pSrc->IterateHitsNext ( sError ) && pSrc->m_tDocInfo.m_iDocID )
+		ISphHits * pHits;
+		for ( ;; )
 		{
-			pIndex->AddDocument ( pSrc->m_dHits, pSrc->m_tDocInfo, NULL, sError );
+			pHits = pSrc->IterateHitsNext ( sError );
+			if ( !pHits || !pSrc->m_tDocInfo.m_iDocID )
+				break;
+
+			pIndex->AddDocument ( pHits, pSrc->m_tDocInfo, NULL, sError );
 			pIndex->Commit ();
 		}
 
@@ -1785,9 +1790,13 @@ void TestRTSendVsMerge ()
 	ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, pIndex->GetMatchSchema(), tResult.m_sError, false );
 	assert ( pSorter );
 
-	while ( pSrc->IterateHitsNext ( sError ) && pSrc->m_tDocInfo.m_iDocID )
+	for ( ;; )
 	{
-		pIndex->AddDocument ( pSrc->m_dHits, pSrc->m_tDocInfo, NULL, sError );
+		ISphHits * pHits = pSrc->IterateHitsNext ( sError );
+		if ( !pHits || !pSrc->m_tDocInfo.m_iDocID )
+			break;
+
+		pIndex->AddDocument ( pHits, pSrc->m_tDocInfo, NULL, sError );
 		if ( pSrc->m_tDocInfo.m_iDocID==350 )
 		{
 			pIndex->Commit ();
@@ -1821,6 +1830,81 @@ void TestRTSendVsMerge ()
 
 //////////////////////////////////////////////////////////////////////////
 
+void TestSentenceTokenizer()
+{
+	printf ( "testing sentence detection in tokenizer... " );
+
+	CSphTokenizerSettings tSettings;
+	tSettings.m_iType = TOKENIZER_SBCS;
+	tSettings.m_iMinWordLen = 1;
+
+	CSphString sError;
+	ISphTokenizer * pTok = ISphTokenizer::Create ( tSettings, sError );
+
+	assert ( pTok->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
+//	assert ( pTok->SetBlendChars ( "., &", sError ) ); // NOLINT
+	pTok->AddSpecials ( ".?!" );
+
+	const char * SENTENCE = "\2"; // MUST be in sync with sphinx.cpp
+	const char * sTest[] =
+	{
+		"Just a sentence. And then some.", "just", "a", "sentence", SENTENCE, "and", "then", "some", SENTENCE, NULL,
+		"Right, guy number two? Yes, guy number one!", "right", "guy", "number", "two", SENTENCE, "yes", "guy", "number", "one", SENTENCE, NULL,
+		"S.T.A.L.K.E.R. sold well in the U.K and elsewhere. Including Russia.", "s", "t", "a", "l", "k", "e", "r", "sold", "well", "in", "the", "u", "k", "and", "elsewhere", SENTENCE, "including", "russia", SENTENCE, NULL,
+		"Yoyodine Inc. exists since 1800", "yoyodine", "inc", "exists", "since", "1800", NULL,
+		"John D. Doe, our CEO", "john", "d", "doe", "our", "ceo", NULL,
+		NULL
+	};
+
+	int i = 0;
+	while ( sTest[i] )
+	{
+		pTok->SetBuffer ( (BYTE*)sTest[i], strlen ( sTest[i] ) );
+		i++;
+
+		BYTE * sTok;
+		while ( ( sTok = pTok->GetToken() )!=NULL )
+		{
+			assert ( !strcmp ( (char*)sTok, sTest[i] ) );
+			i++;
+		}
+
+		assert ( sTest[i]==NULL );
+		i++;
+	}
+
+	printf ( "ok\n" );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+void TestSpanSearch()
+{
+	printf ( "testing span search... " );
+
+	CSphVector<int> dVec;
+	dVec.Add ( 1 );
+	dVec.Add ( 3 );
+	dVec.Add ( 4 );
+
+	assert ( FindSpan ( dVec, 1, 5 )==0 );
+	assert ( FindSpan ( dVec, 3, 5 )==1 );
+	assert ( FindSpan ( dVec, 4, 5 )==2 );
+
+	dVec.Add ( 15 );
+	dVec.Add ( 17 );
+	dVec.Add ( 22 );
+	dVec.Add ( 23 );
+
+	assert ( FindSpan ( dVec, 1, 5 )==0 );
+	assert ( FindSpan ( dVec, 18, 5 )==4 );
+	assert ( FindSpan ( dVec, 23, 5 )==6 );
+
+	printf ( "ok\n" );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 int main ()
 {
 	printf ( "RUNNING INTERNAL LIBSPHINX TESTS\n\n" );
@@ -1849,6 +1933,8 @@ int main ()
 	TestRTWeightBoundary ();
 	TestWriter();
 	TestRTSendVsMerge ();
+	TestSentenceTokenizer ();
+	TestSpanSearch ();
 #endif
 
 	unlink ( g_sTmpfile );

@@ -24,6 +24,20 @@
 
 //////////////////////////////////////////////////////////////////////////
 
+const char		MAGIC_SYNONYM_WHITESPACE	= 1;				// used internally in tokenizer only
+const char		MAGIC_CODE_SENTENCE			= 2;				// emitted from tokenizer on sentence boundary
+const char		MAGIC_CODE_PARAGRAPH		= 3;				// emitted from stripper (and passed via tokenizer) on paragraph boundary
+const char		MAGIC_CODE_ZONE				= 4;				// emitted from stripper (and passed via tokenizer) on zone boundary; followed by zero-terminated zone name
+
+const char		MAGIC_WORD_HEAD				= 1;				// prepended to keyword by source, stored in (crc) dictionary
+const char		MAGIC_WORD_TAIL				= 1;				// appended to keyword by source, stored in (crc) dictionary
+const char		MAGIC_WORD_HEAD_NONSTEMMED	= 2;				// prepended to keyword by source, stored in dictionary
+
+extern const char *		MAGIC_WORD_SENTENCE;
+extern const char *		MAGIC_WORD_PARAGRAPH;
+
+//////////////////////////////////////////////////////////////////////////
+
 #ifdef O_BINARY
 #define SPH_O_BINARY O_BINARY
 #else
@@ -51,6 +65,7 @@ public:
 	void			PutDword ( DWORD uValue ) { PutBytes ( &uValue, sizeof(DWORD) ); }
 	void			PutOffset ( SphOffset_t uValue ) { PutBytes ( &uValue, sizeof(SphOffset_t) ); }
 	void			PutString ( const char * szString );
+	void			PutString ( const CSphString & sString );
 
 	void			SeekTo ( SphOffset_t pos ); ///< seeking inside the buffer will truncate it
 
@@ -258,6 +273,17 @@ void sphDoStatsOrder ( const struct XQNode_t * pNode, CSphQueryResultMeta & tRes
 
 const BYTE * SkipQuoted ( const BYTE * p );
 
+class ISphBinlog : ISphNoncopyable
+{
+public:
+	virtual			~ISphBinlog () {}
+
+	virtual void	BinlogUpdateAttributes ( const char * sIndexName, int64_t iTID, const CSphAttrUpdate & tUpd ) = 0;
+	virtual void	NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool bShutdown ) = 0;
+};
+
+void sphSetBinLog ( ISphBinlog * pBinlog );
+
 //////////////////////////////////////////////////////////////////////////
 
 /// memory tracker
@@ -395,6 +421,59 @@ public:
 		return 2 * ( 1 + uDocinfoIndex ) * m_uStride;
 	}
 };
+
+/// find a value-enclosing span in a sorted vector (aka an index at which vec[i] <= val < vec[i+1])
+template < typename T >
+static int FindSpan ( const CSphVector<T> & dVec, T tRef, int iSmallTreshold=8 )
+{
+	// empty vector
+	if ( !dVec.GetLength() )
+		return -1;
+
+	// check last semi-span
+	if ( dVec.Last()<tRef || dVec.Last()==tRef )
+		return dVec.GetLength()-1;
+
+	// linear search for small vectors
+	if ( dVec.GetLength()<=iSmallTreshold )
+	{
+		for ( int i=0; i<dVec.GetLength()-1; i++ )
+			if ( ( dVec[i]<tRef || dVec[i]==tRef ) && tRef<dVec[i+1] )
+				return i;
+		return -1;
+	}
+
+	// binary search for longer vectors
+	const T * pStart = dVec.Begin();
+	const T * pEnd = &dVec.Last();
+
+	if ( ( pStart[0]<tRef || pStart[0]==tRef ) && tRef<pStart[1] )
+		return 0;
+
+	if ( ( pEnd[-1]<tRef || pEnd[-1]==tRef ) && tRef<pEnd[0] )
+		return pEnd-dVec.Begin()-1;
+
+	while ( pEnd-pStart>1 )
+	{
+		if ( tRef<*pStart || *pEnd<tRef )
+			break;
+		assert ( *pStart<tRef );
+		assert ( tRef<*pEnd );
+
+		const T * pMid = pStart + (pEnd-pStart)/2;
+		assert ( pMid+1 < &dVec.Last() );
+
+		if ( ( pMid[0]<tRef || pMid[0]==tRef ) && tRef<pMid[1] )
+			return pMid - dVec.Begin();
+
+		if ( tRef<pMid[0] )
+			pEnd = pMid;
+		else
+			pStart = pMid;
+	}
+
+	return -1;
+}
 
 #endif // _sphinxint_
 

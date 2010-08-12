@@ -20,6 +20,7 @@
 #define _sphinxutils_
 
 #include <ctype.h>
+#include <stdarg.h>
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -33,8 +34,6 @@ inline bool sphIsSpace ( int iCode )
 {
 	return iCode==' ' || iCode=='\t' || iCode=='\n' || iCode=='\r';
 }
-
-/////////////////////////////////////////////////////////////////////////////
 
 /// config section (hash of variant values)
 class CSphConfigSection : public SmallStringHash_T < CSphVariant >
@@ -138,12 +137,13 @@ enum ESphLogLevel
 	LOG_DEBUG	= 3
 };
 
+typedef void ( *SphLogger_fn )( ESphLogLevel, const char *, va_list );
 
 void sphWarning ( const char * sFmt, ... );
 void sphInfo ( const char * sFmt, ... );
 void sphLogFatal ( const char * sFmt, ... );
 void sphLogDebug ( const char * sFmt, ... );
-void sphSetLogger ( const void * );
+void sphSetLogger ( SphLogger_fn fnLog );
 
 #endif // _sphinxutils_
 

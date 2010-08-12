@@ -63,6 +63,7 @@
 #if USE_WINDOWS
 typedef __int64				SphOffset_t;
 #define STDOUT_FILENO		fileno(stdout)
+#define STDERR_FILENO		fileno(stderr)
 #else
 typedef off_t				SphOffset_t;
 #endif

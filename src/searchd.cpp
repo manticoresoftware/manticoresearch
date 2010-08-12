@@ -29,15 +29,6 @@
 #include <time.h>
 #include <stdarg.h>
 #include <limits.h>
-#if HAVE_EXECINFO_H
-#include <execinfo.h>
-#endif
-
-#if USE_WINDOWS
-#include <dbghelp.h>
-#pragma comment(linker, "/defaultlib:dbghelp.lib")
-#pragma message("Automatically linking with dbghelp.lib")
-#endif
 
 #define SEARCHD_BACKLOG			5
 #define SPHINXAPI_PORT			9312
@@ -1267,301 +1258,6 @@ void Shutdown ()
 }
 
 #if !USE_WINDOWS
-
-template <typename Uint>
-void UItoA ( char** ppOutput, Uint uVal, int iBase=10, int iWidth=0, int iPrec=0, const char cFill=' ' )
-{
-	assert ( ppOutput );
-	assert ( *ppOutput );
-
-	const char cDigits[] = "0123456789abcdef";
-
-	if ( iWidth && iPrec )
-	{
-		iPrec = iWidth;
-		iWidth = 0;
-	}
-
-	if ( !uVal )
-	{
-		if ( !iPrec && !iWidth )
-			*(*ppOutput)++ = cDigits[0];
-		else
-		{
-			while ( iPrec-- )
-				*(*ppOutput)++ = cDigits[0];
-			if ( iWidth )
-			{
-				while ( --iWidth )
-					*(*ppOutput)++ = cFill;
-				*(*ppOutput)++ = cDigits[0];
-			}
-		}
-		return;
-	}
-
-	const BYTE uMaxIndex = 31; // 20 digits for MAX_INT64 in decimal; let it be 31 (32 digits max).
-	char CBuf[uMaxIndex+1];
-	char *pRes = &CBuf[uMaxIndex];
-	char *& pOutput = *ppOutput;
-
-	while ( uVal )
-	{
-		*pRes-- = cDigits [ uVal % iBase ];
-		uVal /= iBase;
-	}
-
-	BYTE uLen = (BYTE)( uMaxIndex - (pRes-CBuf) );
-
-	if ( iWidth )
-		while ( uLen < iWidth )
-		{
-			*pOutput++=cFill;
-			iWidth--;
-		}
-
-	if ( iPrec )
-	{
-		while ( uLen < iPrec )
-		{
-			*pOutput++=cDigits[0];
-			iPrec--;
-		}
-		iPrec = uLen-iPrec;
-	}
-
-	while ( pRes<CBuf+uMaxIndex-iPrec )
-		*pOutput++=*++pRes;
-}
-
-static int sphVSprintf ( char* pOutput, const char* sFmt, va_list ap )
-{
-	char c;
-	enum eStates { SNORMAL, SPERCENT, SHAVEFILL, SINWIDTH, SINPERC };
-	eStates state = SNORMAL;
-	int iPrec = 0;
-	int iWidth = 0;
-	char cFill = ' ';
-	const char * pBegin = pOutput;
-	while ( (c = *sFmt++) )
-		switch ( c )
-		{
-			case '%':
-				if ( state==SNORMAL )
-				{
-					state = SPERCENT;
-					iPrec = 0;
-					iWidth = 0;
-					cFill = ' ';
-				} else
-				{
-					state = SNORMAL;
-					*pOutput++ = c;
-				}
-				break;
-			case '0':
-				if ( state==SPERCENT )
-				{
-					cFill = '0';
-					state = SHAVEFILL;
-					break;
-				};
-			case '1': case '2': case '3':
-			case '4': case '5': case '6':
-			case '7': case '8': case '9':
-				if ( state==SNORMAL )
-				{
-					*pOutput++ = c;
-					break;
-				}
-				if ( state==SPERCENT || state==SHAVEFILL )
-				{
-					state = SINWIDTH;
-					iWidth = c - '0';
-				} else if ( state==SINWIDTH )
-					iWidth = iWidth * 10 + c - '0';
-				else if ( state==SINPERC )
-					iPrec = iPrec * 10 + c - '0';
-				break;
-			case '.':
-				if ( state==SNORMAL )
-					*pOutput++ = c;
-				else
-				{
-					state = SINPERC;
-					iPrec = 0;
-				}
-				break;
-			case 's': // string
-				if ( state==SNORMAL )
-				{
-					*pOutput++ = c;
-					break;
-				}
-				{
-					const char* pValue = va_arg ( ap, const char* );
-					int iValue = strlen ( pValue );
-					if ( iWidth )
-						while ( iValue < iWidth-- )
-							*pOutput++ = ' ';
-					if ( iPrec && iPrec < iValue )
-						while ( iPrec-- )
-							*pOutput++ = *pValue++;
-					else
-						while ( *pValue )
-							*pOutput++ = *pValue++;
-					state = SNORMAL;
-					break;
-				}
-			case 'p': // pointer
-				if ( state==SNORMAL )
-				{
-					*pOutput++ = c;
-					break;
-				}
-				{
-					void* pValue = va_arg ( ap, void* );
-					uint64_t uValue = uint64_t ( pValue );
-					UItoA ( &pOutput, uValue, 16, iWidth, iPrec, cFill );
-					state = SNORMAL;
-					break;
-				}
-			case 'x': // hex integer
-				if ( state==SNORMAL )
-				{
-					*pOutput++ = c;
-					break;
-				}
-				{
-					DWORD uValue = va_arg ( ap, DWORD );
-					UItoA ( &pOutput, uValue, 16, iWidth, iPrec, cFill );
-					state = SNORMAL;
-					break;
-				}
-			case 'd': // decimal integer
-				if ( state==SNORMAL )
-				{
-					*pOutput++ = c;
-					break;
-				}
-				{
-					DWORD uValue = va_arg ( ap, DWORD );
-					UItoA ( &pOutput, uValue, 10, iWidth, iPrec, cFill );
-					state = SNORMAL;
-					break;
-				}
-			default:
-				state = SNORMAL;
-				*pOutput++ = c;
-		}
-	// final zero to EOL
-	*pOutput++ = '\n';
-	return pOutput-pBegin;
-}
-
-static bool sphSafeInfo ( int iFD, const char * sFmt, ... )
-{
-	assert ( iFD>=0 && sFmt );
-	char sBuf [ 1024 ];
-	va_list ap;
-	va_start ( ap, sFmt );
-	int iLen = sphVSprintf ( sBuf, sFmt, ap );
-	va_end ( ap );
-
-	return ::write ( iFD, sBuf, iLen )==iLen;
-}
-
-void StackTraceDump ( int iFD )
-{
-	if ( iFD<0 )
-		return;
-
-	void * pMyStack = sphMyStack();
-	int iStackSize = sphMyStackSize();
-
-	sphSafeInfo ( iFD, "-------------- cut here ---------------" );
-	sphSafeInfo ( iFD, "Searchd " SPHINX_VERSION );
-#ifdef COMPILER
-	sphSafeInfo ( iFD, "Program compiled with " COMPILER );
-#endif
-
-#ifdef OS_UNAME
-	sphSafeInfo ( iFD, "Host OS is "OS_UNAME );
-#endif
-
-	sphSafeInfo ( iFD, "Stack bottom = 0x%p, thread stack size = 0x%x", pMyStack, iStackSize );
-
-#if HAVE_BACKTRACE
-	void *pAddresses [128];
-	int iDepth = backtrace ( pAddresses, 128 );
-#if HAVE_BACKTRACE_SYMBOLS
-	backtrace_symbols_fd ( pAddresses, iDepth, iFD );
-#elif !HAVE_BACKTRACE_SYMBOLS
-	for ( int i=0; i<Depth; i++ )
-		sphSafeInfo ( iFD, "%p", pAddresses[i] );
-#endif
-
-#elif !HAVE_BACKTRACE
-	BYTE ** pFramePointer = NULL;
-
-	int iFrameCount = 0;
-	int iReturnFrameCount = sphIsLtLib() ? 2 : 1;
-
-#ifdef __i386__
-#define SIGRETURN_FRAME_OFFSET 17
-	__asm __volatile__ ( "movl %%ebp,%0":"=r"(pFramePointer):"r"(pFramePointer) );
-#endif
-
-#ifdef __x86_64__
-#define SIGRETURN_FRAME_OFFSET 23
-	__asm __volatile__ ( "movq %%rbp,%0":"=r"(pFramePointer):"r"(pFramePointer) );
-#endif
-
-	if ( !pFramePointer )
-	{
-		sphSafeInfo ( iFD, "Frame pointer is null. Unable to backtrace the stack. Did you build the searchd with -fomit-frame-pointer?" );
-		return;
-	}
-
-	if ( !pMyStack || (BYTE*) pMyStack > (BYTE*) &pFramePointer )
-	{
-		int iRound = Min ( 65536, iStackSize );
-		pMyStack = (void *) ( ( (size_t) &pFramePointer + iRound ) & ~(size_t)65535 );
-		sphSafeInfo ( iFD, "Something wrong with thread's stack, the trace may be incorrect (FramePointer=%p)", pFramePointer );
-
-		if ( pFramePointer > (BYTE**) pMyStack || pFramePointer < (BYTE**) pMyStack - iStackSize )
-		{
-			sphSafeInfo ( iFD, "Wrong stack limit or frame pointer (fp=%p, stack=%p, stack size=%d). Unable to backtrace", pFramePointer, pMyStack, iStackSize );
-			return;
-		}
-	}
-
-	sphSafeInfo ( iFD, "Stack is OK. Backtrace:" );
-
-	BYTE** pNewFP;
-	bool bOk = true;
-	while ( pFramePointer < (BYTE**) pMyStack )
-	{
-		pNewFP = (BYTE**) *pFramePointer;
-		sphSafeInfo ( iFD, "%p", iFrameCount==iReturnFrameCount? *(pFramePointer + SIGRETURN_FRAME_OFFSET) : *(pFramePointer + 1) );
-
-		bOk = pNewFP > pFramePointer;
-		if ( !bOk ) break;
-
-		pFramePointer = pNewFP;
-		iFrameCount++;
-	}
-
-	if ( !bOk )
-		sphSafeInfo ( iFD, "Something wrong in frame pointers. BackTrace failed (failed FP was %p)", pNewFP );
-	else
-#endif // !HAVE_BACKTRACE
-		sphSafeInfo ( iFD, "Stack trace seems to be succesfull. Now you have to resolve the numbers above and attach resolved values to the bugreport. See the section about resolving in the documentation" );
-
-	sphSafeInfo ( iFD, "-------------- cut here ---------------" );
-}
-
-
 void sighup ( int )
 {
 	g_bDoRotate = true;
@@ -1590,32 +1286,10 @@ void sigusr1 ( int )
 {
 	g_bGotSigusr1 = true;
 }
-
 #endif // !USE_WINDOWS
 
-#if USE_WINDOWS
-void StackTraceDump ( EXCEPTION_POINTERS * pExc, const char * sFile )
-{
-	if ( !pExc || !sFile || !(*sFile) )
-		return;
 
-	HANDLE hFile;
-	hFile = CreateFile ( sFile, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0 );
-	if ( !hFile )
-		return;
-
-	MINIDUMP_EXCEPTION_INFORMATION tExcInfo;
-	tExcInfo.ExceptionPointers = pExc;
-	tExcInfo.ClientPointers = FALSE;
-	tExcInfo.ThreadId = GetCurrentThreadId();
-
-	MiniDumpWriteDump ( GetCurrentProcess(), GetCurrentProcessId(), hFile, MiniDumpNormal, &tExcInfo, 0, 0 );
-	CloseHandle ( hFile );
-}
-#endif
-
-
-// crash query handle
+// crash query handler
 static const char g_dEncodeBase64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 BYTE * sphEncodeBase64 ( BYTE * pDst, const BYTE * pSrc, int iLen )
 {
@@ -1687,19 +1361,6 @@ void SphCrashLogger_c::Done ()
 		sphThreadKeyDelete ( m_tLastQueryTLS );
 }
 
-#if !USE_WINDOWS // UNIX case
-	#ifndef NDEBUG // has also to generate core
-		#define CRASH_EXIT signal ( sig, SIG_DFL ); kill ( getpid(), sig )
-	#else // simple exit
-		#define CRASH_EXIT exit ( 1 )
-	#endif
-#else // WINDOWS case
-	#ifndef NDEBUG // show prompt to attach debugger
-		#define CRASH_EXIT return EXCEPTION_CONTINUE_SEARCH
-	#else // simple exit
-		#define CRASH_EXIT return EXCEPTION_EXECUTE_HANDLER
-	#endif
-#endif
 
 #if !USE_WINDOWS
 #ifndef NDEBUG
@@ -1715,9 +1376,9 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 	sphWrite ( g_iLogFile, g_sCrashInfo, g_iCrashInfoLen );
 
 #if !USE_WINDOWS
-	StackTraceDump ( g_iLogFile );
+	sphBacktrace ( g_iLogFile );
 #else
-	StackTraceDump ( pExc, g_sMinidump );
+	sphBacktrace ( pExc, g_sMinidump );
 #endif
 
 	// log crashed query

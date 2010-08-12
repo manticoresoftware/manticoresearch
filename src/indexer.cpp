@@ -49,6 +49,8 @@ int				g_iMaxFileFieldBuffer	= 1024*1024;
 const int		EXT_COUNT = 8;
 const char *	g_dExt[EXT_COUNT] = { "sph", "spa", "spi", "spd", "spp", "spm", "spk", "sps" };
 
+char			g_sMinidump[256];
+
 /////////////////////////////////////////////////////////////////////////////
 
 template < typename T > struct CSphMTFHashEntry
@@ -1312,6 +1314,70 @@ void ReportIOStats ( const char * sType, int iReads, int64_t iReadTime, int64_t 
 }
 
 
+#if !USE_WINDOWS
+
+void sigsegv ( int sig )
+{
+	const char * sFail = "*** Oops, indexer crashed! Please send the following report to developers.\n";
+	::write ( STDERR_FILENO, sFail, strlen(sFail) );
+
+	sphBacktrace ( STDERR_FILENO );
+	CRASH_EXIT;
+}
+
+void SetSignalHandlers ()
+{
+	struct sigaction sa;
+	sigfillset ( &sa.sa_mask );
+
+	bool bSignalsSet = false;
+	for ( ;; )
+	{
+		sa.sa_flags = SA_NOCLDSTOP;
+		sa.sa_handler = SIG_IGN; if ( sigaction ( SIGCHLD, &sa, NULL )!=0 ) break;
+
+		sa.sa_flags |= SA_RESETHAND;
+		sa.sa_handler = sigsegv; if ( sigaction ( SIGSEGV, &sa, NULL )!=0 ) break;
+		sa.sa_handler = sigsegv; if ( sigaction ( SIGBUS, &sa, NULL )!=0 ) break;
+		sa.sa_handler = sigsegv; if ( sigaction ( SIGABRT, &sa, NULL )!=0 ) break;
+		sa.sa_handler = sigsegv; if ( sigaction ( SIGILL, &sa, NULL )!=0 ) break;
+		sa.sa_handler = sigsegv; if ( sigaction ( SIGFPE, &sa, NULL )!=0 ) break;
+
+		bSignalsSet = true;
+		break;
+	}
+	if ( !bSignalsSet )
+	{
+		fprintf ( stderr, "sigaction(): %s", strerror(errno) );
+		exit ( 1 );
+	}
+}
+
+#else // if USE_WINDOWS
+
+LONG WINAPI sigsegv ( EXCEPTION_POINTERS * pExc )
+{
+	const char * sFail1 = "*** Oops, indexer crashed! Please send ";
+	const char * sFail2 = " minidump file to developers.\n";
+
+	sphBacktrace ( pExc, g_sMinidump );
+	::write ( STDERR_FILENO, sFail1, strlen(sFail1) );
+	::write ( STDERR_FILENO, g_sMinidump, strlen(g_sMinidump) );
+	::write ( STDERR_FILENO, sFail2, strlen(sFail2) );
+
+	CRASH_EXIT;
+}
+
+
+void SetSignalHandlers ()
+{
+	snprintf ( g_sMinidump, sizeof(g_sMinidump), "indexer.%d.mdmp", GetCurrentProcessId() );
+	SetUnhandledExceptionFilter ( sigsegv );
+}
+
+#endif // USE_WINDOWS
+
+
 int main ( int argc, char ** argv )
 {
 	sphSetLogger ( Logger );
@@ -1461,7 +1527,7 @@ int main ( int argc, char ** argv )
 		return 1;
 	}
 
-	sphSetupSignals();
+	SetSignalHandlers();
 
 	///////////////
 	// load config

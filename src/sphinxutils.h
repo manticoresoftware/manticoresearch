@@ -127,8 +127,6 @@ void			sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSet
 /// try to set dictionary, tokenizer and misc settings for an index (if not already set)
 bool			sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError );
 
-void			sphSetupSignals ();
-
 enum ESphLogLevel
 {
 	LOG_FATAL	= 0,
@@ -144,6 +142,36 @@ void sphInfo ( const char * sFmt, ... );
 void sphLogFatal ( const char * sFmt, ... );
 void sphLogDebug ( const char * sFmt, ... );
 void sphSetLogger ( SphLogger_fn fnLog );
+
+//////////////////////////////////////////////////////////////////////////
+
+/// how do we properly exit from the crash handler?
+#if !USE_WINDOWS
+	#ifndef NDEBUG
+		// UNIX debug build, die and dump core
+		#define CRASH_EXIT { signal ( sig, SIG_DFL ); kill ( getpid(), sig ); }
+	#else
+		// UNIX release build, just die
+		#define CRASH_EXIT exit ( 1 )
+	#endif
+#else
+	#ifndef NDEBUG
+		// Windows debug build, show prompt to attach debugger
+		#define CRASH_EXIT return EXCEPTION_CONTINUE_SEARCH
+	#else
+		// Windows release build, just die
+		#define CRASH_EXIT return EXCEPTION_EXECUTE_HANDLER
+	#endif
+#endif
+
+
+#if !USE_WINDOWS
+/// UNIX backtrace gets printed out to a stream
+void sphBacktrace ( int iFD );
+#else
+/// Windows minidump gets saved to a file
+void sphBacktrace ( EXCEPTION_POINTERS * pExc, const char * sFile );
+#endif
 
 #endif // _sphinxutils_
 

@@ -1338,7 +1338,7 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, Sph
 				tHit.m_uDocid = pDoc->m_uDocid;
 				tHit.m_uHitpos = HITMAN::Create ( m_uFieldPos, -1 );
 				tHit.m_uQuerypos = m_iAtomPos;
-				tHit.m_uWeight  = tHit.m_uMatchlen = tHit.m_uSpanlen = 1;
+				tHit.m_uWeight = tHit.m_uMatchlen = tHit.m_uSpanlen = 1;
 
 				if ( iHit==MAX_HITS-1 )
 					break;
@@ -1943,7 +1943,7 @@ const ExtDoc_t * ExtNear_c::GetDocsChunk ( SphDocID_t * pMaxID )
 				m_dMyHits[iHit].m_uDocid = uCurDocID;
 				m_dMyHits[iHit].m_uHitpos = pL->m_uHitpos;
 				m_dMyHits[iHit].m_uQuerypos = pL->m_uQuerypos;
-				m_dMyHits[iHit].m_uMatchlen = (WORD) iDistance + pR->m_uMatchlen;
+				m_dMyHits[iHit].m_uMatchlen = m_dMyHits[iHit].m_uSpanlen = (WORD)iDistance + pR->m_uMatchlen;
 				m_dMyHits[iHit++].m_uWeight = pHitLeft->m_uWeight + pHitRight->m_uWeight;
 				if ( iHit==MAX_HITS-1 )
 				{
@@ -2134,7 +2134,7 @@ const ExtHit_t * ExtNear_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uM
 				m_dHits[iHit].m_uDocid = uMatchedDocid;
 				m_dHits[iHit].m_uHitpos = pL->m_uHitpos;
 				m_dHits[iHit].m_uQuerypos = pL->m_uQuerypos;
-				m_dHits[iHit].m_uMatchlen = (WORD) iDistance + pR->m_uMatchlen;
+				m_dHits[iHit].m_uMatchlen = m_dHits[iHit].m_uSpanlen = (WORD)iDistance + pR->m_uMatchlen;
 				m_dHits[iHit++].m_uWeight = pHitLeft->m_uWeight + pHitRight->m_uWeight;
 				if ( iHit==MAX_HITS-1 )
 				{

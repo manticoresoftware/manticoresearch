@@ -1838,7 +1838,7 @@ inline int BispanLen ( const ExtHit_t * pLeft, const ExtHit_t * pRight )
 //////////////////////////////////////////////////////////////////////////
 
 ExtNear_c::ExtNear_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup & tSetup, int iMaxDistance ) :
-	m_iNear ( iMaxDistance+1 ) ,
+	m_iNear ( iMaxDistance ) ,
 	m_pDoc ( NULL ),
 	m_pHitsLeft ( NULL ),
 	m_pHitsRight ( NULL ),

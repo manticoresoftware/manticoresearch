@@ -14515,7 +14515,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				iMatch = rdDict.GetByte();
 			}
 			const int iLastWordLen = strlen(sLastWord);
-			if ( iMatch+iDelta>=sizeof(sLastWord)-1 || iMatch>iLastWordLen )
+			if ( iMatch+iDelta>=(int)sizeof(sLastWord)-1 || iMatch>iLastWordLen )
 			{
 				LOC_FAIL(( fp, "wrong word-delta (pos="INT64_FMT", word=%s, len=%d, begin=%d, delta=%d)",
 					iDictPos, sLastWord, iLastWordLen, iMatch, iDelta ));
@@ -14601,9 +14601,9 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		const int iLen = bWordDict ? strlen ( tCP.m_sWord ) : 0;
 		if ( bWordDict && ( strlen ( tRefCP.m_sWord )==0 || strlen ( tCP.m_sWord )==0 ) )
 		{
-			LOC_FAIL(( fp, "empty checkpoint %d (read_word=%s, read_len=%d, readpos="INT64_FMT", calc_word=%s, calc_len=%d, calcpos="INT64_FMT")",
-				i, tCP.m_sWord, strlen ( tCP.m_sWord ), (int64_t)tCP.m_iWordlistOffset,
-					tRefCP.m_sWord, strlen ( tRefCP.m_sWord ), (int64_t)tRefCP.m_iWordlistOffset ));
+			LOC_FAIL(( fp, "empty checkpoint %d (read_word=%s, read_len=%u, readpos="INT64_FMT", calc_word=%s, calc_len=%u, calcpos="INT64_FMT")",
+				i, tCP.m_sWord, (DWORD)strlen ( tCP.m_sWord ), (int64_t)tCP.m_iWordlistOffset,
+					tRefCP.m_sWord, (DWORD)strlen ( tRefCP.m_sWord ), (int64_t)tRefCP.m_iWordlistOffset ));
 
 		} else if ( tRefCP.CmpStrictly ( tCP.m_sWord, iLen, tCP.m_iWordID, bWordDict )
 			|| tRefCP.m_iWordlistOffset!=tCP.m_iWordlistOffset )
@@ -14679,7 +14679,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				iMatch = rdDict.GetByte();
 			}
 			const int iLastWordLen = strlen(sLastWord);
-			if ( iMatch+iDelta>=sizeof(sLastWord)-1 || iMatch>iLastWordLen )
+			if ( iMatch+iDelta>=(int)sizeof(sLastWord)-1 || iMatch>iLastWordLen )
 				rdDict.SkipBytes ( iDelta );
 			else
 			{
@@ -16456,13 +16456,13 @@ private:
 CSphDictKeywords::CSphDictKeywords ()
 	: m_bHitblock ( false )
 	, m_iMemUse ( 0 )
+	, m_iDictLimit ( 0 )
 	, m_pEntryChunk ( NULL )
 	, m_iEntryChunkFree ( 0 )
 	, m_pKeywordChunk ( NULL )
 	, m_iKeywordChunkFree ( 0 )
 	, m_pDictChunk ( NULL )
 	, m_iDictChunkFree ( 0 )
-	, m_iDictLimit ( 0 )
 {
 	memset ( m_dHash, 0, sizeof(m_dHash) );
 }
@@ -16658,7 +16658,7 @@ void CSphDictKeywords::DictBegin ( int iTmpDictFD, int iDictFD, int iDictLimit )
 	m_wrDict.SetFile ( iDictFD, NULL );
 	m_wrDict.PutByte ( 1 );
 
-	m_iDictLimit = Max ( iDictLimit, KEYWORD_CHUNK + DICT_CHUNK*sizeof(DictKeyword_t) ); // can't use less than 1 chunk
+	m_iDictLimit = Max ( iDictLimit, KEYWORD_CHUNK + DICT_CHUNK*(int)sizeof(DictKeyword_t) ); // can't use less than 1 chunk
 }
 
 bool CSphDictKeywords::DictEnd ( SphOffset_t * pCheckpointsPos, int * pCheckpointsCount, int iMemLimit, CSphString & sError )
@@ -16774,7 +16774,7 @@ bool CSphDictKeywords::DictEnd ( SphOffset_t * pCheckpointsPos, int * pCheckpoin
 		assert ( tWord.m_uOff );
 		assert ( tWord.m_iDocs );
 		assert ( tWord.m_iHits );
-		assert ( iMatch+iDelta<sizeof(sLastKeyword) );
+		assert ( iMatch+iDelta<(int)sizeof(sLastKeyword) );
 
 		// match and delta are usually tiny, pack them together in 1 byte
 		// tricky bit, this byte leads the entry so it must never be 0 (aka eof mark)!
@@ -22662,7 +22662,7 @@ const BYTE * CWordlist::GetWord ( const BYTE * pBuf, const char * pStr, int iLen
 			iMatch = *pBuf++;
 		}
 
-		assert ( iMatch+iDelta<sizeof(tCtx.m_sWord)-1 );
+		assert ( iMatch+iDelta<(int)sizeof(tCtx.m_sWord)-1 );
 		assert ( iMatch<=(int)strlen ( (char *)tCtx.m_sWord ) );
 
 		memcpy ( tCtx.m_sWord + iMatch, pBuf, iDelta );

@@ -359,7 +359,6 @@ public:
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
-
 	virtual bool				GotHitless () { return false; }
 
 	virtual void DebugDump ( int iLevel )
@@ -393,7 +392,6 @@ protected:
 private:
 	virtual bool				EmitTail ( int & iHit );	///< the "trickiest part" extracted in order to process the proximity also
 };
-
 
 /// phrase A-near-phrase B streamer
 class ExtNear_c : public ExtNode_i
@@ -616,7 +614,7 @@ struct ZoneHash_fn
 
 		// now hash docid bytes, lsb first (intel-style)
 		SphDocID_t uDocid = tKey.m_uDocid;
-		for ( int i=0; i<sizeof(SphDocID_t); i++ )
+		for ( BYTE i=0; i<sizeof(SphDocID_t); i++ )
 		{
 			uHash = uHash*0x01000193UL ^ (DWORD)( uDocid & 0xff );
 			uDocid >>= 8;
@@ -4472,7 +4470,7 @@ bool ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit )
 				break;
 
 			while ( pEnd->m_uDocid < pStart->m_uDocid )
-				pEnd;
+				pEnd++;
 			if ( pEnd->m_uDocid==DOCID_MAX )
 				break;
 		}

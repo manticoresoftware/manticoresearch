@@ -162,6 +162,15 @@ static bool					g_bSphQuiet					= false;
 static int					g_iReadBuffer				= DEFAULT_READ_BUFFER;
 static int					g_iReadUnhinted				= DEFAULT_READ_UNHINTED;
 
+// quick hack for indexer crash reporting
+// one day, these might turn into a callback or something
+int64_t		g_iIndexerCurrentDocID		= 0;
+int64_t		g_iIndexerCurrentHits		= 0;
+int64_t		g_iIndexerCurrentRangeMin	= 0;
+int64_t		g_iIndexerCurrentRangeMax	= 0;
+int64_t		g_iIndexerPoolStartDocID	= 0;
+int64_t		g_iIndexerPoolStartHit		= 0;
+
 /////////////////////////////////////////////////////////////////////////////
 // COMPILE-TIME CHECKS
 /////////////////////////////////////////////////////////////////////////////
@@ -9552,6 +9561,10 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			if ( iDocHits<=0 )
 				continue;
 
+			// update crashdump
+			g_iIndexerCurrentDocID = pSource->m_tDocInfo.m_iDocID;
+			g_iIndexerCurrentHits = iDocHits;
+
 			// store field MVAs
 			if ( bHaveFieldMVAs )
 			{
@@ -9755,6 +9768,10 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				{
 					continue;
 				}
+
+				// update crashdump
+				g_iIndexerPoolStartDocID = pSource->m_tDocInfo.m_iDocID;
+				g_iIndexerPoolStartHit = g_iIndexerCurrentHits - iToCopy;
 
 				// sort hits
 				int iHits = pHits - dHits;
@@ -18975,6 +18992,8 @@ bool CSphSource_SQL::RunQueryStep ( const char * sQuery, CSphString & sError )
 	SphDocID_t uNextID = Min ( m_uCurrentID + m_tParams.m_iRangeStep - 1, m_uMaxID );
 	snprintf ( sValues[0], iBufSize, DOCID_FMT, m_uCurrentID );
 	snprintf ( sValues[1], iBufSize, DOCID_FMT, uNextID );
+	g_iIndexerCurrentRangeMin = m_uCurrentID;
+	g_iIndexerCurrentRangeMax = uNextID;
 	m_uCurrentID = 1 + uNextID;
 
 	// OPTIMIZE? things can be precalculated

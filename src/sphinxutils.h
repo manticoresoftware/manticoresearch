@@ -168,6 +168,9 @@ void sphSetLogger ( SphLogger_fn fnLog );
 #if !USE_WINDOWS
 /// UNIX backtrace gets printed out to a stream
 void sphBacktrace ( int iFD );
+
+/// async safe fprintf
+void sphSafeInfo ( int iFD, const char * sFmt, ... );
 #else
 /// Windows minidump gets saved to a file
 void sphBacktrace ( EXCEPTION_POINTERS * pExc, const char * sFile );

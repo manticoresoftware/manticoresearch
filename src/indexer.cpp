@@ -1317,13 +1317,22 @@ void ReportIOStats ( const char * sType, int iReads, int64_t iReadTime, int64_t 
 }
 
 
+extern int64_t g_iIndexerCurrentDocID;
+extern int64_t g_iIndexerCurrentHits;
+extern int64_t g_iIndexerCurrentRangeMin;
+extern int64_t g_iIndexerCurrentRangeMax;
+extern int64_t g_iIndexerPoolStartDocID;
+extern int64_t g_iIndexerPoolStartHit;
+
 #if !USE_WINDOWS
 
 void sigsegv ( int sig )
 {
-	const char * sFail = "*** Oops, indexer crashed! Please send the following report to developers.\n";
-	::write ( STDERR_FILENO, sFail, strlen(sFail) );
-
+	sphSafeInfo ( STDERR_FILENO, "*** Oops, indexer crashed! Please send the following report to developers." );
+	sphSafeInfo ( STDERR_FILENO, "-------------- cut here ---------------" );
+	sphSafeInfo ( STDERR_FILENO, "Current document: docid=%l, hits=%l", g_iIndexerCurrentDocID, g_iIndexerCurrentHits );
+	sphSafeInfo ( STDERR_FILENO, "Current batch: minid=%l, maxid=%l", g_iIndexerCurrentRangeMin, g_iIndexerCurrentRangeMax );
+	sphSafeInfo ( STDERR_FILENO, "Hit pool start: docid=%l, hit=%l", g_iIndexerPoolStartDocID, g_iIndexerPoolStartHit );
 	sphBacktrace ( STDERR_FILENO );
 	CRASH_EXIT;
 }

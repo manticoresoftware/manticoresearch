@@ -1243,6 +1243,18 @@ static int sphVSprintf ( char* pOutput, const char* sFmt, va_list ap )
 				state = SNORMAL;
 				break;
 			}
+		case 'l': // decimal int64
+			if ( state==SNORMAL )
+			{
+				*pOutput++ = c;
+				break;
+			}
+			{
+				int64_t iValue = va_arg ( ap, int64_t );
+				UItoA ( &pOutput, iValue, 10, iWidth, iPrec, cFill );
+				state = SNORMAL;
+				break;
+			}
 		default:
 			state = SNORMAL;
 			*pOutput++ = c;
@@ -1252,16 +1264,15 @@ static int sphVSprintf ( char* pOutput, const char* sFmt, va_list ap )
 	return pOutput-pBegin;
 }
 
-static bool sphSafeInfo ( int iFD, const char * sFmt, ... )
+void sphSafeInfo ( int iFD, const char * sFmt, ... )
 {
 	assert ( iFD>=0 && sFmt );
 	char sBuf [ 1024 ];
 	va_list ap;
 	va_start ( ap, sFmt );
-	int iLen = sphVSprintf ( sBuf, sFmt, ap );
+	int iLen = sphVSprintf ( sBuf, sFmt, ap ); // FIXME! make this vsnprintf
 	va_end ( ap );
-
-	return ::write ( iFD, sBuf, iLen )==iLen;
+	::write ( iFD, sBuf, iLen );
 }
 
 void sphBacktrace ( int iFD )

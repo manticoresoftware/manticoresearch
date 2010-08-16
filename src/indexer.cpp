@@ -536,10 +536,13 @@ bool ParseJoinedField ( const char * sBuf, CSphJoinedField * pField, const char 
 
 bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSection & hSource, const char * sSourceName )
 {
-	LOC_CHECK ( hSource, "sql_host", "in source '%s'", sSourceName );
-	LOC_CHECK ( hSource, "sql_user", "in source '%s'", sSourceName );
-	LOC_CHECK ( hSource, "sql_pass", "in source '%s'", sSourceName );
-	LOC_CHECK ( hSource, "sql_db", "in source '%s'", sSourceName );
+	if ( !hSource.Exists("odbc_dsn") ) // in case of odbc source, the host, user, pass and db are not mandatory, since they may be already defined in dsn string.
+	{
+		LOC_CHECK ( hSource, "sql_host", "in source '%s'", sSourceName );
+		LOC_CHECK ( hSource, "sql_user", "in source '%s'", sSourceName );
+		LOC_CHECK ( hSource, "sql_pass", "in source '%s'", sSourceName );
+		LOC_CHECK ( hSource, "sql_db", "in source '%s'", sSourceName );
+	}
 	LOC_CHECK ( hSource, "sql_query", "in source '%s'", sSourceName );
 
 	LOC_GETS ( tParams.m_sHost,				"sql_host" );

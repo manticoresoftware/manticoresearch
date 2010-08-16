@@ -650,6 +650,7 @@ class SphinxConfig
 				$res["expect_error"] = $q->getAttribute("expect_error");
 				$res["tag"] = $q->getAttribute("tag");
 				$res["cutoff"] = $q->getAttribute("cutoff");
+				$res["limits"] = $q->getAttribute("limits");
 
 				// add query
 				if ( $q->getAttribute("source") )
@@ -870,7 +871,8 @@ class SphinxConfig
 						if ( @$qinfo["id_range"] )	$cl->SetIDRange ( $qinfo["id_range"]["min"], $qinfo["id_range"]["max"] );
 						if ( @$qinfo["index"] )		$my_index = $qinfo["index"];
 						if ( @$qinfo["index_weights"] ) $cl->SetIndexWeights ( $qinfo["index_weights"] );
-						if ( @$qinfo["cutoff"] )	$cl->SetLimits ( 0, 20, 0, $qinfo["cutoff"] );
+						if ( @$qinfo["cutoff"] )		$cl->SetLimits ( 0, 20, 0, $qinfo["cutoff"] );
+						if ( @$qinfo["limits"] )		$cl->SetLimits ( 0, (int)$qinfo["limits"] );
 						if ( @$qinfo["filter"] )
 						{
 							$name = $qinfo["filter"];

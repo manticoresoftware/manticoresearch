@@ -1,0 +1,71 @@
+<test>
+<name>string attributes vs buffer ovverun</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_table
+	sql_attr_uint	= idd
+	sql_attr_string = attr1
+	sql_attr_string = attr2	
+}
+
+index test
+{
+	source	= test
+	path	= <data_path/>/test
+	docinfo	= extern
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INT NOT NULL,
+	text VARCHAR(255) NOT NULL,
+	idd INT NOT NULL,
+	attr1 VARCHAR(5000) NOT NULL,
+	attr2 VARCHAR(5000) NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<custom_insert><![CDATA[
+	$attr = '';
+	for ( $i=1; $i < 400; $i++ )
+	{
+		$attr .= ' overrun'.$i;
+	}
+	
+	$text = sprintf ( "insert into test_table
+		(id, text, idd, attr1, attr2 ) values
+		( 1, 'text', 1, '%s', '%s' )",
+		$attr, $attr );
+	mysql_query ( $text );
+]]></custom_insert>
+
+<!--
+<queries>
+	<query mode="extended2" index="test"></query>
+</queries>
+-->
+<sphqueries>
+	<sphinxql>select * from test</sphinxql>
+</sphqueries>
+
+</test>

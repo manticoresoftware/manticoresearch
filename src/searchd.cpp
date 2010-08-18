@@ -7998,6 +7998,82 @@ void HandleShowTables ( NetOutputBuffer_c & tOut, BYTE uPacketID )
 	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
 }
 
+#define SPH_MAX_NUMERIC_STR 32
+
+class SqlRowBuffer_c
+{
+public:
+
+	SqlRowBuffer_c ()
+		: m_pBuf ( NULL )
+		, m_iLen ( 0 )
+		, m_iLimit ( sizeof ( m_dBuf ) )
+	{
+	}
+
+	~SqlRowBuffer_c ()
+	{
+		SafeDeleteArray ( m_pBuf );
+	}
+
+	char * Reserve ( int iLen )
+	{
+		int iNewSize = m_iLen+iLen;
+		if ( iNewSize<=m_iLimit )
+			return Get();
+
+		int iNewLimit = Max ( m_iLimit*2, iNewSize );
+		char * pBuf = new char [iNewLimit];
+		memcpy ( pBuf, m_pBuf ? m_pBuf : m_dBuf, m_iLen );
+		SafeDeleteArray ( m_pBuf );
+		m_pBuf = pBuf;
+		m_iLimit = iNewLimit;
+		return Get();
+	}
+
+	char * Get ()
+	{
+		return m_pBuf ? m_pBuf+m_iLen : m_dBuf+m_iLen;
+	}
+
+	char * Off ( int iOff )
+	{
+		assert ( iOff<m_iLimit );
+		return m_pBuf ? m_pBuf+iOff : m_dBuf+iOff;
+	}
+
+	int Length () const
+	{
+		return m_iLen;
+	}
+
+	void IncPtr ( int iLen	)
+	{
+		assert ( m_iLen+iLen<=m_iLimit );
+		m_iLen += iLen;
+	}
+
+	void Reset ()
+	{
+		m_iLen = 0;
+	}
+
+	template < typename T>
+	void PutNumeric ( const char * sFormat, T tVal )
+	{
+		Reserve ( SPH_MAX_NUMERIC_STR );
+		int iLen = snprintf ( Get()+1, SPH_MAX_NUMERIC_STR-1, sFormat, tVal );
+		*Get() = BYTE(iLen);
+		IncPtr ( 1+iLen );
+	}
+
+private:
+
+	char m_dBuf[4096];
+	char * m_pBuf;
+	int m_iLen;
+	int m_iLimit;
+};
 
 void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 {
@@ -8177,17 +8253,14 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 			SendMysqlEofPacket ( tOut, uPacketID++, iWarns );
 
 			// rows
-			char sRowBuffer[4096];
-			const char * sRowMax = sRowBuffer + sizeof(sRowBuffer) - 4; // safety gap
+			SqlRowBuffer_c dRows;
 
 			for ( int iMatch = pRes->m_iOffset; iMatch < pRes->m_iOffset + pRes->m_iCount; iMatch++ )
 			{
 				const CSphMatch & tMatch = pRes->m_dMatches [ iMatch ];
-				char * p = sRowBuffer;
 
-				int iLen;
-				iLen = snprintf ( p+1, sRowMax-p, DOCID_FMT, tMatch.m_iDocID ); p[0] = BYTE(iLen); p += 1+iLen;
-				iLen = snprintf ( p+1, sRowMax-p, "%u", tMatch.m_iWeight ); p[0] = BYTE(iLen); p += 1+iLen;
+				dRows.PutNumeric<SphDocID_t> ( DOCID_FMT, tMatch.m_iDocID );
+				dRows.PutNumeric ( "%u", tMatch.m_iWeight );
 
 				const CSphSchema & tSchema = pRes->m_tSchema;
 				for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
@@ -8201,23 +8274,19 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 						case SPH_ATTR_BOOL:
 						case SPH_ATTR_BIGINT:
 							if ( eAttrType==SPH_ATTR_BIGINT )
-								iLen = snprintf ( p+1, sRowMax-p, INT64_FMT, tMatch.GetAttr(tLoc) );
+								dRows.PutNumeric<SphAttr_t> ( INT64_FMT, tMatch.GetAttr(tLoc) );
 							else
-								iLen = snprintf ( p+1, sRowMax-p, "%u", (DWORD)tMatch.GetAttr(tLoc) );
-							p[0] = BYTE(iLen);
-							p += 1+iLen;
+								dRows.PutNumeric<DWORD> ( "%u", (DWORD)tMatch.GetAttr(tLoc) );
 							break;
 
 						case SPH_ATTR_FLOAT:
-							iLen = snprintf ( p+1, sRowMax-p, "%f", tMatch.GetAttrFloat(tLoc) );
-							p[0] = BYTE(iLen);
-							p += 1+iLen;
+							dRows.PutNumeric ( "%f", tMatch.GetAttrFloat(tLoc) );
 							break;
 
 						case SPH_ATTR_INTEGER | SPH_ATTR_MULTI:
 						{
-							BYTE * pLen = (BYTE*) p;
-							p += 4; // marker + 3-byte len
+							int iLenOff = dRows.Length();
+							dRows.IncPtr ( 4 );
 
 							const DWORD * pValues = tMatch.GetAttrMVA ( tLoc, pRes->m_dTag2Pools [ tMatch.m_iTag ].m_pMva );
 							if ( pValues )
@@ -8225,15 +8294,16 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 								DWORD nValues = *pValues++;
 								while ( nValues )
 								{
-									p += snprintf ( p, sRowMax-p, "%u", *pValues++ );
-									if ( --nValues )
-										*p++ = ',';
+									dRows.Reserve ( SPH_MAX_NUMERIC_STR );
+									int iLen = snprintf ( dRows.Get(), SPH_MAX_NUMERIC_STR, nValues>1 ? "%u," : "%u", *pValues++ );
+									dRows.IncPtr ( iLen );
 								}
 							}
 
 							// manually pack length, forcibly into exactly 3 bytes
-							iLen = (BYTE*)p - pLen - 4;
-							pLen[0] = 0xfd;
+							int iLen = dRows.Length()-iLenOff;
+							char * pLen = dRows.Off ( iLenOff );
+							pLen[0] = (BYTE)0xfd;
 							pLen[1] = (BYTE)( iLen & 0xff );
 							pLen[2] = (BYTE)( ( iLen>>8 ) & 0xff );
 							pLen[3] = (BYTE)( ( iLen>>16 ) & 0xff );
@@ -8256,25 +8326,29 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 							}
 
 							// send length
-							iLen = Min ( iLen, sRowMax-p-3 ); // clamp it, buffer size is limited
-							p = (char*)MysqlPack ( p, iLen );
+							dRows.Reserve ( iLen+4 );
+							char * pOutStr = (char*)MysqlPack ( dRows.Get(), iLen );
 
 							// send string data
 							if ( iLen )
-								memcpy ( p, pStr, iLen );
-							p += iLen;
+								memcpy ( pOutStr, pStr, iLen );
+
+							dRows.IncPtr ( pOutStr-dRows.Get()+iLen );
 							break;
 						}
 
 						default:
-							p[0] = 1;
-							p[1] = '-';
-							p += 2; break;
+							char * pDef = dRows.Reserve ( 2 );
+							pDef[0] = 1;
+							pDef[1] = '-';
+							dRows.IncPtr ( 2 );
+							break;
 					}
 				}
 
-				tOut.SendLSBDword ( ((uPacketID++)<<24) + ( p-sRowBuffer ) );
-				tOut.SendBytes ( sRowBuffer, p-sRowBuffer );
+				tOut.SendLSBDword ( ((uPacketID++)<<24) + ( dRows.Length() ) );
+				tOut.SendBytes ( dRows.Off ( 0 ), dRows.Length() );
+				dRows.Reset();
 			}
 
 			// eof packet

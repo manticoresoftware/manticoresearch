@@ -20800,6 +20800,7 @@ private:
 	bool			m_bInDocument;
 	bool			m_bInKillList;
 	bool			m_bInId;
+	bool			m_bInIgnoredTag;
 	bool			m_bFirstTagAfterDocset;
 
 	int				m_iKillListIterator;
@@ -20953,6 +20954,7 @@ CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( BYTE * dInitialBuf, int iBufLen, cons
 	, m_bInDocument		( false )
 	, m_bInKillList		( false )
 	, m_bInId			( false )
+	, m_bInIgnoredTag	( false )
 	, m_bFirstTagAfterDocset	( false )
 	, m_iKillListIterator		( 0 )
 	, m_iMVA			( 0 )
@@ -21684,8 +21686,10 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 		}
 
 		bool bError = false;
-		CSphColumnInfo Info;
 		CSphString sDefault;
+
+		CSphColumnInfo Info;
+		Info.m_eAttrType = SPH_ATTR_INTEGER;
 
 		const char ** dAttrs = pAttrs;
 
@@ -21809,6 +21813,8 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 
 			if ( m_iCurAttr==-1 && m_iCurField==-1 )
 			{
+				m_bInIgnoredTag = true;
+
 				bool bInvalidFound = false;
 				for ( int i = 0; i < m_dInvalid.GetLength () && !bInvalidFound; i++ )
 					bInvalidFound = m_dInvalid[i]==szName;
@@ -21827,6 +21833,8 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 
 void CSphSource_XMLPipe2::EndElement ( const char * szName )
 {
+	m_bInIgnoredTag = false;
+
 	if ( !strcmp ( szName, "sphinx:docset" ) )
 		m_bInDocset = false;
 	else if ( !strcmp ( szName, "sphinx:schema" ) )
@@ -21920,6 +21928,9 @@ void CSphSource_XMLPipe2::UnexpectedCharaters ( const char * pCharacters, int iL
 
 void CSphSource_XMLPipe2::Characters ( const char * pCharacters, int iLen )
 {
+	if ( m_bInIgnoredTag )
+		return;
+
 	if ( !m_bInDocset )
 	{
 		UnexpectedCharaters ( pCharacters, iLen, "outside of <sphinx:docset>" );

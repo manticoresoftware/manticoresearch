@@ -8287,7 +8287,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 							if ( pValues )
 							{
 								DWORD nValues = *pValues++;
-								while ( nValues )
+								while ( nValues-- )
 								{
 									dRows.Reserve ( SPH_MAX_NUMERIC_STR );
 									int iLen = snprintf ( dRows.Get(), SPH_MAX_NUMERIC_STR, nValues>1 ? "%u," : "%u", *pValues++ );
@@ -8296,7 +8296,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 							}
 
 							// manually pack length, forcibly into exactly 3 bytes
-							int iLen = dRows.Length()-iLenOff;
+							int iLen = dRows.Length()-iLenOff-4;
 							char * pLen = dRows.Off ( iLenOff );
 							pLen[0] = (BYTE)0xfd;
 							pLen[1] = (BYTE)( iLen & 0xff );

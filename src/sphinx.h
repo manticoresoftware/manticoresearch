@@ -2172,8 +2172,8 @@ public:
 	const DWORD *			m_pMva;				///< pointer to MVA storage
 	const BYTE *			m_pStrings;			///< pointer to strings storage
 
-	CSphTightVector<BYTE>	m_dStrStorage;		/// < external string storage
-	CSphRowitem *			m_pAttrs;			/// < external attributes storage
+	CSphVector<BYTE *>			m_dStr2Free;		/// < aggregated external string attributes from rt indexes
+	CSphVector<CSphRowitem *>	m_dAttr2Free;		///< aggregated external result attributes from rt indexes
 
 	int						m_iOffset;			///< requested offset into matches array
 	int						m_iCount;			///< count which will be actually served (computed from total, offset and limit)
@@ -2183,6 +2183,8 @@ public:
 public:
 							CSphQueryResult ();		///< ctor
 	virtual					~CSphQueryResult ();	///< dtor, which releases all owned stuff
+
+	void					LeakStorages ( CSphQueryResult & tDst );
 };
 
 /////////////////////////////////////////////////////////////////////////////

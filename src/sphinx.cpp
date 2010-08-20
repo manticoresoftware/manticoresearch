@@ -5667,7 +5667,6 @@ CSphQueryResult::CSphQueryResult ()
 	m_iTotalMatches = 0;
 	m_pMva = NULL;
 	m_pStrings = NULL;
-	m_pAttrs = NULL;
 	m_iOffset = 0;
 	m_iCount = 0;
 	m_iSuccesses = 0;
@@ -5676,8 +5675,29 @@ CSphQueryResult::CSphQueryResult ()
 
 CSphQueryResult::~CSphQueryResult ()
 {
-	SafeDeleteArray ( m_pAttrs );
+	ARRAY_FOREACH ( i, m_dAttr2Free )
+	{
+		SafeDeleteArray ( m_dAttr2Free[i] );
+	}
+
+	ARRAY_FOREACH ( i, m_dStr2Free )
+	{
+		SafeDeleteArray ( m_dStr2Free[i] );
+	}
 }
+
+void CSphQueryResult::LeakStorages ( CSphQueryResult & tDst )
+{
+	ARRAY_FOREACH ( i, m_dAttr2Free )
+		tDst.m_dAttr2Free.Add ( m_dAttr2Free[i] );
+
+	ARRAY_FOREACH ( i, m_dStr2Free )
+		tDst.m_dStr2Free.Add ( m_dStr2Free[i] );
+
+	m_dAttr2Free.Reset();
+	m_dStr2Free.Reset();
+}
+
 
 /////////////////////////////////////////////////////////////////////////////
 // CHUNK READER

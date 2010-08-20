@@ -1308,7 +1308,7 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, int iRow
 	}
 
 	// accumulate hits
-	for ( const CSphWordHit * pHit = pHits->First(); pHit <= pHits->Last(); pHit++ )
+	for ( const CSphWordHit * pHit = pHits->First(); pHit<=pHits->Last(); pHit++ )
 		m_dAccum.Add ( *pHit );
 
 	m_iAccumDocs++;
@@ -3625,7 +3625,10 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		if ( iFixupCount>0 )
 		{
 			CSphRowitem * pAttr = new CSphRowitem [ iFixupCount * iStaticSize ];
-			pResult->m_pAttrs = pAttr;
+			pResult->m_dAttr2Free.Add ( pAttr );
+#ifndef NDEBUG
+			CSphRowitem * pEnd = pAttr + iFixupCount * iStaticSize;
+#endif
 
 			ARRAY_FOREACH ( iSorter, dSorters )
 			{
@@ -3639,8 +3642,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 					const int iMatchSegment = pMatches[i].m_iTag-1;
 					if ( iMatchSegment>=0 && iMatchSegment< iSegmentsTotal )
 					{
-						assert ( pAttr<( pResult->m_pAttrs + ( iFixupCount * iStaticSize ) ) );
-						assert ( ( pAttr + iStaticSize )<=( pResult->m_pAttrs + ( iFixupCount * iStaticSize ) ) );
+						assert ( pAttr+iStaticSize<=pEnd );
 
 						memcpy ( pAttr, pMatches[i].m_pStatic, sizeof(CSphRowitem)*iStaticSize );
 						pMatches[i].m_pStatic = pAttr;
@@ -3677,9 +3679,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	}
 	if ( dStringGetLoc.GetLength() )
 	{
-		CSphTightVector<BYTE> & dStorage = pResult->m_dStrStorage; // for shortness
-		if ( !dStorage.GetLength() ) // handle dummy offset
-			dStorage.Add ( 0 );
+		assert ( !pResult->m_pStrings );
+		CSphTightVector<BYTE> dStorage;
+		dStorage.Add ( 0 );
 
 		ARRAY_FOREACH ( iSorter, dSorters )
 		{
@@ -3705,7 +3707,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 				ARRAY_FOREACH ( i, dStringGetLoc )
 				{
 					const SphAttr_t tOff = tMatch.GetAttr ( dStringGetLoc[i] );
-					if ( tOff>0 ) // have to fix up only exists attribute
+					if ( tOff>0 ) // have to fix up only existed attribute
 					{
 						assert ( tOff<( I64C(1)<<32 ) ); // should be 32 bit offset
 						assert ( iRange==0 || (int)tOff<iRange );
@@ -3717,11 +3719,17 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 				}
 			}
 		}
+
+		if ( dStorage.GetLength()>1 )
+		{
+			BYTE * pStrings = dStorage.LeakData ();
+			pResult->m_dStr2Free.Add ( pStrings );
+			pResult->m_pStrings = pStrings;
+		}
 	}
 
 	// FIXME! mva pools ptrs
 	pResult->m_pMva = NULL;
-	pResult->m_pStrings = pResult->m_dStrStorage.Begin();
 
 	// query timer
 	pResult->m_iQueryTime = int ( ( sphMicroTimer()-tmQueryStart )/1000 );

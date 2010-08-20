@@ -883,6 +883,15 @@ public:
 		Swap ( m_pData, rhs.m_pData );
 	}
 
+	/// leak
+	T * LeakData ()
+	{
+		T * pData = m_pData;
+		m_pData = NULL;
+		Reset();
+		return pData;
+	}
+
 	/// generic binary search
 	/// assumes that the array is sorted in ascending order
 	template < typename U, typename PRED >

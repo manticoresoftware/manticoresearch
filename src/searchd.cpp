@@ -4183,6 +4183,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 		{
 			const CSphMatch & tMatch = pRes->m_dMatches [ pRes->m_iOffset+i ];
 			const DWORD * pMvaPool = dTag2Pools [ tMatch.m_iTag ].m_pMva;
+			assert ( !dMvaItems.GetLength() || pMvaPool );
 			ARRAY_FOREACH ( j, dMvaItems )
 			{
 				const DWORD * pMva = tMatch.GetAttrMVA ( dMvaItems[j], pMvaPool );
@@ -4201,6 +4202,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 			ARRAY_FOREACH ( j, dStringItems )
 			{
 				DWORD uOffset = (DWORD) tMatch.GetAttr ( dStringItems[j] );
+				assert ( !uOffset || pStrings );
 				if ( uOffset ) // magic zero
 					iRespLen += sphUnpackStr ( pStrings+uOffset, NULL );
 			}
@@ -4309,6 +4311,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 				const CSphColumnInfo & tAttr = pRes->m_tSchema.GetAttr(j);
 				if ( tAttr.m_eAttrType & SPH_ATTR_MULTI )
 				{
+					assert ( pMvaPool );
 					const DWORD * pValues = tMatch.GetAttrMVA ( tAttr.m_tLocator, pMvaPool );
 					if ( iVer<0x10C || !pValues )
 					{
@@ -4341,6 +4344,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 						} else
 						{
 							const BYTE * pStr;
+							assert ( pStrings );
 							int iLen = sphUnpackStr ( pStrings+uOffset, &pStr );
 							tOut.SendDword ( iLen );
 							tOut.SendBytes ( pStr, iLen );
@@ -4384,17 +4388,6 @@ struct AggrResult_t : CSphQueryResult
 	CSphVector<int>				m_dMatchCounts;		///< aggregated resultsets lengths (for schema minimization)
 	CSphVector<int>				m_dIndexWeights;	///< aggregated resultsets per-index weights (optional)
 	CSphVector<PoolPtrs_t>		m_dTag2Pools;		///< tag to MVA and strings storage pools mapping
-	CSphVector<CSphRowitem *>	m_dAttrs;			///< aggregated externall result attributes from rt indexes
-
-	// <dtor
-	virtual ~AggrResult_t ()
-	{
-		m_dAttrs.Uniq();
-		ARRAY_FOREACH ( i, m_dAttrs )
-		{
-			SafeDeleteArray ( m_dAttrs[i] );
-		}
-	}
 };
 
 
@@ -4757,8 +4750,8 @@ void SearchHandler_c::RunQueries ()
 	// final fixup
 	ARRAY_FOREACH ( i, m_dResults )
 	{
-		m_dResults[i].m_dTag2Pools[0].m_pMva = m_dMvaStorage.GetLength() ? &m_dMvaStorage[0] : NULL;
-		m_dResults[i].m_dTag2Pools[0].m_pStrings = m_dStringsStorage.GetLength() ? &m_dStringsStorage[0] : NULL;
+		m_dResults[i].m_dTag2Pools[0].m_pMva = m_dMvaStorage.Begin();
+		m_dResults[i].m_dTag2Pools[0].m_pStrings = m_dStringsStorage.Begin();
 	}
 }
 
@@ -4901,10 +4894,10 @@ void SearchHandler_c::RunLocalSearchesMT ()
 		for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
 		{
 			// but some of the sorters could had failed at "create sorter" stage
-			int iResultIndex = iLocal*iQueries;
-			int iSorterIndex = iResultIndex + iQuery - m_iStart;
-			if ( m_bMultiQueue )
-				iResultIndex = iSorterIndex;
+			int iSorterIndex = iLocal*iQueries;
+			int iResultIndex = iSorterIndex + iQuery - m_iStart;
+			if ( !m_bMultiQueue )
+				iSorterIndex = iResultIndex;
 
 			// check per-query failures of MultiQueryEx
 			else if ( dResults[iResultIndex].m_iMultiplier==-1 )
@@ -4931,11 +4924,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 			MergeWordStats ( tRes, tRaw.m_hWordStats );
 
 			// move external attributes storage from tRaw to actual result
-			if ( tRaw.m_pAttrs )
-			{
-				tRes.m_dAttrs.Add ( tRaw.m_pAttrs );
-				tRaw.m_pAttrs = NULL;
-			}
+			tRaw.LeakStorages ( tRes );
 
 			tRes.m_iMultiplier = m_bMultiQueue ? iQueries : 1;
 			tRes.m_iCpuTime += tRaw.m_iCpuTime / tRes.m_iMultiplier;
@@ -4952,6 +4941,10 @@ void SearchHandler_c::RunLocalSearchesMT ()
 				tPoolPtrs.m_pMva = tRes.m_pMva;
 				tPoolPtrs.m_pStrings = tRes.m_pStrings;
 				sphFlattenQueue ( pSorter, &tRes, tRes.m_iTag++ );
+
+				// clean up for next index search
+				tRes.m_pMva = NULL;
+				tRes.m_pStrings = NULL;
 			}
 		}
 	}
@@ -5179,6 +5172,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
 					tRes.m_iQueryTime += tStats.m_iQueryTime / ( m_iEnd-m_iStart+1 );
 					tRes.m_iCpuTime += tStats.m_iCpuTime / ( m_iEnd-m_iStart+1 );
 					tRes.m_pMva = tStats.m_pMva;
+					tRes.m_pStrings = tStats.m_pStrings;
 					tRes.m_hWordStats = tStats.m_hWordStats;
 					tRes.m_iMultiplier = m_iEnd-m_iStart+1;
 				} else if ( tRes.m_iMultiplier==-1 )
@@ -5203,14 +5197,14 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
 					tPoolPtrs.m_pMva = tRes.m_pMva;
 					tPoolPtrs.m_pStrings = tRes.m_pStrings;
 					sphFlattenQueue ( pSorter, &tRes, tRes.m_iTag++ );
+
+					// clean up for next index search
+					tRes.m_pMva = NULL;
+					tRes.m_pStrings = NULL;
 				}
 
 				// move external attributes storage from tStats to actual result
-				if ( tStats.m_pAttrs )
-				{
-					tRes.m_dAttrs.Add ( tStats.m_pAttrs );
-					tStats.m_pAttrs = NULL;
-				}
+				tStats.LeakStorages ( tRes );
 			}
 
 			if ( !m_bIsLocked )
@@ -8288,6 +8282,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 							int iLenOff = dRows.Length();
 							dRows.IncPtr ( 4 );
 
+							assert ( pRes->m_dTag2Pools [ tMatch.m_iTag ].m_pMva );
 							const DWORD * pValues = tMatch.GetAttrMVA ( tLoc, pRes->m_dTag2Pools [ tMatch.m_iTag ].m_pMva );
 							if ( pValues )
 							{

@@ -14004,7 +14004,8 @@ static void TransformNear ( XQNode_t ** ppNode )
 	{
 		assert ( pNode->m_dWords.GetLength()==0 );
 		CSphVector<XQNode_t*> dArgs;
-		int iStartFrom = 0;
+		int iStartFrom;
+		bool bTransformed = false;
 
 		// transform all (A B C) NEAR D into A NEAR B NEAR C NEAR D
 		do
@@ -14022,6 +14023,7 @@ static void TransformNear ( XQNode_t ** ppNode )
 							// we will remove the node anyway, so just replace it with 1-st child instead
 							pNode->m_dChildren[i] = pChild->m_dChildren[j];
 							iStartFrom = i+1;
+							bTransformed = true;
 						} else
 							dArgs.Add ( pChild->m_dChildren[j] );
 					pChild->m_dChildren.Reset();
@@ -14037,6 +14039,10 @@ static void TransformNear ( XQNode_t ** ppNode )
 					pNode->m_dChildren [ i + iStartFrom ] = dArgs[i];
 			}
 		} while ( iStartFrom!=0 );
+
+		// such a way we get not NEAR, but transitive Multinear
+		if ( bTransformed && pNode->m_dChildren.GetLength()>2 )
+			pNode->SetOp ( SPH_QUERY_MULTINEAR );
 	}
 
 	ARRAY_FOREACH ( i, pNode->m_dChildren )

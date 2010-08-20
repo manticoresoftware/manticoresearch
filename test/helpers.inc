@@ -169,7 +169,7 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error )
 	}
 
 	// check for early crash
-	$error = CheckSearchdLog ( $error_file, &$retval );
+	$error = CheckSearchdLog ( $error_file, $retval );
 
 	// on windows, searchd starts *fully* async
 	// so lets also wait until pidfile gets real data

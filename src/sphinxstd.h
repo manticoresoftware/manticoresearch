@@ -923,6 +923,22 @@ public:
 			m_pData[i] = rhs;
 	}
 
+	/// insert into a middle
+	void Insert ( int iIndex, const T & tValue )
+	{
+		if ( iIndex==m_iLength )
+		{
+			Add ( tValue );
+			return;
+		}
+
+		if ( m_iLength>=m_iLimit )
+			Reserve ( m_iLength+1 );
+
+		memmove ( m_pData+iIndex+1, m_pData+iIndex, ( m_iLength++-iIndex ) * sizeof tValue );
+		m_pData[iIndex] = tValue;
+	}
+
 protected:
 	int		m_iLength;		///< entries actually used
 	int		m_iLimit;		///< entries allocated

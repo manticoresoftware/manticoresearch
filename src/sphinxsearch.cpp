@@ -487,73 +487,47 @@ protected:
 								FSMmultinear ( const CSphVector<ExtNode_i *> & dNodes, DWORD uDupeMask, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
 	inline void ResetFSM()
 	{
-		m_uLastPos = 0;
-		m_uLastMatchLen = 0;
-		m_uWords = 0;
-		m_uWeight = 0;
-		m_uFirstHit = 0;
+		m_iRing = m_uLastP = m_uPrelastP = 0;
 	}
 	bool						HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget );
 	inline static const char*	GetName() { return "ExtMultinear"; }
-	static const bool			bTermsTree = false;		///< we work with ExtTerm nodes
+	static const bool			bTermsTree = true;	///< we work with generic (not just ExtTerm) nodes
 protected:
-	int							m_iNear;	///< the NEAR distance
-	DWORD						m_uLastPos;	///< position of the last hit
-	DWORD						m_uLastMatchLen; ///< the length of the previous hit
-	DWORD						m_uWords;	///< already counted words
-	DWORD						m_uWordsExpected; ///< now many hits we're expect
-	DWORD						m_uWeight;	///< weight accum
-	DWORD						m_uFirstHit; ///< hitpos of the beginning of the match chain
+	int							m_iNear;			///< the NEAR distance
+	DWORD						m_uPrelastP;
+	DWORD						m_uPrelastML;
+	DWORD						m_uPrelastSL;
+	DWORD						m_uPrelastW;
+	DWORD						m_uLastP;			///< position of the last hit
+	DWORD						m_uLastML;			///< the length of the previous hit
+	DWORD						m_uLastSL;			///< the length of the previous hit in Query
+	DWORD						m_uLastW;			///< last weight
+	DWORD						m_uWordsExpected;	///< now many hits we're expect
+	DWORD						m_uWeight;			///< weight accum
+	DWORD						m_uFirstHit;		///< hitpos of the beginning of the match chain
+	DWORD						m_uFirstQpos;		///< Q-position of the head of the chain
+	CSphVector<DWORD>			m_dQpos;			///< query positions for multinear
+	CSphVector<ExtHit_t>		m_dRing;			///< ring buffer for multihit data
+	int							m_iRing;			///< the head of the ring
+	bool						m_bTwofer;			///< if we have 2- or N-way NEAR
+private:
+	inline int RingTail() const
+	{
+		return ( m_iRing + m_dQpos.GetLength() - 1 ) % m_uWordsExpected;
+	}
+	inline void Add2Ring ( const ExtHit_t* pHit )
+	{
+		if ( !m_bTwofer )
+			m_dRing [ RingTail() ] = *pHit;
+	}
+	inline void ShiftRing()
+	{
+		if ( ++m_iRing==(int)m_uWordsExpected )
+			m_iRing=0;
+	}
 };
 /// exact phrase streamer
 typedef ExtNWay_c<FSMmultinear> ExtMultinear_c;
-
-/// phrase A-near-phrase B streamer
-class ExtNear_c : public ExtNode_i
-{
-public:
-	ExtNear_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup & tSetup, int iMaxDistance );
-	~ExtNear_c();
-	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
-	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
-	virtual void				Reset ( const ISphQwordSetup & tSetup );
-	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
-	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
-	virtual bool				GotHitless () { return false; }
-	virtual void				DebugDump ( int iLevel )
-	{
-		DebugIndent ( iLevel );
-		printf ( "ExtNear\n" );
-		m_pNode->DebugDump ( iLevel+1 );
-	}
-
-	// the main logical condition
-	inline bool IsAppropriateHit ( const ExtHit_t * pLeft, const ExtHit_t * pRight )
-	{
-		return pLeft && pRight															///< both members exist
-			&& pLeft->m_uDocid!=DOCID_MAX && pRight->m_uDocid!=DOCID_MAX				///< both members are valid
-			&& pLeft->m_uDocid==pRight->m_uDocid										///< both are about the same doc
-			/// and the main NEAR condition-filter
-			&& ( ( ( HITMAN::GetLCS ( pLeft->m_uHitpos ) < HITMAN::GetLCS ( pRight->m_uHitpos ) ) && ( HITMAN::GetLCS ( pLeft->m_uHitpos ) + pLeft->m_uMatchlen + m_iNear>HITMAN::GetLCS ( pRight->m_uHitpos ) ) )
-				| ( ( HITMAN::GetLCS ( pLeft->m_uHitpos )>=HITMAN::GetLCS ( pRight->m_uHitpos ) ) && ( HITMAN::GetLCS ( pRight->m_uHitpos ) + pRight->m_uMatchlen + m_iNear>HITMAN::GetLCS ( pLeft->m_uHitpos ) ) ) );
-	}
-
-private:
-	int					m_iNear;				///< the main param of the NEAR
-	ExtAnd_c *			m_pNode;				///< the basic filter for the near
-	const ExtDoc_t *	m_pDoc;					///< current doc from and-node
-	const ExtHit_t *	m_pHitsLeft;			///< the hits from the left part of the expression
-	const ExtHit_t *	m_pHitsRight;			///< the hits from the left part of the expression
-	ExtNode_i *			m_pNodeLeft;			///< left part (branch) of the expression
-	ExtNode_i *			m_pNodeRight;			///< right part (branch) of the expression
-	SphDocID_t			m_uMatchedDocid;		///< the current doc for hits extraction
-	ExtHit_t			m_dMyHits[MAX_HITS];	///< buffer for all my phrase hits; inherited m_dHits will receive filtered results
-	SphDocID_t			m_uHitsOverFor;			///< there are no more hits for matches block starting with this ID
-	const ExtDoc_t *	m_pMyDoc;				///< current doc for hits getter
-	const ExtHit_t *	m_pMyHit;				///< current hit for hits getter
-	SphDocID_t			m_uDocsMaxID;			///< max id in current docs chunk
-};
-
 
 /// quorum streamer
 class ExtQuorum_c : public ExtNode_i
@@ -888,8 +862,7 @@ static ExtNode_i * CreateMultiNode ( const XQNode_t * pQueryNode, const ISphQwor
 		ARRAY_FOREACH ( i, pQueryNode->m_dChildren )
 		{
 			dNodes.Add ( ExtNode_i::Create ( pQueryNode->m_dChildren[i], tSetup ) );
-			dNodes.Last()->m_iAtomPos = pQueryNode->m_dChildren[i]->m_iAtomPos;
-		// assert ( dNodes.Last()->m_iAtomPos>=0 );
+			assert ( dNodes.Last()->m_iAtomPos>=0 );
 		}
 
 		// compute dupe mask (needed for quorum only)
@@ -1083,7 +1056,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 			case SPH_QUERY_PROXIMITY:
 				return CreateMultiNode<ExtProximity_c,false> ( pNode, tSetup, true );
 
-			case SPH_QUERY_MULTINEAR:
+			case SPH_QUERY_NEAR:
 				return CreateMultiNode<ExtMultinear_c,false> ( pNode, tSetup, true );
 
 			case SPH_QUERY_QUORUM:
@@ -1106,9 +1079,17 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 
 				// couldn't create quorum, make an AND node instead
 				const CSphVector<XQKeyword_t> & dWords = pNode->m_dWords;
-				ExtNode_i * pCur = Create ( dWords[0], pNode, tSetup );
-				for ( int i=1; i<dWords.GetLength(); i++ )
-					pCur = new ExtAnd_c ( pCur, Create ( dWords[i], pNode, tSetup ), tSetup );
+				CSphVector<ExtNode_i*> dTerms ( dWords.GetLength() );
+				ARRAY_FOREACH ( i, dWords )
+					dTerms[i] = Create ( dWords[i], pNode, tSetup );
+
+				// make not simple, but optimized AND node.
+				dTerms.Sort ( ExtNodeTF_fn() );
+
+				ExtNode_i * pCur = dTerms[0];
+				for ( int i=1; i<dTerms.GetLength(); i++ )
+					pCur = new ExtAnd_c ( pCur, dTerms[i], tSetup );
+
 				if ( pNode->GetCount() )
 					return tSetup.m_pNodeCache->CreateProxy ( pCur, pNode, tSetup );
 				return pCur;
@@ -1157,7 +1138,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 		}
 
 		// Multinear could be also non-plain, so here is the second entry for it.
-		if ( pNode->GetOp()==SPH_QUERY_MULTINEAR )
+		if ( pNode->GetOp()==SPH_QUERY_NEAR )
 			return CreateMultiNode<ExtMultinear_c,false> ( pNode, tSetup, true );
 
 		// generic create
@@ -1175,7 +1156,6 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 			{
 				case SPH_QUERY_OR:			pCur = new ExtOr_c ( pCur, pNext, tSetup ); break;
 				case SPH_QUERY_AND:			pCur = new ExtAnd_c ( pCur, pNext, tSetup ); break;
-				case SPH_QUERY_NEAR:		pCur = new ExtNear_c ( pCur, pNext, tSetup, pNode->m_iOpArg ); break;
 				case SPH_QUERY_ANDNOT:		pCur = new ExtAndNot_c ( pCur, pNext, tSetup ); break;
 				case SPH_QUERY_SENTENCE:	pCur = new ExtUnit_c ( pCur, pNext, pNode->m_uFieldMask, tSetup, MAGIC_WORD_SENTENCE ); break;
 				case SPH_QUERY_PARAGRAPH:	pCur = new ExtUnit_c ( pCur, pNext, pNode->m_uFieldMask, tSetup, MAGIC_WORD_PARAGRAPH ); break;
@@ -1937,380 +1917,6 @@ inline int BispanLen ( const ExtHit_t * pLeft, const ExtHit_t * pRight )
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtNear_c::ExtNear_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup & tSetup, int iMaxDistance ) :
-	m_iNear ( iMaxDistance ) ,
-	m_pDoc ( NULL ),
-	m_pHitsLeft ( NULL ),
-	m_pHitsRight ( NULL ),
-	m_pNodeLeft ( pFirst ),
-	m_pNodeRight ( pSecond ),
-	m_uMatchedDocid ( 0 ),
-	m_pMyDoc ( NULL ),
-	m_pMyHit ( NULL ),
-	m_uDocsMaxID ( 0 )
-{
-	assert ( pFirst );
-	assert ( pSecond );
-	m_pNode = new ExtAnd_c ( pFirst, pSecond, tSetup );
-}
-
-ExtNear_c::~ExtNear_c()
-{
-	SafeDelete ( m_pNode );
-}
-
-const ExtDoc_t * ExtNear_c::GetDocsChunk ( SphDocID_t * pMaxID )
-{
-	m_uMaxID = 0;
-
-	// the shortcuts
-	const ExtDoc_t * pDoc = m_pDoc;
-	const ExtHit_t * pHitLeft = m_pHitsLeft;
-	const ExtHit_t * pHitRight = m_pHitsRight;
-
-	CSphRowitem * pDocinfo = m_pDocinfo;
-	SphDocID_t uCurDocID = DOCID_MAX;
-	enum State_e { ST_ENTERED, ST_NODOCS, ST_EXAMINEDOC, ST_LHITSSEEK, ST_RHITSSEEK,
-			ST_LHITSEMIT, ST_RHITSEMIT, ST_EMITHITS, ST_STEPNEXTDOC, ST_STEPNEXTHIT,
-			ST_DOSEEKDOC, ST_DOEMITHITS, ST_DOCFINISHED, ST_STEPFINALIZE, ST_FINALIZE, ST_FINISHED };
-
-	int iHit = 0;
-	int iDoc = 0;
-	State_e eState = ST_ENTERED;
-
-	while ( eState!=ST_FINISHED )
-		switch ( eState )
-		{
-		// the initial state
-		case ST_ENTERED:
-			if ( !pDoc || pDoc->m_uDocid==DOCID_MAX )
-			{
-				eState = ST_NODOCS;
-				break;
-			}
-			eState = ST_EXAMINEDOC;
-			// break? No, no break, just keep going!
-		// Check if the current doc is appropriate, or collect the hits from already approved doc
-		case ST_EXAMINEDOC:
-		case ST_EMITHITS:
-			if ( !pHitLeft || pHitLeft->m_uDocid==DOCID_MAX )
-			{
-				eState = ( eState==ST_EXAMINEDOC ) ? ST_LHITSSEEK : ST_LHITSEMIT;
-				break;
-			}
-			if ( !pHitRight || pHitRight->m_uDocid==DOCID_MAX )
-			{
-				eState = ( eState==ST_EXAMINEDOC ) ? ST_RHITSSEEK : ST_RHITSEMIT;
-				break;
-			}
-			if ( pHitLeft->m_uDocid==pHitRight->m_uDocid )
-				eState = ( eState==ST_EXAMINEDOC ) ? ST_DOSEEKDOC : ST_DOEMITHITS;
-			else if ( pHitRight->m_uDocid > pHitLeft->m_uDocid )
-				pHitLeft++;
-			else if ( pHitLeft->m_uDocid > pHitRight->m_uDocid )
-				pHitRight++;
-			break;
-		// Actually examine, and then accept or decline the found doc
-		case ST_DOSEEKDOC:
-			if ( IsAppropriateHit ( pHitLeft, pHitRight ) )
-			{
-				ExtDoc_t & tDoc = m_dDocs[iDoc++];
-				tDoc.m_uDocid = uCurDocID = pHitLeft->m_uDocid;
-				tDoc.m_uFields = pDoc->m_uFields;
-				tDoc.m_uHitlistOffset = -1;
-				tDoc.m_fTFIDF = pDoc->m_fTFIDF;
-				CopyExtDocinfo ( tDoc, *pDoc, &pDocinfo, m_iStride );
-				eState = ST_DOEMITHITS;
-				break;
-			}
-			eState = ST_STEPNEXTDOC;
-			break;
-		// Actually examine, and then emit or decline the found hit
-		case ST_DOEMITHITS:
-			if ( IsAppropriateHit ( pHitLeft, pHitRight ) )
-			{
-				if ( pHitLeft->m_uDocid!=uCurDocID )
-				{
-					eState = ST_DOCFINISHED;
-					break;
-				}
-
-				int iDistance = HITMAN::GetLCS ( pHitRight->m_uHitpos ) - HITMAN::GetLCS ( pHitLeft->m_uHitpos );
-				const ExtHit_t *&pL = (iDistance>0)?pHitLeft:pHitRight;
-				const ExtHit_t *&pR = (iDistance>0)?pHitRight:pHitLeft;
-				iDistance = (iDistance>0)?iDistance:-iDistance;
-				m_dMyHits[iHit].m_uDocid = uCurDocID;
-				m_dMyHits[iHit].m_uHitpos = pL->m_uHitpos;
-				m_dMyHits[iHit].m_uQuerypos = pL->m_uQuerypos;
-				m_dMyHits[iHit].m_uMatchlen = m_dMyHits[iHit].m_uSpanlen = (WORD)iDistance + pR->m_uMatchlen;
-				m_dMyHits[iHit++].m_uWeight = pHitLeft->m_uWeight + pHitRight->m_uWeight;
-				if ( iHit==MAX_HITS-1 )
-				{
-					eState = ST_STEPFINALIZE;
-					break;
-				}
-			}
-			eState = ST_STEPNEXTHIT;
-			// break? No, no break, just keep going!
-		// The pair of hits processed; step to the next one
-		case ST_STEPNEXTDOC:
-		case ST_STEPNEXTHIT:
-		case ST_STEPFINALIZE:
-			if ( pHitRight->m_uHitpos < pHitLeft->m_uHitpos ) // !COMMIT can we compare SPZ hits?
-				pHitRight++;
-			else
-				pHitLeft++;
-			if ( eState==ST_STEPFINALIZE )
-				eState = ST_FINALIZE;
-			else if ( eState==ST_STEPNEXTDOC )
-				eState = ST_EXAMINEDOC;
-			else
-				eState = ST_EMITHITS;
-			break;
-		// The left branch of the hist is over; Give me more
-		case ST_LHITSSEEK:
-		case ST_LHITSEMIT:
-			pHitLeft = m_pNodeLeft->GetHitsChunk ( pDoc, m_uDocsMaxID );
-			if ( !pHitLeft )
-				eState = ST_FINALIZE;
-			else
-				eState = ( eState==ST_LHITSSEEK ) ? ST_EXAMINEDOC : ST_EMITHITS;
-			break;
-		// The right branch of the hits is over; Give me more
-		case ST_RHITSSEEK:
-		case ST_RHITSEMIT:
-			pHitRight = m_pNodeRight->GetHitsChunk ( pDoc, m_uDocsMaxID );
-			if ( !pHitRight )
-				eState = ST_FINALIZE;
-			else
-				eState = ( eState==ST_RHITSSEEK ) ? ST_EXAMINEDOC : ST_EMITHITS;
-			break;
-		// The docs chunk is over; give me more
-		case ST_NODOCS:
-			pDoc = m_pNode->GetDocsChunk ( &m_uDocsMaxID );
-			eState = pDoc ? ST_ENTERED : ST_FINALIZE;
-			break;
-		// The last doc is processed. Step forward and start all again
-		case ST_DOCFINISHED:
-			pDoc++;
-			eState = ST_ENTERED;
-			break;
-		// We are finishing. Emit the end marker and say Good bye!
-		case ST_FINALIZE:
-			assert ( iHit>=0 && iHit<MAX_HITS );
-			m_dMyHits[iHit].m_uDocid = DOCID_MAX; // end marker
-			eState = ST_FINISHED;
-			break;
-		// Shit happens..
-		default:
-			/// unknown/unhandled state
-			assert ( 0 && "Unknown or unhandled state in GetDocsChunk" );
-		}
-
-	// store the shortcuts
-	m_pDoc = pDoc;
-	m_pHitsLeft = pHitLeft;
-	m_pHitsRight = pHitRight;
-	m_uMatchedDocid = 0;
-
-	// reset current positions for hits chunk getter
-	m_pMyDoc = m_dDocs;
-	m_pMyHit = m_dMyHits;
-	return ReturnDocsChunk ( iDoc, pMaxID );
-}
-
-
-const ExtHit_t * ExtNear_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
-{
-	// if we already emitted hits for this matches block, do not do that again
-	SphDocID_t uFirstMatch = pDocs->m_uDocid;
-	if ( uFirstMatch==m_uHitsOverFor )
-		return NULL;
-
-	// early reject whole block
-	if ( pDocs->m_uDocid > m_uMaxID ) return NULL;
-	if ( m_uMaxID && m_dDocs[0].m_uDocid > uMaxID ) return NULL;
-
-	// shortcuts
-	const ExtDoc_t * pMyDoc = m_pMyDoc;
-	const ExtHit_t * pMyHit = m_pMyHit;
-	assert ( pMyDoc );
-	assert ( pMyHit );
-	const ExtHit_t * pHitLeft = m_pHitsLeft;
-	const ExtHit_t * pHitRight = m_pHitsRight;
-	SphDocID_t uMatchedDocid = m_uMatchedDocid;
-	const ExtDoc_t * pDoc = m_pDoc;
-
-	// filter and copy hits from m_dMyHits
-	int iHit = 0;
-
-	enum State_e { ST_ENTERED, ST_STEPHIT, ST_EMITHIT, ST_GETNEXTDOC, ST_GETMATCHEDDOC, ST_MYHITSOVER,
-		ST_LHITSSEEK, ST_RHITSSEEK, ST_STEPNEXTHIT, ST_HITSOVER, ST_STEPFINALIZE, ST_FINALIZE, ST_FINISHED };
-	State_e eState = ST_ENTERED;
-
-	while ( eState!=ST_FINISHED )
-		switch ( eState )
-	{
-		case ST_ENTERED:
-			if ( !uMatchedDocid )
-			{
-				eState = ST_GETMATCHEDDOC;
-				break;
-			}
-			eState = ST_STEPHIT;
-		case ST_STEPHIT:
-			while ( pMyHit->m_uDocid < uMatchedDocid ) pMyHit++;
-			if ( pMyHit->m_uDocid==DOCID_MAX )
-			{
-				eState = ST_MYHITSOVER;
-				break;
-			}
-			eState = ST_EMITHIT;
-			// no break, keep going here
-		case ST_EMITHIT:
-			assert ( uMatchedDocid!=0 && uMatchedDocid!=DOCID_MAX );
-			if ( pMyHit->m_uDocid==uMatchedDocid )
-				m_dHits[iHit++] = *pMyHit++;
-			else
-				eState = ST_GETNEXTDOC;
-			if ( iHit==MAX_HITS-1 )
-					eState = ST_FINALIZE;
-			break;
-		case ST_GETNEXTDOC:
-			uMatchedDocid = 0;
-			pMyDoc++;
-			eState = ST_GETMATCHEDDOC;
-			// no break; keep going.
-		case ST_GETMATCHEDDOC:
-			do
-			{
-				while ( pMyDoc->m_uDocid < pDocs->m_uDocid ) pMyDoc++;
-				if ( pMyDoc->m_uDocid==DOCID_MAX ) break;
-
-				while ( pDocs->m_uDocid < pMyDoc->m_uDocid ) pDocs++;
-				if ( pDocs->m_uDocid==DOCID_MAX ) break;
-			} while ( pDocs->m_uDocid!=pMyDoc->m_uDocid );
-			if ( pDocs->m_uDocid!=pMyDoc->m_uDocid )
-			{
-				assert ( pMyDoc->m_uDocid==DOCID_MAX || pDocs->m_uDocid==DOCID_MAX );
-				eState = ST_HITSOVER;
-				break;
-			}
-			assert ( pDocs->m_uDocid==pMyDoc->m_uDocid );
-			assert ( pDocs->m_uDocid!=0 );
-			assert ( pDocs->m_uDocid!=DOCID_MAX );
-
-			uMatchedDocid = pDocs->m_uDocid;
-			eState = ST_STEPHIT;
-			break;
-		case ST_MYHITSOVER:
-			if ( !pDoc )
-			{
-				eState = ST_FINALIZE;
-				break;
-			}
-			if ( !pHitLeft || pHitLeft->m_uDocid==DOCID_MAX )
-			{
-				eState = ST_LHITSSEEK;
-				break;
-			}
-			if ( !pHitRight || pHitRight->m_uDocid==DOCID_MAX )
-			{
-				eState = ST_RHITSSEEK;
-				break;
-			}
-			if ( pHitLeft->m_uDocid!=pHitRight->m_uDocid )
-			{
-				eState = ST_HITSOVER;
-				break;
-			}
-			if ( IsAppropriateHit ( pHitLeft, pHitRight ) )
-			{
-				int iDistance = HITMAN::GetLCS ( pHitRight->m_uHitpos ) - HITMAN::GetLCS ( pHitLeft->m_uHitpos );
-				const ExtHit_t *&pL = (iDistance>0)?pHitLeft:pHitRight;
-				const ExtHit_t *&pR = (iDistance>0)?pHitRight:pHitLeft;
-				iDistance = (iDistance>0)?iDistance:-iDistance;
-				m_dHits[iHit].m_uDocid = uMatchedDocid;
-				m_dHits[iHit].m_uHitpos = pL->m_uHitpos;
-				m_dHits[iHit].m_uQuerypos = pL->m_uQuerypos;
-				m_dHits[iHit].m_uMatchlen = m_dHits[iHit].m_uSpanlen = (WORD)iDistance + pR->m_uMatchlen;
-				m_dHits[iHit++].m_uWeight = pHitLeft->m_uWeight + pHitRight->m_uWeight;
-				if ( iHit==MAX_HITS-1 )
-				{
-					eState = ST_STEPFINALIZE;
-					break;
-				}
-			}
-			eState = ST_STEPNEXTHIT;
-			// no break;
-		case ST_STEPNEXTHIT:
-		case ST_STEPFINALIZE:
-			if ( pHitRight->m_uHitpos < pHitLeft->m_uHitpos ) // !COMMIT can we compare SPZ hits?
-				pHitRight++;
-			else
-				pHitLeft++;
-			eState = ( eState==ST_STEPFINALIZE ) ? ST_FINALIZE : ST_MYHITSOVER;
-			break;
-		case ST_LHITSSEEK:
-			pHitLeft = m_pNodeLeft->GetHitsChunk ( pDoc, m_uDocsMaxID );
-			eState = pHitLeft ? ST_MYHITSOVER : ST_HITSOVER;
-			break;
-		case ST_RHITSSEEK:
-			pHitRight = m_pNodeRight->GetHitsChunk ( pDoc, m_uDocsMaxID );
-			eState = pHitRight ? ST_MYHITSOVER : ST_HITSOVER;
-			break;
-		case ST_HITSOVER:
-			pDoc = NULL;
-			// no break;
-		case ST_FINALIZE:
-			m_dHits[iHit].m_uDocid = DOCID_MAX;
-			eState = ST_FINISHED;
-			break;
-		default:
-			/// unknown/unhandled state
-			assert ( 0 && "Unknown or unhandled state in GetHitsChunk" );
-	}
-
-	// save shortcuts
-	m_pMyDoc = pMyDoc;
-	m_pMyHit = pMyHit;
-	m_pHitsLeft = pHitLeft;
-	m_pHitsRight = pHitRight;
-	m_uMatchedDocid = uMatchedDocid;
-	m_pDoc = pDoc;
-
-	assert ( iHit>=0 && iHit<MAX_HITS );
-	m_dHits[iHit].m_uDocid = DOCID_MAX; // end marker
-	return iHit ? m_dHits : NULL;
-}
-
-void ExtNear_c::Reset ( const ISphQwordSetup & tSetup )
-{
-	assert ( m_pNode );
-	m_pNode->Reset ( tSetup );
-	m_pHitsLeft = NULL;
-	m_pHitsRight = NULL;
-	m_uMatchedDocid = 0;
-	m_pDoc = NULL;
-	m_pMyDoc = NULL;
-	m_pMyHit = NULL;
-	m_uDocsMaxID = 0;
-}
-
-void ExtNear_c::GetQwords ( ExtQwordsHash_t & hQwords )
-{
-	assert ( m_pNode );
-	m_pNode->GetQwords ( hQwords );
-}
-
-void ExtNear_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
-{
-	assert ( m_pNode );
-	m_pNode->SetQwordsIDF ( hQwords );
-}
-
-//////////////////////////////////////////////////////////////////////////
-
 const ExtDoc_t * ExtOr_c::GetDocsChunk ( SphDocID_t * pMaxID )
 {
 	m_uMaxID = 0;
@@ -3025,6 +2631,14 @@ FSMmultinear::FSMmultinear ( const CSphVector<ExtNode_i *> & dNodes, DWORD, cons
 	: m_iNear ( tNode.m_iOpArg )
 	, m_uWordsExpected ( dNodes.GetLength() )
 {
+	if ( m_uWordsExpected==2 )
+		m_bTwofer = true;
+	else
+	{
+		m_dQpos.Reserve ( m_uWordsExpected );
+		m_dRing.Resize ( m_uWordsExpected );
+		m_bTwofer = false;
+	}
 	assert ( m_iNear>0 );
 }
 
@@ -3032,48 +2646,154 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 {
 	// walk through the hitlist and update context
 	DWORD uHitpos = HITMAN::GetLCS ( pHit->m_uHitpos );
-
-	// probably new chain
-	if ( m_uLastPos==0 )
-	{
-		m_uFirstHit = m_uLastPos = uHitpos;
-		m_uLastMatchLen = pHit->m_uMatchlen;
-		m_uWords = 1;
-		m_uWeight = pHit->m_uWeight;
-		return false;
-	}
+	DWORD uQpos = pHit->m_uQuerypos;
 
 	// skip dupe hit (may be emitted by OR node, for example)
-	if ( m_uLastPos==uHitpos )
-		return false;
-
-	// unexpected (too high) position - reset the chain
-	if ( (m_uLastPos + m_uLastMatchLen + m_iNear)<=uHitpos )
+	if ( m_uLastP==uHitpos )
 	{
-		m_uLastPos = 0;
+		// check if the hit is subset of another one
+		if ( m_uPrelastP && m_uLastML < pHit->m_uMatchlen )
+		{
+			// roll back pre-last to check agains this new hit.
+			m_uLastML = m_uPrelastML;
+			m_uLastSL = m_uPrelastSL;
+			m_uFirstHit = m_uLastP = m_uPrelastP;
+			m_uWeight = m_uWeight - m_uLastW + m_uPrelastW;
+		} else
+			return false;
+	}
+
+	// probably new chain
+	if ( m_uLastP==0 || ( m_uLastP + m_uLastML + m_iNear )<=uHitpos )
+	{
+		m_uFirstHit = m_uLastP = uHitpos;
+		m_uLastML = pHit->m_uMatchlen;
+		m_uLastSL = pHit->m_uSpanlen;
+		m_uWeight = m_uLastW = pHit->m_uWeight;
+		if ( m_bTwofer )
+			m_uFirstQpos = uQpos;
+		else
+		{
+			m_dQpos.Resize(1);
+			m_dQpos[0] = uQpos;
+			Add2Ring ( pHit );
+		}
 		return false;
 	}
 
-	m_uWords++;
+	// this hit (with such querypos) already was there. Skip the hit.
+	if ( m_bTwofer )
+	{
+		// special case for twofer: hold the overlapping
+		if ( ( m_uFirstHit + m_uLastML )>uHitpos
+			&& ( m_uFirstHit + m_uLastML )<( uHitpos + pHit->m_uMatchlen )
+			&& m_uLastML!=pHit->m_uMatchlen )
+		{
+			m_uFirstHit = m_uLastP = uHitpos;
+			m_uLastML = pHit->m_uMatchlen;
+			m_uLastSL = pHit->m_uSpanlen;
+			m_uWeight = m_uLastW = pHit->m_uWeight;
+			m_uFirstQpos = uQpos;
+			return false;
+		}
+		if ( uQpos==m_uFirstQpos )
+		{
+			if ( m_uLastP < uHitpos )
+			{
+				m_uPrelastML = m_uLastML;
+				m_uPrelastSL = m_uLastSL;
+				m_uPrelastP = m_uLastP;
+				m_uPrelastW = pHit->m_uWeight;
+
+				m_uFirstHit = m_uLastP = uHitpos;
+				m_uLastML = pHit->m_uMatchlen;
+				m_uLastSL = pHit->m_uSpanlen;
+				m_uWeight = m_uLastW = m_uPrelastW;
+				m_uFirstQpos = uQpos;
+			}
+			return false;
+		}
+	} else
+	{
+		if ( uQpos < m_dQpos[0] )
+			m_dQpos.Insert ( 0, uQpos );
+		else if ( uQpos > m_dQpos.Last() )
+			m_dQpos.Add ( uQpos );
+		else if ( uQpos!=m_dQpos[0] && uQpos!=m_dQpos.Last() )
+		{
+			int iEnd = m_dQpos.GetLength();
+			int iStart = 0;
+			int iMid = -1;
+			while ( iEnd-iStart>1 )
+			{
+				iMid = ( iStart + iEnd ) / 2;
+				if ( uQpos==m_dQpos[iMid] )
+				{
+					const ExtHit_t& dHit = m_dRing[m_iRing];
+					// last addition same as the first. So, we can shift
+					if ( uQpos==dHit.m_uQuerypos )
+					{
+						m_uWeight -= dHit.m_uWeight;
+						m_uFirstHit = HITMAN::GetLCS ( dHit.m_uHitpos );
+						ShiftRing();
+					// last addition same as the first. So, we can shift
+					} else if ( uQpos==m_dRing [ RingTail() ].m_uQuerypos )
+						m_uWeight -= m_dRing [ RingTail() ].m_uWeight;
+					else
+						return false;
+				}
+
+				if ( uQpos<m_dQpos[iMid] )
+					iEnd = iMid;
+				else
+					iStart = iMid;
+			}
+			m_dQpos.Insert ( iEnd, uQpos );
+		// last addition same as the first. So, we can shift
+		} else if ( uQpos==m_dRing[m_iRing].m_uQuerypos )
+		{
+			m_uWeight -= m_dRing[m_iRing].m_uWeight;
+			m_uFirstHit = HITMAN::GetLCS ( m_dRing[m_iRing].m_uHitpos );
+			ShiftRing();
+		// last addition same as the tail. So, we can move the tail onto it.
+		} else if ( uQpos==m_dRing [ RingTail() ].m_uQuerypos )
+			m_uWeight -= m_dRing [ RingTail() ].m_uWeight;
+		else
+			return false;
+	}
+
 	m_uWeight += pHit->m_uWeight;
-	m_uLastMatchLen = pHit->m_uMatchlen;
+	m_uLastML = pHit->m_uMatchlen;
+	m_uLastSL = pHit->m_uSpanlen;
+	Add2Ring ( pHit );
 
 	// finally got the whole chain - emit it!
-	// warning: we don't support overlapping (but it is possible, by the way).
-	if ( m_uWords==m_uWordsExpected )
+	// warning: we don't support overlapping in generic chains.
+	if ( m_bTwofer || (int)m_uWordsExpected==m_dQpos.GetLength() )
 	{
 		dTarget->m_uDocid = pHit->m_uDocid;
 		dTarget->m_uHitpos = Hitpos_t ( m_uFirstHit ); // !COMMIT strictly speaking this is creation from LCS not value
-		dTarget->m_uQuerypos = -1;
-		dTarget->m_uSpanlen = dTarget->m_uMatchlen = (WORD)( uHitpos - m_uFirstHit + m_uLastMatchLen );
+		dTarget->m_uMatchlen = (WORD)( uHitpos - m_uFirstHit + m_uLastML );
 		dTarget->m_uWeight = m_uWeight;
+		m_uPrelastP = 0;
 
-		// reset the chain
-		m_uLastPos = 0;
+		if ( m_bTwofer ) // for exactly 2 words allow overlapping - so, just shift the chain, not reset it
+		{
+			dTarget->m_uQuerypos = Min ( m_uFirstQpos, pHit->m_uQuerypos );
+			dTarget->m_uSpanlen = 2;
+			m_uFirstHit = m_uLastP = uHitpos;
+			m_uWeight = pHit->m_uWeight;
+			m_uFirstQpos = pHit->m_uQuerypos;
+		} else
+		{
+			dTarget->m_uQuerypos = m_dQpos[0];
+			dTarget->m_uSpanlen = m_dQpos.GetLength();
+			m_uLastP = 0;
+		}
 		return true;
 	}
 
-	m_uLastPos = uHitpos;
+	m_uLastP = uHitpos;
 	return false;
 }
 
@@ -4916,7 +4636,7 @@ void CSphHitMarker::Mark ( CSphVector<SphHitMark_t> & dMarked )
 		{
 			SphHitMark_t tMark;
 			tMark.m_uPosition = HITMAN::GetPos ( pHits->m_uHitpos );
-			tMark.m_uSpan = pHits->m_uSpanlen;
+			tMark.m_uSpan = pHits->m_uMatchlen;
 
 			dMarked.Add ( tMark );
 		}

@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>MVA and string via MySQL</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srcmain
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT * FROM test_table
+	sql_attr_uint	= idd
+	sql_attr_string	= str1
+	sql_attr_uint	= tag
+	sql_attr_multi	= uint mva1 from field
+	sql_attr_string	= str2
+	sql_attr_multi	= uint mva2 from field
+}
+
+index main
+{
+	source			= srcmain
+	path			= <data_path/>/main
+    charset_type 	= utf-8
+}
+</config>
+
+<indexer>
+	mem_limit		= 16M
+</indexer>
+
+<sphqueries>
+<sphinxql>select * from main order by idd asc</sphinxql>
+<sphinxql>select * from main where match('main') order by idd asc</sphinxql>
+<sphinxql>select * from main where match('delta') order by idd asc</sphinxql>
+<sphinxql>select * from main where match('main | delta') order by idd asc</sphinxql>
+</sphqueries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`idd` int(11) NOT NULL default '0',
+	`tag` int(11) NOT NULL default '0',
+	`mva1` varchar(255) NOT NULL default '',
+	`mva2` varchar(255) NOT NULL default '',
+	`body` varchar(255) NOT NULL default '',
+	`str1` varchar(255) NOT NULL default '',
+	`str2` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 1, 1, '',			'1 2 3','main and delta', 'some attribute', 'more data are here' ),
+( 2, 2, 0, '2 22 222',	'',		'main and delta' , 'is it sunny', ''),
+( 3, 3, 0, '3 33 333',	'5 6 7','main and delta' , '', 'cool place' ),
+( 4, 4, 1, '', 			'',		'delta', '', '' ),
+( 5, 5, 1, '', 			'',		'delta', 'good stuff', 'step ahead' ),
+( 6, 6, 0, '6', 		'',		'delta', 'reality real', 'reality augumented' ),
+( 7, 7, 1, '7', 		'',		'main', 'how its going', 'well' ),
+( 8, 8, 1, '8',			'',		'main', 'its going...', '?!?!?!' ),
+( 9, 9, 0, '1 10 100',	'9 0 1','delta', '', '' ),
+(10, 10, 0, '2 20 200',	'',	 	'delta', '', 'a' ),
+(11, 11, 0, '',			'',		'delta', 'b', '' )
+</db_insert>
+
+</test>

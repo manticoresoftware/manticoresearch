@@ -1329,7 +1329,7 @@ extern int64_t g_iIndexerPoolStartHit;
 void sigsegv ( int sig )
 {
 	sphSafeInfo ( STDERR_FILENO, "*** Oops, indexer crashed! Please send the following report to developers." );
-	sphSafeInfo ( STDERR_FILENO, "-------------- cut here ---------------" );
+	sphSafeInfo ( STDERR_FILENO, "-------------- report begins here ---------------" );
 	sphSafeInfo ( STDERR_FILENO, "Current document: docid=%l, hits=%l", g_iIndexerCurrentDocID, g_iIndexerCurrentHits );
 	sphSafeInfo ( STDERR_FILENO, "Current batch: minid=%l, maxid=%l", g_iIndexerCurrentRangeMin, g_iIndexerCurrentRangeMax );
 	sphSafeInfo ( STDERR_FILENO, "Hit pool start: docid=%l, hit=%l", g_iIndexerPoolStartDocID, g_iIndexerPoolStartHit );

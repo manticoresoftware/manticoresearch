@@ -1283,7 +1283,7 @@ void sphBacktrace ( int iFD )
 	void * pMyStack = sphMyStack();
 	int iStackSize = sphMyStackSize();
 
-	sphSafeInfo ( iFD, "-------------- cut here ---------------" );
+	sphSafeInfo ( iFD, "-------------- backtrace begins here ---------------" );
 	sphSafeInfo ( iFD, "Sphinx " SPHINX_VERSION );
 #ifdef COMPILER
 	sphSafeInfo ( iFD, "Program compiled with " COMPILER );
@@ -1360,9 +1360,12 @@ void sphBacktrace ( int iFD )
 		sphSafeInfo ( iFD, "Something wrong in frame pointers, backtrace failed (fp=%p)", pNewFP );
 	else
 #endif // !HAVE_BACKTRACE
-		sphSafeInfo ( iFD, "Backtrace looks OK. Now you have to resolve the numbers above and attach resolved values to the bug report. See the section about resolving in the documentation." );
-
-	sphSafeInfo ( iFD, "-------------- cut here ---------------" );
+		sphSafeInfo ( iFD, "Backtrace looks OK. Now you have to do following steps:\n"
+							"  1. Run the command over the crashed binary (for example, 'indexer'):\n"
+							"     nm -n indexer > indexer.sym\n"
+							"  2. Attach the binary, generated .sym and the text of backtrace (see above) to the bug report.\n"
+							"Also you can read the section about resolving backtraces in the documentation.");
+	sphSafeInfo ( iFD, "-------------- backtrace ends here ---------------" );
 }
 
 #else // USE_WINDOWS

@@ -16976,8 +16976,6 @@ void CSphDictKeywords::DictEntry ( SphWordID_t, BYTE * sKeyword, int iDocs, int 
 			m_dDictChunks.Add ( m_pDictChunk );
 			m_iMemUse += sizeof(DictKeyword_t)*DICT_CHUNK;
 		}
-		pWord = m_pDictChunk++;
-		m_iDictChunkFree--;
 
 		// alloc keyword
 		if ( m_iKeywordChunkFree < iLen )
@@ -16993,11 +16991,12 @@ void CSphDictKeywords::DictEntry ( SphWordID_t, BYTE * sKeyword, int iDocs, int 
 			m_dKeywordChunks.Add ( m_pKeywordChunk );
 			m_iMemUse += KEYWORD_CHUNK;
 		}
-
 		// aw kay
 		break;
 	}
 
+	pWord = m_pDictChunk++;
+	m_iDictChunkFree--;
 	pWord->m_sKeyword = (char*)m_pKeywordChunk;
 	memcpy ( m_pKeywordChunk, sKeyword, iLen );
 	m_pKeywordChunk += iLen;

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>Crashing of indexer id64 with keywords dict</name>
+<requires>
+<id64/>
+</requires>
+<config>
+indexer
+{
+	mem_limit		= 64M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+source srcmain
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM table141
+	sql_attr_uint		= uint1
+}
+
+index main
+{
+	source			= srcmain
+	path			= <data_path/>/main
+	charset_type 	= utf-8
+	dict		= keywords
+}
+</config>
+
+<sphqueries>
+<!-- not necessary, by the fact that the indexer will crash -->
+<sphinxql>select * from main where match('00001')</sphinxql>
+</sphqueries>
+
+<db_create>
+CREATE TABLE `table141`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`uint1` int(11) NOT NULL default '0',
+	`body` varchar(25) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `table141`
+</db_drop>
+
+<db_insert>
+INSERT INTO `table141` VALUES (1, 1, '00001'), (2, 2, '00002'), (3, 3, '00003')
+</db_insert>
+
+</test>

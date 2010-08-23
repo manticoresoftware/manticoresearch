@@ -657,9 +657,16 @@ template < typename T > class CSphAutoArray
 {
 protected:
 	T *		m_pData;
+#ifndef NDEBUG
+	size_t			m_iLength; // for pretty-printers to work
+#endif
 
 public:
-	explicit	CSphAutoArray ( int iCount )	{ m_pData = ( iCount>0 ) ? new T [ iCount ] : NULL; }
+	explicit	CSphAutoArray ( int iCount )
+#ifndef NDEBUG
+	: m_iLength (iCount)
+#endif
+	{ m_pData = ( iCount>0 ) ? new T [ iCount ] : NULL; }
 				~CSphAutoArray ()				{ Reset (); }
 
 	void		Reset ()						{ SafeDeleteArray ( m_pData ); }
@@ -5950,7 +5957,7 @@ int CSphBin::ReadHit ( CSphAggregateHit * pOut, int iRowitems, CSphRowitem * pRo
 
 						ReadBytes ( m_sKeyword, (int)uDelta );
 						m_sKeyword[uDelta] = '\0';
-						tHit.m_iWordID = sphCRCWord<SphWordID_t> ( m_sKeyword ); // must be in sync with dict!
+						tHit.m_iWordID = sphCRCWord<DWORD> ( m_sKeyword ); // must be in sync with dict!
 
 #ifndef NDEBUG
 						assert ( ( m_iLastWordID<tHit.m_iWordID )

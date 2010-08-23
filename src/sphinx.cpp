@@ -7166,7 +7166,7 @@ bool CSphIndex_VLN::LoadPersistentMVA ( CSphString & sError )
 		return false;
 
 	CSphVector<SphDocID_t> dAffected ( uDocs );
-	fdReader.GetBytes ( &dAffected[0], uDocs*sizeof(DWORD) );
+	fdReader.GetBytes ( &dAffected[0], uDocs*sizeof(SphDocID_t) );
 
 	// collect the indexes of MVA schema attributes
 	CSphVector<CSphAttrLocator> dMvaLocators;

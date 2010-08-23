@@ -2014,30 +2014,30 @@ function RunTest ( $test_dir )
 			// standard run
 			if ( !$config->IsRt() )
 			{
-				$indexer_ret = RunIndexer ( $error, "--all" );
-				if ( $indexer_ret==1 )
-				{
-					if ( !HandleFailure ( $config, $report, $error, $nfailed ) )
-						$log .= "\tsubtest $subtest: error running indexer; see $report_file\n";
-					continue;
-
-				} else if ( $indexer_ret==2 )
+			$indexer_ret = RunIndexer ( $error, "--all" );
+				if ( $indexer_ret==2 )
 				{
 					fwrite ( $report, "$error\n" );
+				} else if ( $indexer_ret!=0 )
+				{
+					if ( !HandleFailure ( $config, $report, $error, $nfailed ) )
+						$log .= "\tsubtest $subtest: error running indexer with code $indexer_ret; see $report_file\n";
+					continue;
+
 				}
 			}
 
 			// additional optional runs (eg for merge tests)
 			$indexer_ret = $config->RunIndexerEx ( $error );
-			if ( $indexer_ret==1 )
-			{
-				if ( !HandleFailure ( $config, $report, $error, $nfailed ) )
-					$log .= "\tsubtest $subtest: error running indexer; see $report_file\n";
-				continue;
-
-			} else if ( $indexer_ret==2 )
+			if ( $indexer_ret==2 )
 			{
 				fwrite ( $report, "$error\n" );
+			} else if ( $indexer_ret!=0 )
+			{
+				if ( !HandleFailure ( $config, $report, $error, $nfailed ) )
+					$log .= "\tsubtest $subtest: error running indexer with code $indexer_ret; see $report_file\n";
+				continue;
+
 			}
 		}
 

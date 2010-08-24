@@ -243,6 +243,7 @@ static bool				g_bIOStats		= false;
 static bool				g_bCpuStats		= false;
 static bool				g_bOptNoDetach	= false;
 static bool				g_bOptNoLock	= false;
+static bool				g_bSafeTrace	= false;
 
 static volatile bool	g_bDoDelete			= false;	// do we need to delete any indexes?
 static volatile bool	g_bDoRotate			= false;	// flag that we are rotating now; set from SIGHUP; cleared on rotation success
@@ -1327,13 +1328,15 @@ BYTE * sphEncodeBase64 ( BYTE * pDst, const BYTE * pSrc, int iLen )
 #define SPH_TIME_PID_MAX_SIZE 256
 const char		g_sCrashedBannerAPI[] = "\n--- crashed SphinxAPI request dump ---\n";
 const char		g_sCrashedBannerMySQL[] = "\n--- crashed SphinxMYSQL request dump ---\n";
-static BYTE		g_dEncoded[ 2*Max ( sizeof(g_sCrashedBannerAPI), sizeof(g_sCrashedBannerMySQL) )+SPH_LAST_QUERY_MAX_SIZE*4/3 ];
+static BYTE		g_dEncoded[	SPH_TIME_PID_MAX_SIZE
+							+ 2 * Max ( sizeof(g_sCrashedBannerAPI), sizeof(g_sCrashedBannerMySQL) )
+							+ SPH_LAST_QUERY_MAX_SIZE*4/3 ];
 static BYTE		g_dQuery [SPH_LAST_QUERY_MAX_SIZE*4/3];
-static char		g_sCrashInfo [SPH_TIME_PID_MAX_SIZE] = "[none]\n";
+static char		g_sCrashInfo [SPH_TIME_PID_MAX_SIZE] = "[][]\n";
 static int		g_iCrashInfoLen = 0;
 
 #if USE_WINDOWS
-static char		g_sMinidump[SPH_TIME_PID_MAX_SIZE] = "\0";
+static char		g_sMinidump[SPH_TIME_PID_MAX_SIZE] = "\n";
 static int		g_iMinidumpLen = 0;
 #endif
 
@@ -1372,29 +1375,21 @@ void SphCrashLogger_c::HandleCrash ( int )
 LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 #endif // !USE_WINDOWS
 {
+	if ( g_iLogFile<0 )
+		CRASH_EXIT;
+
+	// log [time][pid]
 	lseek ( g_iLogFile, 0, SEEK_END );
 	sphWrite ( g_iLogFile, g_sCrashInfo, g_iCrashInfoLen );
 
-#if !USE_WINDOWS
-	sphBacktrace ( g_iLogFile );
-#else
-	sphBacktrace ( pExc, g_sMinidump );
-#endif
-
-	// log crashed query
-	if ( g_iLogFile<=0 )
-		CRASH_EXIT;
-
+	// log query
 	SphCrashLogger_c tQuery = m_tLastQuery;
-	if ( g_eWorkers==MPM_THREADS )
+	if ( g_eWorkers==MPM_THREADS && !g_bSafeTrace )
 	{
 		const SphCrashLogger_c * pQueryTLS = (SphCrashLogger_c *)sphThreadGet ( m_tLastQueryTLS );
 		if ( pQueryTLS )
 			tQuery = *pQueryTLS;
 	}
-
-	if ( !tQuery.m_pQuery || !tQuery.m_iSize )
-		CRASH_EXIT;
 
 	const char * sBanner = g_sCrashedBannerAPI;
 	int iBannerLen = sizeof( g_sCrashedBannerAPI )-1; // no need to append tail 0
@@ -1408,44 +1403,54 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 
 	BYTE * pEncoded = g_dEncoded;
 
-#if USE_WINDOWS
-	// mini-dump reference
-	memcpy ( pEncoded, g_sMinidump, g_iMinidumpLen );
-	pEncoded += g_iMinidumpLen;
-#endif
-
 	// BANNER head
 	memcpy ( pEncoded, sBanner, iBannerLen );
 	pEncoded += iBannerLen;
 
 	// query
-	if ( tQuery.m_bMySQL )
+	if ( tQuery.m_iSize )
 	{
-		memcpy ( pEncoded, tQuery.m_pQuery, tQuery.m_iSize );
-		pEncoded += tQuery.m_iSize;
-	} else
-	{
-		int iSize = Min ( tQuery.m_iSize, SPH_LAST_QUERY_MAX_SIZE-8 );
-		*(g_dQuery+0) = (BYTE)( tQuery.m_uCMD>>8 );
-		*(g_dQuery+1) = (BYTE)( tQuery.m_uCMD );
-		*(g_dQuery+2) = (BYTE)( tQuery.m_uVer>>8 );
-		*(g_dQuery+3) = (BYTE)( tQuery.m_uVer );
-		*(g_dQuery+4) = (BYTE)( iSize>>24 );
-		*(g_dQuery+5) = (BYTE)( iSize>>16 );
-		*(g_dQuery+6) = (BYTE)( iSize>>8 );
-		*(g_dQuery+7) = (BYTE)( iSize );
-		memcpy ( g_dQuery+8, tQuery.m_pQuery, iSize );
-		pEncoded = sphEncodeBase64 ( pEncoded, g_dQuery, Min ( tQuery.m_iSize+8, SPH_LAST_QUERY_MAX_SIZE ) );
+		if ( tQuery.m_bMySQL )
+		{
+			memcpy ( pEncoded, tQuery.m_pQuery, tQuery.m_iSize );
+			pEncoded += tQuery.m_iSize;
+		} else
+		{
+			int iSize = Min ( tQuery.m_iSize, SPH_LAST_QUERY_MAX_SIZE-8 );
+			*(g_dQuery+0) = (BYTE)( ( tQuery.m_uCMD>>8 ) & 0xff );
+			*(g_dQuery+1) = (BYTE)( tQuery.m_uCMD & 0xff );
+			*(g_dQuery+2) = (BYTE)( ( tQuery.m_uVer>>8 ) & 0xff );
+			*(g_dQuery+3) = (BYTE)( tQuery.m_uVer & 0xff );
+			*(g_dQuery+4) = (BYTE)( ( iSize>>24 ) & 0xff );
+			*(g_dQuery+5) = (BYTE)( ( iSize>>16 ) & 0xff );
+			*(g_dQuery+6) = (BYTE)( ( iSize>>8 ) & 0xff );
+			*(g_dQuery+7) = (BYTE)( iSize & 0xff );
+			memcpy ( g_dQuery+8, tQuery.m_pQuery, iSize );
+			pEncoded = sphEncodeBase64 ( pEncoded, g_dQuery, Min ( tQuery.m_iSize+8, SPH_LAST_QUERY_MAX_SIZE ) );
+		}
 	}
 
 	// BANNER tail
 	memcpy ( pEncoded, sBanner, iBannerLen );
 	pEncoded += iBannerLen;
 
+#if USE_WINDOWS
+	// mini-dump reference
+	memcpy ( pEncoded, g_sMinidump, g_iMinidumpLen );
+	pEncoded += g_iMinidumpLen;
+#endif
+
 	int iSize = pEncoded-g_dEncoded;
 
 	lseek ( g_iLogFile, 0, SEEK_END );
 	sphWrite ( g_iLogFile, g_dEncoded, iSize );
+
+	// log trace
+#if !USE_WINDOWS
+	sphBacktrace ( g_iLogFile, g_bSafeTrace );
+#else
+	sphBacktrace ( pExc, g_sMinidump );
+#endif
 
 	CRASH_EXIT;
 }
@@ -11193,6 +11198,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		OPT1 ( "--nodetach" )		g_bOptNoDetach = true;
 #endif
 		OPT1 ( "--logdebug" )		g_eLogLevel = LOG_DEBUG;
+		OPT1 ( "--safetrace" )		g_bSafeTrace = true;
 
 		// handle 1-arg options
 		else if ( (i+1)>=argc )		break;

@@ -1264,24 +1264,25 @@ static int sphVSprintf ( char* pOutput, const char* sFmt, va_list ap )
 	return pOutput-pBegin;
 }
 
+static char g_sSafeInfoBuf [ 1024 ];
+
 void sphSafeInfo ( int iFD, const char * sFmt, ... )
 {
 	assert ( iFD>=0 && sFmt );
-	char sBuf [ 1024 ];
 	va_list ap;
 	va_start ( ap, sFmt );
-	int iLen = sphVSprintf ( sBuf, sFmt, ap ); // FIXME! make this vsnprintf
+	int iLen = sphVSprintf ( g_sSafeInfoBuf, sFmt, ap ); // FIXME! make this vsnprintf
 	va_end ( ap );
-	::write ( iFD, sBuf, iLen );
+	::write ( iFD, g_sSafeInfoBuf, iLen );
 }
 
-void sphBacktrace ( int iFD )
+#define SPH_BACKTRACE_ADDR_COUNT 128
+static void * g_pBacktraceAddresses [SPH_BACKTRACE_ADDR_COUNT];
+
+void sphBacktrace ( int iFD, bool bSafe )
 {
 	if ( iFD<0 )
 		return;
-
-	void * pMyStack = sphMyStack();
-	int iStackSize = sphMyStackSize();
 
 	sphSafeInfo ( iFD, "-------------- backtrace begins here ---------------" );
 	sphSafeInfo ( iFD, "Sphinx " SPHINX_VERSION );
@@ -1293,73 +1294,89 @@ void sphBacktrace ( int iFD )
 	sphSafeInfo ( iFD, "Host OS is "OS_UNAME );
 #endif
 
+	bool bOk = true;
+
+	void * pMyStack = NULL;
+	int iStackSize = 0;
+	if ( !bSafe )
+	{
+		pMyStack = sphMyStack();
+		iStackSize = sphMyStackSize();
+	}
 	sphSafeInfo ( iFD, "Stack bottom = 0x%p, thread stack size = 0x%x", pMyStack, iStackSize );
 
-#if HAVE_BACKTRACE
-	void *pAddresses [128];
-	int iDepth = backtrace ( pAddresses, 128 );
-#if HAVE_BACKTRACE_SYMBOLS
-	backtrace_symbols_fd ( pAddresses, iDepth, iFD );
-#elif !HAVE_BACKTRACE_SYMBOLS
-	for ( int i=0; i<Depth; i++ )
-		sphSafeInfo ( iFD, "%p", pAddresses[i] );
-#endif
+	while ( pMyStack && !bSafe )
+	{
+		sphSafeInfo ( iFD, "begin of manual backtrace:" );
+		BYTE ** pFramePointer = NULL;
 
-#elif !HAVE_BACKTRACE
-	BYTE ** pFramePointer = NULL;
-
-	int iFrameCount = 0;
-	int iReturnFrameCount = sphIsLtLib() ? 2 : 1;
+		int iFrameCount = 0;
+		int iReturnFrameCount = sphIsLtLib() ? 2 : 1;
 
 #ifdef __i386__
 #define SIGRETURN_FRAME_OFFSET 17
-	__asm __volatile__ ( "movl %%ebp,%0":"=r"(pFramePointer):"r"(pFramePointer) );
+		__asm __volatile__ ( "movl %%ebp,%0":"=r"(pFramePointer):"r"(pFramePointer) );
 #endif
 
 #ifdef __x86_64__
 #define SIGRETURN_FRAME_OFFSET 23
-	__asm __volatile__ ( "movq %%rbp,%0":"=r"(pFramePointer):"r"(pFramePointer) );
+		__asm __volatile__ ( "movq %%rbp,%0":"=r"(pFramePointer):"r"(pFramePointer) );
 #endif
 
-	if ( !pFramePointer )
-	{
-		sphSafeInfo ( iFD, "Frame pointer is null, backtrace failed (did you build with -fomit-frame-pointer?)" );
-		return;
-	}
-
-	if ( !pMyStack || (BYTE*) pMyStack > (BYTE*) &pFramePointer )
-	{
-		int iRound = Min ( 65536, iStackSize );
-		pMyStack = (void *) ( ( (size_t) &pFramePointer + iRound ) & ~(size_t)65535 );
-		sphSafeInfo ( iFD, "Something wrong with thread stack, backtrace may be incorrect (fp=%p)", pFramePointer );
-
-		if ( pFramePointer > (BYTE**) pMyStack || pFramePointer < (BYTE**) pMyStack - iStackSize )
+		if ( !pFramePointer )
 		{
-			sphSafeInfo ( iFD, "Wrong stack limit or frame pointer, backtrace failed (fp=%p, stack=%p, stacksize=%d)", pFramePointer, pMyStack, iStackSize );
-			return;
+			sphSafeInfo ( iFD, "Frame pointer is null, backtrace failed (did you build with -fomit-frame-pointer?)" );
+			break;
 		}
+
+		if ( !pMyStack || (BYTE*) pMyStack > (BYTE*) &pFramePointer )
+		{
+			int iRound = Min ( 65536, iStackSize );
+			pMyStack = (void *) ( ( (size_t) &pFramePointer + iRound ) & ~(size_t)65535 );
+			sphSafeInfo ( iFD, "Something wrong with thread stack, backtrace may be incorrect (fp=%p)", pFramePointer );
+
+			if ( pFramePointer > (BYTE**) pMyStack || pFramePointer < (BYTE**) pMyStack - iStackSize )
+			{
+				sphSafeInfo ( iFD, "Wrong stack limit or frame pointer, backtrace failed (fp=%p, stack=%p, stacksize=%d)", pFramePointer, pMyStack, iStackSize );
+				break;
+			}
+		}
+
+		sphSafeInfo ( iFD, "Stack looks OK, attempting backtrace." );
+
+		BYTE** pNewFP;
+		while ( pFramePointer < (BYTE**) pMyStack )
+		{
+			pNewFP = (BYTE**) *pFramePointer;
+			sphSafeInfo ( iFD, "%p", iFrameCount==iReturnFrameCount? *(pFramePointer + SIGRETURN_FRAME_OFFSET) : *(pFramePointer + 1) );
+
+			bOk = pNewFP > pFramePointer;
+			if ( !bOk ) break;
+
+			pFramePointer = pNewFP;
+			iFrameCount++;
+		}
+
+		if ( !bOk )
+			sphSafeInfo ( iFD, "Something wrong in frame pointers, backtrace failed (fp=%p)", pNewFP );
+
+		break;
 	}
 
-	sphSafeInfo ( iFD, "Stack looks OK, attempting backtrace." );
-
-	BYTE** pNewFP;
-	bool bOk = true;
-	while ( pFramePointer < (BYTE**) pMyStack )
-	{
-		pNewFP = (BYTE**) *pFramePointer;
-		sphSafeInfo ( iFD, "%p", iFrameCount==iReturnFrameCount? *(pFramePointer + SIGRETURN_FRAME_OFFSET) : *(pFramePointer + 1) );
-
-		bOk = pNewFP > pFramePointer;
-		if ( !bOk ) break;
-
-		pFramePointer = pNewFP;
-		iFrameCount++;
-	}
-
-	if ( !bOk )
-		sphSafeInfo ( iFD, "Something wrong in frame pointers, backtrace failed (fp=%p)", pNewFP );
-	else
+#if HAVE_BACKTRACE
+	sphSafeInfo ( iFD, "begin of system backtrace:" );
+	int iDepth = backtrace ( g_pBacktraceAddresses, SPH_BACKTRACE_ADDR_COUNT );
+#if HAVE_BACKTRACE_SYMBOLS
+	sphSafeInfo ( iFD, "begin of system symbols:" );
+	backtrace_symbols_fd ( g_pBacktraceAddresses, iDepth, iFD );
+#elif !HAVE_BACKTRACE_SYMBOLS
+	sphSafeInfo ( iFD, "begin of manual symbols:" );
+	for ( int i=0; i<Depth; i++ )
+		sphSafeInfo ( iFD, "%p", g_pBacktraceAddresses[i] );
+#endif // HAVE_BACKTRACE_SYMBOLS
 #endif // !HAVE_BACKTRACE
+
+	if ( bOk )
 		sphSafeInfo ( iFD, "Backtrace looks OK. Now you have to do following steps:\n"
 							"  1. Run the command over the crashed binary (for example, 'indexer'):\n"
 							"     nm -n indexer > indexer.sym\n"

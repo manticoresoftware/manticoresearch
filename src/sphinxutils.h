@@ -167,7 +167,7 @@ void sphSetLogger ( SphLogger_fn fnLog );
 
 #if !USE_WINDOWS
 /// UNIX backtrace gets printed out to a stream
-void sphBacktrace ( int iFD );
+void sphBacktrace ( int iFD, bool bSafe=false );
 
 /// async safe fprintf
 void sphSafeInfo ( int iFD, const char * sFmt, ... );

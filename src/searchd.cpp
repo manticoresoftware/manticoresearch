@@ -471,9 +471,10 @@ static CSphSharedBuffer<BYTE>	g_tFlushBuffer;
 #endif // USE_WINDOWS
 
 const int EXT_COUNT = 8;
+const int EXT_MVP = 8;
 const char * g_dNewExts[EXT_COUNT] = { ".new.sph", ".new.spa", ".new.spi", ".new.spd", ".new.spp", ".new.spm", ".new.spk", ".new.sps" };
-const char * g_dOldExts[EXT_COUNT] = { ".old.sph", ".old.spa", ".old.spi", ".old.spd", ".old.spp", ".old.spm", ".old.spk", ".old.sps" };
-const char * g_dCurExts[EXT_COUNT] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm", ".spk", ".sps" };
+const char * g_dOldExts[] = { ".old.sph", ".old.spa", ".old.spi", ".old.spd", ".old.spp", ".old.spm", ".old.spk", ".old.sps", ".old.mvp" };
+const char * g_dCurExts[] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm", ".spk", ".sps", ".mvp" };
 
 /////////////////////////////////////////////////////////////////////////////
 // MISC
@@ -8664,6 +8665,27 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 			sphWarning ( "rotating index '%s': rename to .old failed; using old index", sIndex );
 			return false;
 		}
+
+		// holding the persistent MVA updates (.mvp).
+		for ( ;; )
+		{
+			char sBuf [ SPH_MAX_FILENAME_LEN ];
+			snprintf ( sBuf, sizeof(sBuf), "%s%s", sPath, g_dCurExts[EXT_MVP] );
+
+			CSphString sFakeError;
+			CSphAutofile fdTest ( sBuf, SPH_O_READ, sFakeError );
+			if ( fdTest.GetFD()<0 )
+				break; ///< no file, nothing to hold
+
+			if ( TryRename ( sIndex, sPath, g_dCurExts[EXT_MVP], g_dOldExts[EXT_MVP], false ) )
+				break;
+
+			// rollback
+			for ( int j=0; j<EXT_COUNT; j++ )
+				TryRename ( sIndex, sPath, g_dOldExts[j], g_dCurExts[j], true );
+
+			break;
+		}
 		sphLogDebug ( "RotateIndexGreedy: Current index renamed to .old" );
 	}
 
@@ -8679,7 +8701,7 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 
 		// rollback old ones
 		if ( !tIndex.m_bOnlyNew )
-			for ( int j=0; j<EXT_COUNT; j++ )
+			for ( int j=0; j<=EXT_COUNT; j++ ) ///< <=, not <, since we have the .mvp at the end of these lists
 				TryRename ( sIndex, sPath, g_dOldExts[j], g_dCurExts[j], true );
 
 		return false;
@@ -8710,6 +8732,7 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 				TryRename ( sIndex, sPath, g_dCurExts[j], g_dNewExts[j], true );
 				TryRename ( sIndex, sPath, g_dOldExts[j], g_dCurExts[j], true );
 			}
+			TryRename ( sIndex, sPath, g_dOldExts[EXT_MVP], g_dCurExts[EXT_MVP], true );
 			sphLogDebug ( "RotateIndexGreedy: has recovered" );
 
 			if ( !tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, false, sWarning ) || !tIndex.m_pIndex->Preread() )
@@ -8760,12 +8783,16 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 
 	// unlink .old
 	if ( g_bUnlinkOld && !tIndex.m_bOnlyNew )
+	{
 		for ( int i=0; i<EXT_COUNT; i++ )
 		{
 			snprintf ( sFile, sizeof(sFile), "%s%s", sPath, g_dOldExts[i] );
 			if ( ::unlink ( sFile ) )
 				sphWarning ( "rotating index '%s': unable to unlink '%s': %s", sIndex, sFile, strerror(errno) );
 		}
+		snprintf ( sFile, sizeof(sFile), "%s%s", sPath, g_dOldExts[EXT_MVP] );
+		::unlink ( sFile );
+	}
 
 	sphLogDebug ( "RotateIndexGreedy: the old index unlinked" );
 

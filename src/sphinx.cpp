@@ -664,7 +664,7 @@ protected:
 public:
 	explicit	CSphAutoArray ( int iCount )
 #ifndef NDEBUG
-	: m_iLength (iCount)
+	: m_iLength ( iCount )
 #endif
 	{ m_pData = ( iCount>0 ) ? new T [ iCount ] : NULL; }
 				~CSphAutoArray ()				{ Reset (); }
@@ -10026,6 +10026,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	if ( !BuildMVA ( dSources, dHits, iHitsMax*sizeof(CSphWordHit),
 		fdTmpFieldMVAs.GetFD (), nFieldMVAs, iMaxPoolFieldMVAs ) )
 		return 0;
+
+	// reset persistent mva update pool
+	::unlink ( GetIndexFileName("mvp").cstr() );
 
 	// reset hits pool
 	dHits.Reset ();

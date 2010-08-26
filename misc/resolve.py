@@ -9,6 +9,8 @@ if len(sys.argv)!=3:
 	sys.exit(0)
 
 def myopen(name):
+	if name == '-':
+		return sys.stdin
 	fh = open(name, 'r')
 	if not fh:
 		print 'FATAL: failed to open %s' % name
@@ -35,7 +37,7 @@ for line in fp.readlines():
 		resolved = '???'
 		for i in range(len(syms)-1):
 			if syms[i][0]<=addr and addr<syms[i+1][0]:
-				resolved = syms[i][1]
+				resolved = '%s+0x%x' % (syms[i][1], addr - syms[i][0])
 				break
 		line += ' ' + resolved
 	print line

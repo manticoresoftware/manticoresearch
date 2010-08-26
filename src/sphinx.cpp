@@ -1459,8 +1459,6 @@ private:
 private:
 	CSphString					GetIndexFileName ( const char * sExt ) const;
 
-	int							AdjustMemoryLimit ( int iMemoryLimit );
-
 	int							cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWORD * pDocinfo, int Docinfos, int iStride );
 	void						cidxFinishDoclistEntry ( Hitpos_t uLastPos );
 	void						cidxHit ( CSphAggregateHit * pHit, CSphRowitem * pDocinfos );
@@ -5942,7 +5940,15 @@ int CSphBin::ReadHit ( CSphAggregateHit * pOut, int iRowitems, CSphRowitem * pRo
 				case BIN_WORD:
 					if ( m_bWordDict )
 					{
+#ifdef NDEBUG
+						// FIXME?! move this under PARANOID or something?
+						// or just introduce an assert() checked release build?
+						if ( uDelta>=sizeof(m_sKeyword) )
+							sphDie ( "INTERNAL ERROR: corrupted keyword length (len="UINT64_FMT", binpos="UINT64_FMT", bufpos=%d",
+								uDelta, m_iFilePos, (int)(m_pCurrent-m_dBuffer) );
+#else
 						assert ( uDelta>0 && uDelta<sizeof(m_sKeyword)-1 );
+#endif
 
 						ReadBytes ( m_sKeyword, (int)uDelta );
 						m_sKeyword[uDelta] = '\0';
@@ -8500,37 +8506,8 @@ DWORD *		CmpQueuedDocinfo_fn::m_pStorage		= NULL;
 int			CmpQueuedDocinfo_fn::m_iStride		= 1;
 
 
-static const int MAX_DOC_HITS		= 1048576;		// FIXME! dirty hack to quick patch keywords dict..
+static const int MAX_DOC_HITS		= 1048576;		// FIXME! dirty hack to quick patch keywords dict.. !COMMIT
 static const int MIN_KEYWORDS_DICT	= 4*1048576;	// FIXME! ideally must be in sync with impl (ENTRY_CHUNKS, KEYWORD_CHUNKS)
-
-int CSphIndex_VLN::AdjustMemoryLimit ( int iMemoryLimit )
-{
-	const int MIN_MEM_LIMIT =
-		sizeof(CSphWordHit)*1048576							// book memory to store 1M hits
-		+ m_bWordDict*sizeof(CSphWordHit)*MAX_DOC_HITS		// book memory to store 1M hits extra for keywords dict to index long documents (we can't split those hits!)
-		+ m_bWordDict*MIN_KEYWORDS_DICT						// book 2MB for keywords dict itself
-		+ sizeof(DWORD)*( 1+m_tSchema.GetRowSize() )*65536;	// book memory to store 64K rows
-
-	bool bRelimit = false;
-	int iOldLimit = 0;
-
-	if ( iMemoryLimit<MIN_MEM_LIMIT )
-	{
-		iOldLimit = iMemoryLimit;
-		iMemoryLimit = MIN_MEM_LIMIT;
-		bRelimit = true;
-	}
-
-	iMemoryLimit = ( ( (iMemoryLimit+32768) >> 16 ) << 16 ); // round to 64K
-
-	if ( bRelimit && iOldLimit )
-	{
-		sphWarn ( "collect_hits: mem_limit=%d kb too low, increasing to %d kb",
-			iOldLimit/1024, iMemoryLimit/1024 );
-	}
-
-	return iMemoryLimit;
-}
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -9369,28 +9346,46 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	CSphVector <SphAttr_t> dKillList;
 
 	// adjust memory requirements
-	// ensure there's enough memory to hold 1M hits and 64K docinfos
-	// alloc 1/16 of memory (but not less than 64K entries) for docinfos
-	iMemoryLimit = AdjustMemoryLimit ( iMemoryLimit );
+	int iOldLimit = iMemoryLimit;
 
+	// book memory to store at least 64K attribute rows
 	const int iDocinfoStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 	int iDocinfoMax = Max ( 65536, iMemoryLimit/16/iDocinfoStride/sizeof(DWORD) );
 	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_NONE )
 		iDocinfoMax = 1;
 
+	// book at least 32 KB for ordinals, if needed
 	int iOrdinalPoolSize = Max ( 32768, iMemoryLimit/8 );
 	if ( dOrdinalAttrs.GetLength()==0 )
 		iOrdinalPoolSize = 0;
 
+	// book at least 32 KB for field MVAs, if needed
 	int iFieldMVAPoolSize = Max ( 32768, iMemoryLimit/16 );
 	if ( bHaveFieldMVAs==0 )
 		iFieldMVAPoolSize = 0;
 
+	// book at least 2 MB for keywords dict, if needed
 	int iDictSize = 0;
 	if ( m_bWordDict )
 		iDictSize = Max ( MIN_KEYWORDS_DICT, iMemoryLimit/8 );
 
-	int iHitsMax = ( iMemoryLimit - iDocinfoMax*iDocinfoStride*sizeof(DWORD) - iOrdinalPoolSize - iFieldMVAPoolSize - iDictSize ) / sizeof(CSphWordHit);
+	// do we have enough left for hits?
+	int iHitsMax = 1048576;
+	if ( m_bWordDict )
+		iHitsMax += MAX_DOC_HITS;
+
+	iMemoryLimit -= iDocinfoMax*iDocinfoStride*sizeof(DWORD) + iOrdinalPoolSize + iFieldMVAPoolSize + iDictSize;
+	if ( iMemoryLimit < iHitsMax*(int)sizeof(CSphWordHit) )
+	{
+		iMemoryLimit = iOldLimit + iHitsMax*sizeof(CSphWordHit) - iMemoryLimit;
+		sphWarn ( "collect_hits: mem_limit=%d kb too low, increasing to %d kb",
+			iOldLimit/1024, iMemoryLimit/1024 );
+	} else
+	{
+		iHitsMax = iMemoryLimit / sizeof(CSphWordHit);
+	}
+
+	// reserve that "hit chunk of last hope"
 	if ( m_bWordDict )
 		iHitsMax -= MAX_DOC_HITS;
 
@@ -10819,8 +10814,8 @@ public:
 			DoclistHintUnpack ( m_iDocs, (BYTE) m_iHint );
 
 			m_iWordID = ( !m_pDict && USE_64BIT )
-				? sphFNV64 ( GetWord() )
-				: sphCRC32 ( GetWord() ); // set wordID for indexing
+				? (SphWordID_t) sphFNV64 ( GetWord() )
+				: (SphWordID_t) sphCRC32 ( GetWord() ); // set wordID for indexing
 
 		} else
 		{

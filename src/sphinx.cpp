@@ -677,17 +677,6 @@ public:
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// crc for WHOLE indexing \ merging
-template < typename T > T sphCRCWord ( const BYTE * pWord );
-template<> uint64_t sphCRCWord ( const BYTE * pWord ) { return sphFNV64 ( pWord ); }
-template<> DWORD sphCRCWord ( const BYTE * pWord ) { return sphCRC32 ( pWord ); }
-
-template < typename T > T sphCRCWord ( const BYTE * pWord, int iLen );
-template<> uint64_t sphCRCWord ( const BYTE * pWord, int iLen ) { return sphFNV64 ( pWord, iLen ); }
-template<> DWORD sphCRCWord ( const BYTE * pWord, int iLen ) { return sphCRC32 ( pWord, iLen ); }
-
-/////////////////////////////////////////////////////////////////////////////
-
 /// generic stateless priority queue
 template < typename T, typename COMP > class CSphQueue
 {
@@ -5957,7 +5946,7 @@ int CSphBin::ReadHit ( CSphAggregateHit * pOut, int iRowitems, CSphRowitem * pRo
 
 						ReadBytes ( m_sKeyword, (int)uDelta );
 						m_sKeyword[uDelta] = '\0';
-						tHit.m_iWordID = sphCRCWord<DWORD> ( m_sKeyword ); // must be in sync with dict!
+						tHit.m_iWordID = sphCRC32 ( m_sKeyword ); // must be in sync with dict!
 
 #ifndef NDEBUG
 						assert ( ( m_iLastWordID<tHit.m_iWordID )
@@ -10747,7 +10736,7 @@ private:
 	CSphAutofile	m_tFile;
 	SphOffset_t		m_iMaxPos;
 
-	CSphDict *		m_pDict;
+	CSphDict *		m_pDict;	///< only used in dict=keywords case, NULL in dict=crc case
 	char			m_sWord[MAX_KEYWORD_BYTES];
 
 public:
@@ -10829,7 +10818,9 @@ public:
 				m_iHint = m_tReader.GetByte();
 			DoclistHintUnpack ( m_iDocs, (BYTE) m_iHint );
 
-			m_iWordID = sphCRCWord<SphWordID_t> ( GetWord() ); // set wordID for indexing
+			m_iWordID = ( !m_pDict && USE_64BIT )
+				? sphFNV64 ( GetWord() )
+				: sphCRC32 ( GetWord() ); // set wordID for indexing
 
 		} else
 		{
@@ -10845,7 +10836,7 @@ public:
 			m_iDocs = m_eHitless==SPH_HITLESS_SOME ? ( m_iDocs & 0x7FFFFFFF ) : m_iDocs;
 
 		return true; // FIXME? errorflag?
-		}
+	}
 
 	int CmpWord ( const CSphDictReader & tOther ) const
 	{

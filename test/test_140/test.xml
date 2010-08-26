@@ -36,10 +36,6 @@ index main
 }
 </config>
 
-<indexer>
-	mem_limit		= 16M
-</indexer>
-
 <sphqueries>
 <sphinxql>select * from main order by idd asc</sphinxql>
 <sphinxql>select * from main where match('main') order by idd asc</sphinxql>

@@ -282,8 +282,6 @@ public:
 	virtual void	NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool bShutdown ) = 0;
 };
 
-void sphSetBinLog ( ISphBinlog * pBinlog );
-
 //////////////////////////////////////////////////////////////////////////
 
 /// memory tracker

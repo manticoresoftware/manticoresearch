@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>RT on *nix: watchdog and replaying binlog</name>
+
+<requires>
+<non-windows/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+<searchd_settings/>
+	workers = threads
+<dynamic>
+<variant>
+	binlog_path =
+</variant>
+<variant>
+	binlog_path = data
+</variant>
+</dynamic>
+}
+
+index test
+{
+	type	= rt
+	path	= data/test
+	rt_field = content
+}
+
+</config>
+
+<custom_test><![CDATA[
+
+global $sd_address, $sd_sphinxql_port;
+
+$results = array();
+$sockStr = "$sd_address:$sd_sphinxql_port";
+if ($sd_address == "localhost")
+	$sockStr = "127.0.0.1:$sd_sphinxql_port";
+$sock = @mysql_connect ($sockStr,'','',	true );
+
+if ( $sock === false )
+{
+	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+	return;
+}
+
+$results[] = "inserting";
+@mysql_query ( "INSERT INTO test VALUES (1,'test')",$sock);
+//@mysql_close ($sock);
+
+$results[]= "killing";
+KillSearchd ('config.conf', 'searchd.pid',9,false);
+usleep (50000);
+
+$results[] = "connecting again";
+$sock = @mysql_connect ($sockStr,'','',	true );
+if ( $sock === false )
+{
+	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+	return;
+}
+$results[] = "querying";
+
+$res = mysql_query ( "SELECT * FROM test WHERE MATCH('test')",$sock );
+if ($res===true)
+	$results[] = "total affected ".mysql_affected_rows($sock);
+else if ($res===false)
+	$results[] = "error ".@mysql_errno($sock)." : ".@mysql_error ($sock);
+else
+	$results[] = "total found ".mysql_num_rows ($res);
+
+]]></custom_test>
+
+</test>

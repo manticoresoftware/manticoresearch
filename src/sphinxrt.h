@@ -55,7 +55,8 @@ public:
 
 /// initialize subsystem
 class CSphConfigSection;
-void sphRTInit ( const CSphConfigSection & hSearchd );
+void sphRTInit ();
+void sphRTConfigure ( const CSphConfigSection & hSearchd );
 
 /// deinitialize subsystem
 void sphRTDone ();

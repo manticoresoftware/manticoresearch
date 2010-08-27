@@ -1258,11 +1258,6 @@ static void WriteFileInfo ( CSphWriter & tWriter, const CSphSavedFile & tInfo )
 
 static ISphBinlog * g_pBinlog;
 
-void sphSetBinLog ( ISphBinlog * pBinlog )
-{
-	g_pBinlog = pBinlog;
-}
-
 class AttrIndexBuilder_c;
 
 

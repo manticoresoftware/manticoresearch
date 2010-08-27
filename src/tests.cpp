@@ -1557,7 +1557,8 @@ void TestRTInit ()
 	CSphVariant tEmpty ( "" );
 	tRTConfig.Add ( tEmpty, "binlog_path" ); // explicitly disable binlog
 
-	sphRTInit ( tRTConfig );
+	sphRTInit();
+	sphRTConfigure ( tRTConfig );
 
 	SmallStringHash_T<CSphIndex*> hIndexes;
 	sphReplayBinlog ( hIndexes );

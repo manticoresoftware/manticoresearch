@@ -218,7 +218,7 @@ function StopSearchd ( $config, $pidfile )
 	}
 }
 
-function KillSearchd ( $config, $pidfile, $signal )
+function KillSearchd ( $config, $pidfile, $signal, $unlinkpid=True )
 {
 	global $windows, $action_wait_timeout;
 	
@@ -231,7 +231,7 @@ function KillSearchd ( $config, $pidfile, $signal )
 			fclose ($fp);
 
 			exec ("kill -s $signal $pid");
-			if ( file_exists ( $pidfile ) )
+			if ( $unlinkpid && file_exists ( $pidfile ) )
 			{
 			    usleep ( $action_wait_timeout );
 			    unlink ( $pidfile );

@@ -54,7 +54,7 @@ for ( $i = 0; $i < 4; $i++)
 	else
 		$results[] = sprintf("up.err=%s", $client->GetLastError());
 
-	KillSearchd ( 'config.conf', 'searchd.pid', 9 );
+	KillSearchd ( 'config.conf', 'searchd.pid', 9, false );
 
 	usleep ( 50000 );
 

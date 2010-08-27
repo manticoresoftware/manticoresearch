@@ -174,7 +174,7 @@ static int				g_iMaxChildren	= 0;
 static bool				g_bPreopenIndexes = false;
 static bool				g_bOnDiskDicts	= false;
 static bool				g_bUnlinkOld	= true;
-static bool				g_bWatchdog		= false;
+static bool				g_bWatchdog		= true;
 
 struct Listener_t
 {
@@ -11680,7 +11680,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	///////////
 
 	if ( g_eWorkers==MPM_THREADS )
-		sphRTInit ( hSearchd );
+		sphRTInit();
 
 	// handle my signals
 	SetSignalHandlers ();
@@ -11770,6 +11770,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	}
 	if ( g_bWatchdog && g_eWorkers==MPM_THREADS )
 		SetWatchDog();
+
+	if ( g_eWorkers==MPM_THREADS )
+		sphRTConfigure ( hSearchd );
+
 #endif
 
 	if ( bOptPIDFile )

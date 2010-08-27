@@ -5056,7 +5056,7 @@ ISphRtIndex * sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndex
 	return new RtIndex_t ( tSchema, sIndexName, uRamSize, sPath );
 }
 
-void sphRTInit ( const CSphConfigSection & hSearchd )
+void sphRTInit ()
 {
 	MEMORY ( SPH_MEM_BINLOG );
 
@@ -5067,9 +5067,12 @@ void sphRTInit ( const CSphConfigSection & hSearchd )
 	g_pBinlog = new RtBinlog_c();
 	if ( !g_pBinlog )
 		sphDie ( "binlog: failed to create binlog" );
+}
 
+void sphRTConfigure ( const CSphConfigSection & hSearchd )
+{
+	assert ( g_pBinlog );
 	g_pBinlog->Configure ( hSearchd );
-	sphSetBinLog ( g_pBinlog );
 }
 
 void sphRTDone ()
@@ -5083,7 +5086,6 @@ void sphRTDone ()
 void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes )
 {
 	MEMORY ( SPH_MEM_BINLOG );
-
 	g_pBinlog->Replay ( hIndexes );
 	g_pBinlog->CreateTimerThread();
 	g_bRTChangesAllowed = true;

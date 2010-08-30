@@ -1190,7 +1190,7 @@ testing passes, and last but not least a number of production instances
 are already using RT indexes with good results.
 </para>
 <para>
-RT index can be accessed using MySQL protocol. INSERT, DELETE, and
+RT index can be accessed using MySQL protocol. INSERT, REPLACE, DELETE, and
 SELECT statements against RT index are supported. For instance, this
 is an example session with the sample index above:
 </para>

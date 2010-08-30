@@ -2806,6 +2806,8 @@ ISphTokenizer::ISphTokenizer ()
 	, m_bWasSpecial ( false )
 	, m_bEscaped ( false )
 	, m_iOvershortCount ( 0 )
+	, m_bBlended ( false )
+	, m_bNonBlended ( true )
 	, m_bShortTokenFilter ( false )
 	, m_bQueryMode ( false )
 	, m_bDetectSentences ( false )
@@ -4400,6 +4402,10 @@ BYTE * CSphTokenizer_Filter::GetToken ()
 		{
 			FillTokenInfo ( &m_tLastToken );
 			m_pLastToken = &m_tLastToken;
+
+			bool bBlended = m_pTokenizer->TokenIsBlended();
+			m_bBlended = bBlended;
+			m_bNonBlended = !bBlended;
 		}
 
 		return pToken;

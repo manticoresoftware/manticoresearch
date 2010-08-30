@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>snippets vs multiwordforms</name>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'text';
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+
+	charset_type	= utf-8
+	wordforms = test_143/wordforms.txt
+	blend_chars = +
+}
+</config>
+
+<db_insert>select 1;</db_insert>
+
+<sphqueries>
+<sphinxql>CALL SNIPPETS('Kph on Europe road 1110', 'test', 'kph', 1 AS query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS('when you on+time do it', 'test', 'you on', 1 AS query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS('when you on+time do it', 'test', 'you time', 1 AS query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS('you on+time 0 es you 0 at', 'test', 'none', 1 AS query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS('you on+time 0 es you 0 at', 'test', '0', 1 AS query_mode )</sphinxql>
+
+</sphqueries>
+
+</test>

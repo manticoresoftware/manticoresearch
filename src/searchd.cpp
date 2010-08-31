@@ -4585,8 +4585,15 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 		// groupby sorter does that automagically
 		pSorter->SetMVAPool ( NULL ); // because we must be able to group on @groupby anyway
 		ARRAY_FOREACH ( i, tRes.m_dMatches )
-			if ( !pSorter->PushGrouped ( tRes.m_dMatches[i] ) )
+		{
+			CSphMatch & tMatch = tRes.m_dMatches[i];
+
+			if ( tRes.m_dIndexWeights.GetLength() && tMatch.m_iTag>=0 )
+				tMatch.m_iWeight *= tRes.m_dIndexWeights[tMatch.m_iTag];
+
+			if ( !pSorter->PushGrouped ( tMatch ) )
 				iDupes++;
+		}
 	} else
 	{
 		// normal sorter needs massasging

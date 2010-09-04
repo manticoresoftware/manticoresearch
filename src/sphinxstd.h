@@ -1866,6 +1866,9 @@ void * sphMyStack ();
 /// get the size of my thread's stack
 int sphMyStackSize ();
 
+/// set the size of my thread's stack
+void sphSetMyStackSize ( int iStackSize );
+
 /// store the address in the TLS
 void MemorizeStack ( void* PStack );
 

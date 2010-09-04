@@ -11503,6 +11503,17 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	g_iMaxBatchQueries = hSearchd.GetInt ( "max_batch_queries", g_iMaxBatchQueries );
 	g_iDistThreads = hSearchd.GetInt ( "dist_threads", g_iDistThreads );
 
+	if ( hSearchd("thread_stack") )
+	{
+		int iStackSize = hSearchd.GetInt ( "thread_stack", 65536 );
+		if ( iStackSize<65536 || iStackSize>2*1024*1024 )
+			sphWarning ( "thread_stack is %d will be clamped to range ( 65k to 2M )", iStackSize );
+
+		iStackSize = Min ( iStackSize, 2*1024*1024 );
+		iStackSize = Max ( iStackSize, 65536 );
+		sphSetMyStackSize ( iStackSize );
+	}
+
 	if ( hSearchd("workers") )
 	{
 		if ( hSearchd["workers"]=="none" )

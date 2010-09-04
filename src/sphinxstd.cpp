@@ -21,7 +21,7 @@
 #endif
 
 
-#define THREAD_STACK_SIZE 65536
+static int g_iThreadStackSize = 65536;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -854,16 +854,16 @@ void * sphThreadInit ( bool )
 
 		if ( pthread_attr_setdetachstate ( &tDetachedAttr, PTHREAD_CREATE_DETACHED ) )
 			sphDie ( "FATAL: pthread_attr_setdetachstate( detached ) failed" );
-
-		if ( pthread_attr_setstacksize ( &tJoinableAttr, sphMyStackSize() ) )
-			sphDie ( "FATAL: pthread_attr_setstacksize( joinable ) failed" );
-
-		if ( pthread_attr_setstacksize ( &tDetachedAttr, sphMyStackSize() ) )
-			sphDie ( "FATAL: pthread_attr_setstacksize( detached ) failed" );
 #endif
 		bInit = true;
 	}
 #if !USE_WINDOWS
+	if ( pthread_attr_setstacksize ( &tJoinableAttr, sphMyStackSize() ) )
+		sphDie ( "FATAL: pthread_attr_setstacksize( joinable ) failed" );
+
+	if ( pthread_attr_setstacksize ( &tDetachedAttr, sphMyStackSize() ) )
+		sphDie ( "FATAL: pthread_attr_setstacksize( detached ) failed" );
+
 	return bDetached ? &tDetachedAttr : &tJoinableAttr;
 #else
 	return NULL;
@@ -969,11 +969,18 @@ void * sphMyStack ()
 int sphMyStackSize ()
 {
 #if USE_WINDOWS
-	return THREAD_STACK_SIZE;
+	return g_iThreadStackSize;
 #else
-	return PTHREAD_STACK_MIN + THREAD_STACK_SIZE;
+	return PTHREAD_STACK_MIN + g_iThreadStackSize;
 #endif
 }
+
+void sphSetMyStackSize ( int iStackSize )
+{
+	g_iThreadStackSize = iStackSize;
+	sphThreadInit ( false );
+}
+
 
 void MemorizeStack ( void* PStack )
 {

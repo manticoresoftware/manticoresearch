@@ -271,6 +271,8 @@ void SafeClose ( int & iFD );
 
 void sphDoStatsOrder ( const struct XQNode_t * pNode, CSphQueryResultMeta & tResult );
 
+bool sphCheckQueryHeight ( const struct XQNode_t * pRoot, CSphString & sError );
+
 const BYTE * SkipQuoted ( const BYTE * p );
 
 class ISphBinlog : ISphNoncopyable

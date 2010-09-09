@@ -2041,7 +2041,7 @@ public:
 	int			GetSentCount () { return m_iSent; }
 
 protected:
-	BYTE		m_dBuffer[16384];	///< my buffer
+	BYTE		m_dBuffer[8192];	///< my buffer
 	BYTE *		m_pBuffer;			///< my current buffer position
 	int			m_iSock;			///< my socket
 	bool		m_bError;			///< if there were any write errors
@@ -8074,6 +8074,18 @@ public:
 		IncPtr ( 1+iLen );
 	}
 
+	void PutString ( const char * sMsg )
+	{
+		int iLen = sMsg ? strlen ( sMsg ) : 0;
+		iLen = Min ( iLen, 0xff );
+		Reserve ( 1+iLen );
+		*Get() = BYTE(iLen);
+		if ( iLen )
+			memcpy ( Get()+1, sMsg, iLen );
+		IncPtr ( 1+iLen );
+	}
+
+
 private:
 
 	char m_dBuf[4096];
@@ -8195,6 +8207,8 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 		tStmt.m_pQuery = &tHandler.m_dQueries[0];
 		SqlStmt_e eStmt = ParseSqlQuery ( sQuery, &tStmt, sError );
 
+		SqlRowBuffer_c dRows;
+
 		// handle SQL query
 		switch ( eStmt )
 		{
@@ -8260,7 +8274,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 			SendMysqlEofPacket ( tOut, uPacketID++, iWarns );
 
 			// rows
-			SqlRowBuffer_c dRows;
+			dRows.Reset();
 
 			for ( int iMatch = pRes->m_iOffset; iMatch < pRes->m_iOffset + pRes->m_iCount; iMatch++ )
 			{
@@ -8383,17 +8397,14 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 			SendMysqlEofPacket ( tOut, uPacketID++, 0 );
 
 			// row
-			char sRowBuffer[4096];
-			const char * sRowMax = sRowBuffer + sizeof(sRowBuffer) - 4; // safety gap
+			dRows.Reset();
+			dRows.PutString ( "warning" );
+			dRows.PutString ( "1000" );
+			dRows.PutString ( tLastMeta.m_sWarning.cstr() );
 
-			int iLen;
-			char * p = sRowBuffer;
-			iLen = snprintf ( p+1, sRowMax-p, "warning" ); p[0] = BYTE(iLen); p += 1+iLen;
-			iLen = snprintf ( p+1, sRowMax-p, "%d", 1000 ); p[0] = BYTE(iLen); p += 1+iLen; // FIXME! proper code?
-			iLen = snprintf ( p+1, sRowMax-p, "%s", tLastMeta.m_sWarning.cstr() ); p[0] = BYTE(iLen); p += 1+iLen;
-
-			tOut.SendLSBDword ( ((uPacketID++)<<24) + ( p-sRowBuffer ) );
-			tOut.SendBytes ( sRowBuffer, p-sRowBuffer );
+			tOut.SendLSBDword ( ((uPacketID++)<<24) + ( dRows.Length() ) );
+			tOut.SendBytes ( dRows.Off ( 0 ), dRows.Length() );
+			dRows.Reset();
 
 			// cleanup
 			SendMysqlEofPacket ( tOut, uPacketID++, 0 );
@@ -8420,18 +8431,16 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 			SendMysqlEofPacket ( tOut, uPacketID++, 0 );
 
 			// send rows
-			char sRowBuffer[4096];
-			const char * sRowMax = sRowBuffer + sizeof(sRowBuffer) - 4; // safety gap
+			dRows.Reset();
 
 			for ( int iRow=0; iRow<dStatus.GetLength(); iRow+=2 )
 			{
-				int iLen;
-				char * p = sRowBuffer;
-				iLen = strlen ( dStatus[iRow+0].cstr() ); strncpy ( p+1, dStatus[iRow+0].cstr(), sRowMax-p-1 ); p[0] = BYTE(iLen); p += 1+iLen;
-				iLen = strlen ( dStatus[iRow+1].cstr() ); strncpy ( p+1, dStatus[iRow+1].cstr(), sRowMax-p-1 ); p[0] = BYTE(iLen); p += 1+iLen;
+				dRows.PutString ( dStatus[iRow+0].cstr() );
+				dRows.PutString ( dStatus[iRow+1].cstr() );
 
-				tOut.SendLSBDword ( ((uPacketID++)<<24) + ( p-sRowBuffer ) );
-				tOut.SendBytes ( sRowBuffer, p-sRowBuffer );
+				tOut.SendLSBDword ( ((uPacketID++)<<24) + ( dRows.Length() ) );
+				tOut.SendBytes ( dRows.Off ( 0 ), dRows.Length() );
+				dRows.Reset();
 			}
 
 			// cleanup
@@ -11505,12 +11514,14 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	if ( hSearchd("thread_stack") )
 	{
-		int iStackSize = hSearchd.GetInt ( "thread_stack", 65536 );
-		if ( iStackSize<65536 || iStackSize>2*1024*1024 )
+		int iThreadStackSizeMin = 65536;
+		int iThreadStackSizeMax = 2*1024*1024;
+		int iStackSize = hSearchd.GetSize ( "thread_stack", iThreadStackSizeMin );
+		if ( iStackSize<iThreadStackSizeMin || iStackSize>iThreadStackSizeMax )
 			sphWarning ( "thread_stack is %d will be clamped to range ( 65k to 2M )", iStackSize );
 
-		iStackSize = Min ( iStackSize, 2*1024*1024 );
-		iStackSize = Max ( iStackSize, 65536 );
+		iStackSize = Min ( iStackSize, iThreadStackSizeMax );
+		iStackSize = Max ( iStackSize, iThreadStackSizeMin );
 		sphSetMyStackSize ( iStackSize );
 	}
 

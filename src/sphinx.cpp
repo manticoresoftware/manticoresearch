@@ -13646,6 +13646,48 @@ bool CSphQueryContext::SetupOverrides ( const CSphQuery * pQuery, CSphQueryResul
 	return true;
 }
 
+static int sphQueryHeightCalc ( const XQNode_t * pNode )
+{
+	if ( !pNode->m_dChildren.GetLength() )
+		return pNode->m_dWords.GetLength();
+
+	if ( pNode->GetOp()==SPH_QUERY_BEFORE )
+		return 1;
+
+	int iMaxChild = 0;
+	int iHeight = 0;
+	ARRAY_FOREACH ( i, pNode->m_dChildren )
+	{
+		int iBottom = sphQueryHeightCalc ( pNode->m_dChildren[i] );
+		int iTop = pNode->m_dChildren.GetLength()-i-1;
+		if ( iBottom+iTop>=iMaxChild+iHeight )
+		{
+			iMaxChild = iBottom;
+			iHeight = iTop;
+		}
+	}
+
+	return iMaxChild+iHeight;
+}
+
+#define SPH_DAEMON_STACK_HEIGHT 20000
+#define SPH_EXTNODE_STACK_SIZE 80
+
+bool sphCheckQueryHeight ( const XQNode_t * pRoot, CSphString & sError )
+{
+	int iQueryMaxHeight = ( sphMyStackSize() - SPH_DAEMON_STACK_HEIGHT ) / SPH_EXTNODE_STACK_SIZE;
+	int iHeight = 0;
+	if ( pRoot )
+		iHeight = sphQueryHeightCalc ( pRoot );
+
+	bool bValid = ( iQueryMaxHeight>=iHeight );
+	if ( !bValid )
+		sError.SetSprintf ( "query too complex, not enough stack (thread_stack_size=%dK or higher required)",
+			( ( SPH_DAEMON_STACK_HEIGHT + iHeight*SPH_EXTNODE_STACK_SIZE ) / 1024 ) );
+
+	return bValid;
+}
+
 void sphDoStatsOrder ( const XQNode_t * pNode, CSphQueryResultMeta & tResult )
 {
 	if ( !pNode )
@@ -14129,6 +14171,9 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	if ( m_bExpandKeywords )
 		tParsed.m_pRoot = ExpandKeywords ( tParsed.m_pRoot, m_tSettings );
 
+	if ( !sphCheckQueryHeight ( tParsed.m_pRoot, pResult->m_sError ) )
+		return false;
+
 	// flag common subtrees
 	CSphVector<XQNode_t*> dTrees;
 	dTrees.Add ( tParsed.m_pRoot );
@@ -14212,10 +14257,17 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 			if ( m_bExpandKeywords )
 				tParsed.m_pRoot = ExpandKeywords ( tParsed.m_pRoot, m_tSettings );
 
-			dTrees.Add ( tParsed.m_pRoot );
-			dZones.Add ( tParsed.m_dZones );
-			tParsed.m_pRoot = NULL;
-			bResult = true;
+			if ( sphCheckQueryHeight ( tParsed.m_pRoot, tParsed.m_sParseError ) )
+			{
+				dTrees.Add ( tParsed.m_pRoot );
+				dZones.Add ( tParsed.m_dZones );
+				tParsed.m_pRoot = NULL;
+				bResult = true;
+			} else
+			{
+				ppResults[i]->m_sError = tParsed.m_sParseError;
+				ppResults[i]->m_iMultiplier = -1;
+			}
 		} else
 				ppResults[i]->m_iMultiplier = -1;
 		} else

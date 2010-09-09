@@ -751,7 +751,6 @@ class SphinxConfig
 	function RunQuerySphinxQL ( &$error, $bench=false )
 	{
 		global $sd_address, $sd_sphinxql_port, $action_retries, $action_wait_timeout;
-		$query_results = array ();
 		$total = $done = 0;
 		if ($sd_address == "localhost")
 			$connect_string = "127.0.0.1:$sd_sphinxql_port";
@@ -788,13 +787,10 @@ class SphinxConfig
 					$query_result["rows"][] = $row;
 				mysql_free_result($result);
 			}
-			$query_results[] = $query_result;
+			$this->_results[] = $query_result;
+			if ( IsModelGenMode () )
+				$this->_results_model[count($this->_results_model)-1][] = $query_result;
 		}
-		$this->_results = $query_results;
-
-		if ( IsModelGenMode () )
-			array_push ( $this->_results_model, $query_results );
-
 		mysql_close ( $connection );
 		return true;
 	}
@@ -1828,6 +1824,8 @@ class SphinxConfig
 			case "static":				fwrite ( $fp, $node->nodeValue ); return;
 			case "searchd_settings":	$this->WriteSearchdSettings ( $fp ); return;
 			case "sql_settings":		$this->WriteSqlSettings ( $fp, $node->attributes ); return;
+			case "my_address":
+			case "agent0_address":		fwrite ( $fp, $agents[0]["address"].":".$agents[0]["port"] ); return;
 			case "agent_address":
 			case "agent1_address":		fwrite ( $fp, $agents[1]["address"].":".$agents[1]["port"] ); return;
 			case "agent2_address":		fwrite ( $fp, $agents[2]["address"].":".$agents[2]["port"] ); return;

@@ -10172,7 +10172,12 @@ void CheckRotate ()
 			g_dRotateQueue.Add ( sIndex );
 			g_tRotateQueueMutex.Unlock();
 		} else
+		{
 			g_dRotating.Add ( sIndex.cstr() );
+
+			if ( !( tIndex.m_bPreopen || g_bPreopenIndexes ) )
+				sphWarning ( "rotating index '%s' without preopen option; use per-index propen=1 or searchd preopen_indexes=1", sIndex.cstr() );
+		}
 	}
 
 	if ( g_eWorkers!=MPM_THREADS )

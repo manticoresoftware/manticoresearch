@@ -756,7 +756,7 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 }
 
 
-CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSourceName, bool bUTF8 )
+CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSourceName, bool bUTF8, bool bWordDict )
 {
 	if ( !hSource.Exists ( "type" ) )
 	{
@@ -781,6 +781,12 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 	if ( hSource["type"]=="mssql" )
 		return SpawnSourceMSSQL ( hSource, sSourceName );
 	#endif
+
+	if ( hSource["type"]=="xmlpipe" && bWordDict )
+	{
+		fprintf ( stdout, "ERROR: source '%s': type xmlpipe incompatible with dict=keywords option use xmlpipe2 instead; skipping.\n", sSourceName );
+		return NULL;
+	}
 
 	if ( hSource["type"]=="xmlpipe" || hSource["type"]=="xmlpipe2" )
 		return SpawnSourceXMLPipe ( hSource, sSourceName, bUTF8 );
@@ -992,7 +998,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		}
 		const CSphConfigSection & hSource = hSources [ pSourceName->cstr() ];
 
-		CSphSource * pSource = SpawnSource ( hSource, pSourceName->cstr(), pTokenizer->IsUtf8 () );
+		CSphSource * pSource = SpawnSource ( hSource, pSourceName->cstr(), pTokenizer->IsUtf8 (), tDictSettings.m_bWordDict );
 		if ( !pSource )
 		{
 			bSpawnFailed = true;

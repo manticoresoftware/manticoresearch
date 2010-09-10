@@ -1256,7 +1256,7 @@ void Shutdown ()
 		sphInfo ( "shutdown complete" );
 
 	if ( g_bHeadDaemon )
-		sphThreadDone();
+		sphThreadDone ( g_iLogFile );
 }
 
 #if !USE_WINDOWS
@@ -1329,6 +1329,7 @@ BYTE * sphEncodeBase64 ( BYTE * pDst, const BYTE * pSrc, int iLen )
 #define SPH_TIME_PID_MAX_SIZE 256
 const char		g_sCrashedBannerAPI[] = "\n--- crashed SphinxAPI request dump ---\n";
 const char		g_sCrashedBannerMySQL[] = "\n--- crashed SphinxMYSQL request dump ---\n";
+const char		g_sMemoryStatBanner[] = "\n--- memory statistics ---\n";
 static BYTE		g_dEncoded[	SPH_TIME_PID_MAX_SIZE
 							+ 2 * Max ( sizeof(g_sCrashedBannerAPI), sizeof(g_sCrashedBannerMySQL) )
 							+ SPH_LAST_QUERY_MAX_SIZE*4/3 ];
@@ -1451,6 +1452,11 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 	sphBacktrace ( g_iLogFile, g_bSafeTrace );
 #else
 	sphBacktrace ( pExc, g_sMinidump );
+#endif
+
+#if SPH_ALLOCS_PROFILER
+	sphWrite ( g_iLogFile, g_sMemoryStatBanner, sizeof ( g_sMemoryStatBanner )-1 );
+	sphMemStatDump ( g_iLogFile );
 #endif
 
 	CRASH_EXIT;
@@ -8920,7 +8926,7 @@ void CheckLeaks ()
 #endif
 
 #if SPH_ALLOCS_PROFILER
-	const int iAllocLogPeriod = 60 * 1000000;
+	int iAllocLogPeriod = 60 * 1000000;
 	static int64_t tmLastLog = -iAllocLogPeriod*10;
 
 	const int iAllocCount = sphAllocsCount();
@@ -8932,8 +8938,7 @@ void CheckLeaks ()
 		const int iThdsCount = g_dThd.GetLength ();
 		const float fMB = 1024.0f*1024.0f;
 		sphInfo ( "--- allocs-count=%d, mem-total=%.4f Mb, active-threads=%d", iAllocCount, fMemTotal/fMB, iThdsCount );
-		sphMemStatDump();
-		sphInfo ( NULL ); // flush dupes
+		sphMemStatDump ( g_iLogFile );
 	}
 #endif
 }

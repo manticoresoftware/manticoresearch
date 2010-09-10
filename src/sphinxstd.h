@@ -189,7 +189,7 @@ void			sphAllocsStats ();
 /// check all existing allocs; raises assertion failure in cases of errors
 void			sphAllocsCheck ();
 
-void			sphMemStatDump ();
+void			sphMemStatDump ( int iFD );
 
 void			sphMemStatMMapAdd ( int64_t iSize );
 void			sphMemStatMMapDel ( int64_t iSize );
@@ -1840,7 +1840,7 @@ typedef pthread_key_t SphThreadKey_t;
 void * sphThreadInit ( bool bDetached=false );
 
 /// my threading deinitialize routine
-void sphThreadDone();
+void sphThreadDone ( int iFD );
 
 /// my create thread wrapper
 bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg, bool bDetached=false );

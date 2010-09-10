@@ -15,6 +15,7 @@
 
 #include "sphinx.h"
 #include "sphinxint.h"
+#include "sphinxutils.h"
 
 #if !USE_WINDOWS
 #include <sys/time.h> // for gettimeofday
@@ -55,13 +56,6 @@ void sphAssert ( const char * sExpr, const char * sFile, int iLine )
 
 #undef new
 #define SPH_DEBUG_DOFREE 1 // 0 will not actually free returned blocks; helps to catch double deletes etc
-
-// for ::write
-#if USE_WINDOWS
-#include <io.h>
-#else
-#include <unistd.h>
-#endif
 
 const DWORD MEMORY_MAGIC_PLAIN		= 0xbbbbbbbbUL;
 const DWORD MEMORY_MAGIC_ARRAY		= 0xaaaaaaaaUL;
@@ -216,21 +210,17 @@ void sphAllocsDump ( int iFile, int iSinceID )
 {
 	g_tAllocsMutex.Lock();
 
-	char sBuf [ 1024 ];
-	snprintf ( sBuf, sizeof(sBuf), "--- dumping allocs since %d ---\n", iSinceID );
-	write ( iFile, sBuf, strlen(sBuf) );
+	sphfprintf ( iFile, "--- dumping allocs since %d ---\n", iSinceID );
 
 	for ( CSphMemHeader * pHeader = g_pAllocs;
 		pHeader && pHeader->m_iAllocId > iSinceID;
 		pHeader = pHeader->m_pNext )
 	{
-		snprintf ( sBuf, sizeof(sBuf), "alloc %d at %s(%d): %d bytes\n", pHeader->m_iAllocId,
+		sphfprintf ( iFile, "alloc %d at %s(%d): %d bytes\n", pHeader->m_iAllocId,
 			pHeader->m_sFile, pHeader->m_iLine, (int)pHeader->m_iSize );
-		write ( iFile, sBuf, strlen(sBuf) );
 	}
 
-	snprintf ( sBuf, sizeof(sBuf), "--- end of dump ---\n" );
-	write ( iFile, sBuf, strlen(sBuf) );
+	sphfprintf ( iFile, "--- end of dump ---\n" );
 
 	g_tAllocsMutex.Unlock();
 }
@@ -263,7 +253,7 @@ void sphAllocsCheck ()
 
 void sphMemStatInit () {}
 void sphMemStatDone () {}
-void sphMemStatDump () {}
+void sphMemStatDump ( int ) {}
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -559,10 +549,8 @@ static const char* g_dMemCategoryName[] = {
 STATIC_ASSERT ( sizeof(g_dMemCategoryName)/sizeof(g_dMemCategoryName[0])==Memory::SPH_MEM_TOTAL, MEM_STAT_NAME_MISMATCH );
 
 // output of memory statistic's
-void sphMemStatDump ()
+void sphMemStatDump ( int iFD )
 {
-extern void sphInfo ( const char * sFmt, ... );
-
 	const float fMB = 1024.0f*1024.0f;
 	float fSize = 0;
 	int iCount = 0;
@@ -571,12 +559,12 @@ extern void sphInfo ( const char * sFmt, ... );
 		fSize += (float)g_dMemCategoryStat[i].m_iSize;
 		iCount += g_dMemCategoryStat[i].m_iCount;
 	}
-	sphInfo ( "%-24s allocs-count=%d, mem-total=%.4f Mb", "(total)", iCount, fSize/fMB );
+	sphfprintf ( iFD, "%-24s allocs-count=%d, mem-total=%.4f Mb", "(total)", iCount, fSize/fMB );
 
 	for ( int i=0; i<Memory::SPH_MEM_TOTAL; i++ )
 		if ( g_dMemCategoryStat[i].m_iCount>0 )
-			sphInfo ( "%-24s allocs-count=%d, mem-total=%.4f Mb"
-				, g_dMemCategoryName[i], g_dMemCategoryStat[i].m_iCount, (float)g_dMemCategoryStat[i].m_iSize/fMB );
+			sphfprintf ( iFD, "%-24s allocs-count=%d, mem-total=%.4f Mb",
+				g_dMemCategoryName[i], g_dMemCategoryStat[i].m_iCount, (float)g_dMemCategoryStat[i].m_iSize/fMB);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -871,13 +859,17 @@ void * sphThreadInit ( bool )
 }
 
 
-void sphThreadDone()
-{
 #if SPH_DEBUG_LEAKS || SPH_ALLOCS_PROFILER
-	sphMemStatDump();
+void sphThreadDone ( int iFD )
+{
+	sphMemStatDump ( iFD );
 	sphMemStatDone();
-#endif
 }
+#else
+void sphThreadDone ( int )
+{
+}
+#endif
 
 
 bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg, bool bDetached )

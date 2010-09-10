@@ -1060,8 +1060,6 @@ void sphSetLogger ( SphLogger_fn fnLog )
 // CRASH REPORTING
 //////////////////////////////////////////////////////////////////////////
 
-#if !USE_WINDOWS
-
 template <typename Uint>
 static void UItoA ( char** ppOutput, Uint uVal, int iBase=10, int iWidth=0, int iPrec=0, const char cFill=' ' )
 {
@@ -1269,13 +1267,32 @@ static char g_sSafeInfoBuf [ 1024 ];
 
 void sphSafeInfo ( int iFD, const char * sFmt, ... )
 {
-	assert ( iFD>=0 && sFmt );
+	if ( iFD<0 || !sFmt )
+		return;
+
 	va_list ap;
 	va_start ( ap, sFmt );
 	int iLen = sphVSprintf ( g_sSafeInfoBuf, sFmt, ap ); // FIXME! make this vsnprintf
 	va_end ( ap );
 	::write ( iFD, g_sSafeInfoBuf, iLen );
 }
+
+void sphfprintf ( int iFD, const char * sFmt, ... )
+{
+	if ( iFD<0 || !sFmt )
+		return;
+
+	va_list ap;
+	va_start ( ap, sFmt );
+	int iLen = vsnprintf ( g_sSafeInfoBuf, sizeof(g_sSafeInfoBuf)-1, sFmt, ap );
+	va_end ( ap );
+	if ( iLen==-1 )
+		iLen = sizeof(g_sSafeInfoBuf)-1;
+	g_sSafeInfoBuf[iLen] = '\n';
+	::write ( iFD, g_sSafeInfoBuf, iLen+1 );
+}
+
+#if !USE_WINDOWS
 
 #define SPH_BACKTRACE_ADDR_COUNT 128
 static void * g_pBacktraceAddresses [SPH_BACKTRACE_ADDR_COUNT];

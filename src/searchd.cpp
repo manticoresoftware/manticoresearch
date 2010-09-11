@@ -11809,11 +11809,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	}
 	if ( g_bWatchdog && g_eWorkers==MPM_THREADS )
 		SetWatchDog();
+#endif
 
 	if ( g_eWorkers==MPM_THREADS )
 		sphRTConfigure ( hSearchd );
-
-#endif
 
 	if ( bOptPIDFile )
 	{

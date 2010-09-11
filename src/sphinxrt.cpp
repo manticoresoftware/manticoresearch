@@ -4171,7 +4171,8 @@ RtBinlog_c::~RtBinlog_c ()
 	if ( !m_bDisabled )
 	{
 		m_iFlushPeriod = 0;
-		sphThreadJoin ( &m_tUpdateTread );
+		if ( m_eOnCommit!=ACTION_FSYNC )
+			sphThreadJoin ( &m_tUpdateTread );
 
 		DoCacheWrite();
 		m_tWriter.CloseFile();
@@ -4277,6 +4278,9 @@ void RtBinlog_c::BinlogUpdateAttributes ( const char * sIndexName, int64_t iTID,
 // here's been going binlogs with ALL closed indices removing
 void RtBinlog_c::NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool bShutdown )
 {
+	if ( m_bReplayMode )
+		sphInfo ( "index '%s': ramchunk saved. TID="INT64_FMT"", sIndexName, iTID );
+
 	if ( m_bReplayMode || m_bDisabled )
 		return;
 
@@ -4400,7 +4404,7 @@ void RtBinlog_c::Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes )
 
 void RtBinlog_c::CreateTimerThread ()
 {
-	if ( !m_bDisabled )
+	if ( !m_bDisabled && m_eOnCommit!=ACTION_FSYNC )
 	{
 		m_iFlushTimeLeft = sphMicroTimer() + m_iFlushPeriod;
 		sphThreadCreate ( &m_tUpdateTread, RtBinlog_c::DoAutoFlush, this );
@@ -4421,20 +4425,15 @@ void RtBinlog_c::DoAutoFlush ( void * pBinlog )
 
 			pLog->m_iFlushTimeLeft = sphMicroTimer() + pLog->m_iFlushPeriod;
 
-			const bool bHasUnwritedData = pLog->m_tWriter.HasUnwrittenData();
-			const bool bHasUnfsyncedData = pLog->m_tWriter.HasUnsyncedData();
-
-			if ( bHasUnwritedData || bHasUnfsyncedData )
+			if ( pLog->m_eOnCommit==ACTION_NONE || pLog->m_tWriter.HasUnwrittenData() )
 			{
 				Verify ( pLog->m_tWriteLock.Lock() );
-
-				if ( bHasUnwritedData )
-					pLog->m_tWriter.Flush();
-				else
-					pLog->m_tWriter.Fsync();
-
+				pLog->m_tWriter.Flush();
 				Verify ( pLog->m_tWriteLock.Unlock() );
 			}
+
+			if ( pLog->m_tWriter.HasUnsyncedData() )
+				pLog->m_tWriter.Fsync();
 		}
 
 		// sleep N msec before next iter or terminate because of shutdown

@@ -67,8 +67,10 @@ ISphRtIndex * sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndex
 /// Get current txn index
 ISphRtIndex * sphGetCurrentIndexRT();
 
+typedef void ProgressCallbackSimple_t ();
+
 /// replay stored binlog
-void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes );
+void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback=NULL );
 
 #endif // _sphinxrt_
 

@@ -8908,6 +8908,13 @@ int PipeAndFork ( bool bFatal, int iHandler )
 
 #endif // !USE_WINDOWS
 
+void DumpMemStat ()
+{
+#if SPH_ALLOCS_PROFILER
+	sphMemStatDump ( g_iLogFile );
+#endif
+}
+
 /// check and report if there were any leaks since last call
 void CheckLeaks ()
 {
@@ -8938,7 +8945,7 @@ void CheckLeaks ()
 		const int iThdsCount = g_dThd.GetLength ();
 		const float fMB = 1024.0f*1024.0f;
 		sphInfo ( "--- allocs-count=%d, mem-total=%.4f Mb, active-threads=%d", iAllocCount, fMemTotal/fMB, iThdsCount );
-		sphMemStatDump ( g_iLogFile );
+		DumpMemStat ();
 	}
 #endif
 }
@@ -11920,7 +11927,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		hIndexes.Add ( it.Get().m_pIndex, it.GetKey() );
 
 	if ( g_eWorkers==MPM_THREADS )
-		sphReplayBinlog ( hIndexes );
+		sphReplayBinlog ( hIndexes, DumpMemStat );
 
 	if ( !g_bOptNoDetach )
 		g_bLogStdout = false;

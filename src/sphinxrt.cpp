@@ -878,7 +878,7 @@ public:
 	void	NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool bShutdown );
 
 	void	Configure ( const CSphConfigSection & hSearchd );
-	void	Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes );
+	void	Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback  );
 
 	void	CreateTimerThread ();
 
@@ -4381,16 +4381,24 @@ void RtBinlog_c::Configure ( const CSphConfigSection & hSearchd )
 	}
 }
 
-void RtBinlog_c::Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes )
+void RtBinlog_c::Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback  )
 {
 	if ( m_bDisabled || !hIndexes.GetLength() )
 		return;
+
+	// on replay started
+	if ( pfnProgressCallback )
+		pfnProgressCallback();
 
 	// do replay
 	m_bReplayMode = true;
 	int iLastLogState = 0;
 	ARRAY_FOREACH ( i, m_dLogFiles )
+	{
 		iLastLogState = ReplayBinlog ( hIndexes, i );
+		if ( pfnProgressCallback ) // on each replayed binlog
+			pfnProgressCallback();
+	}
 
 	// FIXME?
 	// in some cases, indexes might had been flushed during replay
@@ -5089,10 +5097,10 @@ void sphRTDone ()
 	SafeDelete ( g_pBinlog );
 }
 
-void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes )
+void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback  )
 {
 	MEMORY ( SPH_MEM_BINLOG );
-	g_pBinlog->Replay ( hIndexes );
+	g_pBinlog->Replay ( hIndexes, pfnProgressCallback );
 	g_pBinlog->CreateTimerThread();
 	g_bRTChangesAllowed = true;
 }

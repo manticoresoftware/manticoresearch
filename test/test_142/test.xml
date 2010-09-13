@@ -4,6 +4,7 @@
 
 <requires>
 <non-windows/>
+<watchdog/>
 </requires>
 
 <skip_indexer/>

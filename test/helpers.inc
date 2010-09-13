@@ -128,7 +128,7 @@ function CheckSearchdLog ( $error_file, &$retval )
 }
 
 
-function StartSearchd ( $config_file, $error_file, $pidfile, &$error )
+function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watchdog = false )
 {
 	global $g_locals, $windows, $action_retries, $action_wait_timeout;
 
@@ -145,6 +145,10 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error )
 		return 1;
 	}
 
+	$test_mode = '--test';
+	if ( $use_watchdog )
+		$test_mode = '';
+		
 	$retval = 0;
 	if ( $windows )
 	{
@@ -152,11 +156,11 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error )
 		// using cmd /c for redirection to work
 		if ( file_exists ( $pidfile ) )
 			unlink ( $pidfile );
-		$process = popen ("start /min cmd /c \"$path --config $config_file --pidfile --console > $error_file\"", "r" );
+		$process = popen ("start /min cmd /c \"$path --config $config_file --pidfile --console $test_mode > $error_file\"", "r" );
 		pclose ( $process );
 	}
 	else
-		system ( "$path --config $config_file > $error_file", $retval );
+		system ( "$path --config $config_file $test_mode > $error_file", $retval );
 
 	// wait until pid appears
 	for ( $i=0; $i<$action_retries && !file_exists($pidfile); $i++ )
@@ -2046,7 +2050,7 @@ function RunTest ( $test_dir )
 			if ( $sd_managed_searchd )
 				$searchd_ret = 0;
 			else
-				$searchd_ret = StartSearchd ( "config.conf", "error.txt", $sd_pid_file, $error );
+				$searchd_ret = StartSearchd ( "config.conf", "error.txt", $sd_pid_file, $error, $config->Requires ( "watchdog" ) );
 			
 			$stop["config.conf"] = $sd_pid_file;
 
@@ -2080,7 +2084,7 @@ function RunTest ( $test_dir )
 			if ( $sd_managed_searchd )
 				$searchd_ret = 0;
 			else
-				$searchd_ret = StartSearchd ( $config_file, "error_".$agent_id.".txt", $pid_file, $error );
+				$searchd_ret = StartSearchd ( $config_file, "error_".$agent_id.".txt", $pid_file, $error, $config->Requires ( "watchdog" )  );
 
 				if ( $searchd_ret == 1 )
 				{

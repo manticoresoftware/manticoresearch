@@ -10658,15 +10658,9 @@ void SetWatchDog()
 			assert ( iPid==iRes );
 			if ( WIFEXITED ( iStatus ) )
 			{
-				if ( WEXITSTATUS ( iStatus )!=0 )
-				{
-					sphInfo ( "Child process %d has died with code %i, will be restarted", iPid, WEXITSTATUS ( iStatus ) );
-					bReincarnate = true;
-				} else
-				{
-					sphInfo ( "Child process %d has been finished. Watchdog finishes also. Good bye!", iPid );
-					bShutdown = true;
-				}
+				int iExit = WEXITSTATUS ( iStatus );
+				sphInfo ( "Child process %d has been finished, exit code %d. Watchdog finishes also. Good bye!", iPid, iExit );
+				bShutdown = true;
 			} else if ( WIFSIGNALED ( iStatus ) )
 			{
 				if ( WTERMSIG ( iStatus )==SIGINT || WTERMSIG ( iStatus )==SIGTERM )
@@ -11259,6 +11253,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 #endif
 		OPT1 ( "--logdebug" )		g_eLogLevel = LOG_DEBUG;
 		OPT1 ( "--safetrace" )		g_bSafeTrace = true;
+		OPT1 ( "--test" )			g_bWatchdog = false;
 
 		// handle 1-arg options
 		else if ( (i+1)>=argc )		break;

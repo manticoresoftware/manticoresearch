@@ -899,6 +899,16 @@ void sphinx_reset_groupby ( sphinx_client * client )
 
 //////////////////////////////////////////////////////////////////////////
 
+static int sphinx_dismiss_requests ( sphinx_client * client )
+{
+	int nreqs = client->num_reqs, i;
+	for ( i=0; i<client->num_reqs; i++ )
+		free ( client->reqs[i] );
+	client->num_reqs = 0;
+	return nreqs;
+}
+
+
 sphinx_result * sphinx_query ( sphinx_client * client, const char * query, const char * index_list, const char * comment )
 {
 	sphinx_result * res;
@@ -916,6 +926,7 @@ sphinx_result * sphinx_query ( sphinx_client * client, const char * query, const
 		return NULL;
 
 	res = sphinx_run_queries ( client ); // just a shortcut for client->results[0]
+	sphinx_dismiss_requests ( client ); // sphinx_query() is fire and forget; dismiss request in all cases
 	if ( !res )
 		return NULL;
 
@@ -1681,12 +1692,8 @@ sphinx_result * sphinx_run_queries ( sphinx_client * client )
 	if ( !client->response_buf )
 		return NULL;
 
-	// dismiss requests
-	nreqs = client->num_reqs;
-
-	for ( i=0; i<client->num_reqs; i++ )
-		free ( client->reqs[i] );
-	client->num_reqs = 0;
+	// dismiss request data, memorize count
+	nreqs = sphinx_dismiss_requests ( client );
 
 	// parse response
 	p = client->response_start;

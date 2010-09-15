@@ -748,9 +748,12 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokeni
 	Token_t & tLast = m_dTokens.Add();
 	tLast.m_eType = TOK_NONE;
 	tLast.m_iStart = 0;
+	tLast.m_iLengthCP = 0;
 	tLast.m_iLengthBytes = 0;
+	tLast.m_iWeight = 0;
 	tLast.m_iWordID = 0;
 	tLast.m_uWords = 0;
+	tLast.m_uPosition = 0;
 }
 
 void ExcerptGen_c::MarkHits ()

@@ -8,12 +8,14 @@ searchd
 {
 	<searchd_settings/>
 	workers	= threads
+	thread_stack = 91K
+	binlog_path =
 }
 
 index test
 {
 	type	= rt
-	path	= data/test
+	path	= <data_path/>/test
 	
 	rt_field		= text
 	rt_attr_uint	= idd
@@ -36,11 +38,6 @@ CREATE TABLE `test`
 DROP TABLE IF EXISTS `test`
 </db_drop>
 
-<db_insert>
-INSERT INTO `test` VALUES (1, 'word1 word10', 1 )
-</db_insert>
-
-
 <custom_test><![CDATA[
 
 global $sd_address, $sd_sphinxql_port;
@@ -57,13 +54,22 @@ if ( $sock === false )
 	return;
 }
 
-$match = '"word1 \n word2"~30 ';
+$query = "INSERT INTO test VALUES (1, 'word1 word10', 1 )";
+$results[] = $query;
+$res = mysql_query ( $query, $sock );
+if ($res===true)
+	$results[] = "total affected ".mysql_affected_rows($sock);
+else if ($res===false)
+	$results[] = "error ".@mysql_errno($sock)." : ".@mysql_error ($sock);
+else
+	$results[] = "total found ".mysql_num_rows ($res);
+	
+$match = '"word1 word2"~30 ';
 for ( $i=3; $i<520; $i++ )
 	$match = $match . ' | "word' . $i . ' word' . ( $i+1 ) . '"~30 ';
 
 $query = "SELECT * FROM test WHERE MATCH('$match')";
-
-
+$results[] = $query;
 $res = mysql_query ( $query, $sock );
 if ($res===true)
 	$results[] = "total affected ".mysql_affected_rows($sock);

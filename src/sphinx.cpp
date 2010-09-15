@@ -13678,20 +13678,20 @@ static int sphQueryHeightCalc ( const XQNode_t * pNode )
 	return iMaxChild+iHeight;
 }
 
-#define SPH_DAEMON_STACK_HEIGHT 20000
-#define SPH_EXTNODE_STACK_SIZE 80
+#define SPH_DAEMON_STACK_HEIGHT 30*1024
+#define SPH_EXTNODE_STACK_SIZE 120
 
 bool sphCheckQueryHeight ( const XQNode_t * pRoot, CSphString & sError )
 {
-	int iQueryMaxHeight = ( sphMyStackSize() - SPH_DAEMON_STACK_HEIGHT ) / SPH_EXTNODE_STACK_SIZE;
 	int iHeight = 0;
 	if ( pRoot )
 		iHeight = sphQueryHeightCalc ( pRoot );
 
-	bool bValid = ( iQueryMaxHeight>=iHeight );
+	int iQueryStack = iHeight*SPH_EXTNODE_STACK_SIZE+SPH_DAEMON_STACK_HEIGHT;
+	bool bValid = ( sphMyStackSize()>=iQueryStack );
 	if ( !bValid )
 		sError.SetSprintf ( "query too complex, not enough stack (thread_stack_size=%dK or higher required)",
-			( ( SPH_DAEMON_STACK_HEIGHT + iHeight*SPH_EXTNODE_STACK_SIZE ) / 1024 ) );
+			( ( iQueryStack+1024-( iQueryStack%1024 ) ) / 1024 ) );
 
 	return bValid;
 }

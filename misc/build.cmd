@@ -1,8 +1,8 @@
 @echo off
 
 
-set URL=svn://sphx.org/sphinx/branches/rel099
-set REL=0.9.9
+set URL=svn://sphx.org/sphinx/branches/rel110
+set REL=1.10
 
 
 set PATH=C:\Program Files\Microsoft Visual Studio 8\Common7\IDE;%PATH%;
@@ -106,6 +106,7 @@ for %%i in (comerr32.dll gssapi32.dll iconv.dll k5sprt32.dll krb5_32.dll libeay3
 	copy "%PGSQLROOT%\bin\%%i" %BASE%\bin
 )
 
+copy "%EXPATROOT%\libs\libexpat.dll" %BASE%\bin
 copy "%MYSQLROOT%\bin\libmysql.dll" %BASE%\bin
 xcopy /q /s common\* %BASE%
 pkzip25 -add %BASE%.zip -dir %BASE%\*
@@ -150,6 +151,7 @@ for %%i in (comerr32.dll gssapi32.dll iconv.dll k5sprt32.dll krb5_32.dll libeay3
 	copy "%PGSQLROOT%\bin\%%i" %BASE%\bin
 )
 
+copy "%EXPATROOT%\libs\libexpat.dll" %BASE%\bin
 copy "%MYSQLROOT%\bin\libmysql.dll" %BASE%\bin
 xcopy /q /s common\* %BASE%
 pkzip25 -add %BASE%.zip -dir %BASE%\*

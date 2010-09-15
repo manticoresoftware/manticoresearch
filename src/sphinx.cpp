@@ -1377,7 +1377,7 @@ private:
 	static const int			DEFAULT_WRITE_BUFFER	= 1048576;	///< default write buffer size
 
 	static const DWORD			INDEX_MAGIC_HEADER		= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD			INDEX_FORMAT_VERSION	= 22;			///< my format version
+	static const DWORD			INDEX_FORMAT_VERSION	= 23;			///< my format version
 
 private:
 	// common stuff
@@ -13474,6 +13474,12 @@ void CSphIndex_VLN::LoadSettings ( CSphReader & tReader )
 
 	if ( m_uVersion>=22 )
 		m_tSettings.m_sZonePrefix = tReader.GetString();
+
+	if ( m_uVersion>=23 )
+	{
+		m_tSettings.m_iBoundaryStep = (int)tReader.GetDword();
+		m_tSettings.m_iStopwordStep = (int)tReader.GetDword();
+	}
 }
 
 
@@ -13489,6 +13495,8 @@ void CSphIndex_VLN::SaveSettings ( CSphWriter & tWriter )
 	tWriter.PutDword ( m_tSettings.m_eHitFormat );
 	tWriter.PutByte ( m_tSettings.m_bIndexSP );
 	tWriter.PutString ( m_tSettings.m_sZonePrefix );
+	tWriter.PutDword ( m_tSettings.m_iBoundaryStep );
+	tWriter.PutDword ( m_tSettings.m_iStopwordStep );
 }
 
 

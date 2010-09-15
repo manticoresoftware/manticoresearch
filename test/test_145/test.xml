@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>snippets vs stopwords</name>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'text';
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+
+	charset_type	= utf-8
+	stopwords		= test_145/stopwords.txt
+	morphology		= stem_en
+	
+	phrase_boundary = U+002C
+	phrase_boundary_step = 4	
+}
+</config>
+
+<db_insert>select 1;</db_insert>
+
+<sphqueries>
+<!-- query mode phase should match to exact_phrase -->
+<sphinxql>CALL SNIPPETS('click edit', 'test', '"click TO edit"', 1 AS query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS('click word1 WITH edit', 'test', '"click TO word1 edit"', 1 AS query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS('click WITH word1 edit', 'test', '"click TO word1 edit"', 1 AS query_mode )</sphinxql>
+
+<sphinxql>CALL SNIPPETS('clicking ANY edit', 'test', '"click TO edit"', 1 AS query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS('click ANY edit', 'test', '"click TO edit"', 1 AS query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS('edit ANY click', 'test', '"click TO edit"', 1 AS query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS('clicking WITH ANY AND ALL TO edit', 'test', '"click TO edit"', 1 AS query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS('click WITH ANY AND ALL TO edit', 'test', '"click TO edit"', 1 AS query_mode )</sphinxql>
+
+<sphinxql>CALL SNIPPETS('either click, edit', 'test', '"click TO edit"', 1 AS query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS('either click, edit', 'test', '"click TO ANY AND ALL edit"', 1 AS query_mode )</sphinxql>
+
+<!-- exact phrase phase  should match to query_mode -->
+<sphinxql>CALL SNIPPETS('click edit', 'test', '"click TO edit"', 1 AS exact_phrase )</sphinxql>
+<sphinxql>CALL SNIPPETS('click word1 WITH edit', 'test', '"click TO word1 edit"', 1 AS exact_phrase )</sphinxql>
+<sphinxql>CALL SNIPPETS('click WITH word1 edit', 'test', '"click TO word1 edit"', 1 AS exact_phrase )</sphinxql>
+
+<sphinxql>CALL SNIPPETS('clicking ANY edit', 'test', '"click TO edit"', 1 AS exact_phrase )</sphinxql>
+<sphinxql>CALL SNIPPETS('click ANY edit', 'test', '"click TO edit"', 1 AS exact_phrase )</sphinxql>
+<sphinxql>CALL SNIPPETS('edit ANY click', 'test', '"click TO edit"', 1 AS exact_phrase )</sphinxql>
+<sphinxql>CALL SNIPPETS('clicking WITH ANY AND ALL TO edit', 'test', '"click TO edit"', 1 AS exact_phrase )</sphinxql>
+<sphinxql>CALL SNIPPETS('click WITH ANY AND ALL TO edit', 'test', '"click TO edit"', 1 AS exact_phrase )</sphinxql>
+
+<sphinxql>CALL SNIPPETS('either click, edit', 'test', '"click TO edit"', 1 AS exact_phrase )</sphinxql>
+<sphinxql>CALL SNIPPETS('either click, edit', 'test', '"click TO ANY AND ALL edit"', 1 AS exact_phrase )</sphinxql>
+
+</sphqueries>
+
+</test>

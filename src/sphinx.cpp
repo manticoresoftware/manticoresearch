@@ -1147,7 +1147,7 @@ struct CSphWordlistCheckpoint
 {
 	union
 	{
-	SphWordID_t			m_iWordID;
+		SphWordID_t		m_iWordID;
 		const char *	m_sWord;
 	};
 	SphOffset_t			m_iWordlistOffset;
@@ -12612,12 +12612,13 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 {
 	// get keyword id
 	SphWordID_t uWordID = 0;
+	BYTE * sTok = NULL;
 	if ( !bID )
 	{
 		CSphString sBuf ( sKeyword );
 
 		m_pTokenizer->SetBuffer ( (BYTE*)sBuf.cstr(), strlen ( sBuf.cstr() ) );
-		BYTE * sTok = m_pTokenizer->GetToken();
+		sTok = m_pTokenizer->GetToken();
 
 		if ( !sTok )
 			sphDie ( "keyword=%s, no token (too short?)", sKeyword );
@@ -12659,6 +12660,8 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 	Qword tKeyword;
 	tKeyword.m_tDoc.m_iDocID = m_tMin.m_iDocID;
 	tKeyword.m_iWordID = uWordID;
+	tKeyword.m_sWord = sKeyword;
+	tKeyword.m_sDictWord = (const char *)sTok;
 	if ( !tTermSetup.QwordSetup ( &tKeyword ) )
 		sphDie ( "failed to setup keyword" );
 
@@ -22765,7 +22768,7 @@ bool CWordlist::ReadCP ( CSphAutofile & tFile, DWORD uVer, bool bWordDict, CSphS
 
 const CSphWordlistCheckpoint * CWordlist::FindCheckpoint ( const char * sWord, int iWordLen, SphWordID_t iWordID, bool bStarMode ) const
 {
-	assert ( iWordLen>0 );
+	assert ( !m_bWordDict || iWordLen>0 );
 
 	const CSphWordlistCheckpoint * pStart = m_dCheckpoints.Begin();
 	const CSphWordlistCheckpoint * pEnd = &m_dCheckpoints.Last();

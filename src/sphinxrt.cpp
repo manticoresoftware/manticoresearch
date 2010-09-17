@@ -878,7 +878,7 @@ public:
 	void	NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool bShutdown );
 
 	void	Configure ( const CSphConfigSection & hSearchd );
-	void	Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback  );
+	void	Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback );
 
 	void	CreateTimerThread ();
 
@@ -1136,11 +1136,11 @@ public:
 	explicit			CSphSource_StringVector ( int iFields, const char ** ppFields, const CSphSchema & tSchema );
 	virtual				~CSphSource_StringVector () {}
 
-	virtual bool		Connect ( CSphString & ) { return true; }
-	virtual void		Disconnect () {}
+	virtual bool		Connect ( CSphString & );
+	virtual void		Disconnect ();
 
 	virtual bool		HasAttrsConfigured () { return false; }
-	virtual bool		IterateHitsStart ( CSphString & ) { return true; }
+	virtual bool		IterateStart ( CSphString & ) { return true; }
 
 	virtual bool		IterateMultivaluedStart ( int, CSphString & ) { return false; }
 	virtual bool		IterateMultivaluedNext () { return false; }
@@ -1171,6 +1171,19 @@ CSphSource_StringVector::CSphSource_StringVector ( int iFields, const char ** pp
 		assert ( m_dFields[i] );
 	}
 	m_dFields [ iFields ] = NULL;
+
+	m_iMaxHits = 0; // force all hits build
+}
+
+bool CSphSource_StringVector::Connect ( CSphString & )
+{
+	m_tHits.m_dData.Reserve ( 1024 );
+	return true;
+}
+
+void CSphSource_StringVector::Disconnect ()
+{
+	m_tHits.m_dData.Reset();
 }
 
 bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const char ** ppStr, CSphString & sError )
@@ -1203,7 +1216,11 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 	tSrc.SetDict ( m_pDict );
 
 	tSrc.m_tDocInfo.Clone ( tDoc, m_tOutboundSchema.GetRowSize() );
-	ISphHits * pHits = tSrc.IterateHitsNext ( sError );
+
+	if ( !tSrc.IterateStart ( sError ) || !tSrc.IterateDocument ( sError ) )
+		return false;
+
+	ISphHits * pHits = tSrc.IterateHits ( sError );
 	if ( !pHits )
 		return false;
 
@@ -4381,7 +4398,7 @@ void RtBinlog_c::Configure ( const CSphConfigSection & hSearchd )
 	}
 }
 
-void RtBinlog_c::Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback  )
+void RtBinlog_c::Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback )
 {
 	if ( m_bDisabled || !hIndexes.GetLength() )
 		return;
@@ -5097,7 +5114,7 @@ void sphRTDone ()
 	SafeDelete ( g_pBinlog );
 }
 
-void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback  )
+void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback )
 {
 	MEMORY ( SPH_MEM_BINLOG );
 	g_pBinlog->Replay ( hIndexes, pfnProgressCallback );

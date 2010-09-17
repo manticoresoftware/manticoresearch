@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>joined fields indexing</name>
+
+<requires>
+<non-rt/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type					= mysql
+	<sql_settings/>
+
+	sql_query				= select id, text, idd from test;
+	sql_joined_field		= text from query; select id, text from test_joined;
+	sql_attr_uint			= idd
+}
+
+index test
+{
+	source	= test
+	path	= <data_path/>/test
+
+    charset_type			= utf-8
+    docinfo					= extern
+	
+    phrase_boundary			= .
+    phrase_boundary_step	= 2
+	stopwords				= test_146/stopwords.txt
+}
+</config>
+
+<db_create>
+create table test
+(
+	id int,
+	text varchar(255),
+	idd int
+);
+</db_create>
+
+<db_create>
+create table test_joined
+(
+	id int,
+	text varchar(255)
+);
+</db_create>
+
+<db_drop>drop table if exists test</db_drop>
+<db_drop>drop table if exists test_joined</db_drop>
+
+<db_insert>
+insert into test (id, text, idd) values
+	( 1, 'aaa', 1 ),
+	( 2, 'aaa bbb', 2 ),
+	( 3, 'bbb ccc', 3 );
+</db_insert>
+
+<db_insert>
+insert into test_joined (id, text) values
+	( 1, 'jjj kkk' ),
+	( 1, 'zzz. my' ),
+	( 1, 'cool' ),
+	( 2, 'yyy' ),
+	( 2, 'ttt' ),
+	( 3, 'ccc do. dog' ),
+	( 3, 'sleepy' );
+</db_insert>
+
+<queries>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">aaa</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">bbb</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">aaa | bbb</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">"aaa bbb"</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">( kkk zzz ) | "do dog"</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">( kkk zzz ) | "do not as dog"</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">"kkk zzz"</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">"zzz not as not cool"</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">"zzz do dog look cool"/2</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">dog not as do sleepy</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">"dog not as do sleepy"</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">"do not as dog sleepy"</query>
+</queries>
+
+</test>

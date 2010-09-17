@@ -1378,16 +1378,23 @@ public:
 	/// check if there are any joined fields
 	virtual bool						HasJoinedFields () { return false; }
 
-	/// begin iterating document hits
+	/// begin indexing this source
 	/// to be implemented by descendants
-	virtual bool						IterateHitsStart ( CSphString & sError ) = 0;
+	virtual bool						IterateStart ( CSphString & sError ) = 0;
 
-	/// get next document hit
+	/// get next document
 	/// to be implemented by descendants
-	/// on next document, returns true and m_tDocInfo.m_uDocID is not 0
-	/// on end of documents, returns true and m_tDocInfo.m_uDocID is 0
-	/// on error, returns false and fills sError
-	virtual ISphHits *					IterateHitsNext ( CSphString & sError ) = 0;
+	/// returns false on error
+	/// returns true and fills m_tDocInfo on success
+	/// returns true and sets m_tDocInfo.m_iDocID to 0 on eof
+	virtual bool						IterateDocument ( CSphString & sError ) = 0;
+
+	/// get next hits chunk for current document
+	/// to be implemented by descendants
+	/// returns NULL when there are no more hits
+	/// returns pointer to hit vector (with at most MAX_SOURCE_HITS) on success
+	/// fills out-string with error message on failure
+	virtual ISphHits *					IterateHits ( CSphString & sError ) = 0;
 
 	/// get joined hits from joined fields (w/o attached docinfos)
 	/// returns false and fills out-string with error message on failure
@@ -1446,20 +1453,15 @@ class CSphSource_Document : public CSphSource
 {
 public:
 	/// ctor
-	explicit				CSphSource_Document ( const char * sName )
-							: CSphSource ( sName )
-							, m_pReadFileBuffer ( NULL )
-							, m_iReadFileBufferSize ( 256 * 1024 )
-							, m_iMaxFileBufferSize ( 2 * 1024 * 1024 )
-							, m_fpDumpRows ( NULL )
-							{}
+	explicit				CSphSource_Document ( const char * sName );
 
 	/// dtor
 	virtual					~CSphSource_Document () { SafeDeleteArray ( m_pReadFileBuffer ); }
 
 	/// my generic tokenizer
-	virtual ISphHits *		IterateHitsNext ( CSphString & sError );
-	ISphHits *				BuildHits ( BYTE ** dFields, int iFieldIndex, int iStartPos, CSphString & sError );
+	virtual bool			IterateDocument ( CSphString & sError );
+	virtual ISphHits *		IterateHits ( CSphString & sError );
+	void					BuildHits ( CSphString & sError, bool bSkipEndMarker );
 
 	/// field data getter
 	/// to be implemented by descendants
@@ -1474,8 +1476,8 @@ protected:
 
 	void					ParseFieldMVA ( CSphVector < CSphVector < DWORD > > & dFieldMVAs, int iFieldMVA, const char * szValue );
 	int						LoadFileField ( BYTE ** ppField, CSphString & sError );
-	void					BuildSubstringHits ( const CSphColumnInfo & tField, SphDocID_t uDocid, Hitpos_t iPos );
-	void					BuildRegularHits ( const CSphColumnInfo & tField, SphDocID_t uDocid, Hitpos_t iPos );
+	void					BuildSubstringHits ( SphDocID_t uDocid, bool bPayload, ESphWordpart eWordpart, bool bSkipEndMarker );
+	void					BuildRegularHits ( SphDocID_t uDocid, bool bPayload, bool bSkipEndMarker );
 
 protected:
 	ISphHits				m_tHits;				///< my hitvector
@@ -1491,6 +1493,28 @@ private:
 	CSphString				m_sInfixFields;
 
 	bool					IsFieldInStr ( const char * szField, const char * szString ) const;
+
+protected:
+	struct CSphBuildHitsState_t
+	{
+		bool m_bProcessingHits;
+		bool m_bDocumentDone;
+
+		BYTE ** m_dFields;
+
+		int m_iStartPos;
+		Hitpos_t m_iHitPos;
+		int m_iField;
+		int m_iStartField;
+		int m_iEndField;
+
+		int m_iBuildLastStep;
+
+		CSphBuildHitsState_t ();
+	};
+
+	CSphBuildHitsState_t	m_tState;
+	int						m_iMaxHits;
 };
 
 struct CSphUnpackInfo
@@ -1551,7 +1575,7 @@ struct CSphSource_SQL : CSphSource_Document
 	virtual bool		Connect ( CSphString & sError );
 	virtual void		Disconnect ();
 
-	virtual bool		IterateHitsStart ( CSphString & sError );
+	virtual bool		IterateStart ( CSphString & sError );
 	virtual BYTE **		NextDocument ( CSphString & sError );
 	virtual void		PostIndex ();
 
@@ -1691,7 +1715,7 @@ struct CSphSource_PgSQL : CSphSource_SQL
 {
 	explicit				CSphSource_PgSQL ( const char * sName );
 	bool					Setup ( const CSphSourceParams_PgSQL & pParams );
-	virtual bool			IterateHitsStart ( CSphString & sError );
+	virtual bool			IterateStart ( CSphString & sError );
 
 protected:
 	PGresult * 				m_pPgResult;	///< postgresql execution restult context
@@ -1799,8 +1823,9 @@ public:
 	virtual bool	Connect ( CSphString & sError );			///< run the command and open the pipe
 	virtual void	Disconnect ();								///< close the pipe
 
-	virtual bool		IterateHitsStart ( CSphString & ) { return true; }	///< Connect() starts getting documents automatically, so this one is empty
-	virtual ISphHits *	IterateHitsNext ( CSphString & sError );			///< parse incoming chunk and emit some hits
+	virtual bool		IterateStart ( CSphString & ) { return true; }	///< Connect() starts getting documents automatically, so this one is empty
+	virtual bool		IterateDocument ( CSphString & sError );		///< parse incoming chunk and emit document
+	virtual ISphHits *	IterateHits ( CSphString & sError );									///< parse incoming chunk and emit some hits
 
 	virtual bool	HasAttrsConfigured ()							{ return true; }	///< xmlpipe always has some attrs for now
 	virtual bool	IterateMultivaluedStart ( int, CSphString & )	{ return false; }	///< xmlpipe does not support multi-valued attrs for now
@@ -1840,6 +1865,7 @@ private:
 	int				m_iWordPos;			///< current word position
 
 	ISphHits		m_tHits;			///< my hitvector
+	bool			m_bHitsReady;
 
 private:
 	/// set current tag
@@ -1875,6 +1901,9 @@ private:
 
 	/// scan for tag with string value
 	bool			ScanStr ( const char * sTag, char * pRes, int iMaxLength, CSphString & sError );
+
+	/// check for hits overun hits buffer
+	void			CheckHitsCount ( const char * sField );
 };
 
 

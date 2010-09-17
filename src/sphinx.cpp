@@ -8507,7 +8507,7 @@ DWORD *		CmpQueuedDocinfo_fn::m_pStorage		= NULL;
 int			CmpQueuedDocinfo_fn::m_iStride		= 1;
 
 
-static const int MAX_DOC_HITS		= 1048576;		// FIXME! dirty hack to quick patch keywords dict.. !COMMIT
+#define MAX_SOURCE_HITS	32768
 static const int MIN_KEYWORDS_DICT	= 4*1048576;	// FIXME! ideally must be in sync with impl (ENTRY_CHUNKS, KEYWORD_CHUNKS)
 
 /////////////////////////////////////////////////////////////////////////////
@@ -9271,7 +9271,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	// connect 1st source and fetch its schema
 	if ( !dSources[0]->Connect ( m_sLastError )
-		|| !dSources[0]->IterateHitsStart ( m_sLastError )
+		|| !dSources[0]->IterateStart ( m_sLastError )
 		|| !dSources[0]->UpdateSchema ( &m_tSchema, m_sLastError ) )
 	{
 		return 0;
@@ -9372,8 +9372,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	// do we have enough left for hits?
 	int iHitsMax = 1048576;
-	if ( m_bWordDict )
-		iHitsMax += MAX_DOC_HITS;
 
 	iMemoryLimit -= iDocinfoMax*iDocinfoStride*sizeof(DWORD) + iOrdinalPoolSize + iFieldMVAPoolSize + iDictSize;
 	if ( iMemoryLimit < iHitsMax*(int)sizeof(CSphWordHit) )
@@ -9386,12 +9384,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		iHitsMax = iMemoryLimit / sizeof(CSphWordHit);
 	}
 
-	// reserve that "hit chunk of last hope"
-	if ( m_bWordDict )
-		iHitsMax -= MAX_DOC_HITS;
-
 	// allocate raw hits block
-	CSphAutoArray<CSphWordHit> dHits ( iHitsMax + MAX_DOC_HITS );
+	CSphAutoArray<CSphWordHit> dHits ( iHitsMax + MAX_SOURCE_HITS );
 	CSphWordHit * pHits = dHits;
 	CSphWordHit * pHitsMax = dHits + iHitsMax;
 
@@ -9513,7 +9507,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 		if ( iSource )
 			if ( !pSource->Connect ( m_sLastError )
-				|| !pSource->IterateHitsStart ( m_sLastError )
+				|| !pSource->IterateStart ( m_sLastError )
 				|| !pSource->UpdateSchema ( &m_tSchema, m_sLastError ) )
 			{
 				return 0;
@@ -9541,8 +9535,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		for ( ;; )
 		{
 			// get next doc, and handle errors
-			ISphHits * pHitsNext = pSource->IterateHitsNext ( m_sLastError );
-			if ( !pHitsNext )
+			bool bGotDoc = pSource->IterateDocument ( m_sLastError );
+			if ( !bGotDoc )
 				return 0;
 
 			// ensure docid is sane
@@ -9568,14 +9562,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				m_pProgress ( &m_tProgress, false );
 			}
 
-			// make a shortcut for hit count
-			int iDocHits = pHitsNext->Length ();
-			if ( iDocHits<=0 )
-				continue;
-
 			// update crashdump
 			g_iIndexerCurrentDocID = pSource->m_tDocInfo.m_iDocID;
-			g_iIndexerCurrentHits = iDocHits;
+			g_iIndexerCurrentHits = pHits-dHits;
 
 			// store field MVAs
 			if ( bHaveFieldMVAs )
@@ -9735,43 +9724,22 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			}
 
 			// store hits
-			const CSphWordHit * pDocHits = pHitsNext->First();
-
-#if PARANOID
-			for ( int i=0; i<iDocHits; i++ )
+			while ( const ISphHits * pDocHits = pSource->IterateHits ( m_sLastWarning ) )
 			{
-				assert ( pDocHits[i].m_iDocID==pSource->m_tDocInfo.m_iDocID );
-				assert ( pDocHits[i].m_iWordID );
-				assert ( pDocHits[i].m_iWordPos );
-			}
+				int iDocHits = pDocHits->Length();
+#if PARANOID
+				for ( int i=0; i<iDocHits; i++ )
+				{
+					assert ( pDocHits[i].m_iDocID==pSource->m_tDocInfo.m_iDocID );
+					assert ( pDocHits[i].m_iWordID );
+					assert ( pDocHits[i].m_iWordPos );
+				}
 #endif
 
-			while ( iDocHits )
-			{
-				// copy as much hits as we can
-				int iToCopy = 0;
+				assert ( ( pHits+iDocHits )<=( pHitsMax+MAX_SOURCE_HITS ) );
 
-				if ( !m_bWordDict )
-				{
-					iToCopy = Min ( iDocHits, pHitsMax - pHits );
-				} else
-				{
-					iToCopy = Min ( iDocHits, pHitsMax - pHits + MAX_DOC_HITS );
-					if ( iDocHits > iToCopy )
-					{
-						sphWarn ( "overlong document on a buffer boundary, skipping tail hits (id="DOCID_FMT", hits=%d, indexed=%d)",
-							pSource->m_tDocInfo.m_iDocID, iDocHits, iToCopy );
-						iDocHits = iToCopy;
-					}
-				}
-
-				memcpy ( pHits, pDocHits, iToCopy*sizeof(CSphWordHit) );
-				pHits += iToCopy;
-				pDocHits += iToCopy;
-				iDocHits -= iToCopy;
-
-				assert ( iDocHits>=0 );
-				assert ( pHits<=( pHitsMax + m_bWordDict*MAX_DOC_HITS ) );
+				memcpy ( pHits, pDocHits->First(), iDocHits*sizeof(CSphWordHit) );
+				pHits += iDocHits;
 
 				// check if we need to flush
 				if ( pHits<pHitsMax
@@ -9783,7 +9751,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 				// update crashdump
 				g_iIndexerPoolStartDocID = pSource->m_tDocInfo.m_iDocID;
-				g_iIndexerPoolStartHit = g_iIndexerCurrentHits - iToCopy;
+				g_iIndexerPoolStartHit = pHits-dHits;
 
 				// sort hits
 				int iHits = pHits - dHits;
@@ -18563,27 +18531,65 @@ static void FormatEscaped ( FILE * fp, const char * sLine )
 	SafeDeleteArray ( sMaxibuffer );
 }
 
+CSphSource_Document::CSphBuildHitsState_t::CSphBuildHitsState_t ()
+	: m_bProcessingHits ( false )
+	, m_bDocumentDone ( false )
+	, m_dFields ( NULL )
+	, m_iStartPos ( 0 )
+	, m_iHitPos ( 0 )
+	, m_iField ( 0 )
+	, m_iStartField ( 0 )
+	, m_iEndField ( 0 )
+	, m_iBuildLastStep ( 1 )
+{
+}
 
-ISphHits * CSphSource_Document::IterateHitsNext ( CSphString & sError )
+CSphSource_Document::CSphSource_Document ( const char * sName )
+	: CSphSource ( sName )
+	, m_pReadFileBuffer ( NULL )
+	, m_iReadFileBufferSize ( 256 * 1024 )
+	, m_iMaxFileBufferSize ( 2 * 1024 * 1024 )
+	, m_fpDumpRows ( NULL )
+	, m_iMaxHits ( MAX_SOURCE_HITS )
+{
+}
+
+
+bool CSphSource_Document::IterateDocument ( CSphString & sError )
 {
 	assert ( m_pTokenizer );
+	assert ( !m_tState.m_bProcessingHits );
 	PROFILE ( src_document );
 
-	BYTE ** dFields = NextDocument ( sError );
+	m_tHits.m_dData.Resize ( 0 );
+
+	m_tState = CSphBuildHitsState_t();
+	m_tState.m_iEndField = m_tSchema.m_iBaseFields ? m_tSchema.m_iBaseFields : m_tSchema.m_dFields.GetLength();
+
+	// fetch next document
+	m_tState.m_dFields = NextDocument ( sError );
 	if ( m_tDocInfo.m_iDocID==0 )
-	{
-		static ISphHits dDummy;
-		return &dDummy;
-	}
-	if ( !dFields )
-		return NULL;
+		return true;
+
+	if ( !m_tState.m_dFields )
+		return false;
 
 	m_tStats.m_iTotalDocuments++;
 
-	m_tHits.m_dData.Reserve ( 1024 );
+	return true;
+}
+
+
+ISphHits * CSphSource_Document::IterateHits ( CSphString & sError )
+{
+	if ( m_tState.m_bDocumentDone )
+		return NULL;
+
 	m_tHits.m_dData.Resize ( 0 );
 
-	return BuildHits ( dFields, -1, 0, sError );
+	BuildHits ( sError, false );
+
+	return &m_tHits;
 }
 
 
@@ -18635,26 +18641,36 @@ int CSphSource_Document::LoadFileField ( BYTE ** ppField, CSphString & sError )
 }
 
 
-void CSphSource_Document::BuildSubstringHits ( const CSphColumnInfo & tField, SphDocID_t uDocid, Hitpos_t iPos )
+#define BUILD_SUBSTRING_HITS_COUNT 4
+
+void CSphSource_Document::BuildSubstringHits ( SphDocID_t uDocid, bool bPayload, ESphWordpart eWordpart, bool bSkipEndMarker )
 {
-	bool bPrefixField = tField.m_eWordpart==SPH_WORDPART_PREFIX;
+	bool bPrefixField = ( eWordpart==SPH_WORDPART_PREFIX );
 	bool bInfixMode = m_iMinInfixLen > 0;
 
 	int iMinInfixLen = bPrefixField ? m_iMinPrefixLen : m_iMinInfixLen;
-	int iLastStep = 1;
+	if ( !m_tState.m_bProcessingHits )
+		m_tState.m_iBuildLastStep = 1;
 
-	BYTE * sWord;
+	BYTE * sWord = NULL;
 	BYTE sBuf [ 16+3*SPH_MAX_WORD_LEN ];
 
+	int iIterHitCount = BUILD_SUBSTRING_HITS_COUNT;
+	if ( bPrefixField )
+		iIterHitCount += SPH_MAX_WORD_LEN - m_iMinPrefixLen;
+	else
+		iIterHitCount += ( ( m_iMinInfixLen+SPH_MAX_WORD_LEN ) * ( SPH_MAX_WORD_LEN-m_iMinInfixLen ) / 2 );
+
 	// index all infixes
-	while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
+	while ( ( m_iMaxHits==0 || m_tHits.m_dData.GetLength()+iIterHitCount<m_iMaxHits )
+		&& ( sWord = m_pTokenizer->GetToken() )!=NULL )
 	{
-		if ( !tField.m_bPayload )
+		if ( !bPayload )
 		{
-			HITMAN::AddPos ( &iPos, iLastStep + m_pTokenizer->GetOvershortCount()*m_iOvershortStep );
+			HITMAN::AddPos ( &m_tState.m_iHitPos, m_tState.m_iBuildLastStep + m_pTokenizer->GetOvershortCount()*m_iOvershortStep );
 			if ( m_pTokenizer->GetBoundary() )
-				HITMAN::AddPos ( &iPos, m_iBoundaryStep );
-			iLastStep = 1;
+				HITMAN::AddPos ( &m_tState.m_iHitPos, m_iBoundaryStep );
+			m_tState.m_iBuildLastStep = 1;
 		}
 
 		int iLen = m_pTokenizer->GetLastTokenLen ();
@@ -18668,7 +18684,7 @@ void CSphSource_Document::BuildSubstringHits ( const CSphColumnInfo & tField, Sp
 			memcpy ( sBuf + 1, sWord, iBytes );
 			sBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
 			sBuf[iBytes+1] = '\0';
-			m_tHits.AddHit ( uDocid, m_pDict->GetWordIDNonStemmed ( sBuf ), iPos );
+			m_tHits.AddHit ( uDocid, m_pDict->GetWordIDNonStemmed ( sBuf ), m_tState.m_iHitPos );
 		}
 
 		memcpy ( sBuf + 1, sWord, iBytes );
@@ -18678,10 +18694,10 @@ void CSphSource_Document::BuildSubstringHits ( const CSphColumnInfo & tField, Sp
 		// stemmed word w/markers
 		SphWordID_t iWord = m_pDict->GetWordIDWithMarkers ( sBuf );
 		if ( iWord )
-			m_tHits.AddHit ( uDocid, iWord, iPos );
+			m_tHits.AddHit ( uDocid, iWord, m_tState.m_iHitPos );
 		else
 		{
-			iLastStep = m_iStopwordStep;
+			m_tState.m_iBuildLastStep = m_iStopwordStep;
 			continue;
 		}
 
@@ -18691,7 +18707,7 @@ void CSphSource_Document::BuildSubstringHits ( const CSphColumnInfo & tField, Sp
 
 		// stemmed word w/o markers
 		if ( strcmp ( (const char *)sBuf + 1, (const char *)sWord ) )
-			m_tHits.AddHit ( uDocid, m_pDict->GetWordID ( sBuf + 1, iStemmedLen - 2, true ), iPos );
+			m_tHits.AddHit ( uDocid, m_pDict->GetWordID ( sBuf + 1, iStemmedLen - 2, true ), m_tState.m_iHitPos );
 
 		// restore word
 		memcpy ( sBuf + 1, sWord, iBytes );
@@ -18702,7 +18718,7 @@ void CSphSource_Document::BuildSubstringHits ( const CSphColumnInfo & tField, Sp
 		if ( iMinInfixLen > iLen )
 		{
 			// index full word
-			m_tHits.AddHit ( uDocid, m_pDict->GetWordID ( sWord ), iPos );
+			m_tHits.AddHit ( uDocid, m_pDict->GetWordID ( sWord ), m_tState.m_iHitPos );
 			continue;
 		}
 
@@ -18719,15 +18735,15 @@ void CSphSource_Document::BuildSubstringHits ( const CSphColumnInfo & tField, Sp
 
 			for ( int i=iMinInfixLen; i<=iLen-iStart; i++ )
 			{
-				m_tHits.AddHit ( uDocid, m_pDict->GetWordID ( sInfix, sInfixEnd-sInfix, false ), iPos );
+				m_tHits.AddHit ( uDocid, m_pDict->GetWordID ( sInfix, sInfixEnd-sInfix, false ), m_tState.m_iHitPos );
 
 				// word start: add magic head
 				if ( bInfixMode && iStart==0 )
-					m_tHits.AddHit ( uDocid, m_pDict->GetWordID ( sInfix - 1, sInfixEnd-sInfix + 1, false ), iPos );
+					m_tHits.AddHit ( uDocid, m_pDict->GetWordID ( sInfix - 1, sInfixEnd-sInfix + 1, false ), m_tState.m_iHitPos );
 
 				// word end: add magic tail
 				if ( bInfixMode && i==iLen-iStart )
-					m_tHits.AddHit ( uDocid, m_pDict->GetWordID ( sInfix, sInfixEnd-sInfix+1, false ), iPos );
+					m_tHits.AddHit ( uDocid, m_pDict->GetWordID ( sInfix, sInfixEnd-sInfix+1, false ), m_tState.m_iHitPos );
 
 				sInfixEnd += m_pTokenizer->GetCodepointLength ( *sInfixEnd );
 			}
@@ -18736,8 +18752,10 @@ void CSphSource_Document::BuildSubstringHits ( const CSphColumnInfo & tField, Sp
 		}
 	}
 
+	m_tState.m_bProcessingHits = ( sWord!=NULL );
+
 	// mark trailing hits
-	if ( m_tHits.Length() )
+	if ( !bSkipEndMarker && !m_tState.m_bProcessingHits && m_tHits.Length() )
 	{
 		CSphWordHit * pHit = const_cast < CSphWordHit * > ( m_tHits.Last() );
 		Hitpos_t uRefPos = pHit->m_iWordPos;
@@ -18748,31 +18766,36 @@ void CSphSource_Document::BuildSubstringHits ( const CSphColumnInfo & tField, Sp
 }
 
 
-void CSphSource_Document::BuildRegularHits ( const CSphColumnInfo & tField, SphDocID_t uDocid, Hitpos_t iPos )
+#define BUILD_REGULAR_HITS_COUNT 6
+
+void CSphSource_Document::BuildRegularHits ( SphDocID_t uDocid, bool bPayload, bool bSkipEndMarker )
 {
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 	bool bGlobalPartialMatch = !bWordDict && ( m_iMinPrefixLen > 0 || m_iMinInfixLen > 0 );
-	int iLastStep = 1;
 
-	BYTE * sWord;
+	if ( !m_tState.m_bProcessingHits )
+		m_tState.m_iBuildLastStep = 1;
+
+	BYTE * sWord = NULL;
 	BYTE sBuf [ 16+3*SPH_MAX_WORD_LEN ];
 
 	// index words only
-	while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
+	while ( ( m_iMaxHits==0 || m_tHits.m_dData.GetLength()+BUILD_REGULAR_HITS_COUNT<m_iMaxHits )
+		&& ( sWord = m_pTokenizer->GetToken() )!=NULL )
 	{
-		if ( !tField.m_bPayload )
+		if ( !bPayload )
 		{
-			HITMAN::AddPos ( &iPos, iLastStep + m_pTokenizer->GetOvershortCount()*m_iOvershortStep );
+			HITMAN::AddPos ( &m_tState.m_iHitPos, m_tState.m_iBuildLastStep + m_pTokenizer->GetOvershortCount()*m_iOvershortStep );
 			if ( m_pTokenizer->GetBoundary() )
-				HITMAN::AddPos ( &iPos, m_iBoundaryStep );
+				HITMAN::AddPos ( &m_tState.m_iHitPos, m_iBoundaryStep );
 		}
 
 		if ( *sWord==MAGIC_CODE_SENTENCE || *sWord==MAGIC_CODE_PARAGRAPH || *sWord==MAGIC_CODE_ZONE )
 		{
-			m_tHits.AddHit ( uDocid, m_pDict->GetWordID ( (BYTE*)MAGIC_WORD_SENTENCE ), iPos );
+			m_tHits.AddHit ( uDocid, m_pDict->GetWordID ( (BYTE*)MAGIC_WORD_SENTENCE ), m_tState.m_iHitPos );
 
 			if ( *sWord==MAGIC_CODE_PARAGRAPH || *sWord==MAGIC_CODE_ZONE )
-				m_tHits.AddHit ( uDocid, m_pDict->GetWordID ( (BYTE*)MAGIC_WORD_PARAGRAPH ), iPos );
+				m_tHits.AddHit ( uDocid, m_pDict->GetWordID ( (BYTE*)MAGIC_WORD_PARAGRAPH ), m_tState.m_iHitPos );
 
 			if ( *sWord==MAGIC_CODE_ZONE )
 			{
@@ -18781,11 +18804,11 @@ void CSphSource_Document::BuildRegularHits ( const CSphColumnInfo & tField, SphD
 				while ( *pEnd!=MAGIC_CODE_ZONE )
 					pEnd++;
 				*pEnd = '\0';
-				m_tHits.AddHit ( uDocid, m_pDict->GetWordID ( pZone-1 ), iPos );
+				m_tHits.AddHit ( uDocid, m_pDict->GetWordID ( pZone-1 ), m_tState.m_iHitPos );
 				m_pTokenizer->SetBufferPtr ( (const char*) pEnd+1 );
 			}
 
-			iLastStep = 1;
+			m_tState.m_iBuildLastStep = 1;
 			continue;
 		}
 
@@ -18795,7 +18818,7 @@ void CSphSource_Document::BuildRegularHits ( const CSphColumnInfo & tField, SphD
 			memcpy ( sBuf + 1, sWord, iBytes );
 			sBuf[0] = MAGIC_WORD_HEAD;
 			sBuf[iBytes+1] = '\0';
-			m_tHits.AddHit ( uDocid, m_pDict->GetWordIDWithMarkers ( sBuf ), iPos );
+			m_tHits.AddHit ( uDocid, m_pDict->GetWordIDWithMarkers ( sBuf ), m_tState.m_iHitPos );
 		}
 
 		if ( m_bIndexExactWords )
@@ -18804,20 +18827,22 @@ void CSphSource_Document::BuildRegularHits ( const CSphColumnInfo & tField, SphD
 			memcpy ( sBuf + 1, sWord, iBytes );
 			sBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
 			sBuf[iBytes+1] = '\0';
-			m_tHits.AddHit ( uDocid, m_pDict->GetWordIDNonStemmed ( sBuf ), iPos );
+			m_tHits.AddHit ( uDocid, m_pDict->GetWordIDNonStemmed ( sBuf ), m_tState.m_iHitPos );
 		}
 
 		SphWordID_t iWord = m_pDict->GetWordID ( sWord );
 		if ( iWord )
 		{
-			m_tHits.AddHit ( uDocid, iWord, iPos );
-			iLastStep = m_pTokenizer->TokenIsBlended() ? 0 : 1;
+			m_tHits.AddHit ( uDocid, iWord, m_tState.m_iHitPos );
+			m_tState.m_iBuildLastStep = m_pTokenizer->TokenIsBlended() ? 0 : 1;
 		} else
-			iLastStep = m_iStopwordStep;
+			m_tState.m_iBuildLastStep = m_iStopwordStep;
 	}
 
+	m_tState.m_bProcessingHits = ( sWord!=NULL );
+
 	// mark trailing hit
-	if ( m_tHits.Length() )
+	if ( !bSkipEndMarker && !m_tState.m_bProcessingHits && m_tHits.Length() )
 	{
 		CSphWordHit * pHit = const_cast < CSphWordHit * > ( m_tHits.Last() );
 		HITMAN::SetEndMarker ( &pHit->m_iWordPos );
@@ -18825,58 +18850,54 @@ void CSphSource_Document::BuildRegularHits ( const CSphColumnInfo & tField, SphD
 }
 
 
-ISphHits * CSphSource_Document::BuildHits ( BYTE ** dFields, int iFieldIndex, int iStartPos, CSphString & sError )
+void CSphSource_Document::BuildHits ( CSphString & sError, bool bSkipEndMarker )
 {
 	SphDocID_t uDocid = m_tDocInfo.m_iDocID;
 
-	int iStartField = 0;
-	int iEndField = m_tSchema.m_iBaseFields;
-	if ( !iEndField )
-		iEndField = m_tSchema.m_dFields.GetLength();
-
-	if ( iFieldIndex>=0 )
+	for ( ; m_tState.m_iField<m_tState.m_iEndField; m_tState.m_iField++ )
 	{
-		iStartField = iFieldIndex;
-		iEndField = iFieldIndex+1;
-	}
-
-	for ( int iField=iStartField; iField<iEndField; iField++ )
-	{
-		// get that field
-		BYTE * sField = dFields[iField-iStartField];
-		if ( !sField || !(*sField) )
-			continue;
-
-		// load files
-		int iFieldBytes = m_tSchema.m_dFields[iField].m_bFilename
-			? LoadFileField ( &sField, sError )
-			: (int) strlen ( (char*)sField );
-
-		if ( iFieldBytes<=0 )
-			continue;
-
-		// strip html
-		if ( m_bStripHTML )
+		if ( !m_tState.m_bProcessingHits )
 		{
-			m_pStripper->Strip ( sField );
-			iFieldBytes = (int) strlen ( (char*)sField );
+			// get that field
+			BYTE * sField = m_tState.m_dFields[m_tState.m_iField-m_tState.m_iStartField];
+			if ( !sField || !(*sField) )
+				continue;
+
+			// load files
+			int iFieldBytes = m_tSchema.m_dFields[m_tState.m_iField].m_bFilename
+				? LoadFileField ( &sField, sError )
+				: (int) strlen ( (char*)sField );
+
+			if ( iFieldBytes<=0 )
+				continue;
+
+			// strip html
+			if ( m_bStripHTML )
+			{
+				m_pStripper->Strip ( sField );
+				iFieldBytes = (int) strlen ( (char*)sField );
+			}
+
+			// tokenize and build hits
+			m_tStats.m_iTotalBytes += iFieldBytes;
+
+			m_pTokenizer->SetBuffer ( sField, iFieldBytes );
+
+			m_tState.m_iHitPos = HITMAN::Create ( m_tState.m_iField, m_tState.m_iStartPos );
 		}
 
-		// tokenize and build hits
-		m_tStats.m_iTotalBytes += iFieldBytes;
-
-		m_pTokenizer->SetBuffer ( sField, iFieldBytes );
-
-		const CSphColumnInfo & tField = m_tSchema.m_dFields[iField];
-		Hitpos_t iPos = HITMAN::Create ( iField, iStartPos );
+		const CSphColumnInfo & tField = m_tSchema.m_dFields[m_tState.m_iField];
 
 		if ( tField.m_eWordpart!=SPH_WORDPART_WHOLE )
-			BuildSubstringHits ( tField, uDocid, iPos );
+			BuildSubstringHits ( uDocid, tField.m_bPayload, tField.m_eWordpart, bSkipEndMarker );
 		else
-			BuildRegularHits ( tField, uDocid, iPos );
+			BuildRegularHits ( uDocid, tField.m_bPayload, bSkipEndMarker );
+
+		if ( m_tState.m_bProcessingHits )
+			break;
 	}
 
-	return &m_tHits;
+	m_tState.m_bDocumentDone = !m_tState.m_bProcessingHits;
 }
 
 
@@ -19148,6 +19169,8 @@ bool CSphSource_SQL::Connect ( CSphString & sError )
 		return false;
 	}
 
+	m_tHits.m_dData.Reserve ( m_iMaxHits );
+
 	// all good
 	m_bSqlConnected = true;
 	return true;
@@ -19220,7 +19243,7 @@ bool CSphSource_SQL::SetupRanges ( const char * sRangeQuery, const char * sQuery
 
 
 /// issue main rows fetch query
-bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
+bool CSphSource_SQL::IterateStart ( CSphString & sError )
 {
 	assert ( m_bSqlConnected );
 
@@ -19457,6 +19480,7 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 void CSphSource_SQL::Disconnect ()
 {
 	SafeDeleteArray ( m_pReadFileBuffer );
+	m_tHits.m_dData.Reset();
 
 	if ( m_iNullIds )
 		sphWarn ( "source %s: skipped %d document(s) with zero/NULL ids", m_tSchema.m_sName.cstr(), m_iNullIds );
@@ -19918,7 +19942,6 @@ const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, ESphUnpackFormat
 
 ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 {
-	m_tHits.m_dData.Reserve ( 1024 );
 	m_tHits.m_dData.Resize ( 0 );
 
 	// eof check
@@ -19928,13 +19951,10 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 		return &m_tHits;
 	}
 
-	// my buffer
-	const int HITS_THRESH = 1048576/sizeof(CSphWordHit);
-
 	// my fetch loop
-	while ( m_tHits.Length()<HITS_THRESH )
+	while ( m_iJoinedHitField<m_tSchema.m_dFields.GetLength() )
 	{
-		if ( SqlFetchRow() )
+		if ( m_tState.m_bProcessingHits || SqlFetchRow() )
 		{
 			// next row
 			m_tDocInfo.m_iDocID = sphToDocid ( SqlColumn(0) ); // FIXME! handle conversion errors and zero/max values?
@@ -19958,22 +19978,31 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 				m_iJoinedHitPos = 0;
 			}
 
-			// build those hits
-			BYTE * pText = (BYTE *) SqlColumn(1);
-			if ( m_tSchema.m_dFields[m_iJoinedHitField].m_bPayload )
+			if ( !m_tState.m_bProcessingHits )
 			{
-				DWORD uPosition = sphToDword ( SqlColumn(2) );
-				if ( !BuildHits ( &pText, m_iJoinedHitField, uPosition, sError ) )
-					return NULL;
-			} else
-			{
-				if ( !BuildHits ( &pText, m_iJoinedHitField, m_iJoinedHitPos, sError ) )
-					return NULL;
+				m_tState = CSphBuildHitsState_t();
+				m_tState.m_iField = m_iJoinedHitField;
+				m_tState.m_iStartField = m_iJoinedHitField;
+				m_tState.m_iEndField = m_iJoinedHitField+1;
 
-				// update current position
-				if ( m_tHits.Length() )
-					m_iJoinedHitPos = HITMAN::GetPos ( m_tHits.Last()->m_iWordPos );
+				if ( m_tSchema.m_dFields[m_iJoinedHitField].m_bPayload )
+					m_tState.m_iStartPos = sphToDword ( SqlColumn(2) );
+				else
+					m_tState.m_iStartPos = m_iJoinedHitPos;
 			}
+
+			// build those hits
+			BYTE * dText[] = { (BYTE *)SqlColumn(1) };
+			m_tState.m_dFields = dText;
+
+			BuildHits ( sError, true );
+
+			// update current position
+			if ( !m_tSchema.m_dFields[m_iJoinedHitField].m_bPayload && !m_tState.m_bProcessingHits && m_tHits.Length() )
+				m_iJoinedHitPos = HITMAN::GetPos ( m_tHits.Last()->m_iWordPos );
+
+			if ( m_tState.m_bProcessingHits )
+				break;
 		} else if ( SqlIsError() )
 		{
 			// error while fetching row
@@ -20243,7 +20272,7 @@ bool CSphSource_PgSQL::Setup ( const CSphSourceParams_PgSQL & tParams )
 }
 
 
-bool CSphSource_PgSQL::IterateHitsStart ( CSphString & sError )
+bool CSphSource_PgSQL::IterateStart ( CSphString & sError )
 {
 	bool bResult = CSphSource_SQL::IterateHitsStart ( sError );
 	if ( !bResult )
@@ -20377,6 +20406,7 @@ CSphSource_XMLPipe::CSphSource_XMLPipe ( BYTE * dInitialBuf, int iBufLen, const 
 	, m_bEOF		( false )
 	, m_bWarned		( false )
 	, m_iInitialBufLen ( iBufLen )
+	, m_bHitsReady ( false )
 {
 	assert ( m_iBufferSize > iBufLen );
 
@@ -20403,6 +20433,7 @@ void CSphSource_XMLPipe::Disconnect ()
 {
 	m_iInitialBufLen = 0;
 
+	m_tHits.m_dData.Reset();
 	m_tSchema.Reset ();
 
 	if ( m_pPipe )
@@ -20445,11 +20476,12 @@ bool CSphSource_XMLPipe::Connect ( CSphString & )
 	snprintf ( sBuf, sizeof(sBuf), "xmlpipe(%s)", m_sCommand.cstr() );
 	m_tSchema.m_sName = sBuf;
 
+	m_tHits.m_dData.Reserve ( MAX_SOURCE_HITS );
+
 	return true;
 }
 
-
-ISphHits * CSphSource_XMLPipe::IterateHitsNext ( CSphString & sError )
+bool CSphSource_XMLPipe::IterateDocument ( CSphString & sError )
 {
 	PROFILE ( src_xmlpipe );
 	char sTitle [ 1024 ]; // FIXME?
@@ -20457,8 +20489,8 @@ ISphHits * CSphSource_XMLPipe::IterateHitsNext ( CSphString & sError )
 	assert ( m_pPipe );
 	assert ( m_pTokenizer );
 
-	m_tHits.m_dData.Reserve ( 1024 );
 	m_tHits.m_dData.Resize ( 0 );
+	m_bHitsReady = false;
 
 	/////////////////////////
 	// parse document header
@@ -20468,16 +20500,16 @@ ISphHits * CSphSource_XMLPipe::IterateHitsNext ( CSphString & sError )
 	if ( !SkipWhitespace() )
 	{
 		m_tDocInfo.m_iDocID = 0;
-		return &m_tHits;
+		return true;
 	}
 
 	// look for opening '<document>' tag
 	SetTag ( "document" );
 	if ( !SkipTag ( true, sError ) )
-		return NULL;
+		return false;
 
 	if ( !ScanInt ( "id", &m_tDocInfo.m_iDocID, sError ) )
-		return NULL;
+		return false;
 	m_tStats.m_iTotalDocuments++;
 
 	SphAttr_t uVal;
@@ -20485,7 +20517,7 @@ ISphHits * CSphSource_XMLPipe::IterateHitsNext ( CSphString & sError )
 	if ( !ScanInt ( "timestamp", &uVal, sError ) ) uVal = 1; m_tDocInfo.SetAttr ( m_tSchema.GetAttr(1).m_tLocator, uVal );
 
 	if ( !ScanStr ( "title", sTitle, sizeof(sTitle), sError ) )
-		return NULL;
+		return false;
 
 	// index title
 	{
@@ -20494,16 +20526,18 @@ ISphHits * CSphSource_XMLPipe::IterateHitsNext ( CSphString & sError )
 		BYTE * sWord;
 
 		m_pTokenizer->SetBuffer ( (BYTE*)sTitle, iLen );
-		while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
+		while ( ( sWord = m_pTokenizer->GetToken() )!=NULL && m_tHits.Length()<MAX_SOURCE_HITS )
 		{
 			m_tHits.AddHit ( m_tDocInfo.m_iDocID, m_pDict->GetWordID ( sWord ), iPos );
 			HITMAN::AddPos ( &iPos, 1 );
 		}
 	}
 
+	CheckHitsCount ( "title" );
+
 	SetTag ( "body" );
 	if ( !SkipTag ( true, sError ) )
-		return NULL;
+		return false;
 
 	m_iWordPos = 0;
 
@@ -20559,8 +20593,10 @@ ISphHits * CSphSource_XMLPipe::IterateHitsNext ( CSphString & sError )
 
 	// tokenize
 	BYTE * sWord;
-	while ( ( sWord = m_pTokenizer->GetToken () )!=NULL )
+	while ( ( sWord = m_pTokenizer->GetToken () )!=NULL && m_tHits.Length()<MAX_SOURCE_HITS )
 		m_tHits.AddHit ( m_tDocInfo.m_iDocID, m_pDict->GetWordID ( sWord ), HITMAN::Create ( 1, ++m_iWordPos ) );
+
+	CheckHitsCount ( "body" );
 
 	m_pBuffer = p;
 
@@ -20571,7 +20607,7 @@ ISphHits * CSphSource_XMLPipe::IterateHitsNext ( CSphString & sError )
 	{
 		// let's check if it's '</body>' which is the only allowed tag at this point
 		if ( !SkipTag ( false, sError ) )
-			return NULL;
+			return false;
 	} else
 	{
 		// search for '</body>' tag
@@ -20588,7 +20624,7 @@ ISphHits * CSphSource_XMLPipe::IterateHitsNext ( CSphString & sError )
 				if ( !SkipTag ( false, sError ) )
 				{
 					if ( m_bEOF )
-						return NULL;
+						return false;
 					else
 					{
 						if ( m_pBuffer==pBufferTmp )
@@ -20598,7 +20634,7 @@ ISphHits * CSphSource_XMLPipe::IterateHitsNext ( CSphString & sError )
 					bFound = true;
 			} else
 				if ( !UpdateBuffer () )
-					return NULL;
+					return false;
 		}
 	}
 
@@ -20606,9 +20642,21 @@ ISphHits * CSphSource_XMLPipe::IterateHitsNext ( CSphString & sError )
 	// let's check if it's '</document>' which is the only allowed tag at this point
 	SetTag ( "document" );
 	if ( !SkipTag ( false, sError ) )
-		return NULL;
+		return false;
 
 	// if it was all correct, we have to flush our hits
+	m_bHitsReady = m_tHits.Length()>0;
+	return true;
+}
+
+
+ISphHits * CSphSource_XMLPipe::IterateHits ( CSphString & )
+{
+	if ( !m_bHitsReady )
+		return NULL;
+
+	m_bHitsReady = false;
+
 	return &m_tHits;
 }
 
@@ -20806,6 +20854,13 @@ bool CSphSource_XMLPipe::ScanStr ( const char * sTag, char * pRes, int iMaxLengt
 }
 
 
+void CSphSource_XMLPipe::CheckHitsCount ( const char * sField )
+{
+	if ( m_tHits.Length()>=MAX_SOURCE_HITS && m_pTokenizer->GetTokenEnd()!=m_pTokenizer->GetBufferEnd() )
+		sphWarn ( "xmlpipe: collected hits larger than %d(MAX_SOURCE_HITS) while scanning docid=" DOCID_FMT " %s - clipped!!!", MAX_SOURCE_HITS, m_tDocInfo.m_iDocID, sField );
+}
+
+
 /////////////////////////////////////////////////////////////////////////////
 // XMLPIPE (v2)
 /////////////////////////////////////////////////////////////////////////////
@@ -20823,7 +20878,7 @@ public:
 	virtual bool	Connect ( CSphString & sError );			///< run the command and open the pipe
 	virtual void	Disconnect ();								///< close the pipe
 
-	virtual bool	IterateHitsStart ( CSphString & ) { return true; }	///< Connect() starts getting documents automatically, so this one is empty
+	virtual bool	IterateStart ( CSphString & ) { return true; }	///< Connect() starts getting documents automatically, so this one is empty
 	virtual BYTE **	NextDocument ( CSphString & sError );			///< parse incoming chunk and emit some hits
 
 	virtual bool	HasAttrsConfigured ()							{ return true; }	///< xmlpipe always has some attrs for now
@@ -21095,6 +21150,8 @@ void CSphSource_XMLPipe2::Disconnect ()
 		m_pParser = NULL;
 	}
 #endif
+
+	m_tHits.m_dData.Reset();
 
 	m_iInitialBufSize = 0;
 }
@@ -21376,6 +21433,8 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 	m_dFieldMVAs.Resize ( iFieldMVA );
 	ARRAY_FOREACH ( i, m_dFieldMVAs )
 		m_dFieldMVAs[i].Reserve ( 16 );
+
+	m_tHits.m_dData.Reserve ( m_iMaxHits );
 
 	return true;
 }

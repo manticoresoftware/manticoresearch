@@ -33,7 +33,7 @@ void SetupIndexing ( CSphSource_MySQL * pSrc, const CSphSourceParams_MySQL & tPa
 		sphDie ( "setup failed" );
 	if ( !pSrc->Connect ( sError ) )
 		sphDie ( "connect failed: %s", sError.cstr() );
-	if ( !pSrc->IterateHitsStart ( sError ) )
+	if ( !pSrc->IterateStart ( sError ) )
 		sphDie ( "iterate-start failed: %s", sError.cstr() );
 }
 
@@ -78,9 +78,11 @@ void DoIndexing ( CSphSource * pSrc, ISphRtIndex * pIndex )
 	int iCommits = 0;
 	for ( ;; )
 	{
-		ISphHits * pHitsNext = pSrc->IterateHitsNext ( sError );
-		if ( !pHitsNext )
-			sphDie ( "iterate-next failed: %s", sError.cstr() );
+		if ( !pSrc->IterateDocument ( sError ) )
+			sphDie ( "iterate-document failed: %s", sError.cstr() );
+		ISphHits * pHitsNext = pSrc->IterateHits ( sError );
+		if ( !sError.IsEmpty() )
+			sphDie ( "iterate-hits failed: %s", sError.cstr() );
 
 		if ( pSrc->m_tDocInfo.m_iDocID )
 			pIndex->AddDocument ( pHitsNext, pSrc->m_tDocInfo, NULL, sError );

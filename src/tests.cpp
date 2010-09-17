@@ -1495,7 +1495,7 @@ public:
 	bool Connect ( CSphString & ) { return true; }
 	void Disconnect () {}
 	bool HasAttrsConfigured () { return true; }
-	bool IterateHitsStart ( CSphString & ) { m_tDocInfo.Reset ( m_tSchema.GetRowSize() ); return true; }
+	bool IterateStart ( CSphString & ) { m_tDocInfo.Reset ( m_tSchema.GetRowSize() ); return true; }
 	bool IterateMultivaluedStart ( int, CSphString & ) { return false; }
 	bool IterateMultivaluedNext () { return false; }
 	bool IterateFieldMVAStart ( int, CSphString & ) { return false; }
@@ -1605,10 +1605,10 @@ void TestRTWeightBoundary ()
 		pSrc->SetDict ( pDict );
 
 		pSrc->Setup ( tParams );
-		assert ( pSrc->Connect ( sError ) );
-		assert ( pSrc->IterateHitsStart ( sError ) );
+		Verify ( pSrc->Connect ( sError ) );
+		Verify ( pSrc->IterateStart ( sError ) );
 
-		assert ( pSrc->UpdateSchema ( &tSrcSchema, sError ) );
+		Verify ( pSrc->UpdateSchema ( &tSrcSchema, sError ) );
 
 		CSphSchema tSchema; // source schema must be all dynamic attrs; but index ones must be static
 		tSchema.m_dFields = tSrcSchema.m_dFields;
@@ -1619,12 +1619,13 @@ void TestRTWeightBoundary ()
 
 		pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 		pIndex->SetDictionary ( pDict );
-		assert ( pIndex->Prealloc ( false, false, sError ) );
+		Verify ( pIndex->Prealloc ( false, false, sError ) );
 
 		ISphHits * pHits;
 		for ( ;; )
 		{
-			pHits = pSrc->IterateHitsNext ( sError );
+			Verify ( pSrc->IterateDocument ( sError ) );
+			pHits = pSrc->IterateHits ( sError );
 			if ( !pHits || !pSrc->m_tDocInfo.m_iDocID )
 				break;
 
@@ -1642,7 +1643,7 @@ void TestRTWeightBoundary ()
 
 		ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, pIndex->GetMatchSchema(), tResult.m_sError, false );
 		assert ( pSorter );
-		assert ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, NULL ) );
+		Verify ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, NULL ) );
 		sphFlattenQueue ( pSorter, &tResult, 0 );
 		CheckRT ( tResult.m_dMatches.GetLength(), 1, "results found" );
 		CheckRT ( tResult.m_dMatches[0].m_iDocID, 1, "docID" );
@@ -1720,7 +1721,7 @@ public:
 	bool Connect ( CSphString & ) { return true; }
 	void Disconnect () {}
 	bool HasAttrsConfigured () { return true; }
-	bool IterateHitsStart ( CSphString & ) { m_tDocInfo.Reset ( m_tSchema.GetRowSize() ); return true; }
+	bool IterateStart ( CSphString & ) { m_tDocInfo.Reset ( m_tSchema.GetRowSize() ); return true; }
 	bool IterateMultivaluedStart ( int, CSphString & ) { return false; }
 	bool IterateMultivaluedNext () { return false; }
 	bool IterateFieldMVAStart ( int, CSphString & ) { return false; }
@@ -1768,10 +1769,10 @@ void TestRTSendVsMerge ()
 	pSrc->SetDict ( pDict );
 
 	pSrc->Setup ( tParams );
-	assert ( pSrc->Connect ( sError ) );
-	assert ( pSrc->IterateHitsStart ( sError ) );
+	Verify ( pSrc->Connect ( sError ) );
+	Verify ( pSrc->IterateStart ( sError ) );
 
-	assert ( pSrc->UpdateSchema ( &tSrcSchema, sError ) );
+	Verify ( pSrc->UpdateSchema ( &tSrcSchema, sError ) );
 
 	CSphSchema tSchema; // source schema must be all dynamic attrs; but index ones must be static
 	tSchema.m_dFields = tSrcSchema.m_dFields;
@@ -1782,7 +1783,7 @@ void TestRTSendVsMerge ()
 
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( pDict );
-	assert ( pIndex->Prealloc ( false, false, sError ) );
+	Verify ( pIndex->Prealloc ( false, false, sError ) );
 
 	CSphQuery tQuery;
 	CSphQueryResult tResult;
@@ -1793,7 +1794,8 @@ void TestRTSendVsMerge ()
 
 	for ( ;; )
 	{
-		ISphHits * pHits = pSrc->IterateHitsNext ( sError );
+		Verify ( pSrc->IterateDocument ( sError ) );
+		ISphHits * pHits = pSrc->IterateHits ( sError );
 		if ( !pHits || !pSrc->m_tDocInfo.m_iDocID )
 			break;
 
@@ -1801,7 +1803,7 @@ void TestRTSendVsMerge ()
 		if ( pSrc->m_tDocInfo.m_iDocID==350 )
 		{
 			pIndex->Commit ();
-			assert ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, NULL ) );
+			Verify ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, NULL ) );
 			sphFlattenQueue ( pSorter, &tResult, 0 );
 		}
 	}

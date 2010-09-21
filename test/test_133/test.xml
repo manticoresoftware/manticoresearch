@@ -30,6 +30,17 @@ index test
 	index_sp		= 1
 	index_zones		= zone
 }
+
+index test_keyword
+{
+	source			= test
+	path			= <data_path/>/test
+	html_strip		= 1
+	dict			= keywords
+	index_sp		= 1
+	index_zones		= zone
+}
+
 </config>
 
 <db_create>
@@ -55,6 +66,17 @@ create table test_table
 <db_insert><![CDATA[insert into test_table values ( 201, 3, 'Of shoes, <zoneC>and ships</zoneC>, and sealing wax, of cabbages, <zoneC>, and kings.</zoneC>' );]]></db_insert>
 <db_insert><![CDATA[insert into test_table values ( 202, 3, '<zoneA>Sweet dreams are made of this.</zoneA><zoneB>Who am I to disagree?</zoneB>' );]]></db_insert>
 
+<db_insert>
+<![CDATA[insert into test_table values ( 300, 4, '<zoneA>Sweet of this.</zoneA><zoneLongWord1LongWord2LongWord3LongWord4LongWord5LongWord6LongWord7LongWord8LongWord9LongWord10LongWord11LongWord12LongWord13LongWord14LongWord15LongWord16LongWord17LongWord18LongWord19LongWord20LongWord21LongWord22LongWord23LongWord24LongWord25>Who am I to disagree?</zoneLongWord1LongWord2LongWord3LongWord4LongWord5LongWord6LongWord7LongWord8LongWord9LongWord10LongWord11LongWord12LongWord13LongWord14LongWord15LongWord16LongWord17LongWord18LongWord19LongWord20LongWord21LongWord22LongWord23LongWord24LongWord25>' );]]>
+</db_insert>
+<!-- crash case on search - should be last too as &#4
+<db_insert><![CDATA[insert into test_table values ( 301, 4, '>I like this.</zoneA> Sweet of &#1;&#2;&#3; this.' );]]></db_insert>
+<db_insert><![CDATA[insert into test_table values ( 301, 4, '<zoneA>I like this.</zoneA> Sweet of &#4; this.' );]]></db_insert>
+-->
+<db_insert><![CDATA[insert into test_table values ( 310, 4, '<zoneA>I like this.</zoneA> Sweet of &#1;&#2;&#3; this.' );]]></db_insert>
+<db_insert><![CDATA[insert into test_table values ( 311, 4, '<zoneA>I like this.</zoneA> Sweet of &#4; this.' );]]></db_insert>
+
+
 <queries>
 <query mode="extended2">one SENTENCE two</query>
 <query mode="extended2">one SENTENCE two three</query>
@@ -73,6 +95,9 @@ create table test_table
 <query mode="extended2">ZONE:zoneC cabbages and kings</query>
 <query mode="extended2">ZONE:zoneC kings and ships</query>
 <query mode="extended2">ZONE:(zoneA,zoneB) sweet disagree</query>
+<query mode="extended2">"Who am I"</query>
+<query mode="extended2">"of this"</query>
+<query mode="extended2">ZONE:zoneA "like this"</query>
 </queries>
 
 </test>

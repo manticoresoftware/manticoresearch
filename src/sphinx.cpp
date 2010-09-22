@@ -5945,8 +5945,8 @@ int CSphBin::ReadHit ( CSphAggregateHit * pOut, int iRowitems, CSphRowitem * pRo
 						// FIXME?! move this under PARANOID or something?
 						// or just introduce an assert() checked release build?
 						if ( uDelta>=sizeof(m_sKeyword) )
-							sphDie ( "INTERNAL ERROR: corrupted keyword length (len="UINT64_FMT", binpos="UINT64_FMT", bufpos=%d",
-								uDelta, m_iFilePos, (int)(m_pCurrent-m_dBuffer) );
+							sphDie ( "INTERNAL ERROR: corrupted keyword length (len="UINT64_FMT", deltapos="UINT64_FMT")",
+								(uint64_t)uDelta, (uint64_t)(m_iFilePos-m_iLeft) );
 #else
 						assert ( uDelta>0 && uDelta<sizeof(m_sKeyword)-1 );
 #endif

@@ -193,7 +193,7 @@ int main ()
 
 	CSphConfigSection tRTConfig;
 	sphRTInit();
-	sphRTConfigure ( tRTConfig );
+	sphRTConfigure ( tRTConfig, true );
 	SmallStringHash_T< CSphIndex * > dTemp;
 	sphReplayBinlog ( dTemp );
 	ISphRtIndex * pIndex = sphCreateIndexRT ( tSchema, "testrt", 32*1024*1024, "data/dump" );

@@ -1554,11 +1554,9 @@ static void DeleteIndexFiles ( const char * sIndex )
 void TestRTInit ()
 {
 	CSphConfigSection tRTConfig;
-	CSphVariant tEmpty ( "" );
-	tRTConfig.Add ( tEmpty, "binlog_path" ); // explicitly disable binlog
 
 	sphRTInit();
-	sphRTConfigure ( tRTConfig );
+	sphRTConfigure ( tRTConfig, true );
 
 	SmallStringHash_T<CSphIndex*> hIndexes;
 	sphReplayBinlog ( hIndexes );

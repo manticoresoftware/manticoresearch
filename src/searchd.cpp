@@ -11222,6 +11222,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	CSphString		sOptListen;
 	bool			bOptListen = false;
+	bool			bTestMode = false;
 
 	#define OPT(_a1,_a2)	else if ( !strcmp(argv[i],_a1) || !strcmp(argv[i],_a2) )
 	#define OPT1(_a1)		else if ( !strcmp(argv[i],_a1) )
@@ -11253,7 +11254,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 #endif
 		OPT1 ( "--logdebug" )		g_eLogLevel = LOG_DEBUG;
 		OPT1 ( "--safetrace" )		g_bSafeTrace = true;
-		OPT1 ( "--test" )			g_bWatchdog = false;
+		OPT1 ( "--test" )			{ g_bWatchdog = false; bTestMode = true; }
 
 		// handle 1-arg options
 		else if ( (i+1)>=argc )		break;
@@ -11814,7 +11815,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 #endif
 
 	if ( g_eWorkers==MPM_THREADS )
-		sphRTConfigure ( hSearchd );
+		sphRTConfigure ( hSearchd, bTestMode );
 
 	if ( bOptPIDFile )
 	{

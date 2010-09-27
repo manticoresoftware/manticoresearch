@@ -877,7 +877,7 @@ public:
 	void	BinlogUpdateAttributes ( const char * sIndexName, int64_t iTID, const CSphAttrUpdate & tUpd );
 	void	NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool bShutdown );
 
-	void	Configure ( const CSphConfigSection & hSearchd );
+	void	Configure ( const CSphConfigSection & hSearchd, bool bTestMode );
 	void	Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback );
 
 	void	CreateTimerThread ();
@@ -4369,7 +4369,7 @@ void RtBinlog_c::NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool 
 	Verify ( m_tWriteLock.Unlock() );
 }
 
-void RtBinlog_c::Configure ( const CSphConfigSection & hSearchd )
+void RtBinlog_c::Configure ( const CSphConfigSection & hSearchd, bool bTestMode )
 {
 	MEMORY ( SPH_MEM_BINLOG );
 
@@ -4386,7 +4386,7 @@ void RtBinlog_c::Configure ( const CSphConfigSection & hSearchd )
 #define DATADIR "."
 #endif
 
-	m_sLogPath = hSearchd.GetStr ( "binlog_path", DATADIR );
+	m_sLogPath = hSearchd.GetStr ( "binlog_path", bTestMode ? "" : DATADIR );
 	m_bDisabled = m_sLogPath.IsEmpty();
 
 	m_iRestartSize = hSearchd.GetSize ( "binlog_max_log_size", m_iRestartSize );
@@ -5100,10 +5100,10 @@ void sphRTInit ()
 		sphDie ( "binlog: failed to create binlog" );
 }
 
-void sphRTConfigure ( const CSphConfigSection & hSearchd )
+void sphRTConfigure ( const CSphConfigSection & hSearchd, bool bTestMode )
 {
 	assert ( g_pBinlog );
-	g_pBinlog->Configure ( hSearchd );
+	g_pBinlog->Configure ( hSearchd, bTestMode );
 }
 
 void sphRTDone ()

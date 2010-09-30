@@ -19659,7 +19659,7 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 
 void CSphSource_SQL::PostIndex ()
 {
-	if ( !m_tParams.m_dQueryPostIndex.GetLength() || !m_uMaxFetchedID )
+	if ( !m_tParams.m_dQueryPostIndex.GetLength() )
 		return;
 
 	assert ( !m_bSqlConnected );

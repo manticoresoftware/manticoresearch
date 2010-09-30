@@ -1221,6 +1221,13 @@ public:
 		m_pIterator = NULL;
 	}
 
+	/// start iterating from key element
+	bool IterateStart ( const KEY & tKey ) const
+	{
+		m_pIterator = FindByKey ( tKey );
+		return m_pIterator!=NULL;
+	}
+
 	/// go to next existing entry
 	bool IterateNext () const
 	{

@@ -742,11 +742,10 @@ protected:
 	CSphVector<CSphString>		m_dZones;
 	CSphVector<ExtTerm_c*>		m_dZoneStartTerm;
 	CSphVector<ExtTerm_c*>		m_dZoneEndTerm;
-	CSphVector<const ExtDoc_t*>	m_dZoneStartDocs;
-	CSphVector<const ExtDoc_t*>	m_dZoneEndDocs;
 	CSphVector<const ExtDoc_t*>	m_dZoneStart;
 	CSphVector<const ExtDoc_t*>	m_dZoneEnd;
 	CSphVector<SphDocID_t>		m_dZoneMax;				///< last docid we (tried) to cache
+	CSphVector<SphDocID_t>		m_dZoneMin;				///< first docid we (tried) to cache
 	ZoneHash_c					m_hZoneInfo;
 };
 
@@ -3806,12 +3805,12 @@ ExtRanker_c::ExtRanker_c ( const XQNode_t * pRoot, const CSphVector<CSphString> 
 	m_pCtx = tSetup.m_pCtx;
 
 	m_dZones = dZones;
-	m_dZoneStartDocs.Resize ( m_dZones.GetLength() );
-	m_dZoneEndDocs.Resize ( m_dZones.GetLength() );
 	m_dZoneStart.Resize ( m_dZones.GetLength() );
 	m_dZoneEnd.Resize ( m_dZones.GetLength() );
 	m_dZoneMax.Resize ( m_dZones.GetLength() );
+	m_dZoneMin.Resize ( m_dZones.GetLength() );
 	m_dZoneMax.Fill ( 0 );
+	m_dZoneMin.Fill	( DOCID_MAX );
 
 	ARRAY_FOREACH ( i, m_dZones )
 	{
@@ -3819,11 +3818,11 @@ ExtRanker_c::ExtRanker_c ( const XQNode_t * pRoot, const CSphVector<CSphString> 
 
 		tDot.m_sWord.SetSprintf ( "%c%s", MAGIC_CODE_ZONE, m_dZones[i].cstr() );
 		m_dZoneStartTerm.Add ( new ExtTerm_c ( CreateQueryWord ( tDot, tSetup ), UINT_MAX, tSetup, true ) );
-		m_dZoneStart[i] = m_dZoneStartDocs[i] = m_dZoneStartTerm.Last()->GetDocsChunk ( NULL );
+		m_dZoneStart[i] = NULL;
 
 		tDot.m_sWord.SetSprintf ( "%c/%s", MAGIC_CODE_ZONE, m_dZones[i].cstr() );
 		m_dZoneEndTerm.Add ( new ExtTerm_c ( CreateQueryWord ( tDot, tSetup ), UINT_MAX, tSetup, true ) );
-		m_dZoneEnd[i] = m_dZoneEndDocs[i] = m_dZoneEndTerm.Last()->GetDocsChunk ( NULL );;
+		m_dZoneEnd[i] = NULL;
 	}
 }
 
@@ -3846,7 +3845,14 @@ void ExtRanker_c::Reset ( const ISphQwordSetup & tSetup )
 	{
 		m_dZoneStartTerm[i]->Reset ( tSetup );
 		m_dZoneEndTerm[i]->Reset ( tSetup );
+
+		m_dZoneStart[i] = NULL;
+		m_dZoneEnd[i] = NULL;
 	}
+
+	m_dZoneMax.Fill ( 0 );
+	m_dZoneMin.Fill ( DOCID_MAX );
+	m_hZoneInfo.Reset();
 }
 
 
@@ -3879,6 +3885,36 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 			Swap ( m_tTestMatch, m_dMyMatches[iDocs] );
 			iDocs++;
 			pCand++;
+		}
+
+		// clean up zone hash
+		if ( m_uMaxID!=DOCID_MAX )
+		{
+			ARRAY_FOREACH ( i, m_dZoneMin )
+			{
+				SphDocID_t uMinDocid = m_dZoneMin[i];
+				if ( uMinDocid==DOCID_MAX )
+					continue;
+
+				ZoneKey_t tZoneStart;
+				tZoneStart.m_iZone = i;
+				tZoneStart.m_uDocid = uMinDocid;
+				Verify ( m_hZoneInfo.IterateStart ( tZoneStart ) );
+				uMinDocid = DOCID_MAX;
+				do
+				{
+					ZoneKey_t tKey = m_hZoneInfo.IterateGetKey();
+					if ( tKey.m_iZone!=i || tKey.m_uDocid>m_uMaxID )
+					{
+						uMinDocid = ( tKey.m_iZone==i ) ? tKey.m_uDocid : DOCID_MAX;
+						break;
+					}
+
+					m_hZoneInfo.Delete ( tKey );
+				} while ( m_hZoneInfo.IterateNext() );
+
+				m_dZoneMin[i] = uMinDocid;
+			}
 		}
 
 		if ( iDocs )
@@ -3933,22 +3969,13 @@ bool ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit )
 	const ExtDoc_t * pStart = m_dZoneStart[iZone];
 	const ExtDoc_t * pEnd = m_dZoneEnd[iZone];
 
-	if ( !pStart || !pEnd )
-	{
-		// oops, no more zone info
-		m_dZoneMax[iZone] = DOCID_MAX;
-		return false;
-	}
-
 	// now keep caching spans until we see current id
 	while ( pHit->m_uDocid > m_dZoneMax[iZone] )
 	{
-		assert ( pStart && pEnd );
-
 		// get more docs if needed
-		if ( pStart->m_uDocid==DOCID_MAX )
+		if ( ( !pStart && m_dZoneMax[iZone]!=DOCID_MAX ) || pStart->m_uDocid==DOCID_MAX )
 		{
-			pStart = m_dZoneStartDocs[iZone] = m_dZoneStartTerm[iZone]->GetDocsChunk ( NULL );
+			pStart = m_dZoneStartTerm[iZone]->GetDocsChunk ( NULL );
 			if ( !pStart )
 			{
 				m_dZoneMax[iZone] = DOCID_MAX;
@@ -3956,15 +3983,17 @@ bool ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit )
 			}
 		}
 
-		if ( pEnd->m_uDocid==DOCID_MAX )
+		if ( ( !pEnd && m_dZoneMax[iZone]!=DOCID_MAX ) || pEnd->m_uDocid==DOCID_MAX )
 		{
-			pEnd = m_dZoneEndDocs[iZone] = m_dZoneEndTerm[iZone]->GetDocsChunk ( NULL );
+			pEnd = m_dZoneEndTerm[iZone]->GetDocsChunk ( NULL );
 			if ( !pEnd )
 			{
 				m_dZoneMax[iZone] = DOCID_MAX;
 				return false;
 			}
 		}
+
+		assert ( pStart && pEnd );
 
 		// skip zone starts past already cached stuff
 		while ( pStart->m_uDocid<=m_dZoneMax[iZone] )
@@ -4092,6 +4121,7 @@ bool ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit )
 
 			// update cache status
 			m_dZoneMax[iZone] = uCur;
+			m_dZoneMin[iZone] = Min ( m_dZoneMin[iZone], uCur );
 		}
 	}
 

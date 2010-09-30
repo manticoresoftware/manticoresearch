@@ -25,7 +25,7 @@ source test
 index test
 {
 	source			= test
-	path			= <data_path/>/test
+	path			= <data_path/>/test1
 	html_strip		= 1
 	index_sp		= 1
 	index_zones		= zone
@@ -34,7 +34,7 @@ index test
 index test_keyword
 {
 	source			= test
-	path			= <data_path/>/test
+	path			= <data_path/>/test2
 	html_strip		= 1
 	dict			= keywords
 	index_sp		= 1

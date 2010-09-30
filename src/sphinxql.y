@@ -223,6 +223,7 @@ where_item:
 			tFilter.m_sAttrName = $1.m_sValue;
 			tFilter.m_eType = SPH_FILTER_VALUES;
 			tFilter.m_dValues = $4.m_dValues;
+			tFilter.m_dValues.Sort();
 		}
 	| TOK_IDENT TOK_NOT TOK_IN '(' const_list ')'
 		{
@@ -231,6 +232,7 @@ where_item:
 			tFilter.m_eType = SPH_FILTER_VALUES;
 			tFilter.m_dValues = $4.m_dValues;
 			tFilter.m_bExclude = true;
+			tFilter.m_dValues.Sort();
 		}
 	| TOK_IDENT TOK_BETWEEN const_int TOK_AND const_int
 		{

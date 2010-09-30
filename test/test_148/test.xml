@@ -1,0 +1,57 @@
+<test>
+<name>field position limit vs many hits</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_table
+	sql_attr_uint	= idd
+	sql_file_field	= body
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+	docinfo			= extern
+	
+	html_strip		= 1	
+	index_sp		= 1
+	index_zones		= zone	
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INT NOT NULL,
+	body VARCHAR(2048) NOT NULL,
+	idd INT NOT NULL
+);
+</db_create>
+
+<db_drop>drop table if exists test_table;</db_drop>
+
+<db_insert>insert into test_table values ( 1, 'test_148/doc1.txt', 1 );</db_insert>
+<db_insert>insert into test_table values ( 2, 'test_148/doc2.txt', 2 );</db_insert>
+<db_insert>insert into test_table values ( 3, 'test_148/doc3.txt', 3 );</db_insert>
+
+<sphqueries>
+	<sphinxql>select * from test where match ('ZONE:zoneA dummy')</sphinxql>
+	<sphinxql>select * from test where match ('@body[1024] text')</sphinxql>
+	<sphinxql>select * from test where match ('@body[1024] dummy')</sphinxql>
+</sphqueries>
+
+</test>

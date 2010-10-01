@@ -5342,6 +5342,27 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		{
 			// search through specified local indexes
 			ParseIndexList ( tFirst.m_sIndexes, m_dLocal );
+
+			// there should be no distributed indexes in multi-index query
+			int iDistFound = -1;
+			g_tDistLock.Lock();
+
+			ARRAY_FOREACH ( i, m_dLocal )
+				if ( g_hDistIndexes.Exists ( m_dLocal[i] ) )
+				{
+					iDistFound = i;
+					break;
+				}
+
+			g_tDistLock.Unlock();
+
+			if ( iDistFound!=-1 )
+			{
+				for ( int iRes=iStart; iRes<=iEnd; iRes++ )
+					m_dResults[iRes].m_sError.SetSprintf ( "distributed index '%s' in multi-index query found", m_dLocal[iDistFound].cstr() );
+				return;
+			}
+
 			ARRAY_FOREACH ( i, m_dLocal )
 			{
 				const ServedIndex_t * pServedIndex = g_pIndexes->GetRlockedEntry ( m_dLocal[i] );

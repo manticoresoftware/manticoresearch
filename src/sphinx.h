@@ -1355,7 +1355,7 @@ public:
 
 	/// updates schema fields and attributes
 	/// updates pInfo if it's empty; checks for match if it's not
-	/// must be called after IterateHitsStart(); will always fail otherwise
+	/// must be called after IterateStart(); will always fail otherwise
 	virtual bool						UpdateSchema ( CSphSchema * pInfo, CSphString & sError );
 
 	/// setup misc indexing settings (prefix/infix/exact-word indexing, position steps)

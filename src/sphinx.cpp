@@ -20294,7 +20294,7 @@ bool CSphSource_PgSQL::Setup ( const CSphSourceParams_PgSQL & tParams )
 
 bool CSphSource_PgSQL::IterateStart ( CSphString & sError )
 {
-	bool bResult = CSphSource_SQL::IterateHitsStart ( sError );
+	bool bResult = CSphSource_SQL::IterateStart ( sError );
 	if ( !bResult )
 		return false;
 

@@ -230,7 +230,7 @@ where_item:
 			CSphFilterSettings & tFilter = pParser->m_pQuery->m_dFilters.Add();
 			tFilter.m_sAttrName = $1.m_sValue;
 			tFilter.m_eType = SPH_FILTER_VALUES;
-			tFilter.m_dValues = $4.m_dValues;
+			tFilter.m_dValues = $5.m_dValues;
 			tFilter.m_bExclude = true;
 			tFilter.m_dValues.Sort();
 		}

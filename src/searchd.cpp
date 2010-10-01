@@ -175,6 +175,7 @@ static bool				g_bPreopenIndexes = false;
 static bool				g_bOnDiskDicts	= false;
 static bool				g_bUnlinkOld	= true;
 static bool				g_bWatchdog		= true;
+static int				g_iExpansionLimit = 0;
 
 struct Listener_t
 {
@@ -9922,6 +9923,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		tIdx.m_pIndex = sphCreateIndexPhrase ( szIndexName, hIndex["path"].cstr() );
 		tIdx.m_pIndex->m_bEnableStar = tIdx.m_bStar;
 		tIdx.m_pIndex->m_bExpandKeywords = tIdx.m_bExpand;
+		tIdx.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 		tIdx.m_pIndex->SetPreopen ( tIdx.m_bPreopen || g_bPreopenIndexes );
 		tIdx.m_pIndex->SetWordlistPreload ( !tIdx.m_bOnDiskDict && !g_bOnDiskDicts );
 		tIdx.m_bEnabled = false;
@@ -11493,6 +11495,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	g_bPreopenIndexes = hSearchd.GetInt ( "preopen_indexes", (int)g_bPreopenIndexes )!=0;
 	g_bOnDiskDicts = hSearchd.GetInt ( "ondisk_dict_default", (int)g_bOnDiskDicts )!=0;
 	g_bUnlinkOld = hSearchd.GetInt ( "unlink_old", (int)g_bUnlinkOld )!=0;
+	g_iExpansionLimit = hSearchd.GetInt ( "expansion_limit", 0 );
 
 	if ( hSearchd("max_matches") )
 	{

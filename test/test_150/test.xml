@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>keywords dictionary vs expansion limit</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	<dynamic>
+		<variant>expansion_limit = 0</variant>
+		<variant>expansion_limit = 3</variant>
+		<variant>expansion_limit = 2</variant>
+	</dynamic>
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+
+	dict			= keywords
+	min_prefix_len	= 2
+	enable_star	= 1
+}
+
+</config>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	gid int not null,
+	title varchar(255) not null
+);
+</db_create>
+<db_drop>drop table if exists test_table;</db_drop>
+<db_insert>insert into test_table values ( 1, 1, 'funny place. funny.' );</db_insert>
+<db_insert>insert into test_table values ( 2, 1, 'is it function? funny.' );</db_insert>
+<db_insert>insert into test_table values ( 3, 1, 'functional lang. quite funny.' );</db_insert>
+<db_insert>insert into test_table values ( 4, 1, 'fund sequence. funny functional.' );</db_insert>
+<db_insert>insert into test_table values ( 5, 1, 'fun place. funny fund.' );</db_insert>
+<db_insert>insert into test_table values ( 6, 1, 'its funny function.' );</db_insert>
+<db_insert>insert into test_table values ( 7, 1, 'functional is not funny place.' );</db_insert>
+
+<queries>
+	<query mode="extended2">fu*</query>
+	<query mode="extended2">fun*</query>
+</queries>
+
+</test>

@@ -6749,6 +6749,7 @@ CSphIndex::CSphIndex ( const char * sIndexName, const char * sName )
 	, m_iTID ( 0 )
 	, m_bEnableStar ( false )
 	, m_bExpandKeywords ( false )
+	, m_iExpansionLimit ( 0 )
 	, m_pProgress ( NULL )
 	, m_tSchema ( sName )
 	, m_sLastError ( "(no error message)" )
@@ -13967,9 +13968,21 @@ XQNode_t * CSphIndex_VLN::DoExpansion ( XQNode_t * pNode, BYTE * pBuff, int iFD 
 	// sort word's to leftmost max documents, rightmost least documents
 	dPrefixedWords.Sort ( WordDocsGreaterOp_t() );
 
+	// clip words with hight doc frequency as rare words are better
+	if ( m_iExpansionLimit && m_iExpansionLimit<dPrefixedWords.GetLength() )
+	{
+		int iExtra = dPrefixedWords.GetLength()-m_iExpansionLimit;
+		for ( int i=0; i<m_iExpansionLimit; i++ )
+		{
+			dPrefixedWords[i].m_sName.Swap ( dPrefixedWords[i+iExtra].m_sName );
+			dPrefixedWords[i].m_iValue = dPrefixedWords[i+iExtra].m_iValue;
+		}
+		dPrefixedWords.Resize ( m_iExpansionLimit );
+	}
+
 	// add this very Word but with zero documents
 	if ( !bWordExists )
-		dPrefixedWords.Add().m_sName = sAdjustedWord;
+		dPrefixedWords.Add().m_sName = sFullWord; // FIXME!!! should we use ( sAdjustedWord, iWordLen ) instead of reference word
 
 	const XQKeyword_t tPrefixingWord = pNode->m_dWords[0];
 	pNode->m_dWords.Reset();
@@ -22987,7 +23000,7 @@ bool CWordlist::GetPrefixedWords ( const char * sWord, int iWordLen, CSphVector<
 				CSphNamedInt & tPrefixed = dPrefixedWords.Add();
 				tPrefixed.m_sName = tResWord.m_sWord; // OPTIMIZE? swap mb?
 				tPrefixed.m_iValue = tResWord.m_iDocs;
-				bExactWord |= ( tPrefixed.m_sName==sWord );
+				bExactWord |= ( DictCmpStrictly ( tPrefixed.m_sName.cstr(), tPrefixed.m_sName.Length(), sWord, iWordLen )==0 );
 			}
 		}
 

@@ -2544,6 +2544,7 @@ public:
 
 	bool						m_bEnableStar;			///< enable star-syntax
 	bool						m_bExpandKeywords;		///< enable automatic query-time keyword expansion (to "( word | =word | *word* )")
+	int							m_iExpansionLimit;
 
 protected:
 	ProgressCallback_t *		m_pProgress;

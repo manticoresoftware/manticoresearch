@@ -18358,16 +18358,67 @@ void CSphHTMLStripper::Strip ( BYTE * sData ) const
 	}
 	*d++ = '\0';
 
-	// double space's character elimination pass
+	// space, paragraph sequences elimination pass
 	s = sData;
 	d = sData;
-	bool bIsLastSpace = false;
+	bool bSpaceOut = false;
+	bool bParaOut = false;
+	bool bZoneOut = false;
 	while ( const char c = *s++ )
 	{
-		const bool bIsSpace = sphIsSpace ( c );
-		*d = ( bIsSpace ? ' ' : c );
-		d += !( bIsSpace && bIsLastSpace );
-		bIsLastSpace = bIsSpace;
+		assert ( d<=s-1 );
+
+		// handle different character classes
+		if ( sphIsSpace(c) )
+		{
+			// handle whitespace, skip dupes
+			if ( !bSpaceOut )
+				*d++ = c;
+
+			bSpaceOut = true;
+			continue;
+
+		} else if ( c==MAGIC_CODE_PARAGRAPH )
+		{
+			// handle paragraph marker, skip dupes
+			if ( !bParaOut && !bZoneOut )
+			{
+				*d++ = c;
+				bParaOut = true;
+			}
+
+			bSpaceOut = true;
+			continue;
+
+		} else if ( c==MAGIC_CODE_ZONE )
+		{
+			// zone marker
+			// rewind preceding paragraph, if any, it is redundant
+			if ( bParaOut )
+			{
+				assert ( d>sData && d[-1]==MAGIC_CODE_PARAGRAPH );
+				d--;
+			}
+
+			// copy \4zoneid\4
+			*d++ = c;
+			while ( *s && *s!=MAGIC_CODE_ZONE )
+				*d++ = *s++;
+
+			if ( *s )
+				*d++ = *s++;
+
+			// update state
+			// no spaces paragraphs allowed
+			bSpaceOut = bZoneOut = true;
+			bParaOut = false;
+			continue;
+
+		} else
+		{
+			*d++ = c;
+			bSpaceOut = bParaOut = bZoneOut = false;
+		}
 	}
 	*d++ = '\0';
 }

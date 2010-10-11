@@ -630,6 +630,7 @@ protected:
 
 protected:
 	int					FilterHits ( int iMyHit, DWORD uSentenceEnd, SphDocID_t uDocid, int * pDoc );
+	void				SkipTailHits ();
 
 private:
 	ExtNode_i *			m_pArg1;				///< left arg
@@ -3509,7 +3510,7 @@ int ExtUnit_c::FilterHits ( int iMyHit, DWORD uSentenceEnd, SphDocID_t uDocid, i
 			{
 				// no more hits in this sentence
 				uSentenceEnd = 0;
-				if ( m_pHit1 && m_pHit2 && m_pHit1->m_uDocid==uDocid && m_pHit2->m_uDocid )
+				if ( m_pHit1 && m_pHit2 && m_pHit1->m_uDocid==uDocid && m_pHit2->m_uDocid==uDocid )
 					continue; // no more in-sentence hits, but perhaps more sentences in this document
 				else
 					break; // document is over
@@ -3590,6 +3591,13 @@ int ExtUnit_c::FilterHits ( int iMyHit, DWORD uSentenceEnd, SphDocID_t uDocid, i
 	return iMyHit;
 }
 
+void ExtUnit_c::SkipTailHits ()
+{
+	m_uTailDocid = 0;
+	m_pDoc1++;
+	m_pDoc2++;
+}
+
 
 const ExtDoc_t * ExtUnit_c::GetDocsChunk ( SphDocID_t * pMaxID )
 {
@@ -3606,6 +3614,9 @@ const ExtDoc_t * ExtUnit_c::GetDocsChunk ( SphDocID_t * pMaxID )
 
 	int iDoc = 0;
 	int iMyHit = 0;
+
+	if ( m_uTailDocid )
+		SkipTailHits();
 
 	while ( iMyHit<MAX_HITS-1 )
 	{
@@ -3685,9 +3696,7 @@ const ExtDoc_t * ExtUnit_c::GetDocsChunk ( SphDocID_t * pMaxID )
 				m_uTailDocid = uDocid; // yep, do check that tail
 			} else
 			{
-				m_uTailDocid = 0; // nope, both hit lists are definitely over
-				m_pDoc1++;
-				m_pDoc2++;
+				SkipTailHits(); // nope, both hit lists are definitely over
 			}
 
 			return ReturnDocsChunk ( iDoc, iMyHit, pMaxID );
@@ -3749,24 +3758,35 @@ const ExtHit_t * ExtUnit_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t )
 		// skip filtered hits until next requested document
 		while ( pMyHit->m_uDocid!=pDocs->m_uDocid )
 		{
-			while ( pDocs->m_uDocid < pMyHit->m_uDocid )
+			while ( pDocs->m_uDocid < pMyHit->m_uDocid && pDocs->m_uDocid!=DOCID_MAX )
 				pDocs++;
+			if ( pDocs->m_uDocid==DOCID_MAX )
+				break;
 			while ( pMyHit->m_uDocid < pDocs->m_uDocid )
 				pMyHit++;
 		}
 
 		// out of hits
-		if ( pMyHit->m_uDocid==DOCID_MAX )
+		if ( pMyHit->m_uDocid==DOCID_MAX || pDocs->m_uDocid==DOCID_MAX )
 		{
 			// there still might be trailing hits
 			// if so, they will be handled on next entry
 			m_uHitsOverFor = uFirstMatch;
+			if ( pDocs->m_uDocid==DOCID_MAX && m_uTailDocid )
+				SkipTailHits();
+
 			break;
 		}
 
 		// copy
 		while ( pMyHit->m_uDocid==pDocs->m_uDocid )
 			m_dHits[iHit++] = *pMyHit++;
+
+		if ( pMyHit->m_uDocid==DOCID_MAX )
+		{
+			m_uHitsOverFor = uFirstMatch;
+			break;
+		}
 	}
 
 	assert ( iHit>=0 && iHit<MAX_HITS );

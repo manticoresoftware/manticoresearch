@@ -18373,7 +18373,7 @@ void CSphHTMLStripper::Strip ( BYTE * sData ) const
 		{
 			// handle whitespace, skip dupes
 			if ( !bSpaceOut )
-				*d++ = c;
+				*d++ = ' ';
 
 			bSpaceOut = true;
 			continue;

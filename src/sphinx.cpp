@@ -1938,7 +1938,7 @@ public:
 protected:
 	BYTE *	GetTokenSyn ();
 	void	BlendAdjust ( BYTE * pPosition );
-	int		CodepointArbitration ( int iCodepoint, int iLastCodepoint, bool bSpaceAhead );
+	int		CodepointArbitration ( int iCodepoint, bool bWasEscaped, bool bSpaceAhead );
 
 protected:
 	/// get codepoint
@@ -3295,7 +3295,7 @@ static bool IsModifier ( int iSymbol )
 
 
 template < bool IS_UTF8 >
-int CSphTokenizerTraits<IS_UTF8>::CodepointArbitration ( int iCode, int iLastCodepoint, bool bSpaceAhead )
+int CSphTokenizerTraits<IS_UTF8>::CodepointArbitration ( int iCode, bool bWasEscaped, bool bSpaceAhead )
 {
 	/////////////////////////////
 	// indexing time arbitration
@@ -3358,7 +3358,7 @@ int CSphTokenizerTraits<IS_UTF8>::CodepointArbitration ( int iCode, int iLastCod
 	if ( ( iCode & FLAG_CODEPOINT_BLEND ) && ( iCode & FLAG_CODEPOINT_SPECIAL ) )
 	{
 		bool bBlend =
-			( iLastCodepoint=='\\' ) || // escaped characters should always act as blended
+			bWasEscaped || // escaped characters should always act as blended
 			( m_bPhrase && !IsModifier ( iSymbol ) ) || // non-modifier special inside phrase
 			( m_iAccum && ( iSymbol=='@' || iSymbol=='/' || iSymbol=='-' ) ); // some specials in the middle of a token
 
@@ -3372,7 +3372,7 @@ int CSphTokenizerTraits<IS_UTF8>::CodepointArbitration ( int iCode, int iLastCod
 	// dash and dollar inside the word are not special
 	// non-modifier specials within phrase are not special
 	if ( iCode & FLAG_CODEPOINT_SPECIAL )
-		if ( iLastCodepoint=='\\'
+		if ( bWasEscaped
 			|| ( m_iAccum && iSymbol=='-' )
 			|| ( m_iAccum && iSymbol=='$' && !bSpaceAhead )
 			|| ( m_bPhrase && iSymbol!='"' && !IsModifier ( iSymbol ) ) )
@@ -3916,28 +3916,59 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 	m_bWasSpecial = false;
 	m_bBlended = false;
 	m_iOvershortCount = 0;
+	m_bTokenBoundary = false;
 
 	if ( m_dSynonyms.GetLength() )
 		return GetTokenSyn ();
 
-	bool bEscaped = m_bEscaped;
-	int iCodepoint = 0;
-	int iLastCodepoint = 0;
-	BYTE * pCur = m_pCur;
-	m_bTokenBoundary = false;
+	const bool bUseEscape = m_bEscaped;
+
 	for ( ;; )
 	{
-		// get next codepoint
+		// memorize buffer start
+		BYTE * pCur = m_pCur;
+
+		// get next codepoint, real or virtual
+		int iCodepoint = 0;
 		int iCode = 0;
-		if ( m_pCur>=m_pBufferMax )
+
+		bool bWasEscaped = false; // whether current char was escaped
+		if ( m_pCur<m_pBufferMax )
 		{
-			pCur = m_pCur;
+			// get next codepoint
+			iCodepoint = *m_pCur++;
+			iCode = m_tLC.ToLower ( iCodepoint );
+
+			// handle escaping
+			if ( bUseEscape && iCodepoint=='\\' )
+			{
+				if ( m_pCur<m_pBufferMax )
+				{
+					// fetch, fold, and then forcibly demote special
+					iCodepoint = *m_pCur++;
+					iCode = m_tLC.ToLower ( iCodepoint );
+					if ( !Special2Simple ( iCode ) )
+						iCode = 0;
+					bWasEscaped = true;
+
+				} else
+				{
+					// stray slash on a buffer end
+					// handle it as a separator
+					iCodepoint = iCode = 0;
+				}
+			}
+
+		} else
+		{
+			// out of buffer
+			// but still need to handle short tokens
 			if ( m_iAccum<m_tSettings.m_iMinWordLen )
 			{
 				bool bShortToken = false;
 				if ( m_bShortTokenFilter )
 				{
-					m_sAccum [m_iAccum] = '\0';
+					m_sAccum[m_iAccum] = '\0';
 					if ( ShortTokenFilter ( m_sAccum, m_iAccum ) )
 						bShortToken = true;
 				}
@@ -3949,14 +3980,9 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 					return NULL;
 				}
 			}
-		} else
-		{
-			pCur = m_pCur;
-			iCodepoint = *m_pCur++;
-			iCode = m_tLC.ToLower ( iCodepoint );
 		}
 
-		iCode = CodepointArbitration ( iCode, iLastCodepoint, IsWhitespace ( *m_pCur ) );
+		iCode = CodepointArbitration ( iCode, bWasEscaped, IsWhitespace ( *m_pCur ) );
 
 		// handle ignored chars
 		if ( iCode & FLAG_CODEPOINT_IGNORE )
@@ -3972,20 +3998,6 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 				m_bBlended = true;
 				m_pBlendStart = m_iAccum ? m_pTokenStart : pCur;
 			}
-		}
-
-		if ( bEscaped )
-		{
-			if ( iCodepoint=='\\' && iLastCodepoint!='\\' )
-			{
-				iLastCodepoint = iCodepoint;
-				continue;
-			}
-
-			if ( iLastCodepoint=='\\' && !Special2Simple ( iCode ) )
-				iCode = 0;
-
-			iLastCodepoint = iCodepoint;
 		}
 
 		// handle whitespace and boundary
@@ -4133,19 +4145,29 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 	m_bBlended = false;
 	m_bWasSpecial = false;
 	m_iOvershortCount = 0;
+	m_bTokenBoundary = false;
 
 	if ( m_dSynonyms.GetLength() )
 		return GetTokenSyn ();
 
-	bool bEscaped = m_bEscaped;
-	int iLastCodepoint = 0;
-	m_bTokenBoundary = false;
+	const bool bUseEscape = m_bEscaped; // whether this tokenizer supports escaping
+
 	for ( ;; )
 	{
 		// get next codepoint
 		BYTE * pCur = m_pCur; // to redo special char, if there's a token already
 		int iCodePoint = GetCodepoint(); // advances m_pCur
 		int iCode = m_tLC.ToLower ( iCodePoint );
+
+		// handle escaping
+		bool bWasEscaped = ( bUseEscape && iCodePoint=='\\' ); // whether current codepoint was escaped
+		if ( bWasEscaped )
+		{
+			iCodePoint = GetCodepoint();
+			iCode = m_tLC.ToLower ( iCodePoint );
+			if ( !Special2Simple ( iCode ) )
+				iCode = 0;
+		}
 
 		// handle eof
 		if ( iCode<0 )
@@ -4167,7 +4189,7 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			return m_sAccum;
 		}
 
-		iCode = CodepointArbitration ( iCode, iLastCodepoint, IsWhitespace ( *m_pCur ) );
+		iCode = CodepointArbitration ( iCode, bWasEscaped, IsWhitespace ( *m_pCur ) );
 
 		// handle ignored chars
 		if ( iCode & FLAG_CODEPOINT_IGNORE )
@@ -4183,20 +4205,6 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 				m_bBlended = true;
 				m_pBlendStart = m_iAccum ? m_pTokenStart : pCur;
 			}
-		}
-
-		if ( bEscaped )
-		{
-			if ( iCodePoint=='\\' && iLastCodepoint!='\\' )
-			{
-				iLastCodepoint = iCodePoint;
-				continue;
-			}
-
-			if ( iLastCodepoint=='\\' && !Special2Simple ( iCode ) )
-				iCode = 0;
-
-			iLastCodepoint = iCodePoint;
 		}
 
 		// handle whitespace and boundary

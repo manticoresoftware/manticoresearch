@@ -10,6 +10,12 @@ n=2, res=another <b>test text</b> to be highlighted, below limit
 n=3, res=test number three, without phrase match
 n=4, res=final test, not only without phrase match, but also above  ... 
 
+passage_boundary=zone
+n=1, res= ... The institutional investment manager <b>it</b>. <b>Is</b> Filing this report and. <b>It</b> <b>is</b> signed hereby represent. That <b>it</b> <b>is</b> all information.are <b>It</b> or <b>is</b> cool <b>It</b> <b>is</b> cooler <b>It</b> <b>is</b> another ... 
+
+passage_boundary=sentence
+n=1, res= ... The institutional investment manager <b>it</b>. ... <b>Is</b> Filing this report and. ... <b>It</b> <b>is</b> signed hereby represent. ... That <b>it</b> <b>is</b> all information.are <b>It</b> or <b>is</b> cool <b>It</b> <b>is</b> cooler <b>It</b> <b>is</b> another place! ... 
+
 build_keywords result:
 1. tokenized=hello, normalized=hello, docs=0, hits=0
 2. tokenized=test, normalized=test, docs=3, hits=5
@@ -181,10 +187,10 @@ Matches:
 2. doc_id=3, weight=1304, idd=3, tag=(7,77,177), group_id=123, q=3030, @groupby=123, @count=2
 3. doc_id=2, weight=1304, idd=2, tag=(2,4,6), group_id=2000, q=2020, @groupby=2000, @count=1
 
-connections: 15
+connections: 17
 maxed_out: 0
 command_search: 16
-command_excerpt: 2
+command_excerpt: 4
 command_update: 4
 command_keywords: 1
 command_persist: 1

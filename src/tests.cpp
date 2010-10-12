@@ -1856,7 +1856,7 @@ void TestSentenceTokenizer()
 
 	assert ( pTok->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
 //	assert ( pTok->SetBlendChars ( "., &", sError ) ); // NOLINT
-	pTok->AddSpecials ( ".?!" );
+	assert ( pTok->EnableSentenceIndexing ( sError ) );
 
 	const char * SENTENCE = "\2"; // MUST be in sync with sphinx.cpp
 	const char * sTest[] =

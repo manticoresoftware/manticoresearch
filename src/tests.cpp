@@ -1486,7 +1486,10 @@ public:
 	virtual BYTE ** NextDocument ( CSphString & )
 	{
 		if ( m_tDocInfo.m_iDocID )
+		{
+			m_tDocInfo.m_iDocID = 0;
 			return NULL;
+		}
 
 		m_tDocInfo.m_iDocID++;
 		return (BYTE **) &g_sFieldsData[2];
@@ -1623,8 +1626,11 @@ void TestRTWeightBoundary ()
 		for ( ;; )
 		{
 			Verify ( pSrc->IterateDocument ( sError ) );
+			if ( !pSrc->m_tDocInfo.m_iDocID )
+				break;
+
 			pHits = pSrc->IterateHits ( sError );
-			if ( !pHits || !pSrc->m_tDocInfo.m_iDocID )
+			if ( !pHits )
 				break;
 
 			pIndex->AddDocument ( pHits, pSrc->m_tDocInfo, NULL, sError );
@@ -1700,7 +1706,10 @@ public:
 	virtual BYTE ** NextDocument ( CSphString & )
 	{
 		if ( m_tDocInfo.m_iDocID>800 )
+		{
+			m_tDocInfo.m_iDocID = 0;
 			return NULL;
+		}
 
 		m_tDocInfo.m_iDocID++;
 
@@ -1793,8 +1802,11 @@ void TestRTSendVsMerge ()
 	for ( ;; )
 	{
 		Verify ( pSrc->IterateDocument ( sError ) );
+		if ( !pSrc->m_tDocInfo.m_iDocID )
+			break;
+
 		ISphHits * pHits = pSrc->IterateHits ( sError );
-		if ( !pHits || !pSrc->m_tDocInfo.m_iDocID )
+		if ( !pHits  )
 			break;
 
 		pIndex->AddDocument ( pHits, pSrc->m_tDocInfo, NULL, sError );

@@ -458,6 +458,10 @@ public:
 							~ExprParser_t ();
 
 	ISphExpr *				Parse ( const char * sExpr, const CSphSchema & tSchema, DWORD * pAttrType, bool * pUsesWeight, CSphString & sError );
+	inline void				SetGenMode ( CSphSchema * pExtra )
+	{
+		m_pExtra = pExtra;
+	}
 
 protected:
 	int						m_iParsed;	///< filled by yyparse() at the very end
@@ -486,6 +490,8 @@ private:
 	const char *			m_pLastTokenStart;
 	const CSphSchema *		m_pSchema;
 	CSphVector<ExprNode_t>	m_dNodes;
+
+	CSphSchema *			m_pExtra;
 
 	int						m_iConstNow;
 
@@ -611,6 +617,8 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 			const CSphColumnInfo & tCol = m_pSchema->GetAttr ( iAttr );
 			if ( IsNumericAttrType ( tCol.m_eAttrType ) || ( tCol.m_eAttrType & SPH_ATTR_MULTI ) )
 			{
+				if ( m_pExtra )
+					m_pExtra->AddAttr ( tCol, true );
 				lvalp->iAttrLocator = ( tCol.m_tLocator.m_iBitOffset<<16 ) + tCol.m_tLocator.m_iBitCount;
 
 				if ( tCol.m_eAttrType==SPH_ATTR_FLOAT )			return TOK_ATTR_FLOAT;
@@ -2042,10 +2050,11 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema,
 //////////////////////////////////////////////////////////////////////////
 
 /// parser entry point
-ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, DWORD * pAttrType, bool * pUsesWeight, CSphString & sError )
+ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, DWORD * pAttrType, bool * pUsesWeight, CSphString & sError, CSphSchema * pExtra )
 {
 	// parse into opcodes
 	ExprParser_t tParser;
+	tParser.SetGenMode ( pExtra );
 	return tParser.Parse ( sExpr, tSchema, pAttrType, pUsesWeight, sError );
 }
 

@@ -470,21 +470,21 @@ static const yysigned_char yyrhs[] =
 static const unsigned short yyrline[] =
 {
        0,   110,   110,   111,   112,   113,   114,   115,   116,   117,
-     118,   124,   139,   140,   144,   145,   146,   147,   148,   149,
-     150,   151,   166,   167,   170,   172,   176,   180,   181,   185,
-     198,   205,   212,   220,   228,   237,   241,   245,   249,   253,
-     257,   258,   259,   260,   265,   269,   273,   280,   281,   285,
-     286,   290,   291,   294,   296,   300,   307,   309,   313,   319,
-     321,   325,   332,   333,   337,   338,   339,   343,   344,   347,
-     349,   353,   358,   365,   367,   371,   375,   376,   380,   385,
-     390,   399,   409,   421,   431,   432,   433,   434,   435,   436,
-     437,   438,   439,   440,   441,   442,   443,   444,   445,   446,
-     447,   448,   449,   450,   451,   455,   456,   457,   458,   459,
-     463,   464,   470,   474,   475,   476,   482,   491,   492,   493,
-     507,   508,   509,   513,   514,   520,   528,   529,   532,   534,
-     538,   539,   543,   544,   548,   552,   553,   557,   558,   559,
-     565,   576,   583,   585,   589,   594,   598,   606,   607,   613,
-     621,   622,   628
+     118,   124,   139,   140,   144,   146,   148,   149,   150,   151,
+     152,   153,   169,   170,   173,   175,   179,   183,   184,   188,
+     201,   208,   215,   223,   231,   240,   244,   248,   252,   256,
+     260,   261,   262,   263,   268,   272,   276,   283,   284,   288,
+     289,   293,   294,   297,   299,   303,   310,   312,   316,   322,
+     324,   328,   335,   336,   340,   341,   342,   346,   347,   350,
+     352,   356,   361,   368,   370,   374,   378,   379,   383,   388,
+     393,   402,   412,   424,   434,   435,   436,   437,   438,   439,
+     440,   441,   442,   443,   444,   445,   446,   447,   448,   449,
+     450,   451,   452,   453,   454,   458,   459,   460,   461,   462,
+     466,   467,   473,   477,   478,   479,   485,   494,   495,   496,
+     510,   511,   512,   516,   517,   523,   531,   532,   535,   537,
+     541,   542,   546,   547,   551,   555,   556,   560,   561,   562,
+     568,   579,   586,   588,   592,   597,   601,   609,   610,   616,
+     624,   625,   631
 };
 #endif
 
@@ -1440,37 +1440,39 @@ yyreduce:
 
   case 14:
 
-    { pParser->AddItem ( &yyvsp[0], NULL ); ;}
+    { pParser->SetSelect ( yyvsp[0].m_iStart, yyvsp[0].m_iEnd );
+											pParser->AddItem ( &yyvsp[0], NULL ); ;}
     break;
 
   case 15:
 
-    { pParser->AddItem ( &yyvsp[-2], &yyvsp[0] ); ;}
+    { pParser->SetSelect ( yyvsp[-2].m_iStart, yyvsp[0].m_iEnd );
+									pParser->AddItem ( &yyvsp[-2], &yyvsp[0] ); ;}
     break;
 
   case 16:
 
-    { pParser->AddItem ( &yyvsp[-3], &yyvsp[0], SPH_AGGR_AVG ); ;}
+    { pParser->SetSelect (yyvsp[-5].m_iStart, yyvsp[0].m_iEnd); pParser->AddItem ( &yyvsp[-3], &yyvsp[0], SPH_AGGR_AVG ); ;}
     break;
 
   case 17:
 
-    { pParser->AddItem ( &yyvsp[-3], &yyvsp[0], SPH_AGGR_MAX ); ;}
+    { pParser->SetSelect (yyvsp[-5].m_iStart, yyvsp[0].m_iEnd); pParser->AddItem ( &yyvsp[-3], &yyvsp[0], SPH_AGGR_MAX ); ;}
     break;
 
   case 18:
 
-    { pParser->AddItem ( &yyvsp[-3], &yyvsp[0], SPH_AGGR_MIN ); ;}
+    { pParser->SetSelect (yyvsp[-5].m_iStart, yyvsp[0].m_iEnd); pParser->AddItem ( &yyvsp[-3], &yyvsp[0], SPH_AGGR_MIN ); ;}
     break;
 
   case 19:
 
-    { pParser->AddItem ( &yyvsp[-3], &yyvsp[0], SPH_AGGR_SUM ); ;}
+    { pParser->SetSelect (yyvsp[-5].m_iStart, yyvsp[0].m_iEnd); pParser->AddItem ( &yyvsp[-3], &yyvsp[0], SPH_AGGR_SUM ); ;}
     break;
 
   case 20:
 
-    { pParser->AddItem ( &yyvsp[0], NULL ); ;}
+    { pParser->SetSelect (yyvsp[0].m_iStart, yyvsp[0].m_iEnd); pParser->AddItem ( &yyvsp[0], NULL ); ;}
     break;
 
   case 21:
@@ -1484,6 +1486,7 @@ yyreduce:
 			} else
 			{
 				pParser->m_pQuery->m_sGroupDistinct = yyvsp[-1].m_sValue;
+				pParser->SetSelect ( yyvsp[-1].m_iStart, yyvsp[-1].m_iEnd );
 			}
 		;}
     break;
@@ -2111,7 +2114,7 @@ yyerrlab:
 	      char *yyp = yystpcpy (yymsg, "syntax error, unexpected ");
 	      yyp = yystpcpy (yyp, yytname[yytype]);
 
-	      if (yycount < 5)
+	      if (yycount < 4)
 		{
 		  yycount = 0;
 		  for (yyx = yyn < 0 ? -yyn : 0;
@@ -2125,6 +2128,19 @@ yyerrlab:
 			yycount++;
 		      }
 		}
+	      else
+		{
+		  for (yyx = yyn < 0 ? -yyn : 0;
+		       yyx < (int) (sizeof (yytname) / sizeof (char *));
+		       yyx++)
+		    if (yycheck[yyx + yyn] == yyx && yyx != YYTERROR)
+		      {
+			snprintf (yyp, (int)(yysize - (yyp - yymsg)), ", expecting %s (or %d other tokens)", yytname[yyx], yycount - 1);
+			while (*yyp++);
+			break;
+		      }
+		}
+
 	      yyerror (pParser, yymsg);
 	      YYSTACK_FREE (yymsg);
 	    }

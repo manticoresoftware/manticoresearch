@@ -2156,6 +2156,7 @@ public:
 
 	/// parse select list string into items
 	bool			ParseSelectList ( CSphString & sError );
+	bool			m_bAgent;			///< agent mode ( may be need extra schema on output )
 };
 
 
@@ -2582,7 +2583,7 @@ void				sphSetQuiet ( bool bQuiet );
 
 /// creates proper queue for given query
 /// may return NULL on error; in this case, error message is placed in sError
-ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError, bool bComputeItems=true );
+ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError, bool bComputeItems=true, CSphSchema * pExtra=NULL);
 
 /// convert queue to sorted array, and add its entries to result's matches array
 void				sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag );

@@ -31,7 +31,8 @@ index test
 	<SPHinxQL>insert into test (id,title) values (4,'title1'),(5,'title5'),(6,'title6')</SPHinxQL>
 	<SPHinxQL>insert into test (id,content) values (7,'content7'),(8,'content8'),(9,'content9')</SPHinxQL>
 	<SPHinxQL>insert into test (title,content) values ('title','failure'),('title1','failure')</SPHinxQL>
-	<SPHinxQL>select * from test</SPHinxQL>
+-	<SPHinxQL>select * from test</SPHinxQL>
+	<SPHinxQL>select @id as idd from test</SPHinxQL>
 </SPHQueries>
 
 </Test>

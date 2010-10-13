@@ -3199,13 +3199,15 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 {
 	int iReqSize = 104 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
 		+ q.m_sSortBy.Length()
-		+ q.m_sRawQuery.Length()
 		+ strlen ( sIndexes )
 		+ q.m_sGroupBy.Length()
 		+ q.m_sGroupSortBy.Length()
 		+ q.m_sGroupDistinct.Length()
 		+ q.m_sComment.Length()
 		+ q.m_sSelect.Length();
+	if ( !q.m_bAgent ) // send the magic to agent ("*,*," + real query)
+		iReqSize += q.m_sSelect.IsEmpty()?3:4;
+		iReqSize += q.m_sRawQuery.IsEmpty()?q.m_sQuery.Length():q.m_sRawQuery.Length();
 	ARRAY_FOREACH ( j, q.m_dFilters )
 	{
 		const CSphFilterSettings & tFilter = q.m_dFilters[j];
@@ -3238,7 +3240,10 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	tOut.SendInt ( (DWORD)q.m_eRanker ); // ranking mode
 	tOut.SendInt ( q.m_eSort ); // sort mode
 	tOut.SendString ( q.m_sSortBy.cstr() ); // sort attr
-	tOut.SendString ( q.m_sRawQuery.cstr() ); // query
+	if ( q.m_sRawQuery.IsEmpty() )
+		tOut.SendString ( q.m_sQuery.cstr() );
+	else
+		tOut.SendString ( q.m_sRawQuery.cstr() ); // query
 	tOut.SendInt ( q.m_iWeights );
 	for ( int j=0; j<q.m_iWeights; j++ )
 		tOut.SendInt ( q.m_pWeights[j] ); // weights
@@ -3320,7 +3325,15 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 			}
 		}
 	}
-	tOut.SendString ( q.m_sSelect.cstr() );
+	if ( q.m_bAgent )
+		tOut.SendString ( q.m_sSelect.cstr() );
+	else
+	{
+		if ( !q.m_sSelect.Length() )
+			tOut.SendString ( "*,*" );
+		else
+			tOut.SendString ( CSphString().SetSprintf ( "*,*,%s", q.m_sSelect.cstr() ).cstr() );
+	}
 }
 
 
@@ -3520,6 +3533,12 @@ bool MinimizeSchema ( CSphSchema & tDst, const CSphSchema & tSrc )
 			{
 				// different bit sizes? choose the max one
 				dDst[i].m_tLocator.m_iBitCount = Max ( dDst[i].m_tLocator.m_iBitCount, tSrcAttr.m_tLocator.m_iBitCount );
+				bEqual = false;
+			}
+
+			if ( tSrcAttr.m_tLocator.m_iBitOffset!=dDst[i].m_tLocator.m_iBitOffset )
+			{
+				// different offsets? have to force target dynamic then, since we can't use one locator for all matches
 				bEqual = false;
 			}
 
@@ -3994,13 +4013,27 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 	// v.1.22
 	if ( iVer>=0x116 )
 	{
-		tQuery.m_sSelect = tReq.GetString ();
-
+		CSphString sRawSelect = tReq.GetString ();
+		CSphString sSelect = "";
 		CSphString sError;
+		bool bAgent = false;
+		if ( sRawSelect.Begins ( "*,*" ) ) // this is the mark of agent.
+		{
+			bAgent = true;
+			if ( sRawSelect.Length()>3 )
+				sSelect = sRawSelect.SubString ( 4, sRawSelect.Length()-4 );
+		}
+
+		tQuery.m_sSelect = bAgent?sSelect:sRawSelect;
 		if ( !tQuery.ParseSelectList ( sError ) )
 		{
 			tReq.SendErrorReply ( "select: %s", sError.cstr() );
 			return false;
+		}
+		if ( bAgent )
+		{
+			tQuery.m_sSelect = sRawSelect;
+			tQuery.m_bAgent = true;
 		}
 	}
 
@@ -4432,8 +4465,88 @@ struct TaggedMatchSorter_fn : public SphAccessor_T<CSphMatch>
 	}
 };
 
+void RemapResult ( const CSphSchema& tTarget, AggrResult_t & tRes, bool bMultiSchema=true )
+{
+	int iCur = 0;
+	int * dMapFrom = NULL;
 
-bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHadLocalIndexes )
+	if ( tTarget.GetRowSize() )
+		dMapFrom = new int [ tTarget.GetAttrsCount() ];
+
+	ARRAY_FOREACH ( iSchema, tRes.m_dSchemas )
+	{
+		CSphSchema& dSchema = bMultiSchema?tRes.m_dSchemas[iSchema]:tRes.m_tSchema;
+		for ( int i=0; i<tTarget.GetAttrsCount(); i++ )
+		{
+			dMapFrom[i] = dSchema.GetAttrIndex ( tTarget.GetAttr(i).m_sName.cstr() );
+			assert ( dMapFrom[i]>=0 );
+		}
+		int iLimit = bMultiSchema?iCur+tRes.m_dMatchCounts[iSchema]:tRes.m_iTotalMatches;
+		for ( int i=iCur;i<iLimit; i++ )
+		{
+			CSphMatch & tMatch = tRes.m_dMatches[i];
+
+			// create new and shiny (and properly sized and fully dynamic) match
+			CSphMatch tRow;
+			tRow.Reset ( tTarget.GetDynamicSize() );
+			tRow.m_iDocID = tMatch.m_iDocID;
+			tRow.m_iWeight = tMatch.m_iWeight;
+			tRow.m_iTag = tMatch.m_iTag;
+
+			// remap attrs
+			for ( int j=0; j<tTarget.GetAttrsCount(); j++ )
+			{
+				const CSphColumnInfo & tDst = tTarget.GetAttr(j);
+				const CSphColumnInfo & tSrc = dSchema.GetAttr ( dMapFrom[j] );
+				if ( !tDst.m_tLocator.m_bDynamic )
+				{
+					assert ( !tSrc.m_tLocator.m_bDynamic );
+					tRow.m_pStatic = tMatch.m_pStatic;
+				} else
+					tRow.SetAttr ( tDst.m_tLocator, tMatch.GetAttr ( tSrc.m_tLocator ) );
+			}
+
+			// swap out old (most likely wrong sized) match
+			Swap ( tMatch, tRow );
+		}
+
+		if ( !bMultiSchema )
+			break;
+
+		iCur = iLimit;
+	}
+
+	if ( bMultiSchema )
+		assert ( iCur==tRes.m_dMatches.GetLength() );
+	SafeDeleteArray ( dMapFrom );
+	if ( &tRes.m_tSchema!=&tTarget )
+		tRes.m_tSchema = tTarget;
+}
+
+// just to avoid the const_cast of the schema (i.e, return writable columns)
+// also to make possible several members refer to one and same locator.
+class CVirtualSchema : public CSphSchema
+{
+public:
+	inline CSphColumnInfo & LastColumn() { return m_dAttrs.Last(); }
+	inline CSphColumnInfo &	GetWAttr ( int iIndex ) { return m_dAttrs[iIndex]; }
+	inline CSphVector<CSphColumnInfo> & GetWAttrs () { return m_dAttrs; }
+	inline void AlignSizes ( const CSphSchema& tProof )
+	{
+		m_dDynamicUsed.Resize ( tProof.GetDynamicSize() );
+		m_iStaticSize = tProof.GetStaticSize();
+	}
+};
+
+// swap the schema into the new one
+void RenameApplyAliases ( AggrResult_t & tRes, CVirtualSchema * tSchema )
+{
+	tSchema->AlignSizes ( tRes.m_tSchema );
+	tSchema->m_dFields = tRes.m_tSchema.m_dFields;
+	tRes.m_tSchema = *tSchema;
+}
+
+bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHadLocalIndexes, CSphSchema* pExtraSchema=NULL )
 {
 	// sanity check
 	int iExpected = 0;
@@ -4451,8 +4564,10 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 		return true;
 
 	// build minimal schema
-	bool bAllEqual = true;
 	tRes.m_tSchema = tRes.m_dSchemas[0];
+	bool bAllEqual = true;
+	bool bAgent = tQuery.m_bAgent;
+
 	for ( int i=1; i<tRes.m_dSchemas.GetLength(); i++ )
 	{
 		if ( !MinimizeSchema ( tRes.m_tSchema, tRes.m_dSchemas[i] ) )
@@ -4468,32 +4583,119 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 		break;
 	}
 
+	// the final result schema - for collections, etc
+	// we can't construct the random final schema right now, since
+	// the final sorter needs the schema fields in specific order:
+	CVirtualSchema tItems;
+	// truly virtual schema for final result returning
+	CVirtualSchema tFinalItems;
+	if ( !bStar )
+		tFinalItems.GetWAttrs().Resize ( tQuery.m_dItems.GetLength() );
+
 	if ( !bStar && tQuery.m_dItems.GetLength() )
 	{
-		CSphSchema tItems;
 		for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
 		{
 			const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
-			if ( !tCol.m_pExpr )
+			if ( /* tCol.m_sName.cstr()[0]!='@' && */ !tCol.m_pExpr )
 			{
 				bool bAdd = false;
-				ARRAY_FOREACH ( i, tQuery.m_dItems )
-					if ( tQuery.m_dItems[i].m_sExpr==tCol.m_sName )
+				ARRAY_FOREACH ( j, tQuery.m_dItems )
 				{
-					bAdd = true;
-					break;
+					const CSphQueryItem & tQueryItem = tQuery.m_dItems[j];
+					if ( tFinalItems.GetAttr(j).m_iIndex<0
+						&& ( ( tQueryItem.m_sExpr.cstr() && tQueryItem.m_sExpr==tCol.m_sName && tQueryItem.m_eAggrFunc==SPH_AGGR_NONE )
+						|| ( tQueryItem.m_sAlias.cstr() && tQueryItem.m_sAlias==tCol.m_sName ) ) )
+					{
+						bAdd = true;
+						if ( !bAgent )
+						{
+							CSphColumnInfo & tItem = tFinalItems.GetWAttr(j);
+							tItem.m_iIndex = tItems.GetAttrsCount(); // temporary idx, will change to locator by this index
+							if ( tQueryItem.m_sAlias.cstr() )
+								tItem.m_sName = tQueryItem.m_sAlias;
+							else
+								tItem.m_sName = tQueryItem.m_sExpr;
+						} else
+							break;
+					}
+				}
+				if ( !bAdd && pExtraSchema!=NULL )
+				{
+					if ( pExtraSchema->GetAttrsCount() )
+					{
+						for ( int j=0; j<pExtraSchema->GetAttrsCount(); j++ )
+							if ( pExtraSchema->GetAttr(j).m_sName==tCol.m_sName )
+							{
+								bAdd = true;
+								break;
+							}
+					// the extra schema is not null, but empty - and we have no local agents
+					// so, the schema of result is already aligned to the extra, just add it
+					} else if ( !bHadLocalIndexes )
+						bAdd = true;
 				}
 
 				if ( !bAdd )
 					continue;
+			} else if ( !bAgent )
+			{
+				ARRAY_FOREACH ( j, tQuery.m_dItems )
+					if ( tFinalItems.GetAttr(j).m_iIndex<0
+						&& ( tQuery.m_dItems[j].m_sAlias.cstr() && tQuery.m_dItems[j].m_sAlias==tCol.m_sName ) )
+					{
+						CSphColumnInfo & tItem = tFinalItems.GetWAttr(j);
+						tItem.m_iIndex = tItems.GetAttrsCount();
+						tItem.m_sName = tQuery.m_dItems[j].m_sAlias;
+					}
 			}
-			tItems.AddAttr ( tCol, true );
+			// if before all schemas were proved as equal, and the tCol taken from current schema is static -
+			// this is no reason now to make it dynamic.
+			bool bDynamic = bAllEqual?tCol.m_tLocator.m_bDynamic:true;
+			tItems.AddAttr ( tCol, bDynamic );
+			if ( !bDynamic )
+			{
+				// all schemas are equal, so all offsets and bitcounts also equal.
+				// If we Add the static attribute which already exists in result, we need
+				// not to corrupt it's locator. So, in this case let us force the locator
+				// to the old data.
+				CSphColumnInfo & tNewCol = tItems.LastColumn();
+				assert ( !tNewCol.m_tLocator.m_bDynamic );
+				tNewCol.m_tLocator = tCol.m_tLocator;
+			}
 		}
 
-		if ( tRes.m_tSchema.GetAttrsCount()!=tItems.GetAttrsCount() )
+		bAllEqual &= tRes.m_tSchema.GetAttrsCount()==tItems.GetAttrsCount();
+	}
+
+	// finalize the tFinalItems - switch back m_iIndex field
+	// and set up the locators for the fields
+	if ( !bAgent )
+	{
+		// fully custom schema
+		if ( !bStar )
 		{
-			tRes.m_tSchema = tItems;
-			bAllEqual = false;
+			ARRAY_FOREACH ( i, tFinalItems.GetWAttrs() )
+			{
+				CSphColumnInfo & tCol = tFinalItems.GetWAttr(i);
+				const CSphColumnInfo & tSource = tItems.GetAttr ( tCol.m_iIndex );
+				tCol.m_tLocator = tSource.m_tLocator;
+				tCol.m_eAttrType = tSource.m_eAttrType;
+				tCol.m_iIndex = -1;
+			}
+		} else
+		// star schema - remove the @ if it is not agent
+		{
+			// assign the star as the name of the schema
+			// it will be used later as the mark to attach document ID at the beginning of resultset
+			// when returning results to sphinxql client
+			tFinalItems.m_sName = "*";
+			for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
+			{
+				const CSphColumnInfo & tSource = tRes.m_tSchema.GetAttr(i);
+				if ( tSource.m_sName.cstr()[0]!='@')
+					tFinalItems.GetWAttrs().Add ( tSource );
+			}
 		}
 	}
 
@@ -4518,75 +4720,37 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 		}
 	}
 
+	// we do not need to re-sort if there's exactly one result set
+	if ( tRes.m_iSuccesses==1 )
+	{
+		// convert all matches to minimal schema
+		if ( !bAllEqual )
+			RemapResult ( bStar?tRes.m_tSchema:tItems, tRes );
+		if ( !bAgent )
+			RenameApplyAliases ( tRes, &tFinalItems );
+		return true;
+	}
+
 	// if there's more than one result set, we need to re-sort the matches
 	// so we need to bring matches to the schema that the *sorter* wants
 	// so we need to create the sorter before conversion
-	ISphMatchSorter * pSorter = NULL;
-	if ( tRes.m_iSuccesses!=1 )
-	{
-		// create queue
-		// at this point, we do not need to compute anything; it all must be here
-		pSorter = sphCreateQueue ( &tQuery, tRes.m_tSchema, tRes.m_sError, false );
-		if ( !pSorter )
-			return false;
+	//
+	// create queue
+	// at this point, we do not need to compute anything; it all must be here
+	ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, tRes.m_tSchema, tRes.m_sError, false );
+	if ( !pSorter )
+		return false;
 
-		// sorter expects this
-		tRes.m_tSchema = pSorter->GetSchema();
-	}
+	// sorter expects this
+	tRes.m_tSchema = pSorter->GetSchema();
 
-	// convert all matches to minimal schema
+	// convert all matches to sorter schema - at least to manage all static to dynamic
 	if ( !bAllEqual )
-	{
-		int iCur = 0;
-		int * dMapFrom = NULL;
-
-		if ( tRes.m_tSchema.GetRowSize() )
-			dMapFrom = new int [ tRes.m_tSchema.GetAttrsCount() ];
-
-		ARRAY_FOREACH ( iSchema, tRes.m_dSchemas )
-		{
-			for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
-			{
-				dMapFrom[i] = tRes.m_dSchemas[iSchema].GetAttrIndex ( tRes.m_tSchema.GetAttr(i).m_sName.cstr() );
-				assert ( dMapFrom[i]>=0 );
-			}
-
-			for ( int i=iCur; i<iCur+tRes.m_dMatchCounts[iSchema]; i++ )
-			{
-				CSphMatch & tMatch = tRes.m_dMatches[i];
-
-				// create new and shiny (and properly sized and fully dynamic) match
-				CSphMatch tRow;
-				tRow.Reset ( tRes.m_tSchema.GetRowSize() );
-				tRow.m_iDocID = tMatch.m_iDocID;
-				tRow.m_iWeight = tMatch.m_iWeight;
-				tRow.m_iTag = tMatch.m_iTag;
-
-				// remap attrs
-				for ( int j=0; j<tRes.m_tSchema.GetAttrsCount(); j++ )
-				{
-					const CSphColumnInfo & tDst = tRes.m_tSchema.GetAttr(j);
-					const CSphColumnInfo & tSrc = tRes.m_dSchemas[iSchema].GetAttr ( dMapFrom[j] );
-					tRow.SetAttr ( tDst.m_tLocator, tMatch.GetAttr ( tSrc.m_tLocator ) );
-				}
-
-				// swap out old (most likely wrong sized) match
-				Swap ( tMatch, tRow );
-			}
-
-			iCur += tRes.m_dMatchCounts[iSchema];
-		}
-
-		assert ( iCur==tRes.m_dMatches.GetLength() );
-		SafeDeleteArray ( dMapFrom );
-	}
-
-	// we do not need to re-sort if there's exactly one result set
-	if ( tRes.m_iSuccesses==1 )
-		return true;
+		RemapResult ( tRes.m_tSchema, tRes );
 
 	// kill all dupes
 	int iDupes = 0;
+	assert ( pSorter );
 	if ( pSorter->IsGroupby () )
 	{
 		// groupby sorter does that automagically
@@ -4652,8 +4816,12 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	tRes.m_dMatches.Reset ();
 	sphFlattenQueue ( pSorter, &tRes, -1 );
 	SafeDelete ( pSorter );
-
 	tRes.m_iTotalMatches -= iDupes;
+
+	if ( !bAllEqual )
+		RemapResult ( bStar?tRes.m_tSchema:tItems, tRes, false );
+	if ( !bAgent )
+		RenameApplyAliases ( tRes, &tFinalItems );
 	return true;
 }
 
@@ -4699,6 +4867,7 @@ protected:
 	bool							m_bMultiQueue;	///< whether current subset is subject to multi-queue optimization
 	CSphVector<CSphString>			m_dLocal;		///< local indexes for the current subset
 	bool							m_bIsLocked;	///< whether local indexes are already locked
+	mutable CSphVector<CSphSchema>			m_dExtraSchemas; ///< the extra fields for agents
 };
 
 
@@ -4707,6 +4876,7 @@ SearchHandler_c::SearchHandler_c ( int iQueries )
 	m_dQueries.Resize ( iQueries );
 	m_dResults.Resize ( iQueries );
 	m_dFailuresSet.SetSize ( iQueries );
+	m_dExtraSchemas.Resize ( iQueries );
 
 	ARRAY_FOREACH ( i, m_dResults )
 	{
@@ -5000,9 +5170,11 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 	{
 		CSphString sError;
 		const CSphQuery & tQuery = m_dQueries[i+m_iStart];
+		CSphSchema * pExtraSchema = tQuery.m_bAgent?&m_dExtraSchemas[i+m_iStart]:NULL;
 
 		assert ( !tQuery.m_iOldVersion || tQuery.m_iOldVersion>=0x102 );
-		ppSorters[i] = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError );
+
+		ppSorters[i] = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchema );
 		if ( !ppSorters[i] )
 		{
 			// FIXME! submit a failure?
@@ -5094,6 +5266,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
 		{
 			CSphString sError;
 			CSphQuery & tQuery = m_dQueries[iQuery];
+			CSphSchema * pExtraSchema = tQuery.m_bAgent?&m_dExtraSchemas[iQuery]:NULL;
 
 			// create sorter, if needed
 			ISphMatchSorter * pSorter = pLocalSorter;
@@ -5107,7 +5280,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
 				}
 
 				// create queue
-				pSorter = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError );
+				pSorter = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchema );
 				if ( !pSorter )
 				{
 					m_dFailuresSet[iQuery].SubmitEx ( sLocal, "%s", sError.cstr() );
@@ -5447,7 +5620,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		// we can reuse the very same sorter
 		if ( bAllEqual )
 			if ( FixupQuery ( &m_dQueries[iStart], &tFirstSchema, "local-sorter", sError ) )
-				pLocalSorter = sphCreateQueue ( &m_dQueries[iStart], tFirstSchema, sError );
+				pLocalSorter = sphCreateQueue ( &m_dQueries[iStart], tFirstSchema, sError, true,
+					m_dQueries[iStart].m_bAgent?&m_dExtraSchemas[iStart]:NULL);
 
 		if ( g_eWorkers==MPM_THREADS )
 		{
@@ -5609,6 +5783,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		assert ( m_dResults[i].m_iTag==m_dResults[i].m_dTag2Pools.GetLength() );
 
 	// cleanup
+	bool bWasLocalSorter = pLocalSorter!=NULL;
 	SafeDelete ( pLocalSorter );
 	DoUnlockClear ( dLockedEqualIndexes );
 
@@ -5620,6 +5795,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	{
 		AggrResult_t & tRes = m_dResults[iRes];
 		CSphQuery & tQuery = m_dQueries[iRes];
+		CSphSchema * pExtraSchema = tQuery.m_bAgent?&m_dExtraSchemas[bWasLocalSorter?0:iRes]:NULL;
 
 		// if there were no succesful searches at all, this is an error
 		if ( !tRes.m_iSuccesses )
@@ -5634,9 +5810,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		// minimize schema and remove dupes
 		if ( tRes.m_dSchemas.GetLength() )
 			tRes.m_tSchema = tRes.m_dSchemas[0];
-
 		if ( tRes.m_iSuccesses>1 || tQuery.m_dItems.GetLength() )
-			if ( !MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength()!=0 ) )
+			if ( !MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength()!=0, pExtraSchema ) )
 				return;
 
 		if ( !m_dFailuresSet[iRes].IsEmpty() )
@@ -5943,13 +6118,21 @@ public:
 	CSphQuery *		m_pQuery;
 	bool			m_bGotQuery;
 	SqlStmt_t *		m_pStmt;
+	int				m_iSelectStart;
+	int				m_iSelectEnd;
 
 public:
-					SqlParser_c () : m_bNamedVecBusy ( false ) {}
+					SqlParser_c () : m_iSelectStart ( -1 ), m_bNamedVecBusy ( false ) {}
 
 	bool			AddOption ( SqlNode_t tIdent, SqlNode_t tValue );
 	bool			AddOption ( SqlNode_t tIdent, CSphVector<CSphNamedInt> & dNamed );
 	void			AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias, ESphAggrFunc eFunc=SPH_AGGR_NONE );
+	inline void		SetSelect ( int iStart, int iEnd )
+	{
+		if ( m_iSelectStart<0 || m_iSelectStart>iStart )
+			m_iSelectStart = iStart;
+		m_iSelectEnd = iEnd;
+	}
 	bool			AddSchemaItem ( YYSTYPE * pNode );
 	void			SetValue ( const char * sName, YYSTYPE tValue );
 
@@ -6273,6 +6456,19 @@ SqlStmt_e ParseSqlQuery ( const CSphString & sQuery, SqlStmt_t * pStmt, CSphStri
 		tQuery.m_sSortBy = tQuery.m_sOrderBy;
 	else
 		tQuery.m_sGroupSortBy = tQuery.m_sOrderBy;
+
+	if ( tParser.m_iSelectStart>=0 )
+	{
+		tQuery.m_sSelect.SetBinary ( tParser.m_pBuf + tParser.m_iSelectStart, tParser.m_iSelectEnd-tParser.m_iSelectStart );
+
+		// finally check for agent magic
+		if ( tQuery.m_sSelect.Begins ( "*,*" ) ) // this is the mark of agent.
+		{
+			tQuery.m_dItems.Remove(0);
+			tQuery.m_dItems.Remove(0);
+			tQuery.m_bAgent = true;
+		}
+	}
 
 	if ( iRes!=0 )
 		pStmt->m_eStmt = STMT_PARSE_ERROR;
@@ -8276,14 +8472,18 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 			tLastMeta = *pRes;
 			tLastMeta.m_iMatches = pRes->m_dMatches.GetLength();
 
+			bool bStar = pRes->m_tSchema.m_sName=="*";
+
 			// result set header packet
 			tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
-			tOut.SendByte ( BYTE ( 2+pRes->m_tSchema.GetAttrsCount() ) ); // field count (id+weight+attrs)
+			tOut.SendByte ( BYTE ( pRes->m_tSchema.GetAttrsCount() + (bStar?1:0) ) );
 			tOut.SendByte ( 0 ); // extra
 
+			// in case of star schema send first the DocID
+			if ( bStar )
+				SendMysqlFieldPacket ( tOut, uPacketID++, "id", USE_64BIT ? MYSQL_COL_LONGLONG : MYSQL_COL_LONG );
+
 			// field packets
-			SendMysqlFieldPacket ( tOut, uPacketID++, "id", USE_64BIT ? MYSQL_COL_LONGLONG : MYSQL_COL_LONG );
-			SendMysqlFieldPacket ( tOut, uPacketID++, "weight", MYSQL_COL_LONG );
 			for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
 			{
 				const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(i);
@@ -8308,14 +8508,15 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 			{
 				const CSphMatch & tMatch = pRes->m_dMatches [ iMatch ];
 
-				dRows.PutNumeric<SphDocID_t> ( DOCID_FMT, tMatch.m_iDocID );
-				dRows.PutNumeric ( "%u", tMatch.m_iWeight );
+				if ( bStar )
+					dRows.PutNumeric<SphDocID_t> ( DOCID_FMT, tMatch.m_iDocID );
 
 				const CSphSchema & tSchema = pRes->m_tSchema;
 				for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
 				{
-					CSphAttrLocator tLoc = tSchema.GetAttr(i).m_tLocator;
-					DWORD eAttrType = tSchema.GetAttr(i).m_eAttrType;
+					const CSphColumnInfo & tCol = tSchema.GetAttr(i);
+					CSphAttrLocator tLoc = tCol.m_tLocator;
+					DWORD eAttrType = tCol.m_eAttrType;
 					switch ( eAttrType )
 					{
 						case SPH_ATTR_INTEGER:

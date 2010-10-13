@@ -4608,6 +4608,7 @@ CSphQuery::CSphQuery ()
 	, m_iOldMaxTS		( UINT_MAX )
 	, m_iOldMinGID		( 0 )
 	, m_iOldMaxGID		( UINT_MAX )
+	, m_bAgent			( false )
 {}
 
 

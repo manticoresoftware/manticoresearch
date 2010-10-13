@@ -1,0 +1,352 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>aggregate, aliases, different sorting, grouping and schemas vs different type of distributed</name>
+<config>
+indexer
+{
+	mem_limit			= 26M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source auth
+{
+	type			= mysql
+	<sql_settings/>
+}
+
+source src : auth
+{
+	sql_query = SELECT id, tag, gr, text FROM test_table WHERE id&lt;4
+	sql_attr_uint	= tag
+	sql_attr_uint	= gr
+}
+
+source src1 : src
+{
+	sql_query = SELECT id, tag, gr, text FROM test_table WHERE id&lt;3
+}
+
+source src2 : src
+{
+	sql_query = SELECT id, tag, gr, text FROM test_table WHERE id=3
+}
+
+source src51 : src
+{
+	sql_query = SELECT id, tag, gr, text FROM test_table WHERE id&lt;6
+}
+
+source src52 : src
+{
+	sql_query = SELECT id, tag, gr, text FROM test_table WHERE id&gt;5
+}
+
+source fake: auth
+{
+	sql_query = SELECT id, gr, text FROM test_table WHERE id&lt;4
+	sql_attr_uint	= gr
+}
+
+index dist_no
+{
+	source			= src
+	path			= <data_path/>/idx
+	docinfo			= extern
+	charset_type	= utf-8
+	min_word_len	= 1
+}
+
+index idx1 : dist_no
+{
+	source			= src1
+	path			= <data_path/>/idx1
+}
+
+index idx2 : dist_no
+{
+	source			= src2
+	path			= <data_path/>/idx2
+}
+
+index idx51 : dist_no
+{
+	source			= src51
+	path			= <data_path/>/idx51
+}
+
+index idx52 : dist_no
+{
+	source			= src52
+	path			= <data_path/>/idx52
+}
+
+index idxfake : dist_no
+{
+	source			= fake
+	path			= <data_path/>/otheridx
+}
+
+
+index dist50
+{
+	type					= distributed
+	local					= idx51
+	agent					= <agent0_address/>:idx52
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist52
+{
+	type					= distributed
+	local					= idx51
+	local					= idx52
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+
+index dist0
+{
+	type					= distributed
+	local					= dist_no
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist1
+{
+	type					= distributed
+	local					= idx1
+	local					= idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist2
+{
+	type					= distributed
+	agent					= <agent0_address/>:idx1
+	local					= idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist3
+{
+	type					= distributed
+	local					= idx1
+	agent					= <agent0_address/>:idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist4
+{
+	type					= distributed
+	agent					= <agent0_address/>:idx1
+	agent					= <agent0_address/>:idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist5
+{
+	type					= distributed
+	agent					= <agent0_address/>:dist_no
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index distfake
+{
+	type					= distributed
+	agent					= <agent0_address/>:idx51
+	agent					= <agent0_address/>:idxfake
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index disthfake
+{
+	type					= distributed
+	local					= idx51
+	agent					= <agent0_address/>:idxfake
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index disthfakeb
+{
+	type					= distributed
+	agent					= <agent0_address/>:idx51
+	local					= idxfake
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index distlfake
+{
+	type					= distributed
+	local					= idx51
+	local					= idxfake
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+
+</config>
+
+
+<queries>
+<!--First, test that aggregate works on distributed on example o Sum -->
+<query index="dist_no" select="gr,sum(tag) as t" groupattr="gr"/>
+<query index="dist0" select="gr,sum(tag) as t" groupattr="gr"/>
+<query index="dist1" select="gr,sum(tag) as t" groupattr="gr"/>
+<query index="dist2" select="gr,sum(tag) as t" groupattr="gr"/>
+<query index="dist3" select="gr,sum(tag) as t" groupattr="gr"/>
+<query index="dist4" select="gr,sum(tag) as t" groupattr="gr"/>
+<query index="dist5" select="gr,sum(tag) AS t" groupattr="gr"/>
+
+<!-- Test the schema transmitting to agent - t is in select, but groupattr and groupsort (gr) is not-->
+
+<query index="dist0" select="tag+1 AS t" groupattr="tag" groupsort="gr desc"/>
+<query index="dist4" select="tag+1 as t" groupattr="tag" groupsort="gr desc"/>
+<query index="dist4" select="tag,gr" groupattr="tag" groupsort="gr desc" />
+<query index="dist4" select="@id as idd" groupsort="gr desc" /> 
+<query index="dist4" select="@id as idd" groupattr="tag" groupsort="gr desc" /> 
+
+<query index="dist0">test</query>
+<query index="dist5">test</query>
+
+<!-- groupsort is not in the schema -->
+<query index="dist52" select="tag+1 as t" groupattr="t" groupsort="gr asc"/>
+<query index="dist50" select="tag+1 as t" groupsort="gr asc"/> -->
+
+<!-- Now test the dist contains different schemas -->
+<!-- Note that each index has 'idxfake' as part of it, and the last doesn't contain 'tag' attribute -->
+<!-- distfake - both remote, disthfake - fake remote, disthfakeb - fake local, distlfake - both local -->
+ <query index="distfake" select="gr+1 as t" groupattr="t" groupsort="tag asc"/> 
+ <query index="disthfakeb" select="gr+1 as t" groupattr="t" groupsort="tag asc"/> 
+ <query index="disthfake" select="gr+1 as t" groupattr="t" groupsort="tag asc"/> 
+ <query index="distlfake" select="gr+1 as t" groupattr="t" groupsort="tag asc"/> 
+
+
+</queries>
+
+
+<sphqueries>
+<!-- First, just show all the indexes -->
+ 
+<sphinxql>select * from dist_no</sphinxql>
+<sphinxql>select * from dist0</sphinxql>
+<sphinxql>select * from dist1</sphinxql>
+<sphinxql>select * from dist2</sphinxql>
+<sphinxql>select * from dist3</sphinxql>
+<sphinxql>select * from dist4</sphinxql>
+<sphinxql>select * from dist5</sphinxql>
+
+<!-- Check the aggretage on differend kind of dist indexes -->
+ 
+<sphinxql>select gr, sum(tag) as t from dist_no group by gr</sphinxql>
+<sphinxql>select gr, sum(tag) as t from dist0 group by gr</sphinxql>
+<sphinxql>select gr, sum(tag) as t from dist1 group by gr</sphinxql>
+<sphinxql>select gr, sum(tag) as t from dist2 group by gr</sphinxql>
+<sphinxql>select gr, sum(tag) as t from dist3 group by gr</sphinxql> 
+
+
+ <sphinxql>select tag,gr from dist4 group by tag order by gr asc</sphinxql> 
+
+
+ <sphinxql>select gr, sum(tag) as t from dist4 group by gr</sphinxql> 
+ <sphinxql>select gr, sum(tag) as t from dist5 group by gr</sphinxql>
+
+<!-- Group by (gr) is not in the schema - check if it work or not -->
+ 
+<sphinxql>select sum(tag) as t from dist0 group by gr</sphinxql>
+<sphinxql>select sum(tag) as t from dist5 group by gr</sphinxql> 
+
+<!-- Check two edge distr indexes - one totally local, one totally dist -->
+ 
+<sphinxql>select gr, tag+1 as t from dist0 group by gr</sphinxql>
+<sphinxql>select gr, tag+1 as t from dist5 group by gr</sphinxql>
+
+<!-- order by (gr) is not in the schema. Also use match to check weighting -->
+ 
+<sphinxql>select tag+1 as t from dist0 where match('test') ORDER BY gr ASC</sphinxql>
+<sphinxql>select tag+1 as t from dist5 where match('test') ORDER BY gr ASC</sphinxql>
+
+<!-- use match to check weighting. Also reorder -->
+ 
+<sphinxql>select tag+1 as t, gr from dist0 where match('test') ORDER BY gr ASC</sphinxql>
+<sphinxql>select tag+1 as t, gr from dist5 where match('test') ORDER BY gr ASC</sphinxql>
+<sphinxql>select tag+1 as t, gr, tag, gr from dist0 where match('test') ORDER BY gr ASC</sphinxql>
+<sphinxql>select tag+1 as t, gr, tag, gr from dist5 where match('test') ORDER BY gr ASC</sphinxql>
+<sphinxql>select tag+1 as t, gr, gr+1 as g from dist0 where match('test') ORDER BY gr ASC</sphinxql>
+<sphinxql>select tag+1 as t, gr, gr+1 as g from dist5 where match('test') ORDER BY gr ASC</sphinxql>
+<sphinxql>select tag+1 as t, gr, tag as tt, tag, tag from dist0 where match('test') ORDER BY gr ASC</sphinxql>
+<sphinxql>select tag+1 as t, gr, tag as tt, tag, tag from dist5 where match('test') ORDER BY gr ASC</sphinxql>
+
+<!-- Same as below, but without matching -->
+ 
+<sphinxql>select tag+1 as t from dist0 ORDER BY gr ASC</sphinxql>
+<sphinxql>select tag+1 as t from dist5 ORDER BY gr ASC</sphinxql>
+
+<!-- Just check the weighting -->
+ 
+<sphinxql>select * from dist0 where match('test')</sphinxql>
+<sphinxql>select * from dist5 where match('test')</sphinxql>
+
+
+<!-- gr is in and not in the schema (being ordered by). Dist50 is dist-1local, dist52 - dist-2local, idx51 is local -->
+ 
+<sphinxql>select @id as idd, gr,tag+1 as t from dist50 order by gr asc</sphinxql>
+<sphinxql>select @id as idd, tag+1 as t from dist50 order by gr asc</sphinxql>
+<sphinxql>select @id as idd, gr,tag+1 as t from dist52 order by gr asc</sphinxql>
+<sphinxql>select @id as idd, tag+1 as t from dist52 order by gr asc</sphinxql>
+<sphinxql>select @id as idd, gr,tag+1 as t from idx51 order by gr asc</sphinxql>
+<sphinxql>select @id as idd, tag+1 as t from idx51 order by gr asc</sphinxql>
+
+
+<!-- todo: Faked index: attr 'tag' is absent in some cases -->
+<sphinxql>select @id as idd, gr+1 as t from distfake group by t order by tag asc</sphinxql>
+<sphinxql>select @id as idd, gr+1 as t from disthfakeb group by t order by tag asc</sphinxql>
+<sphinxql>select @id as idd, gr+1 as t from disthfake group by t order by tag asc</sphinxql>
+<sphinxql>select @id as idd, gr+1 as t from distlfake group by t order by tag asc</sphinxql>
+
+</sphqueries>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11),
+  `tag` int(11),
+  `gr` int(11),
+  `text` varchar(255) NOT NULL
+)
+</db_create>
+
+
+ <db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 2, 3, 'test'),
+( 2, 2, 2, 'test'),
+( 3, 2, 3, 'test'),
+( 4, 2, 10, 'test'),
+( 5, 2, 9, 'test'),
+( 6, 2, 8, 'test'),
+( 7, 2, 7, 'test'),
+( 8, 2, 6, 'test'),
+( 9, 2, 5, 'test'),
+( 10, 2, 4, 'test')
+</db_insert>
+
+</test>

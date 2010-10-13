@@ -1806,7 +1806,7 @@ void TestRTSendVsMerge ()
 			break;
 
 		ISphHits * pHits = pSrc->IterateHits ( sError );
-		if ( !pHits  )
+		if ( !pHits )
 			break;
 
 		pIndex->AddDocument ( pHits, pSrc->m_tDocInfo, NULL, sError );
@@ -1826,7 +1826,7 @@ void TestRTSendVsMerge ()
 		const SphDocID_t tID = tResult.m_dMatches[i].m_iDocID;
 		const SphAttr_t tTag1 = tResult.m_dMatches[i].GetAttr ( tResult.m_tSchema.GetAttr ( 0 ).m_tLocator );
 		const SphAttr_t tTag2 = tResult.m_dMatches[i].GetAttr ( tResult.m_tSchema.GetAttr ( 1 ).m_tLocator );
-		assert ( tTag1==tID+1000 );
+		assert ( (SphDocID_t)tTag1==tID+1000 );
 		assert ( tTag2==1313 );
 	}
 	SafeDelete ( pSorter );

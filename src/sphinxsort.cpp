@@ -1540,7 +1540,7 @@ public:
 
 
 static ESortClauseParseResult sphParseSortClause ( const char * sClause, const CSphSchema & tSchema,
-	ESphSortFunc & eFunc, CSphMatchComparatorState & tState, int * dAttrs, CSphString & sError )
+	ESphSortFunc & eFunc, CSphMatchComparatorState & tState, int * dAttrs, CSphString & sError, CSphSchema * pExtra = NULL )
 {
 	assert ( dAttrs );
 	for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
@@ -1613,13 +1613,16 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 				sError.SetSprintf ( "sort-by attribute '%s' not found", pTok );
 				return SORT_CLAUSE_ERROR;
 			}
-
-			DWORD eType = tSchema.GetAttr(iAttr).m_eAttrType;
+			const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
+			DWORD eType = tCol.m_eAttrType;
 			if ( eType==SPH_ATTR_STRING )
 			{
 				sError.SetSprintf ( "sort-by on string attribute '%s' not (yet) supported", pTok );
 				return SORT_CLAUSE_ERROR;
 			}
+
+			if ( pExtra )
+				pExtra->AddAttr ( tCol, true );
 
 			tState.m_eKeypart[iField] = ( eType==SPH_ATTR_FLOAT ) ? SPH_KEYPART_FLOAT : SPH_KEYPART_INT;
 			tState.m_tLocator[iField] = tSchema.GetAttr(iAttr).m_tLocator;
@@ -1851,7 +1854,7 @@ static inline void FixupStage ( CSphSchema & tSchema, int iAttr )
 }
 
 
-ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError, bool bComputeItems )
+ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError, bool bComputeItems, CSphSchema * pExtra )
 {
 	// prepare for descent
 	ISphMatchSorter * pTop = NULL;
@@ -1882,6 +1885,8 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		CSphColumnInfo tCol = tSorterSchema.GetAttr ( iIndex );
 		tCol.m_eStage = SPH_EVAL_OVERRIDE;
 		tSorterSchema.AddAttr ( tCol, true );
+		if ( pExtra )
+			pExtra->AddAttr ( tCol, true );
 		tSorterSchema.RemoveAttr ( iIndex );
 	}
 
@@ -1894,18 +1899,19 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 			pExpr->Release ();
 			return NULL;
 		}
-
 		CSphColumnInfo tCol ( "@geodist", SPH_ATTR_FLOAT );
 		tCol.m_pExpr = pExpr; // takes ownership, no need to for explicit pExpr release
 		tCol.m_eStage = SPH_EVAL_PREFILTER; // OPTIMIZE? actual stage depends on usage
 		tSorterSchema.AddAttr ( tCol, true );
+		if ( pExtra )
+			pExtra->AddAttr ( tCol, true );
 	}
 
 	// setup @expr
 	if ( pQuery->m_eSort==SPH_SORT_EXPR && tSorterSchema.GetAttrIndex ( "@expr" )<0 )
 	{
 		CSphColumnInfo tCol ( "@expr", SPH_ATTR_FLOAT ); // enforce float type for backwards compatibility (ie. too lazy to fix those tests right now)
-		tCol.m_pExpr = sphExprParse ( pQuery->m_sSortBy.cstr(), tSorterSchema, NULL, NULL, sError );
+		tCol.m_pExpr = sphExprParse ( pQuery->m_sSortBy.cstr(), tSorterSchema, NULL, NULL, sError, pExtra );
 		if ( !tCol.m_pExpr )
 			return NULL;
 		tCol.m_eStage = SPH_EVAL_PRESORT;
@@ -1971,7 +1977,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		// a new and shiny expression, lets parse
 		bool bUsesWeight;
 		CSphColumnInfo tExprCol ( tItem.m_sAlias.cstr(), SPH_ATTR_NONE );
-		tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), tSorterSchema, &tExprCol.m_eAttrType, &bUsesWeight, sError );
+		tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), tSorterSchema, &tExprCol.m_eAttrType, &bUsesWeight, sError, pExtra );
 		tExprCol.m_eAggrFunc = tItem.m_eAggrFunc;
 		if ( !tExprCol.m_pExpr )
 		{
@@ -2008,7 +2014,6 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 			// NOTE, "final" stage might need to be fixed up later
 			// we'll do that when parsing sorting clause
 			tSorterSchema.AddAttr ( tExprCol, true );
-
 		} else
 		{
 			tExprCol.m_eStage = SPH_EVAL_PRESORT; // sorter expects computed expression
@@ -2018,7 +2023,11 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 
 	// expressions wrapped in aggregates must be at the very end of pre-groupby match
 	ARRAY_FOREACH ( i, dAggregates )
+	{
 		tSorterSchema.AddAttr ( dAggregates[i], true );
+		if ( pExtra )
+			pExtra->AddAttr ( dAggregates[i], true );
+	}
 
 	////////////////////////////////////////////
 	// setup groupby settings, create shortcuts
@@ -2042,10 +2051,20 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		tCount.m_eStage = SPH_EVAL_SORTER;
 		tDistinct.m_eStage = SPH_EVAL_SORTER;
 
+
 		tSorterSchema.AddAttr ( tGroupby, true );
+		if ( pExtra )
+			pExtra->AddAttr ( tGroupby, true );
 		tSorterSchema.AddAttr ( tCount, true );
+		if ( pExtra )
+			pExtra->AddAttr ( tCount, true );
+
 		if ( bGotDistinct )
+		{
 			tSorterSchema.AddAttr ( tDistinct, true );
+			if ( pExtra )
+				pExtra->AddAttr ( tDistinct, true );
+		}
 	}
 
 #define LOC_CHECK(_cond,_msg) if (!(_cond)) { sError = "invalid schema: " _msg; return false; }
@@ -2090,7 +2109,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	if ( pQuery->m_eSort==SPH_SORT_EXTENDED )
 	{
 		int dAttrs [ CSphMatchComparatorState::MAX_ATTRS ];
-		ESortClauseParseResult eRes = sphParseSortClause ( pQuery->m_sSortBy.cstr(), tSorterSchema, eMatchFunc, tStateMatch, dAttrs, sError );
+		ESortClauseParseResult eRes = sphParseSortClause ( pQuery->m_sSortBy.cstr(), tSorterSchema, eMatchFunc, tStateMatch, dAttrs, sError, pExtra );
 		if ( eRes==SORT_CLAUSE_ERROR )
 			return NULL;
 
@@ -2124,7 +2143,6 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 				sError.SetSprintf ( "sort-by attribute '%s' not found", pQuery->m_sSortBy.cstr() );
 				return NULL;
 			}
-
 			const CSphColumnInfo & tAttr = tSorterSchema.GetAttr ( iSortAttr );
 			tStateMatch.m_eKeypart[0] = ( tAttr.m_eAttrType==SPH_ATTR_FLOAT ) ? SPH_KEYPART_FLOAT : SPH_KEYPART_INT;
 			tStateMatch.m_tLocator[0] = tAttr.m_tLocator;
@@ -2148,7 +2166,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	if ( bGotGroupby )
 	{
 		int dAttrs [ CSphMatchComparatorState::MAX_ATTRS ];
-		ESortClauseParseResult eRes = sphParseSortClause ( pQuery->m_sGroupSortBy.cstr(), tSorterSchema, eGroupFunc, tStateGroup, dAttrs, sError );
+		ESortClauseParseResult eRes = sphParseSortClause ( pQuery->m_sGroupSortBy.cstr(), tSorterSchema, eGroupFunc, tStateGroup, dAttrs, sError, pExtra );
 
 		if ( eRes==SORT_CLAUSE_ERROR || eRes==SORT_CLAUSE_RANDOM )
 		{
@@ -2156,8 +2174,11 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 				sError.SetSprintf ( "groups can not be sorted by @random" );
 			return NULL;
 		}
+		int idx = tSorterSchema.GetAttrIndex ( pQuery->m_sGroupBy.cstr() );
+		if ( pExtra )
+			pExtra->AddAttr ( tSorterSchema.GetAttr ( idx ), true );
 
-		FixupStage ( tSorterSchema, tSorterSchema.GetAttrIndex ( pQuery->m_sGroupBy.cstr() ) );
+		FixupStage ( tSorterSchema, idx );
 		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 			FixupStage ( tSorterSchema, dAttrs[i] );
 	}

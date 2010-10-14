@@ -1,1 +1,1 @@
-a:1:{i:0;a:1:{i:0;a:3:{s:8:"sphinxql";s:91:"SELECT 0 AND 0 OR 1 AS a, 0 AND 1 OR 1 AS b, 1 OR 0 AND 0 AS c, 1 OR 1 AND 0 AS d FROM test";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:4:{s:1:"a";s:1:"1";s:1:"b";s:1:"1";s:1:"c";s:1:"1";s:1:"d";s:1:"1";}}}}}
+a:1:{i:0;a:1:{i:0;a:3:{s:8:"sphinxql";s:91:"SELECT 0 AND 0 OR 1 AS a, 0 AND 1 OR 1 AS b, 1 OR 0 AND 0 AS c, 1 OR 1 AND 0 AS d FROM test";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:6:{s:2:"id";s:1:"1";s:6:"weight";s:1:"1";s:1:"a";s:1:"1";s:1:"b";s:1:"1";s:1:"c";s:1:"1";s:1:"d";s:1:"1";}}}}}

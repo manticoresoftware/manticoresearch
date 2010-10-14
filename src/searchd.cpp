@@ -176,6 +176,7 @@ static bool				g_bOnDiskDicts	= false;
 static bool				g_bUnlinkOld	= true;
 static bool				g_bWatchdog		= true;
 static int				g_iExpansionLimit = 0;
+static bool				g_bCompatResults = true;
 
 struct Listener_t
 {
@@ -4824,6 +4825,230 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	return true;
 }
 
+bool MinimizeAggrResultCompat ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHadLocalIndexes )
+{
+	// sanity check
+	int iExpected = 0;
+	ARRAY_FOREACH ( i, tRes.m_dMatchCounts )
+		iExpected += tRes.m_dMatchCounts[i];
+
+	if ( iExpected!=tRes.m_dMatches.GetLength() )
+	{
+		tRes.m_sError.SetSprintf ( "INTERNAL ERROR: expected %d matches in combined result set, got %d",
+			iExpected, tRes.m_dMatches.GetLength() );
+		return false;
+	}
+
+	if ( !tRes.m_dMatches.GetLength() )
+		return true;
+
+	// build minimal schema
+	bool bAllEqual = true;
+	tRes.m_tSchema = tRes.m_dSchemas[0];
+	for ( int i=1; i<tRes.m_dSchemas.GetLength(); i++ )
+	{
+		if ( !MinimizeSchema ( tRes.m_tSchema, tRes.m_dSchemas[i] ) )
+			bAllEqual = false;
+	}
+
+	// apply select-items on top of that
+	bool bStar = false;
+	ARRAY_FOREACH ( i, tQuery.m_dItems )
+		if ( tQuery.m_dItems[i].m_sExpr=="*" )
+		{
+			bStar = true;
+			break;
+		}
+
+		if ( !bStar && tQuery.m_dItems.GetLength() )
+		{
+			CSphSchema tItems;
+			for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
+			{
+				const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
+				if ( !tCol.m_pExpr )
+				{
+					bool bAdd = false;
+					ARRAY_FOREACH ( i, tQuery.m_dItems )
+						if ( tQuery.m_dItems[i].m_sExpr==tCol.m_sName )
+						{
+							bAdd = true;
+							break;
+						}
+
+						if ( !bAdd )
+							continue;
+				}
+				tItems.AddAttr ( tCol, true );
+			}
+
+			if ( tRes.m_tSchema.GetAttrsCount()!=tItems.GetAttrsCount() )
+			{
+				tRes.m_tSchema = tItems;
+				bAllEqual = false;
+			}
+		}
+
+		// tricky bit
+		// in purely distributed case, all schemas are received from the wire, and miss aggregate functions info
+		// thus, we need to re-assign that info
+		if ( !bHadLocalIndexes )
+			ARRAY_FOREACH ( i, tQuery.m_dItems )
+		{
+			const CSphQueryItem & tItem = tQuery.m_dItems[i];
+			if ( tItem.m_eAggrFunc==SPH_AGGR_NONE )
+				continue;
+
+			for ( int j=0; j<tRes.m_tSchema.GetAttrsCount(); j++ )
+			{
+				CSphColumnInfo & tCol = const_cast<CSphColumnInfo&> ( tRes.m_tSchema.GetAttr(j) );
+				if ( tCol.m_sName==tItem.m_sAlias )
+				{
+					assert ( tCol.m_eAggrFunc==SPH_AGGR_NONE );
+					tCol.m_eAggrFunc = tItem.m_eAggrFunc;
+				}
+			}
+		}
+
+		// if there's more than one result set, we need to re-sort the matches
+		// so we need to bring matches to the schema that the *sorter* wants
+		// so we need to create the sorter before conversion
+		ISphMatchSorter * pSorter = NULL;
+		if ( tRes.m_iSuccesses!=1 )
+		{
+			// create queue
+			// at this point, we do not need to compute anything; it all must be here
+			pSorter = sphCreateQueue ( &tQuery, tRes.m_tSchema, tRes.m_sError, false );
+			if ( !pSorter )
+				return false;
+
+			// sorter expects this
+			tRes.m_tSchema = pSorter->GetSchema();
+		}
+
+		// convert all matches to minimal schema
+		if ( !bAllEqual )
+		{
+			int iCur = 0;
+			int * dMapFrom = NULL;
+
+			if ( tRes.m_tSchema.GetRowSize() )
+				dMapFrom = new int [ tRes.m_tSchema.GetAttrsCount() ];
+
+			ARRAY_FOREACH ( iSchema, tRes.m_dSchemas )
+			{
+				for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
+				{
+					dMapFrom[i] = tRes.m_dSchemas[iSchema].GetAttrIndex ( tRes.m_tSchema.GetAttr(i).m_sName.cstr() );
+					assert ( dMapFrom[i]>=0 );
+				}
+
+				for ( int i=iCur; i<iCur+tRes.m_dMatchCounts[iSchema]; i++ )
+				{
+					CSphMatch & tMatch = tRes.m_dMatches[i];
+
+					// create new and shiny (and properly sized and fully dynamic) match
+					CSphMatch tRow;
+					tRow.Reset ( tRes.m_tSchema.GetRowSize() );
+					tRow.m_iDocID = tMatch.m_iDocID;
+					tRow.m_iWeight = tMatch.m_iWeight;
+					tRow.m_iTag = tMatch.m_iTag;
+
+					// remap attrs
+					for ( int j=0; j<tRes.m_tSchema.GetAttrsCount(); j++ )
+					{
+						const CSphColumnInfo & tDst = tRes.m_tSchema.GetAttr(j);
+						const CSphColumnInfo & tSrc = tRes.m_dSchemas[iSchema].GetAttr ( dMapFrom[j] );
+						tRow.SetAttr ( tDst.m_tLocator, tMatch.GetAttr ( tSrc.m_tLocator ) );
+					}
+
+					// swap out old (most likely wrong sized) match
+					Swap ( tMatch, tRow );
+				}
+
+				iCur += tRes.m_dMatchCounts[iSchema];
+			}
+
+			assert ( iCur==tRes.m_dMatches.GetLength() );
+			SafeDeleteArray ( dMapFrom );
+		}
+
+		// we do not need to re-sort if there's exactly one result set
+		if ( tRes.m_iSuccesses==1 )
+			return true;
+
+		// kill all dupes
+		int iDupes = 0;
+		if ( pSorter->IsGroupby () )
+		{
+			// groupby sorter does that automagically
+			pSorter->SetMVAPool ( NULL ); // because we must be able to group on @groupby anyway
+			ARRAY_FOREACH ( i, tRes.m_dMatches )
+			{
+				CSphMatch & tMatch = tRes.m_dMatches[i];
+
+				if ( tRes.m_dIndexWeights.GetLength() && tMatch.m_iTag>=0 )
+					tMatch.m_iWeight *= tRes.m_dIndexWeights[tMatch.m_iTag];
+
+				if ( !pSorter->PushGrouped ( tMatch ) )
+					iDupes++;
+			}
+		} else
+		{
+			// normal sorter needs massasging
+			// sort by docid and then by tag to guarantee the replacement order
+			TaggedMatchSorter_fn fnSort;
+			sphSort ( &tRes.m_dMatches[0], tRes.m_dMatches.GetLength(), fnSort, fnSort );
+
+			// fold them matches
+			if ( tQuery.m_dIndexWeights.GetLength() )
+			{
+				// if there were per-index weights, compute weighted ranks sum
+				int iCur = 0;
+				int iMax = tRes.m_dMatches.GetLength();
+
+				while ( iCur<iMax )
+				{
+					CSphMatch & tMatch = tRes.m_dMatches[iCur++];
+					if ( tMatch.m_iTag>=0 )
+						tMatch.m_iWeight *= tRes.m_dIndexWeights[tMatch.m_iTag];
+
+					while ( iCur<iMax && tRes.m_dMatches[iCur].m_iDocID==tMatch.m_iDocID )
+					{
+						const CSphMatch & tDupe = tRes.m_dMatches[iCur];
+						int iAddWeight = tDupe.m_iWeight;
+						if ( tDupe.m_iTag>=0 )
+							iAddWeight *= tRes.m_dIndexWeights[tDupe.m_iTag];
+						tMatch.m_iWeight += iAddWeight;
+
+						iDupes++;
+						iCur++;
+					}
+
+					pSorter->Push ( tMatch );
+				}
+
+			} else
+			{
+				// by default, simply remove dupes (select first by tag)
+				ARRAY_FOREACH ( i, tRes.m_dMatches )
+				{
+					if ( i==0 || tRes.m_dMatches[i].m_iDocID!=tRes.m_dMatches[i-1].m_iDocID )
+						pSorter->Push ( tRes.m_dMatches[i] );
+					else
+						iDupes++;
+				}
+			}
+		}
+
+		tRes.m_dMatches.Reset ();
+		sphFlattenQueue ( pSorter, &tRes, -1 );
+		SafeDelete ( pSorter );
+
+		tRes.m_iTotalMatches -= iDupes;
+		return true;
+}
+
 
 void SetupKillListFilter ( CSphFilterSettings & tFilter, const SphAttr_t * pKillList, int nEntries )
 {
@@ -5810,8 +6035,17 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		if ( tRes.m_dSchemas.GetLength() )
 			tRes.m_tSchema = tRes.m_dSchemas[0];
 		if ( tRes.m_iSuccesses>1 || tQuery.m_dItems.GetLength() )
-			if ( !MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength()!=0, pExtraSchema ) )
-				return;
+		{
+			if (g_bCompatResults)
+			{
+				if ( !MinimizeAggrResultCompat ( tRes, tQuery, m_dLocal.GetLength()!=0 ) )
+					return;
+			} else
+			{
+				if ( !MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength()!=0, pExtraSchema ) )
+					return;
+			}
+		}
 
 		if ( !m_dFailuresSet[iRes].IsEmpty() )
 		{
@@ -8475,12 +8709,22 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 
 			// result set header packet
 			tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
-			tOut.SendByte ( BYTE ( pRes->m_tSchema.GetAttrsCount() + (bStar?1:0) ) );
+			if ( g_bCompatResults )
+				tOut.SendByte ( BYTE ( 2+pRes->m_tSchema.GetAttrsCount() ) );
+			else
+				tOut.SendByte ( BYTE ( pRes->m_tSchema.GetAttrsCount() + (bStar?1:0) ) );
 			tOut.SendByte ( 0 ); // extra
 
-			// in case of star schema send first the DocID
-			if ( bStar )
+			if ( g_bCompatResults )
+			{
 				SendMysqlFieldPacket ( tOut, uPacketID++, "id", USE_64BIT ? MYSQL_COL_LONGLONG : MYSQL_COL_LONG );
+				SendMysqlFieldPacket ( tOut, uPacketID++, "weight", MYSQL_COL_LONG );
+			} else
+			{
+				// in case of star schema send first the DocID
+				if ( bStar )
+					SendMysqlFieldPacket ( tOut, uPacketID++, "id", USE_64BIT ? MYSQL_COL_LONGLONG : MYSQL_COL_LONG );
+			}
 
 			// field packets
 			for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
@@ -8507,8 +8751,15 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 			{
 				const CSphMatch & tMatch = pRes->m_dMatches [ iMatch ];
 
-				if ( bStar )
+				if ( g_bCompatResults )
+				{
 					dRows.PutNumeric<SphDocID_t> ( DOCID_FMT, tMatch.m_iDocID );
+					dRows.PutNumeric ( "%u", tMatch.m_iWeight );
+				} else
+				{
+					if ( bStar )
+						dRows.PutNumeric<SphDocID_t> ( DOCID_FMT, tMatch.m_iDocID );
+				}
 
 				const CSphSchema & tSchema = pRes->m_tSchema;
 				for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
@@ -11721,6 +11972,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	g_bOnDiskDicts = hSearchd.GetInt ( "ondisk_dict_default", (int)g_bOnDiskDicts )!=0;
 	g_bUnlinkOld = hSearchd.GetInt ( "unlink_old", (int)g_bUnlinkOld )!=0;
 	g_iExpansionLimit = hSearchd.GetInt ( "expansion_limit", 0 );
+	g_bCompatResults = hSearchd.GetInt ( "compat_results", (int)g_bCompatResults )!=0;
 
 	if ( hSearchd("max_matches") )
 	{

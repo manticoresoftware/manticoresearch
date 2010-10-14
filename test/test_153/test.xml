@@ -10,6 +10,7 @@ indexer
 searchd
 {
 	<searchd_settings/>
+	compat_results			= 0
 }
 
 source auth

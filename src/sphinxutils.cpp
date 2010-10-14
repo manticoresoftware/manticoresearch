@@ -290,6 +290,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "binlog_max_log_size",	0, NULL },
 	{ "thread_stack",			0, NULL },
 	{ "expansion_limit",		0, NULL },
+	{ "compat_results",			0, NULL },
 	{ NULL,						0, NULL }
 };
 

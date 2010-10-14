@@ -7257,7 +7257,7 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 			{
 				const char * sLocal = dLocal[i].cstr();
 				const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( sLocal );
-				DoCommandUpdate ( sReqIndex, tUpd, iSuccesses, iUpdated, dUpdated, dFailuresSet, pServed );
+				DoCommandUpdate ( sLocal, tUpd, iSuccesses, iUpdated, dUpdated, dFailuresSet, pServed );
 				if ( pServed )
 					pServed->Unlock();
 			}

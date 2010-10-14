@@ -94,8 +94,9 @@ void TestTokenizer ( bool bUTF8 )
 			: "\xC0\xC1\xF5\xF6"; // valid SBCS but invalid UTF-8
 
 		assert ( CreateSynonymsFile ( sMagic ) );
-		bool bEscaped = iRun==3;
-		ISphTokenizer * pTokenizer = CreateTestTokenizer ( bUTF8, iRun>=2, bEscaped );
+		bool bExceptions = ( iRun>=2 );
+		bool bEscaped = ( iRun==3 );
+		ISphTokenizer * pTokenizer = CreateTestTokenizer ( bUTF8, bExceptions, bEscaped );
 
 		const char * dTests[] =
 		{
@@ -141,6 +142,7 @@ void TestTokenizer ( bool bUTF8 )
 			"3", "\\\\phone",					"phone", NULL,						// the correct behavior if '\' is not in charset
 			"3", "pho\\\\ne",					"pho", "ne", NULL,
 			"3", "phon\\\\e",					"phon", NULL,
+			"3", "trailing\\",					"trailing", NULL,
 			NULL
 		};
 
@@ -293,6 +295,8 @@ void TestTokenizer ( bool bUTF8 )
 		assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "boundaries" ) ); assert ( !pTokenizer->GetBoundary() );
 
 		// test specials vs token start/end ptrs
+		printf ( "%s vs specials vs token start/end ptrs\n", sPrefix );
+
 		char sLine6[] = "abc!def";
 		pTokenizer->SetBuffer ( (BYTE*)sLine6, strlen(sLine6) );
 
@@ -311,6 +315,35 @@ void TestTokenizer ( bool bUTF8 )
 		// done
 		SafeDelete ( pTokenizer );
 	}
+
+	// test blended
+	printf ( "%s vs escaping vs blend_chars edge cases\n", sPrefix );
+
+	CSphString sError;
+	ISphTokenizer * pTokenizer = CreateTestTokenizer ( bUTF8, false, true ); // no exceptions, but escaped
+	pTokenizer->AddSpecials ( "()!-\"" );
+	assert ( pTokenizer->SetBlendChars ( ".", sError ) );
+
+	char sTest1[] = "(texas.\\\")";
+	pTokenizer->SetBuffer ( (BYTE*)sTest1, strlen(sTest1) );
+
+	assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "(" ) );
+	assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "texas." ) );
+	assert ( pTokenizer->TokenIsBlended() );
+	pTokenizer->SkipBlended ();
+	assert ( !strcmp ( (const char*)pTokenizer->GetToken(), ")" ) );
+	assert ( pTokenizer->GetToken()==NULL );
+
+	char sTest2[] = "\"series 2003\\-\\\"\"";
+	printf ( "test %s\n", sTest2 );
+	pTokenizer->SetBuffer ( (BYTE*)sTest2, strlen(sTest2) );
+	assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "\"" ) );
+	assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "series" ) );
+	assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "2003-" ) );
+	assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "\"" ) );
+	assert ( pTokenizer->GetToken()==NULL );
+
+	SafeDelete ( pTokenizer );
 }
 
 

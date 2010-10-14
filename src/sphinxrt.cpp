@@ -2727,14 +2727,16 @@ CSphIndex * RtIndex_t::LoadDiskChunk ( int iChunk )
 	CSphString sChunk, sError;
 	sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), iChunk );
 
+	// !COMMIT handle errors gracefully instead of dying
 	CSphIndex * pDiskChunk = sphCreateIndexPhrase ( m_sIndexName.cstr(), sChunk.cstr() );
-	if ( pDiskChunk )
-	{
-		if ( !pDiskChunk->Prealloc ( false, false, sError ) || !pDiskChunk->Preread() )
-			SafeDelete ( pDiskChunk );
-	}
 	if ( !pDiskChunk )
-		sphDie ( "failed to load disk chunk '%s'", sChunk.cstr() ); // !COMMIT handle this gracefully
+		sphDie ( "disk chunk %s: alloc failed", sChunk.cstr() );
+
+	if ( !pDiskChunk->Prealloc ( false, false, sError ) )
+		sphDie ( "disk chunk %s: prealloc failed: %s", sChunk.cstr(), sError.cstr() );
+
+	if ( !pDiskChunk->Preread() )
+		sphDie ( "disk chunk %s: preread failed: %s", sChunk.cstr(), pDiskChunk->GetLastError().cstr() );
 
 	return pDiskChunk;
 }

@@ -360,6 +360,7 @@ static void set_error ( sphinx_client * client, const char * template, ... )
 	va_end ( ap );
 
 	client->error = client->local_error_buf;
+	client->warning = NULL;
 }
 
 
@@ -1559,8 +1560,11 @@ static void net_get_response ( int fd, sphinx_client * client )
 	{
 		case SEARCHD_OK:
 		case SEARCHD_WARNING:
+			client->error = NULL; // so far so good
 			if ( status==SEARCHD_WARNING )
 				client->warning = unpack_str ( &cur );
+			else
+				client->warning = NULL;
 			client->response_len = len;
 			client->response_buf = response;
 			client->response_start = cur;
@@ -1568,6 +1572,7 @@ static void net_get_response ( int fd, sphinx_client * client )
 
 		case SEARCHD_ERROR:
 		case SEARCHD_RETRY:
+			// copy error message, so that we can immediately free the response
 			set_error ( client, "%s", unpack_str ( &cur ) );
 			free ( response );
 			break;

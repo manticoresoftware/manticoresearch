@@ -1263,7 +1263,6 @@ void Shutdown ()
 #if !USE_WINDOWS
 void sighup ( int )
 {
-	g_bDoRotate = true;
 	g_bGotSighup = true;
 }
 
@@ -10928,6 +10927,11 @@ void CheckSignals ()
 
 	if ( g_bGotSighup )
 	{
+
+
+		g_tRotateQueueMutex.Lock();
+		g_bDoRotate = true;
+		g_tRotateQueueMutex.Unlock();
 		sphInfo ( "rotating indices (seamless=%d)", (int)g_bSeamlessRotate ); // this might hang if performed from SIGHUP
 		g_bGotSighup = false;
 	}
@@ -10984,7 +10988,6 @@ void CheckSignals ()
 			switch ( dPipeInBuf[i] )
 			{
 			case 0:
-				g_bDoRotate = true;
 				g_bGotSighup = true;
 				break;
 

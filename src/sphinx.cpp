@@ -4231,9 +4231,9 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 				}
 			} else
 			{
-				// detect closing hard whitespace
+				// detect closing hard whitespace or special
 				// (if there was anything meaningful in the meantime, we must never get past the outer if!)
-				if ( IsWhitespace ( iCodePoint ) )
+				if ( IsWhitespace ( iCodePoint ) || ( iCode & FLAG_CODEPOINT_SPECIAL ) )
 				{
 					m_iOvershortCount++;
 					bGotNonToken = true;

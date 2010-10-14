@@ -3887,6 +3887,11 @@ static inline bool IsWhitespace ( BYTE c )
 	return ( c=='\0' || c==' ' || c=='\t' || c=='\r' || c=='\n' );
 }
 
+static inline bool IsWhitespace ( int c )
+{
+	return ( c=='\0' || c==' ' || c=='\t' || c=='\r' || c=='\n' );
+}
+
 /////////////////////////////////////////////////////////////////////////////
 
 CSphTokenizer_SBCS::CSphTokenizer_SBCS ()
@@ -4152,6 +4157,11 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 
 	const bool bUseEscape = m_bEscaped; // whether this tokenizer supports escaping
 
+	// in query mode, lets capture (soft-whitespace hard-whitespace) sequences and adjust overshort counter
+	// sample queries would be (one NEAR $$$) or (one | $$$ two) where $ is not a valid character
+	bool bGotNonToken = ( !m_bQueryMode || m_bPhrase ); // only do this in query mode, never in indexing mode, never within phrases
+	bool bGotSoft = false; // hey Beavis he said soft huh huhhuh 
+
 	for ( ;; )
 	{
 		// get next codepoint
@@ -4189,6 +4199,7 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			return m_sAccum;
 		}
 
+		// handle all the flags..
 		iCode = CodepointArbitration ( iCode, bWasEscaped, IsWhitespace ( *m_pCur ) );
 
 		// handle ignored chars
@@ -4207,6 +4218,29 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			}
 		}
 
+		// handle soft-whitespace-only tokens
+		if ( !bGotNonToken && !m_iAccum )
+		{
+			if ( !bGotSoft )
+			{
+				// detect opening soft whitespace
+				if ( ( iCode==0 && !( iCode & MASK_FLAGS ) && !IsWhitespace ( iCodePoint ) )
+					|| ( ( iCode & FLAG_CODEPOINT_BLEND ) && !m_iAccum ) )
+				{
+					bGotSoft = true;
+				}
+			} else
+			{
+				// detect closing hard whitespace
+				// (if there was anything meaningful in the meantime, we must never get past the outer if!)
+				if ( IsWhitespace ( iCodePoint ) )
+				{
+					m_iOvershortCount++;
+					bGotNonToken = true;
+				}
+			}
+		}
+
 		// handle whitespace and boundary
 		if ( m_bBoundary && ( iCode==0 ) )
 		{
@@ -4214,6 +4248,7 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			m_iBoundaryOffset = pCur - m_pBuffer - 1;
 		}
 		m_bBoundary = ( iCode & FLAG_CODEPOINT_BOUNDARY )!=0;
+
 		if ( iCode==0 || m_bBoundary )
 		{
 			FlushAccum ();

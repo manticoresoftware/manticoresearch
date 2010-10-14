@@ -4160,7 +4160,7 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 	// in query mode, lets capture (soft-whitespace hard-whitespace) sequences and adjust overshort counter
 	// sample queries would be (one NEAR $$$) or (one | $$$ two) where $ is not a valid character
 	bool bGotNonToken = ( !m_bQueryMode || m_bPhrase ); // only do this in query mode, never in indexing mode, never within phrases
-	bool bGotSoft = false; // hey Beavis he said soft huh huhhuh 
+	bool bGotSoft = false; // hey Beavis he said soft huh huhhuh
 
 	for ( ;; )
 	{

@@ -6036,7 +6036,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			tRes.m_tSchema = tRes.m_dSchemas[0];
 		if ( tRes.m_iSuccesses>1 || tQuery.m_dItems.GetLength() )
 		{
-			if (g_bCompatResults)
+			if ( g_bCompatResults )
 			{
 				if ( !MinimizeAggrResultCompat ( tRes, tQuery, m_dLocal.GetLength()!=0 ) )
 					return;
@@ -11178,8 +11178,6 @@ void CheckSignals ()
 
 	if ( g_bGotSighup )
 	{
-
-
 		g_tRotateQueueMutex.Lock();
 		g_bDoRotate = true;
 		g_tRotateQueueMutex.Unlock();

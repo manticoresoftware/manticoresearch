@@ -450,7 +450,7 @@ static int GetZoneIndex ( XQQuery_t * pQuery, const CSphString & sZone )
 	ARRAY_FOREACH ( i, pQuery->m_dZones )
 		if ( pQuery->m_dZones[i]==sZone )
 			return i;
-	
+
 	pQuery->m_dZones.Add ( sZone );
 	return pQuery->m_dZones.GetLength()-1;
 }

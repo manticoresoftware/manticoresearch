@@ -400,19 +400,24 @@ public:
 	ExtNWay_c ( const CSphVector<ExtNode_i *> & dNodes, DWORD uDupeMask, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
 		: ExtNWayT ( dNodes, uDupeMask, tNode, tSetup )
 		, FSM ( dNodes, uDupeMask, tNode, tSetup )
+	{
+		bool bTerms = FSM::bTermsTree; // workaround MSVC const condition warning
+		if ( bTerms )
 		{
-			if ( FSM::bTermsTree ) // we use the tree of terms - so, we may resort it
-			{
-				DWORD uNodes = dNodes.GetLength();
-				CSphVector<ExtNode_i*> dTerms;
-				dTerms.Resize ( uNodes );
-				memcpy ( &dTerms[0], &dNodes[0], uNodes * sizeof ( ExtNode_i* ) ); //NOLINT
-				dTerms.Sort ( ExtNodeTF_fn() );
-				ConstructNode ( dTerms, tSetup );
-			} else
-				ConstructNode ( dNodes, tSetup );
+			// we use a tree of terms; we need to re-sort it
+			DWORD uNodes = dNodes.GetLength();
+			CSphVector<ExtNode_i*> dTerms;
+			dTerms.Resize ( uNodes );
+			memcpy ( &dTerms[0], &dNodes[0], uNodes * sizeof ( ExtNode_i* ) ); //NOLINT
+			dTerms.Sort ( ExtNodeTF_fn() );
+			ConstructNode ( dTerms, tSetup );
+		} else
+		{
+			ConstructNode ( dNodes, tSetup );
 		}
+	}
 
+public:
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 	virtual void DebugDump ( int iLevel )
@@ -848,13 +853,50 @@ static bool KeywordsEqual ( const XQNode_t * pA, const XQNode_t * pB )
 }
 
 
-template < typename T, bool bNeedMask >
+static DWORD CalcDupeMask ( const CSphVector<XQNode_t *> & dChildren )
+{
+	DWORD uDupeMask = 0;
+	ARRAY_FOREACH ( i, dChildren )
+	{
+		int iValue = 1;
+		for ( int j = i+1; j<dChildren.GetLength(); j++ )
+		{
+			if ( KeywordsEqual ( dChildren[i], dChildren[j] ) )
+			{
+				iValue = 0;
+				break;
+			}
+		}
+		uDupeMask |= iValue << i;
+	}
+	return uDupeMask;
+}
+
+
+static DWORD CalcDupeMask ( const CSphVector<ISphQword *> & dQwordsHit )
+{
+	DWORD uDupeMask = 0;
+	ARRAY_FOREACH ( i, dQwordsHit )
+	{
+		int iValue = 1;
+		for ( int j = i + 1; j < dQwordsHit.GetLength(); j++ )
+			if ( dQwordsHit[i]->m_iWordID==dQwordsHit[j]->m_iWordID )
+			{
+				iValue = 0;
+				break;
+			}
+			uDupeMask |= iValue << i;
+	}
+	return uDupeMask;
+}
+
+
+template < typename T, bool NEED_MASK >
 static ExtNode_i * CreateMultiNode ( const XQNode_t * pQueryNode, const ISphQwordSetup & tSetup, bool bNeedsHitlist )
 {
 	///////////////////////////////////
 	// virtually plain (expanded) node
 	///////////////////////////////////
-	DWORD uDupeMask = 0;
 
 	if ( pQueryNode->m_dChildren.GetLength() )
 	{
@@ -867,19 +909,9 @@ static ExtNode_i * CreateMultiNode ( const XQNode_t * pQueryNode, const ISphQwor
 
 		// compute dupe mask (needed for quorum only)
 		// FIXME! this check will fail with wordforms and stuff; sorry, no wordforms vs expand vs quorum support for now!
-		if ( bNeedMask )
-			ARRAY_FOREACH ( i, pQueryNode->m_dChildren )
-			{
-				int iValue = 1;
-				for ( int j = i+1; j<pQueryNode->m_dChildren.GetLength(); j++ )
-					if ( KeywordsEqual ( pQueryNode->m_dChildren[i], pQueryNode->m_dChildren[j] ) )
-					{
-						iValue = 0;
-						break;
-					}
-					uDupeMask |= iValue << i;
-			}
-
+		DWORD uDupeMask = NEED_MASK
+			? CalcDupeMask ( pQueryNode->m_dChildren )
+			: 0;
 		ExtNode_i * pResult = new T ( dNodes, uDupeMask, *pQueryNode, tSetup );
 
 		if ( pQueryNode->GetCount() )
@@ -934,19 +966,9 @@ static ExtNode_i * CreateMultiNode ( const XQNode_t * pQueryNode, const ISphQwor
 		}
 
 		// compute dupe mask (needed for quorum only)
-		if ( bNeedMask )
-			ARRAY_FOREACH ( i, dQwordsHit )
-			{
-				int iValue = 1;
-				for ( int j = i + 1; j < dQwordsHit.GetLength(); j++ )
-					if ( dQwordsHit[i]->m_iWordID==dQwordsHit[j]->m_iWordID )
-				{
-					iValue = 0;
-					break;
-				}
-				uDupeMask |= iValue << i;
-			}
-
+		DWORD uDupeMask = NEED_MASK
+			? CalcDupeMask ( dQwordsHit )
+			: 0;
 		pResult = new T ( dNodes, uDupeMask, *pQueryNode, tSetup );
 	}
 
@@ -2175,7 +2197,8 @@ void ExtAndNot_c::Reset ( const ISphQwordSetup & tSetup )
 }
 
 //////////////////////////////////////////////////////////////////////////
-ExtNWayT::ExtNWayT ( const CSphVector<ExtNode_i *> & dNodes, DWORD uDupeMask, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
+
+ExtNWayT::ExtNWayT ( const CSphVector<ExtNode_i *> & dNodes, DWORD, const XQNode_t &, const ISphQwordSetup & tSetup )
 	: m_pNode ( NULL )
 	, m_pDocs ( NULL )
 	, m_pHits ( NULL )
@@ -2456,7 +2479,7 @@ bool ExtNWay_c<FSM>::EmitTail ( int & iHit )
 
 //////////////////////////////////////////////////////////////////////////
 
-FSMphrase::FSMphrase ( const CSphVector<ExtNode_i *> & dQwords, DWORD, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
+FSMphrase::FSMphrase ( const CSphVector<ExtNode_i *> & dQwords, DWORD, const XQNode_t & tNode, const ISphQwordSetup & )
 	: m_uFields ( tNode.m_uFieldMask )
 	, m_uExpQpos ( 0 )
 	, m_uExpPos ( 0 )
@@ -2526,7 +2549,7 @@ inline bool FSMphrase::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 	dTarget->m_uDocid = pHit->m_uDocid;
 	dTarget->m_uHitpos = HITMAN::GetLCS ( pHit->m_uHitpos ) - uSpanlen;
 	dTarget->m_uQuerypos = m_uMinQpos;
-	dTarget->m_uSpanlen = dTarget->m_uMatchlen = uSpanlen + 1;
+	dTarget->m_uMatchlen = dTarget->m_uSpanlen = (WORD)( uSpanlen + 1 );
 	dTarget->m_uWeight = m_uLeaves;
 	m_uExpPos = m_uExpQpos = 0;
 	return true;
@@ -2535,7 +2558,7 @@ inline bool FSMphrase::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 
 //////////////////////////////////////////////////////////////////////////
 
-FSMproximity::FSMproximity ( const CSphVector<ExtNode_i *> & dQwords, DWORD uDupeMask, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
+FSMproximity::FSMproximity ( const CSphVector<ExtNode_i *> & dQwords, DWORD, const XQNode_t & tNode, const ISphQwordSetup & )
 	: m_iMaxDistance ( tNode.m_iOpArg )
 	, m_uWordsExpected ( dQwords.GetLength() )
 	, m_uExpPos ( 0 )
@@ -2630,7 +2653,7 @@ inline bool FSMproximity::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 
 //////////////////////////////////////////////////////////////////////////
 
-FSMmultinear::FSMmultinear ( const CSphVector<ExtNode_i *> & dNodes, DWORD, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
+FSMmultinear::FSMmultinear ( const CSphVector<ExtNode_i *> & dNodes, DWORD, const XQNode_t & tNode, const ISphQwordSetup & )
 	: m_iNear ( tNode.m_iOpArg )
 	, m_uWordsExpected ( dNodes.GetLength() )
 {
@@ -2790,7 +2813,7 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 		} else
 		{
 			dTarget->m_uQuerypos = m_dQpos[0];
-			dTarget->m_uSpanlen = m_dQpos.GetLength();
+			dTarget->m_uSpanlen = (WORD) m_dQpos.GetLength();
 			m_uLastP = 0;
 		}
 		return true;

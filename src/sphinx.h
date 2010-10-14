@@ -686,24 +686,24 @@ protected:
 		POS_BITS		= 31 - FIELD_BITS,
 		FIELD_OFF		= 32 - FIELD_BITS,
 		FIELDEND_OFF	= 31 - FIELD_BITS,
-		FIELDEND_MASK	= (1UL<<POS_BITS),
-		POS_MASK		= (1UL<<POS_BITS)-1,
+		FIELDEND_MASK	= (1UL << POS_BITS),
+		POS_MASK		= (1UL << POS_BITS) - 1,
 	};
 
 public:
 	static Hitpos_t Create ( int iField, int iPos )
 	{
-		return ( iField<<FIELD_OFF ) + ( iPos & POS_MASK );
+		return ( iField << FIELD_OFF ) + ( iPos & POS_MASK );
 	}
 
 	static Hitpos_t Create ( int iField, int iPos, bool bEnd )
 	{
-		return ( iField<<FIELD_OFF ) + ( ((int)bEnd)<<FIELDEND_OFF ) + ( iPos & POS_MASK );
+		return ( iField << FIELD_OFF ) + ( ((int)bEnd) << FIELDEND_OFF ) + ( iPos & POS_MASK );
 	}
 
 	static inline int GetField ( Hitpos_t uHitpos )
 	{
-		return uHitpos>>FIELD_OFF;
+		return uHitpos >> FIELD_OFF;
 	}
 
 	static inline int GetPos ( Hitpos_t uHitpos )
@@ -2583,7 +2583,7 @@ void				sphSetQuiet ( bool bQuiet );
 
 /// creates proper queue for given query
 /// may return NULL on error; in this case, error message is placed in sError
-ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError, bool bComputeItems=true, CSphSchema * pExtra=NULL);
+ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError, bool bComputeItems=true, CSphSchema * pExtra=NULL );
 
 /// convert queue to sorted array, and add its entries to result's matches array
 void				sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag );

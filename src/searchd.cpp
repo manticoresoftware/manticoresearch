@@ -10736,11 +10736,12 @@ void CheckFlush ()
 	}
 
 	// check if there are dirty indexes
+	int iFlushTag = g_pFlush->m_iFlushTag;
 	bool bDirty = false;
 	for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
 	{
 		const ServedIndex_t & tServed = it.Get();
-		if ( tServed.m_bEnabled && tServed.m_iUpdateTag>g_pFlush->m_iFlushTag )
+		if ( tServed.m_bEnabled && tServed.m_iUpdateTag>iFlushTag )
 		{
 			bDirty = true;
 			break;
@@ -10779,7 +10780,7 @@ void CheckFlush ()
 	{
 		const ServedIndex_t & tServed = it.Get();
 		tServed.ReadLock();
-		if ( tServed.m_bEnabled && tServed.m_iUpdateTag > g_pFlush->m_iFlushTag )
+		if ( tServed.m_bEnabled && tServed.m_iUpdateTag > iFlushTag )
 		{
 			if ( tServed.m_pIndex->SaveAttributes () )
 				dSaved.Add ( it.GetKey() );

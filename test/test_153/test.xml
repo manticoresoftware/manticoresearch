@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 <name>aggregate, aliases, different sorting, grouping and schemas vs different type of distributed</name>
+<num_agents>2</num_agents>
 <config>
 indexer
 {
@@ -96,7 +97,7 @@ index dist50
 {
 	type					= distributed
 	local					= idx51
-	agent					= <agent0_address/>:idx52
+	agent					= <agent_address/>:idx52
 	agent_connect_timeout	= 1000
 	agent_query_timeout		= 3000
 }
@@ -131,7 +132,7 @@ index dist1
 index dist2
 {
 	type					= distributed
-	agent					= <agent0_address/>:idx1
+	agent					= <agent_address/>:idx1
 	local					= idx2
 	agent_connect_timeout	= 1000
 	agent_query_timeout		= 3000
@@ -141,7 +142,7 @@ index dist3
 {
 	type					= distributed
 	local					= idx1
-	agent					= <agent0_address/>:idx2
+	agent					= <agent_address/>:idx2
 	agent_connect_timeout	= 1000
 	agent_query_timeout		= 3000
 }
@@ -149,8 +150,8 @@ index dist3
 index dist4
 {
 	type					= distributed
-	agent					= <agent0_address/>:idx1
-	agent					= <agent0_address/>:idx2
+	agent					= <agent_address/>:idx1
+	agent					= <agent_address/>:idx2
 	agent_connect_timeout	= 1000
 	agent_query_timeout		= 3000
 }
@@ -158,7 +159,7 @@ index dist4
 index dist5
 {
 	type					= distributed
-	agent					= <agent0_address/>:dist_no
+	agent					= <agent_address/>:dist_no
 	agent_connect_timeout	= 1000
 	agent_query_timeout		= 3000
 }
@@ -166,8 +167,8 @@ index dist5
 index distfake
 {
 	type					= distributed
-	agent					= <agent0_address/>:idx51
-	agent					= <agent0_address/>:idxfake
+	agent					= <agent_address/>:idx51
+	agent					= <agent_address/>:idxfake
 	agent_connect_timeout	= 1000
 	agent_query_timeout		= 3000
 }
@@ -176,7 +177,7 @@ index disthfake
 {
 	type					= distributed
 	local					= idx51
-	agent					= <agent0_address/>:idxfake
+	agent					= <agent_address/>:idxfake
 	agent_connect_timeout	= 1000
 	agent_query_timeout		= 3000
 }
@@ -184,7 +185,7 @@ index disthfake
 index disthfakeb
 {
 	type					= distributed
-	agent					= <agent0_address/>:idx51
+	agent					= <agent_address/>:idx51
 	local					= idxfake
 	agent_connect_timeout	= 1000
 	agent_query_timeout		= 3000

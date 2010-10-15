@@ -939,6 +939,11 @@ public:
 		m_pData[iIndex] = tValue;
 	}
 
+	size_t GetElementSize () const
+	{
+		return sizeof ( T );
+	}
+
 protected:
 	int		m_iLength;		///< entries actually used
 	int		m_iLimit;		///< entries allocated

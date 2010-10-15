@@ -327,10 +327,10 @@ public:
 	{
 		// FIXME! gonna break on vectors over 2GB
 		return
-			m_dWords.GetLimit()*sizeof(m_dWords[0]) +
-			m_dDocs.GetLimit()*sizeof(m_dDocs[0]) +
-			m_dHits.GetLimit()*sizeof(m_dHits[0]) +
-			m_dStrings.GetLimit()*sizeof(m_dStrings[0]);
+			m_dWords.GetLimit()*sizeof ( m_dWords.GetElementSize() ) +
+			m_dDocs.GetLimit()*sizeof ( m_dDocs.GetElementSize() ) +
+			m_dHits.GetLimit()*sizeof ( m_dHits.GetElementSize() ) +
+			m_dStrings.GetLimit()*sizeof ( m_dStrings.GetElementSize() );
 	}
 
 	int GetMergeFactor () const
@@ -350,11 +350,11 @@ const CSphRowitem * RtSegment_t::FindRow ( SphDocID_t uDocid ) const
 {
 	// binary search through the rows
 	int iStride = m_dRows.GetLength() / m_iRows;
-	SphDocID_t uL = DOCINFO2ID ( &m_dRows[0] );
+	SphDocID_t uL = DOCINFO2ID ( m_dRows.Begin() );
 	SphDocID_t uR = DOCINFO2ID ( &m_dRows[m_dRows.GetLength()-iStride] );
 
 	if ( uDocid==uL )
-		return &m_dRows[0];
+		return m_dRows.Begin();
 
 	if ( uDocid==uR )
 		return &m_dRows[m_dRows.GetLength()-iStride];
@@ -436,14 +436,14 @@ struct RtDocReader_t
 
 	explicit RtDocReader_t ( const RtSegment_t * pSeg, const RtWord_t & tWord )
 	{
-		m_pDocs = &pSeg->m_dDocs[0] + tWord.m_uDoc;
+		m_pDocs = ( pSeg->m_dDocs.Begin() ? pSeg->m_dDocs.Begin() + tWord.m_uDoc : NULL );
 		m_iLeft = tWord.m_uDocs;
 		m_tDoc.m_uDocID = 0;
 	}
 
 	const RtDoc_t * UnzipDoc ()
 	{
-		if ( !m_iLeft )
+		if ( !m_iLeft || !m_pDocs )
 			return NULL;
 
 		const BYTE * pIn = m_pDocs;
@@ -488,14 +488,14 @@ struct RtDocReader_t
 
 	explicit RtDocReader_t ( const RtSegment_t * pSeg, const RtWord_t & tWord )
 	{
-		m_pDocs = &pSeg->m_dDocs[0];
+		m_pDocs = pSeg->m_dDocs.Begin();
 		m_iPos = tWord.m_uDoc;
 		m_iMax = tWord.m_uDoc + tWord.m_uDocs;
 	}
 
 	const RtDoc_t * UnzipDoc ()
 	{
-		return m_iPos<m_iMax ? m_pDocs + m_iPos++ : NULL;
+		return ( m_iPos<m_iMax && m_pDocs ? m_pDocs + m_iPos++ : NULL );
 	}
 };
 
@@ -559,7 +559,7 @@ struct RtWordReader_t
 	explicit RtWordReader_t ( const RtSegment_t * pSeg )
 		: m_iWords ( 0 )
 	{
-		m_pCur = &pSeg->m_dWords[0];
+		m_pCur = pSeg->m_dWords.Begin();
 		m_pMax = m_pCur + pSeg->m_dWords.GetLength();
 
 		m_tWord.m_uWordID = 0;
@@ -610,7 +610,7 @@ struct RtWordReader_t
 
 	explicit RtWordReader_t ( const RtSegment_t * pSeg )
 	{
-		m_pCur = &pSeg->m_dWords[0];
+		m_pCur = pSeg->m_dWords.Begin();
 		m_pMax = m_pCur + pSeg->m_dWords.GetLength();
 	}
 
@@ -1151,7 +1151,7 @@ public:
 	virtual bool		IterateKillListStart ( CSphString & ) { return false; }
 	virtual bool		IterateKillListNext ( SphDocID_t & ) { return false; }
 
-	virtual BYTE **		NextDocument ( CSphString & ) { return &m_dFields[0]; }
+	virtual BYTE **		NextDocument ( CSphString & ) { return m_dFields.Begin(); }
 
 protected:
 	CSphVector<BYTE *>			m_dFields;
@@ -1221,8 +1221,6 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 		return false;
 
 	ISphHits * pHits = tSrc.IterateHits ( sError );
-	if ( !pHits )
-		return false;
 
 	return AddDocument ( pHits, tDoc, ppStr, sError );
 }
@@ -1278,12 +1276,8 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, int iRow
 	// schedule existing copies for deletion
 	m_dAccumKlist.Add ( tDoc.m_iDocID );
 
-	// no pain, no gain!
-	if ( !pHits->Length() )
-		return;
-
 	// reserve some hit space on first use
-	if ( !m_dAccum.GetLength() )
+	if ( pHits && pHits->Length() && !m_dAccum.GetLength() )
 		m_dAccum.Reserve ( 128*1024 );
 
 	// accumulate row data; expect fully dynamic rows
@@ -1325,8 +1319,11 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, int iRow
 	}
 
 	// accumulate hits
-	for ( const CSphWordHit * pHit = pHits->First(); pHit<=pHits->Last(); pHit++ )
-		m_dAccum.Add ( *pHit );
+	if ( pHits && pHits->Length() )
+	{
+		for ( const CSphWordHit * pHit = pHits->First(); pHit<=pHits->Last(); pHit++ )
+			m_dAccum.Add ( *pHit );
+	}
 
 	m_iAccumDocs++;
 }
@@ -1432,7 +1429,7 @@ RtSegment_t * RtAccum_t::CreateSegment ( int iRowSize )
 	int iStride = DOCINFO_IDSIZE + iRowSize;
 	pSeg->m_dRows.SwapData ( m_dAccumRows );
 	pSeg->m_dStrings.SwapData ( m_dStrings );
-	sphSortDocinfos ( &pSeg->m_dRows[0], pSeg->m_dRows.GetLength()/iStride, iStride );
+	sphSortDocinfos ( pSeg->m_dRows.Begin(), pSeg->m_dRows.GetLength()/iStride, iStride );
 
 	// done
 	return pSeg;
@@ -1605,8 +1602,8 @@ protected:
 
 public:
 	explicit RtRowIterator_t ( const RtSegment_t * pSeg, int iStride, bool bWriter, const CSphVector<SphDocID_t> * pAccKlist )
-		: m_pRow ( &pSeg->m_dRows[0] )
-		, m_pRowMax ( &pSeg->m_dRows[0] + pSeg->m_dRows.GetLength() )
+		: m_pRow ( pSeg->m_dRows.Begin() )
+		, m_pRowMax ( pSeg->m_dRows.Begin() + pSeg->m_dRows.GetLength() )
 		, m_pKlist ( NULL )
 		, m_pKlistMax ( NULL )
 		, m_pTlsKlist ( NULL )
@@ -1615,7 +1612,7 @@ public:
 	{
 		if ( pSeg->m_dKlist.GetLength() )
 		{
-			m_pKlist = &pSeg->m_dKlist[0];
+			m_pKlist = pSeg->m_dKlist.Begin();
 			m_pKlistMax = m_pKlist + pSeg->m_dKlist.GetLength();
 		}
 
@@ -1772,7 +1769,7 @@ static void DoFixupStrAttr ( const CSphTightVector<BYTE> & dStorage, const CSphS
 	if ( dStorage.GetLength()<=1 )
 		return;
 
-	DoFixupStrAttr ( &dStorage[0], dStorage.GetLength(), tSchema, pRow, dStrings );
+	DoFixupStrAttr ( dStorage.Begin(), dStorage.GetLength(), tSchema, pRow, dStrings );
 }
 
 RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2, const CSphVector<SphDocID_t> * pAccKlist )
@@ -1815,7 +1812,7 @@ RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 			assert ( pRow1 );
 			for ( int i=0; i<m_iStride; i++ )
 				dRows.Add ( *pRow1++ );
-			CSphRowitem * pDstRow = &dRows[0] + dRows.GetLength() - m_iStride;
+			CSphRowitem * pDstRow = dRows.Begin() + dRows.GetLength() - m_iStride;
 			DoFixupStrAttr ( pSeg1->m_dStrings, m_tSchema, pDstRow, dStrings );
 			pRow1 = tIt1.GetNextAliveRow();
 		} else
@@ -1824,7 +1821,7 @@ RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 			assert ( !pRow1 || ( DOCINFO2ID(pRow1)!=DOCINFO2ID(pRow2) ) ); // all dupes must be killed and skipped by the iterator
 			for ( int i=0; i<m_iStride; i++ )
 				dRows.Add ( *pRow2++ );
-			CSphRowitem * pDstRow = &dRows[0] + dRows.GetLength() - m_iStride;
+			CSphRowitem * pDstRow = dRows.Begin() + dRows.GetLength() - m_iStride;
 			DoFixupStrAttr ( pSeg2->m_dStrings, m_tSchema, pDstRow, dStrings );
 			pRow2 = tIt2.GetNextAliveRow();
 		}
@@ -1898,7 +1895,7 @@ void RtIndex_t::Commit ()
 		return;
 
 	// empty txn, just ignore
-	if ( !pAcc->m_dAccum.GetLength() && !pAcc->m_dAccumKlist.GetLength() )
+	if ( !pAcc->m_iAccumDocs && !pAcc->m_dAccumKlist.GetLength() )
 	{
 		pAcc->m_pIndex = NULL;
 		pAcc->m_iAccumDocs = 0;
@@ -2833,7 +2830,7 @@ static void SaveVector ( CSphWriter & tWriter, const CSphVector < T, P > & tVect
 	STATIC_ASSERT ( IsPodType<T>::Value, NON_POD_VECTORS_ARE_UNSERIALIZABLE );
 	tWriter.PutDword ( tVector.GetLength() );
 	if ( tVector.GetLength() )
-		tWriter.PutBytes ( &tVector[0], tVector.GetLength()*sizeof(T) );
+		tWriter.PutBytes ( tVector.Begin(), tVector.GetLength()*sizeof(T) );
 }
 
 
@@ -2843,7 +2840,7 @@ static void LoadVector ( CSphReader & tReader, CSphVector < T, P > & tVector )
 	STATIC_ASSERT ( IsPodType<T>::Value, NON_POD_VECTORS_ARE_UNSERIALIZABLE );
 	tVector.Resize ( tReader.GetDword() ); // FIXME? sanitize?
 	if ( tVector.GetLength() )
-		tReader.GetBytes ( &tVector[0], tVector.GetLength()*sizeof(T) );
+		tReader.GetBytes ( tVector.Begin(), tVector.GetLength()*sizeof(T) );
 }
 
 
@@ -2853,7 +2850,7 @@ static void SaveVector ( BinlogWriter_c & tWriter, const CSphVector < T, P > & t
 	STATIC_ASSERT ( IsPodType<T>::Value, NON_POD_VECTORS_ARE_UNSERIALIZABLE );
 	tWriter.ZipValue ( tVector.GetLength() );
 	if ( tVector.GetLength() )
-		tWriter.PutBytes ( &tVector[0], tVector.GetLength()*sizeof(T) );
+		tWriter.PutBytes ( tVector.Begin(), tVector.GetLength()*sizeof(T) );
 }
 
 
@@ -2863,7 +2860,7 @@ static bool LoadVector ( BinlogReader_c & tReader, CSphVector < T, P > & tVector
 	STATIC_ASSERT ( IsPodType<T>::Value, NON_POD_VECTORS_ARE_UNSERIALIZABLE );
 	tVector.Resize ( (int) tReader.UnzipValue() ); // FIXME? sanitize?
 	if ( tVector.GetLength() )
-		tReader.GetBytes ( &tVector[0], tVector.GetLength()*sizeof(T) );
+		tReader.GetBytes ( tVector.Begin(), tVector.GetLength()*sizeof(T) );
 	return !tReader.GetErrorFlag();
 }
 
@@ -3128,7 +3125,7 @@ const CSphRowitem * RtIndex_t::FindDocinfo ( const RtSegment_t * pSeg, SphDocID_
 	int iEnd = pSeg->m_iRows-1;
 	assert ( iStride==( DOCINFO_IDSIZE + m_tSchema.GetRowSize() ) );
 
-	const CSphRowitem * pStorage = &pSeg->m_dRows[0];
+	const CSphRowitem * pStorage = pSeg->m_dRows.Begin();
 	const CSphRowitem * pFound = NULL;
 
 	if ( uDocID==DOCINFO2ID ( &pStorage [ iStart*iStride ] ) )
@@ -3185,9 +3182,9 @@ bool RtIndex_t::RtQwordSetupSegment ( RtQword_t * pQword, RtSegment_t * pCurSeg,
 	const CSphVector<RtWordCheckpoint_t> & dCheckpoints = pCurSeg->m_dWordCheckpoints;
 	if ( dCheckpoints.GetLength() )
 	{
-		if ( dCheckpoints[0].m_uWordID > uWordID )
+		if ( dCheckpoints.Begin()->m_uWordID > uWordID )
 		{
-			tReader.m_pMax = tReader.m_pCur + dCheckpoints[0].m_iOffset;
+			tReader.m_pMax = tReader.m_pCur + dCheckpoints.Begin()->m_iOffset;
 
 		} else if ( dCheckpoints.Last().m_uWordID<=uWordID )
 		{
@@ -3235,7 +3232,7 @@ bool RtIndex_t::RtQwordSetupSegment ( RtQword_t * pQword, RtSegment_t * pCurSeg,
 				pQword->m_pDocReader = new RtDocReader_t ( pCurSeg, *pWord );
 				pQword->m_tHitReader.m_pBase = NULL;
 				if ( pCurSeg->m_dHits.GetLength() )
-					pQword->m_tHitReader.m_pBase = &pCurSeg->m_dHits[0];
+					pQword->m_tHitReader.m_pBase = pCurSeg->m_dHits.Begin();
 				pQword->m_pSeg = pCurSeg;
 			}
 			return true;
@@ -3257,7 +3254,7 @@ bool RtIndex_t::RtQwordSetupSegment ( RtQword_t * pQword, RtSegment_t * pCurSeg,
 			pQword->m_pDocReader = new RtDocReader_t ( pCurSeg, *pWord );
 			pQword->m_tHitReader.m_pBase = NULL;
 			if ( pCurSeg->m_dHits.GetLength() )
-				pQword->m_tHitReader.m_pBase = &pCurSeg->m_dHits[0];
+				pQword->m_tHitReader.m_pBase = pCurSeg->m_dHits.Begin();
 			pQword->m_pSeg = pCurSeg;
 		}
 	}
@@ -3725,7 +3722,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 				assert ( tMatch.m_pDynamic );
 
 				const int iStrSrc = tMatch.m_iTag-1;
-				const BYTE * pBase = iStrSrc < iSegCount ? &m_pSegments[iStrSrc]->m_dStrings[0] : dDiskStrings[ iStrSrc-iSegCount ];
+				const BYTE * pBase = iStrSrc < iSegCount ? m_pSegments[iStrSrc]->m_dStrings.Begin() : dDiskStrings[ iStrSrc-iSegCount ];
 				int iRange = 0;
 				if ( iStrSrc < iSegCount )
 					iRange = m_pSegments[iStrSrc]->m_dStrings.GetLength();

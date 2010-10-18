@@ -51,6 +51,9 @@ public:
 
 	/// getter for name
 	virtual const char * GetName () = 0;
+
+	/// check and flush index memory to disk
+	virtual void CheckRamFlush () = 0;
 };
 
 /// initialize subsystem

@@ -291,6 +291,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "thread_stack",			0, NULL },
 	{ "expansion_limit",		0, NULL },
 	{ "compat_results",			0, NULL },
+	{ "rt_flush_period",		0, NULL },
 	{ NULL,						0, NULL }
 };
 

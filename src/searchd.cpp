@@ -352,6 +352,10 @@ static CSphMutex							g_tRotateConfigMutex;
 static SphThread_t							g_tRotateThread;
 static volatile bool						g_bRotateShutdown = false;
 
+/// flush parameters of rt indexes
+static SphThread_t							g_tRtFlushThread;
+static volatile bool						g_bRtFlushShutdown = false;
+
 struct DistributedMutex_t
 {
 	void Init ();
@@ -1216,14 +1220,19 @@ void Shutdown ()
 	{
 		if ( g_eWorkers==MPM_THREADS )
 		{
+			// tell flush-rt thread to shutdown, and wait until it does
+			g_bRtFlushShutdown = true;
+			sphThreadJoin ( &g_tRtFlushThread );
+
 			// tell rotation thread to shutdown, and wait until it does
 			g_bRotateShutdown = true;
 			sphThreadJoin ( &g_tRotateThread );
 			g_tRotateQueueMutex.Done();
 			g_tRotateConfigMutex.Done();
 
-			// stop search threads
-			while ( g_dThd.GetLength() > 0 )
+			int64_t tmShutStarted = sphMicroTimer();
+			// stop search threads; up to 3 seconds long
+			while ( g_dThd.GetLength() > 0 && ( sphMicroTimer()-tmShutStarted )<3000000 )
 				sphSleepMsec ( 50 );
 
 			g_tThdMutex.Lock();
@@ -9547,6 +9556,50 @@ static bool CheckServedEntry ( const ServedIndex_t * pEntry, const char * sIndex
 	return true;
 }
 
+#define SPH_RT_AUTO_FLUSH_CHECK_PERIOD ( 5000000 )
+
+static void RtFlushThreadFunc ( void * )
+{
+	int64_t tmNextCheck = sphMicroTimer() + SPH_RT_AUTO_FLUSH_CHECK_PERIOD;
+	while ( !g_bRtFlushShutdown )
+	{
+		// stand still till save time
+		if ( tmNextCheck>sphMicroTimer() )
+		{
+			sphSleepMsec ( 50 );
+			continue;
+		}
+
+		// collecting available rt indexes at save time
+		CSphVector<CSphString> dRtIndexes;
+		for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
+			if ( it.Get().m_bRT )
+				dRtIndexes.Add ( it.GetKey() );
+
+		// do check+save
+		ARRAY_FOREACH_COND ( i, dRtIndexes, !g_bRtFlushShutdown )
+		{
+			const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( dRtIndexes[i] );
+			if ( !pServed )
+				continue;
+
+			if ( !pServed->m_bEnabled )
+			{
+				pServed->Unlock();
+				continue;
+			}
+
+			ISphRtIndex * pRT = (ISphRtIndex *)pServed->m_pIndex;
+			pRT->CheckRamFlush();
+
+			pServed->Unlock();
+		}
+
+		tmNextCheck = sphMicroTimer() + SPH_RT_AUTO_FLUSH_CHECK_PERIOD;
+	}
+}
+
+
 static void RotateIndexMT ( const CSphString & sIndex )
 {
 	//////////////////
@@ -12481,13 +12534,18 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	// replay last binlog
 	SmallStringHash_T<CSphIndex*> hIndexes;
 	for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
-		hIndexes.Add ( it.Get().m_pIndex, it.GetKey() );
+		if ( it.Get().m_bEnabled )
+			hIndexes.Add ( it.Get().m_pIndex, it.GetKey() );
 
 	if ( g_eWorkers==MPM_THREADS )
 		sphReplayBinlog ( hIndexes, DumpMemStat );
 
 	if ( !g_bOptNoDetach )
 		g_bLogStdout = false;
+
+	// create flush-rt thread
+	if ( g_eWorkers==MPM_THREADS && !sphThreadCreate ( &g_tRtFlushThread, RtFlushThreadFunc, 0 ) )
+		sphDie ( "failed to create rt-flush thread" );
 
 	sphInfo ( "accepting connections" );
 

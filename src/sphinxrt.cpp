@@ -327,10 +327,10 @@ public:
 	{
 		// FIXME! gonna break on vectors over 2GB
 		return
-			m_dWords.GetLimit()*sizeof ( m_dWords.GetElementSize() ) +
-			m_dDocs.GetLimit()*sizeof ( m_dDocs.GetElementSize() ) +
-			m_dHits.GetLimit()*sizeof ( m_dHits.GetElementSize() ) +
-			m_dStrings.GetLimit()*sizeof ( m_dStrings.GetElementSize() );
+			m_dWords.GetLimit()*sizeof(m_dWords[0]) +
+			m_dDocs.GetLimit()*sizeof(m_dDocs[0]) +
+			m_dHits.GetLimit()*sizeof(m_dHits[0]) +
+			m_dStrings.GetLimit()*sizeof(m_dStrings[0]);
 	}
 
 	int GetMergeFactor () const
@@ -962,6 +962,9 @@ private:
 	mutable RtDiskKlist_t		m_tKlist;
 
 	CSphSchema					m_tOutboundSchema;
+	int64_t						m_iSavedTID;
+	int64_t						m_iSavedRam;
+	int64_t						m_tmSaved;
 
 public:
 	explicit					RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath );
@@ -978,6 +981,8 @@ public:
 	void						DumpToDisk ( const char * sFilename );
 
 	virtual const char *		GetName () { return m_sIndexName.cstr(); }
+
+	virtual void				CheckRamFlush ();
 
 private:
 	/// acquire thread-local indexing accumulator
@@ -1046,6 +1051,7 @@ public:
 
 	virtual const CSphSchema &	GetMatchSchema () const { return m_tOutboundSchema; }
 	virtual const CSphSchema &	GetInternalSchema () const { return m_tSchema; }
+	int64_t						GetUsedRam () const;
 
 protected:
 	CSphSourceStats				m_tStats;
@@ -1058,6 +1064,9 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 	, m_iRamSize ( iRamSize )
 	, m_sPath ( sPath )
 	, m_iLockFD ( -1 )
+	, m_iSavedTID ( m_iTID )
+	, m_iSavedRam ( 0 )
+	, m_tmSaved ( sphMicroTimer() )
 {
 	MEMORY ( SPH_MEM_IDX_RT );
 
@@ -1124,6 +1133,61 @@ RtIndex_t::~RtIndex_t ()
 		sphInfo ( "rt: index %s: ramchunk saved in %d.%03d sec",
 			m_sIndexName.cstr(), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
 	}
+}
+
+#define SPH_THRESHOLD_SAVE_RAM ( 64*1024*1024 )
+static int64_t g_iRtFlushPeriod = 10*60*60; // default period is 10 hours
+
+void RtIndex_t::CheckRamFlush ()
+{
+	int64_t tmSave = sphMicroTimer();
+
+	if ( m_iTID<=m_iSavedTID || ( tmSave-m_tmSaved )/1000000<g_iRtFlushPeriod )
+		return;
+
+	m_tRwlock.ReadLock();
+	int64_t iUsedRam = GetUsedRam();
+	int64_t iDeltaRam = iUsedRam-m_iSavedRam;
+	m_tRwlock.Unlock();
+
+	// save if delta-ram runs over maximum value of ram-threshold or 1/3 of index size
+	if ( iDeltaRam < Max ( SPH_THRESHOLD_SAVE_RAM, m_iRamSize/3 ) )
+		return;
+
+	m_tWriterMutex.Lock();
+
+	if ( !SaveRamChunk () )
+	{
+		sphWarning ( "rt auto-save FAILED!!! (index='%s', error '%s')", m_sIndexName.cstr(), m_sLastError.cstr() );
+		m_tWriterMutex.Unlock();
+		return;
+	}
+	SaveMeta ( m_pDiskChunks.GetLength() );
+	g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
+
+	int64_t iWasTID = m_iSavedTID;
+	int64_t iWasRam = m_iSavedRam;
+	int64_t tmDelta = sphMicroTimer() - m_tmSaved;
+	m_iSavedTID = m_iTID;
+	m_iSavedRam = iUsedRam;
+	m_tmSaved = sphMicroTimer();
+
+	m_tWriterMutex.Unlock();
+
+	tmSave = sphMicroTimer() - tmSave;
+	sphInfo ( "rt auto-saved (index='%s', last TID="INT64_FMT", current TID="INT64_FMT", last ram=%d.%03d Mb, current ram=%d.%03d Mb, time delta=%d sec, took=%d.%03d sec)"
+		, m_sIndexName.cstr(), iWasTID, m_iTID, (int)(iWasRam/1024/1024), (int)((iWasRam/1024)%1000)
+		, (int)(m_iSavedRam/1024/1024), (int)((m_iSavedRam/1024)%1000)
+		, (int) (tmDelta/1000000), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
+}
+
+int64_t RtIndex_t::GetUsedRam () const
+{
+	int64_t iTotal = 0;
+	ARRAY_FOREACH ( i, m_pSegments )
+		iTotal += m_pSegments[i]->GetUsedRam();
+
+	return iTotal;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -2704,6 +2768,9 @@ void RtIndex_t::SaveDiskChunk ()
 
 	// save updated meta
 	SaveMeta ( m_pDiskChunks.GetLength()+1 );
+	m_iSavedTID = m_iTID;
+	m_iSavedRam = 0;
+	m_tmSaved = sphMicroTimer();
 
 	// FIXME! add binlog cleanup here once we have binlogs
 
@@ -2805,7 +2872,14 @@ bool RtIndex_t::Prealloc ( bool, bool, CSphString & )
 	}
 
 	// load ram chunk
-	return LoadRamChunk();
+	bool bRamLoaded = LoadRamChunk();
+
+	// set up values for on timer save
+	m_iSavedTID = m_iTID;
+	m_iSavedRam = GetUsedRam();
+	m_tmSaved = sphMicroTimer();
+
+	return bRamLoaded;
 }
 
 
@@ -5103,6 +5177,11 @@ void sphRTConfigure ( const CSphConfigSection & hSearchd, bool bTestMode )
 {
 	assert ( g_pBinlog );
 	g_pBinlog->Configure ( hSearchd, bTestMode );
+	g_iRtFlushPeriod = hSearchd.GetInt ( "rt_flush_period", (int)g_iRtFlushPeriod );
+
+	// clip period to range ( 10 sec, million years )
+	g_iRtFlushPeriod = Max ( g_iRtFlushPeriod, 10 );
+	g_iRtFlushPeriod = Min ( g_iRtFlushPeriod, INT64_MAX );
 }
 
 void sphRTDone ()

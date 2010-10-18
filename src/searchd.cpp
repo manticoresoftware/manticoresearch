@@ -116,8 +116,16 @@ enum ESphAddIndex
 
 enum ProtocolType_e
 {
-	PROTO_SPHINX,
-	PROTO_MYSQL41
+	PROTO_SPHINX = 0,
+	PROTO_MYSQL41,
+
+	PROTO_TOTAL
+};
+
+
+const char * g_dProtoNames[PROTO_TOTAL] =
+{
+	"sphinxapi", "sphinxql"
 };
 
 
@@ -216,12 +224,34 @@ static volatile bool	g_bAcceptUnlocked	= true;		// whether this preforked child 
 static int				g_iClientFD			= -1;
 static int				g_iDistThreads		= 0;
 
+enum ThdState_e
+{
+	THD_HANDSHAKE,
+	THD_NET_READ,
+	THD_NET_WRITE,
+	THD_QUERY,
+
+	THD_STATE_TOTAL
+};
+
+const char * g_dThdStates[THD_STATE_TOTAL] = {
+	"handshake", "net_read", "net_write", "query"
+};
+
 struct ThdDesc_t
 {
 	SphThread_t		m_tThd;
 	ProtocolType_e	m_eProto;
 	int				m_iClientSock;
 	CSphString		m_sClientName;
+
+	ThdState_e		m_eThdState;
+	const char *	m_sCommand;
+
+	ThdDesc_t ()
+		: m_iClientSock ( 0 )
+		, m_sCommand ( NULL )
+	{}
 };
 
 static CSphStaticMutex			g_tThdMutex;
@@ -400,6 +430,13 @@ enum SearchdStatus_e
 	SEARCHD_ERROR	= 1,	///< general failure, error message follows
 	SEARCHD_RETRY	= 2,	///< temporary failure, error message follows, client should retry later
 	SEARCHD_WARNING	= 3		///< general success, warning message and command-specific reply follow
+};
+
+
+/// command names
+const char * g_dApiCommands[SEARCHD_COMMAND_TOTAL] =
+{
+	"search", "excerpt", "update", "keywords", "persist", "status", "query", "flushattrs"
 };
 
 const int	MAX_RETRY_COUNT		= 8;
@@ -1329,7 +1366,7 @@ BYTE * sphEncodeBase64 ( BYTE * pDst, const BYTE * pSrc, int iLen )
 #define SPH_LAST_QUERY_MAX_SIZE 4096
 #define SPH_TIME_PID_MAX_SIZE 256
 const char		g_sCrashedBannerAPI[] = "\n--- crashed SphinxAPI request dump ---\n";
-const char		g_sCrashedBannerMySQL[] = "\n--- crashed SphinxMYSQL request dump ---\n";
+const char		g_sCrashedBannerMySQL[] = "\n--- crashed SphinxQL request dump ---\n";
 const char		g_sMemoryStatBanner[] = "\n--- memory statistics ---\n";
 static BYTE		g_dEncoded[	SPH_TIME_PID_MAX_SIZE
 							+ 2 * Max ( sizeof(g_sCrashedBannerAPI), sizeof(g_sCrashedBannerMySQL) )
@@ -1394,20 +1431,13 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 			tQuery = *pQueryTLS;
 	}
 
-	const char * sBanner = g_sCrashedBannerAPI;
-	int iBannerLen = sizeof( g_sCrashedBannerAPI )-1; // no need to append tail 0
-	if ( tQuery.m_bMySQL )
-	{
-		sBanner = g_sCrashedBannerMySQL;
-		iBannerLen = sizeof ( g_sCrashedBannerMySQL )-1;
-	}
-
 	tQuery.m_iSize = Min ( tQuery.m_iSize, SPH_LAST_QUERY_MAX_SIZE );
 
 	BYTE * pEncoded = g_dEncoded;
 
-	// BANNER head
-	memcpy ( pEncoded, sBanner, iBannerLen );
+	// request dump banner
+	int iBannerLen = ( tQuery.m_bMySQL ? sizeof(g_sCrashedBannerMySQL) : sizeof(g_sCrashedBannerAPI) ) - 1;
+	memcpy ( pEncoded, tQuery.m_bMySQL ? g_sCrashedBannerMySQL : g_sCrashedBannerAPI, iBannerLen );
 	pEncoded += iBannerLen;
 
 	// query
@@ -1433,14 +1463,20 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 		}
 	}
 
-	// BANNER tail
-	memcpy ( pEncoded, sBanner, iBannerLen );
-	pEncoded += iBannerLen;
+	// tail
+	const char sTail[] = "\n--- request dump end ---\n";
+	memcpy ( pEncoded, sTail, sizeof(sTail)-1 );
+	pEncoded += sizeof(sTail)-1;
 
 #if USE_WINDOWS
 	// mini-dump reference
+	const char sMinidump[] = "minidump at: ";
+	memcpy ( pEncoded, sMinidump, sizeof(sMinidump)-1 );
+	pEncoded += sizeof(sMinidump)-1;
+
 	memcpy ( pEncoded, g_sMinidump, g_iMinidumpLen );
 	pEncoded += g_iMinidumpLen;
+	*pEncoded++ = '\n';
 #endif
 
 	int iSize = pEncoded-g_dEncoded;
@@ -1455,10 +1491,29 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 	sphBacktrace ( pExc, g_sMinidump );
 #endif
 
+	// threads table
+	if ( g_eWorkers==MPM_THREADS )
+	{
+		// FIXME? should we try to lock threads table somehow?
+		sphSafeInfo ( g_iLogFile, "--- %d active threads ---", g_dThd.GetLength() );
+		ARRAY_FOREACH ( iThd, g_dThd )
+		{
+			ThdDesc_t * pThd = g_dThd[iThd];
+			sphSafeInfo ( g_iLogFile, "thd %d, proto %s, state %s, command %s",
+				iThd,
+				g_dProtoNames[pThd->m_eProto],
+				g_dThdStates[pThd->m_eThdState],
+				pThd->m_sCommand ? pThd->m_sCommand : "-" );
+		}
+	}
+
+	// memory info
 #if SPH_ALLOCS_PROFILER
 	sphWrite ( g_iLogFile, g_sMemoryStatBanner, sizeof ( g_sMemoryStatBanner )-1 );
 	sphMemStatDump ( g_iLogFile );
 #endif
+
+	sphSafeInfo ( g_iLogFile, "------- CRASH DUMP END -------" );
 
 	CRASH_EXIT;
 }
@@ -1481,7 +1536,7 @@ void SphCrashLogger_c::SetupTimePID ()
 	char sTimeBuf[SPH_TIME_PID_MAX_SIZE];
 	sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
 
-	g_iCrashInfoLen = snprintf ( g_sCrashInfo, SPH_TIME_PID_MAX_SIZE-1, "-------FATAL: CRASH LOG DUMP-------\n[%s] [%5d]\n", sTimeBuf, (int)getpid() );
+	g_iCrashInfoLen = snprintf ( g_sCrashInfo, SPH_TIME_PID_MAX_SIZE-1, "------- FATAL: CRASH DUMP -------\n[%s] [%5d]\n", sTimeBuf, (int)getpid() );
 }
 
 void SphCrashLogger_c::SetupTLS ()
@@ -6239,7 +6294,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 enum SqlStmt_e
 {
-	STMT_PARSE_ERROR,
+	STMT_PARSE_ERROR = 0,
 	STMT_SELECT,
 	STMT_INSERT,
 	STMT_REPLACE,
@@ -6253,7 +6308,17 @@ enum SqlStmt_e
 	STMT_ROLLBACK,
 	STMT_CALL,
 	STMT_DESC,
-	STMT_SHOW_TABLES
+	STMT_SHOW_TABLES,
+
+	STMT_TOTAL
+};
+
+
+const char * g_dSqlStmts[STMT_TOTAL] =
+{
+	"parse_error", "select", "insert", "replace", "delete", "show_warnings",
+	"show_status", "show_meta", "set", "begin", "commit", "rollback", "call",
+	"desc", "show_tables"
 };
 
 
@@ -7553,9 +7618,12 @@ void HandleCommandFlush ( int iSock, int iVer, InputBuffer_c & tReq )
 // GENERAL HANDLER
 /////////////////////////////////////////////////////////////////////////////
 
-void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD )
+#define THD_STATE(_state) { if ( pThd ) pThd->m_eThdState = _state; }
+
+void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc_t * pThd )
 {
 	MEMORY ( SPH_MEM_HANDLE_NONSQL );
+	THD_STATE ( THD_HANDSHAKE );
 
 	bool bPersist = false;
 	int iTimeout = g_iReadTimeout;
@@ -7576,6 +7644,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD )
 	{
 		// in "persistent connection" mode, we want interruptible waits
 		// so that the worker child could be forcibly restarted
+		THD_STATE ( THD_NET_READ );
 		if ( !tBuf.ReadFrom ( 8, iTimeout, bPersist ) && g_bGotSigterm )
 			break;
 
@@ -7637,6 +7706,11 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD )
 
 		// handle known commands
 		assert ( iCommand>=0 && iCommand<SEARCHD_COMMAND_TOTAL );
+
+		if ( pThd )
+			pThd->m_sCommand = g_dApiCommands[iCommand];
+		THD_STATE ( THD_QUERY );
+
 		switch ( iCommand )
 		{
 			case SEARCHD_COMMAND_SEARCH:	HandleCommandSearch ( iSock, iCommandVer, tBuf ); break;
@@ -8551,9 +8625,10 @@ private:
 	int m_iLimit;
 };
 
-void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
+void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc_t * pThd )
 {
 	MEMORY ( SPH_MEM_HANDLE_SQL );
+	THD_STATE ( THD_HANDSHAKE );
 
 	// handshake
 	char sHandshake[] =
@@ -8605,11 +8680,13 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 		CSphString sError;
 
 		// send the packet formed on the previous cycle
+		THD_STATE ( THD_NET_WRITE );
 		if ( !tOut.Flush() )
 			break;
 
 		// get next packet
 		// we want interruptible calls here, so that shutdowns could be honoured
+		THD_STATE ( THD_NET_READ );
 		if ( !tIn.ReadFrom ( 4, INTERACTIVE_TIMEOUT, true ) )
 			break;
 
@@ -8663,6 +8740,10 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 		SqlStmt_t tStmt;
 		tStmt.m_pQuery = &tHandler.m_dQueries[0];
 		SqlStmt_e eStmt = ParseSqlQuery ( sQuery, &tStmt, sError );
+
+		if ( pThd )
+			pThd->m_sCommand = g_dSqlStmts[eStmt];
+		THD_STATE ( THD_QUERY );
 
 		SqlRowBuffer_c dRows;
 
@@ -9062,12 +9143,13 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 // HANDLE-BY-LISTENER
 //////////////////////////////////////////////////////////////////////////
 
-void HandleClient ( ProtocolType_e eProto, int iSock, const char * sClientIP, int iPipeFD )
+void HandleClient ( ProtocolType_e eProto, int iSock, const char * sClientIP, int iPipeFD, ThdDesc_t * pThd )
 {
 	switch ( eProto )
 	{
-		case PROTO_SPHINX:		HandleClientSphinx ( iSock, sClientIP, iPipeFD ); break;
-		case PROTO_MYSQL41:		HandleClientMySQL ( iSock, sClientIP, iPipeFD ); break;
+		case PROTO_SPHINX:		HandleClientSphinx ( iSock, sClientIP, iPipeFD, pThd ); break;
+		case PROTO_MYSQL41:		HandleClientMySQL ( iSock, sClientIP, iPipeFD, pThd ); break;
+		default:				assert ( 0 && "unhandled protocol type" ); break;
 	}
 }
 
@@ -11485,7 +11567,7 @@ void TickPreforked ( CSphProcessSharedMutex * pAcceptMutex )
 
 	if ( pListener )
 	{
-		HandleClient ( pListener->m_eProto, iClientSock, sClientIP, -1 );
+		HandleClient ( pListener->m_eProto, iClientSock, sClientIP, -1, NULL );
 		sphSockClose ( iClientSock );
 	}
 }
@@ -11518,7 +11600,7 @@ void HandlerThread ( void * pArg )
 
 	// handle that client
 	ThdDesc_t * pThd = (ThdDesc_t*) pArg;
-	HandleClient ( pThd->m_eProto, pThd->m_iClientSock, pThd->m_sClientName.cstr(), -1 );
+	HandleClient ( pThd->m_eProto, pThd->m_iClientSock, pThd->m_sClientName.cstr(), -1, pThd );
 	sphSockClose ( pThd->m_iClientSock );
 
 	// done; remove myself from the table
@@ -11587,7 +11669,7 @@ void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 	// handle the client
 	if ( g_eWorkers==MPM_NONE )
 	{
-		HandleClient ( pListener->m_eProto, iClientSock, sClientName, -1 );
+		HandleClient ( pListener->m_eProto, iClientSock, sClientName, -1, NULL );
 		sphSockClose ( iClientSock );
 		return;
 	}
@@ -11599,7 +11681,7 @@ void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 		if ( !g_bHeadDaemon )
 		{
 			// child process, handle client
-			HandleClient ( pListener->m_eProto, iClientSock, sClientName, iChildPipe );
+			HandleClient ( pListener->m_eProto, iClientSock, sClientName, iChildPipe, NULL );
 			sphSockClose ( iClientSock );
 			exit ( 0 );
 		} else

@@ -3270,8 +3270,10 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 		+ q.m_sComment.Length()
 		+ q.m_sSelect.Length();
 	if ( !q.m_bAgent ) // send the magic to agent ("*,*," + real query)
-		iReqSize += q.m_sSelect.IsEmpty()?3:4;
-		iReqSize += q.m_sRawQuery.IsEmpty()?q.m_sQuery.Length():q.m_sRawQuery.Length();
+		iReqSize += q.m_sSelect.IsEmpty() ? 3 : 4;
+	iReqSize += q.m_sRawQuery.IsEmpty()
+		? q.m_sQuery.Length()
+		: q.m_sRawQuery.Length();
 	ARRAY_FOREACH ( j, q.m_dFilters )
 	{
 		const CSphFilterSettings & tFilter = q.m_dFilters[j];
@@ -3390,13 +3392,22 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 		}
 	}
 	if ( q.m_bAgent )
-		tOut.SendString ( q.m_sSelect.cstr() );
-	else
 	{
-		if ( !q.m_sSelect.Length() )
+		tOut.SendString ( q.m_sSelect.cstr() );
+	} else
+	{
+		int iLen = q.m_sSelect.Length();
+		if ( !iLen )
+		{
 			tOut.SendString ( "*,*" );
-		else
-			tOut.SendString ( CSphString().SetSprintf ( "*,*,%s", q.m_sSelect.cstr() ).cstr() );
+		} else
+		{
+			// this was a fun subtle issue
+			// SetSprintf() uses a static 1K buffer...
+			tOut.SendInt ( iLen+4 );
+			tOut.SendBytes ( "*,*,", 4 );
+			tOut.SendBytes ( q.m_sSelect.cstr(), iLen );
+		}
 	}
 }
 

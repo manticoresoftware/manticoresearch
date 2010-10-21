@@ -1163,23 +1163,6 @@ struct CSphWordlistCheckpoint_v10
 	DWORD				m_iWordlistOffset;
 };
 
-struct CSphDocMVA
-{
-	SphDocID_t							m_iDocID;
-	CSphVector < CSphVector<DWORD> >	m_dMVA;
-	CSphVector < DWORD >				m_dOffsets;
-
-	explicit CSphDocMVA ( int iSize )
-		: m_iDocID ( 0 )
-	{
-		m_dMVA.Resize ( iSize );
-		m_dOffsets.Resize ( iSize );
-	}
-
-	void	Read ( CSphReader & tReader );
-	void	Write ( CSphWriter & tWriter );
-};
-
 /////////////////////////////////////////////////////////////////////////////
 
 /// ordinals accumulation and sorting
@@ -1258,9 +1241,6 @@ static void WriteFileInfo ( CSphWriter & tWriter, const CSphSavedFile & tInfo )
 
 static ISphBinlog * g_pBinlog;
 
-class AttrIndexBuilder_c;
-
-
 struct WordDictInfo_t
 {
 	CSphString		m_sWord;
@@ -1322,7 +1302,7 @@ class CSphIndex_VLN : public CSphIndex
 {
 	friend class DiskIndexQwordSetup_c;
 	friend class CSphMerger;
-	friend class AttrIndexBuilder_c;
+	friend class AttrIndexBuilder_t<SphDocID_t>;
 
 public:
 	explicit					CSphIndex_VLN ( const char* sIndexName, const char * sFilename );
@@ -1351,6 +1331,7 @@ public:
 
 	virtual bool				Lock ();
 	virtual void				Unlock ();
+	virtual void				PostSetup() {}
 
 	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const;
 	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const;
@@ -1448,7 +1429,6 @@ private:
 	static int					m_iIndexTagSeq;			///< static ids sequence
 	int64_t						m_iTID;					///< number of times when SaveAttributes called.
 
-	bool						m_bId32to64;			///< did we convert id32 to id64 on startup
 	bool						m_bIsEmpty;				///< do we have actually indexed documents (m_iTotalDocuments is just fetched documents, not indexed!)
 
 private:
@@ -1868,10 +1848,6 @@ void sphSetReadBuffers ( int iReadBuffer, int iReadUnhinted )
 //////////////////////////////////////////////////////////////////////////
 // DOCINFO
 //////////////////////////////////////////////////////////////////////////
-
-#define MVA_DOWNSIZE		DWORD			// MVA offset type
-#define MVA_OFFSET_MASK		0x7fffffffUL	// MVA offset mask
-#define MVA_ARENA_FLAG		0x80000000UL	// MVA global-arena flag
 
 
 static DWORD *				g_pMvaArena = NULL;		///< initialized by sphArenaInit()
@@ -6805,6 +6781,7 @@ CSphIndex::CSphIndex ( const char * sIndexName, const char * sName )
 	, m_bKeepFilesOpen ( false )
 	, m_bPreloadWordlist ( true )
 	, m_bStripperInited ( true )
+	, m_bId32to64 ( false )
 	, m_pTokenizer ( NULL )
 	, m_pDict ( NULL )
 	, m_iMaxCachedDocs ( 0 )
@@ -6914,7 +6891,6 @@ CSphIndex_VLN::CSphIndex_VLN ( const char* sIndexName, const char * sFilename )
 
 	m_iIndexTag = -1;
 	m_iMergeInfinum = 0;
-	m_bId32to64 = false;
 	m_bWordDict = false;
 	m_bIsEmpty = true;
 	m_bMerging = false;
@@ -7278,302 +7254,6 @@ bool CSphIndex_VLN::LoadPersistentMVA ( CSphString & sError )
 					((DWORD*)(((SphDocID_t*)(g_pMvaArena + dAllocs[iAllocIndex++]))+1) - g_pMvaArena) | MVA_ARENA_FLAG );
 	}
 	return true;
-}
-
-
-void AttrIndexBuilder_c::ResetLocal()
-{
-	ARRAY_FOREACH ( i, m_dIntMin )
-	{
-		m_dIntMin[i] = UINT_MAX;
-		m_dIntMax[i] = 0;
-	}
-	ARRAY_FOREACH ( i, m_dFloatMin )
-	{
-		m_dFloatMin[i] = FLT_MAX;
-		m_dFloatMax[i] = -FLT_MAX;
-	}
-	ARRAY_FOREACH ( i, m_dMvaMin )
-	{
-		m_dMvaMin[i] = UINT_MAX;
-		m_dMvaMax[i] = 0;
-	}
-	m_uStart = m_uLast = 0;
-	m_iLoop = 0;
-}
-
-void AttrIndexBuilder_c::FlushComputed ( bool bUseAttrs, bool bUseMvas )
-{
-	assert ( m_pOutBuffer );
-	DWORD * pMinEntry = m_pOutBuffer + 2 * m_uElements * m_uStride;
-	DWORD * pMinAttrs = DOCINFO2ATTRS ( pMinEntry );
-	DWORD * pMaxEntry = pMinEntry + m_uStride;
-	DWORD * pMaxAttrs = pMinAttrs + m_uStride;
-
-	assert ( pMaxEntry+m_uStride<=m_pOutMax );
-	assert ( pMaxAttrs+m_uStride-DOCINFO_IDSIZE<=m_pOutMax );
-
-	m_uIndexLast = m_uLast;
-
-	DOCINFOSETID ( pMinEntry, m_uStart );
-	DOCINFOSETID ( pMaxEntry, m_uLast );
-
-	if ( bUseAttrs )
-	{
-		ARRAY_FOREACH ( i, m_dIntAttrs )
-		{
-			m_dIntIndexMin[i] = Min ( m_dIntIndexMin[i], m_dIntMin[i] );
-			m_dIntIndexMax[i] = Max ( m_dIntIndexMax[i], m_dIntMax[i] );
-			sphSetRowAttr ( pMinAttrs, m_dIntAttrs[i], m_dIntMin[i] );
-			sphSetRowAttr ( pMaxAttrs, m_dIntAttrs[i], m_dIntMax[i] );
-		}
-		ARRAY_FOREACH ( i, m_dFloatAttrs )
-		{
-			m_dFloatIndexMin[i] = Min ( m_dFloatIndexMin[i], m_dFloatMin[i] );
-			m_dFloatIndexMax[i] = Max ( m_dFloatIndexMax[i], m_dFloatMax[i] );
-			sphSetRowAttr ( pMinAttrs, m_dFloatAttrs[i], sphF2DW ( m_dFloatMin[i] ) );
-			sphSetRowAttr ( pMaxAttrs, m_dFloatAttrs[i], sphF2DW ( m_dFloatMax[i] ) );
-		}
-	}
-
-	if ( bUseMvas )
-		ARRAY_FOREACH ( i, m_dMvaAttrs )
-	{
-		m_dMvaIndexMin[i] = Min ( m_dMvaIndexMin[i], m_dMvaMin[i] );
-		m_dMvaIndexMax[i] = Max ( m_dMvaIndexMax[i], m_dMvaMax[i] );
-		sphSetRowAttr ( pMinAttrs, m_dMvaAttrs[i], m_dMvaMin[i] );
-		sphSetRowAttr ( pMaxAttrs, m_dMvaAttrs[i], m_dMvaMax[i] );
-	}
-
-	m_uElements++;
-	ResetLocal();
-}
-
-void AttrIndexBuilder_c::UpdateMinMaxDocids ( SphDocID_t uDocID )
-{
-	if ( !m_uStart )
-		m_uStart = uDocID;
-	if ( !m_uIndexStart )
-		m_uIndexStart = uDocID;
-	m_uLast = uDocID;
-}
-
-AttrIndexBuilder_c::AttrIndexBuilder_c ( const CSphSchema & tSchema )
-	: m_uStride ( DOCINFO_IDSIZE + tSchema.GetRowSize() )
-	, m_uElements ( 0 )
-	, m_iLoop ( 0 )
-	, m_pOutBuffer ( NULL )
-	, m_pOutMax ( NULL )
-	, m_uStart ( 0 )
-	, m_uLast ( 0 )
-	, m_uIndexStart ( 0 )
-	, m_uIndexLast ( 0 )
-{
-	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
-	{
-		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
-		if ( tCol.m_eAttrType & SPH_ATTR_MULTI )
-		{
-			m_dMvaAttrs.Add ( tCol.m_tLocator );
-			continue;
-		}
-
-		switch ( tCol.m_eAttrType )
-		{
-			case SPH_ATTR_INTEGER:
-			case SPH_ATTR_TIMESTAMP:
-			case SPH_ATTR_BOOL:
-			case SPH_ATTR_BIGINT:
-				m_dIntAttrs.Add ( tCol.m_tLocator );
-				break;
-
-			case SPH_ATTR_FLOAT:
-				m_dFloatAttrs.Add ( tCol.m_tLocator );
-				break;
-
-			default:
-				break;
-		}
-	}
-
-	m_dIntMin.Resize ( m_dIntAttrs.GetLength() );
-	m_dIntMax.Resize ( m_dIntAttrs.GetLength() );
-	m_dIntIndexMin.Resize ( m_dIntAttrs.GetLength() );
-	m_dIntIndexMax.Resize ( m_dIntAttrs.GetLength() );
-	m_dFloatMin.Resize ( m_dFloatAttrs.GetLength() );
-	m_dFloatMax.Resize ( m_dFloatAttrs.GetLength() );
-	m_dFloatIndexMin.Resize ( m_dFloatAttrs.GetLength() );
-	m_dFloatIndexMax.Resize ( m_dFloatAttrs.GetLength() );
-	m_dMvaMin.Resize ( m_dMvaAttrs.GetLength() );
-	m_dMvaMax.Resize ( m_dMvaAttrs.GetLength() );
-	m_dMvaIndexMin.Resize ( m_dMvaAttrs.GetLength() );
-	m_dMvaIndexMax.Resize ( m_dMvaAttrs.GetLength() );
-}
-
-void AttrIndexBuilder_c::Prepare ( DWORD * pOutBuffer, DWORD * pOutMax )
-{
-	m_pOutBuffer = pOutBuffer;
-	m_pOutMax = pOutMax;
-	m_uElements = 0;
-	m_uIndexStart = m_uIndexLast = 0;
-	ARRAY_FOREACH ( i, m_dIntIndexMin )
-	{
-		m_dIntIndexMin[i] = UINT_MAX;
-		m_dIntIndexMax[i] = 0;
-	}
-	ARRAY_FOREACH ( i, m_dFloatIndexMin )
-	{
-		m_dFloatIndexMin[i] = FLT_MAX;
-		m_dFloatIndexMax[i] = -FLT_MAX;
-	}
-	ARRAY_FOREACH ( i, m_dMvaIndexMin )
-	{
-		m_dMvaIndexMin[i] = UINT_MAX;
-		m_dMvaIndexMax[i] = 0;
-	}
-	ResetLocal();
-}
-
-void AttrIndexBuilder_c::CollectWithoutMvas ( const DWORD * pCur, bool bUseMvas )
-{
-	// check if it is time to flush already collected values
-	if ( m_iLoop>=DOCINFO_INDEX_FREQ )
-		FlushComputed ( true, bUseMvas );
-
-	const DWORD * pRow = DOCINFO2ATTRS(pCur);
-	UpdateMinMaxDocids ( DOCINFO2ID(pCur) );
-	m_iLoop++;
-
-	// ints
-	ARRAY_FOREACH ( i, m_dIntAttrs )
-	{
-		SphAttr_t uVal = sphGetRowAttr ( pRow, m_dIntAttrs[i] );
-		m_dIntMin[i] = Min ( m_dIntMin[i], uVal );
-		m_dIntMax[i] = Max ( m_dIntMax[i], uVal );
-	}
-
-	// floats
-	ARRAY_FOREACH ( i, m_dFloatAttrs )
-	{
-		float fVal = sphDW2F ( (DWORD)sphGetRowAttr ( pRow, m_dFloatAttrs[i] ) );
-		m_dFloatMin[i] = Min ( m_dFloatMin[i], fVal );
-		m_dFloatMax[i] = Max ( m_dFloatMax[i], fVal );
-	}
-}
-
-bool AttrIndexBuilder_c::Collect ( const DWORD * pCur, const CSphSharedBuffer<DWORD> & pMvas, CSphString & sError )
-{
-	CollectWithoutMvas ( pCur, true );
-
-	const DWORD * pRow = DOCINFO2ATTRS(pCur);
-	SphDocID_t uDocID = DOCINFO2ID(pCur);
-
-	// MVAs
-	ARRAY_FOREACH ( i, m_dMvaAttrs )
-	{
-		SphAttr_t uOff = sphGetRowAttr ( pRow, m_dMvaAttrs[i] );
-		if ( !uOff )
-			continue;
-
-		// sanity checks
-		if ( uOff>=pMvas.GetNumEntries() )
-		{
-			sError.SetSprintf ( "broken index: mva offset out of bounds, id=" DOCID_FMT, uDocID );
-			return false;
-		}
-
-		const DWORD * pMva = &pMvas [ MVA_DOWNSIZE ( uOff ) ]; // don't care about updates at this point
-
-		if ( i==0 && DOCINFO2ID ( pMva-DOCINFO_IDSIZE )!=uDocID )
-		{
-			sError.SetSprintf ( "broken index: mva docid verification failed, id=" DOCID_FMT, uDocID );
-			return false;
-		}
-		if ( uOff+pMva[0]>=pMvas.GetNumEntries() )
-		{
-			sError.SetSprintf ( "broken index: mva list out of bounds, id=" DOCID_FMT, uDocID );
-			return false;
-		}
-
-		// walk and calc
-		for ( DWORD uCount = *pMva++; uCount>0; uCount--, pMva++ )
-		{
-			m_dMvaMin[i] = Min ( m_dMvaMin[i], *pMva );
-			m_dMvaMax[i] = Max ( m_dMvaMax[i], *pMva );
-		}
-	}
-	return true;
-}
-
-void AttrIndexBuilder_c::Collect ( const DWORD * pCur, const CSphDocMVA & dMvas )
-{
-	CollectWithoutMvas ( pCur, true );
-	ARRAY_FOREACH ( i, m_dMvaAttrs )
-		ARRAY_FOREACH ( j, dMvas.m_dMVA[i] )
-	{
-		m_dMvaMin[i] = Min ( m_dMvaMin[i], dMvas.m_dMVA[i][j] );
-		m_dMvaMax[i] = Max ( m_dMvaMax[i], dMvas.m_dMVA[i][j] );
-	}
-}
-
-void AttrIndexBuilder_c::CollectMVA ( SphDocID_t uDocID, const CSphVector< CSphVector<DWORD> > & dCurInfo )
-{
-	// check if it is time to flush already collected values
-	if ( m_iLoop>=DOCINFO_INDEX_FREQ )
-		FlushComputed ( false, true );
-
-	UpdateMinMaxDocids ( uDocID );
-	m_iLoop++;
-
-	ARRAY_FOREACH ( i, dCurInfo )
-		ARRAY_FOREACH ( j, dCurInfo[i] )
-	{
-		m_dMvaMin[i] = Min ( m_dMvaMin[i], dCurInfo[i][j] );
-		m_dMvaMax[i] = Max ( m_dMvaMax[i], dCurInfo[i][j] );
-	}
-}
-
-void AttrIndexBuilder_c::FinishCollect ( bool bMvaOnly )
-{
-	assert ( m_pOutBuffer );
-	if ( m_iLoop )
-		FlushComputed ( !bMvaOnly, true );
-
-	DWORD * pMinEntry = m_pOutBuffer + 2 * m_uElements * m_uStride;
-	DWORD * pMaxEntry = pMinEntry + m_uStride;
-	CSphRowitem * pMinAttrs = DOCINFO2ATTRS ( pMinEntry );
-	CSphRowitem * pMaxAttrs = DOCINFO2ATTRS ( pMaxEntry );
-
-	assert ( pMaxEntry+m_uStride<=m_pOutMax );
-	assert ( pMaxAttrs+m_uStride-DOCINFO_IDSIZE<=m_pOutMax );
-
-	DOCINFOSETID ( pMinEntry, m_uIndexStart );
-	DOCINFOSETID ( pMaxEntry, m_uIndexLast );
-
-	ARRAY_FOREACH ( i, m_dMvaAttrs )
-	{
-		sphSetRowAttr ( pMinAttrs, m_dMvaAttrs[i], m_dMvaIndexMin[i] );
-		sphSetRowAttr ( pMaxAttrs, m_dMvaAttrs[i], m_dMvaIndexMax[i] );
-	}
-
-	if ( !bMvaOnly )
-	{
-		ARRAY_FOREACH ( i, m_dIntAttrs )
-		{
-			sphSetRowAttr ( pMinAttrs, m_dIntAttrs[i], m_dIntIndexMin[i] );
-			sphSetRowAttr ( pMaxAttrs, m_dIntAttrs[i], m_dIntIndexMax[i] );
-		}
-		ARRAY_FOREACH ( i, m_dFloatAttrs )
-		{
-			sphSetRowAttr ( pMinAttrs, m_dFloatAttrs[i], sphF2DW ( m_dFloatIndexMin[i] ) );
-			sphSetRowAttr ( pMaxAttrs, m_dFloatAttrs[i], sphF2DW ( m_dFloatIndexMax[i] ) );
-		}
-		m_uElements++;
-
-	} else
-	{
-		m_uElements = 0; // rewind back for collecting the rest of attributes.
-	}
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -10827,9 +10507,7 @@ public:
 				m_iHint = m_tReader.GetByte();
 			DoclistHintUnpack ( m_iDocs, (BYTE) m_iHint );
 
-			m_iWordID = ( !m_pDict && USE_64BIT )
-				? (SphWordID_t) sphFNV64 ( GetWord() )
-				: (SphWordID_t) sphCRC32 ( GetWord() ); // set wordID for indexing
+			m_iWordID = (SphWordID_t) sphCRC32 ( GetWord() ); // set wordID for indexing
 
 		} else
 		{

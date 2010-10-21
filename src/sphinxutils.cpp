@@ -936,6 +936,8 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 	if ( !pIndex->GetDictionary () )
 	{
 		CSphDictSettings tSettings;
+		if ( pIndex->m_bId32to64 )
+			tSettings.m_bCrc32 = true;
 		sphConfDictionary ( hIndex, tSettings );
 		CSphDict * pDict = sphCreateDictionaryCRC ( tSettings, pIndex->GetTokenizer (), sError );
 		if ( !pDict )
@@ -965,6 +967,8 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 		pIndex->Setup ( tSettings );
 	}
+
+	pIndex->PostSetup();
 
 	return true;
 }

@@ -108,6 +108,8 @@ STATIC_SIZE_ASSERT ( SphDocID_t, 4 );
 
 #endif // USE_64BIT
 
+#define DWSIZEOF(a) ( sizeof(a) / sizeof(DWORD) )
+
 //////////////////////////////////////////////////////////////////////////
 
 /// row entry (storage only, does not necessarily map 1:1 to attributes)
@@ -123,20 +125,25 @@ const int				ROWITEM_SHIFT	= 5;
 STATIC_ASSERT ( ( 1 << ROWITEM_SHIFT )==ROWITEM_BITS, INVALID_ROWITEM_SHIFT );
 
 #if !UNALIGNED_RAM_ACCESS && USE_64BIT
-inline SphDocID_t		DOCINFO2ID ( const DWORD * pDocinfo )					{ SphDocID_t uValue; memcpy ( &uValue, pDocinfo, sizeof(uValue) ); return uValue; }
-inline void				DOCINFOSETID ( DWORD * pDocinfo, SphDocID_t uValue )	{ memcpy ( pDocinfo, &uValue, sizeof(uValue) ); }
+template < typename DOCID > inline DOCID			DOCINFO2ID_T ( const DWORD * pDocinfo )			{ DOCID uValue; memcpy ( &uValue, pDocinfo, sizeof(uValue) ); return uValue; }
+template < typename DOCID > inline void				DOCINFOSETID ( DWORD * pDocinfo, DOCID uValue )	{ memcpy ( pDocinfo, &uValue, sizeof(uValue) ); }
 #else
-inline SphDocID_t		DOCINFO2ID ( const DWORD * pDocinfo )					{ return *(SphDocID_t*)pDocinfo; }
-inline void				DOCINFOSETID ( DWORD * pDocinfo, SphDocID_t uValue )	{ *(SphDocID_t*)pDocinfo = uValue; }
+template < typename DOCID > inline DOCID			DOCINFO2ID_T ( const DWORD * pDocinfo )			{ return *(DOCID*)pDocinfo; }
+template < typename DOCID > inline void				DOCINFOSETID ( DWORD * pDocinfo, DOCID uValue )	{ *(DOCID*)pDocinfo = uValue; }
 #endif
 
+inline SphDocID_t DOCINFO2ID ( const DWORD * pDocinfo )			{ return DOCINFO2ID_T<SphDocID_t> ( pDocinfo ); }
+
 #if PARANOID
-inline DWORD *			DOCINFO2ATTRS ( DWORD * pDocinfo )			{ assert ( pDocinfo ); return pDocinfo+DOCINFO_IDSIZE; }
-inline const DWORD *	DOCINFO2ATTRS ( const DWORD * pDocinfo )	{ assert ( pDocinfo ); return pDocinfo+DOCINFO_IDSIZE; }
+template < typename DOCID > inline DWORD *			DOCINFO2ATTRS_T ( DWORD * pDocinfo )		{ assert ( pDocinfo ); return pDocinfo+DWSIZEOF(DOCID); }
+template < typename DOCID > inline const DWORD *	DOCINFO2ATTRS_T ( const DWORD * pDocinfo )	{ assert ( pDocinfo ); return pDocinfo+DWSIZEOF(DOCID); }
 #else
-inline DWORD *			DOCINFO2ATTRS ( DWORD * pDocinfo )			{ return pDocinfo+DOCINFO_IDSIZE; }
-inline const DWORD *	DOCINFO2ATTRS ( const DWORD * pDocinfo )	{ return pDocinfo+DOCINFO_IDSIZE; }
+template < typename DOCID > inline DWORD *			DOCINFO2ATTRS_T ( DWORD * pDocinfo )		{ return pDocinfo + DWSIZEOF(DOCID); }
+template < typename DOCID > inline const DWORD *	DOCINFO2ATTRS_T ( const DWORD * pDocinfo )	{ return pDocinfo + DWSIZEOF(DOCID); }
 #endif
+
+inline 			DWORD *	DOCINFO2ATTRS ( DWORD * pDocinfo )			{ return DOCINFO2ATTRS_T<SphDocID_t>(pDocinfo); }
+inline const	DWORD *	DOCINFO2ATTRS ( const DWORD * pDocinfo )	{ return DOCINFO2ATTRS_T<SphDocID_t>(pDocinfo); }
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2508,6 +2515,9 @@ public:
 	/// relock shared RAM (only on daemonization)
 	virtual bool				Mlock () = 0;
 
+	/// called when index is loaded and prepared to work
+	virtual void				PostSetup() = 0;
+
 public:
 	virtual bool						EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const = 0;
 	virtual const CSphSourceStats &		GetStats () const = 0;
@@ -2563,6 +2573,11 @@ protected:
 	bool						m_bPreloadWordlist;		///< preload wordlists or keep them on disk
 
 	bool						m_bStripperInited;		///< was stripper initialized (old index version (<9) handling)
+
+public:
+	bool						m_bId32to64;			///< did we convert id32 to id64 on startup
+
+protected:
 	CSphIndexSettings			m_tSettings;
 
 	ISphTokenizer *				m_pTokenizer;

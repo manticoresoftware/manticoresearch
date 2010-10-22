@@ -152,7 +152,7 @@ void sphSetLogger ( SphLogger_fn fnLog );
 		#define CRASH_EXIT { signal ( sig, SIG_DFL ); kill ( getpid(), sig ); }
 	#else
 		// UNIX release build, just die
-		#define CRASH_EXIT exit ( 1 )
+		#define CRASH_EXIT exit ( 2 )
 	#endif
 #else
 	#ifndef NDEBUG

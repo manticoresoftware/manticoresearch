@@ -11280,8 +11280,15 @@ void SetWatchDog()
 			if ( WIFEXITED ( iStatus ) )
 			{
 				int iExit = WEXITSTATUS ( iStatus );
-				sphInfo ( "Child process %d has been finished, exit code %d. Watchdog finishes also. Good bye!", iPid, iExit );
-				bShutdown = true;
+				if ( iExit==2 ) // really crash
+				{
+					sphInfo ( "Child process %d has been finished by CRASH_EXIT (exit code 2), will be restarted", iPid );
+					bReincarnate = true;
+				} else
+				{
+					sphInfo ( "Child process %d has been finished, exit code %d. Watchdog finishes also. Good bye!", iPid, iExit );
+					bShutdown = true;
+				}
 			} else if ( WIFSIGNALED ( iStatus ) )
 			{
 				if ( WTERMSIG ( iStatus )==SIGINT || WTERMSIG ( iStatus )==SIGTERM )

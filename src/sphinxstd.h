@@ -1325,24 +1325,26 @@ public:
 		return m_sValue;
 	}
 
-	bool operator == ( const CSphString & t ) const
+	inline bool operator == ( const char * t ) const
 	{
-		return strcmp ( m_sValue, t.m_sValue )==0;
-	}
-
-	bool operator == ( const char * t ) const
-	{
+		if ( !t || !m_sValue )
+			return (!t && !m_sValue);
 		return strcmp ( m_sValue, t )==0;
 	}
 
-	bool operator != ( const CSphString & t ) const
+	inline bool operator == ( const CSphString & t ) const
 	{
-		return strcmp ( m_sValue, t.m_sValue )!=0;
+		return operator== ( t.cstr() );
+	}
+
+	inline bool operator != ( const CSphString & t ) const
+	{
+		return !operator== ( t );
 	}
 
 	bool operator != ( const char * t ) const
 	{
-		return strcmp ( m_sValue, t )!=0;
+		return !operator== ( t );
 	}
 
 	CSphString ( const char * sString ) // NOLINT

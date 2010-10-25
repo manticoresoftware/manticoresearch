@@ -6370,13 +6370,13 @@ struct SqlNode_t
 
 /// parsing result
 /// one day, we will start subclassing this
-struct SqlStmt_t
+struct SqlStmt_t : ISphNoncopyable
 {
 	SqlStmt_e				m_eStmt;
 	int						m_iRowsAffected;
 
 	// SELECT specific
-	CSphQuery *				m_pQuery;
+	CSphVector<CSphQuery> &	m_dQueries;
 
 	// used by INSERT, DELETE, CALL, DESC
 	CSphString				m_sIndex;
@@ -6399,8 +6399,9 @@ struct SqlStmt_t
 	CSphVector<SqlInsert_t>	m_dCallOptValues;
 
 
-	SqlStmt_t()
+	explicit SqlStmt_t ( CSphVector<CSphQuery> &	dQueries )
 		: m_iRowsAffected ( 0 )
+		, m_dQueries ( dQueries )
 		, m_iSchemaSz ( 0 )
 	{}
 
@@ -6436,20 +6437,23 @@ public:
 	CSphQuery *		m_pQuery;
 	bool			m_bGotQuery;
 	SqlStmt_t *		m_pStmt;
-	int				m_iSelectStart;
-	int				m_iSelectEnd;
 
 public:
-					SqlParser_c () : m_iSelectStart ( -1 ), m_bNamedVecBusy ( false ) {}
+	explicit		SqlParser_c ( SqlStmt_t * pStmt );
+
+	void			PushQuery ();
 
 	bool			AddOption ( SqlNode_t tIdent, SqlNode_t tValue );
 	bool			AddOption ( SqlNode_t tIdent, CSphVector<CSphNamedInt> & dNamed );
 	void			AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias, ESphAggrFunc eFunc=SPH_AGGR_NONE );
-	inline void		SetSelect ( int iStart, int iEnd )
+	void			SetSelect ( int iStart, int iEnd )
 	{
-		if ( m_iSelectStart<0 || m_iSelectStart>iStart )
-			m_iSelectStart = iStart;
-		m_iSelectEnd = iEnd;
+		if ( m_pQuery )
+		{
+			if ( m_pQuery->m_iSQLSelectStart<0 || m_pQuery->m_iSQLSelectStart>iStart )
+				m_pQuery->m_iSQLSelectStart = iStart;
+			m_pQuery->m_iSQLSelectEnd = iEnd;
+		}
 	}
 	bool			AddSchemaItem ( YYSTYPE * pNode );
 	void			SetValue ( const char * sName, YYSTYPE tValue );
@@ -6610,6 +6614,39 @@ public:
 	}
 };
 
+SqlParser_c::SqlParser_c ( SqlStmt_t * pStmt )
+	: m_bNamedVecBusy ( false )
+	, m_pQuery ( NULL )
+	, m_pStmt ( pStmt )
+{
+	assert ( m_pStmt );
+	PushQuery();
+}
+
+void SqlParser_c::PushQuery ()
+{
+	// post set proper result-set order
+	if ( m_pQuery )
+	{
+		if ( m_pQuery->m_sGroupBy.IsEmpty() )
+			m_pQuery->m_sSortBy = m_pQuery->m_sOrderBy;
+		else
+			m_pQuery->m_sGroupSortBy = m_pQuery->m_sOrderBy;
+	}
+
+	// add new query
+	m_pQuery = &m_pStmt->m_dQueries.Add();
+
+	// set up new query
+	*m_pQuery = CSphQuery();
+	m_pQuery->m_eMode = SPH_MATCH_EXTENDED2; // only new and shiny matching and sorting
+	m_pQuery->m_eSort = SPH_SORT_EXTENDED;
+	m_pQuery->m_sSortBy = "@weight desc"; // default order
+	m_pQuery->m_sOrderBy = "@weight desc";
+
+	m_bGotQuery = false;
+}
+
 bool SqlParser_c::AddOption ( SqlNode_t tIdent, SqlNode_t tValue )
 {
 	CSphString & sOpt = tIdent.m_sValue;
@@ -6736,21 +6773,12 @@ void SqlParser_c::FreeNamedVec ( int )
 SqlStmt_e ParseSqlQuery ( const CSphString & sQuery, SqlStmt_t * pStmt, CSphString & sError )
 {
 	assert ( pStmt );
-	assert ( pStmt->m_pQuery );
 
-	SqlParser_c tParser;
+	SqlParser_c tParser ( pStmt );
 	tParser.m_pBuf = sQuery.cstr();
 	tParser.m_pLastTokenStart = NULL;
 	tParser.m_pParseError = &sError;
-	tParser.m_pQuery = pStmt->m_pQuery;
 	tParser.m_bGotQuery = false;
-	tParser.m_pStmt = pStmt;
-
-	CSphQuery & tQuery = *pStmt->m_pQuery;
-	tQuery.m_eMode = SPH_MATCH_EXTENDED2; // only new and shiny matching and sorting
-	tQuery.m_eSort = SPH_SORT_EXTENDED;
-	tQuery.m_sSortBy = "@weight desc"; // default order
-	tQuery.m_sOrderBy = "@weight desc";
 
 	int iLen = strlen ( sQuery.cstr() );
 	char * sEnd = (char*)sQuery.cstr() + iLen;
@@ -6769,26 +6797,27 @@ SqlStmt_e ParseSqlQuery ( const CSphString & sQuery, SqlStmt_t * pStmt, CSphStri
 	yy_delete_buffer ( tLexerBuffer, tParser.m_pScanner );
 	yylex_destroy ( tParser.m_pScanner );
 
-	// set proper result-set order
-	if ( tQuery.m_sGroupBy.IsEmpty() )
-		tQuery.m_sSortBy = tQuery.m_sOrderBy;
-	else
-		tQuery.m_sGroupSortBy = tQuery.m_sOrderBy;
+	pStmt->m_dQueries.Pop(); // last query is always dummy
 
-	if ( tParser.m_iSelectStart>=0 )
+	ARRAY_FOREACH ( i, pStmt->m_dQueries )
 	{
-		tQuery.m_sSelect.SetBinary ( tParser.m_pBuf + tParser.m_iSelectStart, tParser.m_iSelectEnd-tParser.m_iSelectStart );
-
-		// finally check for agent magic
-		if ( tQuery.m_sSelect.Begins ( "*,*" ) ) // this is the mark of agent.
+		CSphQuery & tQuery = pStmt->m_dQueries[i];
+		if ( tQuery.m_iSQLSelectStart>=0 )
 		{
-			tQuery.m_dItems.Remove(0);
-			tQuery.m_dItems.Remove(0);
-			tQuery.m_bAgent = true;
+			tQuery.m_sSelect.SetBinary ( tParser.m_pBuf + tQuery.m_iSQLSelectStart,
+				tQuery.m_iSQLSelectEnd - tQuery.m_iSQLSelectStart );
+
+			// finally check for agent magic
+			if ( tQuery.m_sSelect.Begins ( "*,*" ) ) // this is the mark of agent.
+			{
+				tQuery.m_dItems.Remove(0);
+				tQuery.m_dItems.Remove(0);
+				tQuery.m_bAgent = true;
+			}
 		}
 	}
 
-	if ( iRes!=0 )
+	if ( iRes!=0 && pStmt->m_dQueries.GetLength() )
 		pStmt->m_eStmt = STMT_PARSE_ERROR;
 	return pStmt->m_eStmt;
 }
@@ -6819,11 +6848,9 @@ void HandleCommandQuery ( int iSock, int iVer, InputBuffer_c & tReq )
 	}
 
 	// parse SQL query
-	SearchHandler_c tHandler ( 1 );
 	CSphString sError;
-
-	SqlStmt_t tStmt;
-	tStmt.m_pQuery = &tHandler.m_dQueries[0];
+	CSphVector<CSphQuery> dQueries;
+	SqlStmt_t tStmt ( dQueries );
 
 	SqlStmt_e eStmt = ParseSqlQuery ( sQuery, &tStmt, sError );
 	if ( eStmt==STMT_PARSE_ERROR )
@@ -6831,11 +6858,19 @@ void HandleCommandQuery ( int iSock, int iVer, InputBuffer_c & tReq )
 		tReq.SendErrorReply ( "%s", sError.cstr() );
 		return;
 	}
+	if ( dQueries.GetLength()!=1 )
+	{
+		tReq.SendErrorReply ( "this protocol currently supports single SELECT ( got=%d)", dQueries.GetLength() );
+		return;
+	}
 	if ( eStmt!=STMT_SELECT )
 	{
 		tReq.SendErrorReply ( "this protocol currently supports SELECT only" );
 		return;
 	}
+
+	SearchHandler_c tHandler ( dQueries.GetLength() );
+	tHandler.m_dQueries.SwapData ( dQueries );
 
 	// do the dew
 	tHandler.RunQueries ();
@@ -7875,10 +7910,12 @@ void SendMysqlErrorPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char
 }
 
 
-void SendMysqlEofPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, int iWarns )
+void SendMysqlEofPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, int iWarns, bool bMoreResults=false )
 {
 	if ( iWarns<0 ) iWarns = 0;
 	if ( iWarns>65535 ) iWarns = 65535;
+	if ( bMoreResults )
+		iWarns |= ( SERVER_MORE_RESULTS_EXISTS<<16 );
 
 	tOut.SendLSBDword ( (uPacketID<<24) + 5 );
 	tOut.SendByte ( 0xfe );
@@ -8196,7 +8233,8 @@ enum
 	MYSQL_COM_QUIT		= 1,
 	MYSQL_COM_INIT_DB	= 2,
 	MYSQL_COM_QUERY		= 3,
-	MYSQL_COM_PING		= 14
+	MYSQL_COM_PING		= 14,
+	MYSQL_COM_SET_OPTION	= 27
 };
 
 
@@ -8688,6 +8726,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 	// set on client's level, not on query's
 	bool bAutoCommit = true;
 	bool bInTransaction = false; // ignores bAutoCommit inside transaction
+	bool bMulti = false;
 
 	// to keep data alive for SphCrashQuery_c
 	CSphString sQuery;
@@ -8739,6 +8778,12 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 			SendMysqlOkPacket ( tOut, uPacketID );
 			continue;
 
+		} else if ( uMysqlCmd==MYSQL_COM_SET_OPTION )
+		{
+			bMulti = ( tIn.GetWord()==MYSQL_OPTION_MULTI_STATEMENTS_ON );
+			SendMysqlOkPacket ( tOut, uPacketID );
+			continue;
+
 		} else if ( uMysqlCmd!=MYSQL_COM_QUERY )
 		{
 			// default case, unknown command
@@ -8756,9 +8801,8 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 		SphCrashLogger_c::SetLastQuery ( (const BYTE *)sQuery.cstr(), sQuery.Length(), true );
 
 		// parse SQL query
-		SearchHandler_c tHandler ( 1 );
-		SqlStmt_t tStmt;
-		tStmt.m_pQuery = &tHandler.m_dQueries[0];
+		CSphVector<CSphQuery> dQueries;
+		SqlStmt_t tStmt ( dQueries );
 		SqlStmt_e eStmt = ParseSqlQuery ( sQuery, &tStmt, sError );
 
 		if ( pThd )
@@ -8779,8 +8823,17 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 		{
 			MEMORY ( SPH_MEM_SELECT_SQL );
 
-			CheckQuery ( tHandler.m_dQueries[0], sError );
-			if ( !sError.IsEmpty() )
+			SearchHandler_c tHandler ( dQueries.GetLength() );
+			tHandler.m_dQueries.SwapData ( dQueries );
+
+			bool bCheckOK = true;
+			ARRAY_FOREACH_COND ( i, tHandler.m_dQueries, bCheckOK )
+			{
+				CheckQuery ( tHandler.m_dQueries[i], sError );
+				bCheckOK = sError.IsEmpty();
+			}
+
+			if ( !bCheckOK )
 			{
 				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
 				continue;
@@ -8795,166 +8848,170 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 				continue;
 			}
 
-			AggrResult_t * pRes = &tHandler.m_dResults[0];
-			if ( !pRes->m_iSuccesses )
+			ARRAY_FOREACH ( i, tHandler.m_dResults )
 			{
-				SendMysqlErrorPacket ( tOut, uPacketID, pRes->m_sError.cstr() );
-				continue;
-			}
+				AggrResult_t * pRes = &tHandler.m_dResults[i];
+				if ( !pRes->m_iSuccesses )
+				{
+					SendMysqlErrorPacket ( tOut, uPacketID, pRes->m_sError.cstr() );
+					continue;
+				}
 
-			// save meta for SHOW META
-			tLastMeta = *pRes;
-			tLastMeta.m_iMatches = pRes->m_dMatches.GetLength();
+				bool bMoreResults = i<tHandler.m_dResults.GetLength()-1;
+				bool bStar = pRes->m_tSchema.m_sName=="*";
 
-			bool bStar = pRes->m_tSchema.m_sName=="*";
+				// save meta for SHOW META
+				tLastMeta = *pRes;
+				tLastMeta.m_iMatches = pRes->m_dMatches.GetLength();
 
-			// result set header packet
-			tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
-			if ( g_bCompatResults )
-				tOut.SendByte ( BYTE ( 2+pRes->m_tSchema.GetAttrsCount() ) );
-			else
-				tOut.SendByte ( BYTE ( pRes->m_tSchema.GetAttrsCount() + (bStar?1:0) ) );
-			tOut.SendByte ( 0 ); // extra
+				// result set header packet
+				tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
+				if ( g_bCompatResults )
+					tOut.SendByte ( BYTE ( 2+pRes->m_tSchema.GetAttrsCount() ) );
+				else
+					tOut.SendByte ( BYTE ( pRes->m_tSchema.GetAttrsCount() + (bStar?1:0) ) );
+				tOut.SendByte ( 0 ); // extra
 
-			if ( g_bCompatResults )
-			{
-				SendMysqlFieldPacket ( tOut, uPacketID++, "id", USE_64BIT ? MYSQL_COL_LONGLONG : MYSQL_COL_LONG );
-				SendMysqlFieldPacket ( tOut, uPacketID++, "weight", MYSQL_COL_LONG );
-			} else
-			{
-				// in case of star schema send first the DocID
-				if ( bStar )
-					SendMysqlFieldPacket ( tOut, uPacketID++, "id", USE_64BIT ? MYSQL_COL_LONGLONG : MYSQL_COL_LONG );
-			}
-
-			// field packets
-			for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
-			{
-				const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(i);
-				MysqlColumnType_e eType = MYSQL_COL_STRING;
-				if ( tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP || tCol.m_eAttrType==SPH_ATTR_BOOL )
-					eType = MYSQL_COL_LONG;
-				if ( tCol.m_eAttrType==SPH_ATTR_BIGINT )
-					eType = MYSQL_COL_LONGLONG;
-				if ( tCol.m_eAttrType==SPH_ATTR_STRING )
-					eType = MYSQL_COL_STRING;
-				SendMysqlFieldPacket ( tOut, uPacketID++, tCol.m_sName.cstr(), eType );
-			}
-
-			// eof packet
-			BYTE iWarns = ( !pRes->m_sWarning.IsEmpty() ) ? 1 : 0;
-			SendMysqlEofPacket ( tOut, uPacketID++, iWarns );
-
-			// rows
-			dRows.Reset();
-
-			for ( int iMatch = pRes->m_iOffset; iMatch < pRes->m_iOffset + pRes->m_iCount; iMatch++ )
-			{
-				const CSphMatch & tMatch = pRes->m_dMatches [ iMatch ];
-
+				// field packets
 				if ( g_bCompatResults )
 				{
-					dRows.PutNumeric<SphDocID_t> ( DOCID_FMT, tMatch.m_iDocID );
-					dRows.PutNumeric ( "%u", tMatch.m_iWeight );
+					SendMysqlFieldPacket ( tOut, uPacketID++, "id", USE_64BIT ? MYSQL_COL_LONGLONG : MYSQL_COL_LONG );
+					SendMysqlFieldPacket ( tOut, uPacketID++, "weight", MYSQL_COL_LONG );
 				} else
 				{
+					// in case of star schema send first the DocID
 					if ( bStar )
-						dRows.PutNumeric<SphDocID_t> ( DOCID_FMT, tMatch.m_iDocID );
+						SendMysqlFieldPacket ( tOut, uPacketID++, "id", USE_64BIT ? MYSQL_COL_LONGLONG : MYSQL_COL_LONG );
 				}
 
-				const CSphSchema & tSchema = pRes->m_tSchema;
-				for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
+				for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
 				{
-					const CSphColumnInfo & tCol = tSchema.GetAttr(i);
-					CSphAttrLocator tLoc = tCol.m_tLocator;
-					DWORD eAttrType = tCol.m_eAttrType;
-					switch ( eAttrType )
-					{
-						case SPH_ATTR_INTEGER:
-						case SPH_ATTR_TIMESTAMP:
-						case SPH_ATTR_BOOL:
-						case SPH_ATTR_BIGINT:
-							if ( eAttrType==SPH_ATTR_BIGINT )
-								dRows.PutNumeric<SphAttr_t> ( INT64_FMT, tMatch.GetAttr(tLoc) );
-							else
-								dRows.PutNumeric<DWORD> ( "%u", (DWORD)tMatch.GetAttr(tLoc) );
-							break;
-
-						case SPH_ATTR_FLOAT:
-							dRows.PutNumeric ( "%f", tMatch.GetAttrFloat(tLoc) );
-							break;
-
-						case SPH_ATTR_INTEGER | SPH_ATTR_MULTI:
-						{
-							int iLenOff = dRows.Length();
-							dRows.IncPtr ( 4 );
-
-							assert ( pRes->m_dTag2Pools [ tMatch.m_iTag ].m_pMva );
-							const DWORD * pValues = tMatch.GetAttrMVA ( tLoc, pRes->m_dTag2Pools [ tMatch.m_iTag ].m_pMva );
-							if ( pValues )
-							{
-								DWORD nValues = *pValues++;
-								while ( nValues-- )
-								{
-									dRows.Reserve ( SPH_MAX_NUMERIC_STR );
-									int iLen = snprintf ( dRows.Get(), SPH_MAX_NUMERIC_STR, nValues>1 ? "%u," : "%u", *pValues++ );
-									dRows.IncPtr ( iLen );
-								}
-							}
-
-							// manually pack length, forcibly into exactly 3 bytes
-							int iLen = dRows.Length()-iLenOff-4;
-							char * pLen = dRows.Off ( iLenOff );
-							pLen[0] = (BYTE)0xfd;
-							pLen[1] = (BYTE)( iLen & 0xff );
-							pLen[2] = (BYTE)( ( iLen>>8 ) & 0xff );
-							pLen[3] = (BYTE)( ( iLen>>16 ) & 0xff );
-							break;
-						}
-
-						case SPH_ATTR_STRING:
-						{
-							const BYTE * pStrings = pRes->m_dTag2Pools [ tMatch.m_iTag ].m_pStrings;
-
-							// get that string
-							const BYTE * pStr = NULL;
-							int iLen = 0;
-
-							DWORD uOffset = (DWORD) tMatch.GetAttr ( tLoc );
-							if ( uOffset )
-							{
-								assert ( pStrings );
-								iLen = sphUnpackStr ( pStrings+uOffset, &pStr );
-							}
-
-							// send length
-							dRows.Reserve ( iLen+4 );
-							char * pOutStr = (char*)MysqlPack ( dRows.Get(), iLen );
-
-							// send string data
-							if ( iLen )
-								memcpy ( pOutStr, pStr, iLen );
-
-							dRows.IncPtr ( pOutStr-dRows.Get()+iLen );
-							break;
-						}
-
-						default:
-							char * pDef = dRows.Reserve ( 2 );
-							pDef[0] = 1;
-							pDef[1] = '-';
-							dRows.IncPtr ( 2 );
-							break;
-					}
+					const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(i);
+					MysqlColumnType_e eType = MYSQL_COL_STRING;
+					if ( tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP || tCol.m_eAttrType==SPH_ATTR_BOOL )
+						eType = MYSQL_COL_LONG;
+					if ( tCol.m_eAttrType==SPH_ATTR_BIGINT )
+						eType = MYSQL_COL_LONGLONG;
+					if ( tCol.m_eAttrType==SPH_ATTR_STRING )
+						eType = MYSQL_COL_STRING;
+					SendMysqlFieldPacket ( tOut, uPacketID++, tCol.m_sName.cstr(), eType );
 				}
 
-				tOut.SendLSBDword ( ((uPacketID++)<<24) + ( dRows.Length() ) );
-				tOut.SendBytes ( dRows.Off ( 0 ), dRows.Length() );
-				dRows.Reset();
-			}
+				// eof packet
+				BYTE iWarns = ( !pRes->m_sWarning.IsEmpty() ) ? 1 : 0;
+				SendMysqlEofPacket ( tOut, uPacketID++, iWarns, bMoreResults );
 
-			// eof packet
-			SendMysqlEofPacket ( tOut, uPacketID++, iWarns );
+				// rows
+				dRows.Reset();
+
+				for ( int iMatch = pRes->m_iOffset; iMatch < pRes->m_iOffset + pRes->m_iCount; iMatch++ )
+				{
+					const CSphMatch & tMatch = pRes->m_dMatches [ iMatch ];
+
+					if ( g_bCompatResults )
+					{
+						dRows.PutNumeric<SphDocID_t> ( DOCID_FMT, tMatch.m_iDocID );
+						dRows.PutNumeric ( "%u", tMatch.m_iWeight );
+					} else
+					{
+						if ( bStar )
+							dRows.PutNumeric<SphDocID_t> ( DOCID_FMT, tMatch.m_iDocID );
+					}
+
+					const CSphSchema & tSchema = pRes->m_tSchema;
+					for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
+					{
+						CSphAttrLocator tLoc = tSchema.GetAttr(i).m_tLocator;
+						DWORD eAttrType = tSchema.GetAttr(i).m_eAttrType;
+
+						switch ( eAttrType )
+						{
+							case SPH_ATTR_INTEGER:
+							case SPH_ATTR_TIMESTAMP:
+							case SPH_ATTR_BOOL:
+							case SPH_ATTR_BIGINT:
+								if ( eAttrType==SPH_ATTR_BIGINT )
+									dRows.PutNumeric<SphAttr_t> ( INT64_FMT, tMatch.GetAttr(tLoc) );
+								else
+									dRows.PutNumeric<DWORD> ( "%u", (DWORD)tMatch.GetAttr(tLoc) );
+								break;
+
+							case SPH_ATTR_FLOAT:
+								dRows.PutNumeric ( "%f", tMatch.GetAttrFloat(tLoc) );
+								break;
+
+							case SPH_ATTR_INTEGER | SPH_ATTR_MULTI:
+							{
+								int iLenOff = dRows.Length();
+								dRows.IncPtr ( 4 );
+
+								assert ( pRes->m_dTag2Pools [ tMatch.m_iTag ].m_pMva );
+								const DWORD * pValues = tMatch.GetAttrMVA ( tLoc, pRes->m_dTag2Pools [ tMatch.m_iTag ].m_pMva );
+								if ( pValues )
+								{
+									DWORD nValues = *pValues++;
+									while ( nValues-- )
+									{
+										dRows.Reserve ( SPH_MAX_NUMERIC_STR );
+										int iLen = snprintf ( dRows.Get(), SPH_MAX_NUMERIC_STR, nValues>1 ? "%u," : "%u", *pValues++ );
+										dRows.IncPtr ( iLen );
+									}
+								}
+
+								// manually pack length, forcibly into exactly 3 bytes
+								int iLen = dRows.Length()-iLenOff-4;
+								char * pLen = dRows.Off ( iLenOff );
+								pLen[0] = (BYTE)0xfd;
+								pLen[1] = (BYTE)( iLen & 0xff );
+								pLen[2] = (BYTE)( ( iLen>>8 ) & 0xff );
+								pLen[3] = (BYTE)( ( iLen>>16 ) & 0xff );
+								break;
+							}
+
+							case SPH_ATTR_STRING:
+							{
+								const BYTE * pStrings = pRes->m_dTag2Pools [ tMatch.m_iTag ].m_pStrings;
+
+								// get that string
+								const BYTE * pStr = NULL;
+								int iLen = 0;
+
+								DWORD uOffset = (DWORD) tMatch.GetAttr ( tLoc );
+								if ( uOffset )
+								{
+									assert ( pStrings );
+									iLen = sphUnpackStr ( pStrings+uOffset, &pStr );
+								}
+
+								// send length
+								dRows.Reserve ( iLen+4 );
+								char * pOutStr = (char*)MysqlPack ( dRows.Get(), iLen );
+
+								// send string data
+								if ( iLen )
+									memcpy ( pOutStr, pStr, iLen );
+
+								dRows.IncPtr ( pOutStr-dRows.Get()+iLen );
+								break;
+							}
+
+							default:
+								char * pDef = dRows.Reserve ( 2 );
+								pDef[0] = 1;
+								pDef[1] = '-';
+								dRows.IncPtr ( 2 );
+								break;
+						}
+					}
+
+					tOut.SendLSBDword ( ((uPacketID++)<<24) + ( dRows.Length() ) );
+					tOut.SendBytes ( dRows.Off ( 0 ), dRows.Length() );
+					dRows.Reset();
+				}
+
+				// eof packet
+				SendMysqlEofPacket ( tOut, uPacketID++, iWarns, bMoreResults );
+			}
 			break;
 		}
 		case STMT_SHOW_WARNINGS:

@@ -4611,6 +4611,8 @@ CSphQuery::CSphQuery ()
 	, m_uMaxQueryMsec	( 0 )
 	, m_sComment		( "" )
 	, m_sSelect			( "" )
+	, m_iSQLSelectStart	( -1 )
+	, m_iSQLSelectEnd	( -1 )
 
 	, m_iOldVersion		( 0 )
 	, m_iOldGroups		( 0 )

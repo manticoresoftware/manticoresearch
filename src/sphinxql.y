@@ -107,7 +107,7 @@ static void AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & tNode 
 %%
 
 statement:
-	select_from
+	select_from_list
 	| show_clause
 	| insert_into
 	| delete_from
@@ -135,6 +135,11 @@ select_from:
 		}
 	;
 
+select_from_list:
+	select_from								{ pParser->PushQuery(); }
+	| select_from_list ';' select_from ';'	{ pParser->PushQuery(); }
+	;
+	
 select_items_list:
 	select_item
 	| select_items_list ',' select_item

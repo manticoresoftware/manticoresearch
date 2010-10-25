@@ -2142,6 +2142,9 @@ public:
 	CSphString		m_sSelect;			///< select-list (attributes and/or expressions)
 	CSphString		m_sOrderBy;			///< order-by clause
 
+	int				m_iSQLSelectStart;	///< SQL parser helper
+	int				m_iSQLSelectEnd;	///< SQL parser helper
+
 public:
 	int				m_iOldVersion;		///< version, to fixup old queries
 	int				m_iOldGroups;		///< 0.9.6 group filter values count

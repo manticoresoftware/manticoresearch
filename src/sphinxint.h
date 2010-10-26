@@ -452,7 +452,7 @@ void AttrIndexBuilder_t<DOCID>::ResetLocal()
 {
 	ARRAY_FOREACH ( i, m_dIntMin )
 	{
-		m_dIntMin[i] = ULLONG_MAX;
+		m_dIntMin[i] = LLONG_MAX;
 		m_dIntMax[i] = 0;
 	}
 	ARRAY_FOREACH ( i, m_dFloatMin )
@@ -589,7 +589,7 @@ void AttrIndexBuilder_t<DOCID>::Prepare ( DWORD * pOutBuffer, DWORD * pOutMax )
 	m_uIndexStart = m_uIndexLast = 0;
 	ARRAY_FOREACH ( i, m_dIntIndexMin )
 	{
-		m_dIntIndexMin[i] = ULLONG_MAX;
+		m_dIntIndexMin[i] = LLONG_MAX;
 		m_dIntIndexMax[i] = 0;
 	}
 	ARRAY_FOREACH ( i, m_dFloatIndexMin )

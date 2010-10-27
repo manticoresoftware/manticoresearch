@@ -137,7 +137,8 @@ select_from:
 
 select_from_list:
 	select_from								{ pParser->PushQuery(); }
-	| select_from_list ';' select_from ';'	{ pParser->PushQuery(); }
+	| select_from_list ';' select_from		{ pParser->PushQuery(); }
+	| select_from_list ';'
 	;
 	
 select_items_list:

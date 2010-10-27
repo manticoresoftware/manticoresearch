@@ -6410,7 +6410,8 @@ struct SqlStmt_t : ISphNoncopyable
 
 
 	explicit SqlStmt_t ( CSphVector<CSphQuery> &	dQueries )
-		: m_iRowsAffected ( 0 )
+		: m_eStmt ( STMT_PARSE_ERROR )
+		, m_iRowsAffected ( 0 )
 		, m_dQueries ( dQueries )
 		, m_iSchemaSz ( 0 )
 	{}

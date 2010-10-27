@@ -2013,6 +2013,9 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr 
 			if ( iErr==EINTR && !g_bGotSigterm && !bIntr )
 				continue;
 
+			if ( g_bGotSigterm )
+				sphLogDebug ( "sphSockRead: got SIGTERM, exit -1" );
+
 			sphSockSetErrno ( iErr );
 			return -1;
 		}
@@ -2027,6 +2030,7 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr 
 				// got that SIGTERM
 				if ( g_bGotSigterm )
 				{
+					sphLogDebug ( "sphSockRead: got SIGTERM emulation on Windows, exit -1" );
 					sphSockSetErrno ( EINTR );
 					return -1;
 				}
@@ -2343,6 +2347,9 @@ bool NetOutputBuffer_c::Flush ()
 	if ( iLen==0 )
 		return true;
 
+	if ( g_bGotSigterm )
+		sphLogDebug ( "SIGTERM in NetOutputBuffer::Flush" );
+
 	assert ( iLen>0 );
 	assert ( iLen<=(int)sizeof(m_dBuffer) );
 	char * pBuffer = (char *)&m_dBuffer[0];
@@ -2601,7 +2608,10 @@ bool NetInputBuffer_c::ReadFrom ( int iLen, int iTimeout, bool bIntr )
 	m_pCur = m_pBuf = pBuf;
 	int iGot = sphSockRead ( m_iSock, pBuf, iLen, iTimeout, bIntr );
 	if ( g_bGotSigterm )
+	{
+		sphLogDebug ( "NetInputBuffer_c::ReadFrom: got SIGTERM, return false" );
 		return false;
+	}
 
 	m_bError = g_bGotSigterm || ( iGot!=iLen );
 	m_bIntr = !g_bGotSigterm && m_bError && ( sphSockPeekErrno()==EINTR );
@@ -8844,6 +8854,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 
 			if ( g_bGotSigterm )
 			{
+				sphLogDebug ( "HandleClientMySQL - got SIGTERM, sending the packet MYSQL_ERR_SERVER_SHUTDOWN" );
 				SendMysqlErrorPacket ( tOut, uPacketID, "Server shutdown in progress", MYSQL_ERR_SERVER_SHUTDOWN );
 				continue;
 			}

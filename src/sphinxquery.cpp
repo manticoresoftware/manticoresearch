@@ -1033,8 +1033,8 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTok
 	}
 
 	DeleteNodesWOFields ( m_pRoot );
-	FixupDegenerates ( m_pRoot );
 	m_pRoot = SweepNulls ( m_pRoot );
+	FixupDegenerates ( m_pRoot );
 
 	if ( !FixupNots ( m_pRoot ) )
 	{

@@ -7931,7 +7931,11 @@ void SendMysqlEofPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, int iWarns, 
 	if ( iWarns<0 ) iWarns = 0;
 	if ( iWarns>65535 ) iWarns = 65535;
 	if ( bMoreResults )
+#if USE_MYSQL
 		iWarns |= ( SERVER_MORE_RESULTS_EXISTS<<16 );
+#else
+		iWarns = iWarns;
+#endif
 
 	tOut.SendLSBDword ( (uPacketID<<24) + 5 );
 	tOut.SendByte ( 0xfe );
@@ -8742,7 +8746,6 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 	// set on client's level, not on query's
 	bool bAutoCommit = true;
 	bool bInTransaction = false; // ignores bAutoCommit inside transaction
-	bool bMulti = false;
 
 	// to keep data alive for SphCrashQuery_c
 	CSphString sQuery;
@@ -8796,7 +8799,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 
 		} else if ( uMysqlCmd==MYSQL_COM_SET_OPTION )
 		{
-			bMulti = ( tIn.GetWord()==MYSQL_OPTION_MULTI_STATEMENTS_ON );
+			// bMulti = ( tIn.GetWord()==MYSQL_OPTION_MULTI_STATEMENTS_ON ); // that's how we could double check and validate multi query
 			SendMysqlOkPacket ( tOut, uPacketID );
 			continue;
 

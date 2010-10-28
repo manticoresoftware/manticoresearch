@@ -74,19 +74,10 @@ public:
 		DWORD				m_uQwords;			///< matching query words mask
 		int					m_iQwordsWeight;	///< passage weight factor
 		int					m_iQwordCount;		///< passage weight factor
-		union
-		{
-			struct
-			{
-				int			m_iMaxLCS;		///< passage weight factor
-				int			m_iMinGap;		///< passage weight factor
-			};
-			struct
-			{
-				int			m_iStartLimit;
-				int			m_iEndLimit;
-			};
-		};
+		int			m_iMaxLCS;					///< passage weight factor
+		int			m_iMinGap;					///< passage weight factor
+		int			m_iStartLimit;				///< start of match in passage
+		int			m_iEndLimit;				///< end of match in passage
 
 		void Reset ()
 		{
@@ -1010,6 +1001,8 @@ void ExcerptGen_c::CalcPassageWeight ( const CSphVector<int> & dPassage, Passage
 	// calc everything
 	tPass.m_uQwords = 0;
 	tPass.m_iMinGap = iMaxWords-1;
+	tPass.m_iStartLimit = INT_MAX;
+	tPass.m_iEndLimit = INT_MIN;
 
 	ARRAY_FOREACH ( i, dPassage )
 	{
@@ -1018,6 +1011,13 @@ void ExcerptGen_c::CalcPassageWeight ( const CSphVector<int> & dPassage, Passage
 
 		// update mask
 		tPass.m_uQwords |= tTok.m_uWords;
+
+		// update match boundary
+		if ( tTok.m_uWords )
+		{
+			tPass.m_iStartLimit = Min ( tPass.m_iStartLimit, dPassage[i] );
+			tPass.m_iEndLimit = Max ( tPass.m_iEndLimit, dPassage[i] );
+		}
 
 		// update LCS
 		uLast = tTok.m_uWords & ( uLast<<1 );
@@ -1311,11 +1311,53 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 			break;
 		}
 
-		// save it, despite limits or whatever, we'll tighten everything in the loop below
-		dShow.Add ( tBest );
-		uWords |= tBest.m_uQwords;
-		iTotalWords += tBest.m_iWords;
-		iTotalCodes += tBest.m_iCodes;
+		// merge incoming passages into previous ones
+		bool bMerged = false;
+		ARRAY_FOREACH_COND ( i, dShow, !bMerged )
+		{
+			const Passage_t & tPass = dShow[i];
+			bMerged = ( ( tBest.m_iStartLimit>=tPass.m_iStartLimit && tBest.m_iStartLimit<=tPass.m_iEndLimit )
+				|| ( tBest.m_iEndLimit>=tPass.m_iStartLimit && tBest.m_iEndLimit<=tPass.m_iEndLimit )
+				|| ( tPass.m_iStartLimit>=tBest.m_iStartLimit && tPass.m_iStartLimit<=tBest.m_iEndLimit )
+				|| ( tPass.m_iEndLimit>=tBest.m_iStartLimit && tPass.m_iEndLimit<=tBest.m_iEndLimit ) );
+
+			if ( !bMerged )
+				continue;
+
+			Passage_t tMerged = tPass;
+			tMerged.m_iStart = Min ( tPass.m_iStart, tBest.m_iStart );
+			tMerged.m_iTokens = Max ( tPass.m_iStart+tPass.m_iTokens-tMerged.m_iStart, tBest.m_iStart+tBest.m_iTokens-tMerged.m_iStart );
+			tMerged.m_uQwords |= tBest.m_uQwords;
+			if ( tMerged.m_iStart!=tPass.m_iStart || tMerged.m_iTokens!=tPass.m_iTokens )
+			{
+				tMerged.m_iWords = 0;
+				tMerged.m_iCodes = 0;
+				for ( int iTok = 0; iTok<tMerged.m_iTokens; iTok++ )
+				{
+					const Token_t & tTok = m_dTokens[tMerged.m_iStart+iTok];
+					if ( tTok.m_eType!=TOK_WORD )
+						continue;
+
+					tMerged.m_iWords++;
+					tMerged.m_iCodes += tTok.m_iLengthCP;
+				}
+
+				iTotalWords += tMerged.m_iWords-tPass.m_iWords;
+				iTotalCodes += tMerged.m_iCodes-tPass.m_iCodes;
+			}
+			uWords |= tMerged.m_uQwords;
+			dShow[i] = tMerged;
+		}
+
+
+		if ( !bMerged )
+		{
+			// save it, despite limits or whatever, we'll tighten everything in the loop below
+			dShow.Add ( tBest );
+			uWords |= tBest.m_uQwords;
+			iTotalWords += tBest.m_iWords;
+			iTotalCodes += tBest.m_iCodes;
+		}
 		tBest.m_iCodes = 0; // no longer needed here, abusing to mark displayed passages
 
 		// we just managed to show all words? do one final re-weighting run

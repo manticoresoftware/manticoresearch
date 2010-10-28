@@ -3898,12 +3898,17 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 			return false;
 		}
 
+		const int MAX_ERROR_SET_BUFFER = 128;
+		char sSetError[MAX_ERROR_SET_BUFFER];
 		tQuery.m_dFilters.Resize ( iAttrFilters );
 		ARRAY_FOREACH ( iFilter, tQuery.m_dFilters )
 		{
 			CSphFilterSettings & tFilter = tQuery.m_dFilters[iFilter];
 			tFilter.m_sAttrName = tReq.GetString ();
 			tFilter.m_sAttrName.ToLower ();
+
+			snprintf ( sSetError, MAX_ERROR_SET_BUFFER
+				, "invalid attribute '%s'(%d) set length %s (should be in 0..%s range)", tFilter.m_sAttrName.cstr(), iFilter, "%d", "%d" );
 
 			if ( iVer>=0x10E )
 			{
@@ -3924,8 +3929,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 					case SPH_FILTER_VALUES:
 						{
 							bool bRes = ( iVer>=0x114 )
-								? tReq.GetQwords ( tFilter.m_dValues, g_iMaxFilterValues, "invalid attribute set length %d (should be in 0..%d range)" )
-								: tReq.GetDwords ( tFilter.m_dValues, g_iMaxFilterValues, "invalid attribute set length %d (should be in 0..%d range)" );
+								? tReq.GetQwords ( tFilter.m_dValues, g_iMaxFilterValues, sSetError )
+								: tReq.GetDwords ( tFilter.m_dValues, g_iMaxFilterValues, sSetError );
 							if ( !bRes )
 								return false;
 						}
@@ -3939,7 +3944,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 			} else
 			{
 				// pre-1.14
-				if ( !tReq.GetDwords ( tFilter.m_dValues, g_iMaxFilterValues, "invalid attribute set length %d (should be in 0..%d range)" ) )
+				if ( !tReq.GetDwords ( tFilter.m_dValues, g_iMaxFilterValues, sSetError ) )
 					return false;
 
 				if ( !tFilter.m_dValues.GetLength() )

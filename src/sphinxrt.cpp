@@ -681,6 +681,7 @@ struct BinlogIndexInfo_t
 		, m_tmMin ( INT64_MAX )
 		, m_tmMax ( 0 )
 		, m_pIndex ( NULL )
+		, m_pRT ( NULL )
 		, m_iPreReplayTID ( 0 )
 	{}
 };
@@ -2067,6 +2068,8 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 			if ( !pSeg->m_bTlsKlist )
 				continue; // should be fresh enough
 
+			bool bKlistChanged = false;
+
 			// this segment was not created by this txn
 			// so we need to merge additional K-list from current txn into it
 			ARRAY_FOREACH ( j, dAccKlist )
@@ -2077,12 +2080,14 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 					pSeg->m_dKlist.Add ( uDocid );
 					pSeg->m_iAliveRows--;
 					assert ( pSeg->m_iAliveRows>=0 );
+					bKlistChanged = true;
 				}
 			}
 
 			// we did not check for existence in K-list, only in segment
 			// so need to use Uniq(), not just Sort()
-			pSeg->m_dKlist.Uniq ();
+			if ( bKlistChanged )
+				pSeg->m_dKlist.Uniq ();
 
 			// mark as good
 			pSeg->m_bTlsKlist = false;
@@ -4396,6 +4401,7 @@ void RtBinlog_c::Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, Progre
 	if ( pfnProgressCallback )
 		pfnProgressCallback();
 
+	int64_t tmReplay = sphMicroTimer();
 	// do replay
 	m_bReplayMode = true;
 	int iLastLogState = 0;
@@ -4404,6 +4410,14 @@ void RtBinlog_c::Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, Progre
 		iLastLogState = ReplayBinlog ( hIndexes, i );
 		if ( pfnProgressCallback ) // on each replayed binlog
 			pfnProgressCallback();
+	}
+
+	if ( m_dLogFiles.GetLength()>0 )
+	{
+		tmReplay = sphMicroTimer() - tmReplay;
+		sphInfo ( "binlog: finished replaying total %d in %d.%03d sec",
+			m_dLogFiles.GetLength(),
+			(int)(tmReplay/1000000), (int)((tmReplay/1000)%1000) );
 	}
 
 	// FIXME?
@@ -4876,13 +4890,13 @@ bool RtBinlog_c::ReplayCommit ( int iBinlog, BinlogReader_c & tReader ) const
 			tIndex.m_sName.cstr(), tIndex.m_tmMax, tmStamp, iTxnPos );
 
 	// only replay transaction when index exists and does not have it yet (based on TID)
-	if ( tIndex.m_pRT && iTID > tIndex.m_pIndex->m_iTID )
+	if ( tIndex.m_pRT && iTID > tIndex.m_pRT->m_iTID )
 	{
 		// we normally expect per-index TIDs to be sequential
 		// but let's be graceful about that
-		if ( iTID!=tIndex.m_pIndex->m_iTID+1 )
+		if ( iTID!=tIndex.m_pRT->m_iTID+1 )
 			sphWarning ( "binlog: commit: unexpected tid (index=%s, indextid="INT64_FMT", logtid="INT64_FMT", pos="INT64_FMT")",
-				tIndex.m_sName.cstr(), tIndex.m_pIndex->m_iTID, iTID, iTxnPos );
+				tIndex.m_sName.cstr(), tIndex.m_pRT->m_iTID, iTID, iTxnPos );
 
 		// actually replay
 		tIndex.m_pRT->CommitReplayable ( pSeg, dKlist );

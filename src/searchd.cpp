@@ -8973,7 +8973,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 									while ( nValues-- )
 									{
 										dRows.Reserve ( SPH_MAX_NUMERIC_STR );
-										int iLen = snprintf ( dRows.Get(), SPH_MAX_NUMERIC_STR, nValues>1 ? "%u," : "%u", *pValues++ );
+										int iLen = snprintf ( dRows.Get(), SPH_MAX_NUMERIC_STR, nValues>0 ? "%u," : "%u", *pValues++ );
 										dRows.IncPtr ( iLen );
 									}
 								}

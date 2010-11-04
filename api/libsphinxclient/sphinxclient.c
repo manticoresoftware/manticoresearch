@@ -1251,6 +1251,9 @@ static int sock_set_blocking ( int sock )
 
 void sock_close ( int sock )
 {
+	if ( sock<0 )
+		return;
+
 #if _WIN32
 	closesocket ( sock );
 #else
@@ -1438,10 +1441,54 @@ static int net_connect_get ( sphinx_client * client )
 	}
 }
 
+
+static sphinx_bool net_sock_eof ( int sock )
+{
+	struct timeval tv;
+	fd_set fds_read, fds_except;
+	int res;
+	char buf;
+
+	// wrong arg, consider dead
+	if ( sock<0 )
+		return SPH_TRUE;
+
+	// select() on a socket and watch for exceptions
+	FD_ZERO ( &fds_read );
+	FD_ZERO ( &fds_except );
+	SPH_FD_SET ( sock, &fds_read );
+	SPH_FD_SET ( sock, &fds_except );
+	tv.tv_sec = 0;
+	tv.tv_usec = 0;
+	res = select ( 1+sock, &fds_read, NULL, &fds_except, &tv );
+
+	// select() failed, assume something is wrong
+	if ( res<0 )
+		return SPH_TRUE;
+
+	// got any events to read? (either normal via fds_read, or OOB via fds_except set)
+	if ( FD_ISSET ( sock, &fds_read ) || FD_ISSET ( sock, &fds_except ) )
+		if ( recv ( sock, &buf, sizeof(buf), MSG_PEEK )<=0 )
+			if ( sock_errno()!=EWOULDBLOCK )
+				return SPH_TRUE;
+
+	// it seems alive
+	return SPH_FALSE;
+}
+
+
 static int net_connect_ex ( sphinx_client * client )
 {
 	if ( client->sock>=0 )
-		return client->sock;
+	{
+		// in case of a persistent connection, check for eof
+		// then attempt to reestablish lost pconn once
+		if ( !net_sock_eof ( client->sock ) )
+			return client->sock;
+
+		sock_close ( client->sock );
+		client->sock = -1;
+	}
 
 	if ( !client->persist )
 		return net_connect_get ( client );

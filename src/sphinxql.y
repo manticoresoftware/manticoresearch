@@ -106,10 +106,14 @@ static void AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & tNode 
 
 %%
 
+request:
+   statement							{ pParser->PushQuery(); }
+   | multi_stmt_list
+   | multi_stmt_list ';'
+   ;
+
 statement:
-	select_from_list
-	| show_clause
-	| insert_into
+	insert_into
 	| delete_from
 	| set_clause
 	| transact_op
@@ -119,6 +123,16 @@ statement:
 	;
 
 //////////////////////////////////////////////////////////////////////////
+
+multi_stmt_list:
+	multi_stmt							{ pParser->PushQuery(); }
+	| multi_stmt_list ';' multi_stmt	{ pParser->PushQuery(); }
+	;
+
+multi_stmt:
+	select_from
+	| show_clause
+	;
 
 select_from:
 	TOK_SELECT select_items_list
@@ -133,12 +147,6 @@ select_from:
 			pParser->m_pStmt->m_eStmt = STMT_SELECT;
 			pParser->m_pQuery->m_sIndexes.SetBinary ( pParser->m_pBuf+$4.m_iStart, $4.m_iEnd-$4.m_iStart );
 		}
-	;
-
-select_from_list:
-	select_from								{ pParser->PushQuery(); }
-	| select_from_list ';' select_from		{ pParser->PushQuery(); }
-	| select_from_list ';'
 	;
 	
 select_items_list:

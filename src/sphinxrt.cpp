@@ -1643,12 +1643,13 @@ public:
 typedef RtRowIterator_tmpl<> RtRowIterator_t;
 
 #ifdef PARANOID // sanity check in PARANOID mode
-static void VerifyEmptyStrings ( const CSphTightVector<BYTE> & dStorage, const CSphSchema & tSchema, const CSphRowitem * pRow )
+template <typename DOCID>
+void VerifyEmptyStrings ( const CSphTightVector<BYTE> & dStorage, const CSphSchema & tSchema, const CSphRowitem * pRow )
 {
 	if ( dStorage.GetLength()>1 )
 		return;
 
-	const DWORD * pAttr = DOCINFO2ATTRS(pRow);
+	const DWORD * pAttr = DOCINFO2ATTRS_T<DOCID>(pRow);
 	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
@@ -1676,13 +1677,15 @@ static int CopyPackedString ( const BYTE * pSource, CSphTightVector<BYTE> & dDes
 }
 
 #ifndef NDEBUG
-static void DoFixupStrAttr ( const BYTE * pStrBase, int iOffMax, const CSphSchema & tSchema, CSphRowitem * pRow, CSphWriter & tWriter )
+template <typename DOCID>
+void DoFixupStrAttr ( const BYTE * pStrBase, int iOffMax, const CSphSchema & tSchema, CSphRowitem * pRow, CSphWriter & tWriter )
 #else
-static void DoFixupStrAttr ( const BYTE * pStrBase, int , const CSphSchema & tSchema, CSphRowitem * pRow, CSphWriter & tWriter )
+template <typename DOCID>
+void DoFixupStrAttr ( const BYTE * pStrBase, int , const CSphSchema & tSchema, CSphRowitem * pRow, CSphWriter & tWriter )
 #endif
 {
 	// store string\mva attr for this row
-	DWORD * pAttr = DOCINFO2ATTRS ( pRow );
+	DWORD * pAttr = DOCINFO2ATTRS_T<DOCID>( pRow );
 	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tColumn = tSchema.GetAttr(i);
@@ -1691,7 +1694,7 @@ static void DoFixupStrAttr ( const BYTE * pStrBase, int , const CSphSchema & tSc
 		{
 			assert ( tWriter.GetPos()>0 );
 			assert ( tWriter.GetPos()<( I64C(1)<<32 ) ); // should be 32 bit offset
-			assert ( iOffMax==0 || (int)tOff<iOffMax );
+			assert ( iOffMax==0 || tOff<(SphOffset_t)iOffMax );
 			const DWORD iAttrOff = (DWORD)tWriter.GetPos();
 
 			assert ( pStrBase );
@@ -1710,13 +1713,15 @@ static void DoFixupStrAttr ( const BYTE * pStrBase, int , const CSphSchema & tSc
 }
 
 #ifndef NDEBUG
+template <typename DOCID>
 void DoFixupStrAttr ( const BYTE * pStrBase, int iOffMax, const CSphSchema & tSchema, CSphRowitem * pRow, CSphTightVector<BYTE> & dStrings )
 #else
+template <typename DOCID>
 void DoFixupStrAttr ( const BYTE * pStrBase, int , const CSphSchema & tSchema, CSphRowitem * pRow, CSphTightVector<BYTE> & dStrings )
 #endif
 {
 	// store string\mva attr for this row
-	DWORD * pAttr = DOCINFO2ATTRS(pRow);
+	DWORD * pAttr = DOCINFO2ATTRS_T<DOCID>(pRow);
 	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tColumn = tSchema.GetAttr(i);
@@ -1732,17 +1737,18 @@ void DoFixupStrAttr ( const BYTE * pStrBase, int , const CSphSchema & tSchema, C
 	}
 }
 
-static void DoFixupStrAttr ( const CSphTightVector<BYTE> & dStorage, const CSphSchema & tSchema, CSphRowitem * pRow, CSphTightVector<BYTE> & dStrings )
+template <typename DOCID>
+void DoFixupStrAttr ( const CSphTightVector<BYTE> & dStorage, const CSphSchema & tSchema, CSphRowitem * pRow, CSphTightVector<BYTE> & dStrings )
 {
 #ifdef PARANOID // sanity check in PARANOID mode
-	VerifyEmptyStrings ( dStorage, tSchema, pRow );
+	VerifyEmptyStrings<DOCID> ( dStorage, tSchema, pRow );
 #endif
 
 	// only dummy zero - nothing to fix
 	if ( dStorage.GetLength()<=1 )
 		return;
 
-	DoFixupStrAttr ( dStorage.Begin(), dStorage.GetLength(), tSchema, pRow, dStrings );
+	DoFixupStrAttr<DOCID> ( dStorage.Begin(), dStorage.GetLength(), tSchema, pRow, dStrings );
 }
 
 RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2, const CSphVector<SphDocID_t> * pAccKlist )
@@ -1786,7 +1792,7 @@ RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 			for ( int i=0; i<m_iStride; i++ )
 				dRows.Add ( *pRow1++ );
 			CSphRowitem * pDstRow = dRows.Begin() + dRows.GetLength() - m_iStride;
-			DoFixupStrAttr ( pSeg1->m_dStrings, m_tSchema, pDstRow, dStrings );
+			DoFixupStrAttr<SphDocID_t> ( pSeg1->m_dStrings, m_tSchema, pDstRow, dStrings );
 			pRow1 = tIt1.GetNextAliveRow();
 		} else
 		{
@@ -1795,7 +1801,7 @@ RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 			for ( int i=0; i<m_iStride; i++ )
 				dRows.Add ( *pRow2++ );
 			CSphRowitem * pDstRow = dRows.Begin() + dRows.GetLength() - m_iStride;
-			DoFixupStrAttr ( pSeg2->m_dStrings, m_tSchema, pDstRow, dStrings );
+			DoFixupStrAttr<SphDocID_t> ( pSeg2->m_dStrings, m_tSchema, pDstRow, dStrings );
 			pRow2 = tIt2.GetNextAliveRow();
 		}
 		pSeg->m_iRows++;
@@ -2436,7 +2442,7 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename ) const
 		const RtSegment_t * pSegment = m_pSegments[iMinRow];
 
 #ifdef PARANOID // sanity check in PARANOID mode
-		VerifyEmptyStrings ( pSegment->m_dStrings, m_tSchema, pRow );
+		VerifyEmptyStrings<DOCID> ( pSegment->m_dStrings, m_tSchema, pRow );
 #endif
 
 		const int iMaxOff = pSegment->m_dStrings.GetLength();
@@ -2446,7 +2452,7 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename ) const
 			memcpy ( pFixedRow, pRow, iStride*sizeof(CSphRowitem) );
 			pRow = pFixedRow;
 
-			DoFixupStrAttr ( pSegment->m_dStrings.Begin(), iMaxOff, m_tSchema, pFixedRow, tStrWriter );
+			DoFixupStrAttr<DOCID> ( pSegment->m_dStrings.Begin(), iMaxOff, m_tSchema, pFixedRow, tStrWriter );
 		}
 
 		// emit it

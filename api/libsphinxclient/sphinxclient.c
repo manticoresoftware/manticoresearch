@@ -13,6 +13,7 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
+#ifdef _WIN32
 #if _MSC_VER>=1400
 // VS 2005 and above
 #define _CRT_SECURE_NO_DEPRECATE 1
@@ -20,6 +21,7 @@
 #else
 // VS 2003 and below
 #define vsnprintf _vsnprintf
+#endif
 #endif
 
 #include <stdlib.h>

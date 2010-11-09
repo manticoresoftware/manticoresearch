@@ -2650,6 +2650,10 @@ void NetInputBuffer_c::SendErrorReply ( const char * sTemplate, ... )
 
 	// send!
 	sphSockSend ( m_iSock, dBuf, iHeaderLen+iStrLen );
+
+	// --console logging
+	if ( g_bOptNoDetach )
+		sphInfo ( "query error: %s", sBuf );
 }
 
 // fix MSVC 2005 fuckup
@@ -4362,12 +4366,16 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 		{
 			tOut.SendInt ( SEARCHD_ERROR );
 			tOut.SendString ( pRes->m_sError.cstr() );
+			if ( g_bOptNoDetach )
+				sphInfo ( "query error: %s", pRes->m_sError.cstr() );
 			return;
 
 		} else if ( bWarning )
 		{
 			tOut.SendInt ( SEARCHD_WARNING );
 			tOut.SendString ( pRes->m_sWarning.cstr() );
+			if ( g_bOptNoDetach )
+				sphInfo ( "query warning: %s", pRes->m_sError.cstr() );
 		} else
 		{
 			tOut.SendInt ( SEARCHD_OK );
@@ -6637,10 +6645,10 @@ public:
 };
 
 SqlParser_c::SqlParser_c ( CSphVector<SqlStmt_t> & dStmt )
-	: m_bNamedVecBusy ( false )
-	, m_dStmt ( dStmt )
-	, m_pQuery ( NULL )
+	: m_pQuery ( NULL )
 	, m_pStmt ( NULL )
+	, m_dStmt ( dStmt )
+	, m_bNamedVecBusy ( false )
 {
 	assert ( !m_dStmt.GetLength() );
 	PushQuery ();

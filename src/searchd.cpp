@@ -4579,7 +4579,10 @@ void RemapResult ( const CSphSchema& tTarget, AggrResult_t & tRes, bool bMultiSc
 			dMapFrom[i] = dSchema.GetAttrIndex ( tTarget.GetAttr(i).m_sName.cstr() );
 			assert ( dMapFrom[i]>=0 );
 		}
-		int iLimit = bMultiSchema?iCur+tRes.m_dMatchCounts[iSchema]:tRes.m_iTotalMatches;
+		int iLimit = bMultiSchema
+			? ( iCur + tRes.m_dMatchCounts[iSchema] )
+			: tRes.m_iTotalMatches;
+		iLimit = Min ( iLimit, tRes.m_dMatches.GetLength() );
 		for ( int i=iCur;i<iLimit; i++ )
 		{
 			CSphMatch & tMatch = tRes.m_dMatches[i];

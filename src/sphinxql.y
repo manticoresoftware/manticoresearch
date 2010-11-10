@@ -209,6 +209,7 @@ where_item:
 			} else
 			{
 				pParser->m_pQuery->m_sQuery = $3.m_sValue;
+				pParser->m_pQuery->m_sRawQuery = $3.m_sValue;
 				pParser->m_bGotQuery = true;
 			}
 		}

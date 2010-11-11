@@ -2246,7 +2246,7 @@ bool sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema )
 		const CSphString & sExpr = tQuery.m_dItems[i].m_sExpr;
 
 		if ( !( sExpr=="*"
-			|| ( tSchema.GetAttrIndex ( sExpr.cstr() )>=0 && tQuery.m_dItems[i].m_eAggrFunc==SPH_AGGR_NONE )
+			|| ( tSchema.GetAttrIndex ( sExpr.cstr() )>=0 && tQuery.m_dItems[i].m_eAggrFunc==SPH_AGGR_NONE && tQuery.m_dItems[i].m_sAlias.IsEmpty() )
 			|| IsGroupbyMagic(sExpr) ) )
 			return true;
 	}

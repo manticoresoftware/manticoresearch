@@ -11940,22 +11940,22 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 	if ( bWordFound )
 		{
 			const ESphHitless eMode = pIndex->m_tSettings.m_eHitless;;
-		tWord.m_iDocs = eMode==SPH_HITLESS_SOME ? ( tResWord.m_iDocs & 0x7FFFFFFF ) : tResWord.m_iDocs;
-		tWord.m_iHits = tResWord.m_iHits;
+			tWord.m_iDocs = eMode==SPH_HITLESS_SOME ? ( tResWord.m_iDocs & 0x7FFFFFFF ) : tResWord.m_iDocs;
+			tWord.m_iHits = tResWord.m_iHits;
 			tWord.m_bHasHitlist =
 				( eMode==SPH_HITLESS_NONE ) ||
-			( eMode==SPH_HITLESS_SOME && !( tResWord.m_iDocs & 0x80000000 ) );
+				( eMode==SPH_HITLESS_SOME && !( tResWord.m_iDocs & 0x80000000 ) );
 
 			if ( m_bSetupReaders )
 			{
 				tWord.m_rdDoclist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
 				tWord.m_rdDoclist.SetFile ( m_tDoclist );
-			tWord.m_rdDoclist.SeekTo ( tResWord.m_uOff, tResWord.m_iDoclistHint );
+				tWord.m_rdDoclist.SeekTo ( tResWord.m_uOff, tResWord.m_iDoclistHint );
 
 				tWord.m_rdHitlist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
 				tWord.m_rdHitlist.SetFile ( m_tHitlist );
 			}
-	}
+		}
 
 	return bWordFound;
 }

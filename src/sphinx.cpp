@@ -935,7 +935,7 @@ public:
 		SafeDeleteArray ( m_pDictBuf );
 	}
 
-	virtual ISphQword *					QwordSpawn ( const XQKeyword_t & ) const;
+	virtual ISphQword *					QwordSpawn ( const XQKeyword_t & tWord ) const;
 	virtual bool						QwordSetup ( ISphQword * ) const;
 
 protected:
@@ -977,13 +977,13 @@ public:
 #endif
 
 public:
-	DiskIndexQwordTraits_c ()
+	explicit DiskIndexQwordTraits_c ( bool bUseMini )
 		: m_uHitPosition ( 0 )
 		, m_uHitState ( 0 )
 		, m_bDupe ( false )
 		, m_iHitPos ()
-		, m_rdDoclist ( m_dDoclistBuf, MINIBUFFER_LEN )
-		, m_rdHitlist ( m_dHitlistBuf, MINIBUFFER_LEN )
+		, m_rdDoclist ( bUseMini ? m_dDoclistBuf : NULL, bUseMini ? MINIBUFFER_LEN : 0 )
+		, m_rdHitlist ( bUseMini ? m_dHitlistBuf : NULL, bUseMini ? MINIBUFFER_LEN : 0 )
 		, m_iMinID ( 0 )
 		, m_iInlineAttrs ( 0 )
 		, m_pInlineFixup ( NULL )
@@ -1001,6 +1001,11 @@ template < bool INLINE_HITS, bool INLINE_DOCINFO, bool DISABLE_HITLIST_SEEK >
 class DiskIndexQword_c : public DiskIndexQwordTraits_c
 {
 public:
+	explicit DiskIndexQword_c ( bool bUseMinibuffer )
+		: DiskIndexQwordTraits_c ( bUseMinibuffer )
+	{
+	}
+
 	virtual void Reset ()
 	{
 		m_uHitPosition = 0;
@@ -10720,8 +10725,8 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 
 	/// setup qwords
 
-	QWORDDST tDstQword;
-	QWORDSRC tSrcQword;
+	QWORDDST tDstQword ( false );
+	QWORDSRC tSrcQword ( false );
 
 	CSphAutofile fSrcDocs, fSrcHits;
 	fSrcDocs.Open ( pSrcIndex->GetIndexFileName("spd"), SPH_O_READ, m_sLastError );
@@ -11851,9 +11856,9 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 //////////////////////////////////////////////////////////////////////////////
 
-ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & ) const
+ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & tWord ) const
 {
-	WITH_QWORD ( m_pIndex, false, Qword, return new Qword() );
+	WITH_QWORD ( m_pIndex, false, Qword, return new Qword ( tWord.m_bUseSmallBuffers ) );
 	return NULL;
 }
 
@@ -12382,7 +12387,7 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 	tTermSetup.m_tMin.Clone ( m_tMin, m_tSchema.GetRowSize() );
 	tTermSetup.m_bSetupReaders = true;
 
-	Qword tKeyword;
+	Qword tKeyword ( false );
 	tKeyword.m_tDoc.m_iDocID = m_tMin.m_iDocID;
 	tKeyword.m_iWordID = uWordID;
 	tKeyword.m_sWord = sKeyword;
@@ -13238,7 +13243,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
 	dKeywords.Resize ( 0 );
 
-	Qword QueryWord;
+	Qword QueryWord ( false );
 	CSphString sTokenized;
 	BYTE * sWord;
 	int nWords = 0;
@@ -13606,11 +13611,15 @@ static void BuildBinTree ( const XQKeyword_t & tRootWord, CSphVector<CSphNamedIn
 	BuildBinTree ( tRootWord, dWordSrc, pRoot, iMid+1, iHi );
 }
 
-static void RestoreTree ( XQNode_t * pRoot, const XQNode_t & tRef )
+static void FixupExpandedTree ( XQNode_t * pRoot, const XQNode_t & tRef )
 {
 	pRoot->TagAsCommon ( tRef.GetOrder (), tRef.GetCount () );
+
+	ARRAY_FOREACH ( i, pRoot->m_dWords )
+		pRoot->m_dWords[i].m_bUseSmallBuffers = true;
+
 	ARRAY_FOREACH ( i, pRoot->m_dChildren )
-		RestoreTree ( pRoot->m_dChildren[i], tRef );
+		FixupExpandedTree ( pRoot->m_dChildren[i], tRef );
 }
 
 void Swap ( CSphNamedInt & a, CSphNamedInt & b )
@@ -13712,7 +13721,7 @@ XQNode_t * CSphIndex_VLN::DoExpansion ( XQNode_t * pNode, BYTE * pBuff, int iFD 
 	pNode->m_dWords.Reset();
 	BuildBinTree ( tPrefixingWord, dPrefixedWords, pNode, 0, dPrefixedWords.GetLength()-1 );
 	const XQNode_t tRef;
-	RestoreTree ( pNode, tRef );
+	FixupExpandedTree ( pNode, tRef );
 
 	return pNode;
 }
@@ -14522,7 +14531,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 		// create and manually setup doclist reader
 		DiskIndexQwordTraits_c * pQword = NULL;
-		WITH_QWORD ( this, false, T, pQword = new T() );
+		WITH_QWORD ( this, false, T, pQword = new T ( false ) );
 
 		pQword->m_tDoc.Reset ( m_tSchema.GetDynamicSize() );
 		pQword->m_iMinID = m_tMin.m_iDocID;

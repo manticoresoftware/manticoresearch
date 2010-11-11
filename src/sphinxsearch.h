@@ -117,7 +117,7 @@ public:
 	{}
 	virtual ~ISphQwordSetup () {}
 
-	virtual ISphQword *					QwordSpawn ( const XQKeyword_t & ) const = 0;
+	virtual ISphQword *					QwordSpawn ( const XQKeyword_t & tWord ) const = 0;
 	virtual bool						QwordSetup ( ISphQword * pQword ) const = 0;
 };
 

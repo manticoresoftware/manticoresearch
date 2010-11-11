@@ -17741,7 +17741,13 @@ void CSphHTMLStripper::Strip ( BYTE * sData ) const
 	{
 		// scan until eof, or tag, or entity
 		while ( *s && *s!='<' && *s!='&' )
-			*d++ = *s++;
+		{
+			if ( *s>=0x20 )
+				*d++ = *s;
+			else
+				*d++ = ' ';
+			s++;
+		}
 		if ( !*s )
 			break;
 

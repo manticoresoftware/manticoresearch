@@ -310,12 +310,13 @@ class SphinxConfig
 	private $_indexdata;			///< data for use "insert into" instead of run indexer
 	private $_connection;			///< mysql connection (since we cound use mysql ans sqphinxql together)
 	private $_testdir;				///< the path to the directory with current test (namely for accessing data without knowing the test name)
+	private $_ignore_weight;		///< whether to ignore match weights and keyword stats; to be used when upgrading tests
 
-
-	function SetConnection($connection)
+	function SetConnection ( $connection )
 	{
 		$this->_connection = $connection;
 	}
+
 	function SphinxConfig ()
 	{
 		global $sd_address, $sd_port, $sd_sphinxql_port, $sd_pid_file;
@@ -346,6 +347,7 @@ class SphinxConfig
 		$this->_indexdata		= array ();
 		$this->_connection		= false;
 		$this->_testdir			= "";
+		$this->_ignore_weight	= false;
 	}
 
 	function EnableCompat098 ()		{ $this->_compat098 = true; }	
@@ -1079,6 +1081,25 @@ class SphinxConfig
 			foreach ( $set["matches"] as $id=>$match )
 				$set["matches"][$id]["attrs"][$name] = sprintf ( "%.{$roundoff}f",
 					$set["matches"][$id]["attrs"][$name] );
+		}
+
+		if ( $this->_ignore_weight )
+		{
+			if ( isset($set["matches"]) )
+			{
+				if ( @$set["resarray"] )
+				{
+					for ( $i=0; $i<count($set); $i++ )
+						unset ( $set["matches"][$id]["weight"] );
+				} else
+				{
+					foreach ( $set["matches"] as $id=>$match )
+						unset ( $set["matches"][$id]["weight"] );
+				}
+			}
+			if ( $set["words"] )
+				foreach ( $set["words"] as $word=>$info )
+					$set["words"][$word] = array ( "hits"=>-1, "docs"=>-1 );
 		}
 
 		//foreach ( preg_split ( "/\\W+/", "time warning status fields resarray roundoff words" ) as $key )

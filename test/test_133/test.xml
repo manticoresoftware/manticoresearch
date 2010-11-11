@@ -76,6 +76,16 @@ create table test_table
 <db_insert><![CDATA[insert into test_table values ( 310, 4, '<zoneA>I like this.</zoneA> Sweet of &#1;&#2;&#3; this.' );]]></db_insert>
 <db_insert><![CDATA[insert into test_table values ( 311, 4, '<zoneA>I like this.</zoneA> Sweet of &#4; this.' );]]></db_insert>
 
+<db_insert><![CDATA[insert into test_table values ( 400, 5, CONCAT('Clock',CHAR(4),'strikes twelve and moondrops burst
+Out at you from their hiding place
+Like acid and oil on a madman\'s face
+His reason tends to fly away
+Like lesser birds on the four winds
+Like silver scraps in May
+Now the sands become a crust
+And most of you have gone away
+You have gone away'));]]></db_insert>
+
 
 <queries>
 <query mode="extended2">one SENTENCE two</query>
@@ -98,6 +108,7 @@ create table test_table
 <query mode="extended2">"Who am I"</query>
 <query mode="extended2">"of this"</query>
 <query mode="extended2">ZONE:zoneA "like this"</query>
+<query mode="extended2">strikes</query>
 </queries>
 
 </test>

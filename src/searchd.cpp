@@ -5744,6 +5744,25 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
 }
 
 
+// check expressions into a query to make sure that it's ready for multi query optimization
+static bool HasExpresions ( const CSphQuery & tQuery )
+{
+	const ServedIndex_t * pServedIndex = g_pIndexes->GetRlockedEntry ( tQuery.m_sIndexes );
+
+	// check that it exists
+	if ( !pServedIndex )
+		return false;
+
+	bool bHasExpression = false;
+	if ( pServedIndex->m_bEnabled )
+		bHasExpression = sphHasExpressions ( tQuery, pServedIndex->m_pIndex->GetMatchSchema() );
+
+	pServedIndex->Unlock();
+
+	return bHasExpression;
+}
+
+
 void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 {
 	m_iStart = iStart;
@@ -5771,7 +5790,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	////////////////////////////////////////////////////////////////
 
 	m_bMultiQueue = ( iStart<iEnd );
-	for ( int iCheck=iStart+1; iCheck<=iEnd; iCheck++ )
+	for ( int iCheck=iStart+1; iCheck<=iEnd && m_bMultiQueue; iCheck++ )
 	{
 		const CSphQuery & qFirst = m_dQueries[iStart];
 		const CSphQuery & qCheck = m_dQueries[iCheck];
@@ -5784,7 +5803,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			( qCheck.m_eMode!=qFirst.m_eMode ) || // search mode
 			( qCheck.m_eRanker!=qFirst.m_eRanker ) || // ranking mode
 			( qCheck.m_dFilters.GetLength()!=qFirst.m_dFilters.GetLength() ) || // attr filters count
-			( qCheck.m_dItems.GetLength()!=qFirst.m_dItems.GetLength() ) || // select list item count
 			( qCheck.m_iCutoff!=qFirst.m_iCutoff ) || // cutoff
 			( qCheck.m_eSort==SPH_SORT_EXPR && qFirst.m_eSort==SPH_SORT_EXPR && qCheck.m_sSortBy!=qFirst.m_sSortBy ) || // sort expressions
 			( qCheck.m_bGeoAnchor!=qFirst.m_bGeoAnchor ) || // geodist expression
@@ -5794,29 +5812,21 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			break;
 		}
 
-		// select lists must be same
-		ARRAY_FOREACH ( i, qCheck.m_dItems )
-		{
-			if ( qCheck.m_dItems[i].m_sExpr!=qFirst.m_dItems[i].m_sExpr ||
-				qCheck.m_dItems[i].m_eAggrFunc!=qFirst.m_dItems[i].m_eAggrFunc )
-			{
-				m_bMultiQueue = false;
-				break;
-			}
-		}
-
 		// filters must be the same too
 		assert ( qCheck.m_dFilters.GetLength()==qFirst.m_dFilters.GetLength() );
 		ARRAY_FOREACH ( i, qCheck.m_dFilters )
 			if ( qCheck.m_dFilters[i]!=qFirst.m_dFilters[i] )
-		{
-			m_bMultiQueue = false;
-			break;
-		}
-		if ( !m_bMultiQueue )
-			break;
+			{
+				m_bMultiQueue = false;
+				break;
+			}
 	}
 
+	// select lists must have no expressions
+	for ( int iCheck=iStart; iCheck<=iEnd && m_bMultiQueue; iCheck++ )
+	{
+		m_bMultiQueue = !HasExpresions ( m_dQueries[iCheck] );
+	}
 	////////////////////////////
 	// build local indexes list
 	////////////////////////////

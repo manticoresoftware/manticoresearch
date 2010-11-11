@@ -2238,6 +2238,23 @@ void sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int 
 	}
 }
 
+
+bool sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema )
+{
+	ARRAY_FOREACH ( i, tQuery.m_dItems )
+	{
+		const CSphString & sExpr = tQuery.m_dItems[i].m_sExpr;
+
+		if ( !( sExpr=="*"
+			|| ( tSchema.GetAttrIndex ( sExpr.cstr() )>=0 && tQuery.m_dItems[i].m_eAggrFunc==SPH_AGGR_NONE )
+			|| IsGroupbyMagic(sExpr) ) )
+			return true;
+	}
+
+	return false;
+}
+
+
 //
 // $Id$
 //

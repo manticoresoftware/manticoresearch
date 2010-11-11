@@ -2609,6 +2609,9 @@ void				sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, i
 /// setup per-keyword read buffer sizes
 void				sphSetReadBuffers ( int iReadBuffer, int iReadUnhinted );
 
+/// check query for expressions
+bool				sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema );
+
 /////////////////////////////////////////////////////////////////////////////
 
 // workaround to suppress C4511/C4512 warnings (copy ctor and assignment operator) in VS 2003

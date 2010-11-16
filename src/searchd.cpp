@@ -11640,7 +11640,7 @@ void QueryStatus ( CSphVariant * v )
 			uaddr.sun_family = AF_UNIX;
 			memcpy ( uaddr.sun_path, tDesc.m_sUnix.cstr(), len+1 );
 
-			int iSock = socket ( AF_UNIX, SOCK_STREAM, 0 );
+			iSock = socket ( AF_UNIX, SOCK_STREAM, 0 );
 			if ( iSock<0 )
 				sphFatal ( "failed to create UNIX socket: %s", sphSockError() );
 

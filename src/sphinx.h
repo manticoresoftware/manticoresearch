@@ -2197,8 +2197,12 @@ public:
 	CSphString				m_sError;			///< error message
 	CSphString				m_sWarning;			///< warning message
 
-	virtual					~CSphQueryResultMeta () {} /// <dtor
+	CSphQueryResultMeta ();													///< ctor
+	virtual					~CSphQueryResultMeta () {}						///< dtor
 	void					AddStat ( const CSphString & sWord, int iDocs, int iHits, bool bUntouched=false );
+
+	CSphQueryResultMeta ( const CSphQueryResultMeta & tMeta );				///< copy ctor
+	CSphQueryResultMeta & operator= ( const CSphQueryResultMeta & tMeta );	///< copy
 };
 
 

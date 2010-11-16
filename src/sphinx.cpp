@@ -22811,6 +22811,20 @@ int CSphStrHashFunc::Hash ( const CSphString & sKey )
 }
 
 
+//////////////////////////////////////////////////////////////////////////
+// CSphQueryResultMeta
+//////////////////////////////////////////////////////////////////////////
+
+CSphQueryResultMeta::CSphQueryResultMeta ()
+: m_iQueryTime ( 0 )
+, m_iCpuTime ( 0 )
+, m_iMultiplier ( 1 )
+, m_iMatches ( 0 )
+, m_iTotalMatches ( 0 )
+{
+}
+
+
 void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int iDocs, int iHits, bool bUntouched )
 {
 	CSphString sFixed;
@@ -22830,7 +22844,7 @@ void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int iDocs, int iHi
 	WordStat_t * pStats = m_hWordStats ( *pFixed );
 	if ( !pStats )
 	{
-		CSphQueryResult::WordStat_t tStats;
+		CSphQueryResultMeta::WordStat_t tStats;
 		tStats.m_iDocs = iDocs;
 		tStats.m_iHits = iHits;
 		tStats.m_bUntouched = bUntouched;
@@ -22842,6 +22856,30 @@ void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int iDocs, int iHi
 		pStats->m_bUntouched = bUntouched;
 	}
 }
+
+
+CSphQueryResultMeta::CSphQueryResultMeta ( const CSphQueryResultMeta & tMeta )
+{
+	*this = tMeta;
+}
+
+
+CSphQueryResultMeta & CSphQueryResultMeta::operator= ( const CSphQueryResultMeta & tMeta )
+{
+	m_iQueryTime = tMeta.m_iQueryTime;
+	m_iCpuTime = tMeta.m_iCpuTime;
+	m_iMultiplier = tMeta.m_iMultiplier;
+	m_iMatches = tMeta.m_iMatches;
+	m_iTotalMatches = tMeta.m_iTotalMatches;
+
+	m_sError = tMeta.m_sError;
+	m_sWarning = tMeta.m_sWarning;
+
+	m_hWordStats = tMeta.m_hWordStats;
+
+	return *this;
+}
+
 
 //
 // $Id$

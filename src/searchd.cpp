@@ -4516,7 +4516,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 	pRes->m_hWordStats.IterateStart();
 	while ( pRes->m_hWordStats.IterateNext() )
 	{
-		const CSphQueryResult::WordStat_t & tStat = pRes->m_hWordStats.IterateGet();
+		const CSphQueryResultMeta::WordStat_t & tStat = pRes->m_hWordStats.IterateGet();
 		tOut.SendString ( pRes->m_hWordStats.IterateGetKey().cstr() );
 		tOut.SendInt ( tStat.m_iDocs );
 		tOut.SendInt ( tStat.m_iHits );
@@ -9077,19 +9077,18 @@ void HandleMysqlMultiStmt ( NetOutputBuffer_c & tOut, BYTE uPacketID, const CSph
 		if ( pThd )
 			pThd->m_sCommand = g_dSqlStmts[eStmt];
 
-		const CSphQueryResultMeta & tLastMeta = iSelect-1>=0 ? tHandler.m_dResults[iSelect-1] : tPrevMeta;
-		bool bMoreResultsFollow = iSelect<tHandler.m_dResults.GetLength();
+		const CSphQueryResultMeta & tMeta = iSelect-1>=0 ? tHandler.m_dResults[iSelect-1] : tPrevMeta;
+		bool bMoreResultsFollow = (i+1)<dStmt.GetLength();
 
 		if ( eStmt==STMT_SELECT )
 		{
 			const AggrResult_t & tRes = tHandler.m_dResults[iSelect++];
-			bMoreResultsFollow = iSelect<tHandler.m_dResults.GetLength();
 
 			SendMysqlSelectResult ( tOut, uPacketID, dRows, tRes, bMoreResultsFollow );
 		} else if ( eStmt==STMT_SHOW_WARNINGS )
-			HandleMysqlWarning ( tOut, uPacketID, tLastMeta, dRows, bMoreResultsFollow );
+			HandleMysqlWarning ( tOut, uPacketID, tMeta, dRows, bMoreResultsFollow );
 		else if ( eStmt==STMT_SHOW_STATUS || eStmt==STMT_SHOW_META )
-			HandleMysqlMeta ( tOut, uPacketID, tLastMeta, dRows, eStmt==STMT_SHOW_STATUS, bMoreResultsFollow );
+			HandleMysqlMeta ( tOut, uPacketID, tMeta, dRows, eStmt==STMT_SHOW_STATUS, bMoreResultsFollow );
 
 		if ( g_bGotSigterm )
 		{
@@ -9136,10 +9135,6 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 	BYTE uPacketID = 1;
 
 	CSphQueryResultMeta tLastMeta;
-	tLastMeta.m_iQueryTime = 0;
-	tLastMeta.m_iCpuTime = 0;
-	tLastMeta.m_iMatches = 0;
-	tLastMeta.m_iTotalMatches = 0;
 
 	// set on client's level, not on query's
 	bool bAutoCommit = true;

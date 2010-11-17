@@ -24,6 +24,27 @@ index test
 	source	= test
 	path	= <data_path/>/test
 }
+
+index test_crc
+{
+	source	= test
+	path	= <data_path/>/crc
+	
+	dict			= crc
+	min_prefix_len	= 1
+	enable_star		= 1
+}
+
+index test_kw
+{
+	source	= test
+	path	= <data_path/>/kw
+	
+	dict			= keywords
+	min_prefix_len	= 1
+	enable_star		= 1
+}
+
 </config>
 
 <db_create>
@@ -45,13 +66,19 @@ INSERT INTO test_table ( document_id, text ) VALUES
 </db_insert>
 
 <queries>
-	<query mode="extended2">"hello heaven"/1</query>
-	<query mode="extended2">"hello from above"/2</query>
-	<query mode="extended2">"one two foo bar"/3</query>
-	<query mode="extended2">"one two two bar"/3</query>
-	<query mode="extended2">"one two two bar"/2</query>
-	<query mode="extended2">"two two one three"/3</query>
-	<query mode="extended2">"two two one foo"/3</query>
+	<query mode="extended2" index="test">"hello heaven"/1</query>
+	<query mode="extended2" index="test">"hello from above"/2</query>
+	<query mode="extended2" index="test">"one two foo bar"/3</query>
+	<query mode="extended2" index="test">"one two two bar"/3</query>
+	<query mode="extended2" index="test">"one two two bar"/2</query>
+	<query mode="extended2" index="test">"two two one three"/3</query>
+	<query mode="extended2" index="test">"two two one foo"/3</query>
+	
+	<!--here is going a couple of regresssion tests-->
+	<query mode="extended2" index="test_crc">"o* t*"/2</query>
+	<query mode="extended2" index="test_kw">"o* t*"/2</query>
+	<query mode="extended2" index="test_crc">"h* w* f*"/2</query>
+	<query mode="extended2" index="test_kw">"h* w* f*"/2</query>
 </queries>
 
 </test>

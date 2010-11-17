@@ -1083,27 +1083,33 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 
 			case SPH_QUERY_QUORUM:
 			{
-				if ( pNode->m_iOpArg>=pNode->m_dWords.GetLength() )
+				assert ( pNode->m_dWords.GetLength()==0 || pNode->m_dChildren.GetLength()==0 );
+				int iQuorumCount = pNode->m_dWords.GetLength()+pNode->m_dChildren.GetLength();
+				if ( pNode->m_iOpArg>=iQuorumCount )
 				{
 					// threshold is too high
-					if ( tSetup.m_pWarning && pNode->m_iOpArg>pNode->m_dWords.GetLength() )
+					if ( tSetup.m_pWarning )
 						tSetup.m_pWarning->SetSprintf ( "quorum threshold too high (words=%d, thresh=%d); replacing quorum operator with AND operator",
-							pNode->m_dWords.GetLength(), pNode->m_iOpArg );
+							iQuorumCount, pNode->m_iOpArg );
 
-				} else if ( pNode->m_dWords.GetLength()>32 )
+				} else if ( iQuorumCount>32 )
 				{
 					// right now quorum can only handle 32 words
 					if ( tSetup.m_pWarning )
-						tSetup.m_pWarning->SetSprintf ( "too many words (%d) for quorum; replacing with an AND", pNode->m_dWords.GetLength() );
+						tSetup.m_pWarning->SetSprintf ( "too many words (%d) for quorum; replacing with an AND", iQuorumCount );
 
 				} else // everything is ok; create quorum node
 					return CreateMultiNode<ExtQuorum_c,true> ( pNode, tSetup, false );
 
 				// couldn't create quorum, make an AND node instead
-				const CSphVector<XQKeyword_t> & dWords = pNode->m_dWords;
-				CSphVector<ExtNode_i*> dTerms ( dWords.GetLength() );
-				ARRAY_FOREACH ( i, dWords )
-					dTerms[i] = Create ( dWords[i], pNode, tSetup );
+				CSphVector<ExtNode_i*> dTerms;
+				dTerms.Reserve ( iQuorumCount );
+
+				ARRAY_FOREACH ( i, pNode->m_dWords )
+					dTerms.Add ( Create ( pNode->m_dWords[i], pNode, tSetup ) );
+
+				ARRAY_FOREACH ( i, pNode->m_dChildren )
+					dTerms.Add ( Create ( pNode->m_dChildren[i], tSetup ) );
 
 				// make not simple, but optimized AND node.
 				dTerms.Sort ( ExtNodeTF_fn() );

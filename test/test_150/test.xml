@@ -48,17 +48,18 @@ create table test_table
 );
 </db_create>
 <db_drop>drop table if exists test_table;</db_drop>
-<db_insert>insert into test_table values ( 1, 1, 'funny place. funny.' );</db_insert>
-<db_insert>insert into test_table values ( 2, 1, 'is it function? funny.' );</db_insert>
+<db_insert>insert into test_table values ( 1, 1, 'funny place.' );</db_insert>
+<db_insert>insert into test_table values ( 2, 1, 'is it function?' );</db_insert>
 <db_insert>insert into test_table values ( 3, 1, 'functional lang. quite funny.' );</db_insert>
-<db_insert>insert into test_table values ( 4, 1, 'fund sequence. funny functional.' );</db_insert>
-<db_insert>insert into test_table values ( 5, 1, 'fun place. funny fund.' );</db_insert>
-<db_insert>insert into test_table values ( 6, 1, 'its funny function.' );</db_insert>
-<db_insert>insert into test_table values ( 7, 1, 'functional is not funny place.' );</db_insert>
+<db_insert>insert into test_table values ( 4, 1, 'functic sequence.' );</db_insert>
+<db_insert>insert into test_table values ( 5, 1, 'fun place. funny place.' );</db_insert>
+<db_insert>insert into test_table values ( 6, 1, 'its function.' );</db_insert>
+<db_insert>insert into test_table values ( 7, 1, 'functional is not place.' );</db_insert>
+<db_insert>insert into test_table values ( 8, 1, 'functic is not place.' );</db_insert>
 
 <queries>
 	<query mode="extended2">fu*</query>
-	<query mode="extended2">fun*</query>
+	<query mode="extended2">func*</query>
 </queries>
 
 </test>

@@ -1478,8 +1478,8 @@ private:
 	bool						LoadPersistentMVA ( CSphString & sError );
 
 	bool						JuggleFile ( const char* szExt, bool bNeedOrigin=true );
-	XQNode_t *					DoExpansion ( XQNode_t * pNode, BYTE * pBuff, int iFD ) const;
-	XQNode_t *					ExpandPrefix ( XQNode_t * pNode, CSphString & sError ) const;
+	XQNode_t *					DoExpansion ( XQNode_t * pNode, BYTE * pBuff, int iFD, CSphQueryResultMeta * pResult ) const;
+	XQNode_t *					ExpandPrefix ( XQNode_t * pNode, CSphString & sError, CSphQueryResultMeta * pResult ) const;
 };
 
 int CSphIndex_VLN::m_iIndexTagSeq = 0;
@@ -13638,15 +13638,16 @@ struct WordDocsGreaterOp_t
 	}
 };
 
-XQNode_t * CSphIndex_VLN::DoExpansion ( XQNode_t * pNode, BYTE * pBuff, int iFD ) const
+XQNode_t * CSphIndex_VLN::DoExpansion ( XQNode_t * pNode, BYTE * pBuff, int iFD, CSphQueryResultMeta * pResult ) const
 {
 	assert ( pNode );
+	assert ( pResult );
 
 	// process children for composite nodes
 	if ( pNode->m_dChildren.GetLength() )
 	{
 		ARRAY_FOREACH ( i, pNode->m_dChildren )
-			pNode->m_dChildren[i] = DoExpansion ( pNode->m_dChildren[i], pBuff, iFD );
+			pNode->m_dChildren[i] = DoExpansion ( pNode->m_dChildren[i], pBuff, iFD, pResult );
 		return pNode;
 	}
 
@@ -13658,7 +13659,7 @@ XQNode_t * CSphIndex_VLN::DoExpansion ( XQNode_t * pNode, BYTE * pBuff, int iFD 
 		{
 			XQNode_t * pWord = new XQNode_t;
 			pWord->m_dWords.Add ( pNode->m_dWords[i] );
-			pNode->m_dChildren.Add ( DoExpansion ( pWord, pBuff, iFD ) );
+			pNode->m_dChildren.Add ( DoExpansion ( pWord, pBuff, iFD, pResult ) );
 			pNode->m_dChildren.Last()->m_iAtomPos = pNode->m_dWords[i].m_iAtomPos;
 		}
 		pNode->m_dWords.Reset();
@@ -13697,27 +13698,25 @@ XQNode_t * CSphIndex_VLN::DoExpansion ( XQNode_t * pNode, BYTE * pBuff, int iFD 
 	CSphVector<CSphNamedInt> dPrefixedWords;
 	const bool bWordExists = m_tWordlist.GetPrefixedWords ( sAdjustedWord, iWordLen, dPrefixedWords, pBuff, iFD );
 
+	// add this adjusted Word with zero documents to statistics
+	if ( !bWordExists )
+	{
+		CSphString sStat;
+		sStat.SetBinary ( sAdjustedWord, iWordLen );
+		pResult->AddStat ( sStat, 0, 0, true );
+	}
+
 	if ( !dPrefixedWords.GetLength() )
 		return pNode;
 
 	// sort word's to leftmost max documents, rightmost least documents
 	dPrefixedWords.Sort ( WordDocsGreaterOp_t() );
 
-	// clip words with hight doc frequency as rare words are better
+	// clip words with the lowest doc frequency as rare words are misspelling
 	if ( m_iExpansionLimit && m_iExpansionLimit<dPrefixedWords.GetLength() )
 	{
-		int iExtra = dPrefixedWords.GetLength()-m_iExpansionLimit;
-		for ( int i=0; i<m_iExpansionLimit; i++ )
-		{
-			dPrefixedWords[i].m_sName.Swap ( dPrefixedWords[i+iExtra].m_sName );
-			dPrefixedWords[i].m_iValue = dPrefixedWords[i+iExtra].m_iValue;
-		}
 		dPrefixedWords.Resize ( m_iExpansionLimit );
 	}
-
-	// add this very Word but with zero documents
-	if ( !bWordExists )
-		dPrefixedWords.Add().m_sName = sFullWord; // FIXME!!! should we use ( sAdjustedWord, iWordLen ) instead of reference word
 
 	const XQKeyword_t tPrefixingWord = pNode->m_dWords[0];
 	pNode->m_dWords.Reset();
@@ -13728,7 +13727,7 @@ XQNode_t * CSphIndex_VLN::DoExpansion ( XQNode_t * pNode, BYTE * pBuff, int iFD 
 	return pNode;
 }
 
-XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphString & sError ) const
+XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphString & sError, CSphQueryResultMeta * pResult ) const
 {
 	if ( !pNode || !( m_pDict->GetSettings().m_bWordDict && m_tSettings.m_iMinPrefixLen>0 ) )
 		return pNode;
@@ -13754,7 +13753,7 @@ XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphString & sError )
 
 	assert ( m_bPreread[0] );
 	assert ( !m_bPreloadWordlist || !m_tWordlist.m_pBuf.IsEmpty() );
-	pNode = DoExpansion ( pNode, pBuf, iFD );
+	pNode = DoExpansion ( pNode, pBuf, iFD, pResult );
 
 	SafeDeleteArray ( pBuf );
 
@@ -13890,7 +13889,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	Transform ( &tParsed.m_pRoot );
 
 	// expanding prefix in word dictionary case
-	XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, pResult->m_sError );
+	XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, pResult->m_sError, pResult );
 	if ( !pPrefixed )
 		return false;
 	tParsed.m_pRoot = pPrefixed;
@@ -13976,7 +13975,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 			Transform ( &tParsed.m_pRoot );
 
 			// expanding prefix in word dictionary case
-			XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, ppResults[i]->m_sError );
+			XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, ppResults[i]->m_sError, ppResults[i] );
 			if ( pPrefixed )
 			{
 				tParsed.m_pRoot = pPrefixed;
@@ -22674,7 +22673,7 @@ const BYTE * CWordlist::GetWord ( const BYTE * pBuf, const char * pStr, int iLen
 		BYTE uHint = ( iDocs>=DOCLIST_HINT_THRESH ) ? *pBuf++ : 0;
 
 		// it matches?!
-		if ( iCmpRes==0 )
+		if ( iCmpRes==0 && ( !bStarMode || iLen<=tCtx.m_iLen ) )
 		{
 			tWord.m_sWord = (char*)tCtx.m_sWord;
 			tWord.m_uOff = uOff;
@@ -22792,7 +22791,7 @@ bool CWordlist::GetPrefixedWords ( const char * sWord, int iWordLen, CSphVector<
 				CSphNamedInt & tPrefixed = dPrefixedWords.Add();
 				tPrefixed.m_sName = tResWord.m_sWord; // OPTIMIZE? swap mb?
 				tPrefixed.m_iValue = tResWord.m_iDocs;
-				bExactWord |= ( DictCmpStrictly ( tPrefixed.m_sName.cstr(), tPrefixed.m_sName.Length(), sWord, iWordLen )==0 );
+				bExactWord |= ( DictCmpStrictly ( sWord, iWordLen, tPrefixed.m_sName.cstr(), tPrefixed.m_sName.Length() )==0 );
 			}
 		}
 

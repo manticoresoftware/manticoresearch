@@ -3963,6 +3963,7 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 				{
 					m_iAccum = 0;
 					m_iLastTokenLen = 0;
+					BlendAdjust ( pCur );
 					return NULL;
 				}
 			}
@@ -4170,6 +4171,7 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 				if ( !m_bShortTokenFilter || !ShortTokenFilter ( m_sAccum, m_iLastTokenLen ) )
 				{
 					m_iLastTokenLen = 0;
+					BlendAdjust ( pCur );
 					return NULL;
 				}
 			}

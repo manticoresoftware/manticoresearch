@@ -777,14 +777,6 @@ int sphFormatCurrentTime ( char * sTimeBuf, int iBufLen )
 }
 
 
-/// simple write wrapper
-/// simplifies partial write checks, and also supresses "fortified" glibc warnings
-static bool sphWrite ( int iFD, const void * pBuf, size_t iSize )
-{
-	return ( iSize==(size_t)::write ( iFD, pBuf, iSize ) );
-}
-
-
 /// physically emit log entry
 /// buffer must have 1 extra byte for linefeed
 void sphLogEntry ( ESphLogLevel eLevel, char * sBuf, char * sTtyBuf )

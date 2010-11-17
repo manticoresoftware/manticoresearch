@@ -164,10 +164,12 @@ void sphSetLogger ( SphLogger_fn fnLog );
 	#endif
 #endif
 
+/// simple write wrapper
+/// simplifies partial write checks, and also supresses "fortified" glibc warnings
+bool sphWrite ( int iFD, const void * pBuf, size_t iSize );
 
-/// async safe fprintf
+/// async safe, BUT NOT THREAD SAFE, fprintf
 void sphSafeInfo ( int iFD, const char * sFmt, ... );
-void sphfprintf ( int iFD, const char * sFmt, ... );
 
 #if !USE_WINDOWS
 /// UNIX backtrace gets printed out to a stream

@@ -210,17 +210,17 @@ void sphAllocsDump ( int iFile, int iSinceID )
 {
 	g_tAllocsMutex.Lock();
 
-	sphfprintf ( iFile, "--- dumping allocs since %d ---\n", iSinceID );
+	sphSafeInfo ( iFile, "--- dumping allocs since %d ---\n", iSinceID );
 
 	for ( CSphMemHeader * pHeader = g_pAllocs;
 		pHeader && pHeader->m_iAllocId > iSinceID;
 		pHeader = pHeader->m_pNext )
 	{
-		sphfprintf ( iFile, "alloc %d at %s(%d): %d bytes\n", pHeader->m_iAllocId,
+		sphSafeInfo ( iFile, "alloc %d at %s(%d): %d bytes\n", pHeader->m_iAllocId,
 			pHeader->m_sFile, pHeader->m_iLine, (int)pHeader->m_iSize );
 	}
 
-	sphfprintf ( iFile, "--- end of dump ---\n" );
+	sphSafeInfo ( iFile, "--- end of dump ---\n" );
 
 	g_tAllocsMutex.Unlock();
 }
@@ -551,20 +551,25 @@ STATIC_ASSERT ( sizeof(g_dMemCategoryName)/sizeof(g_dMemCategoryName[0])==Memory
 // output of memory statistic's
 void sphMemStatDump ( int iFD )
 {
-	const float fMB = 1024.0f*1024.0f;
-	float fSize = 0;
+	int64_t iSize = 0;
 	int iCount = 0;
 	for ( int i=0; i<Memory::SPH_MEM_TOTAL; i++ )
 	{
-		fSize += (float)g_dMemCategoryStat[i].m_iSize;
+		iSize += (int64_t) g_dMemCategoryStat[i].m_iSize;
 		iCount += g_dMemCategoryStat[i].m_iCount;
 	}
-	sphfprintf ( iFD, "%-24s allocs-count=%d, mem-total=%.4f Mb", "(total)", iCount, fSize/fMB );
+
+	sphSafeInfo ( iFD, "%-24s allocs-count=%d, mem-total=%d.%d Mb", "(total)", iCount,
+		(int)(iSize/1048576), (int)( (iSize*10/1048576)%10 ) );
 
 	for ( int i=0; i<Memory::SPH_MEM_TOTAL; i++ )
 		if ( g_dMemCategoryStat[i].m_iCount>0 )
-			sphfprintf ( iFD, "%-24s allocs-count=%d, mem-total=%.4f Mb",
-				g_dMemCategoryName[i], g_dMemCategoryStat[i].m_iCount, (float)g_dMemCategoryStat[i].m_iSize/fMB);
+	{
+		iSize = (int64_t) g_dMemCategoryStat[i].m_iSize;
+		sphSafeInfo ( iFD, "%-24s allocs-count=%d, mem-total=%d.%d Mb",
+			g_dMemCategoryName[i], g_dMemCategoryStat[i].m_iCount,
+			(int)(iSize/1048576), (int)( (iSize*10/1048576)%10 ) );
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////////

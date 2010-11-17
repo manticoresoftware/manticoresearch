@@ -1115,7 +1115,7 @@ static void UItoA ( char** ppOutput, Uint uVal, int iBase=10, int iWidth=0, int 
 	if ( iWidth )
 		while ( uLen < iWidth )
 		{
-			*pOutput++=cFill;
+			*pOutput++ = cFill;
 			iWidth--;
 		}
 
@@ -1129,23 +1129,27 @@ static void UItoA ( char** ppOutput, Uint uVal, int iBase=10, int iWidth=0, int 
 			iPrec = uLen-iPrec;
 		}
 
-		while ( pRes<CBuf+uMaxIndex-iPrec )
-			*pOutput++=*++pRes;
+		while ( pRes < CBuf+uMaxIndex-iPrec )
+			*pOutput++ = *++pRes;
 }
 
-static int sphVSprintf ( char* pOutput, const char* sFmt, va_list ap )
+
+static int sphVSprintf ( char * pOutput, const char * sFmt, va_list ap )
 {
-	char c;
-	enum eStates { SNORMAL, SPERCENT, SHAVEFILL, SINWIDTH, SINPERC };
+	enum eStates { SNORMAL, SPERCENT, SHAVEFILL, SINWIDTH, SINPREC };
 	eStates state = SNORMAL;
 	int iPrec = 0;
 	int iWidth = 0;
 	char cFill = ' ';
 	const char * pBegin = pOutput;
-	while ( (c = *sFmt++) )
-		switch ( c )
+	bool bHeadingSpace = true;
+
+	char c;
+	while ( ( c = *sFmt++ )!=0 )
 	{
-		case '%':
+		// handle percent
+		if ( c=='%' )
+		{
 			if ( state==SNORMAL )
 			{
 				state = SPERCENT;
@@ -1157,118 +1161,118 @@ static int sphVSprintf ( char* pOutput, const char* sFmt, va_list ap )
 				state = SNORMAL;
 				*pOutput++ = c;
 			}
-			break;
+			continue;
+		}
+
+		// handle regular chars
+		if ( state==SNORMAL )
+		{
+			*pOutput++ = c;
+			continue;
+		}
+
+		// handle modifiers
+		switch ( c )
+		{
 		case '0':
 			if ( state==SPERCENT )
 			{
 				cFill = '0';
 				state = SHAVEFILL;
 				break;
-			};
+			}
 		case '1': case '2': case '3':
 		case '4': case '5': case '6':
 		case '7': case '8': case '9':
-			if ( state==SNORMAL )
-			{
-				*pOutput++ = c;
-				break;
-			}
 			if ( state==SPERCENT || state==SHAVEFILL )
 			{
 				state = SINWIDTH;
 				iWidth = c - '0';
 			} else if ( state==SINWIDTH )
 				iWidth = iWidth * 10 + c - '0';
-			else if ( state==SINPERC )
+			else if ( state==SINPREC )
 				iPrec = iPrec * 10 + c - '0';
 			break;
-		case '.':
-			if ( state==SNORMAL )
-				*pOutput++ = c;
+
+		case '-':
+			if ( state==SPERCENT )
+				bHeadingSpace = false;
 			else
-			{
-				state = SINPERC;
-				iPrec = 0;
-			}
+				state = SNORMAL; // FIXME? means that bad/unhandled syntax with dash will be just ignored
 			break;
+
+		case '.':
+			state = SINPREC;
+			iPrec = 0;
+			break;
+
 		case 's': // string
-			if ( state==SNORMAL )
 			{
-				*pOutput++ = c;
-				break;
-			}
-			{
-				const char* pValue = va_arg ( ap, const char* );
+				const char * pValue = va_arg ( ap, const char * );
 				int iValue = strlen ( pValue );
-				if ( iWidth )
+
+				if ( iWidth && bHeadingSpace )
 					while ( iValue < iWidth-- )
 						*pOutput++ = ' ';
+
 				if ( iPrec && iPrec < iValue )
 					while ( iPrec-- )
 						*pOutput++ = *pValue++;
 				else
 					while ( *pValue )
 						*pOutput++ = *pValue++;
+
+				if ( iWidth && !bHeadingSpace )
+					while ( iValue < iWidth-- )
+						*pOutput++ = ' ';
+
 				state = SNORMAL;
 				break;
 			}
+
 		case 'p': // pointer
-			if ( state==SNORMAL )
 			{
-				*pOutput++ = c;
-				break;
-			}
-			{
-				void* pValue = va_arg ( ap, void* );
+				void * pValue = va_arg ( ap, void * );
 				uint64_t uValue = uint64_t ( pValue );
 				UItoA ( &pOutput, uValue, 16, iWidth, iPrec, cFill );
 				state = SNORMAL;
 				break;
 			}
+
 		case 'x': // hex integer
-			if ( state==SNORMAL )
-			{
-				*pOutput++ = c;
-				break;
-			}
-			{
-				DWORD uValue = va_arg ( ap, DWORD );
-				UItoA ( &pOutput, uValue, 16, iWidth, iPrec, cFill );
-				state = SNORMAL;
-				break;
-			}
 		case 'd': // decimal integer
-			if ( state==SNORMAL )
-			{
-				*pOutput++ = c;
-				break;
-			}
 			{
 				DWORD uValue = va_arg ( ap, DWORD );
-				UItoA ( &pOutput, uValue, 10, iWidth, iPrec, cFill );
+				UItoA ( &pOutput, uValue, ( c=='x' ) ? 16 : 10, iWidth, iPrec, cFill );
 				state = SNORMAL;
 				break;
 			}
+
 		case 'l': // decimal int64
-			if ( state==SNORMAL )
-			{
-				*pOutput++ = c;
-				break;
-			}
 			{
 				int64_t iValue = va_arg ( ap, int64_t );
 				UItoA ( &pOutput, iValue, 10, iWidth, iPrec, cFill );
 				state = SNORMAL;
 				break;
 			}
+
 		default:
 			state = SNORMAL;
 			*pOutput++ = c;
+		}
 	}
+
 	// final zero to EOL
 	*pOutput++ = '\n';
-	return pOutput-pBegin;
+	return pOutput - pBegin;
 }
+
+
+bool sphWrite ( int iFD, const void * pBuf, size_t iSize )
+{
+	return ( iSize==(size_t)::write ( iFD, pBuf, iSize ) );
+}
+
 
 static char g_sSafeInfoBuf [ 1024 ];
 
@@ -1281,23 +1285,9 @@ void sphSafeInfo ( int iFD, const char * sFmt, ... )
 	va_start ( ap, sFmt );
 	int iLen = sphVSprintf ( g_sSafeInfoBuf, sFmt, ap ); // FIXME! make this vsnprintf
 	va_end ( ap );
-	::write ( iFD, g_sSafeInfoBuf, iLen );
+	sphWrite ( iFD, g_sSafeInfoBuf, iLen );
 }
 
-void sphfprintf ( int iFD, const char * sFmt, ... )
-{
-	if ( iFD<0 || !sFmt )
-		return;
-
-	va_list ap;
-	va_start ( ap, sFmt );
-	int iLen = vsnprintf ( g_sSafeInfoBuf, sizeof(g_sSafeInfoBuf)-1, sFmt, ap );
-	va_end ( ap );
-	if ( iLen==-1 )
-		iLen = sizeof(g_sSafeInfoBuf)-1;
-	g_sSafeInfoBuf[iLen] = '\n';
-	::write ( iFD, g_sSafeInfoBuf, iLen+1 );
-}
 
 #if !USE_WINDOWS
 

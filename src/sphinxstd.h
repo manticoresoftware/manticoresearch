@@ -1328,23 +1328,23 @@ public:
 	inline bool operator == ( const char * t ) const
 	{
 		if ( !t || !m_sValue )
-			return (!t && !m_sValue);
+			return ( !t && !m_sValue );
 		return strcmp ( m_sValue, t )==0;
 	}
 
 	inline bool operator == ( const CSphString & t ) const
 	{
-		return operator== ( t.cstr() );
+		return operator==( t.cstr() );
 	}
 
 	inline bool operator != ( const CSphString & t ) const
 	{
-		return !operator== ( t );
+		return !operator==( t );
 	}
 
 	bool operator != ( const char * t ) const
 	{
-		return !operator== ( t );
+		return !operator==( t );
 	}
 
 	CSphString ( const char * sString ) // NOLINT

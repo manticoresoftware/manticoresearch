@@ -3561,13 +3561,13 @@ int ExtUnit_c::FilterHits ( int iMyHit, DWORD uSentenceEnd, SphDocID_t uDocid, i
 			{
 				m_dMyHits[iMyHit++] = *m_pHit1++;
 				if ( m_pHit1->m_uDocid==DOCID_MAX )
-					m_pHit1 = m_pArg1->GetHitsChunk ( m_pDocs1, NULL );
+					m_pHit1 = m_pArg1->GetHitsChunk ( m_pDocs1, 0 );
 
 			} else
 			{
 				m_dMyHits[iMyHit++] = *m_pHit2++;
 				if ( m_pHit2->m_uDocid==DOCID_MAX )
-					m_pHit2 = m_pArg2->GetHitsChunk ( m_pDocs2, NULL );
+					m_pHit2 = m_pArg2->GetHitsChunk ( m_pDocs2, 0 );
 			}
 
 		} else

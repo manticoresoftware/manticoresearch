@@ -11464,9 +11464,16 @@ void SetWatchDog()
 			sphFatal ( "fork() failed during watchdog setup (error=%s)", strerror(errno) );
 		}
 
-		// child process; just return
+		// child process; reload config if necessary and return
 		if ( iRes==0 )
+		{
+			if ( CheckConfigChanges () )
+			{
+				CSphConfigParser tCP;
+				ReloadIndexSettings ( &tCP );
+			}
 			return;
+		}
 
 		// parent process, watchdog
 		bReincarnate = false;
@@ -11488,7 +11495,7 @@ void SetWatchDog()
 				}
 			} else if ( WIFSIGNALED ( iStatus ) )
 			{
-				if ( WTERMSIG ( iStatus )==SIGINT || WTERMSIG ( iStatus )==SIGTERM )
+				if ( WTERMSIG ( iStatus )==SIGINT || WTERMSIG ( iStatus )==SIGTERM || WTERMSIG ( iStatus )==SIGKILL )
 				{
 					sphInfo ( "Child process %d has been killed with kill or sigterm (%i). Watchdog finishes also. Good bye!", iPid, WTERMSIG ( iStatus ) );
 					bShutdown = true;

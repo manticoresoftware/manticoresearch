@@ -31,6 +31,23 @@ source test2 : test1
 	sql_attr_uint	= b
 }
 
+
+source test3 : test1
+{
+	sql_query		= select id+20, gid, gid+1 as c, gid+2 as b, title from test_table
+	sql_attr_uint	= gid
+	sql_attr_uint	= c
+	sql_attr_uint	= b
+}
+
+source test4 : test1
+{
+	sql_query		= select id+30, gid, gid+3 as d, gid+5 as b, title from test_table
+	sql_attr_uint	= gid
+	sql_attr_uint	= d
+	sql_attr_uint	= b
+}
+
 index test1
 {
 	source			= test1
@@ -43,11 +60,40 @@ index test2
 	path			= <data_path/>/test2
 }
 
+index test3
+{
+	source			= test3
+	path			= <data_path/>/test3
+}
+
+index test4
+{
+	source			= test4
+	path			= <data_path/>/test4
+}
+
 index dist1
 {
 	type			= distributed
 	local			= test1
 	local			= test2
+}
+
+index dist2
+{
+	type			= distributed
+	local			= test2
+	local			= test3
+}
+
+index dist3
+{
+	type			= distributed
+	local			= test2
+	agent			= <my_address/>:idx52
+	local			= test4
+	agent_connect_timeout	= 1000
+	agent_query_timeout	= 3000
 }
 </config>
 
@@ -66,6 +112,8 @@ create table test_table
 
 <sphqueries>
 <sphinxql>select gid from dist1 where match('hello') option max_matches=2</sphinxql>
+<sphinxql>select b from dist2 where match('hello') option max_matches=2</sphinxql>
+<sphinxql>select b from dist3 where match('hello') option max_matches=2</sphinxql>
 </sphqueries>
 
 </test>

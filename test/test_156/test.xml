@@ -36,6 +36,9 @@ index test
 	source			= test
 	path			= <data_path/>/test
 	dict			= keywords
+	
+	min_prefix_len	= 1
+	enable_star		= 1
 }
 </config>
 
@@ -74,11 +77,12 @@ create table mva
 <sphqueries>
 <sphinxql>select * from test</sphinxql>
 <sphinxql>select * from test where mva &gt;= 2004 and mva &lt; 2007</sphinxql>
-<sphinxql>select * from test where match ('goods')</sphinxql>
-<sphinxql>select * from test where match ('grant')</sphinxql>
-<sphinxql>select * from test where match ('grant !(@title grant)')</sphinxql>
+<sphinxql>select * from test where match ('goo*')</sphinxql>
+<sphinxql>select * from test where match ('g*')</sphinxql>
+<sphinxql>select * from test where match ('g* !(@title g*)')</sphinxql>
 <sphinxql>select * from test where match ('everyone')</sphinxql>
 <sphinxql>select * from test where match ('anyone | everyone')</sphinxql>
+<sphinxql>select * from test where match ('@text g*')</sphinxql>
 <sphinxql>select * from test where match ('natural')</sphinxql>
 <sphinxql>select * from test where mva=1001</sphinxql>
 </sphqueries>

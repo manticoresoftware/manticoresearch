@@ -19250,6 +19250,22 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 		tCol.m_bPayload = m_tParams.m_dJoinedFields[i].m_bPayload;
 		tCol.m_eSrc = m_tParams.m_dJoinedFields[i].m_sRanged.IsEmpty() ? SPH_ATTRSRC_QUERY : SPH_ATTRSRC_RANGEDQUERY;
 		tCol.m_sQueryRange = m_tParams.m_dJoinedFields[i].m_sRanged;
+
+		// wordpart of joined filed setup
+		tCol.m_eWordpart = SPH_WORDPART_WHOLE;
+
+		bool bPrefix = !bWordDict && m_iMinPrefixLen > 0 && IsPrefixMatch ( tCol.m_sName.cstr () );
+		bool bInfix = m_iMinInfixLen > 0 && IsInfixMatch ( tCol.m_sName.cstr () );
+
+		if ( bPrefix && m_iMinPrefixLen > 0 && bInfix && m_iMinInfixLen > 0 )
+			LOC_ERROR ( "field '%s' is marked for both infix and prefix indexing", tCol.m_sName.cstr() );
+
+		if ( bPrefix )
+			tCol.m_eWordpart = SPH_WORDPART_PREFIX;
+
+		if ( bInfix )
+			tCol.m_eWordpart = SPH_WORDPART_INFIX;
+
 		m_tSchema.m_dFields.Add ( tCol );
 	}
 

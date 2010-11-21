@@ -473,6 +473,7 @@ bool ParseJoinedField ( const char * sBuf, CSphJoinedField * pField, const char 
 		fprintf ( stdout, "ERROR: source '%s': expected " _exp " in sql_joined_field, got '%s'.\n", sSourceName, sBuf ); \
 		return false; \
 	}
+#define LOC_TEXT()			{ if ( *sBuf!=';') LOC_ERR ( "';'" ); sTmp = ++sBuf; while ( *sBuf && *sBuf!=';' ) sBuf++; iTokLen = sBuf-sTmp; }
 
 	// parse field name
 	while ( isspace(*sBuf) )
@@ -500,6 +501,9 @@ bool ParseJoinedField ( const char * sBuf, CSphJoinedField * pField, const char 
 	while ( isspace(*sBuf) )
 		sBuf++;
 
+	bool bGotRanged = false;
+	pField->m_bPayload = false;
+
 	// parse 'query'
 	if ( strncasecmp ( sBuf, "payload-query", 13 )==0 )
 	{
@@ -508,8 +512,12 @@ bool ParseJoinedField ( const char * sBuf, CSphJoinedField * pField, const char 
 
 	} else if ( strncasecmp ( sBuf, "query", 5 )==0 )
 	{
-		pField->m_bPayload = false;
 		sBuf += 5;
+
+	} else if ( strncasecmp ( sBuf, "ranged-query", 12 )==0 )
+	{
+		bGotRanged = true;
+		sBuf += 12;
 
 	} else
 		LOC_ERR ( "'query'" );
@@ -520,15 +528,28 @@ bool ParseJoinedField ( const char * sBuf, CSphJoinedField * pField, const char 
 
 	if ( *sBuf!=';' )
 		LOC_ERR ( "';'" );
-	sBuf++;
 
-	// the rest is query
-	while ( isspace(*sBuf) )
-		sBuf++;
+	// handle QUERY
+	const char * sTmp = sBuf;
+	int iTokLen = 0;
+	LOC_TEXT();
+	if ( iTokLen )
+		pField->m_sQuery.SetBinary ( sTmp, iTokLen );
+	else
+		LOC_ERR ( "query" );
 
-	pField->m_sQuery = sBuf;
+	if ( !bGotRanged )
+		return true;
+
+	// handle RANGE-QUERY
+	LOC_TEXT();
+	if ( iTokLen )
+		pField->m_sRanged.SetBinary ( sTmp, iTokLen );
+	else
+		LOC_ERR ( "range query" );
 
 #undef LOC_ERR
+#undef LOC_TEXT
 
 	return true;
 }
@@ -579,6 +600,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 	LOC_GETA ( tParams.m_dFileFields,			"sql_file_field" );
 
 	tParams.m_iMaxFileBufferSize = g_iMaxFileFieldBuffer;
+	tParams.m_iRefRangeStep = tParams.m_iRangeStep;
 
 	// unpack
 	if ( !ConfigureUnpack ( hSource("unpack_zlib"), SPH_UNPACK_ZLIB, tParams, sSourceName ) )

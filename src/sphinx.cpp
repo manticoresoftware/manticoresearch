@@ -18813,6 +18813,7 @@ bool CSphSource_Document::IsFieldInStr ( const char * szField, const char * szSt
 
 CSphSourceParams_SQL::CSphSourceParams_SQL ()
 	: m_iRangeStep ( 1024 )
+	, m_iRefRangeStep ( 1024 )
 	, m_iRangedThrottle ( 0 )
 	, m_iMaxFileBufferSize ( 0 )
 	, m_iPort ( 0 )
@@ -19088,9 +19089,12 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 
 	for ( ;; )
 	{
+		m_tParams.m_iRangeStep = 0;
+
 		// issue first fetch query
 		if ( !m_tParams.m_sQueryRange.IsEmpty() )
 		{
+			m_tParams.m_iRangeStep = m_tParams.m_iRefRangeStep;
 			// run range-query; setup ranges
 			if ( !SetupRanges ( m_tParams.m_sQueryRange.cstr(), m_tParams.m_sQuery.cstr(), "sql_query_range: ", sError ) )
 				return false;
@@ -19107,7 +19111,6 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 				sError.SetSprintf ( "sql_query: %s (DSN=%s)", SqlError(), m_sSqlDSN.cstr() );
 				return false;
 			}
-			m_tParams.m_iRangeStep = 0;
 		}
 		break;
 	}
@@ -19245,6 +19248,8 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 		tCol.m_sName = m_tParams.m_dJoinedFields[i].m_sName;
 		tCol.m_sQuery = m_tParams.m_dJoinedFields[i].m_sQuery;
 		tCol.m_bPayload = m_tParams.m_dJoinedFields[i].m_bPayload;
+		tCol.m_eSrc = m_tParams.m_dJoinedFields[i].m_sRanged.IsEmpty() ? SPH_ATTRSRC_QUERY : SPH_ATTRSRC_RANGEDQUERY;
+		tCol.m_sQueryRange = m_tParams.m_dJoinedFields[i].m_sRanged;
 		m_tSchema.m_dFields.Add ( tCol );
 	}
 
@@ -19527,6 +19532,8 @@ bool CSphSource_SQL::IterateMultivaluedStart ( int iAttr, CSphString & sError )
 		break;
 
 	case SPH_ATTRSRC_RANGEDQUERY:
+			m_tParams.m_iRangeStep = m_tParams.m_iRefRangeStep;
+
 			// setup ranges
 			sPrefix.SetSprintf ( "multi-valued attr '%s' ranged query: ", tAttr.m_sName.cstr() );
 			if ( !SetupRanges ( tAttr.m_sQueryRange.cstr(), tAttr.m_sQuery.cstr(), sPrefix.cstr(), sError ) )
@@ -19775,6 +19782,8 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 		return &m_tHits;
 	}
 
+	bool bProcessingRanged = true;
+
 	// my fetch loop
 	while ( m_iJoinedHitField<m_tSchema.m_dFields.GetLength() )
 	{
@@ -19835,10 +19844,14 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 
 		} else
 		{
+			int iLastField = m_iJoinedHitField;
+			bool bRanged = ( m_iJoinedHitField>=m_tSchema.m_iBaseFields && m_iJoinedHitField<m_tSchema.m_dFields.GetLength()
+				&& m_tSchema.m_dFields[m_iJoinedHitField].m_eSrc==SPH_ATTRSRC_RANGEDQUERY );
+
 			// current field is over, continue to next field
 			if ( m_iJoinedHitField<0 )
 				m_iJoinedHitField = m_tSchema.m_iBaseFields;
-			else
+			else if ( !bRanged || !bProcessingRanged )
 				m_iJoinedHitField++;
 
 			// eof check
@@ -19848,17 +19861,46 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 				return &m_tHits;
 			}
 
-			// start fetching next field
 			SqlDismissResult ();
 
-			if ( !SqlQuery ( m_tSchema.m_dFields[m_iJoinedHitField].m_sQuery.cstr() ) )
+			bProcessingRanged = false;
+			bool bCheckNumFields = true;
+			CSphColumnInfo & tJoined = m_tSchema.m_dFields[m_iJoinedHitField];
+
+			// start fetching next field
+			if ( tJoined.m_eSrc!=SPH_ATTRSRC_RANGEDQUERY )
 			{
-				sError = SqlError();
-				return NULL;
+				if ( !SqlQuery ( tJoined.m_sQuery.cstr() ) )
+				{
+					sError = SqlError();
+					return NULL;
+				}
+			} else
+			{
+				m_tParams.m_iRangeStep = m_tParams.m_iRefRangeStep;
+
+				// setup ranges for next field
+				if ( iLastField!=m_iJoinedHitField )
+				{
+					CSphString sPrefix;
+					sPrefix.SetSprintf ( "joined field '%s' ranged query: ", tJoined.m_sName.cstr() );
+					if ( !SetupRanges ( tJoined.m_sQueryRange.cstr(), tJoined.m_sQuery.cstr(), sPrefix.cstr(), sError ) )
+						return NULL;
+
+					m_uCurrentID = m_uMinID;
+				}
+
+				// run first step (in order to report errors)
+				bool bRes = RunQueryStep ( tJoined.m_sQuery.cstr(), sError );
+				bProcessingRanged = bRes; // select next documents in range or loop once to process next field
+				bCheckNumFields = bRes;
+
+				if ( !sError.IsEmpty() )
+					return NULL;
 			}
 
 			const int iExpected = m_tSchema.m_dFields[m_iJoinedHitField].m_bPayload ? 3 : 2;
-			if ( SqlNumFields()!=iExpected )
+			if ( bCheckNumFields && SqlNumFields()!=iExpected )
 			{
 				const char * sName = m_tSchema.m_dFields[m_iJoinedHitField].m_sName.cstr();
 				sError.SetSprintf ( "joined field '%s': query MUST return exactly %d columns, got %d", sName, iExpected, SqlNumFields() );

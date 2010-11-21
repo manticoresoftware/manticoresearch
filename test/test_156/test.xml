@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>ranged-query vs joined field and mva attribute</name>
+
+<requires>
+<non-rt/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_range_step		= 2
+	sql_query			= SELECT id, gid, title FROM test
+	
+	sql_joined_field	= text from ranged-query; select id, text from test where id between $start and $end; select 1, 5
+
+	sql_attr_uint		= gid
+	sql_attr_multi		= uint mva from ranged-query; select id, mva from mva where id between $start and $end; select 2, 5
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+	dict			= keywords
+}
+</config>
+
+<db_create>
+create table test
+(
+	id int not null,
+	gid int not null,
+	title varchar(255) not null,
+	text varchar(255) not null
+);
+</db_create>
+<db_create>
+create table mva
+(
+	id int not null,
+	mva int not null
+);
+</db_create>
+
+<db_drop>drop table if exists test;</db_drop>
+<db_drop>drop table if exists mva;</db_drop>
+<db_insert>insert into test values ( 1, 101, 'not found',	'notice found' );</db_insert>
+<db_insert>insert into test values ( 2, 102, 'not anyone',	'notice goods' );</db_insert>
+<db_insert>insert into test values ( 3, 103, 'not grant',	'notice goods' );</db_insert>
+<db_insert>insert into test values ( 4, 104, 'not grant',	'everyone' );</db_insert>
+<db_insert>insert into test values ( 5, 105, 'not anyone',	'grant' );</db_insert>
+<db_insert>insert into test values ( 6, 106, 'not fun',		'natural' );</db_insert>
+<db_insert>insert into mva values (1, 1001), (1, 2001);</db_insert>
+<db_insert>insert into mva values (2, 1002), (2, 2002);</db_insert>
+<db_insert>insert into mva values (3, 1003), (3, 2003);</db_insert>
+<db_insert>insert into mva values (4, 1004), (4, 2004);</db_insert>
+<db_insert>insert into mva values (5, 1005), (5, 2005);</db_insert>
+<db_insert>insert into mva values (6, 1006), (6, 2006);</db_insert>
+
+<sphqueries>
+<sphinxql>select * from test</sphinxql>
+<sphinxql>select * from test where mva &gt;= 2004 and mva &lt; 2007</sphinxql>
+<sphinxql>select * from test where match ('goods')</sphinxql>
+<sphinxql>select * from test where match ('grant')</sphinxql>
+<sphinxql>select * from test where match ('grant !(@title grant)')</sphinxql>
+<sphinxql>select * from test where match ('everyone')</sphinxql>
+<sphinxql>select * from test where match ('anyone | everyone')</sphinxql>
+<sphinxql>select * from test where match ('natural')</sphinxql>
+<sphinxql>select * from test where mva=1001</sphinxql>
+</sphqueries>
+
+</test>

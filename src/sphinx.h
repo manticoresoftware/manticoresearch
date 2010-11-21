@@ -1534,6 +1534,7 @@ struct CSphJoinedField
 {
 	CSphString			m_sName;
 	CSphString			m_sQuery;
+	CSphString			m_sRanged;
 	bool				m_bPayload;
 };
 
@@ -1545,6 +1546,7 @@ struct CSphSourceParams_SQL
 	CSphString						m_sQueryRange;
 	CSphString						m_sQueryKilllist;
 	int								m_iRangeStep;
+	int								m_iRefRangeStep;
 
 	CSphVector<CSphString>			m_dQueryPre;
 	CSphVector<CSphString>			m_dQueryPost;

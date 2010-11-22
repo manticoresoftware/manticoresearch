@@ -333,7 +333,7 @@ class SphinxClient:
 		"""
 		assert(isinstance(weights, list))
 		for w in weights:
-			assert(isinstance(w, int))
+			AssertUInt32 ( w )
 		self._weights = weights
 
 
@@ -344,7 +344,7 @@ class SphinxClient:
 		assert(isinstance(weights,dict))
 		for key,val in weights.items():
 			assert(isinstance(key,str))
-			assert(isinstance(val,int))
+			AssertUInt32 ( val )
 		self._fieldweights = weights
 
 
@@ -355,7 +355,7 @@ class SphinxClient:
 		assert(isinstance(weights,dict))
 		for key,val in weights.items():
 			assert(isinstance(key,str))
-			assert(isinstance(val,int))
+			AssertUInt32(val)
 		self._indexweights = weights
 
 
@@ -380,7 +380,7 @@ class SphinxClient:
 		assert iter(values)
 
 		for value in values:
-			assert(isinstance(value, int))
+			AssertInt32 ( value )
 
 		self._filters.append ( { 'type':SPH_FILTER_VALUES, 'attr':attribute, 'exclude':exclude, 'values':values } )
 
@@ -391,8 +391,8 @@ class SphinxClient:
 		Only match records if 'attribute' value is beetwen 'min_' and 'max_' (inclusive).
 		"""
 		assert(isinstance(attribute, str))
-		assert(isinstance(min_, int))
-		assert(isinstance(max_, int))
+		AssertInt32(min_)
+		AssertInt32(max_)
 		assert(min_<=max_)
 
 		self._filters.append ( { 'type':SPH_FILTER_RANGE, 'attr':attribute, 'exclude':exclude, 'min':min_, 'max':max_ } )
@@ -876,16 +876,16 @@ class SphinxClient:
 		for attr in attrs:
 			assert ( isinstance ( attr, str ) )
 		for docid, entry in values.items():
-			assert ( isinstance ( docid, int ) )
+			AssertUInt32(docid)
 			assert ( isinstance ( entry, list ) )
 			assert ( len(attrs)==len(entry) )
 			for val in entry:
 				if mva:
 					assert ( isinstance ( val, list ) )
 					for vals in val:
-						assert ( isinstance ( vals, int ))
+						AssertInt32(vals)
 				else:
-					assert ( isinstance ( val, int ) )
+					AssertInt32(val)
 
 		# build request
 		req = [ pack('>L',len(index)), index ]
@@ -899,7 +899,7 @@ class SphinxClient:
 		for docid, entry in values.items():
 			req.append ( pack('>Q',docid) )
 			for val in entry:
-				req.append ( pack('>L',count(val) if mva else val) )
+				req.append ( pack('>L',len(val) if mva else val) )
 				if mva:
 					for vals in val:
 						req.append ( pack ('>L',vals) )
@@ -1029,6 +1029,14 @@ class SphinxClient:
 		tag = unpack ( '>L', response[0:4] )[0]
 		return tag
 
+def AssertInt32 ( value ):
+	assert(isinstance(value, (int, long)))
+	assert(value>=-2**32-1 and value<=2**32-1)
+
+def AssertUInt32 ( value ):
+	assert(isinstance(value, (int, long)))
+	assert(value>=0 and value<=2**32-1)
+		
 #
 # $Id$
 #

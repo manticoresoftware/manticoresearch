@@ -3,6 +3,10 @@
 
 <name>SENTENCE, PARAGRAPH, and ZONE operators</name>
 
+<requires>
+	<variant_match/>
+</requires>
+
 <config>
 indexer
 {
@@ -25,20 +29,15 @@ source test
 index test
 {
 	source			= test
-	path			= <data_path/>/test1
+	path			= <data_path/>/test
 	html_strip		= 1
 	index_sp		= 1
 	index_zones		= zone
-}
-
-index test_keyword
-{
-	source			= test
-	path			= <data_path/>/test2
-	html_strip		= 1
-	dict			= keywords
-	index_sp		= 1
-	index_zones		= zone
+	<Dynamic>
+		<Variant>dict = crc</Variant>
+		<Variant>dict = keywords</Variant>
+	</Dynamic>
+	
 }
 
 </config>

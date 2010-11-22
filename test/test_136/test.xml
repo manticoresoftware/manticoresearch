@@ -42,6 +42,9 @@ index idx_131
 </config>
 
 <custom_test><![CDATA[
+
+global $error;
+
 $results = array ();
 
 // update that block
@@ -55,12 +58,10 @@ for ( $i = 0; $i < 4; $i++)
 	else
 		$results[] = sprintf("up.err=%s", $client->GetLastError());
 
-	KillSearchd ( 'config.conf', 'searchd.pid', 9, false );
+	$stop = StopWaitSearchd ('config.conf', 'searchd.pid');
+	$results[] = 'stoped='.($stop==0 ? 'ok' : 'err' ) . '(code=' . $stop . ')';
 
-	usleep ( 50000 );
-
-	$error = "";
-	$startSta = StartSearchd ( 'config.conf', 'error.txt', 'searchd.pid', $error );
+	$startSta = StartSearchd ( 'config.conf', 'error.txt', 'searchd.pid', $error, true );
 	if ( $startSta == 0 || $startSta == 2 )
 		$results[] = "started=ok";
 	else

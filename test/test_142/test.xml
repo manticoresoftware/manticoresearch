@@ -35,7 +35,7 @@ index test
 
 <custom_test><![CDATA[
 
-global $sd_address, $sd_sphinxql_port;
+global $sd_address, $sd_sphinxql_port, $error;
 
 $results = array();
 $sockStr = "$sd_address:$sd_sphinxql_port";
@@ -55,6 +55,7 @@ $results[] = "inserting";
 
 $results[]= "killing";
 KillSearchd ('config.conf', 'searchd.pid',9,false);
+StartSearchd ( "config.conf", "error.txt", 'searchd.pid', $error, true );
 usleep (50000);
 
 $results[] = "connecting again";

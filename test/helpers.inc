@@ -222,6 +222,20 @@ function StopSearchd ( $config, $pidfile )
 	}
 }
 
+function StopWaitSearchd ( $config, $pidfile )
+{
+	global $g_locals, $action_retries, $action_wait_timeout;
+	$ret = 0;
+
+	if ( file_exists($pidfile) && count(file($pidfile)) )
+	{
+		$path = $g_locals['searchd'];
+		$dummy = array();
+		exec ( "$path --config $config --stopwait", $dummy, $ret );
+	}
+	return $ret;
+}
+
 function KillSearchd ( $config, $pidfile, $signal, $unlinkpid=True )
 {
 	global $windows, $action_wait_timeout;

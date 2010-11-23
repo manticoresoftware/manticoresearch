@@ -1010,9 +1010,13 @@ module Sphinx
       # Connect to searchd server.
       def Connect
         begin
-          sock = TCPSocket.new(@host, @port)
-        rescue
-          @error = "connection to #{@host}:#{@port} failed"
+          if @host[0,1]=='/'
+            sock = UNIXSocket.new(@host)
+          else
+            sock = TCPSocket.new(@host, @port)
+          end
+        rescue => err
+          @error = "connection to #{@host}:#{@port} failed (error=#{err})"
           raise SphinxConnectError, @error
         end
         

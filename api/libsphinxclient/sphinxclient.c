@@ -56,6 +56,7 @@
 	#include <sys/wait.h>
 	#include <netdb.h>
 	#include <errno.h>
+	#include <sys/un.h>
 #endif
 
 //////////////////////////////////////////////////////////////////////////
@@ -1332,16 +1333,11 @@ static sphinx_bool net_read ( int fd, char * buf, int len, sphinx_client * clien
 }
 
 
-static int net_connect_get ( sphinx_client * client )
+static int net_create_inet_sock ( sphinx_client * client )
 {
 	struct hostent * hp;
 	struct sockaddr_in sa;
-	struct timeval timeout;
-	fd_set fds_write;
-	int sock, to_wait, res, err, my_proto, optval;
-
-	if ( client->sock>=0 )
-		return client->sock;
+	int sock, res, err, optval;
 
 	hp = gethostbyname ( client->host );
 	if ( !hp )
@@ -1391,6 +1387,93 @@ static int net_connect_get ( sphinx_client * client )
 		set_error ( client, "connect() failed: %s", sock_error() );
 		return -1;
 	}
+
+	return sock;
+}
+
+#ifndef _WIN32
+static int net_create_unix_sock ( sphinx_client * client )
+{
+	struct hostent * hp;
+	struct sockaddr_un uaddr;
+	int sock, res, err, optval, len;
+
+	len = strlen ( client->host );
+
+	if ( len + 1 > sizeof( uaddr.sun_path ) )
+		set_error ( client, "UNIX socket path is too long (len=%d)", len );
+
+	memset ( &uaddr, 0, sizeof(uaddr) );
+	uaddr.sun_family = AF_UNIX;
+	memcpy ( uaddr.sun_path, client->host, len + 1 );
+
+	sock = socket ( AF_UNIX, SOCK_STREAM, 0 );
+	if ( sock<0 )
+	{
+		set_error ( client, "UNIX socket() failed: %s", sock_error() );
+		return -1;
+	}
+
+	if ( sock_set_nonblocking ( sock )<0 )
+	{
+		set_error ( client, "sock_set_nonblocking() failed: %s", sock_error() );
+		return -1;
+	}
+
+	optval = 1;
+#if defined(SO_NOSIGPIPE)
+	if ( setsockopt ( sock, SOL_SOCKET, SO_NOSIGPIPE, (void *)&optval, (socklen_t)sizeof(optval) ) < 0 )
+	{
+		set_error ( client, "setsockopt() failed: %s", sock_error() );
+		return -1;
+	}
+#endif
+
+	res = connect ( sock, (struct sockaddr *)&uaddr, sizeof(uaddr) );
+	if ( res==0 )
+		return sock;
+
+	err = sock_errno();
+#ifdef EINPROGRESS
+	if ( err!=EWOULDBLOCK && err!=EINPROGRESS )
+#else
+	if ( err!=EWOULDBLOCK )
+#endif
+	{
+		set_error ( client, "connect() failed: %s", sock_error() );
+		return -1;
+	}
+
+	return sock;
+}
+#endif
+
+
+static int net_connect_get ( sphinx_client * client )
+{
+	struct timeval timeout;
+	fd_set fds_write;
+	int sock, to_wait, res, my_proto;
+
+	if ( client->sock>=0 )
+		return client->sock;
+
+	sock = -1;
+	if ( client->host[0]!='/' )
+	{
+		sock = net_create_inet_sock ( client );
+	} else
+	{
+#ifdef _WIN32
+		set_error ( client, "UNIX sockets are not supported on Windows" );
+		return -1;
+#else
+		sock = net_create_unix_sock ( client );
+#endif
+	}
+
+	if ( sock<0 )
+		return -1;
 
 	to_wait = (int)( 1000*client->timeout );
 	if ( to_wait<=0 )

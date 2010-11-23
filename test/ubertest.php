@@ -6,6 +6,7 @@
 
 $sd_managed_searchd	= false;
 $sd_skip_indexer = false;
+$g_ignore_weights = false;
 
 require_once ( "settings.inc" );
 
@@ -71,6 +72,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-s" || $arg=="--searchd" )		$locals['searchd'] = $args[++$i];
 	else if ( $arg=="--rt" )						$locals['rt_mode'] = true;
 	else if ( $arg=="--strict" )					$g_strict = true;
+	else if ( $arg=="--ignore-weights" )			$g_ignore_weights = true;
 	else if ( is_dir($arg) )						$test_dirs[] = $arg;
 	else if ( preg_match ( "/^(\\d+)-(\\d+)$/", $arg, $range ) )
 	{

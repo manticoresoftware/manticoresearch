@@ -3229,21 +3229,29 @@ void CSphTokenizerTraits<IS_UTF8>::SetBufferPtr ( const char * sNewPtr )
 	m_pAccum = m_sAccum;
 }
 
+
 template < bool IS_UTF8 >
 int CSphTokenizerTraits<IS_UTF8>::SkipBlended()
 {
-	if ( m_pBlendEnd )
-	{
-		int iBlended = 0;
-		bool bQueryMode = m_bQueryMode;
-		m_bQueryMode = false;
-		while ( m_pCur < m_pBlendEnd && GetToken() )
-			iBlended++;
-		m_bQueryMode = bQueryMode;
-		return iBlended;
-	}
-	return 0;
+	if ( !m_pBlendEnd )
+		return 0;
+
+	bool bQuery = m_bQueryMode;
+	BYTE * pMax = m_pBufferMax;
+
+	m_bQueryMode = false;
+	m_pBufferMax = m_pBlendEnd;
+
+	int iBlended = 0;
+	while ( GetToken() )
+		iBlended++;
+
+	m_bQueryMode = bQuery;
+	m_pBufferMax = pMax;
+
+	return iBlended;
 }
+
 
 template < bool IS_UTF8 >
 void CSphTokenizerTraits<IS_UTF8>::BlendAdjust ( BYTE * pCur )

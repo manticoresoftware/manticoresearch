@@ -324,7 +324,6 @@ class SphinxConfig
 	private $_indexdata;			///< data for use "insert into" instead of run indexer
 	private $_connection;			///< mysql connection (since we cound use mysql ans sqphinxql together)
 	private $_testdir;				///< the path to the directory with current test (namely for accessing data without knowing the test name)
-	private $_ignore_weight;		///< whether to ignore match weights and keyword stats; to be used when upgrading tests
 
 	function SetConnection ( $connection )
 	{
@@ -361,7 +360,6 @@ class SphinxConfig
 		$this->_indexdata		= array ();
 		$this->_connection		= false;
 		$this->_testdir			= "";
-		$this->_ignore_weight	= false;
 	}
 
 	function EnableCompat098 ()		{ $this->_compat098 = true; }	
@@ -972,7 +970,7 @@ class SphinxConfig
 
 				if ( !$bOk )
 				{
-					$error = $cl->GetLastError ();
+					$error = sprintf ( "query %d/%d: %s", $n+1, count($this->_queries), $cl->GetLastError() );
 					return FALSE;
 				}
 			}
@@ -1085,6 +1083,8 @@ class SphinxConfig
 
 	function CompareResultSetFixup ( &$set, $roundoff )
 	{
+		global $g_ignore_weights;
+
 		if ( !is_array($set) )
 			return;
 
@@ -1097,7 +1097,7 @@ class SphinxConfig
 					$set["matches"][$id]["attrs"][$name] );
 		}
 
-		if ( $this->_ignore_weight )
+		if ( $g_ignore_weights )
 		{
 			if ( isset($set["matches"]) )
 			{
@@ -1111,7 +1111,7 @@ class SphinxConfig
 						unset ( $set["matches"][$id]["weight"] );
 				}
 			}
-			if ( $set["words"] )
+			if ( @$set["words"] )
 				foreach ( $set["words"] as $word=>$info )
 					$set["words"][$word] = array ( "hits"=>-1, "docs"=>-1 );
 		}

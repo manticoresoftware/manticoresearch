@@ -934,7 +934,7 @@ public:
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError );
 	virtual bool				SaveAttributes () { return true; }
 
-	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName ) {}
+	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig ) {}
 	virtual void				DebugDumpDocids ( FILE * fp ) {}
 	virtual void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID ) {}
 	virtual int					DebugCheck ( FILE * fp ) { return 0; }

@@ -2547,7 +2547,7 @@ public:
 
 public:
 	/// internal debugging hook, DO NOT USE
-	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName ) = 0;
+	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig ) = 0;
 
 	/// internal debugging hook, DO NOT USE
 	virtual void				DebugDumpDocids ( FILE * fp ) = 0;

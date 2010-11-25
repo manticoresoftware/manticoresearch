@@ -57,6 +57,7 @@ int main ( int argc, char ** argv )
 			"\n"
 			"Commands are:\n"
 			"--dumpheader <FILENAME.sph>\tdump index header by file name\n"
+			"--dumpconfig <FILENAME.sph>\tdump index header in config format by file name\n"
 			"--dumpheader <INDEXNAME>\tdump index header by index name\n"
 			"--dumpdocids <INDEXNAME>\tdump docids by index name\n"
 			"--dumphitlist <INDEXNAME> <KEYWORD>\n"
@@ -93,6 +94,7 @@ int main ( int argc, char ** argv )
 	{
 		CMD_NOTHING,
 		CMD_DUMPHEADER,
+		CMD_DUMPCONFIG, 
 		CMD_DUMPDOCIDS,
 		CMD_DUMPHITLIST,
 		CMD_CHECK,
@@ -110,6 +112,7 @@ int main ( int argc, char ** argv )
 		if ( (i+1)>=argc )			break;
 		OPT ( "-c", "--config" )	sOptConfig = argv[++i];
 		OPT1 ( "--dumpheader" )		{ eCommand = CMD_DUMPHEADER; sDumpHeader = argv[++i]; }
+		OPT1 ( "--dumpconfig" )		{ eCommand = CMD_DUMPCONFIG; sDumpHeader = argv[++i]; }
 		OPT1 ( "--dumpdocids" )		{ eCommand = CMD_DUMPDOCIDS; sIndex = argv[++i]; }
 		OPT1 ( "--check" )			{ eCommand = CMD_CHECK; sIndex = argv[++i]; }
 		OPT1 ( "--htmlstrip" )		{ eCommand = CMD_STRIP; sIndex = argv[++i]; }
@@ -161,7 +164,14 @@ int main ( int argc, char ** argv )
 
 	CSphConfigParser cp;
 	CSphConfig & hConf = cp.m_tConf;
-	sphLoadConfig ( sOptConfig, false, cp );
+	for ( ;; )
+	{
+		if ( ( eCommand==CMD_DUMPHEADER || eCommand==CMD_DUMPCONFIG ) && sDumpHeader.Ends ( ".sph" ) )
+			break;
+
+		sphLoadConfig ( sOptConfig, false, cp );
+		break;
+	}
 
 	///////////
 	// action!
@@ -203,8 +213,9 @@ int main ( int argc, char ** argv )
 			sphDie ( "nothing to do; specify a command (run indextool w/o switches for help)" );
 
 		case CMD_DUMPHEADER:
+		case CMD_DUMPCONFIG:
 		{
-			if ( hConf["index"](sDumpHeader) )
+			if ( hConf("index") && hConf["index"](sDumpHeader) )
 			{
 				fprintf ( stdout, "dumping header for index '%s'...\n", sDumpHeader.cstr() );
 
@@ -216,7 +227,7 @@ int main ( int argc, char ** argv )
 
 			fprintf ( stdout, "dumping header file '%s'...\n", sDumpHeader.cstr() );
 			CSphIndex * pIndex = sphCreateIndexPhrase ( NULL, "" );
-			pIndex->DebugDumpHeader ( stdout, sDumpHeader.cstr() );
+			pIndex->DebugDumpHeader ( stdout, sDumpHeader.cstr(), eCommand==CMD_DUMPCONFIG );
 			break;
 		}
 

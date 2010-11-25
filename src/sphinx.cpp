@@ -1318,7 +1318,7 @@ public:
 	virtual bool				LoadHeader ( const char * sHeaderName, bool bStripPath, CSphString & sWarning );
 	virtual bool				WriteHeader ( CSphWriter & fdInfo, SphOffset_t iCheckpointsPos, DWORD iCheckpointCount );
 
-	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName );
+	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig );
 	virtual void				DebugDumpDocids ( FILE * fp );
 	virtual void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
 	virtual int					DebugCheck ( FILE * fp );
@@ -12224,7 +12224,7 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 }
 
 
-void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName )
+void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig )
 {
 	CSphString sWarning;
 	if ( !LoadHeader ( sHeaderName, false, sWarning ) )
@@ -12235,6 +12235,123 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName )
 
 	if ( !sWarning.IsEmpty () )
 		fprintf ( fp, "WARNING: %s\n", sWarning.cstr () );
+
+	///////////////////////////////////////////////
+	// print header in index config section format
+	///////////////////////////////////////////////
+
+	if ( bConfig )
+	{
+		fprintf ( fp, "\nsource $dump\n{\n" );
+
+		fprintf ( fp, "\tsql_query = SELECT id \\\n" );
+		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+			fprintf ( fp, "\t, %s \\\n", m_tSchema.m_dFields[i].m_sName.cstr() );
+		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
+		{
+			const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
+			fprintf ( fp, "\t, %s \\\n", tAttr.m_sName.cstr() );
+		}
+		fprintf ( fp, "\tFROM documents\n" );
+
+		if ( m_tSchema.GetAttrsCount() )
+			fprintf ( fp, "\n" );
+
+		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
+		{
+			const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
+			switch ( tAttr.m_eAttrType )
+			{
+				case SPH_ATTR_INTEGER:
+					if ( tAttr.m_tLocator.IsBitfield() )
+						fprintf ( fp, "\tsql_attr_uint = %s:%d\n", tAttr.m_sName.cstr(), tAttr.m_tLocator.m_iBitCount );
+					else
+						fprintf ( fp, "\tsql_attr_uint = %s\n", tAttr.m_sName.cstr() );
+					break;
+
+				case SPH_ATTR_TIMESTAMP:
+					fprintf ( fp, "\tsql_attr_timestamp = %s\n", tAttr.m_sName.cstr() );
+					break;
+
+				case SPH_ATTR_ORDINAL:
+					fprintf ( fp, "\tsql_attr_str2ordinal = %s\n", tAttr.m_sName.cstr() );
+					break;
+
+				case SPH_ATTR_BOOL:
+					fprintf ( fp, "\tsql_attr_bool = %s\n", tAttr.m_sName.cstr() );
+					break;
+
+				case SPH_ATTR_BIGINT:
+					fprintf ( fp, "\tsql_attr_bigint = %s\n", tAttr.m_sName.cstr() );
+					break;
+
+				case SPH_ATTR_MULTI | SPH_ATTR_INTEGER:
+					fprintf ( fp, "\tsql_attr_multi = uint %s from field\n", tAttr.m_sName.cstr() );
+					break;
+			}
+		}
+
+		fprintf ( fp, "}\n\nindex $dump\n{\n\tsource = $dump\n\tpath = $dump\n" );
+
+		if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
+			fprintf ( fp, "\tdocinfo = inline\n" );
+		if ( m_tSettings.m_iMinPrefixLen )
+			fprintf ( fp, "\tmin_prefix_len = %d\n", m_tSettings.m_iMinPrefixLen );
+		if ( m_tSettings.m_iMinInfixLen )
+			fprintf ( fp, "\tmin_prefix_len = %d\n", m_tSettings.m_iMinInfixLen );
+		if ( m_tSettings.m_bIndexExactWords )
+			fprintf ( fp, "\tindex_exact_words = %d\n", m_tSettings.m_bIndexExactWords ? 1 : 0 );
+		if ( m_tSettings.m_bHtmlStrip )
+			fprintf ( fp, "\thtml_strip = 1\n" );
+		if ( !m_tSettings.m_sHtmlIndexAttrs.IsEmpty() )
+			fprintf ( fp, "\thtml_index_attrs = %s\n", m_tSettings.m_sHtmlIndexAttrs.cstr () );
+		if ( !m_tSettings.m_sHtmlRemoveElements.IsEmpty() )
+			fprintf ( fp, "\thtml_remove_elements = %s\n", m_tSettings.m_sHtmlRemoveElements.cstr () );
+		if ( m_tSettings.m_sZonePrefix.cstr() )
+			fprintf ( fp, "\tindex_zones = %s\n", m_tSettings.m_sZonePrefix.cstr() );
+
+		if ( m_pTokenizer )
+		{
+			const CSphTokenizerSettings & tSettings = m_pTokenizer->GetSettings ();
+			fprintf ( fp, "\tcharset_type = %s\n", tSettings.m_iType==TOKENIZER_SBCS ? "sbcs" : "utf-8" );
+			fprintf ( fp, "\tcharset_table = %s\n", tSettings.m_sCaseFolding.cstr () );
+			if ( tSettings.m_iMinWordLen>1 )
+				fprintf ( fp, "\tmin_word_len = %d\n", tSettings.m_iMinWordLen );
+			if ( tSettings.m_iNgramLen && !tSettings.m_sNgramChars.IsEmpty() )
+				fprintf ( fp, "\tngram_len = %d\nngram_chars = %s\n",
+					tSettings.m_iNgramLen, tSettings.m_sNgramChars.cstr () );
+			if ( !tSettings.m_sSynonymsFile.IsEmpty() )
+				fprintf ( fp, "\texceptions = %s\n", tSettings.m_sSynonymsFile.cstr () );
+			if ( !tSettings.m_sBoundary.IsEmpty() )
+				fprintf ( fp, "\tphrase_boundary = %s\n", tSettings.m_sBoundary.cstr () );
+			if ( !tSettings.m_sIgnoreChars.IsEmpty() )
+				fprintf ( fp, "\tignore_chars = %s\n", tSettings.m_sIgnoreChars.cstr () );
+			if ( !tSettings.m_sBlendChars.IsEmpty() )
+				fprintf ( fp, "\tblend_chars = %s\n", tSettings.m_sBlendChars.cstr () );
+		}
+
+		if ( m_pDict )
+		{
+			const CSphDictSettings & tSettings = m_pDict->GetSettings ();
+			if ( tSettings.m_bWordDict )
+				fprintf ( fp, "\tdict = keywords\n" );
+			if ( !tSettings.m_sMorphology.IsEmpty() )
+				fprintf ( fp, "\tmorphology = %s\n", tSettings.m_sMorphology.cstr () );
+			if ( !tSettings.m_sStopwords.IsEmpty() )
+				fprintf ( fp, "\tstopwords = %s\n", tSettings.m_sStopwords.cstr () );
+			if ( !tSettings.m_sWordforms.IsEmpty() )
+				fprintf ( fp, "\twordforms: %s\n", tSettings.m_sWordforms.cstr () );
+			if ( tSettings.m_iMinStemmingLen>1 )
+				fprintf ( fp, "\tmin_stemming_len = %d\n", tSettings.m_iMinStemmingLen );
+		}
+
+		fprintf ( fp, "}\n" );
+		return;
+	}
+
+	///////////////////////////////////////////////
+	// print header and stats in "readable" format
+	///////////////////////////////////////////////
 
 	fprintf ( fp, "version: %d\n",			m_uVersion );
 	fprintf ( fp, "idbits: %d\n",			m_bUse64 ? 64 : 32 );
@@ -12293,6 +12410,7 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName )
 		fprintf ( fp, "tokenizer-exceptions: %s\n", tSettings.m_sSynonymsFile.cstr () );
 		fprintf ( fp, "tokenizer-phrase-boundary: %s\n", tSettings.m_sBoundary.cstr () );
 		fprintf ( fp, "tokenizer-ignore-chars: %s\n", tSettings.m_sIgnoreChars.cstr () );
+		fprintf ( fp, "tokenizer-blend-chars: %s\n", tSettings.m_sBlendChars.cstr () );
 	}
 
 	if ( m_pDict )

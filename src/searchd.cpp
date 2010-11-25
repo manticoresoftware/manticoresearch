@@ -559,10 +559,10 @@ void ServedIndex_t::ReadLock () const
 	if ( g_eWorkers==MPM_THREADS )
 	{
 		if ( m_tLock.ReadLock() )
-			sphLogDebug ( "ReadLock" );
+			sphLogDebug ( "ReadLock %p", this );
 		else
 		{
-			sphLogDebug ( "ReadLock failed" );
+			sphLogDebug ( "ReadLock %p failed", this );
 			assert (false);
 		}
 	}
@@ -573,10 +573,10 @@ void ServedIndex_t::WriteLock () const
 	if ( g_eWorkers==MPM_THREADS )
 	{
 		if ( m_tLock.WriteLock() )
-			sphLogDebug ( "WriteLock" );
+			sphLogDebug ( "WriteLock %p", this );
 		else
 		{
-			sphLogDebug ( "WriteLock failed" );
+			sphLogDebug ( "WriteLock %p failed", this );
 			assert (false);
 		}
 	}
@@ -587,10 +587,10 @@ void ServedIndex_t::Unlock () const
 	if ( g_eWorkers==MPM_THREADS )
 	{
 		if ( m_tLock.Unlock() )
-			sphLogDebug ( "Unlock" );
+			sphLogDebug ( "Unlock %p", this );
 		else
 		{
-			sphLogDebug ( "Unlock failed" );
+			sphLogDebug ( "Unlock %p failed", this );
 			assert (false);
 		}
 	}
@@ -9843,7 +9843,8 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	const ServedIndex_t * pRotating = g_pIndexes->GetRlockedEntry ( sIndex );
 	if ( !CheckServedEntry ( pRotating, sIndex.cstr() ) )
 	{
-		pRotating->Unlock();
+		if ( pRotating )
+			pRotating->Unlock();
 		return;
 	}
 
@@ -9917,7 +9918,8 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	ServedIndex_t * pServed = g_pIndexes->GetWlockedEntry ( sIndex );
 	if ( !CheckServedEntry ( pServed, sIndex.cstr() ) )
 	{
-		pServed->Unlock();
+		if ( pServed )
+			pServed->Unlock();
 		return;
 	}
 

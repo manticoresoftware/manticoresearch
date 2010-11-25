@@ -53,6 +53,7 @@
 %token	TOK_TABLES
 %token	TOK_TRANSACTION
 %token	TOK_TRUE
+%token	TOK_UPDATE
 %token	TOK_VALUES
 %token	TOK_WARNINGS
 %token	TOK_WEIGHT
@@ -120,6 +121,7 @@ statement:
 	| call_proc
 	| describe
 	| show_tables
+	| update
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -644,6 +646,36 @@ describe_tok:
 
 show_tables:
 	TOK_SHOW TOK_TABLES		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_TABLES; }
+	;
+
+//////////////////////////////////////////////////////////////////////////
+
+update:
+	TOK_UPDATE TOK_IDENT TOK_SET update_items_list TOK_WHERE TOK_ID '=' const_int
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_UPDATE;
+			tStmt.m_sIndex = $2.m_sValue;	
+			tStmt.m_tUpdate.m_dDocids.Add ( (SphDocID_t) $8.m_iValue );
+			tStmt.m_tUpdate.m_dRowOffset.Add ( 0 );
+		}
+	;
+
+update_items_list:
+	update_item
+	| update_items_list ',' update_item
+	;
+
+update_item:
+	TOK_IDENT '=' const_int
+		{
+			CSphAttrUpdate & tUpd = pParser->m_pStmt->m_tUpdate;
+			CSphColumnInfo & tAttr = tUpd.m_dAttrs.Add();
+			tAttr.m_sName = $1.m_sValue;
+			tAttr.m_sName.ToLower();
+			tAttr.m_eAttrType = SPH_ATTR_INTEGER; // sorry, ints only for now, riding on legacy shit!
+			tUpd.m_dPool.Add ( (DWORD) $3.m_iValue );
+		}
 	;
 
 %%

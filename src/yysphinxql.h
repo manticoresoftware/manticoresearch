@@ -71,18 +71,19 @@
      TOK_TABLES = 297,
      TOK_TRANSACTION = 298,
      TOK_TRUE = 299,
-     TOK_VALUES = 300,
-     TOK_WARNINGS = 301,
-     TOK_WEIGHT = 302,
-     TOK_WHERE = 303,
-     TOK_WITHIN = 304,
-     TOK_OR = 305,
-     TOK_AND = 306,
-     TOK_NE = 307,
-     TOK_GTE = 308,
-     TOK_LTE = 309,
-     TOK_NOT = 310,
-     TOK_NEG = 311
+     TOK_UPDATE = 300,
+     TOK_VALUES = 301,
+     TOK_WARNINGS = 302,
+     TOK_WEIGHT = 303,
+     TOK_WHERE = 304,
+     TOK_WITHIN = 305,
+     TOK_OR = 306,
+     TOK_AND = 307,
+     TOK_NE = 308,
+     TOK_GTE = 309,
+     TOK_LTE = 310,
+     TOK_NOT = 311,
+     TOK_NEG = 312
    };
 #endif
 #define TOK_IDENT 258
@@ -127,18 +128,19 @@
 #define TOK_TABLES 297
 #define TOK_TRANSACTION 298
 #define TOK_TRUE 299
-#define TOK_VALUES 300
-#define TOK_WARNINGS 301
-#define TOK_WEIGHT 302
-#define TOK_WHERE 303
-#define TOK_WITHIN 304
-#define TOK_OR 305
-#define TOK_AND 306
-#define TOK_NE 307
-#define TOK_GTE 308
-#define TOK_LTE 309
-#define TOK_NOT 310
-#define TOK_NEG 311
+#define TOK_UPDATE 300
+#define TOK_VALUES 301
+#define TOK_WARNINGS 302
+#define TOK_WEIGHT 303
+#define TOK_WHERE 304
+#define TOK_WITHIN 305
+#define TOK_OR 306
+#define TOK_AND 307
+#define TOK_NE 308
+#define TOK_GTE 309
+#define TOK_LTE 310
+#define TOK_NOT 311
+#define TOK_NEG 312
 
 
 

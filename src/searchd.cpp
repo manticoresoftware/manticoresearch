@@ -6381,6 +6381,7 @@ enum SqlStmt_e
 	STMT_CALL,
 	STMT_DESC,
 	STMT_SHOW_TABLES,
+	STMT_UPDATE,
 
 	STMT_TOTAL
 };
@@ -6390,7 +6391,7 @@ const char * g_dSqlStmts[STMT_TOTAL] =
 {
 	"parse_error", "select", "insert", "replace", "delete", "show_warnings",
 	"show_status", "show_meta", "set", "begin", "commit", "rollback", "call",
-	"desc", "show_tables"
+	"desc", "show_tables", "update"
 };
 
 
@@ -6450,6 +6451,8 @@ struct SqlStmt_t
 	CSphVector<CSphString>	m_dCallOptNames;
 	CSphVector<SqlInsert_t>	m_dCallOptValues;
 
+	// UPDATE specific
+	CSphAttrUpdate			m_tUpdate;
 
 	SqlStmt_t ()
 		: m_eStmt ( STMT_PARSE_ERROR )
@@ -8653,6 +8656,40 @@ void HandleMysqlShowTables ( NetOutputBuffer_c & tOut, BYTE uPacketID )
 	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt_t & tStmt, bool bCommit )
+{
+	CSphString sError;
+
+	const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( tStmt.m_sIndex );
+	if ( !pServed )
+	{
+		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		return;
+	}
+
+	int iAffected = pServed->m_pIndex->UpdateAttributes ( tStmt.m_tUpdate, -1, sError );
+	if ( iAffected<0 )
+	{
+		pServed->Unlock();
+		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		return;
+	}
+
+	if ( bCommit && pServed->m_bRT )
+	{
+		ISphRtIndex * pIndex = static_cast<ISphRtIndex *> ( pServed->m_pIndex );
+		pIndex->Commit ();
+	}
+
+	pServed->Unlock();
+
+	SendMysqlOkPacket ( tOut, uPacketID, iAffected );
+}
+
+//////////////////////////////////////////////////////////////////////////
 
 #define SPH_MAX_NUMERIC_STR 32
 
@@ -9366,6 +9403,10 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 
 		case STMT_SHOW_TABLES:
 			HandleMysqlShowTables ( tOut, uPacketID );
+			continue;
+
+		case STMT_UPDATE:
+			HandleMysqlUpdate ( tOut, uPacketID, *pStmt, bAutoCommit && !bInTransaction );
 			continue;
 
 		default:

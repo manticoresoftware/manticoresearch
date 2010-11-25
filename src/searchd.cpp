@@ -557,19 +557,43 @@ ServedIndex_t::~ServedIndex_t ()
 void ServedIndex_t::ReadLock () const
 {
 	if ( g_eWorkers==MPM_THREADS )
-		Verify ( m_tLock.ReadLock() );
+	{
+		if ( m_tLock.ReadLock() )
+			sphLogDebug ( "ReadLock" );
+		else
+		{
+			sphLogDebug ( "ReadLock failed" );
+			assert (false);
+		}
+	}
 }
 
 void ServedIndex_t::WriteLock () const
 {
 	if ( g_eWorkers==MPM_THREADS )
-		Verify ( m_tLock.WriteLock() );
+	{
+		if ( m_tLock.WriteLock() )
+			sphLogDebug ( "WriteLock" );
+		else
+		{
+			sphLogDebug ( "WriteLock failed" );
+			assert (false);
+		}
+	}
 }
 
 void ServedIndex_t::Unlock () const
 {
 	if ( g_eWorkers==MPM_THREADS )
-		Verify ( m_tLock.Unlock() );
+	{
+		if ( m_tLock.Unlock() )
+			sphLogDebug ( "Unlock" );
+		else
+		{
+			sphLogDebug ( "Unlock failed" );
+			assert (false);
+		}
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -5183,7 +5207,7 @@ protected:
 	int								m_iEnd;			///< subset end
 	bool							m_bMultiQueue;	///< whether current subset is subject to multi-queue optimization
 	CSphVector<CSphString>			m_dLocal;		///< local indexes for the current subset
-	bool							m_bIsLocked;	///< whether local indexes are already locked
+	volatile bool							m_bIsLocked;	///< whether local indexes are already locked
 	mutable CSphVector<CSphSchema>			m_dExtraSchemas; ///< the extra fields for agents
 };
 
@@ -5717,10 +5741,9 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
 				// move external attributes storage from tStats to actual result
 				tStats.LeakStorages ( tRes );
 			}
-
-			if ( !m_bIsLocked )
-				pServed->Unlock();
 		}
+		if ( !m_bIsLocked )
+			pServed->Unlock();
 
 		// cleanup kill-list
 		pQuery->m_dFilters.Resize ( iNumFilters );
@@ -7052,6 +7075,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	if ( !sphCheckOptionsSPZ ( q, sPassageBoundaryMode, sError ) )
 	{
 		tReq.SendErrorReply ( "%s", sError.cstr() );
+		pServed->Unlock();
 		return;
 	}
 
@@ -7059,6 +7083,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		( !pTokenizer->EnableSentenceIndexing ( sError ) || !pTokenizer->EnableZoneIndexing ( sError ) ) )
 	{
 		tReq.SendErrorReply ( "%s", sError.cstr() );
+		pServed->Unlock();
 		return;
 	}
 
@@ -8561,6 +8586,7 @@ void HandleMysqlDescribe ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt_t &
 		tOut.SendMysqlString ( sType );
 	}
 
+	pServed->Unlock();
 	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
 }
 
@@ -9757,7 +9783,6 @@ static bool CheckServedEntry ( const ServedIndex_t * pEntry, const char * sIndex
 		if ( !pEntry->m_pIndex )
 			sphWarning ( "rotating index '%s': INTERNAL ERROR, entry does not have an index", sIndex );
 
-		pEntry->Unlock();
 		return false;
 	}
 
@@ -9817,7 +9842,10 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	// create new index, copy some settings from existing one
 	const ServedIndex_t * pRotating = g_pIndexes->GetRlockedEntry ( sIndex );
 	if ( !CheckServedEntry ( pRotating, sIndex.cstr() ) )
+	{
+		pRotating->Unlock();
 		return;
+	}
 
 	sphInfo ( "rotating index '%s': started", sIndex.cstr() );
 
@@ -9888,7 +9916,10 @@ static void RotateIndexMT ( const CSphString & sIndex )
 
 	ServedIndex_t * pServed = g_pIndexes->GetWlockedEntry ( sIndex );
 	if ( !CheckServedEntry ( pServed, sIndex.cstr() ) )
+	{
+		pServed->Unlock();
 		return;
+	}
 
 	CSphIndex * pOld = pServed->m_pIndex;
 	CSphIndex * pNew = tNewIndex.m_pIndex;

@@ -24,7 +24,13 @@ SPACE				[ \t\n\r]
 %option nounput
 %option reentrant
 
+%x ccomment
+
 %%
+
+"/*"         		{ BEGIN(ccomment); }
+<ccomment>.			{ }
+<ccomment>"*/"		{ BEGIN(INITIAL); }
 
 "AND"				{ YYSTOREBOUNDS; return TOK_AND; }
 "AS"				{ YYSTOREBOUNDS; return TOK_AS; }

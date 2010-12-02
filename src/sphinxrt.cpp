@@ -3456,6 +3456,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// fixup stat's order
 	sphDoStatsOrder ( tParsed.m_pRoot, *pResult );
 
+	// transform query if needed (quorum transform, keyword expansion, etc.)
+	sphTransformExtendedQuery ( &tParsed.m_pRoot );
+
 	if ( !sphCheckQueryHeight ( tParsed.m_pRoot, pResult->m_sError ) )
 	{
 		m_tRwlock.Unlock ();

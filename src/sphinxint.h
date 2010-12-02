@@ -278,6 +278,8 @@ void sphDoStatsOrder ( const struct XQNode_t * pNode, CSphQueryResultMeta & tRes
 
 bool sphCheckQueryHeight ( const struct XQNode_t * pRoot, CSphString & sError );
 
+void sphTransformExtendedQuery ( XQNode_t ** ppNode );
+
 const BYTE * SkipQuoted ( const BYTE * p );
 
 class ISphBinlog : ISphNoncopyable

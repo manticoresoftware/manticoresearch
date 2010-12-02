@@ -13934,7 +13934,7 @@ static void TransformNear ( XQNode_t ** ppNode )
 		TransformNear ( &pNode->m_dChildren[i] );
 }
 
-inline static void Transform ( XQNode_t ** ppNode )
+void sphTransformExtendedQuery ( XQNode_t ** ppNode )
 {
 	TransformQuorum ( ppNode );
 	TransformNear ( ppNode );
@@ -14012,7 +14012,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	sphDoStatsOrder ( tParsed.m_pRoot, *pResult );
 
 	// transform query if needed (quorum transform, keyword expansion, etc.)
-	Transform ( &tParsed.m_pRoot );
+	sphTransformExtendedQuery ( &tParsed.m_pRoot );
 
 	// expanding prefix in word dictionary case
 	XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, pResult->m_sError, pResult );
@@ -14098,7 +14098,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 			sphDoStatsOrder ( tParsed.m_pRoot, *ppResults[i] );
 
 			// transform query if needed (quorum transform, keyword expansion, etc.)
-			Transform ( &tParsed.m_pRoot );
+			sphTransformExtendedQuery ( &tParsed.m_pRoot );
 
 			// expanding prefix in word dictionary case
 			XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, ppResults[i]->m_sError, ppResults[i] );

@@ -562,6 +562,7 @@ protected:
 
 private:
 	DWORD						m_uInitialMask;		///< backup mask for Reset()
+	CSphVector<ExtNode_i*>		m_dInitialChildren;	///< my children nodes (simply ExtTerm_c for now)
 };
 
 
@@ -2848,10 +2849,12 @@ ExtQuorum_c::ExtQuorum_c ( CSphVector<ExtNode_i*> & dQwords, DWORD uDupeMask, co
 
 	ARRAY_FOREACH ( i, dQwords )
 	{
-		m_dChildren.Add ( dQwords[i] );
+		m_dInitialChildren.Add ( dQwords[i] );
 		m_pCurDoc.Add ( NULL );
 		m_pCurHit.Add ( NULL );
 	}
+
+	m_dChildren = m_dInitialChildren;
 
 	m_uMask = m_uInitialMask = uDupeMask;
 	m_uMaskEnd = dQwords.GetLength() - 1;
@@ -2860,15 +2863,20 @@ ExtQuorum_c::ExtQuorum_c ( CSphVector<ExtNode_i*> & dQwords, DWORD uDupeMask, co
 
 ExtQuorum_c::~ExtQuorum_c ()
 {
-	ARRAY_FOREACH ( i, m_dChildren )
-		SafeDelete ( m_dChildren[i] );
+	ARRAY_FOREACH ( i, m_dInitialChildren )
+		SafeDelete ( m_dInitialChildren[i] );
 }
 
 void ExtQuorum_c::Reset ( const ISphQwordSetup & tSetup )
 {
 	m_bDone = false;
-	ARRAY_FOREACH ( i, m_dChildren )
+
+	m_pCurDoc.Resize ( m_dInitialChildren.GetLength() );
+	m_pCurHit.Resize ( m_dInitialChildren.GetLength() );
+	m_dChildren.Resize ( m_dInitialChildren.GetLength() );
+	ARRAY_FOREACH ( i, m_dInitialChildren )
 	{
+		m_dChildren[i] = m_dInitialChildren[i];
 		m_pCurDoc[i] = NULL;
 		m_pCurHit[i] = NULL;
 	}
@@ -2876,6 +2884,7 @@ void ExtQuorum_c::Reset ( const ISphQwordSetup & tSetup )
 	m_uMask = m_uInitialMask;
 	m_uMaskEnd = m_dChildren.GetLength() - 1;
 	m_uMatchedDocid = 0;
+
 	ARRAY_FOREACH ( i, m_dChildren )
 		m_dChildren[i]->Reset ( tSetup );
 }
@@ -2913,7 +2922,6 @@ const ExtDoc_t * ExtQuorum_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		m_uMask |= ( ( m_uMask >> m_uMaskEnd ) & 1 ) << i; // set i-th bit to end bit
 		m_uMaskEnd--;
 
-		SafeDelete ( m_dChildren[i] );
 		m_dChildren.RemoveFast ( i );
 		m_pCurDoc.RemoveFast ( i );
 		m_pCurHit.RemoveFast ( i );

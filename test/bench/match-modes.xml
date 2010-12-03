@@ -37,9 +37,9 @@ index lj
 </config>
 
 <queries>
-	<query index="lj" source="local:queries" mode="all" tag="match_all" />
-	<query index="lj" source="local:queries" mode="any" tag="match_any" />
-	<query index="lj" source="local:queries" mode="extended2" tag="extended2" />
+	<query index="lj" source="bench/ljq1k.txt" mode="all" tag="match_all" />
+	<query index="lj" source="bench/ljq1k.txt" mode="any" tag="match_any" />
+	<query index="lj" source="bench/ljq1k.txt" mode="extended2" tag="extended2" />
 </queries>
 
 </test>

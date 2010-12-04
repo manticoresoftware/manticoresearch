@@ -448,6 +448,19 @@ const int	MAX_RETRY_DELAY		= 1000;
 
 //////////////////////////////////////////////////////////////////////////
 
+const int	STATS_MAX_AGENTS	= 1024;	///< we'll track stats for this much remote agents
+
+/// per-agent query stats
+struct AgentStats_t
+{
+	int64_t		m_iTimeoutsQuery;	///< number of time-outed queries
+	int64_t		m_iTimeoutsConnect;	///< number of time-outed connections
+	int64_t		m_iConnectFailures;	///< failed to connect
+	int64_t		m_iNetworkErrors;	///< network error
+	int64_t		m_iWrongReplies;	///< incomplete reply
+	int64_t		m_iUnexpectedClose;	///< agent closed the connection
+};
+
 struct SearchdStats_t
 {
 	DWORD		m_uStarted;
@@ -469,12 +482,14 @@ struct SearchdStats_t
 	int64_t		m_iDiskReads;		///< total read IO calls (fired by search queries)
 	int64_t		m_iDiskReadBytes;	///< total read IO traffic
 	int64_t		m_iDiskReadTime;	///< total read IO time
+
+	DWORD			m_bmAgentStats[STATS_MAX_AGENTS/32];	///< per-agent storage usage bitmap
+	AgentStats_t	m_dAgentStats[STATS_MAX_AGENTS];		///< per-agent storage
 };
 
 static SearchdStats_t *			g_pStats		= NULL;
 static CSphSharedBuffer<BYTE>	g_tStatsBuffer;
 static CSphProcessSharedMutex	g_tStatsMutex;
-
 
 struct FlushState_t
 {
@@ -2681,27 +2696,42 @@ void NetInputBuffer_c::SendErrorReply ( const char * sTemplate, ... )
 // DISTRIBUTED QUERIES
 /////////////////////////////////////////////////////////////////////////////
 
-/// remote agent state
-enum AgentState_e
+/// remote agent descriptor (stored in a global hash)
+struct AgentDesc_t
 {
-	AGENT_UNUSED,				///< agent is unused for this request
-	AGENT_CONNECT,				///< connecting to agent
-	AGENT_HELLO,				///< waiting for "VER x" hello
-	AGENT_QUERY,				///< query sent, wating for reply
-	AGENT_REPLY,				///< reading reply
-	AGENT_RETRY					///< should retry
-};
-
-/// remote agent host/port
-struct Agent_t
-{
-public:
 	CSphString		m_sHost;		///< remote searchd host
 	int				m_iPort;		///< remote searchd port, 0 if local
 	CSphString		m_sPath;		///< local searchd UNIX socket path
 	CSphString		m_sIndexes;		///< remote index names to query
 	bool			m_bBlackhole;	///< blackhole agent flag
+	int				m_iFamily;		///< TCP or UNIX socket
+	DWORD			m_uAddr;		///< IP address
+	int				m_iStatsIndex;	///< index into global searchd stats array
 
+public:
+	AgentDesc_t ()
+		: m_iPort ( -1 )
+		, m_bBlackhole ( false )
+		, m_iFamily ( AF_INET )
+		, m_uAddr ( 0 )
+		, m_iStatsIndex ( -1 )
+	{}
+};
+
+/// remote agent state
+enum AgentState_e
+{
+	AGENT_UNUSED,					///< agent is unused for this request
+	AGENT_CONNECT,					///< connecting to agent
+	AGENT_HELLO,					///< waiting for "VER x" hello
+	AGENT_QUERY,					///< query sent, wating for reply
+	AGENT_REPLY,					///< reading reply
+	AGENT_RETRY						///< should retry
+};
+
+/// remote agent connection (local per-query state)
+struct AgentConn_t : public AgentDesc_t
+{
 	int				m_iSock;		///< socket number, -1 if not connected
 	AgentState_e	m_eState;		///< current state
 
@@ -2715,39 +2745,18 @@ public:
 
 	CSphVector<CSphQueryResult>		m_dResults;		///< multi-query results
 
-	int				m_iFamily;
-	DWORD			m_uAddr;
-
-	// statistic
-	int64_t			m_iTimeoutsQuery;				///< number of time-outed queries
-	int64_t			m_iTimeoutsConnect;				///< number of time-outed connections
-	int64_t			m_iConnectFailures;				///< failed to connect
-	int64_t			m_iNetworkErrors;				///< network error
-	int64_t			m_iWrongReplies;				///< incomplete reply
-	int64_t			m_iUnexpectedClose;				///< agent closed the connection
-
 public:
-	Agent_t ()
-		: m_iPort ( -1 )
-		, m_bBlackhole ( false )
-		, m_iSock ( -1 )
+	AgentConn_t ()
+		: m_iSock ( -1 )
 		, m_eState ( AGENT_UNUSED )
 		, m_bSuccess ( false )
 		, m_iReplyStatus ( -1 )
 		, m_iReplySize ( 0 )
 		, m_iReplyRead ( 0 )
 		, m_pReplyBuf ( NULL )
-		, m_uAddr ( 0 )
-		, m_iTimeoutsQuery ( 0 )
-		, m_iTimeoutsConnect ( 0 )
-		, m_iConnectFailures ( 0 )
-		, m_iNetworkErrors ( 0 )
-		, m_iWrongReplies ( 0 )
-		, m_iUnexpectedClose ( 0 )
-	{
-	}
+	{}
 
-	~Agent_t ()
+	~AgentConn_t ()
 	{
 		Close ();
 	}
@@ -2767,26 +2776,36 @@ public:
 	CSphString GetName() const
 	{
 		CSphString sName;
-
 		switch ( m_iFamily )
 		{
 			case AF_INET: sName.SetSprintf ( "%s:%u", m_sHost.cstr(), m_iPort ); break;
 			case AF_UNIX: sName = m_sPath; break;
 		}
-
 		return sName;
+	}
+
+	AgentConn_t & operator = ( const AgentDesc_t & rhs )
+	{
+		m_sHost = rhs.m_sHost;
+		m_iPort = rhs.m_iPort;
+		m_sPath = rhs.m_sPath;
+		m_sIndexes = rhs.m_sIndexes;
+		m_bBlackhole = rhs.m_bBlackhole;
+		m_iStatsIndex = rhs.m_iStatsIndex;
+		return *this;
 	}
 };
 
 /// distributed index
 struct DistributedIndex_t
 {
-	CSphVector<Agent_t>			m_dAgents;					///< remote agents
+	CSphVector<AgentDesc_t>		m_dAgents;					///< remote agents
 	CSphVector<CSphString>		m_dLocal;					///< local indexes
 	int							m_iAgentConnectTimeout;		///< in msec
 	int							m_iAgentQueryTimeout;		///< in msec
 	bool						m_bToDelete;				///< should be deleted
 
+public:
 	DistributedIndex_t ()
 		: m_iAgentConnectTimeout ( 1000 )
 		, m_iAgentQueryTimeout ( 3000 )
@@ -2794,6 +2813,7 @@ struct DistributedIndex_t
 	{}
 };
 
+/// global distributed index definitions hash
 static SmallStringHash_T < DistributedIndex_t >		g_hDistIndexes;
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2808,15 +2828,24 @@ struct IRequestBuilder_t : public ISphNoncopyable
 struct IReplyParser_t
 {
 	virtual ~IReplyParser_t () {} // to avoid gcc4 warns
-	virtual bool ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent ) const = 0;
+	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const = 0;
 };
 
 
-void ConnectToRemoteAgents ( CSphVector<Agent_t> & dAgents, bool bRetryOnly )
+#define AGENT_STATS_INC(_agent,_counter) \
+	if ( g_pStats && _agent.m_iStatsIndex>=0 && _agent.m_iStatsIndex<STATS_MAX_AGENTS ) \
+	{ \
+		g_tStatsMutex.Lock (); \
+		g_pStats->m_dAgentStats [ _agent.m_iStatsIndex ]._counter++; \
+		g_tStatsMutex.Unlock (); \
+	}
+
+
+void ConnectToRemoteAgents ( CSphVector<AgentConn_t> & dAgents, bool bRetryOnly )
 {
 	ARRAY_FOREACH ( iAgent, dAgents )
 	{
-		Agent_t & tAgent = dAgents[iAgent];
+		AgentConn_t & tAgent = dAgents[iAgent];
 		if ( bRetryOnly && ( tAgent.m_eState!=AGENT_RETRY ) )
 			continue;
 
@@ -2875,7 +2904,7 @@ void ConnectToRemoteAgents ( CSphVector<Agent_t> & dAgents, bool bRetryOnly )
 				tAgent.Close ();
 				tAgent.m_sFailure.SetSprintf ( "connect() failed: %s", sphSockError(iErr) );
 				tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures
-				tAgent.m_iConnectFailures++;
+				AGENT_STATS_INC ( tAgent, m_iConnectFailures );
 				return;
 
 			} else
@@ -2892,7 +2921,7 @@ void ConnectToRemoteAgents ( CSphVector<Agent_t> & dAgents, bool bRetryOnly )
 }
 
 
-int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequestBuilder_t & tBuilder, int64_t * pWaited )
+int QueryRemoteAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, const IRequestBuilder_t & tBuilder, int64_t * pWaited )
 {
 	int iAgents = 0;
 	assert ( iTimeout>=0 );
@@ -2908,7 +2937,7 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 		bool bDone = true;
 		ARRAY_FOREACH ( i, dAgents )
 		{
-			const Agent_t & tAgent = dAgents[i];
+			const AgentConn_t & tAgent = dAgents[i];
 			if ( tAgent.m_eState==AGENT_CONNECT || tAgent.m_eState==AGENT_HELLO )
 			{
 				assert ( !tAgent.m_sPath.IsEmpty() || tAgent.m_iPort>0 );
@@ -2943,7 +2972,7 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 
 		ARRAY_FOREACH ( i, dAgents )
 		{
-			Agent_t & tAgent = dAgents[i];
+			AgentConn_t & tAgent = dAgents[i];
 
 			// check if connection completed
 			if ( tAgent.m_eState==AGENT_CONNECT && FD_ISSET ( tAgent.m_iSock, &fdsWrite ) )
@@ -2956,7 +2985,7 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 					// connect() failure
 					tAgent.m_sFailure.SetSprintf ( "connect() failed: %s", sphSockError(iErr) );
 					tAgent.Close ();
-					tAgent.m_iConnectFailures++;
+					AGENT_STATS_INC ( tAgent, m_iConnectFailures );
 				} else
 				{
 					// connect() success
@@ -2979,13 +3008,13 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 						// network error
 						int iErr = sphSockGetErrno();
 						tAgent.m_sFailure.SetSprintf ( "handshake failure (errno=%d, msg=%s)", iErr, sphSockError(iErr) );
-						tAgent.m_iNetworkErrors++;
+						AGENT_STATS_INC ( tAgent, m_iNetworkErrors );
 
 					} else if ( iRes>0 )
 					{
 						// incomplete reply
 						tAgent.m_sFailure.SetSprintf ( "handshake failure (exp=%d, recv=%d)", sizeof(iRemoteVer), iRes );
-						tAgent.m_iWrongReplies++;
+						AGENT_STATS_INC ( tAgent, m_iWrongReplies );
 
 					} else
 					{
@@ -2993,7 +3022,7 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 						// this might happen in out-of-sync connect-accept case; so let's retry
 						tAgent.m_sFailure.SetSprintf ( "handshake failure (connection was closed)", iRes );
 						tAgent.m_eState = AGENT_RETRY;
-						tAgent.m_iUnexpectedClose++;
+						AGENT_STATS_INC ( tAgent, m_iUnexpectedClose );
 					}
 					continue;
 				}
@@ -3002,7 +3031,7 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 				if (!( iRemoteVer==SPHINX_SEARCHD_PROTO || iRemoteVer==0x01000000UL ) ) // workaround for all the revisions that sent it in host order...
 				{
 					tAgent.m_sFailure.SetSprintf ( "handshake failure (unexpected protocol version=%d)", iRemoteVer );
-					tAgent.m_iWrongReplies++;
+					AGENT_STATS_INC ( tAgent, m_iWrongReplies );
 					tAgent.Close ();
 					continue;
 				}
@@ -3021,18 +3050,18 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 	ARRAY_FOREACH ( i, dAgents )
 	{
 		// check if connection timed out
-		Agent_t & tAgent = dAgents[i];
+		AgentConn_t & tAgent = dAgents[i];
 		if ( tAgent.m_eState!=AGENT_QUERY && tAgent.m_eState!=AGENT_UNUSED && tAgent.m_eState!=AGENT_RETRY )
 		{
 			tAgent.Close ();
 			if ( tAgent.m_eState==AGENT_HELLO )
 			{
 				tAgent.m_sFailure.SetSprintf ( "read() timed out" );
-				tAgent.m_iTimeoutsQuery++;
+				AGENT_STATS_INC ( tAgent, m_iTimeoutsQuery );
 			} else
 			{
 				tAgent.m_sFailure.SetSprintf ( "connect() timed out" );
-				tAgent.m_iTimeoutsConnect++;
+				AGENT_STATS_INC ( tAgent,m_iTimeoutsConnect );
 			}
 			tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures
 		}
@@ -3042,7 +3071,7 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 }
 
 
-int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyParser_t & tParser, int64_t * pWaited )
+int WaitForRemoteAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IReplyParser_t & tParser, int64_t * pWaited )
 {
 	assert ( iTimeout>=0 );
 
@@ -3057,7 +3086,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 		bool bDone = true;
 		ARRAY_FOREACH ( iAgent, dAgents )
 		{
-			Agent_t & tAgent = dAgents[iAgent];
+			AgentConn_t & tAgent = dAgents[iAgent];
 			if ( tAgent.m_bBlackhole )
 				continue;
 
@@ -3093,7 +3122,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 
 		ARRAY_FOREACH ( iAgent, dAgents )
 		{
-			Agent_t & tAgent = dAgents[iAgent];
+			AgentConn_t & tAgent = dAgents[iAgent];
 			if ( tAgent.m_bBlackhole )
 				continue;
 			if (!( tAgent.m_eState==AGENT_QUERY || tAgent.m_eState==AGENT_REPLY ))
@@ -3120,7 +3149,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 					{
 						// bail out if failed
 						tAgent.m_sFailure.SetSprintf ( "failed to receive reply header" );
-						tAgent.m_iNetworkErrors++;
+						AGENT_STATS_INC ( tAgent, m_iNetworkErrors );
 						break;
 					}
 
@@ -3132,7 +3161,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 					if ( tReplyHeader.m_iLength<0 || tReplyHeader.m_iLength>g_iMaxPacketSize ) // FIXME! add reasonable max packet len too
 					{
 						tAgent.m_sFailure.SetSprintf ( "invalid packet size (status=%d, len=%d, max_packet_size=%d)", tReplyHeader.m_iStatus, tReplyHeader.m_iLength, g_iMaxPacketSize );
-						tAgent.m_iWrongReplies++;
+						AGENT_STATS_INC ( tAgent, m_iWrongReplies );
 						break;
 					}
 
@@ -3164,7 +3193,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 					if ( iRes<0 )
 					{
 						tAgent.m_sFailure.SetSprintf ( "failed to receive reply body: %s", sphSockError() );
-						tAgent.m_iNetworkErrors++;
+						AGENT_STATS_INC ( tAgent, m_iNetworkErrors );
 						break;
 					}
 
@@ -3207,7 +3236,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 					if ( tReq.GetError() )
 					{
 						tAgent.m_sFailure.SetSprintf ( "incomplete reply" );
-						tAgent.m_iWrongReplies++;
+						AGENT_STATS_INC ( tAgent, m_iWrongReplies );
 						break;
 					}
 
@@ -3233,7 +3262,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 	// close timed-out agents
 	ARRAY_FOREACH ( iAgent, dAgents )
 	{
-		Agent_t & tAgent = dAgents[iAgent];
+		AgentConn_t & tAgent = dAgents[iAgent];
 		if ( tAgent.m_bBlackhole )
 			tAgent.Close ();
 		else if ( tAgent.m_eState==AGENT_QUERY )
@@ -3242,7 +3271,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 			assert ( !tAgent.m_bSuccess );
 			tAgent.Close ();
 			tAgent.m_sFailure.SetSprintf ( "query timed out" );
-			tAgent.m_iTimeoutsQuery++;
+			AGENT_STATS_INC ( tAgent, m_iTimeoutsQuery );
 		}
 	}
 
@@ -3278,7 +3307,7 @@ struct SearchReplyParser_t : public IReplyParser_t, public ISphNoncopyable
 		, m_dStringsStorage ( dStringsStorage )
 	{}
 
-	virtual bool ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent ) const;
+	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const;
 
 protected:
 	int					m_iStart;
@@ -3460,7 +3489,7 @@ void SearchRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuff
 
 /////////////////////////////////////////////////////////////////////////////
 
-bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent ) const
+bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const
 {
 	int iResults = m_iEnd-m_iStart+1;
 	assert ( iResults>0 );
@@ -4714,7 +4743,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 		for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
 		{
 			const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
-			if ( /* tCol.m_sName.cstr()[0]!='@' && */ !tCol.m_pExpr )
+			if ( !tCol.m_pExpr )
 			{
 				bool bAdd = false;
 				ARRAY_FOREACH ( j, tQuery.m_dItems )
@@ -5846,14 +5875,30 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// build local indexes list
 	////////////////////////////
 
-	g_tDistLock.Lock();
-	DistributedIndex_t * pDist = g_hDistIndexes ( tFirst.m_sIndexes );
+	CSphVector<AgentConn_t> dAgents;
 	CSphVector<CSphString> dDistLocal;
-	if ( pDist )
-		dDistLocal = pDist->m_dLocal;
-	g_tDistLock.Unlock();
+	bool bDist = false;
+	int iAgentConnectTimeout = 0, iAgentQueryTimeout = 0;
 
-	if ( !pDist )
+	{
+		g_tDistLock.Lock();
+		DistributedIndex_t * pDist = g_hDistIndexes ( tFirst.m_sIndexes );
+		if ( pDist )
+		{
+			bDist = true;
+			iAgentConnectTimeout = pDist->m_iAgentConnectTimeout;
+			iAgentQueryTimeout = pDist->m_iAgentQueryTimeout;
+
+			dDistLocal = pDist->m_dLocal;
+
+			dAgents.Resize ( pDist->m_dAgents.GetLength() );
+			ARRAY_FOREACH ( i, pDist->m_dAgents )
+				dAgents[i] = pDist->m_dAgents[i];
+		}
+		g_tDistLock.Unlock();
+	}
+
+	if ( !bDist )
 	{
 		// they're all local, build the list
 		if ( tFirst.m_sIndexes=="*" )
@@ -5995,7 +6040,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	///////////////////////////////////////////////////////////
 
 	tFirst.m_iRetryCount = Min ( Max ( tFirst.m_iRetryCount, 0 ), MAX_RETRY_COUNT ); // paranoid clamp
-	if ( !pDist )
+	if ( !bDist )
 		tFirst.m_iRetryCount = 0;
 
 	for ( int iRetry=0; iRetry<=tFirst.m_iRetryCount; iRetry++ )
@@ -6010,13 +6055,13 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 		// connect to remote agents and query them, if required
 		int iRemote = 0;
-		if ( pDist )
+		if ( bDist )
 		{
 			m_dFailuresSet.SetIndex ( tFirst.m_sIndexes.cstr() );
-			ConnectToRemoteAgents ( pDist->m_dAgents, iRetry!=0 );
+			ConnectToRemoteAgents ( dAgents, iRetry!=0 );
 
 			SearchRequestBuilder_t tReqBuilder ( m_dQueries, iStart, iEnd );
-			iRemote = QueryRemoteAgents ( pDist->m_dAgents, pDist->m_iAgentConnectTimeout, tReqBuilder, &tmWait );
+			iRemote = QueryRemoteAgents ( dAgents, iAgentConnectTimeout, tReqBuilder, &tmWait );
 		}
 
 		/////////////////////
@@ -6027,7 +6072,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		// FIXME! what if the remote agents finish early, could they timeout?
 		if ( iRetry==0 )
 		{
-			if ( pDist && !iRemote && !m_dLocal.GetLength() )
+			if ( bDist && !iRemote && !m_dLocal.GetLength() )
 			{
 				for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 					m_dResults[iRes].m_sError = "all remote agents unreachable and no available local indexes found";
@@ -6053,14 +6098,14 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			m_dFailuresSet.SetIndex ( tFirst.m_sIndexes.cstr() );
 
 			SearchReplyParser_t tParser ( iStart, iEnd, m_dMvaStorage, m_dStringsStorage );
-			int iMsecLeft = pDist->m_iAgentQueryTimeout - (int)( tmLocal/1000 );
-			int iReplys = WaitForRemoteAgents ( pDist->m_dAgents, Max ( iMsecLeft, 0 ), tParser, &tmWait );
+			int iMsecLeft = iAgentQueryTimeout - (int)( tmLocal/1000 );
+			int iReplys = WaitForRemoteAgents ( dAgents, Max ( iMsecLeft, 0 ), tParser, &tmWait );
 
 			// check if there were valid (though might be 0-matches) replys, and merge them
 			if ( iReplys )
-				ARRAY_FOREACH ( iAgent, pDist->m_dAgents )
+				ARRAY_FOREACH ( iAgent, dAgents )
 			{
-				Agent_t & tAgent = pDist->m_dAgents[iAgent];
+				AgentConn_t & tAgent = dAgents[iAgent];
 				if ( !tAgent.m_bSuccess )
 					continue;
 
@@ -6110,23 +6155,24 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 		// check if we need to retry again
 		int iToRetry = 0;
-		if ( pDist )
-			ARRAY_FOREACH ( i, pDist->m_dAgents )
-				if ( pDist->m_dAgents[i].m_eState==AGENT_RETRY )
+		if ( bDist )
+			ARRAY_FOREACH ( i, dAgents )
+				if ( dAgents[i].m_eState==AGENT_RETRY )
 					iToRetry++;
 		if ( !iToRetry )
 			break;
 	}
 
 	// submit failures from failed agents
-	if ( pDist )
+	if ( bDist )
 	{
 		m_dFailuresSet.SetIndex ( tFirst.m_sIndexes.cstr() );
-		ARRAY_FOREACH ( i, pDist->m_dAgents )
+		ARRAY_FOREACH ( i, dAgents )
 		{
-			const Agent_t & tAgent = pDist->m_dAgents[i];
+			const AgentConn_t & tAgent = dAgents[i];
 			if ( !tAgent.m_bSuccess && !tAgent.m_sFailure.IsEmpty() )
-				m_dFailuresSet.Submit ( tAgent.m_bBlackhole?"blackhole %s: %s":"agent %s: %s", tAgent.GetName().cstr(), tAgent.m_sFailure.cstr() );
+				m_dFailuresSet.Submit ( tAgent.m_bBlackhole ? "blackhole %s: %s" : "agent %s: %s",
+					tAgent.GetName().cstr(), tAgent.m_sFailure.cstr() );
 		}
 	}
 
@@ -6231,7 +6277,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		g_pStats->m_iQueries += iQueries;
 		g_pStats->m_iQueryTime += tmSubset;
 		g_pStats->m_iQueryCpuTime += tmCpu;
-		if ( pDist && pDist->m_dAgents.GetLength() )
+		if ( bDist && dAgents.GetLength() )
 		{
 			// do *not* count queries to dist indexes w/o actual remote agents
 			g_pStats->m_iDistQueries++;
@@ -7238,7 +7284,7 @@ struct UpdateReplyParser_t : public IReplyParser_t
 		: m_pUpdated ( pUpd )
 	{}
 
-	virtual bool ParseReply ( MemInputBuffer_c & tReq, Agent_t & ) const
+	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
 	{
 		*m_pUpdated += tReq.GetDword ();
 		return true;
@@ -7446,16 +7492,20 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 			DistributedIndex_t & tDist = dDistributed[iIdx];
 			dFailuresSet.SetIndex ( sReqIndex );
 
+			CSphVector<AgentConn_t> dAgents ( tDist.m_dAgents.GetLength() );
+			ARRAY_FOREACH ( i, dAgents )
+				dAgents[i] = tDist.m_dAgents[i];
+
 			// connect to remote agents and query them
-			ConnectToRemoteAgents ( tDist.m_dAgents, false );
+			ConnectToRemoteAgents ( dAgents, false );
 
 			UpdateRequestBuilder_t tReqBuilder ( tUpd );
-			int iRemote = QueryRemoteAgents ( tDist.m_dAgents, tDist.m_iAgentConnectTimeout, tReqBuilder, NULL ); // FIXME? profile update time too?
+			int iRemote = QueryRemoteAgents ( dAgents, tDist.m_iAgentConnectTimeout, tReqBuilder, NULL ); // FIXME? profile update time too?
 
 			if ( iRemote )
 			{
 				UpdateReplyParser_t tParser ( &iUpdated );
-				iSuccesses += WaitForRemoteAgents ( tDist.m_dAgents, tDist.m_iAgentQueryTimeout, tParser, NULL ); // FIXME? profile update time too?
+				iSuccesses += WaitForRemoteAgents ( dAgents, tDist.m_iAgentQueryTimeout, tParser, NULL ); // FIXME? profile update time too?
 			}
 		}
 	}
@@ -7545,16 +7595,21 @@ void BuildStatus ( CSphVector<CSphString> & dStatus )
 	g_hDistIndexes.IterateStart();
 	while ( g_hDistIndexes.IterateNext() )
 	{
-		const char* sIdx = g_hDistIndexes.IterateGetKey().cstr();
-		CSphVector<Agent_t> & dAgents = g_hDistIndexes.IterateGet().m_dAgents;
+		const char * sIdx = g_hDistIndexes.IterateGetKey().cstr();
+		CSphVector<AgentDesc_t> & dAgents = g_hDistIndexes.IterateGet().m_dAgents;
 		ARRAY_FOREACH ( i, dAgents )
 		{
-			dStatus.Add().SetSprintf ( "ag_%s_%d_query_timeouts", sIdx, i );		dStatus.Add().SetSprintf ( FMT64, dAgents[i].m_iTimeoutsQuery );
-			dStatus.Add().SetSprintf ( "ag_%s_%d_connect_timeouts", sIdx, i );		dStatus.Add().SetSprintf ( FMT64, dAgents[i].m_iTimeoutsConnect );
-			dStatus.Add().SetSprintf ( "ag_%s_%d_connect_failures", sIdx, i );		dStatus.Add().SetSprintf ( FMT64, dAgents[i].m_iConnectFailures );
-			dStatus.Add().SetSprintf ( "ag_%s_%d_network_errors", sIdx, i );		dStatus.Add().SetSprintf ( FMT64, dAgents[i].m_iNetworkErrors );
-			dStatus.Add().SetSprintf ( "ag_%s_%d_wrong_replies", sIdx, i );			dStatus.Add().SetSprintf ( FMT64, dAgents[i].m_iWrongReplies );
-			dStatus.Add().SetSprintf ( "ag_%s_%d_unexpected_closings", sIdx, i );	dStatus.Add().SetSprintf ( FMT64, dAgents[i].m_iUnexpectedClose );
+			int iIndex = dAgents[i].m_iStatsIndex;
+			if ( iIndex<0 || iIndex>=STATS_MAX_AGENTS )
+				continue;
+
+			AgentStats_t & tStats = g_pStats->m_dAgentStats[iIndex];
+			dStatus.Add().SetSprintf ( "ag_%s_%d_query_timeouts", sIdx, i );		dStatus.Add().SetSprintf ( FMT64, tStats.m_iTimeoutsQuery );
+			dStatus.Add().SetSprintf ( "ag_%s_%d_connect_timeouts", sIdx, i );		dStatus.Add().SetSprintf ( FMT64, tStats.m_iTimeoutsConnect );
+			dStatus.Add().SetSprintf ( "ag_%s_%d_connect_failures", sIdx, i );		dStatus.Add().SetSprintf ( FMT64, tStats.m_iConnectFailures );
+			dStatus.Add().SetSprintf ( "ag_%s_%d_network_errors", sIdx, i );		dStatus.Add().SetSprintf ( FMT64, tStats.m_iNetworkErrors );
+			dStatus.Add().SetSprintf ( "ag_%s_%d_wrong_replies", sIdx, i );			dStatus.Add().SetSprintf ( FMT64, tStats.m_iWrongReplies );
+			dStatus.Add().SetSprintf ( "ag_%s_%d_unexpected_closings", sIdx, i );	dStatus.Add().SetSprintf ( FMT64, tStats.m_iUnexpectedClose );
 		}
 	}
 	g_tDistLock.Unlock();
@@ -10517,7 +10572,7 @@ bool PrereadNewIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex, c
 }
 
 
-bool ConfigureAgent ( Agent_t & tAgent, const CSphVariant * pAgent, const char * szIndexName, bool bBlackhole )
+bool ConfigureAgent ( AgentDesc_t & tAgent, const CSphVariant * pAgent, const char * szIndexName, bool bBlackhole )
 {
 	// extract host name or path
 	const char * p = pAgent->cstr();
@@ -10612,6 +10667,22 @@ bool ConfigureAgent ( Agent_t & tAgent, const CSphVariant * pAgent, const char *
 
 	tAgent.m_bBlackhole = bBlackhole;
 
+	// allocate stats slot
+	if ( g_pStats )
+	{
+		g_tStatsMutex.Lock();
+		for ( int i=0; i<STATS_MAX_AGENTS/32; i++ )
+			if ( g_pStats->m_bmAgentStats[i]!=0xffffffffUL )
+		{
+			int j = FindBit ( g_pStats->m_bmAgentStats[i] );
+			g_pStats->m_bmAgentStats[i] |= ( 1<<j );
+			tAgent.m_iStatsIndex = i*32 + j;
+			memset ( &g_pStats->m_dAgentStats[tAgent.m_iStatsIndex], 0, sizeof(AgentStats_t) );
+			break;
+		}
+		g_tStatsMutex.Unlock();
+	}
+
 	return true;
 }
 
@@ -10636,14 +10707,14 @@ static DistributedIndex_t ConfigureDistributedIndex ( const char * szIndexName, 
 	// add remote agents
 	for ( CSphVariant * pAgent = hIndex("agent"); pAgent; pAgent = pAgent->m_pNext )
 	{
-		Agent_t tAgent;
+		AgentDesc_t tAgent;
 		if ( ConfigureAgent ( tAgent, pAgent, szIndexName, false ) )
 			tIdx.m_dAgents.Add ( tAgent );
 	}
 
 	for ( CSphVariant * pAgent = hIndex("agent_blackhole"); pAgent; pAgent = pAgent->m_pNext )
 	{
-		Agent_t tAgent;
+		AgentDesc_t tAgent;
 		if ( ConfigureAgent ( tAgent, pAgent, szIndexName, true ) )
 			tIdx.m_dAgents.Add ( tAgent );
 	}
@@ -10669,6 +10740,25 @@ static DistributedIndex_t ConfigureDistributedIndex ( const char * szIndexName, 
 }
 
 
+void FreeAgentStats ( DistributedIndex_t & tIndex )
+{
+	if ( !g_pStats )
+		return;
+
+	g_tStatsMutex.Lock();
+	ARRAY_FOREACH ( i, tIndex.m_dAgents )
+	{
+		int iIndex = tIndex.m_dAgents[i].m_iStatsIndex;
+		if ( iIndex<0 || iIndex>=STATS_MAX_AGENTS )
+			continue;
+
+		assert ( g_pStats->m_bmAgentStats[iIndex>>5] & ( 1UL<<(iIndex&31) ) );
+		g_pStats->m_bmAgentStats[iIndex>>5] &= ~( 1UL<<(iIndex&31) );
+	}
+	g_tStatsMutex.Unlock();
+}
+
+
 ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex )
 {
 	if ( hIndex("type") && hIndex["type"]=="distributed" )
@@ -10682,15 +10772,21 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		// finally, check and add distributed index to global table
 		if ( tIdx.m_dAgents.GetLength()==0 && tIdx.m_dLocal.GetLength()==0 )
 		{
+			FreeAgentStats ( tIdx );
 			sphWarning ( "index '%s': no valid local/remote indexes in distributed index - NOT SERVING", szIndexName );
 			return ADD_ERROR;
+
 		} else
 		{
+			g_tDistLock.Lock ();
 			if ( !g_hDistIndexes.Add ( tIdx, szIndexName ) )
 			{
+				g_tDistLock.Unlock ();
+				FreeAgentStats ( tIdx );
 				sphWarning ( "index '%s': duplicate name - NOT SERVING", szIndexName );
 				return ADD_ERROR;
 			}
+			g_tDistLock.Unlock ();
 		}
 
 		return ADD_DISTR;
@@ -10901,11 +10997,14 @@ void ReloadIndexSettings ( CSphConfigParser * pCP )
 			// finally, check and add distributed index to global table
 			if ( tIdx.m_dAgents.GetLength()==0 && tIdx.m_dLocal.GetLength()==0 )
 			{
-				sphWarning ( "index '%s': no valid local/remote indexes in distributed index - using last succeed", sIndexName );
+				FreeAgentStats ( tIdx );
+				sphWarning ( "index '%s': no valid local/remote indexes in distributed index; using last valid definition", sIndexName );
 				g_hDistIndexes[sIndexName].m_bToDelete = false;
+
 			} else
 			{
 				g_tDistLock.Lock();
+				FreeAgentStats ( g_hDistIndexes[sIndexName] );
 				g_hDistIndexes[sIndexName] = tIdx;
 				g_tDistLock.Unlock();
 			}
@@ -10962,7 +11061,10 @@ void CheckDelete ()
 	g_tDistLock.Lock();
 
 	ARRAY_FOREACH ( i, dDistToDelete )
+	{
+		FreeAgentStats ( g_hDistIndexes [ *dDistToDelete[i] ] );
 		g_hDistIndexes.Delete ( *dDistToDelete[i] );
+	}
 
 	g_tDistLock.Unlock();
 

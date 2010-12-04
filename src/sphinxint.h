@@ -808,6 +808,30 @@ static int FindSpan ( const CSphVector<T> & dVec, T tRef, int iSmallTreshold=8 )
 	return -1;
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+inline int FindBit ( DWORD uValue )
+{
+	DWORD uMask = 0xffff;
+	int iIdx = 0;
+	int iBits = 16;
+
+	// we negate bits to compare with 0
+	// this makes MSVC emit 'test' instead of 'cmp'
+	uValue ^= 0xffffffff;
+	for ( int t=0; t<5; t++ )
+	{
+		if ( ( uValue & uMask )==0 )
+		{
+			iIdx += iBits;
+			uValue >>= iBits;
+		}
+		iBits >>= 1;
+		uMask >>= iBits;
+	}
+	return iIdx;
+}
+
 #endif // _sphinxint_
 
 //

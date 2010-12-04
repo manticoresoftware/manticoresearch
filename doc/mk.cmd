@@ -1,5 +1,20 @@
 @echo off
 
+if "%1" EQU "chunked" (
+	set XSLTARGS=^
+		--stringparam toc.section.depth 1 ^
+		--stringparam generate.section.toc.level 2 ^
+		--stringparam chunk.first.sections 1 ^
+		--stringparam chunk.section.depth 2 ^
+		--stringparam base.dir chunked/ ^
+		--stringparam use.id.as.filename 1 ^
+		%DOCBOOKXSL%/html/chunk.xsl
+) else (
+	set XSLTARGS=^
+		--stringparam toc.section.depth 4 ^
+		%DOCBOOKXSL%/html/docbook.xsl
+)
+
 type sphinx.xml ^
 	| perl -pe "s/<b>/<emphasis role=\"bold\">/g" ^
 	| perl -pe "s/<\/b>/<\/emphasis>/g" ^
@@ -7,8 +22,7 @@ type sphinx.xml ^
 	| xsltproc ^
 		--stringparam section.autolabel 1 ^
 		--stringparam section.label.includes.component.label 1 ^
-		--stringparam toc.section.depth 4 ^
-		%DOCBOOKXSL%/html/docbook.xsl ^
+		%XSLTARGS% ^
 		- ^
 	| perl -pe "s/\xA0/\&nbsp;/g" ^
 	| perl -pe "s/\xA9/\&copy;/g" ^

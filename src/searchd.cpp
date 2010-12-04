@@ -2791,6 +2791,8 @@ public:
 		m_sPath = rhs.m_sPath;
 		m_sIndexes = rhs.m_sIndexes;
 		m_bBlackhole = rhs.m_bBlackhole;
+		m_iFamily = rhs.m_iFamily;
+		m_uAddr = rhs.m_uAddr;
 		m_iStatsIndex = rhs.m_iStatsIndex;
 		return *this;
 	}
@@ -4420,7 +4422,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 			tOut.SendInt ( SEARCHD_WARNING );
 			tOut.SendString ( pRes->m_sWarning.cstr() );
 			if ( g_bOptNoDetach )
-				sphInfo ( "query warning: %s", pRes->m_sError.cstr() );
+				sphInfo ( "query warning: %s", pRes->m_sWarning.cstr() );
 		} else
 		{
 			tOut.SendInt ( SEARCHD_OK );

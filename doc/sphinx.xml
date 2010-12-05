@@ -268,9 +268,11 @@ specific project files) manually.
 <listitem>
 	<para>
 	Extract everything from the distribution tarball (haven't you already?)
-	and go to the <filename>sphinx</filename> subdirectory:
+	and go to the <filename>sphinx</filename> subdirectory. (We are using
+	version 1.11-beta here for the sake of example only; be sure to change this
+	to a specific version you're using.)
 	</para>
-<para><userinput><literallayout>$ tar xzvf sphinx-0.9.8.tar.gz
+<para><userinput><literallayout>$ tar xzvf sphinx-1.11-beta.tar.gz
 $ cd sphinx
 </literallayout></userinput></para>
 </listitem>
@@ -308,9 +310,13 @@ unless you are preparing code patches, you can use the pre-compiled binary files
 area on the website.</para>
 <orderedlist>
 <listitem>
-	<para>Extract everything from the .zip file you have downloaded - <filename>sphinx-0.9.8-win32.zip</filename>
-	(or <filename>sphinx-0.9.8-win32-pgsql.zip</filename> if you need PostgresSQL support as well.) You can use
-	Windows Explorer in Windows XP and up to extract the files, or a freeware package like 7Zip to open the archive.</para>
+	<para>Extract everything from the .zip file you have downloaded -
+	<filename>sphinx-1.11-beta-win32.zip</filename>,
+	or <filename>sphinx-1.11-beta-win32-pgsql.zip</filename> if you need PostgresSQL support as well.
+	(We are using version 1.11-beta here for the sake of example only;
+	be sure to change this to a specific version you're using.)
+	You can use Windows Explorer in Windows XP and up to extract the files,
+	or a freeware package like 7Zip to open the archive.</para>
 	<para>For the remainder of this guide, we will assume that the folders are unzipped into <filename>C:\Sphinx</filename>,
 	such that <filename>searchd.exe</filename> can be found in <filename>C:\Sphinx\bin\searchd.exe</filename>. If you decide
 	to use any different location for the folders or configuration file, please change it accordingly.</para>

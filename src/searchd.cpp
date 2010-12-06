@@ -1032,14 +1032,6 @@ public:
 public:
 	SearchFailure_t () {}
 
-	SearchFailure_t ( const CSphString & sIndex, const CSphString & sError )
-	{
-		m_sIndex = sIndex;
-		m_sError = sError;
-		if ( m_sIndex.IsEmpty() ) m_sIndex = "(no index name)";
-		if ( m_sError.IsEmpty() ) m_sError = "(no message)";
-	}
-
 public:
 	bool operator == ( const SearchFailure_t & r ) const
 	{
@@ -1056,80 +1048,37 @@ public:
 
 	const SearchFailure_t & operator = ( const SearchFailure_t & r )
 	{
-		m_sIndex = r.m_sIndex;
-		m_sError = r.m_sError;
+		if ( this!=&r )
+		{
+			m_sIndex = r.m_sIndex;
+			m_sError = r.m_sError;
+		}
 		return *this;
 	}
 };
 
 
-class SearchFailuresLog_i
-{
-public:
-	virtual ~SearchFailuresLog_i () {}
-	virtual void SetIndex ( const char * sIndex ) = 0;
-	virtual void SetPrefix ( const char * sTemplate, ... ) = 0;
-	virtual void Submit ( const char * sTemplate, ... ) = 0;
-};
-
-
-class SearchFailuresLog_c : public SearchFailuresLog_i
+class SearchFailuresLog_c
 {
 protected:
-	CSphString						m_sIndex;
-	CSphString						m_sPrefix;
 	CSphVector<SearchFailure_t>		m_dLog;
 
 public:
-	void SetIndex ( const char * sIndex )
+	void Submit ( const char * sIndex, const char * sError )
 	{
-		m_sIndex = sIndex;
-	}
-
-	void SetPrefix ( const char * sTemplate, ... )
-	{
-		va_list ap;
-		va_start ( ap, sTemplate );
-		m_sPrefix.SetSprintfVa ( sTemplate, ap );
-		va_end ( ap );
-	}
-
-	void Submit ( const char * sTemplate, ... )
-	{
-		va_list ap;
-		va_start ( ap, sTemplate );
-		VaSubmit ( ap, sTemplate );
-		va_end ( ap );
+		SearchFailure_t & tEntry = m_dLog.Add ();
+		tEntry.m_sIndex = sIndex;
+		tEntry.m_sError = sError;
 	}
 
 	void SubmitEx ( const char * sIndex, const char * sTemplate, ... )
 	{
-		m_sIndex = sIndex;
-		m_sPrefix = "";
-
+		SearchFailure_t & tEntry = m_dLog.Add ();
 		va_list ap;
 		va_start ( ap, sTemplate );
-		VaSubmit ( ap, sTemplate );
+		tEntry.m_sIndex = sIndex;
+		tEntry.m_sError.SetSprintfVa ( sTemplate, ap );
 		va_end ( ap );
-	}
-
-public:
-	void VaSetPrefix ( va_list ap, const char * sTemplate )
-	{
-		m_sPrefix.SetSprintfVa ( sTemplate, ap );
-	}
-
-	void VaSubmit ( va_list ap, const char * sTemplate )
-	{
-		assert ( !m_sIndex.IsEmpty() );
-
-		char sBuf [ 2048 ];
-		snprintf ( sBuf, sizeof(sBuf), "%s", m_sPrefix.IsEmpty() ? "" : m_sPrefix.cstr() );
-
-		int iLen = strlen(sBuf);
-		vsnprintf ( sBuf+iLen, sizeof(sBuf)-iLen, sTemplate, ap );
-
-		m_dLog.Add ( SearchFailure_t ( m_sIndex, sBuf ) );
 	}
 
 public:
@@ -1144,7 +1093,7 @@ public:
 			return;
 
 		// collapse same messages
-		m_dLog.Sort ();
+		m_dLog.Uniq ();
 		int iSpanStart = 0;
 
 		for ( int i=1; i<=m_dLog.GetLength(); i++ )
@@ -1176,66 +1125,6 @@ public:
 			// done
 			iSpanStart = i;
 		}
-	}
-};
-
-
-class SearchFailuresLogset_c : public SearchFailuresLog_i
-{
-protected:
-	CSphVector<SearchFailuresLog_c>		m_dLogs;
-	int									m_iStart;
-	int									m_iEnd;
-
-public:
-	SearchFailuresLogset_c ()
-		: m_iStart ( -1 )
-		, m_iEnd ( -1 )
-	{}
-
-	virtual void SetSize ( int iSize )
-	{
-		m_dLogs.Resize ( iSize );
-	}
-
-	virtual void SetSubset ( int iStart, int iEnd )
-	{
-		m_iStart = iStart;
-		m_iEnd = iEnd;
-	}
-
-public:
-	virtual void SetIndex ( const char * sIndex )
-	{
-		for ( int i=m_iStart; i<=m_iEnd; i++ )
-			m_dLogs[i].SetIndex ( sIndex );
-	}
-
-	virtual void SetPrefix ( const char * sTemplate, ... )
-	{
-		for ( int i=m_iStart; i<=m_iEnd; i++ )
-		{
-			va_list ap;
-			va_start ( ap, sTemplate );
-			m_dLogs[i].VaSetPrefix ( ap, sTemplate );
-			va_end ( ap );
-		}
-	}
-
-	virtual void Submit ( const char * sTemplate, ... )
-	{
-		for ( int i=m_iStart; i<=m_iEnd; i++ )
-		{
-			va_list ap;
-			va_start ( ap, sTemplate );
-			m_dLogs[i].VaSubmit ( ap, sTemplate );
-			va_end ( ap );
-		}
-	}
-
-	SearchFailuresLog_c & operator [] ( int iIndex )
-	{
-		return m_dLogs[iIndex];
 	}
 };
 
@@ -5223,11 +5112,11 @@ public:
 public:
 	CSphVector<CSphQuery>			m_dQueries;						///< queries which i need to search
 	CSphVector<AggrResult_t>		m_dResults;						///< results which i obtained
-	SearchFailuresLogset_c			m_dFailuresSet;					///< failure logs for each query
+	CSphVector<SearchFailuresLog_c>	m_dFailuresSet;					///< failure logs for each query
 
 protected:
 	void							RunSubset ( int iStart, int iEnd );	///< run queries against index(es) from first query in the subset
-	void							RunLocalSearches ( ISphMatchSorter * pLocalSorter );
+	void							RunLocalSearches ( ISphMatchSorter * pLocalSorter, const char * sDistName );
 	void							RunLocalSearchesMT ();
 	bool							RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters, CSphQueryResult ** pResults ) const;
 
@@ -5247,7 +5136,7 @@ SearchHandler_c::SearchHandler_c ( int iQueries )
 {
 	m_dQueries.Resize ( iQueries );
 	m_dResults.Resize ( iQueries );
-	m_dFailuresSet.SetSize ( iQueries );
+	m_dFailuresSet.Resize ( iQueries );
 	m_dExtraSchemas.Resize ( iQueries );
 
 	ARRAY_FOREACH ( i, m_dResults )
@@ -5448,7 +5337,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 				int iResultIndex = iLocal*iQueries;
 				if ( !m_bMultiQueue )
 					iResultIndex += iQuery - m_iStart;
-				m_dFailuresSet[iQuery].SubmitEx ( sLocal, "%s", dResults[iResultIndex].m_sError.cstr() );
+				m_dFailuresSet[iQuery].Submit ( sLocal, dResults[iResultIndex].m_sError.cstr() );
 			}
 			continue;
 		}
@@ -5466,7 +5355,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 			else if ( dResults[iResultIndex].m_iMultiplier==-1 )
 			{
 				iResultIndex += iQuery - m_iStart;
-				m_dFailuresSet[iQuery].SubmitEx ( sLocal, "%s", dResults[iResultIndex].m_sError.cstr() );
+				m_dFailuresSet[iQuery].Submit ( sLocal, dResults[iResultIndex].m_sError.cstr() );
 				continue;
 			}
 
@@ -5531,7 +5420,6 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 	if ( !pServed )
 	{
 		// FIXME! submit a failure?
-		// m_dFailuresSet.Submit ( "index '%s' does not exist", sLocal );
 		return false;
 	}
 	assert ( pServed->m_pIndex );
@@ -5551,7 +5439,6 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 		if ( !ppSorters[i] )
 		{
 			// FIXME! submit a failure?
-			// m_dFailuresSet[iQuery].SubmitEx ( sLocal, "%s", sError.cstr() );
 			continue;
 		}
 		iValidSorters++;
@@ -5604,7 +5491,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 }
 
 
-void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
+void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const char * sDistName )
 {
 	m_bIsLocked = pLocalSorter!=NULL;
 
@@ -5622,7 +5509,9 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
 		const ServedIndex_t * pServed = m_bIsLocked ? &g_pIndexes->GetUnlockedEntry ( sLocal ) : g_pIndexes->GetRlockedEntry ( sLocal );
 		if ( !pServed )
 		{
-			m_dFailuresSet.Submit ( "index '%s' does not exist", sLocal );
+			if ( sDistName )
+				for ( int i=m_iStart; i<=m_iEnd; i++ )
+					m_dFailuresSet[i].SubmitEx ( sDistName, "local index %s missing", sLocal );
 			continue;
 		}
 
@@ -5648,7 +5537,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
 				// fixup old queries
 				if ( !FixupQuery ( &tQuery, &pServed->m_pIndex->GetMatchSchema(), sLocal, sError ) )
 				{
-					m_dFailuresSet[iQuery].SubmitEx ( sLocal, "%s", sError.cstr() );
+					m_dFailuresSet[iQuery].Submit ( sLocal, sError.cstr() );
 					continue;
 				}
 
@@ -5656,7 +5545,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
 				pSorter = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchema );
 				if ( !pSorter )
 				{
-					m_dFailuresSet[iQuery].SubmitEx ( sLocal, "%s", sError.cstr() );
+					m_dFailuresSet[iQuery].Submit ( sLocal, sError.cstr() );
 					continue;
 				}
 			}
@@ -5717,7 +5606,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
 		{
 			// failed
 			for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
-				m_dFailuresSet[iQuery].SubmitEx ( sLocal, "%s",
+				m_dFailuresSet[iQuery].Submit ( sLocal,
 					m_dResults [ m_bMultiQueue ? m_iStart : iQuery ].m_sError.cstr() );
 		} else
 		{
@@ -5743,7 +5632,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
 					tRes.m_iMultiplier = m_iEnd-m_iStart+1;
 				} else if ( tRes.m_iMultiplier==-1 )
 				{
-					m_dFailuresSet[iQuery].SubmitEx ( sLocal, "%s", tRes.m_sError.cstr() );
+					m_dFailuresSet[iQuery].Submit ( sLocal, tRes.m_sError.cstr() );
 					continue;
 				}
 
@@ -5827,7 +5716,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// prepare for descent
 	CSphQuery & tFirst = m_dQueries[iStart];
 
-	m_dFailuresSet.SetSubset ( iStart, iEnd );
 	for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 		m_dResults[iRes].m_iSuccesses = 0;
 
@@ -6059,7 +5947,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		int iRemote = 0;
 		if ( bDist )
 		{
-			m_dFailuresSet.SetIndex ( tFirst.m_sIndexes.cstr() );
 			ConnectToRemoteAgents ( dAgents, iRetry!=0 );
 
 			SearchRequestBuilder_t tReqBuilder ( m_dQueries, iStart, iEnd );
@@ -6086,7 +5973,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			}
 
 			tmLocal = -sphMicroTimer();
-			RunLocalSearches ( pLocalSorter );
+			RunLocalSearches ( pLocalSorter, bDist ? tFirst.m_sIndexes.cstr() : NULL );
 			tmLocal += sphMicroTimer();
 		}
 
@@ -6097,8 +5984,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		// wait for remote queries to complete
 		if ( iRemote )
 		{
-			m_dFailuresSet.SetIndex ( tFirst.m_sIndexes.cstr() );
-
 			SearchReplyParser_t tParser ( iStart, iEnd, m_dMvaStorage, m_dStringsStorage );
 			int iMsecLeft = iAgentQueryTimeout - (int)( tmLocal/1000 );
 			int iReplys = WaitForRemoteAgents ( dAgents, Max ( iMsecLeft, 0 ), tParser, &tmWait );
@@ -6117,11 +6002,10 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					const CSphQueryResult & tRemoteResult = tAgent.m_dResults[iRes-iStart];
 
 					// copy errors or warnings
-					m_dFailuresSet[iRes].SetPrefix ( "agent %s: ", tAgent.GetName().cstr() );
 					if ( !tRemoteResult.m_sError.IsEmpty() )
-						m_dFailuresSet[iRes].Submit ( "remote query error: %s", tRemoteResult.m_sError.cstr() );
+						m_dFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes.cstr(), "agent %s: remote query error: %s", tAgent.GetName().cstr(), tRemoteResult.m_sError.cstr() );
 					if ( !tRemoteResult.m_sWarning.IsEmpty() )
-						m_dFailuresSet[iRes].Submit ( "remote query warning: %s", tRemoteResult.m_sWarning.cstr() );
+						m_dFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes.cstr(), "agent %s: remote query warning: %s", tAgent.GetName().cstr(), tRemoteResult.m_sWarning.cstr() );
 
 					if ( tRemoteResult.m_iSuccesses<=0 )
 						continue;
@@ -6168,13 +6052,13 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// submit failures from failed agents
 	if ( bDist )
 	{
-		m_dFailuresSet.SetIndex ( tFirst.m_sIndexes.cstr() );
 		ARRAY_FOREACH ( i, dAgents )
 		{
 			const AgentConn_t & tAgent = dAgents[i];
 			if ( !tAgent.m_bSuccess && !tAgent.m_sFailure.IsEmpty() )
-				m_dFailuresSet.Submit ( tAgent.m_bBlackhole ? "blackhole %s: %s" : "agent %s: %s",
-					tAgent.GetName().cstr(), tAgent.m_sFailure.cstr() );
+				for ( int j=iStart; j<=iEnd; j++ )
+					m_dFailuresSet[j].SubmitEx ( tFirst.m_sIndexes.cstr(), tAgent.m_bBlackhole ? "blackhole %s: %s" : "agent %s: %s",
+						tAgent.GetName().cstr(), tAgent.m_sFailure.cstr() );
 		}
 	}
 
@@ -7334,14 +7218,11 @@ void UpdateRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuff
 
 static void DoCommandUpdate ( const char * sIndex, const CSphAttrUpdate & tUpd,
 	int & iSuccesses, int & iUpdated, CSphVector < CSphPair < CSphString, DWORD > > & dUpdated,
-	SearchFailuresLogset_c & dFailuresSet, const ServedIndex_t * pServed )
+	SearchFailuresLog_c & dFails, const ServedIndex_t * pServed )
 {
-	dFailuresSet.SetIndex ( sIndex );
-	dFailuresSet.SetPrefix ( "" );
-
 	if ( !pServed || !pServed->m_pIndex )
 	{
-		dFailuresSet.Submit ( "index not available" );
+		dFails.Submit ( sIndex, "index not available" );
 		return;
 	}
 
@@ -7352,7 +7233,7 @@ static void DoCommandUpdate ( const char * sIndex, const CSphAttrUpdate & tUpd,
 
 	if ( iUpd<0 )
 	{
-		dFailuresSet.Submit ( "%s", sError.cstr() );
+		dFails.Submit ( sIndex, sError.cstr() );
 
 	} else
 	{
@@ -7457,10 +7338,7 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 	}
 
 	// do update
-	SearchFailuresLogset_c dFailuresSet;
-	dFailuresSet.SetSize ( 1 );
-	dFailuresSet.SetSubset ( 0, 0 );
-
+	SearchFailuresLog_c dFails;
 	int iSuccesses = 0;
 	int iUpdated = 0;
 	CSphVector < CSphPair < CSphString, DWORD > > dUpdated;
@@ -7471,7 +7349,7 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 		const ServedIndex_t * pLocked = g_pIndexes->GetRlockedEntry ( sReqIndex );
 		if ( pLocked )
 		{
-			DoCommandUpdate ( sReqIndex, tUpd, iSuccesses, iUpdated, dUpdated, dFailuresSet, pLocked );
+			DoCommandUpdate ( sReqIndex, tUpd, iSuccesses, iUpdated, dUpdated, dFails, pLocked );
 			pLocked->Unlock();
 		} else
 		{
@@ -7482,7 +7360,7 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 			{
 				const char * sLocal = dLocal[i].cstr();
 				const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( sLocal );
-				DoCommandUpdate ( sLocal, tUpd, iSuccesses, iUpdated, dUpdated, dFailuresSet, pServed );
+				DoCommandUpdate ( sLocal, tUpd, iSuccesses, iUpdated, dUpdated, dFails, pServed );
 				if ( pServed )
 					pServed->Unlock();
 			}
@@ -7492,7 +7370,6 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 		if ( dDistributed[iIdx].m_bToDelete )
 		{
 			DistributedIndex_t & tDist = dDistributed[iIdx];
-			dFailuresSet.SetIndex ( sReqIndex );
 
 			CSphVector<AgentConn_t> dAgents ( tDist.m_dAgents.GetLength() );
 			ARRAY_FOREACH ( i, dAgents )
@@ -7533,7 +7410,7 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 
 	// serve reply to client
 	StrBuf_t sReport;
-	dFailuresSet[0].BuildReport ( sReport );
+	dFails.BuildReport ( sReport );
 
 	if ( !iSuccesses )
 	{
@@ -7542,7 +7419,7 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 	}
 
 	NetOutputBuffer_c tOut ( iSock );
-	if ( dFailuresSet[0].IsEmpty() )
+	if ( dFails.IsEmpty() )
 	{
 		tOut.SendWord ( SEARCHD_OK );
 		tOut.SendWord ( VER_COMMAND_UPDATE );

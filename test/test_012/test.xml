@@ -22,6 +22,7 @@ source srclj
 <Sql_Settings/>
 <Static>
 	sql_query = SELECT id, subject, body, author FROM test_table
+	sql_query_pre = SET NAMES UTF8
 }
 </Static>
 <Static>

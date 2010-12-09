@@ -20,6 +20,7 @@ source srctest
 	<sql_settings/>
 
 	sql_query		= SELECT * FROM test_table
+	sql_query_pre	= SET NAMES UTF8
 }
 
 index test

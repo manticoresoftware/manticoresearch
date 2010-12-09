@@ -23,6 +23,7 @@ source auth
 source src : auth
 {
 	sql_query = SELECT id, tag, gr, text FROM test_table WHERE id&lt;4
+	sql_query_pre = SET NAMES UTF8
 	sql_attr_uint	= tag
 	sql_attr_uint	= gr
 }

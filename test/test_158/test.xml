@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>multiforms vs quorum</name>
+
+<skip_indexer/>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+index rt
+{
+	type			= rt
+	docinfo			= extern
+	charset_type	= utf-8
+	path			= <data_path/>/rt
+	wordforms		= wordforms.txt
+
+	rt_attr_uint	= gid
+	rt_field		= body
+	
+	rt_mem_limit	= 8M 
+}
+</config>
+
+<sphqueries>
+<sphinxql>insert into rt (id, gid, body) values ( 1, 123, 'Although various ancient traditions refer to a lost antediluvian world, the one that stands out is the tradition in the early chapters of Genesis.' )</sphinxql>
+<sphinxql>insert into rt (id, gid, body) values ( 2, 123, 'There are many means of transportation all over India and Nepal which can be called shandrydan due to their awkwardness.' )</sphinxql>
+<sphinxql>insert into rt (id, gid, body) values ( 3, 123, 'If Walker was bothered by my hard look, he hid it well.' )</sphinxql>
+<sphinxql>select * from rt where match ('antediluvian')</sphinxql>
+<sphinxql>select * from rt where match ('shandrydan')</sphinxql>
+<sphinxql>select * from rt where match ('"something antediluvian"/1')</sphinxql>
+<sphinxql>select * from rt where match ('"battered shandrydan"/1')</sphinxql>
+</sphqueries>
+
+</test>

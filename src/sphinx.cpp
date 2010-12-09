@@ -2089,7 +2089,7 @@ public:
 	virtual bool					IsUtf8 () const				{ return m_pTokenizer->IsUtf8 (); }
 	virtual const char *			GetTokenStart () const		{ return m_pLastToken->m_szTokenStart; }
 	virtual const char *			GetTokenEnd () const		{ return m_pLastToken->m_szTokenEnd; }
-	virtual const char *			GetBufferPtr () const		{ return m_pTokenizer->GetBufferPtr (); }
+	virtual const char *			GetBufferPtr () const		{ return m_pLastToken ? m_pLastToken->m_pBufferPtr : m_pTokenizer->GetBufferPtr(); }
 	virtual const char *			GetBufferEnd () const		{ return m_pTokenizer->GetBufferEnd (); }
 	virtual void					SetBufferPtr ( const char * sNewPtr );
 
@@ -2108,6 +2108,7 @@ private:
 		int				m_iOvershortCount;
 		const char *	m_szTokenStart;
 		const char *	m_szTokenEnd;
+		const char *	m_pBufferPtr;
 	};
 
 	CSphVector<StoredToken_t>		m_dStoredTokens;
@@ -4406,6 +4407,7 @@ void CSphTokenizer_Filter::FillTokenInfo ( StoredToken_t * pToken )
 	pToken->m_iTokenLen = m_pTokenizer->GetLastTokenLen ();
 	pToken->m_szTokenStart = m_pTokenizer->GetTokenStart ();
 	pToken->m_szTokenEnd = m_pTokenizer->GetTokenEnd ();
+	pToken->m_pBufferPtr = m_pTokenizer->GetBufferPtr ();
 }
 
 
@@ -4508,6 +4510,7 @@ BYTE * CSphTokenizer_Filter::GetToken ()
 			m_tLastToken.m_iTokenLen = pCurForm->m_iNormalTokenLen;
 			m_tLastToken.m_szTokenStart = m_dStoredTokens[m_iStoredStart].m_szTokenStart;
 			m_tLastToken.m_szTokenEnd = m_dStoredTokens[ ( m_iStoredStart+iTokensPerForm-1 ) % iSize ].m_szTokenEnd;
+			m_tLastToken.m_pBufferPtr = m_dStoredTokens[ ( m_iStoredStart+iTokensPerForm-1 ) % iSize ].m_pBufferPtr;
 			m_pLastToken = &m_tLastToken;
 
 			m_iStoredStart = ( m_iStoredStart+iTokensPerForm ) % iSize;

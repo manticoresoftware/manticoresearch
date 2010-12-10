@@ -7963,10 +7963,10 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 		return;
 	}
 
-	if ( !pServed->m_bRT )
+	if ( !pServed->m_bRT || !pServed->m_bEnabled )
 	{
 		pServed->Unlock();
-		sError.SetSprintf ( "index '%s' does not support INSERT", tStmt.m_sIndex.cstr() );
+		sError.SetSprintf ( "index '%s' does not support INSERT (enabled=%d)", tStmt.m_sIndex.cstr(), pServed->m_bEnabled );
 		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
 		return;
 	}
@@ -8604,6 +8604,14 @@ void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt
 		return;
 	}
 
+	if ( !pServed->m_bEnabled )
+	{
+		pServed->Unlock();
+		sError.SetSprintf ( "index '%s' does not support Update (enabled=%d)", tStmt.m_sIndex.cstr(), pServed->m_bEnabled );
+		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		return;
+	}
+
 	int iAffected = pServed->m_pIndex->UpdateAttributes ( tStmt.m_tUpdate, -1, sError );
 	if ( iAffected<0 )
 	{
@@ -8993,10 +9001,10 @@ void HandleMysqlDelete ( NetOutputBuffer_c & tOut, BYTE & uPacketID, const SqlSt
 		return;
 	}
 
-	if ( !pServed->m_bRT )
+	if ( !pServed->m_bRT || !pServed->m_bEnabled )
 	{
 		pServed->Unlock();
-		sError.SetSprintf ( "index '%s' does not support DELETE", tStmt.m_sIndex.cstr() );
+		sError.SetSprintf ( "index '%s' does not support DELETE (enabled=%d)", tStmt.m_sIndex.cstr(), pServed->m_bEnabled );
 		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
 		return;
 	}

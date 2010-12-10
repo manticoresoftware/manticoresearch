@@ -59,6 +59,15 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select * from test group by fval</sphinxql>
 <sphinxql>select *, ival-1 as i1 from test group by i1</sphinxql>
 <sphinxql>select *, @weight+ival as i1 from test where match('test')</sphinxql>
+<sphinxql>select *, 10+ival as i1, 50+i1 as i2 from test where match('test')</sphinxql>
+<sphinxql>select *, 10+ival as i1, 50+i1 as i2 from test</sphinxql>
+<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*10 as i3 from test</sphinxql>
+<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*10-i1 as i3 from test</sphinxql>
+<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*fval as i3 from test</sphinxql>
+<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*fval as i3 from test order by i3 asc</sphinxql>
+<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*fval as i3 from test order by i1 asc, i3 desc</sphinxql>
+<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*fval as i3 from test group by i2</sphinxql>
+<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*@id as i3 from test group by i3</sphinxql>
 </sphqueries>
 
 </test>

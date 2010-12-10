@@ -1721,12 +1721,15 @@ public:
 	bool				Setup ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError );
 	virtual float		Eval ( const CSphMatch & tMatch ) const;
 	virtual void		SetMVAPool ( const DWORD * ) {}
+	virtual void		GetDependencyColumns ( CSphVector<int> & dColumns ) const;
 
 protected:
 	CSphAttrLocator		m_tGeoLatLoc;
 	CSphAttrLocator		m_tGeoLongLoc;
 	float				m_fGeoAnchorLat;
 	float				m_fGeoAnchorLong;
+	int					m_iLat;
+	int					m_iLon;
 };
 
 
@@ -1756,6 +1759,8 @@ bool ExprGeodist_t::Setup ( const CSphQuery * pQuery, const CSphSchema & tSchema
 	m_tGeoLongLoc = tSchema.GetAttr(iLong).m_tLocator;
 	m_fGeoAnchorLat = pQuery->m_fGeoLatitude;
 	m_fGeoAnchorLong = pQuery->m_fGeoLongitude;
+	m_iLat = iLat;
+	m_iLon = iLong;
 	return true;
 }
 
@@ -1776,6 +1781,12 @@ float ExprGeodist_t::Eval ( const CSphMatch & tMatch ) const
 	double a = sphSqr ( sin ( dlat/2 ) ) + cos(plat)*cos(m_fGeoAnchorLat)*sphSqr(sin(dlon/2));
 	double c = 2*asin ( Min ( 1, sqrt(a) ) );
 	return (float)(R*c);
+}
+
+void ExprGeodist_t::GetDependencyColumns ( CSphVector<int> & dColumns ) const
+{
+	dColumns.Add ( m_iLat );
+	dColumns.Add ( m_iLon );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1843,14 +1854,44 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const CSphSchema & 
 }
 
 
-static inline void FixupStage ( CSphSchema & tSchema, int iAttr )
+static bool FixupDependency ( CSphSchema & tSchema, const int * pAttrs, int iAttrCount )
 {
-	if ( iAttr<0 )
-		return;
+	assert ( pAttrs );
 
-	CSphColumnInfo & tCol = const_cast < CSphColumnInfo & > ( tSchema.GetAttr ( iAttr ) );
-	if ( tCol.m_eStage==SPH_EVAL_FINAL )
-		tCol.m_eStage = SPH_EVAL_PRESORT;
+	CSphVector<int> dCur;
+
+	// add valid attributes to processing list
+	for ( int i=0; i<iAttrCount; i++ )
+		if ( pAttrs[i]>=0 )
+			dCur.Add ( pAttrs[i] );
+
+	int iInitialAttrs = dCur.GetLength();
+
+	// collect columns which affect current expressions
+	for ( int i=0; i<dCur.GetLength(); i++ )
+	{
+		const CSphColumnInfo & tCol = tSchema.GetAttr ( dCur[i] );
+		if ( tCol.m_eStage>SPH_EVAL_PRESORT && tCol.m_pExpr.Ptr()!=NULL )
+			tCol.m_pExpr->GetDependencyColumns ( dCur );
+	}
+
+	// get rid of dupes
+	dCur.Uniq();
+
+	// fix up of attributes stages
+	ARRAY_FOREACH ( i, dCur )
+	{
+		int iAttr = dCur[i];
+		if ( iAttr<0 )
+			continue;
+
+		CSphColumnInfo & tCol = const_cast < CSphColumnInfo & > ( tSchema.GetAttr ( iAttr ) );
+		if ( tCol.m_eStage==SPH_EVAL_FINAL )
+			tCol.m_eStage = SPH_EVAL_PRESORT;
+	}
+
+	// it uses attributes if it has dependencies from other attributes
+	return ( iInitialAttrs>dCur.GetLength() );
 }
 
 
@@ -2116,11 +2157,15 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		if ( eRes==SORT_CLAUSE_RANDOM )
 			bRandomize = true;
 
-		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
+		bUsesAttrs = FixupDependency ( tSorterSchema, dAttrs, CSphMatchComparatorState::MAX_ATTRS );
+
+		if ( !bUsesAttrs )
 		{
-			FixupStage ( tSorterSchema, dAttrs[i] );
-			if ( tStateMatch.m_eKeypart[i]==SPH_KEYPART_INT || tStateMatch.m_eKeypart[i]==SPH_KEYPART_FLOAT )
-				bUsesAttrs = true;
+			for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
+			{
+				if ( tStateMatch.m_eKeypart[i]==SPH_KEYPART_INT || tStateMatch.m_eKeypart[i]==SPH_KEYPART_FLOAT )
+					bUsesAttrs = true;
+			}
 		}
 
 	} else if ( pQuery->m_eSort==SPH_SORT_EXPR )
@@ -2178,9 +2223,8 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		if ( pExtra )
 			pExtra->AddAttr ( tSorterSchema.GetAttr ( idx ), true );
 
-		FixupStage ( tSorterSchema, idx );
-		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
-			FixupStage ( tSorterSchema, dAttrs[i] );
+		FixupDependency ( tSorterSchema, &idx, 1 );
+		FixupDependency ( tSorterSchema, dAttrs, CSphMatchComparatorState::MAX_ATTRS );
 	}
 
 	///////////////////

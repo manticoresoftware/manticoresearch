@@ -43,6 +43,9 @@ public:
 
 	/// setup MVA pool
 	virtual void SetMVAPool ( const DWORD * ) {}
+
+	/// get schema columns index which affect expression
+	virtual void GetDependencyColumns ( CSphVector<int> & ) const {}
 };
 
 /// parses given expression, builds evaluator

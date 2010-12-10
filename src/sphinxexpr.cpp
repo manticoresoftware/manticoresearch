@@ -37,40 +37,49 @@
 // EVALUATION ENGINE
 //////////////////////////////////////////////////////////////////////////
 
-struct Expr_GetInt_c : public ISphExpr
+struct ExprLocatorTraits_t : public ISphExpr
 {
 	CSphAttrLocator m_tLocator;
-	explicit Expr_GetInt_c ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
+	int m_iLocator;
+
+	ExprLocatorTraits_t ( const CSphAttrLocator & tLocator, int iLocator ) : m_tLocator ( tLocator ), m_iLocator ( iLocator ) {}
+	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
+	{
+		dColumns.Add ( m_iLocator );
+	}
+};
+
+
+struct Expr_GetInt_c : public ExprLocatorTraits_t
+{
+	Expr_GetInt_c ( const CSphAttrLocator & tLocator, int iLocator ) : ExprLocatorTraits_t ( tLocator, iLocator ) {}
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float) tMatch.GetAttr ( m_tLocator ); } // FIXME! OPTIMIZE!!! we can go the short route here
 	virtual int IntEval ( const CSphMatch & tMatch ) const { return (int)tMatch.GetAttr ( m_tLocator ); }
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)tMatch.GetAttr ( m_tLocator ); }
 };
 
 
-struct Expr_GetBits_c : public ISphExpr
+struct Expr_GetBits_c : public ExprLocatorTraits_t
 {
-	CSphAttrLocator m_tLocator;
-	explicit Expr_GetBits_c ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
+	Expr_GetBits_c ( const CSphAttrLocator & tLocator, int iLocator ) : ExprLocatorTraits_t ( tLocator, iLocator ) {}
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float) tMatch.GetAttr ( m_tLocator ); }
 	virtual int IntEval ( const CSphMatch & tMatch ) const { return (int)tMatch.GetAttr ( m_tLocator ); }
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)tMatch.GetAttr ( m_tLocator ); }
 };
 
 
-struct Expr_GetSint_c : public ISphExpr
+struct Expr_GetSint_c : public ExprLocatorTraits_t
 {
-	CSphAttrLocator m_tLocator;
-	explicit Expr_GetSint_c ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
+	Expr_GetSint_c ( const CSphAttrLocator & tLocator, int iLocator ) : ExprLocatorTraits_t ( tLocator, iLocator ) {}
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)(int)tMatch.GetAttr ( m_tLocator ); }
 	virtual int IntEval ( const CSphMatch & tMatch ) const { return (int)tMatch.GetAttr ( m_tLocator ); }
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int)tMatch.GetAttr ( m_tLocator ); }
 };
 
 
-struct Expr_GetFloat_c : public ISphExpr
+struct Expr_GetFloat_c : public ExprLocatorTraits_t
 {
-	CSphAttrLocator m_tLocator;
-	explicit Expr_GetFloat_c ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
+	Expr_GetFloat_c ( const CSphAttrLocator & tLocator, int iLocator ) : ExprLocatorTraits_t ( tLocator, iLocator ) {}
 	virtual float Eval ( const CSphMatch & tMatch ) const { return tMatch.GetAttrFloat ( m_tLocator ); }
 };
 
@@ -165,6 +174,12 @@ struct Expr_Arglist_c : public ISphExpr
 		assert ( 0 && "internal error: Eval() must not be explicitly called on arglist" );
 		return 0.0f;
 	}
+
+	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
+	{
+		ARRAY_FOREACH ( i, m_dArgs )
+			m_dArgs[i]->GetDependencyColumns ( dColumns );
+	}
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -189,6 +204,7 @@ struct Expr_Arglist_c : public ISphExpr
 		~_classname () { SafeRelease ( m_pFirst ); } \
 		virtual void SetMVAPool ( const DWORD * pMvaPool ) { m_pFirst->SetMVAPool ( pMvaPool ); } \
 		virtual float Eval ( const CSphMatch & tMatch ) const { return _expr; } \
+		virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const { m_pFirst->GetDependencyColumns ( dColumns ); } \
 
 #define DECLARE_UNARY_FLT(_classname,_expr) \
 		DECLARE_UNARY_TRAITS ( _classname, _expr ) \
@@ -229,6 +245,11 @@ DECLARE_UNARY_INT ( Expr_Sint_c,		(float)(INTFIRST),			INTFIRST,		INTFIRST )
 		~_classname () { SafeRelease ( m_pFirst ); SafeRelease ( m_pSecond ); } \
 		virtual void SetMVAPool ( const DWORD * pMvaPool ) { m_pFirst->SetMVAPool ( pMvaPool ); m_pSecond->SetMVAPool ( pMvaPool ); } \
 		virtual float Eval ( const CSphMatch & tMatch ) const { return _expr; } \
+		virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const \
+		{ \
+			m_pFirst->GetDependencyColumns ( dColumns ); \
+			m_pSecond->GetDependencyColumns ( dColumns ); \
+		} \
 
 #define DECLARE_BINARY_FLT(_classname,_expr) \
 		DECLARE_BINARY_TRAITS ( _classname, _expr ) \
@@ -284,6 +305,12 @@ DECLARE_BINARY_POLY ( Expr_Or,		FIRST!=0.0f || SECOND!=0.0f,		IFINT ( INTFIRST |
 		virtual float Eval ( const CSphMatch & tMatch ) const { return _expr; } \
 		virtual int IntEval ( const CSphMatch & tMatch ) const { return _expr2; } \
 		virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return _expr3; } \
+		virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const \
+		{ \
+			m_pFirst->GetDependencyColumns ( dColumns ); \
+			m_pSecond->GetDependencyColumns ( dColumns ); \
+			m_pThird->GetDependencyColumns ( dColumns ); \
+		} \
 	};
 
 DECLARE_TERNARY ( Expr_If_c,	( FIRST!=0.0f ) ? SECOND : THIRD,	INTFIRST ? INTSECOND : INTTHIRD,	INT64FIRST ? INT64SECOND : INT64THIRD )
@@ -426,6 +453,7 @@ struct ExprNode_t
 	DWORD			m_uRetType;	///< result type
 	DWORD			m_uArgType;	///< args type
 	CSphAttrLocator	m_tLocator;	///< attribute locator, for TOK_ATTR type
+	int				m_iLocator; ///< index of attribute locator in schema
 	union
 	{
 		int64_t			m_iConst;		///< constant value, for TOK_CONST_INT type
@@ -437,7 +465,7 @@ struct ExprNode_t
 	int				m_iLeft;
 	int				m_iRight;
 
-	ExprNode_t () : m_iToken ( 0 ), m_uRetType ( SPH_ATTR_NONE ), m_uArgType ( SPH_ATTR_NONE ), m_iLeft ( -1 ), m_iRight ( -1 ) {}
+	ExprNode_t () : m_iToken ( 0 ), m_uRetType ( SPH_ATTR_NONE ), m_uArgType ( SPH_ATTR_NONE ), m_iLocator ( -1 ), m_iLeft ( -1 ), m_iRight ( -1 ) {}
 
 	float FloatVal()
 	{
@@ -474,7 +502,7 @@ protected:
 
 	int						AddNodeInt ( int64_t iValue );
 	int						AddNodeFloat ( float fValue );
-	int						AddNodeAttr ( int iTokenType, int iAttrLocator );
+	int						AddNodeAttr ( int iTokenType, uint64_t uAttrLocator );
 	int						AddNodeID ();
 	int						AddNodeWeight ();
 	int						AddNodeOp ( int iOp, int iLeft, int iRight );
@@ -561,6 +589,26 @@ static bool IsNumericAttrType ( DWORD eType )
 		|| eType==SPH_ATTR_BIGINT;
 }
 
+static uint64_t sphPackAttrLocator ( const CSphAttrLocator & tLoc, int iLocator )
+{
+	assert ( iLocator>=0 && iLocator<=0xff );
+	uint64_t uIndex = 0;
+	uIndex = ( tLoc.m_iBitOffset<<16 ) + tLoc.m_iBitCount + ( (uint64_t)iLocator<<32 );
+	if ( tLoc.m_bDynamic )
+		uIndex |= ( U64C(1)<<63 );
+
+	return uIndex;
+}
+
+static void sphUnpackAttrLocator ( uint64_t uIndex, ExprNode_t * pNode )
+{
+	assert ( pNode );
+	pNode->m_tLocator.m_iBitOffset = (int)( ( uIndex>>16 ) & 0xffff );
+	pNode->m_tLocator.m_iBitCount = (int)( uIndex & 0xffff );
+	pNode->m_tLocator.m_bDynamic = ( ( uIndex & ( U64C(1)<<63 ) )!=0 );
+
+	pNode->m_iLocator = ( ( uIndex>>32 ) & 0xff );
+}
 
 /// a lexer of my own
 /// returns token id and fills lvalp on success
@@ -600,7 +648,7 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 				return -1;
 			}
 			const CSphAttrLocator & tLoc = m_pSchema->GetAttr ( iGeodist ).m_tLocator;
-			lvalp->iAttrLocator = ( tLoc.m_iBitOffset << 16 ) + tLoc.m_iBitCount;
+			lvalp->iAttrLocator = sphPackAttrLocator ( tLoc, iGeodist );
 			return TOK_ATTR_FLOAT;
 		}
 
@@ -619,7 +667,7 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 			{
 				if ( m_pExtra )
 					m_pExtra->AddAttr ( tCol, true );
-				lvalp->iAttrLocator = ( tCol.m_tLocator.m_iBitOffset<<16 ) + tCol.m_tLocator.m_iBitCount;
+				lvalp->iAttrLocator = sphPackAttrLocator ( tCol.m_tLocator, iAttr );
 
 				if ( tCol.m_eAttrType==SPH_ATTR_FLOAT )			return TOK_ATTR_FLOAT;
 				else if ( tCol.m_eAttrType & SPH_ATTR_MULTI )	return TOK_ATTR_MVA;
@@ -1039,10 +1087,10 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 
 	switch ( tNode.m_iToken )
 	{
-		case TOK_ATTR_INT:		return new Expr_GetInt_c ( tNode.m_tLocator );
-		case TOK_ATTR_BITS:		return new Expr_GetBits_c ( tNode.m_tLocator );
-		case TOK_ATTR_FLOAT:	return new Expr_GetFloat_c ( tNode.m_tLocator );
-		case TOK_ATTR_SINT:		return new Expr_GetSint_c ( tNode.m_tLocator );
+		case TOK_ATTR_INT:		return new Expr_GetInt_c ( tNode.m_tLocator, tNode.m_iLocator );
+		case TOK_ATTR_BITS:		return new Expr_GetBits_c ( tNode.m_tLocator, tNode.m_iLocator );
+		case TOK_ATTR_FLOAT:	return new Expr_GetFloat_c ( tNode.m_tLocator, tNode.m_iLocator );
+		case TOK_ATTR_SINT:		return new Expr_GetSint_c ( tNode.m_tLocator, tNode.m_iLocator );
 
 		case TOK_CONST_FLOAT:	return new Expr_GetConst_c ( tNode.m_fConst );
 		case TOK_CONST_INT:
@@ -1160,6 +1208,10 @@ public:
 	virtual int IntEval ( const CSphMatch & tMatch ) const = 0;
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float) IntEval ( tMatch ); }
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return IntEval ( tMatch ); }
+	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
+	{
+		m_pArg->GetDependencyColumns ( dColumns );
+	}
 
 protected:
 	T ExprEval ( ISphExpr * pArg, const CSphMatch & tMatch ) const;
@@ -1271,6 +1323,13 @@ public:
 		this->m_pArg->SetMVAPool ( pMvaPool );
 		ARRAY_FOREACH ( i, m_dTurnPoints )
 			m_dTurnPoints[i]->SetMVAPool ( pMvaPool );
+	}
+
+	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
+	{
+		Expr_ArgVsSet_c<T>::GetDependencyColumns ( dColumns );
+		ARRAY_FOREACH ( i, m_dTurnPoints )
+			m_dTurnPoints[i]->GetDependencyColumns ( dColumns );
 	}
 };
 
@@ -1421,6 +1480,13 @@ public:
 		ARRAY_FOREACH ( i, m_dBitWeights )
 			m_dBitWeights[i]->SetMVAPool ( pMvaPool );
 	}
+
+	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
+	{
+		Expr_ArgVsSet_c<T>::GetDependencyColumns ( dColumns );
+		ARRAY_FOREACH ( i, m_dBitWeights )
+			m_dBitWeights[i]->GetDependencyColumns ( dColumns );
+	}
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1441,16 +1507,24 @@ static inline float CalcGeodist ( float fPointLat, float fPointLon, float fAncho
 class Expr_GeodistAttrConst_c: public ISphExpr
 {
 public:
-	Expr_GeodistAttrConst_c ( CSphAttrLocator tLat, CSphAttrLocator tLon, float fAnchorLat, float fAnchorLon )
+	Expr_GeodistAttrConst_c ( CSphAttrLocator tLat, CSphAttrLocator tLon, float fAnchorLat, float fAnchorLon, int iLat, int iLon )
 		: m_tLat ( tLat )
 		, m_tLon ( tLon )
 		, m_fAnchorLat ( fAnchorLat )
 		, m_fAnchorLon ( fAnchorLon )
+		, m_iLat ( iLat )
+		, m_iLon ( iLon )
 	{}
 
 	virtual float Eval ( const CSphMatch & tMatch ) const
 	{
 		return CalcGeodist ( tMatch.GetAttrFloat ( m_tLat ), tMatch.GetAttrFloat ( m_tLon ), m_fAnchorLat, m_fAnchorLon );
+	}
+
+	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
+	{
+		dColumns.Add ( m_iLat );
+		dColumns.Add ( m_iLon );
 	}
 
 private:
@@ -1459,6 +1533,9 @@ private:
 
 	float		m_fAnchorLat;
 	float		m_fAnchorLon;
+
+	int			m_iLat;
+	int			m_iLon;
 };
 
 /// geodist() - expr point, constant anchor
@@ -1481,6 +1558,12 @@ public:
 	virtual float Eval ( const CSphMatch & tMatch ) const
 	{
 		return CalcGeodist ( m_pLat->Eval(tMatch), m_pLon->Eval(tMatch), m_fAnchorLat, m_fAnchorLon );
+	}
+
+	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
+	{
+		m_pLat->GetDependencyColumns ( dColumns );
+		m_pLon->GetDependencyColumns ( dColumns );
 	}
 
 private:
@@ -1513,6 +1596,14 @@ public:
 	virtual float Eval ( const CSphMatch & tMatch ) const
 	{
 		return CalcGeodist ( m_pLat->Eval(tMatch), m_pLon->Eval(tMatch), m_pAnchorLat->Eval(tMatch), m_pAnchorLon->Eval(tMatch) );
+	}
+
+	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
+	{
+		m_pLat->GetDependencyColumns ( dColumns );
+		m_pLon->GetDependencyColumns ( dColumns );
+		m_pAnchorLat->GetDependencyColumns ( dColumns );
+		m_pAnchorLon->GetDependencyColumns ( dColumns );
 	}
 
 private:
@@ -1668,7 +1759,8 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 			// attr point
 			return new Expr_GeodistAttrConst_c (
 				m_dNodes[dArgs[0]].m_tLocator, m_dNodes[dArgs[1]].m_tLocator,
-				m_dNodes[dArgs[2]].FloatVal(), m_dNodes[dArgs[3]].FloatVal() );
+				m_dNodes[dArgs[2]].FloatVal(), m_dNodes[dArgs[3]].FloatVal(),
+				m_dNodes[dArgs[0]].m_iLocator, m_dNodes[dArgs[1]].m_iLocator );
 		} else
 		{
 			// expr point
@@ -1766,13 +1858,12 @@ int ExprParser_t::AddNodeFloat ( float fValue )
 	return m_dNodes.GetLength()-1;
 }
 
-int ExprParser_t::AddNodeAttr ( int iTokenType, int iAttrLocator )
+int ExprParser_t::AddNodeAttr ( int iTokenType, uint64_t uAttrLocator )
 {
 	assert ( iTokenType==TOK_ATTR_INT || iTokenType==TOK_ATTR_BITS || iTokenType==TOK_ATTR_FLOAT || iTokenType==TOK_ATTR_MVA );
 	ExprNode_t & tNode = m_dNodes.Add ();
 	tNode.m_iToken = iTokenType;
-	tNode.m_tLocator.m_iBitOffset = iAttrLocator>>16;
-	tNode.m_tLocator.m_iBitCount = iAttrLocator&0xffff;
+	sphUnpackAttrLocator ( uAttrLocator, &tNode );
 
 	if ( iTokenType==TOK_ATTR_FLOAT )			tNode.m_uRetType = SPH_ATTR_FLOAT;
 	else if ( iTokenType==TOK_ATTR_MVA )		tNode.m_uRetType = SPH_ATTR_MULTI;

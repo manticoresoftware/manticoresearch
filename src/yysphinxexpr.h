@@ -80,7 +80,7 @@
 typedef union YYSTYPE {
 	int64_t			iConst;			// constant value
 	float			fConst;			// constant value
-	int				iAttrLocator;	// attribute locator (rowitem for int/float; offset+size for bits)
+	uint64_t		iAttrLocator;	// attribute locator (rowitem for int/float; offset+size for bits)
 	int				iFunc;			// function id
 	int				iNode;			// node index
 } YYSTYPE;

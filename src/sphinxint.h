@@ -832,6 +832,95 @@ inline int FindBit ( DWORD uValue )
 	return iIdx;
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+/// decode UTF-8 codepoint
+/// advances buffer ptr in all cases but end of buffer
+///
+/// returns -1 on failure
+/// returns 0 on end of buffer
+/// returns codepoint on success
+inline int sphUTF8Decode ( BYTE * & pBuf )
+{
+	BYTE v = *pBuf;
+	if ( !v )
+		return 0;
+	pBuf++;
+
+	// check for 7-bit case
+	if ( v<128 )
+		return v;
+
+	// get number of bytes
+	int iBytes = 0;
+	while ( v & 0x80 )
+	{
+		iBytes++;
+		v <<= 1;
+	}
+
+	// check for valid number of bytes
+	if ( iBytes<2 || iBytes>4 )
+		return -1;
+
+	int iCode = ( v >> iBytes );
+	iBytes--;
+	do
+	{
+		if ( !(*pBuf) )
+			return 0; // unexpected eof
+
+		if ( ((*pBuf) & 0xC0)!=0x80 )
+			return -1; // invalid code
+
+		iCode = ( iCode<<6 ) + ( (*pBuf) & 0x3F );
+		iBytes--;
+		pBuf++;
+	} while ( iBytes );
+
+	// all good
+	return iCode;
+}
+
+
+/// encode UTF-8 codepoint to buffer
+/// returns number of bytes used
+inline int sphUTF8Encode ( BYTE * pBuf, int iCode )
+{
+	if ( iCode<0x80 )
+	{
+		pBuf[0] = (BYTE)( iCode & 0x7F );
+		return 1;
+
+	} else if ( iCode<0x800 )
+	{
+		pBuf[0] = (BYTE)( ( (iCode>>6) & 0x1F ) | 0xC0 );
+		pBuf[1] = (BYTE)( ( iCode & 0x3F ) | 0x80 );
+		return 2;
+
+	} else
+	{
+		pBuf[0] = (BYTE)( ( (iCode>>12) & 0x0F ) | 0xE0 );
+		pBuf[1] = (BYTE)( ( (iCode>>6) & 0x3F ) | 0x80 );
+		pBuf[2] = (BYTE)( ( iCode & 0x3F ) | 0x80 );
+		return 3;
+	}
+}
+
+
+/// compute UTF-8 string length in codepoints
+inline int sphUTF8Len ( const char * pStr )
+{
+	BYTE * pBuf = (BYTE*) pStr;
+	int iRes = 0, iCode;
+
+	while ( ( iCode = sphUTF8Decode(pBuf) )!=0 )
+		if ( iCode>0 )
+			iRes++;
+
+	return iRes;
+}
+
 #endif // _sphinxint_
 
 //

@@ -607,7 +607,7 @@ static void sphUnpackAttrLocator ( uint64_t uIndex, ExprNode_t * pNode )
 	pNode->m_tLocator.m_iBitCount = (int)( uIndex & 0xffff );
 	pNode->m_tLocator.m_bDynamic = ( ( uIndex & ( U64C(1)<<63 ) )!=0 );
 
-	pNode->m_iLocator = ( ( uIndex>>32 ) & 0xff );
+	pNode->m_iLocator = (int)( ( uIndex>>32 ) & 0xff );
 }
 
 /// a lexer of my own

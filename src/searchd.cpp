@@ -4383,8 +4383,11 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 			const BYTE * pStrings = dTag2Pools [ tMatch.m_iTag ].m_pStrings;
 
 			assert ( tMatch.m_pStatic || !pRes->m_tSchema.GetStaticSize() );
+#if 0
+			// not correct any more because of internal attrs (such as string sorting ptrs)
 			assert ( tMatch.m_pDynamic || !pRes->m_tSchema.GetDynamicSize() );
 			assert ( !tMatch.m_pDynamic || (int)tMatch.m_pDynamic[-1]==pRes->m_tSchema.GetDynamicSize() );
+#endif
 
 			for ( int j=0; j<pRes->m_tSchema.GetAttrsCount(); j++ )
 			{
@@ -5228,6 +5231,7 @@ void SearchHandler_c::RunQueries ()
 		m_dResults[i].m_dTag2Pools[0].m_pMva = m_dMvaStorage.Begin();
 		m_dResults[i].m_dTag2Pools[0].m_pStrings = m_dStringsStorage.Begin();
 		m_dResults[i].m_iMatches = m_dResults[i].m_dMatches.GetLength();
+		sphSortRemoveInternalAttrs ( m_dResults[i].m_tSchema );
 	}
 }
 

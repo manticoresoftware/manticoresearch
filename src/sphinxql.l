@@ -84,6 +84,7 @@ SPACE				[ \t\n\r]
 "<>"				{ YYSTOREBOUNDS; return TOK_NE; }
 "<="				{ YYSTOREBOUNDS; return TOK_LTE; }
 ">="				{ YYSTOREBOUNDS; return TOK_GTE; }
+":="				{ YYSTOREBOUNDS; return '='; }
 
 '([^'\\]|\\.|\\\\)*'	{ YYSTOREBOUNDS; SqlUnescape ( lvalp->m_sValue, yytext, yyleng ); return TOK_QUOTED_STRING; }
 

@@ -266,7 +266,20 @@ public:
 	void						CalcFilter ( CSphMatch & tMatch ) const;
 	void						CalcSort ( CSphMatch & tMatch ) const;
 	void						CalcFinal ( CSphMatch & tMatch ) const;
+
+	void						SetStringPool ( const BYTE * pStrings );
 };
+
+struct SphStringSorterRemap_t
+{
+	CSphAttrLocator m_tSrc;
+	CSphAttrLocator m_tDst;
+};
+
+ISphExpr *	sphSortSetupExpr ( const CSphString & sName, const CSphSchema & tIndexSchema );
+bool		sphSortGetStringRemap ( const ISphMatchSorter * pSorter, const CSphSchema & tIndexSchema, CSphVector<SphStringSorterRemap_t> & dAttrs );
+void		sphSortRemoveInternalAttrs ( CSphSchema & tSchema );
+
 
 //////////////////////////////////////////////////////////////////////////
 

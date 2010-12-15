@@ -2097,6 +2097,17 @@ struct CSphQueryItem
 };
 
 
+/// known collations
+enum ESphCollation
+{
+	SPH_COLLATION_LIBC_CI,
+	SPH_COLLATION_LIBC_CS,
+	SPH_COLLATION_UTF8_GENERAL_CI,
+
+	SPH_COLLATION_DEFAULT = SPH_COLLATION_LIBC_CI
+};
+
+
 /// search query
 class CSphQuery
 {
@@ -2157,7 +2168,9 @@ public:
 	DWORD			m_iOldMaxGID;		///< 0.9.6 max group id
 
 public:
-	CSphVector<CSphQueryItem>		m_dItems;	///< parsed select-list
+	CSphVector<CSphQueryItem>	m_dItems;		///< parsed select-list
+	ESphCollation				m_eCollation;	///< ORDER BY collation
+	bool						m_bAgent;		///< agent mode (may need extra cols on output)
 
 public:
 					CSphQuery ();		///< ctor, fills defaults
@@ -2168,7 +2181,6 @@ public:
 
 	/// parse select list string into items
 	bool			ParseSelectList ( CSphString & sError );
-	bool			m_bAgent;			///< agent mode ( may be need extra schema on output )
 };
 
 
@@ -2305,9 +2317,11 @@ enum ESphSortKeyPart
 	SPH_KEYPART_ID,
 	SPH_KEYPART_WEIGHT,
 	SPH_KEYPART_INT,
-	SPH_KEYPART_FLOAT
+	SPH_KEYPART_FLOAT,
+	SPH_KEYPART_STRING
 };
 
+typedef int ( *SphStringCmp_fn )( const BYTE * pStr1, const BYTE * pStr2 );
 
 /// match comparator state
 struct CSphMatchComparatorState
@@ -2319,11 +2333,13 @@ struct CSphMatchComparatorState
 
 	DWORD				m_uAttrDesc;				///< sort order mask (if i-th bit is set, i-th attr order is DESC)
 	DWORD				m_iNow;						///< timestamp (for timesegments sorting mode)
+	SphStringCmp_fn		m_fnStrCmp;					///< string comparator
 
 	/// create default empty state
 	CSphMatchComparatorState ()
 		: m_uAttrDesc ( 0 )
 		, m_iNow ( 0 )
+		, m_fnStrCmp ( NULL )
 	{
 		for ( int i=0; i<MAX_ATTRS; i++ )
 			m_eKeypart[i] = SPH_KEYPART_ID;
@@ -2336,6 +2352,25 @@ struct CSphMatchComparatorState
 			if ( m_eKeypart[i]==SPH_KEYPART_INT && m_tLocator[i].IsBitfield() )
 				return true;
 		return false;
+	}
+
+	inline int CmpStrings ( const CSphMatch & a, const CSphMatch & b, int iAttr ) const
+	{
+		assert ( iAttr>=0 && iAttr<MAX_ATTRS );
+		assert ( m_eKeypart[iAttr]==SPH_KEYPART_STRING );
+		assert ( m_fnStrCmp );
+
+		const BYTE * aa = (const BYTE*) a.GetAttr ( m_tLocator[iAttr] );
+		const BYTE * bb = (const BYTE*) b.GetAttr ( m_tLocator[iAttr] );
+		if ( aa==NULL || bb==NULL )
+		{
+			if ( aa==bb )
+				return 0;
+			if ( aa==NULL )
+				return -1;
+			return 1;
+		}
+		return m_fnStrCmp ( aa, bb );
 	}
 };
 
@@ -2358,10 +2393,10 @@ public:
 	virtual				~ISphMatchSorter () {}
 
 	/// check if this sorter needs attr values
-	virtual bool		UsesAttrs () = 0;
+	virtual bool		UsesAttrs () const = 0;
 
 	/// check if this sorter does groupby
-	virtual bool		IsGroupby () = 0;
+	virtual bool		IsGroupby () const = 0;
 
 	/// set match comparator state
 	virtual void		SetState ( const CSphMatchComparatorState & ) = 0;
@@ -2617,6 +2652,9 @@ void				sphSetReadBuffers ( int iReadBuffer, int iReadUnhinted );
 
 /// check query for expressions
 bool				sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema );
+
+/// initialize collation tables
+void				sphCollationInit ();
 
 /////////////////////////////////////////////////////////////////////////////
 

@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>sorting vs string</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source src
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, idd1, str1, body FROM test_table
+	sql_attr_uint	= idd1
+	sql_attr_string	= str1
+}
+
+index plain
+{
+	source			= src
+    docinfo			= extern
+    charset_type	= sbcs
+	path			= <data_path/>/plain
+}
+
+index rt
+{
+	type			= rt
+    docinfo			= extern
+    charset_type	= sbcs
+	path			= <data_path/>/plain
+
+	rt_attr_uint	= idd1
+	rt_attr_uint	= idd2
+	rt_attr_string	= str1
+	rt_attr_string	= str2
+	rt_field		= body
+	
+	rt_mem_limit	= 128K 
+}
+
+index dist
+{
+	type = distributed
+	local = plain
+	local = rt
+}
+
+
+</config>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`id` int(11) NOT NULL default '0',
+	`idd1` int(11) NOT NULL default '0',
+	`idd2` int(11) NOT NULL default '0',
+	`str1` varchar(1024) NOT NULL default '',
+	`str2` varchar(1024) NOT NULL default '',
+	`body` varchar(1024) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 1, 9, 'aaa', 'h', 'the dog' ),
+( 2, 11, 8, 'c cc', 'c', 'the cat' ),
+( 3, 13, 7, 'a a', 'cc', 'the bird' ), 
+( 4, 11, 6, 'cc', 'cc', 'cat eats bird' ),
+( 5, 3, 5, 'cc', 'c', 'dog eats cat' ), 
+( 6, 11, 4, 'ddd', 'hh', 'bird' ), 
+( 7, 5, 4, 'a', 'cc', 'the' ),
+( 8, 6, 4, '', 'cc', 'the' ),
+( 9, 7, 4, 'a', '', 'the' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>insert into rt (id, idd1, idd2, str1, str2, body) values ( 10, 5, 4, '', 'cc', 'the' )</sphinxql>
+<sphinxql>insert into rt (id, idd1, idd2, str1, str2, body) values ( 11, 5, 4, 'a', '', 'the' )</sphinxql>
+<sphinxql>insert into rt (id, idd1, idd2, str1, str2, body) values ( 12, 6, 4, 'a', 'cc', 'the' )</sphinxql>
+<sphinxql>insert into rt (id, idd1, idd2, str1, str2, body) values ( 13, 4, 4, 'ddd', 'hh', 'bird' )</sphinxql>
+<sphinxql>insert into rt (id, idd1, idd2, str1, str2, body) values ( 14, 3, 5, 'cc', 'c', 'dog eats cat' )</sphinxql>
+<sphinxql>insert into rt (id, idd1, idd2, str1, str2, body) values ( 15, 2, 6, 'cc', 'cc', 'cat eats bird' )</sphinxql>
+<sphinxql>insert into rt (id, idd1, idd2, str1, str2, body) values ( 16, 1, 7, 'a a', 'cc', 'the bird' )</sphinxql>
+<sphinxql>insert into rt (id, idd1, idd2, str1, str2, body) values ( 17, 1, 8, 'c cc', 'c', 'the cat' )</sphinxql>
+<sphinxql>insert into rt (id, idd1, idd2, str1, str2, body) values ( 18, 11, 9, 'aaa', 'h', 'the dog' )</sphinxql>
+
+<sphinxql>select * from plain order by str1 desc</sphinxql>
+<sphinxql>select * from rt order by str1 desc</sphinxql>
+<sphinxql>select * from rt order by str2 asc, str1 desc</sphinxql>
+<sphinxql>select * from dist order by str1 desc</sphinxql>
+<sphinxql>select * from dist order by str1 desc, idd1 asc</sphinxql>
+<sphinxql>select * from dist where match ('the') order by str1 desc</sphinxql>
+<sphinxql>select * from dist where match ('the') order by str1 desc, idd1 asc</sphinxql>
+<sphinxql>select * from dist where match ('cat | eats') order by str1 asc</sphinxql>
+<sphinxql>select * from dist where match ('cat | eats') order by str1 asc, str2 desc</sphinxql>
+<sphinxql>select * from dist where match ('cat | eats') order by str1 asc, idd1 asc</sphinxql>
+</sphqueries>
+
+</test>

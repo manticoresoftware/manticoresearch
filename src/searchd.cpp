@@ -578,7 +578,7 @@ void ServedIndex_t::ReadLock () const
 		else
 		{
 			sphLogDebug ( "ReadLock %p failed", this );
-			assert (false);
+			assert ( false );
 		}
 	}
 }
@@ -592,7 +592,7 @@ void ServedIndex_t::WriteLock () const
 		else
 		{
 			sphLogDebug ( "WriteLock %p failed", this );
-			assert (false);
+			assert ( false );
 		}
 	}
 }
@@ -606,7 +606,7 @@ void ServedIndex_t::Unlock () const
 		else
 		{
 			sphLogDebug ( "Unlock %p failed", this );
-			assert (false);
+			assert ( false );
 		}
 	}
 }
@@ -2952,7 +2952,7 @@ int QueryRemoteAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, const I
 			} else
 			{
 				tAgent.m_sFailure.SetSprintf ( "connect() timed out" );
-				AGENT_STATS_INC ( tAgent,m_iTimeoutsConnect );
+				AGENT_STATS_INC ( tAgent, m_iTimeoutsConnect );
 			}
 			tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures
 		}
@@ -5014,6 +5014,30 @@ bool MinimizeAggrResultCompat ( AggrResult_t & tRes, const CSphQuery & tQuery, b
 		if ( tRes.m_iSuccesses==1 )
 			return true;
 
+	// do match ptr pre-calc if its "order by string" case
+	CSphVector<SphStringSorterRemap_t> dRemapAttr;
+	if ( sphSortGetStringRemap ( pSorter, tRes.m_tSchema, dRemapAttr ) )
+	{
+		int iCur = 0;
+		ARRAY_FOREACH ( iSchema, tRes.m_dSchemas )
+		{
+			for ( int i=iCur; i<iCur+tRes.m_dMatchCounts[iSchema]; i++ )
+			{
+				CSphMatch & tMatch = tRes.m_dMatches[i];
+				const BYTE * pStringBase = tRes.m_dTag2Pools[tMatch.m_iTag].m_pStrings;
+
+				ARRAY_FOREACH ( iAttr, dRemapAttr )
+				{
+					SphAttr_t uOff = tMatch.GetAttr ( dRemapAttr[iAttr].m_tSrc );
+					SphAttr_t uPtr = (SphAttr_t)( pStringBase && uOff ? pStringBase + uOff : 0 );
+					tMatch.SetAttr ( dRemapAttr[iAttr].m_tDst, uPtr );
+				}
+			}
+			iCur += tRes.m_dMatchCounts[iSchema];
+		}
+	}
+
+
 		// kill all dupes
 		int iDupes = 0;
 		if ( pSorter->IsGroupby () )
@@ -6377,6 +6401,7 @@ struct SqlStmt_t
 	// SET specific
 	CSphString				m_sSetName;
 	int						m_iSetValue;
+	CSphString				m_sSetValue;
 
 	// CALL specific
 	CSphString				m_sCallProc;
@@ -6430,9 +6455,10 @@ public:
 	bool			m_bGotQuery;
 	SqlStmt_t *		m_pStmt;
 	CSphVector<SqlStmt_t> & m_dStmt;
+	ESphCollation	m_eCollation;
 
 public:
-	explicit		SqlParser_c ( CSphVector<SqlStmt_t> & dStmt );
+	explicit		SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation );
 
 	void			PushQuery ();
 
@@ -6607,11 +6633,12 @@ public:
 	}
 };
 
-SqlParser_c::SqlParser_c ( CSphVector<SqlStmt_t> & dStmt )
+SqlParser_c::SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation )
 	: m_pQuery ( NULL )
 	, m_pStmt ( NULL )
 	, m_dStmt ( dStmt )
 	, m_bNamedVecBusy ( false )
+	, m_eCollation ( eCollation )
 {
 	assert ( !m_dStmt.GetLength() );
 	PushQuery ();
@@ -6634,6 +6661,7 @@ void SqlParser_c::PushQuery ()
 	m_dStmt.Add ( SqlStmt_t() );
 	m_pStmt = &m_dStmt.Last();
 	m_pQuery = &m_pStmt->m_tQuery;
+	m_pQuery->m_eCollation = m_eCollation;
 
 	m_bGotQuery = false;
 }
@@ -6761,12 +6789,13 @@ void SqlParser_c::FreeNamedVec ( int )
 	m_dNamedVec.Resize ( 0 );
 }
 
-bool ParseSqlQuery ( const CSphString & sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
+bool ParseSqlQuery ( const CSphString & sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation=SPH_COLLATION_DEFAULT )
 {
-	SqlParser_c tParser ( dStmt );
+	SqlParser_c tParser ( dStmt, eCollation );
 	tParser.m_pBuf = sQuery.cstr();
 	tParser.m_pLastTokenStart = NULL;
 	tParser.m_pParseError = &sError;
+	tParser.m_eCollation = eCollation;
 
 	int iLen = strlen ( sQuery.cstr() );
 	char * sEnd = (char*)sQuery.cstr() + iLen;
@@ -8750,6 +8779,10 @@ bool HandleMysqlSelect ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SearchHandl
 		return false;
 	}
 
+	// remove internal attributes from result schema
+	ARRAY_FOREACH ( i, tHandler.m_dResults )
+		sphSortRemoveInternalAttrs ( tHandler.m_dResults[i].m_tSchema );
+
 	return true;
 }
 
@@ -9140,6 +9173,9 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 	// to keep data alive for SphCrashQuery_c
 	CSphString sQuery;
 
+	// connection set collation
+	ESphCollation eCollation = SPH_COLLATION_DEFAULT;
+
 	for ( ;; )
 	{
 		// set off query guard
@@ -9211,7 +9247,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 
 		// parse SQL query
 		CSphVector<SqlStmt_t> dStmt;
-		bool bParsedOK = ParseSqlQuery ( sQuery, dStmt, sError );
+		bool bParsedOK = ParseSqlQuery ( sQuery, dStmt, sError, eCollation );
 
 		SqlStmt_e eStmt = bParsedOK ? dStmt.Begin()->m_eStmt : STMT_PARSE_ERROR;
 
@@ -9287,6 +9323,29 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 						ISphRtIndex * pIndex = sphGetCurrentIndexRT();
 						if ( pIndex )
 							pIndex->Commit();
+					}
+
+					SendMysqlOkPacket ( tOut, uPacketID );
+					continue;
+				}
+
+				if ( pStmt->m_sSetName=="collation_connection" )
+				{
+					CSphString & sVal = pStmt->m_sSetValue;
+					sVal.ToLower();
+
+					// FIXME! replace with a hash lookup?
+					if ( sVal=="libc_ci" )
+						eCollation = SPH_COLLATION_LIBC_CI;
+					else if ( sVal=="libc_cs" )
+						eCollation = SPH_COLLATION_LIBC_CS;
+					else if ( sVal=="utf8_general_ci" )
+						eCollation = SPH_COLLATION_UTF8_GENERAL_CI;
+					else
+					{
+						sError.SetSprintf ( "Unknown collation: '%s'", sVal.cstr() );
+						SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+						continue;
 					}
 
 					SendMysqlOkPacket ( tOut, uPacketID );
@@ -10639,8 +10698,8 @@ void FreeAgentStats ( DistributedIndex_t & tIndex )
 		if ( iIndex<0 || iIndex>=STATS_MAX_AGENTS )
 			continue;
 
-		assert ( g_pStats->m_bmAgentStats[iIndex>>5] & ( 1UL<<(iIndex&31) ) );
-		g_pStats->m_bmAgentStats[iIndex>>5] &= ~( 1UL<<(iIndex&31) );
+		assert ( g_pStats->m_bmAgentStats[iIndex>>5] & ( 1UL<<( iIndex & 31 ) ) );
+		g_pStats->m_bmAgentStats[iIndex>>5] &= ~( 1UL<<( iIndex & 31 ) );
 	}
 	g_tStatsMutex.Unlock();
 }
@@ -12102,6 +12161,12 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	if ( !g_bService )
 		fprintf ( stdout, SPHINX_BANNER );
+
+	////////////
+	// lib init
+	////////////
+
+	sphCollationInit ();
 
 	//////////////////////
 	// parse command line

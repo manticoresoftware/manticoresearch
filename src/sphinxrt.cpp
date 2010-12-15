@@ -3423,7 +3423,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx;
-	if ( !tCtx.SetupCalc ( pResult, dSorters[iMaxSchemaIndex]->GetSchema(), m_tOutboundSchema, NULL ) )
+	if ( !tCtx.SetupCalc ( pResult, dSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, NULL ) )
 	{
 		m_tRwlock.Unlock ();
 		return false;
@@ -3531,6 +3531,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 			ARRAY_FOREACH ( iSeg, m_pSegments )
 			{
+				// set string pool for string on_sort expression fix up
+				tCtx.SetStringPool ( m_pSegments[iSeg]->m_dStrings.Begin() );
+
 				RtRowIterator_t tIt ( m_pSegments[iSeg], m_iStride, false, NULL );
 				for ( ;; )
 				{
@@ -3575,6 +3578,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 				// for lookups to work
 				tCtx.m_pIndexData = m_pSegments[iSeg];
+
+				// set string pool for string on_sort expression fix up
+				tCtx.SetStringPool ( m_pSegments[iSeg]->m_dStrings.Begin() );
 
 				CSphMatch * pMatch = pRanker->GetMatchesBuffer();
 				for ( ;; )

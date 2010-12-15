@@ -505,6 +505,12 @@ set_clause:
 			pParser->m_pStmt->m_sSetName = $2.m_sValue;
 			pParser->m_pStmt->m_iSetValue = $4.m_iValue;
 		}
+	| TOK_SET TOK_IDENT '=' TOK_QUOTED_STRING
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SET;
+			pParser->m_pStmt->m_sSetName = $2.m_sValue;
+			pParser->m_pStmt->m_sSetValue = $4.m_sValue;
+		}
 	;
 
 boolean_value:

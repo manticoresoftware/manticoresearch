@@ -44,6 +44,9 @@ public:
 	/// setup MVA pool
 	virtual void SetMVAPool ( const DWORD * ) {}
 
+	/// setup sting pool
+	virtual void SetStringPool ( const BYTE * ) {}
+
 	/// get schema columns index which affect expression
 	virtual void GetDependencyColumns ( CSphVector<int> & ) const {}
 };

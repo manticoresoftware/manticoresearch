@@ -4552,6 +4552,8 @@ CSphQuery::CSphQuery ()
 	, m_iOldMaxTS		( UINT_MAX )
 	, m_iOldMinGID		( 0 )
 	, m_iOldMaxGID		( UINT_MAX )
+
+	, m_eCollation		( SPH_COLLATION_DEFAULT )
 	, m_bAgent			( false )
 {}
 
@@ -11543,6 +11545,11 @@ void CSphQueryContext::CalcFinal ( CSphMatch & tMatch ) const
 	CalcContextItems ( tMatch, m_dCalcFinal );
 }
 
+void CSphQueryContext::SetStringPool ( const BYTE * pStrings )
+{
+	ARRAY_FOREACH ( i, m_dCalcSort )
+		m_dCalcSort[i].m_pExpr->SetStringPool ( pStrings );
+}
 
 bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker, int iTag ) const
 {
@@ -11638,6 +11645,9 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	CSphQueryContext tCtx;
 	if ( !tCtx.SetupCalc ( pResult, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, GetMVAPool() ) )
 		return false;
+
+	// set string pool for string on_sort expression fix up
+	tCtx.SetStringPool ( m_pStrings.GetWritePtr() );
 
 	// setup filters
 	if ( !tCtx.CreateFilters ( true, &pQuery->m_dFilters, pResult->m_tSchema, GetMVAPool(), pResult->m_sError ) )
@@ -13073,7 +13083,10 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const CSphSchema &
 			case SPH_EVAL_PRESORT:
 			case SPH_EVAL_FINAL:
 			{
-				if ( !tIn.m_pExpr.Ptr() )
+				ISphExpr * pExpr = tIn.m_pExpr.Ptr();
+				if ( !pExpr )
+					pExpr = sphSortSetupExpr ( tIn.m_sName, tSchema );
+				if ( !pExpr )
 				{
 					pResult->m_sError.SetSprintf ( "INTERNAL ERROR: incoming-schema expression missing evaluator (stage=%d, in=%s)",
 						(int)tIn.m_eStage, sphDumpAttr(tIn).cstr() );
@@ -13084,7 +13097,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const CSphSchema &
 				CalcItem_t tCalc;
 				tCalc.m_uType = tIn.m_eAttrType;
 				tCalc.m_tLoc = tIn.m_tLocator;
-				tCalc.m_pExpr = tIn.m_pExpr.Ptr();
+				tCalc.m_pExpr = pExpr;
 				tCalc.m_pExpr->SetMVAPool ( pMvaPool );
 
 				switch ( tIn.m_eStage )
@@ -14075,6 +14088,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	CSphQueryContext tCtx;
 	if ( !tCtx.SetupCalc ( pResult, ppSorters[0]->GetSchema(), m_tSchema, GetMVAPool() ) )
 		return false;
+
+	// set string pool for string on_sort expression fix up
+	tCtx.SetStringPool ( m_pStrings.GetWritePtr() );
 
 	// open files
 	CSphAutofile tDoclist, tHitlist, tWordlist, tDummy;

@@ -20,7 +20,7 @@ source srclj
 <Sql_Settings/>
 <Static>
 	sql_query = SELECT id, body FROM test_table
-	sql_query_pre = SET NAMES UTF8
+	sql_query_pre = SET NAMES utf8
 }
 </Static>
 <Static>
@@ -61,6 +61,7 @@ CREATE TABLE `test_table` (
   <DB_Drop>
 DROP TABLE IF EXISTS `test_table`
   </DB_Drop>
+  <DB_Insert>SET NAMES utf8</DB_Insert>
   <DB_Insert>
 INSERT INTO `test_table` VALUES
 (1,1,'ABCDEF АБВГДЕЖ')

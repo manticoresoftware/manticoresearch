@@ -292,6 +292,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "expansion_limit",		0, NULL },
 	{ "compat_results",			0, NULL },
 	{ "rt_flush_period",		0, NULL },
+	{ "query_log_format",		0, NULL },
 	{ NULL,						0, NULL }
 };
 

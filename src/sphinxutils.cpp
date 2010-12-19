@@ -494,6 +494,15 @@ bool CSphConfigParser::TryToExec ( char * pBuffer, char * pEnd, const char * szF
 	{
 		// can be interrupted by pretty much anything (e.g. SIGCHLD from other searchd children)
 		iResult = waitpid ( iChild, &iStatus, 0 );
+
+		// they say this can happen if child exited and SIGCHLD was ignored
+		// a cleaner one would be to temporary handle it here, but can we be bothered
+		if ( iResult==-1 && errno==ECHILD )
+		{
+			iResult = iChild;
+			iStatus = 0;
+		}
+
 		if ( iResult==-1 && errno!=EINTR )
 		{
 			snprintf ( m_sError, sizeof ( m_sError ), "waitpid() failed: [%d] %s", errno, strerror(errno) );

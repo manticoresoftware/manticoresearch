@@ -11561,7 +11561,7 @@ bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 	CSphMatch * pMatch = pRanker->GetMatchesBuffer();
 	for ( ;; )
 	{
-		int iMatches = pRanker->GetMatches ( pCtx->m_iWeights, pCtx->m_dWeights );
+		int iMatches = pRanker->GetMatches();
 		if ( iMatches<=0 )
 			break;
 
@@ -14121,7 +14121,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tXQ, pQuery->m_eRanker, pResult, tTermSetup ) );
+	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tXQ, pQuery->m_eRanker, pResult, tTermSetup, tCtx ) );
 	if ( !pRanker.Ptr() )
 		return false;
 

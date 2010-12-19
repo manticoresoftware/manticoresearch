@@ -1000,7 +1000,32 @@ class CSphTightVector : public CSphVector < T, CSphTightVectorPolicy<T> >
 {
 };
 
-/////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////
+
+/// dynamically allocated fixed-size vector
+template < typename T >
+class CSphFixedVector : public ISphNoncopyable
+{
+protected:
+	T *			m_pData;
+	const int	m_iSize;
+
+public:
+	explicit CSphFixedVector ( int iSize )
+		: m_iSize ( iSize )
+	{
+		assert ( iSize>=0 );
+		m_pData = ( iSize>0 ) ? new T [ iSize ] : NULL;
+	}
+
+	T & operator [] ( int iIndex ) const
+	{
+		assert ( iIndex>=0 && iIndex<m_iSize );
+		return m_pData[iIndex];
+	}
+};
+
+//////////////////////////////////////////////////////////////////////////
 
 /// simple dynamic hash
 /// keeps the order, so Iterate() return the entries in the order they was inserted

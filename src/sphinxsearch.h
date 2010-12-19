@@ -134,7 +134,7 @@ public:
 };
 
 /// factory
-ISphRanker * sphCreateRanker ( const XQNode_t * pRoot, const CSphVector<CSphString> & dZones, ESphRankMode eRankMode, CSphQueryResult * pResult, const ISphQwordSetup & tTermSetup );
+ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, ESphRankMode eRankMode, CSphQueryResult * pResult, const ISphQwordSetup & tTermSetup );
 
 //////////////////////////////////////////////////////////////////////////
 

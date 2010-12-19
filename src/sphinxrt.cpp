@@ -3468,7 +3468,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tParsed.m_pRoot, tParsed.m_dZones, pQuery->m_eRanker, pResult, tTermSetup ) );
+	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tParsed, pQuery->m_eRanker, pResult, tTermSetup ) );
 	if ( !pRanker.Ptr() )
 	{
 		m_tRwlock.Unlock ();

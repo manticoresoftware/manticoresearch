@@ -1447,7 +1447,7 @@ private:
 	void						WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInfo & tCol );
 	void						ReadSchemaColumn ( CSphReader & rdInfo, CSphColumnInfo & tCol );
 
-	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQNode_t * pRoot, const CSphVector<CSphString> & dZones, CSphDict * pDict, const CSphVector<CSphFilterSettings> * pExtraFilters, CSphQueryNodeCache * pNodeCache, int iTag ) const;
+	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict, const CSphVector<CSphFilterSettings> * pExtraFilters, CSphQueryNodeCache * pNodeCache, int iTag ) const;
 	bool						MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const;
 	bool						MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker, int iTag ) const;
 
@@ -13933,12 +13933,9 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 		return false;
 
 	// flag common subtrees
-	CSphVector<XQNode_t*> dTrees;
-	dTrees.Add ( tParsed.m_pRoot );
-	int iCommonSubtrees = sphMarkCommonSubtrees ( dTrees );
-
+	int iCommonSubtrees = sphMarkCommonSubtrees ( 1, &tParsed );
 	CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
-	bool bResult = ParsedMultiQuery ( pQuery, pResult, iSorters, &dSorters[0], tParsed.m_pRoot, tParsed.m_dZones, pDict, pExtraFilters, &tNodeCache, iTag );
+	bool bResult = ParsedMultiQuery ( pQuery, pResult, iSorters, &dSorters[0], tParsed, pDict, pExtraFilters, &tNodeCache, iTag );
 
 	SafeDelete ( pTokenizer );
 
@@ -13968,10 +13965,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 	CSphScopedPtr<CSphDict> tDict2 ( NULL );
 	pDict = SetupExactDict ( tDict2, pDict, *pTokenizer );
 
-	CSphVector<XQNode_t*> dTrees;
-	CSphVector < CSphVector<CSphString> > dZones;
-	dTrees.Reserve ( iQueries );
-
+	CSphFixedVector<XQQuery_t> dXQ ( iQueries );
 	bool bResult = false;
 	bool bResultScan = false;
 	for ( int i=0; i<iQueries; i++ )
@@ -13980,7 +13974,6 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 		if ( !ppSorters[i] )
 		{
 			ppResults[i]->m_iMultiplier = -1; ///< show that this particular query failed
-			dTrees.Add ( NULL );
 			continue;
 		}
 
@@ -13991,46 +13984,43 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 				bResultScan = true;
 			else
 				ppResults[i]->m_iMultiplier = -1; ///< show that this particular query failed
-
-			dTrees.Add ( NULL );
 			continue;
 		}
 
 		// parse query
-		XQQuery_t tParsed;
-		if ( sphParseExtendedQuery ( tParsed, pQueries[i].m_sQuery.cstr(), pTokenizer, &m_tSchema, pDict ) )
+		if ( sphParseExtendedQuery ( dXQ[i], pQueries[i].m_sQuery.cstr(), pTokenizer, &m_tSchema, pDict ) )
 		{
 			// fixup stat's order
-			sphDoStatsOrder ( tParsed.m_pRoot, *ppResults[i] );
+			sphDoStatsOrder ( dXQ[i].m_pRoot, *ppResults[i] );
 
 			// transform query if needed (quorum transform, keyword expansion, etc.)
-			sphTransformExtendedQuery ( &tParsed.m_pRoot );
+			sphTransformExtendedQuery ( &dXQ[i].m_pRoot );
 
 			// expanding prefix in word dictionary case
-			XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, ppResults[i]->m_sError, ppResults[i] );
+			XQNode_t * pPrefixed = ExpandPrefix ( dXQ[i].m_pRoot, ppResults[i]->m_sError, ppResults[i] );
 			if ( pPrefixed )
 			{
-				tParsed.m_pRoot = pPrefixed;
+				dXQ[i].m_pRoot = pPrefixed;
 
-			if ( m_bExpandKeywords )
-				tParsed.m_pRoot = ExpandKeywords ( tParsed.m_pRoot, m_tSettings );
+				if ( m_bExpandKeywords )
+					dXQ[i].m_pRoot = ExpandKeywords ( dXQ[i].m_pRoot, m_tSettings );
 
-			if ( sphCheckQueryHeight ( tParsed.m_pRoot, tParsed.m_sParseError ) )
-			{
-				dTrees.Add ( tParsed.m_pRoot );
-				dZones.Add ( tParsed.m_dZones );
-				tParsed.m_pRoot = NULL;
-				bResult = true;
+				if ( sphCheckQueryHeight ( dXQ[i].m_pRoot, ppResults[i]->m_sError ) )
+				{
+					bResult = true;
+				} else
+				{
+					ppResults[i]->m_iMultiplier = -1;
+					SafeDelete ( dXQ[i].m_pRoot );
+				}
 			} else
 			{
-				ppResults[i]->m_sError = tParsed.m_sParseError;
 				ppResults[i]->m_iMultiplier = -1;
+				SafeDelete ( dXQ[i].m_pRoot );
 			}
 		} else
-				ppResults[i]->m_iMultiplier = -1;
-		} else
 		{
-			ppResults[i]->m_sError = tParsed.m_sParseError;
+			ppResults[i]->m_sError = dXQ[i].m_sParseError;
 			ppResults[i]->m_iMultiplier = -1;
 		}
 	}
@@ -14038,13 +14028,13 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 	// continue only if we have at least one non-failed
 	if ( bResult )
 	{
-		int iCommonSubtrees = sphMarkCommonSubtrees ( dTrees );
+		int iCommonSubtrees = sphMarkCommonSubtrees ( iQueries, &dXQ[0] );
 
 		CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
 		bResult = false;
-		ARRAY_FOREACH ( j, dTrees )
-			if ( dTrees[j] && ppSorters[j]
-					&& ParsedMultiQuery ( &pQueries[j], ppResults[j], 1, &ppSorters[j], dTrees[j], dZones[j], pDict, pExtraFilters, &tNodeCache, iTag ) )
+		for ( int j=0; j<iQueries; j++ )
+			if ( dXQ[j].m_pRoot && ppSorters[j]
+					&& ParsedMultiQuery ( &pQueries[j], ppResults[j], 1, &ppSorters[j], dXQ[j], pDict, pExtraFilters, &tNodeCache, iTag ) )
 			{
 				bResult = true;
 				ppResults[j]->m_iMultiplier = iCommonSubtrees ? iQueries : 1;
@@ -14052,15 +14042,11 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 				ppResults[j]->m_iMultiplier = -1;
 	}
 
-	ARRAY_FOREACH ( k, dTrees )
-		SafeDelete ( dTrees[k] );
-
 	SafeDelete ( pTokenizer );
-
 	return bResult | bResultScan;
 }
 
-bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQNode_t * pRoot, const CSphVector<CSphString> & dZones, CSphDict * pDict, const CSphVector<CSphFilterSettings> * pExtraFilters, CSphQueryNodeCache * pNodeCache, int iTag ) const
+bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict, const CSphVector<CSphFilterSettings> * pExtraFilters, CSphQueryNodeCache * pNodeCache, int iTag ) const
 {
 	assert ( pQuery );
 	assert ( pResult );
@@ -14135,7 +14121,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( pRoot, dZones, pQuery->m_eRanker, pResult, tTermSetup ) );
+	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tXQ, pQuery->m_eRanker, pResult, tTermSetup ) );
 	if ( !pRanker.Ptr() )
 		return false;
 

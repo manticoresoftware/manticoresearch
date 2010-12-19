@@ -998,6 +998,9 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTok
 	pMyTokenizer->AddSpecials ( "()|-!@~\"/^$<" );
 	pMyTokenizer->EnableQueryParserMode ( true );
 
+	// most outcomes are errors
+	SafeDelete ( tParsed.m_pRoot );
+
 	// check for relaxed syntax
 	const char * OPTION_RELAXED = "@@relaxed";
 	const int OPTION_RELAXED_LEN = strlen ( OPTION_RELAXED );
@@ -1049,12 +1052,9 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTok
 		return false;
 	}
 
+	// all ok; might want to create a dummy node to indicate that
 	m_dSpawned.Reset();
-	if ( m_pRoot )
-	{
-		SafeDelete ( tParsed.m_pRoot );
-		tParsed.m_pRoot = m_pRoot;
-	}
+	tParsed.m_pRoot = m_pRoot ? m_pRoot : new XQNode_t ();
 	return true;
 }
 
@@ -1531,11 +1531,11 @@ public:
 	{}
 
 	// actual method for processing tree and reveal (extract) common subtrees
-	void transform ( const CSphVector<XQNode_t*> & dTrees )
+	void Transform ( int iXQ, const XQQuery_t * pXQ )
 	{
 		// collect all non-unique nodes
-		ARRAY_FOREACH ( i, dTrees )
-			if ( !BuildAssociations ( dTrees[i] ) )
+		for ( int i=0; i<iXQ; i++ )
+			if ( !BuildAssociations ( pXQ[i].m_pRoot ) )
 				return;
 
 		// count and order all non-unique nodes
@@ -1543,8 +1543,8 @@ public:
 			return;
 
 		// create and collect bitmask for every node
-		ARRAY_FOREACH ( i, dTrees )
-			BuildBitmasks ( dTrees[i] );
+		for ( int i=0; i<iXQ; i++ )
+			BuildBitmasks ( pXQ[i].m_pRoot );
 
 		// intersect all bitmasks one-by-one, and also intersect all intersections
 		CalcIntersections();
@@ -1553,8 +1553,8 @@ public:
 		MakeQueries();
 
 		// ... and finally - process all our trees.
-		ARRAY_FOREACH ( i, dTrees )
-			Reorganize ( dTrees[i] );
+		for ( int i=0; i<iXQ; i++ )
+			Reorganize ( pXQ[i].m_pRoot );
 	}
 };
 
@@ -1641,20 +1641,20 @@ static void SignCommonSubtrees ( XQNode_t * pTree, CSubtreeHash & hSubTrees )
 }
 
 
-int sphMarkCommonSubtrees ( const CSphVector<XQNode_t*> & dTrees )
+int sphMarkCommonSubtrees ( int iXQ, const XQQuery_t * pXQ )
 {
-	if ( !dTrees.GetLength() )
+	if ( iXQ<=0 || !pXQ )
 		return 0;
 
 	{ // Optional reorganize tree to extract common parts
-		RevealCommon_t ( SPH_QUERY_AND ).transform ( dTrees );
-		RevealCommon_t ( SPH_QUERY_OR ).transform ( dTrees );
+		RevealCommon_t ( SPH_QUERY_AND ).Transform ( iXQ, pXQ );
+		RevealCommon_t ( SPH_QUERY_OR ).Transform ( iXQ, pXQ );
 	}
 
 	// flag common subtrees and refcount them
 	CSubtreeHash hSubtrees;
-	ARRAY_FOREACH ( i, dTrees )
-		FlagCommonSubtrees ( dTrees[i], hSubtrees );
+	for ( int i=0; i<iXQ; i++ )
+		FlagCommonSubtrees ( pXQ[i].m_pRoot, hSubtrees );
 
 	// number marked subtrees and assign them order numbers.
 	int iOrder = 0;
@@ -1664,8 +1664,8 @@ int sphMarkCommonSubtrees ( const CSphVector<XQNode_t*> & dTrees )
 			hSubtrees.IterateGet().m_iOrder = iOrder++;
 
 	// copy the flags and orders to original trees
-	ARRAY_FOREACH ( i, dTrees )
-		SignCommonSubtrees ( dTrees[i], hSubtrees );
+	for ( int i=0; i<iXQ; i++ )
+		SignCommonSubtrees ( pXQ[i].m_pRoot, hSubtrees );
 
 	return iOrder;
 }

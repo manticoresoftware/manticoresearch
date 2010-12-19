@@ -219,7 +219,7 @@ struct XQQuery_t : public ISphNoncopyable
 	/// ctor
 	XQQuery_t ()
 	{
-		m_pRoot = new XQNode_t ();
+		m_pRoot = NULL;
 	}
 
 	/// dtor
@@ -237,7 +237,7 @@ struct XQQuery_t : public ISphNoncopyable
 bool	sphParseExtendedQuery ( XQQuery_t & tQuery, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict );
 
 /// analyse vector of trees and tag common parts of them (to cache them later)
-int		sphMarkCommonSubtrees ( const CSphVector<XQNode_t*> & dTrees );
+int		sphMarkCommonSubtrees ( int iXQ, const XQQuery_t * pXQ );
 
 #endif // _sphinxquery_
 

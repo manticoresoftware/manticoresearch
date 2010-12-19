@@ -713,7 +713,7 @@ typedef CSphOrderedHash < ZoneInfo_t, ZoneKey_t, ZoneHash_fn, 4096, 117 > ZoneHa
 class ExtRanker_c : public ISphRanker
 {
 public:
-								ExtRanker_c ( const XQNode_t * pRoot, const CSphVector<CSphString> & dZones, const ISphQwordSetup & tSetup );
+								ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup );
 	virtual						~ExtRanker_c ();
 	virtual void				Reset ( const ISphQwordSetup & tSetup );
 
@@ -765,7 +765,7 @@ template < bool USE_BM25 = false >
 class ExtRanker_WeightSum_c : public ExtRanker_c
 {
 public:
-					ExtRanker_WeightSum_c ( const XQNode_t * pRoot, const CSphVector<CSphString> & dZones, const ISphQwordSetup & tSetup ) : ExtRanker_c ( pRoot, dZones, tSetup ) {}
+					ExtRanker_WeightSum_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup ) : ExtRanker_c ( tXQ, tSetup ) {}
 	virtual int		GetMatches ( int iFields, const int * pWeights );
 };
 
@@ -773,7 +773,7 @@ public:
 class ExtRanker_None_c : public ExtRanker_c
 {
 public:
-					ExtRanker_None_c ( const XQNode_t * pRoot, const CSphVector<CSphString> & dZones, const ISphQwordSetup & tSetup ) : ExtRanker_c ( pRoot, dZones, tSetup ) {}
+					ExtRanker_None_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup ) : ExtRanker_c ( tXQ, tSetup ) {}
 	virtual int		GetMatches ( int iFields, const int * pWeights );
 };
 
@@ -782,7 +782,7 @@ template < typename STATE >
 class ExtRanker_T : public ExtRanker_c
 {
 public:
-					ExtRanker_T<STATE> ( const XQNode_t * pRoot, const CSphVector<CSphString> & dZones, const ISphQwordSetup & tSetup ) : ExtRanker_c ( pRoot, dZones, tSetup ) {}
+					ExtRanker_T<STATE> ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup ) : ExtRanker_c ( tXQ, tSetup ) {}
 	virtual int		GetMatches ( int iFields, const int * pWeights );
 };
 
@@ -3833,7 +3833,7 @@ const ExtHit_t * ExtUnit_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t )
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtRanker_c::ExtRanker_c ( const XQNode_t * pRoot, const CSphVector<CSphString> & dZones, const ISphQwordSetup & tSetup )
+ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup )
 {
 	assert ( tSetup.m_pCtx );
 
@@ -3845,9 +3845,9 @@ ExtRanker_c::ExtRanker_c ( const XQNode_t * pRoot, const CSphVector<CSphString> 
 	}
 	m_tTestMatch.Reset ( tSetup.m_iDynamicRowitems );
 
-	assert ( pRoot );
+	assert ( tXQ.m_pRoot );
 	tSetup.m_pRanker = this;
-	m_pRoot = ExtNode_i::Create ( pRoot, tSetup );
+	m_pRoot = ExtNode_i::Create ( tXQ.m_pRoot, tSetup );
 #if SPH_TREE_DUMP
 	if ( m_pRoot )
 		m_pRoot->DebugDump(0);
@@ -3861,7 +3861,7 @@ ExtRanker_c::ExtRanker_c ( const XQNode_t * pRoot, const CSphVector<CSphString> 
 	m_pIndex = tSetup.m_pIndex;
 	m_pCtx = tSetup.m_pCtx;
 
-	m_dZones = dZones;
+	m_dZones = tXQ.m_dZones;
 	m_dZoneStart.Resize ( m_dZones.GetLength() );
 	m_dZoneEnd.Resize ( m_dZones.GetLength() );
 	m_dZoneMax.Resize ( m_dZones.GetLength() );
@@ -4625,20 +4625,20 @@ static void CheckExtendedQuery ( const XQNode_t * pNode, CSphQueryResult * pResu
 }
 
 
-ISphRanker * sphCreateRanker ( const XQNode_t * pRoot, const CSphVector<CSphString> & dZones, ESphRankMode eRankMode, CSphQueryResult * pResult, const ISphQwordSetup & tTermSetup )
+ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, ESphRankMode eRankMode, CSphQueryResult * pResult, const ISphQwordSetup & tTermSetup )
 {
 	// shortcut
 	const CSphIndex * pIndex = tTermSetup.m_pIndex;
 
 	// check the keywords
-	CheckExtendedQuery ( pRoot, pResult, pIndex->GetSettings(), pIndex->m_bEnableStar );
+	CheckExtendedQuery ( tXQ.m_pRoot, pResult, pIndex->GetSettings(), pIndex->m_bEnableStar );
 
 	// fill payload mask
 	DWORD uPayloadMask = 0;
 	ARRAY_FOREACH ( i, pIndex->GetMatchSchema().m_dFields )
 		uPayloadMask |= pIndex->GetMatchSchema().m_dFields[i].m_bPayload << i;
 
-	bool bSingleWord = pRoot->m_dChildren.GetLength()==0 && pRoot->m_dWords.GetLength()==1;
+	bool bSingleWord = tXQ.m_pRoot->m_dChildren.GetLength()==0 && tXQ.m_pRoot->m_dWords.GetLength()==1;
 
 	// setup eval-tree
 	ExtRanker_c * pRanker = NULL;
@@ -4646,27 +4646,27 @@ ISphRanker * sphCreateRanker ( const XQNode_t * pRoot, const CSphVector<CSphStri
 	{
 		case SPH_RANK_PROXIMITY_BM25:
 			if ( uPayloadMask )
-				pRanker = new ExtRanker_T < RankerState_ProximityPayload_fn<true> > ( pRoot, dZones, tTermSetup );
+				pRanker = new ExtRanker_T < RankerState_ProximityPayload_fn<true> > ( tXQ, tTermSetup );
 			else if ( bSingleWord )
-				pRanker = new ExtRanker_WeightSum_c<WITH_BM25> ( pRoot, dZones, tTermSetup );
+				pRanker = new ExtRanker_WeightSum_c<WITH_BM25> ( tXQ, tTermSetup );
 			else
-				pRanker = new ExtRanker_T < RankerState_Proximity_fn<true> > ( pRoot, dZones, tTermSetup );
+				pRanker = new ExtRanker_T < RankerState_Proximity_fn<true> > ( tXQ, tTermSetup );
 			break;
-		case SPH_RANK_BM25:				pRanker = new ExtRanker_WeightSum_c<WITH_BM25> ( pRoot, dZones, tTermSetup ); break;
-		case SPH_RANK_NONE:				pRanker = new ExtRanker_None_c ( pRoot, dZones, tTermSetup ); break;
-		case SPH_RANK_WORDCOUNT:		pRanker = new ExtRanker_T < RankerState_Wordcount_fn > ( pRoot, dZones, tTermSetup ); break;
+		case SPH_RANK_BM25:				pRanker = new ExtRanker_WeightSum_c<WITH_BM25> ( tXQ, tTermSetup ); break;
+		case SPH_RANK_NONE:				pRanker = new ExtRanker_None_c ( tXQ, tTermSetup ); break;
+		case SPH_RANK_WORDCOUNT:		pRanker = new ExtRanker_T < RankerState_Wordcount_fn > ( tXQ, tTermSetup ); break;
 		case SPH_RANK_PROXIMITY:
 			if ( bSingleWord )
-				pRanker = new ExtRanker_WeightSum_c<> ( pRoot, dZones, tTermSetup );
+				pRanker = new ExtRanker_WeightSum_c<> ( tXQ, tTermSetup );
 			else
-				pRanker = new ExtRanker_T < RankerState_Proximity_fn<false> > ( pRoot, dZones, tTermSetup );
+				pRanker = new ExtRanker_T < RankerState_Proximity_fn<false> > ( tXQ, tTermSetup );
 			break;
-		case SPH_RANK_MATCHANY:			pRanker = new ExtRanker_T < RankerState_MatchAny_fn > ( pRoot, dZones, tTermSetup ); break;
-		case SPH_RANK_FIELDMASK:		pRanker = new ExtRanker_T < RankerState_Fieldmask_fn > ( pRoot, dZones, tTermSetup ); break;
-		case SPH_RANK_SPH04:			pRanker = new ExtRanker_T < RankerState_ProximityBM25Exact_fn > ( pRoot, dZones, tTermSetup ); break;
+		case SPH_RANK_MATCHANY:			pRanker = new ExtRanker_T < RankerState_MatchAny_fn > ( tXQ, tTermSetup ); break;
+		case SPH_RANK_FIELDMASK:		pRanker = new ExtRanker_T < RankerState_Fieldmask_fn > ( tXQ, tTermSetup ); break;
+		case SPH_RANK_SPH04:			pRanker = new ExtRanker_T < RankerState_ProximityBM25Exact_fn > ( tXQ, tTermSetup ); break;
 		default:
 			pResult->m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int)eRankMode );
-			pRanker = new ExtRanker_T < RankerState_Proximity_fn<true> > ( pRoot, dZones, tTermSetup );
+			pRanker = new ExtRanker_T < RankerState_Proximity_fn<true> > ( tXQ, tTermSetup );
 			break;
 	}
 	assert ( pRanker );

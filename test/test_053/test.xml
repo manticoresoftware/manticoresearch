@@ -55,7 +55,7 @@ CREATE TABLE test_table
 	group_id	INTEGER NOT NULL,
 	group_id2	INTEGER NOT NULL,
 	title		VARCHAR(255) NOT NULL,
-	content		TEXT NOT NULL
+	content		VARCHAR(255) NOT NULL
 )
 </db_create>
 

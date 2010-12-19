@@ -42,7 +42,7 @@ CREATE TABLE test_table
 (
 	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
 	title TEXT NOT NULL
-);
+) ENGINE=MYISAM
 </db_create>
 
 <custom_insert><![CDATA[

@@ -52,7 +52,7 @@ create table sph_test
 (
 	id int not null,
 	text text(262144) not null
-);
+) ENGINE=MYISAM
 </db_create>
 
 <db_drop>

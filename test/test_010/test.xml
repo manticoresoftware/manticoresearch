@@ -53,7 +53,7 @@ CREATE TABLE `test_table` (
   `id` int(11) NOT NULL auto_increment,
   `section` int(11) NOT NULL,
   `system_id` tinyint(4) NOT NULL,
-  `adtext` text NOT NULL,
+  `adtext` varchar(255) NOT NULL,
   `heading` varchar(500) NOT NULL,
   `price` int(11) NOT NULL default '0',
   `postcode` varchar(10) NOT NULL,

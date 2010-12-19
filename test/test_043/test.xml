@@ -53,7 +53,7 @@ CREATE TABLE test_table
 	at_1 int not null default 1,
 	at_2 int not null default 2,
 	at_3 int not null default 3
-);
+) ENGINE=MYISAM
 </db_create>
 
 <db_drop>

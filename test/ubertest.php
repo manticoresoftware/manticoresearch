@@ -23,6 +23,7 @@ if ( !is_array($args) || empty($args) )
 	print ( "\nModes are:\n" );
 	print ( "g, gen\t\t\tgenerate reference ('model') test results\n" );
 	print ( "t, test\t\t\trun tests and compare results to reference\n" );
+	print ( "qt\t\t\tsame as test, but skips user-configured slow tests\n" );
 	print ( "\nOptions are:\n" );
 	print ( "-u, --user <USER>\tuse 'USER' as MySQL user\n" );
 	print ( "-p, --password <PASS>\tuse 'PASS' as MySQL password\n" );
@@ -57,6 +58,7 @@ if ( array_key_exists ( "DBPASS", $_ENV ) && $_ENV["DBPASS"] )
 $run = false;
 $test_dirs = array();
 $test_range = array();
+$user_skip = false;
 for ( $i=0; $i<count($args); $i++ )
 {
 	$arg = $args[$i];
@@ -64,6 +66,7 @@ for ( $i=0; $i<count($args); $i++ )
 	if ( false );
 	else if ( $arg=="g" || $arg=="gen" )			{ $g_model = true; $run = true; }
 	else if ( $arg=="t" || $arg=="test" )			{ $g_model = false; $run = true; }
+	else if ( $arg=="qt" )							{ $g_model = false; $run = true; $user_skip = true; }
 	else if ( $arg=="--managed" )					$sd_managed_searchd = true;
 	else if ( $arg=="--skip-indexer")				$sd_skip_indexer = true;
 	else if ( $arg=="-u" || $arg=="--user" )		$locals['db-user'] = $args[++$i];
@@ -132,11 +135,20 @@ $t = MyMicrotime ();
 // build test lists
 $tests = array ();
 $dh = opendir ( "." );
+$user_skipped = 0;
 while ( $entry=readdir($dh) )
 {
 	if ( substr ( $entry, 0, 5 )!="test_" )
 		continue;
 	$test_id = (int) substr ( $entry, 5 );
+
+	if ( $user_skip
+		&& isset ( $g_locals["skip-tests"] )
+		&& in_array ( $test_id, $g_locals["skip-tests"] ) )
+	{
+		$user_skipped++;
+		continue;
+	}
 
 	if ( ( empty($test_dirs) && empty($test_range) )
 		|| in_array ( $entry, $test_dirs )
@@ -160,7 +172,7 @@ $total_tests = 0;
 $total_tests_failed = 0;
 $total_subtests = 0;
 $total_subtests_failed = 0;
-$total_skipped = 0;
+$total_skipped = $user_skipped;
 $failed_tests = array();
 foreach ( $tests as $test )
 {

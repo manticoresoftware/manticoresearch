@@ -68,8 +68,18 @@ function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $skip )
 				return false;
 
 		foreach ( $db_create as $q )
+		{
+			if ( stripos ( $q, "create table")!==false )
+			{
+				if ( stripos ( $q, "engine=")===false )
+				{
+					$q = trim ( $q, " \t\n\r;" );
+					$q .= " ENGINE=MEMORY";
+				}
+			}
 			if ( !@mysql_query ( $q, $conn ) )
 				return false;
+		}
 
 		foreach ( $db_insert as $q )
 			if ( !@mysql_query ( $q, $conn ) )

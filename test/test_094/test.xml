@@ -38,7 +38,7 @@ index test
 CREATE TABLE `test_table`
 (
 	`document_id` int(11) NOT NULL default '0',
-	`body` TEXT NOT NULL
+	`body` VARCHAR(16384) NOT NULL
 )
 </db_create>
 

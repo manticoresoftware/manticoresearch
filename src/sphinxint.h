@@ -378,7 +378,6 @@ struct MemTracker_c : ISphNoncopyable
 
 //////////////////////////////////////////////////////////////////////////
 
-///
 #define DOCINFO_INDEX_FREQ 128 // FIXME? make this configurable
 
 struct CSphDocMVA
@@ -767,6 +766,7 @@ void AttrIndexBuilder_t<DOCID>::FinishCollect ( bool bMvaOnly )
 	}
 }
 
+//////////////////////////////////////////////////////////////////////////
 
 /// find a value-enclosing span in a sorted vector (aka an index at which vec[i] <= val < vec[i+1])
 template < typename T >
@@ -821,7 +821,6 @@ static int FindSpan ( const CSphVector<T> & dVec, T tRef, int iSmallTreshold=8 )
 	return -1;
 }
 
-//////////////////////////////////////////////////////////////////////////
 
 inline int FindBit ( DWORD uValue )
 {
@@ -933,6 +932,29 @@ inline int sphUTF8Len ( const char * pStr )
 
 	return iRes;
 }
+
+
+//////////////////////////////////////////////////////////////////////////
+
+/// hit in the stream
+struct ExtHit_t
+{
+	SphDocID_t	m_uDocid;
+	Hitpos_t	m_uHitpos;
+	DWORD		m_uQuerypos;
+	WORD		m_uSpanlen;
+	WORD		m_uMatchlen;
+	DWORD		m_uWeight;
+};
+
+
+class ISphZoneCheck
+{
+public:
+	virtual ~ISphZoneCheck () {}
+	virtual bool IsInZone ( int iZone, const ExtHit_t * pHit ) = 0;
+};
+
 
 #endif // _sphinxint_
 

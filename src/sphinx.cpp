@@ -2075,7 +2075,7 @@ public:
 	virtual const CSphSavedFile &	GetSynFileInfo () const											{ return m_pTokenizer->GetSynFileInfo (); }
 
 public:
-	virtual void					SetBuffer ( BYTE * sBuffer, int iLength )	{ m_pTokenizer->SetBuffer ( sBuffer, iLength ); }
+	virtual void					SetBuffer ( BYTE * sBuffer, int iLength );
 	virtual BYTE *					GetToken ();
 	virtual int						GetCodepointLength ( int iCode ) const		{ return m_pTokenizer->GetCodepointLength ( iCode ); }
 	virtual void					EnableQueryParserMode ( bool bEnable )		{ m_pTokenizer->EnableQueryParserMode ( bEnable ); }
@@ -4453,9 +4453,16 @@ ISphTokenizer * CSphTokenizer_Filter::Clone ( bool bEscaped ) const
 
 void CSphTokenizer_Filter::SetBufferPtr ( const char * sNewPtr )
 {
+	m_pLastToken = NULL;
 	m_iStoredLen = 0;
 	m_iStoredStart = 0;
 	m_pTokenizer->SetBufferPtr ( sNewPtr );
+}
+
+void CSphTokenizer_Filter::SetBuffer ( BYTE * sBuffer, int iLength )
+{
+	m_pTokenizer->SetBuffer ( sBuffer, iLength );
+	SetBufferPtr ( (const char *)sBuffer );
 }
 
 
@@ -6190,7 +6197,7 @@ CSphArena::~CSphArena ()
 
 bool CSphArena::ReInit ( int uMaxBytes )
 {
-	if ( m_iPages != 0 )
+	if ( m_iPages!=0 )
 	{
 		m_pArena.Reset();
 		m_iPages = 0;

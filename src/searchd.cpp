@@ -4319,7 +4319,7 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 		{
 			if ( bDeflowered )
 				p += snprintf ( p, pMax-p, " AND" );
-			
+
 			const CSphFilterSettings & f = q.m_dFilters[i];
 			switch ( f.m_eType )
 			{
@@ -4446,7 +4446,7 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 			p += snprintf ( p, pMax-p, " agents=(" );
 			ARRAY_FOREACH ( i, dAgentTimes )
 				p += snprintf ( p, pMax-p, i ? ", %d.%03d" : "%d.%03d",
-				(int)(dAgentTimes[i]/1000000), 
+				(int)(dAgentTimes[i]/1000000),
 				(int)((dAgentTimes[i]/1000)%1000) );
 			*p++ = ')';
 		}
@@ -7287,7 +7287,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	CSphString sIndex = tReq.GetString ();
 
 	const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( sIndex );
-	if ( !pServed )
+	if ( !pServed || !pServed->m_bEnabled )
 	{
 		tReq.SendErrorReply ( "unknown local index '%s' in search request", sIndex.cstr() );
 		return;

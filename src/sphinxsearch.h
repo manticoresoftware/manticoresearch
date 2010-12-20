@@ -88,6 +88,7 @@ public:
 
 /// term setup, searcher view
 class CSphQueryNodeCache;
+class ISphZoneCheck;
 class ISphQwordSetup : ISphNoncopyable
 {
 public:
@@ -101,7 +102,7 @@ public:
 	CSphString *			m_pWarning;
 	CSphQueryContext *		m_pCtx;
 	CSphQueryNodeCache *	m_pNodeCache;
-	mutable void *			m_pRanker;
+	mutable ISphZoneCheck *	m_pZoneChecker;
 
 	ISphQwordSetup ()
 		: m_pDict ( NULL )
@@ -113,7 +114,7 @@ public:
 		, m_pWarning ( NULL )
 		, m_pCtx ( NULL )
 		, m_pNodeCache ( NULL )
-		, m_pRanker ( NULL )
+		, m_pZoneChecker ( NULL )
 	{}
 	virtual ~ISphQwordSetup () {}
 

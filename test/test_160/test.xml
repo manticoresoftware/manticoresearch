@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>snippets vs zones</name>
+
+<requires>
+<non-rt/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'text';
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+
+	charset_type	= utf-8
+	html_strip		= 1
+	index_sp		= 1
+	index_zones		= zone
+}
+
+index multiform
+{
+	source			= test
+	path			= <data_path/>/multiform
+
+	charset_type	= utf-8
+	wordforms		= test_160/multiwordorms.txt
+}
+
+</config>
+
+<db_insert>select 1;</db_insert>
+
+<custom_test><![CDATA[
+
+$data = array();
+
+// pass 0
+$data[] = 'ZONE:zoneA these';
+$data[] = 'ZONE:zoneB these';
+$data[] = 'ZONE:(zoneA, zoneB) th*';
+$data[] = 'ZONE:(zoneA, zoneB) are';
+$data[] = 'ZONE:zoneZZ a* cool$';
+// pass 5
+$data[] = 'ZONE:zoneZZ to* a*';
+
+
+$results = array();
+$opts = array ( 'passage_boundary'=>'zone', 'limit'=>0 );
+$docs = array('<zoneZZ><zoneA> these words </zoneA><zoneB> and these to </zoneB> are cool </zoneZZ>');
+$pass = 0;
+
+$results[] = '[pass] (query/result=q/r) (fast path=1/0) (query_mode=1/0)';
+
+foreach ( array(0, 1) as $qmode )
+{
+	$opts['query_mode'] = $qmode;
+	foreach ( $data as $q )
+	{
+		$opts['limit_passages'] = 10;
+		$results["[$pass]q"] = $q;
+		$res = $client->BuildExcerpts($docs, 'test', $q, $opts );
+		$results["[$pass]r 0 $qmode"] = ( count($res)>0 ? $res[0] : '');
+		$opts['limit_passages'] = 0;
+		$res = $client->BuildExcerpts($docs, 'test', $q, $opts );
+		$results["[$pass]r 1 $qmode"] = ( count($res)>0 ? $res[0] : '' );
+		$pass += 1;
+	}
+}
+
+$results[] = $client->BuildExcerpts(array('small doc', 'one more'), 'multiform', 'crash on tokenizer from another doc', array ('query_mode'=>0) );
+
+]]></custom_test>
+
+
+</test>

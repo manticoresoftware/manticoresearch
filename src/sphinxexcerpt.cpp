@@ -28,6 +28,10 @@
 
 static const int MAX_HIGHLIGHT_WORDS = 256;
 
+#define UINT32_MASK 0xffffffffUL
+#define UINT16_MASK 0xffff
+typedef uint64_t ZonePacked_t;
+
 class ExcerptGen_c
 {
 	friend class SnippetsQwordSetup;
@@ -39,7 +43,7 @@ public:
 	char *	BuildExcerpt ( const ExcerptQuery_t &, CSphDict * pDict, ISphTokenizer * pTokenizer );
 
 	void	TokenizeQuery ( const ExcerptQuery_t &, CSphDict * pDict, ISphTokenizer * pTokenizer, const CSphIndexSettings & tSettings );
-	void	TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks, bool bRetainHtml, int iSPZ, const CSphIndexSettings & tSettings );
+	void	TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks, bool bRetainHtml, int iSPZ, const CSphIndexSettings & tSettings );
 
 	void	SetMarker ( CSphHitMarker * pMarker ) { m_pMarker = pMarker; }
 
@@ -112,31 +116,12 @@ public:
 		int		m_iLength;
 	};
 
-	struct Span_t
-	{
-		int m_iStart;
-		int m_iName;
-		int m_iLen;
-
-		bool operator<( const Span_t & a ) const
-		{
-			return m_iStart<a.m_iStart;
-		}
-
-		bool operator==( const Span_t & a ) const
-		{
-			return m_iStart==a.m_iStart;
-		}
-
-		Token_t Token () const
-		{
-			Token_t tRes;
-			tRes.m_iStart = m_iName;
-			tRes.m_iLengthBytes = m_iLen;
-			tRes.m_iLengthCP = 0;
-			return tRes;
-		}
-	};
+	// ZonePacked_t bits:
+	// 64-32	(32) - uint position ( in document words )
+	// 32-16	(16) - uint sibling ( index of sibling (open/closed) zone instance )
+	// 16-0		(0) - zone type for this instance
+	const CSphVector<ZonePacked_t> & GetZones () const { return m_dZones; }
+	const SmallStringHash_T<int> & GetZonesName () const { return m_hZones; }
 
 protected:
 	CSphVector<Token_t>		m_dTokens;		///< source text tokens
@@ -144,7 +129,7 @@ protected:
 	int						m_iDocumentWords;
 	int						m_iPassageId;
 
-	CSphString				m_sBuffer;
+	CSphString				m_sBuffer; // FIXME!!! REMOVE!!! ME!!!
 
 	CSphVector<BYTE>		m_dResult;		///< result holder
 	int						m_iResultLen;	///< result codepoints count
@@ -161,7 +146,10 @@ protected:
 	CSphVector<char>		m_dKeywordsBuffer;
 	CSphVector<Keyword_t>	m_dKeywords;
 
-	CSphVector<Span_t>		m_dSpans;
+	CSphVector<ZonePacked_t>	m_dZones;		///< zones for current document
+	SmallStringHash_T<int>		m_hZones;	///< zones names
+	CSphVector<int>				m_dZonePos;	///< zones positions (in characters)
+	CSphVector<int>				m_dZoneParent;	///< zones parent type
 
 protected:
 	void					CalcPassageWeight ( const CSphVector<int> & dPassage, Passage_t & tPass, int iMaxWords, int iWordCountCoeff );
@@ -549,23 +537,47 @@ static int FindTagEnd ( const char * sData )
 	return s-sData;
 }
 
-void ExcerptGen_c::TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks, bool bRetainHtml, int iSPZ, const CSphIndexSettings & tSettings )
+uint64_t sphPackZone ( DWORD uPosition, int iSiblingIndex, int iZoneType )
+{
+	assert ( iSiblingIndex>=0 && iSiblingIndex<UINT16_MASK );
+	assert ( iZoneType>=0 && iZoneType<UINT16_MASK );
+
+	return ( ( (uint64_t)uPosition<<32 )
+		| ( ( iSiblingIndex & UINT16_MASK )<<16 )
+		| ( iZoneType & UINT16_MASK ) );
+}
+
+int FindAddZone ( const CSphString & sZone, SmallStringHash_T<int> & hZones )
+{
+	int * pZoneIndex = hZones ( sZone );
+	if ( pZoneIndex )
+		return *pZoneIndex;
+
+	int iZone = hZones.GetLength();
+	hZones.Add ( iZone, sZone );
+	return iZone;
+}
+
+void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks, bool bRetainHtml, int iSPZ, const CSphIndexSettings & tSettings )
 {
 	m_iDocumentWords = 0;
 	m_dTokens.Reserve ( 1024 );
 	m_sBuffer = pData;
 
-	pTokenizer->SetBuffer ( (BYTE*)pData, strlen(pData) );
+	pTokenizer->SetBuffer ( (BYTE*)pData, iDataLen );
 
 	const char * pStartPtr = pTokenizer->GetBufferPtr ();
 	const char * pLastTokenEnd = pStartPtr;
 
+	assert ( pStartPtr && pLastTokenEnd );
+
 	if ( bRetainHtml )
 		pTokenizer->AddSpecials ( "<" );
 
+	CSphVector<int> dZoneStack;
+
 	BYTE * sWord;
 	DWORD uPosition = 0; // hit position in document
-	CSphVector<int> dSpanStack;
 	while ( ( sWord = pTokenizer->GetToken() )!=NULL )
 	{
 		if ( pTokenizer->TokenIsBlended() )
@@ -596,6 +608,9 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokeni
 		// FIXME!!! it heavily depends on such this attitude MAGIC_CODE_SENTENCE < MAGIC_CODE_PARAGRAPH < MAGIC_CODE_ZONE
 		if ( iSPZ && *sWord>=iSPZ && *sWord<=MAGIC_CODE_ZONE )
 		{
+			// SPZ token has position and could be last token too
+			++uPosition;
+
 			if ( m_dTokens.GetLength()==0 || m_dTokens.Last().m_eType!=TOK_SPZ )
 			{
 				Token_t & tLast = m_dTokens.Add();
@@ -612,6 +627,8 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokeni
 					tLast.m_iLengthBytes = 1;
 				}
 
+				// SPZ token has position and could be last token too
+				m_iLastWord = m_dTokens.GetLength();
 				pLastTokenEnd = pTokenizer->GetTokenEnd(); // fix it up to prevent adding last chunk on exit
 			}
 
@@ -626,35 +643,53 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokeni
 				pLastTokenEnd = pEnd; // fix it up to prevent adding last chunk on exit
 
 				// span's management
-				if ( *pTagStart!='/' )
+				if ( *pTagStart!='/' )	// open zone
 				{
-					dSpanStack.Add ( m_dSpans.GetLength() );
+					// zone stack management
+					int iSelf = m_dZones.GetLength();
+					dZoneStack.Add ( iSelf );
 
-					Span_t & tSpan = m_dSpans.Add();
-					tSpan.m_iStart = pTagStart-pStartPtr;
-					tSpan.m_iName = pTagStart-pStartPtr;
-					tSpan.m_iLen = pEnd-pTagStart-1;
-				} else
+					// add zone itself
+					CSphString sZone;
+					sZone.SetBinary ( pTagStart, pEnd-pTagStart-1 );
+					int iZone = FindAddZone ( sZone, m_hZones );
+					m_dZones.Add ( sphPackZone ( uPosition, iSelf, iZone ) );
+
+					// zone position in characters
+					m_dZonePos.Add ( pTagStart-pStartPtr );
+
+					// for open zone the parent is the zone itself
+					m_dZoneParent.Add ( iZone );
+				} else					// close zone
 				{
 #ifndef NDEBUG
-					// lets check open - closed tag match
-					assert ( dSpanStack.GetLength() && dSpanStack.Last()<m_dSpans.GetLength() );
-					Span_t & tOpening = m_dSpans [ dSpanStack.Last() ];
-					assert ( tOpening.m_iStart<pEnd-pStartPtr
-						&& strncmp ( pStartPtr+tOpening.m_iStart, pTagStart+1, pEnd-pTagStart-2 )==0 );
+					// lets check open - close tags match
+					assert ( dZoneStack.GetLength() && dZoneStack.Last()<m_dZones.GetLength() );
+					int iOpening = m_dZonePos [ dZoneStack.Last() ];
+					assert ( iOpening<pEnd-pStartPtr && strncmp ( pStartPtr+iOpening, pTagStart+1, pEnd-pTagStart-2 )==0 );
 #endif
-					// pop up last span from the stack
-					dSpanStack.Resize ( dSpanStack.GetLength()-1 );
+					CSphString sZone;
+					sZone.SetBinary ( pTagStart+1, pEnd-pTagStart-2 );
+					int iZone = FindAddZone ( sZone, m_hZones );
+					int iOpen = dZoneStack.Last();
+					int iClose = m_dZones.GetLength();
+					uint64_t uOpenPacked = m_dZones[ iOpen ];
+					DWORD uOpenPos = ( ( uOpenPacked>>32 ) & UINT32_MASK );
+					assert ( iZone==( uOpenPacked & UINT16_MASK ) ); // check for zone's types match;
 
-					Span_t & tSpan = m_dSpans.Add();
-					tSpan.m_iStart = pTagStart-pStartPtr;
-					tSpan.m_iName = tSpan.m_iLen = 0;
-					if ( dSpanStack.GetLength() )
-					{
-						const Span_t & tParent = m_dSpans [ dSpanStack.Last() ];
-						tSpan.m_iName = tParent.m_iName;
-						tSpan.m_iLen = tParent.m_iLen;
-					}
+					m_dZones[iOpen] = sphPackZone ( uOpenPos, iClose, iZone );
+					m_dZones.Add ( sphPackZone ( uPosition, iOpen, iZone ) );
+
+					// zone position in characters
+					m_dZonePos.Add ( pTagStart-pStartPtr );
+
+					// for close zone the parent is the previous zone on stack
+					int iParentZone = dZoneStack.GetLength()>2 ? dZoneStack[dZoneStack.GetLength()-2] : 0;
+					uint64_t uParentPacked = m_dZones.GetLength() && iParentZone<m_dZones.GetLength() ? m_dZones[iParentZone] : 0;
+					m_dZoneParent.Add ( uParentPacked & UINT16_MASK );
+
+					// pop up current zone from zone's stack
+					dZoneStack.Resize ( dZoneStack.GetLength()-1 );
 				}
 			}
 
@@ -1507,7 +1542,7 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 
 	/// show
 	int iLast = -1;
-	bool bEmitZones = tQuery.m_bEmitZones && m_dSpans.GetLength();
+	bool bEmitZones = tQuery.m_bEmitZones && m_dZones.GetLength();
 	ARRAY_FOREACH ( i, dShow )
 	{
 		int iTok = dShow[i].m_iStart;
@@ -1516,16 +1551,25 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 		if ( iTok>1+iLast || tQuery.m_bWeightOrder )
 		{
 			ResultEmit ( tQuery.m_sChunkSeparator.cstr() );
+			// find and emit most enclosing zone
 			if ( bEmitZones )
 			{
-				Span_t tSpan;
-				tSpan.m_iStart = m_dTokens[iTok].m_iStart;
-				int iSpan = FindSpan ( m_dSpans, tSpan );
-				if ( iSpan>=0 )
+				int iHighlightStart = m_dTokens[iTok].m_iStart;
+				int iZone = FindSpan ( m_dZonePos, iHighlightStart );
+				if ( iZone!=-1 )
 				{
-					ResultEmit ( "<" );
-					ResultEmit ( m_dSpans[iSpan].Token() );
-					ResultEmit ( ">" );
+					int iParent = m_dZoneParent[iZone];
+					m_hZones.IterateStart();
+					while ( m_hZones.IterateNext() )
+					{
+						if ( m_hZones.IterateGet()!=iParent )
+							continue;
+
+						ResultEmit ( "<" );
+						ResultEmit ( m_hZones.IterateGetKey().cstr() );
+						ResultEmit ( ">" );
+						break;
+					}
 				}
 			}
 		}
@@ -1557,6 +1601,108 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 
 	return true;
 }
+
+//////////////////////////////////////////////////////////////////////////
+// FAST PATH FOR FULL DOCUMENT HIGHLIGHTING
+//////////////////////////////////////////////////////////////////////////
+
+struct DocQueryZonePair_t
+{
+	int m_iDoc;
+	int m_iQuery;
+	bool operator<( const DocQueryZonePair_t & b ) const { return m_iDoc<b.m_iDoc; }
+	bool operator>( const DocQueryZonePair_t & b ) const { return m_iDoc>b.m_iDoc; }
+	bool operator==( const DocQueryZonePair_t & b ) const { return m_iDoc==b.m_iDoc; }
+};
+
+/// hit-in-zone check implementation for the matching engine
+class SnippetZoneChecker_c : public ISphZoneCheck
+{
+private:
+	struct ZoneHits_t
+	{
+		CSphVector<Hitpos_t> m_dOpen;
+		CSphVector<Hitpos_t> m_dClose;
+	};
+
+	CSphVector<ZoneHits_t> m_dZones;
+
+public:
+	SnippetZoneChecker_c ( const CSphVector<ZonePacked_t> & dDocZones, const SmallStringHash_T<int> & hDocNames, const CSphVector<CSphString> & dQueryZones )
+	{
+		if ( !dQueryZones.GetLength() )
+			return;
+
+		CSphVector<DocQueryZonePair_t> dCheckedZones;
+		ARRAY_FOREACH ( i, dQueryZones )
+		{
+			int * pZone = hDocNames ( dQueryZones[i] );
+			if ( pZone )
+			{
+				DocQueryZonePair_t & tPair = dCheckedZones.Add ();
+				tPair.m_iDoc = *pZone;
+				tPair.m_iQuery = i;
+			}
+		}
+
+		dCheckedZones.Sort();
+		m_dZones.Resize ( dQueryZones.GetLength() );
+
+		ARRAY_FOREACH ( i, dDocZones )
+		{
+			uint64_t uZonePacked = dDocZones[i];
+			DWORD uPos = ( ( uZonePacked >>32 ) & UINT32_MASK );
+			int iSibling = ( ( uZonePacked>>16 ) & UINT16_MASK );
+			int iZone = ( uZonePacked & UINT16_MASK );
+			assert ( iSibling>=0 && iSibling<dDocZones.GetLength() );
+			assert ( iZone==( dDocZones[iSibling] & UINT16_MASK ) );
+
+			// skip cases:
+			// + close zone (tSpan.m_iSibling<i) - skipped
+			// + open without close zone (tSpan.m_iSibling==i) - skipped
+			// + open zone position > close zone position
+			// + zone type not in query zones
+			if ( iSibling<=i || uPos>=( ( dDocZones[iSibling]>>32 ) & UINT32_MASK ) )
+				continue;
+
+			DocQueryZonePair_t tRefZone;
+			tRefZone.m_iDoc = iZone;
+			const DocQueryZonePair_t * pPair = dCheckedZones.BinarySearch ( tRefZone );
+			if ( !pPair )
+				continue;
+
+			uint64_t uClosePacked = dDocZones[iSibling];
+			DWORD uClosePos = ( ( uClosePacked>>32 ) & UINT32_MASK );
+
+			ZoneHits_t & tZone = m_dZones[pPair->m_iQuery];
+			tZone.m_dOpen.Add ( uPos );
+			tZone.m_dClose.Add ( uClosePos );
+		}
+
+#ifndef NDEBUG
+		ARRAY_FOREACH ( i, m_dZones )
+		{
+			const ZoneHits_t & tZone = m_dZones[i];
+			assert ( tZone.m_dOpen.GetLength()==tZone.m_dClose.GetLength() );
+			const Hitpos_t * pHit = tZone.m_dOpen.Begin()+1;
+			const Hitpos_t * pMax = tZone.m_dOpen.Begin()+tZone.m_dOpen.GetLength();
+			for ( ; pHit<pMax; pHit++ )
+				assert ( pHit[-1]<pHit[0] );
+			pHit = tZone.m_dClose.Begin()+1;
+			pMax = tZone.m_dClose.Begin()+tZone.m_dClose.GetLength();
+			for ( ; pHit<pMax; pHit++ )
+				assert ( pHit[-1]<pHit[0] );
+		}
+#endif
+	}
+
+	virtual bool IsInZone ( int iZone, const ExtHit_t * pHit )
+	{
+		Hitpos_t uPos = HITMAN::GetLCS ( pHit->m_uHitpos );
+		int iOpen = FindSpan ( m_dZones[iZone].m_dOpen, uPos );
+		return ( iOpen>=0 && uPos<=m_dZones[iZone].m_dClose[iOpen] );
+	}
+};
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -1600,6 +1746,7 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 
 	char * pData = const_cast<char*> ( tOptions.m_sSource.cstr() );
 	CSphScopedPtr<BYTE> pBuffer ( NULL );
+	int iDataLen = tOptions.m_sSource.Length();
 
 	if ( tOptions.m_bLoadFiles )
 	{
@@ -1621,7 +1768,8 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 			return sEmpty;
 		}
 
-		pBuffer = new BYTE [ iFileSize+1 ];
+		iDataLen = iFileSize+1;
+		pBuffer = new BYTE [ iDataLen ];
 		if ( !tFile.Read ( pBuffer.Ptr(), iFileSize, sError ) )
 			return NULL;
 
@@ -1633,12 +1781,15 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 	if ( pStripper )
 		pStripper->Strip ( (BYTE*)pData );
 
+	// FIXME!!! check on real data (~100 Mb) as stripper changes len
+	iDataLen = strlen ( pData );
+
 	if ( !tOptions.m_bHighlightQuery )
 	{
 		// legacy highlighting
 		ExcerptGen_c tGenerator;
 		tGenerator.TokenizeQuery ( tOptions, pDict, pTokenizer, pIndex->GetSettings() );
-		tGenerator.TokenizeDocument ( pData, pDict, pTokenizer, true, tOptions.m_sStripMode=="retain", tOptions.m_iPassageBoundary, pIndex->GetSettings() );
+		tGenerator.TokenizeDocument ( pData, iDataLen, pDict, pTokenizer, true, tOptions.m_sStripMode=="retain", tOptions.m_iPassageBoundary, pIndex->GetSettings() );
 		return tGenerator.BuildExcerpt ( tOptions, pDict, pTokenizer );
 	}
 
@@ -1651,15 +1802,18 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 	tQuery.m_pRoot->ClearFieldMask();
 
 	ExcerptGen_c tGenerator;
+	tGenerator.TokenizeDocument ( pData, iDataLen, pDict, pTokenizer, false, tOptions.m_sStripMode=="retain", tOptions.m_iPassageBoundary, pIndex->GetSettings() );
+
+
+	CSphScopedPtr<SnippetZoneChecker_c> pZoneChecker ( new SnippetZoneChecker_c ( tGenerator.GetZones(), tGenerator.GetZonesName(), tQuery.m_dZones ) );
 	SnippetsQwordSetup tSetup ( &tGenerator, pTokenizer );
 	CSphString sWarning;
-
-	tGenerator.TokenizeDocument ( pData, pDict, pTokenizer, false, tOptions.m_sStripMode=="retain", tOptions.m_iPassageBoundary, pIndex->GetSettings() );
 
 	tSetup.m_pDict = pDict;
 	tSetup.m_pIndex = pIndex;
 	tSetup.m_eDocinfo = SPH_DOCINFO_EXTERN;
 	tSetup.m_pWarning = &sWarning;
+	tSetup.m_pZoneChecker = pZoneChecker.Ptr();
 
 	CSphScopedPtr<CSphHitMarker> pMarker ( CSphHitMarker::Create ( tQuery.m_pRoot, tSetup ) );
 	if ( !pMarker.Ptr() )

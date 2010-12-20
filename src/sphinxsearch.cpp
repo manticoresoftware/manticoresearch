@@ -52,18 +52,6 @@ struct ExtDoc_t
 };
 
 
-/// hit in the stream
-struct ExtHit_t
-{
-	SphDocID_t	m_uDocid;
-	Hitpos_t	m_uHitpos;
-	DWORD		m_uQuerypos;
-	WORD		m_uSpanlen;
-	WORD		m_uMatchlen;
-	DWORD		m_uWeight;
-};
-
-
 /// word in the query
 struct ExtQword_t
 {
@@ -274,7 +262,7 @@ protected:
 	ExtHit_t					m_dFilteredHits[MAX_HITS];	///< hits from requested subset of the documents (for GetHitsChunk())
 	SphDocID_t					m_uDoneFor;
 
-	class ExtRanker_c *			m_pRanker;					///< zone-limited searches query ranker about zones
+	ISphZoneCheck *				m_pZoneChecker;					///< zone-limited searches query ranker about zones
 	CSphVector<int>				m_dZones;					///< zone ids for this particular term
 };
 
@@ -710,7 +698,7 @@ typedef CSphOrderedHash < ZoneInfo_t, ZoneKey_t, ZoneHash_fn, 4096, 117 > ZoneHa
 
 /// ranker interface
 /// ranker folds incoming hitstream into simple match chunks, and computes relevance rank
-class ExtRanker_c : public ISphRanker
+class ExtRanker_c : public ISphRanker, public ISphZoneCheck
 {
 public:
 								ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup );
@@ -726,7 +714,7 @@ public:
 
 public:
 	// FIXME? hide and friend?
-	bool						IsInZone ( int iZone, const ExtHit_t * pHit );
+	virtual bool				IsInZone ( int iZone, const ExtHit_t * pHit );
 
 public:
 	CSphMatch					m_dMatches[ExtNode_i::MAX_DOCS];	///< exposed for caller
@@ -1517,7 +1505,7 @@ ExtTermPos_c<T>::ExtTermPos_c ( ISphQword * pQword, const XQNode_t * pNode, cons
 	, m_pRawHit ( NULL )
 	, m_uLastID ( 0 )
 	, m_uDoneFor ( 0 )
-	, m_pRanker ( (ExtRanker_c*) tSetup.m_pRanker )
+	, m_pZoneChecker ( tSetup.m_pZoneChecker )
 	, m_dZones ( pNode->m_dZones )
 {
 	AllocDocinfo ( tSetup );
@@ -1566,8 +1554,9 @@ inline bool ExtTermPos_c<TERM_POS_FIELD_STARTEND>::IsAcceptableHit ( const ExtHi
 template<>
 inline bool ExtTermPos_c<TERM_POS_ZONES>::IsAcceptableHit ( const ExtHit_t * pHit ) const
 {
+	assert ( m_pZoneChecker );
 	ARRAY_FOREACH ( i, m_dZones )
-		if ( m_pRanker->IsInZone ( m_dZones[i], pHit ) )
+		if ( m_pZoneChecker->IsInZone ( m_dZones[i], pHit ) )
 			return true;
 	return false;
 }
@@ -3865,7 +3854,7 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup 
 	m_tTestMatch.Reset ( tSetup.m_iDynamicRowitems );
 
 	assert ( tXQ.m_pRoot );
-	tSetup.m_pRanker = this;
+	tSetup.m_pZoneChecker = this;
 	m_pRoot = ExtNode_i::Create ( tXQ.m_pRoot, tSetup );
 #if SPH_TREE_DUMP
 	if ( m_pRoot )

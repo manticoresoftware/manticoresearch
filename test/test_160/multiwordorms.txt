@@ -1,0 +1,3 @@
+folded many > wrapped
+shortform multi > SomeWhatMoreLongFormThatWouldOverflowShortFormBuffer
+antediluvian clumsy shandrydan > fordt

@@ -6077,6 +6077,7 @@ public:
 							~CSphArena ();
 
 	bool					Init ( int uMaxBytes );
+	bool					ReInit ( int uMaxBytes );
 	DWORD *					GetBasePtr () const { return m_pBasePtr; }
 
 	int						TaggedAlloc ( int iTag, int iBytes );
@@ -6187,6 +6188,15 @@ CSphArena::~CSphArena ()
 	g_pMvaArena = NULL;
 }
 
+bool CSphArena::ReInit ( int uMaxBytes )
+{
+	if ( m_iPages != 0 )
+	{
+		m_pArena.Reset();
+		m_iPages = 0;
+	}
+	return Init ( uMaxBytes );
+}
 
 bool CSphArena::Init ( int uMaxBytes )
 {
@@ -6665,7 +6675,7 @@ DWORD * sphArenaInit ( int iMaxBytes )
 	if ( g_pMvaArena )
 		return g_pMvaArena; // already initialized
 
-	if ( !g_MvaArena.Init ( iMaxBytes ) )
+	if ( !g_MvaArena.ReInit ( iMaxBytes ) )
 		return NULL; // tried but failed
 
 	g_pMvaArena = g_MvaArena.GetBasePtr ();

@@ -1068,6 +1068,22 @@ void sphLogDebug ( const char * sFmt, ... )
 	va_end ( ap );
 }
 
+void sphLogDebugv ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	Log ( LOG_VERBOSE_DEBUG, sFmt, ap );
+	va_end ( ap );
+}
+
+void sphLogDebugvv ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	Log ( LOG_VERY_VERBOSE_DEBUG, sFmt, ap );
+	va_end ( ap );
+}
+
 void sphSetLogger ( SphLogger_fn fnLog )
 {
 	g_pLogger = fnLog;

@@ -35,6 +35,12 @@
 #define SPHINXQL_PORT			9306
 #define SPH_ADDRESS_SIZE		sizeof("000.000.000.000")
 
+
+// don't shutdown on SIGKILL (debug purposes)
+// 1 - SIGKILL will shut down the whole daemon; 0 - watchdog will reincarnate the daemon
+#define WATCHDOG_SIGKILL		1
+
+
 /////////////////////////////////////////////////////////////////////////////
 
 #if USE_WINDOWS
@@ -294,10 +300,10 @@ static bool				g_bSafeTrace	= false;
 
 static volatile bool	g_bDoDelete			= false;	// do we need to delete any indexes?
 static volatile bool	g_bDoRotate			= false;	// flag that we are rotating now; set from SIGHUP; cleared on rotation success
-static volatile bool	g_bGotSighup		= false;	// we just received SIGHUP; need to log
-static volatile bool	g_bGotSigterm		= false;	// we just received SIGTERM; need to shutdown
-static volatile bool	g_bGotSigchld		= false;	// we just received SIGCHLD; need to count dead children
-static volatile bool	g_bGotSigusr1		= false;	// we just received SIGUSR1; need to reopen logs
+static volatile sig_atomic_t g_bGotSighup		= 0;	// we just received SIGHUP; need to log
+static volatile sig_atomic_t g_bGotSigterm		= 0;	// we just received SIGTERM; need to shutdown
+static volatile sig_atomic_t g_bGotSigchld		= 0;	// we just received SIGCHLD; need to count dead children
+static volatile sig_atomic_t g_bGotSigusr1		= 0;	// we just received SIGUSR1; need to reopen logs
 
 
 /// global index hash
@@ -589,7 +595,7 @@ void ServedIndex_t::ReadLock () const
 	if ( g_eWorkers==MPM_THREADS )
 	{
 		if ( m_tLock.ReadLock() )
-			sphLogDebug ( "ReadLock %p", this );
+			sphLogDebugvv ( "ReadLock %p", this );
 		else
 		{
 			sphLogDebug ( "ReadLock %p failed", this );
@@ -603,7 +609,7 @@ void ServedIndex_t::WriteLock () const
 	if ( g_eWorkers==MPM_THREADS )
 	{
 		if ( m_tLock.WriteLock() )
-			sphLogDebug ( "WriteLock %p", this );
+			sphLogDebugvv ( "WriteLock %p", this );
 		else
 		{
 			sphLogDebug ( "WriteLock %p failed", this );
@@ -617,7 +623,7 @@ void ServedIndex_t::Unlock () const
 	if ( g_eWorkers==MPM_THREADS )
 	{
 		if ( m_tLock.Unlock() )
-			sphLogDebug ( "Unlock %p", this );
+			sphLogDebugvv ( "Unlock %p", this );
 		else
 		{
 			sphLogDebug ( "Unlock %p failed", this );
@@ -930,7 +936,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	if ( sFmt==NULL ) eLevel = eLastLevel;
 	if ( eLevel==LOG_FATAL ) sBanner = "FATAL: ";
 	if ( eLevel==LOG_WARNING ) sBanner = "WARNING: ";
-	if ( eLevel==LOG_DEBUG ) sBanner = "DEBUG: ";
+	if ( eLevel>=LOG_DEBUG ) sBanner = "DEBUG: ";
 
 	char sBuf [ 1024 ];
 	snprintf ( sBuf, sizeof(sBuf)-1, "[%s] [%5d] ", sTimeBuf, (int)getpid() );
@@ -1265,7 +1271,7 @@ void Shutdown ()
 #if !USE_WINDOWS
 void sighup ( int )
 {
-	g_bGotSighup = true;
+	g_bGotSighup = 1;
 }
 
 
@@ -1275,20 +1281,20 @@ void sigterm ( int )
 	// we can't call exit() here because malloc()/free() are not re-entrant
 	// we could call _exit() but let's try to die gracefully on TERM
 	// and let signal sender wait and send KILL as needed
-	g_bGotSigterm = true;
+	g_bGotSigterm = 1;
 	sphInterruptNow();
 }
 
 
 void sigchld ( int )
 {
-	g_bGotSigchld = true;
+	g_bGotSigchld = 1;
 }
 
 
 void sigusr1 ( int )
 {
-	g_bGotSigusr1 = true;
+	g_bGotSigusr1 = 1;
 }
 #endif // !USE_WINDOWS
 
@@ -4818,7 +4824,7 @@ void RemapResult ( const CSphSchema& tTarget, AggrResult_t & tRes, bool bMultiSc
 		{
 			CSphMatch & tMatch = tRes.m_dMatches[i];
 
-			// create new and shiny (and properly sized and fully dynamic) match
+			// create new and shiny (and properly sized) match
 			CSphMatch tRow;
 			tRow.Reset ( tTarget.GetDynamicSize() );
 			tRow.m_iDocID = tMatch.m_iDocID;
@@ -4830,6 +4836,8 @@ void RemapResult ( const CSphSchema& tTarget, AggrResult_t & tRes, bool bMultiSc
 			{
 				const CSphColumnInfo & tDst = tTarget.GetAttr(j);
 				const CSphColumnInfo & tSrc = dSchema.GetAttr ( dMapFrom[j] );
+				// we could keep some of the rows static
+				// and so, avoid the duplication of the data.
 				if ( !tDst.m_tLocator.m_bDynamic )
 				{
 					assert ( !tSrc.m_tLocator.m_bDynamic );
@@ -4837,7 +4845,6 @@ void RemapResult ( const CSphSchema& tTarget, AggrResult_t & tRes, bool bMultiSc
 				} else
 					tRow.SetAttr ( tDst.m_tLocator, tMatch.GetAttr ( tSrc.m_tLocator ) );
 			}
-
 			// swap out old (most likely wrong sized) match
 			Swap ( tMatch, tRow );
 		}
@@ -11215,7 +11222,7 @@ void ReloadIndexSettings ( CSphConfigParser * pCP )
 	g_bDoDelete = false;
 
 	for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
-		it.Get().m_bToDelete = true;
+		it.Get().m_bToDelete = true; ///< FIXME! What about write lock before doing this?
 
 	g_hDistIndexes.IterateStart ();
 	while ( g_hDistIndexes.IterateNext () )
@@ -11478,7 +11485,7 @@ void CheckReopen ()
 		}
 	}
 
-	g_bGotSigusr1 = false;
+	g_bGotSigusr1 = 0;
 }
 
 
@@ -11843,7 +11850,7 @@ BOOL WINAPI CtrlHandler ( DWORD )
 {
 	if ( !g_bService )
 	{
-		g_bGotSigterm = true;
+		g_bGotSigterm = 1;
 		sphInterruptNow();
 	}
 	return TRUE;
@@ -11873,14 +11880,14 @@ int PreforkChild ()
 	return iRes;
 }
 
-void SetWatchDog()
+bool SetWatchDog()
 {
-	bool bReincarnate = true;
+	int iReincarnate = 1;
 	bool bShutdown = false;
 	int iRes = 0;
 	for ( ;; )
 	{
-		if ( bReincarnate )
+		if ( iReincarnate!=0 )
 			iRes = fork();
 
 		if ( iRes==-1 )
@@ -11889,19 +11896,12 @@ void SetWatchDog()
 			sphFatal ( "fork() failed during watchdog setup (error=%s)", strerror(errno) );
 		}
 
-		// child process; reload config if necessary and return
+		// child process; return true to show that we have to reload everything
 		if ( iRes==0 )
-		{
-			if ( CheckConfigChanges () )
-			{
-				CSphConfigParser tCP;
-				ReloadIndexSettings ( &tCP );
-			}
-			return;
-		}
+			return ( iReincarnate<0 );
 
 		// parent process, watchdog
-		bReincarnate = false;
+		iReincarnate = 0;
 		int iPid, iStatus;
 		while ( ( iPid = wait ( &iStatus ) )>0 )
 		{
@@ -11912,7 +11912,7 @@ void SetWatchDog()
 				if ( iExit==2 ) // really crash
 				{
 					sphInfo ( "Child process %d has been finished by CRASH_EXIT (exit code 2), will be restarted", iPid );
-					bReincarnate = true;
+					iReincarnate = -1;
 				} else
 				{
 					sphInfo ( "Child process %d has been finished, exit code %d. Watchdog finishes also. Good bye!", iPid, iExit );
@@ -11920,7 +11920,11 @@ void SetWatchDog()
 				}
 			} else if ( WIFSIGNALED ( iStatus ) )
 			{
-				if ( WTERMSIG ( iStatus )==SIGINT || WTERMSIG ( iStatus )==SIGTERM || WTERMSIG ( iStatus )==SIGKILL )
+				if ( WTERMSIG ( iStatus )==SIGINT || WTERMSIG ( iStatus )==SIGTERM
+#if WATCHDOG_SIGKILL
+					|| WTERMSIG ( iStatus )==SIGKILL
+#endif
+					)
 				{
 					sphInfo ( "Child process %d has been killed with kill or sigterm (%i). Watchdog finishes also. Good bye!", iPid, WTERMSIG ( iStatus ) );
 					bShutdown = true;
@@ -11930,7 +11934,7 @@ void SetWatchDog()
 						sphInfo ( "Child process %i has been killed with signal %i, core dumped, will be restarted", iPid, WTERMSIG ( iStatus ) );
 					else
 						sphInfo ( "Child process %i has been killed with signal %i, will be restarted", iPid, WTERMSIG ( iStatus ) );
-					bReincarnate = true;
+					iReincarnate = -1;
 				}
 			} else if ( WIFSTOPPED ( iStatus ) )
 				sphInfo ( "Child %i stopped with signal %i", iPid, WSTOPSIG ( iStatus ) );
@@ -11965,7 +11969,7 @@ void CheckSignals ()
 		g_bDoRotate = true;
 		g_tRotateQueueMutex.Unlock();
 		sphInfo ( "rotating indices (seamless=%d)", (int)g_bSeamlessRotate ); // this might hang if performed from SIGHUP
-		g_bGotSighup = false;
+		g_bGotSighup = 0;
 	}
 
 	if ( g_bGotSigterm )
@@ -11999,7 +12003,7 @@ void CheckSignals ()
 			g_iChildren--;
 			g_dChildren.RemoveValue ( iChildPid ); // FIXME! OPTIMIZE! can be slow
 		}
-		g_bGotSigchld = false;
+		g_bGotSigchld = 0;
 
 		// prefork more children, if needed
 		if ( g_eWorkers==MPM_PREFORK )
@@ -12020,11 +12024,11 @@ void CheckSignals ()
 			switch ( dPipeInBuf[i] )
 			{
 			case 0:
-				g_bGotSighup = true;
+				g_bGotSighup = 1;
 				break;
 
 			case 1:
-				g_bGotSigterm = true;
+				g_bGotSigterm = 1;
 				sphInterruptNow();
 				if ( g_bService )
 					g_bServiceStop = true;
@@ -12443,6 +12447,152 @@ void * InitSharedBuffer ( CSphSharedBuffer<BYTE> & tBuffer, int iLen )
 	return pRes;
 }
 
+void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
+{
+	if ( !hConf.Exists ( "searchd" ) || !hConf["searchd"].Exists ( "searchd" ) )
+		sphFatal ( "'searchd' config section not found in '%s'", g_sConfigFile.cstr () );
+
+	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
+
+	if ( !hConf.Exists ( "index" ) )
+		sphFatal ( "no indexes found in '%s'", g_sConfigFile.cstr () );
+
+	#define CONF_CHECK(_hash,_key,_msg,_add) \
+		if (!( _hash.Exists ( _key ) )) \
+			sphFatal ( "mandatory option '%s' not found " _msg, _key, _add );
+
+	if ( bOptPIDFile )
+		CONF_CHECK ( hSearchd, "pid_file", "in 'searchd' section", "" );
+
+	if ( hSearchd.Exists ( "read_timeout" ) && hSearchd["read_timeout"].intval()>=0 )
+		g_iReadTimeout = hSearchd["read_timeout"].intval();
+
+	if ( hSearchd.Exists ( "client_timeout" ) && hSearchd["client_timeout"].intval()>=0 )
+		g_iClientTimeout = hSearchd["client_timeout"].intval();
+
+	if ( hSearchd.Exists ( "max_children" ) && hSearchd["max_children"].intval()>=0 )
+		g_iMaxChildren = hSearchd["max_children"].intval();
+
+	g_bPreopenIndexes = hSearchd.GetInt ( "preopen_indexes", (int)g_bPreopenIndexes )!=0;
+	g_bOnDiskDicts = hSearchd.GetInt ( "ondisk_dict_default", (int)g_bOnDiskDicts )!=0;
+	g_bUnlinkOld = hSearchd.GetInt ( "unlink_old", (int)g_bUnlinkOld )!=0;
+	g_iExpansionLimit = hSearchd.GetInt ( "expansion_limit", 0 );
+	g_bCompatResults = hSearchd.GetInt ( "compat_results", (int)g_bCompatResults )!=0;
+
+	if ( hSearchd("max_matches") )
+	{
+		int iMax = hSearchd["max_matches"].intval();
+		if ( iMax<0 || iMax>10000000 )
+		{
+			sphWarning ( "max_matches=%d out of bounds; using default 1000", iMax );
+		} else
+		{
+			g_iMaxMatches = iMax;
+		}
+	}
+
+	if ( hSearchd("subtree_docs_cache") )
+		g_iMaxCachedDocs = hSearchd.GetSize ( "subtree_docs_cache", g_iMaxCachedDocs );
+
+	if ( hSearchd("subtree_hits_cache") )
+		g_iMaxCachedHits = hSearchd.GetSize ( "subtree_hits_cache", g_iMaxCachedHits );
+
+	if ( hSearchd("seamless_rotate") )
+		g_bSeamlessRotate = ( hSearchd["seamless_rotate"].intval()!=0 );
+
+	if ( !g_bSeamlessRotate && g_bPreopenIndexes )
+		sphWarning ( "preopen_indexes=1 has no effect with seamless_rotate=0" );
+
+	g_iAttrFlushPeriod = hSearchd.GetInt ( "attr_flush_period", g_iAttrFlushPeriod );
+	g_iMaxPacketSize = hSearchd.GetSize ( "max_packet_size", g_iMaxPacketSize );
+	g_iMaxFilters = hSearchd.GetInt ( "max_filters", g_iMaxFilters );
+	g_iMaxFilterValues = hSearchd.GetInt ( "max_filter_values", g_iMaxFilterValues );
+	g_iMaxBatchQueries = hSearchd.GetInt ( "max_batch_queries", g_iMaxBatchQueries );
+	g_iDistThreads = hSearchd.GetInt ( "dist_threads", g_iDistThreads );
+
+	if ( hSearchd("thread_stack") )
+	{
+		int iThreadStackSizeMin = 65536;
+		int iThreadStackSizeMax = 2*1024*1024;
+		int iStackSize = hSearchd.GetSize ( "thread_stack", iThreadStackSizeMin );
+		if ( iStackSize<iThreadStackSizeMin || iStackSize>iThreadStackSizeMax )
+			sphWarning ( "thread_stack is %d will be clamped to range ( 65k to 2M )", iStackSize );
+
+		iStackSize = Min ( iStackSize, iThreadStackSizeMax );
+		iStackSize = Max ( iStackSize, iThreadStackSizeMin );
+		sphSetMyStackSize ( iStackSize );
+	}
+}
+
+void ConfigureAndPreload ( const CSphConfig & hConf, const char * sOptIndex )
+{
+	int iCounter = 1;
+	int iValidIndexes = 0;
+	int64_t tmLoad = -sphMicroTimer();
+
+	hConf["index"].IterateStart ();
+	while ( hConf["index"].IterateNext() )
+	{
+		const CSphConfigSection & hIndex = hConf["index"].IterateGet();
+		const char * sIndexName = hConf["index"].IterateGetKey().cstr();
+
+		if ( g_bOptNoDetach && sOptIndex && strcasecmp ( sIndexName, sOptIndex )!=0 )
+			continue;
+
+		ESphAddIndex eAdd = AddIndex ( sIndexName, hIndex );
+		if ( eAdd==ADD_LOCAL || eAdd==ADD_RT )
+		{
+			ServedIndex_t & tIndex = g_pIndexes->GetUnlockedEntry ( sIndexName );
+			iCounter++;
+
+			fprintf ( stdout, "precaching index '%s'\n", sIndexName );
+			fflush ( stdout );
+			tIndex.m_pIndex->SetProgressCallback ( ShowProgress );
+
+			if ( HasFiles ( tIndex, g_dNewExts ) )
+			{
+				tIndex.m_bOnlyNew = !HasFiles ( tIndex, g_dCurExts );
+				if ( RotateIndexGreedy ( tIndex, sIndexName ) )
+				{
+					CSphString sError;
+					if ( !sphFixupIndexSettings ( tIndex.m_pIndex, hIndex, sError ) )
+					{
+						sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, sError.cstr() );
+						tIndex.m_bEnabled = false;
+					}
+				} else
+				{
+					if ( PrereadNewIndex ( tIndex, hIndex, sIndexName ) )
+						tIndex.m_bEnabled = true;
+				}
+			} else
+			{
+				tIndex.m_bOnlyNew = false;
+				if ( PrereadNewIndex ( tIndex, hIndex, sIndexName ) )
+					tIndex.m_bEnabled = true;
+			}
+
+			CSphString sError;
+			if ( tIndex.m_bEnabled && !CheckIndex ( tIndex.m_pIndex, sError ) )
+			{
+				sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, sError.cstr() );
+				tIndex.m_bEnabled = false;
+			}
+
+			if ( !tIndex.m_bEnabled )
+				continue;
+		}
+
+		iValidIndexes++;
+	}
+
+	tmLoad += sphMicroTimer();
+	if ( !iValidIndexes )
+		sphFatal ( "no valid indexes to serve" );
+	else
+		fprintf ( stdout, "precached %d indexes in %0.3f sec\n", iCounter-1, float(tmLoad)/1000000 );
+}
+
 
 int WINAPI ServiceMain ( int argc, char **argv )
 {
@@ -12532,6 +12682,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		OPT1 ( "--nodetach" )		g_bOptNoDetach = true;
 #endif
 		OPT1 ( "--logdebug" )		g_eLogLevel = LOG_DEBUG;
+		OPT1 ( "--logdebugv" )		g_eLogLevel = LOG_VERBOSE_DEBUG;
+		OPT1 ( "--logdebugvv" )		g_eLogLevel = LOG_VERY_VERBOSE_DEBUG;
 		OPT1 ( "--safetrace" )		g_bSafeTrace = true;
 		OPT1 ( "--test" )			{ g_bWatchdog = false; bTestMode = true; }
 
@@ -12750,74 +12902,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	// configure searchd
 	/////////////////////
 
-	if ( !hConf.Exists ( "index" ) )
-		sphFatal ( "no indexes found in '%s'", g_sConfigFile.cstr () );
-
-	#define CONF_CHECK(_hash,_key,_msg,_add) \
-		if (!( _hash.Exists ( _key ) )) \
-			sphFatal ( "mandatory option '%s' not found " _msg, _key, _add );
-
-	if ( bOptPIDFile )
-		CONF_CHECK ( hSearchd, "pid_file", "in 'searchd' section", "" );
-
-	if ( hSearchd.Exists ( "read_timeout" ) && hSearchd["read_timeout"].intval()>=0 )
-		g_iReadTimeout = hSearchd["read_timeout"].intval();
-
-	if ( hSearchd.Exists ( "client_timeout" ) && hSearchd["client_timeout"].intval()>=0 )
-		g_iClientTimeout = hSearchd["client_timeout"].intval();
-
-	if ( hSearchd.Exists ( "max_children" ) && hSearchd["max_children"].intval()>=0 )
-		g_iMaxChildren = hSearchd["max_children"].intval();
-
-	g_bPreopenIndexes = hSearchd.GetInt ( "preopen_indexes", (int)g_bPreopenIndexes )!=0;
-	g_bOnDiskDicts = hSearchd.GetInt ( "ondisk_dict_default", (int)g_bOnDiskDicts )!=0;
-	g_bUnlinkOld = hSearchd.GetInt ( "unlink_old", (int)g_bUnlinkOld )!=0;
-	g_iExpansionLimit = hSearchd.GetInt ( "expansion_limit", 0 );
-	g_bCompatResults = hSearchd.GetInt ( "compat_results", (int)g_bCompatResults )!=0;
-
-	if ( hSearchd("max_matches") )
-	{
-		int iMax = hSearchd["max_matches"].intval();
-		if ( iMax<0 || iMax>10000000 )
-		{
-			sphWarning ( "max_matches=%d out of bounds; using default 1000", iMax );
-		} else
-		{
-			g_iMaxMatches = iMax;
-		}
-	}
-
-	if ( hSearchd("subtree_docs_cache") )
-		g_iMaxCachedDocs = hSearchd.GetSize ( "subtree_docs_cache", g_iMaxCachedDocs );
-
-	if ( hSearchd("subtree_hits_cache") )
-		g_iMaxCachedHits = hSearchd.GetSize ( "subtree_hits_cache", g_iMaxCachedHits );
-
-	if ( hSearchd("seamless_rotate") )
-		g_bSeamlessRotate = ( hSearchd["seamless_rotate"].intval()!=0 );
-
-	if ( !g_bSeamlessRotate && g_bPreopenIndexes )
-		sphWarning ( "preopen_indexes=1 has no effect with seamless_rotate=0" );
-
-	g_iAttrFlushPeriod = hSearchd.GetInt ( "attr_flush_period", g_iAttrFlushPeriod );
-	g_iMaxPacketSize = hSearchd.GetSize ( "max_packet_size", g_iMaxPacketSize );
-	g_iMaxFilters = hSearchd.GetInt ( "max_filters", g_iMaxFilters );
-	g_iMaxFilterValues = hSearchd.GetInt ( "max_filter_values", g_iMaxFilterValues );
-	g_iMaxBatchQueries = hSearchd.GetInt ( "max_batch_queries", g_iMaxBatchQueries );
-	g_iDistThreads = hSearchd.GetInt ( "dist_threads", g_iDistThreads );
-
-	if ( hSearchd("thread_stack") )
-	{
-		int iThreadStackSizeMin = 65536;
-		int iThreadStackSizeMax = 2*1024*1024;
-		int iStackSize = hSearchd.GetSize ( "thread_stack", iThreadStackSizeMin );
-		if ( iStackSize<iThreadStackSizeMin || iStackSize>iThreadStackSizeMax )
-			sphWarning ( "thread_stack is %d will be clamped to range ( 65k to 2M )", iStackSize );
-
-		iStackSize = Min ( iStackSize, iThreadStackSizeMax );
-		iStackSize = Max ( iStackSize, iThreadStackSizeMin );
-		sphSetMyStackSize ( iStackSize );
-	}
+	ConfigureSearchd ( hConf, bOptPIDFile );
 
 	if ( hSearchd("workers") )
 	{
@@ -12939,70 +13024,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	sphArenaInit ( hSearchd.GetSize ( "mva_updates_pool", 1048576 ) );
 
 	// configure and preload
-	int iValidIndexes = 0;
-	int iCounter = 1;
-	int64_t tmLoad = -sphMicroTimer();
-	hConf["index"].IterateStart ();
-	while ( hConf["index"].IterateNext() )
-	{
-		const CSphConfigSection & hIndex = hConf["index"].IterateGet();
-		const char * sIndexName = hConf["index"].IterateGetKey().cstr();
 
-		if ( g_bOptNoDetach && sOptIndex && strcasecmp ( sIndexName, sOptIndex )!=0 )
-			continue;
-
-		ESphAddIndex eAdd = AddIndex ( sIndexName, hIndex );
-		if ( eAdd==ADD_LOCAL || eAdd==ADD_RT )
-		{
-			ServedIndex_t & tIndex = g_pIndexes->GetUnlockedEntry ( sIndexName );
-			iCounter++;
-
-			fprintf ( stdout, "precaching index '%s'\n", sIndexName );
-			fflush ( stdout );
-			tIndex.m_pIndex->SetProgressCallback ( ShowProgress );
-
-			if ( HasFiles ( tIndex, g_dNewExts ) )
-			{
-				tIndex.m_bOnlyNew = !HasFiles ( tIndex, g_dCurExts );
-				if ( RotateIndexGreedy ( tIndex, sIndexName ) )
-				{
-					CSphString sError;
-					if ( !sphFixupIndexSettings ( tIndex.m_pIndex, hIndex, sError ) )
-					{
-						sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, sError.cstr() );
-						tIndex.m_bEnabled = false;
-					}
-				} else
-				{
-					if ( PrereadNewIndex ( tIndex, hIndex, sIndexName ) )
-						tIndex.m_bEnabled = true;
-				}
-			} else
-			{
-				tIndex.m_bOnlyNew = false;
-				if ( PrereadNewIndex ( tIndex, hIndex, sIndexName ) )
-					tIndex.m_bEnabled = true;
-			}
-
-			CSphString sError;
-			if ( tIndex.m_bEnabled && !CheckIndex ( tIndex.m_pIndex, sError ) )
-			{
-				sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, sError.cstr() );
-				tIndex.m_bEnabled = false;
-			}
-
-			if ( !tIndex.m_bEnabled )
-				continue;
-		}
-
-		iValidIndexes++;
-	}
-
-	tmLoad += sphMicroTimer();
-	if ( !iValidIndexes )
-		sphFatal ( "no valid indexes to serve" );
-	else
-		fprintf ( stdout, "precached %d indexes in %0.3f sec\n", iCounter-1, float(tmLoad)/1000000 );
+	ConfigureAndPreload ( hConf, sOptIndex );
 
 	///////////
 	// startup
@@ -13100,8 +13123,49 @@ int WINAPI ServiceMain ( int argc, char **argv )
 				exit ( 0 );
 		}
 	}
+
+	bool bReloadAll = false;
 	if ( g_bWatchdog && g_eWorkers==MPM_THREADS )
-		SetWatchDog();
+		bReloadAll = SetWatchDog();
+
+	// this instance may be the one reincarned after a crash.
+	// we have to reload config and all the indexes here.
+	if ( bReloadAll )
+	{
+		sphInfo ( "Preparing to full reload of the config and indexes" );
+		CheckConfigChanges ();
+
+		// unload all the indexes
+
+		sphInfo ( "Deleting local indexes" );
+		g_pIndexes->Reset();
+
+		sphInfo ( "Locking distributed indexes list" );
+		g_tDistLock.Lock();
+		sphInfo ( "Deleting distributed indexes indexes" );
+		g_hDistIndexes.Reset();
+		g_tDistLock.Unlock();
+
+		// reparse the config file
+		sphInfo ( "Reloading the config" );
+		CSphConfigParser cp;
+		if ( !cp.Parse ( g_sConfigFile.cstr () ) )
+			sphFatal ( "failed to parse config file '%s'", g_sConfigFile.cstr () );
+
+		// reconfigure the daemon
+		const CSphConfig & hConf = cp.m_tConf;
+		sphInfo ( "Reconfigure the daemon" );
+		ConfigureSearchd ( hConf, bOptPIDFile );
+
+		// reinit the arena
+		const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
+
+		sphInfo ( "Reload the indexes" );
+		sphArenaInit ( hSearchd.GetSize ( "mva_updates_pool", 1048576 ) );
+
+		// reload all the indexes
+		ConfigureAndPreload ( hConf, sOptIndex );
+	}
 #endif
 
 	if ( g_eWorkers==MPM_THREADS )

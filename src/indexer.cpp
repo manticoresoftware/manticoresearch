@@ -281,7 +281,7 @@ void ShowProgress ( const CSphIndexProgress * pProgress, bool bPhaseEnd )
 
 static void Logger ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 {
-	if ( eLevel>=LOG_DEBUG )
+	if ( eLevel>LOG_VERY_VERBOSE_DEBUG )
 		return;
 
 	switch ( eLevel )
@@ -289,7 +289,9 @@ static void Logger ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 		case LOG_FATAL: fprintf ( stdout, "FATAL: " ); break;
 		case LOG_WARNING: fprintf ( stdout, "WARNING: " ); break;
 		case LOG_INFO: fprintf ( stdout, "WARNING: " ); break;
-		case LOG_DEBUG: fprintf ( stdout, "DEBUG: " ); break;
+		case LOG_DEBUG:
+		case LOG_VERBOSE_DEBUG:
+		case LOG_VERY_VERBOSE_DEBUG: fprintf ( stdout, "DEBUG: " ); break;
 	}
 
 	vfprintf ( stdout, sFmt, ap );

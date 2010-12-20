@@ -132,7 +132,9 @@ enum ESphLogLevel
 	LOG_FATAL	= 0,
 	LOG_WARNING	= 1,
 	LOG_INFO	= 2,
-	LOG_DEBUG	= 3
+	LOG_DEBUG	= 3,
+	LOG_VERBOSE_DEBUG = 4,
+	LOG_VERY_VERBOSE_DEBUG = 5
 };
 
 typedef void ( *SphLogger_fn )( ESphLogLevel, const char *, va_list );
@@ -141,6 +143,8 @@ void sphWarning ( const char * sFmt, ... );
 void sphInfo ( const char * sFmt, ... );
 void sphLogFatal ( const char * sFmt, ... );
 void sphLogDebug ( const char * sFmt, ... );
+void sphLogDebugv ( const char * sFmt, ... );
+void sphLogDebugvv ( const char * sFmt, ... );
 void sphSetLogger ( SphLogger_fn fnLog );
 
 //////////////////////////////////////////////////////////////////////////

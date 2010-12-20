@@ -30,9 +30,11 @@ if ( !is_array($args) || empty($args) )
 	print ( "-i, --indexer <PATH>\tpath to indexer\n" );
 	print ( "-s, --searchd <PATH>\tpath to searchd\n" );
 	print ( "--strict\t\tterminate on the first failure (for automatic runs)\n" );
+	print ( "--strict-verbose\tterminate on the first failure and copy the last report to report.txt (for automatic runs)\n" );
 	print ( "--managed\t\tdon't run searchd during test (for debugging)\n" );
 	print ( "--skip-indexer\t\tskip DB creation and indexer stages and go directly to queries/custom tests\n");
 	print ( "--rt\t\t\ttest RT backend (auto-convert all local indexes)\n" );
+	print ( "--no-drop-db\t\tKeep test db tables after the test (for debugging)\n");
 	print ( "\nEnvironment vriables are:\n" );
 	print ( "DBUSER\t\t\tuse 'USER' as MySQL user\n" );
 	print ( "DBPASS\t\t\tuse 'PASS' as MySQL password\n" );
@@ -75,7 +77,9 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-s" || $arg=="--searchd" )		$locals['searchd'] = $args[++$i];
 	else if ( $arg=="--rt" )						$locals['rt_mode'] = true;
 	else if ( $arg=="--strict" )					$g_strict = true;
+	else if ( $arg=="--strict-verbose" )			{ $g_strict = true; $g_strictverbose = true; }
 	else if ( $arg=="--ignore-weights" )			$g_ignore_weights = true;
+	else if ( $arg=="--no-drop-db" )				$locals['no_drop_db'] = true;
 	else if ( is_dir($arg) )						$test_dirs[] = $arg;
 	else if ( preg_match ( "/^(\\d+)-(\\d+)$/", $arg, $range ) )
 	{
@@ -210,7 +214,16 @@ foreach ( $tests as $test )
 			$total_subtests_failed += $res["tests_failed"];
 			$failed_tests[] = ShortTestName ( $test );
 			if ( $g_strict )
+			{
+				if ( $g_strictverbose )
+				{
+					$report = file_get_contents ( "$test/report.txt" );
+					$report.= "\n Test $test failed\n";
+					file_put_contents("report.txt",$report);
+					$report = "";
+				}
 				break;
+			}
 		}
 	}
 	elseif ( file_exists ( $test."/test.inc" ) )

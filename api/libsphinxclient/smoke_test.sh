@@ -1,27 +1,45 @@
 #!/bin/sh
 
-BANNER='C API'
-LOG='smoke_log.txt'
+FAILLOG="/tmp/faillog1"
 DIFF='smoke_diff.txt'
 RES='smoke_test.txt'
 REF='smoke_ref.txt'
+LINE='-----------------------------\n'
 
-./configure --with-debug 1>$LOG 2>&1 || { echo "$BANNER: configure failed"; exit 1; }
-make clean 1>$LOG 2>&1 || { echo "$BANNER: make clean failed"; exit 1; }
-make 1>$LOG 2>&1 || { echo "$BANNER: make failed"; exit 1; }
+die()
+{
+	cat $FAILLOG
+	echo $LINE
+	[ ! "z$2" = "z" ] && { eval $2; echo "$LINE"; }
+	echo "C API:$1"
+	[ -e "$FAILLOG" ] && rm $FAILLOG
+	exit 1
+}
 
-../../src/indexer -c smoke_test.conf --all  1>$LOG 2>&1 || { echo "$BANNER: indexing failed"; exit 1; }
-../../src/searchd -c smoke_test.conf 1>$LOG 2>&1 || { echo "$BANNER: searchd start failed"; exit 1; }
-./test --smoke --port 10312 1>$RES || { exit 1; }
-../../src/searchd -c smoke_test.conf --stop 1>$LOG 2>&1 || { echo "$BANNER: searchd stop failed"; exit 1; }
+cmd ()
+{
+        echo "Executing: $1\n">$FAILLOG
+        eval $1 1>>$FAILLOG 2>&1 || die "$2" "$3"
+}
 
-make clean 1>$LOG 2>&1
+cmd "./configure --with-debug" "configure failed"
+cmd "make clean" "make clean failed"
+cmd "make" "make failed"
 
-diff --unified=3 $REF $RES >$DIFF || { echo "$BANNER: diff failed"; exit 1; }
+
+cmd "../../src/indexer -c smoke_test.conf --all" "indexing failed"
+cmd "../../src/searchd -c smoke_test.conf" "searchd start failed"
+cmd "./test --smoke --port 10312>$RES" "test --smoke --port 10312 failed"
+cmd "../../src/searchd -c smoke_test.conf --stop" "searchd stop failed"
+
+cmd "make clean" " "
+
+cmd "diff --unified=3 $REF $RES >$DIFF" 'diff failed' "cat $DIFF"
 
 rm $RES
 rm $DIFF
-rm $LOG
+rm $FAILLOG
 
 echo "all ok"
 exit 0
+

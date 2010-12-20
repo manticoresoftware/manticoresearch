@@ -31,6 +31,11 @@ function sphFormatTime ( $time )
 	return sprintf ( '%d%s:%d%s', $time / 60, $u[0], $time % 60, $u[1] );
 }
 
+function mysql_wr ($q, $conn)
+{
+//	printf ( "$q\n");
+	return @mysql_query ( $q, $conn );
+}
 
 function ConnectDB ()
 {
@@ -49,7 +54,7 @@ function ConnectDB ()
 		true );
 
 	if ( $conn === false ||
-		!@mysql_query ( "CREATE DATABASE IF NOT EXISTS " . $g_locals['db-name'], $conn ) ||
+		!mysql_wr ( "CREATE DATABASE IF NOT EXISTS " . $g_locals['db-name'], $conn ) ||
 		!@mysql_select_db ( $g_locals['db-name'], $conn ) )
 			return false;
 
@@ -64,7 +69,7 @@ function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $skip )
 	if (!$skip)
 	{
 		foreach ( $db_drop as $q )
-			if ( !@mysql_query ( $q, $conn ) )
+			if ( !mysql_wr ( $q, $conn ) )
 				return false;
 
 		foreach ( $db_create as $q )
@@ -77,12 +82,12 @@ function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $skip )
 					$q .= " ENGINE=MEMORY";
 				}
 			}
-			if ( !@mysql_query ( $q, $conn ) )
+                        if ( !mysql_wr ( $q, $conn ) )
 				return false;
 		}
 
 		foreach ( $db_insert as $q )
-			if ( !@mysql_query ( $q, $conn ) )
+			if ( !mysql_wr ( $q, $conn ) )
 				return false;
 
 		foreach ( $custom_insert as $code )
@@ -801,7 +806,7 @@ class SphinxConfig
 			$query_result = array ();
 				
 			$query_result["sphinxql"]=$query;
-			$result = @mysql_query ($query,$connection);
+			$result = mysql_wr ($query,$connection);
 			if ($result===true)
 				$query_result["total_affected"] = mysql_affected_rows($connection);
 			else if ($result===false)
@@ -1575,7 +1580,7 @@ class SphinxConfig
 				// gotta run pre-queries first!
 				foreach ( $sql_query_pre as $q )
 				{
-					if ( @mysql_query ( $q, $conn ) )
+					if ( mysql_wr ( $q, $conn ) )
 						continue;
 
 					$msg = sprintf ( "sql_query_pre failed (query=%s, error=%s)", $q, mysql_error ( $conn ) );
@@ -1584,7 +1589,7 @@ class SphinxConfig
 				}
 
 				// run main query
-				$res = @mysql_query ( $sql_query, $conn );
+				$res = mysql_wr ( $sql_query, $conn );
 				if ( !$res )
 				{
 					$msg = sprintf ( "sql_query failed (query=%s, error=%s)", $sql_query, mysql_error ( $conn ) );
@@ -1786,7 +1791,7 @@ class SphinxConfig
 				
 				if ( ( strlen ($accum) + strlen ($query) ) > 1024000 ) ///<checkit!
 				{
-					$result = @mysql_query ( $prefix.$accum, $cn );
+					$result = mysql_wr ( $prefix.$accum, $cn );
 					if ( $result === false )
 					{
 						$error = mysql_error ( $cn );
@@ -1990,7 +1995,7 @@ function CheckConfig ( $config, $path )
 
 function RunTest ( $test_dir )
 {
-	global $indexer_data_path, $agents, $sd_pid_file, $sd_managed_searchd, $sd_skip_indexer, $g_id64, $windows;
+	global $indexer_data_path, $agents, $sd_pid_file, $sd_managed_searchd, $sd_skip_indexer, $g_id64, $windows, $g_locals;
 
 	$model_file = $test_dir."/model.bin";
 	$conf_dir 	= $test_dir."/Conf";
@@ -2235,9 +2240,9 @@ function RunTest ( $test_dir )
 	fclose ( $report );
 
 	// cleanup DB after ourselves
-	if ( isset($connection) )
+	if ( !array_key_exists ('no_drop_db', $g_locals) && isset($connection) )
 		foreach ( $config->DB_Drop() as $q )
-			@mysql_query ( $q, $connection );
+			mysql_wr ( $q, $connection );
 
 	return array ( "tests_total"=>$total, "tests_failed"=>$nfailed, "tests_skipped"=>0 );
 }

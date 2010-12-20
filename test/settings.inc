@@ -27,6 +27,7 @@ $index_data_path	= "data";
 $g_model	= false;
 $g_id64		= false;
 $g_strict	= false;
+$g_strictverbose = false;
 
 $windows = isset($_SERVER["WINDIR"]) || isset($_SERVER["windir"]) || isset($_SERVER["HOMEDRIVE"]);
 $action_retries			= 20;

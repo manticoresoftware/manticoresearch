@@ -677,6 +677,9 @@ CSphString ReconstructNode ( const XQNode_t * pNode, const CSphSchema & tSchema 
 {
 	CSphString sRes ( "" );
 
+	if ( !pNode )
+		return sRes;
+
 	if ( pNode->m_dWords.GetLength() )
 	{
 		// say just words to me

@@ -159,12 +159,12 @@ select_items_list:
 select_item:
 	TOK_IDENT									{ pParser->SetSelect ( $1.m_iStart, $1.m_iEnd );
 											pParser->AddItem ( &$1, NULL ); }
-	| expr TOK_AS TOK_IDENT						{ pParser->SetSelect ( $1.m_iStart, $3.m_iEnd );
+	| expr aass TOK_IDENT						{ pParser->SetSelect ( $1.m_iStart, $3.m_iEnd );
 									pParser->AddItem ( &$1, &$3 ); }
-	| TOK_AVG '(' expr ')' TOK_AS TOK_IDENT		{ pParser->SetSelect ($1.m_iStart, $6.m_iEnd); pParser->AddItem ( &$3, &$6, SPH_AGGR_AVG ); }
-	| TOK_MAX '(' expr ')' TOK_AS TOK_IDENT		{ pParser->SetSelect ($1.m_iStart, $6.m_iEnd); pParser->AddItem ( &$3, &$6, SPH_AGGR_MAX ); }
-	| TOK_MIN '(' expr ')' TOK_AS TOK_IDENT		{ pParser->SetSelect ($1.m_iStart, $6.m_iEnd); pParser->AddItem ( &$3, &$6, SPH_AGGR_MIN ); }
-	| TOK_SUM '(' expr ')' TOK_AS TOK_IDENT		{ pParser->SetSelect ($1.m_iStart, $6.m_iEnd); pParser->AddItem ( &$3, &$6, SPH_AGGR_SUM ); }
+	| TOK_AVG '(' expr ')' aass TOK_IDENT		{ pParser->SetSelect ($1.m_iStart, $6.m_iEnd); pParser->AddItem ( &$3, &$6, SPH_AGGR_AVG ); }
+	| TOK_MAX '(' expr ')' aass TOK_IDENT		{ pParser->SetSelect ($1.m_iStart, $6.m_iEnd); pParser->AddItem ( &$3, &$6, SPH_AGGR_MAX ); }
+	| TOK_MIN '(' expr ')' aass TOK_IDENT		{ pParser->SetSelect ($1.m_iStart, $6.m_iEnd); pParser->AddItem ( &$3, &$6, SPH_AGGR_MIN ); }
+	| TOK_SUM '(' expr ')' aass TOK_IDENT		{ pParser->SetSelect ($1.m_iStart, $6.m_iEnd); pParser->AddItem ( &$3, &$6, SPH_AGGR_SUM ); }
 	| '*'										{ pParser->SetSelect ($1.m_iStart, $1.m_iEnd); pParser->AddItem ( &$1, NULL ); }
 	| TOK_COUNT '(' TOK_DISTINCT TOK_IDENT ')'
 		{
@@ -179,6 +179,10 @@ select_item:
 				pParser->SetSelect ( $4.m_iStart, $4.m_iEnd );
 			}
 		}
+	;
+
+aass:
+	| TOK_AS
 	;
 
 ident_list:
@@ -621,7 +625,7 @@ call_opts_list:
 	;
 
 call_opt:
-	insert_val TOK_AS call_opt_name
+	insert_val aass call_opt_name
 		{
 			pParser->m_pStmt->m_dCallOptNames.Add ( $3.m_sValue );
 			AddInsval ( pParser->m_pStmt->m_dCallOptValues, $1 );

@@ -2136,7 +2136,7 @@ public:
 
 	virtual ~HighlightQuery_c () {}
 
-	virtual void OnToken ( int iStart, int iLen, const BYTE * sWord, int iWordID, DWORD uPosition )
+	virtual void OnToken ( int iStart, int iLen, const BYTE * sWord, SphWordID_t iWordID, DWORD uPosition )
 	{
 		assert ( m_pDoc );
 		assert ( iStart>=0 && m_pDoc+iStart+iLen<=m_pTokenizer->GetBufferEnd() );

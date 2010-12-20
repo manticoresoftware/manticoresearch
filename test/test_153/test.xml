@@ -11,7 +11,7 @@ searchd
 {
 	<searchd_settings/>
 	compat_results			= 0
-#	workers				= threads
+	workers				= threads
 }
 
 source auth

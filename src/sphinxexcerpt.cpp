@@ -1733,8 +1733,8 @@ protected:
 public:
 	explicit	SnippetsDocIndex_c ( bool bQueryMode );
 	void		SetupHits ();
-	int			FindWord ( int iWordID, const BYTE * sWord, int iWordLen ) const;
-	void		AddHits ( int iWordID, const BYTE * sWord, int iWordLen, DWORD uPosition );
+	int			FindWord ( SphWordID_t iWordID, const BYTE * sWord, int iWordLen ) const;
+	void		AddHits ( SphWordID_t iWordID, const BYTE * sWord, int iWordLen, DWORD uPosition );
 	bool		Parse ( const char * sQuery, ISphTokenizer * pTokenizer, CSphDict * pDict, const CSphSchema * pSchema, CSphString & sError );
 
 protected:
@@ -1783,7 +1783,7 @@ bool SnippetsDocIndex_c::MatchStar ( const ExcerptGen_c::Keyword_t & tTok, const
 }
 
 
-int SnippetsDocIndex_c::FindWord ( int iWordID, const BYTE * sWord, int iWordLen ) const
+int SnippetsDocIndex_c::FindWord ( SphWordID_t iWordID, const BYTE * sWord, int iWordLen ) const
 {
 	const SphWordID_t * pQueryID = iWordID ? m_dQueryWords.BinarySearch ( iWordID ) : NULL;
 	if ( pQueryID )
@@ -1798,7 +1798,7 @@ int SnippetsDocIndex_c::FindWord ( int iWordID, const BYTE * sWord, int iWordLen
 }
 
 
-void SnippetsDocIndex_c::AddHits ( int iWordID, const BYTE * sWord, int iWordLen, DWORD uPosition )
+void SnippetsDocIndex_c::AddHits ( SphWordID_t iWordID, const BYTE * sWord, int iWordLen, DWORD uPosition )
 {
 	assert ( m_dDocHits.GetLength()==m_dQueryWords.GetLength()+m_dStarWords.GetLength() );
 
@@ -1973,7 +1973,7 @@ public:
 
 	virtual void OnOverlap ( int iStart, int iLen ) = 0;
 	virtual void OnSkipHtml ( int iStart, int iLen ) = 0;
-	virtual void OnToken ( int iStart, int iLen, const BYTE * sWord, int iWordID, DWORD uPosition ) = 0;
+	virtual void OnToken ( int iStart, int iLen, const BYTE * sWord, SphWordID_t iWordID, DWORD uPosition ) = 0;
 	virtual void OnSPZ ( BYTE iSPZ, DWORD uPosition, char * sZoneName ) = 0;
 	virtual void OnTail ( int iStart, int iLen ) = 0;
 	virtual const CSphVector<int> * GetHitlist ( const XQKeyword_t & tWord ) const = 0;
@@ -2001,7 +2001,7 @@ public:
 
 	virtual ~HitCollector_c () {}
 
-	virtual void OnToken ( int , int iLen, const BYTE * sWord, int iWordID, DWORD uPosition )
+	virtual void OnToken ( int , int iLen, const BYTE * sWord, SphWordID_t iWordID, DWORD uPosition )
 	{
 		m_tContainer.AddHits ( iWordID, sWord, iLen, uPosition );
 		m_tContainer.m_uLastPos = iWordID ? uPosition : m_tContainer.m_uLastPos;
@@ -2088,7 +2088,7 @@ public:
 		ResultEmit ( m_pDoc+iStart, iLen );
 	}
 
-	virtual void OnToken ( int iStart, int iLen, const BYTE * sWord, int iWordID, DWORD )
+	virtual void OnToken ( int iStart, int iLen, const BYTE * sWord, SphWordID_t iWordID, DWORD )
 	{
 		assert ( m_pDoc );
 		assert ( iStart>=0 && m_pDoc+iStart+iLen<=m_pTokenizer->GetBufferEnd() );

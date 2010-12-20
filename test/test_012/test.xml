@@ -68,7 +68,7 @@ CREATE TABLE `test_table` (
   `subject` varchar(255) NOT NULL default '',
   `body` varchar(255) NOT NULL default '',
   `author` varchar(255) NOT NULL default ''
-)
+) CHARACTER SET utf8
   </DB_Create>
   <DB_Drop>
 DROP TABLE IF EXISTS `test_table`

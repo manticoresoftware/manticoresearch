@@ -47,7 +47,7 @@ CREATE TABLE `test_table`
 	`document_id` int(11) NOT NULL default '0',
 	`title` varchar(255) NOT NULL default '',
 	`body` varchar(255) NOT NULL default ''
-)
+) CHARACTER SET utf8
 </db_create>
 
 <db_drop>

@@ -56,7 +56,7 @@ CREATE TABLE `test_table` (
   `id` int(11) NOT NULL default '0',
   `document_id` int(5) NOT NULL default '0',
   `body` varchar(255) NOT NULL default ''
-)
+) CHARACTER SET utf8
   </DB_Create>
   <DB_Drop>
 DROP TABLE IF EXISTS `test_table`

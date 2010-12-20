@@ -174,9 +174,9 @@ Query stats:
 
 Matches:
 1. doc_id=1, weight=1304, idd=1, tag=(1,3,5,7), group_id=1, q=1010
-2. doc_id=2, weight=1304, idd=2, tag=(2,4,6), group_id=2000, q=2020
-3. doc_id=3, weight=1304, idd=3, tag=(7,77,177), group_id=123, q=3030
-4. doc_id=4, weight=1304, idd=4, tag=(7,40), group_id=123, q=4040
+2. doc_id=2, weight=1304, idd=2, tag=(2,4,6), group_id=2000, q=2000020
+3. doc_id=3, weight=1304, idd=3, tag=(7,77,177), group_id=123, q=123030
+4. doc_id=4, weight=1304, idd=4, tag=(7,40), group_id=123, q=123040
 
 Query 'is' retrieved 3 of 3 matches.
 Query stats:
@@ -184,8 +184,8 @@ Query stats:
 
 Matches:
 1. doc_id=1, weight=1304, idd=1, tag=(1,3,5,7), group_id=1, q=1010, @groupby=1, @count=1
-2. doc_id=3, weight=1304, idd=3, tag=(7,77,177), group_id=123, q=3030, @groupby=123, @count=2
-3. doc_id=2, weight=1304, idd=2, tag=(2,4,6), group_id=2000, q=2020, @groupby=2000, @count=1
+2. doc_id=3, weight=1304, idd=3, tag=(7,77,177), group_id=123, q=123030, @groupby=123, @count=2
+3. doc_id=2, weight=1304, idd=2, tag=(2,4,6), group_id=2000, q=2000020, @groupby=2000, @count=1
 
 connections: 17
 maxed_out: 0

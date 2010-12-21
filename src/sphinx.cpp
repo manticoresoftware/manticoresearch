@@ -13950,7 +13950,10 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 		return false;
 
 	// flag common subtrees
-	int iCommonSubtrees = sphMarkCommonSubtrees ( 1, &tParsed );
+	int iCommonSubtrees = 0;
+	if ( m_iMaxCachedDocs && m_iMaxCachedHits )
+		iCommonSubtrees = sphMarkCommonSubtrees ( 1, &tParsed );
+
 	CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
 	bool bResult = ParsedMultiQuery ( pQuery, pResult, iSorters, &dSorters[0], tParsed, pDict, pExtraFilters, &tNodeCache, iTag );
 
@@ -14045,7 +14048,9 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 	// continue only if we have at least one non-failed
 	if ( bResult )
 	{
-		int iCommonSubtrees = sphMarkCommonSubtrees ( iQueries, &dXQ[0] );
+		int iCommonSubtrees = 0;
+		if ( m_iMaxCachedDocs && m_iMaxCachedHits )
+			iCommonSubtrees = sphMarkCommonSubtrees ( iQueries, &dXQ[0] );
 
 		CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
 		bResult = false;
@@ -14928,19 +14933,21 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 					LOC_FAIL(( fp, "string offset out of bounds (row=%u, stringattr=%d, docid="DOCID_FMT", index=%u)",
 						uRow, iItem, uLastID, uOffset ));
 
+				if ( uOffset!=0 )
+				{
+					const BYTE * pStr = NULL;
+					const int iLen = sphUnpackStr ( m_pStrings.GetWritePtr() + uOffset, &pStr );
 
-				const BYTE * pStr = NULL;
-				const int iLen = sphUnpackStr ( m_pStrings.GetWritePtr() + uOffset, &pStr );
+					if ( pStr+iLen-1>=m_pStrings.GetWritePtr()+m_pStrings.GetLength() )
+						LOC_FAIL(( fp, "string length out of bounds (row=%u, stringattr=%d, docid="DOCID_FMT", index=%u)",
+							uRow, iItem, uLastID, (unsigned int)( pStr-m_pStrings.GetWritePtr()+iLen-1 ) ));
 
-				if ( pStr+iLen-1>=m_pStrings.GetWritePtr()+m_pStrings.GetLength() )
-					LOC_FAIL(( fp, "string length out of bounds (row=%u, stringattr=%d, docid="DOCID_FMT", index=%u)",
-						uRow, iItem, uLastID, (unsigned int)( pStr-m_pStrings.GetWritePtr()+iLen-1 ) ));
+					if ( pStrLast>=pStr )
+						LOC_FAIL(( fp, "overlapping string values (row=%u, stringattr=%d, docid="DOCID_FMT", last_end=%u, cur_start=%u)",
+							uRow, iItem, uLastID, (unsigned int)( pStrLast-m_pStrings.GetWritePtr() ), (unsigned int)( pStr-m_pStrings.GetWritePtr() ) ));
 
-				if ( pStrLast>=pStr )
-					LOC_FAIL(( fp, "overlapping string values (row=%u, stringattr=%d, docid="DOCID_FMT", last_end=%u, cur_start=%u)",
-						uRow, iItem, uLastID, (unsigned int)( pStrLast-m_pStrings.GetWritePtr() ), (unsigned int)( pStr-m_pStrings.GetWritePtr() ) ));
-
-				pStrLast = pStr + iLen;
+					pStrLast = pStr + iLen;
+				}
 			}
 
 			// progress bar

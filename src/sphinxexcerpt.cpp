@@ -471,15 +471,20 @@ void ExcerptGen_c::TokenizeQuery ( const ExcerptQuery_t & tQuery, CSphDict * pDi
 	{
 		SphWordID_t iWord = pDict->GetWordID ( sWord );
 
-		if ( pTokenizer->GetBoundary() )
-			uPosition += tSettings.m_iBoundaryStep;
-
 		bool bIsStopWord = false;
 		if ( !iWord )
 			bIsStopWord = pDict->IsStopWord ( sWord );
 
-		if ( iWord || bIsStopWord )
-			uPosition = bIsStopWord ? uPosition+tSettings.m_iStopwordStep : uPosition+1;
+		if ( !pTokenizer->TokenIsBlended() )
+		{
+			uPosition += pTokenizer->GetOvershortCount();
+
+			if ( pTokenizer->GetBoundary() )
+				uPosition += tSettings.m_iBoundaryStep;
+
+			if ( iWord || bIsStopWord )
+				uPosition = bIsStopWord ? uPosition+tSettings.m_iStopwordStep : uPosition+1;
+		}
 
 		if ( iWord )
 		{
@@ -582,6 +587,8 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDi
 	{
 		if ( pTokenizer->TokenIsBlended() )
 			continue;
+
+		uPosition += pTokenizer->GetOvershortCount();
 
 		const char * pTokenStart = pTokenizer->GetTokenStart ();
 
@@ -1976,6 +1983,7 @@ public:
 	virtual void OnToken ( int iStart, int iLen, const BYTE * sWord, SphWordID_t iWordID, DWORD uPosition ) = 0;
 	virtual void OnSPZ ( BYTE iSPZ, DWORD uPosition, char * sZoneName ) = 0;
 	virtual void OnTail ( int iStart, int iLen ) = 0;
+	virtual void OnFinish () = 0;
 	virtual const CSphVector<int> * GetHitlist ( const XQKeyword_t & tWord ) const = 0;
 };
 
@@ -2053,6 +2061,7 @@ public:
 	virtual void OnOverlap ( int, int ) {}
 	virtual void OnSkipHtml ( int, int ) {}
 	virtual void OnTail ( int, int ) {}
+	virtual void OnFinish () {}
 };
 
 
@@ -2113,6 +2122,8 @@ public:
 		ResultEmit ( m_pDoc+iStart, iLen );
 	}
 
+	virtual void OnFinish () {}
+
 	virtual const CSphVector<int> * GetHitlist ( const XQKeyword_t & ) const
 	{
 		return NULL;
@@ -2126,15 +2137,35 @@ class HighlightQuery_c : public HighlightPlain_c
 public:
 	const SphHitMark_t * m_pHit;
 	const SphHitMark_t * m_pHitEnd;
+	int m_iStartToken;
+	int m_iLenToken;
+	int m_iLenTotal;
+
+	typedef HighlightPlain_c BASE_c;
 
 public:
 	HighlightQuery_c ( SnippetsDocIndex_c & tContainer, ISphTokenizer * pTokenizer, CSphDict * pDict, const ExcerptQuery_t & tQuery, const CSphIndexSettings & tSettingsIndex, const char * sDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits )
 		: HighlightPlain_c ( tContainer, pTokenizer, pDict, tQuery, tSettingsIndex, sDoc, iDocLen )
 		, m_pHit ( dHits.Begin() )
 		, m_pHitEnd ( dHits.Begin()+dHits.GetLength() )
+		, m_iStartToken ( 0 )
+		, m_iLenToken ( 0 )
+		, m_iLenTotal ( 0 )
 	{}
 
 	virtual ~HighlightQuery_c () {}
+
+	bool AccumulateTokens ( int iStart, int iLen )
+	{
+		if ( !m_iLenToken )
+			return false;
+
+		assert ( m_iStartToken>=0 && m_iLenToken>0 && m_iLenTotal>0 );
+		int iLenTotal = iStart+iLen-m_iStartToken;
+		m_iLenTotal = Max ( iLenTotal, m_iLenTotal );
+
+		return true;
+	}
 
 	virtual void OnToken ( int iStart, int iLen, const BYTE * sWord, SphWordID_t iWordID, DWORD uPosition )
 	{
@@ -2150,13 +2181,79 @@ public:
 
 		bool bHighlight = bMatch && ( m_tContainer.FindWord ( iWordID, sWord, iLen )!=-1 );
 
-		if ( bHighlight )
-			ResultEmit ( m_sBeforeMatch.cstr(), m_iBeforeLen );
+		if ( m_bExactPhrase )
+		{
+			// highlight span isn't broken by stop-word
+			if ( !bHighlight && m_iLenTotal )
+				bHighlight = m_pDict->IsStopWord ( sWord );
 
-		ResultEmit ( m_pDoc+iStart, iLen );
+			if ( bHighlight )
+			{
+				if ( !m_iLenToken )
+				{
+					// start to collect phrase to highlight
+					ResultEmit ( m_sBeforeMatch.cstr(), m_iBeforeLen );
+					m_iStartToken = iStart;
+					m_iLenToken = m_iLenTotal = iLen;
+				} else
+				{
+					m_iLenToken = iStart+iLen-m_iStartToken;
+					m_iLenTotal = Max ( m_iLenToken, m_iLenTotal );
+				}
+			} else
+			{
+				// flush when highlight is over
+				if ( m_iLenToken )
+					OnFinish();
 
-		if ( bHighlight )
+				ResultEmit ( m_pDoc+iStart, iLen );
+			}
+		} else
+		{
+			if ( bHighlight )
+				ResultEmit ( m_sBeforeMatch.cstr(), m_iBeforeLen );
+
+			ResultEmit ( m_pDoc+iStart, iLen );
+
+			if ( bHighlight )
+				ResultEmit ( m_sAfterMatch.cstr(), m_iAfterLen );
+		}
+	}
+
+	virtual void OnFinish ()
+	{
+		if ( m_iLenToken )
+		{
+			assert ( m_iLenToken<=m_iLenTotal );
+			ResultEmit ( m_pDoc+m_iStartToken, m_iLenToken );
 			ResultEmit ( m_sAfterMatch.cstr(), m_iAfterLen );
+			ResultEmit ( m_pDoc+m_iStartToken+m_iLenToken, m_iLenTotal-m_iLenToken );
+			m_iStartToken = m_iLenToken = m_iLenTotal = 0;
+		}
+	}
+
+	virtual void OnOverlap ( int iStart, int iLen )
+	{
+		if ( AccumulateTokens ( iStart, iLen ) )
+			return;
+
+		BASE_c::OnOverlap ( iStart, iLen );
+	}
+
+	virtual void OnSkipHtml ( int iStart, int iLen )
+	{
+		if ( AccumulateTokens ( iStart, iLen ) )
+			return;
+
+		BASE_c::OnSkipHtml ( iStart, iLen );
+	}
+
+	virtual void OnTail ( int iStart, int iLen )
+	{
+		if ( AccumulateTokens ( iStart, iLen ) )
+			return;
+
+		BASE_c::OnTail ( iStart, iLen );
 	}
 };
 
@@ -2189,6 +2286,8 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor )
 	{
 		if ( pTokenizer->TokenIsBlended() )
 			continue;
+
+		uPosition += pTokenizer->GetOvershortCount();
 
 		const char * pTokenStart = pTokenizer->GetTokenStart ();
 
@@ -2304,6 +2403,8 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor )
 	// last space if any
 	if ( pLastTokenEnd!=pTokenizer->GetBufferEnd() )
 		tFunctor.OnTail ( pLastTokenEnd-pStartPtr, pTokenizer->GetBufferEnd() - pLastTokenEnd );
+
+	tFunctor.OnFinish();
 }
 
 
@@ -2404,21 +2505,33 @@ static char * HighlightAllFastpath ( const ExcerptQuery_t & tQuerySettings,
 	CSphDict * pDict, ISphTokenizer * pTokenizer,
 	const CSphSchema * pSchema, CSphString & sError )
 {
+	ExcerptQuery_t tFixedSettings ( tQuerySettings );
+
+	// exact_phrase is replaced by query_mode=1 + "query words"
+	if ( tQuerySettings.m_bExactPhrase )
+	{
+		if ( !tQuerySettings.m_bHighlightQuery && tQuerySettings.m_sWords.Length() && strchr ( tQuerySettings.m_sWords.cstr(), 0x22 )==NULL )
+			tFixedSettings.m_sWords.SetSprintf ( "\"%s\"", tQuerySettings.m_sWords.cstr() );
+
+		tFixedSettings.m_bHighlightQuery = true;
+	}
+
+
 	// adjust tokenizer for markup-retaining mode
-	if ( tQuerySettings.m_sStripMode=="retain" )
+	if ( tFixedSettings.m_sStripMode=="retain" )
 		pTokenizer->AddSpecials ( "<" );
 
 	// create query and hit lists container, parse query
-	SnippetsDocIndex_c tContainer ( tQuerySettings.m_bHighlightQuery );
-	if ( !tContainer.Parse ( tQuerySettings.m_sWords.cstr(), pTokenizer, pDict, pSchema, sError ) )
+	SnippetsDocIndex_c tContainer ( tFixedSettings.m_bHighlightQuery );
+	if ( !tContainer.Parse ( tFixedSettings.m_sWords.cstr(), pTokenizer, pDict, pSchema, sError ) )
 		return NULL;
 
 	// do highlighting
-	if ( !tQuerySettings.m_bHighlightQuery )
+	if ( !tFixedSettings.m_bHighlightQuery )
 	{
 		// simple bag of words query
 		// do just one tokenization pass over the document, matching and highlighting keywords
-		HighlightPlain_c tHighlighter ( tContainer, pTokenizer, pDict, tQuerySettings, tIndexSettings, sDoc, iDocLen );
+		HighlightPlain_c tHighlighter ( tContainer, pTokenizer, pDict, tFixedSettings, tIndexSettings, sDoc, iDocLen );
 		TokenizeDocument ( tHighlighter );
 
 		// add trailing zero, and return
@@ -2433,7 +2546,7 @@ static char * HighlightAllFastpath ( const ExcerptQuery_t & tQuerySettings,
 		// 2nd pass will highlight matching positions only (with some matching engine aid)
 
 		// do the 1st pass
-		HitCollector_c tHitCollector ( tContainer, pTokenizer, pDict, tQuerySettings, tIndexSettings, sDoc, iDocLen );
+		HitCollector_c tHitCollector ( tContainer, pTokenizer, pDict, tFixedSettings, tIndexSettings, sDoc, iDocLen );
 		TokenizeDocument ( tHitCollector );
 
 		// prepare for the 2nd pass (that is, extract matching hits)
@@ -2455,7 +2568,7 @@ static char * HighlightAllFastpath ( const ExcerptQuery_t & tQuerySettings,
 		dMarked.Sort ();
 
 		// 2nd pass
-		HighlightQuery_c tHighlighter ( tContainer, pTokenizer, pDict, tQuerySettings, tIndexSettings, sDoc, iDocLen, dMarked );
+		HighlightQuery_c tHighlighter ( tContainer, pTokenizer, pDict, tFixedSettings, tIndexSettings, sDoc, iDocLen, dMarked );
 		TokenizeDocument ( tHighlighter );
 
 		// add trailing zero, and return
@@ -2548,7 +2661,7 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 	if (!( tOptions.m_iLimitPassages
 		|| ( tOptions.m_iLimitWords && tOptions.m_iLimitWords<iDataLen/2 )
 		|| ( tOptions.m_iLimit && tOptions.m_iLimit<=iDataLen )
-		|| tOptions.m_bExactPhrase || tOptions.m_bForceAllWords || tOptions.m_bUseBoundaries ))
+		|| tOptions.m_bForceAllWords || tOptions.m_bUseBoundaries ))
 	{
 		return HighlightAllFastpath ( tOptions, pIndex->GetSettings(), pData, iDataLen, pDict, pTokenizer, pSchema, sError );
 	}

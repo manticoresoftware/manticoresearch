@@ -596,7 +596,14 @@ delete_from:
 		{
 			pParser->m_pStmt->m_eStmt = STMT_DELETE;
 			pParser->m_pStmt->m_sIndex = $3.m_sValue;
-			pParser->m_pStmt->m_iDeleteID = $7.m_iValue;
+			pParser->m_pStmt->m_dDeleteIds.Add ( $7.m_iValue );
+		}
+	| TOK_DELETE TOK_FROM TOK_IDENT TOK_WHERE TOK_ID TOK_IN '(' const_list ')'
+		{
+			pParser->m_pStmt->m_eStmt = STMT_DELETE;
+			pParser->m_pStmt->m_sIndex = $3.m_sValue;
+			ARRAY_FOREACH ( i, $8.m_dValues )
+				pParser->m_pStmt->m_dDeleteIds.Add ( $8.m_dValues[i] );
 		}
 	;
 

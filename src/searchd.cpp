@@ -6706,7 +6706,7 @@ struct SqlStmt_t
 	int						m_iSchemaSz;
 
 	// DELETE specific
-	SphDocID_t				m_iDeleteID;
+	CSphVector<SphDocID_t>	m_dDeleteIds;
 
 	// SET specific
 	CSphString				m_sSetName;
@@ -9354,7 +9354,7 @@ void HandleMysqlDelete ( NetOutputBuffer_c & tOut, BYTE & uPacketID, const SqlSt
 
 	ISphRtIndex * pIndex = static_cast<ISphRtIndex *> ( pServed->m_pIndex );
 
-	if ( !pIndex->DeleteDocument ( tStmt.m_iDeleteID, sError ) )
+	if ( !pIndex->DeleteDocument ( tStmt.m_dDeleteIds.Begin(), tStmt.m_dDeleteIds.GetLength(), sError ) )
 	{
 		pServed->Unlock();
 		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );

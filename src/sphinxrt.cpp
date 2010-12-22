@@ -876,7 +876,7 @@ public:
 
 	bool						AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const char ** ppStr, CSphString & sError );
 	bool						AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, const char ** ppStr, CSphString & sError );
-	bool						DeleteDocument ( SphDocID_t uDoc, CSphString & sError );
+	bool						DeleteDocument ( const SphDocID_t * pDocs, int iDocs, CSphString & sError );
 	void						Commit ();
 	void						RollBack ();
 
@@ -2159,7 +2159,7 @@ void RtIndex_t::RollBack ()
 	pAcc->m_dAccumKlist.Reset();
 }
 
-bool RtIndex_t::DeleteDocument ( SphDocID_t uDoc, CSphString & sError )
+bool RtIndex_t::DeleteDocument ( const SphDocID_t * pDocs, int iDocs, CSphString & sError )
 {
 	assert ( g_bRTChangesAllowed );
 	MEMORY ( SPH_MEM_IDX_RT_ACCUM );
@@ -2168,8 +2168,15 @@ bool RtIndex_t::DeleteDocument ( SphDocID_t uDoc, CSphString & sError )
 	if ( !pAcc )
 		return false;
 
+	if ( !iDocs )
+		return true;
+
+	assert ( pDocs && iDocs );
+
 	// !COMMIT should handle case when uDoc what inserted in current txn here
-	pAcc->m_dAccumKlist.Add ( uDoc );
+	while ( iDocs-- )
+		pAcc->m_dAccumKlist.Add ( *pDocs++ );
+
 	return true;
 }
 

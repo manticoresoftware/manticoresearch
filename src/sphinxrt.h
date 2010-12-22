@@ -38,7 +38,7 @@ public:
 
 	/// delete document in current txn
 	/// fails in case of two open txns to different indexes
-	virtual bool DeleteDocument ( SphDocID_t uDoc, CSphString & sError ) = 0;
+	virtual bool DeleteDocument ( const SphDocID_t * pDocs, int iDocs, CSphString & sError ) = 0;
 
 	/// commit pending changes
 	virtual void Commit () = 0;

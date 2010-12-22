@@ -5605,7 +5605,7 @@ static void MergeWordStats ( CSphQueryResultMeta & tDstResult, const SmallString
 
 	hSrc.IterateStart();
 	while ( hSrc.IterateNext() )
-		tDstResult.AddStat ( hSrc.IterateGetKey(), hSrc.IterateGet().m_iDocs, hSrc.IterateGet().m_iHits );
+		tDstResult.AddStat ( hSrc.IterateGetKey(), hSrc.IterateGet().m_iDocs, hSrc.IterateGet().m_iHits, hSrc.IterateGet().m_bUntouched );
 }
 
 void SearchHandler_c::RunLocalSearchesMT ()

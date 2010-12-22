@@ -2197,11 +2197,12 @@ public:
 		int					m_iDocs;			///< document count for this term
 		int					m_iHits;			///< hit count for this term
 		bool				m_bUntouched;
+
 		WordStat_t()
 			: m_iDocs ( 0 )
 			, m_iHits ( 0 )
-		{
-		}
+			, m_bUntouched ( false )
+		{}
 	};
 	SmallStringHash_T<WordStat_t>	m_hWordStats; ///< hash of i-th search term (normalized word form)
 

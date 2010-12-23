@@ -1,8 +1,8 @@
 @echo off
 
 
-set URL=svn://sphx.org/sphinx/branches/rel110
-set REL=1.10
+set URL=http://sphinxsearch.googlecode.com/svn/trunk
+set REL=1.11
 
 
 set PATH=C:\Program Files\Microsoft Visual Studio 8\Common7\IDE;%PATH%;
@@ -13,7 +13,7 @@ set PGSQLROOT=C:\Program Files\PostgreSQL\8.3
 
 
 if "%1" EQU "" (
-	echo *** FATAL: specify build tag as 1st argument (eg. build.cmd rc2^).
+	echo *** FATAL: specify build tag as 1st argument (eg. build.cmd rc2 or build.cmd r2345^).
 	exit
 ) else (
 	set TAG=-%1

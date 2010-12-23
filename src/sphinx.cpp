@@ -21245,7 +21245,9 @@ bool CSphSource_XMLPipe2::Setup ( FILE * pPipe, const CSphConfigSection & hSourc
 
 void CSphSource_XMLPipe2::SetupFieldMatch ( CSphColumnInfo & tCol )
 {
-	bool bPrefix = m_iMinPrefixLen > 0 && IsPrefixMatch ( tCol.m_sName.cstr () );
+	bool bWordDict = m_pDict && m_pDict->GetSettings().m_bWordDict;
+
+	bool bPrefix = !bWordDict && m_iMinPrefixLen > 0 && IsPrefixMatch ( tCol.m_sName.cstr () );
 	bool bInfix = m_iMinInfixLen > 0 && IsInfixMatch ( tCol.m_sName.cstr () );
 
 	if ( bPrefix && m_iMinPrefixLen > 0 && bInfix && m_iMinInfixLen > 0 )

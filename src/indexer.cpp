@@ -39,6 +39,7 @@ bool			g_bProgress		= true;
 const char *	g_sBuildStops	= NULL;
 int				g_iTopStops		= 100;
 bool			g_bRotate		= false;
+bool			g_bRotateEach	= false;
 bool			g_bBuildFreqs	= false;
 
 int				g_iMemLimit				= 0;
@@ -50,6 +51,8 @@ const int		EXT_COUNT = 8;
 const char *	g_dExt[EXT_COUNT] = { "sph", "spa", "spi", "spd", "spp", "spm", "spk", "sps" };
 
 char			g_sMinidump[256];
+
+#define			ROTATE_MIN_INTERVAL 100000 // rotate interval 100 ms
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -1425,6 +1428,75 @@ void SetSignalHandlers ()
 
 #endif // USE_WINDOWS
 
+bool SendRotate ( int iPID, bool bForce )
+{
+	if ( iPID<0 )
+		return false;
+
+	if ( !( g_bRotate && ( g_bRotateEach || bForce ) ) )
+		return false;
+
+#if USE_WINDOWS
+	char szPipeName[64];
+	snprintf ( szPipeName, sizeof(szPipeName), "\\\\.\\pipe\\searchd_%d", iPID );
+
+	HANDLE hPipe = INVALID_HANDLE_VALUE;
+
+	while ( hPipe==INVALID_HANDLE_VALUE )
+	{
+		hPipe = CreateFile ( szPipeName, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL );
+
+		if ( hPipe==INVALID_HANDLE_VALUE )
+		{
+			if ( GetLastError()!=ERROR_PIPE_BUSY )
+			{
+				fprintf ( stdout, "WARNING: could not open pipe (GetLastError()=%d)\n", GetLastError () );
+				return false;
+			}
+
+			if ( !WaitNamedPipe ( szPipeName, 1000 ) )
+			{
+				fprintf ( stdout, "WARNING: could not open pipe (GetLastError()=%d)\n", GetLastError () );
+				return false;
+			}
+		}
+	}
+
+	if ( hPipe!=INVALID_HANDLE_VALUE )
+	{
+		DWORD uWritten = 0;
+		BYTE uWrite = 0;
+		BOOL bResult = WriteFile ( hPipe, &uWrite, 1, &uWritten, NULL );
+		if ( bResult )
+			fprintf ( stdout, "rotating indices: succesfully sent SIGHUP to searchd (pid=%d).\n", iPID );
+		else
+			fprintf ( stdout, "WARNING: failed to send SIGHUP to searchd (pid=%d, GetLastError()=%d)\n", iPID, GetLastError () );
+
+		CloseHandle ( hPipe );
+	}
+#else
+	// signal
+	int iErr = kill ( iPID, SIGHUP );
+	if ( iErr==0 )
+	{
+		if ( !g_bQuiet )
+			fprintf ( stdout, "rotating indices: succesfully sent SIGHUP to searchd (pid=%d).\n", iPID );
+	} else
+	{
+		switch ( errno )
+		{
+		case ESRCH:	fprintf ( stdout, "WARNING: no process found by PID %d.\n", iPID ); break;
+		case EPERM:	fprintf ( stdout, "WARNING: access denied to PID %d.\n", iPID ); break;
+		default:	fprintf ( stdout, "WARNING: kill() error: %s.\n", strerror(errno) ); break;
+		}
+		return false;
+	}
+#endif
+
+	// all ok
+	return true;
+}
+
 
 int main ( int argc, char ** argv )
 {
@@ -1476,6 +1548,10 @@ int main ( int argc, char ** argv )
 		} else if ( strcasecmp ( argv[i], "--rotate" )==0 )
 		{
 			g_bRotate = true;
+
+		} else if ( strcasecmp ( argv[i], "--sighup-each" )==0 )
+		{
+			g_bRotateEach = true;
 
 		} else if ( strcasecmp ( argv[i], "--buildfreqs" )==0 )
 		{
@@ -1541,10 +1617,10 @@ int main ( int argc, char ** argv )
 				"--verbose\t\tverbose indexing issues report\n"
 				"--noprogress\t\tdo not display progress\n"
 				"\t\t\t(automatically on if output is not to a tty)\n"
-#if !USE_WINDOWS
 				"--rotate\t\tsend SIGHUP to searchd when indexing is over\n"
 				"\t\t\tto rotate updated indexes automatically\n"
-#endif
+				"--sighup-each\t\tsend SIGHUP to searchd after each index\n"
+				"\t\t\t(used with --rotate only)\n"
 				"--buildstops <output.txt> <N>\n"
 				"\t\t\tbuild top N stopwords and write them to given file\n"
 				"--buildfreqs\t\tstore words frequencies to output.txt\n"
@@ -1601,6 +1677,40 @@ int main ( int argc, char ** argv )
 		sphSetThrottling ( hIndexer.GetInt ( "max_iops", 0 ), hIndexer.GetSize ( "max_iosize", 0 ) );
 	}
 
+	int iPID = -1;
+	while ( g_bRotate )
+	{
+		// load config
+		if ( !hConf.Exists ( "searchd" ) )
+		{
+			fprintf ( stdout, "WARNING: 'searchd' section not found in config file.\n" );
+			break;
+		}
+
+		const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
+		if ( !hSearchd.Exists ( "pid_file" ) )
+		{
+			fprintf ( stdout, "WARNING: 'pid_file' parameter not found in 'searchd' config section.\n" );
+			break;
+		}
+
+		// read in PID
+		FILE * fp = fopen ( hSearchd["pid_file"].cstr(), "r" );
+		if ( !fp )
+		{
+			fprintf ( stdout, "WARNING: failed to open pid_file '%s'.\n", hSearchd["pid_file"].cstr() );
+			break;
+		}
+		if ( fscanf ( fp, "%d", &iPID )!=1 || iPID<=0 )
+		{
+			fprintf ( stdout, "WARNING: failed to scanf pid from pid_file '%s'.\n", hSearchd["pid_file"].cstr() );
+			break;
+		}
+		fclose ( fp );
+
+		break;
+	}
+
 	/////////////////////
 	// index each index
 	////////////////////
@@ -1632,17 +1742,29 @@ int main ( int argc, char ** argv )
 			hConf["index"][dIndexes[1]], dIndexes[1], dMergeDstFilters, g_bRotate, bMergeKillLists );
 	} else if ( bIndexAll )
 	{
+		uint64_t tmRotated = sphMicroTimer();
 		hConf["index"].IterateStart ();
 		while ( hConf["index"].IterateNext() )
-			bIndexedOk |= DoIndex ( hConf["index"].IterateGet (), hConf["index"].IterateGetKey().cstr(), hConf["source"], bVerbose, fpDumpRows );
+		{
+			bool bLastOk = DoIndex ( hConf["index"].IterateGet (), hConf["index"].IterateGetKey().cstr(), hConf["source"], bVerbose, fpDumpRows );
+			bIndexedOk |= bLastOk;
+			if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && SendRotate ( iPID, false ) )
+				tmRotated = sphMicroTimer();
+		}
 	} else
 	{
+		uint64_t tmRotated = sphMicroTimer();
 		ARRAY_FOREACH ( i, dIndexes )
 		{
 			if ( !hConf["index"](dIndexes[i]) )
 				fprintf ( stdout, "WARNING: no such index '%s', skipping.\n", dIndexes[i] );
 			else
-				bIndexedOk |= DoIndex ( hConf["index"][dIndexes[i]], dIndexes[i], hConf["source"], bVerbose, fpDumpRows );
+			{
+				bool bLastOk = DoIndex ( hConf["index"][dIndexes[i]], dIndexes[i], hConf["source"], bVerbose, fpDumpRows );
+				bIndexedOk |= bLastOk;
+				if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && SendRotate ( iPID, false ) )
+					tmRotated = sphMicroTimer();
+			}
 		}
 	}
 
@@ -1660,107 +1782,10 @@ int main ( int argc, char ** argv )
 	// rotating searchd indices
 	////////////////////////////
 
-	if ( bIndexedOk )
+	if ( bIndexedOk && g_bRotate )
 	{
-		bool bOK = false;
-		while ( g_bRotate )
-		{
-			// load config
-			if ( !hConf.Exists ( "searchd" ) )
-			{
-				fprintf ( stdout, "WARNING: 'searchd' section not found in config file.\n" );
-				break;
-			}
-
-			const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
-			if ( !hSearchd.Exists ( "pid_file" ) )
-			{
-				fprintf ( stdout, "WARNING: 'pid_file' parameter not found in 'searchd' config section.\n" );
-				break;
-			}
-
-			// read in PID
-			int iPID;
-			FILE * fp = fopen ( hSearchd["pid_file"].cstr(), "r" );
-			if ( !fp )
-			{
-				fprintf ( stdout, "WARNING: failed to open pid_file '%s'.\n", hSearchd["pid_file"].cstr() );
-				break;
-			}
-			if ( fscanf ( fp, "%d", &iPID )!=1 || iPID<=0 )
-			{
-				fprintf ( stdout, "WARNING: failed to scanf pid from pid_file '%s'.\n", hSearchd["pid_file"].cstr() );
-				break;
-			}
-			fclose ( fp );
-
-#if USE_WINDOWS
-			char szPipeName[64];
-			snprintf ( szPipeName, sizeof(szPipeName), "\\\\.\\pipe\\searchd_%d", iPID );
-
-			HANDLE hPipe = INVALID_HANDLE_VALUE;
-
-			while ( hPipe==INVALID_HANDLE_VALUE )
-			{
-				hPipe = CreateFile ( szPipeName, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL );
-
-				if ( hPipe==INVALID_HANDLE_VALUE )
-				{
-					if ( GetLastError()!=ERROR_PIPE_BUSY )
-					{
-						fprintf ( stdout, "WARNING: could not open pipe (GetLastError()=%d)\n", GetLastError () );
-						break;
-					}
-
-					if ( !WaitNamedPipe ( szPipeName, 1000 ) )
-					{
-						fprintf ( stdout, "WARNING: could not open pipe (GetLastError()=%d)\n", GetLastError () );
-						break;
-					}
-				}
-			}
-
-			if ( hPipe!=INVALID_HANDLE_VALUE )
-			{
-				DWORD uWritten = 0;
-				BYTE uWrite = 0;
-				BOOL bResult = WriteFile ( hPipe, &uWrite, 1, &uWritten, NULL );
-				if ( bResult )
-					fprintf ( stdout, "rotating indices: succesfully sent SIGHUP to searchd (pid=%d).\n", iPID );
-				else
-					fprintf ( stdout, "WARNING: failed to send SIGHUP to searchd (pid=%d, GetLastError()=%d)\n", iPID, GetLastError () );
-
-				CloseHandle ( hPipe );
-			}
-#else
-			// signal
-			int iErr = kill ( iPID, SIGHUP );
-			if ( iErr==0 )
-			{
-				if ( !g_bQuiet )
-					fprintf ( stdout, "rotating indices: succesfully sent SIGHUP to searchd (pid=%d).\n", iPID );
-			} else
-			{
-				switch ( errno )
-				{
-					case ESRCH:	fprintf ( stdout, "WARNING: no process found by PID %d.\n", iPID ); break;
-					case EPERM:	fprintf ( stdout, "WARNING: access denied to PID %d.\n", iPID ); break;
-					default:	fprintf ( stdout, "WARNING: kill() error: %s.\n", strerror(errno) ); break;
-				}
-				break;
-			}
-#endif
-
-			// all ok
-			bOK = true;
-			break;
-		}
-
-		if ( g_bRotate )
-		{
-			if ( !bOK )
-				fprintf ( stdout, "WARNING: indices NOT rotated.\n" );
-		}
+		if ( !SendRotate ( iPID, true ) )
+			fprintf ( stdout, "WARNING: indices NOT rotated.\n" );
 	}
 
 #if SPH_DEBUG_LEAKS

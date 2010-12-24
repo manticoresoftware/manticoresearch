@@ -4270,19 +4270,98 @@ void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 }
 
 
-char * FormatOrderBy ( char * p, const char * pMax, const char * sPrefix, ESphSortOrder eSort, const CSphString & sSort )
+// string buffer
+// it's usually static(2k) but could grow dynamically then necessary
+class StringBuffer_c : ISphNoncopyable
 {
+private:
+#define MAX_STATIC_BUFFER 2048
+	char m_sStatic [ MAX_STATIC_BUFFER ];
+	char * m_pDynamic;
+	char * m_pCur;
+	int m_iSize;
+
+public:
+	StringBuffer_c ()
+		: m_pDynamic ( NULL )
+		, m_iSize ( MAX_STATIC_BUFFER )
+	{
+		m_pCur = m_sStatic;
+	}
+
+	~StringBuffer_c ()
+	{
+		SafeDeleteArray ( m_pDynamic );
+	}
+
+
+	void Append ( const char * sFormat, ... )
+	{
+		if ( !sFormat )
+			return;
+
+		int iLen = -1;
+		while ( iLen==-1 )
+		{
+			va_list ap;
+			va_start ( ap, sFormat );
+			iLen = vsnprintf ( m_pCur, Left(), sFormat, ap );
+			va_end ( ap );
+
+			if ( iLen!=-1 )
+			{
+				assert ( Length()+iLen<=m_iSize );
+				m_pCur += iLen;
+			} else
+			{
+				Grow();
+			}
+		}
+	}
+
+	void AppendCurrentTime ()
+	{
+		if ( Left()<64 )
+			Grow ();
+
+		int iLen = sphFormatCurrentTime ( m_pCur, Left() );
+		assert ( Length()+iLen<=m_iSize );
+		m_pCur += iLen;
+	}
+
+	int Length() const { return m_pDynamic ? ( m_pCur-m_pDynamic ) : ( m_pCur-m_sStatic ); }
+
+	const char * cstr () const { return m_pDynamic ? m_pDynamic : m_sStatic; }
+
+private:
+	int Left () const { return m_iSize-Length(); }
+
+	void Grow ()
+	{
+		int iUsed = Length();
+		char * pDynamic = new char [m_iSize*2];
+		memcpy ( pDynamic, m_pDynamic ? m_pDynamic : m_sStatic, iUsed );
+		SafeDeleteArray ( m_pDynamic );
+		m_pDynamic = pDynamic;
+		m_pCur = pDynamic + iUsed;
+		m_iSize *= 2;
+	}
+};
+
+
+void FormatOrderBy ( StringBuffer_c * pBuf, const char * sPrefix, ESphSortOrder eSort, const CSphString & sSort )
+{
+	assert ( pBuf );
 	if ( eSort==SPH_SORT_EXTENDED && sSort=="@weight desc" )
-		return p;
+		return;
 
 	switch ( eSort )
 	{
-		case SPH_SORT_ATTR_DESC:		return p + snprintf ( p, pMax-p, " %s %s DESC", sPrefix, sSort.cstr() );
-		case SPH_SORT_ATTR_ASC:			return p + snprintf ( p, pMax-p, " %s %s ASC", sPrefix, sSort.cstr() );
-		case SPH_SORT_TIME_SEGMENTS:	return p + snprintf ( p, pMax-p, " %s TIME_SEGMENT(%s)", sPrefix, sSort.cstr() );
-		case SPH_SORT_EXTENDED:			return p + snprintf ( p, pMax-p, " %s %s", sPrefix, sSort.cstr() );
-		case SPH_SORT_EXPR:				return p + snprintf ( p, pMax-p, " %s BUILTIN_EXPR()", sPrefix );
-		default:						return p;
+	case SPH_SORT_ATTR_DESC:		pBuf->Append ( " %s %s DESC", sPrefix, sSort.cstr() ); break;
+	case SPH_SORT_ATTR_ASC:			pBuf->Append ( " %s %s ASC", sPrefix, sSort.cstr() ); break;
+	case SPH_SORT_TIME_SEGMENTS:	pBuf->Append ( " %s TIME_SEGMENT(%s)", sPrefix, sSort.cstr() ); break;
+	case SPH_SORT_EXTENDED:			pBuf->Append ( " %s %s", sPrefix, sSort.cstr() ); break;
+	case SPH_SORT_EXPR:				pBuf->Append ( " %s BUILTIN_EXPR()", sPrefix ); break;
 	}
 }
 
@@ -4293,29 +4372,27 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 	if ( g_iQueryLogFile<0 )
 		return;
 
-	char sBuf[2048]; // FIXME! accommodate for killer queries (much) over 2K?
-	char * p = sBuf;
-	char * pMax = sBuf+sizeof(sBuf)-4;
+	StringBuffer_c tBuf;
 
 	// get connection id
 	int iCid = ( g_eWorkers!=MPM_THREADS ) ? g_iConnID : *(int*) sphThreadGet ( g_tConnKey );
 
 	// time, conn id, wall, found
 	int iQueryTime = Max ( tRes.m_iQueryTime, 0 );
-	p += snprintf ( p, pMax-p, "/""* " );
-	p += sphFormatCurrentTime ( p, pMax-p );
+	tBuf.Append ( "/""* " );
+	tBuf.AppendCurrentTime();
 	if ( tRes.m_iMultiplier>1 )
-		p += snprintf ( p, pMax-p, " conn %d wall %d.%03d x%d found %d *""/ ",
+		tBuf.Append ( " conn %d wall %d.%03d x%d found %d *""/ ",
 			iCid, iQueryTime/1000, iQueryTime%1000, tRes.m_iMultiplier, tRes.m_iTotalMatches );
 	else
-		p += snprintf ( p, pMax-p, " conn %d wall %d.%03d found %d *""/ ",
+		tBuf.Append ( " conn %d wall %d.%03d found %d *""/ ",
 			iCid, iQueryTime/1000, iQueryTime%1000, tRes.m_iTotalMatches );
 
 	///////////////////////////////////
 	// format request as SELECT query
 	///////////////////////////////////
 
-	p += snprintf ( p, pMax-p, "SELECT %s FROM %s", q.m_sSelect.cstr(), q.m_sIndexes.cstr() );
+	tBuf.Append ( "SELECT %s FROM %s", q.m_sSelect.cstr(), q.m_sIndexes.cstr() );
 
 	// WHERE clause
 	// (m_sRawQuery is empty when using MySQL handler)
@@ -4324,19 +4401,19 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 	{
 		bool bDeflowered = false;
 
-		p += snprintf ( p, pMax-p, " WHERE" );
+		tBuf.Append ( " WHERE" );
 		if ( !sQuery.IsEmpty() )
 		{
 			// FIXME! escape it
 			// FIXME! replace \n with spaces
-			p += snprintf ( p, pMax-p, " MATCH('%s')", sQuery.cstr() );
+			tBuf.Append ( " MATCH('%s')", sQuery.cstr() );
 			bDeflowered = true;
 		}
 
 		ARRAY_FOREACH ( i, q.m_dFilters )
 		{
 			if ( bDeflowered )
-				p += snprintf ( p, pMax-p, " AND" );
+				tBuf.Append ( " AND" );
 
 			const CSphFilterSettings & f = q.m_dFilters[i];
 			switch ( f.m_eType )
@@ -4344,33 +4421,33 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 				case SPH_FILTER_VALUES:
 					if ( f.m_dValues.GetLength()==1 )
 					{
-						p += snprintf ( p, pMax-p, " %s="INT64_FMT, f.m_sAttrName.cstr(), (int64_t)f.m_dValues[0] );
+						tBuf.Append ( " %s="INT64_FMT, f.m_sAttrName.cstr(), (int64_t)f.m_dValues[0] );
 					} else
 					{
-						p += snprintf ( p, pMax-p, " %s IN (", f.m_sAttrName.cstr() );
+						tBuf.Append ( " %s IN (", f.m_sAttrName.cstr() );
 						ARRAY_FOREACH ( j, f.m_dValues )
 						{
-							if ( j && p<pMax )
-								*p++ = ',';
-							p += snprintf ( p, pMax-p, INT64_FMT, (int64_t)f.m_dValues[j] );
+							if ( j )
+								tBuf.Append ( ","INT64_FMT, (int64_t)f.m_dValues[j] );
+							else
+								tBuf.Append ( INT64_FMT, (int64_t)f.m_dValues[j] );
 						}
-						if ( p<pMax )
-							*p++ = ')';
+						tBuf.Append ( ")" );
 					}
 					break;
 
 				case SPH_FILTER_RANGE:
-					p += snprintf ( p, pMax-p, " %s BETWEEN "INT64_FMT" AND "INT64_FMT,
+					tBuf.Append ( " %s BETWEEN "INT64_FMT" AND "INT64_FMT,
 						f.m_sAttrName.cstr(), (int64_t)f.m_uMinValue, (int64_t)f.m_uMaxValue );
 					break;
 
 				case SPH_FILTER_FLOATRANGE:
-					p += snprintf ( p, pMax-p, " %s BETWEEN %f AND %f",
+					tBuf.Append ( " %s BETWEEN %f AND %f",
 						f.m_sAttrName.cstr(), f.m_fMinValue, f.m_fMaxValue );
 					break;
 
 				default:
-					p += snprintf ( p, pMax-p, " 1 /""* oops, unknown filter type *""/" );
+					tBuf.Append ( " 1 /""* oops, unknown filter type *""/" );
 					break;
 			}
 		}
@@ -4379,33 +4456,33 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 	// ORDER BY and/or GROUP BY clause
 	if ( q.m_sGroupBy.IsEmpty() )
 	{
-		p = FormatOrderBy ( p, pMax, "ORDER BY", q.m_eSort, q.m_sSortBy );
+		tBuf.Append ( "ORDER BY", q.m_eSort, q.m_sSortBy );
 
 	} else
 	{
-		p += snprintf ( p, pMax-p, " GROUP BY %s", q.m_sGroupBy.cstr() );
-		p = FormatOrderBy ( p, pMax, "WITHIN GROUP ORDER BY", q.m_eSort, q.m_sSortBy );
+		tBuf.Append ( " GROUP BY %s", q.m_sGroupBy.cstr() );
+		FormatOrderBy ( &tBuf, "WITHIN GROUP ORDER BY", q.m_eSort, q.m_sSortBy );
 		if ( q.m_sGroupSortBy!="@group desc" )
-			p = FormatOrderBy ( p, pMax, "ORDER BY", SPH_SORT_EXTENDED, q.m_sGroupSortBy );
+			FormatOrderBy ( &tBuf, "ORDER BY", SPH_SORT_EXTENDED, q.m_sGroupSortBy );
 	}
 
 	// LIMIT clause
 	if ( q.m_iOffset!=0 || q.m_iLimit!=20 )
-		p += snprintf ( p, pMax-p, " LIMIT %d,%d", q.m_iOffset, q.m_iLimit );
+		tBuf.Append ( " LIMIT %d,%d", q.m_iOffset, q.m_iLimit );
 
 	// OPTION clause
 	int iOpts = 0;
 
 	if ( q.m_iMaxMatches!=1000 )
 	{
-		p += snprintf ( p, pMax-p, iOpts++ ? ", " : " OPTION " );
-		p += snprintf ( p, pMax-p, "max_matches=%d", q.m_iMaxMatches );
+		tBuf.Append ( iOpts++ ? ", " : " OPTION " );
+		tBuf.Append ( "max_matches=%d", q.m_iMaxMatches );
 	}
 
 	if ( !q.m_sComment.IsEmpty() )
 	{
-		p += snprintf ( p, pMax-p, iOpts++ ? ", " : " OPTION " );
-		p += snprintf ( p, pMax-p, "comment='%s'", q.m_sComment.cstr() ); // FIXME! escape, replace newlines..
+		tBuf.Append ( iOpts++ ? ", " : " OPTION " );
+		tBuf.Append ( "comment='%s'", q.m_sComment.cstr() ); // FIXME! escape, replace newlines..
 	}
 
 	if ( q.m_eRanker!=SPH_RANK_DEFAULT )
@@ -4422,12 +4499,12 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 			case SPH_RANK_SPH04:		sRanker = "sph04"; break;
 		}
 
-		p += snprintf ( p, pMax-p, iOpts++ ? ", " : " OPTION " );
-		p += snprintf ( p, pMax-p, "ranker=%s", sRanker );
+		tBuf.Append ( iOpts++ ? ", " : " OPTION " );
+		tBuf.Append ( "ranker=%s", sRanker );
 	}
 
 	// finish SQL statement
-	*p++ = ';';
+	tBuf.Append ( ";" );
 
 	///////////////
 	// query stats
@@ -4436,13 +4513,12 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 	if ( !tRes.m_sError.IsEmpty() )
 	{
 		// all we have is an error
-		p += snprintf ( p, pMax-p, " # error=%s", tRes.m_sError.cstr() );
+		tBuf.Append ( " # error=%s", tRes.m_sError.cstr() );
 
 	} else if ( g_bIOStats || g_bCpuStats || dAgentTimes.GetLength() || !tRes.m_sWarning.IsEmpty() )
 	{
 		// got some extra data, add a comment
-		*p++ = ' ';
-		*p++ = '#';
+		tBuf.Append ( " #" );
 
 		// performance counters
 		if ( g_bIOStats || g_bCpuStats )
@@ -4450,41 +4526,36 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 			const CSphIOStats & IOStats = sphStopIOStats ();
 
 			if ( g_bIOStats )
-				p += snprintf ( p, pMax-p, " ios=%d kb=%d.%d ioms=%d.%d",
+				tBuf.Append ( " ios=%d kb=%d.%d ioms=%d.%d",
 				IOStats.m_iReadOps, (int)( IOStats.m_iReadBytes/1024 ), (int)( IOStats.m_iReadBytes%1024 )*10/1024,
 				(int)( IOStats.m_iReadTime/1000 ), (int)( IOStats.m_iReadTime%1000 )/100 );
 
 			if ( g_bCpuStats )
-				p += snprintf ( p, pMax-p, " cpums=%d.%d", (int)( tRes.m_iCpuTime/1000 ), (int)( tRes.m_iCpuTime%1000 )/100 );
+				tBuf.Append ( " cpums=%d.%d", (int)( tRes.m_iCpuTime/1000 ), (int)( tRes.m_iCpuTime%1000 )/100 );
 		}
 
 		// per-agent times
 		if ( dAgentTimes.GetLength() )
 		{
-			p += snprintf ( p, pMax-p, " agents=(" );
+			tBuf.Append ( " agents=(" );
 			ARRAY_FOREACH ( i, dAgentTimes )
-				p += snprintf ( p, pMax-p, i ? ", %d.%03d" : "%d.%03d",
-				(int)(dAgentTimes[i]/1000000),
-				(int)((dAgentTimes[i]/1000)%1000) );
-			*p++ = ')';
+				tBuf.Append ( i ? ", %d.%03d" : "%d.%03d",
+					(int)(dAgentTimes[i]/1000000),
+					(int)((dAgentTimes[i]/1000)%1000) );
+
+			tBuf.Append ( ")" );
 		}
 
 		// warning
 		if ( !tRes.m_sWarning.IsEmpty() )
-			p += snprintf ( p, pMax-p, " warning=%s", tRes.m_sWarning.cstr() );
+			tBuf.Append ( " warning=%s", tRes.m_sWarning.cstr() );
 	}
 
 	// line feed
-	if ( p<pMax-1 )
-	{
-		*p++ = '\n';
-		*p++ = '\0';
-	}
-	sBuf[sizeof(sBuf)-2] = '\n';
-	sBuf[sizeof(sBuf)-1] = '\0';
+	tBuf.Append ( "\n" );
 
 	lseek ( g_iQueryLogFile, 0, SEEK_END );
-	sphWrite ( g_iQueryLogFile, sBuf, strlen(sBuf) );
+	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.Length() );
 }
 
 

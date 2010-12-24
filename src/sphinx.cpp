@@ -16378,6 +16378,7 @@ CSphDictKeywords::HitblockKeyword_t * CSphDictKeywords::HitblockAddKeyword ( DWO
 
 	// fill it
 	memcpy ( m_pKeywordChunk, sWord, iLen );
+	m_pKeywordChunk[iLen-1] = '\0';
 	pEntry->m_pKeyword = (char*)m_pKeywordChunk;
 	pEntry->m_uWordid = uID;
 	m_pKeywordChunk += iLen;
@@ -16424,11 +16425,12 @@ SphWordID_t CSphDictKeywords::HitblockGetID ( const char * sWord, int iLen, SphW
 		}
 
 		// crc matches, check keyword
+		register int iWordLen = iLen;
 		register const char * a = pEntry->m_pKeyword;
 		register const char * b = sWord;
-		while ( *a==*b )
+		while ( *a==*b && iWordLen-- )
 		{
-			if ( !*a )
+			if ( !*a || !iWordLen )
 			{
 				// known word, mtf it, and return id
 				(*ppEntry) = pEntry->m_pNextHash;
@@ -16624,6 +16626,7 @@ bool CSphDictKeywords::DictEnd ( SphOffset_t * pCheckpointsPos, int * pCheckpoin
 
 			BYTE * sClone = new BYTE [ iLen+1 ]; // OPTIMIZE? pool these?
 			memcpy ( sClone, tWord.m_sKeyword, iLen+1 );
+			sClone[iLen] = '\0';
 
 			CSphWordlistCheckpoint & tCheckpoint = m_dCheckpoints.Add ();
 			tCheckpoint.m_sWord = (char*) sClone;
@@ -16642,6 +16645,7 @@ bool CSphDictKeywords::DictEnd ( SphOffset_t * pCheckpointsPos, int * pCheckpoin
 		assert ( iDelta>0 );
 
 		memcpy ( sLastKeyword, tWord.m_sKeyword, iLen+1 );
+		sLastKeyword[iLen] = '\0';
 
 		// write final dict entry
 		assert ( iLen );
@@ -16836,6 +16840,7 @@ void CSphDictKeywords::DictEntry ( SphWordID_t, BYTE * sKeyword, int iDocs, int 
 	m_iDictChunkFree--;
 	pWord->m_sKeyword = (char*)m_pKeywordChunk;
 	memcpy ( m_pKeywordChunk, sKeyword, iLen );
+	m_pKeywordChunk[iLen-1] = '\0';
 	m_pKeywordChunk += iLen;
 	m_iKeywordChunkFree -= iLen;
 

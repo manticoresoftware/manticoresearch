@@ -19,6 +19,7 @@
 %token <iAttrLocator>	TOK_ATTR_MVA
 %token <iFunc>			TOK_FUNC
 %token <iFunc>			TOK_FUNC_IN
+%token <iNode>			TOK_USERVAR
 
 %token	TOK_ID
 %token	TOK_WEIGHT
@@ -107,6 +108,13 @@ function:
 		{
 			$$ = pParser->AddNodeAttr ( TOK_ATTR_MVA, $3 );
 			$$ = pParser->AddNodeFunc ( $1, $$, $5 );
+		}
+	| TOK_FUNC_IN '(' attr ',' TOK_USERVAR ')'
+		{
+			int iConstlist = pParser->ConstlistFromUservar ( $5 );
+			if ( iConstlist<0 )
+				YYERROR;
+			$$ = pParser->AddNodeFunc ( $1, $3, iConstlist );
 		}
 	;
 

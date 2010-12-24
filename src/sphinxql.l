@@ -48,6 +48,7 @@ SPACE				[ \t\n\r]
 "DISTINCT"			{ YYSTOREBOUNDS; return TOK_DISTINCT; }
 "FALSE"				{ YYSTOREBOUNDS; return TOK_FALSE; }
 "FROM"				{ YYSTOREBOUNDS; return TOK_FROM; }
+"GLOBAL"			{ YYSTOREBOUNDS; return TOK_GLOBAL; }
 "GROUP"				{ YYSTOREBOUNDS; return TOK_GROUP; }
 "ID"				{ YYSTOREBOUNDS; return TOK_ID; }
 "IN"				{ YYSTOREBOUNDS; return TOK_IN; }
@@ -95,6 +96,7 @@ SPACE				[ \t\n\r]
 "@weight"			{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_IDENT; }
 "@count"			{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_IDENT; }
 {ID}				{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_IDENT; }
+@{ID}				{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_USERVAR; }
 
 {SPACE}+			{ ; }
 .					{ YYSTOREBOUNDS; return yytext[0]; }

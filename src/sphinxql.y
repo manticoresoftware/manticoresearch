@@ -30,6 +30,7 @@
 %token	TOK_DISTINCT
 %token	TOK_FALSE
 %token	TOK_FROM
+%token	TOK_GLOBAL
 %token	TOK_GROUP
 %token	TOK_ID
 %token	TOK_IN
@@ -54,6 +55,7 @@
 %token	TOK_TRANSACTION
 %token	TOK_TRUE
 %token	TOK_UPDATE
+%token	TOK_USERVAR
 %token	TOK_VALUES
 %token	TOK_WARNINGS
 %token	TOK_WEIGHT
@@ -103,6 +105,30 @@ static void AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & tNode 
 	tIns.m_fVal = tNode.m_fValue;
 	tIns.m_sVal = tNode.m_sValue;
 }
+
+static bool AddUservarFilter ( SqlParser_c * pParser, CSphString & sCol, CSphString & sVar, bool bExclude )
+{
+	g_tUservarsMutex.Lock();
+	Uservar_t * pVar = g_hUservars ( sVar );
+	if ( !pVar )
+	{
+		g_tUservarsMutex.Unlock();
+		yyerror ( pParser, "undefined global variable in IN clause" );
+		return false;
+	}
+
+	assert ( pVar->m_eType==USERVAR_INT_SET );
+	CSphFilterSettings & tFilter = pParser->m_pQuery->m_dFilters.Add();
+	tFilter.m_sAttrName = sCol;
+	tFilter.m_eType = SPH_FILTER_VALUES;
+	tFilter.m_bExclude = bExclude;
+
+	// INT_SET uservars must get sorted on SET once
+	// FIXME? maybe we should do a readlock instead of copying?
+	tFilter.m_dValues = *pVar->m_pVal;
+	g_tUservarsMutex.Unlock();
+	return true;
+}
 %}
 
 %%
@@ -117,6 +143,7 @@ statement:
 	insert_into
 	| delete_from
 	| set_clause
+	| set_global_clause
 	| transact_op
 	| call_proc
 	| describe
@@ -157,14 +184,12 @@ select_items_list:
 	;
 
 select_item:
-	TOK_IDENT									{ pParser->SetSelect ( $1.m_iStart, $1.m_iEnd );
-											pParser->AddItem ( &$1, NULL ); }
-	| expr aass TOK_IDENT						{ pParser->SetSelect ( $1.m_iStart, $3.m_iEnd );
-									pParser->AddItem ( &$1, &$3 ); }
-	| TOK_AVG '(' expr ')' aass TOK_IDENT		{ pParser->SetSelect ($1.m_iStart, $6.m_iEnd); pParser->AddItem ( &$3, &$6, SPH_AGGR_AVG ); }
-	| TOK_MAX '(' expr ')' aass TOK_IDENT		{ pParser->SetSelect ($1.m_iStart, $6.m_iEnd); pParser->AddItem ( &$3, &$6, SPH_AGGR_MAX ); }
-	| TOK_MIN '(' expr ')' aass TOK_IDENT		{ pParser->SetSelect ($1.m_iStart, $6.m_iEnd); pParser->AddItem ( &$3, &$6, SPH_AGGR_MIN ); }
-	| TOK_SUM '(' expr ')' aass TOK_IDENT		{ pParser->SetSelect ($1.m_iStart, $6.m_iEnd); pParser->AddItem ( &$3, &$6, SPH_AGGR_SUM ); }
+	TOK_IDENT									{ pParser->SetSelect ( $1.m_iStart, $1.m_iEnd ); pParser->AddItem ( &$1, NULL ); }
+	| expr opt_as TOK_IDENT						{ pParser->SetSelect ( $1.m_iStart, $3.m_iEnd ); pParser->AddItem ( &$1, &$3 ); }
+	| TOK_AVG '(' expr ')' opt_as TOK_IDENT		{ pParser->SetSelect ($1.m_iStart, $6.m_iEnd); pParser->AddItem ( &$3, &$6, SPH_AGGR_AVG ); }
+	| TOK_MAX '(' expr ')' opt_as TOK_IDENT		{ pParser->SetSelect ($1.m_iStart, $6.m_iEnd); pParser->AddItem ( &$3, &$6, SPH_AGGR_MAX ); }
+	| TOK_MIN '(' expr ')' opt_as TOK_IDENT		{ pParser->SetSelect ($1.m_iStart, $6.m_iEnd); pParser->AddItem ( &$3, &$6, SPH_AGGR_MIN ); }
+	| TOK_SUM '(' expr ')' opt_as TOK_IDENT		{ pParser->SetSelect ($1.m_iStart, $6.m_iEnd); pParser->AddItem ( &$3, &$6, SPH_AGGR_SUM ); }
 	| '*'										{ pParser->SetSelect ($1.m_iStart, $1.m_iEnd); pParser->AddItem ( &$1, NULL ); }
 	| TOK_COUNT '(' TOK_DISTINCT TOK_IDENT ')'
 		{
@@ -181,7 +206,7 @@ select_item:
 		}
 	;
 
-aass:
+opt_as:
 	| TOK_AS
 	;
 
@@ -257,6 +282,16 @@ where_item:
 			tFilter.m_dValues = $5.m_dValues;
 			tFilter.m_bExclude = true;
 			tFilter.m_dValues.Sort();
+		}
+	| TOK_IDENT TOK_IN TOK_USERVAR
+		{
+			if ( !AddUservarFilter ( pParser, $1.m_sValue, $3.m_sValue, false ) )
+				YYERROR;
+		}
+	| TOK_IDENT TOK_NOT TOK_IN TOK_USERVAR
+		{
+			if ( !AddUservarFilter ( pParser, $1.m_sValue, $3.m_sValue, true ) )
+				YYERROR;
 		}
 	| TOK_IDENT TOK_BETWEEN const_int TOK_AND const_int
 		{
@@ -455,6 +490,7 @@ expr:
 	TOK_IDENT
 	| TOK_CONST_INT
 	| TOK_CONST_FLOAT
+	| TOK_USERVAR
 	| '-' expr %prec TOK_NEG	{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
 	| TOK_NOT expr				{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
 	| expr '+' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
@@ -506,14 +542,26 @@ set_clause:
 	TOK_SET TOK_IDENT '=' boolean_value
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SET;
+			pParser->m_pStmt->m_bSetGlobal = false;
 			pParser->m_pStmt->m_sSetName = $2.m_sValue;
 			pParser->m_pStmt->m_iSetValue = $4.m_iValue;
 		}
 	| TOK_SET TOK_IDENT '=' TOK_QUOTED_STRING
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SET;
+			pParser->m_pStmt->m_bSetGlobal = false;
 			pParser->m_pStmt->m_sSetName = $2.m_sValue;
 			pParser->m_pStmt->m_sSetValue = $4.m_sValue;
+		}
+	;
+
+set_global_clause:
+	TOK_SET TOK_GLOBAL TOK_USERVAR '=' '(' const_list ')'
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SET;
+			pParser->m_pStmt->m_bSetGlobal = true;
+			pParser->m_pStmt->m_sSetName = $3.m_sValue;
+			pParser->m_pStmt->m_dSetValues = $6.m_dValues;
 		}
 	;
 
@@ -632,7 +680,7 @@ call_opts_list:
 	;
 
 call_opt:
-	insert_val aass call_opt_name
+	insert_val opt_as call_opt_name
 		{
 			pParser->m_pStmt->m_dCallOptNames.Add ( $3.m_sValue );
 			AddInsval ( pParser->m_pStmt->m_dCallOptValues, $1 );

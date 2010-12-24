@@ -33,6 +33,9 @@
 #define M_LOG10E	0.434294481903251827651
 #endif
 
+// hack hack hack
+bool (*g_pUservarsHook) ( const CSphString & sUservar, CSphVector<SphAttr_t> & dVals ) = NULL;
+
 //////////////////////////////////////////////////////////////////////////
 // EVALUATION ENGINE
 //////////////////////////////////////////////////////////////////////////
@@ -511,6 +514,7 @@ protected:
 	int						AddNodeConstlist ( float iValue );
 	void					AppendToConstlist ( int iNode, int64_t iValue );
 	void					AppendToConstlist ( int iNode, float iValue );
+	int						ConstlistFromUservar ( int iUservar );
 
 private:
 	const char *			m_sExpr;
@@ -518,6 +522,7 @@ private:
 	const char *			m_pLastTokenStart;
 	const CSphSchema *		m_pSchema;
 	CSphVector<ExprNode_t>	m_dNodes;
+	CSphVector<CSphString>	m_dUservars;
 
 	CSphSchema *			m_pExtra;
 
@@ -650,6 +655,14 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 			const CSphAttrLocator & tLoc = m_pSchema->GetAttr ( iGeodist ).m_tLocator;
 			lvalp->iAttrLocator = sphPackAttrLocator ( tLoc, iGeodist );
 			return TOK_ATTR_FLOAT;
+		}
+
+		// check for uservar
+		if ( pStart[0]=='@' )
+		{
+			lvalp->iNode = m_dUservars.GetLength();
+			m_dUservars.Add ( sTok );
+			return TOK_USERVAR;
 		}
 
 		// check for keyword
@@ -2055,6 +2068,27 @@ void ExprParser_t::AppendToConstlist ( int iNode, int64_t iValue )
 void ExprParser_t::AppendToConstlist ( int iNode, float iValue )
 {
 	m_dNodes[iNode].m_pConsts->Add ( iValue );
+}
+
+int ExprParser_t::ConstlistFromUservar ( int iUservar )
+{
+	if ( g_pUservarsHook )
+	{
+		ExprNode_t & tNode = m_dNodes.Add();
+		tNode.m_iToken = TOK_CONST_LIST;
+		tNode.m_pConsts = new ConstList_c();
+		if ( g_pUservarsHook ( m_dUservars[iUservar], tNode.m_pConsts->m_dInts ) )
+		{
+			return m_dNodes.GetLength()-1;
+		} else
+		{
+			SafeDelete ( tNode.m_pConsts );
+			m_dNodes.Pop();
+		}
+	}
+
+	m_sParserError.SetSprintf ( "undefined user variable '%s'", m_dUservars[iUservar].cstr() );
+	return -1;
 }
 
 

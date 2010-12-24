@@ -512,6 +512,8 @@ static SearchdStats_t *			g_pStats		= NULL;
 static CSphSharedBuffer<BYTE>	g_tStatsBuffer;
 static CSphProcessSharedMutex	g_tStatsMutex;
 
+//////////////////////////////////////////////////////////////////////////
+
 struct FlushState_t
 {
 	int		m_iUpdateTag;		///< ever-growing update tag
@@ -522,6 +524,22 @@ struct FlushState_t
 
 static volatile FlushState_t *	g_pFlush		= NULL;
 static CSphSharedBuffer<BYTE>	g_tFlushBuffer;
+
+//////////////////////////////////////////////////////////////////////////
+
+enum Uservar_e
+{
+	USERVAR_INT_SET
+};
+
+struct Uservar_t
+{
+	Uservar_e						m_eType;
+	CSphVector<SphAttr_t> *			m_pVal;
+};
+
+static CSphStaticMutex				g_tUservarsMutex;
+static SmallStringHash_T<Uservar_t>	g_hUservars;
 
 /////////////////////////////////////////////////////////////////////////////
 // MACHINE-DEPENDENT STUFF
@@ -6710,8 +6728,10 @@ struct SqlStmt_t
 
 	// SET specific
 	CSphString				m_sSetName;
+	bool					m_bSetGlobal;
 	int						m_iSetValue;
 	CSphString				m_sSetValue;
+	CSphVector<SphAttr_t>	m_dSetValues;
 
 	// CALL specific
 	CSphString				m_sCallProc;
@@ -9370,8 +9390,8 @@ void HandleMysqlDelete ( NetOutputBuffer_c & tOut, BYTE & uPacketID, const SqlSt
 }
 
 
-void HandleMysqlMultiStmt ( NetOutputBuffer_c & tOut, BYTE uPacketID, const CSphVector<SqlStmt_t> & dStmt, CSphQueryResultMeta & tLastMeta
-						, SqlRowBuffer_c & dRows, ThdDesc_t * pThd )
+void HandleMysqlMultiStmt ( NetOutputBuffer_c & tOut, BYTE uPacketID, const CSphVector<SqlStmt_t> & dStmt, CSphQueryResultMeta & tLastMeta,
+	SqlRowBuffer_c & dRows, ThdDesc_t * pThd )
 {
 	// select count
 	int iSelect = 0;
@@ -9440,6 +9460,99 @@ void HandleMysqlMultiStmt ( NetOutputBuffer_c & tOut, BYTE uPacketID, const CSph
 }
 
 
+struct SessionVars_t
+{
+	bool			m_bAutoCommit;
+	bool			m_bInTransaction;
+	ESphCollation	m_eCollation;
+
+	SessionVars_t ()
+		: m_bAutoCommit ( true )
+		, m_bInTransaction ( false )
+		, m_eCollation ( SPH_COLLATION_LIBC_CI )
+	{}
+};
+
+
+void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tStmt, SessionVars_t & tVars )
+{
+	MEMORY ( SPH_MEM_COMMIT_SET_SQL );
+	CSphString sError;
+
+	tStmt.m_sSetName.ToLower();
+	if ( tStmt.m_sSetName=="autocommit" && !tStmt.m_bSetGlobal )
+	{
+		// per-session AUTOCOMMIT
+		tVars.m_bAutoCommit = ( tStmt.m_iSetValue!=0 );
+		tVars.m_bInTransaction = false;
+
+		// commit all pending changes
+		if ( tVars.m_bAutoCommit )
+		{
+			ISphRtIndex * pIndex = sphGetCurrentIndexRT();
+			if ( pIndex )
+				pIndex->Commit();
+		}
+
+	} else if ( tStmt.m_sSetName=="collation_connection" && !tStmt.m_bSetGlobal )
+	{
+		// per-session COLLATION_CONNECTION
+		CSphString & sVal = tStmt.m_sSetValue;
+		sVal.ToLower();
+
+		// FIXME! replace with a hash lookup?
+		if ( sVal=="libc_ci" )
+			tVars.m_eCollation = SPH_COLLATION_LIBC_CI;
+		else if ( sVal=="libc_cs" )
+			tVars.m_eCollation = SPH_COLLATION_LIBC_CS;
+		else if ( sVal=="utf8_general_ci" )
+			tVars.m_eCollation = SPH_COLLATION_UTF8_GENERAL_CI;
+		else
+		{
+			sError.SetSprintf ( "Unknown collation: '%s'", sVal.cstr() );
+			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+			return;
+		}
+
+	} else if ( tStmt.m_bSetGlobal )
+	{
+		// global user variable
+		if ( g_eWorkers!=MPM_THREADS )
+		{
+			SendMysqlErrorPacket ( tOut, uPacketID, "SET GLOBAL currently requires workes=threads" );
+			return;
+		}
+
+		g_tUservarsMutex.Lock();
+		Uservar_t * pVar = g_hUservars ( tStmt.m_sSetName );
+		if ( pVar )
+		{
+			assert ( pVar->m_eType==USERVAR_INT_SET );
+			pVar->m_pVal->SwapData ( tStmt.m_dSetValues );
+		} else
+		{
+			Uservar_t tVar;
+			tVar.m_eType = USERVAR_INT_SET;
+			tVar.m_pVal = new CSphVector<SphAttr_t>;
+			tVar.m_pVal->SwapData ( tStmt.m_dSetValues );
+			tVar.m_pVal->Sort();
+			g_hUservars.Add ( tVar, tStmt.m_sSetName ); // FIXME? free those on shutdown?
+		}
+		g_tUservarsMutex.Unlock();
+
+	} else
+	{
+		// unknown case, return error
+		sError.SetSprintf ( "Unknown session variable '%s' in SET statement", tStmt.m_sSetName.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		return;
+	}
+
+	// it went ok
+	SendMysqlOkPacket ( tOut, uPacketID );
+}
+
+
 void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc_t * pThd )
 {
 	MEMORY ( SPH_MEM_HANDLE_SQL );
@@ -9471,21 +9584,13 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 		return;
 	}
 
+	SessionVars_t tVars; // session variables and state
+
 	bool bAuthed = false;
 	BYTE uPacketID = 1;
 
 	CSphQueryResultMeta tLastMeta;
-
-	// set on client's level, not on query's
-	bool bAutoCommit = true;
-	bool bInTransaction = false; // ignores bAutoCommit inside transaction
-
-	// to keep data alive for SphCrashQuery_c
-	CSphString sQuery;
-
-	// connection set collation
-	ESphCollation eCollation = SPH_COLLATION_DEFAULT;
-
+	CSphString sQuery; // to keep data alive for SphCrashQuery_c
 	for ( ;; )
 	{
 		// set off query guard
@@ -9557,7 +9662,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 
 		// parse SQL query
 		CSphVector<SqlStmt_t> dStmt;
-		bool bParsedOK = ParseSqlQuery ( sQuery, dStmt, sError, eCollation );
+		bool bParsedOK = ParseSqlQuery ( sQuery, dStmt, sError, tVars.m_eCollation );
 
 		SqlStmt_e eStmt = bParsedOK ? dStmt.Begin()->m_eStmt : STMT_PARSE_ERROR;
 
@@ -9610,68 +9715,22 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 
 		case STMT_INSERT:
 		case STMT_REPLACE:
-			HandleMysqlInsert ( *pStmt, tOut, uPacketID, eStmt==STMT_REPLACE, bAutoCommit && !bInTransaction );
+			HandleMysqlInsert ( *pStmt, tOut, uPacketID, eStmt==STMT_REPLACE, tVars.m_bAutoCommit && !tVars.m_bInTransaction );
 			continue;
 
 		case STMT_DELETE:
-			HandleMysqlDelete ( tOut, uPacketID, *pStmt, bAutoCommit && !bInTransaction );
+			HandleMysqlDelete ( tOut, uPacketID, *pStmt, tVars.m_bAutoCommit && !tVars.m_bInTransaction );
 			continue;
 
 		case STMT_SET:
-			{
-				MEMORY ( SPH_MEM_COMMIT_SET_SQL );
+			HandleMysqlSet ( tOut, uPacketID, *pStmt, tVars );
+			continue;
 
-				pStmt->m_sSetName.ToLower();
-				if ( pStmt->m_sSetName=="autocommit" )
-				{
-					bAutoCommit = (pStmt->m_iSetValue==0)?false:true;
-					bInTransaction = false;
-
-					// commit all pending changes
-					if ( bAutoCommit )
-					{
-						ISphRtIndex * pIndex = sphGetCurrentIndexRT();
-						if ( pIndex )
-							pIndex->Commit();
-					}
-
-					SendMysqlOkPacket ( tOut, uPacketID );
-					continue;
-				}
-
-				if ( pStmt->m_sSetName=="collation_connection" )
-				{
-					CSphString & sVal = pStmt->m_sSetValue;
-					sVal.ToLower();
-
-					// FIXME! replace with a hash lookup?
-					if ( sVal=="libc_ci" )
-						eCollation = SPH_COLLATION_LIBC_CI;
-					else if ( sVal=="libc_cs" )
-						eCollation = SPH_COLLATION_LIBC_CS;
-					else if ( sVal=="utf8_general_ci" )
-						eCollation = SPH_COLLATION_UTF8_GENERAL_CI;
-					else
-					{
-						sError.SetSprintf ( "Unknown collation: '%s'", sVal.cstr() );
-						SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
-						continue;
-					}
-
-					SendMysqlOkPacket ( tOut, uPacketID );
-					continue;
-				}
-
-				// unknown variable, return error
-				sError.SetSprintf ( "Unknown variable '%s' in SET statement", pStmt->m_sSetName.cstr() );
-				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
-				continue;
-			}
 		case STMT_BEGIN:
 			{
 				MEMORY ( SPH_MEM_COMMIT_BEGIN_SQL );
 
-				bInTransaction = true;
+				tVars.m_bInTransaction = true;
 				ISphRtIndex * pIndex = sphGetCurrentIndexRT();
 				if ( pIndex )
 					pIndex->Commit();
@@ -9683,7 +9742,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 			{
 				MEMORY ( SPH_MEM_COMMIT_SQL );
 
-				bInTransaction = false;
+				tVars.m_bInTransaction = false;
 				ISphRtIndex * pIndex = sphGetCurrentIndexRT();
 				if ( pIndex )
 				{
@@ -9717,7 +9776,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 			continue;
 
 		case STMT_UPDATE:
-			HandleMysqlUpdate ( tOut, uPacketID, *pStmt, bAutoCommit && !bInTransaction );
+			HandleMysqlUpdate ( tOut, uPacketID, *pStmt, tVars.m_bAutoCommit && !tVars.m_bInTransaction );
 			continue;
 
 		default:
@@ -13308,6 +13367,22 @@ bool DieCallback ( const char * sMessage )
 }
 
 
+extern bool (*g_pUservarsHook) ( const CSphString & sUservar, CSphVector<SphAttr_t> & dVals );
+
+bool UservarsHook ( const CSphString & sUservar, CSphVector<SphAttr_t> & dVals )
+{
+	g_tUservarsMutex.Lock();
+	Uservar_t * pVar = g_hUservars ( sUservar );
+	if ( pVar )
+	{
+		assert ( pVar->m_eType==USERVAR_INT_SET );
+		dVals = *pVar->m_pVal;
+	}
+	g_tUservarsMutex.Unlock();
+	return ( pVar!=NULL );
+}
+
+
 int main ( int argc, char **argv )
 {
 	// threads should be initialized before memory allocations
@@ -13316,6 +13391,7 @@ int main ( int argc, char **argv )
 	MemorizeStack ( &cTopOfMainStack );
 	sphSetDieCallback ( DieCallback );
 	sphSetLogger ( sphLog );
+	g_pUservarsHook = UservarsHook;
 
 #if USE_WINDOWS
 	int iNameIndex = -1;

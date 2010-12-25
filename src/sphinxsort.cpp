@@ -1949,7 +1949,9 @@ static const char g_sIntAttrPrefix[] = "@int_str2ptr_";
 
 static void SetupSortStringRemap ( CSphSchema & tSorterSchema, CSphMatchComparatorState & tState, const int * dAttr )
 {
+#ifndef NDEBUG
 	int iColWasCount = tSorterSchema.GetAttrsCount();
+#endif
 	for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 	{
 		if ( tState.m_eKeypart[i]!=SPH_KEYPART_STRING )

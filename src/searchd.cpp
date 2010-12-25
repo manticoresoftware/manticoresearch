@@ -4362,6 +4362,7 @@ void FormatOrderBy ( StringBuffer_c * pBuf, const char * sPrefix, ESphSortOrder 
 	case SPH_SORT_TIME_SEGMENTS:	pBuf->Append ( " %s TIME_SEGMENT(%s)", sPrefix, sSort.cstr() ); break;
 	case SPH_SORT_EXTENDED:			pBuf->Append ( " %s %s", sPrefix, sSort.cstr() ); break;
 	case SPH_SORT_EXPR:				pBuf->Append ( " %s BUILTIN_EXPR()", sPrefix ); break;
+	default:						pBuf->Append ( " %s mode-%d", sPrefix, (int)eSort ); break;
 	}
 }
 
@@ -4456,7 +4457,7 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 	// ORDER BY and/or GROUP BY clause
 	if ( q.m_sGroupBy.IsEmpty() )
 	{
-		tBuf.Append ( "ORDER BY", q.m_eSort, q.m_sSortBy );
+		tBuf.Append ( "ORDER BY", q.m_eSort, q.m_sSortBy.cstr() );
 
 	} else
 	{
@@ -4497,6 +4498,7 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 			case SPH_RANK_MATCHANY:		sRanker = "matchany"; break;
 			case SPH_RANK_FIELDMASK:	sRanker = "fieldmask"; break;
 			case SPH_RANK_SPH04:		sRanker = "sph04"; break;
+			default:					break;
 		}
 
 		tBuf.Append ( iOpts++ ? ", " : " OPTION " );
@@ -7038,8 +7040,8 @@ SqlParser_c::SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollati
 	: m_pQuery ( NULL )
 	, m_pStmt ( NULL )
 	, m_dStmt ( dStmt )
-	, m_bNamedVecBusy ( false )
 	, m_eCollation ( eCollation )
+	, m_bNamedVecBusy ( false )
 {
 	assert ( !m_dStmt.GetLength() );
 	PushQuery ();
@@ -13084,7 +13086,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	g_pStats->m_uStarted = (DWORD)time(NULL);
 
 	if ( g_eWorkers==MPM_PREFORK )
-		g_pConnID = (int*) InitSharedBuffer ( g_dConnID, sizeof(int) );
+		g_pConnID = (int*) InitSharedBuffer ( g_dConnID, sizeof(g_iConnID) );
 	if ( g_eWorkers==MPM_THREADS )
 		if ( !sphThreadKeyCreate ( &g_tConnKey ) )
 			sphFatal ( "failed to create TLS for connection ID" );
@@ -13438,7 +13440,7 @@ bool DieCallback ( const char * sMessage )
 }
 
 
-extern bool (*g_pUservarsHook) ( const CSphString & sUservar, CSphVector<SphAttr_t> & dVals );
+extern bool ( *g_pUservarsHook )( const CSphString & sUservar, CSphVector<SphAttr_t> & dVals );
 
 bool UservarsHook ( const CSphString & sUservar, CSphVector<SphAttr_t> & dVals )
 {

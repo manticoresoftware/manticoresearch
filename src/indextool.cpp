@@ -94,7 +94,7 @@ int main ( int argc, char ** argv )
 	{
 		CMD_NOTHING,
 		CMD_DUMPHEADER,
-		CMD_DUMPCONFIG, 
+		CMD_DUMPCONFIG,
 		CMD_DUMPDOCIDS,
 		CMD_DUMPHITLIST,
 		CMD_CHECK,

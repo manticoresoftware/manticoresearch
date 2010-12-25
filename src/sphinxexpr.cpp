@@ -34,7 +34,7 @@
 #endif
 
 // hack hack hack
-bool (*g_pUservarsHook) ( const CSphString & sUservar, CSphVector<SphAttr_t> & dVals ) = NULL;
+bool ( *g_pUservarsHook )( const CSphString & sUservar, CSphVector<SphAttr_t> & dVals ) = NULL;
 
 //////////////////////////////////////////////////////////////////////////
 // EVALUATION ENGINE

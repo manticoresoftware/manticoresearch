@@ -681,8 +681,8 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDi
 					int iOpen = dZoneStack.Last();
 					int iClose = m_dZones.GetLength();
 					uint64_t uOpenPacked = m_dZones[ iOpen ];
-					DWORD uOpenPos = ( ( uOpenPacked>>32 ) & UINT32_MASK );
-					assert ( iZone==( uOpenPacked & UINT16_MASK ) ); // check for zone's types match;
+					DWORD uOpenPos = (DWORD)( ( uOpenPacked>>32 ) & UINT32_MASK );
+					assert ( iZone==(int)( uOpenPacked & UINT16_MASK ) ); // check for zone's types match;
 
 					m_dZones[iOpen] = sphPackZone ( uOpenPos, iClose, iZone );
 					m_dZones.Add ( sphPackZone ( uPosition, iOpen, iZone ) );
@@ -693,7 +693,7 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDi
 					// for close zone the parent is the previous zone on stack
 					int iParentZone = dZoneStack.GetLength()>2 ? dZoneStack[dZoneStack.GetLength()-2] : 0;
 					uint64_t uParentPacked = m_dZones.GetLength() && iParentZone<m_dZones.GetLength() ? m_dZones[iParentZone] : 0;
-					m_dZoneParent.Add ( uParentPacked & UINT16_MASK );
+					m_dZoneParent.Add ( (int)( uParentPacked & UINT16_MASK ) );
 
 					// pop up current zone from zone's stack
 					dZoneStack.Resize ( dZoneStack.GetLength()-1 );
@@ -1658,11 +1658,11 @@ public:
 		ARRAY_FOREACH ( i, dDocZones )
 		{
 			uint64_t uZonePacked = dDocZones[i];
-			DWORD uPos = ( ( uZonePacked >>32 ) & UINT32_MASK );
-			int iSibling = ( ( uZonePacked>>16 ) & UINT16_MASK );
-			int iZone = ( uZonePacked & UINT16_MASK );
+			DWORD uPos = (DWORD)( ( uZonePacked >>32 ) & UINT32_MASK );
+			int iSibling = (int)( ( uZonePacked>>16 ) & UINT16_MASK );
+			int iZone = (int)( uZonePacked & UINT16_MASK );
 			assert ( iSibling>=0 && iSibling<dDocZones.GetLength() );
-			assert ( iZone==( dDocZones[iSibling] & UINT16_MASK ) );
+			assert ( iZone==(int)( dDocZones[iSibling] & UINT16_MASK ) );
 
 			// skip cases:
 			// + close zone (tSpan.m_iSibling<i) - skipped
@@ -1679,7 +1679,7 @@ public:
 				continue;
 
 			uint64_t uClosePacked = dDocZones[iSibling];
-			DWORD uClosePos = ( ( uClosePacked>>32 ) & UINT32_MASK );
+			DWORD uClosePos = ( (int)( uClosePacked>>32 ) & UINT32_MASK );
 
 			ZoneHits_t & tZone = m_dZones[pPair->m_iQuery];
 			tZone.m_dOpen.Add ( uPos );
@@ -2354,8 +2354,8 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor )
 					int iOpen = dZoneStack.Last();
 					int iClose = dZones.GetLength();
 					uint64_t uOpenPacked = dZones[ iOpen ];
-					DWORD uOpenPos = ( ( uOpenPacked>>32 ) & UINT32_MASK );
-					assert ( iZone==( uOpenPacked & UINT16_MASK ) ); // check for zone's types match;
+					DWORD uOpenPos = (DWORD)( ( uOpenPacked>>32 ) & UINT32_MASK );
+					assert ( iZone==(int)( uOpenPacked & UINT16_MASK ) ); // check for zone's types match;
 
 					dZones[iOpen] = sphPackZone ( uOpenPos, iClose, iZone );
 					dZones.Add ( sphPackZone ( uPosition, iOpen, iZone ) );

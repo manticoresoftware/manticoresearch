@@ -3419,6 +3419,63 @@ mysql> DESC rt;
 </sect1>
 
 
+<sect1 id="sphinxql-reserved-keywords">
+<title>List of SphinxQL reserved keywords</title>
+<para>A complete alphabetical list of keywords that are currently reserved
+in SphinxQL syntax (and therefore can not be used as identifiers).
+<programlisting>
+AND
+AS
+ASC
+AVG
+BEGIN
+BETWEEN
+BY
+CALL
+COMMIT
+COUNT
+DELETE
+DESC
+DESCRIBE
+DISTINCT
+FALSE
+FROM
+GLOBAL
+GROUP
+ID
+IN
+INSERT
+INTO
+LIMIT
+MATCH
+MAX
+META
+MIN
+NOT
+OPTION
+OR
+ORDER
+REPLACE
+ROLLBACK
+SELECT
+SET
+SHOW
+START
+STATUS
+SUM
+TABLES
+TRANSACTION
+TRUE
+UPDATE
+VALUES
+WARNINGS
+WEIGHT
+WHERE
+WITHIN
+</programlisting></para>
+</sect1>
+
+
 </chapter>
 <chapter id="api-reference"><title>API reference</title>
 
@@ -4302,6 +4359,14 @@ Starting with version 0.9.9-rc1, keywords can contain wildcards, that work simil
 	<listitem>Whether to extract single best passage only. Boolean, default is false.</listitem>
 </varlistentry>
 <varlistentry>
+	<term>"use_boundaries":</term>
+	<listitem>Whether to additionaly break passages by phrase 
+	boundary characters, as configured in index settings with
+	<link linkend="conf-phrase-boundary">phrase_boundary</link>
+	directive. Boolean, default is false.
+	</listitem>
+</varlistentry>
+<varlistentry>
 	<term>"weight_order":</term>
 	<listitem>Whether to sort the extracted passages in order of relevance (decreasing weight),
 	or in order of appearance in the document (increasing position). Boolean, default is false.</listitem>
@@ -4370,12 +4435,46 @@ Starting with version 0.9.9-rc1, keywords can contain wildcards, that work simil
 	string. Boolean, default is false.
 	</listitem>
 </varlistentry>
+<varlistentry>
+	<term>"passage_boundary":</term>
+	<listitem>Added in version 1.11-beta. Ensures that passages do not
+	cross a sentence, paragraph, or zone boundary (when used with an index
+	that has the respective indexing settings enabled). String, allowed
+	values are "sentence", "paragraph", and "zone".
+	</listitem>
+</varlistentry>
+<varlistentry>
+	<term>"passage_boundary":</term>
+	<listitem>Added in version 1.11-beta. Ensures that passages do not
+	cross a sentence, paragraph, or zone boundary (when used with an index
+	that has the respective indexing settings enabled). String, allowed
+	values are "sentence", "paragraph", and "zone".
+	</listitem>
+</varlistentry>
+<varlistentry>
+	<term>"emit_zones":</term>
+	<listitem>Added in version 1.11-beta. Emits an HTML tag with
+	an enclosing zone name before each passage. Boolean, default is false.
+	</listitem>
+</varlistentry>
 </variablelist>
+</para>
+<para>
+Snippets extraction algorithm currently favors better passages
+(with closer phrase matches), and then passages with keywords not
+yet in snippet. Generally, it will try to highlight the best match
+with the query, and it will also to highlight all the query keywords,
+as made possible by the limtis. In case the document does not match
+the query, beginning of the document trimmed down according to the
+limits will be return by default. Starting with 1.10-beta, you can
+also return an empty snippet instead case by setting "allow_empty"
+option to true.
 </para>
 <para>
 Returns false on failure. Returns a plain array of strings with excerpts (snippets) on success.
 </para>
 </sect2>
+
 
 <sect2 id="api-func-updateatttributes"><title>UpdateAttributes</title>
 <para><b>Prototype:</b> function UpdateAttributes ( $index, $attrs, $values )</para>
@@ -4799,12 +4898,26 @@ attribute name (or sorting clause for "extended") is also required after a colon
 ... WHERE query='test;!range=group_id,5,25;';
 </programlisting>
 </listitem>
-<listitem>maxmatches - per-query max matches value:
+<listitem>maxmatches - per-query max matches value, as in max_matches parameter to
+<link linkend="api-func-setlimits">SetLimits()</link> API call:
 <programlisting>
 ... WHERE query='test;maxmatches=2000;';
 </programlisting>
 </listitem>
-<listitem>groupby - group-by function and attribute:
+<listitem>cutoff - maximum allowed matches, as in cutoff parameter to
+<link linkend="api-func-setlimits">SetLimits()</link> API call:
+<programlisting>
+... WHERE query='test;cutoff=10000;';
+</programlisting>
+</listitem>
+<listitem>maxquerytme - maximum allowed query time (in milliseconds), as in
+<link linkend="api-func-setmaxquerytime">SetMaxQueryTime()</link> API call:
+<programlisting>
+... WHERE query='test;maxquerytime=1000;';
+</programlisting>
+</listitem>
+<listitem>groupby - group-by function and attribute, corresponding to
+<link linkend="api-func-setgroupby">SetGroupBy()</link> API call:
 <programlisting>
 ... WHERE query='test;groupby=day:published_ts;';
 ... WHERE query='test;groupby=attr:group_id;';
@@ -4813,6 +4926,12 @@ attribute name (or sorting clause for "extended") is also required after a colon
 <listitem>groupsort - group-by sorting clause:
 <programlisting>
 ... WHERE query='test;groupsort=@count desc;';
+</programlisting>
+</listitem>
+<listitem>distinct - an attribute to compute COUNT(DISTINCT) for when doing group-by, as in
+<link linkend="api-func-setgroupdistinct">SetGroupDistinct()</link> API call:
+<programlisting>
+... WHERE query='test;groupby=attr:country_id;distinct=site_id';
 </programlisting>
 </listitem>
 <listitem>indexweights - comma-separated list of index names and weights
@@ -4831,6 +4950,28 @@ to use when searching through several indexes:
 (mapping to <link linkend="api-func-setselect">SetSelect()</link> API call):
 <programlisting>
 ... WHERE query='test;select=2*a+3*b as myexpr;';
+</programlisting>
+</listitem>
+<listitem>host, port - remote <filename>searchd</filename> host name
+and TCP port, respectively:
+<programlisting>
+... WHERE query='test;host=sphinx-test.loc;port=7312;';
+</programlisting>
+</listitem>
+<listitem>ranker - a ranking function to use when matching mode is extended
+(i.e. with query syntax), as in <link linkend="api-func-setrankingmode">SetRankingMode()</link> API call.
+Known values are "proximity_bm25", "bm25", "none", "wordcount", "proximity",
+"matchany", and "fieldmask".
+<programlisting>
+... WHERE query='test;ranker=bm25;';
+</programlisting>
+</listitem>
+<listitem>geoanchor - geodistance anchor, as in
+<link linkend="api-func-setgeoanchor">SetGeoAnchor()</link> API call.
+Takes 4 parameters which are latitude and longiture attribute names,
+and anchor point coordinates respectively:
+<programlisting>
+... WHERE query='test;geoanchor=latattr,lonattr,0.123,0.456';
 </programlisting>
 </listitem>
 </itemizedlist>
@@ -5637,15 +5778,25 @@ Multi-value (there might be multiple attributes declared), optional.
 Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
 </para>
 <para>
-The column value should be a timestamp in UNIX format, ie. 32-bit unsigned
+Timestamps can store date and time in the range of Jan 01, 1970
+to Jan 19, 2038 with a precision of one second.
+The expected column value should be a timestamp in UNIX format, ie. 32-bit unsigned
 integer number of seconds elapsed since midnight, January 01, 1970, GMT.
 Timestamps are internally stored and handled as integers everywhere.
 But in addition to working with timestamps as integers, it's also legal
-to use them along with different date-based functions - such as time segments
-sorting mode, or day/week/month/year extraction for GROUP BY. Note that
-DATE or DATETIME column types in MySQL can <b>not</b> be directly used
-as timestamps; you need to explicitly convert such columns using
-UNIX_TIMESTAMP function.
+to use them along with different date-based functions, such as time segments
+sorting mode, or day/week/month/year extraction for GROUP BY.
+</para>
+<para>
+Note that DATE or DATETIME column types in MySQL can <b>not</b> be directly
+used as timestamp attributes in Sphinx; you need to explicitly convert such
+columns using UNIX_TIMESTAMP function (if data is in range).
+</para>
+<para>
+Note timestamps can not represent dates before January 01, 1970,
+and UNIX_TIMESTAMP() in MySQL will not return anything expected.
+If you only needs to work with dates, not times, consider TO_DAYS()
+function in MySQL instead.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -6390,8 +6541,10 @@ For reference, different index files store the following data:
 <listitem><filename>.spd</filename> stores matching document ID lists for each word ID;</listitem>
 <listitem><filename>.sph</filename> stores index header information;</listitem>
 <listitem><filename>.spi</filename> stores word lists (word IDs and pointers to <filename>.spd</filename> file);</listitem>
+<listitem><filename>.spk</filename> stores kill-lists;</listitem>
 <listitem><filename>.spm</filename> stores MVA data;</listitem>
-<listitem><filename>.spp</filename> stores hit (aka posting, aka word occurence) lists for each word ID.</listitem>
+<listitem><filename>.spp</filename> stores hit (aka posting, aka word occurence) lists for each word ID;</listitem>
+<listitem><filename>.sps</filename> stores string attribute data.</listitem>
 </itemizedlist>
 </para>
 <bridgehead>Example:</bridgehead>
@@ -6488,8 +6641,17 @@ because they are based on an older version. Metaphone implementation
 is based on Double Metaphone algorithm and indexes the primary code.
 </para>
 <para>
-Built-in values that be used in <option>morphology</option> option are:
-'none', 'stem_en', 'stem_ru', 'stem_enru', 'soundex', and 'metaphone'.
+Built-in values that are available for use in <option>morphology</option>
+option are as follows:
+<itemizedlist>
+<listitem>none - do not perform any morphology processing;</listitem>
+<listitem>stem_en - apply Porter's English stemmer;</listitem>
+<listitem>stem_ru - apply Porter's Russian stemmer;</listitem>
+<listitem>stem_enru - apply Porter's English and Russian stemmers;</listitem>
+<listitem>stem_cz - apply Czech stemmer;</listitem>
+<listitem>soundex - replace keywords with their SOUNDEX code;</listitem>
+<listitem>soundex - replace keywords with their METAPHONE code.</listitem>
+</itemizedlist>
 Additional values provided by libstemmer are in 'libstemmer_XXX' format,
 where XXX is libstemmer algorithm codename (refer to
 <filename>libstemmer_c/libstemmer/modules.txt</filename> for a complete list).
@@ -6614,7 +6776,7 @@ walking &gt; walk
 </programlisting>
 </para>
 <para>
-There is bundled <filename>spelldump</filename> utility that
+There is a bundled <filename>spelldump</filename> utility that
 helps you create a dictionary file in the format Sphinx can read
 from source <filename>.dict</filename> and <filename>.aff</filename>
 dictionary files in <filename>ispell</filename> or <filename>MySpell</filename>
@@ -6629,6 +6791,14 @@ core 2 duo &gt; c2d
 e6600 &gt; c2d
 core 2duo &gt; c2d
 </programlisting>
+</para>
+<para>
+Notice however that the <emphasis>destination</emphasis> wordforms
+are still always interpreted as a <emphasis>single</emphasis> keyword!
+Having a mapping like "St John > Saint John" will result in <b>not</b>
+matching "St John" when searching for "Saint" or "John", because the
+destination keyword will be "Saint John" with a space character in it
+(and it's barely possible to input a destination keyword with a space).
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -7055,7 +7225,7 @@ Optional, default is 0 (disable n-gram indexing).
 Known values are 0 and 1 (other lengths to be implemented).
 </para>
 <para>
-N-grams provide basic CJK (Chinese, Japanse, Koreasn) support for
+N-grams provide basic CJK (Chinese, Japanese, Korean) support for
 unsegmented texts. The issue with CJK searching is that there could be no
 clear separators between the words. Ideally, the texts would be filtered
 through a special program called segmenter that would insert separators
@@ -7170,6 +7340,26 @@ phrase_boundary_step = 100
 Whether to strip HTML markup from incoming full-text data.
 Optional, default is 0.
 Known values are 0 (disable stripping) and 1 (enable stripping).
+</para>
+<para>
+Both HTML tags and entities and considered markup and get processed.
+</para>
+<para>HTML tags are removed, their contents (i.e., everything between
+&lt;P&gt; and &lt;/P&gt;) are left intact by default. You can choose
+to keep and index attributes of the tags (e.g., HREF attribute in
+an A tag, or ALT in an IMG one). Several well-known inline tags are
+completely removed, all other tags are treated as block level and
+replaced with whitespace. For example, 'te&lt;B&gt;st&lt;/B&gt;'
+text will be indexed as a single keyword 'test', however,
+'te&lt;P&gt;st&lt;/P&gt;' will be indexed as two keywords
+'te' and 'st'. Known inline tags are as follows: A, B, I, S, U, BASEFONT,
+BIG, EM, FONT, IMG, LABEL, SMALL, SPAN, STRIKE, STRONG, SUB, SUP, TT.
+</para>
+<para>
+HTML entities get decoded and replaced with corresponding UTF-8
+characters. Stripper supports both numeric forms (such as &amp;#239;)
+and text forms (such as &amp;oacute; or &amp;nbsp;). All entities
+as specified by HTML4 standard are supported.
 </para>
 <para>
 Stripping does not work with <option>xmlpipe</option> source type
@@ -8367,21 +8557,11 @@ mva_updates_pool = 16M
 
 <sect2 id="conf-crash-log-path"><title>crash_log_path</title>
 <para>
-Path (formally prefix) for the crash log files.
-Optional, default is empty (do not create crash logs).
-Introduced in version 0.9.9-rc1.
+Deprecated debugging setting, path (formally prefix) for crash log files.
+Introduced in version 0.9.9-rc1. Deprecated in version 1.11-beta,
+as crash debugging information now gets logged into searchd.log
+in text form, and separate binary crash logs are no longer needed.
 </para>
-<para>
-This is a debugging setting, to help catch rare offending queries
-causing crashes without otherwise affecting production instances.
-When enabled, <filename>searchd</filename> will intercept crash signals
-such as SIGSEGV, and dump offending query packets to files named
-"crash_log_path.PID", where PID is crashed process ID.
-</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-crash_log_path = /home/sphinx/log/crashlog
-</programlisting>
 </sect2>
 
 

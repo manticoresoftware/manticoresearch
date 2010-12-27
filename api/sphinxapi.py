@@ -31,7 +31,7 @@ SEARCHD_COMMAND_FLUSHATTRS	= 7
 
 # current client-side command implementation versions
 VER_COMMAND_SEARCH		= 0x117
-VER_COMMAND_EXCERPT		= 0x102
+VER_COMMAND_EXCERPT		= 0x103
 VER_COMMAND_UPDATE		= 0x102
 VER_COMMAND_KEYWORDS	= 0x100
 VER_COMMAND_FLUSHATTRS	= 0x100
@@ -771,6 +771,7 @@ class SphinxClient:
 		opts.setdefault('limit_words', 0)
 		opts.setdefault('around', 5)
 		opts.setdefault('start_passage_id', 1)
+		opts.setdefault('passage_boundary', 'none')
 
 		# build request
 		# v.1.0 req
@@ -784,6 +785,7 @@ class SphinxClient:
 		if opts.get('force_all_words'):	flags |= 64
 		if opts.get('load_files'):		flags |= 128
 		if opts.get('allow_empty'):		flags |= 256
+		if opts.get('emit_zones'):		flags |= 256
 		
 		# mode=0, flags
 		req = [pack('>2L', 0, flags)]
@@ -814,6 +816,8 @@ class SphinxClient:
 		req.append(pack('>L', int(opts['start_passage_id'])))
 		req.append(pack('>L', len(opts['html_strip_mode'])))
 		req.append((opts['html_strip_mode']))
+		req.append(pack('>L', len(opts['passage_boundary'])))
+		req.append((opts['passage_boundary']))
 
 		# documents
 		req.append(pack('>L', len(docs)))
@@ -891,15 +895,19 @@ class SphinxClient:
 		req = [ pack('>L',len(index)), index ]
 
 		req.append ( pack('>L',len(attrs)) )
+		mva_attr = 0
+		if mva: mva_attr = 1
 		for attr in attrs:
 			req.append ( pack('>L',len(attr)) + attr )
-			req.append ( pack('>L', 1 if mva else 0 ) )
+			req.append ( pack('>L', mva_attr ) )
 
 		req.append ( pack('>L',len(values)) )
 		for docid, entry in values.items():
 			req.append ( pack('>Q',docid) )
 			for val in entry:
-				req.append ( pack('>L',len(val) if mva else val) )
+				val_len = val
+				if mva: val_len = len ( val )
+				req.append ( pack('>L',val_len ) )
 				if mva:
 					for vals in val:
 						req.append ( pack ('>L',vals) )

@@ -6762,7 +6762,16 @@ struct SqlInsert_t
 };
 
 
+/// refcounted vector
+static int COUNT = 0;
+template < typename T >
+class RefcountedVector_c : public CSphVector<T>, public ISphRefcounted
+{
+};
+
+
 /// parser view on a generic node
+/// CAUTION, nodes get copied in the parser all the time, must keep assignment slim
 struct SqlNode_t
 {
 	int						m_iStart;
@@ -6770,10 +6779,14 @@ struct SqlNode_t
 	CSphString				m_sValue;
 	int64_t					m_iValue;
 	float					m_fValue;
-	CSphVector<SphAttr_t>	m_dValues;
 	int						m_iInstype;	// REMOVE? should not we know this somehow else?
 
-	SqlNode_t() : m_iValue ( 0 ) {}
+	CSphRefcountedPtr < RefcountedVector_c<SphAttr_t> >		m_pValues;	// FIXME? replace with numeric handles into parser state?
+
+	SqlNode_t()
+		: m_iValue ( 0 )
+		, m_pValues ( NULL )
+	{}
 };
 #define YYSTYPE SqlNode_t
 

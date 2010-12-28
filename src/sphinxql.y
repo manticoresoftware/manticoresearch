@@ -271,7 +271,7 @@ where_item:
 			CSphFilterSettings & tFilter = pParser->m_pQuery->m_dFilters.Add();
 			tFilter.m_sAttrName = $1.m_sValue;
 			tFilter.m_eType = SPH_FILTER_VALUES;
-			tFilter.m_dValues = $4.m_dValues;
+			tFilter.m_dValues = *$4.m_pValues.Ptr();
 			tFilter.m_dValues.Sort();
 		}
 	| TOK_IDENT TOK_NOT TOK_IN '(' const_list ')'
@@ -279,7 +279,7 @@ where_item:
 			CSphFilterSettings & tFilter = pParser->m_pQuery->m_dFilters.Add();
 			tFilter.m_sAttrName = $1.m_sValue;
 			tFilter.m_eType = SPH_FILTER_VALUES;
-			tFilter.m_dValues = $5.m_dValues;
+			tFilter.m_dValues = *$5.m_pValues.Ptr();
 			tFilter.m_bExclude = true;
 			tFilter.m_dValues.Sort();
 		}
@@ -346,8 +346,16 @@ const_float:
 	;
 
 const_list:
-	const_int					{ $$.m_dValues.Add ( $1.m_iValue ); }
-	| const_list ',' const_int	{ $$.m_dValues.Add ( $3.m_iValue ); }
+	const_int
+		{
+			assert ( !$$.m_pValues.Ptr() );
+			$$.m_pValues = new RefcountedVector_c<SphAttr_t> ();
+			$$.m_pValues->Add ( $1.m_iValue ); 
+		}
+	| const_list ',' const_int
+		{
+			$$.m_pValues->Add ( $3.m_iValue );
+		}
 	;
 
 opt_group_clause:
@@ -561,7 +569,7 @@ set_global_clause:
 			pParser->m_pStmt->m_eStmt = STMT_SET;
 			pParser->m_pStmt->m_bSetGlobal = true;
 			pParser->m_pStmt->m_sSetName = $3.m_sValue;
-			pParser->m_pStmt->m_dSetValues = $6.m_dValues;
+			pParser->m_pStmt->m_dSetValues = *$6.m_pValues.Ptr();
 		}
 	;
 
@@ -650,8 +658,8 @@ delete_from:
 		{
 			pParser->m_pStmt->m_eStmt = STMT_DELETE;
 			pParser->m_pStmt->m_sIndex = $3.m_sValue;
-			ARRAY_FOREACH ( i, $8.m_dValues )
-				pParser->m_pStmt->m_dDeleteIds.Add ( $8.m_dValues[i] );
+			for ( int i=0; i<$8.m_pValues.Ptr()->GetLength(); i++ )
+				pParser->m_pStmt->m_dDeleteIds.Add ( (*$8.m_pValues.Ptr())[i] );
 		}
 	;
 

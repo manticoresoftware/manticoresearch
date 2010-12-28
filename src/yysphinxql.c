@@ -515,18 +515,18 @@ static const unsigned short yyrline[] =
      210,   214,   215,   218,   220,   224,   228,   229,   233,   247,
      254,   261,   269,   277,   286,   291,   296,   300,   304,   308,
      312,   316,   317,   318,   319,   324,   328,   332,   339,   340,
-     344,   345,   349,   350,   353,   355,   359,   366,   368,   372,
-     378,   380,   384,   391,   392,   396,   397,   398,   402,   403,
-     406,   408,   412,   417,   424,   426,   430,   434,   435,   439,
-     444,   449,   458,   468,   480,   490,   491,   492,   493,   494,
-     495,   496,   497,   498,   499,   500,   501,   502,   503,   504,
-     505,   506,   507,   508,   509,   510,   511,   515,   516,   517,
-     518,   519,   523,   524,   530,   534,   535,   536,   542,   549,
-     559,   569,   570,   571,   585,   586,   587,   591,   592,   598,
-     606,   607,   610,   612,   616,   617,   621,   622,   626,   630,
-     631,   635,   636,   637,   643,   649,   661,   668,   670,   674,
-     679,   683,   691,   692,   698,   706,   707,   713,   719,   730,
-     731,   735
+     344,   345,   349,   355,   361,   363,   367,   374,   376,   380,
+     386,   388,   392,   399,   400,   404,   405,   406,   410,   411,
+     414,   416,   420,   425,   432,   434,   438,   442,   443,   447,
+     452,   457,   466,   476,   488,   498,   499,   500,   501,   502,
+     503,   504,   505,   506,   507,   508,   509,   510,   511,   512,
+     513,   514,   515,   516,   517,   518,   519,   523,   524,   525,
+     526,   527,   531,   532,   538,   542,   543,   544,   550,   557,
+     567,   577,   578,   579,   593,   594,   595,   599,   600,   606,
+     614,   615,   618,   620,   624,   625,   629,   630,   634,   638,
+     639,   643,   644,   645,   651,   657,   669,   676,   678,   682,
+     687,   691,   699,   700,   706,   714,   715,   721,   727,   738,
+     739,   743
 };
 #endif
 
@@ -1633,7 +1633,7 @@ yyreduce:
 			CSphFilterSettings & tFilter = pParser->m_pQuery->m_dFilters.Add();
 			tFilter.m_sAttrName = yyvsp[-4].m_sValue;
 			tFilter.m_eType = SPH_FILTER_VALUES;
-			tFilter.m_dValues = yyvsp[-1].m_dValues;
+			tFilter.m_dValues = *yyvsp[-1].m_pValues.Ptr();
 			tFilter.m_dValues.Sort();
 		;}
     break;
@@ -1644,7 +1644,7 @@ yyreduce:
 			CSphFilterSettings & tFilter = pParser->m_pQuery->m_dFilters.Add();
 			tFilter.m_sAttrName = yyvsp[-5].m_sValue;
 			tFilter.m_eType = SPH_FILTER_VALUES;
-			tFilter.m_dValues = yyvsp[-1].m_dValues;
+			tFilter.m_dValues = *yyvsp[-1].m_pValues.Ptr();
 			tFilter.m_bExclude = true;
 			tFilter.m_dValues.Sort();
 		;}
@@ -1752,12 +1752,18 @@ yyreduce:
 
   case 62:
 
-    { yyval.m_dValues.Add ( yyvsp[0].m_iValue ); ;}
+    {
+			assert ( !yyval.m_pValues.Ptr() );
+			yyval.m_pValues = new RefcountedVector_c<SphAttr_t> ();
+			yyval.m_pValues->Add ( yyvsp[0].m_iValue ); 
+		;}
     break;
 
   case 63:
 
-    { yyval.m_dValues.Add ( yyvsp[0].m_iValue ); ;}
+    {
+			yyval.m_pValues->Add ( yyvsp[0].m_iValue );
+		;}
     break;
 
   case 66:
@@ -2022,7 +2028,7 @@ yyreduce:
 			pParser->m_pStmt->m_eStmt = STMT_SET;
 			pParser->m_pStmt->m_bSetGlobal = true;
 			pParser->m_pStmt->m_sSetName = yyvsp[-4].m_sValue;
-			pParser->m_pStmt->m_dSetValues = yyvsp[-1].m_dValues;
+			pParser->m_pStmt->m_dSetValues = *yyvsp[-1].m_pValues.Ptr();
 		;}
     break;
 
@@ -2135,8 +2141,8 @@ yyreduce:
     {
 			pParser->m_pStmt->m_eStmt = STMT_DELETE;
 			pParser->m_pStmt->m_sIndex = yyvsp[-6].m_sValue;
-			ARRAY_FOREACH ( i, yyvsp[-1].m_dValues )
-				pParser->m_pStmt->m_dDeleteIds.Add ( yyvsp[-1].m_dValues[i] );
+			for ( int i=0; i<yyvsp[-1].m_pValues.Ptr()->GetLength(); i++ )
+				pParser->m_pStmt->m_dDeleteIds.Add ( (*yyvsp[-1].m_pValues.Ptr())[i] );
 		;}
     break;
 

@@ -278,6 +278,10 @@ static SphThreadKey_t			g_tConnKey;			///< current conn-id TLS in threads
 static int *					g_pConnID = NULL;	///< global conn-id ptr in prefork
 static CSphSharedBuffer<BYTE>	g_dConnID;			///< global conn-id storage in prefork (protected by accept mutex)
 
+// handshake
+static char						g_sMysqlHandshake[128];
+static int						g_iMysqlHandshake = 0;
+
 //////////////////////////////////////////////////////////////////////////
 
 static CSphString		g_sConfigFile;
@@ -9644,27 +9648,11 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 	MEMORY ( SPH_MEM_HANDLE_SQL );
 	THD_STATE ( THD_HANDSHAKE );
 
-	// handshake
-	char sHandshake[] =
-		"\x00\x00\x00" // packet length
-		"\x00" // packet id
-		"\x0A" // protocol version; v.10
-		SPHINX_VERSION "\x00" // server version
-		"\x01\x00\x00\x00" // thread id
-		"\x01\x02\x03\x04\x05\x06\x07\x08" // scramble buffer (for auth)
-		"\x00" // filler
-		"\x08\x02" // server capabilities; CLIENT_PROTOCOL_41 | CLIENT_CONNECT_WITH_DB
-		"\x00" // server language
-		"\x02\x00" // server status
-		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" // filler
-		"\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d"; // scramble buffer2 (for auth, 4.1+)
-
 	const int INTERACTIVE_TIMEOUT = 900;
 	NetInputBuffer_c tIn ( iSock );
 	NetOutputBuffer_c tOut ( iSock ); // OPTIMIZE? looks like buffer size matters a lot..
 
-	sHandshake[0] = sizeof(sHandshake)-5;
-	if ( sphSockSend ( iSock, sHandshake, sizeof(sHandshake)-1 )!=sizeof(sHandshake)-1 )
+	if ( sphSockSend ( iSock, g_sMysqlHandshake, g_iMysqlHandshake )!=g_iMysqlHandshake )
 	{
 		sphWarning ( "failed to send server version (client=%s)", sClientIP );
 		return;
@@ -12667,6 +12655,38 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 		iStackSize = Max ( iStackSize, iThreadStackSizeMin );
 		sphSetMyStackSize ( iStackSize );
 	}
+
+	char sHandshake1[] =
+		"\x00\x00\x00" // packet length
+		"\x00" // packet id
+		"\x0A"; // protocol version; v.10
+
+	char sHandshake2[] =
+		"\x01\x00\x00\x00" // thread id
+		"\x01\x02\x03\x04\x05\x06\x07\x08" // scramble buffer (for auth)
+		"\x00" // filler
+		"\x08\x02" // server capabilities; CLIENT_PROTOCOL_41 | CLIENT_CONNECT_WITH_DB
+		"\x00" // server language
+		"\x02\x00" // server status
+		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" // filler
+		"\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d"; // scramble buffer2 (for auth, 4.1+)
+
+	const char * sVersion = hSearchd.GetStr ( "mysql_version_string", SPHINX_VERSION );
+	int iLen = strlen ( sVersion );
+
+	g_iMysqlHandshake = sizeof(sHandshake1) + strlen(sVersion) + sizeof(sHandshake2) - 1;
+	if ( g_iMysqlHandshake>=sizeof(g_sMysqlHandshake) )
+	{
+		sphWarning ( "mysql_version_string too long; using default (version=%s)", SPHINX_VERSION );
+		g_iMysqlHandshake = sizeof(sHandshake1) + strlen(SPHINX_VERSION) + sizeof(sHandshake2) - 1;
+		assert ( g_iMysqlHandshake < sizeof(g_sMysqlHandshake) );
+	}
+
+	char * p = g_sMysqlHandshake;
+	memcpy ( p, sHandshake1, sizeof(sHandshake1)-1 );
+	memcpy ( p+sizeof(sHandshake1)-1, sVersion, iLen+1 );
+	memcpy ( p+sizeof(sHandshake1)+iLen, sHandshake2, sizeof(sHandshake2)-1 );
+	g_sMysqlHandshake[0] = (char)(g_iMysqlHandshake-4); // safe, as long as buffer size is 128
 }
 
 void ConfigureAndPreload ( const CSphConfig & hConf, const char * sOptIndex )

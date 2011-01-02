@@ -6728,6 +6728,8 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 enum SqlStmt_e
 {
 	STMT_PARSE_ERROR = 0,
+	STMT_DUMMY,
+
 	STMT_SELECT,
 	STMT_INSERT,
 	STMT_REPLACE,
@@ -6822,6 +6824,7 @@ struct SqlStmt_t
 	int						m_iSetValue;
 	CSphString				m_sSetValue;
 	CSphVector<SphAttr_t>	m_dSetValues;
+	bool					m_bSetNull;
 
 	// CALL specific
 	CSphString				m_sCallProc;
@@ -6835,6 +6838,9 @@ struct SqlStmt_t
 		: m_eStmt ( STMT_PARSE_ERROR )
 		, m_iRowsAffected ( 0 )
 		, m_iSchemaSz ( 0 )
+		, m_bSetGlobal ( false )
+		, m_iSetValue ( 0 )
+		, m_bSetNull ( false )
 	{
 		m_tQuery.m_eMode = SPH_MATCH_EXTENDED2; // only new and shiny matching and sorting
 		m_tQuery.m_eSort = SPH_SORT_EXTENDED;
@@ -9604,6 +9610,10 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 			return;
 		}
 
+	} else if ( tStmt.m_sSetName=="character_set_results" && !tStmt.m_bSetGlobal )
+	{
+		// per-session CHARACTER_SET_RESULTS; just ignore for now
+
 	} else if ( tStmt.m_bSetGlobal )
 	{
 		// global user variable
@@ -9851,6 +9861,10 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 
 		case STMT_UPDATE:
 			HandleMysqlUpdate ( tOut, uPacketID, *pStmt, tVars.m_bAutoCommit && !tVars.m_bInTransaction );
+			continue;
+
+		case STMT_DUMMY:
+			SendMysqlOkPacket ( tOut, uPacketID );
 			continue;
 
 		default:
@@ -12665,7 +12679,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 		"\x01\x00\x00\x00" // thread id
 		"\x01\x02\x03\x04\x05\x06\x07\x08" // scramble buffer (for auth)
 		"\x00" // filler
-		"\x08\x02" // server capabilities; CLIENT_PROTOCOL_41 | CLIENT_CONNECT_WITH_DB
+		"\x08\x82" // server capabilities; CLIENT_PROTOCOL_41 | CLIENT_CONNECT_WITH_DB | SECURE_CONNECTION
 		"\x00" // server language
 		"\x02\x00" // server status
 		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" // filler

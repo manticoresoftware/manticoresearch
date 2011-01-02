@@ -22,6 +22,7 @@
 %token	TOK_BETWEEN
 %token	TOK_BY
 %token	TOK_CALL
+%token	TOK_COLLATION
 %token	TOK_COMMIT
 %token	TOK_COUNT
 %token	TOK_DELETE
@@ -41,6 +42,7 @@
 %token	TOK_MAX
 %token	TOK_META
 %token	TOK_MIN
+%token	TOK_NULL
 %token	TOK_OPTION
 %token	TOK_ORDER
 %token	TOK_REPLACE
@@ -57,6 +59,7 @@
 %token	TOK_UPDATE
 %token	TOK_USERVAR
 %token	TOK_VALUES
+%token	TOK_VARIABLES
 %token	TOK_WARNINGS
 %token	TOK_WEIGHT
 %token	TOK_WHERE
@@ -149,6 +152,8 @@ statement:
 	| describe
 	| show_tables
 	| update
+	| show_variables
+	| show_collation
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -561,6 +566,13 @@ set_clause:
 			pParser->m_pStmt->m_sSetName = $2.m_sValue;
 			pParser->m_pStmt->m_sSetValue = $4.m_sValue;
 		}
+	| TOK_SET TOK_IDENT '=' TOK_NULL
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SET;
+			pParser->m_pStmt->m_bSetGlobal = false;
+			pParser->m_pStmt->m_sSetName = $2.m_sValue;
+			pParser->m_pStmt->m_bSetNull = true;
+		}
 	;
 
 set_global_clause:
@@ -749,6 +761,16 @@ update_item:
 			tAttr.m_eAttrType = SPH_ATTR_INTEGER; // sorry, ints only for now, riding on legacy shit!
 			tUpd.m_dPool.Add ( (DWORD) $3.m_iValue );
 		}
+	;
+
+//////////////////////////////////////////////////////////////////////////
+
+show_variables:
+	TOK_SHOW TOK_VARIABLES		{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
+	;
+
+show_collation:
+	TOK_SHOW TOK_COLLATION		{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	;
 
 %%

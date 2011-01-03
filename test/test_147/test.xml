@@ -1,6 +1,10 @@
 <test>
 <name>multi-index queries vs mva and string attributes</name>
 
+<requires>
+<variant_match />
+</requires>
+
 <config>
 indexer
 {

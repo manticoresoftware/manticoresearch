@@ -5769,20 +5769,35 @@ void SearchHandler_c::RunLocalSearchesMT ()
 		// multi-query succeeded
 		for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
 		{
-			// but some of the sorters could had failed at "create sorter" stage
-			int iSorterIndex = iLocal*iQueries;
-			int iResultIndex = iSorterIndex + iQuery - m_iStart;
-			if ( !m_bMultiQueue )
-				iSorterIndex = iResultIndex;
+			// base result set index
+			// in multi-queue case, the only (!) result set actually filled with meta info
+			// in non-multi-queue case, just a first index, we fix it below
+			int iResultIndex = iLocal*iQueries;
 
-			// check per-query failures of MultiQueryEx
-			else if ( dResults[iResultIndex].m_iMultiplier==-1 )
+			// current sorter ALWAYS resides at this index, in all cases
+			// (current as in sorter for iQuery-th query against iLocal-th index)
+			int iSorterIndex = iLocal*iQueries + iQuery - m_iStart;
+
+			if ( !m_bMultiQueue )
 			{
-				iResultIndex += iQuery - m_iStart;
-				m_dFailuresSet[iQuery].Submit ( sLocal, dResults[iResultIndex].m_sError.cstr() );
+				// non-multi-queue case
+				// means that we have mere 1:1 mapping between results and sorters
+				// so let's adjust result set index
+				iResultIndex = iSorterIndex;
+
+			} else if ( dResults[iResultIndex].m_iMultiplier==-1 )
+			{
+				// multi-queue case
+				// need to additionally check per-query failures of MultiQueryEx
+				// those are reported through multiplier
+				// note that iSorterIndex just below is NOT a typo
+				// separate errors still go into separate result sets
+				// even though regular meta does not
+				m_dFailuresSet[iQuery].Submit ( sLocal, dResults[iSorterIndex].m_sError.cstr() );
 				continue;
 			}
 
+			// no sorter, no fun
 			ISphMatchSorter * pSorter = pSorters[iSorterIndex];
 			if ( !pSorter )
 				continue;
@@ -6052,7 +6067,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 					tRes.m_iCpuTime += tStats.m_iCpuTime / ( m_iEnd-m_iStart+1 );
 					tRes.m_pMva = tStats.m_pMva;
 					tRes.m_pStrings = tStats.m_pStrings;
-					tRes.m_hWordStats = tStats.m_hWordStats;
+					MergeWordStats ( tRes, tStats.m_hWordStats );
 					tRes.m_iMultiplier = m_iEnd-m_iStart+1;
 				} else if ( tRes.m_iMultiplier==-1 )
 				{

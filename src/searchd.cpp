@@ -10234,7 +10234,7 @@ void CheckLeaks ()
 	static int iHeadAllocs = sphAllocsCount ();
 	static int iHeadCheckpoint = sphAllocsLastID ();
 
-	if ( g_dThd.GetLength()==0 && iHeadAllocs!=sphAllocsCount() )
+	if ( g_dThd.GetLength()==0 && !g_bDoRotate && iHeadAllocs!=sphAllocsCount() )
 	{
 		lseek ( g_iLogFile, 0, SEEK_END );
 		sphAllocsDump ( g_iLogFile, iHeadCheckpoint );
@@ -12487,12 +12487,12 @@ void HandlerThread ( void * pArg )
 	ARRAY_FOREACH ( i, g_dThd )
 		if ( g_dThd[i]==pThd )
 	{
-		g_dThd.RemoveFast(i);
 #if USE_WINDOWS
 		// FIXME? this is sort of automatic on UNIX (pthread_exit() gets implicitly called on return)
 		CloseHandle ( pThd->m_tThd );
 #endif
 		SafeDelete ( pThd );
+		g_dThd.RemoveFast(i);
 		break;
 	}
 	g_tThdMutex.Unlock ();

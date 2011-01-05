@@ -212,14 +212,21 @@ void sphAllocsDump ( int iFile, int iSinceID )
 
 	sphSafeInfo ( iFile, "--- dumping allocs since %d ---\n", iSinceID );
 
+	uint64_t iTotalBytes = 0;
+	int iTotal = 0;
+
 	for ( CSphMemHeader * pHeader = g_pAllocs;
 		pHeader && pHeader->m_iAllocId > iSinceID;
 		pHeader = pHeader->m_pNext )
 	{
 		sphSafeInfo ( iFile, "alloc %d at %s(%d): %d bytes\n", pHeader->m_iAllocId,
 			pHeader->m_sFile, pHeader->m_iLine, (int)pHeader->m_iSize );
+
+		iTotalBytes += pHeader->m_iSize;
+		iTotal++;
 	}
 
+	sphSafeInfo ( iFile, "total allocs %d: %d.%03d bytes", iTotal, (int)(iTotalBytes/1024), (int)(iTotalBytes%1000) );
 	sphSafeInfo ( iFile, "--- end of dump ---\n" );
 
 	g_tAllocsMutex.Unlock();

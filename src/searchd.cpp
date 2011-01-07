@@ -2168,7 +2168,7 @@ public:
 	explicit		NetInputBuffer_c ( int iSock );
 	virtual			~NetInputBuffer_c ();
 
-	bool			ReadFrom ( int iLen, int iTimeout, bool bIntr=false );
+	bool			ReadFrom ( int iLen, int iTimeout, bool bIntr=false, bool bAppend=false );
 	bool			ReadFrom ( int iLen ) { return ReadFrom ( iLen, g_iReadTimeout ); }
 
 	virtual void	SendErrorReply ( const char *, ... );
@@ -2570,26 +2570,39 @@ NetInputBuffer_c::~NetInputBuffer_c ()
 }
 
 
-bool NetInputBuffer_c::ReadFrom ( int iLen, int iTimeout, bool bIntr )
+bool NetInputBuffer_c::ReadFrom ( int iLen, int iTimeout, bool bIntr, bool bAppend )
 {
+	assert (!( bAppend && m_pCur!=m_pBuf && m_pBuf!=m_pMaxibuffer )); // only allow appends to untouched maxi-buffers
+	int iCur = bAppend ? m_iLen : 0;
+
 	m_bIntr = false;
 	if ( iLen<=0 || iLen>g_iMaxPacketSize || m_iSock<0 )
 		return false;
 
-	BYTE * pBuf = m_dMinibufer;
-	if ( iLen>NET_MINIBUFFER_SIZE )
+	BYTE * pBuf = m_dMinibufer + iCur;
+	if ( ( iCur+iLen )>NET_MINIBUFFER_SIZE )
 	{
-		if ( iLen>m_iMaxibuffer )
+		if ( ( iCur+iLen )>m_iMaxibuffer )
 		{
-			SafeDeleteArray ( m_pMaxibuffer );
-			m_pMaxibuffer = new BYTE [ iLen ];
-			m_iMaxibuffer = iLen;
+			if ( iCur )
+			{
+				BYTE * pNew = new BYTE [ iCur+iLen ];
+				memcpy ( pNew, m_pCur, iCur );
+				SafeDeleteArray ( m_pMaxibuffer );
+				m_pMaxibuffer = pNew;
+				m_iMaxibuffer = iCur+iLen;
+			} else
+			{
+				SafeDeleteArray ( m_pMaxibuffer );
+				m_pMaxibuffer = new BYTE [ iLen ];
+				m_iMaxibuffer = iLen;
+			}
 		}
 		pBuf = m_pMaxibuffer;
 	}
 
 	m_pCur = m_pBuf = pBuf;
-	int iGot = sphSockRead ( m_iSock, pBuf, iLen, iTimeout, bIntr );
+	int iGot = sphSockRead ( m_iSock, pBuf + iCur, iLen, iTimeout, bIntr );
 	if ( g_bGotSigterm )
 	{
 		sphLogDebug ( "NetInputBuffer_c::ReadFrom: got SIGTERM, return false" );
@@ -2598,7 +2611,7 @@ bool NetInputBuffer_c::ReadFrom ( int iLen, int iTimeout, bool bIntr )
 
 	m_bError = g_bGotSigterm || ( iGot!=iLen );
 	m_bIntr = !g_bGotSigterm && m_bError && ( sphSockPeekErrno()==EINTR );
-	m_iLen = m_bError ? 0 : iLen;
+	m_iLen = m_bError ? 0 : iCur+iLen;
 	return !m_bError;
 }
 
@@ -9708,13 +9721,38 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 		if ( !tIn.ReadFrom ( 4, INTERACTIVE_TIMEOUT, true ) )
 			break;
 
+		const int MAX_PACKET_LEN = 0xffffffL; // 16777215 bytes, max low level packet size
 		DWORD uPacketHeader = tIn.GetLSBDword ();
-		int iPacketLen = ( uPacketHeader & 0xffffffUL );
+		int iPacketLen = ( uPacketHeader & MAX_PACKET_LEN );
 		if ( !tIn.ReadFrom ( iPacketLen, INTERACTIVE_TIMEOUT, true ) )
 			break;
 
 		// handle it!
 		uPacketID = 1 + (BYTE)( uPacketHeader>>24 ); // client will expect this id
+
+		// handle big packets
+		if ( iPacketLen==MAX_PACKET_LEN )
+		{
+			NetInputBuffer_c tIn2 ( iSock );
+			int iAddonLen = -1;
+			do
+			{
+				if ( !tIn2.ReadFrom ( 4, INTERACTIVE_TIMEOUT, true ) )
+					break;
+
+				DWORD uAddon = tIn2.GetLSBDword();
+				uPacketID = 1 + (BYTE)( uAddon>>24 );
+				iAddonLen = ( uAddon & MAX_PACKET_LEN );
+				if ( !tIn.ReadFrom ( iAddonLen, INTERACTIVE_TIMEOUT, true, true ) )
+				{
+					iAddonLen = -1;
+					break;
+				}
+				iPacketLen += iAddonLen;
+			} while ( iAddonLen==MAX_PACKET_LEN );
+			if ( iAddonLen<0 )
+				break;
+		}
 
 		// handle auth packet
 		if ( !bAuthed )

@@ -741,6 +741,7 @@ struct GroupSorter_fn : public CSphMatchComparatorState, public SphAccessor_T<CS
 	}
 };
 
+static bool IsStrSortMagic ( const char * sColumnName );
 
 /// match sorter with k-buffering and group-by
 template < typename COMPGROUP, bool DISTINCT >
@@ -794,7 +795,7 @@ public:
 		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 		{
 			const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
-			bool bMagicAggr = IsGroupbyMagic ( tAttr.m_sName ); // magic legacy aggregates
+			bool bMagicAggr = IsGroupbyMagic ( tAttr.m_sName ) || IsStrSortMagic ( tAttr.m_sName.cstr() ); // magic legacy aggregates
 
 			if ( tAttr.m_eAggrFunc==SPH_AGGR_NONE && !bMagicAggr )
 			{
@@ -1009,6 +1010,8 @@ public:
 	/// set group comparator state
 	void SetGroupState ( const CSphMatchComparatorState & tState )
 	{
+		m_tGroupSorter.m_fnStrCmp = tState.m_fnStrCmp;
+
 		// FIXME! manual bitwise copying.. yuck
 		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 		{
@@ -1947,11 +1950,20 @@ struct ExprSortStringAttrFixup_c : public ISphExpr
 
 static const char g_sIntAttrPrefix[] = "@int_str2ptr_";
 
-static void SetupSortStringRemap ( CSphSchema & tSorterSchema, CSphMatchComparatorState & tState, const int * dAttr )
+
+bool IsStrSortMagic ( const char * sColumnName )
+{
+	assert ( sColumnName );
+	return ( strncmp ( sColumnName, g_sIntAttrPrefix, sizeof(g_sIntAttrPrefix)-1 )==0 );
+}
+
+
+static bool SetupSortStringRemap ( CSphSchema & tSorterSchema, CSphMatchComparatorState & tState, const int * dAttr )
 {
 #ifndef NDEBUG
 	int iColWasCount = tSorterSchema.GetAttrsCount();
 #endif
+	bool bUsesAtrrs = false;
 	for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 	{
 		if ( tState.m_eKeypart[i]!=SPH_KEYPART_STRING )
@@ -1969,6 +1981,8 @@ static void SetupSortStringRemap ( CSphSchema & tSorterSchema, CSphMatchComparat
 		tSorterSchema.AddAttr ( tRemapCol, true );
 		tState.m_tLocator[i] = tSorterSchema.GetAttr ( iRemap ).m_tLocator;
 	}
+
+	return bUsesAtrrs;
 }
 
 
@@ -2579,7 +2593,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 					bUsesAttrs = true;
 			}
 		}
-		SetupSortStringRemap ( tSorterSchema, tStateMatch, dAttrs );
+		bUsesAttrs = SetupSortStringRemap ( tSorterSchema, tStateMatch, dAttrs );
 
 	} else if ( pQuery->m_eSort==SPH_SORT_EXPR )
 	{
@@ -2607,7 +2621,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 
 			int dAttrs [ CSphMatchComparatorState::MAX_ATTRS ];
 			dAttrs[0] = iSortAttr;
-			SetupSortStringRemap ( tSorterSchema, tStateMatch, dAttrs );
+			bUsesAttrs = SetupSortStringRemap ( tSorterSchema, tStateMatch, dAttrs );
 		}
 
 		// find out what function to use and whether it needs attributes
@@ -2642,6 +2656,9 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 
 		FixupDependency ( tSorterSchema, &idx, 1 );
 		FixupDependency ( tSorterSchema, dAttrs, CSphMatchComparatorState::MAX_ATTRS );
+
+		// GroupSortBy str attributes setup
+		bUsesAttrs = SetupSortStringRemap ( tSorterSchema, tStateGroup, dAttrs );
 	}
 
 	///////////////////
@@ -2678,9 +2695,18 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 
 	switch ( pQuery->m_eCollation )
 	{
-		case SPH_COLLATION_LIBC_CI:				tStateMatch.m_fnStrCmp = CollateLibcCI; break;
-		case SPH_COLLATION_LIBC_CS:				tStateMatch.m_fnStrCmp = CollateLibcCS; break;
-		case SPH_COLLATION_UTF8_GENERAL_CI:		tStateMatch.m_fnStrCmp = CollateUtf8GeneralCI; break;
+		case SPH_COLLATION_LIBC_CI:
+			tStateMatch.m_fnStrCmp = CollateLibcCI;
+			tStateGroup.m_fnStrCmp = CollateLibcCI;
+			break;
+		case SPH_COLLATION_LIBC_CS:
+			tStateMatch.m_fnStrCmp = CollateLibcCS;
+			tStateGroup.m_fnStrCmp = CollateLibcCS;
+			break;
+		case SPH_COLLATION_UTF8_GENERAL_CI:
+			tStateMatch.m_fnStrCmp = CollateUtf8GeneralCI;
+			tStateGroup.m_fnStrCmp = CollateUtf8GeneralCI;
+			break;
 	}
 
 	assert ( pTop );

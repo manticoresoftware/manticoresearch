@@ -2593,7 +2593,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 					bUsesAttrs = true;
 			}
 		}
-		bUsesAttrs = SetupSortStringRemap ( tSorterSchema, tStateMatch, dAttrs );
+		bUsesAttrs |= SetupSortStringRemap ( tSorterSchema, tStateMatch, dAttrs );
 
 	} else if ( pQuery->m_eSort==SPH_SORT_EXPR )
 	{
@@ -2621,7 +2621,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 
 			int dAttrs [ CSphMatchComparatorState::MAX_ATTRS ];
 			dAttrs[0] = iSortAttr;
-			bUsesAttrs = SetupSortStringRemap ( tSorterSchema, tStateMatch, dAttrs );
+			bUsesAttrs |= SetupSortStringRemap ( tSorterSchema, tStateMatch, dAttrs );
 		}
 
 		// find out what function to use and whether it needs attributes
@@ -2658,7 +2658,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		FixupDependency ( tSorterSchema, dAttrs, CSphMatchComparatorState::MAX_ATTRS );
 
 		// GroupSortBy str attributes setup
-		bUsesAttrs = SetupSortStringRemap ( tSorterSchema, tStateGroup, dAttrs );
+		bUsesAttrs |= SetupSortStringRemap ( tSorterSchema, tStateGroup, dAttrs );
 	}
 
 	///////////////////

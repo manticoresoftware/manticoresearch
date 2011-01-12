@@ -72,8 +72,10 @@
      TOK_EQ = 274,
      TOK_GTE = 275,
      TOK_LTE = 276,
-     TOK_NOT = 277,
-     TOK_NEG = 278
+     TOK_MOD = 277,
+     TOK_DIV = 278,
+     TOK_NOT = 279,
+     TOK_NEG = 280
    };
 #endif
 #define TOK_CONST_INT 258
@@ -95,8 +97,10 @@
 #define TOK_EQ 274
 #define TOK_GTE 275
 #define TOK_LTE 276
-#define TOK_NOT 277
-#define TOK_NEG 278
+#define TOK_MOD 277
+#define TOK_DIV 278
+#define TOK_NOT 279
+#define TOK_NEG 280
 
 
 
@@ -238,20 +242,20 @@ union yyalloc
 /* YYFINAL -- State number of the termination state. */
 #define YYFINAL  22
 /* YYLAST -- Last index in YYTABLE.  */
-#define YYLAST   165
+#define YYLAST   200
 
 /* YYNTOKENS -- Number of terminals. */
-#define YYNTOKENS  35
+#define YYNTOKENS  38
 /* YYNNTS -- Number of nonterminals. */
 #define YYNNTS  7
 /* YYNRULES -- Number of rules. */
-#define YYNRULES  40
+#define YYNRULES  43
 /* YYNRULES -- Number of states. */
-#define YYNSTATES  77
+#define YYNSTATES  83
 
 /* YYTRANSLATE(YYLEX) -- Bison symbol number corresponding to YYLEX.  */
 #define YYUNDEFTOK  2
-#define YYMAXUTOK   278
+#define YYMAXUTOK   280
 
 #define YYTRANSLATE(YYX) 						\
   ((unsigned int) (YYX) <= YYMAXUTOK ? yytranslate[YYX] : YYUNDEFTOK)
@@ -262,8 +266,8 @@ static const unsigned char yytranslate[] =
        0,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
-       2,     2,     2,     2,     2,     2,     2,     2,    19,     2,
-      32,    33,    28,    26,    34,    27,     2,    29,     2,     2,
+       2,     2,     2,     2,     2,     2,     2,    30,    19,     2,
+      35,    36,    28,    26,    37,    27,     2,    29,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
       22,     2,    23,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
@@ -286,7 +290,8 @@ static const unsigned char yytranslate[] =
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     1,     2,     3,     4,
        5,     6,     7,     8,     9,    10,    11,    12,    13,    14,
-      15,    16,    17,    20,    21,    24,    25,    30,    31
+      15,    16,    17,    20,    21,    24,    25,    31,    32,    33,
+      34
 };
 
 #if YYDEBUG
@@ -297,28 +302,29 @@ static const unsigned char yyprhs[] =
        0,     0,     3,     5,     7,     9,    11,    13,    15,    17,
       19,    21,    23,    26,    29,    33,    37,    41,    45,    49,
       53,    57,    61,    65,    69,    73,    77,    81,    85,    89,
-      91,    95,    97,    99,   103,   107,   112,   116,   123,   130,
-     137
+      93,    97,   101,   103,   107,   109,   111,   115,   119,   124,
+     128,   135,   142,   149
 };
 
 /* YYRHS -- A `-1'-separated list of the rules' RHS. */
 static const yysigned_char yyrhs[] =
 {
-      36,     0,    -1,    38,    -1,     5,    -1,     6,    -1,     7,
-      -1,    37,    -1,    41,    -1,     3,    -1,     4,    -1,    12,
-      -1,    13,    -1,    27,    38,    -1,    30,    38,    -1,    38,
-      26,    38,    -1,    38,    27,    38,    -1,    38,    28,    38,
-      -1,    38,    29,    38,    -1,    38,    22,    38,    -1,    38,
-      23,    38,    -1,    38,    19,    38,    -1,    38,    18,    38,
-      -1,    38,    25,    38,    -1,    38,    24,    38,    -1,    38,
-      21,    38,    -1,    38,    20,    38,    -1,    38,    17,    38,
-      -1,    38,    16,    38,    -1,    32,    38,    33,    -1,    38,
-      -1,    39,    34,    38,    -1,     3,    -1,     4,    -1,    40,
-      34,     3,    -1,    40,    34,     4,    -1,     9,    32,    39,
-      33,    -1,     9,    32,    33,    -1,    10,    32,    37,    34,
-      40,    33,    -1,    10,    32,    12,    34,    40,    33,    -1,
-      10,    32,     8,    34,    40,    33,    -1,    10,    32,    37,
-      34,    11,    33,    -1
+      39,     0,    -1,    41,    -1,     5,    -1,     6,    -1,     7,
+      -1,    40,    -1,    44,    -1,     3,    -1,     4,    -1,    12,
+      -1,    13,    -1,    27,    41,    -1,    33,    41,    -1,    41,
+      26,    41,    -1,    41,    27,    41,    -1,    41,    28,    41,
+      -1,    41,    29,    41,    -1,    41,    22,    41,    -1,    41,
+      23,    41,    -1,    41,    19,    41,    -1,    41,    18,    41,
+      -1,    41,    30,    41,    -1,    41,    32,    41,    -1,    41,
+      31,    41,    -1,    41,    25,    41,    -1,    41,    24,    41,
+      -1,    41,    21,    41,    -1,    41,    20,    41,    -1,    41,
+      17,    41,    -1,    41,    16,    41,    -1,    35,    41,    36,
+      -1,    41,    -1,    42,    37,    41,    -1,     3,    -1,     4,
+      -1,    43,    37,     3,    -1,    43,    37,     4,    -1,     9,
+      35,    42,    36,    -1,     9,    35,    36,    -1,    10,    35,
+      40,    37,    43,    36,    -1,    10,    35,    12,    37,    43,
+      36,    -1,    10,    35,     8,    37,    43,    36,    -1,    10,
+      35,    40,    37,    11,    36,    -1
 };
 
 /* YYRLINE[YYN] -- source line where rule number YYN was defined.  */
@@ -326,9 +332,9 @@ static const unsigned char yyrline[] =
 {
        0,    49,    49,    53,    54,    55,    59,    60,    61,    62,
       63,    64,    65,    66,    67,    68,    69,    70,    71,    72,
-      73,    74,    75,    76,    77,    78,    79,    80,    81,    85,
-      86,    90,    91,    92,    93,    97,    98,    99,   103,   107,
-     112
+      73,    74,    75,    76,    77,    78,    79,    80,    81,    82,
+      83,    84,    88,    89,    93,    94,    95,    96,   100,   101,
+     102,   106,   110,   115
 };
 #endif
 
@@ -342,8 +348,9 @@ static const char *const yytname[] =
   "TOK_FUNC", "TOK_FUNC_IN", "TOK_USERVAR", "TOK_ID", "TOK_WEIGHT", 
   "TOK_CONST_LIST", "TOK_ATTR_SINT", "TOK_OR", "TOK_AND", "'|'", "'&'", 
   "TOK_NE", "TOK_EQ", "'<'", "'>'", "TOK_GTE", "TOK_LTE", "'+'", "'-'", 
-  "'*'", "'/'", "TOK_NOT", "TOK_NEG", "'('", "')'", "','", "$accept", 
-  "exprline", "attr", "expr", "arglist", "constlist", "function", 0
+  "'*'", "'/'", "'%'", "TOK_MOD", "TOK_DIV", "TOK_NOT", "TOK_NEG", "'('", 
+  "')'", "','", "$accept", "exprline", "attr", "expr", "arglist", 
+  "constlist", "function", 0
 };
 #endif
 
@@ -355,18 +362,18 @@ static const unsigned short yytoknum[] =
        0,   256,   257,   258,   259,   260,   261,   262,   263,   264,
      265,   266,   267,   268,   269,   270,   271,   272,   124,    38,
      273,   274,    60,    62,   275,   276,    43,    45,    42,    47,
-     277,   278,    40,    41,    44
+      37,   277,   278,   279,   280,    40,    41,    44
 };
 # endif
 
 /* YYR1[YYN] -- Symbol number of symbol that rule YYN derives.  */
 static const unsigned char yyr1[] =
 {
-       0,    35,    36,    37,    37,    37,    38,    38,    38,    38,
-      38,    38,    38,    38,    38,    38,    38,    38,    38,    38,
-      38,    38,    38,    38,    38,    38,    38,    38,    38,    39,
-      39,    40,    40,    40,    40,    41,    41,    41,    41,    41,
-      41
+       0,    38,    39,    40,    40,    40,    41,    41,    41,    41,
+      41,    41,    41,    41,    41,    41,    41,    41,    41,    41,
+      41,    41,    41,    41,    41,    41,    41,    41,    41,    41,
+      41,    41,    42,    42,    43,    43,    43,    43,    44,    44,
+      44,    44,    44,    44
 };
 
 /* YYR2[YYN] -- Number of symbols composing right hand side of rule YYN.  */
@@ -374,9 +381,9 @@ static const unsigned char yyr2[] =
 {
        0,     2,     1,     1,     1,     1,     1,     1,     1,     1,
        1,     1,     2,     2,     3,     3,     3,     3,     3,     3,
-       3,     3,     3,     3,     3,     3,     3,     3,     3,     1,
-       3,     1,     1,     3,     3,     4,     3,     6,     6,     6,
-       6
+       3,     3,     3,     3,     3,     3,     3,     3,     3,     3,
+       3,     3,     1,     3,     1,     1,     3,     3,     4,     3,
+       6,     6,     6,     6
 };
 
 /* YYDEFACT[STATE-NAME] -- Default rule to reduce with in state
@@ -387,38 +394,40 @@ static const unsigned char yydefact[] =
        0,     8,     9,     3,     4,     5,     0,     0,    10,    11,
        0,     0,     0,     0,     6,     2,     7,     0,     0,    12,
       13,     0,     1,     0,     0,     0,     0,     0,     0,     0,
-       0,     0,     0,     0,     0,     0,     0,    36,    29,     0,
-       0,     0,     0,    28,    27,    26,    21,    20,    25,    24,
-      18,    19,    23,    22,    14,    15,    16,    17,    35,     0,
-       0,     0,     0,    30,    31,    32,     0,     0,     0,     0,
-      39,     0,    38,    40,    37,    33,    34
+       0,     0,     0,     0,     0,     0,     0,     0,     0,     0,
+      39,    32,     0,     0,     0,     0,    31,    30,    29,    21,
+      20,    28,    27,    18,    19,    26,    25,    14,    15,    16,
+      17,    22,    24,    23,    38,     0,     0,     0,     0,    33,
+      34,    35,     0,     0,     0,     0,    42,     0,    41,    43,
+      40,    36,    37
 };
 
 /* YYDEFGOTO[NTERM-NUM]. */
 static const yysigned_char yydefgoto[] =
 {
-      -1,    13,    14,    15,    39,    66,    16
+      -1,    13,    14,    15,    42,    72,    16
 };
 
 /* YYPACT[STATE-NUM] -- Index in YYTABLE of the portion describing
    STATE-NUM.  */
-#define YYPACT_NINF -29
+#define YYPACT_NINF -32
 static const short yypact[] =
 {
-      35,   -29,   -29,   -29,   -29,   -29,   -22,     3,   -29,   -29,
-      35,    35,    35,    12,   -29,    70,   -29,    24,   149,   -29,
-     -29,    52,   -29,    35,    35,    35,    35,    35,    35,    35,
-      35,    35,    35,    35,    35,    35,    35,   -29,    70,   -28,
-      -2,     9,    16,   -29,    83,    95,   106,   116,   124,   124,
-      32,    32,    32,    32,   -20,   -20,   -29,   -29,   -29,    35,
-      49,    49,     0,    70,   -29,   -29,    30,    50,    13,   125,
-     -29,   159,   -29,   -29,   -29,   -29,   -29
+      38,   -32,   -32,   -32,   -32,   -32,   -25,   -23,   -32,   -32,
+      38,    38,    38,    35,   -32,    79,   -32,    27,   176,   -32,
+     -32,    58,   -32,    38,    38,    38,    38,    38,    38,    38,
+      38,    38,    38,    38,    38,    38,    38,    38,    38,    38,
+     -32,    79,   -31,     9,    12,    24,   -32,    95,   110,   124,
+     137,   148,   148,   163,   163,   163,   163,   168,   168,   -32,
+     -32,   -32,   -32,   -32,   -32,    38,     5,     5,     0,    79,
+     -32,   -32,    16,    20,     2,    22,   -32,    63,   -32,   -32,
+     -32,   -32,   -32
 };
 
 /* YYPGOTO[NTERM-NUM].  */
 static const yysigned_char yypgoto[] =
 {
-     -29,   -29,    37,   -10,   -29,   103,   -29
+     -32,   -32,    46,   -10,   -32,     1,   -32
 };
 
 /* YYTABLE[YYPACT[STATE-NUM]].  What to do in state STATE-NUM.  If
@@ -428,44 +437,52 @@ static const yysigned_char yypgoto[] =
 #define YYTABLE_NINF -1
 static const unsigned char yytable[] =
 {
-      19,    20,    21,    64,    65,    58,    59,    38,    35,    36,
-      17,    68,    22,    44,    45,    46,    47,    48,    49,    50,
-      51,    52,    53,    54,    55,    56,    57,     1,     2,     3,
-       4,     5,    60,     6,     7,    18,     8,     9,     1,     2,
-       3,     4,     5,    61,     6,     7,    73,     8,     9,    63,
-      62,    10,    64,    65,    11,    42,    12,    37,    33,    34,
-      35,    36,    10,    70,    71,    11,     0,    12,    23,    24,
-      25,    26,    27,    28,    29,    30,    31,    32,    33,    34,
-      35,    36,     0,    72,    71,    43,    23,    24,    25,    26,
+      19,    20,    21,    70,    71,    64,    65,    41,    70,    71,
+      17,    74,    18,    47,    48,    49,    50,    51,    52,    53,
+      54,    55,    56,    57,    58,    59,    60,    61,    62,    63,
+       1,     2,     3,     4,     5,    22,     6,     7,    79,     8,
+       9,     1,     2,     3,     4,     5,    66,     6,     7,    67,
+       8,     9,    76,    77,    10,    69,    78,    77,    80,    77,
+      11,    68,    12,    40,    45,    10,    81,    82,    73,    75,
+       0,    11,     0,    12,    23,    24,    25,    26,    27,    28,
+      29,    30,    31,    32,    33,    34,    35,    36,    37,    38,
+      39,     0,     0,     0,    46,    23,    24,    25,    26,    27,
+      28,    29,    30,    31,    32,    33,    34,    35,    36,    37,
+      38,    39,    24,    25,    26,    27,    28,    29,    30,    31,
+      32,    33,    34,    35,    36,    37,    38,    39,    25,    26,
       27,    28,    29,    30,    31,    32,    33,    34,    35,    36,
-      24,    25,    26,    27,    28,    29,    30,    31,    32,    33,
-      34,    35,    36,    25,    26,    27,    28,    29,    30,    31,
-      32,    33,    34,    35,    36,    26,    27,    28,    29,    30,
-      31,    32,    33,    34,    35,    36,    27,    28,    29,    30,
-      31,    32,    33,    34,    35,    36,    29,    30,    31,    32,
-      33,    34,    35,    36,     3,     4,     5,    40,    74,    71,
-       0,    41,    75,    76,    67,    69
+      37,    38,    39,    26,    27,    28,    29,    30,    31,    32,
+      33,    34,    35,    36,    37,    38,    39,    27,    28,    29,
+      30,    31,    32,    33,    34,    35,    36,    37,    38,    39,
+      29,    30,    31,    32,    33,    34,    35,    36,    37,    38,
+      39,     3,     4,     5,    43,     0,     0,     0,    44,    33,
+      34,    35,    36,    37,    38,    39,    35,    36,    37,    38,
+      39
 };
 
 static const yysigned_char yycheck[] =
 {
-      10,    11,    12,     3,     4,    33,    34,    17,    28,    29,
-      32,    11,     0,    23,    24,    25,    26,    27,    28,    29,
-      30,    31,    32,    33,    34,    35,    36,     3,     4,     5,
-       6,     7,    34,     9,    10,    32,    12,    13,     3,     4,
-       5,     6,     7,    34,     9,    10,    33,    12,    13,    59,
-      34,    27,     3,     4,    30,    18,    32,    33,    26,    27,
-      28,    29,    27,    33,    34,    30,    -1,    32,    16,    17,
-      18,    19,    20,    21,    22,    23,    24,    25,    26,    27,
-      28,    29,    -1,    33,    34,    33,    16,    17,    18,    19,
+      10,    11,    12,     3,     4,    36,    37,    17,     3,     4,
+      35,    11,    35,    23,    24,    25,    26,    27,    28,    29,
+      30,    31,    32,    33,    34,    35,    36,    37,    38,    39,
+       3,     4,     5,     6,     7,     0,     9,    10,    36,    12,
+      13,     3,     4,     5,     6,     7,    37,     9,    10,    37,
+      12,    13,    36,    37,    27,    65,    36,    37,    36,    37,
+      33,    37,    35,    36,    18,    27,     3,     4,    67,    68,
+      -1,    33,    -1,    35,    16,    17,    18,    19,    20,    21,
+      22,    23,    24,    25,    26,    27,    28,    29,    30,    31,
+      32,    -1,    -1,    -1,    36,    16,    17,    18,    19,    20,
+      21,    22,    23,    24,    25,    26,    27,    28,    29,    30,
+      31,    32,    17,    18,    19,    20,    21,    22,    23,    24,
+      25,    26,    27,    28,    29,    30,    31,    32,    18,    19,
       20,    21,    22,    23,    24,    25,    26,    27,    28,    29,
-      17,    18,    19,    20,    21,    22,    23,    24,    25,    26,
-      27,    28,    29,    18,    19,    20,    21,    22,    23,    24,
-      25,    26,    27,    28,    29,    19,    20,    21,    22,    23,
-      24,    25,    26,    27,    28,    29,    20,    21,    22,    23,
-      24,    25,    26,    27,    28,    29,    22,    23,    24,    25,
-      26,    27,    28,    29,     5,     6,     7,     8,    33,    34,
-      -1,    12,     3,     4,    61,    62
+      30,    31,    32,    19,    20,    21,    22,    23,    24,    25,
+      26,    27,    28,    29,    30,    31,    32,    20,    21,    22,
+      23,    24,    25,    26,    27,    28,    29,    30,    31,    32,
+      22,    23,    24,    25,    26,    27,    28,    29,    30,    31,
+      32,     5,     6,     7,     8,    -1,    -1,    -1,    12,    26,
+      27,    28,    29,    30,    31,    32,    28,    29,    30,    31,
+      32
 };
 
 /* YYSTOS[STATE-NUM] -- The (internal number of the) accessing
@@ -473,13 +490,14 @@ static const yysigned_char yycheck[] =
 static const unsigned char yystos[] =
 {
        0,     3,     4,     5,     6,     7,     9,    10,    12,    13,
-      27,    30,    32,    36,    37,    38,    41,    32,    32,    38,
-      38,    38,     0,    16,    17,    18,    19,    20,    21,    22,
-      23,    24,    25,    26,    27,    28,    29,    33,    38,    39,
-       8,    12,    37,    33,    38,    38,    38,    38,    38,    38,
-      38,    38,    38,    38,    38,    38,    38,    38,    33,    34,
-      34,    34,    34,    38,     3,     4,    40,    40,    11,    40,
-      33,    34,    33,    33,    33,     3,     4
+      27,    33,    35,    39,    40,    41,    44,    35,    35,    41,
+      41,    41,     0,    16,    17,    18,    19,    20,    21,    22,
+      23,    24,    25,    26,    27,    28,    29,    30,    31,    32,
+      36,    41,    42,     8,    12,    40,    36,    41,    41,    41,
+      41,    41,    41,    41,    41,    41,    41,    41,    41,    41,
+      41,    41,    41,    41,    36,    37,    37,    37,    37,    41,
+       3,     4,    43,    43,    11,    43,    36,    37,    36,    36,
+      36,     3,     4
 };
 
 #if ! defined (YYSIZE_T) && defined (__SIZE_TYPE__)
@@ -1180,94 +1198,109 @@ yyreduce:
 
   case 22:
 
-    { yyval.iNode = pParser->AddNodeOp ( TOK_LTE, yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
+    { yyval.iNode = pParser->AddNodeOp ( '%', yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
     break;
 
   case 23:
 
-    { yyval.iNode = pParser->AddNodeOp ( TOK_GTE, yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
+    { yyval.iNode = pParser->AddNodeFunc ( FUNC_IDIV, pParser->AddNodeOp ( ',', yyvsp[-2].iNode, yyvsp[0].iNode ) ); ;}
     break;
 
   case 24:
 
-    { yyval.iNode = pParser->AddNodeOp ( TOK_EQ, yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
+    { yyval.iNode = pParser->AddNodeOp ( '%', yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
     break;
 
   case 25:
 
-    { yyval.iNode = pParser->AddNodeOp ( TOK_NE, yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
+    { yyval.iNode = pParser->AddNodeOp ( TOK_LTE, yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
     break;
 
   case 26:
 
-    { yyval.iNode = pParser->AddNodeOp ( TOK_AND, yyvsp[-2].iNode, yyvsp[0].iNode ); if ( yyval.iNode<0 ) YYERROR; ;}
+    { yyval.iNode = pParser->AddNodeOp ( TOK_GTE, yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
     break;
 
   case 27:
 
-    { yyval.iNode = pParser->AddNodeOp ( TOK_OR, yyvsp[-2].iNode, yyvsp[0].iNode ); if ( yyval.iNode<0 ) YYERROR; ;}
+    { yyval.iNode = pParser->AddNodeOp ( TOK_EQ, yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
     break;
 
   case 28:
 
-    { yyval.iNode = yyvsp[-1].iNode; ;}
+    { yyval.iNode = pParser->AddNodeOp ( TOK_NE, yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
     break;
 
   case 29:
 
-    { yyval.iNode = yyvsp[0].iNode; ;}
+    { yyval.iNode = pParser->AddNodeOp ( TOK_AND, yyvsp[-2].iNode, yyvsp[0].iNode ); if ( yyval.iNode<0 ) YYERROR; ;}
     break;
 
   case 30:
 
-    { yyval.iNode = pParser->AddNodeOp ( ',', yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
+    { yyval.iNode = pParser->AddNodeOp ( TOK_OR, yyvsp[-2].iNode, yyvsp[0].iNode ); if ( yyval.iNode<0 ) YYERROR; ;}
     break;
 
   case 31:
 
-    { yyval.iNode = pParser->AddNodeConstlist ( yyvsp[0].iConst ); ;}
+    { yyval.iNode = yyvsp[-1].iNode; ;}
     break;
 
   case 32:
 
-    { yyval.iNode = pParser->AddNodeConstlist ( yyvsp[0].fConst ); ;}
+    { yyval.iNode = yyvsp[0].iNode; ;}
     break;
 
   case 33:
 
-    { pParser->AppendToConstlist ( yyval.iNode, yyvsp[0].iConst ); ;}
+    { yyval.iNode = pParser->AddNodeOp ( ',', yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
     break;
 
   case 34:
 
-    { pParser->AppendToConstlist ( yyval.iNode, yyvsp[0].fConst ); ;}
+    { yyval.iNode = pParser->AddNodeConstlist ( yyvsp[0].iConst ); ;}
     break;
 
   case 35:
 
-    { yyval.iNode = pParser->AddNodeFunc ( yyvsp[-3].iFunc, yyvsp[-1].iNode ); if ( yyval.iNode<0 ) YYERROR; ;}
+    { yyval.iNode = pParser->AddNodeConstlist ( yyvsp[0].fConst ); ;}
     break;
 
   case 36:
 
-    { yyval.iNode = pParser->AddNodeFunc ( yyvsp[-2].iFunc, -1 ); if ( yyval.iNode<0 ) YYERROR; ;}
+    { pParser->AppendToConstlist ( yyval.iNode, yyvsp[0].iConst ); ;}
     break;
 
   case 37:
+
+    { pParser->AppendToConstlist ( yyval.iNode, yyvsp[0].fConst ); ;}
+    break;
+
+  case 38:
+
+    { yyval.iNode = pParser->AddNodeFunc ( yyvsp[-3].iFunc, yyvsp[-1].iNode ); if ( yyval.iNode<0 ) YYERROR; ;}
+    break;
+
+  case 39:
+
+    { yyval.iNode = pParser->AddNodeFunc ( yyvsp[-2].iFunc, -1 ); if ( yyval.iNode<0 ) YYERROR; ;}
+    break;
+
+  case 40:
 
     {
 			yyval.iNode = pParser->AddNodeFunc ( yyvsp[-5].iFunc, yyvsp[-3].iNode, yyvsp[-1].iNode );
 		;}
     break;
 
-  case 38:
+  case 41:
 
     {
 			yyval.iNode = pParser->AddNodeFunc ( yyvsp[-5].iFunc, pParser->AddNodeID(), yyvsp[-1].iNode );
 		;}
     break;
 
-  case 39:
+  case 42:
 
     {
 			yyval.iNode = pParser->AddNodeAttr ( TOK_ATTR_MVA, yyvsp[-3].iAttrLocator );
@@ -1275,7 +1308,7 @@ yyreduce:
 		;}
     break;
 
-  case 40:
+  case 43:
 
     {
 			int iConstlist = pParser->ConstlistFromUservar ( yyvsp[-1].iNode );

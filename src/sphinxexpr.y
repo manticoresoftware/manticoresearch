@@ -39,7 +39,7 @@
 %left TOK_EQ TOK_NE
 %left '<' '>' TOK_LTE TOK_GTE
 %left '+' '-'
-%left '*' '/'
+%left '*' '/' '%' TOK_DIV TOK_MOD
 %nonassoc TOK_NOT
 %nonassoc TOK_NEG
 
@@ -72,6 +72,9 @@ expr:
 	| expr '>' expr					{ $$ = pParser->AddNodeOp ( '>', $1, $3 ); }
 	| expr '&' expr					{ $$ = pParser->AddNodeOp ( '&', $1, $3 ); }
 	| expr '|' expr					{ $$ = pParser->AddNodeOp ( '|', $1, $3 ); }
+	| expr '%' expr					{ $$ = pParser->AddNodeOp ( '%', $1, $3 ); }
+	| expr TOK_DIV expr				{ $$ = pParser->AddNodeFunc ( FUNC_IDIV, pParser->AddNodeOp ( ',', $1, $3 ) ); }
+	| expr TOK_MOD expr				{ $$ = pParser->AddNodeOp ( '%', $1, $3 ); }
 	| expr TOK_LTE expr				{ $$ = pParser->AddNodeOp ( TOK_LTE, $1, $3 ); }
 	| expr TOK_GTE expr				{ $$ = pParser->AddNodeOp ( TOK_GTE, $1, $3 ); }
 	| expr TOK_EQ expr				{ $$ = pParser->AddNodeOp ( TOK_EQ, $1, $3 ); }

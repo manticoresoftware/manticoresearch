@@ -279,6 +279,7 @@ DECLARE_BINARY_FLT ( Expr_Div_c,	FIRST / SECOND )
 DECLARE_BINARY_INT ( Expr_Idiv_c,	(float)(int(FIRST)/int(SECOND)),	INTFIRST / INTSECOND,				INT64FIRST / INT64SECOND )
 DECLARE_BINARY_INT ( Expr_BitAnd_c,	(float)(int(FIRST)&int(SECOND)),	INTFIRST & INTSECOND,				INT64FIRST & INT64SECOND )
 DECLARE_BINARY_INT ( Expr_BitOr_c,	(float)(int(FIRST)|int(SECOND)),	INTFIRST | INTSECOND,				INT64FIRST | INT64SECOND )
+DECLARE_BINARY_INT ( Expr_Mod_c,	(float)(int(FIRST)%int(SECOND)),	INTFIRST % INTSECOND,				INT64FIRST % INT64SECOND )
 
 DECLARE_BINARY_POLY ( Expr_Lt,		IFFLT ( FIRST<SECOND ),					IFINT ( INTFIRST<INTSECOND ),		IFINT ( INT64FIRST<INT64SECOND ) )
 DECLARE_BINARY_POLY ( Expr_Gt,		IFFLT ( FIRST>SECOND ),					IFINT ( INTFIRST>INTSECOND ),		IFINT ( INT64FIRST>INT64SECOND ) )
@@ -669,6 +670,8 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		if ( sTok=="and" )		{ return TOK_AND; }
 		if ( sTok=="or" )		{ return TOK_OR; }
 		if ( sTok=="not" )		{ return TOK_NOT; }
+		if ( sTok=="div" )		{ return TOK_DIV; }
+		if ( sTok=="mod" )		{ return TOK_MOD; }
 
 		// check for attribute
 		int iAttr = m_pSchema->GetAttrIndex ( sTok.cstr() );
@@ -719,6 +722,7 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		case ',':
 		case '&':
 		case '|':
+		case '%':
 			return *m_pCur++;
 
 		case '<':
@@ -1124,6 +1128,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case '/':				return new Expr_Div_c ( pLeft, pRight ); break;
 		case '&':				return new Expr_BitAnd_c ( pLeft, pRight ); break;
 		case '|':				return new Expr_BitOr_c ( pLeft, pRight ); break;
+		case '%':				return new Expr_Mod_c ( pLeft, pRight ); break;
 
 		case '<':				LOC_SPAWN_POLY ( Expr_Lt ); break;
 		case '>':				LOC_SPAWN_POLY ( Expr_Gt ); break;
@@ -1928,12 +1933,12 @@ int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 	} else if ( iOp==TOK_LTE || iOp==TOK_GTE || iOp==TOK_EQ || iOp==TOK_NE
 		|| iOp=='<' || iOp=='>' || iOp==TOK_AND || iOp==TOK_OR
 		|| iOp=='+' || iOp=='-' || iOp=='*' || iOp==','
-		|| iOp=='&' || iOp=='|' )
+		|| iOp=='&' || iOp=='|' || iOp=='%' )
 	{
 		tNode.m_uArgType = GetWidestRet ( iLeft, iRight );
 
 		// arithmetical operations return arg type, logical return int
-		tNode.m_uRetType = ( iOp=='+' || iOp=='-' || iOp=='*' || iOp==',' || iOp=='&' || iOp=='|' )
+		tNode.m_uRetType = ( iOp=='+' || iOp=='-' || iOp=='*' || iOp==',' || iOp=='&' || iOp=='|' || iOp=='%' )
 			? tNode.m_uArgType
 			: SPH_ATTR_INTEGER;
 
@@ -1942,6 +1947,14 @@ int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 			&& !( tNode.m_uArgType==SPH_ATTR_INTEGER || tNode.m_uArgType==SPH_ATTR_BIGINT ))
 		{
 			m_sParserError.SetSprintf ( "%s arguments must be integer", ( iOp==TOK_AND || iOp=='&' ) ? "AND" : "OR" );
+			return -1;
+		}
+
+		// MOD can only be over ints
+		if ( iOp=='%'
+			&& !( tNode.m_uArgType==SPH_ATTR_INTEGER || tNode.m_uArgType==SPH_ATTR_BIGINT ))
+		{
+			m_sParserError.SetSprintf ( "MOD arguments must be integer" );
 			return -1;
 		}
 

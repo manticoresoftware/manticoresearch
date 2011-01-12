@@ -29,6 +29,7 @@
 %token	TOK_DESC
 %token	TOK_DESCRIBE
 %token	TOK_DISTINCT
+%token	TOK_DIV
 %token	TOK_FALSE
 %token	TOK_FROM
 %token	TOK_GLOBAL
@@ -42,6 +43,7 @@
 %token	TOK_MAX
 %token	TOK_META
 %token	TOK_MIN
+%token	TOK_MOD
 %token	TOK_NULL
 %token	TOK_OPTION
 %token	TOK_ORDER
@@ -74,7 +76,7 @@
 %left '=' TOK_NE
 %left '<' '>' TOK_LTE TOK_GTE
 %left '+' '-'
-%left '*' '/'
+%left '*' '/' '%' TOK_DIV TOK_MOD
 %nonassoc TOK_NOT
 %nonassoc TOK_NEG
 
@@ -514,6 +516,9 @@ expr:
 	| expr '>' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr '&' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr '|' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
+	| expr '%' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
+	| expr TOK_DIV expr			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
+	| expr TOK_MOD expr			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr TOK_LTE expr			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr TOK_GTE expr			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr '=' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }

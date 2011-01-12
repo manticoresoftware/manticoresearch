@@ -48,8 +48,10 @@
      TOK_EQ = 274,
      TOK_GTE = 275,
      TOK_LTE = 276,
-     TOK_NOT = 277,
-     TOK_NEG = 278
+     TOK_MOD = 277,
+     TOK_DIV = 278,
+     TOK_NOT = 279,
+     TOK_NEG = 280
    };
 #endif
 #define TOK_CONST_INT 258
@@ -71,8 +73,10 @@
 #define TOK_EQ 274
 #define TOK_GTE 275
 #define TOK_LTE 276
-#define TOK_NOT 277
-#define TOK_NEG 278
+#define TOK_MOD 277
+#define TOK_DIV 278
+#define TOK_NOT 279
+#define TOK_NEG 280
 
 
 

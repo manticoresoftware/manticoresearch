@@ -477,6 +477,7 @@ public:
 	virtual int						GetOvershortCount () { return m_iOvershortCount; }
 
 	virtual bool					TokenIsBlended () { return m_bBlended; }
+	virtual bool					TokenIsBlendedPart () { return m_bBlendedPart; }
 	virtual int						SkipBlended () { return 0; }
 
 public:
@@ -518,6 +519,7 @@ protected:
 	int								m_iOvershortCount;			///< skipped overshort tokens count
 	bool							m_bBlended;
 	bool							m_bNonBlended;
+	bool							m_bBlendedPart;
 	bool							m_bShortTokenFilter;		///< short token filter flag
 	bool							m_bQueryMode;				///< is this indexing time or searching time?
 	bool							m_bDetectSentences;			///< should we detect sentence boundaries?

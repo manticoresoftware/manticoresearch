@@ -2703,6 +2703,7 @@ ISphTokenizer::ISphTokenizer ()
 	, m_iOvershortCount ( 0 )
 	, m_bBlended ( false )
 	, m_bNonBlended ( true )
+	, m_bBlendedPart ( false )
 	, m_bShortTokenFilter ( false )
 	, m_bQueryMode ( false )
 	, m_bDetectSentences ( false )
@@ -3180,11 +3181,13 @@ void CSphTokenizerTraits<IS_UTF8>::BlendAdjust ( BYTE * pCur )
 		m_pCur = m_pBlendStart;
 		m_pBlendEnd = pCur;
 		m_pBlendStart = NULL;
+		m_bBlendedPart = true;
 
 	} else if ( pCur>=m_pBlendEnd )
 	{
 		m_pBlendEnd = NULL;
 		m_pBlendStart = NULL;
+		m_bBlendedPart = false;
 	}
 
 	m_bNonBlended = false;

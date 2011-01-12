@@ -66,6 +66,7 @@ public:
 		int					m_iWeight;		///< token weight
 		DWORD				m_uWords;		///< matching query words mask
 		SphWordID_t			m_iWordID;		///< token word ID from dictionary
+		SphWordID_t			m_iBlendID;		///< blended word ID (eg. "T-mobile" would not tokenize itself, but still shadow "T" and "mobile")
 		DWORD				m_uPosition;	///< hit position in document
 	};
 
@@ -261,7 +262,7 @@ struct SnippetsQword_Exact_c: public ISnippetsQword
 			if ( tToken.m_eType!=ExcerptGen_c::TOK_WORD )
 				continue;
 
-			if ( tToken.m_iWordID==m_iWordID )
+			if ( tToken.m_iWordID==m_iWordID || tToken.m_iBlendID )
 			{
 				tToken.m_uWords |= m_uWordMask;
 				return HITMAN::Create ( 0, tToken.m_uPosition, ( m_iToken-1 )==m_iLastIndex );
@@ -406,6 +407,7 @@ void ExcerptGen_c::AddBoundary()
 	tLast.m_iStart = 0;
 	tLast.m_iLengthBytes = 0;
 	tLast.m_iWordID = 0;
+	tLast.m_iBlendID = 0;
 	tLast.m_uWords = 0;
 	tLast.m_uPosition = 0;
 }
@@ -427,6 +429,7 @@ void ExcerptGen_c::AddJunk ( int iStart, int iLength, int iBoundary )
 			tLast.m_iStart = iChunkStart;
 			tLast.m_iLengthBytes = i - iChunkStart;
 			tLast.m_iWordID = 0;
+			tLast.m_iBlendID = 0;
 			tLast.m_uWords = 0;
 			tLast.m_uPosition = 0;
 
@@ -445,6 +448,7 @@ void ExcerptGen_c::AddJunk ( int iStart, int iLength, int iBoundary )
 	tLast.m_iStart = iChunkStart;
 	tLast.m_iLengthBytes = iStart + iLength - iChunkStart;
 	tLast.m_iWordID = 0;
+	tLast.m_iBlendID = 0;
 	tLast.m_uWords = 0;
 	tLast.m_uPosition = 0;
 
@@ -583,10 +587,14 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDi
 
 	BYTE * sWord;
 	DWORD uPosition = 0; // hit position in document
+	SphWordID_t iBlendID = 0;
 	while ( ( sWord = pTokenizer->GetToken() )!=NULL )
 	{
 		if ( pTokenizer->TokenIsBlended() )
+		{
+			iBlendID = pDict->GetWordID ( sWord );
 			continue;
+		}
 
 		uPosition += pTokenizer->GetOvershortCount();
 
@@ -625,6 +633,7 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDi
 				tLast.m_iStart = 0;
 				tLast.m_iLengthBytes = 0;
 				tLast.m_iWordID = 0;
+				tLast.m_iBlendID = 0;
 				tLast.m_uWords = 0;
 				tLast.m_uPosition = 0;
 
@@ -723,11 +732,15 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDi
 		tLast.m_iStart = pTokenStart - pStartPtr;
 		tLast.m_iLengthBytes = pLastTokenEnd - pTokenStart;
 		tLast.m_iWordID = iWord;
+		tLast.m_iBlendID = iBlendID;
 		tLast.m_uWords = 0;
 		if ( iWord )
 			m_iDocumentWords++;
 
 		m_iLastWord = iWord ? m_dTokens.GetLength() - 1 : m_iLastWord;
+
+		if ( !pTokenizer->TokenIsBlendedPart() )
+			iBlendID = 0;
 
 		// fill word mask
 		if ( bFillMasks && iWord )
@@ -785,6 +798,7 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDi
 	tLast.m_iLengthBytes = 0;
 	tLast.m_iWeight = 0;
 	tLast.m_iWordID = 0;
+	tLast.m_iBlendID = 0;
 	tLast.m_uWords = 0;
 	tLast.m_uPosition = 0;
 }

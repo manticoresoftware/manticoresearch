@@ -6825,6 +6825,13 @@ struct SqlNode_t
 #define YYSTYPE SqlNode_t
 
 
+enum SqlSet_e
+{
+	SET_LOCAL,
+	SET_GLOBAL_UVAR,
+	SET_GLOBAL_SVAR
+};
+
 /// parsing result
 /// one day, we will start subclassing this
 struct SqlStmt_t
@@ -6848,7 +6855,7 @@ struct SqlStmt_t
 
 	// SET specific
 	CSphString				m_sSetName;
-	bool					m_bSetGlobal;
+	SqlSet_e				m_eSet;
 	int						m_iSetValue;
 	CSphString				m_sSetValue;
 	CSphVector<SphAttr_t>	m_dSetValues;
@@ -6866,7 +6873,7 @@ struct SqlStmt_t
 		: m_eStmt ( STMT_PARSE_ERROR )
 		, m_iRowsAffected ( 0 )
 		, m_iSchemaSz ( 0 )
-		, m_bSetGlobal ( false )
+		, m_eSet ( SET_LOCAL )
 		, m_iSetValue ( 0 )
 		, m_bSetNull ( false )
 	{
@@ -9604,7 +9611,7 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 	CSphString sError;
 
 	tStmt.m_sSetName.ToLower();
-	if ( tStmt.m_sSetName=="autocommit" && !tStmt.m_bSetGlobal )
+	if ( tStmt.m_eSet==SET_LOCAL && tStmt.m_sSetName=="autocommit" )
 	{
 		// per-session AUTOCOMMIT
 		tVars.m_bAutoCommit = ( tStmt.m_iSetValue!=0 );
@@ -9618,7 +9625,7 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 				pIndex->Commit();
 		}
 
-	} else if ( tStmt.m_sSetName=="collation_connection" && !tStmt.m_bSetGlobal )
+	} else if ( tStmt.m_eSet==SET_LOCAL && tStmt.m_sSetName=="collation_connection" )
 	{
 		// per-session COLLATION_CONNECTION
 		CSphString & sVal = tStmt.m_sSetValue;
@@ -9638,16 +9645,16 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 			return;
 		}
 
-	} else if ( tStmt.m_sSetName=="character_set_results" && !tStmt.m_bSetGlobal )
+	} else if ( tStmt.m_eSet==SET_LOCAL && tStmt.m_sSetName=="character_set_results" )
 	{
 		// per-session CHARACTER_SET_RESULTS; just ignore for now
 
-	} else if ( tStmt.m_bSetGlobal )
+	} else if ( tStmt.m_eSet==SET_GLOBAL_UVAR )
 	{
 		// global user variable
 		if ( g_eWorkers!=MPM_THREADS )
 		{
-			SendMysqlErrorPacket ( tOut, uPacketID, "SET GLOBAL currently requires workes=threads" );
+			SendMysqlErrorPacket ( tOut, uPacketID, "SET GLOBAL currently requires workers=threads" );
 			return;
 		}
 
@@ -9667,6 +9674,33 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 			g_hUservars.Add ( tVar, tStmt.m_sSetName ); // FIXME? free those on shutdown?
 		}
 		g_tUservarsMutex.Unlock();
+
+	} else if ( tStmt.m_eSet==SET_GLOBAL_SVAR )
+	{
+		// global server variable
+		if ( g_eWorkers!=MPM_THREADS )
+		{
+			SendMysqlErrorPacket ( tOut, uPacketID, "SET GLOBAL currently requires workers=threads" );
+			return;
+		}
+
+		if ( tStmt.m_sSetName=="query_log_format" )
+		{
+			if ( tStmt.m_sSetValue=="plain" )
+				g_eLogFormat = LOG_FORMAT_PLAIN;
+			else if ( tStmt.m_sSetValue=="sphinxql" )
+				g_eLogFormat = LOG_FORMAT_SPHINXQL;
+			else
+			{
+				SendMysqlErrorPacket ( tOut, uPacketID, "Unknown query_log_format value (must be plain or sphinxql)" );
+				return;
+			}
+		} else
+		{
+			sError.SetSprintf ( "Unknown system variable '%s'", tStmt.m_sSetName.cstr() );
+			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+			return;
+		}
 
 	} else
 	{

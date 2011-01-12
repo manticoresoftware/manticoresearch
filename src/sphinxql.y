@@ -564,7 +564,7 @@ set_clause:
 			pParser->m_pStmt->m_sSetName = $2.m_sValue;
 			pParser->m_pStmt->m_iSetValue = $4.m_iValue;
 		}
-	| TOK_SET TOK_IDENT '=' TOK_QUOTED_STRING
+	| TOK_SET TOK_IDENT '=' set_string_value
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SET;
 			pParser->m_pStmt->m_eSet = SET_LOCAL;
@@ -588,13 +588,18 @@ set_global_clause:
 			pParser->m_pStmt->m_sSetName = $3.m_sValue;
 			pParser->m_pStmt->m_dSetValues = *$6.m_pValues.Ptr();
 		}
-	| TOK_SET TOK_GLOBAL TOK_IDENT '=' TOK_IDENT
+	| TOK_SET TOK_GLOBAL TOK_IDENT '=' set_string_value
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SET;
 			pParser->m_pStmt->m_eSet = SET_GLOBAL_SVAR;
 			pParser->m_pStmt->m_sSetName = $3.m_sValue;
 			pParser->m_pStmt->m_sSetValue = $5.m_sValue;
 		}
+	;
+
+set_string_value:
+	TOK_IDENT
+	| TOK_QUOTED_STRING
 	;
 
 boolean_value:

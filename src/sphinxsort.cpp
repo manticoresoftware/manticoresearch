@@ -2049,6 +2049,18 @@ void sphSortRemoveInternalAttrs ( CSphSchema & tSchema )
 		tSchema.AddAttr ( dAttrs[i], dAttrs[i].m_tLocator.m_bDynamic );
 }
 
+////////////////////
+// BINARY COLLATION
+////////////////////
+
+int CollateBinary ( const BYTE * pStr1, const BYTE * pStr2 )
+{
+	int iLen1 = sphUnpackStr ( pStr1, &pStr1 );
+	int iLen2 = sphUnpackStr ( pStr2, &pStr2 );
+	int iRes = memcmp ( (const char *)pStr1, (const char *)pStr2, Min ( iLen1, iLen2 ) );
+	return iRes ? iRes : ( iLen1-iLen2 );
+}
+
 ///////////////////////////////
 // LIBC_CI, LIBC_CS COLLATIONS
 ///////////////////////////////
@@ -2706,6 +2718,10 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		case SPH_COLLATION_UTF8_GENERAL_CI:
 			tStateMatch.m_fnStrCmp = CollateUtf8GeneralCI;
 			tStateGroup.m_fnStrCmp = CollateUtf8GeneralCI;
+			break;
+		case SPH_COLLATION_BINARY:
+			tStateMatch.m_fnStrCmp = CollateBinary;
+			tStateGroup.m_fnStrCmp = CollateBinary;
 			break;
 	}
 

@@ -9638,6 +9638,8 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 			tVars.m_eCollation = SPH_COLLATION_LIBC_CS;
 		else if ( sVal=="utf8_general_ci" )
 			tVars.m_eCollation = SPH_COLLATION_UTF8_GENERAL_CI;
+		else if ( sVal=="binary" )
+			tVars.m_eCollation = SPH_COLLATION_BINARY;
 		else
 		{
 			sError.SetSprintf ( "Unknown collation: '%s'", sVal.cstr() );

@@ -322,6 +322,33 @@ DECLARE_TERNARY ( Expr_Madd_c,	FIRST*SECOND+THIRD,					INTFIRST*INTSECOND + INTT
 DECLARE_TERNARY ( Expr_Mul3_c,	FIRST*SECOND*THIRD,					INTFIRST*INTSECOND*INTTHIRD,		INT64FIRST*INT64SECOND*INT64THIRD )
 
 //////////////////////////////////////////////////////////////////////////
+
+#if USE_WINDOWS
+void localtime_r ( const time_t * clock, struct tm * res )
+{
+	*res = *localtime ( clock ); // FIXME?!
+}
+#endif
+
+#define DECLARE_TIMESTAMP(_classname,_expr) \
+	DECLARE_UNARY_TRAITS ( _classname, (float)IntEval(tMatch) ) \
+		virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return IntEval(tMatch); } \
+		virtual int IntEval ( const CSphMatch & tMatch ) const \
+		{ \
+			time_t ts = (time_t)FIRST; \
+			struct tm s; \
+			localtime_r ( &ts, &s ); \
+			return _expr; \
+		} \
+	};
+
+DECLARE_TIMESTAMP ( Expr_Day_c,				s.tm_mday );
+DECLARE_TIMESTAMP ( Expr_Month_c,			s.tm_mon+1 );
+DECLARE_TIMESTAMP ( Expr_Year_c,			s.tm_year+1900 );
+DECLARE_TIMESTAMP ( Expr_YearMonth_c,		(s.tm_year+1900)*100+s.tm_mon+1 );
+DECLARE_TIMESTAMP ( Expr_YearMonthDay_c,	(s.tm_year+1900)*10000+(s.tm_mon+1)*100+s.tm_mday );
+
+//////////////////////////////////////////////////////////////////////////
 // PARSER INTERNALS
 //////////////////////////////////////////////////////////////////////////
 
@@ -344,6 +371,12 @@ enum Func_e
 	FUNC_SQRT,
 	FUNC_BIGINT,
 	FUNC_SINT,
+
+	FUNC_DAY,
+	FUNC_MONTH,
+	FUNC_YEAR,
+	FUNC_YEARMONTH,
+	FUNC_YEARMONTHDAY,
 
 	FUNC_MIN,
 	FUNC_MAX,
@@ -386,6 +419,12 @@ static FuncDesc_t g_dFuncs[] =
 	{ "sqrt",	1,	FUNC_SQRT },
 	{ "bigint",	1,	FUNC_BIGINT },	// type-enforcer special as-if-function
 	{ "sint",	1,	FUNC_SINT },	// type-enforcer special as-if-function
+
+	{ "day",			1, FUNC_DAY },
+	{ "month",			1, FUNC_MONTH },
+	{ "year",			1, FUNC_YEAR },
+	{ "yearmonth",		1, FUNC_YEARMONTH },
+	{ "yearmonthday",	1, FUNC_YEARMONTHDAY },
 
 	{ "min",	2,	FUNC_MIN },
 	{ "max",	2,	FUNC_MAX },
@@ -1179,6 +1218,12 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_SQRT:		return new Expr_Sqrt_c ( dArgs[0] );
 					case FUNC_BIGINT:	return dArgs[0];
 					case FUNC_SINT:		return new Expr_Sint_c ( dArgs[0] );
+
+					case FUNC_DAY:			return new Expr_Day_c ( dArgs[0] );
+					case FUNC_MONTH:		return new Expr_Month_c ( dArgs[0] );
+					case FUNC_YEAR:			return new Expr_Year_c ( dArgs[0] );
+					case FUNC_YEARMONTH:	return new Expr_YearMonth_c ( dArgs[0] );
+					case FUNC_YEARMONTHDAY:	return new Expr_YearMonthDay_c ( dArgs[0] );
 
 					case FUNC_MIN:		return new Expr_Min_c ( dArgs[0], dArgs[1] );
 					case FUNC_MAX:		return new Expr_Max_c ( dArgs[0], dArgs[1] );
@@ -2050,6 +2095,15 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 			return -1;
 		}
 		tNode.m_uRetType = SPH_ATTR_BIGINT;
+
+	} else if ( eFunc==FUNC_DAY || eFunc==FUNC_MONTH || eFunc==FUNC_YEAR || eFunc==FUNC_YEARMONTH || eFunc==FUNC_YEARMONTHDAY )
+	{
+		if ( tNode.m_uArgType!=SPH_ATTR_INTEGER )
+		{
+			m_sParserError.SetSprintf ( "timestamp function argument must be integer" );
+			return -1;
+		}
+		tNode.m_uRetType = SPH_ATTR_INTEGER;
 	}
 
 	return m_dNodes.GetLength()-1;

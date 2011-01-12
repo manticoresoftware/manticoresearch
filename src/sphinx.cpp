@@ -4549,6 +4549,7 @@ CSphQuery::CSphQuery ()
 	, m_uMaxQueryMsec	( 0 )
 	, m_sComment		( "" )
 	, m_sSelect			( "" )
+	, m_bReverseScan	( false )
 	, m_iSQLSelectStart	( -1 )
 	, m_iSQLSelectEnd	( -1 )
 
@@ -11709,7 +11710,9 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	tMatch.m_iWeight = 1;
 
 	DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
-	for ( DWORD uIndexEntry=0; uIndexEntry<m_uDocinfoIndex; uIndexEntry++ )
+	DWORD uStart = pQuery->m_bReverseScan ? ( m_uDocinfoIndex-1 ) : 0;
+	int iStep = pQuery->m_bReverseScan ? -1 : 1;
+	for ( DWORD uIndexEntry=uStart; uIndexEntry<m_uDocinfoIndex; uIndexEntry+=iStep )
 	{
 		/////////////////////////
 		// block-level filtering

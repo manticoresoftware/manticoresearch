@@ -7170,6 +7170,10 @@ bool SqlParser_c::AddOption ( SqlNode_t tIdent, SqlNode_t tValue )
 	{
 		m_pQuery->m_iRetryDelay = (int)tValue.m_iValue;
 
+	} else if ( sOpt=="reverse_scan" )
+	{
+		m_pQuery->m_bReverseScan = ( tValue.m_iValue!=0 );
+
 	} else
 	{
 		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", tIdent.m_sValue.cstr() );

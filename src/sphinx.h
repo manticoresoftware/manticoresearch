@@ -2156,6 +2156,8 @@ public:
 	CSphString		m_sSelect;			///< select-list (attributes and/or expressions)
 	CSphString		m_sOrderBy;			///< order-by clause
 
+	bool			m_bReverseScan;		///< perform scan in reverse order
+
 	int				m_iSQLSelectStart;	///< SQL parser helper
 	int				m_iSQLSelectEnd;	///< SQL parser helper
 

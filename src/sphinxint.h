@@ -277,9 +277,9 @@ struct SphStringSorterRemap_t
 };
 
 ISphExpr *	sphSortSetupExpr ( const CSphString & sName, const CSphSchema & tIndexSchema );
-bool		sphSortGetStringRemap ( const ISphMatchSorter * pSorter, const CSphSchema & tIndexSchema, CSphVector<SphStringSorterRemap_t> & dAttrs );
+bool		sphSortGetStringRemap ( const CSphSchema & tSorterSchema, const CSphSchema & tIndexSchema, CSphVector<SphStringSorterRemap_t> & dAttrs );
 void		sphSortRemoveInternalAttrs ( CSphSchema & tSchema );
-
+bool		sphIsSortStringInternal ( const char * sColumnName );
 
 //////////////////////////////////////////////////////////////////////////
 

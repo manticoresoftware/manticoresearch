@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>string attribute vs different indexes</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source src_main
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, body, concat ( str1, ' main' ) as str1, idd1, 100 as tag FROM test_table
+	sql_attr_uint	= idd1
+	sql_attr_uint	= tag
+	sql_attr_string = str1
+}
+
+source src_delta1
+{
+	type			= mysql
+	<sql_settings/>
+	
+	sql_query		= SELECT id, body, concat ( str1, ' delta1' ) as str1, idd1, 101 as tag FROM test_table where id>3
+	sql_attr_uint	= idd1
+	sql_attr_uint	= tag
+	sql_attr_string = str1
+	sql_query_killlist = SELECT 2
+}
+
+source src_delta2
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, body, 'delta2' as str1, concat ( str1, ' delta2' ) as str2, idd1, 102 as tag FROM test_table where id>4
+	sql_attr_uint	= idd1
+	sql_attr_uint	= tag
+	sql_attr_string = str1
+	sql_attr_string = str2
+	sql_query_killlist = SELECT 2
+}
+
+index main
+{
+	source			= src_main
+    docinfo			= extern
+    charset_type	= sbcs
+	path			= <data_path/>/main
+}
+
+index delta1
+{
+	source			= src_delta1
+    docinfo			= extern
+    charset_type	= sbcs
+	path			= <data_path/>/delta1
+}
+
+index delta2
+{
+	source			= src_delta2
+    docinfo			= extern
+    charset_type	= sbcs
+	path			= <data_path/>/delta2
+}
+
+index loc_dist1
+{
+	type = distributed
+	local = main
+	local = delta1
+}
+
+index loc_dist2
+{
+	type = distributed
+	local = main
+	local = delta2
+}
+
+index dist1
+{
+	type = distributed
+	local = main
+	agent = <agent_address/>:delta2
+}
+
+index dist2
+{
+	type = distributed
+	local = delta2
+	agent = <agent_address/>:delta1
+}
+
+index dist3
+{
+	type = distributed
+	agent = <agent_address/>:main
+	agent = <agent_address/>:delta1
+}
+
+</config>
+
+<num_agents>3</num_agents>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`id` int(11) NOT NULL default '0',
+	`idd1` int(11) NOT NULL default '0',
+	`str1` varchar(255) NOT NULL default '',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS `test_table`</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 1,		'a aa',		'the dog' ),
+( 2, 11,	'c cc',		'the cat' ),
+( 3, 11,	'a a',		'the bird' ), 
+( 4, 11,	'cc c',		'cat eats bird' ),
+( 5, 3, 	'a a',		'dog eats cat' ), 
+( 6, 1,		'c cc',		'bird' ), 
+( 7, 1,		'a a',		'the cat' ),
+( 8, 1,		'a a',		'eats' ),
+( 9, 3, 	'c cc',		'the' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>select * from loc_dist1 order by str1 asc</sphinxql>
+<sphinxql>select * from loc_dist1 order by str1 desc</sphinxql>
+<sphinxql>select * from loc_dist2 order by str1 asc, idd1 desc</sphinxql>
+<sphinxql>select * from loc_dist2 order by str1 desc, idd1 asc</sphinxql>
+<sphinxql>select * from loc_dist2 order by str2 asc</sphinxql>
+<sphinxql>select * from loc_dist2 order by str2 desc</sphinxql>
+<sphinxql>select * from loc_dist2 order by str2 desc, idd1 desc</sphinxql>
+<sphinxql>select * from dist1 order by str2 asc, idd1 desc</sphinxql>
+<sphinxql>select * from dist1 order by str2 desc, idd1 asc</sphinxql>
+<sphinxql>select * from dist2 order by str1 asc</sphinxql>
+<sphinxql>select * from dist2 order by str1 desc</sphinxql>
+<sphinxql>select * from dist3 order by str1 asc</sphinxql>
+<sphinxql>select * from dist3 order by str1 desc, idd1 desc</sphinxql>
+</sphqueries>
+
+</test>

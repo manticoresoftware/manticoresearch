@@ -741,8 +741,6 @@ struct GroupSorter_fn : public CSphMatchComparatorState, public SphAccessor_T<CS
 	}
 };
 
-static bool IsStrSortMagic ( const char * sColumnName );
-
 /// match sorter with k-buffering and group-by
 template < typename COMPGROUP, bool DISTINCT >
 class CSphKBufferGroupSorter : public CSphMatchQueueTraits
@@ -795,7 +793,7 @@ public:
 		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 		{
 			const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
-			bool bMagicAggr = IsGroupbyMagic ( tAttr.m_sName ) || IsStrSortMagic ( tAttr.m_sName.cstr() ); // magic legacy aggregates
+			bool bMagicAggr = IsGroupbyMagic ( tAttr.m_sName ) || sphIsSortStringInternal ( tAttr.m_sName.cstr() ); // magic legacy aggregates
 
 			if ( tAttr.m_eAggrFunc==SPH_AGGR_NONE && !bMagicAggr )
 			{
@@ -1951,7 +1949,7 @@ struct ExprSortStringAttrFixup_c : public ISphExpr
 static const char g_sIntAttrPrefix[] = "@int_str2ptr_";
 
 
-bool IsStrSortMagic ( const char * sColumnName )
+bool sphIsSortStringInternal ( const char * sColumnName )
 {
 	assert ( sColumnName );
 	return ( strncmp ( sColumnName, g_sIntAttrPrefix, sizeof(g_sIntAttrPrefix)-1 )==0 );
@@ -1974,11 +1972,15 @@ static bool SetupSortStringRemap ( CSphSchema & tSorterSchema, CSphMatchComparat
 		CSphString sRemapCol;
 		sRemapCol.SetSprintf ( "%s%s", g_sIntAttrPrefix, tSorterSchema.GetAttr ( dAttr[i] ).m_sName.cstr() );
 
-		CSphColumnInfo tRemapCol ( sRemapCol.cstr(), SPH_ATTR_BIGINT );
-		tRemapCol.m_eStage = SPH_EVAL_PRESORT;
+		int iRemap = tSorterSchema.GetAttrIndex ( sRemapCol.cstr() );
+		if ( iRemap==-1 )
+		{
+			CSphColumnInfo tRemapCol ( sRemapCol.cstr(), SPH_ATTR_BIGINT );
+			tRemapCol.m_eStage = SPH_EVAL_PRESORT;
 
-		int iRemap = tSorterSchema.GetAttrsCount();
-		tSorterSchema.AddAttr ( tRemapCol, true );
+			iRemap = tSorterSchema.GetAttrsCount();
+			tSorterSchema.AddAttr ( tRemapCol, true );
+		}
 		tState.m_tLocator[i] = tSorterSchema.GetAttr ( iRemap ).m_tLocator;
 	}
 
@@ -1999,16 +2001,12 @@ ISphExpr * sphSortSetupExpr ( const CSphString & sName, const CSphSchema & tInde
 }
 
 
-bool sphSortGetStringRemap ( const ISphMatchSorter * pSorter, const CSphSchema & tIndexSchema, CSphVector<SphStringSorterRemap_t> & dAttrs )
+bool sphSortGetStringRemap ( const CSphSchema & tSorterSchema, const CSphSchema & tIndexSchema, CSphVector<SphStringSorterRemap_t> & dAttrs )
 {
-	if ( !pSorter || !pSorter->UsesAttrs() )
-		return false;
-
 	dAttrs.Resize ( 0 );
-	const CSphSchema & tSchema = pSorter->GetSchema();
-	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
+	for ( int i=0; i<tSorterSchema.GetAttrsCount(); i++ )
 	{
-		const CSphColumnInfo & tDst = tSchema.GetAttr(i);
+		const CSphColumnInfo & tDst = tSorterSchema.GetAttr(i);
 		if ( !tDst.m_sName.Begins ( g_sIntAttrPrefix ) )
 			continue;
 

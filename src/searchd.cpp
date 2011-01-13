@@ -5302,46 +5302,49 @@ bool MinimizeAggrResultCompat ( AggrResult_t & tRes, const CSphQuery & tQuery, b
 	// apply select-items on top of that
 	bool bStar = false;
 	ARRAY_FOREACH ( i, tQuery.m_dItems )
+	{
 		if ( tQuery.m_dItems[i].m_sExpr=="*" )
 		{
 			bStar = true;
 			break;
 		}
+	}
 
-		if ( !bStar && tQuery.m_dItems.GetLength() )
+	if ( !bStar && tQuery.m_dItems.GetLength() )
+	{
+		CSphSchema tItems;
+		for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
 		{
-			CSphSchema tItems;
-			for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
+			const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
+			if ( !tCol.m_pExpr )
 			{
-				const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
-				if ( !tCol.m_pExpr )
-				{
-					bool bAdd = false;
-					ARRAY_FOREACH ( i, tQuery.m_dItems )
-						if ( tQuery.m_dItems[i].m_sExpr==tCol.m_sName )
-						{
-							bAdd = true;
-							break;
-						}
+				bool bAdd = false;
+				ARRAY_FOREACH ( i, tQuery.m_dItems )
+					if ( tQuery.m_dItems[i].m_sExpr==tCol.m_sName )
+					{
+						bAdd = true;
+						break;
+					}
 
-						if ( !bAdd )
-							continue;
-				}
-				tItems.AddAttr ( tCol, true );
+					if ( !bAdd )
+						continue;
 			}
-
-			if ( tRes.m_tSchema.GetAttrsCount()!=tItems.GetAttrsCount() )
-			{
-				tRes.m_tSchema = tItems;
-				bAllEqual = false;
-			}
+			tItems.AddAttr ( tCol, true );
 		}
 
-		// tricky bit
-		// in purely distributed case, all schemas are received from the wire, and miss aggregate functions info
-		// thus, we need to re-assign that info
-		if ( !bHadLocalIndexes )
-			ARRAY_FOREACH ( i, tQuery.m_dItems )
+		if ( tRes.m_tSchema.GetAttrsCount()!=tItems.GetAttrsCount() )
+		{
+			tRes.m_tSchema = tItems;
+			bAllEqual = false;
+		}
+	}
+
+	// tricky bit
+	// in purely distributed case, all schemas are received from the wire, and miss aggregate functions info
+	// thus, we need to re-assign that info
+	if ( !bHadLocalIndexes )
+	{
+		ARRAY_FOREACH ( i, tQuery.m_dItems )
 		{
 			const CSphQueryItem & tItem = tQuery.m_dItems[i];
 			if ( tItem.m_eAggrFunc==SPH_AGGR_NONE )
@@ -5357,77 +5360,90 @@ bool MinimizeAggrResultCompat ( AggrResult_t & tRes, const CSphQuery & tQuery, b
 				}
 			}
 		}
+	}
 
-		// if there's more than one result set, we need to re-sort the matches
-		// so we need to bring matches to the schema that the *sorter* wants
-		// so we need to create the sorter before conversion
-		ISphMatchSorter * pSorter = NULL;
-		if ( tRes.m_iSuccesses!=1 )
+	// if there's more than one result set, we need to re-sort the matches
+	// so we need to bring matches to the schema that the *sorter* wants
+	// so we need to create the sorter before conversion
+	ISphMatchSorter * pSorter = NULL;
+	if ( tRes.m_iSuccesses!=1 )
+	{
+		// create queue
+		// at this point, we do not need to compute anything; it all must be here
+		pSorter = sphCreateQueue ( &tQuery, tRes.m_tSchema, tRes.m_sError, false );
+		if ( !pSorter )
+			return false;
+
+		// reset bAllEqual flag if sorter makes new attributes
+		if ( bAllEqual )
 		{
-			// create queue
-			// at this point, we do not need to compute anything; it all must be here
-			pSorter = sphCreateQueue ( &tQuery, tRes.m_tSchema, tRes.m_sError, false );
-			if ( !pSorter )
-				return false;
+			// at first we count already existed internal attributes
+			// then check if sorter makes more
+			CSphVector<SphStringSorterRemap_t> dRemapAttr;
+			sphSortGetStringRemap ( tRes.m_tSchema, tRes.m_tSchema, dRemapAttr );
+			int iRemapCount = dRemapAttr.GetLength();
+			sphSortGetStringRemap ( pSorter->GetSchema(), tRes.m_tSchema, dRemapAttr );
 
-			// sorter expects this
-			tRes.m_tSchema = pSorter->GetSchema();
+			bAllEqual = ( dRemapAttr.GetLength()<=iRemapCount );
 		}
 
-		// convert all matches to minimal schema
-		if ( !bAllEqual )
+		// sorter expects this
+		tRes.m_tSchema = pSorter->GetSchema();
+	}
+
+	// convert all matches to minimal schema
+	if ( !bAllEqual )
+	{
+		int iCur = 0;
+		CSphVector<int> dMapFrom ( tRes.m_tSchema.GetAttrsCount() );
+
+		ARRAY_FOREACH ( iSchema, tRes.m_dSchemas )
 		{
-			int iCur = 0;
-			int * dMapFrom = NULL;
-
-			if ( tRes.m_tSchema.GetRowSize() )
-				dMapFrom = new int [ tRes.m_tSchema.GetAttrsCount() ];
-
-			ARRAY_FOREACH ( iSchema, tRes.m_dSchemas )
+			dMapFrom.Resize ( 0 );
+			for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
 			{
-				for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
-				{
-					dMapFrom[i] = tRes.m_dSchemas[iSchema].GetAttrIndex ( tRes.m_tSchema.GetAttr(i).m_sName.cstr() );
-					assert ( dMapFrom[i]>=0 );
-				}
-
-				for ( int i=iCur; i<iCur+tRes.m_dMatchCounts[iSchema]; i++ )
-				{
-					CSphMatch & tMatch = tRes.m_dMatches[i];
-
-					// create new and shiny (and properly sized and fully dynamic) match
-					CSphMatch tRow;
-					tRow.Reset ( tRes.m_tSchema.GetRowSize() );
-					tRow.m_iDocID = tMatch.m_iDocID;
-					tRow.m_iWeight = tMatch.m_iWeight;
-					tRow.m_iTag = tMatch.m_iTag;
-
-					// remap attrs
-					for ( int j=0; j<tRes.m_tSchema.GetAttrsCount(); j++ )
-					{
-						const CSphColumnInfo & tDst = tRes.m_tSchema.GetAttr(j);
-						const CSphColumnInfo & tSrc = tRes.m_dSchemas[iSchema].GetAttr ( dMapFrom[j] );
-						tRow.SetAttr ( tDst.m_tLocator, tMatch.GetAttr ( tSrc.m_tLocator ) );
-					}
-
-					// swap out old (most likely wrong sized) match
-					Swap ( tMatch, tRow );
-				}
-
-				iCur += tRes.m_dMatchCounts[iSchema];
+				dMapFrom.Add ( tRes.m_dSchemas[iSchema].GetAttrIndex ( tRes.m_tSchema.GetAttr(i).m_sName.cstr() ) );
+				assert ( dMapFrom.Last()>=0 || sphIsSortStringInternal ( tRes.m_tSchema.GetAttr(i).m_sName.cstr() ) );
 			}
 
-			assert ( iCur==tRes.m_dMatches.GetLength() );
-			SafeDeleteArray ( dMapFrom );
+			for ( int i=iCur; i<iCur+tRes.m_dMatchCounts[iSchema]; i++ )
+			{
+				CSphMatch & tMatch = tRes.m_dMatches[i];
+
+				// create new and shiny (and properly sized and fully dynamic) match
+				CSphMatch tRow;
+				tRow.Reset ( tRes.m_tSchema.GetRowSize() );
+				tRow.m_iDocID = tMatch.m_iDocID;
+				tRow.m_iWeight = tMatch.m_iWeight;
+				tRow.m_iTag = tMatch.m_iTag;
+
+				// remap attrs
+				ARRAY_FOREACH ( j, dMapFrom )
+				{
+					if ( dMapFrom[j]<0 )
+						continue;
+
+					const CSphColumnInfo & tDst = tRes.m_tSchema.GetAttr(j);
+					const CSphColumnInfo & tSrc = tRes.m_dSchemas[iSchema].GetAttr ( dMapFrom[j] );
+					tRow.SetAttr ( tDst.m_tLocator, tMatch.GetAttr ( tSrc.m_tLocator ) );
+				}
+
+				// swap out old (most likely wrong sized) match
+				Swap ( tMatch, tRow );
+			}
+			iCur += tRes.m_dMatchCounts[iSchema];
 		}
 
-		// we do not need to re-sort if there's exactly one result set
-		if ( tRes.m_iSuccesses==1 )
-			return true;
+		assert ( iCur==tRes.m_dMatches.GetLength() );
+	}
+
+	// we do not need to re-sort if there's exactly one result set
+	if ( tRes.m_iSuccesses==1 )
+		return true;
 
 	// do match ptr pre-calc if its "order by string" case
 	CSphVector<SphStringSorterRemap_t> dRemapAttr;
-	if ( sphSortGetStringRemap ( pSorter, tRes.m_tSchema, dRemapAttr ) )
+	if ( pSorter && pSorter->UsesAttrs() && sphSortGetStringRemap ( pSorter->GetSchema(), tRes.m_tSchema, dRemapAttr ) )
 	{
 		int iCur = 0;
 		ARRAY_FOREACH ( iSchema, tRes.m_dSchemas )
@@ -5448,77 +5464,76 @@ bool MinimizeAggrResultCompat ( AggrResult_t & tRes, const CSphQuery & tQuery, b
 		}
 	}
 
-
-		// kill all dupes
-		int iDupes = 0;
-		if ( pSorter->IsGroupby () )
+	// kill all dupes
+	int iDupes = 0;
+	if ( pSorter->IsGroupby () )
+	{
+		// groupby sorter does that automagically
+		pSorter->SetMVAPool ( NULL ); // because we must be able to group on @groupby anyway
+		ARRAY_FOREACH ( i, tRes.m_dMatches )
 		{
-			// groupby sorter does that automagically
-			pSorter->SetMVAPool ( NULL ); // because we must be able to group on @groupby anyway
-			ARRAY_FOREACH ( i, tRes.m_dMatches )
-			{
-				CSphMatch & tMatch = tRes.m_dMatches[i];
+			CSphMatch & tMatch = tRes.m_dMatches[i];
 
-				if ( tRes.m_dIndexWeights.GetLength() && tMatch.m_iTag>=0 )
+			if ( tRes.m_dIndexWeights.GetLength() && tMatch.m_iTag>=0 )
+				tMatch.m_iWeight *= tRes.m_dIndexWeights[tMatch.m_iTag];
+
+			if ( !pSorter->PushGrouped ( tMatch ) )
+				iDupes++;
+		}
+	} else
+	{
+		// normal sorter needs massasging
+		// sort by docid and then by tag to guarantee the replacement order
+		TaggedMatchSorter_fn fnSort;
+		sphSort ( &tRes.m_dMatches[0], tRes.m_dMatches.GetLength(), fnSort, fnSort );
+
+		// fold them matches
+		if ( tQuery.m_dIndexWeights.GetLength() )
+		{
+			// if there were per-index weights, compute weighted ranks sum
+			int iCur = 0;
+			int iMax = tRes.m_dMatches.GetLength();
+
+			while ( iCur<iMax )
+			{
+				CSphMatch & tMatch = tRes.m_dMatches[iCur++];
+				if ( tMatch.m_iTag>=0 )
 					tMatch.m_iWeight *= tRes.m_dIndexWeights[tMatch.m_iTag];
 
-				if ( !pSorter->PushGrouped ( tMatch ) )
+				while ( iCur<iMax && tRes.m_dMatches[iCur].m_iDocID==tMatch.m_iDocID )
+				{
+					const CSphMatch & tDupe = tRes.m_dMatches[iCur];
+					int iAddWeight = tDupe.m_iWeight;
+					if ( tDupe.m_iTag>=0 )
+						iAddWeight *= tRes.m_dIndexWeights[tDupe.m_iTag];
+					tMatch.m_iWeight += iAddWeight;
+
 					iDupes++;
+					iCur++;
+				}
+
+				pSorter->Push ( tMatch );
 			}
+
 		} else
 		{
-			// normal sorter needs massasging
-			// sort by docid and then by tag to guarantee the replacement order
-			TaggedMatchSorter_fn fnSort;
-			sphSort ( &tRes.m_dMatches[0], tRes.m_dMatches.GetLength(), fnSort, fnSort );
-
-			// fold them matches
-			if ( tQuery.m_dIndexWeights.GetLength() )
+			// by default, simply remove dupes (select first by tag)
+			ARRAY_FOREACH ( i, tRes.m_dMatches )
 			{
-				// if there were per-index weights, compute weighted ranks sum
-				int iCur = 0;
-				int iMax = tRes.m_dMatches.GetLength();
-
-				while ( iCur<iMax )
-				{
-					CSphMatch & tMatch = tRes.m_dMatches[iCur++];
-					if ( tMatch.m_iTag>=0 )
-						tMatch.m_iWeight *= tRes.m_dIndexWeights[tMatch.m_iTag];
-
-					while ( iCur<iMax && tRes.m_dMatches[iCur].m_iDocID==tMatch.m_iDocID )
-					{
-						const CSphMatch & tDupe = tRes.m_dMatches[iCur];
-						int iAddWeight = tDupe.m_iWeight;
-						if ( tDupe.m_iTag>=0 )
-							iAddWeight *= tRes.m_dIndexWeights[tDupe.m_iTag];
-						tMatch.m_iWeight += iAddWeight;
-
-						iDupes++;
-						iCur++;
-					}
-
-					pSorter->Push ( tMatch );
-				}
-
-			} else
-			{
-				// by default, simply remove dupes (select first by tag)
-				ARRAY_FOREACH ( i, tRes.m_dMatches )
-				{
-					if ( i==0 || tRes.m_dMatches[i].m_iDocID!=tRes.m_dMatches[i-1].m_iDocID )
-						pSorter->Push ( tRes.m_dMatches[i] );
-					else
-						iDupes++;
-				}
+				if ( i==0 || tRes.m_dMatches[i].m_iDocID!=tRes.m_dMatches[i-1].m_iDocID )
+					pSorter->Push ( tRes.m_dMatches[i] );
+				else
+					iDupes++;
 			}
 		}
+	}
 
-		tRes.m_dMatches.Reset ();
-		sphFlattenQueue ( pSorter, &tRes, -1 );
-		SafeDelete ( pSorter );
+	tRes.m_dMatches.Reset ();
+	sphFlattenQueue ( pSorter, &tRes, -1 );
+	SafeDelete ( pSorter );
 
-		tRes.m_iTotalMatches -= iDupes;
-		return true;
+	tRes.m_iTotalMatches -= iDupes;
+	return true;
 }
 
 
@@ -5641,7 +5656,6 @@ void SearchHandler_c::RunQueries ()
 		m_dResults[i].m_dTag2Pools[0].m_pMva = m_dMvaStorage.Begin();
 		m_dResults[i].m_dTag2Pools[0].m_pStrings = m_dStringsStorage.Begin();
 		m_dResults[i].m_iMatches = m_dResults[i].m_dMatches.GetLength();
-		sphSortRemoveInternalAttrs ( m_dResults[i].m_tSchema );
 	}
 }
 
@@ -6538,6 +6552,10 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		CSphQuery & tQuery = m_dQueries[iRes];
 		CSphSchema * pExtraSchema = tQuery.m_bAgent?&m_dExtraSchemas[bWasLocalSorter?0:iRes]:NULL;
 
+		// minimize sorters needs these pointers
+		tRes.m_dTag2Pools[0].m_pMva = m_dMvaStorage.Begin();
+		tRes.m_dTag2Pools[0].m_pStrings = m_dStringsStorage.Begin();
+
 		// if there were no succesful searches at all, this is an error
 		if ( !tRes.m_iSuccesses )
 		{
@@ -6578,6 +6596,10 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		tRes.m_iOffset = tQuery.m_iOffset;
 		tRes.m_iCount = Max ( Min ( tQuery.m_iLimit, tRes.m_dMatches.GetLength()-tQuery.m_iOffset ), 0 );
 	}
+
+	// remove internal attributes from result schema
+	ARRAY_FOREACH ( i, m_dResults )
+		sphSortRemoveInternalAttrs ( m_dResults[i].m_tSchema );
 
 	// stats
 	tmSubset = sphMicroTimer() - tmSubset;
@@ -9244,10 +9266,6 @@ bool HandleMysqlSelect ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SearchHandl
 		SendMysqlErrorPacket ( tOut, uPacketID, "Server shutdown in progress", MYSQL_ERR_SERVER_SHUTDOWN );
 		return false;
 	}
-
-	// remove internal attributes from result schema
-	ARRAY_FOREACH ( i, tHandler.m_dResults )
-		sphSortRemoveInternalAttrs ( tHandler.m_dResults[i].m_tSchema );
 
 	return true;
 }

@@ -3,7 +3,10 @@
 
 <name>string attribute vs different indexes</name>
 
+<num_agents>3</num_agents>
+
 <config>
+
 indexer
 {
 	mem_limit		= 16M
@@ -51,6 +54,7 @@ source src_delta2
 	sql_query_killlist = SELECT 2
 }
 
+<agent0>
 index main
 {
 	source			= src_main
@@ -93,26 +97,54 @@ index dist1
 {
 	type = distributed
 	local = main
-	agent = <agent_address/>:delta2
+	agent = <agent1_address/>:agent1_delta2
 }
 
 index dist2
 {
 	type = distributed
 	local = delta2
-	agent = <agent_address/>:delta1
+	agent = <agent2_address/>:agent2_delta1
 }
 
 index dist3
 {
 	type = distributed
-	agent = <agent_address/>:main
-	agent = <agent_address/>:delta1
+	agent = <agent1_address/>:agent1_main
+	agent = <agent2_address/>:agent2_delta1
+}
+</agent0>
+
+<agent1>
+index agent1_main
+{
+	source			= src_main
+    docinfo			= extern
+    charset_type	= sbcs
+	path			= <data_path/>/agent1_main
 }
 
-</config>
+index agent1_delta2
+{
+	source			= src_delta2
+    docinfo			= extern
+    charset_type	= sbcs
+	path			= <data_path/>/agent1_delta2
+}
+</agent1>
 
-<num_agents>3</num_agents>
+<agent2>
+index agent2_delta1
+{
+	source			= src_delta1
+    docinfo			= extern
+    charset_type	= sbcs
+	path			= <data_path/>/agent2_delta1
+}
+</agent2>
+
+
+</config>
 
 <db_create>
 CREATE TABLE `test_table`

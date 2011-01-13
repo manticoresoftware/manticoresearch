@@ -301,6 +301,7 @@ static bool				g_bCpuStats		= false;
 static bool				g_bOptNoDetach	= false;
 static bool				g_bOptNoLock	= false;
 static bool				g_bSafeTrace	= false;
+static bool				g_bStripPath	= false;
 
 static volatile bool	g_bDoDelete			= false;	// do we need to delete any indexes?
 static volatile bool	g_bDoRotate			= false;	// flag that we are rotating now; set from SIGHUP; cleared on rotation success
@@ -6288,7 +6289,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 				// if it exists but is not enabled, remove it from the list and force recheck
 				if ( !pServedIndex->m_bEnabled )
-					m_dLocal.RemoveFast ( i-- );
+					m_dLocal.Remove ( i-- );
 
 				pServedIndex->Unlock();
 			}
@@ -10127,7 +10128,7 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 	ISphTokenizer * pTokenizer = tIndex.m_pIndex->LeakTokenizer ();
 	CSphDict * pDictionary = tIndex.m_pIndex->LeakDictionary ();
 
-	if ( !tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, false, sWarning ) || !tIndex.m_pIndex->Preread() )
+	if ( !tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, g_bStripPath, sWarning ) || !tIndex.m_pIndex->Preread() )
 	{
 		if ( tIndex.m_bOnlyNew )
 		{
@@ -10144,10 +10145,10 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 				TryRename ( sIndex, sPath, g_dCurExts[j], g_dNewExts[j], true );
 				TryRename ( sIndex, sPath, g_dOldExts[j], g_dCurExts[j], true );
 			}
-			TryRename ( sIndex, sPath, g_dOldExts[EXT_MVP], g_dCurExts[EXT_MVP], true );
+			TryRename ( sIndex, sPath, g_dOldExts[EXT_MVP], g_dCurExts[EXT_MVP], false );
 			sphLogDebug ( "RotateIndexGreedy: has recovered" );
 
-			if ( !tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, false, sWarning ) || !tIndex.m_pIndex->Preread() )
+			if ( !tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, g_bStripPath, sWarning ) || !tIndex.m_pIndex->Preread() )
 			{
 				sphWarning ( "rotating index '%s': .new preload failed; ROLLBACK FAILED; INDEX UNUSABLE", sIndex );
 				tIndex.m_bEnabled = false;
@@ -10463,7 +10464,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	// prealloc enough RAM and lock new index
 	sphLogDebug ( "prealloc enough RAM and lock new index" );
 	CSphString sWarn, sError;
-	if ( !tNewIndex.m_pIndex->Prealloc ( tNewIndex.m_bMlock, false, sWarn ) )
+	if ( !tNewIndex.m_pIndex->Prealloc ( tNewIndex.m_bMlock, g_bStripPath, sWarn ) )
 	{
 		sphWarning ( "rotating index '%s': prealloc: %s; using old index", sIndex.cstr(), tNewIndex.m_pIndex->GetLastError().cstr() );
 		return;
@@ -10651,7 +10652,7 @@ void SeamlessTryToForkPrereader ()
 	// prealloc enough RAM and lock new index
 	sphLogDebug ( "prealloc enough RAM and lock new index" );
 	CSphString sWarn, sError;
-	if ( !g_pPrereading->Prealloc ( tServed.m_bMlock, false, sWarn ) )
+	if ( !g_pPrereading->Prealloc ( tServed.m_bMlock, g_bStripPath, sWarn ) )
 	{
 		sphWarning ( "rotating index '%s': prealloc: %s; using old index", sPrereading, g_pPrereading->GetLastError().cstr() );
 		if ( !sWarn.IsEmpty() )
@@ -11041,7 +11042,7 @@ bool PrereadNewIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex, c
 {
 	CSphString sWarning;
 
-	if ( !tIdx.m_pIndex->Prealloc ( tIdx.m_bMlock, false, sWarning ) || !tIdx.m_pIndex->Preread() )
+	if ( !tIdx.m_pIndex->Prealloc ( tIdx.m_bMlock, g_bStripPath, sWarning ) || !tIdx.m_pIndex->Preread() )
 	{
 		sphWarning ( "index '%s': preload: %s; NOT SERVING", szIndexName, tIdx.m_pIndex->GetLastError().cstr() );
 		return false;
@@ -12958,6 +12959,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		OPT1 ( "--logdebugvv" )		g_eLogLevel = LOG_VERY_VERBOSE_DEBUG;
 		OPT1 ( "--safetrace" )		g_bSafeTrace = true;
 		OPT1 ( "--test" )			{ g_bWatchdog = false; bTestMode = true; }
+		OPT1 ( "--strip-path" )		g_bStripPath = true;
 
 		// handle 1-arg options
 		else if ( (i+1)>=argc )		break;

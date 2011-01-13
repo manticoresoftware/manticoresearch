@@ -904,7 +904,7 @@ private:
 	template < typename DOCID, typename WORDID >
 	void						SaveDiskDataImpl ( const char * sFilename ) const;
 	void						SaveDiskChunk ();
-	CSphIndex *					LoadDiskChunk ( int iChunk );
+	CSphIndex *					LoadDiskChunk ( int iChunk, bool bStripPath );
 	bool						LoadRamChunk ();
 	bool						SaveRamChunk ();
 
@@ -2704,7 +2704,7 @@ void RtIndex_t::SaveDiskChunk ()
 	SaveDiskData ( sNewChunk.cstr() );
 
 	// bring new disk chunk online
-	CSphIndex * pDiskChunk = LoadDiskChunk ( m_pDiskChunks.GetLength() );
+	CSphIndex * pDiskChunk = LoadDiskChunk ( m_pDiskChunks.GetLength(), false );
 	assert ( pDiskChunk );
 
 	// save updated meta
@@ -2725,7 +2725,7 @@ void RtIndex_t::SaveDiskChunk ()
 }
 
 
-CSphIndex * RtIndex_t::LoadDiskChunk ( int iChunk )
+CSphIndex * RtIndex_t::LoadDiskChunk ( int iChunk, bool bStripPath )
 {
 	MEMORY ( SPH_MEM_IDX_DISK );
 
@@ -2737,7 +2737,7 @@ CSphIndex * RtIndex_t::LoadDiskChunk ( int iChunk )
 	if ( !pDiskChunk )
 		sphDie ( "disk chunk %s: alloc failed", sChunk.cstr() );
 
-	if ( !pDiskChunk->Prealloc ( false, false, sError ) )
+	if ( !pDiskChunk->Prealloc ( false, bStripPath, sError ) )
 		sphDie ( "disk chunk %s: prealloc failed: %s", sChunk.cstr(), sError.cstr() );
 
 	if ( !pDiskChunk->Preread() )
@@ -2747,7 +2747,7 @@ CSphIndex * RtIndex_t::LoadDiskChunk ( int iChunk )
 }
 
 
-bool RtIndex_t::Prealloc ( bool, bool, CSphString & )
+bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 {
 	MEMORY ( SPH_MEM_IDX_RT );
 
@@ -2804,7 +2804,7 @@ bool RtIndex_t::Prealloc ( bool, bool, CSphString & )
 	// load disk chunks, if any
 	for ( int iChunk=0; iChunk<iDiskChunks; iChunk++ )
 	{
-		m_pDiskChunks.Add ( LoadDiskChunk ( iChunk ) );
+		m_pDiskChunks.Add ( LoadDiskChunk ( iChunk, bStripPath ) );
 
 		// tricky bit
 		// outgoing match schema on disk chunk should be identical to our internal (!) schema

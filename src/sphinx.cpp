@@ -12846,6 +12846,9 @@ bool CSphIndex_VLN::Preread ()
 
 		for ( DWORD i=1; i<m_uDocinfo; i++ )
 		{
+			assert ( DOCINFO2ID ( &m_pDocinfo[i*iStride] )>uFirst
+				&& DOCINFO2ID ( &m_pDocinfo[(i-1)*iStride] ) < DOCINFO2ID ( &m_pDocinfo[i*iStride] )
+				&& "descending document ID found" );
 			DWORD uHash = (DWORD)( ( DOCINFO2ID ( &m_pDocinfo[i*iStride] ) - uFirst ) >> iShift );
 			if ( uHash==uLastHash )
 				continue;

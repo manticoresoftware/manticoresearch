@@ -11349,6 +11349,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 			for ( CSphVariant * v = hIndex ( sTypes[iType] ); v; v = v->m_pNext )
 			{
 				tCol.m_sName = v->cstr();
+				tCol.m_sName.ToLower();
 				tCol.m_eAttrType = iTypes[iType];
 				tSchema.AddAttr ( tCol, false );
 			}

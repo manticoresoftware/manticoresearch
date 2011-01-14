@@ -40,10 +40,10 @@ index rt
     charset_type	= sbcs
 	path			= <data_path/>/plain
 
-	rt_attr_uint	= idd1
-	rt_attr_uint	= idd2
-	rt_attr_string	= str1
-	rt_attr_string	= str2
+	rt_attr_uint	= IDD1
+	rt_attr_uint	= iDD2
+	rt_attr_string	= Str1
+	rt_attr_string	= Str2
 	rt_field		= body
 	
 	rt_mem_limit	= 128K 
@@ -89,26 +89,26 @@ INSERT INTO `test_table` VALUES
 </db_insert>
 
 <sphqueries>
-<sphinxql>insert into rt (id, idd1, idd2, str1, str2, body) values ( 10, 5, 4, '', 'cc', 'the' )</sphinxql>
-<sphinxql>insert into rt (id, idd1, idd2, str1, str2, body) values ( 11, 5, 4, 'a', '', 'the' )</sphinxql>
-<sphinxql>insert into rt (id, idd1, idd2, str1, str2, body) values ( 12, 6, 4, 'a', 'cc', 'the' )</sphinxql>
-<sphinxql>insert into rt (id, idd1, idd2, str1, str2, body) values ( 13, 4, 4, 'ddd', 'hh', 'bird' )</sphinxql>
-<sphinxql>insert into rt (id, idd1, idd2, str1, str2, body) values ( 14, 3, 5, 'cc', 'c', 'dog eats cat' )</sphinxql>
-<sphinxql>insert into rt (id, idd1, idd2, str1, str2, body) values ( 15, 2, 6, 'cc', 'cc', 'cat eats bird' )</sphinxql>
-<sphinxql>insert into rt (id, idd1, idd2, str1, str2, body) values ( 16, 1, 7, 'a a', 'cc', 'the bird' )</sphinxql>
-<sphinxql>insert into rt (id, idd1, idd2, str1, str2, body) values ( 17, 1, 8, 'c cc', 'c', 'the cat' )</sphinxql>
-<sphinxql>insert into rt (id, idd1, idd2, str1, str2, body) values ( 18, 11, 9, 'aaa', 'h', 'the dog' )</sphinxql>
+<sphinxql>insert into rt (id, Idd1, idd2, str1, str2, body) values ( 10, 5, 4, '', 'cc', 'the' )</sphinxql>
+<sphinxql>insert into rt (id, idd1, IDD2, str1, str2, body) values ( 11, 5, 4, 'a', '', 'the' )</sphinxql>
+<sphinxql>insert into rt (id, idd1, idd2, Str1, str2, body) values ( 12, 6, 4, 'a', 'cc', 'the' )</sphinxql>
+<sphinxql>insert into rt (id, idd1, idd2, str1, STR2, body) values ( 13, 4, 4, 'ddd', 'hh', 'bird' )</sphinxql>
+<sphinxql>insert into rt (id, idd1, idd2, str1, str2, Body) values ( 14, 3, 5, 'cc', 'c', 'dog eats cat' )</sphinxql>
+<sphinxql>insert into rt (id, idd1, idd2, str1, str2, BODY) values ( 15, 2, 6, 'cc', 'cc', 'cat eats bird' )</sphinxql>
+<sphinxql>insert into rt (id, idd1, idd2, str1, sTr2, body) values ( 16, 1, 7, 'a a', 'cc', 'the bird' )</sphinxql>
+<sphinxql>insert into rt (id, idd1, idd2, stR1, str2, body) values ( 17, 1, 8, 'c cc', 'c', 'the cat' )</sphinxql>
+<sphinxql>insert into rt (id, idd1, iDD2, str1, str2, body) values ( 18, 11, 9, 'aaa', 'h', 'the dog' )</sphinxql>
 
-<sphinxql>select * from plain order by str1 desc</sphinxql>
-<sphinxql>select * from rt order by str1 desc</sphinxql>
-<sphinxql>select * from rt order by str2 asc, str1 desc</sphinxql>
-<sphinxql>select * from dist order by str1 desc</sphinxql>
-<sphinxql>select * from dist order by str1 desc, idd1 asc</sphinxql>
-<sphinxql>select * from dist where match ('the') order by str1 desc</sphinxql>
-<sphinxql>select * from dist where match ('the') order by str1 desc, idd1 asc</sphinxql>
-<sphinxql>select * from dist where match ('cat | eats') order by str1 asc</sphinxql>
-<sphinxql>select * from dist where match ('cat | eats') order by str1 asc, str2 desc</sphinxql>
-<sphinxql>select * from dist where match ('cat | eats') order by str1 asc, idd1 asc</sphinxql>
+<sphinxql>select * from plain order by Str1 desc</sphinxql>
+<sphinxql>select * from rt order by sTR1 desc</sphinxql>
+<sphinxql>select * from rt order by STR2 asc, Str1 desc</sphinxql>
+<sphinxql>select * from dist order by Str1 desc</sphinxql>
+<sphinxql>select * from dist order by Str1 desc, IDD1 asc</sphinxql>
+<sphinxql>select * from dist where match ('the') order by Str1 desc</sphinxql>
+<sphinxql>select * from dist where match ('the') order by Str1 desc, iDD1 asc</sphinxql>
+<sphinxql>select * from dist where match ('cat | eats') order by Str1 asc</sphinxql>
+<sphinxql>select * from dist where match ('cat | eats') order by Str1 asc, sTr2 desc</sphinxql>
+<sphinxql>select * from dist where match ('cat | eats') order by Str1 asc, Idd1 asc</sphinxql>
 </sphqueries>
 
 </test>

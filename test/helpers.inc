@@ -823,11 +823,7 @@ class SphinxConfig
 			$this->_results[] = $query_result;
 			if ( IsModelGenMode () )
 			{
-				$keys = array_keys($this->_results_model);
-				$last = end($keys);
-				if ($last===FALSE)
-					$last=0;
-				$this->_results_model[$last][] = $query_result;
+				$this->_results_model[$this->SubtestNo ()][] = $query_result;
 			}
 		}
 		mysql_close ( $connection );

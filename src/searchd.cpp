@@ -4923,7 +4923,7 @@ void RemapResult ( const CSphSchema& tTarget, AggrResult_t & tRes, bool bMultiSc
 		for ( int i=0; i<tTarget.GetAttrsCount(); i++ )
 		{
 			dMapFrom[i] = dSchema.GetAttrIndex ( tTarget.GetAttr(i).m_sName.cstr() );
-			assert ( dMapFrom[i]>=0 );
+			assert ( dMapFrom[i]>=0 || sphIsSortStringInternal ( tTarget.GetAttr(i).m_sName.cstr() ) );
 		}
 		int iLimit = bMultiSchema
 			? ( iCur + tRes.m_dMatchCounts[iSchema] )
@@ -4944,15 +4944,17 @@ void RemapResult ( const CSphSchema& tTarget, AggrResult_t & tRes, bool bMultiSc
 			for ( int j=0; j<tTarget.GetAttrsCount(); j++ )
 			{
 				const CSphColumnInfo & tDst = tTarget.GetAttr(j);
-				const CSphColumnInfo & tSrc = dSchema.GetAttr ( dMapFrom[j] );
 				// we could keep some of the rows static
 				// and so, avoid the duplication of the data.
 				if ( !tDst.m_tLocator.m_bDynamic )
 				{
-					assert ( !tSrc.m_tLocator.m_bDynamic );
+					assert ( dMapFrom[j]<0 || !dSchema.GetAttr ( dMapFrom[j] ).m_tLocator.m_bDynamic );
 					tRow.m_pStatic = tMatch.m_pStatic;
-				} else
+				} else if ( dMapFrom[j]>=0 )
+				{
+					const CSphColumnInfo & tSrc = dSchema.GetAttr ( dMapFrom[j] );
 					tRow.SetAttr ( tDst.m_tLocator, tMatch.GetAttr ( tSrc.m_tLocator ) );
+				}
 			}
 			// swap out old (most likely wrong sized) match
 			Swap ( tMatch, tRow );
@@ -5189,12 +5191,48 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	if ( !pSorter )
 		return false;
 
+	// reset bAllEqual flag if sorter makes new attributes
+	if ( bAllEqual )
+	{
+		// at first we count already existed internal attributes
+		// then check if sorter makes more
+		CSphVector<SphStringSorterRemap_t> dRemapAttr;
+		sphSortGetStringRemap ( tRes.m_tSchema, tRes.m_tSchema, dRemapAttr );
+		int iRemapCount = dRemapAttr.GetLength();
+		sphSortGetStringRemap ( pSorter->GetSchema(), tRes.m_tSchema, dRemapAttr );
+
+		bAllEqual = ( dRemapAttr.GetLength()<=iRemapCount );
+	}
+
 	// sorter expects this
 	tRes.m_tSchema = pSorter->GetSchema();
 
 	// convert all matches to sorter schema - at least to manage all static to dynamic
 	if ( !bAllEqual )
 		RemapResult ( tRes.m_tSchema, tRes );
+
+	// do match ptr pre-calc if its "order by string" case
+	CSphVector<SphStringSorterRemap_t> dRemapAttr;
+	if ( pSorter && pSorter->UsesAttrs() && sphSortGetStringRemap ( pSorter->GetSchema(), tRes.m_tSchema, dRemapAttr ) )
+	{
+		int iCur = 0;
+		ARRAY_FOREACH ( iSchema, tRes.m_dSchemas )
+		{
+			for ( int i=iCur; i<iCur+tRes.m_dMatchCounts[iSchema]; i++ )
+			{
+				CSphMatch & tMatch = tRes.m_dMatches[i];
+				const BYTE * pStringBase = tRes.m_dTag2Pools[tMatch.m_iTag].m_pStrings;
+
+				ARRAY_FOREACH ( iAttr, dRemapAttr )
+				{
+					SphAttr_t uOff = tMatch.GetAttr ( dRemapAttr[iAttr].m_tSrc );
+					SphAttr_t uPtr = (SphAttr_t)( pStringBase && uOff ? pStringBase + uOff : 0 );
+					tMatch.SetAttr ( dRemapAttr[iAttr].m_tDst, uPtr );
+				}
+			}
+			iCur += tRes.m_dMatchCounts[iSchema];
+		}
+	}
 
 	// kill all dupes
 	int iDupes = 0;

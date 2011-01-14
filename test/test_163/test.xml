@@ -16,6 +16,10 @@ searchd
 {
 	<searchd_settings/>
 	workers = threads
+	<dynamic>
+		<variant>compat_results = 1</variant>
+		<variant>compat_results = 0</variant>
+	</dynamic>
 }
 
 source src_main

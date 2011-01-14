@@ -5358,14 +5358,18 @@ bool MinimizeAggrResultCompat ( AggrResult_t & tRes, const CSphQuery & tQuery, b
 			{
 				bool bAdd = false;
 				ARRAY_FOREACH ( i, tQuery.m_dItems )
-					if ( tQuery.m_dItems[i].m_sExpr==tCol.m_sName )
+				{
+					const CSphQueryItem & tQueryItem = tQuery.m_dItems[i];
+					if ( ( tQueryItem.m_sExpr.cstr() && tQueryItem.m_sExpr==tCol.m_sName )
+						|| ( tQueryItem.m_sAlias.cstr() && tQueryItem.m_sAlias==tCol.m_sName ) )
 					{
 						bAdd = true;
 						break;
 					}
+				}
 
-					if ( !bAdd )
-						continue;
+				if ( !bAdd )
+					continue;
 			}
 			tItems.AddAttr ( tCol, true );
 		}
@@ -5589,6 +5593,87 @@ void SetupKillListFilter ( CSphFilterSettings & tFilter, const SphAttr_t * pKill
 
 /////////////////////////////////////////////////////////////////////////////
 
+class CSphSchemaMT : public CSphSchema
+{
+public:
+	explicit				CSphSchemaMT ( const char * sName="(nameless)" ) : CSphSchema ( sName ), m_pLock ( NULL )
+	{}
+
+	void AwareMT()
+	{
+		if ( m_pLock )
+			return;
+		m_pLock = new CSphRwlock();
+		m_pLock->Init();
+	}
+
+	~CSphSchemaMT()
+	{
+		if ( m_pLock )
+		Verify ( m_pLock->Done() );
+		SafeDelete ( m_pLock )
+	}
+
+	// get wlocked entry, only if it is not yet touched
+	inline CSphSchemaMT * GetVirgin ()
+	{
+		if ( !m_pLock )
+			return this;
+
+		if ( m_pLock->WriteLock() )
+		{
+			if ( m_dAttrs.GetLength()!=0 ) // not already a virgin
+			{
+				m_pLock->Unlock();
+				return NULL;
+			}
+			return this;
+		} else
+		{
+			sphLogDebug ( "WriteLock %p failed", this );
+			assert ( false );
+		}
+
+		return NULL;
+	}
+
+	inline CSphSchemaMT * RLock()
+	{
+		if ( !m_pLock )
+			return this;
+
+		if ( !m_pLock->ReadLock() )
+		{
+			sphLogDebug ( "ReadLock %p failed", this );
+			assert ( false );
+		}
+		return this;
+	}
+
+	inline void UnLock() const
+	{
+		if ( m_pLock )
+			m_pLock->Unlock();
+	}
+
+private:
+	mutable CSphRwlock * m_pLock;
+};
+
+class UnlockOnDestroy
+{
+public:
+	explicit UnlockOnDestroy ( const CSphSchemaMT * lock ) : m_pLock ( lock )
+	{}
+	inline ~UnlockOnDestroy()
+	{
+		if ( m_pLock )
+			m_pLock->UnLock();
+	}
+private:
+	const CSphSchemaMT * m_pLock;
+};
+
 class SearchHandler_c
 {
 	friend void LocalSearchThreadFunc ( void * pArg );
@@ -5617,7 +5702,7 @@ protected:
 	bool							m_bMultiQueue;	///< whether current subset is subject to multi-queue optimization
 	CSphVector<CSphString>			m_dLocal;		///< local indexes for the current subset
 	volatile bool							m_bIsLocked;	///< whether local indexes are already locked
-	mutable CSphVector<CSphSchema>			m_dExtraSchemas; ///< the extra fields for agents
+	mutable CSphVector<CSphSchemaMT>		m_dExtraSchemas; ///< the extra fields for agents
 };
 
 
@@ -5915,7 +6000,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 		m_dResults[iQuery].m_iQueryTime += (int)( tmLocal/1000 );
 }
 
-
+// invoked from MT searches. So, must be MT-aware!
 bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters, CSphQueryResult ** ppResults ) const
 {
 	const int iQueries = m_iEnd-m_iStart+1;
@@ -5936,11 +6021,17 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 	{
 		CSphString sError;
 		const CSphQuery & tQuery = m_dQueries[i+m_iStart];
-		CSphSchema * pExtraSchema = tQuery.m_bAgent?&m_dExtraSchemas[i+m_iStart]:NULL;
+		CSphSchemaMT * pExtraSchemaMT = tQuery.m_bAgent?&m_dExtraSchemas[i+m_iStart]:NULL;
+		if ( pExtraSchemaMT )
+		{
+			pExtraSchemaMT->AwareMT();
+			pExtraSchemaMT = pExtraSchemaMT->GetVirgin();
+		}
+		UnlockOnDestroy dSchemaLock ( pExtraSchemaMT );
 
 		assert ( !tQuery.m_iOldVersion || tQuery.m_iOldVersion>=0x102 );
+		ppSorters[i] = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchemaMT );
 
-		ppSorters[i] = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchema );
 		if ( !ppSorters[i] )
 		{
 			// FIXME! submit a failure?
@@ -6033,7 +6124,8 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 		{
 			CSphString sError;
 			CSphQuery & tQuery = m_dQueries[iQuery];
-			CSphSchema * pExtraSchema = tQuery.m_bAgent?&m_dExtraSchemas[iQuery]:NULL;
+			CSphSchemaMT * pExtraSchema = tQuery.m_bAgent?m_dExtraSchemas[iQuery].GetVirgin():NULL;
+			UnlockOnDestroy dSchemaLock ( pExtraSchema );
 
 			// create sorter, if needed
 			ISphMatchSorter * pSorter = pLocalSorter;
@@ -6411,8 +6503,12 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		// we can reuse the very same sorter
 		if ( bAllEqual )
 			if ( FixupQuery ( &m_dQueries[iStart], &tFirstSchema, "local-sorter", sError ) )
-				pLocalSorter = sphCreateQueue ( &m_dQueries[iStart], tFirstSchema, sError, true,
-					m_dQueries[iStart].m_bAgent?&m_dExtraSchemas[iStart]:NULL);
+			{
+				CSphSchemaMT * pExtraSchemaMT = m_dQueries[iStart].m_bAgent?m_dExtraSchemas[iStart].GetVirgin():NULL;
+				UnlockOnDestroy ExtraLocker ( pExtraSchemaMT );
+				pLocalSorter = sphCreateQueue ( &m_dQueries[iStart], tFirstSchema, sError, true, pExtraSchemaMT );
+			}
+
 
 		if ( g_eWorkers==MPM_THREADS )
 		{
@@ -6588,7 +6684,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	{
 		AggrResult_t & tRes = m_dResults[iRes];
 		CSphQuery & tQuery = m_dQueries[iRes];
-		CSphSchema * pExtraSchema = tQuery.m_bAgent?&m_dExtraSchemas[bWasLocalSorter?0:iRes]:NULL;
+		CSphSchemaMT * pExtraSchema = tQuery.m_bAgent?&m_dExtraSchemas[bWasLocalSorter?0:iRes]:NULL;
 
 		// minimize sorters needs these pointers
 		tRes.m_dTag2Pools[0].m_pMva = m_dMvaStorage.Begin();
@@ -6615,6 +6711,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					return;
 			} else
 			{
+				if ( pExtraSchema )
+					pExtraSchema->RLock();
+				UnlockOnDestroy SchemaLocker ( pExtraSchema );
 				if ( !MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength()!=0, pExtraSchema ) )
 					return;
 			}

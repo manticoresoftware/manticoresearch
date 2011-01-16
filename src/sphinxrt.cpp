@@ -461,7 +461,7 @@ struct RtDocReader_tmpl
 
 typedef RtDocReader_tmpl<> RtDocReader_t;
 
-static const int WORDLIST_CHECKPOINT_SIZE = 1024;
+static const int RAM_WORDLIST_CHECKPOINT = 1024;
 
 struct RtWordWriter_t
 {
@@ -485,7 +485,7 @@ struct RtWordWriter_t
 	void ZipWord ( const RtWord_t & tWord )
 	{
 		CSphTightVector<BYTE> & tWords = *m_pWords;
-		if ( ++m_iWords==WORDLIST_CHECKPOINT_SIZE )
+		if ( ++m_iWords==RAM_WORDLIST_CHECKPOINT )
 		{
 			RtWordCheckpoint_t & tCheckpoint = m_pCheckpoints->Add();
 			tCheckpoint.m_uWordID = tWord.m_uWordID;
@@ -527,7 +527,7 @@ struct RtWordReader_tmpl
 	const RTWORD * UnzipWord_t ()
 	{
 		RTWORD & mtWord = *(RTWORD*)&m_tWord;
-		if ( ++m_iWords==WORDLIST_CHECKPOINT_SIZE )
+		if ( ++m_iWords==RAM_WORDLIST_CHECKPOINT )
 		{
 			mtWord.m_uWordID = 0;
 			mtWord.m_uDoc = 0;
@@ -2244,7 +2244,7 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename ) const
 		pWords.Add ( pWordReaders[i]->UnzipWord() );
 
 	// loop keywords
-	static const int WORDLIST_CHECKPOINT = 1024;
+	static const int WORDLIST_CHECKPOINT = 64;
 	CSphVector<Checkpoint_t> dCheckpoints;
 	int iWords = 0;
 
@@ -2558,7 +2558,7 @@ static void WriteSchemaColumn ( CSphWriter & tWriter, const CSphColumnInfo & tCo
 void RtIndex_t::SaveDiskHeader ( const char * sFilename, int iCheckpoints, SphOffset_t iCheckpointsPosition, DWORD uKillListSize, DWORD uMinMaxSize, bool bForceID32 ) const
 {
 	static const DWORD INDEX_MAGIC_HEADER	= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD INDEX_FORMAT_VERSION	= 20;			///< my format version
+	static const DWORD INDEX_FORMAT_VERSION	= 23;			///< my format version
 
 	CSphWriter tWriter;
 	CSphString sName, sError;
@@ -2603,6 +2603,10 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, int iCheckpoints, SphOf
 	tWriter.PutByte ( m_tSettings.m_bIndexExactWords ? 1 : 0 );
 	tWriter.PutDword ( m_tSettings.m_eHitless );
 	tWriter.PutDword ( SPH_HIT_FORMAT_PLAIN );
+	tWriter.PutByte ( 0 ); // m_bIndexSP, v.21+
+	tWriter.PutString ( CSphString() ); // m_sZonePrefix, v.22+
+	tWriter.PutDword ( 0 ); // m_iBoundaryStep, v.23+
+	tWriter.PutDword ( 1 ); // m_iStopwordStep, v.23+
 
 	// tokenizer
 	assert ( m_pTokenizer );
@@ -2637,6 +2641,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, int iCheckpoints, SphOf
 	tWriter.PutString ( tDict.m_sWordforms.cstr () );
 	WriteFileInfo ( tWriter, tWFFileInfo );
 	tWriter.PutDword ( tDict.m_iMinStemmingLen );
+	tWriter.PutByte ( 0 ); // m_bWordDict flag, v.21+
 
 	// kill-list size
 	tWriter.PutDword ( uKillListSize );

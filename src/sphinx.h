@@ -377,6 +377,7 @@ struct CSphTokenizerSettings
 	int					m_iNgramLen;
 	CSphString			m_sNgramChars;
 	CSphString			m_sBlendChars;
+	CSphString			m_sBlendMode;
 
 						CSphTokenizerSettings ();
 };
@@ -422,6 +423,9 @@ public:
 
 	/// set blended characters
 	virtual bool					SetBlendChars ( const char * sConfig, CSphString & sError );
+
+	/// set blended tokens processing mode
+	virtual bool					SetBlendMode ( const char * sMode, CSphString & sError );
 
 	/// setup tokenizer using given settings
 	virtual void					Setup ( const CSphTokenizerSettings & tSettings );
@@ -509,6 +513,11 @@ protected:
 protected:
 	static const int				MAX_SYNONYM_LEN		= 1024;	///< max synonyms map-from length, bytes
 
+	static const BYTE				BLEND_TRIM_NONE		= 1;
+	static const BYTE				BLEND_TRIM_HEAD		= 2;
+	static const BYTE				BLEND_TRIM_TAIL		= 4;
+	static const BYTE				BLEND_TRIM_BOTH		= 8;
+
 	CSphLowercaser					m_tLC;						///< my lowercaser
 	int								m_iLastTokenLen;			///< last token length, in codepoints
 	bool							m_bTokenBoundary;			///< last token boundary flag (true after boundary codepoint followed by separator)
@@ -517,9 +526,15 @@ protected:
 	bool							m_bWasSpecial;				///< special token flag
 	bool							m_bEscaped;					///< backslash handling flag
 	int								m_iOvershortCount;			///< skipped overshort tokens count
-	bool							m_bBlended;
-	bool							m_bNonBlended;
-	bool							m_bBlendedPart;
+
+	bool							m_bBlended;					///< whether last token (as in just returned from GetToken()) was blended
+	bool							m_bNonBlended;				///< internal, whether there were any normal chars in that blended token
+	bool							m_bBlendedPart;				///< whether last token is a normal subtoken of a blended token
+	bool							m_bBlendAdd;				///< whether we have more pending blended variants (of current accumulator) to return
+	BYTE							m_uBlendVariants;			///< mask of blended variants as requested by blend_mode (see BLEND_TRIM_xxx flags)
+	BYTE							m_uBlendVariantsPending;	///< mask of pending blended variants (we clear bits as we return variants)
+	bool							m_bBlendSkipPure;			///< skip purely blended tokens
+
 	bool							m_bShortTokenFilter;		///< short token filter flag
 	bool							m_bQueryMode;				///< is this indexing time or searching time?
 	bool							m_bDetectSentences;			///< should we detect sentence boundaries?

@@ -239,6 +239,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "dict",					0, NULL },
 	{ "index_sp",				0, NULL },
 	{ "index_zones",			0, NULL },
+	{ "blend_mode",				0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -841,6 +842,7 @@ bool sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings 
 		tSettings.m_sSynonymsFile = hIndex.GetStr ( "synonyms" ); // deprecated option name
 	tSettings.m_sIgnoreChars = hIndex.GetStr ( "ignore_chars" );
 	tSettings.m_sBlendChars = hIndex.GetStr ( "blend_chars" );
+	tSettings.m_sBlendMode = hIndex.GetStr ( "blend_mode" );
 
 	// phrase boundaries
 	int iBoundaryStep = Max ( hIndex.GetInt ( "phrase_boundary_step" ), -1 );

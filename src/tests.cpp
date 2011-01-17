@@ -343,6 +343,24 @@ void TestTokenizer ( bool bUTF8 )
 	assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "\"" ) );
 	assert ( pTokenizer->GetToken()==NULL );
 
+	char sTest3[] = "aa lock.up bb";
+	printf ( "test %s\n", sTest3 );
+	pTokenizer->SetBuffer ( (BYTE*)sTest3, strlen(sTest3) );
+	assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "aa" ) );
+	assert ( !pTokenizer->TokenIsBlended() );
+	assert ( !pTokenizer->TokenIsBlendedPart() );
+	assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "lock.up" ) );
+	assert ( pTokenizer->TokenIsBlended() );
+	assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "lock" ) );
+	assert ( !pTokenizer->TokenIsBlended() );
+	assert ( pTokenizer->TokenIsBlendedPart() );
+	assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "up" ) );
+	assert ( !pTokenizer->TokenIsBlended() );
+	assert ( pTokenizer->TokenIsBlendedPart() );
+	assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "bb" ) );
+	assert ( !pTokenizer->TokenIsBlended() );
+	assert ( !pTokenizer->TokenIsBlendedPart() );
+
 	SafeDelete ( pTokenizer );
 }
 

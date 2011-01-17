@@ -1363,7 +1363,7 @@ private:
 	static const int			DEFAULT_WRITE_BUFFER	= 1048576;	///< default write buffer size
 
 	static const DWORD			INDEX_MAGIC_HEADER		= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD			INDEX_FORMAT_VERSION	= 23;			///< my format version
+	static const DWORD			INDEX_FORMAT_VERSION	= 24;			///< my format version
 
 private:
 	// common stuff
@@ -1918,7 +1918,8 @@ public:
 
 protected:
 	BYTE *	GetTokenSyn ();
-	void	BlendAdjust ( BYTE * pPosition );
+	bool	BlendAdjust ( BYTE * pPosition );
+	BYTE *	GetBlendedVariant ();
 	int		CodepointArbitration ( int iCodepoint, bool bWasEscaped, bool bSpaceAhead );
 
 protected:
@@ -1971,6 +1972,10 @@ protected:
 	BYTE				m_sAccum [ 3*SPH_MAX_WORD_LEN+3 ];	///< folded token accumulator
 	BYTE *				m_pAccum;							///< current accumulator position
 	int					m_iAccum;							///< boundary token size
+
+	BYTE				m_sAccumBlend [ 3*SPH_MAX_WORD_LEN+3 ];	///< blend-acc, an accumulator copy for additional blended variants
+	int					m_iBlendNormalStart;					///< points to first normal char in the accumulators (might be NULL)
+	int					m_iBlendNormalEnd;						///< points just past (!) last normal char in the accumulators (might be NULL)
 
 	CSphVector<CSphSynonym>			m_dSynonyms;				///< active synonyms
 	CSphVector<int>					m_dSynStart;				///< map 1st byte to candidate range start
@@ -2614,6 +2619,8 @@ static void LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings 
 	tSettings.m_sNgramChars = tReader.GetString ();
 	if ( uVersion>=15 )
 		tSettings.m_sBlendChars = tReader.GetString ();
+	if ( uVersion>=24 )
+		tSettings.m_sBlendMode = tReader.GetString();
 }
 
 
@@ -2632,6 +2639,7 @@ static void SaveTokenizerSettings ( CSphWriter & tWriter, ISphTokenizer * pToken
 	tWriter.PutDword ( tSettings.m_iNgramLen );
 	tWriter.PutString ( tSettings.m_sNgramChars.cstr () );
 	tWriter.PutString ( tSettings.m_sBlendChars.cstr () );
+	tWriter.PutString ( tSettings.m_sBlendMode.cstr () );
 }
 
 
@@ -2704,6 +2712,10 @@ ISphTokenizer::ISphTokenizer ()
 	, m_bBlended ( false )
 	, m_bNonBlended ( true )
 	, m_bBlendedPart ( false )
+	, m_bBlendAdd ( false )
+	, m_uBlendVariants ( BLEND_TRIM_NONE )
+	, m_uBlendVariantsPending ( 0 )
+	, m_bBlendSkipPure ( false )
 	, m_bShortTokenFilter ( false )
 	, m_bQueryMode ( false )
 	, m_bDetectSentences ( false )
@@ -2862,6 +2874,12 @@ ISphTokenizer * ISphTokenizer::Create ( const CSphTokenizerSettings & tSettings,
 	if ( !tSettings.m_sBlendChars.IsEmpty () && !pTokenizer->SetBlendChars ( tSettings.m_sBlendChars.cstr (), sError ) )
 	{
 		sError.SetSprintf ( "'blend_chars': %s", sError.cstr() );
+		return NULL;
+	}
+
+	if ( !pTokenizer->SetBlendMode ( tSettings.m_sBlendMode.cstr (), sError ) )
+	{
+		sError.SetSprintf ( "'blend_mode': %s", sError.cstr() );
 		return NULL;
 	}
 
@@ -3168,29 +3186,197 @@ int CSphTokenizerTraits<IS_UTF8>::SkipBlended()
 }
 
 
+/// adjusts blending magic when we're about to return a token (any token)
+/// returns false if current token should be skipped, true otherwise
 template < bool IS_UTF8 >
-void CSphTokenizerTraits<IS_UTF8>::BlendAdjust ( BYTE * pCur )
+bool CSphTokenizerTraits<IS_UTF8>::BlendAdjust ( BYTE * pCur )
 {
-	// if all we got is a bunch of blended characters, let's pretend they
-	// weren't really blended to make things easier for the caller
-	m_bBlended = m_bBlended && m_bNonBlended;
+	// check if all we got is a bunch of blended characters (pure-blended case)
+	if ( m_bBlended && !m_bNonBlended )
+	{
+		// we either skip this token, or pretend it was normal
+		// in both cases, clear the flag
+		m_bBlended = false;
+
+		// do we need to skip it?
+		if ( m_bBlendSkipPure )
+		{
+			m_pBlendStart = NULL;
+			return false;
+		}
+	}
+	m_bNonBlended = false;
 
 	// adjust buffer pointers
 	if ( m_bBlended && m_pBlendStart )
 	{
+		// called once per blended token, on processing start
+		// at this point, full blended token is in the accumulator
+		// and we're about to return it
 		m_pCur = m_pBlendStart;
 		m_pBlendEnd = pCur;
 		m_pBlendStart = NULL;
 		m_bBlendedPart = true;
-
 	} else if ( pCur>=m_pBlendEnd )
 	{
+		// tricky bit, as at this point, token we're about to return
+		// can either be a blended subtoken, or the next one
+		m_bBlendedPart = ( m_pTokenStart!=NULL ) && ( m_pTokenStart<m_pBlendEnd );
 		m_pBlendEnd = NULL;
 		m_pBlendStart = NULL;
+	} else if ( !m_pBlendEnd )
+	{
+		// we aren't re-parsing blended; so clear the "blended subtoken" flag
 		m_bBlendedPart = false;
 	}
+	return true;
+}
 
-	m_bNonBlended = false;
+
+static inline void CopySubstring ( BYTE * pDst, const BYTE * pSrc, int iLen )
+{
+	while ( iLen-->0 && *pSrc )
+		*pDst++ = *pSrc++;
+	*pDst++ = '\0';
+}
+
+
+template < bool IS_UTF8 >
+BYTE * CSphTokenizerTraits<IS_UTF8>::GetBlendedVariant ()
+{
+	// we can get called on several occasions
+	// case 1, a new blended token was just accumulated
+	if ( m_bBlended && !m_bBlendAdd )
+	{
+		// fast path for the default case (trim_none)
+		if ( m_uBlendVariants==BLEND_TRIM_NONE )
+			return m_sAccum;
+
+		// analyze the full token, find non-blended bounds
+		m_iBlendNormalStart = -1;
+		m_iBlendNormalEnd = -1;
+
+		// OPTIMIZE? we can skip this based on non-blended flag from adjust
+		BYTE * p = m_sAccum;
+		while ( *p )
+		{
+			int iLast = (int)( p-m_sAccum );
+			int iCode = IS_UTF8
+				? sphUTF8Decode ( p )
+				: *p++;
+			if (!( m_tLC.ToLower ( iCode ) & FLAG_CODEPOINT_BLEND ))
+			{
+				m_iBlendNormalEnd = (int)( p-m_sAccum );
+				if ( m_iBlendNormalStart<0 )
+					m_iBlendNormalStart = iLast;
+			}
+		}
+
+		// build todo mask
+		// check and revert a few degenerate cases
+		m_uBlendVariantsPending = m_uBlendVariants;
+		if ( m_uBlendVariantsPending & BLEND_TRIM_BOTH )
+		{
+			if ( m_iBlendNormalStart<0 )
+			{
+				// no heading blended; revert BOTH to TAIL
+				m_uBlendVariantsPending &= ~BLEND_TRIM_BOTH;
+				m_uBlendVariantsPending |= BLEND_TRIM_TAIL;
+			} else if ( m_iBlendNormalEnd<0 )
+			{
+				// no trailing blended; revert BOTH to HEAD
+				m_uBlendVariantsPending &= ~BLEND_TRIM_BOTH;
+				m_uBlendVariantsPending |= BLEND_TRIM_HEAD;
+			}
+		}
+		if ( m_uBlendVariantsPending & BLEND_TRIM_HEAD )
+		{
+			// either no heading blended, or pure blended; revert HEAD to NONE
+			if ( m_iBlendNormalStart<=0 )
+			{
+				m_uBlendVariantsPending &= ~BLEND_TRIM_HEAD;
+				m_uBlendVariantsPending |= BLEND_TRIM_NONE;
+			}
+		}
+		if ( m_uBlendVariantsPending & BLEND_TRIM_TAIL )
+		{
+			// either no trailing blended, or pure blended; revert TAIL to NONE
+			if ( m_iBlendNormalEnd<=0 || m_sAccum[m_iBlendNormalEnd]==0 )
+			{
+				m_uBlendVariantsPending &= ~BLEND_TRIM_TAIL;
+				m_uBlendVariantsPending |= BLEND_TRIM_NONE;
+			}
+		}
+
+		// ok, we are going to return a few variants after all, flag that
+		// OPTIMIZE? add fast path for "single" variants?
+		m_bBlendAdd = true;
+		assert ( m_uBlendVariantsPending );
+
+		// we also have to stash the original blended token
+		// because accumulator contents may get trashed by caller (say, when stemming)
+		strncpy ( (char*)m_sAccumBlend, (char*)m_sAccum, sizeof(m_sAccumBlend) );
+	}
+
+	// case 2, caller is checking for pending variants, have we even got any?
+	if ( !m_bBlendAdd )
+		return false;
+
+	// handle trim_none
+	// this MUST be the first handler, so that we could avoid copying below, and just return the original accumulator
+	if ( m_uBlendVariantsPending & BLEND_TRIM_NONE )
+	{
+		m_uBlendVariantsPending &= ~BLEND_TRIM_NONE;
+		m_bBlended = true;
+		return m_sAccum;
+	}
+
+	// handle trim_both
+	if ( m_uBlendVariantsPending & BLEND_TRIM_BOTH )
+	{
+		m_uBlendVariantsPending &= ~BLEND_TRIM_BOTH;
+		if ( m_iBlendNormalStart<0 )
+			m_uBlendVariantsPending |= BLEND_TRIM_TAIL; // no heading blended; revert BOTH to TAIL
+		else if ( m_iBlendNormalEnd<0 )
+			m_uBlendVariantsPending |= BLEND_TRIM_HEAD; // no trailing blended; revert BOTH to HEAD
+		else
+		{
+			assert ( m_iBlendNormalStart<m_iBlendNormalEnd );
+			CopySubstring ( m_sAccum, m_sAccumBlend+m_iBlendNormalStart, m_iBlendNormalEnd-m_iBlendNormalStart );
+			m_bBlended = true;
+			return m_sAccum;
+		}
+	}
+
+	// handle TRIM_HEAD
+	if ( m_uBlendVariantsPending & BLEND_TRIM_HEAD )
+	{
+		m_uBlendVariantsPending &= ~BLEND_TRIM_HEAD;
+		if ( m_iBlendNormalStart>=0 )
+		{
+			// FIXME! need we check for overshorts?
+			CopySubstring ( m_sAccum, m_sAccumBlend+m_iBlendNormalStart, sizeof(m_sAccum) );
+			m_bBlended = true;
+			return m_sAccum;
+		}
+	}
+
+	// handle TRIM_TAIL
+	if ( m_uBlendVariantsPending & BLEND_TRIM_TAIL )
+	{
+		m_uBlendVariantsPending &= ~BLEND_TRIM_TAIL;
+		if ( m_iBlendNormalEnd>0 )
+		{
+			// FIXME! need we check for overshorts?
+			CopySubstring ( m_sAccum, m_sAccumBlend, m_iBlendNormalEnd );
+			m_bBlended = true;
+			return m_sAccum;
+		}
+	}
+
+	// all clear, no more variants to go
+	m_bBlendAdd = false;
+	return NULL;
 }
 
 
@@ -3786,6 +3972,61 @@ bool ISphTokenizer::SetBlendChars ( const char * sConfig, CSphString & sError )
 	return RemapCharacters ( sConfig, FLAG_CODEPOINT_BLEND, "blend", sError );
 }
 
+
+static bool sphStrncmp ( const char * sCheck, int iCheck, const char * sRef )
+{
+	return ( iCheck==(int)strlen(sRef) && memcmp ( sCheck, sRef, iCheck )==0 );
+}
+
+
+bool ISphTokenizer::SetBlendMode ( const char * sMode, CSphString & sError )
+{
+	if ( !sMode || !*sMode )
+	{
+		m_uBlendVariants = BLEND_TRIM_NONE;
+		m_bBlendSkipPure = false;
+		return true;
+	}
+
+	m_uBlendVariants = 0;
+	const char * p = sMode;
+	while ( *p )
+	{
+		while ( !sphIsAlpha(*p) )
+			p++;
+		if ( !*p )
+			break;
+
+		const char * sTok = p;
+		while ( sphIsAlpha(*p) )
+			p++;
+		if ( sphStrncmp ( sTok, p-sTok, "trim_none" ) )
+			m_uBlendVariants |= BLEND_TRIM_NONE;
+		else if ( sphStrncmp ( sTok, p-sTok, "trim_head" ) )
+			m_uBlendVariants |= BLEND_TRIM_HEAD;
+		else if ( sphStrncmp ( sTok, p-sTok, "trim_tail" ) )
+			m_uBlendVariants |= BLEND_TRIM_TAIL;
+		else if ( sphStrncmp ( sTok, p-sTok, "trim_both" ) )
+			m_uBlendVariants |= BLEND_TRIM_BOTH;
+		else if ( sphStrncmp ( sTok, p-sTok, "skip_pure" ) )
+			m_bBlendSkipPure = true;
+		else
+		{
+			sError.SetSprintf ( "unknown blend_mode option near '%s'", sTok );
+			return false;
+		}
+	}
+
+	if ( !m_uBlendVariants )
+	{
+		sError.SetSprintf ( "blend_mode must define at least one variant to index" );
+		m_uBlendVariants = BLEND_TRIM_NONE;
+		m_bBlendSkipPure = false;
+		return false;
+	}
+	return true;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 static inline bool IsWhitespace ( BYTE c )
@@ -3831,6 +4072,12 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 
 	if ( m_dSynonyms.GetLength() )
 		return GetTokenSyn ();
+
+	// return pending blending variants
+	BYTE * pVar = GetBlendedVariant ();
+	if ( pVar )
+		return pVar;
+	m_bBlendedPart = ( m_pBlendEnd!=NULL );
 
 	const bool bUseEscape = m_bEscaped;
 
@@ -3946,12 +4193,16 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 			m_sAccum[m_iAccum] = '\0';
 			m_iAccum = 0;
 			m_pTokenEnd = pCur>=m_pBufferMax ? m_pCur : pCur;
-			BlendAdjust ( pCur );
+			if ( !BlendAdjust ( pCur ) )
+				continue;
+			if ( m_bBlended )
+				return GetBlendedVariant();
 			return m_sAccum;
 		}
 
 		// handle specials
 		bool bSpecial = ( iCode & FLAG_CODEPOINT_SPECIAL )!=0;
+		bool bNoBlend = !( iCode & FLAG_CODEPOINT_BLEND );
 		iCode &= MASK_CODEPOINT;
 		if ( bSpecial )
 		{
@@ -3999,7 +4250,10 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 			}
 
 			m_iAccum = 0;
-			BlendAdjust ( pCur );
+			if ( !BlendAdjust ( pCur ) )
+				continue;
+			if ( m_bBlended )
+				return GetBlendedVariant();
 			return m_sAccum;
 		}
 
@@ -4010,11 +4264,12 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 			if ( m_iAccum==0 )
 				m_pTokenStart = pCur;
 
-			m_bNonBlended = m_bNonBlended || !( iCode & FLAG_CODEPOINT_BLEND );
+			m_bNonBlended = m_bNonBlended || bNoBlend;
 			m_sAccum[m_iAccum++] = (BYTE)iCode;
 		}
 	}
 }
+
 
 ISphTokenizer * CSphTokenizer_SBCS::Clone ( bool bEscaped ) const
 {
@@ -4022,7 +4277,6 @@ ISphTokenizer * CSphTokenizer_SBCS::Clone ( bool bEscaped ) const
 	pClone->CloneBase ( this, bEscaped );
 	return pClone;
 }
-
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -4052,17 +4306,25 @@ void CSphTokenizer_UTF8::SetBuffer ( BYTE * sBuffer, int iLength )
 	m_bBoundary = m_bTokenBoundary = false;
 }
 
+
 BYTE * CSphTokenizer_UTF8::GetToken ()
 {
-	m_bBlended = false;
 	m_bWasSpecial = false;
+	m_bBlended = false;
 	m_iOvershortCount = 0;
 	m_bTokenBoundary = false;
 
 	if ( m_dSynonyms.GetLength() )
 		return GetTokenSyn ();
 
-	const bool bUseEscape = m_bEscaped; // whether this tokenizer supports escaping
+	// return pending blending variants
+	BYTE * pVar = GetBlendedVariant ();
+	if ( pVar )
+		return pVar;
+	m_bBlendedPart = ( m_pBlendEnd!=NULL );
+
+	// whether this tokenizer supports escaping
+	const bool bUseEscape = m_bEscaped;
 
 	// in query mode, lets capture (soft-whitespace hard-whitespace) sequences and adjust overshort counter
 	// sample queries would be (one NEAR $$$) or (one | $$$ two) where $ is not a valid character
@@ -4102,8 +4364,11 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			}
 
 			// return trailing word
-			BlendAdjust ( pCur );
+			if ( !BlendAdjust ( pCur ) )
+				return NULL;
 			m_pTokenEnd = m_pCur;
+			if ( m_bBlended )
+				return GetBlendedVariant();
 			return m_sAccum;
 		}
 
@@ -4160,25 +4425,20 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 		if ( iCode==0 || m_bBoundary )
 		{
 			FlushAccum ();
-			if ( m_iLastTokenLen<m_tSettings.m_iMinWordLen )
-			{
-				if ( m_bShortTokenFilter && ShortTokenFilter ( m_sAccum, m_iLastTokenLen ) )
-				{
-					BlendAdjust ( pCur );
-					m_pTokenEnd = pCur;
-					return m_sAccum;
-				} else
-				{
-					if ( m_iLastTokenLen )
-						m_iOvershortCount++;
+			if ( !BlendAdjust ( pCur ) )
+				continue;
 
-					BlendAdjust ( pCur );
-					continue;
-				}
+			if ( m_iLastTokenLen<m_tSettings.m_iMinWordLen
+				&& !( m_bShortTokenFilter && ShortTokenFilter ( m_sAccum, m_iLastTokenLen ) ) )
+			{
+				if ( m_iLastTokenLen )
+					m_iOvershortCount++;
+				continue;
 			} else
 			{
-				BlendAdjust ( pCur );
 				m_pTokenEnd = pCur;
+				if ( m_bBlended )
+					return GetBlendedVariant();
 				return m_sAccum;
 			}
 		}
@@ -4214,7 +4474,10 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			}
 
 			FlushAccum ();
-			BlendAdjust ( pCur );
+			if ( !BlendAdjust ( pCur ) )
+				continue;
+			if ( m_bBlended )
+				return GetBlendedVariant();
 			return m_sAccum;
 		}
 
@@ -12254,6 +12517,8 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 				fprintf ( fp, "\tignore_chars = %s\n", tSettings.m_sIgnoreChars.cstr () );
 			if ( !tSettings.m_sBlendChars.IsEmpty() )
 				fprintf ( fp, "\tblend_chars = %s\n", tSettings.m_sBlendChars.cstr () );
+			if ( !tSettings.m_sBlendMode.IsEmpty() )
+				fprintf ( fp, "\tblend_mode = %s\n", tSettings.m_sBlendMode.cstr () );
 		}
 
 		if ( m_pDict )
@@ -12337,6 +12602,7 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 		fprintf ( fp, "tokenizer-phrase-boundary: %s\n", tSettings.m_sBoundary.cstr () );
 		fprintf ( fp, "tokenizer-ignore-chars: %s\n", tSettings.m_sIgnoreChars.cstr () );
 		fprintf ( fp, "tokenizer-blend-chars: %s\n", tSettings.m_sBlendChars.cstr () );
+		fprintf ( fp, "tokenizer-blend-mode: %s\n", tSettings.m_sBlendMode.cstr () );
 	}
 
 	if ( m_pDict )

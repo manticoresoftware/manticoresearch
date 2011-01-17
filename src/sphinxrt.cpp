@@ -2558,7 +2558,7 @@ static void WriteSchemaColumn ( CSphWriter & tWriter, const CSphColumnInfo & tCo
 void RtIndex_t::SaveDiskHeader ( const char * sFilename, int iCheckpoints, SphOffset_t iCheckpointsPosition, DWORD uKillListSize, DWORD uMinMaxSize, bool bForceID32 ) const
 {
 	static const DWORD INDEX_MAGIC_HEADER	= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD INDEX_FORMAT_VERSION	= 23;			///< my format version
+	static const DWORD INDEX_FORMAT_VERSION	= 24;			///< my format version
 
 	CSphWriter tWriter;
 	CSphString sName, sError;
@@ -2621,6 +2621,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, int iCheckpoints, SphOf
 	tWriter.PutDword ( tSettings.m_iNgramLen );
 	tWriter.PutString ( tSettings.m_sNgramChars.cstr () );
 	tWriter.PutString ( tSettings.m_sBlendChars.cstr () );
+	tWriter.PutString ( tSettings.m_sBlendMode.cstr () );
 
 	// dictionary
 	assert ( m_pDict );

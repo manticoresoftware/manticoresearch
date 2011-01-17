@@ -7893,10 +7893,20 @@ Blended characters are indexed both as separators and valid characters.
 For instance, assume that &amp; is configured as blended and AT&amp;T
 occurs in an indexed document. Three different keywords will get indexed,
 namely "at&amp;t", treating blended characters as valid, plus "at" and "t",
-treating them as separators. Note that all these three keywords will be
-assigned the very same position (in a sense blending with each other).
-Thus, querying for either AT&amp;T or just AT will match that document.
-However, querying for "AT T" phrase will not match it.
+treating them as separators.
+</para>
+<para>
+Positions for tokens obtained by replacing blended characters with whitespace
+are assigned as usual, so regular keywords will be indexed just as if there was
+no <option>blend_chars</option> specified at all. An additional token that
+mixes blended and non-blended characters will be put at the starting position.
+For instance, if the field contents are "AT&amp;T company" occurs in the very
+beginning of the text field, "at" will be given position 1, "t" position 2, 
+"company" positin 3, and "AT&amp;T" will also be given position 1 ("blending"
+with the opening regular keyword). Thus, querying for either AT&amp;T or just
+AT will match that document, and querying for "AT T" as a phrase also match it.
+Last but not least, phrase query for "AT&amp;T company" will <emphasis>also</emphasis>
+match it, despite the position
 </para>
 <para>
 Blended characters can overlap with special characters used in query
@@ -7905,11 +7915,83 @@ automatically handle blended character as blended. For instance, "hello @twitter
 within quotes (a phrase operator) would handle @-sign as blended, because
 @-syntax for field operator is not allowed within phrases. Otherwise,
 the character would be handled as an operator. So you might want to
-escape the query terms.
+escape the keywords.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
 blend_chars = +, &amp;, U+23
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-blend-mode"><title>blend_mode</title>
+<para>
+Blended tokens indexing mode.
+Optional, default is <option>trim_none</option>.
+Introduced in version 1.11-beta.
+</para>
+<para>
+By default, tokens that mix blended and non-blended characters
+get indexed in there entirety. For instance, when both at-sign and
+an exclamation are in <option>blend_chars</option>, "@dude!" will get
+result in two tokens indexed: "@dude!" (with all the blended characters)
+and "dude" (without any). Therefore "@dude" query will <emphasis>not</emphasis>
+match it.
+</para>
+<para>
+<option>blend_mode</option> directive adds flexibility to this indexing
+behavior. It takes a comma-separated list of options.
+<programlisting>
+blend_mode = option [, option [, ...]]
+option = trim_none | trim_head | trim_tail | trim_both | skip_pure
+</programlisting>
+</para>
+<para>
+Options specify token indexing variants. If multiple options are
+specified, multiple variants of the same token will be indexed.
+Regular keywords (resulting from that token by replacing blended
+with whitespace) are always be indexed.
+<variablelist>
+<varlistentry>
+	<term>trim_none</term>
+	<listitem>Index the entire token.</listitem>
+</varlistentry>
+<varlistentry>
+	<term>trim_head</term>
+	<listitem>Trim heading blended characters, and index the resulting token.</listitem>
+</varlistentry>
+<varlistentry>
+	<term>trim_tail</term>
+	<listitem>Trim trailing blended characters, and index the resulting token.</listitem>
+</varlistentry>
+<varlistentry>
+	<term>trim_both</term>
+	<listitem>Trim both heading and trailing blended characters, and index the resulting token.</listitem>
+</varlistentry>
+<varlistentry>
+	<term>skip_pure</term>
+	<listitem>Do not index the token if it's purely blended, that is, consists of blended characters only.</listitem>
+</varlistentry>
+</variablelist>
+Returning to the "@dude!" example above, setting <option>blend_mode = trim_head,
+trim_tail</option> will result in two tokens being indexed, "@dude" and "dude!".
+In this particular example, <option>trim_both</option> would have no effect,
+because trimming both blended characters results in "dude" which is already
+indexed as a regular keyword. Indexing "@U.S.A." with <option>trim_both</option>
+(and assuming that dot is blended two) would result in "U.S.A" being indexed.
+Last but not least, <option>skip_pure</option> enables you to fully ignore
+sequences of blended characters only. For example, "one @@@ two" would be
+indexed exactly as "one two", and match that as a phrase. That is not the case
+by default because a fully blended token gets indexed and offsets the second
+keyword position.
+</para>
+<para>
+Default behavior is to index the entire token, equivalent to
+<option>blend_mode = trim_none</option>.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+blend_mode = trim_tail, skip_pure
 </programlisting>
 </sect2>
 

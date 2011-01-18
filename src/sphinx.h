@@ -457,6 +457,7 @@ public:
 									{
 										m_bQueryMode = bEnable;
 										m_bShortTokenFilter = bEnable;
+										m_uBlendVariants = BLEND_TRIM_NONE;
 									}
 
 	/// enable indexing-time sentence boundary detection, and paragraph indexing

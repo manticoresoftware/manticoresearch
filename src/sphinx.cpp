@@ -3141,6 +3141,8 @@ void CSphTokenizerTraits<IS_UTF8>::CloneBase ( const CSphTokenizerTraits<IS_UTF8
 	m_dSynEnd = pFrom->m_dSynEnd;
 	m_tSettings = pFrom->m_tSettings;
 	m_bEscaped = bEscaped;
+	m_uBlendVariants = pFrom->m_uBlendVariants;
+	m_bBlendSkipPure = pFrom->m_bBlendSkipPure;
 
 	if ( bEscaped )
 	{

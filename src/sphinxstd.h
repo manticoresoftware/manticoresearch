@@ -1020,7 +1020,7 @@ public:
 
 	~CSphFixedVector ()
 	{
-		SafeDelete ( m_pData );
+		SafeDeleteArray ( m_pData );
 	}
 
 	T & operator [] ( int iIndex ) const

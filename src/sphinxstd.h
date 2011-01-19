@@ -1018,6 +1018,11 @@ public:
 		m_pData = ( iSize>0 ) ? new T [ iSize ] : NULL;
 	}
 
+	~CSphFixedVector ()
+	{
+		SafeDelete ( m_pData );
+	}
+
 	T & operator [] ( int iIndex ) const
 	{
 		assert ( iIndex>=0 && iIndex<m_iSize );

@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>exceptions vs ext2 query grouping</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT *, 1 as idd FROM test_table
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+    charset_type 	= utf-8
+	exceptions		= test_165/synonyms.txt
+}
+</config>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1,  'the X files is not X rated movie' ),
+( 2, 'the X files is silver sitcom' ),
+( 3, 'the x files is good on silver screen' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>select * from test where match ('X files')</sphinxql>
+<sphinxql>select * from test where match ('(X files)')</sphinxql>
+<sphinxql>select * from test where match (' ( X files ) ')</sphinxql>
+<sphinxql>select * from test where match ('(x files) silver screen')</sphinxql>
+<sphinxql>select * from test where match (' X files silver screen')</sphinxql>
+<sphinxql>select * from test where match ('(x file) (silver screen)')</sphinxql>
+<sphinxql>select * from test where match ('(x file) | silver screen')</sphinxql>
+<sphinxql>select * from test where match ('(X files) | silver screen')</sphinxql>
+<sphinxql>select * from test where match ('(x files) | silver | screen')</sphinxql>
+<sphinxql>select * from test where match ('x file')</sphinxql>
+<sphinxql>select * from test where match ('the X file')</sphinxql>
+</sphqueries>
+
+</test>

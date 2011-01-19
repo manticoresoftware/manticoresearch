@@ -29,6 +29,25 @@ index test
     charset_type 	= utf-8
 	exceptions		= test_165/synonyms.txt
 }
+
+source srcstar
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT *, 1 as idd FROM star_table
+}
+
+index star
+{
+	source			= srcstar
+	path			= <data_path/>/star
+    charset_type 	= utf-8
+	exceptions		= test_165/synonyms2.txt
+	enable_star = 1
+	min_prefix_len = 1
+}
+
 </config>
 
 <db_create>
@@ -39,8 +58,20 @@ CREATE TABLE `test_table`
 )
 </db_create>
 
+<db_create>
+CREATE TABLE `star_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
 <db_drop>
 DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_drop>
+DROP TABLE IF EXISTS `star_table`
 </db_drop>
 
 <db_insert>
@@ -49,6 +80,15 @@ INSERT INTO `test_table` VALUES
 ( 2, 'the X files is silver sitcom' ),
 ( 3, 'the x files is good on silver screen' )
 </db_insert>
+
+<db_insert>
+INSERT INTO `star_table` VALUES
+( 1,  'action*packed movies are not for family' ),
+( 2,  'action movies are mostly blockbasters' ),
+( 3,  'action packed movies published recently' ),
+( 4,  'recent DVD pack as collection' )
+</db_insert>
+
 
 <sphqueries>
 <sphinxql>select * from test where match ('X files')</sphinxql>
@@ -62,6 +102,11 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select * from test where match ('(x files) | silver | screen')</sphinxql>
 <sphinxql>select * from test where match ('x file')</sphinxql>
 <sphinxql>select * from test where match ('the X file')</sphinxql>
+
+<sphinxql>select * from star where match ('action*packed')</sphinxql>
+<sphinxql>select * from star where match ('mov*')</sphinxql>
+<sphinxql>select * from star where match ('pack*')</sphinxql>
+<sphinxql>select * from star where match ('action')</sphinxql>
 </sphqueries>
 
 </test>

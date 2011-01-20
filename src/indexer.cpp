@@ -707,6 +707,7 @@ CSphSource * SpawnSourceODBC ( const CSphConfigSection & hSource, const char * s
 		return NULL;
 
 	LOC_GETS ( tParams.m_sOdbcDSN, "odbc_dsn" );
+	LOC_GETS ( tParams.m_sColBuffers, "sql_column_buffers" );
 
 	CSphSource_ODBC * pSrc = new CSphSource_ODBC ( sSourceName );
 	if ( !pSrc->Setup ( tParams ) )
@@ -726,6 +727,7 @@ CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * 
 
 	LOC_GETB ( tParams.m_bWinAuth, "mssql_winauth" );
 	LOC_GETB ( tParams.m_bUnicode, "mssql_unicode" );
+	LOC_GETS ( tParams.m_sColBuffers, "sql_column_buffers" );
 
 	CSphSource_MSSQL * pSrc = new CSphSource_MSSQL ( sSourceName );
 	if ( !pSrc->Setup ( tParams ) )

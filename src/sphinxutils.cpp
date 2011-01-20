@@ -177,6 +177,7 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "sql_field_string",		KEY_LIST, NULL },
 	{ "sql_field_str2wordcount",	KEY_LIST, NULL },
 	{ "sql_file_field",			KEY_LIST, NULL },
+	{ "sql_column_buffers",		0, NULL },
 	{ NULL,						0, NULL }
 };
 

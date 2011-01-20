@@ -22493,7 +22493,8 @@ bool CSphSource_ODBC::SqlQuery ( const char * sQuery )
 	char szColumnName[MAX_NAME_LEN];
 
 	m_dColumns.Resize ( m_nResultCols );
-	for ( int i = 0; i<m_nResultCols; ++i )
+	int iTotalBuffer = 0;
+	ARRAY_FOREACH ( i, m_dColumns )
 	{
 		QueryColumn_t & tCol = m_dColumns[i];
 
@@ -22503,16 +22504,27 @@ bool CSphSource_ODBC::SqlQuery ( const char * sQuery )
 		if ( SQLDescribeCol ( m_hStmt, (SQLUSMALLINT)(i+1), (SQLCHAR*)szColumnName, MAX_NAME_LEN, &iNameLen, &iDataType, &uColSize, NULL, NULL )==SQL_ERROR )
 			return false;
 
+		tCol.m_sName = szColumnName;
+		tCol.m_sName.ToLower();
+
+		// deduce buffer size
+		// use a small buffer by default, and a bigger one for varchars
 		int iBuffLen = DEFAULT_COL_SIZE;
-		if ( uColSize && (int)uColSize<MAX_COL_SIZE )
-			iBuffLen = uColSize+1;
+		if ( iDataType==SQL_WCHAR || iDataType==SQL_WVARCHAR || iDataType==SQL_WLONGVARCHAR|| iDataType==SQL_VARCHAR )
+			iBuffLen = VARCHAR_COL_SIZE;
+
+		if ( m_hColBuffers ( tCol.m_sName ) )
+			iBuffLen = m_hColBuffers [ tCol.m_sName ]; // got explicit user override
+		else if ( uColSize )
+			iBuffLen = Min ( uColSize+1, MAX_COL_SIZE ); // got data from driver
 
 		tCol.m_dContents.Resize ( iBuffLen );
 		tCol.m_dRaw.Resize ( iBuffLen );
-		tCol.m_sName = szColumnName;
 		tCol.m_iInd = 0;
 		tCol.m_iBufferSize = iBuffLen;
 		tCol.m_bUnicode = m_bUnicode && ( iDataType==SQL_WCHAR || iDataType==SQL_WVARCHAR || iDataType==SQL_WLONGVARCHAR );
+		tCol.m_bTruncated = false;
+		iTotalBuffer += iBuffLen;
 
 		if ( SQLBindCol ( m_hStmt, (SQLUSMALLINT)(i+1),
 			tCol.m_bUnicode ? SQL_UNICODE : SQL_C_CHAR,
@@ -22520,6 +22532,9 @@ bool CSphSource_ODBC::SqlQuery ( const char * sQuery )
 			iBuffLen, &(tCol.m_iInd) )==SQL_ERROR )
 				return false;
 	}
+
+	if ( iTotalBuffer>WARN_ROW_SIZE )
+		sphWarn ( "row buffer is over %d bytes; consider revising sql_column_buffers", iTotalBuffer );
 
 	return true;
 }
@@ -22622,7 +22637,18 @@ bool CSphSource_ODBC::SqlFetchRow ()
 				} else
 #endif
 				{
-					tCol.m_dContents[tCol.m_iInd] = '\0';
+					if ( tCol.m_iInd>=0 && tCol.m_iInd<tCol.m_iBufferSize )
+					{
+						// data fetched ok; add trailing zero
+						tCol.m_dContents[tCol.m_iInd] = '\0';
+
+					} else if ( tCol.m_iInd>=tCol.m_iBufferSize && !tCol.m_bTruncated )
+					{
+						// out of buffer; warn about that (once)
+						tCol.m_bTruncated = true;
+						sphWarn ( "'%s' column truncated (buffer=%d, got=%d); consider revising sql_column_buffers",
+							tCol.m_sName.cstr(), tCol.m_iBufferSize-1, tCol.m_iInd );
+					}
 				}
 			break;
 		}
@@ -22658,6 +22684,93 @@ bool CSphSource_ODBC::Setup ( const CSphSourceParams_ODBC & tParams )
 	if ( !CSphSource_SQL::Setup ( tParams ) )
 		return false;
 
+	// parse column buffers spec, if any
+	if ( !tParams.m_sColBuffers.IsEmpty() )
+	{
+		const char * p = tParams.m_sColBuffers.cstr();
+		while ( *p )
+		{
+			// skip space
+			while ( sphIsSpace(*p) )
+				p++;
+
+			// expect eof or ident
+			if ( !*p )
+				break;
+			if ( !sphIsAlpha(*p) )
+			{
+				m_sError.SetSprintf ( "identifier expected in sql_column_buffers near '%s'", p );
+				return false;
+			}
+
+			// get ident
+			CSphString sCol;
+			const char * pIdent = p;
+			while ( sphIsAlpha(*p) )
+				p++;
+			sCol.SetBinary ( pIdent, p-pIdent );
+
+			// skip space
+			while ( sphIsSpace(*p) )
+				p++;
+
+			// expect assignment
+			if ( *p!='=' )
+			{
+				m_sError.SetSprintf ( "'=' expected in sql_column_buffers near '%s'", p );
+				return false;
+			}
+			p++;
+
+			// skip space
+			while ( sphIsSpace(*p) )
+				p++;
+
+			// expect number
+			if (!( *p>='0' && *p<='9' ))
+			{
+				m_sError.SetSprintf ( "number expected in sql_column_buffers near '%s'", p );
+				return false;
+			}
+
+			// get value
+			int iSize = 0;
+			while ( *p>='0' && *p<='9' )
+			{
+				iSize = 10*iSize + ( *p-'0' );
+				p++;
+			}
+			if ( *p=='K' )
+			{
+				iSize *= 1024;
+				p++;
+			} else if ( *p=='M' )
+			{
+				iSize *= 1048576;
+				p++;
+			}
+
+			// hash value
+			sCol.ToLower();
+			m_hColBuffers.Add ( iSize, sCol );
+
+			// skip space
+			while ( sphIsSpace(*p) )
+				p++;
+
+			// expect eof or comma
+			if ( !*p )
+				break;
+			if ( *p!=',' )
+			{
+				m_sError.SetSprintf ( "comma expected in sql_column_buffers near '%s'", p );
+				return false;
+			}
+			p++;
+		}
+	}
+
+	// ODBC specific params
 	m_sOdbcDSN = tParams.m_sOdbcDSN;
 	m_bWinAuth = tParams.m_bWinAuth;
 	m_bUnicode = tParams.m_bUnicode;

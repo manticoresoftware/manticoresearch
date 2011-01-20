@@ -1772,7 +1772,8 @@ protected:
 #if USE_ODBC
 struct CSphSourceParams_ODBC: CSphSourceParams_SQL
 {
-	CSphString	m_sOdbcDSN;;				///< ODBC DSN
+	CSphString	m_sOdbcDSN;			///< ODBC DSN
+	CSphString	m_sColBuffers;		///< column buffer sizes (eg "col1=2M, col2=4M")
 	bool		m_bWinAuth;			///< auth type (MS SQL only)
 	bool		m_bUnicode;			///< whether to ask for Unicode or SBCS (C char) data (MS SQL only)
 
@@ -1819,12 +1820,16 @@ protected:
 		SQLLEN				m_iInd;
 		int					m_iBufferSize;	///< size of m_dContents and m_dRaw buffers, in bytes
 		bool				m_bUnicode;		///< whether this column needs UCS-2 to UTF-8 translation
+		bool				m_bTruncated;	///< whether data was truncated when fetching rows
 	};
 
-	static const int		DEFAULT_COL_SIZE	= 1024;
-	static const int		MAX_COL_SIZE		= 1048576; // limit to 1M for now
+	static const int		DEFAULT_COL_SIZE	= 1024;			///< default column buffer size
+	static const int		VARCHAR_COL_SIZE	= 1048576;		///< default column buffer size for VARCHAR columns
+	static const int		MAX_COL_SIZE		= 8*1048576;	///< hard limit on column buffer size
+	static const int		WARN_ROW_SIZE		= 32*1048576;	///< warning thresh (NOT a hard limit) on row buffer size
 
-	CSphVector<QueryColumn_t> m_dColumns;
+	CSphVector<QueryColumn_t>	m_dColumns;
+	SmallStringHash_T<int>		m_hColBuffers;
 
 	void					GetSqlError ( SQLSMALLINT iHandleType, SQLHANDLE hHandle );
 };

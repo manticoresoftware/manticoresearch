@@ -356,7 +356,7 @@ int main ( int argc, char ** argv )
 					const CSphColumnInfo & tAttr = pResult->m_tSchema.GetAttr(j);
 					fprintf ( stdout, ", %s=", tAttr.m_sName.cstr() );
 
-					if ( tAttr.m_eAttrType & SPH_ATTR_MULTI )
+					if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET )
 					{
 						fprintf ( stdout, "(" );
 						SphAttr_t iIndex = tMatch.GetAttr ( tAttr.m_tLocator );

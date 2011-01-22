@@ -23,6 +23,21 @@ class CSphMatch;
 struct CSphSchema;
 struct CSphString;
 
+/// known attribute types
+enum ESphAttr
+{
+	SPH_ATTR_NONE		= 0,			///< not an attribute at all
+	SPH_ATTR_INTEGER	= 1,			///< unsigned 32-bit integer
+	SPH_ATTR_TIMESTAMP	= 2,			///< this attr is a timestamp
+	SPH_ATTR_ORDINAL	= 3,			///< this attr is an ordinal string number (integer at search time, specially handled at indexing time)
+	SPH_ATTR_BOOL		= 4,			///< this attr is a boolean bit field
+	SPH_ATTR_FLOAT		= 5,			///< floating point number (IEEE 32-bit)
+	SPH_ATTR_BIGINT		= 6,			///< signed 64-bit integer
+	SPH_ATTR_STRING		= 7,			///< string (binary; in-memory)
+	SPH_ATTR_WORDCOUNT	= 8,			///< string word count (integer at search time,tokenized and counted at indexing time)
+	SPH_ATTR_UINT32SET	= 0x40000001UL	///< MVA, set of unsigned 32-bit integers
+};
+
 /// expression evaluator
 /// can always be evaluated in floats using Eval()
 /// can sometimes be evaluated in integers using IntEval(), depending on type as returned from sphExprParse()
@@ -55,7 +70,7 @@ public:
 /// returns NULL and fills sError on failure
 /// returns pointer to evaluator on success
 /// fills pAttrType with result type (for now, can be SPH_ATTR_SINT or SPH_ATTR_FLOAT)
-ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, DWORD * pAttrType, bool * pUsesWeight, CSphString & sError, CSphSchema * pExtra=NULL );
+ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError, CSphSchema * pExtra=NULL );
 
 #endif // _sphinxexpr_
 

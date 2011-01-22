@@ -241,7 +241,7 @@ public:
 	struct CalcItem_t
 	{
 		CSphAttrLocator			m_tLoc;					///< result locator
-		DWORD					m_uType;				///< result type
+		ESphAttr				m_eType;				///< result type
 		ISphExpr *				m_pExpr;				///< evaluator (non-owned)
 	};
 	CSphVector<CalcItem_t>		m_dCalcFilter;			///< items to compute for filtering
@@ -556,7 +556,7 @@ AttrIndexBuilder_t<DOCID>::AttrIndexBuilder_t ( const CSphSchema & tSchema )
 	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
-		if ( tCol.m_eAttrType & SPH_ATTR_MULTI )
+		if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET )
 		{
 			m_dMvaAttrs.Add ( tCol.m_tLocator );
 			continue;

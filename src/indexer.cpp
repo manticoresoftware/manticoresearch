@@ -331,8 +331,8 @@ bool ParseMultiAttr ( const char * sBuf, CSphColumnInfo & tAttr, const char * sS
 
 	// handle ATTR-TYPE
 	LOC_SPACE0(); LOC_TOK();
-	if ( LOC_TOKEQ("uint") )				tAttr.m_eAttrType = SPH_ATTR_INTEGER | SPH_ATTR_MULTI;
-	else if ( LOC_TOKEQ("timestamp") )		tAttr.m_eAttrType = SPH_ATTR_INTEGER | SPH_ATTR_MULTI;
+	if ( LOC_TOKEQ("uint") )				tAttr.m_eAttrType = SPH_ATTR_UINT32SET;
+	else if ( LOC_TOKEQ("timestamp") )		tAttr.m_eAttrType = SPH_ATTR_UINT32SET;
 	else									LOC_ERR ( "attr type ('uint' or 'timestamp')", sTok );
 
 	// handle ATTR-NAME
@@ -403,17 +403,17 @@ bool ParseMultiAttr ( const char * sBuf, CSphColumnInfo & tAttr, const char * sS
 	for ( CSphVariant * pVal = hSource(_key); pVal; pVal = pVal->m_pNext ) \
 		_arg.Add ( pVal->cstr() );
 
-void SqlAttrsConfigure ( CSphSourceParams_SQL & tParams, const CSphVariant * pHead, DWORD uAttrType, const char * sSourceName, bool bIndexedAttr=false )
+void SqlAttrsConfigure ( CSphSourceParams_SQL & tParams, const CSphVariant * pHead, ESphAttr eAttrType, const char * sSourceName, bool bIndexedAttr=false )
 {
 	for ( const CSphVariant * pCur = pHead; pCur; pCur= pCur->m_pNext )
 	{
-		CSphColumnInfo tCol ( pCur->cstr(), uAttrType );
+		CSphColumnInfo tCol ( pCur->cstr(), eAttrType );
 		char * pColon = strchr ( const_cast<char*> ( tCol.m_sName.cstr() ), ':' );
 		if ( pColon )
 		{
 			*pColon = '\0';
 
-			if ( uAttrType==SPH_ATTR_INTEGER )
+			if ( eAttrType==SPH_ATTR_INTEGER )
 			{
 				int iBits = strtol ( pColon+1, NULL, 10 );
 				if ( iBits<=0 || iBits>ROWITEM_BITS )

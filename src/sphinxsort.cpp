@@ -40,7 +40,7 @@ public:
 	virtual SphGroupKey_t	KeyFromValue ( SphAttr_t uValue ) const = 0;
 	virtual SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const = 0;
 	virtual void			GetLocator ( CSphAttrLocator & tOut ) const = 0;
-	virtual DWORD			GetResultType () const = 0;
+	virtual ESphAttr		GetResultType () const = 0;
 };
 
 
@@ -213,7 +213,7 @@ static bool IsGroupbyMagic ( const CSphString & s )
 	public: \
 		explicit _name ( const CSphAttrLocator & tLoc ) : m_tLocator ( tLoc ) {} \
 		virtual void GetLocator ( CSphAttrLocator & tOut ) const { tOut = m_tLocator; } \
-		virtual DWORD GetResultType () const { return m_tLocator.m_iBitCount>8*(int)sizeof(DWORD) ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER; } \
+		virtual ESphAttr GetResultType () const { return m_tLocator.m_iBitCount>8*(int)sizeof(DWORD) ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER; } \
 		virtual SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const { return KeyFromValue ( tMatch.GetAttr ( m_tLocator ) ); } \
 		virtual SphGroupKey_t KeyFromValue ( SphAttr_t uValue ) const \
 		{
@@ -1564,9 +1564,9 @@ public:
 };
 
 
-static inline ESphSortKeyPart Attr2Keypart ( DWORD uType )
+static inline ESphSortKeyPart Attr2Keypart ( ESphAttr eType )
 {
-	switch ( uType )
+	switch ( eType )
 	{
 		case SPH_ATTR_FLOAT:	return SPH_KEYPART_FLOAT;
 		case SPH_ATTR_STRING:	return SPH_KEYPART_STRING;
@@ -1842,7 +1842,7 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const CSphSchema & 
 	}
 
 	// check type
-	DWORD eType = tSchema.GetAttr ( iGroupBy ).m_eAttrType;
+	ESphAttr eType = tSchema.GetAttr ( iGroupBy ).m_eAttrType;
 	if ( eType==SPH_ATTR_STRING )
 	{
 		sError.SetSprintf ( "group-by on string attribute '%s' not (yet) supported", pQuery->m_sGroupBy.cstr() );
@@ -1862,7 +1862,7 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const CSphSchema & 
 			return false;
 	}
 
-	tSettings.m_bMVA = ( eType & SPH_ATTR_MULTI )!=0;
+	tSettings.m_bMVA = ( eType==SPH_ATTR_UINT32SET );
 
 	// setup distinct attr
 	if ( !pQuery->m_sGroupDistinct.IsEmpty() )

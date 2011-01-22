@@ -3346,7 +3346,7 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 		iReqSize += 8 + q.m_dFieldWeights[i].m_sName.Length(); // string field-name; int field-weight
 	ARRAY_FOREACH ( i, q.m_dOverrides )
 		iReqSize += 12 + q.m_dOverrides[i].m_sAttr.Length() + // string attr-name; int type; int values-count
-			( q.m_dOverrides[i].m_uAttrType==SPH_ATTR_BIGINT ? 16 : 12 )*q.m_dOverrides[i].m_dValues.GetLength(); // ( bigint id; int/float/bigint value )[] values
+			( q.m_dOverrides[i].m_eAttrType==SPH_ATTR_BIGINT ? 16 : 12 )*q.m_dOverrides[i].m_dValues.GetLength(); // ( bigint id; int/float/bigint value )[] values
 	return iReqSize;
 }
 
@@ -3431,12 +3431,12 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	{
 		const CSphAttrOverride & tEntry = q.m_dOverrides[i];
 		tOut.SendString ( tEntry.m_sAttr.cstr() );
-		tOut.SendDword ( tEntry.m_uAttrType );
+		tOut.SendDword ( tEntry.m_eAttrType );
 		tOut.SendInt ( tEntry.m_dValues.GetLength() );
 		ARRAY_FOREACH ( j, tEntry.m_dValues )
 		{
 			tOut.SendUint64 ( tEntry.m_dValues[j].m_uDocID );
-			switch ( tEntry.m_uAttrType )
+			switch ( tEntry.m_eAttrType )
 			{
 				case SPH_ATTR_FLOAT:	tOut.SendFloat ( tEntry.m_dValues[j].m_fValue ); break;
 				case SPH_ATTR_BIGINT:	tOut.SendUint64 ( tEntry.m_dValues[j].m_uValue ); break;
@@ -3525,7 +3525,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 		{
 			CSphColumnInfo tCol;
 			tCol.m_sName = tReq.GetString ();
-			tCol.m_eAttrType = tReq.GetDword (); // FIXME! add a sanity check
+			tCol.m_eAttrType = (ESphAttr) tReq.GetDword (); // FIXME! add a sanity check
 			tSchema.AddAttr ( tCol, true ); // all attributes received from agents are dynamic
 		}
 
@@ -3556,7 +3556,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 				for ( int j=0; j<tSchema.GetAttrsCount(); j++ )
 				{
 					const CSphColumnInfo & tAttr = tSchema.GetAttr(j);
-					if ( tAttr.m_eAttrType & SPH_ATTR_MULTI )
+					if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET )
 					{
 						tMatch.SetAttr ( tAttr.m_tLocator, m_dMvaStorage.GetLength() );
 
@@ -4128,7 +4128,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 		{
 			CSphAttrOverride & tOverride = tQuery.m_dOverrides[i];
 			tOverride.m_sAttr = tReq.GetString ();
-			tOverride.m_uAttrType = tReq.GetDword ();
+			tOverride.m_eAttrType = (ESphAttr) tReq.GetDword ();
 
 			tOverride.m_dValues.Resize ( tReq.GetInt() ); // FIXME! add sanity check
 			ARRAY_FOREACH ( iVal, tOverride.m_dValues )
@@ -4136,8 +4136,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 				CSphAttrOverride::IdValuePair_t & tEntry = tOverride.m_dValues[iVal];
 				tEntry.m_uDocID = (SphDocID_t) tReq.GetUint64 ();
 
-				if ( tOverride.m_uAttrType==SPH_ATTR_FLOAT )		tEntry.m_fValue = tReq.GetFloat ();
-				else if ( tOverride.m_uAttrType==SPH_ATTR_BIGINT )	tEntry.m_uValue = tReq.GetUint64 ();
+				if ( tOverride.m_eAttrType==SPH_ATTR_FLOAT )		tEntry.m_fValue = tReq.GetFloat ();
+				else if ( tOverride.m_eAttrType==SPH_ATTR_BIGINT )	tEntry.m_uValue = tReq.GetUint64 ();
 				else												tEntry.m_uValue = tReq.GetDword ();
 			}
 		}
@@ -4654,7 +4654,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 	for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(i);
-		if ( tCol.m_eAttrType & SPH_ATTR_MULTI )
+		if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET )
 			dMvaItems.Add ( tCol.m_tLocator );
 		if ( tCol.m_eAttrType==SPH_ATTR_STRING )
 			dStringItems.Add ( tCol.m_tLocator );
@@ -4799,7 +4799,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 			for ( int j=0; j<pRes->m_tSchema.GetAttrsCount(); j++ )
 			{
 				const CSphColumnInfo & tAttr = pRes->m_tSchema.GetAttr(j);
-				if ( tAttr.m_eAttrType & SPH_ATTR_MULTI )
+				if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET )
 				{
 					assert ( pMvaPool );
 					const DWORD * pValues = tMatch.GetAttrMVA ( tAttr.m_tLocator, pMvaPool );
@@ -7218,9 +7218,9 @@ public:
 #define ToDocid ToInt
 #endif // USE_64BIT
 
-	bool SetAttr ( const CSphAttrLocator & tLoc, const SqlInsert_t & tVal, int iTargetType )
+	bool SetAttr ( const CSphAttrLocator & tLoc, const SqlInsert_t & tVal, ESphAttr eTargetType )
 	{
-		switch ( iTargetType )
+		switch ( eTargetType )
 		{
 		case SPH_ATTR_INTEGER:
 		case SPH_ATTR_TIMESTAMP:
@@ -7245,12 +7245,12 @@ public:
 		};
 		return true;
 	}
-	inline bool SetDefaultAttr ( const CSphAttrLocator & tLoc, int iTargetType )
+	inline bool SetDefaultAttr ( const CSphAttrLocator & tLoc, ESphAttr eTargetType )
 	{
 		SqlInsert_t tVal;
 		tVal.m_iType = TOK_CONST_INT;
 		tVal.m_iVal = 0;
-		return SetAttr ( tLoc, tVal, iTargetType );
+		return SetAttr ( tLoc, tVal, eTargetType );
 	}
 };
 
@@ -7855,7 +7855,7 @@ void UpdateRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuff
 	ARRAY_FOREACH ( i, m_tUpd.m_dAttrs )
 	{
 		tOut.SendString ( m_tUpd.m_dAttrs[i].m_sName.cstr() );
-		tOut.SendInt ( ( m_tUpd.m_dAttrs[i].m_eAttrType & SPH_ATTR_MULTI ) ? 1 : 0 );
+		tOut.SendInt ( ( m_tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT32SET ) ? 1 : 0 );
 	}
 	tOut.SendInt ( m_tUpd.m_dDocids.GetLength() );
 
@@ -7919,7 +7919,7 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 		tUpd.m_dAttrs[i].m_eAttrType = SPH_ATTR_INTEGER;
 		if ( iVer>=0x102 )
 			if ( tReq.GetDword() )
-				tUpd.m_dAttrs[i].m_eAttrType |= SPH_ATTR_MULTI;
+				tUpd.m_dAttrs[i].m_eAttrType = SPH_ATTR_UINT32SET;
 	}
 
 	int iNumUpdates = tReq.GetInt (); // FIXME! check this
@@ -7937,7 +7937,7 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 		ARRAY_FOREACH ( iAttr, tUpd.m_dAttrs )
 		{
 			DWORD uCount = 1;
-			if ( tUpd.m_dAttrs[iAttr].m_eAttrType & SPH_ATTR_MULTI )
+			if ( tUpd.m_dAttrs[iAttr].m_eAttrType==SPH_ATTR_UINT32SET )
 			{
 				uCount = tReq.GetDword ();
 				tUpd.m_dPool.Add ( uCount );
@@ -9169,7 +9169,7 @@ void HandleMysqlDescribe ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt_t &
 			case SPH_ATTR_FLOAT:						sType = "float"; break;
 			case SPH_ATTR_BIGINT:						sType = "bigint"; break;
 			case SPH_ATTR_STRING:						sType = "string"; break;
-			case SPH_ATTR_INTEGER | SPH_ATTR_MULTI:		sType = "mva"; break;
+			case SPH_ATTR_UINT32SET:					sType = "mva"; break;
 		}
 
 		tOut.SendLSBDword ( ((uPacketID++)<<24) + MysqlPackedLen ( tCol.m_sName.cstr() ) + MysqlPackedLen ( sType ) );
@@ -9476,7 +9476,7 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 		for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
 		{
 			CSphAttrLocator tLoc = tSchema.GetAttr(i).m_tLocator;
-			DWORD eAttrType = tSchema.GetAttr(i).m_eAttrType;
+			ESphAttr eAttrType = tSchema.GetAttr(i).m_eAttrType;
 
 			switch ( eAttrType )
 			{
@@ -9494,7 +9494,7 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 				dRows.PutNumeric ( "%f", tMatch.GetAttrFloat(tLoc) );
 				break;
 
-			case SPH_ATTR_INTEGER | SPH_ATTR_MULTI:
+			case SPH_ATTR_UINT32SET:
 				{
 					int iLenOff = dRows.Length();
 					dRows.IncPtr ( 4 );
@@ -11479,7 +11479,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		// attrs
 		const int iNumTypes = 5;
 		const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_float", "rt_attr_timestamp", "rt_attr_string" };
-		const int iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_FLOAT, SPH_ATTR_TIMESTAMP, SPH_ATTR_STRING };
+		const ESphAttr iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_FLOAT, SPH_ATTR_TIMESTAMP, SPH_ATTR_STRING };
 
 		for ( int iType=0; iType<iNumTypes; iType++ )
 		{

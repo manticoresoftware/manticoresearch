@@ -2542,7 +2542,7 @@ static void WriteSchemaColumn ( CSphWriter & tWriter, const CSphColumnInfo & tCo
 	tWriter.PutDword ( iLen );
 	tWriter.PutBytes ( tColumn.m_sName.cstr(), iLen );
 
-	DWORD eAttrType = tColumn.m_eAttrType;
+	ESphAttr eAttrType = tColumn.m_eAttrType;
 	if ( eAttrType==SPH_ATTR_WORDCOUNT )
 		eAttrType = SPH_ATTR_INTEGER;
 	tWriter.PutDword ( eAttrType );
@@ -5005,7 +5005,7 @@ bool RtBinlog_c::ReplayUpdateAttributes ( int iBinlog, BinlogReader_c & tReader 
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
 	{
 		tUpd.m_dAttrs[i].m_sName = tReader.GetString();
-		tUpd.m_dAttrs[i].m_eAttrType = (DWORD) tReader.UnzipValue(); // safe, we'll crc check later
+		tUpd.m_dAttrs[i].m_eAttrType = (ESphAttr) tReader.UnzipValue(); // safe, we'll crc check later
 	}
 	if ( tReader.GetErrorFlag()
 		|| !LoadVector ( tReader, tUpd.m_dPool )

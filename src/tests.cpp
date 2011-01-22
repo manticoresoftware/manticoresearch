@@ -650,7 +650,7 @@ void BenchExpr ()
 	{
 		printf ( "run %d: ", iRun+1 );
 
-		DWORD uType;
+		ESphAttr uType;
 		CSphString sError;
 		CSphScopedPtr<ISphExpr> pExpr ( sphExprParse ( dBench[iRun].m_sExpr, tSchema, &uType, NULL, sError ) );
 		if ( !pExpr.Ptr() )

@@ -445,7 +445,7 @@ static FuncDesc_t g_dFuncs[] =
 //////////////////////////////////////////////////////////////////////////
 
 /// check for type based on int value
-static inline DWORD GetIntType ( int64_t iValue )
+static inline ESphAttr GetIntType ( int64_t iValue )
 {
 	return ( iValue>=(int64_t)INT_MIN && iValue<=(int64_t)INT_MAX ) ? SPH_ATTR_INTEGER : SPH_ATTR_BIGINT;
 }
@@ -456,18 +456,18 @@ class ConstList_c
 public:
 	CSphVector<int64_t>		m_dInts;		///< dword/int64 storage
 	CSphVector<float>		m_dFloats;		///< float storage
-	DWORD					m_uRetType;		///< SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, or SPH_ATTR_FLOAT
+	ESphAttr				m_eRetType;		///< SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, or SPH_ATTR_FLOAT
 
 public:
 	ConstList_c ()
-		: m_uRetType ( SPH_ATTR_INTEGER )
+		: m_eRetType ( SPH_ATTR_INTEGER )
 	{}
 
 	void Add ( int64_t iValue )
 	{
-		if ( m_uRetType!=SPH_ATTR_FLOAT )
+		if ( m_eRetType!=SPH_ATTR_FLOAT )
 		{
-			m_uRetType = GetIntType ( iValue );
+			m_eRetType = GetIntType ( iValue );
 			m_dInts.Add ( iValue );
 		} else
 		{
@@ -477,13 +477,13 @@ public:
 
 	void Add ( float fValue )
 	{
-		if ( m_uRetType!=SPH_ATTR_FLOAT )
+		if ( m_eRetType!=SPH_ATTR_FLOAT )
 		{
 			assert ( m_dFloats.GetLength()==0 );
 			ARRAY_FOREACH ( i, m_dInts )
 				m_dFloats.Add ( (float)m_dInts[i] );
 			m_dInts.Reset ();
-			m_uRetType = SPH_ATTR_FLOAT;
+			m_eRetType = SPH_ATTR_FLOAT;
 		}
 		m_dFloats.Add ( fValue );
 	}
@@ -493,8 +493,8 @@ public:
 struct ExprNode_t
 {
 	int				m_iToken;	///< token type, including operators
-	DWORD			m_uRetType;	///< result type
-	DWORD			m_uArgType;	///< args type
+	ESphAttr		m_eRetType;	///< result type
+	ESphAttr		m_eArgType;	///< args type
 	CSphAttrLocator	m_tLocator;	///< attribute locator, for TOK_ATTR type
 	int				m_iLocator; ///< index of attribute locator in schema
 	union
@@ -508,7 +508,7 @@ struct ExprNode_t
 	int				m_iLeft;
 	int				m_iRight;
 
-	ExprNode_t () : m_iToken ( 0 ), m_uRetType ( SPH_ATTR_NONE ), m_uArgType ( SPH_ATTR_NONE ), m_iLocator ( -1 ), m_iLeft ( -1 ), m_iRight ( -1 ) {}
+	ExprNode_t () : m_iToken ( 0 ), m_eRetType ( SPH_ATTR_NONE ), m_eArgType ( SPH_ATTR_NONE ), m_iLocator ( -1 ), m_iLeft ( -1 ), m_iRight ( -1 ) {}
 
 	float FloatVal()
 	{
@@ -528,7 +528,7 @@ public:
 							ExprParser_t () {}
 							~ExprParser_t ();
 
-	ISphExpr *				Parse ( const char * sExpr, const CSphSchema & tSchema, DWORD * pAttrType, bool * pUsesWeight, CSphString & sError );
+	ISphExpr *				Parse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError );
 	inline void				SetGenMode ( CSphSchema * pExtra )
 	{
 		m_pExtra = pExtra;
@@ -541,7 +541,7 @@ protected:
 	CSphString				m_sCreateError;
 
 protected:
-	DWORD					GetWidestRet ( int iLeft, int iRight );
+	ESphAttr				GetWidestRet ( int iLeft, int iRight );
 
 	int						AddNodeInt ( int64_t iValue );
 	int						AddNodeFloat ( float fValue );
@@ -625,7 +625,7 @@ static int ParseNumeric ( YYSTYPE * lvalp, const char ** ppStr )
 }
 
 
-static bool IsNumericAttrType ( DWORD eType )
+static bool IsNumericAttrType ( ESphAttr eType )
 {
 	return eType==SPH_ATTR_INTEGER
 		|| eType==SPH_ATTR_TIMESTAMP
@@ -718,14 +718,14 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		{
 			// check attribute type and width
 			const CSphColumnInfo & tCol = m_pSchema->GetAttr ( iAttr );
-			if ( IsNumericAttrType ( tCol.m_eAttrType ) || ( tCol.m_eAttrType & SPH_ATTR_MULTI ) )
+			if ( IsNumericAttrType ( tCol.m_eAttrType ) || tCol.m_eAttrType==SPH_ATTR_UINT32SET )
 			{
 				if ( m_pExtra )
 					m_pExtra->AddAttr ( tCol, true );
 				lvalp->iAttrLocator = sphPackAttrLocator ( tCol.m_tLocator, iAttr );
 
 				if ( tCol.m_eAttrType==SPH_ATTR_FLOAT )			return TOK_ATTR_FLOAT;
-				else if ( tCol.m_eAttrType & SPH_ATTR_MULTI )	return TOK_ATTR_MVA;
+				else if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET )return TOK_ATTR_MVA;
 				else if ( tCol.m_tLocator.IsBitfield() )		return TOK_ATTR_BITS;
 				else											return TOK_ATTR_INT;
 
@@ -1137,8 +1137,8 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 	ISphExpr * pRight = bSkipRight ? NULL : CreateTree ( tNode.m_iRight );
 
 #define LOC_SPAWN_POLY(_classname) \
-	if ( tNode.m_uArgType==SPH_ATTR_INTEGER )		return new _classname##Int_c ( pLeft, pRight ); \
-	else if ( tNode.m_uArgType==SPH_ATTR_BIGINT )	return new _classname##Int64_c ( pLeft, pRight ); \
+	if ( tNode.m_eArgType==SPH_ATTR_INTEGER )		return new _classname##Int_c ( pLeft, pRight ); \
+	else if ( tNode.m_eArgType==SPH_ATTR_BIGINT )	return new _classname##Int64_c ( pLeft, pRight ); \
 	else											return new _classname##Float_c ( pLeft, pRight );
 
 	switch ( tNode.m_iToken )
@@ -1150,9 +1150,9 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 
 		case TOK_CONST_FLOAT:	return new Expr_GetConst_c ( tNode.m_fConst );
 		case TOK_CONST_INT:
-			if ( tNode.m_uRetType==SPH_ATTR_INTEGER )
+			if ( tNode.m_eRetType==SPH_ATTR_INTEGER )
 				return new Expr_GetIntConst_c ( (int)tNode.m_iConst );
-			else if ( tNode.m_uRetType==SPH_ATTR_BIGINT )
+			else if ( tNode.m_eRetType==SPH_ATTR_BIGINT )
 				return new Expr_GetInt64Const_c ( tNode.m_iConst );
 			else
 				return new Expr_GetConst_c ( float(tNode.m_iConst) );
@@ -1178,7 +1178,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_AND:			LOC_SPAWN_POLY ( Expr_And ); break;
 		case TOK_OR:			LOC_SPAWN_POLY ( Expr_Or ); break;
 		case TOK_NOT:
-			if ( tNode.m_uArgType==SPH_ATTR_BIGINT )
+			if ( tNode.m_eArgType==SPH_ATTR_BIGINT )
 				return new Expr_NotInt64_c ( pLeft );
 			else
 				return new Expr_NotInt_c ( pLeft );
@@ -1310,7 +1310,7 @@ public:
 	Expr_ArgVsConstSet_c ( ISphExpr * pArg, ConstList_c * pConsts )
 		: Expr_ArgVsSet_c<T> ( pArg )
 	{
-		if ( pConsts->m_uRetType==SPH_ATTR_FLOAT )
+		if ( pConsts->m_eRetType==SPH_ATTR_FLOAT )
 		{
 			m_dValues.Reserve ( pConsts->m_dFloats.GetLength() );
 			ARRAY_FOREACH ( i, pConsts->m_dFloats )
@@ -1739,10 +1739,10 @@ ISphExpr * ExprParser_t::CreateIntervalNode ( int iArgsNode, CSphVector<ISphExpr
 	assert ( dArgs.GetLength()>=2 );
 
 	bool bConst = CheckForConstSet ( iArgsNode, 1 );
-	DWORD uAttrType = m_dNodes[iArgsNode].m_uArgType;
+	ESphAttr eAttrType = m_dNodes[iArgsNode].m_eArgType;
 	if ( bConst )
 	{
-		switch ( uAttrType )
+		switch ( eAttrType )
 		{
 			case SPH_ATTR_INTEGER:	return new Expr_IntervalConst_c<int> ( dArgs ); break;
 			case SPH_ATTR_BIGINT:	return new Expr_IntervalConst_c<int64_t> ( dArgs ); break;
@@ -1750,7 +1750,7 @@ ISphExpr * ExprParser_t::CreateIntervalNode ( int iArgsNode, CSphVector<ISphExpr
 		}
 	} else
 	{
-		switch ( uAttrType )
+		switch ( eAttrType )
 		{
 			case SPH_ATTR_INTEGER:	return new Expr_Interval_c<int> ( dArgs ); break;
 			case SPH_ATTR_BIGINT:	return new Expr_Interval_c<int64_t> ( dArgs ); break;
@@ -1781,7 +1781,7 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 	} else
 	{
 		ISphExpr * pArg = CreateTree ( tNode.m_iLeft );
-		switch ( pConst->m_uRetType )
+		switch ( pConst->m_eRetType )
 		{
 			case SPH_ATTR_INTEGER:	return new Expr_In_c<int> ( pArg, pConst ); break;
 			case SPH_ATTR_BIGINT:	return new Expr_In_c<int64_t> ( pArg, pConst ); break;
@@ -1845,8 +1845,8 @@ ISphExpr * ExprParser_t::CreateBitdotNode ( int iArgsNode, CSphVector<ISphExpr *
 {
 	assert ( dArgs.GetLength()>=1 );
 
-	DWORD uAttrType = m_dNodes[iArgsNode].m_uRetType;
-	switch ( uAttrType )
+	ESphAttr eAttrType = m_dNodes[iArgsNode].m_eRetType;
+	switch ( eAttrType )
 	{
 		case SPH_ATTR_INTEGER:	return new Expr_Bitdot_c<int> ( dArgs ); break;
 		case SPH_ATTR_BIGINT:	return new Expr_Bitdot_c<int64_t> ( dArgs ); break;
@@ -1886,12 +1886,12 @@ ExprParser_t::~ExprParser_t ()
 			SafeDelete ( m_dNodes[i].m_pConsts );
 }
 
-DWORD ExprParser_t::GetWidestRet ( int iLeft, int iRight )
+ESphAttr ExprParser_t::GetWidestRet ( int iLeft, int iRight )
 {
-	DWORD uLeftType = ( iLeft<0 ) ? SPH_ATTR_INTEGER : m_dNodes[iLeft].m_uRetType;
-	DWORD uRightType = ( iRight<0 ) ? SPH_ATTR_INTEGER : m_dNodes[iRight].m_uRetType;
+	ESphAttr uLeftType = ( iLeft<0 ) ? SPH_ATTR_INTEGER : m_dNodes[iLeft].m_eRetType;
+	ESphAttr uRightType = ( iRight<0 ) ? SPH_ATTR_INTEGER : m_dNodes[iRight].m_eRetType;
 
-	DWORD uRes = SPH_ATTR_FLOAT; // default is float
+	ESphAttr uRes = SPH_ATTR_FLOAT; // default is float
 	if ( ( uLeftType==SPH_ATTR_INTEGER || uLeftType==SPH_ATTR_BIGINT ) &&
 		( uRightType==SPH_ATTR_INTEGER || uRightType==SPH_ATTR_BIGINT ) )
 	{
@@ -1907,7 +1907,7 @@ int ExprParser_t::AddNodeInt ( int64_t iValue )
 {
 	ExprNode_t & tNode = m_dNodes.Add ();
 	tNode.m_iToken = TOK_CONST_INT;
-	tNode.m_uRetType = GetIntType ( iValue );
+	tNode.m_eRetType = GetIntType ( iValue );
 	tNode.m_iConst = iValue;
 	return m_dNodes.GetLength()-1;
 }
@@ -1916,7 +1916,7 @@ int ExprParser_t::AddNodeFloat ( float fValue )
 {
 	ExprNode_t & tNode = m_dNodes.Add ();
 	tNode.m_iToken = TOK_CONST_FLOAT;
-	tNode.m_uRetType = SPH_ATTR_FLOAT;
+	tNode.m_eRetType = SPH_ATTR_FLOAT;
 	tNode.m_fConst = fValue;
 	return m_dNodes.GetLength()-1;
 }
@@ -1928,10 +1928,10 @@ int ExprParser_t::AddNodeAttr ( int iTokenType, uint64_t uAttrLocator )
 	tNode.m_iToken = iTokenType;
 	sphUnpackAttrLocator ( uAttrLocator, &tNode );
 
-	if ( iTokenType==TOK_ATTR_FLOAT )			tNode.m_uRetType = SPH_ATTR_FLOAT;
-	else if ( iTokenType==TOK_ATTR_MVA )		tNode.m_uRetType = SPH_ATTR_MULTI;
-	else if ( tNode.m_tLocator.m_iBitCount>32 )	tNode.m_uRetType = SPH_ATTR_BIGINT;
-	else										tNode.m_uRetType = SPH_ATTR_INTEGER;
+	if ( iTokenType==TOK_ATTR_FLOAT )			tNode.m_eRetType = SPH_ATTR_FLOAT;
+	else if ( iTokenType==TOK_ATTR_MVA )		tNode.m_eRetType = SPH_ATTR_UINT32SET;
+	else if ( tNode.m_tLocator.m_iBitCount>32 )	tNode.m_eRetType = SPH_ATTR_BIGINT;
+	else										tNode.m_eRetType = SPH_ATTR_INTEGER;
 	return m_dNodes.GetLength()-1;
 }
 
@@ -1939,7 +1939,7 @@ int ExprParser_t::AddNodeID ()
 {
 	ExprNode_t & tNode = m_dNodes.Add ();
 	tNode.m_iToken = TOK_ID;
-	tNode.m_uRetType = USE_64BIT ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER;
+	tNode.m_eRetType = USE_64BIT ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER;
 	return m_dNodes.GetLength()-1;
 }
 
@@ -1947,7 +1947,7 @@ int ExprParser_t::AddNodeWeight ()
 {
 	ExprNode_t & tNode = m_dNodes.Add ();
 	tNode.m_iToken = TOK_WEIGHT;
-	tNode.m_uRetType = SPH_ATTR_INTEGER;
+	tNode.m_eRetType = SPH_ATTR_INTEGER;
 	return m_dNodes.GetLength()-1;
 }
 
@@ -1957,19 +1957,19 @@ int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 	tNode.m_iToken = iOp;
 
 	// deduce type
-	tNode.m_uRetType = SPH_ATTR_FLOAT; // default to float
+	tNode.m_eRetType = SPH_ATTR_FLOAT; // default to float
 	if ( iOp==TOK_NEG )
 	{
 		// NEG just inherits the type
-		tNode.m_uArgType = m_dNodes[iLeft].m_uRetType;
-		tNode.m_uRetType = tNode.m_uArgType;
+		tNode.m_eArgType = m_dNodes[iLeft].m_eRetType;
+		tNode.m_eRetType = tNode.m_eArgType;
 
 	} else if ( iOp==TOK_NOT )
 	{
 		// NOT result is integer, and its argument must be integer
-		tNode.m_uArgType = m_dNodes[iLeft].m_uRetType;
-		tNode.m_uRetType = SPH_ATTR_INTEGER;
-		if (!( tNode.m_uArgType==SPH_ATTR_INTEGER || tNode.m_uArgType==SPH_ATTR_BIGINT ))
+		tNode.m_eArgType = m_dNodes[iLeft].m_eRetType;
+		tNode.m_eRetType = SPH_ATTR_INTEGER;
+		if (!( tNode.m_eArgType==SPH_ATTR_INTEGER || tNode.m_eArgType==SPH_ATTR_BIGINT ))
 		{
 			m_sParserError.SetSprintf ( "NOT argument must be integer" );
 			return -1;
@@ -1980,16 +1980,16 @@ int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 		|| iOp=='+' || iOp=='-' || iOp=='*' || iOp==','
 		|| iOp=='&' || iOp=='|' || iOp=='%' )
 	{
-		tNode.m_uArgType = GetWidestRet ( iLeft, iRight );
+		tNode.m_eArgType = GetWidestRet ( iLeft, iRight );
 
 		// arithmetical operations return arg type, logical return int
-		tNode.m_uRetType = ( iOp=='+' || iOp=='-' || iOp=='*' || iOp==',' || iOp=='&' || iOp=='|' || iOp=='%' )
-			? tNode.m_uArgType
+		tNode.m_eRetType = ( iOp=='+' || iOp=='-' || iOp=='*' || iOp==',' || iOp=='&' || iOp=='|' || iOp=='%' )
+			? tNode.m_eArgType
 			: SPH_ATTR_INTEGER;
 
 		// both logical and bitwise AND/OR can only be over ints
 		if ( ( iOp==TOK_AND || iOp==TOK_OR || iOp=='&' || iOp=='|' )
-			&& !( tNode.m_uArgType==SPH_ATTR_INTEGER || tNode.m_uArgType==SPH_ATTR_BIGINT ))
+			&& !( tNode.m_eArgType==SPH_ATTR_INTEGER || tNode.m_eArgType==SPH_ATTR_BIGINT ))
 		{
 			m_sParserError.SetSprintf ( "%s arguments must be integer", ( iOp==TOK_AND || iOp=='&' ) ? "AND" : "OR" );
 			return -1;
@@ -1997,7 +1997,7 @@ int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 
 		// MOD can only be over ints
 		if ( iOp=='%'
-			&& !( tNode.m_uArgType==SPH_ATTR_INTEGER || tNode.m_uArgType==SPH_ATTR_BIGINT ))
+			&& !( tNode.m_eArgType==SPH_ATTR_INTEGER || tNode.m_eArgType==SPH_ATTR_BIGINT ))
 		{
 			m_sParserError.SetSprintf ( "MOD arguments must be integer" );
 			return -1;
@@ -2052,8 +2052,8 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 		while ( m_dNodes[iLeftmost].m_iToken==',' )
 			iLeftmost = m_dNodes[iLeftmost].m_iLeft;
 
-		DWORD uArg = m_dNodes[iLeftmost].m_uRetType;
-		if ( uArg!=SPH_ATTR_INTEGER && uArg!=SPH_ATTR_BIGINT )
+		ESphAttr eArg = m_dNodes[iLeftmost].m_eRetType;
+		if ( eArg!=SPH_ATTR_INTEGER && eArg!=SPH_ATTR_BIGINT )
 		{
 			m_sParserError.SetSprintf ( "first BITDOT() argument must be integer" );
 			return -1;
@@ -2068,42 +2068,42 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 	tNode.m_iRight = iRight;
 
 	// deduce type
-	tNode.m_uArgType = ( iLeft>=0 ) ? m_dNodes[iLeft].m_uRetType : SPH_ATTR_INTEGER;
-	tNode.m_uRetType = SPH_ATTR_FLOAT; // by default, functions return floats
+	tNode.m_eArgType = ( iLeft>=0 ) ? m_dNodes[iLeft].m_eRetType : SPH_ATTR_INTEGER;
+	tNode.m_eRetType = SPH_ATTR_FLOAT; // by default, functions return floats
 
 	Func_e eFunc = g_dFuncs[iFunc].m_eFunc;
 	if ( eFunc==FUNC_NOW || eFunc==FUNC_INTERVAL || eFunc==FUNC_IN )
 	{
-		tNode.m_uRetType = SPH_ATTR_INTEGER;
+		tNode.m_eRetType = SPH_ATTR_INTEGER;
 
 	} else if ( eFunc==FUNC_MIN || eFunc==FUNC_MAX || eFunc==FUNC_MADD || eFunc==FUNC_MUL3 || eFunc==FUNC_ABS || eFunc==FUNC_BIGINT || eFunc==FUNC_IDIV )
 	{
-		tNode.m_uRetType = tNode.m_uArgType;
+		tNode.m_eRetType = tNode.m_eArgType;
 
-		if ( eFunc==FUNC_BIGINT && tNode.m_uRetType!=SPH_ATTR_FLOAT )
-			tNode.m_uRetType = SPH_ATTR_BIGINT; // enforce if we can; FIXME! silently ignores BIGINT() on floats; should warn or raise an error
+		if ( eFunc==FUNC_BIGINT && tNode.m_eRetType!=SPH_ATTR_FLOAT )
+			tNode.m_eRetType = SPH_ATTR_BIGINT; // enforce if we can; FIXME! silently ignores BIGINT() on floats; should warn or raise an error
 
 	} else if ( eFunc==FUNC_IF || eFunc==FUNC_BITDOT )
 	{
-		tNode.m_uRetType = GetWidestRet ( iLeft, iRight );
+		tNode.m_eRetType = GetWidestRet ( iLeft, iRight );
 
 	} else if ( eFunc==FUNC_SINT )
 	{
-		if ( tNode.m_uArgType!=SPH_ATTR_INTEGER )
+		if ( tNode.m_eArgType!=SPH_ATTR_INTEGER )
 		{
 			m_sParserError.SetSprintf ( "SINT() argument must be integer" );
 			return -1;
 		}
-		tNode.m_uRetType = SPH_ATTR_BIGINT;
+		tNode.m_eRetType = SPH_ATTR_BIGINT;
 
 	} else if ( eFunc==FUNC_DAY || eFunc==FUNC_MONTH || eFunc==FUNC_YEAR || eFunc==FUNC_YEARMONTH || eFunc==FUNC_YEARMONTHDAY )
 	{
-		if ( tNode.m_uArgType!=SPH_ATTR_INTEGER )
+		if ( tNode.m_eArgType!=SPH_ATTR_INTEGER )
 		{
 			m_sParserError.SetSprintf ( "timestamp function argument must be integer" );
 			return -1;
 		}
-		tNode.m_uRetType = SPH_ATTR_INTEGER;
+		tNode.m_eRetType = SPH_ATTR_INTEGER;
 	}
 
 	return m_dNodes.GetLength()-1;
@@ -2178,7 +2178,7 @@ struct WeightCheck_fn
 };
 
 
-ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema, DWORD * pAttrType, bool * pUsesWeight, CSphString & sError )
+ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError )
 {
 	m_sLexerError = "";
 	m_sParserError = "";
@@ -2205,8 +2205,8 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema,
 	}
 
 	// deduce return type
-	DWORD uAttrType = m_dNodes[m_iParsed].m_uRetType;
-	assert ( uAttrType==SPH_ATTR_INTEGER || uAttrType==SPH_ATTR_BIGINT || uAttrType==SPH_ATTR_FLOAT );
+	ESphAttr eAttrType = m_dNodes[m_iParsed].m_eRetType;
+	assert ( eAttrType ==SPH_ATTR_INTEGER || eAttrType==SPH_ATTR_BIGINT || eAttrType==SPH_ATTR_FLOAT );
 
 	// perform optimizations
 	Optimize ( m_iParsed );
@@ -2226,7 +2226,7 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema,
 	}
 
 	if ( pAttrType )
-		*pAttrType = uAttrType;
+		*pAttrType = eAttrType ;
 
 	if ( pUsesWeight )
 	{
@@ -2242,7 +2242,7 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema,
 //////////////////////////////////////////////////////////////////////////
 
 /// parser entry point
-ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, DWORD * pAttrType, bool * pUsesWeight, CSphString & sError, CSphSchema * pExtra )
+ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError, CSphSchema * pExtra )
 {
 	// parse into opcodes
 	ExprParser_t tParser;

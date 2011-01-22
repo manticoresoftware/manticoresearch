@@ -482,10 +482,10 @@ static inline ISphFilter * ReportError ( CSphString & sError, const char * sMess
 }
 
 
-static ISphFilter * CreateFilter ( DWORD eAttrType, ESphFilter eFilterType, CSphString & sError )
+static ISphFilter * CreateFilter ( ESphAttr eAttrType, ESphFilter eFilterType, CSphString & sError )
 {
 	// MVA
-	if ( eAttrType & SPH_ATTR_MULTI )
+	if ( eAttrType==SPH_ATTR_UINT32SET )
 	{
 		switch ( eFilterType )
 		{

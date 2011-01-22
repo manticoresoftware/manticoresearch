@@ -9857,6 +9857,21 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 				SendMysqlErrorPacket ( tOut, uPacketID, "Unknown query_log_format value (must be plain or sphinxql)" );
 				return;
 			}
+		} else if ( tStmt.m_sSetName=="log_level" )
+		{
+			if ( tStmt.m_sSetValue=="info" )
+				g_eLogLevel = LOG_INFO;
+			else if ( tStmt.m_sSetValue=="debug" )
+				g_eLogLevel = LOG_DEBUG;
+			else if ( tStmt.m_sSetValue=="debugv" )
+				g_eLogLevel = LOG_VERBOSE_DEBUG;
+			else if ( tStmt.m_sSetValue=="debugvv" )
+				g_eLogLevel = LOG_VERY_VERBOSE_DEBUG;
+			else
+			{
+				SendMysqlErrorPacket ( tOut, uPacketID, "Unknown log_level value (must be one of info, debug, debugv, debugvv)" );
+				return;
+			}
 		} else
 		{
 			sError.SetSprintf ( "Unknown system variable '%s'", tStmt.m_sSetName.cstr() );

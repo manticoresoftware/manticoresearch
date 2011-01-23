@@ -11837,8 +11837,14 @@ void CSphQueryContext::CalcFinal ( CSphMatch & tMatch ) const
 
 void CSphQueryContext::SetStringPool ( const BYTE * pStrings )
 {
+	ARRAY_FOREACH ( i, m_dCalcFilter )
+		m_dCalcFilter[i].m_pExpr->SetStringPool ( pStrings );
+
 	ARRAY_FOREACH ( i, m_dCalcSort )
 		m_dCalcSort[i].m_pExpr->SetStringPool ( pStrings );
+
+	ARRAY_FOREACH ( i, m_dCalcFinal )
+		m_dCalcFinal[i].m_pExpr->SetStringPool ( pStrings );
 }
 
 bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker, int iTag ) const

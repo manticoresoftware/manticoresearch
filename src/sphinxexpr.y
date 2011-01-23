@@ -17,6 +17,7 @@
 %token <iAttrLocator>	TOK_ATTR_BITS
 %token <iAttrLocator>	TOK_ATTR_FLOAT
 %token <iAttrLocator>	TOK_ATTR_MVA
+%token <iAttrLocator>	TOK_ATTR_STRING
 %token <iFunc>			TOK_FUNC
 %token <iFunc>			TOK_FUNC_IN
 %token <iNode>			TOK_USERVAR
@@ -28,6 +29,7 @@
 
 %type <iNode>			attr
 %type <iNode>			expr
+%type <iNode>			arg
 %type <iNode>			arglist
 %type <iNode>			constlist
 %type <iNode>			function
@@ -84,9 +86,14 @@ expr:
 	| '(' expr ')'					{ $$ = $2; }
 	;
 
+arg:
+	expr
+	| TOK_ATTR_STRING				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_STRING, $1 ); }
+	;
+
 arglist:
-	expr							{ $$ = $1; }
-	| arglist ',' expr				{ $$ = pParser->AddNodeOp ( ',', $1, $3 ); }
+	arg								{ $$ = $1; }
+	| arglist ',' arg				{ $$ = pParser->AddNodeOp ( ',', $1, $3 ); }
 	;
 
 constlist:

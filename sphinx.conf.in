@@ -183,10 +183,10 @@ source src1
 	# QUERY is SQL query used to fetch all ( docid, attrvalue ) pairs
 	# RANGE-QUERY is SQL query used to fetch min and max ID values, similar to 'sql_query_range'
 	#
-	# sql_attr_multi		= uint tag from query; SELECT id, tag FROM tags
+	# sql_attr_multi		= uint tag from query; SELECT docid, tagid FROM tags
 	# sql_attr_multi		= uint tag from ranged-query; \
-	#	SELECT id, tag FROM tags WHERE id>=$start AND id<=$end; \
-	#	SELECT MIN(id), MAX(id) FROM tags
+	#	SELECT docid, tagid FROM tags WHERE id>=$start AND id<=$end; \
+	#	SELECT MIN(docid), MAX(docid) FROM tags
 
 
 	# string attribute declaration

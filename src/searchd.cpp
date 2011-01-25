@@ -4315,7 +4315,7 @@ public:
 
 	void Append ( const char * sFormat, ... )
 	{
-		if ( !sFormat )
+		if ( !sFormat || !*sFormat )
 			return;
 
 		int iLen = -1;
@@ -4337,6 +4337,42 @@ public:
 		}
 	}
 
+	void AppendEscapedFixupSpace ( const char * sText )
+	{
+		if ( !sText || !*sText )
+			return;
+
+		const char * pBuf = sText;
+		int iEsc = 0;
+		for ( ; *pBuf; )
+		{
+			char s = *pBuf++;
+			iEsc = ( s=='\\' || s=='\'' ) ? ( iEsc+1 ) : iEsc;
+		}
+
+		int iLen = pBuf-sText;
+
+		if ( Left()<iLen+iEsc )
+			Grow ( iLen+iEsc );
+
+		pBuf = sText;
+		for ( ; *pBuf; )
+		{
+			char s = *pBuf++;
+			if ( s=='\\' || s=='\'' )
+			{
+				*m_pCur++ = '\\';
+				*m_pCur++ = s;
+			} else if ( sphIsSpace ( s ) )
+			{
+				*m_pCur++ = ' ';
+			} else
+			{
+				*m_pCur++ = s;
+			}
+		}
+	}
+
 	void AppendCurrentTime ()
 	{
 		if ( Left()<64 )
@@ -4354,15 +4390,19 @@ public:
 private:
 	int Left () const { return m_iSize-Length(); }
 
-	void Grow ()
+	void Grow ( int iAdd=0 )
 	{
+		int iNewLen = m_iSize*2;
+		if ( ( m_iSize+iAdd )>( m_iSize*2 ) )
+			iNewLen = m_iSize+iAdd;
+
 		int iUsed = Length();
-		char * pDynamic = new char [m_iSize*2];
+		char * pDynamic = new char [iNewLen];
 		memcpy ( pDynamic, m_pDynamic ? m_pDynamic : m_sStatic, iUsed );
 		SafeDeleteArray ( m_pDynamic );
 		m_pDynamic = pDynamic;
 		m_pCur = pDynamic + iUsed;
-		m_iSize *= 2;
+		m_iSize = iNewLen;
 	}
 };
 
@@ -4423,9 +4463,9 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 		tBuf.Append ( " WHERE" );
 		if ( !sQuery.IsEmpty() )
 		{
-			// FIXME! escape it
-			// FIXME! replace \n with spaces
-			tBuf.Append ( " MATCH('%s')", sQuery.cstr() );
+			tBuf.Append ( " MATCH('" );
+			tBuf.AppendEscapedFixupSpace ( sQuery.cstr() );
+			tBuf.Append ( "')" );
 			bDeflowered = true;
 		}
 
@@ -4475,7 +4515,8 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 	// ORDER BY and/or GROUP BY clause
 	if ( q.m_sGroupBy.IsEmpty() )
 	{
-		tBuf.Append ( "ORDER BY", q.m_eSort, q.m_sSortBy.cstr() );
+		if ( !q.m_sSortBy.IsEmpty() ) // case API SPH_MATCH_EXTENDED2 - SPH_SORT_RELEVANCE
+			tBuf.Append ( " ORDER BY %s", q.m_sSortBy.cstr() );
 
 	} else
 	{

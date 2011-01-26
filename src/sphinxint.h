@@ -941,7 +941,8 @@ struct ExtHit_t
 {
 	SphDocID_t	m_uDocid;
 	Hitpos_t	m_uHitpos;
-	DWORD		m_uQuerypos;
+	WORD		m_uQuerypos;
+	WORD		m_uNodepos;
 	WORD		m_uSpanlen;
 	WORD		m_uMatchlen;
 	DWORD		m_uWeight;

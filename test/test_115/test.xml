@@ -49,6 +49,9 @@ index idx
 	<query index="idx" mode="phrase" >"ARE NEAR"</query>
 	<query index="idx" mode="extended" >"ARE NEAR"</query>
 	<query index="idx" mode="extended2" >"ARE NEAR"</query>
+	<query index="idx" mode="extended2">five NEAR/3 one</query>
+	<query index="idx" mode="extended2">six NEAR/3 one</query>
+	<query index="idx" mode="extended2">(five|six) NEAR/3 one</query>
 </queries>
 
 <db_create>
@@ -62,7 +65,8 @@ CREATE TABLE test_table
 INSERT INTO `test_table` VALUES
 ( 0, 'a b c d'), (0, 'a x b c d'), (0,'a x x b c d'), ( 0, 'a b x c d'), ( 0, 'a b x x c d'), ( 0, 'a b x x x c d'), ( 0, 'a b x x x x c d'), (0, 'a x b x x x x c x d'), (0, 'a x x b x x x c x x d'),
 ( 0, 'c d x x x x a b'), ( 0, 'c d x x x a b'), ( 0, 'c d x x a b'), ( 0, 'c d x a b'), ( 0, 'c d a b'),
-( 0, '... is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial burden resulting from the non-performance by one of their members and, as such, should significantly reduce this credit risk. In cases where the clearinghouse... is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial burden resulting from the non-performance by one of their members and, as such, should significantly reduce this credit risk. In cases where the clearinghouse... be able to meet its obligations to a Trading Company. The counterparty for futures contracts traded in the United States and on most foreign exchanges is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial...')
+( 0, '... is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial burden resulting from the non-performance by one of their members and, as such, should significantly reduce this credit risk. In cases where the clearinghouse... is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial burden resulting from the non-performance by one of their members and, as such, should significantly reduce this credit risk. In cases where the clearinghouse... be able to meet its obligations to a Trading Company. The counterparty for futures contracts traded in the United States and on most foreign exchanges is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial...'),
+( 0, 'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteena' )
 </db_insert>
 <db_drop>DROP TABLE IF EXISTS test_table</db_drop>
 

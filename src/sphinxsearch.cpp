@@ -288,10 +288,19 @@ public:
 		m_pChildren[1]->DebugDump ( iLevel+1 );
 	}
 
+	void SetNodePos ( WORD uPosLeft, WORD uPosRight )
+	{
+		m_dNodePos[0] = uPosLeft;
+		m_dNodePos[1] = uPosRight;
+		m_bPosAware = true;
+	}
+
 protected:
 	ExtNode_i *					m_pChildren[2];
 	const ExtDoc_t *			m_pCurDoc[2];
 	const ExtHit_t *			m_pCurHit[2];
+	WORD						m_dNodePos[2];
+	bool						m_bPosAware;
 	SphDocID_t					m_uMatchedDocid;
 };
 
@@ -362,13 +371,21 @@ protected:
 	SphDocID_t					m_uHitsOverFor;			///< there are no more hits for matches block starting with this ID
 
 protected:
-	inline void					ConstructNode ( const CSphVector<ExtNode_i *> & dNodes, const ISphQwordSetup & tSetup )
+	inline void					ConstructNode ( const CSphVector<ExtNode_i *> & dNodes, const CSphVector<WORD> & dPositions, const ISphQwordSetup & tSetup )
 	{
 		assert ( m_pNode==NULL );
-		ExtNode_i * pCur = dNodes[0];
+		WORD uLPos = dPositions[0];
+		ExtNode_i * pCur = dNodes[uLPos++]; // ++ for zero-based to 1-based
+		ExtAnd_c * pCurEx = NULL;
 		DWORD uLeaves = dNodes.GetLength();
+		WORD uRPos;
 		for ( DWORD i=1; i<uLeaves; i++ )
-			pCur = new ExtAnd_c ( pCur, dNodes[i], tSetup );
+		{
+			uRPos = dPositions[i];
+			pCur = pCurEx = new ExtAnd_c ( pCur, dNodes[uRPos++], tSetup ); // ++ for zero-based to 1-based
+			pCurEx->SetNodePos ( uLPos, uRPos );
+			uLPos = 0;
+		}
 		m_pNode = pCur;
 	}
 };
@@ -381,6 +398,18 @@ struct ExtNodeTF_fn
 	}
 };
 
+struct ExtNodeTFExt_fn
+{
+	const CSphVector<ExtNode_i *> & m_dNodes;
+	ExtNodeTFExt_fn ( const CSphVector<ExtNode_i *> & dNodes ) :
+		m_dNodes ( dNodes ) {}
+
+	bool IsLess ( WORD uA, WORD uB ) const
+	{
+		return m_dNodes[uA]->GetDocsCount() < m_dNodes[uB]->GetDocsCount();
+	}
+};
+
 template < class FSM >
 class ExtNWay_c : public ExtNWayT, private FSM
 {
@@ -390,19 +419,13 @@ public:
 		, FSM ( dNodes, uDupeMask, tNode, tSetup )
 	{
 		bool bTerms = FSM::bTermsTree; // workaround MSVC const condition warning
+		DWORD uNodes = dNodes.GetLength();
+		CSphVector<WORD> dPositions (uNodes);
+		ARRAY_FOREACH ( i, dPositions )
+			dPositions[i] = i;
 		if ( bTerms )
-		{
-			// we use a tree of terms; we need to re-sort it
-			DWORD uNodes = dNodes.GetLength();
-			CSphVector<ExtNode_i*> dTerms;
-			dTerms.Resize ( uNodes );
-			memcpy ( &dTerms[0], &dNodes[0], uNodes * sizeof ( ExtNode_i* ) ); //NOLINT
-			dTerms.Sort ( ExtNodeTF_fn() );
-			ConstructNode ( dTerms, tSetup );
-		} else
-		{
-			ConstructNode ( dNodes, tSetup );
-		}
+			dPositions.Sort ( ExtNodeTFExt_fn(dNodes) );
+		ConstructNode ( dNodes, dPositions, tSetup );
 	}
 
 public:
@@ -498,15 +521,16 @@ protected:
 	DWORD						m_uWordsExpected;	///< now many hits we're expect
 	DWORD						m_uWeight;			///< weight accum
 	DWORD						m_uFirstHit;		///< hitpos of the beginning of the match chain
-	DWORD						m_uFirstQpos;		///< Q-position of the head of the chain
-	CSphVector<DWORD>			m_dQpos;			///< query positions for multinear
+	WORD						m_uFirstNpos;		///< N-position of the head of the chain
+	DWORD						m_uFirstQpos;		///< Q-position of the head of the chain (for twofers)
+	CSphVector<WORD>			m_dNpos;			///< query positions for multinear
 	CSphVector<ExtHit_t>		m_dRing;			///< ring buffer for multihit data
 	int							m_iRing;			///< the head of the ring
 	bool						m_bTwofer;			///< if we have 2- or N-way NEAR
 private:
 	inline int RingTail() const
 	{
-		return ( m_iRing + m_dQpos.GetLength() - 1 ) % m_uWordsExpected;
+		return ( m_iRing + m_dNpos.GetLength() - 1 ) % m_uWordsExpected;
 	}
 	inline void Add2Ring ( const ExtHit_t* pHit )
 	{
@@ -1760,6 +1784,9 @@ ExtTwofer_c::ExtTwofer_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQw
 	m_pCurHit[1] = NULL;
 	m_pCurDoc[0] = NULL;
 	m_pCurDoc[1] = NULL;
+	m_dNodePos[0] = 0;
+	m_dNodePos[1] = 0;
+	m_bPosAware = false;
 	m_uMatchedDocid = 0;
 	m_iAtomPos = ( pFirst && pFirst->m_iAtomPos ) ? pFirst->m_iAtomPos : 0;
 	if ( pSecond && pSecond->m_iAtomPos && pSecond->m_iAtomPos<m_iAtomPos && m_iAtomPos!=0 )
@@ -1868,6 +1895,8 @@ const ExtHit_t * ExtAnd_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMa
 		m_uMatchedDocid = 0;
 
 	int iHit = 0;
+	WORD uNodePos0 = m_dNodePos[0];
+	WORD uNodePos1 = m_dNodePos[1];
 	while ( iHit<MAX_HITS-1 )
 	{
 		// emit hits, while possible
@@ -1882,12 +1911,20 @@ const ExtHit_t * ExtAnd_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMa
 				if ( ( pCur0->m_uHitpos < pCur1->m_uHitpos )
 					|| ( pCur0->m_uHitpos==pCur1->m_uHitpos && pCur0->m_uQuerypos>pCur1->m_uQuerypos ) )
 				{
-					m_dHits[iHit++] = *pCur0++;
+					m_dHits[iHit] = *pCur0++;
+					if ( uNodePos0!=0 )
+						m_dHits[iHit++].m_uNodepos = uNodePos0;
+					else
+						iHit++;
 					if ( pCur0->m_uDocid!=m_uMatchedDocid )
 						break;
 				} else
 				{
-					m_dHits[iHit++] = *pCur1++;
+					m_dHits[iHit] = *pCur1++;
+					if ( uNodePos1!=0 )
+						m_dHits[iHit++].m_uNodepos = uNodePos1;
+					else
+						iHit++;
 					if ( pCur1->m_uDocid!=m_uMatchedDocid )
 						break;
 				}
@@ -1897,12 +1934,24 @@ const ExtHit_t * ExtAnd_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMa
 			if ( pCur0 && pCur0->m_uDocid==m_uMatchedDocid && !( pCur1 && pCur1->m_uDocid==DOCID_MAX ) )
 			{
 				while ( pCur0->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
-					m_dHits[iHit++] = *pCur0++;
+				{
+					m_dHits[iHit] = *pCur0++;
+					if ( uNodePos0!=0 )
+						m_dHits[iHit++].m_uNodepos = uNodePos0;
+					else
+						iHit++;
+				}
 			}
 			if ( pCur1 && pCur1->m_uDocid==m_uMatchedDocid && !( pCur0 && pCur0->m_uDocid==DOCID_MAX ) )
 			{
 				while ( pCur1->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
-					m_dHits[iHit++] = *pCur1++;
+				{
+					m_dHits[iHit] = *pCur1++;
+					if ( uNodePos1!=0 )
+						m_dHits[iHit++].m_uNodepos = uNodePos1;
+					else
+						iHit++;
+				}
 			}
 		}
 
@@ -2676,7 +2725,7 @@ FSMmultinear::FSMmultinear ( const CSphVector<ExtNode_i *> & dNodes, DWORD, cons
 		m_bTwofer = true;
 	else
 	{
-		m_dQpos.Reserve ( m_uWordsExpected );
+		m_dNpos.Reserve ( m_uWordsExpected );
 		m_dRing.Resize ( m_uWordsExpected );
 		m_bTwofer = false;
 	}
@@ -2687,6 +2736,7 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 {
 	// walk through the hitlist and update context
 	DWORD uHitpos = HITMAN::GetLCS ( pHit->m_uHitpos );
+	DWORD uNpos = pHit->m_uNodepos;
 	DWORD uQpos = pHit->m_uQuerypos;
 
 	// skip dupe hit (may be emitted by OR node, for example)
@@ -2712,11 +2762,14 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 		m_uLastSL = pHit->m_uSpanlen;
 		m_uWeight = m_uLastW = pHit->m_uWeight;
 		if ( m_bTwofer )
+		{
 			m_uFirstQpos = uQpos;
+			m_uFirstNpos = uNpos;
+		}
 		else
 		{
-			m_dQpos.Resize(1);
-			m_dQpos[0] = uQpos;
+			m_dNpos.Resize(1);
+			m_dNpos[0] = uNpos;
 			Add2Ring ( pHit );
 		}
 		return false;
@@ -2735,9 +2788,10 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 			m_uLastSL = pHit->m_uSpanlen;
 			m_uWeight = m_uLastW = pHit->m_uWeight;
 			m_uFirstQpos = uQpos;
+			m_uFirstNpos = uNpos;
 			return false;
 		}
-		if ( uQpos==m_uFirstQpos )
+		if ( uNpos==m_uFirstNpos )
 		{
 			if ( m_uLastP < uHitpos )
 			{
@@ -2751,53 +2805,61 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 				m_uLastSL = pHit->m_uSpanlen;
 				m_uWeight = m_uLastW = m_uPrelastW;
 				m_uFirstQpos = uQpos;
+				m_uFirstNpos = uNpos;
 			}
 			return false;
 		}
 	} else
 	{
-		if ( uQpos < m_dQpos[0] )
-			m_dQpos.Insert ( 0, uQpos );
-		else if ( uQpos > m_dQpos.Last() )
-			m_dQpos.Add ( uQpos );
-		else if ( uQpos!=m_dQpos[0] && uQpos!=m_dQpos.Last() )
+		if ( uNpos < m_dNpos[0] )
 		{
-			int iEnd = m_dQpos.GetLength();
+			m_uFirstQpos = Min ( m_uFirstQpos, uQpos );
+			m_dNpos.Insert ( 0, uNpos );
+		}
+		else if ( uNpos > m_dNpos.Last() )
+		{
+			m_uFirstQpos = Min ( m_uFirstQpos, uQpos );
+			m_dNpos.Add ( uNpos );
+		}
+		else if ( uNpos!=m_dNpos[0] && uNpos!=m_dNpos.Last() )
+		{
+			int iEnd = m_dNpos.GetLength();
 			int iStart = 0;
 			int iMid = -1;
 			while ( iEnd-iStart>1 )
 			{
 				iMid = ( iStart + iEnd ) / 2;
-				if ( uQpos==m_dQpos[iMid] )
+				if ( uNpos==m_dNpos[iMid] )
 				{
 					const ExtHit_t& dHit = m_dRing[m_iRing];
 					// last addition same as the first. So, we can shift
-					if ( uQpos==dHit.m_uQuerypos )
+					if ( uNpos==dHit.m_uNodepos )
 					{
 						m_uWeight -= dHit.m_uWeight;
 						m_uFirstHit = HITMAN::GetLCS ( dHit.m_uHitpos );
 						ShiftRing();
 					// last addition same as the first. So, we can shift
-					} else if ( uQpos==m_dRing [ RingTail() ].m_uQuerypos )
+					} else if ( uNpos==m_dRing [ RingTail() ].m_uNodepos )
 						m_uWeight -= m_dRing [ RingTail() ].m_uWeight;
 					else
 						return false;
 				}
 
-				if ( uQpos<m_dQpos[iMid] )
+				if ( uNpos<m_dNpos[iMid] )
 					iEnd = iMid;
 				else
 					iStart = iMid;
 			}
-			m_dQpos.Insert ( iEnd, uQpos );
+			m_dNpos.Insert ( iEnd, uNpos );
+			m_uFirstQpos = Min ( m_uFirstQpos, uQpos );
 		// last addition same as the first. So, we can shift
-		} else if ( uQpos==m_dRing[m_iRing].m_uQuerypos )
+		} else if ( uNpos==m_dRing[m_iRing].m_uNodepos )
 		{
 			m_uWeight -= m_dRing[m_iRing].m_uWeight;
 			m_uFirstHit = HITMAN::GetLCS ( m_dRing[m_iRing].m_uHitpos );
 			ShiftRing();
 		// last addition same as the tail. So, we can move the tail onto it.
-		} else if ( uQpos==m_dRing [ RingTail() ].m_uQuerypos )
+		} else if ( uNpos==m_dRing [ RingTail() ].m_uNodepos )
 			m_uWeight -= m_dRing [ RingTail() ].m_uWeight;
 		else
 			return false;
@@ -2810,7 +2872,7 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 
 	// finally got the whole chain - emit it!
 	// warning: we don't support overlapping in generic chains.
-	if ( m_bTwofer || (int)m_uWordsExpected==m_dQpos.GetLength() )
+	if ( m_bTwofer || (int)m_uWordsExpected==m_dNpos.GetLength() )
 	{
 		dTarget->m_uDocid = pHit->m_uDocid;
 		dTarget->m_uHitpos = Hitpos_t ( m_uFirstHit ); // !COMMIT strictly speaking this is creation from LCS not value
@@ -2827,8 +2889,8 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 			m_uFirstQpos = pHit->m_uQuerypos;
 		} else
 		{
-			dTarget->m_uQuerypos = m_dQpos[0];
-			dTarget->m_uSpanlen = (WORD) m_dQpos.GetLength();
+			dTarget->m_uQuerypos = Min ( m_uFirstQpos, pHit->m_uQuerypos );
+			dTarget->m_uSpanlen = (WORD) m_dNpos.GetLength();
 			m_uLastP = 0;
 		}
 		return true;

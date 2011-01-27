@@ -8,7 +8,7 @@
 	float			fConst;			// constant value
 	uint64_t		iAttrLocator;	// attribute locator (rowitem for int/float; offset+size for bits)
 	int				iFunc;			// function id
-	int				iNode;			// node index
+	int				iNode;			// node, or uservar, or udf index
 };
 
 %token <iConst>			TOK_CONST_INT
@@ -21,6 +21,7 @@
 %token <iFunc>			TOK_FUNC
 %token <iFunc>			TOK_FUNC_IN
 %token <iNode>			TOK_USERVAR
+%token <iNode>			TOK_UDF
 
 %token	TOK_ID
 %token	TOK_WEIGHT
@@ -89,6 +90,7 @@ expr:
 arg:
 	expr
 	| TOK_ATTR_STRING				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_STRING, $1 ); }
+	| TOK_ATTR_MVA					{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA, $1 ); }
 	;
 
 arglist:
@@ -106,6 +108,8 @@ constlist:
 function:
 	TOK_FUNC '(' arglist ')'		{ $$ = pParser->AddNodeFunc ( $1, $3 ); if ( $$<0 ) YYERROR; }
 	| TOK_FUNC '(' ')'				{ $$ = pParser->AddNodeFunc ( $1, -1 ); if ( $$<0 ) YYERROR; }
+	| TOK_UDF '(' arglist ')'		{ $$ = pParser->AddNodeUdf ( $1, $3 ); if ( $$<0 ) YYERROR; }
+	| TOK_UDF '(' ')'				{ $$ = pParser->AddNodeUdf ( $1, -1 ); if ( $$<0 ) YYERROR; }
 	| TOK_FUNC_IN '(' attr ',' constlist ')'
 		{
 			$$ = pParser->AddNodeFunc ( $1, $3, $5 );

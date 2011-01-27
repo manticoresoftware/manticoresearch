@@ -1226,6 +1226,13 @@ public:
 		return pEntry->m_tValue;
 	}
 
+	/// get pointer to key storage
+	const KEY * GetKeyPtr ( const KEY & tKey ) const
+	{
+		HashEntry_t * pEntry = FindByKey ( tKey );
+		return pEntry ? &pEntry->m_tKey : NULL;
+	}
+
 	/// copying
 	const CSphOrderedHash<T,KEY,HASHFUNC,LENGTH,STEP> & operator = ( const CSphOrderedHash<T,KEY,HASHFUNC,LENGTH,STEP> & rhs )
 	{
@@ -1949,11 +1956,7 @@ class CSphStaticMutex : public CSphMutex
 public:
 	CSphStaticMutex()
 	{
-#ifndef NDEBUG
-		assert ( Init() );
-#else
-		Init();
-#endif
+		Verify ( Init() );
 	}
 
 	~CSphStaticMutex()

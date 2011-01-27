@@ -122,6 +122,12 @@ AC_CHECK_FUNCS(clock_gettime)
 SPHINX_CHECK_DEFINE(LOCK_EX,sys/file.h)
 SPHINX_CHECK_DEFINE(F_SETLKW,fcntl.h)
 
+# check for dlopen
+# FIXME! technically, only needed in searchd
+# but as UDF manager is curently in libsphinx, we link everything
+AC_CHECK_LIB(dl,dlopen)
+AC_CHECK_FUNCS(dlopen dlerror)
+
 dnl --------------------------------------------------------------------------
 
 SPHINX_CONFIGURE_PART([configuring Sphinx])

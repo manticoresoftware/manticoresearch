@@ -53,8 +53,11 @@ public:
 	/// evaluate this expression for that match, using int64 math
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { assert ( 0 ); return (int64_t) Eval ( tMatch ); }
 
-	/// evaluate string
+	/// evaluate string attr
 	virtual int StringEval ( const CSphMatch &, const BYTE ** ppStr ) const { *ppStr = NULL; return 0; }
+
+	/// evaluate MVA attr
+	virtual const DWORD * MvaEval ( const CSphMatch & ) const { assert ( 0 ); return NULL; }
 
 	/// check for arglist subtype
 	virtual bool IsArglist () const { return false; }
@@ -74,6 +77,17 @@ public:
 /// returns pointer to evaluator on success
 /// fills pAttrType with result type (for now, can be SPH_ATTR_SINT or SPH_ATTR_FLOAT)
 ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError, CSphSchema * pExtra=NULL );
+
+//////////////////////////////////////////////////////////////////////////
+
+/// initialize UDF manager
+void sphUDFInit ( const char * sUdfDir );
+
+/// load UDF function
+bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, CSphString & sError );
+
+/// unload UDF function
+bool sphUDFDrop ( const char * szFunc, CSphString & sError );
 
 #endif // _sphinxexpr_
 

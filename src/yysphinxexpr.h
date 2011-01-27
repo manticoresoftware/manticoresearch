@@ -39,20 +39,21 @@
      TOK_FUNC = 265,
      TOK_FUNC_IN = 266,
      TOK_USERVAR = 267,
-     TOK_ID = 268,
-     TOK_WEIGHT = 269,
-     TOK_CONST_LIST = 270,
-     TOK_ATTR_SINT = 271,
-     TOK_OR = 272,
-     TOK_AND = 273,
-     TOK_NE = 274,
-     TOK_EQ = 275,
-     TOK_GTE = 276,
-     TOK_LTE = 277,
-     TOK_MOD = 278,
-     TOK_DIV = 279,
-     TOK_NOT = 280,
-     TOK_NEG = 281
+     TOK_UDF = 268,
+     TOK_ID = 269,
+     TOK_WEIGHT = 270,
+     TOK_CONST_LIST = 271,
+     TOK_ATTR_SINT = 272,
+     TOK_OR = 273,
+     TOK_AND = 274,
+     TOK_NE = 275,
+     TOK_EQ = 276,
+     TOK_GTE = 277,
+     TOK_LTE = 278,
+     TOK_MOD = 279,
+     TOK_DIV = 280,
+     TOK_NOT = 281,
+     TOK_NEG = 282
    };
 #endif
 #define TOK_CONST_INT 258
@@ -65,20 +66,21 @@
 #define TOK_FUNC 265
 #define TOK_FUNC_IN 266
 #define TOK_USERVAR 267
-#define TOK_ID 268
-#define TOK_WEIGHT 269
-#define TOK_CONST_LIST 270
-#define TOK_ATTR_SINT 271
-#define TOK_OR 272
-#define TOK_AND 273
-#define TOK_NE 274
-#define TOK_EQ 275
-#define TOK_GTE 276
-#define TOK_LTE 277
-#define TOK_MOD 278
-#define TOK_DIV 279
-#define TOK_NOT 280
-#define TOK_NEG 281
+#define TOK_UDF 268
+#define TOK_ID 269
+#define TOK_WEIGHT 270
+#define TOK_CONST_LIST 271
+#define TOK_ATTR_SINT 272
+#define TOK_OR 273
+#define TOK_AND 274
+#define TOK_NE 275
+#define TOK_EQ 276
+#define TOK_GTE 277
+#define TOK_LTE 278
+#define TOK_MOD 279
+#define TOK_DIV 280
+#define TOK_NOT 281
+#define TOK_NEG 282
 
 
 
@@ -90,7 +92,7 @@ typedef union YYSTYPE {
 	float			fConst;			// constant value
 	uint64_t		iAttrLocator;	// attribute locator (rowitem for int/float; offset+size for bits)
 	int				iFunc;			// function id
-	int				iNode;			// node index
+	int				iNode;			// node, or uservar, or udf index
 } YYSTYPE;
 /* Line 1204 of yacc.c.  */
 

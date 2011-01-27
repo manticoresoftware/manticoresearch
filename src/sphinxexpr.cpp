@@ -15,13 +15,18 @@
 
 #include "sphinx.h"
 #include "sphinxexpr.h"
+#include "sphinxudf.h"
+#include "sphinxutils.h"
 #include <time.h>
 #include <math.h>
 
 #if !USE_WINDOWS
 #include <unistd.h>
 #include <sys/time.h>
-#endif
+#ifdef HAVE_DLOPEN
+#include <dlfcn.h>
+#endif // HAVE_DLOPEN
+#endif // !USE_WINDOWS
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -33,8 +38,92 @@
 #define M_LOG10E	0.434294481903251827651
 #endif
 
+#if !USE_WINDOWS
+#ifndef HAVE_DLERROR
+#define dlerror() ""
+#endif // HAVE_DLERROR
+#endif // !USE_WINDOWS
+
+
+typedef int (*UdfInit_fn) ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error );
+typedef void (*UdfDeinit_fn) ( SPH_UDF_INIT * init );
+
+
+/// loaded UDF library
+struct UdfLib_t
+{
+	void *				m_pHandle;	///< handle from dlopen()
+	int					m_iFuncs;	///< number of registered functions from this library
+};
+
+
+/// registered UDF function
+struct UdfFunc_t
+{
+	UdfLib_t *			m_pLib;			///< library descriptor (pointer to library hash value)
+	const CSphString *	m_pLibName;		///< library name (pointer to library hash key)
+	ESphAttr			m_eRetType;		///< function type, currently FLOAT or INT
+	UdfInit_fn			m_fnInit;		///< per-query init function, mandatory
+	UdfDeinit_fn		m_fnDeinit;		///< per-query deinit function, optional
+	void *				m_fnFunc;		///< per-row worker function, mandatory
+	int					m_iUserCount;	///< number of active users currently working this function
+	bool				m_bToDrop;		///< scheduled for DROP; do not use
+};
+
+
+/// UDF call site
+struct UdfCall_t
+{
+	UdfFunc_t *			m_pUdf;
+	SPH_UDF_INIT		m_tInit;
+	SPH_UDF_ARGS		m_tArgs;
+
+	UdfCall_t();
+	~UdfCall_t();
+};
+
+//////////////////////////////////////////////////////////////////////////
+// GLOBALS
+//////////////////////////////////////////////////////////////////////////
+
 // hack hack hack
 bool ( *g_pUservarsHook )( const CSphString & sUservar, CSphVector<SphAttr_t> & dVals ) = NULL;
+
+static bool								g_bUdfEnabled = false;
+static CSphString						g_sUdfDir;
+static CSphStaticMutex					g_tUdfMutex;
+static SmallStringHash_T<UdfLib_t>		g_hUdfLibs;
+static SmallStringHash_T<UdfFunc_t>		g_hUdfFuncs;
+
+//////////////////////////////////////////////////////////////////////////
+// UDF CALL SITE
+//////////////////////////////////////////////////////////////////////////
+
+UdfCall_t::UdfCall_t ()
+{
+	m_pUdf = NULL;
+	m_tInit.func_data = NULL;
+	m_tInit.is_const = false;
+	m_tArgs.arg_count = 0;
+	m_tArgs.arg_types = NULL;
+	m_tArgs.arg_values = NULL;
+	m_tArgs.arg_names = NULL;
+	m_tArgs.str_lengths = NULL;
+}
+
+UdfCall_t::~UdfCall_t ()
+{
+	if ( m_pUdf )
+	{
+		g_tUdfMutex.Lock ();
+		m_pUdf->m_iUserCount--;
+		g_tUdfMutex.Unlock ();
+	}
+	SafeDeleteArray ( m_tArgs.arg_types );
+	SafeDeleteArray ( m_tArgs.arg_values );
+	SafeDeleteArray ( m_tArgs.arg_names );
+	SafeDeleteArray ( m_tArgs.str_lengths );
+}
 
 //////////////////////////////////////////////////////////////////////////
 // EVALUATION ENGINE
@@ -104,6 +193,17 @@ struct Expr_GetString_c : public ExprLocatorTraits_t
 		*ppStr = NULL;
 		return 0;
 	}
+};
+
+
+struct Expr_GetMva_c : public ExprLocatorTraits_t
+{
+	const DWORD * m_pMva;
+
+	Expr_GetMva_c ( const CSphAttrLocator & tLocator, int iLocator ) : ExprLocatorTraits_t ( tLocator, iLocator ) {}
+	virtual float Eval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
+	virtual void SetMVAPool ( const DWORD * pMva ) { m_pMva = pMva; }
+	virtual const DWORD * MvaEval ( const CSphMatch & tMatch ) const { return tMatch.GetAttrMVA ( m_tLocator, m_pMva ); }
 };
 
 
@@ -561,6 +661,7 @@ struct ExprNode_t
 	}
 };
 
+
 /// expression parser
 class ExprParser_t
 {
@@ -594,6 +695,7 @@ protected:
 	int						AddNodeWeight ();
 	int						AddNodeOp ( int iOp, int iLeft, int iRight );
 	int						AddNodeFunc ( int iFunc, int iLeft, int iRight=-1 );
+	int						AddNodeUdf ( int iCall, int iArg );
 	int						AddNodeConstlist ( int64_t iValue );
 	int						AddNodeConstlist ( float iValue );
 	void					AppendToConstlist ( int iNode, int64_t iValue );
@@ -607,6 +709,7 @@ private:
 	const CSphSchema *		m_pSchema;
 	CSphVector<ExprNode_t>	m_dNodes;
 	CSphVector<CSphString>	m_dUservars;
+	CSphVector<UdfCall_t*>	m_dUdfCalls;
 
 	CSphSchema *			m_pExtra;
 
@@ -631,6 +734,7 @@ private:
 	ISphExpr *				CreateInNode ( int iNode );
 	ISphExpr *				CreateGeodistNode ( int iArgs );
 	ISphExpr *				CreateBitdotNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs );
+	ISphExpr *				CreateUdfNode ( int iCall, ISphExpr * pLeft );
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -782,6 +886,27 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		{
 			lvalp->iFunc = i;
 			return g_dFuncs[i].m_eFunc==FUNC_IN ? TOK_FUNC_IN : TOK_FUNC;
+		}
+
+		// check for UDF
+		if ( g_bUdfEnabled )
+		{
+			g_tUdfMutex.Lock();
+			UdfFunc_t * pUdf = g_hUdfFuncs ( sTok );
+			if ( pUdf )
+			{
+				if ( pUdf->m_bToDrop )
+					pUdf = NULL; // DROP in progress, can not use
+				else
+					pUdf->m_iUserCount++; // protection against concurrent DROP (decrements in ~UdfCall_t())
+				g_tUdfMutex.Unlock();
+
+				lvalp->iNode = m_dUdfCalls.GetLength();
+				m_dUdfCalls.Add ( new UdfCall_t() );
+				m_dUdfCalls.Last()->m_pUdf = pUdf;
+				return TOK_UDF;
+			}
+			g_tUdfMutex.Unlock();
 		}
 
 		m_sLexerError.SetSprintf ( "unknown identifier '%s' (not an attribute, not a function)", sTok.cstr() );
@@ -1152,6 +1277,146 @@ static void FoldArglist ( ISphExpr * pLeft, CSphVector<ISphExpr *> & dArgs )
 }
 
 
+typedef sphinx_int64_t (*UdfInt_fn) ( SPH_UDF_INIT *, SPH_UDF_ARGS *, char * );
+typedef double (*UdfDouble_fn) ( SPH_UDF_INIT *, SPH_UDF_ARGS *, char * );
+
+
+class Expr_Udf_c : public ISphExpr
+{
+public:
+	CSphVector<ISphExpr*>			m_dArgs;
+
+protected:
+	UdfCall_t *						m_pCall;
+	mutable CSphVector<int64_t>		m_dArgvals;
+	mutable char					m_bError;
+
+public:
+	Expr_Udf_c ( UdfCall_t * pCall )
+		: m_pCall ( pCall )
+		, m_bError ( 0 )
+	{
+		SPH_UDF_ARGS & tArgs = m_pCall->m_tArgs;
+
+		assert ( tArgs.arg_values==NULL );
+		tArgs.arg_values = new char * [ tArgs.arg_count ];
+		tArgs.str_lengths = new int [ tArgs.arg_count ];
+
+		m_dArgvals.Resize ( tArgs.arg_count );
+		ARRAY_FOREACH ( i, m_dArgvals )
+			tArgs.arg_values[i] = (char*) &m_dArgvals[i];
+	}
+
+	~Expr_Udf_c ()
+	{
+		if ( m_pCall->m_pUdf->m_fnDeinit )
+			m_pCall->m_pUdf->m_fnDeinit ( &m_pCall->m_tInit );
+		SafeDeleteArray ( m_pCall->m_tArgs.arg_names );
+		SafeDeleteArray ( m_pCall->m_tArgs.arg_types );
+		SafeDeleteArray ( m_pCall->m_tArgs.arg_values );
+		SafeDeleteArray ( m_pCall->m_tArgs.str_lengths );
+		SafeDelete ( m_pCall );
+
+		ARRAY_FOREACH ( i, m_dArgs )
+			SafeRelease ( m_dArgs[i] );
+	}
+
+	void FillArgs ( const CSphMatch & tMatch ) const
+	{
+		// FIXME? a cleaner way to reinterpret?
+		SPH_UDF_ARGS & tArgs = m_pCall->m_tArgs;
+		ARRAY_FOREACH ( i, m_dArgs )
+		{
+			switch ( tArgs.arg_types[i] )
+			{
+				case SPH_UDF_TYPE_UINT32:		*(DWORD*)&m_dArgvals[i] = m_dArgs[i]->IntEval ( tMatch ); break;
+				case SPH_UDF_TYPE_INT64:		m_dArgvals[i] = m_dArgs[i]->Int64Eval ( tMatch ); break;
+				case SPH_UDF_TYPE_FLOAT:		*(float*)&m_dArgvals[i] = m_dArgs[i]->Eval ( tMatch ); break;
+				case SPH_UDF_TYPE_STRING:		tArgs.str_lengths[i] = m_dArgs[i]->StringEval ( tMatch, (const BYTE**)&tArgs.arg_values[i] ); break;
+				case SPH_UDF_TYPE_UINT32SET:	tArgs.arg_values[i] = (char*) m_dArgs[i]->MvaEval ( tMatch ); break;
+				default:						assert ( 0 ); m_dArgvals[i] = 0; break;
+			}
+		}
+	}
+
+	virtual void SetMVAPool ( const DWORD * pPool ) { ARRAY_FOREACH ( i, m_dArgs ) m_dArgs[i]->SetMVAPool ( pPool ); }
+	virtual void SetStringPool ( const BYTE * pPool ) { ARRAY_FOREACH ( i, m_dArgs ) m_dArgs[i]->SetStringPool ( pPool ); }
+	virtual void GetDependencyColumns ( CSphVector<int> & dDeps ) const { ARRAY_FOREACH ( i, m_dArgs ) m_dArgs[i]->GetDependencyColumns ( dDeps ); }
+};
+
+
+class Expr_UdfInt_c : public Expr_Udf_c
+{
+public:
+	Expr_UdfInt_c ( UdfCall_t * pCall )
+		: Expr_Udf_c ( pCall )
+	{
+		assert ( pCall->m_pUdf->m_eRetType==SPH_ATTR_INTEGER || pCall->m_pUdf->m_eRetType==SPH_ATTR_BIGINT );
+	}
+
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const
+	{
+		if ( m_bError )
+			return 0;
+		FillArgs ( tMatch );
+		UdfInt_fn pFn = (UdfInt_fn) m_pCall->m_pUdf->m_fnFunc;
+		return (int) pFn ( &m_pCall->m_tInit, &m_pCall->m_tArgs, &m_bError );
+	}
+
+	virtual int IntEval ( const CSphMatch & tMatch ) const { return (int) Int64Eval ( tMatch ); }
+	virtual float Eval ( const CSphMatch & tMatch ) const { return (float) Int64Eval ( tMatch ); }
+};
+
+
+class Expr_UdfFloat_c : public Expr_Udf_c
+{
+public:
+	Expr_UdfFloat_c ( UdfCall_t * pCall )
+		: Expr_Udf_c ( pCall )
+	{
+		assert ( pCall->m_pUdf->m_eRetType==SPH_ATTR_FLOAT );
+	}
+
+	virtual float Eval ( const CSphMatch & tMatch ) const
+	{
+		if ( m_bError )
+			return 0;
+		FillArgs ( tMatch );
+		UdfDouble_fn pFn = (UdfDouble_fn) m_pCall->m_pUdf->m_fnFunc;
+		return (float) pFn ( &m_pCall->m_tInit, &m_pCall->m_tArgs, &m_bError );
+	}
+
+	virtual int IntEval ( const CSphMatch & tMatch ) const { return (int) Eval ( tMatch ); }
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t) Eval ( tMatch ); }
+};
+
+
+ISphExpr * ExprParser_t::CreateUdfNode ( int iCall, ISphExpr * pLeft )
+{
+	Expr_Udf_c * pRes = NULL;
+	switch ( m_dUdfCalls[iCall]->m_pUdf->m_eRetType )
+	{
+		case SPH_ATTR_INTEGER:
+		case SPH_ATTR_BIGINT:
+			pRes = new Expr_UdfInt_c ( m_dUdfCalls[iCall] );
+			break;
+		case SPH_ATTR_FLOAT:
+			pRes = new Expr_UdfFloat_c ( m_dUdfCalls[iCall] );
+			break;
+		default:
+			m_sParserError.SetSprintf ( "internal error: unhandled type %d in CreateUdfNode()", m_dUdfCalls[iCall]->m_pUdf->m_eRetType );
+			break;
+	}
+	if ( pRes )
+	{
+		if ( pLeft )
+			FoldArglist ( pLeft, pRes->m_dArgs );
+		m_dUdfCalls[iCall] = NULL; // evaluator owns it now
+	}
+	return pRes;
+}
+
+
 /// fold nodes subtree into opcodes
 ISphExpr * ExprParser_t::CreateTree ( int iNode )
 {
@@ -1187,6 +1452,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_ATTR_FLOAT:	return new Expr_GetFloat_c ( tNode.m_tLocator, tNode.m_iLocator );
 		case TOK_ATTR_SINT:		return new Expr_GetSint_c ( tNode.m_tLocator, tNode.m_iLocator );
 		case TOK_ATTR_STRING:	return new Expr_GetString_c ( tNode.m_tLocator, tNode.m_iLocator );
+		case TOK_ATTR_MVA:		return new Expr_GetMva_c ( tNode.m_tLocator, tNode.m_iLocator );
 
 		case TOK_CONST_FLOAT:	return new Expr_GetConst_c ( tNode.m_fConst );
 		case TOK_CONST_INT:
@@ -1284,6 +1550,10 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 				assert ( 0 && "unhandled function id" );
 				break;
 			}
+
+		case TOK_UDF:
+			return CreateUdfNode ( tNode.m_iFunc, pLeft );
+			break;
 
 		default:				assert ( 0 && "unhandled token type" ); break;
 	}
@@ -1930,6 +2200,10 @@ ExprParser_t::~ExprParser_t ()
 	ARRAY_FOREACH ( i, m_dNodes )
 		if ( m_dNodes[i].m_iToken==TOK_CONST_LIST )
 			SafeDelete ( m_dNodes[i].m_pConsts );
+
+	// free any UDF calls that weren't taken over
+	ARRAY_FOREACH ( i, m_dUdfCalls )
+		SafeDelete ( m_dUdfCalls[i] );
 }
 
 ESphAttr ExprParser_t::GetWidestRet ( int iLeft, int iRight )
@@ -2067,11 +2341,21 @@ int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 	return m_dNodes.GetLength()-1;
 }
 
-struct StringCheck_fn
+struct TypeCheck_fn
 {
-	bool *		m_pRes;
-	explicit	StringCheck_fn ( bool * pRes )			: m_pRes ( pRes ) {}
-	void		Process ( const ExprNode_t & tNode )	{ *m_pRes |= ( tNode.m_eRetType==SPH_ATTR_STRING ); }
+	bool * m_pStr;
+	bool * m_pMva;
+
+	explicit TypeCheck_fn ( bool * pStr, bool * pMva )
+		: m_pStr ( pStr )
+		, m_pMva ( pMva )
+	{}
+
+	void Process ( const ExprNode_t & tNode )
+	{
+		*m_pStr |= ( tNode.m_eRetType==SPH_ATTR_STRING );
+		*m_pMva |= ( tNode.m_eRetType==SPH_ATTR_UINT32SET );
+	}
 };
 
 int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
@@ -2106,15 +2390,20 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 	//
 	// check for string args
 	// most builtin functions take numeric args only
-	bool bGotStringArgs = false;
+	bool bGotString = false, bGotMva = false;
 	if ( iRight<0 )
 	{
-		StringCheck_fn fnCheck ( &bGotStringArgs );
+		TypeCheck_fn fnCheck ( &bGotString, &bGotMva );
 		WalkTree ( iLeft, fnCheck );
 	}
-	if ( bGotStringArgs && eFunc!=FUNC_CRC32 )
+	if ( bGotString && eFunc!=FUNC_CRC32 )
 	{
 		m_sParserError.SetSprintf ( "%s() arguments can not be string", g_dFuncs[iFunc].m_sName );
+		return -1;
+	}
+	if ( bGotMva && eFunc!=FUNC_IN )
+	{
+		m_sParserError.SetSprintf ( "%s() arguments can not be MVA", g_dFuncs[iFunc].m_sName );
 		return -1;
 	}
 
@@ -2165,6 +2454,100 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 
 	// all ok
 	assert ( tNode.m_eRetType!=SPH_ATTR_NONE );
+	return m_dNodes.GetLength()-1;
+}
+
+int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
+{
+	UdfCall_t * pCall = m_dUdfCalls[iCall];
+	SPH_UDF_INIT & tInit = pCall->m_tInit;
+	SPH_UDF_ARGS & tArgs = pCall->m_tArgs;
+
+	// initialize UDF right here, at AST creation stage
+	// just because it's easy to gather arg types here
+	if ( iArg>=0 )
+	{
+		// gather arg types
+		CSphVector<DWORD> dArgTypes;
+
+		int iCur = iArg;
+		while ( iCur>=0 )
+		{
+			if ( m_dNodes[iCur].m_iToken!=',' )
+			{
+				dArgTypes.Add ( m_dNodes[iCur].m_eRetType );
+				break;
+			}
+
+			int iRight = m_dNodes[iCur].m_iRight;
+			if ( iRight>=0 )
+			{
+				assert ( m_dNodes[iRight].m_iToken!=',' );
+				dArgTypes.Add ( m_dNodes[iRight].m_eRetType );
+			}
+
+			iCur = m_dNodes[iCur].m_iLeft;
+		}
+
+		assert ( dArgTypes.GetLength() );
+		tArgs.arg_count = dArgTypes.GetLength();
+		tArgs.arg_types = new sphinx_udf_argtype [ tArgs.arg_count ];
+
+		// we gathered internal type ids in right-to-left order
+		// reverse and remap
+		// FIXME! eliminate remap, maybe?
+		ARRAY_FOREACH ( i, dArgTypes )
+		{
+			sphinx_udf_argtype & eRes = tArgs.arg_types [ tArgs.arg_count-1-i ];
+			switch ( dArgTypes[i] )
+			{
+				case SPH_ATTR_INTEGER:
+				case SPH_ATTR_TIMESTAMP:
+				case SPH_ATTR_ORDINAL:
+				case SPH_ATTR_BOOL:
+				case SPH_ATTR_WORDCOUNT:
+					eRes = SPH_UDF_TYPE_UINT32;
+					break;
+				case SPH_ATTR_FLOAT:
+					eRes = SPH_UDF_TYPE_FLOAT;
+					break;
+				case SPH_ATTR_BIGINT:
+					eRes = SPH_UDF_TYPE_INT64;
+					break;
+				case SPH_ATTR_STRING:
+					eRes = SPH_UDF_TYPE_STRING;
+					break;
+				case SPH_ATTR_UINT32SET:
+					eRes = SPH_UDF_TYPE_UINT32SET;
+					break;
+				default:
+					m_sParserError.SetSprintf ( "internal error: unmapped UDF argument type (arg=%d, type=%d)", i, dArgTypes[i] );
+					return -1;
+			}
+		}
+	}
+
+	// init
+	if ( pCall->m_pUdf->m_fnInit )
+	{
+		char sError [ SPH_UDF_ERROR_LEN ];
+		if ( pCall->m_pUdf->m_fnInit ( &tInit, &tArgs, sError ) )
+		{
+			m_sParserError = sError;
+			return -1;
+		}
+	}
+
+	// do add
+	ExprNode_t & tNode = m_dNodes.Add ();
+	tNode.m_iToken = TOK_UDF;
+	tNode.m_iFunc = iCall;
+	tNode.m_iLeft = iArg;
+	tNode.m_iRight = -1;
+
+	// deduce type
+	tNode.m_eArgType = ( iArg>=0 ) ? m_dNodes[iArg].m_eRetType : SPH_ATTR_INTEGER;
+	tNode.m_eRetType = pCall->m_pUdf->m_eRetType;
 	return m_dNodes.GetLength()-1;
 }
 
@@ -2295,6 +2678,238 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema,
 
 	return pRes;
 }
+
+//////////////////////////////////////////////////////////////////////////
+// UDF MANAGER
+//////////////////////////////////////////////////////////////////////////
+
+#if USE_WINDOWS
+#define HAVE_DLOPEN		1
+#define RTLD_LAZY		0
+#define RTLD_LOCAL		0
+
+void * dlsym ( void * lib, const char * name )
+{
+	return GetProcAddress ( (HMODULE)lib, name );
+}
+
+void * dlopen ( const char * libname, int )
+{
+	return LoadLibraryEx ( libname, NULL, 0 );
+}
+
+int dlclose ( void * lib )
+{
+	return FreeLibrary ( (HMODULE)lib )
+		? 0
+		: GetLastError();
+}
+
+const char * dlerror()
+{
+	static char sError[256];
+	DWORD uError = GetLastError();
+	FormatMessage ( FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL,
+		uError, LANG_SYSTEM_DEFAULT, (LPTSTR)sError, sizeof(sError), NULL );
+	return sError;
+}
+#endif // USE_WINDOWS
+
+
+#if !HAVE_DLOPEN
+
+void sphUDFInit ( const char * )
+{
+	return;
+}
+
+bool sphUDFCreate ( const char *, const char *, ESphAttr, CSphString & sError )
+{
+	sError = "no dlopen(); UDF support disabled";
+	return false;
+}
+
+bool sphUDFDrop ( const char *, CSphString & sError )
+{
+	sError = "no dlopen(); UDF support disabled";
+	return false;
+}
+
+#else
+
+void sphUDFInit ( const char * sUdfDir )
+{
+	if ( !sUdfDir || !*sUdfDir )
+		return;
+
+	g_sUdfDir = sUdfDir;
+	g_bUdfEnabled = true;
+}
+
+
+bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, CSphString & sError )
+{
+	if ( !g_bUdfEnabled )
+	{
+		sError = "UDF support disabled (requires workers=threads; and a valid plugin_dir)";
+		return false;
+	}
+
+	// validate library name
+	for ( const char * p = szLib; *p; p++ )
+		if ( *p=='/' || *p=='\\' )
+	{
+		sError = "restricted character (path delimiter) in a library file name";
+		return false;
+	}
+
+	// from here, we need a lock (we intend to update UDF hash)
+	g_tUdfMutex.Lock();
+
+	// validate function name
+	CSphString sFunc ( szFunc );
+	sFunc.ToLower();
+
+	if ( g_hUdfFuncs ( sFunc ) )
+	{
+		sError.SetSprintf ( "UDF '%s' already exists", sFunc.cstr() );
+		g_tUdfMutex.Unlock();
+		return false;
+	}
+
+	// lookup or load library
+	CSphString sLib;
+	sLib.SetSprintf ( "%s/%s", g_sUdfDir.cstr(), szLib );
+
+	UdfFunc_t tFunc;
+	tFunc.m_eRetType = eRetType;
+	tFunc.m_iUserCount = 0;
+	tFunc.m_bToDrop = false;
+
+	bool bLoaded = false;
+	void * pHandle = NULL;
+	tFunc.m_pLib = g_hUdfLibs ( sLib );
+	if ( !tFunc.m_pLib )
+	{
+		bLoaded = true;
+		pHandle = dlopen ( sLib.cstr(), RTLD_LAZY | RTLD_LOCAL );
+		if ( !pHandle )
+		{
+			const char * sDlerror = dlerror();
+			sError.SetSprintf ( "dlopen() failed: %s", sDlerror ? sDlerror : "(null)" );
+			g_tUdfMutex.Unlock();
+			return false;
+		}
+		sphLogDebug ( "dlopen(%s)=%p", sLib.cstr(), pHandle );
+
+	} else
+	{
+		pHandle = tFunc.m_pLib->m_pHandle;
+	}
+	assert ( pHandle );
+
+	// lookup and check function symbols
+	CSphString sName;
+	tFunc.m_fnFunc = dlsym ( pHandle, sFunc.cstr() );
+	tFunc.m_fnInit = (UdfInit_fn) dlsym ( pHandle, sName.SetSprintf ( "%s_init", sFunc.cstr() ).cstr() );
+	tFunc.m_fnDeinit = (UdfDeinit_fn) dlsym ( pHandle, sName.SetSprintf ( "%s_deinit", sFunc.cstr() ).cstr() );
+
+	if ( !tFunc.m_fnFunc || !tFunc.m_fnInit )
+	{
+		sError.SetSprintf ( "symbol '%s%s' not found in '%s'", sFunc.cstr(), tFunc.m_fnFunc ? "_init" : "", szLib );
+		if ( bLoaded )
+			dlclose ( pHandle );
+		g_tUdfMutex.Unlock();
+		return false;
+	}
+
+	// add library
+	if ( bLoaded )
+	{
+		UdfLib_t tLib;
+		tLib.m_iFuncs = 1;
+		tLib.m_pHandle = pHandle;
+		Verify ( g_hUdfLibs.Add ( tLib, sLib ) );
+		tFunc.m_pLib = g_hUdfLibs ( sLib );
+	} else
+	{
+		tFunc.m_pLib->m_iFuncs++;
+
+	}
+	tFunc.m_pLibName = g_hUdfLibs.GetKeyPtr ( sLib );
+	assert ( tFunc.m_pLib );
+
+	// add function
+	Verify ( g_hUdfFuncs.Add ( tFunc, sFunc ) );
+
+	// all ok
+	g_tUdfMutex.Unlock();
+	return true;
+}
+
+
+bool sphUDFDrop ( const char * szFunc, CSphString & sError )
+{
+	CSphString sFunc ( szFunc );
+	sFunc.ToLower();
+
+	g_tUdfMutex.Lock();
+	UdfFunc_t * pFunc = g_hUdfFuncs ( sFunc );
+	if ( !pFunc || pFunc->m_bToDrop ) // handle concurrent drop in progress as "not exists"
+	{
+		sError.SetSprintf ( "UDF '%s' does not exist", sFunc.cstr() );
+		g_tUdfMutex.Unlock();
+		return false;
+	}
+
+	const int UDF_DROP_TIMEOUT_SEC = 30; // in seconds
+	int64_t tmEnd = sphMicroTimer() + UDF_DROP_TIMEOUT_SEC*1000000;
+
+	// mark function for deletion, to prevent new users
+	pFunc->m_bToDrop = true;
+	if ( pFunc->m_iUserCount )
+		for ( ;; )
+	{
+		// release lock and wait
+		// so that concurrent users could complete and release the function
+		g_tUdfMutex.Unlock();
+		sphSleepMsec ( 50 );
+
+		// re-acquire lock
+		g_tUdfMutex.Lock();
+
+		// everyone out? proceed with dropping
+		assert ( pFunc->m_iUserCount>=0 );
+		if ( pFunc->m_iUserCount<=0 )
+			break;
+
+		// timed out? clear deletion flag, and bail
+		if ( sphMicroTimer() > tmEnd )
+		{
+			pFunc->m_bToDrop = false;
+			g_tUdfMutex.Unlock();
+
+			sError.SetSprintf ( "DROP timed out in (still got %d users after waiting for %d seconds); please retry", pFunc->m_iUserCount, UDF_DROP_TIMEOUT_SEC );
+			return false;
+		}
+	}
+
+	UdfLib_t * pLib = pFunc->m_pLib;
+	const CSphString * pLibName = pFunc->m_pLibName;
+
+	Verify ( g_hUdfFuncs.Delete ( sFunc ) );
+	if ( --pLib->m_iFuncs<=0 )
+	{
+		// FIXME! running queries might be using this function
+		int iRes = dlclose ( pLib->m_pHandle );
+		sphLogDebug ( "dlclose(%s)=%d", pLibName->cstr(), iRes );
+		Verify ( g_hUdfLibs.Delete ( *pLibName ) );
+	}
+
+	g_tUdfMutex.Unlock();
+	return true;
+}
+#endif // HAVE_DLOPEN
 
 //////////////////////////////////////////////////////////////////////////
 // PUBLIC STUFF

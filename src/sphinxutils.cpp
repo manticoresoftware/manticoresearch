@@ -296,6 +296,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "rt_flush_period",		0, NULL },
 	{ "query_log_format",		0, NULL },
 	{ "mysql_version_string",	0, NULL },
+	{ "plugin_dir",				0, NULL },
 	{ NULL,						0, NULL }
 };
 

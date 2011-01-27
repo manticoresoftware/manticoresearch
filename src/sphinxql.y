@@ -25,18 +25,23 @@
 %token	TOK_COLLATION
 %token	TOK_COMMIT
 %token	TOK_COUNT
+%token	TOK_CREATE
 %token	TOK_DELETE
 %token	TOK_DESC
 %token	TOK_DESCRIBE
 %token	TOK_DISTINCT
 %token	TOK_DIV
+%token	TOK_DROP
 %token	TOK_FALSE
+%token	TOK_FLOAT
 %token	TOK_FROM
+%token	TOK_FUNCTION
 %token	TOK_GLOBAL
 %token	TOK_GROUP
 %token	TOK_ID
 %token	TOK_IN
 %token	TOK_INSERT
+%token	TOK_INT
 %token	TOK_INTO
 %token	TOK_LIMIT
 %token	TOK_MATCH
@@ -48,10 +53,12 @@
 %token	TOK_OPTION
 %token	TOK_ORDER
 %token	TOK_REPLACE
+%token	TOK_RETURNS
 %token	TOK_ROLLBACK
 %token	TOK_SELECT
 %token	TOK_SET
 %token	TOK_SHOW
+%token	TOK_SONAME
 %token	TOK_START
 %token	TOK_STATUS
 %token	TOK_SUM
@@ -68,6 +75,7 @@
 %token	TOK_WITHIN
 
 %type	<m_iValue>		named_const_list
+%type	<m_iValue>		udf_type
 
 %left TOK_OR
 %left TOK_AND
@@ -156,6 +164,8 @@ statement:
 	| update
 	| show_variables
 	| show_collation
+	| create_function
+	| drop_function
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -788,6 +798,33 @@ show_variables:
 
 show_collation:
 	TOK_SHOW TOK_COLLATION		{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
+	;
+
+//////////////////////////////////////////////////////////////////////////
+
+create_function:
+	TOK_CREATE TOK_FUNCTION TOK_IDENT TOK_RETURNS udf_type TOK_SONAME TOK_QUOTED_STRING
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_CREATE_FUNC;
+			tStmt.m_sUdfName = $3.m_sValue;
+			tStmt.m_sUdfLib = $7.m_sValue;
+			tStmt.m_eUdfType = (ESphAttr) $5;
+		}
+	;
+
+udf_type:
+	TOK_INT			{ $$ = SPH_ATTR_INTEGER; }
+	| TOK_FLOAT		{ $$ = SPH_ATTR_FLOAT; }
+	;
+
+drop_function:
+	TOK_DROP TOK_FUNCTION TOK_IDENT
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_DROP_FUNC;
+			tStmt.m_sUdfName = $3.m_sValue;
+		}
 	;
 
 %%

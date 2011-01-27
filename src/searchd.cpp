@@ -6974,6 +6974,8 @@ enum SqlStmt_e
 	STMT_DESC,
 	STMT_SHOW_TABLES,
 	STMT_UPDATE,
+	STMT_CREATE_FUNC,
+	STMT_DROP_FUNC,
 
 	STMT_TOTAL
 };
@@ -7069,6 +7071,11 @@ struct SqlStmt_t
 
 	// UPDATE specific
 	CSphAttrUpdate			m_tUpdate;
+
+	// CREATE/DROP FUNCTION specific
+	CSphString				m_sUdfName;
+	CSphString				m_sUdfLib;
+	ESphAttr				m_eUdfType;
 
 	SqlStmt_t ()
 		: m_eStmt ( STMT_PARSE_ERROR )
@@ -10172,6 +10179,20 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 			SendMysqlOkPacket ( tOut, uPacketID );
 			continue;
 
+		case STMT_CREATE_FUNC:
+			if ( !sphUDFCreate ( pStmt->m_sUdfLib.cstr(), pStmt->m_sUdfName.cstr(), pStmt->m_eUdfType, sError ) )
+				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+			else
+				SendMysqlOkPacket ( tOut, uPacketID );
+			continue;
+
+		case STMT_DROP_FUNC:
+			if ( !sphUDFDrop ( pStmt->m_sUdfName.cstr(), sError ) )
+				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+			else
+				SendMysqlOkPacket ( tOut, uPacketID );
+			continue;
+
 		default:
 			sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );
 			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
@@ -10184,7 +10205,6 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 
 	SafeClose ( iPipeFD );
 }
-
 
 //////////////////////////////////////////////////////////////////////////
 // HANDLE-BY-LISTENER
@@ -13114,12 +13134,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( !g_bService )
 		fprintf ( stdout, SPHINX_BANNER );
 
-	////////////
-	// lib init
-	////////////
-
-	sphCollationInit ();
-
 	//////////////////////
 	// parse command line
 	//////////////////////
@@ -13430,7 +13444,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			sphFatal ( "failed to lock pid file '%s': %s (searchd already running?)", g_sPidFile, strerror(errno) );
 	}
 
-
 	//////////////////////////////////////////////////
 	// shared stuff (perf counters, flushing) startup
 	//////////////////////////////////////////////////
@@ -13441,9 +13454,15 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	if ( g_eWorkers==MPM_PREFORK )
 		g_pConnID = (int*) InitSharedBuffer ( g_dConnID, sizeof(g_iConnID) );
+
 	if ( g_eWorkers==MPM_THREADS )
+	{
 		if ( !sphThreadKeyCreate ( &g_tConnKey ) )
 			sphFatal ( "failed to create TLS for connection ID" );
+
+		// for simplicity, UDFs are going to be available in threaded mode only for now
+		sphUDFInit ( hSearchd.GetStr ( "plugin_dir" ) );
+	}
 
 	////////////////////
 	// network startup
@@ -13816,9 +13835,11 @@ int main ( int argc, char **argv )
 	char cTopOfMainStack;
 	sphThreadInit();
 	MemorizeStack ( &cTopOfMainStack );
+
 	sphSetDieCallback ( DieCallback );
 	sphSetLogger ( sphLog );
 	g_pUservarsHook = UservarsHook;
+	sphCollationInit ();
 
 #if USE_WINDOWS
 	int iNameIndex = -1;

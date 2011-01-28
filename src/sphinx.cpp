@@ -4989,25 +4989,8 @@ bool CSphQuery::ParseSelectList ( CSphString & sError )
 
 static CSphString sphDumpAttr ( const CSphColumnInfo & tAttr )
 {
-	char sTypeBuf[32];
-	snprintf ( sTypeBuf, sizeof(sTypeBuf), "unknown-%d", tAttr.m_eAttrType );
-
-	const char * sType = sTypeBuf;
-	switch ( tAttr.m_eAttrType )
-	{
-		case SPH_ATTR_NONE:							sType = "none"; break;
-		case SPH_ATTR_INTEGER:						sType = "integer"; break;
-		case SPH_ATTR_TIMESTAMP:					sType = "timestamp"; break;
-		case SPH_ATTR_ORDINAL:						sType = "ordinal"; break;
-		case SPH_ATTR_BOOL:							sType = "bool"; break;
-		case SPH_ATTR_FLOAT:						sType = "float"; break;
-		case SPH_ATTR_BIGINT:						sType = "bigint"; break;
-		case SPH_ATTR_STRING:						sType = "string"; break;
-		case SPH_ATTR_UINT32SET:					sType = "mva"; break;
-	}
-
 	CSphString sRes;
-	sRes.SetSprintf ( "%s %s:%d@%d", sType, tAttr.m_sName.cstr(), tAttr.m_tLocator.m_iBitCount, tAttr.m_tLocator.m_iBitOffset );
+	sRes.SetSprintf ( "%s %s:%d@%d", sphTypeName ( tAttr.m_eAttrType ), tAttr.m_sName.cstr(), tAttr.m_tLocator.m_iBitCount, tAttr.m_tLocator.m_iBitOffset );
 	return sRes;
 }
 
@@ -12461,35 +12444,12 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 		{
 			const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
-			switch ( tAttr.m_eAttrType )
-			{
-				case SPH_ATTR_INTEGER:
-					if ( tAttr.m_tLocator.IsBitfield() )
-						fprintf ( fp, "\tsql_attr_uint = %s:%d\n", tAttr.m_sName.cstr(), tAttr.m_tLocator.m_iBitCount );
-					else
-						fprintf ( fp, "\tsql_attr_uint = %s\n", tAttr.m_sName.cstr() );
-					break;
-
-				case SPH_ATTR_TIMESTAMP:
-					fprintf ( fp, "\tsql_attr_timestamp = %s\n", tAttr.m_sName.cstr() );
-					break;
-
-				case SPH_ATTR_ORDINAL:
-					fprintf ( fp, "\tsql_attr_str2ordinal = %s\n", tAttr.m_sName.cstr() );
-					break;
-
-				case SPH_ATTR_BOOL:
-					fprintf ( fp, "\tsql_attr_bool = %s\n", tAttr.m_sName.cstr() );
-					break;
-
-				case SPH_ATTR_BIGINT:
-					fprintf ( fp, "\tsql_attr_bigint = %s\n", tAttr.m_sName.cstr() );
-					break;
-
-				case SPH_ATTR_UINT32SET:
-					fprintf ( fp, "\tsql_attr_multi = uint %s from field\n", tAttr.m_sName.cstr() );
-					break;
-			}
+			if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET )
+				fprintf ( fp, "\tsql_attr_multi = uint %s from field\n", tAttr.m_sName.cstr() );
+			else if ( tAttr.m_eAttrType==SPH_ATTR_INTEGER && tAttr.m_tLocator.IsBitfield() )
+				fprintf ( fp, "\tsql_attr_uint = %s:%d\n", tAttr.m_sName.cstr(), tAttr.m_tLocator.m_iBitCount );
+			else
+				fprintf ( fp, "\t%s = %s\n", sphTypeDirective ( tAttr.m_eAttrType ), tAttr.m_sName.cstr() );
 		}
 
 		fprintf ( fp, "}\n\nindex $dump\n{\n\tsource = $dump\n\tpath = $dump\n" );
@@ -12575,18 +12535,9 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
-		fprintf ( fp, "  attr %d: %s, ", i, tAttr.m_sName.cstr() );
-		switch ( tAttr.m_eAttrType )
-		{
-			case SPH_ATTR_INTEGER:						fprintf ( fp, "uint, bits %d", tAttr.m_tLocator.m_iBitCount ); break;
-			case SPH_ATTR_TIMESTAMP:					fprintf ( fp, "timestamp" ); break;
-			case SPH_ATTR_ORDINAL:						fprintf ( fp, "ordinal" ); break;
-			case SPH_ATTR_BOOL:							fprintf ( fp, "boolean" ); break;
-			case SPH_ATTR_FLOAT:						fprintf ( fp, "float" ); break;
-			case SPH_ATTR_BIGINT:						fprintf ( fp, "bigint" ); break;
-			case SPH_ATTR_UINT32SET:					fprintf ( fp, "mva" ); break;
-			default:									fprintf ( fp, "unknown-%d, bits %d", tAttr.m_eAttrType, tAttr.m_tLocator.m_iBitCount ); break;
-		}
+		fprintf ( fp, "  attr %d: %s, %s", i, tAttr.m_sName.cstr(), sphTypeName ( tAttr.m_eAttrType ) );
+		if ( tAttr.m_eAttrType==SPH_ATTR_INTEGER && tAttr.m_tLocator.m_iBitCount!=32 )
+			fprintf ( fp, ", bits %d", tAttr.m_tLocator.m_iBitCount );
 		fprintf ( fp, ", bitoff %d\n", tAttr.m_tLocator.m_iBitOffset );
 	}
 
@@ -16691,7 +16642,7 @@ SphWordID_t CSphDictKeywords::HitblockGetID ( const char * sWord, int iLen, SphW
 
 	// is this a known one? find it
 	// OPTIMIZE? in theory we could use something faster than crc32; but quick lookup3 test did not show any improvements
-	const DWORD uHash = uCRC % SLOTS;
+	const DWORD uHash = (DWORD)( uCRC % SLOTS );
 
 	HitblockKeyword_t * pEntry = m_dHash [ uHash ];
 	HitblockKeyword_t ** ppEntry = &m_dHash [ uHash ];
@@ -16752,7 +16703,7 @@ SphWordID_t CSphDictKeywords::HitblockGetID ( const char * sWord, int iLen, SphW
 
 		// hash collision under adjusted wordid
 		// (to handle the case of triple collisions; not directly findable)
-		pEntry = HitblockAddKeyword ( uWordid % SLOTS, sWord, iLen, uWordid );
+		pEntry = HitblockAddKeyword ( (DWORD)( uWordid % SLOTS ), sWord, iLen, uWordid );
 
 		// add collision
 		m_dExceptions.Add();
@@ -17313,7 +17264,7 @@ void CSphDictKeywords::HitblockPatch ( CSphWordHit * pHits, int iHits )
 
 const char * CSphDictKeywords::HitblockGetKeyword ( SphWordID_t uWordID )
 {
-	const DWORD uHash = uWordID % SLOTS;
+	const DWORD uHash = (DWORD)( uWordID % SLOTS );
 
 	HitblockKeyword_t * pEntry = m_dHash [ uHash ];
 	while ( pEntry )
@@ -19623,20 +19574,7 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 		{
 			const CSphColumnInfo & tCol = m_tSchema.GetAttr(i);
-			const char * sType = "unknown";
-			switch ( tCol.m_eAttrType )
-			{
-				case SPH_ATTR_NONE:							sType = "none"; break;
-				case SPH_ATTR_INTEGER:						sType = "uint"; break;
-				case SPH_ATTR_TIMESTAMP:					sType = "timestamp"; break;
-				case SPH_ATTR_ORDINAL:						sType = "str2ordinal"; break;
-				case SPH_ATTR_BOOL:							sType = "bool"; break;
-				case SPH_ATTR_FLOAT:						sType = "float"; break;
-				case SPH_ATTR_BIGINT:						sType = "bigint"; break;
-				case SPH_ATTR_STRING:						sType = "string"; break;
-				case SPH_ATTR_UINT32SET:					sType = "mva"; break;
-			}
-			fprintf ( m_fpDumpRows, "# sql_attr_%s = %s # attr %d\n", sType, tCol.m_sName.cstr(), i );
+			fprintf ( m_fpDumpRows, "# %s = %s # attr %d\n", sphTypeDirective ( tCol.m_eAttrType ), tCol.m_sName.cstr(), i );
 		}
 
 		fprintf ( m_fpDumpRows, "#\n\nDROP TABLE IF EXISTS rows_%s;\nCREATE TABLE rows_%s (\n  id VARCHAR(32) NOT NULL,\n",

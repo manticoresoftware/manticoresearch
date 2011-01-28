@@ -401,12 +401,24 @@ struct ExtNodeTF_fn
 struct ExtNodeTFExt_fn
 {
 	const CSphVector<ExtNode_i *> & m_dNodes;
-	ExtNodeTFExt_fn ( const CSphVector<ExtNode_i *> & dNodes ) :
-		m_dNodes ( dNodes ) {}
+
+	explicit ExtNodeTFExt_fn ( const CSphVector<ExtNode_i *> & dNodes )
+		: m_dNodes ( dNodes )
+	{}
+
+	ExtNodeTFExt_fn ( const ExtNodeTFExt_fn & rhs )
+		: m_dNodes ( rhs.m_dNodes )
+	{}
 
 	bool IsLess ( WORD uA, WORD uB ) const
 	{
 		return m_dNodes[uA]->GetDocsCount() < m_dNodes[uB]->GetDocsCount();
+	}
+
+private:
+	const ExtNodeTFExt_fn & operator = ( const ExtNodeTFExt_fn & )
+	{
+		return *this;
 	}
 };
 
@@ -419,12 +431,11 @@ public:
 		, FSM ( dNodes, uDupeMask, tNode, tSetup )
 	{
 		bool bTerms = FSM::bTermsTree; // workaround MSVC const condition warning
-		DWORD uNodes = dNodes.GetLength();
-		CSphVector<WORD> dPositions (uNodes);
+		CSphVector<WORD> dPositions ( dNodes.GetLength() );
 		ARRAY_FOREACH ( i, dPositions )
-			dPositions[i] = i;
+			dPositions[i] = (WORD) i;
 		if ( bTerms )
-			dPositions.Sort ( ExtNodeTFExt_fn(dNodes) );
+			dPositions.Sort ( ExtNodeTFExt_fn ( dNodes ) );
 		ConstructNode ( dNodes, dPositions, tSetup );
 	}
 
@@ -522,7 +533,7 @@ protected:
 	DWORD						m_uWeight;			///< weight accum
 	DWORD						m_uFirstHit;		///< hitpos of the beginning of the match chain
 	WORD						m_uFirstNpos;		///< N-position of the head of the chain
-	DWORD						m_uFirstQpos;		///< Q-position of the head of the chain (for twofers)
+	WORD						m_uFirstQpos;		///< Q-position of the head of the chain (for twofers)
 	CSphVector<WORD>			m_dNpos;			///< query positions for multinear
 	CSphVector<ExtHit_t>		m_dRing;			///< ring buffer for multihit data
 	int							m_iRing;			///< the head of the ring
@@ -1380,7 +1391,7 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t
 		ExtHit_t & tHit = m_dHits[iHit++];
 		tHit.m_uDocid = pDoc->m_uDocid;
 		tHit.m_uHitpos = uHit;
-		tHit.m_uQuerypos = m_iAtomPos;
+		tHit.m_uQuerypos = (WORD) m_iAtomPos; // assume less that 64K words per query
 		tHit.m_uWeight = tHit.m_uMatchlen = tHit.m_uSpanlen = 1;
 	}
 
@@ -1476,7 +1487,7 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, Sph
 				ExtHit_t & tHit = m_dHits[iHit++];
 				tHit.m_uDocid = pDoc->m_uDocid;
 				tHit.m_uHitpos = HITMAN::Create ( m_uFieldPos, -1 );
-				tHit.m_uQuerypos = m_iAtomPos;
+				tHit.m_uQuerypos = (WORD) m_iAtomPos;
 				tHit.m_uWeight = tHit.m_uMatchlen = tHit.m_uSpanlen = 1;
 
 				if ( iHit==MAX_HITS-1 )
@@ -2612,7 +2623,7 @@ inline bool FSMphrase::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 	// emit directly into m_dHits, this is no need to disturb m_dMyHits here.
 	dTarget->m_uDocid = pHit->m_uDocid;
 	dTarget->m_uHitpos = HITMAN::GetLCS ( pHit->m_uHitpos ) - uSpanlen;
-	dTarget->m_uQuerypos = m_uMinQpos;
+	dTarget->m_uQuerypos = (WORD) m_uMinQpos;
 	dTarget->m_uMatchlen = dTarget->m_uSpanlen = (WORD)( uSpanlen + 1 );
 	dTarget->m_uWeight = m_uLeaves;
 	m_uExpPos = m_uExpQpos = 0;
@@ -2703,7 +2714,7 @@ inline bool FSMproximity::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 	// emit hit
 	dTarget->m_uDocid = pHit->m_uDocid;
 	dTarget->m_uHitpos = Hitpos_t ( m_dProx[m_iMinQindex] ); // !COMMIT strictly speaking this is creation from LCS not value
-	dTarget->m_uQuerypos = m_uMinQpos;
+	dTarget->m_uQuerypos = (WORD) m_uMinQpos;
 	dTarget->m_uSpanlen = dTarget->m_uMatchlen = (WORD)( uMax-m_dProx[m_iMinQindex]+1 );
 	dTarget->m_uWeight = uWeight;
 
@@ -2736,8 +2747,8 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 {
 	// walk through the hitlist and update context
 	DWORD uHitpos = HITMAN::GetLCS ( pHit->m_uHitpos );
-	DWORD uNpos = pHit->m_uNodepos;
-	DWORD uQpos = pHit->m_uQuerypos;
+	WORD uNpos = pHit->m_uNodepos;
+	WORD uQpos = pHit->m_uQuerypos;
 
 	// skip dupe hit (may be emitted by OR node, for example)
 	if ( m_uLastP==uHitpos )
@@ -2765,8 +2776,7 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 		{
 			m_uFirstQpos = uQpos;
 			m_uFirstNpos = uNpos;
-		}
-		else
+		} else
 		{
 			m_dNpos.Resize(1);
 			m_dNpos[0] = uNpos;
@@ -2815,13 +2825,11 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 		{
 			m_uFirstQpos = Min ( m_uFirstQpos, uQpos );
 			m_dNpos.Insert ( 0, uNpos );
-		}
-		else if ( uNpos > m_dNpos.Last() )
+		} else if ( uNpos > m_dNpos.Last() )
 		{
 			m_uFirstQpos = Min ( m_uFirstQpos, uQpos );
 			m_dNpos.Add ( uNpos );
-		}
-		else if ( uNpos!=m_dNpos[0] && uNpos!=m_dNpos.Last() )
+		} else if ( uNpos!=m_dNpos[0] && uNpos!=m_dNpos.Last() )
 		{
 			int iEnd = m_dNpos.GetLength();
 			int iStart = 0;
@@ -5189,7 +5197,8 @@ const ExtHit_t * ExtNodeCached_t::GetHitsChunk ( const ExtDoc_t * pMatched, SphD
 		}
 		m_iHitIndex++;
 		m_dHits[iHit] = tCachedHit;
-		m_dHits[iHit++].m_uQuerypos += m_iAtomPos - m_pNode->m_iAtomPos;
+		m_dHits[iHit].m_uQuerypos = (WORD)( m_dHits[iHit].m_uQuerypos + m_iAtomPos - m_pNode->m_iAtomPos );
+		iHit++;
 	}
 
 	m_pHitDoc = pDoc;

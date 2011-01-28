@@ -7000,7 +7000,6 @@ struct SqlInsert_t
 
 
 /// refcounted vector
-static int COUNT = 0;
 template < typename T >
 class RefcountedVector_c : public CSphVector<T>, public ISphRefcounted
 {
@@ -9205,20 +9204,7 @@ void HandleMysqlDescribe ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt_t &
 	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
-
-		const char * sType = "?";
-		switch ( tCol.m_eAttrType )
-		{
-			case SPH_ATTR_NONE:							sType = "none"; break;
-			case SPH_ATTR_INTEGER:						sType = "integer"; break;
-			case SPH_ATTR_TIMESTAMP:					sType = "timestamp"; break;
-			case SPH_ATTR_ORDINAL:						sType = "ordinal"; break;
-			case SPH_ATTR_BOOL:							sType = "bool"; break;
-			case SPH_ATTR_FLOAT:						sType = "float"; break;
-			case SPH_ATTR_BIGINT:						sType = "bigint"; break;
-			case SPH_ATTR_STRING:						sType = "string"; break;
-			case SPH_ATTR_UINT32SET:					sType = "mva"; break;
-		}
+		const char * sType = sphTypeName ( tCol.m_eAttrType );
 
 		tOut.SendLSBDword ( ((uPacketID++)<<24) + MysqlPackedLen ( tCol.m_sName.cstr() ) + MysqlPackedLen ( sType ) );
 		tOut.SendMysqlString ( tCol.m_sName.cstr() );
@@ -13015,11 +13001,11 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	int iLen = strlen ( sVersion );
 
 	g_iMysqlHandshake = sizeof(sHandshake1) + strlen(sVersion) + sizeof(sHandshake2) - 1;
-	if ( g_iMysqlHandshake>=sizeof(g_sMysqlHandshake) )
+	if ( g_iMysqlHandshake>=(int)sizeof(g_sMysqlHandshake) )
 	{
 		sphWarning ( "mysql_version_string too long; using default (version=%s)", SPHINX_VERSION );
 		g_iMysqlHandshake = sizeof(sHandshake1) + strlen(SPHINX_VERSION) + sizeof(sHandshake2) - 1;
-		assert ( g_iMysqlHandshake < sizeof(g_sMysqlHandshake) );
+		assert ( g_iMysqlHandshake < (int)sizeof(g_sMysqlHandshake) );
 	}
 
 	char * p = g_sMysqlHandshake;

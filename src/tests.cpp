@@ -1704,7 +1704,7 @@ void TestRTWeightBoundary ()
 		Verify ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, NULL ) );
 		sphFlattenQueue ( pSorter, &tResult, 0 );
 		CheckRT ( tResult.m_dMatches.GetLength(), 1, "results found" );
-		CheckRT ( tResult.m_dMatches[0].m_iDocID, 1, "docID" );
+		CheckRT ( (int)tResult.m_dMatches[0].m_iDocID, 1, "docID" );
 		CheckRT ( tResult.m_dMatches[0].m_iWeight, g_iWeights[iPass], "weight" );
 		SafeDelete ( pSorter );
 		SafeDelete ( pIndex );

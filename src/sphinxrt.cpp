@@ -436,7 +436,7 @@ struct RtDocReader_tmpl
 		SphDocID_t uDeltaID;
 		pIn = UnzipDocid ( &uDeltaID, pIn );
 		RTDOC & mtDoc = *(RTDOC*)&m_tDoc;
-		mtDoc.m_uDocID += uDeltaID;
+		mtDoc.m_uDocID += (DOCID) uDeltaID;
 		pIn = UnzipDword ( &mtDoc.m_uFields, pIn );
 		pIn = UnzipDword ( &mtDoc.m_uHits, pIn );
 		if ( mtDoc.m_uHits==1 )
@@ -545,7 +545,7 @@ struct RtWordReader_tmpl
 		pIn = UnzipDword ( &uDeltaDoc, pIn );
 		m_pCur = pIn;
 
-		mtWord.m_uWordID += uDeltaID;
+		mtWord.m_uWordID += (WORDID) uDeltaID;
 		mtWord.m_uDoc += uDeltaDoc;
 		return &mtWord;
 	}

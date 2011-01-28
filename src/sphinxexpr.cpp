@@ -45,8 +45,8 @@
 #endif // !USE_WINDOWS
 
 
-typedef int (*UdfInit_fn) ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error );
-typedef void (*UdfDeinit_fn) ( SPH_UDF_INIT * init );
+typedef int ( *UdfInit_fn ) ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error );
+typedef void ( *UdfDeinit_fn ) ( SPH_UDF_INIT * init );
 
 
 /// loaded UDF library
@@ -185,7 +185,7 @@ struct Expr_GetString_c : public ExprLocatorTraits_t
 	virtual void SetStringPool ( const BYTE * pStrings ) { m_pStrings = pStrings; }
 
 	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
-	{ 
+	{
 		SphAttr_t iOff = tMatch.GetAttr ( m_tLocator );
 		if ( iOff>0 )
 			return sphUnpackStr ( m_pStrings + iOff, ppStr );
@@ -311,7 +311,7 @@ struct Expr_Crc32_c : public ISphExpr
 {
 	ISphExpr * m_pFirst;
 
-	explicit Expr_Crc32_c ( ISphExpr * pFirst ) : m_pFirst ( pFirst ) {};
+	explicit Expr_Crc32_c ( ISphExpr * pFirst ) : m_pFirst ( pFirst ) {}
 	~Expr_Crc32_c () { SafeRelease ( m_pFirst ); }
 
 	virtual void SetMVAPool ( const DWORD * pMvaPool ) { m_pFirst->SetMVAPool ( pMvaPool ); }
@@ -320,7 +320,7 @@ struct Expr_Crc32_c : public ISphExpr
 
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
 	virtual int IntEval ( const CSphMatch & tMatch ) const { const BYTE * pStr; return sphCRC32 ( pStr, m_pFirst->StringEval ( tMatch, &pStr ) ); }
-	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return IntEval (  tMatch ); }
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return IntEval ( tMatch ); }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1277,8 +1277,8 @@ static void FoldArglist ( ISphExpr * pLeft, CSphVector<ISphExpr *> & dArgs )
 }
 
 
-typedef sphinx_int64_t (*UdfInt_fn) ( SPH_UDF_INIT *, SPH_UDF_ARGS *, char * );
-typedef double (*UdfDouble_fn) ( SPH_UDF_INIT *, SPH_UDF_ARGS *, char * );
+typedef sphinx_int64_t ( *UdfInt_fn ) ( SPH_UDF_INIT *, SPH_UDF_ARGS *, char * );
+typedef double ( *UdfDouble_fn ) ( SPH_UDF_INIT *, SPH_UDF_ARGS *, char * );
 
 
 class Expr_Udf_c : public ISphExpr
@@ -1292,7 +1292,7 @@ protected:
 	mutable char					m_bError;
 
 public:
-	Expr_Udf_c ( UdfCall_t * pCall )
+	explicit Expr_Udf_c ( UdfCall_t * pCall )
 		: m_pCall ( pCall )
 		, m_bError ( 0 )
 	{
@@ -1348,7 +1348,7 @@ public:
 class Expr_UdfInt_c : public Expr_Udf_c
 {
 public:
-	Expr_UdfInt_c ( UdfCall_t * pCall )
+	explicit Expr_UdfInt_c ( UdfCall_t * pCall )
 		: Expr_Udf_c ( pCall )
 	{
 		assert ( pCall->m_pUdf->m_eRetType==SPH_ATTR_INTEGER || pCall->m_pUdf->m_eRetType==SPH_ATTR_BIGINT );
@@ -1371,7 +1371,7 @@ public:
 class Expr_UdfFloat_c : public Expr_Udf_c
 {
 public:
-	Expr_UdfFloat_c ( UdfCall_t * pCall )
+	explicit Expr_UdfFloat_c ( UdfCall_t * pCall )
 		: Expr_Udf_c ( pCall )
 	{
 		assert ( pCall->m_pUdf->m_eRetType==SPH_ATTR_FLOAT );
@@ -2834,7 +2834,6 @@ bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, 
 	} else
 	{
 		tFunc.m_pLib->m_iFuncs++;
-
 	}
 	tFunc.m_pLibName = g_hUdfLibs.GetKeyPtr ( sLib );
 	assert ( tFunc.m_pLib );

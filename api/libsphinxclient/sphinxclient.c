@@ -238,7 +238,7 @@ sphinx_client * sphinx_create ( sphinx_bool copy_args )
 	client->num_index_weights		= 0;
 	client->index_weights_names		= NULL;
 	client->index_weights_values	= NULL;
-	client->ranker					= SPH_RANK_PROXIMITY_BM25;
+	client->ranker					= SPH_RANK_DEFAULT;
 	client->max_query_time			= 0;
 	client->num_field_weights		= 0;
 	client->field_weights_names		= NULL;
@@ -524,7 +524,7 @@ sphinx_bool sphinx_set_match_mode ( sphinx_client * client, int mode )
 
 sphinx_bool sphinx_set_ranking_mode ( sphinx_client * client, int ranker )
 {
-	if ( !client || ranker<SPH_RANK_PROXIMITY_BM25 || ranker>SPH_RANK_WORDCOUNT ) // FIXME?
+	if ( !client || ranker<SPH_RANK_PROXIMITY_BM25 || ranker>SPH_RANK_SPH04 ) // FIXME?
 	{
 		set_error ( client, "invalid arguments (ranking mode %d out of bounds)", ranker );
 		return SPH_FALSE;

@@ -248,14 +248,6 @@ struct Filter_IdRange: public IFilter_Range
 		return uID>=(SphDocID_t)m_uMinValue && uID<=(SphDocID_t)m_uMaxValue;
 	}
 
-	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const
-	{
-		const SphAttr_t uBlockMin = DOCINFO2ID ( pMinDocinfo );
-		const SphAttr_t uBlockMax = DOCINFO2ID ( pMaxDocinfo );
-
-		return (!( m_uMaxValue<uBlockMin || m_uMinValue>uBlockMax ));
-	}
-
 	Filter_IdRange ()
 	{
 		m_bUsesAttrs = false;

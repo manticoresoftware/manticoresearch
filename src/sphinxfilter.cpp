@@ -226,6 +226,15 @@ struct Filter_IdValues: public IFilter_Values
 		return EvalValues ( tMatch.m_iDocID );
 	}
 
+	bool EvalBlockValues ( SphAttr_t uBlockMin, SphAttr_t uBlockMax ) const
+	{
+		// is any of our values inside the block?
+		for ( int i = 0; i < m_iValueCount; i++ )
+			if ( (SphDocID_t)GetValue(i)>=(SphDocID_t)uBlockMin && (SphDocID_t)GetValue(i)<=(SphDocID_t)uBlockMax )
+				return true;
+		return false;
+	}
+
 	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const
 	{
 		const SphAttr_t uBlockMin = DOCINFO2ID ( pMinDocinfo );
@@ -246,6 +255,14 @@ struct Filter_IdRange: public IFilter_Range
 	{
 		const SphDocID_t uID = tMatch.m_iDocID;
 		return uID>=(SphDocID_t)m_uMinValue && uID<=(SphDocID_t)m_uMaxValue;
+	}
+
+	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const
+	{
+		const SphDocID_t uBlockMin = DOCINFO2ID ( pMinDocinfo );
+		const SphDocID_t uBlockMax = DOCINFO2ID ( pMaxDocinfo );
+
+		return (!( (SphDocID_t)m_uMaxValue<uBlockMin || (SphDocID_t)m_uMinValue>uBlockMax ));
 	}
 
 	Filter_IdRange ()

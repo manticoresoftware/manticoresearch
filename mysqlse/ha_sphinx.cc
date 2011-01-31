@@ -184,6 +184,7 @@ enum ESphRankMode
 	SPH_RANK_PROXIMITY			= 4,	///< phrase proximity
 	SPH_RANK_MATCHANY			= 5,	///< emulate old match-any weighting
 	SPH_RANK_FIELDMASK			= 6,	///< sets bits where there were matches
+	SPH_RANK_SPH04				= 7,	///< codename SPH04, phrase proximity + bm25 + head/exact boost
 
 	SPH_RANK_TOTAL,
 	SPH_RANK_DEFAULT			= SPH_RANK_PROXIMITY_BM25
@@ -1432,6 +1433,7 @@ bool CSphSEQuery::ParseField ( char * sField )
 		else if ( !strcmp ( sValue, "proximity" ) )	m_eRanker = SPH_RANK_PROXIMITY;
 		else if ( !strcmp ( sValue, "matchany" ) )	m_eRanker = SPH_RANK_MATCHANY;
 		else if ( !strcmp ( sValue, "fieldmask" ) )	m_eRanker = SPH_RANK_FIELDMASK;
+		else if ( !strcmp ( sValue, "sph04" ) )		m_eRanker = SPH_RANK_SPH04;
 		else
 		{
 			snprintf ( m_sParseError, sizeof(m_sParseError), "unknown ranking mode '%s'", sValue );
@@ -2294,7 +2296,7 @@ static inline bool IsIntegerFieldType ( enum_field_types eType )
 
 static inline bool IsIDField ( Field * pField )
 {
-	enum_field_types eType = pField->type(); 
+	enum_field_types eType = pField->type();
 
 	if ( eType==MYSQL_TYPE_LONGLONG )
 		return true;
@@ -2376,7 +2378,7 @@ int ha_sphinx::index_end()
 
 uint32 ha_sphinx::UnpackDword ()
 {
-	if ( m_pCur+sizeof(uint32)>m_pResponseEnd )
+	if ( m_pCur+sizeof(uint32)>m_pResponseEnd ) // NOLINT
 	{
 		m_pCur = m_pResponseEnd;
 		m_bUnpackError = true;
@@ -2384,7 +2386,7 @@ uint32 ha_sphinx::UnpackDword ()
 	}
 
 	uint32 uRes = ntohl ( sphUnalignedRead ( *(uint32*)m_pCur ) );
-	m_pCur += sizeof(uint32);
+	m_pCur += sizeof(uint32); // NOLINT
 	return uRes;
 }
 
@@ -2546,10 +2548,10 @@ bool ha_sphinx::UnpackStats ( CSphSEStats * pStats )
 	assert ( pStats );
 
 	char * pCurSave = m_pCur;
-	for ( uint i=0; i<m_iMatchesTotal && m_pCur<m_pResponseEnd-sizeof(uint32); i++ )
+	for ( uint i=0; i<m_iMatchesTotal && m_pCur<m_pResponseEnd-sizeof(uint32); i++ ) // NOLINT
 	{
 		m_pCur += m_bId64 ? 12 : 8; // skip id+weight
-		for ( uint32 i=0; i<m_iAttrs && m_pCur<m_pResponseEnd-sizeof(uint32); i++ )
+		for ( uint32 i=0; i<m_iAttrs && m_pCur<m_pResponseEnd-sizeof(uint32); i++ ) // NOLINT
 		{
 			if ( m_dAttrs[i].m_uType & SPH_ATTR_MULTI )
 			{

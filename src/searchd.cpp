@@ -9393,12 +9393,14 @@ public:
 	void PutString ( const char * sMsg )
 	{
 		int iLen = sMsg ? strlen ( sMsg ) : 0;
-		iLen = Min ( iLen, 0xff );
 		Reserve ( 1+iLen );
-		*Get() = BYTE(iLen);
-		if ( iLen )
-			memcpy ( Get()+1, sMsg, iLen );
-		IncPtr ( 1+iLen );
+		char * pBegin = Get();
+		char * pStr = (char *)MysqlPack ( pBegin, iLen );
+		if ( pStr>pBegin )
+		{
+			memcpy ( pStr, sMsg, iLen );
+			IncPtr ( ( pStr-pBegin )+iLen );
+		}
 	}
 
 

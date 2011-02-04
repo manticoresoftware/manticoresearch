@@ -934,6 +934,20 @@ inline int sphUTF8Len ( const char * pStr )
 }
 
 
+/// compute UTF-8 string length in codepoints
+inline int sphUTF8Len ( const char * pStr, int iMax )
+{
+	BYTE * pBuf = (BYTE*) pStr;
+	BYTE * pMax = pBuf + iMax;
+	int iRes = 0;
+	while ( pBuf<pMax )
+	{
+		sphUTF8Decode ( pBuf );
+		iRes++;
+	}
+	return iRes;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 /// hit in the stream

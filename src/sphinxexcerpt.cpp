@@ -262,7 +262,7 @@ struct SnippetsQword_Exact_c: public ISnippetsQword
 			if ( tToken.m_eType!=ExcerptGen_c::TOK_WORD )
 				continue;
 
-			if ( tToken.m_iWordID==m_iWordID || tToken.m_iBlendID )
+			if ( tToken.m_iWordID==m_iWordID || tToken.m_iBlendID==m_iWordID )
 			{
 				tToken.m_uWords |= m_uWordMask;
 				return HITMAN::Create ( 0, tToken.m_uPosition, ( m_iToken-1 )==m_iLastIndex );

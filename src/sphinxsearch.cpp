@@ -4703,6 +4703,15 @@ static void CheckExtendedQuery ( const XQNode_t * pNode, CSphQueryResult * pResu
 }
 
 
+struct ExtQwordOrderbyQueryPos_t
+{
+	bool IsLess ( const ExtQword_t * pA, const ExtQword_t * pB ) const
+	{
+		return pA->m_iQueryPos < pB->m_iQueryPos;
+	}
+};
+
+
 ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, ESphRankMode eRankMode, CSphQueryResult * pResult, const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx )
 {
 	// shortcut
@@ -4757,6 +4766,9 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, ESphRankMode eRankMode, CS
 	const int iQwords = hQwords.GetLength ();
 	const CSphSourceStats & tSourceStats = pIndex->GetStats();
 
+	CSphVector<const ExtQword_t *> dWords;
+	dWords.Reserve ( hQwords.GetLength() );
+
 	hQwords.IterateStart ();
 	while ( hQwords.IterateNext() )
 	{
@@ -4773,7 +4785,14 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, ESphRankMode eRankMode, CS
 				/ ( 2*iQwords*fLogTotal );
 		}
 		tWord.m_fIDF = fIDF;
-		pResult->AddStat ( tWord.m_sDictWord, tWord.m_iDocs, tWord.m_iHits, false );
+		dWords.Add ( &tWord );
+	}
+
+	dWords.Sort ( ExtQwordOrderbyQueryPos_t() );
+	ARRAY_FOREACH ( i, dWords )
+	{
+		const ExtQword_t * pWord = dWords[i];
+		pResult->AddStat ( pWord->m_sDictWord, pWord->m_iDocs, pWord->m_iHits, false );
 	}
 
 	pRanker->SetQwordsIDF ( hQwords );

@@ -4773,7 +4773,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, ESphRankMode eRankMode, CS
 				/ ( 2*iQwords*fLogTotal );
 		}
 		tWord.m_fIDF = fIDF;
-		pResult->AddStat ( tWord.m_sDictWord, tWord.m_iDocs, tWord.m_iHits );
+		pResult->AddStat ( tWord.m_sDictWord, tWord.m_iDocs, tWord.m_iHits, false );
 	}
 
 	pRanker->SetQwordsIDF ( hQwords );

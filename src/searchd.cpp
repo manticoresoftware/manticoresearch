@@ -3612,8 +3612,9 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 			const CSphString sWord = tReq.GetString ();
 			const int iDocs = tReq.GetInt ();
 			const int iHits = tReq.GetInt ();
+			const bool bExpanded = ( tReq.GetByte()!=0 ); // agents always send expanded flag to master
 
-			tRes.AddStat ( sWord, iDocs, iHits );
+			tRes.AddStat ( sWord, iDocs, iHits, bExpanded );
 		}
 
 		// mark this result as ok
@@ -4631,7 +4632,7 @@ void LogQuery ( const CSphQuery & q, const CSphQueryResult & tRes, const CSphVec
 
 //////////////////////////////////////////////////////////////////////////
 
-int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<PoolPtrs_t> & dTag2Pools )
+int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<PoolPtrs_t> & dTag2Pools, bool bAgent )
 {
 	int iRespLen = 0;
 
@@ -4685,6 +4686,10 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 		iRespLen += 4*pRes->m_iCount*iWideAttrs; // extra 4 bytes per attr per match
 	}
 
+	// agents send additional flag from words statistics
+	if ( bAgent )
+		iRespLen += pRes->m_hWordStats.GetLength();
+
 	pRes->m_hWordStats.IterateStart();
 	while ( pRes->m_hWordStats.IterateNext() ) // per-word stats
 		iRespLen += 12 + strlen ( pRes->m_hWordStats.IterateGetKey().cstr() ); // wordlen, word, docs, hits
@@ -4737,7 +4742,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 }
 
 
-void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pRes, const CSphVector<PoolPtrs_t> & dTag2Pools )
+void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pRes, const CSphVector<PoolPtrs_t> & dTag2Pools, bool bAgent )
 {
 	// status
 	if ( iVer>=0x10D )
@@ -4907,6 +4912,8 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 		tOut.SendString ( pRes->m_hWordStats.IterateGetKey().cstr() );
 		tOut.SendInt ( tStat.m_iDocs );
 		tOut.SendInt ( tStat.m_iHits );
+		if ( bAgent )
+			tOut.SendByte ( tStat.m_bExpanded );
 	}
 }
 
@@ -5881,8 +5888,10 @@ void LocalSearchThreadFunc ( void * pArg )
 }
 
 
-static void MergeWordStats ( CSphQueryResultMeta & tDstResult, const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hSrc )
+static void MergeWordStats ( CSphQueryResultMeta & tDstResult, const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hSrc, SearchFailuresLog_c * pLog, const char * sIndex )
 {
+	assert ( pLog );
+
 	if ( !tDstResult.m_hWordStats.GetLength() )
 	{
 		// nothing has been set yet; just copy
@@ -5892,7 +5901,18 @@ static void MergeWordStats ( CSphQueryResultMeta & tDstResult, const SmallString
 
 	hSrc.IterateStart();
 	while ( hSrc.IterateNext() )
-		tDstResult.AddStat ( hSrc.IterateGetKey(), hSrc.IterateGet().m_iDocs, hSrc.IterateGet().m_iHits, hSrc.IterateGet().m_bUntouched );
+	{
+		const CSphQueryResultMeta::WordStat_t * pDstStat = tDstResult.m_hWordStats ( hSrc.IterateGetKey() );
+		const CSphQueryResultMeta::WordStat_t & tSrcStat = hSrc.IterateGet();
+
+		// all indexes should produce same words from the query
+		if ( !pDstStat && !tSrcStat.m_bExpanded )
+		{
+			pLog->SubmitEx ( sIndex, "query words mismatch '%s'", hSrc.IterateGetKey().cstr() );
+		}
+
+		tDstResult.AddStat ( hSrc.IterateGetKey(), tSrcStat.m_iDocs, tSrcStat.m_iHits, tSrcStat.m_bExpanded );
+	}
 }
 
 void SearchHandler_c::RunLocalSearchesMT ()
@@ -6004,7 +6024,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 
 			tRes.m_pMva = tRaw.m_pMva;
 			tRes.m_pStrings = tRaw.m_pStrings;
-			MergeWordStats ( tRes, tRaw.m_hWordStats );
+			MergeWordStats ( tRes, tRaw.m_hWordStats, &m_dFailuresSet[iQuery], sLocal );
 
 			// move external attributes storage from tRaw to actual result
 			tRaw.LeakStorages ( tRes );
@@ -6266,7 +6286,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 					tRes.m_iCpuTime += tStats.m_iCpuTime / ( m_iEnd-m_iStart+1 );
 					tRes.m_pMva = tStats.m_pMva;
 					tRes.m_pStrings = tStats.m_pStrings;
-					MergeWordStats ( tRes, tStats.m_hWordStats );
+					MergeWordStats ( tRes, tStats.m_hWordStats, &m_dFailuresSet[iQuery], sLocal );
 					tRes.m_iMultiplier = m_iEnd-m_iStart+1;
 				} else if ( tRes.m_iMultiplier==-1 )
 				{
@@ -6671,7 +6691,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					tRes.m_iQueryTime += tRemoteResult.m_iQueryTime;
 
 					// merge this agent's words
-					MergeWordStats ( tRes, tRemoteResult.m_hWordStats );
+					MergeWordStats ( tRes, tRemoteResult.m_hWordStats, &m_dFailuresSet[iRes], tFirst.m_sIndexes.cstr() );
 				}
 
 				// dismissed
@@ -6861,27 +6881,12 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 	NetOutputBuffer_c tOut ( iSock );
 	int iReplyLen = 0;
 
-	CSphVector<CSphString> dUntouched;
-
-	ARRAY_FOREACH ( i, tHandler.m_dResults )
-	{
-		dUntouched.Resize ( 0 );
-
-		AggrResult_t & tRes = tHandler.m_dResults[i];
-		tRes.m_hWordStats.IterateStart();
-		while ( tRes.m_hWordStats.IterateNext() )
-			if ( tRes.m_hWordStats.IterateGet().m_bUntouched )
-				dUntouched.Add ( tRes.m_hWordStats.IterateGetKey() );
-
-		ARRAY_FOREACH ( i, dUntouched )
-			tRes.m_hWordStats.Delete ( dUntouched[i] );
-	}
-
 	if ( iVer<=0x10C )
 	{
 		assert ( tHandler.m_dQueries.GetLength()==1 );
 		assert ( tHandler.m_dResults.GetLength()==1 );
 		const AggrResult_t & tRes = tHandler.m_dResults[0];
+		bool bAgent = tHandler.m_dQueries[0].m_bAgent;
 
 		if ( !tRes.m_sError.IsEmpty() )
 		{
@@ -6889,7 +6894,7 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 			return;
 		}
 
-		iReplyLen = CalcResultLength ( iVer, &tRes, tRes.m_dTag2Pools );
+		iReplyLen = CalcResultLength ( iVer, &tRes, tRes.m_dTag2Pools, bAgent );
 		bool bWarning = ( iVer>=0x106 && !tRes.m_sWarning.IsEmpty() );
 
 		// send it
@@ -6897,12 +6902,12 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 		tOut.SendWord ( VER_COMMAND_SEARCH );
 		tOut.SendInt ( iReplyLen );
 
-		SendResult ( iVer, tOut, &tRes, tRes.m_dTag2Pools );
+		SendResult ( iVer, tOut, &tRes, tRes.m_dTag2Pools, bAgent );
 
 	} else
 	{
 		ARRAY_FOREACH ( i, tHandler.m_dQueries )
-			iReplyLen += CalcResultLength ( iVer, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools );
+			iReplyLen += CalcResultLength ( iVer, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, tHandler.m_dQueries[i].m_bAgent );
 
 		// send it
 		tOut.SendWord ( (WORD)SEARCHD_OK );
@@ -6910,7 +6915,7 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 		tOut.SendInt ( iReplyLen );
 
 		ARRAY_FOREACH ( i, tHandler.m_dQueries )
-			SendResult ( iVer, tOut, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools );
+			SendResult ( iVer, tOut, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, tHandler.m_dQueries[i].m_bAgent );
 	}
 
 	tOut.Flush ();

@@ -2206,12 +2206,12 @@ public:
 	{
 		int					m_iDocs;			///< document count for this term
 		int					m_iHits;			///< hit count for this term
-		bool				m_bUntouched;
+		bool				m_bExpanded;		///< is this term from query itself or was expanded
 
 		WordStat_t()
 			: m_iDocs ( 0 )
 			, m_iHits ( 0 )
-			, m_bUntouched ( false )
+			, m_bExpanded ( false )
 		{}
 	};
 	SmallStringHash_T<WordStat_t>	m_hWordStats; ///< hash of i-th search term (normalized word form)
@@ -2224,7 +2224,7 @@ public:
 
 	CSphQueryResultMeta ();													///< ctor
 	virtual					~CSphQueryResultMeta () {}						///< dtor
-	void					AddStat ( const CSphString & sWord, int iDocs, int iHits, bool bUntouched=false );
+	void					AddStat ( const CSphString & sWord, int iDocs, int iHits, bool bExpanded );
 
 	CSphQueryResultMeta ( const CSphQueryResultMeta & tMeta );				///< copy ctor
 	CSphQueryResultMeta & operator= ( const CSphQueryResultMeta & tMeta );	///< copy

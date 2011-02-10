@@ -287,7 +287,7 @@ bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char 
 
 void SafeClose ( int & iFD );
 
-void sphDoStatsOrder ( const struct XQNode_t * pNode, CSphQueryResultMeta & tResult );
+void sphMergeStats ( CSphQueryResultMeta & tDstResult, const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hSrc );
 
 bool sphCheckQueryHeight ( const struct XQNode_t * pRoot, CSphString & sError );
 

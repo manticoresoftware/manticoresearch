@@ -3410,8 +3410,10 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 		tChunkResult.m_hWordStats.IterateStart();
 		while ( tChunkResult.m_hWordStats.IterateNext() )
-			pResult->AddStat ( tChunkResult.m_hWordStats.IterateGetKey()
-				, tChunkResult.m_hWordStats.IterateGet().m_iDocs, tChunkResult.m_hWordStats.IterateGet().m_iHits );
+		{
+			const CSphQueryResultMeta::WordStat_t & tStat = tChunkResult.m_hWordStats.IterateGet();
+			pResult->AddStat ( tChunkResult.m_hWordStats.IterateGetKey(), tStat.m_iDocs, tStat.m_iHits, tStat.m_bExpanded );
+		}
 
 		dDiskStrings[iChunk] = tChunkResult.m_pStrings;
 		dExtra.Pop();
@@ -3465,9 +3467,6 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		m_tRwlock.Unlock ();
 		return false;
 	}
-
-	// fixup stat's order
-	sphDoStatsOrder ( tParsed.m_pRoot, *pResult );
 
 	// transform query if needed (quorum transform, keyword expansion, etc.)
 	sphTransformExtendedQuery ( &tParsed.m_pRoot );

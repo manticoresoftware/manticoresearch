@@ -1293,7 +1293,7 @@ public:
 	bool								GetWord ( const BYTE * pBuf, SphWordID_t iWordID, WordDictInfo_t & tWord ) const;
 
 	const BYTE *						AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint, int iFD, BYTE * pDictBuf ) const;
-	bool								GetPrefixedWords ( const char * sWord, int iWordLen, CSphVector<CSphNamedInt> & dPrefixedWords, BYTE * pDictBuf, int iFD ) const;
+	void								GetPrefixedWords ( const char * sWord, int iWordLen, CSphVector<CSphNamedInt> & dPrefixedWords, BYTE * pDictBuf, int iFD ) const;
 
 private:
 	bool								m_bWordDict;
@@ -13686,18 +13686,6 @@ bool sphCheckQueryHeight ( const XQNode_t * pRoot, CSphString & sError )
 	return bValid;
 }
 
-void sphDoStatsOrder ( const XQNode_t * pNode, CSphQueryResultMeta & tResult )
-{
-	if ( !pNode )
-		return;
-
-	ARRAY_FOREACH ( i, pNode->m_dWords )
-		tResult.AddStat ( pNode->m_dWords[i].m_sWord, 0, 0, true );
-
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		sphDoStatsOrder ( pNode->m_dChildren[i], tResult );
-}
-
 static XQNode_t * CloneKeyword ( const XQNode_t * pNode )
 {
 	assert ( pNode );
@@ -13983,15 +13971,7 @@ XQNode_t * CSphIndex_VLN::DoExpansion ( XQNode_t * pNode, BYTE * pBuff, int iFD,
 		return pNode;
 
 	CSphVector<CSphNamedInt> dPrefixedWords;
-	const bool bWordExists = m_tWordlist.GetPrefixedWords ( sAdjustedWord, iWordLen, dPrefixedWords, pBuff, iFD );
-
-	// add this adjusted Word with zero documents to statistics
-	if ( !bWordExists )
-	{
-		CSphString sStat;
-		sStat.SetBinary ( sAdjustedWord, iWordLen );
-		pResult->AddStat ( sStat, 0, 0, true );
-	}
+	m_tWordlist.GetPrefixedWords ( sAdjustedWord, iWordLen, dPrefixedWords, pBuff, iFD );
 
 	if ( !dPrefixedWords.GetLength() )
 		return pNode;
@@ -14003,6 +13983,12 @@ XQNode_t * CSphIndex_VLN::DoExpansion ( XQNode_t * pNode, BYTE * pBuff, int iFD,
 	if ( m_iExpansionLimit && m_iExpansionLimit<dPrefixedWords.GetLength() )
 	{
 		dPrefixedWords.Resize ( m_iExpansionLimit );
+	}
+
+	// mark new words as expanded to skip theirs check on merge ( expanded words differs across different indexes )
+	ARRAY_FOREACH ( i, dPrefixedWords )
+	{
+		pResult->AddStat ( dPrefixedWords[i].m_sName, 0, 0, true );
 	}
 
 	const XQKeyword_t tPrefixingWord = pNode->m_dWords[0];
@@ -14112,18 +14098,6 @@ struct CmpPSortersByRandom_fn
 	}
 };
 
-static void DoOrderStats ( const XQNode_t * pNode, CSphQueryResultMeta & tResult )
-{
-	if ( !pNode )
-		return;
-
-	ARRAY_FOREACH ( i, pNode->m_dWords )
-		tResult.AddStat ( pNode->m_dWords[i].m_sWord, 0, 0 );
-
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		DoOrderStats ( pNode->m_dChildren[i], tResult );
-}
-
 
 /// one regular query vs many sorters
 bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const
@@ -14168,9 +14142,6 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 		SafeDelete ( pTokenizer );
 		return false;
 	}
-
-	// fixup stat's order
-	sphDoStatsOrder ( tParsed.m_pRoot, *pResult );
 
 	// transform query if needed (quorum transform, keyword expansion, etc.)
 	sphTransformExtendedQuery ( &tParsed.m_pRoot );
@@ -14248,9 +14219,6 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 		// parse query
 		if ( sphParseExtendedQuery ( dXQ[i], pQueries[i].m_sQuery.cstr(), pTokenizer, &m_tSchema, pDict ) )
 		{
-			// fixup stat's order
-			sphDoStatsOrder ( dXQ[i].m_pRoot, *ppResults[i] );
-
 			// transform query if needed (quorum transform, keyword expansion, etc.)
 			sphTransformExtendedQuery ( &dXQ[i].m_pRoot );
 
@@ -23204,17 +23172,16 @@ const BYTE * CWordlist::AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint
 	return pBuf;
 }
 
-bool CWordlist::GetPrefixedWords ( const char * sWord, int iWordLen, CSphVector<CSphNamedInt> & dPrefixedWords, BYTE * pDictBuf, int iFD ) const
+void CWordlist::GetPrefixedWords ( const char * sWord, int iWordLen, CSphVector<CSphNamedInt> & dPrefixedWords, BYTE * pDictBuf, int iFD ) const
 {
 	assert ( iWordLen>0 );
 
 	// empty index?
 	if ( !m_dCheckpoints.GetLength() )
-		return false;
+		return;
 
 	const CSphWordlistCheckpoint * pCheckpoint = FindCheckpoint ( sWord, iWordLen, 0, true );
 
-	bool bExactWord = false;
 	while ( pCheckpoint )
 	{
 		// decode wordlist chunk
@@ -23234,7 +23201,6 @@ bool CWordlist::GetPrefixedWords ( const char * sWord, int iWordLen, CSphVector<
 				CSphNamedInt & tPrefixed = dPrefixedWords.Add();
 				tPrefixed.m_sName = tResWord.m_sWord; // OPTIMIZE? swap mb?
 				tPrefixed.m_iValue = tResWord.m_iDocs;
-				bExactWord |= ( DictCmpStrictly ( sWord, iWordLen, tPrefixed.m_sName.cstr(), tPrefixed.m_sName.Length() )==0 );
 			}
 		}
 
@@ -23245,8 +23211,6 @@ bool CWordlist::GetPrefixedWords ( const char * sWord, int iWordLen, CSphVector<
 		if ( DictCmp ( sWord, iWordLen, pCheckpoint->m_sWord, strlen ( pCheckpoint->m_sWord ) )<0 )
 			break;
 	}
-
-	return bExactWord;
 }
 
 int CSphStrHashFunc::Hash ( const CSphString & sKey )
@@ -23269,7 +23233,7 @@ CSphQueryResultMeta::CSphQueryResultMeta ()
 }
 
 
-void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int iDocs, int iHits, bool bUntouched )
+void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int iDocs, int iHits, bool bExpanded )
 {
 	CSphString sFixed;
 	const CSphString * pFixed = &sWord;
@@ -23291,13 +23255,13 @@ void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int iDocs, int iHi
 		CSphQueryResultMeta::WordStat_t tStats;
 		tStats.m_iDocs = iDocs;
 		tStats.m_iHits = iHits;
-		tStats.m_bUntouched = bUntouched;
+		tStats.m_bExpanded = bExpanded;
 		m_hWordStats.Add ( tStats, *pFixed );
 	} else
 	{
 		pStats->m_iDocs += iDocs;
 		pStats->m_iHits += iHits;
-		pStats->m_bUntouched = bUntouched;
+		pStats->m_bExpanded |= bExpanded;
 	}
 }
 

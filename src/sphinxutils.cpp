@@ -297,6 +297,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "query_log_format",		0, NULL },
 	{ "mysql_version_string",	0, NULL },
 	{ "plugin_dir",				0, NULL },
+	{ "collation_server",		0, NULL },
+	{ "collation_libc_locale",	0, NULL },
 	{ NULL,						0, NULL }
 };
 

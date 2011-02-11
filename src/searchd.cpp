@@ -29,6 +29,7 @@
 #include <time.h>
 #include <stdarg.h>
 #include <limits.h>
+#include <locale.h>
 
 #define SEARCHD_BACKLOG			5
 #define SPHINXAPI_PORT			9312
@@ -220,6 +221,7 @@ static int				g_iMaxPacketSize	= 8*1024*1024;	// in bytes; for both query packet
 static int				g_iMaxFilters		= 256;
 static int				g_iMaxFilterValues	= 4096;
 static int				g_iMaxBatchQueries	= 32;
+static ESphCollation	g_eCollation = SPH_COLLATION_DEFAULT;
 
 enum Mpm_e
 {
@@ -7468,7 +7470,7 @@ void SqlParser_c::FreeNamedVec ( int )
 	m_dNamedVec.Resize ( 0 );
 }
 
-bool ParseSqlQuery ( const CSphString & sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation=SPH_COLLATION_DEFAULT )
+bool ParseSqlQuery ( const CSphString & sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation )
 {
 	SqlParser_c tParser ( dStmt, eCollation );
 	tParser.m_pBuf = sQuery.cstr();
@@ -7548,7 +7550,7 @@ void HandleCommandQuery ( int iSock, int iVer, InputBuffer_c & tReq )
 	CSphString sError;
 	CSphVector<SqlStmt_t> dStmt;
 
-	if ( !ParseSqlQuery ( sQuery, dStmt, sError ) )
+	if ( !ParseSqlQuery ( sQuery, dStmt, sError, g_eCollation ) )
 	{
 		tReq.SendErrorReply ( "%s", sError.cstr() );
 		return;
@@ -9803,9 +9805,27 @@ struct SessionVars_t
 	SessionVars_t ()
 		: m_bAutoCommit ( true )
 		, m_bInTransaction ( false )
-		, m_eCollation ( SPH_COLLATION_LIBC_CI )
+		, m_eCollation ( g_eCollation )
 	{}
 };
+
+static ESphCollation sphCollationFromName ( const CSphString & sName, CSphString * pError )
+{
+	assert ( pError );
+
+	// FIXME! replace with a hash lookup?
+	if ( sName=="libc_ci" )
+		return SPH_COLLATION_LIBC_CI;
+	else if ( sName=="libc_cs" )
+		return SPH_COLLATION_LIBC_CS;
+	else if ( sName=="utf8_general_ci" )
+		return SPH_COLLATION_UTF8_GENERAL_CI;
+	else if ( sName=="binary" )
+		return SPH_COLLATION_BINARY;
+
+	pError->SetSprintf ( "Unknown collation: '%s'", sName.cstr() );
+	return SPH_COLLATION_DEFAULT;
+}
 
 
 void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tStmt, SessionVars_t & tVars )
@@ -9834,18 +9854,9 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 		CSphString & sVal = tStmt.m_sSetValue;
 		sVal.ToLower();
 
-		// FIXME! replace with a hash lookup?
-		if ( sVal=="libc_ci" )
-			tVars.m_eCollation = SPH_COLLATION_LIBC_CI;
-		else if ( sVal=="libc_cs" )
-			tVars.m_eCollation = SPH_COLLATION_LIBC_CS;
-		else if ( sVal=="utf8_general_ci" )
-			tVars.m_eCollation = SPH_COLLATION_UTF8_GENERAL_CI;
-		else if ( sVal=="binary" )
-			tVars.m_eCollation = SPH_COLLATION_BINARY;
-		else
+		tVars.m_eCollation = sphCollationFromName ( sVal, &sError );
+		if ( !sError.IsEmpty() )
 		{
-			sError.SetSprintf ( "Unknown collation: '%s'", sVal.cstr() );
 			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
 			return;
 		}
@@ -12977,6 +12988,21 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_iMaxFilterValues = hSearchd.GetInt ( "max_filter_values", g_iMaxFilterValues );
 	g_iMaxBatchQueries = hSearchd.GetInt ( "max_batch_queries", g_iMaxBatchQueries );
 	g_iDistThreads = hSearchd.GetInt ( "dist_threads", g_iDistThreads );
+
+	if ( hSearchd ( "collation_server" ) )
+	{
+		const char * sLocale = hSearchd.GetStr ( "collation_server" );
+		if ( !setlocale ( LC_COLLATE, sLocale ) )
+			sphWarning ( "setlocale failed (locale='%s')", sLocale );
+	}
+	if ( hSearchd ( "collation_libc_locale" ) )
+	{
+		CSphString sCollation = hSearchd.GetStr ( "collation_libc_locale" );
+		CSphString sError;
+		g_eCollation = sphCollationFromName ( sCollation, &sError );
+		if ( !sError.IsEmpty() )
+			sphWarning ( "%s", sError.cstr() );
+	}
 
 	if ( hSearchd("thread_stack") )
 	{

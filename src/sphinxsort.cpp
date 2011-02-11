@@ -41,6 +41,7 @@ public:
 	virtual SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const = 0;
 	virtual void			GetLocator ( CSphAttrLocator & tOut ) const = 0;
 	virtual ESphAttr		GetResultType () const = 0;
+	virtual void			SetStringPool ( const BYTE * ) {}
 };
 
 
@@ -265,6 +266,46 @@ GROUPER_END
 GROUPER_BEGIN_SPLIT ( CSphGrouperYear )
 	return (pSplit->tm_year+1900);
 GROUPER_END
+
+template <class PRED>
+class CSphGrouperString : public CSphGrouperAttr, public PRED
+{
+private:
+	const BYTE * m_pStringBase;
+
+public:
+
+	explicit CSphGrouperString ( const CSphAttrLocator & tLoc )
+		: CSphGrouperAttr ( tLoc )
+		, m_pStringBase ( NULL )
+	{
+	}
+
+	virtual ESphAttr GetResultType () const
+	{
+		return SPH_ATTR_BIGINT;
+	}
+
+	virtual SphGroupKey_t KeyFromValue ( SphAttr_t uValue ) const
+	{
+		if ( !m_pStringBase || !uValue )
+			return 0;
+
+		const BYTE * pStr = NULL;
+		int iLen = sphUnpackStr ( m_pStringBase+uValue, &pStr );
+
+		if ( !pStr || !iLen )
+			return 0;
+
+		return PRED::Hash ( pStr, iLen );
+	}
+
+	virtual void SetStringPool ( const BYTE * pStrings )
+	{
+		m_pStringBase = pStrings;
+	}
+};
+
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -564,7 +605,7 @@ struct CSphGroupSorterSettings
 	CSphGroupSorterSettings ()
 		: m_bDistinct ( false )
 		, m_bMVA ( false )
-		, m_pGrouper ( false )
+		, m_pGrouper ( NULL )
 	{}
 };
 
@@ -874,6 +915,12 @@ public:
 	virtual bool IsGroupby () const
 	{
 		return true;
+	}
+
+	/// set string pool pointer (for string+groupby sorters)
+	void SetStringPool ( const BYTE * pStrings )
+	{
+		m_pGrouper->SetStringPool ( pStrings );
 	}
 
 	/// add entry to the queue
@@ -1820,6 +1867,8 @@ void ExprGeodist_t::GetDependencyColumns ( CSphVector<int> & dColumns ) const
 // PUBLIC FUNCTIONS (FACTORY AND FLATTENING)
 //////////////////////////////////////////////////////////////////////////
 
+static CSphGrouper * sphCreateGrouperString ( const CSphAttrLocator & tLoc, ESphCollation eCollation );
+
 static bool SetupGroupbySettings ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphGroupSorterSettings & tSettings, CSphString & sError )
 {
 	tSettings.m_tDistinctLoc.m_iBitOffset = -1;
@@ -1841,14 +1890,7 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const CSphSchema & 
 		return false;
 	}
 
-	// check type
 	ESphAttr eType = tSchema.GetAttr ( iGroupBy ).m_eAttrType;
-	if ( eType==SPH_ATTR_STRING )
-	{
-		sError.SetSprintf ( "group-by on string attribute '%s' not (yet) supported", pQuery->m_sGroupBy.cstr() );
-		return false;
-	}
-
 	CSphAttrLocator tLoc = tSchema.GetAttr ( iGroupBy ).m_tLocator;
 	switch ( pQuery->m_eGroupFunc )
 	{
@@ -1856,7 +1898,14 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const CSphSchema & 
 		case SPH_GROUPBY_WEEK:		tSettings.m_pGrouper = new CSphGrouperWeek ( tLoc ); break;
 		case SPH_GROUPBY_MONTH:		tSettings.m_pGrouper = new CSphGrouperMonth ( tLoc ); break;
 		case SPH_GROUPBY_YEAR:		tSettings.m_pGrouper = new CSphGrouperYear ( tLoc ); break;
-		case SPH_GROUPBY_ATTR:		tSettings.m_pGrouper = new CSphGrouperAttr ( tLoc ); break;
+		case SPH_GROUPBY_ATTR:
+		{
+			if ( eType!=SPH_ATTR_STRING )
+				tSettings.m_pGrouper = new CSphGrouperAttr ( tLoc );
+			else
+				tSettings.m_pGrouper = sphCreateGrouperString ( tLoc, pQuery->m_eCollation );
+		}
+		break;
 		default:
 			sError.SetSprintf ( "invalid group-by mode (mode=%d)", pQuery->m_eGroupFunc );
 			return false;
@@ -2325,6 +2374,112 @@ int CollateUtf8GeneralCI ( const BYTE * pArg1, const BYTE * pArg2 )
 		return 0;
 	return ( pStr1==pMax1 ) ? 1 : -1;
 }
+
+
+/////////////////////////////
+// hashing functions
+/////////////////////////////
+
+
+class CSphHashLibCS
+{
+public:
+	mutable CSphTightVector<BYTE> m_dBuf;
+	static const int LOCALE_SAFE_GAP = 16;
+
+	CSphHashLibCS()
+	{
+		m_dBuf.Resize ( COLLATE_STACK_BUFFER );
+	}
+
+	uint64_t Hash ( const BYTE * pStr, int iLen ) const
+	{
+		assert ( pStr && iLen );
+
+		int iCompositeLen = iLen + 1 + (int)( 3.0f * iLen ) + LOCALE_SAFE_GAP;
+		if ( m_dBuf.GetLength()<iCompositeLen )
+			m_dBuf.Resize ( iCompositeLen );
+
+		memcpy ( m_dBuf.Begin(), pStr, iLen );
+		m_dBuf[iLen] = '\0';
+
+		BYTE * pDst = m_dBuf.Begin()+iLen+1;
+		int iDstAvailable = m_dBuf.GetLength() - iLen - LOCALE_SAFE_GAP;
+
+		int iDstLen = strxfrm ( (char *)pDst, (const char *)m_dBuf.Begin(), iDstAvailable );
+		assert ( iDstLen<iDstAvailable+LOCALE_SAFE_GAP );
+
+		uint64_t uAcc = sphFNV64 ( pDst, iDstLen );
+
+		return uAcc;
+	}
+};
+
+
+class CSphHashLibCI
+{
+public:
+	uint64_t Hash ( const BYTE * pStr, int iLen ) const
+	{
+		assert ( pStr && iLen );
+
+		uint64_t uAcc = SPH_FNV64_SEED;
+		while ( iLen-- )
+		{
+			int iChar = tolower ( *pStr++ );
+			uAcc = sphFNV64 ( (const BYTE *)&iChar, 4, uAcc );
+		}
+
+		return uAcc;
+	}
+};
+
+
+class CSphHashUtf8CI
+{
+public:
+	uint64_t Hash ( const BYTE * pStr, int iLen ) const
+	{
+		assert ( pStr && iLen );
+
+		uint64_t uAcc = SPH_FNV64_SEED;
+		while ( iLen-- )
+		{
+			BYTE * pCur = (BYTE *)pStr++;
+			int iCode = sphUTF8Decode ( pCur );
+			iCode = CollateUTF8CI ( iCode );
+			uAcc = sphFNV64 ( (const BYTE *)&iCode, 4, uAcc );
+		}
+
+		return uAcc;
+	}
+};
+
+
+class CSphHashBinary
+{
+public:
+	uint64_t Hash ( const BYTE * pStr, int iLen ) const
+	{
+		assert ( pStr && iLen );
+
+		return sphFNV64 ( pStr, iLen );
+	}
+};
+
+
+CSphGrouper * sphCreateGrouperString ( const CSphAttrLocator & tLoc, ESphCollation eCollation )
+{
+	if ( eCollation==SPH_COLLATION_UTF8_GENERAL_CI )
+		return new CSphGrouperString<CSphHashUtf8CI> ( tLoc );
+	else if ( eCollation==SPH_COLLATION_LIBC_CI )
+		return new CSphGrouperString<CSphHashLibCI> ( tLoc );
+	else if ( eCollation==SPH_COLLATION_LIBC_CS )
+		return new CSphGrouperString<CSphHashLibCS> ( tLoc );
+	else
+		return new CSphGrouperString<CSphHashBinary> ( tLoc );
+}
+
 
 /////////////////////////
 // SORTING QUEUE FACTORY

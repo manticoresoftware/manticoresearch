@@ -5289,6 +5289,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	{
 		// groupby sorter does that automagically
 		pSorter->SetMVAPool ( NULL ); // because we must be able to group on @groupby anyway
+		pSorter->SetStringPool ( NULL );
 		ARRAY_FOREACH ( i, tRes.m_dMatches )
 		{
 			CSphMatch & tMatch = tRes.m_dMatches[i];
@@ -5560,6 +5561,7 @@ bool MinimizeAggrResultCompat ( AggrResult_t & tRes, const CSphQuery & tQuery, b
 	{
 		// groupby sorter does that automagically
 		pSorter->SetMVAPool ( NULL ); // because we must be able to group on @groupby anyway
+		pSorter->SetStringPool ( NULL );
 		ARRAY_FOREACH ( i, tRes.m_dMatches )
 		{
 			CSphMatch & tMatch = tRes.m_dMatches[i];

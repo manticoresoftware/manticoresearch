@@ -174,8 +174,9 @@ DWORD			sphCRC32 ( const BYTE * pString, int iLen );
 DWORD			sphCRC32 ( const BYTE * pString, int iLen, DWORD uPrevCRC );
 
 /// Sphinx FNV64 implementation
+const uint64_t	SPH_FNV64_SEED = 0xcbf29ce484222325ULL;
 uint64_t		sphFNV64 ( const BYTE * pString );
-uint64_t		sphFNV64 ( const BYTE * s, int iLen );
+uint64_t		sphFNV64 ( const BYTE * s, int iLen, uint64_t uPrev = SPH_FNV64_SEED );
 
 /// calculate file crc32
 bool			sphCalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 );
@@ -2417,6 +2418,9 @@ public:
 
 	/// set MVA pool pointer (for MVA+groupby sorters)
 	virtual void		SetMVAPool ( const DWORD * ) {}
+
+	/// set string pool pointer (for string+groupby sorters)
+	virtual void		SetStringPool ( const BYTE * ) {}
 
 	/// set schemas
 	virtual void				SetSchema ( const CSphSchema & tSchema ) { m_tSchema = tSchema; }

@@ -3518,7 +3518,10 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 		// FIXME! setup sorters vs. MVA
 		ARRAY_FOREACH ( i, dSorters )
+		{
 			dSorters[i]->SetMVAPool ( NULL );
+			dSorters[i]->SetStringPool ( NULL );
+		}
 
 		// FIXME! setup overrides
 
@@ -3544,6 +3547,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			{
 				// set string pool for string on_sort expression fix up
 				tCtx.SetStringPool ( m_pSegments[iSeg]->m_dStrings.Begin() );
+				ARRAY_FOREACH ( i, dSorters )
+					dSorters[i]->SetStringPool ( m_pSegments[iSeg]->m_dStrings.Begin() );
 
 				RtRowIterator_t tIt ( m_pSegments[iSeg], m_iStride, false, NULL );
 				for ( ;; )

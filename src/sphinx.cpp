@@ -11954,7 +11954,10 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 	// setup sorters vs. MVA
 	for ( int i=0; i<iSorters; i++ )
+	{
 		(ppSorters[i])->SetMVAPool ( m_pMva.GetWritePtr() );
+		(ppSorters[i])->SetStringPool ( m_pStrings.GetWritePtr() );
+	}
 
 	// setup overrides
 	if ( !tCtx.SetupOverrides ( pQuery, pResult, m_tSchema ) )
@@ -14390,7 +14393,10 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	// setup sorters vs. MVA
 	for ( int i=0; i<iSorters; i++ )
+	{
 		(ppSorters[i])->SetMVAPool ( m_pMva.GetWritePtr() );
+		(ppSorters[i])->SetStringPool ( m_pStrings.GetWritePtr() );
+	}
 
 	// setup overrides
 	if ( !tCtx.SetupOverrides ( pQuery, pResult, m_tSchema ) )
@@ -15597,9 +15603,9 @@ uint64_t sphFNV64 ( const BYTE * s )
 }
 
 
-uint64_t sphFNV64 ( const BYTE * s, int iLen )
+uint64_t sphFNV64 ( const BYTE * s, int iLen, uint64_t uPrev )
 {
-	uint64_t hval = 0xcbf29ce484222325ULL;
+	uint64_t hval = uPrev;
 	for ( ; iLen>0; iLen-- )
 	{
 		// xor the bottom with the current octet

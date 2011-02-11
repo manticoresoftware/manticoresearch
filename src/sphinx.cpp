@@ -16283,13 +16283,21 @@ bool CSphDictCRCTraits::SetMorphology ( const char * szMorph, bool bUseUTF8, CSp
 /// common id-based stemmer
 bool CSphDictCRCTraits::StemById ( BYTE * pWord, int iStemmer )
 {
-	char szBuf [4*SPH_MAX_WORD_LEN];
-	strncpy ( szBuf, (char *)pWord, sizeof(szBuf) );
+	char szBuf [ MAX_KEYWORD_BYTES ];
+
+	// safe quick strncpy without (!) padding and with a side of strlen
+	char * p = szBuf;
+	char * pMax = szBuf + sizeof(szBuf) - 1;
+	while ( *pWord && p<pMax )
+		*p++ = *pWord++;
+	int iLen = p - szBuf;
+	*p = '\0';
+	pWord -= iLen;
 
 	switch ( iStemmer )
 	{
 	case SPH_MORPH_STEM_EN:
-		stem_en ( pWord );
+		stem_en ( pWord, iLen );
 		break;
 
 	case SPH_MORPH_STEM_RU_CP1251:

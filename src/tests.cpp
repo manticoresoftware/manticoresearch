@@ -19,7 +19,23 @@
 #include "sphinxquery.h"
 #include "sphinxrt.h"
 #include "sphinxint.h"
+#include "sphinxstem.h"
 #include <math.h>
+
+#define SNOWBALL 0
+#define CROSSCHECK 0
+#define PORTER1 0
+
+#if SNOWBALL
+#include "header.h"
+#include "api.c"
+#include "utilities.c"
+#include "stem.c"
+#endif
+
+#if PORTER1
+#include "porter1.c"
+#endif
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1971,6 +1987,142 @@ void TestSpanSearch()
 }
 
 //////////////////////////////////////////////////////////////////////////
+
+const char * CORPUS = "corpus.txt";
+const int POOLSIZE = 80*1048576;
+const int GAP = 4;
+
+void BenchStemmer ()
+{
+	CSphString sError;
+
+#if SNOWBALL
+	SN_env * pSnow = english_ISO_8859_1_create_env();
+#if 1
+	char test[] = "this";
+	SN_set_current ( pSnow, strlen(test), (const symbol *)test );
+	pSnow->p [ pSnow->l ] = 0;
+	english_ISO_8859_1_stem ( pSnow );
+	stem_en ( (BYTE*)test, strlen(test) );
+#endif
+#endif
+
+#if PORTER1
+	struct stemmer * z = create_stemmer();
+#endif
+
+	BYTE * pRaw = new BYTE [ POOLSIZE ];
+	FILE * fp = fopen ( CORPUS, "rb" );
+	if ( !fp )
+		sphDie ( "fopen %s failed", CORPUS );
+	int iLen = fread ( pRaw, 1, POOLSIZE, fp );
+	printf ( "read %d bytes\n", iLen );
+	fclose ( fp );
+
+	ISphTokenizer * pTok = sphCreateSBCSTokenizer();
+	if ( !pTok->SetCaseFolding ( "A..Z->a..z, a..z", sError ) )
+		sphDie ( "oops: %s", sError.cstr() );
+
+
+	pTok->SetBuffer ( pRaw, iLen );
+
+	BYTE * pTokens = new BYTE [ POOLSIZE ];
+	BYTE * p = pTokens;
+	BYTE * sTok;
+	int iToks = 0;
+	int iBytes = 0;
+	int iStemmed = 0;
+	while ( ( sTok = pTok->GetToken() )!=NULL )
+	{
+		BYTE * pStart = p++; // 1 byte for length
+		while ( *sTok )
+			*p++ = *sTok++;
+		*pStart = (BYTE)( p-pStart-1 ); // store length
+		for ( int i=0; i<GAP; i++ )
+			*p++ = '\0'; // trailing zero and a safety gap 
+		if ( p >= pTokens+POOLSIZE )
+			sphDie ( "out of buffer at tok %d", iToks );
+		iToks++;
+	}
+	*p++ = '\0';
+	iBytes = (int)( p - pTokens );
+	printf ( "tokenized %d tokens\n", iToks );
+
+#if 0
+	int dCharStats[256];
+	memset ( dCharStats, 0, sizeof(dCharStats) );
+	for ( BYTE * t = pTokens; t<pTokens+iBytes; t++ )
+		dCharStats[*t]++;
+
+	const char * sDump = "aeiouywxY";
+	for ( const char * s = sDump; *s; s++ )
+		printf ( "%c: %d\n", *s, dCharStats[*s] );
+
+#endif
+	int64_t tmStem = sphMicroTimer();
+	p = pTokens;
+	iToks = 0;
+	int iDiff = 0;
+	while ( *p )
+	{
+#if !SNOWBALL && !PORTER1
+		stem_en ( p+1, *p );
+#endif
+
+#if SNOWBALL
+		int iLen = *p;
+		SN_set_current ( pSnow, iLen, p+1 );
+		english_ISO_8859_1_stem ( pSnow );
+
+#if !CROSSCHECK
+		// benchmark
+		memcpy ( p+1, pSnow->p, pSnow->l );
+		p[pSnow->l+1] = 0;
+#else
+		// crosscheck
+		char buf[256];
+		memcpy ( buf, p+1, *p+1 );
+
+		stem_en ( p+1, *p );
+		int ll = strlen((char*)p+1);
+		if ( ll!=pSnow->l || memcmp ( p+1, pSnow->p, ll ) )
+		{
+			pSnow->p[pSnow->l] = 0;
+			printf ( "%s[%d] vs %s[%d] for orig %s\n", p+1, ll, pSnow->p, pSnow->l, buf );
+			iDiff++;
+		}
+#endif
+#endif
+
+#if PORTER1
+		p [ stem(z, (char*)p+1, *p-1)+2 ] = 0;
+#endif
+
+		p += *p + GAP + 1;
+		iToks++;
+	}
+	tmStem = sphMicroTimer() - tmStem;
+
+	if ( iDiff )
+		printf ( "%d tokens are different\n", iDiff );
+
+	if ( iStemmed )
+		printf ( "%d data bytes stemmed\n", iStemmed );
+
+#if SNOWBALL
+	english_ISO_8859_1_close_env ( pSnow );
+#endif
+
+	uint64_t uHash = sphFNV64 ( pTokens, iBytes );
+	printf ( "stemmed %d tokens (%d bytes) in %d msec, hash %08x %08x\n",
+		iToks, iBytes, (int)(tmStem/1000),
+		(DWORD)( uHash>>32 ), (DWORD)( uHash & 0xffffffffUL ) );
+	if ( uHash!=U64C(0x54ef4f21994b67db) )
+		printf ( "ERROR, HASH MISMATCH\n" );
+
+	SafeDelete ( pTok );
+	SafeDeleteArray ( pRaw );
+}
 
 int main ()
 {

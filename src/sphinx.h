@@ -27,6 +27,8 @@
 	#define USE_LIBXML		0	/// whether to compile libxml support
 	#define	USE_LIBSTEMMER	0	/// whether to compile libstemmber support
 	#define USE_WINDOWS		1	/// whether to compile for Windows
+
+	#define UNALIGNED_RAM_ACCESS	1
 #else
 	#define USE_WINDOWS		0	/// whether to compile for Windows
 #endif

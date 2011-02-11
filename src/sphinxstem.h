@@ -25,7 +25,7 @@ void	stem_en_init ();
 void	stem_ru_init ();
 
 /// stem lowercase English word
-void	stem_en ( BYTE * pWord );
+void	stem_en ( BYTE * pWord, int iLen );
 
 /// stem lowercase Russian word in Windows-1251 encoding
 void	stem_ru_cp1251 ( BYTE * pWord );

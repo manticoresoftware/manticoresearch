@@ -537,6 +537,11 @@ struct SphMemberFunctor_T
 
 	explicit			SphMemberFunctor_T ( T CLASS::* pMember )	: m_pMember ( pMember ) {}
 	const T &			operator () ( const CLASS & arg ) const		{ return (&arg)->*m_pMember; }
+
+	inline bool IsLess ( const CLASS & a, const CLASS & b ) const
+	{
+		return (&a)->*m_pMember < (&b)->*m_pMember;
+	}
 };
 
 

@@ -7628,6 +7628,56 @@ bool sphCheckOptionsSPZ ( const ExcerptQuery_t & q, const CSphString & sPassageB
 // EXCERPTS HANDLER
 /////////////////////////////////////////////////////////////////////////////
 
+struct SnippetJob_t
+{
+	int							m_iQuery;
+	int							m_iSize;
+	int							m_iNext;
+	char *						m_sRes;
+	CSphString					m_sError;
+
+	SnippetJob_t ()
+		: m_iQuery ( -1 )
+		, m_iSize ( 0 )
+		, m_iNext ( -1 )
+		, m_sRes ( NULL )
+	{}
+};
+
+struct SnippetThread_t
+{
+	int							m_iTotal;
+	int							m_iHead;
+	SphThread_t					m_tThd;
+	SnippetJob_t *				m_pJobs;
+	ExcerptQuery_t *			m_pQueries;
+	CSphIndex *					m_pIndex;
+	const CSphHTMLStripper *	m_pStripper;
+
+	SnippetThread_t()
+		: m_iTotal ( 0 )
+		, m_iHead ( -1 )
+		, m_pJobs ( NULL )
+		, m_pQueries ( NULL )
+		, m_pIndex ( NULL )
+		, m_pStripper ( NULL )
+	{}
+};
+
+void SnippetThreadFunc ( void * pArg )
+{
+	SnippetThread_t * pDesc = (SnippetThread_t*) pArg;
+
+	ISphTokenizer * pTok = pDesc->m_pIndex->GetTokenizer()->Clone ( false );
+	for ( int iJob=pDesc->m_iHead; iJob>=0; iJob=pDesc->m_pJobs[iJob].m_iNext )
+	{
+		SnippetJob_t & tJob = pDesc->m_pJobs[iJob];
+		ExcerptQuery_t * pQuery = pDesc->m_pQueries + tJob.m_iQuery;
+		tJob.m_sRes = sphBuildExcerpt ( *pQuery, pDesc->m_pIndex->GetDictionary(), pTok,
+			&pDesc->m_pIndex->GetMatchSchema(), pDesc->m_pIndex,
+			tJob.m_sError, pDesc->m_pStripper );
+	}
+}
 
 void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 {
@@ -7732,48 +7782,141 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		return;
 	}
 
-	CSphVector<char*> dExcerpts;
-	for ( int i=0; i<iCount; i++ )
+	CSphVector<ExcerptQuery_t> dQueries ( iCount );
+
+	ARRAY_FOREACH ( i, dQueries )
 	{
-		q.m_sSource = tReq.GetString ();
+		dQueries[i] = q; // copy settings
+		dQueries[i].m_sSource = tReq.GetString (); // fetch data
 		if ( tReq.GetError() )
 		{
 			tReq.SendErrorReply ( "invalid or truncated request" );
 			pServed->Unlock();
 			return;
 		}
+	}
 
-		CSphHTMLStripper tStripper;
-		const CSphHTMLStripper * pStripper = NULL;
-		const CSphIndexSettings & tSettings = pIndex->GetSettings ();
-		if ( q.m_sStripMode=="strip"
-			|| ( q.m_sStripMode=="index" && tSettings.m_bHtmlStrip ) )
+	////////////////////////////
+	// setup stripper if needed
+	////////////////////////////
+
+	CSphHTMLStripper tStripper;
+	const CSphHTMLStripper * pStripper = NULL;
+	const CSphIndexSettings & tSettings = pIndex->GetSettings ();
+	if ( q.m_sStripMode=="strip"
+		|| ( q.m_sStripMode=="index" && tSettings.m_bHtmlStrip ) )
+	{
+		if ( q.m_sStripMode=="index" )
 		{
-			if ( q.m_sStripMode=="index" )
+			if (
+				!tStripper.SetIndexedAttrs ( tSettings.m_sHtmlIndexAttrs.cstr (), sError ) ||
+				!tStripper.SetRemovedElements ( tSettings.m_sHtmlRemoveElements.cstr (), sError ) )
 			{
-				if (
-					!tStripper.SetIndexedAttrs ( tSettings.m_sHtmlIndexAttrs.cstr (), sError ) ||
-					!tStripper.SetRemovedElements ( tSettings.m_sHtmlRemoveElements.cstr (), sError ) )
-				{
-					tReq.SendErrorReply ( "HTML stripper config error: %s", sError.cstr() );
-					pServed->Unlock();
-					return;
-				}
+				tReq.SendErrorReply ( "HTML stripper config error: %s", sError.cstr() );
+				pServed->Unlock();
+				return;
 			}
-			pStripper = &tStripper;
-
-			if ( !tSettings.m_sZonePrefix.IsEmpty() )
-				tStripper.SetZonePrefix ( tSettings.m_sZonePrefix.cstr() );
 		}
+		pStripper = &tStripper;
 
-		char * sResult = sphBuildExcerpt ( q, pDict, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError, pStripper );
-		if ( !sResult )
+		if ( !tSettings.m_sZonePrefix.IsEmpty() )
+			tStripper.SetZonePrefix ( tSettings.m_sZonePrefix.cstr() );
+	}
+
+	///////////////////
+	// do highlighting
+	///////////////////
+
+	CSphVector<char*> dExcerpts;
+
+	if ( g_iDistThreads<=1 || q.m_bLoadFiles==false )
+	{
+		// boring single threaded loop
+		ARRAY_FOREACH ( i, dQueries )
 		{
+			dExcerpts.Add ( sphBuildExcerpt ( q, pDict, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError, pStripper ) );
+			if ( dExcerpts.Last() )
+				continue;
+
+			// oops, there was an error
 			tReq.SendErrorReply ( "highlighting failed: %s", sError.cstr() );
 			pServed->Unlock();
+			ARRAY_FOREACH ( i, dExcerpts )
+				SafeDeleteArray ( dExcerpts[i] );
 			return;
 		}
-		dExcerpts.Add ( sResult );
+	} else
+	{
+		// multi threaded file processing fun
+		CSphVector<SnippetJob_t> dJobs;
+		CSphVector<SnippetThread_t> dThreads ( g_iDistThreads );
+		dJobs.Resize ( dQueries.GetLength() );
+
+		// get file sizes
+		ARRAY_FOREACH ( i, dQueries )
+		{
+			struct stat st;
+			if ( ::stat ( dQueries[i].m_sSource.cstr(), &st )<0 )
+			{
+				tReq.SendErrorReply ( "failed to stat %s: %s", dQueries[i].m_sSource.cstr(), strerror(errno) );
+				pServed->Unlock();
+				return;
+			}
+			dJobs[i].m_iQuery = i;
+			dJobs[i].m_iSize = -st.st_size; // so that sort would put bigger ones first
+			dJobs[i].m_iNext = -1;
+		}
+
+		// schedule jobs across threads
+		// simple LPT (Least Processing Time) scheduling for now
+		// might add dynamic programming or something later if needed
+		dJobs.Sort ( bind ( &SnippetJob_t::m_iSize ) );
+		ARRAY_FOREACH ( i, dJobs )
+		{
+			dThreads[0].m_iTotal -= dJobs[i].m_iSize;
+			dJobs[i].m_iNext = dThreads[0].m_iHead;
+			dThreads[0].m_iHead = i;
+			dThreads.Sort ( bind ( &SnippetThread_t::m_iTotal ) );
+		}
+
+		// do MT searching
+		ARRAY_FOREACH ( i, dThreads )
+		{
+			dThreads[i].m_pJobs = dJobs.Begin();
+			dThreads[i].m_pQueries = dQueries.Begin();
+			dThreads[i].m_pIndex = pIndex;
+			dThreads[i].m_pStripper = pStripper;
+			if ( i )
+				sphThreadCreate ( &dThreads[i].m_tThd, SnippetThreadFunc, &dThreads[i] );
+		}
+
+		SnippetThreadFunc ( &dThreads[0] );
+		for ( int i=1; i<dThreads.GetLength(); i++ )
+			sphThreadJoin ( &dThreads[i].m_tThd );
+
+		ARRAY_FOREACH ( i, dJobs )
+			if ( !dJobs[i].m_sRes )
+		{
+			tReq.SendErrorReply ( "failed to stat %s: %s", dQueries[i].m_sSource.cstr(), strerror(errno) );
+			pServed->Unlock();
+
+		}
+
+		dJobs.Sort ( bind ( &SnippetJob_t::m_iQuery ) );
+		ARRAY_FOREACH ( i, dJobs )
+		{
+			if ( dJobs[i].m_sRes )
+			{
+				dExcerpts.Add ( dJobs[i].m_sRes );
+			} else
+			{
+				tReq.SendErrorReply ( "highlighting failed: %s", dJobs[i].m_sError.cstr() );
+				pServed->Unlock();
+				ARRAY_FOREACH ( j, dJobs )
+					SafeDeleteArray ( dJobs[j].m_sRes );
+				return;
+			}
+		}
 	}
 
 	pServed->Unlock();

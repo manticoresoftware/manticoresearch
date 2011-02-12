@@ -7834,7 +7834,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		// boring single threaded loop
 		ARRAY_FOREACH ( i, dQueries )
 		{
-			dExcerpts.Add ( sphBuildExcerpt ( q, pDict, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError, pStripper ) );
+			dExcerpts.Add ( sphBuildExcerpt ( dQueries[i], pDict, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError, pStripper ) );
 			if ( dExcerpts.Last() )
 				continue;
 

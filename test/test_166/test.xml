@@ -16,7 +16,7 @@ searchd
 	<searchd_settings/>
 	workers = threads
 	
-	collation_server = english
+	collation_server = C
 	<dynamic>
 		<variant>collation_libc_locale = utf8_general_ci</variant>
 		<variant>collation_libc_locale = libc_ci</variant>
@@ -125,7 +125,7 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select * from all group by str1 order by @id asc</sphinxql>
 <sphinxql>select * from all where match ('the | cat | dog | bird') group by str1 within group order by idd1 desc order by @weight asc</sphinxql>
 <sphinxql>set collation_connection=libc_cs</sphinxql>
-<sphinxql>select * from all group by str1 order by str1 desc</sphinxql>
+<sphinxql>select * from all group by str1 order by idd1 desc</sphinxql>
 <sphinxql>select * from all where match ('the | cat | dog | bird') group by str1 within group order by idd1 asc order by @weight asc</sphinxql>
 </sphqueries>
 

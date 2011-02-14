@@ -6910,7 +6910,7 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 		assert ( tHandler.m_dQueries.GetLength()==1 );
 		assert ( tHandler.m_dResults.GetLength()==1 );
 		const AggrResult_t & tRes = tHandler.m_dResults[0];
-		bool bExtendedStat = ( tHandler.m_dQueries[i].m_iMasterVer>0 );
+		bool bExtendedStat = ( tHandler.m_dQueries[0].m_iMasterVer>0 );
 
 		if ( !tRes.m_sError.IsEmpty() )
 		{

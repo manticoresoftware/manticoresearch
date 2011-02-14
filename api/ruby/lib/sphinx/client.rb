@@ -57,7 +57,7 @@ module Sphinx
     # Current client-side command implementation versions
     
     # search command version
-    VER_COMMAND_SEARCH   = 0x117
+    VER_COMMAND_SEARCH   = 0x118
     # excerpt command version
     VER_COMMAND_EXCERPT  = 0x102
     # update command version
@@ -566,6 +566,8 @@ module Sphinx
   
       # mode and limits
       request = Request.new
+      # its a client
+      request.put_int 0
       request.put_int @offset, @limit, @mode, @ranker, @sort
       request.put_string @sortby
       # query itself

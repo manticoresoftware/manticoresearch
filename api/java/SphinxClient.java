@@ -85,7 +85,7 @@ public class SphinxClient
 
 	/* searchd command versions */
 	private final static int VER_MAJOR_PROTO		= 0x1;
-	private final static int VER_COMMAND_SEARCH		= 0x117;
+	private final static int VER_COMMAND_SEARCH		= 0x118;
 	private final static int VER_COMMAND_EXCERPT	= 0x102;
 	private final static int VER_COMMAND_UPDATE		= 0x102;
 	private final static int VER_COMMAND_KEYWORDS	= 0x100;
@@ -811,6 +811,8 @@ public class SphinxClient
 		/* build request */
 		try {
 			DataOutputStream out = new DataOutputStream(req);
+			/* its a client */
+			out.writeInt(0);
 			out.writeInt(_offset);
 			out.writeInt(_limit);
 			out.writeInt(_mode);

@@ -200,7 +200,7 @@ sphinx_client * sphinx_create ( sphinx_bool copy_args )
 		return NULL;
 
 	// initialize defaults and return
-	client->ver_search				= 0x117; // 0x113 for 0.9.8, 0x116 for 0.9.9rc2
+	client->ver_search				= 0x118; // 0x113 for 0.9.8, 0x116 for 0.9.9rc2
 	client->copy_args				= copy_args;
 	client->head_alloc				= NULL;
 
@@ -951,7 +951,7 @@ static int calc_req_len ( sphinx_client * client, const char * query, const char
 	int i, filter_val_size;
 	size_t res;
 
-	res = 96 + 2*(int)sizeof(sphinx_uint64_t) + 4*client->num_weights
+	res = 100 + 2*(int)sizeof(sphinx_uint64_t) + 4*client->num_weights
 		+ safestrlen ( client->sortby )
 		+ safestrlen ( query )
 		+ safestrlen ( index_list )
@@ -1086,6 +1086,7 @@ int sphinx_add_query ( sphinx_client * client, const char * query, const char * 
 	client->req_lens[client->num_reqs] = req_len;
 	client->num_reqs++;
 
+	send_int ( &req, 0 ); // its a client
 	send_int ( &req, client->offset );
 	send_int ( &req, client->limit );
 	send_int ( &req, client->mode );

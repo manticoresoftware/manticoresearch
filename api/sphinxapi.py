@@ -30,7 +30,7 @@ SEARCHD_COMMAND_PERSIST		= 4
 SEARCHD_COMMAND_FLUSHATTRS	= 7
 
 # current client-side command implementation versions
-VER_COMMAND_SEARCH		= 0x117
+VER_COMMAND_SEARCH		= 0x118
 VER_COMMAND_EXCERPT		= 0x103
 VER_COMMAND_UPDATE		= 0x102
 VER_COMMAND_KEYWORDS	= 0x100
@@ -500,7 +500,8 @@ class SphinxClient:
 		Add query to batch.
 		"""
 		# build request
-		req = [pack('>5L', self._offset, self._limit, self._mode, self._ranker, self._sort)]
+		req = [pack('>L', 0)] # its a client
+		req.append ( pack('>5L', self._offset, self._limit, self._mode, self._ranker, self._sort) )
 		req.append(pack('>L', len(self._sortby)))
 		req.append(self._sortby)
 

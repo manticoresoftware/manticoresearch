@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>string attibutes vs agent groupings</name>
+
+<num_agents>3</num_agents>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+	
+	collation_server = english
+	<dynamic>
+		<variant>collation_libc_locale = utf8_general_ci</variant>
+		<variant>collation_libc_locale = libc_ci</variant>
+		<variant>collation_libc_locale = libc_cs</variant>
+	</dynamic>
+}
+
+<agent0>
+source src_master
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, idd1, str1, body FROM test_table where id in ( 1, 2, 3 )
+	sql_attr_uint	= idd1
+	sql_attr_string	= str1
+}
+
+index master
+{
+	source			= src_master
+    docinfo			= extern
+    charset_type	= utf-8
+	path			= <data_path/>/master
+}
+
+index all
+{
+	type = distributed
+	local = master
+	agent = <agent1_address/>:a1
+	agent = <agent2_address/>:a2
+}
+</agent0>
+
+<agent1>
+source src_a1
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, idd1, str1, body FROM test_table where id in ( 4, 5, 6 )
+	sql_attr_uint	= idd1
+	sql_attr_string	= str1
+}
+
+index a1
+{
+	source			= src_a1
+    docinfo			= extern
+    charset_type	= utf-8
+	path			= <data_path/>/a1
+}
+</agent1>
+
+<agent2>
+source src_a2
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, idd1, str1, body FROM test_table where id in ( 7, 8, 9 )
+	sql_attr_uint	= idd1
+	sql_attr_string	= str1
+}
+
+index  a2
+{
+	source			= src_a2
+    docinfo			= extern
+    charset_type	= utf-8
+	path			= <data_path/>/a2
+}
+</agent2>
+
+</config>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`id` int(11) NOT NULL default '0',
+	`idd1` int(11) NOT NULL default '0',
+	`str1` varchar(1024) NOT NULL default '',
+	`body` varchar(1024) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 1,		'a aa',		'the dog' ),
+( 2, 10,	'c cC',		'the cat' ),
+( 3, 2,	'a aA',		'the bird' ), 
+( 4, 11,	'c cC',		'cat eats bird' ),
+( 5, 3, 	'a Aa',		'dog eats cat' ), 
+( 6, 12,		'c cc',		'bird' ), 
+( 7, 4,		'a Aa',		'the cat' ),
+( 8, 5,		'a aA',		'eats' ),
+( 9, 13, 	'c cc',		'the' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>select * from all group by str1 order by @id asc</sphinxql>
+<sphinxql>select * from all where match ('the | cat | dog | bird') group by str1 within group order by idd1 desc order by @weight asc</sphinxql>
+<sphinxql>set collation_connection=libc_cs</sphinxql>
+<sphinxql>select * from all group by str1 order by str1 desc</sphinxql>
+<sphinxql>select * from all where match ('the | cat | dog | bird') group by str1 within group order by idd1 asc order by @weight asc</sphinxql>
+</sphqueries>
+
+<queries>
+<query mode="extended2" index="all" groupattr="str1" groupfunc="attr" groupsort="@id asc"></query>
+<query mode="extended2" index="all" groupattr="str1" groupfunc="attr" groupsort="@weight asc" sortmode="extended" sortby="idd1 desc">the | cat | dog | bird</query>
+</queries>
+
+</test>

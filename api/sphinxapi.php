@@ -26,11 +26,10 @@ define ( "SEARCHD_COMMAND_UPDATE",		2 );
 define ( "SEARCHD_COMMAND_KEYWORDS",	3 );
 define ( "SEARCHD_COMMAND_PERSIST",		4 );
 define ( "SEARCHD_COMMAND_STATUS",		5 );
-define ( "SEARCHD_COMMAND_QUERY",		6 );
 define ( "SEARCHD_COMMAND_FLUSHATTRS",	7 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x117 );
+define ( "VER_COMMAND_SEARCH",		0x118 );
 define ( "VER_COMMAND_EXCERPT",		0x103 );
 define ( "VER_COMMAND_UPDATE",		0x102 );
 define ( "VER_COMMAND_KEYWORDS",	0x100 );
@@ -982,7 +981,8 @@ class SphinxClient
 		$this->_MBPush ();
 
 		// build request
-		$req = pack ( "NNNNN", $this->_offset, $this->_limit, $this->_mode, $this->_ranker, $this->_sort ); // mode and limits
+		$req = pack ( "N", 0 ); // its a client
+		$req .= pack ( "NNNNN", $this->_offset, $this->_limit, $this->_mode, $this->_ranker, $this->_sort ); // mode and limits
 		$req .= pack ( "N", strlen($this->_sortby) ) . $this->_sortby;
 		$req .= pack ( "N", strlen($query) ) . $query; // query itself
 		$req .= pack ( "N", count($this->_weights) ); // weights

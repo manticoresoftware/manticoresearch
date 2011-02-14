@@ -435,7 +435,6 @@ enum SearchdCommand_e
 	SEARCHD_COMMAND_KEYWORDS	= 3,
 	SEARCHD_COMMAND_PERSIST		= 4,
 	SEARCHD_COMMAND_STATUS		= 5,
-	SEARCHD_COMMAND_QUERY		= 6,
 	SEARCHD_COMMAND_FLUSHATTRS	= 7,
 
 	SEARCHD_COMMAND_TOTAL
@@ -445,7 +444,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x117,
+	VER_COMMAND_SEARCH		= 0x118,
 	VER_COMMAND_EXCERPT		= 0x103,
 	VER_COMMAND_UPDATE		= 0x102,
 	VER_COMMAND_KEYWORDS	= 0x100,
@@ -462,6 +461,12 @@ enum SearchdStatus_e
 	SEARCHD_ERROR	= 1,	///< general failure, error message follows
 	SEARCHD_RETRY	= 2,	///< temporary failure, error message follows, client should retry later
 	SEARCHD_WARNING	= 3		///< general success, warning message and command-specific reply follow
+};
+
+
+enum
+{
+	VER_MASTER = 1
 };
 
 
@@ -3316,7 +3321,7 @@ protected:
 
 int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuery & q ) const
 {
-	int iReqSize = 104 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
+	int iReqSize = 112 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
 		+ q.m_sSortBy.Length()
 		+ strlen ( sIndexes )
 		+ q.m_sGroupBy.Length()
@@ -3355,6 +3360,8 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 
 void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_c & tOut, const CSphQuery & q ) const
 {
+	tOut.SendInt ( VER_MASTER );
+
 	tOut.SendInt ( 0 ); // offset is 0
 	tOut.SendInt ( q.m_iMaxMatches ); // limit is MAX_MATCHES
 	tOut.SendInt ( (DWORD)q.m_eMode ); // match mode
@@ -3464,6 +3471,9 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 			tOut.SendBytes ( q.m_sSelect.cstr(), iLen );
 		}
 	}
+
+	// master v.1.0
+	tOut.SendDword ( q.m_eCollation );
 }
 
 
@@ -3878,6 +3888,9 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 {
 	tQuery.m_iOldVersion = iVer;
 
+	if ( iVer>=0x118 )
+		tQuery.m_iMasterVer = tReq.GetInt();
+
 	// v.1.0. mode, limits, weights, ID/TS ranges
 	tQuery.m_iOffset = tReq.GetInt ();
 	tQuery.m_iLimit = tReq.GetInt ();
@@ -4171,6 +4184,13 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 			tQuery.m_sSelect = sRawSelect;
 			tQuery.m_bAgent = true;
 		}
+	}
+
+	// master v.1.0
+	tQuery.m_eCollation = g_eCollation;
+	if ( tQuery.m_iMasterVer>=0x001 )
+	{
+		tQuery.m_eCollation = (ESphCollation)tReq.GetDword();
 	}
 
 	/////////////////////
@@ -4634,7 +4654,7 @@ void LogQuery ( const CSphQuery & q, const CSphQueryResult & tRes, const CSphVec
 
 //////////////////////////////////////////////////////////////////////////
 
-int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<PoolPtrs_t> & dTag2Pools, bool bAgent )
+int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<PoolPtrs_t> & dTag2Pools, bool bExtendedStat )
 {
 	int iRespLen = 0;
 
@@ -4689,7 +4709,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 	}
 
 	// agents send additional flag from words statistics
-	if ( bAgent )
+	if ( bExtendedStat )
 		iRespLen += pRes->m_hWordStats.GetLength();
 
 	pRes->m_hWordStats.IterateStart();
@@ -4744,7 +4764,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 }
 
 
-void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pRes, const CSphVector<PoolPtrs_t> & dTag2Pools, bool bAgent )
+void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pRes, const CSphVector<PoolPtrs_t> & dTag2Pools, bool bExtendedStat )
 {
 	// status
 	if ( iVer>=0x10D )
@@ -4914,7 +4934,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 		tOut.SendString ( pRes->m_hWordStats.IterateGetKey().cstr() );
 		tOut.SendInt ( tStat.m_iDocs );
 		tOut.SendInt ( tStat.m_iHits );
-		if ( bAgent )
+		if ( bExtendedStat )
 			tOut.SendByte ( tStat.m_bExpanded );
 	}
 }
@@ -6890,7 +6910,7 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 		assert ( tHandler.m_dQueries.GetLength()==1 );
 		assert ( tHandler.m_dResults.GetLength()==1 );
 		const AggrResult_t & tRes = tHandler.m_dResults[0];
-		bool bAgent = tHandler.m_dQueries[0].m_bAgent;
+		bool bExtendedStat = ( tHandler.m_dQueries[i].m_iMasterVer>0 );
 
 		if ( !tRes.m_sError.IsEmpty() )
 		{
@@ -6898,7 +6918,7 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 			return;
 		}
 
-		iReplyLen = CalcResultLength ( iVer, &tRes, tRes.m_dTag2Pools, bAgent );
+		iReplyLen = CalcResultLength ( iVer, &tRes, tRes.m_dTag2Pools, bExtendedStat );
 		bool bWarning = ( iVer>=0x106 && !tRes.m_sWarning.IsEmpty() );
 
 		// send it
@@ -6906,12 +6926,12 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 		tOut.SendWord ( VER_COMMAND_SEARCH );
 		tOut.SendInt ( iReplyLen );
 
-		SendResult ( iVer, tOut, &tRes, tRes.m_dTag2Pools, bAgent );
+		SendResult ( iVer, tOut, &tRes, tRes.m_dTag2Pools, bExtendedStat );
 
 	} else
 	{
 		ARRAY_FOREACH ( i, tHandler.m_dQueries )
-			iReplyLen += CalcResultLength ( iVer, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, tHandler.m_dQueries[i].m_bAgent );
+			iReplyLen += CalcResultLength ( iVer, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, ( tHandler.m_dQueries[i].m_iMasterVer>0 ) );
 
 		// send it
 		tOut.SendWord ( (WORD)SEARCHD_OK );
@@ -6919,7 +6939,7 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 		tOut.SendInt ( iReplyLen );
 
 		ARRAY_FOREACH ( i, tHandler.m_dQueries )
-			SendResult ( iVer, tOut, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, tHandler.m_dQueries[i].m_bAgent );
+			SendResult ( iVer, tOut, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, ( tHandler.m_dQueries[i].m_iMasterVer>0 ) );
 	}
 
 	tOut.Flush ();
@@ -7521,58 +7541,6 @@ bool ParseSqlQuery ( const CSphString & sQuery, CSphVector<SqlStmt_t> & dStmt, C
 	return true;
 }
 
-/////////////////////////////////////////////////////////////////////////////
-
-void HandleCommandQuery ( int iSock, int iVer, InputBuffer_c & tReq )
-{
-	MEMORY ( SPH_MEM_QUERY_NONSQL );
-
-	if ( !CheckCommandVersion ( iVer, VER_COMMAND_QUERY, tReq ) )
-		return;
-
-	// parse request packet
-	DWORD uResponseVer = tReq.GetDword(); // how shall we pack the response packet?
-	CSphString sQuery = tReq.GetString(); // what is our query?
-
-	// check for errors
-	if ( uResponseVer<0x100 || uResponseVer>VER_COMMAND_SEARCH )
-	{
-		tReq.SendErrorReply ( "unsupported search response format v.%d.%d requested", uResponseVer>>8, uResponseVer & 0xff );
-		return;
-	}
-	if ( tReq.GetError() )
-	{
-		tReq.SendErrorReply ( "invalid or truncated request" );
-		return;
-	}
-
-	// parse SQL query
-	CSphString sError;
-	CSphVector<SqlStmt_t> dStmt;
-
-	if ( !ParseSqlQuery ( sQuery, dStmt, sError, g_eCollation ) )
-	{
-		tReq.SendErrorReply ( "%s", sError.cstr() );
-		return;
-	}
-	if ( dStmt.GetLength()!=1 )
-	{
-		tReq.SendErrorReply ( "this protocol currently supports single SELECT (got=%d)", dStmt.GetLength() );
-		return;
-	}
-	if ( dStmt[0].m_eStmt!=STMT_SELECT )
-	{
-		tReq.SendErrorReply ( "this protocol currently supports SELECT only" );
-		return;
-	}
-
-	SearchHandler_c tHandler ( 1 );
-	tHandler.m_dQueries[0] = dStmt.Begin()->m_tQuery;
-
-	// do the dew
-	tHandler.RunQueries ();
-	SendSearchResponse ( tHandler, tReq, iSock, uResponseVer );
-}
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -8618,7 +8586,6 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD, ThdDes
 			case SEARCHD_COMMAND_UPDATE:	HandleCommandUpdate ( iSock, iCommandVer, tBuf, iPipeFD ); break;
 			case SEARCHD_COMMAND_PERSIST:	bPersist = ( tBuf.GetInt()!=0 ); iTimeout = g_iClientTimeout; break;
 			case SEARCHD_COMMAND_STATUS:	HandleCommandStatus ( iSock, iCommandVer, tBuf ); break;
-			case SEARCHD_COMMAND_QUERY:		HandleCommandQuery ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_FLUSHATTRS:HandleCommandFlush ( iSock, iCommandVer, tBuf ); break;
 			default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
 		}

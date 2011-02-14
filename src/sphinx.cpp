@@ -4139,6 +4139,8 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 
 				if ( !bShortToken )
 				{
+					if ( m_iAccum )
+						m_iOvershortCount++;
 					m_iAccum = 0;
 					m_iLastTokenLen = 0;
 					BlendAdjust ( pCur );
@@ -4363,6 +4365,8 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			{
 				if ( !m_bShortTokenFilter || !ShortTokenFilter ( m_sAccum, m_iLastTokenLen ) )
 				{
+					if ( m_iLastTokenLen )
+						m_iOvershortCount++;
 					m_iLastTokenLen = 0;
 					BlendAdjust ( pCur );
 					return NULL;

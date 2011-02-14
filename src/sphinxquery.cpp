@@ -593,7 +593,14 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		// not a number, or not followed by a whitespace, so fallback to regular tokenizing
 		sToken = (const char *) m_pTokenizer->GetToken ();
 		if ( !sToken )
-			return 0;
+		{
+			m_iPendingNulls = m_pTokenizer->GetOvershortCount ();
+			if ( !m_iPendingNulls )
+				return 0;
+			m_iPendingNulls--;
+			lvalp->pNode = AddKeyword ( NULL );
+			return TOK_KEYWORD;
+		}
 
 		// now let's do some token post-processing
 		m_bWasBlended = m_pTokenizer->TokenIsBlended();

@@ -25,7 +25,8 @@ index idx
 {
 	source			= src
 	path			= <data_path/>/main
-    charset_type 	= utf-8
+	charset_type 	= utf-8
+	blend_chars	= U+002D # '-'
 }
 
 </config>
@@ -52,7 +53,23 @@ index idx
 	<query index="idx" mode="extended2">five NEAR/3 one</query>
 	<query index="idx" mode="extended2">six NEAR/3 one</query>
 	<query index="idx" mode="extended2">(five|six) NEAR/3 one</query>
+	<query index="idx" mode="extended2">aleph NEAR/2 gimel</query>
+	<query index="idx" mode="extended2">bet NEAR/3 he</query>
+	<query index="idx" mode="extended2">aleph-bet-gimel NEAR/3 he</query>
 </queries>
+
+<sphqueries>
+<sphinxql>select * from idx where match ('aleph NEAR/2 gimel')</sphinxql>
+<sphinxql>select * from idx where match ('bet NEAR/3 he')</sphinxql>
+<sphinxql>select * from idx where match ('bet NEAR/2 he')</sphinxql>
+<sphinxql>select * from idx where match ('aleph-bet-gimel NEAR/4 he')</sphinxql>
+<sphinxql>select * from idx where match ('aleph-bet-gimel NEAR/3 he')</sphinxql>
+<sphinxql>call snippets ('aleph-bet-gimel dalet he wav zajin het', 'idx', 'gimel NEAR/2 he', 1 as query_mode)</sphinxql>
+<sphinxql>call snippets ('aleph-bet-gimel dalet he wav zajin het', 'idx', 'bet NEAR/3 he', 1 as query_mode)</sphinxql>
+<sphinxql>call snippets ('aleph-bet-gimel dalet he wav zajin het', 'idx', 'aleph NEAR/2 gimel', 1 as query_mode)</sphinxql>
+<sphinxql>CALL SNIPPETS ('U.S.S.S.B s s s s today s s s s s tomorrow', 'idx', 'B NEAR/7 today', 1 as query_mode)</sphinxql>
+<sphinxql>CALL SNIPPETS ('U.S.S.S.A s s s s today s s s s s tomorrow', 'idx', 'A NEAR/7 today', 1 as query_mode)</sphinxql>
+</sphqueries>
 
 <db_create>
 CREATE TABLE test_table
@@ -66,7 +83,8 @@ INSERT INTO `test_table` VALUES
 ( 0, 'a b c d'), (0, 'a x b c d'), (0,'a x x b c d'), ( 0, 'a b x c d'), ( 0, 'a b x x c d'), ( 0, 'a b x x x c d'), ( 0, 'a b x x x x c d'), (0, 'a x b x x x x c x d'), (0, 'a x x b x x x c x x d'),
 ( 0, 'c d x x x x a b'), ( 0, 'c d x x x a b'), ( 0, 'c d x x a b'), ( 0, 'c d x a b'), ( 0, 'c d a b'),
 ( 0, '... is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial burden resulting from the non-performance by one of their members and, as such, should significantly reduce this credit risk. In cases where the clearinghouse... is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial burden resulting from the non-performance by one of their members and, as such, should significantly reduce this credit risk. In cases where the clearinghouse... be able to meet its obligations to a Trading Company. The counterparty for futures contracts traded in the United States and on most foreign exchanges is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial...'),
-( 0, 'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteena' )
+( 0, 'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteena' ),
+( 0, 'aleph-bet-gimel dalet he wav zajin het')
 </db_insert>
 <db_drop>DROP TABLE IF EXISTS test_table</db_drop>
 

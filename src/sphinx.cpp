@@ -3929,7 +3929,7 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 	}
 }
 
-bool ISphTokenizer::RemapCharacters ( const char * sConfig, DWORD uFlags, const char * sSource, CSphString & sError )
+bool ISphTokenizer::RemapCharacters ( const char * sConfig, DWORD uFlags, const char * sSource, bool bCanRemap, CSphString & sError )
 {
 	// parse
 	CSphVector<CSphRemapRange> dRemaps;
@@ -3943,15 +3943,25 @@ bool ISphTokenizer::RemapCharacters ( const char * sConfig, DWORD uFlags, const 
 	// check
 	ARRAY_FOREACH ( i, dRemaps )
 	{
-		if ( dRemaps[i].m_iStart!=dRemaps[i].m_iRemapStart )
+		const CSphRemapRange & r = dRemaps[i];
+
+		if ( !bCanRemap && r.m_iStart!=r.m_iRemapStart )
 		{
 			sError.SetSprintf ( "%s characters must not be remapped (map-from=U+%x, map-to=U+%x)",
-				sSource, dRemaps[i].m_iStart, dRemaps[i].m_iRemapStart );
+				sSource, r.m_iStart, r.m_iRemapStart );
 			return false;
 		}
 
-		for ( int j=dRemaps[i].m_iStart; j<=dRemaps[i].m_iEnd; j++ )
+		for ( int j=r.m_iStart; j<=r.m_iEnd; j++ )
 			if ( m_tLC.ToLower(j) )
+		{
+			sError.SetSprintf ( "%s characters must not be referenced anywhere else (code=U+%x)", sSource, j );
+			return false;
+		}
+
+		if ( bCanRemap )
+			for ( int j=r.m_iRemapStart; j<=r.m_iRemapStart + r.m_iEnd - r.m_iStart; j++ )
+				if ( m_tLC.ToLower(j) )
 		{
 			sError.SetSprintf ( "%s characters must not be referenced anywhere else (code=U+%x)", sSource, j );
 			return false;
@@ -3965,17 +3975,17 @@ bool ISphTokenizer::RemapCharacters ( const char * sConfig, DWORD uFlags, const 
 
 bool ISphTokenizer::SetBoundary ( const char * sConfig, CSphString & sError )
 {
-	return RemapCharacters ( sConfig, FLAG_CODEPOINT_BOUNDARY, "phrase boundary", sError );
+	return RemapCharacters ( sConfig, FLAG_CODEPOINT_BOUNDARY, "phrase boundary", false, sError );
 }
 
 bool ISphTokenizer::SetIgnoreChars ( const char * sConfig, CSphString & sError )
 {
-	return RemapCharacters ( sConfig, FLAG_CODEPOINT_IGNORE, "ignored", sError );
+	return RemapCharacters ( sConfig, FLAG_CODEPOINT_IGNORE, "ignored", false, sError );
 }
 
 bool ISphTokenizer::SetBlendChars ( const char * sConfig, CSphString & sError )
 {
-	return RemapCharacters ( sConfig, FLAG_CODEPOINT_BLEND, "blend", sError );
+	return RemapCharacters ( sConfig, FLAG_CODEPOINT_BLEND, "blend", true, sError );
 }
 
 

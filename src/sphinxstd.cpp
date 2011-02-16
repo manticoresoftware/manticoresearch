@@ -297,6 +297,7 @@ void operator delete [] ( void * pPtr )
 #undef new
 
 static CSphStaticMutex	g_tAllocsMutex;
+static int				g_iAllocsId		= 0;
 static int				g_iCurAllocs	= 0;
 static int64_t			g_iCurBytes		= 0;
 static int				g_iTotalAllocs	= 0;
@@ -336,6 +337,7 @@ void * sphDebugNew ( size_t iSize )
 
 	g_tAllocsMutex.Lock ();
 
+	g_iAllocsId++;
 	g_iCurAllocs++;
 	g_iCurBytes += iSize;
 	g_iTotalAllocs++;
@@ -389,7 +391,7 @@ void sphAllocsStats ()
 
 int64_t sphAllocBytes ()		{ return g_iCurBytes; }
 int sphAllocsCount ()			{ return g_iCurAllocs; }
-int sphAllocsLastID ()			{ return -1; }
+int sphAllocsLastID ()			{ return g_iAllocsId; }
 void sphAllocsDump ( int, int )	{}
 void sphAllocsCheck ()			{}
 

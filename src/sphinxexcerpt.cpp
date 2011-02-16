@@ -456,8 +456,10 @@ void ExcerptGen_c::AddBoundary()
 void ExcerptGen_c::AddJunk ( int iStart, int iLength, int iBoundary )
 {
 	assert ( iLength>0 );
+#ifdef PARANOID
 	assert ( iLength<=m_sBuffer.Length() );
 	assert ( iStart+iLength<=m_sBuffer.Length() );
+#endif
 
 	int iChunkStart = iStart;
 	int iSaved = 0;

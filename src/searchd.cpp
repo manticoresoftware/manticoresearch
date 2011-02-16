@@ -7641,6 +7641,11 @@ void SnippetThreadFunc ( void * pArg )
 	{
 		SnippetJob_t & tJob = pDesc->m_pJobs[iJob];
 		ExcerptQuery_t * pQuery = pDesc->m_pQueries + tJob.m_iQuery;
+
+		if ( pQuery->m_iPassageBoundary )
+			if ( !pTok->EnableSentenceIndexing ( tJob.m_sError ) || !pTok->EnableZoneIndexing ( tJob.m_sError ) )
+				continue;
+
 		tJob.m_sRes = sphBuildExcerpt ( *pQuery, pDesc->m_pIndex->GetDictionary(), pTok,
 			&pDesc->m_pIndex->GetMatchSchema(), pDesc->m_pIndex,
 			tJob.m_sError, pDesc->m_pStripper );

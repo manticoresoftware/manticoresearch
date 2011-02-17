@@ -7596,37 +7596,21 @@ bool sphCheckOptionsSPZ ( const ExcerptQuery_t & q, const CSphString & sPassageB
 // EXCERPTS HANDLER
 /////////////////////////////////////////////////////////////////////////////
 
-struct SnippetJob_t
-{
-	int							m_iQuery;
-	int							m_iSize;
-	int							m_iNext;
-	char *						m_sRes;
-	CSphString					m_sError;
-
-	SnippetJob_t ()
-		: m_iQuery ( -1 )
-		, m_iSize ( 0 )
-		, m_iNext ( -1 )
-		, m_sRes ( NULL )
-	{}
-};
-
 struct SnippetThread_t
 {
-	int							m_iTotal;
-	int							m_iHead;
 	SphThread_t					m_tThd;
-	SnippetJob_t *				m_pJobs;
+	CSphMutex *					m_pLock;
+	int							m_iQueries;
 	ExcerptQuery_t *			m_pQueries;
+	volatile int *				m_pCurQuery;
 	CSphIndex *					m_pIndex;
 	const CSphHTMLStripper *	m_pStripper;
 
 	SnippetThread_t()
-		: m_iTotal ( 0 )
-		, m_iHead ( -1 )
-		, m_pJobs ( NULL )
+		: m_pLock ( NULL )
+		, m_iQueries ( 0 )
 		, m_pQueries ( NULL )
+		, m_pCurQuery ( NULL )
 		, m_pIndex ( NULL )
 		, m_pStripper ( NULL )
 	{}
@@ -7635,20 +7619,32 @@ struct SnippetThread_t
 void SnippetThreadFunc ( void * pArg )
 {
 	SnippetThread_t * pDesc = (SnippetThread_t*) pArg;
-
 	ISphTokenizer * pTok = pDesc->m_pIndex->GetTokenizer()->Clone ( false );
-	for ( int iJob=pDesc->m_iHead; iJob>=0; iJob=pDesc->m_pJobs[iJob].m_iNext )
+
+	for ( ;; )
 	{
-		SnippetJob_t & tJob = pDesc->m_pJobs[iJob];
-		ExcerptQuery_t * pQuery = pDesc->m_pQueries + tJob.m_iQuery;
+		pDesc->m_pLock->Lock();
+		if ( *pDesc->m_pCurQuery==pDesc->m_iQueries )
+		{
+			pDesc->m_pLock->Unlock();
+			return;
+		}
+
+		ExcerptQuery_t * pQuery = pDesc->m_pQueries + (*pDesc->m_pCurQuery);
+		(*pDesc->m_pCurQuery)++;
+		bool bDone = ( *pDesc->m_pCurQuery==pDesc->m_iQueries );
+		pDesc->m_pLock->Unlock();
 
 		if ( pQuery->m_iPassageBoundary )
-			if ( !pTok->EnableSentenceIndexing ( tJob.m_sError ) || !pTok->EnableZoneIndexing ( tJob.m_sError ) )
+			if ( !pTok->EnableSentenceIndexing ( pQuery->m_sError ) || !pTok->EnableZoneIndexing ( pQuery->m_sError ) )
 				continue;
 
-		tJob.m_sRes = sphBuildExcerpt ( *pQuery, pDesc->m_pIndex->GetDictionary(), pTok,
+		pQuery->m_sRes = sphBuildExcerpt ( *pQuery, pDesc->m_pIndex->GetDictionary(), pTok,
 			&pDesc->m_pIndex->GetMatchSchema(), pDesc->m_pIndex,
-			tJob.m_sError, pDesc->m_pStripper );
+			pQuery->m_sError, pDesc->m_pStripper );
+
+		if ( bDone )
+			return;
 	}
 }
 
@@ -7800,31 +7796,17 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	// do highlighting
 	///////////////////
 
-	CSphVector<char*> dExcerpts;
-
 	if ( g_iDistThreads<=1 || q.m_bLoadFiles==false )
 	{
 		// boring single threaded loop
 		ARRAY_FOREACH ( i, dQueries )
 		{
-			dExcerpts.Add ( sphBuildExcerpt ( dQueries[i], pDict, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError, pStripper ) );
-			if ( dExcerpts.Last() )
-				continue;
-
-			// oops, there was an error
-			tReq.SendErrorReply ( "highlighting failed: %s", sError.cstr() );
-			pServed->Unlock();
-			ARRAY_FOREACH ( i, dExcerpts )
-				SafeDeleteArray ( dExcerpts[i] );
-			return;
+			dQueries[i].m_sRes = sphBuildExcerpt ( dQueries[i], pDict, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, dQueries[i].m_sError, pStripper );
+			if ( !dQueries[i].m_sRes )
+				break;
 		}
 	} else
 	{
-		// multi threaded file processing fun
-		CSphVector<SnippetJob_t> dJobs;
-		CSphVector<SnippetThread_t> dThreads ( g_iDistThreads );
-		dJobs.Resize ( dQueries.GetLength() );
-
 		// get file sizes
 		ARRAY_FOREACH ( i, dQueries )
 		{
@@ -7835,61 +7817,39 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 				pServed->Unlock();
 				return;
 			}
-			dJobs[i].m_iQuery = i;
-			dJobs[i].m_iSize = -st.st_size; // so that sort would put bigger ones first
-			dJobs[i].m_iNext = -1;
+			dQueries[i].m_iSize = -st.st_size; // so that sort would put bigger ones first
+			dQueries[i].m_iSeq = i;
 		}
 
-		// schedule jobs across threads
-		// simple LPT (Least Processing Time) scheduling for now
-		// might add dynamic programming or something later if needed
-		dJobs.Sort ( bind ( &SnippetJob_t::m_iSize ) );
-		ARRAY_FOREACH ( i, dJobs )
-		{
-			dThreads[0].m_iTotal -= dJobs[i].m_iSize;
-			dJobs[i].m_iNext = dThreads[0].m_iHead;
-			dThreads[0].m_iHead = i;
-			dThreads.Sort ( bind ( &SnippetThread_t::m_iTotal ) );
-		}
+		// tough jobs first
+		dQueries.Sort ( bind ( &ExcerptQuery_t::m_iSize ) );
 
 		// do MT searching
+		CSphMutex tLock;
+		tLock.Init();
+
+		int iCurQuery = 0;
+		CSphVector<SnippetThread_t> dThreads ( g_iDistThreads );
 		ARRAY_FOREACH ( i, dThreads )
 		{
-			dThreads[i].m_pJobs = dJobs.Begin();
-			dThreads[i].m_pQueries = dQueries.Begin();
-			dThreads[i].m_pIndex = pIndex;
-			dThreads[i].m_pStripper = pStripper;
+			SnippetThread_t & t = dThreads[i];
+			t.m_pLock = &tLock;
+			t.m_iQueries = dQueries.GetLength();
+			t.m_pQueries = dQueries.Begin();
+			t.m_pCurQuery = &iCurQuery;
+			t.m_pIndex = pIndex;
+			t.m_pStripper = pStripper;
 			if ( i )
 				sphThreadCreate ( &dThreads[i].m_tThd, SnippetThreadFunc, &dThreads[i] );
 		}
-
 		SnippetThreadFunc ( &dThreads[0] );
+
 		for ( int i=1; i<dThreads.GetLength(); i++ )
 			sphThreadJoin ( &dThreads[i].m_tThd );
+		tLock.Done();
 
-		ARRAY_FOREACH ( i, dJobs )
-			if ( !dJobs[i].m_sRes )
-		{
-			tReq.SendErrorReply ( "failed to stat %s: %s", dQueries[i].m_sSource.cstr(), strerror(errno) );
-			pServed->Unlock();
-
-		}
-
-		dJobs.Sort ( bind ( &SnippetJob_t::m_iQuery ) );
-		ARRAY_FOREACH ( i, dJobs )
-		{
-			if ( dJobs[i].m_sRes )
-			{
-				dExcerpts.Add ( dJobs[i].m_sRes );
-			} else
-			{
-				tReq.SendErrorReply ( "highlighting failed: %s", dJobs[i].m_sError.cstr() );
-				pServed->Unlock();
-				ARRAY_FOREACH ( j, dJobs )
-					SafeDeleteArray ( dJobs[j].m_sRes );
-				return;
-			}
-		}
+		// back in query order
+		dQueries.Sort ( bind ( &ExcerptQuery_t::m_iSeq ) );
 	}
 
 	pServed->Unlock();
@@ -7899,17 +7859,29 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	////////////////
 
 	int iRespLen = 0;
-	ARRAY_FOREACH ( i, dExcerpts )
-		iRespLen += 4 + strlen ( dExcerpts[i] );
+	ARRAY_FOREACH ( i, dQueries )
+	{
+		// handle errors
+		if ( !dQueries[i].m_sRes )
+		{
+			tReq.SendErrorReply ( "highlighting failed: %s", dQueries[i].m_sError.cstr() );
+			ARRAY_FOREACH ( j, dQueries )
+				SafeDeleteArray ( dQueries[j].m_sRes );
+			return;
+		}
+
+		// count packet size
+		iRespLen += 4 + strlen ( dQueries[i].m_sRes );
+	}
 
 	NetOutputBuffer_c tOut ( iSock );
 	tOut.SendWord ( SEARCHD_OK );
 	tOut.SendWord ( VER_COMMAND_EXCERPT );
 	tOut.SendInt ( iRespLen );
-	ARRAY_FOREACH ( i, dExcerpts )
+	ARRAY_FOREACH ( i, dQueries )
 	{
-		tOut.SendString ( dExcerpts[i] );
-		SafeDeleteArray ( dExcerpts[i] );
+		tOut.SendString ( dQueries[i].m_sRes );
+		SafeDeleteArray ( dQueries[i].m_sRes );
 	}
 
 	tOut.Flush ();

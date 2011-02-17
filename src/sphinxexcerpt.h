@@ -22,6 +22,7 @@
 /// everything string is expected to be UTF-8
 struct ExcerptQuery_t
 {
+public:
 	CSphString		m_sSource;			///< source text (or file name, see m_bLoadFiles)
 	CSphString		m_sWords;			///< words themselves
 	CSphString		m_sBeforeMatch;		///< string to insert before each match
@@ -43,6 +44,12 @@ struct ExcerptQuery_t
 	bool			m_bLoadFiles;		///< whether to interpret source as text or file name
 	bool			m_bAllowEmpty;		///< whether to allow empty snippets (by default, return something from the start)
 	bool			m_bEmitZones;		///< whether to emit zone for passage
+
+public:
+	int64_t			m_iSize;			///< file size, to sort to work-queue order
+	int				m_iSeq;				///< request order, to sort back to request order
+	char *			m_sRes;				///< snippet result holder (NOT owned)
+	CSphString		m_sError;			///< snippet error message
 
 public:
 	ExcerptQuery_t ();

@@ -5,7 +5,6 @@
 
 <requires>
 <non-windows/>
-<watchdog/>
 </requires>
 
 <config>

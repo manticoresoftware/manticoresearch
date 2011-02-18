@@ -13600,6 +13600,18 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( g_iMaxFilterValues<1 || g_iMaxFilterValues>1048576 )
 		sphFatal ( "max_filter_values out of bounds (1..1048576)" );
 
+	bool bVisualLoad = true;
+	bool bWatched = false;
+#if !USE_WINDOWS
+	// Let us start watchdog right now, on foreground first.
+	int iDevNull = open ( "/dev/null", O_RDWR );
+	if ( g_bWatchdog && g_eWorkers==MPM_THREADS && !g_bOptNoDetach )
+	{
+		bWatched = true;
+		bVisualLoad = SetWatchDog ( iDevNull );
+	}
+#endif
+
 	// create the pid
 	if ( bOptPIDFile )
 	{
@@ -13610,20 +13622,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			sphFatal ( "failed to create pid file '%s': %s", g_sPidFile, strerror(errno) );
 	}
 
-
-	bool bVisualLoad = true;
-	bool bWatched = false;
-#if !USE_WINDOWS
-	// Let us start watchdog right now, on foreground first.
-	int iDevNull = open ( "/dev/null", O_RDWR );
-	if ( g_bWatchdog && g_eWorkers==MPM_THREADS && !g_bOptNoDetach )
-	{
-		bWatched = true;
-		bVisualLoad = SetWatchDog ( iDevNull );
-	} else
-#endif
-		if ( bOptPIDFile && !sphLockEx ( g_iPidFD, false ) )
-			sphFatal ( "failed to lock pid file '%s': %s (searchd already running?)", g_sPidFile, strerror(errno) );
+	if ( bOptPIDFile && !sphLockEx ( g_iPidFD, false ) )
+		sphFatal ( "failed to lock pid file '%s': %s (searchd already running?)", g_sPidFile, strerror(errno) );
 
 	if ( bWatched && !bVisualLoad && CheckConfigChanges() )
 	{

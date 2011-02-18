@@ -35,6 +35,7 @@
 #define SPHINXAPI_PORT			9312
 #define SPHINXQL_PORT			9306
 #define SPH_ADDRESS_SIZE		sizeof("000.000.000.000")
+#define MVA_UPDATES_POOL		1048576
 
 
 // don't shutdown on SIGKILL (debug purposes)
@@ -12446,10 +12447,58 @@ int PreforkChild ()
 	return iRes;
 }
 
-bool SetWatchDog()
+
+// returns 'true' only once - at the very start, to show it beatiful way.
+bool SetWatchDog ( int iDevNull )
 {
+	// Fork #1 - detach from controlling terminal
+	switch ( fork() )
+	{
+		case -1:
+			// error
+			Shutdown ();
+			sphFatal ( "fork() failed (reason: %s)", strerror ( errno ) );
+			exit ( 1 );
+		case 0:
+			// daemonized child - or new and free watchdog :)
+			break;
+
+		default:
+			// tty-controlled parent
+			sphSetProcessInfo ( false );
+			exit ( 0 );
+	}
+
+	// became the session leader
+	if ( setsid()==-1 )
+	{
+		Shutdown ();
+		sphFatal ( "setsid() failed (reason: %s)", strerror ( errno ) );
+		exit ( 1 );
+	}
+
+	// Fork #2 - detach from session leadership (may be not necessary, however)
+	switch ( fork() )
+	{
+		case -1:
+			// error
+			Shutdown ();
+			sphFatal ( "fork() failed (reason: %s)", strerror ( errno ) );
+			exit ( 1 );
+		case 0:
+			// daemonized child - or new and free watchdog :)
+			break;
+
+		default:
+			// tty-controlled parent
+			sphSetProcessInfo ( false );
+			exit ( 0 );
+	}
+
+	// now we are the watchdog. Let us fork the actual process
 	int iReincarnate = 1;
 	bool bShutdown = false;
+	bool bStreamsActive = true;
 	int iRes = 0;
 	for ( ;; )
 	{
@@ -12464,9 +12513,21 @@ bool SetWatchDog()
 
 		// child process; return true to show that we have to reload everything
 		if ( iRes==0 )
-			return ( iReincarnate<0 );
+			return bStreamsActive;
 
 		// parent process, watchdog
+		// close the io files
+		if ( bStreamsActive )
+		{
+			close ( STDIN_FILENO );
+			close ( STDOUT_FILENO );
+			close ( STDERR_FILENO );
+			dup2 ( iDevNull, STDIN_FILENO );
+			dup2 ( iDevNull, STDOUT_FILENO );
+			dup2 ( iDevNull, STDERR_FILENO );
+			bStreamsActive = false;
+		}
+
 		iReincarnate = 0;
 		int iPid, iStatus;
 		while ( ( iPid = wait ( &iStatus ) )>0 )
@@ -13381,7 +13442,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( !hConf.Exists ( "searchd" ) || !hConf["searchd"].Exists ( "searchd" ) )
 		sphFatal ( "'searchd' config section not found in '%s'", g_sConfigFile.cstr () );
 
-	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
+	const CSphConfigSection & hSearchdpre = hConf["searchd"]["searchd"];
 
 	////////////////////////
 	// stop running searchd
@@ -13389,10 +13450,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	if ( bOptStop )
 	{
-		if ( !hSearchd("pid_file") )
+		if ( !hSearchdpre("pid_file") )
 			sphFatal ( "stop: option 'pid_file' not found in '%s' section 'searchd'", g_sConfigFile.cstr () );
 
-		const char * sPid = hSearchd["pid_file"].cstr(); // shortcut
+		const char * sPid = hSearchdpre["pid_file"].cstr(); // shortcut
 		FILE * fp = fopen ( sPid, "r" );
 		if ( !fp )
 			sphFatal ( "stop: pid file '%s' does not exist or is not readable", sPid );
@@ -13502,7 +13563,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	if ( bOptStatus )
 	{
-		QueryStatus ( hSearchd("listen") );
+		QueryStatus ( hSearchdpre("listen") );
 		exit ( 0 );
 	}
 
@@ -13512,18 +13573,18 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	ConfigureSearchd ( hConf, bOptPIDFile );
 
-	if ( hSearchd("workers") )
+	if ( hSearchdpre("workers") )
 	{
-		if ( hSearchd["workers"]=="none" )
+		if ( hSearchdpre["workers"]=="none" )
 			g_eWorkers = MPM_NONE;
-		else if ( hSearchd["workers"]=="fork" )
+		else if ( hSearchdpre["workers"]=="fork" )
 			g_eWorkers = MPM_FORK;
-		else if ( hSearchd["workers"]=="prefork" )
+		else if ( hSearchdpre["workers"]=="prefork" )
 			g_eWorkers = MPM_PREFORK;
-		else if ( hSearchd["workers"]=="threads" )
+		else if ( hSearchdpre["workers"]=="threads" )
 			g_eWorkers = MPM_THREADS;
 		else
-			sphFatal ( "unknown workers=%s value", hSearchd["workers"].cstr() );
+			sphFatal ( "unknown workers=%s value", hSearchdpre["workers"].cstr() );
 	}
 #if USE_WINDOWS
 	if ( g_eWorkers==MPM_FORK || g_eWorkers==MPM_PREFORK )
@@ -13539,18 +13600,52 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( g_iMaxFilterValues<1 || g_iMaxFilterValues>1048576 )
 		sphFatal ( "max_filter_values out of bounds (1..1048576)" );
 
-	// create and lock pid
+	// create the pid
 	if ( bOptPIDFile )
 	{
-		g_sPidFile = hSearchd["pid_file"].cstr();
+		g_sPidFile = hSearchdpre["pid_file"].cstr();
 
 		g_iPidFD = ::open ( g_sPidFile, O_CREAT | O_WRONLY, S_IREAD | S_IWRITE );
 		if ( g_iPidFD<0 )
 			sphFatal ( "failed to create pid file '%s': %s", g_sPidFile, strerror(errno) );
-
-		if ( !sphLockEx ( g_iPidFD, false ) )
-			sphFatal ( "failed to lock pid file '%s': %s (searchd already running?)", g_sPidFile, strerror(errno) );
 	}
+
+
+	bool bVisualLoad = true;
+	bool bWatched = false;
+#if !USE_WINDOWS
+	// Let us start watchdog right now, on foreground first.
+	int iDevNull = open ( "/dev/null", O_RDWR );
+	if ( g_bWatchdog && g_eWorkers==MPM_THREADS && !g_bOptNoDetach )
+	{
+		bWatched = true;
+		bVisualLoad = SetWatchDog ( iDevNull );
+	} else
+#endif
+		if ( bOptPIDFile && !sphLockEx ( g_iPidFD, false ) )
+			sphFatal ( "failed to lock pid file '%s': %s (searchd already running?)", g_sPidFile, strerror(errno) );
+
+	if ( bWatched && !bVisualLoad && CheckConfigChanges() )
+	{
+		// reparse the config file
+		sphInfo ( "Reloading the config" );
+		if ( !cp.ReParse ( g_sConfigFile.cstr () ) )
+			sphFatal ( "failed to parse config file '%s'", g_sConfigFile.cstr () );
+
+		sphInfo ( "Reconfigure the daemon" );
+		ConfigureSearchd ( hConf, bOptPIDFile );
+		// reinit the arena
+		const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
+
+		sphInfo ( "Reload the indexes" );
+		sphArenaInit ( hSearchd.GetSize ( "mva_updates_pool", MVA_UPDATES_POOL ) );
+
+		// reload all the indexes
+		ConfigureAndPreload ( hConf, sOptIndex );
+	}
+
+	// hSearchdpre might be dead if we reloaded the config.
+	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
 
 	//////////////////////////////////////////////////
 	// shared stuff (perf counters, flushing) startup
@@ -13623,7 +13718,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 #if !USE_WINDOWS
 	// reserve an fd for clients
-	int iDevNull = open ( "/dev/null", O_RDWR );
+
 	g_iClientFD = dup ( iDevNull );
 #endif
 
@@ -13634,7 +13729,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	//////////////////////
 
 	// setup mva updates arena here, since we could have saved persistent mva updates
-	sphArenaInit ( hSearchd.GetSize ( "mva_updates_pool", 1048576 ) );
+	sphArenaInit ( hSearchd.GetSize ( "mva_updates_pool", MVA_UPDATES_POOL ) );
 
 	// configure and preload
 
@@ -13692,31 +13787,37 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( !g_bOptNoDetach )
 	{
 #if !USE_WINDOWS
-		close ( STDIN_FILENO );
-		close ( STDOUT_FILENO );
-		close ( STDERR_FILENO );
-		dup2 ( iDevNull, STDIN_FILENO );
-		dup2 ( iDevNull, STDOUT_FILENO );
-		dup2 ( iDevNull, STDERR_FILENO );
+		if ( !bWatched || bVisualLoad )
+		{
+			close ( STDIN_FILENO );
+			close ( STDOUT_FILENO );
+			close ( STDERR_FILENO );
+			dup2 ( iDevNull, STDIN_FILENO );
+			dup2 ( iDevNull, STDOUT_FILENO );
+			dup2 ( iDevNull, STDERR_FILENO );
+		}
 #endif
 
 		// explicitly unlock everything in parent immediately before fork
 		//
 		// there's a race in case another instance is started before
 		// child re-acquires all locks; but let's hope that's rare
-		for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
+		if ( !bWatched )
 		{
-			ServedIndex_t & tServed = it.Get();
-			if ( tServed.m_bEnabled )
-				tServed.m_pIndex->Unlock();
+			for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
+			{
+				ServedIndex_t & tServed = it.Get();
+				if ( tServed.m_bEnabled )
+					tServed.m_pIndex->Unlock();
+			}
 		}
 	}
 
-	if ( bOptPIDFile )
+	if ( bOptPIDFile && !bWatched )
 		sphLockUn ( g_iPidFD );
 
 #if !USE_WINDOWS
-	if ( !g_bOptNoDetach )
+	if ( !g_bOptNoDetach && !bWatched )
 	{
 		switch ( fork() )
 		{
@@ -13737,48 +13838,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		}
 	}
 
-	bool bReloadAll = false;
-	if ( g_bWatchdog && g_eWorkers==MPM_THREADS )
-		bReloadAll = SetWatchDog();
-
-	// this instance may be the one reincarned after a crash.
-	// we have to reload config and all the indexes here.
-	if ( bReloadAll )
-	{
-		sphInfo ( "Preparing to full reload of the config and indexes" );
-		CheckConfigChanges ();
-
-		// unload all the indexes
-
-		sphInfo ( "Deleting local indexes" );
-		g_pIndexes->Reset();
-
-		sphInfo ( "Locking distributed indexes list" );
-		g_tDistLock.Lock();
-		sphInfo ( "Deleting distributed indexes indexes" );
-		g_hDistIndexes.Reset();
-		g_tDistLock.Unlock();
-
-		// reparse the config file
-		sphInfo ( "Reloading the config" );
-		CSphConfigParser cp;
-		if ( !cp.Parse ( g_sConfigFile.cstr () ) )
-			sphFatal ( "failed to parse config file '%s'", g_sConfigFile.cstr () );
-
-		// reconfigure the daemon
-		const CSphConfig & hConf = cp.m_tConf;
-		sphInfo ( "Reconfigure the daemon" );
-		ConfigureSearchd ( hConf, bOptPIDFile );
-
-		// reinit the arena
-		const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
-
-		sphInfo ( "Reload the indexes" );
-		sphArenaInit ( hSearchd.GetSize ( "mva_updates_pool", 1048576 ) );
-
-		// reload all the indexes
-		ConfigureAndPreload ( hConf, sOptIndex );
-	}
 #endif
 
 	if ( g_eWorkers==MPM_THREADS )
@@ -13811,7 +13870,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	SetConsoleCtrlHandler ( CtrlHandler, TRUE );
 #endif
 
-	if ( !g_bOptNoDetach )
+	if ( !g_bOptNoDetach && !bWatched )
 	{
 		// re-lock indexes
 		for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )

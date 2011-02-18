@@ -1241,13 +1241,27 @@ public:
 	/// copying
 	const CSphOrderedHash<T,KEY,HASHFUNC,LENGTH,STEP> & operator = ( const CSphOrderedHash<T,KEY,HASHFUNC,LENGTH,STEP> & rhs )
 	{
-		Reset ();
+		if ( this!=&rhs )
+		{
+			Reset ();
 
-		rhs.IterateStart ();
-		while ( rhs.IterateNext() )
-			Add ( rhs.IterateGet(), rhs.IterateGetKey() );
-
+			rhs.IterateStart ();
+			while ( rhs.IterateNext() )
+				Add ( rhs.IterateGet(), rhs.IterateGetKey() );
+		}
 		return *this;
+	}
+
+	/// copyint ctor
+	CSphOrderedHash<T,KEY,HASHFUNC,LENGTH,STEP> ( const CSphOrderedHash<T,KEY,HASHFUNC,LENGTH,STEP> & rhs )
+		: m_pFirstByOrder ( NULL )
+		, m_pLastByOrder ( NULL )
+		, m_iLength ( 0 )
+		, m_pIterator ( NULL )
+	{
+		for ( int i=0; i<LENGTH; i++ )
+			m_dHash[i] = NULL;
+		*this = rhs;
 	}
 
 	/// length query

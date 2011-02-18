@@ -80,6 +80,9 @@ public:
 					CSphConfigParser ();
 	bool			Parse ( const char * sFileName, const char * pBuffer = NULL );
 
+	// fail-save loading new config over existing.
+	bool			ReParse ( const char * sFileName, const char * pBuffer = NULL );
+
 protected:
 	CSphString		m_sFileName;
 	int				m_iLine;

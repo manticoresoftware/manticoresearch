@@ -563,6 +563,15 @@ char * CSphConfigParser::GetBufferString ( char * szDest, int iMax, const char *
 	return szDest;
 }
 
+bool CSphConfigParser::ReParse ( const char * sFileName, const char * pBuffer )
+{
+	CSphConfig tOldConfig = m_tConf;
+	m_tConf.Reset();
+	if ( Parse ( sFileName, pBuffer ) )
+		return true;
+	m_tConf = tOldConfig;
+	return false;
+}
 
 bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 {

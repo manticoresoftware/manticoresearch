@@ -436,6 +436,14 @@ AC_RUN_IFELSE(
 	[AC_MSG_RESULT([unknown (cross-compiling), assume yes])
 		AC_DEFINE([UNALIGNED_RAM_ACCESS],1)])
 
+# check endianness
+AC_C_BIGENDIAN(
+	AC_DEFINE(USE_LITTLE_ENDIAN, 0, [big-endian]),
+	AC_DEFINE(USE_LITTLE_ENDIAN, 1, [little-endian]),
+	AC_MSG_ERROR(unknown endianess not supported),
+	AC_MSG_ERROR(universial endianess not supported)
+)
+
 dnl --------------------------------------------------------------------------
 
 SPHINX_CONFIGURE_PART([generating configuration files])

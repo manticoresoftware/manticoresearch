@@ -29,6 +29,7 @@
 	#define USE_WINDOWS		1	/// whether to compile for Windows
 
 	#define UNALIGNED_RAM_ACCESS	1
+	#define USE_LITTLE_ENDIAN		1
 #else
 	#define USE_WINDOWS		0	/// whether to compile for Windows
 #endif
@@ -126,15 +127,47 @@ const int				ROWITEM_SHIFT	= 5;
 
 STATIC_ASSERT ( ( 1 << ROWITEM_SHIFT )==ROWITEM_BITS, INVALID_ROWITEM_SHIFT );
 
-#if !UNALIGNED_RAM_ACCESS && USE_64BIT
-template < typename DOCID > inline DOCID			DOCINFO2ID_T ( const DWORD * pDocinfo )			{ DOCID uValue; memcpy ( &uValue, pDocinfo, sizeof(uValue) ); return uValue; }
-template < typename DOCID > inline void				DOCINFOSETID ( DWORD * pDocinfo, DOCID uValue )	{ memcpy ( pDocinfo, &uValue, sizeof(uValue) ); }
-#else
-template < typename DOCID > inline DOCID			DOCINFO2ID_T ( const DWORD * pDocinfo )			{ return *(DOCID*)pDocinfo; }
-template < typename DOCID > inline void				DOCINFOSETID ( DWORD * pDocinfo, DOCID uValue )	{ *(DOCID*)pDocinfo = uValue; }
+#ifndef USE_LITTLE_ENDIAN
+#error Please define endianness
 #endif
 
-inline SphDocID_t DOCINFO2ID ( const DWORD * pDocinfo )			{ return DOCINFO2ID_T<SphDocID_t> ( pDocinfo ); }
+template < typename DOCID >
+inline DOCID DOCINFO2ID_T ( const DWORD * pDocinfo );
+
+template<> inline DWORD DOCINFO2ID_T ( const DWORD * pDocinfo )
+{
+	return pDocinfo[0];
+}
+
+template<> inline uint64_t DOCINFO2ID_T ( const DWORD * pDocinfo )
+{
+#if USE_LITTLE_ENDIAN
+	return uint64_t(pDocinfo[0]) + (uint64_t(pDocinfo[1])<<32);
+#else
+	return uint64_t(pDocinfo[1]) + (uint64_t(pDocinfo[0])<<32);
+#endif
+}
+
+inline void DOCINFOSETID ( DWORD * pDocinfo, DWORD uValue )
+{
+	*pDocinfo = uValue;
+}
+
+inline void DOCINFOSETID ( DWORD * pDocinfo, uint64_t uValue )
+{
+#if USE_LITTLE_ENDIAN
+	pDocinfo[0] = (DWORD)uValue;
+	pDocinfo[1] = (DWORD)(uValue>>32);
+#else
+	pDocinfo[0] = (DWORD)(uValue>>32);
+	pDocinfo[1] = (DWORD)uValue;
+#endif
+}
+
+inline SphDocID_t DOCINFO2ID ( const DWORD * pDocinfo )
+{
+	return DOCINFO2ID_T<SphDocID_t> ( pDocinfo );
+}
 
 #if PARANOID
 template < typename DOCID > inline DWORD *			DOCINFO2ATTRS_T ( DWORD * pDocinfo )		{ assert ( pDocinfo ); return pDocinfo+DWSIZEOF(DOCID); }

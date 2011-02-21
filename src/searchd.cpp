@@ -12449,8 +12449,10 @@ int PreforkChild ()
 
 
 // returns 'true' only once - at the very start, to show it beatiful way.
-bool SetWatchDog ( int iDevNull )
+bool SetWatchDog ( int iDevNull, CSphProcessSharedMutex * pTTYHoldMutex )
 {
+	assert ( pTTYHoldMutex );
+
 	// Fork #1 - detach from controlling terminal
 	switch ( fork() )
 	{
@@ -12465,6 +12467,9 @@ bool SetWatchDog ( int iDevNull )
 
 		default:
 			// tty-controlled parent
+
+			sphSleepMsec ( 100 );;
+			pTTYHoldMutex->Lock();
 			sphSetProcessInfo ( false );
 			exit ( 0 );
 	}
@@ -12513,7 +12518,10 @@ bool SetWatchDog ( int iDevNull )
 
 		// child process; return true to show that we have to reload everything
 		if ( iRes==0 )
+		{
+			pTTYHoldMutex->Lock();
 			return bStreamsActive;
+		}
 
 		// parent process, watchdog
 		// close the io files
@@ -13605,10 +13613,11 @@ int WINAPI ServiceMain ( int argc, char **argv )
 #if !USE_WINDOWS
 	// Let us start watchdog right now, on foreground first.
 	int iDevNull = open ( "/dev/null", O_RDWR );
+	CSphProcessSharedMutex tTTYUnlocker;
 	if ( g_bWatchdog && g_eWorkers==MPM_THREADS && !g_bOptNoDetach )
 	{
 		bWatched = true;
-		bVisualLoad = SetWatchDog ( iDevNull );
+		bVisualLoad = SetWatchDog ( iDevNull, &tTTYUnlocker );
 	}
 #endif
 
@@ -13619,18 +13628,26 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 		g_iPidFD = ::open ( g_sPidFile, O_CREAT | O_WRONLY, S_IREAD | S_IWRITE );
 		if ( g_iPidFD<0 )
+		{
+			tTTYUnlocker.Unlock();
 			sphFatal ( "failed to create pid file '%s': %s", g_sPidFile, strerror(errno) );
+		}
 	}
-
 	if ( bOptPIDFile && !sphLockEx ( g_iPidFD, false ) )
+	{
+		tTTYUnlocker.Unlock();
 		sphFatal ( "failed to lock pid file '%s': %s (searchd already running?)", g_sPidFile, strerror(errno) );
+	}
 
 	if ( bWatched && !bVisualLoad && CheckConfigChanges() )
 	{
 		// reparse the config file
 		sphInfo ( "Reloading the config" );
 		if ( !cp.ReParse ( g_sConfigFile.cstr () ) )
+		{
+			tTTYUnlocker.Unlock();
 			sphFatal ( "failed to parse config file '%s'", g_sConfigFile.cstr () );
+		}
 
 		sphInfo ( "Reconfigure the daemon" );
 		ConfigureSearchd ( hConf, bOptPIDFile );
@@ -13661,7 +13678,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( g_eWorkers==MPM_THREADS )
 	{
 		if ( !sphThreadKeyCreate ( &g_tConnKey ) )
+		{
+			tTTYUnlocker.Unlock();
 			sphFatal ( "failed to create TLS for connection ID" );
+		}
 
 		// for simplicity, UDFs are going to be available in threaded mode only for now
 		sphUDFInit ( hSearchd.GetStr ( "plugin_dir" ) );
@@ -13769,7 +13789,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		{
 			g_iQueryLogFile = open ( hSearchd["query_log"].cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
 			if ( g_iQueryLogFile<0 )
+			{
+				tTTYUnlocker.Unlock();
 				sphFatal ( "failed to open query log file '%s': %s", hSearchd["query_log"].cstr(), strerror(errno) );
+			}
 			g_sQueryLogFile = hSearchd["query_log"].cstr();
 		}
 	}
@@ -13781,7 +13804,12 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	int iBacklog = hSearchd.GetInt ( "listen_backlog", SEARCHD_BACKLOG );
 	ARRAY_FOREACH ( i, g_dListeners )
 		if ( listen ( g_dListeners[i].m_iSock, iBacklog )==-1 )
+		{
+			tTTYUnlocker.Unlock();
 			sphFatal ( "listen() failed: %s", sphSockError() );
+		}
+
+	tTTYUnlocker.Unlock();
 
 	// prepare to detach
 	if ( !g_bOptNoDetach )

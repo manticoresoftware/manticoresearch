@@ -13629,13 +13629,17 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		g_iPidFD = ::open ( g_sPidFile, O_CREAT | O_WRONLY, S_IREAD | S_IWRITE );
 		if ( g_iPidFD<0 )
 		{
+#if !USE_WINDOWS
 			tTTYUnlocker.Unlock();
+#endif
 			sphFatal ( "failed to create pid file '%s': %s", g_sPidFile, strerror(errno) );
 		}
 	}
 	if ( bOptPIDFile && !sphLockEx ( g_iPidFD, false ) )
 	{
+#if !USE_WINDOWS
 		tTTYUnlocker.Unlock();
+#endif
 		sphFatal ( "failed to lock pid file '%s': %s (searchd already running?)", g_sPidFile, strerror(errno) );
 	}
 
@@ -13645,7 +13649,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		sphInfo ( "Reloading the config" );
 		if ( !cp.ReParse ( g_sConfigFile.cstr () ) )
 		{
+#if !USE_WINDOWS
 			tTTYUnlocker.Unlock();
+#endif
 			sphFatal ( "failed to parse config file '%s'", g_sConfigFile.cstr () );
 		}
 
@@ -13679,7 +13685,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	{
 		if ( !sphThreadKeyCreate ( &g_tConnKey ) )
 		{
+#if !USE_WINDOWS
 			tTTYUnlocker.Unlock();
+#endif
 			sphFatal ( "failed to create TLS for connection ID" );
 		}
 
@@ -13790,7 +13798,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			g_iQueryLogFile = open ( hSearchd["query_log"].cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
 			if ( g_iQueryLogFile<0 )
 			{
+#if !USE_WINDOWS
 				tTTYUnlocker.Unlock();
+#endif
 				sphFatal ( "failed to open query log file '%s': %s", hSearchd["query_log"].cstr(), strerror(errno) );
 			}
 			g_sQueryLogFile = hSearchd["query_log"].cstr();
@@ -13805,11 +13815,15 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	ARRAY_FOREACH ( i, g_dListeners )
 		if ( listen ( g_dListeners[i].m_iSock, iBacklog )==-1 )
 		{
+#if !USE_WINDOWS
 			tTTYUnlocker.Unlock();
+#endif
 			sphFatal ( "listen() failed: %s", sphSockError() );
 		}
 
-	tTTYUnlocker.Unlock();
+#if !USE_WINDOWS
+		tTTYUnlocker.Unlock();
+#endif
 
 	// prepare to detach
 	if ( !g_bOptNoDetach )

@@ -37,7 +37,10 @@ index test
 		<Variant>dict = crc</Variant>
 		<Variant>dict = keywords</Variant>
 	</Dynamic>
-	
+	<Dynamic>
+		<Variant></Variant>
+		<Variant>exceptions = synonyms.txt</Variant>
+	</Dynamic>
 }
 
 </config>

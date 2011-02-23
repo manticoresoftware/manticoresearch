@@ -3643,6 +3643,8 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 				iLastCodepoint = iCode;
 			}
 
+			iFolded = CodepointArbitration ( iFolded, false, IsWhitespace ( *m_pCur ) );
+
 			iLastFolded = iFolded;
 
 			// handle specials at the very word start
@@ -3882,6 +3884,8 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 
 					iLast = iCode;
 				}
+
+				iFolded = CodepointArbitration ( iFolded, false, IsWhitespace ( *m_pCur ) );
 
 				if ( IsSeparator ( iFolded, false ) )
 				{

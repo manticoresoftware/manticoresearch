@@ -3488,7 +3488,10 @@ int CSphTokenizerTraits<IS_UTF8>::CodepointArbitration ( int iCode, bool bWasEsc
 		iCode = iSymbol | FLAG_CODEPOINT_SPECIAL;
 	}
 
-	assert ( sphBitCount ( iCode & MASK_FLAGS )<=1 ); // all conflicts must be resolved here
+	// ideally, all conflicts must be resolved here
+	// well, at least most
+	assert ( sphBitCount ( iCode & MASK_FLAGS )<=1
+		|| ( iCode & FLAG_CODEPOINT_SYNONYM ) );
 	return iCode;
 }
 

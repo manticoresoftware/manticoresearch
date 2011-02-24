@@ -3567,6 +3567,15 @@ static inline bool Special2Simple ( int & iCodepoint )
 	return false;
 }
 
+static inline bool IsWhitespace ( BYTE c )
+{
+	return ( c=='\0' || c==' ' || c=='\t' || c=='\r' || c=='\n' );
+}
+
+static inline bool IsWhitespace ( int c )
+{
+	return ( c=='\0' || c==' ' || c=='\t' || c=='\r' || c=='\n' );
+}
 
 template < bool IS_UTF8 >
 BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
@@ -4045,18 +4054,6 @@ bool ISphTokenizer::SetBlendMode ( const char * sMode, CSphString & sError )
 		return false;
 	}
 	return true;
-}
-
-//////////////////////////////////////////////////////////////////////////
-
-static inline bool IsWhitespace ( BYTE c )
-{
-	return ( c=='\0' || c==' ' || c=='\t' || c=='\r' || c=='\n' );
-}
-
-static inline bool IsWhitespace ( int c )
-{
-	return ( c=='\0' || c==' ' || c=='\t' || c=='\r' || c=='\n' );
 }
 
 /////////////////////////////////////////////////////////////////////////////

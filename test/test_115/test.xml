@@ -80,11 +80,25 @@ CREATE TABLE test_table
 </db_create>
 <db_insert>
 INSERT INTO `test_table` VALUES
-( 0, 'a b c d'), (0, 'a x b c d'), (0,'a x x b c d'), ( 0, 'a b x c d'), ( 0, 'a b x x c d'), ( 0, 'a b x x x c d'), ( 0, 'a b x x x x c d'), (0, 'a x b x x x x c x d'), (0, 'a x x b x x x c x x d'),
-( 0, 'c d x x x x a b'), ( 0, 'c d x x x a b'), ( 0, 'c d x x a b'), ( 0, 'c d x a b'), ( 0, 'c d a b'),
-( 0, '... is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial burden resulting from the non-performance by one of their members and, as such, should significantly reduce this credit risk. In cases where the clearinghouse... is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial burden resulting from the non-performance by one of their members and, as such, should significantly reduce this credit risk. In cases where the clearinghouse... be able to meet its obligations to a Trading Company. The counterparty for futures contracts traded in the United States and on most foreign exchanges is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial...'),
-( 0, 'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteena' ),
-( 0, 'aleph-bet-gimel dalet he wav zajin het')
+( 1, 'a b c d' ),
+( 2, 'a x b c d' ),
+( 3, 'a x x b c d' ),
+( 4, 'a b x c d'), 
+( 5, 'a b x x c d' ),
+( 6, 'a b x x x c d' ),
+( 7, 'a b x x x x c d' ),
+( 8, 'a x b x x x x c x d' ),
+( 9, 'a x x b x x x c x x d' ),
+
+( 10, 'c d x x x x a b' ),
+( 11, 'c d x x x a b' ),
+( 12, 'c d x x a b' ),
+( 13, 'c d x a b' ),
+( 14, 'c d a b' ),
+
+( 15, '... is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial burden resulting from the non-performance by one of their members and, as such, should significantly reduce this credit risk. In cases where the clearinghouse... is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial burden resulting from the non-performance by one of their members and, as such, should significantly reduce this credit risk. In cases where the clearinghouse... be able to meet its obligations to a Trading Company. The counterparty for futures contracts traded in the United States and on most foreign exchanges is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial...' ),
+( 16, 'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteena' ),
+( 17, 'aleph-bet-gimel dalet he wav zajin het' )
 </db_insert>
 <db_drop>DROP TABLE IF EXISTS test_table</db_drop>
 

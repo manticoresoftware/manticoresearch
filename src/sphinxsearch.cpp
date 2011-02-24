@@ -2340,6 +2340,23 @@ const ExtDoc_t * ExtNWay_c<FSM>::GetDocsChunk ( SphDocID_t * pMaxID )
 
 	FSM::ResetFSM();
 
+	// skip leftover hits
+	while ( m_uLastDocID )
+	{
+		if ( !pHit || pHit->m_uDocid==DOCID_MAX )
+		{
+			pHit = m_pHits = m_pNode->GetHitsChunk ( m_pDocs, m_uDocsMaxID );
+			if ( !pHit )
+				break;
+		}
+
+		while ( pHit->m_uDocid==m_uLastDocID )
+			pHit++;
+
+		if ( pHit->m_uDocid!=DOCID_MAX && pHit->m_uDocid!=m_uLastDocID )
+			m_uLastDocID = 0;
+	}
+
 	// search for matches
 	int iDoc = 0;
 	int iHit = 0;

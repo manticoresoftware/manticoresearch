@@ -69,13 +69,14 @@ index idx
 <sphinxql>call snippets ('aleph-bet-gimel dalet he wav zajin het', 'idx', 'aleph NEAR/2 gimel', 1 as query_mode)</sphinxql>
 <sphinxql>CALL SNIPPETS ('U.S.S.S.B s s s s today s s s s s tomorrow', 'idx', 'B NEAR/7 today', 1 as query_mode)</sphinxql>
 <sphinxql>CALL SNIPPETS ('U.S.S.S.A s s s s today s s s s s tomorrow', 'idx', 'A NEAR/7 today', 1 as query_mode)</sphinxql>
+<sphinxql>select * from idx where match ('oy NEAR/1 vey') and @id>=22</sphinxql>
 </sphqueries>
 
 <db_create>
 CREATE TABLE test_table
 (
 	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
-	title VARCHAR(4096) NOT NULL
+	title VARCHAR(16384) NOT NULL
 );
 </db_create>
 <db_insert>
@@ -98,7 +99,12 @@ INSERT INTO `test_table` VALUES
 
 ( 15, '... is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial burden resulting from the non-performance by one of their members and, as such, should significantly reduce this credit risk. In cases where the clearinghouse... is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial burden resulting from the non-performance by one of their members and, as such, should significantly reduce this credit risk. In cases where the clearinghouse... be able to meet its obligations to a Trading Company. The counterparty for futures contracts traded in the United States and on most foreign exchanges is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial...' ),
 ( 16, 'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteena' ),
-( 17, 'aleph-bet-gimel dalet he wav zajin het' )
+( 17, 'aleph-bet-gimel dalet he wav zajin het' ),
+
+( 20, 'ein oy vey' ),
+( 21, CONCAT('zwei ',REPEAT('oy vey ho ho ho ',1024)) ),
+( 22, 'oy vey drei' )
+
 </db_insert>
 <db_drop>DROP TABLE IF EXISTS test_table</db_drop>
 

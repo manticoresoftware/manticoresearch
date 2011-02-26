@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>snippet vs blended</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src
+{
+	type					= mysql
+	<sql_settings/>
+	sql_query		= SELECT 1, 'dummy', 1 as idd
+	sql_attr_uint	= idd
+}
+
+index idx
+{
+	source				= src
+	docinfo			= extern
+	path					= <data_path/>/main
+	charset_type 	= utf-8
+	blend_chars		= .
+}
+
+</config>
+
+
+<sphqueries>
+<sphinxql>CALL SNIPPETS ('and here we go 2524460. 989561 as you said', 'idx', '=2524460.', 1 as query_mode, 4 as limit_words, 2 as around)</sphinxql>
+</sphqueries>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 'dummy' )
+</db_insert>
+<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
+
+</test>

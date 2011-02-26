@@ -37,7 +37,7 @@ class ExcerptGen_c
 	friend class SnippetsQwordSetup;
 
 public:
-							ExcerptGen_c ( bool bUtf8 );
+	explicit				ExcerptGen_c ( bool bUtf8 );
 							~ExcerptGen_c () {}
 
 	char *	BuildExcerpt ( const ExcerptQuery_t & tQuery );
@@ -766,13 +766,16 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDi
 		if ( iWord || bIsStopWord )
 			uPosition = bIsStopWord ? uPosition+tSettings.m_iStopwordStep : uPosition+1;
 
+		if ( !pTokenizer->TokenIsBlendedPart() )
+			iBlendID = 0;
+
 		Token_t & tLast = m_dTokens.Add();
 		tLast.m_eType = iWord ? TOK_WORD : TOK_SPACE;
 		tLast.m_uPosition = iWord || bIsStopWord ? uPosition : 0;
 		tLast.m_iStart = pTokenStart - pStartPtr;
 		tLast.m_iLengthBytes = tLast.m_iLengthCP = pLastTokenEnd - pTokenStart;
 		if ( m_bUtf8 && iWord )
-			tLast.m_iLengthCP = sphUTF8Len ( pTokenStart, tLast.m_iLengthBytes );		
+			tLast.m_iLengthCP = sphUTF8Len ( pTokenStart, tLast.m_iLengthBytes );
 		m_iTotalCP += tLast.m_iLengthCP;
 		tLast.m_iWordID = iWord;
 		tLast.m_iBlendID = iBlendID;
@@ -781,9 +784,6 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDi
 			m_iDocumentWords++;
 
 		m_iLastWord = iWord ? m_dTokens.GetLength() - 1 : m_iLastWord;
-
-		if ( !pTokenizer->TokenIsBlendedPart() )
-			iBlendID = 0;
 
 		// fill word mask
 		tLast.m_uWords = 0;
@@ -2491,7 +2491,7 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor )
 		tDocTok.m_iStart = pTokenStart - pStartPtr;
 		tDocTok.m_iLengthBytes = tDocTok.m_iLengthCP = pLastTokenEnd - pTokenStart;
 		if ( bUtf8 && iWord )
-			tDocTok.m_iLengthCP = sphUTF8Len ( pTokenStart,  tDocTok.m_iLengthBytes );
+			tDocTok.m_iLengthCP = sphUTF8Len ( pTokenStart, tDocTok.m_iLengthBytes );
 		tDocTok.m_iWordID = iWord;
 
 		// match & emit

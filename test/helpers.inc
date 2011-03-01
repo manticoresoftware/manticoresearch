@@ -1022,6 +1022,7 @@ class SphinxConfig
 								!@mysql_select_db ( $g_locals['db-name'] ) )
 					return FALSE;
 
+			$GLOBALS["this_test"] = $this->_testdir;
 			$run_func ( $cl, $results );
 
 			@mysql_close();

@@ -3469,14 +3469,18 @@ int CSphTokenizerTraits<IS_UTF8>::CodepointArbitration ( int iCode, bool bWasEsc
 	// escaped specials are not special
 	// dash and dollar inside the word are not special
 	// non-modifier specials within phrase are not special
+	bool bDashInside = ( m_iAccum && iSymbol=='-' );
 	if ( iCode & FLAG_CODEPOINT_SPECIAL )
 		if ( bWasEscaped
-			|| ( m_iAccum && iSymbol=='-' )
+			|| bDashInside
 			|| ( m_iAccum && iSymbol=='$' && !bSpaceAhead )
 			|| ( m_bPhrase && iSymbol!='"' && !IsModifier ( iSymbol ) ) )
 	{
 		if ( iCode & FLAG_CODEPOINT_DUAL )
 			iCode &= ~( FLAG_CODEPOINT_SPECIAL | FLAG_CODEPOINT_DUAL );
+		else if ( bDashInside )
+			// if we return zero here, we will break the tokens like 'Ms-Dos'
+			iCode &= ~( FLAG_CODEPOINT_SPECIAL );
 		else
 			iCode = 0;
 	}

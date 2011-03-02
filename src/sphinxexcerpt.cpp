@@ -20,7 +20,7 @@
 #include "sphinxquery.h"
 #include "sphinxint.h"
 
-#include <ctype.h>
+#include <math.h>
 
 /////////////////////////////////////////////////////////////////////////////
 // THE EXCERPTS GENERATOR
@@ -46,6 +46,7 @@ public:
 	void	TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks, bool bRetainHtml, int iSPZ, const CSphIndexSettings & tSettings );
 
 	void	SetMarker ( CSphHitMarker * pMarker ) { m_pMarker = pMarker; }
+	void	SetExactPhrase ( const ExcerptQuery_t & tQuery );
 
 public:
 	enum Token_e
@@ -201,7 +202,7 @@ protected:
 	bool					ExtractPassages ( const ExcerptQuery_t & q );
 	bool					ExtractPhrases ( const ExcerptQuery_t & q );
 
-	void					HighlightPhrase ( const ExcerptQuery_t & q, int iStart, int iEnd );
+	void					HighlightPhrase ( const ExcerptQuery_t & q, int iTok, int iEnd );
 	void					HighlightAll ( const ExcerptQuery_t & q );
 	void					HighlightStart ( const ExcerptQuery_t & q );
 	bool					HighlightBestPassages ( const ExcerptQuery_t & q );
@@ -214,7 +215,7 @@ protected:
 
 	void					MarkHits ();
 
-	bool					SetupWindow ( TokenSpan_t & tSpan, Passage_t & tPass, int iFrom, int iCpLimit, int iMaxWords );
+	bool					SetupWindow ( TokenSpan_t & tSpan, Passage_t & tPass, int iFrom, int iCpLimit, const ExcerptQuery_t & q );
 	bool					FlushPassage ( const Passage_t & tPass, int iLCSThresh );
 };
 
@@ -628,6 +629,9 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDi
 		pTokenizer->AddSpecials ( "<" );
 
 	CSphVector<int> dZoneStack;
+	CSphVector<int> dExactPhrase;
+	if ( m_bExactPhrase )
+		dExactPhrase.Reserve ( m_dWords.GetLength() );
 
 	BYTE * sWord;
 	DWORD uPosition = 0; // hit position in document
@@ -826,7 +830,39 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDi
 					m_uFoundWords |= 1UL<<nWord;
 				}
 			}
+
+			// check that bag of words in case of exact_phrase
+			if ( m_bExactPhrase )
+			{
+				// FIXME! maybe should keep and roll-back m_uFoundWords state
+				DWORD uExactWord = 1UL<<dExactPhrase.GetLength();
+				bool bExactFound = ( ( tLast.m_uWords & uExactWord )!=0 );
+				if ( bExactFound )
+				{
+					if ( dExactPhrase.GetLength()+1==m_dWords.GetLength() ) // phrase found, no need to track these QWords
+						dExactPhrase.Resize ( 0 );
+					else
+						dExactPhrase.Add ( m_dTokens.GetLength()-1 ); // maybe phrase, keep collecting QWords into phrase list
+				} else // clean up QWords from phrase and current one
+				{
+					ARRAY_FOREACH ( i, dExactPhrase )
+						m_dTokens[dExactPhrase[i]].m_uWords = 0;
+					dExactPhrase.Resize ( 0 );
+
+					if ( (tLast.m_uWords & 1 )!=0 ) // it could be beginning of another exact phrase
+						dExactPhrase.Add ( m_dTokens.GetLength()-1 );
+					else
+						tLast.m_uWords = 0;
+				}
+			}
 		}
+	}
+
+	// clean up tail QWords from phrase list
+	if ( m_bExactPhrase )
+	{
+		ARRAY_FOREACH ( i, dExactPhrase )
+			m_dTokens[dExactPhrase[i]].m_uWords = 0;
 	}
 
 	// last space if any
@@ -881,14 +917,19 @@ void ExcerptGen_c::MarkHits ()
 	}
 }
 
+
+void ExcerptGen_c::SetExactPhrase ( const ExcerptQuery_t & tQuery )
+{
+	m_bExactPhrase = tQuery.m_bExactPhrase && ( m_dWords.GetLength()>1 );
+}
+
+
 char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & tQuery )
 {
 	m_iPassageId = tQuery.m_iPassageId;
 
 	if ( tQuery.m_bHighlightQuery )
 		MarkHits();
-
-	m_bExactPhrase = tQuery.m_bExactPhrase && ( m_dWords.GetLength()>1 );
 
 	// assign word weights
 	ARRAY_FOREACH ( i, m_dWords )
@@ -924,53 +965,22 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & tQuery )
 
 void ExcerptGen_c::HighlightPhrase ( const ExcerptQuery_t & q, int iTok, int iEnd )
 {
-	while ( iTok<=iEnd )
+	int iPhrase = 0;
+	for ( ; iTok<=iEnd; iTok++ )
 	{
-		while ( iTok<=iEnd && !m_dTokens[iTok].m_uWords )
-			ResultEmit ( m_dTokens[iTok++] );
+		bool bQWord = m_dTokens[iTok].m_uWords!=0;
 
-		if ( iTok>iEnd )
-			break;
+		if ( bQWord && iPhrase==0 )
+			ResultEmit ( q.m_sBeforeMatch.cstr(), m_iPassageId );
 
-		bool bMatch = true;
-		int iWord = 0;
-		int iStart = iTok;
-		int iLastDocPos = -1;
-		while ( iWord<m_dWords.GetLength() )
+		ResultEmit ( m_dTokens[iTok] );
+		iPhrase += bQWord ? 1 : 0;
+
+		if ( bQWord && iPhrase==m_dWords.GetLength() )
 		{
-			if ( ( iTok > iEnd ) ||
-				!( m_dTokens[iTok].m_eType!=TOK_WORD || m_dTokens[iTok].m_uWords==( 1UL<<iWord++ ) ) )
-			{
-				bMatch = false;
-				break;
-			}
-
-			if ( m_dTokens[iTok].m_eType==TOK_WORD )
-				iLastDocPos = iTok;
-
-			iTok++;
-
-			if ( iLastDocPos!=-1
-				&& m_dTokens[iTok].m_eType==TOK_WORD
-				&& iTok<=iEnd && iWord<m_dWords.GetLength()
-				&& ( m_dWords[iWord].m_uPosition-m_dWords[iWord-1].m_uPosition )!=( m_dTokens[iTok].m_uPosition-m_dTokens[iLastDocPos].m_uPosition ) )
-			{
-				bMatch = false;
-				break;
-			}
+			ResultEmit ( q.m_sAfterMatch.cstr(), m_iPassageId++ );
+			iPhrase = 0;
 		}
-
-		if ( !bMatch )
-		{
-			ResultEmit ( m_dTokens[iStart] );
-			iTok = iStart + 1;
-			continue;
-		}
-
-		ResultEmit ( q.m_sBeforeMatch.cstr(), m_iPassageId );
-		while ( iStart<iTok )
-			ResultEmit ( m_dTokens [ iStart++ ] );
-		ResultEmit ( q.m_sAfterMatch.cstr(), m_iPassageId++ );
 	}
 }
 
@@ -981,8 +991,9 @@ void ExcerptGen_c::HighlightAll ( const ExcerptQuery_t & q )
 	const int iMaxTok = m_dTokens.GetLength()-1; // skip last one, it's TOK_NONE
 
 	if ( m_bExactPhrase )
-		HighlightPhrase ( q, 0, iMaxTok-1 );
-	else
+	{
+		HighlightPhrase ( q, 0, iMaxTok );
+	} else
 	{
 		// bag of words
 		for ( int iTok=0; iTok<iMaxTok; iTok++ )
@@ -1155,7 +1166,18 @@ void ExcerptGen_c::UpdateGaps ( Passage_t & tPass, const TokenSpan_t & tSpan, in
 	assert ( tPass.m_iMinGap>=0 );
 }
 
-bool ExcerptGen_c::SetupWindow ( TokenSpan_t & tSpan, Passage_t & tPass, int i, int iCpLimit, int iMaxWords )
+
+static int GetWordsLimit ( const ExcerptQuery_t & q, int iQwords )
+{
+	int iSoftLimit = 2*q.m_iAround + iQwords;
+	if ( q.m_iLimitWords )
+		return Min ( iSoftLimit, q.m_iLimitWords );
+
+	return iSoftLimit;
+}
+
+
+bool ExcerptGen_c::SetupWindow ( TokenSpan_t & tSpan, Passage_t & tPass, int i, int iCpLimit, const ExcerptQuery_t & q )
 {
 	assert ( i>=0 && i<m_dTokens.GetLength() );
 
@@ -1174,7 +1196,7 @@ bool ExcerptGen_c::SetupWindow ( TokenSpan_t & tSpan, Passage_t & tPass, int i, 
 		}
 
 		// stop when the window is large enough or meet SPZ
-		if ( ( tPass.m_iCodes + tToken.m_iLengthCP > iCpLimit ) || tSpan.m_iWords==iMaxWords || tToken.m_eType==TOK_SPZ )
+		if ( ( tPass.m_iCodes + tToken.m_iLengthCP > iCpLimit ) || tSpan.m_iWords>=GetWordsLimit ( q, tSpan.m_iQwords ) || tToken.m_eType==TOK_SPZ )
 		{
 			tPass.m_iTokens += ( tToken.m_eType==TOK_SPZ && tToken.m_iLengthBytes>0 ); // only MAGIC_CODE_SENTENCE has length
 			return ( tToken.m_eType==TOK_SPZ );
@@ -1205,14 +1227,26 @@ bool ExcerptGen_c::FlushPassage ( const Passage_t & tPass, int iLCSThresh )
 
 	// check if it's new or better
 	Passage_t & tLast = m_dPassages.Last();
-	if ( tLast.m_uQwords!=tPass.m_uQwords || tLast.m_iStart + tLast.m_iTokens - 1 < tPass.m_iStart )
+	if ( ( tPass.m_iStartLimit<=tLast.m_iStartLimit && tLast.m_iEndLimit<=tPass.m_iEndLimit )
+		|| ( tLast.m_iStartLimit<=tPass.m_iStartLimit && tPass.m_iEndLimit<=tLast.m_iEndLimit ) )
+	{
+		int iPassPre = tPass.m_iStartLimit - tPass.m_iStart + 1;
+		int iPassPost = tPass.m_iStart + tPass.m_iTokens - tPass.m_iEndLimit + 1;
+		float fPassGap = (float)Max ( iPassPre, iPassPost ) / (float)Min ( iPassPre, iPassPost );
+
+		int iLastPre = tLast.m_iStartLimit - tLast.m_iStart + 1;
+		int iLastPost = tLast.m_iStart + tLast.m_iTokens - tLast.m_iEndLimit + 1;
+		float fLastGap = (float)Max ( iLastPre, iLastPost ) / (float)Min ( iLastPre, iLastPost );
+
+		// centered snippet wins last passage
+		if ( tLast.GetWeight()<tPass.GetWeight() || ( tLast.GetWeight()==tPass.GetWeight() && fPassGap<fLastGap ) )
+			tLast = tPass;
+	} else
 		m_dPassages.Add ( tPass );
-	else if ( tLast.GetWeight() < tPass.GetWeight() )
-		tLast = tPass; // better
-	else
-		return false;
+
 	return true;
 }
+
 
 bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 {
@@ -1228,14 +1262,13 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 	tSpan.Reset ();
 	tPass.Reset ();
 
-	int iMaxWords = 2*q.m_iAround+1;
-	if ( q.m_iLimitWords )
-		iMaxWords = Min ( iMaxWords, q.m_iLimitWords );
-	int iLCSThresh = m_bExactPhrase ? m_dWords.GetLength()*iMaxWords : 0;
+	int iLCSThresh = 0;
+	if ( m_bExactPhrase )
+		iLCSThresh = m_dWords.GetLength() * GetWordsLimit ( q, m_dWords.GetLength() );
 	int iCpLimit = q.m_iLimit ? q.m_iLimit : INT_MAX;
 
 	// setup initial window
-	bool bSPZ = SetupWindow ( tSpan, tPass, 0, iCpLimit, iMaxWords );
+	bool bSPZ = SetupWindow ( tSpan, tPass, 0, iCpLimit, q );
 
 	// move our window until the end of document
 	const int iCount = m_dTokens.GetLength();
@@ -1248,9 +1281,9 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 			// re-weight current passage, and submit it
 			// if there weren't any keyword changes, use a fast path that only updates gap values
 			if ( bQwordsChanged )
-				CalcPassageWeight ( tPass, tSpan, iMaxWords, 0 );
+				CalcPassageWeight ( tPass, tSpan, GetWordsLimit ( q, tSpan.m_iQwords ), 0 );
 			else
-				UpdateGaps ( tPass, tSpan, iMaxWords );
+				UpdateGaps ( tPass, tSpan, GetWordsLimit ( q, tSpan.m_iQwords ) );
 			tPass.m_iWords = tSpan.m_iWords;
 			if ( FlushPassage ( tPass, iLCSThresh ) )
 				bQwordsChanged = false;
@@ -1264,7 +1297,7 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 		if ( bSPZ )
 		{
 			tSpan.Reset();
-			bSPZ = SetupWindow ( tSpan, tPass, iToken, iCpLimit, iMaxWords );
+			bSPZ = SetupWindow ( tSpan, tPass, iToken, iCpLimit, q );
 			bQwordsChanged = true;
 			continue;
 		}
@@ -1294,7 +1327,7 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 			continue;
 
 		// drop front tokens until the window fits into both word and CP limits
-		while ( ( tPass.m_iCodes > iCpLimit || tSpan.m_iWords > iMaxWords ) && tPass.m_iTokens!=1 )
+		while ( ( tPass.m_iCodes > iCpLimit || tSpan.m_iWords > GetWordsLimit ( q, tSpan.m_iQwords ) ) && tPass.m_iTokens!=1 )
 		{
 			if ( m_dTokens[tPass.m_iStart].m_eType==TOK_WORD )
 			{
@@ -1448,53 +1481,11 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 			break;
 		}
 
-		// merge incoming passages into previous ones
-		bool bMerged = false;
-		ARRAY_FOREACH_COND ( i, dShow, !bMerged )
-		{
-			const Passage_t & tPass = dShow[i];
-			bMerged = ( ( tBest.m_iStartLimit>=tPass.m_iStartLimit && tBest.m_iStartLimit<=tPass.m_iEndLimit )
-				|| ( tBest.m_iEndLimit>=tPass.m_iStartLimit && tBest.m_iEndLimit<=tPass.m_iEndLimit )
-				|| ( tPass.m_iStartLimit>=tBest.m_iStartLimit && tPass.m_iStartLimit<=tBest.m_iEndLimit )
-				|| ( tPass.m_iEndLimit>=tBest.m_iStartLimit && tPass.m_iEndLimit<=tBest.m_iEndLimit ) );
-
-			if ( !bMerged )
-				continue;
-
-			Passage_t tMerged = tPass;
-			tMerged.m_iStart = Min ( tPass.m_iStart, tBest.m_iStart );
-			tMerged.m_iTokens = Max ( tPass.m_iStart+tPass.m_iTokens-tMerged.m_iStart, tBest.m_iStart+tBest.m_iTokens-tMerged.m_iStart );
-			tMerged.m_uQwords |= tBest.m_uQwords;
-			if ( tMerged.m_iStart!=tPass.m_iStart || tMerged.m_iTokens!=tPass.m_iTokens )
-			{
-				tMerged.m_iWords = 0;
-				tMerged.m_iCodes = 0;
-				for ( int iTok = 0; iTok<tMerged.m_iTokens; iTok++ )
-				{
-					const Token_t & tTok = m_dTokens[tMerged.m_iStart+iTok];
-					if ( tTok.m_eType!=TOK_WORD )
-						continue;
-
-					tMerged.m_iWords++;
-					tMerged.m_iCodes += tTok.m_iLengthCP;
-				}
-
-				iTotalWords += tMerged.m_iWords-tPass.m_iWords;
-				iTotalCodes += tMerged.m_iCodes-tPass.m_iCodes;
-			}
-			uWords |= tMerged.m_uQwords;
-			dShow[i] = tMerged;
-		}
-
-
-		if ( !bMerged )
-		{
-			// save it, despite limits or whatever, we'll tighten everything in the loop below
-			dShow.Add ( tBest );
-			uWords |= tBest.m_uQwords;
-			iTotalWords += tBest.m_iWords;
-			iTotalCodes += tBest.m_iCodes;
-		}
+		// save it, despite limits or whatever, we'll tighten everything in the loop below
+		dShow.Add ( tBest );
+		uWords |= tBest.m_uQwords;
+		iTotalWords += tBest.m_iWords;
+		iTotalCodes += tBest.m_iCodes;
 		tBest.m_iCodes = 0; // no longer needed here, abusing to mark displayed passages
 
 		// we just managed to show all words? do one final re-weighting run
@@ -1529,59 +1520,6 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 	// boundaries) and we don't want to split them
 	if ( ( iTotalCodes > iMaxCp || iTotalWords > iMaxWords ) && !tQuery.m_bUseBoundaries )
 	{
-		const int iKeepAround = ( tQuery.m_iAround + 1 ) / 2;
-		// find limits for trimming.
-		//
-		// we want to have at least iKeepAround words before the first and
-		// after the last query word in passage.
-		ARRAY_FOREACH ( i, dShow )
-		{
-			// find first and last matching words in passage
-			int iFirst = -1, iLast = -1;
-			const int iStart = dShow[i].m_iStart;
-			const int iEnd = dShow[i].m_iStart + dShow[i].m_iTokens;
-			int iQueryWords = 0;
-			for ( int j = iStart; j!=iEnd; j++ )
-			{
-				if ( m_dTokens[j].m_uWords )
-				{
-					if ( iFirst==-1 )
-						iFirst = j;
-					iLast = j;
-					iQueryWords++;
-				}
-			}
-			dShow[i].m_iStartLimit = iFirst;
-			dShow[i].m_iEndLimit = iLast;
-			// sometimes there's enough context inside the passage so we can trim a bit more
-			int iAround = iKeepAround;
-			if ( iQueryWords>=3 )
-			{
-				int iPassageWords = 0;
-				for ( int j = iFirst+1; j<iLast; j++ )
-					if ( m_dTokens[j].m_eType==TOK_WORD && !m_dTokens[j].m_uWords )
-						iPassageWords++;
-				if ( iPassageWords>=iQueryWords )
-					iAround = 1;
-			}
-			// find start limit
-			int iCount = 0;
-			for ( int j = iFirst; j!=iStart; j-- )
-				if ( m_dTokens[j-1].m_eType==TOK_WORD && ++iCount>=iAround )
-				{
-					dShow[i].m_iStartLimit = j-1;
-					break;
-				}
-			// find end limit
-			iCount = 0;
-			for ( int j = iLast+1; j!=iEnd; j++ )
-				if ( m_dTokens[j].m_eType==TOK_WORD && ++iCount>=iAround )
-				{
-					dShow[i].m_iEndLimit = j;
-					break;
-				}
-		}
-
 		// trim passages
 		bool bFirst = true;
 		bool bDone = false;
@@ -1603,6 +1541,7 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 					tPassage.m_iTokens--;
 					tPassage.m_iCodes -= m_dTokens[iFirst].m_iLengthCP;
 					iTotalCodes -= m_dTokens[iFirst].m_iLengthCP;
+					iTotalWords -= m_dTokens[iFirst].m_eType==TOK_WORD ? 1 : 0;
 
 				} else if ( iLast!=tPassage.m_iEndLimit )
 				{
@@ -1612,8 +1551,9 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 						tPassage.m_iTokens--;
 					tPassage.m_iCodes -= m_dTokens[iLast].m_iLengthCP;
 					iTotalCodes -= m_dTokens[iLast].m_iLengthCP;
+					iTotalWords -= m_dTokens[iLast].m_eType==TOK_WORD ? 1 : 0;
 				}
-				if ( iTotalCodes<=iMaxCp )
+				if ( iTotalCodes<=iMaxCp && iTotalWords<=iMaxWords )
 				{
 					bDone = true;
 					break;
@@ -1640,7 +1580,6 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 	// sort passages in the document order
 	if ( !tQuery.m_bWeightOrder )
 		dShow.Sort ( PassageOrder_fn() );
-
 
 	/// show
 	int iLast = -1;
@@ -2771,6 +2710,7 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 		// legacy highlighting
 		ExcerptGen_c tGenerator ( pTokenizer->IsUtf8() );
 		tGenerator.TokenizeQuery ( tOptions, pDict, pTokenizer, pIndex->GetSettings() );
+		tGenerator.SetExactPhrase ( tOptions );
 		tGenerator.TokenizeDocument ( pData, iDataLen, pDict, pTokenizer, true, tOptions.m_sStripMode=="retain", tOptions.m_iPassageBoundary, pIndex->GetSettings() );
 		return tGenerator.BuildExcerpt ( tOptions );
 	}

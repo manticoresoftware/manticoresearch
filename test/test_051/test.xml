@@ -74,6 +74,25 @@ $reply = $client->BuildExcerpts ( array($text), 'idx', $query,
 $results [] = $query;
 $results [] = $reply;
 
+$query = 'the doggy house';
+
+$reply = $client->BuildExcerpts ( array($text), 'idx', $query, array( 'around'=> 3, 'limit'=>100, 'limit_passages'=>1 ) );
+$results [] = $query;
+$results [] = $reply;
+
+$reply = $client->BuildExcerpts ( array($text), 'idx', $query, array( 'around'=> 3, 'exact_phrase'=>true, 'limit'=>100, 'limit_passages'=>1 ) );
+$results [] = $query;
+$results [] = $reply;
+
+$reply = $client->BuildExcerpts ( array($text), 'idx', $query, array('around'=> 3, 'limit_words'=>6, 'exact_phrase'=>true) );
+$results [] = $query;
+$results [] = $reply;
+
+$query = 'is most';
+$reply = $client->BuildExcerpts ( array($text), 'idx', $query, array('around'=> 2, 'limit_words'=>4) );
+$results [] = $query;
+$results [] = $reply;
+
 ]]></custom_test>
 
 </test>

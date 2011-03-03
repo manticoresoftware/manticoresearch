@@ -13145,15 +13145,16 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_iDistThreads = hSearchd.GetInt ( "dist_threads", g_iDistThreads );
 	g_iPreforkChildren = hSearchd.GetInt ( "prefork", g_iPreforkChildren );
 
-	if ( hSearchd ( "collation_server" ) )
+	if ( hSearchd ( "collation_libc_locale" ) )
 	{
-		const char * sLocale = hSearchd.GetStr ( "collation_server" );
+		const char * sLocale = hSearchd.GetStr ( "collation_libc_locale" );
 		if ( !setlocale ( LC_COLLATE, sLocale ) )
 			sphWarning ( "setlocale failed (locale='%s')", sLocale );
 	}
-	if ( hSearchd ( "collation_libc_locale" ) )
+
+	if ( hSearchd ( "collation_server" ) )
 	{
-		CSphString sCollation = hSearchd.GetStr ( "collation_libc_locale" );
+		CSphString sCollation = hSearchd.GetStr ( "collation_server" );
 		CSphString sError;
 		g_eCollation = sphCollationFromName ( sCollation, &sError );
 		if ( !sError.IsEmpty() )

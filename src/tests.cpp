@@ -460,7 +460,27 @@ void TestStripper ()
 		{ "<a href=\"http://www.com\" title=\"my test title\">content2</a>", "a=title", "", "my test title content2" },
 		{ "testing <img src=\"g/smth.jpg\" alt=\"nice picture\" rel=anotherattr junk=\"throwaway\">inline tags vs attr indexing", "img=alt,rel", "", "testing nice picture anotherattr inline tags vs attr indexing" },
 		{ "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\"><html>test</html>", "", "", " test " },
-		{ "<!smth \"that>can<break\"><html>test</html>", "", "", " test " }
+		{ "<!smth \"that>can<break\"><html>test</html>", "", "", " test " },
+		{ "<TABLE CLASS=\"MSONORMALTABLE\" STYLE=\"BORDER-COLLAPSE: COLLAPSE; MARGIN-LEFT: ID=\"TABLE76\"><TR><TD>ohai</TD></TR></TABLE>", "", "", " ohai " },
+		{ "ohai2<table class", "", "", "ohai2 " },
+		{ "ohai<table class>3", "", "", "ohai 3" },
+		{ "ohai<table class >4", "", "", "ohai 4" },
+		{ "ohai<table class =>5", "", "", "ohai 5" },
+		{ "ohai<table class =\"smth><tr><td>6</td></tr></table> some more content", "", "", "ohai 6 some more content" },
+		{ "ohai<table nowrap class=\"a>b\">7", "", "", "ohai 7" },
+		{ "ohai<table nowrap class =\"a>b\">8", "", "", "ohai 8" },
+		{ "ohai<table nowrap class= \"a>b\">9", "", "", "ohai 9" },
+		{ "ohai<table now rap class=\"a>b\">10", "", "", "ohai 10" },
+		{ "ohai<table class = \"smth><tr><td>6</td><td class=\"test\">11</td></tr></table> gimme more", "", "", "ohai 11 gimme more" },
+		{ "<P ALIGN=\"LEFT STYLE=\"MARGIN:0IN 0IN .0001PT;TEXT-ALIGN:LEFT;\"><B><FONT SIZE=\"2\" FACE=\"TIMES NEW ROMAN\" STYLE=\"FONT-SIZE:10.0PT;FONT-WEIGHT:BOLD;\">Commission File Number: 333-155507", "", "", " Commission File Number: 333-155507" },
+		{ "<TD NOWRAP ALIGN=RIGHT STYLE=\"BORDER-BOTTOM: #000000 1PX SOLID; BORDER-TOP: #000000 1PX SOLID;\"\"><B>SGX", "", "", " SGX" },
+		{ "tango & cash", "", "", "tango & cash" },
+		{ "<font CLASS=\"MSONORMALTABLE\" STYLE=\"BORDER-COLLAPSE: COLLAPSE; MARGIN-LEFT: ID=\"TABLE76\">ahoy\"mate", "font=zzz", "", "ahoy\"mate" },
+		{ "ahoy<font class =>2", "font=zzz", "", "ahoy2" },
+		{ "ahoy<font class =\"smth><b>3</b></font>there", "font=zzz", "", "ahoy3there" },
+		{ "ahoy<font nowrap class=\"a>b\">4", "font=zzz", "", "ahoy4" },
+		{ "ahoy<font now rap class=\"a>b\">5", "font=zzz", "", "ahoy5" },
+		{ "ahoy<font class = \"smth><b><i>6</i><b class=\"test\">seven</b></i></font>eight", "font=zzz", "", "ahoyseveneight" }
 	};
 
 	int nTests = (int)(sizeof(sTests)/sizeof(sTests[0]));

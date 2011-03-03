@@ -17346,6 +17346,10 @@ static inline int sphIsTag ( int c )
 	return sphIsAlpha(c) || c=='.' || c==':';
 }
 
+static inline int sphIsTagStart ( int c )
+{
+	return ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' ) || c=='_' || c=='.' || c==':';
+}
 
 CSphHTMLStripper::CSphHTMLStripper ()
 {
@@ -17587,11 +17591,24 @@ void CSphHTMLStripper::SetZonePrefix ( const char * sPrefix )
 
 const BYTE * SkipQuoted ( const BYTE * p )
 {
+	const BYTE * pMax = p + 512; // 512 bytes should be enough for a reasonable HTML attribute value, right?!
+	const BYTE * pProbEnd = NULL; // (most) probable end location in case we don't find a matching quote
 	BYTE cEnd = *p++; // either apostrophe or quote
-	while ( *p && *p!=cEnd )
+
+	while ( p<pMax && *p && *p!=cEnd )
+	{
+		if ( !pProbEnd )
+			if ( *p=='>' || *p=='\r' )
+				pProbEnd = p;
 		p++;
+	}
+
 	if ( *p==cEnd )
-		p++;
+		return p+1;
+
+	if ( pProbEnd )
+		return pProbEnd;
+
 	return p;
 }
 
@@ -18037,7 +18054,10 @@ void CSphHTMLStripper::Strip ( BYTE * sData ) const
 	BYTE * d = sData;
 	for ( ;; )
 	{
+		/////////////////////////////////////
 		// scan until eof, or tag, or entity
+		/////////////////////////////////////
+
 		while ( *s && *s!='<' && *s!='&' )
 		{
 			if ( *s>=0x20 )
@@ -18049,7 +18069,10 @@ void CSphHTMLStripper::Strip ( BYTE * sData ) const
 		if ( !*s )
 			break;
 
+		/////////////////
 		// handle entity
+		/////////////////
+
 		if ( *s=='&' )
 		{
 			if ( s[1]=='#' )
@@ -18098,7 +18121,10 @@ void CSphHTMLStripper::Strip ( BYTE * sData ) const
 			continue;
 		}
 
+		//////////////
 		// handle tag
+		//////////////
+
 		assert ( *s=='<' );
 		if ( GetCharIndex(s[1])<0 )
 		{
@@ -18178,7 +18204,10 @@ void CSphHTMLStripper::Strip ( BYTE * sData ) const
 		}
 		s++; // skip '<'
 
+		//////////////////////////////////////
 		// lookup this tag in known tags list
+		//////////////////////////////////////
+
 		int iTag = -1;
 		const BYTE * sTagName = ( s[0]=='/' ) ? s+1 : s;
 
@@ -18227,34 +18256,112 @@ void CSphHTMLStripper::Strip ( BYTE * sData ) const
 			}
 		}
 
-		// skip unknown or do-not-index-attrs tag
-		if ( iTag<0 || !m_dTags[iTag].m_bIndexAttrs )
-		{
-			// we just scan until EOLN or tag end
-			while ( *s && *s!='>' )
-			{
-				if ( *s=='\'' || *s=='"' )
-					s = SkipQuoted ( s );
-				else
-					s++;
-			}
-			if ( *s )
-				s++;
+		/////////////////////////////////////
+		// process tag contents
+		// index attributes if needed
+		// gracefully handle malformed stuff
+		/////////////////////////////////////
 
-			// unknown tag is done; others might require a bit more work
-			if ( iTag<0 )
+#define LOC_SKIP_SPACES() { while ( sphIsSpace(*s) ) s++; if ( !*s || *s=='>' ) break; }
+
+		bool bIndexAttrs = ( iTag>=0 && m_dTags[iTag].m_bIndexAttrs );
+		while ( *s && *s!='>' )
+		{
+			LOC_SKIP_SPACES();
+			if ( sphIsTagStart(*s) )
 			{
-				*d++ = ' '; // unknown tags are *not* inline by default
-				continue;
+				// skip attribute name while it's valid
+				const BYTE * sAttr = s;
+				while ( sphIsTag(*s) )
+					s++;
+
+				// blanks or a value after a valid attribute name?
+				if ( sphIsSpace(*s) || *s=='=' )
+				{
+					const int iAttrLen = (int)( s - sAttr );
+					LOC_SKIP_SPACES();
+
+					// a valid name but w/o a value; keep scanning
+					if ( *s!='=' )
+						continue;
+
+					// got value!
+					s++;
+					LOC_SKIP_SPACES();
+
+					// check attribute name
+					// OPTIMIZE! remove linear search
+					int iAttr = -1;
+					if ( bIndexAttrs )
+					{
+						const StripperTag_t & tTag = m_dTags[iTag];
+						for ( iAttr=0; iAttr<tTag.m_dAttrs.GetLength(); iAttr++ )
+						{
+							int iLen = strlen ( tTag.m_dAttrs[iAttr].cstr() );
+							if ( iLen==iAttrLen && !strncasecmp ( tTag.m_dAttrs[iAttr].cstr(), (const char*)sAttr, iLen ) )
+								break;
+						}
+						if ( iAttr==tTag.m_dAttrs.GetLength() )
+							iAttr = -1;
+					}
+
+					// process the value
+					const BYTE * sVal = s;
+					if ( *s=='\'' || *s=='"' )
+					{
+						// skip quoted value until a matching quote
+						s = SkipQuoted ( s );
+					} else
+					{
+						// skip unquoted value until tag end or whitespace
+						while ( *s && *s!='>' && !sphIsSpace(*s) )
+							s++;
+					}
+
+					// if this one is to be indexed, copy it
+					if ( iAttr>=0 )
+					{
+						const BYTE * sMax = s;
+						if ( *sVal=='\'' || *sVal=='"' )
+						{
+							if ( sMax[-1]==sVal[0] )
+								sMax--;
+							sVal++;
+						}
+						while ( sVal<sMax )
+							*d++ = *sVal++;
+						*d++ = ' ';
+					}
+
+					// handled the value; keep scanning
+					continue;
+				}
+
+				// nope, got an invalid character in the sequence (or maybe eof)
+				// fall through to an invalid name handler
 			}
+
+			// keep skipping until tag end or whitespace
+			while ( *s && *s!='>' && !sphIsSpace(*s) )
+				s++;
 		}
 
-		// work this known tag
-		assert ( iTag>=0 );
+#undef LOC_SKIP_SPACES
+
+		// skip closing angle bracket, if any
+		if ( *s )
+			s++;
+
+		// unknown tag is done; others might require a bit more work
+		if ( iTag<0 )
+		{
+			*d++ = ' '; // unknown tags are *not* inline by default
+			continue;
+		}
+
 		const StripperTag_t & tTag = m_dTags[iTag];
 
 		// handle zones
-		// FIXME? should we allow to index attribute indexing etc from zone markers?
 		if ( tTag.m_bZone )
 		{
 			// should be at tag's end
@@ -18273,77 +18380,10 @@ void CSphHTMLStripper::Strip ( BYTE * sData ) const
 
 		// handle paragraph boundaries
 		if ( tTag.m_bPara )
-			*d++ = MAGIC_CODE_PARAGRAPH;
-
-		// handle index-attrs
-		if ( tTag.m_bIndexAttrs )
-			while ( *s && *s!='>' )
 		{
-			// skip non-alphas
-			while ( *s && *s!='>' )
-			{
-				if ( *s=='\'' || *s=='"' )
-				{
-					s = SkipQuoted ( s );
-					while ( isspace(*s) ) s++;
-				}
-				if ( sphIsTag(*s) )
-					break;
-				if ( *s!='>' )
-					s++;
-			}
-			if ( !sphIsTag(*s) )
-			{
-				if ( *s && *s!='>' )
-					s++;
-				break;
-			}
-
-			// check attribute name
-			// OPTIMIZE! remove linear search
-			int iAttr;
-			for ( iAttr=0; iAttr<tTag.m_dAttrs.GetLength(); iAttr++ )
-			{
-				int iLen = strlen ( tTag.m_dAttrs[iAttr].cstr() );
-				if ( strncasecmp ( tTag.m_dAttrs[iAttr].cstr(), (const char*)s, iLen ) )
-					continue;
-				if ( s[iLen]=='=' || isspace ( s[iLen] ) )
-				{
-					s += iLen;
-					break;
-				}
-			}
-
-			// if attribute is unknown or malformed, we just skip all alphas and rescan
-			if ( iAttr==tTag.m_dAttrs.GetLength() )
-			{
-				while ( sphIsTag(*s) ) s++;
-				continue;
-			}
-
-			// skip spaces, check for '=', and skip spaces again
-			while ( isspace(*s) ) s++; if ( !*s ) break;
-			if ( *s++!='=' ) break;
-			while ( isspace(*s) ) s++;
-
-			// handle quoted value
-			if ( *s=='\'' || *s=='"' )
-			{
-				char cEnd = *s;
-				s++;
-				while ( *s && *s!=cEnd ) *d++ = *s++;
-				*d++ = ' ';
-				if ( *s==cEnd ) s++;
-				continue;
-			}
-
-			// handle unquoted value
-			while ( *s && !isspace(*s) && *s!='>' ) *d++ = *s++;
-			*d++ = ' ';
+			*d++ = MAGIC_CODE_PARAGRAPH;
+			continue;
 		}
-
-		if ( *s=='>' )
-			s++;
 
 		// in all cases, the tag must be fully processed at this point
 		// not a remove-tag? we're done

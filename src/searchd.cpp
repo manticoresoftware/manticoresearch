@@ -5679,7 +5679,7 @@ public:
 	~CSphSchemaMT()
 	{
 		if ( m_pLock )
-		Verify ( m_pLock->Done() );
+			Verify ( m_pLock->Done() );
 		SafeDelete ( m_pLock )
 	}
 
@@ -5969,6 +5969,10 @@ void SearchHandler_c::RunLocalSearchesMT ()
 		iCurThread = ( iCurThread+1 ) % g_iDistThreads;
 	}
 
+	// prepare for multithread extra schema processing
+	for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
+		m_dExtraSchemas[iQuery].AwareMT();
+
 	// fire searcher threads
 	ARRAY_FOREACH ( i, dThreads )
 	{
@@ -6103,12 +6107,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 	{
 		CSphString sError;
 		const CSphQuery & tQuery = m_dQueries[i+m_iStart];
-		CSphSchemaMT * pExtraSchemaMT = tQuery.m_bAgent?&m_dExtraSchemas[i+m_iStart]:NULL;
-		if ( pExtraSchemaMT )
-		{
-			pExtraSchemaMT->AwareMT();
-			pExtraSchemaMT = pExtraSchemaMT->GetVirgin();
-		}
+		CSphSchemaMT * pExtraSchemaMT = tQuery.m_bAgent?m_dExtraSchemas[i+m_iStart].GetVirgin():NULL;
 		UnlockOnDestroy dSchemaLock ( pExtraSchemaMT );
 
 		assert ( !tQuery.m_iOldVersion || tQuery.m_iOldVersion>=0x102 );

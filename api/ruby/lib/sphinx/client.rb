@@ -566,8 +566,6 @@ module Sphinx
   
       # mode and limits
       request = Request.new
-      # its a client
-      request.put_int 0
       request.put_int @offset, @limit, @mode, @ranker, @sort
       request.put_string @sortby
       # query itself
@@ -1103,9 +1101,9 @@ module Sphinx
         command_ver = Sphinx::Client.const_get('VER_COMMAND_' + cmd)
         
         sock = self.Connect
-        len = request.to_s.length + (additional != nil ? 4 : 0)
+        len = request.to_s.length + (additional != nil ? 8 : 0)
         header = [command_id, command_ver, len].pack('nnN')
-        header << [additional].pack('N') if additional != nil
+        header << [0, additional].pack('NN') if additional != nil
         sock.send(header + request.to_s, 0)
         response = self.GetResponse(sock, command_ver)
         return Response.new(response)

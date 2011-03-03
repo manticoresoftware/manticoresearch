@@ -500,7 +500,7 @@ class SphinxClient:
 		Add query to batch.
 		"""
 		# build request
-		req = [pack('>L', 0)] # its a client
+		req = []
 		req.append ( pack('>5L', self._offset, self._limit, self._mode, self._ranker, self._sort) )
 		req.append(pack('>L', len(self._sortby)))
 		req.append(self._sortby)
@@ -612,8 +612,8 @@ class SphinxClient:
 			return None
 
 		req = ''.join(self._reqs)
-		length = len(req)+4
-		req = pack('>HHLL', SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH, length, len(self._reqs))+req
+		length = len(req)+8
+		req = pack('>HHLLL', SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH, length, 0, len(self._reqs))+req
 		sock.send(req)
 
 		response = self._GetResponse(sock, VER_COMMAND_SEARCH)

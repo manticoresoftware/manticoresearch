@@ -981,8 +981,7 @@ class SphinxClient
 		$this->_MBPush ();
 
 		// build request
-		$req = pack ( "N", 0 ); // its a client
-		$req .= pack ( "NNNNN", $this->_offset, $this->_limit, $this->_mode, $this->_ranker, $this->_sort ); // mode and limits
+		$req = pack ( "NNNNN", $this->_offset, $this->_limit, $this->_mode, $this->_ranker, $this->_sort ); // mode and limits
 		$req .= pack ( "N", strlen($this->_sortby) ) . $this->_sortby;
 		$req .= pack ( "N", strlen($query) ) . $query; // query itself
 		$req .= pack ( "N", count($this->_weights) ); // weights
@@ -1109,8 +1108,8 @@ class SphinxClient
 		// send query, get response
 		$nreqs = count($this->_reqs);
 		$req = join ( "", $this->_reqs );
-		$len = 4+strlen($req);
-		$req = pack ( "nnNN", SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH, $len, $nreqs ) . $req; // add header
+		$len = 8+strlen($req);
+		$req = pack ( "nnNNN", SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH, $len, 0, $nreqs ) . $req; // add header
 
 		if ( !( $this->_Send ( $fp, $req, $len+8 ) ) ||
 			 !( $response = $this->_GetResponse ( $fp, VER_COMMAND_SEARCH ) ) )

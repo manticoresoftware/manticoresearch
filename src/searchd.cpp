@@ -3322,7 +3322,7 @@ protected:
 
 int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuery & q ) const
 {
-	int iReqSize = 112 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
+	int iReqSize = 108 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
 		+ q.m_sSortBy.Length()
 		+ strlen ( sIndexes )
 		+ q.m_sGroupBy.Length()
@@ -3361,8 +3361,6 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 
 void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_c & tOut, const CSphQuery & q ) const
 {
-	tOut.SendInt ( VER_MASTER );
-
 	tOut.SendInt ( 0 ); // offset is 0
 	tOut.SendInt ( q.m_iMaxMatches ); // limit is MAX_MATCHES
 	tOut.SendInt ( (DWORD)q.m_eMode ); // match mode
@@ -3480,7 +3478,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 
 void SearchRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const
 {
-	int iReqLen = 4; // int num-queries
+	int iReqLen = 8; // int num-queries
 	for ( int i=m_iStart; i<=m_iEnd; i++ )
 		iReqLen += CalcQueryLen ( sIndexes, m_dQueries[i] );
 
@@ -3489,6 +3487,7 @@ void SearchRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuff
 	tOut.SendWord ( VER_COMMAND_SEARCH ); // command version
 	tOut.SendInt ( iReqLen ); // request body length
 
+	tOut.SendInt ( VER_MASTER );
 	tOut.SendInt ( m_iEnd-m_iStart+1 );
 	for ( int i=m_iStart; i<=m_iEnd; i++ )
 		SendQuery ( sIndexes, tOut, m_dQueries[i] );
@@ -3885,12 +3884,9 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 }
 
 
-bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
+bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int iMasterVer )
 {
 	tQuery.m_iOldVersion = iVer;
-
-	if ( iVer>=0x118 )
-		tQuery.m_iMasterVer = tReq.GetInt();
 
 	// v.1.0. mode, limits, weights, ID/TS ranges
 	tQuery.m_iOffset = tReq.GetInt ();
@@ -4189,7 +4185,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 
 	// master v.1.0
 	tQuery.m_eCollation = g_eCollation;
-	if ( tQuery.m_iMasterVer>=0x001 )
+	if ( iMasterVer>=0x001 )
 	{
 		tQuery.m_eCollation = (ESphCollation)tReq.GetDword();
 	}
@@ -6900,18 +6896,18 @@ bool CheckCommandVersion ( int iVer, int iDaemonVersion, InputBuffer_c & tReq )
 }
 
 
-void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int iSock, int iVer )
+void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int iSock, int iVer, int iMasterVer )
 {
 	// serve the response
 	NetOutputBuffer_c tOut ( iSock );
 	int iReplyLen = 0;
+	bool bExtendedStat = ( iMasterVer>0 );
 
 	if ( iVer<=0x10C )
 	{
 		assert ( tHandler.m_dQueries.GetLength()==1 );
 		assert ( tHandler.m_dResults.GetLength()==1 );
 		const AggrResult_t & tRes = tHandler.m_dResults[0];
-		bool bExtendedStat = ( tHandler.m_dQueries[0].m_iMasterVer>0 );
 
 		if ( !tRes.m_sError.IsEmpty() )
 		{
@@ -6932,7 +6928,7 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 	} else
 	{
 		ARRAY_FOREACH ( i, tHandler.m_dQueries )
-			iReplyLen += CalcResultLength ( iVer, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, ( tHandler.m_dQueries[i].m_iMasterVer>0 ) );
+			iReplyLen += CalcResultLength ( iVer, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, bExtendedStat );
 
 		// send it
 		tOut.SendWord ( (WORD)SEARCHD_OK );
@@ -6940,7 +6936,7 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 		tOut.SendInt ( iReplyLen );
 
 		ARRAY_FOREACH ( i, tHandler.m_dQueries )
-			SendResult ( iVer, tOut, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, ( tHandler.m_dQueries[i].m_iMasterVer>0 ) );
+			SendResult ( iVer, tOut, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, bExtendedStat );
 	}
 
 	tOut.Flush ();
@@ -6959,6 +6955,10 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	if ( !CheckCommandVersion ( iVer, VER_COMMAND_SEARCH, tReq ) )
 		return;
 
+	int iMasterVer = 0;
+	if ( iVer>=0x118 )
+		iMasterVer = tReq.GetInt();
+
 	// parse request
 	int iQueries = 1;
 	if ( iVer>=0x10D )
@@ -6972,12 +6972,12 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 	SearchHandler_c tHandler ( iQueries );
 	ARRAY_FOREACH ( i, tHandler.m_dQueries )
-		if ( !ParseSearchQuery ( tReq, tHandler.m_dQueries[i], iVer ) )
+		if ( !ParseSearchQuery ( tReq, tHandler.m_dQueries[i], iVer, iMasterVer ) )
 			return;
 
 	// run queries, send response
 	tHandler.RunQueries ();
-	SendSearchResponse ( tHandler, tReq, iSock, iVer );
+	SendSearchResponse ( tHandler, tReq, iSock, iVer, iMasterVer );
 }
 
 //////////////////////////////////////////////////////////////////////////

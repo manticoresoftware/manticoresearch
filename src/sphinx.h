@@ -2217,7 +2217,6 @@ public:
 	CSphVector<CSphQueryItem>	m_dItems;		///< parsed select-list
 	ESphCollation				m_eCollation;	///< ORDER BY collation
 	bool						m_bAgent;		///< agent mode (may need extra cols on output)
-	int							m_iMasterVer;	///< version of master
 
 public:
 					CSphQuery ();		///< ctor, fills defaults

@@ -811,8 +811,6 @@ public class SphinxClient
 		/* build request */
 		try {
 			DataOutputStream out = new DataOutputStream(req);
-			/* its a client */
-			out.writeInt(0);
 			out.writeInt(_offset);
 			out.writeInt(_limit);
 			out.writeInt(_mode);
@@ -953,6 +951,8 @@ public class SphinxClient
 		try
 		{
 			DataOutputStream req = new DataOutputStream ( reqBuf );
+			/* its a client */
+			req.writeInt(0);
 			req.writeInt ( nreqs );
 			for ( int i=0; i<nreqs; i++ )
 				req.write ( (byte[]) _reqs.get(i) );

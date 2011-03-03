@@ -951,7 +951,7 @@ static int calc_req_len ( sphinx_client * client, const char * query, const char
 	int i, filter_val_size;
 	size_t res;
 
-	res = 100 + 2*(int)sizeof(sphinx_uint64_t) + 4*client->num_weights
+	res = 96 + 2*(int)sizeof(sphinx_uint64_t) + 4*client->num_weights
 		+ safestrlen ( client->sortby )
 		+ safestrlen ( query )
 		+ safestrlen ( index_list )
@@ -1086,7 +1086,6 @@ int sphinx_add_query ( sphinx_client * client, const char * query, const char * 
 	client->req_lens[client->num_reqs] = req_len;
 	client->num_reqs++;
 
-	send_int ( &req, 0 ); // its a client
 	send_int ( &req, client->offset );
 	send_int ( &req, client->limit );
 	send_int ( &req, client->mode );
@@ -1809,7 +1808,7 @@ sphinx_result * sphinx_run_queries ( sphinx_client * client )
 	sphinx_free_results ( client );
 
 	// send query, get response
-	len = 4;
+	len = 8;
 	for ( i=0; i<client->num_reqs; i++ )
 		len += client->req_lens[i];
 
@@ -1817,6 +1816,7 @@ sphinx_result * sphinx_run_queries ( sphinx_client * client )
 	send_word ( &req, SEARCHD_COMMAND_SEARCH );
 	send_word ( &req, client->ver_search );
 	send_int ( &req, len );
+	send_int ( &req, 0 ); // its a client
 	send_int ( &req, client->num_reqs );
 
 	if ( !net_write ( fd, req_header, (int)(req-req_header), client ) )

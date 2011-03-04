@@ -16,11 +16,11 @@ searchd
 	<searchd_settings/>
 	workers = threads
 	
-	collation_server = C
+	collation_libc_locale = C
 	<dynamic>
-		<variant>collation_libc_locale = utf8_general_ci</variant>
-		<variant>collation_libc_locale = libc_ci</variant>
-		<variant>collation_libc_locale = libc_cs</variant>
+		<variant>collation_server = utf8_general_ci</variant>
+		<variant>collation_server = libc_ci</variant>
+		<variant>collation_server = libc_cs</variant>
 	</dynamic>
 }
 

@@ -5105,6 +5105,10 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	// the final sorter needs the schema fields in specific order:
 	CVirtualSchema tItems;
 	// truly virtual schema for final result returning
+
+	CSphString sCount("@count");
+	CSphString sWeight("@weight");
+
 	CVirtualSchema tFinalItems;
 	if ( !bStar )
 		tFinalItems.GetWAttrs().Resize ( tQuery.m_dItems.GetLength() );
@@ -5120,8 +5124,10 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 				ARRAY_FOREACH ( j, tQuery.m_dItems )
 				{
 					const CSphQueryItem & tQueryItem = tQuery.m_dItems[j];
+					const CSphString & sExpr = ( tQueryItem.m_sExpr=="count(*)" ) ? sCount
+						: ( ( tQueryItem.m_sExpr=="weight()" ) ? sWeight : tQueryItem.m_sExpr );
 					if ( tFinalItems.GetAttr(j).m_iIndex<0
-						&& ( ( tQueryItem.m_sExpr.cstr() && tQueryItem.m_sExpr==tCol.m_sName && tQueryItem.m_eAggrFunc==SPH_AGGR_NONE )
+						&& ( ( sExpr.cstr() && sExpr==tCol.m_sName && tQueryItem.m_eAggrFunc==SPH_AGGR_NONE )
 						|| ( tQueryItem.m_sAlias.cstr() && tQueryItem.m_sAlias==tCol.m_sName ) ) )
 					{
 						bAdd = true;
@@ -6226,6 +6232,11 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 					m_dFailuresSet[iQuery].Submit ( sLocal, sError.cstr() );
 					continue;
 				}
+				if ( !sError.IsEmpty() )
+					m_dFailuresSet[iQuery].Submit ( sLocal, sError.cstr() );
+
+				if ( !sError.IsEmpty() )
+					m_dFailuresSet[iQuery].Submit ( sLocal, sError.cstr() );
 			}
 
 			dSorters[iQuery-m_iStart] = pSorter;
@@ -7153,15 +7164,18 @@ public:
 	SqlStmt_t *		m_pStmt;
 	CSphVector<SqlStmt_t> & m_dStmt;
 	ESphCollation	m_eCollation;
+	BYTE			m_uSyntaxFlags;
 
 public:
 	explicit		SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation );
 
 	void			PushQuery ();
 
-	bool			AddOption ( SqlNode_t tIdent, SqlNode_t tValue );
-	bool			AddOption ( SqlNode_t tIdent, CSphVector<CSphNamedInt> & dNamed );
-	void			AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias, ESphAggrFunc eFunc=SPH_AGGR_NONE );
+	bool			AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue );
+	bool			AddOption ( const SqlNode_t& tIdent, CSphVector<CSphNamedInt> & dNamed );
+	bool			AddItem ( const char * sNewExpr, SqlNode_t * pAlias, bool bNewSyntax=false );
+	void			AddItem ( SqlNode_t * pExpr, SqlNode_t * pAlias, ESphAggrFunc eFunc=SPH_AGGR_NONE );
+	void			AddItem ( int iStart, int iEnd, SqlNode_t * pAlias, ESphAggrFunc eFunc=SPH_AGGR_NONE );
 	void			SetSelect ( int iStart, int iEnd )
 	{
 		if ( m_pQuery )
@@ -7171,8 +7185,36 @@ public:
 			m_pQuery->m_iSQLSelectEnd = iEnd;
 		}
 	}
-	bool			AddSchemaItem ( YYSTYPE * pNode );
-	void			SetValue ( const char * sName, YYSTYPE tValue );
+	bool			AddSchemaItem ( SqlNode_t * pNode );
+	void			SetValue ( const char * sName, const SqlNode_t& tValue );
+	bool			SetMatch ( const SqlNode_t& tValue );
+	void			AddConst ( int iList, const SqlNode_t& tValue );
+	void			SetStatement ( const SqlNode_t& tName, SqlSet_e eSet );
+	bool			AddFloatRangeFilter ( const CSphString & sAttr, float fMin, float fMax );
+	bool			AddUintRangeFilter ( const CSphString & sAttr, DWORD uMin, DWORD uMax );
+	bool			AddUservarFilter ( const CSphString & sCol, const CSphString & sVar, bool bExclude );
+	CSphFilterSettings * AddFilter ( const CSphString & sCol, ESphFilter eType );
+	inline CSphFilterSettings * AddValuesFilter ( const SqlNode_t& sCol )
+	{
+		return AddFilter ( sCol.m_sValue, SPH_FILTER_VALUES );
+	}
+
+	inline bool		SetOldSyntax()
+	{
+		m_uSyntaxFlags |= 1;
+		return IsGoodSyntax ();
+	}
+
+	inline bool		SetNewSyntax()
+	{
+		m_uSyntaxFlags |= 2;
+		return IsGoodSyntax ();
+	}
+	bool IsGoodSyntax ();
+	inline bool IsDeprecatedSyntax () const
+	{
+		return m_uSyntaxFlags & 1;
+	}
 
 	int							AllocNamedVec ();
 	CSphVector<CSphNamedInt> &	GetNamedVec ( int iIndex );
@@ -7183,6 +7225,14 @@ protected:
 	CSphVector<CSphNamedInt>	m_dNamedVec;
 };
 
+static void AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & tNode )
+{
+	SqlInsert_t & tIns = dVec.Add();
+	tIns.m_iType = tNode.m_iInstype;
+	tIns.m_iVal = tNode.m_iValue; // OPTIMIZE? copy conditionally based on type?
+	tIns.m_fVal = tNode.m_fValue;
+	tIns.m_sVal = tNode.m_sValue;
+}
 
 void SqlUnescape ( CSphString & sRes, const char * sEscaped, int iLen )
 {
@@ -7236,7 +7286,7 @@ void yyerror ( SqlParser_c * pParser, const char * sMessage )
 	yylex_unhold ( pParser->m_pScanner );
 
 	// create our error message
-	pParser->m_pParseError->SetSprintf ( "%s near '%s'", sMessage, pParser->m_pLastTokenStart ? pParser->m_pLastTokenStart : "(null)" );
+	pParser->m_pParseError->SetSprintf ( "sphinxql: %s near '%s'", sMessage, pParser->m_pLastTokenStart ? pParser->m_pLastTokenStart : "(null)" );
 
 	// fixup TOK_xxx thingies
 	char * s = const_cast<char*> ( pParser->m_pParseError->cstr() );
@@ -7336,6 +7386,7 @@ SqlParser_c::SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollati
 	, m_dStmt ( dStmt )
 	, m_eCollation ( eCollation )
 	, m_bNamedVecBusy ( false )
+	, m_uSyntaxFlags ( 0 )
 {
 	assert ( !m_dStmt.GetLength() );
 	PushQuery ();
@@ -7363,10 +7414,10 @@ void SqlParser_c::PushQuery ()
 	m_bGotQuery = false;
 }
 
-bool SqlParser_c::AddOption ( SqlNode_t tIdent, SqlNode_t tValue )
+bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue )
 {
-	CSphString & sOpt = tIdent.m_sValue;
-	CSphString & sVal = tValue.m_sValue;
+	CSphString sOpt = tIdent.m_sValue;
+	CSphString sVal = tValue.m_sValue;
 	sOpt.ToLower ();
 	sVal.ToLower ();
 
@@ -7419,9 +7470,9 @@ bool SqlParser_c::AddOption ( SqlNode_t tIdent, SqlNode_t tValue )
 	return true;
 }
 
-bool SqlParser_c::AddOption ( SqlNode_t tIdent, CSphVector<CSphNamedInt> & dNamed )
+bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, CSphVector<CSphNamedInt> & dNamed )
 {
-	CSphString & sOpt = tIdent.m_sValue;
+	CSphString sOpt = tIdent.m_sValue;
 	sOpt.ToLower ();
 
 	if ( sOpt=="field_weights" )
@@ -7441,15 +7492,32 @@ bool SqlParser_c::AddOption ( SqlNode_t tIdent, CSphVector<CSphNamedInt> & dName
 	return true;
 }
 
-void SqlParser_c::AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias, ESphAggrFunc eFunc )
+void SqlParser_c::AddItem ( int iStart, int iEnd, SqlNode_t * pAlias, ESphAggrFunc eFunc )
 {
 	CSphQueryItem tItem;
-	tItem.m_sExpr.SetBinary ( m_pBuf + pExpr->m_iStart, pExpr->m_iEnd - pExpr->m_iStart );
+	tItem.m_sExpr.SetBinary ( m_pBuf + iStart, iEnd - iStart );
 	if ( pAlias )
 		tItem.m_sAlias.SetBinary ( m_pBuf + pAlias->m_iStart, pAlias->m_iEnd - pAlias->m_iStart );
 	tItem.m_eAggrFunc = eFunc;
-
 	m_pQuery->m_dItems.Add ( tItem );
+}
+
+void SqlParser_c::AddItem ( SqlNode_t * pExpr, SqlNode_t * pAlias, ESphAggrFunc eFunc )
+{
+	AddItem ( pExpr->m_iStart, pExpr->m_iEnd, pAlias, eFunc );
+}
+
+bool SqlParser_c::AddItem ( const char * sNewExpr, SqlNode_t * pAlias, bool bNewSyntax )
+{
+	CSphQueryItem tItem;
+	tItem.m_sExpr = sNewExpr;
+	if ( pAlias )
+		tItem.m_sAlias.SetBinary ( m_pBuf + pAlias->m_iStart, pAlias->m_iEnd - pAlias->m_iStart );
+	tItem.m_eAggrFunc = SPH_AGGR_NONE;
+	m_pQuery->m_dItems.Add ( tItem );
+	if ( !bNewSyntax )
+		return true;
+	return SetNewSyntax();
 }
 
 bool SqlParser_c::AddSchemaItem ( YYSTYPE * pNode )
@@ -7459,6 +7527,102 @@ bool SqlParser_c::AddSchemaItem ( YYSTYPE * pNode )
 	sItem.SetBinary ( m_pBuf + pNode->m_iStart, pNode->m_iEnd - pNode->m_iStart );
 	return m_pStmt->AddSchemaItem ( sItem.cstr() );
 }
+
+bool SqlParser_c::SetMatch ( const YYSTYPE& tValue )
+{
+	if ( m_bGotQuery )
+	{
+		yyerror ( this, "too many MATCH() clauses" );
+		return false;
+	};
+
+	m_pQuery->m_sQuery = tValue.m_sValue;
+	m_pQuery->m_sRawQuery = tValue.m_sValue;
+	return m_bGotQuery = true;
+}
+
+void SqlParser_c::AddConst ( int iList, const YYSTYPE& tValue )
+{
+	CSphVector<CSphNamedInt> & dVec = GetNamedVec ( iList );
+
+	assert ( dVec.GetLength() );
+	dVec.Add();
+	dVec.Last().m_sName = tValue.m_sValue;
+	dVec.Last().m_iValue = tValue.m_iValue;
+}
+
+void SqlParser_c::SetStatement ( const YYSTYPE& tName, SqlSet_e eSet )
+{
+	m_pStmt->m_eStmt = STMT_SET;
+	m_pStmt->m_eSet = eSet;
+	m_pStmt->m_sSetName = tName.m_sValue;
+}
+
+CSphFilterSettings * SqlParser_c::AddFilter ( const CSphString & sCol, ESphFilter eType )
+{
+	if ( sCol=="@weight" || sCol=="@count" || sCol=="count(*)" || sCol=="weight()" )
+	{
+		yyerror ( this, "Aggregates in 'where' clause prohibited" );
+		return NULL;
+	}
+	CSphFilterSettings * pFilter = &m_pQuery->m_dFilters.Add();
+	pFilter->m_sAttrName = sCol;
+	pFilter->m_eType = eType;
+	return pFilter;
+}
+
+bool SqlParser_c::AddFloatRangeFilter ( const CSphString & sAttr, float fMin, float fMax )
+{
+	CSphFilterSettings * pFilter = AddFilter ( sAttr, SPH_FILTER_FLOATRANGE );
+	if ( !pFilter )
+		return false;
+	pFilter->m_fMinValue = fMin;
+	pFilter->m_fMaxValue = fMax;
+	return true;
+}
+
+bool SqlParser_c::AddUintRangeFilter ( const CSphString & sAttr, DWORD uMin, DWORD uMax )
+{
+	CSphFilterSettings * pFilter = AddFilter ( sAttr, SPH_FILTER_RANGE );
+	if ( !pFilter )
+		return false;
+	pFilter->m_uMinValue = uMin;
+	pFilter->m_uMaxValue = uMax;
+	return true;
+}
+
+bool SqlParser_c::AddUservarFilter ( const CSphString & sCol, const CSphString & sVar, bool bExclude )
+{
+	g_tUservarsMutex.Lock();
+	Uservar_t * pVar = g_hUservars ( sVar );
+	if ( !pVar )
+	{
+		g_tUservarsMutex.Unlock();
+		yyerror ( this, "undefined global variable in IN clause" );
+		return false;
+	}
+
+	assert ( pVar->m_eType==USERVAR_INT_SET );
+	CSphFilterSettings * pFilter = AddFilter ( sCol, SPH_FILTER_VALUES );
+	if ( !pFilter )
+		return false;
+	pFilter->m_bExclude = bExclude;
+
+	// INT_SET uservars must get sorted on SET once
+	// FIXME? maybe we should do a readlock instead of copying?
+	pFilter->m_dValues = *pVar->m_pVal;
+	g_tUservarsMutex.Unlock();
+	return true;
+}
+
+bool SqlParser_c::IsGoodSyntax ()
+{
+	if ( ( m_uSyntaxFlags & 3 )!=3 )
+		return true;
+	yyerror ( this, "Mixing the old-fashion internal vars (@id, @count, @weight) with new acronyms like count(*), weight() is prohibited" );
+	return false;
+}
+
 
 int SqlParser_c::AllocNamedVec ()
 {
@@ -7537,6 +7701,9 @@ bool ParseSqlQuery ( const CSphString & sQuery, CSphVector<SqlStmt_t> & dStmt, C
 
 	if ( iRes!=0 || !dStmt.GetLength() )
 		return false;
+
+	if ( tParser.IsDeprecatedSyntax() )
+		sError = "Using the old-fashion @variables (@count, @weight, etc.) is deprecated";
 
 	return true;
 }
@@ -9814,7 +9981,7 @@ void HandleMysqlDelete ( NetOutputBuffer_c & tOut, BYTE & uPacketID, const SqlSt
 
 
 void HandleMysqlMultiStmt ( NetOutputBuffer_c & tOut, BYTE uPacketID, const CSphVector<SqlStmt_t> & dStmt, CSphQueryResultMeta & tLastMeta,
-	SqlRowBuffer_c & dRows, ThdDesc_t * pThd )
+	SqlRowBuffer_c & dRows, ThdDesc_t * pThd, const CSphString& sWarning )
 {
 	// select count
 	int iSelect = 0;
@@ -9865,8 +10032,9 @@ void HandleMysqlMultiStmt ( NetOutputBuffer_c & tOut, BYTE uPacketID, const CSph
 
 		if ( eStmt==STMT_SELECT )
 		{
-			const AggrResult_t & tRes = tHandler.m_dResults[iSelect++];
-
+			AggrResult_t & tRes = tHandler.m_dResults[iSelect++];
+			if ( !sWarning.IsEmpty() )
+				tRes.m_sWarning = sWarning;
 			SendMysqlSelectResult ( tOut, uPacketID, dRows, tRes, bMoreResultsFollow );
 		} else if ( eStmt==STMT_SHOW_WARNINGS )
 			HandleMysqlWarning ( tOut, uPacketID, tMeta, dRows, bMoreResultsFollow );
@@ -10167,7 +10335,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 		// handle multi SQL query
 		if ( bParsedOK && dStmt.GetLength()>1 )
 		{
-			HandleMysqlMultiStmt ( tOut, uPacketID, dStmt, tLastMeta, dRows, pThd );
+			HandleMysqlMultiStmt ( tOut, uPacketID, dStmt, tLastMeta, dRows, pThd, sError );
 			continue;
 		}
 
@@ -10186,7 +10354,12 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 			tHandler.m_dQueries[0] = dStmt.Begin()->m_tQuery;
 
 			if ( HandleMysqlSelect ( tOut, uPacketID, tHandler ) )
-				SendMysqlSelectResult ( tOut, uPacketID, dRows, tHandler.m_dResults.Last(), false );
+			{
+				AggrResult_t & tLast = tHandler.m_dResults.Last();
+				if ( !sError.IsEmpty() )
+					tLast.m_sWarning = sError;
+				SendMysqlSelectResult ( tOut, uPacketID, dRows, tLast, false );
+			}
 
 			// save meta for SHOW META
 			tLastMeta = tHandler.m_dResults.Last();

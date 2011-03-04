@@ -4948,6 +4948,10 @@ int SelectParser_t::GetToken ( YYSTYPE * lvalp )
 		LOC_CHECK ( "MIN", 3, SEL_MIN );
 		LOC_CHECK ( "MAX", 3, SEL_MAX );
 		LOC_CHECK ( "SUM", 3, SEL_SUM );
+		LOC_CHECK ( "COUNT", 5, SEL_COUNT );
+		LOC_CHECK ( "DISTINCT", 8, SEL_DISTINCT );
+		LOC_CHECK ( "WEIGHT", 6, SEL_WEIGHT );
+		LOC_CHECK ( "MATCH_WEIGHT", 12, SEL_MATCH_WEIGHT );
 
 		#undef LOC_CHECK
 

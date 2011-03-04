@@ -23,8 +23,12 @@
 %token <iNode>			TOK_USERVAR
 %token <iNode>			TOK_UDF
 
+%token	TOK_ATID
+%token	TOK_ATWEIGHT
 %token	TOK_ID
 %token	TOK_WEIGHT
+%token	TOK_COUNT
+%token	TOK_DISTINCT
 %token	TOK_CONST_LIST
 %token	TOK_ATTR_SINT
 
@@ -63,8 +67,10 @@ expr:
 	| function
 	| TOK_CONST_INT					{ $$ = pParser->AddNodeInt ( $1 ); }
 	| TOK_CONST_FLOAT				{ $$ = pParser->AddNodeFloat ( $1 ); }
+	| TOK_ATID						{ $$ = pParser->AddNodeID(); }
+	| TOK_ATWEIGHT					{ $$ = pParser->AddNodeWeight(); }
 	| TOK_ID						{ $$ = pParser->AddNodeID(); }
-	| TOK_WEIGHT					{ $$ = pParser->AddNodeWeight(); }
+	| TOK_WEIGHT '(' ')'				{ $$ = pParser->AddNodeWeight(); }
 	| '-' expr %prec TOK_NEG		{ $$ = pParser->AddNodeOp ( TOK_NEG, $2, -1 ); }
 	| TOK_NOT expr					{ $$ = pParser->AddNodeOp ( TOK_NOT, $2, -1 ); if ( $$<0 ) YYERROR; }
 	| expr '+' expr					{ $$ = pParser->AddNodeOp ( '+', $1, $3 ); }
@@ -115,6 +121,10 @@ function:
 			$$ = pParser->AddNodeFunc ( $1, $3, $5 );
 		}
 	| TOK_FUNC_IN '(' TOK_ID ',' constlist ')'
+		{
+			$$ = pParser->AddNodeFunc ( $1, pParser->AddNodeID(), $5 );
+		}
+	| TOK_FUNC_IN '(' TOK_ATID ',' constlist ')'
 		{
 			$$ = pParser->AddNodeFunc ( $1, pParser->AddNodeID(), $5 );
 		}

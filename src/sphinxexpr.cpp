@@ -722,6 +722,7 @@ private:
 	void					GatherArgNodes ( int iNode, CSphVector<int> & dNodes );
 
 	bool					CheckForConstSet ( int iArgsNode, int iSkip );
+	int						ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp );
 
 	template < typename T >
 	void					WalkTree ( int iRoot, T & FUNCTOR );
@@ -793,6 +794,33 @@ static void sphUnpackAttrLocator ( uint64_t uIndex, ExprNode_t * pNode )
 	pNode->m_iLocator = (int)( ( uIndex>>32 ) & 0xff );
 }
 
+int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp )
+{
+	// check attribute type and width
+	const CSphColumnInfo & tCol = m_pSchema->GetAttr ( iAttr );
+
+	int iRes = -1;
+	switch ( tCol.m_eAttrType )
+	{
+	case SPH_ATTR_FLOAT:		iRes = TOK_ATTR_FLOAT;	break;
+	case SPH_ATTR_UINT32SET:	iRes = TOK_ATTR_MVA; break;
+	case SPH_ATTR_STRING:		iRes = TOK_ATTR_STRING; break;
+	case SPH_ATTR_INTEGER:
+	case SPH_ATTR_TIMESTAMP:
+	case SPH_ATTR_BOOL:
+	case SPH_ATTR_BIGINT:
+	case SPH_ATTR_WORDCOUNT:	iRes = tCol.m_tLocator.IsBitfield() ? TOK_ATTR_BITS : TOK_ATTR_INT; break;
+	default:
+		m_sLexerError.SetSprintf ( "attribute '%s' is of unsupported type (type=%d)", sTok, tCol.m_eAttrType );
+		return -1;
+	}
+
+	if ( m_pExtra )
+		m_pExtra->AddAttr ( tCol, true );
+	lvalp->iAttrLocator = sphPackAttrLocator ( tCol.m_tLocator, iAttr );
+	return iRes;
+}
+
 /// a lexer of my own
 /// returns token id and fills lvalp on success
 /// returns -1 and fills sError on failure
@@ -820,8 +848,12 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		sTok.ToLower ();
 
 		// check for magic name
-		if ( sTok=="@id" )		{ return TOK_ID; }
-		if ( sTok=="@weight" )	{ return TOK_WEIGHT; }
+		if ( sTok=="@id" )	{ return TOK_ATID; }
+		if ( sTok=="@weight" )	{ return TOK_ATWEIGHT; }
+		if ( sTok=="id" )	{ return TOK_ID; }
+		if ( sTok=="weight" )	{ return TOK_WEIGHT; }
+		if ( sTok=="match_weight" )	{ return TOK_WEIGHT; }
+		if ( sTok=="distinct" )	{ return TOK_DISTINCT; }
 		if ( sTok=="@geodist" )
 		{
 			int iGeodist = m_pSchema->GetAttrIndex("@geodist");
@@ -850,34 +882,19 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		if ( sTok=="div" )		{ return TOK_DIV; }
 		if ( sTok=="mod" )		{ return TOK_MOD; }
 
+
+		if ( sTok=="count" )
+		{
+			int iAttr = m_pSchema->GetAttrIndex ( "count" );
+			if ( iAttr>=0 )
+				ParseAttr ( iAttr, sTok.cstr(), lvalp );
+			return TOK_COUNT;
+		}
+
 		// check for attribute
 		int iAttr = m_pSchema->GetAttrIndex ( sTok.cstr() );
 		if ( iAttr>=0 )
-		{
-			// check attribute type and width
-			const CSphColumnInfo & tCol = m_pSchema->GetAttr ( iAttr );
-
-			int iRes = -1;
-			switch ( tCol.m_eAttrType )
-			{
-				case SPH_ATTR_FLOAT:		iRes = TOK_ATTR_FLOAT;	break;
-				case SPH_ATTR_UINT32SET:	iRes = TOK_ATTR_MVA; break;
-				case SPH_ATTR_STRING:		iRes = TOK_ATTR_STRING; break;
-				case SPH_ATTR_INTEGER:
-				case SPH_ATTR_TIMESTAMP:
-				case SPH_ATTR_BOOL:
-				case SPH_ATTR_BIGINT:
-				case SPH_ATTR_WORDCOUNT:	iRes = tCol.m_tLocator.IsBitfield() ? TOK_ATTR_BITS : TOK_ATTR_INT; break;
-				default:
-					m_sLexerError.SetSprintf ( "attribute '%s' is of unsupported type (type=%d)", sTok.cstr(), tCol.m_eAttrType );
-					return -1;
-			}
-
-			if ( m_pExtra )
-				m_pExtra->AddAttr ( tCol, true );
-			lvalp->iAttrLocator = sphPackAttrLocator ( tCol.m_tLocator, iAttr );
-			return iRes;
-		}
+			return ParseAttr ( iAttr, sTok.cstr(), lvalp );
 
 		// check for function
 		sTok.ToLower();
@@ -2179,7 +2196,7 @@ int yylex ( YYSTYPE * lvalp, ExprParser_t * pParser )
 
 void yyerror ( ExprParser_t * pParser, const char * sMessage )
 {
-	pParser->m_sParserError.SetSprintf ( "%s near '%s'", sMessage, pParser->m_pLastTokenStart );
+	pParser->m_sParserError.SetSprintf ( "Sphinx expr: %s near '%s'", sMessage, pParser->m_pLastTokenStart );
 }
 
 #if USE_WINDOWS

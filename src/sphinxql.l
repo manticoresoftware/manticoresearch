@@ -63,6 +63,7 @@ SPACE				[ \t\n\r]
 "INTO"				{ YYSTOREBOUNDS; return TOK_INTO; }
 "LIMIT"				{ YYSTOREBOUNDS; return TOK_LIMIT; }
 "MATCH"				{ YYSTOREBOUNDS; return TOK_MATCH; }
+"MATCH_WEIGHT"			{ YYSTOREBOUNDS; return TOK_MATCH_WEIGHT; }
 "MAX"				{ YYSTOREBOUNDS; return TOK_MAX; }
 "META"				{ YYSTOREBOUNDS; return TOK_META; }
 "MIN"				{ YYSTOREBOUNDS; return TOK_MIN; }
@@ -104,9 +105,9 @@ SPACE				[ \t\n\r]
 {DIGIT}*\.{DIGIT}*	{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
 {DIGIT}+			{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; lvalp->m_iValue = strtoll ( yytext, NULL, 10 ); return TOK_CONST_INT; }
 
-"@id"				{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_IDENT; }
-"@weight"			{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_IDENT; }
-"@count"			{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_IDENT; }
+"@id"				{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_ATIDENT; }
+"@weight"			{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_ATIDENT; }
+"@count"			{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_ATIDENT; }
 {ID}				{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_IDENT; }
 @{ID}				{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_USERVAR; }
 

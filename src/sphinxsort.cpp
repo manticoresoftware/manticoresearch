@@ -199,11 +199,20 @@ public:
 // SORTING+GROUPING QUEUE
 //////////////////////////////////////////////////////////////////////////
 
-static bool IsGroupbyMagic ( const CSphString & s )
+static bool IsCount ( const CSphString & s )
 {
-	return s=="@groupby" || s=="@count" || s=="@distinct";
+	return s=="@count" || s=="count(*)";
 }
 
+static bool IsGroupby ( const CSphString & s )
+{
+	return s=="@groupby" || s=="@distinct";
+}
+
+static bool IsGroupbyMagic ( const CSphString & s )
+{
+	return IsGroupby ( s ) || IsCount ( s );
+}
 
 /// groupers
 #define GROUPER_BEGIN(_name) \
@@ -2552,16 +2561,26 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	// expressions from select items
 	CSphVector<CSphColumnInfo> dAggregates;
 
+	bool bHasCount = false;
+
 	if ( bComputeItems )
 		ARRAY_FOREACH ( iItem, pQuery->m_dItems )
 	{
 		const CSphQueryItem & tItem = pQuery->m_dItems[iItem];
 		const CSphString & sExpr = tItem.m_sExpr;
+		bool bIsCount = IsCount(sExpr);
+		bHasCount |= bIsCount;
+
+		if ( bIsCount && sExpr.cstr()[0]!='@' )
+		{
+			CSphString & sExprW = const_cast < CSphString & > ( sExpr );
+			sExprW = "@count";
+		}
 
 		// for now, just always pass "plain" attrs from index to sorter; they will be filtered on searchd level
 		if ( sExpr=="*"
 			|| ( tSchema.GetAttrIndex ( sExpr.cstr() )>=0 && tItem.m_eAggrFunc==SPH_AGGR_NONE )
-			|| IsGroupbyMagic(sExpr) )
+			|| IsGroupby(sExpr) || bIsCount )
 		{
 			continue;
 		}
@@ -2723,6 +2742,11 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		{
 			LOC_CHECK ( iDistinct<=0, "unexpected @distinct" );
 		}
+	}
+
+	if ( bHasCount )
+	{
+		LOC_CHECK ( tSorterSchema.GetAttrIndex ( "@count" )>=0, "Count(*) or @count is queried, but not available in the schema" );
 	}
 
 #undef LOC_CHECK

@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>duplicate documents vs rt insert batches</name>
+
+<skip_indexer/>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+index rt
+{
+	type			= rt
+	docinfo			= extern
+	charset_type	= utf-8
+	path			= <data_path/>/rt
+
+	rt_attr_uint	= gid
+	rt_field		= body
+	
+	rt_mem_limit	= 8M 
+}
+</config>
+
+<sphqueries>
+<sphinxql>replace into rt (id, gid, body) values ( 1, 10, 'the' ), (2, 20, 'good'), (1, 11, 'a'), (3, 30, 'dog')</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+<sphinxql>select * from rt where match ('a')</sphinxql>
+<sphinxql>select * from rt where match ('the')</sphinxql>
+
+<sphinxql>replace into rt (id, gid, body) values ( 1, 10, 'the' ), (1, 11, 'a'), (2, 20, 'good'), (3, 30, 'dog')</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+<sphinxql>select * from rt where match ('a')</sphinxql>
+<sphinxql>select * from rt where match ('the')</sphinxql>
+
+<sphinxql>replace into rt (id, gid, body) values (2, 20, 'good'), (3, 30, 'dog'), ( 1, 10, 'the' ), (1, 11, 'a')</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+<sphinxql>select * from rt where match ('a')</sphinxql>
+<sphinxql>select * from rt where match ('the')</sphinxql>
+
+<sphinxql>replace into rt (id, gid, body) values ( 1, 10, 'the' ), (2, 20, 'good'), (1, 11, 'b'), (3, 30, 'dog'), (1, 12, 'a')</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+<sphinxql>select * from rt where match ('a')</sphinxql>
+<sphinxql>select * from rt where match ('the | b')</sphinxql>
+
+<sphinxql>replace into rt (id, gid, body) values ( 1, 10, 'the' ), (1, 11, 'b') , (1, 12, 'a'), (2, 20, 'good'), (3, 30, 'dog')</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+<sphinxql>select * from rt where match ('a')</sphinxql>
+<sphinxql>select * from rt where match ('the | b')</sphinxql>
+
+<sphinxql>replace into rt (id, gid, body) values (2, 20, 'good'), (3, 30, 'dog'), ( 1, 10, 'the' ), (1, 11, 'b'), (1, 12, 'a')</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+<sphinxql>select * from rt where match ('a')</sphinxql>
+<sphinxql>select * from rt where match ('the | b')</sphinxql>
+
+<sphinxql>replace into rt (id, gid, body) values ( 1, 10, 'the' ), (1, 11, 'a'), (2, 20, 'good'), (3, 30, 'dog'), (2, 21, 'nice'), (2, 22, 'well'), (4, 40, 'as'), (3, 31, 'cat'), (3, 32, 'bird')</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+<sphinxql>select * from rt where match ('a')</sphinxql>
+<sphinxql>select * from rt where match ('the')</sphinxql>
+<sphinxql>select * from rt where match ('well')</sphinxql>
+<sphinxql>select * from rt where match ('good | nice')</sphinxql>
+<sphinxql>select * from rt where match ('bird')</sphinxql>
+<sphinxql>select * from rt where match ('dog | cat')</sphinxql>
+</sphqueries>
+
+</test>

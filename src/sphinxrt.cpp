@@ -641,6 +641,13 @@ struct RtHitReader2_t : public RtHitReader_t
 /// forward ref
 struct RtIndex_t;
 
+struct AccDocDup_t
+{
+	SphDocID_t m_uDocid;
+	int m_iDupCount;
+};
+
+
 /// indexing accumulator
 struct RtAccum_t
 {
@@ -650,10 +657,12 @@ struct RtAccum_t
 	CSphVector<CSphRowitem>		m_dAccumRows;
 	CSphVector<SphDocID_t>		m_dAccumKlist;
 	CSphTightVector<BYTE>		m_dStrings;
+	CSphVector<DWORD>			m_dPerDocHitsCount;
 
 					RtAccum_t() : m_pIndex ( NULL ), m_iAccumDocs ( 0 ) { m_dStrings.Add ( 0 ); }
 	void			AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, int iRowSize, const char ** ppStr );
 	RtSegment_t *	CreateSegment ( int iRowSize );
+	void			CleanupDuplacates ( int iRowSize );
 };
 
 /// TLS indexing accumulator (we disallow two uncommitted adds within one thread; and so need at most one)
@@ -1290,11 +1299,14 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, int iRow
 	}
 
 	// accumulate hits
+	int iHits = 0;
 	if ( pHits && pHits->Length() )
 	{
+		iHits = pHits->Length();
 		for ( const CSphWordHit * pHit = pHits->First(); pHit<=pHits->Last(); pHit++ )
 			m_dAccum.Add ( *pHit );
 	}
+	m_dPerDocHitsCount.Add ( iHits );
 
 	m_iAccumDocs++;
 }
@@ -1404,6 +1416,103 @@ RtSegment_t * RtAccum_t::CreateSegment ( int iRowSize )
 
 	// done
 	return pSeg;
+}
+
+
+struct AccumDocHits_t
+{
+	SphDocID_t m_uDocid;
+	int m_iDocIndex;
+	int m_iHitIndex;
+	int m_iHitCount;
+};
+
+
+struct CmpDocHitIndex_t
+{
+	inline bool IsLess ( const AccumDocHits_t & a, const AccumDocHits_t & b ) const
+	{
+		return ( a.m_uDocid<b.m_uDocid || ( a.m_uDocid==b.m_uDocid && a.m_iDocIndex<b.m_iDocIndex ) );
+	}
+};
+
+
+void RtAccum_t::CleanupDuplacates ( int iRowSize )
+{
+	if ( m_iAccumDocs<=1 )
+		return;
+
+	assert ( m_iAccumDocs==m_dPerDocHitsCount.GetLength() );
+	CSphVector<AccumDocHits_t> dDocHits ( m_dPerDocHitsCount.GetLength() );
+	int iStride = DOCINFO_IDSIZE + iRowSize;
+
+	int iHitIndex = 0;
+	CSphRowitem * pRow = m_dAccumRows.Begin();
+	for ( int i=0; i<m_iAccumDocs; i++, pRow+=iStride )
+	{
+		AccumDocHits_t & tElem = dDocHits[i];
+		tElem.m_uDocid = DOCINFO2ID ( pRow );
+		tElem.m_iDocIndex = i;
+		tElem.m_iHitIndex = iHitIndex;
+		tElem.m_iHitCount = m_dPerDocHitsCount[i];
+		iHitIndex += m_dPerDocHitsCount[i];
+	}
+
+	dDocHits.Sort ( CmpDocHitIndex_t() );
+
+	bool bHasDups = false;;
+	for ( int i=0; i<dDocHits.GetLength()-1 && !bHasDups; i++ )
+		bHasDups = ( dDocHits[i].m_uDocid==dDocHits[i+1].m_uDocid );
+
+	if ( !bHasDups )
+		return;
+
+	// filter out unique - keep duplicates, but not last one
+	int iDst = 0;
+	int iSrc = 1;
+	while ( iSrc<dDocHits.GetLength() )
+	{
+		bool bDup = ( dDocHits[iDst].m_uDocid==dDocHits[iSrc].m_uDocid );
+		iDst += bDup;
+		dDocHits[iDst] = dDocHits[iSrc++];
+	}
+	dDocHits.Resize ( iDst );
+	assert ( dDocHits.GetLength() );
+
+	// sort by hit index
+	dDocHits.Sort ( bind ( &AccumDocHits_t::m_iHitIndex ) );
+
+	// clean up hits of duplicates
+	for ( int iHit = dDocHits.GetLength()-1; iHit>=0; iHit-- )
+	{
+		if ( !dDocHits[iHit].m_iHitCount )
+			continue;
+
+		int iFrom = dDocHits[iHit].m_iHitIndex;
+		int iCount = dDocHits[iHit].m_iHitCount;
+		if ( iFrom+iCount<m_dAccum.GetLength() )
+		{
+			for ( int iDst=iFrom, iSrc=iFrom+iCount; iSrc<m_dAccum.GetLength(); iSrc++, iDst++ )
+				m_dAccum[iDst] = m_dAccum[iSrc];
+		}
+		m_dAccum.Resize ( m_dAccum.GetLength()-iCount );
+	}
+
+	// sort by docid index
+	dDocHits.Sort ( bind ( &AccumDocHits_t::m_iDocIndex ) );
+
+	// clean up docinfos of duplicates
+	for ( int iDoc = dDocHits.GetLength()-1; iDoc>=0; iDoc-- )
+	{
+		int iDst = dDocHits[iDoc].m_iDocIndex*iStride;
+		int iSrc = iDst+iStride;
+		while ( iSrc<m_dAccumRows.GetLength() )
+		{
+			m_dAccumRows[iDst++] = m_dAccumRows[iSrc++];
+		}
+		m_iAccumDocs--;
+		m_dAccumRows.Resize ( m_iAccumDocs*iStride );
+	}
 }
 
 
@@ -1880,12 +1989,14 @@ void RtIndex_t::Commit ()
 		pAcc->m_iAccumDocs = 0;
 		pAcc->m_dAccumRows.Resize ( 0 );
 		pAcc->m_dStrings.Resize ( 1 );
+		pAcc->m_dPerDocHitsCount.Resize ( 0 );
 		return;
 	}
 
 	// phase 0, build a new segment
 	// accum and segment are thread local; so no locking needed yet
 	// segment might be NULL if we're only killing rows this txn
+	pAcc->CleanupDuplacates ( m_tOutboundSchema.GetRowSize() );
 	pAcc->m_dAccum.Sort ( CmpHit_fn() );
 
 	RtSegment_t * pNewSeg = pAcc->CreateSegment ( m_tOutboundSchema.GetRowSize() );
@@ -1893,10 +2004,16 @@ void RtIndex_t::Commit ()
 	assert ( !pNewSeg || pNewSeg->m_iAliveRows>0 );
 	assert ( !pNewSeg || pNewSeg->m_bTlsKlist==false );
 
+#if PARANOID
+	if ( pNewSeg )
+		CheckSegmentRows ( pNewSeg, m_iStride );
+#endif
+
 	// clean up parts we no longer need
 	pAcc->m_dAccum.Resize ( 0 );
 	pAcc->m_dAccumRows.Resize ( 0 );
 	pAcc->m_dStrings.Resize ( 1 ); // handle dummy zero offset
+	pAcc->m_dPerDocHitsCount.Resize ( 0 );
 
 	// sort accum klist, too
 	pAcc->m_dAccumKlist.Uniq ();

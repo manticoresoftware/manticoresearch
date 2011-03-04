@@ -1,3 +1,7 @@
+<!DOCTYPE book [
+<!ENTITY iuml "&#xEF;">
+]>
+
 <book>
 
 <title>Sphinx 1.11-beta reference manual</title>
@@ -2283,6 +2287,113 @@ synthetic tests.
 </sect1>
 
 
+<sect1 id="collations"><title>Collations</title>
+<para>
+Introduced to Sphinx in version 1.11-beta to supplement string sorting,
+collations essentially affect the string attribute comparisons. They specify
+both the character set encoding and the strategy that Sphinx uses to compare
+strings when doing ORDER BY or GROUP BY with a string attribute involved.
+</para>
+<para>
+String attributes are stored as is when indexing, and no character set
+or language information is attached to them. That's okay as long as Sphinx
+only needs to store and return the strings to the calling application verbatim.
+But when you ask Sphinx to sort by a string value, that request immediately
+becomes quite ambiguous.
+</para>
+<para>
+First, single-byte (ASCII, or ISO-8859-1, or Windows-1251) strings
+need to be processed differently that the UTF-8 ones that may encode
+every character with a variable number of bytes. So we need to know
+what is the character set type to interepret the raw bytes as meaningful
+characters properly.
+</para>
+<para>
+Second, we additionally need to know the language-specific
+string sorting rules. For instance, when sorting according to US rules
+in en_US locale, the accented character '&iuml;' (small letter i with diaeresis)
+should be placed somewhere after 'z'. However, when sorting with French rules
+and fr_FR locale in mind, it should be placed between 'i' and 'j'. And some
+other set of rules might choose to ignore accents at all, allowing '&iuml;'
+and 'i' to be mixed arbitrarily.
+</para>
+<para>
+Third, but not least, we might need case-sensitive sorting in some
+scenarios and case-insensitive sorting in some others.
+</para>
+<para>
+Collations combine all of the above: the character set, the lanugage rules,
+and the case sensitivity. Sphinx currently provides the following four
+collations.
+<orderedlist>
+<listitem><option>libc_ci</option></listitem>
+<listitem><option>libc_cs</option></listitem>
+<listitem><option>utf8_general_ci</option></listitem>
+<listitem><option>binary</option></listitem>
+</orderedlist>
+</para>
+<para>
+The first two collations rely on several standard C library (libc) calls
+and can thus support any locale that is installed on your system. They provide
+case-insensitive (_ci) and case-sensitive (_cs) comparisons respectively.
+By default they will use C locale, effectively resorting to bytewise
+comparisons. To change that, you need to specify a different available
+locale using <link linkend="conf-collation-libc-locale">collation_libc_locale</link>
+directive. The list of locales available on your system can usually be obtained
+with the <filename>locale</filename> command:
+<programlisting>
+$ locale -a
+C
+en_AG
+en_AU.utf8
+en_BW.utf8
+en_CA.utf8
+en_DK.utf8
+en_GB.utf8
+en_HK.utf8
+en_IE.utf8
+en_IN
+en_NG
+en_NZ.utf8
+en_PH.utf8
+en_SG.utf8
+en_US.utf8
+en_ZA.utf8
+en_ZW.utf8
+es_ES
+fr_FR
+POSIX
+ru_RU.utf8
+ru_UA.utf8
+</programlisting>
+</para>
+<para>
+The specific list of the system locales may vary. Consult your OS documentation
+to install additional needed locales.
+</para>
+<para>
+<option>utf8_general_ci</option> and <option>binary</option> locales are
+built-in into Sphinx. The first one is a generic collation for UTF-8 data
+(without any so-called language tailoring); it should behave similar to
+<option>utf8_general_ci</option> collation in MySQL. The second one
+is a simple bytewise comparison.
+</para>
+<para>
+Collation can be overriden via SphinxQL on a per-session basis using
+<code>SET collation_connection</code> statement. All subsequent SphinxQL
+queries will use this collation. SphinxAPI and SphinxSE queries will use
+the server default collation, as specified in
+<link linkend="conf-collation-server">collation_server</link> configuration
+directive. Sphinx currently defaults to <option>libc_ci</option> collation.
+</para>
+<para>
+Collations should affect all string attribute comparisons, including
+those within ORDER BY and GROUP BY, so differently ordered or grouped results
+can be returned depending on the collation chosen.
+</para>
+</sect1>
+
+
 </chapter>
 <chapter id="command-line-tools"><title>Command line tools reference</title>
 
@@ -3055,6 +3166,8 @@ FROM products
 WHERE MATCH('ipod')
 GROUP BY vendorid
 </programlisting>
+Starting with 1.11-beta, GROUP BY on a string attribute is supported,
+with respect for current collation (see <xref linkend="collations"/>).
 </listitem>
 <listitem>WITHIN GROUP ORDER BY clause. This is a Sphinx specific
 extension that lets you control how the best row within a group
@@ -3067,6 +3180,8 @@ GROUP BY siteid
 WITHIN GROUP ORDER BY @weight DESC
 ORDER BY timeseg DESC, @weight DESC
 </programlisting>
+Starting with 1.11-beta, WITHIN GROUP ORDER BY on a string attribute is supported,
+with respect for current collation (see <xref linkend="collations"/>).
 </listitem>
 <listitem>ORDER BY clause. Unlike in regular SQL, only column names
 (not expressions) are allowed and explicit ASC and DESC are required.
@@ -3074,6 +3189,8 @@ The columns however can be computed expressions:
 <programlisting>
 SELECT *, @weight*10+docboost AS skey FROM example ORDER BY skey
 </programlisting>
+Starting with 1.11-beta, ORDER BY on a string attribute is supported,
+with respect for current collation (see <xref linkend="collations"/>).
 </listitem>
 <listitem>LIMIT clause. Both LIMIT N and LIMIT M,N forms are supported.
 Unlike in regular SQL (but like in Sphinx API), an implicit LIMIT 0,20
@@ -3094,6 +3211,7 @@ Supported options and respectively allowed values are:
 <listitem>'retry_delay' - integer (distributed retry delay, msec)</listitem>
 <listitem>'field_weights' - a named integer list (per-field user weights for ranking)</listitem>
 <listitem>'index_weights' - a named integer list (per-index user weights for ranking)</listitem>
+<listitem>'reverse_scan' - 0 or 1, lets you control the order in which full-scan query processes the rows</listitem>
 </itemizedlist>
 Example:
 <programlisting>
@@ -4054,6 +4172,10 @@ Starting with version 0.9.9-rc2, aggregate functions (AVG(), MIN(),
 MAX(), SUM()) are supported through <link linkend="api-func-setselect">SetSelect()</link> API call
 when using GROUP BY.
 </para>
+<para>
+Starting with version 1.11-beta, grouping on string attributes
+is supported, with respect to current collation.
+</para>
 </sect2>
 
 <sect2 id="api-func-setgroupdistinct"><title>SetGroupDistinct</title>
@@ -4414,7 +4536,10 @@ Starting with version 0.9.9-rc1, keywords can contain wildcards, that work simil
 	<term>"load_files":</term>
 	<listitem>Added in version 1.10-beta. Whether to handle $docs as data
 	to extract snippets from (default behavior), or to treat it as file names,
-	and load data from specified files on the server side. Boolean, default is false.
+	and load data from specified files on the server side. Starting with
+	version 1.11-beta, up to <link linkend="conf-dist-threads">dist_threads</link>
+	worker threads per request will be created to parallelize the work
+	when this flag is enabled. Boolean, default is false.
 	</listitem>
 </varlistentry>
 <varlistentry>
@@ -7917,9 +8042,16 @@ within quotes (a phrase operator) would handle @-sign as blended, because
 the character would be handled as an operator. So you might want to
 escape the keywords.
 </para>
+<para>
+Starting with version 1.11-beta, blended characters can be remapped,
+so that multiple different blended characters could be normalized into
+just one base form. This is useful when indexing multiple alternative
+Unicode codepoints with equivalent glyphs.
+</para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
 blend_chars = +, &amp;, U+23
+blend_chars = +, &amp;->+ # 1.11 and above
 </programlisting>
 </sect2>
 
@@ -8851,8 +8983,8 @@ workers = threads
 
 <sect2 id="conf-dist-threads"><title>dist_threads</title>
 <para>
-Max local search threads to use when searching a distributed index.
-Optional, default is 0, which means to disable multi-threaded distributed searching.
+Max local worker threads to use for parallelizable requests (searching a distributed index; building a batch of snippets).
+Optional, default is 0, which means to disable in-request parallelism.
 Introduced in version 1.10-beta.
 </para>
 <para>
@@ -8878,6 +9010,13 @@ utilizes even when there are threads that wait for I/O completion).
 <para>
 Note that <option>dist_threads</option> does <b>not</b> require
 threads MPM. You can perfectly use it with fork or prefork MPMs too.
+</para>
+<para>
+Starting with version 1.11-beta, building a batch of snippets
+with <option>load_files</option> flag enabled can also be parallelized.
+Up to <option>dist_threads</option> threads are be created to process
+those files. That speeds up snippet extraction when the total amount
+of document data to process is significant (hundreds of megabytes).
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -8980,6 +9119,41 @@ more efficient binlog disk usage under certain borderline workloads.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 binlog_max_log_size = 16M
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-collation-server"><title>collation_server</title>
+<para>
+Default server collation.
+Optional, default is libc_ci.
+Introduced in version 1.11-beta.
+</para>
+<para>
+Specifies the default collation used for incoming requests. 
+The collation can be overridden on a per-query basis.
+Refer to <xref linkend="collations"/> section for the list of available collations and other details.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+collation_server = utf8_ci
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-collation-libc-locale"><title>collation_libc_locale</title>
+<para>
+Server libc locale.
+Optional, default is C.
+Introduced in version 1.11-beta.
+</para>
+<para>
+Specifies the libc locale, affecting the libc-based collations.
+Refer to <xref linkend="collations"/> section for the details.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+collation_libc_locale = fr_FR
 </programlisting>
 </sect2>
 

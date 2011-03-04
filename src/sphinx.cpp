@@ -3555,6 +3555,10 @@ static inline bool IsSeparator ( int iFolded, bool bFirst )
 	if (!( iFolded & FLAG_CODEPOINT_DUAL ))
 		return true;
 
+	// FIXME? n-grams currently also set dual
+	if ( iFolded & FLAG_CODEPOINT_NGRAM )
+		return true;
+
 	// dual depends on position
 	return bFirst;
 }

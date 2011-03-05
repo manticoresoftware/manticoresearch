@@ -517,8 +517,13 @@ function:
 	;
 
 arglist:
+	arg
+	| arglist ',' arg
+	;
+
+arg:
 	expr
-	| arglist ',' expr
+	| TOK_QUOTED_STRING
 	;
 
 //////////////////////////////////////////////////////////////////////////

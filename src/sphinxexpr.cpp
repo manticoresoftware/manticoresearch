@@ -17,6 +17,7 @@
 #include "sphinxexpr.h"
 #include "sphinxudf.h"
 #include "sphinxutils.h"
+#include "sphinxint.h"
 #include <time.h>
 #include <math.h>
 
@@ -232,6 +233,30 @@ struct Expr_GetInt64Const_c : public ISphExpr
 	virtual float Eval ( const CSphMatch & ) const { return (float) m_iValue; } // no assert() here cause generic float Eval() needs to work even on int-evaluator tree
 	virtual int IntEval ( const CSphMatch & ) const { assert ( 0 ); return (int)m_iValue; }
 	virtual int64_t Int64Eval ( const CSphMatch & ) const { return m_iValue; }
+};
+
+
+struct Expr_GetStrConst_c : public ISphExpr
+{
+	CSphString m_sVal;
+	int m_iLen;
+
+	explicit Expr_GetStrConst_c ( const char * sVal, int iLen )
+	{
+		if ( iLen>0 )
+			SqlUnescape ( m_sVal, sVal, iLen );
+		m_iLen = m_sVal.Length();
+	}
+
+	virtual int StringEval ( const CSphMatch &, const BYTE ** ppStr ) const
+	{
+		*ppStr = (const BYTE*) m_sVal.cstr();
+		return m_iLen;
+	}
+
+	virtual float Eval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
+	virtual int IntEval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
+	virtual int64_t Int64Eval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
 };
 
 
@@ -690,6 +715,7 @@ protected:
 
 	int						AddNodeInt ( int64_t iValue );
 	int						AddNodeFloat ( float fValue );
+	int						AddNodeString ( int64_t iValue );
 	int						AddNodeAttr ( int iTokenType, uint64_t uAttrLocator );
 	int						AddNodeID ();
 	int						AddNodeWeight ();
@@ -848,12 +874,12 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		sTok.ToLower ();
 
 		// check for magic name
-		if ( sTok=="@id" )	{ return TOK_ATID; }
-		if ( sTok=="@weight" )	{ return TOK_ATWEIGHT; }
-		if ( sTok=="id" )	{ return TOK_ID; }
-		if ( sTok=="weight" )	{ return TOK_WEIGHT; }
-		if ( sTok=="match_weight" )	{ return TOK_WEIGHT; }
-		if ( sTok=="distinct" )	{ return TOK_DISTINCT; }
+		if ( sTok=="@id" )			return TOK_ATID;
+		if ( sTok=="@weight" )		return TOK_ATWEIGHT;
+		if ( sTok=="id" )			return TOK_ID;
+		if ( sTok=="weight" )		return TOK_WEIGHT;
+		if ( sTok=="match_weight" )	return TOK_WEIGHT;
+		if ( sTok=="distinct" )		return TOK_DISTINCT;
 		if ( sTok=="@geodist" )
 		{
 			int iGeodist = m_pSchema->GetAttrIndex("@geodist");
@@ -963,12 +989,40 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 
 		// special case for float values without leading zero
 		case '.':
-			char * pEnd = NULL;
-			lvalp->fConst = (float) strtod ( m_pCur, &pEnd );
-			if ( pEnd )
 			{
-				m_pCur = pEnd;
-				return TOK_CONST_FLOAT;
+				char * pEnd = NULL;
+				lvalp->fConst = (float) strtod ( m_pCur, &pEnd );
+				if ( pEnd )
+				{
+					m_pCur = pEnd;
+					return TOK_CONST_FLOAT;
+				}
+				break;
+			}
+
+		case '\'':
+		case '"':
+			{
+				const char cEnd = *m_pCur;
+				for ( const char * s = m_pCur+1; *s; s++ )
+				{
+					if ( *s==cEnd )
+					{
+						int iBeg = (int)( m_pCur-m_sExpr );
+						int iLen = (int)( s-m_sExpr ) - iBeg + 1;
+						lvalp->iConst = ( int64_t(iBeg)<<32 ) + iLen;
+						m_pCur = s+1;
+						return TOK_CONST_STRING;
+
+					} else if ( *s=='\\' )
+					{
+						s++;
+						if ( !*s )
+							break;
+					}
+				}
+				m_sLexerError.SetSprintf ( "unterminated string constant near '%s'", m_pCur );
+				return -1;
 			}
 	}
 
@@ -1480,6 +1534,8 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 			else
 				return new Expr_GetConst_c ( float(tNode.m_iConst) );
 			break;
+		case TOK_CONST_STRING:
+			return new Expr_GetStrConst_c ( m_sExpr+(int)( tNode.m_iConst>>32 ), (int)( tNode.m_iConst & 0xffffffffUL ) );
 
 		case TOK_ID:			return new Expr_GetId_c ();
 		case TOK_WEIGHT:		return new Expr_GetWeight_c ();
@@ -2255,6 +2311,15 @@ int ExprParser_t::AddNodeFloat ( float fValue )
 	tNode.m_iToken = TOK_CONST_FLOAT;
 	tNode.m_eRetType = SPH_ATTR_FLOAT;
 	tNode.m_fConst = fValue;
+	return m_dNodes.GetLength()-1;
+}
+
+int ExprParser_t::AddNodeString ( int64_t iValue )
+{
+	ExprNode_t & tNode = m_dNodes.Add ();
+	tNode.m_iToken = TOK_CONST_STRING;
+	tNode.m_eRetType = SPH_ATTR_STRING;
+	tNode.m_iConst = iValue;
 	return m_dNodes.GetLength()-1;
 }
 

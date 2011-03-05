@@ -1008,6 +1008,40 @@ inline const char * sphTypeDirective ( ESphAttr eType )
 	}
 }
 
+inline void SqlUnescape ( CSphString & sRes, const char * sEscaped, int iLen )
+{
+	assert ( iLen>=2 );
+	assert ( sEscaped[0]=='\'' );
+	assert ( sEscaped[iLen-1]=='\'' );
+
+	// skip heading and trailing quotes
+	const char * s = sEscaped+1;
+	const char * sMax = s+iLen-2;
+
+	sRes.Reserve ( iLen );
+	char * d = (char*) sRes.cstr();
+
+	while ( s<sMax )
+	{
+		if ( s[0]=='\\' )
+		{
+			switch ( s[1] )
+			{
+			case 'b': *d++ = '\b'; break;
+			case 'n': *d++ = '\n'; break;
+			case 'r': *d++ = '\r'; break;
+			case 't': *d++ = '\t'; break;
+			default:
+				*d++ = s[1];
+			}
+			s += 2;
+		} else
+			*d++ = *s++;
+	}
+
+	*d++ = '\0';
+}
+
 #endif // _sphinxint_
 
 //

@@ -13,6 +13,7 @@
 
 %token <iConst>			TOK_CONST_INT
 %token <fConst>			TOK_CONST_FLOAT
+%token <iConst>			TOK_CONST_STRING
 %token <iAttrLocator>	TOK_ATTR_INT
 %token <iAttrLocator>	TOK_ATTR_BITS
 %token <iAttrLocator>	TOK_ATTR_FLOAT
@@ -97,6 +98,7 @@ arg:
 	expr
 	| TOK_ATTR_STRING				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_STRING, $1 ); }
 	| TOK_ATTR_MVA					{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA, $1 ); }
+	| TOK_CONST_STRING				{ $$ = pParser->AddNodeString ( $1 ); }
 	;
 
 arglist:

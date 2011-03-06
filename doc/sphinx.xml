@@ -1704,6 +1704,293 @@ which is commonly used in other search engines).
 </sect1>
 
 
+<sect1 id="expressions">
+<title>Expressions, functions, and operators</title>
+<para>
+Sphinx lets you use arbitrary arithmetic expressions both via SphinxQL
+and SphinxAPI, involving attribute values, internal attributes (document ID
+and relevance weight), arithmetic operations, a number of built-in functions,
+and user-defined functions.
+This section documents the supported operators and functions.
+Here's the complete reference list for quick access.
+<itemizedlist>
+<listitem><link linkend="expr-ari-ops">Arithmetic operators: +, -, *, /</link></listitem>
+<listitem><link linkend="expr-comp-ops">Comparison operators: &lt;, &gt; &lt;=, &gt;=, =, &lt;&gt;</link></listitem>
+<listitem><link linkend="expr-bool-ops">Boolean operators: AND, OR, NOT</link></listitem>
+<listitem><link linkend="expr-func-abs">ABS()</link></listitem>
+<listitem><link linkend="expr-func-bigint">BIGINT()</link></listitem>
+<listitem><link linkend="expr-func-ceil">CEIL()</link></listitem>
+<listitem><link linkend="expr-func-cos">COS()</link></listitem>
+<listitem><link linkend="expr-func-exp">EXP()</link></listitem>
+<listitem><link linkend="expr-func-floor">FLOOR()</link></listitem>
+<listitem><link linkend="expr-func-geodist">GEODIST()</link></listitem>
+<listitem><link linkend="expr-func-idiv">IDIV()</link></listitem>
+<listitem><link linkend="expr-func-if">IF()</link></listitem>
+<listitem><link linkend="expr-func-in">IN()</link></listitem>
+<listitem><link linkend="expr-func-interval">INTERVAL()</link></listitem>
+<listitem><link linkend="expr-func-ln">LN()</link></listitem>
+<listitem><link linkend="expr-func-log10">LOG10()</link></listitem>
+<listitem><link linkend="expr-func-log2">LOG2()</link></listitem>
+<listitem><link linkend="expr-func-max">MAX()</link></listitem>
+<listitem><link linkend="expr-func-min">MIN()</link></listitem>
+<listitem><link linkend="expr-func-now">NOW()</link></listitem>
+<listitem><link linkend="expr-func-pow">POW()</link></listitem>
+<listitem><link linkend="expr-func-sin">SIN()</link></listitem>
+<listitem><link linkend="expr-func-sint">SINT()</link></listitem>
+<listitem><link linkend="expr-func-sqrt">SQRT()</link></listitem>
+</itemizedlist>
+</para>
+
+
+<sect2 id="operators">
+<title>Operators</title>
+<variablelist>
+
+<varlistentry>
+<term id="expr-ari-ops">Arithmetic operators: +, -, *, /</term>
+<listitem>
+The standard arithmetic operators. Arithmetic calculations involving those
+can be performed in three different modes: (a) using single-precision,
+32-bit IEEE 754 floating point values (the default), (b) using signed 32-bit integers,
+(c) using 64-bit signed integers. The expression parser will automatically switch
+to integer mode if there are no operations the result in a floating point value.
+Otherwise, it will use the default floating point mode. For instance, <code>a+b</code>
+will be computed using 32-bit integers if both arguments are 32-bit integers;
+or using 64-bit integers if both arguments are integers but one of them is
+64-bit; or in floats otherwise. However, <code>a/b</code> or <code>sqrt(a)</code>
+will always be computed in floats, because these operations return a result
+of non-integer type. To avoid the first, you can use IDIV(). Also, <code>a*b</code>
+will not be automatically promoted to 64-bit when the arguments are 32-bit.
+To enforce 64-bit results, you can use BIGINT(). (But note that if there are
+non-integer operations, BIGINT() will simply be ignored.)
+</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-comp-ops">Comparison operators: &lt;, &gt; &lt;=, &gt;=, =, &lt;&gt;</term>
+<listitem>
+Comparison operators (eg. = or &lt;=) return 1.0 when the condition is true and 0.0 otherwise.
+For instance, <code>(a=b)+3</code> will evaluate to 4 when attribute 'a' is equal to attribute 'b', and to 3 when 'a' is not.
+Unlike MySQL, the equality comparisons (ie. = and &lt;&gt; operators) introduce a small equality threshold (1e-6 by default).
+If the difference between compared values is within the threshold, they will be considered equal.
+</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-bool-ops">Boolean operators: AND, OR, NOT</term>
+<listitem>
+Boolean operators (AND, OR, NOT) were introduced in 0.9.9-rc2 and behave as usual.
+They are left-associative and have the least priority compared to other operators.
+NOT has more priority than AND and OR but nevertheless less than any other operator.
+AND and OR have the same priority so brackets use is recommended to avoid confusion
+in complex expressions.
+</listitem>
+</varlistentry>
+
+</variablelist>
+</sect2>
+
+
+<sect2 id="numeric-functions">
+<title>Numeric functions</title>
+<variablelist>
+
+<varlistentry>
+<term id="expr-func-abs">ABS()</term>
+<listitem>Returns the absolute value of the argument.</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-ceil">CEIL()</term>
+<listitem>Returns the smallest integer value greater or equal to the argument.</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-cos">COS()</term>
+<listitem>Returns the cosine of the argument.</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-exp">EXP()</term>
+<listitem>Returns the exponent of the argument (e=2.718... to the power of the argument).</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-floor">FLOOR()</term>
+<listitem>Returns the largest integer value lesser or equal to the argument.</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-idiv">IDIV()</term>
+<listitem>
+Returns the result of an integer division of the first
+argument by the second argument. Both arguments must be
+of an integer type.
+</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-ln">LN()</term>
+<listitem>Returns the natural logarithm of the argument (with the base of e=2.718...).</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-log10">LOG10()</term>
+<listitem>Returns the common logarithm of the argument (with the base of 10).</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-log2">LOG2()</term>
+<listitem>Returns the binary logarithm of the argument (with the base of 2).</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-max">MAX()</term>
+<listitem>Returns the bigger of two arguments.</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-min">MIN()</term>
+<listitem>Returns the smaller of two arguments.</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-pow">POW()</term>
+<listitem>Returns the first argument raised to the power of the second argument.</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-sin">SIN()</term>
+<listitem>Returns the sine of the argument.</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-sqrt">SQRT()</term>
+<listitem>Returns the square root of the argument.</listitem>
+</varlistentry>
+
+</variablelist>
+</sect2>
+
+
+<sect2 id="date-time-functions">
+<title>Date and time functions</title>
+<variablelist>
+<varlistentry>
+<term id="expr-func-now">NOW()</term>
+<listitem>Returns the current timestamp as an INTEGER. Introduced in version 0.9.9-rc1.</listitem>
+</varlistentry>
+</variablelist>
+</sect2>
+
+
+<sect2 id="type-conversion-functions">
+<title>Type conversion functions</title>
+<variablelist>
+
+<varlistentry>
+<term id="expr-func-bigint">BIGINT()</term>
+<listitem>
+Forcibly promotes the integer argument to 64-bit type,
+and does nothing on floating point argument. It's intended to help enforce evaluation
+of certain expressions (such as <code>a*b</code>) in 64-bit mode even though all the arguments
+are 32-bit.
+Introduced in version 0.9.9-rc1.
+</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-sint">SINT()</term>
+<listitem>
+Forcibly reinterprets its
+32-bit unsigned integer argument as signed, and also expands it to 64-bit type
+(because 32-bit type is unsigned). It's easily illustrated by the following
+example: 1-2 normally evaluates to 4294967295, but SINT(1-2) evaluates to -1.
+Introduced in version 1.10-beta. 
+</listitem>
+</varlistentry>
+
+</variablelist>
+</sect2>
+
+
+<sect2 id="comparison-functions">
+<title>Comparison functions</title>
+<variablelist>
+
+<varlistentry>
+<term id="expr-func-if">IF()</term>
+<listitem>
+<code>IF()</code> behavior is slightly different that that of its MySQL counterpart.
+It takes 3 arguments, check whether the 1st argument is equal to 0.0, returns the 2nd argument if it is not zero, or the 3rd one when it is.
+Note that unlike comparison operators, <code>IF()</code> does <b>not</b> use a threshold!
+Therefore, it's safe to use comparison results as its 1st argument, but arithmetic operators might produce unexpected results.
+For instance, the following two calls will produce <emphasis>different</emphasis> results even though they are logically equivalent:
+<programlisting>
+IF ( sqrt(3)*sqrt(3)-3&lt;&gt;0, a, b )
+IF ( sqrt(3)*sqrt(3)-3, a, b )
+</programlisting>
+In the first case, the comparison operator &lt;&gt; will return 0.0 (false)
+because of a threshold, and <code>IF()</code> will always return 'b' as a result.
+In the second one, the same <code>sqrt(3)*sqrt(3)-3</code> expression will be compared
+with zero <emphasis>without</emphasis> threshold by the <code>IF()</code> function itself.
+But its value will be slightly different from zero because of limited floating point
+calculations precision. Because of that, the comparison with 0.0 done by <code>IF()</code>
+will not pass, and the second variant will return 'a' as a result.
+</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-in">IN()</term>
+<listitem>
+IN(expr,val1,val2,...), introduced in version 0.9.9-rc1, takes 2 or more arguments, and returns 1 if 1st argument
+(expr) is equal to any of the other arguments (val1..valN), or 0 otherwise.
+Currently, all the checked values (but not the expression itself!) are required
+to be constant. (Its technically possible to implement arbitrary expressions too,
+and that might be implemented in the future.) Constants are pre-sorted and then
+binary search is used, so IN() even against a big arbitrary list of constants
+will be very quick. Starting with 0.9.9-rc2, first argument can also be
+a MVA attribute. In that case, IN() will return 1 if any of the MVA values
+is equal to any of the other arguments.
+</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-interval">INTERVAL()</term>
+<listitem>
+INTERVAL(expr,point1,point2,point3,...), introduced in version 0.9.9-rc1, takes 2 or more arguments, and returns
+the index of the argument that is less than the first argument: it returns
+0 if expr&lt;point1, 1 if point1&lt;=expr&lt;point2, and so on.
+It is required that point1&lt;point2&lt;...&lt;pointN for this function
+to work correctly.
+</listitem>
+</varlistentry>
+
+</variablelist>
+</sect2>
+
+
+<sect2 id="misc-functions">
+<title>Miscellaneous functions</title>
+<variablelist>
+<varlistentry>
+<term id="expr-func-geodist">GEODIST()</term>
+<listitem>
+GEODIST(lat1,long1,lat2,long2) function, introduced in version 0.9.9-rc2,
+computes geosphere distance between two given points specified by their
+coordinates. Note that both latitudes and longitudes must be in radians
+and the result will be in meters. You can use arbitrary expression as any
+of the four coordinates. An optimized path will be selected when one pair
+of the arguments refers directly to a pair attributes and the other one
+is constant.
+</listitem>
+</varlistentry>
+</variablelist>
+</sect2>
+
+</sect1>
+
+
 <sect1 id="sorting-modes"><title>Sorting modes</title>
 <para>
 There are the following result sorting modes available:
@@ -1791,111 +2078,8 @@ arithmetic operations, and a number of built-in functions. Here's an example:
 $cl->SetSortMode ( SPH_SORT_EXPR,
 	"@weight + ( user_karma + ln(pageviews) )*0.1" );
 </programlisting>
-</para>
-<para>
-The following operators and functions are supported. They are mimiced after MySQL.
-The functions take a number of arguments depending on the specific function.
-<itemizedlist>
-<listitem>Operators: +, -, *, /, &lt;, &gt; &lt;=, &gt;=, =, &lt;&gt;.</listitem>
-<listitem>Boolean operators: AND, OR, NOT.</listitem>
-<listitem>0-argument functions: NOW().</listitem>
-<listitem>Unary (1-argument) functions: ABS(), CEIL(), FLOOR(), SIN(), COS(), LN(), LOG2(), LOG10(), EXP(), SQRT(), BIGINT(), SINT().</listitem>
-<listitem>Binary (2-argument) functions: MIN(), MAX(), POW(), IDIV().</listitem>
-<listitem>Other functions: IF(), INTERVAL(), IN(), GEODIST().</listitem>
-</itemizedlist>
-</para>
-<para>
-Calculations can be performed in three different modes: (a) using single-precision,
-32-bit IEEE 754 floating point values (the default), (b) using signed 32-bit integers,
-(c) using 64-bit signed integers. The expression parser will automatically switch
-to integer mode if there are no operations the result in a floating point value.
-Otherwise, it will use the default floating point mode. For instance, "a+b"
-will be computed using 32-bit integers if both arguments are 32-bit integers;
-or using 64-bit integers if both arguments are integers but one of them is
-64-bit; or in floats otherwise. However, "a/b" or "sqrt(a)" will always be
-computed in floats, because these operations return non-integer result.
-To avoid the first, you can use IDIV(). Also, "a*b" will not be automatically
-promoted to 64-bit when the arguments are 32-bit. To enforce 64-bit results,
-you can use BIGINT(). (But note that if there are non-integer operations,
-BIGINT() will simply be ignored.)
-</para>
-<para>
-Comparison operators (eg. = or &lt;=) return 1.0 when the condition is true and 0.0 otherwise.
-For instance, <code>(a=b)+3</code> will evaluate to 4 when attribute 'a' is equal to attribute 'b', and to 3 when 'a' is not.
-Unlike MySQL, the equality comparisons (ie. = and &lt;&gt; operators) introduce a small equality threshold (1e-6 by default).
-If the difference between compared values is within the threshold, they will be considered equal.
-</para>
-<para>
-Boolean operators (AND, OR, NOT) were introduced in 0.9.9-rc2 and behave as usual.
-They are left-associative and have the least priority compared to other operators.
-NOT has more priority than AND and OR but nevertheless less than any other operator.
-AND and OR have the same priority so brackets use is recommended to avoid confusion
-in complex expressions.
-</para>
-<para>
-All unary and binary functions are straightforward, they behave just like their mathematical counterparts.
-But <code>IF()</code> behavior needs to be explained in more detail.
-It takes 3 arguments, check whether the 1st argument is equal to 0.0, returns the 2nd argument if it is not zero, or the 3rd one when it is.
-Note that unlike comparison operators, <code>IF()</code> does <b>not</b> use a threshold!
-Therefore, it's safe to use comparison results as its 1st argument, but arithmetic operators might produce unexpected results.
-For instance, the following two calls will produce <emphasis>different</emphasis> results even though they are logically equivalent:
-<programlisting>
-IF ( sqrt(3)*sqrt(3)-3&lt;&gt;0, a, b )
-IF ( sqrt(3)*sqrt(3)-3, a, b )
-</programlisting>
-In the first case, the comparison operator &lt;&gt; will return 0.0 (false)
-because of a threshold, and <code>IF()</code> will always return 'b' as a result.
-In the second one, the same <code>sqrt(3)*sqrt(3)-3</code> expression will be compared
-with zero <emphasis>without</emphasis> threshold by the <code>IF()</code> function itself.
-But its value will be slightly different from zero because of limited floating point
-calculations precision. Because of that, the comparison with 0.0 done by <code>IF()</code>
-will not pass, and the second variant will return 'a' as a result.
-</para>
-<para>
-BIGINT() function, introduced in version 0.9.9-rc1, forcibly promotes the integer argument to 64-bit type,
-and does nothing on floating point argument. It's intended to help enforce evaluation
-of certain expressions (such as "a*b") in 64-bit mode even though all the arguments
-are 32-bit.
-</para>
-<para>
-SINT() function, introduced in version 1.10-beta, forcibly reinterprets its
-32-bit unsigned integer argument as signed, and also expands it to 64-bit type
-(because 32-bit type is unsigned). It's easily illustrated by the following
-example: 1-2 normally evaluates to 4294967295, but SINT(1-2) evaluates to -1.
-</para>
-<para>
-IDIV() functions performs an integer division on its 2 arguments. The result
-is integer as well, unlike "a/b" result.
-</para>
-<para>
-IN(expr,val1,val2,...), introduced in version 0.9.9-rc1, takes 2 or more arguments, and returns 1 if 1st argument
-(expr) is equal to any of the other arguments (val1..valN), or 0 otherwise.
-Currently, all the checked values (but not the expression itself!) are required
-to be constant. (Its technically possible to implement arbitrary expressions too,
-and that might be implemented in the future.) Constants are pre-sorted and then
-binary search is used, so IN() even against a big arbitrary list of constants
-will be very quick. Starting with 0.9.9-rc2, first argument can also be
-a MVA attribute. In that case, IN() will return 1 if any of the MVA values
-is equal to any of the other arguments.
-</para>
-<para>
-INTERVAL(expr,point1,point2,point3,...), introduced in version 0.9.9-rc1, takes 2 or more arguments, and returns
-the index of the argument that is less than the first argument: it returns
-0 if expr&lt;point1, 1 if point1&lt;=expr&lt;point2, and so on.
-It is required that point1&lt;point2&lt;...&lt;pointN for this function
-to work correctly.
-</para>
-<para>
-NOW(), introduced in version 0.9.9-rc1, is a helper function that returns current timestamp as a 32-bit integer.
-</para>
-<para>
-GEODIST(lat1,long1,lat2,long2) function, introduced in version 0.9.9-rc2,
-computes geosphere distance between two given points specified by their
-coordinates. Note that both latitudes and longitudes must be in radians
-and the result will be in meters. You can use arbitrary expression as any
-of the four coordinates. An optimized path will be selected when one pair
-of the arguments refers directly to a pair attributes and the other one
-is constant.
+The operators and functions supported in the expressions are discussed
+in a separate section, <xref linkend="expressions"/>.
 </para>
 </sect1>
 

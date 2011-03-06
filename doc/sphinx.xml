@@ -1714,13 +1714,16 @@ and user-defined functions.
 This section documents the supported operators and functions.
 Here's the complete reference list for quick access.
 <itemizedlist>
-<listitem><link linkend="expr-ari-ops">Arithmetic operators: +, -, *, /</link></listitem>
+<listitem><link linkend="expr-ari-ops">Arithmetic operators: +, -, *, /, %, DIV, MOD</link></listitem>
 <listitem><link linkend="expr-comp-ops">Comparison operators: &lt;, &gt; &lt;=, &gt;=, =, &lt;&gt;</link></listitem>
 <listitem><link linkend="expr-bool-ops">Boolean operators: AND, OR, NOT</link></listitem>
+<listitem><link linkend="expr-bitwise-ops">Bitwise operators: &amp;, |</link></listitem>
 <listitem><link linkend="expr-func-abs">ABS()</link></listitem>
 <listitem><link linkend="expr-func-bigint">BIGINT()</link></listitem>
 <listitem><link linkend="expr-func-ceil">CEIL()</link></listitem>
 <listitem><link linkend="expr-func-cos">COS()</link></listitem>
+<listitem><link linkend="expr-func-crc32">CRC32()</link></listitem>
+<listitem><link linkend="expr-func-day">DAY()</link></listitem>
 <listitem><link linkend="expr-func-exp">EXP()</link></listitem>
 <listitem><link linkend="expr-func-floor">FLOOR()</link></listitem>
 <listitem><link linkend="expr-func-geodist">GEODIST()</link></listitem>
@@ -1733,11 +1736,15 @@ Here's the complete reference list for quick access.
 <listitem><link linkend="expr-func-log2">LOG2()</link></listitem>
 <listitem><link linkend="expr-func-max">MAX()</link></listitem>
 <listitem><link linkend="expr-func-min">MIN()</link></listitem>
+<listitem><link linkend="expr-func-month">MONTH()</link></listitem>
 <listitem><link linkend="expr-func-now">NOW()</link></listitem>
 <listitem><link linkend="expr-func-pow">POW()</link></listitem>
 <listitem><link linkend="expr-func-sin">SIN()</link></listitem>
 <listitem><link linkend="expr-func-sint">SINT()</link></listitem>
 <listitem><link linkend="expr-func-sqrt">SQRT()</link></listitem>
+<listitem><link linkend="expr-func-year">YEAR()</link></listitem>
+<listitem><link linkend="expr-func-yearmonth">YEARMONTH()</link></listitem>
+<listitem><link linkend="expr-func-yearmonthday">YEARMONTHDAY()</link></listitem>
 </itemizedlist>
 </para>
 
@@ -1747,7 +1754,7 @@ Here's the complete reference list for quick access.
 <variablelist>
 
 <varlistentry>
-<term id="expr-ari-ops">Arithmetic operators: +, -, *, /</term>
+<term id="expr-ari-ops">Arithmetic operators: +, -, *, /, %, DIV, MOD</term>
 <listitem>
 The standard arithmetic operators. Arithmetic calculations involving those
 can be performed in three different modes: (a) using single-precision,
@@ -1759,7 +1766,8 @@ will be computed using 32-bit integers if both arguments are 32-bit integers;
 or using 64-bit integers if both arguments are integers but one of them is
 64-bit; or in floats otherwise. However, <code>a/b</code> or <code>sqrt(a)</code>
 will always be computed in floats, because these operations return a result
-of non-integer type. To avoid the first, you can use IDIV(). Also, <code>a*b</code>
+of non-integer type. To avoid the first, you can either use <code>IDIV(a,b)</code>
+or <code>a DIV b</code> form. Also, <code>a*b</code>
 will not be automatically promoted to 64-bit when the arguments are 32-bit.
 To enforce 64-bit results, you can use BIGINT(). (But note that if there are
 non-integer operations, BIGINT() will simply be ignored.)
@@ -1784,6 +1792,14 @@ They are left-associative and have the least priority compared to other operator
 NOT has more priority than AND and OR but nevertheless less than any other operator.
 AND and OR have the same priority so brackets use is recommended to avoid confusion
 in complex expressions.
+</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-bitwise-ops">Bitwise operators: &amp;, |</term>
+<listitem>
+These operators perform bitwise AND and OR respectively. The operands
+must be of an integer types. Introduced in version 1.10-beta.
 </listitem>
 </varlistentry>
 
@@ -1876,10 +1892,37 @@ of an integer type.
 <sect2 id="date-time-functions">
 <title>Date and time functions</title>
 <variablelist>
+
+<varlistentry>
+<term id="expr-func-day">DAY()</term>
+<listitem>Returns the integer day of month (in 1..31 range) from a timestamp argument, according to the current timezone. Introduced in version 1.11-beta.</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-month">MONTH()</term>
+<listitem>Returns the integer month (in 1..12 range) from a timestamp argument, according to the current timezone. Introduced in version 1.11-beta.</listitem>
+</varlistentry>
+
 <varlistentry>
 <term id="expr-func-now">NOW()</term>
 <listitem>Returns the current timestamp as an INTEGER. Introduced in version 0.9.9-rc1.</listitem>
 </varlistentry>
+
+<varlistentry>
+<term id="expr-func-year">YEAR()</term>
+<listitem>Returns the integer year (in 1969..2038 range) from a timestamp argument, according to the current timezone. Introduced in version 1.11-beta.</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-yearmonth">YEARMONTH()</term>
+<listitem>Returns the integer year and month code (in 196912..203801 range) from a timestamp argument, according to the current timezone. Introduced in version 1.11-beta.</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-yearmonthday">YEARMONTHDAY()</term>
+<listitem>Returns the integer year, month, and date code (in 19691231..20380119 range) from a timestamp argument, according to the current timezone. Introduced in version 1.11-beta.</listitem>
+</varlistentry>
+
 </variablelist>
 </sect2>
 
@@ -1973,6 +2016,14 @@ to work correctly.
 <sect2 id="misc-functions">
 <title>Miscellaneous functions</title>
 <variablelist>
+
+<varlistentry>
+<term id="expr-func-crc32">CRC32()</term>
+<listitem>
+Returns the CRC32 value of a string argument. Introduced in version 1.11-beta.
+</listitem>
+</varlistentry>
+
 <varlistentry>
 <term id="expr-func-geodist">GEODIST()</term>
 <listitem>
@@ -1985,6 +2036,7 @@ of the arguments refers directly to a pair attributes and the other one
 is constant.
 </listitem>
 </varlistentry>
+
 </variablelist>
 </sect2>
 

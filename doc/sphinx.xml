@@ -1994,7 +1994,9 @@ and that might be implemented in the future.) Constants are pre-sorted and then
 binary search is used, so IN() even against a big arbitrary list of constants
 will be very quick. Starting with 0.9.9-rc2, first argument can also be
 a MVA attribute. In that case, IN() will return 1 if any of the MVA values
-is equal to any of the other arguments.
+is equal to any of the other arguments. Starting with 1.11-beta, IN() also
+supports <code>IN(expr,@uservar)</code> syntax to check whether the value
+belongs to the list in the given global user variable.
 </listitem>
 </varlistentry>
 
@@ -3484,12 +3486,15 @@ full-text indexes as in <link linkend="api-func-query">Query()</link>
 API call rather than JOIN.
 </listitem>
 <listitem>WHERE clause. This clause will map both to fulltext query
-and filters. Comparison operators (=, !=, &lt;, &gt;, &lt;=, &gt;=), IN(),
+and filters. Comparison operators (=, !=, &lt;, &gt;, &lt;=, &gt;=), IN,
 AND, NOT, and BETWEEN are all supported and map directly to filters.
 OR is not supported yet but will be in the future. MATCH('query')
 is supported and maps to fulltext query. Query will be interpreted
 according to <link linkend="extended-syntax">full-text query language rules</link>.
-There must be at most one MATCH() in the clause.
+There must be at most one MATCH() in the clause. Starting with version
+1.11-beta, <code>{col_name | expr_alias} [NOT] IN @uservar</code>
+condition syntax is supported. (Refer to <xref linkend="sphinxql-set"/>
+for a discussion of global user variables.)
 </listitem>
 <listitem>GROUP BY clause. Currently only supports grouping by a single
 column. The column however can be a computed expression:
@@ -3743,12 +3748,102 @@ are planned, but not supported yet as of 1.10-beta.
 
 <sect1 id="sphinxql-set"><title>SET syntax</title>
 <programlisting>
-SET variable_name = value
+SET [GLOBAL] server_variable_name = value
+SET GLOBAL @user_variable_name = (int_val1 [, int_val2, ...])
 </programlisting>
 <para>
 SET statement, introduced in version 1.10-beta, modifies a server variable value.
-The only variable supported as of 1.10-beta is AUTOCOMMIT, and its allowed values
-are 0 and 1.
+The variable names are case-insensitive. No variable value changes survive
+server restart. There are the following classes of the variables:
+<orderedlist>
+<listitem>per-session server variable (1.10-beta and above)</listitem>
+<listitem>global server variable (1.11-beta and above)</listitem>
+<listitem>global user variable (1.11-beta and above)</listitem>
+</orderedlist>
+</para>
+<para>
+Global user variables are shared between concurrent sessions. Currently,
+the only supported value type is the list of BIGINTs, and these variables
+can only be used along with IN() for filtering purpose. The intended usage
+scenario is uploading huge lists of values to <filename>searchd</filename>
+(once) and reusing them (many times) later, saving on network overheads.
+Example:
+<programlisting>
+// in session 1
+mysql> SET GLOBAL @myfilter=(2,3,5,7,11,13);
+Query OK, 0 rows affected (0.00 sec)
+
+// later in session 2
+mysql> SELECT * FROM test1 WHERE group_id IN @myfilter;
++------+--------+----------+------------+-----------------+------+
+| id   | weight | group_id | date_added | title           | tag  |
++------+--------+----------+------------+-----------------+------+
+|    3 |      1 |        2 | 1299338153 | another doc     | 15   |
+|    4 |      1 |        2 | 1299338153 | doc number four | 7,40 |
++------+--------+----------+------------+-----------------+------+
+2 rows in set (0.02 sec)
+</programlisting>
+</para>
+<para>
+Per-session and global server variables affect certain server settings in the respective scope.
+Known per-session server variables are:
+<variablelist>
+<varlistentry>
+<term><code>AUTOCOMMIT = {0 | 1}</code></term>
+<listitem>
+Whether any data modification statement should be implicitly
+wrapped by BEGIN and COMMIT.
+Introduced in version 1.10-beta.
+</listitem>
+</varlistentry>
+<varlistentry>
+<term><code>COLLATION_CONNECTION = collation_name</code></term>
+<listitem>
+Selects the collation to be used for ORDER BY or GROUP BY on string
+values in the subsequent queries. Refer to <xref linkend="collations"/>
+for a list of known collation names.
+Introduced in version 1.11-beta.
+</listitem>
+</varlistentry>
+<varlistentry>
+<term><code>CHARACTER_SET_RESULTS = charset_name</code></term>
+<listitem>
+Does nothing; a placeholder to support frameworks, clients, and
+connectors that attempt to automatically enforce a charset when
+connecting to a Sphinx server.
+Introduced in version 1.11-beta.
+</listitem>
+</varlistentry>
+</variablelist>
+</para>
+<para>
+Known global server variables are:
+<variablelist>
+<varlistentry>
+<term><code>QUERY_LOG_FORMAT = {plain | sphinxql}</code></term>
+<listitem>
+Changes the current log format.
+Introduced in version 1.11-beta.
+</listitem>
+</varlistentry>
+<varlistentry>
+<term><code>LOG_LEVEL = {info | debug | debugv | debugvv}</code></term>
+<listitem>
+Changes the current log verboseness level.
+Introduced in version 1.11-beta.
+</listitem>
+</varlistentry>
+</variablelist>
+</para>
+<para>
+Examples:
+<programlisting>
+mysql> SET autocommit=0;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> SET GLOBAL query_log_format=sphinxql;
+Query OK, 0 rows affected (0.00 sec)
+</programlisting>
 </para>
 </sect1>
 

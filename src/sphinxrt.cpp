@@ -3428,6 +3428,14 @@ static void AddKillListFilter ( CSphVector<CSphFilterSettings> * pExtra, const S
 	tFilter.SetExternalValues ( pKillList, nEntries );
 }
 
+
+struct LocatorPair_t
+{
+	CSphAttrLocator m_tSrcLoc;
+	CSphAttrLocator m_tDstLoc;
+};
+
+
 // FIXME! missing MVA, index_exact_words support
 // FIXME? missing enable_star, legacy match modes support
 // FIXME? any chance to factor out common backend agnostic code?
@@ -3642,6 +3650,26 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 		// FIXME! setup overrides
 
+		// setup dynamized attributes
+		// currently only needed to read original string data in the expressions
+		// OPTIMZE! we need not really dynamize all strings here, just the ones actually referenced
+		CSphVector<LocatorPair_t> dDynamize;
+		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
+		{
+			const CSphColumnInfo & tSrc = m_tSchema.GetAttr(i);
+			const CSphColumnInfo & tDst = pResult->m_tSchema.GetAttr(i);
+			if ( tSrc.m_eAttrType==SPH_ATTR_STRING )
+			{
+				assert ( tDst.m_sName==tSrc.m_sName );
+				assert ( tDst.m_eAttrType==tSrc.m_eAttrType );
+				assert ( tDst.m_tLocator.m_bDynamic );
+				assert ( !tSrc.m_tLocator.m_bDynamic );
+				LocatorPair_t & tPair = dDynamize.Add();
+				tPair.m_tSrcLoc = tSrc.m_tLocator;
+				tPair.m_tDstLoc = tDst.m_tLocator;
+			}
+		}
+
 		// do searching
 		bool bRandomize = dSorters[0]->m_bRandomize;
 		int iCutoff = pQuery->m_iCutoff;
@@ -3676,6 +3704,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 					tMatch.m_iDocID = DOCINFO2ID(pRow);
 					tMatch.m_pStatic = DOCINFO2ATTRS(pRow); // FIXME! overrides
+					ARRAY_FOREACH ( j, dDynamize )
+						tMatch.SetAttr ( dDynamize[j].m_tDstLoc, tMatch.GetAttr ( dDynamize[j].m_tSrcLoc ) );
 
 					tCtx.CalcFilter ( tMatch );
 					if ( tCtx.m_pFilter && !tCtx.m_pFilter->Eval ( tMatch ) )
@@ -3726,6 +3756,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 					{
 						if ( tCtx.m_bLookupSort )
 							CopyDocinfo ( pMatch[i], FindDocinfo ( m_pSegments[iSeg], pMatch[i].m_iDocID ) );
+						ARRAY_FOREACH ( j, dDynamize )
+							pMatch[i].SetAttr ( dDynamize[j].m_tDstLoc, pMatch[i].GetAttr ( dDynamize[j].m_tSrcLoc ) );
+
 						tCtx.CalcSort ( pMatch[i] );
 						tCtx.CalcFinal ( pMatch[i] ); // OPTIMIZE? could be possibly done later
 

@@ -1112,6 +1112,8 @@ public class SphinxClient
 		if (!opts.containsKey("weight_order")) opts.put("weight_order", new Integer(0));
 		if (!opts.containsKey("load_files")) opts.put("load_files", new Integer(0));
 		if (!opts.containsKey("allow_empty")) opts.put("allow_empty", new Integer(0));
+		if (!opts.containsKey("query_mode")) opts.put("query_mode", new Integer(0));
+		if (!opts.containsKey("force_all_words")) opts.put("force_all_words", new Integer(0));
 
 		/* build request */
 		ByteArrayOutputStream reqBuf = new ByteArrayOutputStream();

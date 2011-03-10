@@ -2289,22 +2289,33 @@ of alive agents, load-balance requests, etc.
 </sect1>
 
 
-<sect1 id="query-log-format"><title><filename>searchd</filename> query log format</title>
+<sect1 id="query-log-format"><title><filename>searchd</filename> query log formats</title>
 <para>
-<filename>searchd</filename> logs all succesfully executed search queries
-into query log file. Here's an example:
+In version 1.11-beta and above two query log formats are supported.
+Previous versions only supported a custom plain text format. That format
+is still the default one. However, while it might be more convenient for
+manual monitoring and review, but hard to replay for benchmarks, it only
+logs <emphasis>search</emphasis> queries but not the other types
+of requests, does not always contain the complete search query 
+data, etc. The default text format is also harder (and sometimes
+impossible) to replay for benchmarking purposes. The new <code>sphinxql</code>
+format alleviates that. It aims to be complete and automatable,
+even though at the cost of brevity and readability.
+</para>
 
+<sect2 id="plain-log-format"><title>Plain log format</title>
+<para>
+By default, <filename>searchd</filename> logs all succesfully executed search queries
+into a query log file. Here's an example:
 <programlisting>
 [Fri Jun 29 21:17:58 2007] 0.004 sec [all/0/rel 35254 (0,20)] [lj] test
 [Fri Jun 29 21:20:34 2007] 0.024 sec [all/0/rel 19886 (0,20) @channel_id] [lj] test
 </programlisting>
-
 This log format is as follows:
 <programlisting>
 [query-date] query-time [match-mode/filters-count/sort-mode
     total-matches (offset,limit) @groupby-attr] [index-name] query
 </programlisting>
-
 Match mode can take one of the following values:
 <itemizedlist>
 <listitem>"all" for SPH_MATCH_ALL mode;</listitem>
@@ -2315,9 +2326,7 @@ Match mode can take one of the following values:
 <listitem>"ext2" for SPH_MATCH_EXTENDED2 mode;</listitem>
 <listitem>"scan" if the full scan mode was used, either by being specified with SPH_MATCH_FULLSCAN, or if the query was empty (as documented under <link linkend="matching-modes">Matching Modes</link>)</listitem>
 </itemizedlist>
-
 Sort mode can take one of the following values:
-
 <itemizedlist>
 <listitem>"rel" for SPH_SORT_RELEVANCE mode;</listitem>
 <listitem>"attr-" for SPH_SORT_ATTR_DESC mode;</listitem>
@@ -2325,9 +2334,7 @@ Sort mode can take one of the following values:
 <listitem>"tsegs" for SPH_SORT_TIME_SEGMENTS mode;</listitem>
 <listitem>"ext" for SPH_SORT_EXTENDED mode.</listitem>
 </itemizedlist>
-
 </para>
-
 <para>Additionally, if <filename>searchd</filename> was started with <option>--iostats</option>, there will be a block of data after where the index(es) searched are listed.</para>
 <para>A query log entry might take the form of:</para>
 <programlisting>
@@ -2340,6 +2347,55 @@ the number of file I/O operations carried out, the amount of data in kilobytes r
 the index files and time spent on I/O operations (although there is a background processing
 component, the bulk of this time is the I/O operation time).
 </para>
+</sect2>
+
+<sect2 id="sphinxql-log-format"><title>SphinxQL log format</title>
+<para>
+This is a new log format introduced in 1.11-beta, with the goals
+begin logging everything and then some, and in a format easy to automate
+(for insance, automatically replay). New format can either be enabled
+via the <link linkend="conf-query-log-format">query_log_format</link>
+directive in the configuration file, or switched back and forth
+on the fly with the
+<link linkend="sphinxql-set"><code>SET GLOBAL query_log_format=...</code></link>
+statement via SphinxQL. In the new format, the example from the previous
+section would look as follows. (Wrapped below for readability, but with
+just one query per line in the actual log.)
+<programlisting>
+/* Fri Jun 29 21:17:58.609 2007 2011 conn 2 wall 0.004 found 35254 */
+SELECT * FROM lj WHERE MATCH('test') OPTION ranker=proximity;
+
+/* Fri Jun 29 21:20:34 2007.555 conn 3 wall 0.024 found 19886 */
+SELECT * FROM lj WHERE MATCH('test') GROUP BY channel_id
+OPTION ranker=proximity;
+</programlisting>
+Note that <b>all</b> requests would be logged in this format,
+including those sent via SphinxAPI and SphinxSE, not just those
+sent via SphinxQL.
+</para>
+<para>
+The features of SphinxQL log format compared to the default text
+one are as follows.
+<itemizedlist>
+<listitem>All request types should be logged. (This is still work in progress.)</listitem>
+<listitem>Full statement data will be logged where possible.</listitem>
+<listitem>Errors and warnings are logged.</listitem>
+<listitem>The log should be automatically replayable via SphinxQL.</listitem>
+<listitem>Additional performance counters (currently, per-agent distributed query times) are logged.</listitem>
+</itemizedlist>
+<!-- FIXME! more examples with ios, kbs, agents etc; comment stuff reference?-->
+</para>
+<para>
+Every request (including both SphinxAPI and SphinxQL) request
+must result in exactly one log line. All request types, including
+INSERT, CALL SNIPPETS, etc will eventually get logged, though as of
+time of this writing, that is a work in progress). Every log line
+must be a valid SphinxQL statement that reconstructs the full request,
+except if the logged request is too big and needs shortening
+for performance reasons. Additional messages, counters, etc can be
+logged in the comments section after the request.
+</para>
+</sect2>
 </sect1>
 
 
@@ -2923,6 +2979,15 @@ or file field IO issues; etc) will be reported. By default, this option
 is off, and problem summaries may be reported instead.
 </listitem>
 
+<listitem><option>--sighup-each</option> is useful when you are
+rebuilding many big indexes, and want each one rotated into
+<filename>searchd</filename> as soon as possible. With
+<option>--sighup-each</option>, <filename>indexer</filename>
+will send a SIGHUP signal to searchd after succesfully
+completing the work on each index. (The default behavior
+is to send a single SIGHUP after all the indexes were built.)
+</listitem>
+
 </itemizedlist>
 </para>
 </sect1>
@@ -3073,6 +3138,12 @@ itself. Example usage:
 <programlisting>
 $ searchd --index myindex
 </programlisting>
+</listitem>
+
+<listitem><option>--strip-path</option> strips the path names from
+all the file names referenced from the index (stopwords, wordforms,
+exceptions, etc). This is useful for picking up indexes built on another
+machine with possibly different path layouts.
 </listitem>
 
 </itemizedlist>
@@ -3409,6 +3480,11 @@ all the index settings, in particular the entire attribute and
 field list. Prior to 0.9.9-rc2, this command was present in
 CLI search utility.
 </listitem>
+<listitem><option>--dumpconfig FILENAME.sph</option> dumps
+the index definition from the given index header file in (almost)
+compliant <filename>sphinx.conf</filename> file format.
+Added in version 1.11-beta.
+</listitem>
 <listitem><option>--dumpheader INDEXNAME</option> dumps index header
 by index name with looking up the header path in the configuration file.
 </listitem>
@@ -3475,11 +3551,14 @@ extensions and has a few omissions (such as (currently) missing support for JOIN
 Specifically,
 <itemizedlist>
 <listitem>Column list clause. Column names, arbitrary expressions,
-and star ('*') are all allowed (ie. "SELECT @id, group_id*123+456 FROM test1"
-will work). Unlike in regular SQL, all computed expressions must be aliased with
-a valid identifier. Special names such as @id and @weight should currently
+and star ('*') are all allowed (ie.
+<code>SELECT @id, group_id*123+456 AS expr1 FROM test1</code>
+will work). Unlike in regular SQL, all computed expressions must be aliased
+with a valid identifier. Starting with version 1.11-beta, <code>AS</code>
+is optional. Special names such as @id and @weight should currently
 be used with leading at-sign. This at-sign requirement will be lifted in
-the future.</listitem>
+the future.
+</listitem>
 <listitem>FROM clause. FROM clause should contain the list of indexes
 to search through. Unlike in regular SQL, comma means enumeration of
 full-text indexes as in <link linkend="api-func-query">Query()</link>
@@ -3729,7 +3808,7 @@ several comma-separated, parens-enclosed lists of rows values.
 
 <sect1 id="sphinxql-delete"><title>DELETE syntax</title>
 <programlisting>
-DELETE FROM index WHERE id = value
+DELETE FROM index WHERE {id = value | id IN (val1 [, val2 [, ...]])}
 </programlisting>
 <para>
 DELETE statement, introduced in version 1.10-beta, is only supported for RT indexes.
@@ -3737,10 +3816,11 @@ It deletes existing rows (documents) from an existing index based on ID.
 </para>
 <para>
 <option>index</option> is the name of RT index from which the row should be deleted.
-<option>value</option> is the row ID to be deleted.
+<option>value</option> is the row ID to be deleted. Support for batch
+<code>id IN (2,3,5)</code> syntax was added in version 1.11-beta.
 </para>
 <para>
-Additional types of WHERE conditions (such as IN, conditions on attributes, etc)
+Additional types of WHERE conditions (such as conditions on attributes, etc)
 are planned, but not supported yet as of 1.10-beta.
 </para>
 </sect1>
@@ -4024,6 +4104,58 @@ until those queries complete. Example:
 mysql> DROP FUNCTION avgmva;
 Query OK, 0 rows affected (0.00 sec)
 </programlisting>
+</sect1>
+
+
+<sect1 id="sphinxql-show-variables"><title>SHOW VARIABLES syntax</title>
+<programlisting>
+SHOW VARIABLES
+</programlisting>
+<para>
+Added in version 1.11-beta, this is currently a placeholder 
+query that does nothing and reports success. That is in order
+to keep compatibility with frameworks and connectors that
+automatically execute this statement.
+</para>
+<programlisting>
+mysql> SHOW VARIABLES;
+Query OK, 0 rows affected (0.00 sec)
+</programlisting>
+</sect1>
+
+
+<sect1 id="sphinxql-show-variables"><title>SHOW COLLATION syntax</title>
+<programlisting>
+SHOW COLLATION
+</programlisting>
+<para>
+Added in version 1.11-beta, this is currently a placeholder 
+query that does nothing and reports success. That is in order
+to keep compatibility with frameworks and connectors that
+automatically execute this statement.
+</para>
+<programlisting>
+mysql> SHOW COLLATION;
+Query OK, 0 rows affected (0.00 sec)
+</programlisting>
+</sect1>
+
+
+<sect1 id="sphinxql-comment-syntax">
+<title>Comment syntax</title>
+<para>
+Since version 1.11-beta, SphinxQL supports C-style comment syntax.
+Everything from an opening <code>/*</code> sequence to a closing
+<code>*/</code> sequence is ignored. Comments can span multiple lines,
+can not nest, and should not get logged. MySQL specific
+<code>/*! ... */</code> comments are also currently ignored.
+(As the comments support was rather added for better compatibility
+with <filename>mysqldump</filename> produced dumps, rather than
+improving generaly query interoperability between Sphinx and MySQL.)
+<programlisting>
+SELECT /*! SQL_CALC_FOUND_ROWS */ col1 FROM table1 WHERE ...
+</programlisting>
+</para>
 </sect1>
 
 
@@ -6585,6 +6717,44 @@ sql_attr_str2wordcount = title_wc
 </sect2>
 
 
+<sect2 id="conf-sql-column-buffers"><title>sql_column_buffers</title>
+<para>
+Per-column buffer sizes.
+Optional, default is empty (deduce the sizes automatically).
+Applies to <option>odbc</option>, <option>mssql</option> source types only.
+Introduced in version 1.11-beta.
+</para>
+<para>
+ODBC and MS SQL drivers sometimes can not return the maximum
+actual column size to be expected. For instance, NVARCHAR(MAX) columns
+always report their length as 2147483647 bytes to
+<filename>indexer</filename> even though the actually used length
+is likely considerably less. However, the receiving buffers still
+need to be allocated upfront, and their sizes have to be determined.
+When the driver does not report the column length at all, Sphinx
+allocates default 1 KB buffers for each non-char column, and 1 MB
+buffers for each char column. Driver-reported column length
+also gets clamped by an upper limie of 8 MB, so in case the
+driver reports (almost) a 2 GB column length, it will be clamped
+and a 8 MB buffer will be allocated instead for that column.
+These hard-coded limits can be overridden using the
+<code>sql_column_buffers</code> directive, either in order
+to save memory on actually shorter columns, or overcome
+the 8 MB limit on actually longer columns. The directive values
+must be a comma-separated lists of selected column names and sizes:
+<programlisting>
+sql_column_buffers = &lt;colname&gt;=&lt;size&gt;[K|M] [, ...]
+</programlisting>
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_query = SELECT id, mytitle, mycontent FROM documents
+sql_column_buffers = mytitle=64K, mycontent=10M
+</programlisting>
+</sect2>
+
+
+
 <sect2 id="conf-sql-field-string"><title>sql_field_string</title>
 <para>
 Combined string attribute and full-text field declaration.
@@ -8995,6 +9165,28 @@ query_log = /var/log/query.log
 </sect2>
 
 
+<sect2 id="conf-query-log-format"><title>query_log_format</title>
+<para>
+Query log format.
+Optional, allowed values are 'plain' and 'sphinxql', default is 'plain'.
+Introduced in version 1.11-beta.
+</para>
+<para>
+Starting with version 1.11-beta, two different log formats are supported.
+The default one logs queries in a custom text format. The new one logs
+valid SphinxQL statements. This directive allows to switch between the two
+formats on search daemon startup. The log format can also be altered
+on the fly, using <code>SET GLOBAL query_log_format=sphinxql</code> syntax.
+Refer to <xref linkend="query-log-format"/> for more discussion and format
+details.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+query_log_format = sphinxql
+</programlisting>
+</sect2>
+
+
 <sect2 id="conf-read-timeout"><title>read_timeout</title>
 <para>
 Network client request read timeout, in seconds.
@@ -9663,6 +9855,31 @@ Specifies the trusted directory from which the
 <programlisting>
 workers = threads
 plugin_dir = /usr/local/sphinx/lib
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-mysql-version-string"><title>mysql_version_string</title>
+<para>
+A server version string to return via MySQL protocol.
+Optional, default is empty (return Sphinx version).
+Introduced in version 1.11-beta.
+</para>
+<para>
+Several picky MySQL client libraries depend on a particular version
+number format used by MySQL, and moreover, sometimes choose a different
+execution path based on the reported version number (rather than the
+indicated capabilities flags). For instance, Python MySQLdb 1.2.2 throws
+an exception when the version number is not in X.Y.ZZ format; MySQL .NET
+connector 6.3.x fails internally on version numbers 1.x along with
+a certain combination of flags, etc. To workaround that, you can use
+<option>mysql_version_string</option> directive and have <filename>searchd</filename>
+report a different version to clients connecting over MySQL protocol.
+(By default, it reports its own version.)
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+mysql_version_string = 5.0.37
 </programlisting>
 </sect2>
 

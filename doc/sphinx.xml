@@ -1424,6 +1424,32 @@ good one, and/or it's possible to replay transactions until a given
 timestamp (point-in-time recovery), but none of that is implemented yet
 as of 1.10-beta.
 </para>
+<para>
+One unwanted side effect of binlogs is that activel updating
+a small RT index that fully fits into a RAM chunk part will lead
+to an ever-growing binlog that can never be unlinked until clean
+shutdown. Binlogs are essentially append-only deltas against
+the last known good saved state on disk, and unless RAM chunk
+gets saved, they can not be unlinked. An ever-growing binlog
+is not very good for disk use and crash recovery time. Starting
+with 1.11-beta you can configure <filename>searchd</filename>
+to perform a periodic RAM chunk flush to fix that problem
+using a <link linkend="conf-rt-flush-period">rt_flush_period</link>
+directive. With periodic flushes enabled, <filename>searchd</filename>
+will keep a separate thread, checking whether RT indexes RAM
+chunks need to be written back to disk. Once that happens,
+the respective binlogs can be (and are) safely unlinked.
+</para>
+<para>
+Note that <code>rt_flush_period</code> only controls the
+frequency at which the <emphasis>checks</emphasis> happen.
+There are no <emphasis>guarantees</emphasis> that the
+particular RAM chunk will get saved. For instance, it does
+not make sense to regularly re-save a huge RAM chunk that
+only gets a few rows worh of updates. The search daemon
+determine whether to actually perform the flush with a few
+heuristics.
+</para>
 </sect1>
 
 
@@ -2460,6 +2486,8 @@ in one go (more formally, one network request).
 Two API methods that implement multi-query mechanism are
 <link linkend="api-func-addquery">AddQuery()</link> and
 <link linkend="api-func-runqueries">RunQueries()</link>.
+You can also run multiple queries with SphinxQL, see
+<xref linkend="sphinxql-multi-queries"/>.
 (In fact, regular <link linkend="api-func-addquery">Query()</link>
 call is internally implemented as a single AddQuery() call immediately
 followed by RunQueries() call.) AddQuery() captures the current state
@@ -4138,6 +4166,91 @@ automatically execute this statement.
 mysql> SHOW COLLATION;
 Query OK, 0 rows affected (0.00 sec)
 </programlisting>
+</sect1>
+
+
+<sect1 id="sphinxql-update"><title>UPDATE syntax</title>
+<programlisting>
+UPDATE index SET col1 = newval1 [, ...] WHERE ID = docid
+</programlisting>
+<para>
+UPDATE statement was added in version 1.11-beta. It can currently
+update 32-bit integer attributes only. Multiple attributes and values
+can be specified. Both RT and disk indexes are supported.
+Updates on other attribute types are also planned.
+</para>
+<programlisting>
+mysql> UPDATE myindex SET enabled=0 WHERE id=123;
+Query OK, 1 rows affected (0.00 sec)
+</programlisting>
+</sect1>
+
+
+<sect1 id="sphinxql-multi-queries">
+<title>Multi-statement queries</title>
+<para>
+Starting version 1.11-beta, SphinxQL supports multi-statement
+queries, or batches. Possible inter-statement optimizations described
+in <xref linkend="multi-queries"/> do apply to SphinxQL just as well.
+The batched queries should be separated by a semicolon. Your MySQL
+client library needs to support MySQL multi-query mechanism and
+multiple result set. For instance, mysqli interface in PHP
+and DBI/DBD libraries in Perl are known to work.
+</para>
+<para>
+Here's a PHP sample showing how to utilize mysqli interface
+with Sphinx.
+<programlisting><![CDATA[
+<?php
+
+$link = mysqli_connect ( "127.0.0.1", "root", "", "", 9306 );
+if ( mysqli_connect_errno() )
+    die ( "connect failed: " . mysqli_connect_error() );
+
+$batch = "SELECT * FROM test1 ORDER BY group_id ASC;";
+$batch .= "SELECT * FROM test1 ORDER BY group_id DESC";
+
+if ( !mysqli_multi_query ( $link, $batch ) )
+    die ( "query failed" );
+
+do
+{
+    // fetch and print result set
+    if ( $result = mysqli_store_result($link) )
+    {
+        while ( $row = mysqli_fetch_row($result) )
+            printf ( "id=%s\n", $row[0] );
+        mysqli_free_result($result);
+    }
+
+    // print divider
+    if ( mysqli_more_results($link) )
+        printf ( "------\n" );
+
+} while ( mysqli_next_result($link) );
+]]></programlisting>
+Its output with the sample <code>test1</code> index included
+with Sphinx is as follows.
+<programlisting>
+$ php test_multi.php
+id=1
+id=2
+id=3
+id=4
+------
+id=3
+id=4
+id=1
+id=2
+</programlisting>
+</para>
+<para>
+The following statements can currently be used in a batch:
+SELECT, SHOW WARNINGS, SHOW STATUS, and SHOW META. Arbitrary
+sequence of these statements are allowed. The results sets
+returned should match those that would be returned if the
+batched queries were sent one by one.
+</para>
 </sect1>
 
 
@@ -6282,12 +6395,15 @@ Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <op
 <option>sql_joined_field</option> lets you use two different features:
 joined fields, and payloads (payload fields). It's syntax is as follows:
 <programlisting>
-sql_joined_field = FIELD-NAME 'from'  ( 'query' | 'payload-query' ); QUERY
+sql_joined_field = FIELD-NAME 'from'  ( 'query' | 'payload-query' ); \
+    QUERY [ ; RANGE-QUERY ]
 </programlisting>
 where
 <itemizedlist>
 <listitem>FIELD-NAME is a joined/payload field name;</listitem>
-<listitem>QUERY is an SQL query used to fetch values to index.</listitem>
+<listitem>QUERY is an SQL query that must fetch values to index.</listitem>
+<listitem>RANGE-QUERY is an optional SQL query that fetches a range
+of values to index. (Added in version 1.11-beta.)</listitem>
 </itemizedlist>
 </para>
 <para>
@@ -6319,6 +6435,16 @@ a new text field with a value of 'red right hand' to document 1 and
 <para>
 Joined fields are only indexed differently. There are no other differences
 between joined fields and regular text fields.
+</para>
+<para>
+Starting with 1.11-beta, <b>ranged queries</b> can be used when
+a single query is not efficient enough or does not work because of
+the database driver limitations. It works similar to the ranged
+queries in the main indexing loop, see <xref linkend="ranged-queries"/>.
+The range will be queried for and fetched upfront once,
+then multiple queries with different <code>$start</code>
+and <code>$end</code> substitutions will be run to fetch
+the actual data.
 </para>
 <para>
 <b>Payloads</b> let you create a special field in which, instead of
@@ -9880,6 +10006,27 @@ report a different version to clients connecting over MySQL protocol.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 mysql_version_string = 5.0.37
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-rt-flush-period"><title>rt_flush_period</title>
+<para>
+RT indexes RAM chunk flush check period, in seconds.
+Optional, default is 0 (do not flush).
+Introduced in version 1.11-beta.
+</para>
+<para>
+Actively updated RT indexes that however fully fit in RAM chunks
+can result in ever-growing binlogs, impacting disk use and crash
+recovery time. With this directive the search daemon performs
+periodic flush checks, and eligible RAM chunks can get saved,
+enabling consequential binlog cleanup. See <xref linkend="rt-binlog"/>
+for more details.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+rt_flush_period = 3600
 </programlisting>
 </sect2>
 

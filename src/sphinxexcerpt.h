@@ -44,10 +44,13 @@ public:
 	bool			m_bLoadFiles;		///< whether to interpret source as text or file name
 	bool			m_bAllowEmpty;		///< whether to allow empty snippets (by default, return something from the start)
 	bool			m_bEmitZones;		///< whether to emit zone for passage
+	int				m_iRawFlags;		///< flags as they received from proto (to avoid coding/decoding to agents)
+	CSphString		m_sRawPassageBoundary; ///< boundary as it received from proto (to avoid coding/decoding to agents)
 
 public:
 	int64_t			m_iSize;			///< file size, to sort to work-queue order
 	int				m_iSeq;				///< request order, to sort back to request order
+	int				m_iNext;			///< the next one in one-link list for batch processing
 	char *			m_sRes;				///< snippet result holder (NOT owned)
 	CSphString		m_sError;			///< snippet error message
 

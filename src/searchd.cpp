@@ -2802,14 +2802,14 @@ static SmallStringHash_T < DistributedIndex_t >		g_hDistIndexes;
 struct IRequestBuilder_t : public ISphNoncopyable
 {
 	virtual ~IRequestBuilder_t () {} // to avoid gcc4 warns
-	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const = 0;
+	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut, int iAgent ) const = 0;
 };
 
 
 struct IReplyParser_t
 {
 	virtual ~IReplyParser_t () {} // to avoid gcc4 warns
-	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const = 0;
+	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent, int iAgent ) const = 0;
 };
 
 
@@ -3026,7 +3026,7 @@ int QueryRemoteAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, const I
 
 				// send request
 				NetOutputBuffer_c tOut ( tAgent.m_iSock );
-				tBuilder.BuildRequest ( tAgent.m_sIndexes.cstr(), tOut );
+				tBuilder.BuildRequest ( tAgent.m_sIndexes.cstr(), tOut, i );
 				tOut.Flush (); // FIXME! handle flush failure?
 
 				tAgent.m_eState = AGENT_QUERY;
@@ -3231,7 +3231,7 @@ int WaitForRemoteAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 					}
 
 					// call parser
-					if ( !tParser.ParseReply ( tReq, tAgent ) )
+					if ( !tParser.ParseReply ( tReq, tAgent, iAgent ) )
 						break;
 
 					// check if there was enough data
@@ -3287,7 +3287,7 @@ int WaitForRemoteAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 struct SearchRequestBuilder_t : public IRequestBuilder_t
 {
 						SearchRequestBuilder_t ( const CSphVector<CSphQuery> & dQueries, int iStart, int iEnd ) : m_dQueries ( dQueries ), m_iStart ( iStart ), m_iEnd ( iEnd ) {}
-	virtual void		BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const;
+	virtual void		BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut, int ) const;
 
 protected:
 	int					CalcQueryLen ( const char * sIndexes, const CSphQuery & q ) const;
@@ -3309,7 +3309,7 @@ struct SearchReplyParser_t : public IReplyParser_t, public ISphNoncopyable
 		, m_dStringsStorage ( dStringsStorage )
 	{}
 
-	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const;
+	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent, int iAgent ) const;
 
 protected:
 	int					m_iStart;
@@ -3476,7 +3476,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 }
 
 
-void SearchRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const
+void SearchRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut, int ) const
 {
 	int iReqLen = 8; // int num-queries
 	for ( int i=m_iStart; i<=m_iEnd; i++ )
@@ -3495,7 +3495,7 @@ void SearchRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuff
 
 /////////////////////////////////////////////////////////////////////////////
 
-bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const
+bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent, int ) const
 {
 	int iResults = m_iEnd-m_iStart+1;
 	assert ( iResults>0 );
@@ -7729,6 +7729,48 @@ bool sphCheckOptionsSPZ ( const ExcerptQuery_t & q, const CSphString & sPassageB
 // EXCERPTS HANDLER
 /////////////////////////////////////////////////////////////////////////////
 
+enum eExcerpt_Flags
+{
+	EXCERPT_FLAG_REMOVESPACES		= 1,
+	EXCERPT_FLAG_EXACTPHRASE		= 2,
+	EXCERPT_FLAG_SINGLEPASSAGE		= 4,
+	EXCERPT_FLAG_USEBOUNDARIES		= 8,
+	EXCERPT_FLAG_WEIGHTORDER		= 16,
+	EXCERPT_FLAG_QUERY				= 32,
+	EXCERPT_FLAG_FORCE_ALL_WORDS	= 64,
+	EXCERPT_FLAG_LOAD_FILES			= 128,
+	EXCERPT_FLAG_ALLOW_EMPTY		= 256,
+	EXCERPT_FLAG_EMIT_ZONES			= 512
+};
+
+struct SnippetWorker_t
+{
+	int64_t						m_iTotal;
+	int							m_iHead;
+	bool						m_bLocal;
+
+	SnippetWorker_t()
+		: m_iTotal ( 0 )
+		, m_iHead ( -1 )
+		, m_bLocal ( false )
+	{}
+};
+
+struct SnippetsRemote_t : ISphNoncopyable
+{
+	CSphVector<AgentConn_t>		m_dAgents;
+	CSphVector<SnippetWorker_t>	m_dWorkers;
+	CSphVector<ExcerptQuery_t> &	m_dQueries;
+	int							m_iAgentConnectTimeout;
+	int							m_iAgentQueryTimeout;
+
+	explicit SnippetsRemote_t ( CSphVector<ExcerptQuery_t> & dQueries )
+		: m_dQueries ( dQueries )
+		, m_iAgentConnectTimeout ( 0 )
+		, m_iAgentQueryTimeout ( 0 )
+	{}
+};
+
 struct SnippetThread_t
 {
 	SphThread_t					m_tThd;
@@ -7749,6 +7791,148 @@ struct SnippetThread_t
 	{}
 };
 
+struct SnippetRequestBuilder_t : public IRequestBuilder_t
+{
+	explicit SnippetRequestBuilder_t ( const SnippetsRemote_t * pWorker )
+		: m_pWorker ( pWorker )
+		, m_iLastAgent ( -1 )
+		, m_iLastWorker ( -1 )
+	{}
+	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut, int iNumAgent ) const;
+
+private:
+	const SnippetsRemote_t * m_pWorker;
+	mutable int	m_iLastAgent;	///< just a helper to optimize consequental linear search
+	mutable int m_iLastWorker;	///< just a helper to optimize consequental linear search
+};
+
+
+struct SnippetReplyParser_t : public IReplyParser_t
+{
+	explicit SnippetReplyParser_t ( SnippetsRemote_t * pWorker )
+		: m_pWorker ( pWorker )
+		, m_iLastAgent ( -1 )
+		, m_iLastWorker ( -1 )
+	{}
+
+	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t &, int iNumAgent ) const;
+
+private:
+	SnippetsRemote_t * m_pWorker;
+	mutable int	m_iLastAgent;	///< just a helper to optimize consequental linear search
+	mutable int m_iLastWorker;	///< just a helper to optimize consequental linear search
+};
+
+void SnippetRequestBuilder_t::BuildRequest ( const char * sIndex, NetOutputBuffer_c & tOut, int iNumAgent ) const
+{
+	int iCurrentWorker = 0;
+	if ( iNumAgent==m_iLastAgent+1 )
+	{
+		for ( int i=m_iLastWorker+1; i<m_pWorker->m_dWorkers.GetLength(); i++ )
+			if ( !m_pWorker->m_dWorkers[i].m_bLocal )
+			{
+				iCurrentWorker = i;
+				break;
+			}
+	} else
+	{
+		int j = iNumAgent;
+		ARRAY_FOREACH ( i, m_pWorker->m_dWorkers )
+			if ( !m_pWorker->m_dWorkers[i].m_bLocal )
+			{
+				if ( j-- )
+					continue;
+				iCurrentWorker = i;
+				break;
+			}
+	}
+
+	m_iLastWorker = iCurrentWorker;
+	m_iLastAgent = iNumAgent;
+
+	const CSphVector<ExcerptQuery_t> & dQueries = m_pWorker->m_dQueries;
+	const ExcerptQuery_t & q = dQueries[0];
+	const SnippetWorker_t & tWorker = m_pWorker->m_dWorkers[iCurrentWorker];
+
+	int iLen = 60 // 15 ints/dwords - params, strlens, etc.
+		+ strlen ( sIndex )
+		+ q.m_sWords.Length()
+		+ q.m_sBeforeMatch.Length()
+		+ q.m_sAfterMatch.Length()
+		+ q.m_sChunkSeparator.Length()
+		+ q.m_sStripMode.Length()
+		+ q.m_sRawPassageBoundary.Length();
+
+	int iNumDocs = 0;
+	for ( int iDoc = tWorker.m_iHead; iDoc!=-1; iDoc=dQueries[iDoc].m_iNext )
+	{
+		++iNumDocs;
+		iLen += 4 + dQueries[iDoc].m_sSource.Length();
+	}
+
+	tOut.SendDword ( SPHINX_SEARCHD_PROTO );
+	tOut.SendWord ( SEARCHD_COMMAND_EXCERPT );
+	tOut.SendWord ( VER_COMMAND_EXCERPT );
+
+	tOut.SendInt ( iLen );
+
+	tOut.SendInt ( 0 );
+	tOut.SendInt ( q.m_iRawFlags );
+	tOut.SendString ( sIndex );
+	tOut.SendString ( q.m_sWords.cstr() );
+	tOut.SendString ( q.m_sBeforeMatch.cstr() );
+	tOut.SendString ( q.m_sAfterMatch.cstr() );
+	tOut.SendString ( q.m_sChunkSeparator.cstr() );
+	tOut.SendInt ( q.m_iLimit );
+	tOut.SendInt ( q.m_iAround );
+
+	tOut.SendInt ( q.m_iLimitPassages );
+	tOut.SendInt ( q.m_iLimitWords );
+	tOut.SendInt ( q.m_iPassageId );
+	tOut.SendString ( q.m_sStripMode.cstr() );
+	tOut.SendString ( q.m_sRawPassageBoundary.cstr() );
+
+	tOut.SendInt ( iNumDocs );
+	for ( int iDoc = tWorker.m_iHead; iDoc!=-1; iDoc=dQueries[iDoc].m_iNext )
+		tOut.SendString ( dQueries[iDoc].m_sSource.cstr() );
+}
+
+bool SnippetReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t &, int iNumAgent ) const
+{
+	int iCurrentWorker = 0;
+	if ( iNumAgent==m_iLastAgent+1 )
+	{
+		for ( int i=m_iLastWorker+1; i<m_pWorker->m_dWorkers.GetLength(); i++ )
+			if ( !m_pWorker->m_dWorkers[i].m_bLocal )
+			{
+				iCurrentWorker = i;
+				break;
+			}
+	} else
+	{
+		int j = iNumAgent;
+		ARRAY_FOREACH ( i, m_pWorker->m_dWorkers )
+			if ( !m_pWorker->m_dWorkers[i].m_bLocal )
+			{
+				if ( j-- )
+					continue;
+				iCurrentWorker = i;
+				break;
+			}
+	}
+
+	m_iLastWorker = iCurrentWorker;
+	m_iLastAgent = iNumAgent;
+
+	CSphVector<ExcerptQuery_t> & dQueries = m_pWorker->m_dQueries;
+	const SnippetWorker_t & tWorker = m_pWorker->m_dWorkers[iCurrentWorker];
+
+	for ( int iDoc = tWorker.m_iHead; iDoc!=-1; iDoc=dQueries[iDoc].m_iNext )
+		dQueries[iDoc].m_sRes = tReq.GetString().Leak();
+
+	return true;
+}
+
 void SnippetThreadFunc ( void * pArg )
 {
 	SnippetThread_t * pDesc = (SnippetThread_t*) pArg;
@@ -7767,6 +7951,9 @@ void SnippetThreadFunc ( void * pArg )
 		(*pDesc->m_pCurQuery)++;
 		bool bDone = ( *pDesc->m_pCurQuery==pDesc->m_iQueries );
 		pDesc->m_pLock->Unlock();
+
+		if ( pQuery->m_iNext>=0 )
+			continue;
 
 		if ( pQuery->m_iPassageBoundary )
 			if ( !pTok->EnableSentenceIndexing ( pQuery->m_sError ) || !pTok->EnableZoneIndexing ( pQuery->m_sError ) )
@@ -7791,34 +7978,14 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	/////////////////////////////
 
 	const int EXCERPT_MAX_ENTRIES			= 1024;
-	const int EXCERPT_FLAG_REMOVESPACES		= 1;
-	const int EXCERPT_FLAG_EXACTPHRASE		= 2;
-	const int EXCERPT_FLAG_SINGLEPASSAGE	= 4;
-	const int EXCERPT_FLAG_USEBOUNDARIES	= 8;
-	const int EXCERPT_FLAG_WEIGHTORDER		= 16;
-	const int EXCERPT_FLAG_QUERY			= 32;
-	const int EXCERPT_FLAG_FORCE_ALL_WORDS	= 64;
-	const int EXCERPT_FLAG_LOAD_FILES		= 128;
-	const int EXCERPT_FLAG_ALLOW_EMPTY		= 256;
-	const int EXCERPT_FLAG_EMIT_ZONES		= 512;
 
 	// v.1.1
 	ExcerptQuery_t q;
 
 	tReq.GetInt (); // mode field is for now reserved and ignored
 	int iFlags = tReq.GetInt ();
+	q.m_iRawFlags = iFlags;
 	CSphString sIndex = tReq.GetString ();
-
-	const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( sIndex );
-	if ( !pServed || !pServed->m_bEnabled )
-	{
-		tReq.SendErrorReply ( "unknown local index '%s' in search request", sIndex.cstr() );
-		return;
-	}
-
-	CSphIndex * pIndex = pServed->m_pIndex;
-	CSphDict * pDict = pIndex->GetDictionary ();
-	CSphScopedPtr<ISphTokenizer> pTokenizer ( pIndex->GetTokenizer()->Clone ( true ) );
 
 	q.m_sWords = tReq.GetString ();
 	q.m_sBeforeMatch = tReq.GetString ();
@@ -7836,14 +8003,13 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		if ( q.m_sStripMode!="none" && q.m_sStripMode!="index" && q.m_sStripMode!="strip" && q.m_sStripMode!="retain" )
 		{
 			tReq.SendErrorReply ( "unknown html_strip_mode=%s", q.m_sStripMode.cstr() );
-			pServed->Unlock();
 			return;
 		}
 	}
 
 	CSphString sPassageBoundaryMode;
 	if ( iVer>=0x103 )
-		sPassageBoundaryMode = tReq.GetString();
+		q.m_sRawPassageBoundary = tReq.GetString();
 
 	q.m_bRemoveSpaces = ( iFlags & EXCERPT_FLAG_REMOVESPACES )!=0;
 	q.m_bExactPhrase = ( iFlags & EXCERPT_FLAG_EXACTPHRASE )!=0;
@@ -7861,20 +8027,70 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	if ( iCount<0 || iCount>EXCERPT_MAX_ENTRIES )
 	{
 		tReq.SendErrorReply ( "invalid entries count %d", iCount );
-		pServed->Unlock();
 		return;
 	}
 
-	q.m_iPassageBoundary = sphGetPassageBoundary ( sPassageBoundaryMode );
+	q.m_iPassageBoundary = sphGetPassageBoundary ( q.m_sRawPassageBoundary );
 
 	CSphString sError;
 
-	if ( !sphCheckOptionsSPZ ( q, sPassageBoundaryMode, sError ) )
+	if ( !sphCheckOptionsSPZ ( q, q.m_sRawPassageBoundary, sError ) )
 	{
 		tReq.SendErrorReply ( "%s", sError.cstr() );
-		pServed->Unlock();
 		return;
 	}
+
+	CSphVector<ExcerptQuery_t> dQueries ( iCount );
+	SnippetsRemote_t dRemoteSnippets ( dQueries );
+	CSphVector<CSphString> dDistLocal;
+	bool bRemote = false;
+
+	g_tDistLock.Lock();
+	DistributedIndex_t * pDist = g_hDistIndexes ( sIndex );
+	if ( pDist )
+	{
+		bRemote = true;
+		dRemoteSnippets.m_iAgentConnectTimeout = pDist->m_iAgentConnectTimeout;
+		dRemoteSnippets.m_iAgentQueryTimeout = pDist->m_iAgentQueryTimeout;
+		dDistLocal = pDist->m_dLocal;
+		dRemoteSnippets.m_dAgents.Resize ( pDist->m_dAgents.GetLength() );
+		ARRAY_FOREACH ( i, pDist->m_dAgents )
+			dRemoteSnippets.m_dAgents[i] = pDist->m_dAgents[i];
+	}
+	g_tDistLock.Unlock();
+
+	if ( bRemote )
+	{
+		if ( dDistLocal.GetLength()!=1 )
+		{
+			tReq.SendErrorReply ( "%s", "The distributed index for snippets must have exactly one local agent" );
+			return;
+		}
+
+		if ( !q.m_bLoadFiles )
+		{
+			tReq.SendErrorReply ( "%s", "The distributed index for snippets available only when using external files" );
+			return;
+		}
+		sIndex = dDistLocal[0];
+
+		// no remote - roll back to simple local query
+		if ( dRemoteSnippets.m_dAgents.GetLength()==0 )
+			bRemote = false;
+	}
+
+	const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( sIndex );
+	if ( !pServed || !pServed->m_bEnabled )
+	{
+		tReq.SendErrorReply ( "unknown local index '%s' in search request", sIndex.cstr() );
+		if ( pServed )
+			pServed->Unlock();
+		return;
+	}
+
+	CSphIndex * pIndex = pServed->m_pIndex;
+	CSphDict * pDict = pIndex->GetDictionary ();
+	CSphScopedPtr<ISphTokenizer> pTokenizer ( pIndex->GetTokenizer()->Clone ( true ) );
 
 	if ( q.m_iPassageBoundary &&
 		( !pTokenizer->EnableSentenceIndexing ( sError ) || !pTokenizer->EnableZoneIndexing ( sError ) ) )
@@ -7883,8 +8099,6 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		pServed->Unlock();
 		return;
 	}
-
-	CSphVector<ExcerptQuery_t> dQueries ( iCount );
 
 	ARRAY_FOREACH ( i, dQueries )
 	{
@@ -7952,10 +8166,36 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 			}
 			dQueries[i].m_iSize = -st.st_size; // so that sort would put bigger ones first
 			dQueries[i].m_iSeq = i;
+			dQueries[i].m_iNext = -1;
 		}
 
 		// tough jobs first
 		dQueries.Sort ( bind ( &ExcerptQuery_t::m_iSize ) );
+
+		if ( bRemote )
+		{
+			// schedule jobs across workers (the worker is either local thread or instance, either remote agent).
+			// simple LPT (Least Processing Time) scheduling for now
+			// might add dynamic programming or something later if needed
+
+			int iLocalPart = 1;	// one instance = one worker. Or set to = g_iDistThreads, one local thread = one worker.
+
+			dRemoteSnippets.m_dWorkers.Resize ( iLocalPart + dRemoteSnippets.m_dAgents.GetLength() );
+			for ( int i=0; i<iLocalPart; i++ )
+					dRemoteSnippets.m_dWorkers[i].m_bLocal = true;
+
+			ARRAY_FOREACH ( i, dQueries )
+			{
+				dRemoteSnippets.m_dWorkers[0].m_iTotal -= dQueries[i].m_iSize;
+				if ( !dRemoteSnippets.m_dWorkers[0].m_bLocal )
+				{
+					// queries sheduled for local still have iNext==-1
+					dQueries[i].m_iNext = dRemoteSnippets.m_dWorkers[0].m_iHead;
+					dRemoteSnippets.m_dWorkers[0].m_iHead = i;
+				}
+				dRemoteSnippets.m_dWorkers.Sort ( bind ( &SnippetWorker_t::m_iTotal ) );
+			}
+		}
 
 		// do MT searching
 		CSphMutex tLock;
@@ -7963,7 +8203,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 
 		int iCurQuery = 0;
 		CSphVector<SnippetThread_t> dThreads ( g_iDistThreads );
-		ARRAY_FOREACH ( i, dThreads )
+		for ( int i=0; i<g_iDistThreads; i++ )
 		{
 			SnippetThread_t & t = dThreads[i];
 			t.m_pLock = &tLock;
@@ -7975,7 +8215,26 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 			if ( i )
 				sphThreadCreate ( &dThreads[i].m_tThd, SnippetThreadFunc, &dThreads[i] );
 		}
+
+		int iRemote = 0;
+		if ( bRemote )
+		{
+			// connect to remote agents and query them
+			ConnectToRemoteAgents ( dRemoteSnippets.m_dAgents, false );
+
+			SnippetRequestBuilder_t tReqBuilder ( &dRemoteSnippets );
+			iRemote = QueryRemoteAgents ( dRemoteSnippets.m_dAgents, dRemoteSnippets.m_iAgentConnectTimeout, tReqBuilder, NULL ); // FIXME? profile update time too?
+		}
+
 		SnippetThreadFunc ( &dThreads[0] );
+
+		int iSuccesses = 0;
+
+		if ( iRemote )
+		{
+			SnippetReplyParser_t tParser ( &dRemoteSnippets );
+			iSuccesses = WaitForRemoteAgents ( dRemoteSnippets.m_dAgents, dRemoteSnippets.m_iAgentQueryTimeout, tParser, NULL ); // FIXME? profile update time too?
+		}
 
 		for ( int i=1; i<dThreads.GetLength(); i++ )
 			sphThreadJoin ( &dThreads[i].m_tThd );
@@ -8088,7 +8347,7 @@ void HandleCommandKeywords ( int iSock, int iVer, InputBuffer_c & tReq )
 struct UpdateRequestBuilder_t : public IRequestBuilder_t
 {
 	explicit UpdateRequestBuilder_t ( const CSphAttrUpdate & pUpd ) : m_tUpd ( pUpd ) {}
-	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const;
+	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut, int ) const;
 
 protected:
 	const CSphAttrUpdate & m_tUpd;
@@ -8101,7 +8360,7 @@ struct UpdateReplyParser_t : public IReplyParser_t
 		: m_pUpdated ( pUpd )
 	{}
 
-	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
+	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t &, int ) const
 	{
 		*m_pUpdated += tReq.GetDword ();
 		return true;
@@ -8112,7 +8371,7 @@ protected:
 };
 
 
-void UpdateRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const
+void UpdateRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut, int ) const
 {
 	int iReqSize = 4+strlen(sIndexes); // indexes string
 	iReqSize += 4; // attrs array len, data
@@ -9189,8 +9448,6 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 	q.m_sSource = tStmt.m_dInsertValues[0].m_sVal; // OPTIMIZE?
 	q.m_sWords = tStmt.m_dInsertValues[2].m_sVal;
 
-	CSphString sPassageBoundaryMode;
-
 	ARRAY_FOREACH ( i, tStmt.m_dCallOptNames )
 	{
 		CSphString & sOpt = tStmt.m_dCallOptNames[i];
@@ -9203,7 +9460,7 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 		else if ( sOpt=="after_match" )			{ q.m_sAfterMatch = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
 		else if ( sOpt=="chunk_separator" )		{ q.m_sChunkSeparator = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
 		else if ( sOpt=="html_strip_mode" )		{ q.m_sStripMode = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
-		else if ( sOpt=="passage_boundary" )	{ sPassageBoundaryMode = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
+		else if ( sOpt=="passage_boundary" )	{ q.m_sRawPassageBoundary = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
 
 		else if ( sOpt=="limit" )				{ q.m_iLimit = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="limit_words" )			{ q.m_iLimitWords = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
@@ -9240,9 +9497,9 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 		return;
 	}
 
-	q.m_iPassageBoundary = sphGetPassageBoundary ( sPassageBoundaryMode );
+	q.m_iPassageBoundary = sphGetPassageBoundary ( q.m_sRawPassageBoundary );
 
-	if ( !sphCheckOptionsSPZ ( q, sPassageBoundaryMode, sError ) )
+	if ( !sphCheckOptionsSPZ ( q, q.m_sRawPassageBoundary, sError ) )
 	{
 		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
 		pServed->Unlock();

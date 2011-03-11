@@ -1550,6 +1550,13 @@ public:
 	{
 		return m_sValue ? (int)strlen(m_sValue) : 0;
 	}
+
+	char * Leak ()
+	{
+		char * pBuf = m_sValue;
+		m_sValue = NULL;
+		return pBuf;
+	}
 };
 
 /// string swapper

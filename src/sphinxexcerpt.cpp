@@ -2636,8 +2636,10 @@ ExcerptQuery_t::ExcerptQuery_t ()
 	, m_bLoadFiles ( false )
 	, m_bAllowEmpty ( false )
 	, m_bEmitZones ( false )
+	, m_iRawFlags ( 0 )
 	, m_iSize ( 0 )
 	, m_iSeq ( 0 )
+	, m_iNext ( -1 )
 	, m_sRes ( NULL )
 {
 }

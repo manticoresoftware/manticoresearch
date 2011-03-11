@@ -104,8 +104,8 @@ index dist3
 <sphinxql>select gr, count(*) cnt from dist_no group by gr</sphinxql>
 <sphinxql>select gr, count(*) cnt from dist0 group by gr</sphinxql>
 <sphinxql>select gr, count(*) cnt from dist1 group by gr</sphinxql>
-<!-- <sphinxql>select gr, count(*) cnt from dist2 group by gr</sphinxql> -->
-<!-- <sphinxql>select gr, count(*) cnt from dist3 group by gr</sphinxql> -->
+<sphinxql>select gr, count(*) cnt from dist2 group by gr</sphinxql>
+<sphinxql>select gr, count(*) cnt from dist3 group by gr</sphinxql>
 
 <!-- Select weight() and match_weight() on differend kind of dist indexes -->
 <sphinxql>select id idd, weight() cnt from dist_no group by gr</sphinxql>
@@ -131,8 +131,8 @@ index dist3
 <sphinxql>select gr, count(*) cnt from dist_no</sphinxql>
 <sphinxql>select gr, count(*) cnt from dist0</sphinxql>
 <sphinxql>select gr, count(*) cnt from dist1</sphinxql>
-<sphinxql>select gr, count(*) cnt from dist2</sphinxql>
-<sphinxql>select gr, count(*) cnt from dist3</sphinxql>
+<!-- <sphinxql>select gr, count(*) cnt from dist2</sphinxql> -->
+<!-- <sphinxql>select gr, count(*) cnt from dist3</sphinxql> -->
 
 <!-- Prohibited aggregates in where -->
 <sphinxql>select gr from dist_no where count(*)=1</sphinxql>

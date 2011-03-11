@@ -4893,6 +4893,7 @@ class SelectParser_t
 public:
 	int				GetToken ( YYSTYPE * lvalp );
 	void			AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias, ESphAggrFunc eAggrFunc=SPH_AGGR_NONE );
+	void			AddItem ( const char * pToken, YYSTYPE * pAlias );
 
 public:
 	CSphString		m_sParserError;
@@ -4991,6 +4992,17 @@ void SelectParser_t::AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias, ESphAggrFunc e
 	if ( pAlias )
 		tItem.m_sAlias.SetBinary ( m_pStart + pAlias->m_iStart, pAlias->m_iEnd - pAlias->m_iStart );
 	tItem.m_eAggrFunc = eAggrFunc;
+
+	m_pQuery->m_dItems.Add ( tItem );
+}
+
+void SelectParser_t::AddItem ( const char * pToken, YYSTYPE * pAlias )
+{
+	CSphQueryItem tItem;
+	tItem.m_sExpr = pToken;
+	if ( pAlias )
+		tItem.m_sAlias.SetBinary ( m_pStart + pAlias->m_iStart, pAlias->m_iEnd - pAlias->m_iStart );
+	tItem.m_eAggrFunc = SPH_AGGR_NONE;
 
 	m_pQuery->m_dItems.Add ( tItem );
 }

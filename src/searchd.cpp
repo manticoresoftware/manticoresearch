@@ -7193,6 +7193,7 @@ public:
 	bool			AddFloatRangeFilter ( const CSphString & sAttr, float fMin, float fMax );
 	bool			AddUintRangeFilter ( const CSphString & sAttr, DWORD uMin, DWORD uMax );
 	bool			AddUservarFilter ( const CSphString & sCol, const CSphString & sVar, bool bExclude );
+	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pAlias );
 	CSphFilterSettings * AddFilter ( const CSphString & sCol, ESphFilter eType );
 	inline CSphFilterSettings * AddValuesFilter ( const SqlNode_t& sCol )
 	{
@@ -7484,6 +7485,18 @@ bool SqlParser_c::AddItem ( const char * sNewExpr, SqlNode_t * pAlias, bool bNew
 	if ( !bNewSyntax )
 		return true;
 	return SetNewSyntax();
+}
+
+bool SqlParser_c::AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pAlias )
+{
+	if ( !m_pQuery->m_sGroupDistinct.IsEmpty() )
+	{
+		yyerror ( this, "too many COUNT(DISTINCT) clauses" );
+		return false;
+	}
+
+	m_pQuery->m_sGroupDistinct = pNewExpr->m_sValue;
+	return AddItem ( "@distinct", pAlias, true );
 }
 
 bool SqlParser_c::AddSchemaItem ( YYSTYPE * pNode )

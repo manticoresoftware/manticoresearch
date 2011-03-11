@@ -908,7 +908,6 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		if ( sTok=="div" )		{ return TOK_DIV; }
 		if ( sTok=="mod" )		{ return TOK_MOD; }
 
-
 		if ( sTok=="count" )
 		{
 			int iAttr = m_pSchema->GetAttrIndex ( "count" );

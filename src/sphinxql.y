@@ -164,19 +164,8 @@ select_item:
 	| TOK_COUNT '(' '*' ')' opt_as TOK_IDENT	{ pParser->SetSelect ( $1.m_iStart, $6.m_iEnd ); if ( !pParser->AddItem ( "count(*)", &$6, true ) ) YYERROR; }
 	| TOK_WEIGHT '(' ')' opt_as TOK_IDENT		{ pParser->SetSelect ( $1.m_iStart, $5.m_iEnd ); if ( !pParser->AddItem ( "weight()", &$5, true ) ) YYERROR; }
 	| TOK_MATCH_WEIGHT '(' ')' opt_as TOK_IDENT	{ pParser->SetSelect ( $1.m_iStart, $5.m_iEnd ); if ( !pParser->AddItem ( "weight()", &$5, true ) ) YYERROR; }
-	| TOK_COUNT '(' TOK_DISTINCT TOK_IDENT ')'
-		{
-			if ( !pParser->m_pQuery->m_sGroupDistinct.IsEmpty() )
-			{
-				yyerror ( pParser, "too many COUNT(DISTINCT) clauses" );
-				YYERROR;
-
-			} else
-			{
-				pParser->SetSelect ( $1.m_iStart, $5.m_iEnd );
-				pParser->m_pQuery->m_sGroupDistinct = $4.m_sValue;
-			}
-		}
+	| TOK_COUNT '(' TOK_DISTINCT TOK_IDENT ')' opt_as TOK_IDENT
+							{ pParser->SetSelect ( $1.m_iStart, $7.m_iEnd ); if ( !pParser->AddDistinct ( &$4, &$7 ) ) YYERROR; }
 	;
 
 opt_as:

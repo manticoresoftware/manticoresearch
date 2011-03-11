@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>new and old syntax for id, count, weight, count distinct</name>
+<config>
+indexer
+{
+	mem_limit			= 28M
+}
+
+searchd
+{
+	<searchd_settings/>
+	compat_results			= 0
+	workers				= threads
+}
+
+source auth
+{
+	type			= mysql
+	<sql_settings/>
+}
+
+source src : auth
+{
+	sql_query = SELECT id, tag, gr, text FROM test_table WHERE id&lt;4
+	sql_query_pre = SET NAMES UTF8
+	sql_attr_uint	= tag
+	sql_attr_uint	= gr
+}
+
+source src1 : src
+{
+	sql_query = SELECT id, tag, gr, text FROM test_table WHERE id&lt;3
+}
+
+source src2 : src
+{
+	sql_query = SELECT id, tag, gr, text FROM test_table WHERE id=3
+}
+
+index dist_no
+{
+	source			= src
+	path			= <data_path/>/idx
+	docinfo			= extern
+	charset_type	= utf-8
+	min_word_len	= 1
+}
+
+index idx1 : dist_no
+{
+	source			= src1
+	path			= <data_path/>/idx1
+}
+
+index idx2 : dist_no
+{
+	source			= src2
+	path			= <data_path/>/idx2
+}
+
+
+index dist0
+{
+	type					= distributed
+	local					= dist_no
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist1
+{
+	type					= distributed
+	local					= idx1
+	local					= idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist2
+{
+	type					= distributed
+	agent					= <my_address/>:idx1
+	local					= idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist3
+{
+	type					= distributed
+	local					= idx1
+	agent					= <my_address/>:idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+</config>
+
+
+<sphqueries>
+
+<!-- Select count(*) on differend kind of dist indexes -->
+<sphinxql>select gr, count(*) cnt from dist_no group by gr</sphinxql>
+<sphinxql>select gr, count(*) cnt from dist0 group by gr</sphinxql>
+<sphinxql>select gr, count(*) cnt from dist1 group by gr</sphinxql>
+<sphinxql>select gr, count(*) cnt from dist2 group by gr</sphinxql>
+<sphinxql>select gr, count(*) cnt from dist3 group by gr</sphinxql> 
+
+<!-- Select weight() and match_weight() on differend kind of dist indexes -->
+<sphinxql>select id idd, weight() cnt from dist_no group by gr</sphinxql>
+<sphinxql>select id idd, weight() cnt from dist0 group by gr</sphinxql>
+<sphinxql>select id idd, weight() cnt from dist1 group by gr</sphinxql>
+<sphinxql>select id idd, weight() cnt from dist2 group by gr</sphinxql>
+<sphinxql>select id idd, weight() cnt from dist3 group by gr</sphinxql> 
+<sphinxql>select match_weight() cnt from dist_no group by gr</sphinxql>
+<sphinxql>select match_weight() cnt from dist0 group by gr</sphinxql>
+<sphinxql>select match_weight() cnt from dist1 group by gr</sphinxql>
+<sphinxql>select match_weight() cnt from dist2 group by gr</sphinxql>
+<sphinxql>select match_weight() cnt from dist3 group by gr</sphinxql>
+
+<!-- Select count(distinct) on differend kind of dist indexes -->
+<sphinxql>select count(*) cnt, count (distinct tag) tg from dist_no group by gr</sphinxql>
+<sphinxql>select count(*) cnt, count (distinct tag) tg from dist0 group by gr</sphinxql>
+<sphinxql>select count(*) cnt, count (distinct tag) tg from dist1 group by gr</sphinxql>
+<sphinxql>select count(*) cnt, count (distinct tag) tg from dist2 group by gr</sphinxql>
+<sphinxql>select count(*) cnt, count (distinct tag) tg from dist3 group by gr</sphinxql> 
+
+
+<!-- Select count(*) on differend kind of dist indexes - must be error since no group by -->
+<sphinxql>select gr, count(*) cnt from dist_no</sphinxql>
+<sphinxql>select gr, count(*) cnt from dist0</sphinxql>
+<sphinxql>select gr, count(*) cnt from dist1</sphinxql>
+<sphinxql>select gr, count(*) cnt from dist2</sphinxql>
+<sphinxql>select gr, count(*) cnt from dist3</sphinxql>
+
+<!-- Prohibited aggregates in where -->
+<sphinxql>select gr from dist_no where count(*)=1</sphinxql>
+<sphinxql>select gr from dist_no where @count=1</sphinxql>
+<sphinxql>select gr from dist_no where weight()=1</sphinxql>
+<sphinxql>select gr from dist_no where match_weight()=1</sphinxql>
+<sphinxql>select gr from dist_no where @weight=1</sphinxql>
+<sphinxql>select gr from dist0 where count(*)=1</sphinxql>
+<sphinxql>select gr from dist0 where @count=1</sphinxql>
+<sphinxql>select gr from dist0 where weight()=1</sphinxql>
+<sphinxql>select gr from dist0 where match_weight()=1</sphinxql>
+<sphinxql>select gr from dist0 where @weight=1</sphinxql>
+<sphinxql>select gr from dist1 where count(*)=1</sphinxql>
+<sphinxql>select gr from dist1 where @count=1</sphinxql>
+<sphinxql>select gr from dist1 where weight()=1</sphinxql>
+<sphinxql>select gr from dist1 where match_weight()=1</sphinxql>
+<sphinxql>select gr from dist1 where @weight=1</sphinxql>
+<sphinxql>select gr from dist2 where count(*)=1</sphinxql>
+<sphinxql>select gr from dist2 where @count=1</sphinxql>
+<sphinxql>select gr from dist2 where weight()=1</sphinxql>
+<sphinxql>select gr from dist2 where match_weight()=1</sphinxql>
+<sphinxql>select gr from dist2 where @weight=1</sphinxql>
+<sphinxql>select gr from dist3 where count(*)=1</sphinxql>
+<sphinxql>select gr from dist3 where @count=1</sphinxql>
+<sphinxql>select gr from dist3 where weight()=1</sphinxql>
+<sphinxql>select gr from dist3 where match_weight()=1</sphinxql>
+<sphinxql>select gr from dist3 where @weight=1</sphinxql>
+
+<!-- The warnings on old syntax -->
+<sphinxql>select @id idd from dist_no where match('test')</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select @count cnt from dist_no group by gr</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select @weight cnt from dist_no group by gr</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select @id idd from dist0 where match('test')</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select @count cnt from dist0 group by gr</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select @weight cnt from dist0 group by gr</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select @id idd from dist1 where match('test')</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select @count cnt from dist1 group by gr</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select @weight cnt from dist1 group by gr</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select @id idd from dist2 where match('test')</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select @count cnt from dist2 group by gr</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select @weight cnt from dist2 group by gr</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select @id idd from dist3 where match('test')</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select @count cnt from dist3 group by gr</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select @weight cnt from dist3 group by gr</sphinxql>
+
+<!-- Mixing old and new syntax -->
+<sphinxql>select @id idd, count(*) cnt from dist_no group by gr</sphinxql>
+<sphinxql>select id idd, @count cnt from dist_no group by gr</sphinxql>
+<sphinxql>select id idd from dist_no where @count=1 group by gr</sphinxql>
+<sphinxql>select @id idd from dist_no where count(*)=1 group by gr</sphinxql>
+<sphinxql>select id idd from dist_no group by @count</sphinxql>
+<sphinxql>select @id idd from dist_no group by count(*)</sphinxql>
+<sphinxql>select @id idd, count(*) cnt from dist0 group by gr</sphinxql>
+<sphinxql>select id idd, @count cnt from dist0 group by gr</sphinxql>
+<sphinxql>select id idd from dist0 where @count=1 group by gr</sphinxql>
+<sphinxql>select @id idd from dist0 where count(*)=1 group by gr</sphinxql>
+<sphinxql>select id idd from dist0 group by @count</sphinxql>
+<sphinxql>select @id idd from dist0 group by count(*)</sphinxql>
+<sphinxql>select @id idd, count(*) cnt from dist1 group by gr</sphinxql>
+<sphinxql>select id idd, @count cnt from dist1 group by gr</sphinxql>
+<sphinxql>select id idd from dist1 where @count=1 group by gr</sphinxql>
+<sphinxql>select @id idd from dist1 where count(*)=1 group by gr</sphinxql>
+<sphinxql>select id idd from dist1 group by @count</sphinxql>
+<sphinxql>select @id idd from dist1 group by count(*)</sphinxql>
+<sphinxql>select @id idd, count(*) cnt from dist2 group by gr</sphinxql>
+<sphinxql>select id idd, @count cnt from dist2 group by gr</sphinxql>
+<sphinxql>select id idd from dist2 where @count=1 group by gr</sphinxql>
+<sphinxql>select @id idd from dist2 where count(*)=1 group by gr</sphinxql>
+<sphinxql>select id idd from dist2 group by @count</sphinxql>
+<sphinxql>select @id idd from dist2 group by count(*)</sphinxql>
+<sphinxql>select @id idd, count(*) cnt from dist3 group by gr</sphinxql>
+<sphinxql>select id idd, @count cnt from dist3 group by gr</sphinxql>
+<sphinxql>select id idd from dist3 where @count=1 group by gr</sphinxql>
+<sphinxql>select @id idd from dist3 where count(*)=1 group by gr</sphinxql>
+<sphinxql>select id idd from dist3 group by @count</sphinxql>
+<sphinxql>select @id idd from dist3 group by count(*)</sphinxql>
+
+</sphqueries>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11),
+  `tag` int(11),
+  `gr` int(11),
+  `text` varchar(255) NOT NULL
+)
+</db_create>
+
+
+ <db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+
+<db_insert>SET NAMES utf8</db_insert>
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 2, 3, 'test'),
+( 2, 2, 2, 'test'),
+( 3, 2, 3, 'test'),
+( 4, 2, 10, 'test'),
+( 5, 2, 9, 'test'),
+( 6, 2, 8, 'test'),
+( 7, 2, 7, 'test'),
+( 8, 2, 6, 'test'),
+( 9, 2, 5, 'test'),
+( 10, 2, 4, 'test')
+</db_insert>
+
+</test>

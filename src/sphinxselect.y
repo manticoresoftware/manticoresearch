@@ -11,6 +11,7 @@
 %error-verbose
 
 %token SEL_TOKEN
+%token SEL_ID
 %token SEL_AS
 %token SEL_AVG
 %token SEL_MAX
@@ -43,7 +44,8 @@ select_list:
 	;
 
 select_item:
-	SEL_TOKEN					{ pParser->AddItem ( &$1, NULL ); }
+	SEL_ID						{ pParser->AddItem ( "id", &$1 ); }
+	| SEL_TOKEN					{ pParser->AddItem ( &$1, NULL ); }
 	| expr opt_as SEL_TOKEN		{ pParser->AddItem ( &$1, &$3 ); }
 	| SEL_AVG '(' expr ')' opt_as SEL_TOKEN		{ pParser->AddItem ( &$3, &$6, SPH_AGGR_AVG ); }
 	| SEL_MAX '(' expr ')' opt_as SEL_TOKEN		{ pParser->AddItem ( &$3, &$6, SPH_AGGR_MAX ); }
@@ -59,7 +61,8 @@ select_item:
 	;
 
 expr:
-	SEL_TOKEN
+	SEL_ID
+	| SEL_TOKEN
 	| '-' expr %prec TOK_NEG		{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
 	| TOK_NOT expr				{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
 	| expr '+' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }

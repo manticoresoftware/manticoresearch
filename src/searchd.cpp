@@ -5074,6 +5074,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	{
 		tRes.m_sError.SetSprintf ( "INTERNAL ERROR: expected %d matches in combined result set, got %d",
 			iExpected, tRes.m_dMatches.GetLength() );
+		tRes.m_iSuccesses = 0;
 		return false;
 	}
 
@@ -5113,6 +5114,8 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	if ( !bStar )
 		tFinalItems.GetWAttrs().Resize ( tQuery.m_dItems.GetLength() );
 
+	CSphVector<int> dKnownItems;
+	int iKnownItems = 0;
 	if ( !bStar && tQuery.m_dItems.GetLength() )
 	{
 		for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
@@ -5131,6 +5134,8 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 						|| ( tQueryItem.m_sAlias.cstr() && tQueryItem.m_sAlias==tCol.m_sName ) ) )
 					{
 						bAdd = true;
+						dKnownItems.Add(j);
+						++iKnownItems;
 						if ( !bAgent )
 						{
 							CSphColumnInfo & tItem = tFinalItems.GetWAttr(j);
@@ -5170,12 +5175,17 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 						CSphColumnInfo & tItem = tFinalItems.GetWAttr(j);
 						tItem.m_iIndex = tItems.GetAttrsCount();
 						tItem.m_sName = tQuery.m_dItems[j].m_sAlias;
+						dKnownItems.Add(j);
+						++iKnownItems;
 					}
 			}
+
+
 			// if before all schemas were proved as equal, and the tCol taken from current schema is static -
 			// this is no reason now to make it dynamic.
 			bool bDynamic = bAllEqual?tCol.m_tLocator.m_bDynamic:true;
 			tItems.AddAttr ( tCol, bDynamic );
+			++iKnownItems;
 			if ( !bDynamic )
 			{
 				// all schemas are equal, so all offsets and bitcounts also equal.
@@ -5189,6 +5199,28 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 		}
 
 		bAllEqual &= tRes.m_tSchema.GetAttrsCount()==tItems.GetAttrsCount();
+	}
+
+	// check if we actually have all required columns already
+	if ( iKnownItems<tQuery.m_dItems.GetLength() )
+	{
+		dKnownItems.Sort();
+		tRes.m_iSuccesses = 0;
+		ARRAY_FOREACH ( j, dKnownItems )
+			if ( j!=dKnownItems[j] )
+			{
+				tRes.m_sError.SetSprintf ( "INTERNAL ERROR: the column '%s/%s' does not present in result set schema",
+					tQuery.m_dItems[j].m_sExpr.cstr(), tQuery.m_dItems[j].m_sAlias.cstr() );
+				return false;
+			}
+		if ( dKnownItems.GetLength()==tQuery.m_dItems.GetLength()-1 )
+		{
+			tRes.m_sError.SetSprintf ( "INTERNAL ERROR: the column '%s/%s' does not present in result set schema",
+				tQuery.m_dItems.Last().m_sExpr.cstr(), tQuery.m_dItems.Last().m_sAlias.cstr() );
+			return false;
+		}
+		tRes.m_sError = "INTERNAL ERROR: some columns does not present in result set schema";
+		return false;
 	}
 
 	// finalize the tFinalItems - switch back m_iIndex field
@@ -7352,8 +7384,8 @@ SqlParser_c::SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollati
 	, m_pStmt ( NULL )
 	, m_dStmt ( dStmt )
 	, m_eCollation ( eCollation )
-	, m_bNamedVecBusy ( false )
 	, m_uSyntaxFlags ( 0 )
+	, m_bNamedVecBusy ( false )
 {
 	assert ( !m_dStmt.GetLength() );
 	PushQuery ();

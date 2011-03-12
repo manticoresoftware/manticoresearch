@@ -154,7 +154,7 @@ select_items_list:
 
 select_item:
 	TOK_IDENT					{ pParser->SetSelect ( $1.m_iStart, $1.m_iEnd ); pParser->AddItem ( &$1, NULL ); }
-	| TOK_ID					{ pParser->SetSelect ( $1.m_iStart, $1.m_iEnd ); pParser->AddItem ( &$1, NULL ); pParser->SetNewSyntax(); }
+	| TOK_ID					{ pParser->SetSelect ( $1.m_iStart, $1.m_iEnd ); pParser->AddItem ( "id", &$1, NULL ); pParser->SetNewSyntax(); }
 	| expr opt_as TOK_IDENT				{ pParser->SetSelect ( $1.m_iStart, $3.m_iEnd ); pParser->AddItem ( &$1, &$3 ); }
 	| TOK_AVG '(' expr ')' opt_as TOK_IDENT		{ pParser->SetSelect ($1.m_iStart, $6.m_iEnd); pParser->AddItem ( &$3, &$6, SPH_AGGR_AVG ); }
 	| TOK_MAX '(' expr ')' opt_as TOK_IDENT		{ pParser->SetSelect ($1.m_iStart, $6.m_iEnd); pParser->AddItem ( &$3, &$6, SPH_AGGR_MAX ); }

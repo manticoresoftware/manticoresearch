@@ -30,43 +30,45 @@
       know about them.  */
    enum yytokentype {
      SEL_TOKEN = 258,
-     SEL_AS = 259,
-     SEL_AVG = 260,
-     SEL_MAX = 261,
-     SEL_MIN = 262,
-     SEL_SUM = 263,
-     SEL_COUNT = 264,
-     SEL_WEIGHT = 265,
-     SEL_DISTINCT = 266,
-     SEL_MATCH_WEIGHT = 267,
-     TOK_NEG = 268,
-     TOK_LTE = 269,
-     TOK_GTE = 270,
-     TOK_EQ = 271,
-     TOK_NE = 272,
-     TOK_OR = 273,
-     TOK_AND = 274,
-     TOK_NOT = 275
+     SEL_ID = 259,
+     SEL_AS = 260,
+     SEL_AVG = 261,
+     SEL_MAX = 262,
+     SEL_MIN = 263,
+     SEL_SUM = 264,
+     SEL_COUNT = 265,
+     SEL_WEIGHT = 266,
+     SEL_DISTINCT = 267,
+     SEL_MATCH_WEIGHT = 268,
+     TOK_NEG = 269,
+     TOK_LTE = 270,
+     TOK_GTE = 271,
+     TOK_EQ = 272,
+     TOK_NE = 273,
+     TOK_OR = 274,
+     TOK_AND = 275,
+     TOK_NOT = 276
    };
 #endif
 #define SEL_TOKEN 258
-#define SEL_AS 259
-#define SEL_AVG 260
-#define SEL_MAX 261
-#define SEL_MIN 262
-#define SEL_SUM 263
-#define SEL_COUNT 264
-#define SEL_WEIGHT 265
-#define SEL_DISTINCT 266
-#define SEL_MATCH_WEIGHT 267
-#define TOK_NEG 268
-#define TOK_LTE 269
-#define TOK_GTE 270
-#define TOK_EQ 271
-#define TOK_NE 272
-#define TOK_OR 273
-#define TOK_AND 274
-#define TOK_NOT 275
+#define SEL_ID 259
+#define SEL_AS 260
+#define SEL_AVG 261
+#define SEL_MAX 262
+#define SEL_MIN 263
+#define SEL_SUM 264
+#define SEL_COUNT 265
+#define SEL_WEIGHT 266
+#define SEL_DISTINCT 267
+#define SEL_MATCH_WEIGHT 268
+#define TOK_NEG 269
+#define TOK_LTE 270
+#define TOK_GTE 271
+#define TOK_EQ 272
+#define TOK_NE 273
+#define TOK_OR 274
+#define TOK_AND 275
+#define TOK_NOT 276
 
 
 

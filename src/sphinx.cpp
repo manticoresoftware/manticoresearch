@@ -4945,6 +4945,7 @@ int SelectParser_t::GetToken ( YYSTYPE * lvalp )
 		#define LOC_CHECK(_str,_len,_ret) \
 			if ( lvalp->m_iEnd==_len+lvalp->m_iStart && strncasecmp ( m_pStart+lvalp->m_iStart, _str, _len )==0 ) return _ret;
 
+		LOC_CHECK ( "ID", 2, SEL_ID );
 		LOC_CHECK ( "AS", 2, SEL_AS );
 		LOC_CHECK ( "OR", 2, TOK_OR );
 		LOC_CHECK ( "AND", 3, TOK_AND );
@@ -22546,7 +22547,7 @@ bool CSphSource_ODBC::SqlQuery ( const char * sQuery )
 		if ( m_hColBuffers ( tCol.m_sName ) )
 			iBuffLen = m_hColBuffers [ tCol.m_sName ]; // got explicit user override
 		else if ( uColSize )
-			iBuffLen = Min ( uColSize+1, MAX_COL_SIZE ); // got data from driver
+			iBuffLen = Min ( uColSize+1, (SQLULEN) MAX_COL_SIZE ); // got data from driver
 
 		tCol.m_dContents.Resize ( iBuffLen );
 		tCol.m_dRaw.Resize ( iBuffLen );

@@ -124,9 +124,22 @@ index dist3
 <sphinxql>select count(*) cnt, count (distinct tag) tg from dist0 group by gr</sphinxql>
 <sphinxql>select count(*) cnt, count (distinct tag) tg from dist1 group by gr</sphinxql>
 <sphinxql>select count(*) cnt, count (distinct tag) tg from dist2 group by gr</sphinxql>
-<sphinxql>select count(*) cnt, count (distinct tag) tg from dist3 group by gr</sphinxql> 
+<sphinxql>select count(*) cnt, count (distinct tag) tg from dist3 group by gr</sphinxql>
 
+<!-- Select simple id -->
+<sphinxql>select id, tg from dist_no where match ('test')</sphinxql>
+<sphinxql>select id, tg from dist0 where match ('test')</sphinxql>
+<sphinxql>select id, tg from dist1 where match ('test')</sphinxql>
+<sphinxql>select id, tg from dist2 where match ('test')</sphinxql>
+<sphinxql>select id, tg from dist3 where match ('test')</sphinxql>
 
+<!-- Select aliased id -->
+<sphinxql>select id idd, tg from dist_no where match ('test')</sphinxql>
+<sphinxql>select id idd, tg from dist0 where match ('test')</sphinxql>
+<sphinxql>select id idd, tg from dist1 where match ('test')</sphinxql>
+<sphinxql>select id idd, tg from dist2 where match ('test')</sphinxql>
+<sphinxql>select id idd, tg from dist3 where match ('test')</sphinxql>
+ 
 <!-- Select count(*) on differend kind of dist indexes - must be error since no group by -->
 <sphinxql>select gr, count(*) cnt from dist_no</sphinxql>
 <sphinxql>select gr, count(*) cnt from dist0</sphinxql>

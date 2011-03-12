@@ -1595,7 +1595,7 @@ yyreduce:
 
   case 26:
 
-    { pParser->SetSelect ( yyvsp[0].m_iStart, yyvsp[0].m_iEnd ); pParser->AddItem ( &yyvsp[0], NULL ); pParser->SetNewSyntax(); ;}
+    { pParser->SetSelect ( yyvsp[0].m_iStart, yyvsp[0].m_iEnd ); pParser->AddItem ( "id", &yyvsp[0], NULL ); pParser->SetNewSyntax(); ;}
     break;
 
   case 27:

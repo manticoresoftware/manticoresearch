@@ -14501,11 +14501,10 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	////////////////////
 
 	// adjust result sets
-	if ( bFinalPass )
-		for ( int iSorter=0; iSorter<iSorters; iSorter++ )
+	for ( int iSorter=0; iSorter<iSorters; iSorter++ )
 	{
 		ISphMatchSorter * pTop = ppSorters[iSorter];
-		if ( pTop->GetLength() )
+		if ( pTop->GetLength() && bFinalPass )
 		{
 			const int iCount = pTop->GetLength ();
 			CSphMatch * const pHead = pTop->First();

@@ -1042,6 +1042,25 @@ inline void SqlUnescape ( CSphString & sRes, const char * sEscaped, int iLen )
 	*d++ = '\0';
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+/// locator pair, for RT string dynamization
+struct LocatorPair_t
+{
+	CSphAttrLocator m_tFrom;	///< source (static) locator
+	CSphAttrLocator m_tTo;		///< destination (dynamized) locator
+};
+
+/// internal disk index interface (that exposes some guts)
+struct ISphIndex_VLN : public CSphIndex
+{
+	explicit ISphIndex_VLN ( const char * sIndexName, const char * sName )
+		: CSphIndex ( sIndexName, sName )
+	{}
+
+	virtual void SetDynamize ( const CSphVector<LocatorPair_t> & dDynamize ) = 0;
+};
+
 #endif // _sphinxint_
 
 //

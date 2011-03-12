@@ -2654,9 +2654,26 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 				if ( pQuery->m_dFilters[i].m_sAttrName==tExprCol.m_sName )
 			{
 				if ( bUsesWeight )
+				{
 					tExprCol.m_eStage = SPH_EVAL_PRESORT; // special, weight filter
-				else
-					tExprCol.m_eStage = SPH_EVAL_PREFILTER;
+					break;
+				}
+
+				// usual filter
+				tExprCol.m_eStage = SPH_EVAL_PREFILTER;
+
+				// so we are about to add a filter condition
+				// but it might depend on some preceding columns
+				// lets detect those and move them to prefilter phase too
+				CSphVector<int> dCur;
+				tExprCol.m_pExpr->GetDependencyColumns ( dCur );
+
+				ARRAY_FOREACH ( i, dCur )
+				{
+					CSphColumnInfo & tDep = const_cast < CSphColumnInfo & > ( tSorterSchema.GetAttr ( dCur[i] ) );
+					if ( tDep.m_eStage>SPH_EVAL_PREFILTER )
+						tDep.m_eStage = SPH_EVAL_PREFILTER;
+				}
 				break;
 			}
 

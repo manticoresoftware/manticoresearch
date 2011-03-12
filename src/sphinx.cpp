@@ -1303,7 +1303,7 @@ const int WORDLIST_CHECKPOINT			= 64;		///< wordlist checkpoints frequency
 
 
 /// this is my actual VLN-compressed phrase index implementation
-class CSphIndex_VLN : public CSphIndex
+class CSphIndex_VLN : public ISphIndex_VLN
 {
 	friend class DiskIndexQwordSetup_c;
 	friend class CSphMerger;
@@ -1356,6 +1356,8 @@ public:
 	virtual bool				HasDocid ( SphDocID_t uDocid ) const;
 
 	virtual const CSphSourceStats &		GetStats () const { return m_tStats; }
+
+	virtual void				SetDynamize ( const CSphVector<LocatorPair_t> & dDynamize );
 
 private:
 
@@ -1435,6 +1437,8 @@ private:
 	int64_t						m_iTID;					///< number of times when SaveAttributes called.
 
 	bool						m_bIsEmpty;				///< do we have actually indexed documents (m_iTotalDocuments is just fetched documents, not indexed!)
+
+	CSphVector<LocatorPair_t>	m_dDynamize;			///< string attributes that my parent RT index wants dynamized
 
 private:
 	CSphString					GetIndexFileName ( const char * sExt ) const;
@@ -7089,7 +7093,7 @@ CSphIndex * sphCreateIndexPhrase ( const char* szIndexName, const char * sFilena
 
 
 CSphIndex_VLN::CSphIndex_VLN ( const char* sIndexName, const char * sFilename )
-	: CSphIndex ( sIndexName, sFilename )
+	: ISphIndex_VLN ( sIndexName, sFilename )
 	, m_iLockFD ( -1 )
 {
 	m_sFilename = sFilename;
@@ -11825,6 +11829,16 @@ void CSphIndex_VLN::CopyDocinfo ( CSphQueryContext * pCtx, CSphMatch & tMatch, c
 			? pEntry->m_uValue
 			: sphGetRowAttr ( tMatch.m_pStatic, pCtx->m_dOverrideIn[i] ) );
 	}
+
+	// dynamize if necessary
+	ARRAY_FOREACH ( j, m_dDynamize )
+		tMatch.SetAttr ( m_dDynamize[j].m_tTo, tMatch.GetAttr ( m_dDynamize[j].m_tFrom ) );
+}
+
+
+void CSphIndex_VLN::SetDynamize ( const CSphVector<LocatorPair_t> & dDynamize )
+{
+	m_dDynamize = dDynamize;
 }
 
 
@@ -11930,6 +11944,7 @@ bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const
 {
 	assert ( pQuery->m_sQuery.IsEmpty() );
+	assert ( iTag>=0 );
 
 	// check if index is ready
 	if ( m_bPreread.IsEmpty() || !m_bPreread[0] )
@@ -12018,6 +12033,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 	DWORD uStart = pQuery->m_bReverseScan ? ( m_uDocinfoIndex-1 ) : 0;
 	int iStep = pQuery->m_bReverseScan ? -1 : 1;
+	int iMyTag = tCtx.m_dCalcFinal.GetLength() ? -1 : iTag;
 	for ( DWORD uIndexEntry=uStart; uIndexEntry<m_uDocinfoIndex; uIndexEntry+=iStep )
 	{
 		/////////////////////////
@@ -12053,7 +12069,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 			if ( bRandomize )
 				tMatch.m_iWeight = ( sphRand() & 0xffff );
 
-			tMatch.m_iTag = iTag;
+			tMatch.m_iTag = iMyTag;
 
 			bool bNewMatch = false;
 			for ( int iSorter=0; iSorter<iSorters; iSorter++ )
@@ -12083,7 +12099,13 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 		CSphMatch * const pHead = pTop->First();
 		CSphMatch * const pTail = pHead + iCount;
 		for ( CSphMatch * pCur=pHead; pCur<pTail; pCur++ )
-			tCtx.CalcFinal ( *pCur );
+		{
+			if ( pCur->m_iTag<0 )
+			{
+				tCtx.CalcFinal ( *pCur );
+				pCur->m_iTag = iTag;
+			}
+		}
 	}
 
 	// done
@@ -14326,6 +14348,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	assert ( pResult );
 	assert ( ppSorters );
 	assert ( !pQuery->m_sQuery.IsEmpty() && pQuery->m_eMode!=SPH_MATCH_FULLSCAN ); // scans must go through MultiScan()
+	assert ( iTag>=0 );
 
 	// start counting
 	int64_t tmQueryStart = sphMicroTimer();
@@ -14451,6 +14474,10 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	// find and weight matching documents
 	//////////////////////////////////////
 
+	bool bFinalLookup = !tCtx.m_bLookupFilter && !tCtx.m_bLookupSort;
+	bool bFinalPass = bFinalLookup || tCtx.m_dCalcFinal.GetLength();
+	int iMyTag = bFinalPass ? -1 : iTag;
+
 	PROFILE_BEGIN ( query_match );
 	switch ( pQuery->m_eMode )
 	{
@@ -14460,7 +14487,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 		case SPH_MATCH_EXTENDED:
 		case SPH_MATCH_EXTENDED2:
 		case SPH_MATCH_BOOLEAN:
-			if ( !MatchExtended ( &tCtx, pQuery, iSorters, ppSorters, pRanker.Ptr(), iTag ) )
+			if ( !MatchExtended ( &tCtx, pQuery, iSorters, ppSorters, pRanker.Ptr(), iMyTag ) )
 				return false;
 			break;
 
@@ -14474,23 +14501,23 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	////////////////////
 
 	// adjust result sets
-	for ( int iSorter=0; iSorter<iSorters; iSorter++ )
+	if ( bFinalPass )
+		for ( int iSorter=0; iSorter<iSorters; iSorter++ )
 	{
 		ISphMatchSorter * pTop = ppSorters[iSorter];
-
-		// final lookup and/or calc
-		bool bFinalLookup = !tCtx.m_bLookupFilter && !tCtx.m_bLookupSort;
-		if ( pTop->GetLength() && ( bFinalLookup || tCtx.m_dCalcFinal.GetLength() ) )
+		if ( pTop->GetLength() )
 		{
 			const int iCount = pTop->GetLength ();
 			CSphMatch * const pHead = pTop->First();
 			CSphMatch * const pTail = pHead + iCount;
 
 			for ( CSphMatch * pCur=pHead; pCur<pTail; pCur++ )
+				if ( pCur->m_iTag<0 )
 			{
 				if ( bFinalLookup )
 					CopyDocinfo ( &tCtx, *pCur, FindDocinfo ( pCur->m_iDocID ) );
 				tCtx.CalcFinal ( *pCur );
+				pCur->m_iTag = iTag;
 			}
 		}
 

@@ -808,6 +808,7 @@ struct CSphWordHit
 	Hitpos_t		m_iWordPos;		///< word position in current document
 };
 
+
 /// attribute locator within the row
 struct CSphAttrLocator
 {

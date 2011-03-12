@@ -5202,7 +5202,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	}
 
 	// check if we actually have all required columns already
-	if ( iKnownItems<tQuery.m_dItems.GetLength() )
+	if ( !bStar && iKnownItems<tQuery.m_dItems.GetLength() )
 	{
 		dKnownItems.Sort();
 		tRes.m_iSuccesses = 0;

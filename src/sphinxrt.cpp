@@ -2861,7 +2861,7 @@ CSphIndex * RtIndex_t::LoadDiskChunk ( int iChunk, bool bStripPath )
 {
 	MEMORY ( SPH_MEM_IDX_DISK );
 
-	CSphString sChunk, sError;
+	CSphString sChunk, sError, sWarning;
 	sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), iChunk );
 
 	// !COMMIT handle errors gracefully instead of dying
@@ -2869,8 +2869,8 @@ CSphIndex * RtIndex_t::LoadDiskChunk ( int iChunk, bool bStripPath )
 	if ( !pDiskChunk )
 		sphDie ( "disk chunk %s: alloc failed", sChunk.cstr() );
 
-	if ( !pDiskChunk->Prealloc ( false, bStripPath, sError ) )
-		sphDie ( "disk chunk %s: prealloc failed: %s", sChunk.cstr(), sError.cstr() );
+	if ( !pDiskChunk->Prealloc ( false, bStripPath, sWarning ) )
+		sphDie ( "disk chunk %s: prealloc failed: %s", sChunk.cstr(), pDiskChunk->GetLastError().cstr() );
 
 	if ( !pDiskChunk->Preread() )
 		sphDie ( "disk chunk %s: preread failed: %s", sChunk.cstr(), pDiskChunk->GetLastError().cstr() );

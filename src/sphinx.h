@@ -1267,7 +1267,7 @@ public:
 								CSphHTMLStripper ();
 	bool						SetIndexedAttrs ( const char * sConfig, CSphString & sError );
 	bool						SetRemovedElements ( const char * sConfig, CSphString & sError );
-	void						SetZonePrefix ( const char * sPrefix );
+	bool						SetZones ( const char * sZones, CSphString & sError );
 	void						EnableParagraphs ();
 	void						Strip ( BYTE * sData ) const;
 
@@ -1281,6 +1281,7 @@ protected:
 		bool					m_bRemove;		///< whether to remove contents
 		bool					m_bPara;		///< whether to mark a paragraph boundary
 		bool					m_bZone;		///< whether to mark a zone boundary
+		bool					m_bZonePrefix;	///< whether the zone name is a full name or a prefix
 		CSphVector<CSphString>	m_dAttrs;		///< attr names to index
 
 		StripperTag_t ()
@@ -1290,6 +1291,7 @@ protected:
 			, m_bRemove ( false )
 			, m_bPara ( false )
 			, m_bZone ( false )
+			, m_bZonePrefix ( false )
 		{}
 
 		inline bool operator < ( const StripperTag_t & rhs ) const
@@ -1388,7 +1390,7 @@ public:
 	/// sRemoveElements defines what elements to cleanup. format is "style, script"
 	///
 	/// on failure, returns false and fills sError
-	bool								SetStripHTML ( const char * sExtractAttrs, const char * sRemoveElements, bool bDetectParagraphs, const char * sZonePrefix, CSphString & sError );
+	bool								SetStripHTML ( const char * sExtractAttrs, const char * sRemoveElements, bool bDetectParagraphs, const char * sZones, CSphString & sError );
 
 	/// set tokenizer
 	void								SetTokenizer ( ISphTokenizer * pTokenizer );
@@ -2522,7 +2524,7 @@ struct CSphIndexSettings : public CSphSourceSettings
 	bool			m_bHtmlStrip;
 	CSphString		m_sHtmlIndexAttrs;
 	CSphString		m_sHtmlRemoveElements;
-	CSphString		m_sZonePrefix;
+	CSphString		m_sZones;
 
 	ESphHitless		m_eHitless;
 	CSphString		m_sHitlessFile;

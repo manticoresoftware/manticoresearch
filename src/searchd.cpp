@@ -8178,10 +8178,15 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 				return;
 			}
 		}
-		pStripper = &tStripper;
 
-		if ( !tSettings.m_sZonePrefix.IsEmpty() )
-			tStripper.SetZonePrefix ( tSettings.m_sZonePrefix.cstr() );
+		if ( !tStripper.SetZones ( tSettings.m_sZones.cstr (), sError ) )
+		{
+			tReq.SendErrorReply ( "HTML stripper config error: %s", sError.cstr() );
+			pServed->Unlock();
+			return;
+		}
+
+		pStripper = &tStripper;
 	}
 
 	///////////////////
@@ -9584,9 +9589,14 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 			}
 		}
 
-		if ( !tSettings.m_sZonePrefix.IsEmpty() )
-			tStripper.SetZonePrefix ( tSettings.m_sZonePrefix.cstr() );
-
+		if ( !tStripper.SetZones ( tSettings.m_sZones.cstr(), sError ) )
+		{
+			sError.SetSprintf ( "HTML stripper config error: %s", sError.cstr() );
+			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+			pServed->Unlock();
+			return;
+		}
+		
 		pStripper = &tStripper;
 	}
 

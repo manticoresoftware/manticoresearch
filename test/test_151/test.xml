@@ -34,7 +34,7 @@ index test
 	html_strip		= 1
 	
 	index_sp		= 1
-	index_zones		= zone_
+	index_zones		= zone_*
 }
 
 </Config>

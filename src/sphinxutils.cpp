@@ -938,7 +938,7 @@ void sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 
 	// sentence and paragraph indexing
 	tSettings.m_bIndexSP = ( hIndex.GetInt ( "index_sp" )!=0 );
-	tSettings.m_sZonePrefix = hIndex.GetStr ( "index_zones" );
+	tSettings.m_sZones = hIndex.GetStr ( "index_zones" );
 }
 
 
@@ -990,7 +990,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 			tSettings.m_sHtmlIndexAttrs = hIndex.GetStr ( "html_index_attrs" );
 			tSettings.m_sHtmlRemoveElements = hIndex.GetStr ( "html_remove_elements" );
 		}
-		tSettings.m_sZonePrefix = hIndex.GetStr ( "index_zones" );
+		tSettings.m_sZones = hIndex.GetStr ( "index_zones" );
 
 		pIndex->Setup ( tSettings );
 	}

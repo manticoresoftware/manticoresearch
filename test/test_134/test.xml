@@ -28,7 +28,7 @@ index test
 	charset_type	= utf-8
 	html_strip		= 1
 	index_sp		= 1
-	index_zones		= zone_	
+	index_zones		= zone_*
 	dict			= keywords
 }
 </config>

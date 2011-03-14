@@ -32,7 +32,7 @@ index test
 	path			= <data_path/>/test
 	html_strip		= 1
 	index_sp		= 1
-	index_zones		= zone
+	index_zones		= zone*
 	<Dynamic>
 		<Variant>dict = crc</Variant>
 		<Variant>dict = keywords</Variant>

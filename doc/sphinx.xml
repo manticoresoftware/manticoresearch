@@ -1560,6 +1560,10 @@ hello !world
 <listitem>strict order operator (aka operator "before"): <programlisting>aaa &lt;&lt; bbb &lt;&lt; ccc</programlisting></listitem>
 <listitem>exact form modifier (introduced in version 0.9.9-rc1): <programlisting>raining =cats and =dogs</programlisting></listitem>
 <listitem>field-start and field-end modifier (introduced in version 0.9.9-rc2): <programlisting>^hello world$</programlisting></listitem>
+<listitem>NEAR, generalized proximity operator (introduced in version 1.11-beta): <programlisting>hello NEAR/3 world NEAR/4 "my test"</programlisting></listitem>
+<listitem>SENTENCE operator (introduced in version 1.11-beta): <programlisting>all SENTENCE words SENTENCE "in one sentence"</programlisting></listitem>
+<listitem>PARAGRAPH operator (introduced in version 1.11-beta): <programlisting>"Bill Gates" PARAGRAPH "Steve Jobs"</programlisting></listitem>
+<listitem>zone limit operator: <programlisting>ZONE:(h3,h4) only in these titles</programlisting></listitem>
 </itemizedlist>
 
 Here's an example query that uses some of these operators:
@@ -1662,6 +1666,68 @@ aaa -(bbb -(ccc ddd))
 -aaa
 aaa | -bbb
 </programlisting>
+</para>
+<para>
+<b>NEAR operator</b>, added in 1.11-beta, is a generalized version
+of a proximity operator. The syntax is <code>NEAR/N</code>, it is
+case-sensitive, and no spaces are allowed beetwen the NEAR keyword,
+the slash sign, and the distance value.
+</para>
+<para>
+The original proximity operator only worked on sets of keywords.
+NEAR is more generic and can accept arbitrary subexpressions as
+its two arguments, matching the document when both subexpressions
+are found within N words of each other, no matter in which order.
+NEAR is left associative and has the same (lowest) precedence
+as BEFORE.
+</para>
+<para>
+You should also note how a <code>(one NEAR/7 two NEAR/7 three)</code>
+query using NEAR is not really equivalent to a
+<code>("one two three"~7)</code> one using keyword proximity operator.
+The difference here is that the proximity operator allows for up to
+6 non-matching words between all the 3 matching words, but the version
+with NEAR is less restrictive: it would allow for up to 6 words between
+'one' and 'two' and then for up to 6 more between that two-word
+matching and a 'three' keyword.
+</para>
+<para>
+<b>SENTENCE and PARAGRAPH operators</b>, added in 1.11-beta,
+matches the document when both its arguments are within the same
+sentence or the same paragraph of text, respectively. The arguments
+can be either keywords, or phrases, or the instances of the same
+operator. Here are a few examples:
+<programlisting>
+one SENTENCE two
+one SENTENCE "two three"
+one SENTENCE "two three" SENTENCE four
+</programlisting>
+The order of the arguments within the sentence or paragraph
+does not matter. These operators only work on indexes built
+with <link linkend="conf-index-sp">index_sp</link> (sentence
+and paragraph indexing feature) enabled, and revert to a mere
+AND otherwise. Refer to the <code>index_sp</code> directive
+documentation for the notes on what's considered a sentence
+and a paragraph. 
+</para>
+<para>
+<b>ZONE limit operator</b>, added in 1.11-beta, is quite similar
+to field limit operator, but restricts matching to a given in-field
+zone or a list of zones. Note that the subsequent subexpressions
+are <emphasis>not</emphasis> required to match in a single contiguous
+span of a given zone, and may match in multiple spans.
+For instance, <code>(ZONE:th hello world)</code> query
+<emphasis>will</emphasis> match this example document:
+<programlisting>
+&lt;th&gt;Table 1. Local awareness of Hello Kitty brand.&lt;/th&gt;
+.. some table data goes here ..
+&lt;th&gt;Table 2. World-wide brand awareness.&lt;/th&gt;
+</programlisting>
+ZONE operator affects the query until the next
+field or ZONE limit operator, or the closing parenthesis.
+It only works on the indexes built with zones support
+(see <xref linkend="conf-index-zones"/>) and will be ignored
+otherwise.
 </para>
 </sect1>
 
@@ -7587,6 +7653,168 @@ morphology = stem_en, libstemmer_sv
 </sect2>
 
 
+<sect2 id="conf-dict"><title>dict</title>
+<para>
+The keywords dictionary type.
+Known values are 'crc' and 'keywords'.
+Optional, default is 'crc'.
+Introduced in version 1.11-beta.
+</para>
+<para>
+The default dictionary type in Sphinx, and the only one available
+until version 1.11-beta, is a so-called CRC dictionary which never
+stores the original keyword text in the index. Instead, keywords are
+replaced with their control sum value (either CRC32 or FNV64, depending
+whether Sphinx was built with <option>--enable-id64</option>) both
+when searching and indexing, and that value is used internally
+in the index.
+</para>
+<para>
+That approach has two drawbacks. First, in CRC32 case there is
+a chance of control sum collision between several pairs of different
+keywords, growing quadratically with the number of unique keywords
+in the index. (FNV64 case is unaffected in practice, as a chance
+of a single FNV64 collision in a dictionary of 1 billion entries
+is approximately 1:16, or 6.25 percent. And most dictionaries
+will be much more compact that a billion keywords, as a typical
+spoken human language has in the region of 1 to 10 million word
+forms.) Second, and more importantly, substring searches are not
+directly possible with control sums. Sphinx alleviated that by
+pre-indexing all the possible substrings as separate keywords
+(see <xref linkend="conf-min-prefix-len"/>, <xref linkend="conf-min-infix-len"/>
+directives). That actually has an added benefit of matching
+substrings in the quickest way possible. But at the same time
+pre-indexing all substrings grows the index size a lot (factors
+of 3-10x and even more would not be unusual) and impacts the
+indexing time respectively, rendering substring searches
+on big indexes rather impractical.
+</para>
+<para>
+Keywords dictionary, introduced in 1.11-beta, fixes both these
+drawbacks. It stores the keywords in the index and performs
+search-time wildcard expansion. For example, a search for a
+'test*' prefix could internally expand to 'test|tests|testing'
+query based on the dictionary contents. That expansion is fully
+transparent to the application, except that the separate
+per-keyword statistics for all the actually matched keywords 
+would now also be reported.
+</para>
+<para>
+Indexing with keywords dictionary should be 1.1x to 1.3x slower
+compared to regular, non-substring indexing - but times faster
+compared to substring indexing (either prefix or infix). Index size
+should only be slightly bigger that than of the regular non-substring
+index, with a 1..10% percent total difference
+Regular keyword searching time must be very close or identical across
+all three discussed index kinds (CRC non-substring, CRC substring,
+keywords). Substring searching time can vary greatly depending
+on how many actual keywords match the given substring (in other
+words, into how many keywords does the search term expand).
+The maximum number of keywords matched is restricted by the
+<link linkend="conf-expansion-limit">expansion_limit</link>
+directive.
+</para>
+<para>
+Essentially, keywords and CRC dictionaries represent the two
+different trade-off substring searching decisions. You can choose
+to either sacrifice indexing time and index size in favor of
+top-speed worst-case searches (CRC dictionary), or only slightly
+impact indexing time but sacrifice worst-case searching time when
+the prefix expands into very many keywords (keywords dictionary).
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+dict = keywords
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-index-sp"><title>index_sp</title>
+<para>
+Whether to detect and index sentence and paragraph boundaries.
+Optional, default is 0 (do not detect and index).
+Introduced in version 1.11-beta.
+</para>
+<para>
+This directive enables sentence and paragraph boundary indexing.
+It's required for the SENTENCE and PARAGRAPH operators to work.
+Sentence boundary detection is based on plain text analysis, so you
+only need to set <code>index_sp = 1</code> to enable it. Paragraph
+detection is however based on HTML markup, and happens in the
+<link linkend="conf-html-strip">HTML stripper</link>.
+So to index paragraph locations you also need to enable the stripper
+by specifying <code>html_strip = 1</code>. Both types of boundaries
+are detected based on a few built-in rules enumerated just below.
+</para>
+<para>
+Sentence boundary detection rules are as follows.
+<itemizedlist>
+<listitem>Question and excalamation signs (? and !) are always a sentence boundary.</listitem>
+<listitem>Trailing dot (.) is a sentence boundary, except:
+	<itemizedlist>
+	<listitem>When followed by a letter. That's considered a part of an abbreviation (as in "S.T.A.L.K.E.R" or "Goldman Sachs S.p.A.").</listitem>
+	<listitem>When followed by a comma. That's considered an abbreviation followed by a comma (as in "Telecom Italia S.p.A., founded in 1994").</listitem>
+	<listitem>When followed by a space and a small letter. That's considered an abbreviation within a sentence (as in "News Corp. announced in Februrary").</listitem>
+	<listitem>When preceded by a space and a capital letter, and followed by a space. That's considered a middle initial (as in "John D. Doe").</listitem>
+	</itemizedlist>
+</listitem>
+</itemizedlist>
+</para>
+<para>
+Paragraph boundaries are inserted at every block-level HTML tag.
+Namely, those are (as taken from HTML 4 standard) ADDRESS, BLOCKQUOTE,
+CAPTION, CENTER, DD, DIV, DL, DT, H1, H2, H3, H4, H5, LI, MENU, OL, P,
+PRE, TABLE, TBODY, TD, TFOOT, TH, THEAD, TR, and UL.
+</para>
+<para>
+Both sentences and paragraphs increment the keyword position counter by 1.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+index_sp = 1
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-index-zones"><title>index_zones</title>
+<para>
+A list of in-field HTML/XML zones to index.
+Optional, default is empty (do not index zones).
+Introduced in version 1.11-beta.
+</para>
+<para>
+Zones can be formally defined as follows. Everything between
+an opening and a matching closing tag is called a span, and
+the aggregate of all spans corresponding sharing the same
+tag name is called a zone. For instance, everything between
+the occurrences of &lt;H1&gt; and &lt;/H1&gt; in the document
+field belongs to H1 zone.
+</para>
+<para>
+Zone indexing, enabled by <code>index_zones</code> directive,
+is an optional extension of the HTML stripper. So it will also
+require that the <link linkend="conf-html-strip">stripper</link>
+is enabled (with <code>html_strip = 1</code>). The value of the
+<code>index_zones</code> should be a comma-separated list of
+those tag names and wildcards (ending with a star) that should
+be indexed as zones.
+</para>
+<para>
+Zones can nest and overlap arbitrarily. The only requirement
+is that every opening tag has a matching tag. You can also have
+an arbitrary number of both zones (as in unique zone names,
+such as H1) and spans (all the occurrences of those H1 tags)
+in a document.
+Once indexed, zones can then be used for matching with
+the ZONE operator, see <xref linkend="extended-syntax"/>.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+index_zones = h*, th, title
+</programlisting>
+</sect2>
+
+
 <sect2 id="conf-min-stemming-len"><title>min_stemming_len</title>
 <para>
 Minimum word length at which to enable stemming.
@@ -10027,6 +10255,62 @@ for more details.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 rt_flush_period = 3600
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-thread-stack"><title>thread_stack</title>
+<para>
+Per-thread stack size.
+Optional, default is 64K.
+Introduced in version 1.11-beta.
+</para>
+<para>
+In the <code>workers = threads</code> mode, every request is processed
+with a separate thread that needs its own stack space. By default, 64K per
+thread are allocated for stack. However, extremely complex search requests
+might eventually exhaust the default stack and require more. For instance,
+a query that matches a few thousand keywords (either directly or through
+term expansion) can eventually run out of stack. Previously, that resulted
+in crashes. Starting with 1.11-beta, <filename>searchd</filename> attempts
+to estimate the expected stack use, and blocks the potentially dangerous
+queries. To process such queries, you can either the thread stack size
+by using the <code>thread_stack</code> directive (or switch to a different
+<code>workers</code> setting if that is possible).
+</para>
+<para>
+A query with N levels of nesting is estimated to require approximately
+30+0.12*N KB of stack, meaning that the default 64K is enough for queries
+with upto 300 levels, 150K for upto 1000 levels, etc. If the stack size limit
+is not met, <filename>searchd</filename> fails the query and reports
+the required stack size in the error message.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+thread_stack = 256K
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-expansion-limit"><title>expansion_limit</title>
+<para>
+The maximum number of expanded keywords for a single wildcard.
+Optional, default is 0 (no limit).
+Introduced in version 1.11-beta.
+</para>
+<para>
+When doing substring searches against indexes built with
+<code>dict = keywords</code> enabled, a single wildcard may
+potentially result in thousands and even millions of matched
+keywords (think of matching 'a*' against the entire Oxford
+dictionary). This directive lets you limit the impact
+of such expansions. Setting <code>expansion_limit = N</code>
+restricts expansions to no more than N of the most frequent
+matching keywords (per each wildcard in the query).
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+expansion_limit = 16
 </programlisting>
 </sect2>
 

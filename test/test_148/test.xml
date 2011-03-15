@@ -31,6 +31,22 @@ index test
 	index_sp		= 1
 	index_zones		= zone*
 }
+
+source start_end
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT id, body, 1 as idd FROM start_end_table
+	sql_attr_uint	= idd
+	sql_field_string	= body
+}
+
+index start_end
+{
+	source			= start_end
+	path			= <data_path/>/start_end
+	docinfo			= extern
+}
 </config>
 
 <db_create>
@@ -41,8 +57,16 @@ CREATE TABLE test_table
 	idd INT NOT NULL
 );
 </db_create>
+<db_create>
+CREATE TABLE start_end_table
+(
+	id INTEGER PRIMARY KEY NOT NULL AUTO_INCREMENT,
+	body VARCHAR(64) NOT NULL
+);
+</db_create>
 
 <db_drop>drop table if exists test_table;</db_drop>
+<db_drop>drop table if exists start_end_table;</db_drop>
 
 <db_insert>insert into test_table values ( 1, 'test_148/doc1.txt', 1 );</db_insert>
 <db_insert>insert into test_table values ( 2, 'test_148/doc2.txt', 2 );</db_insert>
@@ -52,6 +76,74 @@ CREATE TABLE test_table
 	<sphinxql>select * from test where match ('ZONE:zoneA dummy')</sphinxql>
 	<sphinxql>select * from test where match ('@body[1024] text')</sphinxql>
 	<sphinxql>select * from test where match ('@body[1024] dummy')</sphinxql>
+	<sphinxql>select * from start_end where match ('@body ABB') group by idd</sphinxql>
+	<sphinxql>select * from start_end where match ('@body ^ABB') group by idd</sphinxql>
+	<sphinxql>select * from start_end where match ('@body ABB$') group by idd</sphinxql>
+	<sphinxql>select * from start_end where match ('@body ^ABB$') group by idd</sphinxql>
 </sphqueries>
+
+<db_insert>
+insert into start_end_table (body) values 
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB abc ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ),
+( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' ), ( 'ABB' );
+</db_insert>
 
 </test>

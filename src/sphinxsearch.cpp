@@ -1618,21 +1618,24 @@ const ExtDoc_t * ExtTermPos_c<T>::GetDocsChunk ( SphDocID_t * pMaxID )
 
 	const ExtDoc_t * pDoc = m_pRawDoc; // just a shortcut
 	const ExtHit_t * pHit = m_pRawHit;
-	bool bSkipCurrent = ( m_uLastID!=0 );
+	const SphDocID_t uSkipID = m_uLastID;
 	SphDocID_t uLastID = m_uLastID = 0;
+
+	// skip dupes from tail document
+	while ( uSkipID && pHit && ( pHit->m_uDocid==uSkipID ) )
+		pHit = ExtTerm_c::GetHitsChunk ( m_pRawDocs, uSkipID );
 
 	CSphRowitem * pDocinfo = m_pDocinfo;
 	for ( ;; )
 	{
 		// try to fetch more hits for current raw docs block if we're out
-		if ( !bSkipCurrent && ( !pHit || pHit->m_uDocid==DOCID_MAX ) )
+		if ( !pHit || pHit->m_uDocid==DOCID_MAX )
 			pHit = ExtTerm_c::GetHitsChunk ( m_pRawDocs, m_uTermMaxID );
 
 		// did we touch all the hits we had? if so, we're fully done with
 		// current raw docs block, and should start a new one
-		if ( bSkipCurrent || !pHit )
+		if ( !pHit )
 		{
-			bSkipCurrent = false;
 			m_pRawDocs = ExtTerm_c::GetDocsChunk ( &m_uTermMaxID );
 			if ( !m_pRawDocs ) // no more incoming documents? bail
 				break;

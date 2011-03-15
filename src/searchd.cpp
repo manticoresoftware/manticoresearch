@@ -1094,6 +1094,16 @@ public:
 	}
 };
 
+static int CmpString ( const CSphString & a, const CSphString & b )
+{
+	if ( !a.cstr() && !b.cstr() )
+		return 0;
+
+	if ( !a.cstr() || !b.cstr() )
+		return a.cstr() ? -1 : 1;
+
+	return strcmp ( a.cstr(), b.cstr() );
+}
 
 struct SearchFailure_t
 {
@@ -1112,9 +1122,9 @@ public:
 
 	bool operator < ( const SearchFailure_t & r ) const
 	{
-		int iRes = strcmp ( m_sError.cstr(), r.m_sError.cstr() );
+		int iRes = CmpString ( m_sError.cstr(), r.m_sError.cstr() );
 		if ( !iRes )
-			iRes = strcmp ( m_sIndex.cstr(), r.m_sIndex.cstr() );
+			iRes = CmpString ( m_sIndex.cstr(), r.m_sIndex.cstr() );
 		return iRes<0;
 	}
 
@@ -9181,10 +9191,13 @@ void SendMysqlOkPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, int iAffected
 }
 
 
-bool operator < ( const CSphString & a, const CSphString & b )
+struct CmpColumns_fn
 {
-	return strcmp ( a.cstr(), b.cstr() ) < 0;
-}
+	inline bool IsLess ( const CSphString & a, const CSphString & b ) const
+	{
+		return CmpString ( a, b )<0;
+	}
+};
 
 
 void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE uPacketID, bool bReplace, bool bCommit )
@@ -9259,7 +9272,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 			return;
 		}
 
-		dCheck.Sort();
+		dCheck.Sort ( CmpColumns_fn() );
 
 		ARRAY_FOREACH ( i, dCheck )
 		if ( i>0 && dCheck[i-1]==dCheck[i] )
@@ -9596,7 +9609,7 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 			pServed->Unlock();
 			return;
 		}
-		
+
 		pStripper = &tStripper;
 	}
 

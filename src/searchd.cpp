@@ -4741,9 +4741,9 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 		{
 			const CSphMatch & tMatch = pRes->m_dMatches [ pRes->m_iOffset+i ];
 			const DWORD * pMvaPool = dTag2Pools [ tMatch.m_iTag ].m_pMva;
-			assert ( !dMvaItems.GetLength() || pMvaPool );
 			ARRAY_FOREACH ( j, dMvaItems )
 			{
+				assert ( tMatch.GetAttr ( dMvaItems[j] )==0 || pMvaPool );
 				const DWORD * pMva = tMatch.GetAttrMVA ( dMvaItems[j], pMvaPool );
 				if ( pMva )
 					iRespLen += pMva[0]*4; // FIXME? maybe add some sanity check here
@@ -4876,7 +4876,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 				const CSphColumnInfo & tAttr = pRes->m_tSchema.GetAttr(j);
 				if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET )
 				{
-					assert ( pMvaPool );
+					assert ( tMatch.GetAttr ( tAttr.m_tLocator )==0 || pMvaPool );
 					const DWORD * pValues = tMatch.GetAttrMVA ( tAttr.m_tLocator, pMvaPool );
 					if ( iVer<0x10C || !pValues )
 					{
@@ -10089,7 +10089,7 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 					int iLenOff = dRows.Length();
 					dRows.IncPtr ( 4 );
 
-					assert ( tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pMva );
+					assert ( tMatch.GetAttr ( tLoc )==0 || tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pMva );
 					const DWORD * pValues = tMatch.GetAttrMVA ( tLoc, tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pMva );
 					if ( pValues )
 					{

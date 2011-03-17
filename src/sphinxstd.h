@@ -1886,9 +1886,9 @@ protected:
 class CSphProcessSharedMutex
 {
 public:
-	CSphProcessSharedMutex ();
-	void	Lock ();
-	void	Unlock ();
+	explicit CSphProcessSharedMutex ( int iExtraSize=0 );
+	void	Lock () const;
+	void	Unlock () const;
 
 protected:
 #if !USE_WINDOWS
@@ -1896,6 +1896,44 @@ protected:
 	pthread_mutex_t *			m_pMutex;
 #endif
 };
+
+
+#if !USE_WINDOWS
+/// process-shared mutex variable that survives fork
+template < typename T > class CSphProcessSharedVariable : protected CSphProcessSharedMutex, public ISphNoncopyable
+{
+public:
+
+	explicit CSphProcessSharedVariable ( const T& tInitValue )
+		: CSphProcessSharedMutex ( sizeof(T) )
+		, m_pValue ( NULL )
+	{
+		if ( m_pMutex )
+		{
+			m_pValue = reinterpret_cast<T*> ( m_pStorage.GetWritePtr () + sizeof ( pthread_mutex_t ) );
+			*m_pValue = tInitValue;
+		}
+	}
+	T ReadValue() const
+	{
+		assert ( m_pValue );
+		Lock();
+		T val = *m_pValue;
+		Unlock();
+		return val;
+	}
+	void WriteValue ( const T& tNewValue )
+	{
+		assert ( m_pValue );
+		Lock();
+		*m_pValue = tNewValue;
+		Unlock();
+	}
+
+protected:
+	T *		m_pValue;
+};
+#endif // #if !USE_WINDOWS
 
 //////////////////////////////////////////////////////////////////////////
 

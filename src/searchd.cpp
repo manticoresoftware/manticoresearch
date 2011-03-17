@@ -223,7 +223,9 @@ static int				g_iMaxFilters		= 256;
 static int				g_iMaxFilterValues	= 4096;
 static int				g_iMaxBatchQueries	= 32;
 static ESphCollation	g_eCollation = SPH_COLLATION_DEFAULT;
-
+#if !USE_WINDOWS
+static CSphProcessSharedVariable<bool> g_tHaveTTY ( true );
+#endif
 enum Mpm_e
 {
 	MPM_NONE,		///< process queries in a loop one by one (eg. in --console)
@@ -589,6 +591,13 @@ const char * g_dCurExts[] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm", ".
 /////////////////////////////////////////////////////////////////////////////
 // MISC
 /////////////////////////////////////////////////////////////////////////////
+
+void ReleaseTTYFlag()
+{
+#if !USE_WINDOWS
+	g_tHaveTTY.WriteValue(false);
+#endif
+}
 
 ServedIndex_t::ServedIndex_t ()
 {
@@ -1076,6 +1085,8 @@ public:
 
 	bool Append ( const char * s, bool bWhole )
 	{
+		if ( !s )
+			return false;
 		int iLen = strlen(s);
 		if ( bWhole && m_iLeft<iLen )
 			return false;
@@ -6153,7 +6164,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 	int iValidSorters = 0;
 	for ( int i=0; i<iQueries; i++ )
 	{
-		CSphString sError;
+		CSphString& sError = ppResults[i]->m_sError;
 		const CSphQuery & tQuery = m_dQueries[i+m_iStart];
 		CSphSchemaMT * pExtraSchemaMT = tQuery.m_bAgent?m_dExtraSchemas[i+m_iStart].GetVirgin():NULL;
 		UnlockOnDestroy dSchemaLock ( pExtraSchemaMT );
@@ -6161,12 +6172,8 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 		assert ( !tQuery.m_iOldVersion || tQuery.m_iOldVersion>=0x102 );
 		ppSorters[i] = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchemaMT );
 
-		if ( !ppSorters[i] )
-		{
-			// FIXME! submit a failure?
-			continue;
-		}
-		iValidSorters++;
+		if ( ppSorters[i] )
+			iValidSorters++;
 	}
 	if ( !iValidSorters )
 	{
@@ -12912,10 +12919,8 @@ int PreforkChild ()
 
 
 // returns 'true' only once - at the very start, to show it beatiful way.
-bool SetWatchDog ( int iDevNull, CSphProcessSharedMutex * pTTYHoldMutex )
+bool SetWatchDog ( int iDevNull )
 {
-	assert ( pTTYHoldMutex );
-
 	// Fork #1 - detach from controlling terminal
 	switch ( fork() )
 	{
@@ -12930,9 +12935,9 @@ bool SetWatchDog ( int iDevNull, CSphProcessSharedMutex * pTTYHoldMutex )
 
 		default:
 			// tty-controlled parent
+			while ( g_tHaveTTY.ReadValue() )
+				sphSleepMsec ( 100 );
 
-			sphSleepMsec ( 100 );;
-			pTTYHoldMutex->Lock();
 			sphSetProcessInfo ( false );
 			exit ( 0 );
 	}
@@ -12982,7 +12987,7 @@ bool SetWatchDog ( int iDevNull, CSphProcessSharedMutex * pTTYHoldMutex )
 		// child process; return true to show that we have to reload everything
 		if ( iRes==0 )
 		{
-			pTTYHoldMutex->Lock();
+			atexit ( &ReleaseTTYFlag );
 			return bStreamsActive;
 		}
 
@@ -12998,6 +13003,8 @@ bool SetWatchDog ( int iDevNull, CSphProcessSharedMutex * pTTYHoldMutex )
 			dup2 ( iDevNull, STDERR_FILENO );
 			bStreamsActive = false;
 		}
+
+		sphInfo ( "Child process %d has been forked", iRes );
 
 		iReincarnate = 0;
 		int iPid, iStatus;
@@ -13740,6 +13747,24 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const char * sOptIndex )
 		fprintf ( stdout, "precached %d indexes in %0.3f sec\n", iCounter-1, float(tmLoad)/1000000 );
 }
 
+void OpenDaemonLog ( const CSphConfigSection & hSearchd )
+{
+	// create log
+		const char * sLog = "searchd.log";
+		if ( hSearchd.Exists ( "log" ) )
+			sLog = hSearchd["log"].cstr();
+
+		umask ( 066 );
+		g_iLogFile = open ( sLog, O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
+		if ( g_iLogFile<0 )
+		{
+			g_iLogFile = STDOUT_FILENO;
+			sphFatal ( "failed to open log file '%s': %s", sLog, strerror(errno) );
+		}
+
+		g_sLogFile = sLog;
+		g_bLogTty = isatty ( g_iLogFile )!=0;
+}
 
 int WINAPI ServiceMain ( int argc, char **argv )
 {
@@ -14078,11 +14103,12 @@ int WINAPI ServiceMain ( int argc, char **argv )
 #if !USE_WINDOWS
 	// Let us start watchdog right now, on foreground first.
 	int iDevNull = open ( "/dev/null", O_RDWR );
-	CSphProcessSharedMutex tTTYUnlocker;
 	if ( g_bWatchdog && g_eWorkers==MPM_THREADS && !g_bOptNoDetach )
 	{
 		bWatched = true;
-		bVisualLoad = SetWatchDog ( iDevNull, &tTTYUnlocker );
+		if ( !g_bOptNoLock )
+			OpenDaemonLog ( hConf["searchd"]["searchd"] );
+		bVisualLoad = SetWatchDog ( iDevNull );
 	}
 #endif
 
@@ -14093,32 +14119,17 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 		g_iPidFD = ::open ( g_sPidFile, O_CREAT | O_WRONLY, S_IREAD | S_IWRITE );
 		if ( g_iPidFD<0 )
-		{
-#if !USE_WINDOWS
-			tTTYUnlocker.Unlock();
-#endif
 			sphFatal ( "failed to create pid file '%s': %s", g_sPidFile, strerror(errno) );
-		}
 	}
 	if ( bOptPIDFile && !sphLockEx ( g_iPidFD, false ) )
-	{
-#if !USE_WINDOWS
-		tTTYUnlocker.Unlock();
-#endif
 		sphFatal ( "failed to lock pid file '%s': %s (searchd already running?)", g_sPidFile, strerror(errno) );
-	}
 
 	if ( bWatched && !bVisualLoad && CheckConfigChanges() )
 	{
 		// reparse the config file
 		sphInfo ( "Reloading the config" );
 		if ( !cp.ReParse ( g_sConfigFile.cstr () ) )
-		{
-#if !USE_WINDOWS
-			tTTYUnlocker.Unlock();
-#endif
 			sphFatal ( "failed to parse config file '%s'", g_sConfigFile.cstr () );
-		}
 
 		sphInfo ( "Reconfigure the daemon" );
 		ConfigureSearchd ( hConf, bOptPIDFile );
@@ -14149,12 +14160,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( g_eWorkers==MPM_THREADS )
 	{
 		if ( !sphThreadKeyCreate ( &g_tConnKey ) )
-		{
-#if !USE_WINDOWS
-			tTTYUnlocker.Unlock();
-#endif
 			sphFatal ( "failed to create TLS for connection ID" );
-		}
 
 		// for simplicity, UDFs are going to be available in threaded mode only for now
 		sphUDFInit ( hSearchd.GetStr ( "plugin_dir" ) );
@@ -14247,6 +14253,11 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			sLog = hSearchd["log"].cstr();
 
 		umask ( 066 );
+		if ( g_iLogFile!=STDOUT_FILENO )
+		{
+			close ( g_iLogFile );
+			g_iLogFile = STDOUT_FILENO;
+		}
 		g_iLogFile = open ( sLog, O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
 		if ( g_iLogFile<0 )
 		{
@@ -14262,12 +14273,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		{
 			g_iQueryLogFile = open ( hSearchd["query_log"].cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
 			if ( g_iQueryLogFile<0 )
-			{
-#if !USE_WINDOWS
-				tTTYUnlocker.Unlock();
-#endif
 				sphFatal ( "failed to open query log file '%s': %s", hSearchd["query_log"].cstr(), strerror(errno) );
-			}
 			g_sQueryLogFile = hSearchd["query_log"].cstr();
 		}
 	}
@@ -14279,16 +14285,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	int iBacklog = hSearchd.GetInt ( "listen_backlog", SEARCHD_BACKLOG );
 	ARRAY_FOREACH ( i, g_dListeners )
 		if ( listen ( g_dListeners[i].m_iSock, iBacklog )==-1 )
-		{
-#if !USE_WINDOWS
-			tTTYUnlocker.Unlock();
-#endif
 			sphFatal ( "listen() failed: %s", sphSockError() );
-		}
-
-#if !USE_WINDOWS
-		tTTYUnlocker.Unlock();
-#endif
 
 	// prepare to detach
 	if ( !g_bOptNoDetach )
@@ -14304,6 +14301,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			dup2 ( iDevNull, STDERR_FILENO );
 		}
 #endif
+		ReleaseTTYFlag();
 
 		// explicitly unlock everything in parent immediately before fork
 		//
@@ -14344,7 +14342,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 				exit ( 0 );
 		}
 	}
-
 #endif
 
 	if ( g_eWorkers==MPM_THREADS )

@@ -730,9 +730,9 @@ DWORD sphRand ()
 
 //////////////////////////////////////////////////////////////////////////
 
-CSphProcessSharedMutex::CSphProcessSharedMutex ()
-{
 #if !USE_WINDOWS
+CSphProcessSharedMutex::CSphProcessSharedMutex ( int iExtraSize )
+{
 	m_pMutex = NULL;
 
 	pthread_mutexattr_t tAttr;
@@ -740,7 +740,7 @@ CSphProcessSharedMutex::CSphProcessSharedMutex ()
 		return;
 
 	CSphString sError, sWarning;
-	if ( !m_pStorage.Alloc ( sizeof(pthread_mutex_t), sError, sWarning ) )
+	if ( !m_pStorage.Alloc ( sizeof(pthread_mutex_t) + iExtraSize, sError, sWarning ) )
 		return;
 
 	m_pMutex = (pthread_mutex_t*) m_pStorage.GetWritePtr ();
@@ -750,11 +750,14 @@ CSphProcessSharedMutex::CSphProcessSharedMutex ()
 		m_pStorage.Reset ();
 		return;
 	}
-#endif
 }
+#else
+CSphProcessSharedMutex::CSphProcessSharedMutex ( int )
+{}
+#endif
 
 
-void CSphProcessSharedMutex::Lock ()
+void CSphProcessSharedMutex::Lock () const
 {
 #if !USE_WINDOWS
 	if ( m_pMutex )
@@ -763,7 +766,7 @@ void CSphProcessSharedMutex::Lock ()
 }
 
 
-void CSphProcessSharedMutex::Unlock ()
+void CSphProcessSharedMutex::Unlock () const
 {
 #if !USE_WINDOWS
 	if ( m_pMutex )

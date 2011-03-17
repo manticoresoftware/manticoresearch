@@ -86,9 +86,13 @@ function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $skip )
 				return false;
 		}
 
+		$oneok = count($db_insert)==0;
 		foreach ( $db_insert as $q )
-			if ( !mysql_wr ( $q, $conn ) )
-				return false;
+			if ( mysql_wr ( $q, $conn ) )
+				$oneok = true;
+
+		if ( !$oneok )
+			return false;
 
 		foreach ( $custom_insert as $code )
 		{
@@ -1074,16 +1078,16 @@ class SphinxConfig
 		if ( ! IsModelGenMode () )
 		{
 			if ( ! file_exists ( $filename ) )
-				return FALSE;
+				return -1;
 
 			$contents = file_get_contents ( $filename );
 			if ( ! $contents )
-				return FALSE;
+				return 0;
 
 			$this->_results_model = $this->FixKeys ( unserialize ( $contents ) );
 		}
 
-		return TRUE;
+		return 1;
 	}
 
 
@@ -1990,7 +1994,7 @@ function CheckConfig ( $config, $path )
 }
 
 
-function RunTest ( $test_dir )
+function RunTest ( $test_dir, $skipdemo )
 {
 	global $indexer_data_path, $agents, $sd_pid_file, $sd_managed_searchd, $sd_skip_indexer, $g_id64, $windows, $g_locals;
 
@@ -1998,17 +2002,29 @@ function RunTest ( $test_dir )
 	$conf_dir 	= $test_dir."/Conf";
 
 	$config = new SphinxConfig;
+	$lmodel = $config->LoadModel ( $model_file );
+	$isdemo = false;
+
+	if ( $lmodel==-1 )
+	{
+		if ( $skipdemo )
+		{
+			printf ( "Skipping %s, - this is demo or bugreport (no model.bin file)\n", $test_dir );
+			return array ( "tests_total"=>0, "tests_failed"=>0, "tests_skipped"=>1 );
+		}
+		$isdemo = true;
+	}
+
 	if ( !$config->Load ( $test_dir."/test.xml" ) )
 		return;
 
 	$config->SetTestDir ( $test_dir );
-
 	$prefix = sprintf ( "testing %s, %s...", $test_dir, $config->Name () );
 
 	if ( !CheckConfig ( $config, $test_dir ) )
 		return array ( "tests_total"=>0, "tests_failed"=>0, "tests_skipped"=>1 );
 
-	if ( !$config->LoadModel ( $model_file ) )
+	if ( $lmodel==0 )
 	{
 		printf ( "$prefix FAILED, error loading model\n" );
 		return;
@@ -2192,16 +2208,19 @@ function RunTest ( $test_dir )
 			}
 		}
 
-		$mismatch = ( !IsModelGenMode() && !$config->CompareToModel() );
-		if ( $mismatch )
+		$allmatch = $isdemo || IsModelGenMode() || $config->CompareToModel();
+		if ( !$allmatch )
 		{
 			$log .= "\tsubtest $subtest: query results mismatch; see $report_file\n";
 			$nfailed++;
 		}
 
+		if ( $isdemo )
+			$log .= "\tdemo/bugreport $subtest done; see $report_file\n";
+
 		$config->WriteResults ( $report );
 
-		if ( $mismatch )
+		if ( !$allmatch )
 		{
 			fwrite ( $report, "SUBTEST FAILED, RESULTS ARE DIFFERENT FROM THE REFERENCE:\n\n" );
 			$config->WriteReferenceResultsDiff ( $report );

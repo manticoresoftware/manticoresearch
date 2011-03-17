@@ -80,6 +80,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="--strict-verbose" )			{ $g_strict = true; $g_strictverbose = true; }
 	else if ( $arg=="--ignore-weights" )			$g_ignore_weights = true;
 	else if ( $arg=="--no-drop-db" )				$locals['no_drop_db'] = true;
+	else if ( $arg=="--no-demo" )					$g_skipdemo = true;
 	else if ( is_dir($arg) )						$test_dirs[] = $arg;
 	else if ( preg_match ( "/^(\\d+)-(\\d+)$/", $arg, $range ) )
 	{
@@ -196,7 +197,7 @@ foreach ( $tests as $test )
 	if ( file_exists ( $test."/test.xml" ) )
 	{
 		$total_tests++;
-		$res = RunTest ( $test );
+		$res = RunTest ( $test, $g_skipdemo );
 
 		if ( !is_array($res) )
 		{

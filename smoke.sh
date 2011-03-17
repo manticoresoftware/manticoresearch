@@ -40,7 +40,7 @@ do
 	cmd "make clean" "$BANNER: make clean failed" 
 	cmd "make $jobs" "$BANNER: make failed" 
 
-	cmd1 "/dev/null" "cd ./test; php ubertest.php t -u test --strict-verbose" "$BANNER: regression suite failed" "cat report.txt; rm report.txt"
+	cmd1 "/dev/null" "cd ./test; php ubertest.php t -u test --strict-verbose --no-demo" "$BANNER: regression suite failed" "cat report.txt; rm report.txt"
 	cd ..
 
 	cmd "cd ./src; ./tests" "$BANNER: unit tests failed" 

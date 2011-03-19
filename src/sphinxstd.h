@@ -29,6 +29,10 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 #define vsnprintf _vsnprintf
 #endif
 
+#ifndef __GNUC__
+#define __attribute__(x)
+#endif
+
 #if HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -222,7 +226,7 @@ inline int sphBitCount ( DWORD n )
 typedef			bool ( *SphDieCallback_t ) ( const char * );
 
 /// crash with an error message
-void			sphDie ( const char * sMessage, ... );
+void			sphDie ( const char * sMessage, ... ) __attribute__((format(printf,1,2)));
 
 /// setup a callback function to call from sphDie() before exit
 /// if callback returns false, sphDie() will not log to stdout
@@ -1466,7 +1470,7 @@ public:
 		memset ( m_sValue, 0, 1+SAFETY_GAP+iLen );
 	}
 
-	const CSphString & SetSprintf ( const char * sTemplate, ... )
+	const CSphString & SetSprintf ( const char * sTemplate, ... ) __attribute__((format(printf,2,3)))
 	{
 		char sBuf[1024];
 		va_list ap;
@@ -1714,7 +1718,7 @@ protected:
 //////////////////////////////////////////////////////////////////////////
 
 extern bool g_bHeadProcess;
-void sphWarn ( const char *, ... );
+void sphWarn ( const char *, ... ) __attribute__((format(printf,1,2)));
 
 /// in-memory buffer shared between processes
 template < typename T > class CSphSharedBuffer

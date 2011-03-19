@@ -1032,6 +1032,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	sphLogEntry ( eLevel, sBuf, sTtyBuf );
 }
 
+void sphFatal ( const char * sFmt, ... ) __attribute__((format(printf,1,2)));
 void sphFatal ( const char * sFmt, ... )
 {
 	va_list ap;
@@ -1164,7 +1165,7 @@ public:
 		tEntry.m_sError = sError;
 	}
 
-	void SubmitEx ( const char * sIndex, const char * sTemplate, ... )
+	void SubmitEx ( const char * sIndex, const char * sTemplate, ... ) __attribute__((format(printf,3,4)))
 	{
 		SearchFailure_t & tEntry = m_dLog.Add ();
 		va_list ap;
@@ -1736,7 +1737,7 @@ int sphCreateUnixSocket ( const char * sPath )
 	size_t len = strlen ( sPath );
 
 	if ( len + 1 > sizeof( uaddr.sun_path ) )
-		sphFatal ( "UNIX socket path is too long (len=%d)", len );
+		sphFatal ( "UNIX socket path is too long (len=%d)", (int)len );
 
 	sphInfo ( "listening on UNIX socket %s", sPath );
 
@@ -2167,7 +2168,7 @@ public:
 	template < typename T > bool	GetDwords ( CSphVector<T> & dBuffer, int iMax, const char * sErrorTemplate );
 	template < typename T > bool	GetQwords ( CSphVector<T> & dBuffer, int iMax, const char * sErrorTemplate );
 
-	virtual void	SendErrorReply ( const char *, ... ) = 0;
+	virtual void	SendErrorReply ( const char *, ... ) __attribute__((format(printf,2,3))) = 0;
 
 protected:
 	const BYTE *	m_pBuf;
@@ -2187,7 +2188,7 @@ class MemInputBuffer_c : public InputBuffer_c
 {
 public:
 					MemInputBuffer_c ( const BYTE * pBuf, int iLen ) : InputBuffer_c ( pBuf, iLen ) {}
-	virtual void	SendErrorReply ( const char *, ... ) {}
+	virtual void	SendErrorReply ( const char *, ... ) __attribute__((format(printf,2,3))) {}
 };
 
 
@@ -2201,7 +2202,7 @@ public:
 	bool			ReadFrom ( int iLen, int iTimeout, bool bIntr=false, bool bAppend=false );
 	bool			ReadFrom ( int iLen ) { return ReadFrom ( iLen, g_iReadTimeout ); }
 
-	virtual void	SendErrorReply ( const char *, ... );
+	virtual void	SendErrorReply ( const char *, ... ) __attribute__((format(printf,2,3)));
 
 	const BYTE *	GetBufferPtr () const { return m_pBuf; }
 	bool			IsIntr () const { return m_bIntr; }
@@ -3022,14 +3023,14 @@ int QueryRemoteAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, const I
 					} else if ( iRes>0 )
 					{
 						// incomplete reply
-						tAgent.m_sFailure.SetSprintf ( "handshake failure (exp=%d, recv=%d)", sizeof(iRemoteVer), iRes );
+						tAgent.m_sFailure.SetSprintf ( "handshake failure (exp=%d, recv=%d)", (int)sizeof(iRemoteVer), iRes );
 						AGENT_STATS_INC ( tAgent, m_iWrongReplies );
 
 					} else
 					{
 						// agent closed the connection
 						// this might happen in out-of-sync connect-accept case; so let's retry
-						tAgent.m_sFailure.SetSprintf ( "handshake failure (connection was closed)", iRes );
+						tAgent.m_sFailure = "handshake failure (connection was closed)";
 						tAgent.m_eState = AGENT_RETRY;
 						AGENT_STATS_INC ( tAgent, m_iUnexpectedClose );
 					}
@@ -4354,7 +4355,7 @@ public:
 	}
 
 
-	void Append ( const char * sFormat, ... )
+	void Append ( const char * sFormat, ... ) __attribute__((format(printf,2,3)))
 	{
 		if ( !sFormat || !*sFormat )
 			return;
@@ -7779,7 +7780,7 @@ bool sphCheckOptionsSPZ ( const ExcerptQuery_t & q, const CSphString & sPassageB
 		}
 		if ( !( q.m_sStripMode=="strip" || q.m_sStripMode=="index" ) )
 		{
-			sError.SetSprintf ( "invalid combination of strip=%s and emit_zones", q.m_sStripMode.cstr(), sPassageBoundaryMode.cstr() );
+			sError.SetSprintf ( "invalid combination of strip=%s and emit_zones", q.m_sStripMode.cstr() );
 			return false;
 		}
 	}
@@ -11723,9 +11724,9 @@ void HandlePipePreread ( PipeReader_t & tPipe, bool bFailure )
 	} else
 	{
 		if ( tPipe.IsError() )
-			sphWarning ( "rotating index '%s': pipe read failed" );
+			sphWarning ( "rotating index '%s': pipe read failed", sPrereading );
 		else
-			sphWarning ( "rotating index '%s': preread failure reported" );
+			sphWarning ( "rotating index '%s': preread failure reported", sPrereading );
 	}
 
 	// in any case, buffer index should now be deallocated
@@ -13167,7 +13168,7 @@ void QueryStatus ( CSphVariant * v )
 
 			size_t len = strlen ( tDesc.m_sUnix.cstr() );
 			if ( len+1 > sizeof(uaddr.sun_path ) )
-				sphFatal ( "UNIX socket path is too long (len=%d)", len );
+				sphFatal ( "UNIX socket path is too long (len=%d)", (int)len );
 
 			memset ( &uaddr, 0, sizeof(uaddr) );
 			uaddr.sun_family = AF_UNIX;
@@ -13562,12 +13563,9 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	if ( !hConf.Exists ( "index" ) )
 		sphFatal ( "no indexes found in '%s'", g_sConfigFile.cstr () );
 
-	#define CONF_CHECK(_hash,_key,_msg,_add) \
-		if (!( _hash.Exists ( _key ) )) \
-			sphFatal ( "mandatory option '%s' not found " _msg, _key, _add );
-
 	if ( bOptPIDFile )
-		CONF_CHECK ( hSearchd, "pid_file", "in 'searchd' section", "" );
+		if ( !hSearchd ( "pid_file" ) )
+			sphFatal ( "mandatory option 'pid_file' not found in 'searchd' section" );
 
 	if ( hSearchd.Exists ( "read_timeout" ) && hSearchd["read_timeout"].intval()>=0 )
 		g_iReadTimeout = hSearchd["read_timeout"].intval();

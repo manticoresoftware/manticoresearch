@@ -4117,7 +4117,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 			// FIXME! maybe emit a warning to client as well?
 			if ( iRes<0 )
 			{
-				sphWarn ( "INTERNAL ERROR: index %s chunk %d update failure: ", m_sIndexName.cstr(), iChunk, sError.cstr() );
+				sphWarn ( "INTERNAL ERROR: index %s chunk %d update failure: %s", m_sIndexName.cstr(), iChunk, sError.cstr() );
 				continue;
 			}
 
@@ -4879,16 +4879,16 @@ int RtBinlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, i
 
 	if ( !iFileSize )
 	{
-		sphWarning ( "binlog: empty binlog detected. Skipping %s", sLog.cstr() );
+		sphWarning ( "binlog: empty binlog %s detected, skipping", sLog.cstr() );
 		return -1;
 	}
 
 	if ( tReader.GetDword()!=BINLOG_HEADER_MAGIC )
-		sphDie ( "binlog: log missing magic header (corrupted?)", sLog.cstr() );
+		sphDie ( "binlog: log %s missing magic header (corrupted?)", sLog.cstr() );
 
 	DWORD uVersion = tReader.GetDword();
 	if ( uVersion!=BINLOG_VERSION || tReader.GetErrorFlag() )
-		sphDie ( "binlog: log is v.%d, binary is v.%d; recovery requires previous binary version", sLog.cstr(), uVersion, BINLOG_VERSION );
+		sphDie ( "binlog: log %s is v.%d, binary is v.%d; recovery requires previous binary version", sLog.cstr(), uVersion, BINLOG_VERSION );
 
 	/////////////
 	// do replay
@@ -5234,8 +5234,8 @@ bool RtBinlog_c::ReplayCacheAdd ( int iBinlog, BinlogReader_c & tReader ) const
 
 		if ( tCache.m_iMinTID!=tIndex.m_iMinTID || tCache.m_iMaxTID!=tIndex.m_iMaxTID )
 		{
-			sphWarning ( "binlog: cache mismatch: index %s tid ranges mismatch (cached %d to %d, replayed %d to %d)",
-				i, tCache.m_sName.cstr(), tCache.m_iMinTID, tCache.m_iMaxTID, tIndex.m_iMinTID, tIndex.m_iMaxTID );
+			sphWarning ( "binlog: cache mismatch: index %s tid ranges mismatch (cached "INT64_FMT" to "INT64_FMT", replayed "INT64_FMT" to "INT64_FMT")",
+				tCache.m_sName.cstr(), tCache.m_iMinTID, tCache.m_iMaxTID, tIndex.m_iMinTID, tIndex.m_iMaxTID );
 		}
 	}
 

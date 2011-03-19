@@ -35,8 +35,8 @@ public:
 public:
 	bool			Parse ( XQQuery_t & tQuery, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict );
 
-	bool			Error ( const char * sTemplate, ... );
-	void			Warning ( const char * sTemplate, ... );
+	bool			Error ( const char * sTemplate, ... ) __attribute__((format(printf,2,3)));
+	void			Warning ( const char * sTemplate, ... ) __attribute__((format(printf,2,3)));
 
 	bool			AddField ( DWORD & uFields, const char * szField, int iLen );
 	bool			ParseFields ( DWORD & uFields, int & iMaxFieldPos );
@@ -392,7 +392,9 @@ bool XQParser_t::ParseFields ( DWORD & uFields, int & iMaxFieldPos )
 			// separator found
 			if ( pFieldStart==NULL )
 			{
-				return Error ( "separator without preceding field name in field block operator", *pPtr );
+				CSphString sContext;
+				sContext.SetBinary ( pPtr, (int)( pLastPtr-pPtr ) );
+				return Error ( "invalid field block operator syntax near '%s'", sContext.cstr() ? sContext.cstr() : "" );
 
 			} else if ( *pPtr==',' )
 			{

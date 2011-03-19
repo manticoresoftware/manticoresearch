@@ -138,7 +138,7 @@ static inline float logf ( float v )
 #endif
 
 // forward decl
-void sphWarn ( const char * sTemplate, ... );
+void sphWarn ( const char * sTemplate, ... ) __attribute__((format(printf,1,2)));
 size_t sphReadThrottled ( int iFD, void * pBuf, size_t iCount );
 static bool sphTruncate ( int iFD );
 
@@ -7190,7 +7190,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 		// forbid updates on MVA columns if there's no arena
 		if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET && !g_pMvaArena )
 		{
-			sError.SetSprintf ( "MVA attribute '%s' can not be updated (MVA arena not initialized)" );
+			sError.SetSprintf ( "MVA attribute '%s' can not be updated (MVA arena not initialized)", tCol.m_sName.cstr() );
 			return -1;
 		}
 
@@ -9122,7 +9122,7 @@ bool CSphIndex_VLN::RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSi
 		size_t iRead = sphReadThrottled ( iFile, pBuffer, iToRead );
 		if ( iRead!=size_t(iToRead) )
 		{
-			m_sLastError.SetSprintf ( "block relocation: read error (%d of %d bytes read): %s", iRead, iToRead, strerror(errno) );
+			m_sLastError.SetSprintf ( "block relocation: read error (%d of %d bytes read): %s", (int)iRead, iToRead, strerror(errno) );
 			return false;
 		}
 
@@ -12715,7 +12715,7 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 	{
 		uWordID = (SphWordID_t) strtoull ( sKeyword, NULL, 10 );
 		if ( !uWordID )
-			sphDie ( "failed to convert keyword=%d to id (must be integer)", sKeyword );
+			sphDie ( "failed to convert keyword=%s to id (must be integer)", sKeyword );
 
 		fprintf ( fp, "wordid="UINT64_FMT"\n", uint64_t(uWordID) );
 	}
@@ -12997,7 +12997,9 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 
 		if ( iSize!=(SphOffset_t)( m_iKillListSize*sizeof(SphAttr_t) ) )
 		{
-			m_sLastError.SetSprintf ( "header killlist size (%d) does not match with spk file size (%d)", m_iKillListSize * sizeof(SphAttr_t), iSize );
+			m_sLastError.SetSprintf ( "header k-list size does not match .spk size (klist=" INT64_FMT ", spk=" INT64_FMT ")",
+				(int64_t)( m_iKillListSize*sizeof(SphAttr_t) ),
+				(int64_t) iSize );
 			return false;
 		}
 
@@ -20136,7 +20138,7 @@ const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, ESphUnpackFormat
 				if ( !m_bUnpackOverflow )
 				{
 					m_bUnpackOverflow = true;
-					sphWarn ( "failed to unpack '%s', column size limit exceeded. size=%u", SqlFieldName ( iIndex ), uSize );
+					sphWarn ( "failed to unpack '%s', column size limit exceeded (size=%d)", SqlFieldName(iIndex), (int)uSize );
 				}
 				return NULL;
 			}
@@ -21200,7 +21202,7 @@ public:
 	void			ProcessNode ( xmlTextReaderPtr pReader );
 #endif
 
-	void			Error ( const char * sTemplate, ... );
+	void			Error ( const char * sTemplate, ... ) __attribute__((format(printf,2,3)));
 
 private:
 	struct Document_t
@@ -21269,7 +21271,7 @@ private:
 	int				m_iReparseStart;	///< utf-8 fixerupper might need to postpone a few bytes, starting at this offset
 	int				m_iReparseLen;		///< and this much bytes (under 4)
 
-	const char *	DecorateMessage ( const char * sTemplate, ... );
+	const char *	DecorateMessage ( const char * sTemplate, ... ) __attribute__((format(printf,2,3)));
 	const char *	DecorateMessageVA ( const char * sTemplate, va_list ap );
 
 	void			ConfigureAttrs ( const CSphVariant * pHead, ESphAttr eAttrType );
@@ -21870,7 +21872,7 @@ bool CSphSource_XMLPipe2::ParseNextChunk ( int iBufferLen, CSphString & sError )
 
 		sError.SetSprintf ( "source '%s': XML parse error: %s (line=%d, pos=%d, docid=" DOCID_FMT ")",
 			m_tSchema.m_sName.cstr(), XML_ErrorString ( XML_GetErrorCode ( m_pParser ) ),
-			XML_GetCurrentLineNumber ( m_pParser ), XML_GetCurrentColumnNumber ( m_pParser ),
+			(int)XML_GetCurrentLineNumber ( m_pParser ), (int)XML_GetCurrentColumnNumber ( m_pParser ),
 			uFailedID );
 		m_tDocInfo.m_iDocID = 1;
 		return false;
@@ -22347,7 +22349,7 @@ void CSphSource_XMLPipe2::UnexpectedCharaters ( const char * pCharacters, int iL
 		sWarning.SetBinary ( pCharacters, Min ( iLen, MAX_WARNING_LENGTH ) );
 		sphWarn ( "source '%s': unexpected string '%s' (line=%d, pos=%d) %s",
 			m_tSchema.m_sName.cstr(), sWarning.cstr (),
-			XML_GetCurrentLineNumber ( m_pParser ), XML_GetCurrentColumnNumber ( m_pParser ), szComment );
+			(int)XML_GetCurrentLineNumber ( m_pParser ), (int)XML_GetCurrentColumnNumber ( m_pParser ), szComment );
 #endif
 
 #if USE_LIBXML
@@ -22405,7 +22407,7 @@ void CSphSource_XMLPipe2::Characters ( const char * pCharacters, int iLen )
 #if USE_LIBEXPAT
 			sphWarn ( "source '%s': field/attribute '%s' length exceeds max length (line=%d, pos=%d, docid=" DOCID_FMT ")",
 				m_tSchema.m_sName.cstr(), sName.cstr(),
-				XML_GetCurrentLineNumber ( m_pParser ), XML_GetCurrentColumnNumber ( m_pParser ),
+				(int)XML_GetCurrentLineNumber ( m_pParser ), (int)XML_GetCurrentColumnNumber ( m_pParser ),
 				m_pCurDocument->m_iDocID );
 #endif
 

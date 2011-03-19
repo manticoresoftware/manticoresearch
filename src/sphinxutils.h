@@ -142,12 +142,12 @@ enum ESphLogLevel
 
 typedef void ( *SphLogger_fn )( ESphLogLevel, const char *, va_list );
 
-void sphWarning ( const char * sFmt, ... );
-void sphInfo ( const char * sFmt, ... );
-void sphLogFatal ( const char * sFmt, ... );
-void sphLogDebug ( const char * sFmt, ... );
-void sphLogDebugv ( const char * sFmt, ... );
-void sphLogDebugvv ( const char * sFmt, ... );
+void sphWarning ( const char * sFmt, ... ) __attribute__((format(printf,1,2)));
+void sphInfo ( const char * sFmt, ... ) __attribute__((format(printf,1,2)));
+void sphLogFatal ( const char * sFmt, ... ) __attribute__((format(printf,1,2)));
+void sphLogDebug ( const char * sFmt, ... ) __attribute__((format(printf,1,2)));
+void sphLogDebugv ( const char * sFmt, ... ) __attribute__((format(printf,1,2)));
+void sphLogDebugvv ( const char * sFmt, ... ) __attribute__((format(printf,1,2)));
 void sphSetLogger ( SphLogger_fn fnLog );
 
 //////////////////////////////////////////////////////////////////////////

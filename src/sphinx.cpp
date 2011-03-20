@@ -16074,9 +16074,9 @@ CSphDict * CSphDictCRCTraits::CloneBase ( CSphDictCRCTraits * pDict ) const
 		m_pWordforms->m_iRefCount++;
 
 	pDict->m_dMorph = m_dMorph;
-	pDict->m_dDescStemmers = m_dDescStemmers;
 #if USE_LIBSTEMMER
 	assert ( m_dDescStemmers.GetLength()==m_dStemmers.GetLength() );
+	pDict->m_dDescStemmers = m_dDescStemmers;
 	ARRAY_FOREACH ( i, m_dDescStemmers )
 	{
 		pDict->m_dStemmers.Add ( sb_stemmer_new ( m_dDescStemmers[i].m_sAlgo.cstr(), m_dDescStemmers[i].m_sEnc.cstr() ) );

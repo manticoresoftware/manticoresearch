@@ -1199,10 +1199,16 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 	}
 
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( false ) ); // avoid race
+	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
+	CSphDict * pDictBase = m_pDict;
+	if ( pDictBase->HasState() )
+	{
+		tDictCloned = pDictBase = pDictBase->Clone();
+	}
 	CSphSource_StringVector tSrc ( iFields, ppFields, m_tOutboundSchema );
 	tSrc.Setup ( m_tSettings );
 	tSrc.SetTokenizer ( pTokenizer.Ptr() );
-	tSrc.SetDict ( m_pDict );
+	tSrc.SetDict ( pDictBase );
 
 	tSrc.m_tDocInfo.Clone ( tDoc, m_tOutboundSchema.GetRowSize() );
 
@@ -3576,9 +3582,16 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		return false;
 	}
 
+	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
+	CSphDict * pDictBase = m_pDict;
+	if ( pDictBase->HasState() )
+	{
+		tDictCloned = pDictBase = pDictBase->Clone();
+	}
+
 	// setup search terms
 	RtQwordSetup_t tTermSetup;
-	tTermSetup.m_pDict = m_pDict;
+	tTermSetup.m_pDict = pDictBase;
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
 	tTermSetup.m_iDynamicRowitems = pResult->m_tSchema.GetDynamicSize();
@@ -3593,7 +3606,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	// parse query
 	XQQuery_t tParsed;
-	if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), GetTokenizer(), &m_tOutboundSchema, m_pDict ) )
+	if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), GetTokenizer(), &m_tOutboundSchema, pDictBase ) )
 	{
 		pResult->m_sError = tParsed.m_sParseError;
 		m_tRwlock.Unlock ();
@@ -3946,11 +3959,18 @@ bool RtIndex_t::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const cha
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( false ) ); // avoid race
 	pTokenizer->SetBuffer ( (BYTE *)sBuffer.cstr(), sBuffer.Length() );
 
+	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
+	CSphDict * pDictBase = m_pDict;
+	if ( pDictBase->HasState() )
+	{
+		tDictCloned = pDictBase = pDictBase->Clone();
+	}
+
 	while ( BYTE * pToken = pTokenizer->GetToken() )
 	{
 		const char * sToken = (const char *)pToken;
 		CSphString sWord ( sToken );
-		SphWordID_t iWord = m_pDict->GetWordID ( pToken );
+		SphWordID_t iWord = pDictBase->GetWordID ( pToken );
 		if ( iWord )
 		{
 			CSphKeywordInfo & tInfo = dKeywords.Add();

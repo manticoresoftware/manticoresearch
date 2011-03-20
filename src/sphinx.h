@@ -714,6 +714,11 @@ public:
 
 	/// check whether there were any errors during indexing
 	virtual bool			DictIsError () const;
+
+	/// make clone
+	virtual CSphDict *		Clone () const { return NULL; }
+
+	virtual bool			HasState () const { return false; }
 };
 
 

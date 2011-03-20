@@ -7999,7 +7999,13 @@ bool SnippetReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t &, 
 void SnippetThreadFunc ( void * pArg )
 {
 	SnippetThread_t * pDesc = (SnippetThread_t*) pArg;
-	ISphTokenizer * pTok = pDesc->m_pIndex->GetTokenizer()->Clone ( false );
+	CSphScopedPtr<ISphTokenizer> pTok ( pDesc->m_pIndex->GetTokenizer()->Clone ( false ) );
+	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
+	CSphDict * pDictBase = pDesc->m_pIndex->GetDictionary();
+	if ( pDictBase->HasState() )
+	{
+		tDictCloned = pDictBase = pDictBase->Clone();
+	}
 
 	for ( ;; )
 	{
@@ -8022,7 +8028,7 @@ void SnippetThreadFunc ( void * pArg )
 			if ( !pTok->EnableSentenceIndexing ( pQuery->m_sError ) || !pTok->EnableZoneIndexing ( pQuery->m_sError ) )
 				continue;
 
-		pQuery->m_sRes = sphBuildExcerpt ( *pQuery, pDesc->m_pIndex->GetDictionary(), pTok,
+		pQuery->m_sRes = sphBuildExcerpt ( *pQuery, pDictBase, pTok.Ptr(),
 			&pDesc->m_pIndex->GetMatchSchema(), pDesc->m_pIndex,
 			pQuery->m_sError, pDesc->m_pStripper );
 
@@ -8152,7 +8158,13 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	}
 
 	CSphIndex * pIndex = pServed->m_pIndex;
-	CSphDict * pDict = pIndex->GetDictionary ();
+	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
+	CSphDict * pDictBase = pIndex->GetDictionary();
+	if ( pDictBase->HasState() )
+	{
+		tDictCloned = pDictBase = pDictBase->Clone();
+	}
+
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( pIndex->GetTokenizer()->Clone ( true ) );
 
 	if ( q.m_iPassageBoundary &&
@@ -8216,7 +8228,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		// boring single threaded loop
 		ARRAY_FOREACH ( i, dQueries )
 		{
-			dQueries[i].m_sRes = sphBuildExcerpt ( dQueries[i], pDict, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, dQueries[i].m_sError, pStripper );
+			dQueries[i].m_sRes = sphBuildExcerpt ( dQueries[i], pDictBase, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, dQueries[i].m_sError, pStripper );
 			if ( !dQueries[i].m_sRes )
 				break;
 		}
@@ -9578,7 +9590,13 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 	}
 
 	CSphIndex * pIndex = pServed->m_pIndex;
-	CSphDict * pDict = pIndex->GetDictionary ();
+	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
+	CSphDict * pDictBase = pIndex->GetDictionary();
+	if ( pDictBase->HasState() )
+	{
+		tDictCloned = pDictBase = pDictBase->Clone();
+	}
+
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( pIndex->GetTokenizer()->Clone ( true ) );
 
 	if ( q.m_iPassageBoundary &&
@@ -9621,7 +9639,7 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 		pStripper = &tStripper;
 	}
 
-	char * sResult = sphBuildExcerpt ( q, pDict, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError, pStripper );
+	char * sResult = sphBuildExcerpt ( q, pDictBase, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError, pStripper );
 	if ( !sResult )
 	{
 		sError.SetSprintf ( "highlighting failed: %s", sError.cstr() );

@@ -1460,7 +1460,7 @@ private:
 
 	bool						BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAutoArray<CSphWordHit> & dHits, int iArenaSize, int iFieldFD, int nFieldMVAs, int iFieldMVAInPool );
 
-	CSphDict *					SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, ISphTokenizer & tTokenizer ) const;
+	CSphDict *					SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer & tTokenizer ) const;
 	CSphDict *					SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer & tTokenizer ) const;
 
 	void						LoadSettings ( CSphReader & tReader );
@@ -13452,7 +13452,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const CSphSchema &
 }
 
 
-CSphDict * CSphIndex_VLN::SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, ISphTokenizer & tTokenizer ) const
+CSphDict * CSphIndex_VLN::SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer & tTokenizer ) const
 {
 	// setup proper dict
 	bool bUseStarDict = false;
@@ -13465,14 +13465,14 @@ CSphDict * CSphIndex_VLN::SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, 
 
 	// no star? just return the original one
 	if ( !bUseStarDict )
-		return m_pDict;
+		return pPrevDict;
 
 	// spawn wrapper, and put it in the box
 	// wrapper type depends on version; v.8 introduced new mangling rules
 	if ( m_uVersion>=8 )
-		tContainer = new CSphDictStarV8 ( m_pDict, m_tSettings.m_iMinPrefixLen>0, m_tSettings.m_iMinInfixLen>0 );
+		tContainer = new CSphDictStarV8 ( pPrevDict, m_tSettings.m_iMinPrefixLen>0, m_tSettings.m_iMinInfixLen>0 );
 	else
-		tContainer = new CSphDictStar ( m_pDict );
+		tContainer = new CSphDictStar ( pPrevDict );
 
 	CSphRemapRange tStar ( '*', '*', '*' ); // FIXME? check and warn if star was already there
 	tTokenizer.AddCaseFolding ( tStar );
@@ -13586,8 +13586,15 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( false ) ); // avoid race
 
+	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
+	CSphDict * pDictBase = m_pDict;
+	if ( pDictBase->HasState() )
+	{
+		tDictCloned = pDictBase = pDictBase->Clone();
+	}
+
 	CSphScopedPtr<CSphDict> tDict ( NULL );
-	CSphDict * pDict = SetupStarDict ( tDict, *pTokenizer.Ptr() );
+	CSphDict * pDict = SetupStarDict ( tDict, pDictBase, *pTokenizer.Ptr() );
 
 	CSphScopedPtr<CSphDict> tDict2 ( NULL );
 	pDict = SetupExactDict ( tDict2, pDict, *pTokenizer.Ptr() );
@@ -14203,8 +14210,15 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 
 	ISphTokenizer * pTokenizer = m_pTokenizer->Clone ( false );
 
+	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
+	CSphDict * pDictBase = m_pDict;
+	if ( pDictBase->HasState() )
+	{
+		tDictCloned = pDictBase = pDictBase->Clone();
+	}
+
 	CSphScopedPtr<CSphDict> tDict ( NULL );
-	CSphDict * pDict = SetupStarDict ( tDict, *pTokenizer );
+	CSphDict * pDict = SetupStarDict ( tDict, pDictBase, *pTokenizer );
 
 	CSphScopedPtr<CSphDict> tDict2 ( NULL );
 	pDict = SetupExactDict ( tDict2, pDict, *pTokenizer );
@@ -14263,8 +14277,15 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 
 	ISphTokenizer * pTokenizer = m_pTokenizer->Clone ( false );
 
+	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
+	CSphDict * pDictBase = m_pDict;
+	if ( pDictBase->HasState() )
+	{
+		tDictCloned = pDictBase = pDictBase->Clone();
+	}
+
 	CSphScopedPtr<CSphDict> tDict ( NULL );
-	CSphDict * pDict = SetupStarDict ( tDict, *pTokenizer );
+	CSphDict * pDict = SetupStarDict ( tDict, pDictBase, *pTokenizer );
 
 	CSphScopedPtr<CSphDict> tDict2 ( NULL );
 	pDict = SetupExactDict ( tDict2, pDict, *pTokenizer );
@@ -15515,15 +15536,24 @@ protected:
 	CSphVector < int >	m_dMorph;
 #if USE_LIBSTEMMER
 	CSphVector < sb_stemmer * >	m_dStemmers;
+	struct DescStemmer_t
+	{
+		CSphString m_sAlgo;
+		CSphString m_sEnc;
+	};
+	CSphVector<DescStemmer_t> m_dDescStemmers;
 #endif
 
 	int					m_iStopwords;	///< stopwords count
 	SphWordID_t *		m_pStopwords;	///< stopwords ID list
+	CSphVector<SphWordID_t> m_dStopwordContainer;
 
 protected:
 	bool				ToNormalForm ( BYTE * pWord );
 	bool				ParseMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError );
 	SphWordID_t			FilterStopword ( SphWordID_t uID ) const;	///< filter ID against stopwords list
+	CSphDict *			CloneBase ( CSphDictCRCTraits * pDict ) const;
+	virtual bool		HasState () const;
 
 	CSphWriter							m_wrDict;			///< final dict file writer
 	CSphVector<CSphWordlistCheckpoint>	m_dCheckpoints;		///< checkpoint offsets
@@ -15562,6 +15592,8 @@ struct CSphDictCRC : public CSphDictCRCTraits
 	virtual SphWordID_t		GetWordIDWithMarkers ( BYTE * pWord );
 	virtual SphWordID_t		GetWordIDNonStemmed ( BYTE * pWord );
 	virtual bool			IsStopWord ( const BYTE * pWord ) const;
+
+	virtual CSphDict *		Clone () const { return CloneBase ( new CSphDictCRC<CRC32DICT>() ); }
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -15946,39 +15978,55 @@ bool CSphDictCRCTraits::InitMorph ( const char * szMorph, int iLength, bool bUse
 	const int MAX_ALGO_LENGTH = 64;
 	if ( iLength > LIBSTEMMER_LEN && iLength - LIBSTEMMER_LEN < MAX_ALGO_LENGTH && !strncmp ( szMorph, "libstemmer_", LIBSTEMMER_LEN ) )
 	{
-		char szAlgo [MAX_ALGO_LENGTH];
-
-		strncpy ( szAlgo, szMorph + LIBSTEMMER_LEN, iLength - LIBSTEMMER_LEN );
-		szAlgo [iLength - LIBSTEMMER_LEN] = '\0';
+		CSphString sAlgo;
+		CSphString sEnc;
+		sAlgo.SetBinary ( szMorph+LIBSTEMMER_LEN, iLength - LIBSTEMMER_LEN );
 
 		sb_stemmer * pStemmer = NULL;
 
 		if ( bUseUTF8 )
-			pStemmer = sb_stemmer_new ( szAlgo, "UTF_8" );
-		else
 		{
-			pStemmer = sb_stemmer_new ( szAlgo, "ISO_8859_1" );
+			sEnc = "UTF_8";
+			pStemmer = sb_stemmer_new ( sAlgo.cstr(), sEnc.cstr() );
+		} else
+		{
+			sEnc = "ISO_8859_1";
+			pStemmer = sb_stemmer_new ( sAlgo.cstr(), sEnc.cstr() );
 
 			if ( !pStemmer )
-				pStemmer = sb_stemmer_new ( szAlgo, "ISO_8859_2" );
+			{
+				sEnc = "ISO_8859_2";
+				pStemmer = sb_stemmer_new ( sAlgo.cstr(), sEnc.cstr() );
+			}
 
 			if ( !pStemmer )
-				pStemmer = sb_stemmer_new ( szAlgo, "KOI8_R" );
+			{
+				sEnc = "KOI8_R";
+				pStemmer = sb_stemmer_new ( sAlgo.cstr(), sEnc.cstr() );
+			}
 		}
 
 		if ( !pStemmer )
 		{
 			sError.SetSprintf ( "libstemmer morphology algorithm '%s' not available for %s encoding - IGNORED",
-				szAlgo, bUseUTF8 ? "UTF-8" : "SBCS" );
+				sAlgo.cstr(), bUseUTF8 ? "UTF-8" : "SBCS" );
 			return false;
 		}
 
 		AddMorph ( SPH_MORPH_LIBSTEMMER_FIRST + m_dStemmers.GetLength () );
 		ARRAY_FOREACH ( i, m_dStemmers )
+		{
 			if ( m_dStemmers[i]==pStemmer )
+			{
+				sb_stemmer_delete ( pStemmer );
 				return false;
+			}
+		}
 
 		m_dStemmers.Add ( pStemmer );
+		DescStemmer_t & tDesc = m_dDescStemmers.Add();
+		tDesc.m_sAlgo.Swap ( sAlgo );
+		tDesc.m_sEnc.Swap ( sEnc );
 		return true;
 	}
 #endif
@@ -16014,6 +16062,38 @@ void CSphDictCRCTraits::ApplyStemmers ( BYTE * pWord )
 	ARRAY_FOREACH ( i, m_dMorph )
 		if ( StemById ( pWord, m_dMorph[i] ) )
 			break;
+}
+
+CSphDict * CSphDictCRCTraits::CloneBase ( CSphDictCRCTraits * pDict ) const
+{
+	assert ( pDict );
+	pDict->m_iStopwords = m_iStopwords;
+	pDict->m_pStopwords = m_pStopwords;
+	pDict->m_pWordforms = m_pWordforms;
+	if ( m_pWordforms )
+		m_pWordforms->m_iRefCount++;
+
+	pDict->m_dMorph = m_dMorph;
+	pDict->m_dDescStemmers = m_dDescStemmers;
+#if USE_LIBSTEMMER
+	assert ( m_dDescStemmers.GetLength()==m_dStemmers.GetLength() );
+	ARRAY_FOREACH ( i, m_dDescStemmers )
+	{
+		pDict->m_dStemmers.Add ( sb_stemmer_new ( m_dDescStemmers[i].m_sAlgo.cstr(), m_dDescStemmers[i].m_sEnc.cstr() ) );
+		assert ( pDict->m_dStemmers.Last() );
+	}
+#endif
+
+	return pDict;
+}
+
+bool CSphDictCRCTraits::HasState() const
+{
+#if !USE_LIBSTEMMER
+	return false;
+#else
+	return ( m_dDescStemmers.GetLength()>0 );
+#endif
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -16172,9 +16252,12 @@ void CSphDictCRCTraits::LoadStopwords ( const char * sFiles, ISphTokenizer * pTo
 	// store IDs
 	if ( dStop.GetLength() )
 	{
-		m_iStopwords = dStop.GetLength ();
-		m_pStopwords = new SphWordID_t [ m_iStopwords ];
-		memcpy ( m_pStopwords, &dStop[0], sizeof(SphWordID_t)*m_iStopwords );
+		m_dStopwordContainer.Resize ( dStop.GetLength() );
+		ARRAY_FOREACH ( i, dStop )
+			m_dStopwordContainer[i] = dStop[i];
+
+		m_iStopwords = m_dStopwordContainer.GetLength ();
+		m_pStopwords = m_dStopwordContainer.Begin();
 	}
 }
 

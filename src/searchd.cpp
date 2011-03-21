@@ -1032,7 +1032,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	sphLogEntry ( eLevel, sBuf, sTtyBuf );
 }
 
-void sphFatal ( const char * sFmt, ... ) __attribute__((format(printf,1,2)));
+void sphFatal ( const char * sFmt, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) );
 void sphFatal ( const char * sFmt, ... )
 {
 	va_list ap;
@@ -1165,7 +1165,7 @@ public:
 		tEntry.m_sError = sError;
 	}
 
-	void SubmitEx ( const char * sIndex, const char * sTemplate, ... ) __attribute__((format(printf,3,4)))
+	void SubmitEx ( const char * sIndex, const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 3, 4 ) ) )
 	{
 		SearchFailure_t & tEntry = m_dLog.Add ();
 		va_list ap;
@@ -2168,7 +2168,7 @@ public:
 	template < typename T > bool	GetDwords ( CSphVector<T> & dBuffer, int iMax, const char * sErrorTemplate );
 	template < typename T > bool	GetQwords ( CSphVector<T> & dBuffer, int iMax, const char * sErrorTemplate );
 
-	virtual void	SendErrorReply ( const char *, ... ) __attribute__((format(printf,2,3))) = 0;
+	virtual void	SendErrorReply ( const char *, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) ) = 0;
 
 protected:
 	const BYTE *	m_pBuf;
@@ -2188,7 +2188,7 @@ class MemInputBuffer_c : public InputBuffer_c
 {
 public:
 					MemInputBuffer_c ( const BYTE * pBuf, int iLen ) : InputBuffer_c ( pBuf, iLen ) {}
-	virtual void	SendErrorReply ( const char *, ... ) __attribute__((format(printf,2,3))) {}
+	virtual void	SendErrorReply ( const char *, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) ) {}
 };
 
 
@@ -2202,7 +2202,7 @@ public:
 	bool			ReadFrom ( int iLen, int iTimeout, bool bIntr=false, bool bAppend=false );
 	bool			ReadFrom ( int iLen ) { return ReadFrom ( iLen, g_iReadTimeout ); }
 
-	virtual void	SendErrorReply ( const char *, ... ) __attribute__((format(printf,2,3)));
+	virtual void	SendErrorReply ( const char *, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 
 	const BYTE *	GetBufferPtr () const { return m_pBuf; }
 	bool			IsIntr () const { return m_bIntr; }
@@ -4355,7 +4355,7 @@ public:
 	}
 
 
-	void Append ( const char * sFormat, ... ) __attribute__((format(printf,2,3)))
+	void Append ( const char * sFormat, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) )
 	{
 		if ( !sFormat || !*sFormat )
 			return;
@@ -10660,6 +10660,8 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 		switch ( eStmt )
 		{
 		case STMT_PARSE_ERROR:
+			tLastMeta = CSphQueryResultMeta();
+			tLastMeta.m_sError = sError;
 			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
 			break;
 

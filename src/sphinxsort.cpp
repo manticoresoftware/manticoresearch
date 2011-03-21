@@ -812,6 +812,7 @@ protected:
 
 	CSphGroupSorterSettings		m_tSettings;
 	CSphVector<IAggrFunc *>		m_dAggregates;
+	CSphVector<IAggrFunc *>		m_dAvgs;
 	int							m_iPregroupDynamic;	///< how much dynamic attributes are computed by the index (before groupby sorter)
 
 	static const int			GROUPBY_FACTOR = 4;	///< allocate this times more storage when doing group-by (k, as in k-buffer)
@@ -883,6 +884,19 @@ public:
 						case SPH_ATTR_BIGINT:	m_dAggregates.Add ( new AggrAvg_t<int64_t> ( tAttr.m_tLocator, m_tSettings.m_tLocCount ) ); break;
 						case SPH_ATTR_FLOAT:	m_dAggregates.Add ( new AggrAvg_t<float> ( tAttr.m_tLocator, m_tSettings.m_tLocCount ) ); break;
 						default:				assert ( 0 && "internal error: unhandled aggregate type" ); break;
+					}
+					// store avg to calculate these attributes prior to groups sort
+					for ( int iState=0; iState<CSphMatchComparatorState::MAX_ATTRS; iState++ )
+					{
+						ESphSortKeyPart eKeypart = m_tGroupSorter.m_eKeypart[iState];
+						CSphAttrLocator tLoc = m_tGroupSorter.m_tLocator[iState];
+						if ( ( eKeypart==SPH_KEYPART_INT || eKeypart==SPH_KEYPART_FLOAT )
+							&& tLoc.m_bDynamic==tAttr.m_tLocator.m_bDynamic && tLoc.m_iBitOffset==tAttr.m_tLocator.m_iBitOffset
+							&& tLoc.m_iBitCount==tAttr.m_tLocator.m_iBitCount )
+						{
+								m_dAvgs.Add ( m_dAggregates.Last() );
+								break;
+						}
 					}
 					break;
 
@@ -1030,19 +1044,49 @@ public:
 		return true;
 	}
 
+	void CalcAvg ( bool bGroup )
+	{
+		if ( !m_dAvgs.GetLength() )
+			return;
+
+		CSphMatch * pMatch = m_pData;
+		CSphMatch * pEnd = pMatch + m_iUsed;
+		while ( pMatch<pEnd )
+		{
+			ARRAY_FOREACH ( j, m_dAvgs )
+			{
+				if ( bGroup )
+					m_dAvgs[j]->Finalize ( pMatch );
+				else
+					m_dAvgs[j]->Ungroup ( pMatch );
+			}
+			++pMatch;
+		}
+	}
+
 	/// store all entries into specified location in sorted order, and remove them from queue
 	void Flatten ( CSphMatch * pTo, int iTag )
 	{
 		CountDistinct ();
+
+		CalcAvg ( true );
 		SortGroups ();
+
+		CSphVector<IAggrFunc *> dAggrs;
+		if ( m_dAggregates.GetLength()!=m_dAvgs.GetLength() )
+		{
+			dAggrs = m_dAggregates;
+			ARRAY_FOREACH ( i, m_dAvgs )
+				dAggrs.RemoveValue ( m_dAvgs[i] );
+		}
 
 		int iLen = GetLength ();
 		for ( int i=0; i<iLen; i++, pTo++ )
 		{
-			ARRAY_FOREACH ( j, m_dAggregates )
-				m_dAggregates[j]->Finalize ( &m_pData[i] );
+			ARRAY_FOREACH ( j, dAggrs )
+				dAggrs[j]->Finalize ( &m_pData[i] );
 
-			pTo[0].Clone ( m_pData[i], m_tSchema.GetDynamicSize() );
+			pTo->Clone ( m_pData[i], m_tSchema.GetDynamicSize() );
 			if ( iTag>=0 )
 				pTo->m_iTag = iTag;
 		}
@@ -1108,7 +1152,10 @@ protected:
 		// sort groups
 		if ( m_bSortByDistinct )
 			CountDistinct ();
+
+		CalcAvg ( true );
 		SortGroups ();
+		CalcAvg ( false );
 
 		// cut groups
 		int iCut = m_iLimit * (int)(GROUPBY_FACTOR/2);

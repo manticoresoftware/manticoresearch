@@ -1147,10 +1147,16 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		sphConfIndex ( hIndex, tSettings );
 		tSettings.m_bVerbose = bVerbose;
 
-		if ( tSettings.m_bIndexExactWords && !tDictSettings.HasMorphology () )
+		if ( tSettings.m_bIndexExactWords && !pDict->HasMorphology () )
 		{
 			tSettings.m_bIndexExactWords = false;
 			fprintf ( stdout, "WARNING: index '%s': no morphology, index_exact_words=1 has no effect, ignoring\n", sIndexName );
+		}
+
+		if ( tDictSettings.m_bWordDict && pDict->HasMorphology() && tSettings.m_iMinPrefixLen && !tSettings.m_bIndexExactWords )
+		{
+			tSettings.m_bIndexExactWords = true;
+			fprintf ( stdout, "WARNING: index '%s': dict=keywords and prefixes and morphology enabled, forcing index_exact_words=1\n", sIndexName );
 		}
 
 		if ( bGotAttrs && tSettings.m_eDocinfo==SPH_DOCINFO_NONE )

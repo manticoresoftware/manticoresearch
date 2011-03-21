@@ -613,12 +613,6 @@ struct CSphDictSettings
 		, m_bWordDict ( false )
 		, m_bCrc32 ( !USE_64BIT )
 	{}
-
-	bool HasMorphology () const
-	{
-		const char * szMorph = m_sMorphology.cstr ();
-		return szMorph && *szMorph && strcmp ( szMorph, "none" );
-	}
 };
 
 
@@ -664,6 +658,8 @@ struct CSphDict
 
 	/// set morphology
 	virtual bool		SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError ) = 0;
+
+	virtual bool		HasMorphology () const { return false; }
 
 	/// setup dictionary using settings
 	virtual void		Setup ( const CSphDictSettings & tSettings ) = 0;

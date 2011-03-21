@@ -36,14 +36,14 @@ struct XQKeyword_t
 	bool				m_bFieldStart;	///< must occur at very start
 	bool				m_bFieldEnd;	///< must occur at very end
 	DWORD				m_uStarPosition;
-	bool				m_bUseSmallBuffers;
+	bool				m_bExpanded;	///< added by prefix expansion
 
 	XQKeyword_t ()
 		: m_iAtomPos ( -1 )
 		, m_bFieldStart ( false )
 		, m_bFieldEnd ( false )
 		, m_uStarPosition ( STAR_NONE )
-		, m_bUseSmallBuffers ( false )
+		, m_bExpanded ( false )
 	{}
 
 	XQKeyword_t ( const char * sWord, int iPos )
@@ -52,7 +52,7 @@ struct XQKeyword_t
 		, m_bFieldStart ( false )
 		, m_bFieldEnd ( false )
 		, m_uStarPosition ( STAR_NONE )
-		, m_bUseSmallBuffers ( false )
+		, m_bExpanded ( false )
 	{}
 };
 

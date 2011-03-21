@@ -61,6 +61,7 @@ struct ExtQword_t
 	int			m_iHits;		///< matching hits
 	float		m_fIDF;			///< IDF value
 	int			m_iQueryPos;	///< position in the query
+	bool		m_bExpanded;	///< added by prefix expansion
 };
 
 
@@ -868,6 +869,7 @@ static ISphQword * CreateQueryWord ( const XQKeyword_t & tWord, const ISphQwordS
 	pWord->m_sWord = tWord.m_sWord;
 	pWord->m_iWordID = tSetup.m_pDict->GetWordID ( sTmp );
 	pWord->m_sDictWord = (char*)sTmp;
+	pWord->m_bExpanded = tWord.m_bExpanded;
 	tSetup.QwordSetup ( pWord );
 
 	if ( tWord.m_bFieldStart && tWord.m_bFieldEnd )	pWord->m_iTermPos = TERM_POS_FIELD_STARTEND;
@@ -1418,6 +1420,7 @@ void ExtTerm_c::GetQwords ( ExtQwordsHash_t & hQwords )
 	tInfo.m_iHits = m_pQword->m_iHits;
 	tInfo.m_iQueryPos = m_pQword->m_iAtomPos;
 	tInfo.m_fIDF = -1.0f; // suppress gcc 4.2.3 warning
+	tInfo.m_bExpanded = m_pQword->m_bExpanded;
 	hQwords.Add ( tInfo, m_pQword->m_sWord );
 }
 
@@ -4812,7 +4815,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, ESphRankMode eRankMode, CS
 	ARRAY_FOREACH ( i, dWords )
 	{
 		const ExtQword_t * pWord = dWords[i];
-		pResult->AddStat ( pWord->m_sDictWord, pWord->m_iDocs, pWord->m_iHits, false );
+		pResult->AddStat ( pWord->m_sDictWord, pWord->m_iDocs, pWord->m_iHits, pWord->m_bExpanded );
 	}
 
 	pRanker->SetQwordsIDF ( hQwords );

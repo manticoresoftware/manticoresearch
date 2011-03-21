@@ -11165,7 +11165,7 @@ bool CheckIndex ( const CSphIndex * pIndex, CSphString & sError )
 	{
 		CSphDict * pDict = pIndex->GetDictionary ();
 		assert ( pDict );
-		if ( pDict->GetSettings ().HasMorphology () )
+		if ( pDict->HasMorphology () )
 		{
 			sError = "infixes and morphology are enabled, enable_star=0";
 			return false;

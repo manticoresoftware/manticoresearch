@@ -28,11 +28,58 @@ index test
     charset_type 	= utf-8
 	morphology		= stem_ru, stem_en
 }
+
+index morph0
+{
+	source			= srctest
+	path			= <data_path/>/morph0
+
+	dict			= keywords
+	min_prefix_len	= 1
+	enable_star	= 1
+}
+
+index morph1
+{
+	source			= srctest
+	path			= <data_path/>/morph1
+
+	dict			= keywords
+	min_prefix_len	= 1
+	enable_star	= 1
+	morphology = stem_en
+}
 </config>
 
 <queries>
 <!-- long query after proximity length was not properly 0-terminated, and caused overlong token to be passed to stemmer, and crash -->
 <query mode="extended2">"one two"~3                                                                                                                                                                                                                                                                                                                                                                            three</query>
+
+<!--here is going regression dict=keywords got broken by morphology-->
+<query mode="extended2" index="morph1">=running</query>
+<query mode="extended2" index="morph1">=run</query>
+<query mode="extended2" index="morph1">running*</query>
+<query mode="extended2" index="morph1">runnin*</query>
+<query mode="extended2" index="morph1">run*</query>
+<query mode="extended2" index="morph1">ru*</query>
+<query mode="extended2" index="morph1">=runnin*</query>
+<query mode="extended2" index="morph1">runnings*</query>
+<query mode="extended2" index="morph1">runnin</query>
+<query mode="extended2" index="morph1">running</query>
+<query mode="extended2" index="morph1">run</query>
+
+<query mode="extended2" index="morph0">=running</query>
+<query mode="extended2" index="morph0">=run</query>
+<query mode="extended2" index="morph0">running*</query>
+<query mode="extended2" index="morph0">runnin*</query>
+<query mode="extended2" index="morph0">run*</query>
+<query mode="extended2" index="morph0">ru*</query>
+<query mode="extended2" index="morph0">=runnin*</query>
+<query mode="extended2" index="morph0">runnings*</query>
+<query mode="extended2" index="morph0">runnin</query>
+<query mode="extended2" index="morph0">running</query>
+<query mode="extended2" index="morph0">run</query>
+
 </queries>
 
 <db_create>
@@ -49,7 +96,8 @@ DROP TABLE IF EXISTS `test_table`
 
 <db_insert>
 INSERT INTO `test_table` VALUES
-( 1,  'and nothing else matters' )
+( 1,  'and nothing else matters' ),
+( 2, 'running into trouble' )
 </db_insert>
 
 </test>

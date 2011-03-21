@@ -46,6 +46,7 @@ public:
 	SphWordID_t		m_iWordID;		///< word ID, from dictionary
 	int				m_iTermPos;
 	int				m_iAtomPos;		///< word position, from query
+	bool			m_bExpanded;	///< added by prefix expansion
 
 	// setup by QwordSetup()
 	int				m_iDocs;		///< document count, from wordlist
@@ -62,6 +63,7 @@ public:
 		: m_iWordID ( 0 )
 		, m_iTermPos ( 0 )
 		, m_iAtomPos ( 0 )
+		, m_bExpanded ( false )
 		, m_iDocs ( 0 )
 		, m_iHits ( 0 )
 		, m_bHasHitlist ( true )

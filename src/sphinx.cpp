@@ -138,7 +138,7 @@ static inline float logf ( float v )
 #endif
 
 // forward decl
-void sphWarn ( const char * sTemplate, ... ) __attribute__((format(printf,1,2)));
+void sphWarn ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) );
 size_t sphReadThrottled ( int iFD, void * pBuf, size_t iCount );
 static bool sphTruncate ( int iFD );
 
@@ -12120,7 +12120,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & tWord ) const
 {
-	WITH_QWORD ( m_pIndex, false, Qword, return new Qword ( tWord.m_bUseSmallBuffers ) );
+	WITH_QWORD ( m_pIndex, false, Qword, return new Qword ( tWord.m_bExpanded ) );
 	return NULL;
 }
 
@@ -12178,7 +12178,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 		iWordLen = Max ( iWordLen-1, 0 );
 
 	// leading special symbols trimming
-	if ( tWord.m_sDictWord.Begins("=") || tWord.m_sDictWord.Begins("*") )
+	if ( tWord.m_sDictWord.Begins("*") )
 	{
 		sWord++;
 		iWordLen = Max ( iWordLen-1, 0 );
@@ -13975,7 +13975,10 @@ static void FixupExpandedTree ( XQNode_t * pRoot, const XQNode_t & tRef )
 	pRoot->TagAsCommon ( tRef.GetOrder (), tRef.GetCount () );
 
 	ARRAY_FOREACH ( i, pRoot->m_dWords )
-		pRoot->m_dWords[i].m_bUseSmallBuffers = true;
+	{
+		XQKeyword_t & tKw = pRoot->m_dWords[i];
+		tKw.m_bExpanded = true;
+	}
 
 	ARRAY_FOREACH ( i, pRoot->m_dChildren )
 		FixupExpandedTree ( pRoot->m_dChildren[i], tRef );
@@ -14052,6 +14055,18 @@ XQNode_t * CSphIndex_VLN::DoExpansion ( XQNode_t * pNode, BYTE * pBuff, int iFD,
 	if ( iWordLen<m_tSettings.m_iMinPrefixLen )
 		return pNode;
 
+	bool bMorphEnabled = m_pDict->HasMorphology();
+
+	// prefix expansion looking only into non stemmed words
+	CSphString sFixed;
+	if ( bMorphEnabled )
+	{
+		sFixed = pNode->m_dWords[0].m_sWord.SubString ( sAdjustedWord-sFullWord.cstr(), iWordLen );
+		sFixed.SetSprintf ( "%c%s", MAGIC_WORD_HEAD_NONSTEMMED, sFixed.cstr() );
+		sAdjustedWord = sFixed.cstr();
+		iWordLen++;
+	}
+
 	CSphVector<CSphNamedInt> dPrefixedWords;
 	m_tWordlist.GetPrefixedWords ( sAdjustedWord, iWordLen, dPrefixedWords, pBuff, iFD );
 
@@ -14071,6 +14086,15 @@ XQNode_t * CSphIndex_VLN::DoExpansion ( XQNode_t * pNode, BYTE * pBuff, int iFD,
 	ARRAY_FOREACH ( i, dPrefixedWords )
 	{
 		pResult->AddStat ( dPrefixedWords[i].m_sName, 0, 0, true );
+	}
+
+	// replace MAGIC_WORD_HEAD_NONSTEMMED symbol to '='
+	if ( bMorphEnabled )
+	{
+		ARRAY_FOREACH ( i, dPrefixedWords )
+		{
+			( (char *)dPrefixedWords[i].m_sName.cstr() )[0] = '=';
+		}
 	}
 
 	const XQKeyword_t tPrefixingWord = pNode->m_dWords[0];
@@ -15516,6 +15540,7 @@ struct CSphDictCRCTraits : CSphDict
 	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer );
 	virtual bool		LoadWordforms ( const char * szFile, ISphTokenizer * pTokenizer );
 	virtual bool		SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError );
+	virtual bool		HasMorphology() const;
 	virtual void		ApplyStemmers ( BYTE * pWord );
 
 	virtual void		Setup ( const CSphDictSettings & tSettings ) { m_tSettings = tSettings; }
@@ -16438,6 +16463,13 @@ bool CSphDictCRCTraits::SetMorphology ( const char * szMorph, bool bUseUTF8, CSp
 
 	return true;
 }
+
+
+bool CSphDictCRCTraits::HasMorphology() const
+{
+	return ( m_dMorph.GetLength()>0 );
+}
+
 
 /// common id-based stemmer
 bool CSphDictCRCTraits::StemById ( BYTE * pWord, int iStemmer )
@@ -21285,7 +21317,7 @@ public:
 	void			ProcessNode ( xmlTextReaderPtr pReader );
 #endif
 
-	void			Error ( const char * sTemplate, ... ) __attribute__((format(printf,2,3)));
+	void			Error ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 
 private:
 	struct Document_t
@@ -21354,7 +21386,7 @@ private:
 	int				m_iReparseStart;	///< utf-8 fixerupper might need to postpone a few bytes, starting at this offset
 	int				m_iReparseLen;		///< and this much bytes (under 4)
 
-	const char *	DecorateMessage ( const char * sTemplate, ... ) __attribute__((format(printf,2,3)));
+	const char *	DecorateMessage ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 	const char *	DecorateMessageVA ( const char * sTemplate, va_list ap );
 
 	void			ConfigureAttrs ( const CSphVariant * pHead, ESphAttr eAttrType );
@@ -23510,9 +23542,16 @@ void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int iDocs, int iHi
 		pFixed = &sFixed;
 	} else if ( sWord.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
 	{
-		sFixed = sWord;
-		*(char *)( sFixed.cstr() ) = '=';
-		pFixed = &sFixed;
+		if ( !bExpanded )
+		{
+			sFixed = sWord;
+			*(char *)( sFixed.cstr() ) = '=';
+			pFixed = &sFixed;
+		} else
+		{
+			sFixed = sWord.SubString ( 1, sWord.Length()-1 );
+			pFixed = &sFixed;
+		}
 	}
 
 	WordStat_t * pStats = m_hWordStats ( *pFixed );

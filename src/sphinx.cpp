@@ -4998,6 +4998,9 @@ void SelectParser_t::AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias, ESphAggrFunc e
 		tItem.m_sAlias.SetBinary ( m_pStart + pAlias->m_iStart, pAlias->m_iEnd - pAlias->m_iStart );
 	tItem.m_eAggrFunc = eAggrFunc;
 
+	tItem.m_sExpr.ToLower();
+	tItem.m_sAlias.ToLower();
+
 	m_pQuery->m_dItems.Add ( tItem );
 }
 
@@ -5008,6 +5011,9 @@ void SelectParser_t::AddItem ( const char * pToken, YYSTYPE * pAlias )
 	if ( pAlias )
 		tItem.m_sAlias.SetBinary ( m_pStart + pAlias->m_iStart, pAlias->m_iEnd - pAlias->m_iStart );
 	tItem.m_eAggrFunc = SPH_AGGR_NONE;
+
+	tItem.m_sExpr.ToLower();
+	tItem.m_sAlias.ToLower();
 
 	m_pQuery->m_dItems.Add ( tItem );
 }

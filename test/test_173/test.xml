@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test>
+
+<name>processing error messages from local agents</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	dist_threads = 3
+}
+
+source src
+{
+	type			= mysql
+<sql_settings/>
+	sql_attr_uint	= attru
+	sql_attr_string	= attrs
+	sql_query		= SELECT * FROM test_table WHERE id BETWEEN $start AND $end
+	sql_query_range = SELECT 1,1
+}
+
+source src1: src
+{
+	sql_query_range = SELECT 2,2
+}
+
+index idx
+{
+	source			= src
+	path			= <data_path/>/main
+    charset_type 	= utf-8
+}
+
+index idx1
+{
+	source			= src1
+	path			= <data_path/>/main1
+}
+
+index idxx
+{
+	type = distributed
+	local = idx
+	local = idx1
+}
+
+</config>
+
+<sphqueries>
+<sphinxql>select attru, attru+attrs ss from idx</sphinxql>
+<sphinxql>select attru, attru+attrs ss from idxx</sphinxql>
+</sphqueries>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	attru INTEGER NOT NULL,
+	attrs VARCHAR(10) NOT NULL,
+	text VARCHAR(10) NOT NULL
+) ENGINE=MYISAM
+</db_create>
+
+<db_insert>
+insert into test_table values
+( 1, 1, 'test', 'test' ), (2, 2, 'test', 'test')
+</db_insert>
+
+<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
+
+</test>

@@ -1996,7 +1996,8 @@ function CheckConfig ( $config, $path )
 
 function RunTest ( $test_dir, $skipdemo )
 {
-	global $indexer_data_path, $agents, $sd_pid_file, $sd_managed_searchd, $sd_skip_indexer, $g_id64, $windows, $g_locals;
+	global	$indexer_data_path, $agents, $sd_pid_file, $sd_managed_searchd,
+			$sd_skip_indexer, $g_id64, $windows, $g_locals, $sd_log, $sd_query_log;
 
 	$model_file = $test_dir."/model.bin";
 	$conf_dir 	= $test_dir."/Conf";
@@ -2056,6 +2057,20 @@ function RunTest ( $test_dir, $skipdemo )
 	// config to pid hash, instances to stop
 	// static is only to workaround PHP braindamage, otherwise $stop gets reset (at least on 5.2.2 under win32)
 	static $stop = array();
+	$oldlog = '';
+	$oldquerylog = '';
+	if ( $isdemo )
+	{
+		$oldlog = $sd_log;
+		$oldquerylog = $sd_query_log;
+		$sd_log				= "$test_dir/searchd.log";
+		$sd_query_log		= "$test_dir/query.log";
+		if (file_exists($sd_log))
+			unlink ($sd_log);
+		if (file_exists($sd_query_log))
+			unlink ($sd_query_log);
+	}
+
 	do
 	{
 		// stop them all
@@ -2229,6 +2244,12 @@ function RunTest ( $test_dir, $skipdemo )
 		$config->SubtestFinished ();
 	}
 	while ( $config->CreateNextConfig () );
+
+	if ( $isdemo )
+	{
+		$sd_log				= $oldlog;
+		$sd_query_log		= $oldquerylog;
+	}
 
 	if ( !$sd_managed_searchd )
 		foreach ( $stop as $conf=>$pid )

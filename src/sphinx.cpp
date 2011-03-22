@@ -1338,6 +1338,10 @@ public:
 	virtual void				Unlock ();
 	virtual void				PostSetup() {}
 
+	virtual int					AttrLock ( int iQuantity=1 ) const;
+	virtual bool				AttrLocked() const;
+	virtual void				AttrRelease() const;
+
 	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const;
 	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString & sError ) const;
@@ -1439,6 +1443,8 @@ private:
 	bool						m_bIsEmpty;				///< do we have actually indexed documents (m_iTotalDocuments is just fetched documents, not indexed!)
 
 	CSphVector<LocatorPair_t>	m_dDynamize;			///< string attributes that my parent RT index wants dynamized
+	mutable CSphMutex			m_tAttrLock;
+	mutable volatile int		m_iAttrRefCount;
 
 private:
 	CSphString					GetIndexFileName ( const char * sExt ) const;
@@ -7133,11 +7139,14 @@ CSphIndex_VLN::CSphIndex_VLN ( const char* sIndexName, const char * sFilename )
 	m_bIsEmpty = true;
 	m_bMerging = false;
 	m_tLastHit.m_sKeyword[0] = '\0';
+	m_tAttrLock.Init();
+	m_iAttrRefCount = 1;
 }
 
 
 CSphIndex_VLN::~CSphIndex_VLN ()
 {
+	m_tAttrLock.Done();
 	SafeDeleteArray ( m_pWriteBuffer );
 
 #if USE_WINDOWS
@@ -12269,6 +12278,32 @@ void CSphIndex_VLN::Unlock()
 		::unlink ( sName.cstr() );
 		m_iLockFD = -1;
 	}
+}
+
+
+int	CSphIndex_VLN::AttrLock ( int iQuantity ) const
+{
+	m_tAttrLock.Lock();
+	int iRes = m_iAttrRefCount += iQuantity;
+	m_tAttrLock.Unlock();
+	return iRes;
+}
+bool CSphIndex_VLN::AttrLocked() const
+{
+	m_tAttrLock.Lock();
+	bool bRes = m_iAttrRefCount>1;
+	m_tAttrLock.Unlock();
+	return bRes;
+}
+void CSphIndex_VLN::AttrRelease() const
+{
+	bool bDestroy = false;
+	m_tAttrLock.Lock();
+	if ( m_iAttrRefCount )
+		bDestroy = --m_iAttrRefCount==0;
+	m_tAttrLock.Unlock();
+	if ( bDestroy )
+		delete this;
 }
 
 
@@ -22858,7 +22893,7 @@ bool CSphSource_ODBC::SqlFetchRow ()
 						// out of buffer; warn about that (once)
 						tCol.m_bTruncated = true;
 						sphWarn ( "'%s' column truncated (buffer=%d, got=%d); consider revising sql_column_buffers",
-							tCol.m_sName.cstr(), tCol.m_iBufferSize-1, tCol.m_iInd );
+							tCol.m_sName.cstr(), tCol.m_iBufferSize-1, (int) tCol.m_iInd );
 					}
 				}
 			break;

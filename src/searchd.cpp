@@ -4966,7 +4966,18 @@ struct AggrResult_t : CSphQueryResult
 	CSphVector<CSphSchema>		m_dSchemas;			///< aggregated resultsets schemas (for schema minimization)
 	CSphVector<int>				m_dMatchCounts;		///< aggregated resultsets lengths (for schema minimization)
 	CSphVector<int>				m_dIndexWeights;	///< aggregated resultsets per-index weights (optional)
+	CSphVector<const CSphIndex*>		m_dLockedAttrs;		///< indexes which are hold in the memory untill sending result
 	CSphVector<PoolPtrs_t>		m_dTag2Pools;		///< tag to MVA and strings storage pools mapping
+	inline void					HoldAttrs ( const ServedIndex_t * pServed, int iQueries = 1 )
+	{
+		pServed->m_pIndex->AttrLock ( iQueries );
+		m_dLockedAttrs.Add ( pServed->m_pIndex );
+	}
+	virtual ~AggrResult_t()
+	{
+		ARRAY_FOREACH ( i, m_dLockedAttrs )
+			m_dLockedAttrs[i]->AttrRelease();
+	}
 };
 
 
@@ -6577,6 +6588,15 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				if ( !pServedIndex->m_bEnabled )
 					m_dLocal.Remove ( i-- );
 
+				// for every query increase the ref counter for all invoked indexes
+				// (optimized: do one increase by N and then copy the vector instead of doing N increasing for each)
+				else if ( g_eWorkers==MPM_THREADS )
+					for ( int iRes=iStart; iRes<=iEnd; iRes++ )
+						if ( iRes!=iStart )
+							m_dResults[iRes].m_dLockedAttrs = m_dResults[iStart].m_dLockedAttrs;
+						else if ( !pServedIndex->m_bRT )
+							m_dResults[iStart].HoldAttrs ( pServedIndex, iEnd-iStart+1 );
+
 				pServedIndex->Unlock();
 			}
 		}
@@ -6714,6 +6734,17 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				SafeDelete ( pLocalSorter );
 				return;
 			}
+
+			// for every query increase the ref counter for all invoked indexes
+			// (optimized: do one increase by N and then copy the vector instead of doing N increasing for each)
+			if ( g_eWorkers==MPM_THREADS )
+				for ( int iRes=iStart; iRes<=iEnd; iRes++ )
+					if ( iRes!=iStart )
+						m_dResults[iRes].m_dLockedAttrs = m_dResults[iStart].m_dLockedAttrs;
+					else
+						ARRAY_FOREACH ( i, dLockedEqualIndexes )
+							if ( !dLockedEqualIndexes[i]->m_bRT )
+								m_dResults[iStart].HoldAttrs ( dLockedEqualIndexes[i], iEnd-iStart+1 );
 
 			tmLocal = -sphMicroTimer();
 			RunLocalSearches ( pLocalSorter, bDist ? tFirst.m_sIndexes.cstr() : NULL );
@@ -11250,6 +11281,7 @@ static void RtFlushThreadFunc ( void * )
 
 static void RotateIndexMT ( const CSphString & sIndex )
 {
+	assert ( g_eWorkers==MPM_THREADS );
 	//////////////////
 	// load new index
 	//////////////////
@@ -11395,16 +11427,28 @@ static void RotateIndexMT ( const CSphString & sIndex )
 		}
 	}
 
+	if ( tNewIndex.m_pIndex->AttrLocked() )
+	{
+		tNewIndex.m_pIndex->AttrRelease();
+		tNewIndex.m_pIndex = NULL; // Avoid auto deletion on destructor.
+	}
+
 	pServed->Unlock();
 }
 
 void RotationThreadFunc ( void * )
 {
+	assert ( g_eWorkers==MPM_THREADS );
 	while ( !g_bRotateShutdown )
 	{
 		// check if we have work to do
+		if ( !g_bDoRotate )
+		{
+			sphSleepMsec ( 50 );
+			continue;
+		}
 		g_tRotateQueueMutex.Lock();
-		if (!( g_bDoRotate && g_dRotateQueue.GetLength() ))
+		if ( !g_dRotateQueue.GetLength() )
 		{
 			g_tRotateQueueMutex.Unlock();
 			sphSleepMsec ( 50 );

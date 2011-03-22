@@ -2616,6 +2616,10 @@ public:
 	/// called when index is loaded and prepared to work
 	virtual void				PostSetup() = 0;
 
+	virtual int					AttrLock ( int iIncrement ) const { return 0; }
+	virtual bool				AttrLocked() const { return false; }
+	virtual void				AttrRelease() const {}
+
 public:
 	virtual bool						EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const = 0;
 	virtual const CSphSourceStats &		GetStats () const = 0;

@@ -1115,6 +1115,7 @@ bool CSphRwlock::Init ()
 	if ( !m_hWriteMutex )
 	{
 		CloseHandle ( m_hReadEvent );
+		m_hReadEvent = NULL;
 		return false;
 	}
 	return true;

@@ -7516,6 +7516,8 @@ void SqlParser_c::AddItem ( int iStart, int iEnd, SqlNode_t * pAlias, ESphAggrFu
 	if ( pAlias )
 		tItem.m_sAlias.SetBinary ( m_pBuf + pAlias->m_iStart, pAlias->m_iEnd - pAlias->m_iStart );
 	tItem.m_eAggrFunc = eFunc;
+	tItem.m_sExpr.ToLower();
+	tItem.m_sAlias.ToLower();
 	m_pQuery->m_dItems.Add ( tItem );
 }
 
@@ -7531,6 +7533,8 @@ bool SqlParser_c::AddItem ( const char * sNewExpr, SqlNode_t * pAlias, bool bNew
 	if ( pAlias )
 		tItem.m_sAlias.SetBinary ( m_pBuf + pAlias->m_iStart, pAlias->m_iEnd - pAlias->m_iStart );
 	tItem.m_eAggrFunc = SPH_AGGR_NONE;
+	tItem.m_sExpr.ToLower();
+	tItem.m_sAlias.ToLower();
 	m_pQuery->m_dItems.Add ( tItem );
 	if ( !bNewSyntax )
 		return true;
@@ -7577,6 +7581,7 @@ void SqlParser_c::AddConst ( int iList, const YYSTYPE& tValue )
 	assert ( dVec.GetLength() );
 	dVec.Add();
 	dVec.Last().m_sName = tValue.m_sValue;
+	dVec.Last().m_sName.ToLower();
 	dVec.Last().m_iValue = tValue.m_iValue;
 }
 
@@ -7597,6 +7602,7 @@ CSphFilterSettings * SqlParser_c::AddFilter ( const CSphString & sCol, ESphFilte
 	CSphFilterSettings * pFilter = &m_pQuery->m_dFilters.Add();
 	pFilter->m_sAttrName = sCol;
 	pFilter->m_eType = eType;
+	pFilter->m_sAttrName.ToLower();
 	return pFilter;
 }
 
@@ -12123,6 +12129,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		for ( CSphVariant * v=hIndex("rt_field"); v; v=v->m_pNext )
 		{
 			tCol.m_sName = v->cstr();
+			tCol.m_sName.ToLower();
 			tSchema.m_dFields.Add ( tCol );
 		}
 		if ( !tSchema.m_dFields.GetLength() )

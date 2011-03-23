@@ -114,6 +114,8 @@ create table test_table
 <sphinxql>select gid from dist1 where match('hello') option max_matches=2</sphinxql>
 <sphinxql>select b from dist2 where match('hello') option max_matches=2</sphinxql>
 <sphinxql>select b from dist3 where match('hello') option max_matches=2</sphinxql>
+<!-- regression crash at option named list -->
+<sphinxql>select id, gid from dist1 where match('hello') option field_weights=(none1=1000, title=1)</sphinxql>
 </sphqueries>
 
 </test>

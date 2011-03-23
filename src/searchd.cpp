@@ -7609,7 +7609,6 @@ void SqlParser_c::AddConst ( int iList, const YYSTYPE& tValue )
 {
 	CSphVector<CSphNamedInt> & dVec = GetNamedVec ( iList );
 
-	assert ( dVec.GetLength() );
 	dVec.Add();
 	dVec.Last().m_sName = tValue.m_sValue;
 	dVec.Last().m_sName.ToLower();

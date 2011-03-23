@@ -189,17 +189,17 @@ static CSphString		g_sLogFile;							// log file name
 static bool				g_bLogTty		= false;			// cached isatty(g_iLogFile)
 static LogFormat_e		g_eLogFormat	= LOG_FORMAT_PLAIN;
 
-static int				g_iReadTimeout	= 5;	// sec
-static int				g_iWriteTimeout	= 5;
-static int				g_iClientTimeout = 300;
-static int				g_iChildren		= 0;
-static int				g_iMaxChildren	= 0;
-static bool				g_bPreopenIndexes = false;
-static bool				g_bOnDiskDicts	= false;
-static bool				g_bUnlinkOld	= true;
-static bool				g_bWatchdog		= true;
-static int				g_iExpansionLimit = 0;
-static bool				g_bCompatResults = true;
+static int				g_iReadTimeout		= 5;	// sec
+static int				g_iWriteTimeout		= 5;
+static int				g_iClientTimeout	= 300;
+static int				g_iChildren			= 0;
+static int				g_iMaxChildren		= 0;
+static bool				g_bPreopenIndexes	= false;
+static bool				g_bOnDiskDicts		= false;
+static bool				g_bUnlinkOld		= true;
+static bool				g_bWatchdog			= true;
+static int				g_iExpansionLimit	= 0;
+static bool				g_bCompatResults	= false;
 
 struct Listener_t
 {
@@ -13650,7 +13650,10 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_bOnDiskDicts = hSearchd.GetInt ( "ondisk_dict_default", (int)g_bOnDiskDicts )!=0;
 	g_bUnlinkOld = hSearchd.GetInt ( "unlink_old", (int)g_bUnlinkOld )!=0;
 	g_iExpansionLimit = hSearchd.GetInt ( "expansion_limit", 0 );
-	g_bCompatResults = hSearchd.GetInt ( "compat_results", (int)g_bCompatResults )!=0;
+	g_bCompatResults = hSearchd.GetInt ( "compat_sphinxql_magics", (int)g_bCompatResults )!=0;
+
+	if ( g_bCompatResults )
+		sphWarning ( "compat_sphinxql_magics=1 is deprecated; please update your application and config" );
 
 	if ( hSearchd("max_matches") )
 	{
@@ -14138,6 +14141,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	/////////////////////
 
 	ConfigureSearchd ( hConf, bOptPIDFile );
+	g_bWatchdog = hSearchdpre.GetInt ( "watchdog", g_bWatchdog )!=0;
 
 	if ( hSearchdpre("workers") )
 	{

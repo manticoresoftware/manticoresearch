@@ -2616,7 +2616,7 @@ public:
 	/// called when index is loaded and prepared to work
 	virtual void				PostSetup() = 0;
 
-	virtual int					AttrLock ( int iIncrement ) const { return 0; }
+	virtual int					AttrLock ( int ) const { return 0; }
 	virtual bool				AttrLocked() const { return false; }
 	virtual void				AttrRelease() const {}
 

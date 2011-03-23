@@ -293,13 +293,14 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "binlog_max_log_size",	0, NULL },
 	{ "thread_stack",			0, NULL },
 	{ "expansion_limit",		0, NULL },
-	{ "compat_results",			0, NULL },
+	{ "compat_sphinxql_magics",	0, NULL },
 	{ "rt_flush_period",		0, NULL },
 	{ "query_log_format",		0, NULL },
 	{ "mysql_version_string",	0, NULL },
 	{ "plugin_dir",				0, NULL },
 	{ "collation_server",		0, NULL },
 	{ "collation_libc_locale",	0, NULL },
+	{ "watchdog",				0, NULL },
 	{ NULL,						0, NULL }
 };
 

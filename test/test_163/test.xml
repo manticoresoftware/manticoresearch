@@ -17,8 +17,8 @@ searchd
 	<searchd_settings/>
 	workers = threads
 	<dynamic>
-		<variant>compat_results = 1</variant>
-		<variant>compat_results = 0</variant>
+		<variant>compat_sphinxql_magics = 1</variant>
+		<variant>compat_sphinxql_magics = 0</variant>
 	</dynamic>
 }
 
@@ -27,7 +27,7 @@ source src_main
 	type			= mysql
 	<sql_settings/>
 
-	sql_query		= SELECT id, body, concat ( str1, ' main' ) as str1, idd1, 100 as tag FROM test_table
+	sql_query		= SELECT id, body, CONCAT(str1, ' main') AS str1, idd1, 100 as tag FROM test_table
 	sql_attr_uint	= idd1
 	sql_attr_uint	= tag
 	sql_attr_string = str1
@@ -38,7 +38,7 @@ source src_delta1
 	type			= mysql
 	<sql_settings/>
 	
-	sql_query		= SELECT id, body, concat ( str1, ' delta1' ) as str1, idd1, 101 as tag FROM test_table where id>3
+	sql_query		= SELECT id, body, CONCAT(str1, ' delta1') AS str1, idd1, 101 as tag FROM test_table where id>3
 	sql_attr_uint	= idd1
 	sql_attr_uint	= tag
 	sql_attr_string = str1
@@ -50,7 +50,7 @@ source src_delta2
 	type			= mysql
 	<sql_settings/>
 
-	sql_query		= SELECT id, body, 'delta2' as str1, concat ( str1, ' delta2' ) as str2, idd1, 102 as tag FROM test_table where id>4
+	sql_query		= SELECT id, body, 'delta2' as str1, CONCAT(str1, ' delta2') AS str2, idd1, 102 as tag FROM test_table where id>4
 	sql_attr_uint	= idd1
 	sql_attr_uint	= tag
 	sql_attr_string = str1

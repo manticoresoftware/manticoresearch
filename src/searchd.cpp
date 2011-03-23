@@ -199,7 +199,7 @@ static bool				g_bOnDiskDicts		= false;
 static bool				g_bUnlinkOld		= true;
 static bool				g_bWatchdog			= true;
 static int				g_iExpansionLimit	= 0;
-static bool				g_bCompatResults	= false;
+static bool				g_bCompatResults	= true;
 
 struct Listener_t
 {

@@ -3428,8 +3428,13 @@ int CSphTokenizerTraits<IS_UTF8>::CodepointArbitration ( int iCode, bool bWasEsc
 				// inline dot ("in the U.K and"), not a boundary
 				bool bInwordDot = ( sphIsAlpha ( m_pCur[0] ) || m_pCur[0]==',' );
 
-				// followed by a small letter ("Yoyodine Inc. exists"), not a boundary
-				bool bInphraseDot = ( sphIsSpace ( m_pCur[0] ) && 'a'<=m_pCur[1] && m_pCur[1]<='z' );
+				// followed by a small letter or an opening paren, not a boundary
+				// FIXME? might want to scan for more than one space
+				// Yoyodine Inc. exists ...
+				// Yoyodine Inc. (the company) ..
+				bool bInphraseDot = ( sphIsSpace ( m_pCur[0] )
+					&& ( ( 'a'<=m_pCur[1] && m_pCur[1]<='z' )
+						|| ( m_pCur[1]=='(' && 'a'<=m_pCur[2] && m_pCur[2]<='z' ) ) );
 
 				// middle initial ("John D. Doe"), not a boundary
 				bool bMiddleName = ( m_pCur[0]==' ' && m_pCur-3>=m_pBuffer && m_pCur[-3]==' ' && 'A'<=m_pCur[-2] && m_pCur[-2]<='Z' );

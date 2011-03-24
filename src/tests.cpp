@@ -1956,6 +1956,7 @@ void TestSentenceTokenizer()
 		"S.T.A.L.K.E.R. sold well in the U.K and elsewhere. Including Russia.", "s", "t", "a", "l", "k", "e", "r", "sold", "well", "in", "the", "u", "k", "and", "elsewhere", SENTENCE, "including", "russia", SENTENCE, NULL,
 		"Yoyodine Inc. exists since 1800", "yoyodine", "inc", "exists", "since", "1800", NULL,
 		"John D. Doe, our CEO", "john", "d", "doe", "our", "ceo", NULL,
+		"Yoyodine Inc. (the Company)", "yoyodine", "inc", "the", "company", NULL,
 		NULL
 	};
 

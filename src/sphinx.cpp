@@ -14725,8 +14725,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 		SphWordID_t uNewWordid = 0;
 		SphOffset_t iNewDoclistOffset = 0;
-		int iDocs = 0;
-		int iHits = 0;
+		int64_t iDocs = 0;
+		int64_t iHits = 0;
 
 		if ( bWordDict )
 		{
@@ -14776,7 +14776,12 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				LOC_FAIL(( fp, "invalid word hint (pos="INT64_FMT", word=%s, hint=%d)",
 					iDictPos, sWord, iHint ));
 
+			if ( iDocs<=0 || iHits<=0 || iHits<iDocs )
+				LOC_FAIL(( fp, "invalid docs/hits (pos="INT64_FMT", word=%s, docs="INT64_FMT", hits="INT64_FMT")",
+					(int64_t)iDictPos, sWord, iDocs, iHits ));
+
 			memcpy ( sLastWord, sWord, sizeof(sLastWord) );
+
 		} else
 		{
 			// finish reading the entire entry
@@ -14792,11 +14797,11 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			if ( iNewDoclistOffset<=iDoclistOffset )
 				LOC_FAIL(( fp, "doclist offset decreased (pos="INT64_FMT", wordid="UINT64_FMT")",
 					(int64_t)iDictPos, (uint64_t)uNewWordid ));
-		}
 
-		if ( iDocs<=0 || iHits<=0 || iHits<iDocs )
-			LOC_FAIL(( fp, "invalid docs/hits (pos="INT64_FMT", wordid="UINT64_FMT", docs=%d, hits=%d)",
-				(int64_t)iDictPos, (uint64_t)uNewWordid, iDocs, iHits ));
+			if ( iDocs<=0 || iHits<=0 || iHits<iDocs )
+				LOC_FAIL(( fp, "invalid docs/hits (pos="INT64_FMT", wordid="UINT64_FMT", docs="INT64_FMT", hits="INT64_FMT")",
+					(int64_t)iDictPos, (uint64_t)uNewWordid, iDocs, iHits ));
+		}
 
 		// update stats, add checkpoint
 		if ( ( iWordsTotal%iWordPerCP )==0 )

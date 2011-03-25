@@ -502,6 +502,9 @@ public:
 	/// enable zone indexing
 	virtual bool					EnableZoneIndexing ( CSphString & sError );
 
+	/// enable tokenized multiform tracking
+	virtual void					EnableTokenizedMultiformTracking () {}
+
 	/// get last token length, in codepoints
 	virtual int						GetLastTokenLen () const { return m_iLastTokenLen; }
 
@@ -516,6 +519,9 @@ public:
 
 	/// get amount of overshort keywords skipped before this token
 	virtual int						GetOvershortCount () { return m_iOvershortCount; }
+
+	/// get original tokenized multiform (if any); NULL means there was none
+	virtual BYTE *					GetTokenizedMultiform () { return NULL; }
 
 	virtual bool					TokenIsBlended () { return m_bBlended; }
 	virtual bool					TokenIsBlendedPart () { return m_bBlendedPart; }

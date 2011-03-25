@@ -2094,10 +2094,12 @@ public:
 	virtual BYTE *					GetToken ();
 	virtual int						GetCodepointLength ( int iCode ) const		{ return m_pTokenizer->GetCodepointLength ( iCode ); }
 	virtual void					EnableQueryParserMode ( bool bEnable )		{ m_pTokenizer->EnableQueryParserMode ( bEnable ); }
+	virtual void					EnableTokenizedMultiformTracking ()			{ m_bBuildMultiform = true; }
 	virtual int						GetLastTokenLen () const					{ return m_pLastToken->m_iTokenLen; }
 	virtual bool					GetBoundary ()								{ return m_pLastToken->m_bBoundary; }
 	virtual bool					WasTokenSpecial ()							{ return m_pLastToken->m_bSpecial; }
 	virtual int						GetOvershortCount ()						{ return m_pLastToken->m_iOvershortCount; }
+	virtual BYTE *					GetTokenizedMultiform ()					{ return m_sTokenizedMultiform[0] ? m_sTokenizedMultiform : NULL; }
 
 public:
 	virtual ISphTokenizer *			Clone ( bool bEscaped ) const;
@@ -2113,6 +2115,9 @@ private:
 	const CSphMultiformContainer *	m_pMultiWordforms;
 	int								m_iStoredStart;
 	int								m_iStoredLen;
+
+	bool				m_bBuildMultiform;
+	BYTE				m_sTokenizedMultiform [ 3*SPH_MAX_WORD_LEN+4 ];
 
 	struct StoredToken_t
 	{
@@ -4612,10 +4617,12 @@ CSphTokenizer_Filter::CSphTokenizer_Filter ( ISphTokenizer * pTokenizer, const C
 	, m_pMultiWordforms ( pContainer )
 	, m_iStoredStart	( 0 )
 	, m_iStoredLen		( 0 )
+	, m_bBuildMultiform	( false )
 	, m_pLastToken		( NULL )
 {
 	assert ( pTokenizer && pContainer );
 	m_dStoredTokens.Resize ( pContainer->m_iMaxTokens + 1 );
+	m_sTokenizedMultiform[0] = '\0';
 }
 
 
@@ -4639,6 +4646,8 @@ void CSphTokenizer_Filter::FillTokenInfo ( StoredToken_t * pToken )
 
 BYTE * CSphTokenizer_Filter::GetToken ()
 {
+	m_sTokenizedMultiform[0] = '\0';
+
 	BYTE * pToken = ( m_iStoredLen>0 )
 		? m_dStoredTokens [m_iStoredStart].m_sToken
 		: m_pTokenizer->GetToken ();
@@ -4741,6 +4750,24 @@ BYTE * CSphTokenizer_Filter::GetToken ()
 
 			m_iStoredStart = ( m_iStoredStart+iTokensPerForm ) % iSize;
 			m_iStoredLen -= iTokensPerForm;
+
+			if ( m_bBuildMultiform )
+			{
+				BYTE * pOut = m_sTokenizedMultiform;
+				BYTE * pMax = pOut + sizeof(m_sTokenizedMultiform);
+				for ( int i=0; i<iTokensPerForm && pOut<pMax; i++ )
+				{
+					const BYTE * sTok = m_dStoredTokens [ ( m_iStoredStart+i ) % iSize ].m_sToken;
+					if ( i && pOut<pMax )
+						*pOut++ = ' ';
+					while ( *sTok && pOut<pMax )
+						*pOut++ = *sTok++;
+				}
+				if ( pOut<pMax )
+					*pOut++ = '\0';
+				else
+					pMax[-1] = '\0';
+			}
 
 			assert ( m_iStoredLen>=0 );
 			return (BYTE*)pCurForm->m_sNormalForm.cstr ();
@@ -13631,6 +13658,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 	CSphScopedPtr <CSphAutofile> pHitlist ( NULL );
 
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( false ) ); // avoid race
+	pTokenizer->EnableTokenizedMultiformTracking ();
 
 	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
 	CSphDict * pDictBase = m_pDict;
@@ -13670,7 +13698,11 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 
 	while ( ( sWord = pTokenizer->GetToken() )!=NULL )
 	{
-		sTokenized = (const char*)sWord;
+		BYTE * sMultiform = pTokenizer->GetTokenizedMultiform();
+		if ( sMultiform )
+			sTokenized = (const char*)sMultiform;
+		else
+			sTokenized = (const char*)sWord;
 
 		SphWordID_t iWord = pDict->GetWordID ( sWord );
 		if ( iWord )

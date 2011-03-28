@@ -8088,8 +8088,14 @@ bool SnippetReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t &, 
 	CSphVector<ExcerptQuery_t> & dQueries = m_pWorker->m_dQueries;
 	const SnippetWorker_t & tWorker = m_pWorker->m_dWorkers[iCurrentWorker];
 
-	for ( int iDoc = tWorker.m_iHead; iDoc!=-1; iDoc=dQueries[iDoc].m_iNext )
+	int iDoc = tWorker.m_iHead;
+	while ( iDoc!=-1 )
+	{
 		dQueries[iDoc].m_sRes = tReq.GetString().Leak();
+		int iNext = dQueries[iDoc].m_iNext;
+		dQueries[iDoc].m_iNext = -1; // mark as processed
+		iDoc = iNext;
+	}
 
 	return true;
 }
@@ -8357,8 +8363,9 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 			// might add dynamic programming or something later if needed
 
 			int iLocalPart = 1;	// one instance = one worker. Or set to = g_iDistThreads, one local thread = one worker.
+			int iRemoteAgents = dRemoteSnippets.m_dAgents.GetLength();
 
-			dRemoteSnippets.m_dWorkers.Resize ( iLocalPart + dRemoteSnippets.m_dAgents.GetLength() );
+			dRemoteSnippets.m_dWorkers.Resize ( iLocalPart + iRemoteAgents );
 			for ( int i=0; i<iLocalPart; i++ )
 					dRemoteSnippets.m_dWorkers[i].m_bLocal = true;
 
@@ -8416,6 +8423,20 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 
 		for ( int i=1; i<dThreads.GetLength(); i++ )
 			sphThreadJoin ( &dThreads[i].m_tThd );
+
+		if ( iSuccesses!=iRemote )
+		{
+			sphWarning ( "Remote snippets: some of the agents didn't answered: %d asked, %d answers received", iRemote, iSuccesses );
+			// inverse the success/failed state - so that the queries with negative m_iNext are treated as failed
+			ARRAY_FOREACH ( i, dQueries )
+					dQueries[i].m_iNext = (dQueries[i].m_iNext<0)?0:-1;
+
+			// failsafe - one more turn for failed queries on local agent
+			SnippetThread_t & t = dThreads[0];
+			t.m_pQueries = dQueries.Begin();
+			iCurQuery = 0;
+			SnippetThreadFunc ( &dThreads[0] );
+		}
 		tLock.Done();
 
 		// back in query order

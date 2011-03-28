@@ -1352,14 +1352,34 @@ void sigusr1 ( int )
 #endif // !USE_WINDOWS
 
 
-// crash query handler
-static const char g_dEncodeBase64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-BYTE * sphEncodeBase64 ( BYTE * pDst, const BYTE * pSrc, int iLen )
+struct QueryCopyState_t
 {
-	for ( int i=0; i<iLen/3; i++ )
+	BYTE * m_pDst;
+	BYTE * m_pDstEnd;
+	const BYTE * m_pSrc;
+	const BYTE * m_pSrcEnd;
+};
+
+// crash query handler
+static const int g_iQueryLineLen = 80;
+static const char g_dEncodeBase64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+bool sphCopyEncodedBase64 ( QueryCopyState_t & tEnc )
+{
+	BYTE * pDst = tEnc.m_pDst;
+	const BYTE * pDstBase = tEnc.m_pDst;
+	const BYTE * pSrc = tEnc.m_pSrc;
+	const BYTE * pDstEnd = tEnc.m_pDstEnd-5;
+	const BYTE * pSrcEnd = tEnc.m_pSrcEnd-3;
+
+	while ( pDst<=pDstEnd && pSrc<=pSrcEnd )
 	{
+		// put line delimiter at max line length
+		if ( ( ( pDst-pDstBase ) % g_iQueryLineLen )>( ( pDst-pDstBase+4 ) % g_iQueryLineLen ) )
+			*pDst++ = '\n';
+
 		// Convert to big endian
-		DWORD uSrc = ( pSrc[i*3+0] << 16 ) | ( pSrc[i*3+1] << 8 ) | ( pSrc[i*3+2] );
+		DWORD uSrc = ( pSrc[0] << 16 ) | ( pSrc[1] << 8 ) | ( pSrc[2] );
+		pSrc += 3;
 
 		*pDst++ = g_dEncodeBase64 [ ( uSrc & 0x00FC0000 ) >> 18 ];
 		*pDst++ = g_dEncodeBase64 [ ( uSrc & 0x0003F000 ) >> 12 ];
@@ -1367,40 +1387,74 @@ BYTE * sphEncodeBase64 ( BYTE * pDst, const BYTE * pSrc, int iLen )
 		*pDst++ = g_dEncodeBase64 [ ( uSrc & 0x0000003F ) ];
 	}
 
-	if ( iLen%3==1 )
+	// there is a tail in source data and a room for it at destination buffer
+	if ( pSrc<tEnc.m_pSrcEnd && ( tEnc.m_pSrcEnd-pSrc<3 ) && ( pDst<=pDstEnd-4 ) )
 	{
-		DWORD uSrc = pSrc[iLen-1]<<16;
-		*pDst++ = g_dEncodeBase64 [ ( uSrc & 0x00FC0000 ) >> 18 ];
-		*pDst++ = g_dEncodeBase64 [ ( uSrc & 0x0003F000 ) >> 12 ];
-		*pDst++ = '=';
-		*pDst++ = '=';
-	} else if ( iLen%3==2 )
-	{
-		DWORD uSrc = ( pSrc[iLen-2]<<16 ) | ( pSrc[iLen-1] << 8 );
-		*pDst++ = g_dEncodeBase64 [ ( uSrc & 0x00FC0000 ) >> 18 ];
-		*pDst++ = g_dEncodeBase64 [ ( uSrc & 0x0003F000 ) >> 12 ];
-		*pDst++ = g_dEncodeBase64 [ ( uSrc & 0x00000FC0 ) >> 6 ];
-		*pDst++ = '=';
+		int iLeft = ( tEnc.m_pSrcEnd - pSrc ) % 3;
+		if ( iLeft==1 )
+		{
+			DWORD uSrc = pSrc[0]<<16;
+			pSrc += 1;
+			*pDst++ = g_dEncodeBase64 [ ( uSrc & 0x00FC0000 ) >> 18 ];
+			*pDst++ = g_dEncodeBase64 [ ( uSrc & 0x0003F000 ) >> 12 ];
+			*pDst++ = '=';
+			*pDst++ = '=';
+		} else if ( iLeft==2 )
+		{
+			DWORD uSrc = ( pSrc[0]<<16 ) | ( pSrc[1] << 8 );
+			pSrc += 2;
+			*pDst++ = g_dEncodeBase64 [ ( uSrc & 0x00FC0000 ) >> 18 ];
+			*pDst++ = g_dEncodeBase64 [ ( uSrc & 0x0003F000 ) >> 12 ];
+			*pDst++ = g_dEncodeBase64 [ ( uSrc & 0x00000FC0 ) >> 6 ];
+			*pDst++ = '=';
+		}
 	}
 
-	return pDst;
+	tEnc.m_pDst = pDst;
+	tEnc.m_pSrc = pSrc;
+
+	return ( tEnc.m_pSrc<tEnc.m_pSrcEnd );
 }
 
-#define SPH_LAST_QUERY_MAX_SIZE 4096
+static bool sphCopySphinxQL ( QueryCopyState_t & tState )
+{
+	BYTE * pDst = tState.m_pDst;
+	const BYTE * pSrc = tState.m_pSrc;
+	BYTE * pNextLine = pDst+g_iQueryLineLen;
+
+	while ( pDst<tState.m_pDstEnd && pSrc<tState.m_pSrcEnd )
+	{
+		if ( pDst>pNextLine && pDst+1<tState.m_pDstEnd && ( sphIsSpace ( *pSrc ) || *pSrc==',' ) )
+		{
+			*pDst++ = *pSrc++;
+			*pDst++ = '\n';
+			pNextLine = pDst + g_iQueryLineLen;
+		} else
+		{
+			*pDst++ = *pSrc++;
+		}
+	}
+
+	tState.m_pDst = pDst;
+	tState.m_pSrc = pSrc;
+
+	return ( tState.m_pSrc<tState.m_pSrcEnd );
+}
+
+typedef bool CopyQuery_fn ( QueryCopyState_t & tState );
+
 #define SPH_TIME_PID_MAX_SIZE 256
 const char		g_sCrashedBannerAPI[] = "\n--- crashed SphinxAPI request dump ---\n";
 const char		g_sCrashedBannerMySQL[] = "\n--- crashed SphinxQL request dump ---\n";
+const char		g_sCrashedBannerTail[] = "\n--- request dump end ---\n";
+const char		g_sMinidumpBanner[] = "minidump located at: ";
 const char		g_sMemoryStatBanner[] = "\n--- memory statistics ---\n";
-static BYTE		g_dEncoded[	SPH_TIME_PID_MAX_SIZE
-							+ 2 * Max ( sizeof(g_sCrashedBannerAPI), sizeof(g_sCrashedBannerMySQL) )
-							+ SPH_LAST_QUERY_MAX_SIZE*4/3 ];
-static BYTE		g_dQuery [SPH_LAST_QUERY_MAX_SIZE*4/3];
+static BYTE		g_dCrashQueryBuff [4096];
 static char		g_sCrashInfo [SPH_TIME_PID_MAX_SIZE] = "[][]\n";
 static int		g_iCrashInfoLen = 0;
 
 #if USE_WINDOWS
-static char		g_sMinidump[SPH_TIME_PID_MAX_SIZE] = "\n";
-static int		g_iMinidumpLen = 0;
+static char		g_sMinidump[SPH_TIME_PID_MAX_SIZE] = "";
 #endif
 
 SphCrashLogger_c SphCrashLogger_c::m_tLastQuery = SphCrashLogger_c ();
@@ -1454,64 +1508,81 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 			tQuery = *pQueryTLS;
 	}
 
-	tQuery.m_iSize = Min ( tQuery.m_iSize, SPH_LAST_QUERY_MAX_SIZE );
-
-	BYTE * pEncoded = g_dEncoded;
-
 	// request dump banner
 	int iBannerLen = ( tQuery.m_bMySQL ? sizeof(g_sCrashedBannerMySQL) : sizeof(g_sCrashedBannerAPI) ) - 1;
-	memcpy ( pEncoded, tQuery.m_bMySQL ? g_sCrashedBannerMySQL : g_sCrashedBannerAPI, iBannerLen );
-	pEncoded += iBannerLen;
+	const char * pBanner = tQuery.m_bMySQL ? g_sCrashedBannerMySQL : g_sCrashedBannerAPI;
+	sphWrite ( g_iLogFile, pBanner, iBannerLen );
 
 	// query
 	if ( tQuery.m_iSize )
 	{
-		if ( tQuery.m_bMySQL )
+		QueryCopyState_t tCopyState;
+		tCopyState.m_pDst = g_dCrashQueryBuff;
+		tCopyState.m_pDstEnd = g_dCrashQueryBuff + sizeof(g_dCrashQueryBuff);
+		tCopyState.m_pSrc = tQuery.m_pQuery;
+		tCopyState.m_pSrcEnd = tQuery.m_pQuery + tQuery.m_iSize;
+
+		CopyQuery_fn * pfnCopy = NULL;
+		if ( !tQuery.m_bMySQL )
 		{
-			memcpy ( pEncoded, tQuery.m_pQuery, tQuery.m_iSize );
-			pEncoded += tQuery.m_iSize;
+			pfnCopy = &sphCopyEncodedBase64;
+
+			// should be power of 3 to seamlessly convert to BASE64
+			BYTE dHeader[] = {
+				(BYTE)( ( tQuery.m_uCMD>>8 ) & 0xff ),
+				(BYTE)( tQuery.m_uCMD & 0xff ),
+				(BYTE)( ( tQuery.m_uVer>>8 ) & 0xff ),
+				(BYTE)( tQuery.m_uVer & 0xff ),
+				(BYTE)( ( tQuery.m_iSize>>24 ) & 0xff ),
+				(BYTE)( ( tQuery.m_iSize>>16 ) & 0xff ),
+				(BYTE)( ( tQuery.m_iSize>>8 ) & 0xff ),
+				(BYTE)( tQuery.m_iSize & 0xff ),
+				*tQuery.m_pQuery
+			};
+
+			QueryCopyState_t tHeaderState;
+			tHeaderState.m_pDst = g_dCrashQueryBuff;
+			tHeaderState.m_pDstEnd = g_dCrashQueryBuff + sizeof(g_dCrashQueryBuff);
+			tHeaderState.m_pSrc = dHeader;
+			tHeaderState.m_pSrcEnd = dHeader + sizeof(dHeader);
+			pfnCopy ( tHeaderState );
+			assert ( tHeaderState.m_pSrc==tHeaderState.m_pSrcEnd );
+			tCopyState.m_pDst = tHeaderState.m_pDst;
+			tCopyState.m_pSrc++;
 		} else
 		{
-			int iSize = Min ( tQuery.m_iSize, SPH_LAST_QUERY_MAX_SIZE-8 );
-			*(g_dQuery+0) = (BYTE)( ( tQuery.m_uCMD>>8 ) & 0xff );
-			*(g_dQuery+1) = (BYTE)( tQuery.m_uCMD & 0xff );
-			*(g_dQuery+2) = (BYTE)( ( tQuery.m_uVer>>8 ) & 0xff );
-			*(g_dQuery+3) = (BYTE)( tQuery.m_uVer & 0xff );
-			*(g_dQuery+4) = (BYTE)( ( iSize>>24 ) & 0xff );
-			*(g_dQuery+5) = (BYTE)( ( iSize>>16 ) & 0xff );
-			*(g_dQuery+6) = (BYTE)( ( iSize>>8 ) & 0xff );
-			*(g_dQuery+7) = (BYTE)( iSize & 0xff );
-			memcpy ( g_dQuery+8, tQuery.m_pQuery, iSize );
-			pEncoded = sphEncodeBase64 ( pEncoded, g_dQuery, Min ( tQuery.m_iSize+8, SPH_LAST_QUERY_MAX_SIZE ) );
+			pfnCopy = &sphCopySphinxQL;
+		}
+
+		while ( pfnCopy ( tCopyState ) )
+		{
+			sphWrite ( g_iLogFile, g_dCrashQueryBuff, tCopyState.m_pDst-g_dCrashQueryBuff );
+			tCopyState.m_pDst = g_dCrashQueryBuff; // reset the destination buffer
+		}
+		assert ( tCopyState.m_pSrc==tCopyState.m_pSrcEnd );
+
+		int iLeft = tCopyState.m_pDst-g_dCrashQueryBuff;
+		if ( iLeft>0 )
+		{
+			sphWrite ( g_iLogFile, g_dCrashQueryBuff, iLeft );
 		}
 	}
 
 	// tail
-	const char sTail[] = "\n--- request dump end ---\n";
-	memcpy ( pEncoded, sTail, sizeof(sTail)-1 );
-	pEncoded += sizeof(sTail)-1;
+	sphWrite ( g_iLogFile, g_sCrashedBannerTail, sizeof(g_sCrashedBannerTail)-1 );
 
 #if USE_WINDOWS
 	// mini-dump reference
-	const char sMinidump[] = "minidump at: ";
-	memcpy ( pEncoded, sMinidump, sizeof(sMinidump)-1 );
-	pEncoded += sizeof(sMinidump)-1;
-
-	memcpy ( pEncoded, g_sMinidump, g_iMinidumpLen );
-	pEncoded += g_iMinidumpLen;
-	*pEncoded++ = '\n';
+	int iMiniDumpLen = snprintf ( (char *)g_dCrashQueryBuff, sizeof(g_dCrashQueryBuff), "%s %s.%p.mdmp\n", g_sMinidumpBanner, g_sMinidump, tQuery.m_pQuery );
+	sphWrite ( g_iLogFile, g_dCrashQueryBuff, iMiniDumpLen );
+	snprintf ( (char *)g_dCrashQueryBuff, sizeof(g_dCrashQueryBuff), "%s.%p.mdmp", g_sMinidump, tQuery.m_pQuery );
 #endif
-
-	int iSize = pEncoded-g_dEncoded;
-
-	lseek ( g_iLogFile, 0, SEEK_END );
-	sphWrite ( g_iLogFile, g_dEncoded, iSize );
 
 	// log trace
 #if !USE_WINDOWS
 	sphBacktrace ( g_iLogFile, g_bSafeTrace );
 #else
-	sphBacktrace ( pExc, g_sMinidump );
+	sphBacktrace ( pExc, (char *)g_dCrashQueryBuff );
 #endif
 
 	// threads table
@@ -1603,7 +1674,7 @@ void SetSignalHandlers ()
 	if ( !bSignalsSet )
 		sphFatal ( "sigaction(): %s", strerror(errno) );
 #else
-	g_iMinidumpLen = snprintf ( g_sMinidump, SPH_TIME_PID_MAX_SIZE-1, "%s.%d.mdmp", g_sPidFile ? g_sPidFile : "", (int)getpid() );
+	snprintf ( g_sMinidump, SPH_TIME_PID_MAX_SIZE-1, "%s.%d", g_sPidFile ? g_sPidFile : "", (int)getpid() );
 	SetUnhandledExceptionFilter ( SphCrashLogger_c::HandleCrash );
 #endif
 }
@@ -4970,6 +5041,7 @@ struct AggrResult_t : CSphQueryResult
 	CSphVector<PoolPtrs_t>		m_dTag2Pools;		///< tag to MVA and strings storage pools mapping
 	inline void					HoldAttrs ( const ServedIndex_t * pServed, int iQueries = 1 )
 	{
+		assert ( iQueries>0 );
 		pServed->m_pIndex->AttrLock ( iQueries );
 		m_dLockedAttrs.Add ( pServed->m_pIndex );
 	}

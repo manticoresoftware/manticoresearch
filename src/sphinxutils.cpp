@@ -1449,20 +1449,28 @@ void sphBacktrace ( int iFD, bool bSafe )
 void sphBacktrace ( EXCEPTION_POINTERS * pExc, const char * sFile )
 {
 	if ( !pExc || !sFile || !(*sFile) )
+	{
+		sphInfo( "can't generate minidump" );
 		return;
+	}
 
-	HANDLE hFile;
-	hFile = CreateFile ( sFile, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0 );
-	if ( !hFile )
+	HANDLE hFile = CreateFile ( sFile, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0 );
+	if ( hFile==INVALID_HANDLE_VALUE )
+	{
+		sphInfo( "can't create minidump file '%s'", sFile );
 		return;
+	}
 
 	MINIDUMP_EXCEPTION_INFORMATION tExcInfo;
 	tExcInfo.ExceptionPointers = pExc;
 	tExcInfo.ClientPointers = FALSE;
 	tExcInfo.ThreadId = GetCurrentThreadId();
 
-	MiniDumpWriteDump ( GetCurrentProcess(), GetCurrentProcessId(), hFile, MiniDumpNormal, &tExcInfo, 0, 0 );
+	bool bDumped = ( MiniDumpWriteDump ( GetCurrentProcess(), GetCurrentProcessId(), hFile, MiniDumpNormal, &tExcInfo, 0, 0 )==TRUE );
 	CloseHandle ( hFile );
+
+	if ( !bDumped )
+		sphInfo ( "can't dump minidump" );
 }
 
 #endif // USE_WINDOWS

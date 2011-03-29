@@ -35,8 +35,8 @@ public:
 public:
 	bool			Parse ( XQQuery_t & tQuery, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict );
 
-	bool			Error ( const char * sTemplate, ... ) __attribute__((format(printf,2,3)));
-	void			Warning ( const char * sTemplate, ... ) __attribute__((format(printf,2,3)));
+	bool			Error ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
+	void			Warning ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 
 	bool			AddField ( DWORD & uFields, const char * szField, int iLen );
 	bool			ParseFields ( DWORD & uFields, int & iMaxFieldPos );
@@ -985,6 +985,28 @@ static void DeleteNodesWOFields ( XQNode_t * pNode )
 }
 
 
+static bool CheckQuorum ( XQNode_t * pNode, CSphString * pError )
+{
+	assert ( pError );
+	if ( !pNode )
+		return true;
+
+	if ( pNode->GetOp()==SPH_QUERY_QUORUM && pNode->m_iOpArg<=0 )
+	{
+		pError->SetSprintf ( "quorum threshold too low (%d)", pNode->m_iOpArg );
+		return false;
+	}
+
+	bool bValid = true;
+	ARRAY_FOREACH_COND ( i, pNode->m_dChildren, bValid )
+	{
+		bValid &= CheckQuorum ( pNode->m_dChildren[i], pError );
+	}
+
+	return bValid;
+}
+
+
 static void FixupDegenerates ( XQNode_t * pNode )
 {
 	if ( !pNode )
@@ -1051,6 +1073,12 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTok
 	if ( !FixupNots ( m_pRoot ) )
 	{
 		Cleanup ();
+		return false;
+	}
+
+	if ( !CheckQuorum ( m_pRoot, &m_pParsed->m_sParseError ) )
+	{
+		Cleanup();
 		return false;
 	}
 

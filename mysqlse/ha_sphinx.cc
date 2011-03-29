@@ -1368,11 +1368,13 @@ bool CSphSEQuery::ParseField ( char * sField )
 				m_sQuery = sField;
 				m_bQuery = true;
 
-				// unescape
+				// unescape only 1st one
 				char *s = sField, *d = sField;
+				int iSlashes = 0;
 				while ( *s )
 				{
-					if ( *s!='\\' ) *d++ = *s;
+					iSlashes = ( *s=='\\' ) ? iSlashes+1 : 0;
+					if ( ( iSlashes%2 )==0 ) *d++ = *s;
 					s++;
 				}
 				*d = '\0';
@@ -1776,6 +1778,8 @@ bool CSphSEQuery::Parse ()
 			SPH_RET(false);
 		pCur = pNext;
 	}
+
+	SPH_DEBUG ( "q [[ %s ]]", m_sQuery );
 
 	SPH_RET(true);
 }

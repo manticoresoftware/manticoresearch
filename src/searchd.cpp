@@ -8424,9 +8424,12 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		for ( int i=1; i<dThreads.GetLength(); i++ )
 			sphThreadJoin ( &dThreads[i].m_tThd );
 
-		if ( iSuccesses!=iRemote )
+		if ( iSuccesses!=dRemoteSnippets.m_dAgents.GetLength() )
 		{
-			sphWarning ( "Remote snippets: some of the agents didn't answered: %d asked, %d answers received", iRemote, iSuccesses );
+			sphWarning ( "Remote snippets: some of the agents didn't answered: %d queried, %d available, %d answered",
+				dRemoteSnippets.m_dAgents.GetLength(),
+				iRemote,
+				iSuccesses );
 			// inverse the success/failed state - so that the queries with negative m_iNext are treated as failed
 			ARRAY_FOREACH ( i, dQueries )
 					dQueries[i].m_iNext = (dQueries[i].m_iNext<0)?0:-1;

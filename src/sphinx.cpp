@@ -5180,6 +5180,9 @@ void CSphSchema::AddAttr ( const CSphColumnInfo & tCol, bool bDynamic )
 	m_dAttrs.Add ( tCol );
 	CSphAttrLocator & tLoc = m_dAttrs.Last().m_tLocator;
 
+	if ( tLoc.IsID() )
+		return;
+
 	int iBits = ROWITEM_BITS;
 	if ( tCol.m_tLocator.m_iBitCount>0 )		iBits = tCol.m_tLocator.m_iBitCount;
 	if ( tCol.m_eAttrType==SPH_ATTR_BOOL )		iBits = 1;

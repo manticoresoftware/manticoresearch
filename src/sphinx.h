@@ -840,6 +840,11 @@ struct CSphAttrLocator
 		return IsBitfield() ? -1 : ( m_iBitOffset / ROWITEM_BITS );
 	}
 
+	bool IsID () const
+	{
+		return m_iBitOffset==-8*(int)sizeof(SphDocID_t) && m_iBitCount==8*sizeof(SphDocID_t);
+	}
+
 #ifndef NDEBUG
 	/// get last item touched by this attr (for debugging checks only)
 	int GetMaxRowitem () const
@@ -1033,7 +1038,12 @@ public:
 	{
 		// m_pRowpart[tLoc.m_bDynamic] is 30% faster on MSVC 2005
 		// same time on gcc 4.x though, ~1 msec per 1M calls, so lets avoid the hassle for now
-		return sphGetRowAttr ( tLoc.m_bDynamic ? m_pDynamic : m_pStatic, tLoc );
+		if ( tLoc.m_iBitOffset>=0 )
+			return sphGetRowAttr ( tLoc.m_bDynamic ? m_pDynamic : m_pStatic, tLoc );
+		if ( tLoc.IsID() )
+			return m_iDocID;
+		assert ( false && "Unknown negative-bitoffset locator" );
+		return 0;
 	}
 
 	/// float getter
@@ -1045,6 +1055,11 @@ public:
 	/// integer setter
 	void SetAttr ( const CSphAttrLocator & tLoc, SphAttr_t uValue )
 	{
+		if ( tLoc.IsID() )
+		{
+			// m_iDocID = uValue;
+			return;
+		}
 		assert ( tLoc.m_bDynamic );
 		assert ( tLoc.GetMaxRowitem() < (int)m_pDynamic[-1] );
 		sphSetRowAttr ( m_pDynamic, tLoc, uValue );

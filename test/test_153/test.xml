@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 <name>aggregate, aliases, different sorting, grouping and schemas vs different type of distributed</name>
+<requires>
+<id32/>
+</requires>
 <config>
 indexer
 {
@@ -217,8 +220,8 @@ index distlfake
 
 <!-- Test the schema transmitting to agent - t is in select, but groupattr and groupsort (gr) is not-->
 
-<query index="dist0" select="tag+1 AS t" groupattr="tag" groupsort="gr desc"/>
-<query index="dist4" select="tag+1 as t" groupattr="tag" groupsort="gr desc"/>
+<query index="dist0" select="tag+1 AS t,tag,gr" groupattr="tag" groupsort="gr desc"/>
+<query index="dist4" select="tag+1 as t,tag,gr" groupattr="tag" groupsort="gr desc"/>
 <query index="dist4" select="tag,gr" groupattr="tag" groupsort="gr desc" />
 
 <!-- commented out, because different results in id64 returned - bigind vs int which causes fault -->
@@ -229,16 +232,16 @@ index distlfake
 <query index="dist5">test</query>
 
 <!-- groupsort is not in the schema -->
-<query index="dist52" select="tag+1 as t" groupattr="t" groupsort="gr asc"/>
-<query index="dist50" select="tag+1 as t" groupsort="gr asc"/> -->
+<query index="dist52" select="tag+1 as t,gr" groupattr="t" groupsort="gr asc"/>
+<query index="dist50" select="tag+1 as t,gr" groupsort="gr asc"/> -->
 
 <!-- Now test the dist contains different schemas -->
 <!-- Note that each index has 'idxfake' as part of it, and the last doesn't contain 'tag' attribute -->
 <!-- distfake - both remote, disthfake - fake remote, disthfakeb - fake local, distlfake - both local -->
- <query index="distfake" select="gr+1 as t" groupattr="t" groupsort="tag asc"/> 
- <query index="disthfakeb" select="gr+1 as t" groupattr="t" groupsort="tag asc"/> 
- <query index="disthfake" select="gr+1 as t" groupattr="t" groupsort="tag asc"/> 
- <query index="distlfake" select="gr+1 as t" groupattr="t" groupsort="tag asc"/> 
+ <query index="distfake" select="gr+1 as t,tag" groupattr="t" groupsort="tag asc"/> 
+ <query index="disthfakeb" select="gr+1 as t,tag" groupattr="t" groupsort="tag asc"/> 
+ <query index="disthfake" select="gr+1 as t,tag" groupattr="t" groupsort="tag asc"/> 
+ <query index="distlfake" select="gr+1 as t,tag" groupattr="t" groupsort="tag asc"/> 
 
 
 </queries>

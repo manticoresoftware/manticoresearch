@@ -945,6 +945,7 @@ public:
 			Reserve ( m_iLength+1 );
 
 		memmove ( m_pData+iIndex+1, m_pData+iIndex, ( m_iLength++-iIndex ) * sizeof tValue );
+		memset ( m_pData+iIndex, 0, sizeof tValue );
 		m_pData[iIndex] = tValue;
 	}
 

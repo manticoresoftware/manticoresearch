@@ -207,7 +207,7 @@ protected:
 	void					HighlightStart ( const ExcerptQuery_t & q );
 	bool					HighlightBestPassages ( const ExcerptQuery_t & q );
 
-	void					ResultEmit ( const char * sLine, int iPassageId=0 );
+	void					ResultEmit ( const char * sLine, bool bHasMacro=false, int iPassageId=0, const char * sPostPassage=NULL );
 	void					ResultEmit ( const Token_t & sTok );
 
 	void					AddJunk ( int iStart, int iLength, int iBoundary );
@@ -971,14 +971,14 @@ void ExcerptGen_c::HighlightPhrase ( const ExcerptQuery_t & q, int iTok, int iEn
 		bool bQWord = m_dTokens[iTok].m_uWords!=0;
 
 		if ( bQWord && iPhrase==0 )
-			ResultEmit ( q.m_sBeforeMatch.cstr(), m_iPassageId );
+			ResultEmit ( q.m_sBeforeMatch.cstr(), q.m_bHasPassageMacro, m_iPassageId, q.m_sBeforeMatchPassage.cstr() );
 
 		ResultEmit ( m_dTokens[iTok] );
 		iPhrase += bQWord ? 1 : 0;
 
 		if ( bQWord && iPhrase==m_dWords.GetLength() )
 		{
-			ResultEmit ( q.m_sAfterMatch.cstr(), m_iPassageId++ );
+			ResultEmit ( q.m_sAfterMatch.cstr(), q.m_bHasPassageMacro, m_iPassageId++, q.m_sAfterMatchPassage.cstr() );
 			iPhrase = 0;
 		}
 	}
@@ -1001,15 +1001,15 @@ void ExcerptGen_c::HighlightAll ( const ExcerptQuery_t & q )
 			if ( ( m_dTokens[iTok].m_uWords!=0 ) ^ bOpen )
 			{
 				if ( bOpen )
-					ResultEmit ( q.m_sAfterMatch.cstr(), m_iPassageId++ );
+					ResultEmit ( q.m_sAfterMatch.cstr(), q.m_bHasPassageMacro, m_iPassageId++, q.m_sAfterMatchPassage.cstr() );
 				else
-					ResultEmit ( q.m_sBeforeMatch.cstr(), m_iPassageId );
+					ResultEmit ( q.m_sBeforeMatch.cstr(), q.m_bHasPassageMacro, m_iPassageId, q.m_sBeforeMatchPassage.cstr() );
 				bOpen = !bOpen;
 			}
 			ResultEmit ( m_dTokens[iTok] );
 		}
 		if ( bOpen )
-			ResultEmit ( q.m_sAfterMatch.cstr(), m_iPassageId++ );
+			ResultEmit ( q.m_sAfterMatch.cstr(), q.m_bHasPassageMacro, m_iPassageId++, q.m_sAfterMatchPassage.cstr() );
 	}
 }
 
@@ -1028,40 +1028,31 @@ void ExcerptGen_c::HighlightStart ( const ExcerptQuery_t & q )
 }
 
 
-void ExcerptGen_c::ResultEmit ( const char * sLine, int iPassageId )
+void ExcerptGen_c::ResultEmit ( const char * sLine, bool bHasMacro, int iPassageId, const char * sPostPassage )
 {
-	if ( !iPassageId )
+	// plain old emit
+	while ( *sLine )
 	{
-		// plain old emit
-		while ( *sLine )
-		{
-			assert ( (*(BYTE*)sLine)<128 );
-			m_dResult.Add ( *sLine++ );
-			m_iResultLen++;
-		}
+		assert ( (*(BYTE*)sLine)<128 );
+		m_dResult.Add ( *sLine++ );
+		m_iResultLen++;
+	}
 
-	} else
+	if ( !bHasMacro )
+		return;
+
+	char sBuf[16];
+	int iPassLen = snprintf ( sBuf, sizeof(sBuf), "%d", iPassageId );
+	for ( int i=0; i<iPassLen; i++ )
 	{
-		// emit with (our only) macro expansion
-		while ( *sLine )
-		{
-			if ( *sLine=='%' && strncmp ( sLine, "%PASSAGE_ID%", 12 )==0 )
-			{
-				char sBuf[16];
-				snprintf ( sBuf, sizeof(sBuf), "%d", iPassageId );
-				for ( const char * s = sBuf; *s; s++ )
-				{
-					m_dResult.Add ( *s );
-					m_iResultLen++;
-				}
-				sLine += 12; // skip zee macro
-			} else
-			{
-				assert ( (*(BYTE*)sLine)<128 );
-				m_dResult.Add ( *sLine++ );
-				m_iResultLen++;
-			}
-		}
+		m_dResult.Add ( sBuf[i] );
+		m_iResultLen++;
+	}
+
+	while ( sPostPassage && *sPostPassage )
+	{
+		m_dResult.Add ( *sPostPassage++ );
+		m_iResultLen++;
 	}
 }
 
@@ -1625,9 +1616,9 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 				{
 					if ( m_dTokens[iTok].m_uWords )
 					{
-						ResultEmit ( tQuery.m_sBeforeMatch.cstr(), m_iPassageId );
+						ResultEmit ( tQuery.m_sBeforeMatch.cstr(), tQuery.m_bHasPassageMacro, m_iPassageId, tQuery.m_sBeforeMatchPassage.cstr() );
 						ResultEmit ( m_dTokens[iTok] );
-						ResultEmit ( tQuery.m_sAfterMatch.cstr(), m_iPassageId++ );
+						ResultEmit ( tQuery.m_sAfterMatch.cstr(), tQuery.m_bHasPassageMacro, m_iPassageId++, tQuery.m_sAfterMatchPassage.cstr() );
 					} else
 						ResultEmit ( m_dTokens[iTok] );
 				}
@@ -2002,14 +1993,27 @@ public:
 		m_pDoc = m_pTokenizer->GetBufferPtr();
 	}
 
-	void ResultEmit ( const char * pSrc, int iLen )
+	void ResultEmit ( const char * pSrc, int iLen, bool bHasPassageMacro=false, int iPassageId=0, const char * pPost=NULL, int iPostLen=0 )
 	{
-		if ( iLen<=0 )
+		if ( iLen>0 )
+		{
+			int iOutLen = m_dResult.GetLength();
+			m_dResult.Resize ( iOutLen+iLen );
+			memcpy ( &m_dResult[iOutLen], pSrc, iLen );
+		}
+
+		if ( !bHasPassageMacro )
 			return;
 
+		char sBuf[16];
+		int iPassLen = snprintf ( sBuf, sizeof(sBuf), "%d", iPassageId );
 		int iOutLen = m_dResult.GetLength();
-		m_dResult.Resize ( iOutLen+iLen );
-		memcpy ( &m_dResult[iOutLen], pSrc, iLen );
+		m_dResult.Resize ( iOutLen + iPassLen + iPostLen );
+
+		if ( iPassLen )
+			memcpy ( m_dResult.Begin()+iOutLen, sBuf, iPassLen );
+		if ( iPostLen )
+			memcpy ( m_dResult.Begin()+iOutLen+iPassLen, pPost, iPostLen );
 	}
 
 	virtual void OnOverlap ( int iStart, int iLen ) = 0;
@@ -2105,12 +2109,16 @@ class HighlightPlain_c : public TokenFunctorTraits_c
 protected:
 	int		m_iBeforeLen;
 	int		m_iAfterLen;
+	int		m_iBeforePostLen;
+	int		m_iAfterPostLen;
 
 public:
 	HighlightPlain_c ( SnippetsDocIndex_c & tContainer, ISphTokenizer * pTokenizer, CSphDict * pDict, const ExcerptQuery_t & tQuery, const CSphIndexSettings & tSettingsIndex, const char * sDoc, int iDocLen )
 		: TokenFunctorTraits_c ( tContainer, pTokenizer, pDict, tQuery, tSettingsIndex, sDoc, iDocLen )
 		, m_iBeforeLen ( tQuery.m_sBeforeMatch.Length() )
 		, m_iAfterLen ( tQuery.m_sAfterMatch.Length() )
+		, m_iBeforePostLen ( tQuery.m_sBeforeMatchPassage.Length() )
+		, m_iAfterPostLen ( tQuery.m_sAfterMatchPassage.Length() )
 	{
 		m_dResult.Reserve ( m_iDocLen );
 	}
@@ -2139,12 +2147,12 @@ public:
 		bool bMatch = ( m_tContainer.FindWord ( iWordID, sWord, iLen )!=-1 );
 
 		if ( bMatch )
-			ResultEmit ( m_sBeforeMatch.cstr(), m_iBeforeLen );
+			ResultEmit ( m_sBeforeMatch.cstr(), m_iBeforeLen, m_bHasPassageMacro, m_iPassageId, m_sBeforeMatchPassage.cstr(), m_iBeforePostLen );
 
 		ResultEmit ( m_pDoc+iStart, iLen );
 
 		if ( bMatch )
-			ResultEmit ( m_sAfterMatch.cstr(), m_iAfterLen );
+			ResultEmit ( m_sAfterMatch.cstr(), m_iAfterLen, m_bHasPassageMacro, m_iPassageId++, m_sAfterMatchPassage.cstr(), m_iAfterPostLen );
 	}
 
 	virtual void OnSPZ ( BYTE , DWORD, char * ) {}
@@ -2226,7 +2234,7 @@ public:
 				if ( !m_iLenToken )
 				{
 					// start to collect phrase to highlight
-					ResultEmit ( m_sBeforeMatch.cstr(), m_iBeforeLen );
+					ResultEmit ( m_sBeforeMatch.cstr(), m_iBeforeLen, m_bHasPassageMacro, m_iPassageId, m_sBeforeMatchPassage.cstr(), m_iBeforePostLen );
 					m_iStartToken = iStart;
 					m_iLenToken = m_iLenTotal = iLen;
 				} else
@@ -2245,12 +2253,12 @@ public:
 		} else
 		{
 			if ( bHighlight )
-				ResultEmit ( m_sBeforeMatch.cstr(), m_iBeforeLen );
+				ResultEmit ( m_sBeforeMatch.cstr(), m_iBeforeLen, m_bHasPassageMacro, m_iPassageId, m_sBeforeMatchPassage.cstr(), m_iBeforePostLen );
 
 			ResultEmit ( m_pDoc+iStart, iLen );
 
 			if ( bHighlight )
-				ResultEmit ( m_sAfterMatch.cstr(), m_iAfterLen );
+				ResultEmit ( m_sAfterMatch.cstr(), m_iAfterLen, m_bHasPassageMacro, m_iPassageId++, m_sAfterMatchPassage.cstr(), m_iAfterPostLen );
 		}
 	}
 
@@ -2260,7 +2268,7 @@ public:
 		{
 			assert ( m_iLenToken<=m_iLenTotal );
 			ResultEmit ( m_pDoc+m_iStartToken, m_iLenToken );
-			ResultEmit ( m_sAfterMatch.cstr(), m_iAfterLen );
+			ResultEmit ( m_sAfterMatch.cstr(), m_iAfterLen, m_bHasPassageMacro, m_iPassageId++, m_sAfterMatchPassage.cstr(), m_iAfterPostLen );
 			ResultEmit ( m_pDoc+m_iStartToken+m_iLenToken, m_iLenTotal-m_iLenToken );
 			m_iStartToken = m_iLenToken = m_iLenTotal = 0;
 		}
@@ -2641,6 +2649,7 @@ ExcerptQuery_t::ExcerptQuery_t ()
 	, m_iSeq ( 0 )
 	, m_iNext ( -1 )
 	, m_sRes ( NULL )
+	, m_bHasPassageMacro ( false )
 {
 }
 

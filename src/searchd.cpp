@@ -8141,6 +8141,34 @@ void SnippetThreadFunc ( void * pArg )
 	}
 }
 
+
+static bool SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPost )
+{
+	const char sPassageMacro[] = "%PASSAGE_ID%";
+
+	const char * sPass = NULL;
+	if ( !sSrc.IsEmpty() )
+		sPass = strstr ( sSrc.cstr(), sPassageMacro );
+
+	if ( !sPass )
+		return false;
+
+	int iSrcLen = sSrc.Length();
+	int iPassLen = sizeof ( sPassageMacro ) - 1;
+	int iTailLen = iSrcLen - iPassLen - ( sPass - sSrc.cstr() );
+
+	// copy tail
+	if ( iTailLen )
+		sPost.SetBinary ( sPass+iPassLen, iTailLen );
+
+	CSphString sPre;
+	sPre.SetBinary ( sSrc.cstr(), sPass - sSrc.cstr() );
+	sSrc.Swap ( sPre );
+
+	return true;
+}
+
+
 void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 {
 	if ( !CheckCommandVersion ( iVer, VER_COMMAND_EXCERPT, tReq ) )
@@ -8179,6 +8207,9 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 			return;
 		}
 	}
+
+	q.m_bHasPassageMacro |= SnippetTransformPassageMacros ( q.m_sBeforeMatch, q.m_sBeforeMatchPassage );
+	q.m_bHasPassageMacro |= SnippetTransformPassageMacros ( q.m_sAfterMatch, q.m_sAfterMatchPassage );
 
 	CSphString sPassageBoundaryMode;
 	if ( iVer>=0x103 )
@@ -9710,6 +9741,9 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 		pServed->Unlock();
 		return;
 	}
+
+	q.m_bHasPassageMacro |= SnippetTransformPassageMacros ( q.m_sBeforeMatch, q.m_sBeforeMatchPassage );
+	q.m_bHasPassageMacro |= SnippetTransformPassageMacros ( q.m_sAfterMatch, q.m_sAfterMatchPassage );
 
 	CSphIndex * pIndex = pServed->m_pIndex;
 	CSphScopedPtr<CSphDict> tDictCloned ( NULL );

@@ -67,6 +67,12 @@ source src1
 	# sql_query		= SELECT id, data FROM documents.csv
 
 
+	# ODBC and MS SQL specific, per-column buffer sizes
+	# optional, default is auto-detect
+	#
+	# sql_column_buffers	= content=12M, comments=1M
+
+
 	# pre-query, executed before the main fetch query
 	# multi-value, optional, default is empty list of queries
 	#
@@ -470,6 +476,14 @@ index test1
 	# blend_chars		= +, &, U+23
 
 
+	# blended token indexing mode
+	# a comma separated list of blended token indexing variants
+	# known variants are trim_none, trim_head, trim_tail, trim_both, skip_pure
+	# optional, default is trim_none
+	#
+	# blend_mode		= trim_tail, skip_pure
+
+
 	# whether to strip HTML tags from incoming documents
 	# known values are 0 (do not strip) and 1 (do strip)
 	# optional, default is 0
@@ -539,6 +553,21 @@ index test1
 	#
 	# hitless_words		= all
 	# hitless_words		= hitless.txt
+
+
+	# detect and index sentence and paragraph boundaries
+	# required for the SENTENCE and PARAGRAPH operators to work
+	# optional, allowed values are 0 and 1, default is 0
+	#
+	# index_sp			= 1
+
+
+	# index zones, delimited by HTML/XML tags
+	# a comma separated list of tags and wildcards
+	# required for the ZONE operator to work
+	# optional, default is empty string (do not index zones)
+	#
+	# index_zones		= title, h*, th
 }
 
 
@@ -839,6 +868,66 @@ searchd
 	# optional, default is 128M, 0 means no limit
 	#
 	# binlog_max_log_size	= 256M
+
+
+	# per-thread stack size, only affects workers=threads mode
+	# optional, default is 64K
+	#
+	# thread_stack			= 128K
+
+
+	# per-keyword expansion limit (for dict=keywords prefix searches)
+	# optional, default is 0 (no limit)
+	#
+	# expansion_limit		= 1000
+
+
+	# RT RAM chunks flush period
+	# optional, default is 0 (no periodic flush)
+	#
+	# rt_flush_period		= 900
+
+
+	# query log file format
+	# optional, known values are plain and sphinxql, default is plain
+	#
+	# query_log_format		= sphinxql
+
+
+	# version string returned to MySQL network protocol clients
+	# optional, default is empty (use Sphinx version)
+	#
+	# mysql_version_string	= 5.0.37
+
+
+	# trusted plugin directory
+	# optional, default is empty (disable UDFs)
+	#
+	# plugin_dir			= /usr/local/sphinx/lib
+
+
+	# default server-wide collation
+	# optional, default is libc_ci
+	#
+	# collation_server		= utf8_general_ci
+
+
+	# server-wide locale for libc based collations
+	# optional, default is C
+	#
+	# collation_libc_locale	= ru_RU.UTF-8
+
+
+	# threaded server watchdog (only used in workers=threads mode)
+	# optional, values are 0 and 1, default is 1 (watchdog on)
+	#
+	# watchdog				= 1
+
+	
+	# SphinxQL compatibility mode (legacy columns and their names)
+	# optional, default is 0 (SQL compliant syntax and result sets)
+	#
+	# compat_sphinxql_magics	= 1
 }
 
 # --eof--

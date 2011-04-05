@@ -13698,11 +13698,14 @@ void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 {
 	CheckSignals ();
 	CheckLeaks ();
-	CheckPipes ();
-	CheckDelete ();
-	CheckRotate ();
 	CheckReopen ();
-	CheckFlush ();
+	if ( g_bHeadDaemon )
+	{
+		CheckPipes ();
+		CheckDelete ();
+		CheckRotate ();
+		CheckFlush ();
+	}
 	sphInfo ( NULL ); // flush dupes
 
 	if ( pAcceptMutex )

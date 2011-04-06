@@ -774,17 +774,17 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDi
 			iBlendID = 0;
 
 		Token_t & tLast = m_dTokens.Add();
-		tLast.m_eType = iWord ? TOK_WORD : TOK_SPACE;
-		tLast.m_uPosition = iWord || bIsStopWord ? uPosition : 0;
+		tLast.m_eType = ( iWord || bIsStopWord ) ? TOK_WORD : TOK_SPACE;
+		tLast.m_uPosition = ( iWord || bIsStopWord ) ? uPosition : 0;
 		tLast.m_iStart = pTokenStart - pStartPtr;
 		tLast.m_iLengthBytes = tLast.m_iLengthCP = pLastTokenEnd - pTokenStart;
-		if ( m_bUtf8 && iWord )
+		if ( m_bUtf8 && ( iWord || bIsStopWord ) )
 			tLast.m_iLengthCP = sphUTF8Len ( pTokenStart, tLast.m_iLengthBytes );
 		m_iTotalCP += tLast.m_iLengthCP;
 		tLast.m_iWordID = iWord;
 		tLast.m_iBlendID = iBlendID;
 		tLast.m_uWords = 0;
-		if ( iWord )
+		if ( iWord || bIsStopWord )
 			m_iDocumentWords++;
 
 		m_iLastWord = iWord ? m_dTokens.GetLength() - 1 : m_iLastWord;
@@ -2433,11 +2433,11 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor )
 			uPosition += bIsStopWord ? tFunctor.m_iStopwordStep : 1;
 
 		ExcerptGen_c::Token_t tDocTok;
-		tDocTok.m_eType = iWord ? ExcerptGen_c::TOK_WORD : ExcerptGen_c::TOK_SPACE;
-		tDocTok.m_uPosition = iWord || bIsStopWord ? uPosition : 0;
+		tDocTok.m_eType = ( iWord || bIsStopWord ) ? ExcerptGen_c::TOK_WORD : ExcerptGen_c::TOK_SPACE;
+		tDocTok.m_uPosition = ( iWord || bIsStopWord ) ? uPosition : 0;
 		tDocTok.m_iStart = pTokenStart - pStartPtr;
 		tDocTok.m_iLengthBytes = tDocTok.m_iLengthCP = pLastTokenEnd - pTokenStart;
-		if ( bUtf8 && iWord )
+		if ( bUtf8 && ( iWord || bIsStopWord ) )
 			tDocTok.m_iLengthCP = sphUTF8Len ( pTokenStart, tDocTok.m_iLengthBytes );
 		tDocTok.m_iWordID = iWord;
 

@@ -8275,8 +8275,8 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		}
 	}
 
-	q.m_bHasPassageMacro |= SnippetTransformPassageMacros ( q.m_sBeforeMatch, q.m_sBeforeMatchPassage );
-	q.m_bHasPassageMacro |= SnippetTransformPassageMacros ( q.m_sAfterMatch, q.m_sAfterMatchPassage );
+	q.m_bHasBeforePassageMacro = SnippetTransformPassageMacros ( q.m_sBeforeMatch, q.m_sBeforeMatchPassage );
+	q.m_bHasAfterPassageMacro = SnippetTransformPassageMacros ( q.m_sAfterMatch, q.m_sAfterMatchPassage );
 
 	CSphString sPassageBoundaryMode;
 	if ( iVer>=0x103 )
@@ -9809,8 +9809,8 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 		return;
 	}
 
-	q.m_bHasPassageMacro |= SnippetTransformPassageMacros ( q.m_sBeforeMatch, q.m_sBeforeMatchPassage );
-	q.m_bHasPassageMacro |= SnippetTransformPassageMacros ( q.m_sAfterMatch, q.m_sAfterMatchPassage );
+	q.m_bHasBeforePassageMacro = SnippetTransformPassageMacros ( q.m_sBeforeMatch, q.m_sBeforeMatchPassage );
+	q.m_bHasAfterPassageMacro = SnippetTransformPassageMacros ( q.m_sAfterMatch, q.m_sAfterMatchPassage );
 
 	CSphIndex * pIndex = pServed->m_pIndex;
 	CSphScopedPtr<CSphDict> tDictCloned ( NULL );

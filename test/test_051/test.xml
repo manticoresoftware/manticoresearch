@@ -103,6 +103,15 @@ $reply = $client->BuildExcerpts ( array($text), 'idx', $query, array('around'=> 
 $results [] = $query;
 $results [] = $reply;
 
+$query = 'is house';
+$reply = $client->BuildExcerpts ( array($text), 'idx', $query, array('around'=> 2, 'limit_words'=>10, 'before_match'=>'<b>', 'after_match'=>'</b %PASSAGE_ID%>', 'start_passage_id'=>1000) );
+$results [] = $query;
+$results [] = $reply;
+
+$query = 'is house';
+$reply = $client->BuildExcerpts ( array($text), 'idx', $query, array('around'=> 2, 'limit_words'=>10, 'before_match'=>'<b %PASSAGE_ID%>', 'after_match'=>'</b>', 'start_passage_id'=>1000) );
+$results [] = $query;
+$results [] = $reply;
 
 ]]></custom_test>
 

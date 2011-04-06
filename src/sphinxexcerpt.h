@@ -53,7 +53,8 @@ public:
 	int				m_iNext;			///< the next one in one-link list for batch processing
 	char *			m_sRes;				///< snippet result holder (NOT owned)
 	CSphString		m_sError;			///< snippet error message
-	bool			m_bHasPassageMacro;
+	bool			m_bHasBeforePassageMacro;
+	bool			m_bHasAfterPassageMacro;
 	CSphString		m_sBeforeMatchPassage;
 	CSphString		m_sAfterMatchPassage;
 

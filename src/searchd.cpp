@@ -8170,7 +8170,7 @@ bool SnippetReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t &, 
 void SnippetThreadFunc ( void * pArg )
 {
 	SnippetThread_t * pDesc = (SnippetThread_t*) pArg;
-	CSphScopedPtr<ISphTokenizer> pTok ( pDesc->m_pIndex->GetTokenizer()->Clone ( false ) );
+	CSphScopedPtr<ISphTokenizer> pTok ( pDesc->m_pIndex->GetTokenizer()->Clone ( true ) );
 	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
 	CSphDict * pDictBase = pDesc->m_pIndex->GetDictionary();
 	if ( pDictBase->HasState() )
@@ -8411,7 +8411,8 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 			}
 		}
 
-		if ( !tStripper.SetZones ( tSettings.m_sZones.cstr (), sError ) )
+		// handle zone(s) in special mode only when passage_boundary enabled
+		if ( q.m_iPassageBoundary && !tStripper.SetZones ( tSettings.m_sZones.cstr (), sError ) )
 		{
 			tReq.SendErrorReply ( "HTML stripper config error: %s", sError.cstr() );
 			pServed->Unlock();
@@ -9851,7 +9852,8 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 			}
 		}
 
-		if ( !tStripper.SetZones ( tSettings.m_sZones.cstr(), sError ) )
+		// handle zone(s) in special mode only when passage_boundary enabled
+		if ( q.m_iPassageBoundary && !tStripper.SetZones ( tSettings.m_sZones.cstr(), sError ) )
 		{
 			sError.SetSprintf ( "HTML stripper config error: %s", sError.cstr() );
 			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );

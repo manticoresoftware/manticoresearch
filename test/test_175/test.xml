@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>hitbuffer edge cases</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+}
+</config>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	gid int not null,
+	title varchar(16384) not null
+);
+</db_create>
+<db_drop>drop table if exists test_table;</db_drop>
+<custom_insert><![CDATA[
+
+// OR boundary
+// weight on 11 must be 2xxx; used to be 1xxx (because of positions mismatch)
+$t = str_repeat ( "aaa ", 509 );
+mysql_query ( "INSERT INTO test_table VALUES ( 10, 1, 'bbb bbb bbb bbb $t' )" ) or die("q1:".mysql_error());
+mysql_query ( "INSERT INTO test_table VALUES ( 11, 1, 'aaa aaa aaa aaa bbb bbb aaa aaa' )" ) or die("q2:".mysql_error());
+
+]]></custom_insert>
+
+<queries>
+<query mode="extended2">aaa | bbb</query>
+</queries>
+
+</test>

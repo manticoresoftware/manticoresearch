@@ -2144,6 +2144,24 @@ const ExtHit_t * ExtOr_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMax
 				}
 			}
 
+			// a pretty tricky bit
+			// one of the nodes might have run out of current hits chunk (rather hits at all)
+			// so we need to get the next hits chunk NOW, check for that condition, and keep merging
+			// simply going to tail hits copying is incorrect, it could copy in wrong order
+			// example, word A, pos 1, 2, 3, hit chunk ends, 4, 5, 6, word B, pos 7, 8, 9
+			if ( !pCur0 || pCur0->m_uDocid==DOCID_MAX )
+			{
+				pCur0 = m_pChildren[0]->GetHitsChunk ( pDocs, uMaxID );
+				if ( pCur0 && pCur0->m_uDocid==m_uMatchedDocid )
+					continue;
+			}
+			if ( !pCur1 || pCur1->m_uDocid==DOCID_MAX )
+			{
+				pCur1 = m_pChildren[1]->GetHitsChunk ( pDocs, uMaxID );
+				if ( pCur1 && pCur1->m_uDocid==m_uMatchedDocid )
+					continue;
+			}
+
 			// copy tail, while possible
 			if ( pCur0 && pCur0->m_uDocid==m_uMatchedDocid )
 			{

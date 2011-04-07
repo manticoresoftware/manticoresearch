@@ -5101,44 +5101,57 @@ inline bool IsIDAttribute ( const CSphColumnInfo & tTarget )
 	return tTarget.m_tLocator.IsID();
 }
 
-void RemapResult ( const CSphSchema& tTarget, AggrResult_t & tRes, bool bMultiSchema=true )
+// swap the schema into the new one
+void AdoptSchema ( AggrResult_t * pRes, CSphSchema * pSchema )
+{
+	pSchema->m_dFields = pRes->m_tSchema.m_dFields;
+	pRes->m_tSchema = *pSchema;
+}
+
+void AdoptAliasedSchema ( AggrResult_t & tRes, CVirtualSchema * pSchema )
+{
+	pSchema->AlignSizes ( tRes.m_tSchema );
+	AdoptSchema ( &tRes, pSchema );
+}
+
+void RemapResult ( CSphSchema * pTarget, AggrResult_t * pRes, bool bMultiSchema=true )
 {
 	int iCur = 0;
 	int * dMapFrom = NULL;
 
-	if ( tTarget.GetRowSize() )
-		dMapFrom = new int [ tTarget.GetAttrsCount() ];
+	if ( pTarget->GetRowSize() )
+		dMapFrom = new int [ pTarget->GetAttrsCount() ];
 
-	ARRAY_FOREACH ( iSchema, tRes.m_dSchemas )
+	ARRAY_FOREACH ( iSchema, pRes->m_dSchemas )
 	{
-		CSphSchema& dSchema = bMultiSchema?tRes.m_dSchemas[iSchema]:tRes.m_tSchema;
-		for ( int i=0; i<tTarget.GetAttrsCount(); i++ )
+		CSphSchema& dSchema = bMultiSchema?pRes->m_dSchemas[iSchema]:pRes->m_tSchema;
+		for ( int i=0; i<pTarget->GetAttrsCount(); i++ )
 		{
-			dMapFrom[i] = dSchema.GetAttrIndex ( tTarget.GetAttr(i).m_sName.cstr() );
+			dMapFrom[i] = dSchema.GetAttrIndex ( pTarget->GetAttr(i).m_sName.cstr() );
 			assert ( dMapFrom[i]>=0
-				|| IsIDAttribute ( tTarget.GetAttr(i) )
-				|| sphIsSortStringInternal ( tTarget.GetAttr(i).m_sName.cstr() )
+				|| IsIDAttribute ( pTarget->GetAttr(i) )
+				|| sphIsSortStringInternal ( pTarget->GetAttr(i).m_sName.cstr() )
 				);
 		}
 		int iLimit = bMultiSchema
-			? ( iCur + tRes.m_dMatchCounts[iSchema] )
-			: tRes.m_iTotalMatches;
-		iLimit = Min ( iLimit, tRes.m_dMatches.GetLength() );
+			? ( iCur + pRes->m_dMatchCounts[iSchema] )
+			: pRes->m_iTotalMatches;
+		iLimit = Min ( iLimit, pRes->m_dMatches.GetLength() );
 		for ( int i=iCur;i<iLimit; i++ )
 		{
-			CSphMatch & tMatch = tRes.m_dMatches[i];
+			CSphMatch & tMatch = pRes->m_dMatches[i];
 
 			// create new and shiny (and properly sized) match
 			CSphMatch tRow;
-			tRow.Reset ( tTarget.GetDynamicSize() );
+			tRow.Reset ( pTarget->GetDynamicSize() );
 			tRow.m_iDocID = tMatch.m_iDocID;
 			tRow.m_iWeight = tMatch.m_iWeight;
 			tRow.m_iTag = tMatch.m_iTag;
 
 			// remap attrs
-			for ( int j=0; j<tTarget.GetAttrsCount(); j++ )
+			for ( int j=0; j<pTarget->GetAttrsCount(); j++ )
 			{
-				const CSphColumnInfo & tDst = tTarget.GetAttr(j);
+				const CSphColumnInfo & tDst = pTarget->GetAttr(j);
 				// we could keep some of the rows static
 				// and so, avoid the duplication of the data.
 				if ( !tDst.m_tLocator.m_bDynamic )
@@ -5162,22 +5175,14 @@ void RemapResult ( const CSphSchema& tTarget, AggrResult_t & tRes, bool bMultiSc
 	}
 
 	if ( bMultiSchema )
-		assert ( iCur==tRes.m_dMatches.GetLength() );
+		assert ( iCur==pRes->m_dMatches.GetLength() );
 	SafeDeleteArray ( dMapFrom );
-	if ( &tRes.m_tSchema!=&tTarget )
-		tRes.m_tSchema = tTarget;
-}
-
-// swap the schema into the new one
-void RenameApplyAliases ( AggrResult_t & tRes, CVirtualSchema * tSchema )
-{
-	tSchema->AlignSizes ( tRes.m_tSchema );
-	tSchema->m_dFields = tRes.m_tSchema.m_dFields;
-	tRes.m_tSchema = *tSchema;
+	if ( &pRes->m_tSchema!=pTarget )
+		AdoptSchema ( pRes, pTarget );
 }
 
 // rebuild the results itemlist expanding stars
-const CSphVector<CSphQueryItem> * ExpandAsterisk ( const CSphSchema & tSchema, const CSphVector<CSphQueryItem> & tItems, CSphVector<CSphQueryItem> * pExpanded )
+const CSphVector<CSphQueryItem> * ExpandAsterisk ( const CSphSchema & tSchema, const CSphVector<CSphQueryItem> & tItems, CSphVector<CSphQueryItem> * pExpanded, bool bNoID=false )
 {
 	// the result schema usually is the index schema + calculated items + @-items
 	// we need to extract the index schema only - so, look at the items
@@ -5205,13 +5210,15 @@ const CSphVector<CSphQueryItem> * ExpandAsterisk ( const CSphSchema & tSchema, c
 	{
 		if ( tItems[i].m_sExpr=="*" )
 		{ // asterisk expands to 'id' + all the items from the schema
-			if ( tSchema.GetAttrIndex ( "id" ) < 0 )
+			if ( tSchema.GetAttrIndex ( "id" )<0 && !bNoID )
 			{
 				CSphQueryItem& tItem = pExpanded->Add();
 				tItem.m_sExpr = "id";
 			}
 			for ( int j=0; j<iSchemaBound; j++ )
 			{
+				if ( !j && bNoID && tSchema.GetAttr(j).m_sName=="id" )
+					continue;
 				CSphQueryItem& tItem = pExpanded->Add();
 				tItem.m_sExpr = tSchema.GetAttr ( j ).m_sName;
 			}
@@ -5221,7 +5228,7 @@ const CSphVector<CSphQueryItem> * ExpandAsterisk ( const CSphSchema & tSchema, c
 	return pExpanded;
 }
 
-bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHadLocalIndexes, CSphSchema* pExtraSchema, bool bNeedSchema=false )
+bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHadLocalIndexes, CSphSchema* pExtraSchema, bool bFromSphinxql=false )
 {
 	// sanity check
 	int iExpected = 0;
@@ -5236,11 +5243,11 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 		return false;
 	}
 
-	if ( !( bNeedSchema || tRes.m_dMatches.GetLength() ) )
+	if ( !( bFromSphinxql || tRes.m_dMatches.GetLength() ) )
 		return true;
 
 	// build minimal schema
-	if ( !tRes.m_dSchemas.GetLength() && bNeedSchema )
+	if ( !tRes.m_dSchemas.GetLength() && bFromSphinxql )
 	{
 		AddIDAttribute ( (CVirtualSchema*) &tRes.m_tSchema );
 		return true;
@@ -5248,6 +5255,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	tRes.m_tSchema = tRes.m_dSchemas[0];
 	bool bAllEqual = true;
 	bool bAgent = tQuery.m_bAgent;
+	bool bUsualApi = !( bAgent || bFromSphinxql );
 
 	for ( int i=1; i<tRes.m_dSchemas.GetLength(); i++ )
 	{
@@ -5256,9 +5264,9 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	}
 
 	CSphVector<CSphQueryItem> tExtItems;
-	const CSphVector<CSphQueryItem> * pItems = ExpandAsterisk ( tRes.m_tSchema, tQuery.m_dItems, &tExtItems );
+	const CSphVector<CSphQueryItem> * pSelectItems = ExpandAsterisk ( tRes.m_tSchema, tQuery.m_dItems, &tExtItems, bUsualApi );
 
-	if ( pItems==&tExtItems )
+	if ( pSelectItems==&tExtItems && !bUsualApi )
 	{
 		AddIDAttribute ( (CVirtualSchema*) &tRes.m_tSchema );
 		ARRAY_FOREACH ( i, tRes.m_dSchemas )
@@ -5268,18 +5276,20 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	// the final result schema - for collections, etc
 	// we can't construct the random final schema right now, since
 	// the final sorter needs the schema fields in specific order:
-	CVirtualSchema tItems;
-	// truly virtual schema for final result returning
 
+	// shortcuts
 	CSphString sCount("@count");
 	CSphString sWeight("@weight");
 
-	CVirtualSchema tFinalItems;
-	tFinalItems.GetWAttrs().Resize ( pItems->GetLength() );
+	// truly virtual schema which contains unique necessary fields.
+	CVirtualSchema tInternalSchema;
+	// truly virtual schema for final result returning
+	CVirtualSchema tFrontendSchema;
+	tFrontendSchema.GetWAttrs().Resize ( pSelectItems->GetLength() );
 
 	CSphVector<int> dKnownItems;
 	int iKnownItems = 0;
-	if ( pItems->GetLength() )
+	if ( pSelectItems->GetLength() )
 	{
 		for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
 		{
@@ -5287,22 +5297,22 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 			if ( !tCol.m_pExpr )
 			{
 				bool bAdd = false;
-				ARRAY_FOREACH ( j, (*pItems) )
+				ARRAY_FOREACH ( j, (*pSelectItems) )
 				{
-					const CSphQueryItem & tQueryItem = (*pItems)[j];
+					const CSphQueryItem & tQueryItem = (*pSelectItems)[j];
 					const CSphString & sExpr = ( tQueryItem.m_sExpr=="count(*)" ) ? sCount
 						: ( ( tQueryItem.m_sExpr=="weight()" ) ? sWeight : tQueryItem.m_sExpr );
-					if ( tFinalItems.GetAttr(j).m_iIndex<0
+					if ( tFrontendSchema.GetAttr(j).m_iIndex<0
 						&& ( ( sExpr.cstr() && sExpr==tCol.m_sName && tQueryItem.m_eAggrFunc==SPH_AGGR_NONE )
 						|| ( tQueryItem.m_sAlias.cstr() && tQueryItem.m_sAlias==tCol.m_sName ) ) )
 					{
 						bAdd = true;
 						dKnownItems.Add(j);
 						++iKnownItems;
-						if ( !bAgent )
+						if ( !bAgent && bFromSphinxql )
 						{
-							CSphColumnInfo & tItem = tFinalItems.GetWAttr(j);
-							tItem.m_iIndex = tItems.GetAttrsCount(); // temporary idx, will change to locator by this index
+							CSphColumnInfo & tItem = tFrontendSchema.GetWAttr(j);
+							tItem.m_iIndex = tInternalSchema.GetAttrsCount(); // temporary idx, will change to locator by this index
 							if ( tQueryItem.m_sAlias.cstr() )
 								tItem.m_sName = tQueryItem.m_sAlias;
 							else
@@ -5322,18 +5332,20 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 					} else if ( !bHadLocalIndexes )
 						bAdd = true;
 				}
+				if ( !bAdd && bUsualApi && *tCol.m_sName.cstr()=='@' )
+					bAdd = true;
 
 				if ( !bAdd )
 					continue;
 			} else
 			{
-				ARRAY_FOREACH ( j, (*pItems) )
-					if ( tFinalItems.GetAttr(j).m_iIndex<0
-						&& ( (*pItems)[j].m_sAlias.cstr() && (*pItems)[j].m_sAlias==tCol.m_sName ) )
+				ARRAY_FOREACH ( j, (*pSelectItems) )
+					if ( tFrontendSchema.GetAttr(j).m_iIndex<0
+						&& ( (*pSelectItems)[j].m_sAlias.cstr() && (*pSelectItems)[j].m_sAlias==tCol.m_sName ) )
 					{
-						CSphColumnInfo & tItem = tFinalItems.GetWAttr(j);
-						tItem.m_iIndex = tItems.GetAttrsCount();
-						tItem.m_sName = (*pItems)[j].m_sAlias;
+						CSphColumnInfo & tItem = tFrontendSchema.GetWAttr(j);
+						tItem.m_iIndex = tInternalSchema.GetAttrsCount();
+						tItem.m_sName = (*pSelectItems)[j].m_sAlias;
 						dKnownItems.Add(j);
 						++iKnownItems;
 					}
@@ -5343,24 +5355,24 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 			// if before all schemas were proved as equal, and the tCol taken from current schema is static -
 			// this is no reason now to make it dynamic.
 			bool bDynamic = bAllEqual?tCol.m_tLocator.m_bDynamic:true;
-			tItems.AddAttr ( tCol, bDynamic );
+			tInternalSchema.AddAttr ( tCol, bDynamic );
 			if ( !bDynamic )
 			{
 				// all schemas are equal, so all offsets and bitcounts also equal.
 				// If we Add the static attribute which already exists in result, we need
 				// not to corrupt it's locator. So, in this case let us force the locator
 				// to the old data.
-				CSphColumnInfo & tNewCol = tItems.LastColumn();
+				CSphColumnInfo & tNewCol = tInternalSchema.LastColumn();
 				assert ( !tNewCol.m_tLocator.m_bDynamic );
 				tNewCol.m_tLocator = tCol.m_tLocator;
 			}
 		}
 
-		bAllEqual &= tRes.m_tSchema.GetAttrsCount()==tItems.GetAttrsCount();
+		bAllEqual &= tRes.m_tSchema.GetAttrsCount()==tInternalSchema.GetAttrsCount();
 	}
 
 	// check if we actually have all required columns already
-		if ( iKnownItems<pItems->GetLength() )
+		if ( iKnownItems<pSelectItems->GetLength() )
 	{
 		tRes.m_iSuccesses = 0;
 		dKnownItems.Sort();
@@ -5368,27 +5380,27 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 			if ( j!=dKnownItems[j] )
 			{
 				tRes.m_sError.SetSprintf ( "INTERNAL ERROR: the column '%s/%s' does not present in result set schema",
-					(*pItems)[j].m_sExpr.cstr(), (*pItems)[j].m_sAlias.cstr() );
+					(*pSelectItems)[j].m_sExpr.cstr(), (*pSelectItems)[j].m_sAlias.cstr() );
 				return false;
 			}
-		if ( dKnownItems.GetLength()==pItems->GetLength()-1 )
+		if ( dKnownItems.GetLength()==pSelectItems->GetLength()-1 )
 		{
 				tRes.m_sError.SetSprintf ( "INTERNAL ERROR: the column '%s/%s' does not present in result set schema",
-					pItems->Last().m_sExpr.cstr(), pItems->Last().m_sAlias.cstr() );
+					pSelectItems->Last().m_sExpr.cstr(), pSelectItems->Last().m_sAlias.cstr() );
 				return false;
 		}
 		tRes.m_sError = "INTERNAL ERROR: some columns does not present in result set schema";
 		return false;
 	}
 
-	// finalize the tFinalItems - switch back m_iIndex field
+	// finalize the tFrontendSchema - switch back m_iIndex field
 	// and set up the locators for the fields
-	if ( !bAgent )
+	if ( !bAgent && bFromSphinxql )
 	{
-		ARRAY_FOREACH ( i, tFinalItems.GetWAttrs() )
+		ARRAY_FOREACH ( i, tFrontendSchema.GetWAttrs() )
 		{
-			CSphColumnInfo & tCol = tFinalItems.GetWAttr(i);
-			const CSphColumnInfo & tSource = tItems.GetAttr ( tCol.m_iIndex );
+			CSphColumnInfo & tCol = tFrontendSchema.GetWAttr(i);
+			const CSphColumnInfo & tSource = tInternalSchema.GetAttr ( tCol.m_iIndex );
 			tCol.m_tLocator = tSource.m_tLocator;
 			tCol.m_eAttrType = tSource.m_eAttrType;
 			tCol.m_iIndex = -1;
@@ -5421,9 +5433,9 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	{
 		// convert all matches to minimal schema
 		if ( !bAllEqual )
-			RemapResult ( tItems, tRes );
-		if ( !bAgent )
-			RenameApplyAliases ( tRes, &tFinalItems );
+			RemapResult ( &tInternalSchema, &tRes );
+		if ( !bAgent && bFromSphinxql )
+			AdoptAliasedSchema ( tRes, &tFrontendSchema );
 		return true;
 	}
 
@@ -5455,7 +5467,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 
 	// convert all matches to sorter schema - at least to manage all static to dynamic
 	if ( !bAllEqual )
-		RemapResult ( tRes.m_tSchema, tRes );
+		RemapResult ( &tRes.m_tSchema, &tRes );
 
 	// do match ptr pre-calc if its "order by string" case
 	CSphVector<SphStringSorterRemap_t> dRemapAttr;
@@ -5552,9 +5564,9 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	tRes.m_iTotalMatches -= iDupes;
 
 	if ( !bAllEqual )
-		RemapResult ( tItems, tRes, false );
-	if ( !bAgent )
-		RenameApplyAliases ( tRes, &tFinalItems );
+		RemapResult ( &tInternalSchema, &tRes, false );
+	if ( !bAgent && bFromSphinxql )
+		AdoptAliasedSchema ( tRes, &tFrontendSchema );
 	return true;
 }
 
@@ -6241,7 +6253,6 @@ void SearchHandler_c::RunLocalSearchesMT ()
 
 		if ( !bResult )
 		{
-			ReleaseIndex ( iLocal );
 			// failed
 			for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
 			{
@@ -7007,7 +7018,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			tRes.m_tSchema = tRes.m_dSchemas[0];
 		if ( tRes.m_iSuccesses>1 || tQuery.m_dItems.GetLength() )
 		{
-			if ( g_bCompatResults || !( m_bSphinxql || tQuery.m_bAgent ) )
+			if ( g_bCompatResults )
 			{
 				if ( !MinimizeAggrResultCompat ( tRes, tQuery, m_dLocal.GetLength()!=0 ) )
 					return;

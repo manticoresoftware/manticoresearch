@@ -1192,7 +1192,7 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 				&& !m_pSegments[i]->m_dKlist.BinarySearch ( tDoc.m_iDocID ) )
 		{
 			m_tRwlock.Unlock ();
-			sError.SetSprintf ( "duplicate id '%d'", tDoc.m_iDocID );
+			sError.SetSprintf ( "duplicate id '"UINT64_FMT"'", (uint64_t)tDoc.m_iDocID );
 			return false; // already exists and not deleted; INSERT fails
 		}
 		m_tRwlock.Unlock ();

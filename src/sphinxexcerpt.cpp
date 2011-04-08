@@ -123,7 +123,8 @@ public:
 		int			m_iMinGap;					///< passage weight factor
 		int			m_iStartLimit;				///< start of match in passage
 		int			m_iEndLimit;				///< end of match in passage
-		int			m_iQwords;
+		int			m_iAroundBefore;			///< how many words before first matched words
+		int			m_iAroundAfter;				///< how many words after last matched words
 
 		void Reset ()
 		{
@@ -135,6 +136,8 @@ public:
 			m_iQwordCount = 0;
 			m_iMaxLCS = 0;
 			m_iMinGap = 0;
+			m_iAroundBefore = 0;
+			m_iAroundAfter = 0;
 		}
 
 		inline int GetWeight () const
@@ -1078,6 +1081,7 @@ void ExcerptGen_c::CalcPassageWeight ( Passage_t & tPass, const TokenSpan_t & tS
 	tPass.m_iMinGap = iMaxWords-1;
 	tPass.m_iStartLimit = INT_MAX;
 	tPass.m_iEndLimit = INT_MIN;
+	tPass.m_iAroundBefore = tPass.m_iAroundAfter = 0;
 
 	int iWord = -1;
 	for ( int iTok=tSpan.m_iStart; iTok<=tSpan.m_iEnd; iTok++ )
@@ -1115,6 +1119,9 @@ void ExcerptGen_c::CalcPassageWeight ( Passage_t & tPass, const TokenSpan_t & tS
 			tPass.m_iMinGap = Min ( tPass.m_iMinGap, iWord );
 			tPass.m_iMinGap = Min ( tPass.m_iMinGap, tSpan.m_iWords-1-iWord );
 		}
+
+		tPass.m_iAroundBefore += ( tPass.m_uQwords==0 );
+		tPass.m_iAroundAfter = ( tTok.m_uWords ? 0 : tPass.m_iAroundAfter+1 );
 	}
 	assert ( tPass.m_iMinGap>=0 );
 	assert ( tSpan.m_iWords==iWord+1 );
@@ -1133,13 +1140,13 @@ void ExcerptGen_c::CalcPassageWeight ( Passage_t & tPass, const TokenSpan_t & tS
 
 	tPass.m_iMaxLCS *= iMaxWords;
 	tPass.m_iQwordCount *= iWordCountCoeff;
-
-	tPass.m_iQwords = tSpan.m_iQwords;
 }
 
 void ExcerptGen_c::UpdateGaps ( Passage_t & tPass, const TokenSpan_t & tSpan, int iMaxWords )
 {
 	tPass.m_iMinGap = iMaxWords-1;
+	tPass.m_iAroundBefore = tPass.m_iAroundAfter = 0;
+	DWORD uQwords = 0;
 	int iWord = -1;
 	for ( int iTok=tSpan.m_iStart; iTok<=tSpan.m_iEnd; iTok++ )
 	{
@@ -1153,6 +1160,10 @@ void ExcerptGen_c::UpdateGaps ( Passage_t & tPass, const TokenSpan_t & tSpan, in
 			tPass.m_iMinGap = Min ( tPass.m_iMinGap, iWord );
 			tPass.m_iMinGap = Min ( tPass.m_iMinGap, tSpan.m_iWords-1-iWord );
 		}
+
+		uQwords |= tTok.m_uWords;
+		tPass.m_iAroundBefore += ( uQwords==0 );
+		tPass.m_iAroundAfter = ( tTok.m_uWords ? 0 : tPass.m_iAroundAfter+1 );
 	}
 	assert ( tPass.m_iMinGap>=0 );
 }
@@ -1439,6 +1450,7 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 	DWORD uWords = 0; // mask of words in dShow so far
 	int iTotalCodes = 0;
 	int iTotalWords = 0;
+	bool bAroundComply = true;
 
 	CSphVector<int> dWeights ( m_dPassages.GetLength() );
 	ARRAY_FOREACH ( i, m_dPassages )
@@ -1462,6 +1474,7 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 
 		// does this passage fit the limits?
 		bool bFits = ( iTotalCodes + tBest.m_iCodes<=iMaxCp ) && ( iTotalWords + tBest.m_iWords<=iMaxWords );
+		bAroundComply &= ( Max ( tBest.m_iAroundBefore, tBest.m_iAroundAfter )<=tQuery.m_iAround );
 
 		// all words will be shown and we're outta limit
 		if ( uWords==m_uFoundWords && !bFits )
@@ -1504,6 +1517,44 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 		}
 	}
 
+	// fix-up around constraint
+	if ( !bAroundComply )
+	{
+		ARRAY_FOREACH ( i, dShow )
+		{
+			Passage_t & tPass = dShow[i];
+			while ( tQuery.m_iAround<tPass.m_iAroundBefore )
+			{
+				assert ( tPass.m_iStart<tPass.m_iStartLimit );
+				const Token_t & tTok = m_dTokens[tPass.m_iStart];
+				assert ( tTok.m_uWords==0 );
+
+				tPass.m_iCodes -= tTok.m_iLengthCP;
+				iTotalCodes -= tTok.m_iLengthCP;
+
+				tPass.m_iAroundBefore -= ( tTok.m_eType==TOK_WORD );
+				iTotalWords -= ( tTok.m_eType==TOK_WORD );
+
+				tPass.m_iStart++;
+				tPass.m_iTokens--;
+			}
+			while ( tQuery.m_iAround<tPass.m_iAroundAfter )
+			{
+				assert ( tPass.m_iEndLimit<( tPass.m_iStart + tPass.m_iTokens - 1 ) );
+				const Token_t & tTok = m_dTokens[tPass.m_iStart+tPass.m_iTokens-1];
+				assert ( tTok.m_uWords==0 );
+
+				tPass.m_iCodes -= tTok.m_iLengthCP;
+				iTotalCodes -= tTok.m_iLengthCP;
+
+				tPass.m_iAroundAfter -= ( tTok.m_eType==TOK_WORD );
+				iTotalWords -= ( tTok.m_eType==TOK_WORD );
+
+				tPass.m_iTokens--;
+			}
+		}
+	}
+
 	// if all passages won't fit into the limit, try to trim them a bit
 	//
 	// this step is skipped when use_boundaries is enabled, because
@@ -1532,7 +1583,7 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 					tPassage.m_iTokens--;
 					tPassage.m_iCodes -= m_dTokens[iFirst].m_iLengthCP;
 					iTotalCodes -= m_dTokens[iFirst].m_iLengthCP;
-					iTotalWords -= m_dTokens[iFirst].m_eType==TOK_WORD ? 1 : 0;
+					iTotalWords -= ( m_dTokens[iFirst].m_eType==TOK_WORD );
 
 				} else if ( iLast!=tPassage.m_iEndLimit )
 				{
@@ -1542,7 +1593,7 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 						tPassage.m_iTokens--;
 					tPassage.m_iCodes -= m_dTokens[iLast].m_iLengthCP;
 					iTotalCodes -= m_dTokens[iLast].m_iLengthCP;
-					iTotalWords -= m_dTokens[iLast].m_eType==TOK_WORD ? 1 : 0;
+					iTotalWords -= ( m_dTokens[iLast].m_eType==TOK_WORD );
 				}
 				if ( iTotalCodes<=iMaxCp && iTotalWords<=iMaxWords )
 				{

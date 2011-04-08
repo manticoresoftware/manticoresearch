@@ -35,7 +35,9 @@ if ( !is_array($args) || empty($args) )
 	print ( "--skip-indexer\t\tskip DB creation and indexer stages and go directly to queries/custom tests\n");
 	print ( "--rt\t\t\ttest RT backend (auto-convert all local indexes)\n" );
 	print ( "--no-drop-db\t\tKeep test db tables after the test (for debugging)\n");
-	print ( "\nEnvironment vriables are:\n" );
+	print ( "--no-demo\t\tJust skip all tests without models. Else - run them, but never fail (for debugging)\n");
+	print ( "--no-marks\t\tDon't mark the output of every test in the logs.\n");
+	print ( "\nEnvironment variables are:\n" );
 	print ( "DBUSER\t\t\tuse 'USER' as MySQL user\n" );
 	print ( "DBPASS\t\t\tuse 'PASS' as MySQL password\n" );
 	print ( "\nTests can be specified by full name, or list of IDs, or range of IDs.\n" );
@@ -81,6 +83,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="--ignore-weights" )			$g_ignore_weights = true;
 	else if ( $arg=="--no-drop-db" )				$locals['no_drop_db'] = true;
 	else if ( $arg=="--no-demo" )					$g_skipdemo = true;
+	else if ( $arg=="--no-marks" )					$g_usemarks = false;
 	else if ( is_dir($arg) )						$test_dirs[] = $arg;
 	else if ( preg_match ( "/^(\\d+)-(\\d+)$/", $arg, $range ) )
 	{
@@ -197,7 +200,7 @@ foreach ( $tests as $test )
 	if ( file_exists ( $test."/test.xml" ) )
 	{
 		$total_tests++;
-		$res = RunTest ( $test, $g_skipdemo );
+		$res = RunTest ( $test, $g_skipdemo, $g_usemarks );
 
 		if ( !is_array($res) )
 		{

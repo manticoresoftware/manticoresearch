@@ -1993,8 +1993,15 @@ function CheckConfig ( $config, $path )
 	return true;
 }
 
+function MarkTest ( $logfile, $test_dir )
+{
+	$log = fopen ( $logfile, "a" );
+	fwrite ( $log, "*** in test $test_dir ***\n");
+	fclose ( $log );
+}
 
-function RunTest ( $test_dir, $skipdemo )
+
+function RunTest ( $test_dir, $skipdemo, $usemarks )
 {
 	global	$indexer_data_path, $agents, $sd_pid_file, $sd_managed_searchd,
 			$sd_skip_indexer, $g_id64, $windows, $g_locals, $sd_log, $sd_query_log;
@@ -2069,6 +2076,12 @@ function RunTest ( $test_dir, $skipdemo )
 			unlink ($sd_log);
 		if (file_exists($sd_query_log))
 			unlink ($sd_query_log);
+	}
+
+	if ( $usemarks )
+	{
+		MarkTest($sd_log,$test_dir);
+		MarkTest($sd_query_log,$test_dir);
 	}
 
 	do

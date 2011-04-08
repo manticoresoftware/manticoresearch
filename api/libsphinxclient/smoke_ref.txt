@@ -2,7 +2,7 @@ exact_phrase=0
 n=1, res=this is my <b>test</b> <b>text</b> to be highlighted ... 
 n=2, res=another <b>test</b> <b>text</b> to be highlighted, below limit
 n=3, res=<b>test</b> number three, without phrase match
-n=4, res=final <b>test</b>, not only without phrase match ...  and with swapped phrase <b>text</b> <b>test</b> as well
+n=4, res=final <b>test</b>, not only without  ...  with swapped phrase <b>text</b> <b>test</b> as well
 
 exact_phrase=1
 n=1, res=this is my <b>test text</b> to be highlighted ... 

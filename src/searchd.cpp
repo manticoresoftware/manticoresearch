@@ -309,7 +309,7 @@ static bool				g_bSafeTrace	= false;
 static bool				g_bStripPath	= false;
 
 static volatile bool	g_bDoDelete			= false;	// do we need to delete any indexes?
-static volatile bool	g_bDoRotate			= false;	// flag that we are rotating now; set from SIGHUP; cleared on rotation success
+static volatile int		g_iRotateCount		= 0;		// flag that we are rotating now; set from SIGHUP; cleared on rotation success
 static volatile sig_atomic_t g_bGotSighup		= 0;	// we just received SIGHUP; need to log
 static volatile sig_atomic_t g_bGotSigterm		= 0;	// we just received SIGTERM; need to shutdown
 static volatile sig_atomic_t g_bGotSigchld		= 0;	// we just received SIGCHLD; need to count dead children
@@ -11354,7 +11354,7 @@ void CheckLeaks ()
 	static int iHeadAllocs = sphAllocsCount ();
 	static int iHeadCheckpoint = sphAllocsLastID ();
 
-	if ( g_dThd.GetLength()==0 && !g_bDoRotate && iHeadAllocs!=sphAllocsCount() )
+	if ( g_dThd.GetLength()==0 && !g_iRotateCount && iHeadAllocs!=sphAllocsCount() )
 	{
 		lseek ( g_iLogFile, 0, SEEK_END );
 		sphAllocsDump ( g_iLogFile, iHeadCheckpoint );
@@ -11624,7 +11624,7 @@ void RotationThreadFunc ( void * )
 	while ( !g_bRotateShutdown )
 	{
 		// check if we have work to do
-		if ( !g_bDoRotate )
+		if ( !g_iRotateCount )
 		{
 			sphSleepMsec ( 50 );
 			continue;
@@ -11646,7 +11646,7 @@ void RotationThreadFunc ( void * )
 		g_tRotateQueueMutex.Lock();
 		if ( !g_dRotateQueue.GetLength() )
 		{
-			g_bDoRotate = false;
+			g_iRotateCount = Max ( 0, g_iRotateCount-1 );
 			sphInfo ( "rotating index: all indexes done" );
 		}
 		g_sPrereading = NULL;
@@ -11665,7 +11665,7 @@ void IndexRotationDone ()
 		kill ( g_dChildren[i], iSignal );
 #endif
 
-	g_bDoRotate = false;
+	g_iRotateCount = Max ( 0, g_iRotateCount-1 );
 	sphInfo ( "rotating finished" );
 }
 
@@ -11760,11 +11760,6 @@ void SeamlessForkPrereader ()
 {
 	sphLogDebug ( "Invoked SeamlessForkPrereader" );
 	// sanity checks
-	if ( !g_bDoRotate )
-	{
-		sphWarning ( "INTERNAL ERROR: preread attempt not in rotate state" );
-		return;
-	}
 	if ( g_sPrereading )
 	{
 		sphWarning ( "INTERNAL ERROR: preread attempt before previous completion" );
@@ -11909,7 +11904,7 @@ void HandlePipePreread ( PipeReader_t & tPipe, bool bFailure )
 		return;
 	}
 
-	assert ( g_bDoRotate && g_bSeamlessRotate && g_sPrereading );
+	assert ( g_iRotateCount && g_bSeamlessRotate && g_sPrereading );
 
 	// whatever the outcome, we will be done with this one
 	const char * sPrereading = g_sPrereading;
@@ -12622,7 +12617,7 @@ void CheckDelete ()
 void CheckRotate ()
 {
 	// do we need to rotate now?
-	if ( !g_bDoRotate )
+	if ( !g_iRotateCount )
 		return;
 
 	sphLogDebug ( "CheckRotate invoked" );
@@ -12685,7 +12680,6 @@ void CheckRotate ()
 	// seamless rotate
 	///////////////////
 
-	assert ( g_bDoRotate && g_bSeamlessRotate );
 	if ( g_dRotating.GetLength() || g_dRotateQueue.GetLength() || g_sPrereading )
 		return; // rotate in progress already; will be handled in CheckPipes()
 
@@ -12698,6 +12692,7 @@ void CheckRotate ()
 	}
 	g_tRotateConfigMutex.Unlock();
 
+	int iRotIndexes = 0;
 	// check what indexes need to be rotated
 	for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
 	{
@@ -12730,13 +12725,18 @@ void CheckRotate ()
 			if ( !( tIndex.m_bPreopen || g_bPreopenIndexes ) )
 				sphWarning ( "rotating index '%s' without preopen option; use per-index propen=1 or searchd preopen_indexes=1", sIndex.cstr() );
 		}
+
+		iRotIndexes++;
 	}
 
-	if ( g_eWorkers!=MPM_THREADS )
-		SeamlessForkPrereader ();
+	if ( !iRotIndexes )
+	{
+		sphWarning ( "INTERNAL ERROR: nothing to rotate after SIGHUP" );
+		g_iRotateCount = Max ( 0, g_iRotateCount-1 );
+	}
 
-	if ( g_eWorkers==MPM_THREADS && !g_dRotateQueue.GetLength() ) // set rotated at empty rotation request
-		g_bDoRotate = false;
+	if ( g_eWorkers!=MPM_THREADS && iRotIndexes )
+		SeamlessForkPrereader ();
 }
 
 
@@ -13325,7 +13325,7 @@ void CheckSignals ()
 	if ( g_bGotSighup )
 	{
 		g_tRotateQueueMutex.Lock();
-		g_bDoRotate = true;
+		g_iRotateCount++;
 		g_tRotateQueueMutex.Unlock();
 		sphInfo ( "rotating indices (seamless=%d)", (int)g_bSeamlessRotate ); // this might hang if performed from SIGHUP
 		g_bGotSighup = 0;
@@ -13735,7 +13735,7 @@ void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 		return;
 
 	if ( ( g_iMaxChildren && g_iChildren>=g_iMaxChildren )
-		|| ( g_bDoRotate && !g_bSeamlessRotate ) )
+		|| ( g_iRotateCount && !g_bSeamlessRotate ) )
 	{
 		FailClient ( iClientSock, SEARCHD_RETRY, "server maxed out, retry in a second" );
 		sphWarning ( "maxed out, dismissing client" );

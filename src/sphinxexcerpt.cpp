@@ -2266,7 +2266,7 @@ public:
 		assert ( iStart>=0 && m_pDoc+iStart+iLen<=m_pTokenizer->GetBufferEnd() );
 
 		bool bMatch = m_pHit && uPosition>=m_pHit->m_uPosition && uPosition<m_pHit->m_uPosition+m_pHit->m_uSpan;
-		while ( !bMatch && m_pHit+1<=m_pHitEnd && (m_pHit+1)->m_uPosition<=uPosition )
+		while ( !bMatch && m_pHit+1<m_pHitEnd && (m_pHit+1)->m_uPosition<=uPosition )
 		{
 			m_pHit++;
 			bMatch = uPosition>=m_pHit->m_uPosition && uPosition<m_pHit->m_uPosition+m_pHit->m_uSpan;

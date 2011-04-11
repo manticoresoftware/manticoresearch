@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
-<name>RT: kill-list</name>
+<name>RT: kill-list and segments merge</name>
 <config>
 searchd
 {
@@ -18,6 +18,16 @@ index test
 	rt_field = title
 	rt_field = content
 }
+
+index seg1
+{
+	type	= rt
+	path	= <data_path/>/seg1
+	rt_mem_limit = 32K
+	rt_attr_uint = gid
+	rt_field = body
+}
+
 
 indexer
 {
@@ -126,6 +136,23 @@ for ( $i=0; $i<count ( $queries ); $i++ )
 		}	
 	}
 }
+
+$replaced = 0;
+$queried = 0;
+for ( $i=0; $i<50; $i++ )
+{
+	$res = array ();
+	$res[] = @mysql_query ( "REPLACE INTO seg1 ( id, gid, body ) VALUES ( $i, $i, 'text $i' )" );
+	$res[] = @mysql_query ( "REPLACE INTO seg1 ( id, gid, body ) VALUES ( $i, $i, 'text $i' )" );
+	foreach ( $res as $r )
+	{
+		if ($r===true)
+			$replaced++;
+	}
+	$rq = @mysql_query ( "SELECT * FROM seg1 WHERE MATCH('text')" );
+	$queried += mysql_num_rows ($rq);
+}
+$results[] = "segments merge: replaced=$replaced, queried=$queried";
 
 @mysql_close($sock);
 	

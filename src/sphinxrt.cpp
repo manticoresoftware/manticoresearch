@@ -906,7 +906,7 @@ private:
 
 	RtSegment_t *				MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2, const CSphVector<SphDocID_t> * pAccKlist );
 	const RtWord_t *			CopyWord ( RtSegment_t * pDst, RtWordWriter_t & tOutWord, const RtSegment_t * pSrc, const RtWord_t * pWord, RtWordReader_t & tInWord, const CSphVector<SphDocID_t> * pAccKlist );
-	void						MergeWord ( RtSegment_t * pDst, const RtSegment_t * pSrc1, const RtWord_t * pWord1, const RtSegment_t * pSrc2, const RtWord_t * pWord2, RtWordWriter_t & tOut );
+	void						MergeWord ( RtSegment_t * pDst, const RtSegment_t * pSrc1, const RtWord_t * pWord1, const RtSegment_t * pSrc2, const RtWord_t * pWord2, RtWordWriter_t & tOut, const CSphVector<SphDocID_t> * pAccKlist );
 	void						CopyDoc ( RtSegment_t * pSeg, RtDocWriter_t & tOutDoc, RtWord_t * pWord, const RtSegment_t * pSrc, const RtDoc_t * pDoc );
 
 	void						SaveMeta ( int iDiskChunks );
@@ -1621,7 +1621,7 @@ void RtIndex_t::CopyDoc ( RtSegment_t * pSeg, RtDocWriter_t & tOutDoc, RtWord_t 
 }
 
 
-void RtIndex_t::MergeWord ( RtSegment_t * pSeg, const RtSegment_t * pSrc1, const RtWord_t * pWord1, const RtSegment_t * pSrc2, const RtWord_t * pWord2, RtWordWriter_t & tOut )
+void RtIndex_t::MergeWord ( RtSegment_t * pSeg, const RtSegment_t * pSrc1, const RtWord_t * pWord1, const RtSegment_t * pSrc2, const RtWord_t * pWord2, RtWordWriter_t & tOut, const CSphVector<SphDocID_t> * pAccKlist )
 {
 	assert ( pWord1->m_uWordID==pWord2->m_uWordID );
 
@@ -1647,7 +1647,8 @@ void RtIndex_t::MergeWord ( RtSegment_t * pSeg, const RtSegment_t * pSrc1, const
 			assert ( pSrc1->m_dKlist.BinarySearch ( pDoc1->m_uDocID )
 				|| ( pSrc1->m_bTlsKlist && pAcc && pAcc->m_dAccumKlist.BinarySearch ( pDoc1->m_uDocID ) ) );
 #endif
-			if ( !pSrc2->m_dKlist.BinarySearch ( pDoc2->m_uDocID ) )
+			if ( !pSrc2->m_dKlist.BinarySearch ( pDoc2->m_uDocID )
+				&& ( !pSrc1->m_bTlsKlist || !pSrc2->m_bTlsKlist || !pAccKlist->BinarySearch ( pDoc2->m_uDocID ) ) )
 				CopyDoc ( pSeg, tOutDoc, &tWord, pSrc2, pDoc2 );
 			pDoc1 = tIn1.UnzipDoc();
 			pDoc2 = tIn2.UnzipDoc();
@@ -1655,7 +1656,8 @@ void RtIndex_t::MergeWord ( RtSegment_t * pSeg, const RtSegment_t * pSrc1, const
 		} else if ( pDoc1 && ( !pDoc2 || pDoc1->m_uDocID < pDoc2->m_uDocID ) )
 		{
 			// winner from the first segment
-			if ( !pSrc1->m_dKlist.BinarySearch ( pDoc1->m_uDocID ) )
+			if ( !pSrc1->m_dKlist.BinarySearch ( pDoc1->m_uDocID )
+				&& ( !pSrc1->m_bTlsKlist || !pAccKlist->BinarySearch ( pDoc1->m_uDocID ) ) )
 				CopyDoc ( pSeg, tOutDoc, &tWord, pSrc1, pDoc1 );
 			pDoc1 = tIn1.UnzipDoc();
 
@@ -1663,7 +1665,8 @@ void RtIndex_t::MergeWord ( RtSegment_t * pSeg, const RtSegment_t * pSrc1, const
 		{
 			// winner from the second segment
 			assert ( pDoc2 && ( !pDoc1 || pDoc2->m_uDocID < pDoc1->m_uDocID ) );
-			if ( !pSrc2->m_dKlist.BinarySearch ( pDoc2->m_uDocID ) )
+			if ( !pSrc2->m_dKlist.BinarySearch ( pDoc2->m_uDocID )
+				&& ( !pSrc2->m_bTlsKlist || !pAccKlist->BinarySearch ( pDoc2->m_uDocID ) ) )
 				CopyDoc ( pSeg, tOutDoc, &tWord, pSrc2, pDoc2 );
 			pDoc2 = tIn2.UnzipDoc();
 		}
@@ -1964,7 +1967,7 @@ RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 			break;
 
 		assert ( pWords1 && pWords2 && pWords1->m_uWordID==pWords2->m_uWordID );
-		MergeWord ( pSeg, pSeg1, pWords1, pSeg2, pWords2, tOut );
+		MergeWord ( pSeg, pSeg1, pWords1, pSeg2, pWords2, tOut, pAccKlist );
 		pWords1 = tIn1.UnzipWord();
 		pWords2 = tIn2.UnzipWord();
 	}
@@ -3754,6 +3757,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 					for ( int i=0; i<iMatches; i++ )
 					{
+						assert ( !tCtx.m_bLookupSort || FindDocinfo ( m_pSegments[iSeg], pMatch[i].m_iDocID ) );
+
 						if ( tCtx.m_bLookupSort )
 							CopyDocinfo ( pMatch[i], FindDocinfo ( m_pSegments[iSeg], pMatch[i].m_iDocID ) );
 						ARRAY_FOREACH ( j, m_dDynamize )

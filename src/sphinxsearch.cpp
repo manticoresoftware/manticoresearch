@@ -851,6 +851,7 @@ static inline void CopyExtDoc ( ExtDoc_t & tDst, const ExtDoc_t & tSrc, CSphRowi
 
 ExtNode_i::ExtNode_i ()
 	: m_iAtomPos(0)
+	, m_uMaxID(0)
 	, m_iStride(0)
 	, m_pDocinfo(NULL)
 {
@@ -1701,7 +1702,7 @@ const ExtDoc_t * ExtTermPos_c<T>::GetDocsChunk ( SphDocID_t * pMaxID )
 
 
 template < TermPosFilter_e T >
-const ExtHit_t * ExtTermPos_c<T>::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t ) // OPTIMIZE: could possibly use uMaxID
+const ExtHit_t * ExtTermPos_c<T>::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
 {
 	if ( m_eState==COPY_DONE )
 	{
@@ -1762,7 +1763,7 @@ const ExtHit_t * ExtTermPos_c<T>::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocI
 	{
 		// where do we stand?
 		if ( !m_pRawHit || m_pRawHit->m_uDocid==DOCID_MAX )
-			m_pRawHit = ExtTerm_c::GetHitsChunk ( m_pRawDocs, m_uTermMaxID );
+			m_pRawHit = ExtTerm_c::GetHitsChunk ( m_pRawDocs, Min ( uMaxID, m_uTermMaxID ) );
 
 		// no more hits for current chunk
 		if ( !m_pRawHit )
@@ -3472,7 +3473,7 @@ const ExtDoc_t * ExtOrder_c::GetDocsChunk ( SphDocID_t * pMaxID )
 }
 
 
-const ExtHit_t * ExtOrder_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t )
+const ExtHit_t * ExtOrder_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
 {
 	if ( pDocs->m_uDocid==m_uHitsOverFor )
 		return NULL;
@@ -3518,7 +3519,7 @@ const ExtHit_t * ExtOrder_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t )
 	} else
 	{
 		// we did not copy any hits; check for trailing ones as the last resort
-		iHit = GetMatchingHits ( m_uLastMatchID, m_dHits, MAX_HITS-1 );
+		iHit = GetMatchingHits ( Min ( uMaxID, m_uLastMatchID ), m_dHits, MAX_HITS-1 );
 		if ( !iHit )
 		{
 			// actually, not *only* in this case, also in partial buffer case

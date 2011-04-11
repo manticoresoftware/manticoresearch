@@ -16,6 +16,8 @@ $agent_port_sql		= 6707;
 
 if ( array_key_exists ( "SPHINXDAEMON", $_ENV ) && $_ENV["SPHINXDAEMON"] ) 
 	$sd_address = $_ENV["SPHINXDAEMON"];
+else if ( array_key_exists ( "SPHINXDAEMON", $_SERVER ) && $_SERVER["SPHINXDAEMON"] )
+	$sd_address = $_SERVER["SPHINXDAEMON"];
 
 $agents 			= array (
 	array ( "address" => $sd_address, "port" => $sd_port, "sqlport" => $sd_sphinxql_port ),

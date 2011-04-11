@@ -4742,9 +4742,6 @@ BYTE * CSphTokenizer_Filter::GetToken ()
 			m_tLastToken.m_pBufferPtr = m_dStoredTokens[ ( m_iStoredStart+iTokensPerForm-1 ) % iSize ].m_pBufferPtr;
 			m_pLastToken = &m_tLastToken;
 
-			m_iStoredStart = ( m_iStoredStart+iTokensPerForm ) % iSize;
-			m_iStoredLen -= iTokensPerForm;
-
 			if ( m_bBuildMultiform )
 			{
 				BYTE * pOut = m_sTokenizedMultiform;
@@ -4762,6 +4759,9 @@ BYTE * CSphTokenizer_Filter::GetToken ()
 				else
 					pMax[-1] = '\0';
 			}
+
+			m_iStoredStart = ( m_iStoredStart+iTokensPerForm ) % iSize;
+			m_iStoredLen -= iTokensPerForm;
 
 			assert ( m_iStoredLen>=0 );
 			return (BYTE*)pCurForm->m_sNormalForm.cstr ();

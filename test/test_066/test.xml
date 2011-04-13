@@ -50,6 +50,12 @@ index v20
 	source	= test
 	path	= <this_test/>/refdata/v20
 }
+
+index v8
+{
+	source	= test
+	path	= <this_test/>/refdata/v8
+}
 </config>
 
 <queries>
@@ -57,6 +63,7 @@ index v20
 <query mode="extended2" index="v19">test</query>
 <query mode="extended2" index="v19noattrs">test</query>
 <query mode="extended2" index="v20">test</query>
+<query mode="extended2" index="v8">ford | corsa | tt</query>
 </queries>
 
 </test>

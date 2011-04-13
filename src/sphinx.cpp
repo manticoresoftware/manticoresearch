@@ -13049,9 +13049,13 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 			return false;
 	}
 
+	bool bWordDict = false;
+	if ( m_pDict )
+		bWordDict = m_pDict->GetSettings().m_bWordDict;
+
 	// preload checkpoints (must be done here as they are not shared)
-	if 	( !m_tWordlist.ReadCP ( tWordlist, m_uVersion, m_pDict->GetSettings().m_bWordDict, m_sLastError ) )
-		{
+	if 	( !m_tWordlist.ReadCP ( tWordlist, m_uVersion, bWordDict, m_sLastError ) )
+	{
 		m_sLastError.SetSprintf ( "failed to read %s: %s", GetIndexFileName("spi").cstr(), m_sLastError.cstr () );
 		return false;
 	}
@@ -23325,7 +23329,11 @@ bool CWordlist::ReadCP ( CSphAutofile & tFile, DWORD uVer, bool bWordDict, CSphS
 		// convert v.10 checkpoints
 		ARRAY_FOREACH ( i, m_dCheckpoints )
 		{
-			m_dCheckpoints[i].m_iWordID = (SphWordID_t)tReader.GetOffset();
+#if USE_64BIT
+			m_dCheckpoints[i].m_iWordID = tReader.GetOffset();
+#else
+			m_dCheckpoints[i].m_iWordID = tReader.GetDword();
+#endif
 			m_dCheckpoints[i].m_iWordlistOffset = tReader.GetDword();
 		}
 	}

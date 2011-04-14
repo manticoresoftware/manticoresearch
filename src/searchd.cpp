@@ -5294,7 +5294,25 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 		for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
 		{
 			const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
-			if ( !tCol.m_pExpr )
+			if ( tCol.m_pExpr.Ptr() || ( bUsualApi && *tCol.m_sName.cstr()=='@' ) )
+			{
+				if ( *tCol.m_sName.cstr()=='@' )
+				{
+					CSphColumnInfo & tItem = tFrontendSchema.GetWAttrs().Add();
+					tItem.m_iIndex = tInternalSchema.GetAttrsCount();
+					tItem.m_sName = tCol.m_sName;
+				} else
+					ARRAY_FOREACH ( j, (*pSelectItems) )
+						if ( tFrontendSchema.GetAttr(j).m_iIndex<0
+							&& ( (*pSelectItems)[j].m_sAlias.cstr() && (*pSelectItems)[j].m_sAlias==tCol.m_sName ) )
+						{
+							CSphColumnInfo & tItem = tFrontendSchema.GetWAttr(j);
+							tItem.m_iIndex = tInternalSchema.GetAttrsCount();
+							tItem.m_sName = (*pSelectItems)[j].m_sAlias;
+							dKnownItems.Add(j);
+							++iKnownItems;
+						}
+			} else
 			{
 				bool bAdd = false;
 				ARRAY_FOREACH ( j, (*pSelectItems) )
@@ -5309,7 +5327,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 						bAdd = true;
 						dKnownItems.Add(j);
 						++iKnownItems;
-						if ( !bAgent && bFromSphinxql )
+						if ( !bAgent )
 						{
 							CSphColumnInfo & tItem = tFrontendSchema.GetWAttr(j);
 							tItem.m_iIndex = tInternalSchema.GetAttrsCount(); // temporary idx, will change to locator by this index
@@ -5337,21 +5355,8 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 
 				if ( !bAdd )
 					continue;
-			} else
-			{
-				ARRAY_FOREACH ( j, (*pSelectItems) )
-					if ( tFrontendSchema.GetAttr(j).m_iIndex<0
-						&& ( (*pSelectItems)[j].m_sAlias.cstr() && (*pSelectItems)[j].m_sAlias==tCol.m_sName ) )
-					{
-						CSphColumnInfo & tItem = tFrontendSchema.GetWAttr(j);
-						tItem.m_iIndex = tInternalSchema.GetAttrsCount();
-						tItem.m_sName = (*pSelectItems)[j].m_sAlias;
-						dKnownItems.Add(j);
-						++iKnownItems;
-					}
 			}
-
-
+			
 			// if before all schemas were proved as equal, and the tCol taken from current schema is static -
 			// this is no reason now to make it dynamic.
 			bool bDynamic = bAllEqual?tCol.m_tLocator.m_bDynamic:true;
@@ -5372,7 +5377,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	}
 
 	// check if we actually have all required columns already
-		if ( iKnownItems<pSelectItems->GetLength() )
+	if ( iKnownItems<pSelectItems->GetLength() )
 	{
 		tRes.m_iSuccesses = 0;
 		dKnownItems.Sort();
@@ -5395,7 +5400,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 
 	// finalize the tFrontendSchema - switch back m_iIndex field
 	// and set up the locators for the fields
-	if ( !bAgent && bFromSphinxql )
+	if ( !bAgent )
 	{
 		ARRAY_FOREACH ( i, tFrontendSchema.GetWAttrs() )
 		{
@@ -5434,7 +5439,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 		// convert all matches to minimal schema
 		if ( !bAllEqual )
 			RemapResult ( &tInternalSchema, &tRes );
-		if ( !bAgent && bFromSphinxql )
+		if ( !bAgent )
 			AdoptAliasedSchema ( tRes, &tFrontendSchema );
 		return true;
 	}
@@ -5565,7 +5570,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 
 	if ( !bAllEqual )
 		RemapResult ( &tInternalSchema, &tRes, false );
-	if ( !bAgent && bFromSphinxql )
+	if ( !bAgent )
 		AdoptAliasedSchema ( tRes, &tFrontendSchema );
 	return true;
 }

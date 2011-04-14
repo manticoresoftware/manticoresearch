@@ -209,6 +209,13 @@ index distlfake
 
 
 <queries>
+
+<!--This part is totally uncompatible. In compat mode we have to return result
+ in index column order, as always. But guys from #41 want the query column order, and it
+ may break the old legacy application which wants as the index order as before -->
+<query index="dist_no" select="gr,tag" groupattr="gr"/>
+<query index="dist_no" select="tag,gr" groupattr="gr"/>
+
 <!--First, test that aggregate works on distributed on example o Sum -->
 <query index="dist_no" select="gr,sum(tag) as t" groupattr="gr"/>
 <query index="dist0" select="gr,sum(tag) as t" groupattr="gr"/>

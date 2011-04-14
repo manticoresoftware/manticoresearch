@@ -190,7 +190,7 @@ public:
 	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool );
 
 	virtual void		LoadStopwords ( const char *, ISphTokenizer * ) {}
-	virtual bool		LoadWordforms ( const char *, ISphTokenizer * ) { return true; }
+	virtual bool		LoadWordforms ( const char *, ISphTokenizer *, const char * ) { return true; }
 	virtual bool		SetMorphology ( const char *, bool, CSphString & ) { return true; }
 
 	virtual void		Setup ( const CSphDictSettings & tSettings ) { m_tSettings = tSettings; }
@@ -945,8 +945,8 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		}
 
 		pDict = tDictSettings.m_bWordDict
-			? sphCreateDictionaryKeywords ( tDictSettings, pTokenizer, sError )
-			: sphCreateDictionaryCRC ( tDictSettings, pTokenizer, sError );
+			? sphCreateDictionaryKeywords ( tDictSettings, pTokenizer, sError, sIndexName )
+			: sphCreateDictionaryCRC ( tDictSettings, pTokenizer, sError, sIndexName );
 		if ( !pDict )
 			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
@@ -1133,7 +1133,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		sIndexPath.SetSprintf ( g_bRotate ? "%s.tmp" : "%s", hIndex["path"].cstr() );
 
 		// do index
-		CSphIndex * pIndex = sphCreateIndexPhrase ( NULL, sIndexPath.cstr() );
+		CSphIndex * pIndex = sphCreateIndexPhrase ( sIndexName, sIndexPath.cstr() );
 		assert ( pIndex );
 
 		// check lock file

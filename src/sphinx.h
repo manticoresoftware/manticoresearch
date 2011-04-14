@@ -360,6 +360,7 @@ public:
 	void		SetRemap ( const CSphLowercaser * pLC );
 	void		AddRemaps ( const CSphVector<CSphRemapRange> & dRemaps, DWORD uFlags );
 	void		AddSpecials ( const char * sSpecials );
+	uint64_t	GetFNV () const;
 
 public:
 	const CSphLowercaser &		operator = ( const CSphLowercaser & rhs );
@@ -549,6 +550,9 @@ public:
 	/// set new buffer ptr (must be within current bounds)
 	virtual void					SetBufferPtr ( const char * sNewPtr ) = 0;
 
+	// get settings hash
+	uint64_t						GetSettingsFNV () const { return m_tLC.GetFNV(); }
+
 protected:
 	virtual bool					RemapCharacters ( const char * sConfig, DWORD uFlags, const char * sSource, bool bCanRemap, CSphString & sError );
 	virtual bool					AddSpecialsSPZ ( const char * sSpecials, const char * sDirective, CSphString & sError );
@@ -660,7 +664,7 @@ struct CSphDict
 	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer ) = 0;
 
 	/// load wordforms from a given file
-	virtual bool		LoadWordforms ( const char * sFile, ISphTokenizer * pTokenizer ) = 0;
+	virtual bool		LoadWordforms ( const char * sFile, ISphTokenizer * pTokenizer, const char * sIndex ) = 0;
 
 	/// set morphology
 	virtual bool		SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError ) = 0;
@@ -725,10 +729,10 @@ public:
 
 
 /// CRC32/FNV64 dictionary factory
-CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, ISphTokenizer * pTokenizer, CSphString & sError );
+CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, ISphTokenizer * pTokenizer, CSphString & sError, const char * sIndex );
 
 /// keyword-storing dictionary factory
-CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, ISphTokenizer * pTokenizer, CSphString & sError );
+CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, ISphTokenizer * pTokenizer, CSphString & sError, const char * sIndex );
 
 /// clear wordform cache
 void sphShutdownWordforms ();
@@ -2576,7 +2580,7 @@ public:
 	};
 
 public:
-	explicit					CSphIndex ( const char * sIndexName, const char * sName );
+	explicit					CSphIndex ( const char * sIndexName, const char * sFilename );
 	virtual						~CSphIndex ();
 
 	virtual const CSphString &	GetLastError () const { return m_sLastError; }
@@ -2667,6 +2671,9 @@ public:
 
 	/// internal debugging hook, DO NOT USE
 	virtual int					DebugCheck ( FILE * fp ) = 0;
+
+	/// getter for name
+	const char * GetName () { return m_sIndexName.cstr(); }
 
 public:
 	DWORD						m_uAttrsStatus;			///< whether in-memory attrs are updated (compared to disk state)

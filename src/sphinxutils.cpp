@@ -967,7 +967,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		if ( pIndex->m_bId32to64 )
 			tSettings.m_bCrc32 = true;
 		sphConfDictionary ( hIndex, tSettings );
-		CSphDict * pDict = sphCreateDictionaryCRC ( tSettings, pIndex->GetTokenizer (), sError );
+		CSphDict * pDict = sphCreateDictionaryCRC ( tSettings, pIndex->GetTokenizer (), sError, pIndex->GetName() );
 		if ( !pDict )
 			return false;
 
@@ -1450,14 +1450,14 @@ void sphBacktrace ( EXCEPTION_POINTERS * pExc, const char * sFile )
 {
 	if ( !pExc || !sFile || !(*sFile) )
 	{
-		sphInfo( "can't generate minidump" );
+		sphInfo ( "can't generate minidump" );
 		return;
 	}
 
 	HANDLE hFile = CreateFile ( sFile, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0 );
 	if ( hFile==INVALID_HANDLE_VALUE )
 	{
-		sphInfo( "can't create minidump file '%s'", sFile );
+		sphInfo ( "can't create minidump file '%s'", sFile );
 		return;
 	}
 

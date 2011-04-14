@@ -895,8 +895,6 @@ public:
 
 	void						DumpToDisk ( const char * sFilename );
 
-	virtual const char *		GetName () { return m_sIndexName.cstr(); }
-
 	virtual void				CheckRamFlush ();
 
 private:

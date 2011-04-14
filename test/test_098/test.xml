@@ -16,7 +16,7 @@ source src
 {
 	type			= mysql
 	<sql_settings/>
-	sql_query		= SELECT * FROM test_table
+	sql_query		= SELECT * FROM test_table WHERE document_id IN (1,2,3,4)
 }
 
 index main
@@ -25,17 +25,57 @@ index main
 	path			= <data_path/>/main
 	charset_table	= 0..9, A..Z->a..z, _, a..z, (, ), $
 }
+
+source src_wf
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test_table WHERE document_id>4
+}
+
+index wf1
+{
+	source			= src_wf
+	path			= <data_path/>/wf1
+	morphology			= stem_en
+	charset_type		= utf-8
+	charset_table	= 0..9, A..Z->a..z, a..z,
+	wordforms = test_098/wordforms.txt
+}
+
+index wf2
+{
+	source			= src_wf
+	path			= <data_path/>/wf2
+	morphology			= stem_en
+	charset_type		= utf-8
+	charset_table	= 0..9, A..Z->a..z, a..z, -
+	wordforms = test_098/wordforms.txt
+}
+
 </config>
 
 <queries>
-<query>google$com</query>
-<query>foo(bar)</query>
-<query>foo\(bar\)</query>
-<query mode="extended2">google$com</query>
-<query mode="extended2">foo(bar)</query>
-<query mode="extended2">foo\(bar\)</query>
-<query mode="extended2">"foo(bar)"</query>
+<query index='main'>google$com</query>
+<query index='main'>foo(bar)</query>
+<query index='main'>foo\(bar\)</query>
+<query index='main' mode="extended2">google$com</query>
+<query index='main' mode="extended2">foo(bar)</query>
+<query index='main' mode="extended2">foo\(bar\)</query>
+<query index='main' mode="extended2">"foo(bar)"</query>
+<!-- here is going regression (query 8-)  when second index shares wordform from 1st index -->
+<query index='wf1' mode="extended2">run</query>
+<query index='wf2' mode="extended2">run</query>
+<query index='wf1' mode="extended2">run\-time</query>
+<query index='wf2' mode="extended2">run\-time</query>
+<query index='wf1' mode="extended2">run time</query>
+<query index='wf2' mode="extended2">run time</query>
 </queries>
+<sphqueries>
+<sphinxql>CALL KEYWORDS ('run-time (run time) issue', 'wf1')</sphinxql>
+<sphinxql>CALL KEYWORDS ('run-time (run time) issue', 'wf2')</sphinxql>
+</sphqueries>
+
 
 <db_create>
 CREATE TABLE test_table (
@@ -50,7 +90,9 @@ INSERT INTO test_table VALUES
 	( 1, 'google dot com' ),
 	( 2, 'foo beyond all bars' ),
 	( 3, 'mangled google$com link' ),
-	( 4, 'no idea why search for foo(bar), but they do' )
+	( 4, 'no idea why search for foo(bar), but they do' ),
+	( 5, 'run-time error' ),
+	( 6, 'running without trouble' )
 </db_insert>
 
 </test>

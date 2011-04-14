@@ -2314,6 +2314,12 @@ const CSphLowercaser & CSphLowercaser::operator = ( const CSphLowercaser & rhs )
 	return * this;
 }
 
+uint64_t CSphLowercaser::GetFNV () const
+{
+	int iLen = ( sizeof(int) * m_iChunks * CHUNK_SIZE ) / sizeof(BYTE); // NOLINT
+	return sphFNV64 ( (BYTE *)m_pData, iLen );
+}
+
 /////////////////////////////////////////////////////////////////////////////
 
 /// parser to build lowercaser from textual config
@@ -7037,14 +7043,14 @@ DWORD * sphArenaInit ( int iMaxBytes )
 // INDEX
 /////////////////////////////////////////////////////////////////////////////
 
-CSphIndex::CSphIndex ( const char * sIndexName, const char * sName )
+CSphIndex::CSphIndex ( const char * sIndexName, const char * sFilename )
 	: m_uAttrsStatus ( 0 )
 	, m_iTID ( 0 )
 	, m_bEnableStar ( false )
 	, m_bExpandKeywords ( false )
 	, m_iExpansionLimit ( 0 )
 	, m_pProgress ( NULL )
-	, m_tSchema ( sName )
+	, m_tSchema ( sFilename )
 	, m_sLastError ( "(no error message)" )
 	, m_bInplaceSettings ( false )
 	, m_iHitGap ( 0 )
@@ -11536,7 +11542,7 @@ public:
 	explicit			CSphDictTraits ( CSphDict * pDict ) : m_pDict ( pDict ) { assert ( m_pDict ); }
 
 	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer ) { m_pDict->LoadStopwords ( sFiles, pTokenizer ); }
-	virtual bool		LoadWordforms ( const char * sFile, ISphTokenizer * pTokenizer ) { return m_pDict->LoadWordforms ( sFile, pTokenizer ); }
+	virtual bool		LoadWordforms ( const char * sFile, ISphTokenizer * pTokenizer, const char * sIndex ) { return m_pDict->LoadWordforms ( sFile, pTokenizer, sIndex ); }
 	virtual bool		SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError ) { return m_pDict->SetMorphology ( szMorph, bUseUTF8, sError ); }
 
 	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) { return m_pDict->GetWordID ( pWord, iLen, bFilterStops ); }
@@ -12486,8 +12492,8 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 		}
 
 		CSphDict * pDict = tDictSettings.m_bWordDict
-			? sphCreateDictionaryKeywords ( tDictSettings, pTokenizer, m_sLastError )
-			: sphCreateDictionaryCRC ( tDictSettings, pTokenizer, m_sLastError );
+			? sphCreateDictionaryKeywords ( tDictSettings, pTokenizer, m_sLastError, m_sIndexName.cstr() )
+			: sphCreateDictionaryCRC ( tDictSettings, pTokenizer, m_sLastError, m_sIndexName.cstr() );
 
 		if ( !pDict )
 			return false;
@@ -14282,7 +14288,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	if ( pQuery->m_sQuery.IsEmpty() )
 		return MultiScan ( pQuery, pResult, iSorters, &dSorters[0], pExtraFilters, iTag );
 
-	ISphTokenizer * pTokenizer = m_pTokenizer->Clone ( false );
+	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( false ) );
 
 	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
 	CSphDict * pDictBase = m_pDict;
@@ -14292,17 +14298,16 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	}
 
 	CSphScopedPtr<CSphDict> tDict ( NULL );
-	CSphDict * pDict = SetupStarDict ( tDict, pDictBase, *pTokenizer );
+	CSphDict * pDict = SetupStarDict ( tDict, pDictBase, *pTokenizer.Ptr() );
 
 	CSphScopedPtr<CSphDict> tDict2 ( NULL );
-	pDict = SetupExactDict ( tDict2, pDict, *pTokenizer );
+	pDict = SetupExactDict ( tDict2, pDict, *pTokenizer.Ptr() );
 
 	// parse query
 	XQQuery_t tParsed;
-	if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), pTokenizer, &m_tSchema, pDict ) )
+	if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), pTokenizer.Ptr(), &m_tSchema, pDict ) )
 	{
 		pResult->m_sError = tParsed.m_sParseError;
-		SafeDelete ( pTokenizer );
 		return false;
 	}
 
@@ -14328,8 +14333,6 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 
 	CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
 	bool bResult = ParsedMultiQuery ( pQuery, pResult, iSorters, &dSorters[0], tParsed, pDict, pExtraFilters, &tNodeCache, iTag );
-
-	SafeDelete ( pTokenizer );
 
 	return bResult;
 }
@@ -15575,6 +15578,8 @@ struct WordformContainer_t
 	CSphString					m_sFilename;
 	struct_stat					m_tStat;
 	DWORD						m_uCRC32;
+	uint64_t					m_uTokenizerFNV;
+	CSphString					m_sIndexName;
 	CSphVector <CSphString>		m_dNormalForms;
 	CSphMultiformContainer * m_pMultiWordforms;
 	CSphOrderedHash < int, CSphString, CSphStrHashFunc, 1048576, 117 >	m_dHash;
@@ -15593,7 +15598,7 @@ struct CSphDictCRCTraits : CSphDict
 	virtual				~CSphDictCRCTraits ();
 
 	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer );
-	virtual bool		LoadWordforms ( const char * szFile, ISphTokenizer * pTokenizer );
+	virtual bool		LoadWordforms ( const char * szFile, ISphTokenizer * pTokenizer, const char * sIndex );
 	virtual bool		SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError );
 	virtual bool		HasMorphology() const;
 	virtual void		ApplyStemmers ( BYTE * pWord );
@@ -15649,8 +15654,8 @@ private:
 
 	static CSphVector<WordformContainer_t*>		m_dWordformContainers;
 
-	static WordformContainer_t *	GetWordformContainer ( const char * szFile, DWORD uCRC32, const ISphTokenizer * pTokenizer );
-	static WordformContainer_t *	LoadWordformContainer ( const char * szFile, DWORD uCRC32, const ISphTokenizer * pTokenizer );
+	static WordformContainer_t *	GetWordformContainer ( const char * szFile, DWORD uCRC32, const ISphTokenizer * pTokenizer, const char * sIndex );
+	static WordformContainer_t *	LoadWordformContainer ( const char * szFile, DWORD uCRC32, const ISphTokenizer * pTokenizer, const char * sIndex );
 
 	bool				InitMorph ( const char * szMorph, int iLength, bool bUseUTF8, CSphString & sError );
 	bool				AddMorph ( int iMorph );
@@ -15869,6 +15874,7 @@ static void GetFileStats ( const char * szFilename, CSphSavedFile & tInfo )
 WordformContainer_t::WordformContainer_t ()
 	: m_iRefCount ( 0 )
 	, m_pMultiWordforms ( NULL )
+	, m_uTokenizerFNV ( 0 )
 {
 }
 
@@ -16357,13 +16363,20 @@ void CSphDictCRCTraits::SweepWordformContainers ( const char * szFile, DWORD uCR
 }
 
 
-WordformContainer_t * CSphDictCRCTraits::GetWordformContainer ( const char * szFile, DWORD uCRC32, const ISphTokenizer * pTokenizer )
+WordformContainer_t * CSphDictCRCTraits::GetWordformContainer ( const char * szFile, DWORD uCRC32, const ISphTokenizer * pTokenizer, const char * sIndex )
 {
 	ARRAY_FOREACH ( i, m_dWordformContainers )
 		if ( m_dWordformContainers[i]->IsEqual ( szFile, uCRC32 ) )
-			return m_dWordformContainers[i];
+		{
+			WordformContainer_t * pContainer = m_dWordformContainers[i];
+			if ( pTokenizer->GetSettingsFNV()==pContainer->m_uTokenizerFNV )
+				return pContainer;
 
-	WordformContainer_t * pContainer = LoadWordformContainer ( szFile, uCRC32, pTokenizer );
+			sphWarning ( "index %s: wordforms file %s is shared with index %s, but tokenizer settings are different; IGNORING wordforms", sIndex, szFile, pContainer->m_sIndexName.cstr() );
+			return NULL;
+		}
+
+	WordformContainer_t * pContainer = LoadWordformContainer ( szFile, uCRC32, pTokenizer, sIndex );
 	if ( pContainer )
 		m_dWordformContainers.Add ( pContainer );
 
@@ -16371,7 +16384,7 @@ WordformContainer_t * CSphDictCRCTraits::GetWordformContainer ( const char * szF
 }
 
 
-WordformContainer_t * CSphDictCRCTraits::LoadWordformContainer ( const char * szFile, DWORD uCRC32, const ISphTokenizer * pTokenizer )
+WordformContainer_t * CSphDictCRCTraits::LoadWordformContainer ( const char * szFile, DWORD uCRC32, const ISphTokenizer * pTokenizer, const char * sIndex )
 {
 	// stat it; we'll store stats for later checks
 	struct_stat FileStat;
@@ -16385,6 +16398,8 @@ WordformContainer_t * CSphDictCRCTraits::LoadWordformContainer ( const char * sz
 	pContainer->m_sFilename = szFile;
 	pContainer->m_tStat = FileStat;
 	pContainer->m_uCRC32 = uCRC32;
+	pContainer->m_uTokenizerFNV = pTokenizer->GetSettingsFNV();
+	pContainer->m_sIndexName = sIndex;
 
 	// open it
 	CSphString sError;
@@ -16473,14 +16488,14 @@ WordformContainer_t * CSphDictCRCTraits::LoadWordformContainer ( const char * sz
 }
 
 
-bool CSphDictCRCTraits::LoadWordforms ( const char * szFile, ISphTokenizer * pTokenizer )
+bool CSphDictCRCTraits::LoadWordforms ( const char * szFile, ISphTokenizer * pTokenizer, const char * sIndex )
 {
 	GetFileStats ( szFile, m_tWFFileInfo );
 
 	DWORD uCRC32 = m_tWFFileInfo.m_uCRC32;
 
 	SweepWordformContainers ( szFile, uCRC32 );
-	m_pWordforms = GetWordformContainer ( szFile, uCRC32, pTokenizer );
+	m_pWordforms = GetWordformContainer ( szFile, uCRC32, pTokenizer, sIndex );
 	if ( m_pWordforms )
 		m_pWordforms->m_iRefCount++;
 
@@ -17520,7 +17535,7 @@ const char * CSphDictKeywords::HitblockGetKeyword ( SphWordID_t uWordID )
 // DICTIONARY FACTORIES
 //////////////////////////////////////////////////////////////////////////
 
-static CSphDict * SetupDictionary ( CSphDict * pDict, const CSphDictSettings & tSettings, ISphTokenizer * pTokenizer, CSphString & sError )
+static CSphDict * SetupDictionary ( CSphDict * pDict, const CSphDictSettings & tSettings, ISphTokenizer * pTokenizer, CSphString & sError, const char * sIndex )
 {
 	assert ( pTokenizer );
 	assert ( pDict );
@@ -17530,12 +17545,12 @@ static CSphDict * SetupDictionary ( CSphDict * pDict, const CSphDictSettings & t
 		sError = "";
 
 	pDict->LoadStopwords ( tSettings.m_sStopwords.cstr (), pTokenizer );
-	pDict->LoadWordforms ( tSettings.m_sWordforms.cstr (), pTokenizer );
+	pDict->LoadWordforms ( tSettings.m_sWordforms.cstr (), pTokenizer, sIndex );
 	return pDict;
 }
 
 
-CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, ISphTokenizer * pTokenizer, CSphString & sError )
+CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, ISphTokenizer * pTokenizer, CSphString & sError, const char * sIndex )
 {
 	CSphDict * pDict = NULL;
 	if ( tSettings.m_bCrc32 )
@@ -17544,14 +17559,14 @@ CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, ISphToke
 		pDict = new CSphDictCRC<false> ();
 	if ( !pDict )
 		return NULL;
-	return SetupDictionary ( pDict, tSettings, pTokenizer, sError );
+	return SetupDictionary ( pDict, tSettings, pTokenizer, sError, sIndex );
 }
 
 
-CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, ISphTokenizer * pTokenizer, CSphString & sError )
+CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, ISphTokenizer * pTokenizer, CSphString & sError, const char * sIndex )
 {
 	CSphDict * pDict = new CSphDictKeywords();
-	return SetupDictionary ( pDict, tSettings, pTokenizer, sError );
+	return SetupDictionary ( pDict, tSettings, pTokenizer, sError, sIndex );
 }
 
 

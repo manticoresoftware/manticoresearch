@@ -808,7 +808,7 @@ void TestQueryParser ()
 
 	CSphDictSettings tDictSettings;
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( sphCreateSBCSTokenizer () );
-	CSphScopedPtr<CSphDict> pDict ( sphCreateDictionaryCRC ( tDictSettings, pTokenizer.Ptr(), sTmp ) );
+	CSphScopedPtr<CSphDict> pDict ( sphCreateDictionaryCRC ( tDictSettings, pTokenizer.Ptr(), sTmp, "query" ) );
 	assert ( pTokenizer.Ptr() );
 	assert ( pDict.Ptr() );
 
@@ -1672,7 +1672,7 @@ void TestRTWeightBoundary ()
 		CSphDictSettings tDictSettings;
 
 		ISphTokenizer * pTok = sphCreateUTF8Tokenizer();
-		CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, pTok, sError );
+		CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, pTok, sError, "weight" );
 
 		CSphColumnInfo tCol;
 		CSphSchema tSrcSchema;
@@ -1838,7 +1838,7 @@ void TestRTSendVsMerge ()
 	CSphDictSettings tDictSettings;
 
 	ISphTokenizer * pTok = sphCreateUTF8Tokenizer();
-	CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, pTok, sError );
+	CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, pTok, sError, "rt" );
 
 	CSphColumnInfo tCol;
 	CSphSchema tSrcSchema;
@@ -2060,8 +2060,8 @@ void BenchStemmer ()
 			*p++ = *sTok++;
 		*pStart = (BYTE)( p-pStart-1 ); // store length
 		for ( int i=0; i<GAP; i++ )
-			*p++ = '\0'; // trailing zero and a safety gap 
-		if ( p >= pTokens+POOLSIZE )
+			*p++ = '\0'; // trailing zero and a safety gap
+		if ( p>=pTokens+POOLSIZE )
 			sphDie ( "out of buffer at tok %d", iToks );
 		iToks++;
 	}
@@ -2105,7 +2105,7 @@ void BenchStemmer ()
 		memcpy ( buf, p+1, *p+1 );
 
 		stem_en ( p+1, *p );
-		int ll = strlen((char*)p+1);
+		int ll = strlen ( (char*)p+1 );
 		if ( ll!=pSnow->l || memcmp ( p+1, pSnow->p, ll ) )
 		{
 			pSnow->p[pSnow->l] = 0;
@@ -2116,7 +2116,7 @@ void BenchStemmer ()
 #endif
 
 #if PORTER1
-		p [ stem(z, (char*)p+1, *p-1)+2 ] = 0;
+		p [ stem ( z, (char*)p+1, *p-1 )+2 ] = 0;
 #endif
 
 		p += *p + GAP + 1;
@@ -2138,7 +2138,7 @@ void BenchStemmer ()
 	printf ( "stemmed %d tokens (%d bytes) in %d msec, hash %08x %08x\n",
 		iToks, iBytes, (int)(tmStem/1000),
 		(DWORD)( uHash>>32 ), (DWORD)( uHash & 0xffffffffUL ) );
-	if ( uHash!=U64C(0x54ef4f21994b67db) )
+	if ( uHash!=U64C ( 0x54ef4f21994b67db ) )
 		printf ( "ERROR, HASH MISMATCH\n" );
 
 	SafeDelete ( pTok );

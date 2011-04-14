@@ -49,9 +49,6 @@ public:
 	/// dump index data to disk
 	virtual void DumpToDisk ( const char * sFilename ) = 0;
 
-	/// getter for name
-	virtual const char * GetName () = 0;
-
 	/// check and flush index memory to disk
 	virtual void CheckRamFlush () = 0;
 };

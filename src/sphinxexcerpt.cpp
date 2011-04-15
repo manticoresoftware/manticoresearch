@@ -639,11 +639,16 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDi
 	BYTE * sWord;
 	DWORD uPosition = 0; // hit position in document
 	SphWordID_t iBlendID = 0;
+	const char * pBlendedEnd = NULL;
 	while ( ( sWord = pTokenizer->GetToken() )!=NULL )
 	{
 		if ( pTokenizer->TokenIsBlended() )
 		{
-			iBlendID = pDict->GetWordID ( sWord );
+			if ( pBlendedEnd<pTokenizer->GetTokenEnd() )
+			{
+				iBlendID = pDict->GetWordID ( sWord );
+				pBlendedEnd = pTokenizer->GetTokenEnd();
+			}
 			continue;
 		}
 
@@ -2069,7 +2074,7 @@ public:
 
 	virtual void OnOverlap ( int iStart, int iLen ) = 0;
 	virtual void OnSkipHtml ( int iStart, int iLen ) = 0;
-	virtual void OnToken ( int iStart, int iLen, const BYTE * sWord, SphWordID_t iWordID, DWORD uPosition ) = 0;
+	virtual void OnToken ( int iStart, int iLen, const BYTE * sWord, SphWordID_t iWordID, DWORD uPosition, SphWordID_t iBlendID ) = 0;
 	virtual void OnSPZ ( BYTE iSPZ, DWORD uPosition, char * sZoneName ) = 0;
 	virtual void OnTail ( int iStart, int iLen ) = 0;
 	virtual void OnFinish () = 0;
@@ -2098,7 +2103,7 @@ public:
 
 	virtual ~HitCollector_c () {}
 
-	virtual void OnToken ( int , int iLen, const BYTE * sWord, SphWordID_t iWordID, DWORD uPosition )
+	virtual void OnToken ( int , int iLen, const BYTE * sWord, SphWordID_t iWordID, DWORD uPosition, SphWordID_t )
 	{
 		m_tContainer.AddHits ( iWordID, sWord, iLen, uPosition );
 		m_tContainer.m_uLastPos = iWordID ? uPosition : m_tContainer.m_uLastPos;
@@ -2190,12 +2195,14 @@ public:
 		ResultEmit ( m_pDoc+iStart, iLen );
 	}
 
-	virtual void OnToken ( int iStart, int iLen, const BYTE * sWord, SphWordID_t iWordID, DWORD )
+	virtual void OnToken ( int iStart, int iLen, const BYTE * sWord, SphWordID_t iWordID, DWORD , SphWordID_t iBlendID )
 	{
 		assert ( m_pDoc );
 		assert ( iStart>=0 && m_pDoc+iStart+iLen<=m_pTokenizer->GetBufferEnd() );
 
 		bool bMatch = ( m_tContainer.FindWord ( iWordID, sWord, iLen )!=-1 );
+		if ( !bMatch && iBlendID )
+			bMatch = ( m_tContainer.FindWord ( iBlendID, NULL, 0 )!=-1 );
 
 		if ( bMatch )
 			ResultEmit ( m_sBeforeMatch.cstr(), m_iBeforeLen, m_bHasBeforePassageMacro, m_iPassageId, m_sBeforeMatchPassage.cstr(), m_iBeforePostLen );
@@ -2260,7 +2267,7 @@ public:
 		return true;
 	}
 
-	virtual void OnToken ( int iStart, int iLen, const BYTE * sWord, SphWordID_t iWordID, DWORD uPosition )
+	virtual void OnToken ( int iStart, int iLen, const BYTE * sWord, SphWordID_t iWordID, DWORD uPosition, SphWordID_t iBlendID )
 	{
 		assert ( m_pDoc );
 		assert ( iStart>=0 && m_pDoc+iStart+iLen<=m_pTokenizer->GetBufferEnd() );
@@ -2273,6 +2280,8 @@ public:
 		}
 
 		bool bHighlight = bMatch && ( m_tContainer.FindWord ( iWordID, sWord, iLen )!=-1 );
+		if ( !bHighlight && iBlendID )
+			bHighlight = ( m_tContainer.FindWord ( iBlendID, NULL, 0 )!=-1 );
 
 		if ( m_bExactPhrase )
 		{
@@ -2367,6 +2376,8 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor )
 	int iSPZ = tFunctor.m_iPassageBoundary;
 	int uPosition = 0;
 	BYTE * sWord = NULL;
+	SphWordID_t iBlendID = 0;
+	const char * pBlendedEnd = NULL;
 
 	CSphVector<int> dZoneStack;
 	CSphString sZoneName;
@@ -2379,7 +2390,14 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor )
 	while ( ( sWord = pTokenizer->GetToken() )!=NULL )
 	{
 		if ( pTokenizer->TokenIsBlended() )
+		{
+			if ( pBlendedEnd<pTokenizer->GetTokenEnd() )
+			{
+				iBlendID = pDict->GetWordID ( sWord );
+				pBlendedEnd = pTokenizer->GetTokenEnd();
+			}
 			continue;
+		}
 
 		uPosition += pTokenizer->GetOvershortCount();
 
@@ -2490,10 +2508,12 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor )
 		tDocTok.m_iLengthBytes = tDocTok.m_iLengthCP = pLastTokenEnd - pTokenStart;
 		if ( bUtf8 && ( iWord || bIsStopWord ) )
 			tDocTok.m_iLengthCP = sphUTF8Len ( pTokenStart, tDocTok.m_iLengthBytes );
-		tDocTok.m_iWordID = iWord;
+
+		if ( !pTokenizer->TokenIsBlendedPart() )
+			iBlendID = 0;
 
 		// match & emit
-		tFunctor.OnToken ( tDocTok.m_iStart, tDocTok.m_iLengthBytes, sWord, iWord, tDocTok.m_uPosition );
+		tFunctor.OnToken ( tDocTok.m_iStart, tDocTok.m_iLengthBytes, sWord, iWord, tDocTok.m_uPosition, iBlendID ); // FIXME!!! add iBlendID
 	}
 
 	// last space if any

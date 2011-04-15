@@ -31,11 +31,35 @@ index idx
 	blend_chars		= .
 }
 
+index idx2
+{
+	source				= src
+	docinfo			= extern
+	path					= <data_path/>/idx2
+	morphology			= stem_en
+	charset_type 	= utf-8
+	charset_table = 0..9, a..z, A..Z->a..z
+	blend_chars		= U+0028, U+0029, U+002f, U+002b
+	blend_mode = trim_none, trim_head, trim_tail, trim_both, skip_pure
+}
+
 </config>
 
 
 <sphqueries>
 <sphinxql>CALL SNIPPETS ('and here we go 2524460. 989561 as you said', 'idx', '=2524460.', 1 as query_mode, 4 as limit_words, 2 as around)</sphinxql>
+<sphinxql>CALL SNIPPETS ('What are you need here (exactly)? are dude friendly? As I know this dude\/buddy.', 'idx2', '\(exactly\) | =dude\/buddy', 1 as query_mode, 60 as limit, 2 as around)</sphinxql>
+<sphinxql>CALL SNIPPETS ('What are you need here (exactly)? are dude friendly? As I know this dude\/buddy.', 'idx2', '\(exactly\) dude\/buddy', 0 as query_mode, 2 as around)</sphinxql>
+<sphinxql>CALL SNIPPETS ('What are you need here (exactly)? are dude friendly? As I know this dude\/buddy.', 'idx2', '\(exactly\) | dude\/buddy', 1 as query_mode, 2 as around)</sphinxql>
+
+<sphinxql>CALL SNIPPETS ('What are you need here (exactly)? are dude friendly? As I know this dude\/buddy.', 'idx2', '\(exactly\) buddy', 0 as query_mode, 2 as around)</sphinxql>
+<sphinxql>CALL SNIPPETS ('What are you need here (exactly)? are dude friendly? As I know this dude\/buddy.', 'idx2', '\(exactly\) | buddy', 1 as query_mode, 2 as around)</sphinxql>
+
+<sphinxql>CALL SNIPPETS ('What are you need here+ (exactly)?', 'idx2', '\(exactly\)', 0 as query_mode, 3 as limit_passages, 2 as around)</sphinxql>
+<sphinxql>CALL SNIPPETS ('What are you need here+ (exactly)?', 'idx2', '\(exactly\)', 0 as query_mode, 0 as around, 0 as limit)</sphinxql>
+<sphinxql>CALL SNIPPETS ('What are you need here+ (exactly)?', 'idx2', '\(exactly\)', 1 as query_mode, 3 as limit_passages, 2 as around)</sphinxql>
+<sphinxql>CALL SNIPPETS ('What are you need here+ (exactly)?', 'idx2', '\(exactly\)', 1 as query_mode, 0 as around, 0 as limit)</sphinxql>
+
 </sphqueries>
 
 <db_create>

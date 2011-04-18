@@ -1614,6 +1614,7 @@ struct CSphSourceParams_SQL
 	CSphString						m_sQueryKilllist;
 	int								m_iRangeStep;
 	int								m_iRefRangeStep;
+	bool							m_bPrintQueries;
 
 	CSphVector<CSphString>			m_dQueryPre;
 	CSphVector<CSphString>			m_dQueryPost;

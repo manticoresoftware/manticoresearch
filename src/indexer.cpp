@@ -35,6 +35,7 @@
 
 bool			g_bQuiet		= false;
 bool			g_bProgress		= true;
+bool			g_bPrintQueries	= false;
 
 const char *	g_sBuildStops	= NULL;
 int				g_iTopStops		= 100;
@@ -648,6 +649,10 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 		fprintf ( stdout, "WARNING: sql_ranged_throttle must not be negative; throttling disabled\n" );
 		tParams.m_iRangedThrottle = 0;
 	}
+
+	// debug printer
+	if ( g_bPrintQueries )
+		tParams.m_bPrintQueries = true;
 
 	return true;
 }
@@ -1594,6 +1599,10 @@ int main ( int argc, char ** argv )
 		{
 			sDumpRows = argv[++i];
 
+		} else if ( strcasecmp ( argv[i], "--print-queries" )==0 )
+		{
+			g_bPrintQueries = true;
+
 		} else
 		{
 			break;
@@ -1644,6 +1653,7 @@ int main ( int argc, char ** argv )
 				"--merge-killlists\tmerge src and dst kill-lists (default is to\n"
 				"\t\t\tapply src kill-list to dst index)\n"
 				"--dump-rows <FILE>\tdump indexed rows into FILE\n"
+				"--print-queries\t\tprint SQL queries (for debugging)\n"
 				"\n"
 				"Examples:\n"
 				"indexer --quiet myidx1\treindex 'myidx1' defined in 'sphinx.conf'\n"

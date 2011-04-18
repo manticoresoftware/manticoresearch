@@ -19433,6 +19433,7 @@ bool CSphSource_Document::IsFieldInStr ( const char * szField, const char * szSt
 CSphSourceParams_SQL::CSphSourceParams_SQL ()
 	: m_iRangeStep ( 1024 )
 	, m_iRefRangeStep ( 1024 )
+	, m_bPrintQueries ( false )
 	, m_iRangedThrottle ( 0 )
 	, m_iMaxFileBufferSize ( 0 )
 	, m_iPort ( 0 )
@@ -20595,7 +20596,13 @@ void CSphSource_MySQL::SqlDismissResult ()
 bool CSphSource_MySQL::SqlQuery ( const char * sQuery )
 {
 	if ( mysql_query ( &m_tMysqlDriver, sQuery ) )
+	{
+		if ( m_tParams.m_bPrintQueries )
+			fprintf ( stdout, "SQL-QUERY: %s: FAIL\n", sQuery );
 		return false;
+	}
+	if ( m_tParams.m_bPrintQueries )
+		fprintf ( stdout, "SQL-QUERY: %s: ok\n", sQuery );
 
 	m_pMysqlResult = mysql_use_result ( &m_tMysqlDriver );
 	m_pMysqlFields = NULL;
@@ -20623,14 +20630,20 @@ bool CSphSource_MySQL::SqlConnect ()
 		mysql_ssl_set ( &m_tMysqlDriver, m_sSslKey.cstr(), m_sSslCert.cstr(), m_sSslCA.cstr(), NULL, NULL );
 
 	m_iMysqlConnectFlags |= CLIENT_MULTI_RESULTS; // we now know how to handle this
-	return NULL!=mysql_real_connect ( &m_tMysqlDriver,
+	bool bRes = ( NULL!=mysql_real_connect ( &m_tMysqlDriver,
 		m_tParams.m_sHost.cstr(), m_tParams.m_sUser.cstr(), m_tParams.m_sPass.cstr(),
-		m_tParams.m_sDB.cstr(), m_tParams.m_iPort, m_sMysqlUsock.cstr(), m_iMysqlConnectFlags );
+		m_tParams.m_sDB.cstr(), m_tParams.m_iPort, m_sMysqlUsock.cstr(), m_iMysqlConnectFlags ) );
+	if ( m_tParams.m_bPrintQueries )
+		fprintf ( stdout, bRes ? "SQL-CONNECT: ok\n" : "SQL-CONNECT: FAIL\n" );
+	return bRes;
 }
 
 
 void CSphSource_MySQL::SqlDisconnect ()
 {
+	if ( m_tParams.m_bPrintQueries )
+		fprintf ( stdout, "SQL-DISCONNECT\n" );
+
 	mysql_close ( &m_tMysqlDriver );
 }
 
@@ -20792,22 +20805,33 @@ bool CSphSource_PgSQL::SqlConnect ()
 		m_tParams.m_sDB.cstr(), m_tParams.m_sUser.cstr(), m_tParams.m_sPass.cstr() );
 
 	if ( PQstatus ( m_tPgDriver )==CONNECTION_BAD )
+	{
+		if ( m_tParams.m_bPrintQueries )
+			fprintf ( stdout, "SQL-CONNECT: FAIL\n" );
 		return false;
+	}
 
 	// set client encoding
 	if ( !m_sPgClientEncoding.IsEmpty() )
 		if ( -1==PQsetClientEncoding ( m_tPgDriver, m_sPgClientEncoding.cstr() ) )
 	{
 		SqlDisconnect ();
+		if ( m_tParams.m_bPrintQueries )
+			fprintf ( stdout, "SQL-CONNECT: FAIL\n" );
 		return false;
 	}
 
+	if ( m_tParams.m_bPrintQueries )
+		fprintf ( stdout, "SQL-CONNECT: ok\n" );
 	return true;
 }
 
 
 void CSphSource_PgSQL::SqlDisconnect ()
 {
+	if ( m_tParams.m_bPrintQueries )
+		fprintf ( stdout, "SQL-DISCONNECT\n" );
+
 	PQfinish ( m_tPgDriver );
 }
 
@@ -20821,7 +20845,13 @@ bool CSphSource_PgSQL::SqlQuery ( const char * sQuery )
 
 	ExecStatusType eRes = PQresultStatus ( m_pPgResult );
 	if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
+	{
+		if ( m_tParams.m_bPrintQueries )
+			fprintf ( stdout, "SQL-QUERY: %s: FAIL\n", sQuery );
 		return false;
+	}
+	if ( m_tParams.m_bPrintQueries )
+		fprintf ( stdout, "SQL-QUERY: %s: ok\n", sQuery );
 
 	m_iPgRows = PQntuples ( m_pPgResult );
 	return true;
@@ -22752,10 +22782,20 @@ void CSphSource_ODBC::SqlDismissResult ()
 bool CSphSource_ODBC::SqlQuery ( const char * sQuery )
 {
 	if ( SQLAllocHandle ( SQL_HANDLE_STMT, m_hDBC, &m_hStmt )==SQL_ERROR )
+	{
+		if ( m_tParams.m_bPrintQueries )
+			fprintf ( stdout, "SQL-QUERY: %s: FAIL (SQLAllocHandle failed)\n", sQuery );
 		return false;
+	}
 
 	if ( SQLExecDirect ( m_hStmt, (SQLCHAR *)sQuery, SQL_NTS )==SQL_ERROR )
+	{
+		if ( m_tParams.m_bPrintQueries )
+			fprintf ( stdout, "SQL-QUERY: %s: FAIL\n", sQuery );
 		return false;
+	}
+	if ( m_tParams.m_bPrintQueries )
+		fprintf ( stdout, "SQL-QUERY: %s: ok\n", sQuery );
 
 	SQLSMALLINT nCols = 0;
 	m_nResultCols = 0;
@@ -22830,12 +22870,20 @@ const char * CSphSource_ODBC::SqlError ()
 bool CSphSource_ODBC::SqlConnect ()
 {
 	if ( SQLAllocHandle ( SQL_HANDLE_ENV, NULL, &m_hEnv )==SQL_ERROR )
+	{
+		if ( m_tParams.m_bPrintQueries )
+			fprintf ( stdout, "SQL-CONNECT: FAIL\n" );
 		return false;
+	}
 
 	SQLSetEnvAttr ( m_hEnv, SQL_ATTR_ODBC_VERSION, (void*) SQL_OV_ODBC3, SQL_IS_INTEGER );
 
 	if ( SQLAllocHandle ( SQL_HANDLE_DBC, m_hEnv, &m_hDBC )==SQL_ERROR )
+	{
+		if ( m_tParams.m_bPrintQueries )
+			fprintf ( stdout, "SQL-CONNECT: FAIL\n" );
 		return false;
+	}
 
 	OdbcPostConnect ();
 
@@ -22844,15 +22892,22 @@ bool CSphSource_ODBC::SqlConnect ()
 	if ( SQLDriverConnect ( m_hDBC, NULL, (SQLTCHAR*) m_sOdbcDSN.cstr(), SQL_NTS, (SQLCHAR*)szOutConn, sizeof(szOutConn), &iOutConn, SQL_DRIVER_NOPROMPT )==SQL_ERROR )
 	{
 		GetSqlError ( SQL_HANDLE_DBC, m_hDBC );
+		if ( m_tParams.m_bPrintQueries )
+			fprintf ( stdout, "SQL-CONNECT: FAIL\n" );
 		return false;
 	}
 
+	if ( m_tParams.m_bPrintQueries )
+		fprintf ( stdout, "SQL-CONNECT: ok\n" );
 	return true;
 }
 
 
 void CSphSource_ODBC::SqlDisconnect ()
 {
+	if ( m_tParams.m_bPrintQueries )
+		fprintf ( stdout, "SQL-DISCONNECT\n" );
+
 	if ( m_hStmt!=NULL )
 		SQLFreeHandle ( SQL_HANDLE_STMT, m_hStmt );
 

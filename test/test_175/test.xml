@@ -59,8 +59,8 @@ create table test_table2
 (
 	id int not null,
 	gid int not null,
-	title varchar(16384) not null
-) ENGINE=MYISAM;
+	title varchar(256) not null
+);
 </db_create>
 <db_drop>drop table if exists test_table1;</db_drop>
 <db_drop>drop table if exists test_table2;</db_drop>

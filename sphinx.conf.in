@@ -753,8 +753,8 @@ searchd
 	seamless_rotate		= 1
 
 	# whether to forcibly preopen all indexes on startup
-	# optional, default is 0 (do not preopen)
-	preopen_indexes		= 0
+	# optional, default is 1 (preopen everything)
+	preopen_indexes		= 1
 
 	# whether to unlink .old index copies on succesful rotation.
 	# optional, default is 1 (do unlink)

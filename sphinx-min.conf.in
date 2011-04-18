@@ -63,7 +63,7 @@ searchd
 	pid_file		= @CONFDIR@/log/searchd.pid
 	max_matches		= 1000
 	seamless_rotate		= 1
-	preopen_indexes		= 0
+	preopen_indexes		= 1
 	unlink_old		= 1
 	workers			= threads # for RT to work
 }

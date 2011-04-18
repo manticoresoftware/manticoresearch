@@ -9704,9 +9704,26 @@ seamless_rotate = 1
 <sect2 id="conf-preopen-indexes"><title>preopen_indexes</title>
 <para>
 Whether to forcibly preopen all indexes on startup.
-Optional, default is 0 (do not preopen).
-Enforces enabled <link linkend="conf-preopen">preopen</link> on all served indexes,
-to avoid manually specifying it in every index.
+Optional, default is 1 (preopen everything).
+</para>
+<para>
+Starting with 1.11-beta, the default value for this
+option is now 1 (foribly preopen all indexes). In prior
+versions, it used to be 0 (use per-index settings).
+</para>
+<para>
+When set to 1, this directive overrides and enforces
+<link linkend="conf-preopen">preopen</link> on all indexes.
+They will be preopened, no matter what is the per-index
+<code>preopen</code> setting. When set to 0, per-index
+settings can take effect. (And they default to 0.)
+</para>
+<para>
+Pre-opened indexes avoid races between search queries
+and rotations that can cause queries to fail occasionally.
+They also make <filename>searchd</filename> use more file
+handles. In most scenarios it's therefore preferred and
+recommended to preopen indexes.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>

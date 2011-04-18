@@ -14,42 +14,75 @@ searchd
 	<searchd_settings/>
 }
 
-source test
+source test1
 {
 	type			= mysql
 	<sql_settings/>
-	sql_query		= select * from test_table
+	sql_query		= select * from test_table1
 	sql_attr_uint	= gid
 }
 
-index test
+index test1
 {
-	source			= test
-	path			= <data_path/>/test
+	source			= test1
+	path			= <data_path/>/test1
+}
+
+source test2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table2
+	sql_attr_uint	= gid
+}
+
+index test2
+{
+	source			= test2
+	path			= <data_path/>/test2
+	docinfo		= extern
+	html_strip		= 1
+	index_sp		= 1
 }
 </config>
 
 <db_create>
-create table test_table
+create table test_table1
 (
 	id int not null,
 	gid int not null,
 	title varchar(16384) not null
 );
 </db_create>
-<db_drop>drop table if exists test_table;</db_drop>
+<db_create>
+create table test_table2
+(
+	id int not null,
+	gid int not null,
+	title varchar(16384) not null
+) ENGINE=MYISAM;
+</db_create>
+<db_drop>drop table if exists test_table1;</db_drop>
+<db_drop>drop table if exists test_table2;</db_drop>
 <custom_insert><![CDATA[
 
 // OR boundary
 // weight on 11 must be 2xxx; used to be 1xxx (because of positions mismatch)
 $t = str_repeat ( "aaa ", 509 );
-mysql_query ( "INSERT INTO test_table VALUES ( 10, 1, 'bbb bbb bbb bbb $t' )" ) or die("q1:".mysql_error());
-mysql_query ( "INSERT INTO test_table VALUES ( 11, 1, 'aaa aaa aaa aaa bbb bbb aaa aaa' )" ) or die("q2:".mysql_error());
+mysql_query ( "INSERT INTO test_table1 VALUES ( 10, 1, 'bbb bbb bbb bbb $t' )" ) or die("q1:".mysql_error());
+mysql_query ( "INSERT INTO test_table1 VALUES ( 11, 1, 'aaa aaa aaa aaa bbb bbb aaa aaa' )" ) or die("q2:".mysql_error());
+
+$i3 = '';
+for ( $i=1; $i < 600; $i++ )
+	mysql_query ( "INSERT INTO test_table2 VALUES ( $i, 1, 'The box. A dummy.' )" )  or die("q3:".mysql_error()."\n$i");
+
+mysql_query ( "INSERT INTO test_table2 VALUES ( 701, 1, 'The good box. A dummy.' )" )  or die("q4:".mysql_error());
 
 ]]></custom_insert>
 
 <queries>
-<query mode="extended2">aaa | bbb</query>
+<query mode="extended2" index="test1">aaa | bbb</query>
+<query mode="extended2" index="test2">box SENTENCE good</query>
 </queries>
 
 </test>

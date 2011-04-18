@@ -3793,17 +3793,17 @@ const ExtDoc_t * ExtUnit_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		}
 
 		// find next candidate match
-		while ( m_pDoc1->m_uDocid!=m_pDoc2->m_uDocid )
+		while ( m_pDoc1->m_uDocid!=m_pDoc2->m_uDocid && m_pDoc1->m_uDocid!=DOCID_MAX && m_pDoc2->m_uDocid!=DOCID_MAX )
 		{
-			while ( m_pDoc1->m_uDocid < m_pDoc2->m_uDocid )
+			while ( m_pDoc1->m_uDocid < m_pDoc2->m_uDocid && m_pDoc2->m_uDocid!=DOCID_MAX )
 				m_pDoc1++;
-			while ( m_pDoc1->m_uDocid > m_pDoc2->m_uDocid )
+			while ( m_pDoc1->m_uDocid > m_pDoc2->m_uDocid && m_pDoc1->m_uDocid!=DOCID_MAX )
 				m_pDoc2++;
 		}
 
 		// got our candidate that matches AND?
 		SphDocID_t uDocid = m_pDoc1->m_uDocid;
-		if ( uDocid==DOCID_MAX )
+		if ( m_pDoc1->m_uDocid==DOCID_MAX || m_pDoc2->m_uDocid==DOCID_MAX )
 			continue;
 
 		// yes, now fetch more dots docs, if needed

@@ -22820,6 +22820,7 @@ bool CSphSource_ODBC::SqlQuery ( const char * sQuery )
 
 	if ( SQLExecDirect ( m_hStmt, (SQLCHAR *)sQuery, SQL_NTS )==SQL_ERROR )
 	{
+		GetSqlError ( SQL_HANDLE_STMT, m_hStmt );
 		if ( m_tParams.m_bPrintQueries )
 			fprintf ( stdout, "SQL-QUERY: %s: FAIL\n", sQuery );
 		return false;
@@ -22963,8 +22964,11 @@ int CSphSource_ODBC::SqlNumFields ()
 
 bool CSphSource_ODBC::SqlFetchRow ()
 {
+	if ( !m_hStmt )
+		return false;
+
 	SQLRETURN iRet = SQLFetch ( m_hStmt );
-	if ( iRet==SQL_ERROR )
+	if ( iRet==SQL_ERROR || iRet==SQL_INVALID_HANDLE )
 	{
 		GetSqlError ( SQL_HANDLE_STMT, m_hStmt );
 		return false;
@@ -23146,6 +23150,12 @@ bool CSphSource_ODBC::Setup ( const CSphSourceParams_ODBC & tParams )
 
 void CSphSource_ODBC::GetSqlError ( SQLSMALLINT iHandleType, SQLHANDLE hHandle )
 {
+	if ( !hHandle )
+	{
+		m_sError.SetSprintf ( "invalid handle" );
+		return;
+	}
+
 	char szState[16];
 	char szMessageText[1024];
 	SQLINTEGER iError;

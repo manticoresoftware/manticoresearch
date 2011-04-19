@@ -15156,12 +15156,36 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				dStrItems.Add ( tAttr.m_tLocator );
 		}
 
+		// walk string data, build a list of acceptable start offsets
+		// must be sorted by construction
+		CSphVector<DWORD> dStringOffsets;
+		if ( m_pStrings.GetNumEntries()>1 )
+		{
+			const BYTE * pBase = m_pStrings.GetWritePtr();
+			const BYTE * pCur = pBase + 1;
+			const BYTE * pMax = pBase + m_pStrings.GetNumEntries();
+			while ( pCur<pMax )
+			{
+				const BYTE * pStr = NULL;
+				const int iLen = sphUnpackStr ( pCur, &pStr );
+
+				// 4 bytes must be enough to encode string length, hence pCur+4
+				if ( pStr+iLen>pMax || pStr<pCur || pStr>pCur+4 )
+				{
+					LOC_FAIL(( fp, "string length out of bounds (offset=%u, len=%d)", (DWORD)(pCur-pBase), iLen ));
+					break;
+				}
+
+				dStringOffsets.Add ( (DWORD)(pCur-pBase) );
+				pCur = pStr + iLen;
+			}
+		}
+
 		// loop the rows
 		const CSphRowitem * pRow = m_pDocinfo.GetWritePtr();
 		const DWORD * pMvaBase = m_pMva.GetWritePtr();
 		const DWORD * pMvaMax = pMvaBase + m_pMva.GetNumEntries();
 		const DWORD * pMva = pMvaBase;
-		const BYTE * pStrLast = NULL;
 
 		int iOrphan = 0;
 		SphDocID_t uLastID = 0;
@@ -15306,9 +15330,9 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 						uRow, iItem, uLastID, uValue, sphDW2F ( uValue ) ));
 			}
 
-			///////////////////////////
+			/////////////////
 			// check strings
-			///////////////////////////
+			/////////////////
 
 			ARRAY_FOREACH ( iItem, dStrItems )
 			{
@@ -15319,20 +15343,26 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 					LOC_FAIL(( fp, "string offset out of bounds (row=%u, stringattr=%d, docid="DOCID_FMT", index=%u)",
 						uRow, iItem, uLastID, uOffset ));
 
-				if ( uOffset!=0 )
+				if ( !uOffset )
+					continue;
+
+				const BYTE * pStr = NULL;
+				const int iLen = sphUnpackStr ( m_pStrings.GetWritePtr() + uOffset, &pStr );
+
+				// check that length is sane
+				if ( pStr+iLen-1>=m_pStrings.GetWritePtr()+m_pStrings.GetLength() )
 				{
-					const BYTE * pStr = NULL;
-					const int iLen = sphUnpackStr ( m_pStrings.GetWritePtr() + uOffset, &pStr );
+					LOC_FAIL(( fp, "string length out of bounds (row=%u, stringattr=%d, docid="DOCID_FMT", index=%u)",
+						uRow, iItem, uLastID, (unsigned int)( pStr-m_pStrings.GetWritePtr()+iLen-1 ) ));
+					continue;
+				}
 
-					if ( pStr+iLen-1>=m_pStrings.GetWritePtr()+m_pStrings.GetLength() )
-						LOC_FAIL(( fp, "string length out of bounds (row=%u, stringattr=%d, docid="DOCID_FMT", index=%u)",
-							uRow, iItem, uLastID, (unsigned int)( pStr-m_pStrings.GetWritePtr()+iLen-1 ) ));
-
-					if ( pStrLast>=pStr )
-						LOC_FAIL(( fp, "overlapping string values (row=%u, stringattr=%d, docid="DOCID_FMT", last_end=%u, cur_start=%u)",
-							uRow, iItem, uLastID, (unsigned int)( pStrLast-m_pStrings.GetWritePtr() ), (unsigned int)( pStr-m_pStrings.GetWritePtr() ) ));
-
-					pStrLast = pStr + iLen;
+				// check that offset is one of the good ones
+				// (that is, that we don't point in the middle of some other data)
+				if ( !dStringOffsets.BinarySearch ( uOffset ) )
+				{
+					LOC_FAIL(( fp, "string offset is not a string start (row=%u, stringattr=%d, docid="DOCID_FMT", offset=%u)",
+						uRow, iItem, uLastID, uOffset ));
 				}
 			}
 

@@ -261,6 +261,7 @@ public:
 	CSphString *							m_sBuffer;
 	CSphVector<ExcerptGen_c::Token_t> *		m_dTokens;
 	ISphTokenizer *							m_pTokenizer;
+	DWORD *									m_uFoundWords;
 
 	// word information, filled during query word setup
 	int			m_iWordLength;
@@ -313,6 +314,7 @@ struct SnippetsQword_Exact_c: public ISnippetsQword
 			if ( tToken.m_iWordID==m_iWordID || tToken.m_iBlendID==m_iWordID )
 			{
 				tToken.m_uWords |= m_uWordMask;
+				*m_uFoundWords |= m_uWordMask;
 				return HITMAN::Create ( 0, tToken.m_uPosition, ( m_iToken-1 )==m_iLastIndex );
 			}
 		}
@@ -336,6 +338,7 @@ template < typename COMPARE > struct SnippetsQword_c: public ISnippetsQword
 			if ( (*(COMPARE *)this).Match ( tToken, sToken ) )
 			{
 				tToken.m_uWords |= m_uWordMask;
+				*m_uFoundWords |= m_uWordMask;
 				return HITMAN::Create ( 0, tToken.m_uPosition, ( m_iToken-1 )==m_iLastIndex );
 			}
 		}
@@ -410,6 +413,7 @@ bool SnippetsQwordSetup::QwordSetup ( ISphQword * pQword ) const
 	pWord->m_dTokens = &(m_pGenerator->m_dTokens);
 	pWord->m_sBuffer = &(m_pGenerator->m_sBuffer);
 	pWord->m_pTokenizer = m_pTokenizer;
+	pWord->m_uFoundWords = &m_pGenerator->m_uFoundWords;
 
 	pWord->m_iDocs = 1;
 	pWord->m_iHits = 1;
@@ -419,6 +423,7 @@ bool SnippetsQwordSetup::QwordSetup ( ISphQword * pQword ) const
 	const char * sWord = pWord->m_sDictWord.cstr();
 	const int iLength = m_pTokenizer->IsUtf8() ? sphUTF8Len ( sWord ) : strlen ( sWord );
 	m_pGenerator->m_dWords.Add().m_iLengthCP = iLength;
+	m_pGenerator->m_dKeywords.Add().m_iLength = iLength;
 
 	return true;
 }
@@ -677,12 +682,12 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDi
 		// handle SPZ tokens GE then needed
 		// add SENTENCE, PARAGRAPH, ZONE token, do junks and tokenizer and pLastTokenEnd fix up
 		// FIXME!!! it heavily depends on such this attitude MAGIC_CODE_SENTENCE < MAGIC_CODE_PARAGRAPH < MAGIC_CODE_ZONE
-		if ( iSPZ && *sWord>=iSPZ && *sWord<=MAGIC_CODE_ZONE )
+		if ( *sWord==MAGIC_CODE_SENTENCE || *sWord==MAGIC_CODE_PARAGRAPH || *sWord==MAGIC_CODE_ZONE )
 		{
 			// SPZ token has position and could be last token too
-			++uPosition;
+			uPosition += ( iSPZ && *sWord>=iSPZ );
 
-			if ( m_dTokens.GetLength()==0 || m_dTokens.Last().m_eType!=TOK_SPZ )
+			if ( iSPZ && *sWord>=iSPZ && ( m_dTokens.GetLength()==0 || m_dTokens.Last().m_eType!=TOK_SPZ ) )
 			{
 				Token_t & tLast = m_dTokens.Add();
 				tLast.Reset();
@@ -700,11 +705,11 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDi
 				pLastTokenEnd = pTokenizer->GetTokenEnd(); // fix it up to prevent adding last chunk on exit
 			}
 
-			if ( *sWord==MAGIC_CODE_ZONE && iSPZ==MAGIC_CODE_ZONE )
+			if ( *sWord==MAGIC_CODE_ZONE )
 			{
 				const char * pEnd = pTokenizer->GetBufferPtr();
 				const char * pTagStart = pEnd;
-				while ( *pEnd!=MAGIC_CODE_ZONE )
+				while ( *pEnd && *pEnd!=MAGIC_CODE_ZONE )
 					pEnd++;
 				pEnd++; // skip zone token too
 				pTokenizer->SetBufferPtr ( pEnd );
@@ -1636,7 +1641,7 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 		int iTok = dShow[i].m_iStart;
 		int iEnd = iTok + dShow[i].m_iTokens - 1;
 
-		if ( iTok>1+iLast || tQuery.m_bWeightOrder )
+		if ( ( iLast>=0 && iLast<m_dTokens.GetLength() && m_dTokens[iLast].m_eType==TOK_SPZ ) || iTok>1+iLast || tQuery.m_bWeightOrder )
 		{
 			ResultEmit ( tQuery.m_sChunkSeparator.cstr() );
 			// find and emit most enclosing zone
@@ -2422,16 +2427,16 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor )
 		// handle SPZ tokens GE then needed
 		// add SENTENCE, PARAGRAPH, ZONE token, do junks and tokenizer and pLastTokenEnd fix up
 		// FIXME!!! it heavily depends on such attitude MAGIC_CODE_SENTENCE < MAGIC_CODE_PARAGRAPH < MAGIC_CODE_ZONE
-		if ( iSPZ && *sWord>=iSPZ && *sWord<=MAGIC_CODE_ZONE )
+		if ( *sWord==MAGIC_CODE_SENTENCE || *sWord==MAGIC_CODE_PARAGRAPH || *sWord==MAGIC_CODE_ZONE )
 		{
 			// SPZ token has position and could be last token too
-			++uPosition;
+			uPosition += ( iSPZ && *sWord>=iSPZ );
 
-			if ( *sWord==MAGIC_CODE_ZONE && iSPZ==MAGIC_CODE_ZONE )
+			if ( *sWord==MAGIC_CODE_ZONE )
 			{
 				const char * pEnd = pTokenizer->GetBufferPtr();
 				const char * pTagStart = pEnd;
-				while ( *pEnd!=MAGIC_CODE_ZONE )
+				while ( *pEnd && *pEnd!=MAGIC_CODE_ZONE )
 					pEnd++;
 				pEnd++; // skip zone token too
 				pTokenizer->SetBufferPtr ( pEnd );
@@ -2483,7 +2488,10 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor )
 				}
 			}
 
-			tFunctor.OnSPZ ( *sWord, uPosition, const_cast<char *>( sZoneName.cstr() ) );
+			if ( iSPZ && *sWord>=iSPZ )
+			{
+				tFunctor.OnSPZ ( *sWord, uPosition, const_cast<char *>( sZoneName.cstr() ) );
+			}
 			continue;
 		}
 

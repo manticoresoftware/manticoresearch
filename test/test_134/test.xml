@@ -31,6 +31,20 @@ index test
 	index_zones		= zone_*
 	dict			= keywords
 }
+
+index test1
+{
+	source			= test
+	path			= <data_path/>/test1
+
+	html_strip		= 1
+	index_sp		= 1
+	index_zones		= zone_*
+	dict			= crc
+	charset_type	= utf-8
+	charset_table = 0..9, a..z, A..Z->a..z
+}
+
 </config>
 
 <db_insert>select 1;</db_insert>
@@ -93,7 +107,7 @@ It is another place!
 </zone_unidentified_table>
 </HTML>' ),
 		"opt"=>array (
-			"limit"=>150
+			"limit"=>170
 			, "limit_words"=>60
 			, "limit_passages"=>8
 			, "around"=>8
@@ -121,7 +135,7 @@ It is another place!
 </zone_unidentified_table>
 </HTML>' ),
 		"opt"=>array (
-			"limit"=>150
+			"limit"=>170
 			, "limit_words"=>60
 			, "limit_passages"=>8
 			, "around"=>8
@@ -149,7 +163,7 @@ It is another place!
 </zone_unidentified_table>
 </HTML>' ),
 		"opt"=>array (
-			"limit"=>150
+			"limit"=>170
 			, "limit_words"=>60
 			, "limit_passages"=>8
 			, "around"=>8
@@ -182,7 +196,43 @@ foreach ( $refs as $ref )
 }
 
 // last test - nothing found - HighlightStart path
+$refs[3]['opt']['limit'] = 150;
 $results[] = $client->BuildExcerpts($refs[3]["doc"], 'test', "nothing found", $refs[3]["opt"] );
+
+// 7 test
+$docs7 = array ( '<zone_ma1> The manager it. Is Filing this report and.<zone_ma2>Is a signed hereby represent.</zone_ma2>Is another place!</zone_ma1>
+</HTML>' );
+$opts7 = array (
+	'query_mode'=>1
+	,'limit'=>70
+	, "limit_passages"=>4
+	, "around"=>8
+	, "html_strip_mode"=>"strip"
+	, 'chunk_separator'=>"\n<--->\n"
+	, "passage_boundary"=>"zone"
+	, "emit_zones"=>false);
+
+$results[] = $client->BuildExcerpts($docs7, 'test1', 'it is', $opts7 );
+
+// 8 test
+$opts7['query_mode'] = 0;
+$results[] = $client->BuildExcerpts($docs7, 'test1', 'it is', $opts7 );
+
+// 9 test
+$opts7['passage_boundary'] = 'sentence';
+$opts7['query_mode'] = 1;
+$results[] = $client->BuildExcerpts($docs7, 'test1', 'it is', $opts7 );
+
+// 10 test
+$opts7['query_mode'] = 0;
+$results[] = $client->BuildExcerpts($docs7, 'test1', 'it is', $opts7 );
+
+// 11 test
+$opts7['html_strip_mode'] = 'index';
+$opts7['passage_boundary'] = 'paragraph';
+$opts7['query_mode'] = 1;
+$opts7['limit_passages'] = 8;
+$results[] = $client->BuildExcerpts($docs7, 'test1', 'it | is | ma1 | ma2', $opts7 );
 
 ]]></custom_test>
 

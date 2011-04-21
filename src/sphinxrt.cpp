@@ -2876,6 +2876,8 @@ CSphIndex * RtIndex_t::LoadDiskChunk ( int iChunk, bool bStripPath )
 	if ( !pDiskChunk )
 		sphDie ( "disk chunk %s: alloc failed", sChunk.cstr() );
 
+	pDiskChunk->SetWordlistPreload ( m_bPreloadWordlist );
+
 	if ( !pDiskChunk->Prealloc ( false, bStripPath, sWarning ) )
 		sphDie ( "disk chunk %s: prealloc failed: %s", sChunk.cstr(), pDiskChunk->GetLastError().cstr() );
 

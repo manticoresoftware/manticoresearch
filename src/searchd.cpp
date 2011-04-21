@@ -12408,6 +12408,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		tIdx.m_bEnabled = false;
 		tIdx.m_sIndexPath = hIndex["path"];
 		tIdx.m_bRT = true;
+		tIdx.m_pIndex->SetWordlistPreload ( !hIndex.GetInt("ondisk_dict") && !g_bOnDiskDicts );
 
 		// pick config settings
 		// they should be overriden later by Preload() if needed

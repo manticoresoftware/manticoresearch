@@ -3082,6 +3082,13 @@ completing the work on each index. (The default behavior
 is to send a single SIGHUP after all the indexes were built.)
 </listitem>
 
+<listitem><option>--print-queries</option> prints out
+SQL queries that <filename>indexer</filename> sends to
+the database, along with SQL connection and disconnection
+events. That is useful to diagnose and fix problems with
+SQL sources.
+</listitem>
+
 </itemizedlist>
 </para>
 </sect1>
@@ -4395,6 +4402,103 @@ WEIGHT
 WHERE
 WITHIN
 </programlisting></para>
+</sect1>
+
+
+<sect1 id="sphinxql-upgrading-magics">
+<title>SphinxQL upgrade notes, version 1.11-beta</title>
+<para>
+This section only applies to existing applications that
+use SphinxQL versions prior to 1.11-beta.
+</para>
+<para>
+In previous versions, SphinxQL just wrapped around SphinxAPI
+and inherited its magic columns and column set quirks. Essentially,
+SphinxQL queries could return (slightly) different columns and
+in a (slightly) different order than it was explicitly requested
+in the query. Namely, <code>weight</code> magic column (which is not
+a real column in any index) was added at all times, and GROUP BY
+related <code>@count</code>, <code>@group</code>, and <code>@distinct</code>
+magic columns were conditionally added when grouping. Also, the order
+of columns (attributes) in the result set was actually taken from the
+index rather than the query. (So if you asked for columns C, B, A
+in your query but they were in the A, B, C order in the index,
+they would have been returned in the A, B, C order.)
+</para>
+<para>
+In version 1.11-beta, we fixed that. SphinxQL is now more
+SQL compliant (and will be further brought in as much compliance
+with standard SQL syntax as possible). That is not yet a breaking
+change, because <filename>searchd</filename> now supports
+<link linkend="conf-compat-sphinxql-magics"><code>compat_sphinxql_magics</code></link>
+directive that flips between the old "compatibility" mode and the new
+"compliance" mode. However, the compatibility mode support is going
+to be removed in future, so it's strongly advised to update SphinxQL
+applications and switch to the compliance mode.
+</para>
+<para>
+The important changes are as follows:
+<itemizedlist>
+<listitem><para>
+<b><code>@ID</code> magic name is deprecated in favor of
+<code>ID</code>.</b> Document ID is considered an attribute.
+</para></listitem>
+<listitem><para>
+<b><code>WEIGHT</code> is no longer implicitly returned</b>,
+because it is not actually a column (an index attribute),
+but rather an internal function computed per each row (a match).
+You have to explicitly ask for it, using the <code>WEIGHT()</code>
+function. (The requirement to alias the result will be lifted
+in the next release.)
+<programlisting>
+SELECT id, WEIGHT() w FROM myindex WHERE MATCH('test')
+</programlisting>
+</para></listitem>
+<listitem><para>
+<b>You can now use quoted reserved keywords as aliases.</b>
+The quote character is backtick ("`", ASCII code 96 decimal,
+60 hex). One particularly useful example would be returning
+<code>weight</code> column like the old mode:
+<programlisting>
+SELECT id, WEIGHT() `weight` FROM myindex WHERE MATCH('test')
+</programlisting>
+</para></listitem>
+<listitem><para>
+The column order is now different and should now match the
+one expliclitly defined in the query. So if you are accessing
+columns based on their position in the result set rather than
+the name (for instance, by using <code>mysql_fetch_row()</code>
+rather than <code>mysql_fetch_assoc()</code> in PHP),
+<b>check and fix the order of columns in your queries.</b>
+</para></listitem>
+<listitem><para>
+<code>SELECT *</code> return the columns in index order,
+as it used to, including the ID column. However,
+<b><code>SELECT *</code> does not automatically return WEIGHT().</b>
+To update such queries in case you access columns by names,
+simply add it to the query:
+<programlisting>
+SELECT *, WEIGHT() `weight` FROM myindex WHERE MATCH('test')
+</programlisting>
+Otherwise, i.e., in case you rely on column order, select
+ID, weight, and then other columns:
+<programlisting>
+SELECT id, *, WEIGHT() `weight` FROM myindex WHERE MATCH('test')
+</programlisting>
+</para></listitem>
+<listitem><para>
+<b>Magic <code>@count</code> and <code>@distinct</code>
+attributes are no longer implicitly returned</b>. You now
+have to explicitly ask for them when using GROUP BY.
+(Also note that you currently have to alias them;
+that requirement will be lifted in the future.)
+<programlisting>
+SELECT gid, COUNT(*) q FROM myindex WHERE MATCH('test')
+GROUP BY gid ORDER BY q DESC
+</programlisting>
+</para></listitem>
+</itemizedlist>
+</para>
 </sect1>
 
 
@@ -10332,6 +10436,54 @@ expansion_limit = 16
 </sect2>
 
 
+<sect2 id="conf-compat-sphinxql-magics"><title>compat_sphinxql_magics</title>
+<para>
+Legacy SphinxQL quirks compatiblity mode.
+Optional, default is 1 (keep compatibility).
+Introduced in version 1.11-beta.
+</para>
+<para>
+Starting with version 1.11-beta, we're bringing SphinxQL in closer
+compliance with standard SQL. However, existing applications must not
+get broken, and <code>compat_sphinxql_magics</code> lets you upgrade
+safely. It defauls to 1, which enables the compatibility mode.
+However, <b>SphinxQL compatibility mode is now deprecated and
+will be removed</b> once we complete bringing SphinxQL in line
+with standard SQL syntax. So it's advised to update the applications
+utilising SphinxQL and then switch the daemon to the new, more SQL
+compliant mode by setting <code>compat_sphinxql_magics = 0</code>.
+Please refer to <xref linkend="sphinxql-upgrading-magics"/>
+for the details and update instruction.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+compat_sphinxql_magics = 0 # the future is now
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-watchdog"><title>watchdog</title>
+<para>
+Threaded server watchdog.
+Optional, default is 1 (watchdog enabled).
+Introduced in version 1.11-beta.
+</para>
+<para>
+A crashed query in <code>threads</code> multi-processing mode
+(<code><link linkend="conf-workers">workers</link> = threads</code>)
+can take down the entire server. With watchdog feature enabled,
+<filename>searchd</filename> additionally keeps a separate lightweight
+process that monitors the main server process, and automatically
+restarts the latter in case of abnormal termination. Watchdog
+is enabled by default.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+watchdog = 0 # disable watchdog
+</programlisting>
+</sect2>
+
+
 </sect1>
 
 
@@ -10357,9 +10509,147 @@ expansion_limit = 16
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 
-<sect1 id="rel111"><title>Version 1.11-beta, ???</title>
+<sect1 id="rel111"><title>Version 1.11-beta, 22 apr 2011</title>
+<bridgehead>New general features</bridgehead>
 <itemizedlist>
-<listitem>added <link linkend="sphinxql-show-tables">SHOW TABLES</link>, <link linkend="sphinxql-describe">DESCRIBE</link> SphinxQL statements</listitem>
+<listitem>added remapping support to <link linkend="conf-blend-chars">blend_chars</link> directive</listitem>
+<listitem>added multi-threaded snippet batches support (requires a batch sent via API, <link linkend="conf-dist-threads">dist_threads</link>, and <code>load_files</code>)</listitem>
+<listitem>added collations (<link linkend="conf-collation-server">collation_server</link>, <link linkend="conf-collation-libc-locale">collation_libc_locale directives</link>)</listitem>
+<listitem>added support for sorting and grouping on string attributes (<code>ORDER BY</code>, <code>GROUP BY</code>, <code>WITHING GROUP ORDER BY</code>)</listitem>
+<listitem>added UDF support (<link linkend="conf-plugin-dir">plugin_dir</link> directive; <link linkend="sphinxql-create-function">CREATE FUNCTION</link>, <link linkend="sphinxql-drop-function">DROP FUNCTION</link> statements)</listitem>
+<listitem>added <link linkend="conf-query-log-format">query_log_format</link> directive, <link linkend="sphinxql-set">SET GLOBAL query_log_format | log_level = ...</link> statements; and connection id tracking</listitem>
+<listitem>added <link linkend="conf-sql-column-buffers">sql_column_buffers</link> directive, fixed out-of-buffer column handling in ODBC/MS SQL sources</listitem>
+<listitem>added <link linkend="conf-blend-mode">blend_mode</link> directive that enables indexing multiple variants of a blended sequence</listitem>
+<listitem>added UNIX socket support to C, Ruby APIs</listitem>
+<listitem>added ranged query support to <link linkend="conf-sql-joined-field">sql_joined_field</link></listitem>
+<listitem>added <link linkend="conf-rt-flush-period">rt_flush_period</link> directive</listitem>
+<listitem>added <link linkend="conf-thread-stack">thread_stack</link> directive</listitem>
+<listitem>added SENTENCE, PARAGRAPH, ZONE operators (and <link linkend="conf-index-sp">index_sp</link>, <link linkend="conf-index-zones">index_zones</link> directives)</listitem>
+<listitem>added keywords dictionary support (and <link linkend="conf-dict">dict</link>, <link linkend="conf-expansion-limit">expansion_limit</link> directives)</listitem>
+<listitem>added <code>passage_boundary</code>, <code>emit_zones</code> options to snippets</listitem>
+<listitem>added <link linkend="conf-watchdog">a watchdog process</link> in threaded mode</listitem>
+<listitem>added persistent MVA updates</listitem>
+<listitem>added crash dumps to <filename>searchd.log</filename>, deprecated <code>crash_log_path</code> directive</listitem>
+<listitem>added id32 index support in id64 binaries (EXPERIMENTAL)</listitem>
+<listitem>added SphinxSE support for DELETE and REPLACE on SphinxQL tables</listitem>
+</itemizedlist>
+<bridgehead>New SphinxQL features</bridgehead>
+<itemizedlist>
+<listitem>added new, more SQL compliant SphinxQL syntax; and a <link linkend="conf-compat-sphinxql-magics">compat_sphinxql_magics</link> directive</listitem>
+<listitem>added <link linkend="expr-func-crc32">CRC32()</link>, <link linkend="expr-func-day">DAY()</link>, <link linkend="expr-func-month">MONTH()</link>, <link linkend="expr-func-year">YEAR()</link>, <link linkend="expr-func-yearmonth">YEARMONTH()</link>, <link linkend="expr-func-yearmonthday">YEARMONTHDAY()</link> functions</listitem>
+<listitem>added <link linkend="expr-ari-ops">DIV, MOD, and % operators</link></listitem>
+<listitem>added <link linkend="sphinxql-select">reverse_scan=(0|1)</link> option to SELECT</listitem>
+<listitem>added support for MySQL packets over 16M</listitem>
+<listitem>added dummy SHOW VARIABLES, SHOW COLLATION, and SET character_set_results support (to support handshake with certain client libraries and frameworks)</listitem>
+<listitem>added <link linkend="conf-mysql-version-string">mysql_version_string</link> directive (to workaround picky MySQL client libraries)</listitem>
+<listitem>added support for global filter variables, <link linkend="sphinxql-set">SET GLOBAL @uservar=(int_list)</link> </listitem>
+<listitem>added <link linkend="sphinxql-delete">DELETE ... IN (id_list)</link> syntax support</listitem>
+<listitem>added C-style comments syntax (for example, <code>SELECT /*!40000 some comment*/ id FROM test</code>)</listitem>
+<listitem>added <link linkend="sphinxql-update">UPDATE ... WHERE id=X</link> syntax support</listitem>
+<listitem>added <link linkend="sphinxql-multi-queries">SphinxQL multi-query support</link></listitem>
+<listitem>added <link linkend="sphinxql-describe">DESCRIBE</link>, <link linkend="sphinxql-show-tables">SHOW TABLES</link> statements</listitem>
+</itemizedlist>
+<bridgehead>New command-line switches</bridgehead>
+<itemizedlist>
+<listitem>added <code>--print-queries</code> switch to <filename>indexer</filename> that dumps SQL queries it runs</listitem>
+<listitem>added <code>--sighup-each </code> switch to <filename>indexer</filename> that rotates indexes one by one</listitem>
+<listitem>added <code>--strip-path</code> switch to <filename>searchd</filename> that skips file paths embedded in the index(-es)</listitem>
+<listitem>added <code>--dumpconfig</code> switch to <filename>indextool</filename> that dumps an index header in <filename>sphinx.conf</filename> format</listitem>
+</itemizedlist>
+<bridgehead>Major changes and optimizations</bridgehead>
+<itemizedlist>
+<listitem>changed default preopen_indexes value to 1</listitem>
+<listitem>optimized English stemmer (results in 1.3x faster snippets and indexing with morphology=stem_en)</listitem>
+<listitem>optimized snippets, 1.6x general speedup</listitem>
+<listitem>optimized const-list parsing in SphinxQL</listitem>
+<listitem>optimized full-document highlighting CPU/RAM use</listitem>
+<listitem>optimized binlog replay (improved performance on K-list update)</listitem>
+</itemizedlist>
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+<listitem>fixed #767, joined fields vs ODBC sources</listitem>
+<listitem>fixed #757, wordforms shared by indexes with different settings</listitem>
+<listitem>fixed #733, loading of indexes in formats prior to v.14</listitem>
+<listitem>fixed #763, occasional snippets failures</listitem>
+<listitem>fixed #648, occasionally missed rotations on multiple SIGHUPs</listitem>
+<listitem>fixed #750, an RT segment merge leading to false positives and/or crashes in some cases</listitem>
+<listitem>fixed #755, zones in snippets output</listitem>
+<listitem>fixed #754, stopwords counting at snippet passage generation</listitem>
+<listitem>fixed #723, fork/prefork index rotation in children processes</listitem>
+<listitem>fixed #696, freeze on zero threshold in quorum operator</listitem>
+<listitem>fixed #732, query escaping in SphinxSE</listitem>
+<listitem>fixed #739, occasional crashes in MT mode on result set send</listitem>
+<listitem>fixed #746, crash with a named list in SphinxQL option</listitem>
+<listitem>fixed #674, AVG vs group order</listitem>
+<listitem>fixed #734, occasional crashes attempting to report NULL errors</listitem>
+<listitem>fixed #829, tail hits within field position modifier</listitem>
+<listitem>fixed #712, missing query_mode, force_all_words snippet option defaults in Java API</listitem>
+<listitem>fixed #721, added dupe removal on RT batch INSERT/REPLACE</listitem>
+<listitem>fixed #720, potential extraneous highlighting after a blended keyword</listitem>
+<listitem>fixed #702, exceptions vs star search</listitem>
+<listitem>fixed #666, ext2 query grouping vs exceptions</listitem>
+<listitem>fixed #688, WITHIN GROUP ORDER BY related crash</listitem>
+<listitem>fixed #660, multi-queue batches vs dist_threads</listitem>
+<listitem>fixed #678, crash on dict=keywords vs xmlpipe vs min_prefix_len</listitem>
+<listitem>fixed #596, ECHILD vs scripted configs</listitem>
+<listitem>fixed #653, dependency in expression, sorting, grouping</listitem>
+<listitem>fixed #661, concurrent distributed searches vs workers=threads</listitem>
+<listitem>fixed #646, crash on status query via UNIX socket</listitem>
+<listitem>fixed #589, libexpat.dll missing from some Win32 build types</listitem>
+<listitem>fixed #574, quorum match order</listitem>
+<listitem>fixed multiple documentation issues (#372, #483, #495, #601, #623, #632, #654)</listitem>
+<listitem>fixed that ondisk_dict did not affect RT indexes</listitem>
+<listitem>fixed that string attributes check in indextool --check was erroneously sensitive to string data order</listitem>
+<listitem>fixed a rare crash when using BEFORE operator</listitem>
+<listitem>fixed an issue with multiforms vs BuildKeywords()</listitem>
+<listitem>fixed an edge case in OR operator (emitted wrong hits order sometimes)</listitem>
+<listitem>fixed aliasing in docinfo accessors that lead to very rare crashes and/or missing results</listitem>
+<listitem>fixed a syntax error on a short token at the end of a query</listitem>
+<listitem>fixed id64 filtering and performance degradation with range filters</listitem>
+<listitem>fixed missing rankers in libsphinxclient</listitem>
+<listitem>fixed missing SPH04 ranker in SphinxSE</listitem>
+<listitem>fixed column names in sql_attr_multi sample (works with example.sql now)</listitem>
+<listitem>fixed an issue with distributed local+remote setup vs aggregate functions</listitem>
+<listitem>fixed case sensitive columns names in RT indexes</listitem>
+<listitem>fixed a crash vs strings from multiple indexes in result set</listitem>
+<listitem>fixed blended keywords vs snippets</listitem>
+<listitem>fixed secure_connection vs MySQL protocol vs MySQL.NET connector</listitem>
+<listitem>fixed that Python API did not works with Python 2.3</listitem>
+<listitem>fixed overshort_step vs snippets</listitem>
+<listitem>fixed keyword staistics vs dist_threads searching</listitem>
+<listitem>fixed multiforms vs query parsing (vs quorum)</listitem>
+<listitem>fixed missed quorum words vs RT segments</listitem>
+<listitem>fixed blended keywords occasionally skipping extra character when querying (eg "abc[]")</listitem>
+<listitem>fixed Python API to handle int32 values</listitem>
+<listitem>fixed prefix and infix indexing of joined fields</listitem>
+<listitem>fixed MVA ranged query</listitem>
+<listitem>fixed missing blended state reset on document boundary</listitem>
+<listitem>fixed a crash on missing index while replaying binlog</listitem>
+<listitem>fixed an error message on filter values overrun</listitem>
+<listitem>fixed passage duplication in snippets in weight_order mode</listitem>
+<listitem>fixed select clauses over 1K vs remote agents</listitem>
+<listitem>fixed overshort accounting vs soft-whitespace tokens</listitem>
+<listitem>fixed rotation vs workers=threads</listitem>
+<listitem>fixed schema issues vs distributed indexes</listitem>
+<listitem>fixed blended-escaped sequence parsing issue</listitem>
+<listitem>fixed MySQL IN clause (values order etc)</listitem>
+<listitem>fixed that post_index did not execute when 0 documents were succesfully indexed</listitem>
+<listitem>fixed field position limit vs many hits</listitem>
+<listitem>fixed that joined fields missed an end marker at field end</listitem>
+<listitem>fixed that xxx_step settings were missing from .sph index header</listitem>
+<listitem>fixed libsphinxclient missing request cleanup in sphinx_query() (eg after network errors)</listitem>
+<listitem>fixed that index_weights were ignored when grouping</listitem>
+<listitem>fixed multi wordforms vs blend_chars</listitem>
+<listitem>fixed broken MVA output in SphinxQL</listitem>
+<listitem>fixed a few RT leaks</listitem>
+<listitem>fixed an issue with RT string storage going missing</listitem>
+<listitem>fixed an issue with repeated queries vs dist_threads</listitem>
+<listitem>fixed an issue with string attributes vs buffer overrun in SphinxQL</listitem>
+<listitem>fixed unexpected character data warnings within ignored xmlpipe tags</listitem>
+<listitem>fixed a crash in snippets with NEAR syntax query</listitem>
+<listitem>fixed passage duplication in snippets</listitem>
+<listitem>fixed libsphinxclient SIGPIPE handling</listitem>
+<listitem>fixed libsphinxclient vs VS2003 compiler bug</listitem>
 </itemizedlist>
 </sect1>
 

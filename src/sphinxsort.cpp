@@ -1678,7 +1678,7 @@ static inline ESphSortKeyPart Attr2Keypart ( ESphAttr eType )
 }
 
 
-static ESortClauseParseResult sphParseSortClause ( const char * sClause, const CSphSchema & tSchema,
+static ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char * sClause, const CSphSchema & tSchema,
 	ESphSortFunc & eFunc, CSphMatchComparatorState & tState, int * dAttrs, CSphString & sError, CSphSchema * pExtra = NULL )
 {
 	assert ( dAttrs );
@@ -1724,10 +1724,10 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 			continue;
 		}
 
-		// handle field name
+		// handle attribute name
 		if ( iField==MAX_SORT_FIELDS )
 		{
-			sError.SetSprintf ( "too much sort-by fields; maximum count is %d", MAX_SORT_FIELDS );
+			sError.SetSprintf ( "too many sort-by attributes; maximum count is %d", MAX_SORT_FIELDS );
 			return SORT_CLAUSE_ERROR;
 		}
 
@@ -1746,12 +1746,30 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 			if ( !strcasecmp ( pTok, "@group" ) )
 				pTok = "@groupby";
 
+			// try to lookup plain attr in sorter schema
 			int iAttr = tSchema.GetAttrIndex ( pTok );
+
+			// try to lookup aliased count(*) in select items
+			if ( iAttr<0 )
+			{
+				ARRAY_FOREACH ( i, pQuery->m_dItems )
+				{
+					const CSphQueryItem & tItem = pQuery->m_dItems[i];
+					if ( !tItem.m_sAlias.cstr() || strcasecmp ( tItem.m_sAlias.cstr(), pTok ) )
+						continue;
+					if ( tItem.m_sExpr.Begins("@") )
+						iAttr = tSchema.GetAttrIndex ( tItem.m_sExpr.cstr() );
+					break; // break in any case; because we did match the alias
+				}
+			}
+
+			// epic fail
 			if ( iAttr<0 )
 			{
 				sError.SetSprintf ( "sort-by attribute '%s' not found", pTok );
 				return SORT_CLAUSE_ERROR;
 			}
+
 			const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
 			if ( pExtra )
 				pExtra->AddAttr ( tCol, true );
@@ -2828,7 +2846,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	if ( pQuery->m_eSort==SPH_SORT_EXTENDED )
 	{
 		int dAttrs [ CSphMatchComparatorState::MAX_ATTRS ];
-		ESortClauseParseResult eRes = sphParseSortClause ( pQuery->m_sSortBy.cstr(), tSorterSchema, eMatchFunc, tStateMatch, dAttrs, sError, pExtra );
+		ESortClauseParseResult eRes = sphParseSortClause ( pQuery, pQuery->m_sSortBy.cstr(), tSorterSchema, eMatchFunc, tStateMatch, dAttrs, sError, pExtra );
 		if ( eRes==SORT_CLAUSE_ERROR )
 			return NULL;
 
@@ -2895,7 +2913,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	if ( bGotGroupby )
 	{
 		int dAttrs [ CSphMatchComparatorState::MAX_ATTRS ];
-		ESortClauseParseResult eRes = sphParseSortClause ( pQuery->m_sGroupSortBy.cstr(), tSorterSchema, eGroupFunc, tStateGroup, dAttrs, sError, pExtra );
+		ESortClauseParseResult eRes = sphParseSortClause ( pQuery, pQuery->m_sGroupSortBy.cstr(), tSorterSchema, eGroupFunc, tStateGroup, dAttrs, sError, pExtra );
 
 		if ( eRes==SORT_CLAUSE_ERROR || eRes==SORT_CLAUSE_RANDOM )
 		{

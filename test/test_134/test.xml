@@ -45,6 +45,20 @@ index test1
 	charset_table = 0..9, a..z, A..Z->a..z
 }
 
+index test2
+{
+	source			= test
+	path			= <data_path/>/test2
+
+	html_strip		= 1
+	index_sp		= 1
+	index_zones		= zone_*
+	dict			= crc
+	charset_type	= utf-8
+	charset_table = 0..9, a..z, A..Z->a..z
+	blend_chars = (, )
+}
+
 </config>
 
 <db_insert>select 1;</db_insert>
@@ -233,6 +247,17 @@ $opts7['passage_boundary'] = 'paragraph';
 $opts7['query_mode'] = 1;
 $opts7['limit_passages'] = 8;
 $results[] = $client->BuildExcerpts($docs7, 'test1', 'it | is | ma1 | ma2', $opts7 );
+
+$docs12 = array ('Leverage gains (if any). May fallback or go insolvent. Credit risk of the deal.');
+$words12 = 'fallback insolvent';
+
+// 12 test
+$opts12 = array ( 'limit'=>255, 'limit_words'=>12, 'limit_passages'=>5, 'passage_boundary'=>'paragraph', 'around'=>10 );
+$results[] = $client->BuildExcerpts($docs12, 'test2', $words12, $opts12 );
+
+// 13 test
+$opts12 = array ( 'limit'=>0, 'limit_words'=>0, 'limit_passages'=>0, 'passage_boundary'=>'paragraph', 'around'=>10 );
+$results[] = $client->BuildExcerpts($docs12, 'test2', $words12, $opts12 );
 
 ]]></custom_test>
 

@@ -662,9 +662,12 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDi
 		const char * pTokenStart = pTokenizer->GetTokenStart ();
 
 		if ( pTokenStart!=pStartPtr && pTokenStart>pLastTokenEnd )
+		{
 			AddJunk ( pLastTokenEnd - pStartPtr,
 				pTokenStart - pLastTokenEnd,
 				pTokenizer->GetBoundary() ? pTokenizer->GetBoundaryOffset() : -1 );
+			pLastTokenEnd = pTokenStart;
+		}
 
 		if ( bRetainHtml && *pTokenStart=='<' )
 		{
@@ -2409,7 +2412,10 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor )
 		const char * pTokenStart = pTokenizer->GetTokenStart ();
 
 		if ( pTokenStart>pLastTokenEnd )
+		{
 			tFunctor.OnOverlap ( pLastTokenEnd-pStartPtr, pTokenStart - pLastTokenEnd );
+			pLastTokenEnd = pTokenStart;
+		}
 
 		if ( bRetainHtml && *pTokenStart=='<' )
 		{
@@ -2735,6 +2741,7 @@ ExcerptQuery_t::ExcerptQuery_t ()
 
 /////////////////////////////////////////////////////////////////////////////
 
+
 char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphIndex *pIndex, CSphString & sError, const CSphHTMLStripper * pStripper )
 {
 	if ( tOptions.m_sStripMode=="retain"
@@ -2748,7 +2755,7 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 		tOptions.m_bHighlightQuery = false;
 
 	char * pData = const_cast<char*> ( tOptions.m_sSource.cstr() );
-	CSphScopedPtr<BYTE> pBuffer ( NULL );
+	CSphScopedPtr<char> pBuffer ( NULL );
 	int iDataLen = tOptions.m_sSource.Length();
 
 	if ( tOptions.m_bLoadFiles )
@@ -2772,12 +2779,12 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 		}
 
 		iDataLen = iFileSize+1;
-		pBuffer = new BYTE [ iDataLen ];
+		pBuffer = new char [ iDataLen ];
 		if ( !tFile.Read ( pBuffer.Ptr(), iFileSize, sError ) )
 			return NULL;
 
 		pBuffer.Ptr()[iFileSize] = 0;
-		pData = (char*) pBuffer.Ptr();
+		pData = pBuffer.Ptr();
 	}
 
 	// strip if we have to

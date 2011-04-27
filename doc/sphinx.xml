@@ -7734,7 +7734,7 @@ option are as follows:
 <listitem>stem_enru - apply Porter's English and Russian stemmers;</listitem>
 <listitem>stem_cz - apply Czech stemmer;</listitem>
 <listitem>soundex - replace keywords with their SOUNDEX code;</listitem>
-<listitem>soundex - replace keywords with their METAPHONE code.</listitem>
+<listitem>metaphone - replace keywords with their METAPHONE code.</listitem>
 </itemizedlist>
 Additional values provided by libstemmer are in 'libstemmer_XXX' format,
 where XXX is libstemmer algorithm codename (refer to

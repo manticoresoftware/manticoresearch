@@ -1018,7 +1018,9 @@ class CSphFixedVector : public ISphNoncopyable
 {
 protected:
 	T *			m_pData;
-	const int	m_iSize;
+#ifndef _NDEBUG
+	int	m_iSize;
+#endif
 
 public:
 	explicit CSphFixedVector ( int iSize )
@@ -1049,6 +1051,9 @@ public:
 		SafeDeleteArray ( m_pData );
 		assert ( iSize>=0 );
 		m_pData = ( iSize>0 ) ? new T [ iSize ] : NULL;
+#ifndef _NDEBUG
+		m_iSize = iSize;
+#endif
 	}
 };
 

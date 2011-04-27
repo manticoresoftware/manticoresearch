@@ -3401,9 +3401,15 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetBlendedVariant ()
 }
 
 
-static bool IsModifier ( int iSymbol )
+static inline bool IsModifier ( int iSymbol )
 {
 	return iSymbol=='^' || iSymbol=='$' || iSymbol=='=' || iSymbol=='*';
+}
+
+
+static inline bool IsCapital ( int iCh )
+{
+	return iCh>='A' && iCh<='Z';
 }
 
 
@@ -3441,8 +3447,27 @@ int CSphTokenizerTraits<IS_UTF8>::CodepointArbitration ( int iCode, bool bWasEsc
 					&& ( ( 'a'<=m_pCur[1] && m_pCur[1]<='z' )
 						|| ( m_pCur[1]=='(' && 'a'<=m_pCur[2] && m_pCur[2]<='z' ) ) );
 
-				// middle initial ("John D. Doe"), not a boundary
-				bool bMiddleName = ( m_pCur[0]==' ' && m_pCur-3>=m_pBuffer && m_pCur[-3]==' ' && 'A'<=m_pCur[-2] && m_pCur[-2]<='Z' );
+				// preceded by any 1-char or 2-char token that starts with a capital letter, not a boundary
+				// handles middle initials and sentence-starting initials nicely
+				//
+				// J. R. R. Tolkien, who wrote Hobbit ...
+				// John D. Doe ...
+				// Known as Mr. Doe ...
+				bool bMiddleName =
+					( m_iAccum==1 && IsCapital ( m_pCur[-2] ) ) ||
+					( m_iAccum==2 && IsCapital ( m_pCur[-3] ) );
+
+				// preceded by a known 3-byte token
+				// Survived by Mrs. Doe ...
+				if ( m_iAccum==3 )
+				{
+#define LOC_CHECK(_str) \
+	if ( m_sAccum[0]==_str[0] && m_sAccum[1]==_str[1] && m_sAccum[2]==_str[2] ) \
+		bMiddleName = true;
+					LOC_CHECK("mrs");
+					LOC_CHECK("drs");
+#undef LOC_CHECK
+				}
 
 				if ( !bInwordDot && !bInphraseDot && !bMiddleName )
 				{

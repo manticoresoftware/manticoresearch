@@ -2112,6 +2112,7 @@ private:
 
 	bool				m_bBuildMultiform;
 	BYTE				m_sTokenizedMultiform [ 3*SPH_MAX_WORD_LEN+4 ];
+	BYTE				m_sOutMultiform [ 3*SPH_MAX_WORD_LEN+4 ];
 
 	struct StoredToken_t
 	{
@@ -4795,7 +4796,8 @@ BYTE * CSphTokenizer_Filter::GetToken ()
 			m_iStoredLen -= iTokensPerForm;
 
 			assert ( m_iStoredLen>=0 );
-			return (BYTE*)pCurForm->m_sNormalForm.cstr ();
+			strcpy ( (char *)m_sOutMultiform, pCurForm->m_sNormalForm.cstr () ); // NOLINT
+			return m_sOutMultiform;
 		}
 	}
 
@@ -16476,7 +16478,7 @@ WordformContainer_t * CSphDictCRCTraits::LoadWordformContainer ( const char * sz
 		// parse the line
 		pMyTokenizer->SetBuffer ( (BYTE*)sBuffer, iLen );
 
-		CSphMultiform * pMultiWordform = NULL;
+		CSphScopedPtr<CSphMultiform> tMultiWordform ( NULL );
 		CSphString sKey;
 
 		BYTE * pFrom = NULL;
@@ -16493,12 +16495,12 @@ WordformContainer_t * CSphDictCRCTraits::LoadWordformContainer ( const char * sz
 				break;
 			} else
 			{
-				if ( !pMultiWordform )
+				if ( !tMultiWordform.Ptr() )
 				{
-					pMultiWordform = new CSphMultiform;
+					tMultiWordform = new CSphMultiform;
 					sKey = (const char*)pFrom;
 				} else
-					pMultiWordform->m_dTokens.Add ( (const char*)pFrom );
+					tMultiWordform->m_dTokens.Add ( (const char*)pFrom );
 			}
 		}
 
@@ -16508,13 +16510,32 @@ WordformContainer_t * CSphDictCRCTraits::LoadWordformContainer ( const char * sz
 		BYTE * pTo = pMyTokenizer->GetToken ();
 		if ( !pTo ) continue; // FIXME! report parsing error
 
-		if ( !pMultiWordform )
+		CSphString sTo ( (const char *)pTo );
+		const CSphString & sSourceWordform = tMultiWordform.Ptr() ? sTo : sFrom;
+
+		// check wordform that source token is a new token or has same destination token
+		int * pRefTo = pContainer->m_dHash ( sSourceWordform );
+		assert ( !pRefTo || ( *pRefTo>=0 && *pRefTo<pContainer->m_dNormalForms.GetLength() ) );
+		if ( !tMultiWordform.Ptr() && pRefTo && pContainer->m_dNormalForms[*pRefTo]!=sTo )
 		{
-			pContainer->m_dNormalForms.AddUnique ( (const char*)pTo );
-			pContainer->m_dHash.Add ( pContainer->m_dNormalForms.GetLength()-1, sFrom.cstr() );
-		} else
+			const CSphString & sRefTo = pContainer->m_dNormalForms[*pRefTo];
+			sphWarning ( "duplicate wordform found - skipped ( current='%s > %s', stored='%s > %s' ). Fix your wordforms file '%s'.",
+				sSourceWordform.cstr(), sTo.cstr(), sSourceWordform.cstr(), sRefTo.cstr(), szFile );
+		}
+
+		if ( pRefTo && !tMultiWordform.Ptr() )
+			continue;
+
+		if ( !pRefTo )
 		{
-			pMultiWordform->m_sNormalForm = (const char*)pTo;
+			pContainer->m_dNormalForms.AddUnique ( sTo );
+			pContainer->m_dHash.Add ( pContainer->m_dNormalForms.GetLength()-1, sSourceWordform );
+		}
+
+		if ( tMultiWordform.Ptr() )
+		{
+			CSphMultiform * pMultiWordform = tMultiWordform.LeakPtr();
+			pMultiWordform->m_sNormalForm = sTo;
 			pMultiWordform->m_iNormalTokenLen = pMyTokenizer->GetLastTokenLen ();
 			pMultiWordform->m_dTokens.Add ( sFrom );
 			if ( !pContainer->m_pMultiWordforms )

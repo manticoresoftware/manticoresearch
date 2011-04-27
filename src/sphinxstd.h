@@ -1038,6 +1038,18 @@ public:
 		assert ( iIndex>=0 && iIndex<m_iSize );
 		return m_pData[iIndex];
 	}
+
+	T * Begin () const
+	{
+		return m_pData;
+	}
+
+	void Reset ( int iSize )
+	{
+		SafeDeleteArray ( m_pData );
+		assert ( iSize>=0 );
+		m_pData = ( iSize>0 ) ? new T [ iSize ] : NULL;
+	}
 };
 
 //////////////////////////////////////////////////////////////////////////

@@ -2755,7 +2755,7 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 		tOptions.m_bHighlightQuery = false;
 
 	char * pData = const_cast<char*> ( tOptions.m_sSource.cstr() );
-	CSphScopedPtr<char> pBuffer ( NULL );
+	CSphFixedVector<char> pBuffer ( 0 );
 	int iDataLen = tOptions.m_sSource.Length();
 
 	if ( tOptions.m_bLoadFiles )
@@ -2779,12 +2779,12 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 		}
 
 		iDataLen = iFileSize+1;
-		pBuffer = new char [ iDataLen ];
-		if ( !tFile.Read ( pBuffer.Ptr(), iFileSize, sError ) )
+		pBuffer.Reset ( iDataLen );
+		if ( !tFile.Read ( pBuffer.Begin(), iFileSize, sError ) )
 			return NULL;
 
-		pBuffer.Ptr()[iFileSize] = 0;
-		pData = pBuffer.Ptr();
+		pBuffer[iFileSize] = 0;
+		pData = pBuffer.Begin();
 	}
 
 	// strip if we have to

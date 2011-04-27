@@ -53,6 +53,24 @@ index wf2
 	wordforms = test_098/wordforms.txt
 }
 
+source src_wf3
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test_wf3
+}
+
+
+index wf3
+{
+	source			= src_wf3
+	path			= <data_path/>/wf3
+	morphology			= stem_en
+	charset_type		= utf-8
+	charset_table 	= -, 0..9, A..Z->a..z, _, a..z
+	wordforms = test_098/wf3.txt
+}
+
 </config>
 
 <queries>
@@ -74,6 +92,8 @@ index wf2
 <sphqueries>
 <sphinxql>CALL KEYWORDS ('run-time (run time) issue', 'wf1')</sphinxql>
 <sphinxql>CALL KEYWORDS ('run-time (run time) issue', 'wf2')</sphinxql>
+<!-- here is going regression crash on indexing wordforms vs multi-wordforms -->
+<sphinxql>SELECT * from wf3 where match ('word2word2')</sphinxql>
 </sphqueries>
 
 
@@ -82,8 +102,16 @@ CREATE TABLE test_table (
 	document_id INTEGER NOT NULL PRIMARY KEY,
 	title VARCHAR(255) NOT NULL )
 </db_create>
+<db_create>
+CREATE TABLE test_wf3 (
+	document_id INTEGER NOT NULL PRIMARY KEY,
+	title VARCHAR(255) NOT NULL )
+</db_create>
 <db_drop>
 DROP TABLE IF EXISTS test_table
+</db_drop>
+<db_drop>
+DROP TABLE IF EXISTS test_wf3
 </db_drop>
 <db_insert>
 INSERT INTO test_table VALUES
@@ -94,5 +122,8 @@ INSERT INTO test_table VALUES
 	( 5, 'run-time error' ),
 	( 6, 'running without trouble' )
 </db_insert>
-
+<db_insert>
+INSERT INTO test_wf3 VALUES
+	( 1, 'word2word2 word4word4' )
+</db_insert>
 </test>

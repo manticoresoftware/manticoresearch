@@ -1217,12 +1217,32 @@ public:
 // SIGNAL HANDLERS
 /////////////////////////////////////////////////////////////////////////////
 
+
+#if !USE_WINDOWS
+static void UpdateAliveChildrenList ( CSphVector<int> & dChildren )
+{
+	ARRAY_FOREACH ( i, dChildren )
+	{
+		int iPID = dChildren[i];
+		int iStatus = 0;
+		if ( iPID>0 && waitpid ( iPID, &iStatus, WNOHANG )==iPID && ( WIFEXITED ( iStatus ) || WIFSIGNALED ( iStatus ) ) )
+			iPID = 0;
+
+		if ( iPID<=0 )
+			dChildren.RemoveFast ( i-- );
+	}
+}
+#endif
+
+
 void Shutdown ()
 {
 	bool bAttrsSaveOk = true;
 	// some head-only shutdown procedures
 	if ( g_bHeadDaemon )
 	{
+		const int iShutWaitPeriod = 3000000;
+
 		if ( g_eWorkers==MPM_THREADS )
 		{
 			// tell flush-rt thread to shutdown, and wait until it does
@@ -1237,7 +1257,7 @@ void Shutdown ()
 
 			int64_t tmShutStarted = sphMicroTimer();
 			// stop search threads; up to 3 seconds long
-			while ( g_dThd.GetLength() > 0 && ( sphMicroTimer()-tmShutStarted )<3000000 )
+			while ( g_dThd.GetLength() > 0 && ( sphMicroTimer()-tmShutStarted )<iShutWaitPeriod )
 				sphSleepMsec ( 50 );
 
 			g_tThdMutex.Lock();
@@ -1245,6 +1265,30 @@ void Shutdown ()
 			g_tThdMutex.Unlock();
 			g_tThdMutex.Done();
 		}
+
+#if !USE_WINDOWS
+		if ( g_eWorkers==MPM_FORK || g_eWorkers==MPM_PREFORK )
+		{
+			int64_t tmShutStarted = sphMicroTimer();
+			// stop search children; up to 3 seconds long
+			while ( g_dChildren.GetLength()>0 && ( sphMicroTimer()-tmShutStarted )<iShutWaitPeriod )
+			{
+				UpdateAliveChildrenList ( g_dChildren );
+				sphSleepMsec ( 50 );
+			}
+
+			if ( g_dChildren.GetLength() )
+			{
+				ARRAY_FOREACH ( i, g_dChildren )
+					kill ( g_dChildren[i], SIGKILL );
+
+				sphSleepMsec ( 100 );
+				UpdateAliveChildrenList ( g_dChildren );
+				if ( g_dChildren.GetLength() )
+					sphWarning ( "there are still %d alive children", g_dChildren.GetLength() );
+			}
+		}
+#endif
 
 		SafeDelete ( g_pCfg );
 
@@ -5356,7 +5400,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 				if ( !bAdd )
 					continue;
 			}
-			
+
 			// if before all schemas were proved as equal, and the tCol taken from current schema is static -
 			// this is no reason now to make it dynamic.
 			bool bDynamic = bAllEqual?tCol.m_tLocator.m_bDynamic:true;

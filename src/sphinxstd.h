@@ -1939,6 +1939,8 @@ public:
 	T ReadValue() const
 	{
 		assert ( m_pValue );
+		if (!m_pValue)
+			return 0;
 		Lock();
 		T val = *m_pValue;
 		Unlock();
@@ -1947,6 +1949,8 @@ public:
 	void WriteValue ( const T& tNewValue )
 	{
 		assert ( m_pValue );
+		if (!m_pValue)
+			return;
 		Lock();
 		*m_pValue = tNewValue;
 		Unlock();

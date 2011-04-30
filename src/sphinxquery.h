@@ -141,6 +141,9 @@ public:
 	/// setup zone limits
 	void SetZoneSpec ( const CSphVector<int> & dZones );
 
+	/// copy field/zone limits from another node
+	void CopySpecs ( const XQNode_t * pSpecs );
+
 	/// unconditionally clear field mask
 	void ClearFieldMask ();
 

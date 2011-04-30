@@ -137,6 +137,19 @@ void XQNode_t::SetZoneSpec ( const CSphVector<int> & dZones )
 		m_dChildren[i]->SetZoneSpec ( dZones );
 }
 
+void XQNode_t::CopySpecs ( const XQNode_t * pSpecs )
+{
+	if ( !pSpecs )
+		return;
+
+	if ( pSpecs->m_bFieldSpec )
+		SetFieldSpec ( pSpecs->m_uFieldMask, pSpecs->m_iFieldMaxPos );
+
+	if ( pSpecs->m_dZones.GetLength() )
+		SetZoneSpec ( pSpecs->m_dZones );
+}
+
+
 void XQNode_t::ClearFieldMask ()
 {
 	m_uFieldMask = 0xFFFFFFFFUL;
@@ -807,11 +820,7 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 
 	// left spec always tries to infect the nodes to the right, only brackets can stop it
 	// eg. '@title hello' vs 'world'
-	if ( pLeft->m_bFieldSpec )
-		pRight->SetFieldSpec ( pLeft->m_uFieldMask, pLeft->m_iFieldMaxPos );
-
-	if ( pLeft->m_dZones.GetLength() )
-		pRight->SetZoneSpec ( pLeft->m_dZones );
+	pRight->CopySpecs ( pLeft );
 
 	// build a new node
 	XQNode_t * pResult = NULL;

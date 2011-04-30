@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>ZONE pushdown vs min_prefix_len</name>
+
+<config>
+indexer
+{
+	mem_limit		= 20M
+}
+
+searchd
+{
+	<searchd_settings/>
+	compat_sphinxql_magics	= 0
+	preopen_indexes			= 0
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+
+	html_strip		= 1
+    index_zones		= zone*
+	dict			= keywords	
+	enable_star		= 1
+	<dynamic>
+		<variant>min_prefix_len	= 0</variant>
+		<variant>min_prefix_len	= 1</variant>
+	</dynamic>
+}
+</config>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	gid int not null,
+	title varchar(255) not null
+);
+</db_create>
+<db_drop>drop table if exists test_table;</db_drop>
+<db_insert><![CDATA[insert into test_table values ( 100, 1, 'J\'entends le loup, le renard et la belette, <zoneA>J\'entends le loup et le renard chanter.</zoneA>' );]]></db_insert>
+
+<queries>
+<query mode="extended2">"la belette"</query>
+<query mode="extended2">ZONE:zoneB "la belette"</query>
+<query mode="extended2">ZONE:nonZone "la belette"</query>
+</queries>
+
+</test>

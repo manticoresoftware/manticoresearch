@@ -26,6 +26,7 @@ type sphinx.xml ^
 		- ^
 	| perl -pe "s/\xA0/\&nbsp;/g" ^
 	| perl -pe "s/\xA9/\&copy;/g" ^
+	| perl -pe "s/\xEF/\&iuml;/g" ^
 	| perl -pe "s/((<\/(li|dt|dt|head|div)>)+)/\1\n/g" ^
 	| perl -pe "s/<a name=\"id\d+\"><\/a>//g" ^
 	| perl -pe "s/<\/head>/\n<style type=\"text\/css\">pre.programlisting { background-color: #f0f0f0; padding: 0.5em; margin-left: 2em; margin-right: 2em; }<\/style>\n<\/head>/" ^

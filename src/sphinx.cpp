@@ -1478,7 +1478,7 @@ private:
 	bool						SortOrdinals ( const char * szToFile, int iFromFD, int iArenaSize, int iOrdinalsInPool, CSphVector< CSphVector<SphOffset_t> > & dOrdBlockSize, bool bWarnOfMem );
 	bool						SortOrdinalIds ( const char * szToFile, int iFromFD, int iArenaSize, CSphVector < CSphVector < SphOffset_t > > & dOrdBlockSize, bool bWarnOfMem );
 
-	const DWORD *				GetMVAPool () const { return m_pMva.GetNumEntries() ? &m_pMva[0] : NULL; }
+	const DWORD *				GetMVAPool () const { return m_pMva.GetWritePtr(); }
 	bool						LoadPersistentMVA ( CSphString & sError );
 
 	bool						JuggleFile ( const char* szExt, bool bNeedOrigin=true );
@@ -12986,7 +12986,7 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 			if ( !m_pDocinfo.Alloc ( iDocinfoSize + 2*(1+m_uDocinfoIndex)*iStride + ( m_bId32to64 ? m_uDocinfo : 0 ), m_sLastError, sWarning ) )
 				return false;
 
-			m_pDocinfoIndex = const_cast < DWORD * > ( &m_pDocinfo [ iDocinfoSize ] );
+			m_pDocinfoIndex = m_pDocinfo.GetWritePtr()+iDocinfoSize;
 		} else
 		{
 			if ( iDocinfoSize < iRealDocinfoSize )
@@ -13006,7 +13006,7 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 			assert ( uDocinfoIndex==m_uDocinfoIndex );
 #endif
 
-			m_pDocinfoIndex = const_cast < DWORD * > ( &m_pDocinfo [ m_uMinMaxIndex ] );
+			m_pDocinfoIndex = m_pDocinfo.GetWritePtr()+m_uMinMaxIndex;
 		}
 
 		// prealloc docinfo hash but only if docinfo is big enough (in other words if hash is 8x+ less in size)
@@ -23758,7 +23758,7 @@ const BYTE * CWordlist::AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint
 	const BYTE * pBuf = NULL;
 
 	if ( !m_pBuf.IsEmpty() )
-		pBuf = &m_pBuf[(DWORD)pCheckpoint->m_iWordlistOffset];
+		pBuf = m_pBuf.GetWritePtr()+pCheckpoint->m_iWordlistOffset;
 	else
 	{
 		assert ( pDictBuf );

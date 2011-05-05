@@ -663,7 +663,7 @@ bool AttrIndexBuilder_t<DOCID>::Collect ( const DWORD * pCur, const CSphSharedBu
 			continue;
 
 		// sanity checks
-		if ( uOff>=pMvas.GetNumEntries() )
+		if ( uOff>=(int64_t)pMvas.GetNumEntries() )
 		{
 			sError.SetSprintf ( "broken index: mva offset out of bounds, id=" DOCID_FMT, (SphDocID_t)uDocID );
 			return false;
@@ -676,7 +676,7 @@ bool AttrIndexBuilder_t<DOCID>::Collect ( const DWORD * pCur, const CSphSharedBu
 			sError.SetSprintf ( "broken index: mva docid verification failed, id=" DOCID_FMT, (SphDocID_t)uDocID );
 			return false;
 		}
-		if ( uOff+pMva[0]>=pMvas.GetNumEntries() )
+		if ( uOff+pMva[0]>=(int64_t)pMvas.GetNumEntries() )
 		{
 			sError.SetSprintf ( "broken index: mva list out of bounds, id=" DOCID_FMT, (SphDocID_t)uDocID );
 			return false;

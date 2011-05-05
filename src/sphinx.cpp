@@ -1270,11 +1270,11 @@ struct WordReaderContext_t
 class CWordlist
 {
 public:
-	SphOffset_t							m_iCheckpointsPos;		///< checkpoints offset
-	CSphVector<CSphWordlistCheckpoint>	m_dCheckpoints;			///< checkpoint offsets
+	int64_t								m_iCheckpointsPos;		///< checkpoints offset
+	CSphFixedVector<CSphWordlistCheckpoint>	m_dCheckpoints;			///< checkpoint offsets
 
 	CSphAutofile						m_tFile;				///< file
-	SphOffset_t							m_iSize;				///< file size
+	int64_t								m_iSize;				///< file size
 	CSphSharedBuffer<BYTE>				m_pBuf;					///< my cache
 	int									m_iMaxChunk;			///< max size of entry between checkpoints
 
@@ -11025,7 +11025,7 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 	else
 		m_tMin.m_iDocID = m_iMergeInfinum;
 
-	m_tWordlist.m_dCheckpoints.Reset();
+	m_tWordlist.m_dCheckpoints.Reset ( 0 );
 
 	const int iDstDynamic = m_tSchema.GetDynamicSize();
 	const int iSrcDynamic = pSrcIndex->m_tSchema.GetDynamicSize();
@@ -12493,7 +12493,7 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 
 	// wordlist checkpoints
 	m_tWordlist.m_iCheckpointsPos = rdInfo.GetOffset();
-	m_tWordlist.m_dCheckpoints.Resize ( rdInfo.GetDword() );
+	m_tWordlist.m_dCheckpoints.Reset ( rdInfo.GetDword() );
 
 	// index stats
 	m_tStats.m_iTotalDocuments = rdInfo.GetDword ();
@@ -12743,7 +12743,7 @@ void CSphIndex_VLN::DebugDumpDocids ( FILE * fp )
 	const int iRowStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 
 	const DWORD uNumMinMaxRow = ( m_uVersion>=20 ) ? ( 2*(1+m_uDocinfoIndex)*iRowStride ) : 0;
-	const DWORD uNumRows = (m_pDocinfo.GetNumEntries()-uNumMinMaxRow) / iRowStride; // all 32bit, as we don't expect 2 billion documents per single physical index
+	const int64_t uNumRows = (m_pDocinfo.GetNumEntries()-uNumMinMaxRow) / iRowStride; // all 32bit, as we don't expect 2 billion documents per single physical index
 
 	const uint64_t uDocinfoSize = iRowStride*size_t(m_uDocinfo)*sizeof(DWORD);
 	const uint64_t uMinmaxSize = uNumMinMaxRow*sizeof(CSphRowitem);
@@ -12751,7 +12751,7 @@ void CSphIndex_VLN::DebugDumpDocids ( FILE * fp )
 	fprintf ( fp, "docinfo-bytes: docinfo="UINT64_FMT", min-max="UINT64_FMT", total="UINT64_FMT"\n"
 		, uDocinfoSize, uMinmaxSize, (uint64_t)m_pDocinfo.GetLength() );
 	fprintf ( fp, "docinfo-stride: %d\n", (int)(iRowStride*sizeof(DWORD)) );
-	fprintf ( fp, "docinfo-rows: %d\n", uNumRows );
+	fprintf ( fp, "docinfo-rows: "INT64_FMT"\n", uNumRows );
 
 	if ( !m_pDocinfo.GetNumEntries() )
 		return;
@@ -12912,9 +12912,9 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 	// pre-11 indices use different offset type (this is fixed up later during the loading)
 	assert ( m_tWordlist.m_iCheckpointsPos>0 );
 
-	// prealloc wordlist
+	// prealloc wordlist only !!! no need to load checkpoints here to
 	if ( m_bPreloadWordlist )
-		if ( !m_tWordlist.m_pBuf.Alloc ( DWORD(m_tWordlist.m_iSize), m_sLastError, sWarning ) )
+		if ( !m_tWordlist.m_pBuf.Alloc ( m_tWordlist.m_iCheckpointsPos, m_sLastError, sWarning ) )
 			return false;
 
 	// preopen
@@ -15165,8 +15165,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		uAllRowsTotal += 2*(1+m_uDocinfoIndex); // should had been fixed up to v.20 by the loader
 
 		if ( uAllRowsTotal*uStride!=m_pDocinfo.GetNumEntries() )
-			LOC_FAIL(( fp, "rowitems count mismatch (expected=%u, loaded=%u)",
-				uAllRowsTotal*uStride, m_pDocinfo.GetNumEntries() ));
+			LOC_FAIL(( fp, "rowitems count mismatch (expected=%u, loaded="INT64_FMT")",
+				uAllRowsTotal*uStride, (int64_t)m_pDocinfo.GetNumEntries() ));
 
 		// extract rowitem indexes for MVAs etc
 		// (ie. attr types that we can and will run additional checks on)
@@ -15537,7 +15537,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 						const DWORD * pMvaDocID = bIsFirstMva ? ( pMva - sizeof(SphDocID_t) / sizeof(DWORD) ) : NULL;
 						bIsFirstMva = false;
 
-						if ( uOff>=m_pMva.GetNumEntries() )
+						if ( uOff>=(SphAttr_t)m_pMva.GetNumEntries() )
 							break;
 
 						if ( pMvaDocID && DOCINFO2ID ( pMvaDocID )!=uDocID )
@@ -15549,7 +15549,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 						// check values
 						const DWORD uValues = *pMva++;
-						if ( uOff+uValues>m_pMva.GetNumEntries() )
+						if ( uOff+uValues>(SphAttr_t)m_pMva.GetNumEntries() )
 							break;
 
 						for ( DWORD iVal=0; iVal<uValues; iVal++ )
@@ -15584,8 +15584,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 	// check size
 	if ( m_pKillList.GetNumEntries()!=m_iKillListSize )
-		LOC_FAIL(( fp, "kill-list size differs (expected=%d, got=%d)",
-			m_iKillListSize, m_pKillList.GetNumEntries() ));
+		LOC_FAIL(( fp, "kill-list size differs (expected=%d, got="INT64_FMT")",
+			m_iKillListSize, (int64_t)m_pKillList.GetNumEntries() ));
 
 	// check that ids are ascending
 	for ( DWORD uID=1; uID<m_pKillList.GetNumEntries(); uID++ )
@@ -15702,7 +15702,7 @@ protected:
 
 	int					m_iStopwords;	///< stopwords count
 	SphWordID_t *		m_pStopwords;	///< stopwords ID list
-	CSphVector<SphWordID_t> m_dStopwordContainer;
+	CSphFixedVector<SphWordID_t> m_dStopwordContainer;
 
 protected:
 	bool				ToNormalForm ( BYTE * pWord );
@@ -15712,7 +15712,7 @@ protected:
 	virtual bool		HasState () const;
 
 	CSphWriter							m_wrDict;			///< final dict file writer
-	CSphVector<CSphWordlistCheckpoint>	m_dCheckpoints;		///< checkpoint offsets
+	CSphTightVector<CSphWordlistCheckpoint>	m_dCheckpoints;		///< checkpoint offsets
 	int									m_iEntries;			///< dictionary entries stored
 	SphOffset_t							m_iLastDoclistPos;
 	SphWordID_t							m_iLastWordID;
@@ -15987,6 +15987,7 @@ bool WordformContainer_t::IsEqual ( const char * szFile, DWORD uCRC32 )
 CSphDictCRCTraits::CSphDictCRCTraits ()
 	: m_iStopwords	( 0 )
 	, m_pStopwords	( NULL )
+	, m_dStopwordContainer ( 0 )
 	, m_iEntries ( 0 )
 	, m_iLastDoclistPos ( 0 )
 	, m_iLastWordID ( 0 )
@@ -16409,7 +16410,7 @@ void CSphDictCRCTraits::LoadStopwords ( const char * sFiles, ISphTokenizer * pTo
 	// store IDs
 	if ( dStop.GetLength() )
 	{
-		m_dStopwordContainer.Resize ( dStop.GetLength() );
+		m_dStopwordContainer.Reset ( dStop.GetLength() );
 		ARRAY_FOREACH ( i, dStop )
 			m_dStopwordContainer[i] = dStop[i];
 
@@ -23503,6 +23504,7 @@ WordReaderContext_t::WordReaderContext_t()
 
 
 CWordlist::CWordlist ()
+	: m_dCheckpoints ( 0 )
 {
 	m_iCheckpointsPos = 0;
 	m_iSize = 0;
@@ -23521,7 +23523,7 @@ void CWordlist::Reset ()
 	m_tFile.Close ();
 	m_pBuf.Reset ();
 
-	m_dCheckpoints.Reset ();
+	m_dCheckpoints.Reset ( 0 );
 	SafeDeleteArray ( m_pWords );
 }
 
@@ -23751,6 +23753,7 @@ const BYTE * CWordlist::AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint
 	assert ( m_dCheckpoints.GetLength() );
 	assert ( pCheckpoint>=m_dCheckpoints.Begin() && pCheckpoint<=&m_dCheckpoints.Last() );
 	assert ( pCheckpoint->m_iWordlistOffset>0 && pCheckpoint->m_iWordlistOffset<=m_iSize );
+	assert ( m_pBuf.IsEmpty() || pCheckpoint->m_iWordlistOffset<(int64_t)m_pBuf.GetLength() );
 
 	const BYTE * pBuf = NULL;
 

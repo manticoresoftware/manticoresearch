@@ -226,7 +226,7 @@ inline int sphBitCount ( DWORD n )
 typedef			bool ( *SphDieCallback_t ) ( const char * );
 
 /// crash with an error message
-void			sphDie ( const char * sMessage, ... ) __attribute__((format(printf,1,2)));
+void			sphDie ( const char * sMessage, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) );
 
 /// setup a callback function to call from sphDie() before exit
 /// if callback returns false, sphDie() will not log to stdout
@@ -1018,9 +1018,7 @@ class CSphFixedVector : public ISphNoncopyable
 {
 protected:
 	T *			m_pData;
-#ifndef _NDEBUG
-	int	m_iSize;
-#endif
+	int			m_iSize;
 
 public:
 	explicit CSphFixedVector ( int iSize )
@@ -1046,14 +1044,22 @@ public:
 		return m_pData;
 	}
 
+	T & Last () const
+	{
+		return (*this) [ m_iSize-1 ];
+	}
+
 	void Reset ( int iSize )
 	{
 		SafeDeleteArray ( m_pData );
 		assert ( iSize>=0 );
 		m_pData = ( iSize>0 ) ? new T [ iSize ] : NULL;
-#ifndef _NDEBUG
 		m_iSize = iSize;
-#endif
+	}
+
+	int GetLength() const
+	{
+		return m_iSize;
 	}
 };
 
@@ -1488,7 +1494,7 @@ public:
 		memset ( m_sValue, 0, 1+SAFETY_GAP+iLen );
 	}
 
-	const CSphString & SetSprintf ( const char * sTemplate, ... ) __attribute__((format(printf,2,3)))
+	const CSphString & SetSprintf ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) )
 	{
 		char sBuf[1024];
 		va_list ap;
@@ -1736,7 +1742,7 @@ protected:
 //////////////////////////////////////////////////////////////////////////
 
 extern bool g_bHeadProcess;
-void sphWarn ( const char *, ... ) __attribute__((format(printf,1,2)));
+void sphWarn ( const char *, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) );
 
 /// in-memory buffer shared between processes
 template < typename T > class CSphSharedBuffer
@@ -1765,15 +1771,15 @@ public:
 public:
 	/// allocate storage
 #if USE_WINDOWS
-	bool Alloc ( DWORD iEntries, CSphString & sError, CSphString & )
+	bool Alloc ( int64_t iEntries, CSphString & sError, CSphString & )
 #else
-	bool Alloc ( DWORD iEntries, CSphString & sError, CSphString & sWarning )
+	bool Alloc ( int64_t iEntries, CSphString & sError, CSphString & sWarning )
 #endif
 	{
 		assert ( !m_pData );
 
 		int64_t uCheck = sizeof(T);
-		uCheck *= (int64_t)iEntries;
+		uCheck *= iEntries;
 
 		m_iLength = (size_t)uCheck;
 		if ( uCheck!=(int64_t)m_iLength )
@@ -1784,7 +1790,7 @@ public:
 		}
 
 #if USE_WINDOWS
-		m_pData = new T [ iEntries ];
+		m_pData = new T [ (size_t)iEntries ];
 #else
 		m_pData = (T *) mmap ( NULL, m_iLength, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0 );
 		if ( m_pData==MAP_FAILED )
@@ -1808,7 +1814,7 @@ public:
 #endif // USE_WINDOWS
 
 		assert ( m_pData );
-		m_iEntries = iEntries;
+		m_iEntries = (size_t)iEntries;
 		return true;
 	}
 
@@ -1865,9 +1871,9 @@ public:
 
 public:
 	/// accessor
-	inline const T & operator [] ( DWORD iIndex ) const
+	inline const T & operator [] ( int64_t iIndex ) const
 	{
-		assert ( iIndex>=0 && iIndex<m_iEntries );
+		assert ( iIndex>=0 && iIndex<(int64_t)m_iEntries );
 		return m_pData[iIndex];
 	}
 
@@ -1890,7 +1896,7 @@ public:
 	}
 
 	/// get length in entries
-	DWORD GetNumEntries () const
+	size_t GetNumEntries () const
 	{
 		return m_iEntries;
 	}
@@ -1898,7 +1904,7 @@ public:
 protected:
 	T *					m_pData;	///< data storage
 	size_t				m_iLength;	///< data length, bytes
-	DWORD				m_iEntries;	///< data length, entries
+	size_t				m_iEntries;	///< data length, entries
 	bool				m_bMlock;	///< whether to lock data in RAM
 };
 
@@ -1938,8 +1944,7 @@ public:
 	}
 	T ReadValue() const
 	{
-		assert ( m_pValue );
-		if (!m_pValue)
+		if ( !m_pValue )
 			return 0;
 		Lock();
 		T val = *m_pValue;
@@ -1948,8 +1953,7 @@ public:
 	}
 	void WriteValue ( const T& tNewValue )
 	{
-		assert ( m_pValue );
-		if (!m_pValue)
+		if ( !m_pValue )
 			return;
 		Lock();
 		*m_pValue = tNewValue;

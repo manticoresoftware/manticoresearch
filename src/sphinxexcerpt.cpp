@@ -2111,9 +2111,10 @@ public:
 
 	virtual ~HitCollector_c () {}
 
-	virtual void OnToken ( int , int iLen, const BYTE * sWord, SphWordID_t iWordID, DWORD uPosition, SphWordID_t )
+	virtual void OnToken ( int , int iLen, const BYTE * sWord, SphWordID_t iWordID, DWORD uPosition, SphWordID_t iBlendID )
 	{
 		m_tContainer.AddHits ( iWordID, sWord, iLen, uPosition );
+		m_tContainer.AddHits ( iBlendID, sWord, iLen, uPosition );
 		m_tContainer.m_uLastPos = iWordID ? uPosition : m_tContainer.m_uLastPos;
 	}
 
@@ -2203,7 +2204,7 @@ public:
 		ResultEmit ( m_pDoc+iStart, iLen );
 	}
 
-	virtual void OnToken ( int iStart, int iLen, const BYTE * sWord, SphWordID_t iWordID, DWORD , SphWordID_t iBlendID )
+	virtual void OnToken ( int iStart, int iLen, const BYTE * sWord, SphWordID_t iWordID, DWORD, SphWordID_t iBlendID )
 	{
 		assert ( m_pDoc );
 		assert ( iStart>=0 && m_pDoc+iStart+iLen<=m_pTokenizer->GetBufferEnd() );
@@ -2245,125 +2246,35 @@ class HighlightQuery_c : public HighlightPlain_c
 public:
 	const SphHitMark_t * m_pHit;
 	const SphHitMark_t * m_pHitEnd;
-	int m_iStartToken;
-	int m_iLenToken;
-	int m_iLenTotal;
-
-	typedef HighlightPlain_c BASE_c;
 
 public:
 	HighlightQuery_c ( SnippetsDocIndex_c & tContainer, ISphTokenizer * pTokenizer, CSphDict * pDict, const ExcerptQuery_t & tQuery, const CSphIndexSettings & tSettingsIndex, const char * sDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits )
 		: HighlightPlain_c ( tContainer, pTokenizer, pDict, tQuery, tSettingsIndex, sDoc, iDocLen )
 		, m_pHit ( dHits.Begin() )
 		, m_pHitEnd ( dHits.Begin()+dHits.GetLength() )
-		, m_iStartToken ( 0 )
-		, m_iLenToken ( 0 )
-		, m_iLenTotal ( 0 )
 	{}
 
 	virtual ~HighlightQuery_c () {}
 
-	bool AccumulateTokens ( int iStart, int iLen )
-	{
-		if ( !m_iLenToken )
-			return false;
-
-		assert ( m_iStartToken>=0 && m_iLenToken>0 && m_iLenTotal>0 );
-		int iLenTotal = iStart+iLen-m_iStartToken;
-		m_iLenTotal = Max ( iLenTotal, m_iLenTotal );
-
-		return true;
-	}
-
-	virtual void OnToken ( int iStart, int iLen, const BYTE * sWord, SphWordID_t iWordID, DWORD uPosition, SphWordID_t iBlendID )
+	virtual void OnToken ( int iStart, int iLen, const BYTE *, SphWordID_t, DWORD uPosition, SphWordID_t )
 	{
 		assert ( m_pDoc );
 		assert ( iStart>=0 && m_pDoc+iStart+iLen<=m_pTokenizer->GetBufferEnd() );
 
-		bool bMatch = m_pHit && uPosition>=m_pHit->m_uPosition && uPosition<m_pHit->m_uPosition+m_pHit->m_uSpan;
-		while ( !bMatch && m_pHit+1<m_pHitEnd && (m_pHit+1)->m_uPosition<=uPosition )
-		{
+		// fast forward until next potentially matching hit (hits are sorted by position)
+		while ( m_pHit<m_pHitEnd && m_pHit->m_uPosition+m_pHit->m_uSpan<=uPosition )
 			m_pHit++;
-			bMatch = uPosition>=m_pHit->m_uPosition && uPosition<m_pHit->m_uPosition+m_pHit->m_uSpan;
-		}
 
-		bool bHighlight = bMatch && ( m_tContainer.FindWord ( iWordID, sWord, iLen )!=-1 );
-		if ( !bHighlight && iBlendID )
-			bHighlight = ( m_tContainer.FindWord ( iBlendID, NULL, 0 )!=-1 );
+		// marker folding, emit "before" marker at span start only
+		if ( m_pHit<m_pHitEnd && uPosition==m_pHit->m_uPosition )
+			ResultEmit ( m_sBeforeMatch.cstr(), m_iBeforeLen, m_bHasBeforePassageMacro, m_iPassageId, m_sBeforeMatchPassage.cstr(), m_iBeforePostLen );
 
-		if ( m_bExactPhrase )
-		{
-			// highlight span isn't broken by stop-word
-			if ( !bHighlight && m_iLenTotal )
-				bHighlight = m_pDict->IsStopWord ( sWord );
+		// emit token itself
+		ResultEmit ( m_pDoc+iStart, iLen );
 
-			if ( bHighlight )
-			{
-				if ( !m_iLenToken )
-				{
-					// start to collect phrase to highlight
-					ResultEmit ( m_sBeforeMatch.cstr(), m_iBeforeLen, m_bHasBeforePassageMacro, m_iPassageId, m_sBeforeMatchPassage.cstr(), m_iBeforePostLen );
-					m_iStartToken = iStart;
-					m_iLenToken = m_iLenTotal = iLen;
-				} else
-				{
-					m_iLenToken = iStart+iLen-m_iStartToken;
-					m_iLenTotal = Max ( m_iLenToken, m_iLenTotal );
-				}
-			} else
-			{
-				// flush when highlight is over
-				if ( m_iLenToken )
-					OnFinish();
-
-				ResultEmit ( m_pDoc+iStart, iLen );
-			}
-		} else
-		{
-			if ( bHighlight )
-				ResultEmit ( m_sBeforeMatch.cstr(), m_iBeforeLen, m_bHasBeforePassageMacro, m_iPassageId, m_sBeforeMatchPassage.cstr(), m_iBeforePostLen );
-
-			ResultEmit ( m_pDoc+iStart, iLen );
-
-			if ( bHighlight )
-				ResultEmit ( m_sAfterMatch.cstr(), m_iAfterLen, m_bHasAfterPassageMacro, m_iPassageId++, m_sAfterMatchPassage.cstr(), m_iAfterPostLen );
-		}
-	}
-
-	virtual void OnFinish ()
-	{
-		if ( m_iLenToken )
-		{
-			assert ( m_iLenToken<=m_iLenTotal );
-			ResultEmit ( m_pDoc+m_iStartToken, m_iLenToken );
+		// marker folding, emit "after" marker at span end only
+		if ( m_pHit<m_pHitEnd && uPosition==m_pHit->m_uPosition+m_pHit->m_uSpan-1 )
 			ResultEmit ( m_sAfterMatch.cstr(), m_iAfterLen, m_bHasAfterPassageMacro, m_iPassageId++, m_sAfterMatchPassage.cstr(), m_iAfterPostLen );
-			ResultEmit ( m_pDoc+m_iStartToken+m_iLenToken, m_iLenTotal-m_iLenToken );
-			m_iStartToken = m_iLenToken = m_iLenTotal = 0;
-		}
-	}
-
-	virtual void OnOverlap ( int iStart, int iLen )
-	{
-		if ( AccumulateTokens ( iStart, iLen ) )
-			return;
-
-		BASE_c::OnOverlap ( iStart, iLen );
-	}
-
-	virtual void OnSkipHtml ( int iStart, int iLen )
-	{
-		if ( AccumulateTokens ( iStart, iLen ) )
-			return;
-
-		BASE_c::OnSkipHtml ( iStart, iLen );
-	}
-
-	virtual void OnTail ( int iStart, int iLen )
-	{
-		if ( AccumulateTokens ( iStart, iLen ) )
-			return;
-
-		BASE_c::OnTail ( iStart, iLen );
 	}
 };
 
@@ -2693,9 +2604,74 @@ static char * HighlightAllFastpath ( const ExcerptQuery_t & tQuerySettings,
 			return NULL;
 
 		CSphVector<SphHitMark_t> dMarked;
-
 		pMarker->Mark ( dMarked );
-		dMarked.Sort ();
+
+		// we just collected matching spans into dMarked, but!
+		// certain spans might not match all words within the span
+		// for instance, (one NEAR/3 two) could return a 5-word span
+		// but we do have full matching keywords list in tContainer
+		// so let's post-process and break down such spans
+		// FIXME! what about phrase spans vs stopwords? they will be split now
+		if ( !tQuerySettings.m_bExactPhrase )
+			ARRAY_FOREACH ( i, dMarked )
+		{
+			if ( dMarked[i].m_uSpan==1 )
+				continue;
+
+			CSphVector<int> dMatched;
+			for ( int j=0; j<(int)dMarked[i].m_uSpan; j++ )
+			{
+				// OPTIMZE? we can premerge all dochits vectors once
+				const int iPos = dMarked[i].m_uPosition + j;
+				ARRAY_FOREACH ( k, tContainer.m_dDocHits )
+					if ( tContainer.m_dDocHits[k].BinarySearch ( iPos ) )
+				{
+					dMatched.Add ( iPos );
+					break;
+				}
+			}
+
+			// this is something that must never happen
+			// we got a span out of the matching engine that does not match any keywords?!
+			assert ( dMatched.GetLength() );
+			if ( !dMatched.GetLength() )
+			{
+				dMarked.RemoveFast ( i-- ); // remove, rescan
+				continue;
+			}
+
+			// append all matching keywords as 1-long spans
+			ARRAY_FOREACH ( j, dMatched )
+			{
+				SphHitMark_t & tMarked = dMarked.Add();
+				tMarked.m_uPosition = dMatched[j];
+				tMarked.m_uSpan = 1;
+			}
+
+			// this swaps current span with the last 1-long span we added
+			// which is by definition okay; so we need not rescan it
+			dMarked.RemoveFast ( i );
+		}
+		dMarked.Uniq();
+
+		// we just exploded spans into actual matching hits
+		// now lets fold marked and matched hits back into contiguous spans
+		// so that we could highlight such spans instead of every individual word
+		SphHitMark_t * pOut = dMarked.Begin(); // last emitted folded token
+		SphHitMark_t * pIn = dMarked.Begin() + 1; // next token to process
+		SphHitMark_t * pMax = dMarked.Begin() + dMarked.GetLength();
+		while ( pIn<pMax )
+		{
+			if ( pIn->m_uPosition == pOut->m_uPosition + pOut->m_uSpan )
+			{
+				pOut->m_uSpan += pIn->m_uSpan;
+				pIn++;
+			} else
+			{
+				*++pOut = *pIn++;
+			}			
+		}
+		dMarked.Resize ( pOut - dMarked.Begin() + 1 );
 
 		// 2nd pass
 		HighlightQuery_c tHighlighter ( tContainer, pTokenizer, pDict, tFixedSettings, tIndexSettings, sDoc, iDocLen, dMarked );

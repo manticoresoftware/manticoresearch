@@ -146,6 +146,11 @@ struct SphHitMark_t
 {
 	DWORD	m_uPosition;
 	DWORD	m_uSpan;
+
+	bool operator == ( const SphHitMark_t & rhs ) const
+	{
+		return m_uPosition==rhs.m_uPosition && m_uSpan==rhs.m_uSpan;
+	}
 };
 
 /// hit marker, used for snippets generation

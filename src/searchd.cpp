@@ -194,7 +194,11 @@ static int				g_iWriteTimeout		= 5;
 static int				g_iClientTimeout	= 300;
 static int				g_iChildren			= 0;
 static int				g_iMaxChildren		= 0;
+#if !USE_WINDOWS
 static bool				g_bPreopenIndexes	= true;
+#else
+static bool				g_bPreopenIndexes	= false;
+#endif
 static bool				g_bOnDiskDicts		= false;
 static bool				g_bUnlinkOld		= true;
 static bool				g_bWatchdog			= true;

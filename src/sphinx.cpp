@@ -11570,42 +11570,6 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 // THE SEARCHER
 /////////////////////////////////////////////////////////////////////////////
 
-/// dict traits
-class CSphDictTraits : public CSphDict
-{
-public:
-	explicit			CSphDictTraits ( CSphDict * pDict ) : m_pDict ( pDict ) { assert ( m_pDict ); }
-
-	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer ) { m_pDict->LoadStopwords ( sFiles, pTokenizer ); }
-	virtual bool		LoadWordforms ( const char * sFile, ISphTokenizer * pTokenizer, const char * sIndex ) { return m_pDict->LoadWordforms ( sFile, pTokenizer, sIndex ); }
-	virtual bool		SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError ) { return m_pDict->SetMorphology ( szMorph, bUseUTF8, sError ); }
-
-	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) { return m_pDict->GetWordID ( pWord, iLen, bFilterStops ); }
-
-	virtual void		Setup ( const CSphDictSettings & ) {}
-	virtual const CSphDictSettings & GetSettings () const { return m_pDict->GetSettings (); }
-	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () { return m_pDict->GetStopwordsFileInfos (); }
-	virtual const CSphSavedFile & GetWordformsFileInfo () { return m_pDict->GetWordformsFileInfo (); }
-	virtual const CSphMultiformContainer * GetMultiWordforms () const { return m_pDict->GetMultiWordforms (); }
-
-	virtual bool IsStopWord ( const BYTE * pWord ) const { return m_pDict->IsStopWord ( pWord ); }
-
-protected:
-	CSphDict *			m_pDict;
-};
-
-
-/// dict wrapper for star-syntax support in prefix-indexes
-class CSphDictStar : public CSphDictTraits
-{
-public:
-	explicit			CSphDictStar ( CSphDict * pDict ) : CSphDictTraits ( pDict ) {}
-
-	virtual SphWordID_t	GetWordID ( BYTE * pWord );
-	virtual SphWordID_t	GetWordIDNonStemmed ( BYTE * pWord );
-};
-
-
 SphWordID_t CSphDictStar::GetWordID ( BYTE * pWord )
 {
 	char sBuf [ 16+3*SPH_MAX_WORD_LEN ];
@@ -11641,20 +11605,6 @@ SphWordID_t	CSphDictStar::GetWordIDNonStemmed ( BYTE * pWord )
 
 
 //////////////////////////////////////////////////////////////////////////
-
-/// star dict for index v.8+
-class CSphDictStarV8 : public CSphDictStar
-{
-public:
-						CSphDictStarV8 ( CSphDict * pDict, bool bPrefixes, bool bInfixes );
-
-	virtual SphWordID_t	GetWordID ( BYTE * pWord );
-
-private:
-	bool				m_bPrefixes;
-	bool				m_bInfixes;
-};
-
 
 CSphDictStarV8::CSphDictStarV8 ( CSphDict * pDict, bool bPrefixes, bool bInfixes )
 	: CSphDictStar	( pDict )
@@ -11753,15 +11703,7 @@ SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
 	return m_pDict->GetWordID ( (BYTE*)sBuf, iLen, !bHeadStar && !bTailStar );
 }
 
-
-/// dict wrapper for exact-word syntax
-class CSphDictExact : public CSphDictTraits
-{
-public:
-	explicit CSphDictExact ( CSphDict * pDict ) : CSphDictTraits ( pDict ) {}
-	virtual SphWordID_t	GetWordID ( BYTE * pWord );
-};
-
+//////////////////////////////////////////////////////////////////////////
 
 SphWordID_t CSphDictExact::GetWordID ( BYTE * pWord )
 {
@@ -18962,6 +18904,23 @@ CSphSourceSettings::CSphSourceSettings ()
 	, m_bIndexSP ( false )
 {}
 
+
+ESphWordpart CSphSourceSettings::GetWordpart ( const char * sField, bool bWordDict )
+{
+	if ( bWordDict )
+		return SPH_WORDPART_WHOLE;
+
+	bool bPrefix = ( m_iMinPrefixLen>0 ) && ( m_dPrefixFields.GetLength()==0 || m_dPrefixFields.Contains ( sField ) );
+	bool bInfix = ( m_iMinInfixLen>0 ) && ( m_dInfixFields.GetLength()==0 || m_dInfixFields.Contains ( sField ) );
+
+	assert ( !( bPrefix && bInfix ) ); // no field must be marked both prefix and infix
+	if ( bPrefix )
+		return SPH_WORDPART_PREFIX;
+	if ( bInfix )
+		return SPH_WORDPART_INFIX;
+	return SPH_WORDPART_WHOLE;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 CSphSource::CSphSource ( const char * sName )
@@ -19048,6 +19007,9 @@ void CSphSource::Setup ( const CSphSourceSettings & tSettings )
 	m_bIndexExactWords = tSettings.m_bIndexExactWords;
 	m_iOvershortStep = Min ( Max ( tSettings.m_iOvershortStep, 0 ), 1 );
 	m_iStopwordStep = Min ( Max ( tSettings.m_iStopwordStep, 0 ), 1 );
+	m_bIndexSP = tSettings.m_bIndexSP;
+	m_dPrefixFields = tSettings.m_dPrefixFields;
+	m_dInfixFields = tSettings.m_dInfixFields;
 }
 
 
@@ -19510,28 +19472,6 @@ void CSphSource_Document::BuildHits ( CSphString & sError, bool bSkipEndMarker )
 }
 
 
-void CSphSource_Document::SetupFieldMatch ( const char * szPrefixFields, const char * szInfixFields )
-{
-	m_sPrefixFields = szPrefixFields;
-	m_sInfixFields = szInfixFields;
-
-	m_sPrefixFields.ToLower ();
-	m_sInfixFields.ToLower ();
-}
-
-
-bool CSphSource_Document::IsPrefixMatch ( const char * szField ) const
-{
-	return IsFieldInStr ( szField, m_sPrefixFields.cstr () );
-}
-
-
-bool CSphSource_Document::IsInfixMatch ( const char * szField ) const
-{
-	return IsFieldInStr ( szField, m_sInfixFields.cstr () );
-}
-
-
 void CSphSource_Document::ParseFieldMVA ( CSphVector < CSphVector < DWORD > > & dFieldMVAs, int iFieldMVA, const char * szValue )
 {
 	dFieldMVAs [iFieldMVA].Resize ( 0 );
@@ -19570,26 +19510,6 @@ void CSphSource_Document::ParseFieldMVA ( CSphVector < CSphVector < DWORD > > & 
 
 	if ( pDigit )
 		dFieldMVAs [iFieldMVA].Add ( sphToDword ( pDigit ) );
-}
-
-
-bool CSphSource_Document::IsFieldInStr ( const char * szField, const char * szString ) const
-{
-	if ( !szString || szString[0]=='\0' )
-		return true;
-
-	if ( !szField || szField[0]=='\0' )
-		return false;
-
-	const char * szPos = strstr ( szString, szField );
-	if ( !szPos )
-		return false;
-
-	int iFieldLen = strlen ( szField );
-	bool bStartOk = szPos==szString || !sphIsAlpha ( *(szPos - 1) );
-	bool bEndOk = !*(szPos + iFieldLen) || !sphIsAlpha ( *(szPos + iFieldLen) );
-
-	return bStartOk && bEndOk;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -19948,19 +19868,7 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 		}
 
 		tCol.m_iIndex = i+1;
-		tCol.m_eWordpart = SPH_WORDPART_WHOLE;
-
-		bool bPrefix = !bWordDict && m_iMinPrefixLen > 0 && IsPrefixMatch ( tCol.m_sName.cstr () );
-		bool bInfix = m_iMinInfixLen > 0 && IsInfixMatch ( tCol.m_sName.cstr () );
-
-		if ( bPrefix && m_iMinPrefixLen > 0 && bInfix && m_iMinInfixLen > 0 )
-			LOC_ERROR ( "field '%s' is marked for both infix and prefix indexing", tCol.m_sName.cstr() );
-
-		if ( bPrefix )
-			tCol.m_eWordpart = SPH_WORDPART_PREFIX;
-
-		if ( bInfix )
-			tCol.m_eWordpart = SPH_WORDPART_INFIX;
+		tCol.m_eWordpart = GetWordpart ( tCol.m_sName.cstr(), bWordDict );
 
 		if ( tCol.m_eAttrType==SPH_ATTR_NONE || tCol.m_bIndexed )
 		{
@@ -20036,22 +19944,7 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 		tCol.m_bPayload = m_tParams.m_dJoinedFields[i].m_bPayload;
 		tCol.m_eSrc = m_tParams.m_dJoinedFields[i].m_sRanged.IsEmpty() ? SPH_ATTRSRC_QUERY : SPH_ATTRSRC_RANGEDQUERY;
 		tCol.m_sQueryRange = m_tParams.m_dJoinedFields[i].m_sRanged;
-
-		// wordpart of joined filed setup
-		tCol.m_eWordpart = SPH_WORDPART_WHOLE;
-
-		bool bPrefix = !bWordDict && m_iMinPrefixLen > 0 && IsPrefixMatch ( tCol.m_sName.cstr () );
-		bool bInfix = m_iMinInfixLen > 0 && IsInfixMatch ( tCol.m_sName.cstr () );
-
-		if ( bPrefix && m_iMinPrefixLen > 0 && bInfix && m_iMinInfixLen > 0 )
-			LOC_ERROR ( "field '%s' is marked for both infix and prefix indexing", tCol.m_sName.cstr() );
-
-		if ( bPrefix )
-			tCol.m_eWordpart = SPH_WORDPART_PREFIX;
-
-		if ( bInfix )
-			tCol.m_eWordpart = SPH_WORDPART_INFIX;
-
+		tCol.m_eWordpart = GetWordpart ( tCol.m_sName.cstr(), bWordDict );
 		m_tSchema.m_dFields.Add ( tCol );
 	}
 
@@ -21658,7 +21551,6 @@ private:
 	void			ConfigureAttrs ( const CSphVariant * pHead, ESphAttr eAttrType );
 	void			ConfigureFields ( const CSphVariant * pHead );
 	void			AddFieldToSchema ( const char * szName );
-	void			SetupFieldMatch ( CSphColumnInfo & tCol );
 	void			UnexpectedCharaters ( const char * pCharacters, int iLen, const char * szComment );
 
 #if USE_LIBEXPAT
@@ -21908,7 +21800,7 @@ const char * CSphSource_XMLPipe2::DecorateMessageVA ( const char * sTemplate, va
 void CSphSource_XMLPipe2::AddFieldToSchema ( const char * szName )
 {
 	CSphColumnInfo tCol ( szName );
-	SetupFieldMatch ( tCol );
+	tCol.m_eWordpart = GetWordpart ( tCol.m_sName.cstr(), m_pDict && m_pDict->GetSettings().m_bWordDict );
 	m_tSchema.m_dFields.Add ( tCol );
 }
 
@@ -22000,31 +21892,13 @@ bool CSphSource_XMLPipe2::Setup ( FILE * pPipe, const CSphConfigSection & hSourc
 }
 
 
-void CSphSource_XMLPipe2::SetupFieldMatch ( CSphColumnInfo & tCol )
-{
-	bool bWordDict = m_pDict && m_pDict->GetSettings().m_bWordDict;
-
-	bool bPrefix = !bWordDict && m_iMinPrefixLen > 0 && IsPrefixMatch ( tCol.m_sName.cstr () );
-	bool bInfix = m_iMinInfixLen > 0 && IsInfixMatch ( tCol.m_sName.cstr () );
-
-	if ( bPrefix && m_iMinPrefixLen > 0 && bInfix && m_iMinInfixLen > 0 )
-	{
-		Error ( "field '%s' is marked for both infix and prefix indexing", tCol.m_sName.cstr() );
-		return;
-	}
-
-	if ( bPrefix )
-		tCol.m_eWordpart = SPH_WORDPART_PREFIX;
-
-	if ( bInfix )
-		tCol.m_eWordpart = SPH_WORDPART_INFIX;
-}
-
-
 bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 {
 	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
-		SetupFieldMatch ( m_tSchema.m_dFields[i] );
+	{
+		CSphColumnInfo & tCol = m_tSchema.m_dFields[i];
+		tCol.m_eWordpart = GetWordpart ( tCol.m_sName.cstr(), m_pDict && m_pDict->GetSettings().m_bWordDict );
+	}
 
 #if USE_LIBEXPAT
 	m_pParser = XML_ParserCreate(NULL);

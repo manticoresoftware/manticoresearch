@@ -24,16 +24,46 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// let's build our own theme park!
+/// my own isalpha (let's build our own theme park!)
 inline int sphIsAlpha ( int c )
 {
 	return ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' ) || c=='-' || c=='_';
 }
 
+
+/// my own isspace
 inline bool sphIsSpace ( int iCode )
 {
 	return iCode==' ' || iCode=='\t' || iCode=='\n' || iCode=='\r';
 }
+
+
+/// string splitter, extracts sequences of alphas (as in sphIsAlpha)
+inline void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn )
+{
+	if ( !sIn )
+		return;
+
+	const char * p = (char*)sIn;
+	while ( *p )
+	{
+		// skip non-alphas
+		while ( (*p) && !sphIsAlpha(*p) )
+			p++;
+		if ( !(*p) )
+			break;
+
+		// this is my next token
+		assert ( sphIsAlpha(*p) );
+		const char * sNext = p;
+		while ( sphIsAlpha(*p) )
+			p++;
+		if ( sNext!=p )
+			dOut.Add().SetBinary ( sNext, p-sNext );
+	}
+
+}
+
 
 /// config section (hash of variant values)
 class CSphConfigSection : public SmallStringHash_T < CSphVariant >
@@ -125,7 +155,7 @@ bool			sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSetting
 void			sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tSettings );
 
 /// configure index from index definition section
-void			sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSettings );
+bool			sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSettings, CSphString & sError );
 
 /// try to set dictionary, tokenizer and misc settings for an index (if not already set)
 bool			sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError );

@@ -879,7 +879,8 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		return false;
 	}
 
-	if ( ( hIndex.GetInt ( "min_prefix_len", 0 ) > 0 || hIndex.GetInt ( "min_infix_len", 0 ) > 0 )
+	bool bInfix = hIndex.GetInt ( "min_infix_len", 0 ) > 0;
+	if ( ( hIndex.GetInt ( "min_prefix_len", 0 ) > 0 || bInfix )
 		&& hIndex.GetInt ( "enable_star" )==0 )
 	{
 		const char * szMorph = hIndex.GetStr ( "morphology", "" );
@@ -914,26 +915,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		if ( !pTokenizer->EnableZoneIndexing ( sError ) )
 			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
-	// prefix/infix indexing
-	int iPrefix = hIndex("min_prefix_len") ? hIndex["min_prefix_len"].intval() : 0;
-	int iInfix = hIndex("min_infix_len") ? hIndex["min_infix_len"].intval() : 0;
-	iPrefix = Max ( iPrefix, 0 );
-	iInfix = Max ( iInfix, 0 );
-
-	CSphString sPrefixFields, sInfixFields;
-
-	if ( hIndex.Exists ( "prefix_fields" ) )
-		sPrefixFields = hIndex ["prefix_fields"].cstr ();
-
-	if ( hIndex.Exists ( "infix_fields" ) )
-		sInfixFields = hIndex ["infix_fields"].cstr ();
-
-	if ( iPrefix==0 && !sPrefixFields.IsEmpty () )
-		fprintf ( stdout, "WARNING: min_prefix_len = 0. prefix_fields are ignored\n" );
-
-	if ( iInfix==0 && !sInfixFields.IsEmpty () )
-		fprintf ( stdout, "WARNING: min_infix_len = 0. infix_fields are ignored\n" );
-
 	CSphDict * pDict = NULL;
 	CSphDictSettings tDictSettings;
 
@@ -943,10 +924,10 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		sphConfDictionary ( hIndex, tDictSettings );
 
 		// FIXME! no support for infixes in keywords dict yet
-		if ( tDictSettings.m_bWordDict && iInfix>0 )
+		if ( tDictSettings.m_bWordDict && bInfix )
 		{
 			tDictSettings.m_bWordDict = false;
-			fprintf ( stdout, "WARNING: min_infix_len=%d is not supported yet with dict=keywords; using dict=crc\n", iInfix );
+			fprintf ( stdout, "WARNING: min_infix_len is not supported yet with dict=keywords; using dict=crc\n" );
 		}
 
 		pDict = tDictSettings.m_bWordDict
@@ -1044,8 +1025,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 
 		if ( pSource->HasJoinedFields() )
 			bGotJoinedFields = true;
-
-		pSource->SetupFieldMatch ( sPrefixFields.cstr (), sInfixFields.cstr () );
 
 		// strip_html, index_html_attrs
 		CSphString sError;
@@ -1148,8 +1127,10 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 			exit ( 1 );
 		}
 
+		CSphString sError;
 		CSphIndexSettings tSettings;
-		sphConfIndex ( hIndex, tSettings );
+		if ( !sphConfIndex ( hIndex, tSettings, sError ) )
+			sphDie ( "index '%s': %s.", sIndexName, sError.cstr() );
 		tSettings.m_bVerbose = bVerbose;
 
 		if ( tSettings.m_bIndexExactWords && !pDict->HasMorphology () )

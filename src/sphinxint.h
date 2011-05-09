@@ -1061,6 +1061,66 @@ struct ISphIndex_VLN : public CSphIndex
 	virtual void SetDynamize ( const CSphVector<LocatorPair_t> & dDynamize ) = 0;
 };
 
+//////////////////////////////////////////////////////////////////////////
+
+/// dict traits
+class CSphDictTraits : public CSphDict
+{
+public:
+	explicit			CSphDictTraits ( CSphDict * pDict ) : m_pDict ( pDict ) { assert ( m_pDict ); }
+
+	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer ) { m_pDict->LoadStopwords ( sFiles, pTokenizer ); }
+	virtual bool		LoadWordforms ( const char * sFile, ISphTokenizer * pTokenizer, const char * sIndex ) { return m_pDict->LoadWordforms ( sFile, pTokenizer, sIndex ); }
+	virtual bool		SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError ) { return m_pDict->SetMorphology ( szMorph, bUseUTF8, sError ); }
+
+	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) { return m_pDict->GetWordID ( pWord, iLen, bFilterStops ); }
+
+	virtual void		Setup ( const CSphDictSettings & ) {}
+	virtual const CSphDictSettings & GetSettings () const { return m_pDict->GetSettings (); }
+	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () { return m_pDict->GetStopwordsFileInfos (); }
+	virtual const CSphSavedFile & GetWordformsFileInfo () { return m_pDict->GetWordformsFileInfo (); }
+	virtual const CSphMultiformContainer * GetMultiWordforms () const { return m_pDict->GetMultiWordforms (); }
+
+	virtual bool IsStopWord ( const BYTE * pWord ) const { return m_pDict->IsStopWord ( pWord ); }
+
+protected:
+	CSphDict *			m_pDict;
+};
+
+
+/// dict wrapper for star-syntax support in prefix-indexes
+class CSphDictStar : public CSphDictTraits
+{
+public:
+	explicit			CSphDictStar ( CSphDict * pDict ) : CSphDictTraits ( pDict ) {}
+
+	virtual SphWordID_t	GetWordID ( BYTE * pWord );
+	virtual SphWordID_t	GetWordIDNonStemmed ( BYTE * pWord );
+};
+
+
+/// star dict for index v.8+
+class CSphDictStarV8 : public CSphDictStar
+{
+public:
+	CSphDictStarV8 ( CSphDict * pDict, bool bPrefixes, bool bInfixes );
+
+	virtual SphWordID_t	GetWordID ( BYTE * pWord );
+
+private:
+	bool				m_bPrefixes;
+	bool				m_bInfixes;
+};
+
+
+/// dict wrapper for exact-word syntax
+class CSphDictExact : public CSphDictTraits
+{
+public:
+	explicit CSphDictExact ( CSphDict * pDict ) : CSphDictTraits ( pDict ) {}
+	virtual SphWordID_t	GetWordID ( BYTE * pWord );
+};
+
 #endif // _sphinxint_
 
 //

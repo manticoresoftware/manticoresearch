@@ -12460,8 +12460,14 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 
 		// pick config settings
 		// they should be overriden later by Preload() if needed
+		CSphString sError;
 		CSphIndexSettings tSettings;
-		sphConfIndex ( hIndex, tSettings );
+		if ( !sphConfIndex ( hIndex, tSettings, sError ) )
+		{
+			sphWarning ( "ERROR: index '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
+			return ADD_ERROR;
+		}
+
 		tIdx.m_pIndex->Setup ( tSettings );
 
 		// hash it
@@ -14048,7 +14054,8 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const char * sOptIndex )
 				continue;
 		}
 
-		iValidIndexes++;
+		if ( eAdd!=ADD_ERROR )
+			iValidIndexes++;
 	}
 
 	tmLoad += sphMicroTimer();

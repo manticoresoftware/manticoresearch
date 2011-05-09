@@ -1448,6 +1448,8 @@ public:
 
 	const CSphString & operator = ( const CSphString & rhs )
 	{
+		if ( m_sValue==rhs.m_sValue )
+			return *this;
 		SafeDeleteArray ( m_sValue );
 		if ( rhs.m_sValue )
 		{
@@ -1584,6 +1586,15 @@ public:
 		char * pBuf = m_sValue;
 		m_sValue = NULL;
 		return pBuf;
+	}
+
+	bool operator < ( const CSphString & b ) const
+	{
+		if ( !m_sValue && !b.m_sValue )
+			return false;
+		if ( !m_sValue || !b.m_sValue )
+			return !m_sValue;
+		return strcmp ( m_sValue, b.m_sValue ) < 0;
 	}
 };
 

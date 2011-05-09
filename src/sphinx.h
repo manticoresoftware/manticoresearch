@@ -1340,6 +1340,7 @@ protected:
 
 
 /// indexing-related source settings
+/// NOTE, newly added fields should be synced with CSphSource::Setup()
 struct CSphSourceSettings
 {
 	int		m_iMinPrefixLen;	///< min indexable prefix (0 means don't index prefixes)
@@ -1350,7 +1351,11 @@ struct CSphSourceSettings
 	int		m_iStopwordStep;	///< position step on stopword token (default is 1)
 	bool	m_bIndexSP;			///< whether to index sentence and paragraph delimiters
 
-			CSphSourceSettings ();
+	CSphVector<CSphString>	m_dPrefixFields;	///< list of prefix fields
+	CSphVector<CSphString>	m_dInfixFields;		///< list of infix fields
+
+	explicit				CSphSourceSettings ();
+	ESphWordpart			GetWordpart ( const char * sField, bool bWordDict );
 };
 
 
@@ -1501,9 +1506,6 @@ public:
 	/// gets called when the indexing is succesfully (!) over
 	virtual void						PostIndex () {}
 
-	/// setup field match mode
-	virtual void						SetupFieldMatch ( const char *, const char * ) {}
-
 protected:
 	ISphTokenizer *						m_pTokenizer;	///< my tokenizer
 	CSphDict *							m_pDict;		///< my dict
@@ -1541,13 +1543,9 @@ public:
 	/// to be implemented by descendants
 	virtual BYTE **			NextDocument ( CSphString & sError ) = 0;
 
-	virtual void			SetupFieldMatch ( const char * szPrefixFields, const char * szInfixFields );
 	virtual void			SetDumpRows ( FILE * fpDumpRows ) { m_fpDumpRows = fpDumpRows; }
 
 protected:
-	bool					IsPrefixMatch ( const char * szField ) const;
-	bool					IsInfixMatch ( const char * szField ) const;
-
 	void					ParseFieldMVA ( CSphVector < CSphVector < DWORD > > & dFieldMVAs, int iFieldMVA, const char * szValue );
 	int						LoadFileField ( BYTE ** ppField, CSphString & sError );
 	void					BuildSubstringHits ( SphDocID_t uDocid, bool bPayload, ESphWordpart eWordpart, bool bSkipEndMarker );
@@ -1561,12 +1559,6 @@ protected:
 	int						m_iReadFileBufferSize;	///< size of read buffer for the 'slq_file_field' fields
 	int						m_iMaxFileBufferSize;	///< max size of read buffer for the 'slq_file_field' fields
 	FILE *					m_fpDumpRows;
-
-private:
-	CSphString				m_sPrefixFields;
-	CSphString				m_sInfixFields;
-
-	bool					IsFieldInStr ( const char * szField, const char * szString ) const;
 
 protected:
 	struct CSphBuildHitsState_t

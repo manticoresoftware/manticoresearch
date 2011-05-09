@@ -885,8 +885,9 @@ void sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tS
 }
 
 
-void sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSettings )
+bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSettings, CSphString & sError )
 {
+	// misc settings
 	tSettings.m_iMinPrefixLen = Max ( hIndex.GetInt ( "min_prefix_len" ), 0 );
 	tSettings.m_iMinInfixLen = Max ( hIndex.GetInt ( "min_infix_len" ), 0 );
 	tSettings.m_iBoundaryStep = Max ( hIndex.GetInt ( "phrase_boundary_step" ), -1 );
@@ -894,6 +895,48 @@ void sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 	tSettings.m_iOvershortStep = Min ( Max ( hIndex.GetInt ( "overshort_step", 1 ), 0 ), 1 );
 	tSettings.m_iStopwordStep = Min ( Max ( hIndex.GetInt ( "stopword_step", 1 ), 0 ), 1 );
 
+	// prefix/infix fields
+	CSphString sFields;
+
+	sFields = hIndex.GetStr ( "prefix_fields" );
+	sFields.ToLower();
+	sphSplit ( tSettings.m_dPrefixFields, sFields.cstr() );
+
+	sFields = hIndex.GetStr ( "infix_fields" );
+	sFields.ToLower();
+	sphSplit ( tSettings.m_dInfixFields, sFields.cstr() );
+
+	if ( tSettings.m_iMinPrefixLen==0 && tSettings.m_dPrefixFields.GetLength()!=0 )
+	{
+		fprintf ( stdout, "WARNING: min_prefix_len=0, prefix_fields ignored\n" );
+		tSettings.m_dPrefixFields.Reset();
+	}
+
+	if ( tSettings.m_iMinInfixLen==0 && tSettings.m_dInfixFields.GetLength()!=0 )
+	{
+		fprintf ( stdout, "WARNING: min_infix_len=0, infix_fields ignored\n" );
+		tSettings.m_dInfixFields.Reset();
+	}
+
+	// the only way we could have both prefixes and infixes enabled is when specific field subsets are configured
+	if ( tSettings.m_iMinInfixLen>0 && tSettings.m_iMinPrefixLen>0
+		&& ( !tSettings.m_dPrefixFields.GetLength() || !tSettings.m_dInfixFields.GetLength() ) )
+	{
+		sError.SetSprintf ( "prefixes and infixes can not both be enabled on all fields" );
+		return false;
+	}
+
+	tSettings.m_dPrefixFields.Uniq();
+	tSettings.m_dInfixFields.Uniq();
+
+	ARRAY_FOREACH ( i, tSettings.m_dPrefixFields )
+		if ( tSettings.m_dInfixFields.Contains ( tSettings.m_dPrefixFields[i] ) )
+	{
+		sError.SetSprintf ( "field '%s' marked both as prefix and infix", tSettings.m_dPrefixFields[i].cstr() );
+		return false;
+	}
+
+	// html stripping
 	if ( hIndex ( "html_strip" ) )
 	{
 		tSettings.m_bHtmlStrip = hIndex.GetInt ( "html_strip" )!=0;
@@ -901,6 +944,7 @@ void sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 		tSettings.m_sHtmlRemoveElements = hIndex.GetStr ( "html_remove_elements" );
 	}
 
+	// docinfo
 	tSettings.m_eDocinfo = SPH_DOCINFO_EXTERN;
 	if ( hIndex("docinfo") )
 	{
@@ -911,6 +955,7 @@ void sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 			fprintf ( stdout, "WARNING: unknown docinfo=%s, defaulting to extern\n", hIndex["docinfo"].cstr() );
 	}
 
+	// hit format
 	tSettings.m_eHitFormat = SPH_HIT_FORMAT_INLINE;
 	if ( hIndex("hit_format") )
 	{
@@ -940,6 +985,9 @@ void sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 	// sentence and paragraph indexing
 	tSettings.m_bIndexSP = ( hIndex.GetInt ( "index_sp" )!=0 );
 	tSettings.m_sZones = hIndex.GetStr ( "index_zones" );
+
+	// all good
+	return true;
 }
 
 

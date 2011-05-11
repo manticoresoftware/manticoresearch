@@ -43,7 +43,7 @@ public:
 	char *	BuildExcerpt ( const ExcerptQuery_t & tQuery );
 
 	void	TokenizeQuery ( const ExcerptQuery_t &, CSphDict * pDict, ISphTokenizer * pTokenizer, const CSphIndexSettings & tSettings );
-	void	TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks, bool bRetainHtml, int iSPZ, const CSphIndexSettings & tSettings );
+	void	TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks, const ExcerptQuery_t & q, const CSphIndexSettings & tSettings );
 
 	void	SetMarker ( CSphHitMarker * pMarker ) { m_pMarker = pMarker; }
 	void	SetExactPhrase ( const ExcerptQuery_t & tQuery );
@@ -299,8 +299,7 @@ public:
 	}
 };
 
-/// exact match
-
+/// simple keyword match on id
 struct SnippetsQword_Exact_c: public ISnippetsQword
 {
 	virtual Hitpos_t GetNextHit ()
@@ -346,7 +345,7 @@ template < typename COMPARE > struct SnippetsQword_c: public ISnippetsQword
 	}
 };
 
-struct SnippetsQword_StarFront_c: public SnippetsQword_c<SnippetsQword_StarFront_c>
+struct SnippetsQword_StarFront_c : public SnippetsQword_c<SnippetsQword_StarFront_c>
 {
 	inline bool Match ( const Token_t & tToken, BYTE * sToken )
 	{
@@ -356,7 +355,7 @@ struct SnippetsQword_StarFront_c: public SnippetsQword_c<SnippetsQword_StarFront
 	}
 };
 
-struct SnippetsQword_StarBack_c: public SnippetsQword_c<SnippetsQword_StarBack_c>
+struct SnippetsQword_StarBack_c : public SnippetsQword_c<SnippetsQword_StarBack_c>
 {
 	inline bool Match ( const Token_t & tToken, BYTE * sToken )
 	{
@@ -365,7 +364,7 @@ struct SnippetsQword_StarBack_c: public SnippetsQword_c<SnippetsQword_StarBack_c
 	}
 };
 
-struct SnippetsQword_StarBoth_c: public SnippetsQword_c<SnippetsQword_StarBoth_c>
+struct SnippetsQword_StarBoth_c : public SnippetsQword_c<SnippetsQword_StarBoth_c>
 {
 	inline bool Match ( const Token_t & tToken, BYTE * sToken )
 	{
@@ -373,7 +372,16 @@ struct SnippetsQword_StarBoth_c: public SnippetsQword_c<SnippetsQword_StarBoth_c
 	}
 };
 
+struct SnippetsQword_ExactForm_c : public SnippetsQword_c<SnippetsQword_ExactForm_c>
+{
+	inline bool Match ( const Token_t & tToken, BYTE * sToken )
+	{
+		return memcmp ( sToken, m_sDictWord.cstr()+1, m_iWordLength )==0;
+	}
+};
+
 /// snippets query word setup
+/// FIXME! throw these away in favor of fastpath ones
 class SnippetsQwordSetup: public ISphQwordSetup
 {
 	ExcerptGen_c *		m_pGenerator;
@@ -391,6 +399,8 @@ public:
 
 ISphQword * SnippetsQwordSetup::QwordSpawn ( const XQKeyword_t & tWord ) const
 {
+	if ( tWord.m_sWord.cstr()[0]=='=' )
+		return new SnippetsQword_ExactForm_c;
 	switch ( tWord.m_uStarPosition )
 	{
 		case STAR_NONE:		return new SnippetsQword_Exact_c;
@@ -619,8 +629,13 @@ int FindAddZone ( const CSphString & sZone, SmallStringHash_T<int> & hZones )
 	return iZone;
 }
 
-void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks, bool bRetainHtml, int iSPZ, const CSphIndexSettings & tSettings )
+// FIXME! unify with global static void TokenizeDocument somehow, lots of common code
+void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks, const ExcerptQuery_t & q, const CSphIndexSettings & tSettings )
 {
+	bool bRetainHtml = q.m_sStripMode=="retain";
+	bool bQueryMode = q.m_bHighlightQuery;
+	int iSPZ = q.m_iPassageBoundary;
+
 	m_iTotalCP = 0;
 	m_iDocumentWords = 0;
 	m_dTokens.Reserve ( Max ( iDataLen/4, 256 ) ); // len/tok ratio ranged 2.8 to 3.2 on my testing data
@@ -772,9 +787,21 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDi
 			continue;
 		}
 
-		SphWordID_t iWord = pDict->GetWordID ( sWord );
-
 		pLastTokenEnd = pTokenizer->GetTokenEnd ();
+
+		SphWordID_t iExactID = 0;
+		if ( bQueryMode && tSettings.m_bIndexExactWords )
+		{
+			int iBytes = pLastTokenEnd - pTokenStart;
+			BYTE sBuf [ 3*SPH_MAX_WORD_LEN+4 ];
+
+			memcpy ( sBuf + 1, sWord, iBytes );
+			sBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
+			sBuf[iBytes+1] = '\0';
+			iExactID = pDict->GetWordIDNonStemmed ( sBuf );
+		}
+
+		SphWordID_t iWord = pDict->GetWordID ( sWord );
 
 		if ( pTokenizer->GetBoundary() )
 			uPosition += tSettings.m_iBoundaryStep;
@@ -821,7 +848,7 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDi
 				switch ( m_dKeywords[nWord].m_uStar )
 				{
 				case STAR_NONE:
-					bMatch = ( iWord==tToken.m_iWordID );
+					bMatch = ( iWord==tToken.m_iWordID || iExactID==tToken.m_iWordID );
 					break;
 
 				case STAR_FRONT:
@@ -2040,15 +2067,17 @@ public:
 
 	int		m_iBoundaryStep;
 	int		m_iStopwordStep;
+	bool	m_bIndexExactWords;
 	int		m_iDocLen;
 
-	TokenFunctorTraits_c ( SnippetsDocIndex_c & tContainer, ISphTokenizer * pTokenizer, CSphDict * pDict, const ExcerptQuery_t & tQuery, const CSphIndexSettings & tSettingsIndex, const char * sDoc, int iDocLen )
+	explicit TokenFunctorTraits_c ( SnippetsDocIndex_c & tContainer, ISphTokenizer * pTokenizer, CSphDict * pDict, const ExcerptQuery_t & tQuery, const CSphIndexSettings & tSettingsIndex, const char * sDoc, int iDocLen )
 		: m_tContainer ( tContainer )
 		, m_pTokenizer ( pTokenizer )
 		, m_pDict ( pDict )
 		, m_pDoc ( NULL )
 		, m_iBoundaryStep ( tSettingsIndex.m_iBoundaryStep )
 		, m_iStopwordStep ( tSettingsIndex.m_iStopwordStep )
+		, m_bIndexExactWords ( tSettingsIndex.m_bIndexExactWords )
 		, m_iDocLen ( iDocLen )
 	{
 		assert ( m_pTokenizer && m_pDict );
@@ -2082,7 +2111,7 @@ public:
 
 	virtual void OnOverlap ( int iStart, int iLen ) = 0;
 	virtual void OnSkipHtml ( int iStart, int iLen ) = 0;
-	virtual void OnToken ( int iStart, int iLen, const BYTE * sWord, SphWordID_t iWordID, DWORD uPosition, SphWordID_t iBlendID ) = 0;
+	virtual void OnToken ( int iStart, int iLen, const BYTE * sWord, DWORD uPosition, const CSphVector<SphWordID_t> & dWordids ) = 0;
 	virtual void OnSPZ ( BYTE iSPZ, DWORD uPosition, char * sZoneName ) = 0;
 	virtual void OnTail ( int iStart, int iLen ) = 0;
 	virtual void OnFinish () = 0;
@@ -2111,11 +2140,16 @@ public:
 
 	virtual ~HitCollector_c () {}
 
-	virtual void OnToken ( int , int iLen, const BYTE * sWord, SphWordID_t iWordID, DWORD uPosition, SphWordID_t iBlendID )
+	virtual void OnToken ( int, int iLen, const BYTE * sWord, DWORD uPosition, const CSphVector<SphWordID_t> & dWordids )
 	{
-		m_tContainer.AddHits ( iWordID, sWord, iLen, uPosition );
-		m_tContainer.AddHits ( iBlendID, sWord, iLen, uPosition );
-		m_tContainer.m_uLastPos = iWordID ? uPosition : m_tContainer.m_uLastPos;
+		bool bReal = false;
+		ARRAY_FOREACH ( i, dWordids )
+			if ( dWordids[i] )
+		{
+			m_tContainer.AddHits ( dWordids[i], sWord, iLen, uPosition );
+			bReal = true;
+		}
+		m_tContainer.m_uLastPos = bReal ? uPosition : m_tContainer.m_uLastPos;
 	}
 
 	virtual void OnSPZ ( BYTE iSPZ, DWORD uPosition, char * sZoneName )
@@ -2204,14 +2238,15 @@ public:
 		ResultEmit ( m_pDoc+iStart, iLen );
 	}
 
-	virtual void OnToken ( int iStart, int iLen, const BYTE * sWord, SphWordID_t iWordID, DWORD, SphWordID_t iBlendID )
+	virtual void OnToken ( int iStart, int iLen, const BYTE * sWord, DWORD, const CSphVector<SphWordID_t> & dWordids )
 	{
 		assert ( m_pDoc );
 		assert ( iStart>=0 && m_pDoc+iStart+iLen<=m_pTokenizer->GetBufferEnd() );
 
-		bool bMatch = ( m_tContainer.FindWord ( iWordID, sWord, iLen )!=-1 );
-		if ( !bMatch && iBlendID )
-			bMatch = ( m_tContainer.FindWord ( iBlendID, NULL, 0 )!=-1 );
+		bool bMatch = m_tContainer.FindWord ( dWordids[0], sWord , iLen )!=-1; // the primary one; need this for star matching
+		for ( int i=1; i<dWordids.GetLength() && !bMatch; i++ )
+			if ( m_tContainer.FindWord ( dWordids[i], NULL, 0 )!=-1 )
+				bMatch = true;
 
 		if ( bMatch )
 			ResultEmit ( m_sBeforeMatch.cstr(), m_iBeforeLen, m_bHasBeforePassageMacro, m_iPassageId, m_sBeforeMatchPassage.cstr(), m_iBeforePostLen );
@@ -2256,7 +2291,7 @@ public:
 
 	virtual ~HighlightQuery_c () {}
 
-	virtual void OnToken ( int iStart, int iLen, const BYTE *, SphWordID_t, DWORD uPosition, SphWordID_t )
+	virtual void OnToken ( int iStart, int iLen, const BYTE *, DWORD uPosition, const CSphVector<SphWordID_t> & )
 	{
 		assert ( m_pDoc );
 		assert ( iStart>=0 && m_pDoc+iStart+iLen<=m_pTokenizer->GetBufferEnd() );
@@ -2412,10 +2447,29 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor )
 			continue;
 		}
 
-		SphWordID_t iWord = pDict->GetWordID ( sWord );
-
 		pLastTokenEnd = pTokenizer->GetTokenEnd ();
 
+		// build wordids vector
+		// (exact form, blended, substrings all yield multiple ids)
+		// TODO! only doing exact currently; add everything else (blended/star) here too
+		CSphVector<SphWordID_t> dWordids;
+		dWordids.Add ( 0 ); // will be fixed up later with "primary" wordid
+		if ( tFunctor.m_bHighlightQuery && tFunctor.m_bIndexExactWords )
+		{
+			int iBytes = pLastTokenEnd - pTokenStart;
+			BYTE sBuf [ 3*SPH_MAX_WORD_LEN+4 ];
+
+			memcpy ( sBuf + 1, sWord, iBytes );
+			sBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
+			sBuf[iBytes+1] = '\0';
+			dWordids.Add ( pDict->GetWordIDNonStemmed ( sBuf ) );
+		}
+
+		// must be last because it can change (stem) sWord
+		SphWordID_t iWord = pDict->GetWordID ( sWord );
+		dWordids[0] = iWord;
+
+		// compute position
 		if ( pTokenizer->GetBoundary() )
 			uPosition += tFunctor.m_iBoundaryStep;
 
@@ -2436,9 +2490,10 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor )
 
 		if ( !pTokenizer->TokenIsBlendedPart() )
 			iBlendID = 0;
+		dWordids.Add ( iBlendID );
 
 		// match & emit
-		tFunctor.OnToken ( tDocTok.m_iStart, tDocTok.m_iLengthBytes, sWord, iWord, tDocTok.m_uPosition, iBlendID ); // FIXME!!! add iBlendID
+		tFunctor.OnToken ( tDocTok.m_iStart, tDocTok.m_iLengthBytes, sWord, tDocTok.m_uPosition, dWordids );
 	}
 
 	// last space if any
@@ -2770,6 +2825,17 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 	// FIXME!!! check on real data (~100 Mb) as stripper changes len
 	iDataLen = strlen ( pData );
 
+	// handle index_exact_words
+	CSphScopedPtr<CSphDict> tDict ( NULL );
+	if ( tOptions.m_bHighlightQuery && pIndex->GetSettings().m_bIndexExactWords )
+	{
+		CSphRemapRange tEq ( '=', '=', '=' ); // FIXME? check and warn if star was already there
+		pTokenizer->AddCaseFolding ( tEq );
+
+		tDict = new CSphDictExact ( pDict );
+		pDict = tDict.Ptr();
+	}
+
 	// fast path that highlights entire document
 	if (!( tOptions.m_iLimitPassages
 		|| ( tOptions.m_iLimitWords && tOptions.m_iLimitWords<iDataLen/2 )
@@ -2785,7 +2851,7 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 		ExcerptGen_c tGenerator ( pTokenizer->IsUtf8() );
 		tGenerator.TokenizeQuery ( tOptions, pDict, pTokenizer, pIndex->GetSettings() );
 		tGenerator.SetExactPhrase ( tOptions );
-		tGenerator.TokenizeDocument ( pData, iDataLen, pDict, pTokenizer, true, tOptions.m_sStripMode=="retain", tOptions.m_iPassageBoundary, pIndex->GetSettings() );
+		tGenerator.TokenizeDocument ( pData, iDataLen, pDict, pTokenizer, true, tOptions, pIndex->GetSettings() );
 		return tGenerator.BuildExcerpt ( tOptions );
 	}
 
@@ -2798,7 +2864,7 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 	tQuery.m_pRoot->ClearFieldMask();
 
 	ExcerptGen_c tGenerator ( pTokenizer->IsUtf8() );
-	tGenerator.TokenizeDocument ( pData, iDataLen, pDict, pTokenizer, false, tOptions.m_sStripMode=="retain", tOptions.m_iPassageBoundary, pIndex->GetSettings() );
+	tGenerator.TokenizeDocument ( pData, iDataLen, pDict, pTokenizer, false, tOptions, pIndex->GetSettings() );
 
 	CSphScopedPtr<SnippetZoneChecker_c> pZoneChecker ( new SnippetZoneChecker_c ( tGenerator.GetZones(), tGenerator.GetZonesName(), tQuery.m_dZones ) );
 	SnippetsQwordSetup tSetup ( &tGenerator, pTokenizer );

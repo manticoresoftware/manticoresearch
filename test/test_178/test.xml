@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>snippets vs index_exact_words</name>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'text';
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+
+	charset_type		= utf-8
+	morphology			= stem_en
+	index_exact_words	= 1
+}
+</config>
+
+<db_insert>select 1;</db_insert>
+
+<sphqueries>
+<sphinxql>CALL SNIPPETS('Check vs Checking', 'test', 'check', 1 AS query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS('Check vs Checking', 'test', '=check', 1 AS query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS('Check vs Checking', 'test', 'checking', 1 AS query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS('Check vs Checking', 'test', '=checking', 1 AS query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS('the time has come, the walrus said, to handle many things, including Check vs Checking, but not quite limited to', 'test', 'check', 1 AS query_mode, 2 AS around, 50 AS limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('the time has come, the walrus said, to handle many things, including Check vs Checking, but not quite limited to', 'test', '=check', 1 AS query_mode, 2 AS around, 50 AS limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('the time has come, the walrus said, to handle many things, including Check vs Checking, but not quite limited to', 'test', 'checking', 1 AS query_mode, 2 AS around, 50 AS limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('the time has come, the walrus said, to handle many things, including Check vs Checking, but not quite limited to', 'test', '=checking', 1 AS query_mode, 2 AS around, 50 AS limit )</sphinxql>
+</sphqueries>
+
+</test>

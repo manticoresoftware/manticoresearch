@@ -872,26 +872,6 @@ int sphFormatCurrentTime ( char * sTimeBuf, int iBufLen )
 }
 
 
-/// format current timestamp for logging
-int sphFormatCurrentTime2 ( char * sTimeBuf, int iBufLen )
-{
-	int64_t iNow = sphMicroTimer ();
-	time_t ts = (time_t) ( iNow/1000000 ); // on some systems (eg. FreeBSD 6.2), tv.tv_sec has another type and we can't just pass it
-
-#if !USE_WINDOWS
-	struct tm tmp;
-	localtime_r ( &ts, &tmp );
-#else
-	struct tm tmp;
-	tmp = *localtime ( &ts );
-#endif
-
-	return snprintf ( sTimeBuf, iBufLen, "%d/%.2d/%.2d %.2d:%.2d:%.2d.%.3d",
-		1900+tmp.tm_year, 1+tmp.tm_mon, tmp.tm_mday,
-		tmp.tm_hour, tmp.tm_min, tmp.tm_sec, (int)((iNow%1000000)/1000) );
-}
-
-
 /// physically emit log entry
 /// buffer must have 1 extra byte for linefeed
 void sphLogEntry ( ESphLogLevel eLevel, char * sBuf, char * sTtyBuf )
@@ -5276,6 +5256,131 @@ const CSphVector<CSphQueryItem> * ExpandAsterisk ( const CSphSchema & tSchema, c
 	return pExpanded;
 }
 
+
+static void RemapStrings ( ISphMatchSorter * pSorter, AggrResult_t & tRes )
+{
+	// do match ptr pre-calc if its "order by string" case
+	CSphVector<SphStringSorterRemap_t> dRemapAttr;
+	if ( pSorter && pSorter->UsesAttrs() && sphSortGetStringRemap ( pSorter->GetSchema(), tRes.m_tSchema, dRemapAttr ) )
+	{
+		int iCur = 0;
+		ARRAY_FOREACH ( iSchema, tRes.m_dSchemas )
+		{
+			for ( int i=iCur; i<iCur+tRes.m_dMatchCounts[iSchema]; i++ )
+			{
+				CSphMatch & tMatch = tRes.m_dMatches[i];
+				const BYTE * pStringBase = tRes.m_dTag2Pools[tMatch.m_iTag].m_pStrings;
+
+				ARRAY_FOREACH ( iAttr, dRemapAttr )
+				{
+					SphAttr_t uOff = tMatch.GetAttr ( dRemapAttr[iAttr].m_tSrc );
+					SphAttr_t uPtr = (SphAttr_t)( pStringBase && uOff ? pStringBase + uOff : 0 );
+					tMatch.SetAttr ( dRemapAttr[iAttr].m_tDst, uPtr );
+				}
+			}
+			iCur += tRes.m_dMatchCounts[iSchema];
+		}
+	}
+}
+
+
+static int KillAllDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, const CSphQuery & tQuery )
+{
+	assert ( pSorter );
+	int iDupes = 0;
+
+	if ( pSorter->IsGroupby () )
+	{
+		// groupby sorter does that automagically
+		pSorter->SetMVAPool ( NULL ); // because we must be able to group on @groupby anyway
+		pSorter->SetStringPool ( NULL );
+		ARRAY_FOREACH ( i, tRes.m_dMatches )
+		{
+			CSphMatch & tMatch = tRes.m_dMatches[i];
+
+			if ( tRes.m_dIndexWeights.GetLength() && tMatch.m_iTag>=0 )
+				tMatch.m_iWeight *= tRes.m_dIndexWeights[tMatch.m_iTag];
+
+			if ( !pSorter->PushGrouped ( tMatch ) )
+				iDupes++;
+		}
+	} else
+	{
+		// normal sorter needs massasging
+		// sort by docid and then by tag to guarantee the replacement order
+		TaggedMatchSorter_fn fnSort;
+		sphSort ( &tRes.m_dMatches[0], tRes.m_dMatches.GetLength(), fnSort, fnSort );
+
+		// fold them matches
+		if ( tQuery.m_dIndexWeights.GetLength() )
+		{
+			// if there were per-index weights, compute weighted ranks sum
+			int iCur = 0;
+			int iMax = tRes.m_dMatches.GetLength();
+
+			while ( iCur<iMax )
+			{
+				CSphMatch & tMatch = tRes.m_dMatches[iCur++];
+				if ( tMatch.m_iTag>=0 )
+					tMatch.m_iWeight *= tRes.m_dIndexWeights[tMatch.m_iTag];
+
+				while ( iCur<iMax && tRes.m_dMatches[iCur].m_iDocID==tMatch.m_iDocID )
+				{
+					const CSphMatch & tDupe = tRes.m_dMatches[iCur];
+					int iAddWeight = tDupe.m_iWeight;
+					if ( tDupe.m_iTag>=0 )
+						iAddWeight *= tRes.m_dIndexWeights[tDupe.m_iTag];
+					tMatch.m_iWeight += iAddWeight;
+
+					iDupes++;
+					iCur++;
+				}
+
+				pSorter->Push ( tMatch );
+			}
+
+		} else
+		{
+			// by default, simply remove dupes (select first by tag)
+			ARRAY_FOREACH ( i, tRes.m_dMatches )
+			{
+				if ( i==0 || tRes.m_dMatches[i].m_iDocID!=tRes.m_dMatches[i-1].m_iDocID )
+					pSorter->Push ( tRes.m_dMatches[i] );
+				else
+					iDupes++;
+			}
+		}
+	}
+
+	tRes.m_dMatches.Reset ();
+	sphFlattenQueue ( pSorter, &tRes, -1 );
+	SafeDelete ( pSorter );
+
+	return iDupes;
+}
+
+
+static void RecoverAggregateFunctions ( const CSphQuery & tQuery, const AggrResult_t & tRes )
+{
+	ARRAY_FOREACH ( i, tQuery.m_dItems )
+	{
+		const CSphQueryItem & tItem = tQuery.m_dItems[i];
+		if ( tItem.m_eAggrFunc==SPH_AGGR_NONE )
+			continue;
+
+		for ( int j=0; j<tRes.m_tSchema.GetAttrsCount(); j++ )
+		{
+			CSphColumnInfo & tCol = const_cast<CSphColumnInfo&> ( tRes.m_tSchema.GetAttr(j) );
+			if ( tCol.m_sName==tItem.m_sAlias )
+			{
+				assert ( tCol.m_eAggrFunc==SPH_AGGR_NONE );
+				tCol.m_eAggrFunc = tItem.m_eAggrFunc;
+			}
+		}
+	}
+}
+
+
 bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHadLocalIndexes, CSphSchema* pExtraSchema, bool bFromSphinxql=false )
 {
 	// sanity check
@@ -5464,22 +5569,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	// in purely distributed case, all schemas are received from the wire, and miss aggregate functions info
 	// thus, we need to re-assign that info
 	if ( !bHadLocalIndexes )
-		ARRAY_FOREACH ( i, tQuery.m_dItems )
-	{
-		const CSphQueryItem & tItem = tQuery.m_dItems[i];
-		if ( tItem.m_eAggrFunc==SPH_AGGR_NONE )
-			continue;
-
-		for ( int j=0; j<tRes.m_tSchema.GetAttrsCount(); j++ )
-		{
-			CSphColumnInfo & tCol = const_cast<CSphColumnInfo&> ( tRes.m_tSchema.GetAttr(j) );
-			if ( tCol.m_sName==tItem.m_sAlias )
-			{
-				assert ( tCol.m_eAggrFunc==SPH_AGGR_NONE );
-				tCol.m_eAggrFunc = tItem.m_eAggrFunc;
-			}
-		}
-	}
+		RecoverAggregateFunctions ( tQuery, tRes );
 
 	// we do not need to re-sort if there's exactly one result set
 	if ( tRes.m_iSuccesses==1 )
@@ -5522,99 +5612,8 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	if ( !bAllEqual )
 		RemapResult ( &tRes.m_tSchema, &tRes );
 
-	// do match ptr pre-calc if its "order by string" case
-	CSphVector<SphStringSorterRemap_t> dRemapAttr;
-	if ( pSorter && pSorter->UsesAttrs() && sphSortGetStringRemap ( pSorter->GetSchema(), tRes.m_tSchema, dRemapAttr ) )
-	{
-		int iCur = 0;
-		ARRAY_FOREACH ( iSchema, tRes.m_dSchemas )
-		{
-			for ( int i=iCur; i<iCur+tRes.m_dMatchCounts[iSchema]; i++ )
-			{
-				CSphMatch & tMatch = tRes.m_dMatches[i];
-				const BYTE * pStringBase = tRes.m_dTag2Pools[tMatch.m_iTag].m_pStrings;
-
-				ARRAY_FOREACH ( iAttr, dRemapAttr )
-				{
-					SphAttr_t uOff = tMatch.GetAttr ( dRemapAttr[iAttr].m_tSrc );
-					SphAttr_t uPtr = (SphAttr_t)( pStringBase && uOff ? pStringBase + uOff : 0 );
-					tMatch.SetAttr ( dRemapAttr[iAttr].m_tDst, uPtr );
-				}
-			}
-			iCur += tRes.m_dMatchCounts[iSchema];
-		}
-	}
-
-	// kill all dupes
-	int iDupes = 0;
-	assert ( pSorter );
-	if ( pSorter->IsGroupby () )
-	{
-		// groupby sorter does that automagically
-		pSorter->SetMVAPool ( NULL ); // because we must be able to group on @groupby anyway
-		pSorter->SetStringPool ( NULL );
-		ARRAY_FOREACH ( i, tRes.m_dMatches )
-		{
-			CSphMatch & tMatch = tRes.m_dMatches[i];
-
-			if ( tRes.m_dIndexWeights.GetLength() && tMatch.m_iTag>=0 )
-				tMatch.m_iWeight *= tRes.m_dIndexWeights[tMatch.m_iTag];
-
-			if ( !pSorter->PushGrouped ( tMatch ) )
-				iDupes++;
-		}
-	} else
-	{
-		// normal sorter needs massasging
-		// sort by docid and then by tag to guarantee the replacement order
-		TaggedMatchSorter_fn fnSort;
-		sphSort ( &tRes.m_dMatches[0], tRes.m_dMatches.GetLength(), fnSort, fnSort );
-
-		// fold them matches
-		if ( tQuery.m_dIndexWeights.GetLength() )
-		{
-			// if there were per-index weights, compute weighted ranks sum
-			int iCur = 0;
-			int iMax = tRes.m_dMatches.GetLength();
-
-			while ( iCur<iMax )
-			{
-				CSphMatch & tMatch = tRes.m_dMatches[iCur++];
-				if ( tMatch.m_iTag>=0 )
-					tMatch.m_iWeight *= tRes.m_dIndexWeights[tMatch.m_iTag];
-
-				while ( iCur<iMax && tRes.m_dMatches[iCur].m_iDocID==tMatch.m_iDocID )
-				{
-					const CSphMatch & tDupe = tRes.m_dMatches[iCur];
-					int iAddWeight = tDupe.m_iWeight;
-					if ( tDupe.m_iTag>=0 )
-						iAddWeight *= tRes.m_dIndexWeights[tDupe.m_iTag];
-					tMatch.m_iWeight += iAddWeight;
-
-					iDupes++;
-					iCur++;
-				}
-
-				pSorter->Push ( tMatch );
-			}
-
-		} else
-		{
-			// by default, simply remove dupes (select first by tag)
-			ARRAY_FOREACH ( i, tRes.m_dMatches )
-			{
-				if ( i==0 || tRes.m_dMatches[i].m_iDocID!=tRes.m_dMatches[i-1].m_iDocID )
-					pSorter->Push ( tRes.m_dMatches[i] );
-				else
-					iDupes++;
-			}
-		}
-	}
-
-	tRes.m_dMatches.Reset ();
-	sphFlattenQueue ( pSorter, &tRes, -1 );
-	SafeDelete ( pSorter );
-	tRes.m_iTotalMatches -= iDupes;
+	RemapStrings ( pSorter, tRes );
+	tRes.m_iTotalMatches -= KillAllDupes ( pSorter, tRes, tQuery );
 
 	if ( !bAllEqual )
 		RemapResult ( &tInternalSchema, &tRes, false );
@@ -5622,6 +5621,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 		AdoptAliasedSchema ( tRes, &tFrontendSchema );
 	return true;
 }
+
 
 bool MinimizeAggrResultCompat ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHadLocalIndexes )
 {
@@ -5706,24 +5706,7 @@ bool MinimizeAggrResultCompat ( AggrResult_t & tRes, const CSphQuery & tQuery, b
 	// in purely distributed case, all schemas are received from the wire, and miss aggregate functions info
 	// thus, we need to re-assign that info
 	if ( !bHadLocalIndexes )
-	{
-		ARRAY_FOREACH ( i, tQuery.m_dItems )
-		{
-			const CSphQueryItem & tItem = tQuery.m_dItems[i];
-			if ( tItem.m_eAggrFunc==SPH_AGGR_NONE )
-				continue;
-
-			for ( int j=0; j<tRes.m_tSchema.GetAttrsCount(); j++ )
-			{
-				CSphColumnInfo & tCol = const_cast<CSphColumnInfo&> ( tRes.m_tSchema.GetAttr(j) );
-				if ( tCol.m_sName==tItem.m_sAlias )
-				{
-					assert ( tCol.m_eAggrFunc==SPH_AGGR_NONE );
-					tCol.m_eAggrFunc = tItem.m_eAggrFunc;
-				}
-			}
-		}
-	}
+		RecoverAggregateFunctions ( tQuery, tRes );
 
 	// if there's more than one result set, we need to re-sort the matches
 	// so we need to bring matches to the schema that the *sorter* wants
@@ -5804,99 +5787,8 @@ bool MinimizeAggrResultCompat ( AggrResult_t & tRes, const CSphQuery & tQuery, b
 	if ( tRes.m_iSuccesses==1 )
 		return true;
 
-	// do match ptr pre-calc if its "order by string" case
-	CSphVector<SphStringSorterRemap_t> dRemapAttr;
-	if ( pSorter && pSorter->UsesAttrs() && sphSortGetStringRemap ( pSorter->GetSchema(), tRes.m_tSchema, dRemapAttr ) )
-	{
-		int iCur = 0;
-		ARRAY_FOREACH ( iSchema, tRes.m_dSchemas )
-		{
-			for ( int i=iCur; i<iCur+tRes.m_dMatchCounts[iSchema]; i++ )
-			{
-				CSphMatch & tMatch = tRes.m_dMatches[i];
-				const BYTE * pStringBase = tRes.m_dTag2Pools[tMatch.m_iTag].m_pStrings;
-
-				ARRAY_FOREACH ( iAttr, dRemapAttr )
-				{
-					SphAttr_t uOff = tMatch.GetAttr ( dRemapAttr[iAttr].m_tSrc );
-					SphAttr_t uPtr = (SphAttr_t)( pStringBase && uOff ? pStringBase + uOff : 0 );
-					tMatch.SetAttr ( dRemapAttr[iAttr].m_tDst, uPtr );
-				}
-			}
-			iCur += tRes.m_dMatchCounts[iSchema];
-		}
-	}
-
-	// kill all dupes
-	int iDupes = 0;
-	if ( pSorter->IsGroupby () )
-	{
-		// groupby sorter does that automagically
-		pSorter->SetMVAPool ( NULL ); // because we must be able to group on @groupby anyway
-		pSorter->SetStringPool ( NULL );
-		ARRAY_FOREACH ( i, tRes.m_dMatches )
-		{
-			CSphMatch & tMatch = tRes.m_dMatches[i];
-
-			if ( tRes.m_dIndexWeights.GetLength() && tMatch.m_iTag>=0 )
-				tMatch.m_iWeight *= tRes.m_dIndexWeights[tMatch.m_iTag];
-
-			if ( !pSorter->PushGrouped ( tMatch ) )
-				iDupes++;
-		}
-	} else
-	{
-		// normal sorter needs massasging
-		// sort by docid and then by tag to guarantee the replacement order
-		TaggedMatchSorter_fn fnSort;
-		sphSort ( &tRes.m_dMatches[0], tRes.m_dMatches.GetLength(), fnSort, fnSort );
-
-		// fold them matches
-		if ( tQuery.m_dIndexWeights.GetLength() )
-		{
-			// if there were per-index weights, compute weighted ranks sum
-			int iCur = 0;
-			int iMax = tRes.m_dMatches.GetLength();
-
-			while ( iCur<iMax )
-			{
-				CSphMatch & tMatch = tRes.m_dMatches[iCur++];
-				if ( tMatch.m_iTag>=0 )
-					tMatch.m_iWeight *= tRes.m_dIndexWeights[tMatch.m_iTag];
-
-				while ( iCur<iMax && tRes.m_dMatches[iCur].m_iDocID==tMatch.m_iDocID )
-				{
-					const CSphMatch & tDupe = tRes.m_dMatches[iCur];
-					int iAddWeight = tDupe.m_iWeight;
-					if ( tDupe.m_iTag>=0 )
-						iAddWeight *= tRes.m_dIndexWeights[tDupe.m_iTag];
-					tMatch.m_iWeight += iAddWeight;
-
-					iDupes++;
-					iCur++;
-				}
-
-				pSorter->Push ( tMatch );
-			}
-
-		} else
-		{
-			// by default, simply remove dupes (select first by tag)
-			ARRAY_FOREACH ( i, tRes.m_dMatches )
-			{
-				if ( i==0 || tRes.m_dMatches[i].m_iDocID!=tRes.m_dMatches[i-1].m_iDocID )
-					pSorter->Push ( tRes.m_dMatches[i] );
-				else
-					iDupes++;
-			}
-		}
-	}
-
-	tRes.m_dMatches.Reset ();
-	sphFlattenQueue ( pSorter, &tRes, -1 );
-	SafeDelete ( pSorter );
-
-	tRes.m_iTotalMatches -= iDupes;
+	RemapStrings ( pSorter, tRes );
+	tRes.m_iTotalMatches -= KillAllDupes ( pSorter, tRes, tQuery );
 	return true;
 }
 
@@ -6250,6 +6142,28 @@ static void MergeWordStats ( CSphQueryResultMeta & tDstResult, const SmallString
 	}
 }
 
+
+static void FlattenToRes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, int iIndexWeight )
+{
+	assert ( pSorter );
+
+	if ( pSorter->GetLength() )
+	{
+		tRes.m_dMatchCounts.Add ( pSorter->GetLength() );
+		tRes.m_dSchemas.Add ( tRes.m_tSchema );
+		tRes.m_dIndexWeights.Add ( iIndexWeight );
+		PoolPtrs_t & tPoolPtrs = tRes.m_dTag2Pools.Add ();
+		tPoolPtrs.m_pMva = tRes.m_pMva;
+		tPoolPtrs.m_pStrings = tRes.m_pStrings;
+		sphFlattenQueue ( pSorter, &tRes, tRes.m_iTag++ );
+
+		// clean up for next index search
+		tRes.m_pMva = NULL;
+		tRes.m_pStrings = NULL;
+	}
+}
+
+
 void SearchHandler_c::RunLocalSearchesMT ()
 {
 	int64_t tmLocal = sphMicroTimer();
@@ -6372,22 +6286,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 			tRes.m_iCpuTime += tRaw.m_iCpuTime / tRes.m_iMultiplier;
 
 			// extract matches from sorter
-			assert ( pSorter );
-
-			if ( pSorter->GetLength() )
-			{
-				tRes.m_dMatchCounts.Add ( pSorter->GetLength() );
-				tRes.m_dSchemas.Add ( tRes.m_tSchema );
-				tRes.m_dIndexWeights.Add ( m_dQueries[iQuery].GetIndexWeight ( sLocal ) );
-				PoolPtrs_t & tPoolPtrs = tRes.m_dTag2Pools.Add ();
-				tPoolPtrs.m_pMva = tRes.m_pMva;
-				tPoolPtrs.m_pStrings = tRes.m_pStrings;
-				sphFlattenQueue ( pSorter, &tRes, tRes.m_iTag++ );
-
-				// clean up for next index search
-				tRes.m_pMva = NULL;
-				tRes.m_pStrings = NULL;
-			}
+			FlattenToRes ( pSorter, tRes, m_dQueries[iQuery].GetIndexWeight ( sLocal ) );
 		}
 	}
 
@@ -6625,22 +6524,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 				tRes.m_iTotalMatches += pSorter->GetTotalCount();
 
 				// extract matches from sorter
-				assert ( pSorter );
-
-				if ( pSorter->GetLength() )
-				{
-					tRes.m_dMatchCounts.Add ( pSorter->GetLength() );
-					tRes.m_dSchemas.Add ( tRes.m_tSchema );
-					tRes.m_dIndexWeights.Add ( m_dQueries[iQuery].GetIndexWeight ( sLocal ) );
-					PoolPtrs_t & tPoolPtrs = tRes.m_dTag2Pools.Add ();
-					tPoolPtrs.m_pMva = tRes.m_pMva;
-					tPoolPtrs.m_pStrings = tRes.m_pStrings;
-					sphFlattenQueue ( pSorter, &tRes, tRes.m_iTag++ );
-
-					// clean up for next index search
-					tRes.m_pMva = NULL;
-					tRes.m_pStrings = NULL;
-				}
+				FlattenToRes ( pSorter, tRes, m_dQueries[iQuery].GetIndexWeight ( sLocal ) );
 
 				// move external attributes storage from tStats to actual result
 				tStats.LeakStorages ( tRes );
@@ -8115,7 +7999,8 @@ private:
 	mutable int m_iLastWorker;	///< just a helper to optimize consequental linear search
 };
 
-void SnippetRequestBuilder_t::BuildRequest ( const char * sIndex, NetOutputBuffer_c & tOut, int iNumAgent ) const
+
+static int SnippetGetCurrentWorker ( const int iNumAgent, const int m_iLastAgent, const int m_iLastWorker, const SnippetsRemote_t * m_pWorker )
 {
 	int iCurrentWorker = 0;
 	if ( iNumAgent==m_iLastAgent+1 )
@@ -8138,13 +8023,18 @@ void SnippetRequestBuilder_t::BuildRequest ( const char * sIndex, NetOutputBuffe
 				break;
 			}
 	}
+	return iCurrentWorker;
+}
 
-	m_iLastWorker = iCurrentWorker;
+
+void SnippetRequestBuilder_t::BuildRequest ( const char * sIndex, NetOutputBuffer_c & tOut, int iNumAgent ) const
+{
+	m_iLastWorker = SnippetGetCurrentWorker ( iNumAgent, m_iLastAgent, m_iLastWorker, m_pWorker );
 	m_iLastAgent = iNumAgent;
 
 	const CSphVector<ExcerptQuery_t> & dQueries = m_pWorker->m_dQueries;
 	const ExcerptQuery_t & q = dQueries[0];
-	const SnippetWorker_t & tWorker = m_pWorker->m_dWorkers[iCurrentWorker];
+	const SnippetWorker_t & tWorker = m_pWorker->m_dWorkers[m_iLastWorker];
 
 	int iLen = 60 // 15 ints/dwords - params, strlens, etc.
 		+ strlen ( sIndex )
@@ -8191,33 +8081,11 @@ void SnippetRequestBuilder_t::BuildRequest ( const char * sIndex, NetOutputBuffe
 
 bool SnippetReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t &, int iNumAgent ) const
 {
-	int iCurrentWorker = 0;
-	if ( iNumAgent==m_iLastAgent+1 )
-	{
-		for ( int i=m_iLastWorker+1; i<m_pWorker->m_dWorkers.GetLength(); i++ )
-			if ( !m_pWorker->m_dWorkers[i].m_bLocal )
-			{
-				iCurrentWorker = i;
-				break;
-			}
-	} else
-	{
-		int j = iNumAgent;
-		ARRAY_FOREACH ( i, m_pWorker->m_dWorkers )
-			if ( !m_pWorker->m_dWorkers[i].m_bLocal )
-			{
-				if ( j-- )
-					continue;
-				iCurrentWorker = i;
-				break;
-			}
-	}
-
-	m_iLastWorker = iCurrentWorker;
+	m_iLastWorker = SnippetGetCurrentWorker ( iNumAgent, m_iLastAgent, m_iLastWorker, m_pWorker );
 	m_iLastAgent = iNumAgent;
 
 	CSphVector<ExcerptQuery_t> & dQueries = m_pWorker->m_dQueries;
-	const SnippetWorker_t & tWorker = m_pWorker->m_dWorkers[iCurrentWorker];
+	const SnippetWorker_t & tWorker = m_pWorker->m_dWorkers[m_iLastWorker];
 
 	int iDoc = tWorker.m_iHead;
 	while ( iDoc!=-1 )
@@ -11219,7 +11087,7 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 
 	// try to use new index
 	CSphString sWarning;
-	ISphTokenizer * pTokenizer = tIndex.m_pIndex->LeakTokenizer ();
+	ISphTokenizer * pTokenizer = tIndex.m_pIndex->LeakTokenizer (); // FIXME! disable support of that old indexes and remove this bullshit
 	CSphDict * pDictionary = tIndex.m_pIndex->LeakDictionary ();
 
 	if ( !tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, g_bStripPath, sWarning ) || !tIndex.m_pIndex->Preread() )

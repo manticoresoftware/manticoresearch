@@ -63,11 +63,12 @@ SPACE				[ \t\n\r]
 "INTO"				{ YYSTOREBOUNDS; return TOK_INTO; }
 "LIMIT"				{ YYSTOREBOUNDS; return TOK_LIMIT; }
 "MATCH"				{ YYSTOREBOUNDS; return TOK_MATCH; }
-"MATCH_WEIGHT"			{ YYSTOREBOUNDS; return TOK_MATCH_WEIGHT; }
+"MATCH_WEIGHT"		{ YYSTOREBOUNDS; return TOK_MATCH_WEIGHT; }
 "MAX"				{ YYSTOREBOUNDS; return TOK_MAX; }
 "META"				{ YYSTOREBOUNDS; return TOK_META; }
 "MIN"				{ YYSTOREBOUNDS; return TOK_MIN; }
 "MOD"				{ YYSTOREBOUNDS; return TOK_MOD; }
+"NAMES"				{ YYSTOREBOUNDS; return TOK_NAMES; }
 "NOT"				{ YYSTOREBOUNDS; return TOK_NOT; }
 "NULL"				{ YYSTOREBOUNDS; return TOK_NULL; }
 "OPTION"			{ YYSTOREBOUNDS; return TOK_OPTION; }
@@ -110,6 +111,7 @@ SPACE				[ \t\n\r]
 "@count"			{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_ATIDENT; }
 {ID}				{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_IDENT; }
 @{ID}				{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_USERVAR; }
+@@{ID}				{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_SYSVAR; }
 `{ID}`				{ YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; lvalp->m_sValue.SetBinary ( yytext+1, strlen(yytext)-2 ); return TOK_IDENT; }
 
 {SPACE}+			{ ; }

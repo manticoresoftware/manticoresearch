@@ -10579,7 +10579,7 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 			return;
 		}
 
-	} else if ( tStmt.m_eSet==SET_LOCAL && tStmt.m_sSetName=="character_set_results" )
+	} else if ( tStmt.m_eSet==SET_LOCAL && ( tStmt.m_sSetName=="character_set_results" || tStmt.m_sSetName=="sql_auto_is_null" ) )
 	{
 		// per-session CHARACTER_SET_RESULTS; just ignore for now
 

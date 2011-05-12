@@ -15,6 +15,8 @@
 %token	TOK_CONST_INT
 %token	TOK_CONST_FLOAT
 %token	TOK_QUOTED_STRING
+%token	TOK_USERVAR
+%token	TOK_SYSVAR
 
 %token	TOK_AS
 %token	TOK_ASC
@@ -51,6 +53,7 @@
 %token	TOK_META
 %token	TOK_MIN
 %token	TOK_MOD
+%token	TOK_NAMES
 %token	TOK_NULL
 %token	TOK_OPTION
 %token	TOK_ORDER
@@ -68,7 +71,6 @@
 %token	TOK_TRANSACTION
 %token	TOK_TRUE
 %token	TOK_UPDATE
-%token	TOK_USERVAR
 %token	TOK_VALUES
 %token	TOK_VARIABLES
 %token	TOK_WARNINGS
@@ -529,6 +531,14 @@ show_variable:
 
 //////////////////////////////////////////////////////////////////////////
 
+set_value:
+	TOK_IDENT
+	| TOK_NULL
+	| TOK_QUOTED_STRING
+	| TOK_CONST_INT
+	| TOK_CONST_FLOAT
+	;
+
 set_clause:
 	TOK_SET TOK_IDENT '=' boolean_value
 		{
@@ -545,6 +555,8 @@ set_clause:
 			pParser->SetStatement ( $2, SET_LOCAL );
 			pParser->m_pStmt->m_bSetNull = true;
 		}
+	| TOK_SET TOK_NAMES set_value		{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
+	| TOK_SET TOK_SYSVAR '=' set_value	{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	;
 
 set_global_clause:

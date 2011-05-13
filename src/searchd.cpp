@@ -8177,7 +8177,7 @@ static bool SetupStripper ( const CSphIndex * pIndex, const ExcerptQuery_t & q, 
 		|| ( q.m_sStripMode=="index" && tSettings.m_bHtmlStrip ) )
 	{
 		// don't strip HTML markup in 'retain' mode - proceed zones only
-		tStripper = new CSphHTMLStripper ( q.m_sStripMode=="retain" );
+		tStripper = new CSphHTMLStripper ( q.m_sStripMode!="retain" );
 
 		if ( q.m_sStripMode=="index" )
 		{

@@ -8168,6 +8168,45 @@ static bool SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPos
 }
 
 
+static bool SetupStripper ( const CSphIndex * pIndex, const ExcerptQuery_t & q, CSphScopedPtr<CSphHTMLStripper> & tStripper, CSphString & sError )
+{
+	assert ( pIndex );
+
+	const CSphIndexSettings & tSettings = pIndex->GetSettings ();
+	if ( q.m_sStripMode=="strip" || q.m_sStripMode=="retain"
+		|| ( q.m_sStripMode=="index" && tSettings.m_bHtmlStrip ) )
+	{
+		// don't strip HTML markup in 'retain' mode - proceed zones only
+		tStripper = new CSphHTMLStripper ( q.m_sStripMode=="retain" );
+
+		if ( q.m_sStripMode=="index" )
+		{
+			if (
+				!tStripper->SetIndexedAttrs ( tSettings.m_sHtmlIndexAttrs.cstr (), sError ) ||
+				!tStripper->SetRemovedElements ( tSettings.m_sHtmlRemoveElements.cstr (), sError ) )
+			{
+				sError.SetSprintf ( "HTML stripper config error: %s", sError.cstr() );
+				return false;
+			}
+		}
+
+		if ( q.m_iPassageBoundary )
+		{
+			tStripper->EnableParagraphs();
+		}
+
+		// handle zone(s) in special mode only when passage_boundary enabled
+		if ( q.m_iPassageBoundary && !tStripper->SetZones ( tSettings.m_sZones.cstr (), sError ) )
+		{
+			sError.SetSprintf ( "HTML stripper config error: %s", sError.cstr() );
+			return false;
+		}
+	}
+
+	return true;
+}
+
+
 void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 {
 	if ( !CheckCommandVersion ( iVer, VER_COMMAND_EXCERPT, tReq ) )
@@ -8325,33 +8364,12 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	// setup stripper if needed
 	////////////////////////////
 
-	CSphHTMLStripper tStripper;
-	const CSphHTMLStripper * pStripper = NULL;
-	const CSphIndexSettings & tSettings = pIndex->GetSettings ();
-	if ( q.m_sStripMode=="strip"
-		|| ( q.m_sStripMode=="index" && tSettings.m_bHtmlStrip ) )
+	CSphScopedPtr<CSphHTMLStripper> pStripper ( NULL );
+	if ( !SetupStripper ( pServed->m_pIndex, q, pStripper, sError ) )
 	{
-		if ( q.m_sStripMode=="index" )
-		{
-			if (
-				!tStripper.SetIndexedAttrs ( tSettings.m_sHtmlIndexAttrs.cstr (), sError ) ||
-				!tStripper.SetRemovedElements ( tSettings.m_sHtmlRemoveElements.cstr (), sError ) )
-			{
-				tReq.SendErrorReply ( "HTML stripper config error: %s", sError.cstr() );
-				pServed->Unlock();
-				return;
-			}
-		}
-
-		// handle zone(s) in special mode only when passage_boundary enabled
-		if ( q.m_iPassageBoundary && !tStripper.SetZones ( tSettings.m_sZones.cstr (), sError ) )
-		{
-			tReq.SendErrorReply ( "HTML stripper config error: %s", sError.cstr() );
-			pServed->Unlock();
-			return;
-		}
-
-		pStripper = &tStripper;
+		tReq.SendErrorReply ( "%s", sError.cstr() );
+		pServed->Unlock();
+		return;
 	}
 
 	///////////////////
@@ -8363,7 +8381,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		// boring single threaded loop
 		ARRAY_FOREACH ( i, dQueries )
 		{
-			dQueries[i].m_sRes = sphBuildExcerpt ( dQueries[i], pDictBase, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, dQueries[i].m_sError, pStripper );
+			dQueries[i].m_sRes = sphBuildExcerpt ( dQueries[i], pDictBase, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, dQueries[i].m_sError, pStripper.Ptr() );
 			if ( !dQueries[i].m_sRes )
 				break;
 		}
@@ -8427,7 +8445,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 			t.m_pQueries = dQueries.Begin();
 			t.m_pCurQuery = &iCurQuery;
 			t.m_pIndex = pIndex;
-			t.m_pStripper = pStripper;
+			t.m_pStripper = pStripper.Ptr();
 			if ( i )
 				sphThreadCreate ( &dThreads[i].m_tThd, SnippetThreadFunc, &dThreads[i] );
 		}
@@ -9763,40 +9781,15 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 		return;
 	}
 
-	// FIXME? cut-paste
-	const CSphIndexSettings & tSettings = pIndex->GetSettings ();
-	CSphHTMLStripper tStripper;
-	CSphHTMLStripper * pStripper = NULL;
-	if ( q.m_sStripMode=="strip"
-		|| ( q.m_sStripMode=="index" && tSettings.m_bHtmlStrip ) )
+	CSphScopedPtr<CSphHTMLStripper> pStripper ( NULL );
+	if ( !SetupStripper ( pServed->m_pIndex, q, pStripper, sError ) )
 	{
-		CSphString sError;
-		if ( q.m_sStripMode=="index" )
-		{
-			if (
-				!tStripper.SetIndexedAttrs ( tSettings.m_sHtmlIndexAttrs.cstr (), sError ) ||
-				!tStripper.SetRemovedElements ( tSettings.m_sHtmlRemoveElements.cstr (), sError ) )
-			{
-				sError.SetSprintf ( "HTML stripper config error: %s", sError.cstr() );
-				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
-				pServed->Unlock();
-				return;
-			}
-		}
-
-		// handle zone(s) in special mode only when passage_boundary enabled
-		if ( q.m_iPassageBoundary && !tStripper.SetZones ( tSettings.m_sZones.cstr(), sError ) )
-		{
-			sError.SetSprintf ( "HTML stripper config error: %s", sError.cstr() );
-			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
-			pServed->Unlock();
-			return;
-		}
-
-		pStripper = &tStripper;
+		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		pServed->Unlock();
+		return;
 	}
 
-	char * sResult = sphBuildExcerpt ( q, pDictBase, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError, pStripper );
+	char * sResult = sphBuildExcerpt ( q, pDictBase, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError, pStripper.Ptr() );
 	if ( !sResult )
 	{
 		sError.SetSprintf ( "highlighting failed: %s", sError.cstr() );

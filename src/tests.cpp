@@ -489,7 +489,7 @@ void TestStripper ()
 		printf ( "testing HTML stripper, test %d/%d... ", 1+iTest, nTests );
 
 		CSphString sError;
-		CSphHTMLStripper tStripper;
+		CSphHTMLStripper tStripper ( true );
 		assert ( tStripper.SetIndexedAttrs ( sTests[iTest][1], sError ) );
 		assert ( tStripper.SetRemovedElements ( sTests[iTest][2], sError ) );
 
@@ -524,7 +524,7 @@ void BenchStripper ()
 	for ( int iRun=0; iRun<2; iRun++ )
 	{
 		CSphString sError;
-		CSphHTMLStripper tStripper;
+		CSphHTMLStripper tStripper ( true );
 		if ( iRun==1 )
 			tStripper.SetRemovedElements ( "style, script", sError );
 

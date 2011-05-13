@@ -1290,14 +1290,15 @@ protected:
 class CSphHTMLStripper
 {
 public:
-								CSphHTMLStripper ();
+	explicit					CSphHTMLStripper ( bool bDefaultTags );
 	bool						SetIndexedAttrs ( const char * sConfig, CSphString & sError );
 	bool						SetRemovedElements ( const char * sConfig, CSphString & sError );
 	bool						SetZones ( const char * sZones, CSphString & sError );
 	void						EnableParagraphs ();
 	void						Strip ( BYTE * sData ) const;
 
-protected:
+public:
+
 	struct StripperTag_t
 	{
 		CSphString				m_sTag;			///< tag name
@@ -1325,6 +1326,11 @@ protected:
 			return strcmp ( m_sTag.cstr(), rhs.m_sTag.cstr() )<0;
 		}
 	};
+
+	/// finds appropriate tag and zone name ( tags zone name could be prefix only )
+	/// advances source to the end of the tag
+	const BYTE * 				FindTag ( const BYTE * sSrc, const StripperTag_t ** ppTag, const BYTE ** ppZoneName, int * pZoneNameLen ) const;
+	bool						IsValidTagStart ( int iCh ) const;
 
 protected:
 	static const int			MAX_CHAR_INDEX = 28;		///< max valid char index (a-z, underscore, colon)

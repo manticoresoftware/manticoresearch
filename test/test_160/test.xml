@@ -109,6 +109,25 @@ $res['html_strip_mode'] = $opts['html_strip_mode'];
 $res['passage_boundary'] = $opts['passage_boundary'];
 $results[] = $res;	
 
+// regression retain vs SPZ
+$docs = array(
+'<zoneZZ><zoneA> these words </zoneA><zoneB> and these to </zoneB> are cool </zoneZZ>',
+'<zoneZZ><zoneA> these words <TR> and these to </zoneA> are cool </zoneZZ>'
+);
+$opts = array ( 'passage_boundary'=>'zone', 'limit'=>0, 'html_strip_mode'=>'retain', 'query_mode'=>1 );
+
+$res =  $client->BuildExcerpts($docs, 'test', 'ZONE:zoneZZ these',  $opts);
+$res['zone'] = 'zoneZZ';
+$results[] = $res;
+
+$res =  $client->BuildExcerpts($docs, 'test', 'ZONE:zoneB these',  $opts);
+$res['zone'] = 'ZoneB';
+$results[] = $res;
+
+$res =  $client->BuildExcerpts($docs, 'test', 'and PARAGRAPH words',  $opts);
+$res['boundary'] = 'paragraph';
+$results[] = $res;
+
 ]]></custom_test>
 
 

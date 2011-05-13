@@ -22,7 +22,7 @@
 void StripStdin ( const char * sIndexAttrs, const char * sRemoveElements )
 {
 	CSphString sError;
-	CSphHTMLStripper tStripper;
+	CSphHTMLStripper tStripper ( true );
 	if ( !tStripper.SetIndexedAttrs ( sIndexAttrs, sError )
 		|| !tStripper.SetRemovedElements ( sRemoveElements, sError ) )
 			sphDie ( "failed to configure stripper: %s", sError.cstr() );

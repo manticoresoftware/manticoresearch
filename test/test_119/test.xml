@@ -19,7 +19,7 @@ source srctest
 {
 	type			= mysql
 	<sql_settings/>
-	sql_query		= SELECT * FROM test_table
+	sql_query		= SELECT * FROM test_table WHERE id IN (1,2, 3, 4 )
 	sql_attr_uint	= ival
 	sql_attr_float	= fval
 }
@@ -28,6 +28,21 @@ index test
 {
 	source			= srctest
 	path			= <data_path/>/test
+}
+
+source src_mva
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, 1 as idd, title as mva, 'test' FROM test_table WHERE id=10
+	sql_attr_uint	= idd
+	sql_attr_multi	= uint mva from field
+}
+
+index mva
+{
+	source			= src_mva
+	path			= <data_path/>/mva
 }
 </config>
 
@@ -50,7 +65,9 @@ INSERT INTO `test_table` VALUES
 ( 1, 11, 10, 'test one' ),
 ( 2, 11, 20, 'test two' ),
 ( 3, 11, -30, 'test three' ),
-( 4, 22, -40, 'test four' )
+( 4, 22, -40, 'test four' ),
+
+( 10, 1, 1, '10,11,12,13' )
 </db_insert>
 
 <sphqueries>
@@ -68,6 +85,9 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*fval as i3 from test order by i1 asc, i3 desc</sphinxql>
 <sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*fval as i3 from test group by i2</sphinxql>
 <sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*@id as i3 from test group by i3</sphinxql>
+
+<!-- here is going another regression from bug #800-->
+<sphinxql>select *, IN ( mva, 11 ) as cnd1 from mva where cnd1=1</sphinxql>
 </sphqueries>
 
 </test>

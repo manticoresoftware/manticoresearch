@@ -1656,6 +1656,7 @@ public:
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return IntEval ( tMatch ); }
 	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
 	{
+		assert ( m_pArg );
 		m_pArg->GetDependencyColumns ( dColumns );
 	}
 
@@ -1813,9 +1814,10 @@ class Expr_MVAIn_c : public Expr_ArgVsConstSet_c<DWORD>
 {
 public:
 	/// pre-sort values for binary search
-	Expr_MVAIn_c ( const CSphAttrLocator & tLoc, ConstList_c * pConsts )
+	Expr_MVAIn_c ( const CSphAttrLocator & tLoc, int iLocator, ConstList_c * pConsts )
 		: Expr_ArgVsConstSet_c<DWORD> ( NULL, pConsts )
 		, m_tLocator ( tLoc )
+		, m_iLocator ( iLocator )
 		, m_pMvaPool ( NULL )
 	{
 		assert ( tLoc.m_iBitOffset>=0 && tLoc.m_iBitCount>0 );
@@ -1860,8 +1862,14 @@ public:
 		m_pMvaPool = pMvaPool; // finally, some real setup work!!!
 	}
 
+	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
+	{
+		dColumns.Add ( m_iLocator );
+	}
+
 protected:
 	CSphAttrLocator	m_tLocator;
+	int				m_iLocator;
 	const DWORD *	m_pMvaPool;
 };
 
@@ -2164,7 +2172,7 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 	bool bMVA = ( m_dNodes[tNode.m_iLeft].m_iToken==TOK_ATTR_MVA );
 	if ( bMVA )
 	{
-		return new Expr_MVAIn_c ( m_dNodes[tNode.m_iLeft].m_tLocator, pConst );
+		return new Expr_MVAIn_c ( m_dNodes[tNode.m_iLeft].m_tLocator, m_dNodes[tNode.m_iLeft].m_iLocator, pConst );
 
 	} else
 	{

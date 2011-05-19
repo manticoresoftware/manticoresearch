@@ -294,7 +294,7 @@ void TestTokenizer ( bool bUTF8 )
 			assert ( pTokenizer->GetToken()==NULL );
 		}
 
-		SafeDelete ( sLine4 );
+		SafeDeleteArray ( sLine4 );
 
 		// test boundaries
 		printf ( "%s for boundaries handling, run=%d\n", sPrefix, iRun );

@@ -8168,11 +8168,17 @@ static bool SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPos
 }
 
 
-static bool SetupStripper ( const CSphIndex * pIndex, const ExcerptQuery_t & q, CSphScopedPtr<CSphHTMLStripper> & tStripper, CSphString & sError )
+static bool SetupStripperSPZ ( const CSphIndexSettings & tSettings, const ExcerptQuery_t & q, CSphScopedPtr<CSphHTMLStripper> & tStripper, ISphTokenizer * pTokenizer, CSphString & sError )
 {
-	assert ( pIndex );
+	bool bSetupSPZ = ( q.m_iPassageBoundary || ( q.m_sStripMode=="retain" && q.m_bHighlightQuery ) );
 
-	const CSphIndexSettings & tSettings = pIndex->GetSettings ();
+	if ( bSetupSPZ &&
+		( !pTokenizer->EnableSentenceIndexing ( sError ) || !pTokenizer->EnableZoneIndexing ( sError ) ) )
+	{
+		return false;
+	}
+
+
 	if ( q.m_sStripMode=="strip" || q.m_sStripMode=="retain"
 		|| ( q.m_sStripMode=="index" && tSettings.m_bHtmlStrip ) )
 	{
@@ -8190,13 +8196,13 @@ static bool SetupStripper ( const CSphIndex * pIndex, const ExcerptQuery_t & q, 
 			}
 		}
 
-		if ( q.m_iPassageBoundary )
+		if ( bSetupSPZ )
 		{
 			tStripper->EnableParagraphs();
 		}
 
 		// handle zone(s) in special mode only when passage_boundary enabled
-		if ( q.m_iPassageBoundary && !tStripper->SetZones ( tSettings.m_sZones.cstr (), sError ) )
+		if ( bSetupSPZ && !tStripper->SetZones ( tSettings.m_sZones.cstr (), sError ) )
 		{
 			sError.SetSprintf ( "HTML stripper config error: %s", sError.cstr() );
 			return false;
@@ -8204,6 +8210,20 @@ static bool SetupStripper ( const CSphIndex * pIndex, const ExcerptQuery_t & q, 
 	}
 
 	return true;
+}
+
+
+static CSphDict * SetupExactDict ( const CSphIndexSettings & tSettings, const ExcerptQuery_t & q, CSphScopedPtr<CSphDict> & tExact, CSphDict * pDict, ISphTokenizer * pTokenizer )
+{
+	// handle index_exact_words
+	if ( !( q.m_bHighlightQuery && tSettings.m_bIndexExactWords ) )
+		return pDict;
+
+	CSphRemapRange tEq ( '=', '=', '=' ); // FIXME? check and warn if star was already there
+	pTokenizer->AddCaseFolding ( tEq );
+
+	tExact = new CSphDictExact ( pDict );
+	return tExact.Ptr();
 }
 
 
@@ -8330,24 +8350,6 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		return;
 	}
 
-	CSphIndex * pIndex = pServed->m_pIndex;
-	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
-	CSphDict * pDictBase = pIndex->GetDictionary();
-	if ( pDictBase->HasState() )
-	{
-		tDictCloned = pDictBase = pDictBase->Clone();
-	}
-
-	CSphScopedPtr<ISphTokenizer> pTokenizer ( pIndex->GetTokenizer()->Clone ( true ) );
-
-	if ( q.m_iPassageBoundary &&
-		( !pTokenizer->EnableSentenceIndexing ( sError ) || !pTokenizer->EnableZoneIndexing ( sError ) ) )
-	{
-		tReq.SendErrorReply ( "%s", sError.cstr() );
-		pServed->Unlock();
-		return;
-	}
-
 	ARRAY_FOREACH ( i, dQueries )
 	{
 		dQueries[i] = q; // copy settings
@@ -8360,17 +8362,30 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		}
 	}
 
-	////////////////////////////
-	// setup stripper if needed
-	////////////////////////////
+	CSphIndex * pIndex = pServed->m_pIndex;
+	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
+	CSphDict * pDictBase = pIndex->GetDictionary();
+	if ( pDictBase->HasState() )
+	{
+		tDictCloned = pDictBase = pDictBase->Clone();
+	}
 
+	CSphScopedPtr<ISphTokenizer> pTokenizer ( pIndex->GetTokenizer()->Clone ( true ) );
 	CSphScopedPtr<CSphHTMLStripper> pStripper ( NULL );
-	if ( !SetupStripper ( pServed->m_pIndex, q, pStripper, sError ) )
+
+	if ( !SetupStripperSPZ ( pIndex->GetSettings(), q, pStripper, pTokenizer.Ptr(), sError ) )
 	{
 		tReq.SendErrorReply ( "%s", sError.cstr() );
 		pServed->Unlock();
 		return;
 	}
+
+	////////////////////////////
+	// setup exact dictionary if needed
+	////////////////////////////
+
+	CSphScopedPtr<CSphDict> tExactDict ( NULL );
+	pDictBase = SetupExactDict ( pIndex->GetSettings(), q, tExactDict, pDictBase, pTokenizer.Ptr() );
 
 	///////////////////
 	// do highlighting
@@ -9772,22 +9787,22 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 	}
 
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( pIndex->GetTokenizer()->Clone ( true ) );
-
-	if ( q.m_iPassageBoundary &&
-		( !pTokenizer->EnableSentenceIndexing ( sError ) || !pTokenizer->EnableZoneIndexing ( sError ) ) )
-	{
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
-		pServed->Unlock();
-		return;
-	}
-
 	CSphScopedPtr<CSphHTMLStripper> pStripper ( NULL );
-	if ( !SetupStripper ( pServed->m_pIndex, q, pStripper, sError ) )
+
+	if ( !SetupStripperSPZ ( pIndex->GetSettings(), q, pStripper, pTokenizer.Ptr(), sError ) )
 	{
 		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
 		pServed->Unlock();
 		return;
 	}
+
+	////////////////////////////
+	// setup exact dictionary if needed
+	////////////////////////////
+
+	CSphScopedPtr<CSphDict> tExactDict ( NULL );
+	pDictBase = SetupExactDict ( pIndex->GetSettings(), q, tExactDict, pDictBase, pTokenizer.Ptr() );
+
 
 	char * sResult = sphBuildExcerpt ( q, pDictBase, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError, pStripper.Ptr() );
 	if ( !sResult )

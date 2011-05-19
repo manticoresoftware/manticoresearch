@@ -21,6 +21,16 @@ index idx
 	source			= src
 	path			= <data_path/>/test
 }
+
+index exact
+{
+	source			= src
+	path			= <data_path/>/exact
+	morphology = stem_en
+	index_exact_words = 1
+	blend_chars = (, ), -
+	blend_mode = trim_none, trim_head, trim_tail, trim_both, skip_pure
+}
 </config>
 
 <db_insert>select 1;</db_insert>
@@ -112,6 +122,25 @@ $query = 'is house';
 $reply = $client->BuildExcerpts ( array($text), 'idx', $query, array('around'=> 2, 'limit_words'=>10, 'before_match'=>'<b %PASSAGE_ID%>', 'after_match'=>'</b>', 'start_passage_id'=>1000) );
 $results [] = $query;
 $results [] = $reply;
+
+$query = '=welcome';
+$reply = $client->BuildExcerpts ( array('=welcome', '=welcome'), 'exact', $query, array('query_mode'=>1) );
+$results [] = "crash on exact words and 2 documents with '=' symbol";
+$results [] = $reply;
+
+$query = ' =\(12b\-1\) ';
+$docs = array ( 'Distribution and Service (12b-1) fees' );
+
+$opts =array ( 'query_mode'=>1, 'limit'=>15, 'around'=>2, 'allows_empty'=>1 );
+$reply = $client->BuildExcerpts ( $docs, 'exact', $query, $opts );
+$results [] = 'exact-blened: plain path';
+$results [] = $reply;
+
+$opts =array ( 'query_mode'=>1, 'limit'=>0, 'around'=>0, 'allows_empty'=>1 );
+$reply = $client->BuildExcerpts ( $docs, 'exact', $query, $opts );
+$results [] = 'exact-blened: fast path';
+$results [] = $reply;
+
 
 ]]></custom_test>
 

@@ -255,7 +255,7 @@ static BYTE * FindString ( BYTE * sBuffer, BYTE * sFind, int iLimit )
 typedef Hitman_c<8> HITMAN;
 
 /// snippets query words for different cases
-class ISnippetsQword: public ISphQword
+class ISnippetsQword : public ISphQword
 {
 public:
 	CSphString *							m_sBuffer;
@@ -297,6 +297,8 @@ public:
 			m_tMatch.m_iDocID = 0;
 		return m_tMatch;
 	}
+
+	virtual void OnSetup ( CSphDict * ) {}
 };
 
 /// simple keyword match on id
@@ -372,11 +374,38 @@ struct SnippetsQword_StarBoth_c : public SnippetsQword_c<SnippetsQword_StarBoth_
 	}
 };
 
+
 struct SnippetsQword_ExactForm_c : public SnippetsQword_c<SnippetsQword_ExactForm_c>
 {
-	inline bool Match ( const Token_t & , BYTE * sToken )
+	inline bool Match ( const Token_t & tToken, BYTE * sToken )
 	{
-		return memcmp ( sToken, m_sDictWord.cstr()+1, m_iWordLength )==0;
+		return tToken.m_iBlendID==m_iWordID || ( memcmp ( sToken, m_sDictWord.cstr()+1, m_iWordLength )==0 );
+	}
+
+	virtual void OnSetup ( CSphDict * pDict )
+	{
+		// FIXME!!! to match with blended parts it recalculates wordID for word without head '=' part
+
+		int iLen = m_sWord.Length()-1;
+		BYTE sTmp [ 3*SPH_MAX_WORD_LEN + 16 ];
+
+		assert ( iLen>0 && iLen<sizeof(sTmp) );
+		assert ( m_sWord.Begins ( "=" ) );
+		assert ( pDict && m_pTokenizer );
+
+		memcpy ( sTmp, m_sWord.cstr()+1, iLen );
+		sTmp[iLen] = '\0';
+
+		m_pTokenizer->SetBuffer ( sTmp, iLen );
+		while ( m_pTokenizer->GetToken()!=NULL )
+		{
+			if ( m_pTokenizer->TokenIsBlended() )
+			{
+				m_pTokenizer->SkipBlended();
+				m_iWordID = pDict->GetWordID ( sTmp );
+				break;
+			}
+		}
 	}
 };
 
@@ -428,6 +457,8 @@ bool SnippetsQwordSetup::QwordSetup ( ISphQword * pQword ) const
 	pWord->m_iDocs = 1;
 	pWord->m_iHits = 1;
 	pWord->m_bHasHitlist = true;
+
+	pWord->OnSetup ( m_pDict );
 
 	// add dummy word, used for passage weighting
 	const char * sWord = pWord->m_sDictWord.cstr();
@@ -2389,10 +2420,16 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor, const CSphHTMLSt
 	int uPosition = 0;
 	BYTE * sWord = NULL;
 	SphWordID_t iBlendID = 0;
+	SphWordID_t iBlendedExactID = 0;
 	const char * pBlendedEnd = NULL;
 
 	CSphVector<int> dZoneStack;
 	CSphVector<char> dZoneName ( 16+3*SPH_MAX_WORD_LEN );
+	BYTE sExactBuf [ 3*SPH_MAX_WORD_LEN+4 ];
+
+	// FIXME!!! replace by query SPZ extraction pass
+	if ( !iSPZ && ( bRetainHtml && tFunctor.m_bHighlightQuery ) )
+		iSPZ = MAGIC_CODE_ZONE;
 
 #ifndef NDEBUG
 	CSphVector<int> dZonePos;
@@ -2406,7 +2443,17 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor, const CSphHTMLSt
 			if ( pBlendedEnd<pTokenizer->GetTokenEnd() )
 			{
 				iBlendID = pDict->GetWordID ( sWord );
+				iBlendedExactID = 0;
 				pBlendedEnd = pTokenizer->GetTokenEnd();
+
+				if ( tFunctor.m_bHighlightQuery && tFunctor.m_bIndexExactWords )
+				{
+					int iLen = strlen ( (const char *)sWord );
+					memcpy ( sExactBuf + 1, sWord, iLen );
+					sExactBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
+					sExactBuf[iLen+1] = '\0';
+					iBlendedExactID = pDict->GetWordIDNonStemmed ( sExactBuf );
+				}
 			}
 			continue;
 		}
@@ -2513,12 +2560,10 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor, const CSphHTMLSt
 		if ( tFunctor.m_bHighlightQuery && tFunctor.m_bIndexExactWords )
 		{
 			int iBytes = pLastTokenEnd - pTokenStart;
-			BYTE sBuf [ 3*SPH_MAX_WORD_LEN+4 ];
-
-			memcpy ( sBuf + 1, sWord, iBytes );
-			sBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
-			sBuf[iBytes+1] = '\0';
-			dWordids.Add ( pDict->GetWordIDNonStemmed ( sBuf ) );
+			memcpy ( sExactBuf + 1, sWord, iBytes );
+			sExactBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
+			sExactBuf[iBytes+1] = '\0';
+			dWordids.Add ( pDict->GetWordIDNonStemmed ( sExactBuf ) );
 		}
 
 		// must be last because it can change (stem) sWord
@@ -2545,8 +2590,15 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor, const CSphHTMLSt
 			tDocTok.m_iLengthCP = sphUTF8Len ( pTokenStart, tDocTok.m_iLengthBytes );
 
 		if ( !pTokenizer->TokenIsBlendedPart() )
+		{
 			iBlendID = 0;
-		dWordids.Add ( iBlendID );
+			iBlendedExactID = 0;
+		} else
+		{
+			dWordids.Add ( iBlendID );
+			if ( iBlendedExactID )
+				dWordids.Add ( iBlendedExactID );
+		}
 
 		// match & emit
 		tFunctor.OnToken ( tDocTok.m_iStart, tDocTok.m_iLengthBytes, sWord, tDocTok.m_uPosition, dWordids );
@@ -2783,7 +2835,8 @@ static char * HighlightAllFastpath ( const ExcerptQuery_t & tQuerySettings,
 				*++pOut = *pIn++;
 			}
 		}
-		dMarked.Resize ( pOut - dMarked.Begin() + 1 );
+		if ( dMarked.GetLength()>1 )
+			dMarked.Resize ( pOut - dMarked.Begin() + 1 );
 
 		// 2nd pass
 		HighlightQuery_c tHighlighter ( tContainer, pTokenizer, pDict, tFixedSettings, tIndexSettings, sDoc, iDocLen, dMarked );
@@ -2830,7 +2883,7 @@ ExcerptQuery_t::ExcerptQuery_t ()
 /////////////////////////////////////////////////////////////////////////////
 
 
-char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphIndex *pIndex, CSphString & sError, const CSphHTMLStripper * pStripper )
+char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphIndex * pIndex, CSphString & sError, const CSphHTMLStripper * pStripper )
 {
 	if ( tOptions.m_sStripMode=="retain"
 		&& !( tOptions.m_iLimit==0 && tOptions.m_iLimitPassages==0 && tOptions.m_iLimitWords==0 ) )
@@ -2884,17 +2937,6 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 
 	// FIXME!!! check on real data (~100 Mb) as stripper changes len
 	iDataLen = strlen ( pData );
-
-	// handle index_exact_words
-	CSphScopedPtr<CSphDict> tDict ( NULL );
-	if ( tOptions.m_bHighlightQuery && pIndex->GetSettings().m_bIndexExactWords )
-	{
-		CSphRemapRange tEq ( '=', '=', '=' ); // FIXME? check and warn if star was already there
-		pTokenizer->AddCaseFolding ( tEq );
-
-		tDict = new CSphDictExact ( pDict );
-		pDict = tDict.Ptr();
-	}
 
 	// fast path that highlights entire document
 	if (!( tOptions.m_iLimitPassages

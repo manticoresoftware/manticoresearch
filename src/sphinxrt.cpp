@@ -2183,7 +2183,7 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 						for ( int k=j+1; k<m_pDiskChunks.GetLength() && bKeep; k++ )
 						{
 							const CSphIndex * pIndex = m_pDiskChunks[k];
-							bKeep &= ( sphBinarySearch ( pIndex->GetKillList(), pIndex->GetKillList() + pIndex->GetKillListSize(), uRef )==NULL );
+							bKeep &= ( sphBinarySearch ( pIndex->GetKillList(), pIndex->GetKillList() + pIndex->GetKillListSize() - 1, uRef )==NULL );
 						}
 					}
 				}
@@ -4126,7 +4126,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 		m_tKlist.Flush();
 		m_tKlist.KillListLock();
 		const SphAttr_t uRef = tUpd.m_dDocids[iUpd];
-		bUpdated = ( sphBinarySearch ( m_tKlist.GetKillList(), m_tKlist.GetKillList() + m_tKlist.GetKillListSize(), uRef )!=NULL );
+		bUpdated = ( sphBinarySearch ( m_tKlist.GetKillList(), m_tKlist.GetKillList() + m_tKlist.GetKillListSize() - 1, uRef )!=NULL );
 		m_tKlist.KillListUnlock();
 		if ( bUpdated )
 			continue;

@@ -8102,6 +8102,7 @@ bool SnippetReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t &, 
 void SnippetThreadFunc ( void * pArg )
 {
 	SnippetThread_t * pDesc = (SnippetThread_t*) pArg;
+
 	CSphScopedPtr<ISphTokenizer> pTok ( pDesc->m_pIndex->GetTokenizer()->Clone ( true ) );
 	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
 	CSphDict * pDictBase = pDesc->m_pIndex->GetDictionary();
@@ -8126,10 +8127,6 @@ void SnippetThreadFunc ( void * pArg )
 
 		if ( pQuery->m_iNext>=0 )
 			continue;
-
-		if ( pQuery->m_iPassageBoundary )
-			if ( !pTok->EnableSentenceIndexing ( pQuery->m_sError ) || !pTok->EnableZoneIndexing ( pQuery->m_sError ) )
-				continue;
 
 		pQuery->m_sRes = sphBuildExcerpt ( *pQuery, pDictBase, pTok.Ptr(),
 			&pDesc->m_pIndex->GetMatchSchema(), pDesc->m_pIndex,
@@ -8391,7 +8388,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	// do highlighting
 	///////////////////
 
-	if ( g_iDistThreads<=1 || q.m_bLoadFiles==false )
+	if ( g_iDistThreads<=1 || dQueries.GetLength()<2 )
 	{
 		// boring single threaded loop
 		ARRAY_FOREACH ( i, dQueries )
@@ -8405,14 +8402,20 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		// get file sizes
 		ARRAY_FOREACH ( i, dQueries )
 		{
-			struct stat st;
-			if ( ::stat ( dQueries[i].m_sSource.cstr(), &st )<0 )
+			if ( dQueries[i].m_bLoadFiles )
 			{
-				tReq.SendErrorReply ( "failed to stat %s: %s", dQueries[i].m_sSource.cstr(), strerror(errno) );
-				pServed->Unlock();
-				return;
+				struct stat st;
+				if ( ::stat ( dQueries[i].m_sSource.cstr(), &st )<0 )
+				{
+					tReq.SendErrorReply ( "failed to stat %s: %s", dQueries[i].m_sSource.cstr(), strerror(errno) );
+					pServed->Unlock();
+					return;
+				}
+				dQueries[i].m_iSize = -st.st_size; // so that sort would put bigger ones first
+			} else
+			{
+				dQueries[i].m_iSize = -dQueries[i].m_sSource.Length();
 			}
-			dQueries[i].m_iSize = -st.st_size; // so that sort would put bigger ones first
 			dQueries[i].m_iSeq = i;
 			dQueries[i].m_iNext = -1;
 		}

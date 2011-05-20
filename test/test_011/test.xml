@@ -46,6 +46,8 @@ index lj
     <Query_2>*search</Query_2>
     <Query_3>*dmin</Query_3>
     <Query_4>*rep</Query_4>
+	<!-- crash on very star -->
+	<Query_5>*</Query_5>
   </Query>
   <DB_Create>
 CREATE TABLE `test_table` (

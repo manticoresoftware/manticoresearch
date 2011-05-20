@@ -11625,7 +11625,7 @@ SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
 		return 0;
 
 	bool bHeadStar = ( pWord[0]=='*' );
-	bool bTailStar = ( pWord[iLen-1]=='*' );
+	bool bTailStar = ( pWord[iLen-1]=='*' ) && ( iLen>1 );
 
 	if ( !bHeadStar && !bTailStar )
 	{
@@ -11637,7 +11637,7 @@ SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
 	iLen = strlen ( (const char*)pWord );
 	assert ( iLen < 16+3*SPH_MAX_WORD_LEN - 2 );
 
-	if ( !iLen )
+	if ( !iLen || ( bHeadStar && iLen==1 ) )
 		return 0;
 
 	if ( m_bInfixes )

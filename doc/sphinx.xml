@@ -1354,14 +1354,14 @@ Generally, it is better to set the limit bigger, to minimize both
 the frequency of flushes, and the index fragmentation (number of disk
 chunks).  For instance, on a dedicated search server that handles
 a big RT index, it can be advised to set <option>rt_mem_limit</option>
-to 1-3 GB.  A global limit on all indexes is also planned, but not yet
+to 1-2 GB.  A global limit on all indexes is also planned, but not yet
 implemented yet as of 1.10-beta.
 </para>
 <para>
 Disk chunk full-text index data can not be actually modified,
 so the full-text field changes (ie. row deletions and updates)
 suppress a previous row version from a disk chunk using a kill-list,
-but do not actually physicall purge the data.  Therefore, on workloads
+but do not actually physically purge the data.  Therefore, on workloads
 with high full-text updates ratio index might eventually get polluted
 by these previous row versions, and searching performance would
 degrade.  Physical index purging that would improve the performance
@@ -3361,10 +3361,10 @@ follows:</para>
 <programlisting>
 search [OPTIONS] word1 [word2 [word3 [...]]]
 </programlisting>
-<para>When calling <filename>search</filename>, it is not necessary to 
-have <filename>searchd</filename> running; simply that the account running 
-<filename>search</filename> has read access to the configuration file and 
-the location and files of the indexes.</para>
+<para>When calling <filename>search</filename>, it is not necessary
+to have <filename>searchd</filename> running; simply make sure that
+the account running the <filename>search</filename> program has read
+access to the configuration file and the index files.</para>
 <para>The default behaviour is to apply a search for word1 (AND word2 AND 
 word3... as specified) to all fields in all indexes as given in the 
 configuration file. If constructing the equivalent in the API, this would 
@@ -5361,7 +5361,7 @@ Starting with version 0.9.9-rc1, keywords can contain wildcards, that work simil
 	a %PASSAGE_ID% macro can be used in this string. The macro is replaced with an incrementing
 	passage number within a current snippet. Numbering starts at 1 by default but can be
 	overridden with "start_passage_id" option. In a multi-document call, %PASSAGE_ID% would
-	restart at every given document. Default is "&lt;b&gt;".</listitem>
+	restart at every given document. Default is "&lt;/b&gt;".</listitem>
 </varlistentry>
 <varlistentry>
 	<term>"after_match":</term>

@@ -4450,18 +4450,21 @@ public:
 		if ( !sFormat || !*sFormat )
 			return;
 
-		int iLen = -1;
-		while ( iLen==-1 )
+		for ( ;; )
 		{
-			va_list ap;
-			va_start ( ap, sFormat );
-			iLen = vsnprintf ( m_pCur, Left(), sFormat, ap );
-			va_end ( ap );
-
-			if ( iLen!=-1 )
+			int iLen = -1;
+			if ( Left()>0 )
 			{
-				assert ( Length()+iLen<=m_iSize );
+				va_list ap;
+				va_start ( ap, sFormat );
+				iLen = vsnprintf ( m_pCur, Left(), sFormat, ap );
+				va_end ( ap );
+			}
+
+			if ( iLen!=-1 && Length()+iLen<=m_iSize )
+			{
 				m_pCur += iLen;
+				break;
 			} else
 			{
 				Grow();

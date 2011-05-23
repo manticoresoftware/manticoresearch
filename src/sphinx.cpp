@@ -16582,8 +16582,12 @@ bool CSphDictCRCTraits::StemById ( BYTE * pWord, int iStemmer )
 	// safe quick strncpy without (!) padding and with a side of strlen
 	char * p = szBuf;
 	char * pMax = szBuf + sizeof(szBuf) - 1;
+	BYTE * pLastSBS = NULL;
 	while ( *pWord && p<pMax )
+	{
+		pLastSBS = ( *pWord )<0x80 ? pWord : pLastSBS;
 		*p++ = *pWord++;
+	}
 	int iLen = p - szBuf;
 	*p = '\0';
 	pWord -= iLen;
@@ -16599,7 +16603,18 @@ bool CSphDictCRCTraits::StemById ( BYTE * pWord, int iStemmer )
 		break;
 
 	case SPH_MORPH_STEM_RU_UTF8:
-		stem_ru_utf8 ( (WORD*)pWord );
+		// skip stemming in case of SBC at the end of the word
+		if ( pLastSBS && ( pLastSBS-pWord+1 )>=iLen )
+			break;
+
+		// stem only UTF8 tail
+		if ( !pLastSBS )
+		{
+			stem_ru_utf8 ( (WORD*)pWord );
+		} else
+		{
+			stem_ru_utf8 ( (WORD *)( pLastSBS+1 ) );
+		}
 		break;
 
 	case SPH_MORPH_STEM_CZ:

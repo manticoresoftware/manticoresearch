@@ -26,6 +26,7 @@ index test
 	source			= srctest
 	path			= <data_path/>/test
     charset_type 	= utf-8
+	charset_table	= -, 0..9, A..Z->a..z, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F
 	morphology		= stem_ru, stem_en
 }
 
@@ -81,6 +82,12 @@ index morph1
 <query mode="extended2" index="morph0">run</query>
 
 </queries>
+
+<sphqueries>
+<!-- here is going regression 2byte vs 2byte + sbc -->
+<sphinxql>CALL KEYWORDS ('то-тический', 'test')</sphinxql>
+<sphinxql>CALL KEYWORDS ('тоЫтический', 'test')</sphinxql>
+</sphqueries>
 
 <db_create>
 CREATE TABLE `test_table`

@@ -14455,9 +14455,19 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 		return false;
 	}
 
+	// select the sorter with max schema
+	int iMaxSchemaSize = -1;
+	int iMaxSchemaIndex = -1;
+	for ( int i=0; i<iSorters; i++ )
+		if ( ppSorters[i]->GetSchema().GetRowSize() > iMaxSchemaSize )
+		{
+			iMaxSchemaSize = ppSorters[i]->GetSchema().GetRowSize();
+			iMaxSchemaIndex = i;
+		}
+
 	// setup calculations and result schema
 	CSphQueryContext tCtx;
-	if ( !tCtx.SetupCalc ( pResult, ppSorters[0]->GetSchema(), m_tSchema, GetMVAPool() ) )
+	if ( !tCtx.SetupCalc ( pResult, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, GetMVAPool() ) )
 		return false;
 
 	// set string pool for string on_sort expression fix up

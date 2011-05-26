@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>Multi queries + (plain|rt|dist)indexes + group by</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source test1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table1
+	sql_attr_uint	= gid
+}
+
+source test2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table2
+	sql_attr_uint	= gid
+}
+
+index test_plain
+{
+	source			= test1
+	path			= <data_path/>/test_plain
+}
+
+index test_plain_for_dist
+{
+	source	= test2
+	path	= <data_path/>/test_plain_for_dist
+}
+
+index test_rt
+{
+        type                    = rt
+        path                    = data/test_rt
+        rt_attr_uint    = gid
+        rt_field                = title
+}
+
+index test_dist
+{
+	type = distributed
+	agent = <agent0_address/>:test_plain_for_dist
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table1
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table1;</db_drop>
+<db_insert>INSERT INTO test_table1 VALUES ( 1, 1, 'word | 1' );</db_insert>
+<db_insert>INSERT INTO test_table1 VALUES ( 2, 2, 'word | 2' );</db_insert>
+<db_insert>INSERT INTO test_table1 VALUES ( 3, 2, 'word | 3' );</db_insert>
+
+<db_create>
+CREATE TABLE test_table2
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table2;</db_drop>
+<db_insert>INSERT INTO test_table2 VALUES ( 7, 1, 'word | 7' );</db_insert>
+<db_insert>INSERT INTO test_table2 VALUES ( 8, 2, 'word | 8' );</db_insert>
+<db_insert>INSERT INTO test_table2 VALUES ( 9, 2, 'word | 9' );</db_insert>
+
+<custom_test><![CDATA[
+$run_subtest = create_function ( '&$client, $index1, $index2, &$results, $sd_address, $sd_sphinxql_port', '
+{
+	$query = "word";
+
+	$client->SetGroupBy ( "gid", SPH_GROUPBY_ATTR );
+	$client->AddQuery ( $query, $index1 );
+
+	$client->ResetGroupBy();
+	$client->AddQuery ( $query, $index2 );
+
+	$sphinxql = @mysql_connect ( sprintf ( "%s:%s", $sd_address, $sd_sphinxql_port ) );
+	@mysql_query ( "DELETE FROM test_rt" );
+	@mysql_query ( "INSERT INTO test_rt ( id, gid, title ) VALUES ( 4, 1, \'word | 4\' )" );
+	@mysql_query ( "INSERT INTO test_rt ( id, gid, title ) VALUES ( 5, 2, \'word | 5\' )" );
+	@mysql_query ( "INSERT INTO test_rt ( id, gid, title ) VALUES ( 6, 2, \'word | 6\' )" );
+
+	$res = $client->RunQueries();
+
+	$query_res = $res[0];
+	{
+		$results[] = sprintf ( "query: \"%s\" index: %s", $query, $index1 );
+		foreach ( $query_res["matches"] as $match )
+			$results[] = sprintf ( "\tid: %d, weight: %d, gid: %d, @groupby: %d, @count: %d",
+				$match["id"], $match["weight"], $match["attrs"]["gid"], $match["attrs"]["@groupby"], $match["attrs"]["@count"] );
+	}
+	$query_res = $res[1];
+	{
+		$results[] = sprintf ( "query: \"%s\" index: %s", $query, $index2 );
+		foreach ( $query_res["matches"] as $match )
+			$results[] = sprintf ( "\tid: %d, weight: %d, gid: %d",
+				$match["id"], $match["weight"], $match["attrs"]["gid"] );
+	}
+	$results[] = "";
+}
+' );
+
+
+$client->SetArrayResult(true);
+
+global $sd_address, $sd_sphinxql_port;
+
+$run_subtest ( $client, "test_plain", "test_plain", $results, $sd_address, $sd_sphinxql_port );
+$run_subtest ( $client, "test_rt", "test_rt", $results, $sd_address, $sd_sphinxql_port );
+$run_subtest ( $client, "test_dist", "test_dist", $results, $sd_address, $sd_sphinxql_port );
+
+$run_subtest ( $client, "test_plain", "test_rt", $results, $sd_address, $sd_sphinxql_port );
+$run_subtest ( $client, "test_plain", "test_dist", $results, $sd_address, $sd_sphinxql_port );
+$run_subtest ( $client, "test_rt", "test_dist", $results, $sd_address, $sd_sphinxql_port );
+$run_subtest ( $client, "test_rt", "test_plain", $results, $sd_address, $sd_sphinxql_port );
+$run_subtest ( $client, "test_dist", "test_plain", $results, $sd_address, $sd_sphinxql_port );
+$run_subtest ( $client, "test_dist", "test_rt", $results, $sd_address, $sd_sphinxql_port );
+]]></custom_test>
+
+</test>

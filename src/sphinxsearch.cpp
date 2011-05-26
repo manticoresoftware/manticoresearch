@@ -1543,6 +1543,7 @@ ExtTermPos_c<T>::ExtTermPos_c ( ISphQword * pQword, const XQNode_t * pNode, cons
 	, m_pRawDoc ( NULL )
 	, m_pRawHit ( NULL )
 	, m_uLastID ( 0 )
+	, m_eState ( COPY_DONE )
 	, m_uDoneFor ( 0 )
 	, m_pZoneChecker ( tSetup.m_pZoneChecker )
 	, m_dZones ( pNode->m_dZones )
@@ -1559,6 +1560,7 @@ void ExtTermPos_c<T>::Reset ( const ISphQwordSetup & tSetup )
 	m_pRawDoc = NULL;
 	m_pRawHit = NULL;
 	m_uLastID = 0;
+	m_eState = COPY_DONE;
 	m_uDoneFor = 0;
 }
 
@@ -1707,7 +1709,7 @@ const ExtHit_t * ExtTermPos_c<T>::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocI
 	if ( m_eState==COPY_DONE )
 	{
 		// this request completed in full
-		if ( m_uDoneFor==pDocs->m_uDocid )
+		if ( m_uDoneFor==pDocs->m_uDocid || !m_uDoneFor )
 			return NULL;
 
 		// old request completed in full, but we have a new hits subchunk request now

@@ -55,6 +55,7 @@ CREATE TABLE test_table
 <SPHQueries>
 	<SPHinxQL>select * from test1 where match('aa SENTENCE bb')</SPHinxQL>	
 	<SPHinxQL>select * from test1 where match('(aa SENTENCE bb) cc')</SPHinxQL>	
+	<sphinxql>CALL SNIPPETS ('dummy1 match1 dummy2 match2', 'test1', ' ( match1 NEAR/3 match2 ) | ^missed1 | missed2 ', 1 as query_mode)</sphinxql>
 </SPHQueries>
 
 </Test>

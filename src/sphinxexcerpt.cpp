@@ -806,12 +806,14 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDi
 		SphWordID_t iExactID = 0;
 		if ( bQueryMode && tSettings.m_bIndexExactWords )
 		{
-			int iBytes = pLastTokenEnd - pTokenStart;
 			BYTE sBuf [ 3*SPH_MAX_WORD_LEN+4 ];
-
+			int iBytes = pLastTokenEnd - pTokenStart;
+			if ( iBytes+2>sizeof(sBuf) )
+				iBytes = sizeof(sBuf)-2;
 			memcpy ( sBuf + 1, sWord, iBytes );
 			sBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
 			sBuf[iBytes+1] = '\0';
+
 			iExactID = pDict->GetWordIDNonStemmed ( sBuf );
 		}
 
@@ -2449,6 +2451,8 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor, const CSphHTMLSt
 				if ( tFunctor.m_bHighlightQuery && tFunctor.m_bIndexExactWords )
 				{
 					int iLen = strlen ( (const char *)sWord );
+					if ( iLen+2>sizeof(sExactBuf) )
+						iLen = sizeof(sExactBuf)-2;
 					memcpy ( sExactBuf + 1, sWord, iLen );
 					sExactBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
 					sExactBuf[iLen+1] = '\0';
@@ -2560,6 +2564,8 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor, const CSphHTMLSt
 		if ( tFunctor.m_bHighlightQuery && tFunctor.m_bIndexExactWords )
 		{
 			int iBytes = pLastTokenEnd - pTokenStart;
+			if ( iBytes+2>sizeof(sExactBuf) )
+				iBytes = sizeof(sExactBuf)-2;
 			memcpy ( sExactBuf + 1, sWord, iBytes );
 			sExactBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
 			sExactBuf[iBytes+1] = '\0';

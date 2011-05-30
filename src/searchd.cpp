@@ -7958,7 +7958,6 @@ struct SnippetThread_t
 	ExcerptQuery_t *			m_pQueries;
 	volatile int *				m_pCurQuery;
 	CSphIndex *					m_pIndex;
-	const CSphHTMLStripper *	m_pStripper;
 
 	SnippetThread_t()
 		: m_pLock ( NULL )
@@ -7966,7 +7965,6 @@ struct SnippetThread_t
 		, m_pQueries ( NULL )
 		, m_pCurQuery ( NULL )
 		, m_pIndex ( NULL )
-		, m_pStripper ( NULL )
 	{}
 };
 
@@ -8102,44 +8100,6 @@ bool SnippetReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t &, 
 	return true;
 }
 
-void SnippetThreadFunc ( void * pArg )
-{
-	SnippetThread_t * pDesc = (SnippetThread_t*) pArg;
-
-	CSphScopedPtr<ISphTokenizer> pTok ( pDesc->m_pIndex->GetTokenizer()->Clone ( true ) );
-	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
-	CSphDict * pDictBase = pDesc->m_pIndex->GetDictionary();
-	if ( pDictBase->HasState() )
-	{
-		tDictCloned = pDictBase = pDictBase->Clone();
-	}
-
-	for ( ;; )
-	{
-		pDesc->m_pLock->Lock();
-		if ( *pDesc->m_pCurQuery==pDesc->m_iQueries )
-		{
-			pDesc->m_pLock->Unlock();
-			return;
-		}
-
-		ExcerptQuery_t * pQuery = pDesc->m_pQueries + (*pDesc->m_pCurQuery);
-		(*pDesc->m_pCurQuery)++;
-		bool bDone = ( *pDesc->m_pCurQuery==pDesc->m_iQueries );
-		pDesc->m_pLock->Unlock();
-
-		if ( pQuery->m_iNext>=0 )
-			continue;
-
-		pQuery->m_sRes = sphBuildExcerpt ( *pQuery, pDictBase, pTok.Ptr(),
-			&pDesc->m_pIndex->GetMatchSchema(), pDesc->m_pIndex,
-			pQuery->m_sError, pDesc->m_pStripper );
-
-		if ( bDone )
-			return;
-	}
-}
-
 
 static bool SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPost )
 {
@@ -8224,6 +8184,85 @@ static CSphDict * SetupExactDict ( const CSphIndexSettings & tSettings, const Ex
 
 	tExact = new CSphDictExact ( pDict );
 	return tExact.Ptr();
+}
+
+
+class SnippetContext_t : ISphNoncopyable
+{
+private:
+	CSphScopedPtr<CSphDict> m_tDictCloned;
+	CSphScopedPtr<CSphDict> m_tExactDict;
+
+public:
+	CSphDict * m_pDict;
+	CSphScopedPtr<ISphTokenizer> m_tTokenizer;
+	CSphScopedPtr<CSphHTMLStripper> m_tStripper;
+
+	SnippetContext_t()
+		: m_tDictCloned ( NULL )
+		, m_tExactDict ( NULL )
+		, m_pDict ( NULL )
+		, m_tTokenizer ( NULL )
+		, m_tStripper ( NULL )
+	{
+	}
+
+	bool Setup ( CSphIndex * pIndex, const ExcerptQuery_t & tQuery, CSphString & sError )
+	{
+		CSphScopedPtr<CSphDict> tDictCloned ( NULL );
+		m_pDict = pIndex->GetDictionary();
+		if ( m_pDict->HasState() )
+		{
+			m_tDictCloned = m_pDict = m_pDict->Clone();
+		}
+
+		m_tTokenizer = pIndex->GetTokenizer()->Clone ( true );
+
+		if ( !SetupStripperSPZ ( pIndex->GetSettings(), tQuery, m_tStripper, m_tTokenizer.Ptr(), sError ) )
+			return false;
+
+		////////////////////////////
+		// setup exact dictionary if needed
+		////////////////////////////
+
+		m_pDict = SetupExactDict ( pIndex->GetSettings(), tQuery, m_tExactDict, m_pDict, m_tTokenizer.Ptr() );
+
+		return true;
+	}
+};
+
+
+void SnippetThreadFunc ( void * pArg )
+{
+	SnippetThread_t * pDesc = (SnippetThread_t*) pArg;
+
+	SnippetContext_t tCtx;
+	tCtx.Setup ( pDesc->m_pIndex, *pDesc->m_pQueries, pDesc->m_pQueries->m_sError );
+
+	for ( ;; )
+	{
+		pDesc->m_pLock->Lock();
+		if ( *pDesc->m_pCurQuery==pDesc->m_iQueries )
+		{
+			pDesc->m_pLock->Unlock();
+			return;
+		}
+
+		ExcerptQuery_t * pQuery = pDesc->m_pQueries + (*pDesc->m_pCurQuery);
+		(*pDesc->m_pCurQuery)++;
+		bool bDone = ( *pDesc->m_pCurQuery==pDesc->m_iQueries );
+		pDesc->m_pLock->Unlock();
+
+		if ( pQuery->m_iNext>=0 )
+			continue;
+
+		pQuery->m_sRes = sphBuildExcerpt ( *pQuery, tCtx.m_pDict, tCtx.m_tTokenizer.Ptr(),
+			&pDesc->m_pIndex->GetMatchSchema(), pDesc->m_pIndex,
+			pQuery->m_sError, tCtx.m_tStripper.Ptr() );
+
+		if ( bDone )
+			return;
+	}
 }
 
 
@@ -8363,29 +8402,15 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	}
 
 	CSphIndex * pIndex = pServed->m_pIndex;
-	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
-	CSphDict * pDictBase = pIndex->GetDictionary();
-	if ( pDictBase->HasState() )
-	{
-		tDictCloned = pDictBase = pDictBase->Clone();
-	}
 
-	CSphScopedPtr<ISphTokenizer> pTokenizer ( pIndex->GetTokenizer()->Clone ( true ) );
-	CSphScopedPtr<CSphHTMLStripper> pStripper ( NULL );
-
-	if ( !SetupStripperSPZ ( pIndex->GetSettings(), q, pStripper, pTokenizer.Ptr(), sError ) )
+	SnippetContext_t tCtx;
+	if ( !tCtx.Setup ( pIndex, q, sError ) ) // same path for single - threaded snippets, bail out here on error
 	{
-		tReq.SendErrorReply ( "%s", sError.cstr() );
+		tReq.SendErrorReply ( "%s", sError );
 		pServed->Unlock();
 		return;
 	}
 
-	////////////////////////////
-	// setup exact dictionary if needed
-	////////////////////////////
-
-	CSphScopedPtr<CSphDict> tExactDict ( NULL );
-	pDictBase = SetupExactDict ( pIndex->GetSettings(), q, tExactDict, pDictBase, pTokenizer.Ptr() );
 
 	///////////////////
 	// do highlighting
@@ -8396,7 +8421,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		// boring single threaded loop
 		ARRAY_FOREACH ( i, dQueries )
 		{
-			dQueries[i].m_sRes = sphBuildExcerpt ( dQueries[i], pDictBase, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, dQueries[i].m_sError, pStripper.Ptr() );
+			dQueries[i].m_sRes = sphBuildExcerpt ( dQueries[i], tCtx.m_pDict, tCtx.m_tTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, dQueries[i].m_sError, tCtx.m_tStripper.Ptr() );
 			if ( !dQueries[i].m_sRes )
 				break;
 		}
@@ -8466,7 +8491,6 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 			t.m_pQueries = dQueries.Begin();
 			t.m_pCurQuery = &iCurQuery;
 			t.m_pIndex = pIndex;
-			t.m_pStripper = pStripper.Ptr();
 			if ( i )
 				sphThreadCreate ( &dThreads[i].m_tThd, SnippetThreadFunc, &dThreads[i] );
 		}
@@ -9785,32 +9809,16 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 	q.m_bHasAfterPassageMacro = SnippetTransformPassageMacros ( q.m_sAfterMatch, q.m_sAfterMatchPassage );
 
 	CSphIndex * pIndex = pServed->m_pIndex;
-	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
-	CSphDict * pDictBase = pIndex->GetDictionary();
-	if ( pDictBase->HasState() )
-	{
-		tDictCloned = pDictBase = pDictBase->Clone();
-	}
-
-	CSphScopedPtr<ISphTokenizer> pTokenizer ( pIndex->GetTokenizer()->Clone ( true ) );
-	CSphScopedPtr<CSphHTMLStripper> pStripper ( NULL );
-
-	if ( !SetupStripperSPZ ( pIndex->GetSettings(), q, pStripper, pTokenizer.Ptr(), sError ) )
+	SnippetContext_t tCtx;
+	if ( !tCtx.Setup ( pIndex, q, sError ) )
 	{
 		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
 		pServed->Unlock();
 		return;
 	}
 
-	////////////////////////////
-	// setup exact dictionary if needed
-	////////////////////////////
 
-	CSphScopedPtr<CSphDict> tExactDict ( NULL );
-	pDictBase = SetupExactDict ( pIndex->GetSettings(), q, tExactDict, pDictBase, pTokenizer.Ptr() );
-
-
-	char * sResult = sphBuildExcerpt ( q, pDictBase, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError, pStripper.Ptr() );
+	char * sResult = sphBuildExcerpt ( q, tCtx.m_pDict, tCtx.m_tTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError, tCtx.m_tStripper.Ptr() );
 	if ( !sResult )
 	{
 		sError.SetSprintf ( "highlighting failed: %s", sError.cstr() );

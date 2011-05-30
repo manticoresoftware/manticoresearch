@@ -8406,7 +8406,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	SnippetContext_t tCtx;
 	if ( !tCtx.Setup ( pIndex, q, sError ) ) // same path for single - threaded snippets, bail out here on error
 	{
-		tReq.SendErrorReply ( "%s", sError );
+		tReq.SendErrorReply ( "%s", sError.cstr() );
 		pServed->Unlock();
 		return;
 	}

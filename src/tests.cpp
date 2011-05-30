@@ -1951,6 +1951,10 @@ void TestSentenceTokenizer()
 	const char * SENTENCE = "\2"; // MUST be in sync with sphinx.cpp
 	const char * sTest[] =
 	{
+		"Bill Gates Jr. attended", "bill", "gates", "jr", "attended", NULL,
+		"Very good, Dr. Watson", "very", "good", "dr", "watson", NULL,
+		"VERY GOOD, DR. WATSON", "very", "good", "dr", "watson", NULL,
+		"He left US. Went abroad", "he", "left", "us", SENTENCE, "went", "abroad", NULL,
 		"Known as Mr. Doe", "known", "as", "mr", "doe", NULL,
 		"Survived by Mrs. Doe", "survived", "by", "mrs", "doe", NULL,
 		"J. R. R. Tolkien", "j", "r", "r", "tolkien", NULL,

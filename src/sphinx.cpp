@@ -3448,26 +3448,39 @@ int CSphTokenizerTraits<IS_UTF8>::CodepointArbitration ( int iCode, bool bWasEsc
 					&& ( ( 'a'<=m_pCur[1] && m_pCur[1]<='z' )
 						|| ( m_pCur[1]=='(' && 'a'<=m_pCur[2] && m_pCur[2]<='z' ) ) );
 
-				// preceded by any 1-char or 2-char token that starts with a capital letter, not a boundary
-				// handles middle initials and sentence-starting initials nicely
-				//
-				// J. R. R. Tolkien, who wrote Hobbit ...
-				// John D. Doe ...
-				// Known as Mr. Doe ...
-				bool bMiddleName =
-					( m_iAccum==1 && IsCapital ( m_pCur[-2] ) ) ||
-					( m_iAccum==2 && IsCapital ( m_pCur[-3] ) );
-
-				// preceded by a known 3-byte token
-				// Survived by Mrs. Doe ...
-				if ( m_iAccum==3 )
+				// preceded by something that looks like a middle name, opening first name, salutation
+				bool bMiddleName = false;
+				switch ( m_iAccum )
 				{
-#define LOC_CHECK(_str) \
-	if ( m_sAccum[0]==_str[0] && m_sAccum[1]==_str[1] && m_sAccum[2]==_str[2] ) \
-		bMiddleName = true;
-					LOC_CHECK("mrs");
-					LOC_CHECK("drs");
-#undef LOC_CHECK
+					case 1:
+						// 1-char capital letter
+						// example: J. R. R. Tolkien, who wrote Hobbit ...
+						// example: John D. Doe ...
+						bMiddleName = IsCapital ( m_pCur[-2] );
+						break;
+					case 2:
+						// 2-char token starting with a capital
+						if ( IsCapital ( m_pCur[-3] ) )
+						{
+							// capital+small
+							// example: Known as Mr. Doe ...
+							if ( !IsCapital ( m_pCur[-2] ) )
+								bMiddleName = true;
+
+							// known capital+capital (MR, DR, MS)
+							if (
+								( m_pCur[-3]=='M' && m_pCur[-2]=='R' ) ||
+								( m_pCur[-3]=='M' && m_pCur[-2]=='S' ) ||
+								( m_pCur[-3]=='D' && m_pCur[-2]=='R' ) )
+									bMiddleName = true;
+						}
+						break;
+					case 3:
+						// preceded by a known 3-byte token (MRS, DRS)
+						// example: Survived by Mrs. Doe ...
+						if ( ( m_sAccum[0]=='m' || m_sAccum[0]=='d' ) && m_sAccum[1]=='r' && m_sAccum[2]=='s' )
+							bMiddleName = true;
+						break;
 				}
 
 				if ( !bInwordDot && !bInphraseDot && !bMiddleName )

@@ -3747,6 +3747,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 				// set string pool for string on_sort expression fix up
 				tCtx.SetStringPool ( m_pSegments[iSeg]->m_dStrings.Begin() );
+				ARRAY_FOREACH ( i, dSorters )
+					dSorters[i]->SetStringPool ( m_pSegments[iSeg]->m_dStrings.Begin() );
 
 				CSphMatch * pMatch = pRanker->GetMatchesBuffer();
 				for ( ;; )

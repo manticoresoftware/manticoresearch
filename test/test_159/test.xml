@@ -109,6 +109,9 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select * from dist where match ('cat | eats') order by Str1 asc</sphinxql>
 <sphinxql>select * from dist where match ('cat | eats') order by Str1 asc, sTr2 desc</sphinxql>
 <sphinxql>select * from dist where match ('cat | eats') order by Str1 asc, Idd1 asc</sphinxql>
+<!-- regression missed string pool in grouper on match -->
+<sphinxql>select * from dist where match ('cat | eats') group by str1 within group order by id desc</sphinxql>
+<sphinxql>select * from dist group by str2  within group order by id desc</sphinxql>
 </sphqueries>
 
 </test>

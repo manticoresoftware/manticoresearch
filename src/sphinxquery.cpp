@@ -612,7 +612,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			m_iPendingNulls = m_pTokenizer->GetOvershortCount ();
 			if ( !m_iPendingNulls )
 				return 0;
-			m_iPendingNulls--;
+			m_iPendingNulls = 0;
 			lvalp->pNode = AddKeyword ( NULL );
 			return TOK_KEYWORD;
 		}

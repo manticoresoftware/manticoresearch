@@ -2135,7 +2135,7 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr 
 				continue;
 
 			if ( g_bGotSigterm )
-				sphLogDebug ( "sphSockRead: got SIGTERM, exit -1" );
+				sphLogDebug ( "sphSockRead: select got SIGTERM, exit -1" );
 
 			sphSockSetErrno ( iErr );
 			return -1;
@@ -2179,8 +2179,11 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr 
 		if ( iRes==-1 )
 		{
 			iErr = sphSockGetErrno();
-			if ( iErr==EINTR && !bIntr )
+			if ( iErr==EINTR && !g_bGotSigterm && !bIntr )
 				continue;
+
+			if ( g_bGotSigterm )
+				sphLogDebug ( "sphSockRead: read got SIGTERM, exit -1" );
 
 			sphSockSetErrno ( iErr );
 			return -1;
@@ -11331,6 +11334,8 @@ int PipeAndFork ( bool bFatal, int iHandler )
 		// child process, handle client
 		case 0:
 			g_bHeadDaemon = false;
+			g_bGotSighup = 0; // just in case.. of a race
+			g_bGotSigterm = 0;
 			sphSetProcessInfo ( false );
 			ARRAY_FOREACH ( i, g_dPipes )
 				SafeClose ( g_dPipes[i].m_iFD );

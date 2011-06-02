@@ -4554,9 +4554,9 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			if ( m_iAccum==0 )
 			{
 				m_bWasSpecial = !( iCode & FLAG_CODEPOINT_NGRAM );
+				m_bNonBlended = m_bNonBlended || ( !( iCode & FLAG_CODEPOINT_BLEND ) && !( iCode & FLAG_CODEPOINT_SPECIAL ) );
 				m_pTokenStart = pCur;
 				m_pTokenEnd = m_pCur;
-				m_bNonBlended = m_bNonBlended || !( iCode & FLAG_CODEPOINT_BLEND );
 				AccumCodepoint ( iCode & MASK_CODEPOINT ); // handle special as a standalone token
 			} else
 			{

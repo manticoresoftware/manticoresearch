@@ -2130,13 +2130,12 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr 
 		// if there was EINTR, retry
 		if ( iRes==-1 )
 		{
+			// only let SIGTERM (of all them) to interrupt, and only if explicitly allowed
 			iErr = sphSockGetErrno();
-			if ( iErr==EINTR && !g_bGotSigterm && !bIntr )
+			if (!( iErr==EINTR && g_bGotSigterm && bIntr ))
 				continue;
 
-			if ( g_bGotSigterm )
-				sphLogDebug ( "sphSockRead: select got SIGTERM, exit -1" );
-
+			sphLogDebug ( "sphSockRead: select got SIGTERM, exit -1" );
 			sphSockSetErrno ( iErr );
 			return -1;
 		}
@@ -2178,13 +2177,12 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr 
 		// if there was EINTR, retry
 		if ( iRes==-1 )
 		{
+			// only let SIGTERM (of all them) to interrupt, and only if explicitly allowed
 			iErr = sphSockGetErrno();
-			if ( iErr==EINTR && !g_bGotSigterm && !bIntr )
+			if (!( iErr==EINTR && g_bGotSigterm && bIntr ))
 				continue;
 
-			if ( g_bGotSigterm )
-				sphLogDebug ( "sphSockRead: read got SIGTERM, exit -1" );
-
+			sphLogDebug ( "sphSockRead: read got SIGTERM, exit -1" );
 			sphSockSetErrno ( iErr );
 			return -1;
 		}
@@ -2747,11 +2745,13 @@ bool NetInputBuffer_c::ReadFrom ( int iLen, int iTimeout, bool bIntr, bool bAppe
 	if ( g_bGotSigterm )
 	{
 		sphLogDebug ( "NetInputBuffer_c::ReadFrom: got SIGTERM, return false" );
+		m_bError = true;
+		m_bIntr = true;
 		return false;
 	}
 
-	m_bError = g_bGotSigterm || ( iGot!=iLen );
-	m_bIntr = !g_bGotSigterm && m_bError && ( sphSockPeekErrno()==EINTR );
+	m_bError = ( iGot!=iLen );
+	m_bIntr = m_bError && ( sphSockPeekErrno()==EINTR );
 	m_iLen = m_bError ? 0 : iCur+iLen;
 	return !m_bError;
 }
@@ -9244,20 +9244,27 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD, ThdDes
 	{
 		// in "persistent connection" mode, we want interruptible waits
 		// so that the worker child could be forcibly restarted
+		//
+		// currently, the only signal allowed to interrupt this read is SIGTERM
+		// see sphSockRead() and ReadFrom() for details
 		THD_STATE ( THD_NET_READ );
-		if ( !tBuf.ReadFrom ( 8, iTimeout, bPersist ) && g_bGotSigterm )
+		bool bCommand = tBuf.ReadFrom ( 8, iTimeout, bPersist );
+
+		// on SIGTERM, bail uncoditionally and immediately, at all times
+		if ( !bCommand && g_bGotSigterm )
 			break;
 
-		if ( bPersist && tBuf.IsIntr() )
-		{
-			// SIGHUP means restart
-			if ( g_bGotSighup )
-				break;
+		// on SIGHUP vs pconn, bail if an idle pconn timed out
+		if ( bPersist && !bCommand && sphSockPeekErrno()==ETIMEDOUT )
+			break;
 
-			// otherwise, keep waiting
+		// on any other signals vs pconn, ignore and keep looping
+		// (redundant for now, as the only allowed interruption is SIGTERM, but.. let's keep it)
+		if ( bPersist && !bCommand && tBuf.IsIntr() )
 			continue;
-		}
 
+		// okay, signal related mess should be over, try to parse the command
+		// (but some other socket error still might had happened, so beware)
 		int iCommand = tBuf.GetWord ();
 		int iCommandVer = tBuf.GetWord ();
 		int iLength = tBuf.GetInt ();

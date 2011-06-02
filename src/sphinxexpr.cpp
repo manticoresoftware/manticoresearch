@@ -878,7 +878,6 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		if ( sTok=="@weight" )		return TOK_ATWEIGHT;
 		if ( sTok=="id" )			return TOK_ID;
 		if ( sTok=="weight" )		return TOK_WEIGHT;
-		if ( sTok=="match_weight" )	return TOK_WEIGHT;
 		if ( sTok=="distinct" )		return TOK_DISTINCT;
 		if ( sTok=="@geodist" )
 		{

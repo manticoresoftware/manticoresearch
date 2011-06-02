@@ -48,7 +48,6 @@
 %token	TOK_INTO
 %token	TOK_LIMIT
 %token	TOK_MATCH
-%token	TOK_MATCH_WEIGHT
 %token	TOK_MAX
 %token	TOK_META
 %token	TOK_MIN
@@ -155,24 +154,25 @@ select_items_list:
 	;
 
 select_item:
-	TOK_IDENT					{ pParser->SetSelect ( $1.m_iStart, $1.m_iEnd ); pParser->AddItem ( &$1, NULL ); }
-	| TOK_ID					{ pParser->SetSelect ( $1.m_iStart, $1.m_iEnd ); pParser->AddItem ( "id", &$1, NULL ); pParser->SetNewSyntax(); }
-	| expr opt_as TOK_IDENT				{ pParser->SetSelect ( $1.m_iStart, $3.m_iEnd ); pParser->AddItem ( &$1, &$3 ); }
-	| TOK_AVG '(' expr ')' opt_as TOK_IDENT		{ pParser->SetSelect ($1.m_iStart, $6.m_iEnd); pParser->AddItem ( &$3, &$6, SPH_AGGR_AVG ); }
-	| TOK_MAX '(' expr ')' opt_as TOK_IDENT		{ pParser->SetSelect ($1.m_iStart, $6.m_iEnd); pParser->AddItem ( &$3, &$6, SPH_AGGR_MAX ); }
-	| TOK_MIN '(' expr ')' opt_as TOK_IDENT		{ pParser->SetSelect ($1.m_iStart, $6.m_iEnd); pParser->AddItem ( &$3, &$6, SPH_AGGR_MIN ); }
-	| TOK_SUM '(' expr ')' opt_as TOK_IDENT		{ pParser->SetSelect ($1.m_iStart, $6.m_iEnd); pParser->AddItem ( &$3, &$6, SPH_AGGR_SUM ); }
-	| '*'						{ pParser->SetSelect ($1.m_iStart, $1.m_iEnd); pParser->AddItem ( &$1, NULL ); }
-	| TOK_COUNT '(' '*' ')' opt_as TOK_IDENT	{ pParser->SetSelect ( $1.m_iStart, $6.m_iEnd ); if ( !pParser->AddItem ( "count(*)", &$6, true ) ) YYERROR; }
-	| TOK_WEIGHT '(' ')' opt_as TOK_IDENT		{ pParser->SetSelect ( $1.m_iStart, $5.m_iEnd ); if ( !pParser->AddItem ( "weight()", &$5, true ) ) YYERROR; }
-	| TOK_MATCH_WEIGHT '(' ')' opt_as TOK_IDENT	{ pParser->SetSelect ( $1.m_iStart, $5.m_iEnd ); if ( !pParser->AddItem ( "weight()", &$5, true ) ) YYERROR; }
-	| TOK_COUNT '(' TOK_DISTINCT TOK_IDENT ')' opt_as TOK_IDENT
-							{ pParser->SetSelect ( $1.m_iStart, $7.m_iEnd ); if ( !pParser->AddDistinct ( &$4, &$7 ) ) YYERROR; }
+	'*'						{ pParser->AddItem ( &$1 ); }
+	| select_expr opt_alias
 	;
 
-opt_as:
-	// empty
-	| TOK_AS
+opt_alias:
+	// empty				
+	| TOK_IDENT					{ pParser->AliasLastItem ( &$1 ); }
+	| TOK_AS TOK_IDENT				{ pParser->AliasLastItem ( &$2 ); }
+	;
+
+select_expr:
+	expr						{ pParser->AddItem ( &$1 ); }
+	| TOK_AVG '(' expr ')'				{ pParser->AddItem ( &$3, SPH_AGGR_AVG, &$1, &$4 ); }
+	| TOK_MAX '(' expr ')'				{ pParser->AddItem ( &$3, SPH_AGGR_MAX, &$1, &$4 ); }
+	| TOK_MIN '(' expr ')'				{ pParser->AddItem ( &$3, SPH_AGGR_MIN, &$1, &$4 ); }
+	| TOK_SUM '(' expr ')'				{ pParser->AddItem ( &$3, SPH_AGGR_SUM, &$1, &$4 ); }
+	| TOK_COUNT '(' '*' ')'				{ if ( !pParser->AddItem ( "count(*)", &$1, &$4 ) ) YYERROR; }
+	| TOK_WEIGHT '(' ')'				{ if ( !pParser->AddItem ( "weight()", &$1, &$3 ) ) YYERROR; }
+	| TOK_COUNT '(' TOK_DISTINCT TOK_IDENT ')' 	{ if ( !pParser->AddDistinct ( &$4, &$1, &$5 ) ) YYERROR; }
 	;
 
 ident_list:
@@ -306,12 +306,6 @@ expr_ident:
 				YYERROR;
 		}
 	| TOK_WEIGHT '(' ')'
-		{
-			$$.m_sValue = "@weight";
-			if ( !pParser->SetNewSyntax() )
-				YYERROR;
-		}
-	| TOK_MATCH_WEIGHT '(' ')'
 		{
 			$$.m_sValue = "@weight";
 			if ( !pParser->SetNewSyntax() )
@@ -697,6 +691,11 @@ call_opt:
 			pParser->m_pStmt->m_dCallOptNames.Add ( $3.m_sValue );
 			AddInsval ( pParser->m_pStmt->m_dCallOptValues, $1 );
 		}
+	;
+
+opt_as:
+	// empty
+	| TOK_AS
 	;
 
 call_opt_name:

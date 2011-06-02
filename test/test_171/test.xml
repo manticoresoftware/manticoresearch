@@ -107,17 +107,12 @@ index dist3
 <sphinxql>select gr, count(*) cnt from dist2 group by gr</sphinxql>
 <sphinxql>select gr, count(*) cnt from dist3 group by gr</sphinxql>
 
-<!-- Select weight() and match_weight() on differend kind of dist indexes -->
+<!-- Select weight() :on differend kind of dist indexes -->
 <sphinxql>select id idd, weight() cnt from dist_no group by gr</sphinxql>
 <sphinxql>select id idd, weight() cnt from dist0 group by gr</sphinxql>
 <sphinxql>select id idd, weight() cnt from dist1 group by gr</sphinxql>
 <sphinxql>select id idd, weight() cnt from dist2 group by gr</sphinxql>
 <sphinxql>select id idd, weight() cnt from dist3 group by gr</sphinxql> 
-<sphinxql>select match_weight() cnt from dist_no group by gr</sphinxql>
-<sphinxql>select match_weight() cnt from dist0 group by gr</sphinxql>
-<sphinxql>select match_weight() cnt from dist1 group by gr</sphinxql>
-<sphinxql>select match_weight() cnt from dist2 group by gr</sphinxql>
-<sphinxql>select match_weight() cnt from dist3 group by gr</sphinxql>
 
 <!-- Select count(distinct) on differend kind of dist indexes -->
 <sphinxql>select count(*) cnt, count (distinct tag) tg from dist_no group by gr</sphinxql>
@@ -151,27 +146,22 @@ index dist3
 <sphinxql>select gr from dist_no where count(*)=1</sphinxql>
 <sphinxql>select gr from dist_no where @count=1</sphinxql>
 <sphinxql>select gr from dist_no where weight()=1</sphinxql>
-<sphinxql>select gr from dist_no where match_weight()=1</sphinxql>
 <sphinxql>select gr from dist_no where @weight=1</sphinxql>
 <sphinxql>select gr from dist0 where count(*)=1</sphinxql>
 <sphinxql>select gr from dist0 where @count=1</sphinxql>
 <sphinxql>select gr from dist0 where weight()=1</sphinxql>
-<sphinxql>select gr from dist0 where match_weight()=1</sphinxql>
 <sphinxql>select gr from dist0 where @weight=1</sphinxql>
 <sphinxql>select gr from dist1 where count(*)=1</sphinxql>
 <sphinxql>select gr from dist1 where @count=1</sphinxql>
 <sphinxql>select gr from dist1 where weight()=1</sphinxql>
-<sphinxql>select gr from dist1 where match_weight()=1</sphinxql>
 <sphinxql>select gr from dist1 where @weight=1</sphinxql>
 <sphinxql>select gr from dist2 where count(*)=1</sphinxql>
 <sphinxql>select gr from dist2 where @count=1</sphinxql>
 <sphinxql>select gr from dist2 where weight()=1</sphinxql>
-<sphinxql>select gr from dist2 where match_weight()=1</sphinxql>
 <sphinxql>select gr from dist2 where @weight=1</sphinxql>
 <sphinxql>select gr from dist3 where count(*)=1</sphinxql>
 <sphinxql>select gr from dist3 where @count=1</sphinxql>
 <sphinxql>select gr from dist3 where weight()=1</sphinxql>
-<sphinxql>select gr from dist3 where match_weight()=1</sphinxql>
 <sphinxql>select gr from dist3 where @weight=1</sphinxql>
 
 <!-- The warnings on old syntax -->

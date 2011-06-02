@@ -5150,7 +5150,7 @@ void RemapResult ( CSphSchema * pTarget, AggrResult_t * pRes, bool bMultiSchema=
 	int iCur = 0;
 	int * dMapFrom = NULL;
 
-	if ( pTarget->GetRowSize() )
+	if ( pTarget->GetAttrsCount() )
 		dMapFrom = new int [ pTarget->GetAttrsCount() ];
 
 	ARRAY_FOREACH ( iSchema, pRes->m_dSchemas )
@@ -5422,7 +5422,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	CSphVector<CSphQueryItem> tExtItems;
 	const CSphVector<CSphQueryItem> * pSelectItems = ExpandAsterisk ( tRes.m_tSchema, tQuery.m_dItems, &tExtItems, bUsualApi );
 
-	if ( pSelectItems==&tExtItems && !bUsualApi )
+	if ( !bUsualApi )
 	{
 		AddIDAttribute ( (CVirtualSchema*) &tRes.m_tSchema );
 		ARRAY_FOREACH ( i, tRes.m_dSchemas )
@@ -5457,6 +5457,16 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 					CSphColumnInfo & tItem = tFrontendSchema.GetWAttrs().Add();
 					tItem.m_iIndex = tInternalSchema.GetAttrsCount();
 					tItem.m_sName = tCol.m_sName;
+					ARRAY_FOREACH ( j, (*pSelectItems) )
+						if ( tFrontendSchema.GetAttr(j).m_iIndex<0
+							&& ( (*pSelectItems)[j].m_sExpr.cstr() && (*pSelectItems)[j].m_sExpr==tCol.m_sName ) )
+						{
+							CSphColumnInfo & tItem = tFrontendSchema.GetWAttr(j);
+							tItem.m_iIndex = tInternalSchema.GetAttrsCount();
+							tItem.m_sName = (*pSelectItems)[j].m_sAlias;
+							dKnownItems.Add(j);
+							++iKnownItems;
+						}
 				} else
 					ARRAY_FOREACH ( j, (*pSelectItems) )
 						if ( tFrontendSchema.GetAttr(j).m_iIndex<0
@@ -7334,16 +7344,19 @@ public:
 
 	bool			AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue );
 	bool			AddOption ( const SqlNode_t& tIdent, CSphVector<CSphNamedInt> & dNamed );
-	bool			AddItem ( const char * sNewExpr, SqlNode_t * pAlias, bool bNewSyntax=false );
-	void			AddItem ( SqlNode_t * pExpr, SqlNode_t * pAlias, ESphAggrFunc eFunc=SPH_AGGR_NONE );
-	void			AddItem ( int iStart, int iEnd, SqlNode_t * pAlias, ESphAggrFunc eFunc=SPH_AGGR_NONE );
-	void			SetSelect ( int iStart, int iEnd )
+	void			AddItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc=SPH_AGGR_NONE, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
+	bool			AddItem ( const char * pToken, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
+	void			AliasLastItem ( SqlNode_t * pAlias );
+	void			SetSelect ( SqlNode_t * pStart, SqlNode_t * pEnd=NULL )
 	{
 		if ( m_pQuery )
 		{
-			if ( m_pQuery->m_iSQLSelectStart<0 || m_pQuery->m_iSQLSelectStart>iStart )
-				m_pQuery->m_iSQLSelectStart = iStart;
-			m_pQuery->m_iSQLSelectEnd = iEnd;
+			if ( pStart && ( m_pQuery->m_iSQLSelectStart<0 || m_pQuery->m_iSQLSelectStart>pStart->m_iStart ) )
+				m_pQuery->m_iSQLSelectStart = pStart->m_iStart;
+			if ( !pEnd )
+				pEnd = pStart;
+			if ( pEnd && ( m_pQuery->m_iSQLSelectEnd<0 || m_pQuery->m_iSQLSelectEnd<pEnd->m_iEnd ) )
+				m_pQuery->m_iSQLSelectEnd = pEnd->m_iEnd;
 		}
 	}
 	bool			AddSchemaItem ( SqlNode_t * pNode );
@@ -7354,7 +7367,7 @@ public:
 	bool			AddFloatRangeFilter ( const CSphString & sAttr, float fMin, float fMax );
 	bool			AddUintRangeFilter ( const CSphString & sAttr, DWORD uMin, DWORD uMax );
 	bool			AddUservarFilter ( const CSphString & sCol, const CSphString & sVar, bool bExclude );
-	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pAlias );
+	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd );
 	CSphFilterSettings * AddFilter ( const CSphString & sCol, ESphFilter eType );
 	inline CSphFilterSettings * AddValuesFilter ( const SqlNode_t& sCol )
 	{
@@ -7381,6 +7394,8 @@ public:
 	int							AllocNamedVec ();
 	CSphVector<CSphNamedInt> &	GetNamedVec ( int iIndex );
 	void						FreeNamedVec ( int iIndex );
+private:
+	void			AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
 
 protected:
 	bool						m_bNamedVecBusy;
@@ -7619,40 +7634,48 @@ bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, CSphVector<CSphNamedInt> 
 
 	return true;
 }
-
-void SqlParser_c::AddItem ( int iStart, int iEnd, SqlNode_t * pAlias, ESphAggrFunc eFunc )
+void SqlParser_c::AliasLastItem ( SqlNode_t * pAlias )
 {
-	CSphQueryItem tItem;
-	tItem.m_sExpr.SetBinary ( m_pBuf + iStart, iEnd - iStart );
 	if ( pAlias )
+	{
+		CSphQueryItem & tItem = m_pQuery->m_dItems.Last();
 		tItem.m_sAlias.SetBinary ( m_pBuf + pAlias->m_iStart, pAlias->m_iEnd - pAlias->m_iStart );
-	tItem.m_eAggrFunc = eFunc;
+		tItem.m_sAlias.ToLower();
+		SetSelect ( pAlias );
+	}
+}
+
+void SqlParser_c::AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd )
+{
+	if ( pStart && pEnd )
+	{
+		tItem.m_sAlias.SetBinary ( m_pBuf + pStart->m_iStart, pEnd->m_iEnd - pStart->m_iStart );
+		tItem.m_sAlias.ToLower();
+	} else
+		tItem.m_sAlias = tItem.m_sExpr;
+	SetSelect ( pStart, pEnd );
+}
+
+void SqlParser_c::AddItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFunc, SqlNode_t * pStart, SqlNode_t * pEnd )
+{
+	CSphQueryItem & tItem = m_pQuery->m_dItems.Add();
+	tItem.m_sExpr.SetBinary ( m_pBuf + pExpr->m_iStart, pExpr->m_iEnd - pExpr->m_iStart );
 	tItem.m_sExpr.ToLower();
-	tItem.m_sAlias.ToLower();
-	m_pQuery->m_dItems.Add ( tItem );
+	tItem.m_eAggrFunc = eAggrFunc;
+	AutoAlias ( tItem, pStart?pStart:pExpr, pEnd?pEnd:pExpr );
 }
 
-void SqlParser_c::AddItem ( SqlNode_t * pExpr, SqlNode_t * pAlias, ESphAggrFunc eFunc )
+bool SqlParser_c::AddItem ( const char * pToken, SqlNode_t * pStart, SqlNode_t * pEnd )
 {
-	AddItem ( pExpr->m_iStart, pExpr->m_iEnd, pAlias, eFunc );
-}
-
-bool SqlParser_c::AddItem ( const char * sNewExpr, SqlNode_t * pAlias, bool bNewSyntax )
-{
-	CSphQueryItem tItem;
-	tItem.m_sExpr = sNewExpr;
-	if ( pAlias )
-		tItem.m_sAlias.SetBinary ( m_pBuf + pAlias->m_iStart, pAlias->m_iEnd - pAlias->m_iStart );
+	CSphQueryItem & tItem = m_pQuery->m_dItems.Add();
+	tItem.m_sExpr = pToken;
 	tItem.m_eAggrFunc = SPH_AGGR_NONE;
 	tItem.m_sExpr.ToLower();
-	tItem.m_sAlias.ToLower();
-	m_pQuery->m_dItems.Add ( tItem );
-	if ( !bNewSyntax )
-		return true;
+	AutoAlias ( tItem, pStart, pEnd );
 	return SetNewSyntax();
 }
 
-bool SqlParser_c::AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pAlias )
+bool SqlParser_c::AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd )
 {
 	if ( !m_pQuery->m_sGroupDistinct.IsEmpty() )
 	{
@@ -7661,7 +7684,7 @@ bool SqlParser_c::AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pAlias )
 	}
 
 	m_pQuery->m_sGroupDistinct = pNewExpr->m_sValue;
-	return AddItem ( "@distinct", pAlias, true );
+	return AddItem ( "@distinct", pStart, pEnd );
 }
 
 bool SqlParser_c::AddSchemaItem ( YYSTYPE * pNode )

@@ -4974,8 +4974,11 @@ class SelectParser_t
 {
 public:
 	int				GetToken ( YYSTYPE * lvalp );
-	void			AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias, ESphAggrFunc eAggrFunc=SPH_AGGR_NONE );
-	void			AddItem ( const char * pToken, YYSTYPE * pAlias );
+	void			AddItem ( YYSTYPE * pExpr, ESphAggrFunc eAggrFunc=SPH_AGGR_NONE, YYSTYPE * pStart=NULL, YYSTYPE * pEnd=NULL );
+	void			AddItem ( const char * pToken, YYSTYPE * pStart=NULL, YYSTYPE * pEnd=NULL );
+	void			AliasLastItem ( YYSTYPE * pAlias );
+private:
+	void			AutoAlias ( CSphQueryItem & tItem, YYSTYPE * pStart, YYSTYPE * pEnd );
 
 public:
 	CSphString		m_sParserError;
@@ -5035,7 +5038,6 @@ int SelectParser_t::GetToken ( YYSTYPE * lvalp )
 		LOC_CHECK ( "COUNT", 5, SEL_COUNT );
 		LOC_CHECK ( "DISTINCT", 8, SEL_DISTINCT );
 		LOC_CHECK ( "WEIGHT", 6, SEL_WEIGHT );
-		LOC_CHECK ( "MATCH_WEIGHT", 12, SEL_MATCH_WEIGHT );
 
 		#undef LOC_CHECK
 
@@ -5067,33 +5069,42 @@ int SelectParser_t::GetToken ( YYSTYPE * lvalp )
 	return *m_pCur++;
 }
 
-
-void SelectParser_t::AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias, ESphAggrFunc eAggrFunc )
+void SelectParser_t::AutoAlias ( CSphQueryItem & tItem, YYSTYPE * pStart, YYSTYPE * pEnd )
 {
-	CSphQueryItem tItem;
-	tItem.m_sExpr.SetBinary ( m_pStart + pExpr->m_iStart, pExpr->m_iEnd - pExpr->m_iStart );
-	if ( pAlias )
-		tItem.m_sAlias.SetBinary ( m_pStart + pAlias->m_iStart, pAlias->m_iEnd - pAlias->m_iStart );
-	tItem.m_eAggrFunc = eAggrFunc;
-
-	tItem.m_sExpr.ToLower();
-	tItem.m_sAlias.ToLower();
-
-	m_pQuery->m_dItems.Add ( tItem );
+	if ( pStart && pEnd )
+	{
+		tItem.m_sAlias.SetBinary ( m_pStart + pStart->m_iStart, pEnd->m_iEnd - pStart->m_iStart );
+		tItem.m_sAlias.ToLower();
+	} else
+		tItem.m_sAlias = tItem.m_sExpr;
 }
 
-void SelectParser_t::AddItem ( const char * pToken, YYSTYPE * pAlias )
+void SelectParser_t::AddItem ( YYSTYPE * pExpr, ESphAggrFunc eAggrFunc, YYSTYPE * pStart, YYSTYPE * pEnd )
 {
-	CSphQueryItem tItem;
-	tItem.m_sExpr = pToken;
-	if ( pAlias )
-		tItem.m_sAlias.SetBinary ( m_pStart + pAlias->m_iStart, pAlias->m_iEnd - pAlias->m_iStart );
-	tItem.m_eAggrFunc = SPH_AGGR_NONE;
-
+	CSphQueryItem & tItem = m_pQuery->m_dItems.Add();
+	tItem.m_sExpr.SetBinary ( m_pStart + pExpr->m_iStart, pExpr->m_iEnd - pExpr->m_iStart );
 	tItem.m_sExpr.ToLower();
-	tItem.m_sAlias.ToLower();
+	tItem.m_eAggrFunc = eAggrFunc;
+	AutoAlias ( tItem, pStart, pEnd );
+}
 
-	m_pQuery->m_dItems.Add ( tItem );
+void SelectParser_t::AddItem ( const char * pToken, YYSTYPE * pStart, YYSTYPE * pEnd )
+{
+	CSphQueryItem & tItem = m_pQuery->m_dItems.Add();
+	tItem.m_sExpr = pToken;
+	tItem.m_eAggrFunc = SPH_AGGR_NONE;
+	tItem.m_sExpr.ToLower();
+	AutoAlias ( tItem, pStart, pEnd );
+}
+
+void SelectParser_t::AliasLastItem ( YYSTYPE * pAlias )
+{
+	if ( pAlias )
+	{
+		CSphQueryItem & tItem = m_pQuery->m_dItems.Last();
+		tItem.m_sAlias.SetBinary ( m_pStart + pAlias->m_iStart, pAlias->m_iEnd - pAlias->m_iStart );
+		tItem.m_sAlias.ToLower();
+	}
 }
 
 

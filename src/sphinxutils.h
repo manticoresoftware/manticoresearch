@@ -162,12 +162,12 @@ bool			sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIn
 
 enum ESphLogLevel
 {
-	LOG_FATAL	= 0,
-	LOG_WARNING	= 1,
-	LOG_INFO	= 2,
-	LOG_DEBUG	= 3,
-	LOG_VERBOSE_DEBUG = 4,
-	LOG_VERY_VERBOSE_DEBUG = 5
+	SPH_LOG_FATAL	= 0,
+	SPH_LOG_WARNING	= 1,
+	SPH_LOG_INFO	= 2,
+	SPH_LOG_DEBUG	= 3,
+	SPH_LOG_VERBOSE_DEBUG = 4,
+	SPH_LOG_VERY_VERBOSE_DEBUG = 5
 };
 
 typedef void ( *SphLogger_fn )( ESphLogLevel, const char *, va_list );

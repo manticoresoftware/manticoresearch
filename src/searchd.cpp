@@ -79,6 +79,10 @@
 
 #endif
 
+#if USE_SYSLOG
+	#include <syslog.h>
+#endif
+
 /////////////////////////////////////////////////////////////////////////////
 // MISC GLOBALS
 /////////////////////////////////////////////////////////////////////////////
@@ -183,8 +187,10 @@ enum LogFormat_e
 	LOG_FORMAT_SPHINXQL
 };
 
-static ESphLogLevel		g_eLogLevel		= LOG_INFO;
+static ESphLogLevel		g_eLogLevel		= SPH_LOG_INFO;
 static int				g_iLogFile		= STDOUT_FILENO;	// log file descriptor
+static bool				g_bLogSyslog	= false;
+static bool				g_bQuerySyslog	= false;
 static CSphString		g_sLogFile;							// log file name
 static bool				g_bLogTty		= false;			// cached isatty(g_iLogFile)
 static LogFormat_e		g_eLogFormat	= LOG_FORMAT_PLAIN;
@@ -891,9 +897,9 @@ void sphLogEntry ( ESphLogLevel eLevel, char * sBuf, char * sTtyBuf )
 			WORD eType = EVENTLOG_INFORMATION_TYPE;
 			switch ( eLevel )
 			{
-				case LOG_FATAL:		eType = EVENTLOG_ERROR_TYPE; break;
-				case LOG_WARNING:	eType = EVENTLOG_WARNING_TYPE; break;
-				case LOG_INFO:		eType = EVENTLOG_INFORMATION_TYPE; break;
+				case SPH_LOG_FATAL:		eType = EVENTLOG_ERROR_TYPE; break;
+				case SPH_LOG_WARNING:	eType = EVENTLOG_WARNING_TYPE; break;
+				case SPH_LOG_INFO:		eType = EVENTLOG_INFORMATION_TYPE; break;
 			}
 
 			ReportEvent ( hEventSource,	// event log handle
@@ -934,13 +940,24 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	static const int	FLUSH_THRESH_TIME	= 1000000; // in microseconds
 	static const int	FLUSH_THRESH_COUNT	= 100;
 
-	static ESphLogLevel eLastLevel = LOG_INFO;
+	static ESphLogLevel eLastLevel = SPH_LOG_INFO;
 	static DWORD uLastEntry = 0;
 	static int64_t tmLastStamp = -1000000-FLUSH_THRESH_TIME;
 	static int iLastRepeats = 0;
 
 	// only if we can
-	if ( ( sFmt && eLevel>g_eLogLevel ) || ( g_iLogFile<0 && !g_bService ) )
+	if ( sFmt && eLevel>g_eLogLevel )
+		return;
+
+#if USE_SYSLOG
+	if ( g_bLogSyslog && sFmt )
+	{
+		const int levels[] = { LOG_EMERG, LOG_WARNING, LOG_INFO, LOG_DEBUG, LOG_DEBUG, LOG_DEBUG };
+		vsyslog ( levels[eLevel], sFmt, ap );
+	}
+#endif
+
+	if ( g_iLogFile<0 && !g_bService )
 		return;
 
 	// format the banner
@@ -949,9 +966,9 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 
 	const char * sBanner = "";
 	if ( sFmt==NULL ) eLevel = eLastLevel;
-	if ( eLevel==LOG_FATAL ) sBanner = "FATAL: ";
-	if ( eLevel==LOG_WARNING ) sBanner = "WARNING: ";
-	if ( eLevel>=LOG_DEBUG ) sBanner = "DEBUG: ";
+	if ( eLevel==SPH_LOG_FATAL ) sBanner = "FATAL: ";
+	if ( eLevel==SPH_LOG_WARNING ) sBanner = "WARNING: ";
+	if ( eLevel>=SPH_LOG_DEBUG ) sBanner = "DEBUG: ";
 
 	char sBuf [ 1024 ];
 	snprintf ( sBuf, sizeof(sBuf)-1, "[%s] [%5d] ", sTimeBuf, (int)getpid() );
@@ -990,7 +1007,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 
 		tmLastStamp = tmNow;
 		iLastRepeats = 0;
-		eLastLevel = LOG_INFO;
+		eLastLevel = SPH_LOG_INFO;
 		uLastEntry = 0;
 	}
 
@@ -1012,7 +1029,7 @@ void sphFatal ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
-	sphLog ( LOG_FATAL, sFmt, ap );
+	sphLog ( SPH_LOG_FATAL, sFmt, ap );
 	va_end ( ap );
 	Shutdown ();
 	exit ( 1 );
@@ -4332,7 +4349,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 {
 	assert ( g_eLogFormat==LOG_FORMAT_PLAIN );
-	if ( g_iQueryLogFile<0 || !tRes.m_sError.IsEmpty() )
+	if ( ( !g_bQuerySyslog && g_iQueryLogFile<0 ) || !tRes.m_sError.IsEmpty() )
 		return;
 
 	char sBuf[2048];
@@ -4340,9 +4357,19 @@ void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 	char * pMax = sBuf+sizeof(sBuf)-4;
 
 	// [time]
-	*p++ = '[';
-	p += sphFormatCurrentTime ( p, pMax-p );
-	*p++ = ']';
+#if USE_SYSLOG
+	if ( !g_bQuerySyslog )
+	{
+#endif
+
+		*p++ = '[';
+		p += sphFormatCurrentTime ( p, pMax-p );
+		*p++ = ']';
+
+#if USE_SYSLOG
+	} else
+		p += snprintf ( p, pMax-p, "[query]" );
+#endif
 
 	// querytime sec
 	int iQueryTime = Max ( tRes.m_iQueryTime, 0 );
@@ -4406,6 +4433,11 @@ void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 			*p = ( *q=='\n' ) ? ' ' : *q;
 	}
 
+#if USE_SYSLOG
+	if ( !g_bQuerySyslog )
+	{
+#endif
+
 	// line feed
 	if ( p<pMax-1 )
 	{
@@ -4417,6 +4449,16 @@ void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 
 	lseek ( g_iQueryLogFile, 0, SEEK_END );
 	sphWrite ( g_iQueryLogFile, sBuf, strlen(sBuf) );
+
+#if USE_SYSLOG
+	} else
+	{
+		if ( p<pMax )
+			*p++ = '\0';
+		sBuf[sizeof(sBuf)-1] = '\0';
+		syslog ( LOG_INFO, "%s", sBuf );
+	}
+#endif
 }
 
 
@@ -10677,13 +10719,13 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 		} else if ( tStmt.m_sSetName=="log_level" )
 		{
 			if ( tStmt.m_sSetValue=="info" )
-				g_eLogLevel = LOG_INFO;
+				g_eLogLevel = SPH_LOG_INFO;
 			else if ( tStmt.m_sSetValue=="debug" )
-				g_eLogLevel = LOG_DEBUG;
+				g_eLogLevel = SPH_LOG_DEBUG;
 			else if ( tStmt.m_sSetValue=="debugv" )
-				g_eLogLevel = LOG_VERBOSE_DEBUG;
+				g_eLogLevel = SPH_LOG_VERBOSE_DEBUG;
 			else if ( tStmt.m_sSetValue=="debugvv" )
-				g_eLogLevel = LOG_VERY_VERBOSE_DEBUG;
+				g_eLogLevel = SPH_LOG_VERY_VERBOSE_DEBUG;
 			else
 			{
 				SendMysqlErrorPacket ( tOut, uPacketID, "Unknown log_level value (must be one of info, debug, debugv, debugvv)" );
@@ -12735,7 +12777,7 @@ void CheckReopen ()
 	}
 
 	// reopen query log
-	if ( g_iQueryLogFile!=g_iLogFile && g_iQueryLogFile>=0 && !isatty ( g_iQueryLogFile ) )
+	if ( !g_bQuerySyslog && g_iQueryLogFile!=g_iLogFile && g_iQueryLogFile>=0 && !isatty ( g_iQueryLogFile ) )
 	{
 		int iFD = ::open ( g_sQueryLogFile.cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
 		if ( iFD<0 )
@@ -13983,14 +14025,31 @@ void OpenDaemonLog ( const CSphConfigSection & hSearchd )
 	// create log
 		const char * sLog = "searchd.log";
 		if ( hSearchd.Exists ( "log" ) )
-			sLog = hSearchd["log"].cstr();
+		{
+			if ( hSearchd["log"]=="syslog" )
+#if !USE_SYSLOG
+				if ( g_iLogFile<0 )
+				{
+					g_iLogFile = STDOUT_FILENO;
+					sphWarning ( "failed to use syslog for logging. You have to reconfigure --with-syslog and rebuild the daemon!" );
+					sphInfo ( "will use default file 'searchd.log' for logging." );
+				}
+#else
+				g_bLogSyslog = true;
+#endif
+			else
+				sLog = hSearchd["log"].cstr();
+		}
 
 		umask ( 066 );
-		g_iLogFile = open ( sLog, O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
-		if ( g_iLogFile<0 )
+		if ( !g_bLogSyslog )
 		{
-			g_iLogFile = STDOUT_FILENO;
-			sphFatal ( "failed to open log file '%s': %s", sLog, strerror(errno) );
+			g_iLogFile = open ( sLog, O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
+			if ( g_iLogFile<0 )
+			{
+				g_iLogFile = STDOUT_FILENO;
+				sphFatal ( "failed to open log file '%s': %s", sLog, strerror(errno) );
+			}
 		}
 
 		g_sLogFile = sLog;
@@ -14078,9 +14137,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 #else
 		OPT1 ( "--nodetach" )		g_bOptNoDetach = true;
 #endif
-		OPT1 ( "--logdebug" )		g_eLogLevel = LOG_DEBUG;
-		OPT1 ( "--logdebugv" )		g_eLogLevel = LOG_VERBOSE_DEBUG;
-		OPT1 ( "--logdebugvv" )		g_eLogLevel = LOG_VERY_VERBOSE_DEBUG;
+		OPT1 ( "--logdebug" )		g_eLogLevel = SPH_LOG_DEBUG;
+		OPT1 ( "--logdebugv" )		g_eLogLevel = SPH_LOG_VERBOSE_DEBUG;
+		OPT1 ( "--logdebugvv" )		g_eLogLevel = SPH_LOG_VERY_VERBOSE_DEBUG;
 		OPT1 ( "--safetrace" )		g_bSafeTrace = true;
 		OPT1 ( "--test" )			{ g_bWatchdog = false; bTestMode = true; }
 		OPT1 ( "--strip-path" )		g_bStripPath = true;
@@ -14482,7 +14541,21 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		// create log
 		const char * sLog = "searchd.log";
 		if ( hSearchd.Exists ( "log" ) )
-			sLog = hSearchd["log"].cstr();
+		{
+			if ( hSearchd["log"]=="syslog" )
+#if !USE_SYSLOG
+				if ( g_iLogFile<0 )
+				{
+					g_iLogFile = STDOUT_FILENO;
+					sphWarning ( "failed to use syslog for logging. You have to reconfigure --with-syslog and rebuild the daemon!" );
+					sphInfo ( "will use default file 'searchd.log' for logging." );
+				}
+#else
+				g_bLogSyslog = true;
+#endif
+			else
+				sLog = hSearchd["log"].cstr();
+		}
 
 		umask ( 066 );
 		if ( g_iLogFile!=STDOUT_FILENO )
@@ -14490,11 +14563,14 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			close ( g_iLogFile );
 			g_iLogFile = STDOUT_FILENO;
 		}
-		g_iLogFile = open ( sLog, O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
-		if ( g_iLogFile<0 )
+		if ( !g_bLogSyslog )
 		{
-			g_iLogFile = STDOUT_FILENO;
-			sphFatal ( "failed to open log file '%s': %s", sLog, strerror(errno) );
+			g_iLogFile = open ( sLog, O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
+			if ( g_iLogFile<0 )
+			{
+				g_iLogFile = STDOUT_FILENO;
+				sphFatal ( "failed to open log file '%s': %s", sLog, strerror(errno) );
+			}
 		}
 
 		g_sLogFile = sLog;
@@ -14503,9 +14579,14 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		// create query log if required
 		if ( hSearchd.Exists ( "query_log" ) )
 		{
-			g_iQueryLogFile = open ( hSearchd["query_log"].cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
-			if ( g_iQueryLogFile<0 )
-				sphFatal ( "failed to open query log file '%s': %s", hSearchd["query_log"].cstr(), strerror(errno) );
+			if ( hSearchd["query_log"]=="syslog" )
+				g_bQuerySyslog = true;
+			else
+			{
+				g_iQueryLogFile = open ( hSearchd["query_log"].cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
+				if ( g_iQueryLogFile<0 )
+					sphFatal ( "failed to open query log file '%s': %s", hSearchd["query_log"].cstr(), strerror(errno) );
+			}
 			g_sQueryLogFile = hSearchd["query_log"].cstr();
 		}
 	}
@@ -14635,8 +14716,21 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	// if we're running in console mode, dump queries to tty as well
 	if ( g_bOptNoLock && hSearchd ( "query_log" ) )
+	{
+		g_bQuerySyslog = false;
+		g_bLogSyslog = false;
 		g_iQueryLogFile = g_iLogFile;
+	}
 
+#if USE_SYSLOG
+	if ( g_bLogSyslog || g_bQuerySyslog )
+	{
+		openlog ( "searchd", LOG_PID, LOG_DAEMON );
+	}
+#else
+	if ( g_bQuerySyslog )
+		sphFatal ( "Wrong query_log file! You have to reconfigure --with-syslog and rebuild daemon if you want to use syslog there." );
+#endif
 	/////////////////
 	// serve clients
 	/////////////////

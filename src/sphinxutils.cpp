@@ -1105,7 +1105,7 @@ void sphWarning ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
-	Log ( LOG_WARNING, sFmt, ap );
+	Log ( SPH_LOG_WARNING, sFmt, ap );
 	va_end ( ap );
 }
 
@@ -1114,7 +1114,7 @@ void sphInfo ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
-	Log ( LOG_INFO, sFmt, ap );
+	Log ( SPH_LOG_INFO, sFmt, ap );
 	va_end ( ap );
 }
 
@@ -1122,7 +1122,7 @@ void sphLogFatal ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
-	Log ( LOG_FATAL, sFmt, ap );
+	Log ( SPH_LOG_FATAL, sFmt, ap );
 	va_end ( ap );
 }
 
@@ -1130,7 +1130,7 @@ void sphLogDebug ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
-	Log ( LOG_DEBUG, sFmt, ap );
+	Log ( SPH_LOG_DEBUG, sFmt, ap );
 	va_end ( ap );
 }
 
@@ -1138,7 +1138,7 @@ void sphLogDebugv ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
-	Log ( LOG_VERBOSE_DEBUG, sFmt, ap );
+	Log ( SPH_LOG_VERBOSE_DEBUG, sFmt, ap );
 	va_end ( ap );
 }
 
@@ -1146,7 +1146,7 @@ void sphLogDebugvv ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
-	Log ( LOG_VERY_VERBOSE_DEBUG, sFmt, ap );
+	Log ( SPH_LOG_VERY_VERBOSE_DEBUG, sFmt, ap );
 	va_end ( ap );
 }
 

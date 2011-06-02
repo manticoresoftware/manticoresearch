@@ -2463,7 +2463,8 @@ OPTION ranker=proximity;
 </programlisting>
 Note that <b>all</b> requests would be logged in this format,
 including those sent via SphinxAPI and SphinxSE, not just those
-sent via SphinxQL.
+sent via SphinxQL. Also note, that this kind of logging works only with plain log
+files and will not work if you use 'syslog' for logging.
 </para>
 <para>
 The features of SphinxQL log format compared to the default text
@@ -9603,6 +9604,10 @@ Log file name.
 Optional, default is 'searchd.log'.
 All <filename>searchd</filename> run time events will be logged in this file.
 </para>
+<para>
+Also you can use the 'syslog' as the file name. In this case the events will be sent to syslog daemon.
+To use the syslog option the sphinx must be configured '--with-syslog' on building.
+</para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
 log = /var/log/searchd.log
@@ -9615,6 +9620,12 @@ log = /var/log/searchd.log
 Query log file name.
 Optional, default is empty (do not log queries).
 All search queries will be logged in this file. The format is described in <xref linkend="query-log-format"/>.
+</para>
+<para>
+In case of 'plain' format, you can use the 'syslog' as the path to the log file.
+In this case all search queries will be sent to syslog daemon with LOG_INFO priority,
+prefixed with '[query]' instead of timestamp.
+To use the syslog option the sphinx must be configured '--with-syslog' on building.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>

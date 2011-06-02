@@ -718,6 +718,7 @@ enable_id64
 with_libstemmer
 with_iconv
 with_unixodbc
+with_syslog
 '
       ac_precious_vars='build_alias
 host_alias
@@ -1369,6 +1370,8 @@ Optional Packages:
   --with-iconv            compile with iconv support (default is autodetect)
   --with-unixodbc         compile with UnixODBC support (default is
                           autodetect)
+  --with-syslog           compile with possibility to use syslog for logging
+                          (default is no)
 
 Some influential environment variables:
   CC          C compiler command
@@ -4863,6 +4866,14 @@ else
 fi
 
 
+ac_fn_c_check_header_mongrel "$LINENO" "syslog.h" "ac_cv_header_syslog_h" "$ac_includes_default"
+if test "x$ac_cv_header_syslog_h" = x""yes; then :
+  have_syslog_h=yes
+else
+  have_syslog_h=no
+fi
+
+
 
 
 
@@ -7236,6 +7247,7 @@ fi
 
 
 
+
 # Check whether --with-libstemmer was given.
 if test "${with_libstemmer+set}" = set; then :
   withval=$with_libstemmer; ac_cv_use_libstemmer=$withval
@@ -7477,6 +7489,35 @@ $as_echo "not found" >&6; }
 			{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: ODBC source support will NOT be available" >&5
 $as_echo "$as_me: WARNING: ODBC source support will NOT be available" >&2;}
 		fi
+	fi
+else
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: disabled" >&5
+$as_echo "disabled" >&6; }
+fi
+
+
+
+
+# Check whether --with-syslog was given.
+if test "${with_syslog+set}" = set; then :
+  withval=$with_syslog; ac_cv_use_syslog=$withval
+else
+  ac_cv_use_syslog=no
+
+fi
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for Syslog" >&5
+$as_echo_n "checking for Syslog... " >&6; }
+if test  $ac_cv_use_syslog != no ; then
+	if test  $have_syslog_h = yes ; then
+
+$as_echo "#define USE_SYSLOG 1" >>confdefs.h
+
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+	else
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
 	fi
 else
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: disabled" >&5

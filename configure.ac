@@ -72,6 +72,7 @@ AC_CHECK_HEADER(expat.h,[have_expat_h=yes],[have_expat_h=no])
 AC_CHECK_HEADER(iconv.h,[have_iconv_h=yes],[have_iconv_h=no])
 AC_CHECK_HEADER(zlib.h,[have_zlib_h=yes],[have_zlib_h=no])
 AC_CHECK_HEADER(sql.h,[have_sql_h=yes],[have_sql_h=no])
+AC_CHECK_HEADER(syslog.h,[have_syslog_h=yes],[have_syslog_h=no])
 
 dnl --------------------------------------------------------------------------
 
@@ -398,6 +399,25 @@ if test [ $ac_cv_use_unixodbc != no ]; then
 			AC_MSG_RESULT([not found])
 			AC_MSG_WARN([ODBC source support will NOT be available])
 		fi
+	fi
+else
+	AC_MSG_RESULT([disabled])
+fi
+
+dnl ---
+
+
+AC_ARG_WITH([syslog],
+	AC_HELP_STRING([--with-syslog], [compile with possibility to use syslog for logging (default is no)]),
+	[ac_cv_use_syslog=$withval], [ac_cv_use_syslog=no]
+)
+AC_MSG_CHECKING([for Syslog])
+if test [ $ac_cv_use_syslog != no ]; then
+	if test [ $have_syslog_h = yes ]; then
+		AC_DEFINE([USE_SYSLOG],1,[define to use POSIX Syslog for logging])
+		AC_MSG_RESULT([yes])
+	else
+		AC_MSG_RESULT([no])
 	fi
 else
 	AC_MSG_RESULT([disabled])

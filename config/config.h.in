@@ -250,6 +250,9 @@
 /* Define to 1 if you want to compile with PostgreSQL support */
 #undef USE_PGSQL
 
+/* define to use POSIX Syslog for logging */
+#undef USE_SYSLOG
+
 /* define to use Zlib */
 #undef USE_ZLIB
 

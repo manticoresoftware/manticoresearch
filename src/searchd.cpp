@@ -2128,14 +2128,17 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr 
 		iRes = ::select ( iSock+1, &fdRead, NULL, &fdExcept, &tv );
 
 		// if there was EINTR, retry
+		// if any other error, bail
 		if ( iRes==-1 )
 		{
 			// only let SIGTERM (of all them) to interrupt, and only if explicitly allowed
 			iErr = sphSockGetErrno();
-			if (!( iErr==EINTR && g_bGotSigterm && bIntr ))
+			if ( iErr==EINTR && !( g_bGotSigterm && bIntr ))
 				continue;
 
-			sphLogDebug ( "sphSockRead: select got SIGTERM, exit -1" );
+			if ( iErr==EINTR )
+				sphLogDebug ( "sphSockRead: select got SIGTERM, exit -1" );
+
 			sphSockSetErrno ( iErr );
 			return -1;
 		}
@@ -2175,14 +2178,17 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr 
 		}
 
 		// if there was EINTR, retry
+		// if any other error, bail
 		if ( iRes==-1 )
 		{
 			// only let SIGTERM (of all them) to interrupt, and only if explicitly allowed
 			iErr = sphSockGetErrno();
-			if (!( iErr==EINTR && g_bGotSigterm && bIntr ))
+			if ( iErr==EINTR && !( g_bGotSigterm && bIntr ))
 				continue;
 
-			sphLogDebug ( "sphSockRead: read got SIGTERM, exit -1" );
+			if ( iErr==EINTR )
+				sphLogDebug ( "sphSockRead: select got SIGTERM, exit -1" );
+
 			sphSockSetErrno ( iErr );
 			return -1;
 		}

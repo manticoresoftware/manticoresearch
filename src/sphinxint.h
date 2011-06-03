@@ -461,6 +461,11 @@ public:
 
 typedef AttrIndexBuilder_t<> AttrIndexBuilder_c;
 
+// dirty hack for some build systems which not has LLONG_MAX
+#ifndef LLONG_MAX
+#define LLONG_MAX (((unsigned long long)(-1))>>1)
+#endif
+
 template < typename DOCID >
 void AttrIndexBuilder_t<DOCID>::ResetLocal()
 {

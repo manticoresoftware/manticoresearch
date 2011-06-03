@@ -1430,6 +1430,10 @@ void sphBacktrace ( int iFD, bool bSafe )
 		__asm __volatile__ ( "movq %%rbp,%0":"=r"(pFramePointer):"r"(pFramePointer) );
 #endif
 
+#ifndef SIGRETURN_FRAME_OFFSET
+#define SIGRETURN_FRAME_OFFSET 0
+#endif
+
 		if ( !pFramePointer )
 		{
 			sphSafeInfo ( iFD, "Frame pointer is null, backtrace failed (did you build with -fomit-frame-pointer?)" );

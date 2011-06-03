@@ -13336,8 +13336,10 @@ bool SetWatchDog ( int iDevNull )
 				}
 			} else if ( WIFSTOPPED ( iStatus ) )
 				sphInfo ( "Child %i stopped with signal %i", iPid, WSTOPSIG ( iStatus ) );
+#ifdef WIFCONTINUED
 			else if ( WIFCONTINUED ( iStatus ) )
 				sphInfo ( "Child %i resumed", iPid );
+#endif
 		}
 
 		if ( bShutdown || g_bGotSigterm )

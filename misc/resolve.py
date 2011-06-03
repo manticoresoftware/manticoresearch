@@ -31,6 +31,12 @@ fp.close()
 fp = myopen(sys.argv[1])
 for line in fp.readlines():
 	line = line.rstrip()
+
+	# skip plain boring log entries
+	if re.search('^\[\w+\s+\w+\s+\d+\s+\d+:\d+:\d+\.\d+ \d+\] \[\d+\] \S', line):
+		continue
+
+	# resolve symbols, if any
 	match = re.search('\[0x([0-9a-fA-F]+)\]', line)
 	if match:
 		addr = int(match.group(1), 16)

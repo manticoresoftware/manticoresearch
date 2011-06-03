@@ -9226,7 +9226,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD, ThdDes
 	THD_STATE ( THD_HANDSHAKE );
 
 	bool bPersist = false;
-	int iTimeout = g_iReadTimeout;
+	int iTimeout = g_iReadTimeout; // wait 5 sec until first command
 	NetInputBuffer_c tBuf ( iSock );
 
 	// send my version
@@ -9240,23 +9240,35 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD, ThdDes
 	// get client version and request
 	tBuf.ReadFrom ( 4 ); // FIXME! magic
 	tBuf.GetInt (); // client version is for now unused
+	int iPconnIdle = 0;
 	do
 	{
 		// in "persistent connection" mode, we want interruptible waits
 		// so that the worker child could be forcibly restarted
 		//
 		// currently, the only signal allowed to interrupt this read is SIGTERM
+		// letting SIGHUP interrupt causes trouble under query/rotation pressure
 		// see sphSockRead() and ReadFrom() for details
 		THD_STATE ( THD_NET_READ );
 		bool bCommand = tBuf.ReadFrom ( 8, iTimeout, bPersist );
 
-		// on SIGTERM, bail uncoditionally and immediately, at all times
+		// on SIGTERM, bail unconditionally and immediately, at all times
 		if ( !bCommand && g_bGotSigterm )
 			break;
 
-		// on SIGHUP vs pconn, bail if an idle pconn timed out
-		if ( bPersist && !bCommand && sphSockPeekErrno()==ETIMEDOUT )
+		// on SIGHUP vs pconn, bail if a pconn was idle for 1 sec
+		if ( bPersist && !bCommand && g_bGotSighup && sphSockPeekErrno()==ETIMEDOUT )
 			break;
+
+		// on pconn that was idle for 300 sec (client_timeout), bail
+		if ( bPersist && !bCommand && sphSockPeekErrno()==ETIMEDOUT )
+		{
+			iPconnIdle += iTimeout;
+			if ( iPconnIdle>=g_iClientTimeout )
+				break;
+			continue;
+		} else
+			iPconnIdle = 0;
 
 		// on any other signals vs pconn, ignore and keep looping
 		// (redundant for now, as the only allowed interruption is SIGTERM, but.. let's keep it)
@@ -9324,7 +9336,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD, ThdDes
 			case SEARCHD_COMMAND_EXCERPT:	HandleCommandExcerpt ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_KEYWORDS:	HandleCommandKeywords ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_UPDATE:	HandleCommandUpdate ( iSock, iCommandVer, tBuf, iPipeFD ); break;
-			case SEARCHD_COMMAND_PERSIST:	bPersist = ( tBuf.GetInt()!=0 ); iTimeout = g_iClientTimeout; break;
+			case SEARCHD_COMMAND_PERSIST:	bPersist = ( tBuf.GetInt()!=0 ); iTimeout = 1; break;
 			case SEARCHD_COMMAND_STATUS:	HandleCommandStatus ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_FLUSHATTRS:HandleCommandFlush ( iSock, iCommandVer, tBuf ); break;
 			default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;

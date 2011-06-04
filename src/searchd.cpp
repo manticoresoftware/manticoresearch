@@ -14090,6 +14090,7 @@ void OpenDaemonLog ( const CSphConfigSection & hSearchd )
 		if ( hSearchd.Exists ( "log" ) )
 		{
 			if ( hSearchd["log"]=="syslog" )
+			{
 #if !USE_SYSLOG
 				if ( g_iLogFile<0 )
 				{
@@ -14100,8 +14101,10 @@ void OpenDaemonLog ( const CSphConfigSection & hSearchd )
 #else
 				g_bLogSyslog = true;
 #endif
-			else
+			} else
+			{
 				sLog = hSearchd["log"].cstr();
+			}
 		}
 
 		umask ( 066 );
@@ -14606,6 +14609,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( hSearchd.Exists ( "log" ) )
 		{
 			if ( hSearchd["log"]=="syslog" )
+			{
 #if !USE_SYSLOG
 				if ( g_iLogFile<0 )
 				{
@@ -14616,8 +14620,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 #else
 				g_bLogSyslog = true;
 #endif
-			else
+			} else
+			{
 				sLog = hSearchd["log"].cstr();
+			}
 		}
 
 		umask ( 066 );

@@ -408,6 +408,13 @@ struct Filter_And: public ISphFilter
 	{
 		m_bUsesAttrs = false;
 	}
+
+
+	virtual void SetMVAStorage ( const DWORD * pMva )
+	{
+		ARRAY_FOREACH ( i, m_dFilters )
+			m_dFilters[i]->SetMVAStorage ( pMva );
+	}
 };
 
 // not
@@ -438,6 +445,11 @@ struct Filter_Not: public ISphFilter
 		// if block passes through the filter we can't just negate the
 		// result since it's imprecise at this point
 		return true;
+	}
+
+	virtual void SetMVAStorage ( const DWORD * pMva )
+	{
+		m_pFilter->SetMVAStorage ( pMva );
 	}
 };
 

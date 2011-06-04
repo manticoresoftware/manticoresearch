@@ -7251,6 +7251,14 @@ const char * g_dSqlStmts[STMT_TOTAL] =
 };
 
 
+/// refcounted vector
+template < typename T >
+class RefcountedVector_c : public CSphVector<T>, public ISphRefcounted
+{
+};
+
+typedef CSphRefcountedPtr < RefcountedVector_c<SphAttr_t> > AttrValues_p;
+
 /// insert value
 struct SqlInsert_t
 {
@@ -7258,13 +7266,11 @@ struct SqlInsert_t
 	CSphString				m_sVal;		// OPTIMIZE? use char* and point to node?
 	int64_t					m_iVal;
 	float					m_fVal;
-};
+	AttrValues_p			m_pVals;
 
-
-/// refcounted vector
-template < typename T >
-class RefcountedVector_c : public CSphVector<T>, public ISphRefcounted
-{
+	SqlInsert_t ()
+		: m_pVals ( NULL )
+	{}
 };
 
 
@@ -7278,8 +7284,7 @@ struct SqlNode_t
 	int64_t					m_iValue;
 	float					m_fValue;
 	int						m_iInstype;	// REMOVE? should not we know this somehow else?
-
-	CSphRefcountedPtr < RefcountedVector_c<SphAttr_t> >		m_pValues;	// FIXME? replace with numeric handles into parser state?
+	AttrValues_p			m_pValues; // FIXME? replace with numeric handles into parser state?
 
 	SqlNode_t()
 		: m_iValue ( 0 )
@@ -7460,6 +7465,7 @@ static void AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & tNode 
 	tIns.m_iVal = tNode.m_iValue; // OPTIMIZE? copy conditionally based on type?
 	tIns.m_fVal = tNode.m_fValue;
 	tIns.m_sVal = tNode.m_sValue;
+	tIns.m_pVals = tNode.m_pValues;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -7516,9 +7522,9 @@ public:
 	{
 		switch ( tVal.m_iType )
 		{
-		case TOK_QUOTED_STRING :	return strtoul ( tVal.m_sVal.cstr(), NULL, 10 ); // FIXME? report conversion error?
-		case TOK_CONST_INT:			return int(tVal.m_iVal);
-		case TOK_CONST_FLOAT:		return int(tVal.m_fVal); // FIXME? report conversion error
+			case TOK_QUOTED_STRING :	return strtoul ( tVal.m_sVal.cstr(), NULL, 10 ); // FIXME? report conversion error?
+			case TOK_CONST_INT:			return int(tVal.m_iVal);
+			case TOK_CONST_FLOAT:		return int(tVal.m_fVal); // FIXME? report conversion error
 		}
 		return 0;
 	}
@@ -7526,9 +7532,9 @@ public:
 	{
 		switch ( tVal.m_iType )
 		{
-		case TOK_QUOTED_STRING :	return strtoll ( tVal.m_sVal.cstr(), NULL, 10 ); // FIXME? report conversion error?
-		case TOK_CONST_INT:			return tVal.m_iVal;
-		case TOK_CONST_FLOAT:		return int(tVal.m_fVal); // FIXME? report conversion error?
+			case TOK_QUOTED_STRING :	return strtoll ( tVal.m_sVal.cstr(), NULL, 10 ); // FIXME? report conversion error?
+			case TOK_CONST_INT:			return tVal.m_iVal;
+			case TOK_CONST_FLOAT:		return int(tVal.m_fVal); // FIXME? report conversion error?
 		}
 		return 0;
 	}
@@ -7542,29 +7548,31 @@ public:
 	{
 		switch ( eTargetType )
 		{
-		case SPH_ATTR_INTEGER:
-		case SPH_ATTR_TIMESTAMP:
-			CSphMatch::SetAttr ( tLoc, ToInt(tVal) );
-			break;
-		case SPH_ATTR_BIGINT:
-			CSphMatch::SetAttr ( tLoc, ToBigInt(tVal) );
-			break;
-		case SPH_ATTR_FLOAT:
-			if ( tVal.m_iType==TOK_QUOTED_STRING )
-				SetAttrFloat ( tLoc, (float)strtod ( tVal.m_sVal.cstr(), NULL ) ); // FIXME? report conversion error?
-			else if ( tVal.m_iType==TOK_CONST_INT )
-				SetAttrFloat ( tLoc, float(tVal.m_iVal) ); // FIXME? report conversion error?
-			else if ( tVal.m_iType==TOK_CONST_FLOAT )
-				SetAttrFloat ( tLoc, tVal.m_fVal );
-			break;
-		case SPH_ATTR_STRING:
-			CSphMatch::SetAttr ( tLoc, 0 );
-			break;
-		default:
-			return false;
+			case SPH_ATTR_INTEGER:
+			case SPH_ATTR_TIMESTAMP:
+				CSphMatch::SetAttr ( tLoc, ToInt(tVal) );
+				break;
+			case SPH_ATTR_BIGINT:
+				CSphMatch::SetAttr ( tLoc, ToBigInt(tVal) );
+				break;
+			case SPH_ATTR_FLOAT:
+				if ( tVal.m_iType==TOK_QUOTED_STRING )
+					SetAttrFloat ( tLoc, (float)strtod ( tVal.m_sVal.cstr(), NULL ) ); // FIXME? report conversion error?
+				else if ( tVal.m_iType==TOK_CONST_INT )
+					SetAttrFloat ( tLoc, float(tVal.m_iVal) ); // FIXME? report conversion error?
+				else if ( tVal.m_iType==TOK_CONST_FLOAT )
+					SetAttrFloat ( tLoc, tVal.m_fVal );
+				break;
+			case SPH_ATTR_STRING:
+			case SPH_ATTR_UINT32SET:
+				CSphMatch::SetAttr ( tLoc, 0 );
+				break;
+			default:
+				return false;
 		};
 		return true;
 	}
+
 	inline bool SetDefaultAttr ( const CSphAttrLocator & tLoc, ESphAttr eTargetType )
 	{
 		SqlInsert_t tVal;
@@ -9674,7 +9682,9 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 		}
 	}
 
-	CSphVector< const char * > dStrings;
+	CSphVector<const char *> dStrings;
+	CSphVector<DWORD> dMvas;
+
 	// convert attrs
 	for ( int c=0; c<tStmt.m_iRowsAffected; c++ )
 	{
@@ -9684,6 +9694,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 		tDoc.Reset ( tSchema.GetRowSize() );
 		tDoc.m_iDocID = (SphDocID_t)CSphMatchVariant::ToDocid ( tStmt.m_dInsertValues[iIdIndex + c * iExp] );
 		dStrings.Resize ( 0 );
+		dMvas.Resize ( 0 );
 
 		for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
 		{
@@ -9699,15 +9710,35 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 				bResult = tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );
 				if ( tCol.m_eAttrType==SPH_ATTR_STRING )
 					dStrings.Add ( NULL );
+				if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET )
+					dMvas.Add ( 0 );
 			} else
 			{
 				const SqlInsert_t & tVal = tStmt.m_dInsertValues[iQuerySchemaIdx + c * iExp];
 
 				// sanity checks
-				if ( tVal.m_iType!=TOK_QUOTED_STRING && tVal.m_iType!=TOK_CONST_INT && tVal.m_iType!=TOK_CONST_FLOAT )
+				if ( tVal.m_iType!=TOK_QUOTED_STRING && tVal.m_iType!=TOK_CONST_INT && tVal.m_iType!=TOK_CONST_FLOAT && tVal.m_iType!=TOK_CONST_MVA )
 				{
 					sError.SetSprintf ( "raw %d, column %d: internal error: unknown insval type %d", 1+c, 1+iQuerySchemaIdx, tVal.m_iType ); // 1 for human base
 					break;
+				}
+				if ( tVal.m_iType==TOK_CONST_MVA && tCol.m_eAttrType!=SPH_ATTR_UINT32SET )
+				{
+					sError.SetSprintf ( "raw %d, column %d: MVA value specified for a non-MVA column", 1+c, 1+iQuerySchemaIdx ); // 1 for human base
+					break;
+				}
+
+				if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET )
+				{
+					// collect data from scattered insvals
+					// note that values still needs to be Uniq()ed at this point
+					// FIXME! maybe remove this mess, and just have a single m_dMvas pool in parser instead?
+					dMvas.Add ( tVal.m_pVals->GetLength() );
+					for ( int j=0; j<tVal.m_pVals->GetLength(); j++ )
+					{
+						DWORD uMva = (DWORD)( *tVal.m_pVals.Ptr() )[j];
+						dMvas.Add ( uMva );
+					}
 				}
 
 				// FIXME? index schema is lawfully static, but our temp match obviously needs to be dynamic
@@ -9746,7 +9777,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 			break;
 
 		// do add
-		pIndex->AddDocument ( dFields.GetLength(), dFields.Begin(), tDoc, bReplace, dStrings.Begin(), sError );
+		pIndex->AddDocument ( dFields.GetLength(), dFields.Begin(), tDoc, bReplace, dStrings.Begin(), dMvas, sError );
 
 		if ( !sError.IsEmpty() )
 			break;
@@ -12404,9 +12435,9 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		}
 
 		// attrs
-		const int iNumTypes = 5;
-		const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_float", "rt_attr_timestamp", "rt_attr_string" };
-		const ESphAttr iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_FLOAT, SPH_ATTR_TIMESTAMP, SPH_ATTR_STRING };
+		const int iNumTypes = 6;
+		const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_float", "rt_attr_timestamp", "rt_attr_string", "rt_attr_multi" };
+		const ESphAttr iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_FLOAT, SPH_ATTR_TIMESTAMP, SPH_ATTR_STRING, SPH_ATTR_UINT32SET };
 
 		for ( int iType=0; iType<iNumTypes; iType++ )
 		{

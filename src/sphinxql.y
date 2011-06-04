@@ -14,6 +14,7 @@
 %token	TOK_ATIDENT
 %token	TOK_CONST_INT
 %token	TOK_CONST_FLOAT
+%token	TOK_CONST_MVA
 %token	TOK_QUOTED_STRING
 %token	TOK_USERVAR
 %token	TOK_SYSVAR
@@ -326,7 +327,7 @@ const_int:
 
 const_float:
 	TOK_CONST_FLOAT			{ $$.m_iInstype = TOK_CONST_FLOAT; $$.m_fValue = $1.m_fValue; }
-	| '-' TOK_CONST_FLOAT		{ $$.m_iInstype = TOK_CONST_FLOAT; $$.m_fValue = -$2.m_fValue; }
+	| '-' TOK_CONST_FLOAT	{ $$.m_iInstype = TOK_CONST_FLOAT; $$.m_fValue = -$2.m_fValue; }
 	;
 
 const_list:
@@ -610,7 +611,7 @@ insert_into:
 
 insert_or_replace:
 	TOK_INSERT		{ pParser->m_pStmt->m_eStmt = STMT_INSERT; }
-	| TOK_REPLACE		{ pParser->m_pStmt->m_eStmt = STMT_REPLACE; }
+	| TOK_REPLACE	{ pParser->m_pStmt->m_eStmt = STMT_REPLACE; }
 	;
 
 opt_column_list:
@@ -619,7 +620,7 @@ opt_column_list:
 	;
 
 column_list:
-	expr_ident				{ if ( !pParser->AddSchemaItem ( &$1 ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } }
+	expr_ident							{ if ( !pParser->AddSchemaItem ( &$1 ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } }
 	| column_list ',' expr_ident		{ if ( !pParser->AddSchemaItem ( &$3 ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } }
 	;
 
@@ -629,18 +630,19 @@ insert_rows_list:
 	;
 
 insert_row:
-	'(' insert_vals_list ')'		{ if ( !pParser->m_pStmt->CheckInsertIntegrity() ) { yyerror ( pParser, "wrong number of values here" ); YYERROR; } }
+	'(' insert_vals_list ')'			{ if ( !pParser->m_pStmt->CheckInsertIntegrity() ) { yyerror ( pParser, "wrong number of values here" ); YYERROR; } }
 	;
 
 insert_vals_list:
-	insert_val				{ AddInsval ( pParser->m_pStmt->m_dInsertValues, $1 ); }
+	insert_val							{ AddInsval ( pParser->m_pStmt->m_dInsertValues, $1 ); }
 	| insert_vals_list ',' insert_val	{ AddInsval ( pParser->m_pStmt->m_dInsertValues, $3 ); }
 	;
 
 insert_val:
 	const_int				{ $$.m_iInstype = TOK_CONST_INT; $$.m_iValue = $1.m_iValue; }
-	| const_float				{ $$.m_iInstype = TOK_CONST_FLOAT; $$.m_fValue = $1.m_fValue; }
-	| TOK_QUOTED_STRING			{ $$.m_iInstype = TOK_QUOTED_STRING; $$.m_sValue = $1.m_sValue; }
+	| const_float			{ $$.m_iInstype = TOK_CONST_FLOAT; $$.m_fValue = $1.m_fValue; }
+	| TOK_QUOTED_STRING		{ $$.m_iInstype = TOK_QUOTED_STRING; $$.m_sValue = $1.m_sValue; }
+	| '(' const_list ')'	{ $$.m_iInstype = TOK_CONST_MVA; $$.m_iValue = $2.m_pValues->GetLength(); $$.m_pValues = $2.m_pValues; }
 	;
 
 //////////////////////////////////////////////////////////////////////////

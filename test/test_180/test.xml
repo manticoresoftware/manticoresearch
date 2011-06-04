@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>rt MVA</name>
+
+<skip_indexer/>
+<requires>
+	<force-rt/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+index rt1
+{
+	type			= rt
+    docinfo			= extern
+    charset_type	= sbcs
+	path			= <data_path/>/rt1
+
+	rt_attr_uint	= idd
+	rt_attr_string	= str1
+	rt_attr_multi = mva1
+	rt_attr_multi = mva2
+	rt_field		= body
+}
+
+</config>
+
+
+<sphqueries>
+<sphinxql>insert into rt1 (id, idd, str1, mva1, body) values ( 1, 1, '', ( 1, 10, 100), 'the' )</sphinxql>
+<sphinxql>insert into rt1 (id, idd, str1, mva2, body) values ( 2, 2, '', ( 11, 12, 13), 'the' )</sphinxql>
+<sphinxql>select * from rt1 where mva1>12</sphinxql>
+<sphinxql>select * from rt1 where match ('the')  and mva1>12</sphinxql>
+<sphinxql>select * from rt1 where mva1=10</sphinxql>
+<sphinxql>select * from rt1 where match ('the')  and mva1=10</sphinxql>
+<sphinxql>select * from rt1 where mva1!=100</sphinxql>
+<sphinxql>select * from rt1 where match ('the')  and mva1!=100</sphinxql>
+<sphinxql>insert into rt1 (id, idd, str1, mva1, mva2, body) values ( 3, 3, '', ( 200, 201, 210),  (300, 301, 310), 'the' )</sphinxql>
+<sphinxql>select * from rt1 order by mva1 asc</sphinxql>
+<sphinxql>select * from rt1 where match ('the') order by mva1 asc</sphinxql>
+<sphinxql>select * from rt1 order by mva1 desc</sphinxql>
+<sphinxql>select * from rt1 where match ('the') order by mva1 desc</sphinxql>
+<sphinxql>select * from rt1 group by mva1 within group order by mva2 desc</sphinxql>
+<sphinxql>select * from rt1 where match ('the') group by mva1 within group order by mva2 desc</sphinxql>
+<sphinxql>insert into rt1 (id, idd, str1, mva1, mva2, body) values ( 4, 4, '', ( 200, 210),  (100, 101, 102), 'the' )</sphinxql>
+<sphinxql>select *, count (*) as c from rt1 group by mva1 within group order by mva2 desc</sphinxql>
+<sphinxql>select *, count (*) as c from rt1 where match ('the') group by mva1 within group order by mva2 desc</sphinxql>
+<sphinxql>select *, count (distinct mva2) as c from rt1 group by mva1 within group order by mva2 desc</sphinxql>
+<sphinxql>select *, count (*) as c from rt1 where match ('the') group by mva1 within group order by mva2 desc</sphinxql>
+<sphinxql>select *, count (distinct mva1) as c from rt1 group by mva1 within group order by mva2 desc</sphinxql>
+<sphinxql>select *, count (distinct mva2) as c from rt1 where match ('the') group by mva1 within group order by mva2 desc</sphinxql>
+</sphqueries>
+
+</test>

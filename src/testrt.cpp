@@ -71,6 +71,7 @@ void DoSearch ( CSphIndex * pIndex )
 void DoIndexing ( CSphSource * pSrc, ISphRtIndex * pIndex )
 {
 	CSphString sError;
+	CSphVector<DWORD> dMvas;
 
 	int64_t tmStart = sphMicroTimer ();
 	int64_t tmAvgCommit = 0;
@@ -85,7 +86,7 @@ void DoIndexing ( CSphSource * pSrc, ISphRtIndex * pIndex )
 			sphDie ( "iterate-hits failed: %s", sError.cstr() );
 
 		if ( pSrc->m_tDocInfo.m_iDocID )
-			pIndex->AddDocument ( pHitsNext, pSrc->m_tDocInfo, NULL, sError );
+			pIndex->AddDocument ( pHitsNext, pSrc->m_tDocInfo, NULL, dMvas, sError );
 
 		if ( ( pSrc->GetStats().m_iTotalDocuments % COMMIT_STEP )==0 || !pSrc->m_tDocInfo.m_iDocID )
 		{

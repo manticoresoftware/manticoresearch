@@ -1713,6 +1713,7 @@ void TestRTWeightBoundary ()
 		Verify ( pIndex->Prealloc ( false, false, sError ) );
 
 		ISphHits * pHits;
+		CSphVector<DWORD> dMvas;
 		for ( ;; )
 		{
 			Verify ( pSrc->IterateDocument ( sError ) );
@@ -1723,7 +1724,7 @@ void TestRTWeightBoundary ()
 			if ( !pHits )
 				break;
 
-			pIndex->AddDocument ( pHits, pSrc->m_tDocInfo, NULL, sError );
+			pIndex->AddDocument ( pHits, pSrc->m_tDocInfo, NULL, dMvas, sError );
 			pIndex->Commit ();
 		}
 
@@ -1889,6 +1890,7 @@ void TestRTSendVsMerge ()
 	ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, pIndex->GetMatchSchema(), tResult.m_sError, false );
 	assert ( pSorter );
 
+	CSphVector<DWORD> dMvas;
 	for ( ;; )
 	{
 		Verify ( pSrc->IterateDocument ( sError ) );
@@ -1899,7 +1901,7 @@ void TestRTSendVsMerge ()
 		if ( !pHits )
 			break;
 
-		pIndex->AddDocument ( pHits, pSrc->m_tDocInfo, NULL, sError );
+		pIndex->AddDocument ( pHits, pSrc->m_tDocInfo, NULL, dMvas, sError );
 		if ( pSrc->m_tDocInfo.m_iDocID==350 )
 		{
 			pIndex->Commit ();

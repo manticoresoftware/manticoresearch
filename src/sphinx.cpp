@@ -6033,27 +6033,18 @@ CSphQueryResult::CSphQueryResult ()
 
 CSphQueryResult::~CSphQueryResult ()
 {
-	ARRAY_FOREACH ( i, m_dAttr2Free )
+	ARRAY_FOREACH ( i, m_dStorage2Free )
 	{
-		SafeDeleteArray ( m_dAttr2Free[i] );
-	}
-
-	ARRAY_FOREACH ( i, m_dStr2Free )
-	{
-		SafeDeleteArray ( m_dStr2Free[i] );
+		SafeDeleteArray ( m_dStorage2Free[i] );
 	}
 }
 
 void CSphQueryResult::LeakStorages ( CSphQueryResult & tDst )
 {
-	ARRAY_FOREACH ( i, m_dAttr2Free )
-		tDst.m_dAttr2Free.Add ( m_dAttr2Free[i] );
+	ARRAY_FOREACH ( i, m_dStorage2Free )
+		tDst.m_dStorage2Free.Add ( m_dStorage2Free[i] );
 
-	ARRAY_FOREACH ( i, m_dStr2Free )
-		tDst.m_dStr2Free.Add ( m_dStr2Free[i] );
-
-	m_dAttr2Free.Reset();
-	m_dStr2Free.Reset();
+	m_dStorage2Free.Reset();
 }
 
 
@@ -7604,7 +7595,7 @@ bool CSphIndex_VLN::PrecomputeMinMax()
 
 	for ( DWORD uIndexEntry=0; uIndexEntry<m_uDocinfo; uIndexEntry++ )
 	{
-		if ( !tBuilder.Collect ( &m_pDocinfo[uIndexEntry*uStride], m_pMva, m_sLastError ) )
+		if ( !tBuilder.Collect ( &m_pDocinfo[uIndexEntry*uStride], m_pMva.GetWritePtr(), (int64_t)m_pMva.GetNumEntries(), m_sLastError ) )
 			return false;
 		m_uMinMaxIndex += uStride;
 
@@ -11923,6 +11914,7 @@ void CSphQueryContext::CalcFinal ( CSphMatch & tMatch ) const
 	CalcContextItems ( tMatch, m_dCalcFinal );
 }
 
+
 void CSphQueryContext::SetStringPool ( const BYTE * pStrings )
 {
 	ARRAY_FOREACH ( i, m_dCalcFilter )
@@ -11934,6 +11926,26 @@ void CSphQueryContext::SetStringPool ( const BYTE * pStrings )
 	ARRAY_FOREACH ( i, m_dCalcFinal )
 		m_dCalcFinal[i].m_pExpr->SetStringPool ( pStrings );
 }
+
+
+void CSphQueryContext::SetMVAPool ( const DWORD * pMva )
+{
+	ARRAY_FOREACH ( i, m_dCalcFilter )
+		m_dCalcFilter[i].m_pExpr->SetMVAPool ( pMva );
+
+	ARRAY_FOREACH ( i, m_dCalcSort )
+		m_dCalcSort[i].m_pExpr->SetMVAPool ( pMva );
+
+	ARRAY_FOREACH ( i, m_dCalcFinal )
+		m_dCalcFinal[i].m_pExpr->SetMVAPool ( pMva );
+
+	if ( m_pFilter )
+		m_pFilter->SetMVAStorage ( pMva );
+
+	if ( m_pWeightFilter )
+		m_pWeightFilter->SetMVAStorage ( pMva );
+}
+
 
 bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker, int iTag ) const
 {

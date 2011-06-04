@@ -38,7 +38,7 @@ index rt
 	type			= rt
     docinfo			= extern
     charset_type	= sbcs
-	path			= <data_path/>/plain
+	path			= <data_path/>/rt
 
 	rt_attr_uint	= IDD1
 	rt_attr_uint	= iDD2

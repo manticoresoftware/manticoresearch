@@ -267,7 +267,9 @@ public:
 	void						CalcSort ( CSphMatch & tMatch ) const;
 	void						CalcFinal ( CSphMatch & tMatch ) const;
 
+	// rt index bind pools at segment searching, not at time it setups context
 	void						SetStringPool ( const BYTE * pStrings );
+	void						SetMVAPool ( const DWORD * pMva );
 };
 
 struct SphStringSorterRemap_t
@@ -438,7 +440,7 @@ public:
 	void Prepare ( DWORD * pOutBuffer, DWORD * pOutMax );
 
 	void CollectWithoutMvas ( const DWORD * pCur, bool bUseMvas );
-	bool Collect ( const DWORD * pCur, const CSphSharedBuffer<DWORD> & pMvas, CSphString & sError );
+	bool Collect ( const DWORD * pCur, const DWORD * pMvas, int64_t iMvasCount, CSphString & sError );
 	void Collect ( const DWORD * pCur, const struct CSphDocMVA & dMvas );
 	void CollectMVA ( DOCID uDocID, const CSphVector< CSphVector<DWORD> > & dCurInfo );
 
@@ -653,7 +655,7 @@ void AttrIndexBuilder_t<DOCID>::CollectWithoutMvas ( const DWORD * pCur, bool bU
 }
 
 template < typename DOCID >
-bool AttrIndexBuilder_t<DOCID>::Collect ( const DWORD * pCur, const CSphSharedBuffer<DWORD> & pMvas, CSphString & sError )
+bool AttrIndexBuilder_t<DOCID>::Collect ( const DWORD * pCur, const DWORD * pMvas, int64_t iMvasCount, CSphString & sError )
 {
 	CollectWithoutMvas ( pCur, true );
 
@@ -668,20 +670,20 @@ bool AttrIndexBuilder_t<DOCID>::Collect ( const DWORD * pCur, const CSphSharedBu
 			continue;
 
 		// sanity checks
-		if ( uOff>=(int64_t)pMvas.GetNumEntries() )
+		if ( uOff>=iMvasCount )
 		{
 			sError.SetSprintf ( "broken index: mva offset out of bounds, id=" DOCID_FMT, (SphDocID_t)uDocID );
 			return false;
 		}
 
-		const DWORD * pMva = &pMvas [ MVA_DOWNSIZE ( uOff ) ]; // don't care about updates at this point
+		const DWORD * pMva = pMvas + uOff; // don't care about updates at this point
 
 		if ( i==0 && DOCINFO2ID_T<DOCID> ( pMva-DWSIZEOF(DOCID) )!=uDocID )
 		{
 			sError.SetSprintf ( "broken index: mva docid verification failed, id=" DOCID_FMT, (SphDocID_t)uDocID );
 			return false;
 		}
-		if ( uOff+pMva[0]>=(int64_t)pMvas.GetNumEntries() )
+		if ( uOff+pMva[0]>=iMvasCount )
 		{
 			sError.SetSprintf ( "broken index: mva list out of bounds, id=" DOCID_FMT, (SphDocID_t)uDocID );
 			return false;

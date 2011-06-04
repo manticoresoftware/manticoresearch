@@ -2306,8 +2306,7 @@ public:
 	const DWORD *			m_pMva;				///< pointer to MVA storage
 	const BYTE *			m_pStrings;			///< pointer to strings storage
 
-	CSphVector<BYTE *>			m_dStr2Free;		/// < aggregated external string attributes from rt indexes
-	CSphVector<CSphRowitem *>	m_dAttr2Free;		///< aggregated external result attributes from rt indexes
+	CSphVector<void *>		m_dStorage2Free;	/// < aggregated external storage from rt indexes
 
 	int						m_iOffset;			///< requested offset into matches array
 	int						m_iCount;			///< count which will be actually served (computed from total, offset and limit)

@@ -575,34 +575,41 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 
 		if ( p>sToken && ( *p=='\0' || isspace ( *(BYTE*)p ) || IsSpecial(*p) ) )
 		{
-			// got a number followed by a whitespace or special, handle it
-			char sNumberBuf[16];
-
-			int iNumberLen = Min ( (int)sizeof(sNumberBuf)-1, int(p-sToken) );
-			memcpy ( sNumberBuf, sToken, iNumberLen );
-			sNumberBuf[iNumberLen] = '\0';
-			m_tPendingToken.tInt.iValue = atoi ( sNumberBuf );
-
-			// check if it can be used as a keyword too
-			m_pTokenizer->SetBuffer ( (BYTE*)sNumberBuf, iNumberLen );
-			sToken = (const char*) m_pTokenizer->GetToken();
-			m_pTokenizer->SetBuffer ( m_sQuery, m_iQueryLen );
-			m_pTokenizer->SetBufferPtr ( p );
-
-			m_tPendingToken.tInt.iStrIndex = -1;
-			if ( sToken )
+			if ( m_pTokenizer->GetToken() && m_pTokenizer->TokenIsBlended() ) // number with blended should be tokenized as usual
 			{
-				m_dIntTokens.Add ( sToken );
-				if ( m_pDict->GetWordID ( (BYTE*)sToken ) )
-					m_tPendingToken.tInt.iStrIndex = m_dIntTokens.GetLength()-1;
-				else
-					m_dIntTokens.Pop();
-				m_iAtomPos++;
-			}
+				m_pTokenizer->SkipBlended();
+				m_pTokenizer->SetBufferPtr ( m_pLastTokenStart );
+			} else
+			{
+				// got a number followed by a whitespace or special, handle it
+				char sNumberBuf[16];
 
-			m_iPendingNulls = 0;
-			m_iPendingType = TOK_INT;
-			break;
+				int iNumberLen = Min ( (int)sizeof(sNumberBuf)-1, int(p-sToken) );
+				memcpy ( sNumberBuf, sToken, iNumberLen );
+				sNumberBuf[iNumberLen] = '\0';
+				m_tPendingToken.tInt.iValue = atoi ( sNumberBuf );
+
+				// check if it can be used as a keyword too
+				m_pTokenizer->SetBuffer ( (BYTE*)sNumberBuf, iNumberLen );
+				sToken = (const char*) m_pTokenizer->GetToken();
+				m_pTokenizer->SetBuffer ( m_sQuery, m_iQueryLen );
+				m_pTokenizer->SetBufferPtr ( p );
+
+				m_tPendingToken.tInt.iStrIndex = -1;
+				if ( sToken )
+				{
+					m_dIntTokens.Add ( sToken );
+					if ( m_pDict->GetWordID ( (BYTE*)sToken ) )
+						m_tPendingToken.tInt.iStrIndex = m_dIntTokens.GetLength()-1;
+					else
+						m_dIntTokens.Pop();
+					m_iAtomPos++;
+				}
+
+				m_iPendingNulls = 0;
+				m_iPendingType = TOK_INT;
+				break;
+			}
 		}
 
 		// not a number, or not followed by a whitespace, so fallback to regular tokenizing

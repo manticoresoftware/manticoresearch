@@ -56,6 +56,22 @@ index test1
 	min_word_len = 2
 }
 
+source test2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT 1 as document_id, 'dummy a11-22 text' as text UNION SELECT 2 as document_id, 'dummy 11-22 text' as text
+}
+
+index test2
+{
+	source	= test2
+	path	= <data_path/>/test2
+
+	blend_chars = -, @,
+	charset_type = utf-8
+}
+
 </config>
 
 <db_create>
@@ -157,10 +173,13 @@ INSERT INTO test_table VALUES
 </queries>
 
 <sphqueries>
-	<!-- here is going regression blend vs special cahracter within query-->
+	<!-- here is going regression blend vs special character within query-->
 	<sphinxql>select * from test1 where match ( 'zzzzzz  .(buzzzz)' )</sphinxql>
 	<!-- here is going regression many overshort tokens in query-->
 	<sphinxql>select * from test1 where match ( 'a+b' )</sphinxql>
+	<!-- here is going regression blend_char into a numeric-->
+	<sphinxql>select * from test2 where match ( 'a11-22' )</sphinxql>
+	<sphinxql>select * from test2 where match ( '11-22' )</sphinxql>
 </sphqueries>
 
 </test>

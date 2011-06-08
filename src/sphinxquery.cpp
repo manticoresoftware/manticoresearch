@@ -573,7 +573,9 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		const char * sToken = p;
 		while ( p<sEnd && isdigit ( *(BYTE*)p ) ) p++;
 
-		if ( p>sToken && ( *p=='\0' || isspace ( *(BYTE*)p ) || IsSpecial(*p) ) )
+		static const int NUMBER_BUF_LEN = 10; // max strlen of int32
+
+		if ( p>sToken && p-sToken<NUMBER_BUF_LEN && ( *p=='\0' || isspace ( *(BYTE*)p ) || IsSpecial(*p) ) )
 		{
 			if ( m_pTokenizer->GetToken() && m_pTokenizer->TokenIsBlended() ) // number with blended should be tokenized as usual
 			{
@@ -581,8 +583,8 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 				m_pTokenizer->SetBufferPtr ( m_pLastTokenStart );
 			} else
 			{
-				// got a number followed by a whitespace or special, handle it
-				char sNumberBuf[16];
+				// got not a very long number followed by a whitespace or special, handle it
+				char sNumberBuf[NUMBER_BUF_LEN];
 
 				int iNumberLen = Min ( (int)sizeof(sNumberBuf)-1, int(p-sToken) );
 				memcpy ( sNumberBuf, sToken, iNumberLen );
@@ -612,7 +614,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			}
 		}
 
-		// not a number, or not followed by a whitespace, so fallback to regular tokenizing
+		// not a number, long number, or number not followed by a whitespace, so fallback to regular tokenizing
 		sToken = (const char *) m_pTokenizer->GetToken ();
 		if ( !sToken )
 		{

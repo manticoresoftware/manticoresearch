@@ -63,6 +63,7 @@ index test
 <query mode="extended2">@title ""</query>
 <query mode="extended2">("")</query>
 <query mode="extended2">"phrase (!query)/ ~on @steroids"</query>
+<query mode="extended2">1234567812345678</query>
 </queries>
 
 <db_create>
@@ -88,7 +89,8 @@ INSERT INTO `test_table` VALUES
 ( 555, 'sample program two', 'something written in basic' ),
 ( 666, 'sample program three', 'something written in perl' ),
 ( 777, '', '77 lies multiplied by 77' ),
-( 888, '', 'agent 0077' )
+( 888, '', 'agent 0077' ),
+( 999, '', '1234567812345678' )
 </db_insert>
 
 </test>

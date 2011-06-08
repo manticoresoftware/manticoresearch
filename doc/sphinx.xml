@@ -5891,7 +5891,7 @@ Any number of options can be specified. Available options are:
 <itemizedlist>
 <listitem>query - query text;</listitem>
 <listitem>mode - matching mode. Must be one of "all", "any", "phrase",
-	"boolean", or "extended". Default is "all";</listitem>
+	"boolean", "extended" or "extended2". Default is "all";</listitem>
 <listitem>sort - match sorting mode. Must be one of "relevance", "attr_desc",
 "attr_asc", "time_segments", or "extended". In all modes besides "relevance"
 attribute name (or sorting clause for "extended") is also required after a colon:
@@ -5992,12 +5992,12 @@ and TCP port, respectively:
 ... WHERE query='test;host=sphinx-test.loc;port=7312;';
 </programlisting>
 </listitem>
-<listitem>ranker - a ranking function to use when matching mode is extended
+<listitem>ranker - a ranking function to use when matching mode is extended2
 (i.e. with query syntax), as in <link linkend="api-func-setrankingmode">SetRankingMode()</link> API call.
 Known values are "proximity_bm25", "bm25", "none", "wordcount", "proximity",
 "matchany", and "fieldmask".
 <programlisting>
-... WHERE query='test;ranker=bm25;';
+... WHERE query='test;mode=extended2;ranker=bm25;';
 </programlisting>
 </listitem>
 <listitem>geoanchor - geodistance anchor, as in

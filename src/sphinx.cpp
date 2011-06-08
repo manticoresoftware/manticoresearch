@@ -23079,8 +23079,12 @@ bool CSphSource_ODBC::SqlFetchRow ()
 #if USE_WINDOWS // FIXME! support UCS-2 columns on Unix too
 				if ( tCol.m_bUnicode )
 				{
-					int iConv = WideCharToMultiByte ( CP_UTF8, 0, LPCWSTR ( &tCol.m_dRaw[0] ), tCol.m_iInd/sizeof(WCHAR),
-						LPSTR ( &tCol.m_dContents[0] ), tCol.m_iBufferSize-1, NULL, NULL );
+					// WideCharToMultiByte should get NULL terminated string
+					for ( int i=0; i<sizeof(WCHAR); i++ )
+						tCol.m_dRaw.Add ( 0 );
+
+					int iConv = WideCharToMultiByte ( CP_UTF8, 0, LPCWSTR ( tCol.m_dRaw.Begin() ), tCol.m_iInd/sizeof(WCHAR),
+						LPSTR ( tCol.m_dContents.Begin() ), tCol.m_iBufferSize-1, NULL, NULL );
 
 					if ( iConv==0 )
 						if ( GetLastError()==ERROR_INSUFFICIENT_BUFFER )

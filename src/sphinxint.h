@@ -258,7 +258,7 @@ public:
 	CSphQueryContext ();
 	~CSphQueryContext ();
 
-	void						BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema );
+	void						BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema, int iIndexWeight );
 	bool						SetupCalc ( CSphQueryResult * pResult, const CSphSchema & tInSchema, const CSphSchema & tSchema, const DWORD * pMvaPool );
 	bool						CreateFilters ( bool bFullscan, const CSphVector<CSphFilterSettings> * pdFilters, const CSphSchema & tSchema, const DWORD * pMvaPool, CSphString & sError );
 	bool						SetupOverrides ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema );

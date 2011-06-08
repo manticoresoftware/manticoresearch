@@ -9324,8 +9324,11 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	}
 
 	// check docinfo
-	if ( m_tSchema.GetAttrsCount()==0 )
+	if ( m_tSchema.GetAttrsCount()==0 && m_tSettings.m_eDocinfo!=SPH_DOCINFO_NONE )
+	{
+		sphWarning ( "Attribute count is 0: switching to none docinfo" );
 		m_tSettings.m_eDocinfo = SPH_DOCINFO_NONE;
+	}
 
 	if ( m_tSchema.GetAttrsCount()>0 && m_tSettings.m_eDocinfo==SPH_DOCINFO_NONE )
 	{
@@ -12089,7 +12092,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 	CSphMatch tMatch;
 	tMatch.Reset ( pResult->m_tSchema.GetDynamicSize() );
-	tMatch.m_iWeight = 1;
+	tMatch.m_iWeight = pQuery->GetIndexWeight ( m_sIndexName.cstr() );
 
 	DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 	DWORD uStart = pQuery->m_bReverseScan ? ( m_uDocinfoIndex-1 ) : 0;
@@ -13385,14 +13388,14 @@ CSphQueryContext::~CSphQueryContext ()
 	SafeDelete ( m_pWeightFilter );
 }
 
-void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema )
+void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema, int iIndexWeight )
 {
 	const int MIN_WEIGHT = 1;
 
 	// defaults
 	m_iWeights = Min ( tSchema.m_dFields.GetLength(), SPH_MAX_FIELDS );
 	for ( int i=0; i<m_iWeights; i++ )
-		m_dWeights[i] = MIN_WEIGHT;
+		m_dWeights[i] = MIN_WEIGHT * iIndexWeight;
 
 	// name-bound weights
 	if ( pQuery->m_dFieldWeights.GetLength() )
@@ -13401,7 +13404,7 @@ void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema 
 		{
 			int j = tSchema.GetFieldIndex ( pQuery->m_dFieldWeights[i].m_sName.cstr() );
 			if ( j>=0 && j<SPH_MAX_FIELDS )
-				m_dWeights[j] = Max ( MIN_WEIGHT, pQuery->m_dFieldWeights[i].m_iValue );
+				m_dWeights[j] = Max ( MIN_WEIGHT, pQuery->m_dFieldWeights[i].m_iValue ) * iIndexWeight;
 		}
 		return;
 	}
@@ -13410,7 +13413,7 @@ void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema 
 	if ( pQuery->m_pWeights )
 	{
 		for ( int i=0; i<Min ( m_iWeights, pQuery->m_iWeights ); i++ )
-			m_dWeights[i] = Max ( MIN_WEIGHT, (int)pQuery->m_pWeights[i] );
+			m_dWeights[i] = Max ( MIN_WEIGHT, (int)pQuery->m_pWeights[i] ) * iIndexWeight;
 	}
 }
 
@@ -14547,8 +14550,10 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	tTermSetup.m_pCtx = &tCtx;
 	tTermSetup.m_pNodeCache = pNodeCache;
 
+	int iIndexWeight = pQuery->GetIndexWeight ( m_sIndexName.cstr() );
+
 	// bind weights
-	tCtx.BindWeights ( pQuery, m_tSchema );
+	tCtx.BindWeights ( pQuery, m_tSchema, iIndexWeight );
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats

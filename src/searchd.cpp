@@ -5133,7 +5133,6 @@ struct AggrResult_t : CSphQueryResult
 	int							m_iTag;				///< current tag
 	CSphVector<CSphSchema>		m_dSchemas;			///< aggregated resultsets schemas (for schema minimization)
 	CSphVector<int>				m_dMatchCounts;		///< aggregated resultsets lengths (for schema minimization)
-	CSphVector<int>				m_dIndexWeights;	///< aggregated resultsets per-index weights (optional)
 	CSphVector<const CSphIndex*>		m_dLockedAttrs;		///< indexes which are hold in the memory untill sending result
 	CSphVector<PoolPtrs_t>		m_dTag2Pools;		///< tag to MVA and strings storage pools mapping
 };
@@ -5376,9 +5375,6 @@ static int KillAllDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, const 
 		{
 			CSphMatch & tMatch = tRes.m_dMatches[i];
 
-			if ( tRes.m_dIndexWeights.GetLength() && tMatch.m_iTag>=0 )
-				tMatch.m_iWeight *= tRes.m_dIndexWeights[tMatch.m_iTag];
-
 			if ( !pSorter->PushGrouped ( tMatch ) )
 				iDupes++;
 		}
@@ -5399,15 +5395,11 @@ static int KillAllDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, const 
 			while ( iCur<iMax )
 			{
 				CSphMatch & tMatch = tRes.m_dMatches[iCur++];
-				if ( tMatch.m_iTag>=0 )
-					tMatch.m_iWeight *= tRes.m_dIndexWeights[tMatch.m_iTag];
 
 				while ( iCur<iMax && tRes.m_dMatches[iCur].m_iDocID==tMatch.m_iDocID )
 				{
 					const CSphMatch & tDupe = tRes.m_dMatches[iCur];
 					int iAddWeight = tDupe.m_iWeight;
-					if ( tDupe.m_iTag>=0 )
-						iAddWeight *= tRes.m_dIndexWeights[tDupe.m_iTag];
 					tMatch.m_iWeight += iAddWeight;
 
 					iDupes++;
@@ -6025,9 +6017,7 @@ SearchHandler_c::SearchHandler_c ( int iQueries, bool bSphinxql )
 
 	ARRAY_FOREACH ( i, m_dResults )
 	{
-		assert ( m_dResults[i].m_dIndexWeights.GetLength()==0 );
 		m_dResults[i].m_iTag = 1; // first avail tag for local storage ptrs
-		m_dResults[i].m_dIndexWeights.Add ( 1 ); // reserved index 0 with weight 1 for remote matches
 		m_dResults[i].m_dTag2Pools.Add (); // reserved index 0 for remote mva storage ptr; we'll fix this up later
 	}
 }
@@ -6239,7 +6229,6 @@ static void FlattenToRes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, int i
 	{
 		tRes.m_dMatchCounts.Add ( pSorter->GetLength() );
 		tRes.m_dSchemas.Add ( tRes.m_tSchema );
-		tRes.m_dIndexWeights.Add ( iIndexWeight );
 		PoolPtrs_t & tPoolPtrs = tRes.m_dTag2Pools.Add ();
 		tPoolPtrs.m_pMva = tRes.m_pMva;
 		tPoolPtrs.m_pStrings = tRes.m_pStrings;

@@ -3771,8 +3771,10 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	tTermSetup.m_pSeg = NULL;
 	tTermSetup.m_pCtx = &tCtx;
 
+	int iIndexWeight = pQuery->GetIndexWeight ( m_sIndexName.cstr() );
+
 	// bind weights
-	tCtx.BindWeights ( pQuery, m_tOutboundSchema );
+	tCtx.BindWeights ( pQuery, m_tOutboundSchema, iIndexWeight );
 
 	// parse query
 	XQQuery_t tParsed;
@@ -3845,7 +3847,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			// FIXME? OPTIMIZE? add shortcuts here too?
 			CSphMatch tMatch;
 			tMatch.Reset ( pResult->m_tSchema.GetDynamicSize() );
-			tMatch.m_iWeight = 1;
+			tMatch.m_iWeight = pQuery->GetIndexWeight ( m_sIndexName.cstr() );
 
 			int iCutoff = pQuery->m_iCutoff;
 			if ( iCutoff<=0 )

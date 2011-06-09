@@ -12,6 +12,8 @@ indexer
 searchd
 {
 	<searchd_settings/>
+	binlog_path = #
+	workers = threads
 }
 
 source src
@@ -31,10 +33,35 @@ index idx
     docinfo			= extern
 }
 
+index rt
+{
+	type = rt
+	path			= <data_path/>/rt
+	charset_type 	= utf-8
+	docinfo			= extern
+
+	rt_field			= body
+	rt_attr_multi	= mva1
+	rt_attr_uint	= gid
+	rt_attr_multi	= mva2
+}
+
 </config>
 
 <custom_test><![CDATA[
 $results = array ();
+
+global $sd_address, $sd_sphinxql_port;
+$sockStr = "$sd_address:$sd_sphinxql_port";
+if ($sd_address == "localhost")
+	$sockStr = "127.0.0.1:$sd_sphinxql_port";
+$sock = @mysql_connect ($sockStr,'','',	true );
+if ( $sock === false )
+{
+	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+	return;
+}
+@mysql_query ( "insert into rt (id, gid, mva1, mva2, body) values (1, 11, (1, 1), (2), 'dummy'), (3, 33, (3, 3), (3), 'dummy')" );
 
 // update that block
 for ( $i = 0; $i < 4; $i++)
@@ -46,6 +73,13 @@ for ( $i = 0; $i < 4; $i++)
 		$results[] = sprintf("up.ok=%d", $up);
 	else	
 		$results[] = sprintf("up.err=%s", $client->GetLastError());
+
+	@mysql_query ( 'update idx set mva1=(3,2, 1, 2), mva1=(1, 2) where id=1' );
+	if ( @mysql_error() )
+		$results[] = @mysql_error();
+	@mysql_query ( 'update rt set mva1=(3,2, 1, 2), gid=3212, mva2=(1, 2, 3, 4, 5, 6), mva2=(3,4,5) where id=1' );
+	if ( @mysql_error() )
+		$results[] = @mysql_error();
 		
 	StopSearchd ( 'config.conf', 'searchd.pid' );
 	
@@ -57,17 +91,21 @@ for ( $i = 0; $i < 4; $i++)
 		$results[] = "started=ok";
 	else
 		$results[] = sprintf("start.err=%d local=%s client=%s", $startSta, $error, $client->GetLastError());
+		
+	$sock = @mysql_connect ($sockStr,'','',	true );
+	if ( $sock === false )
+	{
+		$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+		return;
+	}
 }
-
-// find the updated match
-$results[] = $client->Query ( "test3");
-
-// final fixup; we don't want to compare times
-for ( $i=0; $i<count($results); $i++ )
-	if ( is_array($results[$i]) )
-		unset ( $results[$i]["time"] );
-
 ]]></custom_test>
+
+<sphqueries>
+<sphinxql>select * from idx where match('test3')</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+<sphinxql>select * from idx</sphinxql>
+</sphqueries>
 
   <DB_Create>
 CREATE TABLE `test_table` (

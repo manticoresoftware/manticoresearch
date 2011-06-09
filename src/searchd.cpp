@@ -4023,8 +4023,7 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 			pQuery->m_eRanker = SPH_RANK_PROXIMITY;
 		}
 		*szRes = '\0';
-	}
-	else if ( pQuery->m_eMode==SPH_MATCH_ANY )
+	} else if ( pQuery->m_eMode==SPH_MATCH_ANY )
 	{
 		if ( pQuery->m_eRanker!=SPH_RANK_MATCHANY )
 		{
@@ -4032,8 +4031,7 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 			pQuery->m_eRanker = SPH_RANK_MATCHANY;
 		}
 		strncpy ( szRes, "\"/1", 8 );
-	}
-	else if ( pQuery->m_eMode==SPH_MATCH_PHRASE )
+	} else if ( pQuery->m_eMode==SPH_MATCH_PHRASE )
 	{
 		if ( pQuery->m_eRanker!=SPH_RANK_PROXIMITY )
 		{
@@ -8836,6 +8834,7 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 	// parse request
 	CSphString sIndexes = tReq.GetString ();
 	CSphAttrUpdate tUpd;
+	CSphVector<DWORD> dMva;
 
 	tUpd.m_dAttrs.Resize ( tReq.GetDword() ); // FIXME! check this
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
@@ -8863,15 +8862,31 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 
 		ARRAY_FOREACH ( iAttr, tUpd.m_dAttrs )
 		{
-			DWORD uCount = 1;
 			if ( tUpd.m_dAttrs[iAttr].m_eAttrType==SPH_ATTR_UINT32SET )
 			{
-				uCount = tReq.GetDword ();
-				tUpd.m_dPool.Add ( uCount );
-			}
+				DWORD uCount = tReq.GetDword ();
+				if ( !uCount )
+				{
+					tUpd.m_dPool.Add ( 0 );
+					continue;
+				}
 
-			for ( DWORD j=0; j<uCount; j++ )
+				dMva.Resize ( uCount );
+				for ( DWORD j=0; j<uCount; j++ )
+				{
+					dMva[j] = tReq.GetDword();
+				}
+				dMva.Uniq(); // don't need dupes within MVA
+
+				tUpd.m_dPool.Add ( dMva.GetLength() );
+				ARRAY_FOREACH ( j, dMva )
+				{
+					tUpd.m_dPool.Add ( dMva[j] );
+				}
+			} else
+			{
 				tUpd.m_dPool.Add ( tReq.GetDword() );
+			}
 		}
 	}
 

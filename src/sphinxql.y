@@ -754,6 +754,30 @@ update_item:
 			tAttr.m_eAttrType = SPH_ATTR_INTEGER; // sorry, ints only for now, riding on legacy shit!
 			tUpd.m_dPool.Add ( (DWORD) $3.m_iValue );
 		}
+	| TOK_IDENT '='  '(' const_list ')'
+		{
+			CSphAttrUpdate & tUpd = pParser->m_pStmt->m_tUpdate;
+			CSphColumnInfo & tAttr = tUpd.m_dAttrs.Add();
+			tAttr.m_sName = $1.m_sValue;
+			tAttr.m_sName.ToLower();
+			tAttr.m_eAttrType = SPH_ATTR_UINT32SET;
+			assert ( $4.m_pValues.Ptr() && $4.m_pValues->GetLength()>0 );
+			$4.m_pValues->Uniq(); // don't need dupes within MVA
+			tUpd.m_dPool.Add ( $4.m_pValues->GetLength() );
+			for ( int i=0; i<$4.m_pValues->GetLength(); i++ )
+			{
+				tUpd.m_dPool.Add ( (DWORD) $4.m_pValues.Ptr()->Begin()[i] );
+			}
+		}
+	| TOK_IDENT '='  '(' ')' // special case () means delete mva
+		{
+			CSphAttrUpdate & tUpd = pParser->m_pStmt->m_tUpdate;
+			CSphColumnInfo & tAttr = tUpd.m_dAttrs.Add();
+			tAttr.m_sName = $1.m_sValue;
+			tAttr.m_sName.ToLower();
+			tAttr.m_eAttrType = SPH_ATTR_UINT32SET;
+			tUpd.m_dPool.Add ( 0 );
+		}
 	;
 
 //////////////////////////////////////////////////////////////////////////

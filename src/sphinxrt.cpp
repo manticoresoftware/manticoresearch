@@ -4277,9 +4277,10 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 
 		// forbid updates on non-int columns
 		const CSphColumnInfo & tCol = m_tSchema.GetAttr(iIndex);
-		if (!( tCol.m_eAttrType==SPH_ATTR_BOOL || tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP ))
+		if ( !( tCol.m_eAttrType==SPH_ATTR_BOOL || tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP
+			|| tCol.m_eAttrType==SPH_ATTR_UINT32SET ) )
 		{
-			sError.SetSprintf ( "attribute '%s' can not be updated (must be boolean, integer, or timestamp)", tUpd.m_dAttrs[i].m_sName.cstr() );
+			sError.SetSprintf ( "attribute '%s' can not be updated (must be boolean, integer, or timestamp or MVA)", tUpd.m_dAttrs[i].m_sName.cstr() );
 			return -1;
 		}
 
@@ -4319,12 +4320,44 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 			int iPos = tUpd.m_dRowOffset[iUpd];
 			ARRAY_FOREACH ( iCol, tUpd.m_dAttrs )
 			{
-				// plain update
-				SphAttr_t uValue = tUpd.m_dPool[iPos];
-				sphSetRowAttr ( pRow, dLocators[iCol], uValue );
+				if ( tUpd.m_dAttrs[iCol].m_eAttrType!=SPH_ATTR_UINT32SET )
+				{
+					// plain update
+					uUpdateMask |= ATTRS_UPDATED;
 
-				iPos++;
-				uUpdateMask |= ATTRS_UPDATED;
+					SphAttr_t uValue = tUpd.m_dPool[iPos];
+					sphSetRowAttr ( pRow, dLocators[iCol], uValue );
+					iPos++;
+				} else
+				{
+					// MVA update
+					uUpdateMask |= ATTRS_MVA_UPDATED;
+
+					const DWORD * pSrc = tUpd.m_dPool.Begin()+iPos;
+					DWORD uCount = *pSrc;
+					if ( !uCount )
+					{
+						iPos++;
+						sphSetRowAttr ( pRow, dLocators[iCol], 0 );
+						continue;
+					}
+
+					CSphTightVector<DWORD> & dMvas = m_pSegments[iSeg]->m_dMvas;
+
+					DWORD uMvaOff = (DWORD)sphGetRowAttr ( pRow, dLocators[iCol] );
+					assert ( !dMvas.Begin() || uMvaOff );
+					DWORD * pDst = dMvas.Begin() + uMvaOff;
+					if ( uCount>(*pDst) )
+					{
+						uMvaOff = dMvas.GetLength();
+						dMvas.Resize ( uMvaOff+uCount+1 );
+						pDst = dMvas.Begin()+uMvaOff;
+					}
+					memcpy ( pDst, pSrc, sizeof(DWORD)*(uCount+1) );
+					sphSetRowAttr ( pRow, dLocators[iCol], uMvaOff );
+
+					iPos += uCount+1;
+				}
 			}
 
 			bUpdated = true;

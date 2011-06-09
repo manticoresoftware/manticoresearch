@@ -62,6 +62,7 @@ if ( $sock === false )
 	return;
 }
 @mysql_query ( "insert into rt (id, gid, mva1, mva2, body) values (1, 11, (1, 1), (2), 'dummy'), (3, 33, (3, 3), (3), 'dummy')" );
+@mysql_close($sock);
 
 // update that block
 for ( $i = 0; $i < 4; $i++)
@@ -74,12 +75,19 @@ for ( $i = 0; $i < 4; $i++)
 	else	
 		$results[] = sprintf("up.err=%s", $client->GetLastError());
 
+	$sock = @mysql_connect ($sockStr,'','',	true );
+	if ( $sock === false )
+	{
+		$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+		return;
+	}
 	@mysql_query ( 'update idx set mva1=(3,2, 1, 2), mva1=(1, 2) where id=1' );
 	if ( @mysql_error() )
 		$results[] = @mysql_error();
 	@mysql_query ( 'update rt set mva1=(3,2, 1, 2), gid=3212, mva2=(1, 2, 3, 4, 5, 6), mva2=(3,4,5) where id=1' );
 	if ( @mysql_error() )
 		$results[] = @mysql_error();
+	@mysql_close($sock);
 		
 	StopSearchd ( 'config.conf', 'searchd.pid' );
 	
@@ -91,13 +99,6 @@ for ( $i = 0; $i < 4; $i++)
 		$results[] = "started=ok";
 	else
 		$results[] = sprintf("start.err=%d local=%s client=%s", $startSta, $error, $client->GetLastError());
-		
-	$sock = @mysql_connect ($sockStr,'','',	true );
-	if ( $sock === false )
-	{
-		$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
-		return;
-	}
 }
 ]]></custom_test>
 

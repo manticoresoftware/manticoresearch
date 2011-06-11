@@ -1,0 +1,261 @@
+'\" t
+.\"     Title: search
+.\"    Author: [see the "Author" section]
+.\" Generator: DocBook XSL Stylesheets v1.75.2 <http://docbook.sf.net/>
+.\"      Date: 06/11/2011
+.\"    Manual: Sphinxsearch
+.\"    Source: 2.0.2
+.\"  Language: English
+.\"
+.TH "SEARCH" "1" "06/11/2011" "2\&.0\&.2" "Sphinxsearch"
+.\" -----------------------------------------------------------------
+.\" * Define some portability stuff
+.\" -----------------------------------------------------------------
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.\" http://bugs.debian.org/507673
+.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
+.\" -----------------------------------------------------------------
+.\" * set default formatting
+.\" -----------------------------------------------------------------
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.\" -----------------------------------------------------------------
+.\" * MAIN CONTENT STARTS HERE *
+.\" -----------------------------------------------------------------
+.SH "NAME"
+search \- Sphinxsearch command\-line index query
+.SH "SYNOPSIS"
+.HP \w'\fBsearch\fR\ 'u
+\fBsearch\fR [OPTIONS] word1 [word2\ [word3\ [\&.\&.\&.]] ]
+.SH "DESCRIPTION"
+.PP
+Sphinx is a collection of programs that aim to provide high quality fulltext search\&.
+.PP
+\fBsearch\fR
+is one of the helper tools within the Sphinx package\&. Whereas
+\fBsearchd\fR
+is responsible for searches in a server\-type environment,
+\fBsearch\fR
+is aimed at testing the index from the command line, and testing the index quickly without building a framework to make the connection to the server and process its response\&.
+.PP
+Note:
+\fBsearch\fR
+is not intended to be deployed as part of a client application; it is strongly recommended you do not write an interface to
+\fBsearch\fR
+instead of
+\fBsearchd\fR, and none of the bundled client APIs support this method\&. (In any event,
+\fBsearch\fR
+will reload files each time, whereas
+\fBsearchd\fR
+will cache them in memory for performance\&.)
+.PP
+That said, many types of query that you could build in the APIs could also be made with
+\fBsearch\fR, however for very complex searches it may be easier to construct them using a small script and the corresponding API\&. Additionally, some newer features may be available in the
+\fBsearchd\fR
+system that have not yet been brought into
+\fBsearch\fR\&.
+.PP
+When calling
+\fBsearch\fR, it is not necessary to have
+\fBsearchd\fR
+running; simply make sure that the account running the
+\fBsearch\fR
+program has read access to the configuration file and the index files\&.
+.PP
+The default behaviour is to apply a
+\fBsearch\fR
+for
+\fIword1\fR
+(AND
+\fIword2\fR
+AND
+\fIword3\fR\&.\&.\&. as specified) to all fields in all indexes as given in the configuration file\&. If constructing the equivalent in the API, this would be the equivalent to passing
+\fBSPH_MATCH_ALL\fR
+to
+\fBSetMatchMode\fR, and specifying * as the indexes to query as part of Query\&.
+.SH "OPTIONS"
+.PP
+There are many options available to
+\fBsearch\fR\&.
+.PP
+Firstly, the general options:
+.PP
+\fB\-\-config\fR\ \&\fICONFIGFILE\fR, \fB\-c\fR\ \&\fICONFIGFILE\fR
+.RS 4
+Use the given file as its configuration, just as with
+\fBindexer\fR\&.
+.RE
+.PP
+\fB\-\-index\fR\ \&\fIINDEX\fR, \fB\-i\fR\ \&\fIINDEX\fR
+.RS 4
+Limit searching to the specified index only; normally
+\fBsearch\fR
+would attempt to search all of the physical indexes listed in
+sphinx\&.conf, not any distributed ones\&.
+.RE
+.PP
+\fB\-\-stdin\fR
+.RS 4
+Accept the query from the standard input, rather than the command line\&. This can be useful for testing purposes whereby you could feed input via pipes and from scripts
+.RE
+.PP
+Options for setting matches:
+.PP
+\fB\-\-any\fR, \fB\-a\fR
+.RS 4
+Changes the matching mode to match any of the words as part of the query (word1 OR word2 OR word3)\&. In the API this would be equivalent to passing
+\fBSPH_MATCH_ANY\fR
+to
+\fBSetMatchMode\fR\&.
+.RE
+.PP
+\fB\-\-phrase\fR, \fB\-p\fR
+.RS 4
+Changes the matching mode to match all of the words as part of the query, and do so in the phrase given (not including punctuation)\&. In the API this would be equivalent to passing
+\fBSPH_MATCH_PHRASE\fR
+to
+\fBSetMatchMode\fR\&.
+.RE
+.PP
+\fB\-\-boolean\fR, \fB\-b\fR
+.RS 4
+Changes the matching mode to
+\fIBoolean matching\fR\&. Note if using Boolean syntax matching on the command line, you may need to escape the symbols (with a backslash) to avoid the shell/command line processor applying them, such as ampersands being escaped on a Unix/Linux system to avoid it forking to the
+\fBsearch\fR
+process, although this can be resolved by using
+\fB\-\-stdin\fR, as below\&. In the API this would be equivalent to passing
+\fBSPH_MATCH_BOOLEAN\fR
+to
+\fBSetMatchMode\fR\&.
+.RE
+.PP
+\fB\-\-ext\fR, \fB\-e\fR
+.RS 4
+Changes the matching mode to
+\fIExtended matching\fR\&. In the API this would be equivalent to passing
+\fBSPH_MATCH_EXTENDED\fR
+to
+\fBSetMatchMode\fR, and it should be noted that use of this mode is being discouraged in favour of Extended2, below\&.
+.RE
+.PP
+\fB\-\-ext2\fR, \fB\-e2\fR
+.RS 4
+Changes the matching mode to
+\fIExtended matching, version 2\fR\&. In the API this would be equivalent to passing
+\fBSPH_MATCH_EXTENDED2\fR
+to
+\fBSetMatchMode\fR, and it should be noted that use of this mode is being recommended in favour of Extended, due to being more efficient and providing other features\&.
+.RE
+.PP
+\fB\-\-filter\fR\ \&\fI<attr>\fR\fI<v>\fR, \fB\-f\fR\ \&\fI<attr>\fR\fI<v>\fR
+.RS 4
+Filters the results such that only documents where the attribute given (attr) matches the value given (v)\&. For example,
+\fB\-\-filter\fR
+\fIdeleted\fR
+\fI0\fR
+only matches documents with an attribute called \*(Aqdeleted\*(Aq where its value is 0\&. You can also add multiple filters on the command line, by specifying multiple
+\fB\-\-filter\fR
+multiple times, however if you apply a second filter to an attribute it will override the first defined filter\&.
+.RE
+.PP
+Options for handling the results:
+.PP
+\fB\-\-limit\fR\ \&\fI<count>\fR, \fB\-l\fR\ \&\fI<count>\fR
+.RS 4
+limits the total number of matches back to the number given\&. If a \*(Aqgroup\*(Aq is specified, this will be the number of grouped results\&. This defaults to 20 results if not specified (as do the APIs)
+.RE
+.PP
+\fB\-\-offset\fR\ \&\fI<count>\fR, \fB\-o\fR\ \&\fI<count>\fR
+.RS 4
+offsets the result list by the number of places set by the count; this would be used for pagination through results, where if you have 20 results per \*(Aqpage\*(Aq, the second page would begin at offset 20, the third page at offset 40, etc\&.
+.RE
+.PP
+\fB\-\-group\fR\ \&\fI<attr>\fR, \fB\-g\fR\ \&\fI<attr>\fR
+.RS 4
+specifies that results should be grouped together based on the attribute specified\&. Like the GROUP BY clause in SQL, it will combine all results where the attribute given matches, and returns a set of results where each returned result is the best from each group\&. Unless otherwise specified, this will be the best match on relevance\&.
+.RE
+.PP
+\fB\-\-groupsort\fR\ \&\fI<expr>\fR, \fB\-gs\fR\ \&\fI<expr>\fR
+.RS 4
+instructs that when results are grouped with
+\fB\-\-group\fR, the expression given in
+\fI<expr>\fR
+shall determine the order of the groups\&. Note, this does not specify which is the best item within the group, only the order in which the groups themselves shall be returned\&.
+.RE
+.PP
+\fB\-\-sortby\fR\ \&\fI<clause>\fR, \fB\-s\fR\ \&\fI<clause>\fR
+.RS 4
+specifies that results should be sorted in the order listed in
+\fI<clause>\fR\&. This allows you to specify the order you wish results to be presented in, ordering by different columns\&. For example, you could say
+\fB\-\-sortby\fR
+\fI"@weight DESC entrytime DESC"\fR
+to sort entries first by weight (or relevance) and where two or more entries have the same weight, to then sort by the time with the highest time (newest) first\&. You will usually need to put the items in quotes (\fB\-\-sortby\fR
+\fI"@weight DESC"\fR) or use commas (\fB\-\-sortby\fR
+\fI@weight,DESC\fR) to avoid the items being treated separately\&. Additionally, like the regular sorting modes, if
+\fB\-\-group\fR
+(grouping) is being used, this will state how to establish the best match within each group\&.
+.RE
+.PP
+\fB\-\-sortexpr\fR\ \&\fI<expr>\fR, \fB\-S\fR\ \&\fI<expr>\fR
+.RS 4
+specifies that the search results should be presented in an order determined by an arithmetic expression, stated in expr\&. For example:
+\fB\-\-sortexpr\fR
+\fI"@weight + ( user_karma + ln(pageviews) )*0\&.1"\fR
+(again noting that this will have to be quoted to avoid the shell dealing with the asterisk)\&. Extended sort mode is discussed in more detail under the
+\fBSPH_SORT_EXTENDED\fR
+entry under the
+\fISorting modes\fR
+section of the manual\&.
+.RE
+.PP
+\fB\-\-sort=date\fR
+.RS 4
+specifies that the results should be sorted by descending (i\&.e\&. most recent first) date\&. This requires that there is an attribute in the index that is set as a timestamp\&.
+.RE
+.PP
+\fB\-\-rsort=date\fR
+.RS 4
+specifies that the results should be sorted by ascending (i\&.e\&. oldest first) date\&. This requires that there is an attribute in the index that is set as a timestamp\&.
+.RE
+.PP
+\fB\-\-sort=ts\fR
+.RS 4
+specifies that the results should be sorted by timestamp in groups; it will return all of the documents whose timestamp is within the last hour, then sorted within that bracket for relevance\&. After, it would return the documents from the last day, sorted by relevance, then the last week and then the last month\&. It is discussed in more detail under the
+\fBSPH_SORT_TIME_SEGMENTS\fR
+entry under the
+\fISorting modes\fR
+section of the manual\&.
+.RE
+.PP
+Other options:
+.PP
+\fB\-\-noinfo\fR, \fB\-q\fR
+.RS 4
+instructs
+\fBsearch\fR
+not to look\-up data in your SQL database\&. Specifically, for debugging with MySQL and
+\fBsearch\fR, you can provide it with a query to look up the full article based on the returned document ID\&. It is explained in more detail under the
+\fBsql_query_info\fR
+directive\&.
+.RE
+.SH "AUTHOR"
+.PP
+Andrey Aksenoff (shodan@sphinxsearch\&.com)\&. This manual page is written by Alexey Vinogradov (klirichek@sphinxsearch\&.com)\&. Permission is granted to copy, distribute and/or modify this document under the terms of the GNU General Public License, Version 2 any later version published by the Free Software Foundation\&.
+.PP
+On Debian systems, the complete text of the GNU General Public License can be found in
+/usr/share/common\-licenses/GPL\&.
+.SH "SEE ALSO"
+.PP
+\fBindexer\fR(1),
+\fBsearchd\fR(1),
+\fBindextool\fR(1)
+.PP
+Sphinx and it\*(Aqs programs are documented fully by the
+\fISphinx reference manual\fR
+available in
+/usr/share/doc/sphinxsearch\&.

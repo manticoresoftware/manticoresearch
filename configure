@@ -7872,7 +7872,7 @@ fi
 CONFDIR=`eval echo "${my_op_prefix}"`
 
 
-ac_config_files="$ac_config_files Makefile src/Makefile libstemmer_c/Makefile sphinx.conf.dist:sphinx.conf.in sphinx-min.conf.dist:sphinx-min.conf.in"
+ac_config_files="$ac_config_files Makefile src/Makefile libstemmer_c/Makefile doc/Makefile sphinx.conf.dist:sphinx.conf.in sphinx-min.conf.dist:sphinx-min.conf.in"
 
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
@@ -8609,6 +8609,7 @@ do
     "Makefile") CONFIG_FILES="$CONFIG_FILES Makefile" ;;
     "src/Makefile") CONFIG_FILES="$CONFIG_FILES src/Makefile" ;;
     "libstemmer_c/Makefile") CONFIG_FILES="$CONFIG_FILES libstemmer_c/Makefile" ;;
+    "doc/Makefile") CONFIG_FILES="$CONFIG_FILES doc/Makefile" ;;
     "sphinx.conf.dist") CONFIG_FILES="$CONFIG_FILES sphinx.conf.dist:sphinx.conf.in" ;;
     "sphinx-min.conf.dist") CONFIG_FILES="$CONFIG_FILES sphinx-min.conf.dist:sphinx-min.conf.in" ;;
 

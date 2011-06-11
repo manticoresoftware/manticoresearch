@@ -510,7 +510,7 @@ fi
 CONFDIR=`eval echo "${my_op_prefix}"`
 AC_SUBST(CONFDIR)
 
-AC_CONFIG_FILES([Makefile src/Makefile libstemmer_c/Makefile sphinx.conf.dist:sphinx.conf.in \
+AC_CONFIG_FILES([Makefile src/Makefile libstemmer_c/Makefile doc/Makefile sphinx.conf.dist:sphinx.conf.in \
 	sphinx-min.conf.dist:sphinx-min.conf.in])
 AC_OUTPUT
 

@@ -1,0 +1,121 @@
+'\" t
+.\"     Title: indextool
+.\"    Author: [see the "Author" section]
+.\" Generator: DocBook XSL Stylesheets v1.75.2 <http://docbook.sf.net/>
+.\"      Date: 06/11/2011
+.\"    Manual: Sphinxsearch
+.\"    Source: 2.0.2
+.\"  Language: English
+.\"
+.TH "INDEXTOOL" "1" "06/11/2011" "2\&.0\&.2" "Sphinxsearch"
+.\" -----------------------------------------------------------------
+.\" * Define some portability stuff
+.\" -----------------------------------------------------------------
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.\" http://bugs.debian.org/507673
+.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
+.\" -----------------------------------------------------------------
+.\" * set default formatting
+.\" -----------------------------------------------------------------
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.\" -----------------------------------------------------------------
+.\" * MAIN CONTENT STARTS HERE *
+.\" -----------------------------------------------------------------
+.SH "NAME"
+indextool \- Sphinxsearch tool dump miscellaneous debug information about the physical index\&.
+.SH "SYNOPSIS"
+.HP \w'\fBindextool\fR\ 'u
+\fBindextool\fR {command} [options]
+.SH "DESCRIPTION"
+.PP
+Sphinx is a collection of programs that aim to provide high quality fulltext search\&.
+.PP
+\fBindextool\fR
+is one of the helper tools within the Sphinx package\&. It is used to dump miscellaneous debug information about the physical index\&. Apart ghe dumping
+\fBindextool\fR
+can perform index verification, hence the indextool name rather than just indexdump\&.
+.SH "COMMANDS"
+.PP
+The commands are as follows:
+.PP
+\fB\-\-dumpheader\fR \fIFILENAME\&.sph\fR
+.RS 4
+quickly dumps the provided index header file without touching any other index files or even the configuration file\&. The report provides a breakdown of all the index settings, in particular the entire attribute and field list\&. Prior to 0\&.9\&.9\-rc2, this command was present in CLI search utility\&.
+.RE
+.PP
+\fB\-\-dumpconfig\fR \fIFILENAME\&.sph\fR
+.RS 4
+dumps the index definition from the given index header file in (almost) compliant
+sphinx\&.conf
+file format\&.
+.RE
+.PP
+\fB\-\-dumpheader\fR \fIINDEXNAME\fR
+.RS 4
+dumps index header by index name with looking up the header path in the configuration file\&.
+.RE
+.PP
+\fB\-\-dumpdocids\fR \fIINDEXNAME\fR
+.RS 4
+dumps document IDs by index name\&. It takes the data from attribute (\&.spa) file and therefore requires
+\fBdocinfo=extern\fR
+to work\&.
+.RE
+.PP
+\fB\-\-dumphitlist\fR \fIINDEXNAME\fR \fIKEYWORD\fR
+.RS 4
+dumps all the hits (occurences) of a given keyword in a given index, with keyword specified as text\&.
+.RE
+.PP
+\fB\-\-dumphitlist\fR \fIINDEXNAME\fR \fB\-\-wordid\fR \fIID\fR
+.RS 4
+dumps all the hits (occurences) of a given keyword in a given index, with keyword specified as internal numeric ID\&.
+.RE
+.PP
+\fB\-\-htmlstrip\fR INDEXNAME
+.RS 4
+filters stdin using HTML stripper settings for a given index, and prints the filtering results to stdout\&. Note that the settings will be taken from
+sphinx\&.conf, and not the index header\&.
+.RE
+.PP
+\fB\-\-check\fR \fIINDEXNAME\fR
+.RS 4
+checks the index data files for consistency errors that might be introduced either by bugs in
+\fBindexer\fR
+and/or hardware faults\&.
+.RE
+.PP
+\fB\-\-strip\-path\fR
+.RS 4
+strips the path names from all the file names referenced from the index (stopwords, wordforms, exceptions, etc)\&. This is useful for checking indexes built on another machine with possibly different path layouts\&.
+.RE
+.SH "OPTIONS"
+.PP
+The only currently available option applies to all commands and lets you specify the configuration file:
+.PP
+\fB\-\-config\fR\ \&\fICONFIGFILE\fR, \fB\-c\fR\ \&\fICONFIGFILE\fR
+.RS 4
+overrides the built\-in config file names\&.
+.RE
+.SH "AUTHOR"
+.PP
+Andrey Aksenoff (shodan@sphinxsearch\&.com)\&. This manual page is written by Alexey Vinogradov (klirichek@sphinxsearch\&.com)\&. Permission is granted to copy, distribute and/or modify this document under the terms of the GNU General Public License, Version 2 any later version published by the Free Software Foundation\&.
+.PP
+On Debian systems, the complete text of the GNU General Public License can be found in
+/usr/share/common\-licenses/GPL\&.
+.SH "SEE ALSO"
+.PP
+\fBindexer\fR(1),
+\fBsearchd\fR(1),
+\fBsearch\fR(1)
+.PP
+Sphinx and it\*(Aqs programs are documented fully by the
+\fISphinx reference manual\fR
+available in
+/usr/share/doc/sphinxsearch\&.

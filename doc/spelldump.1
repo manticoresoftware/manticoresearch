@@ -1,0 +1,100 @@
+'\" t
+.\"     Title: spelldump
+.\"    Author: [see the "Author" section]
+.\" Generator: DocBook XSL Stylesheets v1.75.2 <http://docbook.sf.net/>
+.\"      Date: 06/11/2011
+.\"    Manual: Sphinxsearch
+.\"    Source: 2.0.2
+.\"  Language: English
+.\"
+.TH "SPELLDUMP" "1" "06/11/2011" "2\&.0\&.2" "Sphinxsearch"
+.\" -----------------------------------------------------------------
+.\" * Define some portability stuff
+.\" -----------------------------------------------------------------
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.\" http://bugs.debian.org/507673
+.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
+.\" -----------------------------------------------------------------
+.\" * set default formatting
+.\" -----------------------------------------------------------------
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.\" -----------------------------------------------------------------
+.\" * MAIN CONTENT STARTS HERE *
+.\" -----------------------------------------------------------------
+.SH "NAME"
+spelldump \- Sphinxsearch tool for extract the contents of a dictionary file\&.
+.SH "SYNOPSIS"
+.HP \w'\fBspelldump\fR\ 'u
+\fBspelldump\fR [OPTIONS] dictionary affix [result] [locale\-name]
+.SH "DESCRIPTION"
+.PP
+Sphinx is a collection of programs that aim to provide high quality fulltext search\&.
+.PP
+spelldump is used to extract the contents of a dictionary file that uses ispell or MySpell format, which can help build word lists for wordforms \- all of the possible forms are pre\-built for you\&.
+.PP
+The two main parameters are the dictionary\*(Aqs main file and its affix file; usually these are named as
+[language\-prefix]\&.dict
+and
+[language\-prefix]\&.aff
+and will be available with most common Linux distributions, as well as various places online\&.
+\fB[result]\fR
+specifies where the dictionary data should be output to, and
+\fB[locale\-name]\fR
+additionally specifies the locale details you wish to use\&.
+.PP
+Examples of its usage are:
+.PP
+.if n \{\
+.RS 4
+.\}
+.nf
+spelldump en\&.dict en\&.aff
+spelldump ru\&.dict ru\&.aff ru\&.txt ru_RU\&.CP1251
+spelldump ru\&.dict ru\&.aff ru\&.txt \&.1251
+.fi
+.if n \{\
+.RE
+.\}
+.PP
+The results file will contain a list of all the words in the dictionary in alphabetical order, output in the format of a wordforms file, which you can use to customise for your specific circumstances\&.
+.PP
+An example of the result file:
+.PP
+.if n \{\
+.RS 4
+.\}
+.nf
+zone > zone
+zoned > zoned
+zoning > zoning 
+.fi
+.if n \{\
+.RE
+.\}
+.SH "OPTIONS"
+.PP
+\fB\-c\fR\ \&\fI[FILE]\fR
+.RS 4
+specifies a file for case conversion details\&.
+.RE
+.SH "AUTHOR"
+.PP
+Andrey Aksenoff (shodan@sphinxsearch\&.com)\&. This manual page is written by Alexey Vinogradov (klirichek@sphinxsearch\&.com)\&. Permission is granted to copy, distribute and/or modify this document under the terms of the GNU General Public License, Version 2 any later version published by the Free Software Foundation\&.
+.PP
+On Debian systems, the complete text of the GNU General Public License can be found in
+/usr/share/common\-licenses/GPL\&.
+.SH "SEE ALSO"
+.PP
+\fBindexer\fR(1),
+\fBindextool\fR(1)\&.
+.PP
+Sphinx and it\*(Aqs programs are documented fully by the
+\fISphinx reference manual\fR
+available in
+/usr/share/doc/sphinxsearch\&.

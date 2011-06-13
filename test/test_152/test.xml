@@ -35,6 +35,26 @@ index test1
 	index_sp		= 1
 }
 
+source src2
+{
+	type			= mysql
+<Sql_Settings/>
+
+	sql_query = SELECT * FROM test_table2
+	sql_attr_uint = gid
+}
+
+index test2
+{
+	source			= src2
+	path			= <Data_Path/>/test2
+	docinfo		= extern
+    charset_type	= utf-8
+	html_strip		= 1
+	index_sp		= 1
+	index_zones = z_*
+}
+
 </Config>
 <DB_Create>
 CREATE TABLE test_table
@@ -52,10 +72,33 @@ CREATE TABLE test_table
 <db_insert>insert into test_table values ( 5, 1, 'cc' )</db_insert>
 <db_insert>insert into test_table values ( 6, 1, 'cc' )</db_insert>
 
-<SPHQueries>
-	<SPHinxQL>select * from test1 where match('aa SENTENCE bb')</SPHinxQL>	
-	<SPHinxQL>select * from test1 where match('(aa SENTENCE bb) cc')</SPHinxQL>	
+<db_create>
+CREATE TABLE test_table2
+(
+	id INTEGER NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(6048) NOT NULL
+)
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table2</db_drop>
+<db_insert>insert into test_table2 values ( 1, 1, 'aa' )</db_insert>
+<db_insert>insert into test_table2 values ( 2, 1, 'aa' )</db_insert>
+<db_insert>insert into test_table2 values ( 3, 1, 'aa' )</db_insert>
+<db_insert>insert into test_table2 values ( 4, 1, 'aa' )</db_insert>
+<db_insert>insert into test_table2 values ( 5, 1, 'aa' )</db_insert>
+<db_insert><![CDATA[insert into test_table2 values ( 6, 1, '<z_1>aa</z_1>' )]]></db_insert>
+<db_insert><![CDATA[insert into test_table2 values ( 7, 1, '<z_1>aa</z_1>' )]]></db_insert>
+<db_insert><![CDATA[insert into test_table2 values ( 8, 1, '<z_1>aa</z_1>' )]]></db_insert>
+<db_insert><![CDATA[insert into test_table2 values ( 9, 1, CONCAT ( '<z_1> ', CONCAT ( REPEAT ( 'aa ', 512 ), ' </z_1>' ) ) )]]></db_insert>
+<db_insert><![CDATA[insert into test_table2 values ( 10, 1, '<z_1> aa </z_1>' )]]></db_insert>
+<db_insert><![CDATA[insert into test_table2 values ( 11, 1, '<z_1> aa </z_1>' )]]></db_insert>
+
+<sphqueries>
+	<sphinxql>select * from test1 where match('aa SENTENCE bb')</sphinxql>	
+	<sphinxql>select * from test1 where match('(aa SENTENCE bb) cc')</sphinxql>	
 	<sphinxql>CALL SNIPPETS ('dummy1 match1 dummy2 match2', 'test1', ' ( match1 NEAR/3 match2 ) | ^missed1 | missed2 ', 1 as query_mode)</sphinxql>
-</SPHQueries>
+	<!-- here is another regression -->
+	<sphinxql>select * from test2 where match('(ZONE:z_1 aa )') order by id asc</sphinxql>	
+</sphqueries>
 
 </Test>

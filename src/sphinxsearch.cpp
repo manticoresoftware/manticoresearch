@@ -1627,10 +1627,6 @@ const ExtDoc_t * ExtTermPos_c<T>::GetDocsChunk ( SphDocID_t * pMaxID )
 	const SphDocID_t uSkipID = m_uLastID;
 	SphDocID_t uLastID = m_uLastID = 0;
 
-	// skip dupes from tail document
-	while ( uSkipID && pHit && ( pHit->m_uDocid==uSkipID ) )
-		pHit = ExtTerm_c::GetHitsChunk ( m_pRawDocs, uSkipID );
-
 	CSphRowitem * pDocinfo = m_pDocinfo;
 	for ( ;; )
 	{
@@ -1651,14 +1647,16 @@ const ExtDoc_t * ExtTermPos_c<T>::GetDocsChunk ( SphDocID_t * pMaxID )
 			continue;
 		}
 
+		// skip all tail hits hits from documents below or same ID as uSkipID
+
 		// scan until next acceptable hit
-		while ( pHit->m_uDocid < pDoc->m_uDocid ) // skip leftovers
+		while ( pHit->m_uDocid < pDoc->m_uDocid || ( uSkipID && pHit->m_uDocid<=uSkipID ) ) // skip leftovers
 			pHit++;
 
-		while ( pHit->m_uDocid!=DOCID_MAX && !IsAcceptableHit ( pHit ) ) // skip unneeded hits
+		while ( ( pHit->m_uDocid!=DOCID_MAX || ( uSkipID && pHit->m_uDocid<=uSkipID ) ) && !IsAcceptableHit ( pHit ) ) // skip unneeded hits
 			pHit++;
 
-		if ( pHit->m_uDocid==DOCID_MAX ) // check for eof
+		if ( pHit->m_uDocid==DOCID_MAX || ( uSkipID && pHit->m_uDocid<=uSkipID ) ) // check for eof
 			continue;
 
 		// find and emit new document

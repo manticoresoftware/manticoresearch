@@ -6219,7 +6219,7 @@ static void MergeWordStats ( CSphQueryResultMeta & tDstResult, const SmallString
 }
 
 
-static void FlattenToRes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, int iIndexWeight )
+static void FlattenToRes ( ISphMatchSorter * pSorter, AggrResult_t & tRes )
 {
 	assert ( pSorter );
 
@@ -6361,7 +6361,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 			tRes.m_iCpuTime += tRaw.m_iCpuTime / tRes.m_iMultiplier;
 
 			// extract matches from sorter
-			FlattenToRes ( pSorter, tRes, m_dQueries[iQuery].GetIndexWeight ( sLocal ) );
+			FlattenToRes ( pSorter, tRes );
 		}
 	}
 
@@ -6599,7 +6599,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 				tRes.m_iTotalMatches += pSorter->GetTotalCount();
 
 				// extract matches from sorter
-				FlattenToRes ( pSorter, tRes, m_dQueries[iQuery].GetIndexWeight ( sLocal ) );
+				FlattenToRes ( pSorter, tRes );
 
 				// move external attributes storage from tStats to actual result
 				tStats.LeakStorages ( tRes );

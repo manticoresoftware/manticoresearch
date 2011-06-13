@@ -13364,6 +13364,8 @@ bool SetWatchDog ( int iDevNull )
 
 		sphInfo ( "Child process %d has been forked", iRes );
 
+		SetSignalHandlers();
+
 		iReincarnate = 0;
 		int iPid, iStatus;
 		while ( ( iPid = wait ( &iStatus ) )>0 )

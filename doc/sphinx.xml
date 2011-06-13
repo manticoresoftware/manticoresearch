@@ -6487,7 +6487,7 @@ $results = $cl-&gt;RunQueries ();
                 number within a current snippet. Numbering starts at 1 by
                 default but can be overridden with "start_passage_id" option.
                 In a multi-document call, %PASSAGE_ID% would restart at every
-                given document. Default is "&lt;/b&gt;".</para>
+                given document. Default is "&lt;b&gt;".</para>
               </listitem>
             </varlistentry>
 
@@ -6497,7 +6497,7 @@ $results = $cl-&gt;RunQueries ();
               <listitem>
                 <para>A string to insert after a keyword match. Starting with
                 version 1.10-beta, a %PASSAGE_ID% macro can be used in this
-                string. Default is "&lt;b&gt;".</para>
+                string. Default is "&lt;/b&gt;".</para>
               </listitem>
             </varlistentry>
 
@@ -7112,7 +7112,7 @@ ALTER TABLE t1 CONNECTION="sphinx://NEWHOST:NEWPORT/NEWINDEXNAME";
 
           <listitem>
             <para>mode - matching mode. Must be one of "all", "any", "phrase",
-            "boolean", "extended" or "extended2". Default is "all";</para>
+            "boolean", "extended", or "extended2". Default is "all";</para>
           </listitem>
 
           <listitem>

@@ -4254,10 +4254,10 @@ $results = $cl-&gt;RunQueries ();
                 number within a current snippet. Numbering starts at 1 by
                 default but can be overridden with "start_passage_id" option.
                 In a multi-document call, %PASSAGE_ID% would restart at every
-                given document. Default is "&lt;/b&gt;".</p></dd><dt><span class="term">"after_match":</span></dt>
+                given document. Default is "&lt;b&gt;".</p></dd><dt><span class="term">"after_match":</span></dt>
 <dd><p>A string to insert after a keyword match. Starting with
                 version 1.10-beta, a %PASSAGE_ID% macro can be used in this
-                string. Default is "&lt;b&gt;".</p></dd><dt><span class="term">"chunk_separator":</span></dt>
+                string. Default is "&lt;/b&gt;".</p></dd><dt><span class="term">"chunk_separator":</span></dt>
 <dd><p>A string to insert between snippet chunks (passages).
                 Default is "&nbsp;...&nbsp;".</p></dd><dt><span class="term">"limit":</span></dt>
 <dd><p>Maximum snippet size, in symbols (codepoints). Integer,
@@ -4566,7 +4566,7 @@ ALTER TABLE t1 CONNECTION="sphinx://NEWHOST:NEWPORT/NEWINDEXNAME";
       equality sign. Any number of options can be specified. Available options
       are: </p><div class="itemizedlist"><ul class="itemizedlist" type="disc"><li class="listitem"><p>query - query text;</p></li>
 <li class="listitem"><p>mode - matching mode. Must be one of "all", "any", "phrase",
-            "boolean", "extended" or "extended2". Default is "all";</p></li>
+            "boolean", "extended", or "extended2". Default is "all";</p></li>
 <li class="listitem"><p>sort - match sorting mode. Must be one of "relevance",
             "attr_desc", "attr_asc", "time_segments", or "extended". In all
             modes besides "relevance" attribute name (or sorting clause for

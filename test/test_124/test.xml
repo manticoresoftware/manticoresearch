@@ -6,6 +6,10 @@
 indexer
 {
 	mem_limit			= 16M
+	<dynamic>
+	<variant>skip_file_field_errors = 0</variant>
+	<variant>skip_file_field_errors = 1</variant>
+	</dynamic>
 }
 
 searchd
@@ -52,6 +56,7 @@ INSERT INTO `test_table` VALUES
 </DB_Insert>
 
 <queries>
+<query></query>
 <query>all</query>
 <query>none</query>
 <query>match</query>

@@ -19205,6 +19205,7 @@ CSphSource_Document::CSphSource_Document ( const char * sName )
 	, m_pReadFileBuffer ( NULL )
 	, m_iReadFileBufferSize ( 256 * 1024 )
 	, m_iMaxFileBufferSize ( 2 * 1024 * 1024 )
+	, m_bSkipFileFieldErrors ( false )
 	, m_fpDumpRows ( NULL )
 	, m_iMaxHits ( MAX_SOURCE_HITS )
 {
@@ -19223,15 +19224,34 @@ bool CSphSource_Document::IterateDocument ( CSphString & sError )
 	m_tState.m_iEndField = m_tSchema.m_iBaseFields ? m_tSchema.m_iBaseFields : m_tSchema.m_dFields.GetLength();
 
 	// fetch next document
-	m_tState.m_dFields = NextDocument ( sError );
-	if ( m_tDocInfo.m_iDocID==0 )
-		return true;
+	for ( ;; )
+	{
+		m_tState.m_dFields = NextDocument ( sError );
+		if ( m_tDocInfo.m_iDocID==0 )
+			return true;
 
-	if ( !m_tState.m_dFields )
-		return false;
+		if ( !m_tState.m_dFields )
+			return false;
+
+		// tricky bit
+		// we can only skip document indexing from here, IterateHits() is too late
+		// so in case the user chose to skip documents with file field problems
+		// we need to check for those here
+		if ( m_bSkipFileFieldErrors )
+		{
+			bool bOk = true;
+			for ( int iField=0; iField<m_tState.m_iEndField && bOk; iField++ )
+				if ( m_tSchema.m_dFields[iField].m_bFilename )
+					bOk &= CheckFileField ( m_tState.m_dFields[iField] );
+			if ( !bOk )
+				continue;
+		}
+
+		// we're good
+		break;
+	}
 
 	m_tStats.m_iTotalDocuments++;
-
 	return true;
 }
 
@@ -19246,6 +19266,29 @@ ISphHits * CSphSource_Document::IterateHits ( CSphString & sError )
 	BuildHits ( sError, false );
 
 	return &m_tHits;
+}
+
+
+bool CSphSource_Document::CheckFileField ( const BYTE * sField )
+{
+	CSphAutofile tFileSource;
+	CSphString sError;
+
+	if ( tFileSource.Open ( (const char *)sField, SPH_O_READ, sError )==-1 )
+	{
+		sphWarning ( "failed to open file '%s', error '%s'", (const char *)sField, sError.cstr() );
+		return false;
+	}
+
+	int64_t iFileSize = tFileSource.GetSize();
+	if ( iFileSize+16 > m_iMaxFileBufferSize )
+	{
+		sphWarning ( "file '%s' too big for a field (size="INT64_FMT", max_file_field_buffer=%d)",
+			(const char *)sField, iFileSize, m_iMaxFileBufferSize );
+		return false;
+	}
+
+	return true;
 }
 
 
@@ -19607,6 +19650,7 @@ CSphSourceParams_SQL::CSphSourceParams_SQL ()
 	, m_bPrintQueries ( false )
 	, m_iRangedThrottle ( 0 )
 	, m_iMaxFileBufferSize ( 0 )
+	, m_bSkipFileFieldErrors ( false )
 	, m_iPort ( 0 )
 {
 }
@@ -19673,6 +19717,7 @@ bool CSphSource_SQL::Setup ( const CSphSourceParams_SQL & tParams )
 
 	if ( m_tParams.m_iMaxFileBufferSize > 0 )
 		m_iMaxFileBufferSize = m_tParams.m_iMaxFileBufferSize;
+	m_bSkipFileFieldErrors = m_tParams.m_bSkipFileFieldErrors;
 
 	return true;
 }

@@ -47,6 +47,7 @@ int				g_iMemLimit				= 0;
 int				g_iMaxXmlpipe2Field		= 0;
 int				g_iWriteBuffer			= 0;
 int				g_iMaxFileFieldBuffer	= 1024*1024;
+bool			g_bSkipFileFieldErrors	= false;	// true: discard entire row; false: warn but index
 
 const int		EXT_COUNT = 8;
 const char *	g_dExt[EXT_COUNT] = { "sph", "spa", "spi", "spd", "spp", "spm", "spk", "sps" };
@@ -607,6 +608,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 
 	tParams.m_iMaxFileBufferSize = g_iMaxFileFieldBuffer;
 	tParams.m_iRefRangeStep = tParams.m_iRangeStep;
+	tParams.m_bSkipFileFieldErrors = g_bSkipFileFieldErrors;
 
 	// unpack
 	if ( !ConfigureUnpack ( hSource("unpack_zlib"), SPH_UNPACK_ZLIB, tParams, sSourceName ) )
@@ -1672,6 +1674,7 @@ int main ( int argc, char ** argv )
 		g_iMaxXmlpipe2Field = hIndexer.GetSize ( "max_xmlpipe2_field", 2*1024*1024 );
 		g_iWriteBuffer = hIndexer.GetSize ( "write_buffer", 1024*1024 );
 		g_iMaxFileFieldBuffer = Max ( 1024*1024, hIndexer.GetSize ( "max_file_field_buffer", 8*1024*1024 ) );
+		g_bSkipFileFieldErrors = ( hIndexer.GetInt ( "skip_file_field_errors", 0 )!=0 );
 
 		sphSetThrottling ( hIndexer.GetInt ( "max_iops", 0 ), hIndexer.GetSize ( "max_iosize", 0 ) );
 	}

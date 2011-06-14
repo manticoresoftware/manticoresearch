@@ -1554,6 +1554,7 @@ public:
 
 protected:
 	void					ParseFieldMVA ( CSphVector < CSphVector < DWORD > > & dFieldMVAs, int iFieldMVA, const char * szValue );
+	bool					CheckFileField ( const BYTE * sField );
 	int						LoadFileField ( BYTE ** ppField, CSphString & sError );
 	void					BuildSubstringHits ( SphDocID_t uDocid, bool bPayload, ESphWordpart eWordpart, bool bSkipEndMarker );
 	void					BuildRegularHits ( SphDocID_t uDocid, bool bPayload, bool bSkipEndMarker );
@@ -1563,8 +1564,9 @@ protected:
 
 protected:
 	char *					m_pReadFileBuffer;
-	int						m_iReadFileBufferSize;	///< size of read buffer for the 'slq_file_field' fields
-	int						m_iMaxFileBufferSize;	///< max size of read buffer for the 'slq_file_field' fields
+	int						m_iReadFileBufferSize;	///< size of read buffer for the 'sql_file_field' fields
+	int						m_iMaxFileBufferSize;	///< max size of read buffer for the 'sql_file_field' fields
+	bool					m_bSkipFileFieldErrors;
 	FILE *					m_fpDumpRows;
 
 protected:
@@ -1623,6 +1625,7 @@ struct CSphSourceParams_SQL
 
 	int								m_iRangedThrottle;
 	int								m_iMaxFileBufferSize;
+	bool							m_bSkipFileFieldErrors;
 
 	CSphVector<CSphUnpackInfo>		m_dUnpack;
 	DWORD							m_uUnpackMemoryLimit;

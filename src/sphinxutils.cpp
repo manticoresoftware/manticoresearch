@@ -254,6 +254,7 @@ static KeyDesc_t g_dKeysIndexer[] =
 	{ "max_xmlpipe2_field",		0, NULL },
 	{ "max_file_field_buffer",	0, NULL },
 	{ "write_buffer",			0, NULL },
+	{ "skip_file_field_errors",	0, NULL },
 	{ NULL,						0, NULL }
 };
 

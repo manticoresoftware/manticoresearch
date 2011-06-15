@@ -35,6 +35,7 @@
 #define SPHINXAPI_PORT			9312
 #define SPHINXQL_PORT			9306
 #define SPH_ADDRESS_SIZE		sizeof("000.000.000.000")
+#define SPH_ADDRPORT_SIZE		sizeof("000.000.000.000:00000")
 #define MVA_UPDATES_POOL		1048576
 
 
@@ -9281,7 +9282,8 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD, ThdDes
 
 	// get client version and request
 	tBuf.ReadFrom ( 4 ); // FIXME! magic
-	tBuf.GetInt (); // client version is for now unused
+	int iMagic = tBuf.GetInt (); // client version is for now unused
+	sphLogDebugv ( "conn %s: got handshake, major v.%d, err %d", sClientIP, iMagic, (int)tBuf.GetError() );
 	int iPconnIdle = 0;
 	do
 	{
@@ -9296,18 +9298,27 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD, ThdDes
 
 		// on SIGTERM, bail unconditionally and immediately, at all times
 		if ( !bCommand && g_bGotSigterm )
+		{
+			sphLogDebugv ( "conn %s: bailing on SIGTERM", sClientIP );
 			break;
+		}
 
 		// on SIGHUP vs pconn, bail if a pconn was idle for 1 sec
 		if ( bPersist && !bCommand && g_bGotSighup && sphSockPeekErrno()==ETIMEDOUT )
+		{
+			sphLogDebugv ( "conn %s: bailing idle pconn on SIGHUP", sClientIP );
 			break;
+		}
 
 		// on pconn that was idle for 300 sec (client_timeout), bail
 		if ( bPersist && !bCommand && sphSockPeekErrno()==ETIMEDOUT )
 		{
 			iPconnIdle += iTimeout;
 			if ( iPconnIdle>=g_iClientTimeout )
+			{
+				sphLogDebugv ( "conn %s: bailing idle pconn on client_timeout", sClientIP );
 				break;
+			}
 			continue;
 		} else
 			iPconnIdle = 0;
@@ -9328,6 +9339,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD, ThdDes
 			// lets avoid agent log flood
 			//
 			// sphWarning ( "failed to receive client version and request (client=%s, error=%s)", sClientIP, sphSockError() );
+			sphLogDebugv ( "conn %s: bailing on failed request header (sockerr=%s)", sClientIP, sphSockError() );
 			return;
 		}
 
@@ -9372,13 +9384,18 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD, ThdDes
 			pThd->m_sCommand = g_dApiCommands[iCommand];
 		THD_STATE ( THD_QUERY );
 
+		sphLogDebugv ( "conn %s: got command %d, handling", sClientIP, iCommand );
 		switch ( iCommand )
 		{
 			case SEARCHD_COMMAND_SEARCH:	HandleCommandSearch ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_EXCERPT:	HandleCommandExcerpt ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_KEYWORDS:	HandleCommandKeywords ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_UPDATE:	HandleCommandUpdate ( iSock, iCommandVer, tBuf, iPipeFD ); break;
-			case SEARCHD_COMMAND_PERSIST:	bPersist = ( tBuf.GetInt()!=0 ); iTimeout = 1; break;
+			case SEARCHD_COMMAND_PERSIST:
+				bPersist = ( tBuf.GetInt()!=0 );
+				iTimeout = 1;
+				sphLogDebugv ( "conn %s: pconn is now %s", sClientIP, bPersist ? "on" : "off" );
+				break;
 			case SEARCHD_COMMAND_STATUS:	HandleCommandStatus ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_FLUSHATTRS:HandleCommandFlush ( iSock, iCommandVer, tBuf ); break;
 			default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
@@ -9387,6 +9404,8 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD, ThdDes
 		// set off query guard
 		SphCrashLogger_c::SetLastQuery ( NULL, 0, false );
 	} while ( bPersist );
+
+	sphLogDebugv ( "conn %s: exiting", sClientIP );
 	SafeClose ( iPipeFD );
 }
 
@@ -13708,7 +13727,15 @@ Listener_t * DoAccept ( int * pClientSock, char * sClientName )
 		{
 			sClientName[0] = '\0';
 			if ( saStorage.ss_family==AF_INET )
-				sphFormatIP ( sClientName, SPH_ADDRESS_SIZE, ((struct sockaddr_in *)&saStorage)->sin_addr.s_addr );
+			{
+				struct sockaddr_in * pSa = ((struct sockaddr_in *)&saStorage);
+				sphFormatIP ( sClientName, SPH_ADDRESS_SIZE, pSa->sin_addr.s_addr );
+
+				char * d = sClientName;
+				while ( *d )
+					d++;
+				snprintf ( d, 7, ":%d", (int)ntohs(pSa->sin_port) );
+			}
 			if ( saStorage.ss_family==AF_UNIX )
 				strncpy ( sClientName, "(local)", SPH_ADDRESS_SIZE );
 		}
@@ -13738,7 +13765,7 @@ void TickPreforked ( CSphProcessSharedMutex * pAcceptMutex )
 	pAcceptMutex->Lock ();
 
 	int iClientSock = -1;
-	char sClientIP[SPH_ADDRESS_SIZE];
+	char sClientIP[SPH_ADDRPORT_SIZE];
 	Listener_t * pListener = NULL;
 	if ( !g_bGotSigterm )
 		pListener = DoAccept ( &iClientSock, sClientIP );
@@ -13837,7 +13864,7 @@ void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 	}
 
 	int iClientSock;
-	char sClientName[SPH_ADDRESS_SIZE];
+	char sClientName[SPH_ADDRPORT_SIZE];
 	Listener_t * pListener = DoAccept ( &iClientSock, sClientName );
 	if ( !pListener )
 		return;
@@ -13864,10 +13891,12 @@ void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 #if !USE_WINDOWS
 	if ( g_eWorkers==MPM_FORK )
 	{
+		sphLogDebugv ( "conn %s: accepted, socket %d", sClientName, iClientSock );
 		int iChildPipe = PipeAndFork ( false, -1 );
 		if ( !g_bHeadDaemon )
 		{
 			// child process, handle client
+			sphLogDebugv ( "conn %s: forked handler, socket %d", sClientName, iClientSock );
 			HandleClient ( pListener->m_eProto, iClientSock, sClientName, iChildPipe, NULL );
 			sphSockClose ( iClientSock );
 			exit ( 0 );
@@ -14264,6 +14293,11 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	int iStartupErr = WSAStartup ( WINSOCK_VERSION, &tWSAData );
 	if ( iStartupErr )
 		sphFatal ( "failed to initialize WinSock2: %s", sphSockError ( iStartupErr ) );
+
+#ifndef NDEBUG
+	// i want my windows debugging sessions to log onto stdout
+	g_bOptNoDetach = true;
+#endif
 #endif
 
 	if ( !bOptPIDFile )

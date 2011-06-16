@@ -41,24 +41,26 @@
      TOK_FUNC_IN = 267,
      TOK_USERVAR = 268,
      TOK_UDF = 269,
-     TOK_ATID = 270,
-     TOK_ATWEIGHT = 271,
-     TOK_ID = 272,
-     TOK_WEIGHT = 273,
-     TOK_COUNT = 274,
-     TOK_DISTINCT = 275,
-     TOK_CONST_LIST = 276,
-     TOK_ATTR_SINT = 277,
-     TOK_OR = 278,
-     TOK_AND = 279,
-     TOK_NE = 280,
-     TOK_EQ = 281,
-     TOK_GTE = 282,
-     TOK_LTE = 283,
-     TOK_MOD = 284,
-     TOK_DIV = 285,
-     TOK_NOT = 286,
-     TOK_NEG = 287
+     TOK_HOOK_IDENT = 270,
+     TOK_HOOK_FUNC = 271,
+     TOK_ATID = 272,
+     TOK_ATWEIGHT = 273,
+     TOK_ID = 274,
+     TOK_WEIGHT = 275,
+     TOK_COUNT = 276,
+     TOK_DISTINCT = 277,
+     TOK_CONST_LIST = 278,
+     TOK_ATTR_SINT = 279,
+     TOK_OR = 280,
+     TOK_AND = 281,
+     TOK_NE = 282,
+     TOK_EQ = 283,
+     TOK_GTE = 284,
+     TOK_LTE = 285,
+     TOK_MOD = 286,
+     TOK_DIV = 287,
+     TOK_NOT = 288,
+     TOK_NEG = 289
    };
 #endif
 #define TOK_CONST_INT 258
@@ -73,24 +75,26 @@
 #define TOK_FUNC_IN 267
 #define TOK_USERVAR 268
 #define TOK_UDF 269
-#define TOK_ATID 270
-#define TOK_ATWEIGHT 271
-#define TOK_ID 272
-#define TOK_WEIGHT 273
-#define TOK_COUNT 274
-#define TOK_DISTINCT 275
-#define TOK_CONST_LIST 276
-#define TOK_ATTR_SINT 277
-#define TOK_OR 278
-#define TOK_AND 279
-#define TOK_NE 280
-#define TOK_EQ 281
-#define TOK_GTE 282
-#define TOK_LTE 283
-#define TOK_MOD 284
-#define TOK_DIV 285
-#define TOK_NOT 286
-#define TOK_NEG 287
+#define TOK_HOOK_IDENT 270
+#define TOK_HOOK_FUNC 271
+#define TOK_ATID 272
+#define TOK_ATWEIGHT 273
+#define TOK_ID 274
+#define TOK_WEIGHT 275
+#define TOK_COUNT 276
+#define TOK_DISTINCT 277
+#define TOK_CONST_LIST 278
+#define TOK_ATTR_SINT 279
+#define TOK_OR 280
+#define TOK_AND 281
+#define TOK_NE 282
+#define TOK_EQ 283
+#define TOK_GTE 284
+#define TOK_LTE 285
+#define TOK_MOD 286
+#define TOK_DIV 287
+#define TOK_NOT 288
+#define TOK_NEG 289
 
 
 

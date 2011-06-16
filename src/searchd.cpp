@@ -4766,6 +4766,7 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 			case SPH_RANK_MATCHANY:		sRanker = "matchany"; break;
 			case SPH_RANK_FIELDMASK:	sRanker = "fieldmask"; break;
 			case SPH_RANK_SPH04:		sRanker = "sph04"; break;
+			case SPH_RANK_EXPR:			sRanker = "expr"; break;
 			default:					break;
 		}
 
@@ -7410,8 +7411,9 @@ public:
 
 	void			PushQuery ();
 
-	bool			AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue );
-	bool			AddOption ( const SqlNode_t& tIdent, CSphVector<CSphNamedInt> & dNamed );
+	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue );
+	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue, const CSphString & sArg );
+	bool			AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt> & dNamed );
 	void			AddItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc=SPH_AGGR_NONE, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
 	bool			AddItem ( const char * pToken, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
 	void			AliasLastItem ( SqlNode_t * pAlias );
@@ -7645,7 +7647,11 @@ bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue )
 		else if ( sVal=="matchany" )	m_pQuery->m_eRanker = SPH_RANK_MATCHANY;
 		else if ( sVal=="fieldmask" )	m_pQuery->m_eRanker = SPH_RANK_FIELDMASK;
 		else if ( sVal=="sph04" )		m_pQuery->m_eRanker = SPH_RANK_SPH04;
-		else
+		else if ( sVal=="expr" )
+		{
+			m_pParseError->SetSprintf ( "missing ranker expression (use OPTION ranker=expr('1+2') for example)", sVal.cstr() );
+			return false;
+		} else
 		{
 			m_pParseError->SetSprintf ( "unknown ranker '%s'", sVal.cstr() );
 			return false;
@@ -7684,7 +7690,28 @@ bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue )
 	return true;
 }
 
-bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, CSphVector<CSphNamedInt> & dNamed )
+
+bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue, const CSphString & sArg )
+{
+	CSphString sOpt = tIdent.m_sValue;
+	CSphString sVal = tValue.m_sValue;
+	sOpt.ToLower ();
+	sVal.ToLower ();
+
+	if ( sOpt=="ranker" && sVal=="expr" )
+	{
+		m_pQuery->m_eRanker = SPH_RANK_EXPR;
+		m_pQuery->m_sRankerExpr = sArg;
+		return true;
+	} else
+	{
+		m_pParseError->SetSprintf ( "unknown option or extra argument to '%s=%s'", tIdent.m_sValue.cstr(), tValue.m_sValue.cstr() );
+		return false;
+	}
+}
+
+
+bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt> & dNamed )
 {
 	CSphString sOpt = tIdent.m_sValue;
 	sOpt.ToLower ();
@@ -7705,6 +7732,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, CSphVector<CSphNamedInt> 
 
 	return true;
 }
+
 void SqlParser_c::AliasLastItem ( SqlNode_t * pAlias )
 {
 	if ( pAlias )

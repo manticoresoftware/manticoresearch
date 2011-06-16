@@ -440,6 +440,11 @@ option_item:
 				YYERROR;
 			pParser->FreeNamedVec ( $4 );
 		}
+	| TOK_IDENT '=' TOK_IDENT '(' TOK_QUOTED_STRING ')'
+		{
+			if ( !pParser->AddOption ( $1, $4, $5.m_sValue ) )
+				YYERROR;
+		}
 	;
 
 named_const_list:

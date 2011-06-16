@@ -72,11 +72,46 @@ public:
 	virtual void GetDependencyColumns ( CSphVector<int> & ) const {}
 };
 
+/// hook to extend expressions
+/// lets one to add her own identifier and function handlers
+struct ISphExprHook
+{
+	/// checks for an identifier known to the hook
+	/// returns -1 on failure, a non-negative OID on success
+	virtual int IsKnownIdent ( const char * sIdent ) = 0;
+
+	/// checks for a valid function call
+	/// returns -1 on failure, a non-negative OID on success (possibly adjusted)
+	virtual int IsKnownFunc ( const char * sFunc ) = 0;
+
+	/// create node by OID
+	virtual ISphExpr * CreateNode ( int iID, ISphExpr * pLeft ) = 0;
+
+	/// get identifier return type by OID
+	virtual ESphAttr GetIdentType ( int iID ) = 0;
+
+	/// get function return type by OID and argument type
+	virtual ESphAttr GetFuncType ( int iID, ESphAttr eArgType ) = 0;
+
+	/// get expected function argument count by OID
+	virtual int GetExpectedArgc ( int iID ) = 0;
+
+	/// get function name by OID
+	virtual const char * GetFuncName ( int iID ) = 0;
+
+	/// recursive scope check
+	virtual void CheckEnter ( int iID ) = 0;
+
+	/// recursive scope check
+	virtual void CheckExit ( int iID ) = 0;
+};
+
 /// parses given expression, builds evaluator
 /// returns NULL and fills sError on failure
 /// returns pointer to evaluator on success
 /// fills pAttrType with result type (for now, can be SPH_ATTR_SINT or SPH_ATTR_FLOAT)
-ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError, CSphSchema * pExtra=NULL );
+/// fills pUsesWeight with a flag whether match relevance is referenced in expression AST
+ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError, CSphSchema * pExtra=NULL, ISphExprHook * pHook=NULL );
 
 //////////////////////////////////////////////////////////////////////////
 

@@ -23,6 +23,8 @@
 %token <iFunc>			TOK_FUNC_IN
 %token <iNode>			TOK_USERVAR
 %token <iNode>			TOK_UDF
+%token <iNode>			TOK_HOOK_IDENT
+%token <iNode>			TOK_HOOK_FUNC
 
 %token	TOK_ATID
 %token	TOK_ATWEIGHT
@@ -72,6 +74,7 @@ expr:
 	| TOK_ATWEIGHT					{ $$ = pParser->AddNodeWeight(); }
 	| TOK_ID						{ $$ = pParser->AddNodeID(); }
 	| TOK_WEIGHT '(' ')'				{ $$ = pParser->AddNodeWeight(); }
+	| TOK_HOOK_IDENT				{ $$ = pParser->AddNodeHookIdent ( $1 ); }
 	| '-' expr %prec TOK_NEG		{ $$ = pParser->AddNodeOp ( TOK_NEG, $2, -1 ); }
 	| TOK_NOT expr					{ $$ = pParser->AddNodeOp ( TOK_NOT, $2, -1 ); if ( $$<0 ) YYERROR; }
 	| expr '+' expr					{ $$ = pParser->AddNodeOp ( '+', $1, $3 ); }
@@ -142,6 +145,7 @@ function:
 				YYERROR;
 			$$ = pParser->AddNodeFunc ( $1, $3, iConstlist );
 		}
+	| TOK_HOOK_FUNC '(' arglist ')'	{ $$ = pParser->AddNodeHookFunc ( $1, $3 ); if ( $$<0 ) YYERROR; }
 	;
 
 %%

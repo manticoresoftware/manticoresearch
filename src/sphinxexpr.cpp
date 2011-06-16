@@ -695,20 +695,20 @@ class ExprParser_t
 	friend void				yyerror ( ExprParser_t * pParser, const char * sMessage );
 
 public:
-							ExprParser_t () {}
-							~ExprParser_t ();
+	ExprParser_t ( CSphSchema * pExtra, ISphExprHook * pHook )
+		: m_pExtra ( pExtra )
+		, m_pHook ( pHook )
+	{}
 
+							~ExprParser_t ();
 	ISphExpr *				Parse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError );
-	inline void				SetGenMode ( CSphSchema * pExtra )
-	{
-		m_pExtra = pExtra;
-	}
 
 protected:
 	int						m_iParsed;	///< filled by yyparse() at the very end
 	CSphString				m_sLexerError;
 	CSphString				m_sParserError;
 	CSphString				m_sCreateError;
+	ISphExprHook *			m_pHook;
 
 protected:
 	ESphAttr				GetWidestRet ( int iLeft, int iRight );
@@ -727,6 +727,8 @@ protected:
 	void					AppendToConstlist ( int iNode, int64_t iValue );
 	void					AppendToConstlist ( int iNode, float iValue );
 	int						ConstlistFromUservar ( int iUservar );
+	int						AddNodeHookIdent ( int iID );
+	int						AddNodeHookFunc ( int iID, int iLeft );
 
 private:
 	const char *			m_sExpr;
@@ -927,6 +929,24 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		{
 			lvalp->iFunc = i;
 			return g_dFuncs[i].m_eFunc==FUNC_IN ? TOK_FUNC_IN : TOK_FUNC;
+		}
+
+		// ask hook
+		if ( m_pHook )
+		{
+			int iID = m_pHook->IsKnownIdent ( sTok.cstr() );
+			if ( iID>=0 )
+			{
+				lvalp->iNode = iID;
+				return TOK_HOOK_IDENT;
+			}
+
+			iID = m_pHook->IsKnownFunc ( sTok.cstr() );
+			if ( iID>=0 )
+			{
+				lvalp->iNode = iID;
+				return TOK_HOOK_FUNC;
+			}
 		}
 
 		// check for UDF
@@ -1622,10 +1642,9 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 				break;
 			}
 
-		case TOK_UDF:
-			return CreateUdfNode ( tNode.m_iFunc, pLeft );
-			break;
-
+		case TOK_UDF:			return CreateUdfNode ( tNode.m_iFunc, pLeft ); break;
+		case TOK_HOOK_IDENT:	return m_pHook->CreateNode ( tNode.m_iFunc, NULL ); break;
+		case TOK_HOOK_FUNC:		return m_pHook->CreateNode ( tNode.m_iFunc, pLeft ); break;
 		default:				assert ( 0 && "unhandled token type" ); break;
 	}
 
@@ -2122,9 +2141,10 @@ void ExprParser_t::WalkTree ( int iRoot, T & FUNCTOR )
 	if ( iRoot>=0 )
 	{
 		const ExprNode_t & tNode = m_dNodes[iRoot];
-		FUNCTOR.Process ( tNode );
+		FUNCTOR.Enter ( tNode );
 		WalkTree ( tNode.m_iLeft, FUNCTOR );
 		WalkTree ( tNode.m_iRight, FUNCTOR );
+		FUNCTOR.Exit ( tNode );
 	}
 }
 
@@ -2439,11 +2459,14 @@ struct TypeCheck_fn
 		, m_pMva ( pMva )
 	{}
 
-	void Process ( const ExprNode_t & tNode )
+	void Enter ( const ExprNode_t & tNode )
 	{
 		*m_pStr |= ( tNode.m_eRetType==SPH_ATTR_STRING );
 		*m_pMva |= ( tNode.m_eRetType==SPH_ATTR_UINT32SET );
 	}
+
+	void Exit ( const ExprNode_t & )
+	{}
 };
 
 int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
@@ -2683,9 +2706,44 @@ int ExprParser_t::ConstlistFromUservar ( int iUservar )
 			m_dNodes.Pop();
 		}
 	}
-
 	m_sParserError.SetSprintf ( "undefined user variable '%s'", m_dUservars[iUservar].cstr() );
 	return -1;
+}
+
+int ExprParser_t::AddNodeHookIdent ( int iID )
+{
+	ExprNode_t & tNode = m_dNodes.Add();
+	tNode.m_iToken = TOK_HOOK_IDENT;
+	tNode.m_iFunc = iID;
+	tNode.m_eRetType = m_pHook->GetIdentType ( iID );
+	return m_dNodes.GetLength()-1;
+}
+
+int ExprParser_t::AddNodeHookFunc ( int iID, int iLeft )
+{
+	// check args count
+	int iArgc = 0;
+	if ( iLeft>=0 )
+		iArgc = ( m_dNodes[iLeft].m_iToken==',' ) ? m_dNodes[iLeft].m_iArgs : 1;
+
+	int iExpectedArgc = m_pHook->GetExpectedArgc ( iID );
+	if ( iArgc!=iExpectedArgc )
+	{
+		m_sParserError.SetSprintf ( "%s() called with %d args, %d args expected", m_pHook->GetFuncName ( iID ), iArgc, iExpectedArgc );
+		return -1;
+	}
+
+	ExprNode_t & tNode = m_dNodes.Add();
+	tNode.m_iToken = TOK_HOOK_FUNC;
+	tNode.m_iFunc = iID;
+	tNode.m_iLeft = iLeft;
+	tNode.m_iRight = -1;
+
+	// deduce type
+	tNode.m_eArgType = ( iLeft>=0 ) ? m_dNodes[iLeft].m_eRetType : SPH_ATTR_INTEGER;
+	tNode.m_eRetType = m_pHook->GetFuncType ( iID, m_dNodes[iLeft].m_eRetType );
+
+	return m_dNodes.GetLength()-1;
 }
 
 
@@ -2700,10 +2758,35 @@ struct WeightCheck_fn
 		*m_pRes = false;
 	}
 
-	void Process ( const ExprNode_t & tNode )
+	void Enter ( const ExprNode_t & tNode )
 	{
 		if ( tNode.m_iToken==TOK_WEIGHT )
 			*m_pRes = true;
+	}
+
+	void Exit ( const ExprNode_t & )
+	{}
+};
+
+
+struct HookCheck_fn
+{
+	ISphExprHook * m_pHook;
+
+	explicit HookCheck_fn ( ISphExprHook * pHook )
+		: m_pHook ( pHook )
+	{}
+
+	void Enter ( const ExprNode_t & tNode )
+	{
+		if ( tNode.m_iToken==TOK_HOOK_IDENT || tNode.m_iToken==TOK_HOOK_FUNC )
+			m_pHook->CheckEnter ( tNode.m_iFunc );
+	}
+
+	void Exit ( const ExprNode_t & tNode )
+	{
+		if ( tNode.m_iToken==TOK_HOOK_IDENT || tNode.m_iToken==TOK_HOOK_FUNC )
+			m_pHook->CheckExit ( tNode.m_iFunc );
 	}
 };
 
@@ -2761,6 +2844,12 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema,
 	if ( pUsesWeight )
 	{
 		WeightCheck_fn tFunctor ( pUsesWeight );
+		WalkTree ( m_iParsed, tFunctor );
+	}
+
+	if ( m_pHook )
+	{
+		HookCheck_fn tFunctor ( m_pHook );
 		WalkTree ( m_iParsed, tFunctor );
 	}
 
@@ -3003,11 +3092,10 @@ bool sphUDFDrop ( const char * szFunc, CSphString & sError )
 //////////////////////////////////////////////////////////////////////////
 
 /// parser entry point
-ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError, CSphSchema * pExtra )
+ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError, CSphSchema * pExtra, ISphExprHook * pHook )
 {
 	// parse into opcodes
-	ExprParser_t tParser;
-	tParser.SetGenMode ( pExtra );
+	ExprParser_t tParser ( pExtra, pHook );
 	return tParser.Parse ( sExpr, tSchema, pAttrType, pUsesWeight, sError );
 }
 

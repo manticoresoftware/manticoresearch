@@ -744,9 +744,9 @@ public:
 	virtual CSphMatch *			GetMatchesBuffer () { return m_dMatches; }
 	virtual const ExtDoc_t *	GetFilteredDocs ();
 
-	void						GetQwords ( ExtQwordsHash_t & hQwords )				{ if ( m_pRoot ) m_pRoot->GetQwords ( hQwords ); }
-	void						SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
-	virtual void				InitState ( const CSphQueryContext & )				{}
+	void						GetQwords ( ExtQwordsHash_t & hQwords )					{ if ( m_pRoot ) m_pRoot->GetQwords ( hQwords ); }
+	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
+	virtual bool				InitState ( const CSphQueryContext &, CSphString & )	{ return true; }
 
 public:
 	// FIXME? hide and friend?
@@ -797,10 +797,11 @@ public:
 					ExtRanker_WeightSum_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup ) : ExtRanker_c ( tXQ, tSetup ) {}
 	virtual int		GetMatches ();
 
-	virtual void InitState ( const CSphQueryContext & tCtx )
+	virtual bool InitState ( const CSphQueryContext & tCtx, CSphString & )
 	{
 		m_iWeights = tCtx.m_iWeights;
 		m_pWeights = tCtx.m_dWeights;
+		return true;
 	}
 };
 
@@ -823,9 +824,9 @@ public:
 					ExtRanker_T<STATE> ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup ) : ExtRanker_c ( tXQ, tSetup ) {}
 	virtual int		GetMatches ();
 
-	virtual void InitState ( const CSphQueryContext & tCtx )
+	virtual bool InitState ( const CSphQueryContext & tCtx, CSphString & sError )
 	{
-		m_tState.Init ( tCtx.m_iWeights, &tCtx.m_dWeights[0], this );
+		return m_tState.Init ( tCtx.m_iWeights, &tCtx.m_dWeights[0], this, sError );
 }
 };
 
@@ -4420,7 +4421,7 @@ int ExtRanker_T<STATE>::GetMatches ()
 		{
 			assert ( uCurDocid==pDoc->m_uDocid );
 			Swap ( m_dMatches[iMatches], m_dMyMatches[pDoc-m_dMyDocs] );
-			m_dMatches[iMatches].m_iWeight = m_tState.Finalize ( m_dMatches[iMatches].m_iWeight );
+			m_dMatches[iMatches].m_iWeight = m_tState.Finalize ( m_dMatches[iMatches] );
 			iMatches++;
 		}
 
@@ -4464,13 +4465,14 @@ struct RankerState_Proximity_fn
 	int m_iFields;
 	const int * m_pWeights;
 
-	void Init ( int iFields, const int * pWeights, ExtRanker_c * )
+	bool Init ( int iFields, const int * pWeights, ExtRanker_c *, CSphString & )
 	{
 		memset ( m_uLCS, 0, sizeof(m_uLCS) );
 		m_uCurLCS = 0;
 		m_iExpDelta = -INT_MAX;
 		m_iFields = iFields;
 		m_pWeights = pWeights;
+		return true;
 	}
 
 	void Update ( const ExtHit_t * pHlist )
@@ -4488,7 +4490,7 @@ struct RankerState_Proximity_fn
 		m_iExpDelta = iDelta + pHlist->m_uSpanlen - 1; // !COMMIT why spanlen??
 	}
 
-	DWORD Finalize ( DWORD uWeight )
+	DWORD Finalize ( const CSphMatch & tMatch )
 	{
 		m_uCurLCS = 0;
 		m_iExpDelta = -1;
@@ -4500,7 +4502,7 @@ struct RankerState_Proximity_fn
 			m_uLCS[i] = 0;
 		}
 
-		return USE_BM25 ? uWeight + uRank*SPH_BM25_SCALE : uRank;
+		return USE_BM25 ? tMatch.m_iWeight + uRank*SPH_BM25_SCALE : uRank;
 	}
 };
 
@@ -4519,7 +4521,7 @@ struct RankerState_ProximityBM25Exact_fn
 	DWORD m_uExactHit;
 	int m_iMaxQuerypos;
 
-	void Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker )
+	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & )
 	{
 		memset ( m_uLCS, 0, sizeof(m_uLCS) );
 		m_uCurLCS = 0;
@@ -4530,6 +4532,7 @@ struct RankerState_ProximityBM25Exact_fn
 		m_uHeadHit = 0;
 		m_uExactHit = 0;
 		m_iMaxQuerypos = pRanker->m_iMaxQuerypos;
+		return true;
 	}
 
 	void Update ( const ExtHit_t * pHlist )
@@ -4560,7 +4563,7 @@ struct RankerState_ProximityBM25Exact_fn
 		m_uMinExpPos = HITMAN::GetLCS ( pHlist->m_uHitpos ) + 1;
 	}
 
-	DWORD Finalize ( DWORD uWeight )
+	DWORD Finalize ( const CSphMatch & tMatch )
 	{
 		m_uCurLCS = 0;
 		m_iExpDelta = -1;
@@ -4574,7 +4577,7 @@ struct RankerState_ProximityBM25Exact_fn
 		m_uHeadHit = 0;
 		m_uExactHit = 0;
 
-		return uWeight + uRank*SPH_BM25_SCALE;
+		return tMatch.m_iWeight + uRank*SPH_BM25_SCALE;
 	}
 };
 
@@ -4585,11 +4588,12 @@ struct RankerState_ProximityPayload_fn : public RankerState_Proximity_fn<USE_BM2
 	DWORD m_uPayloadRank;
 	DWORD m_uPayloadMask;
 
-	void Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker )
+	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError )
 	{
-		RankerState_Proximity_fn<USE_BM25>::Init ( iFields, pWeights, pRanker );
+		RankerState_Proximity_fn<USE_BM25>::Init ( iFields, pWeights, pRanker, sError );
 		m_uPayloadRank = 0;
 		m_uPayloadMask = pRanker->m_uPayloadMask;
+		return true;
 	}
 
 	void Update ( const ExtHit_t * pHlist )
@@ -4601,7 +4605,7 @@ struct RankerState_ProximityPayload_fn : public RankerState_Proximity_fn<USE_BM2
 			RankerState_Proximity_fn<USE_BM25>::Update ( pHlist );
 	}
 
-	DWORD Finalize ( DWORD uWeight )
+	DWORD Finalize ( const CSphMatch & tMatch )
 	{
 		// as usual, redundant 'this' is just because gcc is stupid
 		this->m_uCurLCS = 0;
@@ -4616,7 +4620,7 @@ struct RankerState_ProximityPayload_fn : public RankerState_Proximity_fn<USE_BM2
 		}
 
 		m_uPayloadRank = 0;
-		return USE_BM25 ? uWeight + uRank*SPH_BM25_SCALE : uRank;
+		return USE_BM25 ? tMatch.m_iWeight + uRank*SPH_BM25_SCALE : uRank;
 	}
 };
 
@@ -4627,14 +4631,14 @@ struct RankerState_MatchAny_fn : public RankerState_Proximity_fn<false>
 	int m_iPhraseK;
 	BYTE m_uMatchMask[SPH_MAX_FIELDS];
 
-	void Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker )
+	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError )
 	{
-		RankerState_Proximity_fn<false>::Init ( iFields, pWeights, pRanker );
+		RankerState_Proximity_fn<false>::Init ( iFields, pWeights, pRanker, sError );
 		m_iPhraseK = 0;
 		for ( int i=0; i<iFields; i++ )
 			m_iPhraseK += pWeights[i] * pRanker->m_iQwords;
-
 		memset ( m_uMatchMask, 0, sizeof(m_uMatchMask) );
+		return true;
 	}
 
 	void Update ( const ExtHit_t * pHlist )
@@ -4643,7 +4647,7 @@ struct RankerState_MatchAny_fn : public RankerState_Proximity_fn<false>
 		m_uMatchMask [ HITMAN::GetField ( pHlist->m_uHitpos ) ] |= ( 1<<(pHlist->m_uQuerypos-1) );
 	}
 
-	DWORD Finalize ( DWORD )
+	DWORD Finalize ( const CSphMatch & )
 	{
 		m_uCurLCS = 0;
 		m_iExpDelta = -1;
@@ -4669,11 +4673,12 @@ struct RankerState_Wordcount_fn
 	int m_iFields;
 	const int * m_pWeights;
 
-	void Init ( int iFields, const int * pWeights, ExtRanker_c * )
+	bool Init ( int iFields, const int * pWeights, ExtRanker_c *, CSphString & )
 	{
 		m_uRank = 0;
 		m_iFields = iFields;
 		m_pWeights = pWeights;
+		return true;
 	}
 
 	void Update ( const ExtHit_t * pHlist )
@@ -4681,7 +4686,7 @@ struct RankerState_Wordcount_fn
 		m_uRank += m_pWeights [ HITMAN::GetField ( pHlist->m_uHitpos ) ];
 	}
 
-	DWORD Finalize ( DWORD )
+	DWORD Finalize ( const CSphMatch & )
 	{
 		DWORD uRes = m_uRank;
 		m_uRank = 0;
@@ -4695,9 +4700,10 @@ struct RankerState_Fieldmask_fn
 {
 	DWORD m_uRank;
 
-	void Init ( int, const int *, ExtRanker_c * )
+	bool Init ( int, const int *, ExtRanker_c *, CSphString & )
 	{
 		m_uRank = 0;
+		return true;
 	}
 
 	void Update ( const ExtHit_t * pHlist )
@@ -4705,7 +4711,7 @@ struct RankerState_Fieldmask_fn
 		m_uRank |= 1UL << HITMAN::GetField ( pHlist->m_uHitpos );
 	}
 
-	DWORD Finalize ( DWORD )
+	DWORD Finalize ( const CSphMatch & )
 	{
 		DWORD uRes = m_uRank;
 		m_uRank = 0;
@@ -4713,6 +4719,448 @@ struct RankerState_Fieldmask_fn
 	}
 };
 
+//////////////////////////////////////////////////////////////////////////
+// EXPRESSION RANKER
+//////////////////////////////////////////////////////////////////////////
+
+/// ranker state that computes weight dynamically based on user supplied expression (formula)
+struct RankerState_Expr_fn
+{
+public:
+	BYTE				m_uLCS[SPH_MAX_FIELDS];
+	BYTE				m_uMatchMask[SPH_MAX_FIELDS];
+	BYTE				m_uCurLCS;
+	int					m_iExpDelta;
+	int					m_iFields;
+	const int *			m_pWeights;
+	DWORD				m_uDocBM25;
+	DWORD				m_uMatchedFields;
+	int					m_iCurrentField;
+	DWORD				m_uHitCount[SPH_MAX_FIELDS];
+	DWORD				m_uWordCount[SPH_MAX_FIELDS];
+	CSphVector<float>	m_dIDF;
+	float				m_dTFIDF[SPH_MAX_FIELDS];
+	int					m_iMinHitPos[SPH_MAX_FIELDS];
+	int					m_iMinBestSpanPos[SPH_MAX_FIELDS];
+
+	const char *		m_sExpr;
+	ISphExpr *			m_pExpr;
+	ESphAttr			m_eExprType;
+	const CSphSchema *	m_pSchema;
+
+public:
+						RankerState_Expr_fn ();
+						~RankerState_Expr_fn ();
+
+	bool				Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError );
+	void				Update ( const ExtHit_t * pHlist );
+	DWORD				Finalize ( const CSphMatch & tMatch );
+};
+
+
+/// extra expression ranker node types
+enum ExprRankerNode_e
+{
+	XRANK_LCS,
+	XRANK_USER_WEIGHT,
+	XRANK_HIT_COUNT,
+	XRANK_WORD_COUNT,
+	XRANK_TF_IDF,
+	XRANK_MIN_HIT_POS,
+	XRANK_MIN_BEST_SPAN_POS,
+	XRANK_BM25,
+	XRANK_SUM
+};
+
+
+/// generic field factor
+template < typename T >
+struct Expr_FieldFactor_c : public ISphExpr
+{
+	const int *		m_pIndex;
+	const T *		m_pData;
+
+	Expr_FieldFactor_c ( const int * pIndex, const T * pData )
+		: m_pIndex ( pIndex )
+		, m_pData ( pData )
+	{}
+
+	float Eval ( const CSphMatch & ) const
+	{
+		return (float) m_pData [ *m_pIndex ];
+	}
+
+	int IntEval ( const CSphMatch & ) const
+	{
+		return (int) m_pData [ *m_pIndex ];
+	}
+};
+
+
+/// generic per-document int factor
+struct Expr_IntPtr_c : public ISphExpr
+{
+	DWORD * m_pVal;
+
+	Expr_IntPtr_c ( DWORD * pVal )
+		: m_pVal ( pVal )
+	{}
+
+	float Eval ( const CSphMatch & ) const
+	{
+		return (float)*m_pVal;
+	}
+
+	int IntEval ( const CSphMatch & ) const
+	{
+		return (int)*m_pVal;
+	}
+};
+
+
+/// function that sums sub-expressions over matched fields
+struct Expr_Sum_c : public ISphExpr
+{
+	RankerState_Expr_fn *	m_pState;
+	ISphExpr *				m_pArg;
+
+	Expr_Sum_c ( RankerState_Expr_fn * pState, ISphExpr * pArg )
+		: m_pState ( pState )
+		, m_pArg ( pArg )
+	{}
+
+	float Eval ( const CSphMatch & tMatch ) const
+	{
+		m_pState->m_iCurrentField = 0;
+		float fRes = 0;
+		DWORD uMask = m_pState->m_uMatchedFields;
+		while ( uMask )
+		{
+			if ( uMask & 1 )
+				fRes += m_pArg->Eval ( tMatch );
+			uMask >>= 1;
+			m_pState->m_iCurrentField++;
+		}
+		return fRes;
+	}
+
+	int IntEval ( const CSphMatch & tMatch ) const
+	{
+		m_pState->m_iCurrentField = 0;
+		int iRes = 0;
+		DWORD uMask = m_pState->m_uMatchedFields;
+		while ( uMask )
+		{
+			if ( uMask & 1 )
+				iRes += m_pArg->IntEval ( tMatch );
+			uMask >>= 1;
+			m_pState->m_iCurrentField++;
+		}
+		return iRes;
+	}
+};
+
+
+/// hook that exposes field-level factors, document-level factors, and matched field SUM() function to generic expressions
+class ExprRankerHook_c : public ISphExprHook
+{
+public:
+	RankerState_Expr_fn *	m_pState;
+	const char *			m_sCheckError;
+	bool					m_bCheckInFieldAggr;
+
+public:
+	ExprRankerHook_c ( RankerState_Expr_fn * pState )
+		: m_pState ( pState )
+		, m_sCheckError ( NULL )
+		, m_bCheckInFieldAggr ( false )
+	{}
+
+	int IsKnownIdent ( const char * sIdent )
+	{
+		if ( !strcasecmp ( sIdent, "lcs" ) )
+			return XRANK_LCS;
+		if ( !strcasecmp ( sIdent, "user_weight" ) )
+			return XRANK_USER_WEIGHT;
+		if ( !strcasecmp ( sIdent, "hit_count" ) )
+			return XRANK_HIT_COUNT;
+		if ( !strcasecmp ( sIdent, "word_count" ) )
+			return XRANK_WORD_COUNT;
+		if ( !strcasecmp ( sIdent, "tf_idf" ) )
+			return XRANK_TF_IDF;
+		if ( !strcasecmp ( sIdent, "min_hit_pos" ) )
+			return XRANK_MIN_HIT_POS;
+		if ( !strcasecmp ( sIdent, "min_best_span_pos" ) )
+			return XRANK_MIN_BEST_SPAN_POS;
+		if ( !strcasecmp ( sIdent, "bm25" ) )
+			return XRANK_BM25;
+		return -1;
+	}
+
+	int IsKnownFunc ( const char * sFunc )
+	{
+		if ( !strcasecmp ( sFunc, "sum" ) )
+			return XRANK_SUM;
+		return -1;
+	}
+
+	ISphExpr * CreateNode ( int iID, ISphExpr * pLeft )
+	{
+		int * pCF = &m_pState->m_iCurrentField; // just a shortcut
+		switch ( iID )
+		{
+			case XRANK_LCS:					return new Expr_FieldFactor_c<BYTE> ( pCF, m_pState->m_uLCS );
+			case XRANK_USER_WEIGHT:			return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_pWeights );
+			case XRANK_HIT_COUNT:			return new Expr_FieldFactor_c<DWORD> ( pCF, m_pState->m_uHitCount );
+			case XRANK_WORD_COUNT:			return new Expr_FieldFactor_c<DWORD> ( pCF, m_pState->m_uWordCount );
+			case XRANK_TF_IDF:				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dTFIDF );
+			case XRANK_MIN_HIT_POS:			return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinHitPos );
+			case XRANK_MIN_BEST_SPAN_POS:	return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinBestSpanPos );
+			case XRANK_BM25:				return new Expr_IntPtr_c ( &m_pState->m_uDocBM25 );
+			case XRANK_SUM:					return new Expr_Sum_c ( m_pState, pLeft );
+			default:						return NULL;
+		}
+	}
+
+	ESphAttr GetIdentType ( int iID )
+	{
+		switch ( iID )
+		{
+			case XRANK_LCS:
+			case XRANK_USER_WEIGHT:
+			case XRANK_HIT_COUNT:
+			case XRANK_WORD_COUNT:
+			case XRANK_MIN_HIT_POS:
+			case XRANK_MIN_BEST_SPAN_POS:
+			case XRANK_BM25:
+				return SPH_ATTR_INTEGER;
+			case XRANK_TF_IDF:
+				return SPH_ATTR_FLOAT;
+			default:
+				assert ( 0 );
+				return SPH_ATTR_INTEGER;
+		}
+	}
+
+	ESphAttr GetFuncType ( int iID, ESphAttr eArgType )
+	{
+		switch ( iID )
+		{
+			case XRANK_SUM:		return eArgType;
+			default:			return SPH_ATTR_INTEGER;
+		}
+	}
+
+	int GetExpectedArgc ( int iID )
+	{
+		switch ( iID )
+		{
+			case XRANK_SUM:		return 1;
+			default:			return -1;
+		}
+	}
+
+	const char * GetFuncName ( int iID )
+	{
+		switch ( iID )
+		{
+			case XRANK_SUM:		return "SUM";
+			default:			return "???";
+		}
+	}
+
+	void CheckEnter ( int iID )
+	{
+		if ( !m_sCheckError )
+			switch ( iID )
+		{
+			case XRANK_LCS:
+			case XRANK_USER_WEIGHT:
+			case XRANK_HIT_COUNT:
+			case XRANK_WORD_COUNT:
+			case XRANK_TF_IDF:
+			case XRANK_MIN_HIT_POS:
+			case XRANK_MIN_BEST_SPAN_POS:
+				if ( !m_bCheckInFieldAggr )
+					m_sCheckError = "field factors must only occur withing field aggregates in ranking expression";
+				break;
+
+			case XRANK_SUM:
+				if ( m_bCheckInFieldAggr )
+					m_sCheckError = "field aggregates can not be nested in ranking expression";
+				else
+					m_bCheckInFieldAggr = true;
+				break;
+
+			default:
+				assert ( iID>=0 );
+				return;
+		}
+	}
+
+	void CheckExit ( int iID )
+	{
+		if ( !m_sCheckError && iID==XRANK_SUM )
+		{
+			assert ( m_bCheckInFieldAggr );
+			m_bCheckInFieldAggr = false;
+		}
+	}
+};
+
+
+/// ctor
+RankerState_Expr_fn::RankerState_Expr_fn ()
+	: m_pWeights ( NULL )
+	, m_sExpr ( NULL )
+	, m_pExpr ( NULL )
+{}
+
+
+/// dtor
+RankerState_Expr_fn::~RankerState_Expr_fn ()
+{
+	SafeRelease ( m_pExpr );
+}
+
+
+/// initialize ranker state
+bool RankerState_Expr_fn::Init ( int iFields, const int * pWeights, ExtRanker_c *, CSphString & sError )
+{
+	// cleanup factors
+	memset ( m_uLCS, 0, sizeof(m_uLCS) );
+	memset ( m_uMatchMask, 0, sizeof(m_uMatchMask) );
+	m_uCurLCS = 0;
+	m_iExpDelta = -INT_MAX;
+	m_iFields = iFields;
+	m_pWeights = pWeights;
+	m_uDocBM25 = 0;
+	m_uMatchedFields = 0;
+	m_iCurrentField = 0;
+	memset ( m_uHitCount, 0, sizeof(m_uHitCount) );
+	memset ( m_uWordCount, 0, sizeof(m_uWordCount) );
+	memset ( m_dTFIDF, 0, sizeof(m_dTFIDF) );
+	memset ( m_iMinHitPos, 0, sizeof(m_iMinHitPos) );
+	memset ( m_iMinBestSpanPos, 0, sizeof(m_iMinBestSpanPos) );
+
+	// parse expression
+	bool bUsesWeight;
+	ExprRankerHook_c tHook ( this );
+	m_pExpr = sphExprParse ( m_sExpr, *m_pSchema, &m_eExprType, &bUsesWeight, sError, NULL, &tHook );
+	if ( !m_pExpr )
+		return false;
+	if ( m_eExprType!=SPH_ATTR_INTEGER && m_eExprType!=SPH_ATTR_FLOAT )
+	{
+		sError = "ranking expression must evaluate to integer or float";
+		return false;
+	}
+	if ( bUsesWeight )
+	{
+		sError = "ranking expression must not refer to WEIGHT()";
+		return false;
+	}
+	if ( tHook.m_sCheckError )
+	{
+		sError = tHook.m_sCheckError;
+		return false;
+	}
+
+	// all seems ok
+	return true;
+}
+
+
+/// process next hit, update factors
+void RankerState_Expr_fn::Update ( const ExtHit_t * pHlist )
+{
+	const DWORD uField = HITMAN::GetField ( pHlist->m_uHitpos );
+
+	// update LCS
+	int iDelta = HITMAN::GetLCS ( pHlist->m_uHitpos ) - pHlist->m_uQuerypos;
+	if ( iDelta==m_iExpDelta )
+		m_uCurLCS = m_uCurLCS + BYTE(pHlist->m_uWeight);
+	else
+		m_uCurLCS = BYTE(pHlist->m_uWeight);
+	if ( m_uCurLCS>m_uLCS[uField] )
+	{
+		m_uLCS[uField] = m_uCurLCS;
+		m_iMinBestSpanPos[uField] = HITMAN::GetPos ( pHlist->m_uHitpos ) - m_uCurLCS + 1;
+	}
+	m_iExpDelta = iDelta + pHlist->m_uSpanlen - 1;
+
+	// update other stuff
+	m_uMatchMask[uField] |= ( 1<<(pHlist->m_uQuerypos-1) );
+	m_uMatchedFields |= ( 1UL<<uField );
+	m_uHitCount[uField]++;
+	m_uWordCount[uField] |= ( 1<<pHlist->m_uQuerypos );
+	m_dTFIDF[uField] += m_dIDF [ pHlist->m_uQuerypos ];
+	if ( !m_iMinHitPos[uField] )
+		m_iMinHitPos[uField] = HITMAN::GetPos ( pHlist->m_uHitpos );
+}
+
+
+/// finish document processing, compute weight from factors
+DWORD RankerState_Expr_fn::Finalize ( const CSphMatch & tMatch )
+{
+	// finishing touches
+	m_uDocBM25 = tMatch.m_iWeight;
+	for ( int i=0; i<m_iFields; i++ )
+		m_uWordCount[i] = sphBitCount ( m_uWordCount[i] );
+
+	// compute expression
+	DWORD uRes = ( m_eExprType==SPH_ATTR_INTEGER )
+		? m_pExpr->IntEval ( tMatch )
+		: (DWORD)m_pExpr->Eval ( tMatch );
+
+	// cleanup
+	// OPTIMIZE? quick full wipe? (using dwords/sse/whatever)
+	m_uCurLCS = 0;
+	m_iExpDelta = -1;
+	for ( int i=0; i<m_iFields; i++ )
+	{
+		m_uMatchMask[i] = 0;
+		m_uLCS[i] = 0;
+		m_uHitCount[i] = 0;
+		m_uWordCount[i] = 0;
+		m_dTFIDF[i] = 0;
+		m_iMinHitPos[i] = 0;
+		m_iMinBestSpanPos[i] = 0;
+	}
+	m_uMatchedFields = 0;
+
+	// done
+	return uRes;
+}
+
+
+/// expression ranker
+class ExtRanker_Expr_c : public ExtRanker_T<RankerState_Expr_fn>
+{
+public:
+	ExtRanker_Expr_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const char * sExpr, const CSphSchema & tSchema )
+		: ExtRanker_T<RankerState_Expr_fn> ( tXQ, tSetup )
+	{
+		// tricky bit, we stash the pointer to expr here, but it will be parsed
+		// somewhat later during InitState() call, when IDFs etc are computed
+		m_tState.m_sExpr = sExpr;
+		m_tState.m_pSchema = &tSchema;
+	}
+
+	void SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
+	{
+		ExtRanker_T<RankerState_Expr_fn>::SetQwordsIDF ( hQwords );
+
+		m_tState.m_dIDF.Resize ( m_iMaxQuerypos+1 );
+		ARRAY_FOREACH ( i, m_tState.m_dIDF )
+			m_tState.m_dIDF[i] = 0.0f;
+		hQwords.IterateStart();
+		while ( hQwords.IterateNext() )
+			m_tState.m_dIDF [ hQwords.IterateGet().m_iQueryPos ] = hQwords.IterateGet().m_fIDF;
+	}
+};
+
+//////////////////////////////////////////////////////////////////////////
+// RANKER FACTORY
 //////////////////////////////////////////////////////////////////////////
 
 static void CheckQueryWord ( const char * szWord, CSphQueryResult * pResult, const CSphIndexSettings & tSettings, bool bStar )
@@ -4754,7 +5202,7 @@ struct ExtQwordOrderbyQueryPos_t
 };
 
 
-ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, ESphRankMode eRankMode, CSphQueryResult * pResult, const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx )
+ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, CSphQueryResult * pResult, const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx )
 {
 	// shortcut
 	const CSphIndex * pIndex = tTermSetup.m_pIndex;
@@ -4771,7 +5219,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, ESphRankMode eRankMode, CS
 
 	// setup eval-tree
 	ExtRanker_c * pRanker = NULL;
-	switch ( eRankMode )
+	switch ( pQuery->m_eRanker )
 	{
 		case SPH_RANK_PROXIMITY_BM25:
 			if ( uPayloadMask )
@@ -4793,8 +5241,9 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, ESphRankMode eRankMode, CS
 		case SPH_RANK_MATCHANY:			pRanker = new ExtRanker_T < RankerState_MatchAny_fn > ( tXQ, tTermSetup ); break;
 		case SPH_RANK_FIELDMASK:		pRanker = new ExtRanker_T < RankerState_Fieldmask_fn > ( tXQ, tTermSetup ); break;
 		case SPH_RANK_SPH04:			pRanker = new ExtRanker_T < RankerState_ProximityBM25Exact_fn > ( tXQ, tTermSetup ); break;
+		case SPH_RANK_EXPR:				pRanker = new ExtRanker_Expr_c ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema() ); break;
 		default:
-			pResult->m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int)eRankMode );
+			pResult->m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int)pQuery->m_eRanker );
 			pRanker = new ExtRanker_T < RankerState_Proximity_fn<true> > ( tXQ, tTermSetup );
 			break;
 	}
@@ -4838,7 +5287,8 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, ESphRankMode eRankMode, CS
 	}
 
 	pRanker->SetQwordsIDF ( hQwords );
-	pRanker->InitState ( tCtx );
+	if ( !pRanker->InitState ( tCtx, pResult->m_sError ) )
+		SafeDelete ( pRanker );
 	return pRanker;
 }
 
@@ -4895,7 +5345,6 @@ CSphHitMarker * CSphHitMarker::Create ( const XQNode_t * pRoot, const ISphQwordS
 //////////////////////////////////////////////////////////////////////////
 // INTRA-BATCH CACHING
 //////////////////////////////////////////////////////////////////////////
-
 
 /// container that does intra-batch query-sub-tree caching
 /// actually carries the cached data, NOT to be recreated frequently (see thin wrapper below)

@@ -969,12 +969,18 @@ struct ExtHit_t
 	DWORD		m_uWeight;
 };
 
+enum SphZoneHit_e
+{
+	SPH_ZONE_FOUND,
+	SPH_ZONE_NO_SPAN,
+	SPH_ZONE_NO_DOCUMENT
+};
 
 class ISphZoneCheck
 {
 public:
 	virtual ~ISphZoneCheck () {}
-	virtual bool IsInZone ( int iZone, const ExtHit_t * pHit ) = 0;
+	virtual SphZoneHit_e IsInZone ( int iZone, const ExtHit_t * pHit ) = 0;
 };
 
 //////////////////////////////////////////////////////////////////////////

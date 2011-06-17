@@ -1835,11 +1835,11 @@ public:
 #endif
 	}
 
-	virtual bool IsInZone ( int iZone, const ExtHit_t * pHit )
+	virtual SphZoneHit_e IsInZone ( int iZone, const ExtHit_t * pHit )
 	{
 		Hitpos_t uPos = HITMAN::GetLCS ( pHit->m_uHitpos );
 		int iOpen = FindSpan ( m_dZones[iZone].m_dOpen, uPos );
-		return ( iOpen>=0 && uPos<=m_dZones[iZone].m_dClose[iOpen] );
+		return ( iOpen>=0 && uPos<=m_dZones[iZone].m_dClose[iOpen] ) ? SPH_ZONE_FOUND : SPH_ZONE_NO_SPAN;
 	}
 };
 

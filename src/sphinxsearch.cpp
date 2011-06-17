@@ -264,7 +264,9 @@ protected:
 	SphDocID_t					m_uDoneFor;
 
 	ISphZoneCheck *				m_pZoneChecker;					///< zone-limited searches query ranker about zones
-	CSphVector<int>				m_dZones;					///< zone ids for this particular term
+	mutable CSphVector<int>		m_dZones;					///< zone ids for this particular term
+	mutable SphDocID_t			m_uLastZonedId;
+	mutable int					m_iCheckFrom;
 };
 
 
@@ -711,19 +713,7 @@ struct ZoneHash_fn
 {
 	static inline int Hash ( const ZoneKey_t & tKey )
 	{
-		// FNV32 hash first byte of zone first (more than 256 zones per query are unlikely)
-		DWORD uHash = 0x050c5d1fUL ^ ( tKey.m_iZone & 0xff );
-
-		// now hash docid bytes, lsb first (intel-style)
-		SphDocID_t uDocid = tKey.m_uDocid;
-		for ( BYTE i=0; i<sizeof(SphDocID_t); i++ )
-		{
-			uHash = uHash*0x01000193UL ^ (DWORD)( uDocid & 0xff );
-			uDocid >>= 8;
-		}
-
-		// FNV also recommends xor hashing for tiny bases, but lets omit that for now
-		return uHash;
+		return (DWORD)tKey.m_uDocid ^ ( tKey.m_iZone<<16 );
 	}
 };
 
@@ -750,7 +740,7 @@ public:
 
 public:
 	// FIXME? hide and friend?
-	virtual bool				IsInZone ( int iZone, const ExtHit_t * pHit );
+	virtual SphZoneHit_e		IsInZone ( int iZone, const ExtHit_t * pHit );
 
 public:
 	CSphMatch					m_dMatches[ExtNode_i::MAX_DOCS];	///< exposed for caller
@@ -1548,6 +1538,8 @@ ExtTermPos_c<T>::ExtTermPos_c ( ISphQword * pQword, const XQNode_t * pNode, cons
 	, m_uDoneFor ( 0 )
 	, m_pZoneChecker ( tSetup.m_pZoneChecker )
 	, m_dZones ( pNode->m_dZones )
+	, m_uLastZonedId ( 0 )
+	, m_iCheckFrom ( 0 )
 {
 	AllocDocinfo ( tSetup );
 }
@@ -1563,6 +1555,8 @@ void ExtTermPos_c<T>::Reset ( const ISphQwordSetup & tSetup )
 	m_uLastID = 0;
 	m_eState = COPY_DONE;
 	m_uDoneFor = 0;
+	m_uLastZonedId = 0;
+	m_iCheckFrom = 0;
 }
 
 template<>
@@ -1597,9 +1591,25 @@ template<>
 inline bool ExtTermPos_c<TERM_POS_ZONES>::IsAcceptableHit ( const ExtHit_t * pHit ) const
 {
 	assert ( m_pZoneChecker );
-	ARRAY_FOREACH ( i, m_dZones )
-		if ( m_pZoneChecker->IsInZone ( m_dZones[i], pHit ) )
+
+	if ( m_uLastZonedId!=pHit->m_uDocid )
+		m_iCheckFrom = 0;
+	m_uLastZonedId = pHit->m_uDocid;
+
+	// only check zones that actually match this document
+	for ( int i=m_iCheckFrom; i<m_dZones.GetLength(); i++ )
+	{
+		SphZoneHit_e eState = m_pZoneChecker->IsInZone ( m_dZones[i], pHit );
+		switch ( eState )
+		{
+		case SPH_ZONE_FOUND:
 			return true;
+		case SPH_ZONE_NO_DOCUMENT:
+			Swap ( m_dZones[i], m_dZones[m_iCheckFrom] );
+			m_iCheckFrom++;
+			break;
+		}
+	}
 	return false;
 }
 
@@ -1663,6 +1673,7 @@ const ExtDoc_t * ExtTermPos_c<T>::GetDocsChunk ( SphDocID_t * pMaxID )
 		// find and emit new document
 		while ( pDoc->m_uDocid<pHit->m_uDocid ) pDoc++; // FIXME? unsafe in broken cases
 		assert ( pDoc->m_uDocid==pHit->m_uDocid );
+		assert ( iMyDoc<MAX_DOCS-1 );
 
 		if ( uLastID!=pDoc->m_uDocid )
 			CopyExtDoc ( m_dMyDocs[iMyDoc++], *pDoc, &pDocinfo, m_iStride );
@@ -4118,27 +4129,25 @@ void ExtRanker_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 }
 
 
-bool ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit )
+SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit )
 {
-	// remove end markers that might mess up ordering
-	// also, a shortcut
-	Hitpos_t uPos = HITMAN::GetLCS ( pHit->m_uHitpos );
-
 	// quick route, we have current docid cached
 	ZoneKey_t tKey; // OPTIMIZE? allow 2-component hash keys maybe?
-	tKey.m_iZone = iZone;
 	tKey.m_uDocid = pHit->m_uDocid;
+	tKey.m_iZone = iZone;
 
 	ZoneInfo_t * pZone = m_hZoneInfo ( tKey );
 	if ( pZone )
 	{
+		// remove end markers that might mess up ordering
+		Hitpos_t uPos = HITMAN::GetLCS ( pHit->m_uHitpos );
 		int iSpan = FindSpan ( pZone->m_dStarts, uPos );
-		return ( iSpan>=0 && uPos<=pZone->m_dEnds[iSpan] );
+		return ( iSpan>=0 && uPos<=pZone->m_dEnds[iSpan] ) ? SPH_ZONE_FOUND : SPH_ZONE_NO_SPAN;
 	}
 
 	// is there any zone info for this document at all?
 	if ( pHit->m_uDocid<=m_dZoneMax[iZone] )
-		return false;
+		return SPH_ZONE_NO_DOCUMENT;
 
 	// long route, read in zone info for all (!) the documents until next requested
 	// that's because we might be queried out of order
@@ -4157,7 +4166,7 @@ bool ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit )
 			if ( !pStart )
 			{
 				m_dZoneMax[iZone] = DOCID_MAX;
-				return false;
+				return SPH_ZONE_NO_DOCUMENT;
 			}
 		}
 
@@ -4167,7 +4176,7 @@ bool ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit )
 			if ( !pEnd )
 			{
 				m_dZoneMax[iZone] = DOCID_MAX;
-				return false;
+				return SPH_ZONE_NO_DOCUMENT;
 			}
 		}
 
@@ -4212,7 +4221,7 @@ bool ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit )
 
 			// no zone info for all those precending documents (including requested one)
 			m_dZoneMax[iZone] = pStart->m_uDocid-1;
-			return false;
+			return SPH_ZONE_NO_DOCUMENT;
 		}
 
 		// cache all matching docs from current chunks below requested docid
@@ -4312,11 +4321,13 @@ bool ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit )
 	pZone = m_hZoneInfo ( tKey );
 	if ( pZone )
 	{
+		// remove end markers that might mess up ordering
+		Hitpos_t uPos = HITMAN::GetLCS ( pHit->m_uHitpos );
 		int iSpan = FindSpan ( pZone->m_dStarts, uPos );
-		return ( iSpan>=0 && uPos<=pZone->m_dEnds[iSpan] );
+		return ( iSpan>=0 && uPos<=pZone->m_dEnds[iSpan] ) ? SPH_ZONE_FOUND : SPH_ZONE_NO_SPAN;
 	}
 
-	return false;
+	return SPH_ZONE_NO_DOCUMENT;
 }
 
 //////////////////////////////////////////////////////////////////////////

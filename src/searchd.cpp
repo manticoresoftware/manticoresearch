@@ -9806,8 +9806,8 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 				if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET )
 				{
 					// collect data from scattered insvals
-					// note that values still needs to be Uniq()ed at this point
 					// FIXME! maybe remove this mess, and just have a single m_dMvas pool in parser instead?
+					tVal.m_pVals->Uniq();
 					dMvas.Add ( tVal.m_pVals->GetLength() );
 					for ( int j=0; j<tVal.m_pVals->GetLength(); j++ )
 					{

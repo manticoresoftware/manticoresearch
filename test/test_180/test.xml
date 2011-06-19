@@ -33,8 +33,8 @@ index rt1
 
 
 <sphqueries>
-<sphinxql>insert into rt1 (id, idd, str1, mva1, body) values ( 1, 1, '', ( 1, 10, 100), 'the' )</sphinxql>
-<sphinxql>insert into rt1 (id, idd, str1, mva2, body) values ( 2, 2, '', ( 11, 12, 13), 'the' )</sphinxql>
+<sphinxql>insert into rt1 (id, idd, str1, mva1, body) values ( 1, 1, '', ( 100, 10, 1), 'the' )</sphinxql>
+<sphinxql>insert into rt1 (id, idd, str1, mva2, body) values ( 2, 2, '', ( 11, 13, 12), 'the' )</sphinxql>
 <sphinxql>select * from rt1 where mva1>12</sphinxql>
 <sphinxql>select * from rt1 where match ('the')  and mva1>12</sphinxql>
 <sphinxql>select * from rt1 where mva1=10</sphinxql>

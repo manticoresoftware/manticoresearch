@@ -100,7 +100,6 @@ struct ServedIndex_t
 	bool				m_bExpand;
 	bool				m_bToDelete;
 	bool				m_bOnlyNew;
-	int					m_iUpdateTag;
 	bool				m_bRT;
 
 public:
@@ -412,8 +411,6 @@ static DistributedMutex_t					g_tDistLock;
 
 enum
 {
-	SPH_PIPE_UPDATED_ATTRS,
-	SPH_PIPE_SAVED_ATTRS,
 	SPH_PIPE_PREREAD
 };
 
@@ -535,21 +532,21 @@ struct SearchdStats_t
 };
 
 static SearchdStats_t *			g_pStats		= NULL;
-static CSphSharedBuffer<BYTE>	g_tStatsBuffer;
+static CSphSharedBuffer<SearchdStats_t>	g_tStatsBuffer;
 static CSphProcessSharedMutex	g_tStatsMutex;
 
 //////////////////////////////////////////////////////////////////////////
 
 struct FlushState_t
 {
-	int		m_iUpdateTag;		///< ever-growing update tag
 	int		m_bFlushing;		///< update flushing in progress
 	int		m_iFlushTag;		///< last flushed tag
 	bool	m_bForceCheck;		///< forced check/flush flag
 };
 
 static volatile FlushState_t *	g_pFlush		= NULL;
-static CSphSharedBuffer<BYTE>	g_tFlushBuffer;
+static CSphSharedBuffer<FlushState_t>	g_tFlushBuffer;
+static CSphMutex g_tFlushMutex;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -626,7 +623,6 @@ void ServedIndex_t::Reset ()
 	m_bExpand = false;
 	m_bToDelete = false;
 	m_bOnlyNew = false;
-	m_iUpdateTag = 0;
 	m_bRT = false;
 
 	m_tLock = CSphRwlock();
@@ -1294,6 +1290,7 @@ void Shutdown ()
 
 		SafeDelete ( g_pCfg );
 
+		g_tFlushMutex.Done();
 		// save attribute updates for all local indexes
 		for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
 		{
@@ -5138,14 +5135,6 @@ struct AggrResult_t : CSphQueryResult
 };
 
 
-template < typename T, typename U >
-struct CSphPair
-{
-	T m_tFirst;
-	U m_tSecond;
-};
-
-
 struct TaggedMatchSorter_fn : public SphAccessor_T<CSphMatch>
 {
 	void CopyKey ( CSphMatch * pMed, CSphMatch * pVal ) const
@@ -7649,7 +7638,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue )
 		else if ( sVal=="sph04" )		m_pQuery->m_eRanker = SPH_RANK_SPH04;
 		else if ( sVal=="expr" )
 		{
-			m_pParseError->SetSprintf ( "missing ranker expression (use OPTION ranker=expr('1+2') for example)", sVal.cstr() );
+			m_pParseError->SetSprintf ( "missing ranker expression (use OPTION ranker=expr('1+2') for example)" );
 			return false;
 		} else
 		{
@@ -8825,7 +8814,7 @@ void UpdateRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuff
 }
 
 static void DoCommandUpdate ( const char * sIndex, const CSphAttrUpdate & tUpd,
-	int & iSuccesses, int & iUpdated, CSphVector < CSphPair < CSphString, DWORD > > & dUpdated,
+	int & iSuccesses, int & iUpdated,
 	SearchFailuresLog_c & dFails, const ServedIndex_t * pServed )
 {
 	if ( !pServed || !pServed->m_pIndex )
@@ -8835,9 +8824,7 @@ static void DoCommandUpdate ( const char * sIndex, const CSphAttrUpdate & tUpd,
 	}
 
 	CSphString sError;
-	DWORD uStatusDelta = pServed->m_pIndex->m_uAttrsStatus;
 	int iUpd = pServed->m_pIndex->UpdateAttributes ( tUpd, -1, sError );
-	uStatusDelta = pServed->m_pIndex->m_uAttrsStatus & ~uStatusDelta;
 
 	if ( iUpd<0 )
 	{
@@ -8847,15 +8834,11 @@ static void DoCommandUpdate ( const char * sIndex, const CSphAttrUpdate & tUpd,
 	{
 		iUpdated += iUpd;
 		iSuccesses++;
-
-		CSphPair<CSphString, DWORD> tAdd;
-		tAdd.m_tFirst = sIndex;
-		tAdd.m_tSecond = uStatusDelta;
-		dUpdated.Add ( tAdd );
 	}
 }
 
-void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeFD )
+
+void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq )
 {
 	if ( !CheckCommandVersion ( iVer, VER_COMMAND_UPDATE, tReq ) )
 		return;
@@ -8966,7 +8949,6 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 	SearchFailuresLog_c dFails;
 	int iSuccesses = 0;
 	int iUpdated = 0;
-	CSphVector < CSphPair < CSphString, DWORD > > dUpdated;
 
 	ARRAY_FOREACH ( iIdx, dIndexNames )
 	{
@@ -8974,7 +8956,7 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 		const ServedIndex_t * pLocked = g_pIndexes->GetRlockedEntry ( sReqIndex );
 		if ( pLocked )
 		{
-			DoCommandUpdate ( sReqIndex, tUpd, iSuccesses, iUpdated, dUpdated, dFails, pLocked );
+			DoCommandUpdate ( sReqIndex, tUpd, iSuccesses, iUpdated, dFails, pLocked );
 			pLocked->Unlock();
 		} else
 		{
@@ -8985,7 +8967,7 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 			{
 				const char * sLocal = dLocal[i].cstr();
 				const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( sLocal );
-				DoCommandUpdate ( sLocal, tUpd, iSuccesses, iUpdated, dUpdated, dFails, pServed );
+				DoCommandUpdate ( sLocal, tUpd, iSuccesses, iUpdated, dFails, pServed );
 				if ( pServed )
 					pServed->Unlock();
 			}
@@ -9011,25 +8993,6 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 				UpdateReplyParser_t tParser ( &iUpdated );
 				iSuccesses += WaitForRemoteAgents ( dAgents, tDist.m_iAgentQueryTimeout, tParser, NULL ); // FIXME? profile update time too?
 			}
-		}
-	}
-
-	// notify head daemon of local updates
-	if ( iPipeFD>=0 )
-	{
-		DWORD uTmp = SPH_PIPE_UPDATED_ATTRS;
-		sphWrite ( iPipeFD, &uTmp, sizeof(DWORD) ); // FIXME? add buffering/checks?
-
-		uTmp = dUpdated.GetLength();
-		sphWrite ( iPipeFD, &uTmp, sizeof(DWORD) );
-
-		ARRAY_FOREACH ( i, dUpdated )
-		{
-			uTmp = strlen ( dUpdated[i].m_tFirst.cstr() );
-			sphWrite ( iPipeFD, &uTmp, sizeof(DWORD) );
-			sphWrite ( iPipeFD, dUpdated[i].m_tFirst.cstr(), uTmp );
-			uTmp = dUpdated[i].m_tSecond;
-			sphWrite ( iPipeFD, &uTmp, sizeof(DWORD) );
 		}
 	}
 
@@ -9291,7 +9254,7 @@ void HandleCommandFlush ( int iSock, int iVer, InputBuffer_c & tReq )
 
 #define THD_STATE(_state) { if ( pThd ) pThd->m_eThdState = _state; }
 
-void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc_t * pThd )
+void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 {
 	MEMORY ( SPH_MEM_HANDLE_NONSQL );
 	THD_STATE ( THD_HANDSHAKE );
@@ -9418,7 +9381,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD, ThdDes
 			case SEARCHD_COMMAND_SEARCH:	HandleCommandSearch ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_EXCERPT:	HandleCommandExcerpt ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_KEYWORDS:	HandleCommandKeywords ( iSock, iCommandVer, tBuf ); break;
-			case SEARCHD_COMMAND_UPDATE:	HandleCommandUpdate ( iSock, iCommandVer, tBuf, iPipeFD ); break;
+			case SEARCHD_COMMAND_UPDATE:	HandleCommandUpdate ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_PERSIST:
 				bPersist = ( tBuf.GetInt()!=0 );
 				iTimeout = 1;
@@ -9434,7 +9397,6 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD, ThdDes
 	} while ( bPersist );
 
 	sphLogDebugv ( "conn %s: exiting", sClientIP );
-	SafeClose ( iPipeFD );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -10885,7 +10847,7 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 }
 
 
-void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc_t * pThd )
+void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 {
 	MEMORY ( SPH_MEM_HANDLE_SQL );
 	THD_STATE ( THD_HANDSHAKE );
@@ -11154,20 +11116,18 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD, ThdDesc
 
 	// set off query guard
 	SphCrashLogger_c::SetLastQuery ( NULL, 0, true );
-
-	SafeClose ( iPipeFD );
 }
 
 //////////////////////////////////////////////////////////////////////////
 // HANDLE-BY-LISTENER
 //////////////////////////////////////////////////////////////////////////
 
-void HandleClient ( ProtocolType_e eProto, int iSock, const char * sClientIP, int iPipeFD, ThdDesc_t * pThd )
+void HandleClient ( ProtocolType_e eProto, int iSock, const char * sClientIP, ThdDesc_t * pThd )
 {
 	switch ( eProto )
 	{
-		case PROTO_SPHINX:		HandleClientSphinx ( iSock, sClientIP, iPipeFD, pThd ); break;
-		case PROTO_MYSQL41:		HandleClientMySQL ( iSock, sClientIP, iPipeFD, pThd ); break;
+		case PROTO_SPHINX:		HandleClientSphinx ( iSock, sClientIP, pThd ); break;
+		case PROTO_MYSQL41:		HandleClientMySQL ( iSock, sClientIP, pThd ); break;
 		default:				assert ( 0 && "unhandled protocol type" ); break;
 	}
 }
@@ -12002,35 +11962,6 @@ protected:
 };
 
 
-/// handle pipe notifications from attribute updating
-void HandlePipeUpdate ( PipeReader_t & tPipe, bool bFailure )
-{
-	if ( bFailure )
-		return; // silently ignore errors
-
-	++g_pFlush->m_iUpdateTag;
-
-	int iUpdIndexes = tPipe.GetInt ();
-	for ( int i=0; i<iUpdIndexes; i++ )
-	{
-		// index name and status must follow
-		CSphString sIndex = tPipe.GetString ();
-		DWORD uStatus = tPipe.GetInt ();
-		if ( tPipe.IsError() )
-			break;
-
-		ServedIndex_t * pServed = g_pIndexes->GetWlockedEntry ( sIndex );
-		if ( pServed )
-		{
-			pServed->m_iUpdateTag = g_pFlush->m_iUpdateTag;
-			pServed->m_pIndex->m_uAttrsStatus |= uStatus;
-			pServed->Unlock();
-		} else
-			sphWarning ( "INTERNAL ERROR: unknown index '%s' in HandlePipeUpdate()", sIndex.cstr() );
-	}
-}
-
-
 /// handle pipe notifications from prereading
 void HandlePipePreread ( PipeReader_t & tPipe, bool bFailure )
 {
@@ -12129,38 +12060,6 @@ void HandlePipePreread ( PipeReader_t & tPipe, bool bFailure )
 }
 
 
-/// handle pipe notifications from attribute saving
-void HandlePipeSave ( PipeReader_t & tPipe, bool bFailure )
-{
-	// in any case, we're no more flushing
-	g_pFlush->m_bFlushing = false;
-
-	// silently ignore errors
-	if ( bFailure )
-		return;
-
-	// handle response
-	int iSavedIndexes = tPipe.GetInt ();
-	for ( int i=0; i<iSavedIndexes; i++ )
-	{
-		// index name must follow
-		CSphString sIndex = tPipe.GetString ();
-		if ( tPipe.IsError() )
-			break;
-
-		const ServedIndex_t * pServed = g_pIndexes->GetWlockedEntry ( sIndex );
-		if ( pServed )
-		{
-			if ( pServed->m_iUpdateTag<=g_pFlush->m_iFlushTag )
-				pServed->m_pIndex->m_uAttrsStatus = 0;
-
-			pServed->Unlock();
-		} else
-			sphWarning ( "INTERNAL ERROR: unknown index '%s' in HandlePipeSave()", sIndex.cstr() );
-	}
-}
-
-
 /// check if there are any notifications from the children and handle them
 void CheckPipes ()
 {
@@ -12206,8 +12105,6 @@ void CheckPipes ()
 		// run the proper handler
 		switch ( iHandler )
 		{
-			case SPH_PIPE_UPDATED_ATTRS:	HandlePipeUpdate ( tPipe, bFailure ); break;
-			case SPH_PIPE_SAVED_ATTRS:		HandlePipeSave ( tPipe, bFailure ); break;
 			case SPH_PIPE_PREREAD:			HandlePipePreread ( tPipe, bFailure ); break;
 			default:						if ( !bFailure ) sphWarning ( "INTERNAL ERROR: unknown pipe handler (handler=%d, status=%d)", iHandler, uStatus ); break;
 		}
@@ -12931,6 +12828,36 @@ void CheckReopen ()
 }
 
 
+static void SaveIndexes ()
+{
+	for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
+	{
+		const ServedIndex_t & tServed = it.Get();
+		tServed.ReadLock();
+		if ( tServed.m_bEnabled )
+		{
+			if ( !tServed.m_pIndex->SaveAttributes () )
+				sphWarning ( "index %s: attrs save failed: %s", it.GetKey().cstr(), tServed.m_pIndex->GetLastError().cstr() );
+		}
+		tServed.Unlock();
+	}
+}
+
+
+static void ThdSaveIndexes ( void * )
+{
+	SaveIndexes ();
+
+	// we're no more flushing
+	g_tFlushMutex.Lock();
+	g_pFlush->m_bFlushing = false;
+	g_tFlushMutex.Unlock();
+}
+
+#if !USE_WINDOWS
+int PreforkChild ();
+#endif
+
 void CheckFlush ()
 {
 	if ( g_iAttrFlushPeriod<=0 || g_pFlush->m_bFlushing )
@@ -12953,12 +12880,11 @@ void CheckFlush ()
 	}
 
 	// check if there are dirty indexes
-	int iFlushTag = g_pFlush->m_iFlushTag;
 	bool bDirty = false;
 	for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
 	{
 		const ServedIndex_t & tServed = it.Get();
-		if ( tServed.m_bEnabled && tServed.m_iUpdateTag>iFlushTag )
+		if ( tServed.m_bEnabled && tServed.m_pIndex->GetAttributeStatus() )
 		{
 			bDirty = true;
 			break;
@@ -12981,48 +12907,30 @@ void CheckFlush ()
 	}
 
 	// launch the flush!
-	sphLogDebug ( "attrflush: forking writer" );
-	int iUpdateTag = g_pFlush->m_iUpdateTag; // avoid a race between forking writer and updating flush tag
-	int iPipeFD = PipeAndFork ( false, SPH_PIPE_SAVED_ATTRS ); // FIXME! gracefully handle fork() failures, Windows, etc
-	if ( g_bHeadDaemon )
-	{
-		g_pFlush->m_iFlushTag = iUpdateTag;
-		return;
-	}
+	g_pFlush->m_iFlushTag++;
 
-	// child process, do the work
-	CSphVector<CSphString> dSaved;
+	sphLogDebug ( "attrflush: starting writer, tag ( %d )", g_pFlush->m_iFlushTag );
 
-	for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
+#if !USE_WINDOWS
+	if ( g_eWorkers==MPM_FORK || g_eWorkers==MPM_PREFORK )
 	{
-		const ServedIndex_t & tServed = it.Get();
-		tServed.ReadLock();
-		if ( tServed.m_bEnabled && tServed.m_iUpdateTag > iFlushTag )
+		PreforkChild(); // FIXME! gracefully handle fork() failures, Windows, etc
+		if ( g_bHeadDaemon )
 		{
-			if ( tServed.m_pIndex->SaveAttributes () )
-				dSaved.Add ( it.GetKey() );
-			else
-				sphWarning ( "index %s: attrs save failed: %s", it.GetKey().cstr(), tServed.m_pIndex->GetLastError().cstr() );
+			return;
 		}
-		tServed.Unlock();
-	}
 
-	// report and exit
-	DWORD uTmp = SPH_PIPE_SAVED_ATTRS;
-	sphWrite ( iPipeFD, &uTmp, sizeof(DWORD) ); // FIXME? add buffering/checks?
-
-	uTmp = dSaved.GetLength();
-	sphWrite ( iPipeFD, &uTmp, sizeof(DWORD) );
-
-	ARRAY_FOREACH ( i, dSaved )
+		// child process, do the work
+		SaveIndexes ();
+		g_pFlush->m_bFlushing = false;
+		exit ( 0 );
+	} else
+#endif
 	{
-		uTmp = strlen ( dSaved[i].cstr() );
-		sphWrite ( iPipeFD, &uTmp, sizeof(DWORD) );
-		sphWrite ( iPipeFD, dSaved[i].cstr(), uTmp );
+		ThdDesc_t tThd;
+		if ( !sphThreadCreate ( &tThd.m_tThd, ThdSaveIndexes, NULL, true ) )
+			sphWarning ( "failed to create attribute save thread, error[%d] %s", errno, strerror(errno) );
 	}
-
-	::close ( iPipeFD );
-	exit ( 0 );
 }
 
 
@@ -13762,7 +13670,7 @@ Listener_t * DoAccept ( int * pClientSock, char * sClientName )
 				char * d = sClientName;
 				while ( *d )
 					d++;
-				snprintf ( d, 7, ":%d", (int)ntohs(pSa->sin_port) );
+				snprintf ( d, 7, ":%d", (int)ntohs ( pSa->sin_port ) );
 			}
 			if ( saStorage.ss_family==AF_UNIX )
 				strncpy ( sClientName, "(local)", SPH_ADDRESS_SIZE );
@@ -13805,7 +13713,7 @@ void TickPreforked ( CSphProcessSharedMutex * pAcceptMutex )
 
 	if ( pListener )
 	{
-		HandleClient ( pListener->m_eProto, iClientSock, sClientIP, -1, NULL );
+		HandleClient ( pListener->m_eProto, iClientSock, sClientIP, NULL );
 		sphSockClose ( iClientSock );
 	}
 }
@@ -13839,7 +13747,7 @@ void HandlerThread ( void * pArg )
 	// handle that client
 	ThdDesc_t * pThd = (ThdDesc_t*) pArg;
 	sphThreadSet ( g_tConnKey, &pThd->m_iConnID );
-	HandleClient ( pThd->m_eProto, pThd->m_iClientSock, pThd->m_sClientName.cstr(), -1, pThd );
+	HandleClient ( pThd->m_eProto, pThd->m_iClientSock, pThd->m_sClientName.cstr(), pThd );
 	sphSockClose ( pThd->m_iClientSock );
 
 	// done; remove myself from the table
@@ -13911,7 +13819,7 @@ void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 	// handle the client
 	if ( g_eWorkers==MPM_NONE )
 	{
-		HandleClient ( pListener->m_eProto, iClientSock, sClientName, -1, NULL );
+		HandleClient ( pListener->m_eProto, iClientSock, sClientName, NULL );
 		sphSockClose ( iClientSock );
 		return;
 	}
@@ -13921,11 +13829,12 @@ void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 	{
 		sphLogDebugv ( "conn %s: accepted, socket %d", sClientName, iClientSock );
 		int iChildPipe = PipeAndFork ( false, -1 );
+		SafeClose ( iChildPipe );
 		if ( !g_bHeadDaemon )
 		{
 			// child process, handle client
 			sphLogDebugv ( "conn %s: forked handler, socket %d", sClientName, iClientSock );
-			HandleClient ( pListener->m_eProto, iClientSock, sClientName, iChildPipe, NULL );
+			HandleClient ( pListener->m_eProto, iClientSock, sClientName, NULL );
 			sphSockClose ( iClientSock );
 			exit ( 0 );
 		} else
@@ -13963,14 +13872,15 @@ void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 }
 
 
-void * InitSharedBuffer ( CSphSharedBuffer<BYTE> & tBuffer, int iLen )
+template<typename T>
+T * InitSharedBuffer ( CSphSharedBuffer<T> & tBuffer, int iLen )
 {
 	CSphString sError, sWarning;
 	if ( !tBuffer.Alloc ( iLen, sError, sWarning ) )
 		sphDie ( "failed to allocate shared buffer (msg=%s)", sError.cstr() );
 
-	void * pRes = tBuffer.GetWritePtr();
-	memset ( pRes, 0, iLen ); // reset
+	T * pRes = tBuffer.GetWritePtr();
+	memset ( pRes, 0, iLen*sizeof(T) ); // reset
 	return pRes;
 }
 
@@ -14599,9 +14509,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	// shared stuff (perf counters, flushing) startup
 	//////////////////////////////////////////////////
 
-	g_pStats = (SearchdStats_t*) InitSharedBuffer ( g_tStatsBuffer, sizeof(SearchdStats_t) );
-	g_pFlush = (FlushState_t*) InitSharedBuffer ( g_tFlushBuffer, sizeof(FlushState_t) );
+	g_pStats = InitSharedBuffer ( g_tStatsBuffer, 1 );
+	g_pFlush = InitSharedBuffer ( g_tFlushBuffer, 1 );
 	g_pStats->m_uStarted = (DWORD)time(NULL);
+	g_tFlushMutex.Init();
 
 	if ( g_eWorkers==MPM_PREFORK )
 		g_pConnID = (int*) InitSharedBuffer ( g_dConnID, sizeof(g_iConnID) );

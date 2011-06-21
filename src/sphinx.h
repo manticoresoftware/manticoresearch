@@ -2663,6 +2663,8 @@ public:
 	/// on failure, false is returned and GetLastError() contains error message
 	virtual bool				SaveAttributes () = 0;
 
+	virtual DWORD				GetAttributeStatus () const = 0;
+
 public:
 	/// internal debugging hook, DO NOT USE
 	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig ) = 0;
@@ -2680,7 +2682,6 @@ public:
 	const char * GetName () { return m_sIndexName.cstr(); }
 
 public:
-	DWORD						m_uAttrsStatus;			///< whether in-memory attrs are updated (compared to disk state)
 	int64_t						m_iTID;
 
 	bool						m_bEnableStar;			///< enable star-syntax

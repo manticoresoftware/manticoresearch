@@ -1348,6 +1348,7 @@ public:
 
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError );
 	virtual bool				SaveAttributes ();
+	virtual DWORD				GetAttributeStatus () const;
 
 	bool						EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const;
 
@@ -1427,8 +1428,13 @@ private:
 	CSphAutofile				m_tDoclistFile;			///< doclist file
 	CSphAutofile				m_tHitlistFile;			///< hitlist file
 
+#define SPH_SHARED_VARS_COUNT 2
+
+	DWORD *						m_pPreread;
+	DWORD *						m_pAttrsStatus;
+	CSphSharedBuffer<DWORD>		m_dShared;				///< are we ready to search
+
 	bool						m_bPreallocated;		///< are we ready to preread
-	CSphSharedBuffer<BYTE>		m_bPreread;				///< are we ready to search
 	DWORD						m_uVersion;				///< data files version
 	bool						m_bUse64;				///< whether the header is id64
 
@@ -7086,8 +7092,7 @@ DWORD * sphArenaInit ( int iMaxBytes )
 /////////////////////////////////////////////////////////////////////////////
 
 CSphIndex::CSphIndex ( const char * sIndexName, const char * sFilename )
-	: m_uAttrsStatus ( 0 )
-	, m_iTID ( 0 )
+	: m_iTID ( 0 )
 	, m_bEnableStar ( false )
 	, m_bExpandKeywords ( false )
 	, m_iExpansionLimit ( 0 )
@@ -7216,6 +7221,9 @@ CSphIndex_VLN::CSphIndex_VLN ( const char* sIndexName, const char * sFilename )
 	m_bIsEmpty = true;
 	m_bMerging = false;
 	m_tLastHit.m_sKeyword[0] = '\0';
+
+	m_pPreread = NULL;
+	m_pAttrsStatus = NULL;
 }
 
 
@@ -7475,7 +7483,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 		iUpdated++;
 	}
 
-	m_uAttrsStatus |= uUpdateMask; // FIXME! add lock/atomic?
+	*m_pAttrsStatus |= uUpdateMask; // FIXME! add lock/atomic?
 	return iUpdated;
 }
 
@@ -7656,12 +7664,16 @@ bool CSphIndex_VLN::JuggleFile ( const char* szExt, bool bNeedOrigin )
 
 bool CSphIndex_VLN::SaveAttributes ()
 {
-	if ( !m_uAttrsStatus || !m_uDocinfo )
+	if ( !m_pAttrsStatus || !*m_pAttrsStatus || !m_uDocinfo )
 		return true;
+
+	DWORD uAttrStatus = *m_pAttrsStatus;
+
+	sphLogDebugvv ( "index '%s' attrs (%d) saving...", m_sIndexName.cstr(), uAttrStatus );
 
 	assert ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && m_uDocinfo && m_pDocinfo.GetWritePtr() );
 
-	for ( ; m_uAttrsStatus & ATTRS_MVA_UPDATED ; )
+	for ( ; uAttrStatus & ATTRS_MVA_UPDATED ; )
 	{
 		// collect the indexes of MVA schema attributes
 		CSphVector<CSphAttrLocator> dMvaLocators;
@@ -7748,9 +7760,20 @@ bool CSphIndex_VLN::SaveAttributes ()
 	if ( g_pBinlog )
 		g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
 
-	m_uAttrsStatus = 0;
+	if ( *m_pAttrsStatus==uAttrStatus )
+		*m_pAttrsStatus = 0;
+
+	sphLogDebugvv ( "index '%s' attrs (%d) saved", m_sIndexName.cstr(), *m_pAttrsStatus );
+
 	return true;
 }
+
+DWORD CSphIndex_VLN::GetAttributeStatus () const
+{
+	assert ( m_pAttrsStatus );
+	return *m_pAttrsStatus;
+}
+
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -12011,7 +12034,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	assert ( iTag>=0 );
 
 	// check if index is ready
-	if ( m_bPreread.IsEmpty() || !m_bPreread[0] )
+	if ( !m_pPreread || !*m_pPreread )
 	{
 		pResult->m_sError = "index not preread";
 		return false;
@@ -12227,7 +12250,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 	CSphIndex_VLN * pIndex = (CSphIndex_VLN *)m_pIndex;
 
 	// binary search through checkpoints for a one whose range matches word ID
-	assert ( pIndex->m_bPreread[0] );
+	assert ( pIndex->m_pPreread && *pIndex->m_pPreread );
 	assert ( !pIndex->m_bPreloadWordlist || !pIndex->m_tWordlist.m_pBuf.IsEmpty() );
 
 	// empty index?
@@ -12360,7 +12383,6 @@ void CSphIndex_VLN::Dealloc ()
 	m_uDocinfo = 0;
 	m_uMinMaxIndex = 0;
 	m_tSettings.m_eDocinfo = SPH_DOCINFO_NONE;
-	m_uAttrsStatus = 0;
 
 	m_bPreallocated = false;
 	SafeDelete ( m_pTokenizer );
@@ -12370,8 +12392,11 @@ void CSphIndex_VLN::Dealloc ()
 		g_MvaArena.TaggedFreeTag ( m_iIndexTag );
 	m_iIndexTag = -1;
 
+	m_pPreread = NULL;
+	m_pAttrsStatus = NULL;
+
 #ifndef NDEBUG
-	m_bPreread.Reset ();
+	m_dShared.Reset ();
 #endif
 }
 
@@ -12846,13 +12871,15 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 	// reset
 	Dealloc ();
 
-	// always keep preread flag
-	if ( m_bPreread.IsEmpty() )
+	// always keep shared variables flag
+	if ( m_dShared.IsEmpty() )
 	{
-		if ( !m_bPreread.Alloc ( 1, m_sLastError, sWarning ) )
+		if ( !m_dShared.Alloc ( SPH_SHARED_VARS_COUNT, m_sLastError, sWarning ) )
 			return false;
 	}
-	m_bPreread.GetWritePtr()[0] = 0;
+	memset ( m_dShared.GetWritePtr(), 0, m_dShared.GetLength() );
+	m_pPreread = m_dShared.GetWritePtr()+0;
+	m_pAttrsStatus = m_dShared.GetWritePtr()+1;
 
 	// set new locking flag
 	m_pDocinfo.SetMlock ( bMlock );
@@ -13115,7 +13142,7 @@ bool CSphIndex_VLN::Preread ()
 		m_sLastError = "INTERNAL ERROR: not preallocated";
 		return false;
 	}
-	if ( m_bPreread[0] )
+	if ( !m_pPreread || *m_pPreread )
 	{
 		m_sLastError = "INTERNAL ERROR: already preread";
 		return false;
@@ -13271,7 +13298,7 @@ bool CSphIndex_VLN::Preread ()
 	}
 	#endif // PARANOID
 
-	m_bPreread.GetWritePtr()[0] = 1;
+	*m_pPreread = 1;
 	sphLogDebug ( "Preread successfully finished" );
 	return true;
 }
@@ -13642,7 +13669,7 @@ bool CSphIndex_VLN::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, cons
 template < class Qword >
 bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString & sError ) const
 {
-	if ( m_bPreread.IsEmpty() || !m_bPreread[0] )
+	if ( !m_pPreread || !*m_pPreread )
 	{
 		sError = "index not preread";
 		return false;
@@ -14208,7 +14235,7 @@ XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphString & sError, 
 			pBuf = new BYTE [ m_tWordlist.m_iMaxChunk ];
 	}
 
-	assert ( m_bPreread[0] );
+	assert ( m_pPreread && *m_pPreread );
 	assert ( !m_bPreloadWordlist || !m_tWordlist.m_pBuf.IsEmpty() );
 	pNode = DoExpansion ( pNode, pBuf, iFD, pResult );
 
@@ -14488,7 +14515,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	PROFILE_BEGIN ( query_init );
 
 	// non-ready index, empty response!
-	if ( m_bPreread.IsEmpty() || !m_bPreread[0] )
+	if ( !m_pPreread || !*m_pPreread )
 	{
 		pResult->m_sError = "index not preread";
 		return false;
@@ -14698,7 +14725,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	const int FAILS_THRESH = 100;
 
 	// check if index is ready
-	if ( m_bPreread.IsEmpty() || !m_bPreread[0] )
+	if ( m_dShared.GetNumEntries()!=SPH_SHARED_VARS_COUNT || !m_pPreread || !*m_pPreread )
 		LOC_FAIL(( fp, "index not preread" ));
 
 	bool bProgress = isatty ( fileno ( fp ) )!=0;

@@ -1262,6 +1262,7 @@ void Shutdown ()
 			g_dThd.Reset();
 			g_tThdMutex.Unlock();
 			g_tThdMutex.Done();
+			g_tFlushMutex.Done();
 		}
 
 #if !USE_WINDOWS
@@ -1290,7 +1291,6 @@ void Shutdown ()
 
 		SafeDelete ( g_pCfg );
 
-		g_tFlushMutex.Done();
 		// save attribute updates for all local indexes
 		for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
 		{
@@ -14512,7 +14512,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	g_pStats = InitSharedBuffer ( g_tStatsBuffer, 1 );
 	g_pFlush = InitSharedBuffer ( g_tFlushBuffer, 1 );
 	g_pStats->m_uStarted = (DWORD)time(NULL);
-	g_tFlushMutex.Init();
 
 	if ( g_eWorkers==MPM_PREFORK )
 		g_pConnID = (int*) InitSharedBuffer ( g_dConnID, sizeof(g_iConnID) );
@@ -14843,6 +14842,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		g_dThd.Reserve ( g_iMaxChildren*2 );
 
 		g_tDistLock.Init();
+		g_tFlushMutex.Init();
 	}
 
 	// replay last binlog

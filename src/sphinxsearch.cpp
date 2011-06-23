@@ -4551,7 +4551,7 @@ struct RankerState_ProximityBM25Exact_fn
 		// upd LCS
 		DWORD uField = HITMAN::GetField ( pHlist->m_uHitpos );
 		int iDelta = HITMAN::GetLCS ( pHlist->m_uHitpos ) - pHlist->m_uQuerypos;
-		if ( iDelta==m_iExpDelta && HITMAN::GetLCS ( pHlist->m_uHitpos ) > m_uMinExpPos )
+		if ( iDelta==m_iExpDelta && HITMAN::GetLCS ( pHlist->m_uHitpos ) >= m_uMinExpPos )
 		{
 			m_uCurLCS = m_uCurLCS + BYTE(pHlist->m_uWeight);
 			if ( HITMAN::IsEnd ( pHlist->m_uHitpos ) && (int)pHlist->m_uQuerypos==m_iMaxQuerypos )

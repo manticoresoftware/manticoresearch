@@ -616,17 +616,20 @@ class SphinxConfig
 				// parse ranker
 				$ranker = 0;
 				$ranker_s = $q->getAttribute("ranker");
-				switch ( $ranker_s )
+
+				if ( empty($ranker_s) )
 				{
-					case "":				$ranker_s = "(default)"; break;
-					case "proximity_bm25":	$ranker = SPH_RANK_PROXIMITY_BM25; break;
-					case "bm25":			$ranker = SPH_RANK_BM25; break;
-					case "none":			$ranker = SPH_RANK_NONE; break;
-					case "wordcount":		$ranker = SPH_RANK_WORDCOUNT; break;
-					default:
+					$ranker_s = "(default)";
+				} else
+				{
+					$ranker = @constant("SPH_RANK_" . strtoupper($ranker_s));
+					if ( $ranker===NULL )
+					{
 						printf ( "$config_file: unknown ranker '%s'\n", $ranker_s );
 						return false;
+					}
 				}
+
 				$res["ranker"] = $ranker;
 				$res["ranker_s"] = $ranker_s;
 

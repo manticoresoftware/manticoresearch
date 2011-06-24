@@ -3698,6 +3698,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			dExtra.Add();
 	}
 
+	CSphVector<CSphString> dWrongWords;
+	SmallStringHash_T<CSphQueryResultMeta::WordStat_t> hDiskStats;
+
 	assert ( dExtra.GetLength()==m_pDiskChunks.GetLength() );
 	CSphVector<const BYTE *> dDiskStrings ( m_pDiskChunks.GetLength() );
 	CSphVector<const DWORD *> dDiskMva ( m_pDiskChunks.GetLength() );
@@ -3716,16 +3719,36 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			return false;
 		}
 
-		tChunkResult.m_hWordStats.IterateStart();
-		while ( tChunkResult.m_hWordStats.IterateNext() )
+		// check terms inconsistency amongs disk chunks
+		const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hSrcStats = tChunkResult.m_hWordStats;
+		if ( pResult->m_hWordStats.GetLength() )
 		{
-			const CSphQueryResultMeta::WordStat_t & tStat = tChunkResult.m_hWordStats.IterateGet();
-			pResult->AddStat ( tChunkResult.m_hWordStats.IterateGetKey(), tStat.m_iDocs, tStat.m_iHits, tStat.m_bExpanded );
+			hSrcStats.IterateStart();
+			while ( hSrcStats.IterateNext() )
+			{
+				const CSphQueryResultMeta::WordStat_t * pDstStat = pResult->m_hWordStats ( hSrcStats.IterateGetKey() );
+				const CSphQueryResultMeta::WordStat_t & tSrcStat = hSrcStats.IterateGet();
+
+				// all indexes should produce same words from the query
+				if ( !pDstStat && !tSrcStat.m_bExpanded )
+				{
+					dWrongWords.Add ( hSrcStats.IterateGetKey() );
+				}
+
+				pResult->AddStat ( hSrcStats.IterateGetKey(), tSrcStat.m_iDocs, tSrcStat.m_iHits, tSrcStat.m_bExpanded );
+			}
+		} else
+		{
+			pResult->m_hWordStats = hSrcStats;
 		}
 
 		dDiskStrings[iChunk] = tChunkResult.m_pStrings;
 		dDiskMva[iChunk] = tChunkResult.m_pMva;
 		dExtra.Pop();
+
+		// keep last chunk statistics to check vs rt settings
+		if ( iChunk==m_pDiskChunks.GetLength()-1 )
+			hDiskStats = hSrcStats;
 	}
 
 	if ( m_bKlistLocked )
@@ -3802,6 +3825,33 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	{
 		m_tRwlock.Unlock ();
 		return false;
+	}
+
+	// check terms inconsistency disk chunks vs rt
+	if ( pResult->m_hWordStats.GetLength() && hDiskStats.GetLength() )
+	{
+		const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hSrcStats = pResult->m_hWordStats;
+		hSrcStats.IterateStart();
+		while ( hSrcStats.IterateNext() )
+		{
+			const CSphQueryResultMeta::WordStat_t * pDstStat = hDiskStats ( hSrcStats.IterateGetKey() );
+			const CSphQueryResultMeta::WordStat_t & tSrcStat = hSrcStats.IterateGet();
+
+			// all indexes should produce same words from the query
+			if ( !pDstStat && !tSrcStat.m_bExpanded )
+			{
+				dWrongWords.Add ( hSrcStats.IterateGetKey() );
+			}
+		}
+	}
+
+	// make warning on terms inconsistency
+	if ( dWrongWords.GetLength() )
+	{
+		dWrongWords.Uniq();
+		pResult->m_sWarning.SetSprintf ( "index '%s': query word(s) mismatch: %s", m_sIndexName.cstr(), dWrongWords.Begin()->cstr() );
+		for ( int i=1; i<dWrongWords.GetLength(); i++ )
+			pResult->m_sWarning.SetSprintf ( "%s, %s", pResult->m_sWarning.cstr(), dWrongWords[i].cstr() );
 	}
 
 	// empty index, empty result

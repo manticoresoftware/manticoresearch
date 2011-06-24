@@ -128,6 +128,9 @@ $res =  $client->BuildExcerpts($docs, 'test', 'and PARAGRAPH words',  $opts);
 $res['boundary'] = 'paragraph';
 $results[] = $res;
 
+$results[] = $client->BuildExcerpts(array('tokenizer filter crash at lc'), 'multiform', 'crash at lc',
+	array ('query_mode'=>1, 'html_strip_mode'=>'retain', 'limit'=>0) );
+
 ]]></custom_test>
 
 

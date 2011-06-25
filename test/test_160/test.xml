@@ -131,6 +131,9 @@ $results[] = $res;
 $results[] = $client->BuildExcerpts(array('tokenizer filter crash at lc'), 'multiform', 'crash at lc',
 	array ('query_mode'=>1, 'html_strip_mode'=>'retain', 'limit'=>0) );
 
+$results[] = $client->BuildExcerpts(array('dog dummy! as the house nearby the dog'), 'test', 'the. dog? as',
+	array ('query_mode'=>1, 'html_strip_mode'=>'retain', 'limit'=>0) );
+
 ]]></custom_test>
 
 

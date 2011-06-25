@@ -5628,10 +5628,12 @@ void CSphReader::SeekTo ( SphOffset_t iPos, int iSizeHint )
 	assert ( iPos>=0 );
 
 #ifndef NDEBUG
+#if PARANOID
 	struct_stat tStat;
 	fstat ( m_iFD, &tStat );
 	if ( iPos > tStat.st_size )
 		sphDie ( "INTERNAL ERROR: seeking past the end of file" );
+#endif
 #endif
 
 	if ( iPos>=m_iPos && iPos<m_iPos+m_iBuffUsed )

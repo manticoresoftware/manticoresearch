@@ -1721,67 +1721,319 @@ otherwise.
 </sect1>
 
 
-<sect1 id="weighting"><title>Weighting</title>
+<sect1 id="weighting"><title>Search results ranking</title>
+<bridgehead>Ranking overview</bridgehead>
 <para>
-Specific weighting function (currently) depends on the search mode.
+Ranking (aka weighting) of the search results can be defined
+as a process of computing a so-called relevance (aka weight)
+for every given matched document with regards to a given query
+that matched it. So relevance is in the end just a number attached
+to every document that estimates how relevant the document is to
+the query. Search results can then be sorted based on this number
+and/or some additional parameters, so that the most sought after
+results would come up higher on the results page.
 </para>
 <para>
-There are these major parts which are used in the weighting functions:
-<orderedlist>
-<listitem><para>phrase rank,</para></listitem>
-<listitem><para>statistical rank.</para></listitem>
-</orderedlist>
+There is no single standard one-size-fits-all way to rank
+any document in any scenario. Moreover, there can not ever be
+such a way, because relevance is <emphasis>subjective</emphasis>.
+As in, what seems relevant to you might not seem relevant to me.
+Hence, in general case it's not just hard to compute, it's
+theoretically impossible.
 </para>
 <para>
-Phrase rank is based on a length of longest common subsequence
-(LCS) of search words between document body and query phrase. So if
-there's a perfect phrase match in some document then its phrase rank
-would be the highest possible, and equal to query words count.
+So ranking in Sphinx is configurable. It has a notion of
+a so-called <b>ranker</b>. A ranker can formally be defined
+as a function that takes document and query as its input and
+produces a relevance value as output. In layman's terms,
+a ranker controls exactly how (using which specific algorithm)
+will Sphinx assign weights to the document.
 </para>
 <para>
-Statistical rank is based on classic BM25 function which only takes
-word frequencies into account. If the word is rare in the whole database
-(ie. low frequency over document collection) or mentioned a lot in specific
-document (ie. high frequency over matching document), it receives more weight.
-Final BM25 weight is a floating point number between 0 and 1.
+Previously, this ranking function was rigidly bound to the matching mode.
+So in the legacy matching modes (that is, SPH_MATCH_ALL, SPH_MATCH_ANY,
+SPH_MATCH_PHRASE, and SPH_MATCH_BOOLEAN) you can not choose the ranker.
+You can only do that in the SPH_MATCH_EXTENDED mode. (Which is the only
+mode in SphinxQL and the suggested mode in SphinxAPI anyway.) To choose
+a non-default ranker you can either use
+<link linkend="api-func-setrankingmode">SetRankingMode()</link>
+with SphinxAPI, or <link linkend="sphinxql-select">OPTION ranker</link>
+clause in <code>SELECT</code> statement when using SphinxQL.
 </para>
 <para>
-In all modes, per-field weighted phrase ranks are computed as
-a product of LCS multiplied by per-field weight speficifed by user.
-Per-field weights are integer, default to 1, and can not be set
-lower than 1.
+As a sidenote, legacy matching modes are internally implemented via
+the unified syntax anyway. When you use one of those modes, Sphinx just
+internally adjusts the query and sets the associated ranker, then
+executes the query using the very same unified code path.
+</para>
+<bridgehead>Available rankers</bridgehead>
+<para>
+Sphinx ships with a number of built-in rankers suited for different
+purposes. A number of them uses two factors, phrase proximity (aka LCS)
+and BM25. Phrase proximity works on the keyword positions, while BM25
+works on the keyword frequencies. Basically, the better the degree of
+the phrase match between the document body and the query, the higher
+is the phrase proximity (it maxes out when the document contains
+the entire query as a verbatim quote). And BM25 is higher when
+the document containers more rare words. We'll save the detailed
+discussion for later.
 </para>
 <para>
-In SPH_MATCH_BOOLEAN mode, no weighting is performed at all, every match weight
-is set to 1.
+Currently implemented rankers are:
+<itemizedlist>
+<listitem><para>
+SPH_RANK_PROXIMITY_BM25, the default ranking mode that uses and combines
+both phrase proximity and BM25 ranking.
+</para></listitem>
+<listitem><para>
+SPH_RANK_BM25, statistical ranking mode which uses BM25 ranking only (similar to
+most other full-text engines). This mode is faster but may result in worse quality
+on queries which contain more than 1 keyword.
+</para></listitem>
+<listitem><para>
+SPH_RANK_NONE, no ranking mode. This mode is obviously the fastest.
+A weight of 1 is assigned to all matches. This is sometimes called boolean
+searching that just matches the documents but does not rank them.
+</para></listitem>
+<listitem><para>SPH_RANK_WORDCOUNT, ranking by the keyword occurrences count.
+This ranker computes the per-field keyword occurrence counts, then multiplies
+them by field weights, and sums the resulting values.
+</para></listitem>
+<listitem><para>
+SPH_RANK_PROXIMITY, added in version 0.9.9-rc1, returns raw phrase proximity
+value as a result. This mode is internally used to emulate SPH_MATCH_ALL queries.
+</para></listitem>
+<listitem><para>
+SPH_RANK_MATCHANY, added in version 0.9.9-rc1, returns rank as it was computed
+in SPH_MATCH_ANY mode ealier, and is internally used to emulate SPH_MATCH_ANY queries.
+</para></listitem>
+<listitem><para>
+SPH_RANK_FIELDMASK, added in version 0.9.9-rc2, returns a 32-bit mask with
+N-th bit corresponding to N-th fulltext field, numbering from 0. The bit will
+only be set when the respective field has any keyword occurences satisfiying
+the query.
+</para></listitem>
+<listitem><para>
+SPH_RANK_SPH04, added in version 1.10-beta, is generally based on the default
+SPH_RANK_PROXIMITY_BM25 ranker, but additionally boosts the matches when
+they occur in the very beginning or the very end of a text field. Thus,
+if a field equals the exact query, SPH04 should rank it higher than a field
+that contains the exact query but is not equal to it. (For instance, when
+the query is "Hyde Park", a document entitled "Hyde Park" should be ranked
+higher than a one entitled "Hyde Park, London" or "The Hyde Park Cafe".)
+</para></listitem>
+<listitem><para>
+SPH_RANK_EXPR, added in version 2.0.2-beta, lets you specify the ranking
+formula in run time. It exposes a number of internal text factors and lets
+you defined how the final weight should be computed from those factors.
+You can find more details about its syntax and a reference available
+factors in a subsection below.
+</para></listitem>
+</itemizedlist>
 </para>
 <para>
-In SPH_MATCH_ALL and SPH_MATCH_PHRASE modes, final weight is a sum of weighted phrase ranks.
+You should specify the <code>SPH_RANK_</code> prefix and use capital letters only
+when using the <link linkend="api-func-setrankingmode">SetRankingMode()</link>
+call from the SphinxAPI. The API ports expose these as global constants.
+Using SphinxQL syntax, the prefix should be omitted and the ranker name
+is case insensitive. Example:
+<programlisting>
+// SphinxAPI
+$client->SetRankingMode ( SPH_RANK_SPH04 );
+
+// SphinxQL
+mysql_query ( "SELECT ... OPTION ranker=sph04" );
+</programlisting>
+</para>
+<bridgehead>Legacy matching modes rankers</bridgehead>
+<para>
+Legacy matching modes automatically select a ranker as follows:
+<itemizedlist>
+<listitem><para>SPH_MATCH_ALL uses SPH_RANK_PROXIMITY ranker;</para></listitem>
+<listitem><para>SPH_MATCH_ANY uses SPH_RANK_MATCHANY ranker;</para></listitem>
+<listitem><para>SPH_MATCH_PHRASE uses SPH_RANK_PROXIMITY ranker;</para></listitem>
+<listitem><para>SPH_MATCH_BOOLEAN uses SPH_RANK_NONE ranker.</para></listitem>
+</itemizedlist>
+</para>
+<bridgehead>Expression based ranker (SPH_RANK_EXPR)</bridgehead>
+<para>
+Expression ranker, added in version 2.0.2-beta, lets you change the ranking
+formula on the fly, on a per-query basis. For a quick kickoff, this is how you
+emulate PROXIMITY_BM25 ranker using the expression based one:
+<programlisting>
+SELECT *, WEIGHT() FROM myindex WHERE MATCH('hello world')
+OPTION ranker=expr('sum(lcs*user_weight)*1000+bm25')
+</programlisting>
+The output of this query must not change if you omit the <code>OPTION</code>
+clause, because the default ranker (PROXIMITY_BM25) behaves exactly like
+specified in the ranker formula above. But the expression ranker is somewhat
+more flexible than just that and provides access to many more factors.
 </para>
 <para>
-In SPH_MATCH_ANY mode, the idea is essentially the same, but it also
-adds a count of matching words in each field. Before that, weighted
-phrase ranks are additionally mutliplied by a value big enough to
-guarantee that higher phrase rank in <emphasis role="bold">any</emphasis> field will make the
-match ranked higher, even if it's field weight is low.
+The ranking formula is an arbitrary arithmetic expression that can use
+constants, document attributes, built-in functions and operators (described
+in <xref linkend="expressions"/>), and also a few ranking-specific things
+that are only accessible in a ranking formula. Namely, those are field
+aggregation functions, field-level, and document-level ranking factors.
 </para>
 <para>
-In SPH_MATCH_EXTENDED mode, final weight is a sum of weighted phrase
-ranks and BM25 weight, multiplied by 1000 and rounded to integer.
+A <b>document-level factor</b> is a numeric value computed by the ranking
+engine for every matched document with regards to the current query.
+(So it differs from a plain document attribute in that the attribute
+do not depend on the full text query, while factors might.) Those
+factors can be used anywhere in the ranking expression.
+Currently implemented document-level factors are:
+<itemizedlist>
+<listitem><para>
+<code>bm25</code> (integer), a document-level BM25 estimate (computed without
+keyword occurrence filtering).
+</para></listitem>
+<listitem><para>
+<code>max_lcs</code> (integer), a query-level maximum possible value that
+the sum(lcs*user_weight) expression can ever take. This can be
+useful for weight boost scaling. For instance, MATCHANY ranker
+formula uses this to guarantee that a full phrase match in any
+field rankes higher than any combination of partial matches
+in all fields.
+</para></listitem>
+<listitem><para>
+<code>field_mask</code> (integer), a document-level 32-bit mask of matched
+fields.
+</para></listitem>
+</itemizedlist>
 </para>
 <para>
-This is going to be changed, so that MATCH_ALL and MATCH_ANY modes
-use BM25 weights as well. This would improve search results in those
-match spans where phrase ranks are equal; this is especially useful
-for 1-word queries.
+A <b>field-level factor</b> is a numeric value computed by the ranking
+engine for every matched in-document text field with regards to the
+current query. As more than one field can be matched by a query,
+but the final weight needs to be a single integer value, these
+values need to be folded into a single one. To achieve that,
+field-level factors can only be used within a field aggregation
+function, they can <b>not</b> be used anywhere in the expression.
+For example, you can not use <code>(lcs+bm25)</code> as your
+ranking expression, as <code>lcs</code> takes multiple values (one
+in every matched field). You shoudl use <code>(sum(lcs)+bm25)</code>
+instead, that expression sums <code>lcs</code> over all matching fields,
+and then adds <code>bm25</code> to that per-field sum.
+Currently implemented field-level factors are:
+<itemizedlist>
+<listitem><para>
+<code>lcs</code> (integer), the length of a maximum verbatim match between
+the document and the query, coutned in words. LCS stands for Longest Common
+Subsequence (or Subset). Takes a minimum value of 1 when only stray keywords
+were matched in a field, and a maximum value of query keywords count
+when the entire query was matched in a field verbatim (in the exact
+query keywords order). For example, if the query is 'hello world'
+and the field contains these two words quoted from the query (that is,
+adjacent to each other, and exaclty in the query order), <code>lcs</code>
+will be 2. For example, if the query is 'hello world program' and
+the field contains 'hello world', <code>lcs</code> will be 2.
+Note that any subset of the query keyword works, not just a subset
+of adjacent keywords. For example, if the query is 'hello world program'
+and the field contains 'hello (test program)', <code>lcs</code> will be 2
+just as well, because both 'hello' and 'program' matched in the same
+respective positions as they were in the query. Finally, if the query
+is 'hello world program' and the field contains 'hello world program',
+<code>lcs</code> will be 3. (Hopefully that is unsurpising at this point.)
+</para></listitem>
+<listitem><para>
+<code>user_weight</code> (integer), the user specified per-field weight
+(refer to <link linkend="api-func-setfieldweights">SetFieldWeights()</link>
+in SphinxAPI and <link linkend="sphinxql-select">OPTION field_weights</link>
+in SphinxQL respectively). The weights default to 1 if not specified
+explicitly.
+</para></listitem>
+<listitem><para>
+<code>hit_count</code> (integer), the number of keyword occurrences
+that matched in the field. Note that a single keyword may occur multiple
+times. For example, if 'hello' occurs 3 times in a field and 'world'
+occurs 5 times, <code>hit_count</code> will be 8.
+</para></listitem>
+<listitem><para>
+<code>word_count</code> (integer), the number of unique keywords matched
+in the field. For example, if 'hello' and 'world' occur anywhere in a field,
+<code>word_count</code> will be 2, irregardless of how many times do both
+keywords occur.
+</para></listitem>
+<listitem><para>
+<code>tf_idf</code> (float), the sum of TF*IDF over all the keywords matched in the
+field. IDF is the Inverse Document Frequency, a floating point value
+between 0 and 1 that describes how frequent is the keywords (basically,
+0 for a keyword that occurs in every document indexed, and 1 for a unique
+keyword that occurs in just a single document). TF is the Term Frequency,
+the number of matched keyword occurrences in the field. As a side note,
+<code>tf_idf</code> is actually computed by summing IDF over all matched
+occurences. That's by construction equivalent to summing TF*IDF over
+all matched keywords.
+</para></listitem>
+<listitem><para>
+<code>min_hit_pos</code> (integer), the position of the first matched keyword occurrence,
+counted in words. Indexing begins from position 1.
+</para></listitem>
+<listitem><para>
+<code>min_best_span_pos</code> (integer), the position of the first maximum LCS
+occurrences span. For example, assume that our query was 'hello world
+program' and 'hello world' subphrase was matched twice in the field,
+in positions 13 and 21. Assume that 'hello' and 'world' additionally
+occurred elsewhere in the field, but never next to each other and thus
+never as a subphrase match. In that case, <code>min_best_span_pos</code>
+will be 13. Note how for the single keyword queries
+<code>min_best_span_pos</code> will always equal <code>min_hit_pos</code>.
+</para></listitem>
+<listitem><para>
+<code>exact_hit</code> (boolean), whether a query was an exact match
+of the entire current field. Used in the SPH04 ranker.
+</para></listitem>
+</itemizedlist>
 </para>
 <para>
-The key idea (in all modes, besides boolean) is that better subphrase
-matches are ranked higher, and perfect matches are pulled to the top. Author's
-experience is that this phrase proximity based ranking provides noticeably
-better search quality than any statistical scheme alone (such as BM25,
-which is commonly used in other search engines).
+A <b>field aggregation function</b> is a single argument function
+that takes an expression with field-level factors, iterates it over
+all the matched fields, and computes the final results.
+Currently implemented field aggregation functions are:
+<itemizedlist>
+<listitem><para>
+<code>sum</code>, sums the argument expression over all matched
+fields. For instance, <code>sum(1)</code> should return a number
+of matched fields.
+</para></listitem>
+</itemizedlist>
 </para>
+<bridgehead>Expressions for the built-in rankers</bridgehead>
+<para>
+Most of the other rankers can actually be emulated with the expression
+based ranker. You just need to pass a proper expression. Such emulation is,
+of course, going to be slower than using the built-in, compiled ranker but
+still might be of interest if you want to fine-tune your ranking formula
+starting with one of the existing ones. Also, the formulas define the
+nitty gritty ranker details in a nicely readable fashion.
+</para>
+<itemizedlist>
+<listitem><para>
+SPH_RANK_PROXIMITY_BM25 = sum(lcs*user_weight)*1000+bm25
+</para></listitem>
+<listitem><para>
+SPH_RANK_BM25 = bm25
+</para></listitem>
+<listitem><para>
+SPH_RANK_NONE = 1
+</para></listitem>
+<listitem><para>
+SPH_RANK_WORDCOUNT = sum(hit_count*user_weight)
+</para></listitem>
+<listitem><para>
+SPH_RANK_PROXIMITY = sum(lcs*user_weight)
+</para></listitem>
+<listitem><para>
+SPH_RANK_MATCHANY = sum((word_count+(lcs-1)*max_lcs)*user_weight)
+</para></listitem>
+<listitem><para>
+SPH_RANK_FIELDMASK = field_mask
+</para></listitem>
+<listitem><para>
+SPH_RANK_SPH04 = sum((4*lcs+2*(min_hit_pos==1)+exact_hit)*user_weight)*1000+bm25
+</para></listitem>
+</itemizedlist>
 </sect1>
 
 
@@ -4795,13 +5047,14 @@ $cl->SetMatchMode ( SPH_MATCH_ANY ); // correct, works OK
 <sect2 id="api-func-setrankingmode"><title>SetRankingMode</title>
 <para><b>Prototype:</b> function SetRankingMode ( $ranker )</para>
 <para>
-Sets ranking mode. Only available in SPH_MATCH_EXTENDED2 matching
-mode at the time of this writing. Parameter must be a constant
-specifying one of the known modes.
+Sets ranking mode (aka ranker). Only available in SPH_MATCH_EXTENDED
+matching mode. Parameter must be a constant specifying one of the known
+rankers.
 </para>
 <para>
-By default, Sphinx computes two factors which contribute to the final
-match weight. The major part is query phrase proximity to document text.
+By default, in the EXTENDED matching mode Sphinx computes two factors
+which contribute to the final match weight. The major part is a phrase
+proximity value between the document text and the query.
 The minor part is so-called BM25 statistical function, which varies
 from 0 to 1 depending on the keyword frequency within document
 (more occurrences yield higher weight) and within the whole index
@@ -4811,53 +5064,8 @@ from 0 to 1 depending on the keyword frequency within document
 However, in some cases you'd want to compute weight differently -
 or maybe avoid computing it at all for performance reasons because
 you're sorting the result set by something else anyway. This can be
-accomplished by setting the appropriate ranking mode.
-</para>
-<para>
-Currently implemented modes are:
-<itemizedlist>
-<listitem><para>
-SPH_RANK_PROXIMITY_BM25, default ranking mode which uses and combines
-both phrase proximity and BM25 ranking.
-</para></listitem>
-<listitem><para>
-SPH_RANK_BM25, statistical ranking mode which uses BM25 ranking only (similar to
-most other full-text engines). This mode is faster but may result in worse quality
-on queries which contain more than 1 keyword.
-</para></listitem>
-<listitem><para>
-SPH_RANK_NONE, disabled ranking mode. This mode is the fastest.
-It is essentially equivalent to boolean searching. A weight of 1 is assigned
-to all matches.
-</para></listitem>
-<listitem><para>SPH_RANK_WORDCOUNT, ranking by keyword occurrences count. This ranker
-computes the amount of per-field keyword occurrences, then multiplies the
-amounts by field weights, then sums the resulting values for the final result.
-</para></listitem>
-<listitem><para>
-SPH_RANK_PROXIMITY, added in version 0.9.9-rc1, returns raw phrase proximity
-value as a result. This mode is internally used to emulate SPH_MATCH_ALL queries.
-</para></listitem>
-<listitem><para>
-SPH_RANK_MATCHANY, added in version 0.9.9-rc1, returns rank as it was computed
-in SPH_MATCH_ANY mode ealier, and is internally used to emulate SPH_MATCH_ANY queries.
-</para></listitem>
-<listitem><para>
-SPH_RANK_FIELDMASK, added in version 0.9.9-rc2, returns a 32-bit mask with
-N-th bit corresponding to N-th fulltext field, numbering from 0. The bit will
-only be set when the respective field has any keyword occurences satisfiying
-the query.
-</para></listitem>
-<listitem><para>
-SPH_RANK_SPH04, added in version 1.10-beta, is generally based on the default
-SPH_RANK_PROXIMITY_BM25 ranker, but additionally boosts the matches when
-they occur in the very beginning or the very end of a text field. Thus,
-if a field equals the exact query, SPH04 should rank it higher than a field
-that contains the exact query but is not equal to it. (For instance, when
-the query is "Hyde Park", a document entitled "Hyde Park" should be ranked
-higher than a one entitled "Hyde Park, London" or "The Hyde Park Cafe".)
-</para></listitem>
-</itemizedlist>
+accomplished by setting the appropriate ranking mode. The list of
+the modes is available in <xref linkend="weighting"/>.
 </para>
 </sect2>
 

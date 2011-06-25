@@ -4753,11 +4753,15 @@ public:
 	float				m_dTFIDF[SPH_MAX_FIELDS];
 	int					m_iMinHitPos[SPH_MAX_FIELDS];
 	int					m_iMinBestSpanPos[SPH_MAX_FIELDS];
+	int					m_iMaxQuerypos;
+	DWORD				m_uExactHit;
 
 	const char *		m_sExpr;
 	ISphExpr *			m_pExpr;
 	ESphAttr			m_eExprType;
 	const CSphSchema *	m_pSchema;
+
+	int					m_iMaxLCS;
 
 public:
 						RankerState_Expr_fn ();
@@ -4772,6 +4776,7 @@ public:
 /// extra expression ranker node types
 enum ExprRankerNode_e
 {
+	// field level factors
 	XRANK_LCS,
 	XRANK_USER_WEIGHT,
 	XRANK_HIT_COUNT,
@@ -4779,7 +4784,14 @@ enum ExprRankerNode_e
 	XRANK_TF_IDF,
 	XRANK_MIN_HIT_POS,
 	XRANK_MIN_BEST_SPAN_POS,
+	XRANK_EXACT_HIT,
+
+	// document level factors
 	XRANK_BM25,
+	XRANK_MAX_LCS,
+	XRANK_FIELD_MASK,
+
+	// field aggregation functions
 	XRANK_SUM
 };
 
@@ -4806,6 +4818,31 @@ struct Expr_FieldFactor_c : public ISphExpr
 		return (int) m_pData [ *m_pIndex ];
 	}
 };
+
+
+/// bitmask field factor specialization
+template<>
+struct Expr_FieldFactor_c<bool> : public ISphExpr
+{
+	const int *		m_pIndex;
+	const DWORD *	m_pData;
+
+	Expr_FieldFactor_c ( const int * pIndex, const DWORD * pData )
+		: m_pIndex ( pIndex )
+		, m_pData ( pData )
+	{}
+
+	float Eval ( const CSphMatch & ) const
+	{
+		return (float)( (*m_pData) >> (*m_pIndex) );
+	}
+
+	int IntEval ( const CSphMatch & ) const
+	{
+		return (int)( (*m_pData) >> (*m_pIndex) );
+	}
+};
+
 
 
 /// generic per-document int factor
@@ -4872,6 +4909,17 @@ struct Expr_Sum_c : public ISphExpr
 };
 
 
+// FIXME! cut/pasted from sphinxexpr; remove dupe
+struct Expr_GetIntConst_c : public ISphExpr
+{
+	int m_iValue;
+	explicit Expr_GetIntConst_c ( int iValue ) : m_iValue ( iValue ) {}
+	virtual float Eval ( const CSphMatch & ) const { return (float) m_iValue; } // no assert() here cause generic float Eval() needs to work even on int-evaluator tree
+	virtual int IntEval ( const CSphMatch & ) const { return m_iValue; }
+	virtual int64_t Int64Eval ( const CSphMatch & ) const { return m_iValue; }
+};
+
+
 /// hook that exposes field-level factors, document-level factors, and matched field SUM() function to generic expressions
 class ExprRankerHook_c : public ISphExprHook
 {
@@ -4889,6 +4937,7 @@ public:
 
 	int IsKnownIdent ( const char * sIdent )
 	{
+		// OPTIMIZE? hash this some nice long winter night?
 		if ( !strcasecmp ( sIdent, "lcs" ) )
 			return XRANK_LCS;
 		if ( !strcasecmp ( sIdent, "user_weight" ) )
@@ -4903,8 +4952,15 @@ public:
 			return XRANK_MIN_HIT_POS;
 		if ( !strcasecmp ( sIdent, "min_best_span_pos" ) )
 			return XRANK_MIN_BEST_SPAN_POS;
+		if ( !strcasecmp ( sIdent, "exact_hit" ) )
+			return XRANK_EXACT_HIT;
+
 		if ( !strcasecmp ( sIdent, "bm25" ) )
 			return XRANK_BM25;
+		if ( !strcasecmp ( sIdent, "max_lcs" ) )
+			return XRANK_MAX_LCS;
+		if ( !strcasecmp ( sIdent, "field_mask" ) )
+			return XRANK_FIELD_MASK;
 		return -1;
 	}
 
@@ -4927,7 +4983,10 @@ public:
 			case XRANK_TF_IDF:				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dTFIDF );
 			case XRANK_MIN_HIT_POS:			return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinHitPos );
 			case XRANK_MIN_BEST_SPAN_POS:	return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinBestSpanPos );
+			case XRANK_EXACT_HIT:			return new Expr_FieldFactor_c<bool> ( pCF, &m_pState->m_uExactHit );
 			case XRANK_BM25:				return new Expr_IntPtr_c ( &m_pState->m_uDocBM25 );
+			case XRANK_MAX_LCS:				return new Expr_GetIntConst_c ( m_pState->m_iMaxLCS );
+			case XRANK_FIELD_MASK:			return new Expr_IntPtr_c ( &m_pState->m_uMatchedFields );
 			case XRANK_SUM:					return new Expr_Sum_c ( m_pState, pLeft );
 			default:						return NULL;
 		}
@@ -4943,7 +5002,10 @@ public:
 			case XRANK_WORD_COUNT:
 			case XRANK_MIN_HIT_POS:
 			case XRANK_MIN_BEST_SPAN_POS:
+			case XRANK_EXACT_HIT:
 			case XRANK_BM25:
+			case XRANK_MAX_LCS:
+			case XRANK_FIELD_MASK:
 				return SPH_ATTR_INTEGER;
 			case XRANK_TF_IDF:
 				return SPH_ATTR_FLOAT;
@@ -4992,6 +5054,7 @@ public:
 			case XRANK_TF_IDF:
 			case XRANK_MIN_HIT_POS:
 			case XRANK_MIN_BEST_SPAN_POS:
+			case XRANK_EXACT_HIT:
 				if ( !m_bCheckInFieldAggr )
 					m_sCheckError = "field factors must only occur withing field aggregates in ranking expression";
 				break;
@@ -5025,6 +5088,7 @@ RankerState_Expr_fn::RankerState_Expr_fn ()
 	: m_pWeights ( NULL )
 	, m_sExpr ( NULL )
 	, m_pExpr ( NULL )
+	, m_iMaxLCS ( 0 )
 {}
 
 
@@ -5036,7 +5100,7 @@ RankerState_Expr_fn::~RankerState_Expr_fn ()
 
 
 /// initialize ranker state
-bool RankerState_Expr_fn::Init ( int iFields, const int * pWeights, ExtRanker_c *, CSphString & sError )
+bool RankerState_Expr_fn::Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError )
 {
 	// cleanup factors
 	memset ( m_uLCS, 0, sizeof(m_uLCS) );
@@ -5053,6 +5117,13 @@ bool RankerState_Expr_fn::Init ( int iFields, const int * pWeights, ExtRanker_c 
 	memset ( m_dTFIDF, 0, sizeof(m_dTFIDF) );
 	memset ( m_iMinHitPos, 0, sizeof(m_iMinHitPos) );
 	memset ( m_iMinBestSpanPos, 0, sizeof(m_iMinBestSpanPos) );
+	m_iMaxQuerypos = pRanker->m_iMaxQuerypos;
+	m_uExactHit = 0;
+
+	// compute query level constants (max_lcs, for matchany ranker emulation)
+	m_iMaxLCS = 0;
+	for ( int i=0; i<iFields; i++ )
+		m_iMaxLCS += pWeights[i] * pRanker->m_iQwords;
 
 	// parse expression
 	bool bUsesWeight;
@@ -5089,9 +5160,16 @@ void RankerState_Expr_fn::Update ( const ExtHit_t * pHlist )
 	// update LCS
 	int iDelta = HITMAN::GetLCS ( pHlist->m_uHitpos ) - pHlist->m_uQuerypos;
 	if ( iDelta==m_iExpDelta )
+	{
 		m_uCurLCS = m_uCurLCS + BYTE(pHlist->m_uWeight);
-	else
+		if ( HITMAN::IsEnd ( pHlist->m_uHitpos ) && (int)pHlist->m_uQuerypos==m_iMaxQuerypos && HITMAN::GetPos ( pHlist->m_uHitpos )==m_iMaxQuerypos )
+			m_uExactHit |= ( 1UL << uField );
+	} else
+	{
 		m_uCurLCS = BYTE(pHlist->m_uWeight);
+		if ( HITMAN::GetPos ( pHlist->m_uHitpos )==1 && HITMAN::IsEnd ( pHlist->m_uHitpos ) && m_iMaxQuerypos==1 )
+			m_uExactHit |= ( 1UL << uField );
+	}
 	if ( m_uCurLCS>m_uLCS[uField] )
 	{
 		m_uLCS[uField] = m_uCurLCS;
@@ -5138,6 +5216,7 @@ DWORD RankerState_Expr_fn::Finalize ( const CSphMatch & tMatch )
 		m_iMinBestSpanPos[i] = 0;
 	}
 	m_uMatchedFields = 0;
+	m_uExactHit = 0;
 
 	// done
 	return uRes;

@@ -85,7 +85,8 @@ INSERT INTO `test_table` VALUES
 ( 12, 'market street west', '' ),
 ( 13, 'north market street', '' ),
 ( 14, 'farmers market street north', '' ),
-( 15, 'flower street market', '' )
+( 15, 'flower street market', '' ),
+( 16, 'market street is so very market street', '' )
 </db_insert>
 
 </test>

@@ -3357,6 +3357,11 @@ int ExtOrder_c::GetMatchingHits ( SphDocID_t uDocid, ExtHit_t * pHitbuf, int iLi
 			dAccRecent.Resize ( 0 );
 			dAccRecent.Add ( *pHit );
 			iPosRecent = iHitPos + pHit->m_uSpanlen;
+			if ( !dAccLongest.GetLength() )
+			{
+				dAccLongest.Add	( *pHit );
+				iPosLongest = iHitPos + pHit->m_uSpanlen;
+			}
 		} else if ( iChild==dAccRecent.GetLength() && iHitPos>=iPosRecent )
 		{
 			// it fits most-recent tracker
@@ -4551,7 +4556,7 @@ struct RankerState_ProximityBM25Exact_fn
 		// upd LCS
 		DWORD uField = HITMAN::GetField ( pHlist->m_uHitpos );
 		int iDelta = HITMAN::GetLCS ( pHlist->m_uHitpos ) - pHlist->m_uQuerypos;
-		if ( iDelta==m_iExpDelta && HITMAN::GetLCS ( pHlist->m_uHitpos ) >= m_uMinExpPos )
+		if ( iDelta==m_iExpDelta && HITMAN::GetLCS ( pHlist->m_uHitpos )>=m_uMinExpPos )
 		{
 			m_uCurLCS = m_uCurLCS + BYTE(pHlist->m_uWeight);
 			if ( HITMAN::IsEnd ( pHlist->m_uHitpos ) && (int)pHlist->m_uQuerypos==m_iMaxQuerypos && HITMAN::GetPos ( pHlist->m_uHitpos )==m_iMaxQuerypos )
@@ -4850,7 +4855,7 @@ struct Expr_IntPtr_c : public ISphExpr
 {
 	DWORD * m_pVal;
 
-	Expr_IntPtr_c ( DWORD * pVal )
+	explicit Expr_IntPtr_c ( DWORD * pVal )
 		: m_pVal ( pVal )
 	{}
 
@@ -4929,7 +4934,7 @@ public:
 	bool					m_bCheckInFieldAggr;
 
 public:
-	ExprRankerHook_c ( RankerState_Expr_fn * pState )
+	explicit ExprRankerHook_c ( RankerState_Expr_fn * pState )
 		: m_pState ( pState )
 		, m_sCheckError ( NULL )
 		, m_bCheckInFieldAggr ( false )

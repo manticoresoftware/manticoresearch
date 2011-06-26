@@ -16,7 +16,7 @@ source test
 {
 	type = mysql
 	<sql_settings/>
-	sql_query = SELECT * FROM test_table
+	sql_query = SELECT * FROM test_table where document_id in (1,2,3,4,5 )
 }
 
 index test
@@ -25,6 +25,20 @@ index test
 	path	= <data_path/>/test
 	min_word_len = 1
 }
+
+source test1
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_table where document_id=6
+}
+
+index test1
+{
+	source	= test1
+	path	= <data_path/>/test1
+}
+
 </config>
 
 <db_create>
@@ -46,7 +60,8 @@ INSERT INTO test_table ( document_id, title, text ) VALUES
 ( 2, 'xxx', 'ccc ddd eee fff ggg' ),
 ( 3, 'yyy', 'one one one two three' ),
 ( 4, 'zzz', 'one two three one three one two four one two three four' ),
-( 5, '', 'a b c d e f g' );
+( 5, '', 'a b c d e f g' ),
+( 6, '', 'h1 h2 h3 h4 h5' );
 </db_insert>
 
 <queries>
@@ -79,6 +94,8 @@ INSERT INTO test_table ( document_id, title, text ) VALUES
 	<query mode="extended2"><![CDATA[ ^one << "one one" << two << three$ ]]></query>
 	<query mode="extended2"><![CDATA[ "zzz aaa"/1 << bbb ]]></query>
 	<query mode="extended2"><![CDATA[ "zzz aaa"/1 << ddd ]]></query>
+	<!-- here is going regression -->
+	<query mode="extended2" index="test1"><![CDATA[ ("h1 h2" NEAR/5 ( h3 | h4 | h5) ) << ("h1 h2" NEAR/5 ( h3 | h4 | h5) ) ]]></query>
 </queries>
 
 </test>

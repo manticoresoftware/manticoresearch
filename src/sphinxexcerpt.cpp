@@ -2428,6 +2428,7 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor, const CSphHTMLSt
 	CSphVector<int> dZoneStack;
 	CSphVector<char> dZoneName ( 16+3*SPH_MAX_WORD_LEN );
 	BYTE sExactBuf [ 3*SPH_MAX_WORD_LEN+4 ];
+	BYTE sNonStemmed [ 3*SPH_MAX_WORD_LEN+3];
 
 	// FIXME!!! replace by query SPZ extraction pass
 	if ( !iSPZ && ( bRetainHtml && tFunctor.m_bHighlightQuery ) )
@@ -2555,6 +2556,7 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor, const CSphHTMLSt
 		}
 
 		pLastTokenEnd = pTokenizer->GetTokenEnd ();
+		int iWordLen = pLastTokenEnd - pTokenStart;
 
 		// build wordids vector
 		// (exact form, blended, substrings all yield multiple ids)
@@ -2563,7 +2565,7 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor, const CSphHTMLSt
 		dWordids.Add ( 0 ); // will be fixed up later with "primary" wordid
 		if ( tFunctor.m_bHighlightQuery && tFunctor.m_bIndexExactWords )
 		{
-			int iBytes = pLastTokenEnd - pTokenStart;
+			int iBytes = iWordLen;
 			if ( iBytes+2>sizeof(sExactBuf) )
 				iBytes = sizeof(sExactBuf)-2;
 			memcpy ( sExactBuf + 1, sWord, iBytes );
@@ -2572,6 +2574,8 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor, const CSphHTMLSt
 			dWordids.Add ( pDict->GetWordIDNonStemmed ( sExactBuf ) );
 		}
 
+		memcpy ( sNonStemmed, sWord, iWordLen );
+		sNonStemmed[iWordLen] = '\0';
 		// must be last because it can change (stem) sWord
 		SphWordID_t iWord = pDict->GetWordID ( sWord );
 		dWordids[0] = iWord;
@@ -2591,7 +2595,7 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor, const CSphHTMLSt
 		tDocTok.m_eType = ( iWord || bIsStopWord ) ? ExcerptGen_c::TOK_WORD : ExcerptGen_c::TOK_SPACE;
 		tDocTok.m_uPosition = ( iWord || bIsStopWord ) ? uPosition : 0;
 		tDocTok.m_iStart = pTokenStart - pStartPtr;
-		tDocTok.m_iLengthBytes = tDocTok.m_iLengthCP = pLastTokenEnd - pTokenStart;
+		tDocTok.m_iLengthBytes = tDocTok.m_iLengthCP = iWordLen;
 		if ( bUtf8 && ( iWord || bIsStopWord ) )
 			tDocTok.m_iLengthCP = sphUTF8Len ( pTokenStart, tDocTok.m_iLengthBytes );
 
@@ -2607,7 +2611,8 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor, const CSphHTMLSt
 		}
 
 		// match & emit
-		tFunctor.OnToken ( tDocTok.m_iStart, tDocTok.m_iLengthBytes, sWord, tDocTok.m_uPosition, dWordids );
+		// star match needs non-stemmed word
+		tFunctor.OnToken ( tDocTok.m_iStart, tDocTok.m_iLengthBytes, sNonStemmed, tDocTok.m_uPosition, dWordids );
 	}
 
 	// last space if any

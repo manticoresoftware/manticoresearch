@@ -57,6 +57,16 @@ AC_PROG_CC
 AC_PROG_CXX
 AC_PROG_RANLIB
 
+AC_COMPILE_IFELSE([
+#ifdef __GNUC__
+#if __GNUC__ > 3 || (__GNUC__ == 3 && __GNUC_MINOR__ > 3)
+void main() {}
+#else
+syntax error
+#endif
+#endif
+], [], [AC_MSG_ERROR([Gcc version error. Minspec is 3.4])])
+
 AC_DEFINE_UNQUOTED([COMPILER],"$CC `$CC -dumpversion`",[Define to be the name of the compiler.])
 AC_DEFINE_UNQUOTED([OS_UNAME],"`uname -a`",[Full name OS])
 

@@ -4356,6 +4356,26 @@ fi
 
 
 
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+#ifdef __GNUC__
+#if __GNUC__ > 3 || (__GNUC__ == 3 && __GNUC_MINOR__ > 3)
+void main() {}
+#else
+syntax error
+#endif
+#endif
+
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+
+else
+  as_fn_error "Gcc version error. Minspec is 3.4" "$LINENO" 5
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+
+
 cat >>confdefs.h <<_ACEOF
 #define COMPILER "$CC `$CC -dumpversion`"
 _ACEOF
@@ -4380,7 +4400,6 @@ $as_echo "" >&6; }
 
 
 # Checks for header files.
-
 ac_ext=c
 ac_cpp='$CPP $CPPFLAGS'
 ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'

@@ -1541,6 +1541,10 @@ ExtTermPos_c<T>::ExtTermPos_c ( ISphQword * pQword, const XQNode_t * pNode, cons
 	, m_uLastZonedId ( 0 )
 	, m_iCheckFrom ( 0 )
 {
+	m_dMyDocs[0].m_uDocid = DOCID_MAX;
+	m_dMyHits[0].m_uDocid = DOCID_MAX;
+	m_dFilteredHits[0].m_uDocid = DOCID_MAX;
+
 	AllocDocinfo ( tSetup );
 }
 
@@ -1557,6 +1561,9 @@ void ExtTermPos_c<T>::Reset ( const ISphQwordSetup & tSetup )
 	m_uDoneFor = 0;
 	m_uLastZonedId = 0;
 	m_iCheckFrom = 0;
+	m_dMyDocs[0].m_uDocid = DOCID_MAX;
+	m_dMyHits[0].m_uDocid = DOCID_MAX;
+	m_dFilteredHits[0].m_uDocid = DOCID_MAX;
 }
 
 template<>
@@ -2324,6 +2331,7 @@ ExtNWayT::ExtNWayT ( const CSphVector<ExtNode_i *> & dNodes, DWORD, const XQNode
 {
 	assert ( dNodes.GetLength()>1 );
 	m_iAtomPos = dNodes[0]->m_iAtomPos;
+	m_dMyHits[0].m_uDocid = DOCID_MAX;
 	AllocDocinfo ( tSetup );
 }
 
@@ -2344,6 +2352,7 @@ void ExtNWayT::Reset ( const ISphQwordSetup & tSetup )
 	m_uLastDocID = 0;
 	m_uMatchedDocid = 0;
 	m_uHitsOverFor = 0;
+	m_dMyHits[0].m_uDocid = DOCID_MAX;
 }
 
 void ExtNWayT::GetQwords ( ExtQwordsHash_t & hQwords )
@@ -3207,6 +3216,7 @@ ExtOrder_c::ExtOrder_c ( const CSphVector<ExtNode_i *> & dChildren, const ISphQw
 	: m_dChildren ( dChildren )
 	, m_bDone ( false )
 	, m_uHitsOverFor ( 0 )
+	, m_uLastMatchID ( 0 )
 {
 	int iChildren = dChildren.GetLength();
 	assert ( iChildren>=2 );
@@ -3215,6 +3225,7 @@ ExtOrder_c::ExtOrder_c ( const CSphVector<ExtNode_i *> & dChildren, const ISphQw
 	m_pHits.Resize ( iChildren );
 	m_pDocsChunk.Resize ( iChildren );
 	m_dMaxID.Resize ( iChildren );
+	m_dMyHits[0].m_uDocid = DOCID_MAX;
 
 	if ( dChildren.GetLength()>0 )
 		m_iAtomPos = dChildren[0]->m_iAtomPos;
@@ -3232,6 +3243,9 @@ ExtOrder_c::ExtOrder_c ( const CSphVector<ExtNode_i *> & dChildren, const ISphQw
 void ExtOrder_c::Reset ( const ISphQwordSetup & tSetup )
 {
 	m_bDone = false;
+	m_uHitsOverFor = 0;
+	m_uLastMatchID = 0;
+	m_dMyHits[0].m_uDocid = DOCID_MAX;
 
 	ARRAY_FOREACH ( i, m_dChildren )
 	{
@@ -3498,7 +3512,7 @@ const ExtHit_t * ExtOrder_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t u
 	// copy accumulated hits while we can
 	SphDocID_t uFirstMatch = pDocs->m_uDocid;
 
-	const ExtHit_t * pMyHits = &m_dMyHits[0];
+	const ExtHit_t * pMyHits = m_dMyHits;
 	int iHit = 0;
 
 	for ( ;; )
@@ -3588,6 +3602,7 @@ ExtUnit_c::ExtUnit_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, DWORD uFields, c
 	m_pHit1 = NULL;
 	m_pHit2 = NULL;
 	m_pDotHit = NULL;
+	m_dMyHits[0].m_uDocid = DOCID_MAX;
 }
 
 
@@ -3603,6 +3618,7 @@ void ExtUnit_c::Reset ( const ISphQwordSetup & tSetup )
 	m_pArg1->Reset ( tSetup );
 	m_pArg2->Reset ( tSetup );
 	m_pDot->Reset ( tSetup );
+	m_dMyHits[0].m_uDocid = DOCID_MAX;
 }
 
 

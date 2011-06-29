@@ -55,6 +55,23 @@ index test2
 	index_zones = z_*
 }
 
+source src3
+{
+	type			= mysql
+<Sql_Settings/>
+
+	sql_query = SELECT * FROM test_table3
+	sql_attr_uint = gid
+}
+
+index test3
+{
+	source			= src3
+	path			= <Data_Path/>/test3
+	docinfo		= extern
+    charset_type	= utf-8
+}
+
 </Config>
 <DB_Create>
 CREATE TABLE test_table
@@ -93,12 +110,25 @@ CREATE TABLE test_table2
 <db_insert><![CDATA[insert into test_table2 values ( 10, 1, '<z_1> aa </z_1>' )]]></db_insert>
 <db_insert><![CDATA[insert into test_table2 values ( 11, 1, '<z_1> aa </z_1>' )]]></db_insert>
 
+<db_create>
+CREATE TABLE test_table3
+(
+	id BIGINT NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(6048) NOT NULL
+)
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table3</db_drop>
+<db_insert>insert into test_table3 values ( 3452816845, 3, 'match1 and match2 vs match3' )</db_insert>
+
 <sphqueries>
 	<sphinxql>select * from test1 where match('aa SENTENCE bb')</sphinxql>	
 	<sphinxql>select * from test1 where match('(aa SENTENCE bb) cc')</sphinxql>	
 	<sphinxql>CALL SNIPPETS ('dummy1 match1 dummy2 match2', 'test1', ' ( match1 NEAR/3 match2 ) | ^missed1 | missed2 ', 1 as query_mode)</sphinxql>
 	<!-- here is another regression -->
 	<sphinxql>select * from test2 where match('(ZONE:z_1 aa )') order by id asc</sphinxql>	
+	<!-- here is another regression Order with Or parent -->
+	<sphinxql><![CDATA[select * from test3 where match ( ' match1 | ( match5 << match2) ' ) ]]></sphinxql>	
 </sphqueries>
 
 </Test>

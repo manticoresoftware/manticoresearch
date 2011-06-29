@@ -963,7 +963,10 @@ void ExcerptGen_c::MarkHits ()
 
 		// clear false matches
 		while ( dMarked[k].m_uPosition > m_dTokens[i].m_uPosition )
+		{
 			m_dTokens[i++].m_uWords = 0;
+			assert ( i<m_dTokens.GetLength() );
+		}
 
 		// skip tokens covered by hit's span
 		assert ( dMarked[k].m_uPosition==m_dTokens[i].m_uPosition );
@@ -2574,8 +2577,12 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor, const CSphHTMLSt
 			dWordids.Add ( pDict->GetWordIDNonStemmed ( sExactBuf ) );
 		}
 
-		memcpy ( sNonStemmed, sWord, iWordLen );
-		sNonStemmed[iWordLen] = '\0';
+		int iNonStemmedLen = iWordLen;
+		if ( iNonStemmedLen+1>sizeof(sNonStemmed) )
+			iNonStemmedLen = sizeof(sNonStemmed)-1;
+
+		memcpy ( sNonStemmed, sWord, iNonStemmedLen );
+		sNonStemmed[iNonStemmedLen] = '\0';
 		// must be last because it can change (stem) sWord
 		SphWordID_t iWord = pDict->GetWordID ( sWord );
 		dWordids[0] = iWord;

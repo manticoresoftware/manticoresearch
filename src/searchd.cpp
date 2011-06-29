@@ -2487,6 +2487,8 @@ bool NetOutputBuffer_c::Flush ()
 		if ( iRes < 0 )
 		{
 			int iErrno = sphSockGetErrno();
+			if ( iErrno==EINTR ) // interrupted before any data was sent; just loop
+				continue;
 			if ( iErrno!=EAGAIN )
 			{
 				sphWarning ( "send() failed: %d: %s", iErrno, sphSockError(iErrno) );

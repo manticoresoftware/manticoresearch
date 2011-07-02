@@ -8250,8 +8250,9 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 	DWORD d3, l3 = 0; // !COMMIT must be wide enough
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 
+	int iGap = Max ( 128, 16*sizeof(DWORD) + iStride*sizeof(DWORD) + ( bWordDict ? MAX_KEYWORD_BYTES : 0 ) );
 	pBuf = m_pWriteBuffer;
-	maxP = m_pWriteBuffer + m_iWriteBuffer - 128;
+	maxP = m_pWriteBuffer + m_iWriteBuffer - iGap;
 
 	SphDocID_t iAttrID = 0; // current doc id
 	DWORD * pAttrs = NULL; // current doc attrs
@@ -8345,6 +8346,7 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 					uHitCount = ( uHitCount << 1 ) | 1;
 				pBuf += encodeVLB ( pBuf, uHitCount );
 				pBuf += encodeVLB ( pBuf, uHitFieldMask );
+				assert ( pBuf<m_pWriteBuffer + m_iWriteBuffer );
 
 				uHitCount = 0;
 				uHitFieldMask = 0;
@@ -8370,6 +8372,8 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 		if ( d1 ) pBuf += encodeVLB ( pBuf, 0 );
 		if ( d2 && !bFlushed ) pBuf += encodeVLB ( pBuf, 0 );
 
+		assert ( pBuf<m_pWriteBuffer + m_iWriteBuffer );
+
 		// encode deltas
 #if USE_64BIT
 #define LOC_ENCODE encodeVLB8
@@ -8384,11 +8388,16 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 				pBuf += encodeKeyword ( pBuf, m_pDict->HitblockGetKeyword ( pHit->m_iWordID ) ); // keyword itself in case of keywords dict
 			else
 				pBuf += LOC_ENCODE ( pBuf, d1 ); // delta in case of CRC dict
+
+			assert ( pBuf<m_pWriteBuffer + m_iWriteBuffer );
 		}
 
 		// encode docid delta
 		if ( d2 )
+		{
 			pBuf += LOC_ENCODE ( pBuf, d2 );
+			assert ( pBuf<m_pWriteBuffer + m_iWriteBuffer );
+		}
 
 #undef LOC_ENCODE
 
@@ -8396,12 +8405,18 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 		if ( d2 && pAttrs )
 		{
 			for ( int i=0; i<iStride-DOCINFO_IDSIZE; i++ )
+			{
 				pBuf += encodeVLB ( pBuf, pAttrs[i] );
+				assert ( pBuf<m_pWriteBuffer + m_iWriteBuffer );
+			}
 		}
 
 		assert ( d3 );
 		if ( !uHitCount ) // encode position delta, unless accumulating hits
+		{
 			pBuf += encodeVLB ( pBuf, d3 << iPositionShift );
+			assert ( pBuf<m_pWriteBuffer + m_iWriteBuffer );
+		}
 
 		// update current state
 		l1 = pHit->m_iWordID;
@@ -8413,6 +8428,7 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 		if ( pBuf>maxP )
 		{
 			w = (int)(pBuf - m_pWriteBuffer);
+			assert ( w<m_iWriteBuffer );
 			if ( !sphWriteThrottled ( fd, m_pWriteBuffer, w, "raw_hits", m_sLastError ) )
 				return -1;
 			n += w;
@@ -8430,12 +8446,16 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 			uHitCount = ( uHitCount << 1 ) | 1;
 		pBuf += encodeVLB ( pBuf, uHitCount );
 		pBuf += encodeVLB ( pBuf, uHitFieldMask );
+
+		assert ( pBuf<m_pWriteBuffer + m_iWriteBuffer );
 	}
 
 	pBuf += encodeVLB ( pBuf, 0 );
 	pBuf += encodeVLB ( pBuf, 0 );
 	pBuf += encodeVLB ( pBuf, 0 );
+	assert ( pBuf<m_pWriteBuffer + m_iWriteBuffer );
 	w = (int)(pBuf - m_pWriteBuffer);
+	assert ( w<m_iWriteBuffer );
 	if ( !sphWriteThrottled ( fd, m_pWriteBuffer, w, "raw_hits", m_sLastError ) )
 		return -1;
 	n += w;

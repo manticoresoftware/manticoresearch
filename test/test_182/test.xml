@@ -32,7 +32,10 @@ source src
 	<sql_settings/>
 	sql_query = SELECT id, text, 1 as gid, mva1 FROM test_table
 	sql_attr_uint	= gid
-	sql_attr_multi = uint mva1 from field mva1
+<Dynamic>	
+	<Variant>sql_attr_multi = uint mva1 from field mva1</Variant>
+	<Variant>sql_attr_multi = bigint mva1 from field mva1</Variant>
+</Dynamic>	
 }
 
 index idx

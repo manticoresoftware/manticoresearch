@@ -57,7 +57,7 @@ module Sphinx
     # Current client-side command implementation versions
     
     # search command version
-    VER_COMMAND_SEARCH   = 0x118
+    VER_COMMAND_SEARCH   = 0x119
     # excerpt command version
     VER_COMMAND_EXCERPT  = 0x102
     # update command version
@@ -150,7 +150,8 @@ module Sphinx
 	# string
 	SPH_ATTR_STRING		= 7
     # this attr has multiple values (0 or more)
-    SPH_ATTR_MULTI     = 0x40000000
+	SPH_ATTR_MULTI			= 0x40000001
+	SPH_ATTR_MULTI64		= 0x40000002
     
     # Known grouping functions
   
@@ -766,10 +767,16 @@ module Sphinx
                 else
                   # handle everything else as unsigned ints
                   val = response.get_int
-                  if (attrs[a] & SPH_ATTR_MULTI) != 0
+                  if attrs[a]==SPH_ATTR_MULTI
                     r['attrs'][a] = []
                     1.upto(val) do
                       r['attrs'][a] << response.get_int
+                    end
+                  elsif attrs[a]==SPH_ATTR_MULTI64
+                    r['attrs'][a] = []
+					val = val/2
+                    1.upto(val) do
+                      r['attrs'][a] << response.get_int64
                     end
                   else
                     r['attrs'][a] = val

@@ -2,6 +2,8 @@
 <test>
 <name>select expressions vs eval stages</name>
 
+<requires> <variant_match /> </requires>
+
 <config>
 indexer
 {
@@ -36,7 +38,10 @@ source src_mva
 	<sql_settings/>
 	sql_query		= SELECT id, 1 as idd, title as mva, 'test' FROM test_table WHERE id=10
 	sql_attr_uint	= idd
-	sql_attr_multi	= uint mva from field
+<Dynamic>	
+	<Variant>sql_attr_multi = uint mva from field</Variant>
+	<Variant>sql_attr_multi = bigint mva from field</Variant>
+</Dynamic>	
 }
 
 index mva

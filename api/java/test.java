@@ -116,7 +116,7 @@ public class test
 			{
 				System.out.print ( ", " + res.attrNames[a] + "=" );
 
-				if ( ( res.attrTypes[a] & SphinxClient.SPH_ATTR_MULTI )!=0 )
+				if ( res.attrTypes[a]==SphinxClient.SPH_ATTR_MULTI || res.attrTypes[a]==SphinxClient.SPH_ATTR_MULTI64 )
 				{
 					System.out.print ( "(" );
 					long[] attrM = (long[]) info.attrValues.get(a);

@@ -831,7 +831,8 @@ int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp )
 	switch ( tCol.m_eAttrType )
 	{
 	case SPH_ATTR_FLOAT:		iRes = TOK_ATTR_FLOAT;	break;
-	case SPH_ATTR_UINT32SET:	iRes = TOK_ATTR_MVA; break;
+	case SPH_ATTR_UINT32SET:	iRes = TOK_ATTR_MVA32; break;
+	case SPH_ATTR_UINT64SET:	iRes = TOK_ATTR_MVA64; break;
 	case SPH_ATTR_STRING:		iRes = TOK_ATTR_STRING; break;
 	case SPH_ATTR_INTEGER:
 	case SPH_ATTR_TIMESTAMP:
@@ -1541,7 +1542,8 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_ATTR_FLOAT:	return new Expr_GetFloat_c ( tNode.m_tLocator, tNode.m_iLocator );
 		case TOK_ATTR_SINT:		return new Expr_GetSint_c ( tNode.m_tLocator, tNode.m_iLocator );
 		case TOK_ATTR_STRING:	return new Expr_GetString_c ( tNode.m_tLocator, tNode.m_iLocator );
-		case TOK_ATTR_MVA:		return new Expr_GetMva_c ( tNode.m_tLocator, tNode.m_iLocator );
+		case TOK_ATTR_MVA64:
+		case TOK_ATTR_MVA32:	return new Expr_GetMva_c ( tNode.m_tLocator, tNode.m_iLocator );
 
 		case TOK_CONST_FLOAT:	return new Expr_GetConst_c ( tNode.m_fConst );
 		case TOK_CONST_INT:
@@ -1828,6 +1830,7 @@ public:
 
 
 /// IN() evaluator, MVA attribute vs. constant values
+template < bool IS_MVA64 >
 class Expr_MVAIn_c : public Expr_ArgVsConstSet_c<DWORD>
 {
 public:
@@ -1842,6 +1845,8 @@ public:
 		this->m_dValues.Sort();
 	}
 
+	int MvaEval ( const DWORD * pMva ) const;
+
 	/// evaluate arg, check if any values are within set
 	virtual int IntEval ( const CSphMatch & tMatch ) const
 	{
@@ -1849,30 +1854,7 @@ public:
 		if ( !pMva )
 			return 0;
 
-		// OPTIMIZE! FIXME! factor out a common function with Filter_MVAValues::Eval()
-		DWORD uLen = *pMva++;
-		const DWORD * pMvaMax = pMva+uLen;
-
-		const DWORD * pFilter = &m_dValues[0];
-		const DWORD * pFilterMax = pFilter + m_dValues.GetLength();
-
-		const DWORD * L = pMva;
-		const DWORD * R = pMvaMax - 1;
-		for ( ; pFilter < pFilterMax; pFilter++ )
-		{
-			while ( L<=R )
-			{
-				const DWORD * m = L + (R - L) / 2;
-				if ( *pFilter > *m )
-					L = m + 1;
-				else if ( *pFilter < *m )
-					R = m - 1;
-				else
-					return 1;
-			}
-			R = pMvaMax - 1;
-		}
-		return 0;
+		return MvaEval ( pMva );
 	}
 
 	virtual void SetMVAPool ( const DWORD * pMvaPool )
@@ -1890,6 +1872,71 @@ protected:
 	int				m_iLocator;
 	const DWORD *	m_pMvaPool;
 };
+
+
+template<>
+int Expr_MVAIn_c<false>::MvaEval ( const DWORD * pMva ) const
+{
+	// OPTIMIZE! FIXME! factor out a common function with Filter_MVAValues::Eval()
+	DWORD uLen = *pMva++;
+	const DWORD * pMvaMax = pMva+uLen;
+
+	const DWORD * pFilter = m_dValues.Begin();
+	const DWORD * pFilterMax = pFilter + m_dValues.GetLength();
+
+	const DWORD * L = pMva;
+	const DWORD * R = pMvaMax - 1;
+	for ( ; pFilter < pFilterMax; pFilter++ )
+	{
+		while ( L<=R )
+		{
+			const DWORD * m = L + (R - L) / 2;
+
+			if ( *pFilter > *m )
+				L = m + 1;
+			else if ( *pFilter < *m )
+				R = m - 1;
+			else
+				return 1;
+		}
+		R = pMvaMax - 1;
+	}
+	return 0;
+}
+
+
+template<>
+int Expr_MVAIn_c<true>::MvaEval ( const DWORD * pMva ) const
+{
+	// OPTIMIZE! FIXME! factor out a common function with Filter_MVAValues::Eval()
+	DWORD uLen = *pMva++;
+	assert ( ( uLen%2 )==0 );
+	const DWORD * pMvaMax = pMva+uLen;
+
+	const DWORD * pFilter = m_dValues.Begin();
+	const DWORD * pFilterMax = pFilter + m_dValues.GetLength();
+
+	const uint64_t * L = (const uint64_t *)pMva;
+	const uint64_t * R = (const uint64_t *)( pMvaMax - 2 );
+	for ( ; pFilter < pFilterMax; pFilter++ )
+	{
+		while ( L<=R )
+		{
+			const uint64_t * pVal = L + (R - L) / 2;
+			uint64_t uMva = MVA_UPSIZE ( (const DWORD *)pVal );
+
+			if ( *pFilter > uMva )
+				L = pVal + 1;
+			else if ( *pFilter < uMva )
+				R = pVal - 1;
+			else
+				return 1;
+		}
+		R = (const uint64_t *) ( pMvaMax - 2 );
+	}
+	return 0;
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -2188,11 +2235,14 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 	assert ( m_dNodes[tNode.m_iRight].m_iToken==TOK_CONST_LIST );
 	ConstList_c * pConst = m_dNodes[tNode.m_iRight].m_pConsts;
 
-	bool bMVA = ( m_dNodes[tNode.m_iLeft].m_iToken==TOK_ATTR_MVA );
+	bool bMVA = ( m_dNodes[tNode.m_iLeft].m_iToken==TOK_ATTR_MVA32
+		|| m_dNodes[tNode.m_iLeft].m_iToken==TOK_ATTR_MVA64 );
 	if ( bMVA )
 	{
-		return new Expr_MVAIn_c ( m_dNodes[tNode.m_iLeft].m_tLocator, m_dNodes[tNode.m_iLeft].m_iLocator, pConst );
-
+		if ( m_dNodes[tNode.m_iLeft].m_iToken==TOK_ATTR_MVA32 )
+			return new Expr_MVAIn_c<false> ( m_dNodes[tNode.m_iLeft].m_tLocator, m_dNodes[tNode.m_iLeft].m_iLocator, pConst );
+		else
+			return new Expr_MVAIn_c<true> ( m_dNodes[tNode.m_iLeft].m_tLocator, m_dNodes[tNode.m_iLeft].m_iLocator, pConst );
 	} else
 	{
 		ISphExpr * pArg = CreateTree ( tNode.m_iLeft );
@@ -2351,13 +2401,15 @@ int ExprParser_t::AddNodeString ( int64_t iValue )
 
 int ExprParser_t::AddNodeAttr ( int iTokenType, uint64_t uAttrLocator )
 {
-	assert ( iTokenType==TOK_ATTR_INT || iTokenType==TOK_ATTR_BITS || iTokenType==TOK_ATTR_FLOAT || iTokenType==TOK_ATTR_MVA || iTokenType==TOK_ATTR_STRING );
+	assert ( iTokenType==TOK_ATTR_INT || iTokenType==TOK_ATTR_BITS || iTokenType==TOK_ATTR_FLOAT
+		|| iTokenType==TOK_ATTR_MVA32 || iTokenType==TOK_ATTR_MVA64 || iTokenType==TOK_ATTR_STRING );
 	ExprNode_t & tNode = m_dNodes.Add ();
 	tNode.m_iToken = iTokenType;
 	sphUnpackAttrLocator ( uAttrLocator, &tNode );
 
 	if ( iTokenType==TOK_ATTR_FLOAT )			tNode.m_eRetType = SPH_ATTR_FLOAT;
-	else if ( iTokenType==TOK_ATTR_MVA )		tNode.m_eRetType = SPH_ATTR_UINT32SET;
+	else if ( iTokenType==TOK_ATTR_MVA32 )		tNode.m_eRetType = SPH_ATTR_UINT32SET;
+	else if ( iTokenType==TOK_ATTR_MVA64 )		tNode.m_eRetType = SPH_ATTR_UINT64SET;
 	else if ( iTokenType==TOK_ATTR_STRING )		tNode.m_eRetType = SPH_ATTR_STRING;
 	else if ( tNode.m_tLocator.m_iBitCount>32 )	tNode.m_eRetType = SPH_ATTR_BIGINT;
 	else										tNode.m_eRetType = SPH_ATTR_INTEGER;
@@ -2462,7 +2514,7 @@ struct TypeCheck_fn
 	void Enter ( const ExprNode_t & tNode )
 	{
 		*m_pStr |= ( tNode.m_eRetType==SPH_ATTR_STRING );
-		*m_pMva |= ( tNode.m_eRetType==SPH_ATTR_UINT32SET );
+		*m_pMva |= ( tNode.m_eRetType==SPH_ATTR_UINT32SET || tNode.m_eRetType==SPH_ATTR_UINT64SET );
 	}
 
 	void Exit ( const ExprNode_t & )

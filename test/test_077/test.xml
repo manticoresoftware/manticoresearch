@@ -1,6 +1,8 @@
 <test>
 <name>uint attrs</name>
 
+<requires> <variant_match /> </requires>
+
 <config>
 indexer
 {
@@ -19,7 +21,10 @@ source test
 
 	sql_query = SELECT id, n, 'text' FROM test_table;
 	sql_attr_uint = n
-	sql_attr_multi = uint mva from query; select id, n mva from test_table
+<Dynamic>	
+	<Variant>sql_attr_multi = uint mva from query; select id, n mva from test_table</Variant>
+	<Variant>sql_attr_multi = bigint mva from query; select id, n mva from test_table</Variant>
+</Dynamic>	
 }
 
 index test

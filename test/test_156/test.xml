@@ -5,6 +5,7 @@
 
 <requires>
 <non-rt/>
+<variant_match />
 </requires>
 
 <config>
@@ -28,7 +29,10 @@ source test
 	sql_joined_field	= text from ranged-query; select id, text from test where id between $start and $end; select 1, 5
 
 	sql_attr_uint		= gid
-	sql_attr_multi		= uint mva from ranged-query; select id, mva from mva where id between $start and $end; select 2, 5
+<Dynamic>	
+	<Variant>sql_attr_multi = uint mva from ranged-query; select id, mva from mva where id between $start and $end; select 2, 5</Variant>
+	<Variant>sql_attr_multi = bigint mva from ranged-query; select id, mva from mva where id between $start and $end; select 2, 5</Variant>
+</Dynamic>	
 }
 
 index test

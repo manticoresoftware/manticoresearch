@@ -57,7 +57,7 @@ void test_query ( sphinx_client * client, const char * query )
 {
 	sphinx_result * res;
 	const char *index;
-	int i, j, k;
+	int i, j, k, mva_len;
 	unsigned int * mva;
 	const char * field_names[2];
 	int field_weights[2];
@@ -104,11 +104,13 @@ void test_query ( sphinx_client * client, const char * query )
 			printf ( ", %s=", res->attr_names[j] );
 			switch ( res->attr_types[j] )
 			{
-			case SPH_ATTR_MULTI | SPH_ATTR_INTEGER:
+			case SPH_ATTR_MULTI64:
+			case SPH_ATTR_MULTI:
 				mva = sphinx_get_mva ( res, i, j );
+				mva_len = *mva++;
 				printf ( "(" );
-				for ( k=0; k<(int)mva[0]; k++ )
-					printf ( k ? ",%u" : "%u", mva[1+k] );
+				for ( k=0; k<mva_len; k++ )
+					printf ( k ? ",%u" : "%u", ( res->attr_types[j]==SPH_ATTR_MULTI ? mva[k] : (unsigned int)sphinx_get_mva64_value ( mva, k ) ) );
 				printf ( ")" );
 				break;
 

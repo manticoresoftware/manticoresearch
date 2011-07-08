@@ -529,8 +529,8 @@ static const unsigned short yyrline[] =
      622,   624,   628,   629,   633,   634,   638,   642,   643,   647,
      648,   649,   650,   656,   662,   674,   681,   683,   687,   692,
      696,   703,   705,   709,   710,   716,   724,   725,   731,   737,
-     748,   749,   753,   762,   777,   791,   795,   801,   812,   813,
-     817
+     748,   749,   753,   762,   785,   799,   803,   809,   820,   821,
+     825
 };
 #endif
 
@@ -2369,13 +2369,21 @@ yyreduce:
 			CSphColumnInfo & tAttr = tUpd.m_dAttrs.Add();
 			tAttr.m_sName = yyvsp[-4].m_sValue;
 			tAttr.m_sName.ToLower();
-			tAttr.m_eAttrType = SPH_ATTR_UINT32SET;
 			assert ( yyvsp[-1].m_pValues.Ptr() && yyvsp[-1].m_pValues->GetLength()>0 );
 			yyvsp[-1].m_pValues->Uniq(); // don't need dupes within MVA
-			tUpd.m_dPool.Add ( yyvsp[-1].m_pValues->GetLength() );
-			for ( int i=0; i<yyvsp[-1].m_pValues->GetLength(); i++ )
+			tUpd.m_dPool.Add ( yyvsp[-1].m_pValues->GetLength()*2 );
+			tAttr.m_eAttrType = SPH_ATTR_UINT32SET;
+			SphAttr_t * pVal = yyvsp[-1].m_pValues.Ptr()->Begin();
+			SphAttr_t * pValMax = pVal + yyvsp[-1].m_pValues->GetLength();
+			for ( ;pVal<pValMax; pVal++ )
 			{
-				tUpd.m_dPool.Add ( (DWORD) yyvsp[-1].m_pValues.Ptr()->Begin()[i] );
+				SphAttr_t uVal = *pVal;
+				if ( uVal>UINT_MAX )
+				{
+					tAttr.m_eAttrType = SPH_ATTR_UINT64SET;
+				}
+				tUpd.m_dPool.Add ( (DWORD)uVal );
+				tUpd.m_dPool.Add ( (DWORD)( uVal>>32 ) );
 			}
 		;}
     break;

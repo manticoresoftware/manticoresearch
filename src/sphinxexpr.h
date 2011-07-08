@@ -35,7 +35,8 @@ enum ESphAttr
 	SPH_ATTR_BIGINT		= 6,			///< signed 64-bit integer
 	SPH_ATTR_STRING		= 7,			///< string (binary; in-memory)
 	SPH_ATTR_WORDCOUNT	= 8,			///< string word count (integer at search time,tokenized and counted at indexing time)
-	SPH_ATTR_UINT32SET	= 0x40000001UL	///< MVA, set of unsigned 32-bit integers
+	SPH_ATTR_UINT32SET	= 0x40000001UL,	///< MVA, set of unsigned 32-bit integers
+	SPH_ATTR_UINT64SET	= 0x40000002UL	///< MVA, set of unsigned 64-bit integers
 };
 
 /// expression evaluator
@@ -76,6 +77,7 @@ public:
 /// lets one to add her own identifier and function handlers
 struct ISphExprHook
 {
+	virtual ~ISphExprHook () {}
 	/// checks for an identifier known to the hook
 	/// returns -1 on failure, a non-negative OID on success
 	virtual int IsKnownIdent ( const char * sIdent ) = 0;

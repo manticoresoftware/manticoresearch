@@ -145,7 +145,7 @@ if ( $res===false )
 			foreach ( $res["attrs"] as $attrname => $attrtype )
 			{
 				$value = $docinfo["attrs"][$attrname];
-				if ( $attrtype & SPH_ATTR_MULTI )
+				if ( $attrtype==SPH_ATTR_MULTI || $attrtype==SPH_ATTR_MULTI64 )
 				{
 					$value = "(" . join ( ",", $value ) .")";
 				} else

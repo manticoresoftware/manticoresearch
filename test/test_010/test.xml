@@ -1,43 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Test>
-  <Name>bitfields + MVA</Name>
-  <Config>
-    <Static>indexer
+<Name>bitfields + MVA</Name>
+  
+<requires> <variant_match /> </requires>  
+
+<Config>
+indexer
 {
-	mem_limit			= 16M
+mem_limit			= 16M
 }
 
 searchd
 {
-</Static><Searchd_Settings/><Static>
+	<Searchd_Settings/>
 }
 
 source srclj
 {
 	type			= mysql
-</Static>
 <Sql_Settings/>
-<Static>
 	sql_query = SELECT id, adtext, heading, postcode, lng, lat, section, transmission_id FROM test_table
 
 	sql_attr_float	= lng
 	sql_attr_float	= lat
 	sql_attr_uint	= section:8
 	sql_attr_uint	= transmission_id:5
-    sql_attr_multi	= uint make_id from query; SELECT id, make_id FROM test_table
+<Dynamic>
+	<Variant>sql_attr_multi = uint make_id from query; SELECT id, make_id FROM test_table</Variant>
+	<Variant>sql_attr_multi = bigint make_id from query; SELECT id, make_id FROM test_table</Variant>
+</Dynamic>	
 }
-</Static>
-<Static>
 index lj
 {
 	source			= srclj
-	path			= </Static><Data_Path/><Static>/lj
+	path			= <Data_Path/>/lj
 	docinfo			= extern
 	charset_type	= utf-8
 	min_word_len	= 1
 	charset_type	= sbcs
 }
-</Static>
   </Config>
 
   <Query_Attributes>

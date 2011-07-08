@@ -20,45 +20,78 @@ searchd
 	</Dynamic>
 }
 
-source src_1
+source src_base
 {
 	type = mysql
 	<sql_settings/>
+}
 
+<Dynamic>
+<Variant>
+source src_1 : src_base
+{
 	sql_query = SELECT id, attr1, mva1, mva2, str1, str2, text FROM test_table WHERE idx = 'i1';
 
-	sql_attr_multi	= uint mva1 from field
-	sql_attr_multi	= uint mva2 from field
+	sql_attr_multi = uint mva1 from field
+	sql_attr_multi = uint mva2 from field
 	sql_attr_string = str1
 	sql_attr_string = str2
 	sql_attr_uint	= attr1
 }
 
-source src_2
+source src_2 : src_base
 {
-	type = mysql
-	<sql_settings/>
-
 	sql_query = SELECT  id, attr1, mva2, str1, str2, text FROM test_table WHERE idx = 'i2';
 
-	sql_attr_multi	= uint mva2 from field
+	sql_attr_multi = uint mva2 from field
 	sql_attr_string	= str1
 	sql_attr_string = str2
 	sql_attr_uint	= attr1
 }
 
-source src_3
+source src_3 : src_base
 {
-	type = mysql
-	<sql_settings/>
-
 	sql_query = SELECT  id, attr1, mva1, mva2, str2, text FROM test_table WHERE idx = 'i3';
 
-	sql_attr_multi	= uint mva1 from field
-	sql_attr_multi	= uint mva2 from field
+	sql_attr_multi = uint mva1 from field
+	sql_attr_multi = uint mva2 from field
 	sql_attr_string	= str2
 	sql_attr_uint	= attr1
 }
+</Variant>
+<Variant>
+source src_1 : src_base
+{
+	sql_query = SELECT id, attr1, mva1, mva2, str1, str2, text FROM test_table WHERE idx = 'i1';
+
+	sql_attr_multi = bigint mva1 from field
+	sql_attr_multi = bigint mva2 from field
+	sql_attr_string = str1
+	sql_attr_string = str2
+	sql_attr_uint	= attr1
+}
+
+source src_2 : src_base
+{
+	sql_query = SELECT  id, attr1, mva2, str1, str2, text FROM test_table WHERE idx = 'i2';
+
+	sql_attr_multi = bigint mva2 from field
+	sql_attr_string	= str1
+	sql_attr_string = str2
+	sql_attr_uint	= attr1
+}
+
+source src_3 : src_base
+{
+	sql_query = SELECT  id, attr1, mva1, mva2, str2, text FROM test_table WHERE idx = 'i3';
+
+	sql_attr_multi = bigint mva1 from field
+	sql_attr_multi = bigint mva2 from field
+	sql_attr_string	= str2
+	sql_attr_uint	= attr1
+}
+</Variant>
+</Dynamic>
 
 index i1
 {

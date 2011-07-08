@@ -26,10 +26,10 @@ Query stats:
 	'is' found 4 times in 4 documents
 
 Matches:
-1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7)
-2. doc_id=2, weight=1304, idd=2, group_id=1, tag=(2,4,6)
-3. doc_id=3, weight=1304, idd=3, group_id=2, tag=(15)
-4. doc_id=4, weight=1304, idd=4, group_id=2, tag=(7,40)
+1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), tag64=(1,3,5,7), tag2=(1,3,5,7)
+2. doc_id=2, weight=1304, idd=2, group_id=1, tag=(2,4,6), tag64=(2,4,6), tag2=(2,4,6)
+3. doc_id=3, weight=1304, idd=3, group_id=2, tag=(15), tag64=(15), tag2=(15)
+4. doc_id=4, weight=1304, idd=4, group_id=2, tag=(7,40), tag64=(7,40), tag2=(7,40)
 
 Query 'is test' retrieved 3 of 3 matches.
 Query stats:
@@ -37,9 +37,9 @@ Query stats:
 	'test' found 5 times in 3 documents
 
 Matches:
-1. doc_id=1, weight=101362, idd=1, group_id=1, tag=(1,3,5,7)
-2. doc_id=2, weight=101362, idd=2, group_id=1, tag=(2,4,6)
-3. doc_id=4, weight=1373, idd=4, group_id=2, tag=(7,40)
+1. doc_id=1, weight=101362, idd=1, group_id=1, tag=(1,3,5,7), tag64=(1,3,5,7), tag2=(1,3,5,7)
+2. doc_id=2, weight=101362, idd=2, group_id=1, tag=(2,4,6), tag64=(2,4,6), tag2=(2,4,6)
+3. doc_id=4, weight=1373, idd=4, group_id=2, tag=(7,40), tag64=(7,40), tag2=(7,40)
 
 Query 'test number' retrieved 3 of 3 matches.
 Query stats:
@@ -47,48 +47,48 @@ Query stats:
 	'number' found 3 times in 3 documents
 
 Matches:
-1. doc_id=4, weight=101442, idd=4, group_id=2, tag=(7,40)
-2. doc_id=1, weight=101432, idd=1, group_id=1, tag=(1,3,5,7)
-3. doc_id=2, weight=101432, idd=2, group_id=1, tag=(2,4,6)
+1. doc_id=4, weight=101442, idd=4, group_id=2, tag=(7,40), tag64=(7,40), tag2=(7,40)
+2. doc_id=1, weight=101432, idd=1, group_id=1, tag=(1,3,5,7), tag64=(1,3,5,7), tag2=(1,3,5,7)
+3. doc_id=2, weight=101432, idd=2, group_id=1, tag=(2,4,6), tag64=(2,4,6), tag2=(2,4,6)
 
 Query 'is' retrieved 2 of 2 matches.
 Query stats:
 	'is' found 4 times in 4 documents
 
 Matches:
-1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), @groupby=1, @count=2
-2. doc_id=3, weight=1304, idd=3, group_id=2, tag=(15), @groupby=2, @count=2
+1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), tag64=(1,3,5,7), tag2=(1,3,5,7), @groupby=1, @count=2
+2. doc_id=3, weight=1304, idd=3, group_id=2, tag=(15), tag64=(15), tag2=(15), @groupby=2, @count=2
 
 Query 'is' retrieved 9 of 9 matches.
 Query stats:
 	'is' found 4 times in 4 documents
 
 Matches:
-1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), @groupby=1, @count=1
-2. doc_id=2, weight=1304, idd=2, group_id=1, tag=(2,4,6), @groupby=2, @count=1
-3. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), @groupby=3, @count=1
-4. doc_id=2, weight=1304, idd=2, group_id=1, tag=(2,4,6), @groupby=4, @count=1
-5. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), @groupby=5, @count=1
-6. doc_id=2, weight=1304, idd=2, group_id=1, tag=(2,4,6), @groupby=6, @count=1
-7. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), @groupby=7, @count=2
-8. doc_id=3, weight=1304, idd=3, group_id=2, tag=(15), @groupby=15, @count=1
-9. doc_id=4, weight=1304, idd=4, group_id=2, tag=(7,40), @groupby=40, @count=1
+1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), tag64=(1,3,5,7), tag2=(1,3,5,7), @groupby=1, @count=1
+2. doc_id=2, weight=1304, idd=2, group_id=1, tag=(2,4,6), tag64=(2,4,6), tag2=(2,4,6), @groupby=2, @count=1
+3. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), tag64=(1,3,5,7), tag2=(1,3,5,7), @groupby=3, @count=1
+4. doc_id=2, weight=1304, idd=2, group_id=1, tag=(2,4,6), tag64=(2,4,6), tag2=(2,4,6), @groupby=4, @count=1
+5. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), tag64=(1,3,5,7), tag2=(1,3,5,7), @groupby=5, @count=1
+6. doc_id=2, weight=1304, idd=2, group_id=1, tag=(2,4,6), tag64=(2,4,6), tag2=(2,4,6), @groupby=6, @count=1
+7. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), tag64=(1,3,5,7), tag2=(1,3,5,7), @groupby=7, @count=2
+8. doc_id=3, weight=1304, idd=3, group_id=2, tag=(15), tag64=(15), tag2=(15), @groupby=15, @count=1
+9. doc_id=4, weight=1304, idd=4, group_id=2, tag=(7,40), tag64=(7,40), tag2=(7,40), @groupby=40, @count=1
 
 Query 'is' retrieved 2 of 2 matches.
 Query stats:
 	'is' found 4 times in 4 documents
 
 Matches:
-1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7)
-2. doc_id=2, weight=1304, idd=2, group_id=1, tag=(2,4,6)
+1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), tag64=(1,3,5,7), tag2=(1,3,5,7)
+2. doc_id=2, weight=1304, idd=2, group_id=1, tag=(2,4,6), tag64=(2,4,6), tag2=(2,4,6)
 
 Query 'is' retrieved 2 of 2 matches.
 Query stats:
 	'is' found 4 times in 4 documents
 
 Matches:
-1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7)
-2. doc_id=4, weight=1304, idd=4, group_id=2, tag=(7,40)
+1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), tag64=(1,3,5,7), tag2=(1,3,5,7)
+2. doc_id=4, weight=1304, idd=4, group_id=2, tag=(7,40), tag64=(7,40), tag2=(7,40)
 
 update success, 1 rows updated
 
@@ -99,10 +99,10 @@ Query stats:
 	'is' found 4 times in 4 documents
 
 Matches:
-1. doc_id=4, weight=1304, idd=4, group_id=2, tag=(7,40)
-2. doc_id=3, weight=1304, idd=3, group_id=2, tag=(7,77,177)
-3. doc_id=2, weight=1304, idd=2, group_id=123, tag=(2,4,6)
-4. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7)
+1. doc_id=4, weight=1304, idd=4, group_id=2, tag=(7,40), tag64=(7,40), tag2=(7,40)
+2. doc_id=3, weight=1304, idd=3, group_id=2, tag=(7,77,177), tag64=(15), tag2=(15)
+3. doc_id=2, weight=1304, idd=2, group_id=123, tag=(2,4,6), tag64=(2,4,6), tag2=(2,4,6)
+4. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), tag64=(1,3,5,7), tag2=(1,3,5,7)
 
 update success, 1 rows updated
 
@@ -113,79 +113,79 @@ Query stats:
 	'is' found 4 times in 4 documents
 
 Matches:
-1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7)
-2. doc_id=2, weight=1304, idd=2, group_id=123, tag=(2,4,6)
-3. doc_id=3, weight=1304, idd=3, group_id=123, tag=(7,77,177)
-4. doc_id=4, weight=1304, idd=4, group_id=123, tag=(7,40)
+1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), tag64=(1,3,5,7), tag2=(1,3,5,7)
+2. doc_id=2, weight=1304, idd=2, group_id=123, tag=(2,4,6), tag64=(2,4,6), tag2=(2,4,6)
+3. doc_id=3, weight=1304, idd=3, group_id=123, tag=(7,77,177), tag64=(15), tag2=(15)
+4. doc_id=4, weight=1304, idd=4, group_id=123, tag=(7,40), tag64=(7,40), tag2=(7,40)
 
 Query 'is' retrieved 2 of 2 matches.
 Query stats:
 	'is' found 4 times in 4 documents
 
 Matches:
-1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), @groupby=1, @count=1
-2. doc_id=2, weight=1304, idd=2, group_id=123, tag=(2,4,6), @groupby=123, @count=3
+1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), tag64=(1,3,5,7), tag2=(1,3,5,7), @groupby=1, @count=1
+2. doc_id=2, weight=1304, idd=2, group_id=123, tag=(2,4,6), tag64=(2,4,6), tag2=(2,4,6), @groupby=123, @count=3
 
 Query 'is' retrieved 10 of 10 matches.
 Query stats:
 	'is' found 4 times in 4 documents
 
 Matches:
-1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), @groupby=1, @count=1
-2. doc_id=2, weight=1304, idd=2, group_id=123, tag=(2,4,6), @groupby=2, @count=1
-3. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), @groupby=3, @count=1
-4. doc_id=2, weight=1304, idd=2, group_id=123, tag=(2,4,6), @groupby=4, @count=1
-5. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), @groupby=5, @count=1
-6. doc_id=2, weight=1304, idd=2, group_id=123, tag=(2,4,6), @groupby=6, @count=1
-7. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), @groupby=7, @count=3
-8. doc_id=4, weight=1304, idd=4, group_id=123, tag=(7,40), @groupby=40, @count=1
-9. doc_id=3, weight=1304, idd=3, group_id=123, tag=(7,77,177), @groupby=77, @count=1
-10. doc_id=3, weight=1304, idd=3, group_id=123, tag=(7,77,177), @groupby=177, @count=1
+1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), tag64=(1,3,5,7), tag2=(1,3,5,7), @groupby=1, @count=1
+2. doc_id=2, weight=1304, idd=2, group_id=123, tag=(2,4,6), tag64=(2,4,6), tag2=(2,4,6), @groupby=2, @count=1
+3. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), tag64=(1,3,5,7), tag2=(1,3,5,7), @groupby=3, @count=1
+4. doc_id=2, weight=1304, idd=2, group_id=123, tag=(2,4,6), tag64=(2,4,6), tag2=(2,4,6), @groupby=4, @count=1
+5. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), tag64=(1,3,5,7), tag2=(1,3,5,7), @groupby=5, @count=1
+6. doc_id=2, weight=1304, idd=2, group_id=123, tag=(2,4,6), tag64=(2,4,6), tag2=(2,4,6), @groupby=6, @count=1
+7. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), tag64=(1,3,5,7), tag2=(1,3,5,7), @groupby=7, @count=3
+8. doc_id=4, weight=1304, idd=4, group_id=123, tag=(7,40), tag64=(7,40), tag2=(7,40), @groupby=40, @count=1
+9. doc_id=3, weight=1304, idd=3, group_id=123, tag=(7,77,177), tag64=(15), tag2=(15), @groupby=77, @count=1
+10. doc_id=3, weight=1304, idd=3, group_id=123, tag=(7,77,177), tag64=(15), tag2=(15), @groupby=177, @count=1
 
 Query 'is' retrieved 1 of 1 matches.
 Query stats:
 	'is' found 4 times in 4 documents
 
 Matches:
-1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7)
+1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), tag64=(1,3,5,7), tag2=(1,3,5,7)
 
 Query 'is' retrieved 3 of 3 matches.
 Query stats:
 	'is' found 4 times in 4 documents
 
 Matches:
-1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7)
-2. doc_id=3, weight=1304, idd=3, group_id=123, tag=(7,77,177)
-3. doc_id=4, weight=1304, idd=4, group_id=123, tag=(7,40)
+1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), tag64=(1,3,5,7), tag2=(1,3,5,7)
+2. doc_id=3, weight=1304, idd=3, group_id=123, tag=(7,77,177), tag64=(15), tag2=(15)
+3. doc_id=4, weight=1304, idd=4, group_id=123, tag=(7,40), tag64=(7,40), tag2=(7,40)
 
 Query 'is' retrieved 4 of 4 matches.
 Query stats:
 	'is' found 4 times in 4 documents
 
 Matches:
-1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), q=1010
-2. doc_id=2, weight=1304, idd=2, group_id=123, tag=(2,4,6), q=123020
-3. doc_id=3, weight=1304, idd=3, group_id=123, tag=(7,77,177), q=123030
-4. doc_id=4, weight=1304, idd=4, group_id=123, tag=(7,40), q=123040
+1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), tag64=(1,3,5,7), tag2=(1,3,5,7), q=1010
+2. doc_id=2, weight=1304, idd=2, group_id=123, tag=(2,4,6), tag64=(2,4,6), tag2=(2,4,6), q=123020
+3. doc_id=3, weight=1304, idd=3, group_id=123, tag=(7,77,177), tag64=(15), tag2=(15), q=123030
+4. doc_id=4, weight=1304, idd=4, group_id=123, tag=(7,40), tag64=(7,40), tag2=(7,40), q=123040
 
 Query 'is' retrieved 4 of 4 matches.
 Query stats:
 	'is' found 4 times in 4 documents
 
 Matches:
-1. doc_id=1, weight=1304, idd=1, tag=(1,3,5,7), group_id=1, q=1010
-2. doc_id=2, weight=1304, idd=2, tag=(2,4,6), group_id=2000, q=2000020
-3. doc_id=3, weight=1304, idd=3, tag=(7,77,177), group_id=123, q=123030
-4. doc_id=4, weight=1304, idd=4, tag=(7,40), group_id=123, q=123040
+1. doc_id=1, weight=1304, idd=1, tag=(1,3,5,7), tag64=(1,3,5,7), tag2=(1,3,5,7), group_id=1, q=1010
+2. doc_id=2, weight=1304, idd=2, tag=(2,4,6), tag64=(2,4,6), tag2=(2,4,6), group_id=2000, q=2000020
+3. doc_id=3, weight=1304, idd=3, tag=(7,77,177), tag64=(15), tag2=(15), group_id=123, q=123030
+4. doc_id=4, weight=1304, idd=4, tag=(7,40), tag64=(7,40), tag2=(7,40), group_id=123, q=123040
 
 Query 'is' retrieved 3 of 3 matches.
 Query stats:
 	'is' found 4 times in 4 documents
 
 Matches:
-1. doc_id=1, weight=1304, idd=1, tag=(1,3,5,7), group_id=1, q=1010, @groupby=1, @count=1
-2. doc_id=3, weight=1304, idd=3, tag=(7,77,177), group_id=123, q=123030, @groupby=123, @count=2
-3. doc_id=2, weight=1304, idd=2, tag=(2,4,6), group_id=2000, q=2000020, @groupby=2000, @count=1
+1. doc_id=1, weight=1304, idd=1, tag=(1,3,5,7), tag64=(1,3,5,7), tag2=(1,3,5,7), group_id=1, q=1010, @groupby=1, @count=1
+2. doc_id=3, weight=1304, idd=3, tag=(7,77,177), tag64=(15), tag2=(15), group_id=123, q=123030, @groupby=123, @count=2
+3. doc_id=2, weight=1304, idd=2, tag=(2,4,6), tag64=(2,4,6), tag2=(2,4,6), group_id=2000, q=2000020, @groupby=2000, @count=1
 
 connections: 17
 maxed_out: 0

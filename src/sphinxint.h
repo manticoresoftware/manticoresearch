@@ -48,9 +48,15 @@ extern const char *		MAGIC_WORD_PARAGRAPH;
 #define SPH_O_READ	( O_RDONLY | SPH_O_BINARY )
 #define SPH_O_NEW	( O_CREAT | O_RDWR | O_TRUNC | SPH_O_BINARY )
 
-#define MVA_DOWNSIZE		DWORD			// MVA offset type
+#define MVA_DOWNSIZE		DWORD			// MVA32 offset type
 #define MVA_OFFSET_MASK		0x7fffffffUL	// MVA offset mask
 #define MVA_ARENA_FLAG		0x80000000UL	// MVA global-arena flag
+inline uint64_t MVA_UPSIZE ( const DWORD * pMva )
+{
+	uint64_t uMva = (uint64_t)pMva[0] | ( ( (uint64_t)pMva[1] )<<32 );
+	return uMva;
+}
+
 
 /// file writer with write buffering and int encoder
 class CSphWriter : ISphNoncopyable
@@ -415,10 +421,10 @@ private:
 	CSphVector<float>			m_dFloatMax;
 	CSphVector<float>			m_dFloatIndexMin;
 	CSphVector<float>			m_dFloatIndexMax;
-	CSphVector<DWORD>			m_dMvaMin;
-	CSphVector<DWORD>			m_dMvaMax;
-	CSphVector<DWORD>			m_dMvaIndexMin;
-	CSphVector<DWORD>			m_dMvaIndexMax;
+	CSphVector<uint64_t>		m_dMvaMin;
+	CSphVector<uint64_t>		m_dMvaMax;
+	CSphVector<uint64_t>		m_dMvaIndexMin;
+	CSphVector<uint64_t>		m_dMvaIndexMax;
 	DWORD						m_uStride;		// size of attribute's chunk (in DWORDs)
 	DWORD						m_uElements;	// counts total number of collected min/max pairs
 	int							m_iLoop;		// loop inside one set
@@ -428,11 +434,13 @@ private:
 	DOCID						m_uLast;
 	DOCID						m_uIndexStart;	// first and last docids of whole index
 	DOCID						m_uIndexLast;
+	int							m_iMva64;
 
 private:
 	void ResetLocal();
 	void FlushComputed ( bool bUseAttrs, bool bUseMvas );
 	void UpdateMinMaxDocids ( DOCID uDocID );
+	void CollectRowMVA ( int iAttr, DWORD uCount, const DWORD * pMva );
 
 public:
 	explicit AttrIndexBuilder_t ( const CSphSchema & tSchema );
@@ -483,7 +491,7 @@ void AttrIndexBuilder_t<DOCID>::ResetLocal()
 	}
 	ARRAY_FOREACH ( i, m_dMvaMin )
 	{
-		m_dMvaMin[i] = UINT_MAX;
+		m_dMvaMin[i] = LLONG_MAX;
 		m_dMvaMax[i] = 0;
 	}
 	m_uStart = m_uLast = 0;
@@ -563,12 +571,6 @@ AttrIndexBuilder_t<DOCID>::AttrIndexBuilder_t ( const CSphSchema & tSchema )
 	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
-		if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET )
-		{
-			m_dMvaAttrs.Add ( tCol.m_tLocator );
-			continue;
-		}
-
 		switch ( tCol.m_eAttrType )
 		{
 		case SPH_ATTR_INTEGER:
@@ -582,10 +584,23 @@ AttrIndexBuilder_t<DOCID>::AttrIndexBuilder_t ( const CSphSchema & tSchema )
 			m_dFloatAttrs.Add ( tCol.m_tLocator );
 			break;
 
+		case SPH_ATTR_UINT32SET:
+			m_dMvaAttrs.Add ( tCol.m_tLocator );
+			break;
+
 		default:
 			break;
 		}
 	}
+
+	m_iMva64 = m_dMvaAttrs.GetLength();
+	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
+		if ( tCol.m_eAttrType==SPH_ATTR_UINT64SET )
+			m_dMvaAttrs.Add ( tCol.m_tLocator );
+	}
+
 
 	m_dIntMin.Resize ( m_dIntAttrs.GetLength() );
 	m_dIntMax.Resize ( m_dIntAttrs.GetLength() );
@@ -620,7 +635,7 @@ void AttrIndexBuilder_t<DOCID>::Prepare ( DWORD * pOutBuffer, DWORD * pOutMax )
 	}
 	ARRAY_FOREACH ( i, m_dMvaIndexMin )
 	{
-		m_dMvaIndexMin[i] = UINT_MAX;
+		m_dMvaIndexMin[i] = LLONG_MAX;
 		m_dMvaIndexMax[i] = 0;
 	}
 	ResetLocal();
@@ -655,6 +670,29 @@ void AttrIndexBuilder_t<DOCID>::CollectWithoutMvas ( const DWORD * pCur, bool bU
 }
 
 template < typename DOCID >
+void AttrIndexBuilder_t<DOCID>::CollectRowMVA ( int iAttr, DWORD uCount, const DWORD * pMva )
+{
+	if ( iAttr>=m_iMva64 )
+	{
+		assert ( ( uCount%2 )==0 );
+		for ( ; uCount>0; uCount-=2, pMva+=2 )
+		{
+			uint64_t uVal = MVA_UPSIZE ( pMva );
+			m_dMvaMin[iAttr] = Min ( m_dMvaMin[iAttr], uVal );
+			m_dMvaMax[iAttr] = Max ( m_dMvaMax[iAttr], uVal );
+		}
+	} else
+	{
+		for ( ; uCount>0; uCount--, pMva++ )
+		{
+			DWORD uVal = *pMva;
+			m_dMvaMin[iAttr] = Min ( m_dMvaMin[iAttr], uVal );
+			m_dMvaMax[iAttr] = Max ( m_dMvaMax[iAttr], uVal );
+		}
+	}
+}
+
+template < typename DOCID >
 bool AttrIndexBuilder_t<DOCID>::Collect ( const DWORD * pCur, const DWORD * pMvas, int64_t iMvasCount, CSphString & sError )
 {
 	CollectWithoutMvas ( pCur, true );
@@ -683,18 +721,16 @@ bool AttrIndexBuilder_t<DOCID>::Collect ( const DWORD * pCur, const DWORD * pMva
 			sError.SetSprintf ( "broken index: mva docid verification failed, id=" DOCID_FMT, (SphDocID_t)uDocID );
 			return false;
 		}
-		if ( uOff+pMva[0]>=iMvasCount )
+
+		DWORD uCount = *pMva;
+		if ( ( uOff+uCount>=iMvasCount ) || ( i>=m_iMva64 && ( uCount%2 )!=0 ) )
 		{
 			sError.SetSprintf ( "broken index: mva list out of bounds, id=" DOCID_FMT, (SphDocID_t)uDocID );
 			return false;
 		}
 
 		// walk and calc
-		for ( DWORD uCount = *pMva++; uCount>0; uCount--, pMva++ )
-		{
-			m_dMvaMin[i] = Min ( m_dMvaMin[i], *pMva );
-			m_dMvaMax[i] = Max ( m_dMvaMax[i], *pMva );
-		}
+		CollectRowMVA ( i, uCount, pMva );
 	}
 	return true;
 }
@@ -704,10 +740,8 @@ void AttrIndexBuilder_t<DOCID>::Collect ( const DWORD * pCur, const CSphDocMVA &
 {
 	CollectWithoutMvas ( pCur, true );
 	ARRAY_FOREACH ( i, m_dMvaAttrs )
-		ARRAY_FOREACH ( j, dMvas.m_dMVA[i] )
 	{
-		m_dMvaMin[i] = Min ( m_dMvaMin[i], dMvas.m_dMVA[i][j] );
-		m_dMvaMax[i] = Max ( m_dMvaMax[i], dMvas.m_dMVA[i][j] );
+		CollectRowMVA ( i, dMvas.m_dMVA[i].GetLength(), dMvas.m_dMVA[i].Begin() );
 	}
 }
 
@@ -722,10 +756,8 @@ void AttrIndexBuilder_t<DOCID>::CollectMVA ( DOCID uDocID, const CSphVector< CSp
 	m_iLoop++;
 
 	ARRAY_FOREACH ( i, dCurInfo )
-		ARRAY_FOREACH ( j, dCurInfo[i] )
 	{
-		m_dMvaMin[i] = Min ( m_dMvaMin[i], dCurInfo[i][j] );
-		m_dMvaMax[i] = Max ( m_dMvaMax[i], dCurInfo[i][j] );
+		CollectRowMVA ( i, dCurInfo[i].GetLength(), dCurInfo[i].Begin() );
 	}
 }
 
@@ -999,6 +1031,7 @@ inline const char * sphTypeName ( ESphAttr eType )
 		case SPH_ATTR_STRING:		return "string";
 		case SPH_ATTR_WORDCOUNT:	return "wordcount";
 		case SPH_ATTR_UINT32SET:	return "mva";
+		case SPH_ATTR_UINT64SET:	return "mva64";
 		default:					return "unknown";
 	}
 }
@@ -1017,6 +1050,7 @@ inline const char * sphTypeDirective ( ESphAttr eType )
 		case SPH_ATTR_STRING:		return "sql_attr_string";
 		case SPH_ATTR_WORDCOUNT:	return "sql_attr_wordcount";
 		case SPH_ATTR_UINT32SET:	return "sql_attr_multi";
+		case SPH_ATTR_UINT64SET:	return "sql_attr_multi bigint";
 		default:					return "???";
 	}
 }

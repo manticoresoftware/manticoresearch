@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 <name>block index vs MVA</name>
+
+<requires> <variant_match /> </requires>
+
 <config>
 indexer
 {
@@ -11,40 +14,68 @@ searchd
 {
 	<searchd_settings/>
 }
-source src1
+
+source src_base
 {
 	type			= mysql
 	<sql_settings/>
+}	
+<Dynamic>
+<Variant>
+source src1 : src_base
+{
 	sql_query = SELECT document_id, text, mva1 FROM main_table
-	sql_attr_multi	= uint mva2 from query; SELECT word_document_id, word_tag_id FROM tag_table;
-	sql_attr_multi	= uint mva1 from field mva1
+	sql_attr_multi = uint mva2 from query; SELECT word_document_id, word_tag_id FROM tag_table;
+	sql_attr_multi = uint mva1 from field mva1
 }
-source src2
+source src2 : src_base
 {
-	type			= mysql
-	<sql_settings/>
 	sql_query = SELECT document_id, text, attr1, mva1 FROM main_table2
-	sql_attr_multi	= uint mva1 from field mva1
+	sql_attr_multi = uint mva1 from field mva1
 	sql_attr_uint = attr1	
 }
-source src3
+source src3 : src_base
 {
-	type			= mysql
-	<sql_settings/>
 	sql_query = SELECT document_id, text, mva1 FROM main_table3
-	sql_attr_multi	= uint mva2 from query; SELECT word_document_id, word_tag_id FROM tag_table;
-	sql_attr_multi	= uint mva1 from field mva1
+	sql_attr_multi = uint mva2 from query; SELECT word_document_id, word_tag_id FROM tag_table;
+	sql_attr_multi = uint mva1 from field mva1
 }
-source src4
+source src4 : src_base
 {
-	type			= mysql
-	<sql_settings/>
 	sql_query = SELECT document_id, text, mva1 FROM main_table2
-	sql_attr_multi	= uint mva2 from query; SELECT word_document_id, word_tag_id FROM tag_table;
-	sql_attr_multi	= uint mva1 from field mva1
+	sql_attr_multi = uint mva2 from query; SELECT word_document_id, word_tag_id FROM tag_table;
+	sql_attr_multi = uint mva1 from field mva1
 	sql_attr_str2ordinal = text	
 }
-
+</Variant>
+<Variant>
+source src1 : src_base
+{
+	sql_query = SELECT document_id, text, mva1 FROM main_table
+	sql_attr_multi = bigint mva2 from query; SELECT word_document_id, word_tag_id FROM tag_table;
+	sql_attr_multi = bigint mva1 from field mva1
+}
+source src2 : src_base
+{
+	sql_query = SELECT document_id, text, attr1, mva1 FROM main_table2
+	sql_attr_multi = bigint mva1 from field mva1
+	sql_attr_uint = attr1	
+}
+source src3 : src_base
+{
+	sql_query = SELECT document_id, text, mva1 FROM main_table3
+	sql_attr_multi = bigint mva2 from query; SELECT word_document_id, word_tag_id FROM tag_table;
+	sql_attr_multi = bigint mva1 from field mva1
+}
+source src4 : src_base
+{
+	sql_query = SELECT document_id, text, mva1 FROM main_table2
+	sql_attr_multi = bigint mva2 from query; SELECT word_document_id, word_tag_id FROM tag_table;
+	sql_attr_multi = bigint mva1 from field mva1
+	sql_attr_str2ordinal = text	
+}
+</Variant>
+</Dynamic>
 index main
 {
 <dynamic>

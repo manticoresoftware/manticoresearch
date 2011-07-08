@@ -3,6 +3,8 @@
 
 <name>MVA and string via MySQL</name>
 
+<requires> <variant_match /> </requires>
+
 <config>
 indexer
 {
@@ -23,9 +25,18 @@ source srcmain
 	sql_attr_uint	= idd
 	sql_attr_string	= str1
 	sql_attr_uint	= tag
-	sql_attr_multi	= uint mva1 from field
+<Dynamic>	
+<Variant>
+	sql_attr_multi = uint mva1 from field
 	sql_attr_string	= str2
-	sql_attr_multi	= uint mva2 from field
+	sql_attr_multi = uint mva2 from field
+</Variant>	
+<Variant>
+	sql_attr_multi = bigint mva1 from field
+	sql_attr_string	= str2
+	sql_attr_multi = bigint mva2 from field
+</Variant>	
+</Dynamic>	
 }
 
 index main

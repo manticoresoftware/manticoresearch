@@ -30,7 +30,7 @@ SEARCHD_COMMAND_PERSIST		= 4
 SEARCHD_COMMAND_FLUSHATTRS	= 7
 
 # current client-side command implementation versions
-VER_COMMAND_SEARCH		= 0x118
+VER_COMMAND_SEARCH		= 0x119
 VER_COMMAND_EXCERPT		= 0x103
 VER_COMMAND_UPDATE		= 0x102
 VER_COMMAND_KEYWORDS	= 0x100
@@ -84,7 +84,8 @@ SPH_ATTR_BOOL			= 4
 SPH_ATTR_FLOAT			= 5
 SPH_ATTR_BIGINT			= 6
 SPH_ATTR_STRING			= 7
-SPH_ATTR_MULTI			= 0X40000000L
+SPH_ATTR_MULTI			= 0X40000001L
+SPH_ATTR_MULTI64		= 0X40000002L
 
 SPH_ATTR_TYPES = (SPH_ATTR_NONE,
 				  SPH_ATTR_INTEGER,
@@ -94,7 +95,8 @@ SPH_ATTR_TYPES = (SPH_ATTR_NONE,
 				  SPH_ATTR_FLOAT,
 				  SPH_ATTR_BIGINT,
 				  SPH_ATTR_STRING,
-				  SPH_ATTR_MULTI)
+				  SPH_ATTR_MULTI,
+				  SPH_ATTR_MULTI64)
 
 # known grouping functions
 SPH_GROUPBY_DAY	 		= 0
@@ -708,13 +710,22 @@ class SphinxClient:
 						if slen>0:
 							match['attrs'][attrs[i][0]] = response[p:p+slen]
 						p += slen-4
-					elif attrs[i][1] == (SPH_ATTR_MULTI | SPH_ATTR_INTEGER):
+					elif attrs[i][1] == SPH_ATTR_MULTI:
 						match['attrs'][attrs[i][0]] = []
 						nvals = unpack('>L', response[p:p+4])[0]
 						p += 4
 						for n in range(0,nvals,1):
 							match['attrs'][attrs[i][0]].append(unpack('>L', response[p:p+4])[0])
 							p += 4
+						p -= 4
+					elif attrs[i][1] == SPH_ATTR_MULTI64:
+						match['attrs'][attrs[i][0]] = []
+						nvals = unpack('>L', response[p:p+4])[0]
+						nvals = nvals/2
+						p += 4
+						for n in range(0,nvals,1):
+							match['attrs'][attrs[i][0]].append(unpack('>q', response[p:p+8])[0])
+							p += 8
 						p -= 4
 					else:
 						match['attrs'][attrs[i][0]] = unpack('>L', response[p:p+4])[0]

@@ -455,12 +455,11 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x118,
+	VER_COMMAND_SEARCH		= 0x119,
 	VER_COMMAND_EXCERPT		= 0x103,
 	VER_COMMAND_UPDATE		= 0x102,
 	VER_COMMAND_KEYWORDS	= 0x100,
 	VER_COMMAND_STATUS		= 0x100,
-	VER_COMMAND_QUERY		= 0x100,
 	VER_COMMAND_FLUSHATTRS	= 0x100
 };
 
@@ -3706,14 +3705,26 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 				for ( int j=0; j<tSchema.GetAttrsCount(); j++ )
 				{
 					const CSphColumnInfo & tAttr = tSchema.GetAttr(j);
-					if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET )
+					if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_UINT64SET )
 					{
 						tMatch.SetAttr ( tAttr.m_tLocator, m_dMvaStorage.GetLength() );
 
 						int iValues = tReq.GetDword ();
 						m_dMvaStorage.Add ( iValues );
-						while ( iValues-- )
-							m_dMvaStorage.Add ( tReq.GetDword() );
+						if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET )
+						{
+							while ( iValues-- )
+								m_dMvaStorage.Add ( tReq.GetDword() );
+						} else
+						{
+							assert ( ( iValues%2 )==0 );
+							for ( ; iValues; iValues -= 2 )
+							{
+								uint64_t uMva = tReq.GetUint64();
+								m_dMvaStorage.Add ( (DWORD)uMva );
+								m_dMvaStorage.Add ( (DWORD)( uMva>>32 ) );
+							}
+						}
 
 					} else if ( tAttr.m_eAttrType==SPH_ATTR_FLOAT )
 					{
@@ -4908,7 +4919,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 	for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(i);
-		if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET )
+		if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET )
 			dMvaItems.Add ( tCol.m_tLocator );
 		if ( tCol.m_eAttrType==SPH_ATTR_STRING )
 			dStringItems.Add ( tCol.m_tLocator );
@@ -5053,7 +5064,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 			for ( int j=0; j<pRes->m_tSchema.GetAttrsCount(); j++ )
 			{
 				const CSphColumnInfo & tAttr = pRes->m_tSchema.GetAttr(j);
-				if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET )
+				if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_UINT64SET )
 				{
 					assert ( tMatch.GetAttr ( tAttr.m_tLocator )==0 || pMvaPool );
 					const DWORD * pValues = tMatch.GetAttrMVA ( tAttr.m_tLocator, pMvaPool );
@@ -5067,8 +5078,21 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 						// send MVA values
 						int iValues = *pValues++;
 						tOut.SendDword ( iValues );
-						while ( iValues-- )
-							tOut.SendDword ( *pValues++ );
+						if ( tAttr.m_eAttrType==SPH_ATTR_UINT64SET )
+						{
+							assert ( ( iValues%2 )==0 );
+							while ( iValues )
+							{
+								uint64_t uVal = MVA_UPSIZE ( pValues );
+								tOut.SendUint64 ( uVal );
+								pValues += 2;
+								iValues -= 2;
+							}
+						} else
+						{
+							while ( iValues-- )
+								tOut.SendDword ( *pValues++ );
+						}
 					}
 
 				} else if ( tAttr.m_eAttrType==SPH_ATTR_STRING )
@@ -7570,6 +7594,7 @@ public:
 				break;
 			case SPH_ATTR_STRING:
 			case SPH_ATTR_UINT32SET:
+			case SPH_ATTR_UINT64SET:
 				CSphMatch::SetAttr ( tLoc, 0 );
 				break;
 			default:
@@ -8816,7 +8841,7 @@ void UpdateRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuff
 	ARRAY_FOREACH ( i, m_tUpd.m_dAttrs )
 	{
 		tOut.SendString ( m_tUpd.m_dAttrs[i].m_sName.cstr() );
-		tOut.SendInt ( ( m_tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT32SET ) ? 1 : 0 );
+		tOut.SendInt ( ( m_tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT32SET || m_tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT64SET ) ? 1 : 0 );
 	}
 	tOut.SendInt ( m_tUpd.m_dDocids.GetLength() );
 
@@ -8908,10 +8933,11 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq )
 				}
 				dMva.Uniq(); // don't need dupes within MVA
 
-				tUpd.m_dPool.Add ( dMva.GetLength() );
+				tUpd.m_dPool.Add ( dMva.GetLength()*2 );
 				ARRAY_FOREACH ( j, dMva )
 				{
 					tUpd.m_dPool.Add ( dMva[j] );
+					tUpd.m_dPool.Add ( 0 ); // dummy expander mva32 -> mva64
 				}
 			} else
 			{
@@ -9765,7 +9791,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 				bResult = tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );
 				if ( tCol.m_eAttrType==SPH_ATTR_STRING )
 					dStrings.Add ( NULL );
-				if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET )
+				if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET )
 					dMvas.Add ( 0 );
 			} else
 			{
@@ -9777,22 +9803,34 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 					sError.SetSprintf ( "raw %d, column %d: internal error: unknown insval type %d", 1+c, 1+iQuerySchemaIdx, tVal.m_iType ); // 1 for human base
 					break;
 				}
-				if ( tVal.m_iType==TOK_CONST_MVA && tCol.m_eAttrType!=SPH_ATTR_UINT32SET )
+				if ( tVal.m_iType==TOK_CONST_MVA && !( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET ) )
 				{
 					sError.SetSprintf ( "raw %d, column %d: MVA value specified for a non-MVA column", 1+c, 1+iQuerySchemaIdx ); // 1 for human base
 					break;
 				}
 
-				if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET )
+				if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET )
 				{
 					// collect data from scattered insvals
 					// FIXME! maybe remove this mess, and just have a single m_dMvas pool in parser instead?
 					tVal.m_pVals->Uniq();
-					dMvas.Add ( tVal.m_pVals->GetLength() );
-					for ( int j=0; j<tVal.m_pVals->GetLength(); j++ )
+					int iLen = tVal.m_pVals->GetLength();
+					if ( tCol.m_eAttrType==SPH_ATTR_UINT64SET )
 					{
-						DWORD uMva = (DWORD)( *tVal.m_pVals.Ptr() )[j];
-						dMvas.Add ( uMva );
+						dMvas.Add ( iLen*2 );
+						for ( int j=0; j<iLen; j++ )
+						{
+							uint64_t uVal = ( *tVal.m_pVals.Ptr() )[j];
+							DWORD uLow = (DWORD)uVal;
+							DWORD uHi = (DWORD)( uVal>>32 );
+							dMvas.Add ( uLow );
+							dMvas.Add ( uHi );
+						}
+					} else
+					{
+						dMvas.Add ( iLen );
+						for ( int j=0; j<iLen; j++ )
+							dMvas.Add ( (DWORD)( *tVal.m_pVals.Ptr() )[j] );
 					}
 				}
 
@@ -10259,8 +10297,7 @@ void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt
 
 //////////////////////////////////////////////////////////////////////////
 
-#define SPH_MAX_NUMERIC_STR 32
-
+#define SPH_MAX_NUMERIC_STR 64
 class SqlRowBuffer_c
 {
 public:
@@ -10457,9 +10494,11 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 				dRows.PutNumeric ( "%f", tMatch.GetAttrFloat(tLoc) );
 				break;
 
+			case SPH_ATTR_UINT64SET:
 			case SPH_ATTR_UINT32SET:
 				{
 					int iLenOff = dRows.Length();
+					dRows.Reserve ( 4 );
 					dRows.IncPtr ( 4 );
 
 					assert ( tMatch.GetAttr ( tLoc )==0 || tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pMva );
@@ -10467,11 +10506,24 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 					if ( pValues )
 					{
 						DWORD nValues = *pValues++;
-						while ( nValues-- )
+						assert ( eAttrType==SPH_ATTR_UINT32SET || ( nValues%2 )==0 );
+						if ( eAttrType==SPH_ATTR_UINT32SET )
 						{
-							dRows.Reserve ( SPH_MAX_NUMERIC_STR );
-							int iLen = snprintf ( dRows.Get(), SPH_MAX_NUMERIC_STR, nValues>0 ? "%u," : "%u", *pValues++ );
-							dRows.IncPtr ( iLen );
+							while ( nValues-- )
+							{
+								dRows.Reserve ( SPH_MAX_NUMERIC_STR );
+								int iLen = snprintf ( dRows.Get(), SPH_MAX_NUMERIC_STR, nValues>0 ? "%u," : "%u", *pValues++ );
+								dRows.IncPtr ( iLen );
+							}
+						} else
+						{
+							for ( ; nValues; nValues-=2, pValues+=2 )
+							{
+								uint64_t uVal = MVA_UPSIZE ( pValues );
+								dRows.Reserve ( SPH_MAX_NUMERIC_STR );
+								int iLen = snprintf ( dRows.Get(), SPH_MAX_NUMERIC_STR, nValues>2 ? UINT64_FMT"," : UINT64_FMT, uVal );
+								dRows.IncPtr ( iLen );
+							}
 						}
 					}
 
@@ -12425,9 +12477,9 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		}
 
 		// attrs
-		const int iNumTypes = 6;
-		const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_float", "rt_attr_timestamp", "rt_attr_string", "rt_attr_multi" };
-		const ESphAttr iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_FLOAT, SPH_ATTR_TIMESTAMP, SPH_ATTR_STRING, SPH_ATTR_UINT32SET };
+		const int iNumTypes = 7;
+		const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_float", "rt_attr_timestamp", "rt_attr_string", "rt_attr_multi", "rt_attr_multi_64" };
+		const ESphAttr iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_FLOAT, SPH_ATTR_TIMESTAMP, SPH_ATTR_STRING, SPH_ATTR_UINT32SET, SPH_ATTR_UINT64SET };
 
 		for ( int iType=0; iType<iNumTypes; iType++ )
 		{

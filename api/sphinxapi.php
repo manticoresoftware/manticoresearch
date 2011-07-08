@@ -29,7 +29,7 @@ define ( "SEARCHD_COMMAND_STATUS",		5 );
 define ( "SEARCHD_COMMAND_FLUSHATTRS",	7 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x118 );
+define ( "VER_COMMAND_SEARCH",		0x119 );
 define ( "VER_COMMAND_EXCERPT",		0x103 );
 define ( "VER_COMMAND_UPDATE",		0x102 );
 define ( "VER_COMMAND_KEYWORDS",	0x100 );
@@ -84,7 +84,8 @@ define ( "SPH_ATTR_BOOL",			4 );
 define ( "SPH_ATTR_FLOAT",			5 );
 define ( "SPH_ATTR_BIGINT",			6 );
 define ( "SPH_ATTR_STRING",			7 );
-define ( "SPH_ATTR_MULTI",			0x40000000 );
+define ( "SPH_ATTR_MULTI",			0x40000001 );
+define ( "SPH_ATTR_MULTI64",			0x40000002 );
 
 /// known grouping functions
 define ( "SPH_GROUPBY_DAY",			0 );
@@ -1234,7 +1235,7 @@ class SphinxClient
 
 					// handle everything else as unsigned ints
 					list(,$val) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
-					if ( $type & SPH_ATTR_MULTI )
+					if ( $type==SPH_ATTR_MULTI )
 					{
 						$attrvals[$attr] = array ();
 						$nvalues = $val;
@@ -1242,6 +1243,16 @@ class SphinxClient
 						{
 							list(,$val) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
 							$attrvals[$attr][] = sphFixUint($val);
+						}
+					} else if ( $type==SPH_ATTR_MULTI64 )
+					{
+						$attrvals[$attr] = array ();
+						$nvalues = $val;
+						while ( $nvalues>0 && $p<$max )
+						{
+							$val = sphUnpackU64 ( substr ( $response, $p, 8 ) ); $p += 8;
+							$attrvals[$attr][] = strval( $val ); // FIXME!!! sphFixUint returns MVA values as string so It to
+							$nvalues -= 2;
 						}
 					} else if ( $type==SPH_ATTR_STRING )
 					{

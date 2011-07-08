@@ -311,7 +311,7 @@ bool ParseMultiAttr ( const char * sBuf, CSphColumnInfo & tAttr, const char * sS
 	// format is as follows:
 	//
 	// multi-valued-attr := ATTR-TYPE ATTR-NAME 'from' SOURCE-TYPE [;QUERY] [;RANGE-QUERY]
-	// ATTR-TYPE := 'uint' | 'timestamp'
+	// ATTR-TYPE := 'uint' | 'timestamp' | 'bigint'
 	// SOURCE-TYPE := 'field' | 'query' | 'ranged-query'
 
 	const char * sTok = NULL;
@@ -335,7 +335,8 @@ bool ParseMultiAttr ( const char * sBuf, CSphColumnInfo & tAttr, const char * sS
 	LOC_SPACE0(); LOC_TOK();
 	if ( LOC_TOKEQ("uint") )				tAttr.m_eAttrType = SPH_ATTR_UINT32SET;
 	else if ( LOC_TOKEQ("timestamp") )		tAttr.m_eAttrType = SPH_ATTR_UINT32SET;
-	else									LOC_ERR ( "attr type ('uint' or 'timestamp')", sTok );
+	else if ( LOC_TOKEQ("bigint") )		tAttr.m_eAttrType = SPH_ATTR_UINT64SET;
+	else									LOC_ERR ( "attr type ('uint' or 'timestamp' or 'bigint')", sTok );
 
 	// handle ATTR-NAME
 	LOC_SPACE1(); LOC_TOK ();

@@ -3,6 +3,8 @@
 
 <name>groupby</name>
 
+<requires> <variant_match /> </requires>  
+
 <config>
 indexer
 {
@@ -23,7 +25,10 @@ source srctest
 	sql_query		= SELECT document_id, tag, UNIX_TIMESTAMP(time) as time, mva, body FROM test_table
 	sql_attr_uint	= tag
 	sql_attr_timestamp = time
-	sql_attr_multi	= uint mva from field;
+<Dynamic>
+	<Variant>sql_attr_multi = uint mva from field;</Variant>
+	<Variant>sql_attr_multi = bigint mva from field;</Variant>
+</Dynamic>	
 }
 
 index test

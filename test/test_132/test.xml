@@ -3,6 +3,8 @@
 
 <name>MVA persistent attribute updates</name>
 
+<requires> <variant_match /> </requires>
+
 <config>
 indexer
 {
@@ -22,7 +24,10 @@ source src
 	<sql_settings/>
 	sql_query = SELECT id, text, section, mva1 FROM test_table
 	sql_attr_uint	= section
-	sql_attr_multi = uint mva1 from field mva1
+<Dynamic>	
+	<Variant>sql_attr_multi = uint mva1 from field mva1</Variant>
+	<Variant>sql_attr_multi = bigint mva1 from field mva1</Variant>
+</Dynamic>	
 }
 
 index idx

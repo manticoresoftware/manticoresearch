@@ -3,6 +3,8 @@
 
 <name>merge vs --merge-dst-range</name>
 
+<requires><variant_match/></requires>
+
 <config>
 indexer
 {
@@ -14,29 +16,52 @@ searchd
 	<searchd_settings/>
 }
 
-source srcmain
+source src_base
 {
 	type			= mysql
 	<sql_settings/>
+}
 
+<Dynamic>
+<Variant>
+source srcmain : src_base
+{
 	sql_query		= SELECT * FROM test_table WHERE document_id in (1,2,3,4,5,6,7,8)
 	sql_attr_uint	= tag1
 	sql_attr_uint	= tag2
-	sql_attr_multi	= uint mva1 from field
-	sql_attr_multi	= uint mva2 from field
+	sql_attr_multi = uint mva1 from field
+	sql_attr_multi = uint mva2 from field
 }
 
-source srcdelta
+source srcdelta : src_base
 {
-	type			= mysql
-	<sql_settings/>
-
 	sql_query		= SELECT * FROM test_table WHERE document_id in (9,10,11)
 	sql_attr_uint	= tag1
 	sql_attr_uint	= tag2
-	sql_attr_multi	= uint mva1 from field
-	sql_attr_multi	= uint mva2 from field
+	sql_attr_multi = uint mva1 from field
+	sql_attr_multi = uint mva2 from field
 }
+</Variant>
+<Variant>
+source srcmain : src_base
+{
+	sql_query		= SELECT * FROM test_table WHERE document_id in (1,2,3,4,5,6,7,8)
+	sql_attr_uint	= tag1
+	sql_attr_uint	= tag2
+	sql_attr_multi = bigint mva1 from field
+	sql_attr_multi = bigint mva2 from field
+}
+
+source srcdelta : src_base
+{
+	sql_query		= SELECT * FROM test_table WHERE document_id in (9,10,11)
+	sql_attr_uint	= tag1
+	sql_attr_uint	= tag2
+	sql_attr_multi = bigint mva1 from field
+	sql_attr_multi = bigint mva2 from field
+}
+</Variant>
+</Dynamic>
 
 index main
 {

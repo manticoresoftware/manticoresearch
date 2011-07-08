@@ -996,8 +996,11 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 	// schemes strings attributes fix up
 	bool bReplaceSchema = false;
 	for ( int i=0; i<tSchema.GetAttrsCount() && !bReplaceSchema; i++ )
-		bReplaceSchema = ( ( tSchema.GetAttr(i).m_eAttrType==SPH_ATTR_STRING || tSchema.GetAttr(i).m_eAttrType==SPH_ATTR_UINT32SET )
-							&& !tSchema.GetAttr(i).m_tLocator.m_bDynamic );
+	{
+		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
+		bReplaceSchema = ( ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET )
+							&& !tCol.m_tLocator.m_bDynamic );
+	}
 
 	m_tOutboundSchema = m_tSchema;
 	if ( bReplaceSchema )
@@ -1007,7 +1010,8 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 		{
 			CSphColumnInfo tCol = m_tSchema.GetAttr(i);
 			bool bDynamic = tCol.m_tLocator.m_bDynamic;
-			if ( ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_UINT32SET ) && !tCol.m_tLocator.m_bDynamic )
+			if ( ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET )
+				&& !tCol.m_tLocator.m_bDynamic )
 			{
 				tCol.m_eStage = SPH_EVAL_OVERRIDE;
 				bDynamic = true;
@@ -1328,7 +1332,7 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, int iRow
 			{
 				sphSetRowAttr ( pAttrs, tColumn.m_tLocator, 0 );
 			}
-		} else if ( tColumn.m_eAttrType==SPH_ATTR_UINT32SET )
+		} else if ( tColumn.m_eAttrType==SPH_ATTR_UINT32SET || tColumn.m_eAttrType==SPH_ATTR_UINT64SET )
 		{
 			assert ( m_dMvas.GetLength() );
 			int iCount = dMvas[iMva];
@@ -1936,6 +1940,7 @@ public:
 		: m_tDst ( tDst )
 	{
 		ExtractLocators ( tSchema, SPH_ATTR_UINT32SET, m_dLocators );
+		ExtractLocators ( tSchema, SPH_ATTR_UINT64SET, m_dLocators );
 	}
 	const CSphVector<CSphAttrLocator> & GetLocators () const { return m_dLocators; }
 
@@ -1971,6 +1976,7 @@ public:
 		: m_dDst ( dDst )
 	{
 		ExtractLocators ( tSchema, SPH_ATTR_UINT32SET, m_dLocators );
+		ExtractLocators ( tSchema, SPH_ATTR_UINT64SET, m_dLocators );
 	}
 	const CSphVector<CSphAttrLocator> & GetLocators () const { return m_dLocators; }
 
@@ -2851,7 +2857,7 @@ static void WriteSchemaColumn ( CSphWriter & tWriter, const CSphColumnInfo & tCo
 void RtIndex_t::SaveDiskHeader ( const char * sFilename, int iCheckpoints, SphOffset_t iCheckpointsPosition, DWORD uKillListSize, DWORD uMinMaxSize, bool bForceID32 ) const
 {
 	static const DWORD INDEX_MAGIC_HEADER	= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD INDEX_FORMAT_VERSION	= 24;			///< my format version
+	static const DWORD INDEX_FORMAT_VERSION	= 26;			///< my format version
 
 	CSphWriter tWriter;
 	CSphString sName, sError;
@@ -4102,7 +4108,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 			dStringGetLoc.Add ( m_tSchema.GetAttr ( iInLocator ).m_tLocator );
 			dStringSetLoc.Add ( tSetInfo.m_tLocator );
-		} else if ( tSetInfo.m_eAttrType==SPH_ATTR_UINT32SET )
+		} else if ( tSetInfo.m_eAttrType==SPH_ATTR_UINT32SET || tSetInfo.m_eAttrType==SPH_ATTR_UINT64SET )
 		{
 			const int iInLocator = m_tSchema.GetAttrIndex ( tSetInfo.m_sName.cstr() );
 			assert ( iInLocator>=0 );
@@ -4111,8 +4117,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			dMvaSetLoc.Add ( tSetInfo.m_tLocator );
 		}
 
-		assert ( ( tSetInfo.m_eAttrType!=SPH_ATTR_STRING && tSetInfo.m_eAttrType!=SPH_ATTR_UINT32SET ) ||
-			( ( tSetInfo.m_eAttrType==SPH_ATTR_STRING || tSetInfo.m_eAttrType==SPH_ATTR_UINT32SET ) && tSetInfo.m_tLocator.m_bDynamic ) );
+		assert ( ( tSetInfo.m_eAttrType!=SPH_ATTR_STRING && tSetInfo.m_eAttrType!=SPH_ATTR_UINT32SET && tSetInfo.m_eAttrType!=SPH_ATTR_UINT64SET )
+			|| tSetInfo.m_tLocator.m_bDynamic );
 	}
 	if ( dStringGetLoc.GetLength() || dMvaGetLoc.GetLength() )
 	{
@@ -4317,6 +4323,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 
 	// remap update schema to index schema
 	CSphVector<CSphAttrLocator> dLocators;
+	uint64_t uDst64 = 0;
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
 	{
 		int iIndex = m_tSchema.GetAttrIndex ( tUpd.m_dAttrs[i].m_sName.cstr() );
@@ -4329,11 +4336,29 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 		// forbid updates on non-int columns
 		const CSphColumnInfo & tCol = m_tSchema.GetAttr(iIndex);
 		if ( !( tCol.m_eAttrType==SPH_ATTR_BOOL || tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP
-			|| tCol.m_eAttrType==SPH_ATTR_UINT32SET ) )
+			|| tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET ) )
 		{
 			sError.SetSprintf ( "attribute '%s' can not be updated (must be boolean, integer, or timestamp or MVA)", tUpd.m_dAttrs[i].m_sName.cstr() );
 			return -1;
 		}
+
+		bool bSrcMva = ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET );
+		bool bDstMva = ( tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT32SET || tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT64SET );
+		if ( bSrcMva!=bDstMva )
+		{
+			sError.SetSprintf ( "attribute '%s' MVA flag mismatch", tUpd.m_dAttrs[i].m_sName.cstr() );
+			return -1;
+		}
+
+		if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET && tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT64SET )
+		{
+			sError.SetSprintf ( "attribute '%s' MVA bits (dst=%d, src=%d) mismatch", tUpd.m_dAttrs[i].m_sName.cstr(),
+				tCol.m_eAttrType, tUpd.m_dAttrs[i].m_eAttrType );
+			return -1;
+		}
+
+		if ( tCol.m_eAttrType==SPH_ATTR_UINT64SET )
+			uDst64 |= ( U64C(1)<<i );
 
 		dLocators.Add ( tCol.m_tLocator );
 	}
@@ -4371,7 +4396,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 			int iPos = tUpd.m_dRowOffset[iUpd];
 			ARRAY_FOREACH ( iCol, tUpd.m_dAttrs )
 			{
-				if ( tUpd.m_dAttrs[iCol].m_eAttrType!=SPH_ATTR_UINT32SET )
+				if ( !( tUpd.m_dAttrs[iCol].m_eAttrType==SPH_ATTR_UINT32SET || tUpd.m_dAttrs[iCol].m_eAttrType==SPH_ATTR_UINT64SET ) )
 				{
 					// plain update
 					uUpdateMask |= ATTRS_UPDATED;
@@ -4385,13 +4410,19 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 					uUpdateMask |= ATTRS_MVA_UPDATED;
 
 					const DWORD * pSrc = tUpd.m_dPool.Begin()+iPos;
-					DWORD uCount = *pSrc;
-					if ( !uCount )
+					DWORD iLen = *pSrc;
+					if ( !iLen )
 					{
 						iPos++;
 						sphSetRowAttr ( pRow, dLocators[iCol], 0 );
 						continue;
 					}
+
+					iPos += iLen+1;
+
+					bool bDst64 = ( ( uDst64 & ( U64C(1) << iCol ) )!=0 );
+					assert ( ( iLen%2 )==0 );
+					DWORD uCount = ( bDst64 ? iLen : iLen/2 );
 
 					CSphTightVector<DWORD> & dMvas = m_pSegments[iSeg]->m_dMvas;
 
@@ -4404,10 +4435,22 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 						dMvas.Resize ( uMvaOff+uCount+1 );
 						pDst = dMvas.Begin()+uMvaOff;
 					}
-					memcpy ( pDst, pSrc, sizeof(DWORD)*(uCount+1) );
 					sphSetRowAttr ( pRow, dLocators[iCol], uMvaOff );
 
-					iPos += uCount+1;
+					if ( bDst64 )
+					{
+						memcpy ( pDst, pSrc, sizeof(DWORD)*(uCount+1) );
+					} else
+					{
+						*pDst++ = uCount; // MVA values counter first
+						pSrc++;
+						while ( uCount-- )
+						{
+							*pDst = *pSrc;
+							pDst++;
+							pSrc+=2;
+						}
+					}
 				}
 			}
 

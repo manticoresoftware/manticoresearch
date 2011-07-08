@@ -17,7 +17,8 @@
 %token <iAttrLocator>	TOK_ATTR_INT
 %token <iAttrLocator>	TOK_ATTR_BITS
 %token <iAttrLocator>	TOK_ATTR_FLOAT
-%token <iAttrLocator>	TOK_ATTR_MVA
+%token <iAttrLocator>	TOK_ATTR_MVA32
+%token <iAttrLocator>	TOK_ATTR_MVA64
 %token <iAttrLocator>	TOK_ATTR_STRING
 %token <iFunc>			TOK_FUNC
 %token <iFunc>			TOK_FUNC_IN
@@ -100,7 +101,8 @@ expr:
 arg:
 	expr
 	| TOK_ATTR_STRING				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_STRING, $1 ); }
-	| TOK_ATTR_MVA					{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA, $1 ); }
+	| TOK_ATTR_MVA32					{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA32, $1 ); }
+	| TOK_ATTR_MVA64					{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA64, $1 ); }
 	| TOK_CONST_STRING				{ $$ = pParser->AddNodeString ( $1 ); }
 	;
 
@@ -133,9 +135,14 @@ function:
 		{
 			$$ = pParser->AddNodeFunc ( $1, pParser->AddNodeID(), $5 );
 		}
-	| TOK_FUNC_IN '(' TOK_ATTR_MVA ',' constlist ')'
+	| TOK_FUNC_IN '(' TOK_ATTR_MVA32 ',' constlist ')'
 		{
-			$$ = pParser->AddNodeAttr ( TOK_ATTR_MVA, $3 );
+			$$ = pParser->AddNodeAttr ( TOK_ATTR_MVA32, $3 );
+			$$ = pParser->AddNodeFunc ( $1, $$, $5 );
+		}
+	| TOK_FUNC_IN '(' TOK_ATTR_MVA64 ',' constlist ')'
+		{
+			$$ = pParser->AddNodeAttr ( TOK_ATTR_MVA64, $3 );
 			$$ = pParser->AddNodeFunc ( $1, $$, $5 );
 		}
 	| TOK_FUNC_IN '(' attr ',' TOK_USERVAR ')'

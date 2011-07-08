@@ -285,6 +285,56 @@ function IsModelGenMode ()
 }
 
 
+function CompareResultSetFixup ( &$set, $roundoff, $variants_match )
+{
+	global $g_ignore_weights;
+
+	if ( !is_array($set) )
+		return;
+
+	if ( $roundoff && !@$set["resarray"] ) // FIXME! support resarray too
+		foreach ( $set["attrs"] as $name=>$type )
+			if ( $type==SPH_ATTR_FLOAT )
+	{
+		foreach ( $set["matches"] as $id=>$match )
+			$set["matches"][$id]["attrs"][$name] = sprintf ( "%.{$roundoff}f",
+				$set["matches"][$id]["attrs"][$name] );
+	}
+
+	if ( $g_ignore_weights )
+	{
+		if ( isset($set["matches"]) )
+		{
+			if ( @$set["resarray"] )
+			{
+				for ( $i=0; $i<count($set); $i++ )
+					unset ( $set["matches"][$id]["weight"] );
+			} else
+			{
+				foreach ( $set["matches"] as $id=>$match )
+					unset ( $set["matches"][$id]["weight"] );
+			}
+		}
+		if ( @$set["words"] )
+			foreach ( $set["words"] as $word=>$info )
+				$set["words"][$word] = array ( "hits"=>-1, "docs"=>-1 );
+	}
+
+	//foreach ( preg_split ( "/\\W+/", "time warning status fields resarray roundoff words" ) as $key )
+	foreach ( preg_split ( "/\\W+/", "time warning status fields resarray roundoff" ) as $key )
+		unset ( $set[$key] );
+		
+	if ( $variants_match && isset ( $set["attrs"] ) )
+	{			
+		foreach ( $set["attrs"] as $k=>$v )
+		{
+			if ( $v==SPH_ATTR_MULTI64 )
+				$set["attrs"][$k] = SPH_ATTR_MULTI; 
+		}
+	}
+}
+
+	
 function ChildrenArray ( $node, $name="" )
 {
 	$res = array ();
@@ -1100,54 +1150,16 @@ class SphinxConfig
 	}
 
 
-	function CompareResultSetFixup ( &$set, $roundoff )
-	{
-		global $g_ignore_weights;
-
-		if ( !is_array($set) )
-			return;
-
-		if ( $roundoff && !@$set["resarray"] ) // FIXME! support resarray too
-			foreach ( $set["attrs"] as $name=>$type )
-				if ( $type==SPH_ATTR_FLOAT )
-		{
-			foreach ( $set["matches"] as $id=>$match )
-				$set["matches"][$id]["attrs"][$name] = sprintf ( "%.{$roundoff}f",
-					$set["matches"][$id]["attrs"][$name] );
-		}
-
-		if ( $g_ignore_weights )
-		{
-			if ( isset($set["matches"]) )
-			{
-				if ( @$set["resarray"] )
-				{
-					for ( $i=0; $i<count($set); $i++ )
-						unset ( $set["matches"][$id]["weight"] );
-				} else
-				{
-					foreach ( $set["matches"] as $id=>$match )
-						unset ( $set["matches"][$id]["weight"] );
-				}
-			}
-			if ( @$set["words"] )
-				foreach ( $set["words"] as $word=>$info )
-					$set["words"][$word] = array ( "hits"=>-1, "docs"=>-1 );
-		}
-
-		//foreach ( preg_split ( "/\\W+/", "time warning status fields resarray roundoff words" ) as $key )
-		foreach ( preg_split ( "/\\W+/", "time warning status fields resarray roundoff" ) as $key )
-			unset ( $set[$key] );
-	}
-
 	function CompareResultSets ( $set1, $set2 )
 	{
 		$roundoff = 0;
 		if ( isset($set1["roundoff"]) ) $roundoff = $set1["roundoff"];
 		if ( isset($set2["roundoff"]) ) $roundoff = $set2["roundoff"];
+		
+		$variants_match = $this->Requires("variant_match");
 
-		$this->CompareResultSetFixup ( $set1, $roundoff );
-		$this->CompareResultSetFixup ( $set2, $roundoff );
+		CompareResultSetFixup ( $set1, $roundoff, $variants_match );
+		CompareResultSetFixup ( $set2, $roundoff, $variants_match );
 
 		return $set1==$set2;
 	}
@@ -1306,7 +1318,8 @@ class SphinxConfig
 				SPH_ATTR_FLOAT => "float",
 				SPH_ATTR_BIGINT => "bigint",
 				SPH_ATTR_STRING => "string",
-				SPH_ATTR_MULTI | SPH_ATTR_INTEGER => "mva" );
+				SPH_ATTR_MULTI => "mva",
+				SPH_ATTR_MULTI64 => "mva" ); // !COMMIT
 
 			$n = 1;
 			$str .= "Result set attributes:\n";

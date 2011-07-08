@@ -609,11 +609,13 @@ struct CSphGroupSorterSettings
 	CSphAttrLocator		m_tDistinctLoc;		///< locator for attribute to compute count(distinct) for
 	bool				m_bDistinct;		///< whether we need distinct
 	bool				m_bMVA;				///< whether we're grouping by MVA attribute
+	bool				m_bMva64;
 	CSphGrouper *		m_pGrouper;			///< group key calculator
 
 	CSphGroupSorterSettings ()
 		: m_bDistinct ( false )
 		, m_bMVA ( false )
+		, m_bMva64 ( false )
 		, m_pGrouper ( NULL )
 	{}
 };
@@ -1197,12 +1199,14 @@ class CSphKBufferMVAGroupSorter : public CSphKBufferGroupSorter < COMPGROUP, DIS
 protected:
 	const DWORD *		m_pMva;		///< pointer to MVA pool for incoming matches
 	CSphAttrLocator		m_tMvaLocator;
+	bool				m_bMva64;
 
 public:
 	/// ctor
 	CSphKBufferMVAGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
 		: CSphKBufferGroupSorter < COMPGROUP, DISTINCT > ( pComp, pQuery, tSettings )
 		, m_pMva ( NULL )
+		, m_bMva64 ( tSettings.m_bMva64 )
 	{
 		this->m_pGrouper->GetLocator ( m_tMvaLocator );
 	}
@@ -1236,10 +1240,23 @@ public:
 		DWORD iValues = *pValues++;
 
 		bool bRes = false;
-		while ( iValues-- )
+		if ( m_bMva64 )
 		{
-			SphGroupKey_t uGroupkey = this->m_pGrouper->KeyFromValue ( *pValues++ );
-			bRes |= this->PushEx ( tEntry, uGroupkey, false );
+			assert ( ( iValues%2 )==0 );
+			for ( ;iValues>0; iValues-=2, pValues+=2 )
+			{
+				uint64_t uMva = MVA_UPSIZE ( pValues );
+				SphGroupKey_t uGroupkey = this->m_pGrouper->KeyFromValue ( uMva );
+				bRes |= this->PushEx ( tEntry, uGroupkey, false );
+			}
+
+		} else
+		{
+			while ( iValues-- )
+			{
+				SphGroupKey_t uGroupkey = this->m_pGrouper->KeyFromValue ( *pValues++ );
+				bRes |= this->PushEx ( tEntry, uGroupkey, false );
+			}
 		}
 		return bRes;
 	}
@@ -1806,7 +1823,7 @@ static ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, con
 template < typename COMPGROUP >
 static ISphMatchSorter * sphCreateSorter3rd ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
 {
-	if ( tSettings.m_bMVA==true )
+	if ( tSettings.m_bMVA )
 	{
 		if ( tSettings.m_bDistinct==true )
 			return new CSphKBufferMVAGroupSorter < COMPGROUP, true > ( pComp, pQuery, tSettings);
@@ -1985,7 +2002,8 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const CSphSchema & 
 			return false;
 	}
 
-	tSettings.m_bMVA = ( eType==SPH_ATTR_UINT32SET );
+	tSettings.m_bMVA = ( eType==SPH_ATTR_UINT32SET || eType==SPH_ATTR_UINT64SET );
+	tSettings.m_bMva64 = ( eType==SPH_ATTR_UINT64SET );
 
 	// setup distinct attr
 	if ( !pQuery->m_sGroupDistinct.IsEmpty() )

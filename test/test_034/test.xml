@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 <name>distibuted index vs MVA</name>
+
+<requires> <variant_match /> </requires>  
+
 <config>
 indexer
 {
@@ -17,7 +20,10 @@ source src
 	type			= mysql
 	<sql_settings/>
 	sql_query = SELECT document_id, text, mva, tag FROM test_table
-	sql_attr_multi	= uint mva from field
+<Dynamic>	
+	<Variant>sql_attr_multi = uint mva from field</Variant>
+	<Variant>sql_attr_multi = bigint mva from field</Variant>
+</Dynamic>	
 	sql_attr_uint	= tag
 }
 

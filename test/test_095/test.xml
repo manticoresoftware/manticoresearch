@@ -42,10 +42,50 @@ index delta
 	path			= <data_path/>/delta
     charset_type 	= utf-8
 }
+
+source srcm1
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query			= SELECT document_id, body, 1 xid FROM test_table WHERE document_id in (3,4,5,6)
+	sql_attr_uint		= xid
+	sql_query_killlist	= select 1 union select 2 union select 3
+}
+
+source srcd1 : srcmain
+{
+	sql_query			= SELECT document_id, body, 2 AS xid FROM test_table WHERE document_id in (1,2)
+	sql_query_killlist	= select 4 union select 6
+}
+
+index m1
+{
+	source			= srcm1
+	path			= <data_path/>/m1
+    charset_type 	= utf-8
+}
+
+index d1
+{
+	source			= srcd1
+	path			= <data_path/>/d1
+    charset_type 	= utf-8
+}
+
+index mmk
+{
+	source			= srcm1
+	path			= <data_path/>/mmk
+    charset_type 	= utf-8
+}
+
 </config>
 
 <indexer>
 <run>--merge main delta</run>
+<run>--merge m1 d1</run>
+<run>--merge mmk d1 --merge-killlists</run>
 </indexer>
 
 <queries>
@@ -54,6 +94,8 @@ index delta
 <query index="main">four</query>
 <query index="main">five</query>
 <query index="main">six</query>
+<query index="m1"></query>
+<query index="mmk"></query>
 </queries>
 
 <db_create>

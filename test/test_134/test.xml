@@ -225,6 +225,7 @@ foreach ( $refs as $ref )
 
 // last test - nothing found - HighlightStart path
 $refs[3]['opt']['limit'] = 150;
+$refs[3]['opt']['allow_empty']=true;
 $results[] = $client->BuildExcerpts($refs[3]["doc"], 'test', "nothing found", $refs[3]["opt"] );
 
 // 7 test

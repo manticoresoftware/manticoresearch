@@ -79,6 +79,7 @@ $opts = array
     "chunk_separator" => " ... ",
     "limit" => 100,
     "around" => 2,
+	"allow_empty"=>true
 );
 
 $results = array ();
@@ -98,6 +99,7 @@ $opts = array
     "chunk_separator" => " ... ",
     "limit" => 50,
     "around" => 2,
+	"allow_empty"=>true	
 );
 
 $results [] = $opts;
@@ -116,6 +118,7 @@ $opts = array
     "chunk_separator" => " ... ",
     "limit" => 30,
     "around" => 2,
+	"allow_empty"=>true
 );
 
 $results [] = $opts;

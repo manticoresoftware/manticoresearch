@@ -45,6 +45,7 @@ $opts = array
 	"after_match"		=> "</b>",
 	"chunk_separator"	=> " ... ",
 	"around"			=> 3,
+	"allow_empty"=>true
 );
 
 $results = array();

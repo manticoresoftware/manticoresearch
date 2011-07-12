@@ -1011,8 +1011,10 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & tQuery )
 	} else
 	{
 		if ( !( ExtractPassages ( tQuery ) && HighlightBestPassages ( tQuery ) ) )
-			if ( !tQuery.m_bAllowEmpty )
+		{
+			if ( tQuery.m_bAllowEmpty )
 				HighlightStart ( tQuery );
+		}
 	}
 
 	// alloc, fill and return the result
@@ -1080,7 +1082,7 @@ void ExcerptGen_c::HighlightStart ( const ExcerptQuery_t & q )
 {
 	// no matches found. just show the starting tokens
 	int i = 0;
-	while ( m_iResultLen+m_dTokens[i].m_iLengthCP < q.m_iLimit )
+	while ( m_dTokens.GetLength() && ( m_iResultLen+m_dTokens[i].m_iLengthCP < q.m_iLimit || i==0 ) )
 	{
 		ResultEmit ( m_dTokens[i++] );
 		if ( i>=m_dTokens.GetLength() )

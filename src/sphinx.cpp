@@ -9519,6 +9519,13 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		return 0;
 	}
 
+	bool bHaveOrdinals = ( dOrdinalAttrs.GetLength() > 0 );
+	if ( bHaveOrdinals && m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN )
+	{
+		m_sLastError.SetSprintf ( "ordinal string attributes require docinfo=extern (fix your config file)" );
+		return 0;
+	}
+
 	if ( dStringAttrs.GetLength() && m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN )
 	{
 		m_sLastError.SetSprintf ( "string attributes require docinfo=extern (fix your config file)" );
@@ -9543,7 +9550,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	// book at least 32 KB for ordinals, if needed
 	int iOrdinalPoolSize = Max ( 32768, iMemoryLimit/8 );
-	if ( dOrdinalAttrs.GetLength()==0 )
+	if ( !bHaveOrdinals )
 		iOrdinalPoolSize = 0;
 
 	// book at least 32 KB for field MVAs, if needed
@@ -9588,7 +9595,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	int nOrdinals = 0;
 	SphOffset_t uMaxOrdinalAttrBlockSize = 0;
 	int iCurrentBlockSize = 0;
-	bool bHaveOrdinals = dOrdinalAttrs.GetLength() > 0;
 
 	CSphVector < CSphVector < Ordinal_t > > dOrdinals;
 	dOrdinals.Resize ( dOrdinalAttrs.GetLength() );

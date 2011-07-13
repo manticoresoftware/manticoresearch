@@ -7,8 +7,9 @@ indexer
 {
 	mem_limit			= 16M
 	<dynamic>
-	<variant>skip_file_field_errors = 0</variant>
-	<variant>skip_file_field_errors = 1</variant>
+	<variant>on_file_field_error = ignore_field</variant>
+	<variant>on_file_field_error = skip_document</variant>
+	<variant>on_file_field_error = fail_index</variant>
 	</dynamic>
 }
 

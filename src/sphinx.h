@@ -1530,6 +1530,15 @@ protected:
 };
 
 
+/// how to handle IO errors in file fields
+enum ESphOnFileFieldError
+{
+	FFE_IGNORE_FIELD,
+	FFE_SKIP_DOCUMENT,
+	FFE_FAIL_INDEX
+};
+
+
 /// generic document source
 /// provides multi-field support and generic tokenizer
 class CSphSource_Document : public CSphSource
@@ -1566,7 +1575,7 @@ protected:
 	char *					m_pReadFileBuffer;
 	int						m_iReadFileBufferSize;	///< size of read buffer for the 'sql_file_field' fields
 	int						m_iMaxFileBufferSize;	///< max size of read buffer for the 'sql_file_field' fields
-	bool					m_bSkipFileFieldErrors;
+	ESphOnFileFieldError	m_eOnFileFieldError;
 	FILE *					m_fpDumpRows;
 
 protected:
@@ -1606,6 +1615,7 @@ struct CSphJoinedField
 	bool				m_bPayload;
 };
 
+
 /// generic SQL source params
 struct CSphSourceParams_SQL
 {
@@ -1625,7 +1635,7 @@ struct CSphSourceParams_SQL
 
 	int								m_iRangedThrottle;
 	int								m_iMaxFileBufferSize;
-	bool							m_bSkipFileFieldErrors;
+	ESphOnFileFieldError			m_eOnFileFieldError;
 
 	CSphVector<CSphUnpackInfo>		m_dUnpack;
 	DWORD							m_uUnpackMemoryLimit;

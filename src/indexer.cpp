@@ -47,7 +47,8 @@ int				g_iMemLimit				= 0;
 int				g_iMaxXmlpipe2Field		= 0;
 int				g_iWriteBuffer			= 0;
 int				g_iMaxFileFieldBuffer	= 1024*1024;
-bool			g_bSkipFileFieldErrors	= false;	// true: discard entire row; false: warn but index
+
+ESphOnFileFieldError	g_eOnFileFieldError = FFE_IGNORE_FIELD;
 
 const int		EXT_COUNT = 8;
 const char *	g_dExt[EXT_COUNT] = { "sph", "spa", "spi", "spd", "spp", "spm", "spk", "sps" };
@@ -609,7 +610,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 
 	tParams.m_iMaxFileBufferSize = g_iMaxFileFieldBuffer;
 	tParams.m_iRefRangeStep = tParams.m_iRangeStep;
-	tParams.m_bSkipFileFieldErrors = g_bSkipFileFieldErrors;
+	tParams.m_eOnFileFieldError = g_eOnFileFieldError;
 
 	// unpack
 	if ( !ConfigureUnpack ( hSource("unpack_zlib"), SPH_UNPACK_ZLIB, tParams, sSourceName ) )
@@ -1675,7 +1676,19 @@ int main ( int argc, char ** argv )
 		g_iMaxXmlpipe2Field = hIndexer.GetSize ( "max_xmlpipe2_field", 2*1024*1024 );
 		g_iWriteBuffer = hIndexer.GetSize ( "write_buffer", 1024*1024 );
 		g_iMaxFileFieldBuffer = Max ( 1024*1024, hIndexer.GetSize ( "max_file_field_buffer", 8*1024*1024 ) );
-		g_bSkipFileFieldErrors = ( hIndexer.GetInt ( "skip_file_field_errors", 0 )!=0 );
+
+		if ( hIndexer("on_file_field_error") )
+		{
+			const CSphString & sVal = hIndexer["on_file_field_error"];
+			if ( sVal=="ignore_field" )
+				g_eOnFileFieldError = FFE_IGNORE_FIELD;
+			else if ( sVal=="skip_document" )
+				g_eOnFileFieldError = FFE_SKIP_DOCUMENT;
+			else if ( sVal=="fail_index" )
+				g_eOnFileFieldError = FFE_FAIL_INDEX;
+			else
+				sphDie ( "unknown on_field_field_error value (must be one of ignore_field, skip_document, fail_index)" );
+		}
 
 		sphSetThrottling ( hIndexer.GetInt ( "max_iops", 0 ), hIndexer.GetSize ( "max_iosize", 0 ) );
 	}

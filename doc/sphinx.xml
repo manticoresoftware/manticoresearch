@@ -9725,21 +9725,31 @@ max_file_field_buffer = 128M
 </programlisting>
 </sect2>
 
-<sect2 id="conf-skip-file-field-errors"><title>skip_file_field_errors</title>
+<sect2 id="conf-on-file-field-error"><title>on_file_field_error</title>
 <para>
-Whether to ignore errors in file fields and index documents, or to skip such documents.
-Optional, default is false (index documents).
+How to handle IO errors in file fields.
+Optional, default is <code>ignore_field</code>.
 Introduced in version 2.0.2-beta.
 </para>
 <para>
 When there is a problem indexing a file referenced by a file field
 (<xref linkend="conf-sql-file-field"/>), <filename>indexer</filename> can
 either index the document, assuming empty content in this particular field,
-or skip the document. <option>skip_file_field_errors</option> controls
-that behavior.
+or skip the document, or fail indexing entirely. <option>on_file_field_error</option>
+directive controls that behavior. The values it takes are:
+<itemizedlist>
+<listitem><code>ignore_field</code>, index the current document without field;</listitem>
+<listitem><code>skip_document</code>, skip the current document but continue indexing;</listitem>
+<listitem><code>fail_index</code>, fail indexing with an error message.</listitem>
+</itemizedlist>
 </para>
 <para>
-Note that with <option>skip_file_field_errors = 1</option>
+The problems that can arise are: open error, size error (file too big),
+and data read error. Warning messages on any problem will be given at all times,
+irregardless of the phase and the <code>on_file_field_error</code> setting.
+</para>
+<para>
+Note that with <option>on_file_field_error = skip_document</option>
 documents will only be ignored if problems are detected during
 an early check phase, and <b>not</b> during the actual file parsing
 phase. <filename>indexer</filename> will open every referenced file
@@ -9748,14 +9758,9 @@ when doing actual parsing work. So in case a file goes away
 between these two open attempts, the document will still be
 indexed.
 </para>
-<para>
-The problems that can arise are: open error, size error (file too big),
-and data read error. Warning messages on these will be given at all times,
-irregardless of the phase.
-</para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
-skip_file_field_errors = 1
+on_file_field_errors = skip_document
 </programlisting>
 </sect2>
 

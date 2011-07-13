@@ -10446,7 +10446,8 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 	{
 		const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
 		MysqlColumnType_e eType = MYSQL_COL_STRING;
-		if ( tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP || tCol.m_eAttrType==SPH_ATTR_BOOL )
+		if ( tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP || tCol.m_eAttrType==SPH_ATTR_BOOL
+			|| tCol.m_eAggrFunc==SPH_ATTR_FLOAT || tCol.m_eAttrType == SPH_ATTR_ORDINAL || tCol.m_eAttrType==SPH_ATTR_WORDCOUNT )
 			eType = MYSQL_COL_LONG;
 		if ( tCol.m_eAttrType==SPH_ATTR_BIGINT )
 			eType = MYSQL_COL_LONGLONG;
@@ -10484,6 +10485,8 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 			case SPH_ATTR_TIMESTAMP:
 			case SPH_ATTR_BOOL:
 			case SPH_ATTR_BIGINT:
+			case SPH_ATTR_ORDINAL:
+			case SPH_ATTR_WORDCOUNT:
 				if ( eAttrType==SPH_ATTR_BIGINT )
 					dRows.PutNumeric<SphAttr_t> ( INT64_FMT, tMatch.GetAttr(tLoc) );
 				else

@@ -62,6 +62,7 @@
 %token	TOK_ROLLBACK
 %token	TOK_SELECT
 %token	TOK_SET
+%token	TOK_SESSION
 %token	TOK_SHOW
 %token	TOK_SONAME
 %token	TOK_START
@@ -796,7 +797,11 @@ update_item:
 //////////////////////////////////////////////////////////////////////////
 
 show_variables:
-	TOK_SHOW TOK_VARIABLES		{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
+	TOK_SHOW opt_session TOK_VARIABLES		{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
+	;
+
+opt_session:
+	| TOK_SESSION
 	;
 
 show_collation:

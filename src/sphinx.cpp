@@ -14320,7 +14320,11 @@ XQNode_t * CSphIndex_VLN::DoExpansion ( XQNode_t * pNode, BYTE * pBuff, int iFD,
 	m_tWordlist.GetPrefixedWords ( sAdjustedWord, iWordLen, dPrefixedWords, pBuff, iFD );
 
 	if ( !dPrefixedWords.GetLength() )
+	{
+		// mark source word as expanded to prevent warning on terms mismatch in statistics
+		pNode->m_dWords.Begin()->m_bExpanded = true;
 		return pNode;
+	}
 
 	// sort word's to leftmost max documents, rightmost least documents
 	dPrefixedWords.Sort ( WordDocsGreaterOp_t() );

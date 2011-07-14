@@ -137,6 +137,7 @@ class SphinxClient:
 		self._indexweights	= {}							# per-index weights
 		self._ranker		= SPH_RANK_PROXIMITY_BM25		# ranking mode
 		self._maxquerytime	= 0								# max query time, milliseconds (default is 0, do not limit)
+		self._timeout = 1.0										# connection timeout
 		self._fieldweights	= {}							# per-field-name weights
 		self._overrides		= {}							# per-query attribute values overrides
 		self._select		= '*'							# select-list (attributes or expressions, with optional aliases)
@@ -180,6 +181,13 @@ class SphinxClient:
 		self._port = port
 		self._path = None
 
+	def SetConnectTimeout ( self, timeout ):
+		"""
+		Set connection timeout ( float second )
+		"""
+		assert (isinstance(timeout, float))
+		# set timeout to 0 make connaection non-blocking that is wrong so timeout got clipped to reasonable minimum
+		self._timeout = max ( 0.001, timeout )
 					
 	def _Connect (self):
 		"""
@@ -207,6 +215,7 @@ class SphinxClient:
 				addr = ( self._host, self._port )
 				desc = '%s;%s' % addr
 			sock = socket.socket ( af, socket.SOCK_STREAM )
+			sock.settimeout ( self._timeout )
 			sock.connect ( addr )
 		except socket.error, msg:
 			if sock:

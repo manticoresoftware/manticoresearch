@@ -19,6 +19,7 @@ package org.sphx.api;
 import java.io.*;
 import java.net.*;
 import java.util.*;
+import java.net.SocketAddress.*;
 
 /** Sphinx client class */
 public class SphinxClient
@@ -285,9 +286,11 @@ public class SphinxClient
 		Socket sock = null;
 		try
 		{
-			sock = new Socket ( _host, _port );
+			sock = new Socket ();
 			sock.setSoTimeout ( _timeout );
-
+			InetSocketAddress addr = new InetSocketAddress ( _host, _port );
+			sock.connect ( addr, _timeout );
+			
 			DataInputStream sIn = new DataInputStream ( sock.getInputStream() );
 			int version = sIn.readInt();
 			if ( version<1 )

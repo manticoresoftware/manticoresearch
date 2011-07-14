@@ -3998,11 +3998,8 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 	// fixup query
 	pQuery->m_sQuery = pQuery->m_sRawQuery;
 
-	if ( pQuery->m_eMode==SPH_MATCH_BOOLEAN && pQuery->m_eRanker!=SPH_RANK_NONE )
-	{
-		sphWarning ( "Match mode is SPH_MATCH_BOOLEAN so switch to SPH_RANK_NONE ranking mode" );
+	if ( pQuery->m_eMode==SPH_MATCH_BOOLEAN )
 		pQuery->m_eRanker = SPH_RANK_NONE;
-	}
 
 	if ( pQuery->m_eMode!=SPH_MATCH_ALL && pQuery->m_eMode!=SPH_MATCH_ANY && pQuery->m_eMode!=SPH_MATCH_PHRASE )
 		return;
@@ -4026,31 +4023,12 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 		*szRes++ = c;
 	}
 
-	if ( pQuery->m_eMode==SPH_MATCH_ALL )
+	switch ( pQuery->m_eMode )
 	{
-		if ( pQuery->m_eRanker!=SPH_RANK_PROXIMITY )
-		{
-			sphWarning ( "Match mode is SPH_MATCH_ALL so switch to SPH_RANK_PROXIMITY ranking mode" );
-			pQuery->m_eRanker = SPH_RANK_PROXIMITY;
-		}
-		*szRes = '\0';
-	} else if ( pQuery->m_eMode==SPH_MATCH_ANY )
-	{
-		if ( pQuery->m_eRanker!=SPH_RANK_MATCHANY )
-		{
-			sphWarning ( "Match mode is SPH_MATCH_ANY so switch to SPH_RANK_MATCHANY ranking mode" );
-			pQuery->m_eRanker = SPH_RANK_MATCHANY;
-		}
-		strncpy ( szRes, "\"/1", 8 );
-	} else if ( pQuery->m_eMode==SPH_MATCH_PHRASE )
-	{
-		if ( pQuery->m_eRanker!=SPH_RANK_PROXIMITY )
-		{
-			sphWarning ( "Match mode is SPH_MATCH_PHRASE so switch to SPH_RANK_PROXIMITY ranking mode" );
-			pQuery->m_eRanker = SPH_RANK_PROXIMITY;
-		}
-		*szRes++ = '\"';
-		*szRes = '\0';
+		case SPH_MATCH_ALL:		pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes = '\0'; break;
+		case SPH_MATCH_ANY:		pQuery->m_eRanker = SPH_RANK_MATCHANY; strncpy ( szRes, "\"/1", 8 ); break;
+		case SPH_MATCH_PHRASE:	pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes++ = '\"'; *szRes = '\0'; break;
+		default:				return;
 	}
 }
 

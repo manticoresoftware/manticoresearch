@@ -441,6 +441,9 @@ void sphHeapSort ( T * pData, int iCount, U COMP, V ACC )
 template < typename T, typename U, typename V >
 void sphSort ( T * pData, int iCount, U COMP, V ACC )
 {
+	if ( iCount<2 )
+		return;
+
 	typedef T * P;
 	P st0[32], st1[32], a, b, i, j;
 	typename V::MEDIAN_TYPE x;

@@ -333,6 +333,9 @@ index distlfake
 <sphinxql>select @id as idd, gr+1 as t from disthfake group by t order by tag asc</sphinxql>
 <sphinxql>select @id as idd, gr+1 as t from distlfake group by t order by tag asc</sphinxql>
 
+<!-- another regression chrash on sort of 0 matches -->
+<sphinxql>select * from dist50 where match ( 'broken merge' )</sphinxql>
+
 </sphqueries>
 
 <db_create>

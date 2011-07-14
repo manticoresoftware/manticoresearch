@@ -5398,7 +5398,7 @@ static int KillAllDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, const 
 		// normal sorter needs massasging
 		// sort by docid and then by tag to guarantee the replacement order
 		TaggedMatchSorter_fn fnSort;
-		sphSort ( &tRes.m_dMatches[0], tRes.m_dMatches.GetLength(), fnSort, fnSort );
+		sphSort ( tRes.m_dMatches.Begin(), tRes.m_dMatches.GetLength(), fnSort, fnSort );
 
 		// fold them matches
 		if ( tQuery.m_dIndexWeights.GetLength() )
@@ -10447,7 +10447,7 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 		const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
 		MysqlColumnType_e eType = MYSQL_COL_STRING;
 		if ( tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP || tCol.m_eAttrType==SPH_ATTR_BOOL
-			|| tCol.m_eAggrFunc==SPH_ATTR_FLOAT || tCol.m_eAttrType == SPH_ATTR_ORDINAL || tCol.m_eAttrType==SPH_ATTR_WORDCOUNT )
+			|| tCol.m_eAggrFunc==SPH_ATTR_FLOAT || tCol.m_eAttrType==SPH_ATTR_ORDINAL || tCol.m_eAttrType==SPH_ATTR_WORDCOUNT )
 			eType = MYSQL_COL_LONG;
 		if ( tCol.m_eAttrType==SPH_ATTR_BIGINT )
 			eType = MYSQL_COL_LONGLONG;

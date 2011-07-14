@@ -1456,9 +1456,15 @@ struct TestAccCmp_fn
 #ifndef NDEBUG
 static bool IsSorted ( DWORD * pData, int iCount, const TestAccCmp_fn & fn )
 {
+	if ( iCount<1 )
+		return true;
+
 	const DWORD * pPrev = pData;
 	if ( !fn.IsKeyDataSynced ( pPrev ) )
 		return false;
+
+	if ( iCount<2 )
+		return true;
 
 	for ( int i = 1; i < iCount; ++i )
 	{
@@ -1508,6 +1514,13 @@ void TestStridedSortPass ( int iStride, int iCount )
 	memset ( pData, 0, sizeof ( DWORD ) * iCount * iStride );
 	TestAccCmp_fn fnSort ( iStride );
 	RandomFill ( pData, iCount, fnSort, false );
+
+	// crash on sort of mini-arrays
+	TestAccCmp_fn fnSortDummy ( 1 );
+	DWORD dMini[1] = { 1 };
+	sphSort ( dMini, 1, fnSortDummy, fnSortDummy );
+	sphSort ( dMini, 0, fnSortDummy, fnSortDummy );
+	assert ( IsSorted ( dMini, 1, fnSortDummy ) );
 
 	// random sort
 	sphSort ( pData, iCount, fnSort, fnSort );

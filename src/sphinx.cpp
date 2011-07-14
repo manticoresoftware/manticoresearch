@@ -7562,7 +7562,9 @@ bool CSphIndex_VLN::LoadPersistentMVA ( CSphString & sError )
 		if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET )
 			dMvaLocators.Add ( tAttr.m_tLocator );
 	}
+#ifndef NDEBUG
 	int iMva64 = dMvaLocators.GetLength();
+#endif
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
@@ -7733,7 +7735,9 @@ bool CSphIndex_VLN::SaveAttributes ()
 			if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET )
 				dMvaLocators.Add ( tAttr.m_tLocator );
 		}
+#ifndef NDEBUG
 		int iMva64 = dMvaLocators.GetLength();
+#endif
 		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 		{
 			const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);

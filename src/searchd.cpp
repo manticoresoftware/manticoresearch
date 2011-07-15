@@ -198,7 +198,6 @@ static LogFormat_e		g_eLogFormat	= LOG_FORMAT_PLAIN;
 static int				g_iReadTimeout		= 5;	// sec
 static int				g_iWriteTimeout		= 5;
 static int				g_iClientTimeout	= 300;
-static int				g_iChildren			= 0;
 static int				g_iMaxChildren		= 0;
 #if !USE_WINDOWS
 static bool				g_bPreopenIndexes	= true;
@@ -325,6 +324,9 @@ static volatile sig_atomic_t g_bGotSigterm		= 0;	// we just received SIGTERM; ne
 static volatile sig_atomic_t g_bGotSigchld		= 0;	// we just received SIGCHLD; need to count dead children
 static volatile sig_atomic_t g_bGotSigusr1		= 0;	// we just received SIGUSR1; need to reopen logs
 
+static CSphVector<int>	g_dTermChildren;				// children to send term signal on rotation is done
+static int64_t			g_tmRotateChildren		= 0;	// pause to next children term signal after rotation is done
+static int				g_iRotationThrottle		= 0;	// pause between children term signals after rotation is done
 
 /// global index hash
 /// used in both non-threaded and multi-threaded modes
@@ -1267,6 +1269,13 @@ void Shutdown ()
 #if !USE_WINDOWS
 		if ( g_eWorkers==MPM_FORK || g_eWorkers==MPM_PREFORK )
 		{
+			// in *forked mode, explicitly kill all children
+			ARRAY_FOREACH ( i, g_dChildren )
+			{
+				sphLogDebug ( "killing child %d", g_dChildren[i] );
+				kill ( g_dChildren[i], SIGTERM );
+			}
+
 			int64_t tmShutStarted = sphMicroTimer();
 			// stop search children; up to 3 seconds long
 			while ( g_dChildren.GetLength()>0 && ( sphMicroTimer()-tmShutStarted )<iShutWaitPeriod )
@@ -10425,7 +10434,7 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 		const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
 		MysqlColumnType_e eType = MYSQL_COL_STRING;
 		if ( tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP || tCol.m_eAttrType==SPH_ATTR_BOOL
-			|| tCol.m_eAggrFunc==SPH_ATTR_FLOAT || tCol.m_eAttrType==SPH_ATTR_ORDINAL || tCol.m_eAttrType==SPH_ATTR_WORDCOUNT )
+			|| tCol.m_eAttrType==SPH_ATTR_FLOAT || tCol.m_eAttrType==SPH_ATTR_ORDINAL || tCol.m_eAttrType==SPH_ATTR_WORDCOUNT )
 			eType = MYSQL_COL_LONG;
 		if ( tCol.m_eAttrType==SPH_ATTR_BIGINT )
 			eType = MYSQL_COL_LONGLONG;
@@ -11485,7 +11494,6 @@ int PipeAndFork ( bool bFatal, int iHandler )
 
 		// parent process, continue accept()ing
 		default:
-			g_iChildren++;
 			g_dChildren.Add ( iFork );
 			SafeClose ( iChildPipe );
 			break;
@@ -11813,11 +11821,18 @@ void RotationThreadFunc ( void * )
 void IndexRotationDone ()
 {
 #if !USE_WINDOWS
-	// forcibly restart children serving persistent connections and/or preforked ones
-	// FIXME! check how both signals are handled in both cases
-	int iSignal = ( g_eWorkers==MPM_PREFORK ) ? SIGTERM : SIGHUP;
-	ARRAY_FOREACH ( i, g_dChildren )
-		kill ( g_dChildren[i], iSignal );
+	if ( g_iRotationThrottle && g_eWorkers==MPM_PREFORK )
+	{
+		ARRAY_FOREACH ( i, g_dChildren )
+			g_dTermChildren.Add ( g_dChildren[i] );
+	} else
+	{
+		// forcibly restart children serving persistent connections and/or preforked ones
+		// FIXME! check how both signals are handled in both cases
+		int iSignal = ( g_eWorkers==MPM_PREFORK ) ? SIGTERM : SIGHUP;
+		ARRAY_FOREACH ( i, g_dChildren )
+			kill ( g_dChildren[i], iSignal );
+	}
 #endif
 
 	g_iRotateCount = Max ( 0, g_iRotateCount-1 );
@@ -12673,7 +12688,7 @@ void CheckDelete ()
 	if ( !g_bDoDelete )
 		return;
 
-	if ( g_iChildren )
+	if ( g_dChildren.GetLength() )
 		return;
 
 	CSphVector<const CSphString *> dToDelete;
@@ -12728,7 +12743,7 @@ void CheckRotate ()
 	if ( !g_bSeamlessRotate || g_eWorkers==MPM_PREFORK )
 	{
 		// wait until there's no running queries
-		if ( g_iChildren && g_eWorkers!=MPM_PREFORK )
+		if ( g_dChildren.GetLength() && g_eWorkers!=MPM_PREFORK )
 			return;
 
 		CSphConfigParser * pCP = NULL;
@@ -13276,7 +13291,6 @@ int PreforkChild ()
 	}
 
 	// parent process
-	g_iChildren++;
 	g_dChildren.Add ( iRes );
 	return iRes;
 }
@@ -13449,16 +13463,6 @@ void CheckSignals ()
 	{
 		assert ( g_bHeadDaemon );
 		sphInfo ( "caught SIGTERM, shutting down" );
-
-#if !USE_WINDOWS
-		// in preforked mode, explicitly kill all children
-		ARRAY_FOREACH ( i, g_dChildren )
-		{
-			sphLogDebug ( "killing child %d", g_dChildren[i] );
-			kill ( g_dChildren[i], SIGTERM );
-		}
-#endif
-
 		Shutdown ();
 		exit ( 0 );
 	}
@@ -13470,10 +13474,10 @@ void CheckSignals ()
 		for ( ;; )
 		{
 			int iChildPid = waitpid ( -1, NULL, WNOHANG );
+			sphLogDebugvv ( "gone child %d ( %d )", iChildPid, g_dChildren.GetLength() ); // !COMMIT
 			if ( iChildPid<=0 )
 				break;
 
-			g_iChildren--;
 			g_dChildren.RemoveValue ( iChildPid ); // FIXME! OPTIMIZE! can be slow
 		}
 		g_bGotSigchld = 0;
@@ -13749,15 +13753,20 @@ void TickPreforked ( CSphProcessSharedMutex * pAcceptMutex )
 	if ( g_bGotSigterm )
 		exit ( 0 );
 
-	pAcceptMutex->Lock ();
-
 	int iClientSock = -1;
 	char sClientIP[SPH_ADDRPORT_SIZE];
 	Listener_t * pListener = NULL;
-	if ( !g_bGotSigterm )
-		pListener = DoAccept ( &iClientSock, sClientIP );
 
-	pAcceptMutex->Unlock ();
+	for ( ; !g_bGotSigterm && !pListener; )
+	{
+		if ( pAcceptMutex->TimedLock ( 100 ) )
+		{
+			if ( !g_bGotSigterm )
+				pListener = DoAccept ( &iClientSock, sClientIP );
+
+			pAcceptMutex->Unlock();
+		}
+	}
 
 	if ( g_bGotSigterm )
 		exit ( 0 ); // clean shutdown (after mutex unlock)
@@ -13829,18 +13838,34 @@ void HandlerThread ( void * pArg )
 }
 
 
+static void CheckChildrenTerm ()
+{
+#if !USE_WINDOWS
+	if ( g_eWorkers!=MPM_PREFORK || !g_dTermChildren.GetLength() || g_tmRotateChildren>sphMicroTimer() )
+		return;
+
+	sphLogDebugvv ( "killing child %d ( %d )", g_dTermChildren.Last(), g_dTermChildren.GetLength() );
+	kill ( g_dTermChildren.Last(), SIGTERM );
+	g_dTermChildren.Resize ( g_dTermChildren.GetLength()-1 );
+	g_tmRotateChildren = sphMicroTimer() + g_iRotationThrottle*1000;
+#endif
+}
+
+
 void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 {
 	CheckSignals ();
+	if ( !g_bHeadDaemon )
+		return;
+
 	CheckLeaks ();
 	CheckReopen ();
-	if ( g_bHeadDaemon )
-	{
-		CheckPipes ();
-		CheckDelete ();
-		CheckRotate ();
-		CheckFlush ();
-	}
+	CheckPipes ();
+	CheckDelete ();
+	CheckRotate ();
+	CheckFlush ();
+	CheckChildrenTerm();
+
 	sphInfo ( NULL ); // flush dupes
 
 	if ( pAcceptMutex )
@@ -13856,7 +13881,7 @@ void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 	if ( !pListener )
 		return;
 
-	if ( ( g_iMaxChildren && g_iChildren>=g_iMaxChildren )
+	if ( ( g_iMaxChildren && g_dChildren.GetLength()>=g_iMaxChildren )
 		|| ( g_iRotateCount && !g_bSeamlessRotate ) )
 	{
 		FailClient ( iClientSock, SEARCHD_RETRY, "server maxed out, retry in a second" );
@@ -14875,8 +14900,12 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			sphFatal ( "failed to create process-shared mutex" );
 
 		while ( g_dChildren.GetLength() < g_iPreforkChildren )
+		{
 			if ( PreforkChild()==0 ) // child process? break from here, go work
 				break;
+		}
+
+		g_iRotationThrottle = hSearchd.GetInt ( "prefork_rotation_throttle", 0 );
 	}
 #endif
 

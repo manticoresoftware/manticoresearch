@@ -1931,6 +1931,7 @@ public:
 	explicit CSphProcessSharedMutex ( int iExtraSize=0 );
 	void	Lock () const;
 	void	Unlock () const;
+	bool	TimedLock ( int tmSpin ) const; // wait at least tmSpin microseconds the lock will available
 
 protected:
 #if !USE_WINDOWS

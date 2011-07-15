@@ -774,6 +774,24 @@ void CSphProcessSharedMutex::Unlock () const
 #endif
 }
 
+#if !USE_WINDOWS
+bool CSphProcessSharedMutex::TimedLock ( int tmSpin ) const
+{
+	struct timespec tp;
+	tp.tv_sec = 0;
+	tp.tv_nsec = tmSpin * 1000;
+	if ( m_pMutex )
+		return ( pthread_mutex_timedlock ( m_pMutex, &tp )==0 );
+
+	return false;
+}
+#else
+bool CSphProcessSharedMutex::TimedLock ( int ) const
+{
+	return false;
+}
+#endif
+
 //////////////////////////////////////////////////////////////////////////
 // THREADING FUNCTIONS
 //////////////////////////////////////////////////////////////////////////

@@ -305,6 +305,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "collation_server",		0, NULL },
 	{ "collation_libc_locale",	0, NULL },
 	{ "watchdog",				0, NULL },
+	{ "prefork_rotation_throttle", 0, NULL },
 	{ NULL,						0, NULL }
 };
 

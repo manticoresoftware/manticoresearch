@@ -1366,6 +1366,7 @@ extern int64_t g_iIndexerPoolStartHit;
 void sigsegv ( int sig )
 {
 	sphSafeInfo ( STDERR_FILENO, "*** Oops, indexer crashed! Please send the following report to developers." );
+	sphSafeInfo ( STDERR_FILENO, "Sphinx " SPHINX_VERSION );
 	sphSafeInfo ( STDERR_FILENO, "-------------- report begins here ---------------" );
 	sphSafeInfo ( STDERR_FILENO, "Current document: docid=%l, hits=%l", g_iIndexerCurrentDocID, g_iIndexerCurrentHits );
 	sphSafeInfo ( STDERR_FILENO, "Current batch: minid=%l, maxid=%l", g_iIndexerCurrentRangeMin, g_iIndexerCurrentRangeMax );
@@ -1408,11 +1409,13 @@ LONG WINAPI sigsegv ( EXCEPTION_POINTERS * pExc )
 {
 	const char * sFail1 = "*** Oops, indexer crashed! Please send ";
 	const char * sFail2 = " minidump file to developers.\n";
+	const char * sFailVer = "Sphinx " SPHINX_VERSION "\n";
 
 	sphBacktrace ( pExc, g_sMinidump );
 	::write ( STDERR_FILENO, sFail1, strlen(sFail1) );
 	::write ( STDERR_FILENO, g_sMinidump, strlen(g_sMinidump) );
 	::write ( STDERR_FILENO, sFail2, strlen(sFail2) );
+	::write ( STDERR_FILENO, sFailVer, strlen(sFailVer) );
 
 	CRASH_EXIT;
 }

@@ -1613,6 +1613,8 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 	// tail
 	sphWrite ( g_iLogFile, g_sCrashedBannerTail, sizeof(g_sCrashedBannerTail)-1 );
 
+	sphSafeInfo ( g_iLogFile, "Sphinx " SPHINX_VERSION );
+
 #if USE_WINDOWS
 	// mini-dump reference
 	int iMiniDumpLen = snprintf ( (char *)g_dCrashQueryBuff, sizeof(g_dCrashQueryBuff), "%s %s.%p.mdmp\n", g_sMinidumpBanner, g_sMinidump, tQuery.m_pQuery );
@@ -12450,42 +12452,12 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 			return ADD_ERROR;
 		}
 
+		CSphString sError;
 		CSphSchema tSchema ( szIndexName );
-		CSphColumnInfo tCol;
-
-		// fields
-		for ( CSphVariant * v=hIndex("rt_field"); v; v=v->m_pNext )
+		if ( !sphRTSchemaConfigure ( hIndex, &tSchema, &sError ) )
 		{
-			tCol.m_sName = v->cstr();
-			tCol.m_sName.ToLower();
-			tSchema.m_dFields.Add ( tCol );
-		}
-		if ( !tSchema.m_dFields.GetLength() )
-		{
-			sphWarning ( "index '%s': no fields configured (use rt_field directive) - NOT SERVING", szIndexName );
+			sphWarning ( "index '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
 			return ADD_ERROR;
-		}
-
-		if ( tSchema.m_dFields.GetLength()>SPH_MAX_FIELDS )
-		{
-			sphWarning ( "index '%s': too many fields (fields=%d, max=%d) - NOT SERVING", szIndexName, tSchema.m_dFields.GetLength(), SPH_MAX_FIELDS );
-			return ADD_ERROR;
-		}
-
-		// attrs
-		const int iNumTypes = 7;
-		const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_float", "rt_attr_timestamp", "rt_attr_string", "rt_attr_multi", "rt_attr_multi_64" };
-		const ESphAttr iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_FLOAT, SPH_ATTR_TIMESTAMP, SPH_ATTR_STRING, SPH_ATTR_UINT32SET, SPH_ATTR_UINT64SET };
-
-		for ( int iType=0; iType<iNumTypes; iType++ )
-		{
-			for ( CSphVariant * v = hIndex ( sTypes[iType] ); v; v = v->m_pNext )
-			{
-				tCol.m_sName = v->cstr();
-				tCol.m_sName.ToLower();
-				tCol.m_eAttrType = iTypes[iType];
-				tSchema.AddAttr ( tCol, false );
-			}
 		}
 
 		// path
@@ -12514,7 +12486,6 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 
 		// pick config settings
 		// they should be overriden later by Preload() if needed
-		CSphString sError;
 		CSphIndexSettings tSettings;
 		if ( !sphConfIndex ( hIndex, tSettings, sError ) )
 		{

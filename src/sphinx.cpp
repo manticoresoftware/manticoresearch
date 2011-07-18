@@ -15575,8 +15575,11 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 				const DWORD uOffset = (DWORD)sphGetRowAttr ( pAttrs, dStrItems[ iItem ] );
 				if ( uOffset>=m_pStrings.GetNumEntries() )
+				{
 					LOC_FAIL(( fp, "string offset out of bounds (row=%u, stringattr=%d, docid="DOCID_FMT", index=%u)",
 						uRow, iItem, uLastID, uOffset ));
+					continue;
+				}
 
 				if ( !uOffset )
 					continue;

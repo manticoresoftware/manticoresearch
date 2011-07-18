@@ -1397,7 +1397,6 @@ void sphBacktrace ( int iFD, bool bSafe )
 		return;
 
 	sphSafeInfo ( iFD, "-------------- backtrace begins here ---------------" );
-	sphSafeInfo ( iFD, "Sphinx " SPHINX_VERSION );
 #ifdef COMPILER
 	sphSafeInfo ( iFD, "Program compiled with " COMPILER );
 #endif

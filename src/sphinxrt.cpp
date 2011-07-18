@@ -951,7 +951,7 @@ public:
 	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig ) {}
 	virtual void				DebugDumpDocids ( FILE * fp ) {}
 	virtual void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID ) {}
-	virtual int					DebugCheck ( FILE * fp ) { return 0; }
+	virtual int					DebugCheck ( FILE * fp );
 #if USE_WINDOWS
 #pragma warning(pop)
 #endif
@@ -3318,6 +3318,18 @@ void RtIndex_t::PostSetup()
 	}
 }
 
+int RtIndex_t::DebugCheck ( FILE * fp )
+{
+	int iFails = 0;
+	ARRAY_FOREACH ( i, m_pDiskChunks )
+	{
+		fprintf ( fp, "checking disk chunk %d(%d)...\n", i, m_pDiskChunks.GetLength() );
+		iFails += m_pDiskChunks[i]->DebugCheck ( fp );
+	}
+
+	return iFails;
+}
+
 //////////////////////////////////////////////////////////////////////////
 // SEARCHING
 //////////////////////////////////////////////////////////////////////////
@@ -5661,6 +5673,50 @@ void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressC
 	g_pBinlog->Replay ( hIndexes, pfnProgressCallback );
 	g_pBinlog->CreateTimerThread();
 	g_bRTChangesAllowed = true;
+}
+
+bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema * pSchema, CSphString * pError )
+{
+	assert ( pSchema && pError );
+
+	CSphColumnInfo tCol;
+
+	// fields
+	for ( CSphVariant * v=hIndex("rt_field"); v; v=v->m_pNext )
+	{
+		tCol.m_sName = v->cstr();
+		tCol.m_sName.ToLower();
+		pSchema->m_dFields.Add ( tCol );
+	}
+	if ( !pSchema->m_dFields.GetLength() )
+	{
+		pError->SetSprintf ( "no fields configured (use rt_field directive)" );
+		return false;
+	}
+
+	if ( pSchema->m_dFields.GetLength()>SPH_MAX_FIELDS )
+	{
+		pError->SetSprintf ( "too many fields (fields=%d, max=%d)", pSchema->m_dFields.GetLength(), SPH_MAX_FIELDS );
+		return false;
+	}
+
+	// attrs
+	const int iNumTypes = 7;
+	const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_float", "rt_attr_timestamp", "rt_attr_string", "rt_attr_multi", "rt_attr_multi_64" };
+	const ESphAttr iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_FLOAT, SPH_ATTR_TIMESTAMP, SPH_ATTR_STRING, SPH_ATTR_UINT32SET, SPH_ATTR_UINT64SET };
+
+	for ( int iType=0; iType<iNumTypes; iType++ )
+	{
+		for ( CSphVariant * v = hIndex ( sTypes[iType] ); v; v = v->m_pNext )
+		{
+			tCol.m_sName = v->cstr();
+			tCol.m_sName.ToLower();
+			tCol.m_eAttrType = iTypes[iType];
+			pSchema->AddAttr ( tCol, false );
+		}
+	}
+
+	return true;
 }
 
 //

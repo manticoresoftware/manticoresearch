@@ -62,7 +62,7 @@ typedef union YYSTYPE {
 	} tInt;
 	struct							// field spec
 	{
-		DWORD		uMask;			// acceptable fields mask
+		CSphSmallBitvec		dMask;			// acceptable fields mask
 		int			iMaxPos;		// max allowed position within field
 	} tFieldLimit;
 	int				iZoneVec;

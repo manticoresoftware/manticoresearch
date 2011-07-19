@@ -93,7 +93,7 @@ public:
 	CSphVector<XQNode_t*>	m_dChildren;	///< non-plain node children
 
 	bool					m_bFieldSpec;	///< whether field spec was already explicitly set
-	DWORD					m_uFieldMask;	///< fields mask (spec part)
+	CSphSmallBitvec			m_dFieldMask;	///< fields mask (spec part)
 	int						m_iFieldMaxPos;	///< max position within field (spec part)
 
 	CSphVector<int>			m_dZones;		///< zone indexes in per-query zones list
@@ -113,13 +113,14 @@ public:
 		, m_iCounter ( 0 )
 		, m_iMagicHash ( 0 )
 		, m_bFieldSpec ( false )
-		, m_uFieldMask ( 0xFFFFFFFFUL )
 		, m_iFieldMaxPos ( 0 )
 		, m_iOpArg ( 0 )
 		, m_iAtomPos ( -1 )
 		, m_bVirtuallyPlain ( false )
 		, m_bNotWeighted ( false )
-	{}
+	{
+		m_dFieldMask.Set();
+	}
 
 	/// dtor
 	~XQNode_t ()
@@ -136,7 +137,7 @@ public:
 	}
 
 	/// setup field limits
-	void SetFieldSpec ( DWORD uMask, int iMaxPos );
+	void SetFieldSpec ( const CSphSmallBitvec& uMask, int iMaxPos );
 
 	/// setup zone limits
 	void SetZoneSpec ( const CSphVector<int> & dZones );

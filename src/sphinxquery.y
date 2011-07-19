@@ -18,7 +18,7 @@
 	} tInt;
 	struct							// field spec
 	{
-		DWORD		uMask;			// acceptable fields mask
+		CSphSmallBitvec		dMask;			// acceptable fields mask
 		int			iMaxPos;		// max allowed position within field
 	} tFieldLimit;
 	int				iZoneVec;
@@ -111,7 +111,7 @@ atom:
 
 atomf:
 	atom								{ $$ = $1; }
-	| TOK_FIELDLIMIT atom				{ $$ = $2; if ( $$ ) $$->SetFieldSpec ( $1.uMask, $1.iMaxPos ); }
+	| TOK_FIELDLIMIT atom				{ $$ = $2; if ( $$ ) $$->SetFieldSpec ( $1.dMask, $1.iMaxPos ); }
 	| TOK_ZONE atom						{ $$ = $2; if ( $$ ) $$->SetZoneSpec ( pParser->GetZoneVec ( $1 ) ); }
 	;
 
@@ -123,7 +123,7 @@ orlist:
 orlistf:
 	orlist								{ $$ = $1; }
 	| '-' orlist						{ $$ = pParser->AddOp ( SPH_QUERY_NOT, $2, NULL ); }
-	| TOK_FIELDLIMIT '-' orlist			{ $$ = pParser->AddOp ( SPH_QUERY_NOT, $3, NULL ); $$->SetFieldSpec ( $1.uMask, $1.iMaxPos ); }
+	| TOK_FIELDLIMIT '-' orlist			{ $$ = pParser->AddOp ( SPH_QUERY_NOT, $3, NULL ); $$->SetFieldSpec ( $1.dMask, $1.iMaxPos ); }
 	;
 
 beforelist:

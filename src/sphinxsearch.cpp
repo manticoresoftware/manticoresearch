@@ -47,7 +47,7 @@ struct ExtDoc_t
 	SphDocID_t		m_uDocid;
 	CSphRowitem *	m_pDocinfo;			///< for inline storage only
 	SphOffset_t		m_uHitlistOffset;
-	DWORD			m_uFields;
+	CSphSmallBitvec m_dFields;
 	float			m_fTFIDF;
 };
 
@@ -145,7 +145,8 @@ protected:
 class ExtTerm_c : public ExtNode_i, ISphNoncopyable
 {
 public:
-								ExtTerm_c ( ISphQword * pQword, DWORD uFields, const ISphQwordSetup & tSetup, bool bNotWeighted );
+								ExtTerm_c ( ISphQword * pQword, const CSphSmallBitvec& uFields, const ISphQwordSetup & tSetup, bool bNotWeighted );
+								ExtTerm_c ( ISphQword * pQword, const ISphQwordSetup & tSetup );
 								~ExtTerm_c ()
 								{
 									SafeDelete ( m_pQword );
@@ -164,17 +165,16 @@ public:
 	{
 		DebugIndent ( iLevel );
 		printf ( "ExtTerm: %s at: %d ", m_pQword->m_sWord.cstr(), m_pQword->m_iAtomPos );
-		DWORD uFields = m_uFields;
-		if ( uFields==0xFFFFFFFFUL )
+		if ( m_dFields.TestAll(true) )
 		{
 			printf ( "(all)\n" );
 		} else
 		{
 			bool bFirst = true;
 			printf ( "in: " );
-			for ( int iField = 1; uFields; uFields >>= 1, iField++ )
+			for ( int iField = 0; iField < CSphSmallBitvec::iTOTALBITS; iField++ )
 			{
-				if ( uFields & 1 )
+				if ( m_dFields.Test ( iField ) )
 				{
 					if ( !bFirst )
 						printf ( ", " );
@@ -190,7 +190,8 @@ protected:
 	ISphQword *					m_pQword;
 	ExtDoc_t *					m_pHitDoc;		///< points to entry in m_dDocs which GetHitsChunk() currently emits hits for
 	SphDocID_t					m_uHitsOverFor;	///< there are no more hits for matches block starting with this ID
-	DWORD						m_uFields;		///< accepted fields mask
+	CSphSmallBitvec				m_dFields;		///< accepted fields mask
+	bool						m_bLongMask;	///< if we work with >32bit mask
 	float						m_fIDF;			///< IDF for this term (might be 0.0f for non-1st occurences in query)
 	int64_t						m_iMaxTimer;	///< work until this timestamp
 	CSphString *				m_pWarning;
@@ -212,21 +213,20 @@ volatile bool ExtTerm_c::m_bInterruptNow = false;
 class ExtTermHitless_c: public ExtTerm_c
 {
 public:
-									ExtTermHitless_c ( ISphQword * pQword, DWORD uFields, const ISphQwordSetup & tSetup, bool bNotWeighted )
+									ExtTermHitless_c ( ISphQword * pQword, const CSphSmallBitvec& uFields, const ISphQwordSetup & tSetup, bool bNotWeighted )
 									: ExtTerm_c ( pQword, uFields, tSetup, bNotWeighted )
-									, m_uFieldMask ( 0 )
 									, m_uFieldPos ( 0 )
 								{}
 	virtual void				Reset ( const ISphQwordSetup & )
 	{
-		m_uFieldMask = 0;
+		m_dFieldMask.Unset();
 		m_uFieldPos = 0;
 	}
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 	virtual bool				GotHitless () { return true; }
 
 protected:
-	DWORD	m_uFieldMask;
+	CSphSmallBitvec	m_dFieldMask;
 	DWORD	m_uFieldPos;
 };
 
@@ -469,7 +469,7 @@ class FSMphrase
 		static const bool			bTermsTree = true;		///< we work with ExtTerm nodes
 
 	protected:
-		DWORD						m_uFields;				///< what fields is the search restricted to
+		CSphSmallBitvec				m_dFields;				///< what fields is the search restricted to
 		DWORD						m_uExpQpos;
 		CSphVector<int>				m_dQposDelta;			///< next expected qpos delta for each existing qpos (for skipped stopwords case)
 		DWORD						m_uMinQpos;
@@ -628,7 +628,7 @@ protected:
 class ExtUnit_c : public ExtNode_i
 {
 public:
-	ExtUnit_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, DWORD uFields, const ISphQwordSetup & tSetup, const char * sUnit );
+	ExtUnit_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const CSphSmallBitvec& dFields, const ISphQwordSetup & tSetup, const char * sUnit );
 	~ExtUnit_c ();
 
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
@@ -772,7 +772,7 @@ protected:
 };
 
 
-STATIC_ASSERT ( ( sizeof(DWORD)*8 )>=SPH_MAX_FIELDS, PAYLOAD_MASK_OVERFLOW );
+STATIC_ASSERT ( ( 8*8*sizeof(DWORD) )>=SPH_MAX_FIELDS, PAYLOAD_MASK_OVERFLOW );
 
 static const bool WITH_BM25 = true;
 
@@ -1074,7 +1074,7 @@ ExtNode_i * ExtNode_i::Create ( ISphQword * pQword, const XQNode_t * pNode, cons
 	{
 		if ( tSetup.m_pWarning && pQword->m_iTermPos )
 			tSetup.m_pWarning->SetSprintf ( "hitlist unavailable, position limit ignored" );
-		return new ExtTermHitless_c ( pQword, pNode->m_uFieldMask, tSetup, pNode->m_bNotWeighted );
+		return new ExtTermHitless_c ( pQword, pNode->m_dFieldMask, tSetup, pNode->m_bNotWeighted );
 	}
 	switch ( pQword->m_iTermPos )
 	{
@@ -1083,7 +1083,7 @@ ExtNode_i * ExtNode_i::Create ( ISphQword * pQword, const XQNode_t * pNode, cons
 		case TERM_POS_FIELD_END:		return new ExtTermPos_c<TERM_POS_FIELD_END> ( pQword, pNode, tSetup );
 		case TERM_POS_FIELD_LIMIT:		return new ExtTermPos_c<TERM_POS_FIELD_LIMIT> ( pQword, pNode, tSetup );
 		case TERM_POS_ZONES:			return new ExtTermPos_c<TERM_POS_ZONES> ( pQword, pNode, tSetup );
-		default:						return new ExtTerm_c ( pQword, pNode->m_uFieldMask, tSetup, pNode->m_bNotWeighted );
+		default:						return new ExtTerm_c ( pQword, pNode->m_dFieldMask, tSetup, pNode->m_bNotWeighted );
 	}
 }
 
@@ -1222,8 +1222,8 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 				case SPH_QUERY_OR:			pCur = new ExtOr_c ( pCur, pNext, tSetup ); break;
 				case SPH_QUERY_AND:			pCur = new ExtAnd_c ( pCur, pNext, tSetup ); break;
 				case SPH_QUERY_ANDNOT:		pCur = new ExtAndNot_c ( pCur, pNext, tSetup ); break;
-				case SPH_QUERY_SENTENCE:	pCur = new ExtUnit_c ( pCur, pNext, pNode->m_uFieldMask, tSetup, MAGIC_WORD_SENTENCE ); break;
-				case SPH_QUERY_PARAGRAPH:	pCur = new ExtUnit_c ( pCur, pNext, pNode->m_uFieldMask, tSetup, MAGIC_WORD_PARAGRAPH ); break;
+				case SPH_QUERY_SENTENCE:	pCur = new ExtUnit_c ( pCur, pNext, pNode->m_dFieldMask, tSetup, MAGIC_WORD_SENTENCE ); break;
+				case SPH_QUERY_PARAGRAPH:	pCur = new ExtUnit_c ( pCur, pNext, pNode->m_dFieldMask, tSetup, MAGIC_WORD_PARAGRAPH ); break;
 				default:					assert ( 0 && "internal error: unhandled op in ExtNode_i::Create()" ); break;
 			}
 		}
@@ -1235,7 +1235,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtTerm_c::ExtTerm_c ( ISphQword * pQword, DWORD uFields, const ISphQwordSetup & tSetup, bool bNotWeighted )
+ExtTerm_c::ExtTerm_c ( ISphQword * pQword, const CSphSmallBitvec& dFields, const ISphQwordSetup & tSetup, bool bNotWeighted )
 	: m_pQword ( pQword )
 	, m_pWarning ( tSetup.m_pWarning )
 	, m_bNotWeighted ( bNotWeighted )
@@ -1243,8 +1243,30 @@ ExtTerm_c::ExtTerm_c ( ISphQword * pQword, DWORD uFields, const ISphQwordSetup &
 	m_iAtomPos = pQword->m_iAtomPos;
 	m_pHitDoc = NULL;
 	m_uHitsOverFor = 0;
-	m_uFields = uFields;
+	m_dFields = dFields;
 	m_iMaxTimer = tSetup.m_iMaxTimer;
+	if ( tSetup.m_pIndex )
+		m_bLongMask = tSetup.m_pIndex->GetMatchSchema().m_dFields.GetLength()>32;
+	else
+		m_bLongMask = false;
+
+	AllocDocinfo ( tSetup );
+}
+
+ExtTerm_c::ExtTerm_c ( ISphQword * pQword, const ISphQwordSetup & tSetup )
+	: m_pQword ( pQword )
+	, m_pWarning ( tSetup.m_pWarning )
+	, m_bNotWeighted ( true )
+{
+	m_iAtomPos = pQword->m_iAtomPos;
+	m_pHitDoc = NULL;
+	m_uHitsOverFor = 0;
+	m_dFields.Set();
+	m_iMaxTimer = tSetup.m_iMaxTimer;
+	if ( tSetup.m_pIndex )
+		m_bLongMask = tSetup.m_pIndex->GetMatchSchema().m_dFields.GetLength()>32;
+	else
+		m_bLongMask = false;
 
 	AllocDocinfo ( tSetup );
 }
@@ -1291,14 +1313,20 @@ const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 			m_pQword->m_iDocs = 0;
 			break;
 		}
-		if (!( m_pQword->m_uFields & m_uFields ))
-			continue;
+		if (!( m_pQword->m_dFields.Test ( m_dFields ) ))
+		{
+			if ( (!m_bLongMask) || m_pQword->m_bAllFieldsKnown )
+				continue;
+			m_pQword->CollectHitMask();
+			if (!( m_pQword->m_dFields.Test ( m_dFields ) ))
+				continue;
+		}
 
 		ExtDoc_t & tDoc = m_dDocs[iDoc++];
 		tDoc.m_uDocid = tMatch.m_iDocID;
 		tDoc.m_pDocinfo = pDocinfo;
 		tDoc.m_uHitlistOffset = m_pQword->m_iHitlistPos;
-		tDoc.m_uFields = m_pQword->m_uFields & m_uFields; // OPTIMIZE: only needed for phrase node
+		tDoc.m_dFields = m_pQword->m_dFields & m_dFields; // OPTIMIZE: only needed for phrase node
 		tDoc.m_fTFIDF = float(m_pQword->m_uMatchHits) / float(m_pQword->m_uMatchHits+SPH_BM25_K1) * m_fIDF;
 		pDocinfo += m_iStride;
 	}
@@ -1379,7 +1407,7 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t
 			continue;
 		}
 
-		if (!( m_uFields & ( 1UL << HITMAN::GetField ( uHit ) ) ))
+		if (!( m_dFields.Test ( HITMAN::GetField ( uHit ) ) ))
 			continue;
 
 		ExtHit_t & tHit = m_dHits[iHit++];
@@ -1466,7 +1494,7 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, Sph
 			}
 		} while ( pDoc->m_uDocid!=pMatched->m_uDocid );
 
-		m_uFieldMask = pDoc->m_uFields;
+		m_dFieldMask = pDoc->m_dFields;
 		m_uFieldPos = 0;
 	}
 
@@ -1474,9 +1502,9 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, Sph
 	int iHit = 0;
 	for ( ;; )
 	{
-		if ( m_uFieldMask & 1 )
+		if ( m_dFieldMask.Test ( m_uFieldPos ) )
 		{
-			if ( m_uFields & ( 1UL<<m_uFieldPos ) )
+			if ( m_dFields.Test ( m_uFieldPos ) )
 			{
 				// emit hit
 				ExtHit_t & tHit = m_dHits[iHit++];
@@ -1490,7 +1518,7 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, Sph
 			}
 		}
 
-		if ( m_uFieldMask >>= 1 )
+		if ( m_uFieldPos < CSphSmallBitvec::iTOTALBITS-1 )
 		{
 			m_uFieldPos++;
 			continue;
@@ -1510,7 +1538,7 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, Sph
 		if ( !pDoc )
 			break;
 
-		m_uFieldMask = pDoc->m_uFields;
+		m_dFieldMask = pDoc->m_dFields;
 		m_uFieldPos = 0;
 	}
 
@@ -1527,7 +1555,7 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, Sph
 
 template < TermPosFilter_e T >
 ExtTermPos_c<T>::ExtTermPos_c ( ISphQword * pQword, const XQNode_t * pNode, const ISphQwordSetup & tSetup )
-	: ExtTerm_c ( pQword, pNode->m_uFieldMask, tSetup, pNode->m_bNotWeighted )
+	: ExtTerm_c ( pQword, pNode->m_dFieldMask, tSetup, pNode->m_bNotWeighted )
 	, m_iMaxFieldPos ( pNode->m_iFieldMaxPos )
 	, m_uTermMaxID ( 0 )
 	, m_pRawDocs ( NULL )
@@ -1905,7 +1933,7 @@ const ExtDoc_t * ExtAnd_c::GetDocsChunk ( SphDocID_t * pMaxID )
 			// emit it
 			ExtDoc_t & tDoc = m_dDocs[iDoc++];
 			tDoc.m_uDocid = pCur0->m_uDocid;
-			tDoc.m_uFields = pCur0->m_uFields | pCur1->m_uFields;
+			tDoc.m_dFields = pCur0->m_dFields | pCur1->m_dFields;
 			tDoc.m_uHitlistOffset = -1;
 			tDoc.m_fTFIDF = pCur0->m_fTFIDF + pCur1->m_fTFIDF;
 			CopyExtDocinfo ( tDoc, *pCur0, &pDocinfo, m_iStride );
@@ -2098,7 +2126,7 @@ const ExtDoc_t * ExtOr_c::GetDocsChunk ( SphDocID_t * pMaxID )
 				while ( pCur0->m_uDocid==pCur1->m_uDocid && pCur0->m_uDocid!=DOCID_MAX && iDoc<MAX_DOCS-1 )
 				{
 					m_dDocs[iDoc] = *pCur0;
-					m_dDocs[iDoc].m_uFields = pCur0->m_uFields | pCur1->m_uFields;
+					m_dDocs[iDoc].m_dFields = pCur0->m_dFields | pCur1->m_dFields;
 					m_dDocs[iDoc].m_fTFIDF = pCur0->m_fTFIDF + pCur1->m_fTFIDF;
 					CopyExtDocinfo ( m_dDocs[iDoc], *pCur0, &pDocinfo, m_iStride );
 					iDoc++;
@@ -2446,7 +2474,8 @@ const ExtDoc_t * ExtNWay_c<FSM>::GetDocsChunk ( SphDocID_t * pMaxID )
 				assert ( pDoc->m_uDocid==pHit->m_uDocid );
 
 				m_dDocs[iDoc].m_uDocid = pHit->m_uDocid;
-				m_dDocs[iDoc].m_uFields = ( 1UL<<HITMAN::GetField ( pHit->m_uHitpos ) );
+				m_dDocs[iDoc].m_dFields.Unset();
+				m_dDocs[iDoc].m_dFields.Set ( HITMAN::GetField ( pHit->m_uHitpos ) );
 				m_dDocs[iDoc].m_uHitlistOffset = -1;
 				m_dDocs[iDoc].m_fTFIDF = pDoc->m_fTFIDF;
 				CopyExtDocinfo ( m_dDocs[iDoc], *pDoc, &pDocinfo, m_iStride );
@@ -2618,7 +2647,7 @@ bool ExtNWay_c<FSM>::EmitTail ( int & iHit )
 //////////////////////////////////////////////////////////////////////////
 
 FSMphrase::FSMphrase ( const CSphVector<ExtNode_i *> & dQwords, DWORD, const XQNode_t & tNode, const ISphQwordSetup & )
-	: m_uFields ( tNode.m_uFieldMask )
+	: m_dFields ( tNode.m_dFieldMask )
 	, m_uExpQpos ( 0 )
 	, m_uExpPos ( 0 )
 	, m_uLeaves ( dQwords.GetLength() )
@@ -3086,7 +3115,7 @@ const ExtDoc_t * ExtQuorum_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		tCand.m_uDocid = DOCID_MAX; // current candidate id
 		tCand.m_uHitlistOffset = 0; // suppress gcc warnings
 		tCand.m_pDocinfo = NULL;
-		tCand.m_uFields = 0;
+		tCand.m_dFields.Unset();
 		tCand.m_fTFIDF = 0.0f;
 
 		int iCandMatches = 0; // amount of children that match current candidate
@@ -3100,7 +3129,7 @@ const ExtDoc_t * ExtQuorum_c::GetDocsChunk ( SphDocID_t * pMaxID )
 
 			} else if ( m_pCurDoc[i]->m_uDocid==tCand.m_uDocid )
 			{
-				tCand.m_uFields |= m_pCurDoc[i]->m_uFields;
+				tCand.m_dFields |= m_pCurDoc[i]->m_dFields;
 				tCand.m_fTFIDF += m_pCurDoc[i]->m_fTFIDF;
 				iCandMatches += (m_uMask >> i) & 1;
 			}
@@ -3580,7 +3609,7 @@ void ExtOrder_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtUnit_c::ExtUnit_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, DWORD uFields, const ISphQwordSetup & tSetup, const char * sUnit )
+ExtUnit_c::ExtUnit_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const CSphSmallBitvec& uFields, const ISphQwordSetup & tSetup, const char * sUnit )
 {
 	m_pArg1 = pFirst;
 	m_pArg2 = pSecond;
@@ -3711,7 +3740,7 @@ int ExtUnit_c::FilterHits ( int iMyHit, DWORD uSentenceEnd, SphDocID_t uDocid, i
 			{
 				ExtDoc_t & tDoc = m_dDocs [ (*pDoc)++ ];
 				tDoc.m_uDocid = m_pDoc1->m_uDocid;
-				tDoc.m_uFields = m_pDoc1->m_uFields | m_pDoc2->m_uFields;
+				tDoc.m_dFields = m_pDoc1->m_dFields | m_pDoc2->m_dFields;
 				tDoc.m_uHitlistOffset = -1;
 				tDoc.m_fTFIDF = m_pDoc1->m_fTFIDF + m_pDoc2->m_fTFIDF;
 				tDoc.m_pDocinfo = NULL; // no inline support, sorry
@@ -4027,11 +4056,11 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup 
 		XQKeyword_t tDot;
 
 		tDot.m_sWord.SetSprintf ( "%c%s", MAGIC_CODE_ZONE, m_dZones[i].cstr() );
-		m_dZoneStartTerm.Add ( new ExtTerm_c ( CreateQueryWord ( tDot, tSetup ), UINT_MAX, tSetup, true ) );
+		m_dZoneStartTerm.Add ( new ExtTerm_c ( CreateQueryWord ( tDot, tSetup ), tSetup ) );
 		m_dZoneStart[i] = NULL;
 
 		tDot.m_sWord.SetSprintf ( "%c/%s", MAGIC_CODE_ZONE, m_dZones[i].cstr() );
-		m_dZoneEndTerm.Add ( new ExtTerm_c ( CreateQueryWord ( tDot, tSetup ), UINT_MAX, tSetup, true ) );
+		m_dZoneEndTerm.Add ( new ExtTerm_c ( CreateQueryWord ( tDot, tSetup ), tSetup ) );
 		m_dZoneEnd[i] = NULL;
 	}
 }
@@ -4369,7 +4398,8 @@ int ExtRanker_WeightSum_c<USE_BM25>::GetMatches ()
 
 		DWORD uRank = 0;
 		for ( int i=0; i<m_iWeights; i++ )
-			uRank += ( (pDoc->m_uFields>>i)&1 )*m_pWeights[i];
+			if ( pDoc->m_dFields.Test(i) )
+				uRank += m_pWeights[i];
 
 		Swap ( m_dMatches[iMatches], m_dMyMatches[pDoc-m_dMyDocs] ); // OPTIMIZE? can avoid this swap and simply return m_dMyMatches (though in lesser chunks)
 		m_dMatches[iMatches].m_iWeight = USE_BM25

@@ -107,7 +107,7 @@ typedef union YYSTYPE {
 	} tInt;
 	struct							// field spec
 	{
-		DWORD		uMask;			// acceptable fields mask
+		CSphSmallBitvec		dMask;			// acceptable fields mask
 		int			iMaxPos;		// max allowed position within field
 	} tFieldLimit;
 	int				iZoneVec;
@@ -1227,7 +1227,7 @@ yyreduce:
 
   case 35:
 
-    { yyval.pNode = yyvsp[0].pNode; if ( yyval.pNode ) yyval.pNode->SetFieldSpec ( yyvsp[-1].tFieldLimit.uMask, yyvsp[-1].tFieldLimit.iMaxPos ); ;}
+    { yyval.pNode = yyvsp[0].pNode; if ( yyval.pNode ) yyval.pNode->SetFieldSpec ( yyvsp[-1].tFieldLimit.dMask, yyvsp[-1].tFieldLimit.iMaxPos ); ;}
     break;
 
   case 36:
@@ -1257,7 +1257,7 @@ yyreduce:
 
   case 41:
 
-    { yyval.pNode = pParser->AddOp ( SPH_QUERY_NOT, yyvsp[0].pNode, NULL ); yyval.pNode->SetFieldSpec ( yyvsp[-2].tFieldLimit.uMask, yyvsp[-2].tFieldLimit.iMaxPos ); ;}
+    { yyval.pNode = pParser->AddOp ( SPH_QUERY_NOT, yyvsp[0].pNode, NULL ); yyval.pNode->SetFieldSpec ( yyvsp[-2].tFieldLimit.dMask, yyvsp[-2].tFieldLimit.iMaxPos ); ;}
     break;
 
   case 43:

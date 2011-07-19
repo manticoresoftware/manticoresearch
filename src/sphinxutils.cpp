@@ -961,6 +961,7 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 	}
 
 	// hit format
+	// TODO! add the description into documentation.
 	tSettings.m_eHitFormat = SPH_HIT_FORMAT_INLINE;
 	if ( hIndex("hit_format") )
 	{

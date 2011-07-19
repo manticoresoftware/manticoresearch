@@ -196,7 +196,7 @@ inline const	DWORD *	DOCINFO2ATTRS ( const DWORD * pDocinfo )	{ return DOCINFO2A
 
 #define SPH_MAX_WORD_LEN		42		// so that any UTF-8 word fits 127 bytes
 #define SPH_MAX_FILENAME_LEN	512
-#define SPH_MAX_FIELDS			32
+#define SPH_MAX_FIELDS			256
 
 /////////////////////////////////////////////////////////////////////////////
 

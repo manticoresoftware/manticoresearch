@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>More than 32 searchable fields</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT * FROM test_table
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+    charset_type 	= utf-8
+}
+source srctests
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT document_id, t21, t141, t241 FROM test_table
+}
+
+index tests
+{
+	source			= srctests
+	path			= <data_path/>/tests
+    charset_type 	= utf-8
+}
+</config>
+
+
+<sphqueries>
+<sphinxql>select * from tests where match ('field_one')</sphinxql>
+<sphinxql>select * from test where match ('field_one')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from tests where match ('field_two')</sphinxql>
+<sphinxql>select * from test where match ('field_two')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from tests where match ('@t21 field_one')</sphinxql>
+<sphinxql>select * from tests where match ('@t141 field_one')</sphinxql>
+<sphinxql>select * from test where match ('@t21 field_one')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from tests where match ('@t21 field_two')</sphinxql>
+<sphinxql>select * from test where match ('@t21 field_two')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from tests where match ('@t141 field_three')</sphinxql>
+<sphinxql>select * from test where match ('@t141 field_three')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from tests where match ('@t141 field_two')</sphinxql>
+<sphinxql>select * from test where match ('@t141 field_two')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from tests where match ('@t241 field_two')</sphinxql>
+<sphinxql>select * from test where match ('@t241 field_two')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from tests where match ('field_one field_two')</sphinxql>
+<sphinxql>select * from test where match ('field_one field_two')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from tests where match ('field_one @t141 field_two')</sphinxql>
+<sphinxql>select * from test where match ('field_one @t141 field_two')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from tests where match ('field_one @t21 field_two')</sphinxql>
+<sphinxql>select * from test where match ('field_one @t21 field_two')</sphinxql>
+<sphinxql>show meta</sphinxql>
+</sphqueries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`t1` varchar(5),`t2` varchar(5),`t3` varchar(5),`t4` varchar(5),`t5` varchar(5),`t6` varchar(5),`t7` varchar(5),`t8` varchar(5),`t9` varchar(5),`t10` varchar(5),
+	`t11` varchar(5),`t12` varchar(5),`t13` varchar(5),`t14` varchar(5),`t15` varchar(5),`t16` varchar(5),`t17` varchar(5),`t18` varchar(5),`t19` varchar(5),`t20` varchar(5),
+	`t21` varchar(25),`t22` varchar(5),`t23` varchar(5),`t24` varchar(5),`t25` varchar(5),`t26` varchar(5),`t27` varchar(5),`t28` varchar(5),`t29` varchar(5),`t30` varchar(5),
+	`t31` varchar(5),`t32` varchar(5),`t33` varchar(5),`t34` varchar(5),`t35` varchar(5),`t36` varchar(5),`t37` varchar(5),`t38` varchar(5),`t39` varchar(5),`t40` varchar(5),
+	`t41` varchar(5),`t42` varchar(5),`t43` varchar(5),`t44` varchar(5),`t45` varchar(5),`t46` varchar(5),`t47` varchar(5),`t48` varchar(5),`t49` varchar(5),`t50` varchar(5),
+	`t51` varchar(5),`t52` varchar(5),`t53` varchar(5),`t54` varchar(5),`t55` varchar(5),`t56` varchar(5),`t57` varchar(5),`t58` varchar(5),`t59` varchar(5),`t60` varchar(5),
+	`t61` varchar(5),`t62` varchar(5),`t63` varchar(5),`t64` varchar(5),`t65` varchar(5),`t66` varchar(5),`t67` varchar(5),`t68` varchar(5),`t69` varchar(5),`t70` varchar(5),
+	`t71` varchar(5),`t72` varchar(5),`t73` varchar(5),`t74` varchar(5),`t75` varchar(5),`t76` varchar(5),`t77` varchar(5),`t78` varchar(5),`t79` varchar(5),`t80` varchar(5),
+	`t81` varchar(5),`t82` varchar(5),`t83` varchar(5),`t84` varchar(5),`t85` varchar(5),`t86` varchar(5),`t87` varchar(5),`t88` varchar(5),`t89` varchar(5),`t90` varchar(5),
+	`t91` varchar(5),`t92` varchar(5),`t93` varchar(5),`t94` varchar(5),`t95` varchar(5),`t96` varchar(5),`t97` varchar(5),`t98` varchar(5),`t99` varchar(5),`t100` varchar(5),
+	`t101` varchar(5),`t102` varchar(5),`t103` varchar(5),`t104` varchar(5),`t105` varchar(5),`t106` varchar(5),`t107` varchar(5),`t108` varchar(5),`t109` varchar(5),`t110` varchar(5),
+	`t111` varchar(5),`t112` varchar(5),`t113` varchar(5),`t114` varchar(5),`t115` varchar(5),`t116` varchar(5),`t117` varchar(5),`t118` varchar(5),`t119` varchar(5),`t120` varchar(5),
+	`t121` varchar(5),`t122` varchar(5),`t123` varchar(5),`t124` varchar(5),`t125` varchar(5),`t126` varchar(5),`t127` varchar(5),`t128` varchar(5),`t129` varchar(5),`t130` varchar(5),
+	`t131` varchar(5),`t132` varchar(5),`t133` varchar(5),`t134` varchar(5),`t135` varchar(5),`t136` varchar(5),`t137` varchar(5),`t138` varchar(5),`t139` varchar(5),`t140` varchar(5),
+	`t141` varchar(25),`t142` varchar(5),`t143` varchar(5),`t144` varchar(5),`t145` varchar(5),`t146` varchar(5),`t147` varchar(5),`t148` varchar(5),`t149` varchar(5),`t150` varchar(5),
+	`t151` varchar(5),`t152` varchar(5),`t153` varchar(5),`t154` varchar(5),`t155` varchar(5),`t156` varchar(5),`t157` varchar(5),`t158` varchar(5),`t159` varchar(5),`t160` varchar(5),
+	`t161` varchar(5),`t162` varchar(5),`t163` varchar(5),`t164` varchar(5),`t165` varchar(5),`t166` varchar(5),`t167` varchar(5),`t168` varchar(5),`t169` varchar(5),`t170` varchar(5),
+	`t171` varchar(5),`t172` varchar(5),`t173` varchar(5),`t174` varchar(5),`t175` varchar(5),`t176` varchar(5),`t177` varchar(5),`t178` varchar(5),`t179` varchar(5),`t180` varchar(5),
+	`t181` varchar(5),`t182` varchar(5),`t183` varchar(5),`t184` varchar(5),`t185` varchar(5),`t186` varchar(5),`t187` varchar(5),`t188` varchar(5),`t189` varchar(5),`t190` varchar(5),
+	`t191` varchar(5),`t192` varchar(5),`t193` varchar(5),`t194` varchar(5),`t195` varchar(5),`t196` varchar(5),`t197` varchar(5),`t198` varchar(5),`t199` varchar(5),`t200` varchar(5),
+	`t201` varchar(5),`t202` varchar(5),`t203` varchar(5),`t204` varchar(5),`t205` varchar(5),`t206` varchar(5),`t207` varchar(5),`t208` varchar(5),`t209` varchar(5),`t210` varchar(5),
+	`t211` varchar(5),`t212` varchar(5),`t213` varchar(5),`t214` varchar(5),`t215` varchar(5),`t216` varchar(5),`t217` varchar(5),`t218` varchar(5),`t219` varchar(5),`t220` varchar(5),
+	`t221` varchar(5),`t222` varchar(5),`t223` varchar(5),`t224` varchar(5),`t225` varchar(5),`t226` varchar(5),`t227` varchar(5),`t228` varchar(5),`t229` varchar(5),`t230` varchar(5),
+	`t231` varchar(5),`t232` varchar(5),`t233` varchar(5),`t234` varchar(5),`t235` varchar(5),`t236` varchar(5),`t237` varchar(5),`t238` varchar(5),`t239` varchar(5),`t240` varchar(5),
+	`t241` varchar(25),`t242` varchar(5),`t243` varchar(5),`t244` varchar(5),`t245` varchar(5),`t246` varchar(5),`t247` varchar(5),`t248` varchar(5),`t249` varchar(5),`t250` varchar(5),
+	`t251` varchar(5),`t252` varchar(5),`t253` varchar(5),`t254` varchar(5),`t255` varchar(5),`t256` varchar(5)
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`;
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` (document_id, t21, t141, t241) VALUES
+( 1, 'field_one', 'field_one field_one', 'field_one field_two' ),
+( 2, 'field_three', 'field_two', 'field_three' ),
+( 3, 'field_one', 'field_one', 'field_one');
+</db_insert>
+
+</test>

@@ -2099,6 +2099,176 @@ private:
 #endif
 };
 
+// small bitvector of 256 elements.
+class CSphSmallBitvec
+{
+public:
+	static const int iTOTALBITS = 256;
+
+private:
+	typedef unsigned long ELTYPE;
+	static const int iELEMBITS = sizeof ( ELTYPE ) * 8;
+	static const int iBYTESIZE = iTOTALBITS / 8;
+	static const int IELEMENTS = iTOTALBITS / iELEMBITS;
+	static const ELTYPE uALLBITS = ~(0UL);
+
+private:
+	ELTYPE m_dFieldsMask[IELEMENTS];
+
+public:
+	// no custom cstr and d-tor - to be usable from inside unions
+	// deep copy for it is ok - so, no explicit copying constructor and operator=
+
+	// old-fashion layer to work with DWORD (32-bit) mask.
+	// all bits above 32 assumed to be unset.
+	void Assign32 ( DWORD uMask )
+	{
+		Unset();
+		*(DWORD*)(&m_dFieldsMask[0]) = uMask;
+	}
+
+	DWORD GetMask32 () const
+	{
+		return (DWORD) ( m_dFieldsMask[0] & 0xFFFFFFFFUL );
+	}
+
+	// set n-th bit, or all
+	void Set ( int iIdx=-1 )
+	{
+		assert ( iIdx < iTOTALBITS );
+		if ( iIdx<0 )
+		{
+			for ( int i=0; i<IELEMENTS; i++ )
+				m_dFieldsMask[i] = uALLBITS;
+			return;
+		}
+		m_dFieldsMask[iIdx/iELEMBITS] |= 1UL << ( iIdx & ( iELEMBITS-1 ) );
+	}
+
+	// unset n-th bit, or all
+	void Unset ( int iIdx=-1 )
+	{
+		assert ( iIdx < iTOTALBITS );
+		if ( iIdx<0 )
+		{
+			for ( int i=0; i<IELEMENTS; i++ )
+				m_dFieldsMask[i] = 0UL;
+			return;
+		}
+		m_dFieldsMask[iIdx/iELEMBITS] &= ~(1UL << ( iIdx & ( iELEMBITS-1 ) ));
+	}
+
+	// test if n-th bit is set
+	bool Test ( int iIdx ) const
+	{
+		assert ( iIdx>=0 && iIdx<iTOTALBITS );
+		return ( m_dFieldsMask[iIdx/iELEMBITS] & ( 1UL << ( iIdx & ( iELEMBITS-1 ) ) ) )!=0;
+	}
+
+	// test the given mask (with &-operator)
+	bool Test ( const CSphSmallBitvec& dParam ) const
+	{
+		for ( int i=0; i<IELEMENTS; i++ )
+			if ( m_dFieldsMask[i] & dParam.m_dFieldsMask[i] )
+				return true;
+		return false;
+	}
+
+	// test if all bits are set or unset
+	bool TestAll ( bool bSet=false ) const
+	{
+		ELTYPE uTest = bSet?uALLBITS:0;
+		for ( int i=0; i<IELEMENTS; i++ )
+			if ( m_dFieldsMask[i]!=uTest )
+				return false;
+		return true;
+	}
+
+	// returns number or set bits in low 32 DWORD
+	unsigned short NumOfBits32 () const
+	{
+		DWORD uLow = GetMask32();
+		uLow = ( uLow & 0x55555555 ) + ( (uLow>>1) & 0x55555555 );
+		uLow = ( uLow & 0x33333333 ) + ( (uLow>>2) & 0x33333333 );
+		uLow = ( uLow & 0x7070707 ) + ( (uLow>>4) & 0x7070707 );
+		uLow = ( uLow & 0xF000F ) + ( (uLow>>8) & 0xF000F );
+		return ( uLow & 0x1F ) + ( (uLow>>16) & 0x1F );
+	}
+
+	friend CSphSmallBitvec operator & ( const CSphSmallBitvec& dFirst, const CSphSmallBitvec& dSecond );
+	friend CSphSmallBitvec operator | ( const CSphSmallBitvec& dFirst, const CSphSmallBitvec& dSecond );
+	friend bool operator == ( const CSphSmallBitvec& dFirst, const CSphSmallBitvec& dSecond );
+	CSphSmallBitvec& operator |= ( const CSphSmallBitvec& dSecond )
+	{
+		if ( &dSecond!=this )
+			for ( int i=0; i<IELEMENTS; i++ )
+				m_dFieldsMask[i] |= dSecond.m_dFieldsMask[i];
+		return *this;
+	}
+
+	// cut out all the bits over given number
+	void LimitBits ( int iBits )
+	{
+		if ( iBits>=iTOTALBITS )
+			return;
+
+		int iMaskPos = iBits / iELEMBITS;
+		ELTYPE uMask = ( 1UL << ( iBits % iELEMBITS ) ) - 1;
+		m_dFieldsMask[iMaskPos++] &= uMask;
+		for ( ; iMaskPos < IELEMENTS; iMaskPos++ )
+			m_dFieldsMask[iMaskPos] = 0UL;
+	}
+
+	void Negate()
+	{
+		for ( int i=0; i<IELEMENTS; i++ )
+			m_dFieldsMask[i] = ~m_dFieldsMask[i];
+	}
+};
+
+inline CSphSmallBitvec operator & ( const CSphSmallBitvec& dFirst, const CSphSmallBitvec& dSecond )
+{
+	if ( &dFirst==&dSecond )
+		return dFirst;
+
+	CSphSmallBitvec dResult;
+	for ( int i=0; i<CSphSmallBitvec::IELEMENTS; i++ )
+			dResult.m_dFieldsMask[i] = dFirst.m_dFieldsMask[i] & dSecond.m_dFieldsMask[i];
+	return dResult;
+}
+
+#if USE_WINDOWS
+#pragma warning(push,1)
+#pragma warning(disable:4701)
+#endif
+
+inline CSphSmallBitvec operator | ( const CSphSmallBitvec& dFirst, const CSphSmallBitvec& dSecond )
+{
+	if ( &dFirst==&dSecond )
+		return dFirst;
+
+	CSphSmallBitvec dResult;
+	for ( int i=0; i<CSphSmallBitvec::IELEMENTS; i++ )
+		dResult.m_dFieldsMask[i] = dFirst.m_dFieldsMask[i] | dSecond.m_dFieldsMask[i];
+	return dResult;
+}
+
+inline bool operator == ( const CSphSmallBitvec& dFirst, const CSphSmallBitvec& dSecond )
+{
+	if ( &dFirst==&dSecond )
+		return true;
+
+	return !memcmp ( &dFirst.m_dFieldsMask, &dSecond.m_dFieldsMask, CSphSmallBitvec::iBYTESIZE );
+}
+
+inline bool operator != ( const CSphSmallBitvec& dFirst, const CSphSmallBitvec& dSecond )
+{
+	return !( dFirst==dSecond );
+}
+#if USE_WINDOWS
+#pragma warning(pop)
+#endif
+
 #endif // _sphinxstd_
 
 //

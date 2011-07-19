@@ -813,7 +813,7 @@ struct CSphAggregateHit
 	SphWordID_t		m_iWordID;		///< word ID in current dictionary
 	BYTE *			m_sKeyword;		///< word itself (in keywords dictionary case only)
 	Hitpos_t		m_iWordPos;		///< word position in current document, or hit count in case of aggregate hit
-	DWORD			m_uFieldMask;	///< mask of fields containing this word, 0 for regular hits, non-0 for aggregate hits
+	CSphSmallBitvec	m_dFieldMask;	///< mask of fields containing this word, 0 for regular hits, non-0 for aggregate hits
 
 	CSphAggregateHit()
 		: m_iDocID ( 0 )
@@ -823,7 +823,7 @@ struct CSphAggregateHit
 
 	int GetAggrCount () const
 	{
-		assert ( m_uFieldMask );
+		assert ( !m_dFieldMask.TestAll() );
 		return m_iWordPos;
 	}
 
@@ -1033,11 +1033,20 @@ public:
 		}
 	}
 
+	virtual void CollectHitMask()
+	{
+		SeekHitlist ( m_iHitlistPos );
+		for ( Hitpos_t uHit = GetNextHit(); uHit!=EMPTY_HIT; uHit = GetNextHit() )
+			m_dFields.Set ( HITMAN::GetField ( uHit ) );
+		m_bAllFieldsKnown = true;
+	}
+
 	virtual const CSphMatch & GetNextDoc ( DWORD * pDocinfo )
 	{
 		SphDocID_t iDelta = m_rdDoclist.UnzipDocid();
 		if ( iDelta )
 		{
+			m_bAllFieldsKnown = false;
 			m_tDoc.m_iDocID += iDelta;
 			if ( INLINE_DOCINFO )
 			{
@@ -1054,10 +1063,12 @@ public:
 				{
 					const DWORD uField = m_rdDoclist.UnzipInt(); // field and end marker
 					m_iHitlistPos = uFirst | ( uField << 23 ) | ( U64C(1)<<63 );
-					m_uFields = 1 << ( uField >> 1 );
+					m_dFields.Unset();
+					m_dFields.Set ( uField >> 1 );
+					m_bAllFieldsKnown = true;
 				} else
 				{
-					m_uFields = uFirst;
+					m_dFields.Assign32 ( uFirst );
 					m_uHitPosition += m_rdDoclist.UnzipOffset();
 					m_iHitlistPos = m_uHitPosition;
 				}
@@ -1068,7 +1079,7 @@ public:
 
 				m_iHitlistPos += iDeltaPos;
 
-				m_uFields = m_rdDoclist.UnzipInt();
+				m_dFields.Assign32 ( m_rdDoclist.UnzipInt() );
 				m_uMatchHits = m_rdDoclist.UnzipInt();
 			}
 		} else
@@ -1389,7 +1400,7 @@ private:
 
 	SphOffset_t					m_iLastHitlistPos;		///< doclist entry
 	SphOffset_t					m_iLastHitlistDelta;	///< doclist entry
-	DWORD						m_uLastDocFields;		///< doclist entry
+	CSphSmallBitvec				m_dLastDocFields;		///< doclist entry
 	DWORD						m_uLastDocHits;			///< doclist entry
 
 	SphOffset_t					m_iLastWordDoclist;		///< wordlist entry
@@ -6126,7 +6137,7 @@ void CSphBin::Init ( int iFD, SphOffset_t * pSharedOffset, const int iBinSize )
 	m_tHit.m_iDocID = 0;
 	m_tHit.m_iWordID = 0;
 	m_tHit.m_iWordPos = EMPTY_HIT;
-	m_tHit.m_uFieldMask = 0;
+	m_tHit.m_dFieldMask.Unset();
 
 	m_bError = false;
 }
@@ -6331,7 +6342,7 @@ int CSphBin::ReadHit ( CSphAggregateHit * pOut, int iRowitems, CSphRowitem * pRo
 					}
 					tHit.m_iDocID = 0;
 					tHit.m_iWordPos = EMPTY_HIT;
-					tHit.m_uFieldMask = 0;
+					tHit.m_dFieldMask.Unset();
 					m_eState = BIN_DOC;
 					break;
 
@@ -6347,14 +6358,14 @@ int CSphBin::ReadHit ( CSphAggregateHit * pOut, int iRowitems, CSphRowitem * pRo
 				case BIN_POS:
 					if ( m_eMode==SPH_HITLESS_ALL )
 					{
-						tHit.m_uFieldMask = (DWORD)ReadVLB();
+						tHit.m_dFieldMask.Assign32 ( (DWORD)ReadVLB() );
 						m_eState = BIN_DOC;
 
 					} else if ( m_eMode==SPH_HITLESS_SOME )
 					{
 						if ( uDelta & 1 )
 						{
-							tHit.m_uFieldMask = (DWORD)ReadVLB();
+							tHit.m_dFieldMask.Assign32 ( (DWORD)ReadVLB() );
 							m_eState = BIN_DOC;
 						}
 						uDelta >>= 1;
@@ -7204,7 +7215,6 @@ CSphIndex_VLN::CSphIndex_VLN ( const char* sIndexName, const char * sFilename )
 	m_tLastHit.m_iWordPos = EMPTY_HIT;
 	m_tLastHit.m_sKeyword = m_sLastKeyword;
 	m_iLastHitlistPos = 0;
-	m_uLastDocFields = 0;
 	m_uLastDocHits = 0;
 	m_iLastWordDocs = 0;
 	m_iLastWordHits = 0;
@@ -7935,7 +7945,7 @@ void CSphIndex_VLN::cidxFinishDoclistEntry ( Hitpos_t uLastPos )
 
 		} else
 		{
-			m_wrDoclist.ZipInt ( m_uLastDocFields );
+			m_wrDoclist.ZipInt ( m_dLastDocFields.GetMask32() );
 			m_wrDoclist.ZipOffset ( m_iLastHitlistDelta );
 		}
 
@@ -7943,10 +7953,10 @@ void CSphIndex_VLN::cidxFinishDoclistEntry ( Hitpos_t uLastPos )
 	{
 		assert ( m_tSettings.m_eHitFormat==SPH_HIT_FORMAT_PLAIN );
 		m_wrDoclist.ZipOffset ( m_iLastHitlistDelta );
-		m_wrDoclist.ZipInt ( m_uLastDocFields );
+		m_wrDoclist.ZipInt ( m_dLastDocFields.GetMask32() );
 		m_wrDoclist.ZipInt ( m_uLastDocHits );
 	}
-	m_uLastDocFields = 0;
+	m_dLastDocFields.Unset();
 	m_uLastDocHits = 0;
 }
 
@@ -8042,15 +8052,15 @@ void CSphIndex_VLN::cidxHit ( CSphAggregateHit * hit, CSphRowitem * pAttrs )
 	// the hit
 	///////////
 
-	if ( hit->m_uFieldMask ) // merge aggregate hits into the current hit
+	if ( !hit->m_dFieldMask.TestAll(false) ) // merge aggregate hits into the current hit
 	{
 		int iHitCount = hit->GetAggrCount();
 		assert ( m_tSettings.m_eHitless );
 		assert ( iHitCount );
-		assert ( hit->m_uFieldMask );
+		assert ( !hit->m_dFieldMask.TestAll(false) );
 
 		m_uLastDocHits += iHitCount;
-		m_uLastDocFields |= hit->m_uFieldMask;
+		m_dLastDocFields |= hit->m_dFieldMask;
 		m_iLastWordHits += iHitCount;
 
 		if ( m_tSettings.m_eHitless==SPH_HITLESS_SOME )
@@ -8068,7 +8078,7 @@ void CSphIndex_VLN::cidxHit ( CSphAggregateHit * hit, CSphRowitem * pAttrs )
 		m_iLastWordHits++;
 
 		// update matched fields mask
-		m_uLastDocFields |= ( 1UL << HITMAN::GetField ( hit->m_iWordPos ) );
+		m_dLastDocFields.Set ( HITMAN::GetField ( hit->m_iWordPos ) );
 		m_uLastDocHits++;
 	}
 }
@@ -8586,7 +8596,7 @@ public:
 		m_pData [ m_iUsed ].m_iWordID = tHit.m_iWordID;
 		m_pData [ m_iUsed ].m_sKeyword = tHit.m_sKeyword; // bin must hold the actual data for the queue
 		m_pData [ m_iUsed ].m_iWordPos = tHit.m_iWordPos;
-		m_pData [ m_iUsed ].m_uFieldMask = tHit.m_uFieldMask;
+		m_pData [ m_iUsed ].m_dFieldMask = tHit.m_dFieldMask;
 		m_pData [ m_iUsed ].m_iBin = iBin;
 
 		int iEntry = m_iUsed++;
@@ -10737,7 +10747,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		tFlush.m_iWordID = 0;
 		tFlush.m_sKeyword = NULL;
 		tFlush.m_iWordPos = EMPTY_HIT;
-		tFlush.m_uFieldMask = 0;
+		tFlush.m_dFieldMask.Unset();
 		cidxHit ( &tFlush, NULL );
 
 		if ( m_bInplaceSettings )
@@ -11106,7 +11116,7 @@ public:
 		CSphAggregateHit tHit;
 		tHit.m_iWordID = iWordID;
 		tHit.m_sKeyword = sWord;
-		tHit.m_uFieldMask = 0;
+		tHit.m_dFieldMask.Unset();
 
 		while ( CSphMerger::NextDocument ( tQword, pSourceIndex, pInline, pFilter ) )
 		{
@@ -11116,7 +11126,7 @@ public:
 			{
 				// convert to aggregate if there is no hit-list
 				tHit.m_iDocID = tQword.m_tDoc.m_iDocID - m_pOutputIndex->m_tMin.m_iDocID;
-				tHit.m_uFieldMask = tQword.m_uFields;
+				tHit.m_dFieldMask = tQword.m_dFields;
 				tHit.SetAggrCount ( tQword.m_uMatchHits );
 				m_pOutputIndex->cidxHit ( &tHit, pInline );
 			}
@@ -11284,7 +11294,7 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 			CSphAggregateHit tHit;
 			tHit.m_iWordID = tDstReader.m_iWordID; // !COMMIT m_sKeyword anyone?
 			tHit.m_sKeyword = tDstReader.GetWord();
-			tHit.m_uFieldMask = 0;
+			tHit.m_dFieldMask.Unset();
 
 			bool bDstDocs = CSphMerger::NextDocument ( tDstQword, this, dDstInline, pFilter );
 			bool bSrcDocs = true;
@@ -11302,7 +11312,7 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 						while ( tDstQword.m_bHasHitlist && tDstQword.GetNextHit()!=EMPTY_HIT );
 
 						tHit.m_iDocID = tDstQword.m_tDoc.m_iDocID - m_tMin.m_iDocID;
-						tHit.m_uFieldMask = tDstQword.m_uFields;
+						tHit.m_dFieldMask = tDstQword.m_dFields;
 						tHit.SetAggrCount ( tDstQword.m_uMatchHits );
 						cidxHit ( &tHit, dSrcInline );
 					} else
@@ -11317,7 +11327,7 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 						while ( tSrcQword.m_bHasHitlist && tSrcQword.GetNextHit()!=EMPTY_HIT );
 
 						tHit.m_iDocID = tSrcQword.m_tDoc.m_iDocID - m_tMin.m_iDocID;
-						tHit.m_uFieldMask = tSrcQword.m_uFields;
+						tHit.m_dFieldMask = tSrcQword.m_dFields;
 						tHit.SetAggrCount ( tSrcQword.m_uMatchHits );
 						cidxHit ( &tHit, dSrcInline );
 					} else
@@ -11338,7 +11348,7 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 						while ( tDstQword.m_bHasHitlist && tDstQword.GetNextHit()!=EMPTY_HIT );
 						while ( tSrcQword.m_bHasHitlist && tSrcQword.GetNextHit()!=EMPTY_HIT );
 
-						tHit.m_uFieldMask = tDstQword.m_uFields | tSrcQword.m_uFields;
+						tHit.m_dFieldMask = tDstQword.m_dFields | tSrcQword.m_dFields;
 						tHit.SetAggrCount ( tDstQword.m_uMatchHits + tSrcQword.m_uMatchHits );
 						cidxHit ( &tHit, dSrcInline );
 
@@ -11730,7 +11740,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 	tFlush.m_iWordID = 0;
 	tFlush.m_sKeyword = (BYTE*)""; // tricky: assertion in cidxHit calls strcmp on this in case of empty index!
 	tFlush.m_iWordPos = EMPTY_HIT;
-	tFlush.m_uFieldMask = 0;
+	tFlush.m_dFieldMask.Unset();
 	cidxHit ( &tFlush, NULL );
 	cidxDone ( "sph.tmp", 8*1024*1024 ); // FIXME? is this magic dict block constant any good?..
 
@@ -13562,9 +13572,11 @@ CSphQueryContext::~CSphQueryContext ()
 void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema, int iIndexWeight )
 {
 	const int MIN_WEIGHT = 1;
+	// const int HEAVY_FIELDS = 32;
+	const int HEAVY_FIELDS = SPH_MAX_FIELDS;
 
 	// defaults
-	m_iWeights = Min ( tSchema.m_dFields.GetLength(), SPH_MAX_FIELDS );
+	m_iWeights = Min ( tSchema.m_dFields.GetLength(), HEAVY_FIELDS );
 	for ( int i=0; i<m_iWeights; i++ )
 		m_dWeights[i] = MIN_WEIGHT * iIndexWeight;
 
@@ -13574,7 +13586,7 @@ void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema 
 		ARRAY_FOREACH ( i, pQuery->m_dFieldWeights )
 		{
 			int j = tSchema.GetFieldIndex ( pQuery->m_dFieldWeights[i].m_sName.cstr() );
-			if ( j>=0 && j<SPH_MAX_FIELDS )
+			if ( j>=0 && j<HEAVY_FIELDS )
 				m_dWeights[j] = Max ( MIN_WEIGHT, pQuery->m_dFieldWeights[i].m_iValue ) * iIndexWeight;
 		}
 		return;
@@ -14017,7 +14029,7 @@ static XQNode_t * CloneKeyword ( const XQNode_t * pNode )
 
 	XQNode_t * pRes = new XQNode_t;
 	pRes->m_bFieldSpec = pNode->m_bFieldSpec;
-	pRes->m_uFieldMask = pNode->m_uFieldMask;
+	pRes->m_dFieldMask = pNode->m_dFieldMask;
 	pRes->m_iFieldMaxPos = pNode->m_iFieldMaxPos;
 	pRes->m_dWords = pNode->m_dWords;
 	return pRes;
@@ -15248,7 +15260,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 			// loop the hitlist
 			int iDocHits = 0;
-			DWORD uFieldMask = 0;
+			CSphSmallBitvec dFieldMask;
 			Hitpos_t uLastHit = EMPTY_HIT;
 
 			for ( ;; )
@@ -15274,7 +15286,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 						(uint64_t)uWordid, sWord, pQword->m_tDoc.m_iDocID, iField ));
 				}
 
-				uFieldMask |= ( 1UL<<iField );
+				dFieldMask.Set(iField);
 				iDocHits++; // to check doclist entry
 				iHitlistHits++; // to check dictionary entry
 			}
@@ -15285,9 +15297,9 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 					(uint64_t)uWordid, sWord, pQword->m_tDoc.m_iDocID, pQword->m_uMatchHits, iDocHits ));
 
 			// check the mask
-			if ( uFieldMask!=pQword->m_uFields )
-				LOC_FAIL(( fp, "field mask mismatch (wordid="UINT64_FMT"(%s), docid="DOCID_FMT", doclist=0x%x, hitlist=0x%x)",
-					(uint64_t)uWordid, sWord, pQword->m_tDoc.m_iDocID, pQword->m_uFields, uFieldMask ));
+			if ( dFieldMask!=pQword->m_dFields )
+				LOC_FAIL(( fp, "field mask mismatch (wordid="UINT64_FMT"(%s), docid="DOCID_FMT")",
+					(uint64_t)uWordid, sWord, pQword->m_tDoc.m_iDocID ));
 
 			// update my hitlist reader
 			rdHits.SeekTo ( pQword->m_rdHitlist.GetPos(), READ_NO_SIZE_HINT );

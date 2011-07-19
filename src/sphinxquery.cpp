@@ -38,8 +38,8 @@ public:
 	bool			Error ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 	void			Warning ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 
-	bool			AddField ( DWORD & uFields, const char * szField, int iLen );
-	bool			ParseFields ( DWORD & uFields, int & iMaxFieldPos );
+	bool			AddField ( CSphSmallBitvec & dFields, const char * szField, int iLen );
+	bool			ParseFields ( CSphSmallBitvec & uFields, int & iMaxFieldPos );
 	int				ParseZone ( const char * pZone );
 
 	bool			IsSpecial ( char c );
@@ -110,13 +110,13 @@ void yyerror ( XQParser_t * pParser, const char * sMessage )
 
 //////////////////////////////////////////////////////////////////////////
 
-void XQNode_t::SetFieldSpec ( DWORD uMask, int iMaxPos )
+void XQNode_t::SetFieldSpec ( const CSphSmallBitvec& uMask, int iMaxPos )
 {
 	// set it, if we do not yet have one
 	if ( !m_bFieldSpec )
 	{
 		m_bFieldSpec = true;
-		m_uFieldMask = uMask;
+		m_dFieldMask = uMask;
 		m_iFieldMaxPos = iMaxPos;
 	}
 
@@ -143,7 +143,7 @@ void XQNode_t::CopySpecs ( const XQNode_t * pSpecs )
 		return;
 
 	if ( pSpecs->m_bFieldSpec )
-		SetFieldSpec ( pSpecs->m_uFieldMask, pSpecs->m_iFieldMaxPos );
+		SetFieldSpec ( pSpecs->m_dFieldMask, pSpecs->m_iFieldMaxPos );
 
 	if ( pSpecs->m_dZones.GetLength() )
 		SetZoneSpec ( pSpecs->m_dZones );
@@ -152,7 +152,7 @@ void XQNode_t::CopySpecs ( const XQNode_t * pSpecs )
 
 void XQNode_t::ClearFieldMask ()
 {
-	m_uFieldMask = 0xFFFFFFFFUL;
+	m_dFieldMask.Set();
 
 	ARRAY_FOREACH ( i, m_dChildren )
 		m_dChildren[i]->ClearFieldMask();
@@ -301,7 +301,7 @@ bool XQParser_t::IsSpecial ( char c )
 
 
 /// lookup field and add it into mask
-bool XQParser_t::AddField ( DWORD & uFields, const char * szField, int iLen )
+bool XQParser_t::AddField ( CSphSmallBitvec & dFields, const char * szField, int iLen )
 {
 	CSphString sField;
 	sField.SetBinary ( szField, iLen );
@@ -315,10 +315,10 @@ bool XQParser_t::AddField ( DWORD & uFields, const char * szField, int iLen )
 			Warning ( "no field '%s' found in schema", sField.cstr () );
 	} else
 	{
-		if ( iField>=32 )
-			return Error ( " max 32 fields allowed" );
+		if ( iField>=SPH_MAX_FIELDS )
+			return Error ( " max %d fields allowed", SPH_MAX_FIELDS );
 
-		uFields |= 1 << iField;
+		dFields.Set(iField);
 	}
 
 	return true;
@@ -326,9 +326,9 @@ bool XQParser_t::AddField ( DWORD & uFields, const char * szField, int iLen )
 
 
 /// parse fields block
-bool XQParser_t::ParseFields ( DWORD & uFields, int & iMaxFieldPos )
+bool XQParser_t::ParseFields ( CSphSmallBitvec & dFields, int & iMaxFieldPos )
 {
-	uFields = 0;
+	dFields.Unset();
 	iMaxFieldPos = 0;
 
 	const char * pPtr = m_pTokenizer->GetBufferPtr ();
@@ -350,7 +350,7 @@ bool XQParser_t::ParseFields ( DWORD & uFields, int & iMaxFieldPos )
 	} else if ( *pPtr=='*' )
 	{
 		// handle @*
-		uFields = 0xFFFFFFFF;
+		dFields.Set();
 		m_pTokenizer->SetBufferPtr ( pPtr+1 );
 		return true;
 
@@ -377,12 +377,12 @@ bool XQParser_t::ParseFields ( DWORD & uFields, int & iMaxFieldPos )
 			pPtr++;
 
 		assert ( pPtr-pFieldStart>0 );
-		if ( !AddField ( uFields, pFieldStart, pPtr-pFieldStart ) )
+		if ( !AddField ( dFields, pFieldStart, pPtr-pFieldStart ) )
 			return false;
 
 		m_pTokenizer->SetBufferPtr ( pPtr );
-		if ( bNegate && uFields )
-			uFields = ~uFields;
+		if ( bNegate && ( !dFields.TestAll() ) )
+			dFields.Negate();
 
 	} else
 	{
@@ -411,7 +411,7 @@ bool XQParser_t::ParseFields ( DWORD & uFields, int & iMaxFieldPos )
 
 			} else if ( *pPtr==',' )
 			{
-				if ( !AddField ( uFields, pFieldStart, pPtr-pFieldStart ) )
+				if ( !AddField ( dFields, pFieldStart, pPtr-pFieldStart ) )
 					return false;
 
 				pFieldStart = NULL;
@@ -419,12 +419,12 @@ bool XQParser_t::ParseFields ( DWORD & uFields, int & iMaxFieldPos )
 
 			} else if ( *pPtr==')' )
 			{
-				if ( !AddField ( uFields, pFieldStart, pPtr-pFieldStart ) )
+				if ( !AddField ( dFields, pFieldStart, pPtr-pFieldStart ) )
 					return false;
 
 				m_pTokenizer->SetBufferPtr ( ++pPtr );
-				if ( bNegate && uFields )
-					uFields = ~uFields;
+				if ( bNegate && ( !dFields.TestAll() ) )
+					dFields.Negate();
 
 				bOK = true;
 				break;
@@ -694,11 +694,11 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			if ( sToken[0]=='@' )
 			{
 				// parse fields operator
-				if ( !ParseFields ( m_tPendingToken.tFieldLimit.uMask, m_tPendingToken.tFieldLimit.iMaxPos ) )
+				if ( !ParseFields ( m_tPendingToken.tFieldLimit.dMask, m_tPendingToken.tFieldLimit.iMaxPos ) )
 					return -1;
 
-				if ( m_pSchema->m_dFields.GetLength()!=32 )
-					m_tPendingToken.tFieldLimit.uMask &= ( 1UL<<m_pSchema->m_dFields.GetLength() )-1;
+				if ( m_pSchema->m_dFields.GetLength()!=SPH_MAX_FIELDS )
+					m_tPendingToken.tFieldLimit.dMask.LimitBits ( m_pSchema->m_dFields.GetLength() );
 
 				m_iPendingType = TOK_FIELDLIMIT;
 				break;
@@ -851,7 +851,7 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 	if ( pRight->m_bFieldSpec )
 	{
 		pResult->m_bFieldSpec = true;
-		pResult->m_uFieldMask = pRight->m_uFieldMask;
+		pResult->m_dFieldMask = pRight->m_dFieldMask;
 		pResult->m_iFieldMaxPos = pRight->m_iFieldMaxPos;
 	}
 
@@ -987,7 +987,7 @@ static void DeleteNodesWOFields ( XQNode_t * pNode )
 
 	for ( int i = 0; i < pNode->m_dChildren.GetLength (); )
 	{
-		if ( pNode->m_dChildren[i]->m_uFieldMask==0 )
+		if ( pNode->m_dChildren[i]->m_dFieldMask.TestAll() )
 		{
 			// this should be a leaf node
 			assert ( pNode->m_dChildren[i]->m_dChildren.GetLength()==0 );

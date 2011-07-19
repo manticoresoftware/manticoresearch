@@ -48,35 +48,25 @@ index tests
 <sphqueries>
 <sphinxql>select * from tests where match ('field_one')</sphinxql>
 <sphinxql>select * from test where match ('field_one')</sphinxql>
-<sphinxql>show meta</sphinxql>
 <sphinxql>select * from tests where match ('field_two')</sphinxql>
 <sphinxql>select * from test where match ('field_two')</sphinxql>
-<sphinxql>show meta</sphinxql>
 <sphinxql>select * from tests where match ('@t21 field_one')</sphinxql>
 <sphinxql>select * from tests where match ('@t141 field_one')</sphinxql>
 <sphinxql>select * from test where match ('@t21 field_one')</sphinxql>
-<sphinxql>show meta</sphinxql>
 <sphinxql>select * from tests where match ('@t21 field_two')</sphinxql>
 <sphinxql>select * from test where match ('@t21 field_two')</sphinxql>
-<sphinxql>show meta</sphinxql>
 <sphinxql>select * from tests where match ('@t141 field_three')</sphinxql>
 <sphinxql>select * from test where match ('@t141 field_three')</sphinxql>
-<sphinxql>show meta</sphinxql>
 <sphinxql>select * from tests where match ('@t141 field_two')</sphinxql>
 <sphinxql>select * from test where match ('@t141 field_two')</sphinxql>
-<sphinxql>show meta</sphinxql>
 <sphinxql>select * from tests where match ('@t241 field_two')</sphinxql>
 <sphinxql>select * from test where match ('@t241 field_two')</sphinxql>
-<sphinxql>show meta</sphinxql>
 <sphinxql>select * from tests where match ('field_one field_two')</sphinxql>
 <sphinxql>select * from test where match ('field_one field_two')</sphinxql>
-<sphinxql>show meta</sphinxql>
 <sphinxql>select * from tests where match ('field_one @t141 field_two')</sphinxql>
 <sphinxql>select * from test where match ('field_one @t141 field_two')</sphinxql>
-<sphinxql>show meta</sphinxql>
 <sphinxql>select * from tests where match ('field_one @t21 field_two')</sphinxql>
 <sphinxql>select * from test where match ('field_one @t21 field_two')</sphinxql>
-<sphinxql>show meta</sphinxql>
 </sphqueries>
 
 <db_create>

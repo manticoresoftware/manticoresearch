@@ -1454,6 +1454,17 @@ heuristics.
 
 <sect1 id="matching-modes"><title>Matching modes</title>
 <para>
+So-called matching modes are a legacy feature that used to provide
+(very) limited query syntax and ranking support. Currently, they are
+deprecated in favor of <link linkend="extended-syntax">full-text query
+language</link> and so-called <link linkend="weighting">rankers</link>.
+Starting with version 0.9.9-release, it is thus strongly recommended
+to use SPH_MATCH_EXTENDED and proper query syntax rather than any other
+legacy mode. All those other modes are actually internally converted
+to extended syntax anyway. SphinxAPI still defaults to SPH_MATCH_ALL
+but that is for compatibility reasons only.
+</para>
+<para>
 There are the following matching modes available:
 <itemizedlist>
 <listitem><para>SPH_MATCH_ALL, matches all query words (default mode);</para></listitem>
@@ -1461,14 +1472,19 @@ There are the following matching modes available:
 <listitem><para>SPH_MATCH_PHRASE, matches query as a phrase, requiring perfect match;</para></listitem>
 <listitem><para>SPH_MATCH_BOOLEAN, matches query as a boolean expression (see <xref linkend="boolean-syntax"/>);</para></listitem>
 <listitem><para>SPH_MATCH_EXTENDED, matches query as an expression in Sphinx internal query language
-	(see <xref linkend="extended-syntax"/>). As of 0.9.9, this has been superceded by SPH_MATCH_EXTENDED2,
-	providing additional functionality and better performance. The ident is retained for legacy application code
-	that will continue to be compatible once Sphinx and its components, including the API, are upgraded.</para></listitem>
-<listitem><para>SPH_MATCH_EXTENDED2, matches query using the second version of the Extended matching mode.</para></listitem>
+	(see <xref linkend="extended-syntax"/>);</para></listitem>
+<listitem><para>SPH_MATCH_EXTENDED2, an alias for SPH_MATCH_EXTENDED;</para></listitem>
 <listitem><para>SPH_MATCH_FULLSCAN, matches query, forcibly using the "full scan" mode as below.
 	NB, any query terms will be ignored, such that filters, filter-ranges and grouping 
 	will still be applied, but no text-matching.</para></listitem>
 </itemizedlist>
+</para>
+<para>
+SPH_MATCH_EXTENDED2 was used during 0.9.8 and 0.9.9 development cycle,
+when the internal matching engine was being rewritten (for the sake of
+additional functionality and better performance). By 0.9.9-release,
+the older version was removed, and SPH_MATCH_EXTENDED and SPH_MATCH_EXTENDED2
+are now just aliases.
 </para>
 <para>
 The SPH_MATCH_FULLSCAN mode will be automatically activated in place of the specified matching mode when the following conditions are met:
@@ -1487,6 +1503,7 @@ in this case providing every post from that user. By default this will be ordere
 followed by Sphinx document ID in ascending order (earliest first).
 </para>
 </sect1>
+
 
 <sect1 id="boolean-syntax"><title>Boolean query syntax</title>
 <para>
@@ -2656,7 +2673,6 @@ Match mode can take one of the following values:
 <listitem><para>"phr" for SPH_MATCH_PHRASE mode;</para></listitem>
 <listitem><para>"bool" for SPH_MATCH_BOOLEAN mode;</para></listitem>
 <listitem><para>"ext" for SPH_MATCH_EXTENDED mode;</para></listitem>
-<listitem><para>"ext2" for SPH_MATCH_EXTENDED2 mode;</para></listitem>
 <listitem><para>"scan" if the full scan mode was used, either by being specified with SPH_MATCH_FULLSCAN, or if the query was empty (as documented under <link linkend="matching-modes">Matching Modes</link>)</para></listitem>
 </itemizedlist>
 Sort mode can take one of the following values:
@@ -2880,7 +2896,7 @@ sorting modes:
 <programlisting>
 require ( "sphinxapi.php" );
 $cl = new SphinxClient ();
-$cl->SetMatchMode ( SPH_MATCH_EXTENDED2 );
+$cl->SetMatchMode ( SPH_MATCH_EXTENDED );
 
 $cl->SetSortMode ( SPH_SORT_RELEVANCE );
 $cl->AddQuery ( "the", "lj" );
@@ -2896,17 +2912,17 @@ How to tell whether the queries in the batch were actually optimized?
 If they were, respective query log will have a "multiplier" field that
 specifies how many queries were processed together:
 <programlisting>
-[Sun Jul 12 15:18:17.000 2009] 0.040 sec x3 [ext2/0/rel 747541 (0,20)] [lj] the
-[Sun Jul 12 15:18:17.000 2009] 0.040 sec x3 [ext2/0/ext 747541 (0,20)] [lj] the
-[Sun Jul 12 15:18:17.000 2009] 0.040 sec x3 [ext2/0/ext 747541 (0,20)] [lj] the
+[Sun Jul 12 15:18:17.000 2009] 0.040 sec x3 [ext/0/rel 747541 (0,20)] [lj] the
+[Sun Jul 12 15:18:17.000 2009] 0.040 sec x3 [ext/0/ext 747541 (0,20)] [lj] the
+[Sun Jul 12 15:18:17.000 2009] 0.040 sec x3 [ext/0/ext 747541 (0,20)] [lj] the
 </programlisting>
 Note the "x3" field. It means that this query was optimized and
 processed in a sub-batch of 3 queries. For reference, this is how
 the regular log would look like if the queries were not batched:
 <programlisting>
-[Sun Jul 12 15:18:17.062 2009] 0.059 sec [ext2/0/rel 747541 (0,20)] [lj] the
-[Sun Jul 12 15:18:17.156 2009] 0.091 sec [ext2/0/ext 747541 (0,20)] [lj] the
-[Sun Jul 12 15:18:17.250 2009] 0.092 sec [ext2/0/ext 747541 (0,20)] [lj] the
+[Sun Jul 12 15:18:17.062 2009] 0.059 sec [ext/0/rel 747541 (0,20)] [lj] the
+[Sun Jul 12 15:18:17.156 2009] 0.091 sec [ext/0/ext 747541 (0,20)] [lj] the
+[Sun Jul 12 15:18:17.250 2009] 0.092 sec [ext/0/ext 747541 (0,20)] [lj] the
 </programlisting>
 Note how per-query time in multi-query case was improved by a factor 
 of 1.5x to 2.3x, depending on a particular sorting mode. In fact, for both
@@ -3669,18 +3685,11 @@ using <option>--stdin</option>, as below. In the API this would be
 equivalent to passing <option>SPH_MATCH_BOOLEAN</option> to 
 <code>SetMatchMode</code>.</para></listitem>
 <listitem><para><option>--ext</option> (<option>-e</option> for short) changes 
-the matching mode to <link linkend="extended-syntax">Extended 
-matching</link>. In the API this would be equivalent to passing 
-<option>SPH_MATCH_EXTENDED</option> to <code>SetMatchMode</code>, and it 
-should be noted that use of this mode is being discouraged in favour of 
-Extended2, below.</para></listitem>
-<listitem><para><option>--ext2</option> (<option>-e2</option> for short) changes 
-the matching mode to <link linkend="extended-syntax">Extended matching, 
-version 2</link>. In the API this would be equivalent to passing 
-<option>SPH_MATCH_EXTENDED2</option> to <code>SetMatchMode</code>, and it 
-should be noted that use of this mode is being recommended in favour of 
-Extended, due to being more efficient and providing other 
-features.</para></listitem>
+the matching mode to <link linkend="extended-syntax">extended 
+matching</link> which provides various text querying operators.
+In the API this would be equivalent to passing 
+<option>SPH_MATCH_EXTENDED</option> to <code>SetMatchMode</code>.
+</para></listitem>
 <listitem><para><option>--filter &lt;attr&gt; &lt;v&gt;</option> (<option>-f 
 &lt;attr&gt; &lt;v&gt;</option> for short) filters the results such that 
 only documents where the attribute given (attr) matches the value given 
@@ -6105,7 +6114,7 @@ Any number of options can be specified. Available options are:
 <itemizedlist>
 <listitem><para>query - query text;</para></listitem>
 <listitem><para>mode - matching mode. Must be one of "all", "any", "phrase",
-	"boolean", "extended" or "extended2". Default is "all";</para></listitem>
+	"boolean", or "extended". Default is "all";</para></listitem>
 <listitem><para>sort - match sorting mode. Must be one of "relevance", "attr_desc",
 "attr_asc", "time_segments", or "extended". In all modes besides "relevance"
 attribute name (or sorting clause for "extended") is also required after a colon:
@@ -6206,12 +6215,13 @@ and TCP port, respectively:
 ... WHERE query='test;host=sphinx-test.loc;port=7312;';
 </programlisting>
 </para></listitem>
-<listitem><para>ranker - a ranking function to use when matching mode is extended2
-(i.e. with query syntax), as in <link linkend="api-func-setrankingmode">SetRankingMode()</link> API call.
+<listitem><para>ranker - a ranking function to use with "extended" matching mode,
+as in <link linkend="api-func-setrankingmode">SetRankingMode()</link> API call
+(the only mode that supports full query syntax).
 Known values are "proximity_bm25", "bm25", "none", "wordcount", "proximity",
 "matchany", and "fieldmask".
 <programlisting>
-... WHERE query='test;mode=extended2;ranker=bm25;';
+... WHERE query='test;mode=extended;ranker=bm25;';
 </programlisting>
 </para></listitem>
 <listitem><para>geoanchor - geodistance anchor, as in

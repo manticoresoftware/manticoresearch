@@ -601,7 +601,7 @@ public:
 
 	virtual void				Reset ( const ISphQwordSetup & tSetup );
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
-	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
+	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t );
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 	virtual bool				GotHitless () { return false; }
@@ -615,7 +615,6 @@ protected:
 	ExtHit_t					m_dMyHits[MAX_HITS];	///< buffer for all my phrase hits; inherited m_dHits will receive filtered results
 	bool						m_bDone;
 	SphDocID_t					m_uHitsOverFor;
-	SphDocID_t					m_uLastMatchID;
 
 protected:
 	int							GetNextHit ( SphDocID_t uDocid );										///< get next hit within given document, and return its child-id
@@ -3245,7 +3244,6 @@ ExtOrder_c::ExtOrder_c ( const CSphVector<ExtNode_i *> & dChildren, const ISphQw
 	: m_dChildren ( dChildren )
 	, m_bDone ( false )
 	, m_uHitsOverFor ( 0 )
-	, m_uLastMatchID ( 0 )
 {
 	int iChildren = dChildren.GetLength();
 	assert ( iChildren>=2 );
@@ -3273,7 +3271,6 @@ void ExtOrder_c::Reset ( const ISphQwordSetup & tSetup )
 {
 	m_bDone = false;
 	m_uHitsOverFor = 0;
-	m_uLastMatchID = 0;
 	m_dMyHits[0].m_uDocid = DOCID_MAX;
 
 	ARRAY_FOREACH ( i, m_dChildren )
@@ -3511,7 +3508,6 @@ const ExtDoc_t * ExtOrder_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		int iGotHits = GetMatchingHits ( uDocid, m_dMyHits+iMyHit, MAX_HITS-1-iMyHit );
 		if ( iGotHits )
 		{
-			m_uLastMatchID = uDocid;
 			CopyExtDoc ( m_dDocs[iDoc++], *m_pDocs[0], &pDocinfo, m_iStride );
 			iMyHit += iGotHits;
 		}
@@ -3533,7 +3529,7 @@ const ExtDoc_t * ExtOrder_c::GetDocsChunk ( SphDocID_t * pMaxID )
 }
 
 
-const ExtHit_t * ExtOrder_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
+const ExtHit_t * ExtOrder_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t )
 {
 	if ( pDocs->m_uDocid==m_uHitsOverFor )
 		return NULL;
@@ -3579,7 +3575,10 @@ const ExtHit_t * ExtOrder_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t u
 	} else
 	{
 		// we did not copy any hits; check for trailing ones as the last resort
-		iHit = GetMatchingHits ( Min ( uMaxID, m_uLastMatchID ), m_dHits, MAX_HITS-1 );
+		if ( pDocs->m_uDocid!=DOCID_MAX )
+		{
+			iHit = GetMatchingHits ( pDocs->m_uDocid, m_dHits, MAX_HITS-1 );
+		}
 		if ( !iHit )
 		{
 			// actually, not *only* in this case, also in partial buffer case

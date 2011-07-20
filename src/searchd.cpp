@@ -4688,10 +4688,17 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 				case SPH_FILTER_VALUES:
 					if ( f.m_dValues.GetLength()==1 )
 					{
-						tBuf.Append ( " %s="INT64_FMT, f.m_sAttrName.cstr(), (int64_t)f.m_dValues[0] );
+						if ( f.m_bExclude )
+							tBuf.Append ( " %s!="INT64_FMT, f.m_sAttrName.cstr(), (int64_t)f.m_dValues[0] );
+						else
+							tBuf.Append ( " %s="INT64_FMT, f.m_sAttrName.cstr(), (int64_t)f.m_dValues[0] );
 					} else
 					{
-						tBuf.Append ( " %s IN (", f.m_sAttrName.cstr() );
+						if ( f.m_bExclude )
+							tBuf.Append ( " %s NOT IN (", f.m_sAttrName.cstr() );
+						else
+							tBuf.Append ( " %s IN (", f.m_sAttrName.cstr() );
+
 						ARRAY_FOREACH ( j, f.m_dValues )
 						{
 							if ( j )
@@ -4704,13 +4711,21 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 					break;
 
 				case SPH_FILTER_RANGE:
-					tBuf.Append ( " %s BETWEEN "INT64_FMT" AND "INT64_FMT,
+					if ( f.m_bExclude )
+						tBuf.Append ( " %s NOT BETWEEN "INT64_FMT" AND "INT64_FMT,
 						f.m_sAttrName.cstr(), (int64_t)f.m_uMinValue, (int64_t)f.m_uMaxValue );
+					else
+						tBuf.Append ( " %s BETWEEN "INT64_FMT" AND "INT64_FMT,
+							f.m_sAttrName.cstr(), (int64_t)f.m_uMinValue, (int64_t)f.m_uMaxValue );
 					break;
 
 				case SPH_FILTER_FLOATRANGE:
-					tBuf.Append ( " %s BETWEEN %f AND %f",
+					if ( f.m_bExclude )
+						tBuf.Append ( " %s NOT BETWEEN %f AND %f",
 						f.m_sAttrName.cstr(), f.m_fMinValue, f.m_fMaxValue );
+					else
+						tBuf.Append ( " %s BETWEEN %f AND %f",
+							f.m_sAttrName.cstr(), f.m_fMinValue, f.m_fMaxValue );
 					break;
 
 				default:

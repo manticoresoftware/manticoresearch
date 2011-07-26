@@ -5700,14 +5700,6 @@ Starting with version 0.9.9-rc1, keywords can contain wildcards, that work simil
 	</para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"passage_boundary":</term>
-	<listitem><para>Added in version 2.0.1-beta. Ensures that passages do not
-	cross a sentence, paragraph, or zone boundary (when used with an index
-	that has the respective indexing settings enabled). String, allowed
-	values are "sentence", "paragraph", and "zone".
-	</para></listitem>
-</varlistentry>
-<varlistentry>
 	<term>"emit_zones":</term>
 	<listitem><para>Added in version 2.0.1-beta. Emits an HTML tag with
 	an enclosing zone name before each passage. Boolean, default is false.

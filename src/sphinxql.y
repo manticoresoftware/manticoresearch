@@ -57,6 +57,7 @@
 %token	TOK_NULL
 %token	TOK_OPTION
 %token	TOK_ORDER
+%token	TOK_RAND
 %token	TOK_REPLACE
 %token	TOK_RETURNS
 %token	TOK_ROLLBACK
@@ -378,6 +379,10 @@ order_clause:
 	TOK_ORDER TOK_BY order_items_list
 		{
 			pParser->m_pQuery->m_sOrderBy.SetBinary ( pParser->m_pBuf+$3.m_iStart, $3.m_iEnd-$3.m_iStart );
+		}
+	| TOK_ORDER TOK_BY TOK_RAND '(' ')'
+		{
+			pParser->m_pQuery->m_sOrderBy = "@random";
 		}
 	;
 

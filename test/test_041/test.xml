@@ -12,6 +12,7 @@ indexer
 searchd
 {
 	<searchd_settings/>
+	workers = threads
 }
 
 source srctest
@@ -36,20 +37,59 @@ index test
 		<variant>morphology = stem_en</variant>
 	</dynamic>
 }
+
+index rt
+{
+	type			= rt
+	path			= <data_path/>/rt
+	rt_field		= title	
+	rt_attr_uint	= id1
+	index_exact_words = 1
+	morphology = stem_en
+}
 </config>
 
 <queries>
-<query mode="extended2">work</query>
-<query mode="extended2">worked</query>
-<query mode="extended2">worker</query>
-<query mode="extended2">=work</query>
-<query mode="extended2">=worked</query>
-<query mode="extended2">=worker</query>
-<query mode="extended2">run</query>
-<query mode="extended2">runs</query>
-<query mode="extended2">=run</query>
-<query mode="extended2">=runs</query>
+<query mode="extended2" index="test">work</query>
+<query mode="extended2" index="test">worked</query>
+<query mode="extended2" index="test">worker</query>
+<query mode="extended2" index="test">=work</query>
+<query mode="extended2" index="test">=worked</query>
+<query mode="extended2" index="test">=worker</query>
+<query mode="extended2" index="test">run</query>
+<query mode="extended2" index="test">runs</query>
+<query mode="extended2" index="test">=run</query>
+<query mode="extended2" index="test">=runs</query>
 </queries>
+
+<sphqueries>
+<sphinxql>
+REPLACE INTO rt (id, id1, title) VALUES ( 1, 1, 'work worked working workings worker works workers' ),
+( 2, 1, 'run' ),
+( 3, 1, 'runs' ),
+( 4, 1, 'running' )
+</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('work')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('worked')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('worker')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('=work')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('=worked')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('=worker')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('run')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('runs')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('=run')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('=runs')</sphinxql>
+<sphinxql>show meta</sphinxql>
+</sphqueries>
 
 <db_create>
 CREATE TABLE `test_table`

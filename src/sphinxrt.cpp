@@ -430,7 +430,7 @@ struct RtDocReader_tmpl
 		m_tDoc.m_uDocID = 0;
 	}
 
-	const RTDOC * UnzipDoc_t ()
+	const RTDOC * UnzipDoc ()
 	{
 		if ( !m_iLeft || !m_pDocs )
 			return NULL;
@@ -456,11 +456,6 @@ struct RtDocReader_tmpl
 
 		m_iLeft--;
 		return &mtDoc;
-	}
-
-	inline const RTDOC * UnzipDoc ()
-	{
-		return UnzipDoc_t();
 	}
 };
 
@@ -529,7 +524,7 @@ struct RtWordReader_tmpl
 		m_tWord.m_uDoc = 0;
 	}
 
-	const RTWORD * UnzipWord_t ()
+	const RTWORD * UnzipWord ()
 	{
 		RTWORD & mtWord = *(RTWORD*)&m_tWord;
 		if ( ++m_iWords==RAM_WORDLIST_CHECKPOINT )
@@ -553,11 +548,6 @@ struct RtWordReader_tmpl
 		mtWord.m_uWordID += (WORDID) uDeltaID;
 		mtWord.m_uDoc += uDeltaDoc;
 		return &mtWord;
-	}
-
-	inline const RTWORD * UnzipWord ()
-	{
-		return UnzipWord_t ();
 	}
 };
 
@@ -876,6 +866,7 @@ private:
 
 	int64_t						m_iRamSize;
 	CSphString					m_sPath;
+	bool						m_bPathStripped;
 	CSphVector<CSphIndex*>		m_pDiskChunks;
 	int							m_iLockFD;
 	mutable RtDiskKlist_t		m_tKlist;
@@ -919,7 +910,7 @@ private:
 	template < typename DOCID, typename WORDID >
 	void						SaveDiskDataImpl ( const char * sFilename ) const;
 	void						SaveDiskChunk ();
-	CSphIndex *					LoadDiskChunk ( int iChunk, bool bStripPath );
+	CSphIndex *					LoadDiskChunk ( int iChunk );
 	bool						LoadRamChunk ( DWORD uVersion );
 	bool						SaveRamChunk ();
 
@@ -972,6 +963,8 @@ public:
 	bool						RtQwordSetup ( RtQword_t * pQword, RtSegment_t * pSeg ) const;
 	static bool					RtQwordSetupSegment ( RtQword_t * pQword, RtSegment_t * pSeg, bool bSetup );
 
+	CSphDict *					SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer * pTokenizer ) const;
+
 	virtual const CSphSchema &	GetMatchSchema () const { return m_tOutboundSchema; }
 	virtual const CSphSchema &	GetInternalSchema () const { return m_tSchema; }
 	int64_t						GetUsedRam () const;
@@ -986,6 +979,7 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 	, m_iStride ( DOCINFO_IDSIZE + tSchema.GetRowSize() )
 	, m_iRamSize ( iRamSize )
 	, m_sPath ( sPath )
+	, m_bPathStripped ( false )
 	, m_iLockFD ( -1 )
 	, m_iSavedTID ( m_iTID )
 	, m_iSavedRam ( 0 )
@@ -1219,6 +1213,8 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 	tSrc.Setup ( m_tSettings );
 	tSrc.SetTokenizer ( pTokenizer.Ptr() );
 	tSrc.SetDict ( pDictBase );
+	if ( !tSrc.Connect ( m_sLastError ) )
+		return false;
 
 	tSrc.m_tDocInfo.Clone ( tDoc, m_tOutboundSchema.GetRowSize() );
 
@@ -3011,7 +3007,7 @@ void RtIndex_t::SaveDiskChunk ()
 	SaveDiskData ( sNewChunk.cstr() );
 
 	// bring new disk chunk online
-	CSphIndex * pDiskChunk = LoadDiskChunk ( m_pDiskChunks.GetLength(), false );
+	CSphIndex * pDiskChunk = LoadDiskChunk ( m_pDiskChunks.GetLength() );
 	assert ( pDiskChunk );
 
 	// save updated meta
@@ -3032,7 +3028,7 @@ void RtIndex_t::SaveDiskChunk ()
 }
 
 
-CSphIndex * RtIndex_t::LoadDiskChunk ( int iChunk, bool bStripPath )
+CSphIndex * RtIndex_t::LoadDiskChunk ( int iChunk )
 {
 	MEMORY ( SPH_MEM_IDX_DISK );
 
@@ -3046,7 +3042,7 @@ CSphIndex * RtIndex_t::LoadDiskChunk ( int iChunk, bool bStripPath )
 
 	pDiskChunk->SetWordlistPreload ( m_bPreloadWordlist );
 
-	if ( !pDiskChunk->Prealloc ( false, bStripPath, sWarning ) )
+	if ( !pDiskChunk->Prealloc ( false, m_bPathStripped, sWarning ) )
 		sphDie ( "disk chunk %s: prealloc failed: %s", sChunk.cstr(), pDiskChunk->GetLastError().cstr() );
 
 	if ( !pDiskChunk->Preread() )
@@ -3115,10 +3111,12 @@ bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 	if ( uVersion>=2 )
 		m_iTID = rdMeta.GetOffset();
 
+	m_bPathStripped = bStripPath;
+
 	// load disk chunks, if any
 	for ( int iChunk=0; iChunk<iDiskChunks; iChunk++ )
 	{
-		m_pDiskChunks.Add ( LoadDiskChunk ( iChunk, bStripPath ) );
+		m_pDiskChunks.Add ( LoadDiskChunk ( iChunk ) );
 
 		// tricky bit
 		// outgoing match schema on disk chunk should be identical to our internal (!) schema
@@ -3638,6 +3636,20 @@ static void AddKillListFilter ( CSphVector<CSphFilterSettings> * pExtra, const S
 }
 
 
+CSphDict * RtIndex_t::SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer * pTokenizer ) const
+{
+	assert ( pTokenizer );
+
+	if ( !m_tSettings.m_bIndexExactWords )
+		return pPrevDict;
+
+	tContainer = new CSphDictExact ( pPrevDict );
+	CSphRemapRange tStar ( '=', '=', '=' ); // FIXME? check and warn if star was already there
+	pTokenizer->AddCaseFolding ( tStar );
+	return tContainer.Ptr();
+}
+
+
 // FIXME! missing MVA, index_exact_words support
 // FIXME? missing enable_star, legacy match modes support
 // FIXME? any chance to factor out common backend agnostic code?
@@ -3680,6 +3692,12 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// force ext2 mode for them
 	// FIXME! eliminate this const breakage
 	const_cast<CSphQuery*> ( pQuery )->m_eMode = SPH_MATCH_EXTENDED2;
+
+	// wrappers
+	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( false ) );
+
+	CSphScopedPtr<CSphDict> tDict2 ( NULL );
+	CSphDict * pDict = SetupExactDict ( tDict2, m_pDict, pTokenizer.Ptr() );
 
 	// FIXME! slow disk searches could lock out concurrent writes for too long
 	// FIXME! each result will point to its own MVA and string pools
@@ -3797,7 +3815,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	}
 
 	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
-	CSphDict * pDictBase = m_pDict;
+	CSphDict * pDictBase = pDict;
 	if ( pDictBase->HasState() )
 	{
 		tDictCloned = pDictBase = pDictBase->Clone();
@@ -3822,7 +3840,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	// parse query
 	XQQuery_t tParsed;
-	if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), GetTokenizer(), &m_tOutboundSchema, pDictBase ) )
+	if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), pTokenizer.Ptr(), &m_tOutboundSchema, pDictBase ) )
 	{
 		pResult->m_sError = tParsed.m_sParseError;
 		m_tRwlock.Unlock ();

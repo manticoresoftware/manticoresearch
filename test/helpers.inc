@@ -861,7 +861,11 @@ class SphinxConfig
 				$query = $this->_sphqueries[$n/2]["query"];
 		
 			$query_result = array ();
-				
+			
+			$no_time = false;
+			if ( $bench===false && ( stripos ( $query, 'show' )!==false ) && ( stripos ( $query, 'meta' )!==false ) )
+				$no_time = true;
+			
 			$query_result["sphinxql"]=$query;
 			$result = mysql_wr ($query,$connection);
 			if ($result===true)
@@ -874,7 +878,11 @@ class SphinxConfig
 			{
 				$query_result["total_rows"] = mysql_num_rows($result);
 				while ($row = mysql_fetch_array($result, MYSQL_ASSOC))
+				{
+					if ( $no_time===true && array_key_exists ( 'Variable_name', $row ) && $row['Variable_name']=='time' )
+						continue;
 					$query_result["rows"][] = $row;
+				}
 				mysql_free_result($result);
 			}
 			$this->_results[] = $query_result;

@@ -14134,110 +14134,63 @@ static void TransformQuorum ( XQNode_t ** ppNode )
 }
 
 
-static void AddWordLeaf ( const XQKeyword_t & tWord, XQNode_t * pNode, CSphNamedInt & tElem )
+struct BinaryNode_t
 {
-	assert ( !pNode->m_dWords.GetLength() );
-	XQNode_t * pLeaf = CloneKeyword ( pNode );
-	pLeaf->m_dWords.Add ( tWord );
-	pLeaf->m_dWords.Last().m_sWord.Swap ( tElem.m_sName );
-	pLeaf->TagAsCommon ( 0, tElem.m_iValue );
-	pLeaf->m_bNotWeighted = ( tElem.m_iValue==0 );
-	pNode->SetOp ( SPH_QUERY_OR, pLeaf );
-	pNode->m_bNotWeighted = false;
-}
+	int m_iLo;
+	int m_iHi;
+};
 
-static void InsertNode ( const XQKeyword_t & tWord, XQNode_t * pRoot, CSphNamedInt & tElem )
-{
-	// [0] - node's word; [1] - left; [1]||[2] - right
-	// 0b00 - no children; 0b10 - left child; 0b01 - right child; 0b11 - both children
-	assert ( pRoot );
-
-	if ( pRoot->m_dWords.GetLength() ) // was leaf but becomes node - move word to 0es child
-	{
-		assert ( pRoot->m_dWords.GetLength()==1 );
-		assert ( pRoot->GetOrder()==0 );
-		CSphNamedInt tRootElem;
-		tRootElem.m_sName.Swap ( pRoot->m_dWords[0].m_sWord );
-		tRootElem.m_iValue = pRoot->GetCount();
-		pRoot->m_dWords.Reset();
-		AddWordLeaf ( tWord, pRoot, tRootElem );
-	}
-
-	if ( !pRoot->m_dChildren.GetLength() ) // add node's word
-	{
-		AddWordLeaf ( tWord, pRoot, tElem );
-		return;
-	}
-
-	const int iChildMask = pRoot->GetOrder();
-
-	assert ( pRoot->m_dChildren.GetLength()>=1 );
-	assert ( ( iChildMask==3 && pRoot->m_dChildren.GetLength()==3 )
-		|| ( iChildMask==2 && pRoot->m_dChildren.GetLength()==2 )
-		|| ( iChildMask==1 && pRoot->m_dChildren.GetLength()==2 )
-		|| ( iChildMask==0 && pRoot->m_dChildren.GetLength()==1 ) );
-
-	const int iCmp = tElem.m_iValue - pRoot->m_dChildren[0]->GetCount();
-	if ( iCmp>=0 ) // insert to leftmost
-	{
-		if ( ( iChildMask & 2 )==2 )
-			InsertNode ( tWord, pRoot->m_dChildren[1], tElem );
-		else // make left leaf node
-		{
-			XQNode_t * pLeftmost = CloneKeyword ( pRoot );
-			pLeftmost->m_dWords.Add ( tWord );
-			pLeftmost->m_dWords.Last().m_sWord.Swap ( tElem.m_sName );
-			pLeftmost->TagAsCommon ( 0, tElem.m_iValue );
-			pLeftmost->m_bNotWeighted = ( tElem.m_iValue==0 );
-			pRoot->m_dChildren.Add ( pLeftmost );
-			pRoot->TagAsCommon ( pRoot->GetOrder() | 2, pRoot->GetCount() ); // mark leftmost child presence
-			if ( ( iChildMask & 1 )==1 ) // place already existed right to rightmost place
-				::Swap ( pRoot->m_dChildren[1], pRoot->m_dChildren[2] );
-		}
-	} else // insert to rightmost
-	{
-		if ( ( iChildMask & 1 )==1 )
-			InsertNode ( tWord, pRoot->m_dChildren[ ( iChildMask & 2 )==2 ? 2 : 1 ], tElem );
-		else // make right leaf node
-		{
-			XQNode_t * pRightmost = CloneKeyword ( pRoot );
-			pRightmost->m_dWords.Add ( tWord );
-			pRightmost->m_dWords.Last().m_sWord.Swap ( tElem.m_sName );
-			pRightmost->TagAsCommon ( 0, tElem.m_iValue );
-			pRightmost->m_bNotWeighted = ( tElem.m_iValue==0 );
-			pRoot->m_dChildren.Add ( pRightmost );
-			pRoot->TagAsCommon ( pRoot->GetOrder() | 1, pRoot->GetCount() ); // mark rightmost child presence
-		}
-	}
-}
-
-static void BuildBinTree ( const XQKeyword_t & tRootWord, CSphVector<CSphNamedInt> & dWordSrc, XQNode_t * pRoot, int iLow, int iHi )
+static void BuildExpandedTree ( const XQKeyword_t & tRootWord, CSphVector<CSphNamedInt> & dWordSrc, XQNode_t * pRoot )
 {
 	assert ( dWordSrc.GetLength() );
-	assert ( iLow>=0 && iHi< dWordSrc.GetLength() );
+	pRoot->m_dWords.Reset();
 
-	if ( iHi < iLow )
-		return;
+	CSphVector<BinaryNode_t> dNodes;
+	dNodes.Reserve ( dWordSrc.GetLength() );
 
-	const int iMid = ( iLow+iHi )/2;
+	XQNode_t * pCur = pRoot;
 
-	InsertNode ( tRootWord, pRoot, dWordSrc[iMid] );
-	BuildBinTree ( tRootWord, dWordSrc, pRoot, iLow, iMid-1 );
-	BuildBinTree ( tRootWord, dWordSrc, pRoot, iMid+1, iHi );
-}
+	dNodes.Add();
+	dNodes.Last().m_iLo = 0;
+	dNodes.Last().m_iHi = ( dWordSrc.GetLength()-1 );
 
-static void FixupExpandedTree ( XQNode_t * pRoot, const XQNode_t & tRef )
-{
-	pRoot->TagAsCommon ( tRef.GetOrder (), tRef.GetCount () );
-
-	ARRAY_FOREACH ( i, pRoot->m_dWords )
+	while ( dNodes.GetLength() )
 	{
-		XQKeyword_t & tKw = pRoot->m_dWords[i];
-		tKw.m_bExpanded = true;
-	}
+		BinaryNode_t tNode = dNodes.Pop();
+		if ( tNode.m_iHi<tNode.m_iLo )
+		{
+			pCur = pCur->m_pParent;
+			continue;
+		}
 
-	ARRAY_FOREACH ( i, pRoot->m_dChildren )
-		FixupExpandedTree ( pRoot->m_dChildren[i], tRef );
+		int iMid = ( tNode.m_iLo+tNode.m_iHi ) / 2;
+		dNodes.Add ();
+		dNodes.Last().m_iLo = tNode.m_iLo;
+		dNodes.Last().m_iHi = iMid-1;
+		dNodes.Add ();
+		dNodes.Last().m_iLo = iMid+1;
+		dNodes.Last().m_iHi = tNode.m_iHi;
+
+		if ( pCur->m_dWords.GetLength() )
+		{
+			assert ( pCur->m_dWords.GetLength()==1 );
+			XQNode_t * pTerm = CloneKeyword ( pRoot );
+			Swap ( pTerm->m_dWords, pCur->m_dWords );
+			pCur->m_dChildren.Add ( pTerm );
+		}
+
+		XQNode_t * pChild = CloneKeyword ( pRoot );
+		pChild->m_dWords.Add ( tRootWord );
+		pChild->m_dWords.Last().m_sWord.Swap ( dWordSrc[iMid].m_sName );
+		pChild->m_dWords.Last().m_bExpanded = true;
+		pChild->m_bNotWeighted = ( dWordSrc[iMid].m_iValue==0 );
+
+		pChild->m_pParent = pCur;
+		pCur->m_dChildren.Add ( pChild );
+		pCur->SetOp ( SPH_QUERY_OR );
+
+		pCur = pChild;
+	}
 }
 
 void Swap ( CSphNamedInt & a, CSphNamedInt & b )
@@ -14364,10 +14317,7 @@ XQNode_t * CSphIndex_VLN::DoExpansion ( XQNode_t * pNode, BYTE * pBuff, int iFD,
 	}
 
 	const XQKeyword_t tPrefixingWord = pNode->m_dWords[0];
-	pNode->m_dWords.Reset();
-	BuildBinTree ( tPrefixingWord, dPrefixedWords, pNode, 0, dPrefixedWords.GetLength()-1 );
-	const XQNode_t tRef;
-	FixupExpandedTree ( pNode, tRef );
+	BuildExpandedTree ( tPrefixingWord, dPrefixedWords, pNode );
 
 	return pNode;
 }

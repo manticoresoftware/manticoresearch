@@ -7215,6 +7215,7 @@ CSphIndex_VLN::CSphIndex_VLN ( const char* sIndexName, const char * sFilename )
 	m_tLastHit.m_iWordPos = EMPTY_HIT;
 	m_tLastHit.m_sKeyword = m_sLastKeyword;
 	m_iLastHitlistPos = 0;
+	m_dLastDocFields.Unset();
 	m_uLastDocHits = 0;
 	m_iLastWordDocs = 0;
 	m_iLastWordHits = 0;

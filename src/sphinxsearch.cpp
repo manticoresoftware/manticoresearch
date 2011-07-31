@@ -190,7 +190,7 @@ protected:
 	ISphQword *					m_pQword;
 	ExtDoc_t *					m_pHitDoc;		///< points to entry in m_dDocs which GetHitsChunk() currently emits hits for
 	SphDocID_t					m_uHitsOverFor;	///< there are no more hits for matches block starting with this ID
-	CSphSmallBitvec				m_dFields;		///< accepted fields mask
+	mutable CSphSmallBitvec		m_dFields;		///< accepted fields mask
 	bool						m_bLongMask;	///< if we work with >32bit mask
 	float						m_fIDF;			///< IDF for this term (might be 0.0f for non-1st occurences in query)
 	int64_t						m_iMaxTimer;	///< work until this timestamp
@@ -216,7 +216,10 @@ public:
 									ExtTermHitless_c ( ISphQword * pQword, const CSphSmallBitvec& uFields, const ISphQwordSetup & tSetup, bool bNotWeighted )
 									: ExtTerm_c ( pQword, uFields, tSetup, bNotWeighted )
 									, m_uFieldPos ( 0 )
-								{}
+
+								{
+									m_dFieldMask.Unset();
+								}
 	virtual void				Reset ( const ISphQwordSetup & )
 	{
 		m_dFieldMask.Unset();
@@ -469,7 +472,6 @@ class FSMphrase
 		static const bool			bTermsTree = true;		///< we work with ExtTerm nodes
 
 	protected:
-		CSphSmallBitvec				m_dFields;				///< what fields is the search restricted to
 		DWORD						m_uExpQpos;
 		CSphVector<int>				m_dQposDelta;			///< next expected qpos delta for each existing qpos (for skipped stopwords case)
 		DWORD						m_uMinQpos;
@@ -2645,9 +2647,8 @@ bool ExtNWay_c<FSM>::EmitTail ( int & iHit )
 
 //////////////////////////////////////////////////////////////////////////
 
-FSMphrase::FSMphrase ( const CSphVector<ExtNode_i *> & dQwords, DWORD, const XQNode_t & tNode, const ISphQwordSetup & )
-	: m_dFields ( tNode.m_dFieldMask )
-	, m_uExpQpos ( 0 )
+FSMphrase::FSMphrase ( const CSphVector<ExtNode_i *> & dQwords, DWORD, const XQNode_t & , const ISphQwordSetup & )
+	: m_uExpQpos ( 0 )
 	, m_uExpPos ( 0 )
 	, m_uLeaves ( dQwords.GetLength() )
 {

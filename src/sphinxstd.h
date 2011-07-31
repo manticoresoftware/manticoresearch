@@ -2111,6 +2111,7 @@ private:
 	static const int iBYTESIZE = iTOTALBITS / 8;
 	static const int IELEMENTS = iTOTALBITS / iELEMBITS;
 	static const ELTYPE uALLBITS = ~(0UL);
+	STATIC_ASSERT ( IELEMENTS>=1, 8_BITS_MINIMAL_SIZE_OF_VECTOR );
 
 private:
 	ELTYPE m_dFieldsMask[IELEMENTS];
@@ -2226,6 +2227,11 @@ public:
 	}
 };
 
+#if USE_WINDOWS
+#pragma warning(push,1)
+#pragma warning(disable:4701)
+#endif
+
 inline CSphSmallBitvec operator & ( const CSphSmallBitvec& dFirst, const CSphSmallBitvec& dSecond )
 {
 	if ( &dFirst==&dSecond )
@@ -2236,11 +2242,6 @@ inline CSphSmallBitvec operator & ( const CSphSmallBitvec& dFirst, const CSphSma
 			dResult.m_dFieldsMask[i] = dFirst.m_dFieldsMask[i] & dSecond.m_dFieldsMask[i];
 	return dResult;
 }
-
-#if USE_WINDOWS
-#pragma warning(push,1)
-#pragma warning(disable:4701)
-#endif
 
 inline CSphSmallBitvec operator | ( const CSphSmallBitvec& dFirst, const CSphSmallBitvec& dSecond )
 {

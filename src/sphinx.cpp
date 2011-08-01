@@ -15212,6 +15212,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			// loop the hitlist
 			int iDocHits = 0;
 			CSphSmallBitvec dFieldMask;
+			dFieldMask.Unset();
 			Hitpos_t uLastHit = EMPTY_HIT;
 
 			for ( ;; )

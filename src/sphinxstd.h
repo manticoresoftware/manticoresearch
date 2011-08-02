@@ -2188,12 +2188,7 @@ public:
 	// returns number or set bits in low 32 DWORD
 	unsigned short NumOfBits32 () const
 	{
-		DWORD uLow = GetMask32();
-		uLow = ( uLow & 0x55555555 ) + ( (uLow>>1) & 0x55555555 );
-		uLow = ( uLow & 0x33333333 ) + ( (uLow>>2) & 0x33333333 );
-		uLow = ( uLow & 0x7070707 ) + ( (uLow>>4) & 0x7070707 );
-		uLow = ( uLow & 0xF000F ) + ( (uLow>>8) & 0xF000F );
-		return ( uLow & 0x1F ) + ( (uLow>>16) & 0x1F );
+		return (unsigned short) sphBitCount ( GetMask32() );
 	}
 
 	friend CSphSmallBitvec operator & ( const CSphSmallBitvec& dFirst, const CSphSmallBitvec& dSecond );

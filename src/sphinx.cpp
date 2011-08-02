@@ -1384,7 +1384,7 @@ private:
 	CSphString					m_sFilename;
 	int							m_iLockFD;
 
-	CSphMatch					m_tMin;				///< min attribute values tracker
+	CSphMatch *					m_pMin;				///< min attribute values tracker
 	CSphSourceStats				m_tStats;			///< my stats
 	SphDocID_t					m_iMergeInfinum;	///< minimal docid-1 for merging
 
@@ -7239,12 +7239,15 @@ CSphIndex_VLN::CSphIndex_VLN ( const char* sIndexName, const char * sFilename )
 
 	m_pPreread = NULL;
 	m_pAttrsStatus = NULL;
+
+	m_pMin = new CSphMatch();
 }
 
 
 CSphIndex_VLN::~CSphIndex_VLN ()
 {
 	SafeDeleteArray ( m_pWriteBuffer );
+	SafeDelete ( m_pMin );
 
 #if USE_WINDOWS
 	if ( m_iIndexTag>=0 && g_pMvaArena )
@@ -8038,7 +8041,7 @@ void CSphIndex_VLN::cidxHit ( CSphAggregateHit * hit, CSphRowitem * pAttrs )
 		if ( pAttrs )
 		{
 			for ( int i=0; i<m_tSchema.GetRowSize(); i++ )
-				m_wrDoclist.ZipInt ( pAttrs[i] - m_tMin.m_pDynamic[i] );
+				m_wrDoclist.ZipInt ( pAttrs[i] - m_pMin->m_pDynamic[i] );
 		}
 		m_iLastHitlistDelta = m_wrHitlist.GetPos() - m_iLastHitlistPos;
 
@@ -8151,9 +8154,9 @@ bool CSphIndex_VLN::WriteHeader ( CSphWriter & fdInfo, SphOffset_t iCheckpointsP
 		WriteSchemaColumn ( fdInfo, m_tSchema.GetAttr(i) );
 
 	// min doc
-	fdInfo.PutOffset ( m_tMin.m_iDocID ); // was dword in v.1
+	fdInfo.PutOffset ( m_pMin->m_iDocID ); // was dword in v.1
 	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
-		fdInfo.PutBytes ( m_tMin.m_pDynamic, m_tSchema.GetRowSize()*sizeof(CSphRowitem) );
+		fdInfo.PutBytes ( m_pMin->m_pDynamic, m_tSchema.GetRowSize()*sizeof(CSphRowitem) );
 
 	// wordlist checkpoints
 	fdInfo.PutOffset ( iCheckpointsPos );
@@ -9689,11 +9692,11 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	}
 
 	// setup accumulating docinfo IDs range
-	m_tMin.Reset ( m_tSchema.GetRowSize() );
+	m_pMin->Reset ( m_tSchema.GetRowSize() );
 
 	for ( int i=0; i<m_tSchema.GetRowSize(); i++ )
-		m_tMin.m_pDynamic[i] = ROWITEM_MAX;
-	m_tMin.m_iDocID = DOCID_MAX;
+		m_pMin->m_pDynamic[i] = ROWITEM_MAX;
+	m_pMin->m_iDocID = DOCID_MAX;
 
 	// build raw log
 	PROFILE_BEGIN ( collect_hits );
@@ -9901,10 +9904,10 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 			// update min docinfo
 			assert ( pSource->m_tDocInfo.m_iDocID );
-			m_tMin.m_iDocID = Min ( m_tMin.m_iDocID, pSource->m_tDocInfo.m_iDocID );
+			m_pMin->m_iDocID = Min ( m_pMin->m_iDocID, pSource->m_tDocInfo.m_iDocID );
 			if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
 				for ( int i=0; i<m_tSchema.GetRowSize(); i++ )
-					m_tMin.m_pDynamic[i] = Min ( m_tMin.m_pDynamic[i], pSource->m_tDocInfo.m_pDynamic[i] );
+					m_pMin->m_pDynamic[i] = Min ( m_pMin->m_pDynamic[i], pSource->m_tDocInfo.m_pDynamic[i] );
 
 			// store docinfo
 			if ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_NONE )
@@ -10631,11 +10634,11 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	m_pDict->DictBegin ( fdTmpDict.GetFD(), fdDict.GetFD(), iBinSize );
 
 	// adjust min IDs, and fill header
-	assert ( m_tMin.m_iDocID>0 );
-	m_tMin.m_iDocID--;
+	assert ( m_pMin->m_iDocID>0 );
+	m_pMin->m_iDocID--;
 	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
 		for ( int i=0; i<m_tSchema.GetRowSize(); i++ )
-			m_tMin.m_pDynamic[i]--;
+			m_pMin->m_pDynamic[i]--;
 
 	//////////////
 	// final sort
@@ -10685,7 +10688,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			int iBin = tQueue.m_pData->m_iBin;
 
 			// pack and emit queue root
-			tQueue.m_pData->m_iDocID -= m_tMin.m_iDocID;
+			tQueue.m_pData->m_iDocID -= m_pMin->m_iDocID;
 
 			if ( m_bInplaceSettings )
 			{
@@ -11126,7 +11129,7 @@ public:
 			else
 			{
 				// convert to aggregate if there is no hit-list
-				tHit.m_iDocID = tQword.m_tDoc.m_iDocID - m_pOutputIndex->m_tMin.m_iDocID;
+				tHit.m_iDocID = tQword.m_tDoc.m_iDocID - m_pOutputIndex->m_pMin->m_iDocID;
 				tHit.m_dFieldMask = tQword.m_dFields;
 				tHit.SetAggrCount ( tQword.m_uMatchHits );
 				m_pOutputIndex->cidxHit ( &tHit, pInline );
@@ -11138,7 +11141,7 @@ public:
 	inline void TransferHits ( QWORD & tQword, CSphRowitem * pInline, CSphAggregateHit & tHit )
 	{
 		assert ( tQword.m_bHasHitlist );
-		tHit.m_iDocID = tQword.m_tDoc.m_iDocID - m_pOutputIndex->m_tMin.m_iDocID;
+		tHit.m_iDocID = tQword.m_tDoc.m_iDocID - m_pOutputIndex->m_pMin->m_iDocID;
 		for ( Hitpos_t uHit = tQword.GetNextHit(); uHit!=EMPTY_HIT; uHit = tQword.GetNextHit() )
 		{
 			tHit.m_iWordPos = uHit;
@@ -11152,7 +11155,7 @@ public:
 		bool bInline = pIndex->m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE;
 
 		tQword.m_iInlineAttrs = bInline ? pIndex->m_tSchema.GetAttrsCount() : 0;
-		tQword.m_pInlineFixup = bInline ? pIndex->m_tMin.m_pDynamic : NULL;
+		tQword.m_pInlineFixup = bInline ? pIndex->m_pMin->m_pDynamic : NULL;
 
 		tQword.m_rdHitlist.SetFile ( tHits );
 		tQword.m_rdHitlist.GetByte();
@@ -11197,14 +11200,14 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 	m_tLastHit.m_sKeyword = m_sLastKeyword;
 	m_tLastHit.m_iWordPos = EMPTY_HIT;
 
-	const SphDocID_t iDstMinID = m_tMin.m_iDocID;
-	const SphDocID_t iSrcMinID = pSrcIndex->m_tMin.m_iDocID;
+	const SphDocID_t iDstMinID = m_pMin->m_iDocID;
+	const SphDocID_t iSrcMinID = pSrcIndex->m_pMin->m_iDocID;
 
 	// correct infinum might be already set during spa merging.
 	if ( !m_iMergeInfinum )
-		m_tMin.m_iDocID = Min ( iDstMinID, iSrcMinID );
+		m_pMin->m_iDocID = Min ( iDstMinID, iSrcMinID );
 	else
-		m_tMin.m_iDocID = m_iMergeInfinum;
+		m_pMin->m_iDocID = m_iMergeInfinum;
 
 	m_tWordlist.m_dCheckpoints.Reset ( 0 );
 
@@ -11312,7 +11315,7 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 					{
 						while ( tDstQword.m_bHasHitlist && tDstQword.GetNextHit()!=EMPTY_HIT );
 
-						tHit.m_iDocID = tDstQword.m_tDoc.m_iDocID - m_tMin.m_iDocID;
+						tHit.m_iDocID = tDstQword.m_tDoc.m_iDocID - m_pMin->m_iDocID;
 						tHit.m_dFieldMask = tDstQword.m_dFields;
 						tHit.SetAggrCount ( tDstQword.m_uMatchHits );
 						cidxHit ( &tHit, dSrcInline );
@@ -11327,7 +11330,7 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 					{
 						while ( tSrcQword.m_bHasHitlist && tSrcQword.GetNextHit()!=EMPTY_HIT );
 
-						tHit.m_iDocID = tSrcQword.m_tDoc.m_iDocID - m_tMin.m_iDocID;
+						tHit.m_iDocID = tSrcQword.m_tDoc.m_iDocID - m_pMin->m_iDocID;
 						tHit.m_dFieldMask = tSrcQword.m_dFields;
 						tHit.SetAggrCount ( tSrcQword.m_uMatchHits );
 						cidxHit ( &tHit, dSrcInline );
@@ -11342,7 +11345,7 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 					assert ( bSrcDocs );
 					assert ( tDstQword.m_tDoc.m_iDocID==tSrcQword.m_tDoc.m_iDocID );
 
-					tHit.m_iDocID = tDstQword.m_tDoc.m_iDocID - m_tMin.m_iDocID;
+					tHit.m_iDocID = tDstQword.m_tDoc.m_iDocID - m_pMin->m_iDocID;
 
 					if ( bHitless )
 					{
@@ -12634,14 +12637,18 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 				sWarning.SetSprintf ( "duplicate attribute name: %s", tCol.m_sName.cstr() );
 	}
 
+	// in case of *fork rotation we reuse min match from 1st rotated index ( it could be less than my size and inline ( m_pDynamic ) )
+	SafeDelete ( m_pMin );
+	m_pMin = new CSphMatch();
+
 	// min doc
-	m_tMin.Reset ( m_tSchema.GetRowSize() );
+	m_pMin->Reset ( m_tSchema.GetRowSize() );
 	if ( m_uVersion>=2 )
-		m_tMin.m_iDocID = (SphDocID_t) rdInfo.GetOffset (); // v2+; losing high bits when !USE_64 is intentional, check is performed on bUse64 above
+		m_pMin->m_iDocID = (SphDocID_t) rdInfo.GetOffset (); // v2+; losing high bits when !USE_64 is intentional, check is performed on bUse64 above
 	else
-		m_tMin.m_iDocID = rdInfo.GetDword(); // v1
+		m_pMin->m_iDocID = rdInfo.GetDword(); // v1
 	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
-		rdInfo.GetBytes ( m_tMin.m_pDynamic, sizeof(CSphRowitem)*m_tSchema.GetRowSize() );
+		rdInfo.GetBytes ( m_pMin->m_pDynamic, sizeof(CSphRowitem)*m_tSchema.GetRowSize() );
 
 	// wordlist checkpoints
 	m_tWordlist.m_iCheckpointsPos = rdInfo.GetOffset();
@@ -12972,11 +12979,11 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 	tTermSetup.m_pDict = m_pDict;
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
-	tTermSetup.m_tMin.Clone ( m_tMin, m_tSchema.GetRowSize() );
+	tTermSetup.m_tMin.Clone ( *m_pMin, m_tSchema.GetRowSize() );
 	tTermSetup.m_bSetupReaders = true;
 
 	Qword tKeyword ( false );
-	tKeyword.m_tDoc.m_iDocID = m_tMin.m_iDocID;
+	tKeyword.m_tDoc.m_iDocID = m_pMin->m_iDocID;
 	tKeyword.m_iWordID = uWordID;
 	tKeyword.m_sWord = sKeyword;
 	tKeyword.m_sDictWord = (const char *)sTok;
@@ -14673,10 +14680,10 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	tTermSetup.m_pDict = pDict;
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
-	tTermSetup.m_tMin.m_iDocID = m_tMin.m_iDocID;
+	tTermSetup.m_tMin.m_iDocID = m_pMin->m_iDocID;
 	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
 	{
-		tTermSetup.m_tMin.Clone ( m_tMin, m_tSchema.GetRowSize() );
+		tTermSetup.m_tMin.Clone ( *m_pMin, m_tSchema.GetRowSize() );
 		tTermSetup.m_iInlineRowitems = m_tSchema.GetRowSize();
 	}
 	tTermSetup.m_iDynamicRowitems = pResult->m_tSchema.GetDynamicSize();
@@ -15141,12 +15148,12 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		WITH_QWORD ( this, false, T, pQword = new T ( false ) );
 
 		pQword->m_tDoc.Reset ( m_tSchema.GetDynamicSize() );
-		pQword->m_iMinID = m_tMin.m_iDocID;
-		pQword->m_tDoc.m_iDocID = m_tMin.m_iDocID;
+		pQword->m_iMinID = m_pMin->m_iDocID;
+		pQword->m_tDoc.m_iDocID = m_pMin->m_iDocID;
 		if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
 		{
 			pQword->m_iInlineAttrs = m_tSchema.GetDynamicSize();
-			pQword->m_pInlineFixup = m_tMin.m_pDynamic;
+			pQword->m_pInlineFixup = m_pMin->m_pDynamic;
 		} else
 		{
 			pQword->m_iInlineAttrs = 0;

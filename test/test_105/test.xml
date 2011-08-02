@@ -31,6 +31,36 @@ index index
 	source = sql
 	path = <data_path/>/index
 }
+
+source sql1 : sql
+{
+	sql_query = select id, text, 1 as idd1 from test_table;
+	
+	sql_attr_uint = idd1
+}
+
+source sql2 : sql
+{
+	sql_query = select id, text, 1 as idd1, 2 as idd2 from test_table;
+	
+	sql_attr_uint = idd1
+	sql_attr_uint = idd2
+}
+
+index i1
+{
+	source = sql1
+	path = <data_path/>/index1
+	docinfo = inline
+}
+
+index i2
+{
+	source = sql2
+	path = <data_path/>/index2
+	docinfo = inline
+}
+
 </config>
 
 <db_drop>drop table if exists test_table</db_drop>
@@ -61,7 +91,7 @@ insert into test_table values
 
 <custom_test><![CDATA[
 
-$query = create_function('$client,$words','$result = $client->Query ( $words );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError(); ');
+$query = create_function('$client,$words','$result = $client->Query ( $words, "index" );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError(); ');
 
 $results = array();
 $errors = '';

@@ -9322,7 +9322,14 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 	// get client version and request
 	tBuf.ReadFrom ( 4 ); // FIXME! magic
 	int iMagic = tBuf.GetInt (); // client version is for now unused
+
 	sphLogDebugv ( "conn %s: got handshake, major v.%d, err %d", sClientIP, iMagic, (int)tBuf.GetError() );
+	if ( tBuf.GetError() )
+	{
+		sphLogDebugv ( "conn %s: exiting on handshake error", sClientIP );
+		return;
+	}
+
 	int iPconnIdle = 0;
 	do
 	{

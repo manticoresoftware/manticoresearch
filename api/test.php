@@ -58,6 +58,7 @@ $filter = "group_id";
 $filtervals = array();
 $distinct = "";
 $sortby = "";
+$sortexpr = "";
 $limit = 20;
 $ranker = SPH_RANK_PROXIMITY_BM25;
 $select = "";

@@ -28,6 +28,7 @@ index test
 	charset_table	= 0..9, A..Z->a..z, _, a..z
 	ngram_chars		= U+410..U+42F->U+430..U+44F, U+430..U+44F
 	ngram_len 		= 1
+	stopwords		= <this_test/>/stops.txt
 }
 </config>
 
@@ -40,6 +41,7 @@ index test
 <query mode="extended2">"foo bar baz bar"</query>
 <query mode="extended2">"i did it"</query>
 <query mode="extended2">"zee lord of zee rings"</query>
+<query mode="extended2">Braun 370\-2 3702 370 2 Braun Series 3 370 Shaver</query>
 </queries>
 
 <db_create>
@@ -60,7 +62,8 @@ INSERT INTO `test_table` VALUES
 ( 222, 'bar baz foo' ),
 ( 333, 'foo baz bar' ),
 ( 444, 'i i did it it' ),
-( 555, 'zee lord of zee rings' )
+( 555, 'zee lord of zee rings' ),
+( 666, 'Braun 370-2 3702 370 2 Braun Series 3 - 370 Shaver')
 </db_insert>
 
 </test>

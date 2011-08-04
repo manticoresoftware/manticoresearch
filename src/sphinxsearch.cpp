@@ -4518,7 +4518,11 @@ int ExtRanker_T<STATE>::GetMatches ()
 
 //////////////////////////////////////////////////////////////////////////
 
-template < bool USE_BM25 >
+#if USE_WINDOWS
+#pragma warning(disable:4127) // conditional expr is const for MSVC
+#endif
+
+template < bool USE_BM25, bool HANDLE_DUPES >
 struct RankerState_Proximity_fn
 {
 	BYTE m_uLCS[SPH_MAX_FIELDS];
@@ -4527,6 +4531,11 @@ struct RankerState_Proximity_fn
 	int m_iFields;
 	const int * m_pWeights;
 
+	DWORD m_uLcsTailPos;
+	DWORD m_uLcsTailQposMask;
+	DWORD m_uCurQposMask;
+	DWORD m_uCurPos;
+
 	bool Init ( int iFields, const int * pWeights, ExtRanker_c *, CSphString & )
 	{
 		memset ( m_uLCS, 0, sizeof(m_uLCS) );
@@ -4534,28 +4543,87 @@ struct RankerState_Proximity_fn
 		m_iExpDelta = -INT_MAX;
 		m_iFields = iFields;
 		m_pWeights = pWeights;
+
+		m_uLcsTailPos = 0;
+		m_uLcsTailQposMask = 0;
+		m_uCurQposMask = 0;
+		m_uCurPos = 0;
+
 		return true;
 	}
 
 	void Update ( const ExtHit_t * pHlist )
 	{
-		int iDelta = HITMAN::GetLCS ( pHlist->m_uHitpos ) - pHlist->m_uQuerypos;
-		if ( iDelta==m_iExpDelta )
-			m_uCurLCS = m_uCurLCS + BYTE(pHlist->m_uWeight);
-		else
-			m_uCurLCS = BYTE(pHlist->m_uWeight);
+		if ( !HANDLE_DUPES )
+		{
+			// all query keywords are unique
+			// simpler path (just do the delta)
+			int iDelta = HITMAN::GetLCS ( pHlist->m_uHitpos ) - pHlist->m_uQuerypos;
+			if ( iDelta==m_iExpDelta )
+				m_uCurLCS = m_uCurLCS + BYTE(pHlist->m_uWeight);
+			else
+				m_uCurLCS = BYTE(pHlist->m_uWeight);
 
-		DWORD uField = HITMAN::GetField ( pHlist->m_uHitpos );
-		if ( m_uCurLCS>m_uLCS[uField] )
-			m_uLCS[uField] = m_uCurLCS;
+			DWORD uField = HITMAN::GetField ( pHlist->m_uHitpos );
+			if ( m_uCurLCS>m_uLCS[uField] )
+				m_uLCS[uField] = m_uCurLCS;
 
-		m_iExpDelta = iDelta + pHlist->m_uSpanlen - 1; // !COMMIT why spanlen??
+			m_iExpDelta = iDelta + pHlist->m_uSpanlen - 1; // !COMMIT why spanlen??
+		} else
+		{
+			// keywords are duplicated in the query
+			// so there might be multiple qpos entries sharing the same hitpos
+			DWORD uPos = HITMAN::GetLCS ( pHlist->m_uHitpos );
+			DWORD uField = HITMAN::GetField ( pHlist->m_uHitpos );
+
+			if ( uPos!=m_uCurPos )
+			{
+				// next new and shiny hitpos in line
+				// FIXME!? what do we do with longer spans? keep looking? reset?
+				if ( m_uCurLCS<2 )
+				{
+					m_uLcsTailPos = m_uCurPos;
+					m_uLcsTailQposMask = m_uCurQposMask;
+					m_uCurLCS = 1; // FIXME!? can this ever be different? ("a b" c) maybe..
+				}
+				m_uCurQposMask = 0;
+				m_uCurPos = uPos;
+				if ( m_uLCS[uField] < pHlist->m_uWeight )
+					m_uLCS[uField] = BYTE(pHlist->m_uWeight);
+			}
+
+			// add that qpos to current qpos mask (for the current hitpos)
+			m_uCurQposMask |= ( 1UL << pHlist->m_uQuerypos );
+
+			// and check if that results in a better lcs match now
+			int iDelta = m_uCurPos - m_uLcsTailPos;
+			if ( ( m_uCurQposMask >> iDelta ) & m_uLcsTailQposMask )
+			{
+				// cool, it matched!
+				m_uLcsTailQposMask = ( 1UL << pHlist->m_uQuerypos ); // our lcs span now ends with a specific qpos
+				m_uLcsTailPos = m_uCurPos; // and in a specific position
+				m_uCurLCS = BYTE(m_uCurLCS + pHlist->m_uWeight); // and it's longer
+				m_uCurQposMask = 0; // and we should avoid matching subsequent hits on the same hitpos
+
+				// update per-field vector
+				if ( m_uCurLCS>m_uLCS[uField] )
+					m_uLCS[uField] = m_uCurLCS;
+			}
+		}
 	}
 
 	DWORD Finalize ( const CSphMatch & tMatch )
 	{
 		m_uCurLCS = 0;
 		m_iExpDelta = -1;
+
+		if ( HANDLE_DUPES )
+		{
+			m_uLcsTailPos = 0;
+			m_uLcsTailQposMask = 0;
+			m_uCurQposMask = 0;
+			m_uCurPos = 0;
+		}
 
 		DWORD uRank = 0;
 		for ( int i=0; i<m_iFields; i++ )
@@ -4567,6 +4635,10 @@ struct RankerState_Proximity_fn
 		return USE_BM25 ? tMatch.m_iWeight + uRank*SPH_BM25_SCALE : uRank;
 	}
 };
+
+#if USE_WINDOWS
+#pragma warning(default:4127) // conditional expr is const for MSVC
+#endif
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -4645,14 +4717,14 @@ struct RankerState_ProximityBM25Exact_fn
 
 
 template < bool USE_BM25 >
-struct RankerState_ProximityPayload_fn : public RankerState_Proximity_fn<USE_BM25>
+struct RankerState_ProximityPayload_fn : public RankerState_Proximity_fn<USE_BM25,false>
 {
 	DWORD m_uPayloadRank;
 	DWORD m_uPayloadMask;
 
 	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError )
 	{
-		RankerState_Proximity_fn<USE_BM25>::Init ( iFields, pWeights, pRanker, sError );
+		RankerState_Proximity_fn<USE_BM25,false>::Init ( iFields, pWeights, pRanker, sError );
 		m_uPayloadRank = 0;
 		m_uPayloadMask = pRanker->m_uPayloadMask;
 		return true;
@@ -4664,7 +4736,7 @@ struct RankerState_ProximityPayload_fn : public RankerState_Proximity_fn<USE_BM2
 		if ( ( 1<<uField ) & m_uPayloadMask )
 			this->m_uPayloadRank += HITMAN::GetPos ( pHlist->m_uHitpos ) * this->m_pWeights[uField];
 		else
-			RankerState_Proximity_fn<USE_BM25>::Update ( pHlist );
+			RankerState_Proximity_fn<USE_BM25,false>::Update ( pHlist );
 	}
 
 	DWORD Finalize ( const CSphMatch & tMatch )
@@ -4688,14 +4760,14 @@ struct RankerState_ProximityPayload_fn : public RankerState_Proximity_fn<USE_BM2
 
 //////////////////////////////////////////////////////////////////////////
 
-struct RankerState_MatchAny_fn : public RankerState_Proximity_fn<false>
+struct RankerState_MatchAny_fn : public RankerState_Proximity_fn<false,false>
 {
 	int m_iPhraseK;
 	BYTE m_uMatchMask[SPH_MAX_FIELDS];
 
 	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError )
 	{
-		RankerState_Proximity_fn<false>::Init ( iFields, pWeights, pRanker, sError );
+		RankerState_Proximity_fn<false,false>::Init ( iFields, pWeights, pRanker, sError );
 		m_iPhraseK = 0;
 		for ( int i=0; i<iFields; i++ )
 			m_iPhraseK += pWeights[i] * pRanker->m_iQwords;
@@ -4705,7 +4777,7 @@ struct RankerState_MatchAny_fn : public RankerState_Proximity_fn<false>
 
 	void Update ( const ExtHit_t * pHlist )
 	{
-		RankerState_Proximity_fn<false>::Update ( pHlist );
+		RankerState_Proximity_fn<false,false>::Update ( pHlist );
 		m_uMatchMask [ HITMAN::GetField ( pHlist->m_uHitpos ) ] |= ( 1<<(pHlist->m_uQuerypos-1) );
 	}
 
@@ -5343,6 +5415,25 @@ struct ExtQwordOrderbyQueryPos_t
 };
 
 
+static bool HasQwordDupes ( XQNode_t * pNode, SmallStringHash_T<int> & hQwords )
+{
+	ARRAY_FOREACH ( i, pNode->m_dChildren )
+		if ( HasQwordDupes ( pNode->m_dChildren[i], hQwords ) )
+			return true;
+	ARRAY_FOREACH ( i, pNode->m_dWords )
+		if ( !hQwords.Add ( 1, pNode->m_dWords[i].m_sWord ) )
+			return true;
+	return false;
+}
+
+
+static bool HasQwordDupes ( XQNode_t * pNode )
+{
+	SmallStringHash_T<int> hQwords;
+	return HasQwordDupes ( pNode, hQwords );
+}
+
+
 ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, CSphQueryResult * pResult, const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx )
 {
 	// shortcut
@@ -5357,6 +5448,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 		uPayloadMask |= pIndex->GetMatchSchema().m_dFields[i].m_bPayload << i;
 
 	bool bSingleWord = tXQ.m_pRoot->m_dChildren.GetLength()==0 && tXQ.m_pRoot->m_dWords.GetLength()==1;
+	bool bGotDupes = HasQwordDupes ( tXQ.m_pRoot );
 
 	// setup eval-tree
 	ExtRanker_c * pRanker = NULL;
@@ -5367,8 +5459,10 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 				pRanker = new ExtRanker_T < RankerState_ProximityPayload_fn<true> > ( tXQ, tTermSetup );
 			else if ( bSingleWord )
 				pRanker = new ExtRanker_WeightSum_c<WITH_BM25> ( tXQ, tTermSetup );
+			else if ( bGotDupes )
+				pRanker = new ExtRanker_T < RankerState_Proximity_fn<true,true> > ( tXQ, tTermSetup );
 			else
-				pRanker = new ExtRanker_T < RankerState_Proximity_fn<true> > ( tXQ, tTermSetup );
+				pRanker = new ExtRanker_T < RankerState_Proximity_fn<true,false> > ( tXQ, tTermSetup );
 			break;
 		case SPH_RANK_BM25:				pRanker = new ExtRanker_WeightSum_c<WITH_BM25> ( tXQ, tTermSetup ); break;
 		case SPH_RANK_NONE:				pRanker = new ExtRanker_None_c ( tXQ, tTermSetup ); break;
@@ -5376,8 +5470,10 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 		case SPH_RANK_PROXIMITY:
 			if ( bSingleWord )
 				pRanker = new ExtRanker_WeightSum_c<> ( tXQ, tTermSetup );
+			else if ( bGotDupes )
+				pRanker = new ExtRanker_T < RankerState_Proximity_fn<false,true> > ( tXQ, tTermSetup );
 			else
-				pRanker = new ExtRanker_T < RankerState_Proximity_fn<false> > ( tXQ, tTermSetup );
+				pRanker = new ExtRanker_T < RankerState_Proximity_fn<false,false> > ( tXQ, tTermSetup );
 			break;
 		case SPH_RANK_MATCHANY:			pRanker = new ExtRanker_T < RankerState_MatchAny_fn > ( tXQ, tTermSetup ); break;
 		case SPH_RANK_FIELDMASK:		pRanker = new ExtRanker_T < RankerState_Fieldmask_fn > ( tXQ, tTermSetup ); break;
@@ -5385,7 +5481,10 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 		case SPH_RANK_EXPR:				pRanker = new ExtRanker_Expr_c ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema() ); break;
 		default:
 			pResult->m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int)pQuery->m_eRanker );
-			pRanker = new ExtRanker_T < RankerState_Proximity_fn<true> > ( tXQ, tTermSetup );
+			if ( bGotDupes )
+				pRanker = new ExtRanker_T < RankerState_Proximity_fn<true,true> > ( tXQ, tTermSetup );
+			else
+				pRanker = new ExtRanker_T < RankerState_Proximity_fn<true,false> > ( tXQ, tTermSetup );
 			break;
 	}
 	assert ( pRanker );

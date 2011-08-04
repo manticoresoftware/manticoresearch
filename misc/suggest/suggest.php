@@ -1,7 +1,7 @@
 <?php
 
-define ( FREQ_THRESHOLD, 40 );
-define ( SUGGEST_DEBUG, 0 );
+define ( "FREQ_THRESHOLD", 40 );
+define ( "SUGGEST_DEBUG", 0 );
 
 require ( "../../api/sphinxapi.php" );
 
@@ -31,10 +31,10 @@ CREATE TABLE suggest (
 	freq		INTEGER NOT NULL
 );
 
-INSERT INTO suggest VALUES
 " );
 
 	$n = 0;
+	$m = 0;
 	while ( $line = fgets ( $in, 1024 ) )
 	{
 		list ( $keyword, $freq ) = split ( " ", trim ( $line ) );
@@ -44,11 +44,24 @@ INSERT INTO suggest VALUES
 
 		$trigrams = BuildTrigrams ( $keyword );
 
-		if ( $n++ ) print ",\n";
+		if ( !$m )
+			print "INSERT INTO suggest VALUES\n";
+		else
+			print ",\n";
+
+		$n++;
 		fwrite ( $out, "( $n, '$keyword', '$trigrams', $freq )" );
+
+		$m++;
+		if ( ( $m % 10000 )==0 )
+		{
+			print ";\n";
+			$m = 0;
+		}
 	}
 
-	fwrite ( $out, ";" );
+	if ( $m )
+		fwrite ( $out, ";" );
 }
 
 

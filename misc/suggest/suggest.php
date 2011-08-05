@@ -2,6 +2,9 @@
 
 define ( "FREQ_THRESHOLD", 40 );
 define ( "SUGGEST_DEBUG", 0 );
+define ( "LENGTH_THRESHOLD", 2 );
+define ( "LEVENSHTEIN_THRESHOLD", 2 );
+define ( "TOP_COUNT", 10 );
 
 require ( "../../api/sphinxapi.php" );
 
@@ -73,16 +76,17 @@ function MakeSuggestion ( $keyword )
 	$query = "\"$trigrams\"/1";
 	$len = strlen($keyword);
 
+	$delta = LENGTH_THRESHOLD;
 	$cl = new SphinxClient ();
 	$cl->SetMatchMode ( SPH_MATCH_EXTENDED2 );
 	$cl->SetRankingMode ( SPH_RANK_WORDCOUNT );
-	$cl->SetFilterRange ( "len", $len-2, $len+2 );
-	$cl->SetSelect ( "*, @weight+2-abs(len-$len) AS myrank" );
+	$cl->SetFilterRange ( "len", $len-$delta, $len+$delta );
+	$cl->SetSelect ( "*, @weight+$delta-abs(len-$len) AS myrank" );
 	$cl->SetSortMode ( SPH_SORT_EXTENDED, "myrank DESC, freq DESC" );
   	$cl->SetArrayResult ( true );
 
-  	// pull top-10 best trigram matches
-	$res = $cl->Query ( $query, "suggest", 0, 10 );
+  	// pull top-N best trigram matches and run them through Levenshtein
+	$res = $cl->Query ( $query, "suggest", 0, TOP_COUNT );
 
 	if ( !$res || !$res["matches"] )
 		return false;
@@ -109,7 +113,7 @@ function MakeSuggestion ( $keyword )
 	foreach ( $res["matches"] as $match )
 	{
 		$suggested = $match["attrs"]["keyword"];
-		if ( levenshtein ( $keyword, $suggested )<=2 )
+		if ( levenshtein ( $keyword, $suggested )<=LEVENSHTEIN_THRESHOLD )
 			return $suggested;
 	}
 	return $keyword;

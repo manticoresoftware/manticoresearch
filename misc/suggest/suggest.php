@@ -28,7 +28,8 @@ CREATE TABLE suggest (
 	id			INTEGER PRIMARY KEY AUTO_INCREMENT NOT NULL,
 	keyword		VARCHAR(255) NOT NULL,
 	trigrams	VARCHAR(255) NOT NULL,
-	freq		INTEGER NOT NULL
+	freq		INTEGER NOT NULL,
+	UNIQUE(keyword)
 );
 
 " );
@@ -50,7 +51,7 @@ CREATE TABLE suggest (
 			print ",\n";
 
 		$n++;
-		fwrite ( $out, "( $n, '$keyword', '$trigrams', $freq )" );
+		fwrite ( $out, "( 0, '$keyword', '$trigrams', $freq )" );
 
 		$m++;
 		if ( ( $m % 10000 )==0 )
@@ -80,7 +81,8 @@ function MakeSuggestion ( $keyword )
 	$cl->SetSortMode ( SPH_SORT_EXTENDED, "myrank DESC, freq DESC" );
   	$cl->SetArrayResult ( true );
 
-	$res = $cl->Query ( $query, "suggest" );
+  	// pull top-10 best trigram matches
+	$res = $cl->Query ( $query, "suggest", 0, 10 );
 
 	if ( !$res || !$res["matches"] )
 		return false;
@@ -89,25 +91,28 @@ function MakeSuggestion ( $keyword )
 	{
 		print "--- DEBUG START ---\n";
 
-		foreach ( $res["matches"]  as $match )
+		foreach ( $res["matches"] as $match )
 		{
-			$r = mysql_query ( "SELECT keyword FROM suggest WHERE id=".$match["id"] ) or die ( "mysql_query() failed: ".mysql_error() );
-			$row = mysql_fetch_row ( $r );
-			$w = $row[0];
-
+			$w = $match["keyword"];
 			$myrank = @$match["attrs"]["myrank"];
-			if ( $myrank ) $myrank = ", myrank=$myrank";
+			if ( $myrank )
+				$myrank = ", myrank=$myrank";
+			$levdist = levenshtein ( $keyword, $w );
 
-			print "id=$match[id], weight=$match[weight], freq={$match[attrs][freq]}{$myrank}, word=$w\n";
+			print "id=$match[id], weight=$match[weight], freq={$match[attrs][freq]}{$myrank}, word=$w, levdist=$levdist\n";
 		}
 
 		print "--- DEBUG END ---\n";
 	}
 
-	$id = (int)$res["matches"][0]["id"];
-	$r = mysql_query ( "SELECT keyword FROM suggest WHERE id=$id" ) or die ( "mysql_query() failed: ".mysql_error() );
-	$row = mysql_fetch_row ( $r );
-	return $row[0];
+	// further restrict trigram matches with a sane Levenshtein distance limit
+	foreach ( $res["matches"] as $match )
+	{
+		$suggested = $match["attrs"]["keyword"];
+		if ( levenshtein ( $keyword, $suggested )<=2 )
+			return $suggested;
+	}
+	return $keyword;
 }
 
 /// main

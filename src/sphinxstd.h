@@ -2125,7 +2125,7 @@ public:
 	void Assign32 ( DWORD uMask )
 	{
 		Unset();
-		*(DWORD*)(&m_dFieldsMask[0]) = uMask;
+		m_dFieldsMask[0] = uMask;
 	}
 
 	DWORD GetMask32 () const

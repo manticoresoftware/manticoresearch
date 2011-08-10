@@ -14523,8 +14523,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( g_iMaxFilters<1 || g_iMaxFilters>10240 )
 		sphFatal ( "max_filters out of bounds (1..10240)" );
 
-	if ( g_iMaxFilterValues<1 || g_iMaxFilterValues>1048576 )
-		sphFatal ( "max_filter_values out of bounds (1..1048576)" );
+	if ( g_iMaxFilterValues<1 || g_iMaxFilterValues>10485760 )
+		sphFatal ( "max_filter_values out of bounds (1..10485760)" );
 
 	bool bVisualLoad = true;
 	bool bWatched = false;

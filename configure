@@ -6565,6 +6565,18 @@ else
 	as_fn_error "no working pthreads library found" "$LINENO" 5
 fi
 
+for ac_func in pthread_mutex_timedlock
+do :
+  ac_fn_c_check_func "$LINENO" "pthread_mutex_timedlock" "ac_cv_func_pthread_mutex_timedlock"
+if test "x$ac_cv_func_pthread_mutex_timedlock" = x""yes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_PTHREAD_MUTEX_TIMEDLOCK 1
+_ACEOF
+
+fi
+done
+
+
 
 # check if we should compile with MySQL support
 

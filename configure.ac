@@ -250,6 +250,8 @@ else
 	AC_MSG_ERROR([no working pthreads library found])
 fi
 
+AC_CHECK_FUNCS([pthread_mutex_timedlock])
+
 dnl ---
 
 # check if we should compile with MySQL support

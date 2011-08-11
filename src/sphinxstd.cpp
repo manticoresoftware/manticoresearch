@@ -781,7 +781,28 @@ bool CSphProcessSharedMutex::TimedLock ( int tmSpin ) const
 	tp.tv_sec = 0;
 	tp.tv_nsec = tmSpin * 1000;
 	if ( m_pMutex )
+	{
+#if HAVE_PTHREAD_MUTEX_TIMEDLOCK
 		return ( pthread_mutex_timedlock ( m_pMutex, &tp )==0 );
+#else
+		int iRes = EBUSY;
+		int64_t tmTill = sphMicroTimer() + tmSpin;
+		do
+		{
+			iRes = pthread_mutex_trylock ( m_pMutex );
+			if ( iRes==EBUSY )
+			{
+				sphSleepMsec ( 0 );
+			}
+		}
+		while ( iRes==EBUSY && sphMicroTimer()<tmTill );
+
+		if ( iRes==EBUSY )
+			iRes = pthread_mutex_trylock ( m_pMutex );
+
+		return iRes!=0;
+#endif
+	}
 
 	return false;
 }

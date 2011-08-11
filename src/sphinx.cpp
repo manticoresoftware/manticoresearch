@@ -965,8 +965,8 @@ public:
 
 	BYTE			m_dDoclistBuf [ MINIBUFFER_LEN ];
 	BYTE			m_dHitlistBuf [ MINIBUFFER_LEN ];
-	CSphReader	m_rdDoclist;	///< my doclist reader
-	CSphReader	m_rdHitlist;	///< my hitlist reader
+	CSphReader		m_rdDoclist;	///< my doclist reader
+	CSphReader		m_rdHitlist;	///< my hitlist reader
 
 	SphDocID_t		m_iMinID;		///< min ID to fixup
 	int				m_iInlineAttrs;	///< inline attributes count
@@ -977,7 +977,7 @@ public:
 #endif
 
 public:
-	explicit DiskIndexQwordTraits_c ( bool bUseMini )
+	explicit DiskIndexQwordTraits_c ( bool bUseMini, bool bExcluded )
 		: m_uHitPosition ( 0 )
 		, m_uHitState ( 0 )
 		, m_bDupe ( false )
@@ -992,6 +992,7 @@ public:
 #endif
 	{
 		m_iHitPos = EMPTY_HIT;
+		m_bExcluded = bExcluded;
 	}
 };
 
@@ -1001,8 +1002,8 @@ template < bool INLINE_HITS, bool INLINE_DOCINFO, bool DISABLE_HITLIST_SEEK >
 class DiskIndexQword_c : public DiskIndexQwordTraits_c
 {
 public:
-	explicit DiskIndexQword_c ( bool bUseMinibuffer )
-		: DiskIndexQwordTraits_c ( bUseMinibuffer )
+	explicit DiskIndexQword_c ( bool bUseMinibuffer, bool bExcluded )
+		: DiskIndexQwordTraits_c ( bUseMinibuffer, bExcluded )
 	{
 	}
 
@@ -11216,8 +11217,8 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 
 	/// setup qwords
 
-	QWORDDST tDstQword ( false );
-	QWORDSRC tSrcQword ( false );
+	QWORDDST tDstQword ( false, false );
+	QWORDSRC tSrcQword ( false, false );
 
 	CSphAutofile fSrcDocs, fSrcHits;
 	fSrcDocs.Open ( pSrcIndex->GetIndexFileName("spd"), SPH_O_READ, m_sLastError );
@@ -12355,7 +12356,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & tWord ) const
 {
-	WITH_QWORD ( m_pIndex, false, Qword, return new Qword ( tWord.m_bExpanded ) );
+	WITH_QWORD ( m_pIndex, false, Qword, return new Qword ( tWord.m_bExpanded, tWord.m_bExcluded ) );
 	return NULL;
 }
 
@@ -12982,7 +12983,7 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 	tTermSetup.m_tMin.Clone ( *m_pMin, m_tSchema.GetRowSize() );
 	tTermSetup.m_bSetupReaders = true;
 
-	Qword tKeyword ( false );
+	Qword tKeyword ( false, false );
 	tKeyword.m_tDoc.m_iDocID = m_pMin->m_iDocID;
 	tKeyword.m_iWordID = uWordID;
 	tKeyword.m_sWord = sKeyword;
@@ -13873,7 +13874,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
 	dKeywords.Resize ( 0 );
 
-	Qword QueryWord ( false );
+	Qword QueryWord ( false, false );
 	CSphString sTokenized;
 	BYTE * sWord;
 	int nWords = 0;
@@ -14410,10 +14411,38 @@ static void TransformNear ( XQNode_t ** ppNode )
 		TransformNear ( &pNode->m_dChildren[i] );
 }
 
+
+/// tag excluded keywords (rvals to operator NOT)
+static void TagExcluded ( XQNode_t * pNode, bool bNot )
+{
+	if ( pNode->GetOp()==SPH_QUERY_ANDNOT )
+	{
+		assert ( pNode->m_dChildren.GetLength()==2 );
+		assert ( pNode->m_dWords.GetLength()==0 );
+		TagExcluded ( pNode->m_dChildren[0], bNot );
+		TagExcluded ( pNode->m_dChildren[1], !bNot );
+
+	} else if ( pNode->m_dChildren.GetLength() )
+	{
+		// FIXME? check if this works okay with "virtually plain" stuff?
+		ARRAY_FOREACH ( i, pNode->m_dChildren )
+			TagExcluded ( pNode->m_dChildren[i], bNot );
+	} else
+	{
+		// tricky bit
+		// no assert on length here and that is intended
+		// we have fully empty nodes (0 children, 0 words) sometimes!
+		ARRAY_FOREACH ( i, pNode->m_dWords )
+			pNode->m_dWords[i].m_bExcluded = bNot;
+	}
+}
+
+
 void sphTransformExtendedQuery ( XQNode_t ** ppNode )
 {
 	TransformQuorum ( ppNode );
 	TransformNear ( ppNode );
+	TagExcluded ( *ppNode, false );
 }
 
 
@@ -15145,7 +15174,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 		// create and manually setup doclist reader
 		DiskIndexQwordTraits_c * pQword = NULL;
-		WITH_QWORD ( this, false, T, pQword = new T ( false ) );
+		WITH_QWORD ( this, false, T, pQword = new T ( false, false ) );
 
 		pQword->m_tDoc.Reset ( m_tSchema.GetDynamicSize() );
 		pQword->m_iMinID = m_pMin->m_iDocID;

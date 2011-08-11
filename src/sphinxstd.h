@@ -2261,9 +2261,66 @@ inline bool operator != ( const CSphSmallBitvec& dFirst, const CSphSmallBitvec& 
 {
 	return !( dFirst==dSecond );
 }
+
 #if USE_WINDOWS
 #pragma warning(pop)
 #endif
+
+//////////////////////////////////////////////////////////////////////////
+
+/// generic dynamic bitvector
+/// with a preallocated part for small-size cases, and a dynamic route for big-size ones
+class CSphBitvec
+{
+protected:
+	DWORD *		m_pData;
+	DWORD		m_uStatic[4];
+	int			m_iElements;
+
+public:
+	CSphBitvec ()
+		: m_pData ( NULL )
+		, m_iElements ( 0 )
+	{}
+
+	~CSphBitvec ()
+	{
+		if ( m_pData && m_pData!=m_uStatic )
+			SafeDeleteArray ( m_pData );
+	}
+
+	void Init ( int iElements )
+	{
+		assert ( iElements>0 );
+		m_iElements = iElements;
+		if ( iElements > int(sizeof(m_uStatic)*8) )
+		{
+			int iSize = (m_iElements+31)/32;
+			m_pData = new DWORD [ iSize ];
+			memset ( m_pData, 0, sizeof(DWORD)*iSize );
+		} else
+		{
+			m_pData = m_uStatic;
+			for ( int i=0; i<int(sizeof(m_uStatic)/sizeof(m_uStatic[0])); i++ )
+				m_uStatic[i] = 0;
+		}
+	}
+
+	bool BitGet ( int iIndex ) const
+	{
+		assert ( m_pData );
+		assert ( iIndex>=0 );
+		assert ( iIndex<m_iElements );
+		return ( m_pData [ iIndex>>5 ] & ( 1UL<<( iIndex&31 ) ) )!=0;
+	}
+
+	void BitSet ( int iIndex )
+	{
+		assert ( iIndex>=0 );
+		assert ( iIndex<m_iElements );
+		m_pData [ iIndex>>5 ] |= ( 1UL<<( iIndex&31 ) );
+	}
+};
 
 #endif // _sphinxstd_
 

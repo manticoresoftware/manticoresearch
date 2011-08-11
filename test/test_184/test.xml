@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>expression based ranker</name>
+
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	compat_sphinxql_magics	= 0
+}
+
+source test
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= select * from test_table
+	sql_attr_uint		= gid
+	sql_field_string	= title
+}
+
+index test
+{
+	source				= test
+	path				= <data_path/>/test
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>
+INSERT INTO test_table VALUES
+( 100, 1, 'Seven lies multiplied by seven' ),
+( 101, 1, 'Multiplied by seven again' ),
+( 102, 1, 'Seven angels with seven trumpets' ),
+( 103, 1, 'Send them home on a morning train' ),
+( 104, 1, 'Well who is that shouting?' ),
+( 105, 1, 'John the Revelator' ),
+( 106, 1, 'All he ever gives us is pain' ),
+( 107, 1, 'Well who is that shouting?' ),
+( 108, 1, 'John the Revelator' ),
+( 109, 1, 'He should bow his head in shame' );
+</db_insert>
+
+<sphqueries>
+<!-- check that expr yields same result as bultin proximity_bm25 -->
+<sphinxql>select id, gid, weight(), title from test where match('seven') and gid=1</sphinxql>
+<sphinxql>select id, gid, weight(), title from test where match('seven') and gid=1 option ranker=expr('sum(lcs)*1000+bm25')</sphinxql>
+<sphinxql>select id, gid, weight(), title from test where match('seven') and gid=1 option ranker=expr('sum(300*lcs+700*lcs)+bm25')</sphinxql>
+
+<!-- check that query_word_count stuff works okay (in general, with dupes, with NOTs etc) -->
+<sphinxql>select id, gid, weight(), title from test where match('seven|lies') and gid=1 option ranker=expr('query_word_count*100+sum(word_count)*10+sum(hit_count)')</sphinxql>
+<sphinxql>select id, gid, weight(), title from test where match('seven seven seven seven') and gid=1 option ranker=expr('query_word_count*100+sum(word_count)*10+sum(hit_count)')</sphinxql>
+<sphinxql>select id, gid, weight(), title from test where match('seven !se7en') and gid=1 option ranker=expr('query_word_count*100+sum(word_count)*10+sum(hit_count)')</sphinxql>
+<sphinxql>select id, gid, weight(), title from test where match('seven !(angels !by)') and gid=1 option ranker=expr('query_word_count*100+sum(word_count)*10+sum(hit_count)')</sphinxql>
+</sphqueries>
+
+</test>

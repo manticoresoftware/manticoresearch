@@ -62,6 +62,7 @@ struct ExtQword_t
 	float		m_fIDF;			///< IDF value
 	int			m_iQueryPos;	///< position in the query
 	bool		m_bExpanded;	///< added by prefix expansion
+	bool		m_bExcluded;	///< excluded by the query (eg. bb in (aa AND NOT bb))
 };
 
 
@@ -1442,6 +1443,7 @@ void ExtTerm_c::GetQwords ( ExtQwordsHash_t & hQwords )
 	tInfo.m_iQueryPos = m_pQword->m_iAtomPos;
 	tInfo.m_fIDF = -1.0f; // suppress gcc 4.2.3 warning
 	tInfo.m_bExpanded = m_pQword->m_bExpanded;
+	tInfo.m_bExcluded = m_pQword->m_bExcluded;
 	hQwords.Add ( tInfo, m_pQword->m_sWord );
 }
 
@@ -4861,6 +4863,7 @@ struct RankerState_Fieldmask_fn
 struct RankerState_Expr_fn
 {
 public:
+	// per-field and per-document stuff
 	BYTE				m_uLCS[SPH_MAX_FIELDS];
 	BYTE				m_uMatchMask[SPH_MAX_FIELDS];
 	BYTE				m_uCurLCS;
@@ -4878,13 +4881,16 @@ public:
 	int					m_iMinBestSpanPos[SPH_MAX_FIELDS];
 	int					m_iMaxQuerypos;
 	DWORD				m_uExactHit;
+	CSphBitvec			m_tKeywordMask;
 
 	const char *		m_sExpr;
 	ISphExpr *			m_pExpr;
 	ESphAttr			m_eExprType;
 	const CSphSchema *	m_pSchema;
 
+	// per-query stuff
 	int					m_iMaxLCS;
+	int					m_iQueryWordCount;
 
 public:
 						RankerState_Expr_fn ();
@@ -4913,6 +4919,7 @@ enum ExprRankerNode_e
 	XRANK_BM25,
 	XRANK_MAX_LCS,
 	XRANK_FIELD_MASK,
+	XRANK_QUERY_WORD_COUNT,
 
 	// field aggregation functions
 	XRANK_SUM
@@ -5084,6 +5091,8 @@ public:
 			return XRANK_MAX_LCS;
 		if ( !strcasecmp ( sIdent, "field_mask" ) )
 			return XRANK_FIELD_MASK;
+		if ( !strcasecmp ( sIdent, "query_word_count" ) )
+			return XRANK_QUERY_WORD_COUNT;
 		return -1;
 	}
 
@@ -5110,6 +5119,7 @@ public:
 			case XRANK_BM25:				return new Expr_IntPtr_c ( &m_pState->m_uDocBM25 );
 			case XRANK_MAX_LCS:				return new Expr_GetIntConst_c ( m_pState->m_iMaxLCS );
 			case XRANK_FIELD_MASK:			return new Expr_IntPtr_c ( &m_pState->m_uMatchedFields );
+			case XRANK_QUERY_WORD_COUNT:	return new Expr_GetIntConst_c ( m_pState->m_iQueryWordCount );
 			case XRANK_SUM:					return new Expr_Sum_c ( m_pState, pLeft );
 			default:						return NULL;
 		}
@@ -5129,6 +5139,7 @@ public:
 			case XRANK_BM25:
 			case XRANK_MAX_LCS:
 			case XRANK_FIELD_MASK:
+			case XRANK_QUERY_WORD_COUNT:
 				return SPH_ATTR_INTEGER;
 			case XRANK_TF_IDF:
 				return SPH_ATTR_FLOAT;
@@ -5212,6 +5223,7 @@ RankerState_Expr_fn::RankerState_Expr_fn ()
 	, m_sExpr ( NULL )
 	, m_pExpr ( NULL )
 	, m_iMaxLCS ( 0 )
+	, m_iQueryWordCount ( 0 )
 {}
 
 
@@ -5243,7 +5255,9 @@ bool RankerState_Expr_fn::Init ( int iFields, const int * pWeights, ExtRanker_c 
 	m_iMaxQuerypos = pRanker->m_iMaxQuerypos;
 	m_uExactHit = 0;
 
-	// compute query level constants (max_lcs, for matchany ranker emulation)
+	// compute query level constants
+	// max_lcs, aka m_iMaxLCS (for matchany ranker emulation) gets computed here
+	// query_word_count, aka m_iQueryWordCount is set elsewhere (in SetQwordsIDF())
 	m_iMaxLCS = 0;
 	for ( int i=0; i<iFields; i++ )
 		m_iMaxLCS += pWeights[i] * pRanker->m_iQwords;
@@ -5303,8 +5317,14 @@ void RankerState_Expr_fn::Update ( const ExtHit_t * pHlist )
 	// update other stuff
 	m_uMatchMask[uField] |= ( 1<<(pHlist->m_uQuerypos-1) );
 	m_uMatchedFields |= ( 1UL<<uField );
-	m_uHitCount[uField]++;
-	m_uWordCount[uField] |= ( 1<<pHlist->m_uQuerypos );
+
+	// keywords can be duplicated in the query, so we need this extra check
+	if ( m_tKeywordMask.BitGet ( pHlist->m_uQuerypos ) )
+	{
+		m_uHitCount[uField]++;
+		m_uWordCount[uField] |= ( 1<<pHlist->m_uQuerypos );
+	}
+
 	m_dTFIDF[uField] += m_dIDF [ pHlist->m_uQuerypos ];
 	if ( !m_iMinHitPos[uField] )
 		m_iMinHitPos[uField] = HITMAN::GetPos ( pHlist->m_uHitpos );
@@ -5361,14 +5381,30 @@ public:
 
 	void SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 	{
+		// this sets m_iMaxQuerypos, setups terms etc
 		ExtRanker_T<RankerState_Expr_fn>::SetQwordsIDF ( hQwords );
 
+		// setup our own custom stuff, begin with IDFs
 		m_tState.m_dIDF.Resize ( m_iMaxQuerypos+1 );
 		ARRAY_FOREACH ( i, m_tState.m_dIDF )
 			m_tState.m_dIDF[i] = 0.0f;
+
+		m_tState.m_iQueryWordCount = 0;
+		m_tState.m_tKeywordMask.Init ( m_iMaxQuerypos+1 );
+
 		hQwords.IterateStart();
 		while ( hQwords.IterateNext() )
-			m_tState.m_dIDF [ hQwords.IterateGet().m_iQueryPos ] = hQwords.IterateGet().m_fIDF;
+		{
+			const int iPos = hQwords.IterateGet().m_iQueryPos;
+			m_tState.m_dIDF [ iPos ] = hQwords.IterateGet().m_fIDF;
+			m_tState.m_tKeywordMask.BitSet ( iPos );
+
+			// tricky bit
+			// for query_word_count, we only want to count keywords that are not (!) excluded by the query
+			// that is, in (aa NOT bb) case, we want a value of 1, not 2
+			if ( !hQwords.IterateGet().m_bExcluded )
+				m_tState.m_iQueryWordCount++;
+		}
 	}
 };
 

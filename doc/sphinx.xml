@@ -1917,6 +1917,13 @@ in all fields.
 <code>field_mask</code> (integer), a document-level 32-bit mask of matched
 fields.
 </para></listitem>
+<listitem><para>
+<code>query_word_count</code> (integer), the number of unique keywords
+in a query, adjusted for a number of excluded keywords. For instance,
+both <code>(one one one one)</code> and <code>(one !two)</code> queries
+should assign a value of 1 to this factor, because there is just one unique
+non-excluded keyword.
+</para></listitem>
 </itemizedlist>
 </para>
 <para>

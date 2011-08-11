@@ -47,6 +47,7 @@ public:
 	int				m_iTermPos;
 	int				m_iAtomPos;		///< word position, from query
 	bool			m_bExpanded;	///< added by prefix expansion
+	bool			m_bExcluded;	///< excluded by the query (rval to operator NOT)
 
 	// setup by QwordSetup()
 	int				m_iDocs;		///< document count, from wordlist
@@ -65,13 +66,13 @@ public:
 		, m_iTermPos ( 0 )
 		, m_iAtomPos ( 0 )
 		, m_bExpanded ( false )
+		, m_bExcluded ( false )
 		, m_iDocs ( 0 )
 		, m_iHits ( 0 )
 		, m_bHasHitlist ( true )
 		, m_bAllFieldsKnown ( false )
 		, m_uMatchHits ( 0 )
 		, m_iHitlistPos ( 0 )
-
 	{
 		m_dFields.Unset();
 	}

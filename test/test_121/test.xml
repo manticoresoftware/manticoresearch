@@ -28,6 +28,7 @@ index test
 	path			= <data_path/>/test
     charset_type 	= utf-8
 	stopwords		= stopwords.txt stopwords_121.txt
+	stopword_step	= 0
 }
 </config>
 
@@ -36,6 +37,9 @@ index test
 <query>very</query>
 <query>add</query>
 <query>adds</query>
+<query mode="extended2">"look and add books"</query>
+<query mode="extended2">"look add books"</query>
+<query mode="extended2">"look books"</query>
 </queries>
 
 <db_create>
@@ -55,7 +59,9 @@ INSERT INTO `test_table` VALUES
 ( 1,  'the add' ),
 ( 2,  'add' ),
 ( 3,  'add is very plus' ),
-( 4,  'the adds is very good' )
+( 4,  'the adds is very good' ),
+( 5,  'look books together' ),
+( 6,  'look add books together' )
 </db_insert>
 
 </test>

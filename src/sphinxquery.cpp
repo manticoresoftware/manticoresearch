@@ -33,7 +33,7 @@ public:
 					~XQParser_t () {}
 
 public:
-	bool			Parse ( XQQuery_t & tQuery, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict );
+	bool			Parse ( XQQuery_t & tQuery, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, int iStopwordStep );
 
 	bool			Error ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 	void			Warning ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
@@ -87,6 +87,8 @@ public:
 	bool					m_bEmpty;
 
 	bool					m_bQuoted;
+
+	bool					m_bEmptyStopword;
 
 	CSphVector<CSphString>	m_dIntTokens;
 
@@ -237,6 +239,7 @@ XQParser_t::XQParser_t ()
 	, m_bStopOnInvalid ( true )
 	, m_bWasBlended ( false )
 	, m_bQuoted ( false )
+	, m_bEmptyStopword ( false )
 {
 }
 
@@ -735,7 +738,12 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		sTmp[MAX_BYTES-1] = '\0';
 
 		if ( !m_pDict->GetWordID ( sTmp ) )
+		{
 			sToken = NULL;
+			// stopwords with step=0 must not affect pos
+			if ( m_bEmptyStopword )
+				m_iAtomPos--;
+		}
 
 		// information about stars is lost after this point, so was have to save it now
 		DWORD uStarPosition = STAR_NONE;
@@ -1041,7 +1049,7 @@ static void FixupDegenerates ( XQNode_t * pNode )
 }
 
 
-bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict )
+bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, int iStopwordStep )
 {
 	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone ( true ) );
 	pMyTokenizer->AddSpecials ( "()|-!@~\"/^$<" );
@@ -1074,6 +1082,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTok
 	m_iPendingType = 0;
 	m_pRoot = NULL;
 	m_bEmpty = true;
+	m_bEmptyStopword = ( iStopwordStep==0 );
 
 	m_pTokenizer->SetBuffer ( m_sQuery, m_iQueryLen );
 	int iRes = yyparse ( this );
@@ -1163,10 +1172,10 @@ static void xqDump ( XQNode_t * pNode, const CSphSchema & tSch, int iIndent )
 #endif
 
 
-bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict )
+bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, int iStopwordStep )
 {
 	XQParser_t qp;
-	bool bRes = qp.Parse ( tParsed, sQuery, pTokenizer, pSchema, pDict );
+	bool bRes = qp.Parse ( tParsed, sQuery, pTokenizer, pSchema, pDict, iStopwordStep );
 
 #ifndef NDEBUG
 	if ( bRes && tParsed.m_pRoot )

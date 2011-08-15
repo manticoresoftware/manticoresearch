@@ -4882,6 +4882,7 @@ public:
 	int					m_iMaxQuerypos;
 	DWORD				m_uExactHit;
 	CSphBitvec			m_tKeywordMask;
+	DWORD				m_uDocWordCount;
 
 	const char *		m_sExpr;
 	ISphExpr *			m_pExpr;
@@ -4920,6 +4921,7 @@ enum ExprRankerNode_e
 	XRANK_MAX_LCS,
 	XRANK_FIELD_MASK,
 	XRANK_QUERY_WORD_COUNT,
+	XRANK_DOC_WORD_COUNT,
 
 	// field aggregation functions
 	XRANK_SUM
@@ -5093,6 +5095,8 @@ public:
 			return XRANK_FIELD_MASK;
 		if ( !strcasecmp ( sIdent, "query_word_count" ) )
 			return XRANK_QUERY_WORD_COUNT;
+		if ( !strcasecmp ( sIdent, "doc_word_count" ) )
+			return XRANK_DOC_WORD_COUNT;
 		return -1;
 	}
 
@@ -5116,10 +5120,13 @@ public:
 			case XRANK_MIN_HIT_POS:			return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinHitPos );
 			case XRANK_MIN_BEST_SPAN_POS:	return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinBestSpanPos );
 			case XRANK_EXACT_HIT:			return new Expr_FieldFactor_c<bool> ( pCF, &m_pState->m_uExactHit );
+
 			case XRANK_BM25:				return new Expr_IntPtr_c ( &m_pState->m_uDocBM25 );
 			case XRANK_MAX_LCS:				return new Expr_GetIntConst_c ( m_pState->m_iMaxLCS );
 			case XRANK_FIELD_MASK:			return new Expr_IntPtr_c ( &m_pState->m_uMatchedFields );
 			case XRANK_QUERY_WORD_COUNT:	return new Expr_GetIntConst_c ( m_pState->m_iQueryWordCount );
+			case XRANK_DOC_WORD_COUNT:		return new Expr_IntPtr_c ( &m_pState->m_uDocWordCount );
+
 			case XRANK_SUM:					return new Expr_Sum_c ( m_pState, pLeft );
 			default:						return NULL;
 		}
@@ -5140,6 +5147,7 @@ public:
 			case XRANK_MAX_LCS:
 			case XRANK_FIELD_MASK:
 			case XRANK_QUERY_WORD_COUNT:
+			case XRANK_DOC_WORD_COUNT:
 				return SPH_ATTR_INTEGER;
 			case XRANK_TF_IDF:
 				return SPH_ATTR_FLOAT;
@@ -5254,6 +5262,7 @@ bool RankerState_Expr_fn::Init ( int iFields, const int * pWeights, ExtRanker_c 
 	memset ( m_iMinBestSpanPos, 0, sizeof(m_iMinBestSpanPos) );
 	m_iMaxQuerypos = pRanker->m_iMaxQuerypos;
 	m_uExactHit = 0;
+	m_uDocWordCount = 0;
 
 	// compute query level constants
 	// max_lcs, aka m_iMaxLCS (for matchany ranker emulation) gets computed here
@@ -5323,6 +5332,7 @@ void RankerState_Expr_fn::Update ( const ExtHit_t * pHlist )
 	{
 		m_uHitCount[uField]++;
 		m_uWordCount[uField] |= ( 1<<pHlist->m_uQuerypos );
+		m_uDocWordCount |= ( 1<<pHlist->m_uQuerypos );
 	}
 
 	m_dTFIDF[uField] += m_dIDF [ pHlist->m_uQuerypos ];
@@ -5338,6 +5348,7 @@ DWORD RankerState_Expr_fn::Finalize ( const CSphMatch & tMatch )
 	m_uDocBM25 = tMatch.m_iWeight;
 	for ( int i=0; i<m_iFields; i++ )
 		m_uWordCount[i] = sphBitCount ( m_uWordCount[i] );
+	m_uDocWordCount = sphBitCount ( m_uDocWordCount );
 
 	// compute expression
 	DWORD uRes = ( m_eExprType==SPH_ATTR_INTEGER )
@@ -5360,6 +5371,7 @@ DWORD RankerState_Expr_fn::Finalize ( const CSphMatch & tMatch )
 	}
 	m_uMatchedFields = 0;
 	m_uExactHit = 0;
+	m_uDocWordCount = 0;
 
 	// done
 	return uRes;

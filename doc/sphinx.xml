@@ -1924,6 +1924,10 @@ both <code>(one one one one)</code> and <code>(one !two)</code> queries
 should assign a value of 1 to this factor, because there is just one unique
 non-excluded keyword.
 </para></listitem>
+<listitem><para>
+<code>doc_word_count</code> (integer), the number of unique keywords
+matched in the entire document.
+</para></listitem>
 </itemizedlist>
 </para>
 <para>

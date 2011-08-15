@@ -36,22 +36,27 @@ CREATE TABLE test_table
 (
 	id INTEGER PRIMARY KEY NOT NULL,
 	gid INTEGER NOT NULL,
-	title VARCHAR(255) NOT NULL
+	title VARCHAR(255) NOT NULL,
+	content VARCHAR(255) NOT NULL
 );
 </db_create>
 <db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
 <db_insert>
 INSERT INTO test_table VALUES
-( 100, 1, 'Seven lies multiplied by seven' ),
-( 101, 1, 'Multiplied by seven again' ),
-( 102, 1, 'Seven angels with seven trumpets' ),
-( 103, 1, 'Send them home on a morning train' ),
-( 104, 1, 'Well who is that shouting?' ),
-( 105, 1, 'John the Revelator' ),
-( 106, 1, 'All he ever gives us is pain' ),
-( 107, 1, 'Well who is that shouting?' ),
-( 108, 1, 'John the Revelator' ),
-( 109, 1, 'He should bow his head in shame' );
+( 100, 1, 'Seven lies multiplied by seven', '' ),
+( 101, 1, 'Multiplied by seven again', '' ),
+( 102, 1, 'Seven angels with seven trumpets', '' ),
+( 103, 1, 'Send them home on a morning train', '' ),
+( 104, 1, 'Well who is that shouting?', '' ),
+( 105, 1, 'John the Revelator', '' ),
+( 106, 1, 'All he ever gives us is pain', '' ),
+( 107, 1, 'Well who is that shouting?', '' ),
+( 108, 1, 'John the Revelator', '' ),
+( 109, 1, 'He should bow his head in shame', '' ),
+
+( 110, 2, 'Mary vs Lamb', 'Mary had a little lamb little lamb little lamb' ),
+( 111, 2, 'Mary vs Lamb 2: Return of The Lamb', '...whose fleece was white as snow' ),
+( 112, 2, 'Mary vs Lamb 3: The Resurrection', 'Snow! Bloody snow!' )
 </db_insert>
 
 <sphqueries>
@@ -65,6 +70,9 @@ INSERT INTO test_table VALUES
 <sphinxql>select id, gid, weight(), title from test where match('seven seven seven seven') and gid=1 option ranker=expr('query_word_count*100+sum(word_count)*10+sum(hit_count)')</sphinxql>
 <sphinxql>select id, gid, weight(), title from test where match('seven !se7en') and gid=1 option ranker=expr('query_word_count*100+sum(word_count)*10+sum(hit_count)')</sphinxql>
 <sphinxql>select id, gid, weight(), title from test where match('seven !(angels !by)') and gid=1 option ranker=expr('query_word_count*100+sum(word_count)*10+sum(hit_count)')</sphinxql>
+
+<!-- check that doc_word_count stuff works -->
+<sphinxql>select id, gid, weight(), title from test where match('lamb') and gid=2 option ranker=expr('doc_word_count*1000+sum(word_count)')</sphinxql>
 </sphqueries>
 
 </test>

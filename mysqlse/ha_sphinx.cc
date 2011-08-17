@@ -135,7 +135,7 @@ void sphUnalignedWrite ( void * pPtr, const T & tVal )
 #define SPHINXSE_MAX_ALLOC			(16*1024*1024)
 #define SPHINXSE_MAX_KEYWORDSTATS	4096
 
-#define SPHINXSE_VERSION			"0.9.9 ($Revision$)"
+#define SPHINXSE_VERSION			"2.0.2-dev ($Revision: 2917)"
 
 // FIXME? the following is cut-n-paste from sphinx.h and searchd.cpp
 // cut-n-paste is somewhat simpler that adding dependencies however..
@@ -144,7 +144,7 @@ enum
 {
 	SPHINX_SEARCHD_PROTO	= 1,
 	SEARCHD_COMMAND_SEARCH	= 0,
-	VER_COMMAND_SEARCH		= 0x116,
+	VER_COMMAND_SEARCH		= 0x117,
 };
 
 /// search query sorting orders
@@ -210,6 +210,7 @@ enum
 	SPH_ATTR_BOOL		= 4,			///< this attr is a boolean bit field
 	SPH_ATTR_FLOAT		= 5,
 	SPH_ATTR_BIGINT		= 6,
+	SPH_ATTR_STRING		= 7,			///< string (binary; in-memory)
 
 	SPH_ATTR_MULTI		= 0x40000000UL	///< this attr has multiple values (0 or more)
 };
@@ -2380,12 +2381,23 @@ int ha_sphinx::index_end()
 }
 
 
-uint32 ha_sphinx::UnpackDword ()
+bool ha_sphinx::CheckResponcePtr ( int iLen )
 {
-	if ( m_pCur+sizeof(uint32)>m_pResponseEnd ) // NOLINT
+	if ( m_pCur+iLen>m_pResponseEnd )
 	{
 		m_pCur = m_pResponseEnd;
 		m_bUnpackError = true;
+		return false;
+	}
+
+	return true;
+}
+
+
+uint32 ha_sphinx::UnpackDword ()
+{
+	if ( !CheckResponcePtr ( sizeof(uint32) ) ) // NOLINT
+	{
 		return 0;
 	}
 
@@ -2401,10 +2413,8 @@ char * ha_sphinx::UnpackString ()
 	if ( !iLen )
 		return NULL;
 
-	if ( m_pCur+iLen>m_pResponseEnd )
+	if ( !CheckResponcePtr ( iLen ) )
 	{
-		m_pCur = m_pResponseEnd;
-		m_bUnpackError = true;
 		return NULL;
 	}
 
@@ -2562,6 +2572,10 @@ bool ha_sphinx::UnpackStats ( CSphSEStats * pStats )
 				// skip MVA list
 				uint32 uCount = UnpackDword ();
 				m_pCur += uCount*4;
+			} else if ( m_dAttrs[i].m_uType==SPH_ATTR_STRING )
+			{
+				uint32 iLen = UnpackDword();
+				m_pCur += iLen;
 			} else // skip normal value
 				m_pCur += m_dAttrs[i].m_uType==SPH_ATTR_BIGINT ? 8 : 4;
 		}
@@ -2951,6 +2965,16 @@ int ha_sphinx::get_rec ( byte * buf, const byte *, uint )
 
 			case SPH_ATTR_BIGINT:
 				af->store ( iValue64, 0 );
+				break;
+
+			case SPH_ATTR_STRING:
+				if ( !uValue )
+					af->store ( "", 0, &my_charset_bin );
+				else if ( CheckResponcePtr ( uValue ) )
+				{
+					af->store ( m_pCur, uValue, &my_charset_bin );
+					m_pCur += uValue;
+				}
 				break;
 
 			case ( SPH_ATTR_MULTI | SPH_ATTR_INTEGER ):

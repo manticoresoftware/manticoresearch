@@ -147,6 +147,7 @@ private:
 	char *			UnpackString ();
 	bool			UnpackSchema ();
 	bool			UnpackStats ( CSphSEStats * pStats );
+	bool			CheckResponcePtr ( int iLen );
 
 	CSphSEThreadData *	GetTls ();
 };

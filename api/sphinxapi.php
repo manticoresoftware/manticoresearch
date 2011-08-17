@@ -61,7 +61,8 @@ define ( "SPH_RANK_PROXIMITY",		4 );
 define ( "SPH_RANK_MATCHANY",		5 );
 define ( "SPH_RANK_FIELDMASK",		6 );
 define ( "SPH_RANK_SPH04",			7 );
-define ( "SPH_RANK_TOTAL",			8 );
+define ( "SPH_RANK_EXPR",			8 );
+define ( "SPH_RANK_TOTAL",			9 );
 
 /// known sort modes
 define ( "SPH_SORT_RELEVANCE",		0 );
@@ -406,6 +407,7 @@ class SphinxClient
 	var $_anchor;		///< geographical anchor point
 	var $_indexweights;	///< per-index weights
 	var $_ranker;		///< ranking mode (default is SPH_RANK_PROXIMITY_BM25)
+	var $_rankexpr;		///< ranking mode expression (for SPH_RANK_EXPR)
 	var $_maxquerytime;	///< max query time, milliseconds (default is 0, do not limit)
 	var $_fieldweights;	///< per-field-name weights
 	var $_overrides;	///< per-query attribute values overrides
@@ -454,6 +456,7 @@ class SphinxClient
 		$this->_anchor		= array ();
 		$this->_indexweights= array ();
 		$this->_ranker		= SPH_RANK_PROXIMITY_BM25;
+		$this->_rankexpr	= "";
 		$this->_maxquerytime= 0;
 		$this->_fieldweights= array();
 		$this->_overrides 	= array();
@@ -736,10 +739,12 @@ class SphinxClient
 	}
 
 	/// set ranking mode
-	function SetRankingMode ( $ranker )
+	function SetRankingMode ( $ranker, $rankexpr="" )
 	{
 		assert ( $ranker>=0 && $ranker<SPH_RANK_TOTAL );
+		assert ( is_string($rankexpr) );
 		$this->_ranker = $ranker;
+		$this->_rankexpr = $rankexpr;
 	}
 
 	/// set matches sorting mode
@@ -982,7 +987,10 @@ class SphinxClient
 		$this->_MBPush ();
 
 		// build request
-		$req = pack ( "NNNNN", $this->_offset, $this->_limit, $this->_mode, $this->_ranker, $this->_sort ); // mode and limits
+		$req = pack ( "NNNN", $this->_offset, $this->_limit, $this->_mode, $this->_ranker );
+		if ( $this->_ranker==SPH_RANK_EXPR )
+			$req .= pack ( "N", strlen($this->_rankexpr) ) . $this->_rankexpr;
+		$req .= pack ( "N", $this->_sort ); // (deprecated) sort mode
 		$req .= pack ( "N", strlen($this->_sortby) ) . $this->_sortby;
 		$req .= pack ( "N", strlen($query) ) . $query; // query itself
 		$req .= pack ( "N", count($this->_weights) ); // weights

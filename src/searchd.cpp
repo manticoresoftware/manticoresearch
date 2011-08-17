@@ -4053,7 +4053,11 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 	tQuery.m_iLimit = tReq.GetInt ();
 	tQuery.m_eMode = (ESphMatchMode) tReq.GetInt ();
 	if ( iVer>=0x110 )
+	{
 		tQuery.m_eRanker = (ESphRankMode) tReq.GetInt ();
+		if ( tQuery.m_eRanker==SPH_RANK_EXPR )
+			tQuery.m_sRankerExpr = tReq.GetString();
+	}
 	tQuery.m_eSort = (ESphSortOrder) tReq.GetInt ();
 	if ( iVer<=0x101 )
 		tQuery.m_iOldGroups = tReq.GetDwords ( &tQuery.m_pOldGroups, g_iMaxFilterValues, "invalid group count %d (should be in 0..%d range)" );

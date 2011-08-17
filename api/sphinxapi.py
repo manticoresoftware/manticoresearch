@@ -60,7 +60,8 @@ SPH_RANK_PROXIMITY		= 4
 SPH_RANK_MATCHANY		= 5
 SPH_RANK_FIELDMASK		= 6
 SPH_RANK_SPH04			= 7
-SPH_RANK_TOTAL			= 8
+SPH_RANK_EXPR			= 8
+SPH_RANK_TOTAL			= 9
 
 # known sort modes
 SPH_SORT_RELEVANCE		= 0
@@ -136,6 +137,7 @@ class SphinxClient:
 		self._anchor		= {}							# geographical anchor point
 		self._indexweights	= {}							# per-index weights
 		self._ranker		= SPH_RANK_PROXIMITY_BM25		# ranking mode
+		self._rankexpr		= ''							# ranking expression for SPH_RANK_EXPR
 		self._maxquerytime	= 0								# max query time, milliseconds (default is 0, do not limit)
 		self._timeout = 1.0										# connection timeout
 		self._fieldweights	= {}							# per-field-name weights
@@ -319,12 +321,13 @@ class SphinxClient:
 		self._mode = mode
 
 
-	def SetRankingMode (self, ranker):
+	def SetRankingMode ( self, ranker, rankexpr='' ):
 		"""
 		Set ranking mode.
 		"""
 		assert(ranker>=0 and ranker<SPH_RANK_TOTAL)
 		self._ranker = ranker
+		self._rankexpr = rankexpr
 
 
 	def SetSortMode ( self, mode, clause='' ):
@@ -512,7 +515,11 @@ class SphinxClient:
 		"""
 		# build request
 		req = []
-		req.append ( pack('>5L', self._offset, self._limit, self._mode, self._ranker, self._sort) )
+		req.append(pack('>4L', self._offset, self._limit, self._mode, self._ranker))
+		if self._ranker==SPH_RANK_EXPR:
+			req.append(pack('>L', len(self._rankexpr)))
+			req.append(self._rankexpr)
+		req.append(pack('>L', self._sort))
 		req.append(pack('>L', len(self._sortby)))
 		req.append(self._sortby)
 

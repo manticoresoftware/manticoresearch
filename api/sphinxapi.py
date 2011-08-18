@@ -27,6 +27,7 @@ SEARCHD_COMMAND_EXCERPT		= 1
 SEARCHD_COMMAND_UPDATE		= 2
 SEARCHD_COMMAND_KEYWORDS	= 3
 SEARCHD_COMMAND_PERSIST		= 4
+SEARCHD_COMMAND_STATUS		= 5
 SEARCHD_COMMAND_FLUSHATTRS	= 7
 
 # current client-side command implementation versions
@@ -34,6 +35,7 @@ VER_COMMAND_SEARCH		= 0x119
 VER_COMMAND_EXCERPT		= 0x103
 VER_COMMAND_UPDATE		= 0x102
 VER_COMMAND_KEYWORDS	= 0x100
+VER_COMMAND_STATUS		= 0x100
 VER_COMMAND_FLUSHATTRS	= 0x100
 
 # known searchd status codes
@@ -1017,6 +1019,40 @@ class SphinxClient:
 		if nwords>0 or p>max_:
 			self._error = 'incomplete reply'
 			return None
+
+		return res
+
+	def Status ( self ):
+		"""
+		Get the status
+		"""
+
+		# connect, send query, get response
+		sock = self._Connect()
+		if not sock:
+			return None
+
+		req = pack ( '>2HLL', SEARCHD_COMMAND_STATUS, VER_COMMAND_STATUS, 4, 1 )
+		wrote = sock.send ( req )
+
+		response = self._GetResponse ( sock, VER_COMMAND_STATUS )
+		if not response:
+			return None
+
+		# parse response
+		res = []
+
+		p = 8
+		max_ = len(response)
+
+		while p<max_:
+			length = unpack ( '>L', response[p:p+4] )[0]
+			k = response[p+4:p+length+4]
+			p += 4+length
+			length = unpack ( '>L', response[p:p+4] )[0]
+			v = response[p+4:p+length+4]
+			p += 4+length
+			res += [[k, v]]
 
 		return res
 

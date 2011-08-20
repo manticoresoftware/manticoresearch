@@ -144,7 +144,7 @@ enum
 {
 	SPHINX_SEARCHD_PROTO	= 1,
 	SEARCHD_COMMAND_SEARCH	= 0,
-	VER_COMMAND_SEARCH		= 0x117,
+	VER_COMMAND_SEARCH		= 0x119,
 };
 
 /// search query sorting orders
@@ -212,7 +212,8 @@ enum
 	SPH_ATTR_BIGINT		= 6,
 	SPH_ATTR_STRING		= 7,			///< string (binary; in-memory)
 
-	SPH_ATTR_MULTI		= 0x40000000UL	///< this attr has multiple values (0 or more)
+	SPH_ATTR_UINT32SET		= 0x40000001UL,	///< this attr is multiple int32 values (0 or more)
+	SPH_ATTR_UINT64SET		= 0x40000002UL	///< this attr is multiple int64 values (0 or more)
 };
 
 /// known answers
@@ -1808,7 +1809,7 @@ int CSphSEQuery::BuildRequest ( char ** ppBuffer )
 	SPH_ENTER_METHOD();
 
 	// calc request length
-	int iReqSize = 124 + 4*m_iWeights
+	int iReqSize = 128 + 4*m_iWeights
 		+ strlen ( m_sSortBy )
 		+ strlen ( m_sQuery )
 		+ strlen ( m_sIndex )
@@ -1861,6 +1862,7 @@ int CSphSEQuery::BuildRequest ( char ** ppBuffer )
 	SendWord ( SEARCHD_COMMAND_SEARCH ); // command id
 	SendWord ( VER_COMMAND_SEARCH ); // command version
 	SendInt ( iReqSize-8 ); // packet body length
+	SendInt ( 0 ); // its a client
 
 	SendInt ( 1 ); // number of queries
 	SendInt ( m_iOffset );
@@ -2567,7 +2569,7 @@ bool ha_sphinx::UnpackStats ( CSphSEStats * pStats )
 		m_pCur += m_bId64 ? 12 : 8; // skip id+weight
 		for ( uint32 i=0; i<m_iAttrs && m_pCur<m_pResponseEnd-sizeof(uint32); i++ ) // NOLINT
 		{
-			if ( m_dAttrs[i].m_uType & SPH_ATTR_MULTI )
+			if ( m_dAttrs[i].m_uType==SPH_ATTR_UINT32SET || m_dAttrs[i].m_uType==SPH_ATTR_UINT64SET )
 			{
 				// skip MVA list
 				uint32 uCount = UnpackDword ();
@@ -2937,7 +2939,7 @@ int ha_sphinx::get_rec ( byte * buf, const byte *, uint )
 		if ( m_dAttrs[i].m_iField<0 )
 		{
 			// skip MVA
-			if ( m_dAttrs[i].m_uType & SPH_ATTR_MULTI )
+			if ( m_dAttrs[i].m_uType==SPH_ATTR_UINT32SET || m_dAttrs[i].m_uType==SPH_ATTR_UINT64SET )
 				for ( ; uValue>0 && !m_bUnpackError; uValue-- )
 					UnpackDword();
 			continue;
@@ -2977,7 +2979,8 @@ int ha_sphinx::get_rec ( byte * buf, const byte *, uint )
 				}
 				break;
 
-			case ( SPH_ATTR_MULTI | SPH_ATTR_INTEGER ):
+			case SPH_ATTR_UINT64SET:
+			case SPH_ATTR_UINT32SET :
 				if ( uValue<=0 )
 				{
 					// shortcut, empty MVA set
@@ -2989,15 +2992,32 @@ int ha_sphinx::get_rec ( byte * buf, const byte *, uint )
 					char sBuf[1024]; // FIXME! magic size
 					char * pCur = sBuf;
 
-					for ( ; uValue>0 && !m_bUnpackError; uValue-- )
+					if ( m_dAttrs[i].m_uType==SPH_ATTR_UINT32SET )
 					{
-						uint32 uEntry = UnpackDword ();
-						if ( pCur < sBuf+sizeof(sBuf)-16 ) // 10 chars per 32bit value plus some safety bytes
+						for ( ; uValue>0 && !m_bUnpackError; uValue-- )
 						{
-							snprintf ( pCur, sBuf+sizeof(sBuf)-pCur, "%u", uEntry );
-							while ( *pCur ) *pCur++;
-							if ( uValue>1 )
-								*pCur++ = ','; // non-trailing commas
+							uint32 uEntry = UnpackDword ();
+							if ( pCur < sBuf+sizeof(sBuf)-16 ) // 10 chars per 32bit value plus some safety bytes
+							{
+								snprintf ( pCur, sBuf+sizeof(sBuf)-pCur, "%u", uEntry );
+								while ( *pCur ) *pCur++;
+								if ( uValue>1 )
+									*pCur++ = ','; // non-trailing commas
+							}
+						}
+					} else
+					{
+						for ( ; uValue>0 && !m_bUnpackError; uValue-=2 )
+						{
+							uint64 uEntry = UnpackDword ();
+							uEntry = ( uEntry<<32 ) | UnpackDword();
+							if ( pCur < sBuf+sizeof(sBuf)-24 ) // 20 chars per 64bit value plus some safety bytes
+							{
+								snprintf ( pCur, sBuf+sizeof(sBuf)-pCur, "%llu", uEntry );
+								while ( *pCur ) *pCur++;
+								if ( uValue>2 )
+									*pCur++ = ','; // non-trailing commas
+							}
 						}
 					}
 

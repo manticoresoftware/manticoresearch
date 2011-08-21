@@ -7,7 +7,9 @@
 #endif
 
 
-#if MYSQL_VERSION_ID>50100
+#if MYSQL_VERSION_ID>=50515
+#define TABLE_ARG	TABLE_SHARE
+#elif MYSQL_VERSION_ID>50100
 #define TABLE_ARG	st_table_share
 #else
 #define TABLE_ARG	st_table
@@ -47,7 +49,7 @@ protected:
 
 public:
 #if MYSQL_VERSION_ID<50100
-					ha_sphinx ( TABLE_ARG * table_arg );
+					ha_sphinx ( TABLE_ARG * table_arg ); // NOLINT
 #else
 					ha_sphinx ( handlerton * hton, TABLE_ARG * table_arg );
 #endif
@@ -90,7 +92,7 @@ public:
 	int				index_init ( uint keynr, bool sorted ); // 5.1.x
 	int				index_init ( uint keynr ) { return index_init ( keynr, false ); } // 5.0.x
 
-	int				index_end (); 
+	int				index_end ();
 	int				index_read ( byte * buf, const byte * key, uint key_len, enum ha_rkey_function find_flag );
 	int				index_read_idx ( byte * buf, uint idx, const byte * key, uint key_len, enum ha_rkey_function find_flag );
 	int				index_next ( byte * buf );

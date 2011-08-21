@@ -24,7 +24,10 @@
 
 #include <mysql_version.h>
 
-#if MYSQL_VERSION_ID>50100
+#if MYSQL_VERSION_ID>=50515
+#include "sql_class.h"
+#include "sql_array.h"
+#elif MYSQL_VERSION_ID>50100
 #include "mysql_priv.h"
 #include <mysql/plugin.h>
 #else
@@ -116,6 +119,22 @@ void sphUnalignedWrite ( void * pPtr, const T & tVal )
 	for ( int i=0; i<(int)sizeof(T); i++ )
 		*pDst++ = *pSrc++;
 }
+
+#endif
+
+#if MYSQL_VERSION_ID>=50515
+
+#define sphinx_hash_init my_hash_init
+#define sphinx_hash_free my_hash_free
+#define sphinx_hash_search my_hash_search
+#define sphinx_hash_delete my_hash_delete
+
+#else
+
+#define sphinx_hash_init hash_init
+#define sphinx_hash_free hash_free
+#define sphinx_hash_search hash_search
+#define sphinx_hash_delete hash_delete
 
 #endif
 
@@ -675,8 +694,8 @@ static int sphinx_init_func ( void * p )
 	if ( !sphinx_init )
 	{
 		sphinx_init = 1;
-		VOID ( pthread_mutex_init ( &sphinx_mutex, MY_MUTEX_INIT_FAST ) );
-		hash_init ( &sphinx_open_tables, system_charset_info, 32, 0, 0,
+		void ( pthread_mutex_init ( &sphinx_mutex, MY_MUTEX_INIT_FAST ) );
+		sphinx_hash_init ( &sphinx_open_tables, system_charset_info, 32, 0, 0,
 			sphinx_get_key, 0, 0 );
 
 		#if MYSQL_VERSION_ID > 50100
@@ -726,7 +745,7 @@ static int sphinx_done_func ( void * )
 		sphinx_init = 0;
 		if ( sphinx_open_tables.records )
 			error = 1;
-		hash_free ( &sphinx_open_tables );
+		sphinx_hash_free ( &sphinx_open_tables );
 		pthread_mutex_destroy ( &sphinx_mutex );
 	}
 
@@ -1131,12 +1150,12 @@ static CSphSEShare * get_share ( const char * table_name, TABLE * table )
 	{
 		// check if we already have this share
 #if MYSQL_VERSION_ID>=50120
-		pShare = (CSphSEShare*) hash_search ( &sphinx_open_tables, (const uchar *) table_name, strlen(table_name) );
+		pShare = (CSphSEShare*) sphinx_hash_search ( &sphinx_open_tables, (const uchar *) table_name, strlen(table_name) );
 #else
 #ifdef __WIN__
-		pShare = (CSphSEShare*) hash_search ( &sphinx_open_tables, (const byte *) table_name, strlen(table_name) );
+		pShare = (CSphSEShare*) sphinx_hash_search ( &sphinx_open_tables, (const byte *) table_name, strlen(table_name) );
 #else
-		pShare = (CSphSEShare*) hash_search ( &sphinx_open_tables, table_name, strlen(table_name) );
+		pShare = (CSphSEShare*) sphinx_hash_search ( &sphinx_open_tables, table_name, strlen(table_name) );
 #endif // win
 #endif // pre-5.1.20
 
@@ -1188,7 +1207,7 @@ static int free_share ( CSphSEShare * pShare )
 
 	if ( !--pShare->m_iUseCount )
 	{
-		hash_delete ( &sphinx_open_tables, (byte *)pShare );
+		sphinx_hash_delete ( &sphinx_open_tables, (byte *)pShare );
 		SafeDelete ( pShare );
 	}
 
@@ -2073,15 +2092,29 @@ int ha_sphinx::Connect ( const char * sHost, ushort uPort )
 		} else
 		{
 			int tmp_errno;
+			bool bError = false;
+
+#if MYSQL_VERSION_ID>=50515
+			struct addrinfo tmp_hostent, *hp;
+			tmp_errno = getaddrinfo ( sHost, NULL, &tmp_hostent, &hp );
+			if ( !tmp_errno )
+			{
+				freeaddrinfo ( hp );
+				bError = true;
+			}
+#else
 			struct hostent tmp_hostent, *hp;
 			char buff2 [ GETHOSTBYNAME_BUFF_SIZE ];
-
-			hp = my_gethostbyname_r ( sHost, &tmp_hostent,
-				buff2, sizeof(buff2), &tmp_errno );
+			hp = my_gethostbyname_r ( sHost, &tmp_hostent, buff2, sizeof(buff2), &tmp_errno );
 			if ( !hp )
 			{
 				my_gethostbyname_r_free();
+				bError = true;
+			}
+#endif
 
+			if ( bError )
+			{
 				char sError[256];
 				my_snprintf ( sError, sizeof(sError), "failed to resolve searchd host (name=%s)", sHost );
 
@@ -2089,9 +2122,13 @@ int ha_sphinx::Connect ( const char * sHost, ushort uPort )
 				SPH_RET(-1);
 			}
 
-			memcpy ( &sin.sin_addr, hp->h_addr,
-				Min ( sizeof(sin.sin_addr), (size_t)hp->h_length ) );
+#if MYSQL_VERSION_ID>=50515
+			memcpy ( &sin.sin_addr, hp->ai_addr, Min ( sizeof(sin.sin_addr), (size_t)hp->ai_addrlen ) );
+			freeaddrinfo ( hp );
+#else
+			memcpy ( &sin.sin_addr, hp->h_addr, Min ( sizeof(sin.sin_addr), (size_t)hp->h_length ) );
 			my_gethostbyname_r_free();
+#endif
 		}
 	} else
 	{
@@ -2932,7 +2969,7 @@ int ha_sphinx::get_rec ( byte * buf, const byte *, uint )
 
 	for ( uint32 i=0; i<m_iAttrs; i++ )
 	{
-		longlong iValue64;
+		longlong iValue64 = 0;
 		uint32 uValue = UnpackDword ();
 		if ( m_dAttrs[i].m_uType==SPH_ATTR_BIGINT )
 			iValue64 = ( (longlong)uValue<<32 ) | UnpackDword();

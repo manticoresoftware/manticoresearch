@@ -6646,21 +6646,27 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 
 
 // check expressions into a query to make sure that it's ready for multi query optimization
-static bool HasExpresions ( const CSphQuery & tQuery )
+static bool HasExpresions ( const CSphQuery & tQuery, const CSphVector<CSphNamedInt>& m_dIndices )
 {
-	const ServedIndex_t * pServedIndex = g_pIndexes->GetRlockedEntry ( tQuery.m_sIndexes );
 
-	// check that it exists
-	if ( !pServedIndex )
-		return false;
+	ARRAY_FOREACH ( i, m_dIndices )
+	{
+		const ServedIndex_t * pServedIndex = g_pIndexes->GetRlockedEntry ( m_dIndices[i].m_sName );
 
-	bool bHasExpression = false;
-	if ( pServedIndex->m_bEnabled )
-		bHasExpression = sphHasExpressions ( tQuery, pServedIndex->m_pIndex->GetMatchSchema() );
+		// check that it exists
+		if ( !pServedIndex )
+			return false;
 
-	pServedIndex->Unlock();
+		bool bHasExpression = false;
+		if ( pServedIndex->m_bEnabled )
+			bHasExpression = sphHasExpressions ( tQuery, pServedIndex->m_pIndex->GetMatchSchema() );
 
-	return bHasExpression;
+		pServedIndex->Unlock();
+
+		if ( bHasExpression )
+			return true;
+	}
+	return false;
 }
 
 
@@ -6722,11 +6728,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			}
 	}
 
-	// select lists must have no expressions
-	for ( int iCheck=iStart; iCheck<=iEnd && m_bMultiQueue; iCheck++ )
-	{
-		m_bMultiQueue = !HasExpresions ( m_dQueries[iCheck] );
-	}
 	////////////////////////////
 	// build local indexes list
 	////////////////////////////
@@ -6874,6 +6875,12 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 		pFirstIndex->Unlock ();
 		break;
+	}
+
+	// select lists must have no expressions
+	for ( int iCheck=iStart; iCheck<=iEnd && m_bMultiQueue; iCheck++ )
+	{
+		m_bMultiQueue = !HasExpresions ( m_dQueries[iCheck], m_dLocal );
 	}
 
 	// these are mutual exclusive

@@ -195,6 +195,83 @@ public:
 	}
 };
 
+/// collector for UPDATE statement
+class CSphUpdateQueue : public CSphMatchQueueTraits
+{
+	CSphAttrUpdateEx*	m_pUpdate;
+private:
+	void DoUpdate()
+	{
+		if ( !m_iUsed )
+			return;
+
+		CSphAttrUpdate tSet;
+		tSet.m_dAttrs = m_pUpdate->m_pUpdate->m_dAttrs;
+		tSet.m_dPool = m_pUpdate->m_pUpdate->m_dPool;
+		tSet.m_dRowOffset.Resize ( m_iUsed );
+		if ( !DOCINFO2ID ( STATIC2DOCINFO ( m_pData->m_pStatic ) ) ) // if static attrs were copied, so, they actually dynamic
+		{
+			tSet.m_dDocids.Resize ( m_iUsed );
+			ARRAY_FOREACH ( i, tSet.m_dDocids )
+			{
+				tSet.m_dDocids[i] = m_pData[i].m_iDocID;
+				tSet.m_dRowOffset[i] = 0;
+			}
+		} else // static attrs points to the active indexes - so, no lookup, 5 times faster update.
+		{
+			tSet.m_dRows.Resize ( m_iUsed );
+			ARRAY_FOREACH ( i, tSet.m_dRows )
+			{
+				tSet.m_dRows[i] = m_pData[i].m_pStatic - ( sizeof(SphDocID_t) / sizeof(CSphRowitem) );
+				tSet.m_dRowOffset[i] = 0;
+			}
+		}
+
+		m_pUpdate->m_iAffected += m_pUpdate->m_pIndex->UpdateAttributes ( tSet, -1, *m_pUpdate->m_pError );
+		m_iUsed = 0;
+	}
+public:
+	/// ctor
+	CSphUpdateQueue ( int iSize, CSphAttrUpdateEx* pUpdate )
+		: CSphMatchQueueTraits ( iSize, true )
+		, m_pUpdate ( pUpdate )
+	{}
+
+	/// check if this sorter does groupby
+	virtual bool IsGroupby () const
+	{
+		return false;
+	}
+
+	/// add entry to the queue
+	virtual bool Push ( const CSphMatch & tEntry )
+	{
+		m_iTotal++;
+
+		if ( m_iUsed==m_iSize )
+			DoUpdate();
+
+		// do add
+		m_pData[m_iUsed++].Clone ( tEntry, m_tSchema.GetDynamicSize() );
+		return true;
+	}
+
+	/// add grouped entry (must not happen)
+	virtual bool PushGrouped ( const CSphMatch & )
+	{
+		assert ( 0 );
+		return false;
+	}
+
+	/// store all entries into specified location in sorted order, and remove them from queue
+	void Flatten ( CSphMatch *, int )
+	{
+		assert ( m_iUsed>=0 );
+		DoUpdate();
+		m_iTotal = 0;
+	}
+};
+
 //////////////////////////////////////////////////////////////////////////
 // SORTING+GROUPING QUEUE
 //////////////////////////////////////////////////////////////////////////
@@ -2577,7 +2654,8 @@ CSphGrouper * sphCreateGrouperString ( const CSphAttrLocator & tLoc, ESphCollati
 // SORTING QUEUE FACTORY
 /////////////////////////
 
-ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError, bool bComputeItems, CSphSchema * pExtra )
+ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema,
+								CSphString & sError, bool bComputeItems, CSphSchema * pExtra, CSphAttrUpdateEx* pUpdate )
 {
 	// prepare for descent
 	ISphMatchSorter * pTop = NULL;
@@ -2956,20 +3034,24 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 
 	if ( !bGotGroupby )
 	{
-		switch ( eMatchFunc )
-		{
-			case FUNC_REL_DESC:	pTop = new CSphMatchQueue<MatchRelevanceLt_fn>	( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-			case FUNC_ATTR_DESC:pTop = new CSphMatchQueue<MatchAttrLt_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-			case FUNC_ATTR_ASC:	pTop = new CSphMatchQueue<MatchAttrGt_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-			case FUNC_TIMESEGS:	pTop = new CSphMatchQueue<MatchTimeSegments_fn>	( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-			case FUNC_GENERIC2:	pTop = new CSphMatchQueue<MatchGeneric2_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-			case FUNC_GENERIC3:	pTop = new CSphMatchQueue<MatchGeneric3_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-			case FUNC_GENERIC4:	pTop = new CSphMatchQueue<MatchGeneric4_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-			case FUNC_GENERIC5:	pTop = new CSphMatchQueue<MatchGeneric5_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-			case FUNC_CUSTOM:	pTop = new CSphMatchQueue<MatchCustom_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-			case FUNC_EXPR:		pTop = new CSphMatchQueue<MatchExpr_fn>			( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-			default:			pTop = NULL;
-		}
+		if ( pUpdate )
+			pTop = new CSphUpdateQueue ( pQuery->m_iMaxMatches, pUpdate );
+		else
+			switch ( eMatchFunc )
+			{
+				case FUNC_REL_DESC:	pTop = new CSphMatchQueue<MatchRelevanceLt_fn>	( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_ATTR_DESC:pTop = new CSphMatchQueue<MatchAttrLt_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_ATTR_ASC:	pTop = new CSphMatchQueue<MatchAttrGt_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_TIMESEGS:	pTop = new CSphMatchQueue<MatchTimeSegments_fn>	( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_GENERIC2:	pTop = new CSphMatchQueue<MatchGeneric2_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_GENERIC3:	pTop = new CSphMatchQueue<MatchGeneric3_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_GENERIC4:	pTop = new CSphMatchQueue<MatchGeneric4_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_GENERIC5:	pTop = new CSphMatchQueue<MatchGeneric5_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_CUSTOM:	pTop = new CSphMatchQueue<MatchCustom_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_EXPR:		pTop = new CSphMatchQueue<MatchExpr_fn>			( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				default:			pTop = NULL;
+			}
+
 	} else
 	{
 		pTop = sphCreateSorter1st ( eMatchFunc, eGroupFunc, pQuery, tSettings );

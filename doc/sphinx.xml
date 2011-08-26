@@ -4522,13 +4522,15 @@ Query OK, 0 rows affected (0.00 sec)
 
 <sect1 id="sphinxql-update"><title>UPDATE syntax</title>
 <programlisting>
-UPDATE index SET col1 = newval1 [, ...] WHERE ID = docid
+UPDATE index SET col1 = newval1 [, ...] WHERE where_condition
 </programlisting>
 <para>
 UPDATE statement was added in version 2.0.1-beta. It can currently
 update 32-bit integer attributes only. Multiple attributes and values
 can be specified. Both RT and disk indexes are supported.
 Updates on other attribute types are also planned.
+</para>
+<para><code>where_condition</code> uses the same syntax as in SELECT statement (Refer to <xref linkend="sphinxql-select"/> for details).
 </para>
 <programlisting>
 mysql> UPDATE myindex SET enabled=0 WHERE id=123;

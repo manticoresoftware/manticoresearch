@@ -2138,12 +2138,10 @@ public:
 	{
 		assert ( iIdx < iTOTALBITS );
 		if ( iIdx<0 )
-		{
 			for ( int i=0; i<IELEMENTS; i++ )
 				m_dFieldsMask[i] = uALLBITS;
-			return;
-		}
-		m_dFieldsMask[iIdx/iELEMBITS] |= 1UL << ( iIdx & ( iELEMBITS-1 ) );
+		else
+			m_dFieldsMask[iIdx/iELEMBITS] |= 1UL << ( iIdx & ( iELEMBITS-1 ) );
 	}
 
 	// unset n-th bit, or all
@@ -2151,12 +2149,10 @@ public:
 	{
 		assert ( iIdx < iTOTALBITS );
 		if ( iIdx<0 )
-		{
 			for ( int i=0; i<IELEMENTS; i++ )
 				m_dFieldsMask[i] = 0UL;
-			return;
-		}
-		m_dFieldsMask[iIdx/iELEMBITS] &= ~(1UL << ( iIdx & ( iELEMBITS-1 ) ));
+		else
+			m_dFieldsMask[iIdx/iELEMBITS] &= ~(1UL << ( iIdx & ( iELEMBITS-1 ) ));
 	}
 
 	// test if n-th bit is set
@@ -2183,12 +2179,6 @@ public:
 			if ( m_dFieldsMask[i]!=uTest )
 				return false;
 		return true;
-	}
-
-	// returns number or set bits in low 32 DWORD
-	unsigned short NumOfBits32 () const
-	{
-		return (unsigned short) sphBitCount ( GetMask32() );
 	}
 
 	friend CSphSmallBitvec operator & ( const CSphSmallBitvec& dFirst, const CSphSmallBitvec& dSecond );
@@ -2311,14 +2301,14 @@ public:
 		assert ( m_pData );
 		assert ( iIndex>=0 );
 		assert ( iIndex<m_iElements );
-		return ( m_pData [ iIndex>>5 ] & ( 1UL<<( iIndex&31 ) ) )!=0;
+		return ( m_pData [ iIndex>>5 ] & ( 1UL<<( iIndex&31 ) ) )!=0; // NOLINT
 	}
 
 	void BitSet ( int iIndex )
 	{
 		assert ( iIndex>=0 );
 		assert ( iIndex<m_iElements );
-		m_pData [ iIndex>>5 ] |= ( 1UL<<( iIndex&31 ) );
+		m_pData [ iIndex>>5 ] |= ( 1UL<<( iIndex&31 ) ); // NOLINT
 	}
 };
 

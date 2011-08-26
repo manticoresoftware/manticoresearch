@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>Smart attribute updates</name>
+
+<requires> <variant_match /> </requires>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+	binlog_path = #
+}
+
+source src
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT id, text, section, mva1 FROM test_table WHERE id&lt;4
+	sql_attr_uint	= section
+<Dynamic>	
+	<Variant>sql_attr_multi = uint mva1 from field mva1</Variant>
+	<Variant>sql_attr_multi = bigint mva1 from field mva1</Variant>
+</Dynamic>	
+}
+
+source src1 : src
+{
+	sql_query = SELECT id, text, section, mva1 FROM test_table WHERE id&lt;3
+}
+
+source src2 : src
+{
+	sql_query = SELECT id, text, section, mva1 FROM test_table WHERE id=3
+}
+
+index dist_no
+{
+	source			= src
+	path			= <data_path/>/idx
+	docinfo			= extern
+	charset_type	= utf-8
+	min_word_len	= 1
+}
+
+index idx1 : dist_no
+{
+	source			= src1
+	path			= <data_path/>/idx1
+}
+
+index idx2 : dist_no
+{
+	source			= src2
+	path			= <data_path/>/idx2
+}
+
+index dist0
+{
+	type					= distributed
+	local					= dist_no
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist1
+{
+	type					= distributed
+	local					= idx1
+	local					= idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist2
+{
+	type					= distributed
+	agent					= <my_address/>:idx1
+	local					= idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist3
+{
+	type					= distributed
+	local					= idx1
+	agent					= <my_address/>:idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist4
+{
+	type					= distributed
+	agent					= <my_address/>:idx1
+	agent					= <my_address/>:idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist5
+{
+	type					= distributed
+	agent					= <my_address/>:dist_no
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index rt
+{
+	type = rt
+	path			= <data_path/>/rt
+	charset_type 	= utf-8
+	docinfo			= extern
+
+	rt_field			= body
+	rt_attr_multi	= mva1
+	rt_attr_uint	= gid
+	rt_attr_multi	= mva2
+}
+
+</config>
+
+<sphqueries>
+<sphinxql>insert into rt (id, gid, mva1, mva2, body) values (1, 11, (1, 1), (2), 'dummy'), (3, 33, (3, 3), (3), 'dummy1')</sphinxql>
+<sphinxql>update dist_no set mva1=(3,2, 1, 2), mva1=(1, 2), section=111 where match ('test1')</sphinxql>
+<sphinxql>select * from dist_no</sphinxql>
+<sphinxql>update dist0 set mva1=(4,5, 1, 2), mva1=(8, 7), section=112 where match ('test1')</sphinxql>
+<sphinxql>select * from dist0</sphinxql>
+<sphinxql>update dist1 set mva1=(3,2, 1, 2), mva1=(9, 10), section=113 where match ('testt') and id>=2</sphinxql>
+<sphinxql>select * from dist1</sphinxql>
+<sphinxql>update dist2 set mva1=(3,2, 1, 2), mva1=(11, 12), section=114 where match ('testt') and id>=2</sphinxql>
+<sphinxql>select * from dist2</sphinxql>
+<sphinxql>update dist3 set mva1=(3,2, 1, 2), mva1=(13, 14), section=115 where gid match ('testt') and id>=2</sphinxql>
+<sphinxql>select * from dist3</sphinxql>
+<sphinxql>update dist4 set mva1=(3,2, 1, 2), mva1=(15, 16), section=116 where match ('testt') and id>=2</sphinxql>
+<sphinxql>select * from dist4</sphinxql>
+<sphinxql>update dist5 set mva1=(3,2, 1, 2), mva1=(17, 18), section=117 where match ('testt') and id>=2</sphinxql>
+<sphinxql>select * from dist5</sphinxql>
+<sphinxql>update rt set mva1=(3,2, 1, 2), gid=3212, mva2=(1, 2, 3, 4, 5, 6), mva2=(3,4,5) where id=1</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+</sphqueries>
+
+  <DB_Create>
+CREATE TABLE `test_table` (
+  `id` int(11) DEFAULT NULL,
+  `text` varchar (255) NOT NULL,
+  `section` int(11) DEFAULT NULL,
+  `mva1` varchar(255) NOT NULL  
+)
+  </DB_Create>
+
+  <DB_Drop>
+DROP TABLE IF EXISTS `test_table`
+  </DB_Drop>
+
+  <DB_Insert>
+INSERT INTO `test_table` (`id`, `text`, `section`, `mva1`) VALUES 
+(1, 'test test1', 101, '1001'),
+(2, 'testt test2', 102, '1002 1023 4456'),
+(3, 'test test3', 103, '1003 1008 1010'),
+(4, 'testt test4', 104, '1004 1005 1006');
+  </DB_Insert>
+  
+</test>

@@ -740,13 +740,10 @@ show_tables:
 //////////////////////////////////////////////////////////////////////////
 
 update:
-	TOK_UPDATE TOK_IDENT TOK_SET update_items_list TOK_WHERE TOK_ID '=' const_int
+	TOK_UPDATE ident_list TOK_SET update_items_list where_clause
 		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_UPDATE;
-			tStmt.m_sIndex = $2.m_sValue;	
-			tStmt.m_tUpdate.m_dDocids.Add ( (SphDocID_t) $8.m_iValue );
-			tStmt.m_tUpdate.m_dRowOffset.Add ( 0 );
+			if ( !pParser->UpdateStatement ( &$2 ) )
+				YYERROR;
 		}
 	;
 
@@ -758,44 +755,15 @@ update_items_list:
 update_item:
 	TOK_IDENT '=' const_int
 		{
-			CSphAttrUpdate & tUpd = pParser->m_pStmt->m_tUpdate;
-			CSphColumnInfo & tAttr = tUpd.m_dAttrs.Add();
-			tAttr.m_sName = $1.m_sValue;
-			tAttr.m_sName.ToLower();
-			tAttr.m_eAttrType = SPH_ATTR_INTEGER; // sorry, ints only for now, riding on legacy shit!
-			tUpd.m_dPool.Add ( (DWORD) $3.m_iValue );
+			pParser->UpdateAttr ( $1.m_sValue, (DWORD) $3.m_iValue );
 		}
 	| TOK_IDENT '='  '(' const_list ')'
 		{
-			CSphAttrUpdate & tUpd = pParser->m_pStmt->m_tUpdate;
-			CSphColumnInfo & tAttr = tUpd.m_dAttrs.Add();
-			tAttr.m_sName = $1.m_sValue;
-			tAttr.m_sName.ToLower();
-			assert ( $4.m_pValues.Ptr() && $4.m_pValues->GetLength()>0 );
-			$4.m_pValues->Uniq(); // don't need dupes within MVA
-			tUpd.m_dPool.Add ( $4.m_pValues->GetLength()*2 );
-			tAttr.m_eAttrType = SPH_ATTR_UINT32SET;
-			SphAttr_t * pVal = $4.m_pValues.Ptr()->Begin();
-			SphAttr_t * pValMax = pVal + $4.m_pValues->GetLength();
-			for ( ;pVal<pValMax; pVal++ )
-			{
-				SphAttr_t uVal = *pVal;
-				if ( uVal>UINT_MAX )
-				{
-					tAttr.m_eAttrType = SPH_ATTR_UINT64SET;
-				}
-				tUpd.m_dPool.Add ( (DWORD)uVal );
-				tUpd.m_dPool.Add ( (DWORD)( uVal>>32 ) );
-			}
+			pParser->UpdateMVAAttr ( $1.m_sValue, $4 );
 		}
 	| TOK_IDENT '='  '(' ')' // special case () means delete mva
 		{
-			CSphAttrUpdate & tUpd = pParser->m_pStmt->m_tUpdate;
-			CSphColumnInfo & tAttr = tUpd.m_dAttrs.Add();
-			tAttr.m_sName = $1.m_sValue;
-			tAttr.m_sName.ToLower();
-			tAttr.m_eAttrType = SPH_ATTR_UINT32SET;
-			tUpd.m_dPool.Add ( 0 );
+			pParser->UpdateAttr ( $1.m_sValue, NULL, SPH_ATTR_UINT32SET );
 		}
 	;
 

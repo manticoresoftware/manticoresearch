@@ -37,6 +37,7 @@
 #define SPH_ADDRESS_SIZE		sizeof("000.000.000.000")
 #define SPH_ADDRPORT_SIZE		sizeof("000.000.000.000:00000")
 #define MVA_UPDATES_POOL		1048576
+#define NETOUTBUF				8192
 
 
 // don't shutdown on SIGKILL (debug purposes)
@@ -449,6 +450,7 @@ enum SearchdCommand_e
 	SEARCHD_COMMAND_PERSIST		= 4,
 	SEARCHD_COMMAND_STATUS		= 5,
 	SEARCHD_COMMAND_FLUSHATTRS	= 7,
+	SEARCHD_COMMAND_SPHINXQL	= 8,
 
 	SEARCHD_COMMAND_TOTAL
 };
@@ -462,7 +464,8 @@ enum
 	VER_COMMAND_UPDATE		= 0x102,
 	VER_COMMAND_KEYWORDS	= 0x100,
 	VER_COMMAND_STATUS		= 0x100,
-	VER_COMMAND_FLUSHATTRS	= 0x100
+	VER_COMMAND_FLUSHATTRS	= 0x100,
+	VER_COMMAND_SPHINXQL	= 0x100
 };
 
 
@@ -2247,16 +2250,21 @@ public:
 	bool		SendString ( const char * sStr );
 	bool		SendMysqlString ( const char * sStr );
 
-	bool		Flush ();
+	bool		Flush ( bool bUnfreeze=false );
 	bool		GetError () { return m_bError; }
 	int			GetSentCount () { return m_iSent; }
+	void		FreezeBlock ( const char * sError, int iLen );
 
 protected:
-	BYTE		m_dBuffer[8192];	///< my buffer
+	BYTE		m_dBuffer[NETOUTBUF];	///< my buffer
 	BYTE *		m_pBuffer;			///< my current buffer position
 	int			m_iSock;			///< my socket
 	bool		m_bError;			///< if there were any write errors
 	int			m_iSent;
+	const char *m_sError;			///< fallback message if the frozen buf overloaded
+	int			m_iErrorLength;
+	bool		m_bFlushEnabled;	///< in frozen state we never flush until special command
+	BYTE *		m_pSize;			///< the pointer to the size of frozen block
 
 protected:
 	bool		SetError ( bool bValue );	///< set error flag
@@ -2347,6 +2355,7 @@ NetOutputBuffer_c::NetOutputBuffer_c ( int iSock )
 	, m_iSock ( iSock )
 	, m_bError ( false )
 	, m_iSent ( 0 )
+	, m_bFlushEnabled ( true )
 {
 	assert ( m_iSock>0 );
 }
@@ -2435,6 +2444,38 @@ void * MysqlPack ( void * pBuffer, int iValue )
 	return (void*)pOutput;
 }
 
+int MysqlUnpack ( InputBuffer_c & tReq, DWORD * pSize )
+{
+	assert ( pSize );
+
+	int iRes = tReq.GetByte();
+	--*pSize;
+	if ( iRes < 251 )
+		return iRes;
+
+	if ( iRes==0xFC )
+	{
+		*pSize -=2;
+		return tReq.GetByte() + ((int)tReq.GetByte()<<8);
+	}
+
+	if ( iRes==0xFD )
+	{
+		*pSize -= 3;
+		return tReq.GetByte() + ((int)tReq.GetByte()<<8) + ((int)tReq.GetByte()<<16);
+	}
+
+	if ( iRes==0xFE )
+		iRes = tReq.GetByte() + ((int)tReq.GetByte()<<8) + ((int)tReq.GetByte()<<16) + ((int)tReq.GetByte()<<24);
+
+	tReq.GetByte();
+	tReq.GetByte();
+	tReq.GetByte();
+	tReq.GetByte();
+	*pSize -= 8;
+	return iRes;
+}
+
 
 bool NetOutputBuffer_c::SendMysqlString ( const char * sStr )
 {
@@ -2474,7 +2515,7 @@ bool NetOutputBuffer_c::SendBytes ( const void * pBuf, int iLen )
 }
 
 
-bool NetOutputBuffer_c::Flush ()
+bool NetOutputBuffer_c::Flush ( bool bUnfreeze )
 {
 	if ( m_bError )
 		return false;
@@ -2485,6 +2526,26 @@ bool NetOutputBuffer_c::Flush ()
 
 	if ( g_bGotSigterm )
 		sphLogDebug ( "SIGTERM in NetOutputBuffer::Flush" );
+
+	if ( bUnfreeze )
+	{
+		BYTE * pBuf = m_pBuffer;
+		m_pBuffer = m_pSize;
+		SendDword ( pBuf-m_pSize-4 );
+		m_pBuffer = pBuf;
+		m_bFlushEnabled = true;
+	}
+
+	// buffer overloaded. It is fail. Send the error message.
+	if ( !m_bFlushEnabled )
+	{
+		sphLogDebug ( "NetOutputBuffer with disabled flush is overloaded" );
+		m_pBuffer = m_dBuffer;
+		SendBytes ( m_sError, m_iErrorLength );
+		iLen = m_pBuffer-m_dBuffer;
+		if ( iLen==0 )
+			return true;
+	}
 
 	assert ( iLen>0 );
 	assert ( iLen<=(int)sizeof(m_dBuffer) );
@@ -2555,6 +2616,16 @@ bool NetOutputBuffer_c::Flush ()
 
 	m_pBuffer = m_dBuffer;
 	return !m_bError;
+}
+
+void NetOutputBuffer_c::FreezeBlock ( const char * sError, int iLen )
+{
+	m_sError = sError;
+	m_iErrorLength = iLen;
+	m_bFlushEnabled = false;
+	// reserve the DWORD for the size
+	m_pSize = m_pBuffer;
+	SendDword ( 0 );
 }
 
 
@@ -6001,6 +6072,9 @@ public:
 	void							RunQueries ();					///< run all queries, get all results
 
 public:
+	void							SetUpdates ( CSphAttrUpdateEx * pUpdates ); ///< run Update command instead of Search
+
+public:
 	CSphVector<CSphQuery>			m_dQueries;						///< queries which i need to search
 	CSphVector<AggrResult_t>		m_dResults;						///< results which i obtained
 	CSphVector<SearchFailuresLog_c>	m_dFailuresSet;					///< failure logs for each query
@@ -6022,6 +6096,7 @@ protected:
 	mutable CSphVector<CSphSchemaMT>		m_dExtraSchemas; ///< the extra fields for agents
 	mutable CSphMutex				m_tLock;
 	bool							m_bSphinxql;	///< if the query get from sphinxql - to avoid applying sphinxql magick for others
+	CSphAttrUpdateEx *		m_pUpdates;				///< holder for updates
 
 	const ServedIndex_t *			UseIndex ( int iLocal ) const;
 	void							ReleaseIndex ( int iLocal ) const;
@@ -6037,6 +6112,7 @@ SearchHandler_c::SearchHandler_c ( int iQueries, bool bSphinxql )
 	m_dAgentTimes.Resize ( iQueries );
 	m_tLock.Init();
 	m_bSphinxql = bSphinxql;
+	m_pUpdates = NULL;
 
 	ARRAY_FOREACH ( i, m_dResults )
 	{
@@ -6099,6 +6175,10 @@ void SearchHandler_c::ReleaseIndex ( int iLocal ) const
 	m_tLock.Unlock();
 }
 
+void SearchHandler_c::SetUpdates ( CSphAttrUpdateEx * pUpdates )
+{
+	m_pUpdates = pUpdates;
+};
 
 void SearchHandler_c::RunQueries ()
 {
@@ -6422,7 +6502,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 		UnlockOnDestroy dSchemaLock ( pExtraSchemaMT );
 
 		assert ( !tQuery.m_iOldVersion || tQuery.m_iOldVersion>=0x102 );
-		ppSorters[i] = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchemaMT );
+		ppSorters[i] = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchemaMT, m_pUpdates );
 
 		if ( ppSorters[i] )
 			iValidSorters++;
@@ -6521,7 +6601,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 				}
 
 				// create queue
-				pSorter = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchema );
+				pSorter = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchema, m_pUpdates );
 				if ( !pSorter )
 				{
 					m_dFailuresSet[iQuery].Submit ( sLocal, sError.cstr() );
@@ -6648,7 +6728,6 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 // check expressions into a query to make sure that it's ready for multi query optimization
 static bool HasExpresions ( const CSphQuery & tQuery, const CSphVector<CSphNamedInt>& m_dIndices )
 {
-
 	ARRAY_FOREACH ( i, m_dIndices )
 	{
 		const ServedIndex_t * pServedIndex = g_pIndexes->GetRlockedEntry ( m_dIndices[i].m_sName );
@@ -7380,6 +7459,8 @@ struct SqlStmt_t
 
 	// UPDATE specific
 	CSphAttrUpdate			m_tUpdate;
+	int						m_iListStart; // < the position of start and end of index's definition in original query.
+	int						m_iListEnd;
 
 	// CREATE/DROP FUNCTION specific
 	CSphString				m_sUdfName;
@@ -7393,6 +7474,8 @@ struct SqlStmt_t
 		, m_eSet ( SET_LOCAL )
 		, m_iSetValue ( 0 )
 		, m_bSetNull ( false )
+		, m_iListStart ( -1 )
+		, m_iListEnd ( -1 )
 	{
 		m_tQuery.m_eMode = SPH_MATCH_EXTENDED2; // only new and shiny matching and sorting
 		m_tQuery.m_eSort = SPH_SORT_EXTENDED;
@@ -7494,8 +7577,12 @@ public:
 	int							AllocNamedVec ();
 	CSphVector<CSphNamedInt> &	GetNamedVec ( int iIndex );
 	void						FreeNamedVec ( int iIndex );
+	bool						UpdateStatement ( SqlNode_t * pNode );
+	void						UpdateAttr ( const CSphString&, DWORD uValue, ESphAttr eType = SPH_ATTR_INTEGER );
+	void						UpdateMVAAttr ( const CSphString& sName, const SqlNode_t& dValues );
 private:
 	void			AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
+	void			AddUpdatedAttr ( const CSphString&, ESphAttr eType );
 
 protected:
 	bool						m_bNamedVecBusy;
@@ -7853,6 +7940,53 @@ void SqlParser_c::SetStatement ( const YYSTYPE& tName, SqlSet_e eSet )
 	m_pStmt->m_eStmt = STMT_SET;
 	m_pStmt->m_eSet = eSet;
 	m_pStmt->m_sSetName = tName.m_sValue;
+}
+
+bool SqlParser_c::UpdateStatement ( SqlNode_t * pNode )
+{
+	m_pStmt->m_eStmt = STMT_UPDATE;
+	m_pStmt->m_iListStart = pNode->m_iStart;
+	m_pStmt->m_iListEnd = pNode->m_iEnd;
+	m_pStmt->m_sIndex.SetBinary ( m_pBuf + pNode->m_iStart, pNode->m_iEnd - pNode->m_iStart );
+	m_pStmt->m_tUpdate.m_dRowOffset.Add ( 0 );
+	return true;
+}
+
+void SqlParser_c::AddUpdatedAttr ( const CSphString& sName, ESphAttr eType )
+{
+	CSphAttrUpdate & tUpd = m_pStmt->m_tUpdate;
+	CSphColumnInfo & tAttr = tUpd.m_dAttrs.Add();
+	tAttr.m_sName = sName;
+	tAttr.m_sName.ToLower();
+	tAttr.m_eAttrType = eType; // sorry, ints only for now, riding on legacy shit!
+}
+
+void SqlParser_c::UpdateAttr ( const CSphString& sName, DWORD uValue, ESphAttr eType )
+{
+	AddUpdatedAttr ( sName, eType );
+	m_pStmt->m_tUpdate.m_dPool.Add ( uValue );
+}
+
+void SqlParser_c::UpdateMVAAttr ( const CSphString& sName, const SqlNode_t& dValues )
+{
+	CSphAttrUpdate & tUpd = m_pStmt->m_tUpdate;
+	assert ( dValues.m_pValues.Ptr() && dValues.m_pValues->GetLength()>0 );
+	dValues.m_pValues->Uniq(); // don't need dupes within MVA
+	tUpd.m_dPool.Add ( dValues.m_pValues->GetLength()*2 );
+	SphAttr_t * pVal = dValues.m_pValues.Ptr()->Begin();
+	SphAttr_t * pValMax = pVal + dValues.m_pValues->GetLength();
+	ESphAttr eType = SPH_ATTR_UINT32SET;
+	for ( ;pVal<pValMax; pVal++ )
+	{
+		SphAttr_t uVal = *pVal;
+		if ( uVal>UINT_MAX )
+		{
+			eType = SPH_ATTR_UINT64SET;
+		}
+		tUpd.m_dPool.Add ( (DWORD)uVal );
+		tUpd.m_dPool.Add ( (DWORD)( uVal>>32 ) );
+	}
+	AddUpdatedAttr ( sName, eType );
 }
 
 CSphFilterSettings * SqlParser_c::AddFilter ( const CSphString & sCol, ESphFilter eType )
@@ -9312,6 +9446,7 @@ void HandleCommandFlush ( int iSock, int iVer, InputBuffer_c & tReq )
 /////////////////////////////////////////////////////////////////////////////
 
 #define THD_STATE(_state) { if ( pThd ) pThd->m_eThdState = _state; }
+void HandleCommandSphinxql ( int iSock, int iVer, InputBuffer_c & tReq ); // definition is below
 
 void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 {
@@ -9455,6 +9590,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 				break;
 			case SEARCHD_COMMAND_STATUS:	HandleCommandStatus ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_FLUSHATTRS:HandleCommandFlush ( iSock, iCommandVer, tBuf ); break;
+			case SEARCHD_COMMAND_SPHINXQL:	HandleCommandSphinxql ( iSock, iCommandVer, tBuf ); break;
 			default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
 		}
 
@@ -9507,6 +9643,7 @@ enum MysqlColumnType_e
 	MYSQL_COL_LONGLONG	= 8,
 	MYSQL_COL_STRING	= 254
 };
+
 
 
 void SendMysqlFieldPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char * sCol, MysqlColumnType_e eType )
@@ -10276,33 +10413,132 @@ void HandleMysqlShowTables ( NetOutputBuffer_c & tOut, BYTE uPacketID )
 	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
 }
 
-//////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////
+// SMART UPDATES HANDLER
+/////////////////////////////////////////////////////////////////////////////
 
-void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt_t & tStmt, bool bCommit )
+struct SphinxqlRequestBuilder_t : public IRequestBuilder_t
 {
-	CSphString sError;
-
-	const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( tStmt.m_sIndex );
-	if ( !pServed )
+	explicit SphinxqlRequestBuilder_t ( const CSphString sQuery, const SqlStmt_t & tStmt )
 	{
-		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		m_sBegin.SetBinary ( sQuery.cstr(), tStmt.m_iListStart );
+		m_sEnd.SetBinary ( sQuery.cstr() + tStmt.m_iListEnd, sQuery.Length() - tStmt.m_iListEnd );
+	}
+	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut, int ) const;
+
+protected:
+	CSphString			m_sBegin;
+	CSphString			m_sEnd;
+};
+
+
+struct SphinxqlReplyParser_t : public IReplyParser_t
+{
+	explicit SphinxqlReplyParser_t ( int * pUpd, int * pWarns )
+		: m_pUpdated ( pUpd )
+		, m_pWarns ( pWarns )
+	{}
+
+	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t &, int ) const
+	{
+		DWORD uSize = ( tReq.GetLSBDword() & 0x00FFFFFF ) - 1;
+		BYTE uCommand = tReq.GetByte();
+		int iAffected = 0;
+		int iWarns = 0;
+		int iError = 0;
+		int iInsert_id = 0;
+		CSphString sMessage;
+		switch ( uCommand )
+		{
+		case 0: // ok packet
+			iAffected = MysqlUnpack ( tReq, &uSize );
+			iInsert_id = MysqlUnpack ( tReq, &uSize );
+			iWarns = tReq.GetLSBDword();
+			uSize -= 4;
+			if ( uSize )
+				sMessage = tReq.GetRawString ( uSize );
+			break;
+
+		case 0xff: // error packet
+			iError = tReq.GetByte() + ((int)tReq.GetByte()<<8);
+			uSize -= 2;
+			if ( uSize )
+				sMessage = tReq.GetRawString ( uSize );
+			break;
+		default:
+			break;
+		}
+
+		*m_pUpdated += iAffected;
+		return true;
+	}
+
+protected:
+	int * m_pUpdated;
+	int * m_pWarns;
+};
+
+
+void SphinxqlRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut, int ) const
+{
+	int iReqSize = strlen(sIndexes) + m_sBegin.Length() + m_sEnd.Length(); // indexes string
+
+	// header
+	tOut.SendDword ( SPHINX_SEARCHD_PROTO );
+	tOut.SendWord ( SEARCHD_COMMAND_SPHINXQL );
+	tOut.SendWord ( VER_COMMAND_SPHINXQL );
+	tOut.SendInt ( iReqSize + 4 );
+
+	tOut.SendInt ( iReqSize );
+	tOut.SendBytes ( m_sBegin.cstr(), m_sBegin.Length() );
+	tOut.SendBytes ( sIndexes, strlen(sIndexes) );
+	tOut.SendBytes ( m_sEnd.cstr(), m_sEnd.Length() );
+}
+
+//////////////////////////////////////////////////////////////////////////
+static void DoExtendedUpdate ( const char * sIndex, const SqlStmt_t & tStmt,
+							int & iSuccesses, int & iUpdated, bool bCommit,
+							SearchFailuresLog_c & dFails, const ServedIndex_t * pServed )
+{
+	if ( !pServed || !pServed->m_pIndex )
+	{
+		dFails.Submit ( sIndex, "index not available" );
 		return;
 	}
+
+	SearchHandler_c tHandler ( 1, true );
+	CSphAttrUpdateEx tUpdate;
+	CSphString sError;
+
+	tUpdate.m_pUpdate = &tStmt.m_tUpdate;
+	tUpdate.m_pIndex = pServed->m_pIndex;
+	tUpdate.m_pError = &sError;
+	tHandler.SetUpdates ( &tUpdate );
+
+	tHandler.m_dQueries[0] = tStmt.m_tQuery;
+	tHandler.m_dQueries[0].m_sIndexes = sIndex;
 
 	if ( !pServed->m_bEnabled )
 	{
-		pServed->Unlock();
 		sError.SetSprintf ( "index '%s' does not support Update (enabled=%d)", tStmt.m_sIndex.cstr(), pServed->m_bEnabled );
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		dFails.Submit ( sIndex, sError.cstr() );
 		return;
 	}
 
-	int iAffected = pServed->m_pIndex->UpdateAttributes ( tStmt.m_tUpdate, -1, sError );
-	if ( iAffected<0 )
+	CheckQuery ( tStmt.m_tQuery, tHandler.m_dResults[0].m_sError );
+	if ( !tHandler.m_dResults[0].m_sError.IsEmpty() )
 	{
-		pServed->Unlock();
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		sError.SetSprintf ( "%squery 0 error: %s ; ", sError.cstr(), tHandler.m_dResults[0].m_sError.cstr() );
+		dFails.Submit ( sIndex, sError.cstr() );
+		return;
+	}
+
+	// actual updating
+	tHandler.RunQueries ();
+
+	if ( sError.Length() )
+	{
+		dFails.Submit ( sIndex, sError.cstr() );
 		return;
 	}
 
@@ -10312,9 +10548,117 @@ void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt
 		pIndex->Commit ();
 	}
 
-	pServed->Unlock();
+	iUpdated += tUpdate.m_iAffected;
+	iSuccesses++;
+}
 
-	SendMysqlOkPacket ( tOut, uPacketID, iAffected );
+
+
+void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit )
+{
+	CSphString sError;
+
+	// check index names
+	CSphVector<CSphNamedInt> dIndexNames;
+	ParseIndexList ( tStmt.m_sIndex, dIndexNames );
+
+	if ( !dIndexNames.GetLength() )
+	{
+		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		return;
+	}
+
+	CSphVector<DistributedIndex_t> dDistributed ( dIndexNames.GetLength() ); // lock safe storage for distributed indexes
+	ARRAY_FOREACH ( i, dIndexNames )
+	{
+		if ( !g_pIndexes->Exists ( dIndexNames[i].m_sName ) )
+		{
+			// search amongst distributed and copy for further processing
+			g_tDistLock.Lock();
+			const DistributedIndex_t * pDistIndex = g_hDistIndexes ( dIndexNames[i].m_sName );
+
+			if ( pDistIndex )
+			{
+				dDistributed[i] = *pDistIndex;
+				dDistributed[i].m_bToDelete = true; // our presence flag
+			}
+
+			g_tDistLock.Unlock();
+
+			if ( pDistIndex )
+				continue;
+			else
+			{
+				sError.SetSprintf ( "unknown index '%s' in update request", dIndexNames[i].m_sName.cstr() );
+				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+				return;
+			}
+		}
+	}
+
+	// do update
+	SearchFailuresLog_c dFails;
+	int iSuccesses = 0;
+	int iUpdated = 0;
+	int iWarns = 0;
+
+	ARRAY_FOREACH ( iIdx, dIndexNames )
+	{
+		const char * sReqIndex = dIndexNames[iIdx].m_sName.cstr();
+		const ServedIndex_t * pLocked = g_pIndexes->GetRlockedEntry ( sReqIndex );
+		if ( pLocked )
+		{
+			DoExtendedUpdate ( sReqIndex, tStmt, iSuccesses, iUpdated, bCommit, dFails, pLocked );
+			pLocked->Unlock();
+		} else
+		{
+			assert ( dDistributed[iIdx].m_bToDelete );
+			CSphVector<CSphString>& dLocal = dDistributed[iIdx].m_dLocal;
+
+			ARRAY_FOREACH ( i, dLocal )
+			{
+				const char * sLocal = dLocal[i].cstr();
+				const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( sLocal );
+				DoExtendedUpdate ( sLocal, tStmt, iSuccesses, iUpdated, bCommit, dFails, pServed );
+				if ( pServed )
+					pServed->Unlock();
+			}
+		}
+
+		// update remote agents
+		if ( dDistributed[iIdx].m_bToDelete )
+		{
+			DistributedIndex_t & tDist = dDistributed[iIdx];
+
+			CSphVector<AgentConn_t> dAgents ( tDist.m_dAgents.GetLength() );
+			ARRAY_FOREACH ( i, dAgents )
+				dAgents[i] = tDist.m_dAgents[i];
+
+			// connect to remote agents and query them
+			ConnectToRemoteAgents ( dAgents, false );
+
+			SphinxqlRequestBuilder_t tReqBuilder ( sQuery, tStmt );
+			int iRemote = QueryRemoteAgents ( dAgents, tDist.m_iAgentConnectTimeout, tReqBuilder, NULL ); // FIXME? profile update time too?
+
+			if ( iRemote )
+			{
+				SphinxqlReplyParser_t tParser ( &iUpdated, &iWarns );
+				iSuccesses += WaitForRemoteAgents ( dAgents, tDist.m_iAgentQueryTimeout, tParser, NULL ); // FIXME? profile update time too?
+			}
+		}
+	}
+
+	StrBuf_t sReport;
+	dFails.BuildReport ( sReport );
+
+	if ( !iSuccesses )
+	{
+		SendMysqlErrorPacket ( tOut, uPacketID, sReport.cstr() );
+		return;
+	}
+
+	SendMysqlOkPacket ( tOut, uPacketID, iUpdated, iWarns );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -10941,6 +11285,203 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 	SendMysqlOkPacket ( tOut, uPacketID );
 }
 
+class CSphinxqlSession : public ISphNoncopyable
+{
+	CSphString&			m_sError;
+
+public:
+	CSphQueryResultMeta m_tLastMeta;
+	SessionVars_t		m_tVars;
+
+public:
+	explicit CSphinxqlSession ( CSphString & sError ) :
+		m_sError ( sError )
+		{}
+
+	// just execute one sphinxql statement
+	void Execute ( const CSphString & sQuery, NetOutputBuffer_c & tOut, BYTE & uPacketID, ThdDesc_t * pThd=NULL )
+	{
+		// set on query guard
+		SphCrashLogger_c::SetLastQuery ( (const BYTE *)sQuery.cstr(), sQuery.Length(), true );
+
+		// parse SQL query
+		CSphVector<SqlStmt_t> dStmt;
+		bool bParsedOK = ParseSqlQuery ( sQuery, dStmt, m_sError, m_tVars.m_eCollation );
+
+		SqlStmt_e eStmt = bParsedOK ? dStmt.Begin()->m_eStmt : STMT_PARSE_ERROR;
+
+		SqlStmt_t * pStmt = dStmt.Begin();
+		assert ( !bParsedOK || pStmt );
+
+		if ( pThd )
+			pThd->m_sCommand = g_dSqlStmts[eStmt];
+		THD_STATE ( THD_QUERY );
+
+		SqlRowBuffer_c dRows;
+
+		// handle multi SQL query
+		if ( bParsedOK && dStmt.GetLength()>1 )
+		{
+			HandleMysqlMultiStmt ( tOut, uPacketID, dStmt, m_tLastMeta, dRows, pThd, m_sError );
+			return;
+		}
+
+		// handle SQL query
+		switch ( eStmt )
+		{
+		case STMT_PARSE_ERROR:
+			m_tLastMeta = CSphQueryResultMeta();
+			m_tLastMeta.m_sError = m_sError;
+			SendMysqlErrorPacket ( tOut, uPacketID, m_sError.cstr() );
+			return;
+
+		case STMT_SELECT:
+			{
+				MEMORY ( SPH_MEM_SELECT_SQL );
+
+				SearchHandler_c tHandler ( 1, true );
+				tHandler.m_dQueries[0] = dStmt.Begin()->m_tQuery;
+
+				if ( HandleMysqlSelect ( tOut, uPacketID, tHandler ) )
+				{
+					AggrResult_t & tLast = tHandler.m_dResults.Last();
+					if ( !m_sError.IsEmpty() )
+						tLast.m_sWarning = m_sError;
+					SendMysqlSelectResult ( tOut, uPacketID, dRows, tLast, false );
+				}
+
+				// save meta for SHOW META
+				m_tLastMeta = tHandler.m_dResults.Last();
+				return;
+			}
+		case STMT_SHOW_WARNINGS:
+			HandleMysqlWarning ( tOut, uPacketID, m_tLastMeta, dRows, false );
+			return;
+
+		case STMT_SHOW_STATUS:
+		case STMT_SHOW_META:
+			HandleMysqlMeta ( tOut, uPacketID, m_tLastMeta, dRows, eStmt==STMT_SHOW_STATUS, false );
+			return;
+
+		case STMT_INSERT:
+		case STMT_REPLACE:
+			HandleMysqlInsert ( *pStmt, tOut, uPacketID, eStmt==STMT_REPLACE, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction );
+			return;
+
+		case STMT_DELETE:
+			HandleMysqlDelete ( tOut, uPacketID, *pStmt, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction );
+			return;
+
+		case STMT_SET:
+			HandleMysqlSet ( tOut, uPacketID, *pStmt, m_tVars );
+			return;
+
+		case STMT_BEGIN:
+			{
+				MEMORY ( SPH_MEM_COMMIT_BEGIN_SQL );
+
+				m_tVars.m_bInTransaction = true;
+				ISphRtIndex * pIndex = sphGetCurrentIndexRT();
+				if ( pIndex )
+					pIndex->Commit();
+				SendMysqlOkPacket ( tOut, uPacketID );
+				return;
+			}
+		case STMT_COMMIT:
+		case STMT_ROLLBACK:
+			{
+				MEMORY ( SPH_MEM_COMMIT_SQL );
+
+				m_tVars.m_bInTransaction = false;
+				ISphRtIndex * pIndex = sphGetCurrentIndexRT();
+				if ( pIndex )
+				{
+					if ( eStmt==STMT_COMMIT )
+						pIndex->Commit();
+					else
+						pIndex->RollBack();
+				}
+				SendMysqlOkPacket ( tOut, uPacketID );
+				return;
+			}
+		case STMT_CALL:
+			pStmt->m_sCallProc.ToUpper();
+			if ( pStmt->m_sCallProc=="SNIPPETS" )
+				HandleMysqlCallSnippets ( tOut, uPacketID, *pStmt );
+			else if ( pStmt->m_sCallProc=="KEYWORDS" )
+				HandleMysqlCallKeywords ( tOut, uPacketID, *pStmt );
+			else
+			{
+				m_sError.SetSprintf ( "no such builtin procedure %s", pStmt->m_sCallProc.cstr() );
+				SendMysqlErrorPacket ( tOut, uPacketID, m_sError.cstr() );
+			}
+			return;
+
+		case STMT_DESC:
+			HandleMysqlDescribe ( tOut, uPacketID, *pStmt );
+			return;
+
+		case STMT_SHOW_TABLES:
+			HandleMysqlShowTables ( tOut, uPacketID );
+			return;
+
+		case STMT_UPDATE:
+			HandleMysqlUpdate ( tOut, uPacketID, *pStmt, sQuery, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction );
+			return;
+
+		case STMT_DUMMY:
+			SendMysqlOkPacket ( tOut, uPacketID );
+			return;
+
+		case STMT_CREATE_FUNC:
+			if ( !sphUDFCreate ( pStmt->m_sUdfLib.cstr(), pStmt->m_sUdfName.cstr(), pStmt->m_eUdfType, m_sError ) )
+				SendMysqlErrorPacket ( tOut, uPacketID, m_sError.cstr() );
+			else
+				SendMysqlOkPacket ( tOut, uPacketID );
+			return;
+
+		case STMT_DROP_FUNC:
+			if ( !sphUDFDrop ( pStmt->m_sUdfName.cstr(), m_sError ) )
+				SendMysqlErrorPacket ( tOut, uPacketID, m_sError.cstr() );
+			else
+				SendMysqlOkPacket ( tOut, uPacketID );
+			return;
+
+		default:
+			m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );
+			SendMysqlErrorPacket ( tOut, uPacketID, m_sError.cstr() );
+			return;
+		} // switch
+	}
+};
+
+/// sphinxql command over API
+void HandleCommandSphinxql ( int iSock, int iVer, InputBuffer_c & tReq )
+{
+	if ( !CheckCommandVersion ( iVer, VER_COMMAND_SPHINXQL, tReq ) )
+		return;
+
+	// parse request
+	CSphString sCommand = tReq.GetString ();
+
+	NetOutputBuffer_c tOut ( iSock );
+	BYTE uDummy = 0;
+	CSphString sError;
+
+	// todo: move upper, if the session variables are also necessary in API access mode.
+	CSphinxqlSession tSession ( sError );
+
+	tOut.Flush();
+	tOut.SendWord ( SEARCHD_OK );
+	tOut.SendWord ( VER_COMMAND_SPHINXQL );
+
+	// assume that the whole answer could fit in output buffer without flush.
+	// Otherwise the error will be fired.
+	// SEARCHD_ERROR + strlen (32) + the message
+	tOut.FreezeBlock ( "\x01\x00\x20\x00\x00\x00The output buffer is overloaded.", 38 );
+	tSession.Execute ( sCommand, tOut, uDummy );
+	tOut.Flush ( true );
+}
 
 void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 {
@@ -10957,19 +11498,17 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 		return;
 	}
 
-	SessionVars_t tVars; // session variables and state
-
 	bool bAuthed = false;
 	BYTE uPacketID = 1;
 
-	CSphQueryResultMeta tLastMeta;
+	CSphString sError;
+	CSphinxqlSession tSession ( sError ); // session variables and state
+
 	CSphString sQuery; // to keep data alive for SphCrashQuery_c
 	for ( ;; )
 	{
 		// set off query guard
 		SphCrashLogger_c::SetLastQuery ( NULL, 0, true );
-
-		CSphString sError;
 
 		// send the packet formed on the previous cycle
 		THD_STATE ( THD_NET_WRITE );
@@ -11055,159 +11594,8 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 		assert ( uMysqlCmd==MYSQL_COM_QUERY );
 		sQuery = tIn.GetRawString ( iPacketLen-1 );
 
-		// set on query guard
-		SphCrashLogger_c::SetLastQuery ( (const BYTE *)sQuery.cstr(), sQuery.Length(), true );
-
-		// parse SQL query
-		CSphVector<SqlStmt_t> dStmt;
-		bool bParsedOK = ParseSqlQuery ( sQuery, dStmt, sError, tVars.m_eCollation );
-
-		SqlStmt_e eStmt = bParsedOK ? dStmt.Begin()->m_eStmt : STMT_PARSE_ERROR;
-
-		SqlStmt_t * pStmt = dStmt.Begin();
-		assert ( !bParsedOK || pStmt );
-
-		if ( pThd )
-			pThd->m_sCommand = g_dSqlStmts[eStmt];
-		THD_STATE ( THD_QUERY );
-
-		SqlRowBuffer_c dRows;
-
-		// handle multi SQL query
-		if ( bParsedOK && dStmt.GetLength()>1 )
-		{
-			HandleMysqlMultiStmt ( tOut, uPacketID, dStmt, tLastMeta, dRows, pThd, sError );
-			continue;
-		}
-
-		// handle SQL query
-		switch ( eStmt )
-		{
-		case STMT_PARSE_ERROR:
-			tLastMeta = CSphQueryResultMeta();
-			tLastMeta.m_sError = sError;
-			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
-			break;
-
-		case STMT_SELECT:
-		{
-			MEMORY ( SPH_MEM_SELECT_SQL );
-
-			SearchHandler_c tHandler ( 1, true );
-			tHandler.m_dQueries[0] = dStmt.Begin()->m_tQuery;
-
-			if ( HandleMysqlSelect ( tOut, uPacketID, tHandler ) )
-			{
-				AggrResult_t & tLast = tHandler.m_dResults.Last();
-				if ( !sError.IsEmpty() )
-					tLast.m_sWarning = sError;
-				SendMysqlSelectResult ( tOut, uPacketID, dRows, tLast, false );
-			}
-
-			// save meta for SHOW META
-			tLastMeta = tHandler.m_dResults.Last();
-
-			break;
-		}
-		case STMT_SHOW_WARNINGS:
-			HandleMysqlWarning ( tOut, uPacketID, tLastMeta, dRows, false );
-			break;
-
-		case STMT_SHOW_STATUS:
-		case STMT_SHOW_META:
-			HandleMysqlMeta ( tOut, uPacketID, tLastMeta, dRows, eStmt==STMT_SHOW_STATUS, false );
-			break;
-
-		case STMT_INSERT:
-		case STMT_REPLACE:
-			HandleMysqlInsert ( *pStmt, tOut, uPacketID, eStmt==STMT_REPLACE, tVars.m_bAutoCommit && !tVars.m_bInTransaction );
-			continue;
-
-		case STMT_DELETE:
-			HandleMysqlDelete ( tOut, uPacketID, *pStmt, tVars.m_bAutoCommit && !tVars.m_bInTransaction );
-			continue;
-
-		case STMT_SET:
-			HandleMysqlSet ( tOut, uPacketID, *pStmt, tVars );
-			continue;
-
-		case STMT_BEGIN:
-			{
-				MEMORY ( SPH_MEM_COMMIT_BEGIN_SQL );
-
-				tVars.m_bInTransaction = true;
-				ISphRtIndex * pIndex = sphGetCurrentIndexRT();
-				if ( pIndex )
-					pIndex->Commit();
-				SendMysqlOkPacket ( tOut, uPacketID );
-				continue;
-			}
-		case STMT_COMMIT:
-		case STMT_ROLLBACK:
-			{
-				MEMORY ( SPH_MEM_COMMIT_SQL );
-
-				tVars.m_bInTransaction = false;
-				ISphRtIndex * pIndex = sphGetCurrentIndexRT();
-				if ( pIndex )
-				{
-					if ( eStmt==STMT_COMMIT )
-						pIndex->Commit();
-					else
-						pIndex->RollBack();
-				}
-				SendMysqlOkPacket ( tOut, uPacketID );
-				continue;
-			}
-		case STMT_CALL:
-			pStmt->m_sCallProc.ToUpper();
-			if ( pStmt->m_sCallProc=="SNIPPETS" )
-				HandleMysqlCallSnippets ( tOut, uPacketID, *pStmt );
-			else if ( pStmt->m_sCallProc=="KEYWORDS" )
-				HandleMysqlCallKeywords ( tOut, uPacketID, *pStmt );
-			else
-			{
-				sError.SetSprintf ( "no such builtin procedure %s", pStmt->m_sCallProc.cstr() );
-				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
-			}
-			continue;
-
-		case STMT_DESC:
-			HandleMysqlDescribe ( tOut, uPacketID, *pStmt );
-			continue;
-
-		case STMT_SHOW_TABLES:
-			HandleMysqlShowTables ( tOut, uPacketID );
-			continue;
-
-		case STMT_UPDATE:
-			HandleMysqlUpdate ( tOut, uPacketID, *pStmt, tVars.m_bAutoCommit && !tVars.m_bInTransaction );
-			continue;
-
-		case STMT_DUMMY:
-			SendMysqlOkPacket ( tOut, uPacketID );
-			continue;
-
-		case STMT_CREATE_FUNC:
-			if ( !sphUDFCreate ( pStmt->m_sUdfLib.cstr(), pStmt->m_sUdfName.cstr(), pStmt->m_eUdfType, sError ) )
-				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
-			else
-				SendMysqlOkPacket ( tOut, uPacketID );
-			continue;
-
-		case STMT_DROP_FUNC:
-			if ( !sphUDFDrop ( pStmt->m_sUdfName.cstr(), sError ) )
-				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
-			else
-				SendMysqlOkPacket ( tOut, uPacketID );
-			continue;
-
-		default:
-			sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );
-			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
-			break;
-		} // switch
-	} // for ( ;; )
+		tSession.Execute ( sQuery, tOut, uPacketID, pThd );
+	} // for (;;)
 
 	// set off query guard
 	SphCrashLogger_c::SetLastQuery ( NULL, 0, true );

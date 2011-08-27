@@ -1185,22 +1185,18 @@ class SphinxConfig
 	}
 
 
+	/// returns false if everything is okay
+	/// returns error messages if something failed
 	function CheckVariants ( $output_path )
 	{
 		if ( !$this->Requires("variant_match") )
-			return true;
+			return false;
 		
 		$total = count ( $this->_results_model );
 		if ( $total==1 )
-		{
-			printf ( "Variant match is required, but there are no variants.\n" );
-			return false;
-		}
+			return "variant match required, but there are no variants";
 		else if ( !$this->IsQueryTest() )
-		{
-			printf ( "Variant match is not supported for non-query tests.\n" );
-			return false;
-		}
+			return "variant match is not supported with custom tests";
 
 		$failed = false;
 		$output = '';
@@ -1228,8 +1224,13 @@ class SphinxConfig
 		}
 
 		if ( $failed )
+		{
 			file_put_contents ( $output_path, $output );
-		return !$failed;
+			return "variants mismatch; see $output_path for details";
+		}
+
+		// all ok, indicated by false ("no error")
+		return false;
 	}
 
 
@@ -2295,14 +2296,14 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 	$total = $config->SubtestNo()+1;
 	if ( IsModelGenMode () )
 	{
-		if ( $config->CheckVariants ( $report_path."_variant.txt" ) )
+		$variant = $config->CheckVariants ( $report_path."_variant.txt" );
+		if ($variant===false)
 		{
 			$config->WriteModel ( $model_file );
 			printf ( "$prefix done; %d/%d subtests run\n", $config->SubtestNo(), $nsubtests );
-		}
-		else
+		} else
 		{
-			printf ( "$prefix done; %d/%d subtests: VARIANT CHECK FAILED\n", $config->SubtestNo(), $nsubtests );
+			printf ( "$prefix done; %d/%d subtests: VARIANT CHECK FAILED: %s\n", $config->SubtestNo(), $nsubtests, $variant );
 			$nfailed = $total;
 		}
 	}

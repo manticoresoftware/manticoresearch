@@ -1258,8 +1258,7 @@ class SphinxClient
 						$nvalues = $val;
 						while ( $nvalues>0 && $p<$max )
 						{
-							$val = sphUnpackU64 ( substr ( $response, $p, 8 ) ); $p += 8;
-							$attrvals[$attr][] = strval( $val ); // FIXME!!! sphFixUint returns MVA values as string so It to
+							$attrvals[$attr][] = sphUnpackU64 ( substr ( $response, $p, 8 ) ); $p += 8;
 							$nvalues -= 2;
 						}
 					} else if ( $type==SPH_ATTR_STRING )

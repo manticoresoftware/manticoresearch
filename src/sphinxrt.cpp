@@ -5714,9 +5714,10 @@ void sphRTInit ()
 	Verify ( RtSegment_t::m_tSegmentSeq.Init() );
 	Verify ( sphThreadKeyCreate ( &g_tTlsAccumKey ) );
 
-	g_pBinlog = new RtBinlog_c();
-	if ( !g_pBinlog )
+	g_pRtBinlog = new RtBinlog_c();
+	if ( !g_pRtBinlog )
 		sphDie ( "binlog: failed to create binlog" );
+	g_pBinlog = g_pRtBinlog;
 }
 
 

@@ -54,6 +54,20 @@ typedef Hitman_c<8> HITMAN;
 #endif
 
 //////////////////////////////////////////////////////////////////////////
+// GLOBALS
+//////////////////////////////////////////////////////////////////////////
+
+/// publicly exposed binlog interface
+ISphBinlog *			g_pBinlog				= NULL;
+
+/// actual binlog implementation
+class RtBinlog_c;
+static RtBinlog_c *		g_pRtBinlog				= NULL;
+
+/// protection from concurrent changes during binlog replay
+static bool				g_bRTChangesAllowed		= false;
+
+//////////////////////////////////////////////////////////////////////////
 
 // !COMMIT cleanup extern ref to sphinx.cpp
 extern void sphSortDocinfos ( DWORD * pBuf, int iCount, int iStride );
@@ -846,8 +860,6 @@ private:
 	bool					ReplayCacheAdd ( int iBinlog, BinlogReader_c & tReader ) const;
 };
 
-static RtBinlog_c * g_pBinlog = NULL;
-static bool g_bRTChangesAllowed = false;
 
 /// RAM based index
 struct RtQword_t;
@@ -2209,7 +2221,7 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 	Verify ( m_tWriterMutex.Lock() );
 
 	// first of all, binlog txn data for recovery
-	g_pBinlog->BinlogCommit ( m_sIndexName.cstr(), ++m_iTID, pNewSeg, dAccKlist );
+	g_pRtBinlog->BinlogCommit ( m_sIndexName.cstr(), ++m_iTID, pNewSeg, dAccKlist );
 
 	// let merger know that existing segments are subject to additional, TLS K-list filter
 	// safe despite the readers, flag must only be used by writer
@@ -5686,11 +5698,13 @@ ISphRtIndex * sphGetCurrentIndexRT()
 	return NULL;
 }
 
+
 ISphRtIndex * sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndexName, DWORD uRamSize, const char * sPath )
 {
 	MEMORY ( SPH_MEM_IDX_RT );
 	return new RtIndex_t ( tSchema, sIndexName, uRamSize, sPath );
 }
+
 
 void sphRTInit ()
 {
@@ -5705,16 +5719,18 @@ void sphRTInit ()
 		sphDie ( "binlog: failed to create binlog" );
 }
 
+
 void sphRTConfigure ( const CSphConfigSection & hSearchd, bool bTestMode )
 {
 	assert ( g_pBinlog );
-	g_pBinlog->Configure ( hSearchd, bTestMode );
+	g_pRtBinlog->Configure ( hSearchd, bTestMode );
 	g_iRtFlushPeriod = hSearchd.GetInt ( "rt_flush_period", (int)g_iRtFlushPeriod );
 
 	// clip period to range ( 10 sec, million years )
 	g_iRtFlushPeriod = Max ( g_iRtFlushPeriod, 10 );
 	g_iRtFlushPeriod = Min ( g_iRtFlushPeriod, INT64_MAX );
 }
+
 
 void sphRTDone ()
 {
@@ -5724,13 +5740,15 @@ void sphRTDone ()
 	SafeDelete ( g_pBinlog );
 }
 
+
 void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback )
 {
 	MEMORY ( SPH_MEM_BINLOG );
-	g_pBinlog->Replay ( hIndexes, pfnProgressCallback );
-	g_pBinlog->CreateTimerThread();
+	g_pRtBinlog->Replay ( hIndexes, pfnProgressCallback );
+	g_pRtBinlog->CreateTimerThread();
 	g_bRTChangesAllowed = true;
 }
+
 
 bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema * pSchema, CSphString * pError )
 {

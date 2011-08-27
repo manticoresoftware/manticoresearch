@@ -18,11 +18,14 @@
 
 #include "sphinx.h"
 #include "sphinxfilter.h"
+#include "sphinxrt.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <float.h>
 
+//////////////////////////////////////////////////////////////////////////
+// INTERNAL CONSTANTS
 //////////////////////////////////////////////////////////////////////////
 
 const char		MAGIC_SYNONYM_WHITESPACE	= 1;				// used internally in tokenizer only
@@ -37,6 +40,24 @@ const char		MAGIC_WORD_HEAD_NONSTEMMED	= 2;				// prepended to keyword by source
 extern const char *		MAGIC_WORD_SENTENCE;
 extern const char *		MAGIC_WORD_PARAGRAPH;
 
+//////////////////////////////////////////////////////////////////////////
+// INTERNAL GLOBALS
+//////////////////////////////////////////////////////////////////////////
+
+class ISphBinlog : ISphNoncopyable
+{
+public:
+	virtual				~ISphBinlog () {}
+
+	virtual void		BinlogUpdateAttributes ( const char * sIndexName, int64_t iTID, const CSphAttrUpdate & tUpd ) = 0;
+	virtual void		NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool bShutdown ) = 0;
+};
+
+/// binlog, defind in sphinxrt.cpp
+extern ISphBinlog *		g_pBinlog;
+
+//////////////////////////////////////////////////////////////////////////
+// INTERNAL HELPER FUNCTIONS, CLASSES, ETC
 //////////////////////////////////////////////////////////////////////////
 
 #ifdef O_BINARY
@@ -302,15 +323,6 @@ bool sphCheckQueryHeight ( const struct XQNode_t * pRoot, CSphString & sError );
 void sphTransformExtendedQuery ( XQNode_t ** ppNode );
 
 const BYTE * SkipQuoted ( const BYTE * p );
-
-class ISphBinlog : ISphNoncopyable
-{
-public:
-	virtual			~ISphBinlog () {}
-
-	virtual void	BinlogUpdateAttributes ( const char * sIndexName, int64_t iTID, const CSphAttrUpdate & tUpd ) = 0;
-	virtual void	NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool bShutdown ) = 0;
-};
 
 //////////////////////////////////////////////////////////////////////////
 

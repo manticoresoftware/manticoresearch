@@ -1256,7 +1256,6 @@ static void WriteFileInfo ( CSphWriter & tWriter, const CSphSavedFile & tInfo )
 	tWriter.PutDword ( tInfo.m_uCRC32 );
 }
 
-static ISphBinlog * g_pBinlog;
 
 struct WordDictInfo_t
 {
@@ -1268,6 +1267,7 @@ struct WordDictInfo_t
 
 	WordDictInfo_t ();
 };
+
 
 struct WordReaderContext_t
 {
@@ -1452,7 +1452,6 @@ private:
 
 	int							m_iIndexTag;			///< my ids for MVA updates pool
 	static int					m_iIndexTagSeq;			///< static ids sequence
-	int64_t						m_iTID;					///< number of times when SaveAttributes called.
 
 	bool						m_bIsEmpty;				///< do we have actually indexed documents (m_iTotalDocuments is just fetched documents, not indexed!)
 
@@ -24152,7 +24151,6 @@ CSphQueryResultMeta & CSphQueryResultMeta::operator= ( const CSphQueryResultMeta
 
 	return *this;
 }
-
 
 //
 // $Id$

@@ -3121,10 +3121,10 @@ bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 
 		// recreate dictionary
 		SafeDelete ( m_pDict );
-		CSphDict * pDict = tDictSettings.m_bWordDict
+		m_pDict = tDictSettings.m_bWordDict
 			? sphCreateDictionaryKeywords ( tDictSettings, m_pTokenizer, m_sLastError, m_sIndexName.cstr() )
 			: sphCreateDictionaryCRC ( tDictSettings, m_pTokenizer, m_sLastError, m_sIndexName.cstr() );
-		if ( !pDict )
+		if ( !m_pDict )
 			return false;
 
 		// update schema

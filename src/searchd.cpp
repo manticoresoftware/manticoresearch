@@ -1318,7 +1318,8 @@ void Shutdown ()
 
 		// unlock indexes and release locks if needed
 		for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
-			it.Get().m_pIndex->Unlock();
+			if ( it.Get().m_pIndex )
+				it.Get().m_pIndex->Unlock();
 		g_pIndexes->Reset();
 
 		// clear shut down of rt indexes + binlog
@@ -7360,6 +7361,7 @@ enum SqlStmt_e
 	STMT_UPDATE,
 	STMT_CREATE_FUNC,
 	STMT_DROP_FUNC,
+	STMT_ATTACH_INDEX,
 
 	STMT_TOTAL
 };
@@ -7433,7 +7435,7 @@ struct SqlStmt_t
 	// SELECT specific
 	CSphQuery				m_tQuery;
 
-	// used by INSERT, DELETE, CALL, DESC
+	// used by INSERT, DELETE, CALL, DESC, ATTACH
 	CSphString				m_sIndex;
 
 	// INSERT (and CALL) specific
@@ -7445,7 +7447,7 @@ struct SqlStmt_t
 	CSphVector<SphDocID_t>	m_dDeleteIds;
 
 	// SET specific
-	CSphString				m_sSetName;
+	CSphString				m_sSetName;		// reused by ATTACH
 	SqlSet_e				m_eSet;
 	int						m_iSetValue;
 	CSphString				m_sSetValue;
@@ -9738,6 +9740,19 @@ void SendMysqlErrorPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char
 }
 
 
+void SendMysqlErrorPacketEx ( NetOutputBuffer_c & tOut, BYTE uPacketID, MysqlErrors_e iErr, const char * sTemplate, ... )
+{
+	char sBuf[1024];
+	va_list ap;
+
+	va_start ( ap, sTemplate );
+	vsnprintf ( sBuf, sizeof(sBuf), sTemplate, ap );
+	va_end ( ap );
+
+	SendMysqlErrorPacket ( tOut, uPacketID, sBuf, iErr );
+}
+
+
 void SendMysqlEofPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, int iWarns, bool bMoreResults=false )
 {
 	if ( iWarns<0 ) iWarns = 0;
@@ -11296,9 +11311,59 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 	SendMysqlOkPacket ( tOut, uPacketID );
 }
 
+
+void HandleMysqlAttach ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE uPacketID )
+{
+	const CSphString & sFrom = tStmt.m_sIndex;
+	const CSphString & sTo = tStmt.m_sSetName;
+	CSphString sError;
+
+	ServedIndex_t * pFrom = g_pIndexes->GetWlockedEntry ( sFrom );
+	const ServedIndex_t * pTo = g_pIndexes->GetRlockedEntry ( sTo );
+
+	if ( !pFrom || !pFrom->m_bEnabled
+		|| !pTo || !pTo->m_bEnabled
+		|| pFrom->m_bRT
+		|| !pTo->m_bRT )
+	{
+		if ( !pFrom || !pFrom->m_bEnabled)
+			SendMysqlErrorPacketEx ( tOut, uPacketID, MYSQL_ERR_PARSE_ERROR, "no such index '%s'", sFrom.cstr() );
+		else if ( !pTo || !pTo->m_bEnabled )
+			SendMysqlErrorPacketEx ( tOut, uPacketID, MYSQL_ERR_PARSE_ERROR, "no such index '%s'", sTo.cstr() );
+		else if ( pFrom->m_bRT )
+			SendMysqlErrorPacket ( tOut, uPacketID, "1st argument to ATTACH must be a plain index" );
+		else if ( pTo->m_bRT )
+			SendMysqlErrorPacket ( tOut, uPacketID, "2nd argument to ATTACH must be a RT index" );
+
+		if ( pFrom )
+			pFrom->Unlock();
+		if ( pTo )
+			pTo->Unlock();
+		return;
+	}
+
+	ISphRtIndex * pRtTo = dynamic_cast<ISphRtIndex*> ( pTo->m_pIndex );
+	assert ( pRtTo );
+
+	if ( !pRtTo->AttachDiskIndex ( pFrom->m_pIndex, sError ) )
+	{
+		pFrom->Unlock();
+		pTo->Unlock();
+		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		return;
+	}
+
+	pFrom->m_pIndex = NULL; // after a succesfull Attach() RT index owns it
+	pFrom->m_bEnabled = false; // so we need to disable the disk index until further notice
+	pFrom->Unlock();
+	pTo->Unlock();
+	SendMysqlOkPacket ( tOut, uPacketID );
+}
+
+
 class CSphinxqlSession : public ISphNoncopyable
 {
-	CSphString&			m_sError;
+	CSphString &		m_sError;
 
 public:
 	CSphQueryResultMeta m_tLastMeta;
@@ -11458,6 +11523,10 @@ public:
 				SendMysqlOkPacket ( tOut, uPacketID );
 			return;
 
+		case STMT_ATTACH_INDEX:
+			HandleMysqlAttach ( *pStmt, tOut, uPacketID );
+			return;
+
 		default:
 			m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );
 			SendMysqlErrorPacket ( tOut, uPacketID, m_sError.cstr() );
@@ -11465,6 +11534,7 @@ public:
 		} // switch
 	}
 };
+
 
 /// sphinxql command over API
 void HandleCommandSphinxql ( int iSock, int iVer, InputBuffer_c & tReq )
@@ -11493,6 +11563,7 @@ void HandleCommandSphinxql ( int iSock, int iVer, InputBuffer_c & tReq )
 	tSession.Execute ( sCommand, tOut, uDummy );
 	tOut.Flush ( true );
 }
+
 
 void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 {

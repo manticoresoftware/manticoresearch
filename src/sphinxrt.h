@@ -51,6 +51,9 @@ public:
 
 	/// check and flush index memory to disk
 	virtual void CheckRamFlush () = 0;
+
+	/// attach a disk chunk to current index
+	virtual bool AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError ) = 0;
 };
 
 /// initialize subsystem

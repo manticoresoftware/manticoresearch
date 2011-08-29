@@ -43,6 +43,9 @@
 
 //////////////////////////////////////////////////////////////////////////
 
+const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
+const DWORD		INDEX_FORMAT_VERSION		= 26;				///< my format version
+
 const char		MAGIC_SYNONYM_WHITESPACE	= 1;				// used internally in tokenizer only
 const char		MAGIC_CODE_SENTENCE			= 2;				// emitted from tokenizer on sentence boundary
 const char		MAGIC_CODE_PARAGRAPH		= 3;				// emitted from stripper (and passed via tokenizer) on paragraph boundary
@@ -1082,6 +1085,26 @@ inline void SqlUnescape ( CSphString & sRes, const char * sEscaped, int iLen )
 	*d++ = '\0';
 }
 
+
+inline void StripPath ( CSphString & sPath )
+{
+	if ( sPath.IsEmpty() )
+		return;
+
+	const char * s = sPath.cstr();
+	if ( *s!='/' )
+		return;
+
+	const char * sLastSlash = s;
+	for ( ; *s; s++ )
+		if ( *s=='/' )
+			sLastSlash = s;
+
+	int iPos = (int)( sLastSlash - sPath.cstr() + 1 );
+	int iLen = (int)( s - sPath.cstr() );
+	sPath = sPath.SubString ( iPos, iLen - iPos );
+}
+
 //////////////////////////////////////////////////////////////////////////
 // DISK INDEX INTERNALS
 //////////////////////////////////////////////////////////////////////////
@@ -1201,6 +1224,15 @@ bool			sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const cha
 void			sphMergeStats ( CSphQueryResultMeta & tDstResult, const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hSrc );
 bool			sphCheckQueryHeight ( const struct XQNode_t * pRoot, CSphString & sError );
 void			sphTransformExtendedQuery ( XQNode_t ** ppNode );
+
+void			WriteSchema ( CSphWriter & fdInfo, const CSphSchema & tSchema );
+void			ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema, DWORD uVersion, bool bDynamic );
+void			SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & m_tSettings );
+void			LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion );
+void			SaveTokenizerSettings ( CSphWriter & tWriter, ISphTokenizer * pTokenizer );
+void			LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings & tSettings, DWORD uVersion, CSphString & sWarning );
+void			SaveDictionarySettings ( CSphWriter & tWriter, CSphDict * pDict );
+void			LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings, DWORD uVersion, CSphString & sWarning );
 
 #endif // _sphinxint_
 

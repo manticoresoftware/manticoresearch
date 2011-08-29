@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>ATTACH INDEX</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers			= threads
+}
+
+source disk
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+}
+
+index disk
+{
+	source			= disk
+	path			= <data_path/>/disk
+	charset_table	= a..z, A..Z->a..z
+}
+
+index rt
+{
+	type			= rt
+	path			= data/rt
+	rt_attr_uint	= gid1
+	rt_attr_uint	= gid2
+	rt_field		= title
+	rt_field		= content
+	charset_table	= a..z, A..Z->a..z, _
+} 
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>INSERT INTO test_table VALUES
+( 1, 11, 'Fare thee well' ),
+( 2, 11, 'And if for ever' ),
+( 3, 11, 'Still for ever fare thee well' ),
+( 4, 11, 'under_score' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>SELECT * FROM rt</sphinxql>
+<sphinxql>SELECT * FROM disk</sphinxql>
+<sphinxql>SELECT * FROM disk WHERE MATCH('thee')</sphinxql>
+<sphinxql>SELECT * FROM disk WHERE MATCH('under')</sphinxql>
+<sphinxql>ATTACH INDEX disk TO RTINDEX rt</sphinxql>
+<sphinxql>SELECT * FROM rt</sphinxql>
+<sphinxql>SELECT * FROM disk</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('thee')</sphinxql>
+<sphinxql>DESC rt</sphinxql>
+<sphinxql>INSERT INTO rt ( id, gid, title ) VALUES ( 10, 22, 'I dub thee unforgiven' )</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('thee')</sphinxql>
+<sphinxql>INSERT INTO rt ( id, gid, title ) VALUES ( 11, 22, 'under_score_again' )</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('under')</sphinxql>
+</sphqueries>
+
+</test>

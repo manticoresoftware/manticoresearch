@@ -867,10 +867,10 @@ struct RtIndex_t : public ISphRtIndex, public ISphNoncopyable
 {
 private:
 	static const DWORD			META_HEADER_MAGIC	= 0x54525053;	///< my magic 'SPRT' header
-	static const DWORD			META_VERSION		= 3;			///< current version
+	static const DWORD			META_VERSION		= 4;			///< current version
 
 private:
-	const int					m_iStride;
+	int							m_iStride;
 	CSphVector<RtSegment_t*>	m_pSegments;
 
 	CSphMutex					m_tWriterMutex;
@@ -894,17 +894,15 @@ public:
 	explicit					RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath );
 	virtual						~RtIndex_t ();
 
-	bool						AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError );
-	bool						AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError );
-	bool						DeleteDocument ( const SphDocID_t * pDocs, int iDocs, CSphString & sError );
-	void						Commit ();
-	void						RollBack ();
-
-	void						CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t> & dAccKlist );
-
-	void						DumpToDisk ( const char * sFilename );
-
+	virtual bool				AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError );
+	virtual bool				AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError );
+	virtual bool				DeleteDocument ( const SphDocID_t * pDocs, int iDocs, CSphString & sError );
+	virtual void				Commit ();
+	virtual void				RollBack ();
+	void						CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t> & dAccKlist ); // FIXME? protect?
+	virtual void				DumpToDisk ( const char * sFilename );
 	virtual void				CheckRamFlush ();
+	virtual bool				AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError );
 
 private:
 	/// acquire thread-local indexing accumulator
@@ -925,6 +923,8 @@ private:
 	CSphIndex *					LoadDiskChunk ( int iChunk );
 	bool						LoadRamChunk ( DWORD uVersion );
 	bool						SaveRamChunk ();
+
+	void						ComputeOutboundSchema();
 
 public:
 #if USE_WINDOWS
@@ -986,6 +986,32 @@ protected:
 };
 
 
+void RtIndex_t::ComputeOutboundSchema()
+{
+	m_tOutboundSchema.ResetAttrs();
+	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
+	{
+		CSphColumnInfo tCol = m_tSchema.GetAttr(i);
+		bool bDynamic = tCol.m_tLocator.m_bDynamic;
+		if ( ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET )
+			&& !tCol.m_tLocator.m_bDynamic )
+		{
+			tCol.m_eStage = SPH_EVAL_OVERRIDE;
+			bDynamic = true;
+		}
+
+		m_tOutboundSchema.AddAttr ( tCol, bDynamic );
+
+		if ( bDynamic )
+		{
+			LocatorPair_t & tPair = m_dDynamize.Add();
+			tPair.m_tFrom = tCol.m_tLocator;
+			tPair.m_tTo = m_tOutboundSchema.GetAttr(i).m_tLocator;
+		}
+	}
+}
+
+
 RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath )
 	: ISphRtIndex ( sIndexName, "rtindex" )
 	, m_iStride ( DOCINFO_IDSIZE + tSchema.GetRowSize() )
@@ -1012,29 +1038,7 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 
 	m_tOutboundSchema = m_tSchema;
 	if ( bReplaceSchema )
-	{
-		m_tOutboundSchema.ResetAttrs();
-		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
-		{
-			CSphColumnInfo tCol = m_tSchema.GetAttr(i);
-			bool bDynamic = tCol.m_tLocator.m_bDynamic;
-			if ( ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET )
-				&& !tCol.m_tLocator.m_bDynamic )
-			{
-				tCol.m_eStage = SPH_EVAL_OVERRIDE;
-				bDynamic = true;
-			}
-
-			m_tOutboundSchema.AddAttr ( tCol, bDynamic );
-
-			if ( bDynamic )
-			{
-				LocatorPair_t & tPair = m_dDynamize.Add();
-				tPair.m_tFrom = tCol.m_tLocator;
-				tPair.m_tTo = m_tOutboundSchema.GetAttr(i).m_tLocator;
-			}
-		}
-	}
+		ComputeOutboundSchema();
 
 #ifndef NDEBUG
 	// check that index cols are static
@@ -2829,38 +2833,13 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename ) const
 	wrRows.CloseFile ();
 }
 
+
 void RtIndex_t::SaveDiskData ( const char * sFilename ) const
 {
 	if ( m_bId32to64 )
 		return SaveDiskDataImpl<DWORD,DWORD> (sFilename);
 	else
 		return SaveDiskDataImpl<SphDocID_t,SphWordID_t> (sFilename);
-}
-
-static void WriteFileInfo ( CSphWriter & tWriter, const CSphSavedFile & tInfo )
-{
-	tWriter.PutOffset ( tInfo.m_uSize );
-	tWriter.PutOffset ( tInfo.m_uCTime );
-	tWriter.PutOffset ( tInfo.m_uMTime );
-	tWriter.PutDword ( tInfo.m_uCRC32 );
-}
-
-static void WriteSchemaColumn ( CSphWriter & tWriter, const CSphColumnInfo & tColumn )
-{
-	int iLen = strlen ( tColumn.m_sName.cstr() );
-	tWriter.PutDword ( iLen );
-	tWriter.PutBytes ( tColumn.m_sName.cstr(), iLen );
-
-	ESphAttr eAttrType = tColumn.m_eAttrType;
-	if ( eAttrType==SPH_ATTR_WORDCOUNT )
-		eAttrType = SPH_ATTR_INTEGER;
-	tWriter.PutDword ( eAttrType );
-
-	tWriter.PutDword ( tColumn.m_tLocator.CalcRowitem() ); // for backwards compatibility
-	tWriter.PutDword ( tColumn.m_tLocator.m_iBitOffset );
-	tWriter.PutDword ( tColumn.m_tLocator.m_iBitCount );
-
-	tWriter.PutByte ( tColumn.m_bPayload );
 }
 
 
@@ -2885,15 +2864,10 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, int iCheckpoints, SphOf
 	tWriter.PutDword ( SPH_DOCINFO_EXTERN );
 
 	// schema
-	tWriter.PutDword ( m_tSchema.m_dFields.GetLength() );
-	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
-		WriteSchemaColumn ( tWriter, m_tSchema.m_dFields[i] );
+	WriteSchema ( tWriter, m_tSchema );
 
-	tWriter.PutDword ( m_tSchema.GetAttrsCount() );
-	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
-		WriteSchemaColumn ( tWriter, m_tSchema.GetAttr(i) );
-
-	tWriter.PutOffset ( 0 ); // min docid
+	// min docid
+	tWriter.PutOffset ( 0 );
 
 	// wordlist checkpoints
 	tWriter.PutOffset ( iCheckpointsPosition );
@@ -2918,40 +2892,11 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, int iCheckpoints, SphOf
 	tWriter.PutDword ( 1 ); // m_iStopwordStep, v.23+
 
 	// tokenizer
-	assert ( m_pTokenizer );
-	const CSphTokenizerSettings & tSettings = m_pTokenizer->GetSettings ();
-	tWriter.PutByte ( tSettings.m_iType );
-	tWriter.PutString ( tSettings.m_sCaseFolding.cstr () );
-	tWriter.PutDword ( tSettings.m_iMinWordLen );
-	tWriter.PutString ( tSettings.m_sSynonymsFile.cstr () );
-	WriteFileInfo ( tWriter, m_pTokenizer->GetSynFileInfo () );
-	tWriter.PutString ( tSettings.m_sBoundary.cstr () );
-	tWriter.PutString ( tSettings.m_sIgnoreChars.cstr () );
-	tWriter.PutDword ( tSettings.m_iNgramLen );
-	tWriter.PutString ( tSettings.m_sNgramChars.cstr () );
-	tWriter.PutString ( tSettings.m_sBlendChars.cstr () );
-	tWriter.PutString ( tSettings.m_sBlendMode.cstr () );
+	SaveTokenizerSettings ( tWriter, m_pTokenizer );
 
 	// dictionary
-	assert ( m_pDict );
-
-	const CSphDictSettings & tDict = m_pDict->GetSettings ();
-	tWriter.PutString ( tDict.m_sMorphology.cstr () );
-	tWriter.PutString ( tDict.m_sStopwords.cstr () );
-
-	const CSphVector <CSphSavedFile> & dSWFileInfos = m_pDict->GetStopwordsFileInfos ();
-	tWriter.PutDword ( dSWFileInfos.GetLength () );
-	ARRAY_FOREACH ( i, dSWFileInfos )
-	{
-		tWriter.PutString ( dSWFileInfos[i].m_sFilename.cstr () );
-		WriteFileInfo ( tWriter, dSWFileInfos[i] );
-	}
-
-	const CSphSavedFile & tWFFileInfo = m_pDict->GetWordformsFileInfo ();
-	tWriter.PutString ( tDict.m_sWordforms.cstr () );
-	WriteFileInfo ( tWriter, tWFFileInfo );
-	tWriter.PutDword ( tDict.m_iMinStemmingLen );
-	tWriter.PutByte ( 0 ); // m_bWordDict flag, v.21+
+	assert ( m_pDict->GetSettings().m_bWordDict==false ); // not supported.. yet
+	SaveDictionarySettings ( tWriter, m_pDict );
 
 	// kill-list size
 	tWriter.PutDword ( uKillListSize );
@@ -2997,7 +2942,15 @@ void RtIndex_t::SaveMeta ( int iDiskChunks )
 	wrMeta.PutDword ( m_tStats.m_iTotalDocuments );
 	wrMeta.PutOffset ( m_tStats.m_iTotalBytes ); // FIXME? need PutQword ideally
 	wrMeta.PutOffset ( m_iTID );
-	wrMeta.CloseFile();
+
+	// meta v.4, save disk index format and settings, too
+	wrMeta.PutDword ( INDEX_FORMAT_VERSION );
+	WriteSchema ( wrMeta, m_tSchema );
+	SaveIndexSettings ( wrMeta, m_tSettings );
+	SaveTokenizerSettings ( wrMeta, m_pTokenizer );
+	SaveDictionarySettings ( wrMeta, m_pDict );
+
+	wrMeta.CloseFile(); // FIXME? handle errors?
 
 	// rename
 	if ( ::rename ( sMetaNew.cstr(), sMeta.cstr() ) )
@@ -3074,7 +3027,7 @@ bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 	MEMORY ( SPH_MEM_IDX_RT );
 
 	// locking uber alles
-	// in RT backed case, we just must be multi-threaded
+	// in RT backend case, we just must be multi-threaded
 	// so we simply lock here, and ignore Lock/Unlock hassle caused by forks
 	assert ( m_iLockFD<0 );
 
@@ -3092,6 +3045,10 @@ bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 		::close ( m_iLockFD );
 		return false;
 	}
+
+	/////////////
+	// load meta
+	/////////////
 
 	// check if we have a meta file (kinda-header)
 	CSphString sMeta;
@@ -3122,6 +3079,63 @@ bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 	m_tStats.m_iTotalBytes = rdMeta.GetOffset();
 	if ( uVersion>=2 )
 		m_iTID = rdMeta.GetOffset();
+
+	// tricky bit
+	// we started saving settings into .meta from v.4 and up only
+	// and those reuse disk format version, aka INDEX_FORMAT_VERSION
+	// anyway, starting v.4, serialized settings take precedence over config
+	// so different chunks can't have different settings any more
+	if ( uVersion>=4 )
+	{
+		CSphTokenizerSettings tTokenizerSettings;
+		CSphDictSettings tDictSettings;
+		CSphString sWarning;
+
+		// load them settings
+		DWORD uSettingsVer = rdMeta.GetDword();
+		ReadSchema ( rdMeta, m_tSchema, uSettingsVer, false );
+		LoadIndexSettings ( m_tSettings, rdMeta, uSettingsVer );
+		LoadTokenizerSettings ( rdMeta, tTokenizerSettings, uSettingsVer, sWarning );
+		LoadDictionarySettings ( rdMeta, tDictSettings, uSettingsVer, sWarning );
+
+		// fixup them settings
+		if ( m_bId32to64 )
+			tDictSettings.m_bCrc32 = true;
+
+		if ( bStripPath )
+		{
+			StripPath ( tTokenizerSettings.m_sSynonymsFile );
+			StripPath ( tDictSettings.m_sStopwords );
+			StripPath ( tDictSettings.m_sWordforms );
+		}
+
+		// recreate tokenizer
+		SafeDelete ( m_pTokenizer );
+		m_pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, m_sLastError );
+		if ( !m_pTokenizer )
+			return false;
+
+		// !COMMIT implement support for multiforms, eh?
+		// ISphTokenizer * pTokenFilter = ISphTokenizer::CreateTokenFilter ( pTokenizer, pDict->GetMultiWordforms () );
+		// SetTokenizer ( pTokenFilter ? pTokenFilter : pTokenizer );
+
+		// recreate dictionary
+		SafeDelete ( m_pDict );
+		CSphDict * pDict = tDictSettings.m_bWordDict
+			? sphCreateDictionaryKeywords ( tDictSettings, m_pTokenizer, m_sLastError, m_sIndexName.cstr() )
+			: sphCreateDictionaryCRC ( tDictSettings, m_pTokenizer, m_sLastError, m_sIndexName.cstr() );
+		if ( !pDict )
+			return false;
+
+		// update schema
+		m_tOutboundSchema = m_tSchema;
+		ComputeOutboundSchema();
+		m_iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+	}
+
+	///////////////
+	// load chunks
+	///////////////
 
 	m_bPathStripped = bStripPath;
 
@@ -4577,6 +4591,87 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 	// all done
 	m_tRwlock.Unlock ();
 	return iUpdated;
+}
+
+//////////////////////////////////////////////////////////////////////////
+// MAGIC CONVERSIONS
+//////////////////////////////////////////////////////////////////////////
+
+bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
+{
+	// safeguards
+	// we do not support some of the disk index features in RT just yet
+#define LOC_ERROR(_arg) { sError = _arg; return false; }
+	const CSphIndexSettings & tSettings = pIndex->GetSettings();
+	if ( tSettings.m_bIndexSP!=false )
+		LOC_ERROR ( "ATTACH currently requires index_sp=0 in disk index (RT-side support not implemented yet)" );
+	if ( !tSettings.m_sZones.IsEmpty() )
+		LOC_ERROR ( "ATTACH currently requires no zones in disk index (RT-side support not implemented yet)" );
+	if ( tSettings.m_iBoundaryStep!=0 )
+		LOC_ERROR ( "ATTACH currently requires boundary_step=0 in disk index (RT-side support not implemented yet)" );
+	if ( tSettings.m_iStopwordStep!=1 )
+		LOC_ERROR ( "ATTACH currently requires stopword_step=1 in disk index (RT-side support not implemented yet)" );
+	if ( pIndex->GetDictionary()->GetSettings().m_bWordDict!=false )
+		LOC_ERROR ( "ATTACH currently requires dict=crc in disk index (RT-side support not implemented yet)" );
+#undef LOC_ERROR
+
+	// ATTACH needs an exclusive global lock on both indexes
+	// source disk index must come in locked internally
+	// target RT index lock is acquired here
+	m_tWriterMutex.Lock();
+	m_tRwlock.WriteLock();
+
+	// for now, let's do the simplest possible thing
+	// and attach new data to empty RT indexes only
+	bool bHasData = ( m_pDiskChunks.GetLength()!=0 );
+	ARRAY_FOREACH_COND ( i, m_pSegments, !bHasData )
+		bHasData = ( m_pSegments[i]->m_iAliveRows!=0 );
+
+	if ( bHasData )
+	{
+		m_tRwlock.Unlock();
+		m_tWriterMutex.Unlock();
+		sError.SetSprintf ( "ATTACH currently supports empty target RT indexes only" );
+		return false;
+	}
+
+	// rename that source index to our chunk0
+	CSphString sChunk;
+	sChunk.SetSprintf ( "%s.0", m_sPath.cstr() );
+	if ( !pIndex->Rename ( sChunk.cstr() ) )
+	{
+		m_tRwlock.Unlock();
+		m_tWriterMutex.Unlock();
+		sError.SetSprintf ( "ATTACH failed: %s", pIndex->GetLastError().cstr() );
+		return false;
+	}
+
+	// copy schema from chunk0 schema
+	m_tSchema = pIndex->GetMatchSchema();
+	m_tOutboundSchema = m_tSchema;
+	m_tStats = pIndex->GetStats();
+	ComputeOutboundSchema();
+	m_iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+
+	// copy tokenizer, dict etc settings from chunk0
+	SafeDelete ( m_pTokenizer );
+	SafeDelete ( m_pDict );
+	m_pTokenizer = pIndex->GetTokenizer()->Clone ( false );
+	m_pDict = pIndex->GetDictionary()->Clone ();
+
+	// FIXME? what about copying m_TID etc?
+
+	// recreate disk chunk list, resave header file
+	m_pDiskChunks.Add ( pIndex );
+	SaveMeta ( m_pDiskChunks.GetLength() );
+
+	// FIXME? do something about binlog too?
+	// g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
+
+	// all done
+	Verify ( m_tRwlock.Unlock() );
+	Verify ( m_tWriterMutex.Unlock() );
+	return true;
 }
 
 //////////////////////////////////////////////////////////////////////////

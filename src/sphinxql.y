@@ -21,6 +21,7 @@
 
 %token	TOK_AS
 %token	TOK_ASC
+%token	TOK_ATTACH
 %token	TOK_AVG
 %token	TOK_BEGIN
 %token	TOK_BETWEEN
@@ -44,6 +45,7 @@
 %token	TOK_GROUP
 %token	TOK_ID
 %token	TOK_IN
+%token	TOK_INDEX
 %token	TOK_INSERT
 %token	TOK_INT
 %token	TOK_INTO
@@ -61,6 +63,7 @@
 %token	TOK_REPLACE
 %token	TOK_RETURNS
 %token	TOK_ROLLBACK
+%token	TOK_RTINDEX
 %token	TOK_SELECT
 %token	TOK_SET
 %token	TOK_SESSION
@@ -70,6 +73,7 @@
 %token	TOK_STATUS
 %token	TOK_SUM
 %token	TOK_TABLES
+%token	TOK_TO
 %token	TOK_TRANSACTION
 %token	TOK_TRUE
 %token	TOK_UPDATE
@@ -122,6 +126,7 @@ statement:
 	| show_collation
 	| create_function
 	| drop_function
+	| attach_index
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -809,6 +814,18 @@ drop_function:
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_DROP_FUNC;
 			tStmt.m_sUdfName = $3.m_sValue;
+		}
+	;
+
+////////////////////////////////////////////////////////////
+
+attach_index:
+	TOK_ATTACH TOK_INDEX TOK_IDENT TOK_TO TOK_RTINDEX TOK_IDENT
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_ATTACH_INDEX;
+			tStmt.m_sIndex = $3.m_sValue;
+			tStmt.m_sSetName = $6.m_sValue;
 		}
 	;
 

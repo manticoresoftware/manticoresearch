@@ -1377,9 +1377,6 @@ private:
 	static const int			MIN_WRITE_BUFFER		= 262144;	///< min write buffer size
 	static const int			DEFAULT_WRITE_BUFFER	= 1048576;	///< default write buffer size
 
-	static const DWORD			INDEX_MAGIC_HEADER		= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD			INDEX_FORMAT_VERSION	= 26;			///< my format version
-
 private:
 	// common stuff
 	CSphString					m_sFilename;
@@ -1465,9 +1462,6 @@ private:
 	void						cidxHit ( CSphAggregateHit * pHit, CSphRowitem * pDocinfos );
 	bool						cidxDone ( const char * sHeaderExtension, int iMemLimit );
 
-	void						WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInfo & tCol );
-	void						ReadSchemaColumn ( CSphReader & rdInfo, CSphColumnInfo & tCol );
-
 	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict, const CSphVector<CSphFilterSettings> * pExtraFilters, CSphQueryNodeCache * pNodeCache, int iTag ) const;
 	bool						MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const;
 	bool						MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker, int iTag ) const;
@@ -1479,9 +1473,6 @@ private:
 
 	CSphDict *					SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer & tTokenizer ) const;
 	CSphDict *					SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer & tTokenizer ) const;
-
-	void						LoadSettings ( CSphReader & tReader );
-	void						SaveSettings ( CSphWriter & tWriter );
 
 	bool						RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSize, SphOffset_t * pFileSize, CSphBin * pMinBin, SphOffset_t * pSharedOffset );
 	bool						PrecomputeMinMax();
@@ -2642,7 +2633,7 @@ CSphTokenizerSettings::CSphTokenizerSettings ()
 }
 
 
-static void LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings & tSettings, DWORD uVersion, CSphString & sWarning )
+void LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings & tSettings, DWORD uVersion, CSphString & sWarning )
 {
 	if ( uVersion<9 )
 		return;
@@ -2663,7 +2654,7 @@ static void LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings 
 }
 
 
-static void SaveTokenizerSettings ( CSphWriter & tWriter, ISphTokenizer * pTokenizer )
+void SaveTokenizerSettings ( CSphWriter & tWriter, ISphTokenizer * pTokenizer )
 {
 	assert ( pTokenizer );
 
@@ -2712,6 +2703,7 @@ void LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings
 
 void SaveDictionarySettings ( CSphWriter & tWriter, CSphDict * pDict )
 {
+	assert ( pDict );
 	const CSphDictSettings & tSettings = pDict->GetSettings ();
 
 	tWriter.PutString ( tSettings.m_sMorphology.cstr () );
@@ -8132,7 +8124,53 @@ void CSphIndex_VLN::cidxHit ( CSphAggregateHit * hit, CSphRowitem * pAttrs )
 }
 
 
-void CSphIndex_VLN::WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInfo & tCol )
+static void ReadSchemaColumn ( CSphReader & rdInfo, CSphColumnInfo & tCol, DWORD uVersion )
+{
+	tCol.m_sName = rdInfo.GetString ();
+	if ( tCol.m_sName.IsEmpty () )
+		tCol.m_sName = "@emptyname";
+
+	tCol.m_sName.ToLower ();
+	tCol.m_eAttrType = (ESphAttr) rdInfo.GetDword (); // FIXME? check/fixup?
+
+	if ( uVersion>=5 ) // m_uVersion for searching
+	{
+		rdInfo.GetDword (); // ignore rowitem
+		tCol.m_tLocator.m_iBitOffset = rdInfo.GetDword ();
+		tCol.m_tLocator.m_iBitCount = rdInfo.GetDword ();
+	} else
+	{
+		tCol.m_tLocator.m_iBitOffset = -1;
+		tCol.m_tLocator.m_iBitCount = -1;
+	}
+
+	if ( uVersion>=16 ) // m_uVersion for searching
+		tCol.m_bPayload = ( rdInfo.GetByte()!=0 );
+
+	// WARNING! max version used here must be in sync with RtIndex_t::Prealloc
+}
+
+
+void ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema, DWORD uVersion, bool bDynamic )
+{
+	m_tSchema.Reset ();
+
+	m_tSchema.m_dFields.Resize ( rdInfo.GetDword() );
+	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+		ReadSchemaColumn ( rdInfo, m_tSchema.m_dFields[i], uVersion );
+
+	int iNumAttrs = rdInfo.GetDword();
+
+	for ( int i=0; i<iNumAttrs; i++ )
+	{
+		CSphColumnInfo tCol;
+		ReadSchemaColumn ( rdInfo, tCol, uVersion );
+		m_tSchema.AddAttr ( tCol, bDynamic );
+	}
+}
+
+
+static void WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInfo & tCol )
 {
 	int iLen = strlen ( tCol.m_sName.cstr() );
 	fdInfo.PutDword ( iLen );
@@ -8151,28 +8189,33 @@ void CSphIndex_VLN::WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInf
 }
 
 
-void CSphIndex_VLN::ReadSchemaColumn ( CSphReader & rdInfo, CSphColumnInfo & tCol )
+void WriteSchema ( CSphWriter & fdInfo, const CSphSchema & tSchema )
 {
-	tCol.m_sName = rdInfo.GetString ();
-	if ( tCol.m_sName.IsEmpty () )
-		tCol.m_sName = "@emptyname";
+	// schema
+	fdInfo.PutDword ( tSchema.m_dFields.GetLength() );
+	ARRAY_FOREACH ( i, tSchema.m_dFields )
+		WriteSchemaColumn ( fdInfo, tSchema.m_dFields[i] );
 
-	tCol.m_sName.ToLower ();
-	tCol.m_eAttrType = (ESphAttr) rdInfo.GetDword (); // FIXME? check/fixup?
+	fdInfo.PutDword ( tSchema.GetAttrsCount() );
+	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
+		WriteSchemaColumn ( fdInfo, tSchema.GetAttr(i) );
+}
 
-	if ( m_uVersion>=5 )
-	{
-		rdInfo.GetDword (); // ignore rowitem
-		tCol.m_tLocator.m_iBitOffset = rdInfo.GetDword ();
-		tCol.m_tLocator.m_iBitCount = rdInfo.GetDword ();
-	} else
-	{
-		tCol.m_tLocator.m_iBitOffset = -1;
-		tCol.m_tLocator.m_iBitCount = -1;
-	}
 
-	if ( m_uVersion>=16 )
-		tCol.m_bPayload = ( rdInfo.GetByte()!=0 );
+void SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettings )
+{
+	tWriter.PutDword ( tSettings.m_iMinPrefixLen );
+	tWriter.PutDword ( tSettings.m_iMinInfixLen );
+	tWriter.PutByte ( tSettings.m_bHtmlStrip ? 1 : 0 );
+	tWriter.PutString ( tSettings.m_sHtmlIndexAttrs.cstr () );
+	tWriter.PutString ( tSettings.m_sHtmlRemoveElements.cstr () );
+	tWriter.PutByte ( tSettings.m_bIndexExactWords ? 1 : 0 );
+	tWriter.PutDword ( tSettings.m_eHitless );
+	tWriter.PutDword ( tSettings.m_eHitFormat );
+	tWriter.PutByte ( tSettings.m_bIndexSP );
+	tWriter.PutString ( tSettings.m_sZones );
+	tWriter.PutDword ( tSettings.m_iBoundaryStep );
+	tWriter.PutDword ( tSettings.m_iStopwordStep );
 }
 
 
@@ -8189,13 +8232,7 @@ bool CSphIndex_VLN::WriteHeader ( CSphWriter & fdInfo, SphOffset_t iCheckpointsP
 	fdInfo.PutDword ( m_tSettings.m_eDocinfo );
 
 	// schema
-	fdInfo.PutDword ( m_tSchema.m_dFields.GetLength() );
-	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
-		WriteSchemaColumn ( fdInfo, m_tSchema.m_dFields[i] );
-
-	fdInfo.PutDword ( m_tSchema.GetAttrsCount() );
-	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
-		WriteSchemaColumn ( fdInfo, m_tSchema.GetAttr(i) );
+	WriteSchema ( fdInfo, m_tSchema );
 
 	// min doc
 	fdInfo.PutOffset ( m_pMin->m_iDocID ); // was dword in v.1
@@ -8211,7 +8248,7 @@ bool CSphIndex_VLN::WriteHeader ( CSphWriter & fdInfo, SphOffset_t iCheckpointsP
 	fdInfo.PutOffset ( m_tStats.m_iTotalBytes );
 
 	// index settings
-	SaveSettings ( fdInfo );
+	SaveIndexSettings ( fdInfo, m_tSettings );
 
 	// tokenizer info
 	assert ( m_pTokenizer );
@@ -12594,23 +12631,55 @@ void CSphIndex_VLN::Dealloc ()
 }
 
 
-static void StripPath ( CSphString & sPath )
+void LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion )
 {
-	if ( sPath.IsEmpty() )
-		return;
+	if ( uVersion>=8 )
+	{
+		tSettings.m_iMinPrefixLen = tReader.GetDword ();
+		tSettings.m_iMinInfixLen = tReader.GetDword ();
 
-	const char * s = sPath.cstr();
-	if ( *s!='/' )
-		return;
+	} else if ( uVersion>=6 )
+	{
+		bool bPrefixesOnly = ( tReader.GetByte ()!=0 );
+		tSettings.m_iMinPrefixLen = tReader.GetDword ();
+		tSettings.m_iMinInfixLen = 0;
+		if ( !bPrefixesOnly )
+			Swap ( tSettings.m_iMinPrefixLen, tSettings.m_iMinInfixLen );
+	}
 
-	const char * sLastSlash = s;
-	for ( ; *s; s++ )
-		if ( *s=='/' )
-			sLastSlash = s;
+	if ( uVersion>=9 )
+	{
+		tSettings.m_bHtmlStrip = !!tReader.GetByte ();
+		tSettings.m_sHtmlIndexAttrs = tReader.GetString ();
+		tSettings.m_sHtmlRemoveElements = tReader.GetString ();
+	}
 
-	int iPos = (int)( sLastSlash - sPath.cstr() + 1 );
-	int iLen = (int)( s - sPath.cstr() );
-	sPath = sPath.SubString ( iPos, iLen - iPos );
+	if ( uVersion>=12 )
+		tSettings.m_bIndexExactWords = !!tReader.GetByte ();
+
+	if ( uVersion>=18 )
+		tSettings.m_eHitless = (ESphHitless)tReader.GetDword();
+
+	if ( uVersion>=19 )
+		tSettings.m_eHitFormat = (ESphHitFormat)tReader.GetDword();
+	else // force plain format for old indices
+		tSettings.m_eHitFormat = SPH_HIT_FORMAT_PLAIN;
+
+	if ( uVersion>=21 )
+		tSettings.m_bIndexSP = !!tReader.GetByte();
+
+	if ( uVersion>=22 )
+	{
+		tSettings.m_sZones = tReader.GetString();
+		if ( uVersion<25 && !tSettings.m_sZones.IsEmpty() )
+			tSettings.m_sZones.SetSprintf ( "%s*", tSettings.m_sZones.cstr() );
+	}
+
+	if ( uVersion>=23 )
+	{
+		tSettings.m_iBoundaryStep = (int)tReader.GetDword();
+		tSettings.m_iStopwordStep = (int)tReader.GetDword();
+	}
 }
 
 
@@ -12660,24 +12729,15 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 	m_tSettings.m_eDocinfo = (ESphDocinfo) rdInfo.GetDword();
 
 	// schema
-	m_tSchema.Reset ();
+	// 4th arg means that inline attributes need be dynamic in searching time too
+	ReadSchema ( rdInfo, m_tSchema, m_uVersion, m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE );
 
-	m_tSchema.m_dFields.Resize ( rdInfo.GetDword() );
-	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
-		ReadSchemaColumn ( rdInfo, m_tSchema.m_dFields[i] );
-
-	int iNumAttrs = rdInfo.GetDword();
-	bool bDynamic = ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE ); // inline attributes need be dynamic in searching time too
-
-	for ( int i=0; i<iNumAttrs; i++ )
+	// check schema for dupes
+	for ( int iAttr=1; iAttr<m_tSchema.GetAttrsCount(); iAttr++ )
 	{
-		CSphColumnInfo tCol;
-		ReadSchemaColumn ( rdInfo, tCol );
-		m_tSchema.AddAttr ( tCol, bDynamic );
-
-		// warn on dups
-		for ( int k = 0; k < m_tSchema.GetAttrsCount() - 1; k++ )
-			if ( m_tSchema.GetAttr(k).m_sName==tCol.m_sName )
+		const CSphColumnInfo & tCol = m_tSchema.GetAttr(iAttr);
+		for ( int i=0; i<iAttr; i++ )
+			if ( m_tSchema.GetAttr(i).m_sName==tCol.m_sName )
 				sWarning.SetSprintf ( "duplicate attribute name: %s", tCol.m_sName.cstr() );
 	}
 
@@ -12702,7 +12762,9 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 	m_tStats.m_iTotalDocuments = rdInfo.GetDword ();
 	m_tStats.m_iTotalBytes = rdInfo.GetOffset ();
 
-	LoadSettings ( rdInfo );
+	LoadIndexSettings ( m_tSettings, rdInfo, m_uVersion );
+	if ( m_uVersion<9 )
+		m_bStripperInited = false;
 
 	if ( m_uVersion>=9 )
 	{
@@ -13794,76 +13856,6 @@ CSphDict * CSphIndex_VLN::SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer,
 	tTokenizer.AddCaseFolding ( tStar );
 
 	return tContainer.Ptr();
-}
-
-
-void CSphIndex_VLN::LoadSettings ( CSphReader & tReader )
-{
-	if ( m_uVersion>=8 )
-	{
-		m_tSettings.m_iMinPrefixLen = tReader.GetDword ();
-		m_tSettings.m_iMinInfixLen = tReader.GetDword ();
-
-	} else if ( m_uVersion>=6 )
-	{
-		bool bPrefixesOnly = ( tReader.GetByte ()!=0 );
-		m_tSettings.m_iMinPrefixLen = tReader.GetDword ();
-		m_tSettings.m_iMinInfixLen = 0;
-		if ( !bPrefixesOnly )
-			Swap ( m_tSettings.m_iMinPrefixLen, m_tSettings.m_iMinInfixLen );
-	}
-
-	if ( m_uVersion>=9 )
-	{
-		m_tSettings.m_bHtmlStrip = !!tReader.GetByte ();
-		m_tSettings.m_sHtmlIndexAttrs = tReader.GetString ();
-		m_tSettings.m_sHtmlRemoveElements = tReader.GetString ();
-	} else
-		m_bStripperInited = false;
-
-	if ( m_uVersion>=12 )
-		m_tSettings.m_bIndexExactWords = !!tReader.GetByte ();
-
-	if ( m_uVersion>=18 )
-		m_tSettings.m_eHitless = (ESphHitless)tReader.GetDword();
-
-	if ( m_uVersion>=19 )
-		m_tSettings.m_eHitFormat = (ESphHitFormat)tReader.GetDword();
-	else // force plain format for old indices
-		m_tSettings.m_eHitFormat = SPH_HIT_FORMAT_PLAIN;
-
-	if ( m_uVersion>=21 )
-		m_tSettings.m_bIndexSP = !!tReader.GetByte();
-
-	if ( m_uVersion>=22 )
-	{
-		m_tSettings.m_sZones = tReader.GetString();
-		if ( m_uVersion<25 && !m_tSettings.m_sZones.IsEmpty() )
-			m_tSettings.m_sZones.SetSprintf ( "%s*", m_tSettings.m_sZones.cstr() );
-	}
-
-	if ( m_uVersion>=23 )
-	{
-		m_tSettings.m_iBoundaryStep = (int)tReader.GetDword();
-		m_tSettings.m_iStopwordStep = (int)tReader.GetDword();
-	}
-}
-
-
-void CSphIndex_VLN::SaveSettings ( CSphWriter & tWriter )
-{
-	tWriter.PutDword ( m_tSettings.m_iMinPrefixLen );
-	tWriter.PutDword ( m_tSettings.m_iMinInfixLen );
-	tWriter.PutByte ( m_tSettings.m_bHtmlStrip ? 1 : 0 );
-	tWriter.PutString ( m_tSettings.m_sHtmlIndexAttrs.cstr () );
-	tWriter.PutString ( m_tSettings.m_sHtmlRemoveElements.cstr () );
-	tWriter.PutByte ( m_tSettings.m_bIndexExactWords ? 1 : 0 );
-	tWriter.PutDword ( m_tSettings.m_eHitless );
-	tWriter.PutDword ( m_tSettings.m_eHitFormat );
-	tWriter.PutByte ( m_tSettings.m_bIndexSP );
-	tWriter.PutString ( m_tSettings.m_sZones );
-	tWriter.PutDword ( m_tSettings.m_iBoundaryStep );
-	tWriter.PutDword ( m_tSettings.m_iStopwordStep );
 }
 
 

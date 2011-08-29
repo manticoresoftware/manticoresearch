@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>Bigint and float attribute updates via sphinxql</name>
+
+<requires></requires>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+	binlog_path = #
+}
+
+source src
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_table WHERE id&lt;4
+	sql_attr_uint	= section
+	sql_attr_bigint = bint
+	sql_attr_float = bfloat
+}
+
+source src1 : src
+{
+	sql_query = SELECT * FROM test_table WHERE id&lt;3
+}
+
+source src2 : src
+{
+	sql_query = SELECT *  FROM test_table WHERE id=3
+}
+
+index dist_no
+{
+	source			= src
+	path			= <data_path/>/idx
+	docinfo			= extern
+	charset_type	= utf-8
+	min_word_len	= 1
+}
+
+index idx1 : dist_no
+{
+	source			= src1
+	path			= <data_path/>/idx1
+}
+
+index idx2 : dist_no
+{
+	source			= src2
+	path			= <data_path/>/idx2
+}
+
+index dist0
+{
+	type					= distributed
+	local					= dist_no
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist1
+{
+	type					= distributed
+	local					= idx1
+	local					= idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist2
+{
+	type					= distributed
+	agent					= <my_address/>:idx1
+	local					= idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist3
+{
+	type					= distributed
+	local					= idx1
+	agent					= <my_address/>:idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist4
+{
+	type					= distributed
+	agent					= <my_address/>:idx1
+	agent					= <my_address/>:idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist5
+{
+	type					= distributed
+	agent					= <my_address/>:dist_no
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index rt
+{
+	type = rt
+	path			= <data_path/>/rt
+	charset_type 	= utf-8
+	docinfo			= extern
+
+	rt_field			= body
+	rt_attr_uint	= gid
+	rt_attr_bigint	= bint
+	rt_attr_float	= bfloat
+}
+
+</config>
+
+<sphqueries>
+<sphinxql>insert into rt (id, gid, bint, bfloat, body) values (1, 1, 1, 1.0, 'dummy'), (3, 33, 44, 55.0, 'dummy1')</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+<sphinxql>select * from dist_no</sphinxql>
+<sphinxql>update dist_no set bint=-4560000000000, bfloat=55.5, section=111 where match ('test1')</sphinxql>
+<sphinxql>select * from dist_no</sphinxql>
+<sphinxql>update dist0 set bint=40000000000, bfloat=55.5, section=111 where match ('test1')</sphinxql>
+<sphinxql>select * from dist0</sphinxql>
+<sphinxql>update dist1 set bint=410000000000, bfloat=56.6, section=112 where match ('test1')</sphinxql>
+<sphinxql>select * from dist1</sphinxql>
+<sphinxql>update dist2 set bint=420000000000, bfloat=57.7, section=113 where match ('test1')</sphinxql>
+<sphinxql>select * from dist2</sphinxql>
+<sphinxql>update dist3 set bint=-430000000000, bfloat=58.8, section=114 where match ('test1')</sphinxql>
+<sphinxql>select * from dist3</sphinxql>
+<sphinxql>update dist4 set bint=440000000000, bfloat=59.9, section=115 where match ('test1')</sphinxql>
+<sphinxql>select * from dist4</sphinxql>
+<sphinxql>update dist5 set bint=-450000000000, bfloat=60.4, section=116 where match ('test1')</sphinxql>
+<sphinxql>select * from dist5</sphinxql>
+<sphinxql>update rt set gid=3212, bfloat=55.5, bint=2340000000000 where id=1</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+</sphqueries>
+
+  <DB_Create>
+CREATE TABLE `test_table` (
+  `id` int(11) DEFAULT NULL,
+  `text` varchar (255) NOT NULL,
+  `section` int(11) DEFAULT NULL,
+  `bint` BIGINT NOT NULL,
+  `bfloat` float DEFAULT NULL
+)
+  </DB_Create>
+
+  <DB_Drop>
+DROP TABLE IF EXISTS `test_table`
+  </DB_Drop>
+
+  <DB_Insert>
+INSERT INTO `test_table` (`id`, `text`, `section`, `bint`, `bfloat`) VALUES 
+(1, 'test test1', 101, 7000000000, 3.14),
+(2, 'testt test2', 102, 8000000000, 1.44),
+(3, 'test test3', 103, -7000000000, 3.42),
+(4, 'testt test4', 104, -10000000000, 246.2);
+  </DB_Insert>
+  
+</test>

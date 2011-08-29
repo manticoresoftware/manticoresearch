@@ -755,7 +755,11 @@ update_items_list:
 update_item:
 	TOK_IDENT '=' const_int
 		{
-			pParser->UpdateAttr ( $1.m_sValue, (DWORD) $3.m_iValue );
+			pParser->UpdateAttr ( $1.m_sValue, &$3 );
+		}
+	| TOK_IDENT '=' const_float
+		{
+			pParser->UpdateAttr ( $1.m_sValue, &$3, SPH_ATTR_FLOAT);
 		}
 	| TOK_IDENT '='  '(' const_list ')'
 		{

@@ -4374,8 +4374,12 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 	// remap update schema to index schema
 	CSphVector<CSphAttrLocator> dLocators;
 	CSphVector<int> dIndexes;
+	CSphVector<bool> dFloats;
+	CSphVector<bool> dBigints;
 	dLocators.Reserve ( tUpd.m_dAttrs.GetLength() );
 	dIndexes.Reserve ( tUpd.m_dAttrs.GetLength() );
+	dFloats.Reserve ( tUpd.m_dAttrs.GetLength() );
+	dBigints.Reserve ( tUpd.m_dAttrs.GetLength() ); // bigint flags for *source* schema.
 
 	uint64_t uDst64 = 0;
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
@@ -4387,12 +4391,15 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 			return -1;
 		}
 
+		dBigints.Add ( tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_BIGINT );
+
 		// forbid updates on non-int columns
 		const CSphColumnInfo & tCol = m_tSchema.GetAttr(iIndex);
 		if ( !( tCol.m_eAttrType==SPH_ATTR_BOOL || tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP
-			|| tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET ) )
+			|| tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET
+			|| tCol.m_eAttrType==SPH_ATTR_BIGINT || tCol.m_eAttrType==SPH_ATTR_FLOAT ))
 		{
-			sError.SetSprintf ( "attribute '%s' can not be updated (must be boolean, integer, or timestamp or MVA)", tUpd.m_dAttrs[i].m_sName.cstr() );
+			sError.SetSprintf ( "attribute '%s' can not be updated (must be boolean, integer, bigint, float or timestamp or MVA)", tUpd.m_dAttrs[i].m_sName.cstr() );
 			return -1;
 		}
 
@@ -4414,6 +4421,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 		if ( tCol.m_eAttrType==SPH_ATTR_UINT64SET )
 			uDst64 |= ( U64C(1)<<i );
 
+		dFloats.Add ( tCol.m_eAttrType==SPH_ATTR_FLOAT );
 		dLocators.Add ( tCol.m_tLocator );
 
 		// find dupes to optimize
@@ -4466,8 +4474,9 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 						// plain update
 						uUpdateMask |= ATTRS_UPDATED;
 
-						SphAttr_t uValue = tUpd.m_dPool[iPos++];
+						SphAttr_t uValue = dBigints[iCol] ? MVA_UPSIZE ( &tUpd.m_dPool[iPos] ) : tUpd.m_dPool[iPos];
 						sphSetRowAttr ( pRow, dLocators[iCol], uValue );
+						iPos += dBigints[iCol]?2:1;
 					}
 				} else
 				{

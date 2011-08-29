@@ -7578,7 +7578,7 @@ public:
 	CSphVector<CSphNamedInt> &	GetNamedVec ( int iIndex );
 	void						FreeNamedVec ( int iIndex );
 	bool						UpdateStatement ( SqlNode_t * pNode );
-	void						UpdateAttr ( const CSphString&, DWORD uValue, ESphAttr eType = SPH_ATTR_INTEGER );
+	void						UpdateAttr ( const CSphString&, const SqlNode_t * pValue, ESphAttr eType = SPH_ATTR_INTEGER );
 	void						UpdateMVAAttr ( const CSphString& sName, const SqlNode_t& dValues );
 private:
 	void			AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
@@ -7932,7 +7932,7 @@ void SqlParser_c::AddConst ( int iList, const YYSTYPE& tValue )
 	dVec.Add();
 	dVec.Last().m_sName = tValue.m_sValue;
 	dVec.Last().m_sName.ToLower();
-	dVec.Last().m_iValue = tValue.m_iValue;
+	dVec.Last().m_iValue = (int) tValue.m_iValue;
 }
 
 void SqlParser_c::SetStatement ( const YYSTYPE& tName, SqlSet_e eSet )
@@ -7961,10 +7961,21 @@ void SqlParser_c::AddUpdatedAttr ( const CSphString& sName, ESphAttr eType )
 	tAttr.m_eAttrType = eType; // sorry, ints only for now, riding on legacy shit!
 }
 
-void SqlParser_c::UpdateAttr ( const CSphString& sName, DWORD uValue, ESphAttr eType )
+void SqlParser_c::UpdateAttr ( const CSphString& sName, const SqlNode_t * pValue, ESphAttr eType )
 {
+	if ( eType==SPH_ATTR_FLOAT )
+		m_pStmt->m_tUpdate.m_dPool.Add ( *(const DWORD*)( &pValue->m_fValue ) );
+	else // default: if ( eType==SPH_ATTR_INTEGER )
+	{
+		m_pStmt->m_tUpdate.m_dPool.Add ( (DWORD) pValue->m_iValue );
+		DWORD uHi = (DWORD) ( pValue->m_iValue>>32 );
+		if ( uHi )
+		{
+			m_pStmt->m_tUpdate.m_dPool.Add ( uHi );
+			eType = SPH_ATTR_BIGINT;
+		}
+	}
 	AddUpdatedAttr ( sName, eType );
-	m_pStmt->m_tUpdate.m_dPool.Add ( uValue );
 }
 
 void SqlParser_c::UpdateMVAAttr ( const CSphString& sName, const SqlNode_t& dValues )

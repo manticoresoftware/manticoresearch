@@ -7290,8 +7290,12 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 	// remap update schema to index schema
 	CSphVector<CSphAttrLocator> dLocators;
 	CSphVector<int> dIndexes;
+	CSphVector<bool> dFloats;
+	CSphVector<bool> dBigints;
 	dLocators.Reserve ( tUpd.m_dAttrs.GetLength() );
 	dIndexes.Reserve ( tUpd.m_dAttrs.GetLength() );
+	dFloats.Reserve ( tUpd.m_dAttrs.GetLength() );
+	dBigints.Reserve ( tUpd.m_dAttrs.GetLength() ); // bigint flags for *source* schema.
 	uint64_t uDst64 = 0;
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
 	{
@@ -7302,12 +7306,15 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 			return -1;
 		}
 
+		dBigints.Add ( tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_BIGINT );
+
 		// forbid updates on non-int columns
 		const CSphColumnInfo & tCol = m_tSchema.GetAttr(iIndex);
 		if (!( tCol.m_eAttrType==SPH_ATTR_BOOL || tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP
-			|| tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET ))
+			|| tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET
+			|| tCol.m_eAttrType==SPH_ATTR_BIGINT || tCol.m_eAttrType==SPH_ATTR_FLOAT ))
 		{
-			sError.SetSprintf ( "attribute '%s' can not be updated (must be boolean, integer, timestamp, or MVA)", tUpd.m_dAttrs[i].m_sName.cstr() );
+			sError.SetSprintf ( "attribute '%s' can not be updated (must be boolean, integer, bigint, float, timestamp, or MVA)", tUpd.m_dAttrs[i].m_sName.cstr() );
 			return -1;
 		}
 
@@ -7336,6 +7343,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 		if ( tCol.m_eAttrType==SPH_ATTR_UINT64SET )
 			uDst64 |= ( U64C(1)<<i );
 
+		dFloats.Add ( tCol.m_eAttrType==SPH_ATTR_FLOAT );
 		dLocators.Add ( tCol.m_tLocator );
 
 		// find dupes to optimize
@@ -7388,6 +7396,8 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 			if (!( bSrcMva32 || bSrcMva64 )) // FIXME! optimize using a prebuilt dword mask?
 			{
 				iPoolPos++;
+				if ( dBigints[iCol] )
+					iPoolPos++;
 				continue;
 			}
 
@@ -7456,7 +7466,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 				// plain update
 				if ( dIndexes[iCol]>=0 )
 				{
-					SphAttr_t uValue = tUpd.m_dPool[iPos];
+					SphAttr_t uValue = dBigints[iCol] ? MVA_UPSIZE ( &tUpd.m_dPool[iPos] ) : tUpd.m_dPool[iPos];
 					sphSetRowAttr ( pEntry, dLocators[iCol], uValue );
 
 					// update block and index ranges
@@ -7465,15 +7475,26 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 						DWORD * pBlock = i ? pBlockRanges : pIndexRanges;
 						SphAttr_t uMin = sphGetRowAttr ( DOCINFO2ATTRS ( pBlock ), dLocators[iCol] );
 						SphAttr_t uMax = sphGetRowAttr ( DOCINFO2ATTRS ( pBlock+iRowStride ) , dLocators[iCol] );
-						if ( uValue<uMin || uValue>uMax )
+						if ( dFloats[iCol] ) // update float's indexes assumes float comparision
 						{
-							sphSetRowAttr ( DOCINFO2ATTRS ( pBlock ), dLocators[iCol], Min ( uMin, uValue ) );
-							sphSetRowAttr ( DOCINFO2ATTRS ( pBlock+iRowStride ), dLocators[iCol], Max ( uMax, uValue ) );
+							float fValue = sphDW2F ( (DWORD) uValue );
+							float fMin = sphDW2F ( (DWORD) uMin );
+							float fMax = sphDW2F ( (DWORD) uMax );
+							if ( fValue<fMin )
+								sphSetRowAttr ( DOCINFO2ATTRS ( pBlock ), dLocators[iCol], sphF2DW ( fValue ) );
+							if ( fValue>fMax )
+								sphSetRowAttr ( DOCINFO2ATTRS ( pBlock+iRowStride ), dLocators[iCol], sphF2DW ( fValue ) );
+						} else // update usual integers
+						{
+							if ( uValue<uMin )
+								sphSetRowAttr ( DOCINFO2ATTRS ( pBlock ), dLocators[iCol], uValue );
+							if ( uValue>uMax )
+								sphSetRowAttr ( DOCINFO2ATTRS ( pBlock+iRowStride ), dLocators[iCol], uValue );
 						}
 					}
 					uUpdateMask |= ATTRS_UPDATED;
 				}
-				iPos++;
+				iPos += dBigints[iCol]?2:1;
 				continue;
 			}
 

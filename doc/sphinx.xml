@@ -4526,15 +4526,20 @@ UPDATE index SET col1 = newval1 [, ...] WHERE where_condition
 </programlisting>
 <para>
 UPDATE statement was added in version 2.0.1-beta. It can currently
-update 32-bit integer attributes only. Multiple attributes and values
-can be specified. Both RT and disk indexes are supported.
-Updates on other attribute types are also planned.
+update 32-bit and 64-bit integers, 32-bit and 64-bit MVAs and floats attributes only. Multiple attributes and values
+can be specified. Both RT and disk indexes are supported. Updates on other attribute types are also planned.
 </para>
 <para><code>where_condition</code> uses the same syntax as in SELECT statement (Refer to <xref linkend="sphinxql-select"/> for details).
+</para>
+<para>When assigning the out-of-range values to 32-bit attributes, they will be trimmed to their lower 32 bits without a prompt. For example, if you try to update the 32-bit unsigned int with number 4294967297, you actually will write there the number 1. Because the low 32 bits of 4294967297 (0x100000001) is exactly 1 (0x00000001).
+</para>
+<para>MVA values sets for updating (and also for INSERT or REPLACE, refer to <xref linked="sphinxql-insert"/>) must be written comma-separated and surrounded in cirly brackets. For wiping out the MVA value assign the empty brackets to it.
 </para>
 <programlisting>
 mysql> UPDATE myindex SET enabled=0 WHERE id=123;
 Query OK, 1 rows affected (0.00 sec)
+mysql> UPDATE myindex SET bigattr=-100000000000, fattr=3465.23, mvattr1=(3,6,4), mvattr2=() WHERE match('hehe') AND enabled=1;
+Query OK, 148 rows affected (0.01 sec)
 </programlisting>
 </sect1>
 
@@ -7179,7 +7184,7 @@ sql_attr_multi = ATTR-TYPE ATTR-NAME 'from' SOURCE-TYPE \
 </programlisting>
 where
 <itemizedlist>
-<listitem><para>ATTR-TYPE is 'uint' or 'timestamp'</para></listitem>
+<listitem><para>ATTR-TYPE is 'uint', 'bigint' or 'timestamp'</para></listitem>
 <listitem><para>SOURCE-TYPE is 'field', 'query', or 'ranged-query'</para></listitem>
 <listitem><para>QUERY is SQL query used to fetch all ( docid, attrvalue ) pairs</para></listitem>
 <listitem><para>RANGE-QUERY is SQL query used to fetch min and max ID values, similar to 'sql_query_range'</para></listitem>
@@ -7188,7 +7193,7 @@ where
 <bridgehead>Example:</bridgehead>
 <programlisting>
 sql_attr_multi = uint tag from query; SELECT id, tag FROM tags
-sql_attr_multi = uint tag from ranged-query; \
+sql_attr_multi = bigint tag from ranged-query; \
 	SELECT id, tag FROM tags WHERE id&gt;=$start AND id&lt;=$end; \
 	SELECT MIN(id), MAX(id) FROM tags
 </programlisting>
@@ -7584,6 +7589,24 @@ xmlpipe_attr_multi = taglist
 </programlisting>
 </sect2>
 
+<sect2 id="conf-xmlpipe-attr-multi-64"><title>xmlpipe_attr_multi_64</title>
+<para>
+xmlpipe MVA attribute declaration. Declares the BIGINT (signed 64-bit integer) MVA attribute.
+Multi-value, optional.
+Applies to <option>xmlpipe2</option> source type only.
+</para>
+<para>
+This setting declares an MVA attribute tag in xmlpipe2 stream.
+The contents of the specified tag will be parsed and a list of integers
+that will constitute the MVA will be extracted, similar to how
+<link linkend="conf-sql-attr-multi">sql_attr_multi</link> parses
+SQL column contents when 'field' MVA source type is specified.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+xmlpipe_attr_multi_64 = taglist
+</programlisting>
+</sect2>
 
 <sect2 id="conf-xmlpipe-attr-string"><title>xmlpipe_attr_string</title>
 <para>
@@ -9567,6 +9590,29 @@ rt_attr_float = gpa
 </programlisting>
 </sect2>
 
+<sect2 id="conf-rt-attr-multi"><title>rt_attr_multi</title>
+<para>
+<link linkend="mva">Multi-valued attribute</link> (MVA) declaration.
+Multi-value (ie. there may be more than one such attribute declared), optional.
+Applies to <option>rt</option>-indexes only.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+rt_attr_multi = my_tags
+</programlisting>
+</sect2>
+
+<sect2 id="conf-rt-attr-multi-64"><title>rt_attr_multi_64</title>
+<para>
+<link linkend="mva">Multi-valued attribute</link> (MVA) declaration. Declares the BIGINT (signed 64-bit) MVA attribute.
+Multi-value (ie. there may be more than one such attribute declared), optional.
+Applies to <option>rt</option>-indexes only.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+rt_attr_multi_64 = my_wide_tags
+</programlisting>
+</sect2>
 
 <sect2 id="conf-rt-attr-timestamp"><title>rt_attr_timestamp</title>
 <para>

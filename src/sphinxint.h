@@ -28,6 +28,21 @@
 // INTERNAL CONSTANTS
 //////////////////////////////////////////////////////////////////////////
 
+#ifdef O_BINARY
+#define SPH_O_BINARY O_BINARY
+#else
+#define SPH_O_BINARY 0
+#endif
+
+#define SPH_O_READ	( O_RDONLY | SPH_O_BINARY )
+#define SPH_O_NEW	( O_CREAT | O_RDWR | O_TRUNC | SPH_O_BINARY )
+
+#define MVA_DOWNSIZE		DWORD			// MVA32 offset type
+#define MVA_OFFSET_MASK		0x7fffffffUL	// MVA offset mask
+#define MVA_ARENA_FLAG		0x80000000UL	// MVA global-arena flag
+
+//////////////////////////////////////////////////////////////////////////
+
 const char		MAGIC_SYNONYM_WHITESPACE	= 1;				// used internally in tokenizer only
 const char		MAGIC_CODE_SENTENCE			= 2;				// emitted from tokenizer on sentence boundary
 const char		MAGIC_CODE_PARAGRAPH		= 3;				// emitted from stripper (and passed via tokenizer) on paragraph boundary
@@ -44,40 +59,12 @@ extern const char *		MAGIC_WORD_PARAGRAPH;
 // INTERNAL GLOBALS
 //////////////////////////////////////////////////////////////////////////
 
-class ISphBinlog : ISphNoncopyable
-{
-public:
-	virtual				~ISphBinlog () {}
-
-	virtual void		BinlogUpdateAttributes ( const char * sIndexName, int64_t iTID, const CSphAttrUpdate & tUpd ) = 0;
-	virtual void		NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool bShutdown ) = 0;
-};
-
 /// binlog, defind in sphinxrt.cpp
-extern ISphBinlog *		g_pBinlog;
+extern class ISphBinlog *		g_pBinlog;
 
 //////////////////////////////////////////////////////////////////////////
 // INTERNAL HELPER FUNCTIONS, CLASSES, ETC
 //////////////////////////////////////////////////////////////////////////
-
-#ifdef O_BINARY
-#define SPH_O_BINARY O_BINARY
-#else
-#define SPH_O_BINARY 0
-#endif
-
-#define SPH_O_READ	( O_RDONLY | SPH_O_BINARY )
-#define SPH_O_NEW	( O_CREAT | O_RDWR | O_TRUNC | SPH_O_BINARY )
-
-#define MVA_DOWNSIZE		DWORD			// MVA32 offset type
-#define MVA_OFFSET_MASK		0x7fffffffUL	// MVA offset mask
-#define MVA_ARENA_FLAG		0x80000000UL	// MVA global-arena flag
-inline uint64_t MVA_UPSIZE ( const DWORD * pMva )
-{
-	uint64_t uMva = (uint64_t)pMva[0] | ( ( (uint64_t)pMva[1] )<<32 );
-	return uMva;
-}
-
 
 /// file writer with write buffering and int encoder
 class CSphWriter : ISphNoncopyable
@@ -132,7 +119,6 @@ protected:
 
 	virtual void	Flush ();
 };
-
 
 
 /// file which closes automatically when going out of scope
@@ -232,6 +218,7 @@ private:
 	void		UpdateCache ();
 };
 
+
 /// scoped reader
 class CSphAutoreader : public CSphReader
 {
@@ -299,34 +286,10 @@ public:
 	void						SetMVAPool ( const DWORD * pMva );
 };
 
-struct SphStringSorterRemap_t
-{
-	CSphAttrLocator m_tSrc;
-	CSphAttrLocator m_tDst;
-};
-
-ISphExpr *	sphSortSetupExpr ( const CSphString & sName, const CSphSchema & tIndexSchema );
-bool		sphSortGetStringRemap ( const CSphSchema & tSorterSchema, const CSphSchema & tIndexSchema, CSphVector<SphStringSorterRemap_t> & dAttrs );
-void		sphSortRemoveInternalAttrs ( CSphSchema & tSchema );
-bool		sphIsSortStringInternal ( const char * sColumnName );
-
+//////////////////////////////////////////////////////////////////////////
+// MEMORY TRACKER
 //////////////////////////////////////////////////////////////////////////
 
-bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * sName, CSphString & sError );
-
-void SafeClose ( int & iFD );
-
-void sphMergeStats ( CSphQueryResultMeta & tDstResult, const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hSrc );
-
-bool sphCheckQueryHeight ( const struct XQNode_t * pRoot, CSphString & sError );
-
-void sphTransformExtendedQuery ( XQNode_t ** ppNode );
-
-const BYTE * SkipQuoted ( const BYTE * p );
-
-//////////////////////////////////////////////////////////////////////////
-
-/// memory tracker
 namespace Memory
 {
 	enum Category_e
@@ -397,8 +360,18 @@ struct MemTracker_c : ISphNoncopyable
 #endif // if SPH_ALLOCS_PROFILER
 
 //////////////////////////////////////////////////////////////////////////
+// BLOCK-LEVEL ATTRIBUTE INDEX BUILDER
+//////////////////////////////////////////////////////////////////////////
 
 #define DOCINFO_INDEX_FREQ 128 // FIXME? make this configurable
+
+
+inline uint64_t MVA_UPSIZE ( const DWORD * pMva )
+{
+	uint64_t uMva = (uint64_t)pMva[0] | ( ( (uint64_t)pMva[1] )<<32 );
+	return uMva;
+}
+
 
 struct CSphDocMVA
 {
@@ -818,6 +791,8 @@ void AttrIndexBuilder_t<DOCID>::FinishCollect ( bool bMvaOnly )
 }
 
 //////////////////////////////////////////////////////////////////////////
+// INLINES, FIND_XXX() GENERIC FUNCTIONS
+//////////////////////////////////////////////////////////////////////////
 
 /// find a value-enclosing span in a sorted vector (aka an index at which vec[i] <= val < vec[i+1])
 template < typename T >
@@ -895,6 +870,8 @@ inline int FindBit ( DWORD uValue )
 	return iIdx;
 }
 
+//////////////////////////////////////////////////////////////////////////
+// INLINES, UTF-8 TOOLS
 //////////////////////////////////////////////////////////////////////////
 
 /// decode UTF-8 codepoint
@@ -1000,6 +977,8 @@ inline int sphUTF8Len ( const char * pStr, int iMax )
 }
 
 //////////////////////////////////////////////////////////////////////////
+// MATCHING ENGINE INTERNALS
+//////////////////////////////////////////////////////////////////////////
 
 /// hit in the stream
 struct ExtHit_t
@@ -1027,6 +1006,8 @@ public:
 	virtual SphZoneHit_e IsInZone ( int iZone, const ExtHit_t * pHit ) = 0;
 };
 
+//////////////////////////////////////////////////////////////////////////
+// INLINES, MISC
 //////////////////////////////////////////////////////////////////////////
 
 inline const char * sphTypeName ( ESphAttr eType )
@@ -1102,6 +1083,8 @@ inline void SqlUnescape ( CSphString & sRes, const char * sEscaped, int iLen )
 }
 
 //////////////////////////////////////////////////////////////////////////
+// DISK INDEX INTERNALS
+//////////////////////////////////////////////////////////////////////////
 
 /// locator pair, for RT string dynamization
 struct LocatorPair_t
@@ -1120,6 +1103,8 @@ struct ISphIndex_VLN : public CSphIndex
 	virtual void SetDynamize ( const CSphVector<LocatorPair_t> & dDynamize ) = 0;
 };
 
+//////////////////////////////////////////////////////////////////////////
+// DICTIONARY INTERNALS
 //////////////////////////////////////////////////////////////////////////
 
 /// dict traits
@@ -1179,6 +1164,43 @@ public:
 	explicit CSphDictExact ( CSphDict * pDict ) : CSphDictTraits ( pDict ) {}
 	virtual SphWordID_t	GetWordID ( BYTE * pWord );
 };
+
+//////////////////////////////////////////////////////////////////////////
+// BINLOG INTERNALS
+//////////////////////////////////////////////////////////////////////////
+
+/// global binlog interface
+class ISphBinlog : ISphNoncopyable
+{
+public:
+	virtual				~ISphBinlog () {}
+
+	virtual void		BinlogUpdateAttributes ( const char * sIndexName, int64_t iTID, const CSphAttrUpdate & tUpd ) = 0;
+	virtual void		NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool bShutdown ) = 0;
+};
+
+//////////////////////////////////////////////////////////////////////////
+// MISC FUNCTION PROTOTYPES
+//////////////////////////////////////////////////////////////////////////
+
+struct SphStringSorterRemap_t
+{
+	CSphAttrLocator m_tSrc;
+	CSphAttrLocator m_tDst;
+};
+
+void			SafeClose ( int & iFD );
+const BYTE *	SkipQuoted ( const BYTE * p );
+
+ISphExpr *		sphSortSetupExpr ( const CSphString & sName, const CSphSchema & tIndexSchema );
+bool			sphSortGetStringRemap ( const CSphSchema & tSorterSchema, const CSphSchema & tIndexSchema, CSphVector<SphStringSorterRemap_t> & dAttrs );
+void			sphSortRemoveInternalAttrs ( CSphSchema & tSchema );
+bool			sphIsSortStringInternal ( const char * sColumnName );
+
+bool			sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * sName, CSphString & sError );
+void			sphMergeStats ( CSphQueryResultMeta & tDstResult, const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hSrc );
+bool			sphCheckQueryHeight ( const struct XQNode_t * pRoot, CSphString & sError );
+void			sphTransformExtendedQuery ( XQNode_t ** ppNode );
 
 #endif // _sphinxint_
 

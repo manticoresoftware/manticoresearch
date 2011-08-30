@@ -10819,33 +10819,53 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 		return;
 	}
 
+	// empty result sets just might carry the full uberschema
+	// bummer! lets protect ourselves against that
+	int iAttrs = 1;
+	if ( tRes.m_dMatches.GetLength() )
+	{
+		iAttrs = tRes.m_tSchema.GetAttrsCount();
+		if ( g_bCompatResults )
+			iAttrs += 2;
+	}
+	if ( iAttrs>=251 )
+	{
+		SendMysqlErrorPacket ( tOut, uPacketID++, "selecting more than 250 columns is not supported yet" );
+		return;
+	}
+
 	// result set header packet
 	tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
-	if ( g_bCompatResults )
-		tOut.SendByte ( BYTE ( 2+tRes.m_tSchema.GetAttrsCount() ) );
-	else
-		tOut.SendByte ( BYTE ( tRes.m_tSchema.GetAttrsCount() ) );
+	tOut.SendByte ( BYTE(iAttrs) );
 	tOut.SendByte ( 0 ); // extra
 
 	// field packets
-	if ( g_bCompatResults )
+	if ( !tRes.m_dMatches.GetLength() )
 	{
+		// in case there are no matches, send a dummy schema
 		SendMysqlFieldPacket ( tOut, uPacketID++, "id", USE_64BIT ? MYSQL_COL_LONGLONG : MYSQL_COL_LONG );
-		SendMysqlFieldPacket ( tOut, uPacketID++, "weight", MYSQL_COL_LONG );
-	}
-
-	for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
+	} else
 	{
-		const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
-		MysqlColumnType_e eType = MYSQL_COL_STRING;
-		if ( tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP || tCol.m_eAttrType==SPH_ATTR_BOOL
-			|| tCol.m_eAttrType==SPH_ATTR_FLOAT || tCol.m_eAttrType==SPH_ATTR_ORDINAL || tCol.m_eAttrType==SPH_ATTR_WORDCOUNT )
-			eType = MYSQL_COL_LONG;
-		if ( tCol.m_eAttrType==SPH_ATTR_BIGINT )
-			eType = MYSQL_COL_LONGLONG;
-		if ( tCol.m_eAttrType==SPH_ATTR_STRING )
-			eType = MYSQL_COL_STRING;
-		SendMysqlFieldPacket ( tOut, uPacketID++, tCol.m_sName.cstr(), eType );
+		// send result set schema
+		if ( g_bCompatResults )
+		{
+			SendMysqlFieldPacket ( tOut, uPacketID++, "id", USE_64BIT ? MYSQL_COL_LONGLONG : MYSQL_COL_LONG );
+			SendMysqlFieldPacket ( tOut, uPacketID++, "weight", MYSQL_COL_LONG );
+		}
+
+		for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
+		{
+			const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
+			MysqlColumnType_e eType = MYSQL_COL_STRING;
+			if ( tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP || tCol.m_eAttrType==SPH_ATTR_BOOL
+				|| tCol.m_eAttrType==SPH_ATTR_FLOAT || tCol.m_eAttrType==SPH_ATTR_ORDINAL || tCol.m_eAttrType==SPH_ATTR_WORDCOUNT )
+				eType = MYSQL_COL_LONG;
+			if ( tCol.m_eAttrType==SPH_ATTR_BIGINT )
+				eType = MYSQL_COL_LONGLONG;
+			if ( tCol.m_eAttrType==SPH_ATTR_STRING )
+				eType = MYSQL_COL_STRING;
+			SendMysqlFieldPacket ( tOut, uPacketID++, tCol.m_sName.cstr(), eType );
+		}
 	}
 
 	// eof packet

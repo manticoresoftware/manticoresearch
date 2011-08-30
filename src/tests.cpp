@@ -1721,8 +1721,14 @@ void TestRTWeightBoundary ()
 
 		ISphRtIndex * pIndex = sphCreateIndexRT ( tSchema, "testrt", 32*1024*1024, RT_INDEX_FILE_NAME );
 
-		pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
-		pIndex->SetDictionary ( pDict );
+		// tricky bit
+		// index owns its tokenizer/dict pair, and MAY do whatever it wants
+		// and starting with meta v4, it WILL deallocate tokenizer/dict in Prealloc()
+		// in favor of tokenizer/dict loaded from the saved settings in meta
+		// however, source still needs those guys!
+		// so for simplicity i just clone them
+		pIndex->SetTokenizer ( pTok->Clone ( false ) );
+		pIndex->SetDictionary ( pDict->Clone() );
 		Verify ( pIndex->Prealloc ( false, false, sError ) );
 
 		ISphHits * pHits;
@@ -1759,6 +1765,8 @@ void TestRTWeightBoundary ()
 		SafeDelete ( pSorter );
 		SafeDelete ( pIndex );
 
+		SafeDelete ( pDict );
+		SafeDelete ( pTok );
 		sphRTDone ();
 
 		printf ( "ok\n" );

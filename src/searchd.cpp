@@ -325,6 +325,9 @@ static volatile sig_atomic_t g_bGotSigterm		= 0;	// we just received SIGTERM; ne
 static volatile sig_atomic_t g_bGotSigchld		= 0;	// we just received SIGCHLD; need to count dead children
 static volatile sig_atomic_t g_bGotSigusr1		= 0;	// we just received SIGUSR1; need to reopen logs
 
+// pipe to watchdog to inform that daemon is going to close, so no need to restart it in case of crash
+static CSphSharedBuffer<DWORD> g_bDaemonAtShutdown;
+
 static CSphVector<int>	g_dTermChildren;				// children to send term signal on rotation is done
 static int64_t			g_tmRotateChildren		= 0;	// pause to next children term signal after rotation is done
 static int				g_iRotationThrottle		= 0;	// pause between children term signals after rotation is done
@@ -1243,6 +1246,11 @@ void Shutdown ()
 	// some head-only shutdown procedures
 	if ( g_bHeadDaemon )
 	{
+		if ( !g_bDaemonAtShutdown.IsEmpty() )
+		{
+			*g_bDaemonAtShutdown.GetWritePtr() = 1;
+		}
+
 		const int iShutWaitPeriod = 3000000;
 
 		if ( g_eWorkers==MPM_THREADS )
@@ -11346,7 +11354,7 @@ void HandleMysqlAttach ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 		|| pFrom->m_bRT
 		|| !pTo->m_bRT )
 	{
-		if ( !pFrom || !pFrom->m_bEnabled)
+		if ( !pFrom || !pFrom->m_bEnabled )
 			SendMysqlErrorPacketEx ( tOut, uPacketID, MYSQL_ERR_PARSE_ERROR, "no such index '%s'", sFrom.cstr() );
 		else if ( !pTo || !pTo->m_bEnabled )
 			SendMysqlErrorPacketEx ( tOut, uPacketID, MYSQL_ERR_PARSE_ERROR, "no such index '%s'", sTo.cstr() );
@@ -13755,6 +13763,19 @@ void ShowHelp ()
 }
 
 
+template<typename T>
+T * InitSharedBuffer ( CSphSharedBuffer<T> & tBuffer, int iLen )
+{
+	CSphString sError, sWarning;
+	if ( !tBuffer.Alloc ( iLen, sError, sWarning ) )
+		sphDie ( "failed to allocate shared buffer (msg=%s)", sError.cstr() );
+
+	T * pRes = tBuffer.GetWritePtr();
+	memset ( pRes, 0, iLen*sizeof(T) ); // reset
+	return pRes;
+}
+
+
 #if USE_WINDOWS
 BOOL WINAPI CtrlHandler ( DWORD )
 {
@@ -13793,6 +13814,8 @@ int PreforkChild ()
 // returns 'true' only once - at the very start, to show it beatiful way.
 bool SetWatchDog ( int iDevNull )
 {
+	InitSharedBuffer ( g_bDaemonAtShutdown, 1 );
+
 	// Fork #1 - detach from controlling terminal
 	switch ( fork() )
 	{
@@ -13882,15 +13905,19 @@ bool SetWatchDog ( int iDevNull )
 
 		iReincarnate = 0;
 		int iPid, iStatus;
+		bool bDaemonAtShutdown = 0;
 		while ( ( iPid = wait ( &iStatus ) )>0 )
 		{
+			bDaemonAtShutdown = ( g_bDaemonAtShutdown[0]!=0 );
+			const char * sWillRestart = ( bDaemonAtShutdown ? "will not be restarted ( daemon is shutting down )" : "will be restarted" );
+
 			assert ( iPid==iRes );
 			if ( WIFEXITED ( iStatus ) )
 			{
 				int iExit = WEXITSTATUS ( iStatus );
 				if ( iExit==2 ) // really crash
 				{
-					sphInfo ( "Child process %d has been finished by CRASH_EXIT (exit code 2), will be restarted", iPid );
+					sphInfo ( "Child process %d has been finished by CRASH_EXIT (exit code 2), %s", iPid, sWillRestart );
 					iReincarnate = -1;
 				} else
 				{
@@ -13910,9 +13937,9 @@ bool SetWatchDog ( int iDevNull )
 				} else
 				{
 					if ( WCOREDUMP ( iStatus ) )
-						sphInfo ( "Child process %i has been killed with signal %i, core dumped, will be restarted", iPid, WTERMSIG ( iStatus ) );
+						sphInfo ( "Child process %i has been killed with signal %i, core dumped, %s", iPid, WTERMSIG ( iStatus ), sWillRestart );
 					else
-						sphInfo ( "Child process %i has been killed with signal %i, will be restarted", iPid, WTERMSIG ( iStatus ) );
+						sphInfo ( "Child process %i has been killed with signal %i, %s", iPid, WTERMSIG ( iStatus ), sWillRestart );
 					iReincarnate = -1;
 				}
 			} else if ( WIFSTOPPED ( iStatus ) )
@@ -13923,7 +13950,7 @@ bool SetWatchDog ( int iDevNull )
 #endif
 		}
 
-		if ( bShutdown || g_bGotSigterm )
+		if ( bShutdown || g_bGotSigterm || bDaemonAtShutdown )
 		{
 			Shutdown();
 			exit ( 0 );
@@ -14441,18 +14468,6 @@ void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 	sphSockClose ( iClientSock );
 }
 
-
-template<typename T>
-T * InitSharedBuffer ( CSphSharedBuffer<T> & tBuffer, int iLen )
-{
-	CSphString sError, sWarning;
-	if ( !tBuffer.Alloc ( iLen, sError, sWarning ) )
-		sphDie ( "failed to allocate shared buffer (msg=%s)", sError.cstr() );
-
-	T * pRes = tBuffer.GetWritePtr();
-	memset ( pRes, 0, iLen*sizeof(T) ); // reset
-	return pRes;
-}
 
 void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 {

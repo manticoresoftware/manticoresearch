@@ -6726,6 +6726,8 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 		ARRAY_FOREACH ( i, dLocked )
 			ReleaseIndex ( dLocked[i] );
 
+		dLocked.Resize ( 0 );
+
 		// cleanup sorters
 		if ( !pLocalSorter )
 			ARRAY_FOREACH ( i, dSorters )

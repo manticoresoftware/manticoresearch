@@ -154,10 +154,28 @@ static CSphVector<CSphString>	g_dArgs;
 static bool				g_bHeadDaemon	= false;
 static bool				g_bLogStdout	= true;
 
+struct CrashQuery_t
+{
+	const BYTE *			m_pQuery;	// last query
+	int						m_iSize;	// last query size
+	WORD					m_uCMD;		// last command (header)
+	WORD					m_uVer;		// last command's version (header)
+	bool					m_bMySQL;	// is query from MySQL or API
+
+	CrashQuery_t ()
+		: m_pQuery ( NULL )
+		, m_iSize ( 0 )
+		, m_uCMD ( 0 )
+		, m_uVer ( 0 )
+		, m_bMySQL ( false )
+	{
+	}
+};
+
 class SphCrashLogger_c
 {
 public:
-	SphCrashLogger_c ();
+	SphCrashLogger_c () {}
 
 	static void Init ();
 	static void Done ();
@@ -167,19 +185,15 @@ public:
 #else
 	static LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc );
 #endif
-	static void SetLastQuery ( const BYTE * pQuery, int iSize, bool bMySQL, int uCmd=0, int uVer=0 );
+	static void SetLastQuery ( const CrashQuery_t & tQuery );
 	static void SetupTimePID ();
+	static CrashQuery_t GetQuery ();
 	void SetupTLS ();
 
 private:
-	const BYTE *			m_pQuery;	// last query
-	int						m_iSize;	// last query size
-	WORD					m_uCMD;		// last command (header)
-	WORD					m_uVer;		// last command's version (header)
-	bool					m_bMySQL;	// is query from MySQL or API
+	CrashQuery_t			m_tQuery;
 
-	static SphCrashLogger_c	m_tLastQuery; // non threaded mode last query
-	static SphThreadKey_t	m_tLastQueryTLS; // threaded mode last query
+	static SphThreadKey_t	m_tLastQueryTLS; // last query ( non threaded workers could use dist_threads too )
 };
 
 enum LogFormat_e
@@ -1335,8 +1349,6 @@ void Shutdown ()
 		SafeDelete ( g_pIndexes );
 		sphRTDone();
 
-		SphCrashLogger_c::Done();
-
 		sphShutdownWordforms ();
 	}
 
@@ -1372,7 +1384,10 @@ void Shutdown ()
 		sphInfo ( "shutdown complete" );
 
 	if ( g_bHeadDaemon )
+	{
+		SphCrashLogger_c::Done();
 		sphThreadDone ( g_iLogFile );
+	}
 }
 
 #if !USE_WINDOWS
@@ -1511,28 +1526,16 @@ static int		g_iCrashInfoLen = 0;
 static char		g_sMinidump[SPH_TIME_PID_MAX_SIZE] = "";
 #endif
 
-SphCrashLogger_c SphCrashLogger_c::m_tLastQuery = SphCrashLogger_c ();
 SphThreadKey_t SphCrashLogger_c::m_tLastQueryTLS = SphThreadKey_t ();
-
-SphCrashLogger_c::SphCrashLogger_c ()
-	: m_pQuery ( NULL )
-	, m_iSize ( 0 )
-	, m_uCMD ( 0 )
-	, m_uVer ( 0 )
-	, m_bMySQL ( false )
-{
-}
 
 void SphCrashLogger_c::Init ()
 {
-	if ( g_eWorkers==MPM_THREADS )
-		Verify ( sphThreadKeyCreate ( &m_tLastQueryTLS ) );
+	Verify ( sphThreadKeyCreate ( &m_tLastQueryTLS ) );
 }
 
 void SphCrashLogger_c::Done ()
 {
-	if ( g_eWorkers==MPM_THREADS )
-		sphThreadKeyDelete ( m_tLastQueryTLS );
+	sphThreadKeyDelete ( m_tLastQueryTLS );
 }
 
 
@@ -1554,13 +1557,7 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 	sphWrite ( g_iLogFile, g_sCrashInfo, g_iCrashInfoLen );
 
 	// log query
-	SphCrashLogger_c tQuery = m_tLastQuery;
-	if ( g_eWorkers==MPM_THREADS && !g_bSafeTrace )
-	{
-		const SphCrashLogger_c * pQueryTLS = (SphCrashLogger_c *)sphThreadGet ( m_tLastQueryTLS );
-		if ( pQueryTLS )
-			tQuery = *pQueryTLS;
-	}
+	CrashQuery_t tQuery = SphCrashLogger_c::GetQuery();
 
 	// request dump banner
 	int iBannerLen = ( tQuery.m_bMySQL ? sizeof(g_sCrashedBannerMySQL) : sizeof(g_sCrashedBannerAPI) ) - 1;
@@ -1668,17 +1665,13 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 	CRASH_EXIT;
 }
 
-void SphCrashLogger_c::SetLastQuery ( const BYTE * pQuery, int iSize, bool bMySQL, int uCmd, int uVer )
+void SphCrashLogger_c::SetLastQuery ( const CrashQuery_t & tQuery )
 {
-	SphCrashLogger_c * pLastQuery = &m_tLastQuery;
-	if ( g_eWorkers==MPM_THREADS )
-		pLastQuery = (SphCrashLogger_c *)sphThreadGet ( m_tLastQueryTLS );
-
-	pLastQuery->m_pQuery = pQuery;
-	pLastQuery->m_iSize = iSize;
-	pLastQuery->m_uCMD = (WORD)uCmd;
-	pLastQuery->m_uVer = (WORD)uVer;
-	pLastQuery->m_bMySQL = bMySQL;
+	SphCrashLogger_c * pCrashLogger = (SphCrashLogger_c *)sphThreadGet ( m_tLastQueryTLS );
+	if ( pCrashLogger )
+	{
+		pCrashLogger->m_tQuery = tQuery;
+	}
 }
 
 void SphCrashLogger_c::SetupTimePID ()
@@ -1691,10 +1684,13 @@ void SphCrashLogger_c::SetupTimePID ()
 
 void SphCrashLogger_c::SetupTLS ()
 {
-	if ( g_eWorkers!=MPM_THREADS )
-		return;
-
 	Verify ( sphThreadSet ( m_tLastQueryTLS, this ) );
+}
+
+CrashQuery_t SphCrashLogger_c::GetQuery()
+{
+	SphCrashLogger_c * pCrashLogger = (SphCrashLogger_c *)sphThreadGet ( m_tLastQueryTLS );
+	return pCrashLogger ? pCrashLogger->m_tQuery : CrashQuery_t();
 }
 
 
@@ -6291,12 +6287,19 @@ struct LocalSearchThreadContext_t
 	SphThread_t					m_tThd;
 	SearchHandler_c *			m_pHandler;
 	CSphVector<LocalSearch_t*>	m_pSearches;
+	CrashQuery_t				m_tCrashQuery;
 };
 
 
 void LocalSearchThreadFunc ( void * pArg )
 {
 	LocalSearchThreadContext_t * pContext = (LocalSearchThreadContext_t*) pArg;
+
+	// setup query guard for thread
+	SphCrashLogger_c tQueryTLS;
+	tQueryTLS.SetupTLS ();
+	SphCrashLogger_c::SetLastQuery ( pContext->m_tCrashQuery );
+
 	ARRAY_FOREACH ( i, pContext->m_pSearches )
 	{
 		LocalSearch_t * pCall = pContext->m_pSearches[i];
@@ -6390,10 +6393,12 @@ void SearchHandler_c::RunLocalSearchesMT ()
 	for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
 		m_dExtraSchemas[iQuery].AwareMT();
 
+	CrashQuery_t tCrashQuery = SphCrashLogger_c::GetQuery(); // transfer query info for crash logger to new thread
 	// fire searcher threads
 	ARRAY_FOREACH ( i, dThreads )
 	{
 		dThreads[i].m_pHandler = this;
+		dThreads[i].m_tCrashQuery = tCrashQuery;
 		sphThreadCreate ( &dThreads[i].m_tThd, LocalSearchThreadFunc, (void*)&dThreads[i] ); // FIXME! check result
 	}
 
@@ -8268,6 +8273,7 @@ struct SnippetThread_t
 	ExcerptQuery_t *			m_pQueries;
 	volatile int *				m_pCurQuery;
 	CSphIndex *					m_pIndex;
+	CrashQuery_t				m_tCrashQuery;
 
 	SnippetThread_t()
 		: m_pLock ( NULL )
@@ -8562,6 +8568,11 @@ void SnippetThreadFunc ( void * pArg )
 {
 	SnippetThread_t * pDesc = (SnippetThread_t*) pArg;
 
+	// setup query guard for thread
+	SphCrashLogger_c tQueryTLS;
+	tQueryTLS.SetupTLS ();
+	SphCrashLogger_c::SetLastQuery ( pDesc->m_tCrashQuery );
+
 	SnippetContext_t tCtx;
 	tCtx.Setup ( pDesc->m_pIndex, *pDesc->m_pQueries, pDesc->m_pQueries->m_sError );
 
@@ -8807,6 +8818,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		CSphMutex tLock;
 		tLock.Init();
 
+		CrashQuery_t tCrashQuery = SphCrashLogger_c::GetQuery(); // transfer query info for crash logger to new thread
 		int iCurQuery = 0;
 		CSphVector<SnippetThread_t> dThreads ( g_iDistThreads );
 		for ( int i=0; i<g_iDistThreads; i++ )
@@ -8817,6 +8829,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 			t.m_pQueries = dQueries.Begin();
 			t.m_pCurQuery = &iCurQuery;
 			t.m_pIndex = pIndex;
+			t.m_tCrashQuery = tCrashQuery;
 			if ( i )
 				sphThreadCreate ( &dThreads[i].m_tThd, SnippetThreadFunc, &dThreads[i] );
 		}
@@ -9590,7 +9603,13 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 		}
 
 		// set on query guard
-		SphCrashLogger_c::SetLastQuery ( tBuf.GetBufferPtr(), iLength, false, iCommand, iCommandVer );
+		CrashQuery_t tCrashQuery;
+		tCrashQuery.m_pQuery = tBuf.GetBufferPtr();
+		tCrashQuery.m_iSize = iLength;
+		tCrashQuery.m_bMySQL = false;
+		tCrashQuery.m_uCMD = (WORD)iCommand;
+		tCrashQuery.m_uVer = (WORD)iCommandVer;
+		SphCrashLogger_c::SetLastQuery ( tCrashQuery );
 
 		// handle known commands
 		assert ( iCommand>=0 && iCommand<SEARCHD_COMMAND_TOTAL );
@@ -9618,7 +9637,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 		}
 
 		// set off query guard
-		SphCrashLogger_c::SetLastQuery ( NULL, 0, false );
+		SphCrashLogger_c::SetLastQuery ( CrashQuery_t() );
 	} while ( bPersist );
 
 	sphLogDebugv ( "conn %s: exiting", sClientIP );
@@ -11408,7 +11427,11 @@ public:
 	void Execute ( const CSphString & sQuery, NetOutputBuffer_c & tOut, BYTE & uPacketID, ThdDesc_t * pThd=NULL )
 	{
 		// set on query guard
-		SphCrashLogger_c::SetLastQuery ( (const BYTE *)sQuery.cstr(), sQuery.Length(), true );
+		CrashQuery_t tCrashQuery;
+		tCrashQuery.m_pQuery = (const BYTE *)sQuery.cstr();
+		tCrashQuery.m_iSize = sQuery.Length();
+		tCrashQuery.m_bMySQL = true;
+		SphCrashLogger_c::SetLastQuery ( tCrashQuery );
 
 		// parse SQL query
 		CSphVector<SqlStmt_t> dStmt;
@@ -11620,7 +11643,9 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 	for ( ;; )
 	{
 		// set off query guard
-		SphCrashLogger_c::SetLastQuery ( NULL, 0, true );
+		CrashQuery_t tCrashQuery;
+		tCrashQuery.m_bMySQL = true;
+		SphCrashLogger_c::SetLastQuery ( tCrashQuery );
 
 		// send the packet formed on the previous cycle
 		THD_STATE ( THD_NET_WRITE );
@@ -11710,7 +11735,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 	} // for (;;)
 
 	// set off query guard
-	SphCrashLogger_c::SetLastQuery ( NULL, 0, true );
+	SphCrashLogger_c::SetLastQuery ( CrashQuery_t() );
 }
 
 //////////////////////////////////////////////////////////////////////////

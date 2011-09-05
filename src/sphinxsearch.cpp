@@ -5811,7 +5811,9 @@ bool NodeCacheContainer_t::WarmupCache ( ExtNode_i * pChild, int iQwords )
 
 		const ExtHit_t * pHits = NULL;
 		if ( iHasDocs )
-			while (	( pHits = pChild->GetHitsChunk ( pChunkHits, pChild->m_uMaxID ) )!=NULL )
+		{
+			SphDocID_t uLastDocid = m_Docs.Last().m_uDocid;
+			while (	( pHits = pChild->GetHitsChunk ( pChunkHits, uLastDocid ) )!=NULL )
 			{
 				for ( ; pHits->m_uDocid!=DOCID_MAX; pHits++ )
 				{
@@ -5819,6 +5821,7 @@ bool NodeCacheContainer_t::WarmupCache ( ExtNode_i * pChild, int iQwords )
 					m_pNodeCache->m_iMaxCachedHits--;
 				}
 			}
+		}
 
 		// too many values, stop caching
 		if ( m_pNodeCache->m_iMaxCachedDocs<0 || m_pNodeCache->m_iMaxCachedHits<0 )

@@ -12,6 +12,8 @@ indexer
 searchd
 {
 	<searchd_settings/>
+    subtree_docs_cache  = 128k
+    subtree_hits_cache  = 128k
 }
 
 source test1
@@ -44,6 +46,20 @@ index test2
 	html_strip		= 1
 	index_sp		= 1
 }
+
+source test3
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table3
+	sql_attr_uint	= gid
+}
+index test3
+{
+	source			= test3
+	path			= <data_path/>/test3
+	docinfo		= extern
+}
 </config>
 
 <db_create>
@@ -62,8 +78,17 @@ create table test_table2
 	title varchar(256) not null
 );
 </db_create>
+<db_create>
+create table test_table3
+(
+	id int not null,
+	gid int not null,
+	title varchar(64) not null
+);
+</db_create>
 <db_drop>drop table if exists test_table1;</db_drop>
 <db_drop>drop table if exists test_table2;</db_drop>
+<db_drop>drop table if exists test_table3;</db_drop>
 <custom_insert><![CDATA[
 
 // OR boundary
@@ -78,11 +103,51 @@ for ( $i=1; $i < 600; $i++ )
 
 mysql_query ( "INSERT INTO test_table2 VALUES ( 701, 1, 'The good box. A dummy.' )" )  or die("q4:".mysql_error());
 
+// common subtree case
+for ( $i=1; $i < 401; $i++ )
+	mysql_query ( "INSERT INTO test_table3 VALUES ( $i, $i, 'aaa bbb' )" )  or die("q5:".mysql_error()."\n$i");
+
+for ( $i=402; $i < 602; $i++ )
+	mysql_query ( "INSERT INTO test_table3 VALUES ( $i, $i, 'aaa' )" )  or die("q6:".mysql_error()."\n$i");
 ]]></custom_insert>
 
-<queries>
-<query mode="extended2" index="test1">aaa | bbb</query>
-<query mode="extended2" index="test2">box SENTENCE good</query>
-</queries>
+<custom_test>
+<![CDATA[
+$results = array ();
+
+$client->SetMatchMode ( SPH_MATCH_EXTENDED2 );
+
+// legacy
+$res = $client->Query ( "aaa | bbb", "test1" );
+unset ( $res["time"] );
+$results[] = $res;
+
+$res  = $client->Query ( "box SENTENCE good", "test2" );
+unset ( $res["time"] );
+$results[] = $res;
+
+$results[] = 'common subtree crash';
+
+$client->SetFilter ( "@id", array ( 999999 ) );
+$client->AddQuery ( "aaa -bbb", "test3" );
+
+$client->ResetFilters ();
+$client->AddQuery ( "aaa -bbb", "test3" );
+
+$res = $client->RunQueries();
+
+if ( !$res )
+{
+	$results[] = $client->GetLastError();
+	return;
+}
+
+foreach ( $res as $r )
+{
+	unset ( $r["time"] );
+	$results[] = $r;
+}
+]]>
+</custom_test>
 
 </test>

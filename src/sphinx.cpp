@@ -3537,9 +3537,9 @@ int CSphTokenizerTraits<IS_UTF8>::CodepointArbitration ( int iCode, bool bWasEsc
 	}
 
 	// escaped specials are not special
-	// dash and dollar inside the word are not special
+	// dash and dollar inside the word are not special (however, single opening modifier is not a word!)
 	// non-modifier specials within phrase are not special
-	bool bDashInside = ( m_iAccum && iSymbol=='-' );
+	bool bDashInside = ( m_iAccum && iSymbol=='-' && !( m_iAccum==1 && IsModifier(m_sAccum[0]) ));
 	if ( iCode & FLAG_CODEPOINT_SPECIAL )
 		if ( bWasEscaped
 			|| bDashInside

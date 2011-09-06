@@ -1571,6 +1571,8 @@ protected:
 	void					ParseFieldMVA ( CSphVector < CSphVector < DWORD > > & dFieldMVAs, int iFieldMVA, const char * szValue );
 	bool					CheckFileField ( const BYTE * sField );
 	int						LoadFileField ( BYTE ** ppField, CSphString & sError );
+
+	bool					BuildZoneHits ( SphDocID_t uDocid, BYTE * sWord );
 	void					BuildSubstringHits ( SphDocID_t uDocid, bool bPayload, ESphWordpart eWordpart, bool bSkipEndMarker );
 	void					BuildRegularHits ( SphDocID_t uDocid, bool bPayload, bool bSkipEndMarker );
 

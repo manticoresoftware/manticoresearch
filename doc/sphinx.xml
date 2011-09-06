@@ -5,7 +5,7 @@
 ]>
 <book lang="en">
 
-<title>Sphinx 2.0.1-beta reference manual</title>
+<title>Sphinx 2.0.2-beta reference manual</title>
 <subtitle>Free open-source SQL full-text search engine</subtitle>
 
 <bookinfo>
@@ -4531,9 +4531,18 @@ can be specified. Both RT and disk indexes are supported. Updates on other attri
 </para>
 <para><code>where_condition</code> uses the same syntax as in SELECT statement (Refer to <xref linkend="sphinxql-select"/> for details).
 </para>
-<para>When assigning the out-of-range values to 32-bit attributes, they will be trimmed to their lower 32 bits without a prompt. For example, if you try to update the 32-bit unsigned int with number 4294967297, you actually will write there the number 1. Because the low 32 bits of 4294967297 (0x100000001) is exactly 1 (0x00000001).
+<para>
+When assigning the out-of-range values to 32-bit attributes, they
+will be trimmed to their lower 32 bits without a prompt. For example, if
+you try to update the 32-bit unsigned int with number 4294967297, you
+actually will write there the number 1. Because the low 32 bits of
+4294967297 (0x100000001) is exactly 1 (0x00000001).
 </para>
-<para>MVA values sets for updating (and also for INSERT or REPLACE, refer to <xref linked="sphinxql-insert"/>) must be written comma-separated and surrounded in cirly brackets. For wiping out the MVA value assign the empty brackets to it.
+<para>
+MVA values sets for updating (and also for INSERT or REPLACE, refer
+to <xref linkend="sphinxql-insert"/>) must be written comma-separated and
+surrounded in cirly brackets. For wiping out the MVA value assign the empty
+brackets to it.
 </para>
 <programlisting>
 mysql> UPDATE myindex SET enabled=0 WHERE id=123;

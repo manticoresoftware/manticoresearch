@@ -52,7 +52,7 @@ Table of Contents
    5.1. Matching modes
    5.2. Boolean query syntax
    5.3. Extended query syntax
-   5.4. Weighting
+   5.4. Search results ranking
    5.5. Expressions, functions, and operators
       5.5.1. Operators
       5.5.2. Numeric functions
@@ -98,10 +98,11 @@ Table of Contents
    7.15. SHOW VARIABLES syntax
    7.16. SHOW COLLATION syntax
    7.17. UPDATE syntax
-   7.18. Multi-statement queries
-   7.19. Comment syntax
-   7.20. List of SphinxQL reserved keywords
-   7.21. SphinxQL upgrade notes, version 2.0.1-beta
+   7.18. ATTACH INDEX syntax
+   7.19. Multi-statement queries
+   7.20. Comment syntax
+   7.21. List of SphinxQL reserved keywords
+   7.22. SphinxQL upgrade notes, version 2.0.1-beta
 
 8. API reference
    8.1. General API functions
@@ -213,13 +214,14 @@ Table of Contents
       11.1.41. xmlpipe_attr_str2ordinal
       11.1.42. xmlpipe_attr_float
       11.1.43. xmlpipe_attr_multi
-      11.1.44. xmlpipe_attr_string
-      11.1.45. xmlpipe_fixup_utf8
-      11.1.46. mssql_winauth
-      11.1.47. mssql_unicode
-      11.1.48. unpack_zlib
-      11.1.49. unpack_mysqlcompress
-      11.1.50. unpack_mysqlcompress_maxsize
+      11.1.44. xmlpipe_attr_multi_64
+      11.1.45. xmlpipe_attr_string
+      11.1.46. xmlpipe_fixup_utf8
+      11.1.47. mssql_winauth
+      11.1.48. mssql_unicode
+      11.1.49. unpack_zlib
+      11.1.50. unpack_mysqlcompress
+      11.1.51. unpack_mysqlcompress_maxsize
 
    11.2. Index configuration options
       11.2.1. type
@@ -275,8 +277,10 @@ Table of Contents
       11.2.51. rt_attr_uint
       11.2.52. rt_attr_bigint
       11.2.53. rt_attr_float
-      11.2.54. rt_attr_timestamp
-      11.2.55. rt_attr_string
+      11.2.54. rt_attr_multi
+      11.2.55. rt_attr_multi_64
+      11.2.56. rt_attr_timestamp
+      11.2.57. rt_attr_string
 
    11.3. indexer program configuration options
       11.3.1. mem_limit
@@ -285,6 +289,7 @@ Table of Contents
       11.3.4. max_xmlpipe2_field
       11.3.5. write_buffer
       11.3.6. max_file_field_buffer
+      11.3.7. on_file_field_error
 
    11.4. searchd program configuration options
       11.4.1. listen
@@ -712,8 +717,8 @@ pre-compiled binary files from the Downloads area on the website.
 
    3. Install the searchd system as a Windows service:
 
-      | C:\Sphinx\bin> C:\Sphinx\bin\searchd --install --config
-      | C:\Sphinx\sphinx.conf.in --servicename SphinxSearch
+      C:\Sphinx\bin> C:\Sphinx\bin\searchd --install --config
+      C:\Sphinx\sphinx.conf.in --servicename SphinxSearch
 
    4. The searchd service will now be listed in the Services panel within
       the Management Console, available from Administrative Tools. It will
@@ -1745,7 +1750,7 @@ Table of Contents
 5.1. Matching modes
 5.2. Boolean query syntax
 5.3. Extended query syntax
-5.4. Weighting
+5.4. Search results ranking
 5.5. Expressions, functions, and operators
    5.5.1. Operators
    5.5.2. Numeric functions
@@ -1769,6 +1774,15 @@ Table of Contents
 5.1. Matching modes
 ===================
 
+So-called matching modes are a legacy feature that used to provide (very)
+limited query syntax and ranking support. Currently, they are deprecated in
+favor of full-text query language and so-called rankers. Starting with
+version 0.9.9-release, it is thus strongly recommended to use
+SPH_MATCH_EXTENDED and proper query syntax rather than any other legacy
+mode. All those other modes are actually internally converted to extended
+syntax anyway. SphinxAPI still defaults to SPH_MATCH_ALL but that is for
+compatibility reasons only.
+
 There are the following matching modes available:
 
    * SPH_MATCH_ALL, matches all query words (default mode);
@@ -1781,19 +1795,20 @@ There are the following matching modes available:
      Section 5.2, <<Boolean query syntax>>);
 
    * SPH_MATCH_EXTENDED, matches query as an expression in Sphinx internal
-     query language (see Section 5.3, <<Extended query syntax>>). As of
-     0.9.9, this has been superceded by SPH_MATCH_EXTENDED2, providing
-     additional functionality and better performance. The ident is retained
-     for legacy application code that will continue to be compatible once
-     Sphinx and its components, including the API, are upgraded.
+     query language (see Section 5.3, <<Extended query syntax>>);
 
-   * SPH_MATCH_EXTENDED2, matches query using the second version of the
-     Extended matching mode.
+   * SPH_MATCH_EXTENDED2, an alias for SPH_MATCH_EXTENDED;
 
    * SPH_MATCH_FULLSCAN, matches query, forcibly using the "full scan" mode
      as below. NB, any query terms will be ignored, such that filters,
      filter-ranges and grouping will still be applied, but no
      text-matching.
+
+SPH_MATCH_EXTENDED2 was used during 0.9.8 and 0.9.9 development cycle, when
+the internal matching engine was being rewritten (for the sake of
+additional functionality and better performance). By 0.9.9-release, the
+older version was removed, and SPH_MATCH_EXTENDED and SPH_MATCH_EXTENDED2
+are now just aliases.
 
 The SPH_MATCH_FULLSCAN mode will be automatically activated in place of the
 specified matching mode when the following conditions are met:
@@ -2070,56 +2085,278 @@ operator, or the closing parenthesis. It only works on the indexes built
 with zones support (see Section 11.2.9, <<index_zones>>) and will be
 ignored otherwise.
 
-5.4. Weighting
-==============
+5.4. Search results ranking
+===========================
 
-Specific weighting function (currently) depends on the search mode.
+Ranking overview
+----------------
 
-There are these major parts which are used in the weighting functions:
+Ranking (aka weighting) of the search results can be defined as a process
+of computing a so-called relevance (aka weight) for every given matched
+document with regards to a given query that matched it. So relevance is in
+the end just a number attached to every document that estimates how
+relevant the document is to the query. Search results can then be sorted
+based on this number and/or some additional parameters, so that the most
+sought after results would come up higher on the results page.
 
-   1. phrase rank,
+There is no single standard one-size-fits-all way to rank any document in
+any scenario. Moreover, there can not ever be such a way, because relevance
+is subjective. As in, what seems relevant to you might not seem relevant to
+me. Hence, in general case it's not just hard to compute, it's
+theoretically impossible.
 
-   2. statistical rank.
+So ranking in Sphinx is configurable. It has a notion of a so-called
+ranker. A ranker can formally be defined as a function that takes document
+and query as its input and produces a relevance value as output. In
+layman's terms, a ranker controls exactly how (using which specific
+algorithm) will Sphinx assign weights to the document.
 
-Phrase rank is based on a length of longest common subsequence (LCS) of
-search words between document body and query phrase. So if there's
-a perfect phrase match in some document then its phrase rank would be the
-highest possible, and equal to query words count.
+Previously, this ranking function was rigidly bound to the matching mode.
+So in the legacy matching modes (that is, SPH_MATCH_ALL, SPH_MATCH_ANY,
+SPH_MATCH_PHRASE, and SPH_MATCH_BOOLEAN) you can not choose the ranker. You
+can only do that in the SPH_MATCH_EXTENDED mode. (Which is the only mode in
+SphinxQL and the suggested mode in SphinxAPI anyway.) To choose
+a non-default ranker you can either use SetRankingMode() with SphinxAPI, or
+OPTION ranker clause in SELECT statement when using SphinxQL.
 
-Statistical rank is based on classic BM25 function which only takes word
-frequencies into account. If the word is rare in the whole database (ie.
-low frequency over document collection) or mentioned a lot in specific
-document (ie. high frequency over matching document), it receives more
-weight. Final BM25 weight is a floating point number between 0 and 1.
+As a sidenote, legacy matching modes are internally implemented via the
+unified syntax anyway. When you use one of those modes, Sphinx just
+internally adjusts the query and sets the associated ranker, then executes
+the query using the very same unified code path.
 
-In all modes, per-field weighted phrase ranks are computed as a product of
-LCS multiplied by per-field weight speficifed by user. Per-field weights
-are integer, default to 1, and can not be set lower than 1.
+Available rankers
+-----------------
 
-In SPH_MATCH_BOOLEAN mode, no weighting is performed at all, every match
-weight is set to 1.
+Sphinx ships with a number of built-in rankers suited for different
+purposes. A number of them uses two factors, phrase proximity (aka LCS) and
+BM25. Phrase proximity works on the keyword positions, while BM25 works on
+the keyword frequencies. Basically, the better the degree of the phrase
+match between the document body and the query, the higher is the phrase
+proximity (it maxes out when the document contains the entire query as
+a verbatim quote). And BM25 is higher when the document containers more
+rare words. We'll save the detailed discussion for later.
 
-In SPH_MATCH_ALL and SPH_MATCH_PHRASE modes, final weight is a sum of
-weighted phrase ranks.
+Currently implemented rankers are:
 
-In SPH_MATCH_ANY mode, the idea is essentially the same, but it also adds
-a count of matching words in each field. Before that, weighted phrase ranks
-are additionally mutliplied by a value big enough to guarantee that higher
-phrase rank in any field will make the match ranked higher, even if it's
-field weight is low.
+   * SPH_RANK_PROXIMITY_BM25, the default ranking mode that uses and
+     combines both phrase proximity and BM25 ranking.
 
-In SPH_MATCH_EXTENDED mode, final weight is a sum of weighted phrase ranks
-and BM25 weight, multiplied by 1000 and rounded to integer.
+   * SPH_RANK_BM25, statistical ranking mode which uses BM25 ranking only
+     (similar to most other full-text engines). This mode is faster but may
+     result in worse quality on queries which contain more than 1 keyword.
 
-This is going to be changed, so that MATCH_ALL and MATCH_ANY modes use BM25
-weights as well. This would improve search results in those match spans
-where phrase ranks are equal; this is especially useful for 1-word queries.
+   * SPH_RANK_NONE, no ranking mode. This mode is obviously the fastest.
+     A weight of 1 is assigned to all matches. This is sometimes called
+     boolean searching that just matches the documents but does not rank
+     them.
 
-The key idea (in all modes, besides boolean) is that better subphrase
-matches are ranked higher, and perfect matches are pulled to the top.
-Author's experience is that this phrase proximity based ranking provides
-noticeably better search quality than any statistical scheme alone (such as
-BM25, which is commonly used in other search engines).
+   * SPH_RANK_WORDCOUNT, ranking by the keyword occurrences count. This
+     ranker computes the per-field keyword occurrence counts, then
+     multiplies them by field weights, and sums the resulting values.
+
+   * SPH_RANK_PROXIMITY, added in version 0.9.9-rc1, returns raw phrase
+     proximity value as a result. This mode is internally used to emulate
+     SPH_MATCH_ALL queries.
+
+   * SPH_RANK_MATCHANY, added in version 0.9.9-rc1, returns rank as it was
+     computed in SPH_MATCH_ANY mode ealier, and is internally used to
+     emulate SPH_MATCH_ANY queries.
+
+   * SPH_RANK_FIELDMASK, added in version 0.9.9-rc2, returns a 32-bit mask
+     with N-th bit corresponding to N-th fulltext field, numbering from 0.
+     The bit will only be set when the respective field has any keyword
+     occurences satisfiying the query.
+
+   * SPH_RANK_SPH04, added in version 1.10-beta, is generally based on the
+     default SPH_RANK_PROXIMITY_BM25 ranker, but additionally boosts the
+     matches when they occur in the very beginning or the very end of
+     a text field. Thus, if a field equals the exact query, SPH04 should
+     rank it higher than a field that contains the exact query but is not
+     equal to it. (For instance, when the query is "Hyde Park", a document
+     entitled "Hyde Park" should be ranked higher than a one entitled "Hyde
+     Park, London" or "The Hyde Park Cafe".)
+
+   * SPH_RANK_EXPR, added in version 2.0.2-beta, lets you specify the
+     ranking formula in run time. It exposes a number of internal text
+     factors and lets you defined how the final weight should be computed
+     from those factors. You can find more details about its syntax and
+     a reference available factors in a subsection below.
+
+You should specify the SPH_RANK_ prefix and use capital letters only when
+using the SetRankingMode() call from the SphinxAPI. The API ports expose
+these as global constants. Using SphinxQL syntax, the prefix should be
+omitted and the ranker name is case insensitive. Example:
+
+   | // SphinxAPI
+   | $client->SetRankingMode ( SPH_RANK_SPH04 );
+   | 
+   | // SphinxQL
+   | mysql_query ( "SELECT ... OPTION ranker=sph04" );
+
+Legacy matching modes rankers
+-----------------------------
+
+Legacy matching modes automatically select a ranker as follows:
+
+   * SPH_MATCH_ALL uses SPH_RANK_PROXIMITY ranker;
+
+   * SPH_MATCH_ANY uses SPH_RANK_MATCHANY ranker;
+
+   * SPH_MATCH_PHRASE uses SPH_RANK_PROXIMITY ranker;
+
+   * SPH_MATCH_BOOLEAN uses SPH_RANK_NONE ranker.
+
+Expression based ranker (SPH_RANK_EXPR)
+---------------------------------------
+
+Expression ranker, added in version 2.0.2-beta, lets you change the ranking
+formula on the fly, on a per-query basis. For a quick kickoff, this is how
+you emulate PROXIMITY_BM25 ranker using the expression based one:
+
+   | SELECT *, WEIGHT() FROM myindex WHERE MATCH('hello world')
+   | OPTION ranker=expr('sum(lcs*user_weight)*1000+bm25')
+
+The output of this query must not change if you omit the OPTION clause,
+because the default ranker (PROXIMITY_BM25) behaves exactly like specified
+in the ranker formula above. But the expression ranker is somewhat more
+flexible than just that and provides access to many more factors.
+
+The ranking formula is an arbitrary arithmetic expression that can use
+constants, document attributes, built-in functions and operators (described
+in Section 5.5, <<Expressions, functions, and operators>>), and also a few
+ranking-specific things that are only accessible in a ranking formula.
+Namely, those are field aggregation functions, field-level, and
+document-level ranking factors.
+
+A document-level factor is a numeric value computed by the ranking engine
+for every matched document with regards to the current query. (So it
+differs from a plain document attribute in that the attribute do not depend
+on the full text query, while factors might.) Those factors can be used
+anywhere in the ranking expression. Currently implemented document-level
+factors are:
+
+   * bm25 (integer), a document-level BM25 estimate (computed without
+     keyword occurrence filtering).
+
+   * max_lcs (integer), a query-level maximum possible value that the
+     sum(lcs*user_weight) expression can ever take. This can be useful for
+     weight boost scaling. For instance, MATCHANY ranker formula uses this
+     to guarantee that a full phrase match in any field rankes higher than
+     any combination of partial matches in all fields.
+
+   * field_mask (integer), a document-level 32-bit mask of matched fields.
+
+   * query_word_count (integer), the number of unique keywords in a query,
+     adjusted for a number of excluded keywords. For instance, both (one
+     one one one) and (one !two) queries should assign a value of 1 to this
+     factor, because there is just one unique non-excluded keyword.
+
+   * doc_word_count (integer), the number of unique keywords matched in the
+     entire document.
+
+A field-level factor is a numeric value computed by the ranking engine for
+every matched in-document text field with regards to the current query. As
+more than one field can be matched by a query, but the final weight needs
+to be a single integer value, these values need to be folded into a single
+one. To achieve that, field-level factors can only be used within a field
+aggregation function, they can not be used anywhere in the expression. For
+example, you can not use (lcs+bm25) as your ranking expression, as lcs
+takes multiple values (one in every matched field). You shoudl use
+(sum(lcs)+bm25) instead, that expression sums lcs over all matching fields,
+and then adds bm25 to that per-field sum. Currently implemented field-level
+factors are:
+
+   * lcs (integer), the length of a maximum verbatim match between the
+     document and the query, coutned in words. LCS stands for Longest
+     Common Subsequence (or Subset). Takes a minimum value of 1 when only
+     stray keywords were matched in a field, and a maximum value of query
+     keywords count when the entire query was matched in a field verbatim
+     (in the exact query keywords order). For example, if the query is
+     'hello world' and the field contains these two words quoted from the
+     query (that is, adjacent to each other, and exaclty in the query
+     order), lcs will be 2. For example, if the query is 'hello world
+     program' and the field contains 'hello world', lcs will be 2. Note
+     that any subset of the query keyword works, not just a subset of
+     adjacent keywords. For example, if the query is 'hello world program'
+     and the field contains 'hello (test program)', lcs will be 2 just as
+     well, because both 'hello' and 'program' matched in the same
+     respective positions as they were in the query. Finally, if the query
+     is 'hello world program' and the field contains 'hello world program',
+     lcs will be 3. (Hopefully that is unsurpising at this point.)
+
+   * user_weight (integer), the user specified per-field weight (refer to
+     SetFieldWeights() in SphinxAPI and OPTION field_weights in SphinxQL
+     respectively). The weights default to 1 if not specified explicitly.
+
+   * hit_count (integer), the number of keyword occurrences that matched in
+     the field. Note that a single keyword may occur multiple times. For
+     example, if 'hello' occurs 3 times in a field and 'world' occurs
+     5 times, hit_count will be 8.
+
+   * word_count (integer), the number of unique keywords matched in the
+     field. For example, if 'hello' and 'world' occur anywhere in a field,
+     word_count will be 2, irregardless of how many times do both keywords
+     occur.
+
+   * tf_idf (float), the sum of TF*IDF over all the keywords matched in the
+     field. IDF is the Inverse Document Frequency, a floating point value
+     between 0 and 1 that describes how frequent is the keywords
+     (basically, 0 for a keyword that occurs in every document indexed, and
+     1 for a unique keyword that occurs in just a single document). TF is
+     the Term Frequency, the number of matched keyword occurrences in the
+     field. As a side note, tf_idf is actually computed by summing IDF over
+     all matched occurences. That's by construction equivalent to summing
+     TF*IDF over all matched keywords.
+
+   * min_hit_pos (integer), the position of the first matched keyword
+     occurrence, counted in words. Indexing begins from position 1.
+
+   * min_best_span_pos (integer), the position of the first maximum LCS
+     occurrences span. For example, assume that our query was 'hello world
+     program' and 'hello world' subphrase was matched twice in the field,
+     in positions 13 and 21. Assume that 'hello' and 'world' additionally
+     occurred elsewhere in the field, but never next to each other and thus
+     never as a subphrase match. In that case, min_best_span_pos will be
+     13. Note how for the single keyword queries min_best_span_pos will
+     always equal min_hit_pos.
+
+   * exact_hit (boolean), whether a query was an exact match of the entire
+     current field. Used in the SPH04 ranker.
+
+A field aggregation function is a single argument function that takes an
+expression with field-level factors, iterates it over all the matched
+fields, and computes the final results. Currently implemented field
+aggregation functions are:
+
+   * sum, sums the argument expression over all matched fields. For
+     instance, sum(1) should return a number of matched fields.
+
+Expressions for the built-in rankers
+------------------------------------
+
+Most of the other rankers can actually be emulated with the expression
+based ranker. You just need to pass a proper expression. Such emulation is,
+of course, going to be slower than using the built-in, compiled ranker but
+still might be of interest if you want to fine-tune your ranking formula
+starting with one of the existing ones. Also, the formulas define the nitty
+gritty ranker details in a nicely readable fashion.
+
+   * SPH_RANK_PROXIMITY_BM25 = sum(lcs*user_weight)*1000+bm25
+
+   * SPH_RANK_BM25 = bm25
+
+   * SPH_RANK_NONE = 1
+
+   * SPH_RANK_WORDCOUNT = sum(hit_count*user_weight)
+
+   * SPH_RANK_PROXIMITY = sum(lcs*user_weight)
+
+   * SPH_RANK_MATCHANY = sum((word_count+(lcs-1)*max_lcs)*user_weight)
+
+   * SPH_RANK_FIELDMASK = field_mask
+
+   * SPH_RANK_SPH04 =
+     sum((4*lcs+2*(min_hit_pos==1)+exact_hit)*user_weight)*1000+bm25
 
 5.5. Expressions, functions, and operators
 ==========================================
@@ -2672,8 +2909,6 @@ Match mode can take one of the following values:
 
    * "ext" for SPH_MATCH_EXTENDED mode;
 
-   * "ext2" for SPH_MATCH_EXTENDED2 mode;
-
    * "scan" if the full scan mode was used, either by being specified with
      SPH_MATCH_FULLSCAN, or if the query was empty (as documented under
      Matching Modes)
@@ -2803,7 +3038,7 @@ one go (more formally, one network request).
 
 Two API methods that implement multi-query mechanism are AddQuery() and
 RunQueries(). You can also run multiple queries with SphinxQL, see
-Section 7.18, <<Multi-statement queries>>. (In fact, regular Query() call
+Section 7.19, <<Multi-statement queries>>. (In fact, regular Query() call
 is internally implemented as a single AddQuery() call immediately followed
 by RunQueries() call.) AddQuery() captures the current state of all the
 query settings set by previous API calls, and memorizes the query.
@@ -2875,7 +3110,7 @@ sorting modes:
 
    | require ( "sphinxapi.php" );
    | $cl = new SphinxClient ();
-   | $cl->SetMatchMode ( SPH_MATCH_EXTENDED2 );
+   | $cl->SetMatchMode ( SPH_MATCH_EXTENDED );
    | 
    | $cl->SetSortMode ( SPH_SORT_RELEVANCE );
    | $cl->AddQuery ( "the", "lj" );
@@ -2889,17 +3124,17 @@ How to tell whether the queries in the batch were actually optimized? If
 they were, respective query log will have a "multiplier" field that
 specifies how many queries were processed together:
 
-   | [Sun Jul 12 15:18:17.000 2009] 0.040 sec x3 [ext2/0/rel 747541 (0,20)] [lj] the
-   | [Sun Jul 12 15:18:17.000 2009] 0.040 sec x3 [ext2/0/ext 747541 (0,20)] [lj] the
-   | [Sun Jul 12 15:18:17.000 2009] 0.040 sec x3 [ext2/0/ext 747541 (0,20)] [lj] the
+   | [Sun Jul 12 15:18:17.000 2009] 0.040 sec x3 [ext/0/rel 747541 (0,20)] [lj] the
+   | [Sun Jul 12 15:18:17.000 2009] 0.040 sec x3 [ext/0/ext 747541 (0,20)] [lj] the
+   | [Sun Jul 12 15:18:17.000 2009] 0.040 sec x3 [ext/0/ext 747541 (0,20)] [lj] the
 
 Note the "x3" field. It means that this query was optimized and processed
 in a sub-batch of 3 queries. For reference, this is how the regular log
 would look like if the queries were not batched:
 
-   | [Sun Jul 12 15:18:17.062 2009] 0.059 sec [ext2/0/rel 747541 (0,20)] [lj] the
-   | [Sun Jul 12 15:18:17.156 2009] 0.091 sec [ext2/0/ext 747541 (0,20)] [lj] the
-   | [Sun Jul 12 15:18:17.250 2009] 0.092 sec [ext2/0/ext 747541 (0,20)] [lj] the
+   | [Sun Jul 12 15:18:17.062 2009] 0.059 sec [ext/0/rel 747541 (0,20)] [lj] the
+   | [Sun Jul 12 15:18:17.156 2009] 0.091 sec [ext/0/ext 747541 (0,20)] [lj] the
+   | [Sun Jul 12 15:18:17.250 2009] 0.092 sec [ext/0/ext 747541 (0,20)] [lj] the
 
 Note how per-query time in multi-query case was improved by a factor of
 1.5x to 2.3x, depending on a particular sorting mode. In fact, for both
@@ -2930,11 +3165,11 @@ properly.
 
 Second, we additionally need to know the language-specific string sorting
 rules. For instance, when sorting according to US rules in en_US locale,
-the accented character 'ï' (small letter i with diaeresis) should be placed
-somewhere after 'z'. However, when sorting with French rules and fr_FR
-locale in mind, it should be placed between 'i' and 'j'. And some other set
-of rules might choose to ignore accents at all, allowing 'ï' and 'i' to be
-mixed arbitrarily.
+the accented character '&iuml;' (small letter i with diaeresis) should be
+placed somewhere after 'z'. However, when sorting with French rules and
+fr_FR locale in mind, it should be placed between 'i' and 'j'. And some
+other set of rules might choose to ignore accents at all, allowing '&iuml;'
+and 'i' to be mixed arbitrarily.
 
 Third, but not least, we might need case-sensitive sorting in some
 scenarios and case-insensitive sorting in some others.
@@ -3572,16 +3807,9 @@ Options for setting matches:
      the API this would be equivalent to passing SPH_MATCH_BOOLEAN to
      SetMatchMode.
 
-   * --ext (-e for short) changes the matching mode to Extended matching.
-     In the API this would be equivalent to passing SPH_MATCH_EXTENDED to
-     SetMatchMode, and it should be noted that use of this mode is being
-     discouraged in favour of Extended2, below.
-
-   * --ext2 (-e2 for short) changes the matching mode to Extended matching,
-     version 2. In the API this would be equivalent to passing
-     SPH_MATCH_EXTENDED2 to SetMatchMode, and it should be noted that use
-     of this mode is being recommended in favour of Extended, due to being
-     more efficient and providing other features.
+   * --ext (-e for short) changes the matching mode to extended matching
+     which provides various text querying operators. In the API this would
+     be equivalent to passing SPH_MATCH_EXTENDED to SetMatchMode.
 
    * --filter <attr> <v> (-f <attr> <v> for short) filters the results such
      that only documents where the attribute given (attr) matches the value
@@ -3778,10 +4006,11 @@ Table of Contents
 7.15. SHOW VARIABLES syntax
 7.16. SHOW COLLATION syntax
 7.17. UPDATE syntax
-7.18. Multi-statement queries
-7.19. Comment syntax
-7.20. List of SphinxQL reserved keywords
-7.21. SphinxQL upgrade notes, version 2.0.1-beta
+7.18. ATTACH INDEX syntax
+7.19. Multi-statement queries
+7.20. Comment syntax
+7.21. List of SphinxQL reserved keywords
+7.22. SphinxQL upgrade notes, version 2.0.1-beta
 
 SphinxQL is our SQL dialect that exposes all of the search daemon
 functionality using a standard SQL syntax with a few Sphinx-specific
@@ -4301,17 +4530,120 @@ with frameworks and connectors that automatically execute this statement.
 7.17. UPDATE syntax
 ===================
 
-   | UPDATE index SET col1 = newval1 [, ...] WHERE ID = docid
+   | UPDATE index SET col1 = newval1 [, ...] WHERE where_condition
 
 UPDATE statement was added in version 2.0.1-beta. It can currently update
-32-bit integer attributes only. Multiple attributes and values can be
-specified. Both RT and disk indexes are supported. Updates on other
-attribute types are also planned.
+32-bit and 64-bit integers, 32-bit and 64-bit MVAs and floats attributes
+only. Multiple attributes and values can be specified. Both RT and disk
+indexes are supported. Updates on other attribute types are also planned.
+
+where_condition uses the same syntax as in SELECT statement (Refer to
+Section 7.1, <<SELECT syntax>> for details).
+
+When assigning the out-of-range values to 32-bit attributes, they will be
+trimmed to their lower 32 bits without a prompt. For example, if you try to
+update the 32-bit unsigned int with number 4294967297, you actually will
+write there the number 1. Because the low 32 bits of 4294967297
+(0x100000001) is exactly 1 (0x00000001).
+
+MVA values sets for updating (and also for INSERT or REPLACE, refer to
+Section 7.5, <<INSERT and REPLACE syntax>>) must be written comma-separated
+and surrounded in cirly brackets. For wiping out the MVA value assign the
+empty brackets to it.
 
    | mysql> UPDATE myindex SET enabled=0 WHERE id=123;
    | Query OK, 1 rows affected (0.00 sec)
+   | mysql> UPDATE myindex SET bigattr=-100000000000, fattr=3465.23, mvattr1=(3,6,4), mvattr2=() WHERE match('hehe') AND enabled=1;
+   | Query OK, 148 rows affected (0.01 sec)
 
-7.18. Multi-statement queries
+7.18. ATTACH INDEX syntax
+=========================
+
+   | ATTACH INDEX diskindex TO RTINDEX rtindex
+
+ATTACH INDEX statement, added in version 2.0.2-beta, lets you move data
+from a regular disk index to a RT index.
+
+After a successful ATTACH, the data originally stored in the source disk
+index becomes a part of the target RT index, and the source disk index
+becomes unavailable (until the next rebuild). ATTACH does not result in any
+index data changes. Basically, it just renames the files (making the source
+index a new disk chunk of the target RT index), and updates the metadata.
+So it is a generally quick operation which might (frequently) complete as
+fast as under a second.
+
+Note that when an index is attached to an empty RT index, the fields,
+attributes, and text processing settings (tokenizer, wordforms, etc) from
+the source index are copied over and take effect. The respective parts of
+the RT index definition from the configuration file will be ignored.
+
+As of 2.0.2-beta, ATTACH INDEX comes with a number of restrictions. Most
+notably, the target RT index is currently required to be empty, making
+ATTACH INDEX a one-time conversion operation only. Those restrictions may
+be lifted in future releases, as we add the needed functionality to the RT
+indexes. The complete list is as follows.
+
+   * Target RT index needs to be empty.
+
+   * Source disk index needs to have index_sp=0, boundary_step=0,
+     stopword_step=1, dict=crc settings.
+
+   * Source disk index needs to have an empty index_zones setting.
+
+   | mysql> DESC rt;
+   | +-----------+---------+
+   | | Field     | Type    |
+   | +-----------+---------+
+   | | id        | integer |
+   | | testfield | field   |
+   | | testattr  | uint    |
+   | +-----------+---------+
+   | 3 rows in set (0.00 sec)
+   | 
+   | mysql> SELECT * FROM rt;
+   | Empty set (0.00 sec)
+   | 
+   | mysql> SELECT * FROM disk WHERE MATCH('test');
+   | +------+--------+----------+------------+
+   | | id   | weight | group_id | date_added |
+   | +------+--------+----------+------------+
+   | |    1 |   1304 |        1 | 1313643256 |
+   | |    2 |   1304 |        1 | 1313643256 |
+   | |    3 |   1304 |        1 | 1313643256 |
+   | |    4 |   1304 |        1 | 1313643256 |
+   | +------+--------+----------+------------+
+   | 4 rows in set (0.00 sec)
+   | 
+   | mysql> ATTACH INDEX disk TO RTINDEX rt;
+   | Query OK, 0 rows affected (0.00 sec)
+   | 
+   | mysql> DESC rt;
+   | +------------+-----------+
+   | | Field      | Type      |
+   | +------------+-----------+
+   | | id         | integer   |
+   | | title      | field     |
+   | | content    | field     |
+   | | group_id   | uint      |
+   | | date_added | timestamp |
+   | +------------+-----------+
+   | 5 rows in set (0.00 sec)
+   | 
+   | mysql> SELECT * FROM rt WHERE MATCH('test');
+   | +------+--------+----------+------------+
+   | | id   | weight | group_id | date_added |
+   | +------+--------+----------+------------+
+   | |    1 |   1304 |        1 | 1313643256 |
+   | |    2 |   1304 |        1 | 1313643256 |
+   | |    3 |   1304 |        1 | 1313643256 |
+   | |    4 |   1304 |        1 | 1313643256 |
+   | +------+--------+----------+------------+
+   | 4 rows in set (0.00 sec)
+   | 
+   | mysql> SELECT * FROM disk WHERE MATCH('test');
+   | ERROR 1064 (42000): no enabled local indexes to search
+
+7.19. Multi-statement queries
 =============================
 
 Starting version 2.0.1-beta, SphinxQL supports multi-statement queries, or
@@ -4369,7 +4701,7 @@ WARNINGS, SHOW STATUS, and SHOW META. Arbitrary sequence of these
 statements are allowed. The results sets returned should match those that
 would be returned if the batched queries were sent one by one.
 
-7.19. Comment syntax
+7.20. Comment syntax
 ====================
 
 Since version 2.0.1-beta, SphinxQL supports C-style comment syntax.
@@ -4382,7 +4714,7 @@ between Sphinx and MySQL.)
 
    | SELECT /*! SQL_CALC_FOUND_ROWS */ col1 FROM table1 WHERE ...
 
-7.20. List of SphinxQL reserved keywords
+7.21. List of SphinxQL reserved keywords
 ========================================
 
 A complete alphabetical list of keywords that are currently reserved in
@@ -4440,7 +4772,7 @@ SphinxQL syntax (and therefore can not be used as identifiers).
    | WHERE
    | WITHIN
 
-7.21. SphinxQL upgrade notes, version 2.0.1-beta
+7.22. SphinxQL upgrade notes, version 2.0.1-beta
 ================================================
 
 This section only applies to existing applications that use SphinxQL
@@ -4829,61 +5161,22 @@ in quotes, that syntax specifies a string and is incorrect:
 
 Prototype: function SetRankingMode ( $ranker )
 
-Sets ranking mode. Only available in SPH_MATCH_EXTENDED2 matching mode at
-the time of this writing. Parameter must be a constant specifying one of
-the known modes.
+Sets ranking mode (aka ranker). Only available in SPH_MATCH_EXTENDED
+matching mode. Parameter must be a constant specifying one of the known
+rankers.
 
-By default, Sphinx computes two factors which contribute to the final match
-weight. The major part is query phrase proximity to document text. The
-minor part is so-called BM25 statistical function, which varies from 0 to
-1 depending on the keyword frequency within document (more occurrences
-yield higher weight) and within the whole index (more rare keywords yield
-higher weight).
+By default, in the EXTENDED matching mode Sphinx computes two factors which
+contribute to the final match weight. The major part is a phrase proximity
+value between the document text and the query. The minor part is so-called
+BM25 statistical function, which varies from 0 to 1 depending on the
+keyword frequency within document (more occurrences yield higher weight)
+and within the whole index (more rare keywords yield higher weight).
 
 However, in some cases you'd want to compute weight differently - or maybe
 avoid computing it at all for performance reasons because you're sorting
 the result set by something else anyway. This can be accomplished by
-setting the appropriate ranking mode.
-
-Currently implemented modes are:
-
-   * SPH_RANK_PROXIMITY_BM25, default ranking mode which uses and combines
-     both phrase proximity and BM25 ranking.
-
-   * SPH_RANK_BM25, statistical ranking mode which uses BM25 ranking only
-     (similar to most other full-text engines). This mode is faster but may
-     result in worse quality on queries which contain more than 1 keyword.
-
-   * SPH_RANK_NONE, disabled ranking mode. This mode is the fastest. It is
-     essentially equivalent to boolean searching. A weight of 1 is assigned
-     to all matches.
-
-   * SPH_RANK_WORDCOUNT, ranking by keyword occurrences count. This ranker
-     computes the amount of per-field keyword occurrences, then multiplies
-     the amounts by field weights, then sums the resulting values for the
-     final result.
-
-   * SPH_RANK_PROXIMITY, added in version 0.9.9-rc1, returns raw phrase
-     proximity value as a result. This mode is internally used to emulate
-     SPH_MATCH_ALL queries.
-
-   * SPH_RANK_MATCHANY, added in version 0.9.9-rc1, returns rank as it was
-     computed in SPH_MATCH_ANY mode ealier, and is internally used to
-     emulate SPH_MATCH_ANY queries.
-
-   * SPH_RANK_FIELDMASK, added in version 0.9.9-rc2, returns a 32-bit mask
-     with N-th bit corresponding to N-th fulltext field, numbering from 0.
-     The bit will only be set when the respective field has any keyword
-     occurences satisfiying the query.
-
-   * SPH_RANK_SPH04, added in version 1.10-beta, is generally based on the
-     default SPH_RANK_PROXIMITY_BM25 ranker, but additionally boosts the
-     matches when they occur in the very beginning or the very end of
-     a text field. Thus, if a field equals the exact query, SPH04 should
-     rank it higher than a field that contains the exact query but is not
-     equal to it. (For instance, when the query is "Hyde Park", a document
-     entitled "Hyde Park" should be ranked higher than a one entitled "Hyde
-     Park, London" or "The Hyde Park Cafe".)
+setting the appropriate ranking mode. The list of the modes is available in
+Section 5.4, <<Search results ranking>>.
 
 8.3.3. SetSortMode
 ------------------
@@ -4916,9 +5209,9 @@ Binds per-field weights by name. Parameter must be a hash (associative
 array) mapping string field names to integer weights.
 
 Match ranking can be affected by per-field weights. For instance, see
-Section 5.4, <<Weighting>> for an explanation how phrase proximity ranking
-is affected. This call lets you specify what non-default weights to assign
-to different full-text fields.
+Section 5.4, <<Search results ranking>> for an explanation how phrase
+proximity ranking is affected. This call lets you specify what non-default
+weights to assign to different full-text fields.
 
 The weights must be positive 32-bit integers. The final weight will be
 a 32-bit integer too. Default weight value is 1. Unknown field names will
@@ -4929,9 +5222,9 @@ However, beware that if you set it too high you can start hitting 32-bit
 wraparound issues. For instance, if you set a weight of 10,000,000 and
 search in extended mode, then maximum possible weight will be equal to 10
 million (your weight) by 1 thousand (internal BM25 scaling factor, see
-Section 5.4, <<Weighting>>) by 1 or more (phrase proximity rank). The
-result is at least 10 billion that does not fit in 32 bits and will be
-wrapped around, producing unexpected results.
+Section 5.4, <<Search results ranking>>) by 1 or more (phrase proximity
+rank). The result is at least 10 billion that does not fit in 32 bits and
+will be wrapped around, producing unexpected results.
 
 8.3.6. SetIndexWeights
 ----------------------
@@ -5059,7 +5352,7 @@ desc" )
 
 Sets grouping attribute, function, and groups sorting mode; and enables
 grouping (as described in Section 5.7, <<Grouping (clustering) search
-results>>).
+results >>).
 
 $attribute is a string that contains group-by attribute name. $func is
 a constant that chooses a function applied to the attribute value in order
@@ -5431,12 +5724,6 @@ additional optional highlighting parameters:
    has the respective indexing settings enabled). String, allowed values
    are "sentence", "paragraph", and "zone".
 
-"passage_boundary":
-   Added in version 2.0.1-beta. Ensures that passages do not cross
-   a sentence, paragraph, or zone boundary (when used with an index that
-   has the respective indexing settings enabled). String, allowed values
-   are "sentence", "paragraph", and "zone".
-
 "emit_zones":
    Added in version 2.0.1-beta. Emits an HTML tag with an enclosing zone
    name before each passage. Boolean, default is false.
@@ -5780,7 +6067,7 @@ number of options can be specified. Available options are:
    * query - query text;
 
    * mode - matching mode. Must be one of "all", "any", "phrase",
-     "boolean", "extended", or "extended2". Default is "all";
+     "boolean", or "extended". Default is "all";
 
    * sort - match sorting mode. Must be one of "relevance", "attr_desc",
      "attr_asc", "time_segments", or "extended". In all modes besides
@@ -5873,12 +6160,12 @@ number of options can be specified. Available options are:
 
       | ... WHERE query='test;host=sphinx-test.loc;port=7312;';
 
-   * ranker - a ranking function to use when matching mode is extended2
-     (i.e. with query syntax), as in SetRankingMode() API call. Known
-     values are "proximity_bm25", "bm25", "none", "wordcount", "proximity",
-     "matchany", and "fieldmask".
+   * ranker - a ranking function to use with "extended" matching mode, as
+     in SetRankingMode() API call (the only mode that supports full query
+     syntax). Known values are "proximity_bm25", "bm25", "none",
+     "wordcount", "proximity", "matchany", and "fieldmask".
 
-      | ... WHERE query='test;mode=extended2;ranker=bm25;';
+      | ... WHERE query='test;mode=extended;ranker=bm25;';
 
    * geoanchor - geodistance anchor, as in SetGeoAnchor() API call. Takes
      4 parameters which are latitude and longiture attribute names, and
@@ -6157,13 +6444,14 @@ Table of Contents
    11.1.41. xmlpipe_attr_str2ordinal
    11.1.42. xmlpipe_attr_float
    11.1.43. xmlpipe_attr_multi
-   11.1.44. xmlpipe_attr_string
-   11.1.45. xmlpipe_fixup_utf8
-   11.1.46. mssql_winauth
-   11.1.47. mssql_unicode
-   11.1.48. unpack_zlib
-   11.1.49. unpack_mysqlcompress
-   11.1.50. unpack_mysqlcompress_maxsize
+   11.1.44. xmlpipe_attr_multi_64
+   11.1.45. xmlpipe_attr_string
+   11.1.46. xmlpipe_fixup_utf8
+   11.1.47. mssql_winauth
+   11.1.48. mssql_unicode
+   11.1.49. unpack_zlib
+   11.1.50. unpack_mysqlcompress
+   11.1.51. unpack_mysqlcompress_maxsize
 
 11.2. Index configuration options
    11.2.1. type
@@ -6219,8 +6507,10 @@ Table of Contents
    11.2.51. rt_attr_uint
    11.2.52. rt_attr_bigint
    11.2.53. rt_attr_float
-   11.2.54. rt_attr_timestamp
-   11.2.55. rt_attr_string
+   11.2.54. rt_attr_multi
+   11.2.55. rt_attr_multi_64
+   11.2.56. rt_attr_timestamp
+   11.2.57. rt_attr_string
 
 11.3. indexer program configuration options
    11.3.1. mem_limit
@@ -6229,6 +6519,7 @@ Table of Contents
    11.3.4. max_xmlpipe2_field
    11.3.5. write_buffer
    11.3.6. max_file_field_buffer
+   11.3.7. on_file_field_error
 
 11.4. searchd program configuration options
    11.4.1. listen
@@ -6826,7 +7117,7 @@ everything can be declared in a single line as well):
 
 where
 
-   * ATTR-TYPE is 'uint' or 'timestamp'
+   * ATTR-TYPE is 'uint', 'bigint' or 'timestamp'
 
    * SOURCE-TYPE is 'field', 'query', or 'ranged-query'
 
@@ -6838,7 +7129,7 @@ where
 Example:
 
    | sql_attr_multi = uint tag from query; SELECT id, tag FROM tags
-   | sql_attr_multi = uint tag from ranged-query; \
+   | sql_attr_multi = bigint tag from ranged-query; \
    | 	SELECT id, tag FROM tags WHERE id>=$start AND id<=$end; \
    | 	SELECT MIN(id), MAX(id) FROM tags
 
@@ -7152,7 +7443,23 @@ Example:
 
    | xmlpipe_attr_multi = taglist
 
-11.1.44. xmlpipe_attr_string
+11.1.44. xmlpipe_attr_multi_64
+------------------------------
+
+xmlpipe MVA attribute declaration. Declares the BIGINT (signed 64-bit
+integer) MVA attribute. Multi-value, optional. Applies to xmlpipe2 source
+type only.
+
+This setting declares an MVA attribute tag in xmlpipe2 stream. The contents
+of the specified tag will be parsed and a list of integers that will
+constitute the MVA will be extracted, similar to how sql_attr_multi parses
+SQL column contents when 'field' MVA source type is specified.
+
+Example:
+
+   | xmlpipe_attr_multi_64 = taglist
+
+11.1.45. xmlpipe_attr_string
 ----------------------------
 
 xmlpipe string declaration. Multi-value, optional. Applies to xmlpipe2
@@ -7165,7 +7472,7 @@ Example:
 
    | xmlpipe_attr_string = subject
 
-11.1.45. xmlpipe_fixup_utf8
+11.1.46. xmlpipe_fixup_utf8
 ---------------------------
 
 Perform Sphinx-side UTF-8 validation and filtering to prevent XML parser
@@ -7185,7 +7492,7 @@ Example:
 
    | xmlpipe_fixup_utf8 = 1
 
-11.1.46. mssql_winauth
+11.1.47. mssql_winauth
 ----------------------
 
 MS SQL Windows authentication flag. Boolean, optional, default value is
@@ -7201,7 +7508,7 @@ Example:
 
    | mssql_winauth = 1
 
-11.1.47. mssql_unicode
+11.1.48. mssql_unicode
 ----------------------
 
 MS SQL encoding type flag. Boolean, optional, default value is 0 (false).
@@ -7218,7 +7525,7 @@ Example:
 
    | mssql_unicode = 1
 
-11.1.48. unpack_zlib
+11.1.49. unpack_zlib
 --------------------
 
 Columns to unpack using zlib (aka deflate, aka gunzip). Multi-value,
@@ -7236,7 +7543,7 @@ Example:
    | unpack_zlib = col1
    | unpack_zlib = col2
 
-11.1.49. unpack_mysqlcompress
+11.1.50. unpack_mysqlcompress
 -----------------------------
 
 Columns to unpack using MySQL UNCOMPRESS() algorithm. Multi-value,
@@ -7254,7 +7561,7 @@ Example:
    | unpack_mysqlcompress = body_compressed
    | unpack_mysqlcompress = description_compressed
 
-11.1.50. unpack_mysqlcompress_maxsize
+11.1.51. unpack_mysqlcompress_maxsize
 -------------------------------------
 
 Buffer size for UNCOMPRESS()ed data. Optional, default value is 16M.
@@ -8776,7 +9083,29 @@ Example:
 
    | rt_attr_float = gpa
 
-11.2.54. rt_attr_timestamp
+11.2.54. rt_attr_multi
+----------------------
+
+Multi-valued attribute (MVA) declaration. Multi-value (ie. there may be
+more than one such attribute declared), optional. Applies to rt-indexes
+only.
+
+Example:
+
+   | rt_attr_multi = my_tags
+
+11.2.55. rt_attr_multi_64
+-------------------------
+
+Multi-valued attribute (MVA) declaration. Declares the BIGINT (signed
+64-bit) MVA attribute. Multi-value (ie. there may be more than one such
+attribute declared), optional. Applies to rt-indexes only.
+
+Example:
+
+   | rt_attr_multi_64 = my_wide_tags
+
+11.2.56. rt_attr_timestamp
 --------------------------
 
 Timestamp attribute declaration. Multi-value (an arbitrary number of
@@ -8786,7 +9115,7 @@ Example:
 
    | rt_attr_timestamp = date_added
 
-11.2.55. rt_attr_string
+11.2.57. rt_attr_string
 -----------------------
 
 String attribute declaration. Multi-value (an arbitrary number of
@@ -8910,6 +9239,37 @@ still be only 2 MB. However, files over 128 MB would be entirely skipped.
 Example:
 
    | max_file_field_buffer = 128M
+
+11.3.7. on_file_field_error
+---------------------------
+
+How to handle IO errors in file fields. Optional, default is ignore_field.
+Introduced in version 2.0.2-beta.
+
+When there is a problem indexing a file referenced by a file field
+(Section 11.1.29, <<sql_file_field>>), indexer can either index the
+document, assuming empty content in this particular field, or skip the
+document, or fail indexing entirely. on_file_field_error directive controls
+that behavior. The values it takes are:
+
+   * ignore_field, index the current document without field;
+   * skip_document, skip the current document but continue indexing;
+   * fail_index, fail indexing with an error message.
+
+The problems that can arise are: open error, size error (file too big), and
+data read error. Warning messages on any problem will be given at all
+times, irregardless of the phase and the on_file_field_error setting.
+
+Note that with on_file_field_error = skip_document documents will only be
+ignored if problems are detected during an early check phase, and not
+during the actual file parsing phase. indexer will open every referenced
+file and check its size before doing any work, and then open it again when
+doing actual parsing work. So in case a file goes away between these two
+open attempts, the document will still be indexed.
+
+Example:
+
+   | on_file_field_errors = skip_document
 
 11.4. searchd program configuration options
 ===========================================
@@ -9689,7 +10049,7 @@ mode is now deprecated and will be removed once we complete bringing
 SphinxQL in line with standard SQL syntax. So it's advised to update the
 applications utilising SphinxQL and then switch the daemon to the new, more
 SQL compliant mode by setting compat_sphinxql_magics = 0. Please refer to
-Section 7.21, <<SphinxQL upgrade notes, version 2.0.1-beta>> for the
+Section 7.22, <<SphinxQL upgrade notes, version 2.0.1-beta>> for the
 details and update instruction.
 
 Example:

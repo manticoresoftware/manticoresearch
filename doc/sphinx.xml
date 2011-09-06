@@ -1792,7 +1792,7 @@ works on the keyword frequencies. Basically, the better the degree of
 the phrase match between the document body and the query, the higher
 is the phrase proximity (it maxes out when the document contains
 the entire query as a verbatim quote). And BM25 is higher when
-the document containers more rare words. We'll save the detailed
+the document contains more rare words. We'll save the detailed
 discussion for later.
 </para>
 <para>
@@ -1842,7 +1842,7 @@ higher than a one entitled "Hyde Park, London" or "The Hyde Park Cafe".)
 <listitem><para>
 SPH_RANK_EXPR, added in version 2.0.2-beta, lets you specify the ranking
 formula in run time. It exposes a number of internal text factors and lets
-you defined how the final weight should be computed from those factors.
+you define how the final weight should be computed from those factors.
 You can find more details about its syntax and a reference available
 factors in a subsection below.
 </para></listitem>
@@ -1940,7 +1940,7 @@ field-level factors can only be used within a field aggregation
 function, they can <b>not</b> be used anywhere in the expression.
 For example, you can not use <code>(lcs+bm25)</code> as your
 ranking expression, as <code>lcs</code> takes multiple values (one
-in every matched field). You shoudl use <code>(sum(lcs)+bm25)</code>
+in every matched field). You should use <code>(sum(lcs)+bm25)</code>
 instead, that expression sums <code>lcs</code> over all matching fields,
 and then adds <code>bm25</code> to that per-field sum.
 Currently implemented field-level factors are:
@@ -4526,7 +4526,7 @@ UPDATE index SET col1 = newval1 [, ...] WHERE where_condition
 </programlisting>
 <para>
 UPDATE statement was added in version 2.0.1-beta. It can currently
-update 32-bit and 64-bit integers, 32-bit and 64-bit MVAs and floats attributes only. Multiple attributes and values
+update 32-bit and 64-bit integers, 32-bit and 64-bit MVAs and float attributes only. Multiple attributes and values
 can be specified. Both RT and disk indexes are supported. Updates on other attribute types are also planned.
 </para>
 <para><code>where_condition</code> uses the same syntax as in SELECT statement (Refer to <xref linkend="sphinxql-select"/> for details).

@@ -7377,6 +7377,7 @@ enum SqlStmt_e
 	STMT_CREATE_FUNC,
 	STMT_DROP_FUNC,
 	STMT_ATTACH_INDEX,
+	STMT_FLUSH_RTINDEX,
 
 	STMT_TOTAL
 };
@@ -11410,6 +11411,28 @@ void HandleMysqlAttach ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 }
 
 
+void HandleMysqlFlush ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE uPacketID )
+{
+	CSphString sError;
+	const ServedIndex_t * pIndex = g_pIndexes->GetRlockedEntry ( tStmt.m_sIndex );
+
+	if ( !pIndex || !pIndex->m_bEnabled || !pIndex->m_bRT )
+	{
+		pIndex->Unlock();
+		SendMysqlErrorPacket ( tOut, uPacketID, "FLUSH RTINDEX requires an existing RT index" );
+		return;
+	}
+
+
+	ISphRtIndex * pRt = dynamic_cast<ISphRtIndex*> ( pIndex->m_pIndex );
+	assert ( pRt );
+
+	pRt->ForceRamFlush();
+	pIndex->Unlock();
+	SendMysqlOkPacket ( tOut, uPacketID );
+}
+
+
 class CSphinxqlSession : public ISphNoncopyable
 {
 	CSphString &		m_sError;
@@ -11578,6 +11601,10 @@ public:
 
 		case STMT_ATTACH_INDEX:
 			HandleMysqlAttach ( *pStmt, tOut, uPacketID );
+			return;
+
+		case STMT_FLUSH_RTINDEX:
+			HandleMysqlFlush ( *pStmt, tOut, uPacketID );
 			return;
 
 		default:

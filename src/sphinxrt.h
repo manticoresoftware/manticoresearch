@@ -49,8 +49,11 @@ public:
 	/// dump index data to disk
 	virtual void DumpToDisk ( const char * sFilename ) = 0;
 
-	/// check and flush index memory to disk
+	/// check and periodically flush RAM chunk to disk
 	virtual void CheckRamFlush () = 0;
+
+	/// forcibly flush RAM chunk to disk
+	virtual void ForceRamFlush ( bool bPeriodic=false ) = 0;
 
 	/// attach a disk chunk to current index
 	virtual bool AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError ) = 0;

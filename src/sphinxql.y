@@ -39,6 +39,7 @@
 %token	TOK_DROP
 %token	TOK_FALSE
 %token	TOK_FLOAT
+%token	TOK_FLUSH
 %token	TOK_FROM
 %token	TOK_FUNCTION
 %token	TOK_GLOBAL
@@ -127,6 +128,7 @@ statement:
 	| create_function
 	| drop_function
 	| attach_index
+	| flush_rtindex
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -826,6 +828,17 @@ attach_index:
 			tStmt.m_eStmt = STMT_ATTACH_INDEX;
 			tStmt.m_sIndex = $3.m_sValue;
 			tStmt.m_sSetName = $6.m_sValue;
+		}
+	;
+
+//////////////////////////////////////////////////////////////////////////
+
+flush_rtindex:
+	TOK_FLUSH TOK_RTINDEX TOK_IDENT
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_FLUSH_RTINDEX;
+			tStmt.m_sIndex = $3.m_sValue;
 		}
 	;
 

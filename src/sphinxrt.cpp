@@ -903,6 +903,7 @@ public:
 	void						CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t> & dAccKlist ); // FIXME? protect?
 	virtual void				DumpToDisk ( const char * sFilename );
 	virtual void				CheckRamFlush ();
+	virtual void				ForceRamFlush ( bool bPeriodic=false );
 	virtual bool				AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError );
 
 private:
@@ -1084,10 +1085,10 @@ RtIndex_t::~RtIndex_t ()
 #define SPH_THRESHOLD_SAVE_RAM ( 64*1024*1024 )
 static int64_t g_iRtFlushPeriod = 10*60*60; // default period is 10 hours
 
+
 void RtIndex_t::CheckRamFlush ()
 {
 	int64_t tmSave = sphMicroTimer();
-
 	if ( m_iTID<=m_iSavedTID || ( tmSave-m_tmSaved )/1000000<g_iRtFlushPeriod )
 		return;
 
@@ -1100,11 +1101,21 @@ void RtIndex_t::CheckRamFlush ()
 	if ( iDeltaRam < Max ( SPH_THRESHOLD_SAVE_RAM, m_iRamSize/3 ) )
 		return;
 
-	m_tWriterMutex.Lock();
+	ForceRamFlush ( true );
+}
 
+
+void RtIndex_t::ForceRamFlush ( bool bPeriodic )
+{
+	int64_t tmSave = sphMicroTimer();
+	if ( m_iTID<=m_iSavedTID )
+		return;
+
+	m_tWriterMutex.Lock();
+	int64_t iUsedRam = GetUsedRam();
 	if ( !SaveRamChunk () )
 	{
-		sphWarning ( "rt auto-save FAILED!!! (index='%s', error '%s')", m_sIndexName.cstr(), m_sLastError.cstr() );
+		sphWarning ( "rt: index %s: ramchunk save FAILED! (error=%s)", m_sIndexName.cstr(), m_sLastError.cstr() );
 		m_tWriterMutex.Unlock();
 		return;
 	}
@@ -1121,11 +1132,13 @@ void RtIndex_t::CheckRamFlush ()
 	m_tWriterMutex.Unlock();
 
 	tmSave = sphMicroTimer() - tmSave;
-	sphInfo ( "rt auto-saved (index='%s', last TID="INT64_FMT", current TID="INT64_FMT", last ram=%d.%03d Mb, current ram=%d.%03d Mb, time delta=%d sec, took=%d.%03d sec)"
-		, m_sIndexName.cstr(), iWasTID, m_iTID, (int)(iWasRam/1024/1024), (int)((iWasRam/1024)%1000)
+	sphInfo ( "rt: index %s: ramchunk saved ok (mode=%s, last TID="INT64_FMT", current TID="INT64_FMT", last ram=%d.%03d Mb, current ram=%d.%03d Mb, time delta=%d sec, took=%d.%03d sec)"
+		, m_sIndexName.cstr(), bPeriodic ? "periodic" : "forced"
+		, iWasTID, m_iTID, (int)(iWasRam/1024/1024), (int)((iWasRam/1024)%1000)
 		, (int)(m_iSavedRam/1024/1024), (int)((m_iSavedRam/1024)%1000)
 		, (int) (tmDelta/1000000), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
 }
+
 
 int64_t RtIndex_t::GetUsedRam () const
 {

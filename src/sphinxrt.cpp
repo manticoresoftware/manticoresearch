@@ -790,6 +790,7 @@ private:
 	DWORD			m_uCRC;
 };
 
+
 class RtBinlog_c : public ISphBinlog
 {
 public:
@@ -801,7 +802,7 @@ public:
 	void	NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool bShutdown );
 
 	void	Configure ( const CSphConfigSection & hSearchd, bool bTestMode );
-	void	Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback );
+	void	Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, DWORD uReplayFlags, ProgressCallbackSimple_t * pfnProgressCallback );
 
 	void	CreateTimerThread ();
 
@@ -853,8 +854,8 @@ private:
 	void					CheckDoFlush ();
 	void					OpenNewLog ( int iLastState=0 );
 
-	int						ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int iBinlog );
-	bool					ReplayCommit ( int iBinlog, BinlogReader_c & tReader ) const;
+	int						ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, DWORD uReplayFlags, int iBinlog );
+	bool					ReplayCommit ( int iBinlog, DWORD uReplayFlags, BinlogReader_c & tReader ) const;
 	bool					ReplayUpdateAttributes ( int iBinlog, BinlogReader_c & tReader ) const;
 	bool					ReplayIndexAdd ( int iBinlog, const SmallStringHash_T<CSphIndex*> & hIndexes, BinlogReader_c & tReader ) const;
 	bool					ReplayCacheAdd ( int iBinlog, BinlogReader_c & tReader ) const;
@@ -5109,7 +5110,7 @@ void RtBinlog_c::Configure ( const CSphConfigSection & hSearchd, bool bTestMode 
 	}
 }
 
-void RtBinlog_c::Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback )
+void RtBinlog_c::Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, DWORD uReplayFlags, ProgressCallbackSimple_t * pfnProgressCallback )
 {
 	if ( m_bDisabled || !hIndexes.GetLength() )
 		return;
@@ -5124,7 +5125,7 @@ void RtBinlog_c::Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, Progre
 	int iLastLogState = 0;
 	ARRAY_FOREACH ( i, m_dLogFiles )
 	{
-		iLastLogState = ReplayBinlog ( hIndexes, i );
+		iLastLogState = ReplayBinlog ( hIndexes, uReplayFlags, i );
 		if ( pfnProgressCallback ) // on each replayed binlog
 			pfnProgressCallback();
 	}
@@ -5409,7 +5410,7 @@ void RtBinlog_c::CheckDoFlush ()
 	}
 }
 
-int RtBinlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int iBinlog )
+int RtBinlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, DWORD uReplayFlags, int iBinlog )
 {
 	assert ( iBinlog>=0 && iBinlog<m_dLogFiles.GetLength() );
 	CSphString sError;
@@ -5477,7 +5478,7 @@ int RtBinlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, i
 		switch ( uOp )
 		{
 			case BLOP_COMMIT:
-				bReplayOK = ReplayCommit ( iBinlog, tReader );
+				bReplayOK = ReplayCommit ( iBinlog, uReplayFlags, tReader );
 				break;
 
 			case BLOP_UPDATE_ATTRS:
@@ -5559,7 +5560,7 @@ static BinlogIndexInfo_t & ReplayIndexID ( BinlogReader_c & tReader, BinlogFileD
 }
 
 
-bool RtBinlog_c::ReplayCommit ( int iBinlog, BinlogReader_c & tReader ) const
+bool RtBinlog_c::ReplayCommit ( int iBinlog, DWORD uReplayFlags, BinlogReader_c & tReader ) const
 {
 	// load and lookup index
 	const int64_t iTxnPos = tReader.GetPos();
@@ -5599,13 +5600,21 @@ bool RtBinlog_c::ReplayCommit ( int iBinlog, BinlogReader_c & tReader ) const
 	if ( tReader.GetErrorFlag() || !tReader.CheckCrc ( "commit", tIndex.m_sName.cstr(), iTID, iTxnPos ) )
 		return false;
 
-	// check TID, time order in log
+	// check TID
 	if ( iTID<tIndex.m_iMaxTID )
 		sphDie ( "binlog: commit: descending tid (index=%s, lasttid="INT64_FMT", logtid="INT64_FMT", pos="INT64_FMT")",
 			tIndex.m_sName.cstr(), tIndex.m_iMaxTID, iTID, iTxnPos );
+
+	// check timestamp
 	if ( tmStamp<tIndex.m_tmMax )
-		sphDie ( "binlog: commit: descending time (index=%s, lasttime="INT64_FMT", logtime="INT64_FMT", pos="INT64_FMT")",
-			tIndex.m_sName.cstr(), tIndex.m_tmMax, tmStamp, iTxnPos );
+	{
+		if (!( uReplayFlags & SPH_REPLAY_ACCEPT_DESC_TIMESTAMP ))
+			sphDie ( "binlog: commit: descending time (index=%s, lasttime="INT64_FMT", logtime="INT64_FMT", pos="INT64_FMT")",
+				tIndex.m_sName.cstr(), tIndex.m_tmMax, tmStamp, iTxnPos );
+		else
+			sphWarning ( "binlog: commit: replaying txn despite descending time (index=%s, logtid="INT64_FMT", lasttime="INT64_FMT", logtime="INT64_FMT", pos="INT64_FMT")",
+				tIndex.m_sName.cstr(), iTID, tIndex.m_tmMax, tmStamp, iTxnPos );
+	}
 
 	// only replay transaction when index exists and does not have it yet (based on TID)
 	if ( tIndex.m_pRT && iTID > tIndex.m_pRT->m_iTID )
@@ -5846,10 +5855,10 @@ void sphRTDone ()
 }
 
 
-void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback )
+void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, DWORD uReplayFlags, ProgressCallbackSimple_t * pfnProgressCallback )
 {
 	MEMORY ( SPH_MEM_BINLOG );
-	g_pRtBinlog->Replay ( hIndexes, pfnProgressCallback );
+	g_pRtBinlog->Replay ( hIndexes, uReplayFlags, pfnProgressCallback );
 	g_pRtBinlog->CreateTimerThread();
 	g_bRTChangesAllowed = true;
 }

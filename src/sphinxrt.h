@@ -73,8 +73,15 @@ ISphRtIndex * sphGetCurrentIndexRT();
 
 typedef void ProgressCallbackSimple_t ();
 
+//////////////////////////////////////////////////////////////////////////
+
+enum ESphBinlogReplayFlags
+{
+	SPH_REPLAY_ACCEPT_DESC_TIMESTAMP = 1
+};
+
 /// replay stored binlog
-void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback=NULL );
+void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, DWORD uReplayFlags, ProgressCallbackSimple_t * pfnProgressCallback=NULL );
 
 #endif // _sphinxrt_
 

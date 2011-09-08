@@ -196,7 +196,7 @@ int main ()
 	sphRTInit();
 	sphRTConfigure ( tRTConfig, true );
 	SmallStringHash_T< CSphIndex * > dTemp;
-	sphReplayBinlog ( dTemp );
+	sphReplayBinlog ( dTemp, 0 );
 	ISphRtIndex * pIndex = sphCreateIndexRT ( tSchema, "testrt", 32*1024*1024, "data/dump" );
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( pDict );

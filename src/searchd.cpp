@@ -14784,6 +14784,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	bool			bOptListen = false;
 	bool			bTestMode = false;
 
+	DWORD			uReplayFlags = 0;
+
 	#define OPT(_a1,_a2)	else if ( !strcmp(argv[i],_a1) || !strcmp(argv[i],_a2) )
 	#define OPT1(_a1)		else if ( !strcmp(argv[i],_a1) )
 
@@ -14818,6 +14820,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		OPT1 ( "--safetrace" )		g_bSafeTrace = true;
 		OPT1 ( "--test" )			{ g_bWatchdog = false; bTestMode = true; }
 		OPT1 ( "--strip-path" )		g_bStripPath = true;
+
+		// FIXME! add opt=(csv)val handling here
+		OPT1 ( "--replay-flags=accept-desc-timestamp" )		uReplayFlags |= SPH_REPLAY_ACCEPT_DESC_TIMESTAMP;
 
 		// handle 1-arg options
 		else if ( (i+1)>=argc )		break;
@@ -15468,7 +15473,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			hIndexes.Add ( it.Get().m_pIndex, it.GetKey() );
 
 	if ( g_eWorkers==MPM_THREADS )
-		sphReplayBinlog ( hIndexes, DumpMemStat );
+		sphReplayBinlog ( hIndexes, uReplayFlags, DumpMemStat );
 
 	if ( !g_bOptNoDetach )
 		g_bLogStdout = false;

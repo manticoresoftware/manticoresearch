@@ -1665,7 +1665,7 @@ void TestRTInit ()
 	sphRTConfigure ( tRTConfig, true );
 
 	SmallStringHash_T<CSphIndex*> hIndexes;
-	sphReplayBinlog ( hIndexes );
+	sphReplayBinlog ( hIndexes, 0 );
 }
 
 

@@ -11484,6 +11484,7 @@ public:
 		case STMT_PARSE_ERROR:
 			m_tLastMeta = CSphQueryResultMeta();
 			m_tLastMeta.m_sError = m_sError;
+			m_tLastMeta.m_sWarning = "";
 			SendMysqlErrorPacket ( tOut, uPacketID, m_sError.cstr() );
 			return;
 
@@ -11496,9 +11497,9 @@ public:
 
 				if ( HandleMysqlSelect ( tOut, uPacketID, tHandler ) )
 				{
+					// query just completed ok; reset out error message
+					m_sError = "";
 					AggrResult_t & tLast = tHandler.m_dResults.Last();
-					if ( !m_sError.IsEmpty() )
-						tLast.m_sWarning = m_sError;
 					SendMysqlSelectResult ( tOut, uPacketID, dRows, tLast, false );
 				}
 

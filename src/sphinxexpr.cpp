@@ -403,7 +403,7 @@ DECLARE_UNARY_INT ( Expr_Sint_c,		(float)(INTFIRST),			INTFIRST,		INTFIRST )
 
 //////////////////////////////////////////////////////////////////////////
 
-#define DECLARE_BINARY_TRAITS(_classname,_expr) \
+#define DECLARE_BINARY_TRAITS(_classname) \
 	struct _classname : public ISphExpr \
 	{ \
 		ISphExpr * m_pFirst; \
@@ -412,19 +412,22 @@ DECLARE_UNARY_INT ( Expr_Sint_c,		(float)(INTFIRST),			INTFIRST,		INTFIRST )
 		~_classname () { SafeRelease ( m_pFirst ); SafeRelease ( m_pSecond ); } \
 		virtual void SetMVAPool ( const DWORD * pMvaPool ) { m_pFirst->SetMVAPool ( pMvaPool ); m_pSecond->SetMVAPool ( pMvaPool ); } \
 		virtual void SetStringPool ( const BYTE * pStrings ) { m_pFirst->SetStringPool ( pStrings ); m_pSecond->SetStringPool ( pStrings ); } \
-		virtual float Eval ( const CSphMatch & tMatch ) const { return _expr; } \
 		virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const \
 		{ \
 			m_pFirst->GetDependencyColumns ( dColumns ); \
 			m_pSecond->GetDependencyColumns ( dColumns ); \
 		} \
 
+#define DECLARE_END() };
+
 #define DECLARE_BINARY_FLT(_classname,_expr) \
-		DECLARE_BINARY_TRAITS ( _classname, _expr ) \
+		DECLARE_BINARY_TRAITS ( _classname ) \
+		virtual float Eval ( const CSphMatch & tMatch ) const { return _expr; } \
 	};
 
 #define DECLARE_BINARY_INT(_classname,_expr,_expr2,_expr3) \
-		DECLARE_BINARY_TRAITS ( _classname, _expr ) \
+		DECLARE_BINARY_TRAITS ( _classname ) \
+		virtual float Eval ( const CSphMatch & tMatch ) const { return _expr; } \
 		virtual int IntEval ( const CSphMatch & tMatch ) const { return _expr2; } \
 		virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return _expr3; } \
 	};
@@ -441,10 +444,29 @@ DECLARE_BINARY_INT ( Expr_Add_c,	FIRST + SECOND,						INTFIRST + INTSECOND,				I
 DECLARE_BINARY_INT ( Expr_Sub_c,	FIRST - SECOND,						INTFIRST - INTSECOND,				INT64FIRST - INT64SECOND )
 DECLARE_BINARY_INT ( Expr_Mul_c,	FIRST * SECOND,						INTFIRST * INTSECOND,				INT64FIRST * INT64SECOND )
 DECLARE_BINARY_FLT ( Expr_Div_c,	FIRST / SECOND )
-DECLARE_BINARY_INT ( Expr_Idiv_c,	(float)(int(FIRST)/int(SECOND)),	INTFIRST / INTSECOND,				INT64FIRST / INT64SECOND )
 DECLARE_BINARY_INT ( Expr_BitAnd_c,	(float)(int(FIRST)&int(SECOND)),	INTFIRST & INTSECOND,				INT64FIRST & INT64SECOND )
 DECLARE_BINARY_INT ( Expr_BitOr_c,	(float)(int(FIRST)|int(SECOND)),	INTFIRST | INTSECOND,				INT64FIRST | INT64SECOND )
 DECLARE_BINARY_INT ( Expr_Mod_c,	(float)(int(FIRST)%int(SECOND)),	INTFIRST % INTSECOND,				INT64FIRST % INT64SECOND )
+
+DECLARE_BINARY_TRAITS ( Expr_Idiv_c )
+	virtual float Eval ( const CSphMatch & tMatch ) const
+	{
+		int iSecond = int(SECOND);
+		return iSecond ? float(int(FIRST)/iSecond) : 0.0f;
+	}
+
+	virtual int IntEval ( const CSphMatch & tMatch ) const
+	{
+		int iSecond = INTSECOND;
+		return iSecond ? ( INTFIRST / iSecond ) : 0;
+	}
+
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const
+	{
+		int64_t iSecond = INT64SECOND;
+		return iSecond ? ( INT64FIRST / iSecond ) : 0;
+	}
+DECLARE_END()
 
 DECLARE_BINARY_POLY ( Expr_Lt,		IFFLT ( FIRST<SECOND ),					IFINT ( INTFIRST<INTSECOND ),		IFINT ( INT64FIRST<INT64SECOND ) )
 DECLARE_BINARY_POLY ( Expr_Gt,		IFFLT ( FIRST>SECOND ),					IFINT ( INTFIRST>INTSECOND ),		IFINT ( INT64FIRST>INT64SECOND ) )

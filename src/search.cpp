@@ -257,7 +257,7 @@ int main ( int argc, char ** argv )
 		CSphQueryResult * pResult = NULL;
 
 		CSphIndex * pIndex = sphCreateIndexPhrase ( NULL, hIndex["path"].cstr() );
-		pIndex->m_bEnableStar = ( hIndex.GetInt("enable_star")!=0 );
+		pIndex->SetEnableStar ( hIndex.GetInt("enable_star")!=0 );
 		pIndex->SetWordlistPreload ( hIndex.GetInt("ondisk_dict")==0 );
 
 		CSphString sWarning;

@@ -12137,7 +12137,7 @@ bool CheckIndex ( const CSphIndex * pIndex, CSphString & sError )
 {
 	const CSphIndexSettings & tSettings = pIndex->GetSettings ();
 
-	if ( ( tSettings.m_iMinPrefixLen>0 || tSettings.m_iMinInfixLen>0 ) && !pIndex->m_bEnableStar )
+	if ( ( tSettings.m_iMinPrefixLen>0 || tSettings.m_iMinInfixLen>0 ) && !pIndex->IsStarEnabled() )
 	{
 		CSphDict * pDict = pIndex->GetDictionary ();
 		assert ( pDict );
@@ -12240,7 +12240,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	tNewIndex.m_bOnlyNew = pRotating->m_bOnlyNew;
 
 	tNewIndex.m_pIndex = sphCreateIndexPhrase ( NULL, NULL ); // FIXME! check if it's ok
-	tNewIndex.m_pIndex->m_bEnableStar = pRotating->m_bStar;
+	tNewIndex.m_pIndex->SetEnableStar ( pRotating->m_bStar );
 	tNewIndex.m_pIndex->m_bExpandKeywords = pRotating->m_bExpand;
 	tNewIndex.m_pIndex->SetPreopen ( pRotating->m_bPreopen || g_bPreopenIndexes );
 	tNewIndex.m_pIndex->SetWordlistPreload ( !pRotating->m_bOnDiskDict && !g_bOnDiskDicts );
@@ -12445,7 +12445,7 @@ void SeamlessTryToForkPrereader ()
 	if ( !g_pPrereading )
 		g_pPrereading = sphCreateIndexPhrase ( NULL, NULL ); // FIXME! check if it's ok
 
-	g_pPrereading->m_bEnableStar = tServed.m_bStar;
+	g_pPrereading->SetEnableStar ( tServed.m_bStar );
 	g_pPrereading->m_bExpandKeywords = tServed.m_bExpand;
 	g_pPrereading->SetPreopen ( tServed.m_bPreopen || g_bPreopenIndexes );
 	g_pPrereading->SetWordlistPreload ( !tServed.m_bOnDiskDict && !g_bOnDiskDicts );
@@ -13064,11 +13064,17 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 
 		// index
 		ServedIndex_t tIdx;
-		tIdx.m_pIndex = sphCreateIndexRT ( tSchema, szIndexName, uRamSize, hIndex["path"].cstr() );
+		bool bWordDict = strcmp ( hIndex.GetStr ( "dict", "" ), "keywords" )==0;
+		tIdx.m_pIndex = sphCreateIndexRT ( tSchema, szIndexName, uRamSize, hIndex["path"].cstr(), bWordDict );
 		tIdx.m_bEnabled = false;
 		tIdx.m_sIndexPath = hIndex["path"];
 		tIdx.m_bRT = true;
-		tIdx.m_pIndex->SetWordlistPreload ( !hIndex.GetInt("ondisk_dict") && !g_bOnDiskDicts );
+
+		ConfigureIndex ( tIdx, hIndex );
+		tIdx.m_pIndex->SetEnableStar ( tIdx.m_bStar );
+		tIdx.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
+		tIdx.m_pIndex->SetPreopen ( tIdx.m_bPreopen || g_bPreopenIndexes );
+		tIdx.m_pIndex->SetWordlistPreload ( !tIdx.m_bOnDiskDict && !g_bOnDiskDicts );
 
 		// pick config settings
 		// they should be overriden later by Preload() if needed
@@ -13119,7 +13125,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		// try to create index
 		CSphString sWarning;
 		tIdx.m_pIndex = sphCreateIndexPhrase ( szIndexName, hIndex["path"].cstr() );
-		tIdx.m_pIndex->m_bEnableStar = tIdx.m_bStar;
+		tIdx.m_pIndex->SetEnableStar ( tIdx.m_bStar );
 		tIdx.m_pIndex->m_bExpandKeywords = tIdx.m_bExpand;
 		tIdx.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 		tIdx.m_pIndex->SetPreopen ( tIdx.m_bPreopen || g_bPreopenIndexes );

@@ -2628,6 +2628,9 @@ public:
 	virtual bool				HasDocid ( SphDocID_t uDocid ) const = 0;
 	virtual bool				IsRT() const { return false; }
 
+	virtual void				SetEnableStar ( bool bEnableStar ) { m_bEnableStar = bEnableStar; }
+	bool						IsStarEnabled () const { return m_bEnableStar; }
+
 public:
 	/// build index by indexing given sources
 	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer ) = 0;
@@ -2703,11 +2706,11 @@ public:
 public:
 	int64_t						m_iTID;
 
-	bool						m_bEnableStar;			///< enable star-syntax
 	bool						m_bExpandKeywords;		///< enable automatic query-time keyword expansion (to "( word | =word | *word* )")
 	int							m_iExpansionLimit;
 
 protected:
+
 	ProgressCallback_t *		m_pProgress;
 	CSphSchema					m_tSchema;
 	CSphString					m_sLastError;
@@ -2723,6 +2726,7 @@ protected:
 	bool						m_bPreloadWordlist;		///< preload wordlists or keep them on disk
 
 	bool						m_bStripperInited;		///< was stripper initialized (old index version (<9) handling)
+	bool						m_bEnableStar;			///< enable star-syntax
 
 public:
 	bool						m_bId32to64;			///< did we convert id32 to id64 on startup

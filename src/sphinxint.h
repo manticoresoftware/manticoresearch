@@ -1231,8 +1231,174 @@ void			SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & m_tSe
 void			LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion );
 void			SaveTokenizerSettings ( CSphWriter & tWriter, ISphTokenizer * pTokenizer );
 void			LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings & tSettings, DWORD uVersion, CSphString & sWarning );
-void			SaveDictionarySettings ( CSphWriter & tWriter, CSphDict * pDict );
+void			SaveDictionarySettings ( CSphWriter & tWriter, CSphDict * pDict, bool bForceWordDict );
 void			LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings, DWORD uVersion, CSphString & sWarning );
+
+
+int sphDictCmp ( const char * pStr1, int iLen1, const char * pStr2, int iLen2 );
+int sphDictCmpStrictly ( const char * pStr1, int iLen1, const char * pStr2, int iLen2 );
+
+template <typename CP>
+int sphCheckpointCmp ( const char * sWord, int iLen, SphWordID_t iWordID, bool bWordDict, const CP & tCP )
+{
+	if ( bWordDict )
+		return sphDictCmp ( sWord, iLen, tCP.m_sWord, strlen ( tCP.m_sWord ) );
+
+	int iRes = 0;
+	iRes = iWordID<tCP.m_iWordID ? -1 : iRes;
+	iRes = iWordID>tCP.m_iWordID ? 1 : iRes;
+	return iRes;
+}
+
+template <typename CP>
+int sphCheckpointCmpStrictly ( const char * sWord, int iLen, SphWordID_t iWordID, bool bWordDict, const CP & tCP )
+{
+	if ( bWordDict )
+		return sphDictCmpStrictly ( sWord, iLen, tCP.m_sWord, strlen ( tCP.m_sWord ) );
+
+	int iRes = 0;
+	iRes = iWordID<tCP.m_iWordID ? -1 : iRes;
+	iRes = iWordID>tCP.m_iWordID ? 1 : iRes;
+	return iRes;
+}
+
+
+template < typename CP >
+const CP * sphSearchCheckpoint ( const char * sWord, int iWordLen, SphWordID_t iWordID
+							, bool bStarMode, bool bWordDict
+							, const CP * pFirstCP, const CP * pLastCP )
+{
+	assert ( !bWordDict || iWordLen>0 );
+
+	const CP * pStart = pFirstCP;
+	const CP * pEnd = pLastCP;
+
+	if ( bStarMode && sphCheckpointCmp ( sWord, iWordLen, iWordID, bWordDict, *pStart )<0 )
+		return NULL;
+	if ( !bStarMode && sphCheckpointCmpStrictly ( sWord, iWordLen, iWordID, bWordDict, *pStart )<0 )
+		return NULL;
+
+	if ( sphCheckpointCmpStrictly ( sWord, iWordLen, iWordID, bWordDict, *pEnd )>=0 )
+		pStart = pEnd;
+	else
+	{
+		while ( pEnd-pStart>1 )
+		{
+			const CP * pMid = pStart + (pEnd-pStart)/2;
+			const int iCmpRes = sphCheckpointCmpStrictly ( sWord, iWordLen, iWordID, bWordDict, *pMid );
+
+			if ( iCmpRes==0 )
+			{
+				pStart = pMid;
+				break;
+			} else if ( iCmpRes<0 )
+				pEnd = pMid;
+			else
+				pStart = pMid;
+		}
+
+		assert ( pStart>=pFirstCP );
+		assert ( pStart<=pLastCP );
+		assert ( sphCheckpointCmp ( sWord, iWordLen, iWordID, bWordDict, *pStart )>=0
+			&& sphCheckpointCmpStrictly ( sWord, iWordLen, iWordID, bWordDict, *pEnd )<0 );
+	}
+
+	return pStart;
+}
+
+
+class ISphRtDictWraper : public CSphDict
+{
+public:
+	virtual const BYTE *	GetPackedKeywords () = 0;
+	virtual int				GetPackedLen () = 0;
+
+	virtual void			ResetKeywords() = 0;
+};
+
+ISphRtDictWraper * sphCreateRtKeywordsDictionaryWrapper ( CSphDict * pBase );
+
+
+class ISphWordlist
+{
+public:
+	virtual ~ISphWordlist () {}
+	virtual void GetPrefixedWords ( const char * sWord, int iWordLen, CSphVector<CSphNamedInt> & dPrefixedWords, BYTE * pDictBuf, int iFD ) const = 0;
+};
+
+struct ExpansionContext_t
+{
+	const ISphWordlist * m_pWordlist;
+	BYTE * m_pBuf;
+	CSphQueryResultMeta * m_pResult;
+	int m_iFD;
+	int m_iMinPrefixLen;
+	int m_iExpansionLimit;
+	bool m_bStarEnabled;
+	bool m_bHasMorphology;
+};
+
+XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx );
+
+
+class CSphKeywordDeltaWriter
+{
+private:
+	BYTE m_sLastKeyword [SPH_MAX_WORD_LEN*3+4];
+	int m_iLastLen;
+
+public:
+	CSphKeywordDeltaWriter ()
+	{
+		Reset();
+	}
+
+	void Reset ()
+	{
+		m_iLastLen = 0;
+	}
+
+	template <typename F>
+	void PutDelta ( F & WRITER, const BYTE * pWord, int iLen )
+	{
+		assert ( pWord && iLen );
+
+		// how many bytes of a previous keyword can we reuse?
+		BYTE iMatch = 0;
+		int iMinLen = Min ( m_iLastLen, iLen );
+		assert ( iMinLen<sizeof(m_sLastKeyword) );
+		while ( iMatch<iMinLen && m_sLastKeyword[iMatch]==pWord[iMatch] )
+		{
+			iMatch++;
+		}
+
+		BYTE iDelta = (BYTE)( iLen - iMatch );
+		assert ( iDelta>0 );
+
+		memcpy ( m_sLastKeyword, pWord, iLen );
+		m_iLastLen = iLen;
+
+		// match and delta are usually tiny, pack them together in 1 byte
+		// tricky bit, this byte leads the entry so it must never be 0 (aka eof mark)!
+		if ( iDelta<=8 && iMatch<=15 )
+		{
+			BYTE uPacked = ( 0x80 + ( (iDelta-1)<<4 ) + iMatch );
+			WRITER.PutBytes ( &uPacked, 1 );
+		} else
+		{
+			WRITER.PutBytes ( &iDelta, 1 ); // always greater than 0
+			WRITER.PutBytes ( &iMatch, 1 );
+		}
+
+		WRITER.PutBytes ( pWord + iMatch, iDelta );
+	}
+};
+
+BYTE sphDoclistHintPack ( SphOffset_t iDocs, SphOffset_t iLen );
+
+// wordlist checkpoints frequency
+#define SPH_WORDLIST_CHECKPOINT 64
+
 
 #endif // _sphinxint_
 

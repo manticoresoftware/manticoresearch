@@ -1719,7 +1719,7 @@ void TestRTWeightBoundary ()
 		for ( int i=0; i<tSrcSchema.GetAttrsCount(); i++ )
 			tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
 
-		ISphRtIndex * pIndex = sphCreateIndexRT ( tSchema, "testrt", 32*1024*1024, RT_INDEX_FILE_NAME );
+		ISphRtIndex * pIndex = sphCreateIndexRT ( tSchema, "testrt", 32*1024*1024, RT_INDEX_FILE_NAME, false );
 
 		// tricky bit
 		// index owns its tokenizer/dict pair, and MAY do whatever it wants
@@ -1898,7 +1898,7 @@ void TestRTSendVsMerge ()
 	for ( int i=0; i<tSrcSchema.GetAttrsCount(); i++ )
 		tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
 
-	ISphRtIndex * pIndex = sphCreateIndexRT ( tSchema, "testrt", 128*1024, RT_INDEX_FILE_NAME );
+	ISphRtIndex * pIndex = sphCreateIndexRT ( tSchema, "testrt", 128*1024, RT_INDEX_FILE_NAME, false );
 
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( pDict );

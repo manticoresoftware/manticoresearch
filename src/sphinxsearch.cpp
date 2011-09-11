@@ -4604,7 +4604,7 @@ struct RankerState_Proximity_fn
 				// cool, it matched!
 				m_uLcsTailQposMask = ( 1UL << pHlist->m_uQuerypos ); // our lcs span now ends with a specific qpos
 				m_uLcsTailPos = m_uCurPos; // and in a specific position
-				m_uCurLCS = BYTE(m_uCurLCS + pHlist->m_uWeight); // and it's longer
+				m_uCurLCS = BYTE ( m_uCurLCS + pHlist->m_uWeight ); // and it's longer
 				m_uCurQposMask = 0; // and we should avoid matching subsequent hits on the same hitpos
 
 				// update per-field vector
@@ -5488,7 +5488,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 	const CSphIndex * pIndex = tTermSetup.m_pIndex;
 
 	// check the keywords
-	CheckExtendedQuery ( tXQ.m_pRoot, pResult, pIndex->GetSettings(), pIndex->m_bEnableStar );
+	CheckExtendedQuery ( tXQ.m_pRoot, pResult, pIndex->GetSettings(), pIndex->IsStarEnabled() );
 
 	// fill payload mask
 	DWORD uPayloadMask = 0;

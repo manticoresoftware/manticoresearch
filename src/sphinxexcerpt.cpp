@@ -298,7 +298,11 @@ public:
 		return m_tMatch;
 	}
 
-	virtual void OnSetup ( CSphDict * ) {}
+	virtual const char * OnSetup ( CSphDict * )
+	{
+		m_iWordLength = strlen ( m_sDictWord.cstr() );
+		return m_sDictWord.cstr();
+	}
 };
 
 /// simple keyword match on id
@@ -335,7 +339,7 @@ template < typename COMPARE > struct SnippetsQword_c: public ISnippetsQword
 				continue;
 
 			m_pTokenizer->SetBuffer ( (BYTE *) &m_sBuffer->cstr() [ tToken.m_iStart ], tToken.m_iLengthBytes );
-			BYTE * sToken = m_pTokenizer->GetToken(); // OPTIMIZE? token can be memoized and shared between qwords
+			BYTE * sToken = m_pTokenizer->GetToken(); // OPTIMIZE? token can be memorized and shared between qwords
 			if ( (*(COMPARE *)this).Match ( tToken, sToken ) )
 			{
 				tToken.m_uWords |= m_uWordMask;
@@ -347,30 +351,40 @@ template < typename COMPARE > struct SnippetsQword_c: public ISnippetsQword
 	}
 };
 
-struct SnippetsQword_StarFront_c : public SnippetsQword_c<SnippetsQword_StarFront_c>
+template < typename COMPARE >
+struct SnippetQword_Star_t : public SnippetsQword_c<COMPARE>
+{
+	virtual const char * OnSetup ( CSphDict * )
+	{
+		m_iWordLength = strlen ( m_sWord.cstr() );
+		return m_sWord.cstr();
+	}
+};
+
+struct SnippetsQword_StarFront_c : public SnippetQword_Star_t<SnippetsQword_StarFront_c>
 {
 	inline bool Match ( const Token_t & tToken, BYTE * sToken )
 	{
 		int iOffset = tToken.m_iLengthBytes - m_iWordLength;
 		return iOffset>=0 &&
-			memcmp ( m_sDictWord.cstr(), sToken + iOffset, m_iWordLength )==0;
+			memcmp ( m_sWord.cstr(), sToken + iOffset, m_iWordLength )==0;
 	}
 };
 
-struct SnippetsQword_StarBack_c : public SnippetsQword_c<SnippetsQword_StarBack_c>
+struct SnippetsQword_StarBack_c : public SnippetQword_Star_t<SnippetsQword_StarBack_c>
 {
 	inline bool Match ( const Token_t & tToken, BYTE * sToken )
 	{
 		return ( tToken.m_iLengthBytes>=m_iWordLength ) &&
-			memcmp ( m_sDictWord.cstr(), sToken, m_iWordLength )==0;
+			memcmp ( m_sWord.cstr(), sToken, m_iWordLength )==0;
 	}
 };
 
-struct SnippetsQword_StarBoth_c : public SnippetsQword_c<SnippetsQword_StarBoth_c>
+struct SnippetsQword_StarBoth_c : public SnippetQword_Star_t<SnippetsQword_StarBoth_c>
 {
 	inline bool Match ( const Token_t & tToken, BYTE * sToken )
 	{
-		return FindString ( sToken, (BYTE *)m_sDictWord.cstr(), tToken.m_iLengthBytes )!=NULL;
+		return FindString ( sToken, (BYTE *)m_sWord.cstr(), tToken.m_iLengthBytes )!=NULL;
 	}
 };
 
@@ -382,7 +396,7 @@ struct SnippetsQword_ExactForm_c : public SnippetsQword_c<SnippetsQword_ExactFor
 		return tToken.m_iBlendID==m_iWordID || ( memcmp ( sToken, m_sDictWord.cstr()+1, m_iWordLength )==0 );
 	}
 
-	virtual void OnSetup ( CSphDict * pDict )
+	virtual const char* OnSetup ( CSphDict * pDict )
 	{
 		// FIXME!!! to match with blended parts it recalculates wordID for word without head '=' part
 
@@ -406,6 +420,8 @@ struct SnippetsQword_ExactForm_c : public SnippetsQword_c<SnippetsQword_ExactFor
 				break;
 			}
 		}
+
+		return SnippetsQword_c::OnSetup ( pDict );
 	}
 };
 
@@ -448,7 +464,6 @@ bool SnippetsQwordSetup::QwordSetup ( ISphQword * pQword ) const
 
 	pWord->m_iLastIndex = m_pGenerator->m_iLastWord;
 	pWord->m_uWordMask = 1 << (m_pGenerator->m_iQwordCount++);
-	pWord->m_iWordLength = strlen ( pWord->m_sDictWord.cstr() );
 	pWord->m_dTokens = &(m_pGenerator->m_dTokens);
 	pWord->m_sBuffer = &(m_pGenerator->m_sBuffer);
 	pWord->m_pTokenizer = m_pTokenizer;
@@ -458,10 +473,9 @@ bool SnippetsQwordSetup::QwordSetup ( ISphQword * pQword ) const
 	pWord->m_iHits = 1;
 	pWord->m_bHasHitlist = true;
 
-	pWord->OnSetup ( m_pDict );
+	const char * sWord = pWord->OnSetup ( m_pDict );
 
 	// add dummy word, used for passage weighting
-	const char * sWord = pWord->m_sDictWord.cstr();
 	const int iLength = m_pTokenizer->IsUtf8() ? sphUTF8Len ( sWord ) : strlen ( sWord );
 	m_pGenerator->m_dWords.Add().m_iLengthCP = iLength;
 	m_pGenerator->m_dKeywords.Add().m_iLength = iLength;

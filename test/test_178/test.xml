@@ -33,6 +33,15 @@ index tstar : test
 	enable_star			= 1	
 	morphology			= stem_enru
 }
+
+index stars : test
+{
+	path						= <data_path/>/tstar
+	min_infix_len		= 1
+	enable_star			= 1	
+	morphology			= stem_en
+}
+
 </config>
 
 <db_insert>select 1;</db_insert>
@@ -49,6 +58,10 @@ index tstar : test
 <!-- here is going regression no star matches on fast path - words were stemmed -->
 <sphinxql>CALL SNIPPETS('check vs checking fast path', 'tstar', 'checki*', 1 AS query_mode, 0 AS limit )</sphinxql>
 <sphinxql>CALL SNIPPETS('check vs checking regular path', 'tstar', 'checki*', 1 AS query_mode, 0 AS limit, 1 AS limit_passages )</sphinxql>
+<!-- here is going regression no star matches on regular path - words were stemmed -->
+<sphinxql>CALL SNIPPETS('time is dying out like everething else here', 'stars', 'dying*', 1 AS query_mode, 20 AS limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('time is dying out like everething else here', 'stars', '*dying', 1 AS query_mode, 20 AS limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('time is dying out like everething else here', 'stars', '*dying*', 1 AS query_mode, 20 AS limit )</sphinxql>
 </sphqueries>
 
 </test>

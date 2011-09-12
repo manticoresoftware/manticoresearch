@@ -356,8 +356,8 @@ struct SnippetQword_Star_t : public SnippetsQword_c<COMPARE>
 {
 	virtual const char * OnSetup ( CSphDict * )
 	{
-		m_iWordLength = strlen ( m_sWord.cstr() );
-		return m_sWord.cstr();
+		this->m_iWordLength = strlen ( this->m_sWord.cstr() );
+		return this->m_sWord.cstr();
 	}
 };
 
@@ -421,7 +421,7 @@ struct SnippetsQword_ExactForm_c : public SnippetsQword_c<SnippetsQword_ExactFor
 			}
 		}
 
-		return SnippetsQword_c::OnSetup ( pDict );
+		return SnippetsQword_c<SnippetsQword_ExactForm_c>::OnSetup ( pDict );
 	}
 };
 

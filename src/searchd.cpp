@@ -4328,7 +4328,10 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 
 	// v.1.11
 	if ( iVer>=0x10B )
+	{
 		tQuery.m_sGroupDistinct = tReq.GetString ();
+		tQuery.m_sGroupDistinct.ToLower();
+	}
 
 	// v.1.14
 	if ( iVer>=0x10E )

@@ -1224,6 +1224,13 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	const CSphConfigSection & hSrc, const char * sSrc, CSphVector<CSphFilterSettings> & tPurge, bool bRotate, bool bMergeKillLists )
 {
+	// progress bar
+	if ( !g_bQuiet )
+	{
+		fprintf ( stdout, "merging index '%s' into index '%s'...\n", sSrc, sDst );
+		fflush ( stdout );
+	}
+
 	// check config
 	if ( !hDst("path") )
 	{

@@ -3429,13 +3429,9 @@ bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 		LoadTokenizerSettings ( rdMeta, tTokenizerSettings, uSettingsVer, sWarning );
 		LoadDictionarySettings ( rdMeta, tDictSettings, uSettingsVer, sWarning );
 
-		// meta v.5
-		m_iWordsCheckpoint = ( uVersion<5 ? SPH_RT_WORDS_PER_CHECKPOINT_v3 : SPH_RT_WORDS_PER_CHECKPOINT_v5 );
+		// meta v.5 dictionary
 		if ( uVersion>=5 )
-		{
 			m_bKeywordDict = tDictSettings.m_bWordDict;
-			m_iWordsCheckpoint = rdMeta.GetDword();
-		}
 
 		// fixup them settings
 		if ( m_bId32to64 )
@@ -3468,6 +3464,13 @@ bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 		m_tOutboundSchema = m_tSchema;
 		ComputeOutboundSchema();
 		m_iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+	}
+
+	// meta v.5 checkpoint freq
+	m_iWordsCheckpoint = ( uVersion<5 ? SPH_RT_WORDS_PER_CHECKPOINT_v3 : SPH_RT_WORDS_PER_CHECKPOINT_v5 );
+	if ( uVersion>=5 )
+	{
+		m_iWordsCheckpoint = rdMeta.GetDword();
 	}
 
 	///////////////

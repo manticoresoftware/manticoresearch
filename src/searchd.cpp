@@ -15319,12 +15319,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( !strcmp ( hSearchd.GetStr ( "query_log_format", "plain" ), "sphinxql" ) )
 		g_eLogFormat = LOG_FORMAT_SPHINXQL;
 
-	// almost ready, time to start listening
-	int iBacklog = hSearchd.GetInt ( "listen_backlog", SEARCHD_BACKLOG );
-	ARRAY_FOREACH ( i, g_dListeners )
-		if ( listen ( g_dListeners[i].m_iSock, iBacklog )==-1 )
-			sphFatal ( "listen() failed: %s", sphSockError() );
-
 	// prepare to detach
 	if ( !g_bOptNoDetach )
 	{
@@ -15518,6 +15512,12 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	// create flush-rt thread
 	if ( g_eWorkers==MPM_THREADS && !sphThreadCreate ( &g_tRtFlushThread, RtFlushThreadFunc, 0 ) )
 		sphDie ( "failed to create rt-flush thread" );
+
+	// almost ready, time to start listening
+	int iBacklog = hSearchd.GetInt ( "listen_backlog", SEARCHD_BACKLOG );
+	ARRAY_FOREACH ( i, g_dListeners )
+		if ( listen ( g_dListeners[i].m_iSock, iBacklog )==-1 )
+			sphFatal ( "listen() failed: %s", sphSockError() );
 
 	sphInfo ( "accepting connections" );
 

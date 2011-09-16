@@ -5,6 +5,7 @@
 
 <requires>
 <pre_copy_ref/>
+<id32/>
 </requires>
 
 <skip_indexer/>

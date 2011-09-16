@@ -64,7 +64,6 @@ $restartDaemon = create_function('$client','
 	if ( $startSta == 0 || $startSta == 2 )
 	{
 		$results[] = "started=ok";
-		usleep ( 50000 );
 		$client->SetMatchMode ( SPH_MATCH_EXTENDED2 );
 	}
 	else

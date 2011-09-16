@@ -60,7 +60,6 @@ for ( $i = 0; $i < 4; $i++)
 	if ( $startSta == 0 || $startSta == 2 )
 	{
 		$results[] = "started=ok";
-		usleep ( 50000 );
 	}
 	else
 		$results[] = sprintf("start.err=%d local=%s client=%s", $startSta, $error, $client->GetLastError());

@@ -147,9 +147,9 @@ function CheckSearchdLog ( $error_file, &$retval )
 }
 
 
-function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watchdog = false )
+function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watchdog = false, $addr=false, $port=false )
 {
-	global $g_locals, $windows, $action_retries, $action_wait_timeout;
+	global $g_locals, $windows, $action_retries, $action_wait_timeout, $sd_address, $sd_port;
 
 	$path = $g_locals['searchd'];
 	if ( !is_executable($path) )
@@ -215,6 +215,37 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 //	// we've got a pid file; but lets check the log file for startup errors
 //	for ( $i=0; $i<$action_retries && !file_exists($error_file); $i++ )
 //		usleep ( $action_wait_timeout );
+
+	// lets wait when daemon is ready to accept connections
+	if ( $retval==0 )
+	{
+		if ( !$addr )
+			$addr = $sd_address;
+		if ( !$port )
+			$port = $sd_port;
+
+		$cl = new SphinxClient ();
+		$cl->SetServer ( $addr, $port );	
+		$cl->SetConnectTimeout ( 1 );
+		
+		$ok = false;
+		$start = MyMicrotime();		
+		for ( $i=0; $i<3; $i++ )
+		{
+			if ( $cl->Open() )
+			{
+				$cl->Close(); 
+				$ok = true;
+				break;
+			}
+		}
+		
+		if ( !$ok )
+		{
+			$tm = ( MyMicrotime() - $start );
+			printf ( "\nWARNING: can't connect to daemon on startup for %.1f sec\t\t\t\n", $tm );
+		}
+	}
 
 	if ( $retval==0 && !empty($error) )
 		$retval = 2; // no errors, but there were warnings
@@ -440,6 +471,8 @@ class SphinxConfig
 	function DB_Insert ()			{ return $this->_db_insert; }
 	function DB_CustomInsert ()		{ return $this->_custom_insert; }
 	function NumAgents ()			{ return $this->_num_agents; }
+	function AddressAPI ()				{ return $this->_sd_address; }
+	function Port ()						{ return $this->_sd_port; }
 	function Requires ( $name )		{ return isset($this->_prereqs[$name]); }
 	function IsQueryTest ()			{ return strlen ( $this->_custom_test ) == 0;	}
 	function IsSphinxqlTest ()		{ return $this->_use_sphinxql; }
@@ -2223,7 +2256,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 			if ( $sd_managed_searchd )
 				$searchd_ret = 0;
 			else
-				$searchd_ret = StartSearchd ( $config_file, "error_".$agent_id.".txt", $pid_file, $error, $config->Requires ( "watchdog" )  );
+				$searchd_ret = StartSearchd ( $config_file, "error_".$agent_id.".txt", $pid_file, $error, $config->Requires ( "watchdog" ), $config->AddressAPI(), $config->Port()  );
 
 				if ( $searchd_ret == 1 )
 				{

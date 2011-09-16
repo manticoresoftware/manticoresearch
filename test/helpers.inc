@@ -1980,6 +1980,21 @@ function EraseDirContents ( $path )
 	}
 }
 
+function CopyDirContents ( $from, $to )
+{
+	$ffrom = opendir ( $from );
+	
+	if ( $ffrom && is_dir ( $to ) )
+	{
+		while ( ( $file = readdir ( $ffrom ) ) !== false )
+		{
+			if ( $file != "." && $file != ".." && !is_dir ( $file ) )
+				copy ( "$from/$file", "$to/$file" );
+		} 
+
+		closedir ( $ffrom );
+	}
+}
 
 function CheckConfig ( $config, $path )
 {
@@ -2132,6 +2147,8 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 		$config->WriteConfig ( "config.conf", "all", $msg, $config->NumAgents () < 2 );
 
 		EraseDirContents ( $indexer_data_path );
+		if ( $config->Requires( "pre_copy_ref" ) )
+			CopyDirContents ( $test_dir . "/refdata/", "data/" );
 
 		if ( $config->IsSkipIndexer()===false && $sd_managed_searchd===false && $sd_skip_indexer===false )
 		{

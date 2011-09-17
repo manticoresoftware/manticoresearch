@@ -4358,7 +4358,11 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 			if ( m_iAccum==0 )
 				m_pTokenStart = pCur;
 
-			m_bNonBlended = m_bNonBlended || bNoBlend;
+			// tricky bit
+			// heading modifiers must not (!) affected blended status
+			// eg. we want stuff like '=-' (w/o apostrophes) thrown away when pure_blend is on
+			if (!( m_bQueryMode && !m_iAccum && IsModifier(iCode) ) )
+				m_bNonBlended = m_bNonBlended || bNoBlend;
 			m_sAccum[m_iAccum++] = (BYTE)iCode;
 		}
 	}
@@ -4558,8 +4562,8 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 
 			if ( m_iAccum==0 )
 			{
-				m_bWasSpecial = !( iCode & FLAG_CODEPOINT_NGRAM );
 				m_bNonBlended = m_bNonBlended || ( !( iCode & FLAG_CODEPOINT_BLEND ) && !( iCode & FLAG_CODEPOINT_SPECIAL ) );
+				m_bWasSpecial = !( iCode & FLAG_CODEPOINT_NGRAM );
 				m_pTokenStart = pCur;
 				m_pTokenEnd = m_pCur;
 				AccumCodepoint ( iCode & MASK_CODEPOINT ); // handle special as a standalone token
@@ -4580,8 +4584,13 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 		if ( m_iAccum==0 )
 			m_pTokenStart = pCur;
 
+		// tricky bit
+		// heading modifiers must not (!) affected blended status
+		// eg. we want stuff like '=-' (w/o apostrophes) thrown away when pure_blend is on
+		if (!( m_bQueryMode && !m_iAccum && IsModifier ( iCode & MASK_CODEPOINT ) ) )
+			m_bNonBlended = m_bNonBlended || !( iCode & FLAG_CODEPOINT_BLEND );
+
 		// just accumulate
-		m_bNonBlended = m_bNonBlended || !( iCode & FLAG_CODEPOINT_BLEND );
 		AccumCodepoint ( iCode & MASK_CODEPOINT );
 	}
 }

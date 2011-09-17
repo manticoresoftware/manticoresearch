@@ -72,20 +72,31 @@ bool CreateSynonymsFile ( const char * sMagic )
 }
 
 
-ISphTokenizer * CreateTestTokenizer ( bool bUTF8, bool bSynonyms, bool bEscaped = false )
+const DWORD TOK_EXCEPTIONS		= 1;
+const DWORD TOK_ESCAPED			= 2;
+const DWORD TOK_NO_DASH			= 4;
+
+ISphTokenizer * CreateTestTokenizer ( bool bUTF8, DWORD uMode )
 {
 	CSphString sError;
 	CSphTokenizerSettings tSettings;
 	tSettings.m_iType = bUTF8 ? TOKENIZER_UTF8 : TOKENIZER_SBCS;
 	tSettings.m_iMinWordLen = 2;
 	ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tSettings, sError );
-	assert ( pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
-	pTokenizer->AddSpecials ( "!-" );
+	if (!( uMode & TOK_NO_DASH ))
+	{
+		assert ( pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
+		pTokenizer->AddSpecials ( "!-" );
+	} else
+	{
+		assert ( pTokenizer->SetCaseFolding ( "0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
+		pTokenizer->AddSpecials ( "!" );
+	}
 	pTokenizer->EnableQueryParserMode ( true );
-	if ( bSynonyms )
+	if ( uMode & TOK_EXCEPTIONS )
 		assert ( pTokenizer->LoadSynonyms ( g_sTmpfile, sError ) );
 
-	if ( bEscaped )
+	if ( uMode & TOK_ESCAPED )
 	{
 		ISphTokenizer * pOldTokenizer = pTokenizer;
 		pTokenizer = pTokenizer->Clone ( true );
@@ -112,7 +123,7 @@ void TestTokenizer ( bool bUTF8 )
 		assert ( CreateSynonymsFile ( sMagic ) );
 		bool bExceptions = ( iRun>=2 );
 		bool bEscaped = ( iRun==3 );
-		ISphTokenizer * pTokenizer = CreateTestTokenizer ( bUTF8, bExceptions, bEscaped );
+		ISphTokenizer * pTokenizer = CreateTestTokenizer ( bUTF8, bExceptions*TOK_EXCEPTIONS + bEscaped*TOK_ESCAPED );
 
 		const char * dTests[] =
 		{
@@ -336,7 +347,7 @@ void TestTokenizer ( bool bUTF8 )
 	printf ( "%s vs escaping vs blend_chars edge cases\n", sPrefix );
 
 	CSphString sError;
-	ISphTokenizer * pTokenizer = CreateTestTokenizer ( bUTF8, false, true ); // no exceptions, but escaped
+	ISphTokenizer * pTokenizer = CreateTestTokenizer ( bUTF8, TOK_ESCAPED );
 	pTokenizer->AddSpecials ( "()!-\"" );
 	assert ( pTokenizer->SetBlendChars ( ".", sError ) );
 
@@ -376,6 +387,25 @@ void TestTokenizer ( bool bUTF8 )
 	assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "bb" ) );
 	assert ( !pTokenizer->TokenIsBlended() );
 	assert ( !pTokenizer->TokenIsBlendedPart() );
+
+	// blended/special vs query mode vs modifier.. hell, this is complicated
+	CSphRemapRange tModifier ( '=', '=', '=' );
+
+	SafeDelete ( pTokenizer );
+	pTokenizer = CreateTestTokenizer ( bUTF8, TOK_NO_DASH );
+	assert ( pTokenizer->SetBlendChars ( "., -", sError ) );
+	pTokenizer->AddSpecials ( "-" );
+	pTokenizer->AddCaseFolding ( tModifier );
+	pTokenizer->EnableQueryParserMode ( true );
+	assert ( pTokenizer->SetBlendMode ( "trim_none, skip_pure", sError ) );
+
+	char sTest4[] = "hello =- =world";
+	printf ( "test %s\n", sTest4 );
+	pTokenizer->SetBuffer ( (BYTE*)sTest4, strlen(sTest4) );
+
+	const BYTE * sToken;
+	assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "hello" ) );
+	assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "=world" ) );
 
 	SafeDelete ( pTokenizer );
 }

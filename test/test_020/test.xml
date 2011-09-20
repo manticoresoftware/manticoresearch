@@ -73,6 +73,41 @@ index mini2 : test
 	source			= srcmini2
 	path			= <data_path/>/mini2
 }
+
+source src_mva64
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT document_id, 11 as tag, mva1, 'dummy' FROM table64_0
+	sql_attr_uint	= tag
+	sql_attr_multi = bigint mva1 from field
+	sql_attr_multi = bigint mva2 from query; SELECT id, mva2 FROM table64_1
+}
+
+index mva64
+{
+	source			= src_mva64
+	path			= <data_path/>/mva64
+}
+
+source src_mva_mixed
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT document_id, 11 as tag, mva, 'dummy' FROM test_table
+	sql_attr_uint	= tag
+	sql_attr_multi = bigint mva2 from query; SELECT id, mva2 FROM table64_1
+	sql_attr_multi = uint mva from field
+}
+
+index mva_mixed
+{
+	source			= src_mva_mixed
+	path			= <data_path/>/mva_mixed
+}
+
 </config>
 
 <queries>
@@ -96,7 +131,23 @@ index mini2 : test
 
 <query mode="extended2" index="test" groupattr="tag" groupsort="@group asc" sortmode="extended" sortby="time asc">test*</query>
 <query mode="extended2" index="test" groupattr="tAg" groupsort="@groUp asc" sortmode="extended" sortby="@id desc" select="*,BIGINT(@id*10) as q" filter="q" filter_range="0 1000">test*</query>
+
+<!-- here is going regression mva64 hasn't indexed -->
+<query mode="extended2" index="mva64"></query>
+<query mode="extended2" index="mva64" sortmode="extended" sortby="mva1 asc"></query>
+<query mode="extended2" index="mva64" sortmode="extended" sortby="mva2 desc"></query>
+<query mode="extended2" index="mva_mixed"></query>
+<query mode="extended2" index="mva_mixed" sortmode="extended" sortby="mva2 desc"></query>
 </queries>
+
+<sphqueries>
+<sphinxql>SELECT * FROM mva64</sphinxql>
+<sphinxql>SELECT * FROM mva64 ORDER BY mva1 desc</sphinxql>
+<sphinxql>SELECT * FROM mva64 ORDER BY mva2 asc</sphinxql>
+<sphinxql>SELECT * FROM mva_mixed</sphinxql>
+<sphinxql>SELECT * FROM mva_mixed GROUP BY mva ORDER BY mva2 desc</sphinxql>
+<sphinxql>SELECT * FROM mva_mixed ORDER BY mva2 desc</sphinxql>
+</sphqueries>
 
 <db_create>
 CREATE TABLE `test_table`
@@ -125,6 +176,38 @@ INSERT INTO `test_table` VALUES
 ( 8, 4, '2006-05-02 12:00:00', '4,5,6',	'test8' ),
 ( 9, 4, '2005-06-03 12:00:00', '4',		'test9' ),
 ( 10, 4,'2005-07-04 12:00:00', '3,4,5',	'test10' )
+</db_insert>
+
+<db_create>
+CREATE TABLE `table64_0`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`mva1` varchar(255) NOT NULL default ''
+)
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `table64_0`</db_drop>
+<db_insert>
+INSERT INTO `table64_0` VALUES
+( 1, '10000000112 10000000124 10000000110 10000000111 10000000113' ),
+( 2, '10000000242 10000000224 10000000210 10000000221 10000000213' ),
+( 3, '10000000332 10000000314 10000000310 10000000391 10000000393' ),
+( 4, '10000000442 10000000424 10000000410 10000000461 10000000413' )
+</db_insert>
+
+<db_create>
+CREATE TABLE `table64_1`
+(
+	`id` int(11) NOT NULL default '0',
+	`mva2` bigint NOT NULL default 0
+)
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `table64_1`</db_drop>
+<db_insert>
+INSERT INTO `table64_1` VALUES
+( 1, 50000000112), (1, 50000000124), (1, 50000000110), (1, 50000000111), (1, 50000000113),
+( 2, 50000000242), (2, 50000000224), (2, 50000000210), (2, 50000000221), (2, 50000000213),
+( 3, 50000000332), (3, 50000000314), (3, 50000000310), (3, 50000000391), (3, 50000000393),
+( 4, 50000000442), (4, 50000000424), (4, 50000000410), (4, 50000000461), (4, 50000000413)
 </db_insert>
 
 </test>

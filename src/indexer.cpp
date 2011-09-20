@@ -336,7 +336,7 @@ bool ParseMultiAttr ( const char * sBuf, CSphColumnInfo & tAttr, const char * sS
 	LOC_SPACE0(); LOC_TOK();
 	if ( LOC_TOKEQ("uint") )				tAttr.m_eAttrType = SPH_ATTR_UINT32SET;
 	else if ( LOC_TOKEQ("timestamp") )		tAttr.m_eAttrType = SPH_ATTR_UINT32SET;
-	else if ( LOC_TOKEQ("bigint") )		tAttr.m_eAttrType = SPH_ATTR_UINT64SET;
+	else if ( LOC_TOKEQ("bigint") )			tAttr.m_eAttrType = SPH_ATTR_UINT64SET;
 	else									LOC_ERR ( "attr type ('uint' or 'timestamp' or 'bigint')", sTok );
 
 	// handle ATTR-NAME

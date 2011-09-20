@@ -1409,12 +1409,20 @@ public:
 };
 
 
+struct SphRange_t
+{
+	int m_iStart;
+	int m_iLength;
+};
+
+
 /// generic data source
 class CSphSource : public CSphSourceSettings
 {
 public:
 	CSphMatch							m_tDocInfo;		///< current document info
 	CSphVector<CSphString>				m_dStrAttrs;	///< current document string attrs
+	CSphVector<DWORD>					m_dMva;			///< MVA storage for mva64
 
 public:
 	/// ctor
@@ -1499,15 +1507,12 @@ public:
 	/// can also fail if configured settings are invalid (eg. SQL query can not be executed)
 	virtual bool						IterateMultivaluedStart ( int iAttr, CSphString & sError ) = 0;
 
-	/// get next multi-valued (id,attr-value) tuple to m_tDocInfo
+	/// get next multi-valued (id,attr-value) or (id, offset) for mva64 tuple to m_tDocInfo
 	virtual bool						IterateMultivaluedNext () = 0;
 
 	/// begin iterating values of multi-valued attribute iAttr stored in a field
 	/// will fail if iAttr is out of range, or is not multi-valued
-	virtual bool						IterateFieldMVAStart ( int iAttr, CSphString & sError ) = 0;
-
-	/// get next multi-valued (id,attr-value) tuple to m_tDocInfo
-	virtual bool						IterateFieldMVANext () = 0;
+	virtual SphRange_t					IterateFieldMVAStart ( int iAttr ) = 0;
 
 	/// begin iterating kill list
 	virtual bool						IterateKillListStart ( CSphString & sError ) = 0;
@@ -1567,8 +1572,10 @@ public:
 
 	virtual void			SetDumpRows ( FILE * fpDumpRows ) { m_fpDumpRows = fpDumpRows; }
 
+	virtual SphRange_t		IterateFieldMVAStart ( int iAttr );
+
 protected:
-	void					ParseFieldMVA ( CSphVector < CSphVector < DWORD > > & dFieldMVAs, int iFieldMVA, const char * szValue );
+	int						ParseFieldMVA ( CSphVector < DWORD > & dMva, const char * szValue, bool bMva64 );
 	bool					CheckFileField ( const BYTE * sField );
 	int						LoadFileField ( BYTE ** ppField, CSphString & sError );
 
@@ -1684,9 +1691,6 @@ struct CSphSource_SQL : CSphSource_Document
 	virtual bool		IterateMultivaluedStart ( int iAttr, CSphString & sError );
 	virtual bool		IterateMultivaluedNext ();
 
-	virtual bool		IterateFieldMVAStart ( int iAttr, CSphString & sError );
-	virtual bool		IterateFieldMVANext ();
-
 	virtual bool		IterateKillListStart ( CSphString & sError );
 	virtual bool		IterateKillListNext ( SphDocID_t & tDocId );
 
@@ -1705,11 +1709,6 @@ protected:
 	SphDocID_t			m_uMaxFetchedID;	///< max actually fetched ID
 	int					m_iMultiAttr;		///< multi-valued attr being currently fetched
 	int					m_iSqlFields;		///< field count (for row dumper)
-
-	int					m_iFieldMVA;
-	int					m_iFieldMVAIterator;
-	CSphVector < CSphVector <DWORD> > m_dFieldMVAs;
-	CSphVector < int >	m_dAttrToFieldMVA;
 
 	CSphSourceParams_SQL		m_tParams;
 
@@ -1932,8 +1931,7 @@ public:
 	virtual bool	HasAttrsConfigured ()							{ return true; }	///< xmlpipe always has some attrs for now
 	virtual bool	IterateMultivaluedStart ( int, CSphString & )	{ return false; }	///< xmlpipe does not support multi-valued attrs for now
 	virtual bool	IterateMultivaluedNext ()						{ return false; }	///< xmlpipe does not support multi-valued attrs for now
-	virtual bool	IterateFieldMVAStart ( int, CSphString & )		{ return false; }
-	virtual bool	IterateFieldMVANext ()							{ return false; }
+	virtual SphRange_t	IterateFieldMVAStart ( int );
 	virtual bool	IterateKillListStart ( CSphString & )			{ return false; }
 	virtual bool	IterateKillListNext ( SphDocID_t & )			{ return false; }
 

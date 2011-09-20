@@ -11287,38 +11287,50 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 	CSphString sError;
 
 	tStmt.m_sSetName.ToLower();
-	if ( tStmt.m_eSet==SET_LOCAL && tStmt.m_sSetName=="autocommit" )
+	switch ( tStmt.m_eSet )
 	{
-		// per-session AUTOCOMMIT
-		tVars.m_bAutoCommit = ( tStmt.m_iSetValue!=0 );
-		tVars.m_bInTransaction = false;
-
-		// commit all pending changes
-		if ( tVars.m_bAutoCommit )
+	case SET_LOCAL:
+		if ( tStmt.m_sSetName=="autocommit" )
 		{
-			ISphRtIndex * pIndex = sphGetCurrentIndexRT();
-			if ( pIndex )
-				pIndex->Commit();
-		}
+			// per-session AUTOCOMMIT
+			tVars.m_bAutoCommit = ( tStmt.m_iSetValue!=0 );
+			tVars.m_bInTransaction = false;
 
-	} else if ( tStmt.m_eSet==SET_LOCAL && tStmt.m_sSetName=="collation_connection" )
-	{
-		// per-session COLLATION_CONNECTION
-		CSphString & sVal = tStmt.m_sSetValue;
-		sVal.ToLower();
-
-		tVars.m_eCollation = sphCollationFromName ( sVal, &sError );
-		if ( !sError.IsEmpty() )
+			// commit all pending changes
+			if ( tVars.m_bAutoCommit )
+			{
+				ISphRtIndex * pIndex = sphGetCurrentIndexRT();
+				if ( pIndex )
+					pIndex->Commit();
+			}
+		} else if ( tStmt.m_sSetName=="collation_connection" )
 		{
+			// per-session COLLATION_CONNECTION
+			CSphString & sVal = tStmt.m_sSetValue;
+			sVal.ToLower();
+
+			tVars.m_eCollation = sphCollationFromName ( sVal, &sError );
+			if ( !sError.IsEmpty() )
+			{
+				SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+				return;
+			}
+		} else if ( tStmt.m_sSetName=="character_set_results"
+			|| tStmt.m_sSetName=="sql_auto_is_null"
+			|| tStmt.m_sSetName=="sql_mode" )
+		{
+			// per-session CHARACTER_SET_RESULTS et al; just ignore for now
+	
+		} else
+		{
+			// unknown variable, return error
+			sError.SetSprintf ( "Unknown session variable '%s' in SET statement", tStmt.m_sSetName.cstr() );
 			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 			return;
 		}
+		break;
 
-	} else if ( tStmt.m_eSet==SET_LOCAL && ( tStmt.m_sSetName=="character_set_results" || tStmt.m_sSetName=="sql_auto_is_null" ) )
-	{
-		// per-session CHARACTER_SET_RESULTS; just ignore for now
-
-	} else if ( tStmt.m_eSet==SET_GLOBAL_UVAR )
+	case SET_GLOBAL_UVAR:
 	{
 		// global user variable
 		if ( g_eWorkers!=MPM_THREADS )
@@ -11343,9 +11355,10 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 			g_hUservars.Add ( tVar, tStmt.m_sSetName ); // FIXME? free those on shutdown?
 		}
 		g_tUservarsMutex.Unlock();
+		break;
+	}
 
-	} else if ( tStmt.m_eSet==SET_GLOBAL_SVAR )
-	{
+	case SET_GLOBAL_SVAR:
 		// global server variable
 		if ( g_eWorkers!=MPM_THREADS )
 		{
@@ -11385,11 +11398,10 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 			return;
 		}
+		break;
 
-	} else
-	{
-		// unknown case, return error
-		sError.SetSprintf ( "Unknown session variable '%s' in SET statement", tStmt.m_sSetName.cstr() );
+	default:
+		sError.SetSprintf ( "INTERNAL ERROR: unhandle SET mode %d", (int)tStmt.m_eSet );
 		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		return;
 	}

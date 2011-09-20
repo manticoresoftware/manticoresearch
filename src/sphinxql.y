@@ -29,6 +29,7 @@
 %token	TOK_CALL
 %token	TOK_COLLATION
 %token	TOK_COMMIT
+%token	TOK_COMMITTED
 %token	TOK_COUNT
 %token	TOK_CREATE
 %token	TOK_DELETE
@@ -50,6 +51,8 @@
 %token	TOK_INSERT
 %token	TOK_INT
 %token	TOK_INTO
+%token	TOK_ISOLATION
+%token	TOK_LEVEL
 %token	TOK_LIMIT
 %token	TOK_MATCH
 %token	TOK_MAX
@@ -61,11 +64,14 @@
 %token	TOK_OPTION
 %token	TOK_ORDER
 %token	TOK_RAND
+%token	TOK_READ
+%token	TOK_REPEATABLE
 %token	TOK_REPLACE
 %token	TOK_RETURNS
 %token	TOK_ROLLBACK
 %token	TOK_RTINDEX
 %token	TOK_SELECT
+%token	TOK_SERIALIZABLE
 %token	TOK_SET
 %token	TOK_SESSION
 %token	TOK_SHOW
@@ -77,6 +83,7 @@
 %token	TOK_TO
 %token	TOK_TRANSACTION
 %token	TOK_TRUE
+%token	TOK_UNCOMMITTED
 %token	TOK_UPDATE
 %token	TOK_VALUES
 %token	TOK_VARIABLES
@@ -129,6 +136,7 @@ statement:
 	| drop_function
 	| attach_index
 	| flush_rtindex
+	| set_transaction
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -781,15 +789,30 @@ update_item:
 //////////////////////////////////////////////////////////////////////////
 
 show_variables:
-	TOK_SHOW opt_session TOK_VARIABLES		{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
-	;
-
-opt_session:
-	| TOK_SESSION
+	TOK_SHOW opt_scope TOK_VARIABLES		{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	;
 
 show_collation:
 	TOK_SHOW TOK_COLLATION		{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
+	;
+
+set_transaction:
+	TOK_SET opt_scope TOK_TRANSACTION TOK_ISOLATION TOK_LEVEL isolation_level
+		{
+			pParser->m_pStmt->m_eStmt = STMT_DUMMY;
+		}
+	;
+
+opt_scope:
+	| TOK_GLOBAL
+	| TOK_SESSION
+	;
+
+isolation_level:
+	TOK_READ TOK_UNCOMMITTED
+	| TOK_READ TOK_COMMITTED
+	| TOK_REPEATABLE TOK_READ
+	| TOK_SERIALIZABLE
 	;
 
 //////////////////////////////////////////////////////////////////////////

@@ -4936,6 +4936,24 @@ void LogQuery ( const CSphQuery & q, const CSphQueryResult & tRes, const CSphVec
 	}
 }
 
+
+void LogSphinxqlError ( const char * sStmt, const char * sError )
+{
+	if ( g_eLogFormat!=LOG_FORMAT_SPHINXQL || g_iQueryLogFile<0 || !sStmt || !sError )
+		return;
+
+	// time, conn id, query, error
+	StringBuffer_c tBuf;
+	int iCid = ( g_eWorkers!=MPM_THREADS ) ? g_iConnID : *(int*) sphThreadGet ( g_tConnKey );
+
+	tBuf.Append ( "/""* " );
+	tBuf.AppendCurrentTime();
+	tBuf.Append ( " conn %d *""/ %s # error=%s\n", iCid, sStmt, sError );
+
+	lseek ( g_iQueryLogFile, 0, SEEK_END );
+	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.Length() );
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<PoolPtrs_t> & dTag2Pools, bool bExtendedStat )
@@ -7450,6 +7468,7 @@ struct SqlStmt_t
 {
 	SqlStmt_e				m_eStmt;
 	int						m_iRowsAffected;
+	const char *			m_sStmt; // for error reporting
 
 	// SELECT specific
 	CSphQuery				m_tQuery;
@@ -7491,6 +7510,7 @@ struct SqlStmt_t
 	SqlStmt_t ()
 		: m_eStmt ( STMT_PARSE_ERROR )
 		, m_iRowsAffected ( 0 )
+		, m_sStmt ( NULL )
 		, m_iSchemaSz ( 0 )
 		, m_eSet ( SET_LOCAL )
 		, m_iSetValue ( 0 )
@@ -9738,10 +9758,12 @@ enum MysqlErrors_e
 };
 
 
-void SendMysqlErrorPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char * sError, MysqlErrors_e iErr=MYSQL_ERR_PARSE_ERROR )
+void SendMysqlErrorPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char * sStmt, const char * sError, MysqlErrors_e iErr=MYSQL_ERR_PARSE_ERROR )
 {
 	if ( sError==NULL )
 		sError = "(null)";
+
+	LogSphinxqlError ( sStmt, sError );
 
 	int iErrorLen = strlen(sError)+1; // including the trailing zero
 	int iLen = 9 + iErrorLen;
@@ -9782,7 +9804,7 @@ void SendMysqlErrorPacketEx ( NetOutputBuffer_c & tOut, BYTE uPacketID, MysqlErr
 	vsnprintf ( sBuf, sizeof(sBuf), sTemplate, ap );
 	va_end ( ap );
 
-	SendMysqlErrorPacket ( tOut, uPacketID, sBuf, iErr );
+	SendMysqlErrorPacket ( tOut, uPacketID, NULL, sBuf, iErr );
 }
 
 
@@ -9847,7 +9869,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 	if ( !pServed )
 	{
 		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -9855,7 +9877,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 	{
 		pServed->Unlock();
 		sError.SetSprintf ( "index '%s' does not support INSERT (enabled=%d)", tStmt.m_sIndex.cstr(), pServed->m_bEnabled );
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -9871,7 +9893,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 	{
 		pServed->Unlock();
 		sError.SetSprintf ( "column count does not match schema (expected %d, got %d)", iSchemaSz, iGot );
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -9879,7 +9901,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 	{
 		pServed->Unlock();
 		sError.SetSprintf ( "column count does not match value count (expected %d, got %d)", iExp, iGot );
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -9904,7 +9926,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 		{
 			pServed->Unlock();
 			sError.SetSprintf ( "unknown column: '%s'", dCheck[i].cstr() );
-			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr(), MYSQL_ERR_PARSE_ERROR );
+			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_PARSE_ERROR );
 			return;
 		}
 
@@ -9915,7 +9937,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 		{
 			pServed->Unlock();
 			sError.SetSprintf ( "column '%s' specified twice", dCheck[i].cstr() );
-			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr(), MYSQL_ERR_FIELD_SPECIFIED_TWICE );
+			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_FIELD_SPECIFIED_TWICE );
 			return;
 		}
 
@@ -9929,7 +9951,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 		if ( !dInsertSchema.Exists("id") )
 		{
 			pServed->Unlock();
-			SendMysqlErrorPacket ( tOut, uPacketID, "column list must contain an 'id' column" );
+			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "column list must contain an 'id' column" );
 			return;
 		}
 		iIdIndex = dInsertSchema["id"];
@@ -9953,7 +9975,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 		if ( bIdDupe )
 		{
 			pServed->Unlock();
-			SendMysqlErrorPacket ( tOut, uPacketID, "fields must never be named 'id' (fix your config)" );
+			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "fields must never be named 'id' (fix your config)" );
 			return;
 		}
 
@@ -9976,7 +9998,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 		{
 			pServed->Unlock();
 			sError.SetSprintf ( "attributes must never be named 'id' (fix your config)" );
-			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 			return;
 		}
 	}
@@ -10098,7 +10120,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 	if ( !sError.IsEmpty() )
 	{
 		pServed->Unlock();
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -10166,7 +10188,7 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 		|| tStmt.m_dInsertValues[1].m_iType!=TOK_QUOTED_STRING
 		|| tStmt.m_dInsertValues[2].m_iType!=TOK_QUOTED_STRING )
 	{
-		SendMysqlErrorPacket ( tOut, uPacketID, "bad argument count or types in SNIPPETS() call" );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "bad argument count or types in SNIPPETS() call" );
 		return;
 	}
 
@@ -10174,7 +10196,7 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 	if ( !pServed || !pServed->m_bEnabled || !pServed->m_pIndex )
 	{
 		sError.SetSprintf ( "no such index %s", tStmt.m_dInsertValues[1].m_sVal.cstr() );
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -10226,7 +10248,7 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 	}
 	if ( !sError.IsEmpty() )
 	{
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		pServed->Unlock();
 		return;
 	}
@@ -10235,7 +10257,7 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 
 	if ( !sphCheckOptionsSPZ ( q, q.m_sRawPassageBoundary, sError ) )
 	{
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		pServed->Unlock();
 		return;
 	}
@@ -10247,7 +10269,7 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 	SnippetContext_t tCtx;
 	if ( !tCtx.Setup ( pIndex, q, sError ) )
 	{
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		pServed->Unlock();
 		return;
 	}
@@ -10257,7 +10279,7 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 	if ( !sResult )
 	{
 		sError.SetSprintf ( "highlighting failed: %s", sError.cstr() );
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		pServed->Unlock();
 		return;
 	}
@@ -10295,7 +10317,7 @@ void HandleMysqlCallKeywords ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 		|| tStmt.m_dInsertValues[1].m_iType!=TOK_QUOTED_STRING
 		|| ( iArgs==3 && tStmt.m_dInsertValues[2].m_iType!=TOK_CONST_INT ) )
 	{
-		SendMysqlErrorPacket ( tOut, uPacketID, "bad argument count or types in KEYWORDS() call" );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "bad argument count or types in KEYWORDS() call" );
 		return;
 	}
 
@@ -10303,7 +10325,7 @@ void HandleMysqlCallKeywords ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 	if ( !pServed || !pServed->m_bEnabled || !pServed->m_pIndex )
 	{
 		sError.SetSprintf ( "no such index %s", tStmt.m_dInsertValues[1].m_sVal.cstr() );
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -10315,7 +10337,7 @@ void HandleMysqlCallKeywords ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 	if ( !bRes )
 	{
 		sError.SetSprintf ( "keyword extraction failed: %s", sError.cstr() );
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -10366,7 +10388,7 @@ void HandleMysqlDescribe ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt_t &
 	{
 		CSphString sError;
 		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr(), MYSQL_ERR_NO_SUCH_TABLE );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_NO_SUCH_TABLE );
 		return;
 	}
 
@@ -10624,7 +10646,7 @@ void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt
 	if ( !dIndexNames.GetLength() )
 	{
 		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -10650,7 +10672,7 @@ void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt
 			else
 			{
 				sError.SetSprintf ( "unknown index '%s' in update request", dIndexNames[i].m_sName.cstr() );
-				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+				SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 				return;
 			}
 		}
@@ -10713,7 +10735,7 @@ void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt
 
 	if ( !iSuccesses )
 	{
-		SendMysqlErrorPacket ( tOut, uPacketID, sReport.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sReport.cstr() );
 		return;
 	}
 
@@ -10817,16 +10839,24 @@ bool HandleMysqlSelect ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SearchHandl
 {
 	// lets check all query for errors
 	CSphString sError;
+	CSphVector<int64_t> dAgentTimes; // dummy for error reporting
 	ARRAY_FOREACH ( i, tHandler.m_dQueries )
 	{
 		CheckQuery ( tHandler.m_dQueries[i], tHandler.m_dResults[i].m_sError );
 		if ( !tHandler.m_dResults[i].m_sError.IsEmpty() )
-			sError.SetSprintf ( "%squery %d error: %s ; ", sError.cstr(), i, tHandler.m_dResults[i].m_sError.cstr() );
+		{
+			LogQuery ( tHandler.m_dQueries[i], tHandler.m_dResults[i], dAgentTimes );
+			if ( sError.IsEmpty() )
+				sError.SetSprintf ( "query %d error: %s", i, tHandler.m_dResults[i].m_sError.cstr() );
+			else
+				sError.SetSprintf ( "%s; query %d error: %s", sError.cstr(), i, tHandler.m_dResults[i].m_sError.cstr() );
+		}				
 	}
 
 	if ( sError.Length() )
 	{
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		// stmt is intentionally NULL, as we did all the reporting just above
+		SendMysqlErrorPacket ( tOut, uPacketID, NULL, sError.cstr() );
 		return false;
 	}
 
@@ -10836,7 +10866,7 @@ bool HandleMysqlSelect ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SearchHandl
 	if ( g_bGotSigterm )
 	{
 		sphLogDebug ( "HandleClientMySQL: got SIGTERM, sending the packet MYSQL_ERR_SERVER_SHUTDOWN" );
-		SendMysqlErrorPacket ( tOut, uPacketID, "Server shutdown in progress", MYSQL_ERR_SERVER_SHUTDOWN );
+		SendMysqlErrorPacket ( tOut, uPacketID, NULL, "Server shutdown in progress", MYSQL_ERR_SERVER_SHUTDOWN );
 		return false;
 	}
 
@@ -10848,7 +10878,8 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 {
 	if ( !tRes.m_iSuccesses )
 	{
-		SendMysqlErrorPacket ( tOut, uPacketID++, tRes.m_sError.cstr() );
+		// at this point, SELECT error logging should have been handled, so pass a NULL stmt to logger
+		SendMysqlErrorPacket ( tOut, uPacketID++, NULL, tRes.m_sError.cstr() );
 		return;
 	}
 
@@ -10863,7 +10894,10 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 	}
 	if ( iAttrs>=251 )
 	{
-		SendMysqlErrorPacket ( tOut, uPacketID++, "selecting more than 250 columns is not supported yet" );
+		// this will show up as success in query log, as the query itself was ok
+		// but we need some kind of a notice anyway, to nail down issues based on logs only
+		sphWarning ( "selecting more than 250 columns is not supported yet" );
+		SendMysqlErrorPacket ( tOut, uPacketID++, NULL, "selecting more than 250 columns is not supported yet" );
 		return;
 	}
 
@@ -11114,7 +11148,7 @@ void HandleMysqlDelete ( NetOutputBuffer_c & tOut, BYTE & uPacketID, const SqlSt
 	if ( !pServed )
 	{
 		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -11122,7 +11156,7 @@ void HandleMysqlDelete ( NetOutputBuffer_c & tOut, BYTE & uPacketID, const SqlSt
 	{
 		pServed->Unlock();
 		sError.SetSprintf ( "index '%s' does not support DELETE (enabled=%d)", tStmt.m_sIndex.cstr(), pServed->m_bEnabled );
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -11131,7 +11165,7 @@ void HandleMysqlDelete ( NetOutputBuffer_c & tOut, BYTE & uPacketID, const SqlSt
 	if ( !pIndex->DeleteDocument ( tStmt.m_dDeleteIds.Begin(), tStmt.m_dDeleteIds.GetLength(), sError ) )
 	{
 		pServed->Unlock();
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -11208,7 +11242,7 @@ void HandleMysqlMultiStmt ( NetOutputBuffer_c & tOut, BYTE uPacketID, const CSph
 		if ( g_bGotSigterm )
 		{
 			sphLogDebug ( "HandleMultiStmt: got SIGTERM, sending the packet MYSQL_ERR_SERVER_SHUTDOWN" );
-			SendMysqlErrorPacket ( tOut, uPacketID, "Server shutdown in progress", MYSQL_ERR_SERVER_SHUTDOWN );
+			SendMysqlErrorPacket ( tOut, uPacketID, NULL, "Server shutdown in progress", MYSQL_ERR_SERVER_SHUTDOWN );
 			return;
 		}
 	}
@@ -11276,7 +11310,7 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 		tVars.m_eCollation = sphCollationFromName ( sVal, &sError );
 		if ( !sError.IsEmpty() )
 		{
-			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 			return;
 		}
 
@@ -11289,7 +11323,7 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 		// global user variable
 		if ( g_eWorkers!=MPM_THREADS )
 		{
-			SendMysqlErrorPacket ( tOut, uPacketID, "SET GLOBAL currently requires workers=threads" );
+			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "SET GLOBAL currently requires workers=threads" );
 			return;
 		}
 
@@ -11315,7 +11349,7 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 		// global server variable
 		if ( g_eWorkers!=MPM_THREADS )
 		{
-			SendMysqlErrorPacket ( tOut, uPacketID, "SET GLOBAL currently requires workers=threads" );
+			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "SET GLOBAL currently requires workers=threads" );
 			return;
 		}
 
@@ -11327,7 +11361,7 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 				g_eLogFormat = LOG_FORMAT_SPHINXQL;
 			else
 			{
-				SendMysqlErrorPacket ( tOut, uPacketID, "Unknown query_log_format value (must be plain or sphinxql)" );
+				SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "Unknown query_log_format value (must be plain or sphinxql)" );
 				return;
 			}
 		} else if ( tStmt.m_sSetName=="log_level" )
@@ -11342,13 +11376,13 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 				g_eLogLevel = SPH_LOG_VERY_VERBOSE_DEBUG;
 			else
 			{
-				SendMysqlErrorPacket ( tOut, uPacketID, "Unknown log_level value (must be one of info, debug, debugv, debugvv)" );
+				SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "Unknown log_level value (must be one of info, debug, debugv, debugvv)" );
 				return;
 			}
 		} else
 		{
 			sError.SetSprintf ( "Unknown system variable '%s'", tStmt.m_sSetName.cstr() );
-			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 			return;
 		}
 
@@ -11356,7 +11390,7 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 	{
 		// unknown case, return error
 		sError.SetSprintf ( "Unknown session variable '%s' in SET statement", tStmt.m_sSetName.cstr() );
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -11384,9 +11418,9 @@ void HandleMysqlAttach ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 		else if ( !pTo || !pTo->m_bEnabled )
 			SendMysqlErrorPacketEx ( tOut, uPacketID, MYSQL_ERR_PARSE_ERROR, "no such index '%s'", sTo.cstr() );
 		else if ( pFrom->m_bRT )
-			SendMysqlErrorPacket ( tOut, uPacketID, "1st argument to ATTACH must be a plain index" );
+			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "1st argument to ATTACH must be a plain index" );
 		else if ( pTo->m_bRT )
-			SendMysqlErrorPacket ( tOut, uPacketID, "2nd argument to ATTACH must be a RT index" );
+			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "2nd argument to ATTACH must be a RT index" );
 
 		if ( pFrom )
 			pFrom->Unlock();
@@ -11402,7 +11436,7 @@ void HandleMysqlAttach ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 	{
 		pFrom->Unlock();
 		pTo->Unlock();
-		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -11422,7 +11456,7 @@ void HandleMysqlFlush ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE 
 	if ( !pIndex || !pIndex->m_bEnabled || !pIndex->m_bRT )
 	{
 		pIndex->Unlock();
-		SendMysqlErrorPacket ( tOut, uPacketID, "FLUSH RTINDEX requires an existing RT index" );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "FLUSH RTINDEX requires an existing RT index" );
 		return;
 	}
 
@@ -11463,7 +11497,12 @@ public:
 		CSphVector<SqlStmt_t> dStmt;
 		bool bParsedOK = ParseSqlQuery ( sQuery, dStmt, m_sError, m_tVars.m_eCollation );
 
-		SqlStmt_e eStmt = bParsedOK ? dStmt.Begin()->m_eStmt : STMT_PARSE_ERROR;
+		SqlStmt_e eStmt = STMT_PARSE_ERROR;
+		if ( bParsedOK )
+		{
+			eStmt = dStmt[0].m_eStmt;
+			dStmt[0].m_sStmt = sQuery.cstr();
+		}
 
 		SqlStmt_t * pStmt = dStmt.Begin();
 		assert ( !bParsedOK || pStmt );
@@ -11488,7 +11527,7 @@ public:
 			m_tLastMeta = CSphQueryResultMeta();
 			m_tLastMeta.m_sError = m_sError;
 			m_tLastMeta.m_sWarning = "";
-			SendMysqlErrorPacket ( tOut, uPacketID, m_sError.cstr() );
+			SendMysqlErrorPacket ( tOut, uPacketID, sQuery.cstr(), m_sError.cstr() );
 			return;
 
 		case STMT_SELECT:
@@ -11569,7 +11608,7 @@ public:
 			else
 			{
 				m_sError.SetSprintf ( "no such builtin procedure %s", pStmt->m_sCallProc.cstr() );
-				SendMysqlErrorPacket ( tOut, uPacketID, m_sError.cstr() );
+				SendMysqlErrorPacket ( tOut, uPacketID, sQuery.cstr(), m_sError.cstr() );
 			}
 			return;
 
@@ -11591,14 +11630,14 @@ public:
 
 		case STMT_CREATE_FUNC:
 			if ( !sphUDFCreate ( pStmt->m_sUdfLib.cstr(), pStmt->m_sUdfName.cstr(), pStmt->m_eUdfType, m_sError ) )
-				SendMysqlErrorPacket ( tOut, uPacketID, m_sError.cstr() );
+				SendMysqlErrorPacket ( tOut, uPacketID, sQuery.cstr(), m_sError.cstr() );
 			else
 				SendMysqlOkPacket ( tOut, uPacketID );
 			return;
 
 		case STMT_DROP_FUNC:
 			if ( !sphUDFDrop ( pStmt->m_sUdfName.cstr(), m_sError ) )
-				SendMysqlErrorPacket ( tOut, uPacketID, m_sError.cstr() );
+				SendMysqlErrorPacket ( tOut, uPacketID, sQuery.cstr(), m_sError.cstr() );
 			else
 				SendMysqlOkPacket ( tOut, uPacketID );
 			return;
@@ -11613,7 +11652,7 @@ public:
 
 		default:
 			m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );
-			SendMysqlErrorPacket ( tOut, uPacketID, m_sError.cstr() );
+			SendMysqlErrorPacket ( tOut, uPacketID, sQuery.cstr(), m_sError.cstr() );
 			return;
 		} // switch
 	}
@@ -11754,7 +11793,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 			// default case, unknown command
 			// (and query is handled just below)
 			sError.SetSprintf ( "unknown command (code=%d)", uMysqlCmd );
-			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr(), MYSQL_ERR_UNKNOWN_COM_ERROR );
+			SendMysqlErrorPacket ( tOut, uPacketID, sQuery.cstr(), sError.cstr(), MYSQL_ERR_UNKNOWN_COM_ERROR );
 			continue;
 		}
 
@@ -14889,6 +14928,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 #ifndef NDEBUG
 	// i want my windows debugging sessions to log onto stdout
 	g_bOptNoDetach = true;
+	g_bOptNoLock = true;
 #endif
 #endif
 

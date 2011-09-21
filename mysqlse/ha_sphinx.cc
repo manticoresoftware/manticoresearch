@@ -2975,10 +2975,15 @@ int ha_sphinx::get_rec ( byte * buf, const byte *, uint )
 			iValue64 = ( (longlong)uValue<<32 ) | UnpackDword();
 		if ( m_dAttrs[i].m_iField<0 )
 		{
-			// skip MVA
+			// skip MVA or String
 			if ( m_dAttrs[i].m_uType==SPH_ATTR_UINT32SET || m_dAttrs[i].m_uType==SPH_ATTR_UINT64SET )
+			{
 				for ( ; uValue>0 && !m_bUnpackError; uValue-- )
 					UnpackDword();
+			} else if ( m_dAttrs[i].m_uType==SPH_ATTR_STRING && CheckResponcePtr ( uValue ) )
+			{
+				m_pCur += uValue;
+			}
 			continue;
 		}
 

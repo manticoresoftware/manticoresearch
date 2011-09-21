@@ -2550,13 +2550,13 @@ int CollateUtf8GeneralCI ( const BYTE * pArg1, const BYTE * pArg2 )
 /////////////////////////////
 
 
-class CSphHashLibCS
+class LibcCSHash_fn
 {
 public:
 	mutable CSphTightVector<BYTE> m_dBuf;
 	static const int LOCALE_SAFE_GAP = 16;
 
-	CSphHashLibCS()
+	LibcCSHash_fn()
 	{
 		m_dBuf.Resize ( COLLATE_STACK_BUFFER );
 	}
@@ -2585,7 +2585,7 @@ public:
 };
 
 
-class CSphHashLibCI
+class LibcCIHash_fn
 {
 public:
 	uint64_t Hash ( const BYTE * pStr, int iLen ) const
@@ -2604,7 +2604,7 @@ public:
 };
 
 
-class CSphHashUtf8CI
+class Utf8CIHash_fn
 {
 public:
 	uint64_t Hash ( const BYTE * pStr, int iLen ) const
@@ -2625,13 +2625,12 @@ public:
 };
 
 
-class CSphHashBinary
+class BinaryHash_fn
 {
 public:
 	uint64_t Hash ( const BYTE * pStr, int iLen ) const
 	{
 		assert ( pStr && iLen );
-
 		return sphFNV64 ( pStr, iLen );
 	}
 };
@@ -2640,13 +2639,13 @@ public:
 CSphGrouper * sphCreateGrouperString ( const CSphAttrLocator & tLoc, ESphCollation eCollation )
 {
 	if ( eCollation==SPH_COLLATION_UTF8_GENERAL_CI )
-		return new CSphGrouperString<CSphHashUtf8CI> ( tLoc );
+		return new CSphGrouperString<Utf8CIHash_fn> ( tLoc );
 	else if ( eCollation==SPH_COLLATION_LIBC_CI )
-		return new CSphGrouperString<CSphHashLibCI> ( tLoc );
+		return new CSphGrouperString<LibcCIHash_fn> ( tLoc );
 	else if ( eCollation==SPH_COLLATION_LIBC_CS )
-		return new CSphGrouperString<CSphHashLibCS> ( tLoc );
+		return new CSphGrouperString<LibcCSHash_fn> ( tLoc );
 	else
-		return new CSphGrouperString<CSphHashBinary> ( tLoc );
+		return new CSphGrouperString<BinaryHash_fn> ( tLoc );
 }
 
 

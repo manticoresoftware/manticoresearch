@@ -2565,7 +2565,7 @@ bool NetOutputBuffer_c::Flush ( bool bUnfreeze )
 			int iErrno = sphSockGetErrno();
 			if ( iErrno==EINTR ) // interrupted before any data was sent; just loop
 				continue;
-			if ( iErrno!=EAGAIN )
+			if ( iErrno!=EAGAIN && iErrno!=EWOULDBLOCK )
 			{
 				sphWarning ( "send() failed: %d: %s", iErrno, sphSockError(iErrno) );
 				m_bError = true;

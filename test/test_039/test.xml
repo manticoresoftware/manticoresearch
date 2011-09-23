@@ -12,6 +12,10 @@ indexer
 searchd
 {
 	<searchd_settings/>
+	max_filter_values 	= 500000
+	max_packet_size 	= 64M
+	dist_threads			= 4
+	read_timeout			= 1
 }
 
 source src1
@@ -48,6 +52,15 @@ index block2
 	charset_type	= utf-8
 	min_word_len	= 1
 }
+
+index dist_agent_2
+{
+	source			= src1
+	path			= <data_path/>/dist_agent_2
+	docinfo			= extern
+	charset_type	= utf-8
+}
+
 </agent1>
 
 <agent0>
@@ -56,6 +69,14 @@ index dist
 	type					= distributed
 	local					= block1
 	agent					= <agent_address/>:block2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist2
+{
+	type					= distributed
+	agent					= <agent_address/>:dist_agent_2
 	agent_connect_timeout	= 1000
 	agent_query_timeout		= 3000
 }
@@ -93,6 +114,22 @@ if ( !$res )
 }
 unset ( $res["time"] );
 $results[] = $res;
+
+// here is going regression master fails to send 4k attributes to agent
+$gid = array();
+for ( $i=0; $i<50000; $i++ )
+	$gid[] = $i;
+
+$client->SetFilter ( 'group_id', $gid );
+$res = $client->Query ( "", "dist2" );
+if ( !$res )
+{
+	$results[] = $client->GetLastError();
+	return;
+}
+unset ( $res["time"] );
+$results[] = $res;
+
 ]]>
 </custom_test>
 

@@ -7399,6 +7399,7 @@ enum SqlStmt_e
 	STMT_DROP_FUNC,
 	STMT_ATTACH_INDEX,
 	STMT_FLUSH_RTINDEX,
+	STMT_SHOW_VARIABLES,
 
 	STMT_TOTAL
 };
@@ -11482,6 +11483,72 @@ void HandleMysqlFlush ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE 
 }
 
 
+void SendMysqlPair ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowBuffer_c & dRows, const char * sKey, const char * sValue )
+{
+	dRows.PutString ( sKey );
+	dRows.PutString ( sValue );
+	tOut.SendLSBDword ( ((uPacketID++)<<24) + ( dRows.Length() ) );
+	tOut.SendBytes ( dRows.Off ( 0 ), dRows.Length() );
+	dRows.Reset();
+}
+
+
+const char * sphCollationToName ( ESphCollation eColl )
+{
+	switch ( eColl )
+	{
+		case SPH_COLLATION_LIBC_CI:				return "libc_ci";
+		case SPH_COLLATION_LIBC_CS:				return "libc_cs";
+		case SPH_COLLATION_UTF8_GENERAL_CI:		return "utf8_general_ci";
+		case SPH_COLLATION_BINARY:				return "binary";
+		default:								return "unknown";
+	}
+}
+
+
+static const char * LogLevelName ( ESphLogLevel eLevel )
+{
+	switch ( eLevel )
+	{
+		case SPH_LOG_FATAL:					return "fatal";
+		case SPH_LOG_WARNING:				return "warning";
+		case SPH_LOG_INFO:					return "info";
+		case SPH_LOG_DEBUG:					return "debug";
+		case SPH_LOG_VERBOSE_DEBUG:			return "debugv";
+		case SPH_LOG_VERY_VERBOSE_DEBUG:	return "debugvv";
+		default:							return "unknown";
+	}
+}
+
+
+void HandleMysqlShowVariables ( const SqlStmt_t &, NetOutputBuffer_c & tOut, BYTE uPacketID, SqlRowBuffer_c & dRows, SessionVars_t & tVars )
+{
+	// result set header packet
+	tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
+	tOut.SendByte ( 2 ); // field count (level+code+message)
+	tOut.SendByte ( 0 ); // extra
+
+	// field packets
+	SendMysqlFieldPacket ( tOut, uPacketID++, "Variable_name", MYSQL_COL_STRING );
+	SendMysqlFieldPacket ( tOut, uPacketID++, "Value", MYSQL_COL_STRING );
+	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+
+	// send rows
+	dRows.Reset();
+
+	// sessions vars
+	SendMysqlPair ( tOut, uPacketID, dRows, "autocommit", tVars.m_bAutoCommit ? "1" : "0" );
+	SendMysqlPair ( tOut, uPacketID, dRows, "collation_connection", sphCollationToName ( tVars.m_eCollation ) );
+
+	// server vars
+	SendMysqlPair ( tOut, uPacketID, dRows, "query_log_format", g_eLogFormat==LOG_FORMAT_PLAIN ? "plain" : "sphinxql" );
+	SendMysqlPair ( tOut, uPacketID, dRows, "log_level", LogLevelName ( g_eLogLevel ) );
+
+	// cleanup
+	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+}
+
+
 class CSphinxqlSession : public ISphNoncopyable
 {
 	CSphString &		m_sError;
@@ -11660,6 +11727,10 @@ public:
 
 		case STMT_FLUSH_RTINDEX:
 			HandleMysqlFlush ( *pStmt, tOut, uPacketID );
+			return;
+
+		case STMT_SHOW_VARIABLES:
+			HandleMysqlShowVariables ( *pStmt, tOut, uPacketID, dRows, m_tVars );
 			return;
 
 		default:

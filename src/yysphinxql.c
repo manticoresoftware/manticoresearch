@@ -564,8 +564,8 @@ static const unsigned short yyrline[] =
      659,   663,   664,   668,   669,   670,   671,   677,   683,   695,
      702,   704,   708,   713,   717,   724,   726,   730,   731,   737,
      745,   746,   752,   758,   766,   767,   771,   775,   779,   783,
-     792,   796,   800,   806,   807,   808,   812,   813,   814,   815,
-     821,   832,   833,   837,   848,   860
+     792,   799,   806,   812,   813,   814,   818,   819,   820,   821,
+     827,   838,   839,   843,   854,   866
 };
 #endif
 
@@ -2446,12 +2446,16 @@ yyreduce:
 
   case 210:
 
-    { pParser->m_pStmt->m_eStmt = STMT_DUMMY; ;}
+    {
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_VARIABLES;
+		;}
     break;
 
   case 211:
 
-    { pParser->m_pStmt->m_eStmt = STMT_DUMMY; ;}
+    {
+			pParser->m_pStmt->m_eStmt = STMT_DUMMY;
+		;}
     break;
 
   case 212:

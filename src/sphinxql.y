@@ -789,11 +789,17 @@ update_item:
 //////////////////////////////////////////////////////////////////////////
 
 show_variables:
-	TOK_SHOW opt_scope TOK_VARIABLES		{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
+	TOK_SHOW opt_scope TOK_VARIABLES
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_VARIABLES;
+		}
 	;
 
 show_collation:
-	TOK_SHOW TOK_COLLATION		{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
+	TOK_SHOW TOK_COLLATION
+		{
+			pParser->m_pStmt->m_eStmt = STMT_DUMMY;
+		}
 	;
 
 set_transaction:

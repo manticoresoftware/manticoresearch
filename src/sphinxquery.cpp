@@ -1208,7 +1208,7 @@ static bool IsAppropriate ( XQNode_t * pTree )
 	return !( pTree->m_dWords.GetLength()==1 && pTree->GetOp()!=SPH_QUERY_NOT );
 }
 
-typedef CSphOrderedHash < DWORD, uint64_t, IdentityHash_fn, 128, 117 > CDwordHash;
+typedef CSphOrderedHash < DWORD, uint64_t, IdentityHash_fn, 128 > CDwordHash;
 
 // stores the pair of a tree, and the bitmask of common nodes
 // which contains the tree.
@@ -1306,7 +1306,7 @@ public:
 
 // for pairs of values builds and stores the association "key -> list of values"
 class CAssociations_t
-	: public CSphOrderedHash < Associations_t, uint64_t, IdentityHash_fn, 128, 117 >
+	: public CSphOrderedHash < Associations_t, uint64_t, IdentityHash_fn, 128 >
 {
 	int		m_iBits;			// number of non-unique associations
 public:
@@ -1501,7 +1501,7 @@ private:
 		if ( m_eOp==pTree->GetOp() )
 		{
 			// pBranch is for common subset of children, pOtherChildren is for the rest.
-			CSphOrderedHash < XQNode_t*, int, IdentityHash_fn, 64, 13 > hBranches;
+			CSphOrderedHash < XQNode_t*, int, IdentityHash_fn, 64 > hBranches;
 			XQNode_t * pOtherChildren = NULL;
 			int iBit;
 			int iOptimizations = 0;
@@ -1655,7 +1655,7 @@ struct MarkedNode_t
 	}
 };
 
-typedef CSphOrderedHash < MarkedNode_t, uint64_t, IdentityHash_fn, 128, 117 > CSubtreeHash;
+typedef CSphOrderedHash < MarkedNode_t, uint64_t, IdentityHash_fn, 128 > CSubtreeHash;
 
 /// check hashes, then check subtrees, then flag
 static void FlagCommonSubtrees ( XQNode_t * pTree, CSubtreeHash & hSubTrees, bool bFlag=true, bool bMarkIt=true )

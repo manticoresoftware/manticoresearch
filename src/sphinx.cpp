@@ -2061,7 +2061,7 @@ struct CSphMultiformContainer
 							CSphMultiformContainer () : m_iMaxTokens ( 0 ) {}
 
 	int						m_iMaxTokens;
-	typedef CSphOrderedHash < CSphMultiforms *, CSphString, CSphStrHashFunc, 131072, 117 > CSphMultiformHash;
+	typedef CSphOrderedHash < CSphMultiforms *, CSphString, CSphStrHashFunc, 131072 > CSphMultiformHash;
 	CSphMultiformHash	m_Hash;
 };
 
@@ -3014,7 +3014,7 @@ bool CSphTokenizerTraits<IS_UTF8>::LoadSynonyms ( const char * sFilename, CSphSt
 	int iLine = 0;
 	char sBuffer[1024];
 
-	CSphOrderedHash < int, int, IdentityHash_fn, 4096, 117 > hSynonymOnly;
+	CSphOrderedHash < int, int, IdentityHash_fn, 4096 > hSynonymOnly;
 	CSphVector<CSphString> dFrom;
 
 	bool bOK = false;
@@ -15917,7 +15917,7 @@ struct WordformContainer_t
 	CSphString					m_sIndexName;
 	CSphVector <CSphString>		m_dNormalForms;
 	CSphMultiformContainer * m_pMultiWordforms;
-	CSphOrderedHash < int, CSphString, CSphStrHashFunc, 1048576, 117 >	m_dHash;
+	CSphOrderedHash < int, CSphString, CSphStrHashFunc, 1048576  >	m_dHash;
 
 	WordformContainer_t ();
 	~WordformContainer_t ();

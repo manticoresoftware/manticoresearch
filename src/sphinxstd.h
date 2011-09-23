@@ -1070,7 +1070,7 @@ public:
 
 /// simple dynamic hash
 /// keeps the order, so Iterate() return the entries in the order they was inserted
-template < typename T, typename KEY, typename HASHFUNC, int LENGTH, int STEP >
+template < typename T, typename KEY, typename HASHFUNC, int LENGTH >
 class CSphOrderedHash
 {
 protected:
@@ -1270,7 +1270,7 @@ public:
 	}
 
 	/// copying
-	const CSphOrderedHash<T,KEY,HASHFUNC,LENGTH,STEP> & operator = ( const CSphOrderedHash<T,KEY,HASHFUNC,LENGTH,STEP> & rhs )
+	const CSphOrderedHash<T,KEY,HASHFUNC,LENGTH> & operator = ( const CSphOrderedHash<T,KEY,HASHFUNC,LENGTH> & rhs )
 	{
 		if ( this!=&rhs )
 		{
@@ -1284,7 +1284,7 @@ public:
 	}
 
 	/// copyint ctor
-	CSphOrderedHash<T,KEY,HASHFUNC,LENGTH,STEP> ( const CSphOrderedHash<T,KEY,HASHFUNC,LENGTH,STEP> & rhs )
+	CSphOrderedHash<T,KEY,HASHFUNC,LENGTH> ( const CSphOrderedHash<T,KEY,HASHFUNC,LENGTH> & rhs )
 		: m_pFirstByOrder ( NULL )
 		, m_pLastByOrder ( NULL )
 		, m_iLength ( 0 )
@@ -1695,7 +1695,7 @@ struct CSphStrHashFunc
 
 /// small hash with string keys
 template < typename T >
-class SmallStringHash_T : public CSphOrderedHash < T, CSphString, CSphStrHashFunc, 256, 13 > {};
+class SmallStringHash_T : public CSphOrderedHash < T, CSphString, CSphStrHashFunc, 256  > {};
 
 //////////////////////////////////////////////////////////////////////////
 

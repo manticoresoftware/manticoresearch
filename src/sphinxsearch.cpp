@@ -67,7 +67,7 @@ struct ExtQword_t
 
 
 /// query words set
-typedef CSphOrderedHash < ExtQword_t, CSphString, QwordsHash_fn, 256, 13 > ExtQwordsHash_t;
+typedef CSphOrderedHash < ExtQword_t, CSphString, QwordsHash_fn, 256 > ExtQwordsHash_t;
 
 
 /// generic match streamer
@@ -721,7 +721,7 @@ struct ZoneHash_fn
 
 
 /// zone hash
-typedef CSphOrderedHash < ZoneInfo_t, ZoneKey_t, ZoneHash_fn, 4096, 117 > ZoneHash_c;
+typedef CSphOrderedHash < ZoneInfo_t, ZoneKey_t, ZoneHash_fn, 4096 > ZoneHash_c;
 
 
 /// ranker interface

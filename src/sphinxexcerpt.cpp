@@ -2902,13 +2902,13 @@ ExcerptQuery_t::ExcerptQuery_t ()
 	, m_bWeightOrder ( false )
 	, m_bHighlightQuery ( false )
 	, m_bForceAllWords ( false )
-	, m_bLoadFiles ( false )
+	, m_iLoadFiles ( 0 )
 	, m_bAllowEmpty ( false )
 	, m_bEmitZones ( false )
 	, m_iRawFlags ( 0 )
 	, m_iSize ( 0 )
 	, m_iSeq ( 0 )
-	, m_iNext ( -1 )
+	, m_iNext ( -2 )
 	, m_sRes ( NULL )
 	, m_bHasBeforePassageMacro ( false )
 	, m_bHasAfterPassageMacro ( false )
@@ -2934,7 +2934,7 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 	CSphFixedVector<char> pBuffer ( 0 );
 	int iDataLen = tOptions.m_sSource.Length();
 
-	if ( tOptions.m_bLoadFiles )
+	if ( tOptions.m_iLoadFiles )
 	{
 		CSphAutofile tFile;
 		if ( tFile.Open ( tOptions.m_sSource.cstr(), SPH_O_READ, sError )<0 )

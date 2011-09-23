@@ -477,7 +477,7 @@ enum SearchdCommand_e
 enum
 {
 	VER_COMMAND_SEARCH		= 0x119,
-	VER_COMMAND_EXCERPT		= 0x103,
+	VER_COMMAND_EXCERPT		= 0x104,
 	VER_COMMAND_UPDATE		= 0x102,
 	VER_COMMAND_KEYWORDS	= 0x100,
 	VER_COMMAND_STATUS		= 0x100,
@@ -8259,7 +8259,8 @@ enum eExcerpt_Flags
 	EXCERPT_FLAG_FORCE_ALL_WORDS	= 64,
 	EXCERPT_FLAG_LOAD_FILES			= 128,
 	EXCERPT_FLAG_ALLOW_EMPTY		= 256,
-	EXCERPT_FLAG_EMIT_ZONES			= 512
+	EXCERPT_FLAG_EMIT_ZONES			= 512,
+	EXCERPT_FLAG_FILES_SCATTERED	= 1024
 };
 
 struct SnippetWorker_t
@@ -8270,7 +8271,7 @@ struct SnippetWorker_t
 
 	SnippetWorker_t()
 		: m_iTotal ( 0 )
-		, m_iHead ( -1 )
+		, m_iHead ( -1 ) // -1 is the marker of the end of the list
 		, m_bLocal ( false )
 	{}
 };
@@ -8315,6 +8316,9 @@ struct SnippetRequestBuilder_t : public IRequestBuilder_t
 		: m_pWorker ( pWorker )
 		, m_iLastAgent ( -1 )
 		, m_iLastWorker ( -1 )
+		, m_iNumDocs ( -1 )
+		, m_iReqLen ( -1 )
+		, m_bScattered ( false )
 	{}
 	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut, int iNumAgent ) const;
 
@@ -8322,6 +8326,9 @@ private:
 	const SnippetsRemote_t * m_pWorker;
 	mutable int	m_iLastAgent;	///< just a helper to optimize consequental linear search
 	mutable int m_iLastWorker;	///< just a helper to optimize consequental linear search
+	mutable int m_iNumDocs;		///< optimize numdocs/length calculation in scattered case
+	mutable int m_iReqLen;
+	mutable bool m_bScattered;
 };
 
 
@@ -8378,7 +8385,12 @@ void SnippetRequestBuilder_t::BuildRequest ( const char * sIndex, NetOutputBuffe
 	const ExcerptQuery_t & q = dQueries[0];
 	const SnippetWorker_t & tWorker = m_pWorker->m_dWorkers[m_iLastWorker];
 
-	int iLen = 60 // 15 ints/dwords - params, strlens, etc.
+	if ( m_iNumDocs < 0 )
+		m_bScattered = ( q.m_iLoadFiles & 2 )!=0;
+
+	if ( !m_bScattered || ( m_bScattered && m_iNumDocs<0 ) )
+	{
+		m_iReqLen = 60 // 15 ints/dwords - params, strlens, etc.
 		+ strlen ( sIndex )
 		+ q.m_sWords.Length()
 		+ q.m_sBeforeMatch.Length()
@@ -8387,18 +8399,20 @@ void SnippetRequestBuilder_t::BuildRequest ( const char * sIndex, NetOutputBuffe
 		+ q.m_sStripMode.Length()
 		+ q.m_sRawPassageBoundary.Length();
 
-	int iNumDocs = 0;
-	for ( int iDoc = tWorker.m_iHead; iDoc!=-1; iDoc=dQueries[iDoc].m_iNext )
-	{
-		++iNumDocs;
-		iLen += 4 + dQueries[iDoc].m_sSource.Length();
+		m_iNumDocs = 0;
+		for ( int iDoc = tWorker.m_iHead; iDoc!=-1; iDoc=dQueries[iDoc].m_iNext )
+		{
+			++m_iNumDocs;
+			m_iReqLen += 4 + dQueries[iDoc].m_sSource.Length();
+		}
 	}
+
 
 	tOut.SendDword ( SPHINX_SEARCHD_PROTO );
 	tOut.SendWord ( SEARCHD_COMMAND_EXCERPT );
 	tOut.SendWord ( VER_COMMAND_EXCERPT );
 
-	tOut.SendInt ( iLen );
+	tOut.SendInt ( m_iReqLen );
 
 	tOut.SendInt ( 0 );
 	tOut.SendInt ( q.m_iRawFlags );
@@ -8416,7 +8430,7 @@ void SnippetRequestBuilder_t::BuildRequest ( const char * sIndex, NetOutputBuffe
 	tOut.SendString ( q.m_sStripMode.cstr() );
 	tOut.SendString ( q.m_sRawPassageBoundary.cstr() );
 
-	tOut.SendInt ( iNumDocs );
+	tOut.SendInt ( m_iNumDocs );
 	for ( int iDoc = tWorker.m_iHead; iDoc!=-1; iDoc=dQueries[iDoc].m_iNext )
 		tOut.SendString ( dQueries[iDoc].m_sSource.cstr() );
 }
@@ -8430,15 +8444,35 @@ bool SnippetReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t &, 
 	const SnippetWorker_t & tWorker = m_pWorker->m_dWorkers[m_iLastWorker];
 
 	int iDoc = tWorker.m_iHead;
+	bool bOk = true;
 	while ( iDoc!=-1 )
 	{
+		int iCurDoc = iDoc;
+		if ( ( dQueries[iDoc].m_iLoadFiles&2 )!=0 ) // NOLINT
+		{
+			char * sRes = tReq.GetString().Leak();
+			if ( sRes && !strlen(sRes) )
+				SafeDelete ( sRes );
+			if ( sRes )
+			{
+				if ( dQueries[iDoc].m_sRes && strlen ( dQueries[iDoc].m_sRes )!=0 )
+				{
+					if ( strcmp ( sRes, dQueries[iDoc].m_sRes )!=0 )
+						bOk = false;
+					SafeDelete ( dQueries[iDoc].m_sRes );
+				}
+				dQueries[iDoc].m_sRes = sRes;
+			}
+
+			iDoc = dQueries[iDoc].m_iNext;
+			continue;
+		}
 		dQueries[iDoc].m_sRes = tReq.GetString().Leak();
-		int iNext = dQueries[iDoc].m_iNext;
-		dQueries[iDoc].m_iNext = -1; // mark as processed
-		iDoc = iNext;
+		iDoc = dQueries[iDoc].m_iNext;
+		dQueries[iDoc].m_iNext = -2; // mark as processed
 	}
 
-	return true;
+	return bOk;
 }
 
 
@@ -8615,7 +8649,7 @@ void SnippetThreadFunc ( void * pArg )
 		bool bDone = ( *pDesc->m_pCurQuery==pDesc->m_iQueries );
 		pDesc->m_pLock->Unlock();
 
-		if ( pQuery->m_iNext>=0 )
+		if ( pQuery->m_iNext!=-2 )
 			continue;
 
 		pQuery->m_sRes = sphBuildExcerpt ( *pQuery, tCtx.m_pDict, tCtx.m_tTokenizer.Ptr(),
@@ -8682,7 +8716,9 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	q.m_bForceAllWords = ( iFlags & EXCERPT_FLAG_FORCE_ALL_WORDS )!=0;
 	if ( iFlags & EXCERPT_FLAG_SINGLEPASSAGE )
 		q.m_iLimitPassages = 1;
-	q.m_bLoadFiles = ( iFlags & EXCERPT_FLAG_LOAD_FILES )!=0;
+	q.m_iLoadFiles = (( iFlags & EXCERPT_FLAG_LOAD_FILES )!=0)?1:0;
+	bool bScattered = ( iFlags & EXCERPT_FLAG_FILES_SCATTERED )!=0;
+	q.m_iLoadFiles |= bScattered?2:0;
 	q.m_bAllowEmpty = ( iFlags & EXCERPT_FLAG_ALLOW_EMPTY )!=0;
 	q.m_bEmitZones = ( iFlags & EXCERPT_FLAG_EMIT_ZONES )!=0;
 
@@ -8730,7 +8766,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 			return;
 		}
 
-		if ( !q.m_bLoadFiles )
+		if ( !q.m_iLoadFiles )
 		{
 			tReq.SendErrorReply ( "%s", "The distributed index for snippets available only when using external files" );
 			return;
@@ -8778,6 +8814,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	// do highlighting
 	///////////////////
 
+	int iAbsentHead = -1;
 	if ( g_iDistThreads<=1 || dQueries.GetLength()<2 )
 	{
 		// boring single threaded loop
@@ -8792,14 +8829,19 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		// get file sizes
 		ARRAY_FOREACH ( i, dQueries )
 		{
-			if ( dQueries[i].m_bLoadFiles )
+			dQueries[i].m_iNext = -2;
+			if ( dQueries[i].m_iLoadFiles )
 			{
 				struct stat st;
 				if ( ::stat ( dQueries[i].m_sSource.cstr(), &st )<0 )
 				{
-					tReq.SendErrorReply ( "failed to stat %s: %s", dQueries[i].m_sSource.cstr(), strerror(errno) );
-					pServed->Unlock();
-					return;
+					if ( !bScattered )
+					{
+						tReq.SendErrorReply ( "failed to stat %s: %s", dQueries[i].m_sSource.cstr(), strerror(errno) );
+						pServed->Unlock();
+						return;
+					}
+					dQueries[i].m_iNext = -1;
 				}
 				dQueries[i].m_iSize = -st.st_size; // so that sort would put bigger ones first
 			} else
@@ -8807,11 +8849,27 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 				dQueries[i].m_iSize = -dQueries[i].m_sSource.Length();
 			}
 			dQueries[i].m_iSeq = i;
-			dQueries[i].m_iNext = -1;
 		}
 
 		// tough jobs first
 		dQueries.Sort ( bind ( &ExcerptQuery_t::m_iSize ) );
+
+		ARRAY_FOREACH ( i, dQueries )
+			if ( dQueries[i].m_iNext==-1 )
+				{
+					dQueries[i].m_iNext = iAbsentHead;
+					iAbsentHead = i;
+					dQueries[i].m_sError.SetSprintf ( "failed to stat %s: %s", dQueries[i].m_sSource.cstr(), strerror(errno) );
+				}
+
+
+
+		// check if all files are available locally.
+		if ( bScattered && iAbsentHead==-1 )
+		{
+			bRemote = false;
+			dRemoteSnippets.m_dAgents.Reset();
+		}
 
 		if ( bRemote )
 		{
@@ -8826,16 +8884,25 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 			for ( int i=0; i<iLocalPart; i++ )
 					dRemoteSnippets.m_dWorkers[i].m_bLocal = true;
 
-			ARRAY_FOREACH ( i, dQueries )
+			if ( bScattered )
 			{
-				dRemoteSnippets.m_dWorkers[0].m_iTotal -= dQueries[i].m_iSize;
-				if ( !dRemoteSnippets.m_dWorkers[0].m_bLocal )
+				// on scattered case - the queries with m_iNext==-2 are here, and has to be scheduled to local agent
+				// the rest has to be sent to remotes, all of them!
+				for ( int i=0; i<iRemoteAgents; i++ )
+					dRemoteSnippets.m_dWorkers[iLocalPart+i].m_iHead = iAbsentHead;
+			} else
+			{
+				ARRAY_FOREACH ( i, dQueries )
 				{
-					// queries sheduled for local still have iNext==-1
-					dQueries[i].m_iNext = dRemoteSnippets.m_dWorkers[0].m_iHead;
-					dRemoteSnippets.m_dWorkers[0].m_iHead = i;
+					dRemoteSnippets.m_dWorkers[0].m_iTotal -= dQueries[i].m_iSize;
+					if ( !dRemoteSnippets.m_dWorkers[0].m_bLocal )
+					{
+						// queries sheduled for local still have iNext==-2
+						dQueries[i].m_iNext = dRemoteSnippets.m_dWorkers[0].m_iHead;
+						dRemoteSnippets.m_dWorkers[0].m_iHead = i;
+					}
+					dRemoteSnippets.m_dWorkers.Sort ( bind ( &SnippetWorker_t::m_iTotal ) );
 				}
-				dRemoteSnippets.m_dWorkers.Sort ( bind ( &SnippetWorker_t::m_iTotal ) );
 			}
 		}
 
@@ -8888,15 +8955,19 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 				dRemoteSnippets.m_dAgents.GetLength(),
 				iRemote,
 				iSuccesses );
-			// inverse the success/failed state - so that the queries with negative m_iNext are treated as failed
-			ARRAY_FOREACH ( i, dQueries )
-					dQueries[i].m_iNext = (dQueries[i].m_iNext<0)?0:-1;
 
-			// failsafe - one more turn for failed queries on local agent
-			SnippetThread_t & t = dThreads[0];
-			t.m_pQueries = dQueries.Begin();
-			iCurQuery = 0;
-			SnippetThreadFunc ( &dThreads[0] );
+			if ( !bScattered )
+			{
+				// inverse the success/failed state - so that the queries with negative m_iNext are treated as failed
+				ARRAY_FOREACH ( i, dQueries )
+						dQueries[i].m_iNext = (dQueries[i].m_iNext==-2)?0:-2;
+
+				// failsafe - one more turn for failed queries on local agent
+				SnippetThread_t & t = dThreads[0];
+				t.m_pQueries = dQueries.Begin();
+				iCurQuery = 0;
+				SnippetThreadFunc ( &dThreads[0] );
+			}
 		}
 		tLock.Done();
 
@@ -8916,14 +8987,16 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		// handle errors
 		if ( !dQueries[i].m_sRes )
 		{
-			tReq.SendErrorReply ( "highlighting failed: %s", dQueries[i].m_sError.cstr() );
-			ARRAY_FOREACH ( j, dQueries )
-				SafeDeleteArray ( dQueries[j].m_sRes );
-			return;
-		}
-
-		// count packet size
-		iRespLen += 4 + strlen ( dQueries[i].m_sRes );
+			if ( !bScattered )
+			{
+				tReq.SendErrorReply ( "highlighting failed: %s", dQueries[i].m_sError.cstr() );
+				ARRAY_FOREACH ( j, dQueries )
+					SafeDeleteArray ( dQueries[j].m_sRes );
+				return;
+			}
+			iRespLen += 4;
+		} else
+			iRespLen += 4 + strlen ( dQueries[i].m_sRes );
 	}
 
 	NetOutputBuffer_c tOut ( iSock );
@@ -8932,8 +9005,12 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	tOut.SendInt ( iRespLen );
 	ARRAY_FOREACH ( i, dQueries )
 	{
-		tOut.SendString ( dQueries[i].m_sRes );
-		SafeDeleteArray ( dQueries[i].m_sRes );
+		if ( dQueries[i].m_sRes )
+		{
+			tOut.SendString ( dQueries[i].m_sRes );
+			SafeDeleteArray ( dQueries[i].m_sRes );
+		} else
+			tOut.SendString ( "" );
 	}
 
 	tOut.Flush ();
@@ -10230,7 +10307,8 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 		else if ( sOpt=="weight_order" )		{ q.m_bWeightOrder = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="query_mode" )			{ q.m_bHighlightQuery = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="force_all_words" )		{ q.m_bForceAllWords = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
-		else if ( sOpt=="load_files" )			{ q.m_bLoadFiles = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
+		else if ( sOpt=="load_files" )			{ q.m_iLoadFiles = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
+		else if ( sOpt=="load_files_scattered" ) { q.m_iLoadFiles |= ( v.m_iVal!=0 )?2:0; iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="allow_empty" )			{ q.m_bAllowEmpty = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="emit_zones" )			{ q.m_bEmitZones = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
 
@@ -10851,7 +10929,7 @@ bool HandleMysqlSelect ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SearchHandl
 				sError.SetSprintf ( "query %d error: %s", i, tHandler.m_dResults[i].m_sError.cstr() );
 			else
 				sError.SetSprintf ( "%s; query %d error: %s", sError.cstr(), i, tHandler.m_dResults[i].m_sError.cstr() );
-		}				
+		}
 	}
 
 	if ( sError.Length() )
@@ -11321,7 +11399,7 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 			|| tStmt.m_sSetName=="sql_mode" )
 		{
 			// per-session CHARACTER_SET_RESULTS et al; just ignore for now
-	
+
 		} else
 		{
 			// unknown variable, return error

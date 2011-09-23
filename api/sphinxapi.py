@@ -32,7 +32,7 @@ SEARCHD_COMMAND_FLUSHATTRS	= 7
 
 # current client-side command implementation versions
 VER_COMMAND_SEARCH		= 0x119
-VER_COMMAND_EXCERPT		= 0x103
+VER_COMMAND_EXCERPT		= 0x104
 VER_COMMAND_UPDATE		= 0x102
 VER_COMMAND_KEYWORDS	= 0x100
 VER_COMMAND_STATUS		= 0x100
@@ -815,7 +815,8 @@ class SphinxClient:
 		if opts.get('force_all_words'):	flags |= 64
 		if opts.get('load_files'):		flags |= 128
 		if opts.get('allow_empty'):		flags |= 256
-		if opts.get('emit_zones'):		flags |= 256
+		if opts.get('emit_zones'):		flags |= 512
+		if opts.get('load_files_scattered'):	flags |= 1024
 		
 		# mode=0, flags
 		req = [pack('>2L', 0, flags)]

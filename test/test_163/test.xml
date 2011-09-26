@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>string attribute vs different indexes</name>
+<name>string attribute vs different indexes, attributes UNION</name>
 
 <num_agents>3</num_agents>
 
@@ -117,6 +117,101 @@ index dist3
 	agent = <agent1_address/>:agent1_main
 	agent = <agent2_address/>:agent2_delta1
 }
+
+source src_bool
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, body, idd1>2 as attr FROM test_table
+	sql_attr_bool	= attr
+}
+source src_uint
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, body, idd1*100 as attr FROM test_table
+	sql_attr_uint	= attr
+}
+source src_float
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, body, idd1/1.73 as attr FROM test_table
+	sql_attr_float	= attr
+}
+source src_bigint
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, body, idd1*100000000000 as attr FROM test_table
+	sql_attr_bigint	= attr
+}
+
+index u_bool
+{
+	source			= src_bool
+    docinfo			= extern
+	path			= <data_path/>/u_bool
+}
+index u_uint
+{
+	source			= src_uint
+    docinfo			= extern
+	path			= <data_path/>/u_uint
+}
+index u_float
+{
+	source			= src_float
+    docinfo			= extern
+	path			= <data_path/>/u_float
+}
+index u_bigint
+{
+	source			= src_bigint
+    docinfo			= extern
+	path			= <data_path/>/u_bigint
+}
+
+index u_dist10
+{
+	type = distributed
+	local = u_bool
+	local = u_float
+}
+index u_dist11
+{
+	type = distributed
+	local = u_float
+	local = u_bool
+}
+index u_dist20
+{
+	type = distributed
+	local = u_bool
+	local = u_uint
+	local = u_bigint
+}
+index u_dist21
+{
+	type = distributed
+	local = u_bool
+	local = u_bigint
+	local = u_uint
+}
+index u_dist22
+{
+	type = distributed
+	local = u_bigint
+	local = u_bool
+	local = u_uint
+}
+index u_dist23
+{
+	type = distributed
+	local = u_bigint
+	local = u_uint
+	local = u_bool
+}
 </agent0>
 
 <agent1>
@@ -189,6 +284,25 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select * from dist2 order by str1 desc</sphinxql>
 <sphinxql>select * from dist3 order by str1 asc</sphinxql>
 <sphinxql>select * from dist3 order by str1 desc, idd1 desc</sphinxql>
+
+<!-- here is going new feature seamless conversion of result set attributes ( bool -> float ) | ( bool -> uint -> bigint ) -->
+<sphinxql>select * from u_bool, u_float</sphinxql>
+<sphinxql>select * from u_float, u_bool</sphinxql>
+<sphinxql>select * from u_bool, u_uint, u_bigint</sphinxql>
+<sphinxql>select * from u_uint, u_bool, u_bigint</sphinxql>
+<sphinxql>select * from u_uint, u_bigint, u_bool</sphinxql>
+<sphinxql>select * from u_bigint, u_uint, u_bool </sphinxql>
+<sphinxql>select * from u_dist10</sphinxql>
+<sphinxql>select * from u_dist11</sphinxql>
+<sphinxql>select * from u_dist20</sphinxql>
+<sphinxql>select * from u_dist21</sphinxql>
+<sphinxql>select * from u_dist22</sphinxql>
+<sphinxql>select * from u_dist23</sphinxql>
+<!-- still invalid -->
+<sphinxql>select * from u_float, u_uint</sphinxql>
+<sphinxql>select * from u_float, u_bigint</sphinxql>
+<sphinxql>select * from u_uint, u_float</sphinxql>
+<sphinxql>select * from u_bigint, u_float</sphinxql>
 </sphqueries>
 
 </test>

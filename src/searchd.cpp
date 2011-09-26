@@ -3900,17 +3900,31 @@ bool MinimizeSchema ( CSphSchema & tDst, const CSphSchema & tSrc )
 		if ( iSrcIdx>=0 )
 		{
 			const CSphColumnInfo & tSrcAttr = tSrc.GetAttr ( iSrcIdx );
-			if ( tSrcAttr.m_eAttrType!=dDst[i].m_eAttrType )
+
+			// should seamlessly convert ( bool > float ) | ( bool > int > bigint )
+			ESphAttr eDst = dDst[i].m_eAttrType;
+			ESphAttr eSrc = tSrcAttr.m_eAttrType;
+			bool bSame = ( eDst==eSrc )
+				|| ( ( eDst==SPH_ATTR_FLOAT && eSrc==SPH_ATTR_BOOL ) || ( eDst==SPH_ATTR_BOOL && eSrc==SPH_ATTR_FLOAT ) )
+				|| ( ( eDst==SPH_ATTR_BOOL || eDst==SPH_ATTR_INTEGER || eDst==SPH_ATTR_BIGINT )
+					&& ( eSrc==SPH_ATTR_BOOL || eSrc==SPH_ATTR_INTEGER || eSrc==SPH_ATTR_BIGINT ) );
+
+			int iDstBitCount = dDst[i].m_tLocator.m_iBitCount;
+			int iSrcBitCount = tSrcAttr.m_tLocator.m_iBitCount;
+
+			if ( !bSame )
 			{
 				// different types? remove the attr
 				iSrcIdx = -1;
 				bEqual = false;
 
-			} else if ( tSrcAttr.m_tLocator.m_iBitCount!=dDst[i].m_tLocator.m_iBitCount )
+			} else if ( iDstBitCount!=iSrcBitCount )
 			{
 				// different bit sizes? choose the max one
-				dDst[i].m_tLocator.m_iBitCount = Max ( dDst[i].m_tLocator.m_iBitCount, tSrcAttr.m_tLocator.m_iBitCount );
+				dDst[i].m_tLocator.m_iBitCount = Max ( iDstBitCount, iSrcBitCount );
 				bEqual = false;
+				if ( iDstBitCount<iSrcBitCount )
+					dDst[i].m_eAttrType = tSrcAttr.m_eAttrType;
 			}
 
 			if ( tSrcAttr.m_tLocator.m_iBitOffset!=dDst[i].m_tLocator.m_iBitOffset )
@@ -5342,17 +5356,15 @@ void AdoptAliasedSchema ( AggrResult_t & tRes, CVirtualSchema * pSchema )
 void RemapResult ( CSphSchema * pTarget, AggrResult_t * pRes, bool bMultiSchema=true )
 {
 	int iCur = 0;
-	int * dMapFrom = NULL;
-
-	if ( pTarget->GetAttrsCount() )
-		dMapFrom = new int [ pTarget->GetAttrsCount() ];
+	CSphVector<int> dMapFrom ( pTarget->GetAttrsCount() );
 
 	ARRAY_FOREACH ( iSchema, pRes->m_dSchemas )
 	{
-		CSphSchema& dSchema = bMultiSchema?pRes->m_dSchemas[iSchema]:pRes->m_tSchema;
+		dMapFrom.Resize ( 0 );
+		CSphSchema & dSchema = ( bMultiSchema ? pRes->m_dSchemas[iSchema] : pRes->m_tSchema );
 		for ( int i=0; i<pTarget->GetAttrsCount(); i++ )
 		{
-			dMapFrom[i] = dSchema.GetAttrIndex ( pTarget->GetAttr(i).m_sName.cstr() );
+			dMapFrom.Add ( dSchema.GetAttrIndex ( pTarget->GetAttr(i).m_sName.cstr() ) );
 			assert ( dMapFrom[i]>=0
 				|| IsIDAttribute ( pTarget->GetAttr(i) )
 				|| sphIsSortStringInternal ( pTarget->GetAttr(i).m_sName.cstr() )
@@ -5362,7 +5374,7 @@ void RemapResult ( CSphSchema * pTarget, AggrResult_t * pRes, bool bMultiSchema=
 			? ( iCur + pRes->m_dMatchCounts[iSchema] )
 			: pRes->m_iTotalMatches;
 		iLimit = Min ( iLimit, pRes->m_dMatches.GetLength() );
-		for ( int i=iCur;i<iLimit; i++ )
+		for ( int i=iCur; i<iLimit; i++ )
 		{
 			CSphMatch & tMatch = pRes->m_dMatches[i];
 
@@ -5386,7 +5398,13 @@ void RemapResult ( CSphSchema * pTarget, AggrResult_t * pRes, bool bMultiSchema=
 				} else if ( dMapFrom[j]>=0 )
 				{
 					const CSphColumnInfo & tSrc = dSchema.GetAttr ( dMapFrom[j] );
-					tRow.SetAttr ( tDst.m_tLocator, tMatch.GetAttr ( tSrc.m_tLocator ) );
+					if ( tDst.m_eAttrType==SPH_ATTR_FLOAT && tSrc.m_eAttrType==SPH_ATTR_BOOL )
+					{
+						tRow.SetAttrFloat ( tDst.m_tLocator, ( tMatch.GetAttr ( tSrc.m_tLocator )>0 ? 1.0f : 0.0f ) );
+					} else
+					{
+						tRow.SetAttr ( tDst.m_tLocator, tMatch.GetAttr ( tSrc.m_tLocator ) );
+					}
 				}
 			}
 			// swap out old (most likely wrong sized) match
@@ -5401,7 +5419,6 @@ void RemapResult ( CSphSchema * pTarget, AggrResult_t * pRes, bool bMultiSchema=
 
 	if ( bMultiSchema )
 		assert ( iCur==pRes->m_dMatches.GetLength() );
-	SafeDeleteArray ( dMapFrom );
 	if ( &pRes->m_tSchema!=pTarget )
 		AdoptSchema ( pRes, pTarget );
 }
@@ -5712,7 +5729,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 
 			// if before all schemas were proved as equal, and the tCol taken from current schema is static -
 			// this is no reason now to make it dynamic.
-			bool bDynamic = bAllEqual?tCol.m_tLocator.m_bDynamic:true;
+			bool bDynamic = ( bAllEqual ? tCol.m_tLocator.m_bDynamic : true );
 			tInternalSchema.AddAttr ( tCol, bDynamic );
 			if ( !bDynamic )
 			{
@@ -5726,7 +5743,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 			}
 		}
 
-		bAllEqual &= tRes.m_tSchema.GetAttrsCount()==tInternalSchema.GetAttrsCount();
+		bAllEqual &= ( tRes.m_tSchema.GetAttrsCount()==tInternalSchema.GetAttrsCount() );
 	}
 
 	// check if we actually have all required columns already
@@ -5939,49 +5956,7 @@ bool MinimizeAggrResultCompat ( AggrResult_t & tRes, const CSphQuery & tQuery, b
 
 	// convert all matches to minimal schema
 	if ( !bAllEqual )
-	{
-		int iCur = 0;
-		CSphVector<int> dMapFrom ( tRes.m_tSchema.GetAttrsCount() );
-
-		ARRAY_FOREACH ( iSchema, tRes.m_dSchemas )
-		{
-			dMapFrom.Resize ( 0 );
-			for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
-			{
-				dMapFrom.Add ( tRes.m_dSchemas[iSchema].GetAttrIndex ( tRes.m_tSchema.GetAttr(i).m_sName.cstr() ) );
-				assert ( dMapFrom.Last()>=0 || sphIsSortStringInternal ( tRes.m_tSchema.GetAttr(i).m_sName.cstr() ) );
-			}
-
-			for ( int i=iCur; i<iCur+tRes.m_dMatchCounts[iSchema]; i++ )
-			{
-				CSphMatch & tMatch = tRes.m_dMatches[i];
-
-				// create new and shiny (and properly sized and fully dynamic) match
-				CSphMatch tRow;
-				tRow.Reset ( tRes.m_tSchema.GetRowSize() );
-				tRow.m_iDocID = tMatch.m_iDocID;
-				tRow.m_iWeight = tMatch.m_iWeight;
-				tRow.m_iTag = tMatch.m_iTag;
-
-				// remap attrs
-				ARRAY_FOREACH ( j, dMapFrom )
-				{
-					if ( dMapFrom[j]<0 )
-						continue;
-
-					const CSphColumnInfo & tDst = tRes.m_tSchema.GetAttr(j);
-					const CSphColumnInfo & tSrc = tRes.m_dSchemas[iSchema].GetAttr ( dMapFrom[j] );
-					tRow.SetAttr ( tDst.m_tLocator, tMatch.GetAttr ( tSrc.m_tLocator ) );
-				}
-
-				// swap out old (most likely wrong sized) match
-				Swap ( tMatch, tRow );
-			}
-			iCur += tRes.m_dMatchCounts[iSchema];
-		}
-
-		assert ( iCur==tRes.m_dMatches.GetLength() );
-	}
+		RemapResult ( &tRes.m_tSchema, &tRes );
 
 	// we do not need to re-sort if there's exactly one result set
 	if ( tRes.m_iSuccesses==1 )

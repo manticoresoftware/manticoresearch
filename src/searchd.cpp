@@ -10382,11 +10382,7 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 		}
 	}
 
-	bool bGotData = false;
-	for ( int i=0; i<dResults.GetLength() && !bGotData; i++ )
-		if ( dResults[i]!=NULL )
-			bGotData = true;
-
+	bool bGotData = ARRAY_ANY ( bGotData, dResults, dResults[_any]!=NULL );
 	if ( !bGotData )
 	{
 		// just one last error instead of all errors is hopefully ok

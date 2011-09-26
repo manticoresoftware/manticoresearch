@@ -965,6 +965,16 @@ protected:
 #define ARRAY_FOREACH_COND(_index,_array,_cond) \
 	for ( int _index=0; _index<_array.GetLength() && (_cond); _index++ )
 
+#define ARRAY_ANY(_res,_array,_cond) \
+	false; \
+	for ( int _any=0; _any<_array.GetLength() && !_res; _any++ ) \
+		_res |= ( _cond ); \
+
+#define ARRAY_ALL(_res,_array,_cond) \
+	true; \
+	for ( int _all=0; _all<_array.GetLength() && _res; _all++ ) \
+		_res &= ( _cond ); \
+
 //////////////////////////////////////////////////////////////////////////
 
 /// swap-vector policy (for non-copyable classes)

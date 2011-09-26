@@ -7497,6 +7497,7 @@ struct SqlStmt_t
 	CSphString				m_sCallProc;
 	CSphVector<CSphString>	m_dCallOptNames;
 	CSphVector<SqlInsert_t>	m_dCallOptValues;
+	CSphVector<CSphString>	m_dCallStrings;
 
 	// UPDATE specific
 	CSphAttrUpdate			m_tUpdate;
@@ -10260,16 +10261,30 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 {
 	CSphString sError;
 
+	// check arguments
 	// string data, string index, string query, [named opts]
-	if ( tStmt.m_dInsertValues.GetLength()!=3
-		|| tStmt.m_dInsertValues[0].m_iType!=TOK_QUOTED_STRING
-		|| tStmt.m_dInsertValues[1].m_iType!=TOK_QUOTED_STRING
-		|| tStmt.m_dInsertValues[2].m_iType!=TOK_QUOTED_STRING )
+	if ( tStmt.m_dInsertValues.GetLength()!=3 )
 	{
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "bad argument count or types in SNIPPETS() call" );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "SNIPPETS() expectes exactly 3 arguments (data, index, query)" );
+		return;
+	}
+	if ( tStmt.m_dInsertValues[0].m_iType!=TOK_QUOTED_STRING && tStmt.m_dInsertValues[0].m_iType!=TOK_CONST_STRINGS )
+	{
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "SNIPPETS() argument 1 must be a string or a string list" );
+		return;
+	}
+	if ( tStmt.m_dInsertValues[1].m_iType!=TOK_QUOTED_STRING )
+	{
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "SNIPPETS() argument 2 must be a string" );
+		return;
+	}
+	if ( tStmt.m_dInsertValues[2].m_iType!=TOK_QUOTED_STRING )
+	{
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "SNIPPETS() argument 3 must be a string" );
 		return;
 	}
 
+	// do magics
 	const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( tStmt.m_dInsertValues[1].m_sVal );
 	if ( !pServed || !pServed->m_bEnabled || !pServed->m_pIndex )
 	{
@@ -10279,7 +10294,6 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 	}
 
 	ExcerptQuery_t q;
-	q.m_sSource = tStmt.m_dInsertValues[0].m_sVal; // OPTIMIZE?
 	q.m_sWords = tStmt.m_dInsertValues[2].m_sVal;
 
 	ARRAY_FOREACH ( i, tStmt.m_dCallOptNames )
@@ -10353,10 +10367,29 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 		return;
 	}
 
-
-	char * sResult = sphBuildExcerpt ( q, tCtx.m_pDict, tCtx.m_tTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError, tCtx.m_tStripper.Ptr(), tCtx.m_pQueryTokenizer );
-	if ( !sResult )
+	CSphVector<char*> dResults;
+	if ( tStmt.m_dInsertValues[0].m_iType==TOK_QUOTED_STRING )
 	{
+		q.m_sSource = tStmt.m_dInsertValues[0].m_sVal; // OPTIMIZE?
+		dResults.Add ( sphBuildExcerpt ( q, tCtx.m_pDict, tCtx.m_tTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError, tCtx.m_tStripper.Ptr(), tCtx.m_pQueryTokenizer ) );
+	} else
+	{
+		// FIXME! parallelize and distribute this
+		ARRAY_FOREACH ( i, tStmt.m_dCallStrings )
+		{
+			q.m_sSource = tStmt.m_dCallStrings[i];// OPTIMIZE?
+			dResults.Add ( sphBuildExcerpt ( q, tCtx.m_pDict, tCtx.m_tTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError, tCtx.m_tStripper.Ptr(), tCtx.m_pQueryTokenizer ) );
+		}
+	}
+
+	bool bGotData = false;
+	for ( int i=0; i<dResults.GetLength() && !bGotData; i++ )
+		if ( dResults[i]!=NULL )
+			bGotData = true;
+
+	if ( !bGotData )
+	{
+		// just one last error instead of all errors is hopefully ok
 		sError.SetSprintf ( "highlighting failed: %s", sError.cstr() );
 		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		pServed->Unlock();
@@ -10376,11 +10409,16 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
 
 	// data
-	tOut.SendLSBDword ( ((uPacketID++)<<24) + MysqlPackedLen ( sResult ) );
-	tOut.SendMysqlString ( sResult );
+	ARRAY_FOREACH ( i, dResults )
+	{
+		const char * sResult = dResults[i] ? dResults[i] : "";
+		tOut.SendLSBDword ( ((uPacketID++)<<24) + MysqlPackedLen ( sResult ) );
+		tOut.SendMysqlString ( sResult );
+	}
 
 	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
-	SafeDeleteArray ( sResult );
+	ARRAY_FOREACH ( i, dResults )
+		SafeDeleteArray ( dResults[i] );
 }
 
 

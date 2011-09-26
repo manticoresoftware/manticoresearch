@@ -18,6 +18,7 @@
 %token	TOK_QUOTED_STRING
 %token	TOK_USERVAR
 %token	TOK_SYSVAR
+%token	TOK_CONST_STRINGS
 
 %token	TOK_AS
 %token	TOK_ASC
@@ -692,10 +693,46 @@ delete_from:
 //////////////////////////////////////////////////////////////////////////
 
 call_proc:
-	TOK_CALL TOK_IDENT '(' insert_vals_list opt_call_opts_list ')'
+	TOK_CALL TOK_IDENT '(' call_args_list opt_call_opts_list ')'
 		{
 			pParser->m_pStmt->m_eStmt = STMT_CALL;
 			pParser->m_pStmt->m_sCallProc = $2.m_sValue;
+		}
+	;
+
+call_args_list:
+	call_arg
+		{
+			AddInsval ( pParser->m_pStmt->m_dInsertValues, $1 );
+		}
+	| call_args_list ',' call_arg
+		{
+			AddInsval ( pParser->m_pStmt->m_dInsertValues, $3 );
+		}
+	;
+
+call_arg:
+	insert_val
+	| '(' const_string_list ')'
+		{
+			$$.m_iInstype = TOK_CONST_STRINGS;
+		}
+	;
+
+const_string_list:
+	TOK_QUOTED_STRING
+		{
+			// FIXME? for now, one such array per CALL statement, tops
+			if ( pParser->m_pStmt->m_dCallStrings.GetLength() )
+			{
+				yyerror ( pParser, "unexpected constant string list" );
+				YYERROR;
+			}
+			pParser->m_pStmt->m_dCallStrings.Add ( $1.m_sValue );
+		}
+	| const_string_list ',' TOK_QUOTED_STRING
+		{
+			pParser->m_pStmt->m_dCallStrings.Add ( $3.m_sValue );
 		}
 	;
 

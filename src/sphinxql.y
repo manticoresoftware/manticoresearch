@@ -467,6 +467,11 @@ option_item:
 			if ( !pParser->AddOption ( $1, $4, $5.m_sValue ) )
 				YYERROR;
 		}
+	| TOK_IDENT '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddOption ( $1, $3 ) )
+				YYERROR;
+		}
 	;
 
 named_const_list:

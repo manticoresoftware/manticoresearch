@@ -7817,6 +7817,10 @@ bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue )
 	{
 		m_pQuery->m_bReverseScan = ( tValue.m_iValue!=0 );
 
+	} else if ( sOpt=="comment" )
+	{
+		m_pQuery->m_sComment = tValue.m_sValue;
+
 	} else
 	{
 		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", tIdent.m_sValue.cstr() );
@@ -8423,7 +8427,6 @@ bool SnippetReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t &, 
 	bool bOk = true;
 	while ( iDoc!=-1 )
 	{
-		int iCurDoc = iDoc;
 		if ( ( dQueries[iDoc].m_iLoadFiles&2 )!=0 ) // NOLINT
 		{
 			char * sRes = tReq.GetString().Leak();
@@ -10352,7 +10355,7 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 		// FIXME! parallelize and distribute this
 		ARRAY_FOREACH ( i, tStmt.m_dCallStrings )
 		{
-			q.m_sSource = tStmt.m_dCallStrings[i];// OPTIMIZE?
+			q.m_sSource = tStmt.m_dCallStrings[i]; // OPTIMIZE?
 			dResults.Add ( sphBuildExcerpt ( q, tCtx.m_pDict, tCtx.m_tTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError, tCtx.m_tStripper.Ptr(), tCtx.m_pQueryTokenizer ) );
 		}
 	}

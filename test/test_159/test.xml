@@ -112,6 +112,9 @@ INSERT INTO `test_table` VALUES
 <!-- regression missed string pool in grouper on match -->
 <sphinxql>select * from dist where match ('cat | eats') group by str1 within group order by id desc</sphinxql>
 <sphinxql>select * from dist group by str2  within group order by id desc</sphinxql>
+<!-- regression sorter gives first matches instead bests -->
+<sphinxql>select id, str1 from rt group by idd1 order by id asc limit 0,2 option max_matches=2</sphinxql>
+<sphinxql>select id, str1 from rt group by idd1 order by id asc limit 2,2 option max_matches=4</sphinxql>
 </sphqueries>
 
 </test>

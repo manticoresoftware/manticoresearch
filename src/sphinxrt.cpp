@@ -4560,8 +4560,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		{
 			ISphMatchSorter * pSorter = dSorters[iSorter];
 
+			const CSphMatch * pMatches = pSorter->Finalize();
 			const int iMatchesCount = pSorter->GetLength();
-			const CSphMatch * pMatches = pSorter->First();
 
 			for ( int i=0; i<iMatchesCount; i++ )
 			{
@@ -4583,8 +4583,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			{
 				ISphMatchSorter * pSorter = dSorters[iSorter];
 
+				CSphMatch * pMatches = pSorter->Finalize();
 				const int iMatchesCount = pSorter->GetLength();
-				CSphMatch * pMatches = pSorter->First();
 
 				for ( int i=0; i<iMatchesCount; i++ )
 				{
@@ -4648,8 +4648,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		{
 			ISphMatchSorter * pSorter = dSorters[iSorter];
 
+			CSphMatch * pMatches = pSorter->Finalize();
 			const int iMatchesCount = pSorter->GetLength();
-			CSphMatch * pMatches = pSorter->First();
 
 			for ( int i=0; i<iMatchesCount; i++ )
 			{

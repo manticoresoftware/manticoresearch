@@ -12431,11 +12431,11 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 		for ( int iSorter=0; iSorter<iSorters; iSorter++ )
 	{
 		ISphMatchSorter * pTop = ppSorters[iSorter];
+		CSphMatch * const pHead = pTop->Finalize();
 		const int iCount = pTop->GetLength ();
 		if ( !iCount )
 			continue;
 
-		CSphMatch * const pHead = pTop->First();
 		CSphMatch * const pTail = pHead + iCount;
 		for ( CSphMatch * pCur=pHead; pCur<pTail; pCur++ )
 		{
@@ -14888,8 +14888,8 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 		ISphMatchSorter * pTop = ppSorters[iSorter];
 		if ( pTop->GetLength() && bFinalPass )
 		{
+			CSphMatch * const pHead = pTop->Finalize();
 			const int iCount = pTop->GetLength ();
-			CSphMatch * const pHead = pTop->First();
 			CSphMatch * const pTail = pHead + iCount;
 
 			for ( CSphMatch * pCur=pHead; pCur<pTail; pCur++ )
@@ -15917,7 +15917,7 @@ struct WordformContainer_t
 	CSphString					m_sIndexName;
 	CSphVector <CSphString>		m_dNormalForms;
 	CSphMultiformContainer * m_pMultiWordforms;
-	CSphOrderedHash < int, CSphString, CSphStrHashFunc, 1048576  >	m_dHash;
+	CSphOrderedHash < int, CSphString, CSphStrHashFunc, 1048576 >	m_dHash;
 
 	WordformContainer_t ();
 	~WordformContainer_t ();

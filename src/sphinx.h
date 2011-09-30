@@ -2530,8 +2530,8 @@ public:
 	/// get first entry ptr
 	/// used for docinfo lookup
 	/// entries order does NOT matter and is NOT guaranteed
-	/// however top GetLength() entries MUST be stored linearly starting from First()
-	virtual CSphMatch *	First () = 0;
+	/// however top GetLength() entries MUST be stored linearly starting from Finalize()
+	virtual CSphMatch *	Finalize () = 0;
 
 	/// store all entries into specified location and remove them from the queue
 	/// entries are stored in properly sorted order,

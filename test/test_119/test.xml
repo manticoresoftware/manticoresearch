@@ -49,6 +49,23 @@ index mva
 	source			= src_mva
 	path			= <data_path/>/mva
 }
+
+source src_final
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, ival as idd1, id*1000 as idd2, 'test' FROM test_table
+	sql_attr_uint	= idd1
+	sql_attr_uint	= idd2
+}
+
+index final
+{
+	source			= src_final
+	path			= <data_path/>/final
+	docinfo = extern
+}
+
 </config>
 
 <db_create>
@@ -72,7 +89,10 @@ INSERT INTO `test_table` VALUES
 ( 3, 11, -30, 'test three' ),
 ( 4, 22, -40, 'test four' ),
 
-( 10, 1, 1, '10,11,12,13' )
+( 10, 1, 1, '10,11,12,13' ),
+
+( 20, 200, 1, '1' ), ( 21, 201, 1, '1' ), ( 22, 202, 1, '1' ), ( 23, 203, 1, '1' ), ( 24, 204, 1, '1' ), ( 25, 205, 1, '1' ),
+( 30, 300, 1, '1' ), ( 31, 301, 1, '1' ), ( 32, 302, 1, '1' ), ( 33, 303, 1, '1' ), ( 34, 304, 1, '1' ), ( 35, 305, 1, '1' )
 </db_insert>
 
 <sphqueries>
@@ -93,6 +113,9 @@ INSERT INTO `test_table` VALUES
 
 <!-- here is going another regression from bug #800-->
 <sphinxql>select *, IN ( mva, 11 ) as cnd1 from mva where cnd1=1</sphinxql>
+<!-- regression sorter gives first matches instead bests -->
+<sphinxql>select id, idd1, idd2, idd1 + idd2 as i2 from final group by idd1 order by id desc limit 0,2 option max_matches=4</sphinxql>
+<sphinxql>select id, idd1, idd2, idd1 + idd2 as i2 from final group by idd1 order by id desc limit 2,2 option max_matches=4</sphinxql>
 </sphqueries>
 
 </test>

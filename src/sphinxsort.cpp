@@ -77,10 +77,10 @@ public:
 	}
 
 public:
-	int			GetLength () const										{ return m_iUsed; }
 	void		SetState ( const CSphMatchComparatorState & tState )	{ m_tState = tState; m_tState.m_iNow = (DWORD) time ( NULL ); }
 	bool		UsesAttrs () const										{ return m_bUsesAttrs; }
-	CSphMatch *	First ()												{ return m_pData; }
+	virtual CSphMatch *	Finalize ()												{ return m_pData; }
+	virtual int			GetLength () const										{ return m_iUsed; }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1099,7 +1099,7 @@ public:
 
 		// if we're full, let's cut off some worst groups
 		if ( m_iUsed==m_iSize )
-			CutWorst ();
+			CutWorst ( m_iLimit * (int)(GROUPBY_FACTOR/2) );
 
 		// do add
 		assert ( m_iUsed<m_iSize );
@@ -1226,7 +1226,7 @@ protected:
 	}
 
 	/// cut worst N groups off the buffer tail
-	void CutWorst ()
+	void CutWorst ( int iCut )
 	{
 		// sort groups
 		if ( m_bSortByDistinct )
@@ -1237,7 +1237,6 @@ protected:
 		CalcAvg ( false );
 
 		// cut groups
-		int iCut = m_iLimit * (int)(GROUPBY_FACTOR/2);
 		m_iUsed -= iCut;
 
 		// cleanup unused distinct stuff
@@ -1265,6 +1264,14 @@ protected:
 	void SortGroups ()
 	{
 		sphSort ( m_pData, m_iUsed, m_tGroupSorter, m_tGroupSorter );
+	}
+
+	virtual CSphMatch * Finalize()
+	{
+		if ( m_iUsed>m_iLimit )
+			CutWorst ( m_iUsed - m_iLimit );
+
+		return m_pData;
 	}
 };
 

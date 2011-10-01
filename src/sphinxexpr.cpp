@@ -332,19 +332,46 @@ struct Expr_Arglist_c : public ISphExpr
 
 //////////////////////////////////////////////////////////////////////////
 
-struct Expr_Crc32_c : public ISphExpr
+struct Expr_Unary_c : public ISphExpr
 {
 	ISphExpr * m_pFirst;
 
-	explicit Expr_Crc32_c ( ISphExpr * pFirst ) : m_pFirst ( pFirst ) {}
-	~Expr_Crc32_c () { SafeRelease ( m_pFirst ); }
+	~Expr_Unary_c() { SafeRelease ( m_pFirst ); }
 
 	virtual void SetMVAPool ( const DWORD * pMvaPool ) { m_pFirst->SetMVAPool ( pMvaPool ); }
 	virtual void SetStringPool ( const BYTE * pStrings ) { m_pFirst->SetStringPool ( pStrings ); }
 	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const { m_pFirst->GetDependencyColumns ( dColumns ); }
+};
 
+struct Expr_Crc32_c : public Expr_Unary_c
+{
+	explicit Expr_Crc32_c ( ISphExpr * pFirst ) { m_pFirst = pFirst; }
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
 	virtual int IntEval ( const CSphMatch & tMatch ) const { const BYTE * pStr; return sphCRC32 ( pStr, m_pFirst->StringEval ( tMatch, &pStr ) ); }
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return IntEval ( tMatch ); }
+};
+
+static inline int Fibonacci ( int i )
+{
+	if ( i<0 )
+		return 0;
+	int f1 = 0;
+	int f2 = 1;
+	int j = 0;
+	for ( j=0; j<i; j+=2 )
+	{
+		f1 += f2;
+		f2 += f1;
+	}
+	return (i&1) ? f1 : f2;
+}
+
+struct Expr_Fibonacci_c : public Expr_Unary_c
+{
+	explicit Expr_Fibonacci_c ( ISphExpr * pFirst ) { m_pFirst = pFirst; }
+
+	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
+	virtual int IntEval ( const CSphMatch & tMatch ) const { return Fibonacci ( m_pFirst->IntEval ( tMatch ) ); }
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return IntEval ( tMatch ); }
 };
 
@@ -560,6 +587,7 @@ enum Func_e
 	FUNC_BIGINT,
 	FUNC_SINT,
 	FUNC_CRC32,
+	FUNC_FIBONACCI,
 
 	FUNC_DAY,
 	FUNC_MONTH,
@@ -610,6 +638,7 @@ static FuncDesc_t g_dFuncs[] =
 	{ "bigint",			1,	FUNC_BIGINT,		SPH_ATTR_BIGINT },	// type-enforcer special as-if-function
 	{ "sint",			1,	FUNC_SINT,			SPH_ATTR_BIGINT },	// type-enforcer special as-if-function
 	{ "crc32",			1,	FUNC_CRC32,			SPH_ATTR_INTEGER },
+	{ "fibonacci",		1,	FUNC_FIBONACCI,		SPH_ATTR_INTEGER },
 
 	{ "day",			1,	FUNC_DAY,			SPH_ATTR_INTEGER },
 	{ "month",			1,	FUNC_MONTH,			SPH_ATTR_INTEGER },
@@ -1641,6 +1670,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_BIGINT:	return dArgs[0];
 					case FUNC_SINT:		return new Expr_Sint_c ( dArgs[0] );
 					case FUNC_CRC32:	return new Expr_Crc32_c ( dArgs[0] );
+					case FUNC_FIBONACCI:return new Expr_Fibonacci_c ( dArgs[0] );
 
 					case FUNC_DAY:			return new Expr_Day_c ( dArgs[0] );
 					case FUNC_MONTH:		return new Expr_Month_c ( dArgs[0] );
@@ -2625,7 +2655,8 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 	}
 
 	// check that first SINT or timestamp family arg is integer
-	if ( eFunc==FUNC_SINT || eFunc==FUNC_DAY || eFunc==FUNC_MONTH || eFunc==FUNC_YEAR || eFunc==FUNC_YEARMONTH || eFunc==FUNC_YEARMONTHDAY )
+	if ( eFunc==FUNC_SINT || eFunc==FUNC_DAY || eFunc==FUNC_MONTH || eFunc==FUNC_YEAR || eFunc==FUNC_YEARMONTH || eFunc==FUNC_YEARMONTHDAY
+		|| eFunc==FUNC_FIBONACCI )
 	{
 		assert ( iLeft>=0 );
 		if ( m_dNodes[iLeft].m_eRetType!=SPH_ATTR_INTEGER )

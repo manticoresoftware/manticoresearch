@@ -92,14 +92,9 @@ struct ISphExprHook
 	/// get identifier return type by OID
 	virtual ESphAttr GetIdentType ( int iID ) = 0;
 
-	/// get function return type by OID and argument type
-	virtual ESphAttr GetFuncType ( int iID, ESphAttr eArgType ) = 0;
-
-	/// get expected function argument count by OID
-	virtual int GetExpectedArgc ( int iID ) = 0;
-
-	/// get function name by OID
-	virtual const char * GetFuncName ( int iID ) = 0;
+	/// get function return type by OID and argument types vector
+	/// must return SPH_ATTR_NONE and fill the message on failure
+	virtual ESphAttr GetReturnType ( int iID, const CSphVector<ESphAttr> & dArgs, bool bAllConst, CSphString & sError ) = 0;
 
 	/// recursive scope check
 	virtual void CheckEnter ( int iID ) = 0;

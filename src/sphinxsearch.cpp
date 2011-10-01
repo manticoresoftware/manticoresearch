@@ -4883,6 +4883,7 @@ public:
 	DWORD				m_uExactHit;
 	CSphBitvec			m_tKeywordMask;
 	DWORD				m_uDocWordCount;
+	int					m_iMaxWindowHits[SPH_MAX_FIELDS];
 
 	const char *		m_sExpr;
 	ISphExpr *			m_pExpr;
@@ -4892,6 +4893,11 @@ public:
 	// per-query stuff
 	int					m_iMaxLCS;
 	int					m_iQueryWordCount;
+
+public:
+	// internal state, and factor settings
+	CSphVector<DWORD>	m_dWindow;
+	int					m_iWindowSize;
 
 public:
 						RankerState_Expr_fn ();
@@ -4915,6 +4921,7 @@ enum ExprRankerNode_e
 	XRANK_MIN_HIT_POS,
 	XRANK_MIN_BEST_SPAN_POS,
 	XRANK_EXACT_HIT,
+	XRANK_MAX_WINDOW_HITS,
 
 	// document level factors
 	XRANK_BM25,
@@ -5104,6 +5111,8 @@ public:
 	{
 		if ( !strcasecmp ( sFunc, "sum" ) )
 			return XRANK_SUM;
+		if ( !strcasecmp ( sFunc, "max_window_hits" ) )
+			return XRANK_MAX_WINDOW_HITS;
 		return -1;
 	}
 
@@ -5120,6 +5129,12 @@ public:
 			case XRANK_MIN_HIT_POS:			return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinHitPos );
 			case XRANK_MIN_BEST_SPAN_POS:	return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinBestSpanPos );
 			case XRANK_EXACT_HIT:			return new Expr_FieldFactor_c<bool> ( pCF, &m_pState->m_uExactHit );
+			case XRANK_MAX_WINDOW_HITS:
+				{
+					CSphMatch tDummy;
+					m_pState->m_iWindowSize = pLeft->IntEval ( tDummy ); // must be constant; checked in GetReturnType()
+					return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMaxWindowHits );
+				}
 
 			case XRANK_BM25:				return new Expr_IntPtr_c ( &m_pState->m_uDocBM25 );
 			case XRANK_MAX_LCS:				return new Expr_GetIntConst_c ( m_pState->m_iMaxLCS );
@@ -5136,14 +5151,15 @@ public:
 	{
 		switch ( iID )
 		{
-			case XRANK_LCS:
+			case XRANK_LCS: // field-level
 			case XRANK_USER_WEIGHT:
 			case XRANK_HIT_COUNT:
 			case XRANK_WORD_COUNT:
 			case XRANK_MIN_HIT_POS:
 			case XRANK_MIN_BEST_SPAN_POS:
 			case XRANK_EXACT_HIT:
-			case XRANK_BM25:
+			case XRANK_MAX_WINDOW_HITS:
+			case XRANK_BM25: // doc-level
 			case XRANK_MAX_LCS:
 			case XRANK_FIELD_MASK:
 			case XRANK_QUERY_WORD_COUNT:
@@ -5157,31 +5173,30 @@ public:
 		}
 	}
 
-	ESphAttr GetFuncType ( int iID, ESphAttr eArgType )
+	ESphAttr GetReturnType ( int iID, const CSphVector<ESphAttr> & dArgs, bool bAllConst, CSphString & sError )
 	{
 		switch ( iID )
 		{
-			case XRANK_SUM:		return eArgType;
-			default:			return SPH_ATTR_INTEGER;
-		}
-	}
+			case XRANK_SUM:
+				if ( dArgs.GetLength()!=1 )
+				{
+					sError = "SUM() requires 1 argument";
+					return SPH_ATTR_NONE;
+				}
+				return dArgs[0];
 
-	int GetExpectedArgc ( int iID )
-	{
-		switch ( iID )
-		{
-			case XRANK_SUM:		return 1;
-			default:			return -1;
-		}
-	}
+			case XRANK_MAX_WINDOW_HITS:
+				if ( dArgs.GetLength()!=1 || dArgs[0]!=SPH_ATTR_INTEGER || !bAllConst )
+				{
+					sError = "MAX_WINDOW_HITS() requires 1 constant int argument";
+					return SPH_ATTR_NONE;
+				}
+				return SPH_ATTR_INTEGER;
 
-	const char * GetFuncName ( int iID )
-	{
-		switch ( iID )
-		{
-			case XRANK_SUM:		return "SUM";
-			default:			return "???";
+			default:
+				sError.SetSprintf ( "internal error: unknown hook function (id=%d)", iID );
 		}
+		return SPH_ATTR_NONE;
 	}
 
 	void CheckEnter ( int iID )
@@ -5197,6 +5212,7 @@ public:
 			case XRANK_MIN_HIT_POS:
 			case XRANK_MIN_BEST_SPAN_POS:
 			case XRANK_EXACT_HIT:
+			case XRANK_MAX_WINDOW_HITS:
 				if ( !m_bCheckInFieldAggr )
 					m_sCheckError = "field factors must only occur withing field aggregates in ranking expression";
 				break;
@@ -5260,9 +5276,11 @@ bool RankerState_Expr_fn::Init ( int iFields, const int * pWeights, ExtRanker_c 
 	memset ( m_dTFIDF, 0, sizeof(m_dTFIDF) );
 	memset ( m_iMinHitPos, 0, sizeof(m_iMinHitPos) );
 	memset ( m_iMinBestSpanPos, 0, sizeof(m_iMinBestSpanPos) );
+	memset ( m_iMaxWindowHits, 0, sizeof(m_iMaxWindowHits) );
 	m_iMaxQuerypos = pRanker->m_iMaxQuerypos;
 	m_uExactHit = 0;
 	m_uDocWordCount = 0;
+	m_iWindowSize = 1;
 
 	// compute query level constants
 	// max_lcs, aka m_iMaxLCS (for matchany ranker emulation) gets computed here
@@ -5302,24 +5320,25 @@ bool RankerState_Expr_fn::Init ( int iFields, const int * pWeights, ExtRanker_c 
 void RankerState_Expr_fn::Update ( const ExtHit_t * pHlist )
 {
 	const DWORD uField = HITMAN::GetField ( pHlist->m_uHitpos );
+	const int iPos = HITMAN::GetPos ( pHlist->m_uHitpos );
 
 	// update LCS
 	int iDelta = HITMAN::GetLCS ( pHlist->m_uHitpos ) - pHlist->m_uQuerypos;
 	if ( iDelta==m_iExpDelta )
 	{
 		m_uCurLCS = m_uCurLCS + BYTE(pHlist->m_uWeight);
-		if ( HITMAN::IsEnd ( pHlist->m_uHitpos ) && (int)pHlist->m_uQuerypos==m_iMaxQuerypos && HITMAN::GetPos ( pHlist->m_uHitpos )==m_iMaxQuerypos )
+		if ( HITMAN::IsEnd ( pHlist->m_uHitpos ) && (int)pHlist->m_uQuerypos==m_iMaxQuerypos && iPos==m_iMaxQuerypos )
 			m_uExactHit |= ( 1UL << uField );
 	} else
 	{
 		m_uCurLCS = BYTE(pHlist->m_uWeight);
-		if ( HITMAN::GetPos ( pHlist->m_uHitpos )==1 && HITMAN::IsEnd ( pHlist->m_uHitpos ) && m_iMaxQuerypos==1 )
+		if ( iPos==1 && HITMAN::IsEnd ( pHlist->m_uHitpos ) && m_iMaxQuerypos==1 )
 			m_uExactHit |= ( 1UL << uField );
 	}
 	if ( m_uCurLCS>m_uLCS[uField] )
 	{
 		m_uLCS[uField] = m_uCurLCS;
-		m_iMinBestSpanPos[uField] = HITMAN::GetPos ( pHlist->m_uHitpos ) - m_uCurLCS + 1;
+		m_iMinBestSpanPos[uField] = iPos - m_uCurLCS + 1;
 	}
 	m_iExpDelta = iDelta + pHlist->m_uSpanlen - 1;
 
@@ -5337,7 +5356,21 @@ void RankerState_Expr_fn::Update ( const ExtHit_t * pHlist )
 
 	m_dTFIDF[uField] += m_dIDF [ pHlist->m_uQuerypos ];
 	if ( !m_iMinHitPos[uField] )
-		m_iMinHitPos[uField] = HITMAN::GetPos ( pHlist->m_uHitpos );
+		m_iMinHitPos[uField] = iPos;
+
+	// update hit window, max_window_hits factor
+	if ( m_dWindow.GetLength() )
+	{
+		// sorted_remove_if ( _1 + winsize <= hitpos ) )
+		int i = 0;
+		while ( i<m_dWindow.GetLength() && ( m_dWindow[i] + m_iWindowSize )<=pHlist->m_uHitpos )
+			i++;
+		for ( int j=0; j<m_dWindow.GetLength()-i; j++ )
+			m_dWindow[j] = m_dWindow[j+i];
+		m_dWindow.Resize ( m_dWindow.GetLength()-i );
+	}
+	m_dWindow.Add ( pHlist->m_uHitpos);
+	m_iMaxWindowHits[uField] = Max ( m_iMaxWindowHits[uField], m_dWindow.GetLength() );
 }
 
 
@@ -5368,10 +5401,12 @@ DWORD RankerState_Expr_fn::Finalize ( const CSphMatch & tMatch )
 		m_dTFIDF[i] = 0;
 		m_iMinHitPos[i] = 0;
 		m_iMinBestSpanPos[i] = 0;
+		m_iMaxWindowHits[i] = 0;
 	}
 	m_uMatchedFields = 0;
 	m_uExactHit = 0;
 	m_uDocWordCount = 0;
+	m_dWindow.Resize ( 0 );
 
 	// done
 	return uRes;

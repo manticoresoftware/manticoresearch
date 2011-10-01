@@ -770,6 +770,7 @@ private:
 
 	void					GatherArgTypes ( int iNode, CSphVector<int> & dTypes );
 	void					GatherArgNodes ( int iNode, CSphVector<int> & dNodes );
+	void					GatherArgRetTypes ( int iNode, CSphVector<ESphAttr> & dTypes );
 
 	bool					CheckForConstSet ( int iArgsNode, int iSkip );
 	int						ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp );
@@ -2192,6 +2193,22 @@ void ExprParser_t::GatherArgNodes ( int iNode, CSphVector<int> & dNodes )
 		dNodes.Add ( iNode );
 }
 
+void ExprParser_t::GatherArgRetTypes ( int iNode, CSphVector<ESphAttr> & dTypes )
+{
+	if ( iNode<0 )
+		return;
+
+	const ExprNode_t & tNode = m_dNodes[iNode];
+	if ( tNode.m_iToken==',' )
+	{
+		GatherArgRetTypes ( tNode.m_iLeft, dTypes );
+		GatherArgRetTypes ( tNode.m_iRight, dTypes );
+	} else
+	{
+		dTypes.Add ( tNode.m_eRetType );
+	}
+}
+
 bool ExprParser_t::CheckForConstSet ( int iArgsNode, int iSkip )
 {
 	CSphVector<int> dTypes;
@@ -2795,17 +2812,12 @@ int ExprParser_t::AddNodeHookIdent ( int iID )
 
 int ExprParser_t::AddNodeHookFunc ( int iID, int iLeft )
 {
-	// check args count
-	int iArgc = 0;
-	if ( iLeft>=0 )
-		iArgc = ( m_dNodes[iLeft].m_iToken==',' ) ? m_dNodes[iLeft].m_iArgs : 1;
+	CSphVector<ESphAttr> dArgTypes;
+	GatherArgRetTypes ( iLeft, dArgTypes );
 
-	int iExpectedArgc = m_pHook->GetExpectedArgc ( iID );
-	if ( iArgc!=iExpectedArgc )
-	{
-		m_sParserError.SetSprintf ( "%s() called with %d args, %d args expected", m_pHook->GetFuncName ( iID ), iArgc, iExpectedArgc );
+	ESphAttr eRet = m_pHook->GetReturnType ( iID, dArgTypes, CheckForConstSet ( iLeft, 0 ), m_sParserError );
+	if ( eRet==SPH_ATTR_NONE )
 		return -1;
-	}
 
 	ExprNode_t & tNode = m_dNodes.Add();
 	tNode.m_iToken = TOK_HOOK_FUNC;
@@ -2815,7 +2827,7 @@ int ExprParser_t::AddNodeHookFunc ( int iID, int iLeft )
 
 	// deduce type
 	tNode.m_eArgType = ( iLeft>=0 ) ? m_dNodes[iLeft].m_eRetType : SPH_ATTR_INTEGER;
-	tNode.m_eRetType = m_pHook->GetFuncType ( iID, m_dNodes[iLeft].m_eRetType );
+	tNode.m_eRetType = eRet;
 
 	return m_dNodes.GetLength()-1;
 }

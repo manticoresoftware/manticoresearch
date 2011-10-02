@@ -8640,6 +8640,253 @@ void SnippetThreadFunc ( void * pArg )
 	}
 }
 
+int GetRawSnippetFlags ( const ExcerptQuery_t& q )
+{
+	int iRawFlags = 0;
+
+	iRawFlags |= q.m_bRemoveSpaces ? EXCERPT_FLAG_REMOVESPACES : 0;
+	iRawFlags |= q.m_bUseBoundaries ? EXCERPT_FLAG_USEBOUNDARIES : 0;
+	iRawFlags |= q.m_bWeightOrder ? EXCERPT_FLAG_WEIGHTORDER : 0;
+	iRawFlags |= q.m_bHighlightQuery ? EXCERPT_FLAG_QUERY : 0;
+	iRawFlags |= q.m_bForceAllWords ? EXCERPT_FLAG_FORCE_ALL_WORDS : 0;
+	iRawFlags |= q.m_iLimitPassages ? EXCERPT_FLAG_SINGLEPASSAGE : 0;
+	iRawFlags |= ( q.m_iLoadFiles & 1 ) ? EXCERPT_FLAG_LOAD_FILES : 0;
+	iRawFlags |= ( q.m_iLoadFiles & 2 ) ? EXCERPT_FLAG_FILES_SCATTERED : 0;
+	iRawFlags |= q.m_bAllowEmpty ? EXCERPT_FLAG_ALLOW_EMPTY : 0;
+	iRawFlags |= q.m_bEmitZones ? EXCERPT_FLAG_EMIT_ZONES : 0;
+
+	return iRawFlags;
+}
+
+bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CSphString & sError )
+{
+	SnippetsRemote_t dRemoteSnippets ( dQueries );
+	CSphVector<CSphString> dDistLocal;
+	ExcerptQuery_t & q = dQueries[0];
+
+	g_tDistLock.Lock();
+	DistributedIndex_t * pDist = g_hDistIndexes ( sIndex );
+	bool bRemote = pDist!=NULL;
+	bool bScattered = ( q.m_iLoadFiles & 2 )!=0;
+
+	if ( bRemote )
+	{
+		dRemoteSnippets.m_iAgentConnectTimeout = pDist->m_iAgentConnectTimeout;
+		dRemoteSnippets.m_iAgentQueryTimeout = pDist->m_iAgentQueryTimeout;
+		dDistLocal = pDist->m_dLocal;
+		dRemoteSnippets.m_dAgents.Resize ( pDist->m_dAgents.GetLength() );
+		ARRAY_FOREACH ( i, pDist->m_dAgents )
+			dRemoteSnippets.m_dAgents[i] = pDist->m_dAgents[i];
+	}
+	g_tDistLock.Unlock();
+
+	if ( pDist )
+	{
+		if ( pDist->m_dLocal.GetLength()!=1 )
+		{
+			sError.SetSprintf ( "%s", "The distributed index for snippets must have exactly one local agent" );
+			return false;
+		}
+
+		if ( !q.m_iLoadFiles )
+		{
+			sError.SetSprintf ( "%s", "The distributed index for snippets available only when using external files" );
+			return false;
+		}
+		sIndex = dDistLocal[0];
+
+		// no remote - roll back to simple local query
+		if ( dRemoteSnippets.m_dAgents.GetLength()==0 )
+			bRemote = false;
+	}
+
+	const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( sIndex );
+
+	if ( !pServed || !pServed->m_bEnabled || !pServed->m_pIndex )
+	{
+		sError.SetSprintf ( "unknown local index '%s' in search request", sIndex.cstr() );
+		if ( pServed )
+			pServed->Unlock();
+		return false;
+	}
+
+	CSphIndex * pIndex = pServed->m_pIndex;
+
+	SnippetContext_t tCtx;
+	if ( !tCtx.Setup ( pIndex, q, sError ) ) // same path for single - threaded snippets, bail out here on error
+	{
+		sError.SetSprintf ( "%s", sError.cstr() );
+		pServed->Unlock();
+		return false;
+	}
+
+	///////////////////
+	// do highlighting
+	///////////////////
+
+	int iAbsentHead = -1;
+	if ( g_iDistThreads<=1 || dQueries.GetLength()<2 )
+	{
+		// boring single threaded loop
+		ARRAY_FOREACH ( i, dQueries )
+		{
+			dQueries[i].m_sRes = sphBuildExcerpt ( dQueries[i], tCtx.m_pDict, tCtx.m_tTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, dQueries[i].m_sError, tCtx.m_tStripper.Ptr(), tCtx.m_pQueryTokenizer );
+			if ( !dQueries[i].m_sRes )
+				break;
+		}
+	} else
+	{
+		// get file sizes
+		ARRAY_FOREACH ( i, dQueries )
+		{
+			dQueries[i].m_iNext = -2;
+			if ( dQueries[i].m_iLoadFiles )
+			{
+				struct stat st;
+				if ( ::stat ( dQueries[i].m_sSource.cstr(), &st )<0 )
+				{
+					if ( !bScattered )
+					{
+						sError.SetSprintf ( "failed to stat %s: %s", dQueries[i].m_sSource.cstr(), strerror(errno) );
+						pServed->Unlock();
+						return false;
+					}
+					dQueries[i].m_iNext = -1;
+				}
+				dQueries[i].m_iSize = -st.st_size; // so that sort would put bigger ones first
+			} else
+			{
+				dQueries[i].m_iSize = -dQueries[i].m_sSource.Length();
+			}
+			dQueries[i].m_iSeq = i;
+		}
+
+		// tough jobs first
+		dQueries.Sort ( bind ( &ExcerptQuery_t::m_iSize ) );
+
+		ARRAY_FOREACH ( i, dQueries )
+			if ( dQueries[i].m_iNext==-1 )
+			{
+				dQueries[i].m_iNext = iAbsentHead;
+				iAbsentHead = i;
+				dQueries[i].m_sError.SetSprintf ( "failed to stat %s: %s", dQueries[i].m_sSource.cstr(), strerror(errno) );
+			}
+
+
+
+		// check if all files are available locally.
+		if ( bScattered && iAbsentHead==-1 )
+		{
+			bRemote = false;
+			dRemoteSnippets.m_dAgents.Reset();
+		}
+
+		if ( bRemote )
+		{
+			// schedule jobs across workers (the worker is either local thread or instance, either remote agent).
+			// simple LPT (Least Processing Time) scheduling for now
+			// might add dynamic programming or something later if needed
+			int iLocalPart = 1;	// one instance = one worker. Or set to = g_iDistThreads, one local thread = one worker.
+			int iRemoteAgents = dRemoteSnippets.m_dAgents.GetLength();
+
+			dRemoteSnippets.m_dWorkers.Resize ( iLocalPart + iRemoteAgents );
+			for ( int i=0; i<iLocalPart; i++ )
+				dRemoteSnippets.m_dWorkers[i].m_bLocal = true;
+
+			if ( bScattered )
+			{
+				// on scattered case - the queries with m_iNext==-2 are here, and has to be scheduled to local agent
+				// the rest has to be sent to remotes, all of them!
+				for ( int i=0; i<iRemoteAgents; i++ )
+					dRemoteSnippets.m_dWorkers[iLocalPart+i].m_iHead = iAbsentHead;
+			} else
+			{
+				ARRAY_FOREACH ( i, dQueries )
+				{
+					dRemoteSnippets.m_dWorkers[0].m_iTotal -= dQueries[i].m_iSize;
+					if ( !dRemoteSnippets.m_dWorkers[0].m_bLocal )
+					{
+						// queries sheduled for local still have iNext==-2
+						dQueries[i].m_iNext = dRemoteSnippets.m_dWorkers[0].m_iHead;
+						dRemoteSnippets.m_dWorkers[0].m_iHead = i;
+					}
+					dRemoteSnippets.m_dWorkers.Sort ( bind ( &SnippetWorker_t::m_iTotal ) );
+				}
+			}
+		}
+
+		// do MT searching
+		CSphMutex tLock;
+		tLock.Init();
+
+		CrashQuery_t tCrashQuery = SphCrashLogger_c::GetQuery(); // transfer query info for crash logger to new thread
+		int iCurQuery = 0;
+		CSphVector<SnippetThread_t> dThreads ( g_iDistThreads );
+		for ( int i=0; i<g_iDistThreads; i++ )
+		{
+			SnippetThread_t & t = dThreads[i];
+			t.m_pLock = &tLock;
+			t.m_iQueries = dQueries.GetLength();
+			t.m_pQueries = dQueries.Begin();
+			t.m_pCurQuery = &iCurQuery;
+			t.m_pIndex = pIndex;
+			t.m_tCrashQuery = tCrashQuery;
+			if ( i )
+				sphThreadCreate ( &dThreads[i].m_tThd, SnippetThreadFunc, &dThreads[i] );
+		}
+
+		int iRemote = 0;
+		if ( bRemote )
+		{
+			// connect to remote agents and query them
+			ConnectToRemoteAgents ( dRemoteSnippets.m_dAgents, false );
+
+			SnippetRequestBuilder_t tReqBuilder ( &dRemoteSnippets );
+			iRemote = QueryRemoteAgents ( dRemoteSnippets.m_dAgents, dRemoteSnippets.m_iAgentConnectTimeout, tReqBuilder, NULL ); // FIXME? profile update time too?
+		}
+
+		SnippetThreadFunc ( &dThreads[0] );
+
+		int iSuccesses = 0;
+
+		if ( iRemote )
+		{
+			SnippetReplyParser_t tParser ( &dRemoteSnippets );
+			iSuccesses = WaitForRemoteAgents ( dRemoteSnippets.m_dAgents, dRemoteSnippets.m_iAgentQueryTimeout, tParser, NULL ); // FIXME? profile update time too?
+		}
+
+		for ( int i=1; i<dThreads.GetLength(); i++ )
+			sphThreadJoin ( &dThreads[i].m_tThd );
+
+		if ( iSuccesses!=dRemoteSnippets.m_dAgents.GetLength() )
+		{
+			sphWarning ( "Remote snippets: some of the agents didn't answered: %d queried, %d available, %d answered",
+				dRemoteSnippets.m_dAgents.GetLength(),
+				iRemote,
+				iSuccesses );
+
+			if ( !bScattered )
+			{
+				// inverse the success/failed state - so that the queries with negative m_iNext are treated as failed
+				ARRAY_FOREACH ( i, dQueries )
+					dQueries[i].m_iNext = (dQueries[i].m_iNext==-2)?0:-2;
+
+				// failsafe - one more turn for failed queries on local agent
+				SnippetThread_t & t = dThreads[0];
+				t.m_pQueries = dQueries.Begin();
+				iCurQuery = 0;
+				SnippetThreadFunc ( &dThreads[0] );
+			}
+		}
+		tLock.Done();
+
+		// back in query order
+		dQueries.Sort ( bind ( &ExcerptQuery_t::m_iSeq ) );
+	}
+
+	pServed->Unlock();
+	return true;
+}
 
 void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 {
@@ -8719,52 +8966,6 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	}
 
 	CSphVector<ExcerptQuery_t> dQueries ( iCount );
-	SnippetsRemote_t dRemoteSnippets ( dQueries );
-	CSphVector<CSphString> dDistLocal;
-	bool bRemote = false;
-
-	g_tDistLock.Lock();
-	DistributedIndex_t * pDist = g_hDistIndexes ( sIndex );
-	if ( pDist )
-	{
-		bRemote = true;
-		dRemoteSnippets.m_iAgentConnectTimeout = pDist->m_iAgentConnectTimeout;
-		dRemoteSnippets.m_iAgentQueryTimeout = pDist->m_iAgentQueryTimeout;
-		dDistLocal = pDist->m_dLocal;
-		dRemoteSnippets.m_dAgents.Resize ( pDist->m_dAgents.GetLength() );
-		ARRAY_FOREACH ( i, pDist->m_dAgents )
-			dRemoteSnippets.m_dAgents[i] = pDist->m_dAgents[i];
-	}
-	g_tDistLock.Unlock();
-
-	if ( bRemote )
-	{
-		if ( dDistLocal.GetLength()!=1 )
-		{
-			tReq.SendErrorReply ( "%s", "The distributed index for snippets must have exactly one local agent" );
-			return;
-		}
-
-		if ( !q.m_iLoadFiles )
-		{
-			tReq.SendErrorReply ( "%s", "The distributed index for snippets available only when using external files" );
-			return;
-		}
-		sIndex = dDistLocal[0];
-
-		// no remote - roll back to simple local query
-		if ( dRemoteSnippets.m_dAgents.GetLength()==0 )
-			bRemote = false;
-	}
-
-	const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( sIndex );
-	if ( !pServed || !pServed->m_bEnabled )
-	{
-		tReq.SendErrorReply ( "unknown local index '%s' in search request", sIndex.cstr() );
-		if ( pServed )
-			pServed->Unlock();
-		return;
-	}
 
 	ARRAY_FOREACH ( i, dQueries )
 	{
@@ -8773,188 +8974,15 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		if ( tReq.GetError() )
 		{
 			tReq.SendErrorReply ( "invalid or truncated request" );
-			pServed->Unlock();
 			return;
 		}
 	}
 
-	CSphIndex * pIndex = pServed->m_pIndex;
-
-	SnippetContext_t tCtx;
-	if ( !tCtx.Setup ( pIndex, q, sError ) ) // same path for single - threaded snippets, bail out here on error
+	if ( !MakeSnippets ( sIndex, dQueries, sError ) )
 	{
 		tReq.SendErrorReply ( "%s", sError.cstr() );
-		pServed->Unlock();
 		return;
 	}
-
-
-	///////////////////
-	// do highlighting
-	///////////////////
-
-	int iAbsentHead = -1;
-	if ( g_iDistThreads<=1 || dQueries.GetLength()<2 )
-	{
-		// boring single threaded loop
-		ARRAY_FOREACH ( i, dQueries )
-		{
-			dQueries[i].m_sRes = sphBuildExcerpt ( dQueries[i], tCtx.m_pDict, tCtx.m_tTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, dQueries[i].m_sError, tCtx.m_tStripper.Ptr(), tCtx.m_pQueryTokenizer );
-			if ( !dQueries[i].m_sRes )
-				break;
-		}
-	} else
-	{
-		// get file sizes
-		ARRAY_FOREACH ( i, dQueries )
-		{
-			dQueries[i].m_iNext = -2;
-			if ( dQueries[i].m_iLoadFiles )
-			{
-				struct stat st;
-				if ( ::stat ( dQueries[i].m_sSource.cstr(), &st )<0 )
-				{
-					if ( !bScattered )
-					{
-						tReq.SendErrorReply ( "failed to stat %s: %s", dQueries[i].m_sSource.cstr(), strerror(errno) );
-						pServed->Unlock();
-						return;
-					}
-					dQueries[i].m_iNext = -1;
-				}
-				dQueries[i].m_iSize = -st.st_size; // so that sort would put bigger ones first
-			} else
-			{
-				dQueries[i].m_iSize = -dQueries[i].m_sSource.Length();
-			}
-			dQueries[i].m_iSeq = i;
-		}
-
-		// tough jobs first
-		dQueries.Sort ( bind ( &ExcerptQuery_t::m_iSize ) );
-
-		ARRAY_FOREACH ( i, dQueries )
-			if ( dQueries[i].m_iNext==-1 )
-				{
-					dQueries[i].m_iNext = iAbsentHead;
-					iAbsentHead = i;
-					dQueries[i].m_sError.SetSprintf ( "failed to stat %s: %s", dQueries[i].m_sSource.cstr(), strerror(errno) );
-				}
-
-
-
-		// check if all files are available locally.
-		if ( bScattered && iAbsentHead==-1 )
-		{
-			bRemote = false;
-			dRemoteSnippets.m_dAgents.Reset();
-		}
-
-		if ( bRemote )
-		{
-			// schedule jobs across workers (the worker is either local thread or instance, either remote agent).
-			// simple LPT (Least Processing Time) scheduling for now
-			// might add dynamic programming or something later if needed
-
-			int iLocalPart = 1;	// one instance = one worker. Or set to = g_iDistThreads, one local thread = one worker.
-			int iRemoteAgents = dRemoteSnippets.m_dAgents.GetLength();
-
-			dRemoteSnippets.m_dWorkers.Resize ( iLocalPart + iRemoteAgents );
-			for ( int i=0; i<iLocalPart; i++ )
-					dRemoteSnippets.m_dWorkers[i].m_bLocal = true;
-
-			if ( bScattered )
-			{
-				// on scattered case - the queries with m_iNext==-2 are here, and has to be scheduled to local agent
-				// the rest has to be sent to remotes, all of them!
-				for ( int i=0; i<iRemoteAgents; i++ )
-					dRemoteSnippets.m_dWorkers[iLocalPart+i].m_iHead = iAbsentHead;
-			} else
-			{
-				ARRAY_FOREACH ( i, dQueries )
-				{
-					dRemoteSnippets.m_dWorkers[0].m_iTotal -= dQueries[i].m_iSize;
-					if ( !dRemoteSnippets.m_dWorkers[0].m_bLocal )
-					{
-						// queries sheduled for local still have iNext==-2
-						dQueries[i].m_iNext = dRemoteSnippets.m_dWorkers[0].m_iHead;
-						dRemoteSnippets.m_dWorkers[0].m_iHead = i;
-					}
-					dRemoteSnippets.m_dWorkers.Sort ( bind ( &SnippetWorker_t::m_iTotal ) );
-				}
-			}
-		}
-
-		// do MT searching
-		CSphMutex tLock;
-		tLock.Init();
-
-		CrashQuery_t tCrashQuery = SphCrashLogger_c::GetQuery(); // transfer query info for crash logger to new thread
-		int iCurQuery = 0;
-		CSphVector<SnippetThread_t> dThreads ( g_iDistThreads );
-		for ( int i=0; i<g_iDistThreads; i++ )
-		{
-			SnippetThread_t & t = dThreads[i];
-			t.m_pLock = &tLock;
-			t.m_iQueries = dQueries.GetLength();
-			t.m_pQueries = dQueries.Begin();
-			t.m_pCurQuery = &iCurQuery;
-			t.m_pIndex = pIndex;
-			t.m_tCrashQuery = tCrashQuery;
-			if ( i )
-				sphThreadCreate ( &dThreads[i].m_tThd, SnippetThreadFunc, &dThreads[i] );
-		}
-
-		int iRemote = 0;
-		if ( bRemote )
-		{
-			// connect to remote agents and query them
-			ConnectToRemoteAgents ( dRemoteSnippets.m_dAgents, false );
-
-			SnippetRequestBuilder_t tReqBuilder ( &dRemoteSnippets );
-			iRemote = QueryRemoteAgents ( dRemoteSnippets.m_dAgents, dRemoteSnippets.m_iAgentConnectTimeout, tReqBuilder, NULL ); // FIXME? profile update time too?
-		}
-
-		SnippetThreadFunc ( &dThreads[0] );
-
-		int iSuccesses = 0;
-
-		if ( iRemote )
-		{
-			SnippetReplyParser_t tParser ( &dRemoteSnippets );
-			iSuccesses = WaitForRemoteAgents ( dRemoteSnippets.m_dAgents, dRemoteSnippets.m_iAgentQueryTimeout, tParser, NULL ); // FIXME? profile update time too?
-		}
-
-		for ( int i=1; i<dThreads.GetLength(); i++ )
-			sphThreadJoin ( &dThreads[i].m_tThd );
-
-		if ( iSuccesses!=dRemoteSnippets.m_dAgents.GetLength() )
-		{
-			sphWarning ( "Remote snippets: some of the agents didn't answered: %d queried, %d available, %d answered",
-				dRemoteSnippets.m_dAgents.GetLength(),
-				iRemote,
-				iSuccesses );
-
-			if ( !bScattered )
-			{
-				// inverse the success/failed state - so that the queries with negative m_iNext are treated as failed
-				ARRAY_FOREACH ( i, dQueries )
-						dQueries[i].m_iNext = (dQueries[i].m_iNext==-2)?0:-2;
-
-				// failsafe - one more turn for failed queries on local agent
-				SnippetThread_t & t = dThreads[0];
-				t.m_pQueries = dQueries.Begin();
-				iCurQuery = 0;
-				SnippetThreadFunc ( &dThreads[0] );
-			}
-		}
-		tLock.Done();
-
-		// back in query order
-		dQueries.Sort ( bind ( &ExcerptQuery_t::m_iSeq ) );
-	}
-
-	pServed->Unlock();
 
 	////////////////
 	// serve result
@@ -10263,13 +10291,7 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 	}
 
 	// do magics
-	const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( tStmt.m_dInsertValues[1].m_sVal );
-	if ( !pServed || !pServed->m_bEnabled || !pServed->m_pIndex )
-	{
-		sError.SetSprintf ( "no such index %s", tStmt.m_dInsertValues[1].m_sVal.cstr() );
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
-		return;
-	}
+	CSphString sIndex = tStmt.m_dInsertValues[1].m_sVal;
 
 	ExcerptQuery_t q;
 	q.m_sWords = tStmt.m_dInsertValues[2].m_sVal;
@@ -10320,7 +10342,6 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 	if ( !sError.IsEmpty() )
 	{
 		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
-		pServed->Unlock();
 		return;
 	}
 
@@ -10329,36 +10350,37 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 	if ( !sphCheckOptionsSPZ ( q, q.m_sRawPassageBoundary, sError ) )
 	{
 		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
-		pServed->Unlock();
 		return;
 	}
 
 	q.m_bHasBeforePassageMacro = SnippetTransformPassageMacros ( q.m_sBeforeMatch, q.m_sBeforeMatchPassage );
 	q.m_bHasAfterPassageMacro = SnippetTransformPassageMacros ( q.m_sAfterMatch, q.m_sAfterMatchPassage );
+	q.m_iRawFlags = GetRawSnippetFlags ( q );
 
-	CSphIndex * pIndex = pServed->m_pIndex;
-	SnippetContext_t tCtx;
-	if ( !tCtx.Setup ( pIndex, q, sError ) )
-	{
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
-		pServed->Unlock();
-		return;
-	}
-
-	CSphVector<char*> dResults;
+	CSphVector<ExcerptQuery_t> dQueries;
 	if ( tStmt.m_dInsertValues[0].m_iType==TOK_QUOTED_STRING )
 	{
 		q.m_sSource = tStmt.m_dInsertValues[0].m_sVal; // OPTIMIZE?
-		dResults.Add ( sphBuildExcerpt ( q, tCtx.m_pDict, tCtx.m_tTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError, tCtx.m_tStripper.Ptr(), tCtx.m_pQueryTokenizer ) );
+		dQueries.Add ( q );
 	} else
 	{
-		// FIXME! parallelize and distribute this
+		dQueries.Resize ( tStmt.m_dCallStrings.GetLength() );
 		ARRAY_FOREACH ( i, tStmt.m_dCallStrings )
 		{
-			q.m_sSource = tStmt.m_dCallStrings[i]; // OPTIMIZE?
-			dResults.Add ( sphBuildExcerpt ( q, tCtx.m_pDict, tCtx.m_tTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError, tCtx.m_tStripper.Ptr(), tCtx.m_pQueryTokenizer ) );
+			dQueries[i] = q; // copy the settings
+			dQueries[i].m_sSource = tStmt.m_dCallStrings[i]; // OPTIMIZE?
 		}
 	}
+
+	if ( !MakeSnippets ( sIndex, dQueries, sError ) )
+	{
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	CSphVector<char*> dResults ( dQueries.GetLength() );
+	ARRAY_FOREACH ( i, dResults )
+		dResults[i] = dQueries[i].m_sRes;
 
 	bool bGotData = ARRAY_ANY ( bGotData, dResults, dResults[_any]!=NULL );
 	if ( !bGotData )
@@ -10366,12 +10388,8 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 		// just one last error instead of all errors is hopefully ok
 		sError.SetSprintf ( "highlighting failed: %s", sError.cstr() );
 		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
-		pServed->Unlock();
 		return;
 	}
-
-	// all ok, ship it
-	pServed->Unlock ();
 
 	// result set header packet
 	tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
@@ -14522,7 +14540,7 @@ Listener_t * DoAccept ( int * pClientSock, char * sClientName )
 				char * d = sClientName;
 				while ( *d )
 					d++;
-				snprintf ( d, 7, ":%d", (int)ntohs ( pSa->sin_port ) );
+				snprintf ( d, 7, ":%d", (int)ntohs ( pSa->sin_port ) ); //NOLINT
 			}
 			if ( saStorage.ss_family==AF_UNIX )
 				strncpy ( sClientName, "(local)", SPH_ADDRESS_SIZE );

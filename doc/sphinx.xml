@@ -4344,7 +4344,8 @@ CALL SNIPPETS statement, introduced in version 1.10-beta, builds a snippet
 from provided data and query, using specified index settings.
 </para>
 <para>
-<option>data</option> is the source data string to extract a snippet from.
+<option>data</option> is the source data to extract a snippet from. It could be a single string,
+or the list of the strings enclosed in curly brackets.
 <option>index</option> is the name of the index from which to take the text
 processing settings. <option>query</option> is the full-text query to build
 snippets for. Additional options are documented in
@@ -4352,7 +4353,11 @@ snippets for. Additional options are documented in
 </para>
 <programlisting>
 CALL SNIPPETS('this is my document text', 'test1', 'hello world',
-    5 AS around, 200 AS limit)
+    5 AS around, 200 AS limit);
+CALL SNIPPETS(('this is my document text','this is my another text'), 'test1', 'hello world',
+    5 AS around, 200 AS limit);
+CALL SNIPPETS(('data/doc1.txt','data/doc2.txt','/home/sphinx/doc3.txt'), 'test1', 'hello world',
+    5 AS around, 200 AS limit, 1 AS load_files);
 </programlisting>
 </sect1>
 
@@ -5788,8 +5793,9 @@ Starting with version 0.9.9-rc1, keywords can contain wildcards, that work simil
 	version 2.0.1-beta, up to <link linkend="conf-dist-threads">dist_threads</link>
 	worker threads per request will be created to parallelize the work
 	when this flag is enabled. Boolean, default is false. Starting with version 2.0.2-beta,
-	building of the snippets could be parallelized between remote agents. Just invoke the snippets
-	generation over the distributed index with only one(!) local agent and several remotes.
+	building of the snippets could be parallelized between remote agents. Just set the <link linkend='conf-dist-threads'>'dist_threads'</link> param in the config
+	to the value greater than 1, and then invoke the snippets
+	generation over the distributed index, which contain only one(!) first(!) <link linkend='conf-local'>local</link> agent and several remotes.
 	</para></listitem>
 </varlistentry>
 <varlistentry>
@@ -5797,7 +5803,7 @@ Starting with version 0.9.9-rc1, keywords can contain wildcards, that work simil
 	<listitem><para>Added in version 2.0.2-beta. It assumes "load_files" option, and works only with distributed snippets generation
 	with remote agents. The source files for snippets could be distributed among different agents, and the main daemon will merge
 	together all non-erroneous results. So, if one agent of the distributed index has 'file1.txt', another has 'file2.txt' and you call for the snippets
-	with both these files, the sphinx will merge results from the agnets together, so you will get the snippets from both 'file1.txt' and 'file2.txt'.
+	with both these files, the sphinx will merge results from the agents together, so you will get the snippets from both 'file1.txt' and 'file2.txt'.
 	</para></listitem>
 </varlistentry>
 <varlistentry>

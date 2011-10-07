@@ -238,6 +238,7 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 				$ok = true;
 				break;
 			}
+			usleep ( 500 );
 		}
 		
 		if ( !$ok )

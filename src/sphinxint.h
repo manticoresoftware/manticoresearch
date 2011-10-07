@@ -1399,6 +1399,8 @@ BYTE sphDoclistHintPack ( SphOffset_t iDocs, SphOffset_t iLen );
 // wordlist checkpoints frequency
 #define SPH_WORDLIST_CHECKPOINT 64
 
+/// startup mva updates arena
+const char *		sphArenaInit ( int iMaxBytes );
 
 #endif // _sphinxint_
 

@@ -266,9 +266,6 @@ void				sphStartIOStats ();
 /// stops collecting stats, returns results
 const CSphIOStats &	sphStopIOStats ();
 
-/// startup mva updates arena
-DWORD *				sphArenaInit ( int iMaxBytes );
-
 //////////////////////////////////////////////////////////////////////////
 
 #if UNALIGNED_RAM_ACCESS

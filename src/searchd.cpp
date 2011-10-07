@@ -15381,7 +15381,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
 
 		sphInfo ( "Reload the indexes" );
-		sphArenaInit ( hSearchd.GetSize ( "mva_updates_pool", MVA_UPDATES_POOL ) );
+		const char * sArenaError = sphArenaInit ( hSearchd.GetSize ( "mva_updates_pool", MVA_UPDATES_POOL ) );
+		if ( sArenaError )
+			sphWarning ( "process shared mutex unsupported, MVA update disabled ( %s )", sArenaError );
 
 		// reload all the indexes
 		ConfigureAndPreload ( hConf, sOptIndex );
@@ -15472,7 +15474,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	//////////////////////
 
 	// setup mva updates arena here, since we could have saved persistent mva updates
-	sphArenaInit ( hSearchd.GetSize ( "mva_updates_pool", MVA_UPDATES_POOL ) );
+	const char * sArenaError = sphArenaInit ( hSearchd.GetSize ( "mva_updates_pool", MVA_UPDATES_POOL ) );
+	if ( sArenaError )
+		sphWarning ( "process shared mutex unsupported, MVA update disabled ( %s )", sArenaError );
 
 	// configure and preload
 
@@ -15702,13 +15706,21 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( !pAcceptMutex )
 			sphFatal ( "failed to create process-shared mutex" );
 
-		while ( g_dChildren.GetLength() < g_iPreforkChildren )
+		if ( !pAcceptMutex->GetError() )
 		{
-			if ( PreforkChild()==0 ) // child process? break from here, go work
-				break;
-		}
+			while ( g_dChildren.GetLength() < g_iPreforkChildren )
+			{
+				if ( PreforkChild()==0 ) // child process? break from here, go work
+					break;
+			}
 
-		g_iRotationThrottle = hSearchd.GetInt ( "prefork_rotation_throttle", 0 );
+			g_iRotationThrottle = hSearchd.GetInt ( "prefork_rotation_throttle", 0 );
+		} else
+		{
+			sphWarning ( "process shared mutex unsupported, switching to 'workers = fork' ( %s )", pAcceptMutex->GetError() );
+			g_eWorkers = MPM_FORK;
+			SafeDelete ( pAcceptMutex );
+		}
 	}
 #endif
 

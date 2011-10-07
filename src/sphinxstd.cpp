@@ -736,16 +736,31 @@ CSphProcessSharedMutex::CSphProcessSharedMutex ( int iExtraSize )
 	m_pMutex = NULL;
 
 	pthread_mutexattr_t tAttr;
-	if ( pthread_mutexattr_init ( &tAttr ) || pthread_mutexattr_setpshared ( &tAttr, PTHREAD_PROCESS_SHARED ) )
+	int iRes = pthread_mutexattr_init ( &tAttr );
+	if ( iRes )
+	{
+		m_sError.SetSprintf ( "pthread_mutexattr_init, errno=%d", iRes );
 		return;
+	}
+	iRes = pthread_mutexattr_setpshared ( &tAttr, PTHREAD_PROCESS_SHARED );
+	if ( iRes )
+	{
+		m_sError.SetSprintf ( "pthread_mutexattr_setpshared, errno = %d", iRes );
+		return;
+	}
 
 	CSphString sError, sWarning;
 	if ( !m_pStorage.Alloc ( sizeof(pthread_mutex_t) + iExtraSize, sError, sWarning ) )
+	{
+		m_sError.SetSprintf ( "storage.alloc, error='%s', warning='%s'", sError.cstr(), sWarning.cstr() );
 		return;
+	}
 
 	m_pMutex = (pthread_mutex_t*) m_pStorage.GetWritePtr ();
-	if ( pthread_mutex_init ( m_pMutex, &tAttr ) )
+	iRes = pthread_mutex_init ( m_pMutex, &tAttr );
+	if ( iRes )
 	{
+		m_sError.SetSprintf ( "pthread_mutex_init, errno=%d ", iRes );
 		m_pMutex = NULL;
 		m_pStorage.Reset ();
 		return;
@@ -777,9 +792,10 @@ void CSphProcessSharedMutex::Unlock () const
 #if !USE_WINDOWS
 bool CSphProcessSharedMutex::TimedLock ( int tmSpin ) const
 {
+	uint64_t tmStart = sphMicroTimer();
 	struct timespec tp;
-	tp.tv_sec = 0;
-	tp.tv_nsec = tmSpin * 1000;
+	tp.tv_sec = tmStart / 1000000;
+	tp.tv_nsec = ( tmStart % 1000000 ) + tmSpin * 1000;
 	if ( m_pMutex )
 	{
 #if HAVE_PTHREAD_MUTEX_TIMEDLOCK
@@ -812,6 +828,16 @@ bool CSphProcessSharedMutex::TimedLock ( int ) const
 	return false;
 }
 #endif
+
+const char * CSphProcessSharedMutex::GetError() const
+{
+	const char * sError = NULL;
+#if !USE_WINDOWS
+	sError = m_sError.cstr();
+#endif
+	return sError;
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 // THREADING FUNCTIONS

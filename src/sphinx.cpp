@@ -6451,24 +6451,25 @@ CSphIndexSettings::CSphIndexSettings ()
 //////////////////////////////////////////////////////////////////////////
 
 /// scoped mutex lock
-class CSphScopedMutexLock : ISphNoncopyable
+template < typename T >
+class CSphScopedLock : ISphNoncopyable
 {
 public:
 	/// lock on creation
-	explicit CSphScopedMutexLock ( CSphProcessSharedMutex & tMutex )
+	explicit CSphScopedLock ( T & tMutex )
 		: m_tMutexRef ( tMutex )
 	{
 		m_tMutexRef.Lock();
 	}
 
 	/// unlock on going out of scope
-	~CSphScopedMutexLock ()
+	~CSphScopedLock ()
 	{
 		m_tMutexRef.Unlock ();
 	}
 
 protected:
-	CSphProcessSharedMutex &	m_tMutexRef;
+	T &	m_tMutexRef;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -6491,9 +6492,8 @@ public:
 							CSphArena ();
 							~CSphArena ();
 
-	bool					Init ( int uMaxBytes );
-	bool					ReInit ( int uMaxBytes );
-	DWORD *					GetBasePtr () const { return m_pBasePtr; }
+	DWORD *					ReInit ( int uMaxBytes );
+	const char *			GetError () const { return m_sError.cstr(); }
 
 	int						TaggedAlloc ( int iTag, int iBytes );
 	void					TaggedFreeIndex ( int iTag, int iIndex );
@@ -6541,12 +6541,14 @@ protected:
 	STATIC_SIZE_ASSERT ( AllocsLogEntry_t, 124 );
 
 protected:
+	DWORD *					Init ( int uMaxBytes );
 	int						RawAlloc ( int iBytes );
 	void					RawFree ( int iIndex );
 	void					RemoveTag ( TagDesc_t * pTag );
 
 protected:
-	CSphProcessSharedMutex	m_tMutex;
+	CSphProcessSharedMutex	m_tProcMutex;
+	CSphMutex				m_tThdMutex;
 
 	int						m_iPages;			///< max pages count
 	CSphSharedBuffer<DWORD>	m_pArena;			///< arena that stores everything (all other pointers point here)
@@ -6557,6 +6559,7 @@ protected:
 	TagDesc_t *				m_pTags;
 
 	DWORD *					m_pBasePtr;			///< base data storage pointer
+	CSphString				m_sError;
 
 #if ARENADEBUG
 protected:
@@ -6594,6 +6597,7 @@ public:
 CSphArena::CSphArena ()
 	: m_iPages ( 0 )
 {
+	m_tThdMutex.Init();
 }
 
 
@@ -6601,9 +6605,10 @@ CSphArena::~CSphArena ()
 {
 	// notify callers that arena no longer exists
 	g_pMvaArena = NULL;
+	m_tThdMutex.Done();
 }
 
-bool CSphArena::ReInit ( int uMaxBytes )
+DWORD * CSphArena::ReInit ( int uMaxBytes )
 {
 	if ( m_iPages!=0 )
 	{
@@ -6613,7 +6618,7 @@ bool CSphArena::ReInit ( int uMaxBytes )
 	return Init ( uMaxBytes );
 }
 
-bool CSphArena::Init ( int uMaxBytes )
+DWORD * CSphArena::Init ( int uMaxBytes )
 {
 	m_iPages = ( uMaxBytes+PAGE_SIZE-1 ) / PAGE_SIZE;
 
@@ -6628,10 +6633,14 @@ bool CSphArena::Init ( int uMaxBytes )
 	assert ( iMy%sizeof(DWORD)==0 );
 
 	CSphString sError, sWarning;
-	if ( !m_pArena.Alloc ( (iData+iMy)/sizeof(DWORD), sError, sWarning ) )
+	if ( m_tProcMutex.GetError() || !m_pArena.Alloc ( (iData+iMy)/sizeof(DWORD), sError, sWarning ) )
 	{
 		m_iPages = 0;
-		return false;
+		if ( m_tProcMutex.GetError() )
+			m_sError = m_tProcMutex.GetError();
+		else
+			m_sError.SetSprintf ( "alloc, error='%s', warning='%s'", sError.cstr(), sWarning.cstr() );
+		return NULL;
 	}
 
 	// setup internal pointers
@@ -6671,7 +6680,7 @@ bool CSphArena::Init ( int uMaxBytes )
 
 	*m_pTagCount = 0;
 
-	return true;
+	return m_pBasePtr;
 }
 
 
@@ -6877,7 +6886,8 @@ int CSphArena::TaggedAlloc ( int iTag, int iBytes )
 		return -1; // uninitialized
 
 	assert ( iTag>=0 );
-	CSphScopedMutexLock tLock ( m_tMutex );
+	CSphScopedLock<CSphProcessSharedMutex> tProcLock ( m_tProcMutex );
+	CSphScopedLock<CSphMutex> tThdLock ( m_tThdMutex );
 
 	// find that tag first
 	TagDesc_t * pTag = sphBinarySearch ( m_pTags, m_pTags+(*m_pTagCount)-1, bind ( &TagDesc_t::m_iTag ), iTag );
@@ -6951,7 +6961,8 @@ void CSphArena::TaggedFreeIndex ( int iTag, int iIndex )
 		return; // uninitialized
 
 	assert ( iTag>=0 );
-	CSphScopedMutexLock tLock ( m_tMutex );
+	CSphScopedLock<CSphProcessSharedMutex> tProcLock ( m_tProcMutex );
+	CSphScopedLock<CSphMutex> tThdLock ( m_tThdMutex );
 
 	// find that tag
 	TagDesc_t * pTag = sphBinarySearch ( m_pTags, m_pTags+(*m_pTagCount)-1, bind ( &TagDesc_t::m_iTag ), iTag );
@@ -6984,7 +6995,8 @@ void CSphArena::TaggedFreeTag ( int iTag )
 		return; // uninitialized
 
 	assert ( iTag>=0 );
-	CSphScopedMutexLock tLock ( m_tMutex );
+	CSphScopedLock<CSphProcessSharedMutex> tProcLock ( m_tProcMutex );
+	CSphScopedLock<CSphMutex> tThdLock ( m_tThdMutex );
 
 	// find that tag
 	TagDesc_t * pTag = sphBinarySearch ( m_pTags, m_pTags+(*m_pTagCount)-1, bind ( &TagDesc_t::m_iTag ), iTag );
@@ -7029,7 +7041,8 @@ void CSphArena::ExamineTag ( tTester* pTest, int iTag )
 		return; // uninitialized
 
 	assert ( iTag>=0 );
-	CSphScopedMutexLock tLock ( m_tMutex );
+	CSphScopedLock<CSphProcessSharedMutex> tProcLock ( m_tProcMutex );
+	CSphScopedLock<CSphMutex> tThdLock ( m_tThdMutex );
 
 	// find that tag
 	TagDesc_t * pTag = sphBinarySearch ( m_pTags, m_pTags+(*m_pTagCount)-1, bind ( &TagDesc_t::m_iTag ), iTag );
@@ -7085,16 +7098,13 @@ void CSphArena::CheckFreelists ()
 
 static CSphArena g_MvaArena; // global mega-arena
 
-DWORD * sphArenaInit ( int iMaxBytes )
+const char * sphArenaInit ( int iMaxBytes )
 {
-	if ( g_pMvaArena )
-		return g_pMvaArena; // already initialized
+	if ( !g_pMvaArena )
+		g_pMvaArena = g_MvaArena.ReInit ( iMaxBytes );
 
-	if ( !g_MvaArena.ReInit ( iMaxBytes ) )
-		return NULL; // tried but failed
-
-	g_pMvaArena = g_MvaArena.GetBasePtr ();
-	return g_pMvaArena; // all good
+	const char * sError = g_MvaArena.GetError();
+	return sError;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -7625,6 +7635,27 @@ bool CSphIndex_VLN::LoadPersistentMVA ( CSphString & sError )
 			dMvaLocators.Add ( tAttr.m_tLocator );
 	}
 	assert ( dMvaLocators.GetLength()!=0 );
+
+	if ( g_MvaArena.GetError() ) // have to reset affected MVA in case of ( persistent MVA + no MVA arena )
+	{
+		ARRAY_FOREACH ( iDoc, dAffected )
+		{
+			DWORD * pDocinfo = const_cast<DWORD*> ( FindDocinfo ( dAffected[iDoc] ) );
+			assert ( pDocinfo );
+			DWORD * pAttrs = DOCINFO2ATTRS ( pDocinfo );
+			ARRAY_FOREACH ( iMva, dMvaLocators )
+			{
+				// reset MVA from arena
+				if ( MVA_DOWNSIZE ( sphGetRowAttr ( pAttrs, dMvaLocators[iMva] ) ) & MVA_ARENA_FLAG )
+					sphSetRowAttr ( pAttrs, dMvaLocators[iMva], 0 );
+			}
+		}
+
+		sphWarning ( "index '%s' forced to reset persistent MVAs ( %s )", m_sIndexName.cstr(), g_MvaArena.GetError() );
+		fdReader.Close();
+		return true;
+	}
+
 	CSphVector<DWORD*> dRowPtrs ( uDocs );
 	CSphVector<int> dAllocs;
 	dAllocs.Reserve ( uDocs );
@@ -7825,7 +7856,10 @@ bool CSphIndex_VLN::SaveAttributes ()
 		ARRAY_FOREACH ( i, dAffected )
 		{
 			DWORD* pDocinfo = const_cast<DWORD*> ( FindDocinfo ( dAffected[i] ) );
+			if ( !pDocinfo )
+				sphInfo ( "SaveAttribute: tag=%d, i=%d(%d), id=%d", m_iIndexTag, i, dAffected.GetLength(), dAffected[i] );
 			assert ( pDocinfo );
+
 			pDocinfo = DOCINFO2ATTRS ( pDocinfo );
 			ARRAY_FOREACH ( j, dMvaLocators )
 			{

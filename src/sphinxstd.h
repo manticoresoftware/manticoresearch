@@ -1705,7 +1705,7 @@ struct CSphStrHashFunc
 
 /// small hash with string keys
 template < typename T >
-class SmallStringHash_T : public CSphOrderedHash < T, CSphString, CSphStrHashFunc, 256  > {};
+class SmallStringHash_T : public CSphOrderedHash < T, CSphString, CSphStrHashFunc, 256 > {};
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1942,11 +1942,13 @@ public:
 	void	Lock () const;
 	void	Unlock () const;
 	bool	TimedLock ( int tmSpin ) const; // wait at least tmSpin microseconds the lock will available
+	const char * GetError () const;
 
 protected:
 #if !USE_WINDOWS
 	CSphSharedBuffer<BYTE>		m_pStorage;
 	pthread_mutex_t *			m_pMutex;
+	CSphString					m_sError;
 #endif
 };
 

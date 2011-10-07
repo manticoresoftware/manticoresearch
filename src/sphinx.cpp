@@ -7856,8 +7856,6 @@ bool CSphIndex_VLN::SaveAttributes ()
 		ARRAY_FOREACH ( i, dAffected )
 		{
 			DWORD* pDocinfo = const_cast<DWORD*> ( FindDocinfo ( dAffected[i] ) );
-			if ( !pDocinfo )
-				sphInfo ( "SaveAttribute: tag=%d, i=%d(%d), id=%d", m_iIndexTag, i, dAffected.GetLength(), dAffected[i] );
 			assert ( pDocinfo );
 
 			pDocinfo = DOCINFO2ATTRS ( pDocinfo );

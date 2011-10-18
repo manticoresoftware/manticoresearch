@@ -284,7 +284,7 @@ public:
 
 	virtual const CSphMatch & GetNextDoc ( DWORD * )
 	{
-		m_dFields.Set();
+		m_dQwordFields.Set();
 		if ( ( m_iChunk++ )==0 )
 		{
 			if ( GetNextHit()!=EMPTY_HIT )
@@ -2683,7 +2683,7 @@ public:
 
 	virtual const CSphMatch & GetNextDoc ( DWORD * )
 	{
-		m_dFields.Set();
+		m_dQwordFields.Set();
 		m_tMatch.m_iDocID = !m_tMatch.m_iDocID && HasHits() ? 1 : 0;
 		return m_tMatch;
 	}

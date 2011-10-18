@@ -164,7 +164,7 @@ template < typename DOCID = SphDocID_t >
 struct RtDoc_T
 {
 	DOCID						m_uDocID;	///< my document id
-	CSphSmallBitvec 			m_dFields;	///< fields mask
+	DWORD						m_uDocFields;	///< fields mask
 	DWORD						m_uHits;	///< hit count
 	DWORD						m_uHit;		///< either index into segment hits, or the only hit itself (if hit count is 1)
 };
@@ -437,7 +437,7 @@ struct RtDocWriter_t
 		CSphTightVector<BYTE> * pDocs = m_pDocs;
 		ZipDocid ( pDocs, tDoc.m_uDocID - m_uLastDocID );
 		m_uLastDocID = tDoc.m_uDocID;
-		ZipDword ( pDocs, tDoc.m_dFields.GetMask32() );
+		ZipDword ( pDocs, tDoc.m_uDocFields );
 		ZipDword ( pDocs, tDoc.m_uHits );
 		if ( tDoc.m_uHits==1 )
 		{
@@ -486,7 +486,7 @@ struct RtDocReader_T
 		mtDoc.m_uDocID += (DOCID) uDeltaID;
 		DWORD uField;
 		pIn = UnzipDword ( &uField, pIn );
-		m_tDoc.m_dFields.Assign32 ( uField );
+		m_tDoc.m_uDocFields = uField;
 		pIn = UnzipDword ( &mtDoc.m_uHits, pIn );
 		if ( mtDoc.m_uHits==1 )
 		{
@@ -1616,7 +1616,7 @@ RtSegment_t * RtAccum_t::CreateSegment ( int iRowSize, int iWordsCheckpoint )
 
 	RtDoc_t tDoc;
 	tDoc.m_uDocID = 0;
-	tDoc.m_dFields.Unset();
+	tDoc.m_uDocFields = 0;
 	tDoc.m_uHits = 0;
 	tDoc.m_uHit = 0;
 
@@ -1654,7 +1654,7 @@ RtSegment_t * RtAccum_t::CreateSegment ( int iRowSize, int iWordsCheckpoint )
 				}
 
 				tOutDoc.ZipDoc ( tDoc );
-				tDoc.m_dFields.Unset();
+				tDoc.m_uDocFields = 0;
 				tDoc.m_uHits = 0;
 				tDoc.m_uHit = tOutHit.ZipHitPtr();
 			}
@@ -1700,7 +1700,7 @@ RtSegment_t * RtAccum_t::CreateSegment ( int iRowSize, int iWordsCheckpoint )
 			tOutHit.ZipHit ( tHit.m_iWordPos );
 		}
 
-		tDoc.m_dFields.Set ( HITMAN::GetField ( tHit.m_iWordPos ) );
+		tDoc.m_uDocFields |= 1 << ( HITMAN::GetField ( tHit.m_iWordPos ) );
 		tDoc.m_uHits++;
 	}
 
@@ -2882,7 +2882,7 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename ) const
 
 			wrDocs.ZipOffset ( pDoc->m_uDocID - uLastDoc );
 			wrDocs.ZipOffset ( wrHits.GetPos() - uLastHitpos );
-			wrDocs.ZipInt ( pDoc->m_dFields.GetMask32() );
+			wrDocs.ZipInt ( pDoc->m_uDocFields );
 			wrDocs.ZipInt ( pDoc->m_uHits );
 			uLastDoc = pDoc->m_uDocID;
 			uLastHitpos = wrHits.GetPos();
@@ -3776,7 +3776,7 @@ public:
 				continue;
 
 			m_tMatch.m_iDocID = pDoc->m_uDocID;
-			m_dFields = pDoc->m_dFields;
+			m_dQwordFields.Assign32 ( pDoc->m_uDocFields );
 			m_uMatchHits = pDoc->m_uHits;
 			m_iHitlistPos = (uint64_t(pDoc->m_uHits)<<32) + pDoc->m_uHit;
 			return m_tMatch;

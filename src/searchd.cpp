@@ -13561,6 +13561,11 @@ void CheckRotate ()
 			RotateIndexGreedy ( tIndex, sIndex );
 			if ( bWasAdded && tIndex.m_bEnabled )
 			{
+				if ( !pCP )
+				{
+					pCP = new CSphConfigParser;
+					ReloadIndexSettings ( pCP );
+				}
 				const CSphConfigType & hConf = pCP->m_tConf ["index"];
 				if ( hConf.Exists ( sIndex ) )
 				{
@@ -15031,7 +15036,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 #endif
 
 	if ( !g_bService )
+	{
 		fprintf ( stdout, SPHINX_BANNER );
+		fprintf ( stdout, "PID is %d\n", getpid() );
+	}
 
 	//////////////////////
 	// parse command line

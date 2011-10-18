@@ -47,7 +47,7 @@ struct ExtDoc_t
 	SphDocID_t		m_uDocid;
 	CSphRowitem *	m_pDocinfo;			///< for inline storage only
 	SphOffset_t		m_uHitlistOffset;
-	CSphSmallBitvec m_dFields;
+	DWORD			m_uDocFields;
 	float			m_fTFIDF;
 };
 
@@ -166,7 +166,7 @@ public:
 	{
 		DebugIndent ( iLevel );
 		printf ( "ExtTerm: %s at: %d ", m_pQword->m_sWord.cstr(), m_pQword->m_iAtomPos );
-		if ( m_dFields.TestAll(true) )
+		if ( m_dQueriedFields.TestAll(true) )
 		{
 			printf ( "(all)\n" );
 		} else
@@ -175,7 +175,7 @@ public:
 			printf ( "in: " );
 			for ( int iField = 0; iField < CSphSmallBitvec::iTOTALBITS; iField++ )
 			{
-				if ( m_dFields.Test ( iField ) )
+				if ( m_dQueriedFields.Test ( iField ) )
 				{
 					if ( !bFirst )
 						printf ( ", " );
@@ -191,7 +191,7 @@ protected:
 	ISphQword *					m_pQword;
 	ExtDoc_t *					m_pHitDoc;		///< points to entry in m_dDocs which GetHitsChunk() currently emits hits for
 	SphDocID_t					m_uHitsOverFor;	///< there are no more hits for matches block starting with this ID
-	mutable CSphSmallBitvec		m_dFields;		///< accepted fields mask
+	mutable CSphSmallBitvec		m_dQueriedFields;		///< accepted fields mask
 	bool						m_bLongMask;	///< if we work with >32bit mask
 	float						m_fIDF;			///< IDF for this term (might be 0.0f for non-1st occurences in query)
 	int64_t						m_iMaxTimer;	///< work until this timestamp
@@ -218,19 +218,15 @@ public:
 									: ExtTerm_c ( pQword, uFields, tSetup, bNotWeighted )
 									, m_uFieldPos ( 0 )
 
-								{
-									m_dFieldMask.Unset();
-								}
+								{}
 	virtual void				Reset ( const ISphQwordSetup & )
 	{
-		m_dFieldMask.Unset();
 		m_uFieldPos = 0;
 	}
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 	virtual bool				GotHitless () { return true; }
 
 protected:
-	CSphSmallBitvec	m_dFieldMask;
 	DWORD	m_uFieldPos;
 };
 
@@ -1245,7 +1241,7 @@ ExtTerm_c::ExtTerm_c ( ISphQword * pQword, const CSphSmallBitvec& dFields, const
 	m_iAtomPos = pQword->m_iAtomPos;
 	m_pHitDoc = NULL;
 	m_uHitsOverFor = 0;
-	m_dFields = dFields;
+	m_dQueriedFields = dFields;
 	m_iMaxTimer = tSetup.m_iMaxTimer;
 	if ( tSetup.m_pIndex )
 		m_bLongMask = tSetup.m_pIndex->GetMatchSchema().m_dFields.GetLength()>32;
@@ -1263,7 +1259,7 @@ ExtTerm_c::ExtTerm_c ( ISphQword * pQword, const ISphQwordSetup & tSetup )
 	m_iAtomPos = pQword->m_iAtomPos;
 	m_pHitDoc = NULL;
 	m_uHitsOverFor = 0;
-	m_dFields.Set();
+	m_dQueriedFields.Set();
 	m_iMaxTimer = tSetup.m_iMaxTimer;
 	if ( tSetup.m_pIndex )
 		m_bLongMask = tSetup.m_pIndex->GetMatchSchema().m_dFields.GetLength()>32;
@@ -1315,20 +1311,20 @@ const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 			m_pQword->m_iDocs = 0;
 			break;
 		}
-		if (!( m_pQword->m_dFields.Test ( m_dFields ) ))
+		if (!( m_pQword->m_dQwordFields.Test ( m_dQueriedFields ) ))
 		{
 			if ( (!m_bLongMask) || m_pQword->m_bAllFieldsKnown )
 				continue;
-			m_pQword->CollectHitMask();
-			if (!( m_pQword->m_dFields.Test ( m_dFields ) ))
-				continue;
+//			m_pQword->CollectHitMask();
+//			if (!( m_pQword->m_dQwordFields.Test ( m_dQueriedFields ) ))
+//				continue;
 		}
 
 		ExtDoc_t & tDoc = m_dDocs[iDoc++];
 		tDoc.m_uDocid = tMatch.m_iDocID;
 		tDoc.m_pDocinfo = pDocinfo;
 		tDoc.m_uHitlistOffset = m_pQword->m_iHitlistPos;
-		tDoc.m_dFields = m_pQword->m_dFields & m_dFields; // OPTIMIZE: only needed for phrase node
+		tDoc.m_uDocFields = m_pQword->m_dQwordFields.GetMask32() & m_dQueriedFields.GetMask32(); // OPTIMIZE: only needed for phrase node
 		tDoc.m_fTFIDF = float(m_pQword->m_uMatchHits) / float(m_pQword->m_uMatchHits+SPH_BM25_K1) * m_fIDF;
 		pDocinfo += m_iStride;
 	}
@@ -1409,7 +1405,7 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t
 			continue;
 		}
 
-		if (!( m_dFields.Test ( HITMAN::GetField ( uHit ) ) ))
+		if (!( m_dQueriedFields.Test ( HITMAN::GetField ( uHit ) ) ))
 			continue;
 
 		ExtHit_t & tHit = m_dHits[iHit++];
@@ -1497,7 +1493,6 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, Sph
 			}
 		} while ( pDoc->m_uDocid!=pMatched->m_uDocid );
 
-		m_dFieldMask = pDoc->m_dFields;
 		m_uFieldPos = 0;
 	}
 
@@ -1505,20 +1500,18 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, Sph
 	int iHit = 0;
 	for ( ;; )
 	{
-		if ( m_dFieldMask.Test ( m_uFieldPos ) )
+		if ( ( m_uFieldPos<32 && ( pDoc->m_uDocFields & (1<<m_uFieldPos) ) )  // not necessary
+			&& m_dQueriedFields.Test ( m_uFieldPos ) )
 		{
-			if ( m_dFields.Test ( m_uFieldPos ) )
-			{
-				// emit hit
-				ExtHit_t & tHit = m_dHits[iHit++];
-				tHit.m_uDocid = pDoc->m_uDocid;
-				tHit.m_uHitpos = HITMAN::Create ( m_uFieldPos, -1 );
-				tHit.m_uQuerypos = (WORD) m_iAtomPos;
-				tHit.m_uWeight = tHit.m_uMatchlen = tHit.m_uSpanlen = 1;
+			// emit hit
+			ExtHit_t & tHit = m_dHits[iHit++];
+			tHit.m_uDocid = pDoc->m_uDocid;
+			tHit.m_uHitpos = HITMAN::Create ( m_uFieldPos, -1 );
+			tHit.m_uQuerypos = (WORD) m_iAtomPos;
+			tHit.m_uWeight = tHit.m_uMatchlen = tHit.m_uSpanlen = 1;
 
-				if ( iHit==MAX_HITS-1 )
-					break;
-			}
+			if ( iHit==MAX_HITS-1 )
+				break;
 		}
 
 		if ( m_uFieldPos < CSphSmallBitvec::iTOTALBITS-1 )
@@ -1541,7 +1534,6 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, Sph
 		if ( !pDoc )
 			break;
 
-		m_dFieldMask = pDoc->m_dFields;
 		m_uFieldPos = 0;
 	}
 
@@ -1936,7 +1928,7 @@ const ExtDoc_t * ExtAnd_c::GetDocsChunk ( SphDocID_t * pMaxID )
 			// emit it
 			ExtDoc_t & tDoc = m_dDocs[iDoc++];
 			tDoc.m_uDocid = pCur0->m_uDocid;
-			tDoc.m_dFields = pCur0->m_dFields | pCur1->m_dFields;
+			tDoc.m_uDocFields = pCur0->m_uDocFields | pCur1->m_uDocFields; // not necessary
 			tDoc.m_uHitlistOffset = -1;
 			tDoc.m_fTFIDF = pCur0->m_fTFIDF + pCur1->m_fTFIDF;
 			CopyExtDocinfo ( tDoc, *pCur0, &pDocinfo, m_iStride );
@@ -2129,7 +2121,7 @@ const ExtDoc_t * ExtOr_c::GetDocsChunk ( SphDocID_t * pMaxID )
 				while ( pCur0->m_uDocid==pCur1->m_uDocid && pCur0->m_uDocid!=DOCID_MAX && iDoc<MAX_DOCS-1 )
 				{
 					m_dDocs[iDoc] = *pCur0;
-					m_dDocs[iDoc].m_dFields = pCur0->m_dFields | pCur1->m_dFields;
+					m_dDocs[iDoc].m_uDocFields = pCur0->m_uDocFields | pCur1->m_uDocFields; // not necessary
 					m_dDocs[iDoc].m_fTFIDF = pCur0->m_fTFIDF + pCur1->m_fTFIDF;
 					CopyExtDocinfo ( m_dDocs[iDoc], *pCur0, &pDocinfo, m_iStride );
 					iDoc++;
@@ -2477,8 +2469,7 @@ const ExtDoc_t * ExtNWay_c<FSM>::GetDocsChunk ( SphDocID_t * pMaxID )
 				assert ( pDoc->m_uDocid==pHit->m_uDocid );
 
 				m_dDocs[iDoc].m_uDocid = pHit->m_uDocid;
-				m_dDocs[iDoc].m_dFields.Unset();
-				m_dDocs[iDoc].m_dFields.Set ( HITMAN::GetField ( pHit->m_uHitpos ) );
+				m_dDocs[iDoc].m_uDocFields = 1<< ( HITMAN::GetField ( pHit->m_uHitpos ) ); // non necessary
 				m_dDocs[iDoc].m_uHitlistOffset = -1;
 				m_dDocs[iDoc].m_fTFIDF = pDoc->m_fTFIDF;
 				CopyExtDocinfo ( m_dDocs[iDoc], *pDoc, &pDocinfo, m_iStride );
@@ -3117,7 +3108,7 @@ const ExtDoc_t * ExtQuorum_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		tCand.m_uDocid = DOCID_MAX; // current candidate id
 		tCand.m_uHitlistOffset = 0; // suppress gcc warnings
 		tCand.m_pDocinfo = NULL;
-		tCand.m_dFields.Unset();
+		tCand.m_uDocFields=0; // non necessary
 		tCand.m_fTFIDF = 0.0f;
 
 		int iCandMatches = 0; // amount of children that match current candidate
@@ -3131,7 +3122,7 @@ const ExtDoc_t * ExtQuorum_c::GetDocsChunk ( SphDocID_t * pMaxID )
 
 			} else if ( m_pCurDoc[i]->m_uDocid==tCand.m_uDocid )
 			{
-				tCand.m_dFields |= m_pCurDoc[i]->m_dFields;
+				tCand.m_uDocFields |= m_pCurDoc[i]->m_uDocFields; // non necessary
 				tCand.m_fTFIDF += m_pCurDoc[i]->m_fTFIDF;
 				iCandMatches += (m_uMask >> i) & 1;
 			}
@@ -3742,7 +3733,7 @@ int ExtUnit_c::FilterHits ( int iMyHit, DWORD uSentenceEnd, SphDocID_t uDocid, i
 			{
 				ExtDoc_t & tDoc = m_dDocs [ (*pDoc)++ ];
 				tDoc.m_uDocid = m_pDoc1->m_uDocid;
-				tDoc.m_dFields = m_pDoc1->m_dFields | m_pDoc2->m_dFields;
+				tDoc.m_uDocFields = m_pDoc1->m_uDocFields | m_pDoc2->m_uDocFields; // non necessary
 				tDoc.m_uHitlistOffset = -1;
 				tDoc.m_fTFIDF = m_pDoc1->m_fTFIDF + m_pDoc2->m_fTFIDF;
 				tDoc.m_pDocinfo = NULL; // no inline support, sorry
@@ -4400,7 +4391,7 @@ int ExtRanker_WeightSum_c<USE_BM25>::GetMatches ()
 
 		DWORD uRank = 0;
 		for ( int i=0; i<m_iWeights; i++ )
-			if ( pDoc->m_dFields.Test(i) )
+			if ( ( i<32 ) && ( pDoc->m_uDocFields & (1<<i) ) )
 				uRank += m_pWeights[i];
 
 		Swap ( m_dMatches[iMatches], m_dMyMatches[pDoc-m_dMyDocs] ); // OPTIMIZE? can avoid this swap and simply return m_dMyMatches (though in lesser chunks)

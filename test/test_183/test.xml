@@ -44,7 +44,8 @@ index tests
 }
 </config>
 
-
+<!-- NOTE: the test model is made wrong, since we postponed a feature.
+Look at http://sphinxsearch.com/bugs/view.php?id=952 for details -->
 <sphqueries>
 <sphinxql>select * from tests where match ('field_one')</sphinxql>
 <sphinxql>select * from test where match ('field_one')</sphinxql>

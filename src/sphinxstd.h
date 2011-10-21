@@ -2118,15 +2118,14 @@ public:
 	static const int iTOTALBITS = 256;
 
 private:
-	typedef unsigned long ELTYPE;
-	static const int iELEMBITS = sizeof ( ELTYPE ) * 8;
+	static const int iELEMBITS = sizeof(DWORD) * 8;
 	static const int iBYTESIZE = iTOTALBITS / 8;
 	static const int IELEMENTS = iTOTALBITS / iELEMBITS;
-	static const ELTYPE uALLBITS = ~(0UL);
+	static const DWORD uALLBITS = ~(0UL);
 	STATIC_ASSERT ( IELEMENTS>=1, 8_BITS_MINIMAL_SIZE_OF_VECTOR );
 
-private:
-	ELTYPE m_dFieldsMask[IELEMENTS];
+public:
+	DWORD m_dFieldsMask[IELEMENTS];
 
 public:
 	// no custom cstr and d-tor - to be usable from inside unions
@@ -2186,7 +2185,7 @@ public:
 	// test if all bits are set or unset
 	bool TestAll ( bool bSet=false ) const
 	{
-		ELTYPE uTest = bSet?uALLBITS:0;
+		DWORD uTest = bSet?uALLBITS:0;
 		for ( int i=0; i<IELEMENTS; i++ )
 			if ( m_dFieldsMask[i]!=uTest )
 				return false;
@@ -2211,7 +2210,7 @@ public:
 			return;
 
 		int iMaskPos = iBits / iELEMBITS;
-		ELTYPE uMask = ( 1UL << ( iBits % iELEMBITS ) ) - 1;
+		DWORD uMask = ( 1UL << ( iBits % iELEMBITS ) ) - 1;
 		m_dFieldsMask[iMaskPos++] &= uMask;
 		for ( ; iMaskPos < IELEMENTS; iMaskPos++ )
 			m_dFieldsMask[iMaskPos] = 0UL;

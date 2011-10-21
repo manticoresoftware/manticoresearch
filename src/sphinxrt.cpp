@@ -1700,7 +1700,9 @@ RtSegment_t * RtAccum_t::CreateSegment ( int iRowSize, int iWordsCheckpoint )
 			tOutHit.ZipHit ( tHit.m_iWordPos );
 		}
 
-		tDoc.m_uDocFields |= 1 << ( HITMAN::GetField ( tHit.m_iWordPos ) );
+		const int iField = HITMAN::GetField ( tHit.m_iWordPos );
+		if ( iField<32 )
+			tDoc.m_uDocFields |= ( 1UL<<iField );
 		tDoc.m_uHits++;
 	}
 

@@ -189,12 +189,12 @@ public:
 
 protected:
 	ISphQword *					m_pQword;
-	ExtDoc_t *					m_pHitDoc;		///< points to entry in m_dDocs which GetHitsChunk() currently emits hits for
-	SphDocID_t					m_uHitsOverFor;	///< there are no more hits for matches block starting with this ID
-	mutable CSphSmallBitvec		m_dQueriedFields;		///< accepted fields mask
-	bool						m_bLongMask;	///< if we work with >32bit mask
-	float						m_fIDF;			///< IDF for this term (might be 0.0f for non-1st occurences in query)
-	int64_t						m_iMaxTimer;	///< work until this timestamp
+	ExtDoc_t *					m_pHitDoc;			///< points to entry in m_dDocs which GetHitsChunk() currently emits hits for
+	SphDocID_t					m_uHitsOverFor;		///< there are no more hits for matches block starting with this ID
+	CSphSmallBitvec				m_dQueriedFields;	///< accepted fields mask
+	bool						m_bHasWideFields;	///< whether fields mask for this term refer to fields 32+
+	float						m_fIDF;				///< IDF for this term (might be 0.0f for non-1st occurences in query)
+	int64_t						m_iMaxTimer;		///< work until this timestamp
 	CSphString *				m_pWarning;
 	const bool					m_bNotWeighted;
 
@@ -1233,7 +1233,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtTerm_c::ExtTerm_c ( ISphQword * pQword, const CSphSmallBitvec& dFields, const ISphQwordSetup & tSetup, bool bNotWeighted )
+ExtTerm_c::ExtTerm_c ( ISphQword * pQword, const CSphSmallBitvec & dFields, const ISphQwordSetup & tSetup, bool bNotWeighted )
 	: m_pQword ( pQword )
 	, m_pWarning ( tSetup.m_pWarning )
 	, m_bNotWeighted ( bNotWeighted )
@@ -1242,12 +1242,11 @@ ExtTerm_c::ExtTerm_c ( ISphQword * pQword, const CSphSmallBitvec& dFields, const
 	m_pHitDoc = NULL;
 	m_uHitsOverFor = 0;
 	m_dQueriedFields = dFields;
+	m_bHasWideFields = false;
+	for ( int i=1; i<8; i++ )
+		if ( m_dQueriedFields.m_dFieldsMask[i] )
+			m_bHasWideFields = true;
 	m_iMaxTimer = tSetup.m_iMaxTimer;
-	if ( tSetup.m_pIndex )
-		m_bLongMask = tSetup.m_pIndex->GetMatchSchema().m_dFields.GetLength()>32;
-	else
-		m_bLongMask = false;
-
 	AllocDocinfo ( tSetup );
 }
 
@@ -1260,12 +1259,7 @@ ExtTerm_c::ExtTerm_c ( ISphQword * pQword, const ISphQwordSetup & tSetup )
 	m_pHitDoc = NULL;
 	m_uHitsOverFor = 0;
 	m_dQueriedFields.Set();
-	m_iMaxTimer = tSetup.m_iMaxTimer;
-	if ( tSetup.m_pIndex )
-		m_bLongMask = tSetup.m_pIndex->GetMatchSchema().m_dFields.GetLength()>32;
-	else
-		m_bLongMask = false;
-
+	m_bHasWideFields = tSetup.m_pIndex && ( tSetup.m_pIndex->GetMatchSchema().m_dFields.GetLength()>32 );
 	AllocDocinfo ( tSetup );
 }
 
@@ -1311,13 +1305,13 @@ const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 			m_pQword->m_iDocs = 0;
 			break;
 		}
-		if (!( m_pQword->m_dQwordFields.Test ( m_dQueriedFields ) ))
+
+		// fields 0-31 can be quickly checked right here, right now
+		// fields 32+ would need to be checked later, with CollectHitMask() and stuff
+		if ( !m_bHasWideFields )
 		{
-			if ( (!m_bLongMask) || m_pQword->m_bAllFieldsKnown )
+			if (!( m_pQword->m_dQwordFields.m_dFieldsMask[0] & m_dQueriedFields.m_dFieldsMask[0] ))
 				continue;
-//			m_pQword->CollectHitMask();
-//			if (!( m_pQword->m_dQwordFields.Test ( m_dQueriedFields ) ))
-//				continue;
 		}
 
 		ExtDoc_t & tDoc = m_dDocs[iDoc++];

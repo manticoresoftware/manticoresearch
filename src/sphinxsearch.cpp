@@ -1261,6 +1261,7 @@ ExtTerm_c::ExtTerm_c ( ISphQword * pQword, const ISphQwordSetup & tSetup )
 	m_uHitsOverFor = 0;
 	m_dQueriedFields.Set();
 	m_bHasWideFields = tSetup.m_pIndex && ( tSetup.m_pIndex->GetMatchSchema().m_dFields.GetLength()>32 );
+	m_iMaxTimer = tSetup.m_iMaxTimer;
 	AllocDocinfo ( tSetup );
 }
 
@@ -1500,7 +1501,7 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, Sph
 	int iHit = 0;
 	for ( ;; )
 	{
-		if ( ( m_uFieldPos<32 && ( pDoc->m_uDocFields & (1<<m_uFieldPos) ) )  // not necessary
+		if ( ( m_uFieldPos<32 && ( pDoc->m_uDocFields & ( 1 << m_uFieldPos ) ) ) // not necessary
 			&& m_dQueriedFields.Test ( m_uFieldPos ) )
 		{
 			// emit hit
@@ -3108,7 +3109,7 @@ const ExtDoc_t * ExtQuorum_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		tCand.m_uDocid = DOCID_MAX; // current candidate id
 		tCand.m_uHitlistOffset = 0; // suppress gcc warnings
 		tCand.m_pDocinfo = NULL;
-		tCand.m_uDocFields=0; // non necessary
+		tCand.m_uDocFields = 0; // non necessary
 		tCand.m_fTFIDF = 0.0f;
 
 		int iCandMatches = 0; // amount of children that match current candidate
@@ -5360,7 +5361,7 @@ void RankerState_Expr_fn::Update ( const ExtHit_t * pHlist )
 			m_dWindow[j] = m_dWindow[j+i];
 		m_dWindow.Resize ( m_dWindow.GetLength()-i );
 	}
-	m_dWindow.Add ( pHlist->m_uHitpos);
+	m_dWindow.Add ( pHlist->m_uHitpos );
 	m_iMaxWindowHits[uField] = Max ( m_iMaxWindowHits[uField], m_dWindow.GetLength() );
 }
 

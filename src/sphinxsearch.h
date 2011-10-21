@@ -72,9 +72,9 @@ public:
 		, m_iDocs ( 0 )
 		, m_iHits ( 0 )
 		, m_bHasHitlist ( true )
-		, m_bAllFieldsKnown ( false )
 		, m_uMatchHits ( 0 )
 		, m_iHitlistPos ( 0 )
+		, m_bAllFieldsKnown ( false )
 	{
 		m_dQwordFields.Unset();
 	}

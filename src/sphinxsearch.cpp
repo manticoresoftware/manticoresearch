@@ -1243,9 +1243,10 @@ ExtTerm_c::ExtTerm_c ( ISphQword * pQword, const CSphSmallBitvec & dFields, cons
 	m_uHitsOverFor = 0;
 	m_dQueriedFields = dFields;
 	m_bHasWideFields = false;
-	for ( int i=1; i<8; i++ )
-		if ( m_dQueriedFields.m_dFieldsMask[i] )
-			m_bHasWideFields = true;
+	if ( tSetup.m_pIndex && tSetup.m_pIndex->GetMatchSchema().m_dFields.GetLength()>32 )
+		for ( int i=1; i<8; i++ )
+			if ( m_dQueriedFields.m_dFieldsMask[i] )
+				m_bHasWideFields = true;
 	m_iMaxTimer = tSetup.m_iMaxTimer;
 	AllocDocinfo ( tSetup );
 }

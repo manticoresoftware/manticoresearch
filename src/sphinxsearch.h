@@ -55,10 +55,12 @@ public:
 	bool			m_bHasHitlist;	///< hitlist presence flag
 
 	// iterator state
-	CSphSmallBitvec m_dQwordFields;		///< current match fields
-	bool			m_bAllFieldsKnown; ///< whether the all match fields is known, or only low 32.
+	CSphSmallBitvec m_dQwordFields;	///< current match fields
 	DWORD			m_uMatchHits;	///< current match hits count
 	SphOffset_t		m_iHitlistPos;	///< current position in hitlist, from doclist
+
+protected:
+	bool			m_bAllFieldsKnown; ///< whether the all match fields is known, or only low 32.
 
 public:
 	ISphQword ()

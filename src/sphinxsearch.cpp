@@ -1306,11 +1306,16 @@ const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 			break;
 		}
 
-		// fields 0-31 can be quickly checked right here, right now
-		// fields 32+ would need to be checked later, with CollectHitMask() and stuff
 		if ( !m_bHasWideFields )
 		{
+			// fields 0-31 can be quickly checked right here, right now
 			if (!( m_pQword->m_dQwordFields.m_dFieldsMask[0] & m_dQueriedFields.m_dFieldsMask[0] ))
+				continue;
+		} else
+		{
+			// fields 32+ need to be checked with CollectHitMask() and stuff
+			m_pQword->CollectHitMask();
+			if (!( m_pQword->m_dQwordFields.Test ( m_dQueriedFields ) ))
 				continue;
 		}
 

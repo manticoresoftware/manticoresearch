@@ -83,10 +83,7 @@ public:
 	virtual const CSphMatch &	GetNextDoc ( DWORD * pInlineDocinfo ) = 0;
 	virtual void				SeekHitlist ( SphOffset_t uOff ) = 0;
 	virtual Hitpos_t			GetNextHit () = 0;
-	virtual void				CollectHitMask ()
-	{
-		m_bAllFieldsKnown = true;
-	}
+	virtual void				CollectHitMask ();
 
 	virtual void Reset ()
 	{

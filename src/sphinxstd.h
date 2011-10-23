@@ -1156,7 +1156,7 @@ public:
 
 	/// add new entry
 	/// returns true on success
-	/// returns false if this key is alredy hashed
+	/// returns false if this key is already hashed
 	bool Add ( const T & tValue, const KEY & tKey )
 	{
 		unsigned int uHash = ( (unsigned int) HASHFUNC::Hash ( tKey ) ) % LENGTH;

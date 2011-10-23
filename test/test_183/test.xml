@@ -12,6 +12,7 @@ indexer
 searchd
 {
 	<searchd_settings/>
+	workers = threads
 }
 
 source srctest
@@ -42,6 +43,91 @@ index tests
 	path			= <data_path/>/tests
     charset_type 	= utf-8
 }
+
+index rt28
+{
+ type = rt
+ path = <data_path/>/rt28
+
+ rt_field = field1
+ rt_field = field2
+ rt_field = field3
+ rt_field = field4
+ rt_field = field5
+ rt_field = field6
+ rt_field = field7
+ rt_field = field8
+ rt_field = field9
+ rt_field = field10
+ rt_field = field11
+ rt_field = field12
+ rt_field = field13
+ rt_field = field14
+ rt_field = field15
+ rt_field = field16
+ rt_field = field17
+ rt_field = field18
+ rt_field = field19
+ rt_field = field20
+ rt_field = field21
+ rt_field = field22
+ rt_field = field23
+ rt_field = field24
+ rt_field = field25
+ rt_field = field26
+ rt_field = field27
+ rt_field = field28
+ rt_attr_uint = attr1
+}
+
+index rt40
+{
+ type = rt
+ path = <data_path/>/rt40
+
+ rt_field = field1
+ rt_field = field2
+ rt_field = field3
+ rt_field = field4
+ rt_field = field5
+ rt_field = field6
+ rt_field = field7
+ rt_field = field8
+ rt_field = field9
+ rt_field = field10
+ rt_field = field11
+ rt_field = field12
+ rt_field = field13
+ rt_field = field14
+ rt_field = field15
+ rt_field = field16
+ rt_field = field17
+ rt_field = field18
+ rt_field = field19
+ rt_field = field20
+ rt_field = field21
+ rt_field = field22
+ rt_field = field23
+ rt_field = field24
+ rt_field = field25
+ rt_field = field26
+ rt_field = field27
+ rt_field = field28
+ rt_field = field29
+ rt_field = field30
+ rt_field = field31
+ rt_field = field32
+ rt_field = field33
+ rt_field = field34
+ rt_field = field35
+ rt_field = field36
+ rt_field = field37
+ rt_field = field38
+ rt_field = field39
+ rt_field = field40
+ rt_attr_uint = attr1
+}
+
 </config>
 
 <!-- NOTE: the test model is made wrong, since we postponed a feature.
@@ -68,6 +154,17 @@ Look at http://sphinxsearch.com/bugs/view.php?id=952 for details -->
 <sphinxql>select * from test where match ('field_one @t141 field_two')</sphinxql>
 <sphinxql>select * from tests where match ('field_one @t21 field_two')</sphinxql>
 <sphinxql>select * from test where match ('field_one @t21 field_two')</sphinxql>
+
+<sphinxql>insert into rt40 (id,attr1,field1,field2,field3,field4,field5,field6,field7,field8,field9,field10,field11,field12,field13,field14,field15,field16,field17,field18,field19,field20,field21,field22,field23,field24,field25,field26,field27,field28,field29,field30,field31,field32,field33,field34,field35,field36,field37,field38,field39,field40) values (123,111,'kw1','kw2','kw3','kw4','kw5','kw6','kw7','kw8','kw9','kw10','kw11','kw12','kw13','kw14','kw15','kw16','kw17','kw18','kw19','kw20','kw21','kw22','kw23','kw24','kw25','kw26','kw27','kw28','kw29','kw30','kw31','kw32','kw33','kw34','kw35','kw36','kw37','kw38','kw39','kw40')</sphinxql>
+<sphinxql>select *, 1 as testid from rt40 where match('kw37')</sphinxql>
+<sphinxql>select *, 2 as testid from rt40 where match('@field5 kw37')</sphinxql>
+<sphinxql>select *, 3 as testid from rt40 where match('@field37 kw37')</sphinxql>
+
+<sphinxql>insert into rt28 (id,attr1,field1,field2,field3,field4,field5,field6,field7,field8,field9,field10,field11,field12,field13,field14,field15,field16,field17,field18,field19,field20,field21,field22,field23,field24,field25,field26,field27,field28) values (124,222,'kw1','kw2','kw3','kw4','kw5','kw6','kw7','kw8','kw9','kw10','kw11','kw12','kw13','kw14','kw15','kw16','kw17','kw18','kw19','kw20','kw21','kw22','kw23','kw24','kw25','kw26','kw27','kw28')</sphinxql>
+<sphinxql>select *, 1 as testid from rt28 where match('kw17')</sphinxql>
+<sphinxql>select *, 2 as testid from rt28 where match('@field17 kw17')</sphinxql>
+<sphinxql>select *, 3 as testid from rt28 where match('@field3 kw17')</sphinxql>
+
 </sphqueries>
 
 <db_create>

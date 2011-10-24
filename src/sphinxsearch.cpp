@@ -4401,9 +4401,20 @@ int ExtRanker_WeightSum_c<USE_BM25>::GetMatches ()
 		if ( !pDoc ) { m_pDoclist = NULL; return iMatches; }
 
 		DWORD uRank = 0;
-		for ( int i=0; i<m_iWeights; i++ )
-			if ( ( i<32 ) && ( pDoc->m_uDocFields & (1<<i) ) )
-				uRank += m_pWeights[i];
+		DWORD uMask = pDoc->m_uDocFields;
+		if ( !uMask )
+		{
+			// possible if we have more than 32 fields
+			// honestly loading all hits etc is cumbersome, so let's just fake it
+			uRank = 1;
+		} else
+		{
+			// just sum weights over the lowest 32 fields
+			int iWeights = Min ( m_iWeights, 32 );
+			for ( int i=0; i<iWeights; i++ )
+				if ( pDoc->m_uDocFields & (1<<i) )
+					uRank += m_pWeights[i];
+		}
 
 		Swap ( m_dMatches[iMatches], m_dMyMatches[pDoc-m_dMyDocs] ); // OPTIMIZE? can avoid this swap and simply return m_dMyMatches (though in lesser chunks)
 		m_dMatches[iMatches].m_iWeight = USE_BM25

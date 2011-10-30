@@ -219,6 +219,76 @@ void test_excerpt_spz ( sphinx_client * client )
 }
 
 
+void test_persist_work ( sphinx_client * client )
+{
+	char * docs[] = { NULL };
+	const char words[] = "that is";
+	const char * index = "test1";
+	const char filler[] = " no need to worry about ";
+	sphinx_excerpt_options opts;
+	char ** res;
+	char * doc;
+	int i ;
+
+	// should be in sync with sphinxclient.c MAX_PACKET_LEN
+	i = 8*1024*1024 + 50;
+	docs[0] = malloc ( i );
+	if ( !docs[0] )
+		die ( "malloc failed at test_persist_work" );
+
+	memcpy ( docs[0], words, sizeof(words)-1 );
+	doc = docs[0] + sizeof(words)-1;
+	while ( ( doc + sizeof(filler) )<docs[0]+i )
+	{
+		memcpy ( doc, filler, sizeof(filler)-1 );
+		doc += sizeof(filler)-1;
+	}
+	*doc = '\0';
+
+	sphinx_open ( client );
+
+	for ( i=0; i<2; i++ )
+	{
+		if ( i==0 )
+		{
+			sphinx_init_excerpt_options ( &opts );
+			opts.limit = 0;
+			opts.limit_passages = 0;
+			opts.around = 0;
+			opts.html_strip_mode = "none";
+			opts.query_mode = SPH_TRUE;
+		} else
+		{
+			sphinx_init_excerpt_options ( &opts );
+			opts.limit = 500;
+			opts.limit_words = 10;
+			opts.limit_passages = 2;
+			opts.around = 5;
+			opts.html_strip_mode = "none";
+			opts.query_mode = SPH_TRUE;
+
+			*( docs[0]+sizeof(words)+100 ) = '\0';
+		}
+
+		printf ( "n=%d,\t", i );
+		res = sphinx_build_excerpts ( client, 1, docs, index, words, &opts );
+
+		if ( !res )
+		{
+			g_failed += ( res==NULL && i ); // 1st query fails, 2nd works
+			printf ( "query failed: %s", sphinx_error(client) );
+		} else
+		{
+			printf ( "res=%s", res[0] );
+			free ( res );
+		}
+		printf ( "\n" );
+	}
+	sphinx_close ( client );
+	printf ( "\n" );
+}
+
+
 void test_update ( sphinx_client * client, sphinx_uint64_t id )
 {
 	const char * attr = "group_id";
@@ -438,6 +508,10 @@ int main ( int argc, char ** argv )
 	sphinx_close ( client );
 
 	test_status ( client );
+
+	// long queries
+	title ( "long queries vs persist connection" );
+	test_persist_work ( client );
 
 	sphinx_destroy ( client );
 

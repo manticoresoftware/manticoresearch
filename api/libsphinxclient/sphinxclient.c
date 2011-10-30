@@ -1665,6 +1665,9 @@ static void net_get_response ( int fd, sphinx_client * client )
 	// sanity check the length, alloc the buffer
 	if ( len<0 || len>MAX_PACKET_LEN )
 	{
+		sock_close ( fd );
+		if ( client->sock>0 )
+			client->sock = -1;
 		set_error ( client, "response length out of bounds (len=%d)", len );
 		return;
 	}
@@ -1672,6 +1675,9 @@ static void net_get_response ( int fd, sphinx_client * client )
 	response = malloc ( len );
 	if ( !response )
 	{
+		sock_close ( fd );
+		if ( client->sock>0 )
+			client->sock = -1;
 		set_error ( client, "malloc() failed (bytes=%d)", len );
 		return;
 	}

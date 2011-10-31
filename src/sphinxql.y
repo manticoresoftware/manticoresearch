@@ -124,8 +124,8 @@ request:
 statement:
 	insert_into
 	| delete_from
-	| set_clause
-	| set_global_clause
+	| set_stmt
+	| set_global_stmt
 	| transact_op
 	| call_proc
 	| describe
@@ -138,6 +138,7 @@ statement:
 	| attach_index
 	| flush_rtindex
 	| set_transaction
+	| select_sysvar
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -149,7 +150,7 @@ multi_stmt_list:
 
 multi_stmt:
 	select_from
-	| show_clause
+	| show_stmt
 	;
 
 select_from:
@@ -166,7 +167,7 @@ select_from:
 			pParser->m_pQuery->m_sIndexes.SetBinary ( pParser->m_pBuf+$4.m_iStart, $4.m_iEnd-$4.m_iStart );
 		}
 	;
-	
+
 select_items_list:
 	select_item
 	| select_items_list ',' select_item
@@ -546,7 +547,7 @@ arg:
 
 //////////////////////////////////////////////////////////////////////////
 
-show_clause:
+show_stmt:
 	TOK_SHOW show_variable
 	;
 
@@ -566,7 +567,7 @@ set_value:
 	| TOK_CONST_FLOAT
 	;
 
-set_clause:
+set_stmt:
 	TOK_SET TOK_IDENT '=' boolean_value
 		{
 			pParser->SetStatement ( $2, SET_LOCAL );
@@ -586,7 +587,7 @@ set_clause:
 	| TOK_SET TOK_SYSVAR '=' set_value	{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	;
 
-set_global_clause:
+set_global_stmt:
 	TOK_SET TOK_GLOBAL TOK_USERVAR '=' '(' const_list ')'
 		{
 			pParser->SetStatement ( $3, SET_GLOBAL_UVAR );
@@ -913,6 +914,15 @@ flush_rtindex:
 		}
 	;
 
+//////////////////////////////////////////////////////////////////////////
+
+select_sysvar:
+	TOK_SELECT TOK_SYSVAR opt_limit_clause
+		{
+			pParser->m_pStmt->m_eStmt = STMT_DUMMY;
+		}
+	;
+	
 %%
 
 #if USE_WINDOWS

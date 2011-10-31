@@ -355,15 +355,15 @@ static inline int Fibonacci ( int i )
 {
 	if ( i<0 )
 		return 0;
-	int f1 = 0;
-	int f2 = 1;
+	int f0 = 0;
+	int f1 = 1;
 	int j = 0;
-	for ( j=0; j<i; j+=2 )
+	for ( j=0; j+1<i; j+=2 )
 	{
-		f1 += f2;
-		f2 += f1;
+		f0 += f1; // f_j
+		f1 += f0; // f_{j+1}
 	}
-	return (i&1) ? f1 : f2;
+	return (i&1) ? f1 : f0;
 }
 
 struct Expr_Fibonacci_c : public Expr_Unary_c

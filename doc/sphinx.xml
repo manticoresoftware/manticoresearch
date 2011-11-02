@@ -457,8 +457,9 @@ The data to be indexed can generally come from very different
 sources: SQL databases, plain text files, HTML files, mailboxes,
 and so on. From Sphinx point of view, the data it indexes is a
 set of structured <glossterm>documents</glossterm>, each of which has the
-same set of <glossterm>fields</glossterm>. This is biased towards SQL, where
-each row correspond to a document, and each column to a field.
+same set of <glossterm>fields</glossterm> and <glossterm>attributes</glossterm>.
+This is similar to SQL, where each row would correspond to a document,
+and each column to either a field or an attribute.
 </para>
 <para>
 Depending on what source Sphinx should get the data from,
@@ -467,10 +468,9 @@ This code is called <glossterm>data source driver</glossterm> (or simply
 <glossterm>driver</glossterm> or <glossterm>data source</glossterm> for brevity).
 </para>
 <para>
-At the time of this writing, there are drivers for MySQL and
-PostgreSQL databases, which can connect to the database using
-its native C/C++ API, run queries and fetch the data. There's
-also a driver called xmlpipe, which runs a specified command
+At the time of this writing, there are built-in drivers for
+MySQL, PostgreSQL, MS SQL (on Windows), and ODBC. There is also
+a generic driver called xmlpipe, which runs a specified command
 and reads the data from its <filename>stdout</filename>.
 See <xref linkend="xmlpipe"/> section for the format description.
 </para>
@@ -479,6 +479,42 @@ There can be as many sources per index as necessary. They will be
 sequentially processed in the very same order which was specifed in
 index definition. All the documents coming from those sources
 will be merged as if they were coming from a single source.
+</para>
+</sect1>
+
+
+<sect1 id="fields"><title>Full-text fields</title>
+<para>
+Full-text fields (or just <glossterm>fields</glossterm> for brevity)
+are the textual document contents that get indexed by Sphinx, and can be
+(quickly) searched for keywords.
+</para>
+<para>
+Fields are named, and you can limit your searches to a single
+field (eg. search through "title" only) or a subset of fields
+(eg. to "title" and "abstract" only). Sphinx index format generally
+supports up to 256 fields. However, up to version 2.0.1-beta indexes
+were forcibly limited by 32 fields, because of certain complications
+in the matching engine. Full support for up to 256 fields was added
+in version 2.0.2-beta.
+</para>
+<para>
+Note that the original contents of the fields are <b>not</b> stored
+in the Sphinx index. The text that you send to Sphinx gets processed,
+and a full-text index (a special data structure that enables quick
+searches for a keyword) gets built from that text. But the original
+text contents are then simply discarded. Sphinx assumes that you store
+those contents elsewhere anyway.
+</para>
+<para>
+Moreover, it is impossible to <emphasis>fully</emphasis> reconstruct
+the original text, because the specific whitespace, capitalization,
+punctuation, etc will all be lost during indexing. It is theoretically
+possible to partially reconstruct a given document from the Sphinx
+full-text index, but that would be a slow process (especially if
+the <link linkend="conf-dict">CRC dictionary</link> is used,
+which does not even store the original keywords and works with
+their hashes instead).
 </para>
 </sect1>
 
@@ -598,13 +634,17 @@ copies of this data.
 <sect1 id="mva"><title>MVA (multi-valued attributes)</title>
 <para>
 MVAs, or multi-valued attributes, are an important special type of per-document attributes in Sphinx.
-MVAs make it possible to attach lists of values to every document.
-They are useful for article tags, product categories, etc.
+MVAs let you attach sets of numeric values to every document.
+That is useful to implement article tags, product categories, etc.
 Filtering and group-by (but not sorting) on MVA attributes is supported.
 </para>
 <para>
-Currently, MVA list entries are limited to unsigned 32-bit integers.
-The list length is not limited, you can have an arbitrary number of values
+As of version 2.0.2-beta, MVA values can either be unsigned 32-bit integers
+(UNSIGNED INTEGER) or signed 64-bit integers (BIGINT). Up to version 2.0.1-beta,
+only the unsigned 32-bit values were supported.
+</para>
+<para>
+The set size is not limited, you can have an arbitrary number of values
 attached to each document as long as RAM permits (<filename>.spm</filename> file
 that contains the MVA values will be precached in RAM by <filename>searchd</filename>).
 The source data can be taken either from a separate query, or from a document field;
@@ -1414,7 +1454,7 @@ timestamp (point-in-time recovery), but none of that is implemented yet
 as of 1.10-beta.
 </para>
 <para>
-One unwanted side effect of binlogs is that activel updating
+One unwanted side effect of binlogs is that actively updating
 a small RT index that fully fits into a RAM chunk part will lead
 to an ever-growing binlog that can never be unlinked until clean
 shutdown. Binlogs are essentially append-only deltas against
@@ -1872,7 +1912,7 @@ Legacy matching modes automatically select a ranker as follows:
 <listitem><para>SPH_MATCH_BOOLEAN uses SPH_RANK_NONE ranker.</para></listitem>
 </itemizedlist>
 </para>
-<bridgehead>Expression based ranker (SPH_RANK_EXPR)</bridgehead>
+<bridgehead id="expression-ranker">Expression based ranker (SPH_RANK_EXPR)</bridgehead>
 <para>
 Expression ranker, added in version 2.0.2-beta, lets you change the ranking
 formula on the fly, on a per-query basis. For a quick kickoff, this is how you
@@ -2086,6 +2126,7 @@ Here's the complete reference list for quick access.
 <listitem><para><link linkend="expr-func-crc32">CRC32()</link></para></listitem>
 <listitem><para><link linkend="expr-func-day">DAY()</link></para></listitem>
 <listitem><para><link linkend="expr-func-exp">EXP()</link></para></listitem>
+<listitem><para><link linkend="expr-func-fibonacci">FIBONACCI()</link></para></listitem>
 <listitem><para><link linkend="expr-func-floor">FLOOR()</link></para></listitem>
 <listitem><para><link linkend="expr-func-geodist">GEODIST()</link></para></listitem>
 <listitem><para><link linkend="expr-func-idiv">IDIV()</link></para></listitem>
@@ -2190,6 +2231,15 @@ must be of an integer types. Introduced in version 1.10-beta.
 <varlistentry>
 <term id="expr-func-exp">EXP()</term>
 <listitem><para>Returns the exponent of the argument (e=2.718... to the power of the argument).</para></listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-fibonacci">FIBONACCI()</term>
+<listitem><para>Returns the N-th Fibonacci number, where N is the integer
+argument. That is, arguments of 0 and up will generate the values 0, 1, 1,
+2, 3, 5, 8, 13 and so on. Note that the computations are done using 32-bit
+integer math and thus numbers 48th and up will be returned modulo 2^32.
+</para></listitem>
 </varlistentry>
 
 <varlistentry>
@@ -3532,6 +3582,22 @@ exceptions, etc). This is useful for picking up indexes built on another
 machine with possibly different path layouts.
 </para></listitem>
 
+<listitem><para><option>--replay-flags=&lt;OPTIONS&gt;</option> switch,
+added in version 2.0.2-beta, can be used to specify a list of extra binary log
+replay options. The supported options are:
+<itemizedlist>
+	<listitem><para><option>accept-desc-timestamp</option>,
+	ignore descending transaction timestamps and replay such
+	transactions anyway (the default behavior is to exit
+	with an error).
+	</para></listitem>
+</itemizedlist>
+Example:
+<programlisting>
+$ searchd --replay-flags=accept-desc-timestamp
+</programlisting>
+</para></listitem>
+
 </itemizedlist>
 <para>There are some options for <filename>searchd</filename> that are specific
 to Windows platforms, concerning handling as a service, are only be available on Windows binaries.</para>
@@ -3886,7 +3952,9 @@ and not the index header.
 </para></listitem>
 <listitem><para><option>--check INDEXNAME</option> checks the index data
 files for consistency errors that might be introduced either by bugs
-in <filename>indexer</filename> and/or hardware faults.
+in <filename>indexer</filename> and/or hardware faults. Starting with
+version 2.0.2-beta, <option>--check</option> also works on RT indexes,
+but checks disk chunks only.
 </para></listitem>
 <listitem><para><option>--strip-path</option> strips the path names from
 all the file names referenced from the index (stopwords, wordforms,
@@ -3996,9 +4064,17 @@ The columns however can be computed expressions:
 <programlisting>
 SELECT *, @weight*10+docboost AS skey FROM example ORDER BY skey
 </programlisting>
+</para>
+<para>
 Starting with 2.0.1-beta, ORDER BY on a string attribute is supported,
 with respect for current collation (see <xref linkend="collations"/>).
-</para></listitem>
+</para>
+<para>
+Starting with 2.0.2-beta, ORDER BY RAND() syntax is supported.
+Note that this syntax is actually going to randomize the weight
+values and then order matches by those randomized weights.
+</para>
+</listitem>
 <listitem><para>LIMIT clause. Both LIMIT N and LIMIT M,N forms are supported.
 Unlike in regular SQL (but like in Sphinx API), an implicit LIMIT 0,20
 is present by default.
@@ -4019,6 +4095,7 @@ Supported options and respectively allowed values are:
 <listitem><para>'field_weights' - a named integer list (per-field user weights for ranking)</para></listitem>
 <listitem><para>'index_weights' - a named integer list (per-index user weights for ranking)</para></listitem>
 <listitem><para>'reverse_scan' - 0 or 1, lets you control the order in which full-scan query processes the rows</para></listitem>
+<listitem><para>'comment' - string, user comment that gets copied to a query log file</para></listitem>
 </itemizedlist>
 Example:
 <programlisting>
@@ -4209,11 +4286,22 @@ are planned, but not supported yet as of 1.10-beta.
 <programlisting>
 SET [GLOBAL] server_variable_name = value
 SET GLOBAL @user_variable_name = (int_val1 [, int_val2, ...])
+SET NAMES value
+SET @@dummy_variable = ignored_value
 </programlisting>
 <para>
-SET statement, introduced in version 1.10-beta, modifies a server variable value.
+SET statement, introduced in version 1.10-beta, modifies a variable value.
 The variable names are case-insensitive. No variable value changes survive
-server restart. There are the following classes of the variables:
+server restart.
+</para>
+<para>
+SET NAMES statement and SET @@variable_name syntax, both introduced
+in version 2.0.2-beta, do nothing. They were implemented to maintain
+compatibility with 3rd party MySQL client libraries, connectors,
+and frameworks that may need to run this statement when connecting.
+</para>
+<para>
+There are the following classes of the variables:
 <orderedlist>
 <listitem><para>per-session server variable (1.10-beta and above)</para></listitem>
 <listitem><para>global server variable (2.0.1-beta and above)</para></listitem>
@@ -4273,6 +4361,24 @@ connecting to a Sphinx server.
 Introduced in version 2.0.1-beta.
 </para></listitem>
 </varlistentry>
+<varlistentry>
+<term><code>SQL_AUTO_IS_NULL = value</code></term>
+<listitem><para>
+Does nothing; a placeholder to support frameworks, clients, and
+connectors that attempt to automatically enforce a charset when
+connecting to a Sphinx server.
+Introduced in version 2.0.2-beta.
+</para></listitem>
+</varlistentry>
+<varlistentry>
+<term><code>SQL_MODE = value</code></term>
+<listitem><para>
+Does nothing; a placeholder to support frameworks, clients, and
+connectors that attempt to automatically enforce a charset when
+connecting to a Sphinx server.
+Introduced in version 2.0.2-beta.
+</para></listitem>
+</varlistentry>
 </variablelist>
 </para>
 <para>
@@ -4301,6 +4407,29 @@ mysql> SET autocommit=0;
 Query OK, 0 rows affected (0.00 sec)
 
 mysql> SET GLOBAL query_log_format=sphinxql;
+Query OK, 0 rows affected (0.00 sec)
+</programlisting>
+</para>
+</sect1>
+
+
+<sect1 id="sphinxql-set-transaction"><title>SET TRANSACTION syntax</title>
+<programlisting>
+SET TRANSACTION ISOLATION LEVEL { READ UNCOMMITTED
+	| READ COMMITTED
+	| REPEATABLE READ
+	| SERIALIZABLE }
+</programlisting>
+<para>
+SET TRANSACTION statement, introduced in version 2.0.2-beta, does nothing.
+It was implemented to maintain compatibility with 3rd party MySQL client
+libraries, connectors, and frameworks that may need to run this statement
+when connecting.
+</para>
+<para>
+Example:
+<programlisting>
+mysql> SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
 Query OK, 0 rows affected (0.00 sec)
 </programlisting>
 </para>
@@ -4493,18 +4622,32 @@ Query OK, 0 rows affected (0.00 sec)
 
 <sect1 id="sphinxql-show-variables"><title>SHOW VARIABLES syntax</title>
 <programlisting>
-SHOW VARIABLES
+SHOW [{GLOBAL | SESSION}] VARIABLES
 </programlisting>
-<para>
-Added in version 2.0.1-beta, this is currently a placeholder 
-query that does nothing and reports success. That is in order
-to keep compatibility with frameworks and connectors that
-automatically execute this statement.
+<para><b>SHOW VARIABLES</b> statement was added in version 2.0.1-beta
+to improve compatibility with 3rd party MySQL connectors and frameworks
+that automatically execute this statement.
 </para>
+<para>
+In version 2.0.1-beta, it did nothing.
+</para>
+<para>
+Starting from version 2.0.2-beta, it returns the current values of
+a few server-wide variables. Also, support for GLOBAL and SESSION clauses
+was added.
 <programlisting>
-mysql> SHOW VARIABLES;
-Query OK, 0 rows affected (0.00 sec)
+mysql> SHOW GLOBAL VARIABLES;
++----------------------+----------+
+| Variable_name        | Value    |
++----------------------+----------+
+| autocommit           | 1        |
+| collation_connection | libc_ci  |
+| query_log_format     | sphinxql |
+| log_level            | info     |
++----------------------+----------+
+4 rows in set (0.00 sec)
 </programlisting>
+</para>
 </sect1>
 
 
@@ -4530,29 +4673,40 @@ Query OK, 0 rows affected (0.00 sec)
 UPDATE index SET col1 = newval1 [, ...] WHERE where_condition
 </programlisting>
 <para>
-UPDATE statement was added in version 2.0.1-beta. It can currently
-update 32-bit and 64-bit integers, 32-bit and 64-bit MVAs and float attributes only. Multiple attributes and values
-can be specified. Both RT and disk indexes are supported. Updates on other attribute types are also planned.
+UPDATE statement was added in version 2.0.1-beta. Multiple attributes
+and values can be specified in a single statement. Both RT and disk indexes
+are supported.
 </para>
-<para><code>where_condition</code> uses the same syntax as in SELECT statement (Refer to <xref linkend="sphinxql-select"/> for details).
+<para>
+As of version 2.0.2-beta, UPDATE does not support string attributes.
+All the other attribute types (int, bigint, float, MVA) can be updated.
+</para>
+<para>
+<code>where_condition</code> uses the same syntax as the SELECT statement
+(see <xref linkend="sphinxql-select"/> for details).
 </para>
 <para>
 When assigning the out-of-range values to 32-bit attributes, they
-will be trimmed to their lower 32 bits without a prompt. For example, if
-you try to update the 32-bit unsigned int with number 4294967297, you
-actually will write there the number 1. Because the low 32 bits of
-4294967297 (0x100000001) is exactly 1 (0x00000001).
+will be trimmed to their lower 32 bits without a prompt. For example,
+if you try to update the 32-bit unsigned int with a value of 4294967297,
+the value of 1 will actually be stored, because the lower 32 bits of
+4294967297 (0x100000001 in hex) amount to 1 (0x00000001 in hex).
 </para>
 <para>
 MVA values sets for updating (and also for INSERT or REPLACE, refer
-to <xref linkend="sphinxql-insert"/>) must be written comma-separated and
-surrounded in cirly brackets. For wiping out the MVA value assign the empty
-brackets to it.
+to <xref linkend="sphinxql-insert"/>) must be specificed as comma-separated
+lists in parentheses. To erase the MVA value, just assign () to it.
 </para>
 <programlisting>
 mysql> UPDATE myindex SET enabled=0 WHERE id=123;
 Query OK, 1 rows affected (0.00 sec)
-mysql> UPDATE myindex SET bigattr=-100000000000, fattr=3465.23, mvattr1=(3,6,4), mvattr2=() WHERE match('hehe') AND enabled=1;
+
+mysql> UPDATE myindex
+  SET bigattr=-100000000000,
+    fattr=3465.23,
+    mvattr1=(3,6,4),
+    mvattr2=()
+  WHERE MATCH('hehe') AND enabled=1;
 Query OK, 148 rows affected (0.01 sec)
 </programlisting>
 </sect1>
@@ -4647,6 +4801,38 @@ mysql> SELECT * FROM rt WHERE MATCH('test');
 
 mysql> SELECT * FROM disk WHERE MATCH('test');
 ERROR 1064 (42000): no enabled local indexes to search
+</programlisting>
+</sect1>
+
+
+<sect1 id="sphinxql-flush-rtindex"><title>FLUSH RTINDEX syntax</title>
+<programlisting>
+FLUSH RTINDEX rtindex
+</programlisting>
+<para>
+FLUSH RTINDEX statement, added in version 2.0.2-beta, forcibly
+flushes RT index RAM chunk contents to disk.
+</para>
+<para>
+Backing up a RT index is as simple as copying over its data files,
+followed by the binary log. However, recovering from that backup means
+that all the transactions in the log since the last successful RAM chunk
+write would need to be replayed. Those writes normally happen either
+on a clean shutdown, or periodically with a (big enough!) interval
+between writes specified in
+<link linkend="conf-rt-flush-period">rt_flush_period</link> directive.
+So such a backup made at an arbitrary point in time just might end up
+with way too much binary log data to replay.
+</para>
+<para>
+FLUSH RTINDEX forcibly writes the RAM chunk contents to disk,
+and also causes the subsequent cleanup of (now-redundant) binary
+log files. Thus, recovering from a backup made just after
+FLUSH RTINDEX should be almost instant.
+</para>
+<programlisting>
+mysql> FLUSH RTINDEX rt;
+Query OK, 0 rows affected (0.05 sec)
 </programlisting>
 </sect1>
 
@@ -8136,12 +8322,20 @@ Optional, default is 'crc'.
 Introduced in version 2.0.1-beta.
 </para>
 <para>
-The default dictionary type in Sphinx, and the only one available
-until version 2.0.1-beta, is a so-called CRC dictionary which never
-stores the original keyword text in the index. Instead, keywords are
-replaced with their control sum value (either CRC32 or FNV64, depending
-whether Sphinx was built with <option>--enable-id64</option>) both
-when searching and indexing, and that value is used internally
+CRC dictionary mode (dict=crc) is the default dictionary type
+in Sphinx, and the only one available until version 2.0.1-beta.
+Keywords dictionary mode (dict=keywords) was added in 2.0.1-beta,
+primarly to (greatly) reduce indexing impact and enable substring
+searches on huge collections. They also eliminate the chance of
+CRC32 collisions. In 2.0.1-beta, that mode was only supported
+for disk indexes. Starting with 2.0.2-beta, RT indexes are
+also supported.
+</para>
+<para>
+CRC dictionaries never store the original keyword text in the index.
+Instead, keywords are replaced with their control sum value (either CRC32 or
+FNV64, depending whether Sphinx was built with <option>--enable-id64</option>)
+both when searching and indexing, and that value is used internally
 in the index.
 </para>
 <para>
@@ -9711,8 +9905,9 @@ rt_attr_float = gpa
 <sect2 id="conf-rt-attr-multi"><title>rt_attr_multi</title>
 <para>
 <link linkend="mva">Multi-valued attribute</link> (MVA) declaration.
+Declares the UNSIGNED INTEGER (unsigned 32-bit) MVA attribute.
 Multi-value (ie. there may be more than one such attribute declared), optional.
-Applies to <option>rt</option>-indexes only.
+Applies to RT indexes only.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -9722,9 +9917,10 @@ rt_attr_multi = my_tags
 
 <sect2 id="conf-rt-attr-multi-64"><title>rt_attr_multi_64</title>
 <para>
-<link linkend="mva">Multi-valued attribute</link> (MVA) declaration. Declares the BIGINT (signed 64-bit) MVA attribute.
+<link linkend="mva">Multi-valued attribute</link> (MVA) declaration.
+Declares the BIGINT (signed 64-bit) MVA attribute.
 Multi-value (ie. there may be more than one such attribute declared), optional.
-Applies to <option>rt</option>-indexes only.
+Applies to RT indexes only.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -10925,6 +11121,34 @@ watchdog = 0 # disable watchdog
 </sect2>
 
 
+<sect2 id="conf-prefork-rotation-throttle"><title>prefork_rotation_throttle</title>
+<para>
+Delay between restarting preforked children on index rotation, in milliseconds.
+Optional, default is 0 (no delay).
+Introduced in version 2.0.2-beta.
+</para>
+<para>
+When running in <code><link linkend="conf-workers">workers</link> = prefork</code>
+mode, every index rotation needs to restart all children to propagate the newly
+loaded index data changes. Restarting all of them at once might put excessive
+strain on CPU and/or network connections. (For instance, when the application
+keeps a bunch of open persistent connections to different children, and all those
+children restart.) Those bursts can be throttled down with
+<option>prefork_rotation_throttle</option> directive. Note that
+the children will be restarted sequentially, and thus "old" results might
+persist for a few more seconds. For instance, if
+<option>prefork_rotation_throttle</option> is set to 50 (milliseconds), and
+there are 30 children, then the last one would only be <emphasis>actually</emphasis>
+restarted 1.5 seconds (50*30=1500 milliseconds) <emphasis>after</emphasis>
+the "rotation finished" message in the <filename>searchd</filename> event log.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+prefork_rotation_throttle = 50 # throttle children restarts by 50 msec each
+</programlisting>
+</sect2>
+
+
 </sect1>
 
 
@@ -10950,7 +11174,114 @@ watchdog = 0 # disable watchdog
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 
-<sect1 id="rel111"><title>Version 2.0.1-beta, 22 apr 2011</title>
+<sect1 id="rel202"><title>Version 2.0.2-beta, ?? nov 2011</title>
+<bridgehead>Major new features</bridgehead>
+<itemizedlist>
+<listitem><para>added keywords dictionary (<link linkend="conf-dict"><code>dict=keywords</code></link>) support to RT indexes</para></listitem>
+<listitem><para>added <link linkend="conf-rt-attr-multi">MVA</link>, <link linkend="conf-index-exact-words">index_exact_words</link> support to RT indexes (#888)</para></listitem>
+<listitem><para>added <link linkend="mva">MVA64</link> (a set of BIGINTs) support to both disk and RT indexes (<link linkend="conf-rt-attr-multi-64">rt_attr_multi_64</link> directive)</para></listitem>
+<listitem><para>added an <link linkend="expression-ranker">expression-based ranker</link>, and a number of new ranking factors</para></listitem>
+<listitem><para>added <link linkend="sphinxql-attach-index">ATTACH INDEX</link> statement that converts a disk index to RT index</para></listitem>
+<listitem><para>added <code>WHERE</code> clause support to <link linkend="sphinxql-update">UPDATE</link> statement</para></listitem>
+<listitem><para>added <code>bigint</code>, <code>float</code>, and <code>MVA</code> attribute support to <link linkend="sphinxql-update">UPDATE</link> statement</para></listitem>
+</itemizedlist>
+<bridgehead>New features</bridgehead>
+<itemizedlist>
+<listitem><para>added support for upto <link linkend="fields">256 searchable fields</link> (was upto 32 before)</para></listitem>
+<listitem><para>added <link linkend="expr-func-fibonacci"><code>FIBONACCI()</code></link> function to <link linkend="expressions">expressions</link></para></listitem>
+<listitem><para>added <link linkend="api-func-buildexcerpts">load_files_scattered option</link> to snippets</para></listitem>
+<listitem><para>added implicit attribute type promotions in multi-index result sets (#939)</para></listitem>
+<listitem><para>added index names to <filename>indexer</filename> progress message on merge (#928)</para></listitem>
+<listitem><para>added <link linkend="ref-searchd"><option>--replay-flags</option></link> switch to <filename>searchd</filename></para></listitem>
+<listitem><para>added string attribute support and a few previously missing <link linkend="sphinxse-snippets">snippets options</link> to SphinxSE</para></listitem>
+<listitem><para>added previously missing <link linkend="api-func-status"><code>Status()</code></link>, <link linkend="api-func-setconnecttimeout"><code>SetConnectTimeout()</code></link> API calls to Python API</para></listitem>
+<listitem><para>added <code>ORDER BY RAND()</code> support to <link linkend="sphinxql-select">SELECT</link> statement</para></listitem>
+<listitem><para>added Sphinx version to Windows crash log</para></listitem>
+<listitem><para>added RT index support to <link linkend="ref-indextool">indextool</link> <code>--check</code> (checks disk chunks only) (#877)</para></listitem>
+<listitem><para>added <link linkend="conf-prefork-rotation-throttle">prefork_rotation_throttle</link> directive (preforked children restart delay, in milliseconds) (#873)</para></listitem>
+<listitem><para>added <link linkend="conf-on-file-field-error">on_file_field_error</link> directive (different <code>sql_file_field</code> handling modes)</para></listitem>
+<listitem><para>added manpages for all the programs</para></listitem>
+<listitem><para>added syslog logging support</para></listitem>
+<listitem><para>added sentence, paragraph, and zone support in <code>html_strip_mode=retain</code> mode to snippets</para></listitem>
+<listitem><para>optimized search performance with many <code>ZONE</code> operators</para></listitem>
+<listitem><para>improved suggestion tool (added Levenshtein limit, removed extra DB fetch)</para></listitem>
+<listitem><para>improved <link linkend="conf-index-sp">sentence extraction</link> (handles salutations, starting initials better now)</para></listitem>
+<listitem><para>changed <link linkend="conf-max-filter-values">max_filter_values</link> sanity check to 10M values</para></listitem>
+</itemizedlist>
+<bridgehead>New SphinxQL features</bridgehead>
+<itemizedlist>
+<listitem><para>added <link linkend="sphinxql-flush-rtindex">FLUSH RTINDEX</link> statement</para></listitem>
+<listitem><para>added <code>dist_threads</code> directive (parallel processing), <code>load_files</code>, <code>load_files_scattered</code>, batch syntax (multiple documents) support to <link linkend="sphinxql-call-snippets">CALL SNIPPETS</link> statement</para></listitem>
+<listitem><para>added <code>OPTION comment='...'</code> support to <link linkend="sphinxql-select">SELECT</link> statement (#944)</para></listitem>
+<listitem><para>added <link linkend="sphinxql-show-variables">SHOW VARIABLES</link> statement</para></listitem>
+<listitem><para>added dummy handlers for <link linkend="sphinxql-set-transaction">SET TRANSACTION</link>, <link linkend="sphinxql-set">SET NAMES</link>, <link linkend="sphinxql-select">SELECT @@sysvar</link> statements, and for <code>sql_auto_is_null</code>, <code>sql_mode</code>, and @@-style variables (like @@tx_isolation) in <link linkend="sphinxql-set">SET</link> statement (better MySQL frameworks/connectors support)</para></listitem>
+<listitem><para>added complete <link linkend="sphinxql-log-format">SphinxQL error logging</link> (all errors are logged now, not just <code>SELECT</code>s)</para></listitem>
+<listitem><para>improved <link linkend="sphinxql-select">SELECT</link> statement syntax, made expressions aliases optional</para></listitem>
+</itemizedlist>
+
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+<listitem><para>fixed #940, group-by with a small enough <code>max_matches</code> limit could occasionaly crash and/or sort wrongly</para></listitem>
+<listitem><para>fixed #932, sending huge queries to agents occasionally failed (mainly on Windows)</para></listitem>
+<listitem><para>fixed #926, snippets did not highlight widlcard matches with morphology enabled</para></listitem>
+<listitem><para>fixed #918, crash logger did not report a proper query in <code>dist_threads</code> case</para></listitem>
+<listitem><para>fixed #916, watchdog caused (endless) respawns if there was a crash during shutdown</para></listitem>
+<listitem><para>fixed #904, attribute names were not forcibly case-folded in some API calls (eg. <code>SetGroupDistinct</code>)</para></listitem>
+<listitem><para>fixed #902, query parser did not support <code>stopword_step=0</code></para></listitem>
+<listitem><para>fixed #897, network sockets dangled (open but unattended) while replaying binlog</para></listitem>
+<listitem><para>fixed #855, <code>allow_empty</code> option in snippets did not always work correctly</para></listitem>
+<listitem><para>fixed #854, indexing with many <code>bigint</code> attributes and <code>docinfo=inline</code> crashed</para></listitem>
+<listitem><para>fixed #838, RT MVA insertion did not sort MVA values, caused matching issues</para></listitem>
+<listitem><para>fixed #833, duplicate MVA values were not eliminated on update</para></listitem>
+<listitem><para>fixed #832, certain (overshort/incorrect) documents crashed indexing MS SQL Unicode columns</para></listitem>
+<listitem><para>fixed #829, query parser did not properly handle numerics with <code>blend_chars</code></para></listitem>
+<listitem><para>fixed #814, group-by string attributes in RT indexes dit not always work correctly</para></listitem>
+<listitem><para>fixed #812, utf8 stemming produced unexpected stems on words with single-byte chars</para></listitem>
+<listitem><para>fixed #808, huge queries crashed logging with <code>query_log_format=sphinxql</code></para></listitem>
+<listitem><para>fixed #806, stray single-star keyword crashed on querying</para></listitem>
+<listitem><para>fixed #798, snippets ignored <code>index_exact_words</code> in query_mode</para></listitem>
+<listitem><para>fixed #797, RT klist loader had an occasional off-by-one crash</para></listitem>
+<listitem><para>fixed #791, <code>preopen_indexes</code> erroneously defaulted to 0 on Windows</para></listitem>
+<listitem><para>fixed #790, huge dictionaries (over 4 GB) did not work</para></listitem>
+<listitem><para>fixed #786, <code>inplace_enable</code> could occasionally corrupt the indexes</para></listitem>
+<listitem><para>fixed #775, doc had a typo (soundex vs metaphone)</para></listitem>
+<listitem><para>fixed #772, snippets duplicated blended chars on a SPZ boundary</para></listitem>
+<listitem><para>fixed #762, query parser truncated digit-only keywords over 15 digits</para></listitem>
+<listitem><para>fixed #736, query parser dit not properly handle blended/special char sequence</para></listitem>
+<listitem><para>fixed #726, rotation of an index with a changed attribute count crashed</para></listitem>
+<listitem><para>fixed #687, querying multiple indexes with index weights and sort-by expression produced incorrect (unadjusted) weights</para></listitem>
+<listitem><para>fixed #585, (unsupported) string ordinals were silently zeroed out with <code>docinfo=inline</code> (instead of failing)</para></listitem>
+<listitem><para>fixed #583, certain keywords could occasionally crash multiforms</para></listitem>
+<listitem><para>fixed that concurrent MVA updates could crash</para></listitem>
+<listitem><para>fixed that query parser did not ignore a pure blended token with a leading modifier</para></listitem>
+<listitem><para>fixed that query parser did not properly handle a modifier followed by a dash</para></listitem>
+<listitem><para>fixed that substring indexing with <code>dict=crc</code> did not support <code>index_exact_words</code> and <code>zones</code></para></listitem>
+<listitem><para>fixed that in a rare edge case common subtree cache could crash</para></listitem>
+<listitem><para>fixed that empty result set returned the full schema (rather than <code>SELECT</code>-ed columns)</para></listitem>
+<listitem><para>fixed that SphinxQL did not have a sanity check for (currently unsupported) result set schemas over 250 attributes</para></listitem>
+<listitem><para>fixed that updates on regular indexes were not binlogged</para></listitem>
+<listitem><para>fixed that multi-query optimization check for expressions did not handle multi-index case</para></listitem>
+<listitem><para>fixed that SphinxSE did not build vs MySQL 5.5 release</para></listitem>
+<listitem><para>fixed that <code>proximity_bm25</code> ranker could yield incorrect weight on duplicated keywords</para></listitem>
+<listitem><para>fixed that prefix expansion with <code>dict=keyword</code> occasionally crashed</para></listitem>
+<listitem><para>fixed that <code>strip_path</code> did not work on RT disk chunks</para></listitem>
+<listitem><para>fixed that exclude filters were not properly logged in <code>query_log_format=sphinxql</code> mode</para></listitem>
+<listitem><para>fixed that plain string attribute check in <filename>indextool</filename> <code>--check</code> was broken</para></listitem>
+<listitem><para>fixed that Java API did not let specify a connection timeout</para></listitem>
+<listitem><para>fixed that ordinal and wordcount attributes could not be fetched via SphinxQL</para></listitem>
+<listitem><para>fixed that in a rare edge case <code>OR/ORDER</code> would not match properly</para></listitem>
+<listitem><para>fixed that sending (huge) query response did not handle <code>EINTR</code> properly</para></listitem>
+<listitem><para>fixed that <code>SPH04</code> ranker could yield incorrectly high weight in some cases</para></listitem>
+<listitem><para>fixed that C API did not let zero out cutoff, <code>max_matches</code> settings</para></listitem>
+<listitem><para>fixed that on a persistent connection there were occasionally issues handling signals while doing network reads/waitss</para></listitem>
+<listitem><para>fixed that in a rare edge case (field start modifier in a certain complex query) querying crashed</para></listitem>
+<listitem><para>fixed that snippets did not support <code>dist_threads</code> with <code>load_files=0</code></para></listitem>
+<listitem><para>fixed that in some extremely rare edge cases tiny parts of an index could end up corrupted with <code>dict=keywords</code></para></listitem>
+<listitem><para>fixed that field/zone conditions were not propagated to expanded keywords with <code>dict=keywords</code></para></listitem>
+</itemizedlist>
+</sect1>
+
+<sect1 id="rel201"><title>Version 2.0.1-beta, 22 apr 2011</title>
 <bridgehead>New general features</bridgehead>
 <itemizedlist>
 <listitem><para>added remapping support to <link linkend="conf-blend-chars">blend_chars</link> directive</para></listitem>

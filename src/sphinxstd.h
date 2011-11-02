@@ -95,7 +95,7 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 
 #if USE_ODBC
 // UnixODBC compatible DWORD
-#if defined(__alpha) || defined(__sparcv9) || defined(__LP64__) || (defined(__HOS_AIX__) && defined(_LP64))
+#if defined(__alpha) || defined(__sparcv9) || defined(__LP64__) || (defined(__HOS_AIX__) && defined(_LP64)) || defined(__APPLE__)
 typedef unsigned int		DWORD;
 #else
 typedef unsigned long		DWORD;
@@ -154,8 +154,13 @@ typedef unsigned long long uint64_t;
 #define UINT64_FMT "%" PRIu64
 #define INT64_FMT "%" PRIi64
 
+#ifndef UINT64_MAX
 #define UINT64_MAX U64C(0xffffffffffffffff)
+#endif
+
+#ifndef INT64_MAX
 #define INT64_MAX I64C(0x7fffffffffffffff)
+#endif
 
 STATIC_SIZE_ASSERT ( uint64_t, 8 );
 STATIC_SIZE_ASSERT ( int64_t, 8 );

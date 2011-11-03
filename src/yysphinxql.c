@@ -1802,7 +1802,7 @@ yyreduce:
   case 55:
 
     {
-			if ( !pParser->AddUservarFilter ( yyvsp[-3].m_sValue, yyvsp[-1].m_sValue, true ) )
+			if ( !pParser->AddUservarFilter ( yyvsp[-3].m_sValue, yyvsp[0].m_sValue, true ) )
 				YYERROR;
 		;}
     break;

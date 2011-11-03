@@ -259,7 +259,7 @@ where_item:
 		}
 	| expr_ident TOK_NOT TOK_IN TOK_USERVAR
 		{
-			if ( !pParser->AddUservarFilter ( $1.m_sValue, $3.m_sValue, true ) )
+			if ( !pParser->AddUservarFilter ( $1.m_sValue, $4.m_sValue, true ) )
 				YYERROR;
 		}
 	| expr_ident TOK_BETWEEN const_int TOK_AND const_int

@@ -10,6 +10,7 @@ indexer
 searchd
 {
 	<searchd_settings/>
+	workers = threads
 }
 
 source test
@@ -55,6 +56,10 @@ CREATE TABLE test_table
 	<sphinxql>select * from test where @id IN (1,3,6,1000,7)</sphinxql>
 	<sphinxql>select * from test where idd IN (875,321,60,1010,20,457,20,311,20,750,70,10)</sphinxql>
 	<sphinxql>select * from test where idd NOT IN (60,1010,20,457,20,311,20,750,70,10)</sphinxql>
+	<!-- here is regression broken NOT IN @global -->
+	<sphinxql>set global @attr_filter=(10,20,30,70)</sphinxql>
+	<sphinxql>select * from test where idd IN @attr_filter</sphinxql>
+	<sphinxql>select * from test where idd NOT IN @attr_filter</sphinxql>
 </sphqueries>
 
 </test>

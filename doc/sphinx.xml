@@ -2734,6 +2734,7 @@ Match mode can take one of the following values:
 <listitem><para>"phr" for SPH_MATCH_PHRASE mode;</para></listitem>
 <listitem><para>"bool" for SPH_MATCH_BOOLEAN mode;</para></listitem>
 <listitem><para>"ext" for SPH_MATCH_EXTENDED mode;</para></listitem>
+<listitem><para>"ext2" for SPH_MATCH_EXTENDED2 mode;</para></listitem>
 <listitem><para>"scan" if the full scan mode was used, either by being specified with SPH_MATCH_FULLSCAN, or if the query was empty (as documented under <link linkend="matching-modes">Matching Modes</link>)</para></listitem>
 </itemizedlist>
 Sort mode can take one of the following values:

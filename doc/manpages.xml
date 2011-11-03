@@ -542,9 +542,8 @@ $ indexer mysmallindex mybigindex</programlisting>
 
       <variablelist remap="IP">
         <varlistentry>
-          <term><option>--config</option>
-          <replaceable>CONFIGFILE</replaceable>, <option>-c</option>
-          <replaceable>CONFIGFILE</replaceable></term>
+          <term><option>--config</option><replaceable>CONFIGFILE</replaceable>,
+          <option>-c</option><replaceable>CONFIGFILE</replaceable></term>
 
           <listitem>
             <para>Tell <command>searchd</command> to use the given file as its
@@ -671,6 +670,19 @@ $ indexer mysmallindex mybigindex</programlisting>
         </varlistentry>
 
         <varlistentry>
+          <term><option>--nodetach</option></term>
+
+          <listitem>
+            <para>Do not 'daemonize', or, do not detach into background. Apart
+            debug purposes, this switch is useful when you manage sphinx with
+            upstart init daemon. In this case actual 'daemonizing' will be
+            done by upstart itself, and also all tasks like starting,
+            stopping, reloading the config and respawning on crash will be
+            done by the system, not the sphinx.</para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
           <term><option>--pidfile</option>
           <replaceable>PIDFILE</replaceable></term>
 
@@ -689,6 +701,26 @@ $ indexer mysmallindex mybigindex</programlisting>
             <para>Example:</para>
 
             <programlisting>$ searchd --config /home/myuser/sphinx.conf --pidfile /home/myuser/sphinx.pid</programlisting>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><option>--replay-flags</option> <replaceable>OPTIONS</replaceable></term>
+
+          <listitem>
+            <para>Specify a list of extra binary log replay options. The
+            supported options are:<itemizedlist>
+                <listitem>
+                  <para><option>accept-desc-timestamp</option>, ignore
+                  descending transaction timestamps and replay such
+                  transactions anyway (the default behavior is to exit with an
+                  error).</para>
+                </listitem>
+              </itemizedlist></para>
+
+            <para>Example:</para>
+
+            <programlisting>$ searchd --replay-flags=accept-desc-timestamp</programlisting>
           </listitem>
         </varlistentry>
 

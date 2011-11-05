@@ -789,45 +789,46 @@ void CSphProcessSharedMutex::Unlock () const
 #endif
 }
 
-#if !USE_WINDOWS
+
 bool CSphProcessSharedMutex::TimedLock ( int tmSpin ) const
 {
-	uint64_t tmStart = sphMicroTimer();
-	struct timespec tp;
-	tp.tv_sec = tmStart / 1000000;
-	tp.tv_nsec = ( tmStart % 1000000 ) + tmSpin * 1000;
-	if ( m_pMutex )
-	{
-#if HAVE_PTHREAD_MUTEX_TIMEDLOCK
-		return ( pthread_mutex_timedlock ( m_pMutex, &tp )==0 );
+#if USE_WINDOWS
+	return false;
 #else
-		int iRes = EBUSY;
-		int64_t tmTill = sphMicroTimer() + tmSpin;
-		do
-		{
-			iRes = pthread_mutex_trylock ( m_pMutex );
-			if ( iRes==EBUSY )
-			{
-				sphSleepMsec ( 0 );
-			}
-		}
-		while ( iRes==EBUSY && sphMicroTimer()<tmTill );
+	if ( !m_pMutex )
+		return false;
 
-		if ( iRes==EBUSY )
-			iRes = pthread_mutex_trylock ( m_pMutex );
+#if defined(HAVE_PTHREAD_MUTEX_TIMEDLOCK) && defined(HAVE_CLOCK_GETTIME)
+	struct timespec tp;
+	clock_gettime ( CLOCK_REALTIME, &tp );
 
-		return iRes!=0;
-#endif
+	tp.tv_nsec += tmSpin * 1000;
+	if ( tp.tv_nsec > 1000000 )
+	{
+		int iDelta = (int)( tp.tv_nsec / 1000000 );
+		tp.tv_sec += iDelta * 1000000;
+		tp.tv_nsec -= iDelta * 1000000;
 	}
 
-	return false;
-}
+	return ( pthread_mutex_timedlock ( m_pMutex, &tp )==0 );
 #else
-bool CSphProcessSharedMutex::TimedLock ( int ) const
-{
-	return false;
+	int iRes = EBUSY;
+	int64_t tmTill = sphMicroTimer() + tmSpin;
+	do
+	{
+		iRes = pthread_mutex_trylock ( m_pMutex );
+		if ( iRes==EBUSY )
+			sphSleepMsec ( 0 );
+	} while ( iRes==EBUSY && sphMicroTimer()<tmTill );
+
+	if ( iRes==EBUSY )
+		iRes = pthread_mutex_trylock ( m_pMutex );
+
+	return iRes!=0;
+#endif // HAVE_PTHREAD_MUTEX_TIMEDLOCK && HAVE_CLOCK_GETTIME
+#endif // USE_WINDOWS
 }
-#endif
+
 
 const char * CSphProcessSharedMutex::GetError() const
 {

@@ -233,19 +233,25 @@ to compile and run Sphinx without any modifications.
 Currently known systems Sphinx has been successfully running on are:
 <itemizedlist>
 <listitem><para>Linux 2.4.x, 2.6.x (many various distributions)</para></listitem>
-<listitem><para>Windows 2000, XP</para></listitem>
-<listitem><para>FreeBSD 4.x, 5.x, 6.x, 7.x</para></listitem>
+<listitem><para>Windows 2000, XP, 7</para></listitem>
+<listitem><para>FreeBSD 4.x, 5.x, 6.x, 7.x, 8.x</para></listitem>
 <listitem><para>NetBSD 1.6, 3.0</para></listitem>
 <listitem><para>Solaris 9, 11</para></listitem>
 <listitem><para>Mac OS X</para></listitem>
 </itemizedlist>
 </para>
 <para>
-CPU architectures known to work include X86, X86-64, SPARC64, ARM.
+CPU architectures known to work include i386 (aka x86), amd64 (aka x86_64),
+SPARC64, and ARM.
 </para>
 <para>
-Chance are good that Sphinx should work on other Unix platforms as well;
-please report any platforms missing from this list that worked for you!
+Chance are good that Sphinx should work on other Unix platforms and/or
+CPU architectures just as well. Please report any other platforms that
+worked for you!
+</para>
+<para>
+All platforms are production quality. There are no principal functional
+limitations on any platform.
 </para>
 </sect1>
 
@@ -260,7 +266,7 @@ and install Sphinx:
 </itemizedlist>
 </para>
 <para>
-On Windows, you will need Microsoft Visual C/C++ Studio .NET 2003 or 2005.
+On Windows, you will need Microsoft Visual C/C++ Studio .NET 2005 or above.
 Other compilers/environments will probably work as well, but for the
 time being, you will have to build makefile (or other environment
 specific project files) manually.
@@ -1220,13 +1226,8 @@ index rt
 </programlisting>
 </example>
 <para>
-RT INDEXES ARE CURRENTLY (AS OF VERSION 1.10-beta) A WORK IN PROGRESS.
-Therefore, they might lack certain features: for instance, prefix/infix
-indexing, MVA attributes, etc are not supported yet.  There also might be
-performance and stability issues.  However, all the regular indexing features
-and most of the searching features are already in place, our internal
-testing passes, and last but not least a number of production instances
-are already using RT indexes with good results.
+As of 2.0.1-beta and above, RT indexes are production quality,
+despite a few missing features.
 </para>
 <para>
 RT index can be accessed using MySQL protocol. INSERT, REPLACE, DELETE, and
@@ -4679,8 +4680,9 @@ and values can be specified in a single statement. Both RT and disk indexes
 are supported.
 </para>
 <para>
-As of version 2.0.2-beta, UPDATE does not support string attributes.
-All the other attribute types (int, bigint, float, MVA) can be updated.
+As of version 2.0.2-beta, all atributes types (int, bigint, float, MVA)
+except for strings can be updated. Previously, some of the types were not
+supported.
 </para>
 <para>
 <code>where_condition</code> uses the same syntax as the SELECT statement
@@ -10114,9 +10116,9 @@ either index the document, assuming empty content in this particular field,
 or skip the document, or fail indexing entirely. <option>on_file_field_error</option>
 directive controls that behavior. The values it takes are:
 <itemizedlist>
-<listitem><code>ignore_field</code>, index the current document without field;</listitem>
-<listitem><code>skip_document</code>, skip the current document but continue indexing;</listitem>
-<listitem><code>fail_index</code>, fail indexing with an error message.</listitem>
+<listitem><para><code>ignore_field</code>, index the current document without field;</para></listitem>
+<listitem><para><code>skip_document</code>, skip the current document but continue indexing;</para></listitem>
+<listitem><para><code>fail_index</code>, fail indexing with an error message.</para></listitem>
 </itemizedlist>
 </para>
 <para>

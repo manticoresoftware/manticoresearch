@@ -3781,6 +3781,7 @@ public:
 			m_dQwordFields.Assign32 ( pDoc->m_uDocFields );
 			m_uMatchHits = pDoc->m_uHits;
 			m_iHitlistPos = (uint64_t(pDoc->m_uHits)<<32) + pDoc->m_uHit;
+			m_bAllFieldsKnown = false;
 			return m_tMatch;
 		}
 	}

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>select expressions</name>
+<name>select expressions parser vs IN() with 10K args</name>
 
 <config>
 indexer

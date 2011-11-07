@@ -2570,25 +2570,6 @@ int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 	return m_dNodes.GetLength()-1;
 }
 
-struct TypeCheck_fn
-{
-	bool * m_pStr;
-	bool * m_pMva;
-
-	explicit TypeCheck_fn ( bool * pStr, bool * pMva )
-		: m_pStr ( pStr )
-		, m_pMva ( pMva )
-	{}
-
-	void Enter ( const ExprNode_t & tNode )
-	{
-		*m_pStr |= ( tNode.m_eRetType==SPH_ATTR_STRING );
-		*m_pMva |= ( tNode.m_eRetType==SPH_ATTR_UINT32SET || tNode.m_eRetType==SPH_ATTR_UINT64SET );
-	}
-
-	void Exit ( const ExprNode_t & )
-	{}
-};
 
 int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 {
@@ -2625,8 +2606,13 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 	bool bGotString = false, bGotMva = false;
 	if ( iRight<0 )
 	{
-		TypeCheck_fn fnCheck ( &bGotString, &bGotMva );
-		WalkTree ( iLeft, fnCheck );
+		CSphVector<ESphAttr> dRetTypes;
+		GatherArgRetTypes ( iLeft, dRetTypes );
+		ARRAY_FOREACH ( i, dRetTypes )
+		{
+			bGotString |= ( dRetTypes[i]==SPH_ATTR_STRING );
+			bGotMva |= ( dRetTypes[i]==SPH_ATTR_UINT32SET || dRetTypes[i]==SPH_ATTR_UINT32SET );
+		}
 	}
 	if ( bGotString && eFunc!=FUNC_CRC32 )
 	{

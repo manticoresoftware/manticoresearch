@@ -1464,6 +1464,12 @@ public:
 		}
 	}
 
+	CSphString ( const char * sValue, int iLen )
+		: m_sValue ( NULL )
+	{
+		SetBinary ( sValue, iLen );
+	}
+
 	const CSphString & operator = ( const CSphString & rhs )
 	{
 		if ( m_sValue==rhs.m_sValue )

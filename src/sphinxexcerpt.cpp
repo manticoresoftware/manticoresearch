@@ -40,7 +40,7 @@ public:
 	explicit				ExcerptGen_c ( bool bUtf8 );
 							~ExcerptGen_c () {}
 
-	char *	BuildExcerpt ( const ExcerptQuery_t & tQuery );
+	void	BuildExcerpt ( ExcerptQuery_t & tQuery );
 
 	void	TokenizeQuery ( const ExcerptQuery_t &, CSphDict * pDict, ISphTokenizer * pTokenizer, const CSphIndexSettings & tSettings );
 	void	TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks, const ExcerptQuery_t & q, const CSphIndexSettings & tSettings );
@@ -1000,7 +1000,7 @@ void ExcerptGen_c::SetExactPhrase ( const ExcerptQuery_t & tQuery )
 }
 
 
-char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & tQuery )
+void ExcerptGen_c::BuildExcerpt ( ExcerptQuery_t & tQuery )
 {
 	m_iPassageId = tQuery.m_iPassageId;
 
@@ -1033,11 +1033,9 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & tQuery )
 
 	// alloc, fill and return the result
 	m_dResult.Add ( 0 );
-	char * pRes = new char [ m_dResult.GetLength() ];
-	memcpy ( pRes, &m_dResult[0], m_dResult.GetLength() );
-	m_dResult.Reset ();
 
-	return pRes;
+	tQuery.m_dRes.SwapData ( m_dResult );
+	return;
 }
 
 
@@ -2747,7 +2745,7 @@ inline bool operator < ( const SphHitMark_t & a, const SphHitMark_t & b )
 }
 
 
-static char * HighlightAllFastpath ( const ExcerptQuery_t & tQuerySettings,
+static void HighlightAllFastpath ( ExcerptQuery_t & tQuerySettings,
 	const CSphIndexSettings & tIndexSettings,
 	const char * sDoc, int iDocLen,
 	CSphDict * pDict, ISphTokenizer * pTokenizer, const CSphHTMLStripper * pStripper,
@@ -2774,7 +2772,7 @@ static char * HighlightAllFastpath ( const ExcerptQuery_t & tQuerySettings,
 	// create query and hit lists container, parse query
 	SnippetsDocIndex_c tContainer ( tFixedSettings.m_bHighlightQuery );
 	if ( !tContainer.Parse ( tFixedSettings.m_sWords.cstr(), pQueryTokenizer, pDict, pSchema, sError, tIndexSettings.m_iStopwordStep ) )
-		return NULL;
+		return;
 
 	// do highlighting
 	if ( !tFixedSettings.m_bHighlightQuery )
@@ -2789,7 +2787,7 @@ static char * HighlightAllFastpath ( const ExcerptQuery_t & tQuerySettings,
 
 		// add trailing zero, and return
 		tHighlighter.m_dResult.Add ( 0 );
-		return (char*) tHighlighter.m_dResult.LeakData();
+		tQuerySettings.m_dRes.SwapData ( tHighlighter.m_dResult );
 
 	} else
 	{
@@ -2813,7 +2811,7 @@ static char * HighlightAllFastpath ( const ExcerptQuery_t & tQuerySettings,
 
 		CSphScopedPtr<CSphHitMarker> pMarker ( CSphHitMarker::Create ( tContainer.m_tQuery.m_pRoot, tQwordSetup ) );
 		if ( !pMarker.Ptr() )
-			return NULL;
+			return;
 
 		CSphVector<SphHitMark_t> dMarked;
 		pMarker->Mark ( dMarked );
@@ -2895,7 +2893,7 @@ static char * HighlightAllFastpath ( const ExcerptQuery_t & tQuerySettings,
 
 		// add trailing zero, and return
 		tHighlighter.m_dResult.Add ( 0 );
-		return (char*) tHighlighter.m_dResult.LeakData();
+		tQuerySettings.m_dRes.SwapData ( tHighlighter.m_dResult );
 	}
 }
 
@@ -2925,7 +2923,6 @@ ExcerptQuery_t::ExcerptQuery_t ()
 	, m_iSize ( 0 )
 	, m_iSeq ( 0 )
 	, m_iNext ( -2 )
-	, m_sRes ( NULL )
 	, m_bHasBeforePassageMacro ( false )
 	, m_bHasAfterPassageMacro ( false )
 {
@@ -2934,13 +2931,13 @@ ExcerptQuery_t::ExcerptQuery_t ()
 /////////////////////////////////////////////////////////////////////////////
 
 
-char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphIndex * pIndex, CSphString & sError, const CSphHTMLStripper * pStripper, ISphTokenizer * pQueryTokenizer )
+void sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphIndex * pIndex, CSphString & sError, const CSphHTMLStripper * pStripper, ISphTokenizer * pQueryTokenizer )
 {
 	if ( tOptions.m_sStripMode=="retain"
 		&& !( tOptions.m_iLimit==0 && tOptions.m_iLimitPassages==0 && tOptions.m_iLimitWords==0 ) )
 	{
 		sError = "html_strip_mode=retain requires that all limits are zero";
-		return NULL;
+		return;
 	}
 
 	if ( !tOptions.m_sWords.cstr()[0] )
@@ -2954,26 +2951,23 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 	{
 		CSphAutofile tFile;
 		if ( tFile.Open ( tOptions.m_sSource.cstr(), SPH_O_READ, sError )<0 )
-			return NULL;
+			return;
 
 		// will this ever trigger? time will tell; email me if it does!
 		if ( tFile.GetSize()+1>=(SphOffset_t)INT_MAX )
 		{
 			sError.SetSprintf ( "%s too big for snippet (over 2 GB)", pData );
-			return NULL;
+			return;
 		}
 
 		int iFileSize = (int)tFile.GetSize();
 		if ( iFileSize<=0 )
-		{
-			static char sEmpty[] = "";
-			return sEmpty;
-		}
+			return;
 
 		iDataLen = iFileSize+1;
 		pBuffer.Reset ( iDataLen );
 		if ( !tFile.Read ( pBuffer.Begin(), iFileSize, sError ) )
-			return NULL;
+			return;
 
 		pBuffer[iFileSize] = 0;
 		pData = pBuffer.Begin();
@@ -2995,7 +2989,8 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 		|| ( tOptions.m_iLimit && tOptions.m_iLimit<=iDataLen )
 		|| tOptions.m_bForceAllWords || tOptions.m_bUseBoundaries ))
 	{
-		return HighlightAllFastpath ( tOptions, pIndex->GetSettings(), pData, iDataLen, pDict, pTokenizer, pStripper, pSchema, sError, pQueryTokenizer );
+		HighlightAllFastpath ( tOptions, pIndex->GetSettings(), pData, iDataLen, pDict, pTokenizer, pStripper, pSchema, sError, pQueryTokenizer );
+		return;
 	}
 
 	if ( !tOptions.m_bHighlightQuery )
@@ -3005,14 +3000,15 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 		tGenerator.TokenizeQuery ( tOptions, pDict, pTokenizer, pIndex->GetSettings() );
 		tGenerator.SetExactPhrase ( tOptions );
 		tGenerator.TokenizeDocument ( pData, iDataLen, pDict, pTokenizer, true, tOptions, pIndex->GetSettings() );
-		return tGenerator.BuildExcerpt ( tOptions );
+		tGenerator.BuildExcerpt ( tOptions );
+		return;
 	}
 
 	XQQuery_t tQuery;
 	if ( !sphParseExtendedQuery ( tQuery, tOptions.m_sWords.cstr(), pQueryTokenizer, pSchema, pDict, pIndex->GetSettings().m_iStopwordStep ) )
 	{
 		sError = tQuery.m_sParseError;
-		return NULL;
+		return;
 	}
 	tQuery.m_pRoot->ClearFieldMask();
 
@@ -3033,11 +3029,11 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 	if ( !pMarker.Ptr() )
 	{
 		sError = sWarning;
-		return NULL;
+		return;
 	}
 
 	tGenerator.SetMarker ( pMarker.Ptr() );
-	return tGenerator.BuildExcerpt ( tOptions );
+	tGenerator.BuildExcerpt ( tOptions );
 }
 
 //

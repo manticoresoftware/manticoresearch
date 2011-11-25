@@ -51,7 +51,7 @@ public:
 	int64_t			m_iSize;			///< file size, to sort to work-queue order
 	int				m_iSeq;				///< request order, to sort back to request order
 	int				m_iNext;			///< the next one in one-link list for batch processing. -1 terminate the list. -2 sign of other (out-of-the-lists)
-	char *			m_sRes;				///< snippet result holder (NOT owned)
+	CSphVector<BYTE>	m_dRes;				///< snippet result holder
 	CSphString		m_sError;			///< snippet error message
 	bool			m_bHasBeforePassageMacro;
 	bool			m_bHasAfterPassageMacro;
@@ -65,7 +65,7 @@ public:
 /// an excerpt generator
 /// returns a newly allocated string in encoding specified by tokenizer on success
 /// returns NULL on failure
-char * sphBuildExcerpt ( ExcerptQuery_t &, CSphDict *, ISphTokenizer *, const CSphSchema *, CSphIndex *, CSphString & sError, const CSphHTMLStripper *, ISphTokenizer * );
+void sphBuildExcerpt ( ExcerptQuery_t &, CSphDict *, ISphTokenizer *, const CSphSchema *, CSphIndex *, CSphString & sError, const CSphHTMLStripper *, ISphTokenizer * );
 
 #endif // _sphinxexcerpt_
 

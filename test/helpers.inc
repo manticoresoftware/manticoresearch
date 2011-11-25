@@ -244,7 +244,7 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 		if ( !$ok )
 		{
 			$tm = ( MyMicrotime() - $start );
-			printf ( "\nWARNING: can't connect to daemon on startup for %.1f sec\t\t\t\n", $tm );
+			printf ( "\nWARNING: can't connect to daemon on startup for %.3f sec\t\t\t\n", $tm );
 		}
 	}
 

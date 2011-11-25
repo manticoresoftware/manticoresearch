@@ -2300,6 +2300,7 @@ public:
 	float			GetFloat () { return sphDW2F ( ntohl ( GetT<DWORD> () ) ); }
 	CSphString		GetString ();
 	CSphString		GetRawString ( int iLen );
+	bool			GetString ( CSphVector<BYTE> & dBuffer );
 	int				GetDwords ( DWORD ** pBuffer, int iMax, const char * sErrorTemplate );
 	bool			GetError () { return m_bError; }
 
@@ -2702,6 +2703,25 @@ CSphString InputBuffer_c::GetRawString ( int iLen )
 }
 
 
+bool InputBuffer_c::GetString ( CSphVector<BYTE> & dBuffer )
+{
+	int iLen = GetInt ();
+	if ( m_bError || iLen<0 || iLen>g_iMaxPacketSize || ( m_pCur+iLen > m_pBuf+m_iLen ) )
+	{
+		SetError ( true );
+		return false;
+	}
+
+	if ( !iLen )
+		return true;
+
+	int iSize = dBuffer.GetLength();
+	dBuffer.Resize ( iSize + iLen + 1 );
+	dBuffer[iSize+iLen] = '\0';
+	return GetBytes ( dBuffer.Begin()+iSize, iLen );
+}
+
+
 bool InputBuffer_c::GetBytes ( void * pBuf, int iLen )
 {
 	assert ( pBuf );
@@ -2948,6 +2968,7 @@ struct AgentConn_t : public AgentDesc_t
 	CSphVector<CSphQueryResult>		m_dResults;		///< multi-query results
 
 	int64_t			m_iWall;		///< wall time spent vs this agent
+	int64_t			m_iWaited;		///< statistics of waited
 
 public:
 	AgentConn_t ()
@@ -2959,6 +2980,7 @@ public:
 		, m_iReplyRead ( 0 )
 		, m_pReplyBuf ( NULL )
 		, m_iWall ( 0 )
+		, m_iWaited ( 0 )
 	{}
 
 	~AgentConn_t ()
@@ -3029,14 +3051,14 @@ static SmallStringHash_T < DistributedIndex_t >		g_hDistIndexes;
 struct IRequestBuilder_t : public ISphNoncopyable
 {
 	virtual ~IRequestBuilder_t () {} // to avoid gcc4 warns
-	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut, int iAgent ) const = 0;
+	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const = 0;
 };
 
 
 struct IReplyParser_t
 {
 	virtual ~IReplyParser_t () {} // to avoid gcc4 warns
-	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent, int iAgent ) const = 0;
+	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const = 0;
 };
 
 
@@ -3049,119 +3071,145 @@ struct IReplyParser_t
 	}
 
 
-void ConnectToRemoteAgents ( CSphVector<AgentConn_t> & dAgents, bool bRetryOnly )
+struct AgentConnectionContext_t
 {
-	ARRAY_FOREACH ( iAgent, dAgents )
+	fd_set m_fdsRead;
+	fd_set m_fdsWrite;
+	const IRequestBuilder_t * m_pBuilder;
+	AgentConn_t	* m_pAgents;
+	int m_iAgentCount;
+	int m_iTimeout;
+	int m_iRetriesMax;
+	int m_iDelay;
+
+	AgentConnectionContext_t ()
+		: m_pBuilder ( NULL )
+		, m_pAgents ( NULL )
+		, m_iAgentCount ( 0 )
+		, m_iTimeout ( 0 )
+		, m_iRetriesMax ( 0 )
+		, m_iDelay ( 0 )
 	{
-		AgentConn_t & tAgent = dAgents[iAgent];
-		if ( bRetryOnly && ( tAgent.m_eState!=AGENT_RETRY ) )
-			continue;
+		FD_ZERO ( &m_fdsRead );
+		FD_ZERO ( &m_fdsWrite );
+	}
+};
 
-		tAgent.m_eState = AGENT_UNUSED;
-		tAgent.m_bSuccess = false;
+void RemoteConnectToAgents ( AgentConn_t & tAgent )
+{
+	bool bAgentRetry = ( tAgent.m_eState==AGENT_RETRY );
+	tAgent.m_eState = AGENT_UNUSED;
+	tAgent.m_bSuccess = false;
 
-		socklen_t len = 0;
-		struct sockaddr_storage ss;
-		memset ( &ss, 0, sizeof(ss) );
-		ss.ss_family = (short)tAgent.m_iFamily;
+	socklen_t len = 0;
+	struct sockaddr_storage ss;
+	memset ( &ss, 0, sizeof(ss) );
+	ss.ss_family = (short)tAgent.m_iFamily;
 
-		if ( ss.ss_family==AF_INET )
+	if ( ss.ss_family==AF_INET )
+	{
+		struct sockaddr_in *in = (struct sockaddr_in *)&ss;
+		in->sin_port = htons ( (unsigned short)tAgent.m_iPort );
+		in->sin_addr.s_addr = tAgent.m_uAddr;
+		len = sizeof(*in);
+	}
+#if !USE_WINDOWS
+	else if ( ss.ss_family==AF_UNIX )
+	{
+		struct sockaddr_un *un = (struct sockaddr_un *)&ss;
+		snprintf ( un->sun_path, sizeof(un->sun_path), "%s", tAgent.m_sPath.cstr() );
+		len = sizeof(*un);
+	}
+#endif
+
+	tAgent.m_iSock = socket ( tAgent.m_iFamily, SOCK_STREAM, 0 );
+	if ( tAgent.m_iSock<0 )
+	{
+		tAgent.m_sFailure.SetSprintf ( "socket() failed: %s", sphSockError() );
+		return;
+	}
+
+	if ( sphSetSockNB ( tAgent.m_iSock )<0 )
+	{
+		tAgent.m_sFailure.SetSprintf ( "sphSetSockNB() failed: %s", sphSockError() );
+		return;
+	}
+
+	// count connects
+	if ( g_pStats )
+	{
+		g_tStatsMutex.Lock();
+		g_pStats->m_iAgentConnect++;
+		g_pStats->m_iAgentRetry += ( bAgentRetry );
+		g_tStatsMutex.Unlock();
+	}
+
+	tAgent.m_iWall -= sphMicroTimer();
+
+	if ( connect ( tAgent.m_iSock, (struct sockaddr*)&ss, len )<0 )
+	{
+		int iErr = sphSockGetErrno();
+		if ( iErr!=EINPROGRESS && iErr!=EINTR && iErr!=EWOULDBLOCK ) // check for EWOULDBLOCK is for winsock only
 		{
-			struct sockaddr_in *in = (struct sockaddr_in *)&ss;
-			in->sin_port = htons ( (unsigned short)tAgent.m_iPort );
-			in->sin_addr.s_addr = tAgent.m_uAddr;
-			len = sizeof(*in);
-		}
-		#if !USE_WINDOWS
-		else if ( ss.ss_family==AF_UNIX )
-		{
-			struct sockaddr_un *un = (struct sockaddr_un *)&ss;
-			snprintf ( un->sun_path, sizeof(un->sun_path), "%s", tAgent.m_sPath.cstr() );
-			len = sizeof(*un);
-		}
-		#endif
-
-		tAgent.m_iSock = socket ( tAgent.m_iFamily, SOCK_STREAM, 0 );
-		if ( tAgent.m_iSock<0 )
-		{
-			tAgent.m_sFailure.SetSprintf ( "socket() failed: %s", sphSockError() );
+			tAgent.Close ();
+			tAgent.m_sFailure.SetSprintf ( "connect() failed: %s", sphSockError(iErr) );
+			tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures
+			AGENT_STATS_INC ( tAgent, m_iConnectFailures );
 			return;
-		}
 
-		if ( sphSetSockNB ( tAgent.m_iSock )<0 )
-		{
-			tAgent.m_sFailure.SetSprintf ( "sphSetSockNB() failed: %s", sphSockError() );
-			return;
-		}
-
-		// count connects
-		if ( g_pStats )
-		{
-			g_tStatsMutex.Lock();
-			g_pStats->m_iAgentConnect++;
-			if ( bRetryOnly )
-				g_pStats->m_iAgentRetry++;
-			g_tStatsMutex.Unlock();
-		}
-
-		if ( !bRetryOnly )
-			tAgent.m_iWall = 0;
-		tAgent.m_iWall -= sphMicroTimer();
-
-		if ( connect ( tAgent.m_iSock, (struct sockaddr*)&ss, len )<0 )
-		{
-			int iErr = sphSockGetErrno();
-			if ( iErr!=EINPROGRESS && iErr!=EINTR && iErr!=EWOULDBLOCK ) // check for EWOULDBLOCK is for winsock only
-			{
-				tAgent.Close ();
-				tAgent.m_sFailure.SetSprintf ( "connect() failed: %s", sphSockError(iErr) );
-				tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures
-				AGENT_STATS_INC ( tAgent, m_iConnectFailures );
-				return;
-
-			} else
-			{
-				// connection in progress
-				tAgent.m_eState = AGENT_CONNECT;
-			}
 		} else
 		{
-			// socket connected, ready to read hello message
-			tAgent.m_eState = AGENT_HELLO;
+			// connection in progress
+			tAgent.m_eState = AGENT_CONNECT;
 		}
+	} else
+	{
+		// socket connected, ready to read hello message
+		tAgent.m_eState = AGENT_HELLO;
 	}
 }
 
 
-int QueryRemoteAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, const IRequestBuilder_t & tBuilder, int64_t * pWaited )
+bool RemoteFillFDs ( AgentConn_t * pAgents, int iCount, fd_set * pRead, fd_set * pWrite, int * pMax )
 {
-	int iAgents = 0;
-	assert ( iTimeout>=0 );
+	assert ( pAgents && iCount && pMax && *pMax==0 );
+	assert ( pRead && pWrite );
 
-	int64_t tmMaxTimer = sphMicroTimer() + iTimeout*1000; // in microseconds
+	FD_ZERO ( pRead );
+	FD_ZERO ( pWrite );
+
+	int iMax = 0;
+	bool bDone = true;
+	for ( int i=0; i<iCount; i++ )
+	{
+		const AgentConn_t & tAgent = pAgents[i];
+		if ( tAgent.m_eState==AGENT_CONNECT || tAgent.m_eState==AGENT_HELLO || tAgent.m_eState==AGENT_QUERY )
+		{
+			assert ( !tAgent.m_sPath.IsEmpty() || tAgent.m_iPort>0 );
+			assert ( tAgent.m_iSock>0 );
+
+			sphFDSet ( tAgent.m_iSock, ( tAgent.m_eState==AGENT_CONNECT ) ? pWrite : pRead );
+			iMax = Max ( iMax, tAgent.m_iSock );
+			if ( tAgent.m_eState!=AGENT_QUERY )
+				bDone = false;
+		}
+	}
+
+	*pMax = iMax;
+	return bDone;
+}
+
+
+int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
+{
+	assert ( pCtx->m_iTimeout>=0 );
+	int iAgents = 0;
+	int64_t tmMaxTimer = sphMicroTimer() + pCtx->m_iTimeout*1000; // in microseconds
+
 	for ( ;; )
 	{
-		fd_set fdsRead, fdsWrite;
-		FD_ZERO ( &fdsRead );
-		FD_ZERO ( &fdsWrite );
-
 		int iMax = 0;
-		bool bDone = true;
-		ARRAY_FOREACH ( i, dAgents )
-		{
-			const AgentConn_t & tAgent = dAgents[i];
-			if ( tAgent.m_eState==AGENT_CONNECT || tAgent.m_eState==AGENT_HELLO || tAgent.m_eState==AGENT_QUERY )
-			{
-				assert ( !tAgent.m_sPath.IsEmpty() || tAgent.m_iPort>0 );
-				assert ( tAgent.m_iSock>0 );
-
-				sphFDSet ( tAgent.m_iSock, ( tAgent.m_eState==AGENT_CONNECT ) ? &fdsWrite : &fdsRead );
-				iMax = Max ( iMax, tAgent.m_iSock );
-				if ( tAgent.m_eState!=AGENT_QUERY )
-					bDone = false;
-			}
-		}
-		if ( bDone )
+		if ( RemoteFillFDs ( pCtx->m_pAgents, pCtx->m_iAgentCount, &pCtx->m_fdsRead, &pCtx->m_fdsWrite, &iMax ) )
 			break;
 
 		int64_t tmSelect = sphMicroTimer();
@@ -3174,23 +3222,22 @@ int QueryRemoteAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, const I
 		tvTimeout.tv_usec = (int)( tmMicroLeft % 1000000 ); // microseconds
 
 		// we don't care about exceptfds; they're for OOB only
-		int iSelected = select ( 1+iMax, &fdsRead, &fdsWrite, NULL, &tvTimeout );
+		int iSelected = select ( 1+iMax, &pCtx->m_fdsRead, &pCtx->m_fdsWrite, NULL, &tvTimeout );
 
-		if ( pWaited )
-			*pWaited += sphMicroTimer() - tmSelect;
+		pCtx->m_pAgents->m_iWaited += sphMicroTimer() - tmSelect;
 
 		if ( iSelected<=0 )
 			continue;
 
-		ARRAY_FOREACH ( i, dAgents )
+		for ( int i=0; i<pCtx->m_iAgentCount; i++ )
 		{
-			AgentConn_t & tAgent = dAgents[i];
+			AgentConn_t & tAgent = pCtx->m_pAgents[i];
 
 			// check if connection completed
 			// tricky part, we MUST use write-set ONLY here at this check
 			// even though we can't tell connect() success from just OS send buffer availability
 			// but any check involving read-set just never ever completes, so...
-			if ( tAgent.m_eState==AGENT_CONNECT && FD_ISSET ( tAgent.m_iSock, &fdsWrite ) )
+			if ( tAgent.m_eState==AGENT_CONNECT && FD_ISSET ( tAgent.m_iSock, &pCtx->m_fdsWrite ) )
 			{
 				int iErr = 0;
 				socklen_t iErrLen = sizeof(iErr);
@@ -3210,7 +3257,7 @@ int QueryRemoteAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, const I
 			}
 
 			// check if hello was received
-			if ( tAgent.m_eState==AGENT_HELLO && FD_ISSET ( tAgent.m_iSock, &fdsRead ) )
+			if ( tAgent.m_eState==AGENT_HELLO && FD_ISSET ( tAgent.m_iSock, &pCtx->m_fdsRead ) )
 			{
 				// read reply
 				int iRemoteVer;
@@ -3253,7 +3300,7 @@ int QueryRemoteAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, const I
 
 				// send request
 				NetOutputBuffer_c tOut ( tAgent.m_iSock );
-				tBuilder.BuildRequest ( tAgent.m_sIndexes.cstr(), tOut, i );
+				pCtx->m_pBuilder->BuildRequest ( tAgent.m_sIndexes.cstr(), tOut );
 				tOut.Flush (); // FIXME! handle flush failure?
 
 				tAgent.m_eState = AGENT_QUERY;
@@ -3262,7 +3309,7 @@ int QueryRemoteAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, const I
 			}
 
 			// check if queried agent replied while we were querying others
-			if ( tAgent.m_eState==AGENT_QUERY && FD_ISSET ( tAgent.m_iSock, &fdsRead ) )
+			if ( tAgent.m_eState==AGENT_QUERY && FD_ISSET ( tAgent.m_iSock, &pCtx->m_fdsRead ) )
 			{
 				// do not account agent wall time from here; agent is probably ready
 				tAgent.m_iWall += sphMicroTimer();
@@ -3272,11 +3319,12 @@ int QueryRemoteAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, const I
 		}
 	}
 
-	ARRAY_FOREACH ( i, dAgents )
+	// check if connection timed out
+	for ( int i=0; i<pCtx->m_iAgentCount; i++ )
 	{
-		// check if connection timed out
-		AgentConn_t & tAgent = dAgents[i];
-		if ( tAgent.m_eState!=AGENT_QUERY && tAgent.m_eState!=AGENT_UNUSED && tAgent.m_eState!=AGENT_RETRY && tAgent.m_eState!=AGENT_PREREPLY )
+		AgentConn_t & tAgent = pCtx->m_pAgents[i];
+		if ( tAgent.m_eState!=AGENT_QUERY && tAgent.m_eState!=AGENT_UNUSED && tAgent.m_eState!=AGENT_RETRY && tAgent.m_eState!=AGENT_PREREPLY
+			&& tAgent.m_eState!=AGENT_REPLY )
 		{
 			// technically, we can end up here via two different routes
 			// a) connect() never finishes in given time frame
@@ -3294,7 +3342,7 @@ int QueryRemoteAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, const I
 }
 
 
-int WaitForRemoteAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IReplyParser_t & tParser, int64_t * pWaited )
+int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IReplyParser_t & tParser )
 {
 	assert ( iTimeout>=0 );
 
@@ -3337,8 +3385,7 @@ int WaitForRemoteAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 
 		int iSelected = select ( 1+iMax, &fdsRead, NULL, NULL, &tvTimeout );
 
-		if ( pWaited )
-			*pWaited += sphMicroTimer() - tmSelect;
+		dAgents.Begin()->m_iWaited += sphMicroTimer() - tmSelect;
 
 		if ( iSelected<=0 )
 			continue;
@@ -3458,7 +3505,7 @@ int WaitForRemoteAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 					}
 
 					// call parser
-					if ( !tParser.ParseReply ( tReq, tAgent, iAgent ) )
+					if ( !tParser.ParseReply ( tReq, tAgent ) )
 						break;
 
 					// check if there was enough data
@@ -3507,6 +3554,331 @@ int WaitForRemoteAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 	return iAgents;
 }
 
+
+struct AgentWorkContext_t;
+typedef void ( *ThdWorker_fn ) ( AgentWorkContext_t * );
+
+struct AgentWorkContext_t : public AgentConnectionContext_t
+{
+	ThdWorker_fn	m_pfn;			///< work functor & flag of dummy element
+	int64_t			m_tmWait;
+	int				m_iRetries;
+	int				m_iAgentsDone;
+
+	AgentWorkContext_t ()
+		: m_pfn ( NULL )
+		, m_tmWait ( 0 )
+		, m_iRetries ( 0 )
+		, m_iAgentsDone ( 0 )
+	{
+	}
+};
+
+class ThdWorkPool_t : ISphNoncopyable
+{
+private:
+	CSphMutex m_tDataLock;
+	CSphMutex m_tStatLock;
+
+	AgentWorkContext_t * m_dData;	// works array
+	int m_iLen;
+
+	int m_iHead;					// ring buffer begin
+	int m_iTail;					// ring buffer end
+
+	volatile int m_iWorkersCount;			// count of works to be done
+	int m_iAgentsDone;				// count of agents that finished their works
+	int m_iAgentsReported;			// count of agents that reported of their work done
+
+	CrashQuery_t m_tCrashQuery;		// query that got reported on crash
+
+public:
+	explicit ThdWorkPool_t ( int iLen )
+	{
+		m_tCrashQuery = SphCrashLogger_c::GetQuery(); // transfer query info for crash logger to new thread
+
+		m_iLen = iLen+1;
+		m_iTail = m_iHead = 0;
+		m_iWorkersCount = 0;
+		m_iAgentsDone = m_iAgentsReported = 0;
+
+		m_dData = new AgentWorkContext_t[m_iLen];
+#ifndef NDEBUG
+		for ( int i=0; i<m_iLen; i++ ) // to make sure that we don't rewrite valid elements
+			m_dData[i] = AgentWorkContext_t();
+#endif
+
+		m_tDataLock.Init();
+		m_tStatLock.Init();
+	}
+
+	~ThdWorkPool_t ()
+	{
+		m_tStatLock.Done();
+		m_tDataLock.Done();
+		SafeDelete ( m_dData );
+	}
+
+	AgentWorkContext_t Pop()
+	{
+		AgentWorkContext_t tRes;
+		if ( m_iTail==m_iHead ) // quick path for empty pool
+			return tRes;
+
+		m_tDataLock.Lock();
+
+		if ( m_iTail==m_iHead ) // it might be empty now as another thread could steal work till that moment
+		{
+			m_tDataLock.Unlock();
+			return tRes;
+		}
+
+		tRes = m_dData[m_iHead];
+		assert ( tRes.m_pfn );
+#ifndef NDEBUG
+		m_dData[m_iHead] = AgentWorkContext_t(); // to make sure that we don't rewrite valid elements
+#endif
+		m_iHead = ( m_iHead+1 ) % m_iLen;
+
+		m_tDataLock.Unlock();
+		return tRes;
+	}
+
+	void Push ( const AgentWorkContext_t & tElem )
+	{
+		if ( !tElem.m_pfn )
+			return;
+
+		m_tDataLock.Lock();
+		RawPush ( tElem );
+		m_tDataLock.Unlock();
+	}
+
+	void RawPush ( const AgentWorkContext_t & tElem )
+	{
+		assert ( !m_dData[m_iTail].m_pfn ); // to make sure that we don't rewrite valid elements
+		m_dData[m_iTail] = tElem;
+		m_iTail = ( m_iTail+1 ) % m_iLen;
+	}
+
+	int GetReadyCount ()
+	{
+		// it could be better to lock here to get accurate value of m_iAgentsDone
+		// however that make lock contention of 1 sec on 1000 query ~ total 3.2sec vs 2.2 sec ( trunk )
+		int iAgentsDone = m_iAgentsDone;
+		int iNowDone = iAgentsDone - m_iAgentsReported;
+		m_iAgentsReported = iAgentsDone;
+		return iNowDone;
+	}
+
+	int GetReadyTotal ()
+	{
+		return m_iAgentsDone;
+	}
+
+	bool HasActiveWorkers () const
+	{
+		return ( m_iWorkersCount>0 );
+	}
+
+	void SetWorkersCount ( int iWorkers )
+	{
+		m_iWorkersCount = iWorkers;
+	}
+
+	static void PoolThreadFunc ( void * pArg )
+	{
+		ThdWorkPool_t * pPool = (ThdWorkPool_t *)pArg;
+
+		// setup query guard for thread
+		SphCrashLogger_c tQueryTLS;
+		tQueryTLS.SetupTLS ();
+		SphCrashLogger_c::SetLastQuery ( pPool->m_tCrashQuery );
+
+		int iSpinCount = 0;
+		int iPopCount = 0;
+		AgentWorkContext_t tNext;
+		for ( ;; )
+		{
+			if ( !tNext.m_pfn ) // pop new work if current is done
+			{
+				iSpinCount = 0;
+				iPopCount++;
+				tNext = pPool->Pop();
+				if ( !tNext.m_pfn ) // if there is no work at queue - worker done
+					break;
+			}
+
+			tNext.m_pfn ( &tNext );
+			if ( tNext.m_iAgentsDone || !tNext.m_pfn )
+			{
+				pPool->m_tStatLock.Lock();
+				pPool->m_iAgentsDone += tNext.m_iAgentsDone;
+				pPool->m_iWorkersCount -= ( tNext.m_pfn==NULL );
+				pPool->m_tStatLock.Unlock();
+			}
+
+			iSpinCount++;
+			if ( iSpinCount>1 && iSpinCount>4 ) // it could be better not to do the same work
+			{
+				pPool->Push ( tNext );
+				tNext = AgentWorkContext_t();
+			} else if ( pPool->m_iWorkersCount>1 && iPopCount>pPool->m_iWorkersCount ) // should sleep on queue wrap
+			{
+				iPopCount = 0;
+				sphSleepMsec ( 1 );
+			}
+		}
+	}
+};
+
+
+void ThdWorkParallel ( AgentWorkContext_t * );
+void ThdWorkWait ( AgentWorkContext_t * pCtx )
+{
+	pCtx->m_pfn = ( pCtx->m_tmWait<sphMicroTimer() ) ? ThdWorkWait : ThdWorkParallel;
+}
+
+void SetNextRetry ( AgentWorkContext_t * pCtx )
+{
+	pCtx->m_pfn = NULL;
+	pCtx->m_pAgents->m_eState = AGENT_UNUSED;
+
+	if ( !pCtx->m_iRetriesMax || !pCtx->m_iDelay || pCtx->m_iRetries>pCtx->m_iRetriesMax )
+		return;
+
+	int64_t tmNextTry = sphMicroTimer() + pCtx->m_iDelay*1000;
+	pCtx->m_pfn = ThdWorkWait;
+	pCtx->m_iRetries++;
+	pCtx->m_tmWait = tmNextTry;
+	pCtx->m_pAgents->m_eState = AGENT_RETRY;
+}
+
+void ThdWorkParallel ( AgentWorkContext_t * pCtx )
+{
+	RemoteConnectToAgents ( *pCtx->m_pAgents );
+	if ( pCtx->m_pAgents->m_eState==AGENT_UNUSED )
+	{
+		SetNextRetry ( pCtx );
+		return;
+	}
+
+	RemoteQueryAgents ( pCtx );
+	if ( pCtx->m_pAgents->m_eState==AGENT_RETRY ) // next round of connect try
+	{
+		SetNextRetry ( pCtx );
+	} else
+	{
+		pCtx->m_pfn = NULL;
+		pCtx->m_iAgentsDone = 1;
+	}
+}
+
+
+void ThdWorkSequental ( AgentWorkContext_t * pCtx )
+{
+	if ( pCtx->m_iRetries )
+		sphSleepMsec ( pCtx->m_iDelay );
+
+	for ( int iAgent=0; iAgent<pCtx->m_iAgentCount; iAgent++ )
+	{
+		AgentConn_t & tAgent = pCtx->m_pAgents[iAgent];
+		if ( !pCtx->m_iRetries || tAgent.m_eState==AGENT_RETRY )
+		{
+			RemoteConnectToAgents ( tAgent );
+		}
+	}
+
+	pCtx->m_iAgentsDone += RemoteQueryAgents ( pCtx );
+
+	int iToRetry = 0;
+	for ( int i=0; i<pCtx->m_iAgentCount; i++ )
+		iToRetry += ( pCtx->m_pAgents[i].m_eState==AGENT_RETRY );
+
+	pCtx->m_pfn = NULL;
+	if ( iToRetry && pCtx->m_iRetriesMax && pCtx->m_iRetries<=pCtx->m_iRetriesMax )
+		pCtx->m_pfn = ThdWorkSequental;
+}
+
+
+class CSphRemoteAgentsController : ISphNoncopyable
+{
+public:
+	CSphRemoteAgentsController ( int iThreads, CSphVector<AgentConn_t> & dAgents, const IRequestBuilder_t & tBuilder, int iTimeout, int iRetryMax=0, int iDelay=0 )
+		: m_tWorkerPool ( dAgents.GetLength() )
+	{
+		assert ( dAgents.GetLength() );
+
+		iThreads = Max ( 1, Min ( iThreads, dAgents.GetLength() ) );
+		m_dThds.Resize ( iThreads );
+
+		AgentWorkContext_t tCtx;
+		tCtx.m_pBuilder = &tBuilder;
+		tCtx.m_iAgentCount = 1;
+		tCtx.m_pfn = ThdWorkParallel;
+		tCtx.m_iDelay = iDelay;
+		tCtx.m_iRetriesMax = iRetryMax;
+		tCtx.m_iTimeout = iTimeout;
+
+		if ( iThreads>1 )
+		{
+			m_tWorkerPool.SetWorkersCount ( dAgents.GetLength() );
+			ARRAY_FOREACH ( i, dAgents )
+			{
+				tCtx.m_pAgents = dAgents.Begin()+i;
+				m_tWorkerPool.RawPush ( tCtx );
+			}
+		} else
+		{
+			tCtx.m_pAgents = dAgents.Begin();
+			tCtx.m_iAgentCount = dAgents.GetLength();
+			tCtx.m_pfn = ThdWorkSequental;
+			m_tWorkerPool.RawPush ( tCtx );
+			m_tWorkerPool.SetWorkersCount ( 1 );
+		}
+
+		ARRAY_FOREACH ( i, m_dThds )
+			sphThreadCreate ( m_dThds.Begin()+i, ThdWorkPool_t::PoolThreadFunc, &m_tWorkerPool );
+	}
+
+	~CSphRemoteAgentsController ()
+	{
+		ARRAY_FOREACH ( i, m_dThds )
+			sphThreadJoin ( m_dThds.Begin()+i );
+
+		m_dThds.Resize ( 0 );
+	}
+
+	// check that there are no works to do
+	bool IsDone ()
+	{
+		bool bHasWorks = m_tWorkerPool.HasActiveWorkers();
+		return !bHasWorks;
+	}
+
+	// block execution while there are works to do
+	int Finish ()
+	{
+		for ( ; !IsDone(); )
+		{
+			sphSleepMsec ( 0 );
+		}
+
+		return m_tWorkerPool.GetReadyTotal();
+	}
+
+	// check that some agents are done at this iteration
+	bool HasReadyAgents ()
+	{
+		return ( m_tWorkerPool.GetReadyCount()>0 );
+	}
+
+private:
+	ThdWorkPool_t m_tWorkerPool;
+	CSphVector<SphThread_t> m_dThds;
+};
+
+
 /////////////////////////////////////////////////////////////////////////////
 // SEARCH HANDLER
 /////////////////////////////////////////////////////////////////////////////
@@ -3514,7 +3886,7 @@ int WaitForRemoteAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 struct SearchRequestBuilder_t : public IRequestBuilder_t
 {
 						SearchRequestBuilder_t ( const CSphVector<CSphQuery> & dQueries, int iStart, int iEnd ) : m_dQueries ( dQueries ), m_iStart ( iStart ), m_iEnd ( iEnd ) {}
-	virtual void		BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut, int ) const;
+	virtual void		BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const;
 
 protected:
 	int					CalcQueryLen ( const char * sIndexes, const CSphQuery & q ) const;
@@ -3522,8 +3894,8 @@ protected:
 
 protected:
 	const CSphVector<CSphQuery> &		m_dQueries;
-	int									m_iStart;
-	int									m_iEnd;
+	const int							m_iStart;
+	const int							m_iEnd;
 };
 
 
@@ -3536,7 +3908,7 @@ struct SearchReplyParser_t : public IReplyParser_t, public ISphNoncopyable
 		, m_dStringsStorage ( dStringsStorage )
 	{}
 
-	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent, int iAgent ) const;
+	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const;
 
 protected:
 	int					m_iStart;
@@ -3703,7 +4075,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 }
 
 
-void SearchRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut, int ) const
+void SearchRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const
 {
 	int iReqLen = 8; // int num-queries
 	for ( int i=m_iStart; i<=m_iEnd; i++ )
@@ -3722,7 +4094,7 @@ void SearchRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuff
 
 /////////////////////////////////////////////////////////////////////////////
 
-bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent, int ) const
+bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const
 {
 	int iResults = m_iEnd-m_iStart+1;
 	assert ( iResults>0 );
@@ -6841,7 +7213,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// all my stats
 	int64_t tmSubset = sphMicroTimer();
 	int64_t tmLocal = 0;
-	int64_t tmWait = 0;
 	int64_t tmCpu = sphCpuTimer ();
 
 	if ( g_bIOStats )
@@ -7056,60 +7427,48 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	if ( !bDist )
 		tFirst.m_iRetryCount = 0;
 
-	for ( int iRetry=0; iRetry<=tFirst.m_iRetryCount; iRetry++ )
+
+	// connect to remote agents and query them, if required
+	CSphScopedPtr<SearchRequestBuilder_t> tReqBuilder ( NULL );
+	CSphScopedPtr<CSphRemoteAgentsController> tDistCtrl ( NULL );
+	if ( bDist && dAgents.GetLength() )
 	{
-		////////////////////////
-		// issue remote queries
-		////////////////////////
+		tReqBuilder = new SearchRequestBuilder_t ( m_dQueries, iStart, iEnd );
+		tDistCtrl = new CSphRemoteAgentsController ( g_iDistThreads, dAgents, *tReqBuilder.Ptr(), iAgentConnectTimeout, tFirst.m_iRetryCount, tFirst.m_iRetryDelay );
+	}
 
-		// delay between retries
-		if ( iRetry>0 )
-			sphSleepMsec ( tFirst.m_iRetryDelay );
+	/////////////////////
+	// run local queries
+	//////////////////////
 
-		// connect to remote agents and query them, if required
-		int iRemote = 0;
-		if ( bDist )
-		{
-			ConnectToRemoteAgents ( dAgents, iRetry!=0 );
+	// while the remote queries are running, do local searches
+	// FIXME! what if the remote agents finish early, could they timeout?
+	if ( m_dLocal.GetLength() )
+	{
+		tmLocal = -sphMicroTimer();
+		RunLocalSearches ( pLocalSorter, bDist ? tFirst.m_sIndexes.cstr() : NULL );
+		tmLocal += sphMicroTimer();
+	}
 
-			SearchRequestBuilder_t tReqBuilder ( m_dQueries, iStart, iEnd );
-			iRemote = QueryRemoteAgents ( dAgents, iAgentConnectTimeout, tReqBuilder, &tmWait );
-		}
+	///////////////////////
+	// poll remote queries
+	///////////////////////
 
-		/////////////////////
-		// run local queries
-		//////////////////////
+	bool bDistDone = false;
+	while ( bDist && dAgents.GetLength() && !bDistDone )
+	{
+		bDistDone = tDistCtrl->IsDone();
 
-		// while the remote queries are running, do local searches
-		// FIXME! what if the remote agents finish early, could they timeout?
-		if ( iRetry==0 )
-		{
-			if ( bDist && !iRemote && !m_dLocal.GetLength() )
-			{
-				for ( int iRes=iStart; iRes<=iEnd; iRes++ )
-					m_dResults[iRes].m_sError = "all remote agents unreachable and no available local indexes found";
-
-				SafeDelete ( pLocalSorter );
-				return;
-			}
-
-			tmLocal = -sphMicroTimer();
-			RunLocalSearches ( pLocalSorter, bDist ? tFirst.m_sIndexes.cstr() : NULL );
-			tmLocal += sphMicroTimer();
-		}
-
-		///////////////////////
-		// poll remote queries
-		///////////////////////
+		// don't forget to check incoming replies after send was over
 
 		// wait for remote queries to complete
-		if ( iRemote )
+		if ( tDistCtrl->HasReadyAgents() )
 		{
 			SearchReplyParser_t tParser ( iStart, iEnd, m_dMvaStorage, m_dStringsStorage );
 			int iMsecLeft = iAgentQueryTimeout - (int)( tmLocal/1000 );
-			int iReplys = WaitForRemoteAgents ( dAgents, Max ( iMsecLeft, 0 ), tParser, &tmWait );
+			int iReplys = RemoteWaitForAgents ( dAgents, Max ( iMsecLeft, 0 ), tParser );
 
-			// check if there were valid (though might be 0-matches) replys, and merge them
+			// check if there were valid (though might be 0-matches) replies, and merge them
 			if ( iReplys )
 				ARRAY_FOREACH ( iAgent, dAgents )
 			{
@@ -7160,14 +7519,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			}
 		}
 
-		// check if we need to retry again
-		int iToRetry = 0;
-		if ( bDist )
-			ARRAY_FOREACH ( i, dAgents )
-				if ( dAgents[i].m_eState==AGENT_RETRY )
-					iToRetry++;
-		if ( !iToRetry )
-			break;
+		if ( !bDistDone )
+			sphSleepMsec ( tFirst.m_iRetryDelay );
 	}
 
 	// submit failures from failed agents
@@ -7301,6 +7654,11 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		g_pStats->m_iQueryCpuTime += tmCpu;
 		if ( bDist && dAgents.GetLength() )
 		{
+			int64_t tmWait = 0;
+			ARRAY_FOREACH ( i, dAgents )
+			{
+				tmWait += dAgents[i].m_iWaited;
+			}
 			// do *not* count queries to dist indexes w/o actual remote agents
 			g_pStats->m_iDistQueries++;
 			g_pStats->m_iDistWallTime += tmSubset;
@@ -8318,22 +8676,20 @@ struct SnippetWorker_t
 {
 	int64_t						m_iTotal;
 	int							m_iHead;
-	bool						m_bLocal;
 
 	SnippetWorker_t()
 		: m_iTotal ( 0 )
 		, m_iHead ( -1 ) // -1 is the marker of the end of the list
-		, m_bLocal ( false )
 	{}
 };
 
 struct SnippetsRemote_t : ISphNoncopyable
 {
-	CSphVector<AgentConn_t>		m_dAgents;
-	CSphVector<SnippetWorker_t>	m_dWorkers;
+	CSphVector<AgentConn_t>			m_dAgents;
+	CSphVector<SnippetWorker_t>		m_dWorkers;
 	CSphVector<ExcerptQuery_t> &	m_dQueries;
-	int							m_iAgentConnectTimeout;
-	int							m_iAgentQueryTimeout;
+	int								m_iAgentConnectTimeout;
+	int								m_iAgentQueryTimeout;
 
 	explicit SnippetsRemote_t ( CSphVector<ExcerptQuery_t> & dQueries )
 		: m_dQueries ( dQueries )
@@ -8361,25 +8717,31 @@ struct SnippetThread_t
 	{}
 };
 
+
 struct SnippetRequestBuilder_t : public IRequestBuilder_t
 {
 	explicit SnippetRequestBuilder_t ( const SnippetsRemote_t * pWorker )
 		: m_pWorker ( pWorker )
-		, m_iLastAgent ( -1 )
-		, m_iLastWorker ( -1 )
 		, m_iNumDocs ( -1 )
 		, m_iReqLen ( -1 )
 		, m_bScattered ( false )
-	{}
-	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut, int iNumAgent ) const;
+		, m_iWorker ( 0 )
+	{
+		m_tWorkerMutex.Init();
+	}
+	~SnippetRequestBuilder_t()
+	{
+		m_tWorkerMutex.Done();
+	}
+	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const;
 
 private:
 	const SnippetsRemote_t * m_pWorker;
-	mutable int	m_iLastAgent;	///< just a helper to optimize consequental linear search
-	mutable int m_iLastWorker;	///< just a helper to optimize consequental linear search
 	mutable int m_iNumDocs;		///< optimize numdocs/length calculation in scattered case
 	mutable int m_iReqLen;
 	mutable bool m_bScattered;
+	mutable int m_iWorker;
+	mutable CSphMutex m_tWorkerMutex;
 };
 
 
@@ -8387,54 +8749,27 @@ struct SnippetReplyParser_t : public IReplyParser_t
 {
 	explicit SnippetReplyParser_t ( SnippetsRemote_t * pWorker )
 		: m_pWorker ( pWorker )
-		, m_iLastAgent ( -1 )
-		, m_iLastWorker ( -1 )
+		, m_iWorker ( 0 )
 	{}
 
-	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t &, int iNumAgent ) const;
+	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const;
 
 private:
 	SnippetsRemote_t * m_pWorker;
-	mutable int	m_iLastAgent;	///< just a helper to optimize consequental linear search
-	mutable int m_iLastWorker;	///< just a helper to optimize consequental linear search
+	mutable int m_iWorker;
 };
 
 
-static int SnippetGetCurrentWorker ( const int iNumAgent, const int m_iLastAgent, const int m_iLastWorker, const SnippetsRemote_t * m_pWorker )
+void SnippetRequestBuilder_t::BuildRequest ( const char * sIndex, NetOutputBuffer_c & tOut ) const
 {
-	int iCurrentWorker = 0;
-	if ( iNumAgent==m_iLastAgent+1 )
-	{
-		for ( int i=m_iLastWorker+1; i<m_pWorker->m_dWorkers.GetLength(); i++ )
-			if ( !m_pWorker->m_dWorkers[i].m_bLocal )
-			{
-				iCurrentWorker = i;
-				break;
-			}
-	} else
-	{
-		int j = iNumAgent;
-		ARRAY_FOREACH ( i, m_pWorker->m_dWorkers )
-			if ( !m_pWorker->m_dWorkers[i].m_bLocal )
-			{
-				if ( j-- )
-					continue;
-				iCurrentWorker = i;
-				break;
-			}
-	}
-	return iCurrentWorker;
-}
-
-
-void SnippetRequestBuilder_t::BuildRequest ( const char * sIndex, NetOutputBuffer_c & tOut, int iNumAgent ) const
-{
-	m_iLastWorker = SnippetGetCurrentWorker ( iNumAgent, m_iLastAgent, m_iLastWorker, m_pWorker );
-	m_iLastAgent = iNumAgent;
+	// it sends either all queries to each agent or sequence of queries to current agent
+	m_tWorkerMutex.Lock();
+	int iWorker = m_iWorker++;
+	m_tWorkerMutex.Unlock();
 
 	const CSphVector<ExcerptQuery_t> & dQueries = m_pWorker->m_dQueries;
 	const ExcerptQuery_t & q = dQueries[0];
-	const SnippetWorker_t & tWorker = m_pWorker->m_dWorkers[m_iLastWorker];
+	const SnippetWorker_t & tWorker = m_pWorker->m_dWorkers[iWorker];
 
 	if ( m_iNumDocs < 0 )
 		m_bScattered = ( q.m_iLoadFiles & 2 )!=0;
@@ -8457,7 +8792,6 @@ void SnippetRequestBuilder_t::BuildRequest ( const char * sIndex, NetOutputBuffe
 			m_iReqLen += 4 + dQueries[iDoc].m_sSource.Length();
 		}
 	}
-
 
 	tOut.SendDword ( SPHINX_SEARCHD_PROTO );
 	tOut.SendWord ( SEARCHD_COMMAND_EXCERPT );
@@ -8486,13 +8820,11 @@ void SnippetRequestBuilder_t::BuildRequest ( const char * sIndex, NetOutputBuffe
 		tOut.SendString ( dQueries[iDoc].m_sSource.cstr() );
 }
 
-bool SnippetReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t &, int iNumAgent ) const
+bool SnippetReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
 {
-	m_iLastWorker = SnippetGetCurrentWorker ( iNumAgent, m_iLastAgent, m_iLastWorker, m_pWorker );
-	m_iLastAgent = iNumAgent;
-
+	int iWorker = m_iWorker++;
 	CSphVector<ExcerptQuery_t> & dQueries = m_pWorker->m_dQueries;
-	const SnippetWorker_t & tWorker = m_pWorker->m_dWorkers[m_iLastWorker];
+	const SnippetWorker_t & tWorker = m_pWorker->m_dWorkers[iWorker];
 
 	int iDoc = tWorker.m_iHead;
 	bool bOk = true;
@@ -8500,24 +8832,16 @@ bool SnippetReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t &, 
 	{
 		if ( ( dQueries[iDoc].m_iLoadFiles&2 )!=0 ) // NOLINT
 		{
-			char * sRes = tReq.GetString().Leak();
-			if ( sRes && !strlen(sRes) )
-				SafeDelete ( sRes );
-			if ( sRes )
+			if ( !tReq.GetString ( dQueries[iDoc].m_dRes ) )
 			{
-				if ( dQueries[iDoc].m_sRes && strlen ( dQueries[iDoc].m_sRes )!=0 )
-				{
-					if ( strcmp ( sRes, dQueries[iDoc].m_sRes )!=0 )
-						bOk = false;
-					SafeDelete ( dQueries[iDoc].m_sRes );
-				}
-				dQueries[iDoc].m_sRes = sRes;
+				bOk = false;
+				dQueries[iDoc].m_dRes.Resize ( 0 );
 			}
 
 			iDoc = dQueries[iDoc].m_iNext;
 			continue;
 		}
-		dQueries[iDoc].m_sRes = tReq.GetString().Leak();
+		tReq.GetString ( dQueries[iDoc].m_dRes );
 		iDoc = dQueries[iDoc].m_iNext;
 		dQueries[iDoc].m_iNext = -2; // mark as processed
 	}
@@ -8702,7 +9026,7 @@ void SnippetThreadFunc ( void * pArg )
 		if ( pQuery->m_iNext!=-2 )
 			continue;
 
-		pQuery->m_sRes = sphBuildExcerpt ( *pQuery, tCtx.m_pDict, tCtx.m_tTokenizer.Ptr(),
+		sphBuildExcerpt ( *pQuery, tCtx.m_pDict, tCtx.m_tTokenizer.Ptr(),
 			&pDesc->m_pIndex->GetMatchSchema(), pDesc->m_pIndex,
 			pQuery->m_sError, tCtx.m_tStripper.Ptr(), tCtx.m_pQueryTokenizer );
 
@@ -8727,6 +9051,20 @@ int GetRawSnippetFlags ( const ExcerptQuery_t& q )
 	iRawFlags |= q.m_bEmitZones ? EXCERPT_FLAG_EMIT_ZONES : 0;
 
 	return iRawFlags;
+}
+
+bool SnippetFormatErrorMessage ( CSphString * pError, const CSphString & sQueryError )
+{
+	assert ( pError );
+	if ( sQueryError.IsEmpty() )
+		return false;
+
+	if ( pError->IsEmpty() )
+		pError->SetSprintf ( "%s", sQueryError.cstr() );
+	else
+		pError->SetSprintf ( "%s; %s", pError->cstr(), sQueryError.cstr() );
+
+	return true;
 }
 
 bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CSphString & sError )
@@ -8802,12 +9140,8 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 		// boring single threaded loop
 		ARRAY_FOREACH ( i, dQueries )
 		{
-			dQueries[i].m_sRes = sphBuildExcerpt ( dQueries[i], tCtx.m_pDict, tCtx.m_tTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError, tCtx.m_tStripper.Ptr(), tCtx.m_pQueryTokenizer );
-			if ( !dQueries[i].m_sRes )
-			{
-				bOk = false;
-				break;
-			}
+			sphBuildExcerpt ( dQueries[i], tCtx.m_pDict, tCtx.m_tTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, dQueries[i].m_sError, tCtx.m_tStripper.Ptr(), tCtx.m_pQueryTokenizer );
+			bOk = ( bOk && ( !SnippetFormatErrorMessage ( &sError, dQueries[i].m_sError ) ) );
 		}
 	} else
 	{
@@ -8858,33 +9192,27 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 
 		if ( bRemote )
 		{
-			// schedule jobs across workers (the worker is either local thread or instance, either remote agent).
+			// schedule jobs across workers (the worker is remote agent).
 			// simple LPT (Least Processing Time) scheduling for now
 			// might add dynamic programming or something later if needed
-			int iLocalPart = 1;	// one instance = one worker. Or set to = g_iDistThreads, one local thread = one worker.
 			int iRemoteAgents = dRemoteSnippets.m_dAgents.GetLength();
-
-			dRemoteSnippets.m_dWorkers.Resize ( iLocalPart + iRemoteAgents );
-			for ( int i=0; i<iLocalPart; i++ )
-				dRemoteSnippets.m_dWorkers[i].m_bLocal = true;
+			dRemoteSnippets.m_dWorkers.Resize ( iRemoteAgents );
 
 			if ( bScattered )
 			{
 				// on scattered case - the queries with m_iNext==-2 are here, and has to be scheduled to local agent
 				// the rest has to be sent to remotes, all of them!
 				for ( int i=0; i<iRemoteAgents; i++ )
-					dRemoteSnippets.m_dWorkers[iLocalPart+i].m_iHead = iAbsentHead;
+					dRemoteSnippets.m_dWorkers[i].m_iHead = iAbsentHead;
 			} else
 			{
 				ARRAY_FOREACH ( i, dQueries )
 				{
 					dRemoteSnippets.m_dWorkers[0].m_iTotal -= dQueries[i].m_iSize;
-					if ( !dRemoteSnippets.m_dWorkers[0].m_bLocal )
-					{
-						// queries sheduled for local still have iNext==-2
-						dQueries[i].m_iNext = dRemoteSnippets.m_dWorkers[0].m_iHead;
-						dRemoteSnippets.m_dWorkers[0].m_iHead = i;
-					}
+					// queries sheduled for local still have iNext==-2
+					dQueries[i].m_iNext = dRemoteSnippets.m_dWorkers[0].m_iHead;
+					dRemoteSnippets.m_dWorkers[0].m_iHead = i;
+
 					dRemoteSnippets.m_dWorkers.Sort ( bind ( &SnippetWorker_t::m_iTotal ) );
 				}
 			}
@@ -8910,24 +9238,28 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 				sphThreadCreate ( &dThreads[i].m_tThd, SnippetThreadFunc, &dThreads[i] );
 		}
 
-		int iRemote = 0;
-		if ( bRemote )
+		CSphScopedPtr<SnippetRequestBuilder_t> tReqBuilder ( NULL );
+		CSphScopedPtr<CSphRemoteAgentsController> tDistCtrl ( NULL );
+		if ( bRemote && dRemoteSnippets.m_dAgents.GetLength() )
 		{
 			// connect to remote agents and query them
-			ConnectToRemoteAgents ( dRemoteSnippets.m_dAgents, false );
-
-			SnippetRequestBuilder_t tReqBuilder ( &dRemoteSnippets );
-			iRemote = QueryRemoteAgents ( dRemoteSnippets.m_dAgents, dRemoteSnippets.m_iAgentConnectTimeout, tReqBuilder, NULL ); // FIXME? profile update time too?
+			tReqBuilder = new SnippetRequestBuilder_t ( &dRemoteSnippets );
+			tDistCtrl = new CSphRemoteAgentsController ( g_iDistThreads, dRemoteSnippets.m_dAgents, *tReqBuilder.Ptr(), dRemoteSnippets.m_iAgentConnectTimeout );
 		}
 
 		SnippetThreadFunc ( &dThreads[0] );
 
-		int iSuccesses = 0;
+		int iAgentsDone = 0;
+		if ( bRemote && dRemoteSnippets.m_dAgents.GetLength() )
+		{
+			iAgentsDone = tDistCtrl->Finish();
+		}
 
-		if ( iRemote )
+		int iSuccesses = 0;
+		if ( iAgentsDone )
 		{
 			SnippetReplyParser_t tParser ( &dRemoteSnippets );
-			iSuccesses = WaitForRemoteAgents ( dRemoteSnippets.m_dAgents, dRemoteSnippets.m_iAgentQueryTimeout, tParser, NULL ); // FIXME? profile update time too?
+			iSuccesses = RemoteWaitForAgents ( dRemoteSnippets.m_dAgents, dRemoteSnippets.m_iAgentQueryTimeout, tParser ); // FIXME? profile update time too?
 		}
 
 		for ( int i=1; i<dThreads.GetLength(); i++ )
@@ -8937,7 +9269,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 		{
 			sphWarning ( "Remote snippets: some of the agents didn't answered: %d queried, %d available, %d answered",
 				dRemoteSnippets.m_dAgents.GetLength(),
-				iRemote,
+				iAgentsDone,
 				iSuccesses );
 
 			if ( !bScattered )
@@ -8960,14 +9292,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 
 		ARRAY_FOREACH ( i, dQueries )
 		{
-			if ( !dQueries[i].m_sError.IsEmpty() )
-			{
-				bOk = false;
-				if ( sError.IsEmpty() )
-					sError.SetSprintf ( "%s", dQueries[i].m_sError.cstr() );
-				else
-					sError.SetSprintf ( "%s; %s", sError.cstr(), dQueries[i].m_sError.cstr() );
-			}
+			bOk = ( bOk && ( !SnippetFormatErrorMessage ( &sError, dQueries[i].m_sError ) ) );
 		}
 	}
 
@@ -9079,18 +9404,16 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	ARRAY_FOREACH ( i, dQueries )
 	{
 		// handle errors
-		if ( !dQueries[i].m_sRes )
+		if ( !dQueries[i].m_dRes.GetLength() )
 		{
 			if ( !bScattered )
 			{
 				tReq.SendErrorReply ( "highlighting failed: %s", dQueries[i].m_sError.cstr() );
-				ARRAY_FOREACH ( j, dQueries )
-					SafeDeleteArray ( dQueries[j].m_sRes );
 				return;
 			}
 			iRespLen += 4;
 		} else
-			iRespLen += 4 + strlen ( dQueries[i].m_sRes );
+			iRespLen += 4 + strlen ( (const char *)dQueries[i].m_dRes.Begin() );
 	}
 
 	NetOutputBuffer_c tOut ( iSock );
@@ -9099,11 +9422,9 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	tOut.SendInt ( iRespLen );
 	ARRAY_FOREACH ( i, dQueries )
 	{
-		if ( dQueries[i].m_sRes )
-		{
-			tOut.SendString ( dQueries[i].m_sRes );
-			SafeDeleteArray ( dQueries[i].m_sRes );
-		} else
+		if ( dQueries[i].m_dRes.GetLength() )
+			tOut.SendString ( (const char *)dQueries[i].m_dRes.Begin() );
+		else
 			tOut.SendString ( "" );
 	}
 
@@ -9178,7 +9499,7 @@ void HandleCommandKeywords ( int iSock, int iVer, InputBuffer_c & tReq )
 struct UpdateRequestBuilder_t : public IRequestBuilder_t
 {
 	explicit UpdateRequestBuilder_t ( const CSphAttrUpdate & pUpd ) : m_tUpd ( pUpd ) {}
-	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut, int ) const;
+	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const;
 
 protected:
 	const CSphAttrUpdate & m_tUpd;
@@ -9191,7 +9512,7 @@ struct UpdateReplyParser_t : public IReplyParser_t
 		: m_pUpdated ( pUpd )
 	{}
 
-	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t &, int ) const
+	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
 	{
 		*m_pUpdated += tReq.GetDword ();
 		return true;
@@ -9202,7 +9523,7 @@ protected:
 };
 
 
-void UpdateRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut, int ) const
+void UpdateRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const
 {
 	int iReqSize = 4+strlen(sIndexes); // indexes string
 	iReqSize += 4; // attrs array len, data
@@ -9399,7 +9720,7 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq )
 		}
 
 		// update remote agents
-		if ( dDistributed[iIdx].m_bToDelete )
+		if ( dDistributed[iIdx].m_bToDelete && dDistributed[iIdx].m_dAgents.GetLength() )
 		{
 			DistributedIndex_t & tDist = dDistributed[iIdx];
 
@@ -9408,15 +9729,13 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq )
 				dAgents[i] = tDist.m_dAgents[i];
 
 			// connect to remote agents and query them
-			ConnectToRemoteAgents ( dAgents, false );
-
 			UpdateRequestBuilder_t tReqBuilder ( tUpd );
-			int iRemote = QueryRemoteAgents ( dAgents, tDist.m_iAgentConnectTimeout, tReqBuilder, NULL ); // FIXME? profile update time too?
-
-			if ( iRemote )
+			CSphRemoteAgentsController tDistCtrl ( g_iDistThreads, dAgents, tReqBuilder, tDist.m_iAgentConnectTimeout );
+			int iAgentsDone = tDistCtrl.Finish();
+			if ( iAgentsDone )
 			{
 				UpdateReplyParser_t tParser ( &iUpdated );
-				iSuccesses += WaitForRemoteAgents ( dAgents, tDist.m_iAgentQueryTimeout, tParser, NULL ); // FIXME? profile update time too?
+				iSuccesses += RemoteWaitForAgents ( dAgents, tDist.m_iAgentQueryTimeout, tParser ); // FIXME? profile update time too?
 			}
 		}
 	}
@@ -10467,9 +10786,9 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 		return;
 	}
 
-	CSphVector<char*> dResults ( dQueries.GetLength() );
+	CSphVector<const char*> dResults ( dQueries.GetLength() );
 	ARRAY_FOREACH ( i, dResults )
-		dResults[i] = dQueries[i].m_sRes;
+		dResults[i] = (const char *)dQueries[i].m_dRes.Begin();
 
 	bool bGotData = ARRAY_ANY ( bGotData, dResults, dResults[_any]!=NULL );
 	if ( !bGotData )
@@ -10496,10 +10815,7 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 		tOut.SendLSBDword ( ((uPacketID++)<<24) + MysqlPackedLen ( sResult ) );
 		tOut.SendMysqlString ( sResult );
 	}
-
 	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
-	ARRAY_FOREACH ( i, dResults )
-		SafeDeleteArray ( dResults[i] );
 }
 
 
@@ -10699,15 +11015,15 @@ void HandleMysqlShowTables ( NetOutputBuffer_c & tOut, BYTE uPacketID )
 struct SphinxqlRequestBuilder_t : public IRequestBuilder_t
 {
 	explicit SphinxqlRequestBuilder_t ( const CSphString sQuery, const SqlStmt_t & tStmt )
+		: m_sBegin ( sQuery.cstr(), tStmt.m_iListStart )
+		, m_sEnd ( sQuery.cstr() + tStmt.m_iListEnd, sQuery.Length() - tStmt.m_iListEnd )
 	{
-		m_sBegin.SetBinary ( sQuery.cstr(), tStmt.m_iListStart );
-		m_sEnd.SetBinary ( sQuery.cstr() + tStmt.m_iListEnd, sQuery.Length() - tStmt.m_iListEnd );
 	}
-	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut, int ) const;
+	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const;
 
 protected:
-	CSphString			m_sBegin;
-	CSphString			m_sEnd;
+	const CSphString m_sBegin;
+	const CSphString m_sEnd;
 };
 
 
@@ -10718,7 +11034,7 @@ struct SphinxqlReplyParser_t : public IReplyParser_t
 		, m_pWarns ( pWarns )
 	{}
 
-	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t &, int ) const
+	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
 	{
 		DWORD uSize = ( tReq.GetLSBDword() & 0x00FFFFFF ) - 1;
 		BYTE uCommand = tReq.GetByte();
@@ -10758,7 +11074,7 @@ protected:
 };
 
 
-void SphinxqlRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut, int ) const
+void SphinxqlRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const
 {
 	int iReqSize = strlen(sIndexes) + m_sBegin.Length() + m_sEnd.Length(); // indexes string
 
@@ -10885,7 +11201,7 @@ void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt
 		}
 
 		// update remote agents
-		if ( dDistributed[iIdx].m_bToDelete )
+		if ( dDistributed[iIdx].m_bToDelete && dDistributed[iIdx].m_dAgents.GetLength() )
 		{
 			DistributedIndex_t & tDist = dDistributed[iIdx];
 
@@ -10894,15 +11210,13 @@ void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt
 				dAgents[i] = tDist.m_dAgents[i];
 
 			// connect to remote agents and query them
-			ConnectToRemoteAgents ( dAgents, false );
-
 			SphinxqlRequestBuilder_t tReqBuilder ( sQuery, tStmt );
-			int iRemote = QueryRemoteAgents ( dAgents, tDist.m_iAgentConnectTimeout, tReqBuilder, NULL ); // FIXME? profile update time too?
-
-			if ( iRemote )
+			CSphRemoteAgentsController tDistCtrl ( g_iDistThreads, dAgents, tReqBuilder, tDist.m_iAgentConnectTimeout );
+			int iAgentsDone = tDistCtrl.Finish();
+			if ( iAgentsDone )
 			{
 				SphinxqlReplyParser_t tParser ( &iUpdated, &iWarns );
-				iSuccesses += WaitForRemoteAgents ( dAgents, tDist.m_iAgentQueryTimeout, tParser, NULL ); // FIXME? profile update time too?
+				iSuccesses += RemoteWaitForAgents ( dAgents, tDist.m_iAgentQueryTimeout, tParser ); // FIXME? profile update time too?
 			}
 		}
 	}

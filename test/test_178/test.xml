@@ -62,6 +62,11 @@ index stars : test
 <sphinxql>CALL SNIPPETS('time is dying out like everething else here', 'stars', 'dying*', 1 AS query_mode, 20 AS limit )</sphinxql>
 <sphinxql>CALL SNIPPETS('time is dying out like everething else here', 'stars', '*dying', 1 AS query_mode, 20 AS limit )</sphinxql>
 <sphinxql>CALL SNIPPETS('time is dying out like everething else here', 'stars', '*dying*', 1 AS query_mode, 20 AS limit )</sphinxql>
+<!-- here is going regression allow_empty inconsistency, fast vs plain path -->
+<sphinxql>CALL SNIPPETS('time is dying out like everething else here', 'test', 'nothing', 1 AS query_mode, 40 AS limit, 1 as allow_empty )</sphinxql>
+<sphinxql>CALL SNIPPETS('time is dying out like everething', 'test', 'nothing', 1 AS query_mode, 40 AS limit, 1 as allow_empty  )</sphinxql>
+<sphinxql>CALL SNIPPETS('time is dying out like everething else here', 'test', 'nothing', 40 AS limit, 1 as allow_empty  )</sphinxql>
+<sphinxql>CALL SNIPPETS('time is dying out like everething', 'test', 'nothing', 40 AS limit, 1 as allow_empty  )</sphinxql>
 </sphqueries>
 
 </test>

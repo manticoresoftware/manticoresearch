@@ -51,6 +51,20 @@ index rt
 	rt_attr_multi	= mva2
 }
 
+index hung
+{
+	type = rt
+	path			= <data_path/>/hung
+	charset_type 	= utf-8
+	docinfo			= extern
+
+	rt_field			= body
+	rt_attr_multi	= mva1
+	rt_attr_uint	= gid
+	rt_attr_multi	= mva2
+}
+
+
 </config>
 
 <custom_test><![CDATA[
@@ -107,12 +121,33 @@ for ( $i = 0; $i < 4; $i++)
 	else
 		$results[] = sprintf("start.err=%d local=%s client=%s", $startSta, $error, $client->GetLastError());
 }
+
+// regression that rt deadlock on smart attributes update
+$sock = @mysql_connect ($sockStr,'','',	true );
+if ( $sock === false )
+{
+	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+	return;
+}
+for ( $i = 1; $i < 2001; $i++)
+{
+	$gid = $i * 1000;
+	$mva1 = $i * 1000 + 33;
+	$mva2 = $i * 1000 - 11;
+	@mysql_query ( "replace into hung (id, gid, mva1, mva2, body) values ($i, $gid, ($mva1, $mva2), ($mva1), 'dummy1')" );
+	if ( @mysql_error() )
+		$results[] = 'i=$i' . @mysql_error();
+}
+@mysql_close($sock);
 ]]></custom_test>
 
 <sphqueries>
 <sphinxql>select * from idx where match('test3')</sphinxql>
 <sphinxql>select * from rt</sphinxql>
 <sphinxql>select * from idx</sphinxql>
+<!-- regression that rt deadlock on smart attributes update -->
+<sphinxql>update hung set mva1=(3,2, 1, 2) where id>2</sphinxql>
+<sphinxql>select * from hung order by @id asc</sphinxql>
 </sphqueries>
 
   <DB_Create>

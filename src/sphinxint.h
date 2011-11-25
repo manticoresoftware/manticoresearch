@@ -954,6 +954,9 @@ inline int sphUTF8Encode ( BYTE * pBuf, int iCode )
 /// compute UTF-8 string length in codepoints
 inline int sphUTF8Len ( const char * pStr )
 {
+	if ( !pStr || *pStr=='\0' )
+		return 0;
+
 	BYTE * pBuf = (BYTE*) pStr;
 	int iRes = 0, iCode;
 
@@ -968,14 +971,17 @@ inline int sphUTF8Len ( const char * pStr )
 /// compute UTF-8 string length in codepoints
 inline int sphUTF8Len ( const char * pStr, int iMax )
 {
+	if ( !pStr || *pStr=='\0' )
+		return 0;
+
 	BYTE * pBuf = (BYTE*) pStr;
 	BYTE * pMax = pBuf + iMax;
-	int iRes = 0;
-	while ( pBuf<pMax )
-	{
-		sphUTF8Decode ( pBuf );
-		iRes++;
-	}
+	int iRes = 0, iCode;
+
+	while ( pBuf<pMax && iRes<iMax && ( iCode = sphUTF8Decode ( pBuf ) )!=0 )
+		if ( iCode>0 )
+			iRes++;
+
 	return iRes;
 }
 
@@ -1366,7 +1372,7 @@ public:
 		// how many bytes of a previous keyword can we reuse?
 		BYTE iMatch = 0;
 		int iMinLen = Min ( m_iLastLen, iLen );
-		assert ( iMinLen<sizeof(m_sLastKeyword) );
+		assert ( iMinLen<(int)sizeof(m_sLastKeyword) );
 		while ( iMatch<iMinLen && m_sLastKeyword[iMatch]==pWord[iMatch] )
 		{
 			iMatch++;

@@ -2095,12 +2095,13 @@ int ha_sphinx::Connect ( const char * sHost, ushort uPort )
 			bool bError = false;
 
 #if MYSQL_VERSION_ID>=50515
-			struct addrinfo tmp_hostent, *hp;
-			tmp_errno = getaddrinfo ( sHost, NULL, &tmp_hostent, &hp );
-			if ( !tmp_errno )
+			struct addrinfo *hp = NULL;
+			tmp_errno = getaddrinfo ( sHost, NULL, NULL, &hp );
+			if ( !tmp_errno || !hp || !hp->ai_addr )
 			{
-				freeaddrinfo ( hp );
 				bError = true;
+				if ( hp )
+					freeaddrinfo ( hp );
 			}
 #else
 			struct hostent tmp_hostent, *hp;
@@ -3051,11 +3052,11 @@ int ha_sphinx::get_rec ( byte * buf, const byte *, uint )
 					{
 						for ( ; uValue>0 && !m_bUnpackError; uValue-=2 )
 						{
-							uint64 uEntry = UnpackDword ();
-							uEntry = ( uEntry<<32 ) | UnpackDword();
+							uint32 uEntryLo = UnpackDword ();
+							uint32 uEntryHi = UnpackDword();
 							if ( pCur < sBuf+sizeof(sBuf)-24 ) // 20 chars per 64bit value plus some safety bytes
 							{
-								snprintf ( pCur, sBuf+sizeof(sBuf)-pCur, "%llu", uEntry );
+								snprintf ( pCur, sBuf+sizeof(sBuf)-pCur, "%u%u", uEntryHi, uEntryLo );
 								while ( *pCur ) *pCur++;
 								if ( uValue>2 )
 									*pCur++ = ','; // non-trailing commas
@@ -3393,7 +3394,7 @@ int ha_sphinx::create ( const char * name, TABLE * table, HA_CREATE_INFO * )
 			enum_field_types eType = table->field[i]->type();
 			if ( eType!=MYSQL_TYPE_TIMESTAMP && !IsIntegerFieldType(eType) && eType!=MYSQL_TYPE_VARCHAR && eType!=MYSQL_TYPE_FLOAT )
 			{
-				my_snprintf ( sError, sizeof(sError), "%s: column %s is of unsupported type (use int/bigint/timestamp/varchar/float)",
+				my_snprintf ( sError, sizeof(sError), "%s: column %d(%s) is of unsupported type (use int/bigint/timestamp/varchar/float)",
 					name, i+1, table->field[i]->field_name );
 				break;
 			}

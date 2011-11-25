@@ -11,6 +11,7 @@
 searchd
 {
 	<searchd_settings/>
+	seamless_rotate = 0
 	<dynamic>
 		<variant>workers = none</variant>
 		<variant>

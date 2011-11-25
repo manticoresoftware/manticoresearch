@@ -339,7 +339,7 @@ Table of Contents
       11.4.42. prefork_rotation_throttle
 
 A. Sphinx revision history
-   A.1. Version 2.0.2-beta, ?? nov 2011
+   A.1. Version 2.0.2-beta, 15 nov 2011
    A.2. Version 2.0.1-beta, 22 apr 2011
    A.3. Version 1.10-beta, 19 jul 2010
    A.4. Version 0.9.9-release, 02 dec 2009
@@ -2776,6 +2776,7 @@ Match mode can take one of the following values:
    * "phr" for SPH_MATCH_PHRASE mode;
    * "bool" for SPH_MATCH_BOOLEAN mode;
    * "ext" for SPH_MATCH_EXTENDED mode;
+   * "ext2" for SPH_MATCH_EXTENDED2 mode;
    * "scan" if the full scan mode was used, either by being specified with
      SPH_MATCH_FULLSCAN, or if the query was empty (as documented under
      Matching Modes)
@@ -9974,7 +9975,7 @@ Appendix A. Sphinx revision history
 
 Table of Contents
 
-A.1. Version 2.0.2-beta, ?? nov 2011
+A.1. Version 2.0.2-beta, 15 nov 2011
 A.2. Version 2.0.1-beta, 22 apr 2011
 A.3. Version 1.10-beta, 19 jul 2010
 A.4. Version 0.9.9-release, 02 dec 2009
@@ -9988,7 +9989,7 @@ A.11. Version 0.9.7-rc1, 26 oct 2006
 A.12. Version 0.9.6, 24 jul 2006
 A.13. Version 0.9.6-rc1, 26 jun 2006
 
-A.1. Version 2.0.2-beta, ?? nov 2011
+A.1. Version 2.0.2-beta, 15 nov 2011
 ====================================
 
 Major new features
@@ -10056,6 +10057,17 @@ New SphinxQL features
 Bug fixes
 ---------
 
+   * fixed #982, empty binlogs prevented upgraded daemon from starting up
+   * fixed #978, libsphinxclient build failed on sparc/sparc64 solaris
+   * fixed #977, eliminated (most) compiler warnings
+   * fixed #969, broken expression MVA/string argument type check prevented
+     IF(IN(mva..)) and other valid expressions from working
+   * fixed #966, NOT IN @global_var syntax was not supported
+   * fixed #958, mem_limit over INT_MAX was not clamped
+   * fixed #954, UTF-8 snippets could crash on malformed data
+   * fixed #951, UTF-8 snippets could hang on malformed data
+   * fixed #947, bad float column type was reported via SphinxQL, breaking
+     some clients
    * fixed #940, group-by with a small enough max_matches limit could
      occasionaly crash and/or sort wrongly
    * fixed #932, sending huge queries to agents occasionally failed (mainly

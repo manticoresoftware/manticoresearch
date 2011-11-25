@@ -106,7 +106,7 @@ CREATE TABLE test_table2
 <db_insert><![CDATA[insert into test_table2 values ( 6, 1, '<z_1>aa</z_1>' )]]></db_insert>
 <db_insert><![CDATA[insert into test_table2 values ( 7, 1, '<z_1>aa</z_1>' )]]></db_insert>
 <db_insert><![CDATA[insert into test_table2 values ( 8, 1, '<z_1>aa</z_1>' )]]></db_insert>
-<db_insert><![CDATA[insert into test_table2 values ( 9, 1, CONCAT ( '<z_1> ', CONCAT ( REPEAT ( 'aa ', 512 ), ' </z_1>' ) ) )]]></db_insert>
+<db_insert><![CDATA[insert into test_table2 values ( 9, 1, CONCAT('<z_1> ', CONCAT(REPEAT('aa ', 512), ' </z_1>')) )]]></db_insert>
 <db_insert><![CDATA[insert into test_table2 values ( 10, 1, '<z_1> aa </z_1>' )]]></db_insert>
 <db_insert><![CDATA[insert into test_table2 values ( 11, 1, '<z_1> aa </z_1>' )]]></db_insert>
 

@@ -790,11 +790,13 @@ void CSphProcessSharedMutex::Unlock () const
 }
 
 
-bool CSphProcessSharedMutex::TimedLock ( int tmSpin ) const
-{
 #if USE_WINDOWS
+bool CSphProcessSharedMutex::TimedLock ( int ) const
+	{
 	return false;
 #else
+bool CSphProcessSharedMutex::TimedLock ( int tmSpin ) const
+{
 	if ( !m_pMutex )
 		return false;
 

@@ -57,6 +57,7 @@
 	#include <netdb.h>
 	#include <errno.h>
 	#include <sys/un.h>
+	#include <sys/fcntl.h>
 #endif
 
 //////////////////////////////////////////////////////////////////////////
@@ -1280,7 +1281,7 @@ void SPH_FD_SET ( int fd, fd_set * fdset ) { FD_SET ( fd, fdset ); }
 static sphinx_bool net_write ( int fd, const char * bytes, int len, sphinx_client * client )
 {
 	int res;
-#if defined(_WIN32) || defined(SO_NOSIGPIPE)
+#if defined(_WIN32) || defined(SO_NOSIGPIPE) || !defined(MSG_NOSIGNAL)
 	res = send ( fd, bytes, len, 0 );
 #else
 	res = send ( fd, bytes, len, MSG_NOSIGNAL );

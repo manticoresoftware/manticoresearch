@@ -403,7 +403,7 @@ struct SnippetsQword_ExactForm_c : public SnippetsQword_c<SnippetsQword_ExactFor
 		int iLen = m_sWord.Length()-1;
 		BYTE sTmp [ 3*SPH_MAX_WORD_LEN + 16 ];
 
-		assert ( iLen>0 && iLen<sizeof(sTmp) );
+		assert ( iLen>0 && iLen<(int)sizeof(sTmp) );
 		assert ( m_sWord.Begins ( "=" ) );
 		assert ( pDict && m_pTokenizer );
 
@@ -822,8 +822,8 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, int iDataLen, CSphDict * pDi
 		{
 			BYTE sBuf [ 3*SPH_MAX_WORD_LEN+4 ];
 			int iBytes = pLastTokenEnd - pTokenStart;
-			if ( iBytes+2>sizeof(sBuf) )
-				iBytes = sizeof(sBuf)-2;
+			if ( iBytes+2>(int)sizeof(sBuf) )
+				iBytes = (int)sizeof(sBuf)-2;
 			memcpy ( sBuf + 1, sWord, iBytes );
 			sBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
 			sBuf[iBytes+1] = '\0';
@@ -1026,7 +1026,7 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & tQuery )
 	{
 		if ( !( ExtractPassages ( tQuery ) && HighlightBestPassages ( tQuery ) ) )
 		{
-			if ( tQuery.m_bAllowEmpty )
+			if ( !tQuery.m_bAllowEmpty )
 				HighlightStart ( tQuery );
 		}
 	}
@@ -2104,6 +2104,7 @@ public:
 	int		m_iStopwordStep;
 	bool	m_bIndexExactWords;
 	int		m_iDocLen;
+	int		m_iMatchesCount;
 
 	explicit TokenFunctorTraits_c ( SnippetsDocIndex_c & tContainer, ISphTokenizer * pTokenizer, CSphDict * pDict, const ExcerptQuery_t & tQuery, const CSphIndexSettings & tSettingsIndex, const char * sDoc, int iDocLen )
 		: m_tContainer ( tContainer )
@@ -2114,12 +2115,15 @@ public:
 		, m_iStopwordStep ( tSettingsIndex.m_iStopwordStep )
 		, m_bIndexExactWords ( tSettingsIndex.m_bIndexExactWords )
 		, m_iDocLen ( iDocLen )
+		, m_iMatchesCount ( 0 )
 	{
 		assert ( m_pTokenizer && m_pDict );
 		ExcerptQuery_t::operator = ( tQuery );
 		m_pTokenizer->SetBuffer ( (BYTE*)sDoc, m_iDocLen );
 		m_pDoc = m_pTokenizer->GetBufferPtr();
 	}
+
+	~TokenFunctorTraits_c () {}
 
 	void ResultEmit ( const char * pSrc, int iLen, bool bHasPassageMacro=false, int iPassageId=0, const char * pPost=NULL, int iPostLen=0 )
 	{
@@ -2284,7 +2288,10 @@ public:
 				bMatch = true;
 
 		if ( bMatch )
+		{
 			ResultEmit ( m_sBeforeMatch.cstr(), m_iBeforeLen, m_bHasBeforePassageMacro, m_iPassageId, m_sBeforeMatchPassage.cstr(), m_iBeforePostLen );
+			m_iMatchesCount++;
+		}
 
 		ResultEmit ( m_pDoc+iStart, iLen );
 
@@ -2337,7 +2344,10 @@ public:
 
 		// marker folding, emit "before" marker at span start only
 		if ( m_pHit<m_pHitEnd && uPosition==m_pHit->m_uPosition )
+		{
 			ResultEmit ( m_sBeforeMatch.cstr(), m_iBeforeLen, m_bHasBeforePassageMacro, m_iPassageId, m_sBeforeMatchPassage.cstr(), m_iBeforePostLen );
+			m_iMatchesCount++;
+		}
 
 		// emit token itself
 		ResultEmit ( m_pDoc+iStart, iLen );
@@ -2471,8 +2481,8 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor, const CSphHTMLSt
 				if ( tFunctor.m_bHighlightQuery && tFunctor.m_bIndexExactWords )
 				{
 					int iLen = strlen ( (const char *)sWord );
-					if ( iLen+2>sizeof(sExactBuf) )
-						iLen = sizeof(sExactBuf)-2;
+					if ( iLen+2>(int)sizeof(sExactBuf) )
+						iLen = (int)sizeof(sExactBuf)-2;
 					memcpy ( sExactBuf + 1, sWord, iLen );
 					sExactBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
 					sExactBuf[iLen+1] = '\0';
@@ -2585,8 +2595,8 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor, const CSphHTMLSt
 		if ( tFunctor.m_bHighlightQuery && tFunctor.m_bIndexExactWords )
 		{
 			int iBytes = iWordLen;
-			if ( iBytes+2>sizeof(sExactBuf) )
-				iBytes = sizeof(sExactBuf)-2;
+			if ( iBytes+2>(int)sizeof(sExactBuf) )
+				iBytes = (int)sizeof(sExactBuf)-2;
 			memcpy ( sExactBuf + 1, sWord, iBytes );
 			sExactBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
 			sExactBuf[iBytes+1] = '\0';
@@ -2594,7 +2604,7 @@ static void TokenizeDocument ( TokenFunctorTraits_c & tFunctor, const CSphHTMLSt
 		}
 
 		int iNonStemmedLen = iWordLen;
-		if ( iNonStemmedLen+1>sizeof(sNonStemmed) )
+		if ( iNonStemmedLen+1>(int)sizeof(sNonStemmed) )
 			iNonStemmedLen = sizeof(sNonStemmed)-1;
 
 		memcpy ( sNonStemmed, sWord, iNonStemmedLen );
@@ -2774,6 +2784,9 @@ static char * HighlightAllFastpath ( const ExcerptQuery_t & tQuerySettings,
 		HighlightPlain_c tHighlighter ( tContainer, pTokenizer, pDict, tFixedSettings, tIndexSettings, sDoc, iDocLen );
 		TokenizeDocument ( tHighlighter, NULL );
 
+		if ( !tHighlighter.m_iMatchesCount && tFixedSettings.m_bAllowEmpty )
+			tHighlighter.m_dResult.Reset();
+
 		// add trailing zero, and return
 		tHighlighter.m_dResult.Add ( 0 );
 		return (char*) tHighlighter.m_dResult.LeakData();
@@ -2876,6 +2889,9 @@ static char * HighlightAllFastpath ( const ExcerptQuery_t & tQuerySettings,
 		// 2nd pass
 		HighlightQuery_c tHighlighter ( tContainer, pTokenizer, pDict, tFixedSettings, tIndexSettings, sDoc, iDocLen, dMarked );
 		TokenizeDocument ( tHighlighter, pStripper );
+
+		if ( !tHighlighter.m_iMatchesCount && tFixedSettings.m_bAllowEmpty )
+			tHighlighter.m_dResult.Reset();
 
 		// add trailing zero, and return
 		tHighlighter.m_dResult.Add ( 0 );

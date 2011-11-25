@@ -24,55 +24,109 @@ searchd
 </dynamic>
 }
 
-index test
+index crc
 {
 	type	= rt
-	path	= data/test
+	path	= data/crc
+	charset_type = utf-8
+	
 	rt_field = content
+	rt_attr_uint = idd
+	
+	dict = crc
 }
+
+index kw
+{
+	type	= rt
+	path	= data/kw
+	charset_type = utf-8
+	
+	rt_field = content
+	rt_attr_uint = idd
+	
+	dict = keywords
+	min_prefix_len = 1
+}
+
 
 </config>
 
 <custom_test><![CDATA[
 
-global $sd_address, $sd_sphinxql_port, $error;
-
 $results = array();
-$sockStr = "$sd_address:$sd_sphinxql_port";
-if ($sd_address == "localhost")
-	$sockStr = "127.0.0.1:$sd_sphinxql_port";
-$sock = @mysql_connect ($sockStr,'','',	true );
 
+$make_sock = create_function ( '&$results', '
+
+	global $sd_address, $sd_sphinxql_port, $error;
+
+	$sockStr = "$sd_address:$sd_sphinxql_port";
+	if ($sd_address == "localhost")
+		$sockStr = "127.0.0.1:$sd_sphinxql_port";
+	$sock = @mysql_connect ( $sockStr,"","", true );
+	
+	if ( $sock === false )
+	{
+		$results[] = "error: can not connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+	}
+	return $sock;
+');
+
+$query = create_function ( '&$results, $q, $sock', '
+	
+	$res = @mysql_query ( $q, $sock );
+	if ($res===true)
+	{
+		$results[] = "query: " . $q . "; total_affected:" . mysql_affected_rows($sock);
+	}
+	else if ($res===false)
+	{
+		$results[] = "query: " . $q . "; error:" . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+		return;
+	}
+	else
+	{
+		$results[] = "query: " . $q . "; total_rows:" . @mysql_num_rows($res);
+		while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
+		{
+			$foo = array();
+			foreach ($row as $key => $value)
+			{
+				$results[] = $key . " => " . $value;
+			}
+		}	
+	}
+');
+
+$sock = $make_sock( $results );
 if ( $sock === false )
 {
-	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
 	return;
 }
 
-$results[] = "inserting";
-@mysql_query ( "INSERT INTO test VALUES (1,'test')",$sock);
-//@mysql_close ($sock);
+// regression
+// binlog crashes on replayng commit with delete only statement
+$query ( $results, "DELETE FROM kw WHERE id=1000", $sock);
+
+$query ( $results, "INSERT INTO crc VALUES (1, 'test work', 11)", $sock);
+$query ( $results, "INSERT INTO kw VALUES (100, 'test stuff', 111)", $sock);
+
+$query ( $results, "SELECT * FROM crc,kw WHERE MATCH('test')", $sock );
+$query ( $results, "SELECT * FROM crc,kw", $sock );
 
 $results[]= "killing";
 KillSearchd ('config.conf', 'searchd.pid',9,false);
 StartSearchd ( "config.conf", "error.txt", 'searchd.pid', $error, true );
 
 $results[] = "connecting again";
-$sock = @mysql_connect ($sockStr,'','',	true );
+$sock = $make_sock( $results );
 if ( $sock === false )
 {
-	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
 	return;
 }
-$results[] = "querying";
 
-$res = mysql_query ( "SELECT * FROM test WHERE MATCH('test')",$sock );
-if ($res===true)
-	$results[] = "total affected ".mysql_affected_rows($sock);
-else if ($res===false)
-	$results[] = "error ".@mysql_errno($sock)." : ".@mysql_error ($sock);
-else
-	$results[] = "total found ".mysql_num_rows ($res);
+$query ( $results, "SELECT * FROM crc,kw WHERE MATCH('test')", $sock );
+$query ( $results, "SELECT * FROM crc,kw", $sock );
 
 ]]></custom_test>
 

@@ -747,8 +747,8 @@ class ExprParser_t
 
 public:
 	ExprParser_t ( CSphSchema * pExtra, ISphExprHook * pHook )
-		: m_pExtra ( pExtra )
-		, m_pHook ( pHook )
+		: m_pHook ( pHook )
+        , m_pExtra ( pExtra )
 	{}
 
 							~ExprParser_t ();

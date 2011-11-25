@@ -78,8 +78,7 @@ $opts = array
     "after_match" => "[A]",
     "chunk_separator" => " ... ",
     "limit" => 100,
-    "around" => 2,
-	"allow_empty"=>true
+    "around" => 2
 );
 
 $results = array ();
@@ -98,8 +97,7 @@ $opts = array
     "after_match" => "[A]",
     "chunk_separator" => " ... ",
     "limit" => 50,
-    "around" => 2,
-	"allow_empty"=>true	
+    "around" => 2
 );
 
 $results [] = $opts;
@@ -117,8 +115,7 @@ $opts = array
     "after_match" => "[A]",
     "chunk_separator" => " ... ",
     "limit" => 30,
-    "around" => 2,
-	"allow_empty"=>true
+    "around" => 2
 );
 
 $results [] = $opts;

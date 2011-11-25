@@ -90,12 +90,23 @@ int CSphConfigSection::GetSize ( const char * sKey, int iDefault ) const
 	}
 
 	char * sErr;
-	int iRes = strtol ( sMemLimit, &sErr, 10 );
-	if ( !*sErr )
-		return iScale*iRes;
+	int64_t iRes = strtoll ( sMemLimit, &sErr, 10 );
 
-	// FIXME! report syntax error here
-	return iDefault;
+	if ( !*sErr )
+	{
+		iRes *= iScale;
+		if ( iRes>INT_MAX )
+		{
+			sphWarning ( "'%s = %s' clamped to INT_MAX", sKey, pEntry->cstr() );
+			iRes = INT_MAX;
+		}
+	} else
+	{
+		sphWarning ( "'%s = %s' parse error '%s'", sKey, pEntry->cstr(), sErr );
+		iRes = iDefault;
+	}
+
+	return (int)iRes;
 }
 
 //////////////////////////////////////////////////////////////////////////

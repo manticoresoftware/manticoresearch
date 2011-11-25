@@ -11177,7 +11177,7 @@ prefork_rotation_throttle = 50 # throttle children restarts by 50 msec each
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 
-<sect1 id="rel202"><title>Version 2.0.2-beta, ?? nov 2011</title>
+<sect1 id="rel202"><title>Version 2.0.2-beta, 15 nov 2011</title>
 <bridgehead>Major new features</bridgehead>
 <itemizedlist>
 <listitem><para>added keywords dictionary (<link linkend="conf-dict"><code>dict=keywords</code></link>) support to RT indexes</para></listitem>
@@ -11224,6 +11224,15 @@ prefork_rotation_throttle = 50 # throttle children restarts by 50 msec each
 
 <bridgehead>Bug fixes</bridgehead>
 <itemizedlist>
+<listitem><para>fixed #982, empty binlogs prevented upgraded daemon from starting up</para></listitem>
+<listitem><para>fixed #978, libsphinxclient build failed on sparc/sparc64 solaris</para></listitem>
+<listitem><para>fixed #977, eliminated (most) compiler warnings</para></listitem>
+<listitem><para>fixed #969, broken expression MVA/string argument type check prevented IF(IN(mva..)) and other valid expressions from working</para></listitem>
+<listitem><para>fixed #966, NOT IN @global_var syntax was not supported</para></listitem>
+<listitem><para>fixed #958, mem_limit over INT_MAX was not clamped</para></listitem>
+<listitem><para>fixed #954, UTF-8 snippets could crash on malformed data</para></listitem>
+<listitem><para>fixed #951, UTF-8 snippets could hang on malformed data</para></listitem>
+<listitem><para>fixed #947, bad float column type was reported via SphinxQL, breaking some clients</para></listitem>
 <listitem><para>fixed #940, group-by with a small enough <code>max_matches</code> limit could occasionaly crash and/or sort wrongly</para></listitem>
 <listitem><para>fixed #932, sending huge queries to agents occasionally failed (mainly on Windows)</para></listitem>
 <listitem><para>fixed #926, snippets did not highlight widlcard matches with morphology enabled</para></listitem>

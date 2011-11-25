@@ -48,6 +48,14 @@ index star
 	min_prefix_len = 1
 }
 
+index snip
+{
+	source			= srctest
+	path			= <data_path/>/snip
+	charset_type 	= utf-8
+	exceptions		= test_165/synonyms3.txt
+}
+
 </config>
 
 <db_create>
@@ -107,6 +115,11 @@ INSERT INTO `star_table` VALUES
 <sphinxql>select * from star where match ('mov*')</sphinxql>
 <sphinxql>select * from star where match ('pack*')</sphinxql>
 <sphinxql>select * from star where match ('action')</sphinxql>
+
+<!-- regression tokenizer produces wrong token prt with exception -->
+<sphinxql>CALL SNIPPETS('; the test', 'snip', ';doggy the', 1 as force_all_words )</sphinxql>
+<sphinxql>CALL SNIPPETS('; the test', 'snip', 'doggy the', 1 as force_all_words )</sphinxql>
+<sphinxql>CALL SNIPPETS('; the test', 'snip', 'doggy the', 0 as force_all_words )</sphinxql>
 </sphqueries>
 
 </test>

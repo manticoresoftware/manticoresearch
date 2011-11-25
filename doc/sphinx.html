@@ -310,7 +310,7 @@
 <dt><span class="sect2"><a href="#conf-watchdog">11.4.41. watchdog</a></span></dt>
 <dt><span class="sect2"><a href="#conf-prefork-rotation-throttle">11.4.42. prefork_rotation_throttle</a></span></dt>
 </dl></dd></dl></dd><dt><span class="appendix"><a href="#changelog">A. Sphinx revision history</a></span></dt>
-<dd><dl><dt><span class="sect1"><a href="#rel202">A.1. Version 2.0.2-beta, ?? nov 2011</a></span></dt>
+<dd><dl><dt><span class="sect1"><a href="#rel202">A.1. Version 2.0.2-beta, 15 nov 2011</a></span></dt>
 <dt><span class="sect1"><a href="#rel201">A.2. Version 2.0.1-beta, 22 apr 2011</a></span></dt>
 <dt><span class="sect1"><a href="#rel110">A.3. Version 1.10-beta, 19 jul 2010</a></span></dt>
 <dt><span class="sect1"><a href="#rel099">A.4. Version 0.9.9-release, 02 dec 2009</a></span></dt>
@@ -2575,6 +2575,7 @@ Match mode can take one of the following values:
 <li>"phr" for SPH_MATCH_PHRASE mode;</li>
 <li>"bool" for SPH_MATCH_BOOLEAN mode;</li>
 <li>"ext" for SPH_MATCH_EXTENDED mode;</li>
+<li>"ext2" for SPH_MATCH_EXTENDED2 mode;</li>
 <li>"scan" if the full scan mode was used, either by being specified with SPH_MATCH_FULLSCAN, or if the query was empty (as documented under <a href="#matching-modes" title="5.1.&nbsp;Matching modes">Matching Modes</a>)</li>
 </ul></div>
 <p>
@@ -9438,7 +9439,7 @@ the "rotation finished" message in the <code class="filename">searchd</code> eve
 prefork_rotation_throttle = 50 # throttle children restarts by 50 msec each
 </pre></div></div></div>
 <div class="appendix" lang="en"><div class="titlepage"><div><div><h2 class="title"><a name="changelog"></a>Appendix&nbsp;A.&nbsp;Sphinx revision history</h2></div></div></div>
-<div class="toc"><p><b>Table of Contents</b></p><dl><dt><span class="sect1"><a href="#rel202">A.1. Version 2.0.2-beta, ?? nov 2011</a></span></dt>
+<div class="toc"><p><b>Table of Contents</b></p><dl><dt><span class="sect1"><a href="#rel202">A.1. Version 2.0.2-beta, 15 nov 2011</a></span></dt>
 <dt><span class="sect1"><a href="#rel201">A.2. Version 2.0.1-beta, 22 apr 2011</a></span></dt>
 <dt><span class="sect1"><a href="#rel110">A.3. Version 1.10-beta, 19 jul 2010</a></span></dt>
 <dt><span class="sect1"><a href="#rel099">A.4. Version 0.9.9-release, 02 dec 2009</a></span></dt>
@@ -9452,7 +9453,7 @@ prefork_rotation_throttle = 50 # throttle children restarts by 50 msec each
 <dt><span class="sect1"><a href="#rel096">A.12. Version 0.9.6, 24 jul 2006</a></span></dt>
 <dt><span class="sect1"><a href="#rel096rc1">A.13. Version 0.9.6-rc1, 26 jun 2006</a></span></dt>
 </dl></div>
-<div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="rel202"></a>A.1.&nbsp;Version 2.0.2-beta, ?? nov 2011</h2></div></div></div>
+<div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="rel202"></a>A.1.&nbsp;Version 2.0.2-beta, 15 nov 2011</h2></div></div></div>
 <h3>Major new features</h3><div class="itemizedlist"><ul type="disc"><li>added keywords dictionary (<a href="#conf-dict" title="11.2.7.&nbsp;dict"><code class="code">dict=keywords</code></a>) support to RT indexes</li>
 <li>added <a href="#conf-rt-attr-multi" title="11.2.54.&nbsp;rt_attr_multi">MVA</a>, <a href="#conf-index-exact-words" title="11.2.42.&nbsp;index_exact_words">index_exact_words</a> support to RT indexes (#888)</li>
 <li>added <a href="#mva" title="3.4.&nbsp;MVA (multi-valued attributes)">MVA64</a> (a set of BIGINTs) support to both disk and RT indexes (<a href="#conf-rt-attr-multi-64" title="11.2.55.&nbsp;rt_attr_multi_64">rt_attr_multi_64</a> directive)</li>
@@ -9490,7 +9491,16 @@ prefork_rotation_throttle = 50 # throttle children restarts by 50 msec each
 <li>added complete <a href="#sphinxql-log-format" title="5.9.2.&nbsp;SphinxQL log format">SphinxQL error logging</a> (all errors are logged now, not just <code class="code">SELECT</code>s)</li>
 <li>improved <a href="#sphinxql-select" title="7.1.&nbsp;SELECT syntax">SELECT</a> statement syntax, made expressions aliases optional</li>
 </ul></div>
-<h3>Bug fixes</h3><div class="itemizedlist"><ul type="disc"><li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=940" target="_top">#940</a>, group-by with a small enough <code class="code">max_matches</code> limit could occasionaly crash and/or sort wrongly</li>
+<h3>Bug fixes</h3><div class="itemizedlist"><ul type="disc"><li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=982" target="_top">#982</a>, empty binlogs prevented upgraded daemon from starting up</li>
+<li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=978" target="_top">#978</a>, libsphinxclient build failed on sparc/sparc64 solaris</li>
+<li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=977" target="_top">#977</a>, eliminated (most) compiler warnings</li>
+<li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=969" target="_top">#969</a>, broken expression MVA/string argument type check prevented IF(IN(mva..)) and other valid expressions from working</li>
+<li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=966" target="_top">#966</a>, NOT IN @global_var syntax was not supported</li>
+<li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=958" target="_top">#958</a>, mem_limit over INT_MAX was not clamped</li>
+<li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=954" target="_top">#954</a>, UTF-8 snippets could crash on malformed data</li>
+<li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=951" target="_top">#951</a>, UTF-8 snippets could hang on malformed data</li>
+<li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=947" target="_top">#947</a>, bad float column type was reported via SphinxQL, breaking some clients</li>
+<li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=940" target="_top">#940</a>, group-by with a small enough <code class="code">max_matches</code> limit could occasionaly crash and/or sort wrongly</li>
 <li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=932" target="_top">#932</a>, sending huge queries to agents occasionally failed (mainly on Windows)</li>
 <li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=926" target="_top">#926</a>, snippets did not highlight widlcard matches with morphology enabled</li>
 <li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=918" target="_top">#918</a>, crash logger did not report a proper query in <code class="code">dist_threads</code> case</li>

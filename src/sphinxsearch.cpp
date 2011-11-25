@@ -1649,7 +1649,9 @@ inline bool ExtTermPos_c<TERM_POS_ZONES>::IsAcceptableHit ( const ExtHit_t * pHi
 			Swap ( m_dZones[i], m_dZones[m_iCheckFrom] );
 			m_iCheckFrom++;
 			break;
-		}
+        default:
+            break;
+        }
 	}
 	return false;
 }

@@ -145,7 +145,7 @@ void test_excerpt ( sphinx_client * client )
 	sphinx_init_excerpt_options ( &opts );
 	opts.limit = 60;
 	opts.around = 3;
-	opts.allow_empty = SPH_TRUE;
+	opts.allow_empty = SPH_FALSE;
 
 	for ( j=0; j<2; j++ )
 	{

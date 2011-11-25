@@ -103,7 +103,7 @@ mkdir %BASE%
 mkdir %BASE%\bin
 copy checkout\bin\release\*.exe %BASE%\bin
 
-for %%i in (comerr32.dll gssapi32.dll iconv.dll k5sprt32.dll krb5_32.dll libeay32.dll libiconv2.dll libintl3.dll libpq.dll ssleay32.dll) do (
+for %%i in (comerr32.dll gssapi32.dll iconv.dll k5sprt32.dll krb5_32.dll libeay32.dll libiconv2.dll libintl3.dll libpq.dll ssleay32.dll msvcr71.dll) do (
 	copy "%PGSQLROOT%\bin\%%i" %BASE%\bin
 )
 
@@ -149,7 +149,7 @@ mkdir %BASE%
 mkdir %BASE%\bin
 copy checkout\bin\release\*.exe %BASE%\bin
 
-for %%i in (comerr32.dll gssapi32.dll iconv.dll k5sprt32.dll krb5_32.dll libeay32.dll libiconv2.dll libintl3.dll libpq.dll ssleay32.dll) do (
+for %%i in (comerr32.dll gssapi32.dll iconv.dll k5sprt32.dll krb5_32.dll libeay32.dll libiconv2.dll libintl3.dll libpq.dll ssleay32.dll msvcr71.dll) do (
 	copy "%PGSQLROOT%\bin\%%i" %BASE%\bin
 )
 

@@ -2695,8 +2695,11 @@ public:
 	/// internal debugging hook, DO NOT USE
 	virtual int					DebugCheck ( FILE * fp ) = 0;
 
-	/// getter for name
-	const char * GetName () { return m_sIndexName.cstr(); }
+	/// getter for the index name
+	const char *				GetName () { return m_sIndexName.cstr(); }
+
+	/// get for the base file name
+	const char *				GetFilename () { return m_sFilename.cstr(); }
 
 public:
 	int64_t						m_iTID;
@@ -2735,6 +2738,7 @@ protected:
 	int							m_iMaxCachedDocs;
 	int							m_iMaxCachedHits;
 	CSphString					m_sIndexName;
+	CSphString					m_sFilename;
 };
 
 // update attributes with index pointer attached

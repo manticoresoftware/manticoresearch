@@ -1366,7 +1366,6 @@ private:
 
 private:
 	// common stuff
-	CSphString					m_sFilename;
 	int							m_iLockFD;
 
 	CSphMatch *					m_pMin;				///< min attribute values tracker
@@ -7137,6 +7136,7 @@ CSphIndex::CSphIndex ( const char * sIndexName, const char * sFilename )
 	, m_iMaxCachedDocs ( 0 )
 	, m_iMaxCachedHits ( 0 )
 	, m_sIndexName ( sIndexName )
+	, m_sFilename ( sFilename )
 {
 }
 

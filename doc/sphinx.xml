@@ -4840,6 +4840,22 @@ Query OK, 0 rows affected (0.05 sec)
 </sect1>
 
 
+<sect1 id="sphinxql-truncate-rtindex"><title>TRUNCATE RTINDEX syntax</title>
+<programlisting>
+TRUNCATE RTINDEX rtindex
+</programlisting>
+<para>
+TRUNCATE RTINDEX statement, added in version 2.1.1-beta, clears
+the RT index completely. It disposes the in-memory data, unlinks
+all the index data files, and releases the associated binary logs.
+</para>
+<programlisting>
+mysql> TRUNCATE RTINDEX rt;
+Query OK, 0 rows affected (0.05 sec)
+</programlisting>
+</sect1>
+
+
 <sect1 id="sphinxql-multi-queries">
 <title>Multi-statement queries</title>
 <para>

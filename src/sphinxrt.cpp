@@ -1024,6 +1024,7 @@ public:
 	virtual void				CheckRamFlush ();
 	virtual void				ForceRamFlush ( bool bPeriodic=false );
 	virtual bool				AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError );
+	virtual bool				Truncate ( CSphString & sError );
 
 private:
 	/// acquire thread-local indexing accumulator
@@ -5150,6 +5151,64 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 	// all done
 	Verify ( m_tRwlock.Unlock() );
 	Verify ( m_tWriterMutex.Unlock() );
+	return true;
+}
+
+//////////////////////////////////////////////////////////////////////////
+// TRUNCATE
+//////////////////////////////////////////////////////////////////////////
+
+bool RtIndex_t::Truncate ( CSphString & )
+{
+	// TRUNCATE needs an exclusive lock, so get it
+	m_tWriterMutex.Lock();
+	m_tRwlock.WriteLock();
+
+	// update and save meta
+	// indicate 0 disk chunks, we are about to kill them anyway
+	// current TID will be saved, so replay will properly skip preceding txns
+	SaveMeta ( 0 );
+
+	// kill RAM chunk file
+	CSphString sFile;
+	sFile.SetSprintf ( "%s.ram", m_sPath.cstr() );
+	if ( ::unlink ( sFile.cstr() ) )
+		if  ( errno!=ENOENT )
+			sphWarning ( "rt: truncate failed to unlink %s: %s", sFile.cstr(), strerror(errno) );
+
+	// kill all disk chunks files
+	ARRAY_FOREACH ( i, m_pDiskChunks )
+	{
+		// FIXME! ext list must be in sync with sphinx.cpp, searchd.cpp
+		const int EXT_COUNT = 8;
+		const char * dCurExts[] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm", ".spk", ".sps", ".mvp" };
+
+		for ( int j=0; j<EXT_COUNT; j++ )
+		{
+			sFile.SetSprintf ( "%s.%d.%s", m_sPath.cstr(), i, dCurExts[j] );
+			if ( ::unlink ( sFile.cstr() ) )
+				if  ( errno!=ENOENT )
+					sphWarning ( "rt: truncate failed to unlink %s: %s", sFile.cstr(), strerror(errno) );
+		}
+	}
+
+	// kill in-memory data, reset stats
+	ARRAY_FOREACH ( i, m_pDiskChunks )
+		SafeDelete ( m_pDiskChunks[i] );
+	m_pDiskChunks.Reset();
+
+	ARRAY_FOREACH ( i, m_pSegments )
+		SafeDelete ( m_pSegments[i] );
+	m_pSegments.Reset();
+
+	m_tStats.Reset();
+
+	// done, unlock
+	m_tRwlock.Unlock();
+	m_tWriterMutex.Unlock();
+
+	// allow binlog to unlink now-redundant data files
+	g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
 	return true;
 }
 

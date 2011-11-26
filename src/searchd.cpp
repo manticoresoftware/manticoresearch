@@ -611,6 +611,7 @@ static SmallStringHash_T<Uservar_t>	g_hUservars;
 
 #endif // USE_WINDOWS
 
+// FIXME! must be in sync with sphinx.cpp
 const int EXT_COUNT = 8;
 const int EXT_MVP = 8;
 const char * g_dNewExts[EXT_COUNT] = { ".new.sph", ".new.spa", ".new.spi", ".new.spd", ".new.spp", ".new.spm", ".new.spk", ".new.sps" };
@@ -7804,6 +7805,7 @@ enum SqlStmt_e
 	STMT_ATTACH_INDEX,
 	STMT_FLUSH_RTINDEX,
 	STMT_SHOW_VARIABLES,
+	STMT_TRUNCATE_RTINDEX,
 
 	STMT_TOTAL
 };
@@ -11965,13 +11967,38 @@ void HandleMysqlFlush ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE 
 		return;
 	}
 
-
 	ISphRtIndex * pRt = dynamic_cast<ISphRtIndex*> ( pIndex->m_pIndex );
 	assert ( pRt );
 
 	pRt->ForceRamFlush();
 	pIndex->Unlock();
 	SendMysqlOkPacket ( tOut, uPacketID );
+}
+
+
+void HandleMysqlTruncate ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE uPacketID )
+{
+	// get an exclusive lock
+	const ServedIndex_t * pIndex = g_pIndexes->GetWlockedEntry ( tStmt.m_sIndex );
+
+	if ( !pIndex || !pIndex->m_bEnabled || !pIndex->m_bRT )
+	{
+		pIndex->Unlock();
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "TRUNCATE RTINDEX requires an existing RT index" );
+		return;
+	}
+
+	ISphRtIndex * pRt = dynamic_cast<ISphRtIndex*> ( pIndex->m_pIndex );
+	assert ( pRt );
+
+	CSphString sError;
+	bool bRes = pRt->Truncate ( sError );
+	pIndex->Unlock();
+
+	if ( !bRes )
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+	else
+		SendMysqlOkPacket ( tOut, uPacketID );
 }
 
 
@@ -12223,6 +12250,10 @@ public:
 
 		case STMT_SHOW_VARIABLES:
 			HandleMysqlShowVariables ( *pStmt, tOut, uPacketID, dRows, m_tVars );
+			return;
+
+		case STMT_TRUNCATE_RTINDEX:
+			HandleMysqlTruncate ( *pStmt, tOut, uPacketID );
 			return;
 
 		default:

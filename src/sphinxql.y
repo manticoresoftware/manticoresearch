@@ -84,6 +84,7 @@
 %token	TOK_TO
 %token	TOK_TRANSACTION
 %token	TOK_TRUE
+%token	TOK_TRUNCATE
 %token	TOK_UNCOMMITTED
 %token	TOK_UPDATE
 %token	TOK_VALUES
@@ -139,6 +140,7 @@ statement:
 	| flush_rtindex
 	| set_transaction
 	| select_sysvar
+	| truncate
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -923,6 +925,17 @@ select_sysvar:
 		}
 	;
 	
+////////////////////////////////////////////////////////////
+
+truncate:
+	TOK_TRUNCATE TOK_RTINDEX TOK_IDENT
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_TRUNCATE_RTINDEX;
+			tStmt.m_sIndex = $3.m_sValue;
+		}
+	;
+
 %%
 
 #if USE_WINDOWS

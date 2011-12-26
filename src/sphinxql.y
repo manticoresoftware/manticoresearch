@@ -860,7 +860,7 @@ show_variables_where_entry:
 show_collation:
 	TOK_SHOW TOK_COLLATION
 		{
-			pParser->m_pStmt->m_eStmt = STMT_DUMMY;
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_COLLATION;
 		}
 	;
 
@@ -936,12 +936,21 @@ flush_rtindex:
 //////////////////////////////////////////////////////////////////////////
 
 select_sysvar:
-	TOK_SELECT TOK_SYSVAR opt_limit_clause
+	TOK_SELECT sysvar_name opt_limit_clause
 		{
-			pParser->m_pStmt->m_eStmt = STMT_DUMMY;
+			pParser->m_pStmt->m_eStmt = STMT_SELECT_SYSVAR;
+			pParser->m_pStmt->m_tQuery.m_sQuery = $2.m_sValue;
 		}
 	;
 	
+sysvar_name:
+	TOK_SYSVAR
+	| TOK_SYSVAR '.' TOK_IDENT
+		{
+			$$.m_sValue.SetSprintf ( "%s.%s", $1.m_sValue.cstr(), $3.m_sValue.cstr() );
+		}
+	;
+
 ////////////////////////////////////////////////////////////
 
 truncate:

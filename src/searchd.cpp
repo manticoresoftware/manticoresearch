@@ -7806,6 +7806,8 @@ enum SqlStmt_e
 	STMT_FLUSH_RTINDEX,
 	STMT_SHOW_VARIABLES,
 	STMT_TRUNCATE_RTINDEX,
+	STMT_SELECT_SYSVAR,
+	STMT_SHOW_COLLATION,
 
 	STMT_TOTAL
 };
@@ -12254,6 +12256,67 @@ public:
 
 		case STMT_TRUNCATE_RTINDEX:
 			HandleMysqlTruncate ( *pStmt, tOut, uPacketID );
+			return;
+
+		case STMT_SELECT_SYSVAR:
+			{
+				CSphString sVar = pStmt->m_tQuery.m_sQuery;
+				sVar.ToLower();
+
+				if ( sVar=="@@session.auto_increment_increment" )
+				{
+					// MySQL Connector/J really expects an answer here
+					tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
+					tOut.SendByte ( 1 ); // field count (level+code+message)
+					tOut.SendByte ( 0 ); // extra
+
+					// field packet, var name
+					SendMysqlFieldPacket ( tOut, uPacketID++, sVar.cstr(), MYSQL_COL_LONG );
+					SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+
+					// data packet, var value
+					tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 ); // following string length and data
+					tOut.SendMysqlString ( "1" );
+
+					// done
+					SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+				} else
+				{
+					// generally, just send empty response
+					SendMysqlOkPacket ( tOut, uPacketID );
+				}
+			}
+			return;
+
+		case STMT_SHOW_COLLATION:
+			// MySQL Connector/J really expects an answer here
+			tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
+			tOut.SendByte ( 6 ); // field count (collation+charset+id+default+compiled+sortlen)
+			tOut.SendByte ( 0 ); // extra
+
+			// field packets
+			SendMysqlFieldPacket ( tOut, uPacketID++, "Collation", MYSQL_COL_STRING );
+			SendMysqlFieldPacket ( tOut, uPacketID++, "Charset", MYSQL_COL_STRING );
+			SendMysqlFieldPacket ( tOut, uPacketID++, "Id", MYSQL_COL_LONG );
+			SendMysqlFieldPacket ( tOut, uPacketID++, "Default", MYSQL_COL_STRING );
+			SendMysqlFieldPacket ( tOut, uPacketID++, "Compiled", MYSQL_COL_STRING );
+			SendMysqlFieldPacket ( tOut, uPacketID++, "Sortlen", MYSQL_COL_STRING );
+			SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+
+			// data packets
+			dRows.Reset();
+			dRows.PutString ( "utf8_general_ci" );
+			dRows.PutString ( "utf8" );
+			dRows.PutString ( "33" );
+			dRows.PutString ( "Yes" );
+			dRows.PutString ( "Yes" );
+			dRows.PutString ( "1" );
+			tOut.SendLSBDword ( ((uPacketID++)<<24) + ( dRows.Length() ) );
+			tOut.SendBytes ( dRows.Off ( 0 ), dRows.Length() );
+
+			// done
+			dRows.Reset();
+			SendMysqlEofPacket ( tOut, uPacketID++, 0 );
 			return;
 
 		default:

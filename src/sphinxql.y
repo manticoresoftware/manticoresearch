@@ -550,10 +550,10 @@ arg:
 //////////////////////////////////////////////////////////////////////////
 
 show_stmt:
-	TOK_SHOW show_variable
+	TOK_SHOW show_what
 	;
 
-show_variable:
+show_what:
 	TOK_WARNINGS		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_WARNINGS; }
 	| TOK_STATUS		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_STATUS; }
 	| TOK_META			{ pParser->m_pStmt->m_eStmt = STMT_SHOW_META; }
@@ -834,10 +834,27 @@ update_item:
 //////////////////////////////////////////////////////////////////////////
 
 show_variables:
-	TOK_SHOW opt_scope TOK_VARIABLES
+	TOK_SHOW opt_scope TOK_VARIABLES opt_show_variables_where
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_VARIABLES;
 		}
+	;
+
+opt_show_variables_where:
+	| show_variables_where
+	;
+
+show_variables_where:
+	TOK_WHERE show_variables_where_list
+	;
+
+show_variables_where_list:
+	show_variables_where_entry
+	| show_variables_where_list TOK_OR show_variables_where_entry
+	;
+
+show_variables_where_entry:
+	TOK_IDENT '=' TOK_QUOTED_STRING // for example, Variable_name = 'character_set'
 	;
 
 show_collation:

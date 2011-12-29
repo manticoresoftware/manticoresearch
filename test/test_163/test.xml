@@ -212,6 +212,42 @@ index u_dist23
 	local = u_uint
 	local = u_bool
 }
+
+source src_attr1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, body, idd1 as attr1, 1 as tag FROM test_table where id in ( 1,2,3 )
+	sql_attr_uint	= attr1
+	sql_attr_uint = tag
+}
+source src_attr2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, body, idd1 as attr2, 2 as tag FROM test_table where id in ( 4, 5, 6 )
+	sql_attr_uint	= attr2
+	sql_attr_uint = tag
+}
+index idx_attr1
+{
+	source			= src_attr1
+    docinfo			= extern
+	path			= <data_path/>/idx_attr1
+}
+index idx_attr2
+{
+	source			= src_attr2
+    docinfo			= extern
+	path			= <data_path/>/idx_attr2
+}
+index u_dist_aa
+{
+	type = distributed
+	local = idx_attr1
+	local = idx_attr2
+}
+
 </agent0>
 
 <agent1>
@@ -303,6 +339,10 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select * from u_float, u_bigint</sphinxql>
 <sphinxql>select * from u_uint, u_float</sphinxql>
 <sphinxql>select * from u_bigint, u_float</sphinxql>
+<!-- test of exist function -->
+<sphinxql>select * from u_dist_aa</sphinxql>
+<sphinxql>select *, exist ( ' aTTr2', 11 ) as cnd from u_dist_aa where cnd=11</sphinxql>
+<sphinxql>select *, exist ( ' Attr1', 1 ) as cnd from u_dist_aa where cnd=1</sphinxql>
 </sphqueries>
 
 </test>

@@ -363,7 +363,7 @@ static inline int Fibonacci ( int i )
 		f0 += f1; // f_j
 		f1 += f0; // f_{j+1}
 	}
-	return (i&1) ? f1 : f0;
+	return ( i & 1 ) ? f1 : f0;
 }
 
 struct Expr_Fibonacci_c : public Expr_Unary_c
@@ -608,7 +608,8 @@ enum Func_e
 	FUNC_IN,
 	FUNC_BITDOT,
 
-	FUNC_GEODIST
+	FUNC_GEODIST,
+	FUNC_EXIST
 };
 
 
@@ -659,7 +660,8 @@ static FuncDesc_t g_dFuncs[] =
 	{ "in",				-1, FUNC_IN,			SPH_ATTR_INTEGER },
 	{ "bitdot",			-1, FUNC_BITDOT,		SPH_ATTR_NONE },
 
-	{ "geodist",		4,	FUNC_GEODIST,		SPH_ATTR_FLOAT }
+	{ "geodist",		4,	FUNC_GEODIST,		SPH_ATTR_FLOAT },
+	{ "exist",			2,	FUNC_EXIST,			SPH_ATTR_NONE }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -816,6 +818,7 @@ private:
 	ISphExpr *				CreateGeodistNode ( int iArgs );
 	ISphExpr *				CreateBitdotNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs );
 	ISphExpr *				CreateUdfNode ( int iCall, ISphExpr * pLeft );
+	ISphExpr *				CreateExistNode ( const ExprNode_t & tNode );
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1559,6 +1562,56 @@ ISphExpr * ExprParser_t::CreateUdfNode ( int iCall, ISphExpr * pLeft )
 }
 
 
+ISphExpr * ExprParser_t::CreateExistNode ( const ExprNode_t & tNode )
+{
+	assert ( m_dNodes[tNode.m_iLeft].m_iToken==',' );
+	int iAttrName = m_dNodes[tNode.m_iLeft].m_iLeft;
+	int iAttrDefault = m_dNodes[tNode.m_iLeft].m_iRight;
+	assert ( iAttrName>=0 && iAttrName<m_dNodes.GetLength()
+		&& iAttrDefault>=0 && iAttrDefault<m_dNodes.GetLength() );
+
+	int iNameStart = (int)( m_dNodes[iAttrName].m_iConst>>32 );
+	int iNameLen = (int)( m_dNodes[iAttrName].m_iConst & 0xffffffffUL );
+	// skip head and tail non attribute name symbols
+	while ( m_sExpr[iNameStart]!='\0' && ( m_sExpr[iNameStart]=='\'' || m_sExpr[iNameStart]==' ' ) && iNameLen )
+	{
+		iNameStart++;
+		iNameLen--;
+	}
+	while ( m_sExpr[iNameStart+iNameLen-1]!='\0' && ( m_sExpr[iNameStart+iNameLen-1]=='\'' || m_sExpr[iNameStart+iNameLen-1]==' ' ) && iNameLen )
+	{
+		iNameLen--;
+	}
+
+	if ( iNameLen<=0 )
+	{
+		m_sCreateError.SetSprintf ( "first EXIST() argument must be valid string" );
+		return NULL;
+	}
+
+	assert ( iNameStart>=0 && iNameLen>0 && iNameStart+iNameLen<=(int)strlen ( m_sExpr ) );
+
+	CSphString sAttr ( m_sExpr+iNameStart, iNameLen );
+	int iLoc = m_pSchema->GetAttrIndex ( sAttr.cstr() );
+	if ( iLoc>=0 )
+	{
+		const CSphAttrLocator & tLoc = m_pSchema->GetAttr ( iLoc ).m_tLocator;
+		if ( tNode.m_eRetType==SPH_ATTR_FLOAT )
+			return new Expr_GetFloat_c ( tLoc, iLoc );
+		else
+			return new Expr_GetInt_c ( tLoc, iLoc );
+	} else
+	{
+		if ( tNode.m_eRetType==SPH_ATTR_INTEGER )
+			return new Expr_GetIntConst_c ( (int)m_dNodes[iAttrDefault].m_iConst );
+		else if ( tNode.m_eRetType==SPH_ATTR_BIGINT )
+			return new Expr_GetInt64Const_c ( m_dNodes[iAttrDefault].m_iConst );
+		else
+			return new Expr_GetConst_c ( m_dNodes[iAttrDefault].m_fConst );
+	}
+}
+
+
 /// fold nodes subtree into opcodes
 ISphExpr * ExprParser_t::CreateTree ( int iNode )
 {
@@ -1577,6 +1630,11 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 			bSkipLeft = true;
 		if ( eFunc==FUNC_IN )
 			bSkipRight = true;
+		if ( eFunc==FUNC_EXIST )
+		{
+			bSkipLeft = true;
+			bSkipRight = true;
+		}
 	}
 
 	ISphExpr * pLeft = bSkipLeft ? NULL : CreateTree ( tNode.m_iLeft );
@@ -1692,6 +1750,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_BITDOT:	return CreateBitdotNode ( tNode.m_iLeft, dArgs );
 
 					case FUNC_GEODIST:	return CreateGeodistNode ( tNode.m_iLeft );
+					case FUNC_EXIST:	return CreateExistNode ( tNode );
 				}
 				assert ( 0 && "unhandled function id" );
 				break;
@@ -2614,7 +2673,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 			bGotMva |= ( dRetTypes[i]==SPH_ATTR_UINT32SET || dRetTypes[i]==SPH_ATTR_UINT32SET );
 		}
 	}
-	if ( bGotString && eFunc!=FUNC_CRC32 )
+	if ( bGotString && !( eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST ) )
 	{
 		m_sParserError.SetSprintf ( "%s() arguments can not be string", g_dFuncs[iFunc].m_sName );
 		return -1;
@@ -2640,6 +2699,26 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 		}
 	}
 
+	if ( eFunc==FUNC_EXIST )
+	{
+		int iExistLeft = m_dNodes[iLeft].m_iLeft;
+		int iExistRight = m_dNodes[iLeft].m_iRight;
+		bool bIsLeftGood = ( m_dNodes[iExistLeft].m_eRetType==SPH_ATTR_STRING );
+		ESphAttr eRight = m_dNodes[iExistRight].m_eRetType;
+		bool bIsRightGood = ( eRight==SPH_ATTR_INTEGER || eRight==SPH_ATTR_TIMESTAMP || eRight==SPH_ATTR_ORDINAL || eRight==SPH_ATTR_BOOL
+			|| eRight==SPH_ATTR_FLOAT || eRight==SPH_ATTR_BIGINT || eRight==SPH_ATTR_WORDCOUNT );
+
+		if ( !bIsLeftGood || !bIsRightGood )
+		{
+			if ( bIsRightGood )
+				m_sParserError.SetSprintf ( "first EXIST() argument must be string" );
+			else
+				m_sParserError.SetSprintf ( "ill-formed EXIST" );
+			return -1;
+		}
+	}
+
+
 	// check that first SINT or timestamp family arg is integer
 	if ( eFunc==FUNC_SINT || eFunc==FUNC_DAY || eFunc==FUNC_MONTH || eFunc==FUNC_YEAR || eFunc==FUNC_YEARMONTH || eFunc==FUNC_YEARMONTHDAY
 		|| eFunc==FUNC_FIBONACCI )
@@ -2664,6 +2743,14 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 	// fixup return type in a few special cases
 	if ( eFunc==FUNC_MIN || eFunc==FUNC_MAX || eFunc==FUNC_MADD || eFunc==FUNC_MUL3 || eFunc==FUNC_ABS || eFunc==FUNC_IDIV )
 		tNode.m_eRetType = tNode.m_eArgType;
+
+	if ( eFunc==FUNC_EXIST )
+	{
+		int iExistRight = m_dNodes[iLeft].m_iRight;
+		ESphAttr eType = m_dNodes[iExistRight].m_eRetType;
+		tNode.m_eArgType = eType;
+		tNode.m_eRetType = eType;
+	}
 
 	if ( eFunc==FUNC_BIGINT && tNode.m_eRetType==SPH_ATTR_FLOAT )
 		tNode.m_eRetType = SPH_ATTR_FLOAT; // enforce if we can; FIXME! silently ignores BIGINT() on floats; should warn or raise an error

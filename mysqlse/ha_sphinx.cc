@@ -154,7 +154,7 @@ void sphUnalignedWrite ( void * pPtr, const T & tVal )
 #define SPHINXSE_MAX_ALLOC			(16*1024*1024)
 #define SPHINXSE_MAX_KEYWORDSTATS	4096
 
-#define SPHINXSE_VERSION			"2.0.2-dev ($Revision: 2917)"
+#define SPHINXSE_VERSION			"2.1.0-dev"
 
 // FIXME? the following is cut-n-paste from sphinx.h and searchd.cpp
 // cut-n-paste is somewhat simpler that adding dependencies however..

@@ -677,7 +677,8 @@ insert_val:
 	const_int				{ $$.m_iInstype = TOK_CONST_INT; $$.m_iValue = $1.m_iValue; }
 	| const_float			{ $$.m_iInstype = TOK_CONST_FLOAT; $$.m_fValue = $1.m_fValue; }
 	| TOK_QUOTED_STRING		{ $$.m_iInstype = TOK_QUOTED_STRING; $$.m_sValue = $1.m_sValue; }
-	| '(' const_list ')'	{ $$.m_iInstype = TOK_CONST_MVA; $$.m_iValue = $2.m_pValues->GetLength(); $$.m_pValues = $2.m_pValues; }
+	| '(' const_list ')'	{ $$.m_iInstype = TOK_CONST_MVA; $$.m_pValues = $2.m_pValues; }
+	| '(' ')'				{ $$.m_iInstype = TOK_CONST_MVA; }
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -827,7 +828,8 @@ update_item:
 		}
 	| TOK_IDENT '='  '(' ')' // special case () means delete mva
 		{
-			pParser->UpdateAttr ( $1.m_sValue, NULL, SPH_ATTR_UINT32SET );
+			SqlNode_t tNoValues;
+			pParser->UpdateMVAAttr ( $1.m_sValue, tNoValues );
 		}
 	;
 

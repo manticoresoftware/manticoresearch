@@ -150,7 +150,7 @@ typedef union YYSTYPE {
 	int				iFunc;			// function id
 	int				iNode;			// node, or uservar, or udf index
 } YYSTYPE;
-/* Line 191 of yacc.c.  */
+/* Line 186 of yacc.c.  */
 
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

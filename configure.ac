@@ -1,7 +1,7 @@
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.59)
-AC_INIT([sphinx], [2.0.2], [shodan(at)sphinxsearch.com])
+AC_INIT([sphinx], [2.1.0], [shodan(at)sphinxsearch.com])
 
 dnl --------------------------------------------------------------------------
 

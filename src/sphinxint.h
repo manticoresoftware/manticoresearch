@@ -436,7 +436,7 @@ public:
 	void Prepare ( DWORD * pOutBuffer, DWORD * pOutMax );
 
 	void CollectWithoutMvas ( const DWORD * pCur, bool bUseMvas );
-	bool Collect ( const DWORD * pCur, const DWORD * pMvas, int64_t iMvasCount, CSphString & sError );
+	bool Collect ( const DWORD * pCur, const DWORD * pMvas, int64_t iMvasCount, CSphString & sError, bool bHasMvaID );
 	void Collect ( const DWORD * pCur, const struct CSphDocMVA & dMvas );
 	void CollectMVA ( DOCID uDocID, const CSphVector< CSphVector<DWORD> > & dCurInfo );
 
@@ -681,7 +681,7 @@ void AttrIndexBuilder_t<DOCID>::CollectRowMVA ( int iAttr, DWORD uCount, const D
 }
 
 template < typename DOCID >
-bool AttrIndexBuilder_t<DOCID>::Collect ( const DWORD * pCur, const DWORD * pMvas, int64_t iMvasCount, CSphString & sError )
+bool AttrIndexBuilder_t<DOCID>::Collect ( const DWORD * pCur, const DWORD * pMvas, int64_t iMvasCount, CSphString & sError, bool bHasMvaID )
 {
 	CollectWithoutMvas ( pCur, true );
 
@@ -704,13 +704,13 @@ bool AttrIndexBuilder_t<DOCID>::Collect ( const DWORD * pCur, const DWORD * pMva
 
 		const DWORD * pMva = pMvas + uOff; // don't care about updates at this point
 
-		if ( i==0 && DOCINFO2ID_T<DOCID> ( pMva-DWSIZEOF(DOCID) )!=uDocID )
+		if ( bHasMvaID && i==0 && DOCINFO2ID_T<DOCID> ( pMva-DWSIZEOF(DOCID) )!=uDocID )
 		{
 			sError.SetSprintf ( "broken index: mva docid verification failed, id=" DOCID_FMT, (SphDocID_t)uDocID );
 			return false;
 		}
 
-		DWORD uCount = *pMva;
+		DWORD uCount = *pMva++;
 		if ( ( uOff+uCount>=iMvasCount ) || ( i>=m_iMva64 && ( uCount%2 )!=0 ) )
 		{
 			sError.SetSprintf ( "broken index: mva list out of bounds, id=" DOCID_FMT, (SphDocID_t)uDocID );

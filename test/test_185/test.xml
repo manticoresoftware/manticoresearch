@@ -146,6 +146,8 @@ index rt
 <sphinxql>select * from dist5</sphinxql>
 <sphinxql>update rt set mva1=(3,2, 1, 2), gid=3212, mva2=(1, 2, 3, 4, 5, 6), mva2=(3,4,5) where id=1</sphinxql>
 <sphinxql>select * from rt</sphinxql>
+<sphinxql>update rt set mva1=() where id=3</sphinxql>
+<sphinxql>select * from rt</sphinxql>
 </sphqueries>
 
   <DB_Create>

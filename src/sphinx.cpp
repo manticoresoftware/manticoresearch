@@ -5101,6 +5101,20 @@ int SelectParser_t::GetToken ( YYSTYPE * lvalp )
 			m_pCur++;
 			if ( *m_pCur=='=' ) { m_pCur++; lvalp->m_iEnd++; }
 			return TOK_EQ;
+
+		case '\'':
+		{
+			const char cEnd = *m_pCur;
+			for ( const char * s = m_pCur+1; *s; s++ )
+			{
+				if ( *s==cEnd )
+				{
+					m_pCur = s+1;
+					return TOK_CONST_STRING;
+				}
+			}
+			return -1;
+		}
 	}
 
 	// return char as a token

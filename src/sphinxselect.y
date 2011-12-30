@@ -26,6 +26,7 @@
 %token TOK_GTE
 %token TOK_EQ
 %token TOK_NE
+%token TOK_CONST_STRING
 
 %left TOK_AND TOK_OR
 %left TOK_EQ TOK_NE
@@ -97,8 +98,13 @@ function:
 	;
 
 arglist:
+	arg
+	| arglist ',' arg
+	;
+	
+arg:
 	expr
-	| arglist ',' expr
+	| TOK_CONST_STRING
 	;
 
 

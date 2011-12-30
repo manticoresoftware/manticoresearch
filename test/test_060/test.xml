@@ -39,7 +39,7 @@ $idlist = "";
 for ( $i=10000; $i<20000; $i++ )
 	$idlist .= "$i,";
 
-$client->SetSelect ( "*, IN(@id,1," . $idlist . "3) AS q" );
+$client->SetSelect ( "*, IN(@id,1," . $idlist . "3) AS q, crc32('the') as crc" );
 $client->SetFilter ( "q", array(1) );
 
 $r = $client->Query ( "" );

@@ -2246,32 +2246,6 @@ bool sphSortGetStringRemap ( const CSphSchema & tSorterSchema, const CSphSchema 
 	return ( dAttrs.GetLength()>0 );
 }
 
-
-void sphSortRemoveInternalAttrs ( CSphSchema & tSchema )
-{
-	int iAttrCount = tSchema.GetAttrsCount();
-	// internal attributes last
-	if ( !tSchema.GetAttrsCount() || !tSchema.GetAttr ( iAttrCount-1 ).m_sName.Begins( g_sIntAttrPrefix ) )
-		return;
-
-	// save needed attributes
-	CSphVector<CSphColumnInfo> dAttrs ( iAttrCount );
-	dAttrs.Resize ( 0 );
-	for ( int i=0; i<iAttrCount; i++ )
-	{
-		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
-		if ( tCol.m_sName.Begins ( g_sIntAttrPrefix ) )
-			break;
-
-		dAttrs.Add ( tCol );
-	}
-
-	// fill up schema with needed only attributes
-	tSchema.ResetAttrs();
-	ARRAY_FOREACH ( i, dAttrs )
-		tSchema.AddAttr ( dAttrs[i], dAttrs[i].m_tLocator.m_bDynamic );
-}
-
 ////////////////////
 // BINARY COLLATION
 ////////////////////

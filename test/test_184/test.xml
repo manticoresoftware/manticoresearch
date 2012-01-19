@@ -13,6 +13,8 @@ searchd
 {
 	<searchd_settings/>
 	compat_sphinxql_magics	= 0
+	workers = threads
+	binlog_path = #
 }
 
 source test
@@ -28,6 +30,14 @@ index test
 {
 	source				= test
 	path				= <data_path/>/test
+}
+
+index dist
+{
+	type = distributed
+	agent = <my_address/>:test
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000	
 }
 </config>
 
@@ -73,6 +83,12 @@ INSERT INTO test_table VALUES
 
 <!-- check that doc_word_count stuff works -->
 <sphinxql>select id, gid, weight(), title from test where match('lamb') and gid=2 option ranker=expr('doc_word_count*1000+sum(word_count)')</sphinxql>
+
+<!-- regression that expression has not sent to agents -->
+<sphinxql>select id, gid, weight(), title from dist where match('seven|lies') and gid=1 option ranker=expr('query_word_count*100+sum(word_count)*10+sum(hit_count)')</sphinxql>
+<sphinxql>select id, gid, weight(), title from dist where match('seven !(angels !by)') and gid=1 option ranker=expr('query_word_count*100+sum(word_count)*10+sum(hit_count)')</sphinxql>
+<sphinxql>select id, gid, weight(), title from dist where match('lamb') and gid=2 option ranker=expr('doc_word_count*1000+sum(word_count)')</sphinxql>
+
 </sphqueries>
 
 </test>

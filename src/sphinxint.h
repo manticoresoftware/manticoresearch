@@ -1223,7 +1223,6 @@ const BYTE *	SkipQuoted ( const BYTE * p );
 
 ISphExpr *		sphSortSetupExpr ( const CSphString & sName, const CSphSchema & tIndexSchema );
 bool			sphSortGetStringRemap ( const CSphSchema & tSorterSchema, const CSphSchema & tIndexSchema, CSphVector<SphStringSorterRemap_t> & dAttrs );
-void			sphSortRemoveInternalAttrs ( CSphSchema & tSchema );
 bool			sphIsSortStringInternal ( const char * sColumnName );
 
 bool			sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * sName, CSphString & sError );

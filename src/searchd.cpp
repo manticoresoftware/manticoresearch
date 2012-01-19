@@ -3935,11 +3935,12 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 		+ q.m_sGroupDistinct.Length()
 		+ q.m_sComment.Length()
 		+ q.m_sSelect.Length();
-	if ( !q.m_bAgent ) // send the magic to agent ("*,*," + real query)
-		iReqSize += q.m_sSelect.IsEmpty() ? 3 : 4;
+	iReqSize += q.m_sSelect.IsEmpty();
 	iReqSize += q.m_sRawQuery.IsEmpty()
 		? q.m_sQuery.Length()
 		: q.m_sRawQuery.Length();
+	if ( q.m_eRanker==SPH_RANK_EXPR )
+		iReqSize += q.m_sRankerExpr.Length() + 4;
 	ARRAY_FOREACH ( j, q.m_dFilters )
 	{
 		const CSphFilterSettings & tFilter = q.m_dFilters[j];
@@ -3970,6 +3971,8 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	tOut.SendInt ( q.m_iMaxMatches ); // limit is MAX_MATCHES
 	tOut.SendInt ( (DWORD)q.m_eMode ); // match mode
 	tOut.SendInt ( (DWORD)q.m_eRanker ); // ranking mode
+	if ( q.m_eRanker==SPH_RANK_EXPR )
+		tOut.SendString ( q.m_sRankerExpr.cstr() );
 	tOut.SendInt ( q.m_eSort ); // sort mode
 	tOut.SendString ( q.m_sSortBy.cstr() ); // sort attr
 	if ( q.m_sRawQuery.IsEmpty() )
@@ -4057,25 +4060,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 			}
 		}
 	}
-	if ( q.m_bAgent )
-	{
-		tOut.SendString ( q.m_sSelect.cstr() );
-	} else
-	{
-		int iLen = q.m_sSelect.Length();
-		if ( !iLen )
-		{
-			tOut.SendString ( "*,*" );
-		} else
-		{
-			// this was a fun subtle issue
-			// SetSprintf() uses a static 1K buffer...
-			tOut.SendInt ( iLen+4 );
-			tOut.SendBytes ( "*,*,", 4 );
-			tOut.SendBytes ( q.m_sSelect.cstr(), iLen );
-		}
-	}
-
+	tOut.SendString ( q.m_sSelect.cstr() );
 	// master v.1.0
 	tOut.SendDword ( q.m_eCollation );
 }
@@ -4797,27 +4782,13 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 	// v.1.22
 	if ( iVer>=0x116 )
 	{
-		CSphString sRawSelect = tReq.GetString ();
-		CSphString sSelect = "";
+		tQuery.m_sSelect = tReq.GetString ();
+		tQuery.m_bAgent = ( iMasterVer>0 );
 		CSphString sError;
-		bool bAgent = false;
-		if ( sRawSelect.Begins ( "*,*" ) ) // this is the mark of agent.
-		{
-			bAgent = true;
-			if ( sRawSelect.Length()>3 )
-				sSelect = sRawSelect.SubString ( 4, sRawSelect.Length()-4 );
-		}
-
-		tQuery.m_sSelect = bAgent?sSelect:sRawSelect;
 		if ( !tQuery.ParseSelectList ( sError ) )
 		{
 			tReq.SendErrorReply ( "select: %s", sError.cstr() );
 			return false;
-		}
-		if ( bAgent )
-		{
-			tQuery.m_sSelect = sRawSelect;
-			tQuery.m_bAgent = true;
 		}
 	}
 
@@ -5351,6 +5322,23 @@ void LogSphinxqlError ( const char * sStmt, const char * sError )
 
 //////////////////////////////////////////////////////////////////////////
 
+// internals attributes are last no need to send them
+static int SendGetAttrCount ( const CSphSchema & tSchema )
+{
+	int iCount = tSchema.GetAttrsCount();
+	if ( iCount
+		&& sphIsSortStringInternal ( tSchema.GetAttr ( iCount-1 ).m_sName.cstr() ) )
+	{
+		for ( int i=iCount-1; i>=0 && sphIsSortStringInternal ( tSchema.GetAttr(i).m_sName.cstr() ); i-- )
+		{
+			iCount = i;
+		}
+	}
+
+	return iCount;
+}
+
+
 int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<PoolPtrs_t> & dTag2Pools, bool bExtendedStat )
 {
 	int iRespLen = 0;
@@ -5377,13 +5365,15 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 	// query stats
 	iRespLen += 20;
 
+	int iAttrsCount = SendGetAttrCount ( pRes->m_tSchema );
+
 	// schema
 	if ( iVer>=0x102 )
 	{
 		iRespLen += 8; // 4 for field count, 4 for attr count
 		ARRAY_FOREACH ( i, pRes->m_tSchema.m_dFields )
 			iRespLen += 4 + strlen ( pRes->m_tSchema.m_dFields[i].m_sName.cstr() ); // namelen, name
-		for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
+		for ( int i=0; i<iAttrsCount; i++ )
 			iRespLen += 8 + strlen ( pRes->m_tSchema.GetAttr(i).m_sName.cstr() ); // namelen, name, type
 	}
 
@@ -5391,15 +5381,15 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 	if ( iVer<0x102 )
 		iRespLen += 16*pRes->m_iCount; // matches
 	else if ( iVer<0x108 )
-		iRespLen += ( 8+4*pRes->m_tSchema.GetAttrsCount() )*pRes->m_iCount; // matches
+		iRespLen += ( 8+4*iAttrsCount )*pRes->m_iCount; // matches
 	else
-		iRespLen += 4 + ( 8+4*USE_64BIT+4*pRes->m_tSchema.GetAttrsCount() )*pRes->m_iCount; // id64 tag and matches
+		iRespLen += 4 + ( 8+4*USE_64BIT+4*iAttrsCount )*pRes->m_iCount; // id64 tag and matches
 
 	if ( iVer>=0x114 )
 	{
 		// 64bit matches
 		int iWideAttrs = 0;
-		for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
+		for ( int i=0; i<iAttrsCount; i++ )
 			if ( pRes->m_tSchema.GetAttr(i).m_eAttrType==SPH_ATTR_BIGINT )
 				iWideAttrs++;
 		iRespLen += 4*pRes->m_iCount*iWideAttrs; // extra 4 bytes per attr per match
@@ -5416,7 +5406,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 	// MVA and string values
 	CSphVector<CSphAttrLocator> dMvaItems;
 	CSphVector<CSphAttrLocator> dStringItems;
-	for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
+	for ( int i=0; i<iAttrsCount; i++ )
 	{
 		const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(i);
 		if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET )
@@ -5496,6 +5486,8 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 			tOut.SendString ( pRes->m_sWarning.cstr() );
 	}
 
+	int iAttrsCount = SendGetAttrCount ( pRes->m_tSchema );
+
 	// send schema
 	if ( iVer>=0x102 )
 	{
@@ -5503,8 +5495,8 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 		ARRAY_FOREACH ( i, pRes->m_tSchema.m_dFields )
 			tOut.SendString ( pRes->m_tSchema.m_dFields[i].m_sName.cstr() );
 
-		tOut.SendInt ( pRes->m_tSchema.GetAttrsCount() );
-		for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
+		tOut.SendInt ( iAttrsCount );
+		for ( int i=0; i<iAttrsCount; i++ )
 		{
 			const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(i);
 			tOut.SendString ( tCol.m_sName.cstr() );
@@ -5561,7 +5553,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 			assert ( !tMatch.m_pDynamic || (int)tMatch.m_pDynamic[-1]==pRes->m_tSchema.GetDynamicSize() );
 #endif
 
-			for ( int j=0; j<pRes->m_tSchema.GetAttrsCount(); j++ )
+			for ( int j=0; j<iAttrsCount; j++ )
 			{
 				const CSphColumnInfo & tAttr = pRes->m_tSchema.GetAttr(j);
 				if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_UINT64SET )
@@ -7583,7 +7575,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			tRes.m_tSchema = tRes.m_dSchemas[0];
 		if ( tRes.m_iSuccesses>1 || tQuery.m_dItems.GetLength() )
 		{
-			if ( g_bCompatResults )
+			if ( g_bCompatResults && !tQuery.m_bAgent )
 			{
 				if ( !MinimizeAggrResultCompat ( tRes, tQuery, m_dLocal.GetLength()!=0 ) )
 					return;
@@ -7611,10 +7603,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		tRes.m_iOffset = tQuery.m_iOffset;
 		tRes.m_iCount = Max ( Min ( tQuery.m_iLimit, tRes.m_dMatches.GetLength()-tQuery.m_iOffset ), 0 );
 	}
-
-	// remove internal attributes from result schema
-	ARRAY_FOREACH ( i, m_dResults )
-		sphSortRemoveInternalAttrs ( m_dResults[i].m_tSchema );
 
 	// stats
 	tmSubset = sphMicroTimer() - tmSubset;
@@ -8605,14 +8593,6 @@ bool ParseSqlQuery ( const CSphString & sQuery, CSphVector<SqlStmt_t> & dStmt, C
 		{
 			tQuery.m_sSelect.SetBinary ( tParser.m_pBuf + tQuery.m_iSQLSelectStart,
 				tQuery.m_iSQLSelectEnd - tQuery.m_iSQLSelectStart );
-
-			// finally check for agent magic
-			if ( tQuery.m_sSelect.Begins ( "*,*" ) ) // this is the mark of agent.
-			{
-				tQuery.m_dItems.Remove(0);
-				tQuery.m_dItems.Remove(0);
-				tQuery.m_bAgent = true;
-			}
 		}
 	}
 
@@ -9382,6 +9362,9 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	q.m_iLoadFiles |= bScattered?2:0;
 	q.m_bAllowEmpty = ( iFlags & EXCERPT_FLAG_ALLOW_EMPTY )!=0;
 	q.m_bEmitZones = ( iFlags & EXCERPT_FLAG_EMIT_ZONES )!=0;
+
+	if ( bScattered )
+		q.m_bAllowEmpty = false;
 
 	int iCount = tReq.GetInt ();
 	if ( iCount<0 || iCount>EXCERPT_MAX_ENTRIES )
@@ -10794,6 +10777,10 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 			break;
 		}
 
+		// FIXME! Do we need to warn a user also? Or just note it in the documentation?
+		if ( q.m_iLoadFiles & 2 )
+			q.m_bAllowEmpty = false;
+
 		// post-conf type check
 		if ( iExpType!=v.m_iType )
 		{
@@ -11436,14 +11423,16 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 
 	// empty result sets just might carry the full uberschema
 	// bummer! lets protect ourselves against that
-	int iAttrs = 1;
+	int iSchemaAttrsCount = 0;
+	int iAttrsCount = 1;
 	if ( tRes.m_dMatches.GetLength() )
 	{
-		iAttrs = tRes.m_tSchema.GetAttrsCount();
+		iSchemaAttrsCount = SendGetAttrCount ( tRes.m_tSchema );
+		iAttrsCount = iSchemaAttrsCount;
 		if ( g_bCompatResults )
-			iAttrs += 2;
+			iAttrsCount += 2;
 	}
-	if ( iAttrs>=251 )
+	if ( iAttrsCount>=251 )
 	{
 		// this will show up as success in query log, as the query itself was ok
 		// but we need some kind of a notice anyway, to nail down issues based on logs only
@@ -11454,7 +11443,7 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 
 	// result set header packet
 	tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
-	tOut.SendByte ( BYTE(iAttrs) );
+	tOut.SendByte ( BYTE(iAttrsCount) );
 	tOut.SendByte ( 0 ); // extra
 
 	// field packets
@@ -11471,7 +11460,7 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 			SendMysqlFieldPacket ( tOut, uPacketID++, "weight", MYSQL_COL_LONG );
 		}
 
-		for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
+		for ( int i=0; i<iSchemaAttrsCount; i++ )
 		{
 			const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
 			MysqlColumnType_e eType = MYSQL_COL_STRING;
@@ -11506,7 +11495,7 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 		}
 
 		const CSphSchema & tSchema = tRes.m_tSchema;
-		for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
+		for ( int i=0; i<iSchemaAttrsCount; i++ )
 		{
 			CSphAttrLocator tLoc = tSchema.GetAttr(i).m_tLocator;
 			ESphAttr eAttrType = tSchema.GetAttr(i).m_eAttrType;

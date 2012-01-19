@@ -2362,9 +2362,17 @@ RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 	{
 		while ( pWords1 && pWords2 )
 		{
-			int64_t iCmp = ( m_bKeywordDict
-				? sphDictCmpStrictly ( (const char *)pWords1->m_sWord+1, *pWords1->m_sWord, (const char *)pWords2->m_sWord+1, *pWords2->m_sWord )
-				: ( pWords1->m_uWordID<pWords2->m_uWordID ? I64C(-1) : pWords1->m_uWordID-pWords2->m_uWordID ) );
+			int iCmp = 0;
+			if ( m_bKeywordDict )
+			{
+				iCmp = sphDictCmpStrictly ( (const char *)pWords1->m_sWord+1, *pWords1->m_sWord, (const char *)pWords2->m_sWord+1, *pWords2->m_sWord );
+			} else
+			{
+				if ( pWords1->m_uWordID<pWords2->m_uWordID )
+					iCmp = -1;
+				else if ( pWords1->m_uWordID>pWords2->m_uWordID )
+					iCmp = 1;
+			}
 
 			if ( iCmp==0 )
 				break;
@@ -3348,6 +3356,7 @@ CSphIndex * RtIndex_t::LoadDiskChunk ( int iChunk )
 		sphDie ( "disk chunk %s: alloc failed", sChunk.cstr() );
 
 	pDiskChunk->SetWordlistPreload ( m_bPreloadWordlist );
+	pDiskChunk->m_iExpansionLimit = m_iExpansionLimit;
 
 	if ( !pDiskChunk->Prealloc ( false, m_bPathStripped, sWarning ) )
 		sphDie ( "disk chunk %s: prealloc failed: %s", sChunk.cstr(), pDiskChunk->GetLastError().cstr() );
@@ -3721,16 +3730,64 @@ void RtIndex_t::PostSetup()
 	}
 }
 
+
+#define LOC_FAIL(_args) \
+	if ( ++iFails<=FAILS_THRESH ) \
+{ \
+	fprintf ( fp, "FAILED, " ); \
+	fprintf _args; \
+	fprintf ( fp, "\n" ); \
+	iFailsPrinted++; \
+	\
+	if ( iFails==FAILS_THRESH ) \
+	fprintf ( fp, "(threshold reached; suppressing further output)\n" ); \
+}
+
 int RtIndex_t::DebugCheck ( FILE * fp )
 {
+	const int FAILS_THRESH = 100;
 	int iFails = 0;
+	int iFailsPrinted = 0;
+	int iFailsPlain = 0;
+
+	int64_t tmCheck = sphMicroTimer();
+
+	ARRAY_FOREACH ( i, m_pSegments )
+	{
+		SphWordID_t uPrevWordID = 0;
+		RtWordReader_t tSeg ( m_pSegments[i], false, m_iWordsCheckpoint );
+		const RtWord_t * pWord = NULL;
+		int iWord = 0;
+
+		while ( ( pWord = tSeg.UnzipWord() )!=NULL )
+		{
+			if ( pWord->m_uWordID<=uPrevWordID )
+			{
+				LOC_FAIL(( fp, "wordid decreased (segment=%d, word=%d, wordid="UINT64_FMT", previd="UINT64_FMT")",
+					i, iWord, (uint64_t)pWord->m_uWordID, (uint64_t)uPrevWordID ));
+			}
+			uPrevWordID = pWord->m_uWordID;
+			iWord++;
+		}
+	}
+
 	ARRAY_FOREACH ( i, m_pDiskChunks )
 	{
 		fprintf ( fp, "checking disk chunk %d(%d)...\n", i, m_pDiskChunks.GetLength() );
-		iFails += m_pDiskChunks[i]->DebugCheck ( fp );
+		iFailsPlain += m_pDiskChunks[i]->DebugCheck ( fp );
 	}
 
-	return iFails;
+	tmCheck = sphMicroTimer() - tmCheck;
+	if ( ( iFails+iFailsPlain )==0 )
+		fprintf ( fp, "check passed" );
+	else if ( iFails!=iFailsPrinted )
+		fprintf ( fp, "check FAILED, %d of %d failures reported", iFailsPrinted, iFails+iFailsPlain );
+	else
+		fprintf ( fp, "check FAILED, %d failures reported", iFails+iFailsPlain );
+
+	fprintf ( fp, ", %d.%d sec elapsed\n", (int)(tmCheck/1000000), (int)((tmCheck/100000)%10) );
+
+	return iFails + iFailsPlain;
 }
 
 void RtIndex_t::SetEnableStar ( bool bEnableStar )
@@ -3976,9 +4033,18 @@ bool RtIndex_t::RtQwordSetupSegment ( RtQword_t * pQword, RtSegment_t * pCurSeg,
 	const RtWord_t * pWord = NULL;
 	while ( ( pWord = tReader.UnzipWord() )!=NULL )
 	{
-		int64_t iCmp = ( bWordDict
-			? sphDictCmpStrictly ( (const char *)pWord->m_sWord+1, pWord->m_sWord[0], sWord, iWordLen )
-			: ( pWord->m_uWordID<uWordID ? I64C(-1) : pWord->m_uWordID-uWordID ) );
+		int iCmp = 0;
+		if ( bWordDict )
+		{
+			iCmp = sphDictCmpStrictly ( (const char *)pWord->m_sWord+1, pWord->m_sWord[0], sWord, iWordLen );
+		} else
+		{
+			if ( pWord->m_uWordID<uWordID )
+				iCmp = -1;
+			else if ( pWord->m_uWordID>uWordID )
+				iCmp = 1;
+		}
+
 		if ( iCmp==0 )
 		{
 			pQword->m_iDocs += pWord->m_uDocs;
@@ -4225,6 +4291,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	CSphVector<CSphString> dWrongWords;
 	SmallStringHash_T<CSphQueryResultMeta::WordStat_t> hDiskStats;
+	int64_t tmMaxTimer = 0;
+	if ( pQuery->m_uMaxQueryMsec>0 )
+		tmMaxTimer = sphMicroTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
 
 	assert ( dExtra.GetLength()==m_pDiskChunks.GetLength() );
 	CSphVector<const BYTE *> dDiskStrings ( m_pDiskChunks.GetLength() );
@@ -4274,6 +4343,12 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		// keep last chunk statistics to check vs rt settings
 		if ( iChunk==m_pDiskChunks.GetLength()-1 )
 			hDiskStats = hSrcStats;
+
+		if ( (iChunk+1)!=m_pDiskChunks.GetLength() && tmMaxTimer>0 && sphMicroTimer()>=tmMaxTimer )
+		{
+			pResult->m_sWarning = "query time exceeded max_query_time";
+			break;
+		}
 	}
 
 	if ( m_bKlistLocked )
@@ -4395,6 +4470,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		return true;
 	}
 
+	// search segments no looking to max_query_time
+	// FIXME!!! move searching at segments before disk chunks as result set is safe with kill-lists
 	if ( m_pSegments.GetLength() )
 	{
 		// setup filters

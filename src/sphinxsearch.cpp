@@ -3778,7 +3778,7 @@ int ExtUnit_c::FilterHits ( int iMyHit, DWORD uSentenceEnd, SphDocID_t uDocid, i
 			{
 				// we have a match!
 				// copy hits until next dot
-				if ( !SkipHitsLtePos ( &m_pDotHit, m_pDotHit->m_uHitpos, m_pDot, m_pDotDocs ) )
+				if ( !SkipHitsLtePos ( &m_pDotHit, uMax, m_pDot, m_pDotDocs ) )
 					uSentenceEnd = UINT_MAX; // correction, no next dot, so make it "next document"
 				else
 					uSentenceEnd = m_pDotHit->m_uHitpos;

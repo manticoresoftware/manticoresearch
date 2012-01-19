@@ -12,6 +12,8 @@ indexer
 searchd
 {
 	<searchd_settings/>
+	workers = threads
+	binlog_path = #
     subtree_docs_cache  = 128k
     subtree_hits_cache  = 128k
 }
@@ -59,6 +61,16 @@ index test3
 	source			= test3
 	path			= <data_path/>/test3
 	docinfo		= extern
+}
+
+index rt
+{
+	type = rt
+	charset_type = utf-8
+	path = <data_path/>/rt
+
+	rt_field = content
+	morphology = none
 }
 </config>
 
@@ -147,6 +159,66 @@ foreach ( $res as $r )
 	unset ( $r["time"] );
 	$results[] = $r;
 }
+
+// regression RT dictionary lost words on merge with ID64
+$query = create_function ( '$q, $sock','
+	
+	$results = array( $q );
+	$res = @mysql_query ( $q, $sock );
+	if ( $res===false )
+	{
+		$results[]  = mysql_errno( $sock ) . "; " . mysql_error ( $sock );
+	} else
+	{	
+		while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
+		{
+			if ( array_key_exists ( "Variable_name", $row ) && $row["Variable_name"]=="time" )
+			{
+				continue;
+			}
+			if ( !array_key_exists ( "Variable_name", $row ) || !array_key_exists ( "Value", $row ) )
+			{
+				$line = "";
+				foreach ( $row as $k=>$v )
+				{
+					$line .= $k . " = " . $v . "\t";
+				}
+				$results[] = $line;
+			} else
+			{
+				$results[] = $row["Variable_name"] . " = " . $row["Value"];
+			}
+		}	
+		@mysql_free_result ( $res );
+	}
+	return $results;
+');
+
+global $sd_address, $sd_sphinxql_port;
+$sockStr = "$sd_address:$sd_sphinxql_port";
+if ($sd_address == "localhost")
+	$sockStr = "127.0.0.1:$sd_sphinxql_port";
+$sock = @mysql_connect ($sockStr,"","",	true );
+
+for ( $doc=1; $doc<121; $doc++ )
+{
+	$text = 'dummy text is going here';
+	if ( $doc==31 )
+		$text = 'ACT I.';
+	else if ( $doc==100 )
+		$text = 'And let us once again assail your ears, basketball';
+	
+	$insert = " REPLACE INTO rt ( id, content ) VALUES ( $doc, '$text' ) ";
+	$query ( $insert, $sock );
+}	
+
+$results = array_merge ( $results, $query ( "select * from rt limit 0,2", $sock ) );
+$results = array_merge ( $results, $query ( "show meta", $sock ) );	
+$results = array_merge ( $results, $query ( "select * from rt where match ( 'basketball' )", $sock ) );
+$results = array_merge ( $results, $query ( "show meta", $sock ) );	
+
+@mysql_close ( $sock );
+
 ]]>
 </custom_test>
 

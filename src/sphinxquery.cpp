@@ -1131,11 +1131,11 @@ static void xqIndent ( int iIndent )
 {
 	iIndent *= 2;
 	while ( iIndent-- )
-		printf ( " " );
+		printf ( "|-" );
 }
 
 
-static void xqDump ( XQNode_t * pNode, const CSphSchema & tSch, int iIndent )
+static void xqDump ( XQNode_t * pNode, int iIndent )
 {
 	if ( pNode->m_dChildren.GetLength() )
 	{
@@ -1147,14 +1147,20 @@ static void xqDump ( XQNode_t * pNode, const CSphSchema & tSch, int iIndent )
 			case SPH_QUERY_NOT: printf ( "NOT:\n" ); break;
 			case SPH_QUERY_ANDNOT: printf ( "ANDNOT:\n" ); break;
 			case SPH_QUERY_BEFORE: printf ( "BEFORE:\n" ); break;
+			case SPH_QUERY_PHRASE: printf ( "PHRASE:\n" ); break;
+			case SPH_QUERY_PROXIMITY: printf ( "PROXIMITY:\n" ); break;
+			case SPH_QUERY_QUORUM: printf ( "QUORUM:\n" ); break;
+			case SPH_QUERY_NEAR: printf ( "NEAR:\n" ); break;
+			case SPH_QUERY_SENTENCE: printf ( "SENTENCE:\n" ); break;
+			case SPH_QUERY_PARAGRAPH: printf ( "PARAGRAPH:\n" ); break;
 			default: printf ( "unknown-op-%d:\n", pNode->GetOp() ); break;
 		}
 		ARRAY_FOREACH ( i, pNode->m_dChildren )
-			xqDump ( pNode->m_dChildren[i], tSch, iIndent+1 );
+			xqDump ( pNode->m_dChildren[i], iIndent+1 );
 	} else
 	{
 		xqIndent ( iIndent );
-		printf ( "MATCH(%d,%d):", pNode->m_uFieldMask, pNode->m_iOpArg );
+		printf ( "MATCH(%d,%d):", pNode->m_dFieldMask.GetMask32(), pNode->m_iOpArg );
 
 		ARRAY_FOREACH ( i, pNode->m_dWords )
 		{
@@ -1186,7 +1192,8 @@ bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const ISp
 	if ( bRes )
 	{
 		printf ( "--- query ---\n" );
-		xqDump ( tParsed.m_pRoot, *pSchema, 0 );
+		printf ( "%s\n", sQuery );
+		xqDump ( tParsed.m_pRoot, 0 );
 		printf ( "---\n" );
 	}
 #endif

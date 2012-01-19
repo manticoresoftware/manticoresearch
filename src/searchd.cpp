@@ -4784,6 +4784,12 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 	{
 		tQuery.m_sSelect = tReq.GetString ();
 		tQuery.m_bAgent = ( iMasterVer>0 );
+		if ( tQuery.m_sSelect.Begins ( "*,*" ) ) // this is the legacy mark of agent for debug purpose
+		{
+			tQuery.m_bAgent = true;
+			tQuery.m_sSelect = tQuery.m_sSelect.SubString ( 4, tQuery.m_sSelect.Length()-4 );
+		}
+
 		CSphString sError;
 		if ( !tQuery.ParseSelectList ( sError ) )
 		{

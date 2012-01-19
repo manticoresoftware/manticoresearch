@@ -91,7 +91,8 @@ public:
 	}
 
 	/// get size option (plain int, or with K/M prefix) value by key and default value
-	int GetSize ( const char * sKey, int iDefault ) const;
+	int		GetSize ( const char * sKey, int iDefault ) const;
+	int64_t GetSize64 ( const char * sKey, int64_t iDefault ) const;
 };
 
 /// config section type (hash of sections)

@@ -62,7 +62,7 @@ static char * trim ( char * sLine )
 
 //////////////////////////////////////////////////////////////////////////
 
-int CSphConfigSection::GetSize ( const char * sKey, int iDefault ) const
+int64_t CSphConfigSection::GetSize64 ( const char * sKey, int64_t iDefault ) const
 {
 	CSphVariant * pEntry = (*this)( sKey );
 	if ( !pEntry )
@@ -95,18 +95,24 @@ int CSphConfigSection::GetSize ( const char * sKey, int iDefault ) const
 	if ( !*sErr )
 	{
 		iRes *= iScale;
-		if ( iRes>INT_MAX )
-		{
-			sphWarning ( "'%s = %s' clamped to INT_MAX", sKey, pEntry->cstr() );
-			iRes = INT_MAX;
-		}
 	} else
 	{
 		sphWarning ( "'%s = %s' parse error '%s'", sKey, pEntry->cstr(), sErr );
 		iRes = iDefault;
 	}
 
-	return (int)iRes;
+	return iRes;
+}
+
+int CSphConfigSection::GetSize ( const char * sKey, int iDefault ) const
+{
+	int64_t iSize = GetSize64 ( sKey, iDefault );
+	if ( iSize>INT_MAX )
+	{
+		iSize = INT_MAX;
+		sphWarning ( "'%s = "INT64_FMT"' clamped to %d(INT_MAX)", sKey, iSize, INT_MAX );
+	}
+	return (int)iSize;
 }
 
 //////////////////////////////////////////////////////////////////////////

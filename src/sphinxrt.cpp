@@ -334,7 +334,7 @@ public:
 
 	int							m_iRows;		///< number of actually allocated rows
 	int							m_iAliveRows;	///< number of alive (non-killed) rows
-	CSphVector<CSphRowitem>		m_dRows;		///< row data storage
+	CSphTightVector<CSphRowitem>		m_dRows;		///< row data storage
 	CSphVector<SphDocID_t>		m_dKlist;		///< sorted K-list
 	bool						m_bTlsKlist;	///< whether to apply TLS K-list during merge (must only be used by writer during Commit())
 	CSphTightVector<BYTE>		m_dStrings;		///< strings storage
@@ -357,12 +357,13 @@ public:
 	{
 		// FIXME! gonna break on vectors over 2GB
 		return
-			m_dWords.GetLimit()*sizeof(m_dWords[0]) +
-			m_dDocs.GetLimit()*sizeof(m_dDocs[0]) +
-			m_dHits.GetLimit()*sizeof(m_dHits[0]) +
-			m_dStrings.GetLimit()*sizeof(m_dStrings[0]) +
-			m_dMvas.GetLimit()*sizeof(m_dMvas[0]) +
-			m_dKeywordCheckpoints.GetLimit()*sizeof(m_dKeywordCheckpoints[0]);
+			( (int64_t)m_dWords.GetLimit() )*sizeof(m_dWords[0]) +
+			( (int64_t)m_dDocs.GetLimit() )*sizeof(m_dDocs[0]) +
+			( (int64_t)m_dHits.GetLimit() )*sizeof(m_dHits[0]) +
+			( (int64_t)m_dStrings.GetLimit() )*sizeof(m_dStrings[0]) +
+			( (int64_t)m_dMvas.GetLimit() )*sizeof(m_dMvas[0]) +
+			( (int64_t)m_dKeywordCheckpoints.GetLimit() )*sizeof(m_dKeywordCheckpoints[0])+
+			( (int64_t)m_dRows.GetLimit() )*sizeof(m_dRows[0]);
 	}
 
 	int GetMergeFactor () const
@@ -763,7 +764,7 @@ public:
 	RtIndex_t *					m_pIndex;		///< my current owner in this thread
 	int							m_iAccumDocs;
 	CSphTightVector<CSphWordHit>	m_dAccum;
-	CSphVector<CSphRowitem>		m_dAccumRows;
+	CSphTightVector<CSphRowitem>	m_dAccumRows;
 	CSphVector<SphDocID_t>		m_dAccumKlist;
 	CSphTightVector<BYTE>		m_dStrings;
 	CSphTightVector<DWORD>		m_dMvas;
@@ -1228,7 +1229,7 @@ void RtIndex_t::CheckRamFlush ()
 	m_tRwlock.Unlock();
 
 	// save if delta-ram runs over maximum value of ram-threshold or 1/3 of index size
-	if ( iDeltaRam < Max ( SPH_THRESHOLD_SAVE_RAM, m_iRamSize/3 ) )
+	if ( iDeltaRam < Max ( m_iRamSize/3, SPH_THRESHOLD_SAVE_RAM ) )
 		return;
 
 	ForceRamFlush ( true );
@@ -1977,7 +1978,7 @@ void RtIndex_t::MergeWord ( RtSegment_t * pSeg, const RtSegment_t * pSrc1, const
 #if PARANOID
 static void CheckSegmentRows ( const RtSegment_t * pSeg, int iStride )
 {
-	const CSphVector<CSphRowitem> & dRows = pSeg->m_dRows; // shortcut
+	const CSphTightVector<CSphRowitem> & dRows = pSeg->m_dRows; // shortcut
 	for ( int i=iStride; i<dRows.GetLength(); i+=iStride )
 		assert ( DOCINFO2ID ( &dRows[i] ) > DOCINFO2ID ( &dRows[i-iStride] ) );
 }
@@ -2289,18 +2290,18 @@ RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 #endif
 
 	// just a shortcut
-	CSphVector<CSphRowitem> & dRows = pSeg->m_dRows;
+	CSphTightVector<CSphRowitem> & dRows = pSeg->m_dRows;
 	CSphTightVector<BYTE> & dStrings = pSeg->m_dStrings;
 	CSphTightVector<DWORD> & dMvas = pSeg->m_dMvas;
 
 	// we might need less because of dupes, but we can not know yet
-	dRows.Reserve ( pSeg1->m_dRows.GetLength() + pSeg2->m_dRows.GetLength() );
+	dRows.Reserve ( Max ( pSeg1->m_dRows.GetLength(), pSeg2->m_dRows.GetLength() ) );
 
 	// as each segment has dummy zero we reserve less
 	assert ( pSeg1->m_dStrings.GetLength() + pSeg2->m_dStrings.GetLength()>=2 );
-	dStrings.Reserve ( pSeg1->m_dStrings.GetLength() + pSeg2->m_dStrings.GetLength() - 2 );
+	dStrings.Reserve ( Max ( pSeg1->m_dStrings.GetLength(), pSeg2->m_dStrings.GetLength() ) );
 	assert ( pSeg1->m_dMvas.GetLength() + pSeg2->m_dMvas.GetLength()>=2 );
-	dMvas.Reserve ( pSeg1->m_dMvas.GetLength() + pSeg2->m_dMvas.GetLength() - 2 );
+	dMvas.Reserve ( Max ( pSeg1->m_dMvas.GetLength(), pSeg2->m_dMvas.GetLength() ) );
 
 	StorageStringVector_t tStorageString ( m_tSchema, dStrings );
 	StorageMvaVector_t tStorageMva ( m_tSchema, dMvas );
@@ -2346,9 +2347,9 @@ RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 	// merge keywords
 	//////////////////
 
-	pSeg->m_dWords.Reserve ( pSeg1->m_dWords.GetLength() + pSeg2->m_dWords.GetLength() );
-	pSeg->m_dDocs.Reserve ( pSeg1->m_dDocs.GetLength() + pSeg2->m_dDocs.GetLength() );
-	pSeg->m_dHits.Reserve ( pSeg1->m_dHits.GetLength() + pSeg2->m_dHits.GetLength() );
+	pSeg->m_dWords.Reserve ( Max ( pSeg1->m_dWords.GetLength(), pSeg2->m_dWords.GetLength() ) );
+	pSeg->m_dDocs.Reserve ( Max ( pSeg1->m_dDocs.GetLength(), pSeg2->m_dDocs.GetLength() ) );
+	pSeg->m_dHits.Reserve ( Max ( pSeg1->m_dHits.GetLength(), pSeg2->m_dHits.GetLength() ) );
 
 	RtWordWriter_t tOut ( pSeg, m_bKeywordDict, m_iWordsCheckpoint );
 	RtWordReader_t tIn1 ( pSeg1, m_bKeywordDict, m_iWordsCheckpoint );
@@ -2500,14 +2501,17 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 	// enforce RAM usage limit
 	int64_t iRamLeft = m_iRamSize;
 	ARRAY_FOREACH ( i, dSegments )
-		iRamLeft = Max ( 0, iRamLeft - dSegments[i]->GetUsedRam() );
+		iRamLeft = Max ( iRamLeft - dSegments[i]->GetUsedRam(), 0 );
 
 	// skip merging if no rows were added or no memory left
 	bool bDump = ( iRamLeft==0 );
 	const int MAX_SEGMENTS = 32;
 	const int MAX_PROGRESSION_SEGMENT = 8;
+	const int64_t MAX_SEGMENT_VECTOR_LEN = INT_MAX;
 	while ( pNewSeg && iRamLeft>0 )
 	{
+		// segments sort order: large first, smallest last
+		// merge last smallest segments
 		dSegments.Sort ( CmpSegments_fn() );
 
 		// unconditionally merge if there's too much segments now
@@ -2528,19 +2532,31 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 #define LOC_ESTIMATE(_vec) \
 	( LOC_ESTIMATE1 ( dSegments[iLen-1], _vec ) + LOC_ESTIMATE1 ( dSegments[iLen-2], _vec ) )
 
-		int64_t iEstimate =
-			CSphTightVectorPolicy<BYTE>::Relimit ( 0, LOC_ESTIMATE ( m_dWords ) ) +
-			CSphTightVectorPolicy<BYTE>::Relimit ( 0, LOC_ESTIMATE ( m_dDocs ) ) +
-			CSphTightVectorPolicy<BYTE>::Relimit ( 0, LOC_ESTIMATE ( m_dHits ) ) +
-			CSphTightVectorPolicy<BYTE>::Relimit ( 0, LOC_ESTIMATE ( m_dStrings ) );
+		int64_t iWordsRelimit = CSphTightVectorPolicy<BYTE>::Relimit ( 0, LOC_ESTIMATE ( m_dWords ) );
+		int64_t iDocsRelimit = CSphTightVectorPolicy<BYTE>::Relimit ( 0, LOC_ESTIMATE ( m_dDocs ) );
+		int64_t iHitsRelimit = CSphTightVectorPolicy<BYTE>::Relimit ( 0, LOC_ESTIMATE ( m_dHits ) );
+		int64_t iStringsRelimit = CSphTightVectorPolicy<BYTE>::Relimit ( 0, LOC_ESTIMATE ( m_dStrings ) );
+		int64_t iMvasRelimit = CSphTightVectorPolicy<DWORD>::Relimit ( 0, LOC_ESTIMATE ( m_dMvas ) );
+		int64_t iKeywordsRelimit = CSphTightVectorPolicy<BYTE>::Relimit ( 0, LOC_ESTIMATE ( m_dKeywordCheckpoints ) );
+		int64_t iRowsRelimit = CSphTightVectorPolicy<SphDocID_t>::Relimit ( 0, LOC_ESTIMATE ( m_dRows ) );
 
 #undef LOC_ESTIMATE
 #undef LOC_ESTIMATE1
 
+		int64_t iEstimate = iWordsRelimit + iDocsRelimit + iHitsRelimit + iStringsRelimit + iMvasRelimit + iKeywordsRelimit + iRowsRelimit;
 		if ( iEstimate>iRamLeft )
 		{
 			// dump case: can't merge any more AND segments count limit's reached
 			bDump = ( ( iRamLeft + iRamFreed )<=iEstimate ) && ( iLen>=MAX_SEGMENTS );
+			break;
+		}
+
+		// we have to dump if we can't merge even smallest segments without breaking vector constrain ( len<INT_MAX )
+		int64_t iMaxLen = Max ( iWordsRelimit, Max ( iDocsRelimit, Max ( iHitsRelimit,
+			Max ( iStringsRelimit, Max ( iMvasRelimit, Max ( iKeywordsRelimit, iRowsRelimit ) ) ) ) ) );
+		if ( MAX_SEGMENT_VECTOR_LEN<iMaxLen )
+		{
+			bDump = true;
 			break;
 		}
 
@@ -4937,7 +4953,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 				{
 					ARRAY_FOREACH ( iMva, m_pSegments )
 					{
-						const CSphVector<CSphRowitem> & dSegRows = m_pSegments[iMva]->m_dRows;
+						const CSphTightVector<CSphRowitem> & dSegRows = m_pSegments[iMva]->m_dRows;
 						if ( dSegRows.Begin()<=pRow && pRow<dSegRows.Begin()+dSegRows.GetLength() )
 						{
 							pStorageMVA = &m_pSegments[iMva]->m_dMvas;
@@ -5160,7 +5176,7 @@ bool RtIndex_t::Truncate ( CSphString & )
 	CSphString sFile;
 	sFile.SetSprintf ( "%s.ram", m_sPath.cstr() );
 	if ( ::unlink ( sFile.cstr() ) )
-		if  ( errno!=ENOENT )
+		if ( errno!=ENOENT )
 			sphWarning ( "rt: truncate failed to unlink %s: %s", sFile.cstr(), strerror(errno) );
 
 	// kill all disk chunks files
@@ -5174,7 +5190,7 @@ bool RtIndex_t::Truncate ( CSphString & )
 		{
 			sFile.SetSprintf ( "%s.%d.%s", m_sPath.cstr(), i, dCurExts[j] );
 			if ( ::unlink ( sFile.cstr() ) )
-				if  ( errno!=ENOENT )
+				if ( errno!=ENOENT )
 					sphWarning ( "rt: truncate failed to unlink %s: %s", sFile.cstr(), strerror(errno) );
 		}
 	}
@@ -6365,10 +6381,10 @@ ISphRtIndex * sphGetCurrentIndexRT()
 	return NULL;
 }
 
-ISphRtIndex * sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndexName, DWORD uRamSize, const char * sPath, bool bKeywordDict )
+ISphRtIndex * sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict )
 {
 	MEMORY ( SPH_MEM_IDX_RT );
-	return new RtIndex_t ( tSchema, sIndexName, uRamSize, sPath, bKeywordDict );
+	return new RtIndex_t ( tSchema, sIndexName, iRamSize, sPath, bKeywordDict );
 }
 
 

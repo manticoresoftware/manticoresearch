@@ -9098,7 +9098,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 
 	g_tDistLock.Lock();
 	DistributedIndex_t * pDist = g_hDistIndexes ( sIndex );
-	bool bRemote = pDist!=NULL;
+	bool bRemote = ( pDist!=NULL );
 	bool bScattered = ( q.m_iLoadFiles & 2 )!=0;
 
 	if ( bRemote )
@@ -9112,9 +9112,9 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 	}
 	g_tDistLock.Unlock();
 
-	if ( pDist )
+	if ( bRemote )
 	{
-		if ( pDist->m_dLocal.GetLength()!=1 )
+		if ( dDistLocal.GetLength()!=1 )
 		{
 			sError.SetSprintf ( "%s", "The distributed index for snippets must have exactly one local agent" );
 			return false;
@@ -13823,18 +13823,18 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		}
 
 		// RAM chunk size
-		DWORD uRamSize = hIndex.GetSize ( "rt_mem_limit", 32*1024*1024 );
-		if ( uRamSize<128*1024 )
+		int64_t iRamSize = hIndex.GetSize64 ( "rt_mem_limit", 32*1024*1024 );
+		if ( iRamSize<128*1024 )
 		{
 			sphWarning ( "index '%s': rt_mem_limit extremely low, using 128K instead", szIndexName );
-			uRamSize = 128*1024;
-		} else if ( uRamSize<8*1024*1024 )
+			iRamSize = 128*1024;
+		} else if ( iRamSize<8*1024*1024 )
 			sphWarning ( "index '%s': rt_mem_limit very low (under 8 MB)", szIndexName );
 
 		// index
 		ServedIndex_t tIdx;
 		bool bWordDict = strcmp ( hIndex.GetStr ( "dict", "" ), "keywords" )==0;
-		tIdx.m_pIndex = sphCreateIndexRT ( tSchema, szIndexName, uRamSize, hIndex["path"].cstr(), bWordDict );
+		tIdx.m_pIndex = sphCreateIndexRT ( tSchema, szIndexName, iRamSize, hIndex["path"].cstr(), bWordDict );
 		tIdx.m_bEnabled = false;
 		tIdx.m_sIndexPath = hIndex["path"];
 		tIdx.m_bRT = true;

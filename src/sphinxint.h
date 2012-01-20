@@ -44,7 +44,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
-const DWORD		INDEX_FORMAT_VERSION		= 26;				///< my format version
+const DWORD		INDEX_FORMAT_VERSION		= 27;				///< my format version
 
 const char		MAGIC_SYNONYM_WHITESPACE	= 1;				// used internally in tokenizer only
 const char		MAGIC_CODE_SENTENCE			= 2;				// emitted from tokenizer on sentence boundary
@@ -798,8 +798,8 @@ void AttrIndexBuilder_t<DOCID>::FinishCollect ( bool bMvaOnly )
 //////////////////////////////////////////////////////////////////////////
 
 /// find a value-enclosing span in a sorted vector (aka an index at which vec[i] <= val < vec[i+1])
-template < typename T >
-static int FindSpan ( const CSphVector<T> & dVec, T tRef, int iSmallTreshold=8 )
+template < typename T, typename U >
+static int FindSpan ( const CSphVector<T> & dVec, U tRef, int iSmallTreshold=8 )
 {
 	// empty vector
 	if ( !dVec.GetLength() )
@@ -1329,6 +1329,7 @@ class ISphWordlist
 public:
 	virtual ~ISphWordlist () {}
 	virtual void GetPrefixedWords ( const char * sWord, int iWordLen, CSphVector<CSphNamedInt> & dPrefixedWords, BYTE * pDictBuf, int iFD ) const = 0;
+	virtual void GetInfixedWords ( const char * sWord, int iWordLen, CSphVector<CSphNamedInt> & dPrefixedWords ) const = 0;
 };
 
 struct ExpansionContext_t
@@ -1338,6 +1339,7 @@ struct ExpansionContext_t
 	CSphQueryResultMeta * m_pResult;
 	int m_iFD;
 	int m_iMinPrefixLen;
+	int m_iMinInfixLen;
 	int m_iExpansionLimit;
 	bool m_bStarEnabled;
 	bool m_bHasMorphology;

@@ -958,6 +958,12 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 		return false;
 	}
 
+	if ( tSettings.m_iMinInfixLen>0 && hIndex("type") && hIndex["type"]=="rt" )
+	{
+		sError.SetSprintf ( "RT indexes do not support infixes yet (set min_infix_len=0)" );
+		return false;
+	}
+
 	// html stripping
 	if ( hIndex ( "html_strip" ) )
 	{

@@ -15396,10 +15396,10 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	if ( hSearchd("thread_stack") )
 	{
 		int iThreadStackSizeMin = 65536;
-		int iThreadStackSizeMax = 2*1024*1024;
+		int iThreadStackSizeMax = 8*1024*1024;
 		int iStackSize = hSearchd.GetSize ( "thread_stack", iThreadStackSizeMin );
 		if ( iStackSize<iThreadStackSizeMin || iStackSize>iThreadStackSizeMax )
-			sphWarning ( "thread_stack is %d will be clamped to range ( 65k to 2M )", iStackSize );
+			sphWarning ( "thread_stack out of bounds (64K..8M); clamped", iStackSize );
 
 		iStackSize = Min ( iStackSize, iThreadStackSizeMax );
 		iStackSize = Max ( iStackSize, iThreadStackSizeMin );

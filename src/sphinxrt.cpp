@@ -648,6 +648,7 @@ struct RtWordReader_T
 			}
 			m_tPackedWord[0] = iMatch+iDelta;
 			memcpy ( m_tPackedWord+1+iMatch, pIn, iDelta );
+			m_tPackedWord[1+m_tPackedWord[0]] = 0;
 			pIn += iDelta;
 		} else
 		{
@@ -1049,6 +1050,7 @@ private:
 
 	void						ComputeOutboundSchema();
 	virtual void				GetPrefixedWords ( const char * sWord, int iWordLen, CSphVector<CSphNamedInt> & dPrefixedWords, BYTE * pDictBuf, int iFD ) const;
+	virtual void				GetInfixedWords ( const char * sWord, int iWordLen, CSphVector<CSphNamedInt> & dPrefixedWords ) const;
 
 public:
 #if USE_WINDOWS
@@ -1203,7 +1205,9 @@ RtIndex_t::~RtIndex_t ()
 	if ( m_iLockFD>=0 )
 		::close ( m_iLockFD );
 
-	g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, true );
+	// might be NULL during startup
+	if ( g_pBinlog )
+		g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, true );
 
 	tmSave = sphMicroTimer() - tmSave;
 	if ( tmSave>=1000 )
@@ -4067,7 +4071,7 @@ bool RtIndex_t::RtQwordSetupSegment ( RtQword_t * pQword, RtSegment_t * pCurSeg,
 }
 
 
-void RtIndex_t::GetPrefixedWords ( const char * sWord, int iWordLen, CSphVector<CSphNamedInt> & dPrefixedWords, BYTE * , int ) const
+void RtIndex_t::GetPrefixedWords ( const char * sWord, int iWordLen, CSphVector<CSphNamedInt> & dPrefixedWords, BYTE *, int ) const
 {
 	SmallStringHash_T<int> hPrefixedWords;
 	ARRAY_FOREACH ( i, m_pSegments )
@@ -4128,6 +4132,68 @@ void RtIndex_t::GetPrefixedWords ( const char * sWord, int iWordLen, CSphVector<
 		tExpanded.m_iValue = hPrefixedWords.IterateGet();
 	}
 }
+
+
+void RtIndex_t::GetInfixedWords ( const char * sInfix, int iBytes, CSphVector<CSphNamedInt> & dExpanded ) const
+{
+	// sanity checks
+	if ( !sInfix || iBytes<=0 )
+		return;
+
+	// handle trailing star
+	bool bTailStar = ( sInfix[iBytes-1]=='*' );
+	if ( bTailStar )
+		iBytes--;
+
+	char cSave = sInfix[iBytes];
+	const_cast<char*>(sInfix)[iBytes] = '\0'; // for strstr() to work
+
+	// find those prefixes
+	SmallStringHash_T<int> hWords;
+
+	ARRAY_FOREACH ( i, m_pSegments )
+	{
+		RtSegment_t * pSeg = m_pSegments[i];
+
+		// for now, just good old full scan!
+		// (most useful for small segments anyway)
+		RtWordReader_t tReader ( pSeg, true, m_iWordsCheckpoint );
+		for ( ;; )
+		{
+			// get next word
+			const RtWord_t * pWord = tReader.UnzipWord();
+			if ( !pWord )
+				break;
+
+			// check it
+			const char * sCheck = strstr ( (const char*)pWord->m_sWord+1, sInfix );
+			if ( !sCheck )
+				continue;
+			if ( !bTailStar && sCheck[iBytes] )
+				continue;
+
+			// matched, lets add
+			CSphString sWord ( (const char*)pWord->m_sWord+1 );
+			int * pDocs = hWords ( sWord );
+			if ( pDocs )
+				*pDocs += pWord->m_uDocs;
+			else
+				hWords.Add ( pWord->m_uDocs, sWord );
+		}
+	}
+
+	dExpanded.Reserve ( dExpanded.GetLength() + hWords.GetLength() );
+	hWords.IterateStart();
+	while ( hWords.IterateNext() )
+	{
+		CSphNamedInt & tExpanded = dExpanded.Add ();
+		tExpanded.m_sName = hWords.IterateGetKey();
+		tExpanded.m_iValue = hWords.IterateGet();
+	}
+
+	const_cast<char*>(sInfix)[iBytes] = cSave;
+}
+
 
 bool RtIndex_t::RtQwordSetup ( RtQword_t * pQword, RtSegment_t * pSeg ) const
 {
@@ -4414,6 +4480,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		tCtx.m_pResult = pResult;
 		tCtx.m_iFD = -1;
 		tCtx.m_iMinPrefixLen = m_tSettings.m_iMinPrefixLen;
+		tCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
 		tCtx.m_iExpansionLimit = m_iExpansionLimit;
 		tCtx.m_bStarEnabled = true;
 		tCtx.m_bHasMorphology = m_pDict->HasMorphology();

@@ -927,13 +927,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		ISphTokenizer * pTokenFilter = NULL;
 		sphConfDictionary ( hIndex, tDictSettings );
 
-		// FIXME! no support for infixes in keywords dict yet
-		if ( tDictSettings.m_bWordDict && bInfix )
-		{
-			tDictSettings.m_bWordDict = false;
-			fprintf ( stdout, "WARNING: min_infix_len is not supported yet with dict=keywords; using dict=crc\n" );
-		}
-
 		pDict = tDictSettings.m_bWordDict
 			? sphCreateDictionaryKeywords ( tDictSettings, pTokenizer, sError, sIndexName )
 			: sphCreateDictionaryCRC ( tDictSettings, pTokenizer, sError, sIndexName );

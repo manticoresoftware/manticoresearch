@@ -48,6 +48,8 @@ void StripStdin ( const char * sIndexAttrs, const char * sRemoveElements )
 
 void DoOptimization ( const CSphString & sIndex, const CSphConfig & hConfig );
 
+extern void sphDictBuildInfixes ( const char * sPath );
+
 int main ( int argc, char ** argv )
 {
 	fprintf ( stdout, SPHINX_BANNER );
@@ -70,6 +72,8 @@ int main ( int argc, char ** argv )
 			"--optimize-rt-klists <INDEXNAME>\n"
 			"\t\t\t\tperform kill list opimization in rt's disk chunks\n"
 			"\t\t\t\tfor a given index (taken from sphinx.conf) or --all\n"
+			"--build-infixes\t\t\tbuild infixes for an existing dict=keywords\n"
+			"\t\t\t\tindex (upgrades .sph, .spi in place)\n"
 			"\n"
 			"Options are:\n"
 			"-c, --config <file>\t\tuse given config file instead of defaults\n"
@@ -100,7 +104,8 @@ int main ( int argc, char ** argv )
 		CMD_DUMPHITLIST,
 		CMD_CHECK,
 		CMD_STRIP,
-		CMD_OPTIMIZE
+		CMD_OPTIMIZE,
+		CMD_BUILDINFIXES
 	} eCommand = CMD_NOTHING;
 
 	int i;
@@ -117,6 +122,7 @@ int main ( int argc, char ** argv )
 		OPT1 ( "--dumpdocids" )		{ eCommand = CMD_DUMPDOCIDS; sIndex = argv[++i]; }
 		OPT1 ( "--check" )			{ eCommand = CMD_CHECK; sIndex = argv[++i]; }
 		OPT1 ( "--htmlstrip" )		{ eCommand = CMD_STRIP; sIndex = argv[++i]; }
+		OPT1 ( "--build-infixes" )	{ eCommand = CMD_BUILDINFIXES; sIndex = argv[++i]; }
 		OPT1 ( "--strip-path" )		{ bStripPath = true; }
 		OPT1 ( "--optimize-rt-klists" )
 		{
@@ -186,11 +192,16 @@ int main ( int argc, char ** argv )
 		if ( !hConf["index"](sIndex) )
 			sphDie ( "index '%s': no such index in config\n", sIndex.cstr() );
 
+		// only need config-level settings for --htmlstrip
 		if ( eCommand==CMD_STRIP )
 			break;
 
 		if ( !hConf["index"][sIndex]("path") )
 			sphDie ( "index '%s': missing 'path' in config'\n", sIndex.cstr() );
+
+		// only need path for --build-infixes, it will access the files directly
+		if ( eCommand==CMD_BUILDINFIXES )
+			break;
 
 		// preload that index
 		CSphString sError;
@@ -274,6 +285,19 @@ int main ( int argc, char ** argv )
 
 		case CMD_OPTIMIZE:
 			DoOptimization ( sIndex, hConf );
+			break;
+
+		case CMD_BUILDINFIXES:
+			{
+				const CSphConfigSection & hIndex = hConf["index"][sIndex];
+				if ( hIndex("type") && hIndex["type"]=="rt" )
+					sphDie ( "build-infixes requires a disk index" );
+				if ( !hIndex("dict") || hIndex["dict"]!="keywords" )
+					sphDie ( "build-infixes requires dict=keywords" );
+
+				fprintf ( stdout, "building infixes for index %s...\n", sIndex.cstr() );
+				sphDictBuildInfixes ( hIndex["path"].cstr() );
+			}
 			break;
 
 		default:

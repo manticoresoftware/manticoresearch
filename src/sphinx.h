@@ -317,6 +317,16 @@ inline int sphIsAttr ( int c )
 	return ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' ) || c=='_';
 }
 
+
+/// name+int pair
+struct CSphNamedInt
+{
+	CSphString	m_sName;
+	int			m_iValue;
+
+	CSphNamedInt () : m_iValue ( 0 ) {}
+};
+
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////
@@ -379,6 +389,8 @@ public:
 			return pChunk [ iCode & CHUNK_MASK ];
 		return 0;
 	}
+
+	int GetMaxCodepointLength () const;
 
 protected:
 	static const int	CHUNK_COUNT	= 0x300;
@@ -492,6 +504,9 @@ public:
 
 	/// calc codepoint length
 	virtual int						GetCodepointLength ( int iCode ) const = 0;
+
+	/// get max codepoint length
+	virtual int						GetMaxCodepointLength () const = 0;
 
 	/// handle tokens less than min_word_len if they match filter
 	virtual void					EnableQueryParserMode ( bool bEnable )
@@ -630,6 +645,24 @@ struct CSphDictSettings
 };
 
 
+/// dictionary header (ohai, abstraction leak)
+struct DictHeader_t
+{
+	int				m_iDictCheckpoints;			///< how many dict checkpoints (keyword blocks) are there
+	SphOffset_t		m_iDictCheckpointsOffset;	///< dict checkpoints file position
+
+	int				m_iInfixCodepointBytes;		///< max bytes per infix codepoint (0 means no infixes)
+	int				m_iInfixBlocksOffset;		///< infix blocks file position
+
+	DictHeader_t()
+		: m_iDictCheckpoints ( 0 )
+		, m_iDictCheckpointsOffset ( 0 )
+		, m_iInfixCodepointBytes ( 0 )
+		, m_iInfixBlocksOffset ( 0 )
+	{}
+};
+
+
 /// abstract word dictionary interface
 struct CSphWordHit;
 struct CSphDict
@@ -720,15 +753,17 @@ public:
 	virtual void			DictEndEntries ( SphOffset_t iDoclistOffset );
 
 	/// end indexing, store dictionary and checkpoints
-	virtual bool			DictEnd ( SphOffset_t * pCheckpointsPos, int * pCheckpointsCount, int iMemLimit, CSphString & sError );
+	virtual bool			DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphString & sError );
 
 	/// check whether there were any errors during indexing
 	virtual bool			DictIsError () const;
 
-	/// make clone
-	virtual CSphDict *		Clone () const { return NULL; }
-
+public:
+	/// check whether this dict is stateful (when it comes to lookups)
 	virtual bool			HasState () const { return false; }
+
+	/// make a clone
+	virtual CSphDict *		Clone () const { return NULL; }
 };
 
 
@@ -2135,16 +2170,6 @@ struct CSphKeywordInfo
 	CSphString		m_sNormalized;
 	int				m_iDocs;
 	int				m_iHits;
-};
-
-
-/// name+int pair
-struct CSphNamedInt
-{
-	CSphString	m_sName;
-	int			m_iValue;
-
-	CSphNamedInt () : m_iValue ( 0 ) {}
 };
 
 

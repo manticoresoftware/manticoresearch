@@ -1060,6 +1060,284 @@ ExtNode_i * ExtNode_i::Create ( ISphQword * pQword, const XQNode_t * pNode, cons
 	}
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+struct ExtCacheEntry_t
+{
+	SphDocID_t	m_uDocid;
+	Hitpos_t	m_uHitpos;
+	union
+	{
+		int		m_iQword;	///< filled in ctor, used in SetQwordsIDF()
+		float	m_fTFIDF;	///< filled in SetQwordsIDF(), used in searching
+	};
+
+	bool operator < ( const ExtCacheEntry_t & r ) const
+	{
+		if ( m_uDocid!=r.m_uDocid )
+			return m_uDocid < r.m_uDocid;
+		return m_uHitpos < r.m_uHitpos;
+	}
+};
+
+
+/// simple in-memory multi-term cache
+class ExtCached_c : public ExtNode_i
+{
+protected:
+	CSphVector<ExtCacheEntry_t>		m_dCache;
+	CSphVector<ExtQword_t>			m_dQwords;
+
+	int		m_iUniqDocs;
+	int		m_iAtomPos;
+
+	int		m_iCurDocsBegin;	///< start of the last docs chunk returned, inclusive, ie [begin,end)
+	int		m_iCurDocsEnd;		///< end of the last docs chunk returned, exclusive, ie [begin,end)
+	int		m_iCurHit;			///< end of the last hits chunk (within the last docs chunk) returned, exclusive
+
+public:
+	explicit						ExtCached_c ( const XQNode_t * pNode, const ISphQwordSetup & tSetup );
+	virtual void					Reset ( const ISphQwordSetup & tSetup );
+	virtual const ExtDoc_t *		GetDocsChunk ( SphDocID_t * pMaxID );
+	virtual const ExtHit_t *		GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
+
+	virtual void					GetQwords ( ExtQwordsHash_t & hQwords );
+	virtual void					SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
+	virtual bool					GotHitless () { return false; }
+	virtual int						GetDocsCount () { return m_iUniqDocs; }
+};
+
+
+ExtCached_c::ExtCached_c ( const XQNode_t * pNode, const ISphQwordSetup & tSetup )
+{
+#ifndef NDEBUG
+	// sanity checks
+	// this node must be only created for a huge OR of tiny expansions
+	assert ( pNode->GetOp()==SPH_QUERY_OR );
+	assert ( pNode->m_dWords.GetLength() );
+	ARRAY_FOREACH ( i, pNode->m_dWords )
+	{
+		assert ( pNode->m_dWords[i].m_iAtomPos==pNode->m_dWords[0].m_iAtomPos );
+		assert ( pNode->m_dWords[i].m_bExpanded );
+	}
+#endif
+
+	m_dCache.Reserve ( pNode->m_dWords.GetLength() );
+	m_dQwords.Resize ( pNode->m_dWords.GetLength() );
+	m_iAtomPos = pNode->m_dWords[0].m_iAtomPos;
+
+	// loop all the keywords and precache them
+	ARRAY_FOREACH ( i, pNode->m_dWords )
+	{
+		// our little stemming buffer (morpohlogy aware dictionary might need to change the keyword)
+		BYTE sTmp [ 3*SPH_MAX_WORD_LEN + 16 ];
+		strncpy ( (char*)sTmp, pNode->m_dWords[i].m_sWord.cstr(), sizeof(sTmp) );
+		sTmp[sizeof(sTmp)-1] = '\0';
+
+		// setup keyword disk reader
+		ISphQword * pQword = tSetup.QwordSpawn ( pNode->m_dWords[i] );
+		pQword->m_sWord = pNode->m_dWords[i].m_sWord;
+		pQword->m_iWordID = tSetup.m_pDict->GetWordID ( sTmp );
+		pQword->m_sDictWord = (const char*) sTmp;
+		pQword->m_bExpanded = pNode->m_dWords[i].m_bExpanded;
+		if ( !tSetup.QwordSetup ( pQword ) )
+		{
+			SafeDelete ( pQword )
+				continue;
+		}
+
+		// setup keyword idf and stats
+		m_dQwords[i].m_sWord = pNode->m_dWords[i].m_sWord;
+		m_dQwords[i].m_sDictWord = (const char*) sTmp;
+		m_dQwords[i].m_iDocs = pQword->m_iDocs;
+		m_dQwords[i].m_iHits = pQword->m_iHits;
+		m_dQwords[i].m_iQueryPos = m_iAtomPos;
+		m_dQwords[i].m_bExpanded = true;
+		m_dQwords[i].m_bExcluded = pNode->m_bNotWeighted;
+
+		// read and cache all docs and hits
+		for ( ;; )
+		{
+			const CSphMatch & tMatch = pQword->GetNextDoc ( NULL );
+			if ( !tMatch.m_iDocID )
+				break;
+
+			pQword->SeekHitlist ( pQword->m_iHitlistPos );
+			for ( Hitpos_t uHit = pQword->GetNextHit(); uHit!=EMPTY_HIT; uHit = pQword->GetNextHit() )
+			{
+				// apply field limits
+				if ( !pNode->m_dFieldMask.Test ( HITMAN::GetField(uHit) ) )
+					continue;
+
+				// apply zone limits
+				if ( pNode->m_dZones.GetLength() )
+				{
+				}
+
+				// ok, this hit works, copy it
+				ExtCacheEntry_t & tEntry = m_dCache.Add ();
+				tEntry.m_uDocid = tMatch.m_iDocID;
+				tEntry.m_uHitpos = uHit;
+				tEntry.m_iQword = i;
+			}
+		}
+
+		// dismissed
+		SafeDelete ( pQword );
+	}
+
+	// sort from keyword order to document order
+	m_dCache.Sort();
+	m_iUniqDocs = 1;
+	for ( int i=1; i<m_dCache.GetLength(); i++ )
+		if ( m_dCache[i].m_uDocid!=m_dCache[i-1].m_uDocid )
+			m_iUniqDocs++;
+
+	// reset iterators
+	m_iCurDocsBegin = 0;
+	m_iCurDocsEnd = 0;
+	m_iCurHit = 0;
+}
+
+
+void ExtCached_c::Reset ( const ISphQwordSetup & )
+{
+	// FIXME! should this also reset data?
+	m_iCurDocsBegin = 0;
+	m_iCurDocsEnd = 0;
+	m_iCurHit = 0;
+}
+
+
+const ExtDoc_t * ExtCached_c::GetDocsChunk ( SphDocID_t * pMaxID )
+{
+	m_iCurDocsBegin = m_iCurHit = m_iCurDocsEnd;
+	if ( m_iCurDocsBegin>=m_dCache.GetLength() )
+		return NULL;
+
+	int iDoc = 0;
+	int iEnd = m_iCurDocsEnd; // shortcut, and vs2005 optimization
+	while ( iDoc<MAX_DOCS-1 && iEnd<m_dCache.GetLength() )
+	{
+		SphDocID_t uDocid = m_dCache[iEnd].m_uDocid;
+
+		ExtDoc_t & tDoc = m_dDocs[iDoc++];
+		tDoc.m_uDocid = uDocid;
+		tDoc.m_pDocinfo = NULL; // no country for old inline men
+		tDoc.m_uHitlistOffset = 0;
+		tDoc.m_fTFIDF = m_dCache[iEnd].m_fTFIDF;
+
+		while ( iEnd<m_dCache.GetLength() && m_dCache[iEnd].m_uDocid==uDocid )
+			iEnd++;
+	}
+	m_iCurDocsEnd = iEnd;
+
+	return ReturnDocsChunk ( iDoc, pMaxID );
+}
+
+
+const ExtHit_t * ExtCached_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
+{
+	if ( m_iCurHit>=m_iCurDocsEnd )
+		return NULL;
+
+	int iHit = 0;
+	while ( pDocs->m_uDocid!=DOCID_MAX )
+	{
+		// skip rejected documents
+		while ( m_iCurHit < m_iCurDocsEnd && m_dCache[m_iCurHit].m_uDocid < pDocs->m_uDocid )
+			m_iCurHit++;
+		if ( m_iCurHit>=m_iCurDocsEnd )
+			break;
+
+		// skip non-matching documents
+		SphDocID_t uDocid = m_dCache[m_iCurHit].m_uDocid;
+		if ( pDocs->m_uDocid < uDocid )
+		{
+			while ( pDocs->m_uDocid < uDocid )
+				pDocs++;
+			if ( pDocs->m_uDocid!=uDocid )
+				continue;
+		}
+
+		// copy accepted documents
+		while ( m_iCurHit < m_iCurDocsEnd && m_dCache[m_iCurHit].m_uDocid==pDocs->m_uDocid && iHit < MAX_HITS-1 )
+		{
+			ExtHit_t & tHit = m_dHits[iHit++];
+			tHit.m_uDocid = m_dCache[m_iCurHit].m_uDocid;
+			tHit.m_uHitpos = m_dCache[m_iCurHit].m_uHitpos;
+			tHit.m_uQuerypos = m_iAtomPos;
+			tHit.m_uWeight = tHit.m_uMatchlen = tHit.m_uSpanlen = 1;
+			m_iCurHit++;
+		}
+		if ( m_iCurHit>=m_iCurDocsEnd || iHit>=MAX_HITS-1 )
+			break;
+	}
+
+	assert ( iHit>=0 && iHit<MAX_HITS );
+	m_dHits[iHit].m_uDocid = DOCID_MAX;
+	return ( iHit!=0 ) ? m_dHits : NULL;
+}
+
+
+void ExtCached_c::GetQwords ( ExtQwordsHash_t & hQwords )
+{
+	ARRAY_FOREACH ( i, m_dQwords )
+		hQwords.Add ( m_dQwords[i], m_dQwords[i].m_sWord );
+}
+
+
+void ExtCached_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
+{
+	// pull idfs
+	ARRAY_FOREACH ( i, m_dQwords )
+	{
+		ExtQword_t * pHashed = hQwords ( m_dQwords[i].m_sWord );
+		if ( pHashed )
+			m_dQwords[i].m_fIDF = pHashed->m_fIDF;
+	}
+
+	// compute tf*idf for every document
+	// store it into the opening hit
+	for ( int i=0; i<m_dCache.GetLength(); )
+	{
+		// single hit fastpath
+		if ( i+1==m_dCache.GetLength() || m_dCache[i+1].m_uDocid!=m_dCache[i].m_uDocid )
+		{
+			m_dCache[i].m_fTFIDF = m_dQwords [ m_dCache[i].m_iQword ].m_fIDF / ( 1.0f+SPH_BM25_K1 );
+			i++;
+			continue;;
+		}
+
+		int j;
+		SphDocID_t uDocid = m_dCache[i].m_uDocid;
+		CSphVector<int> dWords;
+		for ( j=i; j<m_dCache.GetLength() && m_dCache[j].m_uDocid==uDocid; j++ )
+			dWords.Add ( m_dCache[j].m_iQword );
+
+		dWords.Sort();
+		dWords.Add ( -1 );
+		int iTF = 1;
+		float fTFIDF = 0.0f;
+		for ( int k=1; k<dWords.GetLength(); k++ )
+		{
+			if ( dWords[k]!=dWords[k-1] )
+			{
+				fTFIDF += float(iTF) / float(iTF+SPH_BM25_K1) * m_dQwords[dWords[k-1]].m_fIDF;
+				iTF = 1;
+			} else
+			{
+				iTF++;
+			}
+		}
+
+		m_dCache[i].m_fTFIDF = fTFIDF;
+		i = j;
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & tSetup )
 {
 	// empty node?
@@ -1132,6 +1410,16 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 					return tSetup.m_pNodeCache->CreateProxy ( pCur, pNode, tSetup );
 				return pCur;
 			}
+
+			case SPH_QUERY_OR:
+				// currently, only intended for tiny (super-rare) expanded keywords
+				// might be a nice small optimization to remove the expanded restriction, though
+#ifndef NDEBUG
+				assert ( pNode->m_dWords.GetLength() );
+				ARRAY_FOREACH ( i, pNode->m_dWords )
+					assert ( pNode->m_dWords[i].m_bExpanded );
+#endif
+				return new ExtCached_c ( pNode, tSetup );
 
 			default:
 				assert ( 0 && "unexpected plain node type" );

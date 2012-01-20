@@ -53,16 +53,13 @@ void net_init ()
 }
 
 
-void test_query ( sphinx_client * client, const char * query )
+void test_query ( sphinx_client * client, const char * query, const char * index )
 {
 	sphinx_result * res;
-	const char *index;
 	int i, j, k, mva_len;
 	unsigned int * mva;
 	const char * field_names[2];
 	int field_weights[2];
-
-	index = "test1";
 
 	field_names[0] = "title";
 	field_names[1] = "content";
@@ -379,7 +376,7 @@ void test_status ( sphinx_client * client )
 void test_group_by ( sphinx_client * client, const char * attr )
 {
 	sphinx_set_groupby ( client, attr, SPH_GROUPBY_ATTR, "@group asc" );
-	test_query ( client, "is" );
+	test_query ( client, "is", "test1" );
 
 	sphinx_reset_groupby ( client );
 }
@@ -397,7 +394,7 @@ void test_filter ( sphinx_client * client )
 	{
 		mva = ( i==1 );
 		sphinx_add_filter ( client, mva ? attr_mva : attr_group, 1, mva ? &filter_mva : &filter_group, SPH_FALSE );
-		test_query ( client, "is" );
+		test_query ( client, "is", "test1" );
 
 		sphinx_reset_filters ( client );
 	}
@@ -448,9 +445,10 @@ int main ( int argc, char ** argv )
 
 	// search phase 0
 	title ( "search phase 0" );
-	test_query ( client, "is" );
-	test_query ( client, "is test" );
-	test_query ( client, "test number" );
+	test_query ( client, "is", "test1" );
+	test_query ( client, "is test", "test1" );
+	test_query ( client, "test number", "test1" );
+	test_query ( client, "is", "dist" );
 
 	// group_by (attr; mva) + filter
 	title ( "group_by (attr; mva) + filter" );
@@ -468,7 +466,7 @@ int main ( int argc, char ** argv )
 	test_update ( client, 2 );
 	test_update_mva ( client );
 	sphinx_set_sort_mode ( client, SPH_SORT_EXTENDED, "idd desc" );
-	test_query ( client, "is" );
+	test_query ( client, "is", "test1" );
 
 	// persistence connection
 	sphinx_open ( client );
@@ -478,7 +476,7 @@ int main ( int argc, char ** argv )
 	test_update ( client, 4 );
 	test_update ( client, 3 );
 	sphinx_set_sort_mode ( client, SPH_SORT_RELEVANCE, NULL );
-	test_query ( client, "is" );
+	test_query ( client, "is", "test1" );
 
 	sphinx_cleanup ( client );
 
@@ -494,12 +492,12 @@ int main ( int argc, char ** argv )
 	// select
 	title ( "select" );
 	sphinx_set_select ( client, "*, group_id*1000+@id*10 AS q" );
-	test_query ( client, "is" );
+	test_query ( client, "is", "test1" );
 
 	// override
 	title ( "override" );
 	sphinx_add_override ( client, "group_id", &override_docid, 1, &override_value );
-	test_query ( client, "is" );
+	test_query ( client, "is", "test1" );
 
 	// group_by (override attr)
 	title ( "group_by (override attr)" );

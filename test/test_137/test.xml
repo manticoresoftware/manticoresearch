@@ -36,6 +36,10 @@ $opts = array( 'query_mode'=>true, "around"=> 2 );
 
 $results[] = $client->BuildExcerpts($docs, 'test', '(one) NEAR/35 ("five")', $opts );
 
+// regression crash on 0 docs snippet
+$results[] = $client->BuildExcerpts(array(), 'test', '(one) NEAR/35 ("five")', $opts );
+$results[] = $client->GetLastError();
+
 ]]></custom_test>
 
 </test>

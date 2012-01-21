@@ -243,9 +243,7 @@ void TestTokenizer ( bool bUTF8 )
 		// test short word callbacks
 		printf ( "%s for short token handling\n", sPrefix );
 		ISphTokenizer * pShortTokenizer = pTokenizer->Clone ( bEscaped );
-
-		CSphRemapRange tStar ( '*', '*', '*' );
-		pShortTokenizer->AddCaseFolding ( tStar );
+		pShortTokenizer->AddPlainChar ( '*' );
 
 		CSphTokenizerSettings tSettings = pShortTokenizer->GetSettings();
 		tSettings.m_iMinWordLen = 5;
@@ -389,13 +387,11 @@ void TestTokenizer ( bool bUTF8 )
 	assert ( !pTokenizer->TokenIsBlendedPart() );
 
 	// blended/special vs query mode vs modifier.. hell, this is complicated
-	CSphRemapRange tModifier ( '=', '=', '=' );
-
 	SafeDelete ( pTokenizer );
 	pTokenizer = CreateTestTokenizer ( bUTF8, TOK_NO_DASH );
 	assert ( pTokenizer->SetBlendChars ( "., -", sError ) );
 	pTokenizer->AddSpecials ( "-" );
-	pTokenizer->AddCaseFolding ( tModifier );
+	pTokenizer->AddPlainChar ( '=' );
 	pTokenizer->EnableQueryParserMode ( true );
 	assert ( pTokenizer->SetBlendMode ( "trim_none, skip_pure", sError ) );
 

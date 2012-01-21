@@ -4239,8 +4239,7 @@ CSphDict * RtIndex_t::SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSp
 		return pPrevDict;
 
 	tContainer = new CSphDictExact ( pPrevDict );
-	CSphRemapRange tStar ( '=', '=', '=' ); // FIXME? check and warn if star was already there
-	pTokenizer->AddCaseFolding ( tStar );
+	pTokenizer->AddPlainChar ( '=' );
 	return tContainer.Ptr();
 }
 
@@ -4252,9 +4251,7 @@ CSphDict * RtIndex_t::SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, CSph
 		return pPrevDict;
 
 	tContainer = new CSphDictStarV8 ( pPrevDict, false, true );
-
-	CSphRemapRange tStar ( '*', '*', '*' ); // FIXME? check and warn if star was already there
-	pTokenizer->AddCaseFolding ( tStar );
+	pTokenizer->AddPlainChar ( '*' );
 	return tContainer.Ptr();
 }
 

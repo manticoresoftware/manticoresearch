@@ -8941,9 +8941,7 @@ static CSphDict * SetupExactDict ( const CSphIndexSettings & tSettings, const Ex
 	if ( !( q.m_bHighlightQuery && tSettings.m_bIndexExactWords ) )
 		return pDict;
 
-	CSphRemapRange tEq ( '=', '=', '=' ); // FIXME? check and warn if star was already there
-	pTokenizer->AddCaseFolding ( tEq );
-
+	pTokenizer->AddPlainChar ( '=' );
 	tExact = new CSphDictExact ( pDict );
 	return tExact.Ptr();
 }

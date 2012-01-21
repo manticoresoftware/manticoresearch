@@ -2081,7 +2081,7 @@ public:
 									~CSphTokenizer_Filter ();
 
 	virtual bool					SetCaseFolding ( const char * sConfig, CSphString & sError )	{ return m_pTokenizer->SetCaseFolding ( sConfig, sError ); }
-	virtual void					AddCaseFolding ( CSphRemapRange & tRange )						{ m_pTokenizer->AddCaseFolding ( tRange ); }
+	virtual void					AddPlainChar ( char c )											{ m_pTokenizer->AddPlainChar ( c ); }
 	virtual void					AddSpecials ( const char * sSpecials )							{ m_pTokenizer->AddSpecials ( sSpecials ); }
 	virtual bool					SetIgnoreChars ( const char * sIgnored, CSphString & sError )	{ return m_pTokenizer->SetIgnoreChars ( sIgnored, sError ); }
 	virtual bool					SetNgramChars ( const char * sConfig, CSphString & sError )		{ return m_pTokenizer->SetNgramChars ( sConfig, sError ); }
@@ -2819,10 +2819,10 @@ bool ISphTokenizer::SetCaseFolding ( const char * sConfig, CSphString & sError )
 }
 
 
-void ISphTokenizer::AddCaseFolding ( CSphRemapRange & tRange )
+void ISphTokenizer::AddPlainChar ( char c )
 {
-	CSphVector<CSphRemapRange> dTmp;
-	dTmp.Add ( tRange );
+	CSphVector<CSphRemapRange> dTmp ( 1 );
+	dTmp[0].m_iStart = dTmp[0].m_iEnd = dTmp[0].m_iRemapStart = c;
 	m_tLC.AddRemaps ( dTmp, 0 );
 }
 
@@ -13993,9 +13993,7 @@ CSphDict * CSphIndex_VLN::SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, 
 	else
 		tContainer = new CSphDictStar ( pPrevDict );
 
-	CSphRemapRange tStar ( '*', '*', '*' ); // FIXME? check and warn if star was already there
-	tTokenizer.AddCaseFolding ( tStar );
-
+	tTokenizer.AddPlainChar ( '*' );
 	return tContainer.Ptr();
 }
 
@@ -14006,10 +14004,7 @@ CSphDict * CSphIndex_VLN::SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer,
 		return pPrevDict;
 
 	tContainer = new CSphDictExact ( pPrevDict );
-
-	CSphRemapRange tStar ( '=', '=', '=' ); // FIXME? check and warn if star was already there
-	tTokenizer.AddCaseFolding ( tStar );
-
+	tTokenizer.AddPlainChar ( '=' );
 	return tContainer.Ptr();
 }
 

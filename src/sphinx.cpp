@@ -1246,29 +1246,38 @@ static void WriteFileInfo ( CSphWriter & tWriter, const CSphSavedFile & tInfo )
 }
 
 
+/// per-keyword data that the dictionaries store
 struct WordDictInfo_t
 {
-	CSphString		m_sWord;
-	SphOffset_t		m_uOff;
+	SphOffset_t		m_iOffset;
 	int				m_iDocs;
 	int				m_iHits;
 	int				m_iDoclistHint;
 
-	WordDictInfo_t ();
+	WordDictInfo_t ()
+		: m_iOffset ( 0 )
+		, m_iDocs ( 0 )
+		, m_iHits ( 0 )
+		, m_iDoclistHint ( 0 )
+	{}
 };
 
 
-struct WordReaderContext_t
+/// dict=keywords block reader
+class KeywordsBlockReader_c : public WordDictInfo_t
 {
+private:
+	const BYTE *	m_pBuf;
 	BYTE			m_sWord [ MAX_KEYWORD_BYTES ];
 	int				m_iLen;
-
-	SphOffset_t		m_iOffset;
-	int				m_iDocs;
-	int				m_iHits;
 	BYTE			m_uHint;
 
-	WordReaderContext_t();
+public:
+	explicit		KeywordsBlockReader_c ( const BYTE * pBuf );
+	bool			UnpackWord();
+
+	const char *	GetWord() const			{ return (const char*)m_sWord; }
+	int				GetWordLen() const		{ return m_iLen; }
 };
 
 
@@ -1302,12 +1311,10 @@ public:
 
 	const CSphWordlistCheckpoint *		FindCheckpoint ( const char * sWord, int iWordLen, SphWordID_t iWordID, bool bStarMode ) const;
 	bool								LookupInfixCheckpoints ( const char * sInfix, int iBytes, CSphVector<int> & dCheckpoints ) const;
-	const BYTE *						UnpackWord ( const BYTE * pBuf, WordReaderContext_t & tCtx ) const;
-	const BYTE *						GetWord ( const BYTE * pBuf, const char * pStr, int iLen, WordDictInfo_t & tWord, bool bStarMode, WordReaderContext_t & tCtx ) const;
 	bool								GetWord ( const BYTE * pBuf, SphWordID_t iWordID, WordDictInfo_t & tWord ) const;
 
 	const BYTE *						AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint, int iFD, BYTE * pDictBuf ) const;
-	virtual void						GetPrefixedWords ( const char * sWord, int iWordLen, CSphVector<CSphNamedInt> & dPrefixedWords, BYTE * pDictBuf, int iFD ) const;
+	virtual void						GetPrefixedWords ( const char * sPrefix, int iPrefixLen, CSphVector<CSphNamedInt> & dExpanded, BYTE * pDictBuf, int iFD ) const;
 	virtual void						GetInfixedWords ( const char * sWord, int iWordLen, CSphVector<CSphNamedInt> & dPrefixedWords ) const;
 
 private:
@@ -12655,34 +12662,49 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 	const BYTE * pBuf = pIndex->m_tWordlist.AcquireDict ( pCheckpoint, m_tWordlist.GetFD(), m_pDictBuf );
 	assert ( pBuf );
 
-	WordDictInfo_t tResWord;
-	WordReaderContext_t tReaderCtx;
-
-	const bool bWordFound = bWordDict
-		? pIndex->m_tWordlist.GetWord ( pBuf, sWord, iWordLen, tResWord, false, tReaderCtx )!=NULL
-		: pIndex->m_tWordlist.GetWord ( pBuf, tWord.m_iWordID, tResWord );
-
-	if ( bWordFound )
+	WordDictInfo_t tRes;
+	if ( bWordDict )
 	{
-		const ESphHitless eMode = pIndex->m_tSettings.m_eHitless;
-		tWord.m_iDocs = eMode==SPH_HITLESS_SOME ? ( tResWord.m_iDocs & 0x7FFFFFFF ) : tResWord.m_iDocs;
-		tWord.m_iHits = tResWord.m_iHits;
-		tWord.m_bHasHitlist =
-			( eMode==SPH_HITLESS_NONE ) ||
-			( eMode==SPH_HITLESS_SOME && !( tResWord.m_iDocs & 0x80000000 ) );
-
-		if ( m_bSetupReaders )
+		KeywordsBlockReader_c tCtx ( pBuf );
+		while ( tCtx.UnpackWord() )
 		{
-			tWord.m_rdDoclist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
-			tWord.m_rdDoclist.SetFile ( m_tDoclist );
-			tWord.m_rdDoclist.SeekTo ( tResWord.m_uOff, tResWord.m_iDoclistHint );
-
-			tWord.m_rdHitlist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
-			tWord.m_rdHitlist.SetFile ( m_tHitlist );
+			// block is sorted
+			// so once keywords are greater than the reference word, no more matches
+			assert ( tCtx.GetWordLen()>0 );
+			int iCmp = sphDictCmpStrictly ( sWord, iWordLen, tCtx.GetWord(), tCtx.GetWordLen() );
+			if ( iCmp<0 )
+				return false;
+			if ( iCmp==0 )
+				break;
 		}
+		if ( tCtx.GetWordLen()<=0 )
+			return false;
+		tRes = tCtx;
+
+	} else
+	{
+		if ( !pIndex->m_tWordlist.GetWord ( pBuf, tWord.m_iWordID, tRes ) )
+			return false;
 	}
 
-	return bWordFound;
+	const ESphHitless eMode = pIndex->m_tSettings.m_eHitless;
+	tWord.m_iDocs = eMode==SPH_HITLESS_SOME ? ( tRes.m_iDocs & 0x7FFFFFFF ) : tRes.m_iDocs;
+	tWord.m_iHits = tRes.m_iHits;
+	tWord.m_bHasHitlist =
+		( eMode==SPH_HITLESS_NONE ) ||
+		( eMode==SPH_HITLESS_SOME && !( tRes.m_iDocs & 0x80000000 ) );
+
+	if ( m_bSetupReaders )
+	{
+		tWord.m_rdDoclist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
+		tWord.m_rdDoclist.SetFile ( m_tDoclist );
+		tWord.m_rdDoclist.SeekTo ( tRes.m_iOffset, tRes.m_iDoclistHint );
+
+		tWord.m_rdHitlist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
+		tWord.m_rdHitlist.SetFile ( m_tHitlist );
+	}
+
+	return true;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -24715,21 +24737,6 @@ int sphDictCmpStrictly ( const char * pStr1, int iLen1, const char * pStr2, int 
 }
 
 
-WordDictInfo_t::WordDictInfo_t ()
-{
-	m_uOff = 0;
-	m_iDocs = 0;
-	m_iHits = 0;
-	m_iDoclistHint = 0;
-}
-
-WordReaderContext_t::WordReaderContext_t()
-{
-	m_sWord[0] = '\0';
-	m_iLen = 0;
-}
-
-
 CWordlist::CWordlist ()
 	: m_dCheckpoints ( 0 )
 	, m_dInfixBlocks ( 0 )
@@ -24860,13 +24867,29 @@ const CSphWordlistCheckpoint * CWordlist::FindCheckpoint ( const char * sWord, i
 }
 
 
-const BYTE * CWordlist::UnpackWord ( const BYTE * pBuf, WordReaderContext_t & tCtx ) const
+KeywordsBlockReader_c::KeywordsBlockReader_c ( const BYTE * pBuf )
 {
+	m_pBuf = pBuf;
+	m_sWord[0] = '\0';
+	m_iLen = 0;
+}
+
+
+bool KeywordsBlockReader_c::UnpackWord()
+{
+	if ( !m_pBuf )
+		return false;
+
 	// unpack next word
 	// must be in sync with DictEnd()!
-	BYTE uPack = *pBuf++;
+	BYTE uPack = *m_pBuf++;
 	if ( !uPack )
-		return NULL; // wordlist chunk is over
+	{
+		// ok, this block is over
+		m_pBuf = NULL;
+		m_iLen = 0;
+		return false;
+	}
 
 	int iMatch, iDelta;
 	if ( uPack & 0x80 )
@@ -24876,56 +24899,28 @@ const BYTE * CWordlist::UnpackWord ( const BYTE * pBuf, WordReaderContext_t & tC
 	} else
 	{
 		iDelta = uPack & 127;
-		iMatch = *pBuf++;
+		iMatch = *m_pBuf++;
 	}
 
-	assert ( iMatch+iDelta<(int)sizeof(tCtx.m_sWord)-1 );
-	assert ( iMatch<=(int)strlen ( (char *)tCtx.m_sWord ) );
+	assert ( iMatch+iDelta<(int)sizeof(m_sWord)-1 );
+	assert ( iMatch<=(int)strlen ( (char *)m_sWord ) );
 
-	memcpy ( tCtx.m_sWord + iMatch, pBuf, iDelta );
-	pBuf += iDelta;
+	memcpy ( m_sWord + iMatch, m_pBuf, iDelta );
+	m_pBuf += iDelta;
 
-	tCtx.m_iLen = iMatch + iDelta;
-	tCtx.m_sWord[tCtx.m_iLen] = '\0';
+	m_iLen = iMatch + iDelta;
+	m_sWord[m_iLen] = '\0';
 
-	tCtx.m_iOffset = sphUnzipOffset ( pBuf );
-	tCtx.m_iDocs = sphUnzipInt ( pBuf );
-	tCtx.m_iHits = sphUnzipInt ( pBuf );
-	tCtx.m_uHint = ( tCtx.m_iDocs>=DOCLIST_HINT_THRESH ) ? *pBuf++ : 0;
+	m_iOffset = sphUnzipOffset ( m_pBuf );
+	m_iDocs = sphUnzipInt ( m_pBuf );
+	m_iHits = sphUnzipInt ( m_pBuf );
+	m_uHint = ( m_iDocs>=DOCLIST_HINT_THRESH ) ? *m_pBuf++ : 0;
+	m_iDoclistHint = DoclistHintUnpack ( m_iDocs, m_uHint );
 
-	return pBuf;
+	assert ( m_iLen>0 );
+	return true;
 }
 
-
-const BYTE * CWordlist::GetWord ( const BYTE * pBuf, const char * pStr, int iLen, WordDictInfo_t & tWord, bool bStarMode, WordReaderContext_t & tCtx ) const
-{
-	assert ( pBuf );
-	assert ( pStr && iLen>0 );
-
-	while ( pBuf )
-	{
-		pBuf = UnpackWord ( pBuf, tCtx );
-
-		// list is sorted, so if there was no match, there's no such word
-		int iCmpRes = bStarMode
-			? sphDictCmp ( pStr, iLen, (char*)tCtx.m_sWord, tCtx.m_iLen )
-			: sphDictCmpStrictly ( pStr, iLen, (char*)tCtx.m_sWord, tCtx.m_iLen );
-		if ( iCmpRes<0 )
-			return NULL;
-
-		// it matches?!
-		if ( iCmpRes==0 && ( !bStarMode || iLen<=tCtx.m_iLen ) )
-		{
-			tWord.m_sWord = (char*)tCtx.m_sWord;
-			tWord.m_uOff = tCtx.m_iOffset;
-			tWord.m_iDocs = tCtx.m_iDocs;
-			tWord.m_iHits = tCtx.m_iHits;
-			tWord.m_iDoclistHint = DoclistHintUnpack ( tCtx.m_iDocs, tCtx.m_uHint );
-			return pBuf;
-		}
-	}
-	return NULL;
-}
 
 bool CWordlist::GetWord ( const BYTE * pBuf, SphWordID_t iWordID, WordDictInfo_t & tWord ) const
 {
@@ -24964,7 +24959,7 @@ bool CWordlist::GetWord ( const BYTE * pBuf, SphWordID_t iWordID, WordDictInfo_t
 			sphUnzipWordid ( pBuf ); // might be 0 at checkpoint
 			const SphOffset_t iDoclistLen = sphUnzipOffset ( pBuf );
 
-			tWord.m_uOff = uLastOff;
+			tWord.m_iOffset = uLastOff;
 			tWord.m_iDocs = iDocs;
 			tWord.m_iHits = iHits;
 			tWord.m_iDoclistHint = (int)iDoclistLen;
@@ -25004,46 +24999,51 @@ const BYTE * CWordlist::AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint
 	return pBuf;
 }
 
-void CWordlist::GetPrefixedWords ( const char * sWord, int iWordLen, CSphVector<CSphNamedInt> & dPrefixedWords, BYTE * pDictBuf, int iFD ) const
+
+static inline void AddExpansion ( CSphVector<CSphNamedInt> & dExpanded, const KeywordsBlockReader_c & tCtx )
 {
-	assert ( iWordLen>0 );
+	assert ( tCtx.GetWordLen() );
+
+	CSphNamedInt & tRes = dExpanded.Add();
+	tRes.m_sName = tCtx.GetWord();
+	if ( tCtx.m_iHits<=256 ) // magic threshold; mb make this configurable?
+		tRes.m_iValue = 1;
+	else
+		tRes.m_iValue = tCtx.m_iDocs + 1;
+}
+
+								 
+void CWordlist::GetPrefixedWords ( const char * sPrefix, int iPrefixLen, CSphVector<CSphNamedInt> & dExpanded, BYTE * pDictBuf, int iFD ) const
+{
+	assert ( iPrefixLen>0 );
 
 	// empty index?
 	if ( !m_dCheckpoints.GetLength() )
 		return;
 
-	const CSphWordlistCheckpoint * pCheckpoint = FindCheckpoint ( sWord, iWordLen, 0, true );
-
+	const CSphWordlistCheckpoint * pCheckpoint = FindCheckpoint ( sPrefix, iPrefixLen, 0, true );
 	while ( pCheckpoint )
 	{
 		// decode wordlist chunk
-		const BYTE * pBuf = AcquireDict ( pCheckpoint, iFD, pDictBuf );
-		assert ( pBuf );
-
-		WordReaderContext_t tReaderCtx;
-
-		while ( pBuf )
+		KeywordsBlockReader_c tCtx ( AcquireDict ( pCheckpoint, iFD, pDictBuf ) );
+		while ( tCtx.UnpackWord() )
 		{
-			WordDictInfo_t tResWord;
-			pBuf = GetWord ( pBuf, sWord, iWordLen, tResWord, true, tReaderCtx );
+			// block is sorted
+			// so once keywords are greater than the prefix, no more matches
+			int iCmp = sphDictCmp ( sPrefix, iPrefixLen, tCtx.GetWord(), tCtx.GetWordLen() );
+			if ( iCmp<0 )
+				break;
 
-			if ( pBuf )
-			{
-				assert ( !tResWord.m_sWord.IsEmpty() );
-				CSphNamedInt & tPrefixed = dPrefixedWords.Add();
-				tPrefixed.m_sName = tResWord.m_sWord; // OPTIMIZE? swap mb?
-				if ( tResWord.m_iHits<=256 ) // magic threshold; mb make this configurable?
-					tPrefixed.m_iValue = 1;
-				else
-					tPrefixed.m_iValue = tResWord.m_iDocs + 1;
-			}
+			// does the prefix match?
+			if ( iCmp==0 && iPrefixLen<=tCtx.GetWordLen() )
+				AddExpansion ( dExpanded, tCtx );
 		}
 
 		pCheckpoint++;
 		if ( pCheckpoint > &m_dCheckpoints.Last() )
 			break;
 
-		if ( sphDictCmp ( sWord, iWordLen, pCheckpoint->m_sWord, strlen ( pCheckpoint->m_sWord ) )<0 )
+		if ( sphDictCmp ( sPrefix, iPrefixLen, pCheckpoint->m_sWord, strlen ( pCheckpoint->m_sWord ) )<0 )
 			break;
 	}
 }
@@ -25184,26 +25184,15 @@ void CWordlist::GetInfixedWords ( const char * sInfix, int iBytes, CSphVector<CS
 
 	ARRAY_FOREACH ( i, dPoints )
 	{
-		WordReaderContext_t tCtx;
-		const BYTE * pBuf = m_pBuf.GetWritePtr() + m_dCheckpoints[dPoints[i]-1].m_iWordlistOffset;
-		while ( pBuf )
+		KeywordsBlockReader_c tCtx ( m_pBuf.GetWritePtr() + m_dCheckpoints[dPoints[i]-1].m_iWordlistOffset );
+		while ( tCtx.UnpackWord() )
 		{
-			pBuf = UnpackWord ( pBuf, tCtx );
-			if ( !pBuf )
-				break;
-
-			const char * sCheck = strstr ( (const char*)tCtx.m_sWord, sInfix );
+			const char * sCheck = strstr ( tCtx.GetWord(), sInfix );
 			if ( !sCheck )
 				continue;
 			if ( !bTailStar && sCheck[iBytes] )
 				continue;
-
-			CSphNamedInt & tRes = dExpanded.Add();
-			tRes.m_sName = (const char*)tCtx.m_sWord;
-			if ( tCtx.m_iHits<=256 ) // magic threshold; mb make this configurable?
-				tRes.m_iValue = 1;
-			else
-				tRes.m_iValue = tCtx.m_iDocs + 1;
+			AddExpansion ( dExpanded, tCtx );
 		}
 	}
 

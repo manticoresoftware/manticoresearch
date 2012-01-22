@@ -1703,7 +1703,7 @@ class SphinxConfig
 				$idx = "index ".$match[$idxname][0];
 				if ( $match[$parent][0] != "" )
 					$idx .= " : ".$match[$parent][0];
-				$idx .= "\n{\n";
+				$idx .= "\n{\n\tdict = keywords\n";
 
 				$lines = explode("\n", $match[$content][0]);
 				$justcopy = false;

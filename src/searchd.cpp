@@ -13537,6 +13537,8 @@ void ConfigureIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex )
 }
 
 
+/// this gets called for every new physical index
+/// that is, local and RT indexes, but not distributed once
 bool PrereadNewIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex, const char * szIndexName )
 {
 	CSphString sWarning;
@@ -13550,6 +13552,10 @@ bool PrereadNewIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex, c
 	if ( !sWarning.IsEmpty() )
 		sphWarning ( "index '%s': %s", szIndexName, sWarning.cstr() );
 
+	// tricky bit
+	// fixup was initially intended for (very old) index formats that did not store dict/tokenizer settings
+	// however currently it also ends up configuring dict/tokenizer for fresh RT indexes!
+	// (and for existing RT indexes, settings get loaded during the Prealloc() call)
 	CSphString sError;
 	if ( !sphFixupIndexSettings ( tIdx.m_pIndex, hIndex, sError ) )
 	{

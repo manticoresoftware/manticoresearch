@@ -1073,8 +1073,27 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		pIndex->Setup ( tSettings );
 	}
 
-	pIndex->PostSetup();
+	// exact words fixup, needed for RT indexes
+	// cloned from indexer, remove somehow?
+	CSphDict * pDict = pIndex->GetDictionary();
+	assert ( pDict );
 
+	CSphIndexSettings tSettings = pIndex->GetSettings ();
+	if ( tSettings.m_bIndexExactWords && !pDict->HasMorphology() )
+	{
+		tSettings.m_bIndexExactWords = false;
+		pIndex->Setup ( tSettings );
+		fprintf ( stdout, "WARNING: no morphology, index_exact_words=1 has no effect, ignoring\n" );
+	}
+
+	if ( pDict->GetSettings().m_bWordDict && pDict->HasMorphology() && tSettings.m_iMinPrefixLen && !tSettings.m_bIndexExactWords )
+	{
+		tSettings.m_bIndexExactWords = true;
+		pIndex->Setup ( tSettings );
+		fprintf ( stdout, "WARNING: dict=keywords and prefixes and morphology enabled, forcing index_exact_words=1\n" );
+	}
+
+	pIndex->PostSetup();
 	return true;
 }
 

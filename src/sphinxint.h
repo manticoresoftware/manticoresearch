@@ -1328,8 +1328,8 @@ class ISphWordlist
 {
 public:
 	virtual ~ISphWordlist () {}
-	virtual void GetPrefixedWords ( const char * sWord, int iWordLen, CSphVector<CSphNamedInt> & dPrefixedWords, BYTE * pDictBuf, int iFD ) const = 0;
-	virtual void GetInfixedWords ( const char * sWord, int iWordLen, CSphVector<CSphNamedInt> & dPrefixedWords ) const = 0;
+	virtual void GetPrefixedWords ( const char * sPrefix, int iPrefix, const char * sWildcard, CSphVector<CSphNamedInt> & dPrefixedWords, BYTE * pDictBuf, int iFD ) const = 0;
+	virtual void GetInfixedWords ( const char * sInfix, int iInfix, const char * sWildcard, CSphVector<CSphNamedInt> & dPrefixedWords ) const = 0;
 };
 
 struct ExpansionContext_t

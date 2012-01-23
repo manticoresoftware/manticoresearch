@@ -1049,8 +1049,8 @@ private:
 	bool						SaveRamChunk ();
 
 	void						ComputeOutboundSchema();
-	virtual void				GetPrefixedWords ( const char * sWord, int iWordLen, CSphVector<CSphNamedInt> & dPrefixedWords, BYTE * pDictBuf, int iFD ) const;
-	virtual void				GetInfixedWords ( const char * sWord, int iWordLen, CSphVector<CSphNamedInt> & dPrefixedWords ) const;
+	virtual void				GetPrefixedWords ( const char * sPrefix, int iPrefix, const char * sWildcard, CSphVector<CSphNamedInt> & dPrefixedWords, BYTE * pDictBuf, int iFD ) const;
+	virtual void				GetInfixedWords ( const char * sInfix, int iInfix, const char * sWildcard, CSphVector<CSphNamedInt> & dPrefixedWords ) const;
 
 public:
 #if USE_WINDOWS
@@ -4071,7 +4071,7 @@ bool RtIndex_t::RtQwordSetupSegment ( RtQword_t * pQword, RtSegment_t * pCurSeg,
 }
 
 
-void RtIndex_t::GetPrefixedWords ( const char * sWord, int iWordLen, CSphVector<CSphNamedInt> & dPrefixedWords, BYTE *, int ) const
+void RtIndex_t::GetPrefixedWords ( const char * sWord, int iWordLen, const char * sWildcard, CSphVector<CSphNamedInt> & dPrefixedWords, BYTE *, int ) const
 {
 	SmallStringHash_T<int> hPrefixedWords;
 	ARRAY_FOREACH ( i, m_pSegments )
@@ -4134,7 +4134,7 @@ void RtIndex_t::GetPrefixedWords ( const char * sWord, int iWordLen, CSphVector<
 }
 
 
-void RtIndex_t::GetInfixedWords ( const char * sInfix, int iBytes, CSphVector<CSphNamedInt> & dExpanded ) const
+void RtIndex_t::GetInfixedWords ( const char * sInfix, int iBytes, const char * sWildcard, CSphVector<CSphNamedInt> & dExpanded ) const
 {
 	// sanity checks
 	if ( !sInfix || iBytes<=0 )

@@ -35,7 +35,9 @@
 #include <signal.h>
 #endif
 
-/////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////
+// STRING FUNCTIONS
+//////////////////////////////////////////////////////////////////////////
 
 static char * ltrim ( char * sLine )
 {
@@ -58,6 +60,89 @@ static char * rtrim ( char * sLine )
 static char * trim ( char * sLine )
 {
 	return ltrim ( rtrim ( sLine ) );
+}
+
+
+void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn )
+{
+	if ( !sIn )
+		return;
+
+	const char * p = (char*)sIn;
+	while ( *p )
+	{
+		// skip non-alphas
+		while ( (*p) && !sphIsAlpha(*p) )
+			p++;
+		if ( !(*p) )
+			break;
+
+		// this is my next token
+		assert ( sphIsAlpha(*p) );
+		const char * sNext = p;
+		while ( sphIsAlpha(*p) )
+			p++;
+		if ( sNext!=p )
+			dOut.Add().SetBinary ( sNext, p-sNext );
+	}
+
+}
+
+
+bool sphWildcardMatch ( const char * sString, const char * sPattern )
+{
+	if ( !sString || !sPattern )
+		return false;
+
+	const char * s = sString;
+	const char * p = sPattern;
+	while ( *s )
+	{
+		switch ( *p )
+		{
+		case '?':
+			// match any character
+			s++;
+			p++;
+			break;
+
+		case '*':
+			// skip all the extra stars and question marks
+			for ( p++; *p=='*' || *p=='?'; p++ )
+				if ( *p=='?' )
+				{
+					s++;
+					if ( !*s )
+						return p[1]=='\0';
+				}
+
+				// short-circuit trailing star
+				if ( !*p )
+					return true;
+
+				// so our wildcard expects a real character
+				// scan forward for its occurrences and recurse
+				for ( ;; )
+				{
+					if ( !*s )
+						return false;
+					if ( *s==*p && sphWildcardMatch ( s+1, p+1 ) )
+						return true;
+					s++;
+				}
+				break;
+
+		default:
+			// default case, strict match
+			if ( *s++!=*p++ )
+				return false;
+			break;
+		}
+	}
+
+	// string done
+	// pattern should be either done too, or a trailing star
+	return p[0]=='\0' || ( p[0]=='*' && p[1]=='\0' );
 }
 
 //////////////////////////////////////////////////////////////////////////

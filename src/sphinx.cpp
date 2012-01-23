@@ -1314,8 +1314,8 @@ public:
 	bool								GetWord ( const BYTE * pBuf, SphWordID_t iWordID, WordDictInfo_t & tWord ) const;
 
 	const BYTE *						AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint, int iFD, BYTE * pDictBuf ) const;
-	virtual void						GetPrefixedWords ( const char * sPrefix, int iPrefixLen, CSphVector<CSphNamedInt> & dExpanded, BYTE * pDictBuf, int iFD ) const;
-	virtual void						GetInfixedWords ( const char * sWord, int iWordLen, CSphVector<CSphNamedInt> & dPrefixedWords ) const;
+	virtual void						GetPrefixedWords ( const char * sPrefix, int iPrefixLen, const char * sWildcard, CSphVector<CSphNamedInt> & dExpanded, BYTE * pDictBuf, int iFD ) const;
+	virtual void						GetInfixedWords ( const char * sInfix, int iInfix, const char * sWildcard, CSphVector<CSphNamedInt> & dPrefixedWords ) const;
 
 private:
 	bool								m_bWordDict;
@@ -14489,6 +14489,14 @@ struct WordDocsGreaterOp_t
 };
 
 
+static inline bool IsWild ( char c )
+{
+	return c=='*' || c=='?';
+}
+
+
+/// do wildcard expansion for keywords dictionary
+/// (including prefix and infix expansion)
 XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 {
 	assert ( pNode );
@@ -14538,78 +14546,92 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 	if ( !tCtx.m_bStarEnabled )
 		return pNode;
 
-	// do expansion
-	CSphVector<CSphNamedInt> dPrefixedWords;
+	// check the wildcards
+	const char * sFull = pNode->m_dWords[0].m_sWord.cstr();
+	const int iLen = strlen ( sFull );
 
-	const CSphString & sFullWord = pNode->m_dWords[0].m_sWord;
-	int iWordLen = sFullWord.Length();
+	int iWilds = 0;
+	for ( const char * s = sFull; *s; s++ )
+		if ( IsWild(*s) )
+			iWilds++;
 
-	const bool bHeadStar = ( sFullWord.cstr()[0]=='*' );
-	const bool bTailStar = ( sFullWord.cstr()[iWordLen-1]=='*' ) && ( iWordLen>1 );
-
-	// no expansion needed
-	if ( !bHeadStar && !bTailStar )
+	// no wildcards, or just wildcards? do not expand
+	if ( !iWilds || iWilds==iLen )
 		return pNode;
 
-	if ( !bHeadStar || tCtx.m_iMinInfixLen==0 )
+	CSphVector<CSphNamedInt> dExpanded;
+	if ( !IsWild(*sFull) || tCtx.m_iMinInfixLen==0 )
 	{
 		// do prefix expansion
-		// remove trailing star modifier in any case
-		assert ( bTailStar );
-		const char * sAdjustedWord = sFullWord.cstr();
-		iWordLen--;
-
 		// remove exact form modifier, if any
-		if ( *sFullWord.cstr()=='=' )
+		const char * sPrefix = sFull;
+		if ( *sPrefix=='=' )
+			sPrefix++;
+
+		// skip leading wildcards
+		// (in case we got here on non-infixed index path)
+		const char * sWildcard = sPrefix;
+		while ( IsWild(*sPrefix) )
 		{
-			sAdjustedWord++;
-			iWordLen--;
+			sPrefix++;
+			sWildcard++;
 		}
 
-		// remove heading star in case it's an infix search against a non-infix index
-		if ( bHeadStar )
-		{
-			sAdjustedWord++;
-			iWordLen--;
-		}
-
-		// clamp the length
-		iWordLen  = Max ( iWordLen, 0 );
+		// compute non-wildcard prefix length
+		int iPrefix = 0;
+		for ( const char * s = sPrefix; *s && !IsWild(*s); s++ )
+			iPrefix++;
 
 		// do not expand prefixes under min_prefix_len
-		if ( iWordLen<tCtx.m_iMinPrefixLen )
+		if ( iPrefix<tCtx.m_iMinPrefixLen )
 			return pNode;
 
 		// prefix expansion should work on nonstemmed words only
-		CSphString sFixed;
+		char sFixed [ MAX_KEYWORD_BYTES ];
 		if ( tCtx.m_bHasMorphology )
 		{
-			sFixed = pNode->m_dWords[0].m_sWord.SubString ( sAdjustedWord-sFullWord.cstr(), iWordLen );
-			sFixed.SetSprintf ( "%c%s", MAGIC_WORD_HEAD_NONSTEMMED, sFixed.cstr() );
-			sAdjustedWord = sFixed.cstr();
-			iWordLen++;
+			sFixed[0] = MAGIC_WORD_HEAD_NONSTEMMED;
+			memcpy ( sFixed+1, sPrefix, iPrefix );
+			sPrefix = sFixed;
+			iPrefix++;
 		}
 
-		tCtx.m_pWordlist->GetPrefixedWords ( sAdjustedWord, iWordLen, dPrefixedWords, tCtx.m_pBuf, tCtx.m_iFD );
+		tCtx.m_pWordlist->GetPrefixedWords ( sPrefix, iPrefix, sWildcard, dExpanded, tCtx.m_pBuf, tCtx.m_iFD );
 
 	} else
 	{
 		// do infix expansion
-		// remove heading star modifier
-		assert ( bHeadStar );
-		const char * sAdjustedWord = sFullWord.cstr() + 1;
-		iWordLen = Max ( iWordLen-1, 0 );
+		assert ( IsWild(*sFull) );
+		assert ( tCtx.m_iMinInfixLen>0 );
+
+		// find the longest substring of non-wildcards
+		const char * sMaxInfix = NULL;
+		int iMaxInfix = 0;
+		int iCur = 0;
+
+		for ( const char * s = sFull; *s; s++ )
+		{
+			if ( IsWild(*s) )
+			{
+				iCur = 0;
+			} else if ( ++iCur > iMaxInfix )
+			{
+				sMaxInfix = s-iCur+1;
+				iMaxInfix = iCur;
+			}
+		}
 
 		// do not expand infixes under min_infix_len
-		if ( iWordLen<tCtx.m_iMinInfixLen )
+		if ( iMaxInfix < tCtx.m_iMinInfixLen )
 			return pNode;
 
-		tCtx.m_pWordlist->GetInfixedWords ( sAdjustedWord, iWordLen, dPrefixedWords );
+		// ignore heading star
+		tCtx.m_pWordlist->GetInfixedWords ( sMaxInfix, iMaxInfix, sFull, dExpanded );
 	}
 
 	// no real expansions?
 	// mark source word as expanded to prevent warning on terms mismatch in statistics
-	if ( !dPrefixedWords.GetLength() )
+	if ( !dExpanded.GetLength() )
 	{
 		pNode->m_dWords.Begin()->m_bExpanded = true;
 		return pNode;
@@ -14617,23 +14639,24 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 
 	// sort expansions by frequency desc
 	// clip the less frequent ones if needed, as they are likely misspellings
-	dPrefixedWords.Sort ( WordDocsGreaterOp_t() );
-	if ( tCtx.m_iExpansionLimit && tCtx.m_iExpansionLimit<dPrefixedWords.GetLength() )
-		dPrefixedWords.Resize ( tCtx.m_iExpansionLimit );
+	dExpanded.Sort ( WordDocsGreaterOp_t() );
+	if ( tCtx.m_iExpansionLimit && tCtx.m_iExpansionLimit<dExpanded.GetLength() )
+		dExpanded.Resize ( tCtx.m_iExpansionLimit );
 
 	// mark new words as expanded to skip theirs check on merge
 	// (expanded words differ across indexes)
-	ARRAY_FOREACH ( i, dPrefixedWords )
-		tCtx.m_pResult->AddStat ( dPrefixedWords[i].m_sName, 0, 0, true );
+	ARRAY_FOREACH ( i, dExpanded )
+		tCtx.m_pResult->AddStat ( dExpanded[i].m_sName, 0, 0, true );
 
 	// replace MAGIC_WORD_HEAD_NONSTEMMED symbol to '='
 	if ( tCtx.m_bHasMorphology )
-		ARRAY_FOREACH ( i, dPrefixedWords )
-			( (char *)dPrefixedWords[i].m_sName.cstr() )[0] = '=';
+		ARRAY_FOREACH ( i, dExpanded )
+			( (char *)dExpanded[i].m_sName.cstr() )[0] = '=';
 
-	// 
-	const XQKeyword_t tPrefixingWord = pNode->m_dWords[0];
-	BuildExpandedTree ( tPrefixingWord, dPrefixedWords, pNode );
+	// copy the original word (iirc it might get overwritten),
+	// and build a binary tree of all the expansions
+	const XQKeyword_t tRootWord = pNode->m_dWords[0];
+	BuildExpandedTree ( tRootWord, dExpanded, pNode );
 
 	return pNode;
 }
@@ -25013,15 +25036,17 @@ static inline void AddExpansion ( CSphVector<CSphNamedInt> & dExpanded, const Ke
 }
 
 								 
-void CWordlist::GetPrefixedWords ( const char * sPrefix, int iPrefixLen, CSphVector<CSphNamedInt> & dExpanded, BYTE * pDictBuf, int iFD ) const
+void CWordlist::GetPrefixedWords ( const char * sPrefix, int iPrefixLen, const char * sWildcard, CSphVector<CSphNamedInt> & dExpanded, BYTE * pDictBuf, int iFD ) const
 {
-	assert ( iPrefixLen>0 );
+	assert ( sPrefix && *sPrefix && iPrefixLen>0 );
+	assert ( sWildcard && *sWildcard );
 
 	// empty index?
 	if ( !m_dCheckpoints.GetLength() )
 		return;
 
 	const CSphWordlistCheckpoint * pCheckpoint = FindCheckpoint ( sPrefix, iPrefixLen, 0, true );
+	const int iSkipMagic = ( *sPrefix<0x20 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
 	while ( pCheckpoint )
 	{
 		// decode wordlist chunk
@@ -25034,8 +25059,8 @@ void CWordlist::GetPrefixedWords ( const char * sPrefix, int iPrefixLen, CSphVec
 			if ( iCmp<0 )
 				break;
 
-			// does the prefix match?
-			if ( iCmp==0 && iPrefixLen<=tCtx.GetWordLen() )
+			// does it match the prefix *and* the entire wildcard?
+			if ( iCmp==0 && sphWildcardMatch ( tCtx.GetWord() + iSkipMagic, sWildcard ) )
 				AddExpansion ( dExpanded, tCtx );
 		}
 
@@ -25145,20 +25170,15 @@ bool CWordlist::LookupInfixCheckpoints ( const char * sInfix, int iBytes, CSphVe
 }
 
 
-void CWordlist::GetInfixedWords ( const char * sInfix, int iBytes, CSphVector<CSphNamedInt> & dExpanded ) const
+void CWordlist::GetInfixedWords ( const char * sInfix, int iBytes, const char * sWildcard, CSphVector<CSphNamedInt> & dExpanded ) const
 {
 	// dict must be of keywords type, and fully cached
 	// mmap()ed in the worst case, should we ever banish it to disk again
-	assert ( !m_pBuf.IsEmpty() );
-	assert ( m_dCheckpoints.GetLength() );
-
 	if ( m_pBuf.IsEmpty() || !m_dCheckpoints.GetLength() )
+	{
+		assert ( 0 && "internal error: expansion vs empty keywords dict" );
 		return;
-
-	// handle trailing star
-	bool bTailStar = ( sInfix[iBytes-1]=='*' );
-	if ( bTailStar )
-		iBytes--;
+	}
 
 	// extract key1, upto 6 chars from infix start
 	int iBytes1 = Min ( 6, iBytes );
@@ -25179,24 +25199,14 @@ void CWordlist::GetInfixedWords ( const char * sInfix, int iBytes, CSphVector<CS
 		return;
 
 	// walk those checkpoints, check all their words
-	char cSave = sInfix[iBytes]; // for strstr() to work
-	const_cast<char*>(sInfix)[iBytes] = '\0';
-
 	ARRAY_FOREACH ( i, dPoints )
 	{
+		// OPTIMIZE? add a quicker path than a generic wildcard for "*infix*" case?
 		KeywordsBlockReader_c tCtx ( m_pBuf.GetWritePtr() + m_dCheckpoints[dPoints[i]-1].m_iWordlistOffset );
 		while ( tCtx.UnpackWord() )
-		{
-			const char * sCheck = strstr ( tCtx.GetWord(), sInfix );
-			if ( !sCheck )
-				continue;
-			if ( !bTailStar && sCheck[iBytes] )
-				continue;
-			AddExpansion ( dExpanded, tCtx );
-		}
+			if ( sphWildcardMatch ( tCtx.GetWord(), sWildcard ) )
+				AddExpansion ( dExpanded, tCtx );
 	}
-
-	const_cast<char*>(sInfix)[iBytes] = cSave;
 }
 
 //////////////////////////////////////////////////////////////////////////

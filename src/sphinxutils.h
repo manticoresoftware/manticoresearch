@@ -22,7 +22,7 @@
 #include <ctype.h>
 #include <stdarg.h>
 
-/////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////
 
 /// my own isalpha (let's build our own theme park!)
 inline int sphIsAlpha ( int c )
@@ -39,31 +39,12 @@ inline bool sphIsSpace ( int iCode )
 
 
 /// string splitter, extracts sequences of alphas (as in sphIsAlpha)
-inline void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn )
-{
-	if ( !sIn )
-		return;
+void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn );
 
-	const char * p = (char*)sIn;
-	while ( *p )
-	{
-		// skip non-alphas
-		while ( (*p) && !sphIsAlpha(*p) )
-			p++;
-		if ( !(*p) )
-			break;
+/// string wildcard matching (case-sensitive, supports * and ? patterns)
+bool sphWildcardMatch ( const char * sSstring, const char * sPattern );
 
-		// this is my next token
-		assert ( sphIsAlpha(*p) );
-		const char * sNext = p;
-		while ( sphIsAlpha(*p) )
-			p++;
-		if ( sNext!=p )
-			dOut.Add().SetBinary ( sNext, p-sNext );
-	}
-
-}
-
+//////////////////////////////////////////////////////////////////////////
 
 /// config section (hash of variant values)
 class CSphConfigSection : public SmallStringHash_T < CSphVariant >

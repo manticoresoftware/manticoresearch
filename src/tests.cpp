@@ -2207,6 +2207,39 @@ void BenchStemmer ()
 	SafeDeleteArray ( pRaw );
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+void TestWildcards()
+{
+	printf ( "testing wildcards... " );
+	assert ( sphWildcardMatch ( "abc", "abc" ) );
+	assert ( sphWildcardMatch ( "abc", "?bc" ) );
+	assert ( sphWildcardMatch ( "abc", "a?c" ) );
+	assert ( sphWildcardMatch ( "abc", "ab?" ) );
+	assert ( !sphWildcardMatch ( "abc", "?ab" ) );
+	assert ( sphWildcardMatch ( "abac", "a*c" ) );
+	assert ( sphWildcardMatch ( "abac", "a*?c" ) );
+	assert ( sphWildcardMatch ( "abac", "a*??c" ) );
+	assert ( sphWildcardMatch ( "abac", "a?*?c" ) );
+	assert ( !sphWildcardMatch ( "abac", "a*???c" ) );
+	assert ( sphWildcardMatch ( "abac", "a?a?" ) );
+	assert ( !sphWildcardMatch ( "abac", "a?a??" ) );
+	assert ( !sphWildcardMatch ( "abac", "a??a" ) );
+	assert ( sphWildcardMatch ( "abracadabra", "a*" ) );
+	assert ( sphWildcardMatch ( "abracadabra", "a*a" ) );
+	assert ( !sphWildcardMatch ( "abracadabra", "a*c" ) );
+	assert ( sphWildcardMatch ( "abracadabra", "?b*r?" ) );
+	assert ( sphWildcardMatch ( "abracadabra", "?b*r*" ) );
+	assert ( sphWildcardMatch ( "abracadabra", "?b*r*r*" ) );
+	assert ( sphWildcardMatch ( "abracadabra", "*a*a*a*" ) );
+	assert ( sphWildcardMatch ( "abracadabra", "*a*a*a*a*a*" ) );
+	assert ( !sphWildcardMatch ( "a", "a*a?" ) );
+	assert ( !sphWildcardMatch ( "abracadabra", "*a*a*a*a*a?" ) );
+	printf ( "ok\n" );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 int main ()
 {
 	printf ( "RUNNING INTERNAL LIBSPHINX TESTS\n\n" );
@@ -2237,6 +2270,7 @@ int main ()
 	TestRTSendVsMerge ();
 	TestSentenceTokenizer ();
 	TestSpanSearch ();
+	TestWildcards();
 #endif
 
 	unlink ( g_sTmpfile );

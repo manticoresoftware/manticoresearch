@@ -10404,7 +10404,7 @@ struct CmpColumns_fn
 };
 
 
-void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE uPacketID, bool bReplace, bool bCommit )
+void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE uPacketID, bool bReplace, bool bCommit, CSphString & sWarning )
 {
 	MEMORY ( SPH_MEM_INSERT_SQL );
 
@@ -10665,7 +10665,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 			break;
 
 		// do add
-		pIndex->AddDocument ( dFields.GetLength(), dFields.Begin(), tDoc, bReplace, dStrings.Begin(), dMvas, sError );
+		pIndex->AddDocument ( dFields.GetLength(), dFields.Begin(), tDoc, bReplace, dStrings.Begin(), dMvas, sError, sWarning );
 
 		if ( !sError.IsEmpty() )
 			break;
@@ -10686,7 +10686,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 	pServed->Unlock();
 
 	// my OK packet
-	SendMysqlOkPacket ( tOut, uPacketID, tStmt.m_iRowsAffected );
+	SendMysqlOkPacket ( tOut, uPacketID, tStmt.m_iRowsAffected, sWarning.IsEmpty() ? 0 : 1 );
 }
 
 
@@ -12230,7 +12230,10 @@ public:
 
 		case STMT_INSERT:
 		case STMT_REPLACE:
-			HandleMysqlInsert ( *pStmt, tOut, uPacketID, eStmt==STMT_REPLACE, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction );
+			m_tLastMeta = CSphQueryResultMeta();
+			m_tLastMeta.m_sError = m_sError;
+			m_tLastMeta.m_sWarning = "";
+			HandleMysqlInsert ( *pStmt, tOut, uPacketID, eStmt==STMT_REPLACE, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tLastMeta.m_sWarning );
 			return;
 
 		case STMT_DELETE:
@@ -13842,6 +13845,24 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 			return ADD_ERROR;
 		}
 
+		// pick config settings
+		// they should be overriden later by Preload() if needed
+		CSphIndexSettings tSettings;
+		if ( !sphConfIndex ( hIndex, tSettings, sError ) )
+		{
+			sphWarning ( "ERROR: index '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
+			return ADD_ERROR;
+		}
+
+		int iIndexSP = hIndex.GetInt ( "index_sp" );
+		const char * sIndexZones = hIndex.GetStr ( "index_zones", "" );
+		bool bHasStripEnabled ( hIndex.GetInt ( "html_strip" )!=0 );
+		if ( ( iIndexSP!=0 || ( *sIndexZones )!=NULL ) && !bHasStripEnabled )
+		{
+			sphWarning ( "ERROR: index '%s': has index_sp=%d, index_zones='%s' but disabled 'html_strip' - NOT SERVING", szIndexName, iIndexSP, sIndexZones );
+			return ADD_ERROR;
+		}
+
 		// RAM chunk size
 		int64_t iRamSize = hIndex.GetSize64 ( "rt_mem_limit", 32*1024*1024 );
 		if ( iRamSize<128*1024 )
@@ -13864,15 +13885,6 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		tIdx.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 		tIdx.m_pIndex->SetPreopen ( tIdx.m_bPreopen || g_bPreopenIndexes );
 		tIdx.m_pIndex->SetWordlistPreload ( !tIdx.m_bOnDiskDict && !g_bOnDiskDicts );
-
-		// pick config settings
-		// they should be overriden later by Preload() if needed
-		CSphIndexSettings tSettings;
-		if ( !sphConfIndex ( hIndex, tSettings, sError ) )
-		{
-			sphWarning ( "ERROR: index '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
-			return ADD_ERROR;
-		}
 
 		tIdx.m_pIndex->Setup ( tSettings );
 

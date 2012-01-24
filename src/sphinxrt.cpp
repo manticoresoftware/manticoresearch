@@ -791,6 +791,7 @@ public:
 	void			AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, int iRowSize, const char ** ppStr, const CSphVector<DWORD> & dMvas );
 	RtSegment_t *	CreateSegment ( int iRowSize, int iWordsCheckpoint );
 	void			CleanupDuplacates ( int iRowSize );
+	void			GrabLastWarning ( CSphString & sWarning );
 };
 
 /// TLS indexing accumulator (we disallow two uncommitted adds within one thread; and so need at most one)
@@ -1016,7 +1017,7 @@ public:
 	explicit					RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
 	virtual						~RtIndex_t ();
 
-	virtual bool				AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError );
+	virtual bool				AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning );
 	virtual bool				AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError );
 	virtual bool				DeleteDocument ( const SphDocID_t * pDocs, int iDocs, CSphString & sError );
 	virtual void				Commit ();
@@ -1344,7 +1345,7 @@ void CSphSource_StringVector::Disconnect ()
 	m_tHits.m_dData.Reset();
 }
 
-bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError )
+bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning )
 {
 	assert ( g_bRTChangesAllowed );
 
@@ -1372,8 +1373,19 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 		return false;
 
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( false ) ); // avoid race
-
 	CSphSource_StringVector tSrc ( iFields, ppFields, m_tOutboundSchema );
+
+	// SPZ setup
+	if ( m_tSettings.m_bIndexSP && !pTokenizer->EnableSentenceIndexing ( sError ) )
+		return false;
+
+	if ( !m_tSettings.m_sZones.IsEmpty() && !pTokenizer->EnableZoneIndexing ( sError ) )
+		return false;
+
+	if ( m_tSettings.m_bHtmlStrip && !tSrc.SetStripHTML ( m_tSettings.m_sHtmlIndexAttrs.cstr(), m_tSettings.m_sHtmlRemoveElements.cstr(),
+			m_tSettings.m_bIndexSP, m_tSettings.m_sZones.cstr(), sError ) )
+		return false;
+
 	tSrc.Setup ( m_tSettings );
 	tSrc.SetTokenizer ( pTokenizer.Ptr() );
 	tSrc.SetDict ( pAcc->m_pDict );
@@ -1386,7 +1398,7 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 		return false;
 
 	ISphHits * pHits = tSrc.IterateHits ( sError );
-
+	pAcc->GrabLastWarning ( sWarning );
 	return AddDocument ( pHits, tDoc, ppStr, dMvas, sError );
 }
 
@@ -1825,6 +1837,16 @@ void RtAccum_t::CleanupDuplacates ( int iRowSize )
 		}
 		m_iAccumDocs--;
 		m_dAccumRows.Resize ( m_iAccumDocs*iStride );
+	}
+}
+
+
+void RtAccum_t::GrabLastWarning ( CSphString & sWarning )
+{
+	if ( m_pDictRt && m_pDictRt->GetLastWarning() )
+	{
+		sWarning = m_pDictRt->GetLastWarning();
+		m_pDictRt->ResetWarning();
 	}
 }
 
@@ -2474,6 +2496,9 @@ void RtIndex_t::Commit ()
 	pAcc->m_pIndex = NULL;
 	pAcc->m_iAccumDocs = 0;
 	pAcc->m_dAccumKlist.Reset();
+	// reset accumulated warnings
+	CSphString sWarning;
+	pAcc->GrabLastWarning ( sWarning );
 }
 
 void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t> & dAccKlist )
@@ -3237,8 +3262,8 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, int iCheckpoints, SphOf
 	tWriter.PutByte ( m_tSettings.m_bIndexExactWords ? 1 : 0 );
 	tWriter.PutDword ( m_tSettings.m_eHitless );
 	tWriter.PutDword ( SPH_HIT_FORMAT_PLAIN );
-	tWriter.PutByte ( 0 ); // m_bIndexSP, v.21+
-	tWriter.PutString ( CSphString() ); // m_sZonePrefix, v.22+
+	tWriter.PutByte ( m_tSettings.m_bIndexSP ? 1 : 0 ); // m_bIndexSP, v.21+
+	tWriter.PutString ( m_tSettings.m_sZones ); // m_sZonePrefix, v.22+
 	tWriter.PutDword ( 0 ); // m_iBoundaryStep, v.23+
 	tWriter.PutDword ( 1 ); // m_iStopwordStep, v.23+
 
@@ -5229,10 +5254,13 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 	// we do not support some of the disk index features in RT just yet
 #define LOC_ERROR(_arg) { sError = _arg; return false; }
 	const CSphIndexSettings & tSettings = pIndex->GetSettings();
-	if ( tSettings.m_bIndexSP!=false )
-		LOC_ERROR ( "ATTACH currently requires index_sp=0 in disk index (RT-side support not implemented yet)" );
-	if ( !tSettings.m_sZones.IsEmpty() )
-		LOC_ERROR ( "ATTACH currently requires no zones in disk index (RT-side support not implemented yet)" );
+	if ( tSettings.m_bIndexSP!=m_tSettings.m_bIndexSP || tSettings.m_sZones!=m_tSettings.m_sZones || tSettings.m_bHtmlStrip!=m_tSettings.m_bHtmlStrip )
+	{
+		sError.SetSprintf ( "ATTACH indexes has different SPZ settings: plain-index (index_sp=%d, zones=%s, html_strip_mode=%d), rt-index (index_sp=%d, zones=%s, html_strip_mode=%d)",
+			tSettings.m_bIndexSP?1:0, tSettings.m_sZones.cstr(), tSettings.m_bHtmlStrip?1:0,
+			m_tSettings.m_bIndexSP?1:0, m_tSettings.m_sZones.cstr(), m_tSettings.m_bHtmlStrip?1:0 );
+		return false;
+	}
 	if ( tSettings.m_iBoundaryStep!=0 )
 		LOC_ERROR ( "ATTACH currently requires boundary_step=0 in disk index (RT-side support not implemented yet)" );
 	if ( tSettings.m_iStopwordStep!=1 )

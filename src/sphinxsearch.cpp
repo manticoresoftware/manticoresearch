@@ -3916,6 +3916,20 @@ void ExtUnit_c::Reset ( const ISphQwordSetup & tSetup )
 	m_pArg1->Reset ( tSetup );
 	m_pArg2->Reset ( tSetup );
 	m_pDot->Reset ( tSetup );
+
+	m_uHitsOverFor = 0;
+	m_uTailDocid = 0;
+	m_uTailSentenceEnd = 0;
+
+	m_pDocs1 = NULL;
+	m_pDocs2 = NULL;
+	m_pDotDocs = NULL;
+	m_pDoc1 = NULL;
+	m_pDoc2 = NULL;
+	m_pDotDoc = NULL;
+	m_pHit1 = NULL;
+	m_pHit2 = NULL;
+	m_pDotHit = NULL;
 	m_dMyHits[0].m_uDocid = DOCID_MAX;
 }
 

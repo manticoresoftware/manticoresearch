@@ -16,6 +16,8 @@ indexer
 searchd
 {
 	<searchd_settings/>
+	workers = threads
+	binlog_path = #
 }
 
 source test
@@ -42,6 +44,24 @@ index test
 		<Variant>exceptions = synonyms.txt</Variant>
 	</Dynamic>
 }
+
+index rt
+{
+	type			= rt
+	path			= <data_path/>/rt
+	
+	rt_field	= title
+	rt_attr_uint	= idd
+	
+	html_strip		= 1
+	index_sp		= 1
+	index_zones		= zone*
+	<Dynamic>
+		<Variant>dict = crc</Variant>
+		<Variant>dict = keywords</Variant>
+	</Dynamic>
+}
+
 
 </config>
 
@@ -112,5 +132,44 @@ You have gone away'));]]></db_insert>
 <query mode="extended2">ZONE:zoneA "like this"</query>
 <query mode="extended2">strikes</query>
 </queries>
+
+<sphqueries>
+<sphinxql><![CDATA[insert into rt values ( 1, 'One and one and one. And two. And three, all separate.', 1 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 2, 'And then we\'ll have him, one two three! Kidnap the Sandy Clawz...', 1 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 3, 'One two something. But not three.', 1 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 4, 'Two says hello to one more three.', 1 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 5, 'A ram zam zam. Zam ram!', 1 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 6, 'A ram zam zam, a ram zam zam, guli guli guli guli ram zam zam.', 1 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 101, 'In paragraph, yes. Not in sentence, no.', 2 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 200, '<zoneA>The time has come, <zoneB>the walrus said,</zoneB> to talk of many things.</zoneA>', 3 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 201, 'Of shoes, <zoneC>and ships</zoneC>, and sealing wax, of cabbages, <zoneC>, and kings.</zoneC>', 3 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 202, '<zoneA>Sweet dreams are made of this.</zoneA><zoneB>Who am I to disagree?</zoneB>', 3 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 300, '<zoneA>Sweet of this.</zoneA><zoneLongWord1LongWord2LongWord3LongWord4LongWord5LongWord6LongWord7LongWord8LongWord9LongWord10LongWord11LongWord12LongWord13LongWord14LongWord15LongWord16LongWord17LongWord18LongWord19LongWord20LongWord21LongWord22LongWord23LongWord24LongWord25>Who am I to disagree?</zoneLongWord1LongWord2LongWord3LongWord4LongWord5LongWord6LongWord7LongWord8LongWord9LongWord10LongWord11LongWord12LongWord13LongWord14LongWord15LongWord16LongWord17LongWord18LongWord19LongWord20LongWord21LongWord22LongWord23LongWord24LongWord25>', 4 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 301, '>I like this.</zoneA> Sweet of &#1;&#2;&#3; this.', 4 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 302, '<zoneA>I like this.</zoneA> Sweet of &#4; this.', 4 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 310, '<zoneA>I like this.</zoneA> Sweet of &#1;&#2;&#3; this.', 4 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 311, '<zoneA>I like this.</zoneA> Sweet of &#4; this.', 4 )]]></sphinxql>
+
+<sphinxql> select * from rt where match (' one SENTENCE two' ) </sphinxql>
+<sphinxql> select * from rt where match (' one SENTENCE two three' ) </sphinxql>
+<sphinxql> select * from rt where match (' one SENTENCE two SENTENCE three' ) </sphinxql>
+<sphinxql> select * from rt where match (' "one two" SENTENCE three' ) </sphinxql>
+<sphinxql> select * from rt where match (' zam SENTENCE ram' ) </sphinxql>
+
+<sphinxql> select * from rt where match (' fox PARAGRAPH dog' ) </sphinxql>
+<sphinxql> select * from rt where match (' sentence SENTENCE paragraph' ) </sphinxql>
+<sphinxql> select * from rt where match (' sentence PARAGRAPH paragraph' ) </sphinxql>
+
+<sphinxql> select * from rt where match (' ZONE:zoneA walrus' ) </sphinxql>
+<sphinxql> select * from rt where match (' ZONE:zoneB walrus' ) </sphinxql>
+<sphinxql> select * from rt where match (' ZONE:zoneA walrus time' ) </sphinxql>
+<sphinxql> select * from rt where match (' ZONE:zoneB walrus time' ) </sphinxql>
+<sphinxql> select * from rt where match (' ZONE:zoneC cabbages and kings' ) </sphinxql>
+<sphinxql> select * from rt where match (' ZONE:zoneC kings and ships' ) </sphinxql>
+<sphinxql> select * from rt where match (' ZONE:(zoneA,zoneB) sweet disagree' ) </sphinxql>
+<sphinxql> select * from rt where match (' "Who am I" ' ) </sphinxql>
+<sphinxql> select * from rt where match (' "of this" ' ) </sphinxql>
+<sphinxql> select * from rt where match (' ZONE:zoneA "like this" ' ) </sphinxql>
+</sphqueries>
 
 </test>

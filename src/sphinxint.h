@@ -1319,6 +1319,9 @@ public:
 	virtual int				GetPackedLen () = 0;
 
 	virtual void			ResetKeywords() = 0;
+
+	virtual const char *	GetLastWarning() const = 0;
+	virtual void			ResetWarning() = 0;
 };
 
 ISphRtDictWraper * sphCreateRtKeywordsDictionaryWrapper ( CSphDict * pBase );
@@ -1382,6 +1385,7 @@ public:
 		BYTE iDelta = (BYTE)( iLen - iMatch );
 		assert ( iDelta>0 );
 
+		assert ( iLen<sizeof(m_sLastKeyword) );
 		memcpy ( m_sLastKeyword, pWord, iLen );
 		m_iLastLen = iLen;
 

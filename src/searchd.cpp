@@ -4381,7 +4381,7 @@ bool FixupQuery ( CSphQuery * pQuery, const CSphSchema * pSchema, const char * s
 }
 
 
-void ParseIndexList ( const CSphString & sIndexes, CSphVector<CSphNamedInt> & dOut )
+void ParseIndexList ( const CSphString & sIndexes, CSphVector<CSphString> & dOut )
 {
 	CSphString sSplit = sIndexes;
 	char * p = (char*)sSplit.cstr();
@@ -4398,7 +4398,7 @@ void ParseIndexList ( const CSphString & sIndexes, CSphVector<CSphNamedInt> & dO
 		assert ( sNext!=p );
 		if ( *p ) *p++ = '\0'; // if it was not the end yet, we'll continue from next char
 
-		dOut.Add().m_sName = sNext;
+		dOut.Add ( sNext );
 	}
 }
 
@@ -6462,6 +6462,7 @@ protected:
 	void							RunLocalSearches ( ISphMatchSorter * pLocalSorter, const char * sDistName );
 	void							RunLocalSearchesMT ();
 	bool							RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters, CSphQueryResult ** pResults ) const;
+	bool							HasExpresions ( int iStart, int iEnd ) const;
 
 	CSphVector<DWORD>				m_dMvaStorage;
 	CSphVector<BYTE>				m_dStringsStorage;
@@ -6469,11 +6470,13 @@ protected:
 	int								m_iStart;		///< subset start
 	int								m_iEnd;			///< subset end
 	bool							m_bMultiQueue;	///< whether current subset is subject to multi-queue optimization
-	mutable CSphVector<CSphNamedInt>		m_dLocal;		///< local indexes for the current subset
+	CSphVector<CSphString>			m_dLocal;		///< local indexes for the current subset
 	mutable CSphVector<CSphSchemaMT>		m_dExtraSchemas; ///< the extra fields for agents
-	mutable CSphMutex				m_tLock;
 	bool							m_bSphinxql;	///< if the query get from sphinxql - to avoid applying sphinxql magick for others
 	CSphAttrUpdateEx *				m_pUpdates;		///< holder for updates
+
+	mutable CSphMutex				m_tLock;
+	mutable SmallStringHash_T<int>	m_hUsed;
 
 	const ServedIndex_t *			UseIndex ( int iLocal ) const;
 	void							ReleaseIndex ( int iLocal ) const;
@@ -6512,10 +6515,11 @@ SearchHandler_c::SearchHandler_c ( int iQueries, bool bSphinxql )
 SearchHandler_c::~SearchHandler_c ()
 {
 	m_tLock.Done();
-	ARRAY_FOREACH ( i, m_dLocal )
+	m_hUsed.IterateStart();
+	while ( m_hUsed.IterateNext() )
 	{
-		if ( m_dLocal[i].m_iValue>0 )
-			g_pIndexes->GetUnlockedEntry ( m_dLocal[i].m_sName ).Unlock();
+		if ( m_hUsed.IterateGet()>0 )
+			g_pIndexes->GetUnlockedEntry ( m_hUsed.IterateGetKey() ).Unlock();
 	}
 }
 
@@ -6523,25 +6527,32 @@ SearchHandler_c::~SearchHandler_c ()
 const ServedIndex_t * SearchHandler_c::UseIndex ( int iLocal ) const
 {
 	assert ( iLocal>=0 && iLocal<m_dLocal.GetLength() );
+	const CSphString & sName = m_dLocal[iLocal];
 	if ( g_eWorkers!=MPM_THREADS )
-		return g_pIndexes->GetRlockedEntry ( m_dLocal[iLocal].m_sName );
+		return g_pIndexes->GetRlockedEntry ( sName );
 
 	m_tLock.Lock();
-
-	int iUseCount = m_dLocal[iLocal].m_iValue;
-
-	assert ( ( m_pUpdates && iUseCount>0 ) || !m_pUpdates );
+	int * pUseCount = m_hUsed ( sName );
+	assert ( ( m_pUpdates && pUseCount && *pUseCount>0 ) || !m_pUpdates );
 
 	const ServedIndex_t * pServed = NULL;
-	if ( iUseCount )
-		pServed = &g_pIndexes->GetUnlockedEntry ( m_dLocal[iLocal].m_sName );
-	else
-		pServed = g_pIndexes->GetRlockedEntry ( m_dLocal[iLocal].m_sName );
-
-	m_dLocal[iLocal].m_iValue = iUseCount + (pServed!=NULL);
+	if ( pUseCount && *pUseCount>0 )
+	{
+		pServed = &g_pIndexes->GetUnlockedEntry ( sName );
+		*pUseCount += ( pServed!=NULL );
+	} else
+	{
+		pServed = g_pIndexes->GetRlockedEntry ( sName );
+		if ( pServed )
+		{
+			if ( pUseCount )
+				(*pUseCount)++;
+			else
+				m_hUsed.Add ( 1, sName );
+		}
+	}
 
 	m_tLock.Unlock();
-
 	return pServed;
 }
 
@@ -6552,16 +6563,17 @@ void SearchHandler_c::ReleaseIndex ( int iLocal ) const
 	if ( g_eWorkers!=MPM_THREADS )
 		return;
 
+	const CSphString & sName = m_dLocal[iLocal];
 	m_tLock.Lock();
 
-	int iUseCount = m_dLocal[iLocal].m_iValue - 1;
-	assert ( iUseCount>=0 );
-	m_dLocal[iLocal].m_iValue = iUseCount;
+	int * pUseCount = m_hUsed ( sName );
+	assert ( pUseCount && *pUseCount>=0 );
+	(*pUseCount)--;
 
-	if ( !iUseCount )
-		g_pIndexes->GetUnlockedEntry ( m_dLocal[iLocal].m_sName ).Unlock();
+	if ( !*pUseCount )
+		g_pIndexes->GetUnlockedEntry ( sName ).Unlock();
 
-	assert ( ( m_pUpdates && iUseCount>0 ) || !m_pUpdates );
+	assert ( ( m_pUpdates && pUseCount && *pUseCount ) || !m_pUpdates );
 
 	m_tLock.Unlock();
 }
@@ -6574,8 +6586,10 @@ void SearchHandler_c::RunUpdates ( const CSphQuery & tQuery, const CSphString & 
 	m_dQueries[0] = tQuery;
 	m_dQueries[0].m_sIndexes = sIndex;
 
-	m_dLocal.Add().m_sName = sIndex;
-	m_dLocal.Last().m_iValue = 1;
+	// lets add index to prevent deadlock
+	// as index already r-locker or w-locked at this point
+	m_dLocal.Add ( sIndex );
+	m_hUsed.Add ( 1, sIndex );
 
 	CheckQuery ( tQuery, *pUpdates->m_pError );
 	if ( !pUpdates->m_pError->IsEmpty() )
@@ -6852,7 +6866,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 	ARRAY_FOREACH ( iLocal, dLocals )
 	{
 		bool bResult = dLocals[iLocal].m_bResult;
-		const char * sLocal = m_dLocal[iLocal].m_sName.cstr();
+		const char * sLocal = m_dLocal[iLocal].cstr();
 
 		if ( !bResult )
 		{
@@ -7018,7 +7032,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 	CSphVector <int> dLocked;
 	ARRAY_FOREACH ( iLocal, m_dLocal )
 	{
-		const char * sLocal = m_dLocal[iLocal].m_sName.cstr();
+		const char * sLocal = m_dLocal[iLocal].cstr();
 
 		const ServedIndex_t * pServed = UseIndex ( iLocal );
 		if ( !pServed )
@@ -7184,21 +7198,26 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 
 
 // check expressions into a query to make sure that it's ready for multi query optimization
-static bool HasExpresions ( const CSphQuery & tQuery, const CSphVector<CSphNamedInt>& m_dIndices )
+bool SearchHandler_c::HasExpresions ( int iStart, int iEnd ) const
 {
-	ARRAY_FOREACH ( i, m_dIndices )
+	ARRAY_FOREACH ( i, m_dLocal )
 	{
-		const ServedIndex_t * pServedIndex = g_pIndexes->GetRlockedEntry ( m_dIndices[i].m_sName );
+		const ServedIndex_t * pServedIndex = UseIndex ( i );
 
 		// check that it exists
-		if ( !pServedIndex )
-			return false;
+		if ( !pServedIndex || !pServedIndex->m_bEnabled )
+		{
+			if ( pServedIndex )
+				ReleaseIndex ( i );
+			continue;
+		}
 
 		bool bHasExpression = false;
-		if ( pServedIndex->m_bEnabled )
-			bHasExpression = sphHasExpressions ( tQuery, pServedIndex->m_pIndex->GetMatchSchema() );
+		const CSphSchema & tSchema = pServedIndex->m_pIndex->GetMatchSchema();
+		for ( int iCheck=iStart; iCheck<=iEnd && !bHasExpression; iCheck++ )
+			bHasExpression = sphHasExpressions ( m_dQueries[iCheck], tSchema );
 
-		pServedIndex->Unlock();
+		ReleaseIndex ( i );
 
 		if ( bHasExpression )
 			return true;
@@ -7211,7 +7230,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 {
 	m_iStart = iStart;
 	m_iEnd = iEnd;
-	m_dLocal.Reset ();
+	m_dLocal.Reset();
 
 	// all my stats
 	int64_t tmSubset = sphMicroTimer();
@@ -7299,7 +7318,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			// search through all local indexes
 			for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
 				if ( it.Get ().m_bEnabled )
-					m_dLocal.Add().m_sName = it.GetKey();
+					m_dLocal.Add ( it.GetKey() );
 		} else
 		{
 			// search through specified local indexes
@@ -7310,7 +7329,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			g_tDistLock.Lock();
 
 			ARRAY_FOREACH ( i, m_dLocal )
-				if ( g_hDistIndexes.Exists ( m_dLocal[i].m_sName ) )
+				if ( g_hDistIndexes.Exists ( m_dLocal[i] ) )
 				{
 					iDistFound = i;
 					break;
@@ -7321,27 +7340,27 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			if ( iDistFound!=-1 )
 			{
 				for ( int iRes=iStart; iRes<=iEnd; iRes++ )
-					m_dResults[iRes].m_sError.SetSprintf ( "distributed index '%s' in multi-index query found", m_dLocal[iDistFound].m_sName.cstr() );
+					m_dResults[iRes].m_sError.SetSprintf ( "distributed index '%s' in multi-index query found", m_dLocal[iDistFound].cstr() );
 				return;
 			}
 
 			ARRAY_FOREACH ( i, m_dLocal )
 			{
-				const ServedIndex_t * pServedIndex = g_pIndexes->GetRlockedEntry ( m_dLocal[i].m_sName );
+				const ServedIndex_t * pServedIndex = UseIndex ( i );
 
 				// check that it exists
 				if ( !pServedIndex )
 				{
 					for ( int iRes=iStart; iRes<=iEnd; iRes++ )
-						m_dResults[iRes].m_sError.SetSprintf ( "unknown local index '%s' in search request", m_dLocal[i].m_sName.cstr() );
+						m_dResults[iRes].m_sError.SetSprintf ( "unknown local index '%s' in search request", m_dLocal[i].cstr() );
 					return;
 				}
 
+				bool bEnabled = pServedIndex->m_bEnabled;
+				ReleaseIndex ( i );
 				// if it exists but is not enabled, remove it from the list and force recheck
-				if ( !pServedIndex->m_bEnabled )
+				if ( !bEnabled )
 					m_dLocal.Remove ( i-- );
-
-				pServedIndex->Unlock();
 			}
 		}
 
@@ -7358,14 +7377,16 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		// copy local indexes list from distributed definition, but filter out disabled ones
 		ARRAY_FOREACH ( i, dDistLocal )
 		{
-			const ServedIndex_t * pServedIndex = g_pIndexes->GetRlockedEntry ( dDistLocal[i] );
-			if ( pServedIndex )
-			{
-				if ( pServedIndex->m_bEnabled )
-					m_dLocal.Add().m_sName = dDistLocal[i];
+			int iDistLocal = m_dLocal.GetLength();
+			m_dLocal.Add ( dDistLocal[i] );
 
-				pServedIndex->Unlock();
-			}
+			const ServedIndex_t * pServedIndex = UseIndex ( iDistLocal );
+			bool bValidLocalIndex = pServedIndex && pServedIndex->m_bEnabled;
+			if ( pServedIndex )
+				ReleaseIndex ( iDistLocal );
+
+			if ( !bValidLocalIndex )
+				m_dLocal.Pop();
 		}
 	}
 
@@ -7378,17 +7399,17 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	{
 		CSphString sError;
 
-		// check if all schemas are equal
+		// check if all schemes are equal
 		bool bAllEqual = true;
 
-		const ServedIndex_t * pFirstIndex = g_pIndexes->GetRlockedEntry ( m_dLocal[0].m_sName );
+		const ServedIndex_t * pFirstIndex = UseIndex ( 0 );
 		if ( !pFirstIndex )
 			break;
 
 		const CSphSchema & tFirstSchema = pFirstIndex->m_pIndex->GetMatchSchema();
 		for ( int i=1; i<m_dLocal.GetLength() && bAllEqual; i++ )
 		{
-			const ServedIndex_t * pNextIndex = g_pIndexes->GetRlockedEntry ( m_dLocal[i].m_sName );
+			const ServedIndex_t * pNextIndex = UseIndex ( i );
 			if ( !pNextIndex )
 			{
 				bAllEqual = false;
@@ -7398,7 +7419,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			if ( !tFirstSchema.CompareTo ( pNextIndex->m_pIndex->GetMatchSchema(), sError ) )
 				bAllEqual = false;
 
-			pNextIndex->Unlock();
+			ReleaseIndex ( i );
 		}
 
 		// we can reuse the very same sorter
@@ -7409,14 +7430,14 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			pLocalSorter = sphCreateQueue ( &m_dQueries[iStart], tFirstSchema, sError, true, pExtraSchemaMT );
 		}
 
-		pFirstIndex->Unlock ();
+		ReleaseIndex ( 0 );
 		break;
 	}
 
 	// select lists must have no expressions
-	for ( int iCheck=iStart; iCheck<=iEnd && m_bMultiQueue; iCheck++ )
+	if ( m_bMultiQueue )
 	{
-		m_bMultiQueue = !HasExpresions ( m_dQueries[iCheck], m_dLocal );
+		m_bMultiQueue = !HasExpresions ( iStart, iEnd );
 	}
 
 	// these are mutual exclusive
@@ -9684,7 +9705,7 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq )
 	}
 
 	// check index names
-	CSphVector<CSphNamedInt> dIndexNames;
+	CSphVector<CSphString> dIndexNames;
 	ParseIndexList ( sIndexes, dIndexNames );
 
 	if ( !dIndexNames.GetLength() )
@@ -9696,11 +9717,11 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq )
 	CSphVector<DistributedIndex_t> dDistributed ( dIndexNames.GetLength() ); // lock safe storage for distributed indexes
 	ARRAY_FOREACH ( i, dIndexNames )
 	{
-		if ( !g_pIndexes->Exists ( dIndexNames[i].m_sName ) )
+		if ( !g_pIndexes->Exists ( dIndexNames[i] ) )
 		{
 			// search amongst distributed and copy for further processing
 			g_tDistLock.Lock();
-			const DistributedIndex_t * pDistIndex = g_hDistIndexes ( dIndexNames[i].m_sName );
+			const DistributedIndex_t * pDistIndex = g_hDistIndexes ( dIndexNames[i] );
 
 			if ( pDistIndex )
 			{
@@ -9713,7 +9734,7 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq )
 				continue;
 			else
 			{
-				tReq.SendErrorReply ( "unknown index '%s' in update request", dIndexNames[i].m_sName.cstr() );
+				tReq.SendErrorReply ( "unknown index '%s' in update request", dIndexNames[i].cstr() );
 				return;
 			}
 		}
@@ -9726,7 +9747,7 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq )
 
 	ARRAY_FOREACH ( iIdx, dIndexNames )
 	{
-		const char * sReqIndex = dIndexNames[iIdx].m_sName.cstr();
+		const char * sReqIndex = dIndexNames[iIdx].cstr();
 		const ServedIndex_t * pLocked = UpdateGetLockedIndex ( sReqIndex, bMvaUpdate );
 		if ( pLocked )
 		{
@@ -10144,7 +10165,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 		assert ( iLength>=0 && iLength<=g_iMaxPacketSize );
 		if ( iLength && !tBuf.ReadFrom ( iLength ) )
 		{
-			sphWarning ( "failed to receive client request body (client=%s, exp=%d)", sClientIP, iLength );
+			sphWarning ( "failed to receive client request body (client=%s, exp=%d, error='%s')", sClientIP, iLength, sphSockError() );
 			return;
 		}
 
@@ -10367,7 +10388,8 @@ void SendMysqlOkPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, int iAffected
 	tOut.SendBytes ( sVarLen, iLen );	// packed affected rows & insert_id
 	if ( iWarns<0 ) iWarns = 0;
 	if ( iWarns>65535 ) iWarns = 65535;
-	tOut.SendLSBDword ( iWarns );		// N warnings, 0 status
+	DWORD uWarnStatus = iWarns<<16;
+	tOut.SendLSBDword ( uWarnStatus );		// N warnings, 0 status
 	if ( iMsgLen > 0 )
 		tOut.SendBytes ( sMessage, iMsgLen );
 }
@@ -11180,7 +11202,7 @@ void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt
 	CSphString sError;
 
 	// check index names
-	CSphVector<CSphNamedInt> dIndexNames;
+	CSphVector<CSphString> dIndexNames;
 	ParseIndexList ( tStmt.m_sIndex, dIndexNames );
 
 	if ( !dIndexNames.GetLength() )
@@ -11193,11 +11215,11 @@ void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt
 	CSphVector<DistributedIndex_t> dDistributed ( dIndexNames.GetLength() ); // lock safe storage for distributed indexes
 	ARRAY_FOREACH ( i, dIndexNames )
 	{
-		if ( !g_pIndexes->Exists ( dIndexNames[i].m_sName ) )
+		if ( !g_pIndexes->Exists ( dIndexNames[i] ) )
 		{
 			// search amongst distributed and copy for further processing
 			g_tDistLock.Lock();
-			const DistributedIndex_t * pDistIndex = g_hDistIndexes ( dIndexNames[i].m_sName );
+			const DistributedIndex_t * pDistIndex = g_hDistIndexes ( dIndexNames[i] );
 
 			if ( pDistIndex )
 			{
@@ -11210,7 +11232,7 @@ void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt
 				continue;
 			else
 			{
-				sError.SetSprintf ( "unknown index '%s' in update request", dIndexNames[i].m_sName.cstr() );
+				sError.SetSprintf ( "unknown index '%s' in update request", dIndexNames[i].cstr() );
 				SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 				return;
 			}
@@ -11232,7 +11254,7 @@ void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt
 
 	ARRAY_FOREACH ( iIdx, dIndexNames )
 	{
-		const char * sReqIndex = dIndexNames[iIdx].m_sName.cstr();
+		const char * sReqIndex = dIndexNames[iIdx].cstr();
 		const ServedIndex_t * pLocked = UpdateGetLockedIndex ( sReqIndex, bMvaUpdate );
 		if ( pLocked )
 		{

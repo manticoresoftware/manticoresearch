@@ -1064,7 +1064,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTok
 	const int OPTION_RELAXED_LEN = strlen ( OPTION_RELAXED );
 
 	m_bStopOnInvalid = true;
-	if ( strncmp ( sQuery, OPTION_RELAXED, OPTION_RELAXED_LEN )==0 && !sphIsAlpha ( sQuery[OPTION_RELAXED_LEN] ) )
+	if ( sQuery && strncmp ( sQuery, OPTION_RELAXED, OPTION_RELAXED_LEN )==0 && !sphIsAlpha ( sQuery[OPTION_RELAXED_LEN] ) )
 	{
 		sQuery += OPTION_RELAXED_LEN;
 		m_bStopOnInvalid = false;
@@ -1073,7 +1073,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTok
 	// setup parser
 	m_pParsed = &tParsed;
 	m_sQuery = (BYTE*) sQuery;
-	m_iQueryLen = strlen(sQuery);
+	m_iQueryLen = sQuery ? strlen(sQuery) : 0;
 	m_pTokenizer = pMyTokenizer.Ptr();
 	m_pSchema = pSchema;
 	m_pDict = pDict;

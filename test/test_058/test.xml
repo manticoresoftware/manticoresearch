@@ -34,6 +34,32 @@ index index
 	source = sql
 	path = <data_path/>/index
 }
+
+source locs
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = select id, text from test_table;
+}
+
+index loc1
+{
+	source = locs
+	path = <data_path/>/loc1
+}
+
+index loc2
+{
+	source = locs
+	path = <data_path/>/loc2
+}
+
+index loc3
+{
+	source = locs
+	path = <data_path/>/loc3
+}
 </config>
 
 <db_drop>drop table if exists test_table</db_drop>
@@ -64,13 +90,34 @@ insert into test_table values
 
 <custom_test><![CDATA[
 
-$query = create_function('$client,$words','$result = $client->Query ( $words );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError(); ');
+$query = create_function('$client,$words','
+$result = $client->Query ( $words, "index" );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError();
+');
+
+$mquery = create_function('$client','
+$client->AddQuery ( "second", "loc1" );
+$client->AddQuery ( "fifth", "loc2" );
+$client->AddQuery ( "third", "loc3" );
+	
+$res = $client->RunQueries ();
+if ( !$res )
+	return $client->GetLastError();
+	
+$result = array ();
+for ( $i=0; $i<count($res); $i++ ) 
+{
+	unset ( $res[$i]["time"] );
+	$result[] = $res[$i];
+}
+return $result;
+');
 
 $results = array();
 $errors = '';
 
 $results[] = $query ( $client, 'first' );
 $results[] = $query ( $client, 'one' );
+$results[] = $mquery ( $client );
 
 mysql_query ( 'update test_table set mode = 3 where id = 1000' );
 RunIndexer ( $errors, '--all --rotate' );
@@ -78,6 +125,7 @@ sleep(2);
 
 $results[] = $query ( $client, 'first' );
 $results[] = $query ( $client, 'one' );
+$results[] = $mquery ( $client );
 
 mysql_query ( 'update test_table set mode = 2 where id = 1000' );
 RunIndexer ( $errors, '--all --rotate' );
@@ -85,6 +133,7 @@ sleep(2);
 
 $results[] = $query ( $client, 'first' );
 $results[] = $query ( $client, 'one' );
+$results[] = $mquery ( $client );
 
 ]]></custom_test>
 

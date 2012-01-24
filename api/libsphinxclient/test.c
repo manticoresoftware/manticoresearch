@@ -360,7 +360,7 @@ void test_status ( sphinx_client * client )
 	k = 0;
 	for ( i=0; i<num_rows; i++ )
 	{
-		if ( !g_smoke || ( strstr ( status[k], "time" )==NULL && strstr ( status[k], "wall" )==NULL ) )
+		if ( !g_smoke || ( strstr ( status[k], "time" )==NULL && strstr ( status[k], "wall" )==NULL && strstr ( status[k], "wait" )==NULL ) )
 		{
 			for ( j=0; j<num_cols; j++, k++ )
 				printf ( ( j==0 ) ? "%s:" : " %s", status[k] );

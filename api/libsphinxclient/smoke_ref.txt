@@ -216,12 +216,10 @@ ag_dist_0_wrong_replies: 0
 ag_dist_0_unexpected_closings: 0
 query_cpu: OFF
 dist_local: 0.000
-dist_wait: 0.002
 query_reads: OFF
 query_readkb: OFF
 avg_query_cpu: OFF
 avg_dist_local: 0.000
-avg_dist_wait: 0.002
 avg_query_reads: OFF
 avg_query_readkb: OFF
 

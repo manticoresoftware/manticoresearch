@@ -2246,6 +2246,13 @@ public:
 	explicit	NetOutputBuffer_c ( int iSock );
 
 	bool		SendInt ( int iValue )			{ return SendT<int> ( htonl ( iValue ) ); }
+	bool		SendInt64AsInt ( int64_t iValue ) ///< sends the 32bit MAX_UINT if the value is greater than it.
+		{
+			if ( iValue > (unsigned int)-1 )
+				return SendInt ( -1 );
+			else
+				return SendInt ( iValue );
+		}
 	bool		SendDword ( DWORD iValue )		{ return SendT<DWORD> ( htonl ( iValue ) ); }
 	bool		SendLSBDword ( DWORD v )		{ SendByte ( (BYTE)( v&0xff ) ); SendByte ( (BYTE)( (v>>8)&0xff ) ); SendByte ( (BYTE)( (v>>16)&0xff ) ); return SendByte ( (BYTE)( (v>>24)&0xff) ); }
 	bool		SendWord ( WORD iValue )		{ return SendT<WORD> ( htons ( iValue ) ); }
@@ -4210,7 +4217,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 
 		// read totals (retrieved count, total count, query time, word count)
 		int iRetrieved = tReq.GetInt ();
-		tRes.m_iTotalMatches = tReq.GetInt ();
+		tRes.m_iTotalMatches = (unsigned int)tReq.GetInt ();
 		tRes.m_iQueryTime = tReq.GetInt ();
 		const int iWordsCount = tReq.GetInt (); // FIXME! sanity check?
 		if ( iRetrieved!=iMatches )
@@ -4223,8 +4230,8 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 		for ( int i=0; i<iWordsCount; i++ )
 		{
 			const CSphString sWord = tReq.GetString ();
-			const int iDocs = tReq.GetInt ();
-			const int iHits = tReq.GetInt ();
+			const int64_t iDocs = (unsigned int)tReq.GetInt ();
+			const int64_t iHits = (unsigned int)tReq.GetInt ();
 			const bool bExpanded = ( tReq.GetByte()!=0 ); // agents always send expanded flag to master
 
 			tRes.AddStat ( sWord, iDocs, iHits, bExpanded );
@@ -4867,7 +4874,7 @@ void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 	// [matchmode/numfilters/sortmode matches (offset,limit)
 	static const char * sModes [ SPH_MATCH_TOTAL ] = { "all", "any", "phr", "bool", "ext", "scan", "ext2" };
 	static const char * sSort [ SPH_SORT_TOTAL ] = { "rel", "attr-", "attr+", "tsegs", "ext", "expr" };
-	p += snprintf ( p, pMax-p, " [%s/%d/%s %d (%d,%d)",
+	p += snprintf ( p, pMax-p, " [%s/%d/%s "INT64_FMT" (%d,%d)",
 		sModes [ tQuery.m_eMode ], tQuery.m_dFilters.GetLength(), sSort [ tQuery.m_eSort ],
 		tRes.m_iTotalMatches, tQuery.m_iOffset, tQuery.m_iLimit );
 
@@ -5103,10 +5110,10 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 	tBuf.Append ( "/""* " );
 	tBuf.AppendCurrentTime();
 	if ( tRes.m_iMultiplier>1 )
-		tBuf.Append ( " conn %d wall %d.%03d x%d found %d *""/ ",
+		tBuf.Append ( " conn %d wall %d.%03d x%d found "INT64_FMT" *""/ ",
 			iCid, iQueryTime/1000, iQueryTime%1000, tRes.m_iMultiplier, tRes.m_iTotalMatches );
 	else
-		tBuf.Append ( " conn %d wall %d.%03d found %d *""/ ",
+		tBuf.Append ( " conn %d wall %d.%03d found "INT64_FMT" *""/ ",
 			iCid, iQueryTime/1000, iQueryTime%1000, tRes.m_iTotalMatches );
 
 	///////////////////////////////////
@@ -5630,7 +5637,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 		}
 	}
 	tOut.SendInt ( pRes->m_dMatches.GetLength() );
-	tOut.SendInt ( pRes->m_iTotalMatches );
+	tOut.SendInt64AsInt ( pRes->m_iTotalMatches );
 	tOut.SendInt ( Max ( pRes->m_iQueryTime, 0 ) );
 	tOut.SendInt ( pRes->m_hWordStats.GetLength() );
 
@@ -5639,8 +5646,8 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 	{
 		const CSphQueryResultMeta::WordStat_t & tStat = pRes->m_hWordStats.IterateGet();
 		tOut.SendString ( pRes->m_hWordStats.IterateGetKey().cstr() );
-		tOut.SendInt ( tStat.m_iDocs );
-		tOut.SendInt ( tStat.m_iHits );
+		tOut.SendInt64AsInt ( tStat.m_iDocs );
+		tOut.SendInt64AsInt ( tStat.m_iHits );
 		if ( bExtendedStat )
 			tOut.SendByte ( tStat.m_bExpanded );
 	}
@@ -9939,7 +9946,7 @@ void BuildMeta ( CSphVector<CSphString> & dStatus, const CSphQueryResultMeta & t
 	dStatus.Add().SetSprintf ( "%d", tMeta.m_iMatches );
 
 	dStatus.Add ( "total_found" );
-	dStatus.Add().SetSprintf ( "%d", tMeta.m_iTotalMatches );
+	dStatus.Add().SetSprintf ( INT64_FMT, tMeta.m_iTotalMatches );
 
 	dStatus.Add ( "time" );
 	dStatus.Add().SetSprintf ( "%d.%03d", tMeta.m_iQueryTime/1000, tMeta.m_iQueryTime%1000 );
@@ -9954,10 +9961,10 @@ void BuildMeta ( CSphVector<CSphString> & dStatus, const CSphQueryResultMeta & t
 		dStatus.Add ( tMeta.m_hWordStats.IterateGetKey() );
 
 		dStatus.Add().SetSprintf ( "docs[%d]", iWord );
-		dStatus.Add().SetSprintf ( "%d", tStat.m_iDocs );
+		dStatus.Add().SetSprintf ( INT64_FMT, tStat.m_iDocs );
 
 		dStatus.Add().SetSprintf ( "hits[%d]", iWord );
-		dStatus.Add().SetSprintf ( "%d", tStat.m_iHits );
+		dStatus.Add().SetSprintf ( INT64_FMT, tStat.m_iHits );
 
 		iWord++;
 	}
@@ -15436,7 +15443,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 		int iThreadStackSizeMax = 8*1024*1024;
 		int iStackSize = hSearchd.GetSize ( "thread_stack", iThreadStackSizeMin );
 		if ( iStackSize<iThreadStackSizeMin || iStackSize>iThreadStackSizeMax )
-			sphWarning ( "thread_stack out of bounds (64K..8M); clamped", iStackSize );
+			sphWarning ( "thread_stack %d out of bounds (64K..8M); clamped", iStackSize );
 
 		iStackSize = Min ( iStackSize, iThreadStackSizeMax );
 		iStackSize = Max ( iStackSize, iThreadStackSizeMin );

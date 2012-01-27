@@ -2312,8 +2312,8 @@ public:
 
 	struct WordStat_t
 	{
-		int					m_iDocs;			///< document count for this term
-		int					m_iHits;			///< hit count for this term
+		int64_t					m_iDocs;			///< document count for this term
+		int64_t					m_iHits;			///< hit count for this term
 		bool				m_bExpanded;		///< is this term from query itself or was expanded
 
 		WordStat_t()
@@ -2325,14 +2325,14 @@ public:
 	SmallStringHash_T<WordStat_t>	m_hWordStats; ///< hash of i-th search term (normalized word form)
 
 	int						m_iMatches;			///< total matches returned (upto MAX_MATCHES)
-	int						m_iTotalMatches;	///< total matches found (unlimited)
+	int64_t					m_iTotalMatches;	///< total matches found (unlimited)
 
 	CSphString				m_sError;			///< error message
 	CSphString				m_sWarning;			///< warning message
 
 	CSphQueryResultMeta ();													///< ctor
 	virtual					~CSphQueryResultMeta () {}						///< dtor
-	void					AddStat ( const CSphString & sWord, int iDocs, int iHits, bool bExpanded );
+	void					AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits, bool bExpanded );
 
 	CSphQueryResultMeta ( const CSphQueryResultMeta & tMeta );				///< copy ctor
 	CSphQueryResultMeta & operator= ( const CSphQueryResultMeta & tMeta );	///< copy
@@ -2499,7 +2499,7 @@ class ISphMatchSorter
 {
 public:
 	bool				m_bRandomize;
-	int					m_iTotal;
+	int64_t				m_iTotal;
 
 protected:
 	CSphSchema			m_tSchema;		///< sorter schema (adds dynamic attributes on top of index schema)
@@ -2547,7 +2547,7 @@ public:
 	virtual int			GetLength () const = 0;
 
 	/// get total count of non-duplicates Push()ed through this queue
-	virtual int			GetTotalCount () const { return m_iTotal; }
+	virtual int64_t		GetTotalCount () const { return m_iTotal; }
 
 	/// get first entry ptr
 	/// used for docinfo lookup

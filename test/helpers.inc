@@ -1486,6 +1486,10 @@ class SphinxConfig
 		if ( !is_array ( $this->_results_model [ $this->SubtestNo() ] ) )
 			return;
 
+		fwrite ( $fp, "Run settings:\n" );
+		$this->WriteDiff ( $fp );
+		fwrite ( $fp, "\n" );
+
 		foreach ( $this->_results_model [ $this->SubtestNo() ] as $ref )
 		{
 			$cur = $this->_results[$nquery];

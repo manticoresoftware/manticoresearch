@@ -12960,6 +12960,7 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 		LoadDictionarySettings ( rdInfo, tDictSettings, m_uVersion, sWarning );
 		if ( m_bId32to64 )
 			tDictSettings.m_bCrc32 = true;
+		m_bWordDict = tDictSettings.m_bWordDict;
 
 		if ( bStripPath )
 		{
@@ -14345,6 +14346,47 @@ static XQNode_t * ExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & t
 	return ExpandKeyword ( pNode, tSettings );
 }
 
+
+static inline bool IsWild ( char c )
+{
+	return c=='*' || c=='?';
+}
+
+
+static void AdjustStars ( XQNode_t * pNode, const CSphIndexSettings & tSettings )
+{
+	if ( pNode->m_dChildren.GetLength() )
+	{
+		ARRAY_FOREACH ( i, pNode->m_dChildren )
+			AdjustStars ( pNode->m_dChildren[i], tSettings );
+		return;
+	}
+
+	ARRAY_FOREACH ( i, pNode->m_dWords )
+	{
+		CSphString & sWord = pNode->m_dWords[i].m_sWord;
+
+		// trim all wildcards
+		const char * s = sWord.cstr();
+		int iLen = sWord.Length();
+		while ( iLen>0 && IsWild ( s[iLen-1] ) )
+			iLen--;
+		while ( iLen>0 && IsWild(*s) )
+		{
+			s++;
+			iLen--;
+		}
+		sWord = sWord.SubString ( (int)( s-sWord.cstr() ), iLen );
+
+		// and now append stars if needed
+		if ( tSettings.m_iMinPrefixLen>0 && iLen>=tSettings.m_iMinPrefixLen )
+			sWord = sWord.SetSprintf ( "%s*", sWord.cstr() );
+		else if ( tSettings.m_iMinInfixLen>0 && iLen>=tSettings.m_iMinInfixLen )
+			sWord = sWord.SetSprintf ( "*%s*", sWord.cstr() );
+	}
+}
+
+
 // transform the "one two three"/1 quorum into one|two|three (~40% faster)
 static void TransformQuorum ( XQNode_t ** ppNode )
 {
@@ -14489,12 +14531,6 @@ struct WordDocsGreaterOp_t
 };
 
 
-static inline bool IsWild ( char c )
-{
-	return c=='*' || c=='?';
-}
-
-
 /// do wildcard expansion for keywords dictionary
 /// (including prefix and infix expansion)
 XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
@@ -14542,10 +14578,6 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 	assert ( pNode->m_dChildren.GetLength()==0 );
 	assert ( pNode->m_dWords.GetLength()==1 );
 
-	// FIXME? eliminate this; move the check (way) above
-	if ( !tCtx.m_bStarEnabled )
-		return pNode;
-
 	// check the wildcards
 	const char * sFull = pNode->m_dWords[0].m_sWord.cstr();
 	const int iLen = strlen ( sFull );
@@ -14582,8 +14614,9 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 		for ( const char * s = sPrefix; *s && !IsWild(*s); s++ )
 			iPrefix++;
 
-		// do not expand prefixes under min_prefix_len
-		if ( iPrefix<tCtx.m_iMinPrefixLen )
+		// do not expand prefixes under min length
+		int iMinLen = Max ( tCtx.m_iMinPrefixLen, tCtx.m_iMinInfixLen );
+		if ( iPrefix<iMinLen )
 			return pNode;
 
 		// prefix expansion should work on nonstemmed words only
@@ -14696,7 +14729,6 @@ XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphString & sError, 
 	tCtx.m_iMinPrefixLen = m_tSettings.m_iMinPrefixLen;
 	tCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
 	tCtx.m_iExpansionLimit = m_iExpansionLimit;
-	tCtx.m_bStarEnabled = m_bEnableStar;
 	tCtx.m_bHasMorphology = m_pDict->HasMorphology();
 
 	pNode = sphExpandXQNode ( pNode, tCtx );
@@ -14852,6 +14884,10 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 
 	// transform query if needed (quorum transform, keyword expansion, etc.)
 	sphTransformExtendedQuery ( &tParsed.m_pRoot );
+
+	// adjust stars in keywords for dict=keywords, enable_star=0 case
+	if ( pDict->GetSettings().m_bWordDict && !m_bEnableStar && ( m_tSettings.m_iMinPrefixLen>0 || m_tSettings.m_iMinInfixLen>0 ) )
+		AdjustStars ( tParsed.m_pRoot, m_tSettings );
 
 	// expanding prefix in word dictionary case
 	XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, pResult->m_sError, pResult );

@@ -1344,7 +1344,6 @@ struct ExpansionContext_t
 	int m_iMinPrefixLen;
 	int m_iMinInfixLen;
 	int m_iExpansionLimit;
-	bool m_bStarEnabled;
 	bool m_bHasMorphology;
 };
 

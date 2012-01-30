@@ -4504,7 +4504,6 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		tCtx.m_iMinPrefixLen = m_tSettings.m_iMinPrefixLen;
 		tCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
 		tCtx.m_iExpansionLimit = m_iExpansionLimit;
-		tCtx.m_bStarEnabled = true;
 		tCtx.m_bHasMorphology = m_pDict->HasMorphology();
 		tParsed.m_pRoot = sphExpandXQNode ( tParsed.m_pRoot, tCtx );
 	}

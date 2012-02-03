@@ -66,6 +66,9 @@ INSERT INTO test_table (t_zlib, t_mysql, t_mysql_2, plain) VALUES
 ( NULL, compress('mysql'), NULL, NULL ),
 ( substr(compress('test'), 5), compress('hello'), compress('world'), '' ),
 ( 'malformed', 'broken', NULL, NULL ),
+( substr(COMPRESS ( REPEAT ( 'the dog with snoopy this book like ',  24000 ) ), 5), COMPRESS ( REPEAT ( 'spaceman is a hero not good mooman ',  24001 ) ), NULL, NULL ),
+( COMPRESS ( REPEAT ( 'the dog with snoopy ',  16384 ) ), COMPRESS ( REPEAT ( 'spaceman is a hero not as we ',  16384 ) ), NULL, NULL ),
+( NULL, 'a', NULL, NULL ),
 ( '', '', '', '' );
 </db_insert>
 
@@ -76,6 +79,8 @@ INSERT INTO test_table (t_zlib, t_mysql, t_mysql_2, plain) VALUES
 <query>plain</query>
 <query>malformed</query>
 <query>broken</query>
+<query>the</query>
+<query>a</query>
 </queries>
 
 </test>

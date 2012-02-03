@@ -3,8 +3,8 @@
 //
 
 //
-// Copyright (c) 2001-2011, Andrew Aksyonoff
-// Copyright (c) 2008-2011, Sphinx Technologies Inc
+// Copyright (c) 2001-2012, Andrew Aksyonoff
+// Copyright (c) 2008-2012, Sphinx Technologies Inc
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -88,7 +88,7 @@ struct UdfCall_t
 //////////////////////////////////////////////////////////////////////////
 
 // hack hack hack
-bool ( *g_pUservarsHook )( const CSphString & sUservar, CSphVector<SphAttr_t> & dVals ) = NULL;
+UservarIntSet_c * ( *g_pUservarsHook )( const CSphString & sUservar );
 
 static bool								g_bUdfEnabled = false;
 static CSphString						g_sUdfDir;
@@ -779,7 +779,7 @@ protected:
 	int						AddNodeConstlist ( float iValue );
 	void					AppendToConstlist ( int iNode, int64_t iValue );
 	void					AppendToConstlist ( int iNode, float iValue );
-	int						ConstlistFromUservar ( int iUservar );
+	int						AddNodeUservar ( int iUservar );
 	int						AddNodeHookIdent ( int iID );
 	int						AddNodeHookFunc ( int iID, int iLeft );
 
@@ -1826,6 +1826,8 @@ public:
 	Expr_ArgVsConstSet_c ( ISphExpr * pArg, ConstList_c * pConsts )
 		: Expr_ArgVsSet_c<T> ( pArg )
 	{
+		if ( !pConsts )
+			return; // can happen on uservar path
 		if ( pConsts->m_eRetType==SPH_ATTR_FLOAT )
 		{
 			m_dValues.Reserve ( pConsts->m_dFloats.GetLength() );
@@ -1941,20 +1943,59 @@ public:
 };
 
 
+/// IN() evaluator, arbitrary scalar expression vs. uservar
+/// (for the sake of evaluator, uservar is a pre-sorted, refcounted external vector)
+class Expr_InUservar_c : public Expr_ArgVsSet_c<int64_t>
+{
+protected:
+	UservarIntSet_c * m_pConsts;
+
+public:
+	/// just get hold of args
+	explicit Expr_InUservar_c ( ISphExpr * pArg, UservarIntSet_c * pConsts )
+		: Expr_ArgVsSet_c<int64_t> ( pArg )
+		, m_pConsts ( pConsts ) // no addref, hook should have addref'd (otherwise there'd be a race)
+	{}
+
+	/// release the uservar value
+	~Expr_InUservar_c()
+	{
+		SafeRelease ( m_pConsts );
+	}
+
+	/// evaluate arg, check if the value is within set
+	virtual int IntEval ( const CSphMatch & tMatch ) const
+	{
+		int64_t iVal = ExprEval ( this->m_pArg, tMatch ); // 'this' fixes gcc braindamage
+		return m_pConsts->BinarySearch ( iVal )!=NULL;
+	}
+
+	virtual void SetMVAPool ( const DWORD * pMvaPool ) { this->m_pArg->SetMVAPool ( pMvaPool ); }
+	virtual void SetStringPool ( const BYTE * pStrings ) { this->m_pArg->SetStringPool ( pStrings ); }
+};
+
+
 /// IN() evaluator, MVA attribute vs. constant values
-template < bool IS_MVA64 >
-class Expr_MVAIn_c : public Expr_ArgVsConstSet_c<DWORD>
+template < bool MVA64 >
+class Expr_MVAIn_c : public Expr_ArgVsConstSet_c<uint64_t>
 {
 public:
 	/// pre-sort values for binary search
-	Expr_MVAIn_c ( const CSphAttrLocator & tLoc, int iLocator, ConstList_c * pConsts )
-		: Expr_ArgVsConstSet_c<DWORD> ( NULL, pConsts )
+	Expr_MVAIn_c ( const CSphAttrLocator & tLoc, int iLocator, ConstList_c * pConsts, UservarIntSet_c * pUservar )
+		: Expr_ArgVsConstSet_c<uint64_t> ( NULL, pConsts )
 		, m_tLocator ( tLoc )
 		, m_iLocator ( iLocator )
 		, m_pMvaPool ( NULL )
+		, m_pUservar ( pUservar )
 	{
 		assert ( tLoc.m_iBitOffset>=0 && tLoc.m_iBitCount>0 );
+		assert ( !pConsts || !pUservar ); // either constlist or uservar, not both
 		this->m_dValues.Sort();
+	}
+
+	~Expr_MVAIn_c()
+	{
+		SafeRelease ( m_pUservar );
 	}
 
 	int MvaEval ( const DWORD * pMva ) const;
@@ -1980,9 +2021,10 @@ public:
 	}
 
 protected:
-	CSphAttrLocator	m_tLocator;
-	int				m_iLocator;
-	const DWORD *	m_pMvaPool;
+	CSphAttrLocator		m_tLocator;
+	int					m_iLocator;
+	const DWORD *		m_pMvaPool;
+	UservarIntSet_c *	m_pUservar;
 };
 
 
@@ -1993,8 +2035,8 @@ int Expr_MVAIn_c<false>::MvaEval ( const DWORD * pMva ) const
 	DWORD uLen = *pMva++;
 	const DWORD * pMvaMax = pMva+uLen;
 
-	const DWORD * pFilter = m_dValues.Begin();
-	const DWORD * pFilterMax = pFilter + m_dValues.GetLength();
+	const uint64_t * pFilter = m_pUservar ? (uint64_t*)m_pUservar->Begin() : m_dValues.Begin();
+	const uint64_t * pFilterMax = pFilter + ( m_pUservar ? m_pUservar->GetLength() : m_dValues.GetLength() );
 
 	const DWORD * L = pMva;
 	const DWORD * R = pMvaMax - 1;
@@ -2025,8 +2067,8 @@ int Expr_MVAIn_c<true>::MvaEval ( const DWORD * pMva ) const
 	assert ( ( uLen%2 )==0 );
 	const DWORD * pMvaMax = pMva+uLen;
 
-	const DWORD * pFilter = m_dValues.Begin();
-	const DWORD * pFilterMax = pFilter + m_dValues.GetLength();
+	const uint64_t * pFilter = m_pUservar ? (uint64_t*)m_pUservar->Begin() : m_dValues.Begin();
+	const uint64_t * pFilterMax = pFilter + ( m_pUservar ? m_pUservar->GetLength() : m_dValues.GetLength() );
 
 	const uint64_t * L = (const uint64_t *)pMva;
 	const uint64_t * R = (const uint64_t *)( pMvaMax - 2 );
@@ -2352,34 +2394,65 @@ ISphExpr * ExprParser_t::CreateIntervalNode ( int iArgsNode, CSphVector<ISphExpr
 
 ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 {
-	const ExprNode_t & tNode = m_dNodes[iNode];
+	const ExprNode_t & tLeft = m_dNodes[m_dNodes[iNode].m_iLeft];
+	const ExprNode_t & tRight = m_dNodes[m_dNodes[iNode].m_iRight];
 
-	if ( m_dNodes[tNode.m_iRight].m_iToken!=TOK_CONST_LIST )
+	switch ( tRight.m_iToken )
 	{
-		m_sCreateError = "IN() arguments must be constants (except the 1st one)";
-		return NULL;
-	}
+		// create IN(arg,constlist)
+		case TOK_CONST_LIST:
+			switch ( tLeft.m_iToken )
+			{
+				case TOK_ATTR_MVA32:
+					return new Expr_MVAIn_c<false> ( tLeft.m_tLocator, tLeft.m_iLocator, tRight.m_pConsts, NULL );
+				case TOK_ATTR_MVA64:
+					return new Expr_MVAIn_c<true> ( tLeft.m_tLocator, tLeft.m_iLocator, tRight.m_pConsts, NULL );
+				default:
+				{
+					ISphExpr * pArg = CreateTree ( m_dNodes[iNode].m_iLeft );
+					switch ( tRight.m_pConsts->m_eRetType )
+					{
+						case SPH_ATTR_INTEGER:	return new Expr_In_c<int> ( pArg, tRight.m_pConsts ); break;
+						case SPH_ATTR_BIGINT:	return new Expr_In_c<int64_t> ( pArg, tRight.m_pConsts ); break;
+						default:				return new Expr_In_c<float> ( pArg, tRight.m_pConsts ); break;
+					}
+				}
+			}
+			break;
 
-	assert ( m_dNodes[tNode.m_iRight].m_iToken==TOK_CONST_LIST );
-	ConstList_c * pConst = m_dNodes[tNode.m_iRight].m_pConsts;
-
-	bool bMVA = ( m_dNodes[tNode.m_iLeft].m_iToken==TOK_ATTR_MVA32
-		|| m_dNodes[tNode.m_iLeft].m_iToken==TOK_ATTR_MVA64 );
-	if ( bMVA )
-	{
-		if ( m_dNodes[tNode.m_iLeft].m_iToken==TOK_ATTR_MVA32 )
-			return new Expr_MVAIn_c<false> ( m_dNodes[tNode.m_iLeft].m_tLocator, m_dNodes[tNode.m_iLeft].m_iLocator, pConst );
-		else
-			return new Expr_MVAIn_c<true> ( m_dNodes[tNode.m_iLeft].m_tLocator, m_dNodes[tNode.m_iLeft].m_iLocator, pConst );
-	} else
-	{
-		ISphExpr * pArg = CreateTree ( tNode.m_iLeft );
-		switch ( pConst->m_eRetType )
+		// create IN(arg,uservar)
+		case TOK_USERVAR:
 		{
-			case SPH_ATTR_INTEGER:	return new Expr_In_c<int> ( pArg, pConst ); break;
-			case SPH_ATTR_BIGINT:	return new Expr_In_c<int64_t> ( pArg, pConst ); break;
-			default:				return new Expr_In_c<float> ( pArg, pConst ); break;
+			if ( !g_pUservarsHook )
+			{
+				m_sCreateError.SetSprintf ( "internal error: no uservars hook" );
+				return NULL;
+			}
+
+			UservarIntSet_c * pUservar = g_pUservarsHook ( m_dUservars[(int)tRight.m_iConst] );
+			if ( !pUservar )
+			{
+				m_sCreateError.SetSprintf ( "undefined user variable '%s'", m_dUservars[(int)tRight.m_iConst].cstr() );
+				return NULL;
+
+			}
+
+			switch ( tLeft.m_iToken )
+			{
+				case TOK_ATTR_MVA32:
+					return new Expr_MVAIn_c<false> ( tLeft.m_tLocator, tLeft.m_iLocator, NULL, pUservar );
+				case TOK_ATTR_MVA64:
+					return new Expr_MVAIn_c<true> ( tLeft.m_tLocator, tLeft.m_iLocator, NULL, pUservar );
+				default:
+					return new Expr_InUservar_c ( CreateTree ( m_dNodes[iNode].m_iLeft ), pUservar );
+			}
+			break;
 		}
+
+		// oops, unhandled case
+		default:
+			m_sCreateError = "IN() arguments must be constants (except the 1st one)";
+			return NULL;
 	}
 }
 
@@ -2885,24 +2958,12 @@ void ExprParser_t::AppendToConstlist ( int iNode, float iValue )
 	m_dNodes[iNode].m_pConsts->Add ( iValue );
 }
 
-int ExprParser_t::ConstlistFromUservar ( int iUservar )
+int ExprParser_t::AddNodeUservar ( int iUservar )
 {
-	if ( g_pUservarsHook )
-	{
-		ExprNode_t & tNode = m_dNodes.Add();
-		tNode.m_iToken = TOK_CONST_LIST;
-		tNode.m_pConsts = new ConstList_c();
-		if ( g_pUservarsHook ( m_dUservars[iUservar], tNode.m_pConsts->m_dInts ) )
-		{
-			return m_dNodes.GetLength()-1;
-		} else
-		{
-			SafeDelete ( tNode.m_pConsts );
-			m_dNodes.Pop();
-		}
-	}
-	m_sParserError.SetSprintf ( "undefined user variable '%s'", m_dUservars[iUservar].cstr() );
-	return -1;
+	ExprNode_t & tNode = m_dNodes.Add();
+	tNode.m_iToken = TOK_USERVAR;
+	tNode.m_iConst = iUservar;
+	return m_dNodes.GetLength()-1;
 }
 
 int ExprParser_t::AddNodeHookIdent ( int iID )

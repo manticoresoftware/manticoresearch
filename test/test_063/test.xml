@@ -72,6 +72,18 @@ index test2
 	charset_type = utf-8
 }
 
+index star
+{
+	source	= test
+	path	= <data_path/>/star
+
+	blend_chars = @, ., !, (, ), [, ], {, }
+	charset_type = utf-8
+	min_infix_len = 1
+	enable_star = 1
+}
+
+
 </config>
 
 <db_create>
@@ -170,6 +182,20 @@ INSERT INTO test_table VALUES
 	<query mode="extended2" index="test">"posse()"</query>
 	<query mode="extended2" index="test">"posse[]"</query>
 	<query mode="extended2" index="test">"posse{}"</query>
+	
+	<query mode="extended2" index="test">^ggg*hhh$</query>
+	<query mode="extended2" index="test">^ggg*hhh</query>
+	<query mode="extended2" index="test">ggg*hhh$</query>
+	<query mode="extended2" index="test">^ggg</query>
+	<query mode="extended2" index="test">hhh$</query>
+	<query mode="extended2" index="test">ggg$</query>
+	<query mode="extended2" index="test">^hhh</query>
+	
+	<query mode="extended2" index="star">^gg*</query>
+	<query mode="extended2" index="star">*hh$</query>
+	<query mode="extended2" index="star">^*g*</query>
+	<query mode="extended2" index="star">^*h*</query>
+	<query mode="extended2" index="star">*c*$</query>
 </queries>
 
 <sphqueries>

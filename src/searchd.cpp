@@ -3,8 +3,8 @@
 //
 
 //
-// Copyright (c) 2001-2011, Andrew Aksyonoff
-// Copyright (c) 2008-2011, Sphinx Technologies Inc
+// Copyright (c) 2001-2012, Andrew Aksyonoff
+// Copyright (c) 2008-2012, Sphinx Technologies Inc
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -63,6 +63,7 @@
 	// UNIX-specific headers and calls
 	#include <unistd.h>
 	#include <netinet/in.h>
+	#include <netinet/tcp.h>
 	#include <sys/file.h>
 	#include <sys/socket.h>
 	#include <sys/time.h>
@@ -571,15 +572,22 @@ static CSphMutex g_tFlushMutex;
 
 //////////////////////////////////////////////////////////////////////////
 
+/// available uservar types
 enum Uservar_e
 {
 	USERVAR_INT_SET
 };
 
+/// uservar name to value binding
 struct Uservar_t
 {
-	Uservar_e						m_eType;
-	CSphVector<SphAttr_t> *			m_pVal;
+	Uservar_e			m_eType;
+	UservarIntSet_c *	m_pVal;
+
+	Uservar_t ()
+		: m_eType ( USERVAR_INT_SET )
+		, m_pVal ( NULL )
+	{}
 };
 
 static CSphStaticMutex				g_tUservarsMutex;
@@ -2246,12 +2254,13 @@ public:
 	explicit	NetOutputBuffer_c ( int iSock );
 
 	bool		SendInt ( int iValue )			{ return SendT<int> ( htonl ( iValue ) ); }
-	bool		SendInt64AsInt ( int64_t iValue ) ///< sends the 32bit MAX_UINT if the value is greater than it.
+	bool		SendAsDword ( int64_t iValue ) ///< sends the 32bit MAX_UINT if the value is greater than it.
 		{
-			if ( iValue > (unsigned int)-1 )
-				return SendInt ( -1 );
-			else
-				return SendInt ( iValue );
+			if ( iValue < 0 )
+				return SendDword ( 0 );
+			if ( iValue > UINT_MAX )
+				return SendDword ( UINT_MAX );
+			return SendDword ( DWORD(iValue) );
 		}
 	bool		SendDword ( DWORD iValue )		{ return SendT<DWORD> ( htonl ( iValue ) ); }
 	bool		SendLSBDword ( DWORD v )		{ SendByte ( (BYTE)( v&0xff ) ); SendByte ( (BYTE)( (v>>8)&0xff ) ); SendByte ( (BYTE)( (v>>16)&0xff ) ); return SendByte ( (BYTE)( (v>>24)&0xff) ); }
@@ -3312,7 +3321,13 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 				// send request
 				NetOutputBuffer_c tOut ( tAgent.m_iSock );
 				pCtx->m_pBuilder->BuildRequest ( tAgent.m_sIndexes.cstr(), tOut );
-				tOut.Flush (); // FIXME! handle flush failure?
+				bool bFlushed = tOut.Flush (); // FIXME! handle flush failure?
+
+#ifdef	TCP_NODELAY
+				int iDisable = 1;
+				if ( bFlushed && tAgent.m_iFamily==AF_INET )
+					setsockopt ( tAgent.m_iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iDisable, sizeof(iDisable) );
+#endif
 
 				tAgent.m_eState = AGENT_QUERY;
 				iAgents++;
@@ -4490,8 +4505,13 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 	while ( ( c = *szQuery++ )!=0 )
 	{
 		// must be in sync with EscapeString (php api)
-		if ( c=='(' || c==')' || c=='|' || c=='-' || c=='!' || c=='@' || c=='~' || c=='\"' || c=='&' || c=='/' || c=='<' || c=='\\' )
+		const char sMagics[] = "<\\()|-!@~\"&/^$=";
+		for ( const char * s = sMagics; *s; s++ )
+			if ( c==*s )
+		{
 			*szRes++ = '\\';
+			break;
+		}
 
 		*szRes++ = c;
 	}
@@ -5637,7 +5657,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 		}
 	}
 	tOut.SendInt ( pRes->m_dMatches.GetLength() );
-	tOut.SendInt64AsInt ( pRes->m_iTotalMatches );
+	tOut.SendAsDword ( pRes->m_iTotalMatches );
 	tOut.SendInt ( Max ( pRes->m_iQueryTime, 0 ) );
 	tOut.SendInt ( pRes->m_hWordStats.GetLength() );
 
@@ -5646,8 +5666,8 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 	{
 		const CSphQueryResultMeta::WordStat_t & tStat = pRes->m_hWordStats.IterateGet();
 		tOut.SendString ( pRes->m_hWordStats.IterateGetKey().cstr() );
-		tOut.SendInt64AsInt ( tStat.m_iDocs );
-		tOut.SendInt64AsInt ( tStat.m_iHits );
+		tOut.SendAsDword ( tStat.m_iDocs );
+		tOut.SendAsDword ( tStat.m_iHits );
 		if ( bExtendedStat )
 			tOut.SendByte ( tStat.m_bExpanded );
 	}
@@ -5756,9 +5776,8 @@ void RemapResult ( CSphSchema * pTarget, AggrResult_t * pRes, bool bMultiSchema=
 				);
 		}
 		int iLimit = bMultiSchema
-			? ( iCur + pRes->m_dMatchCounts[iSchema] )
-			: pRes->m_iTotalMatches;
-		iLimit = Min ( iLimit, pRes->m_dMatches.GetLength() );
+			? (int)Min ( iCur + pRes->m_dMatchCounts[iSchema], pRes->m_dMatches.GetLength() )
+			: (int)Min ( pRes->m_iTotalMatches, pRes->m_dMatches.GetLength() );
 		for ( int i=iCur; i<iLimit; i++ )
 		{
 			CSphMatch & tMatch = pRes->m_dMatches[i];
@@ -7907,6 +7926,7 @@ struct SqlStmt_t
 
 	// SELECT specific
 	CSphQuery				m_tQuery;
+	CSphVector < CSphRefcountedPtr<UservarIntSet_c> > m_dRefs;
 
 	// used by INSERT, DELETE, CALL, DESC, ATTACH
 	CSphString				m_sIndex;
@@ -8531,11 +8551,10 @@ bool SqlParser_c::AddUintRangeFilter ( const CSphString & sAttr, DWORD uMin, DWO
 
 bool SqlParser_c::AddUservarFilter ( const CSphString & sCol, const CSphString & sVar, bool bExclude )
 {
-	g_tUservarsMutex.Lock();
+	CSphScopedLock<CSphStaticMutex> tLock ( g_tUservarsMutex );
 	Uservar_t * pVar = g_hUservars ( sVar );
 	if ( !pVar )
 	{
-		g_tUservarsMutex.Unlock();
 		yyerror ( this, "undefined global variable in IN clause" );
 		return false;
 	}
@@ -8546,10 +8565,16 @@ bool SqlParser_c::AddUservarFilter ( const CSphString & sCol, const CSphString &
 		return false;
 	pFilter->m_bExclude = bExclude;
 
-	// INT_SET uservars must get sorted on SET once
-	// FIXME? maybe we should do a readlock instead of copying?
-	pFilter->m_dValues = *pVar->m_pVal;
-	g_tUservarsMutex.Unlock();
+	// tricky black magic
+	// we want to avoid copying the data, hence external values in the filter
+	// we need to guarantee the data (uservar value) lifetime, then
+	// suddenly, enter mutex-protected refcounted value objects
+	// suddenly, we need to track those values in the statement object, too
+	assert ( pVar->m_pVal );
+	CSphRefcountedPtr<UservarIntSet_c> & tRef = m_pStmt->m_dRefs.Add();
+	tRef = pVar->m_pVal; // take over semantics, and thus NO (!) automatic addref
+	pVar->m_pVal->AddRef(); // so do that addref manually
+	pFilter->SetExternalValues ( pVar->m_pVal->Begin(), pVar->m_pVal->GetLength() );
 	return true;
 }
 
@@ -11913,21 +11938,36 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 			return;
 		}
 
+		// INT_SET type must be sorted
+		tStmt.m_dSetValues.Sort();
+
+		// create or update the variable
 		g_tUservarsMutex.Lock();
 		Uservar_t * pVar = g_hUservars ( tStmt.m_sSetName );
 		if ( pVar )
 		{
+			// variable exists, release previous value
+			// actual destruction of the value (aka data) might happen later
+			// as the concurrent queries might still be using and holding that data
+			// from here, the old value becomes nameless, though
 			assert ( pVar->m_eType==USERVAR_INT_SET );
-			pVar->m_pVal->SwapData ( tStmt.m_dSetValues );
+			assert ( pVar->m_pVal );
+			pVar->m_pVal->Release();
+			pVar->m_pVal = NULL;
 		} else
 		{
+			// create a shiny new variable
 			Uservar_t tVar;
-			tVar.m_eType = USERVAR_INT_SET;
-			tVar.m_pVal = new CSphVector<SphAttr_t>;
-			tVar.m_pVal->SwapData ( tStmt.m_dSetValues );
-			tVar.m_pVal->Sort();
-			g_hUservars.Add ( tVar, tStmt.m_sSetName ); // FIXME? free those on shutdown?
+			g_hUservars.Add ( tVar, tStmt.m_sSetName );
+			pVar = g_hUservars ( tStmt.m_sSetName );
 		}
+
+		// swap in the new value
+		assert ( pVar );
+		assert ( !pVar->m_pVal );
+		pVar->m_eType = USERVAR_INT_SET;
+		pVar->m_pVal = new UservarIntSet_c();
+		pVar->m_pVal->SwapData ( tStmt.m_dSetValues );
 		g_tUservarsMutex.Unlock();
 		break;
 	}
@@ -16377,19 +16417,19 @@ bool DieCallback ( const char * sMessage )
 }
 
 
-extern bool ( *g_pUservarsHook )( const CSphString & sUservar, CSphVector<SphAttr_t> & dVals );
+extern UservarIntSet_c * ( *g_pUservarsHook )( const CSphString & sUservar );
 
-bool UservarsHook ( const CSphString & sUservar, CSphVector<SphAttr_t> & dVals )
+UservarIntSet_c * UservarsHook ( const CSphString & sUservar )
 {
-	g_tUservarsMutex.Lock();
+	CSphScopedLock<CSphStaticMutex> tLock ( g_tUservarsMutex );
+
 	Uservar_t * pVar = g_hUservars ( sUservar );
-	if ( pVar )
-	{
-		assert ( pVar->m_eType==USERVAR_INT_SET );
-		dVals = *pVar->m_pVal;
-	}
-	g_tUservarsMutex.Unlock();
-	return ( pVar!=NULL );
+	if ( !pVar )
+		return NULL;
+
+	assert ( pVar->m_eType==USERVAR_INT_SET );
+	pVar->m_pVal->AddRef();
+	return pVar->m_pVal;
 }
 
 

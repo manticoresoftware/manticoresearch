@@ -37,10 +37,12 @@
 %token	TOK_ATTR_SINT
 
 %type <iNode>			attr
+%type <iNode>			attr_mva
 %type <iNode>			expr
 %type <iNode>			arg
 %type <iNode>			arglist
 %type <iNode>			constlist
+%type <iNode>			constlist_or_uservar
 %type <iNode>			function
 
 %left TOK_OR
@@ -66,6 +68,12 @@ attr:
 	| TOK_ATTR_FLOAT				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_FLOAT, $1 ); }
 	;
 
+attr_mva:
+	attr
+	| TOK_ATTR_MVA32				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA32, $1 ) }
+	| TOK_ATTR_MVA64				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA64, $1 ) }
+	;
+
 expr:
 	attr
 	| function
@@ -74,7 +82,7 @@ expr:
 	| TOK_ATID						{ $$ = pParser->AddNodeID(); }
 	| TOK_ATWEIGHT					{ $$ = pParser->AddNodeWeight(); }
 	| TOK_ID						{ $$ = pParser->AddNodeID(); }
-	| TOK_WEIGHT '(' ')'				{ $$ = pParser->AddNodeWeight(); }
+	| TOK_WEIGHT '(' ')'			{ $$ = pParser->AddNodeWeight(); }
 	| TOK_HOOK_IDENT				{ $$ = pParser->AddNodeHookIdent ( $1 ); }
 	| '-' expr %prec TOK_NEG		{ $$ = pParser->AddNodeOp ( TOK_NEG, $2, -1 ); }
 	| TOK_NOT expr					{ $$ = pParser->AddNodeOp ( TOK_NOT, $2, -1 ); if ( $$<0 ) YYERROR; }
@@ -101,8 +109,8 @@ expr:
 arg:
 	expr
 	| TOK_ATTR_STRING				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_STRING, $1 ); }
-	| TOK_ATTR_MVA32					{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA32, $1 ); }
-	| TOK_ATTR_MVA64					{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA64, $1 ); }
+	| TOK_ATTR_MVA32				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA32, $1 ); }
+	| TOK_ATTR_MVA64				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA64, $1 ); }
 	| TOK_CONST_STRING				{ $$ = pParser->AddNodeString ( $1 ); }
 	;
 
@@ -118,12 +126,17 @@ constlist:
 	| constlist ',' TOK_CONST_FLOAT	{ pParser->AppendToConstlist ( $$, $3 ); }
 	;
 
+constlist_or_uservar:
+	constlist
+	| TOK_USERVAR					{ $$ = pParser->AddNodeUservar ( $1 ); }
+	;
+
 function:
 	TOK_FUNC '(' arglist ')'		{ $$ = pParser->AddNodeFunc ( $1, $3 ); if ( $$<0 ) YYERROR; }
 	| TOK_FUNC '(' ')'				{ $$ = pParser->AddNodeFunc ( $1, -1 ); if ( $$<0 ) YYERROR; }
 	| TOK_UDF '(' arglist ')'		{ $$ = pParser->AddNodeUdf ( $1, $3 ); if ( $$<0 ) YYERROR; }
 	| TOK_UDF '(' ')'				{ $$ = pParser->AddNodeUdf ( $1, -1 ); if ( $$<0 ) YYERROR; }
-	| TOK_FUNC_IN '(' attr ',' constlist ')'
+	| TOK_FUNC_IN '(' attr_mva ',' constlist_or_uservar ')'
 		{
 			$$ = pParser->AddNodeFunc ( $1, $3, $5 );
 		}
@@ -135,24 +148,12 @@ function:
 		{
 			$$ = pParser->AddNodeFunc ( $1, pParser->AddNodeID(), $5 );
 		}
-	| TOK_FUNC_IN '(' TOK_ATTR_MVA32 ',' constlist ')'
+	| TOK_HOOK_FUNC '(' arglist ')'
 		{
-			$$ = pParser->AddNodeAttr ( TOK_ATTR_MVA32, $3 );
-			$$ = pParser->AddNodeFunc ( $1, $$, $5 );
-		}
-	| TOK_FUNC_IN '(' TOK_ATTR_MVA64 ',' constlist ')'
-		{
-			$$ = pParser->AddNodeAttr ( TOK_ATTR_MVA64, $3 );
-			$$ = pParser->AddNodeFunc ( $1, $$, $5 );
-		}
-	| TOK_FUNC_IN '(' attr ',' TOK_USERVAR ')'
-		{
-			int iConstlist = pParser->ConstlistFromUservar ( $5 );
-			if ( iConstlist<0 )
+			$$ = pParser->AddNodeHookFunc ( $1, $3 );
+			if ( $$<0 )
 				YYERROR;
-			$$ = pParser->AddNodeFunc ( $1, $3, iConstlist );
 		}
-	| TOK_HOOK_FUNC '(' arglist ')'	{ $$ = pParser->AddNodeHookFunc ( $1, $3 ); if ( $$<0 ) YYERROR; }
 	;
 
 %%

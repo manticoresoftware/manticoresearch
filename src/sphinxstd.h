@@ -3,8 +3,8 @@
 //
 
 //
-// Copyright (c) 2001-2011, Andrew Aksyonoff
-// Copyright (c) 2008-2011, Sphinx Technologies Inc
+// Copyright (c) 2001-2012, Andrew Aksyonoff
+// Copyright (c) 2008-2012, Sphinx Technologies Inc
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -1739,6 +1739,7 @@ protected:
 //////////////////////////////////////////////////////////////////////////
 
 /// refcounted base
+/// WARNING, FOR SINGLE-THREADED USE ONLY
 struct ISphRefcounted : public ISphNoncopyable
 {
 protected:
@@ -1755,11 +1756,13 @@ protected:
 
 
 /// automatic pointer wrapper for refcounted objects
+/// construction from or assignment of a raw pointer takes over (!) the ownership
 template < typename T >
 class CSphRefcountedPtr
 {
 public:
-	explicit		CSphRefcountedPtr ( T * pPtr )	{ m_pPtr = pPtr; }
+	explicit		CSphRefcountedPtr ()			{ m_pPtr = NULL; }	///< default NULL wrapper construction (for vectors)
+	explicit		CSphRefcountedPtr ( T * pPtr )	{ m_pPtr = pPtr; }	///< construction from raw pointer, takes over ownership!
 					~CSphRefcountedPtr ()			{ if ( m_pPtr ) m_pPtr->Release(); }
 
 	T *				Ptr () const					{ return m_pPtr; }
@@ -1767,8 +1770,25 @@ public:
 	bool			operator ! () const				{ return m_pPtr==NULL; }
 
 public:
-	CSphRefcountedPtr<T> &	operator = ( T * pPtr )								{ if ( m_pPtr ) m_pPtr->Release(); m_pPtr = pPtr; return *this; }
-	CSphRefcountedPtr<T> &	operator = ( const CSphRefcountedPtr<T> & rhs )		{ if ( rhs.m_pPtr ) rhs.m_pPtr->AddRef(); if ( m_pPtr ) m_pPtr->Release(); m_pPtr = rhs.m_pPtr; return *this; }
+	/// assignment of a raw pointer, takes over ownership!
+	CSphRefcountedPtr<T> & operator = ( T * pPtr )
+	{
+		if ( m_pPtr && m_pPtr!=pPtr )
+			m_pPtr->Release();
+		m_pPtr = pPtr;
+		return *this;
+	}
+
+	/// wrapper assignment, does automated reference tracking
+	CSphRefcountedPtr<T> & operator = ( const CSphRefcountedPtr<T> & rhs )
+	{
+		if ( rhs.m_pPtr )
+			rhs.m_pPtr->AddRef();
+		if ( m_pPtr )
+			m_pPtr->Release();
+		m_pPtr = rhs.m_pPtr;
+		return *this;
+	}
 
 protected:
 	T *				m_pPtr;
@@ -2095,6 +2115,69 @@ public:
 	{
 		Done();
 	}
+};
+
+
+/// scoped mutex lock
+template < typename T >
+class CSphScopedLock : ISphNoncopyable
+{
+public:
+	/// lock on creation
+	explicit CSphScopedLock ( T & tMutex )
+		: m_tMutexRef ( tMutex )
+	{
+		m_tMutexRef.Lock();
+	}
+
+	/// unlock on going out of scope
+	~CSphScopedLock ()
+	{
+		m_tMutexRef.Unlock ();
+	}
+
+protected:
+	T &	m_tMutexRef;
+};
+
+
+/// MT-aware refcounted base
+/// mutex protected, might be slow
+struct ISphRefcountedMT : public ISphNoncopyable
+{
+protected:
+	ISphRefcountedMT ()
+		: m_iRefCount ( 1 )
+	{
+		m_tLock.Init();
+	}
+
+	virtual ~ISphRefcountedMT ()
+	{
+		m_tLock.Done();
+	}
+
+public:
+	void AddRef () const
+	{
+		m_tLock.Lock();
+		m_iRefCount++;
+		m_tLock.Unlock();
+	}
+
+	void Release () const
+	{
+		m_tLock.Lock();
+		int iRefs = --m_iRefCount;
+		assert ( iRefs>=0 );
+		m_tLock.Unlock();
+		if ( iRefs==0 )
+			delete this;
+	}
+
+protected:
+	mutable int			m_iRefCount;
+	mutable CSphMutex	m_tLock;
 };
 
 

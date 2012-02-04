@@ -84,11 +84,13 @@ public:
 };
 
 //////////////////////////////////////////////////////////////////////////
-// PLAIN SORTING QUEUE
+// SORTING QUEUES
 //////////////////////////////////////////////////////////////////////////
 
-/// normal match-sorting priority queue
-template < typename COMP > class CSphMatchQueue : public CSphMatchQueueTraits
+/// heap sorter
+/// plain binary heap based PQ
+template < typename COMP >
+class CSphMatchQueue : public CSphMatchQueueTraits
 {
 public:
 	/// ctor
@@ -195,10 +197,157 @@ public:
 	}
 };
 
+//////////////////////////////////////////////////////////////////////////
+
+/// match sorting functor
+template < typename COMP >
+struct MatchSort_fn : public SphAccessor_T<CSphMatch>
+{
+	CSphMatchComparatorState	m_tState;
+	int							m_iDynamic;
+
+	MatchSort_fn ( const CSphMatchComparatorState & tState, int iDynamic )
+		: m_tState ( tState )
+		, m_iDynamic ( iDynamic )
+	{}
+
+	bool IsLess ( const CSphMatch & a, const CSphMatch & b )
+	{
+		return COMP::IsLess ( a, b, m_tState );
+	}
+
+	void CopyKey ( CSphMatch * pMed, CSphMatch * pVal ) const
+	{
+		pMed->Clone ( *pVal, m_iDynamic );
+	}
+};
+
+
+/// K-buffer (generalized double buffer) sorter
+/// faster worst-case but slower average-case than the heap sorter
+template < typename COMP >
+class CSphKbufferMatchQueue : public CSphMatchQueueTraits
+{
+protected:
+	static const int	COEFF = 4;
+
+	CSphMatch *			m_pEnd;
+	CSphMatch *			m_pWorst;
+	bool				m_bFinalized;
+
+public:
+	/// ctor
+	CSphKbufferMatchQueue ( int iSize, bool bUsesAttrs )
+		: CSphMatchQueueTraits ( iSize*COEFF, bUsesAttrs )
+		, m_pEnd ( m_pData+iSize*COEFF )
+		, m_pWorst ( NULL )
+		, m_bFinalized ( false )
+	{
+		m_iSize /= COEFF;
+	}
+
+	/// check if this sorter does groupby
+	virtual bool IsGroupby () const
+	{
+		return false;
+	}
+
+	/// add entry to the queue
+	virtual bool Push ( const CSphMatch & tEntry )
+	{
+		assert ( !m_bFinalized );
+
+		// quick early rejection checks
+		m_iTotal++;
+		if ( m_pWorst && COMP::IsLess ( tEntry, *m_pWorst, m_tState ) )
+			return true;
+
+		// quick check passed
+		// fill the data, back to front
+		m_iUsed++;
+		m_pEnd[-m_iUsed].Clone ( tEntry, m_tSchema.GetDynamicSize() );
+
+		// do the initial sort once
+		if ( m_iTotal==m_iSize )
+		{
+			assert ( m_iUsed==m_iSize && !m_pWorst );
+			MatchSort_fn<COMP> tComp ( m_tState, m_tSchema.GetDynamicSize() );
+			sphSort ( m_pEnd-m_iSize, m_iSize, tComp, tComp );
+			m_pWorst = m_pEnd-m_iSize;
+			return true;
+		}
+
+		// do the sort/cut when the K-buffer is full
+		if ( m_iUsed==m_iSize*COEFF )
+		{
+			MatchSort_fn<COMP> tComp ( m_tState, m_tSchema.GetDynamicSize() );
+			sphSort ( m_pData, m_iUsed, tComp, tComp );
+			m_iUsed = m_iSize;
+			m_pWorst = m_pEnd-m_iSize;
+		}
+		return true;
+	}
+
+	/// add grouped entry (must not happen)
+	virtual bool PushGrouped ( const CSphMatch & )
+	{
+		assert ( 0 );
+		return false;
+	}
+
+	/// finalize, perform final sort/cut as needed
+	virtual CSphMatch *	Finalize ()
+	{
+		if ( m_bFinalized )
+		{
+			assert ( m_iUsed<=m_iSize );
+			return m_pEnd-m_iUsed;
+		}
+		if ( m_iUsed )
+		{
+			MatchSort_fn<COMP> tComp ( m_tState, m_tSchema.GetDynamicSize() );
+			sphSort ( m_pEnd-m_iUsed, m_iUsed, tComp, tComp );
+		}
+		m_iUsed = Min ( m_iUsed, m_iSize );
+		m_bFinalized = true;
+		return m_pEnd-m_iUsed;
+	}
+
+	/// current result set length
+	virtual int GetLength () const
+	{
+		return Min ( m_iUsed, m_iSize );
+	}
+
+	/// store all entries into specified location in sorted order, and remove them from queue
+	void Flatten ( CSphMatch * pTo, int iTag )
+	{
+		// ensure we are sorted
+		Finalize();
+
+		// reverse copy
+		for ( int i=1; i<=Min(m_iUsed, m_iSize); i++ )
+		{
+			pTo->Clone ( m_pEnd[-i], m_tSchema.GetDynamicSize() ); // OPTIMIZE? reset dst + swap?
+			if ( iTag>=0 )
+				pTo->m_iTag = iTag;
+			pTo++;
+		}
+
+		// clean up for the next work session
+		m_iTotal = 0;
+		m_iUsed = 0;
+		m_iSize = 0;
+		m_bFinalized = false;
+	}
+};
+
+//////////////////////////////////////////////////////////////////////////
+
 /// collector for UPDATE statement
 class CSphUpdateQueue : public CSphMatchQueueTraits
 {
-	CSphAttrUpdateEx*	m_pUpdate;
+	CSphAttrUpdateEx *	m_pUpdate;
 private:
 	void DoUpdate()
 	{
@@ -232,7 +381,7 @@ private:
 	}
 public:
 	/// ctor
-	CSphUpdateQueue ( int iSize, CSphAttrUpdateEx* pUpdate )
+	CSphUpdateQueue ( int iSize, CSphAttrUpdateEx * pUpdate )
 		: CSphMatchQueueTraits ( iSize, true )
 		, m_pUpdate ( pUpdate )
 	{}
@@ -2634,8 +2783,37 @@ CSphGrouper * sphCreateGrouperString ( const CSphAttrLocator & tLoc, ESphCollati
 // SORTING QUEUE FACTORY
 /////////////////////////
 
+template < typename COMP >
+static ISphMatchSorter * CreatePlainSorter ( bool bKbuffer, int iMaxMatches, bool bUsesAttrs )
+{
+	if ( bKbuffer )
+		return new CSphKbufferMatchQueue<COMP> ( iMaxMatches, bUsesAttrs );
+	else
+		return new CSphMatchQueue<COMP> ( iMaxMatches, bUsesAttrs );
+}
+
+
+static ISphMatchSorter * CreatePlainSorter ( ESphSortFunc eMatchFunc, bool bKbuffer, int iMaxMatches, bool bUsesAttrs )
+{
+	switch ( eMatchFunc )
+	{
+		case FUNC_REL_DESC:		return CreatePlainSorter<MatchRelevanceLt_fn>	( bKbuffer, iMaxMatches, bUsesAttrs ); break;
+		case FUNC_ATTR_DESC:	return CreatePlainSorter<MatchAttrLt_fn>		( bKbuffer, iMaxMatches, bUsesAttrs ); break;
+		case FUNC_ATTR_ASC:		return CreatePlainSorter<MatchAttrGt_fn>		( bKbuffer, iMaxMatches, bUsesAttrs ); break;
+		case FUNC_TIMESEGS:		return CreatePlainSorter<MatchTimeSegments_fn>	( bKbuffer, iMaxMatches, bUsesAttrs ); break;
+		case FUNC_GENERIC2:		return CreatePlainSorter<MatchGeneric2_fn>		( bKbuffer, iMaxMatches, bUsesAttrs ); break;
+		case FUNC_GENERIC3:		return CreatePlainSorter<MatchGeneric3_fn>		( bKbuffer, iMaxMatches, bUsesAttrs ); break;
+		case FUNC_GENERIC4:		return CreatePlainSorter<MatchGeneric4_fn>		( bKbuffer, iMaxMatches, bUsesAttrs ); break;
+		case FUNC_GENERIC5:		return CreatePlainSorter<MatchGeneric5_fn>		( bKbuffer, iMaxMatches, bUsesAttrs ); break;
+		case FUNC_CUSTOM:		return CreatePlainSorter<MatchCustom_fn>		( bKbuffer, iMaxMatches, bUsesAttrs ); break;
+		case FUNC_EXPR:			return CreatePlainSorter<MatchExpr_fn>			( bKbuffer, iMaxMatches, bUsesAttrs ); break;
+		default:				return NULL;
+	}
+}
+
+
 ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema,
-								CSphString & sError, bool bComputeItems, CSphSchema * pExtra, CSphAttrUpdateEx* pUpdate )
+	CSphString & sError, bool bComputeItems, CSphSchema * pExtra, CSphAttrUpdateEx * pUpdate )
 {
 	// prepare for descent
 	ISphMatchSorter * pTop = NULL;
@@ -3017,21 +3195,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		if ( pUpdate )
 			pTop = new CSphUpdateQueue ( pQuery->m_iMaxMatches, pUpdate );
 		else
-			switch ( eMatchFunc )
-			{
-				case FUNC_REL_DESC:	pTop = new CSphMatchQueue<MatchRelevanceLt_fn>	( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_ATTR_DESC:pTop = new CSphMatchQueue<MatchAttrLt_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_ATTR_ASC:	pTop = new CSphMatchQueue<MatchAttrGt_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_TIMESEGS:	pTop = new CSphMatchQueue<MatchTimeSegments_fn>	( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_GENERIC2:	pTop = new CSphMatchQueue<MatchGeneric2_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_GENERIC3:	pTop = new CSphMatchQueue<MatchGeneric3_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_GENERIC4:	pTop = new CSphMatchQueue<MatchGeneric4_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_GENERIC5:	pTop = new CSphMatchQueue<MatchGeneric5_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_CUSTOM:	pTop = new CSphMatchQueue<MatchCustom_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_EXPR:		pTop = new CSphMatchQueue<MatchExpr_fn>			( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				default:			pTop = NULL;
-			}
-
+			pTop = CreatePlainSorter ( eMatchFunc, pQuery->m_bSortKbuffer, pQuery->m_iMaxMatches, bUsesAttrs );
 	} else
 	{
 		pTop = sphCreateSorter1st ( eMatchFunc, eGroupFunc, pQuery, tSettings );

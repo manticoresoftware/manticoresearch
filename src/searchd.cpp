@@ -8300,6 +8300,16 @@ bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue )
 	{
 		m_pQuery->m_sComment = tValue.m_sValue;
 
+	} else if ( sOpt=="sort_method" )
+	{
+		if ( sVal=="pq" )			m_pQuery->m_bSortKbuffer = false;
+		else if ( sVal=="kbuffer" )	m_pQuery->m_bSortKbuffer = true;
+		else
+		{
+			m_pParseError->SetSprintf ( "unknown sort_method=%s (known values are pq, kbuffer)", sVal.cstr() );
+			return false;
+		}
+
 	} else
 	{
 		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", tIdent.m_sValue.cstr() );

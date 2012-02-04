@@ -2241,6 +2241,7 @@ public:
 	ESphSortOrder	m_eSort;		///< sort mode
 	CSphString		m_sSortBy;		///< attribute to sort by
 	int				m_iMaxMatches;	///< max matches to retrieve, default is 1000. more matches use more memory and CPU time to hold and sort them
+	bool			m_bSortKbuffer;	///< whether to use PQ or K-buffer sorting algorithm
 
 	CSphVector<CSphFilterSettings>	m_dFilters;	///< filters
 
@@ -2769,10 +2770,10 @@ protected:
 // update attributes with index pointer attached
 struct CSphAttrUpdateEx
 {
-	const CSphAttrUpdate*	m_pUpdate;	///< the unchangeable update pool
-	CSphIndex *			m_pIndex;		///< the index on which the update should happen
-	CSphString *		m_pError;		///< the error, if any
-	int					m_iAffected;	///< num of updated rows.
+	const CSphAttrUpdate *	m_pUpdate;		///< the unchangeable update pool
+	CSphIndex *				m_pIndex;		///< the index on which the update should happen
+	CSphString *			m_pError;		///< the error, if any
+	int						m_iAffected;	///< num of updated rows.
 	CSphAttrUpdateEx()
 		: m_pUpdate ( NULL )
 		, m_pIndex ( NULL )
@@ -2793,7 +2794,7 @@ void				sphSetQuiet ( bool bQuiet );
 /// may return NULL on error; in this case, error message is placed in sError
 /// if the pUpdate is given, creates the updater's queue and perform the index update
 /// instead of searching
-ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError, bool bComputeItems=true, CSphSchema * pExtra=NULL, CSphAttrUpdateEx* pUpdate=NULL );
+ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError, bool bComputeItems=true, CSphSchema * pExtra=NULL, CSphAttrUpdateEx * pUpdate=NULL );
 
 /// convert queue to sorted array, and add its entries to result's matches array
 void				sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag );

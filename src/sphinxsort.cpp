@@ -201,8 +201,10 @@ public:
 
 /// match sorting functor
 template < typename COMP >
-struct MatchSort_fn : public SphAccessor_T<CSphMatch>
+struct MatchSort_fn
 {
+	typedef CSphMatch			MEDIAN_TYPE;
+
 	CSphMatchComparatorState	m_tState;
 	int							m_iDynamic;
 
@@ -216,12 +218,31 @@ struct MatchSort_fn : public SphAccessor_T<CSphMatch>
 		return COMP::IsLess ( a, b, m_tState );
 	}
 
+	CSphMatch & Key ( CSphMatch * a ) const
+	{
+		return *a;
+	}
+
 	void CopyKey ( CSphMatch * pMed, CSphMatch * pVal ) const
 	{
 		pMed->Clone ( *pVal, m_iDynamic );
 	}
-};
 
+	void Swap ( CSphMatch * a, CSphMatch * b ) const
+	{
+		::Swap ( *a, *b );
+	}
+
+	CSphMatch * Add ( CSphMatch * p, int i ) const
+	{
+		return p+i;
+	}
+
+	int Sub ( CSphMatch * b, CSphMatch * a ) const
+	{
+		return (int)(b-a);
+	}
+};
 
 /// K-buffer (generalized double buffer) sorter
 /// faster worst-case but slower average-case than the heap sorter

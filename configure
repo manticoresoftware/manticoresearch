@@ -231,10 +231,10 @@ fi
     $as_echo "$0: be upgraded to zsh 4.3.4 or later."
   else
     $as_echo "$0: Please tell bug-autoconf@gnu.org and
-$0: shodan(at)sphinxsearch.com about your system, including any
-$0: error possibly output before this message. Then install
-$0: a modern shell, or manually run the script under such a
-$0: shell if you do have one."
+$0: shodan(at)sphinxsearch.com about your system, including
+$0: any error possibly output before this message. Then
+$0: install a modern shell, or manually run the script
+$0: under such a shell if you do have one."
   fi
   exit 1
 fi
@@ -2340,7 +2340,7 @@ ac_config_sub="$SHELL $ac_aux_dir/config.sub"  # Please don't use this var.
 ac_configure="$SHELL $ac_aux_dir/configure"  # Please don't use this var.
 
 
-am__api_version='2.1.0'
+am__api_version='1.11'
 
 # Find a good install program.  We prefer a C program (faster),
 # so one script is as good as another.  But avoid the broken or
@@ -6149,7 +6149,7 @@ if test "$ac_res" != no; then :
 
 fi
 
-for ac_func in dup2 gethostbyname gettimeofday memmove memset select socket strcasecmp strchr strerror strncasecmp strstr strtol logf pread
+for ac_func in dup2 gethostbyname gettimeofday memmove memset select socket strcasecmp strchr strerror strncasecmp strstr strtol logf pread poll
 do :
   as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
 ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"

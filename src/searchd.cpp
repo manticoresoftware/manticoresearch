@@ -71,6 +71,10 @@
 	#include <sys/un.h>
 	#include <netdb.h>
 
+	#if HAVE_POLL
+	#include <poll.h>
+	#endif
+
 	// there's no MSG_NOSIGNAL on OS X
 	#ifndef MSG_NOSIGNAL
 	#define MSG_NOSIGNAL 0
@@ -2120,6 +2124,29 @@ int sphSetSockNB ( int iSock )
 }
 
 
+/// wait until socket is readable or writable
+int sphPoll ( int iSock, int64_t tmTimeout, bool bWrite=false )
+{
+#if HAVE_POLL
+	struct pollfd pfd;
+	pfd.fd = iSock;
+	pfd.events = bWrite ? POLLOUT : POLLIN;
+
+	return ::poll ( &pfd, 1, int(tmTimeout/1000) );
+#else
+	fd_set fdSet;
+	FD_ZERO ( &fdSet );
+	sphFDSet ( iSock, &fdSet );
+
+	struct timeval tv;
+	tv.tv_sec = (int)( tmTimeout / 1000000 );
+	tv.tv_usec = (int)( tmTimeout % 1000000 );
+
+	return ::select ( iSock+1, bWrite ? NULL : &fdSet, bWrite ? &fdSet : NULL, NULL, &tv );
+#endif
+}
+
+
 int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr )
 {
 	assert ( iLen>0 );
@@ -2136,14 +2163,6 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr 
 		if ( tmMicroLeft<=0 )
 			break; // timed out
 
-		fd_set fdRead;
-		FD_ZERO ( &fdRead );
-		sphFDSet ( iSock, &fdRead );
-
-		fd_set fdExcept;
-		FD_ZERO ( &fdExcept );
-		sphFDSet ( iSock, &fdExcept );
-
 #if USE_WINDOWS
 		// Windows EINTR emulation
 		// Ctrl-C will not interrupt select on Windows, so let's handle that manually
@@ -2152,11 +2171,8 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr 
 			tmMicroLeft = Min ( tmMicroLeft, 100000 );
 #endif
 
-		struct timeval tv;
-		tv.tv_sec = (int)( tmMicroLeft / 1000000 );
-		tv.tv_usec = (int)( tmMicroLeft % 1000000 );
-
-		iRes = ::select ( iSock+1, &fdRead, NULL, &fdExcept, &tv );
+		// wait until there is data
+		iRes = sphPoll ( iSock, tmMicroLeft );
 
 		// if there was EINTR, retry
 		// if any other error, bail
@@ -2604,20 +2620,12 @@ bool NetOutputBuffer_c::Flush ( bool bUnfreeze )
 				break;
 		}
 
+		// wait until we can write
 		int64_t tmMicroLeft = tmMaxTimer - sphMicroTimer();
 		if ( tmMicroLeft>0 )
-		{
-			fd_set fdWrite;
-			FD_ZERO ( &fdWrite );
-			sphFDSet ( m_iSock, &fdWrite );
-
-			struct timeval tvTimeout;
-			tvTimeout.tv_sec = (int)( tmMicroLeft / 1000000 );
-			tvTimeout.tv_usec = (int)( tmMicroLeft % 1000000 );
-
-			iRes = select ( m_iSock+1, NULL, &fdWrite, NULL, &tvTimeout );
-		} else
-			iRes = 0;
+			iRes = sphPoll ( m_iSock, tmMicroLeft, true );
+		else
+			iRes = 0; // time out
 
 		switch ( iRes )
 		{
@@ -3093,8 +3101,6 @@ struct IReplyParser_t
 
 struct AgentConnectionContext_t
 {
-	fd_set m_fdsRead;
-	fd_set m_fdsWrite;
 	const IRequestBuilder_t * m_pBuilder;
 	AgentConn_t	* m_pAgents;
 	int m_iAgentCount;
@@ -3109,10 +3115,7 @@ struct AgentConnectionContext_t
 		, m_iTimeout ( 0 )
 		, m_iRetriesMax ( 0 )
 		, m_iDelay ( 0 )
-	{
-		FD_ZERO ( &m_fdsRead );
-		FD_ZERO ( &m_fdsWrite );
-	}
+	{}
 };
 
 void RemoteConnectToAgents ( AgentConn_t & tAgent )
@@ -3190,74 +3193,97 @@ void RemoteConnectToAgents ( AgentConn_t & tAgent )
 }
 
 
-bool RemoteFillFDs ( AgentConn_t * pAgents, int iCount, fd_set * pRead, fd_set * pWrite, int * pMax )
-{
-	assert ( pAgents && iCount && pMax && *pMax==0 );
-	assert ( pRead && pWrite );
-
-	FD_ZERO ( pRead );
-	FD_ZERO ( pWrite );
-
-	int iMax = 0;
-	bool bDone = true;
-	for ( int i=0; i<iCount; i++ )
-	{
-		const AgentConn_t & tAgent = pAgents[i];
-		if ( tAgent.m_eState==AGENT_CONNECT || tAgent.m_eState==AGENT_HELLO || tAgent.m_eState==AGENT_QUERY )
-		{
-			assert ( !tAgent.m_sPath.IsEmpty() || tAgent.m_iPort>0 );
-			assert ( tAgent.m_iSock>0 );
-
-			sphFDSet ( tAgent.m_iSock, ( tAgent.m_eState==AGENT_CONNECT ) ? pWrite : pRead );
-			iMax = Max ( iMax, tAgent.m_iSock );
-			if ( tAgent.m_eState!=AGENT_QUERY )
-				bDone = false;
-		}
-	}
-
-	*pMax = iMax;
-	return bDone;
-}
-
-
 int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 {
 	assert ( pCtx->m_iTimeout>=0 );
+	assert ( pCtx->m_pAgents );
+	assert ( pCtx->m_iAgentCount );
+
 	int iAgents = 0;
 	int64_t tmMaxTimer = sphMicroTimer() + pCtx->m_iTimeout*1000; // in microseconds
 
+#if HAVE_POLL
+	CSphVector<struct pollfd> fds ( pCtx->m_iAgentCount );
+#endif
+
+	// main connection loop
 	for ( ;; )
 	{
+		// prepare socket sets
+#if !HAVE_POLL
 		int iMax = 0;
-		if ( RemoteFillFDs ( pCtx->m_pAgents, pCtx->m_iAgentCount, &pCtx->m_fdsRead, &pCtx->m_fdsWrite, &iMax ) )
+		fd_set fdsRead, fdsWrite;
+		FD_ZERO ( &fdsRead );
+		FD_ZERO ( &fdsWrite );
+#endif
+
+		bool bDone = true;
+		for ( int i=0; i<pCtx->m_iAgentCount; i++ )
+		{
+			const AgentConn_t & tAgent = pCtx->m_pAgents[i];
+			if (!( tAgent.m_eState==AGENT_CONNECT || tAgent.m_eState==AGENT_HELLO || tAgent.m_eState==AGENT_QUERY ))
+			{
+#if HAVE_POLL
+				fds[i].fd = -1;
+				fds[i].events = 0;
+#endif
+				continue;
+			}
+
+			assert ( !tAgent.m_sPath.IsEmpty() || tAgent.m_iPort>0 );
+			assert ( tAgent.m_iSock>0 );
+#if HAVE_POLL
+			fds[i].fd = tAgent.m_iSock;
+			fds[i].events = ( tAgent.m_eState==AGENT_CONNECT) ? POLLOUT : POLLIN;
+#else
+			sphFDSet ( tAgent.m_iSock, ( tAgent.m_eState==AGENT_CONNECT ) ? &fdsWrite : &fdsRead );
+			iMax = Max ( iMax, tAgent.m_iSock );
+#endif
+
+			if ( tAgent.m_eState!=AGENT_QUERY )
+				bDone = false;
+		}
+		if ( bDone )
 			break;
 
+		// compute timeout
 		int64_t tmSelect = sphMicroTimer();
 		int64_t tmMicroLeft = tmMaxTimer - tmSelect;
 		if ( tmMicroLeft<=0 )
 			break; // FIXME? what about iTimeout==0 case?
 
+		// do poll
+#if HAVE_POLL
+		int iSelected = ::poll ( fds.Begin(), fds.GetLength(), int(tmMicroLeft/1000) );
+#else
 		struct timeval tvTimeout;
 		tvTimeout.tv_sec = (int)( tmMicroLeft/ 1000000 ); // full seconds
 		tvTimeout.tv_usec = (int)( tmMicroLeft % 1000000 ); // microseconds
+		int iSelected = ::select ( 1+iMax, &fdsRead, &fdsWrite, NULL, &tvTimeout ); // exceptfds are OOB only
+#endif
 
-		// we don't care about exceptfds; they're for OOB only
-		int iSelected = select ( 1+iMax, &pCtx->m_fdsRead, &pCtx->m_fdsWrite, NULL, &tvTimeout );
-
+		// update counters, and loop again if nothing happened
 		pCtx->m_pAgents->m_iWaited += sphMicroTimer() - tmSelect;
-
 		if ( iSelected<=0 )
 			continue;
 
+		// ok, something did happen, so loop the agents and do them checks
 		for ( int i=0; i<pCtx->m_iAgentCount; i++ )
 		{
 			AgentConn_t & tAgent = pCtx->m_pAgents[i];
+#if HAVE_POLL
+			bool bReadable = ( fds[i].revents & POLLIN )!=0;
+			bool bWriteable = ( fds[i].revents & POLLOUT )!=0;
+#else
+			bool bReadable = FD_ISSET ( tAgent.m_iSock, &fdsRead )!=0;
+			bool bWriteable = FD_ISSET ( tAgent.m_iSock, &fdsWrite )!=0;
+#endif
 
 			// check if connection completed
-			// tricky part, we MUST use write-set ONLY here at this check
+			// tricky part, with select, we MUST use write-set ONLY here at this check
 			// even though we can't tell connect() success from just OS send buffer availability
 			// but any check involving read-set just never ever completes, so...
-			if ( tAgent.m_eState==AGENT_CONNECT && FD_ISSET ( tAgent.m_iSock, &pCtx->m_fdsWrite ) )
+			if ( tAgent.m_eState==AGENT_CONNECT && bWriteable )
 			{
 				int iErr = 0;
 				socklen_t iErrLen = sizeof(iErr);
@@ -3277,7 +3303,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 			}
 
 			// check if hello was received
-			if ( tAgent.m_eState==AGENT_HELLO && FD_ISSET ( tAgent.m_iSock, &pCtx->m_fdsRead ) )
+			if ( tAgent.m_eState==AGENT_HELLO && bReadable )
 			{
 				// read reply
 				int iRemoteVer;
@@ -3335,7 +3361,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 			}
 
 			// check if queried agent replied while we were querying others
-			if ( tAgent.m_eState==AGENT_QUERY && FD_ISSET ( tAgent.m_iSock, &pCtx->m_fdsRead ) )
+			if ( tAgent.m_eState==AGENT_QUERY && bReadable )
 			{
 				// do not account agent wall time from here; agent is probably ready
 				tAgent.m_iWall += sphMicroTimer();
@@ -3374,15 +3400,26 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 
 	int iAgents = 0;
 	int64_t tmMaxTimer = sphMicroTimer() + iTimeout*1000; // in microseconds
+
+#if HAVE_POLL
+	CSphVector<struct pollfd> fds ( dAgents.GetLength() );
+#endif
+
 	for ( ;; )
 	{
+#if !HAVE_POLL
+		int iMax = 0;
 		fd_set fdsRead;
 		FD_ZERO ( &fdsRead );
+#endif
 
-		int iMax = 0;
 		bool bDone = true;
 		ARRAY_FOREACH ( iAgent, dAgents )
 		{
+#if HAVE_POLL
+			fds[iAgent].fd = -1;
+			fds[iAgent].events = 0;
+#endif
 			AgentConn_t & tAgent = dAgents[iAgent];
 			if ( tAgent.m_bBlackhole )
 				continue;
@@ -3392,8 +3429,13 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 				assert ( !tAgent.m_sPath.IsEmpty() || tAgent.m_iPort>0 );
 				assert ( tAgent.m_iSock>0 );
 
+#if HAVE_POLL
+				fds[iAgent].fd = tAgent.m_iSock;
+				fds[iAgent].events = POLLIN;
+#else
 				sphFDSet ( tAgent.m_iSock, &fdsRead );
 				iMax = Max ( iMax, tAgent.m_iSock );
+#endif
 				bDone = false;
 			}
 		}
@@ -3405,11 +3447,14 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 		if ( tmMicroLeft<=0 ) // FIXME? what about iTimeout==0 case?
 			break;
 
+#if HAVE_POLL
+		int iSelected = ::poll ( fds.Begin(), fds.GetLength(), int(tmMicroLeft/1000) );
+#else
 		struct timeval tvTimeout;
 		tvTimeout.tv_sec = (int)( tmMicroLeft / 1000000 ); // full seconds
 		tvTimeout.tv_usec = (int)( tmMicroLeft % 1000000 ); // microseconds
-
-		int iSelected = select ( 1+iMax, &fdsRead, NULL, NULL, &tvTimeout );
+		int iSelected = ::select ( 1+iMax, &fdsRead, NULL, NULL, &tvTimeout );
+#endif
 
 		dAgents.Begin()->m_iWaited += sphMicroTimer() - tmSelect;
 
@@ -3423,8 +3468,14 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 				continue;
 			if (!( tAgent.m_eState==AGENT_QUERY || tAgent.m_eState==AGENT_REPLY || tAgent.m_eState==AGENT_PREREPLY ))
 				continue;
+
+#if HAVE_POLL
+			if (!( fds[iAgent].revents & POLLIN ))
+				continue;
+#else
 			if ( !FD_ISSET ( tAgent.m_iSock, &fdsRead ) )
 				continue;
+#endif
 
 			// if there was no reply yet, read reply header
 			bool bFailure = true;
@@ -15121,7 +15172,8 @@ Listener_t * DoAccept ( int * pClientSock, char * sClientName )
 	tvTimeout.tv_sec = USE_WINDOWS ? 0 : 1;
 	tvTimeout.tv_usec = USE_WINDOWS ? 50000 : 0;
 
-	int iRes = select ( iMaxFD, &fdsAccept, NULL, NULL, &tvTimeout );
+	// select should be OK here as listener sockets are created early and get low FDs
+	int iRes = ::select ( iMaxFD, &fdsAccept, NULL, NULL, &tvTimeout );
 	if ( iRes==0 )
 		return NULL;
 
@@ -15196,17 +15248,18 @@ Listener_t * DoAccept ( int * pClientSock, char * sClientName )
 		}
 
 		// accepted!
-#if !USE_WINDOWS
-		// FIXME!!! either get git of select() or allocate list of FD (with dup2 back instead close for thouse FD)
-		// with threads workers to prevent dup2 closes valid FD
-
+#if !USE_WINDOWS && !HAVE_POLL
+		// when there is no poll(), we use select(),
+		// which can only handle a limited range of fds..
 		if ( SPH_FDSET_OVERFLOW ( iClientSock ) )
 		{
 			if ( ( g_eWorkers==MPM_FORK || g_eWorkers==MPM_PREFORK ) )
 			{
+				// in fork or prefork mode, we switch to a preallocated low fd
 				iClientSock = dup2 ( iClientSock, g_iClientFD );
 			} else
 			{
+				// otherwise, we fail this client (we have to)
 				FailClient ( iClientSock, SEARCHD_RETRY, "server maxed out, retry in a second" );
 				sphWarning ( "maxed out, dismissing client (socket=%d)", iClientSock );
 				sphSockClose ( iClientSock );

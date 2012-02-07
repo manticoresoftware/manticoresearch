@@ -2132,7 +2132,7 @@ int sphPoll ( int iSock, int64_t tmTimeout, bool bWrite=false )
 	pfd.fd = iSock;
 	pfd.events = bWrite ? POLLOUT : POLLIN;
 
-	return ::poll ( &pfd, 1, int(tmTimeout/1000) );
+	return ::poll ( &pfd, 1, int ( tmTimeout/1000 ) );
 #else
 	fd_set fdSet;
 	FD_ZERO ( &fdSet );
@@ -3254,7 +3254,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 
 		// do poll
 #if HAVE_POLL
-		int iSelected = ::poll ( fds.Begin(), fds.GetLength(), int(tmMicroLeft/1000) );
+		int iSelected = ::poll ( fds.Begin(), fds.GetLength(), int( tmMicroLeft/1000 ) );
 #else
 		struct timeval tvTimeout;
 		tvTimeout.tv_sec = (int)( tmMicroLeft/ 1000000 ); // full seconds
@@ -3448,7 +3448,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 			break;
 
 #if HAVE_POLL
-		int iSelected = ::poll ( fds.Begin(), fds.GetLength(), int(tmMicroLeft/1000) );
+		int iSelected = ::poll ( fds.Begin(), fds.GetLength(), int( tmMicroLeft/1000 ) );
 #else
 		struct timeval tvTimeout;
 		tvTimeout.tv_sec = (int)( tmMicroLeft / 1000000 ); // full seconds
@@ -13965,10 +13965,17 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		int iIndexSP = hIndex.GetInt ( "index_sp" );
 		const char * sIndexZones = hIndex.GetStr ( "index_zones", "" );
 		bool bHasStripEnabled ( hIndex.GetInt ( "html_strip" )!=0 );
-		if ( ( iIndexSP!=0 || ( *sIndexZones )!=NULL ) && !bHasStripEnabled )
+		if ( ( iIndexSP!=0 || ( *sIndexZones ) ) && !bHasStripEnabled )
 		{
-			sphWarning ( "ERROR: index '%s': has index_sp=%d, index_zones='%s' but disabled 'html_strip' - NOT SERVING", szIndexName, iIndexSP, sIndexZones );
-			return ADD_ERROR;
+			// SENTENCE indexing w\o stripper is valid combination
+			if ( *sIndexZones )
+			{
+				sphWarning ( "ERROR: index '%s': has index_sp=%d, index_zones='%s' but disabled html_strip - NOT SERVING", szIndexName, iIndexSP, sIndexZones );
+				return ADD_ERROR;
+			} else
+			{
+				sphWarning ( "index '%s': has index_sp=%d but disabled html_strip - PARAGRAPH unavailable", szIndexName, iIndexSP );
+			}
 		}
 
 		// RAM chunk size

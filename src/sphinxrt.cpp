@@ -5253,13 +5253,6 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 	// we do not support some of the disk index features in RT just yet
 #define LOC_ERROR(_arg) { sError = _arg; return false; }
 	const CSphIndexSettings & tSettings = pIndex->GetSettings();
-	if ( tSettings.m_bIndexSP!=m_tSettings.m_bIndexSP || tSettings.m_sZones!=m_tSettings.m_sZones || tSettings.m_bHtmlStrip!=m_tSettings.m_bHtmlStrip )
-	{
-		sError.SetSprintf ( "ATTACH indexes has different SPZ settings: plain-index (index_sp=%d, zones=%s, html_strip_mode=%d), rt-index (index_sp=%d, zones=%s, html_strip_mode=%d)",
-			tSettings.m_bIndexSP?1:0, tSettings.m_sZones.cstr(), tSettings.m_bHtmlStrip?1:0,
-			m_tSettings.m_bIndexSP?1:0, m_tSettings.m_sZones.cstr(), m_tSettings.m_bHtmlStrip?1:0 );
-		return false;
-	}
 	if ( tSettings.m_iBoundaryStep!=0 )
 		LOC_ERROR ( "ATTACH currently requires boundary_step=0 in disk index (RT-side support not implemented yet)" );
 	if ( tSettings.m_iStopwordStep!=1 )

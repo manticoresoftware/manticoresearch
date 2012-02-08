@@ -4231,16 +4231,18 @@ bool RtIndex_t::RtQwordSetup ( RtQword_t * pQword, RtSegment_t * pSeg ) const
 	assert ( !pSeg );
 	pQword->m_iDocs = 0;
 	pQword->m_iHits = 0;
+	if ( !m_pSegments.GetLength() )
+		return true;
 
 	// we care about the results anyway though
 	// because if all (!) segments miss this word, we must notify the caller, right?
-	bool bRes = true;
+	bool bFound = false;
 	ARRAY_FOREACH ( i, m_pSegments )
-		bRes &= RtQwordSetupSegment ( pQword, m_pSegments[i], false, m_bKeywordDict, m_iWordsCheckpoint );
+		bFound |= RtQwordSetupSegment ( pQword, m_pSegments[i], false, m_bKeywordDict, m_iWordsCheckpoint );
 
 	// sanity check
-	assert ( !( m_pSegments.GetLength()!=0 && bRes==true && pQword->m_iDocs==0 ) );
-	return bRes;
+	assert (!( bFound==true && pQword->m_iDocs==0 ) );
+	return !bFound;
 }
 
 static void AddKillListFilter ( CSphVector<CSphFilterSettings> * pExtra, const SphAttr_t * pKillList, int nEntries )
@@ -4505,6 +4507,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		tCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
 		tCtx.m_iExpansionLimit = m_iExpansionLimit;
 		tCtx.m_bHasMorphology = m_pDict->HasMorphology();
+		tCtx.m_bRt = false;
 		tParsed.m_pRoot = sphExpandXQNode ( tParsed.m_pRoot, tCtx );
 	}
 

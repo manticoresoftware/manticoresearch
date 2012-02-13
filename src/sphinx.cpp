@@ -16206,6 +16206,7 @@ enum
 	SPH_MORPH_STEM_RU_CP1251,
 	SPH_MORPH_STEM_RU_UTF8,
 	SPH_MORPH_STEM_CZ,
+	SPH_MORPH_STEM_AR_UTF8,
 	SPH_MORPH_SOUNDEX,
 	SPH_MORPH_METAPHONE_SBCS,
 	SPH_MORPH_METAPHONE_UTF8,
@@ -16696,6 +16697,16 @@ bool CSphDictCRCTraits::InitMorph ( const char * szMorph, int iLength, bool bUse
 	{
 		stem_cz_init ();
 		return AddMorph ( SPH_MORPH_STEM_CZ );
+	}
+
+	if ( iLength==7 && !strncmp ( szMorph, "stem_ar", iLength ) )
+	{
+		if ( !bUseUTF8 )
+		{
+			sError.SetSprintf ( "stem_ar only supports charset_type = utf-8" );
+			return false;
+		}
+		return AddMorph ( SPH_MORPH_STEM_AR_UTF8 );
 	}
 
 	if ( iLength==9 && !strncmp ( szMorph, "stem_enru", iLength ) )
@@ -17263,6 +17274,10 @@ bool CSphDictCRCTraits::StemById ( BYTE * pWord, int iStemmer )
 
 	case SPH_MORPH_STEM_CZ:
 		stem_cz ( pWord );
+		break;
+
+	case SPH_MORPH_STEM_AR_UTF8:
+		stem_ar_utf8 ( pWord );
 		break;
 
 	case SPH_MORPH_SOUNDEX:

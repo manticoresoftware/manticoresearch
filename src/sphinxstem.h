@@ -39,6 +39,9 @@ void	stem_cz_init ();
 /// stem lowercase Czech word
 void	stem_cz ( BYTE * pWord );
 
+/// stem Arabic word in UTF-8 encoding
+void	stem_ar_utf8 ( BYTE * word );
+
 /// calculate soundex in-place if the word is lowercase English letters only;
 /// do nothing if it's not
 void	stem_soundex ( BYTE * pWord );

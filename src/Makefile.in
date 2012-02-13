@@ -56,8 +56,8 @@ am__objects_1 = sphinx.$(OBJEXT) sphinxexcerpt.$(OBJEXT) \
 	sphinxquery.$(OBJEXT) sphinxsoundex.$(OBJEXT) \
 	sphinxmetaphone.$(OBJEXT) sphinxstemen.$(OBJEXT) \
 	sphinxstemru.$(OBJEXT) sphinxstemcz.$(OBJEXT) \
-	sphinxutils.$(OBJEXT) md5.$(OBJEXT) sphinxstd.$(OBJEXT) \
-	sphinxsort.$(OBJEXT) sphinxexpr.$(OBJEXT) \
+	sphinxstemar.$(OBJEXT) sphinxutils.$(OBJEXT) md5.$(OBJEXT) \
+	sphinxstd.$(OBJEXT) sphinxsort.$(OBJEXT) sphinxexpr.$(OBJEXT) \
 	sphinxfilter.$(OBJEXT) sphinxsearch.$(OBJEXT) \
 	sphinxrt.$(OBJEXT)
 am_libsphinx_a_OBJECTS = $(am__objects_1)
@@ -211,7 +211,7 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 SRC_SPHINX = sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp \
-	sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxstemcz.cpp \
+	sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxstemcz.cpp sphinxstemar.cpp \
 	sphinxutils.cpp md5.cpp sphinxstd.cpp sphinxsort.cpp sphinxexpr.cpp sphinxfilter.cpp \
 	sphinxsearch.cpp sphinxrt.cpp
 
@@ -354,6 +354,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxsort.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxsoundex.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxstd.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxstemar.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxstemcz.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxstemen.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxstemru.Po@am__quote@

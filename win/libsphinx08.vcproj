@@ -345,6 +345,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\src\sphinxstemar.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\src\sphinxstemcz.cpp"
 				>
 			</File>

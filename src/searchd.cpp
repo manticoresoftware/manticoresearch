@@ -3695,7 +3695,7 @@ public:
 	{
 		m_tStatLock.Done();
 		m_tDataLock.Done();
-		SafeDelete ( m_dData );
+		SafeDeleteArray ( m_dData );
 	}
 
 	AgentWorkContext_t Pop()
@@ -11289,30 +11289,16 @@ static void DoExtendedUpdate ( const char * sIndex, const SqlStmt_t & tStmt,
 }
 
 
-
-void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit )
+static const char * ExtractDistributedIndexes ( const CSphVector<CSphString> & dNames, CSphVector<DistributedIndex_t> & dDistributed )
 {
-	CSphString sError;
-
-	// check index names
-	CSphVector<CSphString> dIndexNames;
-	ParseIndexList ( tStmt.m_sIndex, dIndexNames );
-
-	if ( !dIndexNames.GetLength() )
+	assert ( dNames.GetLength()==dDistributed.GetLength() );
+	ARRAY_FOREACH ( i, dNames )
 	{
-		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
-		return;
-	}
-
-	CSphVector<DistributedIndex_t> dDistributed ( dIndexNames.GetLength() ); // lock safe storage for distributed indexes
-	ARRAY_FOREACH ( i, dIndexNames )
-	{
-		if ( !g_pIndexes->Exists ( dIndexNames[i] ) )
+		if ( !g_pIndexes->Exists ( dNames[i] ) )
 		{
 			// search amongst distributed and copy for further processing
 			g_tDistLock.Lock();
-			const DistributedIndex_t * pDistIndex = g_hDistIndexes ( dIndexNames[i] );
+			const DistributedIndex_t * pDistIndex = g_hDistIndexes ( dNames[i] );
 
 			if ( pDistIndex )
 			{
@@ -11321,15 +11307,38 @@ void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt
 
 			g_tDistLock.Unlock();
 
-			if ( pDistIndex )
-				continue;
-			else
-			{
-				sError.SetSprintf ( "unknown index '%s' in update request", dIndexNames[i].cstr() );
-				SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
-				return;
-			}
+			if ( !pDistIndex )
+				return dNames[i].cstr();
 		}
+	}
+
+	return NULL;
+}
+
+
+void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit )
+{
+	CSphString sError;
+
+	// extract index names
+	CSphVector<CSphString> dIndexNames;
+	ParseIndexList ( tStmt.m_sIndex, dIndexNames );
+	if ( !dIndexNames.GetLength() )
+	{
+		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	// lock safe storage for distributed indexes
+	CSphVector<DistributedIndex_t> dDistributed ( dIndexNames.GetLength() );
+	// copy distributed indexes description
+	const char * sMissedDist = NULL;
+	if ( ( sMissedDist = ExtractDistributedIndexes ( dIndexNames, dDistributed ) )!=NULL )
+	{
+		sError.SetSprintf ( "unknown index '%s' in update request", sMissedDist );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+		return;
 	}
 
 	// do update
@@ -11798,43 +11807,134 @@ void HandleMysqlMeta ( NetOutputBuffer_c & tOut, BYTE & uPacketID, const CSphQue
 }
 
 
-void HandleMysqlDelete ( NetOutputBuffer_c & tOut, BYTE & uPacketID, const SqlStmt_t & tStmt, bool bCommit )
+static void LocalIndexDoDeleteDocuments ( const char * sName, const SphDocID_t * pDocs, int iCount,
+											const ServedIndex_t * pLocked, SearchFailuresLog_c & dErrors, bool bCommit )
+{
+	if ( !pLocked )
+	{
+		dErrors.Submit ( sName, "no such index" );
+		return;
+	}
+
+	CSphString sError;
+	ISphRtIndex * pIndex = static_cast<ISphRtIndex *> ( pLocked->m_pIndex );
+	if ( !pLocked->m_bRT || !pLocked->m_bEnabled )
+	{
+		sError.SetSprintf ( "does not support DELETE (enabled=%d)", pLocked->m_bEnabled );
+		dErrors.Submit ( sName, sError.cstr() );
+		return;
+	}
+
+	if ( !pIndex->DeleteDocument ( pDocs, iCount, sError ) )
+	{
+		dErrors.Submit ( sName, sError.cstr() );
+		return;
+	}
+
+	if ( bCommit )
+		pIndex->Commit();
+}
+
+
+void HandleMysqlDelete ( const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, NetOutputBuffer_c & tOut, BYTE & uPacketID )
 {
 	MEMORY ( SPH_MEM_DELETE_SQL );
 
 	CSphString sError;
 
-	const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( tStmt.m_sIndex );
-	if ( !pServed )
+	CSphVector<CSphString> dNames;
+	ParseIndexList ( tStmt.m_sIndex, dNames );
+	if ( !dNames.GetLength() )
 	{
 		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
 		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
-	if ( !pServed->m_bRT || !pServed->m_bEnabled )
+	CSphVector<DistributedIndex_t> dDistributed ( dNames.GetLength() );
+	const char * sMissedDist = NULL;
+	if ( ( sMissedDist = ExtractDistributedIndexes ( dNames, dDistributed ) )!=NULL )
 	{
-		pServed->Unlock();
-		sError.SetSprintf ( "index '%s' does not support DELETE (enabled=%d)", tStmt.m_sIndex.cstr(), pServed->m_bEnabled );
+		sError.SetSprintf ( "unknown index '%s' in delete request", sError.cstr() );
 		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
-	ISphRtIndex * pIndex = static_cast<ISphRtIndex *> ( pServed->m_pIndex );
-
-	if ( !pIndex->DeleteDocument ( tStmt.m_dDeleteIds.Begin(), tStmt.m_dDeleteIds.GetLength(), sError ) )
+	// delete to agents works only with commit=1
+	if ( !bCommit && dDistributed.GetLength() )
 	{
-		pServed->Unlock();
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+		ARRAY_FOREACH ( i, dDistributed )
+		{
+			if ( !dDistributed[i].m_dAgents.GetLength() )
+				continue;
+
+			sError.SetSprintf ( "index '%s': DELETE not working on agents when autocommit=0", tStmt.m_sIndex.cstr() );
+			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+			return;
+		}
+	}
+
+	// do delete
+	SearchFailuresLog_c dErrors;
+	const SphDocID_t * pDocs = tStmt.m_dDeleteIds.Begin();
+	int iDocsCount = tStmt.m_dDeleteIds.GetLength();
+
+	// delete for local indexes
+	ARRAY_FOREACH ( iIdx, dNames )
+	{
+		const char * sName = dNames[iIdx].cstr();
+		const ServedIndex_t * pLocal = g_pIndexes->GetRlockedEntry ( sName );
+		if ( pLocal )
+		{
+			LocalIndexDoDeleteDocuments ( sName, pDocs, iDocsCount, pLocal, dErrors, bCommit );
+			pLocal->Unlock();
+		} else
+		{
+			assert ( dDistributed[iIdx].m_dLocal.GetLength() || dDistributed[iIdx].m_dAgents.GetLength() );
+			const CSphVector<CSphString> & dDistLocal = dDistributed[iIdx].m_dLocal;
+
+			ARRAY_FOREACH ( i, dDistLocal )
+			{
+				const char * sDistLocal = dDistLocal[i].cstr();
+				const ServedIndex_t * pDistLocal = g_pIndexes->GetRlockedEntry ( sDistLocal );
+				LocalIndexDoDeleteDocuments ( sDistLocal, pDocs, iDocsCount, pDistLocal, dErrors, bCommit );
+				if ( pDistLocal )
+					pDistLocal->Unlock();
+			}
+		}
+
+		// delete for remote agents
+		if ( dDistributed[iIdx].m_dAgents.GetLength() )
+		{
+			const DistributedIndex_t & tDist = dDistributed[iIdx];
+			CSphVector<AgentConn_t> dAgents ( tDist.m_dAgents.GetLength() );
+			ARRAY_FOREACH ( i, dAgents )
+				dAgents[i] = tDist.m_dAgents[i];
+
+			// connect to remote agents and query them
+			SphinxqlRequestBuilder_t tReqBuilder ( sQuery, tStmt );
+			CSphRemoteAgentsController tDistCtrl ( g_iDistThreads, dAgents, tReqBuilder, tDist.m_iAgentConnectTimeout );
+			int iAgentsDone = tDistCtrl.Finish();
+			if ( iAgentsDone )
+			{
+				// FIXME!!! report error & warnings from agents
+				int iGot = 0;
+				int iWarns = 0;
+				SphinxqlReplyParser_t tParser ( &iGot, &iWarns );
+				RemoteWaitForAgents ( dAgents, tDist.m_iAgentQueryTimeout, tParser ); // FIXME? profile update time too?
+			}
+		}
+	}
+
+	if ( !dErrors.IsEmpty() )
+	{
+		StrBuf_t sReport;
+		dErrors.BuildReport ( sReport );
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sReport.cstr() );
 		return;
 	}
 
-	if ( bCommit )
-		pIndex->Commit ();
-
-	pServed->Unlock();
-
-	SendMysqlOkPacket ( tOut, uPacketID ); // FIXME? affected rows
+	SendMysqlOkPacket ( tOut, uPacketID );
 }
 
 
@@ -12345,7 +12445,7 @@ public:
 			return;
 
 		case STMT_DELETE:
-			HandleMysqlDelete ( tOut, uPacketID, *pStmt, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction );
+			HandleMysqlDelete ( *pStmt, sQuery, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, tOut, uPacketID );
 			return;
 
 		case STMT_SET:

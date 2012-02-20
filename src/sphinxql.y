@@ -684,16 +684,20 @@ insert_val:
 //////////////////////////////////////////////////////////////////////////
 
 delete_from:
-	TOK_DELETE TOK_FROM TOK_IDENT TOK_WHERE TOK_ID '=' const_int
+	TOK_DELETE TOK_FROM ident_list TOK_WHERE TOK_ID '=' const_int
 		{
 			pParser->m_pStmt->m_eStmt = STMT_DELETE;
 			pParser->m_pStmt->m_sIndex = $3.m_sValue;
+			pParser->m_pStmt->m_iListStart = $3.m_iStart;
+			pParser->m_pStmt->m_iListEnd = $3.m_iEnd;
 			pParser->m_pStmt->m_dDeleteIds.Add ( $7.m_iValue );
 		}
-	| TOK_DELETE TOK_FROM TOK_IDENT TOK_WHERE TOK_ID TOK_IN '(' const_list ')'
+	| TOK_DELETE TOK_FROM ident_list TOK_WHERE TOK_ID TOK_IN '(' const_list ')'
 		{
 			pParser->m_pStmt->m_eStmt = STMT_DELETE;
 			pParser->m_pStmt->m_sIndex = $3.m_sValue;
+			pParser->m_pStmt->m_iListStart = $3.m_iStart;
+			pParser->m_pStmt->m_iListEnd = $3.m_iEnd;
 			for ( int i=0; i<$8.m_pValues.Ptr()->GetLength(); i++ )
 				pParser->m_pStmt->m_dDeleteIds.Add ( (*$8.m_pValues.Ptr())[i] );
 		}

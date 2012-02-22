@@ -76,6 +76,60 @@ enum XQOperator_e
 	SPH_QUERY_PARAGRAPH
 };
 
+// the limit of field or zone
+struct XQLimitSpec_t
+{
+	bool					m_bFieldSpec;	///< whether field spec was already explicitly set
+	bool					m_bInvisible;	///< totally ignore this set
+	CSphSmallBitvec			m_dFieldMask;	///< fields mask (spec part)
+	int						m_iFieldMaxPos;	///< max position within field (spec part)
+	CSphVector<int>			m_dZones;		///< zone indexes in per-query zones list
+
+public:
+	XQLimitSpec_t ()
+	{
+		Reset();
+	}
+
+	inline void Reset ()
+	{
+		m_bInvisible = false;
+		m_bFieldSpec = false;
+		m_iFieldMaxPos = 0;
+		m_dFieldMask.Set();
+		m_dZones.Reset();
+	}
+
+	inline void Hide ()
+	{
+		m_bInvisible = true;
+	}
+
+	XQLimitSpec_t ( const XQLimitSpec_t& dLimit )
+	{
+		if ( this==&dLimit )
+			return;
+		Reset();
+		*this = dLimit;
+	}
+
+	XQLimitSpec_t & operator = ( const XQLimitSpec_t& dLimit )
+	{
+		if ( this==&dLimit )
+			return *this;
+
+		if ( dLimit.m_bFieldSpec )
+			SetFieldSpec ( dLimit.m_dFieldMask, dLimit.m_iFieldMaxPos );
+
+		if ( dLimit.m_dZones.GetLength() )
+			SetZoneSpec ( dLimit.m_dZones );
+
+		return *this;
+	}
+public:
+	void SetZoneSpec ( const CSphVector<int> & dZones );
+	void SetFieldSpec ( const CSphSmallBitvec& uMask, int iMaxPos );
+};
 
 /// extended query node
 /// plain nodes are just an atom
@@ -94,12 +148,7 @@ private:
 
 public:
 	CSphVector<XQNode_t*>	m_dChildren;	///< non-plain node children
-
-	bool					m_bFieldSpec;	///< whether field spec was already explicitly set
-	CSphSmallBitvec			m_dFieldMask;	///< fields mask (spec part)
-	int						m_iFieldMaxPos;	///< max position within field (spec part)
-
-	CSphVector<int>			m_dZones;		///< zone indexes in per-query zones list
+	XQLimitSpec_t			m_dSpec;		///< specification by field, zone(s), etc.
 
 	CSphVector<XQKeyword_t>	m_dWords;		///< query words (plain node)
 	int						m_iOpArg;		///< operator argument (proximity distance, quorum count)
@@ -109,21 +158,18 @@ public:
 
 public:
 	/// ctor
-	XQNode_t ()
+	explicit XQNode_t ( const XQLimitSpec_t& dSpec )
 		: m_pParent ( NULL )
 		, m_eOp ( SPH_QUERY_AND )
 		, m_iOrder ( 0 )
 		, m_iCounter ( 0 )
 		, m_iMagicHash ( 0 )
-		, m_bFieldSpec ( false )
-		, m_iFieldMaxPos ( 0 )
+		, m_dSpec ( dSpec )
 		, m_iOpArg ( 0 )
 		, m_iAtomPos ( -1 )
 		, m_bVirtuallyPlain ( false )
 		, m_bNotWeighted ( false )
-	{
-		m_dFieldMask.Set();
-	}
+	{}
 
 	/// dtor
 	~XQNode_t ()

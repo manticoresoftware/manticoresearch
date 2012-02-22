@@ -1,7 +1,7 @@
 #!/bin/sh
 
 jobs=$(grep -c processor /proc/cpuinfo)
-FAILLOG="/tmp/faillog"
+[ "z$FAILLOG" = "z" ] && FAILLOG="/tmp/faillog"
 LINE="-------------------------------\n"
 if [ q"1" = q"$jobs" ] ; then
     jobs=""

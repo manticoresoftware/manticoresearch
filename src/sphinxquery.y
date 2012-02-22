@@ -40,7 +40,6 @@
 %type <pNode>			sentence
 %type <pNode>			paragraph
 %type <pNode>			atom
-%type <pNode>			atomf
 %type <pNode>			orlist
 %type <pNode>			orlistf
 %type <pNode>			beforelist
@@ -54,46 +53,31 @@ query:
 	expr								{ pParser->AddQuery ( $1 ); }
 	;
 
-rawkeyword:
-	TOK_KEYWORD							{ $$ = $1; }
-	| TOK_INT							{ $$ = pParser->AddKeyword ( ( $1.iStrIndex>=0 ) ? pParser->m_dIntTokens[$1.iStrIndex].cstr() : NULL ); }
+expr:
+	beforelist						{ $$ = $1; }
+	| expr beforelist					{ $$ = pParser->AddOp ( SPH_QUERY_AND, $1, $2 ); }
 	;
 
-keyword:
-	rawkeyword
-	| rawkeyword '$'			{ $$ = $1; assert ( $$->m_dWords.GetLength()==1 ); $$->m_dWords[0].m_bFieldEnd = true; }
-	| '^' rawkeyword			{ $$ = $2; assert ( $$->m_dWords.GetLength()==1 ); $$->m_dWords[0].m_bFieldStart = true; }
-	| '^' rawkeyword '$'		{ $$ = $2; assert ( $$->m_dWords.GetLength()==1 ); $$->m_dWords[0].m_bFieldStart = true; $$->m_dWords[0].m_bFieldEnd = true; }
+tok_limiter:
+	// empty
+	| TOK_FIELDLIMIT			{ pParser->SetFieldSpec ( $1.dMask, $1.iMaxPos ); }
+	| TOK_ZONE				{ pParser->SetZoneVec ( $1 ); }
 	;
 
-phrasetoken:
-	keyword								{ $$ = $1; }
-	| '('								{ $$ = NULL; }
-	| ')'								{ $$ = NULL; }
-	| '-'								{ $$ = NULL; }
-	| '|'								{ $$ = NULL; }
-	| '~'								{ $$ = NULL; }
-	| '/'								{ $$ = NULL; }
+beforelist:
+	orlistf					{ $$ = $1; }
+	| beforelist TOK_BEFORE orlistf		{ $$ = pParser->AddOp ( SPH_QUERY_BEFORE, $1, $3 ); }
+	| beforelist TOK_NEAR orlistf		{ $$ = pParser->AddOp ( SPH_QUERY_NEAR, $1, $3, $2.iValue ); }
 	;
 
-phrase:
-	phrasetoken							{ $$ = $1; }
-	| phrase phrasetoken				{ $$ = pParser->AddKeyword ( $1, $2 ); }
+orlistf:
+	orlist								{ $$ = $1; }
+	| tok_limiter '-' orlist					{ $$ = pParser->AddOp ( SPH_QUERY_NOT, $3, NULL ); }
 	;
 
-sp_item:
-	keyword								{ $$ = $1; }
-	| '"' phrase '"'					{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_PHRASE); } }
-	;
-
-sentence:
-	sp_item TOK_SENTENCE sp_item		{ $$ = pParser->AddOp ( SPH_QUERY_SENTENCE, $1, $3 ); }
-	| sentence TOK_SENTENCE sp_item		{ $$ = pParser->AddOp ( SPH_QUERY_SENTENCE, $1, $3 ); }
-	;
-
-paragraph:
-	sp_item TOK_PARAGRAPH sp_item		{ $$ = pParser->AddOp ( SPH_QUERY_PARAGRAPH, $1, $3 ); }
-	| paragraph TOK_PARAGRAPH sp_item	{ $$ = pParser->AddOp ( SPH_QUERY_PARAGRAPH, $1, $3 ); }
+orlist:
+	tok_limiter atom								{ $$ = $2; }
+	| orlist '|' tok_limiter atom					{ $$ = pParser->AddOp ( SPH_QUERY_OR, $1, $4 ); }
 	;
 
 atom:
@@ -106,36 +90,52 @@ atom:
 	| '"' phrase '"'					{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_PHRASE); } }
 	| '"' phrase '"' '~' TOK_INT		{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_PROXIMITY ); $$->m_iOpArg = $5.iValue; } }
 	| '"' phrase '"' '/' TOK_INT		{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_QUORUM ); $$->m_iOpArg = $5.iValue; } }
-	| '(' expr ')'						{ $$ = $2; if ( $$ ) $$->m_bFieldSpec = false; }
+	| '(' expr ')'						{ $$ = $2; if ( $$ ) $$->m_dSpec.Hide(); pParser->m_dStateSpec.Reset(); }
+
 	;
 
-atomf:
-	atom								{ $$ = $1; }
-	| TOK_FIELDLIMIT atom				{ $$ = $2; if ( $$ ) $$->SetFieldSpec ( $1.dMask, $1.iMaxPos ); }
-	| TOK_ZONE atom						{ $$ = $2; if ( $$ ) $$->SetZoneSpec ( pParser->GetZoneVec ( $1 ) ); }
+keyword:
+	rawkeyword
+	| rawkeyword '$'			{ $$ = $1; assert ( $$->m_dWords.GetLength()==1 ); $$->m_dWords[0].m_bFieldEnd = true; }
+	| '^' rawkeyword			{ $$ = $2; assert ( $$->m_dWords.GetLength()==1 ); $$->m_dWords[0].m_bFieldStart = true; }
+	| '^' rawkeyword '$'		{ $$ = $2; assert ( $$->m_dWords.GetLength()==1 ); $$->m_dWords[0].m_bFieldStart = true; $$->m_dWords[0].m_bFieldEnd = true; }
 	;
 
-orlist:
-	atomf								{ $$ = $1; }
-	| orlist '|' atomf					{ $$ = pParser->AddOp ( SPH_QUERY_OR, $1, $3 ); }
+rawkeyword:
+	TOK_KEYWORD							{ $$ = $1; }
+	| TOK_INT							{ $$ = pParser->AddKeyword ( ( $1.iStrIndex>=0 ) ? pParser->m_dIntTokens[$1.iStrIndex].cstr() : NULL ); }
 	;
 
-orlistf:
-	orlist								{ $$ = $1; }
-	| '-' orlist						{ $$ = pParser->AddOp ( SPH_QUERY_NOT, $2, NULL ); }
-	| TOK_FIELDLIMIT '-' orlist			{ $$ = pParser->AddOp ( SPH_QUERY_NOT, $3, NULL ); $$->SetFieldSpec ( $1.dMask, $1.iMaxPos ); }
+sentence:
+	sp_item TOK_SENTENCE sp_item		{ $$ = pParser->AddOp ( SPH_QUERY_SENTENCE, $1, $3 ); }
+	| sentence TOK_SENTENCE sp_item		{ $$ = pParser->AddOp ( SPH_QUERY_SENTENCE, $1, $3 ); }
 	;
 
-beforelist:
-	orlistf
-	| beforelist TOK_BEFORE orlistf		{ $$ = pParser->AddOp ( SPH_QUERY_BEFORE, $1, $3 ); }
-	| beforelist TOK_NEAR orlistf		{ $$ = pParser->AddOp ( SPH_QUERY_NEAR, $1, $3, $2.iValue ); }
+paragraph:
+	sp_item TOK_PARAGRAPH sp_item		{ $$ = pParser->AddOp ( SPH_QUERY_PARAGRAPH, $1, $3 ); }
+	| paragraph TOK_PARAGRAPH sp_item	{ $$ = pParser->AddOp ( SPH_QUERY_PARAGRAPH, $1, $3 ); }
 	;
 
-expr:
-	beforelist							{ $$ = $1; }
-	| expr beforelist					{ $$ = pParser->AddOp ( SPH_QUERY_AND, $1, $2 ); }
+sp_item:
+	keyword								{ $$ = $1; }
+	| '"' phrase '"'					{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_PHRASE); } }
 	;
+
+phrase:
+	phrasetoken							{ $$ = $1; }
+	| phrase phrasetoken				{ $$ = pParser->AddKeyword ( $1, $2 ); }
+	;
+
+phrasetoken:
+	keyword								{ $$ = $1; }
+	| '('								{ $$ = NULL; }
+	| ')'								{ $$ = NULL; }
+	| '-'								{ $$ = NULL; }
+	| '|'								{ $$ = NULL; }
+	| '~'								{ $$ = NULL; }
+	| '/'								{ $$ = NULL; }
+	;
+
 
 %%
 

@@ -514,6 +514,7 @@ static void GetFileStats ( const char * szFilename, CSphSavedFile & tInfo );
 CSphAutofile::CSphAutofile ()
 	: m_iFD ( -1 )
 	, m_bTemporary ( false )
+	, m_bWouldTemporary ( false )
 	, m_pProgress ( NULL )
 	, m_pStat ( NULL )
 {
@@ -523,6 +524,7 @@ CSphAutofile::CSphAutofile ()
 CSphAutofile::CSphAutofile ( const CSphString & sName, int iMode, CSphString & sError, bool bTemp )
 	: m_iFD ( -1 )
 	, m_bTemporary ( false )
+	, m_bWouldTemporary ( false )
 	, m_pProgress ( NULL )
 	, m_pStat ( NULL )
 {
@@ -547,7 +549,10 @@ int CSphAutofile::Open ( const CSphString & sName, int iMode, CSphString & sErro
 	if ( m_iFD<0 )
 		sError.SetSprintf ( "failed to open %s: %s", sName.cstr(), strerror(errno) );
 	else
+	{
 		m_bTemporary = bTemp; // only if we managed to actually open it
+		m_bWouldTemporary = true; // if a shit happen - we could delete the file.
+	}
 
 	return m_iFD;
 }
@@ -565,6 +570,12 @@ void CSphAutofile::Close ()
 	m_iFD = -1;
 	m_sFilename = "";
 	m_bTemporary = false;
+	m_bWouldTemporary = false;
+}
+
+void CSphAutofile::SetTemporary()
+{
+	m_bTemporary = m_bWouldTemporary;
 }
 
 
@@ -3606,7 +3617,7 @@ int CSphTokenizerTraits<IS_UTF8>::CodepointArbitration ( int iCode, bool bWasEsc
 	{
 		if ( iCode & FLAG_CODEPOINT_DUAL )
 			iCode &= ~( FLAG_CODEPOINT_SPECIAL | FLAG_CODEPOINT_DUAL );
-		else if ( bDashInside )
+		else if ( bDashInside && ( iCode & FLAG_CODEPOINT_SYNONYM ) )
 			// if we return zero here, we will break the tokens like 'Ms-Dos'
 			iCode &= ~( FLAG_CODEPOINT_SPECIAL );
 		else
@@ -5543,6 +5554,20 @@ void CSphWriter::CloseFile ( bool bTruncate )
 	}
 }
 
+void CSphWriter::UnlinkFile()
+{
+	if ( m_bOwnFile )
+	{
+		if ( m_iFD>=0 )
+			::close ( m_iFD );
+
+		m_iFD = -1;
+		::unlink ( m_sName.cstr() );
+		m_sName = "";
+	}
+	SafeDeleteArray ( m_pBuffer );
+}
+
 
 void CSphWriter::PutByte ( int data )
 {
@@ -7394,7 +7419,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 		return 0;
 
 	if ( g_pBinlog )
-		g_pBinlog->BinlogUpdateAttributes ( m_sIndexName.cstr(), ++m_iTID, tUpd );
+		g_pBinlog->BinlogUpdateAttributes ( &m_iTID, m_sIndexName.cstr(), tUpd );
 
 	// remap update schema to index schema
 	CSphVector<CSphAttrLocator> dLocators;
@@ -9655,6 +9680,42 @@ static bool sphTruncate ( int iFD )
 #endif
 }
 
+class DeleteOnFail : public ISphNoncopyable
+{
+public:
+	DeleteOnFail() : m_bShitHappened ( true )
+	{}
+	inline ~DeleteOnFail()
+	{
+		if ( m_bShitHappened )
+		{
+			ARRAY_FOREACH ( i, m_dWriters )
+				m_dWriters[i]->UnlinkFile();
+
+			ARRAY_FOREACH ( i, m_dAutofiles )
+				m_dAutofiles[i]->SetTemporary();
+		}
+	}
+	inline void AddWriter ( CSphWriter* pWr )
+	{
+		if ( pWr )
+			m_dWriters.Add ( pWr );
+	}
+	inline void AddAutofile ( CSphAutofile* pAf )
+	{
+		if ( pAf )
+			m_dAutofiles.Add ( pAf );
+	}
+	inline void AllIsDone()
+	{
+		m_bShitHappened = false;
+	}
+private:
+	bool	m_bShitHappened;
+	CSphVector<CSphWriter*> m_dWriters;
+	CSphVector<CSphAutofile*> m_dAutofiles;
+};
+
 
 int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer )
 {
@@ -9888,6 +9949,16 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	if ( !tStrWriter.OpenFile ( GetIndexFileName("sps"), m_sLastError ) )
 		return 0;
 	tStrWriter.PutByte ( 0 ); // dummy byte, to reserve magic zero offset
+
+	DeleteOnFail dFileWatchdog;
+
+	if ( m_bInplaceSettings )
+	{
+		dFileWatchdog.AddAutofile ( &fdHits );
+		dFileWatchdog.AddAutofile ( &fdDocinfos );
+	}
+
+	dFileWatchdog.AddWriter ( &tStrWriter );
 
 	if ( fdLock.GetFD()<0 || fdHits.GetFD()<0 || fdDocinfos.GetFD()<0 || fdTmpFieldMVAs.GetFD ()<0 )
 		return 0;
@@ -10501,7 +10572,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	// initialize MVA reader
 	CSphAutoreader rdMva;
 	if ( !rdMva.Open ( GetIndexFileName("spm"), m_sLastError ) )
-		return false;
+		return 0;
 
 	SphDocID_t uMvaID = rdMva.GetDocid();
 
@@ -11022,6 +11093,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	PROFILER_DONE ();
 	PROFILE_SHOW ();
+	dFileWatchdog.AllIsDone();
 	return 1;
 } // NOLINT function length
 
@@ -12502,71 +12574,94 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	if ( !tCtx.SetupOverrides ( pQuery, pResult, m_tSchema ) )
 		return false;
 
-	// do scan
+	// prepare to work them rows
 	bool bRandomize = ppSorters[0]->m_bRandomize;
-	int iCutoff = pQuery->m_iCutoff;
-	if ( iCutoff<=0 )
-		iCutoff = -1;
 
 	CSphMatch tMatch;
 	tMatch.Reset ( pResult->m_tSchema.GetDynamicSize() );
 	tMatch.m_iWeight = pQuery->GetIndexWeight ( m_sIndexName.cstr() );
+	tMatch.m_iTag = tCtx.m_dCalcFinal.GetLength() ? -1 : iTag;
 
-	DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
-	DWORD uStart = pQuery->m_bReverseScan ? ( m_uDocinfoIndex-1 ) : 0;
-	int iStep = pQuery->m_bReverseScan ? -1 : 1;
-	int iMyTag = tCtx.m_dCalcFinal.GetLength() ? -1 : iTag;
-	for ( DWORD uIndexEntry=uStart; uIndexEntry<m_uDocinfoIndex; uIndexEntry+=iStep )
+	// optimize direct lookups by id
+	// run full scan with block and row filtering for everything else
+	if ( pQuery->m_dFilters.GetLength()==1
+		&& pQuery->m_dFilters[0].m_eType==SPH_FILTER_VALUES
+		&& pQuery->m_dFilters[0].m_bExclude==false
+		&& pQuery->m_dFilters[0].m_sAttrName=="@id"
+		&& !pExtraFilters )
 	{
-		/////////////////////////
-		// block-level filtering
-		/////////////////////////
-
-		const DWORD * pMin = &m_pDocinfoIndex[2*uIndexEntry*uStride];
-		const DWORD * pMax = pMin + uStride;
-
-		// check applicable filters
-		if ( tCtx.m_pFilter && !tCtx.m_pFilter->EvalBlock ( pMin, pMax ) )
-			continue;
-
-		///////////////////////
-		// row-level filtering
-		///////////////////////
-
-		const DWORD * pBlockStart = &m_pDocinfo [ ( int64_t ( uIndexEntry ) )*uStride*DOCINFO_INDEX_FREQ ];
-		const DWORD * pBlockEnd = &m_pDocinfo [ ( int64_t ( Min ( ( uIndexEntry+1 )*DOCINFO_INDEX_FREQ, m_uDocinfo ) - 1 ) )*uStride ];
-
-		for ( const DWORD * pDocinfo=pBlockStart; pDocinfo<=pBlockEnd; pDocinfo+=uStride )
+		// run id lookups
+		for ( int i=0; i<pQuery->m_dFilters[0].GetNumValues(); i++ )
 		{
-			tMatch.m_iDocID = DOCINFO2ID ( pDocinfo );
-			CopyDocinfo ( &tCtx, tMatch, pDocinfo );
-
-			// early filter only (no late filters in full-scan because of no @weight)
-			tCtx.CalcFilter ( tMatch );
-			if ( tCtx.m_pFilter && !tCtx.m_pFilter->Eval ( tMatch ) )
+			SphDocID_t uDocid = (SphDocID_t) pQuery->m_dFilters[0].GetValue(i);
+			const DWORD * pRow = FindDocinfo ( uDocid );
+			if ( !pRow )
 				continue;
+
+			assert ( uDocid==DOCINFO2ID(pRow) );
+			tMatch.m_iDocID = uDocid;
+			CopyDocinfo ( &tCtx, tMatch, pRow );
 
 			// submit match to sorters
 			tCtx.CalcSort ( tMatch );
 			if ( bRandomize )
 				tMatch.m_iWeight = ( sphRand() & 0xffff );
 
-			tMatch.m_iTag = iMyTag;
-
-			bool bNewMatch = false;
 			for ( int iSorter=0; iSorter<iSorters; iSorter++ )
-				bNewMatch |= ppSorters[iSorter]->Push ( tMatch );
+				ppSorters[iSorter]->Push ( tMatch );
+		}
+	} else
+	{
+		// do scan
+		DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+		DWORD uStart = pQuery->m_bReverseScan ? ( m_uDocinfoIndex-1 ) : 0;
+		int iStep = pQuery->m_bReverseScan ? -1 : 1;
 
-			// handle cutoff
-			if ( bNewMatch )
-				if ( --iCutoff==0 )
+		int iCutoff = pQuery->m_iCutoff;
+		if ( iCutoff<=0 )
+			iCutoff = -1;
+
+		for ( DWORD uIndexEntry=uStart; uIndexEntry<m_uDocinfoIndex; uIndexEntry+=iStep )
+		{
+			// block-level filtering
+			const DWORD * pMin = &m_pDocinfoIndex[2*uIndexEntry*uStride];
+			const DWORD * pMax = pMin + uStride;
+
+			// check applicable filters
+			if ( tCtx.m_pFilter && !tCtx.m_pFilter->EvalBlock ( pMin, pMax ) )
+				continue;
+
+			// row-level filtering
+			const DWORD * pBlockStart = &m_pDocinfo [ ( int64_t ( uIndexEntry ) )*uStride*DOCINFO_INDEX_FREQ ];
+			const DWORD * pBlockEnd = &m_pDocinfo [ ( int64_t ( Min ( ( uIndexEntry+1 )*DOCINFO_INDEX_FREQ, m_uDocinfo ) - 1 ) )*uStride ];
+
+			for ( const DWORD * pDocinfo=pBlockStart; pDocinfo<=pBlockEnd; pDocinfo+=uStride )
+			{
+				tMatch.m_iDocID = DOCINFO2ID ( pDocinfo );
+				CopyDocinfo ( &tCtx, tMatch, pDocinfo );
+
+				// early filter only (no late filters in full-scan because of no @weight)
+				tCtx.CalcFilter ( tMatch );
+				if ( tCtx.m_pFilter && !tCtx.m_pFilter->Eval ( tMatch ) )
+					continue;
+
+				// submit match to sorters
+				tCtx.CalcSort ( tMatch );
+				if ( bRandomize )
+					tMatch.m_iWeight = ( sphRand() & 0xffff );
+
+				bool bNewMatch = false;
+				for ( int iSorter=0; iSorter<iSorters; iSorter++ )
+					bNewMatch |= ppSorters[iSorter]->Push ( tMatch );
+
+				// handle cutoff
+				if ( bNewMatch && --iCutoff==0 )
 				{
 					uIndexEntry = m_uDocinfoIndex; // outer break
 					break;
 				}
+			}
 		}
-		if ( iCutoff==0 )
-			break;
 	}
 
 	// do final expression calculations
@@ -14271,10 +14366,7 @@ static XQNode_t * CloneKeyword ( const XQNode_t * pNode )
 {
 	assert ( pNode );
 
-	XQNode_t * pRes = new XQNode_t;
-	pRes->m_bFieldSpec = pNode->m_bFieldSpec;
-	pRes->m_dFieldMask = pNode->m_dFieldMask;
-	pRes->m_iFieldMaxPos = pNode->m_iFieldMaxPos;
+	XQNode_t * pRes = new XQNode_t ( pNode->m_dSpec );
 	pRes->m_dWords = pNode->m_dWords;
 	return pRes;
 }
@@ -14282,7 +14374,9 @@ static XQNode_t * CloneKeyword ( const XQNode_t * pNode )
 
 static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tSettings )
 {
-	XQNode_t * pExpand = new XQNode_t;
+	assert ( pNode );
+
+	XQNode_t * pExpand = new XQNode_t ( pNode->m_dSpec );
 	pExpand->SetOp ( SPH_QUERY_OR, pNode );
 
 	if ( tSettings.m_iMinInfixLen>0 )
@@ -14327,7 +14421,7 @@ static XQNode_t * ExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & t
 		assert ( pNode->m_dWords.GetLength()>1 );
 		ARRAY_FOREACH ( i, pNode->m_dWords )
 		{
-			XQNode_t * pWord = new XQNode_t;
+			XQNode_t * pWord = new XQNode_t ( pNode->m_dSpec );
 			pWord->m_dWords.Add ( pNode->m_dWords[i] );
 			pNode->m_dChildren.Add ( ExpandKeyword ( pWord, tSettings ) );
 			pNode->m_dChildren.Last()->m_iAtomPos = pNode->m_dWords[i].m_iAtomPos;
@@ -14409,7 +14503,7 @@ static void TransformQuorum ( XQNode_t ** ppNode )
 	CSphVector<XQNode_t*> dArgs;
 	ARRAY_FOREACH ( i, pNode->m_dWords )
 	{
-		XQNode_t * pAnd = new XQNode_t();
+		XQNode_t * pAnd = new XQNode_t ( pNode->m_dSpec );
 		pAnd->m_dWords.Add ( pNode->m_dWords[i] );
 		dArgs.Add ( pAnd );
 	}
@@ -14431,7 +14525,7 @@ static void BuildExpandedTree ( const XQKeyword_t & tRootWord, CSphVector<CSphNa
 
 	// put all tiny enough expansions in a single node
 	int iTinyStart = 0;
-	if ( pRoot->m_dZones.GetLength() || bRt )
+	if ( pRoot->m_dSpec.m_dZones.GetLength() || bRt )
 	{
 		// OPTIMIZE
 		// ExtCached_c only supports field filtering but not zone filtering for now
@@ -14450,7 +14544,7 @@ static void BuildExpandedTree ( const XQKeyword_t & tRootWord, CSphVector<CSphNa
 		if ( iTinyStart==0 )
 			pTiny = pRoot;
 		else
-			pTiny = new XQNode_t();
+			pTiny = new XQNode_t ( pRoot->m_dSpec );
 
 		pTiny->SetOp ( SPH_QUERY_OR );
 		for ( int i=iTinyStart; i<dWordSrc.GetLength(); i++ )
@@ -14565,7 +14659,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 		assert ( pNode->m_dWords.GetLength()>1 );
 		ARRAY_FOREACH ( i, pNode->m_dWords )
 		{
-			XQNode_t * pWord = new XQNode_t;
+			XQNode_t * pWord = new XQNode_t ( pNode->m_dSpec );
 			pWord->m_dWords.Add ( pNode->m_dWords[i] );
 			pNode->m_dChildren.Add ( sphExpandXQNode ( pWord, tCtx ) );
 			pNode->m_dChildren.Last()->m_iAtomPos = pNode->m_dWords[i].m_iAtomPos;
@@ -21934,7 +22028,7 @@ const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, ESphUnpackFormat
 	{
 		case SPH_UNPACK_MYSQL_COMPRESS:
 		{
-			if ( iPackedLen <= 4 )
+			if ( iPackedLen<=4 )
 			{
 				if ( !m_bUnpackFailed )
 				{

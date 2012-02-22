@@ -54,6 +54,15 @@ public:
 	XQNode_t *		SweepNulls ( XQNode_t * pNode );
 	bool			FixupNots ( XQNode_t * pNode );
 
+	inline void SetFieldSpec ( const CSphSmallBitvec& uMask, int iMaxPos )
+	{
+		m_dStateSpec.SetFieldSpec ( uMask, iMaxPos );
+	}
+	inline void SetZoneVec ( int iZoneVec )
+	{
+		m_dStateSpec.SetZoneSpec ( m_dZoneVecs[iZoneVec] );
+	}
+
 public:
 	const CSphVector<int> & GetZoneVec ( int iZoneVec ) const
 	{
@@ -93,6 +102,7 @@ public:
 	CSphVector<CSphString>	m_dIntTokens;
 
 	CSphVector < CSphVector<int> >	m_dZoneVecs;
+	XQLimitSpec_t			m_dStateSpec;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -112,15 +122,20 @@ void yyerror ( XQParser_t * pParser, const char * sMessage )
 
 //////////////////////////////////////////////////////////////////////////
 
+void XQLimitSpec_t::SetFieldSpec ( const CSphSmallBitvec& uMask, int iMaxPos )
+{
+	m_bFieldSpec = true;
+	m_dFieldMask = uMask;
+	m_iFieldMaxPos = iMaxPos;
+}
+
+
+
 void XQNode_t::SetFieldSpec ( const CSphSmallBitvec& uMask, int iMaxPos )
 {
 	// set it, if we do not yet have one
-	if ( !m_bFieldSpec )
-	{
-		m_bFieldSpec = true;
-		m_dFieldMask = uMask;
-		m_iFieldMaxPos = iMaxPos;
-	}
+	if ( !m_dSpec.m_bFieldSpec )
+		m_dSpec.SetFieldSpec ( uMask, iMaxPos );
 
 	// some of the children might not yet have a spec, even if the node itself has
 	// eg. 'hello @title world' (whole node has '@title' spec but 'hello' node does not have any!)
@@ -128,11 +143,17 @@ void XQNode_t::SetFieldSpec ( const CSphSmallBitvec& uMask, int iMaxPos )
 		m_dChildren[i]->SetFieldSpec ( uMask, iMaxPos );
 }
 
+void XQLimitSpec_t::SetZoneSpec ( const CSphVector<int> & dZones )
+{
+	m_dZones = dZones;
+}
+
+
 void XQNode_t::SetZoneSpec ( const CSphVector<int> & dZones )
 {
 	// set it, if we do not yet have one
-	if ( !m_dZones.GetLength() )
-		m_dZones = dZones;
+	if ( !m_dSpec.m_dZones.GetLength() )
+		m_dSpec.SetZoneSpec ( dZones );
 
 	// some of the children might not yet have a spec, even if the node itself has
 	ARRAY_FOREACH ( i, m_dChildren )
@@ -144,17 +165,17 @@ void XQNode_t::CopySpecs ( const XQNode_t * pSpecs )
 	if ( !pSpecs )
 		return;
 
-	if ( pSpecs->m_bFieldSpec )
-		SetFieldSpec ( pSpecs->m_dFieldMask, pSpecs->m_iFieldMaxPos );
+	if ( !m_dSpec.m_bFieldSpec )
+		m_dSpec.SetFieldSpec ( pSpecs->m_dSpec.m_dFieldMask, pSpecs->m_dSpec.m_iFieldMaxPos );
 
-	if ( pSpecs->m_dZones.GetLength() )
-		SetZoneSpec ( pSpecs->m_dZones );
+	if ( !m_dSpec.m_dZones.GetLength() )
+		m_dSpec.SetZoneSpec ( pSpecs->m_dSpec.m_dZones );
 }
 
 
 void XQNode_t::ClearFieldMask ()
 {
-	m_dFieldMask.Set();
+	m_dSpec.m_dFieldMask.Set();
 
 	ARRAY_FOREACH ( i, m_dChildren )
 		m_dChildren[i]->ClearFieldMask();
@@ -791,7 +812,7 @@ XQNode_t * XQParser_t::AddKeyword ( const char * sKeyword, DWORD uStarPosition )
 	XQKeyword_t tAW ( sKeyword, m_iAtomPos );
 	tAW.m_uStarPosition = uStarPosition;
 
-	XQNode_t * pNode = new XQNode_t();
+	XQNode_t * pNode = new XQNode_t ( m_dStateSpec );
 	pNode->m_dWords.Add ( tAW );
 
 	m_dSpawned.Add ( pNode );
@@ -822,7 +843,7 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 
 	if ( eOp==SPH_QUERY_NOT )
 	{
-		XQNode_t * pNode = new XQNode_t();
+		XQNode_t * pNode = new XQNode_t ( m_dStateSpec );
 		pNode->SetOp ( SPH_QUERY_NOT, pLeft );
 		m_dSpawned.Add ( pNode );
 		return pNode;
@@ -839,30 +860,33 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 	// eg. '@title hello' vs 'world'
 	pRight->CopySpecs ( pLeft );
 
+	XQNode_t * pDonor = pRight;
+	if ( pRight->m_dSpec.m_bInvisible )
+		pDonor = pLeft;
+
+	m_dStateSpec = pDonor->m_dSpec;
+
 	// build a new node
 	XQNode_t * pResult = NULL;
 	if ( pLeft->m_dChildren.GetLength() && pLeft->GetOp()==eOp && pLeft->m_iOpArg==iOpArg )
 	{
 		pLeft->m_dChildren.Add ( pRight );
 		pResult = pLeft;
+		if ( pRight->m_dSpec.m_bFieldSpec )
+			pResult->m_dSpec.SetFieldSpec ( pRight->m_dSpec.m_dFieldMask, pRight->m_dSpec.m_iFieldMaxPos );
+
+		if ( pRight->m_dSpec.m_dZones.GetLength() )
+			pResult->m_dSpec.SetZoneSpec ( pRight->m_dSpec.m_dZones );
 	} else
 	{
-		XQNode_t * pNode = new XQNode_t();
+		// however, it's right (!) spec which is chosen for the resulting node,
+		// eg. '@title hello' + 'world @body program'
+		XQNode_t * pNode = new XQNode_t ( pDonor->m_dSpec );
 		pNode->SetOp ( eOp, pLeft, pRight );
 		pNode->m_iOpArg = iOpArg;
 		m_dSpawned.Add ( pNode );
 		pResult = pNode;
 	}
-
-	// however, it's right (!) spec which is chosen for the resulting node,
-	// eg. '@title hello' + 'world @body program'
-	if ( pRight->m_bFieldSpec )
-	{
-		pResult->m_bFieldSpec = true;
-		pResult->m_dFieldMask = pRight->m_dFieldMask;
-		pResult->m_iFieldMaxPos = pRight->m_iFieldMaxPos;
-	}
-
 	return pResult;
 }
 
@@ -968,7 +992,7 @@ bool XQParser_t::FixupNots ( XQNode_t * pNode )
 	// must be some NOTs within AND at this point, convert this node to ANDNOT
 	assert ( pNode->GetOp()==SPH_QUERY_AND && pNode->m_dChildren.GetLength() && dNots.GetLength() );
 
-	XQNode_t * pAnd = new XQNode_t();
+	XQNode_t * pAnd = new XQNode_t ( pNode->m_dSpec );
 	pAnd->SetOp ( SPH_QUERY_AND, pNode->m_dChildren );
 	m_dSpawned.Add ( pAnd );
 
@@ -978,7 +1002,7 @@ bool XQParser_t::FixupNots ( XQNode_t * pNode )
 		pNot = dNots[0];
 	} else
 	{
-		pNot = new XQNode_t();
+		pNot = new XQNode_t ( pNode->m_dSpec );
 		pNot->SetOp ( SPH_QUERY_OR, dNots );
 		m_dSpawned.Add ( pNot );
 	}
@@ -995,7 +1019,7 @@ static void DeleteNodesWOFields ( XQNode_t * pNode )
 
 	for ( int i = 0; i < pNode->m_dChildren.GetLength (); )
 	{
-		if ( pNode->m_dChildren[i]->m_dFieldMask.TestAll() )
+		if ( pNode->m_dChildren[i]->m_dSpec.m_dFieldMask.TestAll() )
 		{
 			// this should be a leaf node
 			assert ( pNode->m_dChildren[i]->m_dChildren.GetLength()==0 );
@@ -1119,7 +1143,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTok
 
 	// all ok; might want to create a dummy node to indicate that
 	m_dSpawned.Reset();
-	tParsed.m_pRoot = m_pRoot ? m_pRoot : new XQNode_t ();
+	tParsed.m_pRoot = m_pRoot ? m_pRoot : new XQNode_t ( m_dStateSpec );
 	return true;
 }
 
@@ -1528,7 +1552,7 @@ private:
 							XQNode_t * pNode;
 							if ( !hBranches.Exists(j) )
 							{
-								pNode = new XQNode_t;
+								pNode = new XQNode_t ( pTree->m_dSpec );
 								pNode->SetOp ( m_eOp, pTree->m_dChildren[i] );
 								hBranches.Add ( pNode, j );
 							} else
@@ -1547,7 +1571,7 @@ private:
 				{
 					if ( !pOtherChildren )
 					{
-						pOtherChildren = new XQNode_t;
+						pOtherChildren = new XQNode_t ( pTree->m_dSpec );
 						pOtherChildren->SetOp ( m_eOp, pTree->m_dChildren[i] );
 					} else
 						pOtherChildren->m_dChildren.Add ( pTree->m_dChildren[i] );

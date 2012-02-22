@@ -86,6 +86,7 @@ create table test_table
 
 <db_insert><![CDATA[insert into test_table values ( 200, 3, '<zoneA>The time has come, <zoneB>the walrus said,</zoneB> to talk of many things.</zoneA>' );]]></db_insert>
 <db_insert><![CDATA[insert into test_table values ( 201, 3, 'Of shoes, <zoneC>and ships</zoneC>, and sealing wax, of cabbages, <zoneC>, and kings.</zoneC>' );]]></db_insert>
+<db_insert><![CDATA[insert into test_table values ( 211, 3, 'Of shoes, and ships, and sealing wax, of cabbages, <zoneC>, and kings.</zoneC>' );]]></db_insert>
 <db_insert><![CDATA[insert into test_table values ( 202, 3, '<zoneA>Sweet dreams are made of this.</zoneA><zoneB>Who am I to disagree?</zoneB>' );]]></db_insert>
 
 <db_insert>

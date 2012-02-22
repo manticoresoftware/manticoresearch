@@ -116,11 +116,15 @@ DLLEXPORT sphinx_int64_t strtoint ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, ch
 
 DLLEXPORT int avgmva_init ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error_message )
 {
-	if ( args->arg_count!=1 || args->arg_types[0]!=SPH_UDF_TYPE_UINT32SET )
+	if ( args->arg_count!=1 ||
+		( args->arg_types[0]!=SPH_UDF_TYPE_UINT32SET && args->arg_types[0]!=SPH_UDF_TYPE_UINT64SET ) )
 	{
-		snprintf ( error_message, SPH_UDF_ERROR_LEN, "STRTOINT() requires 1 MVA argument" );
+		snprintf ( error_message, SPH_UDF_ERROR_LEN, "AVGMVA() requires 1 MVA argument" );
 		return 1;
 	}
+
+	// store our mva vs mva64 flag to func_data
+	init->func_data = (void*)(int)( args->arg_types[0]==SPH_UDF_TYPE_UINT64SET ? 1 : 0 );
 	return 0;
 }
 
@@ -128,14 +132,50 @@ DLLEXPORT double avgmva ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error
 {
 	unsigned int * mva = (unsigned int *) args->arg_values[0];
 	double res = 0;
-	int i, n;
+	int i, n, is64;
 
 	if ( !mva )
 		return res;
 
-	n = *mva++;
-	for ( i=0; i<n; i++, mva++ )
-		res += *mva;
+	// Both MVA32 and MVA64 are stored as dword (unsigned 32-bit) arrays.
+	// The first dword stores the array length (always in dwords too), and
+	// the next ones store the values. In pseudocode:
+	//
+	// unsigned int num_dwords
+	// unsigned int data [ num_dwords ]
+	//
+	// With MVA32, this lets you access the values pretty naturally.
+	//
+	// With MVA64, however, we have to do a few tricks:
+	// a) divide num_dwords by 2 to get the number of 64-bit elements,
+	// b) assemble those 64-bit values from dword pairs.
+	//
+	// The latter is required for architectures where non-aligned
+	// 64-bit access crashes. On Intel, we could have also done it
+	// like this:
+	//
+	// int * raw_ptr = (int*) args->arg_values[0];
+	// int mva64_count = (*raw_ptr) / 2;
+	// sphinx_uint64_t * mva64_values = (sphinx_uint64_t*)(raw_ptr + 1);
+
+	// pull "mva32 or mva64" flag (that we stored in _init) from func_data
+	is64 = (int)(init->func_data) != 0;
+	if ( is64 )
+	{
+		// handle mva64
+		n = *mva++ / 2;
+		for ( i=0; i<n; i++ )
+		{
+			res += (((sphinx_uint64_t)mva[1]) << 32) + mva[0];
+			mva += 2;
+		}
+	} else
+	{
+		// handle mva32
+		n = *mva++;
+		for ( i=0; i<n; i++ )
+			res += *mva++;
+	}
 
 	return res/n;
 }

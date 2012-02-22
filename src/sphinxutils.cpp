@@ -260,6 +260,7 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "xmlpipe_attr_str2ordinal",	KEY_LIST, NULL },
 	{ "xmlpipe_attr_bool",		KEY_LIST, NULL },
 	{ "xmlpipe_attr_float",		KEY_LIST, NULL },
+	{ "xmlpipe_attr_bigint",	KEY_LIST, NULL },
 	{ "xmlpipe_attr_multi",		KEY_LIST, NULL },
 	{ "xmlpipe_attr_multi_64",	KEY_LIST, NULL },
 	{ "xmlpipe_attr_string",	KEY_LIST, NULL },

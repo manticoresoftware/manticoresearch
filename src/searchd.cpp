@@ -8794,6 +8794,11 @@ enum eExcerpt_Flags
 	EXCERPT_FLAG_FILES_SCATTERED	= 1024
 };
 
+enum
+{
+	PROCESSED_ITEM					= -2,
+	EOF_ITEM						= -1
+};
 struct SnippetWorker_t
 {
 	int64_t						m_iTotal;
@@ -8801,7 +8806,7 @@ struct SnippetWorker_t
 
 	SnippetWorker_t()
 		: m_iTotal ( 0 )
-		, m_iHead ( -1 ) // -1 is the marker of the end of the list
+		, m_iHead ( EOF_ITEM )
 	{}
 };
 
@@ -8908,7 +8913,7 @@ void SnippetRequestBuilder_t::BuildRequest ( const char * sIndex, NetOutputBuffe
 		+ q.m_sRawPassageBoundary.Length();
 
 		m_iNumDocs = 0;
-		for ( int iDoc = tWorker.m_iHead; iDoc!=-1; iDoc=dQueries[iDoc].m_iNext )
+		for ( int iDoc = tWorker.m_iHead; iDoc!=EOF_ITEM; iDoc=dQueries[iDoc].m_iNext )
 		{
 			++m_iNumDocs;
 			m_iReqLen += 4 + dQueries[iDoc].m_sSource.Length();
@@ -8922,7 +8927,10 @@ void SnippetRequestBuilder_t::BuildRequest ( const char * sIndex, NetOutputBuffe
 	tOut.SendInt ( m_iReqLen );
 
 	tOut.SendInt ( 0 );
-	tOut.SendInt ( q.m_iRawFlags );
+
+	if ( m_bScattered )
+		tOut.SendInt ( q.m_iRawFlags & ~EXCERPT_FLAG_LOAD_FILES );
+
 	tOut.SendString ( sIndex );
 	tOut.SendString ( q.m_sWords.cstr() );
 	tOut.SendString ( q.m_sBeforeMatch.cstr() );
@@ -8938,7 +8946,7 @@ void SnippetRequestBuilder_t::BuildRequest ( const char * sIndex, NetOutputBuffe
 	tOut.SendString ( q.m_sRawPassageBoundary.cstr() );
 
 	tOut.SendInt ( m_iNumDocs );
-	for ( int iDoc = tWorker.m_iHead; iDoc!=-1; iDoc=dQueries[iDoc].m_iNext )
+	for ( int iDoc = tWorker.m_iHead; iDoc!=EOF_ITEM; iDoc=dQueries[iDoc].m_iNext )
 		tOut.SendString ( dQueries[iDoc].m_sSource.cstr() );
 }
 
@@ -8950,7 +8958,7 @@ bool SnippetReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & )
 
 	int iDoc = tWorker.m_iHead;
 	bool bOk = true;
-	while ( iDoc!=-1 )
+	while ( iDoc!=EOF_ITEM )
 	{
 		if ( ( dQueries[iDoc].m_iLoadFiles&2 )!=0 ) // NOLINT
 		{
@@ -8958,14 +8966,17 @@ bool SnippetReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & )
 			{
 				bOk = false;
 				dQueries[iDoc].m_dRes.Resize ( 0 );
-			}
+			} else
+				dQueries[iDoc].m_sError = "";
 
 			iDoc = dQueries[iDoc].m_iNext;
 			continue;
 		}
 		tReq.GetString ( dQueries[iDoc].m_dRes );
-		iDoc = dQueries[iDoc].m_iNext;
-		dQueries[iDoc].m_iNext = -2; // mark as processed
+		int iNextDoc = dQueries[iDoc].m_iNext;
+		dQueries[iDoc].m_iNext = PROCESSED_ITEM;
+		iDoc = iNextDoc;
+
 	}
 
 	return bOk;
@@ -9143,7 +9154,7 @@ void SnippetThreadFunc ( void * pArg )
 		bool bDone = ( *pDesc->m_pCurQuery==pDesc->m_iQueries );
 		pDesc->m_pLock->Unlock();
 
-		if ( pQuery->m_iNext!=-2 )
+		if ( pQuery->m_iNext!=PROCESSED_ITEM )
 			continue;
 
 		sphBuildExcerpt ( *pQuery, tCtx.m_pDict, tCtx.m_tTokenizer.Ptr(),
@@ -9196,7 +9207,11 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 	g_tDistLock.Lock();
 	DistributedIndex_t * pDist = g_hDistIndexes ( sIndex );
 	bool bRemote = ( pDist!=NULL );
+
+	// hack! load_files && load_files_scattered is the 'final' call. It will report the absent files as errors.
+	// simple load_files_scattered without load_files just omits the absent files (returns empty strings).
 	bool bScattered = ( q.m_iLoadFiles & 2 )!=0;
+	bool bSkipAbsentFiles = !( q.m_iLoadFiles & 1 );
 
 	if ( bRemote )
 	{
@@ -9254,7 +9269,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 	///////////////////
 
 	bool bOk = true;
-	int iAbsentHead = -1;
+	int iAbsentHead = EOF_ITEM;
 	if ( g_iDistThreads<=1 || dQueries.GetLength()<2 )
 	{
 		// boring single threaded loop
@@ -9268,7 +9283,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 		// get file sizes
 		ARRAY_FOREACH ( i, dQueries )
 		{
-			dQueries[i].m_iNext = -2;
+			dQueries[i].m_iNext = PROCESSED_ITEM;
 			if ( dQueries[i].m_iLoadFiles )
 			{
 				struct stat st;
@@ -9280,7 +9295,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 						pServed->Unlock();
 						return false;
 					}
-					dQueries[i].m_iNext = -1;
+					dQueries[i].m_iNext = EOF_ITEM;
 				}
 				dQueries[i].m_iSize = -st.st_size; // so that sort would put bigger ones first
 			} else
@@ -9291,20 +9306,22 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 		}
 
 		// tough jobs first
-		dQueries.Sort ( bind ( &ExcerptQuery_t::m_iSize ) );
+		if ( !bScattered )
+			dQueries.Sort ( bind ( &ExcerptQuery_t::m_iSize ) );
 
 		ARRAY_FOREACH ( i, dQueries )
-			if ( dQueries[i].m_iNext==-1 )
+			if ( dQueries[i].m_iNext==EOF_ITEM )
 			{
 				dQueries[i].m_iNext = iAbsentHead;
 				iAbsentHead = i;
-				dQueries[i].m_sError.SetSprintf ( "failed to stat %s: %s", dQueries[i].m_sSource.cstr(), strerror(errno) );
+				if ( !bSkipAbsentFiles )
+					dQueries[i].m_sError.SetSprintf ( "failed to stat %s: %s", dQueries[i].m_sSource.cstr(), strerror(errno) );
 			}
 
 
 
 		// check if all files are available locally.
-		if ( bScattered && iAbsentHead==-1 )
+		if ( bScattered && iAbsentHead==EOF_ITEM )
 		{
 			bRemote = false;
 			dRemoteSnippets.m_dAgents.Reset();
@@ -9320,7 +9337,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 
 			if ( bScattered )
 			{
-				// on scattered case - the queries with m_iNext==-2 are here, and has to be scheduled to local agent
+				// on scattered case - the queries with m_iNext==PROCESSED_ITEM are here, and has to be scheduled to local agent
 				// the rest has to be sent to remotes, all of them!
 				for ( int i=0; i<iRemoteAgents; i++ )
 					dRemoteSnippets.m_dWorkers[i].m_iHead = iAbsentHead;
@@ -9396,7 +9413,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 			{
 				// inverse the success/failed state - so that the queries with negative m_iNext are treated as failed
 				ARRAY_FOREACH ( i, dQueries )
-					dQueries[i].m_iNext = (dQueries[i].m_iNext==-2)?0:-2;
+					dQueries[i].m_iNext = (dQueries[i].m_iNext==PROCESSED_ITEM)?0:PROCESSED_ITEM;
 
 				// failsafe - one more turn for failed queries on local agent
 				SnippetThread_t & t = dThreads[0];
@@ -9479,9 +9496,6 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	q.m_iLoadFiles |= bScattered?2:0;
 	q.m_bAllowEmpty = ( iFlags & EXCERPT_FLAG_ALLOW_EMPTY )!=0;
 	q.m_bEmitZones = ( iFlags & EXCERPT_FLAG_EMIT_ZONES )!=0;
-
-	if ( bScattered )
-		q.m_bAllowEmpty = false;
 
 	int iCount = tReq.GetInt ();
 	if ( iCount<=0 || iCount>EXCERPT_MAX_ENTRIES )
@@ -10894,10 +10908,6 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr() );
 			break;
 		}
-
-		// FIXME! Do we need to warn a user also? Or just note it in the documentation?
-		if ( q.m_iLoadFiles & 2 )
-			q.m_bAllowEmpty = false;
 
 		// post-conf type check
 		if ( iExpType!=v.m_iType )

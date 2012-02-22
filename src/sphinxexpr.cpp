@@ -1479,6 +1479,7 @@ public:
 				case SPH_UDF_TYPE_FLOAT:		*(float*)&m_dArgvals[i] = m_dArgs[i]->Eval ( tMatch ); break;
 				case SPH_UDF_TYPE_STRING:		tArgs.str_lengths[i] = m_dArgs[i]->StringEval ( tMatch, (const BYTE**)&tArgs.arg_values[i] ); break;
 				case SPH_UDF_TYPE_UINT32SET:	tArgs.arg_values[i] = (char*) m_dArgs[i]->MvaEval ( tMatch ); break;
+				case SPH_UDF_TYPE_UINT64SET:	tArgs.arg_values[i] = (char*) m_dArgs[i]->MvaEval ( tMatch ); break;
 				default:						assert ( 0 ); m_dArgvals[i] = 0; break;
 			}
 		}
@@ -2898,6 +2899,9 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 					break;
 				case SPH_ATTR_UINT32SET:
 					eRes = SPH_UDF_TYPE_UINT32SET;
+					break;
+				case SPH_ATTR_UINT64SET:
+					eRes = SPH_UDF_TYPE_UINT64SET;
 					break;
 				default:
 					m_sParserError.SetSprintf ( "internal error: unmapped UDF argument type (arg=%d, type=%d)", i, dArgTypes[i] );

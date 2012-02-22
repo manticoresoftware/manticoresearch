@@ -1207,6 +1207,53 @@ public:
 		return true;
 	}
 
+	/// add new entry
+	/// returns the pointer to just inserted or previously cached (if dupe) value
+	T* AddUnique ( const T & tValue, const KEY & tKey )
+	{
+		unsigned int uHash = ( (unsigned int) HASHFUNC::Hash ( tKey ) ) % LENGTH;
+
+		// check if this key is already hashed
+		HashEntry_t * pEntry = m_dHash [ uHash ];
+		HashEntry_t ** ppEntry = &m_dHash [ uHash ];
+		while ( pEntry )
+		{
+			if ( pEntry->m_tKey==tKey )
+				return &pEntry->m_tValue;
+
+			ppEntry = &pEntry->m_pNextByHash;
+			pEntry = pEntry->m_pNextByHash;
+		}
+
+		// it's not; let's add the entry
+		assert ( !pEntry );
+		assert ( !*ppEntry );
+
+		pEntry = new HashEntry_t;
+		pEntry->m_tKey = tKey;
+		pEntry->m_tValue = tValue;
+		pEntry->m_pNextByHash = NULL;
+		pEntry->m_pPrevByOrder = NULL;
+		pEntry->m_pNextByOrder = NULL;
+
+		*ppEntry = pEntry;
+
+		if ( !m_pFirstByOrder )
+			m_pFirstByOrder = pEntry;
+
+		if ( m_pLastByOrder )
+		{
+			assert ( !m_pLastByOrder->m_pNextByOrder );
+			assert ( !pEntry->m_pNextByOrder );
+			m_pLastByOrder->m_pNextByOrder = pEntry;
+			pEntry->m_pPrevByOrder = m_pLastByOrder;
+		}
+		m_pLastByOrder = pEntry;
+
+		m_iLength++;
+		return &pEntry->m_tValue;
+	}
+
 	/// delete an entry
 	bool Delete ( const KEY & tKey )
 	{

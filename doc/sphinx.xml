@@ -245,7 +245,7 @@ CPU architectures known to work include i386 (aka x86), amd64 (aka x86_64),
 SPARC64, and ARM.
 </para>
 <para>
-Chance are good that Sphinx should work on other Unix platforms and/or
+Chances are good that Sphinx should work on other Unix platforms and/or
 CPU architectures just as well. Please report any other platforms that
 worked for you!
 </para>
@@ -1421,12 +1421,13 @@ files are unlinked.
 </para>
 <para>
 During normal operation, a new binlog file will be opened every time
-when <option>binlog_max_log_size</option> limit (which defaults to 128M)
+when <option>binlog_max_log_size</option> limit
 is reached.  Older, already closed binlog files are kept until all of the
 transactions stored in them (from all indexes) are flushed as a disk chunk.
 Setting the limit to 0 pretty much prevents binlog from being unlinked
 at all while <filename>searchd</filename> is running; however, it will
-still be unlinked on clean shutdown.
+still be unlinked on clean shutdown. (This is the default case as of
+2.0.3-release, <option>binlog_max_log_size</option> defaults to 0.)
 </para>
 <para>
 There are 3 different binlog flushing strategies, controlled by
@@ -4685,8 +4686,8 @@ except for strings can be updated. Previously, some of the types were not
 supported.
 </para>
 <para>
-<code>where_condition</code> uses the same syntax as the SELECT statement
-(see <xref linkend="sphinxql-select"/> for details).
+<code>where_condition</code> (also added in 2.0.2-beta) has the same syntax
+as in the SELECT statement (see <xref linkend="sphinxql-select"/> for details).
 </para>
 <para>
 When assigning the out-of-range values to 32-bit attributes, they
@@ -5384,7 +5385,7 @@ $cl->SetMatchMode ( SPH_MATCH_ANY ); // correct, works OK
 </sect2>
 
 <sect2 id="api-func-setrankingmode"><title>SetRankingMode</title>
-<para><b>Prototype:</b> function SetRankingMode ( $ranker )</para>
+<para><b>Prototype:</b> function SetRankingMode ( $ranker, $rankexpr="" )</para>
 <para>
 Sets ranking mode (aka ranker). Only available in SPH_MATCH_EXTENDED
 matching mode. Parameter must be a constant specifying one of the known
@@ -5405,6 +5406,13 @@ or maybe avoid computing it at all for performance reasons because
 you're sorting the result set by something else anyway. This can be
 accomplished by setting the appropriate ranking mode. The list of
 the modes is available in <xref linkend="weighting"/>.
+</para>
+<para>
+<code>$rankexpr</code> argument was added in version 2.0.2-beta.
+It lets you specify a ranking formula to use with the
+<link linkend="expression-ranker">expression based ranker</link>,
+that is, when <code>$ranker</code> is set to SPH_RANK_EXPR.
+In all other cases, <code>$rankexpr</code> is ignored.
 </para>
 </sect2>
 
@@ -6005,14 +6013,18 @@ Starting with version 0.9.9-rc1, keywords can contain wildcards, that work simil
 </varlistentry>
 <varlistentry>
 	<term>"load_files_scattered":</term>
-	<listitem><para>Added in version 2.0.2-beta. It assumes "load_files" option, and works only with distributed snippets generation
+	<listitem><para>Added in version 2.0.2-beta. It works only with distributed snippets generation
 	with remote agents. The source files for snippets could be distributed among different agents, and the main daemon will merge
 	together all non-erroneous results. So, if one agent of the distributed index has 'file1.txt', another has 'file2.txt' and you call for the snippets
 	with both these files, the sphinx will merge results from the agents together, so you will get the snippets from both 'file1.txt' and 'file2.txt'.
-	This option works by sending the whole bunch of snippet tasks to all agents. Each of them returns the snippets for the files it has, and the empty
-	lines to the one it hasn't. The master then combines all the answers and collect together non-empty snippets. Since the working with scattered files
-	is depends from the empty snippets - it will forcibly reset the "allow_empty" option.
-	</para></listitem>
+	Boolean, default is false.
+	</para>
+	<para>If the "load_files" is also set, the request will return the error in case if any of the files is not available anywhere. Otherwise (if "load_files" is not set)
+	it will just return the empty strings for all absent files. The master instance reset this flag when distributes the snippets among agents. So, for agents the absence of a file
+	is not critical error, but for the master it might be so. If you want to be sure that all snippets are actually created, set both "load_files_scattered" and "load_files". If the
+	absense of some snippets caused by some agents is not critical for you - set just "load_files_scattered", leaving "load_files" not set.
+	</para>
+</listitem>
 </varlistentry>
 <varlistentry>
 	<term>"html_strip_mode":</term>
@@ -6032,8 +6044,7 @@ Starting with version 0.9.9-rc1, keywords can contain wildcards, that work simil
 	returned as highlighting result when a snippet could not be generated
 	(no keywords match, or no passages fit the limit). By default,
 	the beginning of original text would be returned instead of an empty
-	string. Boolean, default is false. This option is not compatible with the "load_files_scattered".
-	If both of them are set, then the "allow_empty" will be forcibly reset without a prompt.
+	string. Boolean, default is false.
 	</para></listitem>
 </varlistentry>
 <varlistentry>
@@ -6283,9 +6294,6 @@ to do that.
 
 
 <sect2 id="sphinxse-mysql50"><title>Compiling MySQL 5.0.x with SphinxSE</title>
-<para>
-Skips steps 1-3 if using already prepared delta tarball.
-</para>
 <orderedlist>
 <listitem><para>copy <filename>sphinx.5.0.yy.diff</filename> patch file
 into MySQL sources directory and run
@@ -6326,9 +6334,6 @@ make install
 
 
 <sect2 id="sphinxse-mysql51"><title>Compiling MySQL 5.1.x with SphinxSE</title>
-<para>
-Skip steps 1-2 if using already prepared delta tarball.
-</para>
 <orderedlist>
 <listitem><para>in MySQL sources directory, create <filename>storage/sphinx</filename>
 directory in and copy all files in <filename>mysqlse</filename> directory 
@@ -7408,7 +7413,8 @@ function in MySQL instead.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
-sql_attr_timestamp = UNIX_TIMESTAMP(added_datetime) AS added_ts
+# sql_query = ... UNIX_TIMESTAMP(added_datetime) AS added_ts ...
+sql_attr_timestamp = added_ts
 </programlisting>
 </sect2>
 
@@ -7835,7 +7841,21 @@ Syntax fully matches that of <link linkend="conf-sql-attr-uint">sql_attr_uint</l
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
-xmlpipe_attr_uint = author
+xmlpipe_attr_uint = author_id
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-xmlpipe-attr-bigint"><title>xmlpipe_attr_bigint</title>
+<para>
+xmlpipe signed 64-bit integer attribute declaration.
+Multi-value, optional.
+Applies to <option>xmlpipe2</option> source type only.
+Syntax fully matches that of <link linkend="conf-sql-attr-bigint">sql_attr_bigint</link>.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+xmlpipe_attr_bigint = my_bigint_id
 </programlisting>
 </sect2>
 
@@ -8557,6 +8577,13 @@ For instance, assume that "the" is a stopword, that document 1 contains the line
 as for exact phrase will only return the first document, as expected, even though
 "the" in the second one is stopped.
 </para>
+<para>
+Stopwords files can either be created manually, or semi-automatically.
+<filename>indexer</filename> provides a mode that creates a frequency dictionary
+of the index, sorted by the keyword frequency, see <option>--buildstops</option>
+and <option>--buildfreqs</option> switch in <xref linkend="ref-indexer"/>.
+Top keywords from that dictionary can usually be used as stopwords.
+</para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
 stopwords = /usr/local/sphinx/data/stopwords.txt
@@ -8657,7 +8684,6 @@ differences.
 Short summary of the differences is as follows:
 <itemizedlist>
 <listitem><para>exceptions are case sensitive, wordforms are not;</para></listitem>
-<listitem><para>exceptions allow to detect sequences of tokens, wordforms work with single words only;</para></listitem>
 <listitem><para>exceptions can use special characters that are <b>not</b> in charset_table, wordforms fully obey charset_table;</para></listitem>
 <listitem><para>exceptions can underperform on huge dictionaries, wordforms handle millions of entries well.</para></listitem>
 </itemizedlist>
@@ -9263,12 +9289,22 @@ Multi-value, optional, default is empty.
 </para>
 <para>
 This setting is used to declare local indexes that will be searched when
-given distributed index is searched. All local indexes will be searched
-<b>sequentially</b>, utilizing only 1 CPU or core; to parallelize processing,
-you can configure <filename>searchd</filename> to query itself (refer to
-<xref linkend="conf-agent"/> for the details). There might be several local
-indexes declared per each distributed index. Any local index can be mentioned
-several times in other distributed indexes.
+given distributed index is searched. Many local indexes can be declared per
+each distributed index. Any local index can also be mentioned several times
+in different distributed indexes.
+</para>
+<para>
+Note that by default all local indexes will be searched <b>sequentially</b>,
+utilizing only 1 CPU or core. To parallelize processing of the local parts
+in the distributed index, you should use <option>dist_threads</option> directive,
+see <xref linkend="conf-dist-threads"/>.
+</para>
+<para>
+Before <option>dist_threads</option>, there also was a legacy solution
+to configure <filename>searchd</filename> to query itself instead of using
+local indexes (refer to <xref linkend="conf-agent"/> for the details). However,
+that creates redundant CPU and network load, and <option>dist_threads</option>
+is now strongly suggested instead.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>

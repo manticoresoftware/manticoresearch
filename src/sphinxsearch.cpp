@@ -242,6 +242,46 @@ protected:
 	DWORD	m_uFieldPos;
 };
 
+//////////////////////////////////////////////////////////////////////////
+
+/// per-document zone information (span start/end positions)
+struct ZoneInfo_t
+{
+	CSphVector<Hitpos_t> m_dStarts;
+	CSphVector<Hitpos_t> m_dEnds;
+};
+
+
+/// zone hash key, zoneid+docid
+struct ZoneKey_t
+{
+	int				m_iZone;
+	SphDocID_t		m_uDocid;
+
+	explicit ZoneKey_t ( int iZone=0, SphDocID_t uDocid=0 )
+		: m_iZone ( iZone )
+		, m_uDocid ( uDocid )
+	{}
+
+	bool operator == ( const ZoneKey_t & rhs ) const
+	{
+		return m_iZone==rhs.m_iZone && m_uDocid==rhs.m_uDocid;
+	}
+};
+
+
+/// zone hashing function
+struct ZoneHash_fn
+{
+	static inline int Hash ( const ZoneKey_t & tKey )
+	{
+		return (DWORD)tKey.m_uDocid ^ ( tKey.m_iZone<<16 );
+	}
+};
+
+
+/// zone hash
+typedef CSphOrderedHash < ZoneInfo_t, ZoneKey_t, ZoneHash_fn, 4096 > ZoneHash_c;
 
 /// single keyword streamer, with term position filtering
 template < TermPosFilter_e T >
@@ -703,41 +743,7 @@ private:
 	const ExtHit_t *	m_pDotHit;		///< current in-chunk ptr
 };
 
-//////////////////////////////////////////////////////////////////////////
 
-/// per-document zone information (span start/end positions)
-struct ZoneInfo_t
-{
-	CSphVector<Hitpos_t> m_dStarts;
-	CSphVector<Hitpos_t> m_dEnds;
-};
-
-
-/// zone hash key, zoneid+docid
-struct ZoneKey_t
-{
-	int				m_iZone;
-	SphDocID_t		m_uDocid;
-
-	bool operator == ( const ZoneKey_t & rhs ) const
-	{
-		return m_iZone==rhs.m_iZone && m_uDocid==rhs.m_uDocid;
-	}
-};
-
-
-/// zone hashing function
-struct ZoneHash_fn
-{
-	static inline int Hash ( const ZoneKey_t & tKey )
-	{
-		return (DWORD)tKey.m_uDocid ^ ( tKey.m_iZone<<16 );
-	}
-};
-
-
-/// zone hash
-typedef CSphOrderedHash < ZoneInfo_t, ZoneKey_t, ZoneHash_fn, 4096 > ZoneHash_c;
 
 
 /// ranker interface
@@ -1037,17 +1043,17 @@ ExtNode_i * ExtNode_i::Create ( ISphQword * pQword, const XQNode_t * pNode, cons
 {
 	assert ( pQword );
 
-	if ( pNode->m_iFieldMaxPos )
+	if ( pNode->m_dSpec.m_iFieldMaxPos )
 		pQword->m_iTermPos = TERM_POS_FIELD_LIMIT;
 
-	if ( pNode->m_dZones.GetLength() )
+	if ( pNode->m_dSpec.m_dZones.GetLength() )
 		pQword->m_iTermPos = TERM_POS_ZONES;
 
 	if ( !pQword->m_bHasHitlist )
 	{
 		if ( tSetup.m_pWarning && pQword->m_iTermPos )
 			tSetup.m_pWarning->SetSprintf ( "hitlist unavailable, position limit ignored" );
-		return new ExtTermHitless_c ( pQword, pNode->m_dFieldMask, tSetup, pNode->m_bNotWeighted );
+		return new ExtTermHitless_c ( pQword, pNode->m_dSpec.m_dFieldMask, tSetup, pNode->m_bNotWeighted );
 	}
 	switch ( pQword->m_iTermPos )
 	{
@@ -1056,7 +1062,7 @@ ExtNode_i * ExtNode_i::Create ( ISphQword * pQword, const XQNode_t * pNode, cons
 		case TERM_POS_FIELD_END:		return new ExtTermPos_c<TERM_POS_FIELD_END> ( pQword, pNode, tSetup );
 		case TERM_POS_FIELD_LIMIT:		return new ExtTermPos_c<TERM_POS_FIELD_LIMIT> ( pQword, pNode, tSetup );
 		case TERM_POS_ZONES:			return new ExtTermPos_c<TERM_POS_ZONES> ( pQword, pNode, tSetup );
-		default:						return new ExtTerm_c ( pQword, pNode->m_dFieldMask, tSetup, pNode->m_bNotWeighted );
+		default:						return new ExtTerm_c ( pQword, pNode->m_dSpec.m_dFieldMask, tSetup, pNode->m_bNotWeighted );
 	}
 }
 
@@ -1166,11 +1172,11 @@ ExtCached_c::ExtCached_c ( const XQNode_t * pNode, const ISphQwordSetup & tSetup
 			for ( Hitpos_t uHit = pQword->GetNextHit(); uHit!=EMPTY_HIT; uHit = pQword->GetNextHit() )
 			{
 				// apply field limits
-				if ( !pNode->m_dFieldMask.Test ( HITMAN::GetField(uHit) ) )
+				if ( !pNode->m_dSpec.m_dFieldMask.Test ( HITMAN::GetField(uHit) ) )
 					continue;
 
 				// apply zone limits
-				if ( pNode->m_dZones.GetLength() )
+				if ( pNode->m_dSpec.m_dZones.GetLength() )
 				{
 				}
 
@@ -1483,8 +1489,8 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 				case SPH_QUERY_OR:			pCur = new ExtOr_c ( pCur, pNext, tSetup ); break;
 				case SPH_QUERY_AND:			pCur = new ExtAnd_c ( pCur, pNext, tSetup ); break;
 				case SPH_QUERY_ANDNOT:		pCur = new ExtAndNot_c ( pCur, pNext, tSetup ); break;
-				case SPH_QUERY_SENTENCE:	pCur = new ExtUnit_c ( pCur, pNext, pNode->m_dFieldMask, tSetup, MAGIC_WORD_SENTENCE ); break;
-				case SPH_QUERY_PARAGRAPH:	pCur = new ExtUnit_c ( pCur, pNext, pNode->m_dFieldMask, tSetup, MAGIC_WORD_PARAGRAPH ); break;
+				case SPH_QUERY_SENTENCE:	pCur = new ExtUnit_c ( pCur, pNext, pNode->m_dSpec.m_dFieldMask, tSetup, MAGIC_WORD_SENTENCE ); break;
+				case SPH_QUERY_PARAGRAPH:	pCur = new ExtUnit_c ( pCur, pNext, pNode->m_dSpec.m_dFieldMask, tSetup, MAGIC_WORD_PARAGRAPH ); break;
 				default:					assert ( 0 && "internal error: unhandled op in ExtNode_i::Create()" ); break;
 			}
 		}
@@ -1814,8 +1820,8 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, Sph
 
 template < TermPosFilter_e T >
 ExtTermPos_c<T>::ExtTermPos_c ( ISphQword * pQword, const XQNode_t * pNode, const ISphQwordSetup & tSetup )
-	: ExtTerm_c ( pQword, pNode->m_dFieldMask, tSetup, pNode->m_bNotWeighted )
-	, m_iMaxFieldPos ( pNode->m_iFieldMaxPos )
+	: ExtTerm_c ( pQword, pNode->m_dSpec.m_dFieldMask, tSetup, pNode->m_bNotWeighted )
+	, m_iMaxFieldPos ( pNode->m_dSpec.m_iFieldMaxPos )
 	, m_uTermMaxID ( 0 )
 	, m_pRawDocs ( NULL )
 	, m_pRawDoc ( NULL )
@@ -1824,7 +1830,7 @@ ExtTermPos_c<T>::ExtTermPos_c ( ISphQword * pQword, const XQNode_t * pNode, cons
 	, m_eState ( COPY_DONE )
 	, m_uDoneFor ( 0 )
 	, m_pZoneChecker ( tSetup.m_pZoneChecker )
-	, m_dZones ( pNode->m_dZones )
+	, m_dZones ( pNode->m_dSpec.m_dZones )
 	, m_uLastZonedId ( 0 )
 	, m_iCheckFrom ( 0 )
 {
@@ -4418,10 +4424,7 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 				if ( uMinDocid==DOCID_MAX )
 					continue;
 
-				ZoneKey_t tZoneStart;
-				tZoneStart.m_iZone = i;
-				tZoneStart.m_uDocid = uMinDocid;
-				Verify ( m_hZoneInfo.IterateStart ( tZoneStart ) );
+				Verify ( m_hZoneInfo.IterateStart ( ZoneKey_t ( i, uMinDocid ) ) );
 				uMinDocid = DOCID_MAX;
 				do
 				{
@@ -4465,10 +4468,7 @@ void ExtRanker_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit )
 {
 	// quick route, we have current docid cached
-	ZoneKey_t tKey; // OPTIMIZE? allow 2-component hash keys maybe?
-	tKey.m_uDocid = pHit->m_uDocid;
-	tKey.m_iZone = iZone;
-
+	ZoneKey_t tKey ( iZone, pHit->m_uDocid ); // OPTIMIZE? allow 2-component hash keys maybe?
 	ZoneInfo_t * pZone = m_hZoneInfo ( tKey );
 	if ( pZone )
 	{
@@ -4606,8 +4606,7 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit )
 			SphDocID_t uCur = pStartHits->m_uDocid;
 
 			tKey.m_uDocid = uCur;
-			m_hZoneInfo.Add ( ZoneInfo_t(), tKey );
-			pZone = m_hZoneInfo ( tKey ); // OPTIMIZE? return pointer from Add()?
+			pZone = m_hZoneInfo.AddUnique ( ZoneInfo_t(), tKey );
 
 			// load all the start hits for it
 			while ( pStartHits )

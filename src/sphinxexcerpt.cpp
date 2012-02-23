@@ -2956,6 +2956,7 @@ ExcerptQuery_t::ExcerptQuery_t ()
 	, m_iNext ( -2 )
 	, m_bHasBeforePassageMacro ( false )
 	, m_bHasAfterPassageMacro ( false )
+	, m_sFilePrefix ( "" )
 {
 }
 
@@ -2981,8 +2982,15 @@ void sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokenize
 	if ( tOptions.m_iLoadFiles )
 	{
 		CSphAutofile tFile;
-		if ( tFile.Open ( tOptions.m_sSource.cstr(), SPH_O_READ, sError )<0 )
-			return;
+		if ( tOptions.m_sFilePrefix!= "" )
+		{
+			CSphString sFilename;
+			sFilename.SetSprintf ( "%s%s", tOptions.m_sFilePrefix.cstr(), tOptions.m_sSource.cstr() );
+			if ( tFile.Open ( sFilename.cstr(), SPH_O_READ, sError )<0 )
+				return;
+		} else
+			if ( tFile.Open ( tOptions.m_sSource.cstr(), SPH_O_READ, sError )<0 )
+				return;
 
 		// will this ever trigger? time will tell; email me if it does!
 		if ( tFile.GetSize()+1>=(SphOffset_t)INT_MAX )

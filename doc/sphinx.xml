@@ -6008,7 +6008,11 @@ Starting with version 0.9.9-rc1, keywords can contain wildcards, that work simil
 	when this flag is enabled. Boolean, default is false. Starting with version 2.0.2-beta,
 	building of the snippets could be parallelized between remote agents. Just set the <link linkend='conf-dist-threads'>'dist_threads'</link> param in the config
 	to the value greater than 1, and then invoke the snippets
-	generation over the distributed index, which contain only one(!) first(!) <link linkend='conf-local'>local</link> agent and several remotes.
+	generation over the distributed index, which contain only one(!) <link linkend='conf-local'>local</link> agent and several remotes.
+	Starting with version 2.1.0-dev, the <link linkend="conf-snippets-file-prefix">snippets_file_prefix</link> option is
+	also in the game and the final filename is calculated by concatenation of the prefix with given name. 
+	Otherwords, when snippets_file_prefix is '/var/data' and filename is 'text.txt' the sphinx will try to generate the snippets
+	from the file '/var/datatext.txt', which is exactly '/var/data' + 'text.txt'.
 	</para></listitem>
 </varlistentry>
 <varlistentry>
@@ -10973,6 +10977,34 @@ more efficient binlog disk usage under certain borderline workloads.
 <programlisting>
 binlog_max_log_size = 16M
 </programlisting>
+</sect2>
+
+
+<sect2 id="conf-snippets-file-prefix"><title>snippets_file_prefix</title>
+<para>
+The prefix for the files, used in distributed snippets generation together with 
+<option>load_files</option> and <option>load_files_scattered</option> options.
+Optional, default is empty ("").
+Introduced in version 2.1.0-dev.
+</para>
+<para>
+Specifies the prefix, which will be attached in the front of all files,
+involved in indirect snippets generation. Note, that this is namely prefix,
+not the path. So, if you want to provide the path to the folder here,
+don't forget to append the trailing path separator to it.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+snippets_file_prefix = /var/data/
+</programlisting>
+<para>With such setting you can then invoke the snippets generation for 'file.txt',
+and the sphinx will actually try to open the '/var/data/file.txt'.
+</para>
+<para>The option only affects the local daemon and not touches the agents. So, in above example
+if you use distributed snippets generation, only the master will try to open '/var/data/file.txt',
+but all remote agents will receive just 'file.txt' as was queried - and so, they will try to
+open the file with their own prefixes (if any).
+</para>
 </sect2>
 
 

@@ -252,6 +252,7 @@ static int				g_iMaxFilters		= 256;
 static int				g_iMaxFilterValues	= 4096;
 static int				g_iMaxBatchQueries	= 32;
 static ESphCollation	g_eCollation = SPH_COLLATION_DEFAULT;
+static CSphString		g_sSnippetsFilePrefix;
 #if !USE_WINDOWS
 static CSphProcessSharedVariable<bool> g_tHaveTTY ( true );
 #endif
@@ -9287,7 +9288,9 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 			if ( dQueries[i].m_iLoadFiles )
 			{
 				struct stat st;
-				if ( ::stat ( dQueries[i].m_sSource.cstr(), &st )<0 )
+				CSphString sFilename;
+				sFilename.SetSprintf ( "%s%s", g_sSnippetsFilePrefix.cstr(), dQueries[i].m_sSource.cstr() );
+				if ( ::stat ( sFilename.cstr(), &st )<0 )
 				{
 					if ( !bScattered )
 					{
@@ -9494,6 +9497,8 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	q.m_iLoadFiles = (( iFlags & EXCERPT_FLAG_LOAD_FILES )!=0)?1:0;
 	bool bScattered = ( iFlags & EXCERPT_FLAG_FILES_SCATTERED )!=0;
 	q.m_iLoadFiles |= bScattered?2:0;
+	if ( q.m_iLoadFiles )
+		q.m_sFilePrefix = g_sSnippetsFilePrefix;
 	q.m_bAllowEmpty = ( iFlags & EXCERPT_FLAG_ALLOW_EMPTY )!=0;
 	q.m_bEmitZones = ( iFlags & EXCERPT_FLAG_EMIT_ZONES )!=0;
 
@@ -10921,6 +10926,9 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
+
+	if ( q.m_iLoadFiles )
+		q.m_sFilePrefix = g_sSnippetsFilePrefix;
 
 	q.m_iPassageBoundary = sphGetPassageBoundary ( q.m_sRawPassageBoundary );
 
@@ -16364,6 +16372,11 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			g_sQueryLogFile = hSearchd["query_log"].cstr();
 		}
 	}
+
+	if ( hSearchd.Exists ( "snippets_file_prefix" ) )
+		g_sSnippetsFilePrefix = hSearchd["snippets_file_prefix"].cstr();
+	else
+		g_sSnippetsFilePrefix = "";
 
 	if ( !strcmp ( hSearchd.GetStr ( "query_log_format", "plain" ), "sphinxql" ) )
 		g_eLogFormat = LOG_FORMAT_SPHINXQL;

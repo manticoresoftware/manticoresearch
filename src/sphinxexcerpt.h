@@ -46,6 +46,7 @@ public:
 	bool			m_bEmitZones;		///< whether to emit zone for passage
 	int				m_iRawFlags;		///< flags as they received from proto (to avoid coding/decoding to agents)
 	CSphString		m_sRawPassageBoundary; ///< boundary as it received from proto (to avoid coding/decoding to agents)
+	CSphString		m_sFilePrefix;		///< the prefix for reading the file
 
 public:
 	int64_t			m_iSize;			///< file size, to sort to work-queue order

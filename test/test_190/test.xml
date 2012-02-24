@@ -24,7 +24,10 @@ searchd
 	</agent2>
 
 	<searchd_settings/>
-	dist_threads = 2
+	<dynamic>
+		<variant>dist_threads = 2</variant>
+		<variant></variant>
+	</dynamic>
 }
 
 source src
@@ -108,8 +111,6 @@ foreach ( $tests as $test )
 {
 	$res = $client->BuildExcerpts ( $test[0], $index, $words, $test[1] );
 	$results[] = $res;
-	var_dump ($test);
-	var_dump ($res);
 }
 ]]> </custom_test>
 

@@ -9238,6 +9238,12 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 			sError.SetSprintf ( "%s", "The distributed index for snippets available only when using external files" );
 			return false;
 		}
+
+		if ( g_iDistThreads<=1 && bScattered )
+		{
+			sError.SetSprintf ( "%s", "load_files_scattered works only together with dist_threads>1" );
+			return false;
+		}
 		sIndex = dDistLocal[0];
 
 		// no remote - roll back to simple local query

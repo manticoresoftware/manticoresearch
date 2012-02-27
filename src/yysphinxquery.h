@@ -34,9 +34,10 @@
      TOK_INT = 260,
      TOK_FIELDLIMIT = 261,
      TOK_ZONE = 262,
-     TOK_BEFORE = 263,
-     TOK_SENTENCE = 264,
-     TOK_PARAGRAPH = 265
+     TOK_ZONESPAN = 263,
+     TOK_BEFORE = 264,
+     TOK_SENTENCE = 265,
+     TOK_PARAGRAPH = 266
    };
 #endif
 #define TOK_KEYWORD 258
@@ -44,9 +45,10 @@
 #define TOK_INT 260
 #define TOK_FIELDLIMIT 261
 #define TOK_ZONE 262
-#define TOK_BEFORE 263
-#define TOK_SENTENCE 264
-#define TOK_PARAGRAPH 265
+#define TOK_ZONESPAN 263
+#define TOK_BEFORE 264
+#define TOK_SENTENCE 265
+#define TOK_PARAGRAPH 266
 
 
 

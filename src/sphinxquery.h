@@ -76,7 +76,7 @@ enum XQOperator_e
 	SPH_QUERY_PARAGRAPH
 };
 
-// the limit of field or zone
+// the limit of field or zone or zonespan
 struct XQLimitSpec_t
 {
 	bool					m_bFieldSpec;	///< whether field spec was already explicitly set
@@ -84,6 +84,7 @@ struct XQLimitSpec_t
 	CSphSmallBitvec			m_dFieldMask;	///< fields mask (spec part)
 	int						m_iFieldMaxPos;	///< max position within field (spec part)
 	CSphVector<int>			m_dZones;		///< zone indexes in per-query zones list
+	bool					m_bZoneSpan;	///< if we need to hits within only one span
 
 public:
 	XQLimitSpec_t ()
@@ -96,6 +97,7 @@ public:
 		m_bInvisible = false;
 		m_bFieldSpec = false;
 		m_iFieldMaxPos = 0;
+		m_bZoneSpan = false;
 		m_dFieldMask.Set();
 		m_dZones.Reset();
 	}
@@ -122,12 +124,12 @@ public:
 			SetFieldSpec ( dLimit.m_dFieldMask, dLimit.m_iFieldMaxPos );
 
 		if ( dLimit.m_dZones.GetLength() )
-			SetZoneSpec ( dLimit.m_dZones );
+			SetZoneSpec ( dLimit.m_dZones, dLimit.m_bZoneSpan );
 
 		return *this;
 	}
 public:
-	void SetZoneSpec ( const CSphVector<int> & dZones );
+	void SetZoneSpec ( const CSphVector<int> & dZones, bool bZoneSpan );
 	void SetFieldSpec ( const CSphSmallBitvec& uMask, int iMaxPos );
 };
 
@@ -189,7 +191,7 @@ public:
 	void SetFieldSpec ( const CSphSmallBitvec& uMask, int iMaxPos );
 
 	/// setup zone limits
-	void SetZoneSpec ( const CSphVector<int> & dZones );
+	void SetZoneSpec ( const CSphVector<int> & dZones, bool bZoneSpan=false );
 
 	/// copy field/zone limits from another node
 	void CopySpecs ( const XQNode_t * pSpecs );

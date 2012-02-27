@@ -58,9 +58,9 @@ public:
 	{
 		m_dStateSpec.SetFieldSpec ( uMask, iMaxPos );
 	}
-	inline void SetZoneVec ( int iZoneVec )
+	inline void SetZoneVec ( int iZoneVec, bool bZoneSpan = false )
 	{
-		m_dStateSpec.SetZoneSpec ( m_dZoneVecs[iZoneVec] );
+		m_dStateSpec.SetZoneSpec ( m_dZoneVecs[iZoneVec], bZoneSpan );
 	}
 
 public:
@@ -129,8 +129,6 @@ void XQLimitSpec_t::SetFieldSpec ( const CSphSmallBitvec& uMask, int iMaxPos )
 	m_iFieldMaxPos = iMaxPos;
 }
 
-
-
 void XQNode_t::SetFieldSpec ( const CSphSmallBitvec& uMask, int iMaxPos )
 {
 	// set it, if we do not yet have one
@@ -143,21 +141,22 @@ void XQNode_t::SetFieldSpec ( const CSphSmallBitvec& uMask, int iMaxPos )
 		m_dChildren[i]->SetFieldSpec ( uMask, iMaxPos );
 }
 
-void XQLimitSpec_t::SetZoneSpec ( const CSphVector<int> & dZones )
+void XQLimitSpec_t::SetZoneSpec ( const CSphVector<int> & dZones, bool bZoneSpan )
 {
 	m_dZones = dZones;
+	m_bZoneSpan = bZoneSpan;
 }
 
 
-void XQNode_t::SetZoneSpec ( const CSphVector<int> & dZones )
+void XQNode_t::SetZoneSpec ( const CSphVector<int> & dZones, bool bZoneSpan )
 {
 	// set it, if we do not yet have one
 	if ( !m_dSpec.m_dZones.GetLength() )
-		m_dSpec.SetZoneSpec ( dZones );
+		m_dSpec.SetZoneSpec ( dZones, bZoneSpan );
 
 	// some of the children might not yet have a spec, even if the node itself has
 	ARRAY_FOREACH ( i, m_dChildren )
-		m_dChildren[i]->SetZoneSpec ( dZones );
+		m_dChildren[i]->SetZoneSpec ( dZones, bZoneSpan );
 }
 
 void XQNode_t::CopySpecs ( const XQNode_t * pSpecs )
@@ -169,7 +168,7 @@ void XQNode_t::CopySpecs ( const XQNode_t * pSpecs )
 		m_dSpec.SetFieldSpec ( pSpecs->m_dSpec.m_dFieldMask, pSpecs->m_dSpec.m_iFieldMaxPos );
 
 	if ( !m_dSpec.m_dZones.GetLength() )
-		m_dSpec.SetZoneSpec ( pSpecs->m_dSpec.m_dZones );
+		m_dSpec.SetZoneSpec ( pSpecs->m_dSpec.m_dZones, pSpecs->m_dSpec.m_bZoneSpan );
 }
 
 
@@ -708,6 +707,22 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			break;
 		}
 
+		// handle ZONESPAN
+		if ( sToken && p && !m_pTokenizer->m_bPhrase && !strncmp ( p, "ZONESPAN:", 9 )
+			&& ( sphIsAlpha(p[9]) || p[9]=='(' ) )
+		{
+			// ParseZone() will update tokenizer buffer ptr as needed
+			int iVec = ParseZone ( p+9 );
+			if ( iVec<0 )
+				return -1;
+
+			// we just lexed our next token
+			m_iPendingType = TOK_ZONESPAN;
+			m_tPendingToken.iZoneVec = iVec;
+			m_iAtomPos -= 1;
+			break;
+		}
+
 		// handle specials
 		if ( m_pTokenizer->WasTokenSpecial() )
 		{
@@ -876,7 +891,7 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 			pResult->m_dSpec.SetFieldSpec ( pRight->m_dSpec.m_dFieldMask, pRight->m_dSpec.m_iFieldMaxPos );
 
 		if ( pRight->m_dSpec.m_dZones.GetLength() )
-			pResult->m_dSpec.SetZoneSpec ( pRight->m_dSpec.m_dZones );
+			pResult->m_dSpec.SetZoneSpec ( pRight->m_dSpec.m_dZones, pRight->m_dSpec.m_bZoneSpan );
 	} else
 	{
 		// however, it's right (!) spec which is chosen for the resulting node,

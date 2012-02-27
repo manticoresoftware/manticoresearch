@@ -65,6 +65,7 @@
 		<Unit filename="../src/sphinxstd.cpp" />
 		<Unit filename="../src/sphinxstd.h" />
 		<Unit filename="../src/sphinxstem.h" />
+		<Unit filename="../src/sphinxstemar.cpp" />
 		<Unit filename="../src/sphinxstemcz.cpp" />
 		<Unit filename="../src/sphinxstemen.cpp" />
 		<Unit filename="../src/sphinxstemru.cpp" />

@@ -1,5 +1,7 @@
 #!/bin/sh
 
+SHELL='/bin/sh'
+
 jobs=$(grep -c processor /proc/cpuinfo)
 [ "z$FAILLOG" = "z" ] && FAILLOG="/tmp/faillog"
 LINE="-------------------------------\n"
@@ -36,7 +38,7 @@ cmd "mysql -u root test < example.sql" "Documents setup failed"
 for CONFARGS in "--with-debug" "--with-debug --enable-id64";
 do
 	BANNER="testing $CONFARGS build"
-	cmd "./configure $CONFARGS" "$BANNER: configure failed"
+	cmd "$SHELL ./configure $CONFARGS" "$BANNER: configure failed"
 	cmd "make clean" "$BANNER: make clean failed" 
 	cmd "make $jobs" "$BANNER: make failed" 
 

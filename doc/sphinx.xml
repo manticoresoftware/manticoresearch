@@ -10900,8 +10900,9 @@ Optional, default is build-time configured data directory.
 Introduced in version 1.10-beta.
 </para>
 <para>
-Binary logs are used for crash recovery of RT index data that
-would otherwise only be stored in RAM.  When logging is enabled,
+Binary logs are used for crash recovery of RT index data, and also of 
+attributes updates of plain disk indices that
+would otherwise only be stored in RAM untill flush.  When logging is enabled,
 every transaction COMMIT-ted into RT index gets written into
 a log file.  Logs are then automatically replayed on startup
 after an unclean shutdown, recovering the logged changes.
@@ -10915,6 +10916,12 @@ will create and unlink multiple binlog.* files in that path as necessary
 <para>
 Empty value disables binary logging. That improves performance,
 but puts RT index data at risk.
+</para>
+<para>
+WARNING! It is strongly recommended to always explicitly define 'binlog_path' option in your config.
+Otherwise, the default path, which is in most cases is the same as working folder, may point to the 
+folder with no write access (for example, to the /usr/bin). In this case, the searchd
+will not start at all.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>

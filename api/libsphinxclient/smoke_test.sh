@@ -4,6 +4,7 @@ FAILLOG="/tmp/faillog1"
 DIFF='smoke_diff.txt'
 RES='smoke_test.txt'
 REF='smoke_ref.txt'
+SHELL='/bin/sh'
 LINE='-----------------------------\n'
 
 die()
@@ -24,7 +25,7 @@ cmd ()
         eval $1 1>>$FAILLOG 2>&1 || die "$2" "$3"
 }
 
-cmd "./configure --with-debug" "configure failed"
+cmd "$SHELL ./configure --with-debug" "configure failed"
 cmd "make clean" "make clean failed"
 cmd "make" "make failed"
 

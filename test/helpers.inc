@@ -226,11 +226,11 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 
 		$cl = new SphinxClient ();
 		$cl->SetServer ( $addr, $port );	
-		$cl->SetConnectTimeout ( 1 );
+		$cl->SetConnectTimeout ( 10 );
 		
 		$ok = false;
 		$start = MyMicrotime();		
-		for ( $i=0; $i<3; $i++ )
+		for ( $i=0; $i<300; $i++ )
 		{
 			if ( $cl->Open() )
 			{

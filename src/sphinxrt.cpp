@@ -4242,7 +4242,7 @@ bool RtIndex_t::RtQwordSetup ( RtQword_t * pQword, RtSegment_t * pSeg ) const
 
 	// sanity check
 	assert (!( bFound==true && pQword->m_iDocs==0 ) );
-	return !bFound;
+	return bFound;
 }
 
 static void AddKillListFilter ( CSphVector<CSphFilterSettings> * pExtra, const SphAttr_t * pKillList, int nEntries )
@@ -4507,7 +4507,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		tCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
 		tCtx.m_iExpansionLimit = m_iExpansionLimit;
 		tCtx.m_bHasMorphology = m_pDict->HasMorphology();
-		tCtx.m_bRt = false;
+		tCtx.m_bRt = true;
 		tParsed.m_pRoot = sphExpandXQNode ( tParsed.m_pRoot, tCtx );
 	}
 

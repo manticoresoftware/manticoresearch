@@ -5,7 +5,7 @@
 ]>
 <book lang="en">
 
-<title>Sphinx 2.0.2-beta reference manual</title>
+<title>Sphinx 2.1.0-beta reference manual</title>
 <subtitle>Free open-source SQL full-text search engine</subtitle>
 
 <bookinfo>
@@ -3143,7 +3143,7 @@ source distribution provides a sample file,
 that defines a few simple functions showing how to work with integer,
 string, and MVA arguments; you can use that one as a foundation for
 your new functions. It includes the UDF interface header file,
-<ulink url="http://code.google.com/p/sphinxsearch/source/browse/trunk/src/udfexample.c">src/sphinxudf.h</ulink>,
+<ulink url="http://code.google.com/p/sphinxsearch/source/browse/trunk/src/sphinxudf.h">src/sphinxudf.h</ulink>,
 that defines the required types and structures. <filename>sphinxudf.h</filename>
 header is standalone, that is, does not require any other parts of Sphinx
 source to compile.
@@ -6565,9 +6565,12 @@ and TCP port, respectively:
 as in <link linkend="api-func-setrankingmode">SetRankingMode()</link> API call
 (the only mode that supports full query syntax).
 Known values are "proximity_bm25", "bm25", "none", "wordcount", "proximity",
-"matchany", and "fieldmask".
+"matchany", "fieldmask"; and, starting with 2.0.4-release, "expr:EXPRESSION"
+syntax to support expression-based ranker (where EXPRESSION should be replaced
+with your specific ranking formula):
 <programlisting>
 ... WHERE query='test;mode=extended;ranker=bm25;';
+... WHERE query='test;mode=extended;ranker=expr:sum(lcs);';
 </programlisting>
 </para></listitem>
 <listitem><para>geoanchor - geodistance anchor, as in
@@ -10919,8 +10922,8 @@ but puts RT index data at risk.
 </para>
 <para>
 WARNING! It is strongly recommended to always explicitly define 'binlog_path' option in your config.
-Otherwise, the default path, which is in most cases is the same as working folder, may point to the 
-folder with no write access (for example, to the /usr/bin). In this case, the searchd
+Otherwise, the default path, which in most cases is the same as working folder, may point to the 
+folder with no write access (for example, /usr/local/var/data). In this case, the searchd
 will not start at all.
 </para>
 <bridgehead>Example:</bridgehead>
@@ -11271,6 +11274,70 @@ prefork_rotation_throttle = 50 # throttle children restarts by 50 msec each
 -->
 
 <appendix id="changelog"><title>Sphinx revision history</title>
+
+<sect1 id="rel204"><title>Version 2.0.4-release, 02 mar 2012</title>
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+<listitem><para>fixed #605, pack vs mysql compress</para></listitem>
+<listitem><para>fixed #783, #862, #917, #985, #990, #1032 documentation bugs</para></listitem>
+<listitem><para>fixed #885, bitwise AND/OR were not available via API</para></listitem>
+<listitem><para>fixed #984, crash on indexing data with MAGIC_CODE_ZONE symbol</para></listitem>
+<listitem><para>fixed #1004, RT index loses words from dictionary on segments merging with <code>id64</code> enabled</para></listitem>
+<listitem><para>fixed #1035, daemon doesn't properly handle FDs in case of socket overflow FD_SETSIZE ( *nix, <code>preopen_indexes=0</code>, <code>worker=threads</code> )</para></listitem>
+<listitem><para>fixed #1038, quoted string for API select</para></listitem>
+<listitem><para>fixed #1046, head SPZ overflow, snippet generation at non fast with SPZ</para></listitem>
+<listitem><para>fixed #1048, distributed index can't sort \ filter because of missed attributes</para></listitem>
+<listitem><para>fixed #1050, expression ranker vs agents</para></listitem>
+<listitem><para>fixed #1051, added <link linkend="mva">MVA64</link> support to <link linkend="udf">UDFs</link></para></listitem>
+<listitem><para>fixed #1054, <link linkend="sphinxql-select">max_query_time</link> not handled properly on searching at <link linkend="rt-indexes">RT index</link></para></listitem>
+<listitem><para>fixed #1055, <link linkend="conf-expansion-limit">expansion_limit</link> on searching at RT disk chunks</para></listitem>
+<listitem><para>fixed #1057, daemon crashes on generating snippet with 0 documents provided</para></listitem>
+<listitem><para>fixed #1060, <link linkend="api-func-buildexcerpts">load_files_scattered</link> don't work</para></listitem>
+<listitem><para>fixed #1065, libsphinxclient vs distribute index (agents)</para></listitem>
+<listitem><para>fixed #1067, modifiers were not escaped in legacy query emulation</para></listitem>
+<listitem><para>fixed #1071, master - agent communication got slower for a large query</para></listitem>
+<listitem><para>fixed #1076, #1077, (redundant copying, and a possible mutex leak with uservars)</para></listitem>
+<listitem><para>fixed #1078, <code>blended</code> vs FIELD_END</para></listitem>
+<listitem><para>fixed #1084 crash \ index corruption on loading persist MVA</para></listitem>
+<listitem><para>fixed #1091, RT attach of plain index with string \ MVA attributes prior regular attributes</para></listitem>
+<listitem><para>fixed #1092, update got binloged with wrong TID</para></listitem>
+<listitem><para>fixed #1098, crash on creating large expression</para></listitem>
+<listitem><para>fixed #1099, cleaning up temporary files on fail of indexing</para></listitem>
+<listitem><para>fixed #1100, missing <link linkend="conf-xmlpipe-attr-bigint">xmlpipe_attr_bigint</link> config directive</para></listitem>
+<listitem><para>fixed #1101, now ignoring dashes within keywords when dash is not in charset_table</para></listitem>
+<listitem><para>fixed #1103, <code>ZONE</code> operator incorrectly works on more than one keywords in a simple zone</para></listitem>
+<listitem><para>fixed #1106, optimized <code>WHERE id=value</code>, <code>WHERE id IN (values_list)</code> clauses used in <code>SELECT</code>, <code>UPDATE</code> statements</para></listitem>
+<listitem><para>fixed #1112, Sphinx doesn't work out-of-the-box because the collision of <code>binlog_path</code> option</para></listitem>
+<listitem><para>fixed #1116, crash on <code>FLUSH RTINDEX</code> unknown-index-name</para></listitem>
+<listitem><para>fixed #1117, occasional RT headers corruption (leading to crashes and/or missing results)</para></listitem>
+<listitem><para>fixed #1119, missing expression ranker support in SphinxSE</para></listitem>
+<listitem><para>fixed #1120, negative <link linkend="api-funcgroup-querying">total_found</link>, docs and hits counter on huge indexes</para></listitem>
+</itemizedlist>
+</sect1>
+
+<sect1 id="rel203"><title>Version 2.0.3-release, 23 dec 2011</title>
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+<listitem><para>fixed #1031, SphinxQL parsing syntax for MVA at insert \ replace statements</para></listitem>
+<listitem><para>fixed #1027, stalls on attribute update in high-concurrency load</para></listitem>
+<listitem><para>fixed #1026, daemon crash on malformed API command</para></listitem>
+<listitem><para>fixed #1021, <code>max_children</code> option has been ignored with <code>worker=threads</code></para></listitem>
+<listitem><para>fixed #1020, crash on large attribute files loading</para></listitem>
+<listitem><para>fixed #1014, crash on rotation when index has been removed from config file (<code>worker=threads</code>, *nix box)</para></listitem>
+<listitem><para>fixed #1001, broken MVA  files in RT index while saving disk chunk</para></listitem>
+<listitem><para>fixed #995, crash on empty MVA updates</para></listitem>
+<listitem><para>fixed #994, crash on daemon shutdown with <code>seamless_rotate=0</code> and <code>workers=threads</code></para></listitem>
+<listitem><para>fixed #993, #998, crash on replay <code>DELETE</code> statement vs RT index with <code>dict=keywords</code>, fixed sequential <code>INSERT</code> into <code>dict=keywords</code> index right after <code>INSERT</code> into <code>dict=crc</code> index</para></listitem>
+<listitem><para>fixed #991, crash on indexing mssql source with <code>mssql_unicode</code> enabled</para></listitem>
+<listitem><para>fixed #983, #950, crash on host name lookup (SphinxSE with MySQL 5.5)</para></listitem>
+<listitem><para>fixed #981, snippet inconsistency with <code>allow_empty=0</code></para></listitem>
+<listitem><para>fixed #980, broken index produced by index merge in rare cases</para></listitem>
+<listitem><para>fixed #971, absent error message at master on agent "maxed out"</para></listitem>
+<listitem><para>fixed #695, #815, #835, #866, malformed warnings in SphinxQL</para></listitem>
+<listitem><para>fixed build of SphinxSE with MySQL 5.1</para></listitem>
+<listitem><para>fixed crash log for 'fork' and 'prefork' workers</para></listitem>
+</itemizedlist>
+</sect1>
 
 <sect1 id="rel202"><title>Version 2.0.2-beta, 15 nov 2011</title>
 <bridgehead>Major new features</bridgehead>

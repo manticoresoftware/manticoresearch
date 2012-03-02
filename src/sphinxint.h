@@ -1125,16 +1125,6 @@ struct LocatorPair_t
 	CSphAttrLocator m_tTo;		///< destination (dynamized) locator
 };
 
-/// internal disk index interface (that exposes some guts)
-struct ISphIndex_VLN : public CSphIndex
-{
-	explicit ISphIndex_VLN ( const char * sIndexName, const char * sFilename )
-		: CSphIndex ( sIndexName, sFilename )
-	{}
-
-	virtual void SetDynamize ( const CSphVector<LocatorPair_t> & dDynamize ) = 0;
-};
-
 //////////////////////////////////////////////////////////////////////////
 // DICTIONARY INTERNALS
 //////////////////////////////////////////////////////////////////////////

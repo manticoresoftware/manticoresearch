@@ -159,6 +159,7 @@ struct st_sphinx_client
 	const char **			index_weights_names;
 	const int *				index_weights_values;
 	int						ranker;
+	const char *					rankexpr;
 	int						max_query_time;
 	int						num_field_weights;
 	const char **			field_weights_names;
@@ -240,6 +241,7 @@ sphinx_client * sphinx_create ( sphinx_bool copy_args )
 	client->index_weights_names		= NULL;
 	client->index_weights_values	= NULL;
 	client->ranker					= SPH_RANK_DEFAULT;
+	client->rankexpr				= NULL;
 	client->max_query_time			= 0;
 	client->num_field_weights		= 0;
 	client->field_weights_names		= NULL;
@@ -523,15 +525,16 @@ sphinx_bool sphinx_set_match_mode ( sphinx_client * client, int mode )
 }
 
 
-sphinx_bool sphinx_set_ranking_mode ( sphinx_client * client, int ranker )
+sphinx_bool sphinx_set_ranking_mode ( sphinx_client * client, int ranker, const char * rankexpr )
 {
-	if ( !client || ranker<SPH_RANK_PROXIMITY_BM25 || ranker>SPH_RANK_SPH04 ) // FIXME?
+	if ( !client || ranker<SPH_RANK_PROXIMITY_BM25 || ranker>=SPH_RANK_TOTAL ) // FIXME?
 	{
 		set_error ( client, "invalid arguments (ranking mode %d out of bounds)", ranker );
 		return SPH_FALSE;
 	}
 
 	client->ranker = ranker;
+	client->rankexpr = strchain ( client, rankexpr );
 	return SPH_TRUE;
 }
 
@@ -959,7 +962,8 @@ static int calc_req_len ( sphinx_client * client, const char * query, const char
 		+ safestrlen ( client->group_by )
 		+ safestrlen ( client->group_sort )
 		+ safestrlen ( client->group_distinct )
-		+ safestrlen ( comment );
+		+ safestrlen ( comment )
+		+ safestrlen ( client->rankexpr );
 
 	filter_val_size = ( client->ver_search>=0x114 ) ? 8 : 4;
 	for ( i=0; i<client->num_filters; i++ )
@@ -1091,6 +1095,8 @@ int sphinx_add_query ( sphinx_client * client, const char * query, const char * 
 	send_int ( &req, client->limit );
 	send_int ( &req, client->mode );
 	send_int ( &req, client->ranker );
+	if ( client->ranker==SPH_RANK_EXPR )
+		send_str ( &req, client->rankexpr );
 	send_int ( &req, client->sort );
 	send_str ( &req, client->sortby );
 	send_str ( &req, query );

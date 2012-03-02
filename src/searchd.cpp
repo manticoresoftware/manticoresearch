@@ -12266,6 +12266,7 @@ void HandleMysqlFlush ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE 
 
 	if ( !pIndex || !pIndex->m_bEnabled || !pIndex->m_bRT )
 	{
+		if ( pIndex )
 		pIndex->Unlock();
 		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "FLUSH RTINDEX requires an existing RT index" );
 		return;
@@ -16181,6 +16182,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( !g_bOptNoLock )
 			OpenDaemonLog ( hConf["searchd"]["searchd"] );
 		bVisualLoad = SetWatchDog ( iDevNull );
+		close ( g_iLogFile ); // just the 'IT Happens' magic - switch off, then on.
+		OpenDaemonLog ( hConf["searchd"]["searchd"] );
 	}
 #endif
 

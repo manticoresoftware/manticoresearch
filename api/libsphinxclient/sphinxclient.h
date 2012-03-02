@@ -52,6 +52,9 @@ enum
 	SPH_RANK_MATCHANY		= 5,
 	SPH_RANK_FIELDMASK		= 6,
 	SPH_RANK_SPH04			= 7,
+	SPH_RANK_EXPR			= 8,
+	SPH_RANK_TOTAL			= 9,
+
 
 	SPH_RANK_DEFAULT		= SPH_RANK_PROXIMITY_BM25
 };
@@ -200,7 +203,7 @@ sphinx_bool					sphinx_close					( sphinx_client * client );
 sphinx_bool					sphinx_set_limits				( sphinx_client * client, int offset, int limit, int max_matches, int cutoff );
 sphinx_bool					sphinx_set_max_query_time		( sphinx_client * client, int max_query_time );
 sphinx_bool					sphinx_set_match_mode			( sphinx_client * client, int mode );
-sphinx_bool					sphinx_set_ranking_mode			( sphinx_client * client, int ranker );
+sphinx_bool					sphinx_set_ranking_mode			( sphinx_client * client, int ranker, const char * rankexpr );
 sphinx_bool					sphinx_set_sort_mode			( sphinx_client * client, int mode, const char * sortby );
 sphinx_bool					sphinx_set_field_weights		( sphinx_client * client, int num_weights, const char ** field_names, const int * field_weights );
 sphinx_bool					sphinx_set_index_weights		( sphinx_client * client, int num_weights, const char ** index_names, const int * index_weights );

@@ -172,6 +172,11 @@ void IndexingThread ( void * pArg )
 
 int main ()
 {
+	// threads should be initialized before memory allocations
+	char cTopOfMainStack;
+	sphThreadInit();
+	MemorizeStack ( &cTopOfMainStack );
+
 	CSphString sError;
 	CSphDictSettings tDictSettings;
 

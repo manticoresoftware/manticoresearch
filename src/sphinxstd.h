@@ -2108,6 +2108,9 @@ void * sphThreadGet ( SphThreadKey_t tKey );
 /// get the pointer to my thread's stack
 void * sphMyStack ();
 
+/// get size of used stack
+int64_t sphGetStackUsed();
+
 /// get the size of my thread's stack
 int sphMyStackSize ();
 

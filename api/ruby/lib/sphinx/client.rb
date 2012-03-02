@@ -107,6 +107,10 @@ module Sphinx
     SPH_RANK_WORDCOUNT      = 3
     # phrase proximity
     SPH_RANK_PROXIMITY      = 4
+    SPH_RANK_MATCHANY       = 5
+    SPH_RANK_FIELDMASK      = 6
+    SPH_RANK_SPH04          = 7
+    SPH_RANK_EXPR           = 8
     
     # Known sort modes
   
@@ -195,6 +199,7 @@ module Sphinx
       @anchor        = []                      # geographical anchor point
       @indexweights  = []                      # per-index weights
       @ranker        = SPH_RANK_PROXIMITY_BM25 # ranking mode (default is SPH_RANK_PROXIMITY_BM25)
+      @rankexpr	     = ''                      # ranker expression for SPH_RANK_EXPR
       @maxquerytime  = 0                       # max query time, milliseconds (default is 0, do not limit) 
       @fieldweights  = {}                      # per-field-name weights
       @overrides     = []                      # per-query attribute values overrides
@@ -265,14 +270,19 @@ module Sphinx
     end
     
     # Set ranking mode.
-    def SetRankingMode(ranker)
+    def SetRankingMode(ranker, rankexpr = '')
       assert { ranker == SPH_RANK_PROXIMITY_BM25 \
             || ranker == SPH_RANK_BM25 \
             || ranker == SPH_RANK_NONE \
             || ranker == SPH_RANK_WORDCOUNT \
-            || ranker == SPH_RANK_PROXIMITY }
+            || ranker == SPH_RANK_PROXIMITY \
+            || ranker == SPH_RANK_MATCHANY \
+            || ranker == SPH_RANK_FIELDMASK \
+            || ranker == SPH_RANK_SPH04 \
+            || ranker == SPH_RANK_EXPR }
 
       @ranker = ranker
+      @rankexpr = rankexpr
     end
     
     # Set matches sorting mode.
@@ -567,7 +577,14 @@ module Sphinx
   
       # mode and limits
       request = Request.new
-      request.put_int @offset, @limit, @mode, @ranker, @sort
+      request.put_int @offset, @limit, @mode, @ranker
+      # process the 'expr' ranker
+      if @ranker == SPH_RANK_EXPR
+        request.put_string @rankexpr
+      end
+
+      request.put_int @sort
+
       request.put_string @sortby
       # query itself
       request.put_string query

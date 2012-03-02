@@ -1331,7 +1331,7 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 		return false;
 
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( false ) ); // avoid race
-	CSphSource_StringVector tSrc ( iFields, ppFields, m_tOutboundSchema );
+	CSphSource_StringVector tSrc ( iFields, ppFields, m_tSchema );
 
 	// SPZ setup
 	if ( m_tSettings.m_bIndexSP && !pTokenizer->EnableSentenceIndexing ( sError ) )

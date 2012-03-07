@@ -89,6 +89,9 @@ INSERT INTO test_table VALUES
 <sphinxql>select id, gid, weight(), title from dist where match('seven !(angels !by)') and gid=1 option ranker=expr('query_word_count*100+sum(word_count)*10+sum(hit_count)')</sphinxql>
 <sphinxql>select id, gid, weight(), title from dist where match('lamb') and gid=2 option ranker=expr('doc_word_count*1000+sum(word_count)')</sphinxql>
 
+<!-- check that duplicate query words work -->
+<sphinxql>select id, gid, weight(), title from test where match('seven|seven|seven') option ranker=expr('sum(lcs)*1000+bm25')</sphinxql>
+
 </sphqueries>
 
 </test>

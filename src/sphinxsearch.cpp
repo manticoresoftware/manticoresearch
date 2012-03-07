@@ -6201,14 +6201,14 @@ void RankerState_Expr_fn::Update ( const ExtHit_t * pHlist )
 	m_uMatchedFields |= ( 1UL<<uField );
 
 	// keywords can be duplicated in the query, so we need this extra check
-	if ( m_tKeywordMask.BitGet ( pHlist->m_uQuerypos ) )
+	if ( pHlist->m_uQuerypos < m_dIDF.GetLength () && m_tKeywordMask.BitGet ( pHlist->m_uQuerypos ) )
 	{
 		m_uHitCount[uField]++;
 		m_uWordCount[uField] |= ( 1<<pHlist->m_uQuerypos );
 		m_uDocWordCount |= ( 1<<pHlist->m_uQuerypos );
+		m_dTFIDF[uField] += m_dIDF [ pHlist->m_uQuerypos ];
 	}
 
-	m_dTFIDF[uField] += m_dIDF [ pHlist->m_uQuerypos ];
 	if ( !m_iMinHitPos[uField] )
 		m_iMinHitPos[uField] = iPos;
 

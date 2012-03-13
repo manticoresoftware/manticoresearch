@@ -929,7 +929,7 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 	if ( !*m_pCur ) return 0;
 
 	// check for constant
-	if ( IsDigit ( m_pCur[0] ) || ( *m_pCur=='-' && IsDigit ( m_pCur[1] ) ) )
+	if ( IsDigit ( m_pCur[0] ) )
 		return ParseNumeric ( lvalp, &m_pCur );
 
 	// check for field, function, or magic name
@@ -1381,6 +1381,16 @@ void ExprParser_t::Optimize ( int iNode )
 	{
 		pRoot->m_iToken = TOK_ATTR_SINT;
 		pRoot->m_tLocator = pLeft->m_tLocator;
+	}
+
+	// NEG(const)
+	if ( pRoot->m_iToken==TOK_NEG && IsConst(pLeft) )
+	{
+		pRoot->m_iToken = pLeft->m_iToken;
+		if ( pRoot->m_iToken==TOK_CONST_INT )
+			pRoot->m_iConst = -pLeft->m_iConst;
+		else
+			pRoot->m_fConst = -pLeft->m_fConst;		
 	}
 }
 

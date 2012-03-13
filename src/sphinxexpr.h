@@ -35,6 +35,7 @@ enum ESphAttr
 	SPH_ATTR_BIGINT		= 6,			///< signed 64-bit integer
 	SPH_ATTR_STRING		= 7,			///< string (binary; in-memory)
 	SPH_ATTR_WORDCOUNT	= 8,			///< string word count (integer at search time,tokenized and counted at indexing time)
+	SPH_ATTR_POLY2D		= 9,			///< vector of floats, 2D polygon (see POLY2D)
 	SPH_ATTR_UINT32SET	= 0x40000001UL,	///< MVA, set of unsigned 32-bit integers
 	SPH_ATTR_UINT64SET	= 0x40000002UL	///< MVA, set of unsigned 64-bit integers
 };

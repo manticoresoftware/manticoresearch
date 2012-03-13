@@ -609,7 +609,10 @@ enum Func_e
 	FUNC_BITDOT,
 
 	FUNC_GEODIST,
-	FUNC_EXIST
+	FUNC_EXIST,
+	FUNC_POLY2D,
+	FUNC_GEOPOLY2D,
+	FUNC_CONTAINS
 };
 
 
@@ -661,7 +664,10 @@ static FuncDesc_t g_dFuncs[] =
 	{ "bitdot",			-1, FUNC_BITDOT,		SPH_ATTR_NONE },
 
 	{ "geodist",		4,	FUNC_GEODIST,		SPH_ATTR_FLOAT },
-	{ "exist",			2,	FUNC_EXIST,			SPH_ATTR_NONE }
+	{ "exist",			2,	FUNC_EXIST,			SPH_ATTR_NONE },
+	{ "poly2d",			-6,	FUNC_POLY2D,		SPH_ATTR_POLY2D },
+	{ "geopoly2d",		-6,	FUNC_GEOPOLY2D,		SPH_ATTR_POLY2D },
+	{ "contains",		3,	FUNC_CONTAINS,		SPH_ATTR_INTEGER }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -732,7 +738,7 @@ struct ExprNode_t
 
 	ExprNode_t () : m_iToken ( 0 ), m_eRetType ( SPH_ATTR_NONE ), m_eArgType ( SPH_ATTR_NONE ), m_iLocator ( -1 ), m_iLeft ( -1 ), m_iRight ( -1 ) {}
 
-	float FloatVal()
+	float FloatVal() const
 	{
 		assert ( m_iToken==TOK_CONST_INT || m_iToken==TOK_CONST_FLOAT );
 		return ( m_iToken==TOK_CONST_INT ) ? (float)m_iConst : m_fConst;
@@ -750,7 +756,7 @@ class ExprParser_t
 public:
 	ExprParser_t ( CSphSchema * pExtra, ISphExprHook * pHook )
 		: m_pHook ( pHook )
-        , m_pExtra ( pExtra )
+		, m_pExtra ( pExtra )
 	{}
 
 							~ExprParser_t ();
@@ -819,6 +825,7 @@ private:
 	ISphExpr *				CreateBitdotNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs );
 	ISphExpr *				CreateUdfNode ( int iCall, ISphExpr * pLeft );
 	ISphExpr *				CreateExistNode ( const ExprNode_t & tNode );
+	ISphExpr *				CreateContainsNode ( const ExprNode_t & tNode );
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -905,6 +912,12 @@ int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp )
 	return iRes;
 }
 
+
+static inline bool IsDigit ( char c )
+{
+	return c>='0' && c<='9';
+}
+
 /// a lexer of my own
 /// returns token id and fills lvalp on success
 /// returns -1 and fills sError on failure
@@ -916,7 +929,7 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 	if ( !*m_pCur ) return 0;
 
 	// check for constant
-	if ( isdigit ( *m_pCur ) )
+	if ( IsDigit ( m_pCur[0] ) || ( *m_pCur=='-' && IsDigit ( m_pCur[1] ) ) )
 		return ParseNumeric ( lvalp, &m_pCur );
 
 	// check for field, function, or magic name
@@ -1612,6 +1625,313 @@ ISphExpr * ExprParser_t::CreateExistNode ( const ExprNode_t & tNode )
 	}
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+static inline bool IsNumeric ( ESphAttr eType )
+{
+	return eType==SPH_ATTR_INTEGER || eType==SPH_ATTR_BIGINT || eType==SPH_ATTR_FLOAT;
+}
+
+
+class Expr_Contains_c : public ISphExpr
+{
+protected:
+	ISphExpr * m_pLat;
+	ISphExpr * m_pLon;
+
+	static bool Contains ( float x, float y, int n, const float * p )
+	{
+		bool bIn = false;
+		for ( int ii=0; ii<n; ii+=2 )
+		{
+			// get that edge
+			float ax = p[ii];
+			float ay = p[ii+1];
+			float bx = ( ii==n-2 ) ? p[0] : p[ii+2];
+			float by = ( ii==n-2 ) ? p[1] : p[ii+3];
+
+			// check point vs edge
+			float t1 = (x-ax)*(by-ay);
+			float t2 = (y-ay)*(bx-ax);
+			if ( t1==t2 )
+			{
+				// so AP and AB are colinear
+				// because (AP dot (-AB.y, AB.x)) aka (t1-t2) is 0
+				// check (AP dot AB) vs (AB dot AB) then
+				float t3 = (x-ax)*(bx-ax) + (y-ay)*(by-ay); // AP dot AP
+				float t4 = (bx-ax)*(bx-ax) + (by-ay)*(by-ay); // AB dot AB
+				if ( t3>=0 && t3<=t4 )
+					return true;
+			}
+
+			// count edge crossings
+			if ( ( ay>y )!=(by>y) )
+				if ( ( t1<t2 ) ^ ( by<ay ) )
+					bIn = !bIn;
+		}
+		return bIn;
+	}
+
+public:
+	Expr_Contains_c ( ISphExpr * pLat, ISphExpr * pLon )
+		: m_pLat ( pLat )
+		, m_pLon ( pLon )
+	{}
+
+	~Expr_Contains_c()
+	{
+		SafeRelease ( m_pLat );
+		SafeRelease ( m_pLon );
+	}
+
+	virtual float Eval ( const CSphMatch & tMatch ) const
+	{
+		return (float)IntEval ( tMatch );
+	}
+
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const
+	{
+		return IntEval ( tMatch );
+	}
+
+	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
+	{
+		m_pLat->GetDependencyColumns ( dColumns );
+		m_pLon->GetDependencyColumns ( dColumns );
+	}
+
+	// FIXME! implement SetStringPool?
+};
+
+
+static inline double sphSqr ( double v )
+{
+	return v * v;
+}
+
+
+static inline float CalcGeodist ( float fPointLat, float fPointLon, float fAnchorLat, float fAnchorLon )
+{
+	const double R = 6384000;
+	double dlat = fPointLat - fAnchorLat;
+	double dlon = fPointLon - fAnchorLon;
+	double a = sphSqr ( sin ( dlat/2 ) ) + cos ( fPointLat ) * cos ( fAnchorLat ) * sphSqr ( sin ( dlon/2 ) );
+	double c = 2*asin ( Min ( 1, sqrt(a) ) );
+	return (float)(R*c);
+}
+
+
+static inline void GeoTesselate ( CSphVector<float> & dIn )
+{
+	// conversion between degrees and radians
+	static const float TO_RAD = (float)( 3.14159265358979323846 / 180.0 );
+	static const float TO_DEG = (float)( 180.0 / 3.14159265358979323846 );
+
+	// 1 minute of latitude, max
+	// (it varies from 1842.9 to 1861.57 at 0 to 90 respectively)
+	static const float LAT_MINUTE = 1861.57f;
+
+	// 1 minute of longitude in metres, at different latitudes
+	static const float LON_MINUTE[] =
+	{
+		1855.32f, 1848.31f, 1827.32f, 1792.51f, // 0, 5, 10, 15
+		1744.12f, 1682.50f, 1608.10f, 1521.47f, // 20, 25, 30, 35
+		1423.23f, 1314.11f, 1194.93f, 1066.57f, // 40, 45, 50, 55
+		930.00f, 786.26f, 636.44f, 481.70f, // 60, 65 70, 75
+		323.22f, 162.24f, 0.0f // 80, 85, 90
+	};
+
+	// tesselation threshold
+	// FIXME! make this configurable?
+	static const float TESSELATE_TRESH = 500000.0f; // 500 km, error under 150m or 0.03%
+
+	CSphVector<float> dOut;
+	for ( int i=0; i<dIn.GetLength(); i+=2 )
+	{
+		// add the current vertex in any event
+		dOut.Add ( dIn[i] );
+		dOut.Add ( dIn[i+1] );
+
+		// get edge lat/lon, convert to radians
+		bool bLast = ( i==dIn.GetLength()-2 );
+		float fLat1 = dIn[i];
+		float fLon1 = dIn[i+1];
+		float fLat2 = dIn [ bLast ? 0 : (i+2) ];
+		float fLon2 = dIn [ bLast ? 1 : (i+3) ];
+
+		// quick rough geodistance estimation
+		float fMinLat = Min ( fLat1, fLat2 );
+		int iLatBand = (int) floor ( fabs ( fMinLat ) / 5.0f );
+		iLatBand = iLatBand % 18;
+
+		float d = 60.0f*( LAT_MINUTE*fabs ( fLat1-fLat2 ) + LON_MINUTE [ iLatBand ]*fabs ( fLon1-fLon2 ) );
+		if ( d<=TESSELATE_TRESH )
+			continue;
+
+		// convert to radians
+		// FIXME! make units configurable
+		fLat1 *= TO_RAD;
+		fLon1 *= TO_RAD;
+		fLat2 *= TO_RAD;
+		fLon2 *= TO_RAD;
+
+		// compute precise geodistance
+		d = CalcGeodist ( fLat1, fLon1, fLat2, fLon2 );
+		if ( d<=TESSELATE_TRESH )
+			continue;
+		int iSegments = (int) ceil ( d / TESSELATE_TRESH );
+
+		// compute arc distance
+		// OPTIMIZE! maybe combine with CalcGeodist?
+		d = acos ( sin(fLat1)*sin(fLat2) + cos(fLat1)*cos(fLat2)*cos(fLon1-fLon2) );
+		const float isd = 1.0f / sin(d);
+		const float clat1 = cos(fLat1);
+		const float slat1 = sin(fLat1);
+		const float clon1 = cos(fLon1);
+		const float slon1 = sin(fLon1);
+		const float clat2 = cos(fLat2);
+		const float slat2 = sin(fLat2);
+		const float clon2 = cos(fLon2);
+		const float slon2 = sin(fLon2);
+
+		for ( int j=1; j<iSegments; j++ )
+		{
+			float f = float(j) / float(iSegments); // needed distance fraction
+			float a = sin ( (1-f)*d ) * isd;
+			float b = sin ( f*d ) * isd;
+			float x = a*clat1*clon1 + b*clat2*clon2;
+			float y = a*clat1*slon1 + b*clat2*slon2;
+			float z = a*slat1 + b*slat2;
+			dOut.Add ( (float)( TO_DEG * atan2 ( z, sqrt ( x*x+y*y ) ) ) );
+			dOut.Add ( (float)( TO_DEG * atan2 ( y, x ) ) );
+		}
+	}
+
+	// swap 'em results
+	dIn.SwapData ( dOut );
+}
+
+
+class Expr_ContainsConstvec_c : public Expr_Contains_c
+{
+protected:
+	CSphVector<float> m_dPoly;
+	float m_fMinX;
+	float m_fMinY;
+	float m_fMaxX;
+	float m_fMaxY;
+
+public:
+	Expr_ContainsConstvec_c ( ISphExpr * pLat, ISphExpr * pLon, const CSphVector<int> & dNodes, const ExprNode_t * pNodes, bool bGeoTesselate )
+		: Expr_Contains_c ( pLat, pLon )
+	{
+		// copy polygon data
+		assert ( dNodes.GetLength()>=6 );
+		m_dPoly.Resize ( dNodes.GetLength() );
+
+		ARRAY_FOREACH ( i, dNodes )
+			m_dPoly[i] = pNodes[dNodes[i]].FloatVal();
+
+		// handle (huge) geosphere polygons
+		if ( bGeoTesselate )
+			GeoTesselate ( m_dPoly );
+
+		// compute bbox
+		m_fMinX = m_fMaxX = m_dPoly[0];
+		for ( int i=2; i<m_dPoly.GetLength(); i+=2 )
+		{
+			m_fMinX = Min ( m_fMinX, m_dPoly[i] );
+			m_fMaxX = Max ( m_fMaxX, m_dPoly[i] );
+		}
+
+		m_fMinY = m_fMaxY = m_dPoly[1];
+		for ( int i=3; i<m_dPoly.GetLength(); i+=2 )
+		{
+			m_fMinY = Min ( m_fMinY, m_dPoly[i] );
+			m_fMaxY = Max ( m_fMaxY, m_dPoly[i] );
+		}
+	}
+
+	virtual int IntEval ( const CSphMatch & tMatch ) const
+	{
+		// eval args, do bbox check
+		float fLat = m_pLat->Eval(tMatch);
+		if ( fLat<m_fMinX || fLat>m_fMaxX )
+			return 0;
+
+		float fLon = m_pLon->Eval(tMatch);
+		if ( fLon<m_fMinY || fLon>m_fMaxY )
+			return 0;
+
+		// do the polygon check
+		return Contains ( fLat, fLon, m_dPoly.GetLength(), m_dPoly.Begin() );
+	}
+};
+
+
+class Expr_ContainsExprvec_c : public Expr_Contains_c
+{
+protected:
+	mutable CSphVector<float> m_dPoly;
+	CSphVector<ISphExpr*> m_dExpr;
+
+public:
+	Expr_ContainsExprvec_c ( ISphExpr * pLat, ISphExpr * pLon, CSphVector<ISphExpr*> dExprs )
+		: Expr_Contains_c ( pLat, pLon )
+	{
+		m_dExpr.SwapData ( dExprs );
+		m_dPoly.Resize ( m_dExpr.GetLength() );
+	}
+
+	~Expr_ContainsExprvec_c()
+	{
+		ARRAY_FOREACH ( i, m_dExpr )
+			SafeRelease ( m_dExpr[i] );
+	}
+
+	virtual int IntEval ( const CSphMatch & tMatch ) const
+	{
+		ARRAY_FOREACH ( i, m_dExpr )
+			m_dPoly[i] = m_dExpr[i]->Eval ( tMatch );
+		return Contains ( m_pLat->Eval(tMatch), m_pLon->Eval(tMatch), m_dPoly.GetLength(), m_dPoly.Begin() );
+	}
+};
+
+
+ISphExpr * ExprParser_t::CreateContainsNode ( const ExprNode_t & tNode )
+{
+	// get and check them args
+	const ExprNode_t & tArglist = m_dNodes [ tNode.m_iLeft ];
+	const int iPoly = m_dNodes [ tArglist.m_iLeft ].m_iLeft;
+	const int iLat = m_dNodes [ tArglist.m_iLeft ].m_iRight;
+	const int iLon = tArglist.m_iRight;
+	assert ( IsNumeric ( m_dNodes[iLat].m_eRetType ) );
+	assert ( IsNumeric ( m_dNodes[iLat].m_eRetType ) );
+	assert ( m_dNodes[iPoly].m_eRetType==SPH_ATTR_POLY2D );
+
+	// create evaluator
+	// gotta handle an optimized constant poly case
+	CSphVector<int> dPolyArgs;
+	GatherArgNodes ( m_dNodes[iPoly].m_iLeft, dPolyArgs );
+
+	bool bConst = ARRAY_ALL ( bConst, dPolyArgs, IsConst ( &m_dNodes [ dPolyArgs[_all] ] ) );
+	if ( bConst )
+	{
+		// POLY2D(numeric-consts)
+		bool bGeoTesselate = ( m_dNodes[iPoly].m_iToken==TOK_FUNC && m_dNodes[iPoly].m_iFunc==FUNC_GEOPOLY2D );
+		return new Expr_ContainsConstvec_c ( CreateTree(iLat), CreateTree(iLon),
+			dPolyArgs, m_dNodes.Begin(), bGeoTesselate );
+	} else
+	{
+		// POLY2D(generic-exprs)
+		CSphVector<ISphExpr*> dExprs ( dPolyArgs.GetLength() );
+		ARRAY_FOREACH ( i, dExprs )
+			dExprs[i] = CreateTree ( dPolyArgs[i] );
+		return new Expr_ContainsExprvec_c ( CreateTree(iLat), CreateTree(iLon), dExprs );
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
 
 /// fold nodes subtree into opcodes
 ISphExpr * ExprParser_t::CreateTree ( int iNode )
@@ -1626,15 +1946,17 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 	bool bSkipRight = false;
 	if ( tNode.m_iToken==TOK_FUNC )
 	{
-		Func_e eFunc = g_dFuncs[tNode.m_iFunc].m_eFunc;
-		if ( eFunc==FUNC_GEODIST || eFunc==FUNC_IN )
-			bSkipLeft = true;
-		if ( eFunc==FUNC_IN )
-			bSkipRight = true;
-		if ( eFunc==FUNC_EXIST )
+		switch ( g_dFuncs[tNode.m_iFunc].m_eFunc )
 		{
-			bSkipLeft = true;
-			bSkipRight = true;
+			case FUNC_GEODIST:
+			case FUNC_CONTAINS:
+				bSkipLeft = true;
+				break;
+			case FUNC_IN:
+			case FUNC_EXIST:
+				bSkipLeft = true;
+				bSkipRight = true;
+				break;
 		}
 	}
 
@@ -1752,6 +2074,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 
 					case FUNC_GEODIST:	return CreateGeodistNode ( tNode.m_iLeft );
 					case FUNC_EXIST:	return CreateExistNode ( tNode );
+					case FUNC_CONTAINS:	return CreateContainsNode ( tNode );
 				}
 				assert ( 0 && "unhandled function id" );
 				break;
@@ -2169,18 +2492,6 @@ public:
 };
 
 //////////////////////////////////////////////////////////////////////////
-
-static inline double sphSqr ( double v ) { return v * v; }
-
-static inline float CalcGeodist ( float fPointLat, float fPointLon, float fAnchorLat, float fAnchorLon )
-{
-	const double R = 6384000;
-	double dlat = fPointLat - fAnchorLat;
-	double dlon = fPointLon - fAnchorLon;
-	double a = sphSqr ( sin ( dlat/2 ) ) + cos ( fPointLat ) * cos ( fAnchorLat ) * sphSqr ( sin ( dlon/2 ) );
-	double c = 2*asin ( Min ( 1, sqrt(a) ) );
-	return (float)(R*c);
-}
 
 /// geodist() - attr point, constant anchor
 class Expr_GeodistAttrConst_c: public ISphExpr
@@ -2736,9 +3047,9 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 	// check for string args
 	// most builtin functions take numeric args only
 	bool bGotString = false, bGotMva = false;
+	CSphVector<ESphAttr> dRetTypes;
 	if ( iRight<0 )
 	{
-		CSphVector<ESphAttr> dRetTypes;
 		GatherArgRetTypes ( iLeft, dRetTypes );
 		ARRAY_FOREACH ( i, dRetTypes )
 		{
@@ -2800,6 +3111,38 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 		if ( m_dNodes[iLeft].m_eRetType!=SPH_ATTR_INTEGER )
 		{
 			m_sParserError.SetSprintf ( "%s() argument must be integer", g_dFuncs[iFunc].m_sName );
+			return -1;
+		}
+	}
+
+	// check that CONTAINS args are poly, float, float
+	if ( eFunc==FUNC_CONTAINS )
+	{
+		assert ( dRetTypes.GetLength()==3 );
+		if ( dRetTypes[0]!=SPH_ATTR_POLY2D )
+		{
+			m_sParserError.SetSprintf ( "1st CONTAINS() argument must be a 2D polygon (se POLY2D)" );
+			return -1;
+		}
+		if ( !IsNumeric ( dRetTypes[1] ) || !IsNumeric ( dRetTypes[2] ) )
+		{
+			m_sParserError.SetSprintf ( "2nd and 3rd CONTAINS() arguments must be numeric" );
+			return -1;
+		}
+	}
+
+	// check POLY2D args count, and that they are numeric
+	if ( eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D )
+	{
+		if ( dRetTypes.GetLength() & 1 )
+		{
+			m_sParserError.SetSprintf ( "%s() requires an even number of arguments (x and y coordinates)", g_dFuncs[iFunc].m_sName );
+			return -1;
+		}
+		ARRAY_FOREACH ( i, dRetTypes )
+			if ( !IsNumeric ( dRetTypes[i] ) )
+		{
+			m_sParserError.SetSprintf ( "%s() arguments must be numeric (argument %d is not)", g_dFuncs[iFunc].m_sName, 1+i );
 			return -1;
 		}
 	}
@@ -3073,7 +3416,7 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema,
 
 	// deduce return type
 	ESphAttr eAttrType = m_dNodes[m_iParsed].m_eRetType;
-	assert ( eAttrType==SPH_ATTR_INTEGER || eAttrType==SPH_ATTR_BIGINT || eAttrType==SPH_ATTR_FLOAT );
+	assert ( IsNumeric ( eAttrType ) );
 
 	// perform optimizations
 	Optimize ( m_iParsed );

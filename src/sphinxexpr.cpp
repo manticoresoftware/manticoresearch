@@ -665,8 +665,8 @@ static FuncDesc_t g_dFuncs[] =
 
 	{ "geodist",		4,	FUNC_GEODIST,		SPH_ATTR_FLOAT },
 	{ "exist",			2,	FUNC_EXIST,			SPH_ATTR_NONE },
-	{ "poly2d",			-6,	FUNC_POLY2D,		SPH_ATTR_POLY2D },
-	{ "geopoly2d",		-6,	FUNC_GEOPOLY2D,		SPH_ATTR_POLY2D },
+	{ "poly2d",			-1,	FUNC_POLY2D,		SPH_ATTR_POLY2D },
+	{ "geopoly2d",		-1,	FUNC_GEOPOLY2D,		SPH_ATTR_POLY2D },
 	{ "contains",		3,	FUNC_CONTAINS,		SPH_ATTR_INTEGER }
 };
 
@@ -1908,6 +1908,61 @@ public:
 };
 
 
+class Expr_ContainsStrattr_c : public Expr_Contains_c
+{
+protected:
+	ISphExpr * m_pStr;
+	bool m_bGeo;
+
+public:
+	Expr_ContainsStrattr_c ( ISphExpr * pLat, ISphExpr * pLon, ISphExpr * pStr, bool bGeo )
+		: Expr_Contains_c ( pLat, pLon )
+	{
+		m_pStr = pStr;
+		m_bGeo = bGeo;
+	}
+
+	~Expr_ContainsStrattr_c()
+	{
+		SafeRelease ( m_pStr );
+	}
+
+	static void ParsePoly ( const char * p, int iLen, CSphVector<float> & dPoly )
+	{
+		const char * pMax = p+iLen;
+		while ( p<pMax )
+		{
+			if ( isdigit(p[0]) || ( p+1<pMax && p[0]=='-' && isdigit(p[1]) ) )
+				dPoly.Add ( (float)strtod ( p, (char**)&p ) );
+			else
+				p++;
+		}
+	}
+
+	virtual int IntEval ( const CSphMatch & tMatch ) const
+	{
+		const char * pStr;
+		int iLen = m_pStr->StringEval ( tMatch, (const BYTE **)&pStr );
+
+		CSphVector<float> dPoly;
+		ParsePoly ( pStr, iLen, dPoly );
+		if ( dPoly.GetLength()<6 )
+			return 0;
+		// OPTIMIZE? add quick bbox check too?
+
+		if ( m_bGeo )
+			GeoTesselate ( dPoly );
+		return Contains ( m_pLat->Eval(tMatch), m_pLon->Eval(tMatch), dPoly.GetLength(), dPoly.Begin() );
+	}
+
+	virtual void SetStringPool ( const BYTE * pPool )
+	{
+		Expr_Contains_c::SetStringPool ( pPool );
+		m_pStr->SetStringPool ( pPool );
+	}
+};
+
+
 ISphExpr * ExprParser_t::CreateContainsNode ( const ExprNode_t & tNode )
 {
 	// get and check them args
@@ -1924,11 +1979,18 @@ ISphExpr * ExprParser_t::CreateContainsNode ( const ExprNode_t & tNode )
 	CSphVector<int> dPolyArgs;
 	GatherArgNodes ( m_dNodes[iPoly].m_iLeft, dPolyArgs );
 
+	bool bGeoTesselate = ( m_dNodes[iPoly].m_iToken==TOK_FUNC && m_dNodes[iPoly].m_iFunc==FUNC_GEOPOLY2D );
+
+	if ( dPolyArgs.GetLength()==1 && m_dNodes[dPolyArgs[0]].m_iToken==TOK_ATTR_STRING )
+	{
+		return new Expr_ContainsStrattr_c ( CreateTree(iLat), CreateTree(iLon),
+			CreateTree ( dPolyArgs[0] ), bGeoTesselate );
+	}
+
 	bool bConst = ARRAY_ALL ( bConst, dPolyArgs, IsConst ( &m_dNodes [ dPolyArgs[_all] ] ) );
 	if ( bConst )
 	{
 		// POLY2D(numeric-consts)
-		bool bGeoTesselate = ( m_dNodes[iPoly].m_iToken==TOK_FUNC && m_dNodes[iPoly].m_iFunc==FUNC_GEOPOLY2D );
 		return new Expr_ContainsConstvec_c ( CreateTree(iLat), CreateTree(iLon),
 			dPolyArgs, m_dNodes.Begin(), bGeoTesselate );
 	} else
@@ -2963,6 +3025,18 @@ int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 	tNode.m_eRetType = SPH_ATTR_FLOAT; // default to float
 	if ( iOp==TOK_NEG )
 	{
+		// special case, NEG(const)
+		ExprNode_t & tArg = m_dNodes[iLeft];
+		if ( tArg.m_iToken==TOK_CONST_INT || tArg.m_iToken==TOK_CONST_FLOAT )
+		{
+			if ( tArg.m_iToken==TOK_CONST_INT )
+				tArg.m_iConst = -tArg.m_iConst;
+			else
+				tArg.m_fConst = -tArg.m_fConst;
+			m_dNodes.Pop();
+			return iLeft;
+		}
+
 		// NEG just inherits the type
 		tNode.m_eArgType = m_dNodes[iLeft].m_eRetType;
 		tNode.m_eRetType = tNode.m_eArgType;
@@ -3067,7 +3141,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 			bGotMva |= ( dRetTypes[i]==SPH_ATTR_UINT32SET || dRetTypes[i]==SPH_ATTR_UINT32SET );
 		}
 	}
-	if ( bGotString && !( eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST ) )
+	if ( bGotString && !( eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST || eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D ) )
 	{
 		m_sParserError.SetSprintf ( "%s() arguments can not be string", g_dFuncs[iFunc].m_sName );
 		return -1;
@@ -3131,7 +3205,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 		assert ( dRetTypes.GetLength()==3 );
 		if ( dRetTypes[0]!=SPH_ATTR_POLY2D )
 		{
-			m_sParserError.SetSprintf ( "1st CONTAINS() argument must be a 2D polygon (se POLY2D)" );
+			m_sParserError.SetSprintf ( "1st CONTAINS() argument must be a 2D polygon (see POLY2D)" );
 			return -1;
 		}
 		if ( !IsNumeric ( dRetTypes[1] ) || !IsNumeric ( dRetTypes[2] ) )
@@ -3141,19 +3215,37 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 		}
 	}
 
-	// check POLY2D args count, and that they are numeric
+	// check POLY2D args
 	if ( eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D )
 	{
-		if ( dRetTypes.GetLength() & 1 )
+		if ( dRetTypes.GetLength()==1 )
 		{
-			m_sParserError.SetSprintf ( "%s() requires an even number of arguments (x and y coordinates)", g_dFuncs[iFunc].m_sName );
-			return -1;
-		}
-		ARRAY_FOREACH ( i, dRetTypes )
-			if ( !IsNumeric ( dRetTypes[i] ) )
+			// handle 1 arg version, POLY2D(string-attr)
+			if ( dRetTypes[0]!=SPH_ATTR_STRING )
+			{
+				m_sParserError.SetSprintf ( "%s() argument must be a string attribute", g_dFuncs[iFunc].m_sName );
+				return -1;
+			}
+		} else if ( dRetTypes.GetLength()<6 )
 		{
-			m_sParserError.SetSprintf ( "%s() arguments must be numeric (argument %d is not)", g_dFuncs[iFunc].m_sName, 1+i );
+			// handle 2..5 arg versions, invalid
+			m_sParserError.SetSprintf ( "bad %s() argument count, must be either 1 (string) or 6+ (x/y pairs list)", g_dFuncs[iFunc].m_sName );
 			return -1;
+
+		} else
+		{
+			// handle 6+ arg version, POLY2D(xy-list)
+			if ( dRetTypes.GetLength() & 1 )
+			{
+				m_sParserError.SetSprintf ( "bad %s() argument count, must be even", g_dFuncs[iFunc].m_sName );
+				return -1;
+			}
+			ARRAY_FOREACH ( i, dRetTypes )
+				if ( !IsNumeric ( dRetTypes[i] ) )
+			{
+				m_sParserError.SetSprintf ( "%s() argument %d must be numeric", g_dFuncs[iFunc].m_sName, 1+i );
+				return -1;
+			}
 		}
 	}
 

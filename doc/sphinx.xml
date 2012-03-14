@@ -11250,6 +11250,21 @@ prefork_rotation_throttle = 50 # throttle children restarts by 50 msec each
 </sect2>
 
 
+<sect2 id="conf-sphinxql-state"><title>sphinxql_state</title>
+<para>
+Path to a file where current SphinxQL state will be serialized
+</para>
+<para>
+On daemon startup, this file gets replayed. On eligible state changes (eg. SET GLOBAL),
+this file gets rewritten automatically.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sphinxql_state = uservars.sql
+</programlisting>
+</sect2>
+
+
 </sect1>
 
 

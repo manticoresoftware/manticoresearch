@@ -85,7 +85,6 @@ void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn )
 		if ( sNext!=p )
 			dOut.Add().SetBinary ( sNext, p-sNext );
 	}
-
 }
 
 
@@ -410,6 +409,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "watchdog",				0, NULL },
 	{ "prefork_rotation_throttle", 0, NULL },
 	{ "snippets_file_prefix",	0, NULL },
+	{ "sphinxql_state",			0, NULL },
 	{ NULL,						0, NULL }
 };
 

@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>persist uservars</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	binlog_path = #
+	workers = threads
+	
+	sphinxql_state = <data_path/>/idx.meta
+}
+
+source src
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT id, text, idd FROM test_table
+	sql_attr_uint	= idd
+}
+
+index idx
+{
+	source			= src
+	path			= <data_path/>/idx
+    charset_type 	= utf-8
+    docinfo			= extern
+}
+
+</config>
+
+<custom_test><![CDATA[
+$results = array ();
+
+$query = create_function ( '$q, $sock','
+	
+	$results = array( $q );
+	$res = @mysql_query ( $q, $sock );
+	if ( $res===false )
+	{
+		$results[]  = mysql_errno( $sock ) . "; " . mysql_error ( $sock );
+	} else
+	{	
+		while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
+		{
+			if ( array_key_exists ( "Variable_name", $row ) && $row["Variable_name"]=="time" )
+			{
+				continue;
+			}
+				
+			if ( !array_key_exists ( "Variable_name", $row ) || !array_key_exists ( "Value", $row ) )
+			{
+				$line = "";
+				foreach ( $row as $k=>$v )
+				{
+					$line .= $k . " = " . $v . "\t";
+				}
+				$results[] = $line;
+			} else
+			{
+				$results[] = $row["Variable_name"] . " = " . $row["Value"];
+			}
+		}	
+		@mysql_free_result ( $res );
+	}
+	
+	return $results;
+');
+
+global $sd_address, $sd_sphinxql_port;
+$sockStr = "$sd_address:$sd_sphinxql_port";
+if ($sd_address == "localhost")
+	$sockStr = "127.0.0.1:$sd_sphinxql_port";
+$sock = @mysql_connect ($sockStr,'','',	true );
+if ( $sock === false )
+{
+	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+	return;
+}
+
+$results = array_merge ( $results, $query ( "SET GLOBAL @filter1 = ( 101 )", $sock ) );
+@mysql_close($sock);
+
+for ( $i = 102; $i < 104; $i++)
+{
+	$sock = @mysql_connect ($sockStr,'','',	true );
+	if ( $sock === false )
+	{
+		$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+		return;
+	}
+
+	$results = array_merge ( $results, $query ( "SELECT * FROM idx WHERE idd IN @filter1", $sock ) );
+	$results = array_merge ( $results, $query ( "SHOW META", $sock ) );
+	$results = array_merge ( $results, $query ( "SET GLOBAL @filter1 = ( 22, $i )", $sock ) );
+		
+	@mysql_close($sock);
+	
+	usleep ( 5000 );	
+	StopSearchd ( 'config.conf', 'searchd.pid' );
+	usleep ( 50000 );
+	
+	$error = "";
+	$startSta = StartSearchd ( 'config.conf', 'error.txt', 'searchd.pid', $error );
+	if ( $startSta == 0 || $startSta == 2 )
+	{
+		$results[] = "started=ok";
+	}
+	else
+	{
+		$results[] = sprintf("start.err=%d local=%s client=%s", $startSta, $error, $client->GetLastError());
+	}
+}
+]]></custom_test>
+
+  <DB_Create>
+CREATE TABLE `test_table` (
+  `id` int(11) DEFAULT NULL,
+  `text` varchar (255) NOT NULL,
+  `idd` int(11) DEFAULT NULL
+)
+  </DB_Create>
+
+  <DB_Drop>
+DROP TABLE IF EXISTS `test_table`
+  </DB_Drop>
+
+  <DB_Insert>
+INSERT INTO `test_table` (`id`, `text`, `idd`) VALUES 
+(1, 'test1', 101 ),
+(2, 'test2', 102 ),
+(3, 'test3', 103 ),
+(4, 'test4', 104 );
+  </DB_Insert>
+  
+</test>

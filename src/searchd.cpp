@@ -595,8 +595,12 @@ struct Uservar_t
 	{}
 };
 
-static CSphStaticMutex				g_tUservarsMutex;
+static CSphMutex					g_tUservarsMutex;
 static SmallStringHash_T<Uservar_t>	g_hUservars;
+static volatile int64_t				g_tmUservars; // update timestamp
+static bool							g_bUservarsFlushShutdown = false;
+static SphThread_t					g_tUservarsFlushThread;
+static CSphString					g_sSphinxqlState;
 
 /////////////////////////////////////////////////////////////////////////////
 // MACHINE-DEPENDENT STUFF
@@ -1297,6 +1301,13 @@ void Shutdown ()
 			g_tRotateQueueMutex.Done();
 			g_tRotateConfigMutex.Done();
 
+			// tell uservars flush thread to shutdown, and wait until it does
+			g_bUservarsFlushShutdown = true;
+			if ( !g_sSphinxqlState.IsEmpty() )
+			{
+				sphThreadJoin ( &g_tUservarsFlushThread );
+			}
+
 			int64_t tmShutStarted = sphMicroTimer();
 			// stop search threads; up to 3 seconds long
 			while ( g_dThd.GetLength() > 0 && ( sphMicroTimer()-tmShutStarted )<iShutWaitPeriod )
@@ -1307,6 +1318,7 @@ void Shutdown ()
 			g_tThdMutex.Unlock();
 			g_tThdMutex.Done();
 			g_tFlushMutex.Done();
+			g_tUservarsMutex.Done();
 		}
 
 #if !USE_WINDOWS
@@ -8613,7 +8625,7 @@ bool SqlParser_c::AddUintRangeFilter ( const CSphString & sAttr, DWORD uMin, DWO
 
 bool SqlParser_c::AddUservarFilter ( const CSphString & sCol, const CSphString & sVar, bool bExclude )
 {
-	CSphScopedLock<CSphStaticMutex> tLock ( g_tUservarsMutex );
+	CSphScopedLock<CSphMutex> tLock ( g_tUservarsMutex );
 	Uservar_t * pVar = g_hUservars ( sVar );
 	if ( !pVar )
 	{
@@ -8679,21 +8691,20 @@ void SqlParser_c::FreeNamedVec ( int )
 	m_dNamedVec.Resize ( 0 );
 }
 
-bool ParseSqlQuery ( const CSphString & sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation )
+bool ParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation )
 {
 	SqlParser_c tParser ( dStmt, eCollation );
-	tParser.m_pBuf = sQuery.cstr();
+	tParser.m_pBuf = sQuery;
 	tParser.m_pLastTokenStart = NULL;
 	tParser.m_pParseError = &sError;
 	tParser.m_eCollation = eCollation;
 
-	int iLen = strlen ( sQuery.cstr() );
-	char * sEnd = (char*)sQuery.cstr() + iLen;
+	char * sEnd = const_cast<char *>( sQuery ) + iLen;
 	sEnd[0] = 0; // prepare for yy_scan_buffer
 	sEnd[1] = 0; // this is ok because string allocates a small gap
 
 	yylex_init ( &tParser.m_pScanner );
-	YY_BUFFER_STATE tLexerBuffer = yy_scan_buffer ( (char*)sQuery.cstr(), iLen+2, tParser.m_pScanner );
+	YY_BUFFER_STATE tLexerBuffer = yy_scan_buffer ( const_cast<char *>( sQuery ), iLen+2, tParser.m_pScanner );
 	if ( !tLexerBuffer )
 	{
 		sError = "internal error: yy_scan_buffer() failed";
@@ -8977,7 +8988,6 @@ bool SnippetReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & )
 		int iNextDoc = dQueries[iDoc].m_iNext;
 		dQueries[iDoc].m_iNext = PROCESSED_ITEM;
 		iDoc = iNextDoc;
-
 	}
 
 	return bOk;
@@ -12065,6 +12075,36 @@ static ESphCollation sphCollationFromName ( const CSphString & sName, CSphString
 }
 
 
+static void UservarAdd ( const CSphString & sName, CSphVector<SphAttr_t> & dVal )
+{
+	Uservar_t * pVar = g_hUservars ( sName );
+	if ( pVar )
+	{
+		// variable exists, release previous value
+		// actual destruction of the value (aka data) might happen later
+		// as the concurrent queries might still be using and holding that data
+		// from here, the old value becomes nameless, though
+		assert ( pVar->m_eType==USERVAR_INT_SET );
+		assert ( pVar->m_pVal );
+		pVar->m_pVal->Release();
+		pVar->m_pVal = NULL;
+	} else
+	{
+		// create a shiny new variable
+		Uservar_t tVar;
+		g_hUservars.Add ( tVar, sName );
+		pVar = g_hUservars ( sName );
+	}
+
+	// swap in the new value
+	assert ( pVar );
+	assert ( !pVar->m_pVal );
+	pVar->m_eType = USERVAR_INT_SET;
+	pVar->m_pVal = new UservarIntSet_c();
+	pVar->m_pVal->SwapData ( dVal );
+}
+
+
 void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tStmt, SessionVars_t & tVars )
 {
 	MEMORY ( SPH_MEM_COMMIT_SET_SQL );
@@ -12128,31 +12168,8 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 
 		// create or update the variable
 		g_tUservarsMutex.Lock();
-		Uservar_t * pVar = g_hUservars ( tStmt.m_sSetName );
-		if ( pVar )
-		{
-			// variable exists, release previous value
-			// actual destruction of the value (aka data) might happen later
-			// as the concurrent queries might still be using and holding that data
-			// from here, the old value becomes nameless, though
-			assert ( pVar->m_eType==USERVAR_INT_SET );
-			assert ( pVar->m_pVal );
-			pVar->m_pVal->Release();
-			pVar->m_pVal = NULL;
-		} else
-		{
-			// create a shiny new variable
-			Uservar_t tVar;
-			g_hUservars.Add ( tVar, tStmt.m_sSetName );
-			pVar = g_hUservars ( tStmt.m_sSetName );
-		}
-
-		// swap in the new value
-		assert ( pVar );
-		assert ( !pVar->m_pVal );
-		pVar->m_eType = USERVAR_INT_SET;
-		pVar->m_pVal = new UservarIntSet_c();
-		pVar->m_pVal->SwapData ( tStmt.m_dSetValues );
+		UservarAdd ( tStmt.m_sSetName, tStmt.m_dSetValues );
+		g_tmUservars = sphMicroTimer();
 		g_tUservarsMutex.Unlock();
 		break;
 	}
@@ -12398,7 +12415,7 @@ public:
 
 		// parse SQL query
 		CSphVector<SqlStmt_t> dStmt;
-		bool bParsedOK = ParseSqlQuery ( sQuery, dStmt, m_sError, m_tVars.m_eCollation );
+		bool bParsedOK = ParseSqlQuery ( sQuery.cstr(), tCrashQuery.m_iSize, dStmt, m_sError, m_tVars.m_eCollation );
 
 		SqlStmt_e eStmt = STMT_PARSE_ERROR;
 		if ( bParsedOK )
@@ -13550,6 +13567,211 @@ void SeamlessForkPrereader ()
 	// if there's no more candidates, and nothing in the works, we're done
 	if ( !g_sPrereading && !g_dRotating.GetLength() )
 		IndexRotationDone ();
+}
+
+
+struct NamedRefVectorPair_t
+{
+	CSphString			m_sName;
+	UservarIntSet_c *	m_pVal;
+};
+
+
+#define SPH_USERVARS_AUTO_FLUSH_CHECK_PERIOD 50
+
+
+/// thread that flush changes of uservars table
+static void UservarsThreadFunc ( void * )
+{
+	assert ( !g_sSphinxqlState.IsEmpty() );
+	CSphString sNewState;
+	sNewState.SetSprintf ( "%s.new", g_sSphinxqlState.cstr() );
+
+	char dBuf[512];
+	const int iMaxString = 80;
+	assert ( sizeof ( dBuf )>iMaxString );
+
+	CSphString sError;
+	CSphWriter tWriter;
+
+	int64_t tmLast = g_tmUservars;
+	while ( !g_bUservarsFlushShutdown )
+	{
+		// stand still till save time
+		if ( tmLast==g_tmUservars )
+		{
+			sphSleepMsec ( SPH_USERVARS_AUTO_FLUSH_CHECK_PERIOD );
+			continue;
+		}
+
+		tWriter.CloseFile ( true );
+		if ( !tWriter.OpenFile ( sNewState, sError ) )
+		{
+			sphWarning ( "uservar flush failed ( error '%s' ) ", sError.cstr() );
+			sphSleepMsec ( SPH_USERVARS_AUTO_FLUSH_CHECK_PERIOD );
+			continue;
+		}
+
+		tmLast = g_tmUservars;
+		CSphVector<NamedRefVectorPair_t> dUservars;
+		dUservars.Reserve ( g_hUservars.GetLength() );
+		g_tUservarsMutex.Lock();
+		g_hUservars.IterateStart();
+		while ( g_hUservars.IterateNext() )
+		{
+			if ( !g_hUservars.IterateGet().m_pVal->GetLength() )
+				continue;
+
+			NamedRefVectorPair_t & tPair = dUservars.Add();
+			tPair.m_sName = g_hUservars.IterateGetKey();
+			tPair.m_pVal = g_hUservars.IterateGet().m_pVal;
+			tPair.m_pVal->AddRef();
+		}
+		g_tUservarsMutex.Unlock();
+
+		dUservars.Sort ( bind ( &NamedRefVectorPair_t::m_sName ) );
+
+		// reinitiate store process on new variables added
+		ARRAY_FOREACH_COND ( i, dUservars, tmLast==g_tmUservars )
+		{
+			const CSphVector<SphAttr_t> & dVals = *dUservars[i].m_pVal;
+			int iLen = snprintf ( dBuf, sizeof ( dBuf ), "SET GLOBAL %s = ( "INT64_FMT, dUservars[i].m_sName.cstr(), dVals[0] );
+			for ( int i=1; i<dVals.GetLength(); i++ )
+			{
+				iLen += snprintf ( dBuf+iLen, sizeof ( dBuf ), ", "INT64_FMT, dVals[i] );
+
+				if ( iLen>=iMaxString && i<dVals.GetLength()-1 )
+				{
+					iLen += snprintf ( dBuf+iLen, sizeof ( dBuf ), " \\\n" );
+					tWriter.PutBytes ( dBuf, iLen );
+					iLen = 0;
+				}
+			}
+
+			if ( iLen )
+				tWriter.PutBytes ( dBuf, iLen );
+
+			char sTail[] = " )\n";
+			tWriter.PutBytes ( sTail, sizeof ( sTail )-1 );
+		}
+
+		// release all locked uservars
+		ARRAY_FOREACH ( i, dUservars )
+			dUservars[i].m_pVal->Release();
+
+		tWriter.CloseFile();
+		if ( ::rename ( sNewState.cstr(), g_sSphinxqlState.cstr() )==0 )
+		{
+			::unlink ( sNewState.cstr() );
+		} else
+		{
+			sphWarning ( "renaming sphinxql_state file '%s' to '%s' failed: %s", sNewState.cstr(), g_sSphinxqlState.cstr(), strerror(errno) );
+		}
+	}
+}
+
+
+static bool StateReaderAddUservar ( CSphVector<char> & dLine, CSphString * sError )
+{
+	assert ( sError );
+	if ( !dLine.GetLength() )
+		return true;
+
+	// parser expects CSphString buffer with gap bytes at the end
+	dLine.Add ( '\0' );
+	dLine.Add ( '\0' );
+	dLine.Add ( '\0' );
+
+	CSphVector<SqlStmt_t> dStmt;
+	bool bParsedOK = ParseSqlQuery ( dLine.Begin(), dLine.GetLength(), dStmt, *sError, SPH_COLLATION_DEFAULT );
+	if ( !bParsedOK )
+		return false;
+
+	bool bOk = true;
+	ARRAY_FOREACH ( i, dStmt )
+	{
+		SqlStmt_t & tStmt = dStmt[i];
+		if ( tStmt.m_eStmt==STMT_SET && tStmt.m_eSet==SET_GLOBAL_UVAR )
+		{
+			tStmt.m_dSetValues.Sort();
+			UservarAdd ( tStmt.m_sSetName, tStmt.m_dSetValues );
+		} else
+		{
+			bOk = false;
+			sError->SetSprintf ( "only 'SET GLOBAL' supported" );
+			continue;
+		}
+	}
+
+	return bOk;
+}
+
+
+/// uservars table reader
+static void UservarsStateRead ( const CSphString & sName )
+{
+	if ( sName.IsEmpty() )
+		return;
+
+	CSphString sError;
+	CSphAutoreader tReader;
+	if ( !tReader.Open ( sName, sError ) )
+		return;
+
+	const int iReadBlock = 32*1024;
+	const int iGapLen = 2;
+	CSphVector<char> dLine;
+	dLine.Reserve ( iReadBlock + iGapLen );
+
+	int iLines = 0;
+	for ( ;; )
+	{
+		const BYTE * pData = NULL;
+		int iRead = tReader.GetBytesZerocopy ( &pData, iReadBlock );
+		// all uservars got read
+		if ( iRead<=0 )
+			break;
+
+		// read escaped line
+		dLine.Reserve ( dLine.GetLength() + iRead + iGapLen );
+		const BYTE * s = pData;
+		const BYTE * pEnd = pData+iRead;
+		while ( s<pEnd )
+		{
+			// goto next line for escaped string
+			if ( *s=='\\' )
+			{
+				s++;
+				while ( s<pEnd && ( *s=='\n' || *s=='\r' ) )
+				{
+					iLines += ( *s=='\n' );
+					s++;
+				}
+				continue;
+			}
+
+			if ( *s=='\n' || *s=='\r' )
+			{
+				if ( !StateReaderAddUservar ( dLine, &sError ) )
+					sphWarning ( "failed to parse uservar at line %d ( error '%s' )", iLines, sError.cstr() );
+
+				dLine.Resize ( 0 );
+				s++;
+				while ( s<pEnd && ( *s=='\n' || *s=='\r' ) )
+				{
+					iLines += ( *s=='\n' );
+					s++;
+				}
+				continue;
+			}
+
+			dLine.Add ( *s );
+			s++;
+		}
+	}
+
+	if ( !StateReaderAddUservar ( dLine, &sError ) )
+		sphWarning ( "failed to parse uservar at line %d ( error '%s' )", iLines, sError.cstr() );
 }
 
 
@@ -16566,7 +16788,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( !g_tThdMutex.Init() || !g_tRotateQueueMutex.Init() || !g_tRotateConfigMutex.Init() )
 			sphDie ( "failed to init mutex" );
 
-		if ( g_bSeamlessRotate && !sphThreadCreate ( &g_tRotateThread, RotationThreadFunc , 0 ) )
+		if ( g_bSeamlessRotate && !sphThreadCreate ( &g_tRotateThread, RotationThreadFunc, 0 ) )
 			sphDie ( "failed to create rotation thread" );
 
 		// reserving max to keep memory consumption constant between frames
@@ -16588,9 +16810,38 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( !g_bOptNoDetach )
 		g_bLogStdout = false;
 
-	// create flush-rt thread
+	// create flush threads
 	if ( g_eWorkers==MPM_THREADS && !sphThreadCreate ( &g_tRtFlushThread, RtFlushThreadFunc, 0 ) )
 		sphDie ( "failed to create rt-flush thread" );
+
+	if ( g_eWorkers==MPM_THREADS )
+	{
+		g_tUservarsMutex.Init();
+
+		g_sSphinxqlState = hSearchd.GetStr ( "sphinxql_state" );
+		if ( !g_sSphinxqlState.IsEmpty() )
+		{
+			UservarsStateRead ( g_sSphinxqlState );
+			g_tmUservars = sphMicroTimer();
+
+			CSphString sError;
+			CSphWriter tWriter;
+			CSphString sNewState;
+			sNewState.SetSprintf ( "%s.new", g_sSphinxqlState.cstr() );
+			// initial check that work can be done
+			bool bCanWrite = tWriter.OpenFile ( sNewState, sError );
+			tWriter.CloseFile();
+			::unlink ( sNewState.cstr() );
+
+			if ( !bCanWrite )
+			{
+				sphWarning ( "uservar flush disabled ( error '%s' ) ", sError.cstr() );
+			} else if ( !sphThreadCreate ( &g_tUservarsFlushThread, UservarsThreadFunc, NULL ) )
+			{
+				sphDie ( "failed to create uservars flush thread" );
+			}
+		}
+	}
 
 	// almost ready, time to start listening
 	int iBacklog = hSearchd.GetInt ( "listen_backlog", SEARCHD_BACKLOG );
@@ -16623,7 +16874,7 @@ extern UservarIntSet_c * ( *g_pUservarsHook )( const CSphString & sUservar );
 
 UservarIntSet_c * UservarsHook ( const CSphString & sUservar )
 {
-	CSphScopedLock<CSphStaticMutex> tLock ( g_tUservarsMutex );
+	CSphScopedLock<CSphMutex> tLock ( g_tUservarsMutex );
 
 	Uservar_t * pVar = g_hUservars ( sUservar );
 	if ( !pVar )

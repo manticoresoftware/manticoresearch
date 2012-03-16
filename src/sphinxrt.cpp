@@ -1037,7 +1037,8 @@ private:
 	void						CopyDoc ( RtSegment_t * pSeg, RtDocWriter_t & tOutDoc, RtWord_t * pWord, const RtSegment_t * pSrc, const RtDoc_t * pDoc );
 
 	void						SaveMeta ( int iDiskChunks );
-	void						SaveDiskHeader ( const char * sFilename, int iCheckpoints, SphOffset_t iCheckpointsPosition, DWORD uKillListSize, DWORD uMinMaxSize, bool bForceID32=false ) const;
+	template < typename DOCID >
+	void						SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iCheckpoints, SphOffset_t iCheckpointsPosition, DWORD uKillListSize, DWORD uMinMaxSize, bool bForceID32=false ) const;
 	void						SaveDiskData ( const char * sFilename ) const;
 	template < typename DOCID, typename WORDID >
 	void						SaveDiskDataImpl ( const char * sFilename ) const;
@@ -2809,6 +2810,121 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename ) const
 	pWords.Reserve ( m_pSegments.GetLength() );
 	pDocs.Reserve ( m_pSegments.GetLength() );
 
+	////////////////////
+	// write attributes
+	////////////////////
+
+	// the new, template-param aligned iStride instead of index-wide
+	int iStride = DWSIZEOF(DOCID) + m_tSchema.GetRowSize();
+	CSphVector<RtRowIterator_T<DOCID>*> pRowIterators ( m_pSegments.GetLength() );
+	ARRAY_FOREACH ( i, m_pSegments )
+		pRowIterators[i] = new RtRowIterator_T<DOCID> ( m_pSegments[i], iStride, false, NULL );
+
+	CSphVector<const CSphRowitem*> pRows ( m_pSegments.GetLength() );
+	ARRAY_FOREACH ( i, pRowIterators )
+		pRows[i] = pRowIterators[i]->GetNextAliveRow();
+
+	// prepare to build min-max index for attributes too
+	int iTotalDocs = 0;
+	ARRAY_FOREACH ( i, m_pSegments )
+		iTotalDocs += m_pSegments[i]->m_iAliveRows;
+
+	AttrIndexBuilder_t<DOCID> tMinMaxBuilder ( m_tSchema );
+	CSphVector<DWORD> dMinMaxBuffer ( tMinMaxBuilder.GetExpectedSize ( iTotalDocs ) );
+	tMinMaxBuilder.Prepare ( dMinMaxBuffer.Begin(), dMinMaxBuffer.Begin() + dMinMaxBuffer.GetLength() );
+
+	sName.SetSprintf ( "%s.sps", sFilename );
+	CSphWriter tStrWriter;
+	tStrWriter.OpenFile ( sName.cstr(), sError );
+	tStrWriter.PutByte ( 0 ); // dummy byte, to reserve magic zero offset
+
+	sName.SetSprintf ( "%s.spm", sFilename );
+	CSphWriter tMvaWriter;
+	tMvaWriter.OpenFile ( sName.cstr(), sError );
+	tMvaWriter.PutDword ( 0 ); // dummy dword, to reserve magic zero offset
+
+	DOCID iMinDocID = DOCID_MAX;
+	CSphRowitem * pFixedRow = new CSphRowitem[iStride];
+
+#ifndef NDEBUG
+	int iStoredDocs = 0;
+#endif
+
+	StorageStringWriter_t tStorageString ( m_tSchema, tStrWriter );
+	StorageMvaWriter_t tStorageMva ( m_tSchema, tMvaWriter );
+
+	for ( ;; )
+	{
+		// find min row
+		int iMinRow = -1;
+		ARRAY_FOREACH ( i, pRows )
+			if ( pRows[i] )
+				if ( iMinRow<0 || DOCINFO2ID_T<DOCID> ( pRows[i] ) < DOCINFO2ID_T<DOCID> ( pRows[iMinRow] ) )
+					iMinRow = i;
+		if ( iMinRow<0 )
+			break;
+
+#ifndef NDEBUG
+		// verify that it's unique
+		int iDupes = 0;
+		ARRAY_FOREACH ( i, pRows )
+			if ( pRows[i] )
+				if ( DOCINFO2ID_T<DOCID> ( pRows[i] )==DOCINFO2ID_T<DOCID> ( pRows[iMinRow] ) )
+					iDupes++;
+		assert ( iDupes==1 );
+#endif
+
+		const CSphRowitem * pRow = pRows[iMinRow];
+
+		// strings storage for stored row
+		assert ( iMinRow<m_pSegments.GetLength() );
+		const RtSegment_t * pSegment = m_pSegments[iMinRow];
+
+#ifdef PARANOID // sanity check in PARANOID mode
+		VerifyEmptyStrings<DOCID> ( pSegment->m_dStrings, m_tSchema, pRow );
+#endif
+
+		// collect min-max data
+		tMinMaxBuilder.Collect ( pRow, pSegment->m_dMvas.Begin(), pSegment->m_dMvas.GetLength(), sError, false );
+
+		if ( iMinDocID==DOCID_MAX )
+			iMinDocID = DOCINFO2ID_T<DOCID> ( pRows[iMinRow] );
+
+		if ( pSegment->m_dStrings.GetLength()>1 || pSegment->m_dMvas.GetLength()>1 ) // should be more then dummy zero elements
+		{
+			// copy row content as we'll fix up its attrs ( string offset for now )
+			memcpy ( pFixedRow, pRow, iStride*sizeof(CSphRowitem) );
+			pRow = pFixedRow;
+
+			CopyFixupStorageAttrs<DOCID> ( pSegment->m_dStrings, tStorageString, pFixedRow );
+			CopyFixupStorageAttrs<DOCID> ( pSegment->m_dMvas, tStorageMva, pFixedRow );
+		}
+
+		// emit it
+		wrRows.PutBytes ( pRow, iStride*sizeof(CSphRowitem) );
+
+		// fast forward
+		pRows[iMinRow] = pRowIterators[iMinRow]->GetNextAliveRow();
+#ifndef NDEBUG
+		iStoredDocs++;
+#endif
+	}
+
+	SafeDeleteArray ( pFixedRow );
+
+	assert ( iStoredDocs==iTotalDocs );
+
+	tMinMaxBuilder.FinishCollect ( false );
+	if ( tMinMaxBuilder.GetActualSize() )
+		wrRows.PutBytes ( dMinMaxBuffer.Begin(), sizeof(DWORD) * tMinMaxBuilder.GetActualSize() );
+
+	tMvaWriter.CloseFile();
+	tStrWriter.CloseFile ();
+
+	////////////////////
+	// write docs & hits
+	////////////////////
+
 	// OPTIMIZE? somehow avoid new on iterators maybe?
 	ARRAY_FOREACH ( i, m_pSegments )
 		pWordReaders.Add ( new RtWordReader_T<WORDID> ( m_pSegments[i], m_bKeywordDict, m_iWordsCheckpoint ) );
@@ -2894,11 +3010,19 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename ) const
 			iHits += pDoc->m_uHits;
 
 			wrDocs.ZipOffset ( pDoc->m_uDocID - uLastDoc );
-			wrDocs.ZipOffset ( wrHits.GetPos() - uLastHitpos );
-			wrDocs.ZipInt ( pDoc->m_uDocFields );
 			wrDocs.ZipInt ( pDoc->m_uHits );
+			if ( pDoc->m_uHits==1 )
+			{
+				wrDocs.ZipInt ( pDoc->m_uHit & 0x7FFFFFUL );
+				wrDocs.ZipInt ( pDoc->m_uHit >> 23 );
+			} else
+			{
+				wrDocs.ZipInt ( pDoc->m_uDocFields );
+				wrDocs.ZipOffset ( wrHits.GetPos() - uLastHitpos );
+				uLastHitpos = wrHits.GetPos();
+			}
+
 			uLastDoc = pDoc->m_uDocID;
-			uLastHitpos = wrHits.GetPos();
 
 			// loop hits from most current segment
 			if ( pDoc->m_uHits>1 )
@@ -2910,11 +3034,8 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename ) const
 					wrHits.ZipInt ( uValue - uLastHit );
 					uLastHit = uValue;
 				}
-			} else
-			{
-				wrHits.ZipInt ( pDoc->m_uHit );
+				wrHits.ZipInt ( 0 );
 			}
-			wrHits.ZipInt ( 0 );
 
 			// fast forward readers
 			DOCID uMinID = pDocs[iMinReader]->m_uDocID;
@@ -3040,113 +3161,6 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename ) const
 		}
 	}
 
-	////////////////////
-	// write attributes
-	////////////////////
-
-	// the new, template-param aligned iStride instead of index-wide
-	int iStride = DWSIZEOF(DOCID) + m_tSchema.GetRowSize();
-	CSphVector<RtRowIterator_T<DOCID>*> pRowIterators ( m_pSegments.GetLength() );
-	ARRAY_FOREACH ( i, m_pSegments )
-		pRowIterators[i] = new RtRowIterator_T<DOCID> ( m_pSegments[i], iStride, false, NULL );
-
-	CSphVector<const CSphRowitem*> pRows ( m_pSegments.GetLength() );
-	ARRAY_FOREACH ( i, pRowIterators )
-		pRows[i] = pRowIterators[i]->GetNextAliveRow();
-
-	// prepare to build min-max index for attributes too
-	int iTotalDocs = 0;
-	ARRAY_FOREACH ( i, m_pSegments )
-		iTotalDocs += m_pSegments[i]->m_iAliveRows;
-
-	AttrIndexBuilder_t<DOCID> tMinMaxBuilder ( m_tSchema );
-	CSphVector<DWORD> dMinMaxBuffer ( tMinMaxBuilder.GetExpectedSize ( iTotalDocs ) );
-	tMinMaxBuilder.Prepare ( dMinMaxBuffer.Begin(), dMinMaxBuffer.Begin() + dMinMaxBuffer.GetLength() );
-
-	sName.SetSprintf ( "%s.sps", sFilename );
-	CSphWriter tStrWriter;
-	tStrWriter.OpenFile ( sName.cstr(), sError );
-	tStrWriter.PutByte ( 0 ); // dummy byte, to reserve magic zero offset
-
-	sName.SetSprintf ( "%s.spm", sFilename );
-	CSphWriter tMvaWriter;
-	tMvaWriter.OpenFile ( sName.cstr(), sError );
-	tMvaWriter.PutDword ( 0 ); // dummy dword, to reserve magic zero offset
-
-	CSphRowitem * pFixedRow = new CSphRowitem[iStride];
-
-#ifndef NDEBUG
-	int iStoredDocs = 0;
-#endif
-
-	StorageStringWriter_t tStorageString ( m_tSchema, tStrWriter );
-	StorageMvaWriter_t tStorageMva ( m_tSchema, tMvaWriter );
-
-	for ( ;; )
-	{
-		// find min row
-		int iMinRow = -1;
-		ARRAY_FOREACH ( i, pRows )
-			if ( pRows[i] )
-				if ( iMinRow<0 || DOCINFO2ID_T<DOCID> ( pRows[i] ) < DOCINFO2ID_T<DOCID> ( pRows[iMinRow] ) )
-					iMinRow = i;
-		if ( iMinRow<0 )
-			break;
-
-#ifndef NDEBUG
-		// verify that it's unique
-		int iDupes = 0;
-		ARRAY_FOREACH ( i, pRows )
-			if ( pRows[i] )
-				if ( DOCINFO2ID_T<DOCID> ( pRows[i] )==DOCINFO2ID_T<DOCID> ( pRows[iMinRow] ) )
-					iDupes++;
-		assert ( iDupes==1 );
-#endif
-
-		const CSphRowitem * pRow = pRows[iMinRow];
-
-		// strings storage for stored row
-		assert ( iMinRow<m_pSegments.GetLength() );
-		const RtSegment_t * pSegment = m_pSegments[iMinRow];
-
-#ifdef PARANOID // sanity check in PARANOID mode
-		VerifyEmptyStrings<DOCID> ( pSegment->m_dStrings, m_tSchema, pRow );
-#endif
-
-		// collect min-max data
-		tMinMaxBuilder.Collect ( pRow, pSegment->m_dMvas.Begin(), pSegment->m_dMvas.GetLength(), sError, false );
-
-		if ( pSegment->m_dStrings.GetLength()>1 || pSegment->m_dMvas.GetLength()>1 ) // should be more then dummy zero elements
-		{
-			// copy row content as we'll fix up its attrs ( string offset for now )
-			memcpy ( pFixedRow, pRow, iStride*sizeof(CSphRowitem) );
-			pRow = pFixedRow;
-
-			CopyFixupStorageAttrs<DOCID> ( pSegment->m_dStrings, tStorageString, pFixedRow );
-			CopyFixupStorageAttrs<DOCID> ( pSegment->m_dMvas, tStorageMva, pFixedRow );
-		}
-
-		// emit it
-		wrRows.PutBytes ( pRow, iStride*sizeof(CSphRowitem) );
-
-		// fast forward
-		pRows[iMinRow] = pRowIterators[iMinRow]->GetNextAliveRow();
-#ifndef NDEBUG
-		iStoredDocs++;
-#endif
-	}
-
-	SafeDeleteArray ( pFixedRow );
-
-	assert ( iStoredDocs==iTotalDocs );
-
-	tMinMaxBuilder.FinishCollect ( false );
-	if ( tMinMaxBuilder.GetActualSize() )
-		wrRows.PutBytes ( dMinMaxBuffer.Begin(), sizeof(DWORD) * tMinMaxBuilder.GetActualSize() );
-
-	tMvaWriter.CloseFile();
-	tStrWriter.CloseFile ();
-
 	// write dummy kill-list files
 	CSphWriter wrDummy;
 
@@ -3163,7 +3177,7 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename ) const
 	wrDummy.CloseFile ();
 
 	// header
-	SaveDiskHeader ( sFilename, dCheckpoints.GetLength(), iCheckpointsPosition, uKlistSize, iTotalDocs*iStride, m_bId32to64 );
+	SaveDiskHeader ( sFilename, iMinDocID, dCheckpoints.GetLength(), iCheckpointsPosition, uKlistSize, iTotalDocs*iStride, m_bId32to64 );
 
 	// cleanup
 	ARRAY_FOREACH ( i, pWordReaders )
@@ -3190,7 +3204,8 @@ void RtIndex_t::SaveDiskData ( const char * sFilename ) const
 }
 
 
-void RtIndex_t::SaveDiskHeader ( const char * sFilename, int iCheckpoints, SphOffset_t iCheckpointsPosition, DWORD uKillListSize, DWORD uMinMaxSize, bool bForceID32 ) const
+template < typename DOCID >
+void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iCheckpoints, SphOffset_t iCheckpointsPosition, DWORD uKillListSize, DWORD uMinMaxSize, bool bForceID32 ) const
 {
 	static const DWORD INDEX_MAGIC_HEADER	= 0x58485053;	///< my magic 'SPHX' header
 	static const DWORD INDEX_FORMAT_VERSION	= 26;			///< my format version
@@ -3214,7 +3229,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, int iCheckpoints, SphOf
 	WriteSchema ( tWriter, m_tSchema );
 
 	// min docid
-	tWriter.PutOffset ( 0 );
+	tWriter.PutOffset ( iMinDocID );
 
 	// wordlist checkpoints
 	tWriter.PutOffset ( iCheckpointsPosition );
@@ -3232,7 +3247,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, int iCheckpoints, SphOf
 	tWriter.PutString ( m_tSettings.m_sHtmlRemoveElements.cstr () );
 	tWriter.PutByte ( m_tSettings.m_bIndexExactWords ? 1 : 0 );
 	tWriter.PutDword ( m_tSettings.m_eHitless );
-	tWriter.PutDword ( SPH_HIT_FORMAT_PLAIN );
+	tWriter.PutDword ( SPH_HIT_FORMAT_INLINE );
 	tWriter.PutByte ( m_tSettings.m_bIndexSP ? 1 : 0 ); // m_bIndexSP, v.21+
 	tWriter.PutString ( m_tSettings.m_sZones ); // m_sZonePrefix, v.22+
 	tWriter.PutDword ( 0 ); // m_iBoundaryStep, v.23+

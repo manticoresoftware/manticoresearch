@@ -5731,6 +5731,9 @@ public:
 	DWORD				m_uWordCount[SPH_MAX_FIELDS];
 	CSphVector<float>	m_dIDF;
 	float				m_dTFIDF[SPH_MAX_FIELDS];
+	float				m_dMinIDF[SPH_MAX_FIELDS];
+	float				m_dMaxIDF[SPH_MAX_FIELDS];
+	float				m_dSumIDF[SPH_MAX_FIELDS];
 	int					m_iMinHitPos[SPH_MAX_FIELDS];
 	int					m_iMinBestSpanPos[SPH_MAX_FIELDS];
 	int					m_iMaxQuerypos;
@@ -5772,6 +5775,9 @@ enum ExprRankerNode_e
 	XRANK_HIT_COUNT,
 	XRANK_WORD_COUNT,
 	XRANK_TF_IDF,
+	XRANK_MIN_IDF,
+	XRANK_MAX_IDF,
+	XRANK_SUM_IDF,
 	XRANK_MIN_HIT_POS,
 	XRANK_MIN_BEST_SPAN_POS,
 	XRANK_EXACT_HIT,
@@ -5941,6 +5947,12 @@ public:
 			return XRANK_WORD_COUNT;
 		if ( !strcasecmp ( sIdent, "tf_idf" ) )
 			return XRANK_TF_IDF;
+		if ( !strcasecmp ( sIdent, "min_idf" ) )
+			return XRANK_MIN_IDF;
+		if ( !strcasecmp ( sIdent, "max_idf" ) )
+			return XRANK_MAX_IDF;
+		if ( !strcasecmp ( sIdent, "sum_idf" ) )
+			return XRANK_SUM_IDF;
 		if ( !strcasecmp ( sIdent, "min_hit_pos" ) )
 			return XRANK_MIN_HIT_POS;
 		if ( !strcasecmp ( sIdent, "min_best_span_pos" ) )
@@ -5980,6 +5992,9 @@ public:
 			case XRANK_HIT_COUNT:			return new Expr_FieldFactor_c<DWORD> ( pCF, m_pState->m_uHitCount );
 			case XRANK_WORD_COUNT:			return new Expr_FieldFactor_c<DWORD> ( pCF, m_pState->m_uWordCount );
 			case XRANK_TF_IDF:				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dTFIDF );
+			case XRANK_MIN_IDF:				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dMinIDF );
+			case XRANK_MAX_IDF:				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dMaxIDF );
+			case XRANK_SUM_IDF:				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dSumIDF );
 			case XRANK_MIN_HIT_POS:			return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinHitPos );
 			case XRANK_MIN_BEST_SPAN_POS:	return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinBestSpanPos );
 			case XRANK_EXACT_HIT:			return new Expr_FieldFactor_c<bool> ( pCF, &m_pState->m_uExactHit );
@@ -6020,6 +6035,9 @@ public:
 			case XRANK_DOC_WORD_COUNT:
 				return SPH_ATTR_INTEGER;
 			case XRANK_TF_IDF:
+			case XRANK_MIN_IDF:
+			case XRANK_MAX_IDF:
+			case XRANK_SUM_IDF:
 				return SPH_ATTR_FLOAT;
 			default:
 				assert ( 0 );
@@ -6063,6 +6081,9 @@ public:
 			case XRANK_HIT_COUNT:
 			case XRANK_WORD_COUNT:
 			case XRANK_TF_IDF:
+			case XRANK_MIN_IDF:
+			case XRANK_MAX_IDF:
+			case XRANK_SUM_IDF:
 			case XRANK_MIN_HIT_POS:
 			case XRANK_MIN_BEST_SPAN_POS:
 			case XRANK_EXACT_HIT:
@@ -6128,6 +6149,7 @@ bool RankerState_Expr_fn::Init ( int iFields, const int * pWeights, ExtRanker_c 
 	memset ( m_uHitCount, 0, sizeof(m_uHitCount) );
 	memset ( m_uWordCount, 0, sizeof(m_uWordCount) );
 	memset ( m_dTFIDF, 0, sizeof(m_dTFIDF) );
+	memset ( m_dSumIDF, 0, sizeof(m_dSumIDF) );
 	memset ( m_iMinHitPos, 0, sizeof(m_iMinHitPos) );
 	memset ( m_iMinBestSpanPos, 0, sizeof(m_iMinBestSpanPos) );
 	memset ( m_iMaxWindowHits, 0, sizeof(m_iMaxWindowHits) );
@@ -6135,6 +6157,12 @@ bool RankerState_Expr_fn::Init ( int iFields, const int * pWeights, ExtRanker_c 
 	m_uExactHit = 0;
 	m_uDocWordCount = 0;
 	m_iWindowSize = 1;
+
+	for ( int i=0; i < SPH_MAX_FIELDS; i++ )
+	{
+		m_dMinIDF[i] = FLT_MAX;
+		m_dMaxIDF[i] = -FLT_MAX;
+	}
 
 	// compute query level constants
 	// max_lcs, aka m_iMaxLCS (for matchany ranker emulation) gets computed here
@@ -6203,10 +6231,22 @@ void RankerState_Expr_fn::Update ( const ExtHit_t * pHlist )
 	// keywords can be duplicated in the query, so we need this extra check
 	if ( pHlist->m_uQuerypos < m_dIDF.GetLength () && m_tKeywordMask.BitGet ( pHlist->m_uQuerypos ) )
 	{
+		float fIDF = m_dIDF [ pHlist->m_uQuerypos ];
+		DWORD uHitPosMask = 1<<pHlist->m_uQuerypos;
+
+		if ( !( m_uWordCount[uField] & uHitPosMask ) )
+			m_dSumIDF[uField] += fIDF;
+
+		if ( fIDF < m_dMinIDF[uField] )
+			m_dMinIDF[uField] = fIDF;
+
+		if ( fIDF > m_dMaxIDF[uField] )
+			m_dMaxIDF[uField] = fIDF;
+
 		m_uHitCount[uField]++;
-		m_uWordCount[uField] |= ( 1<<pHlist->m_uQuerypos );
-		m_uDocWordCount |= ( 1<<pHlist->m_uQuerypos );
-		m_dTFIDF[uField] += m_dIDF [ pHlist->m_uQuerypos ];
+		m_uWordCount[uField] |= uHitPosMask;
+		m_uDocWordCount |= uHitPosMask;
+		m_dTFIDF[uField] += fIDF;
 	}
 
 	if ( !m_iMinHitPos[uField] )
@@ -6252,6 +6292,9 @@ DWORD RankerState_Expr_fn::Finalize ( const CSphMatch & tMatch )
 		m_uLCS[i] = 0;
 		m_uHitCount[i] = 0;
 		m_uWordCount[i] = 0;
+		m_dMinIDF[i] = FLT_MAX;
+		m_dMaxIDF[i] = -FLT_MAX;
+		m_dSumIDF[i] = 0;
 		m_dTFIDF[i] = 0;
 		m_iMinHitPos[i] = 0;
 		m_iMinBestSpanPos[i] = 0;

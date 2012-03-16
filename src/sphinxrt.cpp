@@ -2925,6 +2925,9 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename ) const
 	// write docs & hits
 	////////////////////
 
+	assert ( iMinDocID>0 );
+	iMinDocID--;
+
 	// OPTIMIZE? somehow avoid new on iterators maybe?
 	ARRAY_FOREACH ( i, m_pSegments )
 		pWordReaders.Add ( new RtWordReader_T<WORDID> ( m_pSegments[i], m_bKeywordDict, m_iWordsCheckpoint ) );
@@ -3009,7 +3012,7 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename ) const
 			iDocs++;
 			iHits += pDoc->m_uHits;
 
-			wrDocs.ZipOffset ( pDoc->m_uDocID - uLastDoc );
+			wrDocs.ZipOffset ( pDoc->m_uDocID - uLastDoc - iMinDocID );
 			wrDocs.ZipInt ( pDoc->m_uHits );
 			if ( pDoc->m_uHits==1 )
 			{
@@ -3022,7 +3025,7 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename ) const
 				uLastHitpos = wrHits.GetPos();
 			}
 
-			uLastDoc = pDoc->m_uDocID;
+			uLastDoc = pDoc->m_uDocID - iMinDocID;
 
 			// loop hits from most current segment
 			if ( pDoc->m_uHits>1 )

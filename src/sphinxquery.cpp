@@ -53,6 +53,7 @@ public:
 	void			Cleanup ();
 	XQNode_t *		SweepNulls ( XQNode_t * pNode );
 	bool			FixupNots ( XQNode_t * pNode );
+	void			DeleteNodesWOFields ( XQNode_t * pNode );
 
 	inline void SetFieldSpec ( const CSphSmallBitvec& uMask, int iMaxPos )
 	{
@@ -1027,7 +1028,7 @@ bool XQParser_t::FixupNots ( XQNode_t * pNode )
 }
 
 
-static void DeleteNodesWOFields ( XQNode_t * pNode )
+void XQParser_t::DeleteNodesWOFields ( XQNode_t * pNode )
 {
 	if ( !pNode )
 		return;
@@ -1036,8 +1037,11 @@ static void DeleteNodesWOFields ( XQNode_t * pNode )
 	{
 		if ( pNode->m_dChildren[i]->m_dSpec.m_dFieldMask.TestAll() )
 		{
+			XQNode_t * pChild = pNode->m_dChildren[i];
+			assert ( pChild->m_dChildren.GetLength()==0 );
+			m_dSpawned.RemoveValue ( pChild );
+
 			// this should be a leaf node
-			assert ( pNode->m_dChildren[i]->m_dChildren.GetLength()==0 );
 			SafeDelete ( pNode->m_dChildren[i] );
 			pNode->m_dChildren.RemoveFast ( i );
 

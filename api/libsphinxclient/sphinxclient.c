@@ -963,7 +963,7 @@ static int calc_req_len ( sphinx_client * client, const char * query, const char
 		+ safestrlen ( client->group_sort )
 		+ safestrlen ( client->group_distinct )
 		+ safestrlen ( comment )
-		+ safestrlen ( client->rankexpr );
+		+ ( ( client->ranker==SPH_RANK_EXPR ) ? ( 4 + safestrlen ( client->rankexpr ) ) : 0 );
 
 	filter_val_size = ( client->ver_search>=0x114 ) ? 8 : 4;
 	for ( i=0; i<client->num_filters; i++ )

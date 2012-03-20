@@ -137,6 +137,7 @@ public class SphinxClient
 	private ArrayList	_reqs;
 	private Map			_indexWeights;
 	private int			_ranker;
+	private String		_rankexpr;
 	private int			_maxQueryTime;
 	private Map			_fieldWeights;
 	private Map			_overrideTypes;

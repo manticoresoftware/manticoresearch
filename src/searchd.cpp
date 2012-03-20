@@ -1276,6 +1276,7 @@ static void UpdateAliveChildrenList ( CSphVector<int> & dChildren )
 void Shutdown ()
 {
 	bool bAttrsSaveOk = true;
+	int fdStopwait = -1;
 	// some head-only shutdown procedures
 	if ( g_bHeadDaemon )
 	{
@@ -1283,6 +1284,18 @@ void Shutdown ()
 		{
 			*g_bDaemonAtShutdown.GetWritePtr() = 1;
 		}
+
+#if !USE_WINDOWS
+		// stopwait handshake
+		CSphString sPipeName = GetNamedPipeName ( getpid() );
+		fdStopwait = ::open ( sPipeName.cstr(), O_WRONLY | O_NONBLOCK );
+		if ( fdStopwait>=0 )
+		{
+			DWORD uHandshakeOk = 0;
+			int iDummy; // to avoid gcc unused result warning
+			iDummy = ::write ( fdStopwait, &uHandshakeOk, sizeof(DWORD) );
+		}
+#endif
 
 		const int iShutWaitPeriod = 3000000;
 
@@ -1389,18 +1402,13 @@ void Shutdown ()
 #if USE_WINDOWS
 	CloseHandle ( g_hPipe );
 #else
-	if ( g_bHeadDaemon )
+	if ( g_bHeadDaemon && fdStopwait>=0 )
 	{
-		const CSphString sPipeName = GetNamedPipeName ( getpid() );
-		const int hFile = ::open ( sPipeName.cstr(), O_WRONLY | O_NONBLOCK );
-		if ( hFile!=-1 )
-		{
 			DWORD uStatus = bAttrsSaveOk;
 			int iDummy; // to avoid gcc unused result warning
-			iDummy = ::write ( hFile, &uStatus, sizeof(DWORD) );
-			::close ( hFile );
+		iDummy = ::write ( fdStopwait, &uStatus, sizeof(DWORD) );
+		::close ( fdStopwait );
 		}
-	}
 #endif
 
 	// remove pid
@@ -4928,9 +4936,10 @@ void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 	if ( ( !g_bQuerySyslog && g_iQueryLogFile<0 ) || !tRes.m_sError.IsEmpty() )
 		return;
 
+	const int iBufGap = 4;
 	char sBuf[2048];
 	char * p = sBuf;
-	char * pMax = sBuf+sizeof(sBuf)-4;
+	char * pMax = sBuf+sizeof(sBuf)-iBufGap;
 
 	// [time]
 #if USE_SYSLOG
@@ -4963,10 +4972,11 @@ void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 		tRes.m_iTotalMatches, tQuery.m_iOffset, tQuery.m_iLimit );
 
 	// optional groupby info
-	if ( !tQuery.m_sGroupBy.IsEmpty() )
+	if ( !tQuery.m_sGroupBy.IsEmpty() && p<pMax )
 		p += snprintf ( p, pMax-p, " @%s", tQuery.m_sGroupBy.cstr() );
 
 	// ] [indexes]
+	if ( p<pMax )
 	p += snprintf ( p, pMax-p, "] [%s]", tQuery.m_sIndexes.cstr() );
 
 	// optional performance counters
@@ -4974,24 +4984,27 @@ void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 	{
 		const CSphIOStats & IOStats = sphStopIOStats ();
 
+		if ( p<pMax )
 		*p++ = ' ';
+
 		char * pBracket = p; // can't fill yet, will be overwritten by sprintfs
 
-		if ( g_bIOStats )
+		if ( g_bIOStats && p<pMax )
 			p += snprintf ( p, pMax-p, " ios=%d kb=%d.%d ioms=%d.%d",
 				IOStats.m_iReadOps, (int)( IOStats.m_iReadBytes/1024 ), (int)( IOStats.m_iReadBytes%1024 )*10/1024,
 				(int)( IOStats.m_iReadTime/1000 ), (int)( IOStats.m_iReadTime%1000 )/100 );
 
-		if ( g_bCpuStats )
+		if ( g_bCpuStats && p<pMax )
 			p += snprintf ( p, pMax-p, " cpums=%d.%d", (int)( tRes.m_iCpuTime/1000 ), (int)( tRes.m_iCpuTime%1000 )/100 );
 
+		if ( pBracket<pMax )
 		*pBracket = '[';
 		if ( p<pMax )
 			*p++ = ']';
 	}
 
 	// optional query comment
-	if ( !tQuery.m_sComment.IsEmpty() )
+	if ( !tQuery.m_sComment.IsEmpty() && p<pMax )
 		p += snprintf ( p, pMax-p, " [%s]", tQuery.m_sComment.cstr() );
 
 	// query
@@ -5002,7 +5015,7 @@ void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 
 	if ( !sQuery.IsEmpty() )
 	{
-		if ( p < pMax-1 )
+		if ( p<pMax )
 			*p++ = ' ';
 
 		for ( const char * q = sQuery.cstr(); p<pMax && *q; p++, q++ )
@@ -5015,13 +5028,13 @@ void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 #endif
 
 	// line feed
+	char sGap[iBufGap] = { '\n', '\0', '\0', '\0' };
 	if ( p<pMax-1 )
 	{
-		*p++ = '\n';
-		*p++ = '\0';
+		memcpy ( p, sGap, 2 );
 	}
-	sBuf[sizeof(sBuf)-2] = '\n';
-	sBuf[sizeof(sBuf)-1] = '\0';
+
+	memcpy ( sBuf+sizeof(sBuf)-iBufGap, sGap, iBufGap );
 
 	lseek ( g_iQueryLogFile, 0, SEEK_END );
 	sphWrite ( g_iQueryLogFile, sBuf, strlen(sBuf) );
@@ -5079,7 +5092,7 @@ public:
 				va_end ( ap );
 			}
 
-			if ( iLen!=-1 && Length()+iLen<=m_iSize )
+			if ( iLen!=-1 && Length()+iLen<m_iSize )
 			{
 				m_pCur += iLen;
 				break;
@@ -8109,7 +8122,7 @@ public:
 	void			AddConst ( int iList, const SqlNode_t& tValue );
 	void			SetStatement ( const SqlNode_t& tName, SqlSet_e eSet );
 	bool			AddFloatRangeFilter ( const CSphString & sAttr, float fMin, float fMax );
-	bool			AddUintRangeFilter ( const CSphString & sAttr, DWORD uMin, DWORD uMax );
+	bool			AddUintRangeFilter ( const CSphString & sAttr, int64_t iMin, int64_t iMax );
 	bool			AddUservarFilter ( const CSphString & sCol, const CSphString & sVar, bool bExclude );
 	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd );
 	CSphFilterSettings * AddFilter ( const CSphString & sCol, ESphFilter eType );
@@ -8613,13 +8626,13 @@ bool SqlParser_c::AddFloatRangeFilter ( const CSphString & sAttr, float fMin, fl
 	return true;
 }
 
-bool SqlParser_c::AddUintRangeFilter ( const CSphString & sAttr, DWORD uMin, DWORD uMax )
+bool SqlParser_c::AddUintRangeFilter ( const CSphString & sAttr, int64_t iMin, int64_t iMax )
 {
 	CSphFilterSettings * pFilter = AddFilter ( sAttr, SPH_FILTER_RANGE );
 	if ( !pFilter )
 		return false;
-	pFilter->m_uMinValue = uMin;
-	pFilter->m_uMaxValue = uMax;
+	pFilter->m_uMinValue = (SphAttr_t)iMin;
+	pFilter->m_uMaxValue = (SphAttr_t)iMax;
 	return true;
 }
 
@@ -14676,8 +14689,8 @@ void CheckRotate ()
 
 	if ( !iRotIndexes )
 	{
-		sphWarning ( "INTERNAL ERROR: nothing to rotate after SIGHUP" );
 		g_iRotateCount = Max ( 0, g_iRotateCount-1 );
+		sphWarning ( "nothing to rotate after SIGHUP ( in queue=%d )", g_iRotateCount );
 	}
 
 	if ( g_eWorkers!=MPM_THREADS && iRotIndexes )
@@ -15305,7 +15318,7 @@ void CheckSignals ()
 		g_tRotateQueueMutex.Lock();
 		g_iRotateCount++;
 		g_tRotateQueueMutex.Unlock();
-		sphInfo ( "rotating indices (seamless=%d)", (int)g_bSeamlessRotate ); // this might hang if performed from SIGHUP
+		sphInfo ( "caught SIGHUP (seamless=%d, in queue=%d)", (int)g_bSeamlessRotate, g_iRotateCount );
 		g_bGotSighup = 0;
 	}
 
@@ -16049,6 +16062,7 @@ void OpenDaemonLog ( const CSphConfigSection & hSearchd )
 		g_bLogTty = isatty ( g_iLogFile )!=0;
 }
 
+
 int WINAPI ServiceMain ( int argc, char **argv )
 {
 	g_bLogTty = isatty ( g_iLogFile )!=0;
@@ -16309,17 +16323,17 @@ int WINAPI ServiceMain ( int argc, char **argv )
 #else
 		CSphString sPipeName;
 		int iPipeCreated = -1;
-		int hPipe = -1;
+		int fdPipe = -1;
 		if ( bOptStopWait )
 		{
 			sPipeName = GetNamedPipeName ( iPid );
 			iPipeCreated = mkfifo ( sPipeName.cstr(), 0666 );
 			if ( iPipeCreated!=-1 )
-				hPipe = ::open ( sPipeName.cstr(), O_RDONLY | O_NONBLOCK );
+				fdPipe = ::open ( sPipeName.cstr(), O_RDONLY | O_NONBLOCK );
 
 			if ( iPipeCreated==-1 )
 				sphWarning ( "mkfifo failed (path=%s, err=%d, msg=%s); will NOT wait", sPipeName.cstr(), errno, strerror(errno) );
-			else if ( hPipe==-1 )
+			else if ( fdPipe<0 )
 				sphWarning ( "open failed (path=%s, err=%d, msg=%s); will NOT wait", sPipeName.cstr(), errno, strerror(errno) );
 		}
 
@@ -16328,20 +16342,50 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		else
 			sphInfo ( "stop: successfully sent SIGTERM to pid %d", iPid );
 
-		int iExitCode = ( bOptStopWait && ( iPipeCreated==-1 || hPipe==-1 ) ) ? 1 : 0;
-		if ( bOptStopWait && hPipe!=-1 )
+		int iExitCode = ( bOptStopWait && ( iPipeCreated==-1 || fdPipe<0 ) ) ? 1 : 0;
+		bool bHandshake = true;
+		while ( bOptStopWait && fdPipe>=0 )
 		{
-			while ( sphIsReadable ( sPid, NULL ) )
-				sphSleepMsec ( 5 );
+			int iReady = sphPoll ( fdPipe, 500000 );
 
+			// error on wait
+			if ( iReady<0 )
+			{
+				iExitCode = 3;
+				sphWarning ( "stopwait%s error '%s'", ( bHandshake ? " handshake" : " " ), strerror(errno) );
+				break;
+			}
+
+			// timeout
+			if ( iReady==0 )
+			{
+				if ( !bHandshake )
+					continue;
+
+				iExitCode = 1;
+				break;
+			}
+
+			// reading data
 			DWORD uStatus = 0;
-			if ( ::read ( hPipe, &uStatus, sizeof(DWORD) )!=sizeof(DWORD) )
+			int iRead = ::read ( fdPipe, &uStatus, sizeof(DWORD) );
+			if ( iRead!=sizeof(DWORD) )
+			{
+				sphWarning ( "stopwait read fifo error '%s'", strerror(errno) );
 				iExitCode = 3; // stopped demon crashed during stop
-			else
-				iExitCode = uStatus==1 ? 0 : 2; // uStatus == 1 - AttributeSave - ok, other values - error
+				break;
+			} else
+			{
+				iExitCode = ( uStatus==1 ? 0 : 2 ); // uStatus == 1 - AttributeSave - ok, other values - error
 		}
-		if ( hPipe!=-1 )
-			::close ( hPipe );
+
+			if ( !bHandshake )
+				break;
+
+			bHandshake = false;
+		}
+		if ( fdPipe>=0 )
+			::close ( fdPipe );
 		if ( iPipeCreated!=-1 )
 			::unlink ( sPipeName.cstr() );
 

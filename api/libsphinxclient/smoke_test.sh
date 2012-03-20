@@ -1,6 +1,6 @@
 #!/bin/sh
 
-FAILLOG="/tmp/faillog1"
+[ "z$FAILLOG" = "z" ] && FAILLOG="/tmp/faillog"
 DIFF='smoke_diff.txt'
 RES='smoke_test.txt'
 REF='smoke_ref.txt'
@@ -46,4 +46,3 @@ rm $FAILLOG
 
 echo "all ok"
 exit 0
-

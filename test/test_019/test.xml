@@ -64,6 +64,8 @@ index test
 <query mode="extended2">("")</query>
 <query mode="extended2">"phrase (!query)/ ~on @steroids"</query>
 <query mode="extended2">1234567812345678</query>
+<!-- regression of query parser memory corraption -->
+<query mode="extended2" expect_error="1">1-word@#1215</query>
 </queries>
 
 <db_create>

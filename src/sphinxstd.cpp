@@ -826,7 +826,7 @@ bool CSphProcessSharedMutex::TimedLock ( int tmSpin ) const
 	if ( iRes==EBUSY )
 		iRes = pthread_mutex_trylock ( m_pMutex );
 
-	return iRes!=0;
+	return iRes==0;
 #endif // HAVE_PTHREAD_MUTEX_TIMEDLOCK && HAVE_CLOCK_GETTIME
 #endif // USE_WINDOWS
 }

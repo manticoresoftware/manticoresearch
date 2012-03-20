@@ -1553,8 +1553,8 @@ bool CSphSEQuery::ParseField ( char * sField )
 
 			if ( tFilter.m_eType==SPH_FILTER_RANGE )
 			{
-				tFilter.m_uMinValue = strtoll ( sValue, NULL, 0 );
-				tFilter.m_uMaxValue = strtoll ( p, NULL, 0 );
+				tFilter.m_uMinValue = strtoll ( sValue, NULL, 10 );
+				tFilter.m_uMaxValue = strtoll ( p, NULL, 10 );
 			} else
 			{
 				tFilter.m_fMinValue = (float)atof(sValue);

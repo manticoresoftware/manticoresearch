@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>stopwords vs wordforms vs multiforms</name>
+
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source test
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= select * from test_table
+}
+
+index test
+{
+	source				= test
+	path				= <data_path/>/test
+	stopwords			= test_190/stopwords.txt
+	wordforms			= test_190/wordforms.txt	
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	content VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>
+INSERT INTO test_table VALUES
+( 100, 'Normally, that would be used to bring different word forms stopword' ),
+( 101, 'It can also be used to implement stemming exceptions anotherstopword' ),
+( 102, 'Word forms are applied after the text morestopwords' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>select * from test where match('moderately')</sphinxql>
+<sphinxql>select * from test where match('implement')</sphinxql>
+<sphinxql>select * from test where match('across')</sphinxql>
+<sphinxql>select * from test where match('forms')</sphinxql>
+<sphinxql>select * from test where match('dictionary')</sphinxql>
+<sphinxql>select * from test where match('incoming')</sphinxql>
+<sphinxql>select * from test where match('stopword')</sphinxql>
+<sphinxql>select * from test where match('anotherstopword')</sphinxql>
+<sphinxql>select * from test where match('morestopwords')</sphinxql>
+<sphinxql>select * from test where match('tokenizing')</sphinxql>
+</sphqueries>
+
+</test>

@@ -71,6 +71,7 @@ INSERT INTO test_table (id, a, n) VALUES
 
 <queries>
 	<query />
+
 	<query sortmode="expr" sortby="-n"/>
 
 	<query select="a, n, n + a as sel"/> <!-- doc_id=10 will warp-around -->
@@ -97,4 +98,20 @@ INSERT INTO test_table (id, a, n) VALUES
 	<query filter="n" filter_range="-4611686018427387903 -4611686018427387900" />
 </queries>
 
+<!-- Regression for issue #1062 -->
+<sphqueries>
+<sphinxql>select *, -n as x from test order by x desc</sphinxql>
+<sphinxql>select a, n, n+a as sel from test</sphinxql>
+<sphinxql>select * from test group by n order by n desc</sphinxql>
+<sphinxql>select abs(n) as sel, * from test group by sel order by sel desc</sphinxql>
+<sphinxql>select idiv(abs(n), 10000000000) as sel, * from test where id between 1 and 6 group by sel</sphinxql>
+<sphinxql>select idiv(70000000000, 10000000000) as sel, * from test where id between 1 and 6 group by sel</sphinxql>
+<sphinxql>select min(a,n) as sel, * from test</sphinxql>
+<sphinxql>select * from test where n=-1</sphinxql>
+<sphinxql>select * from test where n=-4611686018427387903</sphinxql>
+<sphinxql>select * from test where n=4611686018427387903</sphinxql>
+<sphinxql>select * from test where n between -100000000000 and 0</sphinxql>
+<sphinxql>select * from test where n between 0 and 100000000000</sphinxql>
+<sphinxql>select * from test where n between -4611686018427387903 and -4611686018427387900</sphinxql>
+</sphqueries>
 </test>

@@ -898,8 +898,9 @@ void TestQueryParser ()
 	{
 		printf ( "testing query parser, test %d/%d... ", i+1, nTests );
 
+		CSphIndexSettings tSettings;
 		XQQuery_t tQuery;
-		sphParseExtendedQuery ( tQuery, dTest[i].m_sQuery, pTokenizer.Ptr(), &tSchema, pDict.Ptr(), 1 );
+		sphParseExtendedQuery ( tQuery, dTest[i].m_sQuery, pTokenizer.Ptr(), &tSchema, pDict.Ptr(), tSettings );
 
 		CSphString sReconst = ReconstructNode ( tQuery.m_pRoot, tSchema );
 		if ( sReconst!=dTest[i].m_sReconst )

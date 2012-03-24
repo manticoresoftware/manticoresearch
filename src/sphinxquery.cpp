@@ -33,7 +33,7 @@ public:
 					~XQParser_t () {}
 
 public:
-	bool			Parse ( XQQuery_t & tQuery, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, int iStopwordStep );
+	bool			Parse ( XQQuery_t & tQuery, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings );
 
 	bool			Error ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 	void			Warning ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
@@ -95,10 +95,9 @@ public:
 	bool					m_bWasBlended;
 
 	bool					m_bEmpty;
-
 	bool					m_bQuoted;
-
 	bool					m_bEmptyStopword;
+	int						m_iOvershortStep;
 
 	CSphVector<CSphString>	m_dIntTokens;
 
@@ -642,7 +641,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		sToken = (const char *) m_pTokenizer->GetToken ();
 		if ( !sToken )
 		{
-			m_iPendingNulls = m_pTokenizer->GetOvershortCount ();
+			m_iPendingNulls = m_pTokenizer->GetOvershortCount() * m_iOvershortStep;
 			if ( !m_iPendingNulls )
 				return 0;
 			m_iPendingNulls = 0;
@@ -654,7 +653,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		m_bWasBlended = m_pTokenizer->TokenIsBlended();
 		m_bEmpty = false;
 
-		m_iPendingNulls = m_pTokenizer->GetOvershortCount ();
+		m_iPendingNulls = m_pTokenizer->GetOvershortCount() * m_iOvershortStep;
 		m_iAtomPos += 1+m_iPendingNulls;
 
 		// handle NEAR (must be case-sensitive, and immediately followed by slash and int)
@@ -1092,7 +1091,7 @@ static void FixupDegenerates ( XQNode_t * pNode )
 }
 
 
-bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, int iStopwordStep )
+bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings )
 {
 	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone ( true ) );
 	pMyTokenizer->AddSpecials ( "()|-!@~\"/^$<" );
@@ -1126,7 +1125,8 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTok
 	m_iPendingType = 0;
 	m_pRoot = NULL;
 	m_bEmpty = true;
-	m_bEmptyStopword = ( iStopwordStep==0 );
+	m_bEmptyStopword = ( tSettings.m_iStopwordStep==0 );
+	m_iOvershortStep = tSettings.m_iOvershortStep;
 
 	m_pTokenizer->SetBuffer ( m_sQuery, m_iQueryLen );
 	int iRes = yyparse ( this );
@@ -1222,10 +1222,10 @@ static void xqDump ( XQNode_t * pNode, int iIndent )
 #endif
 
 
-bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, int iStopwordStep )
+bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings )
 {
 	XQParser_t qp;
-	bool bRes = qp.Parse ( tParsed, sQuery, pTokenizer, pSchema, pDict, iStopwordStep );
+	bool bRes = qp.Parse ( tParsed, sQuery, pTokenizer, pSchema, pDict, tSettings );
 
 #ifndef NDEBUG
 	if ( bRes && tParsed.m_pRoot )

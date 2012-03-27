@@ -79,6 +79,9 @@ INSERT INTO test_table ( document_id, text ) VALUES
 	<query mode="extended2" index="test_kw">"o* t*"/2</query>
 	<query mode="extended2" index="test_crc">"h* w* f*"/2</query>
 	<query mode="extended2" index="test_kw">"h* w* f*"/2</query>
+	
+	<!--here is going regresssion test-->
+	<query mode="extended2" index="test_kw">"one t* three four five"</query>
 </queries>
 
 </test>

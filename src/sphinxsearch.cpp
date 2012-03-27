@@ -1398,7 +1398,6 @@ protected:
 	CSphVector<ExtQword_t>			m_dQwords;
 
 	int		m_iUniqDocs;
-	int		m_iAtomPos;
 
 	int		m_iCurDocsBegin;	///< start of the last docs chunk returned, inclusive, ie [begin,end)
 	int		m_iCurDocsEnd;		///< end of the last docs chunk returned, exclusive, ie [begin,end)
@@ -1408,7 +1407,7 @@ public:
 	explicit						ExtCached_c ( const XQNode_t * pNode, const ISphQwordSetup & tSetup );
 	virtual void					Reset ( const ISphQwordSetup & tSetup );
 	virtual const ExtDoc_t *		GetDocsChunk ( SphDocID_t * pMaxID );
-	virtual const ExtHit_t *		GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
+	virtual const ExtHit_t *		GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t );
 
 	virtual void					GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void					SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
@@ -1548,7 +1547,7 @@ const ExtDoc_t * ExtCached_c::GetDocsChunk ( SphDocID_t * pMaxID )
 }
 
 
-const ExtHit_t * ExtCached_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
+const ExtHit_t * ExtCached_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t )
 {
 	if ( m_iCurHit>=m_iCurDocsEnd )
 		return NULL;
@@ -5164,7 +5163,7 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLa
 						bEofDoc |= (pEndHits->m_uDocid!=uCur)?2:0;
 					}
 
-					if ( pStartHits->m_uHitpos<pEndHits->m_uHitpos && !( bEofDoc&1 ) )
+					if ( pStartHits->m_uHitpos<pEndHits->m_uHitpos && !( bEofDoc & 1 ) )
 					{
 						// actions for outspan/start-marker state
 						// <b>...<b>..<b>..</b> will ignore all the <b> inside.
@@ -5175,7 +5174,7 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLa
 							pZone->m_dEnds.Add ( iSpanEnd );
 							iSpanBegin = pStartHits->m_uHitpos;
 						}
-					} else if ( !( bEofDoc&2 ) )
+					} else if ( !( bEofDoc & 2 ) )
 					{
 						// actions for inspan/end-marker state
 						// so, <b>...</b>..</b>..</b> will ignore all the </b> inside.

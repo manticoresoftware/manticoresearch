@@ -28,6 +28,8 @@ struct ISphFilter
 
 	virtual ~ISphFilter () {}
 
+	virtual ISphFilter * Optimize() { return this; }
+
 	/// evaluate filter for a given match
 	/// returns true if match satisfies the filter critertia (i.e. in range, found in values list etc)
 	virtual bool Eval ( const CSphMatch & tMatch ) const = 0;

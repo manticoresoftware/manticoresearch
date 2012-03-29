@@ -12678,30 +12678,52 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 			const DWORD * pBlockStart = &m_pDocinfo [ ( int64_t ( uIndexEntry ) )*uStride*DOCINFO_INDEX_FREQ ];
 			const DWORD * pBlockEnd = &m_pDocinfo [ ( int64_t ( Min ( ( uIndexEntry+1 )*DOCINFO_INDEX_FREQ, m_uDocinfo ) - 1 ) )*uStride ];
 
-			for ( const DWORD * pDocinfo=pBlockStart; pDocinfo<=pBlockEnd; pDocinfo+=uStride )
+			if ( !tCtx.m_pOverrides && tCtx.m_pFilter && !pQuery->m_iCutoff
+				&& !tCtx.m_dCalcFilter.GetLength() && !tCtx.m_dCalcSort.GetLength() )
 			{
-				tMatch.m_iDocID = DOCINFO2ID ( pDocinfo );
-				CopyDocinfo ( &tCtx, tMatch, pDocinfo );
-
-				// early filter only (no late filters in full-scan because of no @weight)
-				tCtx.CalcFilter ( tMatch );
-				if ( tCtx.m_pFilter && !tCtx.m_pFilter->Eval ( tMatch ) )
-					continue;
-
-				// submit match to sorters
-				tCtx.CalcSort ( tMatch );
-				if ( bRandomize )
-					tMatch.m_iWeight = ( sphRand() & 0xffff );
-
-				bool bNewMatch = false;
-				for ( int iSorter=0; iSorter<iSorters; iSorter++ )
-					bNewMatch |= ppSorters[iSorter]->Push ( tMatch );
-
-				// handle cutoff
-				if ( bNewMatch && --iCutoff==0 )
+				// kinda fastpath
+				for ( const DWORD * pDocinfo=pBlockStart; pDocinfo<=pBlockEnd; pDocinfo+=uStride )
 				{
-					uIndexEntry = m_uDocinfoIndex; // outer break
-					break;
+					tMatch.m_iDocID = DOCINFO2ID ( pDocinfo );
+					tMatch.m_pStatic = DOCINFO2ATTRS ( pDocinfo );
+					if ( !tCtx.m_pFilter->Eval ( tMatch ) )
+						continue;
+					if ( bRandomize )
+						tMatch.m_iWeight = ( sphRand() & 0xffff );
+					for ( int iSorter=0; iSorter<iSorters; iSorter++ )
+						ppSorters[iSorter]->Push ( tMatch );
+				}
+			} else
+			{
+				// generic path
+				for ( const DWORD * pDocinfo=pBlockStart; pDocinfo<=pBlockEnd; pDocinfo+=uStride )
+				{
+					tMatch.m_iDocID = DOCINFO2ID ( pDocinfo );
+					if ( !tCtx.m_pOverrides )
+						tMatch.m_pStatic = DOCINFO2ATTRS ( pDocinfo );
+					else
+						CopyDocinfo ( &tCtx, tMatch, pDocinfo );
+
+					// early filter only (no late filters in full-scan because of no @weight)
+					tCtx.CalcFilter ( tMatch );
+					if ( tCtx.m_pFilter && !tCtx.m_pFilter->Eval ( tMatch ) )
+						continue;
+
+					// submit match to sorters
+					tCtx.CalcSort ( tMatch );
+					if ( bRandomize )
+						tMatch.m_iWeight = ( sphRand() & 0xffff );
+
+					bool bNewMatch = false;
+					for ( int iSorter=0; iSorter<iSorters; iSorter++ )
+						bNewMatch |= ppSorters[iSorter]->Push ( tMatch );
+
+					// handle cutoff
+					if ( bNewMatch && --iCutoff==0 )
+					{
+						uIndexEntry = m_uDocinfoIndex; // outer break
+						break;
+					}
 				}
 			}
 		}
@@ -14318,6 +14340,8 @@ bool CSphQueryContext::CreateFilters ( bool bFullscan, const CSphVector<CSphFilt
 		ISphFilter ** pGroup = tFilter.m_sAttrName=="@weight" ? &m_pWeightFilter : &m_pFilter;
 		*pGroup = sphJoinFilters ( *pGroup, pFilter );
 	}
+	if ( m_pFilter )
+		m_pFilter = m_pFilter->Optimize();
 	return true;
 }
 

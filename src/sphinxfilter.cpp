@@ -170,6 +170,59 @@ struct Filter_Values: public IFilter_Attr, IFilter_Values
 	}
 };
 
+
+struct Filter_SingleValue : public IFilter_Attr
+{
+	SphAttr_t m_RefValue;
+
+#ifndef NDEBUG
+	virtual void SetValues ( const SphAttr_t * pStorage, int iCount )
+#else
+	virtual void SetValues ( const SphAttr_t * pStorage, int )
+#endif
+	{
+		assert ( pStorage );
+		assert ( iCount==1 );
+		m_RefValue = (*pStorage);
+	}
+
+	virtual bool Eval ( const CSphMatch & tMatch ) const
+	{
+		return tMatch.GetAttr ( m_tLocator )==m_RefValue;
+	}
+
+	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const
+	{
+		if ( m_tLocator.m_bDynamic )
+			return true; // ignore computed attributes
+
+		SphAttr_t uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS ( pMinDocinfo ), m_tLocator );
+		SphAttr_t uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS ( pMaxDocinfo ), m_tLocator );
+		return ( uBlockMin<=m_RefValue && m_RefValue<=uBlockMax );
+	}
+};
+
+
+struct Filter_SingleValueStatic32 : public Filter_SingleValue
+{
+	int m_iIndex;
+
+	virtual void SetLocator ( const CSphAttrLocator & tLoc )
+	{
+		assert ( tLoc.m_iBitCount==32 );
+		assert ( ( tLoc.m_iBitOffset % 32 )==0 );
+		assert ( !tLoc.m_bDynamic );
+		m_tLocator = tLoc;
+		m_iIndex = tLoc.m_iBitOffset / 32;
+	}
+
+	virtual bool Eval ( const CSphMatch & tMatch ) const
+	{
+		return tMatch.m_pStatic [ m_iIndex ]==m_RefValue;
+	}
+};
+
+
 struct Filter_Range: public IFilter_Attr, IFilter_Range
 {
 	virtual bool Eval ( const CSphMatch & tMatch ) const
@@ -439,6 +492,94 @@ bool Filter_MVARange<true>::MvaEval ( const DWORD * pMva, const DWORD * pMvaMax 
 
 // and
 
+struct Filter_And2 : public ISphFilter
+{
+	ISphFilter * m_pArg1;
+	ISphFilter * m_pArg2;
+	bool m_bUsesAttrs;
+
+	explicit Filter_And2 ( ISphFilter * pArg1, ISphFilter * pArg2, bool bUsesAttrs )
+		: m_pArg1 ( pArg1 )
+		, m_pArg2 ( pArg2 )
+		, m_bUsesAttrs ( bUsesAttrs )
+	{}
+
+	~Filter_And2 ()
+	{
+		SafeDelete ( m_pArg1 );
+		SafeDelete ( m_pArg2 );
+	}
+
+	virtual bool Eval ( const CSphMatch & tMatch ) const
+	{
+		return m_pArg1->Eval ( tMatch ) && m_pArg2->Eval ( tMatch );
+	}
+
+	virtual bool EvalBlock ( const DWORD * pMin, const DWORD * pMax ) const
+	{
+		return m_pArg1->EvalBlock ( pMin, pMax ) && m_pArg2->EvalBlock ( pMin, pMax );
+	}
+
+	virtual ISphFilter * Join ( ISphFilter * )
+	{
+		assert ( 0 );
+		return 0;
+	}
+
+	virtual void SetMVAStorage ( const DWORD * pMva )
+	{
+		m_pArg1->SetMVAStorage ( pMva );
+		m_pArg2->SetMVAStorage ( pMva );
+	}
+};
+
+
+struct Filter_And3 : public ISphFilter
+{
+	ISphFilter * m_pArg1;
+	ISphFilter * m_pArg2;
+	ISphFilter * m_pArg3;
+	bool m_bUsesAttrs;
+
+	explicit Filter_And3 ( ISphFilter * pArg1, ISphFilter * pArg2, ISphFilter * pArg3, bool bUsesAttrs )
+		: m_pArg1 ( pArg1 )
+		, m_pArg2 ( pArg2 )
+		, m_pArg3 ( pArg3 )
+		, m_bUsesAttrs ( bUsesAttrs )
+	{}
+
+	~Filter_And3 ()
+	{
+		SafeDelete ( m_pArg1 );
+		SafeDelete ( m_pArg2 );
+		SafeDelete ( m_pArg3 );
+	}
+
+	virtual bool Eval ( const CSphMatch & tMatch ) const
+	{
+		return m_pArg1->Eval ( tMatch ) && m_pArg2->Eval ( tMatch ) && m_pArg3->Eval ( tMatch );
+	}
+
+	virtual bool EvalBlock ( const DWORD * pMin, const DWORD * pMax ) const
+	{
+		return m_pArg1->EvalBlock ( pMin, pMax ) && m_pArg2->EvalBlock ( pMin, pMax ) && m_pArg3->EvalBlock ( pMin, pMax );
+	}
+
+	virtual ISphFilter * Join ( ISphFilter * )
+	{
+		assert ( 0 );
+		return 0;
+	}
+
+	virtual void SetMVAStorage ( const DWORD * pMva )
+	{
+		m_pArg1->SetMVAStorage ( pMva );
+		m_pArg2->SetMVAStorage ( pMva );
+		m_pArg3->SetMVAStorage ( pMva );
+	}
+};
+
+
 struct Filter_And: public ISphFilter
 {
 	CSphVector<ISphFilter *> m_dFilters;
@@ -487,6 +628,25 @@ struct Filter_And: public ISphFilter
 	{
 		ARRAY_FOREACH ( i, m_dFilters )
 			m_dFilters[i]->SetMVAStorage ( pMva );
+	}
+
+	virtual ISphFilter * Optimize()
+	{
+		if ( m_dFilters.GetLength()==2 )
+		{
+			ISphFilter * pOpt = new Filter_And2 ( m_dFilters[0], m_dFilters[1], m_bUsesAttrs );
+			m_dFilters.Reset();
+			delete this;
+			return pOpt;
+		}
+		if ( m_dFilters.GetLength()==3 )
+		{
+			ISphFilter * pOpt = new Filter_And3 ( m_dFilters[0], m_dFilters[1], m_dFilters[2], m_bUsesAttrs );
+			m_dFilters.Reset();
+			delete this;
+			return pOpt;
+		}
+		return this;
 	}
 };
 
@@ -584,7 +744,7 @@ static inline ISphFilter * ReportError ( CSphString & sError, const char * sMess
 }
 
 
-static ISphFilter * CreateFilter ( ESphAttr eAttrType, ESphFilter eFilterType, CSphString & sError )
+static ISphFilter * CreateFilter ( ESphAttr eAttrType, ESphFilter eFilterType, int iNumValues, const CSphAttrLocator & tLoc, CSphString & sError )
 {
 	// MVA
 	if ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_UINT64SET )
@@ -618,8 +778,18 @@ static ISphFilter * CreateFilter ( ESphAttr eAttrType, ESphFilter eFilterType, C
 	// non-float, non-MVA
 	switch ( eFilterType )
 	{
-		case SPH_FILTER_VALUES:	return new Filter_Values;
-		case SPH_FILTER_RANGE:	return new Filter_Range;
+		case SPH_FILTER_VALUES:
+			if ( iNumValues==1 && ( eAttrType==SPH_ATTR_INTEGER || eAttrType==SPH_ATTR_BIGINT ) )
+			{
+				if ( eAttrType==SPH_ATTR_INTEGER && !tLoc.m_bDynamic && tLoc.m_iBitCount==32 && ( tLoc.m_iBitOffset % 32 )==0 )
+					return new Filter_SingleValueStatic32();
+				else
+					return new Filter_SingleValue();
+			} else
+			{
+				return new Filter_Values();
+			}
+		case SPH_FILTER_RANGE:	return new Filter_Range();
 		default:				return ReportError ( sError, "unsupported filter type '%s' on int column", eFilterType );
 	}
 }
@@ -648,7 +818,7 @@ ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const CSphS
 		assert ( !pFilter );
 
 		pAttr = &tSchema.GetAttr(iAttr);
-		pFilter = CreateFilter ( pAttr->m_eAttrType, tSettings.m_eType, sError );
+		pFilter = CreateFilter ( pAttr->m_eAttrType, tSettings.m_eType, tSettings.GetNumValues(), pAttr->m_tLocator, sError );
 	}
 
 	// fill filter's properties

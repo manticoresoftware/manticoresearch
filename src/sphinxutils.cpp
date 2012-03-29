@@ -1005,9 +1005,11 @@ bool sphConfFieldFilter ( const CSphConfigSection & hIndex, CSphFieldFilterSetti
 	return tSettings.m_dRegexps.GetLength() > 0;
 }
 #else
-bool sphConfFieldFilter ( const CSphConfigSection &, CSphFieldFilterSettings &, CSphString & sError )
+bool sphConfFieldFilter ( const CSphConfigSection & hIndex, CSphFieldFilterSettings &, CSphString & sError )
 {
-	sError.SetSprintf ( "regexp_filter specified but no regexp support compiled" );
+	if ( hIndex ( "regexp_filter" ) )
+		sError.SetSprintf ( "regexp_filter specified but no regexp support compiled" );
+
 	return false;
 }
 #endif

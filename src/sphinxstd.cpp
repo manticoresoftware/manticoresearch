@@ -604,14 +604,22 @@ void * operator new [] ( size_t iSize )
 	return pResult;
 }
 
+#if USE_RE2
+void operator delete ( void * pPtr ) throw ()
+#else
 void operator delete ( void * pPtr )
+#endif
 {
 	if ( pPtr )
 		::free ( pPtr );
 }
 
 
+#if USE_RE2
+void operator delete [] ( void * pPtr ) throw ()
+#else
 void operator delete [] ( void * pPtr )
+#endif
 {
 	if ( pPtr )
 		::free ( pPtr );

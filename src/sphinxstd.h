@@ -83,6 +83,7 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 #if _WIN32
 
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <windows.h>
 
 #define strcasecmp			strcmpi
@@ -208,11 +209,16 @@ void			sphMemStatMMapDel ( int64_t iSize );
 
 #endif // SPH_DEBUG_LEAKS || SPH_ALLOCS_PROFILER
 
+#if USE_RE2
+void			operator delete ( void * pPtr ) throw ();
+void			operator delete [] ( void * pPtr ) throw ();
+#else
 /// delete for my new
-void			operator delete ( void * pPtr );
+void			operator delete ( void * pPtr ) throw ();
 
 /// delete for my new
-void			operator delete [] ( void * pPtr );
+void			operator delete [] ( void * pPtr ) throw ();
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 // HELPERS
@@ -1634,7 +1640,7 @@ public:
 		return strncmp ( m_sValue+iVal-iPrefix, sPrefix, iPrefix )==0;
 	}
 
-	void Chop ()
+	void Trim ()
 	{
 		if ( m_sValue )
 		{

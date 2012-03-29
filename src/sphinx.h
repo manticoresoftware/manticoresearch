@@ -26,6 +26,7 @@
 	#define USE_LIBICONV	1	/// whether to compile iconv support
 	#define USE_LIBXML		0	/// whether to compile libxml support
 	#define	USE_LIBSTEMMER	0	/// whether to compile libstemmber support
+	#define	USE_RE2			0	/// whether to compile RE2 support
 	#define USE_WINDOWS		1	/// whether to compile for Windows
 	#define USE_SYSLOG		0	/// whether to use syslog for logging
 
@@ -497,6 +498,7 @@ public:
 
 public:
 	/// pass next buffer
+	/// buffer is non-const because we fixup zeroes with spaces; everything else is const
 	virtual void					SetBuffer ( BYTE * sBuffer, int iLength ) = 0;
 
 	/// get next token
@@ -1447,6 +1449,26 @@ struct SphRange_t
 	int m_iLength;
 };
 
+struct CSphFieldFilterSettings
+{
+	bool					m_bUTF8;
+	CSphVector<CSphString>	m_dRegexps;
+};
+
+/// field filter
+class ISphFieldFilter
+{
+public:
+	virtual					~ISphFieldFilter () {}
+
+	virtual	const BYTE *	Apply ( const BYTE * sField, int iLength = 0 ) = 0;
+	virtual int				GetResultLength () const = 0;
+	virtual	void			GetSettings ( CSphFieldFilterSettings & tSettings ) const = 0;
+};
+
+/// create a field filter
+ISphFieldFilter * sphCreateFieldFilter ( const CSphFieldFilterSettings & tFilterSettings, CSphString & sError );
+
 
 /// generic data source
 class CSphSource : public CSphSourceSettings
@@ -1475,6 +1497,9 @@ public:
 	///
 	/// on failure, returns false and fills sError
 	bool								SetStripHTML ( const char * sExtractAttrs, const char * sRemoveElements, bool bDetectParagraphs, const char * sZones, CSphString & sError );
+
+	/// set field filter
+	void								SetFieldFilter ( ISphFieldFilter * pFilter );
 
 	/// set tokenizer
 	void								SetTokenizer ( ISphTokenizer * pTokenizer );
@@ -1559,6 +1584,7 @@ public:
 protected:
 	ISphTokenizer *						m_pTokenizer;	///< my tokenizer
 	CSphDict *							m_pDict;		///< my dict
+	ISphFieldFilter	*					m_pFieldFilter;	///< my field filter
 
 	CSphSourceStats						m_tStats;		///< my stats
 	CSphSchema							m_tSchema;		///< my schema
@@ -1633,6 +1659,9 @@ protected:
 
 		BYTE ** m_dFields;
 
+		CSphVector<BYTE*> m_dTmpFieldStorage;
+		CSphVector<BYTE*> m_dTmpFieldPtrs;
+
 		int m_iStartPos;
 		Hitpos_t m_iHitPos;
 		int m_iField;
@@ -1642,6 +1671,7 @@ protected:
 		int m_iBuildLastStep;
 
 		CSphBuildHitsState_t ();
+		~CSphBuildHitsState_t ();
 	};
 
 	CSphBuildHitsState_t	m_tState;
@@ -2635,6 +2665,7 @@ public:
 	virtual void				SetInplaceSettings ( int iHitGap, int iDocinfoGap, float fRelocFactor, float fWriteFactor );
 	virtual void				SetPreopen ( bool bValue ) { m_bKeepFilesOpen = bValue; }
 	virtual void				SetWordlistPreload ( bool bValue ) { m_bPreloadWordlist = bValue; }
+	void						SetFieldFilter ( ISphFieldFilter * pFilter );
 	void						SetTokenizer ( ISphTokenizer * pTokenizer );
 	ISphTokenizer *				GetTokenizer () const { return m_pTokenizer; }
 	ISphTokenizer *				LeakTokenizer ();
@@ -2758,6 +2789,7 @@ public:
 protected:
 	CSphIndexSettings			m_tSettings;
 
+	ISphFieldFilter *			m_pFieldFilter;
 	ISphTokenizer *				m_pTokenizer;
 	CSphDict *					m_pDict;
 

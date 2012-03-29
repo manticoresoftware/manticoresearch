@@ -598,6 +598,8 @@ ac_subst_vars='am__EXEEXT_FALSE
 am__EXEEXT_TRUE
 LTLIBOBJS
 CONFDIR
+USE_RE2_FALSE
+USE_RE2_TRUE
 USE_LIBSTEMMER_FALSE
 USE_LIBSTEMMER_TRUE
 USE_PGSQL_FALSE
@@ -716,6 +718,7 @@ with_pgsql_includes
 with_pgsql_libs
 enable_id64
 with_libstemmer
+with_re2
 with_iconv
 with_unixodbc
 with_syslog
@@ -1366,6 +1369,8 @@ Optional Packages:
   --with-pgsql-includes   path to PostgreSQL header files
   --with-pgsql-libs       path to PostgreSQL libraries
   --with-libstemmer       compile with libstemmer support (default is
+                          disabled)
+  --with-re2              compile with re2 library support (default is
                           disabled)
   --with-iconv            compile with iconv support (default is autodetect)
   --with-unixodbc         compile with UnixODBC support (default is
@@ -7349,6 +7354,45 @@ fi
 
 
 
+
+# Check whether --with-re2 was given.
+if test "${with_re2+set}" = set; then :
+  withval=$with_re2; ac_cv_use_re2=$withval
+else
+  ac_cv_use_re2=no
+
+fi
+
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to compile with re2 library support" >&5
+$as_echo_n "checking whether to compile with re2 library support... " >&6; }
+if test x$ac_cv_use_re2 != xno; then
+	if test -d libre2 && test -f libre2/re2/re2.h; then
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+
+$as_echo "#define USE_RE2 1" >>confdefs.h
+
+	else
+		as_fn_error "missing re2 sources from libre2" "$LINENO" 5
+	fi
+else
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+
+$as_echo "#define USE_RE2 0" >>confdefs.h
+
+fi
+ if test x$ac_cv_use_re2 != xno; then
+  USE_RE2_TRUE=
+  USE_RE2_FALSE='#'
+else
+  USE_RE2_TRUE='#'
+  USE_RE2_FALSE=
+fi
+
+
+
 got_expat=0
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for libexpat" >&5
 $as_echo_n "checking for libexpat... " >&6; }
@@ -8036,6 +8080,10 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${USE_LIBSTEMMER_TRUE}" && test -z "${USE_LIBSTEMMER_FALSE}"; then
   as_fn_error "conditional \"USE_LIBSTEMMER\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${USE_RE2_TRUE}" && test -z "${USE_RE2_FALSE}"; then
+  as_fn_error "conditional \"USE_RE2\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 

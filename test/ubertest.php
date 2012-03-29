@@ -107,6 +107,7 @@ if ( !$run )
 
 PublishLocals ( $locals, false );
 GuessIdSize();
+GuessRE2();
 
 if ( $g_locals["malloc-scribble"] )
 {

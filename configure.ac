@@ -356,6 +356,27 @@ AM_CONDITIONAL(USE_LIBSTEMMER, test x$ac_cv_use_libstemmer != xno)
 
 dnl ---
 
+AC_ARG_WITH([re2],
+	AC_HELP_STRING([--with-re2], [compile with re2 library support (default is disabled)]),
+	[ac_cv_use_re2=$withval], [ac_cv_use_re2=no]
+)
+
+AC_MSG_CHECKING([whether to compile with re2 library support])
+if test x$ac_cv_use_re2 != xno; then
+	if test -d libre2 && test -f libre2/re2/re2.h; then
+		AC_MSG_RESULT([yes])
+		AC_DEFINE(USE_RE2, 1, [RE2 library support])
+	else
+		AC_MSG_ERROR([missing re2 sources from libre2])
+	fi
+else
+	AC_MSG_RESULT([no])
+	AC_DEFINE(USE_RE2, 0, [re2 library support])
+fi
+AM_CONDITIONAL(USE_RE2, test x$ac_cv_use_re2 != xno)
+
+dnl ---
+
 got_expat=0
 AC_MSG_CHECKING([for libexpat])
 if test [ $have_expat_h = yes -a $have_libexpat = yes ]; then

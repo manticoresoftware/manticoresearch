@@ -940,6 +940,17 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		pTokenizer = pTokenFilter ? pTokenFilter : pTokenizer;
 	}
 
+	ISphFieldFilter * pFieldFilter = NULL;
+	CSphFieldFilterSettings tFilterSettings;
+	if ( sphConfFieldFilter ( hIndex, tFilterSettings, sError ) )
+	{
+		tFilterSettings.m_bUTF8 = tTokSettings.m_iType!=TOKENIZER_SBCS;
+		pFieldFilter = sphCreateFieldFilter ( tFilterSettings, sError );
+	}
+
+	if ( !sError.IsEmpty () )
+		fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sError.cstr() );
+
 	// boundary
 	bool bInplaceEnable = hIndex.GetInt ( "inplace_enable", 0 )!=0;
 	int iHitGap = hIndex.GetSize ( "inplace_hit_gap", 0 );
@@ -1048,6 +1059,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		}
 
 		pSource->SetTokenizer ( pTokenizer );
+		pSource->SetFieldFilter ( pFieldFilter );
 		pSource->SetDumpRows ( fpDumpRows );
 		dSources.Add ( pSource );
 	}
@@ -1101,6 +1113,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		}
 		tDict.Save ( g_sBuildStops, g_iTopStops, g_bBuildFreqs );
 
+		SafeDelete ( pFieldFilter );
 		SafeDelete ( pTokenizer );
 
 	} else
@@ -1158,6 +1171,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		if ( bInplaceEnable )
 			pIndex->SetInplaceSettings ( iHitGap, iDocinfoGap, fRelocFactor, fWriteFactor );
 
+		pIndex->SetFieldFilter ( pFieldFilter );
 		pIndex->SetTokenizer ( pTokenizer );
 		pIndex->SetDictionary ( pDict );
 		pIndex->Setup ( tSettings );

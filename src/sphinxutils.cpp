@@ -346,6 +346,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "index_sp",				0, NULL },
 	{ "index_zones",			0, NULL },
 	{ "blend_mode",				0, NULL },
+	{ "regexp_filter",			KEY_LIST, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -993,6 +994,23 @@ void sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tS
 	}
 }
 
+#if USE_RE2
+bool sphConfFieldFilter ( const CSphConfigSection & hIndex, CSphFieldFilterSettings & tSettings, CSphString & )
+{
+	// regular expressions
+	tSettings.m_dRegexps.Resize ( 0 );
+	for ( CSphVariant * pFilter = hIndex("regexp_filter"); pFilter; pFilter = pFilter->m_pNext )
+		tSettings.m_dRegexps.Add ( pFilter->cstr() );
+
+	return tSettings.m_dRegexps.GetLength() > 0;
+}
+#else
+bool sphConfFieldFilter ( const CSphConfigSection &, CSphFieldFilterSettings &, CSphString & sError )
+{
+	sError.SetSprintf ( "regexp_filter specified but no regexp support compiled" );
+	return false;
+}
+#endif
 
 bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSettings, CSphString & sError )
 {

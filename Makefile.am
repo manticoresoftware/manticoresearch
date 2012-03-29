@@ -1,8 +1,16 @@
 if USE_LIBSTEMMER
-SUBDIRS = libstemmer_c src test doc
+LIBSTEMMER_DIRS = libstemmer_c
 else
-SUBDIRS = src test doc
+LIBSTEMMER_DIRS =
 endif
+
+if USE_RE2
+LIBRE2_DIRS = libre2
+else
+LIBRE2_DIRS =
+endif
+
+SUBDIRS = $(LIBSTEMMER_DIRS) $(LIBRE2_DIRS) src test doc
 
 EXTRA_DIST = api storage sphinx.conf.in sphinx-min.conf.in example.sql
 sysconf_DATA = sphinx.conf.dist sphinx-min.conf.dist example.sql

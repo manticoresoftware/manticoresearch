@@ -88,7 +88,7 @@ AM_RECURSIVE_TARGETS = $(RECURSIVE_TARGETS:-recursive=) \
 	distdir dist dist-all distcheck
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = src test doc libstemmer_c
+DIST_SUBDIRS = libstemmer_c libre2 src test doc
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 distdir = $(PACKAGE)-$(VERSION)
 top_distdir = $(distdir)
@@ -224,8 +224,11 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-@USE_LIBSTEMMER_FALSE@SUBDIRS = src test doc
-@USE_LIBSTEMMER_TRUE@SUBDIRS = libstemmer_c src test doc
+@USE_LIBSTEMMER_FALSE@LIBSTEMMER_DIRS = 
+@USE_LIBSTEMMER_TRUE@LIBSTEMMER_DIRS = libstemmer_c
+@USE_RE2_FALSE@LIBRE2_DIRS = 
+@USE_RE2_TRUE@LIBRE2_DIRS = libre2
+SUBDIRS = $(LIBSTEMMER_DIRS) $(LIBRE2_DIRS) src test doc
 EXTRA_DIST = api storage sphinx.conf.in sphinx-min.conf.in example.sql
 sysconf_DATA = sphinx.conf.dist sphinx-min.conf.dist example.sql
 all: all-recursive

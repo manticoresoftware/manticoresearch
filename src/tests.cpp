@@ -771,7 +771,7 @@ CSphString ReconstructNode ( const XQNode_t * pNode, const CSphSchema & tSchema 
 		const CSphVector<XQKeyword_t> & dWords = pNode->m_dWords;
 		ARRAY_FOREACH ( i, dWords )
 			sRes.SetSprintf ( "%s %s", sRes.cstr(), dWords[i].m_sWord.cstr() );
-		sRes.Chop ();
+		sRes.Trim ();
 
 		switch ( pNode->GetOp() )
 		{

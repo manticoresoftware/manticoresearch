@@ -136,6 +136,9 @@ bool			sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSetting
 /// configure dictionary from index definition section
 void			sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tSettings );
 
+/// configure field filter from index definition section
+bool			sphConfFieldFilter ( const CSphConfigSection & hIndex, CSphFieldFilterSettings & tSettings, CSphString & sError );
+
 /// configure index from index definition section
 bool			sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSettings, CSphString & sError );
 

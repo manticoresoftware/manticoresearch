@@ -23,11 +23,20 @@ extract-version:
 
 if USE_LIBSTEMMER
 LIBSTEMMER_LIBS = $(top_srcdir)/libstemmer_c/libstemmer.a
-AM_CPPFLAGS = -I$(top_srcdir)/libstemmer_c/include -DSYSCONFDIR="\"$(sysconfdir)\"" -DDATADIR="\"$(localstatedir)/data\""
+LIBSTEMMER_INC = -I$(top_srcdir)/libstemmer_c/include
 else
 LIBSTEMMER_LIBS =
-AM_CPPFLAGS = -DSYSCONFDIR="\"$(sysconfdir)\"" -DDATADIR="\"$(localstatedir)/data\""
+LIBSTEMMER_INC =
 endif
 
-COMMON_LIBS = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS)
+if USE_RE2
+LIBRE2_LIBS = $(top_srcdir)/libre2/obj/libre2.a
+LIBRE2_INC = -I$(top_srcdir)/libre2
+else
+LIBRE2_LIBS =
+LIBRE2_INC =
+endif
+
+AM_CPPFLAGS = $(LIBSTEMMER_INC) $(LIBRE2_INC) -DSYSCONFDIR="\"$(sysconfdir)\"" -DDATADIR="\"$(localstatedir)/data\""
+COMMON_LIBS = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS) $(LIBRE2_LIBS)
 LDADD = $(COMMON_LIBS)

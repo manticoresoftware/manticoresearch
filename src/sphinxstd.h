@@ -214,10 +214,10 @@ void			operator delete ( void * pPtr ) throw ();
 void			operator delete [] ( void * pPtr ) throw ();
 #else
 /// delete for my new
-void			operator delete ( void * pPtr ) throw ();
+void			operator delete ( void * pPtr );
 
 /// delete for my new
-void			operator delete [] ( void * pPtr ) throw ();
+void			operator delete [] ( void * pPtr );
 #endif
 
 /////////////////////////////////////////////////////////////////////////////

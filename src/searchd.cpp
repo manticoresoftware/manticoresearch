@@ -482,7 +482,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x119,
+	VER_COMMAND_SEARCH		= 0x11A,
 	VER_COMMAND_EXCERPT		= 0x104,
 	VER_COMMAND_UPDATE		= 0x102,
 	VER_COMMAND_KEYWORDS	= 0x100,
@@ -4306,6 +4306,22 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 		int iRetrieved = tReq.GetInt ();
 		tRes.m_iTotalMatches = (unsigned int)tReq.GetInt ();
 		tRes.m_iQueryTime = tReq.GetInt ();
+
+		// agents always send IO/CPU stats to master
+		BYTE uStatMask = tReq.GetByte();
+		if ( uStatMask & 1 )
+		{
+			tRes.m_tIOStats.m_iReadTime = tReq.GetUint64();
+			tRes.m_tIOStats.m_iReadOps = tReq.GetDword();
+			tRes.m_tIOStats.m_iReadBytes = tReq.GetUint64();
+			tRes.m_tIOStats.m_iWriteTime = tReq.GetUint64();
+			tRes.m_tIOStats.m_iWriteOps = tReq.GetDword();
+			tRes.m_tIOStats.m_iWriteBytes = tReq.GetUint64();
+		}
+
+		if ( uStatMask & 2 )
+			tRes.m_iCpuTime = tReq.GetUint64();
+
 		const int iWordsCount = tReq.GetInt (); // FIXME! sanity check?
 		if ( iRetrieved!=iMatches )
 		{
@@ -5556,6 +5572,16 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 		}
 	}
 
+	if ( iVer>=0x11A && bExtendedStat )
+	{
+		iRespLen += 1;			// stats mask
+		if ( g_bIOStats )
+			iRespLen += 40;		// IO Stats
+
+		if ( g_bCpuStats )
+			iRespLen += 8;		// CPU Stats
+	}
+
 	return iRespLen;
 }
 
@@ -5736,6 +5762,30 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 	tOut.SendInt ( pRes->m_dMatches.GetLength() );
 	tOut.SendAsDword ( pRes->m_iTotalMatches );
 	tOut.SendInt ( Max ( pRes->m_iQueryTime, 0 ) );
+
+	if ( iVer>=0x11A && bExtendedStat )
+	{
+		BYTE uStatMask = ( g_bCpuStats ? 2 : 0 ) | ( g_bIOStats ? 1 : 0 );
+		tOut.SendByte ( uStatMask );
+
+		if ( g_bIOStats )
+		{
+			CSphIOStats tStats = pRes->m_tIOStats + pRes->m_tAgentIOStats;
+			tOut.SendUint64 ( tStats.m_iReadTime );
+			tOut.SendDword ( tStats.m_iReadOps );
+			tOut.SendUint64 ( tStats.m_iReadBytes );
+			tOut.SendUint64 ( tStats.m_iWriteTime );
+			tOut.SendDword ( tStats.m_iWriteOps );
+			tOut.SendUint64 ( tStats.m_iWriteBytes );
+		}
+
+		if ( g_bCpuStats )
+		{
+			int64_t iCpuTime = pRes->m_iCpuTime + pRes->m_iAgentCpuTime;
+			tOut.SendUint64 ( iCpuTime );
+		}
+	}
+
 	tOut.SendInt ( pRes->m_hWordStats.GetLength() );
 
 	pRes->m_hWordStats.IterateStart();
@@ -6729,6 +6779,7 @@ void SearchHandler_c::RunUpdates ( const CSphQuery & tQuery, const CSphString & 
 	}
 
 	const CSphIOStats & tIO = sphStopIOStats ();
+	tRes.m_tIOStats = tIO;
 
 	if ( g_pStats )
 	{
@@ -6918,6 +6969,9 @@ static void FlattenToRes ( ISphMatchSorter * pSorter, AggrResult_t & tRes )
 void SearchHandler_c::RunLocalSearchesMT ()
 {
 	int64_t tmLocal = sphMicroTimer();
+	CSphIOStats tIOStats;
+	if ( g_bIOStats )
+		tIOStats = sphPeekIOStats ();
 
 	// setup local searches
 	const int iQueries = m_iEnd-m_iStart+1;
@@ -7046,10 +7100,16 @@ void SearchHandler_c::RunLocalSearchesMT ()
 	ARRAY_FOREACH ( i, pSorters )
 		SafeDelete ( pSorters[i] );
 
+	if ( g_bIOStats )
+		tIOStats = (sphPeekIOStats()-tIOStats)/iQueries;
+
 	// update our wall time for every result set
 	tmLocal = sphMicroTimer() - tmLocal;
 	for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
+	{
 		m_dResults[iQuery].m_iQueryTime += (int)( tmLocal/1000 );
+		m_dResults[iQuery].m_tIOStats += tIOStats;
+	}
 }
 
 // invoked from MT searches. So, must be MT-aware!
@@ -7262,6 +7322,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 					// these times will be overridden below, but let's be clean
 					tRes.m_iQueryTime += tStats.m_iQueryTime / ( m_iEnd-m_iStart+1 );
 					tRes.m_iCpuTime += tStats.m_iCpuTime / ( m_iEnd-m_iStart+1 );
+					tRes.m_tIOStats += tStats.m_tIOStats / ( m_iEnd-m_iStart+1 );
 					tRes.m_pMva = tStats.m_pMva;
 					tRes.m_pStrings = tStats.m_pStrings;
 					MergeWordStats ( tRes, tStats.m_hWordStats, &m_dFailuresSet[iQuery], sLocal );
@@ -7634,6 +7695,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					// merge this agent's stats
 					tRes.m_iTotalMatches += tRemoteResult.m_iTotalMatches;
 					tRes.m_iQueryTime += tRemoteResult.m_iQueryTime;
+					tRes.m_iAgentCpuTime += tRemoteResult.m_iCpuTime;
+					tRes.m_tAgentIOStats += tRemoteResult.m_tIOStats;
 
 					// merge this agent's words
 					MergeWordStats ( tRes, tRemoteResult.m_hWordStats, &m_dFailuresSet[iRes], tFirst.m_sIndexes.cstr() );
@@ -7737,6 +7800,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	tmSubset = sphMicroTimer() - tmSubset;
 	tmCpu = sphCpuTimer() - tmCpu;
 
+	const CSphIOStats & tIO = sphStopIOStats ();
+
 	// in multi-queue case (1 actual call per N queries), just divide overall query time evenly
 	// otherwise (N calls per N queries), divide common query time overheads evenly
 	const int iQueries = iEnd-iStart+1;
@@ -7746,28 +7811,31 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		{
 			m_dResults[iRes].m_iQueryTime = (int)( tmSubset/1000/iQueries );
 			m_dResults[iRes].m_iCpuTime = tmCpu/iQueries;
+			m_dResults[iRes].m_tIOStats = tIO/iQueries;
 		}
 	} else
 	{
 		int64_t tmAccountedWall = 0;
 		int64_t tmAccountedCpu = 0;
+		CSphIOStats tAccountedIO;
 		for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 		{
 			tmAccountedWall += m_dResults[iRes].m_iQueryTime*1000;
 			tmAccountedCpu += m_dResults[iRes].m_iCpuTime;
+			tAccountedIO += m_dResults[iRes].m_tIOStats;
 		}
 
 		int64_t tmDeltaWall = ( tmSubset - tmAccountedWall ) / iQueries;
 		int64_t tmDeltaCpu = ( tmCpu - tmAccountedCpu ) / iQueries;
+		CSphIOStats tDeltaIO = ( tIO - tAccountedIO ) / iQueries;
 
 		for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 		{
 			m_dResults[iRes].m_iQueryTime += (int)(tmDeltaWall/1000);
 			m_dResults[iRes].m_iCpuTime += tmDeltaCpu;
+			m_dResults[iRes].m_tIOStats += tDeltaIO;
 		}
 	}
-
-	const CSphIOStats & tIO = sphStopIOStats ();
 
 	if ( g_pStats )
 	{
@@ -10061,6 +10129,33 @@ void BuildStatus ( CSphVector<CSphString> & dStatus )
 	}
 }
 
+static void AddIOStatsToMeta ( CSphVector<CSphString> & dStatus, const CSphIOStats & tStats, const char * sPrefix )
+{
+	CSphString sName;
+	sName.SetSprintf ( "%s%s", sPrefix, "io_read_time" );
+	dStatus.Add ( sName );
+	dStatus.Add().SetSprintf ( "%d.%03d", (int)( tStats.m_iReadTime/1000 ), (int)( tStats.m_iReadTime%1000 ) );
+
+	sName.SetSprintf ( "%s%s", sPrefix, "io_read_ops" );
+	dStatus.Add ( sName );
+	dStatus.Add().SetSprintf ( "%u", tStats.m_iReadOps );
+
+	sName.SetSprintf ( "%s%s", sPrefix, "io_read_kbytes" );
+	dStatus.Add ( sName );
+	dStatus.Add().SetSprintf ( "%d.%d", (int)( tStats.m_iReadBytes/1024 ), (int)( tStats.m_iReadBytes%1024 )/100 );
+
+	sName.SetSprintf ( "%s%s", sPrefix, "io_write_time" );
+	dStatus.Add ( sName );
+	dStatus.Add().SetSprintf ( "%d.%03d", (int)( tStats.m_iWriteTime/1000 ), (int)( tStats.m_iWriteTime%1000 ) );
+
+	sName.SetSprintf ( "%s%s", sPrefix, "io_write_ops" );
+	dStatus.Add ( sName );
+	dStatus.Add().SetSprintf ( "%u", tStats.m_iWriteOps );
+
+	sName.SetSprintf ( "%s%s", sPrefix, "io_write_kbytes" );
+	dStatus.Add ( sName );
+	dStatus.Add().SetSprintf ( "%d.%d", (int)( tStats.m_iWriteBytes/1024 ), (int)( tStats.m_iWriteBytes%1024 )/100 );
+}
 
 void BuildMeta ( CSphVector<CSphString> & dStatus, const CSphQueryResultMeta & tMeta )
 {
@@ -10084,6 +10179,21 @@ void BuildMeta ( CSphVector<CSphString> & dStatus, const CSphQueryResultMeta & t
 
 	dStatus.Add ( "time" );
 	dStatus.Add().SetSprintf ( "%d.%03d", tMeta.m_iQueryTime/1000, tMeta.m_iQueryTime%1000 );
+
+	if ( g_bCpuStats )
+	{
+		dStatus.Add ( "cpu_time" );
+		dStatus.Add().SetSprintf ( "%d.%03d", (int)( tMeta.m_iCpuTime/1000 ), (int)( tMeta.m_iCpuTime%1000 ) );
+
+		dStatus.Add ( "agents_cpu_time" );
+		dStatus.Add().SetSprintf ( "%d.%03d", (int)( tMeta.m_iAgentCpuTime/1000 ), (int)( tMeta.m_iAgentCpuTime%1000 ) );
+	}
+
+	if ( g_bIOStats )
+	{
+		AddIOStatsToMeta ( dStatus, tMeta.m_tIOStats, "" );
+		AddIOStatsToMeta ( dStatus, tMeta.m_tAgentIOStats, "agent_" );
+	}
 
 	int iWord = 0;
 	tMeta.m_hWordStats.IterateStart();

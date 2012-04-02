@@ -477,20 +477,83 @@ void sphSetProcessInfo ( bool bHead )
 
 #endif // USE_WINDOWS
 
-static bool g_bIOStats = false;
+static bool g_bCollectIOStats = false;
 static CSphIOStats g_IOStats;
 
 
+CSphIOStats::CSphIOStats ()
+	: m_iReadTime ( 0 )
+	, m_iReadOps ( 0 )
+	, m_iReadBytes ( 0 )
+	, m_iWriteTime ( 0 )
+	, m_iWriteOps ( 0 )
+	, m_iWriteBytes ( 0 )
+{
+}
+
+CSphIOStats CSphIOStats::operator + ( const CSphIOStats & tOp ) const
+{
+	CSphIOStats tTmp ( *this );
+	tTmp.m_iReadBytes += tOp.m_iReadBytes;
+	tTmp.m_iReadOps += tOp.m_iReadOps;
+	tTmp.m_iReadTime += tOp.m_iReadTime;
+	tTmp.m_iWriteBytes += tOp.m_iWriteBytes;
+	tTmp.m_iWriteOps += tOp.m_iWriteOps;
+	tTmp.m_iWriteTime += tOp.m_iWriteTime;
+
+	return tTmp;
+}
+
+CSphIOStats CSphIOStats::operator - ( const CSphIOStats & tOp ) const
+{
+	CSphIOStats tTmp ( *this );
+	assert ( tTmp.m_iReadOps>=tOp.m_iReadOps && tTmp.m_iWriteOps>=tOp.m_iWriteOps );
+
+	tTmp.m_iReadBytes -= tOp.m_iReadBytes;
+	tTmp.m_iReadOps -= tOp.m_iReadOps;
+	tTmp.m_iReadTime -= tOp.m_iReadTime;
+	tTmp.m_iWriteBytes -= tOp.m_iWriteBytes;
+	tTmp.m_iWriteOps -= tOp.m_iWriteOps;
+	tTmp.m_iWriteTime -= tOp.m_iWriteTime;
+
+	assert ( tTmp.m_iReadBytes>=0 && tTmp.m_iReadTime>=0 && tTmp.m_iWriteBytes>=0 && tTmp.m_iWriteTime>=0 );
+
+	return tTmp;
+}
+
+CSphIOStats CSphIOStats::operator / ( int iOp ) const
+{
+	CSphIOStats tTmp ( *this );
+	tTmp.m_iReadBytes /= iOp;
+	tTmp.m_iReadOps /= iOp;
+	tTmp.m_iReadTime /= iOp;
+	tTmp.m_iWriteBytes /= iOp;
+	tTmp.m_iWriteOps /= iOp;
+	tTmp.m_iWriteTime /= iOp;
+
+	return tTmp;
+}
+
+CSphIOStats & CSphIOStats::operator += ( const CSphIOStats & tOp )
+{
+	*this = *this + tOp;
+	return *this;
+}
+
 void sphStartIOStats ()
 {
-	g_bIOStats = true;
+	g_bCollectIOStats = true;
 	memset ( &g_IOStats, 0, sizeof ( g_IOStats ) );
 }
 
+const CSphIOStats &	sphPeekIOStats ()
+{
+	return g_IOStats;
+}
 
 const CSphIOStats & sphStopIOStats ()
 {
-	g_bIOStats = false;
+	g_bCollectIOStats = false;
 	return g_IOStats;
 }
 
@@ -498,12 +561,12 @@ const CSphIOStats & sphStopIOStats ()
 static size_t sphRead ( int iFD, void * pBuf, size_t iCount )
 {
 	int64_t tmStart = 0;
-	if ( g_bIOStats )
+	if ( g_bCollectIOStats )
 		tmStart = sphMicroTimer();
 
 	size_t uRead = (size_t) ::read ( iFD, pBuf, iCount );
 
-	if ( g_bIOStats )
+	if ( g_bCollectIOStats )
 	{
 		g_IOStats.m_iReadTime += sphMicroTimer() - tmStart;
 		g_IOStats.m_iReadOps++;
@@ -1619,7 +1682,7 @@ bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char 
 
 		// write (and maybe time)
 		int64_t tmTimer = 0;
-		if ( g_bIOStats )
+		if ( g_bCollectIOStats )
 			tmTimer = sphMicroTimer();
 
 		int iToWrite = iChunkSize;
@@ -1628,7 +1691,7 @@ bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char 
 
 		int iWritten = ::write ( iFD, p, iToWrite );
 
-		if ( g_bIOStats )
+		if ( g_bCollectIOStats )
 		{
 			g_IOStats.m_iWriteTime += sphMicroTimer() - tmTimer;
 			g_IOStats.m_iWriteOps++;
@@ -5861,7 +5924,7 @@ int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
 		return 0;
 
 	int64_t tmStart = 0;
-	if ( g_bIOStats )
+	if ( g_bCollectIOStats )
 		tmStart = sphMicroTimer();
 
 	HANDLE hFile;
@@ -5885,7 +5948,7 @@ int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
 		return -1;
 	}
 
-	if ( g_bIOStats )
+	if ( g_bCollectIOStats )
 	{
 		g_IOStats.m_iReadTime += sphMicroTimer() - tmStart;
 		g_IOStats.m_iReadOps++;
@@ -5901,7 +5964,7 @@ int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
 // atomic seek+read for non-Windows systems with pread() call
 int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
 {
-	if ( !g_bIOStats )
+	if ( !g_bCollectIOStats )
 		return ::pread ( iFD, pBuf, iBytes, iOffset );
 
 	int64_t tmStart = sphMicroTimer();
@@ -15229,6 +15292,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	// start counting
 	int64_t tmQueryStart = sphMicroTimer();
+	CSphIOStats tStartStats = sphPeekIOStats();
 
 	///////////////////
 	// setup searching
@@ -15419,6 +15483,10 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	// query timer
 	pResult->m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
+
+	CSphIOStats tEndStats = sphPeekIOStats();
+	pResult->m_tIOStats += tEndStats - tStartStats;
+
 	return true;
 }
 
@@ -25826,6 +25894,7 @@ CSphQueryResultMeta::CSphQueryResultMeta ()
 , m_iMultiplier ( 1 )
 , m_iMatches ( 0 )
 , m_iTotalMatches ( 0 )
+, m_iAgentCpuTime ( 0 )
 {
 }
 
@@ -25883,6 +25952,9 @@ CSphQueryResultMeta & CSphQueryResultMeta::operator= ( const CSphQueryResultMeta
 	m_iMultiplier = tMeta.m_iMultiplier;
 	m_iMatches = tMeta.m_iMatches;
 	m_iTotalMatches = tMeta.m_iTotalMatches;
+	m_tIOStats = tMeta.m_tIOStats;
+	m_iAgentCpuTime = tMeta.m_iAgentCpuTime;
+	m_tAgentIOStats = tMeta.m_tAgentIOStats;
 
 	m_sError = tMeta.m_sError;
 	m_sWarning = tMeta.m_sWarning;

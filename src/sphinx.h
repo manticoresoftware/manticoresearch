@@ -259,10 +259,20 @@ struct CSphIOStats
 	int64_t		m_iWriteTime;
 	DWORD		m_iWriteOps;
 	int64_t		m_iWriteBytes;
+
+					CSphIOStats ();
+
+	CSphIOStats		operator + ( const CSphIOStats & tOp ) const;
+	CSphIOStats		operator - ( const CSphIOStats & tOp ) const;
+	CSphIOStats		operator / ( int iOp ) const;
+	CSphIOStats &	operator += ( const CSphIOStats & tOp );
 };
 
 /// clear stats, starts collecting
 void				sphStartIOStats ();
+
+/// take a peek at current stats
+const CSphIOStats &	sphPeekIOStats ();
 
 /// stops collecting stats, returns results
 const CSphIOStats &	sphStopIOStats ();
@@ -2357,6 +2367,10 @@ public:
 
 	int						m_iMatches;			///< total matches returned (upto MAX_MATCHES)
 	int64_t					m_iTotalMatches;	///< total matches found (unlimited)
+
+	CSphIOStats				m_tIOStats;			///< i/o stats for the query
+	int64_t					m_iAgentCpuTime;	///< agent cpu time (for distributed searches)
+	CSphIOStats				m_tAgentIOStats;	///< agent IO stats (for distributed searches)
 
 	CSphString				m_sError;			///< error message
 	CSphString				m_sWarning;			///< warning message

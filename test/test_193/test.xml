@@ -26,8 +26,8 @@ index test
 {
 	source				= test
 	path				= <data_path/>/test
-	stopwords			= test_193/stopwords.txt
-	wordforms			= test_193/wordforms.txt	
+	stopwords			= <this_test/>/stopwords.txt
+	wordforms			= <this_test/>/wordforms.txt	
 }
 </config>
 

@@ -67,9 +67,13 @@ struct CSphMemHeader
 {
 	DWORD			m_uMagic;
 	const char *	m_sFile;
+#if SPH_DEBUG_BACKTRACES
+	const char *	m_sBacktrace;
+#endif
 	int				m_iLine;
 	size_t			m_iSize;
 	int				m_iAllocId;
+	BYTE *			m_pPointer;
 	CSphMemHeader *	m_pNext;
 	CSphMemHeader *	m_pPrev;
 };
@@ -96,9 +100,20 @@ void * sphDebugNew ( size_t iSize, const char * sFile, int iLine, bool bArray )
 	CSphMemHeader * pHeader = (CSphMemHeader*) pBlock;
 	pHeader->m_uMagic = bArray ? MEMORY_MAGIC_ARRAY : MEMORY_MAGIC_PLAIN;
 	pHeader->m_sFile = sFile;
+#if SPH_DEBUG_BACKTRACES
+	const char * sTrace = DoBacktrace ( 0, 3 );
+	if ( sTrace )
+	{
+		char * pTrace = (char*) ::malloc ( strlen(sTrace) + 1 );
+		strcpy ( pTrace, sTrace ); //NOLINT
+		pHeader->m_sBacktrace = pTrace;
+	} else
+		pHeader->m_sBacktrace = NULL;
+#endif
 	pHeader->m_iLine = iLine;
 	pHeader->m_iSize = iSize;
 	pHeader->m_iAllocId = ++g_iAllocsId;
+	pHeader->m_pPointer = pBlock;
 	pHeader->m_pNext = g_pAllocs;
 	pHeader->m_pPrev = NULL;
 	if ( g_pAllocs )
@@ -180,6 +195,11 @@ void sphDebugDelete ( void * pPtr, bool bArray )
 	g_iCurAllocs--;
 	g_iCurBytes -= pHeader->m_iSize;
 
+#if SPH_DEBUG_BACKTRACES
+	if ( pHeader->m_sBacktrace )
+		::free ( (void*) pHeader->m_sBacktrace );
+#endif
+
 #if SPH_DEBUG_DOFREE
 	::free ( pHeader );
 #endif
@@ -219,8 +239,12 @@ void sphAllocsDump ( int iFile, int iSinceID )
 		pHeader && pHeader->m_iAllocId > iSinceID;
 		pHeader = pHeader->m_pNext )
 	{
-		sphSafeInfo ( iFile, "alloc %d at %s(%d): %d bytes\n", pHeader->m_iAllocId,
-			pHeader->m_sFile, pHeader->m_iLine, (int)pHeader->m_iSize );
+		sphSafeInfo ( iFile, "alloc %d at %s(%d): 0x%0p %d bytes\n", pHeader->m_iAllocId,
+			pHeader->m_sFile, pHeader->m_iLine, pHeader->m_pPointer, (int)pHeader->m_iSize );
+
+#if SPH_DEBUG_BACKTRACES
+		sphSafeInfo ( iFile, "Backtrace:\n%s\n", pHeader->m_sBacktrace );
+#endif
 
 		iTotalBytes += pHeader->m_iSize;
 		iTotal++;

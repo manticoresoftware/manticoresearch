@@ -1456,6 +1456,8 @@ static int sphVSprintf ( char * pOutput, const char * sFmt, va_list ap )
 		case 's': // string
 			{
 				const char * pValue = va_arg ( ap, const char * );
+				if ( !pValue )
+					pValue = "(null)";
 				int iValue = strlen ( pValue );
 
 				if ( iWidth && bHeadingSpace )
@@ -1535,11 +1537,40 @@ void sphSafeInfo ( int iFD, const char * sFmt, ... )
 	sphWrite ( iFD, g_sSafeInfoBuf, iLen );
 }
 
-
 #if !USE_WINDOWS
 
 #define SPH_BACKTRACE_ADDR_COUNT 128
 static void * g_pBacktraceAddresses [SPH_BACKTRACE_ADDR_COUNT];
+
+#if HAVE_BACKTRACE & HAVE_BACKTRACE_SYMBOLS
+static char g_pBacktrace[4096];
+const char * DoBacktrace ( int iDepth, int iSkip )
+{
+	if ( !iDepth || iDepth > SPH_BACKTRACE_ADDR_COUNT )
+		iDepth = SPH_BACKTRACE_ADDR_COUNT;
+	iDepth = backtrace ( g_pBacktraceAddresses, iDepth );
+	char ** ppStrings = backtrace_symbols ( g_pBacktraceAddresses, iDepth );
+	if ( !ppStrings )
+		return NULL;
+	char * pDst = g_pBacktrace;
+	for ( int i=iSkip; i<iDepth; ++i )
+	{
+		const char * pStr = ppStrings[i];
+		do
+			*pDst++ = *pStr++;
+		while (*pStr);
+		*pDst++='\n';
+	}
+	*pDst = '\0';
+	free ( ppStrings );
+	return g_pBacktrace; ///< sorry, no backtraces on Windows...
+}
+#else
+const char * DoBacktrace ( int iDepth, int iSkip )
+{
+	return NULL; ///< sorry, no backtraces on Windows...
+}
+#endif
 
 void sphBacktrace ( int iFD, bool bSafe )
 {
@@ -1651,6 +1682,11 @@ void sphBacktrace ( int iFD, bool bSafe )
 }
 
 #else // USE_WINDOWS
+
+const char * DoBacktrace ( int, int )
+{
+	return NULL; ///< sorry, no backtraces on Windows...
+}
 
 void sphBacktrace ( EXCEPTION_POINTERS * pExc, const char * sFile )
 {

@@ -157,12 +157,12 @@ enum ESphLogLevel
 
 typedef void ( *SphLogger_fn )( ESphLogLevel, const char *, va_list );
 
-void sphWarning ( const char * sFmt, ... ) __attribute__((format(printf,1,2)));
-void sphInfo ( const char * sFmt, ... ) __attribute__((format(printf,1,2)));
-void sphLogFatal ( const char * sFmt, ... ) __attribute__((format(printf,1,2)));
-void sphLogDebug ( const char * sFmt, ... ) __attribute__((format(printf,1,2)));
-void sphLogDebugv ( const char * sFmt, ... ) __attribute__((format(printf,1,2)));
-void sphLogDebugvv ( const char * sFmt, ... ) __attribute__((format(printf,1,2)));
+void sphWarning ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
+void sphInfo ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
+void sphLogFatal ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
+void sphLogDebug ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
+void sphLogDebugv ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
+void sphLogDebugvv ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
 void sphSetLogger ( SphLogger_fn fnLog );
 
 //////////////////////////////////////////////////////////////////////////
@@ -200,6 +200,9 @@ void sphBacktrace ( int iFD, bool bSafe=false );
 /// Windows minidump gets saved to a file
 void sphBacktrace ( EXCEPTION_POINTERS * pExc, const char * sFile );
 #endif
+
+/// plain backtrace - returns static buffer with the text of the call stack
+const char * DoBacktrace ( int iDepth=0, int iSkip=0 );
 
 #endif // _sphinxutils_
 

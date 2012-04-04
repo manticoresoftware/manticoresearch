@@ -119,12 +119,14 @@ STATIC_SIZE_ASSERT ( SphDocID_t, 4 );
 
 /// row entry (storage only, does not necessarily map 1:1 to attributes)
 typedef DWORD			CSphRowitem;
+typedef const BYTE *	CSphRowitemPtr;
 
 /// widest integer type that can be be stored as an attribute (ideally, fully decoupled from rowitem size!)
 typedef int64_t			SphAttr_t;
 
 const CSphRowitem		ROWITEM_MAX		= UINT_MAX;
 const int				ROWITEM_BITS	= 8*sizeof(CSphRowitem);
+const int				ROWITEMPTR_BITS	= 8*sizeof(CSphRowitemPtr);
 const int				ROWITEM_SHIFT	= 5;
 
 STATIC_ASSERT ( ( 1 << ROWITEM_SHIFT )==ROWITEM_BITS, INVALID_ROWITEM_SHIFT );
@@ -885,6 +887,12 @@ struct CSphAttrLocator
 		, m_bDynamic ( false )
 	{}
 
+	explicit CSphAttrLocator ( int iBitOffset, int iBitCount=ROWITEM_BITS )
+		: m_iBitOffset ( iBitOffset )
+		, m_iBitCount ( iBitCount )
+		, m_bDynamic ( true )
+	{}
+
 	inline bool IsBitfield () const
 	{
 		return ( m_iBitCount<ROWITEM_BITS || ( m_iBitOffset%ROWITEM_BITS )!=0 );
@@ -1001,6 +1009,7 @@ inline int sphUnpackStr ( const BYTE * pRow, const BYTE ** ppStr )
 /// search query match (document info plus weight/tag)
 class CSphMatch
 {
+	friend struct CSphSchema;
 public:
 	SphDocID_t				m_iDocID;		///< document ID
 	const CSphRowitem *		m_pStatic;		///< static part (stored in and owned by the index)
@@ -1056,7 +1065,7 @@ public:
 		}
 	}
 
-public:
+private:
 	/// assignment
 	void Clone ( const CSphMatch & rhs, int iDynamic )
 	{
@@ -1139,7 +1148,6 @@ private:
 		return *this;
 	}
 };
-
 
 /// specialized swapper
 inline void Swap ( CSphMatch & a, CSphMatch & b )
@@ -1329,13 +1337,26 @@ public:
 	/// WARNING, THIS IS A HACK THAT WILL LIKELY BREAK THE SCHEMA, DO NOT USE THIS UNLESS ABSOLUTELY SURE!
 	void					RemoveAttr ( int iIndex );
 
+public:
+	// also let the schema to clone the matches when necessary
+	void CopyStrings ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound=-1 ) const;
+	
+	// simple copy - clone the fields, copy the dynamic part.
+	void CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const;
+
+	// full copy - for pure dynamic matches.
+	void CloneWholeMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const;
+
+	// free the linked strings and/or just initialize the pointers with NULL
+	void FreeStringPtrs ( CSphMatch * pMatch, int iUpBound=-1 ) const;
+
 protected:
 	CSphVector<CSphColumnInfo>		m_dAttrs;			///< all my attributes
 	CSphVector<int>					m_dStaticUsed;		///< static row part map (amount of used bits in each rowitem)
 	CSphVector<int>					m_dDynamicUsed;		///< dynamic row part map
+	CSphVector<int>					m_dPtrAttrs;		///< the pointers which has to be copied and deleted
 	int								m_iStaticSize;		///< static row size (can be different from m_dStaticUsed.GetLength() because of gaps)
 };
-
 
 /// HTML stripper
 class CSphHTMLStripper
@@ -2282,6 +2303,7 @@ public:
 	CSphString		m_sSortBy;		///< attribute to sort by
 	int				m_iMaxMatches;	///< max matches to retrieve, default is 1000. more matches use more memory and CPU time to hold and sort them
 	bool			m_bSortKbuffer;	///< whether to use PQ or K-buffer sorting algorithm
+	bool			m_bZSlist;		///< whether the ranker has to fetch the zonespanlist with this query
 
 	CSphVector<CSphFilterSettings>	m_dFilters;	///< filters
 
@@ -2840,7 +2862,8 @@ void				sphSetQuiet ( bool bQuiet );
 /// may return NULL on error; in this case, error message is placed in sError
 /// if the pUpdate is given, creates the updater's queue and perform the index update
 /// instead of searching
-ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError, bool bComputeItems=true, CSphSchema * pExtra=NULL, CSphAttrUpdateEx * pUpdate=NULL );
+ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError, 
+						bool bComputeItems=true, CSphSchema * pExtra=NULL, CSphAttrUpdateEx * pUpdate=NULL, bool * pZonespanlist=NULL );
 
 /// convert queue to sorted array, and add its entries to result's matches array
 void				sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag );

@@ -1351,7 +1351,7 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 	if ( !tSrc.Connect ( m_sLastError ) )
 		return false;
 
-	tSrc.m_tDocInfo.Clone ( tDoc, m_tSchema.GetRowSize() );
+	m_tSchema.CloneWholeMatch ( &tSrc.m_tDocInfo, tDoc );
 
 	if ( !tSrc.IterateStart ( sError ) || !tSrc.IterateDocument ( sError ) )
 		return false;
@@ -4504,6 +4504,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		m_tRwlock.Unlock ();
 		return false;
 	}
+
+	tCtx.SetupExtraData ( pRanker.Ptr() );
 
 	// check terms inconsistency disk chunks vs rt
 	if ( pResult->m_hWordStats.GetLength() && hDiskStats.GetLength() )

@@ -121,12 +121,6 @@ typedef CSphOrderedHash < ZoneInfo_t, ZoneKey_t, ZoneHash_fn, 4096 > ZoneHash_c;
 /// zonespan prototype
 typedef CSphOrderedHash < int, ZoneKey_t, ZoneHash_fn, 8192*1024 > ZoneSpans_c;
 
-/// extra possibilities query
-enum ExtraNodeData_e
-{
-	NODE_DATA_ZONESPANS = 1
-};
-
 
 /// generic match streamer
 class ExtNode_i
@@ -164,12 +158,12 @@ public:
 	// return specific extra data may be associated with the node
 	// intended to be used a bit similar to QueryInterface() in COM technology
 	// but simpler due to enum instead of 128-bit GUID, and no ref. counting
-	inline bool GetExtraData ( ExtraNodeData_e eNode, void** ppData )
+	inline bool GetExtraData ( ExtraData_e eNode, void** ppData )
 	{
 		return GetExtraDataImpl ( eNode, ppData );
 	}
 private:
-	virtual bool GetExtraDataImpl ( ExtraNodeData_e, void** )
+	virtual bool GetExtraDataImpl ( ExtraData_e, void** )
 	{
 		return false;
 	}
@@ -246,7 +240,7 @@ public:
 public:
 	~ZoneSpansHolder()
 	{
-		SafeDelete ( m_pZoneVec );
+		SafeDeleteArray ( m_pZoneVec );
 	}
 
 	inline void ResetZones ()
@@ -258,7 +252,7 @@ public:
 
 	inline int GetRowByteSize() const
 	{
-		return m_iNumZones*sizeof(int);
+		return m_iNumZones*sizeof(int); //NOLINT
 	}
 
 	inline int * GetZVec ( int iPos ) const
@@ -535,13 +529,7 @@ public:
 	virtual bool				GotHitless () { return false; }
 
 private:
-	virtual bool				GetExtraDataImpl ( ExtraNodeData_e eData, void ** ppResult );
-
-protected:
-	inline bool					IsAcceptableHit ( const ExtHit_t * pHit ) const
-	{
-		return t_Acceptor::IsAcceptableHit ( pHit );
-	}
+	virtual bool				GetExtraDataImpl ( ExtraData_e eData, void ** ppResult );
 };
 
 /// single keyword streamer, with term position filtering
@@ -558,10 +546,10 @@ public:
 
 
 template<>
-bool ExtConditional<TERM_POS_ZONESPAN>::GetExtraDataImpl ( ExtraNodeData_e eData, void ** ppResult )
+bool ExtConditional<TERM_POS_ZONESPAN>::GetExtraDataImpl ( ExtraData_e eData, void ** ppResult )
 {
 	assert ( ppResult );
-	if ( eData==NODE_DATA_ZONESPANS )
+	if ( eData==EXTRA_DATA_ZONESPANS )
 	{
 		*ppResult = &m_dFinalZones;
 		return true;
@@ -570,7 +558,7 @@ bool ExtConditional<TERM_POS_ZONESPAN>::GetExtraDataImpl ( ExtraNodeData_e eData
 }
 
 template<TermPosFilter_e T, class ExtBase>
-bool ExtConditional<T,ExtBase>::GetExtraDataImpl ( ExtraNodeData_e, void ** )
+bool ExtConditional<T,ExtBase>::GetExtraDataImpl ( ExtraData_e, void ** )
 {
 	return false;
 }
@@ -636,9 +624,9 @@ public:
 		m_pSpans = pSpans;
 		m_pLastBaseHit[0] = NULL;
 		m_pLastBaseHit[1] = NULL;
-		if ( pFirst && !pFirst->GetExtraData ( NODE_DATA_ZONESPANS, (void**) &m_dChildzones[0] ) )
+		if ( pFirst && !pFirst->GetExtraData ( EXTRA_DATA_ZONESPANS, (void**) &m_dChildzones[0] ) )
 			assert ( false );
-		if ( pSecond && !pSecond->GetExtraData ( NODE_DATA_ZONESPANS, (void**) &m_dChildzones[1] ) )
+		if ( pSecond && !pSecond->GetExtraData ( EXTRA_DATA_ZONESPANS, (void**) &m_dChildzones[1] ) )
 			assert ( false );
 	}
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
@@ -662,10 +650,10 @@ public:
 		ExtAndZonespanned::Init ( pFirst, pSecond, tSetup, &m_dMyZones );
 	}
 private:
-	bool GetExtraDataImpl ( ExtraNodeData_e eData, void ** ppResult )
+	bool GetExtraDataImpl ( ExtraData_e eData, void ** ppResult )
 	{
 		assert ( ppResult );
-		if ( eData==NODE_DATA_ZONESPANS )
+		if ( eData==EXTRA_DATA_ZONESPANS )
 		{
 			*ppResult = &m_dFinalZones;
 			return true;
@@ -1095,6 +1083,7 @@ protected:
 	CSphVector<SphDocID_t>		m_dZoneMax;				///< last docid we (tried) to cache
 	CSphVector<SphDocID_t>		m_dZoneMin;				///< first docid we (tried) to cache
 	ZoneHash_c					m_hZoneInfo;
+	bool						m_bZSlist;
 };
 
 
@@ -1135,15 +1124,25 @@ class ExtRanker_T : public ExtRanker_c
 {
 protected:
 	STATE			m_tState;
+	ZoneSpansHolder *	m_pZones;
+	const ExtHit_t *	m_pHitBase;
+	CSphVector<int>		m_dZonespans; // zonespanlists for my matches
 
 public:
-					ExtRanker_T<STATE> ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup ) : ExtRanker_c ( tXQ, tSetup ) {}
+					ExtRanker_T<STATE> ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup );
 	virtual int		GetMatches ();
 
 	virtual bool InitState ( const CSphQueryContext & tCtx, CSphString & sError )
 	{
 		return m_tState.Init ( tCtx.m_iWeights, &tCtx.m_dWeights[0], this, sError );
-}
+	}
+private:
+	virtual bool GetExtraDataImpl ( void ** ppResult )
+	{
+		assert ( ppResult );
+		*ppResult = &m_dZonespans;
+		return true;
+	}
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1778,8 +1777,8 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 					pCur = new ExtAndZonespan_c ( pCur, dTerms[i], tSetup, pNode->m_dChildren[0] );
 
 // For zonespan we have also Extra data which is not (yet?) covered by common-node optimization.
-//				if ( pNode->GetCount() )
-//					return tSetup.m_pNodeCache->CreateProxy ( pCur, pNode, tSetup );
+// if ( pNode->GetCount() )
+// return tSetup.m_pNodeCache->CreateProxy ( pCur, pNode, tSetup );
 
 				return pCur;
 			} else
@@ -2228,33 +2227,17 @@ inline bool TermAcceptor_c<TERM_POS_ZONESPAN>::IsAcceptableHit ( const ExtHit_t 
 	assert ( m_pZoneChecker );
 	int * pZones = ( m_bFinal ? m_dFinalZones.GetZVec ( m_iMyHit ) : m_dMyZones.GetZVec ( m_iMyHit ) );
 
-//	assert ( m_pZones );
-
-	if ( m_uLastZonedId!=pHit->m_uDocid )
-		m_iCheckFrom = 0;
-	m_uLastZonedId = pHit->m_uDocid;
-
+	bool bRes = false;
 	// only check zones that actually match this document
-	for ( int i=m_iCheckFrom; i<m_dZones.GetLength(); i++ )
-	{
-		SphZoneHit_e eState = m_pZoneChecker->IsInZone ( m_dZones[i], pHit, pZones + i );
-		switch ( eState )
-		{
-		case SPH_ZONE_FOUND:
-			return true;
-		case SPH_ZONE_NO_DOCUMENT:
-			Swap ( m_dZones[i], m_dZones[m_iCheckFrom] );
-			m_iCheckFrom++;
-		case SPH_ZONE_NO_SPAN:
-			break;
-		}
-	}
-	return false;
+	ARRAY_FOREACH ( i, m_dZones )
+		bRes |= ( m_pZoneChecker->IsInZone ( m_dZones[i], pHit, pZones + i )==SPH_ZONE_FOUND );
+	return bRes;
 }
 
 template < TermPosFilter_e T, class ExtBase >
 const ExtDoc_t * ExtConditional<T,ExtBase>::GetDocsChunk ( SphDocID_t * pMaxID )
 {
+	SphDocID_t uSkipID = m_uLastID;
 	// fetch more docs if needed
 	if ( !m_pRawDocs )
 	{
@@ -2264,7 +2247,7 @@ const ExtDoc_t * ExtConditional<T,ExtBase>::GetDocsChunk ( SphDocID_t * pMaxID )
 
 		m_pRawDoc = m_pRawDocs;
 		m_pRawHit = NULL;
-		m_uLastID = 0;
+		uSkipID = 0;
 	}
 
 	// filter the hits, and build the documents list
@@ -2274,7 +2257,6 @@ const ExtDoc_t * ExtConditional<T,ExtBase>::GetDocsChunk ( SphDocID_t * pMaxID )
 
 	const ExtDoc_t * pDoc = m_pRawDoc; // just a shortcut
 	const ExtHit_t * pHit = m_pRawHit;
-	const SphDocID_t uSkipID = m_uLastID;
 	SphDocID_t uLastID = m_uLastID = 0;
 
 	CSphRowitem * pDocinfo = ExtBase::m_pDocinfo;
@@ -2303,7 +2285,7 @@ const ExtDoc_t * ExtConditional<T,ExtBase>::GetDocsChunk ( SphDocID_t * pMaxID )
 		while ( pHit->m_uDocid < pDoc->m_uDocid || ( uSkipID && pHit->m_uDocid<=uSkipID ) ) // skip leftovers
 			pHit++;
 
-		while ( ( pHit->m_uDocid!=DOCID_MAX || ( uSkipID && pHit->m_uDocid<=uSkipID ) ) && !IsAcceptableHit ( pHit ) ) // skip unneeded hits
+		while ( ( pHit->m_uDocid!=DOCID_MAX || ( uSkipID && pHit->m_uDocid<=uSkipID ) ) && !t_Acceptor::IsAcceptableHit ( pHit ) ) // skip unneeded hits
 			pHit++;
 
 		if ( pHit->m_uDocid==DOCID_MAX || ( uSkipID && pHit->m_uDocid<=uSkipID ) ) // check for eof
@@ -2325,7 +2307,7 @@ const ExtDoc_t * ExtConditional<T,ExtBase>::GetDocsChunk ( SphDocID_t * pMaxID )
 		// copy acceptable hits for this document
 		while ( iMyHit<ExtBase::MAX_HITS-1 && pHit->m_uDocid==uLastID )
 		{
-			if ( IsAcceptableHit ( pHit ) )
+			if ( t_Acceptor::IsAcceptableHit ( pHit ) )
 			{
 				m_dMyHits[iMyHit++] = *pHit;
 				TermAcceptor_c<T>::SetMyHit ( iMyHit );
@@ -2439,7 +2421,7 @@ const ExtHit_t * ExtConditional<T,ExtBase>::GetHitsChunk ( const ExtDoc_t * pDoc
 		TermAcceptor_c<T>::SetMyHit ( iFilteredHits, true );
 		while ( m_pRawHit->m_uDocid==m_uLastID && iFilteredHits<ExtBase::MAX_HITS-1 )
 		{
-			if ( IsAcceptableHit ( m_pRawHit ) )
+			if ( t_Acceptor::IsAcceptableHit ( m_pRawHit ) )
 			{
 				m_dFilteredHits[iFilteredHits++] = *m_pRawHit;
 				TermAcceptor_c<T>::SetMyHit ( iFilteredHits, true );
@@ -2696,7 +2678,7 @@ bool ExtAndZonespanned::IsSameZonespan ( int iLeft, int iRight ) const
 	int * pLeft = m_dChildzones[0]->GetZVec(iLeft);
 	int * pRight = m_dChildzones[1]->GetZVec(iRight);
 	for ( int i = 0; i<m_pSpans->m_iNumZones; ++i )
-		if ( pLeft[i]==pRight[i] )
+		if ( pLeft[i]>=0 && pLeft[i]==pRight[i] )
 			return true;
 	return false;
 }
@@ -2758,11 +2740,6 @@ const ExtHit_t * ExtAndZonespanned::GetHitsChunk ( const ExtDoc_t * pDocs, SphDo
 				{
 					while ( pCur0->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
 					{
-//						m_dHits[iHit] = *pCur0++;
-//						if ( uNodePos0!=0 )
-//							m_dHits[iHit++].m_uNodepos = uNodePos0;
-//						else
-//							iHit++;
 						pCur0++;
 					}
 				}
@@ -2770,11 +2747,6 @@ const ExtHit_t * ExtAndZonespanned::GetHitsChunk ( const ExtDoc_t * pDocs, SphDo
 				{
 					while ( pCur1->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
 					{
-//						m_dHits[iHit] = *pCur1++;
-//						if ( uNodePos1!=0 )
-//							m_dHits[iHit++].m_uNodepos = uNodePos1;
-//						else
-//							iHit++;
 						pCur1++;
 					}
 				}
@@ -4840,6 +4812,7 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup 
 	m_dZoneMin.Resize ( m_dZones.GetLength() );
 	m_dZoneMax.Fill ( 0 );
 	m_dZoneMin.Fill	( DOCID_MAX );
+	m_bZSlist = tXQ.m_bNeedSZlist;
 
 	ARRAY_FOREACH ( i, m_dZones )
 	{
@@ -4976,9 +4949,11 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLa
 		// remove end markers that might mess up ordering
 		Hitpos_t uPos = HITMAN::GetLCS ( pHit->m_uHitpos );
 		int iSpan = FindSpan ( pZone->m_dStarts, uPos );
+		if ( iSpan<0 || uPos>pZone->m_dEnds[iSpan] )
+			return SPH_ZONE_NO_SPAN;
 		if ( pLastSpan )
 			*pLastSpan = iSpan;
-		return ( iSpan>=0 && uPos<=pZone->m_dEnds[iSpan] ) ? SPH_ZONE_FOUND : SPH_ZONE_NO_SPAN;
+		return SPH_ZONE_FOUND;
 	}
 
 	// is there any zone info for this document at all?
@@ -5113,26 +5088,26 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLa
 
 			assert ( pEndHits->m_uDocid==uCur );
 
-			// load all the pairs of start and end hits for it
-			// do it by with the FSM:
-			//
-			// state 'begin':
-			//		start marker -> set state 'inspan', startspan=pos++
-			//		end marker -> pos++
-			//		end of doc -> set state 'finish'
-			//
-			// state 'inspan':
-			//		start marker -> startspan = pos++
-			//		end marker -> set state 'outspan', endspan=pos++
-			//		end of doc -> set state 'finish'
-			//
-			// state 'outspan':
-			//		start marker -> set state 'inspan', commit span, startspan=pos++
-			//		end marker -> endspan = pos++
-			//		end of doc -> set state 'finish', commit span
-			//
-			// state 'finish':
-			//		we are done.
+			/* load all the pairs of start and end hits for it
+			 do it by with the FSM:
+			
+			 state 'begin':
+					start marker -> set state 'inspan', startspan=pos++
+					end marker -> pos++
+					end of doc -> set state 'finish'
+			
+			 state 'inspan':
+					start marker -> startspan = pos++
+					end marker -> set state 'outspan', endspan=pos++
+					end of doc -> set state 'finish'
+			
+			 state 'outspan':
+					start marker -> set state 'inspan', commit span, startspan=pos++
+					end marker -> endspan = pos++
+					end of doc -> set state 'finish', commit span
+			
+			 state 'finish':
+					we are done. */
 
 			int bEofDoc = 0;
 
@@ -5216,9 +5191,11 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLa
 		// remove end markers that might mess up ordering
 		Hitpos_t uPos = HITMAN::GetLCS ( pHit->m_uHitpos );
 		int iSpan = FindSpan ( pZone->m_dStarts, uPos );
+		if ( iSpan<0 || uPos>pZone->m_dEnds[iSpan] )
+			return SPH_ZONE_NO_SPAN;
 		if ( pLastSpan )
 			*pLastSpan = iSpan;
-		return ( iSpan>=0 && uPos<=pZone->m_dEnds[iSpan] ) ? SPH_ZONE_FOUND : SPH_ZONE_NO_SPAN;
+		return SPH_ZONE_FOUND;
 	}
 
 	return SPH_ZONE_NO_DOCUMENT;
@@ -5297,6 +5274,19 @@ int ExtRanker_None_c::GetMatches ()
 //////////////////////////////////////////////////////////////////////////
 
 template < typename STATE >
+ExtRanker_T<STATE>::ExtRanker_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup ) : ExtRanker_c ( tXQ, tSetup )
+{
+	if ( m_bZSlist && !m_pRoot->GetExtraData ( EXTRA_DATA_ZONESPANS, (void**) & m_pZones ))
+		m_bZSlist = false;
+	if ( m_bZSlist )
+	{
+		m_dZonespans.Reserve ( ExtNode_i::MAX_DOCS );
+	}
+	m_dZonespans.Resize ( 1 );
+	m_pHitBase = NULL;
+}
+
+template < typename STATE >
 int ExtRanker_T<STATE>::GetMatches ()
 {
 	if ( !m_pRoot )
@@ -5304,7 +5294,19 @@ int ExtRanker_T<STATE>::GetMatches ()
 
 	int iMatches = 0;
 	const ExtHit_t * pHlist = m_pHitlist;
+	const ExtHit_t * pHitBase = m_pHitBase;
 	const ExtDoc_t * pDocs = m_pDoclist;
+	m_dZonespans.Resize(1);
+	int		iLastZoneData = 0;
+
+	bool bZSlist = m_bZSlist;
+	CSphVector<int> dSpans;
+	if ( bZSlist )
+	{
+		dSpans.Resize ( m_dZones.GetLength() );
+		ARRAY_FOREACH ( i, dSpans )
+			dSpans[i] = -1;
+	}
 
 	// warmup if necessary
 	if ( !pHlist )
@@ -5316,13 +5318,30 @@ int ExtRanker_T<STATE>::GetMatches ()
 		if ( !pHlist ) return iMatches;
 	}
 
+	if ( !pHitBase )
+		pHitBase = pHlist;
+
 	// main matching loop
 	const ExtDoc_t * pDoc = pDocs;
 	for ( SphDocID_t uCurDocid=0; iMatches<ExtNode_i::MAX_DOCS; )
 	{
 		// keep ranking
 		while ( pHlist->m_uDocid==uCurDocid )
-			m_tState.Update ( pHlist++ );
+		{
+			m_tState.Update ( pHlist );
+			if ( bZSlist )
+			{
+				int * pZones = m_pZones->GetZVec ( pHlist-pHitBase );
+				ARRAY_FOREACH ( i, m_dZones )
+					if ( pZones[i]>=0 && dSpans[i]!=pZones[i] )
+					{
+						m_dZonespans.Add ( i );
+						m_dZonespans.Add ( pZones[i] );
+						dSpans[i] = pZones[i];
+					}
+			}
+			++pHlist;
+		}
 
 		// if hits block is over, get next block, but do *not* flush current doc
 		if ( pHlist->m_uDocid==DOCID_MAX )
@@ -5339,6 +5358,15 @@ int ExtRanker_T<STATE>::GetMatches ()
 			assert ( uCurDocid==pDoc->m_uDocid );
 			Swap ( m_dMatches[iMatches], m_dMyMatches[pDoc-m_dMyDocs] );
 			m_dMatches[iMatches].m_iWeight = m_tState.Finalize ( m_dMatches[iMatches] );
+			if ( bZSlist )
+			{
+				m_dZonespans[iLastZoneData] = m_dZonespans.GetLength()-iLastZoneData-1;
+				m_dMatches[iMatches].m_iTag = iLastZoneData;
+				iLastZoneData = m_dZonespans.GetLength();
+				m_dZonespans.Add(0);
+				ARRAY_FOREACH ( i, dSpans )
+					dSpans[i] = -1;
+			}
 			iMatches++;
 		}
 
@@ -5368,6 +5396,8 @@ int ExtRanker_T<STATE>::GetMatches ()
 
 	m_pDoclist = pDocs;
 	m_pHitlist = pHlist;
+	if ( !m_pHitBase )
+		m_pHitBase = pHitBase;
 	return iMatches;
 }
 

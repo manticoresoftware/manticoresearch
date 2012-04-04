@@ -136,9 +136,15 @@ public:
 };
 
 //////////////////////////////////////////////////////////////////////////
+/// extra possibilities query
+enum ExtraData_e
+{
+	EXTRA_DATA_ZONESPANS = 1,
+	EXTRA_DATA_ZONESPANLIST = 2
+};
 
 /// generic ranker interface
-class ISphRanker
+class ISphRanker : public ISphExtra
 {
 public:
 	virtual						~ISphRanker () {}

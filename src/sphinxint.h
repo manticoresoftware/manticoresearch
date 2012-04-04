@@ -280,12 +280,17 @@ public:
 
 	void						BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema, int iIndexWeight );
 	bool						SetupCalc ( CSphQueryResult * pResult, const CSphSchema & tInSchema, const CSphSchema & tSchema, const DWORD * pMvaPool );
+	void						SetupExtraData ( ISphExtra * pData );
 	bool						CreateFilters ( bool bFullscan, const CSphVector<CSphFilterSettings> * pdFilters, const CSphSchema & tSchema, const DWORD * pMvaPool, CSphString & sError );
 	bool						SetupOverrides ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema );
 
 	void						CalcFilter ( CSphMatch & tMatch ) const;
 	void						CalcSort ( CSphMatch & tMatch ) const;
 	void						CalcFinal ( CSphMatch & tMatch ) const;
+
+	void						FreeStrFilter ( CSphMatch & tMatch ) const;
+	void						FreeStrSort ( CSphMatch & tMatch ) const;
+	void						FreeStrFinal ( CSphMatch & tMatch ) const;
 
 	// rt index bind pools at segment searching, not at time it setups context
 	void						SetStringPool ( const BYTE * pStrings );
@@ -1035,6 +1040,7 @@ inline const char * sphTypeName ( ESphAttr eType )
 		case SPH_ATTR_BIGINT:		return "bigint";
 		case SPH_ATTR_STRING:		return "string";
 		case SPH_ATTR_WORDCOUNT:	return "wordcount";
+		case SPH_ATTR_STRINGPTR:	return "stringptr";
 		case SPH_ATTR_UINT32SET:	return "mva";
 		case SPH_ATTR_UINT64SET:	return "mva64";
 		default:					return "unknown";
@@ -1052,7 +1058,8 @@ inline const char * sphTypeDirective ( ESphAttr eType )
 		case SPH_ATTR_BOOL:			return "sql_attr_bool";
 		case SPH_ATTR_FLOAT:		return "sql_attr_float";
 		case SPH_ATTR_BIGINT:		return "sql_attr_bigint";
-		case SPH_ATTR_STRING:		return "sql_attr_string";
+		case SPH_ATTR_STRING:
+		case SPH_ATTR_STRINGPTR:	return "sql_attr_string";
 		case SPH_ATTR_WORDCOUNT:	return "sql_attr_wordcount";
 		case SPH_ATTR_UINT32SET:	return "sql_attr_multi";
 		case SPH_ATTR_UINT64SET:	return "sql_attr_multi bigint";

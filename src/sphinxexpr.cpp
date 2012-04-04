@@ -259,6 +259,46 @@ struct Expr_GetStrConst_c : public ISphExpr
 	virtual int64_t Int64Eval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
 };
 
+struct Expr_GetZonespanlist_c : public ISphExpr
+{
+	CSphString m_sVal;
+	int m_iLen;
+	CSphVector<int> * m_pData;
+
+	explicit Expr_GetZonespanlist_c ()
+		: m_iLen ( 0 )
+		, m_pData ( NULL )
+	{}
+
+	virtual int StringEval ( const CSphMatch &tMatch, const BYTE ** ppStr ) const
+	{
+		assert ( ppStr );
+		if ( !m_pData )
+		{
+			*ppStr = NULL;
+			return 0;
+		}
+		CSphString sValue = "";
+		const int* pValues = &(*m_pData)[tMatch.m_iTag];
+		int iSize = *pValues++;
+		for ( int i=0; i<(iSize/2); ++i )
+		{
+			sValue.SetSprintf ( "%s %d:%d", sValue.cstr(), pValues[0]+1, pValues[1]+1 );
+			pValues+=2;
+		}
+		*ppStr = (const BYTE *) sValue.Leak();
+		return sValue.Length();
+	}
+
+	virtual float Eval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
+	virtual int IntEval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
+	virtual int64_t Int64Eval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
+	virtual void SetupExtraData ( ISphExtra * pData )
+	{
+		pData->GetExtraData ( (void**)&m_pData );
+	}
+};
+
 
 struct Expr_GetId_c : public ISphExpr
 {
@@ -572,7 +612,7 @@ DECLARE_TIMESTAMP ( Expr_YearMonthDay_c,	(s.tm_year+1900)*10000+(s.tm_mon+1)*100
 /// known functions
 enum Func_e
 {
-	FUNC_NOW,
+	FUNC_NOW=0,
 
 	FUNC_ABS,
 	FUNC_CEIL,
@@ -612,7 +652,8 @@ enum Func_e
 	FUNC_EXIST,
 	FUNC_POLY2D,
 	FUNC_GEOPOLY2D,
-	FUNC_CONTAINS
+	FUNC_CONTAINS,
+	FUNC_ZONESPANLIST
 };
 
 
@@ -667,8 +708,11 @@ static FuncDesc_t g_dFuncs[] =
 	{ "exist",			2,	FUNC_EXIST,			SPH_ATTR_NONE },
 	{ "poly2d",			-1,	FUNC_POLY2D,		SPH_ATTR_POLY2D },
 	{ "geopoly2d",		-1,	FUNC_GEOPOLY2D,		SPH_ATTR_POLY2D },
-	{ "contains",		3,	FUNC_CONTAINS,		SPH_ATTR_INTEGER }
+	{ "contains",		3,	FUNC_CONTAINS,		SPH_ATTR_INTEGER },
+	{ "zonespanlist",	0,	FUNC_ZONESPANLIST,	SPH_ATTR_STRINGPTR }
 };
+
+static SmallStringHash_T<FuncDesc_t*> g_dFuncsHash;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -757,6 +801,7 @@ public:
 	ExprParser_t ( CSphSchema * pExtra, ISphExprHook * pHook )
 		: m_pHook ( pHook )
 		, m_pExtra ( pExtra )
+		, m_bHasZonespanlist ( false )
 	{}
 
 							~ExprParser_t ();
@@ -801,6 +846,9 @@ private:
 	CSphSchema *			m_pExtra;
 
 	int						m_iConstNow;
+
+public:
+	bool					m_bHasZonespanlist;
 
 private:
 	int						GetToken ( YYSTYPE * lvalp );
@@ -993,11 +1041,26 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 
 		// check for function
 		sTok.ToLower();
-		for ( int i=0; i<int(sizeof(g_dFuncs)/sizeof(g_dFuncs[0])); i++ )
-			if ( sTok==g_dFuncs[i].m_sName )
+		int j = g_dFuncsHash.GetLength();
+		if ( j ) ///< faster lookup in the string hash
 		{
-			lvalp->iFunc = i;
-			return g_dFuncs[i].m_eFunc==FUNC_IN ? TOK_FUNC_IN : TOK_FUNC;
+			FuncDesc_t** ppDesc = g_dFuncsHash ( sTok );
+			if ( ppDesc )
+			{
+				lvalp->iFunc = (*ppDesc)->m_eFunc;
+				return (*ppDesc)->m_eFunc==FUNC_IN ? TOK_FUNC_IN : TOK_FUNC;
+			}
+		}
+
+		// hash is not ready. Perform linear lookup, and also fill the hash for the future
+		for ( int i=j; i<int(sizeof(g_dFuncs)/sizeof(g_dFuncs[0])); i++ )
+		{
+			g_dFuncsHash.Add ( &g_dFuncs[i], g_dFuncs[i].m_sName );
+			if ( sTok==g_dFuncs[i].m_sName )
+			{
+				lvalp->iFunc = i;
+				return g_dFuncs[i].m_eFunc==FUNC_IN ? TOK_FUNC_IN : TOK_FUNC;
+			}
 		}
 
 		// ask hook
@@ -1390,7 +1453,7 @@ void ExprParser_t::Optimize ( int iNode )
 		if ( pRoot->m_iToken==TOK_CONST_INT )
 			pRoot->m_iConst = -pLeft->m_iConst;
 		else
-			pRoot->m_fConst = -pLeft->m_fConst;		
+			pRoot->m_fConst = -pLeft->m_fConst;
 	}
 }
 
@@ -2020,15 +2083,16 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 	{
 		switch ( g_dFuncs[tNode.m_iFunc].m_eFunc )
 		{
-			case FUNC_GEODIST:
-			case FUNC_CONTAINS:
-				bSkipLeft = true;
-				break;
-			case FUNC_IN:
-			case FUNC_EXIST:
-				bSkipLeft = true;
-				bSkipRight = true;
-				break;
+		case FUNC_IN:
+		case FUNC_EXIST:
+			bSkipRight = true;
+			// no break
+		case FUNC_GEODIST:
+		case FUNC_CONTAINS:
+		case FUNC_ZONESPANLIST:
+			bSkipLeft = true;
+		default:
+			break;
 		}
 	}
 
@@ -2147,6 +2211,12 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_GEODIST:	return CreateGeodistNode ( tNode.m_iLeft );
 					case FUNC_EXIST:	return CreateExistNode ( tNode );
 					case FUNC_CONTAINS:	return CreateContainsNode ( tNode );
+					case FUNC_ZONESPANLIST:
+										m_bHasZonespanlist = true;
+										return new Expr_GetZonespanlist_c ();
+					case FUNC_POLY2D:
+					case FUNC_GEOPOLY2D:
+										break; ///< just make gcc happy
 				}
 				assert ( 0 && "unhandled function id" );
 				break;
@@ -3518,7 +3588,7 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema,
 
 	// deduce return type
 	ESphAttr eAttrType = m_dNodes[m_iParsed].m_eRetType;
-	assert ( IsNumeric ( eAttrType ) );
+// assert ( IsNumeric ( eAttrType ) );
 
 	// perform optimizations
 	Optimize ( m_iParsed );
@@ -3821,11 +3891,15 @@ bool sphUDFDrop ( const char * szFunc, CSphString & sError )
 //////////////////////////////////////////////////////////////////////////
 
 /// parser entry point
-ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError, CSphSchema * pExtra, ISphExprHook * pHook )
+ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight,
+						CSphString & sError, CSphSchema * pExtra, ISphExprHook * pHook, bool * pZonespanlist )
 {
 	// parse into opcodes
 	ExprParser_t tParser ( pExtra, pHook );
-	return tParser.Parse ( sExpr, tSchema, pAttrType, pUsesWeight, sError );
+	ISphExpr * bRes = tParser.Parse ( sExpr, tSchema, pAttrType, pUsesWeight, sError );
+	if ( pZonespanlist )
+		*pZonespanlist = tParser.m_bHasZonespanlist;
+	return bRes;
 }
 
 //

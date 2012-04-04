@@ -4294,6 +4294,10 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 						pBuf += sphPackStrlen ( pBuf, iLen );
 						memcpy ( pBuf, sValue.cstr(), iLen );
 
+					} else if ( tAttr.m_eAttrType==SPH_ATTR_STRINGPTR )
+					{
+						CSphString sValue = tReq.GetString();
+						tMatch.SetAttr ( tAttr.m_tLocator, (SphAttr_t) sValue.Leak() );
 					} else
 					{
 						tMatch.SetAttr ( tAttr.m_tLocator, tReq.GetDword() );
@@ -5531,6 +5535,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 	// MVA and string values
 	CSphVector<CSphAttrLocator> dMvaItems;
 	CSphVector<CSphAttrLocator> dStringItems;
+	CSphVector<CSphAttrLocator> dStringPtrItems;
 	for ( int i=0; i<iAttrsCount; i++ )
 	{
 		const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(i);
@@ -5538,6 +5543,8 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 			dMvaItems.Add ( tCol.m_tLocator );
 		if ( tCol.m_eAttrType==SPH_ATTR_STRING )
 			dStringItems.Add ( tCol.m_tLocator );
+		if ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR )
+			dStringPtrItems.Add ( tCol.m_tLocator );
 	}
 
 	if ( iVer>=0x10C && dMvaItems.GetLength() )
@@ -5580,6 +5587,21 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 
 		if ( g_bCpuStats )
 			iRespLen += 8;		// CPU Stats
+	}
+
+	if ( iVer>=0x117 && dStringPtrItems.GetLength() )
+	{
+		for ( int i=0; i<pRes->m_iCount; i++ )
+		{
+			const CSphMatch & tMatch = pRes->m_dMatches [ pRes->m_iOffset+i ];
+			ARRAY_FOREACH ( j, dStringPtrItems )
+			{
+				const char* pStr = (const char*) tMatch.GetAttr ( dStringPtrItems[j] );
+				assert ( pStr );
+				if ( pStr )
+					iRespLen += strlen ( pStr );
+			}
+		}
 	}
 
 	return iRespLen;
@@ -5743,6 +5765,28 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 							int iLen = sphUnpackStr ( pStrings+uOffset, &pStr );
 							tOut.SendDword ( iLen );
 							tOut.SendBytes ( pStr, iLen );
+						}
+					}
+
+				} else if ( tAttr.m_eAttrType==SPH_ATTR_STRINGPTR )
+				{
+					// send string attr
+					if ( iVer<0x117 )
+					{
+						// for older clients, just send int value of 0
+						tOut.SendDword ( 0 );
+					} else
+					{
+						// for newer clients, send binary string
+						const char* pString = (const char*) tMatch.GetAttr ( tAttr.m_tLocator );
+						if ( !pString ) // magic zero
+						{
+							tOut.SendDword ( 0 ); // null string
+						} else
+						{
+							int iLen = strlen ( pString );
+							tOut.SendDword ( iLen );
+							tOut.SendBytes ( pString, iLen );
 						}
 					}
 
@@ -7234,7 +7278,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 				}
 
 				// create queue
-				pSorter = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchema, m_pUpdates );
+				pSorter = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchema, m_pUpdates, &tQuery.m_bZSlist );
 				if ( !pSorter )
 				{
 					m_dFailuresSet[iQuery].Submit ( sLocal, sError.cstr() );
@@ -7684,7 +7728,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					ARRAY_FOREACH ( i, tRemoteResult.m_dMatches )
 					{
 						tRes.m_dMatches.Add();
-						tRes.m_dMatches.Last().Clone ( tRemoteResult.m_dMatches[i], tRemoteResult.m_tSchema.GetRowSize() );
+						tRemoteResult.m_tSchema.CloneWholeMatch ( &tRes.m_dMatches.Last(), tRemoteResult.m_dMatches[i] );
 						tRes.m_dMatches.Last().m_iTag = 0; // all remote MVA values go to special pool which is at index 0
 					}
 
@@ -11755,7 +11799,7 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 				eType = MYSQL_COL_FLOAT;
 			if ( tCol.m_eAttrType==SPH_ATTR_BIGINT )
 				eType = MYSQL_COL_LONGLONG;
-			if ( tCol.m_eAttrType==SPH_ATTR_STRING )
+			if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_STRINGPTR )
 				eType = MYSQL_COL_STRING;
 			SendMysqlFieldPacket ( tOut, uPacketID++, tCol.m_sName.cstr(), eType );
 		}
@@ -11867,6 +11911,24 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 					// send string data
 					if ( iLen )
 						memcpy ( pOutStr, pStr, iLen );
+
+					dRows.IncPtr ( pOutStr-dRows.Get()+iLen );
+					break;
+				}
+			case SPH_ATTR_STRINGPTR:
+				{
+					int iLen = 0;
+					const char* pString = (const char*) tMatch.GetAttr ( tLoc );
+					if ( pString )
+						iLen = strlen ( pString );
+
+					// send length
+					dRows.Reserve ( iLen+4 );
+					char * pOutStr = (char*)MysqlPack ( dRows.Get(), iLen );
+
+					// send string data
+					if ( iLen )
+						memcpy ( pOutStr, pString, iLen );
 
 					dRows.IncPtr ( pOutStr-dRows.Get()+iLen );
 					break;

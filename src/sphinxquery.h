@@ -270,11 +270,13 @@ struct XQQuery_t : public ISphNoncopyable
 
 	CSphVector<CSphString>	m_dZones;
 	XQNode_t *				m_pRoot;
+	bool					m_bNeedSZlist;
 
 	/// ctor
 	XQQuery_t ()
 	{
 		m_pRoot = NULL;
+		m_bNeedSZlist = false;
 	}
 
 	/// dtor

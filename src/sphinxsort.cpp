@@ -56,12 +56,16 @@ protected:
 	CSphMatchComparatorState	m_tState;
 	const bool					m_bUsesAttrs;
 
+private:
+	int							m_iAllocatedSize;
+
 public:
 	/// ctor
 	CSphMatchQueueTraits ( int iSize, bool bUsesAttrs )
 		: m_iUsed ( 0 )
 		, m_iSize ( iSize )
 		, m_bUsesAttrs ( bUsesAttrs )
+		, m_iAllocatedSize ( iSize )
 	{
 		assert ( iSize>0 );
 		m_pData = new CSphMatch [ iSize ];
@@ -73,6 +77,8 @@ public:
 	/// dtor
 	~CSphMatchQueueTraits ()
 	{
+		for ( int i=0; i<m_iAllocatedSize; ++i )
+			m_tSchema.FreeStringPtrs ( m_pData+i );
 		SafeDeleteArray ( m_pData );
 	}
 
@@ -119,7 +125,7 @@ public:
 		}
 
 		// do add
-		m_pData[m_iUsed].Clone ( tEntry, m_tSchema.GetDynamicSize() );
+		m_tSchema.CloneMatch ( m_pData+m_iUsed, tEntry );
 		int iEntry = m_iUsed++;
 
 		// sift up if needed, so that worst (lesser) ones float to the top
@@ -153,6 +159,7 @@ public:
 
 		// make the last entry my new root
 		Swap ( m_pData[0], m_pData[m_iUsed] );
+		m_tSchema.FreeStringPtrs ( &m_pData[m_iUsed] );
 
 		// sift down if needed
 		int iEntry = 0;
@@ -188,7 +195,8 @@ public:
 		while ( m_iUsed>0 )
 		{
 			--pTo;
-			pTo[0].Clone ( m_pData[0], m_tSchema.GetDynamicSize() ); // OPTIMIZE? reset dst + swap?
+			m_tSchema.FreeStringPtrs ( pTo );
+			Swap ( *pTo, *m_pData );
 			if ( iTag>=0 )
 				pTo->m_iTag = iTag;
 			Pop ();
@@ -206,11 +214,11 @@ struct MatchSort_fn
 	typedef CSphMatch			MEDIAN_TYPE;
 
 	CSphMatchComparatorState	m_tState;
-	int							m_iDynamic;
+	const CSphSchema *			m_pCloner;
 
-	MatchSort_fn ( const CSphMatchComparatorState & tState, int iDynamic )
+	MatchSort_fn ( const CSphMatchComparatorState & tState, const CSphSchema& dCloner )
 		: m_tState ( tState )
-		, m_iDynamic ( iDynamic )
+		, m_pCloner ( &dCloner )
 	{}
 
 	bool IsLess ( const CSphMatch & a, const CSphMatch & b )
@@ -225,7 +233,8 @@ struct MatchSort_fn
 
 	void CopyKey ( CSphMatch * pMed, CSphMatch * pVal ) const
 	{
-		pMed->Clone ( *pVal, m_iDynamic );
+		assert ( m_pCloner );
+		m_pCloner->CloneMatch ( pMed, *pVal );
 	}
 
 	void Swap ( CSphMatch * a, CSphMatch * b ) const
@@ -286,13 +295,13 @@ public:
 		// quick check passed
 		// fill the data, back to front
 		m_iUsed++;
-		m_pEnd[-m_iUsed].Clone ( tEntry, m_tSchema.GetDynamicSize() );
+		m_tSchema.CloneMatch ( m_pEnd-m_iUsed, tEntry );
 
 		// do the initial sort once
 		if ( m_iTotal==m_iSize )
 		{
 			assert ( m_iUsed==m_iSize && !m_pWorst );
-			MatchSort_fn<COMP> tComp ( m_tState, m_tSchema.GetDynamicSize() );
+			MatchSort_fn<COMP> tComp ( m_tState, m_tSchema );
 			sphSort ( m_pEnd-m_iSize, m_iSize, tComp, tComp );
 			m_pWorst = m_pEnd-m_iSize;
 			return true;
@@ -301,7 +310,7 @@ public:
 		// do the sort/cut when the K-buffer is full
 		if ( m_iUsed==m_iSize*COEFF )
 		{
-			MatchSort_fn<COMP> tComp ( m_tState, m_tSchema.GetDynamicSize() );
+			MatchSort_fn<COMP> tComp ( m_tState, m_tSchema );
 			sphSort ( m_pData, m_iUsed, tComp, tComp );
 			m_iUsed = m_iSize;
 			m_pWorst = m_pEnd-m_iSize;
@@ -326,7 +335,7 @@ public:
 		}
 		if ( m_iUsed )
 		{
-			MatchSort_fn<COMP> tComp ( m_tState, m_tSchema.GetDynamicSize() );
+			MatchSort_fn<COMP> tComp ( m_tState, m_tSchema );
 			sphSort ( m_pEnd-m_iUsed, m_iUsed, tComp, tComp );
 		}
 		m_iUsed = Min ( m_iUsed, m_iSize );
@@ -347,9 +356,10 @@ public:
 		Finalize();
 
 		// reverse copy
-		for ( int i=1; i<=Min(m_iUsed, m_iSize); i++ )
+		for ( int i=1; i<=Min ( m_iUsed, m_iSize ); i++ )
 		{
-			pTo->Clone ( m_pEnd[-i], m_tSchema.GetDynamicSize() ); // OPTIMIZE? reset dst + swap?
+			m_tSchema.FreeStringPtrs ( pTo );
+			Swap ( *pTo, m_pEnd[-i] );
 			if ( iTag>=0 )
 				pTo->m_iTag = iTag;
 			pTo++;
@@ -422,7 +432,7 @@ public:
 			DoUpdate();
 
 		// do add
-		m_pData[m_iUsed++].Clone ( tEntry, m_tSchema.GetDynamicSize() );
+		m_tSchema.CloneMatch ( &m_pData[m_iUsed++], tEntry );
 		return true;
 	}
 
@@ -1016,16 +1026,17 @@ struct GroupSorter_fn : public CSphMatchComparatorState, public SphAccessor_T<CS
 {
 	typedef CSphMatch MEDIAN_TYPE;
 
-	int m_iDynamic;
+	const CSphSchema* m_pCloner;
 
 	GroupSorter_fn ()
 	{
-		m_iDynamic = 0;
+		m_pCloner = NULL;
 	}
 
 	void CopyKey ( MEDIAN_TYPE * pMed, CSphMatch * pVal ) const
 	{
-		pMed->Clone ( *pVal, m_iDynamic );
+		assert ( m_pCloner );
+		m_pCloner->CloneMatch ( pMed, *pVal );
 	}
 
 	bool IsLess ( const CSphMatch & a, const CSphMatch & b ) const
@@ -1087,7 +1098,7 @@ public:
 	virtual void SetSchema ( const CSphSchema & tSchema )
 	{
 		m_tSchema = tSchema;
-		m_tGroupSorter.m_iDynamic = m_tSchema.GetDynamicSize();
+		m_tGroupSorter.m_pCloner = &m_tSchema;
 
 		bool bAggrStarted = false;
 		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
@@ -1252,9 +1263,10 @@ public:
 					assert ( pMatch->m_pDynamic );
 					assert ( tEntry.m_pDynamic );
 					assert ( pMatch->m_pDynamic[-1]==tEntry.m_pDynamic[-1] );
-
+					m_tSchema.FreeStringPtrs ( pMatch, m_iPregroupDynamic );
 					for ( int i=0; i<m_iPregroupDynamic; i++ )
 						pMatch->m_pDynamic[i] = tEntry.m_pDynamic[i];
+					m_tSchema.CopyStrings ( pMatch, tEntry, m_iPregroupDynamic );
 				}
 			}
 		}
@@ -1274,7 +1286,7 @@ public:
 		// do add
 		assert ( m_iUsed<m_iSize );
 		CSphMatch & tNew = m_pData [ m_iUsed++ ];
-		tNew.Clone ( tEntry, m_tSchema.GetDynamicSize() );
+		m_tSchema.CloneMatch ( &tNew, tEntry );
 
 		if ( !bGrouped )
 		{
@@ -1335,7 +1347,7 @@ public:
 			ARRAY_FOREACH ( j, dAggrs )
 				dAggrs[j]->Finalize ( &m_pData[i] );
 
-			pTo->Clone ( m_pData[i], m_tSchema.GetDynamicSize() );
+			m_tSchema.CloneMatch ( pTo, m_pData[i] );
 			if ( iTag>=0 )
 				pTo->m_iTag = iTag;
 		}
@@ -2834,13 +2846,15 @@ static ISphMatchSorter * CreatePlainSorter ( ESphSortFunc eMatchFunc, bool bKbuf
 
 
 ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema,
-	CSphString & sError, bool bComputeItems, CSphSchema * pExtra, CSphAttrUpdateEx * pUpdate )
+	CSphString & sError, bool bComputeItems, CSphSchema * pExtra, CSphAttrUpdateEx * pUpdate, bool * pZonespanlist )
 {
 	// prepare for descent
 	ISphMatchSorter * pTop = NULL;
 	CSphMatchComparatorState tStateMatch, tStateGroup;
 
 	sError = "";
+	bool bHasZonespanlist = false;
+	bool bNeedZonespanlist = false;
 
 	///////////////////////////////////////
 	// build incoming and outgoing schemas
@@ -2891,7 +2905,8 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	if ( pQuery->m_eSort==SPH_SORT_EXPR && tSorterSchema.GetAttrIndex ( "@expr" )<0 )
 	{
 		CSphColumnInfo tCol ( "@expr", SPH_ATTR_FLOAT ); // enforce float type for backwards compatibility (ie. too lazy to fix those tests right now)
-		tCol.m_pExpr = sphExprParse ( pQuery->m_sSortBy.cstr(), tSorterSchema, NULL, NULL, sError, pExtra );
+		tCol.m_pExpr = sphExprParse ( pQuery->m_sSortBy.cstr(), tSorterSchema, NULL, NULL, sError, pExtra, NULL, &bHasZonespanlist );
+		bNeedZonespanlist |= bHasZonespanlist;
 		if ( !tCol.m_pExpr )
 			return NULL;
 		tCol.m_eStage = SPH_EVAL_PRESORT;
@@ -2967,7 +2982,8 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		// a new and shiny expression, lets parse
 		bool bUsesWeight;
 		CSphColumnInfo tExprCol ( tItem.m_sAlias.cstr(), SPH_ATTR_NONE );
-		tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), tSorterSchema, &tExprCol.m_eAttrType, &bUsesWeight, sError, pExtra );
+		tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), tSorterSchema, &tExprCol.m_eAttrType, &bUsesWeight, sError, pExtra, NULL, &bHasZonespanlist );
+		bNeedZonespanlist |= bHasZonespanlist;
 		tExprCol.m_eAggrFunc = tItem.m_eAggrFunc;
 		if ( !tExprCol.m_pExpr )
 		{
@@ -2987,6 +3003,9 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		{
 			// by default, lets be lazy and compute expressions as late as possible
 			tExprCol.m_eStage = SPH_EVAL_FINAL;
+
+			if ( bHasZonespanlist )
+				tExprCol.m_eStage = SPH_EVAL_PRESORT;
 
 			// is this expression used in filter?
 			// OPTIMIZE? hash filters and do hash lookups?
@@ -3257,6 +3276,9 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 
 	if ( bRandomize )
 		sphAutoSrand ();
+
+	if ( pZonespanlist )
+		*pZonespanlist = bNeedZonespanlist;
 
 	return pTop;
 }

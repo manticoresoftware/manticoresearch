@@ -1666,6 +1666,14 @@ public:
 		return pBuf;
 	}
 
+	// opposite to Leak()
+	void Adopt ( char ** sValue )
+	{
+		SafeDeleteArray ( m_sValue );
+		m_sValue = *sValue;
+		*sValue = NULL;
+	}
+
 	bool operator < ( const CSphString & b ) const
 	{
 		if ( !m_sValue && !b.m_sValue )
@@ -2473,6 +2481,22 @@ public:
 		assert ( iIndex>=0 );
 		assert ( iIndex<m_iElements );
 		m_pData [ iIndex>>5 ] |= ( 1UL<<( iIndex&31 ) ); // NOLINT
+	}
+};
+
+/// generic COM-like interface
+class ISphExtra
+{
+public:
+	virtual						~ISphExtra () {}
+	inline bool					GetExtraData	( void** ppData )
+	{
+		return GetExtraDataImpl ( ppData );
+	}
+private:
+	virtual bool GetExtraDataImpl ( void** )
+	{
+		return false;
 	}
 };
 

@@ -1371,6 +1371,24 @@ struct InfixBlock_t
 };
 
 
+// dictionary header
+struct DictHeader_t
+{
+	int				m_iDictCheckpoints;			///< how many dict checkpoints (keyword blocks) are there
+	SphOffset_t		m_iDictCheckpointsOffset;	///< dict checkpoints file position
+
+	int				m_iInfixCodepointBytes;		///< max bytes per infix codepoint (0 means no infixes)
+	int				m_iInfixBlocksOffset;		///< infix blocks file position
+
+	DictHeader_t()
+		: m_iDictCheckpoints ( 0 )
+		, m_iDictCheckpointsOffset ( 0 )
+		, m_iInfixCodepointBytes ( 0 )
+		, m_iInfixBlocksOffset ( 0 )
+	{}
+};
+
+
 // !COMMIT eliminate this, move it to proper dict impls
 class CWordlist : public ISphWordlist, public DictHeader_t
 {
@@ -1382,6 +1400,7 @@ public:
 	int64_t								m_iSize;				///< file size
 	CSphSharedBuffer<BYTE>				m_pBuf;					///< my cache
 	int									m_iMaxChunk;			///< max size of entry between checkpoints
+	SphOffset_t							m_iWordsEnd;			///< end of wordlist
 
 	BYTE *								m_pWords;				///< arena for checkpoint's words
 
@@ -11690,9 +11709,9 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 
 	const bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 
-	tDstReader.Setup ( GetIndexFileName("spi"), m_tWordlist.m_iDictCheckpointsOffset,
+	tDstReader.Setup ( GetIndexFileName("spi"), m_tWordlist.m_iWordsEnd,
 		m_tSettings.m_eHitless, m_sLastError, bWordDict );
-	tSrcReader.Setup ( pSrcIndex->GetIndexFileName("spi"), pSrcIndex->m_tWordlist.m_iDictCheckpointsOffset,
+	tSrcReader.Setup ( pSrcIndex->GetIndexFileName("spi"), pSrcIndex->m_tWordlist.m_iWordsEnd,
 		pSrcIndex->m_tSettings.m_eHitless, m_sLastError, bWordDict );
 
 	if ( !m_sLastError.IsEmpty() )
@@ -13981,7 +14000,6 @@ bool CSphIndex_VLN::Preread ()
 	{
 		sphLogDebug ( "Prereading .spi" );
 		if ( !PrereadSharedBuffer ( m_tWordlist.m_pBuf, "spi" ) )
-
 			return false;
 	}
 
@@ -18265,6 +18283,8 @@ static inline int ZippedIntSize ( DWORD v )
 #pragma warning(disable:4127) // conditional expr is const for MSVC
 #endif
 
+static const char * g_sTagInfixEntries = "infix-entries";
+
 template < int SIZE >
 void InfixBuilder_c<SIZE>::SaveEntries ( CSphWriter & wrDict )
 {
@@ -18272,8 +18292,7 @@ void InfixBuilder_c<SIZE>::SaveEntries ( CSphWriter & wrDict )
 	// we mark the block end with an editcode of 0
 	const int INFIX_BLOCK_SIZE = 64;
 
-	const char * sTag1 = "infix-entries";
-	wrDict.PutBytes ( sTag1, strlen(sTag1) );
+	wrDict.PutBytes ( g_sTagInfixEntries, strlen ( g_sTagInfixEntries ) );
 
 	CSphVector<int> dIndex;
 	dIndex.Resize ( m_dArena.GetLength()-1 );
@@ -18416,12 +18435,13 @@ void InfixBuilder_c<SIZE>::SaveEntries ( CSphWriter & wrDict )
 #endif
 
 
+static const char * g_sTagInfixBlocks = "infix-blocks";
+
 template < int SIZE >
 void InfixBuilder_c<SIZE>::SaveEntryBlocks ( CSphWriter & wrDict, DictHeader_t * pHeader )
 {
 	// save the blocks
-	const char * sTag2 = "infix-blocks";
-	wrDict.PutBytes ( sTag2, strlen(sTag2) );
+	wrDict.PutBytes ( g_sTagInfixBlocks, strlen ( g_sTagInfixBlocks ) );
 
 	pHeader->m_iInfixBlocksOffset = (int)wrDict.GetPos();
 
@@ -25580,8 +25600,9 @@ bool CWordlist::ReadCP ( CSphAutofile & tFile, DWORD uVer, bool bWordDict, CSphS
 	// preload word checkpoints
 	////////////////////////////
 
-	const int iCheckpointOnlySize = (int)(m_iSize-m_iDictCheckpointsOffset);
-	const int iCount = m_dCheckpoints.GetLength();
+	int iCheckpointOnlySize = (int)(m_iSize-m_iDictCheckpointsOffset);
+	if ( m_iInfixCodepointBytes )
+		iCheckpointOnlySize = (int)(m_iInfixBlocksOffset - strlen ( g_sTagInfixBlocks ) - m_iDictCheckpointsOffset);
 
 	CSphReader tReader;
 	tReader.SetFile ( tFile );
@@ -25591,7 +25612,7 @@ bool CWordlist::ReadCP ( CSphAutofile & tFile, DWORD uVer, bool bWordDict, CSphS
 
 	if ( m_bWordDict )
 	{
-		const int iArenaSize = iCheckpointOnlySize - (sizeof(DWORD)+sizeof(SphOffset_t))*iCount + sizeof(BYTE)*iCount;
+		int iArenaSize = iCheckpointOnlySize - (sizeof(DWORD)+sizeof(SphOffset_t))*m_dCheckpoints.GetLength() + sizeof(BYTE)*m_dCheckpoints.GetLength();
 		assert ( iArenaSize>=0 );
 		m_pWords = new BYTE[iArenaSize];
 		assert ( m_pWords );
@@ -25632,24 +25653,13 @@ bool CWordlist::ReadCP ( CSphAutofile & tFile, DWORD uVer, bool bWordDict, CSphS
 		}
 	}
 
-	SphOffset_t uMaxChunk = 0;
-	ARRAY_FOREACH ( i, m_dCheckpoints )
-	{
-		SphOffset_t uNextOffset = ( i+1 )==m_dCheckpoints.GetLength()
-			? m_iSize
-			: m_dCheckpoints[i+1].m_iWordlistOffset;
-		uMaxChunk = Max ( uMaxChunk, uNextOffset - m_dCheckpoints[i].m_iWordlistOffset );
-	}
-	assert ( uMaxChunk<UINT_MAX );
-	m_iMaxChunk = (int)uMaxChunk;
-
 	////////////////////////
 	// preload infix blocks
 	////////////////////////
 
 	if ( m_iInfixCodepointBytes )
 	{
-		tReader.SeekTo ( m_iInfixBlocksOffset, 32768 );
+		tReader.SeekTo ( m_iInfixBlocksOffset, (int)(m_iSize-m_iInfixBlocksOffset) );
 		m_dInfixBlocks.Resize ( tReader.UnzipInt() );
 		ARRAY_FOREACH ( i, m_dInfixBlocks )
 		{
@@ -25659,6 +25669,31 @@ bool CWordlist::ReadCP ( CSphAutofile & tFile, DWORD uVer, bool bWordDict, CSphS
 			m_dInfixBlocks[i].m_iOffset = tReader.UnzipInt();
 		}
 	}
+
+	// set wordlist end
+	assert ( !m_iInfixCodepointBytes || m_dInfixBlocks.GetLength() );
+	m_iWordsEnd = m_iDictCheckpointsOffset;
+	if ( m_iInfixCodepointBytes )
+	{
+		m_iWordsEnd = m_dInfixBlocks.Begin()->m_iOffset - strlen ( g_sTagInfixEntries );
+	}
+
+	// TODO: count m_dInfixBlocks too while make on_disk_dict work with dict=keywords + infix
+	SphOffset_t uMaxChunk = 0;
+	if ( m_dCheckpoints.GetLength() )
+	{
+		uMaxChunk = m_iWordsEnd - m_dCheckpoints.Last().m_iWordlistOffset;
+		SphOffset_t uPrev = m_dCheckpoints.Begin()->m_iWordlistOffset;
+		for ( int i=1; i<m_dCheckpoints.GetLength(); i++ )
+		{
+			SphOffset_t uOff = m_dCheckpoints[i].m_iWordlistOffset;
+			uMaxChunk = Max ( uMaxChunk, uOff-uPrev );
+			uPrev = uOff;
+		}
+	}
+	assert ( uMaxChunk<UINT_MAX );
+	m_iMaxChunk = (int)uMaxChunk;
+
 
 	////////
 	// done
@@ -25785,6 +25820,7 @@ const BYTE * CWordlist::AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint
 	assert ( pCheckpoint->m_iWordlistOffset>0 && pCheckpoint->m_iWordlistOffset<=m_iSize );
 	assert ( m_pBuf.IsEmpty() || pCheckpoint->m_iWordlistOffset<(int64_t)m_pBuf.GetLength() );
 
+	// TODO: implement on_disk_dict = 1 for dict=keywords + infix
 	const BYTE * pBuf = NULL;
 
 	if ( !m_pBuf.IsEmpty() )
@@ -25800,6 +25836,7 @@ const BYTE * CWordlist::AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint
 		else
 			iChunkLength = m_iSize - pCheckpoint->m_iWordlistOffset;
 
+		assert ( iChunkLength<=m_iMaxChunk );
 		if ( (int)sphPread ( iFD, pDictBuf, (size_t)iChunkLength, pCheckpoint->m_iWordlistOffset )==iChunkLength )
 			pBuf = pDictBuf;
 	}

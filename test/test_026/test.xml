@@ -45,10 +45,32 @@ index delta
 	path			= <data_path/>/delta
     charset_type 	= utf-8
 }
+
+index main_kw
+{
+	source			= srcmain
+	path			= <data_path/>/main_kw
+    charset_type 	= utf-8
+	dict				= keywords
+	min_infix_len = 3
+	enable_star = 1
+}
+
+index delta_kw
+{
+	source			= srcdelta
+	path			= <data_path/>/delta_kw
+    charset_type 	= utf-8
+	dict				= keywords
+	min_infix_len = 3
+	enable_star = 1
+}
+
 </config>
 
 <indexer>
 <run>--merge main delta</run>
+<run>--merge main_kw delta_kw</run>
 </indexer>
 
 <queries>
@@ -61,6 +83,9 @@ index delta
 <query index="main">xxx</query>
 <query index="main">yyy</query>
 <query index="main">zzz</query>
+
+<!-- regression that indexer crashes on merging indexes dict=keywords with infixes enabled -->
+<query index="main_kw">*lta*</query>
 </queries>
 
 <db_create>

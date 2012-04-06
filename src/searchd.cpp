@@ -13908,6 +13908,7 @@ static void UservarsStateRead ( const CSphString & sName )
 	CSphVector<char> dLine;
 	dLine.Reserve ( iReadBlock + iGapLen );
 
+	bool bEscaped = false;
 	int iLines = 0;
 	for ( ;; )
 	{
@@ -13924,7 +13925,7 @@ static void UservarsStateRead ( const CSphString & sName )
 		while ( s<pEnd )
 		{
 			// goto next line for escaped string
-			if ( *s=='\\' )
+			if ( *s=='\\' || ( bEscaped && ( *s=='\n' || *s=='\r' ) ) )
 			{
 				s++;
 				while ( s<pEnd && ( *s=='\n' || *s=='\r' ) )
@@ -13932,9 +13933,11 @@ static void UservarsStateRead ( const CSphString & sName )
 					iLines += ( *s=='\n' );
 					s++;
 				}
+				bEscaped = ( s>=pEnd );
 				continue;
 			}
 
+			bEscaped = false;
 			if ( *s=='\n' || *s=='\r' )
 			{
 				if ( !StateReaderAddUservar ( dLine, &sError ) )

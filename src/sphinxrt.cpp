@@ -3211,7 +3211,7 @@ template < typename DOCID >
 void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iCheckpoints, SphOffset_t iCheckpointsPosition, DWORD uKillListSize, DWORD uMinMaxSize, bool bForceID32 ) const
 {
 	static const DWORD INDEX_MAGIC_HEADER	= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD INDEX_FORMAT_VERSION	= 26;			///< my format version
+	static const DWORD INDEX_FORMAT_VERSION	= 29;			///< my format version
 
 	CSphWriter tWriter;
 	CSphString sName, sError;
@@ -3238,6 +3238,9 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iC
 	tWriter.PutOffset ( iCheckpointsPosition );
 	tWriter.PutDword ( iCheckpoints );
 
+	tWriter.PutByte ( 0 ); // m_iInfixCodepointBytes, v.27+
+	tWriter.PutDword ( 0 ); // m_iInfixBlocksOffset, v.27+
+
 	// stats
 	tWriter.PutDword ( m_tStats.m_iTotalDocuments );
 	tWriter.PutOffset ( m_tStats.m_iTotalBytes );
@@ -3255,6 +3258,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iC
 	tWriter.PutString ( m_tSettings.m_sZones ); // m_sZonePrefix, v.22+
 	tWriter.PutDword ( 0 ); // m_iBoundaryStep, v.23+
 	tWriter.PutDword ( 1 ); // m_iStopwordStep, v.23+
+	tWriter.PutDword ( 1 );	// m_iOvershortStep
 
 	// tokenizer
 	SaveTokenizerSettings ( tWriter, m_pTokenizer );
@@ -3267,6 +3271,9 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iC
 
 	// min-max count
 	tWriter.PutDword ( uMinMaxSize );
+
+	// field filter
+	SaveFieldFilterSettings ( tWriter, m_pFieldFilter );
 
 	// done
 	tWriter.CloseFile ();
@@ -3474,7 +3481,8 @@ bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 		{
 			StripPath ( tTokenizerSettings.m_sSynonymsFile );
 			StripPath ( tDictSettings.m_sStopwords );
-			StripPath ( tDictSettings.m_sWordforms );
+			ARRAY_FOREACH ( i, tDictSettings.m_dWordforms )
+				StripPath ( tDictSettings.m_dWordforms[i] );
 		}
 
 		// recreate tokenizer

@@ -646,7 +646,7 @@ struct CSphDictSettings
 {
 	CSphString		m_sMorphology;
 	CSphString		m_sStopwords;
-	CSphString		m_sWordforms;
+	CSphVector<CSphString> m_dWordforms;
 	int				m_iMinStemmingLen;
 	bool			m_bWordDict;
 	bool			m_bCrc32;
@@ -697,8 +697,8 @@ struct CSphDict
 	/// load stopwords from given files
 	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer ) = 0;
 
-	/// load wordforms from a given file
-	virtual bool		LoadWordforms ( const char * sFile, ISphTokenizer * pTokenizer, const char * sIndex ) = 0;
+	/// load wordforms from a given list of files
+	virtual bool		LoadWordforms ( const CSphVector<CSphString> &, ISphTokenizer * pTokenizer, const char * sIndex, CSphString & ) = 0;
 
 	/// set morphology
 	virtual bool		SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError ) = 0;
@@ -715,7 +715,7 @@ struct CSphDict
 	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () = 0;
 
 	/// wordforms file infos
-	virtual const CSphSavedFile & GetWordformsFileInfo () = 0;
+	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () = 0;
 
 	/// get multiwordforms
 	virtual const CSphMultiformContainer * GetMultiWordforms () const = 0;

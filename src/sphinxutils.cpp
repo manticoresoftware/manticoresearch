@@ -33,6 +33,7 @@
 #else
 #include <sys/wait.h>
 #include <signal.h>
+#include <glob.h>
 #endif
 
 //////////////////////////////////////////////////////////////////////////
@@ -295,7 +296,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "stopwords",				0, NULL },
 	{ "synonyms",				KEY_DEPRECATED, "exceptions" },
 	{ "exceptions",				0, NULL },
-	{ "wordforms",				0, NULL },
+	{ "wordforms",				KEY_LIST, NULL },
 	{ "min_word_len",			0, NULL },
 	{ "charset_type",			0, NULL },
 	{ "charset_table",			0, NULL },
@@ -981,8 +982,81 @@ void sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tS
 {
 	tSettings.m_sMorphology = hIndex.GetStr ( "morphology" );
 	tSettings.m_sStopwords = hIndex.GetStr ( "stopwords" );
-	tSettings.m_sWordforms = hIndex.GetStr ( "wordforms" );
 	tSettings.m_iMinStemmingLen = hIndex.GetInt ( "min_stemming_len", 1 );
+
+	for ( CSphVariant * pWordforms = hIndex("wordforms"); pWordforms; pWordforms = pWordforms->m_pNext )
+	{
+		if ( !pWordforms->cstr() || !*pWordforms->cstr() )
+			continue;
+
+		CSphVector<CSphString> dFilesFound;
+
+#if USE_WINDOWS
+		WIN32_FIND_DATA tFFData;
+		const char * sLastSlash = NULL;
+		for ( const char * s = pWordforms->cstr(); *s; s++ )
+			if ( *s=='/' || *s=='\\' )
+				sLastSlash = s;
+
+		CSphString sPath;
+		if ( sLastSlash )
+			sPath = pWordforms->SubString ( 0, sLastSlash - pWordforms->cstr() + 1 );
+
+		HANDLE hFind = FindFirstFile ( pWordforms->cstr(), &tFFData );
+		if ( hFind!=INVALID_HANDLE_VALUE )
+		{
+			if ( !sPath.IsEmpty() )
+			{
+				dFilesFound.Resize ( dFilesFound.GetLength()+1 );
+				dFilesFound.Last().SetSprintf ( "%s%s", sPath.cstr(), tFFData.cFileName );
+			} else
+				dFilesFound.Add ( tFFData.cFileName );
+
+			while ( FindNextFile ( hFind, &tFFData )!=0 )
+			{
+				if ( !sPath.IsEmpty() )
+				{
+					dFilesFound.Resize ( dFilesFound.GetLength()+1 );
+					dFilesFound.Last().SetSprintf ( "%s%s", sPath.cstr(), tFFData.cFileName );
+				} else
+					dFilesFound.Add ( tFFData.cFileName );
+			}
+
+			FindClose ( hFind );
+		}
+#else
+		glob_t tGlob;
+		glob ( pWordforms->cstr(), GLOB_MARK | GLOB_NOSORT, NULL, &tGlob );
+		if ( tGlob.gl_pathv )
+			for ( int i = 0; i < (int)tGlob.gl_pathc; i++ )
+			{
+				const char * szPathName = tGlob.gl_pathv[i];
+				if ( !szPathName )
+					continue;
+
+				int iLen = strlen ( szPathName );
+				if ( !iLen || szPathName[iLen-1]=='/' )
+					continue;
+
+				dFilesFound.Add ( szPathName );
+			}
+
+		globfree ( &tGlob );
+#endif
+		dFilesFound.Sort();
+		ARRAY_FOREACH ( i, dFilesFound )
+			tSettings.m_dWordforms.Add ( dFilesFound[i] );
+	}
+
+	// remove duplicate wordform files
+	for ( int i = tSettings.m_dWordforms.GetLength()-1; i>=0; i-- )
+		for ( int j = i-1; j>=0; j-- )
+			if ( tSettings.m_dWordforms[i]==tSettings.m_dWordforms[j] )
+			{
+				fprintf ( stdout, "WARNING: duplicate wordform file found '%s' : ignoring\n", tSettings.m_dWordforms[i].cstr() );
+				tSettings.m_dWordforms.Remove(j);
+				i--;
+			}
 
 	if ( hIndex("dict") )
 	{

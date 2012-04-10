@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>wordforms: comments, after morph modifier, multiple wordform files</name>
+
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source test
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= select * from test_table
+}
+
+index test
+{
+	source				= test
+	path				= <data_path/>/test
+	wordforms			= <this_test/>/wordforms.txt
+	wordforms			= <this_test/>/words*.txt
+	morphology			= stem_en
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	content VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>
+INSERT INTO test_table VALUES
+( 100, 'drink drive' ),
+( 101, 'smoked flew' ),
+( 102, 'simple form' ),
+( 103, 'manuscript' ),
+( 104, 'before after' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>select * from test where match('multi_before')</sphinxql>
+<sphinxql>select * from test where match('wordform')</sphinxql>
+<sphinxql>select * from test where match('result1')</sphinxql>
+<sphinxql>select * from test where match('result2')</sphinxql>
+<sphinxql>select * from test where match('book1')</sphinxql>
+<sphinxql>select * from test where match('book2')</sphinxql>
+<sphinxql>select * from test where match('shouldnotbe')</sphinxql>
+</sphqueries>
+
+</test>

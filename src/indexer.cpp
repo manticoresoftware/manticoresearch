@@ -193,13 +193,13 @@ public:
 	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool );
 
 	virtual void		LoadStopwords ( const char *, ISphTokenizer * ) {}
-	virtual bool		LoadWordforms ( const char *, ISphTokenizer *, const char * ) { return true; }
+	virtual bool		LoadWordforms ( const CSphVector<CSphString> &, ISphTokenizer *, const char *, CSphString & ) { return true; }
 	virtual bool		SetMorphology ( const char *, bool, CSphString & ) { return true; }
 
 	virtual void		Setup ( const CSphDictSettings & tSettings ) { m_tSettings = tSettings; }
 	virtual const CSphDictSettings & GetSettings () const { return m_tSettings; }
 	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () { return m_dSWFileInfos; }
-	virtual const CSphSavedFile & GetWordformsFileInfo () { return m_tWFFileInfo; }
+	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () { return m_dWFFileInfos; }
 	virtual const CSphMultiformContainer * GetMultiWordforms () const { return NULL; }
 
 	virtual bool IsStopWord ( const BYTE * ) const { return false; }
@@ -219,7 +219,7 @@ protected:
 	// fake setttings
 	CSphDictSettings			m_tSettings;
 	CSphVector <CSphSavedFile>	m_dSWFileInfos;
-	CSphSavedFile				m_tWFFileInfo;
+	CSphVector <CSphSavedFile>	m_dWFFileInfos;
 };
 
 

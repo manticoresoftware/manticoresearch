@@ -724,13 +724,13 @@ struct CSphDict
 	virtual void		WriteStopwords ( CSphWriter & tWriter ) = 0;
 
 	/// load wordforms from a given list of files
-	virtual bool		LoadWordforms ( const CSphVector<CSphString> &, const CSphEmbeddedFiles * pEmbedded, ISphTokenizer * pTokenizer, const char * sIndex, CSphString & ) = 0;
+	virtual bool		LoadWordforms ( const CSphVector<CSphString> &, const CSphEmbeddedFiles * pEmbedded, ISphTokenizer * pTokenizer, const char * sIndex ) = 0;
 
 	/// write wordforms to a file
 	virtual void		WriteWordforms ( CSphWriter & tWriter ) = 0;
 
 	/// set morphology
-	virtual bool		SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError ) = 0;
+	virtual bool		SetMorphology ( const char * szMorph, bool bUseUTF8 ) = 0;
 
 	virtual bool		HasMorphology () const { return false; }
 
@@ -794,10 +794,10 @@ public:
 
 
 /// CRC32/FNV64 dictionary factory
-CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, ISphTokenizer * pTokenizer, CSphString & sError, const char * sIndex );
+CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, ISphTokenizer * pTokenizer, const char * sIndex );
 
 /// keyword-storing dictionary factory
-CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, ISphTokenizer * pTokenizer, CSphString & sError, const char * sIndex );
+CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, ISphTokenizer * pTokenizer, const char * sIndex );
 
 /// clear wordform cache
 void sphShutdownWordforms ();

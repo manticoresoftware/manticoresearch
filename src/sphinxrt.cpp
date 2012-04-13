@@ -3499,9 +3499,12 @@ bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 
 		// recreate dictionary
 		SafeDelete ( m_pDict );
-		m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sLastError, m_sIndexName.cstr() );
+		m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr() );
 		if ( !m_pDict )
+		{
+			m_sLastError.SetSprintf ( "index '%s': unable to create dictionary", m_sIndexName.cstr() );
 			return false;
+		}
 
 		// update schema
 		m_iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();

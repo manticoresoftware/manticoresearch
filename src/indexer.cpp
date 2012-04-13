@@ -195,9 +195,9 @@ public:
 	virtual void		LoadStopwords ( const char *, ISphTokenizer * ) {}
 	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & ) {}
 	virtual void		WriteStopwords ( CSphWriter & ) {}
-	virtual bool		LoadWordforms ( const CSphVector<CSphString> &, const CSphEmbeddedFiles *, ISphTokenizer *, const char *, CSphString & ) { return true; }
+	virtual bool		LoadWordforms ( const CSphVector<CSphString> &, const CSphEmbeddedFiles *, ISphTokenizer *, const char * ) { return true; }
 	virtual void		WriteWordforms ( CSphWriter & ) {}
-	virtual bool		SetMorphology ( const char *, bool, CSphString & ) { return true; }
+	virtual bool		SetMorphology ( const char *, bool ) { return true; }
 
 	virtual void		Setup ( const CSphDictSettings & tSettings ) { m_tSettings = tSettings; }
 	virtual const CSphDictSettings & GetSettings () const { return m_tSettings; }
@@ -931,13 +931,10 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		sphConfDictionary ( hIndex, tDictSettings );
 
 		pDict = tDictSettings.m_bWordDict
-			? sphCreateDictionaryKeywords ( tDictSettings, NULL, pTokenizer, sError, sIndexName )
-			: sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, sError, sIndexName );
+			? sphCreateDictionaryKeywords ( tDictSettings, NULL, pTokenizer, sIndexName )
+			: sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, sIndexName );
 		if ( !pDict )
-			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
-
-		if ( !sError.IsEmpty () )
-			fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sError.cstr() );
+			sphDie ( "index '%s': unable to create dictionary" );
 
 		pTokenFilter = ISphTokenizer::CreateTokenFilter ( pTokenizer, pDict->GetMultiWordforms () );
 		pTokenizer = pTokenFilter ? pTokenFilter : pTokenizer;

@@ -1227,9 +1227,12 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		if ( pIndex->m_bId32to64 )
 			tSettings.m_bCrc32 = true;
 		sphConfDictionary ( hIndex, tSettings );
-		CSphDict * pDict = sphCreateDictionaryCRC ( tSettings, NULL, pIndex->GetTokenizer (), sError, pIndex->GetName() );
+		CSphDict * pDict = sphCreateDictionaryCRC ( tSettings, NULL, pIndex->GetTokenizer (), pIndex->GetName() );
 		if ( !pDict )
+		{
+			sphWarning ( "index '%s': unable to create dictionary", pIndex->GetName() );
 			return false;
+		}
 
 		pIndex->SetDictionary ( pDict );
 	}

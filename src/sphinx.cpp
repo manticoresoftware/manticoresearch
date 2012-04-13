@@ -1295,26 +1295,27 @@ void Swap ( OrdinalEntry_t & a, OrdinalEntry_t & b )
 
 //////////////////////////////////////////////////////////////////////////
 
-static void ReadFileInfo ( CSphReader & tReader, const char * szFilename, CSphString & sWarning )
+static void ReadFileInfo ( CSphReader & tReader, const char * szFilename, CSphSavedFile & tFile, CSphString * sWarning )
 {
-	SphOffset_t uSize = tReader.GetOffset ();
-	SphOffset_t uCTime = tReader.GetOffset ();
-	SphOffset_t uMTime = tReader.GetOffset ();
-	DWORD uCRC32 = tReader.GetDword ();
+	tFile.m_uSize = tReader.GetOffset ();
+	tFile.m_uCTime = tReader.GetOffset ();
+	tFile.m_uMTime = tReader.GetOffset ();
+	tFile.m_uCRC32 = tReader.GetDword ();
+	tFile.m_sFilename = szFilename;
 
-	if ( szFilename && *szFilename )
+	if ( szFilename && *szFilename && sWarning )
 	{
 		struct_stat tFileInfo;
 		if ( stat ( szFilename, &tFileInfo ) < 0 )
-			sWarning.SetSprintf ( "failed to stat %s: %s", szFilename, strerror(errno) );
+			sWarning->SetSprintf ( "failed to stat %s: %s", szFilename, strerror(errno) );
 		else
 		{
 			DWORD uMyCRC32 = 0;
 			if ( !sphCalcFileCRC32 ( szFilename, uMyCRC32 ) )
-				sWarning.SetSprintf ( "failed to calculate CRC32 for %s", szFilename );
+				sWarning->SetSprintf ( "failed to calculate CRC32 for %s", szFilename );
 			else
-				if ( uMyCRC32!=uCRC32 || tFileInfo.st_size!=uSize || tFileInfo.st_ctime!=uCTime || tFileInfo.st_mtime!=uMTime )
-						sWarning.SetSprintf ( "'%s' differs from the original", szFilename );
+				if ( uMyCRC32!=tFile.m_uCRC32 || tFileInfo.st_size!=tFile.m_uSize || tFileInfo.st_ctime!=tFile.m_uCTime || tFileInfo.st_mtime!=tFile.m_uMTime )
+						sWarning->SetSprintf ( "'%s' differs from the original", szFilename );
 		}
 	}
 }
@@ -2022,7 +2023,8 @@ public:
 	CSphTokenizerTraits ();
 
 	virtual bool			SetCaseFolding ( const char * sConfig, CSphString & sError );
-	virtual bool			LoadSynonyms ( const char * sFilename, CSphString & sError );
+	virtual bool			LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError );
+	virtual void			WriteSynonyms ( CSphWriter & tWriter );
 	virtual void			CloneBase ( const CSphTokenizerTraits<IS_UTF8> * pFrom, bool bEscaped );
 
 	virtual const char *	GetTokenStart () const		{ return (const char *) m_pTokenStart; }
@@ -2037,6 +2039,9 @@ protected:
 	bool	BlendAdjust ( BYTE * pPosition );
 	BYTE *	GetBlendedVariant ();
 	int		CodepointArbitration ( int iCodepoint, bool bWasEscaped, bool bSpaceAhead );
+
+	typedef CSphOrderedHash <int, int, IdentityHash_fn, 4096> CSphSynonymHash;
+	bool	LoadSynonym ( char * sBuffer, const char * szFilename, int iLine, CSphSynonymHash & tHash, CSphString & sError );
 
 protected:
 	/// get codepoint
@@ -2191,7 +2196,8 @@ public:
 	virtual bool					SetIgnoreChars ( const char * sIgnored, CSphString & sError )	{ return m_pTokenizer->SetIgnoreChars ( sIgnored, sError ); }
 	virtual bool					SetNgramChars ( const char * sConfig, CSphString & sError )		{ return m_pTokenizer->SetNgramChars ( sConfig, sError ); }
 	virtual void					SetNgramLen ( int iLen )										{ m_pTokenizer->SetNgramLen ( iLen ); }
-	virtual bool					LoadSynonyms ( const char * sFilename, CSphString & sError )	{ return m_pTokenizer->LoadSynonyms ( sFilename, sError ); }
+	virtual bool					LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError ) { return m_pTokenizer->LoadSynonyms ( sFilename, pFiles, sError ); }
+	virtual void					WriteSynonyms ( CSphWriter & tWriter )							{ return m_pTokenizer->WriteSynonyms ( tWriter ); }
 	virtual bool					SetBoundary ( const char * sConfig, CSphString & sError )		{ return m_pTokenizer->SetBoundary ( sConfig, sError ); }
 	virtual void					Setup ( const CSphTokenizerSettings & tSettings )				{ m_pTokenizer->Setup ( tSettings ); }
 	virtual const CSphTokenizerSettings &	GetSettings () const									{ return m_pTokenizer->GetSettings (); }
@@ -2779,6 +2785,14 @@ CSphSavedFile::CSphSavedFile ()
 }
 
 
+CSphEmbeddedFiles::CSphEmbeddedFiles ()
+	: m_bEmbeddedSynonyms	( false )
+	, m_bEmbeddedStopwords	( false )
+	, m_bEmbeddedWordforms	( false )
+{
+}
+
+
 CSphTokenizerSettings::CSphTokenizerSettings ()
 	: m_iType				( TOKENIZER_SBCS )
 	, m_iMinWordLen			( 1 )
@@ -2787,7 +2801,7 @@ CSphTokenizerSettings::CSphTokenizerSettings ()
 }
 
 
-void LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings & tSettings, DWORD uVersion, CSphString & sWarning )
+void LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings & tSettings, CSphEmbeddedFiles & tEmbeddedFiles, DWORD uVersion, CSphString & sWarning )
 {
 	if ( uVersion<9 )
 		return;
@@ -2795,8 +2809,21 @@ void LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings & tSett
 	tSettings.m_iType = tReader.GetByte ();
 	tSettings.m_sCaseFolding = tReader.GetString ();
 	tSettings.m_iMinWordLen = tReader.GetDword ();
+	tEmbeddedFiles.m_bEmbeddedSynonyms = false;
+	if ( uVersion>=30 )
+	{
+		tEmbeddedFiles.m_bEmbeddedSynonyms = !!tReader.GetByte();
+		if ( tEmbeddedFiles.m_bEmbeddedSynonyms )
+		{
+			int nSynonyms = (int)tReader.GetDword();
+			tEmbeddedFiles.m_dSynonyms.Resize ( nSynonyms );
+			ARRAY_FOREACH ( i, tEmbeddedFiles.m_dSynonyms )
+				tEmbeddedFiles.m_dSynonyms[i] = tReader.GetString();
+		}
+	}
+
 	tSettings.m_sSynonymsFile = tReader.GetString ();
-	ReadFileInfo ( tReader, tSettings.m_sSynonymsFile.cstr (), sWarning );
+	ReadFileInfo ( tReader, tSettings.m_sSynonymsFile.cstr (), tEmbeddedFiles.m_tSynonymFile, tEmbeddedFiles.m_bEmbeddedSynonyms ? NULL : &sWarning );
 	tSettings.m_sBoundary = tReader.GetString ();
 	tSettings.m_sIgnoreChars = tReader.GetString ();
 	tSettings.m_iNgramLen = tReader.GetDword ();
@@ -2808,7 +2835,7 @@ void LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings & tSett
 }
 
 
-void SaveTokenizerSettings ( CSphWriter & tWriter, ISphTokenizer * pTokenizer )
+void SaveTokenizerSettings ( CSphWriter & tWriter, ISphTokenizer * pTokenizer, int iEmbeddedLimit )
 {
 	assert ( pTokenizer );
 
@@ -2816,6 +2843,12 @@ void SaveTokenizerSettings ( CSphWriter & tWriter, ISphTokenizer * pTokenizer )
 	tWriter.PutByte ( tSettings.m_iType );
 	tWriter.PutString ( tSettings.m_sCaseFolding.cstr () );
 	tWriter.PutDword ( tSettings.m_iMinWordLen );
+
+	bool bEmbedSynonyms = pTokenizer->GetSynFileInfo ().m_uSize<=(SphOffset_t)iEmbeddedLimit;
+	tWriter.PutByte ( bEmbedSynonyms ? 1 : 0 );
+	if ( bEmbedSynonyms )
+		pTokenizer->WriteSynonyms ( tWriter );
+
 	tWriter.PutString ( tSettings.m_sSynonymsFile.cstr () );
 	WriteFileInfo ( tWriter, pTokenizer->GetSynFileInfo () );
 	tWriter.PutString ( tSettings.m_sBoundary.cstr () );
@@ -2827,20 +2860,48 @@ void SaveTokenizerSettings ( CSphWriter & tWriter, ISphTokenizer * pTokenizer )
 }
 
 
-void LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings, DWORD uVersion, CSphString & sWarning )
+void LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings, CSphEmbeddedFiles & tEmbeddedFiles, DWORD uVersion, CSphString & sWarning )
 {
 	if ( uVersion<9 )
 		return;
 
 	tSettings.m_sMorphology = tReader.GetString ();
+
+	tEmbeddedFiles.m_bEmbeddedStopwords = false;
+	if ( uVersion>=30 )
+	{
+		tEmbeddedFiles.m_bEmbeddedStopwords = !!tReader.GetByte();
+		if ( tEmbeddedFiles.m_bEmbeddedStopwords )
+		{
+			int nStopwords = (int)tReader.GetDword();
+			tEmbeddedFiles.m_dStopwords.Resize ( nStopwords );
+			ARRAY_FOREACH ( i, tEmbeddedFiles.m_dStopwords )
+				tEmbeddedFiles.m_dStopwords[i] = (SphWordID_t)tReader.UnzipOffset();
+		}
+	}
+
 	tSettings.m_sStopwords = tReader.GetString ();
 	int nFiles = tReader.GetDword ();
 
 	CSphString sFile;
+	tEmbeddedFiles.m_dStopwordFiles.Resize ( nFiles );
 	for ( int i = 0; i < nFiles; i++ )
 	{
 		sFile = tReader.GetString ();
-		ReadFileInfo ( tReader, sFile.cstr (), sWarning );
+		ReadFileInfo ( tReader, sFile.cstr (), tEmbeddedFiles.m_dStopwordFiles[i], tEmbeddedFiles.m_bEmbeddedSynonyms ? NULL : &sWarning );
+	}
+
+	tEmbeddedFiles.m_bEmbeddedWordforms = false;
+	if ( uVersion>=30 )
+	{
+		tEmbeddedFiles.m_bEmbeddedWordforms = !!tReader.GetByte();
+		if ( tEmbeddedFiles.m_bEmbeddedWordforms )
+		{
+			int nWordforms = (int)tReader.GetDword();
+			tEmbeddedFiles.m_dWordforms.Resize ( nWordforms );
+			ARRAY_FOREACH ( i, tEmbeddedFiles.m_dWordforms )
+				tEmbeddedFiles.m_dWordforms[i] = tReader.GetString();
+		}
 	}
 
 	if ( uVersion<=28 )
@@ -2848,10 +2909,11 @@ void LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings
 	else
 		tSettings.m_dWordforms.Resize ( tReader.GetDword() );
 
+	tEmbeddedFiles.m_dWordformFiles.Resize ( tSettings.m_dWordforms.GetLength() );
 	ARRAY_FOREACH ( i, tSettings.m_dWordforms )
 	{
 		tSettings.m_dWordforms[i] = tReader.GetString();
-		ReadFileInfo ( tReader, tSettings.m_dWordforms[i].cstr(), sWarning );
+		ReadFileInfo ( tReader, tSettings.m_dWordforms[i].cstr(), tEmbeddedFiles.m_dWordformFiles[i], tEmbeddedFiles.m_bEmbeddedWordforms ? NULL : &sWarning );
 	}
 
 	if ( uVersion>=13 )
@@ -2863,14 +2925,23 @@ void LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings
 }
 
 
-void SaveDictionarySettings ( CSphWriter & tWriter, CSphDict * pDict, bool bForceWordDict )
+void SaveDictionarySettings ( CSphWriter & tWriter, CSphDict * pDict, bool bForceWordDict, int iEmbeddedLimit )
 {
 	assert ( pDict );
 	const CSphDictSettings & tSettings = pDict->GetSettings ();
 
 	tWriter.PutString ( tSettings.m_sMorphology.cstr () );
-	tWriter.PutString ( tSettings.m_sStopwords.cstr () );
 	const CSphVector <CSphSavedFile> & dSWFileInfos = pDict->GetStopwordsFileInfos ();
+	SphOffset_t uTotalSize = 0;
+	ARRAY_FOREACH ( i, dSWFileInfos )
+		uTotalSize += dSWFileInfos[i].m_uSize;
+
+	bool bEmbedStopwords = uTotalSize<=(SphOffset_t)iEmbeddedLimit;
+	tWriter.PutByte ( bEmbedStopwords ? 1 : 0 );
+	if ( bEmbedStopwords )
+		pDict->WriteStopwords ( tWriter );
+
+	tWriter.PutString ( tSettings.m_sStopwords.cstr () );
 	tWriter.PutDword ( dSWFileInfos.GetLength () );
 	ARRAY_FOREACH ( i, dSWFileInfos )
 	{
@@ -2879,6 +2950,14 @@ void SaveDictionarySettings ( CSphWriter & tWriter, CSphDict * pDict, bool bForc
 	}
 
 	const CSphVector <CSphSavedFile> & dWFFileInfos = pDict->GetWordformsFileInfos ();
+	uTotalSize = 0;
+	ARRAY_FOREACH ( i, dWFFileInfos )
+		uTotalSize += dWFFileInfos[i].m_uSize;
+
+	bool bEmbedWordforms = uTotalSize<=(SphOffset_t)iEmbeddedLimit;
+	tWriter.PutByte ( bEmbedWordforms ? 1 : 0 );
+	if ( bEmbedWordforms )
+		pDict->WriteWordforms ( tWriter );
 
 	tWriter.PutDword ( dWFFileInfos.GetLength() );
 	ARRAY_FOREACH ( i, dWFFileInfos )
@@ -3061,7 +3140,7 @@ void ISphTokenizer::Setup ( const CSphTokenizerSettings & tSettings )
 }
 
 
-ISphTokenizer * ISphTokenizer::Create ( const CSphTokenizerSettings & tSettings, CSphString & sError )
+ISphTokenizer * ISphTokenizer::Create ( const CSphTokenizerSettings & tSettings, const CSphEmbeddedFiles * pFiles, CSphString & sError )
 {
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( NULL );
 
@@ -3083,7 +3162,7 @@ ISphTokenizer * ISphTokenizer::Create ( const CSphTokenizerSettings & tSettings,
 		return NULL;
 	}
 
-	if ( !tSettings.m_sSynonymsFile.IsEmpty () && !pTokenizer->LoadSynonyms ( tSettings.m_sSynonymsFile.cstr (), sError ) )
+	if ( !tSettings.m_sSynonymsFile.IsEmpty () && !pTokenizer->LoadSynonyms ( tSettings.m_sSynonymsFile.cstr (), pFiles && pFiles->m_bEmbeddedSynonyms ? pFiles : NULL, sError ) )
 	{
 		sError.SetSprintf ( "'synonyms': %s", sError.cstr() );
 		return NULL;
@@ -3200,136 +3279,136 @@ bool CSphTokenizerTraits<IS_UTF8>::SetCaseFolding ( const char * sConfig, CSphSt
 
 
 template < bool IS_UTF8 >
-bool CSphTokenizerTraits<IS_UTF8>::LoadSynonyms ( const char * sFilename, CSphString & sError )
+bool CSphTokenizerTraits<IS_UTF8>::LoadSynonym ( char * sBuffer, const char * sFilename, int iLine, CSphSynonymHash & tHash, CSphString & sError )
+{
+	CSphVector<CSphString> dFrom;
+
+	// extract map-from and map-to parts
+	char * sSplit = strstr ( sBuffer, "=>" );
+	if ( !sSplit )
+	{
+		sError.SetSprintf ( "%s line %d: mapping token (=>) not found", sFilename, iLine );
+		return false;
+	}
+
+	BYTE * sFrom = (BYTE *) sBuffer;
+	BYTE * sTo = (BYTE *)( sSplit + strlen ( "=>" ) );
+	*sSplit = '\0';
+
+	// tokenize map-from
+	if ( !TokenizeOnWhitespace ( dFrom, sFrom, IsUtf8() ) )
+	{
+		sError.SetSprintf ( "%s line %d: empty map-from part", sFilename, iLine );
+		return false;
+	}
+
+	// trim map-to
+	sTo = sphTrim ( sTo );
+	if ( !*sTo )
+	{
+		sError.SetSprintf ( "%s line %d: empty map-to part", sFilename, iLine );
+		return false;
+	}
+
+	// check lengths
+	ARRAY_FOREACH ( i, dFrom )
+	{
+		int iFromLen = IsUtf8() ? sphUTF8Len ( dFrom[i].cstr() ) : strlen ( dFrom[i].cstr() );
+		if ( iFromLen>SPH_MAX_WORD_LEN )
+		{
+			sError.SetSprintf ( "%s line %d: map-from token too long (over %d bytes)", sFilename, iLine, SPH_MAX_WORD_LEN );
+			return false;
+		}
+	}
+
+	int iToLen = IsUtf8() ? sphUTF8Len ( (const char*)sTo ) : strlen ( (const char*)sTo );
+	if ( iToLen>SPH_MAX_WORD_LEN )
+	{
+		sError.SetSprintf ( "%s line %d: map-to token too long (over %d bytes)", sFilename, iLine, SPH_MAX_WORD_LEN );
+		return false;
+	}
+
+	// pack and store it
+	int iFromLen = 1;
+	ARRAY_FOREACH ( i, dFrom )
+		iFromLen += strlen ( dFrom[i].cstr() ) + 1;
+
+	if ( iFromLen>MAX_SYNONYM_LEN )
+	{
+		sError.SetSprintf ( "%s line %d: map-from part too long (over %d bytes)", sFilename, iLine, MAX_SYNONYM_LEN );
+		return false;
+	}
+
+	CSphSynonym & tSyn = m_dSynonyms.Add ();
+	tSyn.m_sFrom.Reserve ( iFromLen );
+	tSyn.m_iFromLen = iFromLen;
+	tSyn.m_sTo = (char*)sTo;
+	tSyn.m_iToLen = iToLen;
+
+	char * sCur = const_cast<char*> ( tSyn.m_sFrom.cstr() );
+	ARRAY_FOREACH ( i, dFrom )
+	{
+		int iLen = strlen ( dFrom[i].cstr() );
+		memcpy ( sCur, dFrom[i].cstr(), iLen );
+
+		sCur[iLen] = MAGIC_SYNONYM_WHITESPACE;
+		sCur += iLen+1;
+	}
+	*sCur++ = '\0';
+	assert ( sCur-tSyn.m_sFrom.cstr()==iFromLen );
+
+	// track synonym-only codepoints in map-from
+	for ( ;; )
+	{
+		int iCode = IsUtf8() ? sphUTF8Decode(sFrom) : *sFrom++;
+		if ( !iCode )
+			break;
+		if ( iCode>0 && !sphIsSpace(iCode) && !m_tLC.ToLower(iCode) )
+			tHash.Add ( 1, iCode );
+	}
+
+	return true;
+}
+
+
+template < bool IS_UTF8 >
+bool CSphTokenizerTraits<IS_UTF8>::LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError )
 {
 	m_dSynonyms.Reset ();
 
-	if ( !sFilename || !*sFilename )
-		return true;
+	CSphSynonymHash hSynonymOnly;
 
-	GetFileStats ( sFilename, m_tSynFileInfo );
-
-	FILE * fp = fopen ( sFilename, "r" );
-	if ( !fp )
+	if ( pFiles )
 	{
-		sError.SetSprintf ( "failed to open '%s'", sFilename );
-		return false;
-	}
-
-	int iLine = 0;
-	char sBuffer[1024];
-
-	CSphOrderedHash < int, int, IdentityHash_fn, 4096 > hSynonymOnly;
-	CSphVector<CSphString> dFrom;
-
-	bool bOK = false;
-	for ( ;; )
+		m_tSynFileInfo = pFiles->m_tSynonymFile;
+		ARRAY_FOREACH ( i, pFiles->m_dSynonyms )
+		{
+			if ( !LoadSynonym ( (char*)pFiles->m_dSynonyms[i].cstr(), pFiles->m_tSynonymFile.m_sFilename.cstr(), i, hSynonymOnly, sError ) )
+				sphWarning ( "%s", sError.cstr() );
+		}
+	} else
 	{
-		char * sGot = fgets ( sBuffer, sizeof(sBuffer), fp );
-		if ( !sGot )
+		if ( !sFilename || !*sFilename )
+			return true;
+
+		GetFileStats ( sFilename, m_tSynFileInfo );
+
+		CSphAutoreader tReader;
+		if ( !tReader.Open ( sFilename, sError ) )
+			return NULL;
+
+		char sBuffer[1024];
+		int iLine = 0;
+		while ( tReader.GetLine ( sBuffer, sizeof(sBuffer) )>=0 )
 		{
-			if ( feof(fp) )
-				bOK = true;
-			break;
+			iLine++;
+			if ( !LoadSynonym ( sBuffer, sFilename, iLine, hSynonymOnly, sError ) )
+				sphWarning ( "%s", sError.cstr() );
 		}
 
-		iLine++;
-		dFrom.Resize ( 0 );
-
-		// extract map-from and map-to parts
-		char * sSplit = strstr ( sBuffer, "=>" );
-		if ( !sSplit )
-		{
-			sError.SetSprintf ( "%s line %d: mapping token (=>) not found", sFilename, iLine );
-			break;
-		}
-
-		BYTE * sFrom = (BYTE *) sBuffer;
-		BYTE * sTo = (BYTE *)( sSplit + strlen ( "=>" ) );
-		*sSplit = '\0';
-
-		// tokenize map-from
-		if ( !TokenizeOnWhitespace ( dFrom, sFrom, IsUtf8() ) )
-		{
-			sError.SetSprintf ( "%s line %d: empty map-from part", sFilename, iLine );
-			break;
-		}
-
-		// trim map-to
-		sTo = sphTrim ( sTo );
-		if ( !*sTo )
-		{
-			sError.SetSprintf ( "%s line %d: empty map-to part", sFilename, iLine );
-			break;
-		}
-
-		// check lengths
-		ARRAY_FOREACH ( i, dFrom )
-		{
-			int iFromLen = IsUtf8() ? sphUTF8Len ( dFrom[i].cstr() ) : strlen ( dFrom[i].cstr() );
-			if ( iFromLen>SPH_MAX_WORD_LEN )
-			{
-				sError.SetSprintf ( "%s line %d: map-from token too long (over %d bytes)", sFilename, iLine, SPH_MAX_WORD_LEN );
-				break;
-			}
-		}
-
-		int iToLen = IsUtf8() ? sphUTF8Len ( (const char*)sTo ) : strlen ( (const char*)sTo );
-		if ( iToLen>SPH_MAX_WORD_LEN )
-		{
-			sError.SetSprintf ( "%s line %d: map-to token too long (over %d bytes)", sFilename, iLine, SPH_MAX_WORD_LEN );
-			break;
-		}
-
-		// pack and store it
-		int iFromLen = 1;
-		ARRAY_FOREACH ( i, dFrom )
-			iFromLen += strlen ( dFrom[i].cstr() ) + 1;
-
-		if ( iFromLen>MAX_SYNONYM_LEN )
-		{
-			sError.SetSprintf ( "%s line %d: map-from part too long (over %d bytes)", sFilename, iLine, MAX_SYNONYM_LEN );
-			break;
-		}
-
-		CSphSynonym & tSyn = m_dSynonyms.Add ();
-		tSyn.m_sFrom.Reserve ( iFromLen );
-		tSyn.m_iFromLen = iFromLen;
-		tSyn.m_sTo = (char*)sTo;
-		tSyn.m_iToLen = iToLen;
-
-		char * sCur = const_cast<char*> ( tSyn.m_sFrom.cstr() );
-		ARRAY_FOREACH ( i, dFrom )
-		{
-			int iLen = strlen ( dFrom[i].cstr() );
-			memcpy ( sCur, dFrom[i].cstr(), iLen );
-
-			sCur[iLen] = MAGIC_SYNONYM_WHITESPACE;
-			sCur += iLen+1;
-		}
-		*sCur++ = '\0';
-		assert ( sCur-tSyn.m_sFrom.cstr()==iFromLen );
-
-		// track synonym-only codepoints in map-from
-		for ( ;; )
-		{
-			int iCode = IsUtf8() ? sphUTF8Decode(sFrom) : *sFrom++;
-			if ( !iCode )
-				break;
-			if ( iCode>0 && !sphIsSpace(iCode) && !m_tLC.ToLower(iCode) )
-				hSynonymOnly.Add ( 1, iCode );
-		}
+		// sort the list
+		m_dSynonyms.Sort ();
 	}
-	fclose ( fp );
-
-	if ( !bOK )
-	{
-		m_dSynonyms.Reset ();
-		return false;
-	}
-
-	// sort the list
-	m_dSynonyms.Sort ();
 
 	// build simple lookup table
 	m_dSynStart.Resize ( 256 );
@@ -3359,6 +3438,29 @@ bool CSphTokenizerTraits<IS_UTF8>::LoadSynonyms ( const char * sFilename, CSphSt
 
 	m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_SYNONYM );
 	return true;
+}
+
+
+template < bool IS_UTF8 >
+void CSphTokenizerTraits<IS_UTF8>::WriteSynonyms ( CSphWriter & tWriter )
+{
+	tWriter.PutDword ( m_dSynonyms.GetLength() );
+	ARRAY_FOREACH ( i, m_dSynonyms )
+	{
+		CSphString sFrom, sLine;
+		sFrom = m_dSynonyms[i].m_sFrom;
+		char * pFrom = (char*)sFrom.cstr();
+		while ( pFrom && *pFrom )
+		{
+			if ( *pFrom==MAGIC_SYNONYM_WHITESPACE )
+				*pFrom = ' ';
+			pFrom++;
+		}
+
+		sFrom.Trim();
+		sLine.SetSprintf ( "%s => %s", sFrom.cstr(), m_dSynonyms[i].m_sTo.cstr() );
+		tWriter.PutString ( sLine );
+	}
 }
 
 
@@ -6794,6 +6896,7 @@ CSphIndexSettings::CSphIndexSettings ()
 	, m_eHitFormat			( SPH_HIT_FORMAT_PLAIN )
 	, m_bHtmlStrip			( false )
 	, m_eHitless			( SPH_HITLESS_NONE )
+	, m_iEmbeddedLimit		( 0 )
 {
 }
 
@@ -8588,6 +8691,7 @@ void SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettin
 	tWriter.PutDword ( tSettings.m_iBoundaryStep );
 	tWriter.PutDword ( tSettings.m_iStopwordStep );
 	tWriter.PutDword ( tSettings.m_iOvershortStep );
+	tWriter.PutDword ( tSettings.m_iEmbeddedLimit );
 }
 
 
@@ -8626,11 +8730,11 @@ bool CSphIndex_VLN::WriteHeader ( CSphWriter & fdInfo, const DictHeader_t & tDic
 
 	// tokenizer info
 	assert ( m_pTokenizer );
-	SaveTokenizerSettings ( fdInfo, m_pTokenizer );
+	SaveTokenizerSettings ( fdInfo, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
 
 	// dictionary info
 	assert ( m_pDict );
-	SaveDictionarySettings ( fdInfo, m_pDict, false );
+	SaveDictionarySettings ( fdInfo, m_pDict, false, m_tSettings.m_iEmbeddedLimit );
 
 	fdInfo.PutDword ( m_iKillListSize );
 	fdInfo.PutDword ( m_uMinMaxIndex );
@@ -13219,6 +13323,9 @@ void LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DW
 
 	if ( uVersion>=28 )
 		tSettings.m_iOvershortStep = (int)tReader.GetDword();
+
+	if ( uVersion>=30 )
+		tSettings.m_iEmbeddedLimit = (int)tReader.GetDword();
 }
 
 
@@ -13314,20 +13421,22 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 
 	if ( m_uVersion>=9 )
 	{
+		CSphEmbeddedFiles tEmbeddedFiles;
+
 		// tokenizer stuff
 		CSphTokenizerSettings tSettings;
-		LoadTokenizerSettings ( rdInfo, tSettings, m_uVersion, sWarning );
+		LoadTokenizerSettings ( rdInfo, tSettings, tEmbeddedFiles, m_uVersion, sWarning );
 
 		if ( bStripPath )
 			StripPath ( tSettings.m_sSynonymsFile );
 
-		ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tSettings, m_sLastError );
+		ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tSettings, &tEmbeddedFiles, m_sLastError );
 		if ( !pTokenizer )
 			return false;
 
 		// dictionary stuff
 		CSphDictSettings tDictSettings;
-		LoadDictionarySettings ( rdInfo, tDictSettings, m_uVersion, sWarning );
+		LoadDictionarySettings ( rdInfo, tDictSettings, tEmbeddedFiles, m_uVersion, sWarning );
 		if ( m_bId32to64 )
 			tDictSettings.m_bCrc32 = true;
 		m_bWordDict = tDictSettings.m_bWordDict;
@@ -13340,8 +13449,8 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 		}
 
 		CSphDict * pDict = tDictSettings.m_bWordDict
-			? sphCreateDictionaryKeywords ( tDictSettings, pTokenizer, m_sLastError, m_sIndexName.cstr() )
-			: sphCreateDictionaryCRC ( tDictSettings, pTokenizer, m_sLastError, m_sIndexName.cstr() );
+			? sphCreateDictionaryKeywords ( tDictSettings, &tEmbeddedFiles, pTokenizer, m_sLastError, m_sIndexName.cstr() )
+			: sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, pTokenizer, m_sLastError, m_sIndexName.cstr() );
 
 		if ( !pDict )
 			return false;
@@ -16664,7 +16773,10 @@ struct CSphDictCRCTraits : CSphDict
 	virtual				~CSphDictCRCTraits ();
 
 	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer );
-	virtual bool		LoadWordforms ( const CSphVector<CSphString> & dFiles, ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError );
+	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords );
+	virtual void		WriteStopwords ( CSphWriter & tWriter );
+	virtual bool		LoadWordforms ( const CSphVector<CSphString> & dFiles, const CSphEmbeddedFiles * pEmbedded, ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError );
+	virtual void		WriteWordforms ( CSphWriter & tWriter );
 	virtual bool		SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError );
 	virtual bool		HasMorphology() const;
 	virtual void		ApplyStemmers ( BYTE * pWord );
@@ -16720,12 +16832,13 @@ private:
 
 	static CSphVector<WordformContainer_t*>		m_dWordformContainers;
 
-	WordformContainer_t * GetWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos, const ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError );
-	WordformContainer_t * LoadWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos, const ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError );
+	WordformContainer_t * GetWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos, const CSphVector<CSphString> * pEmbeddedWordforms, const ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError );
+	WordformContainer_t * LoadWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos, const CSphVector<CSphString> * pEmbeddedWordforms, const ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError );
 
 	bool				InitMorph ( const char * szMorph, int iLength, bool bUseUTF8, CSphString & sError );
 	bool				AddMorph ( int iMorph );
 	bool				StemById ( BYTE * pWord, int iStemmer );
+	void				AddWordform ( WordformContainer_t * pContainer, char * sBuffer, int iLen, ISphTokenizer * pTokenizer, const char * szFile, CSphString & sError );
 };
 
 CSphVector < WordformContainer_t * > CSphDictCRCTraits::m_dWordformContainers;
@@ -17443,6 +17556,25 @@ void CSphDictCRCTraits::LoadStopwords ( const char * sFiles, ISphTokenizer * pTo
 }
 
 
+void CSphDictCRCTraits::LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords )
+{
+	m_dStopwordContainer.Reset ( dStopwords.GetLength() );
+	ARRAY_FOREACH ( i, dStopwords )
+		m_dStopwordContainer[i] = dStopwords[i];
+
+	m_iStopwords = m_dStopwordContainer.GetLength ();
+	m_pStopwords = m_dStopwordContainer.Begin();
+}
+
+
+void CSphDictCRCTraits::WriteStopwords ( CSphWriter & tWriter )
+{
+	tWriter.PutDword ( (DWORD)m_iStopwords );
+	for ( int i = 0; i < m_iStopwords; i++ )
+		tWriter.ZipOffset ( m_pStopwords[i] );
+}
+
+
 void CSphDictCRCTraits::SweepWordformContainers ( const CSphVector<CSphSavedFile> & dFiles )
 {
 	for ( int i = 0; i < m_dWordformContainers.GetLength (); )
@@ -17484,7 +17616,7 @@ static const char * ConcatReportStrings ( const CSphVector<CSphString> & dString
 }
 
 
-WordformContainer_t * CSphDictCRCTraits::GetWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos, const ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError )
+WordformContainer_t * CSphDictCRCTraits::GetWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos, const CSphVector<CSphString> * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError )
 {
 	ARRAY_FOREACH ( i, m_dWordformContainers )
 		if ( m_dWordformContainers[i]->IsEqual ( dFileInfos ) )
@@ -17502,7 +17634,7 @@ WordformContainer_t * CSphDictCRCTraits::GetWordformContainer ( const CSphVector
 			return NULL;
 		}
 
-	WordformContainer_t * pContainer = LoadWordformContainer ( dFileInfos, pTokenizer, sIndex, sError );
+	WordformContainer_t * pContainer = LoadWordformContainer ( dFileInfos, pEmbedded, pTokenizer, sIndex, sError );
 	if ( pContainer )
 		m_dWordformContainers.Add ( pContainer );
 
@@ -17510,7 +17642,224 @@ WordformContainer_t * CSphDictCRCTraits::GetWordformContainer ( const CSphVector
 }
 
 
-WordformContainer_t * CSphDictCRCTraits::LoadWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos, const ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError )
+void CSphDictCRCTraits::AddWordform ( WordformContainer_t * pContainer, char * sBuffer, int iLen, ISphTokenizer * pTokenizer, const char * szFile, CSphString & sError )
+{
+	CSphString sFrom;
+	bool bSeparatorFound = false;
+	const char * pStart = sBuffer;
+	while ( *pStart && isspace(*pStart) ) pStart++;
+	bool bAfterMorphology = *pStart=='~';
+	if ( bAfterMorphology )
+		pStart++;
+
+	// parse the line
+	pTokenizer->SetBuffer ( (BYTE*)pStart, iLen-(pStart-sBuffer) );
+
+	CSphScopedPtr<CSphMultiform> tMultiWordform ( NULL );
+	CSphString sKey;
+	bool bStopwordsPresent = false;
+
+	BYTE * pFrom = NULL;
+	while ( ( pFrom = pTokenizer->GetToken () )!=NULL )
+	{
+		if ( *pFrom=='#' && pTokenizer->GetLastTokenLen()==1 )
+			break;
+
+		const BYTE * pCur = (const BYTE *) pTokenizer->GetBufferPtr ();
+
+		while ( isspace(*pCur) ) pCur++;
+		if ( *pCur=='>' || ( *pCur=='=' && *(pCur+1)=='>' ) )
+		{
+			sFrom = (const char*)pFrom;
+			bSeparatorFound = true;
+			pTokenizer->SetBufferPtr ( (const char*) pCur+(*pCur=='=' ? 2 : 1) );
+			break;
+		} else if ( *pCur=='#' )
+			break;
+		else
+		{
+			if ( !tMultiWordform.Ptr() )
+			{
+				tMultiWordform = new CSphMultiform;
+				sKey = (const char*)pFrom;
+			} else
+			{
+				tMultiWordform->m_dTokens.Add ( (const char*)pFrom );
+				if ( !bStopwordsPresent && !GetWordID ( pFrom, tMultiWordform->m_dTokens.Last().Length(), true ) )
+					bStopwordsPresent = true;
+			}
+		}
+	}
+
+	if ( !pFrom || *pFrom=='#' )
+		return;
+
+	if ( !bSeparatorFound )
+	{
+		sError.SetSprintf ( "no wordform separator found ( wordform='%s' ). Fix your wordforms file '%s'.", sBuffer, szFile );
+		return;
+	}
+
+	BYTE * pTo = pTokenizer->GetToken ();
+	if ( !pTo )
+	{
+		sError.SetSprintf ( "no destination token found ( wordform='%s' ). Fix your wordforms file '%s'.", sBuffer, szFile );
+		return;
+	}
+
+	if ( *pTo=='#' )
+	{
+		sError.SetSprintf ( "misplaced comment ( wordform='%s' ). Fix your wordforms file '%s'.", sBuffer, szFile );
+		return;
+	}
+
+	CSphString sTo ( (const char *)pTo );
+
+	if ( tMultiWordform.Ptr() )
+	{
+		if ( bAfterMorphology )
+		{
+			sError.SetSprintf ( "'~' modifier is incompatible with wordforms that have several source words ( wordform='%s' ). Fix your wordforms file '%s'.",
+				sBuffer, szFile );
+			return;
+		}
+
+		tMultiWordform->m_dTokens.Add ( sFrom );
+
+		bool bToIsStopword = !GetWordID ( pTo, sTo.Length(), true );
+		bool bKeyIsStopword = !GetWordID ( (BYTE *)sKey.cstr(), sKey.Length(), true );
+
+		if ( bToIsStopword || bStopwordsPresent || bKeyIsStopword )
+		{
+			const char * szStopwordReport = ConcatReportStrings ( tMultiWordform->m_dTokens );
+			sError.SetSprintf ( "wordforms contain stopwords ( wordform='%s %s> %s' ). Fix your wordforms file '%s'.",
+				sKey.cstr(), szStopwordReport, sTo.cstr(), szFile );
+		}
+
+		if ( bToIsStopword )
+			return;
+
+		if ( bStopwordsPresent )
+			ARRAY_FOREACH ( i, tMultiWordform->m_dTokens )
+			if ( !GetWordID ( (BYTE *)( tMultiWordform->m_dTokens[i].cstr() ), tMultiWordform->m_dTokens[i].Length(), true ) )
+			{
+				tMultiWordform->m_dTokens.Remove(i);
+				i--;
+			}
+
+			if ( bKeyIsStopword )
+			{
+				if ( tMultiWordform->m_dTokens.GetLength() )
+				{
+					sKey = tMultiWordform->m_dTokens[0];
+					tMultiWordform->m_dTokens.Remove(0);
+				} else
+					return;
+			}
+
+			if ( !tMultiWordform->m_dTokens.GetLength() )
+			{
+				tMultiWordform.Reset();
+				sFrom = sKey;
+			}
+	} else
+	{
+		if ( !GetWordID ( (BYTE *)sFrom.cstr(), sFrom.Length(), true ) || !GetWordID ( pTo, sTo.Length(), true ) )
+		{
+			sError.SetSprintf ( "wordforms contain stopwords ( wordform='%s' ). Fix your wordforms file '%s'.", sBuffer, szFile );
+			return;
+		}
+	}
+
+	const CSphString & sSourceWordform = tMultiWordform.Ptr() ? sTo : sFrom;
+
+	// check wordform that source token is a new token or has same destination token
+	int * pRefTo = pContainer->m_dHash ( sSourceWordform );
+	assert ( !pRefTo || ( *pRefTo>=0 && *pRefTo<pContainer->m_dNormalForms.GetLength() ) );
+	if ( !tMultiWordform.Ptr() && pRefTo )
+	{
+		// replace with a new wordform
+		if ( pContainer->m_dNormalForms[*pRefTo].m_sWord!=sTo || pContainer->m_dNormalForms[*pRefTo].m_bAfterMorphology!=bAfterMorphology )
+		{
+			CSphStoredNF & tRefTo = pContainer->m_dNormalForms[*pRefTo];
+			sError.SetSprintf ( "duplicate wordform found - overridden ( current='%s', old='%s%s > %s' ). Fix your wordforms file '%s'.",
+				sBuffer, tRefTo.m_bAfterMorphology ? "~" : "", sSourceWordform.cstr(), tRefTo.m_sWord.cstr(), szFile );
+
+			tRefTo.m_sWord = sTo;
+			tRefTo.m_bAfterMorphology = bAfterMorphology;
+			pContainer->m_bHavePostMorphNF |= bAfterMorphology;
+		}
+
+		return;
+	}
+
+	if ( !pRefTo && !tMultiWordform.Ptr() )
+	{
+		CSphStoredNF tForm;
+		tForm.m_sWord = sTo;
+		tForm.m_bAfterMorphology = bAfterMorphology;
+		pContainer->m_bHavePostMorphNF |= bAfterMorphology;
+		if ( !pContainer->m_dNormalForms.GetLength() || pContainer->m_dNormalForms.Last().m_sWord!=sTo || pContainer->m_dNormalForms.Last().m_bAfterMorphology!=bAfterMorphology)
+			pContainer->m_dNormalForms.Add ( tForm );
+
+		pContainer->m_dHash.Add ( pContainer->m_dNormalForms.GetLength()-1, sSourceWordform );
+	}
+
+	if ( tMultiWordform.Ptr() )
+	{
+		CSphMultiform * pMultiWordform = tMultiWordform.LeakPtr();
+		pMultiWordform->m_sNormalForm = sTo;
+		pMultiWordform->m_iNormalTokenLen = pTokenizer->GetLastTokenLen ();
+		if ( !pContainer->m_pMultiWordforms )
+			pContainer->m_pMultiWordforms = new CSphMultiformContainer;
+
+		CSphMultiforms ** pWordforms = pContainer->m_pMultiWordforms->m_Hash ( sKey );
+		if ( pWordforms )
+		{
+			ARRAY_FOREACH ( iMultiform, (*pWordforms)->m_dWordforms )
+			{
+				CSphMultiform * pStoredMF = (*pWordforms)->m_dWordforms[iMultiform];
+				if ( pStoredMF->m_dTokens.GetLength()==pMultiWordform->m_dTokens.GetLength() )
+				{
+					bool bSameTokens = true;
+					ARRAY_FOREACH_COND ( iToken, pStoredMF->m_dTokens, bSameTokens )
+						if ( pStoredMF->m_dTokens[iToken]!=pMultiWordform->m_dTokens[iToken] )
+							bSameTokens = false;
+
+					if ( bSameTokens )
+					{
+						const char * szStoredTokens = ConcatReportStrings ( pStoredMF->m_dTokens );
+						sError.SetSprintf ( "duplicate wordform found - overridden ( current='%s', old='%s %s > %s' ). Fix your wordforms file '%s'.",
+							sBuffer, sKey.cstr(), szStoredTokens, pStoredMF->m_sNormalForm.cstr(), szFile );
+
+						pStoredMF->m_iNormalTokenLen = pMultiWordform->m_iNormalTokenLen;
+						pStoredMF->m_sNormalForm = pMultiWordform->m_sNormalForm;
+						SafeDelete ( pMultiWordform );
+					}
+				}
+			}
+
+			if ( pMultiWordform )
+			{
+				(*pWordforms)->m_dWordforms.Add ( pMultiWordform );
+				(*pWordforms)->m_iMinTokens = Min ( (*pWordforms)->m_iMinTokens, pMultiWordform->m_dTokens.GetLength () );
+				(*pWordforms)->m_iMaxTokens = Max ( (*pWordforms)->m_iMaxTokens, pMultiWordform->m_dTokens.GetLength () );
+				pContainer->m_pMultiWordforms->m_iMaxTokens = Max ( pContainer->m_pMultiWordforms->m_iMaxTokens, (*pWordforms)->m_iMaxTokens );
+			}
+		} else
+		{
+			CSphMultiforms * pNewWordforms = new CSphMultiforms;
+			pNewWordforms->m_dWordforms.Add ( pMultiWordform );
+			pNewWordforms->m_iMinTokens = pMultiWordform->m_dTokens.GetLength ();
+			pNewWordforms->m_iMaxTokens = pMultiWordform->m_dTokens.GetLength ();
+			pContainer->m_pMultiWordforms->m_iMaxTokens = Max ( pContainer->m_pMultiWordforms->m_iMaxTokens, pNewWordforms->m_iMaxTokens );
+			pContainer->m_pMultiWordforms->m_Hash.Add ( pNewWordforms, sKey );
+		}
+	}
+}
+
+
+WordformContainer_t * CSphDictCRCTraits::LoadWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos, const CSphVector<CSphString> * pEmbeddedWordforms, const ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError )
 {
 	// allocate it
 	WordformContainer_t * pContainer = new WordformContainer_t;
@@ -17525,229 +17874,31 @@ WordformContainer_t * CSphDictCRCTraits::LoadWordformContainer ( const CSphVecto
 	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone ( false ) );
 	pMyTokenizer->AddSpecials ( "#=>" );
 
-	// scan it line by line
-	char sBuffer [ 6*SPH_MAX_WORD_LEN + 512 ]; // enough to hold 2 UTF-8 words, plus some whitespace overhead
-	int iLen;
-	CSphString sFrom;
-
-	ARRAY_FOREACH ( i, dFileInfos )
+	if ( pEmbeddedWordforms )
 	{
-		CSphAutoreader rdWordforms;
-		const char * szFile = dFileInfos[i].m_sFilename.cstr();
-		if ( !rdWordforms.Open ( szFile, sError ) )
-			return NULL;
+		CSphVector<CSphString> dFilenames;
+		dFilenames.Resize ( dFileInfos.GetLength() );
+		ARRAY_FOREACH ( i, dFileInfos )
+			dFilenames[i] = dFileInfos[i].m_sFilename;
 
-		while ( ( iLen = rdWordforms.GetLine ( sBuffer, sizeof(sBuffer) ) )>=0 )
+		CSphString sAllFiles = ConcatReportStrings ( dFilenames );
+
+		ARRAY_FOREACH ( i, (*pEmbeddedWordforms) )
+			AddWordform ( pContainer, (char*)(*pEmbeddedWordforms)[i].cstr(), (*pEmbeddedWordforms)[i].Length(), pMyTokenizer.Ptr(), sAllFiles.cstr(), sError );
+	} else
+	{
+		char sBuffer [ 6*SPH_MAX_WORD_LEN + 512 ]; // enough to hold 2 UTF-8 words, plus some whitespace overhead
+
+		ARRAY_FOREACH ( i, dFileInfos )
 		{
-			bool bSeparatorFound = false;
-			char * pStart = sBuffer;
-			while ( *pStart && isspace(*pStart) ) pStart++;
-			bool bAfterMorphology = *pStart=='~';
-			if ( bAfterMorphology )
-				pStart++;
+			CSphAutoreader rdWordforms;
+			const char * szFile = dFileInfos[i].m_sFilename.cstr();
+			if ( !rdWordforms.Open ( szFile, sError ) )
+				return NULL;
 
-			// parse the line
-			pMyTokenizer->SetBuffer ( (BYTE*)pStart, iLen-(pStart-sBuffer) );
-
-			CSphScopedPtr<CSphMultiform> tMultiWordform ( NULL );
-			CSphString sKey;
-			bool bStopwordsPresent = false;
-
-			BYTE * pFrom = NULL;
-			while ( ( pFrom = pMyTokenizer->GetToken () )!=NULL )
-			{
-				if ( *pFrom=='#' && pMyTokenizer->GetLastTokenLen()==1 )
-					break;
-
-				const BYTE * pCur = (const BYTE *) pMyTokenizer->GetBufferPtr ();
-
-				while ( isspace(*pCur) ) pCur++;
-				if ( *pCur=='>' || ( *pCur=='=' && *(pCur+1)=='>' ) )
-				{
-					sFrom = (const char*)pFrom;
-					bSeparatorFound = true;
-					pMyTokenizer->SetBufferPtr ( (const char*) pCur+(*pCur=='=' ? 2 : 1) );
-					break;
-				} else if ( *pCur=='#' )
-					break;
-				else
-				{
-					if ( !tMultiWordform.Ptr() )
-					{
-						tMultiWordform = new CSphMultiform;
-						sKey = (const char*)pFrom;
-					} else
-					{
-						tMultiWordform->m_dTokens.Add ( (const char*)pFrom );
-						if ( !bStopwordsPresent && !GetWordID ( pFrom, tMultiWordform->m_dTokens.Last().Length(), true ) )
-							bStopwordsPresent = true;
-					}
-				}
-			}
-
-			if ( !pFrom || *pFrom=='#' )
-				continue;
-
-			if ( !bSeparatorFound )
-			{
-				sError.SetSprintf ( "no wordform separator found ( wordform='%s' ). Fix your wordforms file '%s'.", sBuffer, szFile );
-				continue;
-			}
-
-			BYTE * pTo = pMyTokenizer->GetToken ();
-			if ( !pTo )
-			{
-				sError.SetSprintf ( "no destination token found ( wordform='%s' ). Fix your wordforms file '%s'.", sBuffer, szFile );
-				continue;
-			}
-
-			if ( *pTo=='#' )
-			{
-				sError.SetSprintf ( "misplaced comment ( wordform='%s' ). Fix your wordforms file '%s'.", sBuffer, szFile );
-				continue;
-			}
-
-			CSphString sTo ( (const char *)pTo );
-
-			if ( tMultiWordform.Ptr() )
-			{
-				if ( bAfterMorphology )
-				{
-					sError.SetSprintf ( "'~' modifier is incompatible with wordforms that have several source words ( wordform='%s' ). Fix your wordforms file '%s'.",
-						sBuffer, szFile );
-					continue;
-				}
-
-				tMultiWordform->m_dTokens.Add ( sFrom );
-
-				bool bToIsStopword = !GetWordID ( pTo, sTo.Length(), true );
-				bool bKeyIsStopword = !GetWordID ( (BYTE *)sKey.cstr(), sKey.Length(), true );
-
-				if ( bToIsStopword || bStopwordsPresent || bKeyIsStopword )
-				{
-					const char * szStopwordReport = ConcatReportStrings ( tMultiWordform->m_dTokens );
-					sError.SetSprintf ( "wordforms contain stopwords ( wordform='%s %s> %s' ). Fix your wordforms file '%s'.",
-						sKey.cstr(), szStopwordReport, sTo.cstr(), szFile );
-				}
-
-				if ( bToIsStopword )
-					continue;
-
-				if ( bStopwordsPresent )
-					ARRAY_FOREACH ( i, tMultiWordform->m_dTokens )
-						if ( !GetWordID ( (BYTE *)( tMultiWordform->m_dTokens[i].cstr() ), tMultiWordform->m_dTokens[i].Length(), true ) )
-						{
-							tMultiWordform->m_dTokens.Remove(i);
-							i--;
-						}
-
-				if ( bKeyIsStopword )
-					if ( tMultiWordform->m_dTokens.GetLength() )
-					{
-						sKey = tMultiWordform->m_dTokens[0];
-						tMultiWordform->m_dTokens.Remove(0);
-					} else
-						continue;
-
-				if ( !tMultiWordform->m_dTokens.GetLength() )
-				{
-					tMultiWordform.Reset();
-					sFrom = sKey;
-				}
-			} else
-			{
-				if ( !GetWordID ( (BYTE *)sFrom.cstr(), sFrom.Length(), true ) || !GetWordID ( pTo, sTo.Length(), true ) )
-				{
-					sError.SetSprintf ( "wordforms contain stopwords ( wordform='%s' ). Fix your wordforms file '%s'.", sBuffer, szFile );
-					continue;
-				}
-			}
-
-			const CSphString & sSourceWordform = tMultiWordform.Ptr() ? sTo : sFrom;
-
-			// check wordform that source token is a new token or has same destination token
-			int * pRefTo = pContainer->m_dHash ( sSourceWordform );
-			assert ( !pRefTo || ( *pRefTo>=0 && *pRefTo<pContainer->m_dNormalForms.GetLength() ) );
-			if ( !tMultiWordform.Ptr() && pRefTo )
-			{
-				// replace with a new wordform
-				if ( pContainer->m_dNormalForms[*pRefTo].m_sWord!=sTo || pContainer->m_dNormalForms[*pRefTo].m_bAfterMorphology!=bAfterMorphology )
-				{
-					CSphStoredNF & tRefTo = pContainer->m_dNormalForms[*pRefTo];
-					sError.SetSprintf ( "duplicate wordform found - overridden ( current='%s', old='%s%s > %s' ). Fix your wordforms file '%s'.",
-						sBuffer, tRefTo.m_bAfterMorphology ? "~" : "", sSourceWordform.cstr(), tRefTo.m_sWord.cstr(), szFile );
-
-					tRefTo.m_sWord = sTo;
-					tRefTo.m_bAfterMorphology = bAfterMorphology;
-					pContainer->m_bHavePostMorphNF |= bAfterMorphology;
-				}
-
-				continue;
-			}
-
-			if ( !pRefTo && !tMultiWordform.Ptr() )
-			{
-				CSphStoredNF tForm;
-				tForm.m_sWord = sTo;
-				tForm.m_bAfterMorphology = bAfterMorphology;
-				pContainer->m_bHavePostMorphNF |= bAfterMorphology;
-				if ( !pContainer->m_dNormalForms.GetLength() || pContainer->m_dNormalForms.Last().m_sWord!=sTo || pContainer->m_dNormalForms.Last().m_bAfterMorphology!=bAfterMorphology)
-					pContainer->m_dNormalForms.Add ( tForm );
-
-				pContainer->m_dHash.Add ( pContainer->m_dNormalForms.GetLength()-1, sSourceWordform );
-			}
-
-			if ( tMultiWordform.Ptr() )
-			{
-				CSphMultiform * pMultiWordform = tMultiWordform.LeakPtr();
-				pMultiWordform->m_sNormalForm = sTo;
-				pMultiWordform->m_iNormalTokenLen = pMyTokenizer->GetLastTokenLen ();
-				if ( !pContainer->m_pMultiWordforms )
-					pContainer->m_pMultiWordforms = new CSphMultiformContainer;
-
-				CSphMultiforms ** pWordforms = pContainer->m_pMultiWordforms->m_Hash ( sKey );
-				if ( pWordforms )
-				{
-					ARRAY_FOREACH ( iMultiform, (*pWordforms)->m_dWordforms )
-					{
-						CSphMultiform * pStoredMF = (*pWordforms)->m_dWordforms[iMultiform];
-						if ( pStoredMF->m_dTokens.GetLength()==pMultiWordform->m_dTokens.GetLength() )
-						{
-							bool bSameTokens = true;
-							ARRAY_FOREACH_COND ( iToken, pStoredMF->m_dTokens, bSameTokens )
-								if ( pStoredMF->m_dTokens[iToken]!=pMultiWordform->m_dTokens[iToken] )
-									bSameTokens = false;
-
-							if ( bSameTokens )
-							{
-								const char * szStoredTokens = ConcatReportStrings ( pStoredMF->m_dTokens );
-								sError.SetSprintf ( "duplicate wordform found - overridden ( current='%s', old='%s %s > %s' ). Fix your wordforms file '%s'.",
-									sBuffer, sKey.cstr(), szStoredTokens, pStoredMF->m_sNormalForm.cstr(), szFile );
-
-								pStoredMF->m_iNormalTokenLen = pMultiWordform->m_iNormalTokenLen;
-								pStoredMF->m_sNormalForm = pMultiWordform->m_sNormalForm;
-								SafeDelete ( pMultiWordform );
-							}
-						}
-					}
-
-					if ( pMultiWordform )
-					{
-						(*pWordforms)->m_dWordforms.Add ( pMultiWordform );
-						(*pWordforms)->m_iMinTokens = Min ( (*pWordforms)->m_iMinTokens, pMultiWordform->m_dTokens.GetLength () );
-						(*pWordforms)->m_iMaxTokens = Max ( (*pWordforms)->m_iMaxTokens, pMultiWordform->m_dTokens.GetLength () );
-						pContainer->m_pMultiWordforms->m_iMaxTokens = Max ( pContainer->m_pMultiWordforms->m_iMaxTokens, (*pWordforms)->m_iMaxTokens );
-					}
-				} else
-				{
-					CSphMultiforms * pNewWordforms = new CSphMultiforms;
-					pNewWordforms->m_dWordforms.Add ( pMultiWordform );
-					pNewWordforms->m_iMinTokens = pMultiWordform->m_dTokens.GetLength ();
-					pNewWordforms->m_iMaxTokens = pMultiWordform->m_dTokens.GetLength ();
-					pContainer->m_pMultiWordforms->m_iMaxTokens = Max ( pContainer->m_pMultiWordforms->m_iMaxTokens, pNewWordforms->m_iMaxTokens );
-					pContainer->m_pMultiWordforms->m_Hash.Add ( pNewWordforms, sKey );
-				}
-			}
+			int iLen;
+			while ( ( iLen = rdWordforms.GetLine ( sBuffer, sizeof(sBuffer) ) )>=0 )
+				AddWordform ( pContainer, sBuffer, iLen, pMyTokenizer.Ptr(), szFile, sError );
 		}
 	}
 
@@ -17755,21 +17906,29 @@ WordformContainer_t * CSphDictCRCTraits::LoadWordformContainer ( const CSphVecto
 }
 
 
-bool CSphDictCRCTraits::LoadWordforms ( const CSphVector<CSphString> & dFiles, ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError )
+bool CSphDictCRCTraits::LoadWordforms ( const CSphVector<CSphString> & dFiles, const CSphEmbeddedFiles * pEmbedded, ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError )
 {
-	m_dWFFileInfos.Reserve ( m_dWFFileInfos.GetLength () );
-	CSphSavedFile tFile;
-	ARRAY_FOREACH ( i, dFiles )
+	if ( pEmbedded )
 	{
-		if ( GetFileStats ( dFiles[i].cstr(), tFile ) )
-			m_dWFFileInfos.Add ( tFile );
-		else
-			sError.SetSprintf ( "wordforms file '%s' not found", dFiles[i].cstr() );
+		m_dWFFileInfos.Resize ( pEmbedded->m_dWordformFiles.GetLength() );
+		ARRAY_FOREACH ( i, m_dWFFileInfos )
+			m_dWFFileInfos[i] = pEmbedded->m_dWordformFiles[i];
+	} else
+	{
+		m_dWFFileInfos.Reserve ( m_dWFFileInfos.GetLength() );
+		CSphSavedFile tFile;
+		ARRAY_FOREACH ( i, dFiles )
+		{
+			if ( GetFileStats ( dFiles[i].cstr(), tFile ) )
+				m_dWFFileInfos.Add ( tFile );
+			else
+				sError.SetSprintf ( "wordforms file '%s' not found", dFiles[i].cstr() );
+		}
 	}
 
 	SweepWordformContainers ( m_dWFFileInfos );
 
-	m_pWordforms = GetWordformContainer ( m_dWFFileInfos, pTokenizer, sIndex, sError );
+	m_pWordforms = GetWordformContainer ( m_dWFFileInfos, pEmbedded ? &(pEmbedded->m_dWordforms) : NULL, pTokenizer, sIndex, sError );
 	if ( m_pWordforms )
 	{
 		m_pWordforms->m_iRefCount++;
@@ -17778,6 +17937,60 @@ bool CSphDictCRCTraits::LoadWordforms ( const CSphVector<CSphString> & dFiles, I
 	}
 
 	return !!m_pWordforms;
+}
+
+
+void CSphDictCRCTraits::WriteWordforms ( CSphWriter & tWriter )
+{
+	if ( !m_pWordforms )
+	{
+		tWriter.PutDword(0);
+		return;
+	}
+
+	int nMultiforms = 0;
+	if ( m_pWordforms->m_pMultiWordforms )
+	{
+		CSphMultiformContainer::CSphMultiformHash & tHash = m_pWordforms->m_pMultiWordforms->m_Hash;
+		tHash.IterateStart();
+		while ( tHash.IterateNext() )
+		{
+			CSphMultiforms * pMF = tHash.IterateGet();
+			nMultiforms += pMF ? pMF->m_dWordforms.GetLength() : 0;
+		}
+	}
+
+	tWriter.PutDword ( m_pWordforms->m_dHash.GetLength()+nMultiforms );
+	m_pWordforms->m_dHash.IterateStart();
+	while ( m_pWordforms->m_dHash.IterateNext() )
+	{
+		const CSphString & sKey = m_pWordforms->m_dHash.IterateGetKey();
+		int iIndex = m_pWordforms->m_dHash.IterateGet();
+		CSphString sLine;
+		sLine.SetSprintf ( "%s%s > %s", m_pWordforms->m_dNormalForms[iIndex].m_bAfterMorphology ? "~" : "", sKey.cstr(), m_pWordforms->m_dNormalForms[iIndex].m_sWord.cstr() );
+		tWriter.PutString ( sLine );
+	}
+
+	if ( m_pWordforms->m_pMultiWordforms )
+	{
+		CSphMultiformContainer::CSphMultiformHash & tHash = m_pWordforms->m_pMultiWordforms->m_Hash;
+		tHash.IterateStart();
+		while ( tHash.IterateNext() )
+		{
+			const CSphString & sKey = tHash.IterateGetKey();
+			CSphMultiforms * pMF = tHash.IterateGet();
+			if ( !pMF )
+				continue;
+
+			ARRAY_FOREACH ( i, pMF->m_dWordforms )
+			{
+				CSphString sLine;
+				const char * szTokens = ConcatReportStrings ( pMF->m_dWordforms[i]->m_dTokens );
+				sLine.SetSprintf ( "%s %s > %s", sKey.cstr(), szTokens, pMF->m_dWordforms[i]->m_sNormalForm.cstr() );
+				tWriter.PutString ( sLine );
+			}
+		}
+	}
 }
 
 
@@ -19625,7 +19838,10 @@ public:
 	}
 
 	virtual void LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer ) { m_pBase->LoadStopwords ( sFiles, pTokenizer ); }
-	virtual bool LoadWordforms ( const CSphVector<CSphString> & dFiles, ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError ) { return m_pBase->LoadWordforms ( dFiles, pTokenizer, sIndex, sError ); }
+	virtual void LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) { m_pBase->LoadStopwords ( dStopwords ); }
+	virtual void WriteStopwords ( CSphWriter & tWriter ) { m_pBase->WriteStopwords ( tWriter ); }
+	virtual bool LoadWordforms ( const CSphVector<CSphString> & dFiles, const CSphEmbeddedFiles * pEmbedded, ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError ) { return m_pBase->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex, sError ); }
+	virtual void WriteWordforms ( CSphWriter & tWriter ) { m_pBase->WriteWordforms ( tWriter ); }
 	virtual bool SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError ) { return m_pBase->SetMorphology ( szMorph, bUseUTF8, sError ); }
 	virtual void Setup ( const CSphDictSettings & tSettings ) { m_pBase->Setup ( tSettings ); }
 	virtual const CSphDictSettings & GetSettings () const { return m_pBase->GetSettings(); }
@@ -19647,7 +19863,7 @@ ISphRtDictWraper * sphCreateRtKeywordsDictionaryWrapper ( CSphDict * pBase )
 // DICTIONARY FACTORIES
 //////////////////////////////////////////////////////////////////////////
 
-static CSphDict * SetupDictionary ( CSphDict * pDict, const CSphDictSettings & tSettings, ISphTokenizer * pTokenizer, CSphString & sError, const char * sIndex )
+static CSphDict * SetupDictionary ( CSphDict * pDict, const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, ISphTokenizer * pTokenizer, CSphString & sError, const char * sIndex )
 {
 	assert ( pTokenizer );
 	assert ( pDict );
@@ -19656,14 +19872,18 @@ static CSphDict * SetupDictionary ( CSphDict * pDict, const CSphDictSettings & t
 	if ( pDict->SetMorphology ( tSettings.m_sMorphology.cstr (), pTokenizer->IsUtf8(), sError ) )
 		sError = "";
 
-	pDict->LoadStopwords ( tSettings.m_sStopwords.cstr (), pTokenizer );
-	pDict->LoadWordforms ( tSettings.m_dWordforms, pTokenizer, sIndex, sError );
+	if ( pFiles && pFiles->m_bEmbeddedStopwords )
+		pDict->LoadStopwords ( pFiles->m_dStopwords );
+	else
+		pDict->LoadStopwords ( tSettings.m_sStopwords.cstr (), pTokenizer );
+
+	pDict->LoadWordforms ( tSettings.m_dWordforms, pFiles && pFiles->m_bEmbeddedWordforms ? pFiles : NULL, pTokenizer, sIndex, sError );
 
 	return pDict;
 }
 
 
-CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, ISphTokenizer * pTokenizer, CSphString & sError, const char * sIndex )
+CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, ISphTokenizer * pTokenizer, CSphString & sError, const char * sIndex )
 {
 	CSphDict * pDict = NULL;
 	if ( tSettings.m_bCrc32 )
@@ -19672,14 +19892,14 @@ CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, ISphToke
 		pDict = new CSphDictCRC<false> ();
 	if ( !pDict )
 		return NULL;
-	return SetupDictionary ( pDict, tSettings, pTokenizer, sError, sIndex );
+	return SetupDictionary ( pDict, tSettings, pFiles, pTokenizer, sError, sIndex );
 }
 
 
-CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, ISphTokenizer * pTokenizer, CSphString & sError, const char * sIndex )
+CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, ISphTokenizer * pTokenizer, CSphString & sError, const char * sIndex )
 {
 	CSphDict * pDict = new CSphDictKeywords();
-	return SetupDictionary ( pDict, tSettings, pTokenizer, sError, sIndex );
+	return SetupDictionary ( pDict, tSettings, pFiles, pTokenizer, sError, sIndex );
 }
 
 
@@ -26308,6 +26528,7 @@ void sphDictBuildInfixes ( const char * sPath )
 	CSphIndexSettings tIndexSettings;
 	CSphTokenizerSettings tTokenizerSettings;
 	CSphDictSettings tDictSettings;
+	CSphEmbeddedFiles tEmbeddedFiles;
 
 	ReadSchema ( rdHeader, tSchema, uVersion, eDocinfo==SPH_DOCINFO_INLINE );
 	SphOffset_t iMinDocid = rdHeader.GetOffset();
@@ -26318,8 +26539,8 @@ void sphDictBuildInfixes ( const char * sPath )
 	tStats.m_iTotalDocuments = rdHeader.GetDword ();
 	tStats.m_iTotalBytes = rdHeader.GetOffset ();
 	LoadIndexSettings ( tIndexSettings, rdHeader, uVersion );
-	LoadTokenizerSettings ( rdHeader, tTokenizerSettings, uVersion, sError );
-	LoadDictionarySettings ( rdHeader, tDictSettings, uVersion, sError );
+	LoadTokenizerSettings ( rdHeader, tTokenizerSettings, tEmbeddedFiles, uVersion, sError );
+	LoadDictionarySettings ( rdHeader, tDictSettings, tEmbeddedFiles, uVersion, sError );
 	int iKillListSize = rdHeader.GetDword();
 	DWORD uMinMaxIndex = rdHeader.GetDword();
 
@@ -26337,7 +26558,7 @@ void sphDictBuildInfixes ( const char * sPath )
 	tIndexSettings.m_iMinPrefixLen = 0;
 	tIndexSettings.m_iMinInfixLen = 2;
 
-	ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, sError );
+	ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, sError );
 	if ( !pTokenizer )
 		sphDie ( "infix upgrade: %s", sError.cstr() );
 	tDictHeader.m_iInfixCodepointBytes = pTokenizer->GetMaxCodepointLength();
@@ -26420,7 +26641,7 @@ void sphDictBuildInfixes ( const char * sPath )
 	////////////////////
 
 	assert ( tDictSettings.m_bWordDict );
-	CSphDict * pDict = sphCreateDictionaryKeywords ( tDictSettings, pTokenizer, sError, "$indexname" );
+	CSphDict * pDict = sphCreateDictionaryKeywords ( tDictSettings, &tEmbeddedFiles, pTokenizer, sError, "$indexname" );
 	if ( !pDict )
 		sphDie ( "infix upgrade: %s", sError.cstr() );
 
@@ -26442,8 +26663,8 @@ void sphDictBuildInfixes ( const char * sPath )
 	wrHeader.PutDword ( tStats.m_iTotalDocuments );
 	wrHeader.PutOffset ( tStats.m_iTotalBytes );
 	SaveIndexSettings ( wrHeader, tIndexSettings );
-	SaveTokenizerSettings ( wrHeader, pTokenizer );
-	SaveDictionarySettings ( wrHeader, pDict, false );
+	SaveTokenizerSettings ( wrHeader, pTokenizer, tIndexSettings.m_iEmbeddedLimit );
+	SaveDictionarySettings ( wrHeader, pDict, false, tIndexSettings.m_iEmbeddedLimit );
 	wrHeader.PutDword ( iKillListSize );
 	wrHeader.PutDword ( uMinMaxIndex );
 

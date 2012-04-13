@@ -3211,7 +3211,7 @@ template < typename DOCID >
 void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iCheckpoints, SphOffset_t iCheckpointsPosition, DWORD uKillListSize, DWORD uMinMaxSize, bool bForceID32 ) const
 {
 	static const DWORD INDEX_MAGIC_HEADER	= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD INDEX_FORMAT_VERSION	= 29;			///< my format version
+	static const DWORD INDEX_FORMAT_VERSION	= 30;			///< my format version
 
 	CSphWriter tWriter;
 	CSphString sName, sError;
@@ -3259,12 +3259,13 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iC
 	tWriter.PutDword ( 0 ); // m_iBoundaryStep, v.23+
 	tWriter.PutDword ( 1 ); // m_iStopwordStep, v.23+
 	tWriter.PutDword ( 1 );	// m_iOvershortStep
+	tWriter.PutDword ( m_tSettings.m_iEmbeddedLimit );	// v.30+
 
 	// tokenizer
-	SaveTokenizerSettings ( tWriter, m_pTokenizer );
+	SaveTokenizerSettings ( tWriter, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
 
 	// dictionary
-	SaveDictionarySettings ( tWriter, m_pDict, m_bKeywordDict );
+	SaveDictionarySettings ( tWriter, m_pDict, m_bKeywordDict, m_tSettings.m_iEmbeddedLimit );
 
 	// kill-list size
 	tWriter.PutDword ( uKillListSize );
@@ -3318,8 +3319,8 @@ void RtIndex_t::SaveMeta ( int iDiskChunks )
 	wrMeta.PutDword ( INDEX_FORMAT_VERSION );
 	WriteSchema ( wrMeta, m_tSchema );
 	SaveIndexSettings ( wrMeta, m_tSettings );
-	SaveTokenizerSettings ( wrMeta, m_pTokenizer );
-	SaveDictionarySettings ( wrMeta, m_pDict, m_bKeywordDict );
+	SaveTokenizerSettings ( wrMeta, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
+	SaveDictionarySettings ( wrMeta, m_pDict, m_bKeywordDict, m_tSettings.m_iEmbeddedLimit );
 
 	// meta v.5
 	wrMeta.PutDword ( m_iWordsCheckpoint );
@@ -3460,14 +3461,15 @@ bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 	{
 		CSphTokenizerSettings tTokenizerSettings;
 		CSphDictSettings tDictSettings;
+		CSphEmbeddedFiles tEmbeddedFiles;
 		CSphString sWarning;
 
 		// load them settings
 		DWORD uSettingsVer = rdMeta.GetDword();
 		ReadSchema ( rdMeta, m_tSchema, uSettingsVer, false );
 		LoadIndexSettings ( m_tSettings, rdMeta, uSettingsVer );
-		LoadTokenizerSettings ( rdMeta, tTokenizerSettings, uSettingsVer, sWarning );
-		LoadDictionarySettings ( rdMeta, tDictSettings, uSettingsVer, sWarning );
+		LoadTokenizerSettings ( rdMeta, tTokenizerSettings, tEmbeddedFiles, uSettingsVer, sWarning );
+		LoadDictionarySettings ( rdMeta, tDictSettings, tEmbeddedFiles, uSettingsVer, sWarning );
 
 		// meta v.5 dictionary
 		if ( uVersion>=5 )
@@ -3487,7 +3489,7 @@ bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 
 		// recreate tokenizer
 		SafeDelete ( m_pTokenizer );
-		m_pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, m_sLastError );
+		m_pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, m_sLastError );
 		if ( !m_pTokenizer )
 			return false;
 
@@ -3497,7 +3499,7 @@ bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 
 		// recreate dictionary
 		SafeDelete ( m_pDict );
-		m_pDict = sphCreateDictionaryCRC ( tDictSettings, m_pTokenizer, m_sLastError, m_sIndexName.cstr() );
+		m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sLastError, m_sIndexName.cstr() );
 		if ( !m_pDict )
 			return false;
 

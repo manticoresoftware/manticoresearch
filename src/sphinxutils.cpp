@@ -297,6 +297,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "synonyms",				KEY_DEPRECATED, "exceptions" },
 	{ "exceptions",				0, NULL },
 	{ "wordforms",				KEY_LIST, NULL },
+	{ "embedded_limit",			0, NULL },
 	{ "min_word_len",			0, NULL },
 	{ "charset_type",			0, NULL },
 	{ "charset_table",			0, NULL },
@@ -1097,6 +1098,7 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 	tSettings.m_bIndexExactWords = hIndex.GetInt ( "index_exact_words" )!=0;
 	tSettings.m_iOvershortStep = Min ( Max ( hIndex.GetInt ( "overshort_step", 1 ), 0 ), 1 );
 	tSettings.m_iStopwordStep = Min ( Max ( hIndex.GetInt ( "stopword_step", 1 ), 0 ), 1 );
+	tSettings.m_iEmbeddedLimit = hIndex.GetSize ( "embedded_limit", 16384 );
 
 	// prefix/infix fields
 	CSphString sFields;
@@ -1211,7 +1213,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		if ( !sphConfTokenizer ( hIndex, tSettings, sError ) )
 			return false;
 
-		ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tSettings, sError );
+		ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tSettings, NULL, sError );
 		if ( !pTokenizer )
 			return false;
 
@@ -1225,7 +1227,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		if ( pIndex->m_bId32to64 )
 			tSettings.m_bCrc32 = true;
 		sphConfDictionary ( hIndex, tSettings );
-		CSphDict * pDict = sphCreateDictionaryCRC ( tSettings, pIndex->GetTokenizer (), sError, pIndex->GetName() );
+		CSphDict * pDict = sphCreateDictionaryCRC ( tSettings, NULL, pIndex->GetTokenizer (), sError, pIndex->GetName() );
 		if ( !pDict )
 			return false;
 

@@ -82,7 +82,7 @@ ISphTokenizer * CreateTestTokenizer ( bool bUTF8, DWORD uMode )
 	CSphTokenizerSettings tSettings;
 	tSettings.m_iType = bUTF8 ? TOKENIZER_UTF8 : TOKENIZER_SBCS;
 	tSettings.m_iMinWordLen = 2;
-	ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tSettings, sError );
+	ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tSettings, NULL, sError );
 	if (!( uMode & TOK_NO_DASH ))
 	{
 		assert ( pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
@@ -94,7 +94,7 @@ ISphTokenizer * CreateTestTokenizer ( bool bUTF8, DWORD uMode )
 	}
 	pTokenizer->EnableQueryParserMode ( true );
 	if ( uMode & TOK_EXCEPTIONS )
-		assert ( pTokenizer->LoadSynonyms ( g_sTmpfile, sError ) );
+		assert ( pTokenizer->LoadSynonyms ( g_sTmpfile, NULL, sError ) );
 
 	if ( uMode & TOK_ESCAPED )
 	{
@@ -446,7 +446,7 @@ void BenchTokenizer ( bool bUTF8 )
 		ISphTokenizer * pTokenizer = bUTF8 ? sphCreateUTF8Tokenizer () : sphCreateSBCSTokenizer ();
 		pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z", sError );
 		if ( iRun==2 )
-			pTokenizer->LoadSynonyms ( g_sTmpfile, sError );
+			pTokenizer->LoadSynonyms ( g_sTmpfile, NULL, sError );
 		pTokenizer->AddSpecials ( "!-" );
 
 		const int iPasses = 10;
@@ -839,7 +839,7 @@ void TestQueryParser ()
 
 	CSphDictSettings tDictSettings;
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( sphCreateSBCSTokenizer () );
-	CSphScopedPtr<CSphDict> pDict ( sphCreateDictionaryCRC ( tDictSettings, pTokenizer.Ptr(), sTmp, "query" ) );
+	CSphScopedPtr<CSphDict> pDict ( sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer.Ptr(), sTmp, "query" ) );
 	assert ( pTokenizer.Ptr() );
 	assert ( pDict.Ptr() );
 
@@ -850,7 +850,7 @@ void TestQueryParser ()
 
 	CSphString sError;
 	assert ( CreateSynonymsFile ( NULL ) );
-	assert ( pTokenizer->LoadSynonyms ( g_sTmpfile, sError ) );
+	assert ( pTokenizer->LoadSynonyms ( g_sTmpfile, NULL, sError ) );
 
 	struct QueryTest_t
 	{
@@ -1720,7 +1720,7 @@ void TestRTWeightBoundary ()
 		CSphDictSettings tDictSettings;
 
 		ISphTokenizer * pTok = sphCreateUTF8Tokenizer();
-		CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, pTok, sError, "weight" );
+		CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, sError, "weight" );
 
 		CSphColumnInfo tCol;
 		CSphSchema tSrcSchema;
@@ -1895,7 +1895,7 @@ void TestRTSendVsMerge ()
 	CSphDictSettings tDictSettings;
 
 	ISphTokenizer * pTok = sphCreateUTF8Tokenizer();
-	CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, pTok, sError, "rt" );
+	CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, sError, "rt" );
 
 	CSphColumnInfo tCol;
 	CSphSchema tSrcSchema;
@@ -2000,7 +2000,7 @@ void TestSentenceTokenizer()
 	tSettings.m_iMinWordLen = 1;
 
 	CSphString sError;
-	ISphTokenizer * pTok = ISphTokenizer::Create ( tSettings, sError );
+	ISphTokenizer * pTok = ISphTokenizer::Create ( tSettings, NULL, sError );
 
 	assert ( pTok->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
 //	assert ( pTok->SetBlendChars ( "., &", sError ) ); // NOLINT

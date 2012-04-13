@@ -381,6 +381,14 @@ index test1
 	# exceptions		= @CONFDIR@/data/exceptions.txt
 
 
+	# embedded file size limit, in bytes, kiloytes (16384K) or megabytes (256M)
+	# optional, default is 16K
+	#
+	# exception, wordform and stopword files less than this limit are stored
+	# in the index header
+	#
+	embedded_limit		= 1
+
 	# minimum indexed word length
 	# default is 1 (index everything)
 	min_word_len		= 1

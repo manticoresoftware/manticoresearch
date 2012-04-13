@@ -432,6 +432,22 @@ struct CSphSavedFile
 };
 
 
+struct CSphEmbeddedFiles
+{
+	bool						m_bEmbeddedSynonyms;
+	bool						m_bEmbeddedStopwords;
+	bool						m_bEmbeddedWordforms;
+	CSphSavedFile				m_tSynonymFile;
+	CSphVector<CSphString>		m_dSynonyms;
+	CSphVector<CSphSavedFile>	m_dStopwordFiles;
+	CSphVector<SphWordID_t>		m_dStopwords;
+	CSphVector<CSphString>		m_dWordforms;
+	CSphVector<CSphSavedFile>	m_dWordformFiles;
+
+								CSphEmbeddedFiles ();
+};
+
+
 struct CSphTokenizerSettings
 {
 	int					m_iType;
@@ -449,6 +465,7 @@ struct CSphTokenizerSettings
 };
 
 struct CSphMultiformContainer;
+class CSphWriter;
 
 /// generic tokenizer
 class ISphTokenizer
@@ -482,7 +499,10 @@ public:
 	virtual void					SetNgramLen ( int ) {}
 
 	/// load synonyms list
-	virtual bool					LoadSynonyms ( const char * sFilename, CSphString & sError ) = 0;
+	virtual bool					LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError ) = 0;
+
+	/// write synonyms to file
+	virtual void					WriteSynonyms ( CSphWriter & tWriter ) = 0;
 
 	/// set phrase boundary chars
 	virtual bool					SetBoundary ( const char * sConfig, CSphString & sError );
@@ -497,7 +517,7 @@ public:
 	virtual void					Setup ( const CSphTokenizerSettings & tSettings );
 
 	/// create a tokenizer using the given settings
-	static ISphTokenizer *			Create ( const CSphTokenizerSettings & tSettings, CSphString & sError );
+	static ISphTokenizer *			Create ( const CSphTokenizerSettings & tSettings, const CSphEmbeddedFiles * pFiles, CSphString & sError );
 
 	/// create a token filter
 	static ISphTokenizer *			CreateTokenFilter ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer );
@@ -697,8 +717,17 @@ struct CSphDict
 	/// load stopwords from given files
 	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer ) = 0;
 
+	/// load stopwords from an array
+	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) = 0;
+
+	/// write stopwords to a file
+	virtual void		WriteStopwords ( CSphWriter & tWriter ) = 0;
+
 	/// load wordforms from a given list of files
-	virtual bool		LoadWordforms ( const CSphVector<CSphString> &, ISphTokenizer * pTokenizer, const char * sIndex, CSphString & ) = 0;
+	virtual bool		LoadWordforms ( const CSphVector<CSphString> &, const CSphEmbeddedFiles * pEmbedded, ISphTokenizer * pTokenizer, const char * sIndex, CSphString & ) = 0;
+
+	/// write wordforms to a file
+	virtual void		WriteWordforms ( CSphWriter & tWriter ) = 0;
 
 	/// set morphology
 	virtual bool		SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError ) = 0;
@@ -765,10 +794,10 @@ public:
 
 
 /// CRC32/FNV64 dictionary factory
-CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, ISphTokenizer * pTokenizer, CSphString & sError, const char * sIndex );
+CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, ISphTokenizer * pTokenizer, CSphString & sError, const char * sIndex );
 
 /// keyword-storing dictionary factory
-CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, ISphTokenizer * pTokenizer, CSphString & sError, const char * sIndex );
+CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, ISphTokenizer * pTokenizer, CSphString & sError, const char * sIndex );
 
 /// clear wordform cache
 void sphShutdownWordforms ();
@@ -2649,6 +2678,8 @@ struct CSphIndexSettings : public CSphSourceSettings
 	CSphString		m_sHitlessFile;
 
 	bool			m_bVerbose;
+
+	int				m_iEmbeddedLimit;
 
 					CSphIndexSettings ();
 };

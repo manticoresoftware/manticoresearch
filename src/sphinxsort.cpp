@@ -463,7 +463,7 @@ static bool IsCount ( const CSphString & s )
 
 static bool IsGroupby ( const CSphString & s )
 {
-	return s=="@groupby" || s=="@distinct";
+	return s=="@groupby" || s=="@distinct" || s=="groupby()";
 }
 
 static bool IsGroupbyMagic ( const CSphString & s )

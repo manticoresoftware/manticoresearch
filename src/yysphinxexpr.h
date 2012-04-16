@@ -47,21 +47,22 @@
      TOK_ATID = 273,
      TOK_ATWEIGHT = 274,
      TOK_ID = 275,
-     TOK_WEIGHT = 276,
-     TOK_COUNT = 277,
-     TOK_DISTINCT = 278,
-     TOK_CONST_LIST = 279,
-     TOK_ATTR_SINT = 280,
-     TOK_OR = 281,
-     TOK_AND = 282,
-     TOK_NE = 283,
-     TOK_EQ = 284,
-     TOK_GTE = 285,
-     TOK_LTE = 286,
-     TOK_MOD = 287,
-     TOK_DIV = 288,
-     TOK_NOT = 289,
-     TOK_NEG = 290
+     TOK_GROUPBY = 276,
+     TOK_WEIGHT = 277,
+     TOK_COUNT = 278,
+     TOK_DISTINCT = 279,
+     TOK_CONST_LIST = 280,
+     TOK_ATTR_SINT = 281,
+     TOK_OR = 282,
+     TOK_AND = 283,
+     TOK_NE = 284,
+     TOK_EQ = 285,
+     TOK_GTE = 286,
+     TOK_LTE = 287,
+     TOK_MOD = 288,
+     TOK_DIV = 289,
+     TOK_NOT = 290,
+     TOK_NEG = 291
    };
 #endif
 #define TOK_CONST_INT 258
@@ -82,21 +83,22 @@
 #define TOK_ATID 273
 #define TOK_ATWEIGHT 274
 #define TOK_ID 275
-#define TOK_WEIGHT 276
-#define TOK_COUNT 277
-#define TOK_DISTINCT 278
-#define TOK_CONST_LIST 279
-#define TOK_ATTR_SINT 280
-#define TOK_OR 281
-#define TOK_AND 282
-#define TOK_NE 283
-#define TOK_EQ 284
-#define TOK_GTE 285
-#define TOK_LTE 286
-#define TOK_MOD 287
-#define TOK_DIV 288
-#define TOK_NOT 289
-#define TOK_NEG 290
+#define TOK_GROUPBY 276
+#define TOK_WEIGHT 277
+#define TOK_COUNT 278
+#define TOK_DISTINCT 279
+#define TOK_CONST_LIST 280
+#define TOK_ATTR_SINT 281
+#define TOK_OR 282
+#define TOK_AND 283
+#define TOK_NE 284
+#define TOK_EQ 285
+#define TOK_GTE 286
+#define TOK_LTE 287
+#define TOK_MOD 288
+#define TOK_DIV 289
+#define TOK_NOT 290
+#define TOK_NEG 291
 
 
 

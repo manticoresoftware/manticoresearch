@@ -6215,6 +6215,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	// shortcuts
 	CSphString sCount("@count");
 	CSphString sWeight("@weight");
+	CSphString sGroupby("@groupby");
 
 	// truly virtual schema which contains unique necessary fields.
 	CVirtualSchema tInternalSchema;
@@ -6264,7 +6265,8 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 				{
 					const CSphQueryItem & tQueryItem = (*pSelectItems)[j];
 					const CSphString & sExpr = ( tQueryItem.m_sExpr=="count(*)" ) ? sCount
-						: ( ( tQueryItem.m_sExpr=="weight()" ) ? sWeight : tQueryItem.m_sExpr );
+						: ( ( tQueryItem.m_sExpr=="weight()" ) ? sWeight
+						: ( ( tQueryItem.m_sExpr=="groupby()" ) ? sGroupby : tQueryItem.m_sExpr ) );
 					if ( tFrontendSchema.GetAttr(j).m_iIndex<0
 						&& ( ( sExpr.cstr() && sExpr==tCol.m_sName && tQueryItem.m_eAggrFunc==SPH_AGGR_NONE )
 						|| ( tQueryItem.m_sAlias.cstr() && tQueryItem.m_sAlias==tCol.m_sName ) ) )

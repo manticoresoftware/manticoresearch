@@ -30,6 +30,7 @@
 %token	TOK_ATID
 %token	TOK_ATWEIGHT
 %token	TOK_ID
+%token	TOK_GROUPBY
 %token	TOK_WEIGHT
 %token	TOK_COUNT
 %token	TOK_DISTINCT
@@ -83,6 +84,7 @@ expr:
 	| TOK_ATWEIGHT					{ $$ = pParser->AddNodeWeight(); }
 	| TOK_ID						{ $$ = pParser->AddNodeID(); }
 	| TOK_WEIGHT '(' ')'			{ $$ = pParser->AddNodeWeight(); }
+	| TOK_GROUPBY '(' ')'			{ $$ = pParser->AddNodeGroupby(); }
 	| TOK_HOOK_IDENT				{ $$ = pParser->AddNodeHookIdent ( $1 ); }
 	| '-' expr %prec TOK_NEG		{ $$ = pParser->AddNodeOp ( TOK_NEG, $2, -1 ); }
 	| TOK_NOT expr					{ $$ = pParser->AddNodeOp ( TOK_NOT, $2, -1 ); if ( $$<0 ) YYERROR; }

@@ -46,6 +46,7 @@
 %token	TOK_FUNCTION
 %token	TOK_GLOBAL
 %token	TOK_GROUP
+%token	TOK_GROUPBY
 %token	TOK_ID
 %token	TOK_IN
 %token	TOK_INDEX
@@ -194,6 +195,7 @@ select_expr:
 	| TOK_SUM '(' expr ')'				{ pParser->AddItem ( &$3, SPH_AGGR_SUM, &$1, &$4 ); }
 	| TOK_COUNT '(' '*' ')'				{ if ( !pParser->AddItem ( "count(*)", &$1, &$4 ) ) YYERROR; }
 	| TOK_WEIGHT '(' ')'				{ if ( !pParser->AddItem ( "weight()", &$1, &$3 ) ) YYERROR; }
+	| TOK_GROUPBY '(' ')'				{ if ( !pParser->AddItem ( "groupby()", &$1, &$3 ) ) YYERROR; }
 	| TOK_COUNT '(' TOK_DISTINCT TOK_IDENT ')' 	{ if ( !pParser->AddDistinct ( &$4, &$1, &$5 ) ) YYERROR; }
 	;
 
@@ -324,6 +326,12 @@ expr_ident:
 	| TOK_COUNT '(' '*' ')'
 		{
 			$$.m_sValue = "@count";
+			if ( !pParser->SetNewSyntax() )
+				YYERROR;
+		}
+	| TOK_GROUPBY '(' ')'
+		{
+			$$.m_sValue = "@groupby";
 			if ( !pParser->SetNewSyntax() )
 				YYERROR;
 		}

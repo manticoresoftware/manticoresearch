@@ -64,60 +64,61 @@
      TOK_FUNCTION = 290,
      TOK_GLOBAL = 291,
      TOK_GROUP = 292,
-     TOK_ID = 293,
-     TOK_IN = 294,
-     TOK_INDEX = 295,
-     TOK_INSERT = 296,
-     TOK_INT = 297,
-     TOK_INTO = 298,
-     TOK_ISOLATION = 299,
-     TOK_LEVEL = 300,
-     TOK_LIMIT = 301,
-     TOK_MATCH = 302,
-     TOK_MAX = 303,
-     TOK_META = 304,
-     TOK_MIN = 305,
-     TOK_MOD = 306,
-     TOK_NAMES = 307,
-     TOK_NULL = 308,
-     TOK_OPTION = 309,
-     TOK_ORDER = 310,
-     TOK_RAND = 311,
-     TOK_READ = 312,
-     TOK_REPEATABLE = 313,
-     TOK_REPLACE = 314,
-     TOK_RETURNS = 315,
-     TOK_ROLLBACK = 316,
-     TOK_RTINDEX = 317,
-     TOK_SELECT = 318,
-     TOK_SERIALIZABLE = 319,
-     TOK_SET = 320,
-     TOK_SESSION = 321,
-     TOK_SHOW = 322,
-     TOK_SONAME = 323,
-     TOK_START = 324,
-     TOK_STATUS = 325,
-     TOK_SUM = 326,
-     TOK_TABLES = 327,
-     TOK_TO = 328,
-     TOK_TRANSACTION = 329,
-     TOK_TRUE = 330,
-     TOK_TRUNCATE = 331,
-     TOK_UNCOMMITTED = 332,
-     TOK_UPDATE = 333,
-     TOK_VALUES = 334,
-     TOK_VARIABLES = 335,
-     TOK_WARNINGS = 336,
-     TOK_WEIGHT = 337,
-     TOK_WHERE = 338,
-     TOK_WITHIN = 339,
-     TOK_OR = 340,
-     TOK_AND = 341,
-     TOK_NE = 342,
-     TOK_GTE = 343,
-     TOK_LTE = 344,
-     TOK_NOT = 345,
-     TOK_NEG = 346
+     TOK_GROUPBY = 293,
+     TOK_ID = 294,
+     TOK_IN = 295,
+     TOK_INDEX = 296,
+     TOK_INSERT = 297,
+     TOK_INT = 298,
+     TOK_INTO = 299,
+     TOK_ISOLATION = 300,
+     TOK_LEVEL = 301,
+     TOK_LIMIT = 302,
+     TOK_MATCH = 303,
+     TOK_MAX = 304,
+     TOK_META = 305,
+     TOK_MIN = 306,
+     TOK_MOD = 307,
+     TOK_NAMES = 308,
+     TOK_NULL = 309,
+     TOK_OPTION = 310,
+     TOK_ORDER = 311,
+     TOK_RAND = 312,
+     TOK_READ = 313,
+     TOK_REPEATABLE = 314,
+     TOK_REPLACE = 315,
+     TOK_RETURNS = 316,
+     TOK_ROLLBACK = 317,
+     TOK_RTINDEX = 318,
+     TOK_SELECT = 319,
+     TOK_SERIALIZABLE = 320,
+     TOK_SET = 321,
+     TOK_SESSION = 322,
+     TOK_SHOW = 323,
+     TOK_SONAME = 324,
+     TOK_START = 325,
+     TOK_STATUS = 326,
+     TOK_SUM = 327,
+     TOK_TABLES = 328,
+     TOK_TO = 329,
+     TOK_TRANSACTION = 330,
+     TOK_TRUE = 331,
+     TOK_TRUNCATE = 332,
+     TOK_UNCOMMITTED = 333,
+     TOK_UPDATE = 334,
+     TOK_VALUES = 335,
+     TOK_VARIABLES = 336,
+     TOK_WARNINGS = 337,
+     TOK_WEIGHT = 338,
+     TOK_WHERE = 339,
+     TOK_WITHIN = 340,
+     TOK_OR = 341,
+     TOK_AND = 342,
+     TOK_NE = 343,
+     TOK_GTE = 344,
+     TOK_LTE = 345,
+     TOK_NOT = 346,
+     TOK_NEG = 347
    };
 #endif
 #define TOK_IDENT 258
@@ -155,60 +156,61 @@
 #define TOK_FUNCTION 290
 #define TOK_GLOBAL 291
 #define TOK_GROUP 292
-#define TOK_ID 293
-#define TOK_IN 294
-#define TOK_INDEX 295
-#define TOK_INSERT 296
-#define TOK_INT 297
-#define TOK_INTO 298
-#define TOK_ISOLATION 299
-#define TOK_LEVEL 300
-#define TOK_LIMIT 301
-#define TOK_MATCH 302
-#define TOK_MAX 303
-#define TOK_META 304
-#define TOK_MIN 305
-#define TOK_MOD 306
-#define TOK_NAMES 307
-#define TOK_NULL 308
-#define TOK_OPTION 309
-#define TOK_ORDER 310
-#define TOK_RAND 311
-#define TOK_READ 312
-#define TOK_REPEATABLE 313
-#define TOK_REPLACE 314
-#define TOK_RETURNS 315
-#define TOK_ROLLBACK 316
-#define TOK_RTINDEX 317
-#define TOK_SELECT 318
-#define TOK_SERIALIZABLE 319
-#define TOK_SET 320
-#define TOK_SESSION 321
-#define TOK_SHOW 322
-#define TOK_SONAME 323
-#define TOK_START 324
-#define TOK_STATUS 325
-#define TOK_SUM 326
-#define TOK_TABLES 327
-#define TOK_TO 328
-#define TOK_TRANSACTION 329
-#define TOK_TRUE 330
-#define TOK_TRUNCATE 331
-#define TOK_UNCOMMITTED 332
-#define TOK_UPDATE 333
-#define TOK_VALUES 334
-#define TOK_VARIABLES 335
-#define TOK_WARNINGS 336
-#define TOK_WEIGHT 337
-#define TOK_WHERE 338
-#define TOK_WITHIN 339
-#define TOK_OR 340
-#define TOK_AND 341
-#define TOK_NE 342
-#define TOK_GTE 343
-#define TOK_LTE 344
-#define TOK_NOT 345
-#define TOK_NEG 346
+#define TOK_GROUPBY 293
+#define TOK_ID 294
+#define TOK_IN 295
+#define TOK_INDEX 296
+#define TOK_INSERT 297
+#define TOK_INT 298
+#define TOK_INTO 299
+#define TOK_ISOLATION 300
+#define TOK_LEVEL 301
+#define TOK_LIMIT 302
+#define TOK_MATCH 303
+#define TOK_MAX 304
+#define TOK_META 305
+#define TOK_MIN 306
+#define TOK_MOD 307
+#define TOK_NAMES 308
+#define TOK_NULL 309
+#define TOK_OPTION 310
+#define TOK_ORDER 311
+#define TOK_RAND 312
+#define TOK_READ 313
+#define TOK_REPEATABLE 314
+#define TOK_REPLACE 315
+#define TOK_RETURNS 316
+#define TOK_ROLLBACK 317
+#define TOK_RTINDEX 318
+#define TOK_SELECT 319
+#define TOK_SERIALIZABLE 320
+#define TOK_SET 321
+#define TOK_SESSION 322
+#define TOK_SHOW 323
+#define TOK_SONAME 324
+#define TOK_START 325
+#define TOK_STATUS 326
+#define TOK_SUM 327
+#define TOK_TABLES 328
+#define TOK_TO 329
+#define TOK_TRANSACTION 330
+#define TOK_TRUE 331
+#define TOK_TRUNCATE 332
+#define TOK_UNCOMMITTED 333
+#define TOK_UPDATE 334
+#define TOK_VALUES 335
+#define TOK_VARIABLES 336
+#define TOK_WARNINGS 337
+#define TOK_WEIGHT 338
+#define TOK_WHERE 339
+#define TOK_WITHIN 340
+#define TOK_OR 341
+#define TOK_AND 342
+#define TOK_NE 343
+#define TOK_GTE 344
+#define TOK_LTE 345
+#define TOK_NOT 346
+#define TOK_NEG 347
 
 
 

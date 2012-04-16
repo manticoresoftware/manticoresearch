@@ -823,6 +823,7 @@ protected:
 	int						AddNodeAttr ( int iTokenType, uint64_t uAttrLocator );
 	int						AddNodeID ();
 	int						AddNodeWeight ();
+	int						AddNodeGroupby ();
 	int						AddNodeOp ( int iOp, int iLeft, int iRight );
 	int						AddNodeFunc ( int iFunc, int iLeft, int iRight=-1 );
 	int						AddNodeUdf ( int iCall, int iArg );
@@ -997,6 +998,7 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		if ( sTok=="@weight" )		return TOK_ATWEIGHT;
 		if ( sTok=="id" )			return TOK_ID;
 		if ( sTok=="weight" )		return TOK_WEIGHT;
+		if ( sTok=="groupby" )		return TOK_GROUPBY;
 		if ( sTok=="distinct" )		return TOK_DISTINCT;
 		if ( sTok=="@geodist" )
 		{
@@ -3083,6 +3085,14 @@ int ExprParser_t::AddNodeWeight ()
 	ExprNode_t & tNode = m_dNodes.Add ();
 	tNode.m_iToken = TOK_WEIGHT;
 	tNode.m_eRetType = SPH_ATTR_INTEGER;
+	return m_dNodes.GetLength()-1;
+}
+
+int ExprParser_t::AddNodeGroupby ()
+{
+	ExprNode_t & tNode = m_dNodes.Add ();
+	tNode.m_iToken = TOK_GROUPBY;
+	tNode.m_eRetType = SPH_ATTR_INTEGER; /// will be corrected later, using context.
 	return m_dNodes.GetLength()-1;
 }
 

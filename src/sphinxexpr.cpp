@@ -792,7 +792,7 @@ static int FuncHashLookup ( const char * sKey )
 		-1, -1, -1, 22, -1, 13
 	};
 
-	if ( iHash<0 && iHash>sizeof(dIndexes)/sizeof(dIndexes[0]) )
+	if ( iHash<0 || iHash>=sizeof(dIndexes)/sizeof(dIndexes[0]) )
 		return -1;
 
 	int iFunc = dIndexes[iHash];

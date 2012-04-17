@@ -1034,7 +1034,7 @@ public:
 	void Ungroup ( CSphMatch * ) {}
 	void Finalize ( CSphMatch * ) {}
 
-	void Update ( CSphMatch * pDst, const CSphMatch * pSrc, bool bGrouped )
+	void Update ( CSphMatch * pDst, const CSphMatch * pSrc, bool )
 	{
 		const char * sDst = (const char*) pDst->GetAttr(m_tLoc);
 		const char * sSrc = (const char*) pSrc->GetAttr(m_tLoc);

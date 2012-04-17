@@ -446,7 +446,41 @@ public:
 			case SPH_ATTR_INTEGER:	sBuf.SetSprintf ( "%u", m_pFirst->IntEval ( tMatch ) ); break;
 			case SPH_ATTR_BIGINT:	sBuf.SetSprintf ( INT64_FMT, m_pFirst->Int64Eval ( tMatch ) ); break;
 			case SPH_ATTR_FLOAT:	sBuf.SetSprintf ( "%f", m_pFirst->Eval ( tMatch ) ); break;
-			default:				assert ( 0 && "unhandled arg type in TO_STRING()" ); break;
+			case SPH_ATTR_UINT32SET:
+			case SPH_ATTR_UINT64SET:
+				{
+					const DWORD * pValues = m_pFirst->MvaEval ( tMatch );
+					if ( !pValues || !*pValues )
+						break;
+
+					DWORD nValues = *pValues++;
+					assert (!( m_eArg==SPH_ATTR_UINT64SET && ( nValues&1 ) ));
+
+					// OPTIMIZE? minibuffer on stack, less allocs, manual formatting vs printf, etc
+					if ( m_eArg==SPH_ATTR_UINT32SET )
+					{
+						while ( nValues-- )
+						{
+							if ( sBuf.cstr() )
+								sBuf.SetSprintf ( "%s,%u", sBuf.cstr(), *pValues++ );
+							else
+								sBuf.SetSprintf ( "%u", *pValues++ );
+						}
+					} else
+					{
+						for ( ; nValues; nValues-=2, pValues+=2 )
+						{
+							if ( sBuf.cstr() )
+								sBuf.SetSprintf ( INT64_FMT",%s", sBuf.cstr(), MVA_UPSIZE ( pValues ) );
+							else
+								sBuf.SetSprintf ( INT64_FMT, MVA_UPSIZE ( pValues ) );
+						}
+					}
+				}
+				break;
+			default:
+				assert ( 0 && "unhandled arg type in TO_STRING()" );
+				break;
 		}
 		if ( sBuf.IsEmpty() )
 		{
@@ -3376,7 +3410,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 		m_sParserError.SetSprintf ( "%s() arguments can not be string", g_dFuncs[iFunc].m_sName );
 		return -1;
 	}
-	if ( bGotMva && eFunc!=FUNC_IN )
+	if ( bGotMva && !(eFunc==FUNC_IN || eFunc==FUNC_TO_STRING ) )
 	{
 		m_sParserError.SetSprintf ( "%s() arguments can not be MVA", g_dFuncs[iFunc].m_sName );
 		return -1;

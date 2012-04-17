@@ -712,7 +712,117 @@ static FuncDesc_t g_dFuncs[] =
 	{ "zonespanlist",	0,	FUNC_ZONESPANLIST,	SPH_ATTR_STRINGPTR }
 };
 
-static SmallStringHash_T<FuncDesc_t*> g_dFuncsHash;
+
+// helper to generate input data for gperf
+// run this, run gperf, that will generate a C program
+// copy dAsso from asso_values in that C source
+// copy dIndexes from the program output
+#if 0
+int HashGen()
+{
+	printf ( "struct func { char *name; int num; };\n%%%%\n" );
+	for ( int i=0; i<sizeof(g_dFuncs)/sizeof(g_dFuncs[0]); i++ )
+		printf ( "%s, %d\n", g_dFuncs[i].m_sName, i );
+	printf ( "%%%%\n" );
+	printf ( "void main()\n" );
+	printf ( "{\n" );
+	printf ( "\tint i;\n" );
+	printf ( "\tfor ( i=0; i<=MAX_HASH_VALUE; i++ )\n" );
+	printf ( "\t\tprintf ( \"%%d,%%s\", wordlist[i].name[0] ? wordlist[i].num : -1, (i%%10)==9 ? \"\\n\" : \" \" );\n" );
+	printf ( "}\n" );
+	printf ( "// gperf -Gt 1.p > 1.c\n" );
+	exit ( 0 );
+	return 0;
+}
+
+static int G_HASHGEN = HashGen();
+#endif
+
+
+static int FuncHashLookup ( const char * sKey )
+{
+	static BYTE dAsso[] =
+	{
+		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 66, 66, 0, 0, 30,
+		30, 0, 15, 5, 66, 5, 66, 66, 0, 0,
+		0, 5, 15, 35, 0, 15, 25, 45, 66, 40,
+		10, 0, 10, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 66
+	};
+
+	const BYTE * s = (const BYTE*) sKey;
+	int iHash = strlen ( sKey );
+	switch ( iHash )
+	{
+		default:		iHash += dAsso [ s[2] | 0x20 ];
+		case 2:			iHash += dAsso [ s[1] | 0x20 ];
+		case 1:			iHash += dAsso [ s[0] | 0x20 ];
+		case 0:
+						break;
+	}
+
+	static int dIndexes[] = {
+		-1, -1, 6, -1, 17, -1, -1, 28, 20, 18,
+		16, -1, 19, 21, 7, 8, 11, 30, 1, 33,
+		31, -1, 24, 4, 12, 3, 32, 35, 9, 14,
+		-1, -1, -1, 15, 25, -1, 29, -1, 27, 2,
+		-1, -1, -1, 34, 23, -1, -1, -1, 0, 26,
+		-1, -1, -1, 5, 10, -1, -1, -1, -1, -1,
+		-1, -1, -1, 22, -1, 13
+	};
+
+	if ( iHash<0 && iHash>sizeof(dIndexes)/sizeof(dIndexes[0]) )
+		return -1;
+
+	int iFunc = dIndexes[iHash];
+	if ( iFunc>=0 && strcasecmp ( g_dFuncs[iFunc].m_sName, sKey )==0 )
+		return iFunc;
+	return -1;
+}
+
+
+static int FuncHashCheck()
+{
+	for ( int i=0; i<sizeof(g_dFuncs)/sizeof(g_dFuncs[0]); i++ )
+	{
+		CSphString sKey ( g_dFuncs[i].m_sName );
+		sKey.ToLower();
+		if ( FuncHashLookup ( sKey.cstr() )!=i )
+			sphDie ( "INTERNAL ERROR: lookup for %s() failed, rebuild function hash", sKey.cstr() );
+		sKey.ToUpper();
+		if ( FuncHashLookup ( sKey.cstr() )!=i )
+			sphDie ( "INTERNAL ERROR: lookup for %s() failed, rebuild function hash", sKey.cstr() );
+	}
+	if ( FuncHashLookup("")!=-1 )
+		sphDie ( "INTERNAL ERROR: lookup for empty-func-name succeeded, rebuild function hash" );
+	if ( FuncHashLookup("A")!=-1 )
+		sphDie ( "INTERNAL ERROR: lookup for A() succeeded, rebuild function hash" );
+	return 1;
+}
+
+
+static int G_FUNC_HASH_CHECK = FuncHashCheck();
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1042,27 +1152,12 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 			return ParseAttr ( iAttr, sTok.cstr(), lvalp );
 
 		// check for function
-		sTok.ToLower();
-		int j = g_dFuncsHash.GetLength();
-		if ( j ) ///< faster lookup in the string hash
+		int iFunc = FuncHashLookup ( sTok.cstr() );
+		if ( iFunc>=0 )
 		{
-			FuncDesc_t** ppDesc = g_dFuncsHash ( sTok );
-			if ( ppDesc )
-			{
-				lvalp->iFunc = (*ppDesc)->m_eFunc;
-				return (*ppDesc)->m_eFunc==FUNC_IN ? TOK_FUNC_IN : TOK_FUNC;
-			}
-		}
-
-		// hash is not ready. Perform linear lookup, and also fill the hash for the future
-		for ( int i=j; i<int(sizeof(g_dFuncs)/sizeof(g_dFuncs[0])); i++ )
-		{
-			g_dFuncsHash.Add ( &g_dFuncs[i], g_dFuncs[i].m_sName );
-			if ( sTok==g_dFuncs[i].m_sName )
-			{
-				lvalp->iFunc = i;
-				return g_dFuncs[i].m_eFunc==FUNC_IN ? TOK_FUNC_IN : TOK_FUNC;
-			}
+			assert ( !strcasecmp ( g_dFuncs[iFunc].m_sName, sTok.cstr() ) );
+			lvalp->iFunc = iFunc;
+			return g_dFuncs[iFunc].m_eFunc==FUNC_IN ? TOK_FUNC_IN : TOK_FUNC;
 		}
 
 		// ask hook

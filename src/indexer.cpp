@@ -1304,11 +1304,11 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	int iExt;
 	for ( iExt=0; iExt<EXT_COUNT; iExt++ )
 	{
-		snprintf ( sFrom, sizeof(sFrom), "%s.%s.tmp", sPath, g_dExt[iExt] );
+		snprintf ( sFrom, sizeof(sFrom), "%s.tmp.%s", sPath, g_dExt[iExt] );
 		sFrom [ sizeof(sFrom)-1 ] = '\0';
 
-		if ( g_bRotate )
-			snprintf ( sTo, sizeof(sTo), "%s.new.%s", sPath, g_dExt[iExt] );
+		if ( bRotate )
+			snprintf ( sTo, sizeof(sTo), "%s.%s.new", sPath, g_dExt[iExt] );
 		else
 			snprintf ( sTo, sizeof(sTo), "%s.%s", sPath, g_dExt[iExt] );
 

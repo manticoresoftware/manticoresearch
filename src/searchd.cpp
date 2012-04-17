@@ -225,7 +225,6 @@ static bool				g_bPreopenIndexes	= true;
 static bool				g_bPreopenIndexes	= false;
 #endif
 static bool				g_bOnDiskDicts		= false;
-static bool				g_bUnlinkOld		= true;
 static bool				g_bWatchdog			= true;
 static int				g_iExpansionLimit	= 0;
 static bool				g_bCompatResults	= true;
@@ -346,7 +345,8 @@ static volatile sig_atomic_t g_bGotSigchld		= 0;	// we just received SIGCHLD; ne
 static volatile sig_atomic_t g_bGotSigusr1		= 0;	// we just received SIGUSR1; need to reopen logs
 
 // pipe to watchdog to inform that daemon is going to close, so no need to restart it in case of crash
-static CSphSharedBuffer<DWORD> g_bDaemonAtShutdown;
+static CSphSharedBuffer<DWORD>	g_bDaemonAtShutdown;
+static volatile bool			g_bShutdown = false;
 
 static CSphVector<int>	g_dTermChildren;				// children to send term signal on rotation is done
 static int64_t			g_tmRotateChildren		= 0;	// pause to next children term signal after rotation is done
@@ -417,11 +417,15 @@ static CSphMutex							g_tRotateQueueMutex;
 static CSphVector<CSphString>				g_dRotateQueue;		// FIXME? maybe replace it with lockless ring buffer
 static CSphMutex							g_tRotateConfigMutex;
 static SphThread_t							g_tRotateThread;
-static volatile bool						g_bRotateShutdown = false;
 
 /// flush parameters of rt indexes
 static SphThread_t							g_tRtFlushThread;
-static volatile bool						g_bRtFlushShutdown = false;
+
+// optimize thread
+static SphThread_t							g_tOptimizeThread;
+CSphMutex									g_tOptimizeQueueMutex;
+CSphVector<CSphString>						g_dOptimizeQueue;
+static ThrottleState_t						g_tRtThrottle;
 
 struct DistributedMutex_t
 {
@@ -598,7 +602,6 @@ struct Uservar_t
 static CSphMutex					g_tUservarsMutex;
 static SmallStringHash_T<Uservar_t>	g_hUservars;
 static volatile int64_t				g_tmUservars; // update timestamp
-static bool							g_bUservarsFlushShutdown = false;
 static SphThread_t					g_tUservarsFlushThread;
 static CSphString					g_sSphinxqlState;
 
@@ -1275,8 +1278,12 @@ static void UpdateAliveChildrenList ( CSphVector<int> & dChildren )
 
 void Shutdown ()
 {
-	bool bAttrsSaveOk = true;
+#if !USE_WINDOWS
 	int fdStopwait = -1;
+#endif
+	bool bAttrsSaveOk = true;
+	g_bShutdown = true;
+
 	// some head-only shutdown procedures
 	if ( g_bHeadDaemon )
 	{
@@ -1302,11 +1309,9 @@ void Shutdown ()
 		if ( g_eWorkers==MPM_THREADS )
 		{
 			// tell flush-rt thread to shutdown, and wait until it does
-			g_bRtFlushShutdown = true;
 			sphThreadJoin ( &g_tRtFlushThread );
 
 			// tell rotation thread to shutdown, and wait until it does
-			g_bRotateShutdown = true;
 			if ( g_bSeamlessRotate )
 			{
 				sphThreadJoin ( &g_tRotateThread );
@@ -1315,11 +1320,12 @@ void Shutdown ()
 			g_tRotateConfigMutex.Done();
 
 			// tell uservars flush thread to shutdown, and wait until it does
-			g_bUservarsFlushShutdown = true;
 			if ( !g_sSphinxqlState.IsEmpty() )
 			{
 				sphThreadJoin ( &g_tUservarsFlushThread );
 			}
+
+			sphThreadJoin ( &g_tOptimizeThread );
 
 			int64_t tmShutStarted = sphMicroTimer();
 			// stop search threads; up to 3 seconds long
@@ -1332,6 +1338,7 @@ void Shutdown ()
 			g_tThdMutex.Done();
 			g_tFlushMutex.Done();
 			g_tUservarsMutex.Done();
+			g_tOptimizeQueueMutex.Done();
 		}
 
 #if !USE_WINDOWS
@@ -1367,6 +1374,7 @@ void Shutdown ()
 
 		SafeDelete ( g_pCfg );
 
+		CSphString sError;
 		// save attribute updates for all local indexes
 		for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
 		{
@@ -1374,9 +1382,9 @@ void Shutdown ()
 			if ( !tServed.m_bEnabled )
 				continue;
 
-			if ( !tServed.m_pIndex->SaveAttributes() )
+			if ( !tServed.m_pIndex->SaveAttributes ( sError ) )
 			{
-				sphWarning ( "index %s: attrs save failed: %s", it.GetKey().cstr(), tServed.m_pIndex->GetLastError().cstr() );
+				sphWarning ( "index %s: attrs save failed: %s", it.GetKey().cstr(), sError.cstr() );
 				bAttrsSaveOk = false;
 			}
 		}
@@ -8044,16 +8052,19 @@ enum SqlStmt_e
 	STMT_TRUNCATE_RTINDEX,
 	STMT_SELECT_SYSVAR,
 	STMT_SHOW_COLLATION,
+	STMT_OPTIMIZE_INDEX,
 
 	STMT_TOTAL
 };
 
 
-const char * g_dSqlStmts[STMT_TOTAL] =
+static const char * g_dSqlStmts[STMT_TOTAL] =
 {
-	"parse_error", "select", "insert", "replace", "delete", "show_warnings",
+	"parse_error", "dummy", "select", "insert", "replace", "delete", "show_warnings",
 	"show_status", "show_meta", "set", "begin", "commit", "rollback", "call",
-	"desc", "show_tables", "update"
+	"desc", "show_tables", "update", "create_func", "drop_func", "attach_index",
+	"flush_rtindex", "show_variables", "truncate_rtindex", "select_sysvar",
+	"show_collation", "optimize_index"
 };
 
 
@@ -12492,7 +12503,8 @@ void HandleMysqlTruncate ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BY
 
 	if ( !pIndex || !pIndex->m_bEnabled || !pIndex->m_bRT )
 	{
-		pIndex->Unlock();
+		if ( pIndex )
+			pIndex->Unlock();
 		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "TRUNCATE RTINDEX requires an existing RT index" );
 		return;
 	}
@@ -12508,6 +12520,28 @@ void HandleMysqlTruncate ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BY
 		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
 	else
 		SendMysqlOkPacket ( tOut, uPacketID );
+}
+
+
+void HandleMysqlOptimize ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE uPacketID )
+{
+	// get an exclusive lock
+	const ServedIndex_t * pIndex = g_pIndexes->GetRlockedEntry ( tStmt.m_sIndex );
+	bool bValid = pIndex && pIndex->m_bEnabled && pIndex->m_bRT;
+	if ( pIndex )
+		pIndex->Unlock();
+
+	if ( !bValid )
+		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "OPTIMIZE INDEX requires an existing RT index" );
+	else
+		SendMysqlOkPacket ( tOut, uPacketID );
+
+	if ( bValid )
+	{
+		g_tOptimizeQueueMutex.Lock();
+		g_dOptimizeQueue.Add ( tStmt.m_sIndex );
+		g_tOptimizeQueueMutex.Unlock();
+	}
 }
 
 
@@ -12766,6 +12800,10 @@ public:
 
 		case STMT_TRUNCATE_RTINDEX:
 			HandleMysqlTruncate ( *pStmt, tOut, uPacketID );
+			return;
+
+		case STMT_OPTIMIZE_INDEX:
+			HandleMysqlOptimize ( *pStmt, tOut, uPacketID );
 			return;
 
 		case STMT_SELECT_SYSVAR:
@@ -13209,16 +13247,10 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 		SafeDelete ( pDictionary );
 
 	// unlink .old
-	if ( g_bUnlinkOld && !tIndex.m_bOnlyNew )
+	if ( !tIndex.m_bOnlyNew )
 	{
-		for ( int i=0; i<EXT_COUNT; i++ )
-		{
-			snprintf ( sFile, sizeof(sFile), "%s%s", sPath, g_dOldExts[i] );
-			if ( ::unlink ( sFile ) )
-				sphWarning ( "rotating index '%s': unable to unlink '%s': %s", sIndex, sFile, strerror(errno) );
-		}
-		snprintf ( sFile, sizeof(sFile), "%s%s", sPath, g_dOldExts[EXT_MVP] );
-		::unlink ( sFile );
+		snprintf ( sFile, sizeof(sFile), "%s.old", sPath );
+		sphUnlinkIndex ( sFile, false, true );
 	}
 
 	sphLogDebug ( "RotateIndexGreedy: the old index unlinked" );
@@ -13402,7 +13434,7 @@ static bool CheckServedEntry ( const ServedIndex_t * pEntry, const char * sIndex
 static void RtFlushThreadFunc ( void * )
 {
 	int64_t tmNextCheck = sphMicroTimer() + SPH_RT_AUTO_FLUSH_CHECK_PERIOD;
-	while ( !g_bRtFlushShutdown )
+	while ( !g_bShutdown )
 	{
 		// stand still till save time
 		if ( tmNextCheck>sphMicroTimer() )
@@ -13418,7 +13450,7 @@ static void RtFlushThreadFunc ( void * )
 				dRtIndexes.Add ( it.GetKey() );
 
 		// do check+save
-		ARRAY_FOREACH_COND ( i, dRtIndexes, !g_bRtFlushShutdown )
+		ARRAY_FOREACH_COND ( i, dRtIndexes, !g_bShutdown )
 		{
 			const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( dRtIndexes[i] );
 			if ( !pServed )
@@ -13572,16 +13604,9 @@ static void RotateIndexMT ( const CSphString & sIndex )
 
 			// unlink .old
 			sphLogDebug ( "unlink .old" );
-			if ( g_bUnlinkOld && !pServed->m_bOnlyNew )
+			if ( !pServed->m_bOnlyNew )
 			{
-				char sFile [ SPH_MAX_FILENAME_LEN ];
-
-				for ( int i=0; i<EXT_COUNT; i++ )
-				{
-					snprintf ( sFile, sizeof(sFile), "%s%s", sOld, g_dCurExts[i] );
-					if ( ::unlink ( sFile ) )
-						sphWarning ( "rotating index '%s': unable to unlink '%s': %s", sIndex.cstr(), sFile, strerror(errno) );
-				}
+				sphUnlinkIndex ( sOld, false, false );
 			}
 
 			pServed->m_bOnlyNew = false;
@@ -13595,7 +13620,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 void RotationThreadFunc ( void * )
 {
 	assert ( g_eWorkers==MPM_THREADS );
-	while ( !g_bRotateShutdown )
+	while ( !g_bShutdown )
 	{
 		// check if we have work to do
 		if ( !g_iRotateCount )
@@ -13782,7 +13807,7 @@ static void UservarsThreadFunc ( void * )
 	CSphWriter tWriter;
 
 	int64_t tmLast = g_tmUservars;
-	while ( !g_bUservarsFlushShutdown )
+	while ( !g_bShutdown )
 	{
 		// stand still till save time
 		if ( tmLast==g_tmUservars )
@@ -13965,6 +13990,46 @@ static void UservarsStateRead ( const CSphString & sName )
 }
 
 
+void OptimizeThreadFunc ( void * )
+{
+	while ( !g_bShutdown )
+	{
+		// stand still till optimize time
+		if ( !g_dOptimizeQueue.GetLength() )
+		{
+			sphSleepMsec ( 50 );
+			continue;
+		}
+
+		CSphString sIndex;
+		g_tOptimizeQueueMutex.Lock();
+		if ( g_dOptimizeQueue.GetLength() )
+		{
+			sIndex = g_dOptimizeQueue[0];
+			g_dOptimizeQueue.Remove(0);
+		}
+		g_tOptimizeQueueMutex.Unlock();
+
+		const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( sIndex );
+		if ( !pServed )
+		{
+			continue;
+		}
+		if ( !pServed->m_pIndex || !pServed->m_bEnabled )
+		{
+			pServed->Unlock();
+			continue;
+		}
+
+		// FIXME: MVA update would wait w-lock here for a very long time
+		assert ( pServed->m_bRT );
+		static_cast<ISphRtIndex *>( pServed->m_pIndex )->Optimize ( &g_bShutdown, &g_tRtThrottle );
+
+		pServed->Unlock();
+	}
+}
+
+
 /// simple wrapper to simplify reading from pipes
 struct PipeReader_t
 {
@@ -14111,16 +14176,9 @@ void HandlePipePreread ( PipeReader_t & tPipe, bool bFailure )
 				tServed.m_bEnabled = true;
 
 				// unlink .old
-				if ( g_bUnlinkOld && !tServed.m_bOnlyNew )
+				if ( !tServed.m_bOnlyNew )
 				{
-					char sFile [ SPH_MAX_FILENAME_LEN ];
-
-					for ( int i=0; i<EXT_COUNT; i++ )
-					{
-						snprintf ( sFile, sizeof(sFile), "%s%s", sOld, g_dCurExts[i] );
-						if ( ::unlink ( sFile ) )
-							sphWarning ( "rotating index '%s': unable to unlink '%s': %s", sPrereading, sFile, strerror(errno) );
-					}
+					sphUnlinkIndex ( sOld, false, false );
 				}
 
 				tServed.m_bOnlyNew = false;
@@ -14917,14 +14975,15 @@ void CheckReopen ()
 
 static void SaveIndexes ()
 {
+	CSphString sError;
 	for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
 	{
 		const ServedIndex_t & tServed = it.Get();
 		tServed.ReadLock();
 		if ( tServed.m_bEnabled )
 		{
-			if ( !tServed.m_pIndex->SaveAttributes () )
-				sphWarning ( "index %s: attrs save failed: %s", it.GetKey().cstr(), tServed.m_pIndex->GetLastError().cstr() );
+			if ( !tServed.m_pIndex->SaveAttributes ( sError ) )
+				sphWarning ( "index %s: attrs save failed: %s", it.GetKey().cstr(), sError.cstr() );
 		}
 		tServed.Unlock();
 	}
@@ -16029,7 +16088,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 
 	g_bPreopenIndexes = hSearchd.GetInt ( "preopen_indexes", (int)g_bPreopenIndexes )!=0;
 	g_bOnDiskDicts = hSearchd.GetInt ( "ondisk_dict_default", (int)g_bOnDiskDicts )!=0;
-	g_bUnlinkOld = hSearchd.GetInt ( "unlink_old", (int)g_bUnlinkOld )!=0;
+	sphSetUnlinkOld ( hSearchd.GetInt ( "unlink_old", 1 )!=0 );
 	g_iExpansionLimit = hSearchd.GetInt ( "expansion_limit", 0 );
 	g_bCompatResults = hSearchd.GetInt ( "compat_sphinxql_magics", (int)g_bCompatResults )!=0;
 
@@ -16067,6 +16126,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_iMaxBatchQueries = hSearchd.GetInt ( "max_batch_queries", g_iMaxBatchQueries );
 	g_iDistThreads = hSearchd.GetInt ( "dist_threads", g_iDistThreads );
 	g_iPreforkChildren = hSearchd.GetInt ( "prefork", g_iPreforkChildren );
+	g_tRtThrottle.m_iMaxIOps = hSearchd.GetInt ( "rt_merge_iops", 0 );
+	g_tRtThrottle.m_iMaxIOSize = hSearchd.GetSize ( "rt_merge_maxiosize", 0 );
 
 	if ( hSearchd ( "collation_libc_locale" ) )
 	{
@@ -17034,6 +17095,15 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	// create flush threads
 	if ( g_eWorkers==MPM_THREADS && !sphThreadCreate ( &g_tRtFlushThread, RtFlushThreadFunc, 0 ) )
 		sphDie ( "failed to create rt-flush thread" );
+
+	// create optimize thread
+	if ( g_eWorkers==MPM_THREADS )
+	{
+		if ( !sphThreadCreate ( &g_tOptimizeThread, OptimizeThreadFunc, 0 ) )
+			sphDie ( "failed to create optimize thread" );
+
+		g_tOptimizeQueueMutex.Init();
+	}
 
 	if ( g_eWorkers==MPM_THREADS )
 	{

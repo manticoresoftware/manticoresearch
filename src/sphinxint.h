@@ -104,6 +104,7 @@ public:
 
 	bool			IsError () const	{ return m_bError; }
 	SphOffset_t		GetPos () const		{ return m_iPos; }
+	void			SetThrottle ( ThrottleState_t * pState ) { m_pThrottle = pState; }
 
 protected:
 	CSphString		m_sName;
@@ -120,6 +121,7 @@ protected:
 
 	bool			m_bError;
 	CSphString *	m_pError;
+	ThrottleState_t * m_pThrottle;
 
 	virtual void	Flush ();
 };
@@ -134,7 +136,6 @@ protected:
 	bool		m_bTemporary;	///< whether to unlink this file on Close()
 	bool		m_bWouldTemporary; ///< backup of the m_bTemporary
 
-	CSphIndex::ProgressCallback_t *		m_pProgress; ///< for displaying progress
 	CSphIndexProgress *					m_pStat;
 
 public:
@@ -153,7 +154,7 @@ public:
 	SphOffset_t		GetSize ();
 
 	bool			Read ( void * pBuf, size_t uCount, CSphString & sError );
-	void			SetProgressCallback ( CSphIndex::ProgressCallback_t * pfnProgress, CSphIndexProgress * pStat );
+	void			SetProgressCallback ( CSphIndexProgress * pStat );
 };
 
 
@@ -201,6 +202,7 @@ public:
 #endif
 
 	const CSphReader &	operator = ( const CSphReader & rhs );
+	void		SetThrottle ( ThrottleState_t * pState ) { m_pThrottle = pState; }
 
 protected:
 
@@ -219,6 +221,7 @@ protected:
 	bool		m_bError;
 	CSphString	m_sError;
 	CSphString	m_sFilename;
+	ThrottleState_t * m_pThrottle;
 
 private:
 	void		UpdateCache ();
@@ -384,23 +387,6 @@ inline uint64_t MVA_UPSIZE ( const DWORD * pMva )
 }
 
 
-struct CSphDocMVA
-{
-	SphDocID_t							m_iDocID;
-	CSphVector < CSphVector<DWORD> >	m_dMVA;
-	CSphVector < DWORD >				m_dOffsets;
-
-	explicit CSphDocMVA ( int iSize )
-		: m_iDocID ( 0 )
-	{
-		m_dMVA.Resize ( iSize );
-		m_dOffsets.Resize ( iSize );
-	}
-
-	void	Read ( CSphReader & tReader );
-	void	Write ( CSphWriter & tWriter );
-};
-
 /// attr min-max builder
 template < typename DOCID = SphDocID_t >
 class AttrIndexBuilder_t : ISphNoncopyable
@@ -434,21 +420,19 @@ private:
 
 private:
 	void ResetLocal();
-	void FlushComputed ( bool bUseAttrs, bool bUseMvas );
+	void FlushComputed();
 	void UpdateMinMaxDocids ( DOCID uDocID );
 	void CollectRowMVA ( int iAttr, DWORD uCount, const DWORD * pMva );
+	void CollectWithoutMvas ( const DWORD * pCur );
 
 public:
 	explicit AttrIndexBuilder_t ( const CSphSchema & tSchema );
 
 	void Prepare ( DWORD * pOutBuffer, DWORD * pOutMax );
 
-	void CollectWithoutMvas ( const DWORD * pCur, bool bUseMvas );
 	bool Collect ( const DWORD * pCur, const DWORD * pMvas, int64_t iMvasCount, CSphString & sError, bool bHasMvaID );
-	void Collect ( const DWORD * pCur, const struct CSphDocMVA & dMvas );
-	void CollectMVA ( DOCID uDocID, const CSphVector< CSphVector<DWORD> > & dCurInfo );
 
-	void FinishCollect ( bool bMvaOnly = false );
+	void FinishCollect ();
 
 	/// actually used part of output buffer, only used with index merge
 	/// (we reserve space for rows from both indexes, but might kill some rows)
@@ -495,7 +479,7 @@ void AttrIndexBuilder_t<DOCID>::ResetLocal()
 }
 
 template < typename DOCID >
-void AttrIndexBuilder_t<DOCID>::FlushComputed ( bool bUseAttrs, bool bUseMvas )
+void AttrIndexBuilder_t<DOCID>::FlushComputed ()
 {
 	assert ( m_pOutBuffer );
 	DWORD * pMinEntry = m_pOutBuffer + 2 * m_uElements * m_uStride;
@@ -511,26 +495,22 @@ void AttrIndexBuilder_t<DOCID>::FlushComputed ( bool bUseAttrs, bool bUseMvas )
 	DOCINFOSETID ( pMinEntry, m_uStart );
 	DOCINFOSETID ( pMaxEntry, m_uLast );
 
-	if ( bUseAttrs )
+	ARRAY_FOREACH ( i, m_dIntAttrs )
 	{
-		ARRAY_FOREACH ( i, m_dIntAttrs )
-		{
-			m_dIntIndexMin[i] = Min ( m_dIntIndexMin[i], m_dIntMin[i] );
-			m_dIntIndexMax[i] = Max ( m_dIntIndexMax[i], m_dIntMax[i] );
-			sphSetRowAttr ( pMinAttrs, m_dIntAttrs[i], m_dIntMin[i] );
-			sphSetRowAttr ( pMaxAttrs, m_dIntAttrs[i], m_dIntMax[i] );
-		}
-		ARRAY_FOREACH ( i, m_dFloatAttrs )
-		{
-			m_dFloatIndexMin[i] = Min ( m_dFloatIndexMin[i], m_dFloatMin[i] );
-			m_dFloatIndexMax[i] = Max ( m_dFloatIndexMax[i], m_dFloatMax[i] );
-			sphSetRowAttr ( pMinAttrs, m_dFloatAttrs[i], sphF2DW ( m_dFloatMin[i] ) );
-			sphSetRowAttr ( pMaxAttrs, m_dFloatAttrs[i], sphF2DW ( m_dFloatMax[i] ) );
-		}
+		m_dIntIndexMin[i] = Min ( m_dIntIndexMin[i], m_dIntMin[i] );
+		m_dIntIndexMax[i] = Max ( m_dIntIndexMax[i], m_dIntMax[i] );
+		sphSetRowAttr ( pMinAttrs, m_dIntAttrs[i], m_dIntMin[i] );
+		sphSetRowAttr ( pMaxAttrs, m_dIntAttrs[i], m_dIntMax[i] );
+	}
+	ARRAY_FOREACH ( i, m_dFloatAttrs )
+	{
+		m_dFloatIndexMin[i] = Min ( m_dFloatIndexMin[i], m_dFloatMin[i] );
+		m_dFloatIndexMax[i] = Max ( m_dFloatIndexMax[i], m_dFloatMax[i] );
+		sphSetRowAttr ( pMinAttrs, m_dFloatAttrs[i], sphF2DW ( m_dFloatMin[i] ) );
+		sphSetRowAttr ( pMaxAttrs, m_dFloatAttrs[i], sphF2DW ( m_dFloatMax[i] ) );
 	}
 
-	if ( bUseMvas )
-		ARRAY_FOREACH ( i, m_dMvaAttrs )
+	ARRAY_FOREACH ( i, m_dMvaAttrs )
 	{
 		m_dMvaIndexMin[i] = Min ( m_dMvaIndexMin[i], m_dMvaMin[i] );
 		m_dMvaIndexMax[i] = Max ( m_dMvaIndexMax[i], m_dMvaMax[i] );
@@ -638,11 +618,11 @@ void AttrIndexBuilder_t<DOCID>::Prepare ( DWORD * pOutBuffer, DWORD * pOutMax )
 }
 
 template < typename DOCID >
-void AttrIndexBuilder_t<DOCID>::CollectWithoutMvas ( const DWORD * pCur, bool bUseMvas )
+void AttrIndexBuilder_t<DOCID>::CollectWithoutMvas ( const DWORD * pCur )
 {
 	// check if it is time to flush already collected values
 	if ( m_iLoop>=DOCINFO_INDEX_FREQ )
-		FlushComputed ( true, bUseMvas );
+		FlushComputed ();
 
 	const DWORD * pRow = DOCINFO2ATTRS_T<DOCID>(pCur);
 	UpdateMinMaxDocids ( DOCINFO2ID_T<DOCID>(pCur) );
@@ -691,7 +671,7 @@ void AttrIndexBuilder_t<DOCID>::CollectRowMVA ( int iAttr, DWORD uCount, const D
 template < typename DOCID >
 bool AttrIndexBuilder_t<DOCID>::Collect ( const DWORD * pCur, const DWORD * pMvas, int64_t iMvasCount, CSphString & sError, bool bHasMvaID )
 {
-	CollectWithoutMvas ( pCur, true );
+	CollectWithoutMvas ( pCur );
 
 	const DWORD * pRow = DOCINFO2ATTRS_T<DOCID>(pCur);
 	SphDocID_t uDocID = DOCINFO2ID_T<DOCID>(pCur);
@@ -732,37 +712,11 @@ bool AttrIndexBuilder_t<DOCID>::Collect ( const DWORD * pCur, const DWORD * pMva
 }
 
 template < typename DOCID >
-void AttrIndexBuilder_t<DOCID>::Collect ( const DWORD * pCur, const CSphDocMVA & dMvas )
-{
-	CollectWithoutMvas ( pCur, true );
-	ARRAY_FOREACH ( i, m_dMvaAttrs )
-	{
-		CollectRowMVA ( i, dMvas.m_dMVA[i].GetLength(), dMvas.m_dMVA[i].Begin() );
-	}
-}
-
-template < typename DOCID >
-void AttrIndexBuilder_t<DOCID>::CollectMVA ( DOCID uDocID, const CSphVector< CSphVector<DWORD> > & dCurInfo )
-{
-	// check if it is time to flush already collected values
-	if ( m_iLoop>=DOCINFO_INDEX_FREQ )
-		FlushComputed ( false, true );
-
-	UpdateMinMaxDocids ( uDocID );
-	m_iLoop++;
-
-	ARRAY_FOREACH ( i, dCurInfo )
-	{
-		CollectRowMVA ( i, dCurInfo[i].GetLength(), dCurInfo[i].Begin() );
-	}
-}
-
-template < typename DOCID >
-void AttrIndexBuilder_t<DOCID>::FinishCollect ( bool bMvaOnly )
+void AttrIndexBuilder_t<DOCID>::FinishCollect ()
 {
 	assert ( m_pOutBuffer );
 	if ( m_iLoop )
-		FlushComputed ( !bMvaOnly, true );
+		FlushComputed ();
 
 	DWORD * pMinEntry = m_pOutBuffer + 2 * m_uElements * m_uStride;
 	DWORD * pMaxEntry = pMinEntry + m_uStride;
@@ -781,24 +735,17 @@ void AttrIndexBuilder_t<DOCID>::FinishCollect ( bool bMvaOnly )
 		sphSetRowAttr ( pMaxAttrs, m_dMvaAttrs[i], m_dMvaIndexMax[i] );
 	}
 
-	if ( !bMvaOnly )
+	ARRAY_FOREACH ( i, m_dIntAttrs )
 	{
-		ARRAY_FOREACH ( i, m_dIntAttrs )
-		{
-			sphSetRowAttr ( pMinAttrs, m_dIntAttrs[i], m_dIntIndexMin[i] );
-			sphSetRowAttr ( pMaxAttrs, m_dIntAttrs[i], m_dIntIndexMax[i] );
-		}
-		ARRAY_FOREACH ( i, m_dFloatAttrs )
-		{
-			sphSetRowAttr ( pMinAttrs, m_dFloatAttrs[i], sphF2DW ( m_dFloatIndexMin[i] ) );
-			sphSetRowAttr ( pMaxAttrs, m_dFloatAttrs[i], sphF2DW ( m_dFloatIndexMax[i] ) );
-		}
-		m_uElements++;
-
-	} else
-	{
-		m_uElements = 0; // rewind back for collecting the rest of attributes.
+		sphSetRowAttr ( pMinAttrs, m_dIntAttrs[i], m_dIntIndexMin[i] );
+		sphSetRowAttr ( pMaxAttrs, m_dIntAttrs[i], m_dIntIndexMax[i] );
 	}
+	ARRAY_FOREACH ( i, m_dFloatAttrs )
+	{
+		sphSetRowAttr ( pMinAttrs, m_dFloatAttrs[i], sphF2DW ( m_dFloatIndexMin[i] ) );
+		sphSetRowAttr ( pMaxAttrs, m_dFloatAttrs[i], sphF2DW ( m_dFloatIndexMax[i] ) );
+	}
+	m_uElements++;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1230,6 +1177,19 @@ struct SphStringSorterRemap_t
 	CSphAttrLocator m_tDst;
 };
 
+struct ThrottleState_t
+{
+	int64_t	m_tmLastIOTime;
+	int		m_iMaxIOps;
+	int		m_iMaxIOSize;
+
+	ThrottleState_t ()
+		: m_tmLastIOTime ( 0 )
+		, m_iMaxIOps ( 0 )
+		, m_iMaxIOSize ( 0 )
+	{}
+};
+
 void			SafeClose ( int & iFD );
 const BYTE *	SkipQuoted ( const BYTE * p );
 
@@ -1237,10 +1197,15 @@ ISphExpr *		sphSortSetupExpr ( const CSphString & sName, const CSphSchema & tInd
 bool			sphSortGetStringRemap ( const CSphSchema & tSorterSchema, const CSphSchema & tIndexSchema, CSphVector<SphStringSorterRemap_t> & dAttrs );
 bool			sphIsSortStringInternal ( const char * sColumnName );
 
-bool			sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * sName, CSphString & sError );
+bool			sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * sName, CSphString & sError, ThrottleState_t * pThrottle );
+size_t			sphReadThrottled ( int iFD, void * pBuf, size_t iCount, ThrottleState_t * pThrottle );
 void			sphMergeStats ( CSphQueryResultMeta & tDstResult, const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hSrc );
 bool			sphCheckQueryHeight ( const struct XQNode_t * pRoot, CSphString & sError );
 void			sphTransformExtendedQuery ( XQNode_t ** ppNode );
+bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle );
+
+void			sphSetUnlinkOld ( bool bUnlink );
+void			sphUnlinkIndex ( const char * sName, bool bForce, bool bRemoveMVP );
 
 void			WriteSchema ( CSphWriter & fdInfo, const CSphSchema & tSchema );
 void			ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema, DWORD uVersion, bool bDynamic );

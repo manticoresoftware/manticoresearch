@@ -682,6 +682,7 @@ struct CSphDictSettings
 /// abstract word dictionary interface
 struct CSphWordHit;
 struct DictHeader_t;
+struct ThrottleState_t;
 struct CSphDict
 {
 	/// virtualizing dtor
@@ -770,7 +771,7 @@ public:
 
 public:
 	/// begin creating dictionary file, setup any needed internal structures
-	virtual void			DictBegin ( int iTmpDictFD, int iDictFD, int iDictLimit );
+	virtual void			DictBegin ( int iTmpDictFD, int iDictFD, int iDictLimit, ThrottleState_t * pThrottle );
 
 	/// add next keyword entry to final dict
 	virtual void			DictEntry ( SphWordID_t uWordID, BYTE * sKeyword, int iDocs, int iHits, SphOffset_t iDoclistOffset, SphOffset_t iDoclistLength );
@@ -779,7 +780,7 @@ public:
 	virtual void			DictEndEntries ( SphOffset_t iDoclistOffset );
 
 	/// end indexing, store dictionary and checkpoints
-	virtual bool			DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphString & sError );
+	virtual bool			DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphString & sError, ThrottleState_t * pThrottle );
 
 	/// check whether there were any errors during indexing
 	virtual bool			DictIsError () const;
@@ -2492,6 +2493,9 @@ struct CSphIndexProgress
 
 	int				m_iDone;		///< generic percent, 0..1000 range
 
+	typedef void ( *IndexingProgress_fn ) ( const CSphIndexProgress * pStat, bool bPhaseEnd );
+	IndexingProgress_fn m_fnProgress;
+
 	CSphIndexProgress ()
 		: m_ePhase ( PHASE_COLLECT )
 		, m_iDocuments ( 0 )
@@ -2502,11 +2506,14 @@ struct CSphIndexProgress
 		, m_iHits ( 0 )
 		, m_iHitsTotal ( 0 )
 		, m_iWords ( 0 )
+		, m_fnProgress ( NULL )
 	{}
 
 	/// builds a message to print
 	/// WARNING, STATIC BUFFER, NON-REENTRANT
 	const char * BuildMessage() const;
+
+	void Show ( bool bPhaseEnd ) const;
 };
 
 
@@ -2690,13 +2697,13 @@ struct CSphIndexSettings : public CSphSourceSettings
 class ISphQword;
 class ISphQwordSetup;
 class CSphQueryContext;
+struct ISphFilter;
 
 
 /// generic fulltext index interface
 class CSphIndex
 {
 public:
-	typedef void ProgressCallback_t ( const CSphIndexProgress * pStat, bool bPhaseEnd );
 
 	enum
 	{
@@ -2712,7 +2719,7 @@ public:
 	virtual const CSphString &	GetLastWarning () const { return m_sLastWarning; }
 	virtual const CSphSchema &	GetMatchSchema () const { return m_tSchema; }			///< match schema as returned in result set (possibly different from internal storage schema!)
 
-	virtual	void				SetProgressCallback ( ProgressCallback_t * pfnProgress ) { m_pProgress = pfnProgress; }
+	virtual	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn pfnProgress ) = 0;
 	virtual void				SetInplaceSettings ( int iHitGap, int iDocinfoGap, float fRelocFactor, float fWriteFactor );
 	virtual void				SetPreopen ( bool bValue ) { m_bKeepFilesOpen = bValue; }
 	virtual void				SetWordlistPreload ( bool bValue ) { m_bPreloadWordlist = bValue; }
@@ -2739,7 +2746,7 @@ public:
 	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer ) = 0;
 
 	/// build index by mering current index with given index
-	virtual bool				Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists ) = 0;
+	virtual bool				Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists ) = 0;
 
 public:
 	/// check all data files, preload schema, and preallocate enough shared RAM to load memory-cached data
@@ -2786,7 +2793,7 @@ public:
 
 	/// saves memory-cached attributes, if there were any updates to them
 	/// on failure, false is returned and GetLastError() contains error message
-	virtual bool				SaveAttributes () = 0;
+	virtual bool				SaveAttributes ( CSphString & sError ) const = 0;
 
 	virtual DWORD				GetAttributeStatus () const = 0;
 
@@ -2804,10 +2811,10 @@ public:
 	virtual int					DebugCheck ( FILE * fp ) = 0;
 
 	/// getter for the index name
-	const char *				GetName () { return m_sIndexName.cstr(); }
+	const char *				GetName () const { return m_sIndexName.cstr(); }
 
 	/// get for the base file name
-	const char *				GetFilename () { return m_sFilename.cstr(); }
+	const char *				GetFilename () const { return m_sFilename.cstr(); }
 
 public:
 	int64_t						m_iTID;
@@ -2817,7 +2824,6 @@ public:
 
 protected:
 
-	ProgressCallback_t *		m_pProgress;
 	CSphSchema					m_tSchema;
 	CSphString					m_sLastError;
 	CSphString					m_sLastWarning;

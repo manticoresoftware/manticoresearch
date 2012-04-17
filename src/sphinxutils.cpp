@@ -413,6 +413,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "prefork_rotation_throttle", 0, NULL },
 	{ "snippets_file_prefix",	0, NULL },
 	{ "sphinxql_state",			0, NULL },
+	{ "rt_merge_iops",			0, NULL },
+	{ "rt_merge_maxiosize",		0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -1795,6 +1797,36 @@ void sphBacktrace ( EXCEPTION_POINTERS * pExc, const char * sFile )
 }
 
 #endif // USE_WINDOWS
+
+
+static bool g_bUnlinkOld = true;
+void sphSetUnlinkOld ( bool bUnlink )
+{
+	g_bUnlinkOld = bUnlink;
+}
+
+
+void sphUnlinkIndex ( const char * sName, bool bForce, bool bRemoveMVP )
+{
+	if ( !( g_bUnlinkOld || bForce ) )
+		return;
+
+	// FIXME! ext list must be in sync with sphinx.cpp, searchd.cpp
+	const int EXT_COUNT = 9;
+	const char * dCurExts[EXT_COUNT] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm", ".spk", ".sps", ".mvp" };
+	char sFileName[SPH_MAX_FILENAME_LEN];
+
+	int iEnd = bRemoveMVP ? EXT_COUNT : EXT_COUNT-1;
+	for ( int j=0; j<iEnd; j++ )
+	{
+		snprintf ( sFileName, sizeof(sFileName), "%s%s", sName, dCurExts[j] );
+		// 'mvp' is optional file
+		if ( ::unlink ( sFileName ) && errno!=ENOENT )
+			sphWarning ( "unlink failed (file '%s', error '%s'", sFileName, strerror(errno) );
+	}
+}
+
+
 
 //
 // $Id$

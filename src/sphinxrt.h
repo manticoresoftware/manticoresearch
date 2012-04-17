@@ -60,6 +60,8 @@ public:
 
 	/// truncate index (that is, kill all data)
 	virtual bool Truncate ( CSphString & sError ) = 0;
+
+	virtual void Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pThrottle ) = 0;
 };
 
 /// initialize subsystem

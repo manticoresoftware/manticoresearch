@@ -66,6 +66,7 @@
 %token	TOK_NULL
 %token	TOK_OPTION
 %token	TOK_ORDER
+%token	TOK_OPTIMIZE
 %token	TOK_RAND
 %token	TOK_READ
 %token	TOK_REPEATABLE
@@ -143,6 +144,7 @@ statement:
 	| set_transaction
 	| select_sysvar
 	| truncate
+	| optimize_index
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -974,6 +976,17 @@ truncate:
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_TRUNCATE_RTINDEX;
+			tStmt.m_sIndex = $3.m_sValue;
+		}
+	;
+
+////////////////////////////////////////////////////////////
+
+optimize_index:
+	TOK_OPTIMIZE TOK_INDEX TOK_IDENT
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_OPTIMIZE_INDEX;
 			tStmt.m_sIndex = $3.m_sValue;
 		}
 	;

@@ -108,7 +108,8 @@ public:
 	CSphDict *				m_pDict;
 	const CSphIndex *		m_pIndex;
 	ESphDocinfo				m_eDocinfo;
-	CSphMatch				m_tMin;
+	const CSphRowitem *		m_pMinRow;
+	SphDocID_t				m_iMinDocid;
 	int						m_iInlineRowitems;		///< inline rowitems count
 	int						m_iDynamicRowitems;		///< dynamic rowitems counts (including (!) inline)
 	int64_t					m_iMaxTimer;
@@ -120,6 +121,8 @@ public:
 	ISphQwordSetup ()
 		: m_pDict ( NULL )
 		, m_pIndex ( NULL )
+		, m_pMinRow ( NULL )
+		, m_iMinDocid ( 0 )
 		, m_eDocinfo ( SPH_DOCINFO_NONE )
 		, m_iInlineRowitems ( 0 )
 		, m_iDynamicRowitems ( 0 )

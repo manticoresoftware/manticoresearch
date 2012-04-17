@@ -1020,6 +1020,49 @@ public:
 };
 
 
+/// GROUP_CONCAT() implementation
+class AggrConcat_t : public IAggrFunc
+{
+protected:
+	CSphAttrLocator	m_tLoc;
+
+public:
+	AggrConcat_t ( const CSphColumnInfo & tCol )
+		: m_tLoc ( tCol.m_tLocator )
+	{}
+
+	void Ungroup ( CSphMatch * ) {}
+	void Finalize ( CSphMatch * ) {}
+
+	void Update ( CSphMatch * pDst, const CSphMatch * pSrc, bool bGrouped )
+	{
+		const char * sDst = (const char*) pDst->GetAttr(m_tLoc);
+		const char * sSrc = (const char*) pSrc->GetAttr(m_tLoc);
+		assert ( !sDst || *sDst ); // ensure the string is either NULL, or has data
+		assert ( !sSrc || *sSrc );
+
+		// empty source? kinda weird, but done!
+		if ( !sSrc )
+			return;
+
+		// empty destination? just clone the source
+		if ( !sDst )
+		{
+			if ( sSrc )
+				pDst->SetAttr ( m_tLoc, (SphAttr_t)strdup(sSrc) );
+			return;
+		}
+
+		// both source and destination present? append source to destination
+		assert ( sDst && sSrc );
+		CSphString sNew;
+		sNew.SetSprintf ( "%s,%s", sDst, sSrc );
+		pDst->SetAttr ( m_tLoc, (SphAttr_t)sNew.Leak() );
+		SafeDelete ( sDst );
+	}
+};
+
+
 /// group sorting functor
 template < typename COMPGROUP >
 struct GroupSorter_fn : public CSphMatchComparatorState, public SphAccessor_T<CSphMatch>
@@ -1180,6 +1223,10 @@ public:
 					}
 					break;
 
+				case SPH_AGGR_CAT:
+					m_dAggregates.Add ( new AggrConcat_t ( tAttr ) );
+					break;
+
 				default:
 					assert ( 0 && "internal error: unhandled aggregate function" );
 					break;
@@ -1192,6 +1239,8 @@ public:
 	{
 		SafeDelete ( m_pComp );
 		SafeDelete ( m_pGrouper );
+		ARRAY_FOREACH ( i, m_dAggregates )
+			SafeDelete ( m_dAggregates[i] );
 	}
 
 	/// check if this sorter does groupby
@@ -2982,7 +3031,22 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		// a new and shiny expression, lets parse
 		bool bUsesWeight;
 		CSphColumnInfo tExprCol ( tItem.m_sAlias.cstr(), SPH_ATTR_NONE );
-		tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), tSorterSchema, &tExprCol.m_eAttrType, &bUsesWeight, sError, pExtra, NULL, &bHasZonespanlist );
+
+		// tricky bit
+		// GROUP_CONCAT() adds an implicit TO_STRING() conversion on top of its argument
+		// and then the aggregate operation simply concatenates strings as matches arrive
+		// ideally, we would instead pass ownership of the expression to G_C() implementation
+		// and also the original expression type, and let the string conversion happen in G_C() itself
+		// but that ideal route seems somewhat more complicated in the current architecture
+		if ( tItem.m_eAggrFunc==SPH_AGGR_CAT )
+		{
+			CSphString sExpr2;
+			sExpr2.SetSprintf ( "TO_STRING(%s)", sExpr.cstr() );
+			tExprCol.m_pExpr = sphExprParse ( sExpr2.cstr(), tSorterSchema, &tExprCol.m_eAttrType, &bUsesWeight, sError, pExtra, NULL, &bHasZonespanlist );
+		} else
+		{
+			tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), tSorterSchema, &tExprCol.m_eAttrType, &bUsesWeight, sError, pExtra, NULL, &bHasZonespanlist );
+		}
 		bNeedZonespanlist |= bHasZonespanlist;
 		tExprCol.m_eAggrFunc = tItem.m_eAggrFunc;
 		if ( !tExprCol.m_pExpr )
@@ -2998,6 +3062,13 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 			tExprCol.m_tLocator.m_iBitCount = 32;
 		}
 
+		// force GROUP_CONCAT() to be computed as strings
+		if ( tExprCol.m_eAggrFunc==SPH_AGGR_CAT )
+		{
+			tExprCol.m_eAttrType = SPH_ATTR_STRINGPTR;
+			tExprCol.m_tLocator.m_iBitCount = ROWITEMPTR_BITS;
+		}
+		
 		// postpone aggregates, add non-aggregates
 		if ( tExprCol.m_eAggrFunc==SPH_AGGR_NONE )
 		{

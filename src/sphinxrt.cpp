@@ -4634,6 +4634,11 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 					ARRAY_FOREACH ( iSorter, dSorters )
 						bNewMatch |= dSorters[iSorter]->Push ( tMatch );
 
+					// stringptr expressions should be duplicated (or taken over) at this point
+					tCtx.FreeStrFilter ( tMatch );
+					tCtx.FreeStrSort ( tMatch );
+					tCtx.FreeStrFinal ( tMatch );
+
 					// handle cutoff
 					if ( bNewMatch )
 						if ( --iCutoff==0 )

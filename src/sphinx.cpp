@@ -12694,7 +12694,7 @@ static inline void CalcContextItems ( CSphMatch & tMatch, const CSphVector<CSphQ
 		{
 			const BYTE * pStr = NULL;
 			tCalc.m_pExpr->StringEval ( tMatch, &pStr );
-			tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t) pStr );
+			tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t) pStr ); // FIXME! a potential leak of *previous* value?
 		} else
 			tMatch.SetAttrFloat ( tCalc.m_tLoc, tCalc.m_pExpr->Eval(tMatch) );
 	}

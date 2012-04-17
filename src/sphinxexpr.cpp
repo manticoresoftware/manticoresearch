@@ -259,6 +259,7 @@ struct Expr_GetStrConst_c : public ISphExpr
 	virtual int64_t Int64Eval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
 };
 
+
 struct Expr_GetZonespanlist_c : public ISphExpr
 {
 	CSphString m_sVal;
@@ -383,6 +384,7 @@ struct Expr_Unary_c : public ISphExpr
 	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const { m_pFirst->GetDependencyColumns ( dColumns ); }
 };
 
+
 struct Expr_Crc32_c : public Expr_Unary_c
 {
 	explicit Expr_Crc32_c ( ISphExpr * pFirst ) { m_pFirst = pFirst; }
@@ -390,6 +392,7 @@ struct Expr_Crc32_c : public Expr_Unary_c
 	virtual int IntEval ( const CSphMatch & tMatch ) const { const BYTE * pStr; return sphCRC32 ( pStr, m_pFirst->StringEval ( tMatch, &pStr ) ); }
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return IntEval ( tMatch ); }
 };
+
 
 static inline int Fibonacci ( int i )
 {
@@ -406,6 +409,7 @@ static inline int Fibonacci ( int i )
 	return ( i & 1 ) ? f1 : f0;
 }
 
+
 struct Expr_Fibonacci_c : public Expr_Unary_c
 {
 	explicit Expr_Fibonacci_c ( ISphExpr * pFirst ) { m_pFirst = pFirst; }
@@ -413,6 +417,45 @@ struct Expr_Fibonacci_c : public Expr_Unary_c
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
 	virtual int IntEval ( const CSphMatch & tMatch ) const { return Fibonacci ( m_pFirst->IntEval ( tMatch ) ); }
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return IntEval ( tMatch ); }
+};
+
+
+struct Expr_ToString_c : public Expr_Unary_c
+{
+protected:
+	ESphAttr	m_eArg;
+
+public:
+	Expr_ToString_c ( ISphExpr * pArg, ESphAttr eArg )
+	{
+		m_pFirst = pArg;
+		m_eArg = eArg;
+	}
+
+	virtual float Eval ( const CSphMatch & ) const
+	{
+		assert ( 0 );
+		return 0.0f;
+	}
+
+	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
+	{
+		CSphString sBuf;
+		switch ( m_eArg )
+		{
+			case SPH_ATTR_INTEGER:	sBuf.SetSprintf ( "%u", m_pFirst->IntEval ( tMatch ) ); break;
+			case SPH_ATTR_BIGINT:	sBuf.SetSprintf ( INT64_FMT, m_pFirst->Int64Eval ( tMatch ) ); break;
+			case SPH_ATTR_FLOAT:	sBuf.SetSprintf ( "%f", m_pFirst->Eval ( tMatch ) ); break;
+			default:				assert ( 0 && "unhandled arg type in TO_STRING()" ); break;
+		}
+		if ( sBuf.IsEmpty() )
+		{
+			*ppStr = NULL;
+			return 0;
+		}
+		*ppStr = (const BYTE *) sBuf.Leak();
+		return strlen ( (const char*) *ppStr );
+	}
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -653,7 +696,8 @@ enum Func_e
 	FUNC_POLY2D,
 	FUNC_GEOPOLY2D,
 	FUNC_CONTAINS,
-	FUNC_ZONESPANLIST
+	FUNC_ZONESPANLIST,
+	FUNC_TO_STRING
 };
 
 
@@ -709,7 +753,8 @@ static FuncDesc_t g_dFuncs[] =
 	{ "poly2d",			-1,	FUNC_POLY2D,		SPH_ATTR_POLY2D },
 	{ "geopoly2d",		-1,	FUNC_GEOPOLY2D,		SPH_ATTR_POLY2D },
 	{ "contains",		3,	FUNC_CONTAINS,		SPH_ATTR_INTEGER },
-	{ "zonespanlist",	0,	FUNC_ZONESPANLIST,	SPH_ATTR_STRINGPTR }
+	{ "zonespanlist",	0,	FUNC_ZONESPANLIST,	SPH_ATTR_STRINGPTR },
+	{ "to_string",		1,	FUNC_TO_STRING,		SPH_ATTR_STRINGPTR }
 };
 
 
@@ -739,6 +784,13 @@ static int G_HASHGEN = HashGen();
 #endif
 
 
+// FIXME? can remove this by preprocessing the assoc table
+static inline BYTE FuncHashLower ( BYTE u )
+{
+	return ( u>='A' && u<='Z' ) ? ( u | 0x20 ) : u;
+}
+
+
 static int FuncHashLookup ( const char * sKey )
 {
 	static BYTE dAsso[] =
@@ -752,10 +804,10 @@ static int FuncHashLookup ( const char * sKey )
 		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
 		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
 		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 66, 66, 0, 0, 30,
-		30, 0, 15, 5, 66, 5, 66, 66, 0, 0,
-		0, 5, 15, 35, 0, 15, 25, 45, 66, 40,
-		10, 0, 10, 66, 66, 66, 66, 66, 66, 66,
+		66, 66, 66, 66, 66, 20, 66,  0,  0, 30,
+		30,  0, 15,  5, 66,  5, 66, 66,  0,  0,
+		0,  5, 15, 35,  0, 15, 25, 45, 66, 40,
+		10,  0, 10, 66, 66, 66, 66, 66, 66, 66,
 		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
 		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
 		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
@@ -775,9 +827,9 @@ static int FuncHashLookup ( const char * sKey )
 	int iHash = strlen ( sKey );
 	switch ( iHash )
 	{
-		default:		iHash += dAsso [ s[2] | 0x20 ];
-		case 2:			iHash += dAsso [ s[1] | 0x20 ];
-		case 1:			iHash += dAsso [ s[0] | 0x20 ];
+		default:		iHash += dAsso [ FuncHashLower ( s[2] ) ];
+		case 2:			iHash += dAsso [ FuncHashLower ( s[1] ) ];
+		case 1:			iHash += dAsso [ FuncHashLower ( s[0] ) ];
 		case 0:
 						break;
 	}
@@ -788,7 +840,7 @@ static int FuncHashLookup ( const char * sKey )
 		31, -1, 24, 4, 12, 3, 32, 35, 9, 14,
 		-1, -1, -1, 15, 25, -1, 29, -1, 27, 2,
 		-1, -1, -1, 34, 23, -1, -1, -1, 0, 26,
-		-1, -1, -1, 5, 10, -1, -1, -1, -1, -1,
+		-1, -1, -1, 5, 10, -1, -1, -1, -1, 36,
 		-1, -1, -1, 22, -1, 13
 	};
 
@@ -2308,12 +2360,15 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_GEODIST:	return CreateGeodistNode ( tNode.m_iLeft );
 					case FUNC_EXIST:	return CreateExistNode ( tNode );
 					case FUNC_CONTAINS:	return CreateContainsNode ( tNode );
-					case FUNC_ZONESPANLIST:
-										m_bHasZonespanlist = true;
-										return new Expr_GetZonespanlist_c ();
+
 					case FUNC_POLY2D:
-					case FUNC_GEOPOLY2D:
-										break; ///< just make gcc happy
+					case FUNC_GEOPOLY2D:break; // just make gcc happy
+
+					case FUNC_ZONESPANLIST:
+						m_bHasZonespanlist = true;
+						return new Expr_GetZonespanlist_c ();
+					case FUNC_TO_STRING:
+						return new Expr_ToString_c ( dArgs[0], m_dNodes [ tNode.m_iLeft ].m_eRetType );
 				}
 				assert ( 0 && "unhandled function id" );
 				break;

@@ -46,6 +46,55 @@ void StripStdin ( const char * sIndexAttrs, const char * sRemoveElements )
 	fprintf ( stdout, "dumping stripped results...\n%s\n", &dBuffer[0] );
 }
 
+void ApplyMorphology ( CSphIndex * pIndex )
+{
+	CSphVector<BYTE> dInBuffer, dOutBuffer;
+	const int READ_BUFFER_SIZE = 1024;
+	dInBuffer.Reserve ( READ_BUFFER_SIZE );
+	char sBuffer[READ_BUFFER_SIZE];
+	while ( !feof(stdin) )
+	{
+		int iLen = fread ( sBuffer, 1, sizeof(sBuffer), stdin );
+		if ( !iLen )
+			break;
+
+		int iPos = dInBuffer.GetLength();
+		dInBuffer.Resize ( iPos+iLen );
+		memcpy ( &dInBuffer[iPos], sBuffer, iLen );
+	}
+	dInBuffer.Add(0);
+	dOutBuffer.Reserve ( dInBuffer.GetLength() );
+
+	ISphTokenizer * pTokenizer = pIndex->GetTokenizer();
+	CSphDict * pDict = pIndex->GetDictionary();
+	BYTE * sBufferToDump = &dInBuffer[0];
+	if (pTokenizer)
+	{
+		pTokenizer->SetBuffer ( &dInBuffer[0], dInBuffer.GetLength() );
+		while ( BYTE * sToken = pTokenizer->GetToken() )
+		{
+			if ( pDict )
+				pDict->ApplyStemmers ( sToken );
+
+			int iPos = dOutBuffer.GetLength();
+			int iLen = strlen ( (char *)sToken );
+			sToken[iLen] = ' ';
+			dOutBuffer.Resize ( iPos+iLen+1 );
+			memcpy ( &dOutBuffer[iPos], sToken, iLen+1 );
+		}
+
+		if ( dOutBuffer.GetLength() )
+			dOutBuffer[dOutBuffer.GetLength()-1] = 0;
+		else
+			dOutBuffer.Add(0);
+
+		sBufferToDump = &dOutBuffer[0];
+	}
+
+	fprintf ( stdout, "dumping stemmed results...\n%s\n", sBufferToDump );
+}
+
+
 void DoOptimization ( const CSphString & sIndex, const CSphConfig & hConfig );
 
 extern void sphDictBuildInfixes ( const char * sPath );
@@ -67,13 +116,15 @@ int main ( int argc, char ** argv )
 			"--dumphitlist <INDEXNAME> --wordid <ID>\n"
 			"\t\t\t\tdump hits for given keyword\n"
 			"--check <INDEXNAME>\t\tperform index consistency check\n"
-			"--htmlstrip <INDEXNAME>\t\tfilter stdin usng HTML stripper settings\n"
+			"--htmlstrip <INDEXNAME>\t\tfilter stdin using HTML stripper settings\n"
 			"\t\t\t\tfor a given index (taken from sphinx.conf)\n"
 			"--optimize-rt-klists <INDEXNAME>\n"
 			"\t\t\t\tperform kill list opimization in rt's disk chunks\n"
 			"\t\t\t\tfor a given index (taken from sphinx.conf) or --all\n"
 			"--build-infixes\t\t\tbuild infixes for an existing dict=keywords\n"
 			"\t\t\t\tindex (upgrades .sph, .spi in place)\n"
+			"--morph <INDEXNAME>\t\tfilter stdin using morphology settings\n"
+			"\t\t\t\tfor a given index (taken from sphinx.conf)\n"
 			"\n"
 			"Options are:\n"
 			"-c, --config <file>\t\tuse given config file instead of defaults\n"
@@ -105,7 +156,8 @@ int main ( int argc, char ** argv )
 		CMD_CHECK,
 		CMD_STRIP,
 		CMD_OPTIMIZE,
-		CMD_BUILDINFIXES
+		CMD_BUILDINFIXES,
+		CMD_MORPH
 	} eCommand = CMD_NOTHING;
 
 	int i;
@@ -123,6 +175,7 @@ int main ( int argc, char ** argv )
 		OPT1 ( "--check" )			{ eCommand = CMD_CHECK; sIndex = argv[++i]; }
 		OPT1 ( "--htmlstrip" )		{ eCommand = CMD_STRIP; sIndex = argv[++i]; }
 		OPT1 ( "--build-infixes" )	{ eCommand = CMD_BUILDINFIXES; sIndex = argv[++i]; }
+		OPT1 ( "--morph")			{ eCommand = CMD_MORPH; sIndex = argv[++i]; }
 		OPT1 ( "--strip-path" )		{ bStripPath = true; }
 		OPT1 ( "--optimize-rt-klists" )
 		{
@@ -229,6 +282,9 @@ int main ( int argc, char ** argv )
 		if ( !pIndex->Prealloc ( false, bStripPath, sWarn ) )
 			sphDie ( "index '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
 
+		if ( eCommand==CMD_MORPH )
+			break;
+
 		if ( !pIndex->Preread() )
 			sphDie ( "index '%s': preread failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
 
@@ -298,6 +354,10 @@ int main ( int argc, char ** argv )
 				fprintf ( stdout, "building infixes for index %s...\n", sIndex.cstr() );
 				sphDictBuildInfixes ( hIndex["path"].cstr() );
 			}
+			break;
+
+		case CMD_MORPH:
+			ApplyMorphology ( pIndex );
 			break;
 
 		default:

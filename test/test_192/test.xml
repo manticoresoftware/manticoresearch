@@ -103,7 +103,7 @@ for ( $i = 102; $i < 104; $i++)
 		
 	@mysql_close($sock);
 	
-	usleep ( 5000 );	
+	usleep ( 50000 );	
 	StopSearchd ( 'config.conf', 'searchd.pid' );
 	usleep ( 50000 );
 	

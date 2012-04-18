@@ -23,7 +23,7 @@
 #pragma message("Automatically linking with psapi.lib")
 #endif
 
-const int	COMMIT_STEP = 1;
+int			COMMIT_STEP = 1;
 float		g_fTotalMB = 0.0f;
 
 void SetupIndexing ( CSphSource_MySQL * pSrc, const CSphSourceParams_MySQL & tParams )
@@ -81,12 +81,14 @@ void DoIndexing ( CSphSource * pSrc, ISphRtIndex * pIndex )
 	{
 		if ( !pSrc->IterateDocument ( sError ) )
 			sphDie ( "iterate-document failed: %s", sError.cstr() );
-		ISphHits * pHitsNext = pSrc->IterateHits ( sError );
-		if ( !sError.IsEmpty() )
-			sphDie ( "iterate-hits failed: %s", sError.cstr() );
 
 		if ( pSrc->m_tDocInfo.m_iDocID )
+		{
+			ISphHits * pHitsNext = pSrc->IterateHits ( sError );
+			if ( !sError.IsEmpty() )
+				sphDie ( "iterate-hits failed: %s", sError.cstr() );
 			pIndex->AddDocument ( pHitsNext, pSrc->m_tDocInfo, NULL, dMvas, sError );
+		}
 
 		if ( ( pSrc->GetStats().m_iTotalDocuments % COMMIT_STEP )==0 || !pSrc->m_tDocInfo.m_iDocID )
 		{
@@ -170,8 +172,11 @@ void IndexingThread ( void * pArg )
 }
 
 
-int main ()
+int main ( int argc, char ** argv )
 {
+	if ( argc==2 )
+		COMMIT_STEP = atoi ( argv[1] );
+
 	// threads should be initialized before memory allocations
 	char cTopOfMainStack;
 	sphThreadInit();

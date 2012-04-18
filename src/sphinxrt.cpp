@@ -5526,7 +5526,8 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 
 		if ( *pForceTerminate )
 		{
-			sphWarning ( "rt optimize: index %s: forced to shutdown, remove old index files manually '%s', '%s'", sRename.cstr(), sOldest.cstr() );
+			sphWarning ( "rt optimize: index %s: forced to shutdown, remove old index files manually '%s', '%s'",
+				m_sIndexName.cstr(), sRename.cstr(), sOldest.cstr() );
 			break;
 		}
 
@@ -5543,7 +5544,7 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 	int64_t tmPass = sphMicroTimer() - tmStart;
 
 	sphInfo ( "rt: index %s: optimized chunk(s) %d ( of %d ) in %d.%03d sec",
-		m_sIndexName.cstr(), iChunks-m_pDiskChunks.GetLength(), iChunks, (int)(tmPass/1000000), (int)((tmPass/1000)%1000), m_pDiskChunks.GetLength() );
+		m_sIndexName.cstr(), iChunks-m_pDiskChunks.GetLength(), iChunks, (int)(tmPass/1000000), (int)((tmPass/1000)%1000) );
 }
 
 //////////////////////////////////////////////////////////////////////////

@@ -2953,12 +2953,12 @@ ExcerptQuery_t::ExcerptQuery_t ()
 	, m_bAllowEmpty ( false )
 	, m_bEmitZones ( false )
 	, m_iRawFlags ( -1 )
+	, m_sFilePrefix ( "" )
 	, m_iSize ( 0 )
 	, m_iSeq ( 0 )
 	, m_iNext ( -2 )
 	, m_bHasBeforePassageMacro ( false )
 	, m_bHasAfterPassageMacro ( false )
-	, m_sFilePrefix ( "" )
 {
 }
 
@@ -2984,7 +2984,7 @@ void sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokenize
 	if ( tOptions.m_iLoadFiles )
 	{
 		CSphAutofile tFile;
-		if ( tOptions.m_sFilePrefix!= "" )
+		if ( tOptions.m_sFilePrefix!="" )
 		{
 			CSphString sFilename;
 			sFilename.SetSprintf ( "%s%s", tOptions.m_sFilePrefix.cstr(), tOptions.m_sSource.cstr() );

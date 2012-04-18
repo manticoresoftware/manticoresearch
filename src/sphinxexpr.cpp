@@ -454,7 +454,7 @@ public:
 						break;
 
 					DWORD nValues = *pValues++;
-					assert (!( m_eArg==SPH_ATTR_UINT64SET && ( nValues&1 ) ));
+					assert (!( m_eArg==SPH_ATTR_UINT64SET && ( nValues & 1 ) ));
 
 					// OPTIMIZE? minibuffer on stack, less allocs, manual formatting vs printf, etc
 					if ( m_eArg==SPH_ATTR_UINT32SET )
@@ -471,7 +471,7 @@ public:
 						for ( ; nValues; nValues-=2, pValues+=2 )
 						{
 							if ( sBuf.cstr() )
-								sBuf.SetSprintf ( INT64_FMT",%s", sBuf.cstr(), MVA_UPSIZE ( pValues ) );
+								sBuf.SetSprintf ( "%s,"INT64_FMT, sBuf.cstr(), MVA_UPSIZE ( pValues ) );
 							else
 								sBuf.SetSprintf ( INT64_FMT, MVA_UPSIZE ( pValues ) );
 						}

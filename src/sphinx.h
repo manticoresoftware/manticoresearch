@@ -520,7 +520,7 @@ public:
 	static ISphTokenizer *			Create ( const CSphTokenizerSettings & tSettings, const CSphEmbeddedFiles * pFiles, CSphString & sError );
 
 	/// create a token filter
-	static ISphTokenizer *			CreateTokenFilter ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer );
+	static ISphTokenizer *			CreateMultiformFilter ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer );
 
 	/// save tokenizer settings to a stream
 	virtual const CSphTokenizerSettings &	GetSettings () const { return m_tSettings; }

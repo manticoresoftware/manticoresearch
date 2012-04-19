@@ -2162,11 +2162,11 @@ struct CSphMultiformContainer
 
 
 /// Token filter
-class CSphTokenizer_Filter : public ISphTokenizer
+class CSphMultiformTokenizer : public ISphTokenizer
 {
 public:
-									CSphTokenizer_Filter ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer );
-									~CSphTokenizer_Filter ();
+									CSphMultiformTokenizer ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer );
+									~CSphMultiformTokenizer ();
 
 	virtual bool					SetCaseFolding ( const char * sConfig, CSphString & sError )	{ return m_pTokenizer->SetCaseFolding ( sConfig, sError ); }
 	virtual void					AddPlainChar ( char c )											{ m_pTokenizer->AddPlainChar ( c ); }
@@ -3182,12 +3182,12 @@ ISphTokenizer * ISphTokenizer::Create ( const CSphTokenizerSettings & tSettings,
 }
 
 
-ISphTokenizer * ISphTokenizer::CreateTokenFilter ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer )
+ISphTokenizer * ISphTokenizer::CreateMultiformFilter ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer )
 {
 	if ( !pContainer )
 		return NULL;
 
-	return new CSphTokenizer_Filter ( pTokenizer, pContainer );
+	return new CSphMultiformTokenizer ( pTokenizer, pContainer );
 }
 
 
@@ -4958,7 +4958,7 @@ BYTE * CSphTokenizer_UTF8Ngram::GetToken ()
 
 //////////////////////////////////////////////////////////////////////////
 
-CSphTokenizer_Filter::CSphTokenizer_Filter ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer )
+CSphMultiformTokenizer::CSphMultiformTokenizer ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer )
 	: m_pTokenizer		( pTokenizer )
 	, m_pMultiWordforms ( pContainer )
 	, m_iStoredStart	( 0 )
@@ -4972,13 +4972,13 @@ CSphTokenizer_Filter::CSphTokenizer_Filter ( ISphTokenizer * pTokenizer, const C
 }
 
 
-CSphTokenizer_Filter::~CSphTokenizer_Filter ()
+CSphMultiformTokenizer::~CSphMultiformTokenizer ()
 {
 	SafeDelete ( m_pTokenizer );
 }
 
 
-void CSphTokenizer_Filter::FillTokenInfo ( StoredToken_t * pToken )
+void CSphMultiformTokenizer::FillTokenInfo ( StoredToken_t * pToken )
 {
 	pToken->m_bBoundary = m_pTokenizer->GetBoundary ();
 	pToken->m_bSpecial = m_pTokenizer->WasTokenSpecial ();
@@ -4990,7 +4990,7 @@ void CSphTokenizer_Filter::FillTokenInfo ( StoredToken_t * pToken )
 }
 
 
-BYTE * CSphTokenizer_Filter::GetToken ()
+BYTE * CSphMultiformTokenizer::GetToken ()
 {
 	m_sTokenizedMultiform[0] = '\0';
 
@@ -5131,14 +5131,14 @@ BYTE * CSphTokenizer_Filter::GetToken ()
 }
 
 
-ISphTokenizer * CSphTokenizer_Filter::Clone ( bool bEscaped ) const
+ISphTokenizer * CSphMultiformTokenizer::Clone ( bool bEscaped ) const
 {
 	ISphTokenizer * pClone = m_pTokenizer->Clone ( bEscaped );
-	return CreateTokenFilter ( pClone, m_pMultiWordforms );
+	return CreateMultiformFilter ( pClone, m_pMultiWordforms );
 }
 
 
-void CSphTokenizer_Filter::SetBufferPtr ( const char * sNewPtr )
+void CSphMultiformTokenizer::SetBufferPtr ( const char * sNewPtr )
 {
 	m_pLastToken = NULL;
 	m_iStoredLen = 0;
@@ -5146,7 +5146,7 @@ void CSphTokenizer_Filter::SetBufferPtr ( const char * sNewPtr )
 	m_pTokenizer->SetBufferPtr ( sNewPtr );
 }
 
-void CSphTokenizer_Filter::SetBuffer ( BYTE * sBuffer, int iLength )
+void CSphMultiformTokenizer::SetBuffer ( BYTE * sBuffer, int iLength )
 {
 	m_pTokenizer->SetBuffer ( sBuffer, iLength );
 	SetBufferPtr ( (const char *)sBuffer );
@@ -13551,7 +13551,7 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 
 		SetDictionary ( pDict );
 
-		ISphTokenizer * pTokenFilter = ISphTokenizer::CreateTokenFilter ( pTokenizer, pDict->GetMultiWordforms () );
+		ISphTokenizer * pTokenFilter = ISphTokenizer::CreateMultiformFilter ( pTokenizer, pDict->GetMultiWordforms () );
 		SetTokenizer ( pTokenFilter ? pTokenFilter : pTokenizer );
 	} else
 	{

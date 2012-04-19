@@ -1576,7 +1576,7 @@ const ExtHit_t * ExtCached_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 			ExtHit_t & tHit = m_dHits[iHit++];
 			tHit.m_uDocid = m_dCache[m_iCurHit].m_uDocid;
 			tHit.m_uHitpos = m_dCache[m_iCurHit].m_uHitpos;
-			tHit.m_uQuerypos = m_iAtomPos;
+			tHit.m_uQuerypos = (WORD) m_iAtomPos;
 			tHit.m_uWeight = tHit.m_uMatchlen = tHit.m_uSpanlen = 1;
 			m_iCurHit++;
 		}

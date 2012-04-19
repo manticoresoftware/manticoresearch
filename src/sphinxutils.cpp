@@ -1242,7 +1242,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 	if ( bTokenizerSpawned )
 	{
 		ISphTokenizer * pTokenizer = pIndex->LeakTokenizer ();
-		ISphTokenizer * pTokenFilter = ISphTokenizer::CreateTokenFilter ( pTokenizer, pIndex->GetDictionary ()->GetMultiWordforms () );
+		ISphTokenizer * pTokenFilter = ISphTokenizer::CreateMultiformFilter ( pTokenizer, pIndex->GetDictionary ()->GetMultiWordforms () );
 		pIndex->SetTokenizer ( pTokenFilter ? pTokenFilter : pTokenizer );
 	}
 

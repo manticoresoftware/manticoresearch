@@ -1445,6 +1445,7 @@ public:
 	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig );
 	virtual void				DebugDumpDocids ( FILE * fp );
 	virtual void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
+	virtual void				DebugDumpDict ( FILE * fp );
 	virtual int					DebugCheck ( FILE * fp );
 	template <class Qword> void	DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
 
@@ -13895,6 +13896,48 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 }
 
 
+void CSphIndex_VLN::DebugDumpDict ( FILE * fp )
+{
+	if ( !m_pDict->GetSettings().m_bWordDict )
+	{
+		fprintf ( fp, "sorry, DebugDumpDict() only supports dict=keywords for now\n" );
+		return;
+	}
+
+	// thread safe outer storage for dictionaries chunks and file
+	// FIXME! cut-n-paste
+	CSphString sError;
+	BYTE * pBuf = NULL;
+	int iFD = -1;
+	CSphAutofile rdWordlist;
+	if ( !m_bPreloadWordlist )
+	{
+		if ( m_bKeepFilesOpen )
+			iFD = m_tWordlist.m_tFile.GetFD();
+		else
+		{
+			iFD = rdWordlist.Open ( GetIndexFileName ( "spi" ), SPH_O_READ, sError );
+			if ( iFD<0 )
+			{
+				fprintf ( fp, "ERROR: %s\n", sError.cstr() );
+				return;
+			}
+		}
+		if ( m_tWordlist.m_iMaxChunk>0 )
+			pBuf = new BYTE [ m_tWordlist.m_iMaxChunk ];
+	}
+
+	fprintf ( fp, "keyword,docs,hits,offset\n" );
+	ARRAY_FOREACH ( i, m_tWordlist.m_dCheckpoints )
+	{
+		KeywordsBlockReader_c tCtx ( m_tWordlist.AcquireDict ( &m_tWordlist.m_dCheckpoints[i], iFD, pBuf ) );
+		while ( tCtx.UnpackWord() )
+			printf ( "%s,%d,%d," INT64_FMT "\n", tCtx.GetWord(), tCtx.m_iDocs, tCtx.m_iHits, int64_t(tCtx.m_iOffset) );
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarning )
 {
 	MEMORY ( SPH_MEM_IDX_DISK );
@@ -26266,7 +26309,7 @@ const BYTE * CWordlist::AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint
 		if ( pCheckpoint < &m_dCheckpoints.Last() )
 			iChunkLength = pCheckpoint[1].m_iWordlistOffset - pCheckpoint->m_iWordlistOffset;
 		else
-			iChunkLength = m_iSize - pCheckpoint->m_iWordlistOffset;
+			iChunkLength = m_iWordsEnd - pCheckpoint->m_iWordlistOffset;
 
 		assert ( iChunkLength<=m_iMaxChunk );
 		if ( (int)sphPread ( iFD, pDictBuf, (size_t)iChunkLength, pCheckpoint->m_iWordlistOffset )==iChunkLength )

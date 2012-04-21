@@ -115,6 +115,7 @@ int main ( int argc, char ** argv )
 			"--dumphitlist <INDEXNAME> <KEYWORD>\n"
 			"--dumphitlist <INDEXNAME> --wordid <ID>\n"
 			"\t\t\t\tdump hits for given keyword\n"
+			"--dumpdict <INDEXNAME>\t\tdump dictionary\n"
 			"--check <INDEXNAME>\t\tperform index consistency check\n"
 			"--htmlstrip <INDEXNAME>\t\tfilter stdin using HTML stripper settings\n"
 			"\t\t\t\tfor a given index (taken from sphinx.conf)\n"
@@ -153,6 +154,7 @@ int main ( int argc, char ** argv )
 		CMD_DUMPCONFIG,
 		CMD_DUMPDOCIDS,
 		CMD_DUMPHITLIST,
+		CMD_DUMPDICT,
 		CMD_CHECK,
 		CMD_STRIP,
 		CMD_OPTIMIZE,
@@ -172,6 +174,7 @@ int main ( int argc, char ** argv )
 		OPT1 ( "--dumpheader" )		{ eCommand = CMD_DUMPHEADER; sDumpHeader = argv[++i]; }
 		OPT1 ( "--dumpconfig" )		{ eCommand = CMD_DUMPCONFIG; sDumpHeader = argv[++i]; }
 		OPT1 ( "--dumpdocids" )		{ eCommand = CMD_DUMPDOCIDS; sIndex = argv[++i]; }
+		OPT1 ( "--dumpdict" )		{ eCommand = CMD_DUMPDICT; sIndex = argv[++i]; }
 		OPT1 ( "--check" )			{ eCommand = CMD_CHECK; sIndex = argv[++i]; }
 		OPT1 ( "--htmlstrip" )		{ eCommand = CMD_STRIP; sIndex = argv[++i]; }
 		OPT1 ( "--build-infixes" )	{ eCommand = CMD_BUILDINFIXES; sIndex = argv[++i]; }
@@ -324,6 +327,11 @@ int main ( int argc, char ** argv )
 		case CMD_DUMPHITLIST:
 			fprintf ( stdout, "dumping hitlist for index '%s' keyword '%s'...\n", sIndex.cstr(), sKeyword.cstr() );
 			pIndex->DebugDumpHitlist ( stdout, sKeyword.cstr(), bWordid );
+			break;
+
+		case CMD_DUMPDICT:
+			fprintf ( stdout, "dumping dictionary for index '%s'...\n", sIndex.cstr() );
+			pIndex->DebugDumpDict ( stdout );
 			break;
 
 		case CMD_CHECK:

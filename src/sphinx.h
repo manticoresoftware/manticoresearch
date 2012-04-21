@@ -2808,6 +2808,9 @@ public:
 	virtual void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID ) = 0;
 
 	/// internal debugging hook, DO NOT USE
+	virtual void				DebugDumpDict ( FILE * fp ) = 0;
+
+	/// internal debugging hook, DO NOT USE
 	virtual int					DebugCheck ( FILE * fp ) = 0;
 
 	/// getter for the index name

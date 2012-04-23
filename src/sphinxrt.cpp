@@ -1003,6 +1003,7 @@ private:
 	int							m_iLockFD;
 	mutable RtDiskKlist_t		m_tKlist;
 	int							m_iDiskBase;
+	bool						m_bOptimizing;
 
 	int64_t						m_iSavedTID;
 	int64_t						m_iSavedRam;
@@ -1132,6 +1133,7 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 	, m_bPathStripped ( false )
 	, m_iLockFD ( -1 )
 	, m_iDiskBase ( 0 )
+	, m_bOptimizing ( false )
 	, m_iSavedTID ( m_iTID )
 	, m_iSavedRam ( 0 )
 	, m_tmSaved ( sphMicroTimer() )
@@ -4767,10 +4769,15 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		}
 	}
 
+	// we're copying docinfo from RT segments to result set (segments got merged in RAM)
+	// also static part of docinfo:
+	// during optimize process (disk chunks are merged and removed from RT index)
+	// result set has arena attributes (STRING and MVA) (all these attrs should be at one pool)
+	bool bOptimizing = m_bOptimizing;
 	bool bHasArenaAttrs = ( dStringSetLoc.GetLength()>0 || dMvaSetLoc.GetLength()>0 );
 	const int iSegmentsTotal = m_pSegments.GetLength();
 	bool bSegmentMatchesFixup = ( m_tSchema.GetStaticSize()>0 && iSegmentsTotal>0 );
-	if ( bSegmentMatchesFixup || bHasArenaAttrs )
+	if ( bSegmentMatchesFixup || bHasArenaAttrs || bOptimizing )
 	{
 		MEMORY ( SPH_MEM_IDX_RT_RES_MATCHES );
 
@@ -4787,12 +4794,13 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			const CSphMatch * pMatches = pSorter->Finalize();
 			const int iMatchesCount = pSorter->GetLength();
 
-			if ( bHasArenaAttrs )
+			if ( bHasArenaAttrs || bOptimizing )
 			{
 				iFixupCount += iMatchesCount;
 				continue;
 			}
 
+			// copying only RT segments docinfo (no need to copy docinfo from disk chunks)
 			for ( int i=0; i<iMatchesCount; i++ )
 			{
 				const int iMatchSegment = pMatches[i].m_iTag-1;
@@ -4801,7 +4809,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			}
 		}
 
-		if ( iFixupCount>0 || bHasArenaAttrs )
+		if ( iFixupCount>0 || bHasArenaAttrs || bOptimizing )
 		{
 			const int iStaticSize = m_tSchema.GetStaticSize() + DWSIZEOF ( SphDocID_t );
 			CSphRowitem * pAttr = new CSphRowitem [ iFixupCount * iStaticSize ];
@@ -4820,7 +4828,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 				for ( int i=0; i<iMatchesCount; i++ )
 				{
 					const int iMatchSegment = pMatches[i].m_iTag-1;
-					if ( ( iMatchSegment>=0 && iMatchSegment< iSegmentsTotal ) || bHasArenaAttrs )
+					if ( ( iMatchSegment>=0 && iMatchSegment< iSegmentsTotal ) || bHasArenaAttrs || bOptimizing )
 					{
 						assert ( pAttr+iStaticSize<=pEnd );
 
@@ -4841,7 +4849,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	MEMORY ( SPH_MEM_IDX_RT_RES_STRINGS );
 
-	if ( bHasArenaAttrs )
+	if ( bHasArenaAttrs || bOptimizing )
 	{
 		assert ( !pResult->m_pStrings && !pResult->m_pMva );
 		CSphTightVector<BYTE> dStorageString;
@@ -5410,6 +5418,7 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 
 	while ( m_pDiskChunks.GetLength()>1 && !*pForceTerminate )
 	{
+		m_bOptimizing = true;
 		CSphTightVector<SphAttr_t> dKlist;
 		m_tRwlock.ReadLock ();
 
@@ -5541,7 +5550,7 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 		// FIXEME: wipe out 'merged' index files in case of error
 	}
 
-
+	m_bOptimizing = false;
 	int64_t tmPass = sphMicroTimer() - tmStart;
 
 	sphInfo ( "rt: index %s: optimized chunk(s) %d ( of %d ) in %d.%03d sec",

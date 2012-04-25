@@ -496,13 +496,13 @@ struct Filter_And2 : public ISphFilter
 {
 	ISphFilter * m_pArg1;
 	ISphFilter * m_pArg2;
-	bool m_bUsesAttrs;
 
 	explicit Filter_And2 ( ISphFilter * pArg1, ISphFilter * pArg2, bool bUsesAttrs )
 		: m_pArg1 ( pArg1 )
 		, m_pArg2 ( pArg2 )
-		, m_bUsesAttrs ( bUsesAttrs )
-	{}
+	{
+		m_bUsesAttrs = bUsesAttrs;
+	}
 
 	~Filter_And2 ()
 	{
@@ -520,10 +520,11 @@ struct Filter_And2 : public ISphFilter
 		return m_pArg1->EvalBlock ( pMin, pMax ) && m_pArg2->EvalBlock ( pMin, pMax );
 	}
 
-	virtual ISphFilter * Join ( ISphFilter * )
+	virtual ISphFilter * Join ( ISphFilter * pFilter )
 	{
-		assert ( 0 );
-		return 0;
+		ISphFilter * pJoined = new Filter_And2 ( m_pArg2, pFilter, m_bUsesAttrs );
+		m_pArg2 = pJoined;
+		return this;
 	}
 
 	virtual void SetMVAStorage ( const DWORD * pMva )
@@ -539,14 +540,14 @@ struct Filter_And3 : public ISphFilter
 	ISphFilter * m_pArg1;
 	ISphFilter * m_pArg2;
 	ISphFilter * m_pArg3;
-	bool m_bUsesAttrs;
 
 	explicit Filter_And3 ( ISphFilter * pArg1, ISphFilter * pArg2, ISphFilter * pArg3, bool bUsesAttrs )
 		: m_pArg1 ( pArg1 )
 		, m_pArg2 ( pArg2 )
 		, m_pArg3 ( pArg3 )
-		, m_bUsesAttrs ( bUsesAttrs )
-	{}
+	{
+		m_bUsesAttrs = bUsesAttrs;
+	}
 
 	~Filter_And3 ()
 	{
@@ -565,10 +566,11 @@ struct Filter_And3 : public ISphFilter
 		return m_pArg1->EvalBlock ( pMin, pMax ) && m_pArg2->EvalBlock ( pMin, pMax ) && m_pArg3->EvalBlock ( pMin, pMax );
 	}
 
-	virtual ISphFilter * Join ( ISphFilter * )
+	virtual ISphFilter * Join ( ISphFilter * pFilter )
 	{
-		assert ( 0 );
-		return 0;
+		ISphFilter * pJoined = new Filter_And2 ( m_pArg3, pFilter, m_bUsesAttrs );
+		m_pArg3 = pJoined;
+		return this;
 	}
 
 	virtual void SetMVAStorage ( const DWORD * pMva )

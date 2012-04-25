@@ -72,6 +72,27 @@ index rt
 	rt_field = content
 	morphology = none
 }
+
+index optimized_filter
+{
+	type = rt
+	rt_mem_limit = 128k
+	charset_type = utf-8
+	path = <data_path/>/optimized_filter
+
+	rt_field = content
+	rt_attr_uint = idd0
+	rt_attr_uint = idd1
+	rt_attr_uint = idd2
+	rt_attr_uint = idd3
+	rt_attr_uint = idd4
+	rt_attr_uint = idd5
+	rt_attr_uint = idd6
+	rt_attr_uint = idd7
+	rt_attr_uint = idd8
+	rt_attr_uint = idd9
+}
+
 </config>
 
 <db_create>
@@ -216,6 +237,16 @@ $results = array_merge ( $results, $query ( "select * from rt limit 0,2", $sock 
 $results = array_merge ( $results, $query ( "show meta", $sock ) );	
 $results = array_merge ( $results, $query ( "select * from rt where match ( 'basketball' )", $sock ) );
 $results = array_merge ( $results, $query ( "show meta", $sock ) );	
+
+// regression - optimized filter broken with extra-filter
+$text = 'dummy text is going here';
+for ( $doc=1; $doc<1700; $doc++ )
+{
+	$id = $doc % 1500;
+	$insert = " REPLACE INTO optimized_filter VALUES ( $id, '$text', 0, 1, 2, 3, 4, 5, 6, 7,8, 9 ) ";
+	$query ( $insert, $sock );
+}	
+$results = array_merge ( $results, $query ( "select * from optimized_filter where idd5>1 and idd5<20 limit 2", $sock ) );
 
 @mysql_close ( $sock );
 

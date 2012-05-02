@@ -18065,6 +18065,9 @@ bool CSphDictCRCTraits::LoadWordforms ( const CSphVector<CSphString> & dFiles, c
 		}
 	}
 
+	if ( !m_dWFFileInfos.GetLength() )
+		return false;
+
 	SweepWordformContainers ( m_dWFFileInfos );
 
 	m_pWordforms = GetWordformContainer ( m_dWFFileInfos, pEmbedded ? &(pEmbedded->m_dWordforms) : NULL, pTokenizer, sIndex );

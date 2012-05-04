@@ -3816,13 +3816,13 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 		LOC_FAIL(( fp, "disk chunk base < 0" ));
 
 	if ( m_iTID<0 )
-		LOC_FAIL(( fp, "index TID < 0 (current=%d)", m_iTID ));
+		LOC_FAIL(( fp, "index TID < 0 (current="INT64_FMT")", m_iTID ));
 
 	if ( m_iSavedTID<0 )
-		LOC_FAIL(( fp, "index saved TID < 0 (current=%d)", m_iSavedTID ));
+		LOC_FAIL(( fp, "index saved TID < 0 (current="INT64_FMT")", m_iSavedTID ));
 
 	if ( m_iTID<m_iSavedTID )
-		LOC_FAIL(( fp, "index TID < index saved TID (current=%d, saved=%d)", m_iTID, m_iSavedTID ));
+		LOC_FAIL(( fp, "index TID < index saved TID (current="INT64_FMT", saved="INT64_FMT")", m_iTID, m_iSavedTID ));
 
 	if ( m_iWordsCheckpoint!=SPH_RT_WORDS_PER_CHECKPOINT_v3 && m_iWordsCheckpoint!=SPH_RT_WORDS_PER_CHECKPOINT_v5 )
 		LOC_FAIL(( fp, "words per checkpoint different from SPH_RT_WORDS_PER_CHECKPOINT_v3 (%d) and SPH_RT_WORDS_PER_CHECKPOINT_v5 (%d) (current=%d)",
@@ -3862,7 +3862,12 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 		SphWordID_t uPrevWordID = 0;
 		DWORD uPrevDocOffset = 0;
 		DWORD uPrevHitOffset = 0;
-		int nUsedKListEntries = 0;
+
+		CSphVector<bool> dUsedKListEntries;
+		dUsedKListEntries.Resize ( tSegment.m_dKlist.GetLength() );
+		ARRAY_FOREACH ( i, dUsedKListEntries )
+			dUsedKListEntries[i] = false;
+
 		RtWord_t tWord;
 		memset ( &tWord, 0, sizeof(tWord) );
 
@@ -4256,8 +4261,9 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, (uint64_t)tDoc.m_uDocID, tDoc.m_uDocFields, m_tSchema.m_dFields.GetLength() ));
 				}
 
-				if ( tSegment.m_dKlist.BinarySearch ( tDoc.m_uDocID ) )
-					nUsedKListEntries++;
+				const SphDocID_t * pKEntry = tSegment.m_dKlist.BinarySearch ( tDoc.m_uDocID );
+				if ( pKEntry )
+					dUsedKListEntries [pKEntry-tSegment.m_dKlist.Begin()] = true;
 
 				uPrevDocID = tDoc.m_uDocID;
 			}
@@ -4306,6 +4312,11 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 		dRefCheckpoints.Reset ();
 
 		// check killlists
+		int nUsedKListEntries = 0;
+		ARRAY_FOREACH ( i, dUsedKListEntries )
+			if ( dUsedKListEntries[i] )
+				nUsedKListEntries++;
+
 		if ( nUsedKListEntries!=tSegment.m_dKlist.GetLength() )
 		{
 			LOC_FAIL(( fp, "used killlist entries mismatch (segment=%d, klist_entries=%d, used_entries=%d)",

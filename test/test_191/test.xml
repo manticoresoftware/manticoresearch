@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>bitfields vs inline docinfo vs merge</name>
+
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source test1
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query_pre 		= set time_zone='+0:00'
+	sql_query			= select id, content, status, category, kind, UNIX_TIMESTAMP(timestamp) as date, class, price, code, surface from test_table WHERE id=100 or id=101
+	sql_attr_uint		= status:3
+	sql_attr_uint		= category:2
+	sql_attr_uint		= kind:8
+	sql_attr_timestamp	= date
+	sql_attr_uint		= class:6
+	sql_attr_uint		= price:32
+	sql_attr_uint		= code:8
+	sql_attr_uint		= surface:32
+}
+
+source test2
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query_pre 		= set time_zone='+0:00'
+	sql_query			= select id, content, status, category, kind, UNIX_TIMESTAMP(timestamp) as date, class, price, code, surface from test_table WHERE id=102 or id=103
+	sql_attr_uint		= status:3
+	sql_attr_uint		= category:2
+	sql_attr_uint		= kind:8
+	sql_attr_timestamp	= date
+	sql_attr_uint		= class:6
+	sql_attr_uint		= price:32
+	sql_attr_uint		= code:8
+	sql_attr_uint		= surface:32
+}
+
+index main
+{
+	source				= test1
+	path				= <data_path/>/test1
+	docinfo				= inline
+}
+
+index delta
+{
+	source				= test2
+	path				= <data_path/>/test2
+	docinfo				= inline
+}
+</config>
+
+<indexer>
+<run>--merge main delta</run>
+</indexer>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	content VARCHAR(255) NOT NULL,
+	status INTEGER NOT NULL,
+	category INTEGER NOT NULL,
+	kind INTEGER NOT NULL,
+	timestamp DATE NOT NULL,
+	class INTEGER NOT NULL,
+	price INTEGER NOT NULL,
+	code INTEGER NOT NULL,
+	surface INTEGER NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>
+INSERT INTO test_table VALUES
+( 100, 'This planet has or rather had a problem', 1, 0, 13, '2001-07-04', 14, 15, 16, 17 ),
+( 101, 'which was this: most of the people on it were unhappy for pretty much of the time.', 2, 1, 23, '2002-07-04', 24, 25, 26, 27 ),
+( 102, 'Many solutions were suggested for this problem', 3, 2, 33, '2003-07-04', 34, 35, 36, 37 ),
+( 103, 'but most of these were largely concerned with the movements of small green pieces of paper', 4, 0, 43, '2004-07-04', 44, 45, 46, 47 )
+</db_insert>
+
+<sphqueries>
+<sphinxql>select * from main where match('planet')</sphinxql>
+<sphinxql>select * from main where match('unhappy')</sphinxql>
+<sphinxql>select * from main where match('solutions')</sphinxql>
+<sphinxql>select * from main where match('green')</sphinxql>
+</sphqueries>
+
+</test>

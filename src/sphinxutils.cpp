@@ -945,8 +945,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 
 bool sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings & tSettings, CSphString & sError )
 {
-	// charset_type
-	CSphScopedPtr<ISphTokenizer> pTokenizer ( NULL );
+	tSettings.m_iNgramLen = Max ( hIndex.GetInt ( "ngram_len" ), 0 );
 
 	if ( !hIndex("charset_type") || hIndex["charset_type"]=="sbcs" )
 	{
@@ -954,7 +953,14 @@ bool sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings 
 
 	} else if ( hIndex["charset_type"]=="utf-8" )
 	{
-		tSettings.m_iType = hIndex("ngram_chars") ? TOKENIZER_NGRAM : TOKENIZER_UTF8;
+		tSettings.m_iType = TOKENIZER_UTF8;
+		if ( hIndex ( "ngram_chars" ) )
+		{
+			if ( tSettings.m_iNgramLen )
+				tSettings.m_iType = TOKENIZER_NGRAM;
+			else
+				sphWarning ( "ngram_chars specified, but ngram_len=0; IGNORED" );
+		}
 
 	} else
 	{
@@ -965,7 +971,6 @@ bool sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings 
 	tSettings.m_sCaseFolding = hIndex.GetStr ( "charset_table" );
 	tSettings.m_iMinWordLen = Max ( hIndex.GetInt ( "min_word_len" ), 0 );
 	tSettings.m_sNgramChars = hIndex.GetStr ( "ngram_chars" );
-	tSettings.m_iNgramLen = Max ( hIndex.GetInt ( "ngram_len" ), 0 );
 	tSettings.m_sSynonymsFile = hIndex.GetStr ( "exceptions" ); // new option name
 	if ( tSettings.m_sSynonymsFile.IsEmpty() )
 		tSettings.m_sSynonymsFile = hIndex.GetStr ( "synonyms" ); // deprecated option name

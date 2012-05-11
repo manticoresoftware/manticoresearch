@@ -45,6 +45,23 @@ index main
 	path			= <data_path/>/main140
     charset_type 	= utf-8
 }
+
+source src_mva_64
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT * FROM mva_64
+	sql_attr_uint	= idd
+	sql_attr_multi = bigint mva1 from field
+}
+
+index mva_64
+{
+	source			= src_mva_64
+	path			= <data_path/>/mva_64
+	charset_type 	= utf-8
+}
 </config>
 
 <sphqueries>
@@ -52,7 +69,23 @@ index main
 <sphinxql>select * from main where match('main') order by idd asc</sphinxql>
 <sphinxql>select * from main where match('delta') order by idd asc</sphinxql>
 <sphinxql>select * from main where match('main | delta') order by idd asc</sphinxql>
+
+<sphinxql>select * from mva_64</sphinxql>
+<sphinxql>select * from mva_64 where mva1=-2099511627775 </sphinxql>
+<sphinxql>select * from mva_64 where mva1=55599511627775 </sphinxql>
+<sphinxql><![CDATA[ select * from mva_64 where mva1<-10 ]]></sphinxql>
+<sphinxql><![CDATA[ select * from mva_64 where mva1<-1099511627775 ]]></sphinxql>
+<sphinxql><![CDATA[ select * from mva_64 where mva1>50099511627775 ]]></sphinxql>
 </sphqueries>
+
+<queries>
+<query index="mva_64"></query>
+<query filter_value="-2099511627775" filter="mva1" index="mva_64"></query>
+<query filter_value="55599511627775" filter="mva1" index="mva_64"></query>
+<query filter_range="-3000000000000 -10" filter="mva1" index="mva_64"></query>
+<query filter_range="-3000000000000 -1099511627776" filter="mva1" index="mva_64"></query>
+<query filter_range="50099511627776 600000000000000" filter="mva1" index="mva_64"></query>
+</queries>
 
 <db_create>
 CREATE TABLE `test_table`
@@ -85,6 +118,26 @@ INSERT INTO `test_table` VALUES
 ( 9, 9, 0, '1 10 100',	'9 0 1','delta', '', '' ),
 (10, 10, 0, '2 20 200',	'',	 	'delta', '', 'a' ),
 (11, 11, 0, '',			'',		'delta', 'b', '' )
+</db_insert>
+
+<db_create>
+CREATE TABLE `mva_64`
+(
+	`id` int(11) NOT NULL default '0',
+	`idd` int(11) NOT NULL default '0',
+	`mva1` varchar(255) NOT NULL default '',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS `mva_64`</db_drop>
+
+<db_insert>
+INSERT INTO `mva_64` VALUES
+( 100,	1,	'1099511627775		50099511627775	-1099511627775		2099511627775',	'dummy' ),
+( 200,	1,	'50099511627775	11099511627775	501099511627775	-2099511627775',	'dummy' ),
+( 300,	2,	'-1099511627775	50099511627775	50099511627772	-2099511627771',	'dummy' ),
+( 400,	2,	'-1099511627775	50099511627771	-1099511627775		55599511627775',	'dummy' )
 </db_insert>
 
 </test>

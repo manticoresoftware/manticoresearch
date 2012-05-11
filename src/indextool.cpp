@@ -68,7 +68,7 @@ void ApplyMorphology ( CSphIndex * pIndex )
 	ISphTokenizer * pTokenizer = pIndex->GetTokenizer();
 	CSphDict * pDict = pIndex->GetDictionary();
 	BYTE * sBufferToDump = &dInBuffer[0];
-	if (pTokenizer)
+	if ( pTokenizer )
 	{
 		pTokenizer->SetBuffer ( &dInBuffer[0], dInBuffer.GetLength() );
 		while ( BYTE * sToken = pTokenizer->GetToken() )
@@ -178,7 +178,7 @@ int main ( int argc, char ** argv )
 		OPT1 ( "--check" )			{ eCommand = CMD_CHECK; sIndex = argv[++i]; }
 		OPT1 ( "--htmlstrip" )		{ eCommand = CMD_STRIP; sIndex = argv[++i]; }
 		OPT1 ( "--build-infixes" )	{ eCommand = CMD_BUILDINFIXES; sIndex = argv[++i]; }
-		OPT1 ( "--morph")			{ eCommand = CMD_MORPH; sIndex = argv[++i]; }
+		OPT1 ( "--morph" )			{ eCommand = CMD_MORPH; sIndex = argv[++i]; }
 		OPT1 ( "--strip-path" )		{ bStripPath = true; }
 		OPT1 ( "--optimize-rt-klists" )
 		{

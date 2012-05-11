@@ -104,18 +104,18 @@ bool IFilter_Values::EvalBlockValues ( SphAttr_t uBlockMin, SphAttr_t uBlockMax 
 /// range
 struct IFilter_Range: virtual ISphFilter
 {
-	SphAttr_t m_uMinValue;
-	SphAttr_t m_uMaxValue;
+	SphAttr_t m_iMinValue;
+	SphAttr_t m_iMaxValue;
 
 	virtual void SetRange ( SphAttr_t tMin, SphAttr_t tMax )
 	{
-		m_uMinValue = tMin;
-		m_uMaxValue = tMax;
+		m_iMinValue = tMin;
+		m_iMaxValue = tMax;
 	}
 
 	bool EvalRange ( const SphAttr_t uValue ) const
 	{
-		return uValue>=m_uMinValue && uValue<=m_uMaxValue;
+		return uValue>=m_iMinValue && uValue<=m_iMaxValue;
 	}
 };
 
@@ -237,7 +237,7 @@ struct Filter_Range: public IFilter_Attr, IFilter_Range
 
 		SphAttr_t uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS ( pMinDocinfo ), m_tLocator );
 		SphAttr_t uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS ( pMaxDocinfo ), m_tLocator );
-		return (!( m_uMaxValue<uBlockMin || m_uMinValue>uBlockMax )); // not-reject
+		return (!( m_iMaxValue<uBlockMin || m_iMinValue>uBlockMax )); // not-reject
 	}
 };
 
@@ -308,7 +308,7 @@ struct Filter_IdRange: public IFilter_Range
 	virtual bool Eval ( const CSphMatch & tMatch ) const
 	{
 		const SphDocID_t uID = tMatch.m_iDocID;
-		return uID>=(SphDocID_t)m_uMinValue && uID<=(SphDocID_t)m_uMaxValue;
+		return uID>=(SphDocID_t)m_iMinValue && uID<=(SphDocID_t)m_iMaxValue;
 	}
 
 	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const
@@ -316,7 +316,7 @@ struct Filter_IdRange: public IFilter_Range
 		const SphDocID_t uBlockMin = DOCINFO2ID ( pMinDocinfo );
 		const SphDocID_t uBlockMax = DOCINFO2ID ( pMaxDocinfo );
 
-		return (!( (SphDocID_t)m_uMaxValue<uBlockMin || (SphDocID_t)m_uMinValue>uBlockMax ));
+		return (!( (SphDocID_t)m_iMaxValue<uBlockMin || (SphDocID_t)m_iMinValue>uBlockMax ));
 	}
 
 	Filter_IdRange ()
@@ -403,24 +403,24 @@ bool Filter_MVAValues<true>::MvaEval ( const DWORD * pMva, const DWORD * pMvaMax
 	const SphAttr_t * pFilter = m_pValues;
 	const SphAttr_t * pFilterMax = pFilter + m_iValueCount;
 
-	const uint64_t * L = (const uint64_t *)pMva;
-	const uint64_t * R = (const uint64_t *)( pMvaMax - 2 );
+	const int64_t * L = (const int64_t *)pMva;
+	const int64_t * R = (const int64_t *)( pMvaMax - 2 );
 	for ( ; pFilter < pFilterMax; pFilter++ )
 	{
-		uint64_t uFilter = *pFilter;
+		int64_t uFilter = *pFilter;
 		while ( L<=R )
 		{
-			const uint64_t * pVal = L + (R - L) / 2;
-			uint64_t uMva = MVA_UPSIZE ( (const DWORD *)pVal );
+			const int64_t * pVal = L + (R - L) / 2;
+			int64_t iMva = MVA_UPSIZE ( (const DWORD *)pVal );
 
-			if ( uFilter > uMva )
+			if ( uFilter > iMva )
 				L = pVal + 1;
-			else if ( uFilter < uMva )
+			else if ( uFilter < iMva )
 				R = pVal - 1;
 			else
 				return true;
 		}
-		R = (const uint64_t *)( pMvaMax - 2 );
+		R = (const int64_t *)( pMvaMax - 2 );
 	}
 	return false;
 }
@@ -451,42 +451,42 @@ bool Filter_MVARange<false>::MvaEval ( const DWORD * pMva, const DWORD * pMvaMax
 	while ( L<=R )
 	{
 		const DWORD * m = L + (R - L) / 2;
-		if ( m_uMinValue > *m )
+		if ( m_iMinValue > *m )
 			L = m + 1;
-		else if ( m_uMinValue < *m )
+		else if ( m_iMinValue < *m )
 			R = m - 1;
 		else
 			return true;
 	}
 	if ( L==pMvaMax )
 		return false;
-	return *L<=m_uMaxValue;
+	return *L<=m_iMaxValue;
 }
 
 
 template<>
 bool Filter_MVARange<true>::MvaEval ( const DWORD * pMva, const DWORD * pMvaMax ) const
 {
-	const uint64_t * L = (const uint64_t *)pMva;
-	const uint64_t * R = (const uint64_t *)( pMvaMax - 2 );
+	const int64_t * L = (const int64_t *)pMva;
+	const int64_t * R = (const int64_t *)( pMvaMax - 2 );
 
 	while ( L<=R )
 	{
-		const uint64_t * pVal = L + (R - L) / 2;
-		uint64_t uMva = MVA_UPSIZE ( (const DWORD *)pVal );
+		const int64_t * pVal = L + (R - L) / 2;
+		int64_t iMva = MVA_UPSIZE ( (const DWORD *)pVal );
 
-		if ( (uint64_t)m_uMinValue>uMva )
+		if ( m_iMinValue>iMva )
 			L = pVal + 1;
-		else if ( (uint64_t)m_uMinValue < uMva )
+		else if ( m_iMinValue < iMva )
 			R = pVal - 1;
 		else
 			return true;
 	}
-	if ( L==(const uint64_t *)pMvaMax )
+	if ( L==(const int64_t *)pMvaMax )
 		return false;
 
-	uint64_t uMvaL = MVA_UPSIZE ( (const DWORD *)L );
-	return uMvaL<=(uint64_t)m_uMaxValue;
+	int64_t iMvaL = MVA_UPSIZE ( (const DWORD *)L );
+	return iMvaL<=m_iMaxValue;
 }
 
 
@@ -749,18 +749,18 @@ static inline ISphFilter * ReportError ( CSphString & sError, const char * sMess
 static ISphFilter * CreateFilter ( ESphAttr eAttrType, ESphFilter eFilterType, int iNumValues, const CSphAttrLocator & tLoc, CSphString & sError )
 {
 	// MVA
-	if ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_UINT64SET )
+	if ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET )
 	{
 		switch ( eFilterType )
 		{
 		case SPH_FILTER_VALUES:
-			if ( eAttrType==SPH_ATTR_UINT64SET )
+			if ( eAttrType==SPH_ATTR_INT64SET )
 				return new Filter_MVAValues<true>();
 			else
 				return new Filter_MVAValues<false>();
 
 		case SPH_FILTER_RANGE:
-			if ( eAttrType==SPH_ATTR_UINT64SET )
+			if ( eAttrType==SPH_ATTR_INT64SET )
 				return new Filter_MVARange<true>();
 			else
 				return new Filter_MVARange<false>();
@@ -829,7 +829,7 @@ ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const CSphS
 		if ( pAttr )
 			pFilter->SetLocator ( pAttr->m_tLocator );
 
-		pFilter->SetRange ( tSettings.m_uMinValue, tSettings.m_uMaxValue );
+		pFilter->SetRange ( tSettings.m_iMinValue, tSettings.m_iMaxValue );
 		pFilter->SetRangeFloat ( tSettings.m_fMinValue, tSettings.m_fMaxValue );
 		pFilter->SetMVAStorage ( pMvaPool );
 

@@ -292,6 +292,21 @@ class SphinxClient:
 		return response
 
 
+	def _Send ( self, sock, req ):
+		"""
+		INTERNAL METHOD, DO NOT CALL. send request to searchd server.
+		"""
+		total = 0
+		while True:
+			sent = sock.send ( req[total:] )
+			if sent<=0:
+				break
+				
+			total = total + sent
+		
+		return total
+		
+
 	def SetLimits (self, offset, limit, maxmatches=0, cutoff=0):
 		"""
 		Set offset and count into result set, and optionally set max-matches and cutoff limits.
@@ -634,7 +649,7 @@ class SphinxClient:
 		req = ''.join(self._reqs)
 		length = len(req)+8
 		req = pack('>HHLLL', SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH, length, 0, len(self._reqs))+req
-		sock.send(req)
+		self._Send ( sock, req )
 
 		response = self._GetResponse(sock, VER_COMMAND_SEARCH)
 		if not response:
@@ -866,7 +881,7 @@ class SphinxClient:
 
 		# add header
 		req = pack('>2HL', SEARCHD_COMMAND_EXCERPT, VER_COMMAND_EXCERPT, length)+req
-		wrote = sock.send(req)
+		self._Send ( sock, req )
 
 		response = self._GetResponse(sock, VER_COMMAND_EXCERPT )
 		if not response:
@@ -951,7 +966,7 @@ class SphinxClient:
 		req = ''.join(req)
 		length = len(req)
 		req = pack ( '>2HL', SEARCHD_COMMAND_UPDATE, VER_COMMAND_UPDATE, length ) + req
-		wrote = sock.send ( req )
+		self._Send ( sock, req )
 
 		response = self._GetResponse ( sock, VER_COMMAND_UPDATE )
 		if not response:
@@ -984,7 +999,7 @@ class SphinxClient:
 		req = ''.join(req)
 		length = len(req)
 		req = pack ( '>2HL', SEARCHD_COMMAND_KEYWORDS, VER_COMMAND_KEYWORDS, length ) + req
-		wrote = sock.send ( req )
+		self._Send ( sock, req )
 
 		response = self._GetResponse ( sock, VER_COMMAND_KEYWORDS )
 		if not response:
@@ -1034,7 +1049,7 @@ class SphinxClient:
 			return None
 
 		req = pack ( '>2HLL', SEARCHD_COMMAND_STATUS, VER_COMMAND_STATUS, 4, 1 )
-		wrote = sock.send ( req )
+		self._Send ( sock, req )
 
 		response = self._GetResponse ( sock, VER_COMMAND_STATUS )
 		if not response:
@@ -1070,7 +1085,7 @@ class SphinxClient:
 
 		# command, command version = 0, body length = 4, body = 1
 		request = pack ( '>hhII', SEARCHD_COMMAND_PERSIST, 0, 4, 1 )
-		server.send ( request )
+		self._Send ( server, request )
 		
 		self._socket = server
 		return True
@@ -1092,7 +1107,7 @@ class SphinxClient:
 			return -1
 
 		request = pack ( '>hhI', SEARCHD_COMMAND_FLUSHATTRS, VER_COMMAND_FLUSHATTRS, 0 ) # cmd, ver, bodylen
-		sock.send ( request )
+		self._Send ( sock, request )
 
 		response = self._GetResponse ( sock, VER_COMMAND_FLUSHATTRS )
 		if not response or len(response)!=4:

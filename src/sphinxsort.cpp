@@ -1027,7 +1027,7 @@ protected:
 	CSphAttrLocator	m_tLoc;
 
 public:
-	AggrConcat_t ( const CSphColumnInfo & tCol )
+	explicit AggrConcat_t ( const CSphColumnInfo & tCol )
 		: m_tLoc ( tCol.m_tLocator )
 	{}
 
@@ -1560,8 +1560,8 @@ public:
 			assert ( ( iValues%2 )==0 );
 			for ( ;iValues>0; iValues-=2, pValues+=2 )
 			{
-				uint64_t uMva = MVA_UPSIZE ( pValues );
-				SphGroupKey_t uGroupkey = this->m_pGrouper->KeyFromValue ( uMva );
+				int64_t iMva = MVA_UPSIZE ( pValues );
+				SphGroupKey_t uGroupkey = this->m_pGrouper->KeyFromValue ( iMva );
 				bRes |= this->PushEx ( tEntry, uGroupkey, false );
 			}
 
@@ -2317,8 +2317,8 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const CSphSchema & 
 			return false;
 	}
 
-	tSettings.m_bMVA = ( eType==SPH_ATTR_UINT32SET || eType==SPH_ATTR_UINT64SET );
-	tSettings.m_bMva64 = ( eType==SPH_ATTR_UINT64SET );
+	tSettings.m_bMVA = ( eType==SPH_ATTR_UINT32SET || eType==SPH_ATTR_INT64SET );
+	tSettings.m_bMva64 = ( eType==SPH_ATTR_INT64SET );
 
 	// setup distinct attr
 	if ( !pQuery->m_sGroupDistinct.IsEmpty() )
@@ -3029,7 +3029,6 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		}
 
 		// a new and shiny expression, lets parse
-		bool bUsesWeight;
 		CSphColumnInfo tExprCol ( tItem.m_sAlias.cstr(), SPH_ATTR_NONE );
 
 		// tricky bit
@@ -3042,10 +3041,10 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		{
 			CSphString sExpr2;
 			sExpr2.SetSprintf ( "TO_STRING(%s)", sExpr.cstr() );
-			tExprCol.m_pExpr = sphExprParse ( sExpr2.cstr(), tSorterSchema, &tExprCol.m_eAttrType, &bUsesWeight, sError, pExtra, NULL, &bHasZonespanlist );
+			tExprCol.m_pExpr = sphExprParse ( sExpr2.cstr(), tSorterSchema, &tExprCol.m_eAttrType, &tExprCol.m_bWeight, sError, pExtra, NULL, &bHasZonespanlist );
 		} else
 		{
-			tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), tSorterSchema, &tExprCol.m_eAttrType, &bUsesWeight, sError, pExtra, NULL, &bHasZonespanlist );
+			tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), tSorterSchema, &tExprCol.m_eAttrType, &tExprCol.m_bWeight, sError, pExtra, NULL, &bHasZonespanlist );
 		}
 		bNeedZonespanlist |= bHasZonespanlist;
 		tExprCol.m_eAggrFunc = tItem.m_eAggrFunc;
@@ -3068,7 +3067,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 			tExprCol.m_eAttrType = SPH_ATTR_STRINGPTR;
 			tExprCol.m_tLocator.m_iBitCount = ROWITEMPTR_BITS;
 		}
-		
+
 		// postpone aggregates, add non-aggregates
 		if ( tExprCol.m_eAggrFunc==SPH_AGGR_NONE )
 		{
@@ -3083,26 +3082,40 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 			ARRAY_FOREACH ( i, pQuery->m_dFilters )
 				if ( pQuery->m_dFilters[i].m_sAttrName==tExprCol.m_sName )
 			{
-				if ( bUsesWeight )
+				if ( tExprCol.m_bWeight )
 				{
-					tExprCol.m_eStage = SPH_EVAL_PRESORT; // special, weight filter
+					tExprCol.m_eStage = SPH_EVAL_PRESORT; // special, weight filter ( short cut )
 					break;
 				}
 
-				// usual filter
-				tExprCol.m_eStage = SPH_EVAL_PREFILTER;
-
 				// so we are about to add a filter condition
 				// but it might depend on some preceding columns
-				// lets detect those and move them to prefilter phase too
+				// lets detect those and move them to prefilter \ presort phase too
 				CSphVector<int> dCur;
 				tExprCol.m_pExpr->GetDependencyColumns ( dCur );
+
+				// usual filter
+				tExprCol.m_eStage = SPH_EVAL_PREFILTER;
+				ARRAY_FOREACH ( i, dCur )
+				{
+					const CSphColumnInfo & tCol = tSorterSchema.GetAttr ( dCur[i] );
+					if ( tCol.m_bWeight )
+					{
+						tExprCol.m_eStage = SPH_EVAL_PRESORT;
+						tExprCol.m_bWeight = true;
+					}
+					if ( tCol.m_pExpr.Ptr() )
+					{
+						tCol.m_pExpr->GetDependencyColumns ( dCur );
+					}
+				}
+				dCur.Uniq();
 
 				ARRAY_FOREACH ( i, dCur )
 				{
 					CSphColumnInfo & tDep = const_cast < CSphColumnInfo & > ( tSorterSchema.GetAttr ( dCur[i] ) );
-					if ( tDep.m_eStage>SPH_EVAL_PREFILTER )
-						tDep.m_eStage = SPH_EVAL_PREFILTER;
+					if ( tDep.m_eStage>tExprCol.m_eStage )
+						tDep.m_eStage = tExprCol.m_eStage;
 				}
 				break;
 			}

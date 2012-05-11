@@ -133,6 +133,43 @@ $results[] = $client->BuildExcerpts(array('tokenizer filter crash at lc'), 'mult
 $results[] = $client->BuildExcerpts(array('dog dummy! as the house nearby the dog'), 'test', 'the. dog!? as',
 	array ('query_mode'=>1, 'html_strip_mode'=>'retain', 'limit'=>0) );
 	
+// regression SPZ vs passage_boundary
+
+$opts = array ( 'query_mode'=>1, 'allow_empty'=>1 );
+
+$opts['limit'] = 0;
+$res =  $client->BuildExcerpts($docs, 'test', 'ZONE:zoneB these',  $opts);
+$res['ZoneB'] = 'fast-path';
+$results[] = $res;
+
+$opts['limit'] = 30;
+$res =  $client->BuildExcerpts($docs, 'test', 'ZONE:zoneB these',  $opts);
+$res['ZoneB'] = 'old-path';
+$results[] = $res;
+
+$opts['limit'] = 0;
+$res =  $client->BuildExcerpts($docs, 'test', 'and PARAGRAPH words',  $opts);
+$res['PARAGRAPH'] = 'fast-path';
+$results[] = $res;
+
+$opts['limit'] = 30;
+$res =  $client->BuildExcerpts($docs, 'test', 'and PARAGRAPH words',  $opts);
+$res['PARAGRAPH'] = 'old-path';
+$results[] = $res;
+
+// regression fast-path vs passage_boundary
+$opts['limit'] = 0;
+$opts['passage_boundary'] = 'paragraph';
+$res =  $client->BuildExcerpts($docs, 'test', 'and words',  $opts);
+$res['passage_boundary'] = 'paragraph';
+$results[] = $res;
+
+$opts['passage_boundary'] = 'zone';
+$res =  $client->BuildExcerpts($docs, 'test', 'and words',  $opts);
+$res['passage_boundary'] = 'zone';
+$results[] = $res;
+
+	
 // regression head SPZ overgrow + non fast path SPZ
 
 $docs = array ( 'Ultra long stuff is going here then store sales, which were going before of store closes. Same store sales for the quarter increased as ultra long dust was here since univerce was born. ' );

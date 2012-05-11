@@ -18,6 +18,14 @@
 
 #include "sphinx.h"
 
+enum ESphSpz
+{
+	SPH_SPZ_NONE		= 0,
+	SPH_SPZ_SENTENCE	= 1UL<<0,
+	SPH_SPZ_PARAGRAPH	= 1UL<<1,
+	SPH_SPZ_ZONE		= 1UL<<2
+};
+
 /// a query to generate an excerpt
 /// everything string is expected to be UTF-8
 struct ExcerptQuery_t
@@ -34,7 +42,6 @@ public:
 	int				m_iLimitPassages;	///< max passages in snippet
 	int				m_iAround;			///< how much words to highlight around each match
 	int				m_iPassageId;		///< current %PASSAGE_ID% counter value (must start at 1)
-	int				m_iPassageBoundary;	///< passage boundary mode
 	bool			m_bRemoveSpaces;	///< whether to collapse whitespace
 	bool			m_bExactPhrase;		///< whether to highlight exact phrase matches only
 	bool			m_bUseBoundaries;	///< whether to extract passages by phrase boundaries setup in tokenizer
@@ -59,14 +66,19 @@ public:
 	CSphString		m_sBeforeMatchPassage;
 	CSphString		m_sAfterMatchPassage;
 
+	DWORD			m_ePassageSPZ;
+
 public:
 	ExcerptQuery_t ();
 };
 
+struct XQQuery_t;
+
 /// an excerpt generator
 /// returns a newly allocated string in encoding specified by tokenizer on success
 /// returns NULL on failure
-void sphBuildExcerpt ( ExcerptQuery_t &, CSphDict *, ISphTokenizer *, const CSphSchema *, CSphIndex *, CSphString & sError, const CSphHTMLStripper *, ISphTokenizer * );
+void sphBuildExcerpt ( ExcerptQuery_t & tOptions, const CSphIndex * pIndex, const CSphHTMLStripper * pStripper, const XQQuery_t & tExtQuery,
+						DWORD eExtQuerySPZ, CSphString & sError, CSphDict * pDict, ISphTokenizer * pDocTokenizer, ISphTokenizer * pQueryTokenizer );
 
 #endif // _sphinxexcerpt_
 

@@ -272,27 +272,27 @@ where_item:
 		}
 	| expr_ident TOK_BETWEEN const_int TOK_AND const_int
 		{
-			if ( !pParser->AddUintRangeFilter ( $1.m_sValue, $3.m_iValue, $5.m_iValue ) )
+			if ( !pParser->AddIntRangeFilter ( $1.m_sValue, $3.m_iValue, $5.m_iValue ) )
 				YYERROR;
 		}
 	| expr_ident '>' const_int
 		{
-			if ( !pParser->AddUintRangeFilter ( $1.m_sValue, $3.m_iValue+1, UINT_MAX ) )
+			if ( !pParser->AddIntRangeFilter ( $1.m_sValue, $3.m_iValue+1, LLONG_MAX ) )
 				YYERROR;
 		}
 	| expr_ident '<' const_int
 		{
-			if ( !pParser->AddUintRangeFilter ( $1.m_sValue, 0, $3.m_iValue-1 ) )
+			if ( !pParser->AddIntRangeFilter ( $1.m_sValue, LLONG_MIN, $3.m_iValue-1 ) )
 				YYERROR;
 		}
 	| expr_ident TOK_GTE const_int
 		{
-			if ( !pParser->AddUintRangeFilter ( $1.m_sValue, $3.m_iValue, UINT_MAX ) )
+			if ( !pParser->AddIntRangeFilter ( $1.m_sValue, $3.m_iValue, LLONG_MAX ) )
 				YYERROR;
 		}
 	| expr_ident TOK_LTE const_int
 		{
-			if ( !pParser->AddUintRangeFilter ( $1.m_sValue, 0, $3.m_iValue ) )
+			if ( !pParser->AddIntRangeFilter ( $1.m_sValue, LLONG_MIN, $3.m_iValue ) )
 				YYERROR;
 		}
 	| expr_ident '=' const_float

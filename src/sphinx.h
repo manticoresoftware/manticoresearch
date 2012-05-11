@@ -379,6 +379,7 @@ inline bool operator < ( const CSphRemapRange & a, const CSphRemapRange & b )
 /// lowercaser
 class CSphLowercaser
 {
+	friend class ISphTokenizer;
 public:
 				CSphLowercaser ();
 				~CSphLowercaser ();
@@ -1266,6 +1267,7 @@ struct CSphColumnInfo
 	ESphEvalStage					m_eStage;		///< column evaluation stage (who and how computes this column)
 	bool							m_bPayload;
 	bool							m_bFilename;	///< column is a file name
+	bool							m_bWeight;		///< is a weight column
 
 	/// handy ctor
 	CSphColumnInfo ( const char * sName=NULL, ESphAttr eType=SPH_ATTR_NONE )
@@ -1280,6 +1282,7 @@ struct CSphColumnInfo
 		, m_eStage ( SPH_EVAL_STATIC )
 		, m_bPayload ( false )
 		, m_bFilename ( false )
+		, m_bWeight ( false )
 	{
 		m_sName.ToLower ();
 	}
@@ -1354,7 +1357,7 @@ public:
 public:
 	// also let the schema to clone the matches when necessary
 	void CopyStrings ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound=-1 ) const;
-	
+
 	// simple copy - clone the fields, copy the dynamic part.
 	void CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const;
 
@@ -2206,12 +2209,12 @@ public:
 	ESphFilter			m_eType;		///< filter type
 	union
 	{
-		SphAttr_t		m_uMinValue;	///< range min
+		SphAttr_t		m_iMinValue;	///< range min
 		float			m_fMinValue;	///< range min
 	};
 	union
 	{
-		SphAttr_t		m_uMaxValue;	///< range max
+		SphAttr_t		m_iMaxValue;	///< range max
 		float			m_fMaxValue;	///< range max
 	};
 	CSphVector<SphAttr_t>	m_dValues;		///< integer values set
@@ -2886,7 +2889,7 @@ void				sphSetQuiet ( bool bQuiet );
 /// may return NULL on error; in this case, error message is placed in sError
 /// if the pUpdate is given, creates the updater's queue and perform the index update
 /// instead of searching
-ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError, 
+ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError,
 						bool bComputeItems=true, CSphSchema * pExtra=NULL, CSphAttrUpdateEx * pUpdate=NULL, bool * pZonespanlist=NULL );
 
 /// convert queue to sorted array, and add its entries to result's matches array

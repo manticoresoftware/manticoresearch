@@ -1535,7 +1535,7 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, int iRow
 			{
 				sphSetRowAttr ( pAttrs, tColumn.m_tLocator, 0 );
 			}
-		} else if ( tColumn.m_eAttrType==SPH_ATTR_UINT32SET || tColumn.m_eAttrType==SPH_ATTR_UINT64SET )
+		} else if ( tColumn.m_eAttrType==SPH_ATTR_UINT32SET || tColumn.m_eAttrType==SPH_ATTR_INT64SET )
 		{
 			assert ( m_dMvas.GetLength() );
 			int iCount = dMvas[iMva];
@@ -2184,7 +2184,7 @@ public:
 		: m_tDst ( tDst )
 	{
 		ExtractLocators ( tSchema, SPH_ATTR_UINT32SET, m_dLocators );
-		ExtractLocators ( tSchema, SPH_ATTR_UINT64SET, m_dLocators );
+		ExtractLocators ( tSchema, SPH_ATTR_INT64SET, m_dLocators );
 	}
 	const CSphVector<CSphAttrLocator> & GetLocators () const { return m_dLocators; }
 
@@ -2220,7 +2220,7 @@ public:
 		: m_dDst ( dDst )
 	{
 		ExtractLocators ( tSchema, SPH_ATTR_UINT32SET, m_dLocators );
-		ExtractLocators ( tSchema, SPH_ATTR_UINT64SET, m_dLocators );
+		ExtractLocators ( tSchema, SPH_ATTR_INT64SET, m_dLocators );
 	}
 	const CSphVector<CSphAttrLocator> & GetLocators () const { return m_dLocators; }
 
@@ -4343,7 +4343,7 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 		for ( int iAttr=0; iAttr<m_tSchema.GetAttrsCount(); iAttr++ )
 		{
 			const CSphColumnInfo & tAttr = m_tSchema.GetAttr(iAttr);
-			if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_UINT64SET )
+			if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_INT64SET )
 			{
 				if ( tAttr.m_tLocator.m_iBitCount!=ROWITEM_BITS )
 				{
@@ -4368,7 +4368,7 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 		for ( int iAttr=0; iAttr<m_tSchema.GetAttrsCount(); iAttr++ )
 		{
 			const CSphColumnInfo & tAttr = m_tSchema.GetAttr(iAttr);
-			if ( tAttr.m_eAttrType==SPH_ATTR_UINT64SET )
+			if ( tAttr.m_eAttrType==SPH_ATTR_INT64SET )
 				dMvaItems.Add ( tAttr.m_tLocator.m_iBitOffset/ROWITEM_BITS );
 		}
 
@@ -5024,8 +5024,8 @@ static void AddKillListFilter ( CSphVector<CSphFilterSettings> * pExtra, const S
 	CSphFilterSettings & tFilter = pExtra->Add();
 	tFilter.m_bExclude = true;
 	tFilter.m_eType = SPH_FILTER_VALUES;
-	tFilter.m_uMinValue = pKillList[0];
-	tFilter.m_uMaxValue = pKillList[nEntries-1];
+	tFilter.m_iMinValue = pKillList[0];
+	tFilter.m_iMaxValue = pKillList[nEntries-1];
 	tFilter.m_sAttrName = "@id";
 	tFilter.SetExternalValues ( pKillList, nEntries );
 }
@@ -5513,7 +5513,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 			dStringGetLoc.Add ( m_tSchema.GetAttr ( iInLocator ).m_tLocator );
 			dStringSetLoc.Add ( tSetInfo.m_tLocator );
-		} else if ( tSetInfo.m_eAttrType==SPH_ATTR_UINT32SET || tSetInfo.m_eAttrType==SPH_ATTR_UINT64SET )
+		} else if ( tSetInfo.m_eAttrType==SPH_ATTR_UINT32SET || tSetInfo.m_eAttrType==SPH_ATTR_INT64SET )
 		{
 			const int iInLocator = m_tSchema.GetAttrIndex ( tSetInfo.m_sName.cstr() );
 			assert ( iInLocator>=0 );
@@ -5828,34 +5828,34 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 		// forbid updates on non-int columns
 		const CSphColumnInfo & tCol = m_tSchema.GetAttr(iIndex);
 		if ( !( tCol.m_eAttrType==SPH_ATTR_BOOL || tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP
-			|| tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET
+			|| tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET
 			|| tCol.m_eAttrType==SPH_ATTR_BIGINT || tCol.m_eAttrType==SPH_ATTR_FLOAT ))
 		{
 			sError.SetSprintf ( "attribute '%s' can not be updated (must be boolean, integer, bigint, float or timestamp or MVA)", tUpd.m_dAttrs[i].m_sName.cstr() );
 			return -1;
 		}
 
-		bool bSrcMva = ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET );
-		bool bDstMva = ( tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT32SET || tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT64SET );
+		bool bSrcMva = ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET );
+		bool bDstMva = ( tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT32SET || tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_INT64SET );
 		if ( bSrcMva!=bDstMva )
 		{
 			sError.SetSprintf ( "attribute '%s' MVA flag mismatch", tUpd.m_dAttrs[i].m_sName.cstr() );
 			return -1;
 		}
 
-		if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET && tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT64SET )
+		if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET && tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_INT64SET )
 		{
 			sError.SetSprintf ( "attribute '%s' MVA bits (dst=%d, src=%d) mismatch", tUpd.m_dAttrs[i].m_sName.cstr(),
 				tCol.m_eAttrType, tUpd.m_dAttrs[i].m_eAttrType );
 			return -1;
 		}
 
-		if ( tCol.m_eAttrType==SPH_ATTR_UINT64SET )
+		if ( tCol.m_eAttrType==SPH_ATTR_INT64SET )
 			uDst64 |= ( U64C(1)<<i );
 
 		dFloats.Add ( tCol.m_eAttrType==SPH_ATTR_FLOAT );
 		dLocators.Add ( tCol.m_tLocator );
-		bHasMva |= ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET );
+		bHasMva |= ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET );
 
 		// find dupes to optimize
 		ARRAY_FOREACH ( i, dIndexes )
@@ -5922,7 +5922,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 			int iPos = tUpd.m_dRowOffset[iUpd];
 			ARRAY_FOREACH ( iCol, tUpd.m_dAttrs )
 			{
-				if ( !( tUpd.m_dAttrs[iCol].m_eAttrType==SPH_ATTR_UINT32SET || tUpd.m_dAttrs[iCol].m_eAttrType==SPH_ATTR_UINT64SET ) )
+				if ( !( tUpd.m_dAttrs[iCol].m_eAttrType==SPH_ATTR_UINT32SET || tUpd.m_dAttrs[iCol].m_eAttrType==SPH_ATTR_INT64SET ) )
 				{
 					if ( dIndexes[iCol]>=0 )
 					{
@@ -6225,8 +6225,8 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 			CSphFilterSettings tFilterSettings;
 			tFilterSettings.m_bExclude = true;
 			tFilterSettings.m_eType = SPH_FILTER_VALUES;
-			tFilterSettings.m_uMinValue = dKlist[0];
-			tFilterSettings.m_uMaxValue = dKlist.Last();
+			tFilterSettings.m_iMinValue = dKlist[0];
+			tFilterSettings.m_iMaxValue = dKlist.Last();
 			tFilterSettings.m_sAttrName = "@id";
 			tFilterSettings.SetExternalValues ( dKlist.Begin(), dKlist.GetLength() );
 			pFilter = sphCreateFilter ( tFilterSettings, tSchema, NULL, sError );
@@ -7559,7 +7559,7 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema * pSche
 	// attrs
 	const int iNumTypes = 7;
 	const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_float", "rt_attr_timestamp", "rt_attr_string", "rt_attr_multi", "rt_attr_multi_64" };
-	const ESphAttr iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_FLOAT, SPH_ATTR_TIMESTAMP, SPH_ATTR_STRING, SPH_ATTR_UINT32SET, SPH_ATTR_UINT64SET };
+	const ESphAttr iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_FLOAT, SPH_ATTR_TIMESTAMP, SPH_ATTR_STRING, SPH_ATTR_UINT32SET, SPH_ATTR_INT64SET };
 
 	for ( int iType=0; iType<iNumTypes; iType++ )
 	{

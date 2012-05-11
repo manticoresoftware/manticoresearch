@@ -380,10 +380,10 @@ struct MemTracker_c : ISphNoncopyable
 #define DOCINFO_INDEX_FREQ 128 // FIXME? make this configurable
 
 
-inline uint64_t MVA_UPSIZE ( const DWORD * pMva )
+inline int64_t MVA_UPSIZE ( const DWORD * pMva )
 {
-	uint64_t uMva = (uint64_t)pMva[0] | ( ( (uint64_t)pMva[1] )<<32 );
-	return uMva;
+	int64_t iMva = (int64_t)( (uint64_t)pMva[0] | ( ( (uint64_t)pMva[1] )<<32 ) );
+	return iMva;
 }
 
 
@@ -403,10 +403,10 @@ private:
 	CSphVector<float>			m_dFloatMax;
 	CSphVector<float>			m_dFloatIndexMin;
 	CSphVector<float>			m_dFloatIndexMax;
-	CSphVector<uint64_t>		m_dMvaMin;
-	CSphVector<uint64_t>		m_dMvaMax;
-	CSphVector<uint64_t>		m_dMvaIndexMin;
-	CSphVector<uint64_t>		m_dMvaIndexMax;
+	CSphVector<int64_t>			m_dMvaMin;
+	CSphVector<int64_t>			m_dMvaMax;
+	CSphVector<int64_t>			m_dMvaIndexMin;
+	CSphVector<int64_t>			m_dMvaIndexMax;
 	DWORD						m_uStride;		// size of attribute's chunk (in DWORDs)
 	DWORD						m_uElements;	// counts total number of collected min/max pairs
 	int							m_iLoop;		// loop inside one set
@@ -472,7 +472,7 @@ void AttrIndexBuilder_t<DOCID>::ResetLocal()
 	ARRAY_FOREACH ( i, m_dMvaMin )
 	{
 		m_dMvaMin[i] = LLONG_MAX;
-		m_dMvaMax[i] = 0;
+		m_dMvaMax[i] = ( i>=m_iMva64 ? LLONG_MIN : 0 );
 	}
 	m_uStart = m_uLast = 0;
 	m_iLoop = 0;
@@ -573,7 +573,7 @@ AttrIndexBuilder_t<DOCID>::AttrIndexBuilder_t ( const CSphSchema & tSchema )
 	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
-		if ( tCol.m_eAttrType==SPH_ATTR_UINT64SET )
+		if ( tCol.m_eAttrType==SPH_ATTR_INT64SET )
 			m_dMvaAttrs.Add ( tCol.m_tLocator );
 	}
 
@@ -612,7 +612,7 @@ void AttrIndexBuilder_t<DOCID>::Prepare ( DWORD * pOutBuffer, DWORD * pOutMax )
 	ARRAY_FOREACH ( i, m_dMvaIndexMin )
 	{
 		m_dMvaIndexMin[i] = LLONG_MAX;
-		m_dMvaIndexMax[i] = 0;
+		m_dMvaIndexMax[i] = ( i>=m_iMva64 ? LLONG_MIN : 0 );
 	}
 	ResetLocal();
 }
@@ -653,9 +653,9 @@ void AttrIndexBuilder_t<DOCID>::CollectRowMVA ( int iAttr, DWORD uCount, const D
 		assert ( ( uCount%2 )==0 );
 		for ( ; uCount>0; uCount-=2, pMva+=2 )
 		{
-			uint64_t uVal = MVA_UPSIZE ( pMva );
-			m_dMvaMin[iAttr] = Min ( m_dMvaMin[iAttr], uVal );
-			m_dMvaMax[iAttr] = Max ( m_dMvaMax[iAttr], uVal );
+			int64_t iVal = MVA_UPSIZE ( pMva );
+			m_dMvaMin[iAttr] = Min ( m_dMvaMin[iAttr], iVal );
+			m_dMvaMax[iAttr] = Max ( m_dMvaMax[iAttr], iVal );
 		}
 	} else
 	{
@@ -989,7 +989,7 @@ inline const char * sphTypeName ( ESphAttr eType )
 		case SPH_ATTR_WORDCOUNT:	return "wordcount";
 		case SPH_ATTR_STRINGPTR:	return "stringptr";
 		case SPH_ATTR_UINT32SET:	return "mva";
-		case SPH_ATTR_UINT64SET:	return "mva64";
+		case SPH_ATTR_INT64SET:		return "mva64";
 		default:					return "unknown";
 	}
 }
@@ -1009,7 +1009,7 @@ inline const char * sphTypeDirective ( ESphAttr eType )
 		case SPH_ATTR_STRINGPTR:	return "sql_attr_string";
 		case SPH_ATTR_WORDCOUNT:	return "sql_attr_wordcount";
 		case SPH_ATTR_UINT32SET:	return "sql_attr_multi";
-		case SPH_ATTR_UINT64SET:	return "sql_attr_multi bigint";
+		case SPH_ATTR_INT64SET:		return "sql_attr_multi bigint";
 		default:					return "???";
 	}
 }

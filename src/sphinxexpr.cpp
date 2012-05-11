@@ -447,14 +447,14 @@ public:
 			case SPH_ATTR_BIGINT:	sBuf.SetSprintf ( INT64_FMT, m_pFirst->Int64Eval ( tMatch ) ); break;
 			case SPH_ATTR_FLOAT:	sBuf.SetSprintf ( "%f", m_pFirst->Eval ( tMatch ) ); break;
 			case SPH_ATTR_UINT32SET:
-			case SPH_ATTR_UINT64SET:
+			case SPH_ATTR_INT64SET:
 				{
 					const DWORD * pValues = m_pFirst->MvaEval ( tMatch );
 					if ( !pValues || !*pValues )
 						break;
 
 					DWORD nValues = *pValues++;
-					assert (!( m_eArg==SPH_ATTR_UINT64SET && ( nValues & 1 ) ));
+					assert (!( m_eArg==SPH_ATTR_INT64SET && ( nValues & 1 ) ));
 
 					// OPTIMIZE? minibuffer on stack, less allocs, manual formatting vs printf, etc
 					if ( m_eArg==SPH_ATTR_UINT32SET )
@@ -1139,7 +1139,7 @@ int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp )
 	{
 	case SPH_ATTR_FLOAT:		iRes = TOK_ATTR_FLOAT;	break;
 	case SPH_ATTR_UINT32SET:	iRes = TOK_ATTR_MVA32; break;
-	case SPH_ATTR_UINT64SET:	iRes = TOK_ATTR_MVA64; break;
+	case SPH_ATTR_INT64SET:		iRes = TOK_ATTR_MVA64; break;
 	case SPH_ATTR_STRING:		iRes = TOK_ATTR_STRING; break;
 	case SPH_ATTR_INTEGER:
 	case SPH_ATTR_TIMESTAMP:
@@ -2629,12 +2629,12 @@ public:
 
 /// IN() evaluator, MVA attribute vs. constant values
 template < bool MVA64 >
-class Expr_MVAIn_c : public Expr_ArgVsConstSet_c<uint64_t>
+class Expr_MVAIn_c : public Expr_ArgVsConstSet_c<int64_t>
 {
 public:
 	/// pre-sort values for binary search
 	Expr_MVAIn_c ( const CSphAttrLocator & tLoc, int iLocator, ConstList_c * pConsts, UservarIntSet_c * pUservar )
-		: Expr_ArgVsConstSet_c<uint64_t> ( NULL, pConsts )
+		: Expr_ArgVsConstSet_c<int64_t> ( NULL, pConsts )
 		, m_tLocator ( tLoc )
 		, m_iLocator ( iLocator )
 		, m_pMvaPool ( NULL )
@@ -2687,8 +2687,8 @@ int Expr_MVAIn_c<false>::MvaEval ( const DWORD * pMva ) const
 	DWORD uLen = *pMva++;
 	const DWORD * pMvaMax = pMva+uLen;
 
-	const uint64_t * pFilter = m_pUservar ? (uint64_t*)m_pUservar->Begin() : m_dValues.Begin();
-	const uint64_t * pFilterMax = pFilter + ( m_pUservar ? m_pUservar->GetLength() : m_dValues.GetLength() );
+	const int64_t * pFilter = m_pUservar ? m_pUservar->Begin() : m_dValues.Begin();
+	const int64_t * pFilterMax = pFilter + ( m_pUservar ? m_pUservar->GetLength() : m_dValues.GetLength() );
 
 	const DWORD * L = pMva;
 	const DWORD * R = pMvaMax - 1;
@@ -2719,26 +2719,26 @@ int Expr_MVAIn_c<true>::MvaEval ( const DWORD * pMva ) const
 	assert ( ( uLen%2 )==0 );
 	const DWORD * pMvaMax = pMva+uLen;
 
-	const uint64_t * pFilter = m_pUservar ? (uint64_t*)m_pUservar->Begin() : m_dValues.Begin();
-	const uint64_t * pFilterMax = pFilter + ( m_pUservar ? m_pUservar->GetLength() : m_dValues.GetLength() );
+	const int64_t * pFilter = m_pUservar ? m_pUservar->Begin() : m_dValues.Begin();
+	const int64_t * pFilterMax = pFilter + ( m_pUservar ? m_pUservar->GetLength() : m_dValues.GetLength() );
 
-	const uint64_t * L = (const uint64_t *)pMva;
-	const uint64_t * R = (const uint64_t *)( pMvaMax - 2 );
+	const int64_t * L = (const int64_t *)pMva;
+	const int64_t * R = (const int64_t *)( pMvaMax - 2 );
 	for ( ; pFilter < pFilterMax; pFilter++ )
 	{
 		while ( L<=R )
 		{
-			const uint64_t * pVal = L + (R - L) / 2;
-			uint64_t uMva = MVA_UPSIZE ( (const DWORD *)pVal );
+			const int64_t * pVal = L + (R - L) / 2;
+			int64_t iMva = MVA_UPSIZE ( (const DWORD *)pVal );
 
-			if ( *pFilter > uMva )
+			if ( *pFilter > iMva )
 				L = pVal + 1;
-			else if ( *pFilter < uMva )
+			else if ( *pFilter < iMva )
 				R = pVal - 1;
 			else
 				return 1;
 		}
-		R = (const uint64_t *) ( pMvaMax - 2 );
+		R = (const int64_t *) ( pMvaMax - 2 );
 	}
 	return 0;
 }
@@ -3249,7 +3249,7 @@ int ExprParser_t::AddNodeAttr ( int iTokenType, uint64_t uAttrLocator )
 
 	if ( iTokenType==TOK_ATTR_FLOAT )			tNode.m_eRetType = SPH_ATTR_FLOAT;
 	else if ( iTokenType==TOK_ATTR_MVA32 )		tNode.m_eRetType = SPH_ATTR_UINT32SET;
-	else if ( iTokenType==TOK_ATTR_MVA64 )		tNode.m_eRetType = SPH_ATTR_UINT64SET;
+	else if ( iTokenType==TOK_ATTR_MVA64 )		tNode.m_eRetType = SPH_ATTR_INT64SET;
 	else if ( iTokenType==TOK_ATTR_STRING )		tNode.m_eRetType = SPH_ATTR_STRING;
 	else if ( tNode.m_tLocator.m_iBitCount>32 )	tNode.m_eRetType = SPH_ATTR_BIGINT;
 	else										tNode.m_eRetType = SPH_ATTR_INTEGER;
@@ -3608,7 +3608,7 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 				case SPH_ATTR_UINT32SET:
 					eRes = SPH_UDF_TYPE_UINT32SET;
 					break;
-				case SPH_ATTR_UINT64SET:
+				case SPH_ATTR_INT64SET:
 					eRes = SPH_UDF_TYPE_UINT64SET;
 					break;
 				default:

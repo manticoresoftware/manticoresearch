@@ -92,6 +92,36 @@ foreach ( $queries as $query )
 	$results [] = $reply;
 }
 
+// regressions fast-path query mode starred vs regular term matches
+
+$query = ' "*mmitt* u" | ommitt* | "committed u" ';
+$results [] = $query;
+$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query, array ( 'query_mode' => 1 ) );
+
+$query = ' *ommitt* | "committed u" ';
+$results [] = $query;
+$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query, array ( 'query_mode' => 1 ) );
+
+$query = ' *ommitt* committed u ';
+$results [] = $query;
+$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query, array ( 'query_mode' => 0 ) );
+
+$query = ' committed* | "committed p" ';
+$results [] = $query;
+$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query, array ( 'query_mode' => 1 ) );
+
+$query = ' committed* committed p ';
+$results [] = $query;
+$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query, array ( 'query_mode' => 0 ) );
+
+$query = ' (support ("committed*")) ';
+$results [] = $query;
+$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query, array ( 'query_mode' => 1 ) );
+
+$query = ' (support ("code*" | "code test")) ';
+$results [] = $query;
+$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query, array ( 'query_mode' => 1, 'limit' => 25 ) );
+
 ]]></custom_test>
 
 </test>

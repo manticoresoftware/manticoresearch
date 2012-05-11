@@ -18,6 +18,7 @@
 #include "sphinxexcerpt.h"
 #include "sphinxrt.h"
 #include "sphinxint.h"
+#include "sphinxquery.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -4102,8 +4103,8 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 				break;
 
 			case SPH_FILTER_RANGE:
-				tOut.SendUint64 ( tFilter.m_uMinValue );
-				tOut.SendUint64 ( tFilter.m_uMaxValue );
+				tOut.SendUint64 ( tFilter.m_iMinValue );
+				tOut.SendUint64 ( tFilter.m_iMaxValue );
 				break;
 
 			case SPH_FILTER_FLOATRANGE:
@@ -4259,7 +4260,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 				for ( int j=0; j<tSchema.GetAttrsCount(); j++ )
 				{
 					const CSphColumnInfo & tAttr = tSchema.GetAttr(j);
-					if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_UINT64SET )
+					if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_INT64SET )
 					{
 						tMatch.SetAttr ( tAttr.m_tLocator, m_dMvaStorage.GetLength() );
 
@@ -4470,8 +4471,8 @@ bool FixupQuery ( CSphQuery * pQuery, const CSphSchema * pSchema, const char * s
 		tFilter.m_dValues.Resize ( pQuery->m_iOldGroups );
 		ARRAY_FOREACH ( i, tFilter.m_dValues )
 			tFilter.m_dValues[i] = pQuery->m_pOldGroups[i];
-		tFilter.m_uMinValue = pQuery->m_iOldMinGID;
-		tFilter.m_uMaxValue = pQuery->m_iOldMaxGID;
+		tFilter.m_iMinValue = pQuery->m_iOldMinGID;
+		tFilter.m_iMaxValue = pQuery->m_iOldMaxGID;
 		pQuery->m_dFilters.Add ( tFilter );
 	}
 
@@ -4493,8 +4494,8 @@ bool FixupQuery ( CSphQuery * pQuery, const CSphSchema * pSchema, const char * s
 
 		CSphFilterSettings tFilter;
 		tFilter.m_sAttrName = pSchema->GetAttr(iAttr).m_sName;
-		tFilter.m_uMinValue = pQuery->m_iOldMinTS;
-		tFilter.m_uMaxValue = pQuery->m_iOldMaxTS;
+		tFilter.m_iMinValue = pQuery->m_iOldMinTS;
+		tFilter.m_iMaxValue = pQuery->m_iOldMaxTS;
 		pQuery->m_dFilters.Add ( tFilter );
 	}
 
@@ -4719,8 +4720,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 				switch ( tFilter.m_eType )
 				{
 					case SPH_FILTER_RANGE:
-						tFilter.m_uMinValue = ( iVer>=0x114 ) ? tReq.GetUint64() : tReq.GetDword ();
-						tFilter.m_uMaxValue = ( iVer>=0x114 ) ? tReq.GetUint64() : tReq.GetDword ();
+						tFilter.m_iMinValue = ( iVer>=0x114 ) ? tReq.GetUint64() : tReq.GetDword ();
+						tFilter.m_iMaxValue = ( iVer>=0x114 ) ? tReq.GetUint64() : tReq.GetDword ();
 						break;
 
 					case SPH_FILTER_FLOATRANGE:
@@ -4752,8 +4753,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 				if ( !tFilter.m_dValues.GetLength() )
 				{
 					// 0 length means this is range, not set
-					tFilter.m_uMinValue = tReq.GetDword ();
-					tFilter.m_uMaxValue = tReq.GetDword ();
+					tFilter.m_iMinValue = tReq.GetDword ();
+					tFilter.m_iMaxValue = tReq.GetDword ();
 				}
 
 				tFilter.m_eType = tFilter.m_dValues.GetLength() ? SPH_FILTER_VALUES : SPH_FILTER_RANGE;
@@ -4770,8 +4771,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 		CSphFilterSettings & tFilter = tQuery.m_dFilters.Add();
 		tFilter.m_sAttrName = "@id";
 		tFilter.m_eType = SPH_FILTER_RANGE;
-		tFilter.m_uMinValue = uMinID;
-		tFilter.m_uMaxValue = uMaxID;
+		tFilter.m_iMinValue = uMinID;
+		tFilter.m_iMaxValue = uMaxID;
 	}
 
 	// v.1.3
@@ -5299,10 +5300,10 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 				case SPH_FILTER_RANGE:
 					if ( f.m_bExclude )
 						tBuf.Append ( " %s NOT BETWEEN "INT64_FMT" AND "INT64_FMT,
-						f.m_sAttrName.cstr(), (int64_t)f.m_uMinValue, (int64_t)f.m_uMaxValue );
+						f.m_sAttrName.cstr(), f.m_iMinValue, f.m_iMaxValue );
 					else
 						tBuf.Append ( " %s BETWEEN "INT64_FMT" AND "INT64_FMT,
-							f.m_sAttrName.cstr(), (int64_t)f.m_uMinValue, (int64_t)f.m_uMaxValue );
+							f.m_sAttrName.cstr(), f.m_iMinValue, f.m_iMaxValue );
 					break;
 
 				case SPH_FILTER_FLOATRANGE:
@@ -5547,7 +5548,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 	for ( int i=0; i<iAttrsCount; i++ )
 	{
 		const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(i);
-		if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET )
+		if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET )
 			dMvaItems.Add ( tCol.m_tLocator );
 		if ( tCol.m_eAttrType==SPH_ATTR_STRING )
 			dStringItems.Add ( tCol.m_tLocator );
@@ -5721,7 +5722,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 			for ( int j=0; j<iAttrsCount; j++ )
 			{
 				const CSphColumnInfo & tAttr = pRes->m_tSchema.GetAttr(j);
-				if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_UINT64SET )
+				if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_INT64SET )
 				{
 					assert ( tMatch.GetAttr ( tAttr.m_tLocator )==0 || pMvaPool );
 					const DWORD * pValues = tMatch.GetAttrMVA ( tAttr.m_tLocator, pMvaPool );
@@ -5735,12 +5736,12 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 						// send MVA values
 						int iValues = *pValues++;
 						tOut.SendDword ( iValues );
-						if ( tAttr.m_eAttrType==SPH_ATTR_UINT64SET )
+						if ( tAttr.m_eAttrType==SPH_ATTR_INT64SET )
 						{
 							assert ( ( iValues%2 )==0 );
 							while ( iValues )
 							{
-								uint64_t uVal = MVA_UPSIZE ( pValues );
+								uint64_t uVal = (uint64_t)MVA_UPSIZE ( pValues );
 								tOut.SendUint64 ( uVal );
 								pValues += 2;
 								iValues -= 2;
@@ -6559,8 +6560,8 @@ void SetupKillListFilter ( CSphFilterSettings & tFilter, const SphAttr_t * pKill
 
 	tFilter.m_bExclude = true;
 	tFilter.m_eType = SPH_FILTER_VALUES;
-	tFilter.m_uMinValue = pKillList[0];
-	tFilter.m_uMaxValue = pKillList[nEntries-1];
+	tFilter.m_iMinValue = pKillList[0];
+	tFilter.m_iMaxValue = pKillList[nEntries-1];
 	tFilter.m_sAttrName = "@id";
 	tFilter.SetExternalValues ( pKillList, nEntries );
 }
@@ -7800,7 +7801,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	{
 		AggrResult_t & tRes = m_dResults[iRes];
 		CSphQuery & tQuery = m_dQueries[iRes];
-		CSphSchemaMT * pExtraSchema = tQuery.m_bAgent?&m_dExtraSchemas[bWasLocalSorter?0:iRes]:NULL;
+		CSphSchemaMT * pExtraSchema = tQuery.m_bAgent ? m_dExtraSchemas.Begin() + ( bWasLocalSorter ? 0 : iRes ) : NULL;
 
 		// minimize sorters needs these pointers
 		tRes.m_dTag2Pools[0].m_pMva = m_dMvaStorage.Begin();
@@ -7824,14 +7825,20 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			if ( g_bCompatResults && !tQuery.m_bAgent )
 			{
 				if ( !MinimizeAggrResultCompat ( tRes, tQuery, m_dLocal.GetLength()!=0 ) )
+				{
+					tRes.m_iSuccesses = 0;
 					return;
+				}
 			} else
 			{
 				if ( pExtraSchema )
 					pExtraSchema->RLock();
 				UnlockOnDestroy SchemaLocker ( pExtraSchema );
 				if ( !MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength()!=0, pExtraSchema, m_bSphinxql ) )
+				{
+					tRes.m_iSuccesses = 0;
 					return;
+				}
 			}
 		}
 
@@ -8247,7 +8254,7 @@ public:
 	void			AddConst ( int iList, const SqlNode_t& tValue );
 	void			SetStatement ( const SqlNode_t& tName, SqlSet_e eSet );
 	bool			AddFloatRangeFilter ( const CSphString & sAttr, float fMin, float fMax );
-	bool			AddUintRangeFilter ( const CSphString & sAttr, int64_t iMin, int64_t iMax );
+	bool			AddIntRangeFilter ( const CSphString & sAttr, int64_t iMin, int64_t iMax );
 	bool			AddUservarFilter ( const CSphString & sCol, const CSphString & sVar, bool bExclude );
 	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd );
 	CSphFilterSettings * AddFilter ( const CSphString & sCol, ESphFilter eType );
@@ -8395,7 +8402,7 @@ public:
 				break;
 			case SPH_ATTR_STRING:
 			case SPH_ATTR_UINT32SET:
-			case SPH_ATTR_UINT64SET:
+			case SPH_ATTR_INT64SET:
 				CSphMatch::SetAttr ( tLoc, 0 );
 				break;
 			default:
@@ -8711,7 +8718,7 @@ void SqlParser_c::UpdateMVAAttr ( const CSphString & sName, const SqlNode_t & dV
 			SphAttr_t uVal = *pVal;
 			if ( uVal>UINT_MAX )
 			{
-				eType = SPH_ATTR_UINT64SET;
+				eType = SPH_ATTR_INT64SET;
 			}
 			tUpd.m_dPool.Add ( (DWORD)uVal );
 			tUpd.m_dPool.Add ( (DWORD)( uVal>>32 ) );
@@ -8729,7 +8736,7 @@ void SqlParser_c::UpdateMVAAttr ( const CSphString & sName, const SqlNode_t & dV
 
 CSphFilterSettings * SqlParser_c::AddFilter ( const CSphString & sCol, ESphFilter eType )
 {
-	if ( sCol=="@weight" || sCol=="@count" || sCol=="count(*)" || sCol=="weight()" )
+	if ( sCol=="@count" || sCol=="count(*)" )
 	{
 		yyerror ( this, "Aggregates in 'where' clause prohibited" );
 		return NULL;
@@ -8751,13 +8758,13 @@ bool SqlParser_c::AddFloatRangeFilter ( const CSphString & sAttr, float fMin, fl
 	return true;
 }
 
-bool SqlParser_c::AddUintRangeFilter ( const CSphString & sAttr, int64_t iMin, int64_t iMax )
+bool SqlParser_c::AddIntRangeFilter ( const CSphString & sAttr, int64_t iMin, int64_t iMax )
 {
 	CSphFilterSettings * pFilter = AddFilter ( sAttr, SPH_FILTER_RANGE );
 	if ( !pFilter )
 		return false;
-	pFilter->m_uMinValue = (SphAttr_t)iMin;
-	pFilter->m_uMaxValue = (SphAttr_t)iMax;
+	pFilter->m_iMinValue = iMin;
+	pFilter->m_iMaxValue = iMax;
 	return true;
 }
 
@@ -8877,25 +8884,25 @@ bool ParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStm
 
 /////////////////////////////////////////////////////////////////////////////
 
-int sphGetPassageBoundary ( const CSphString & sPassageBoundaryMode )
+ESphSpz sphGetPassageBoundary ( const CSphString & sPassageBoundaryMode )
 {
 	if ( sPassageBoundaryMode.IsEmpty() )
-		return 0;
+		return SPH_SPZ_NONE;
 
-	int iMode = 0;
+	ESphSpz eSPZ = SPH_SPZ_NONE;
 	if ( sPassageBoundaryMode=="sentence" )
-		iMode = MAGIC_CODE_SENTENCE;
+		eSPZ = SPH_SPZ_SENTENCE;
 	else if ( sPassageBoundaryMode=="paragraph" )
-		iMode = MAGIC_CODE_PARAGRAPH;
+		eSPZ = SPH_SPZ_PARAGRAPH;
 	else if ( sPassageBoundaryMode=="zone" )
-		iMode = MAGIC_CODE_ZONE;
+		eSPZ = SPH_SPZ_ZONE;
 
-	return iMode;
+	return eSPZ;
 }
 
 bool sphCheckOptionsSPZ ( const ExcerptQuery_t & q, const CSphString & sPassageBoundaryMode, CSphString & sError )
 {
-	if ( q.m_iPassageBoundary )
+	if ( q.m_ePassageSPZ )
 	{
 		if ( q.m_iAround==0 )
 		{
@@ -8910,7 +8917,7 @@ bool sphCheckOptionsSPZ ( const ExcerptQuery_t & q, const CSphString & sPassageB
 
 	if ( q.m_bEmitZones )
 	{
-		if ( q.m_iPassageBoundary!=MAGIC_CODE_ZONE )
+		if ( q.m_ePassageSPZ!=SPH_SPZ_ZONE )
 		{
 			sError.SetSprintf ( "invalid combination of passage_boundary=%s and emit_zones", sPassageBoundaryMode.cstr() );
 			return false;
@@ -9080,6 +9087,8 @@ void SnippetRequestBuilder_t::BuildRequest ( const char * sIndex, NetOutputBuffe
 
 	if ( m_bScattered )
 		tOut.SendInt ( q.m_iRawFlags & ~EXCERPT_FLAG_LOAD_FILES );
+	else
+		tOut.SendInt ( q.m_iRawFlags );
 
 	tOut.SendString ( sIndex );
 	tOut.SendString ( q.m_sWords.cstr() );
@@ -9158,16 +9167,9 @@ static bool SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPos
 	return true;
 }
 
-static bool IsSPZEnabled ( const ExcerptQuery_t & q )
+
+static bool SetupStripperSPZ ( const CSphIndexSettings & tSettings, const ExcerptQuery_t & q, bool bSetupSPZ, CSphScopedPtr<CSphHTMLStripper> & tStripper, ISphTokenizer * pTokenizer, CSphString & sError )
 {
-	return ( q.m_iPassageBoundary || ( q.m_sStripMode=="retain" && q.m_bHighlightQuery ) );
-}
-
-
-static bool SetupStripperSPZ ( const CSphIndexSettings & tSettings, const ExcerptQuery_t & q, CSphScopedPtr<CSphHTMLStripper> & tStripper, ISphTokenizer * pTokenizer, CSphString & sError )
-{
-	bool bSetupSPZ = IsSPZEnabled ( q );
-
 	if ( bSetupSPZ &&
 		( !pTokenizer->EnableSentenceIndexing ( sError ) || !pTokenizer->EnableZoneIndexing ( sError ) ) )
 	{
@@ -9221,6 +9223,24 @@ static CSphDict * SetupExactDict ( const CSphIndexSettings & tSettings, const Ex
 }
 
 
+static DWORD CollectQuerySPZ ( const XQNode_t * pNode )
+{
+	if ( !pNode )
+		return SPH_SPZ_NONE;
+
+	DWORD eSPZ = SPH_SPZ_NONE;
+	if ( pNode->GetOp()==SPH_QUERY_SENTENCE )
+		eSPZ |= SPH_SPZ_SENTENCE;
+	else if ( pNode->GetOp()==SPH_QUERY_PARAGRAPH )
+		eSPZ |= SPH_SPZ_PARAGRAPH;
+
+	ARRAY_FOREACH ( i, pNode->m_dChildren )
+		eSPZ |= CollectQuerySPZ ( pNode->m_dChildren[i] );
+
+	return eSPZ;
+}
+
+
 class SnippetContext_t : ISphNoncopyable
 {
 private:
@@ -9233,6 +9253,8 @@ public:
 	CSphScopedPtr<ISphTokenizer> m_tTokenizer;
 	CSphScopedPtr<CSphHTMLStripper> m_tStripper;
 	ISphTokenizer * m_pQueryTokenizer;
+	XQQuery_t m_tExtQuery;
+	DWORD m_eExtQuerySPZ;
 
 	SnippetContext_t()
 		: m_tDictCloned ( NULL )
@@ -9242,10 +9264,11 @@ public:
 		, m_tTokenizer ( NULL )
 		, m_tStripper ( NULL )
 		, m_pQueryTokenizer ( NULL )
+		, m_eExtQuerySPZ ( SPH_SPZ_NONE )
 	{
 	}
 
-	bool Setup ( CSphIndex * pIndex, const ExcerptQuery_t & tQuery, CSphString & sError )
+	bool Setup ( const CSphIndex * pIndex, const ExcerptQuery_t & tSettings, CSphString & sError )
 	{
 		CSphScopedPtr<CSphDict> tDictCloned ( NULL );
 		m_pDict = pIndex->GetDictionary();
@@ -9257,20 +9280,37 @@ public:
 		m_tTokenizer = pIndex->GetTokenizer()->Clone ( true );
 		m_pQueryTokenizer = m_tTokenizer.Ptr();
 
-		if ( !SetupStripperSPZ ( pIndex->GetSettings(), tQuery, m_tStripper, m_tTokenizer.Ptr(), sError ) )
+		// setup exact dictionary if needed
+		m_pDict = SetupExactDict ( pIndex->GetSettings(), tSettings, m_tExactDict, m_pDict, m_tTokenizer.Ptr() );
+		// TODO!!! check star dict too
+
+		if ( tSettings.m_bHighlightQuery )
+		{
+			if ( !sphParseExtendedQuery ( m_tExtQuery, tSettings.m_sWords.cstr(), m_pQueryTokenizer, &pIndex->GetMatchSchema(), m_pDict, pIndex->GetSettings() ) )
+			{
+				sError = m_tExtQuery.m_sParseError;
+				return false;
+			}
+			if ( m_tExtQuery.m_pRoot )
+				m_tExtQuery.m_pRoot->ClearFieldMask();
+
+			m_eExtQuerySPZ = SPH_SPZ_NONE;
+			m_eExtQuerySPZ |= CollectQuerySPZ ( m_tExtQuery.m_pRoot );
+			if ( m_tExtQuery.m_dZones.GetLength() )
+				m_eExtQuerySPZ |= SPH_SPZ_ZONE;
+		}
+
+		bool bSetupSPZ = ( tSettings.m_ePassageSPZ!=SPH_SPZ_NONE || m_eExtQuerySPZ!=SPH_SPZ_NONE ||
+			( tSettings.m_sStripMode=="retain" && tSettings.m_bHighlightQuery ) );
+
+		if ( !SetupStripperSPZ ( pIndex->GetSettings(), tSettings, bSetupSPZ, m_tStripper, m_tTokenizer.Ptr(), sError ) )
 			return false;
 
-		if ( IsSPZEnabled ( tQuery ) )
+		if ( bSetupSPZ )
 		{
 			m_tQueryTokenizer = pIndex->GetTokenizer()->Clone ( true );
 			m_pQueryTokenizer = m_tQueryTokenizer.Ptr();
 		}
-
-		////////////////////////////
-		// setup exact dictionary if needed
-		////////////////////////////
-
-		m_pDict = SetupExactDict ( pIndex->GetSettings(), tQuery, m_tExactDict, m_pDict, m_tTokenizer.Ptr() );
 
 		return true;
 	}
@@ -9306,9 +9346,8 @@ void SnippetThreadFunc ( void * pArg )
 		if ( pQuery->m_iNext!=PROCESSED_ITEM )
 			continue;
 
-		sphBuildExcerpt ( *pQuery, tCtx.m_pDict, tCtx.m_tTokenizer.Ptr(),
-			&pDesc->m_pIndex->GetMatchSchema(), pDesc->m_pIndex,
-			pQuery->m_sError, tCtx.m_tStripper.Ptr(), tCtx.m_pQueryTokenizer );
+		sphBuildExcerpt ( *pQuery, pDesc->m_pIndex, tCtx.m_tStripper.Ptr(), tCtx.m_tExtQuery, tCtx.m_eExtQuerySPZ,
+			pQuery->m_sError, tCtx.m_pDict, tCtx.m_tTokenizer.Ptr(), tCtx.m_pQueryTokenizer );
 
 		if ( bDone )
 			return;
@@ -9430,7 +9469,8 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 		// boring single threaded loop
 		ARRAY_FOREACH ( i, dQueries )
 		{
-			sphBuildExcerpt ( dQueries[i], tCtx.m_pDict, tCtx.m_tTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, dQueries[i].m_sError, tCtx.m_tStripper.Ptr(), tCtx.m_pQueryTokenizer );
+			sphBuildExcerpt ( dQueries[i], pIndex, tCtx.m_tStripper.Ptr(), tCtx.m_tExtQuery, tCtx.m_eExtQuerySPZ,
+				sError, tCtx.m_pDict, tCtx.m_tTokenizer.Ptr(), tCtx.m_pQueryTokenizer );
 			bOk = ( bOk && ( !SnippetFormatErrorMessage ( &sError, dQueries[i].m_sError ) ) );
 		}
 	} else
@@ -9663,7 +9703,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		return;
 	}
 
-	q.m_iPassageBoundary = sphGetPassageBoundary ( q.m_sRawPassageBoundary );
+	q.m_ePassageSPZ = sphGetPassageBoundary ( q.m_sRawPassageBoundary );
 
 	CSphString sError;
 
@@ -9839,7 +9879,7 @@ void UpdateRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuff
 	ARRAY_FOREACH ( i, m_tUpd.m_dAttrs )
 	{
 		tOut.SendString ( m_tUpd.m_dAttrs[i].m_sName.cstr() );
-		tOut.SendInt ( ( m_tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT32SET || m_tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT64SET ) ? 1 : 0 );
+		tOut.SendInt ( ( m_tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT32SET || m_tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_INT64SET ) ? 1 : 0 );
 	}
 	tOut.SendInt ( m_tUpd.m_dDocids.GetLength() );
 
@@ -10364,12 +10404,13 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 	bool bPersist = false;
 	int iTimeout = g_iReadTimeout; // wait 5 sec until first command
 	NetInputBuffer_c tBuf ( iSock );
+	int64_t iCID = ( pThd ? pThd->m_iConnID : g_iConnID );
 
 	// send my version
 	DWORD uServer = htonl ( SPHINX_SEARCHD_PROTO );
 	if ( sphSockSend ( iSock, (char*)&uServer, sizeof(DWORD) )!=sizeof(DWORD) )
 	{
-		sphWarning ( "failed to send server version (client=%s)", sClientIP );
+		sphWarning ( "failed to send server version (client=%s("INT64_FMT"))", sClientIP, iCID );
 		return;
 	}
 
@@ -10377,10 +10418,10 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 	tBuf.ReadFrom ( 4 ); // FIXME! magic
 	int iMagic = tBuf.GetInt (); // client version is for now unused
 
-	sphLogDebugv ( "conn %s: got handshake, major v.%d, err %d", sClientIP, iMagic, (int)tBuf.GetError() );
+	sphLogDebugv ( "conn %s("INT64_FMT"): got handshake, major v.%d, err %d", sClientIP, iCID, iMagic, (int)tBuf.GetError() );
 	if ( tBuf.GetError() )
 	{
-		sphLogDebugv ( "conn %s: exiting on handshake error", sClientIP );
+		sphLogDebugv ( "conn %s("INT64_FMT"): exiting on handshake error", sClientIP, iCID );
 		return;
 	}
 
@@ -10399,14 +10440,14 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 		// on SIGTERM, bail unconditionally and immediately, at all times
 		if ( !bCommand && g_bGotSigterm )
 		{
-			sphLogDebugv ( "conn %s: bailing on SIGTERM", sClientIP );
+			sphLogDebugv ( "conn %s("INT64_FMT"): bailing on SIGTERM", sClientIP, iCID );
 			break;
 		}
 
 		// on SIGHUP vs pconn, bail if a pconn was idle for 1 sec
 		if ( bPersist && !bCommand && g_bGotSighup && sphSockPeekErrno()==ETIMEDOUT )
 		{
-			sphLogDebugv ( "conn %s: bailing idle pconn on SIGHUP", sClientIP );
+			sphLogDebugv ( "conn %s("INT64_FMT"): bailing idle pconn on SIGHUP", sClientIP, iCID );
 			break;
 		}
 
@@ -10416,7 +10457,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 			iPconnIdle += iTimeout;
 			if ( iPconnIdle>=g_iClientTimeout )
 			{
-				sphLogDebugv ( "conn %s: bailing idle pconn on client_timeout", sClientIP );
+				sphLogDebugv ( "conn %s("INT64_FMT"): bailing idle pconn on client_timeout", sClientIP, iCID );
 				break;
 			}
 			continue;
@@ -10439,7 +10480,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 			// lets avoid agent log flood
 			//
 			// sphWarning ( "failed to receive client version and request (client=%s, error=%s)", sClientIP, sphSockError() );
-			sphLogDebugv ( "conn %s: bailing on failed request header (sockerr=%s)", sClientIP, sphSockError() );
+			sphLogDebugv ( "conn %s("INT64_FMT"): bailing on failed request header (sockerr=%s)", sClientIP, iCID, sphSockError() );
 			return;
 		}
 
@@ -10473,7 +10514,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 		assert ( iLength>=0 && iLength<=g_iMaxPacketSize );
 		if ( iLength && !tBuf.ReadFrom ( iLength ) )
 		{
-			sphWarning ( "failed to receive client request body (client=%s, exp=%d, error='%s')", sClientIP, iLength, sphSockError() );
+			sphWarning ( "failed to receive client request body (client=%s("INT64_FMT"), exp=%d, error='%s')", sClientIP, iCID, iLength, sphSockError() );
 			return;
 		}
 
@@ -10493,7 +10534,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 			pThd->m_sCommand = g_dApiCommands[iCommand];
 		THD_STATE ( THD_QUERY );
 
-		sphLogDebugv ( "conn %s: got command %d, handling", sClientIP, iCommand );
+		sphLogDebugv ( "conn %s("INT64_FMT"): got command %d, handling", sClientIP, iCID, iCommand );
 		switch ( iCommand )
 		{
 			case SEARCHD_COMMAND_SEARCH:	HandleCommandSearch ( iSock, iCommandVer, tBuf ); break;
@@ -10503,7 +10544,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 			case SEARCHD_COMMAND_PERSIST:
 				bPersist = ( tBuf.GetInt()!=0 );
 				iTimeout = 1;
-				sphLogDebugv ( "conn %s: pconn is now %s", sClientIP, bPersist ? "on" : "off" );
+				sphLogDebugv ( "conn %s("INT64_FMT"): pconn is now %s", sClientIP, iCID, bPersist ? "on" : "off" );
 				break;
 			case SEARCHD_COMMAND_STATUS:	HandleCommandStatus ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_FLUSHATTRS:HandleCommandFlush ( iSock, iCommandVer, tBuf ); break;
@@ -10515,7 +10556,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 		SphCrashLogger_c::SetLastQuery ( CrashQuery_t() );
 	} while ( bPersist );
 
-	sphLogDebugv ( "conn %s: exiting", sClientIP );
+	sphLogDebugv ( "conn %s("INT64_FMT"): exiting", sClientIP, iCID );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -10885,7 +10926,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 				bResult = tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );
 				if ( tCol.m_eAttrType==SPH_ATTR_STRING )
 					dStrings.Add ( NULL );
-				if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET )
+				if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET )
 					dMvas.Add ( 0 );
 			} else
 			{
@@ -10897,18 +10938,18 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 					sError.SetSprintf ( "raw %d, column %d: internal error: unknown insval type %d", 1+c, 1+iQuerySchemaIdx, tVal.m_iType ); // 1 for human base
 					break;
 				}
-				if ( tVal.m_iType==TOK_CONST_MVA && !( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET ) )
+				if ( tVal.m_iType==TOK_CONST_MVA && !( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET ) )
 				{
 					sError.SetSprintf ( "raw %d, column %d: MVA value specified for a non-MVA column", 1+c, 1+iQuerySchemaIdx ); // 1 for human base
 					break;
 				}
-				if ( ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET ) && tVal.m_iType!=TOK_CONST_MVA )
+				if ( ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET ) && tVal.m_iType!=TOK_CONST_MVA )
 				{
 					sError.SetSprintf ( "raw %d, column %d: non-MVA value specified for a MVA column", 1+c, 1+iQuerySchemaIdx ); // 1 for human base
 					break;
 				}
 
-				if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_UINT64SET )
+				if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET )
 				{
 					// collect data from scattered insvals
 					// FIXME! maybe remove this mess, and just have a single m_dMvas pool in parser instead?
@@ -10918,7 +10959,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 						tVal.m_pVals->Uniq();
 						iLen = tVal.m_pVals->GetLength();
 					}
-					if ( tCol.m_eAttrType==SPH_ATTR_UINT64SET )
+					if ( tCol.m_eAttrType==SPH_ATTR_INT64SET )
 					{
 						dMvas.Add ( iLen*2 );
 						for ( int j=0; j<iLen; j++ )
@@ -11126,7 +11167,7 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 	if ( q.m_iLoadFiles )
 		q.m_sFilePrefix = g_sSnippetsFilePrefix;
 
-	q.m_iPassageBoundary = sphGetPassageBoundary ( q.m_sRawPassageBoundary );
+	q.m_ePassageSPZ = sphGetPassageBoundary ( q.m_sRawPassageBoundary );
 
 	if ( !sphCheckOptionsSPZ ( q, q.m_sRawPassageBoundary, sError ) )
 	{
@@ -11565,7 +11606,7 @@ void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt
 	ARRAY_FOREACH_COND ( i, tStmt.m_tUpdate.m_dAttrs, !bMvaUpdate )
 	{
 		bMvaUpdate = ( tStmt.m_tUpdate.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT32SET
-			|| tStmt.m_tUpdate.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT64SET );
+			|| tStmt.m_tUpdate.m_dAttrs[i].m_eAttrType==SPH_ATTR_INT64SET );
 	}
 
 	ARRAY_FOREACH ( iIdx, dIndexNames )
@@ -11859,7 +11900,7 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 				dRows.PutNumeric ( "%f", tMatch.GetAttrFloat(tLoc) );
 				break;
 
-			case SPH_ATTR_UINT64SET:
+			case SPH_ATTR_INT64SET:
 			case SPH_ATTR_UINT32SET:
 				{
 					int iLenOff = dRows.Length();
@@ -11884,9 +11925,9 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 						{
 							for ( ; nValues; nValues-=2, pValues+=2 )
 							{
-								uint64_t uVal = MVA_UPSIZE ( pValues );
+								int64_t iVal = MVA_UPSIZE ( pValues );
 								dRows.Reserve ( SPH_MAX_NUMERIC_STR );
-								int iLen = snprintf ( dRows.Get(), SPH_MAX_NUMERIC_STR, nValues>2 ? UINT64_FMT"," : UINT64_FMT, uVal );
+								int iLen = snprintf ( dRows.Get(), SPH_MAX_NUMERIC_STR, nValues>2 ? INT64_FMT"," : INT64_FMT, iVal );
 								dRows.IncPtr ( iLen );
 							}
 						}
@@ -12913,11 +12954,12 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 	const int INTERACTIVE_TIMEOUT = 900;
 	NetInputBuffer_c tIn ( iSock );
 	NetOutputBuffer_c tOut ( iSock ); // OPTIMIZE? looks like buffer size matters a lot..
+	int64_t iCID = ( pThd ? pThd->m_iConnID : g_iConnID );
 
 	if ( sphSockSend ( iSock, g_sMysqlHandshake, g_iMysqlHandshake )!=g_iMysqlHandshake )
 	{
 		int iErrno = sphSockGetErrno ();
-		sphWarning ( "failed to send server version (client=%s, error: %d '%s')", sClientIP, iErrno, sphSockError ( iErrno ) );
+		sphWarning ( "failed to send server version (client=%s("INT64_FMT"), error: %d '%s')", sClientIP, iCID, iErrno, sphSockError ( iErrno ) );
 		return;
 	}
 

@@ -38,6 +38,13 @@ inline bool sphIsSpace ( int iCode )
 }
 
 
+/// check for keyword modifiers
+inline bool sphIsModifier ( int iSymbol )
+{
+	return iSymbol=='^' || iSymbol=='$' || iSymbol=='=' || iSymbol=='*';
+}
+
+
 /// string splitter, extracts sequences of alphas (as in sphIsAlpha)
 void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn );
 

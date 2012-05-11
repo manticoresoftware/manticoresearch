@@ -597,8 +597,9 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		while ( p<sEnd && isdigit ( *(BYTE*)p ) ) p++;
 
 		static const int NUMBER_BUF_LEN = 10; // max strlen of int32
-
-		if ( p>sToken && p-sToken<NUMBER_BUF_LEN && ( *p=='\0' || isspace ( *(BYTE*)p ) || IsSpecial(*p) ) )
+		if ( p>sToken && p-sToken<NUMBER_BUF_LEN
+			&& !( *p=='-' && !( p-sToken==1 && sphIsModifier ( p[-1] ) ) ) // !bDashInside copied over from arbitration
+			&& ( *p=='\0' || sphIsSpace(*p) || IsSpecial(*p) ) )
 		{
 			if ( m_pTokenizer->GetToken() && m_pTokenizer->TokenIsBlended() ) // number with blended should be tokenized as usual
 			{
@@ -1204,7 +1205,7 @@ static void xqDump ( XQNode_t * pNode, int iIndent )
 	} else
 	{
 		xqIndent ( iIndent );
-		printf ( "MATCH(%d,%d):", pNode->m_dFieldMask.GetMask32(), pNode->m_iOpArg );
+		printf ( "MATCH(%d,%d):", pNode->m_dSpec.m_dFieldMask.GetMask32(), pNode->m_iOpArg );
 
 		ARRAY_FOREACH ( i, pNode->m_dWords )
 		{

@@ -6547,6 +6547,9 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 
 void CSphHitMarker::Mark ( CSphVector<SphHitMark_t> & dMarked )
 {
+	if ( !m_pRoot )
+		return;
+
 	const ExtHit_t * pHits = NULL;
 	const ExtDoc_t * pDocs = NULL;
 
@@ -6581,8 +6584,11 @@ CSphHitMarker::~CSphHitMarker ()
 
 CSphHitMarker * CSphHitMarker::Create ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup )
 {
-	ExtNode_i * pNode = ExtNode_i::Create ( pRoot, tSetup );
-	if ( pNode )
+	ExtNode_i * pNode = NULL;
+	if ( pRoot )
+		pNode = ExtNode_i::Create ( pRoot, tSetup );
+
+	if ( !pRoot || pNode )
 	{
 		CSphHitMarker * pMarker = new CSphHitMarker;
 		pMarker->m_pRoot = pNode;

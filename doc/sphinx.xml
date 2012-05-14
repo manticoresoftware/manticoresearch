@@ -9339,8 +9339,9 @@ many CPUs or cores).
 <para>
 The value format is as follows:
 <programlisting>
-agent = specification:remote-indexes-list
-specification = hostname ":" port | path
+agent = mirror["|"mirror["|"mirror...]]
+mirror = specification:remote-indexes-list
+specification = hostname ":" port | path["|"hostname ":" port | path["|"hostname ":" port | path...]]
 </programlisting>
 Where 'hostname' is remote host name; 'port' is remote TCP port; 'path'
 is Unix-domain socket path and 'remote-indexes-list' is a
@@ -9387,6 +9388,29 @@ agent = localhost:9312:chunk2 # contact itself
 agent = /var/run/searchd.s:chunk2
 agent = searchbox2:9312:chunk3,chunk4 # search remote indexes
 </programlisting>
+<para>
+It is also possible to define the alternative agents, or 'mirrors'. The alternatives will be used as backups
+and will help you to keep the searching alive in case when some alternative agents became not available.
+For example:
+<programlisting>
+agent = localhost:9312|other_host:9312|other_host:9313:chunk2
+</programlisting>
+This clause defines that localhost:9312, other_host:9312 and other_host:9313 serve one and same indices, and can
+be used as full mirrors of each other. By default all the query packages will be roundly distributed on them. It mean,
+that 1-st package will be directed to localhost:9312. Second - to other_host:9312. Third - to other_host:9313, fourth - 
+again, to localhost:9312 - and so on. That mean that with N mirrors each will be loaded with 1/N of incoming packets. It is also scheduled
+to realize more complex ways to use mirrors - like special care about not-available mirrors, load balancing, etc.
+The indexes (in this case - chunk2) is assumed the same for all mirror hosts. I.e. all the mirrors will be queried with index 'chunk2', stated
+in the very end of agent clause.
+</para>
+<para>
+Another way to define the alternatives - is to explicitly set the indices also:
+<programlisting>
+agent = localhost:9312:chunk1|other_host:9312:chunk2
+</programlisting>
+This is quite the same as previous, but here is explicitly stated that from first mirror we need the 'chunk1', and from the second - the 'chunk2'.
+So, the packets will be distributed the same way, but to these concrete indices.
+</para>
 </sect2>
 
 

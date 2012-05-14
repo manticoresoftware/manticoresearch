@@ -2997,6 +2997,81 @@ public:
 	{}
 };
 
+struct MetaAgentDesc_t
+{
+private:
+	CSphVector<AgentDesc_t> m_dAgents;
+	int				m_iCurAgent;
+public:
+	AgentDesc_t *	m_pAgent;		/// currently active agent
+
+public:
+	MetaAgentDesc_t ()
+		: m_iCurAgent ( -1 )
+		, m_pAgent ( NULL )
+	{}
+
+	MetaAgentDesc_t ( const MetaAgentDesc_t & rhs )
+	{
+		*this = rhs;
+	}
+
+	AgentDesc_t * NewAgent()
+	{
+		m_iCurAgent=m_dAgents.GetLength();
+		AgentDesc_t & tAgent = m_dAgents.Add();
+		m_pAgent=&tAgent;
+		return m_pAgent;
+	}
+
+	AgentDesc_t * PulseAgent ( bool bForward=true )
+	{
+		if ( m_dAgents.GetLength()==1 )
+			return m_pAgent;
+
+		if ( bForward )
+		{
+			++m_iCurAgent;
+			if ( m_iCurAgent==m_dAgents.GetLength() )
+				m_iCurAgent=0;
+		} else
+		{
+			--m_iCurAgent;
+			if ( m_iCurAgent==-1 )
+				m_iCurAgent = m_dAgents.GetLength()-1;
+		}
+
+		m_pAgent=&m_dAgents[m_iCurAgent];
+		return m_pAgent;
+	}
+
+	AgentDesc_t * GetRRAgent()
+	{
+		return PulseAgent();
+	}
+
+	void Rewind ( bool bLast=true )
+	{
+		m_iCurAgent = bLast?(m_dAgents.GetLength()-1):0;
+		m_pAgent=&m_dAgents[m_iCurAgent];
+	}
+
+	const CSphVector<AgentDesc_t>& GetAgents() const
+	{
+		return m_dAgents;
+	}
+
+	MetaAgentDesc_t & operator= ( const MetaAgentDesc_t & rhs )
+	{
+		if ( this==&rhs )
+			return *this;
+		m_dAgents = rhs.GetAgents();
+		m_iCurAgent = rhs.m_iCurAgent;
+		m_pAgent=&m_dAgents[m_iCurAgent];
+		return *this;
+	}
+};
+
 /// remote agent state
 enum AgentState_e
 {
@@ -3070,6 +3145,19 @@ public:
 		return sName;
 	}
 
+/*	AgentConn_t & operator = ( const MetaAgentDesc_t & rhs )
+	{
+		m_pAgent->m_sHost = rhs.m_pAgent->m_sHost;
+		m_pAgent->m_iPort = rhs.m_pAgent->m_iPort;
+		m_pAgent->m_sPath = rhs.m_pAgent->m_sPath;
+		m_pAgent->m_sIndexes = rhs.m_pAgent->m_sIndexes;
+		m_pAgent->m_bBlackhole = rhs.m_pAgent->m_bBlackhole;
+		m_pAgent->m_iFamily = rhs.m_pAgent->m_iFamily;
+		m_pAgent->m_uAddr = rhs.m_pAgent->m_uAddr;
+		m_pAgent->m_iStatsIndex = rhs.m_pAgent->m_iStatsIndex;
+		return *this;
+	} */
+
 	AgentConn_t & operator = ( const AgentDesc_t & rhs )
 	{
 		m_sHost = rhs.m_sHost;
@@ -3087,7 +3175,7 @@ public:
 /// distributed index
 struct DistributedIndex_t
 {
-	CSphVector<AgentDesc_t>		m_dAgents;					///< remote agents
+	CSphVector<MetaAgentDesc_t>		m_dAgents;					///< remote agents
 	CSphVector<CSphString>		m_dLocal;					///< local indexes
 	int							m_iAgentConnectTimeout;		///< in msec
 	int							m_iAgentQueryTimeout;		///< in msec
@@ -3099,6 +3187,16 @@ public:
 		, m_iAgentQueryTimeout ( 3000 )
 		, m_bToDelete ( false )
 	{}
+	void GetAllAgents ( CSphVector<AgentConn_t> * pTarget ) const
+	{
+		assert ( pTarget );
+		ARRAY_FOREACH ( i, m_dAgents )
+			ARRAY_FOREACH ( j, m_dAgents[i].GetAgents() )
+			{
+				AgentDesc_t & dAgent = pTarget->Add();
+				dAgent = m_dAgents[i].GetAgents()[j];
+			}
+	}
 };
 
 /// global distributed index definitions hash
@@ -7524,7 +7622,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 			dAgents.Resize ( pDist->m_dAgents.GetLength() );
 			ARRAY_FOREACH ( i, pDist->m_dAgents )
-				dAgents[i] = pDist->m_dAgents[i];
+				dAgents[i] = *pDist->m_dAgents[i].GetRRAgent();
 		}
 		g_tDistLock.Unlock();
 	}
@@ -9408,7 +9506,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 		dDistLocal = pDist->m_dLocal;
 		dRemoteSnippets.m_dAgents.Resize ( pDist->m_dAgents.GetLength() );
 		ARRAY_FOREACH ( i, pDist->m_dAgents )
-			dRemoteSnippets.m_dAgents[i] = pDist->m_dAgents[i];
+			dRemoteSnippets.m_dAgents[i] = *pDist->m_dAgents[i].GetRRAgent();
 	}
 	g_tDistLock.Unlock();
 
@@ -10079,9 +10177,8 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq )
 		{
 			DistributedIndex_t & tDist = dDistributed[iIdx];
 
-			CSphVector<AgentConn_t> dAgents ( tDist.m_dAgents.GetLength() );
-			ARRAY_FOREACH ( i, dAgents )
-				dAgents[i] = tDist.m_dAgents[i];
+			CSphVector<AgentConn_t> dAgents;
+			tDist.GetAllAgents ( &dAgents );
 
 			// connect to remote agents and query them
 			UpdateRequestBuilder_t tReqBuilder ( tUpd );
@@ -10162,10 +10259,10 @@ void BuildStatus ( CSphVector<CSphString> & dStatus )
 	while ( g_hDistIndexes.IterateNext() )
 	{
 		const char * sIdx = g_hDistIndexes.IterateGetKey().cstr();
-		CSphVector<AgentDesc_t> & dAgents = g_hDistIndexes.IterateGet().m_dAgents;
+		CSphVector<MetaAgentDesc_t> & dAgents = g_hDistIndexes.IterateGet().m_dAgents;
 		ARRAY_FOREACH ( i, dAgents )
 		{
-			int iIndex = dAgents[i].m_iStatsIndex;
+			int iIndex = dAgents[i].m_pAgent->m_iStatsIndex;
 			if ( iIndex<0 || iIndex>=STATS_MAX_AGENTS )
 				continue;
 
@@ -11634,9 +11731,8 @@ void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt
 		{
 			DistributedIndex_t & tDist = dDistributed[iIdx];
 
-			CSphVector<AgentConn_t> dAgents ( tDist.m_dAgents.GetLength() );
-			ARRAY_FOREACH ( i, dAgents )
-				dAgents[i] = tDist.m_dAgents[i];
+			CSphVector<AgentConn_t> dAgents;
+			tDist.GetAllAgents ( &dAgents );
 
 			// connect to remote agents and query them
 			SphinxqlRequestBuilder_t tReqBuilder ( sQuery, tStmt );
@@ -12180,9 +12276,8 @@ void HandleMysqlDelete ( const SqlStmt_t & tStmt, const CSphString & sQuery, boo
 		if ( dDistributed[iIdx].m_dAgents.GetLength() )
 		{
 			const DistributedIndex_t & tDist = dDistributed[iIdx];
-			CSphVector<AgentConn_t> dAgents ( tDist.m_dAgents.GetLength() );
-			ARRAY_FOREACH ( i, dAgents )
-				dAgents[i] = tDist.m_dAgents[i];
+			CSphVector<AgentConn_t> dAgents;
+			tDist.GetAllAgents ( &dAgents );
 
 			// connect to remote agents and query them
 			SphinxqlRequestBuilder_t tReqBuilder ( sQuery, tStmt );
@@ -14343,101 +14438,24 @@ bool PrereadNewIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex, c
 	return true;
 }
 
-
-bool ConfigureAgent ( AgentDesc_t & tAgent, const CSphVariant * pAgent, const char * szIndexName, bool bBlackhole )
+bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, const char * szIndexName, bool bBlackhole )
 {
-	// extract host name or path
-	const char * p = pAgent->cstr();
-	while ( sphIsAlpha(*p) || *p=='.' || *p=='-' || *p=='/' ) p++;
-	if ( p==pAgent->cstr() )
-	{
-		sphWarning ( "index '%s': agent '%s': host name or path expected - SKIPPING AGENT",
-			szIndexName, pAgent->cstr() );
-		return false;
-	}
-	if ( *p++!=':' )
-	{
-		sphWarning ( "index '%s': agent '%s': colon expected near '%s' - SKIPPING AGENT",
-			szIndexName, pAgent->cstr(), p );
-		return false;
-	}
-
-	CSphString sSub = pAgent->SubString ( 0, p-1-pAgent->cstr() );
-	if ( sSub.cstr()[0]=='/' )
-	{
-#if USE_WINDOWS
-		sphWarning ( "index '%s': agent '%s': UNIX sockets are not supported on Windows - SKIPPING AGENT",
-			szIndexName, pAgent->cstr() );
-		return false;
-#else
-		if ( strlen ( sSub.cstr() ) + 1 > sizeof(((struct sockaddr_un *)0)->sun_path) )
-		{
-			sphWarning ( "index '%s': agent '%s': UNIX socket path is too long - SKIPPING AGENT",
-				szIndexName, pAgent->cstr() );
-			return false;
-		}
-
-		tAgent.m_iFamily = AF_UNIX;
-		tAgent.m_sPath = sSub;
-		p--;
-#endif
-	} else
-	{
-		tAgent.m_iFamily = AF_INET;
-		tAgent.m_sHost = sSub;
-
-		// extract port
-		if ( !isdigit(*p) )
-		{
-			sphWarning ( "index '%s': agent '%s': port number expected near '%s' - SKIPPING AGENT",
-				szIndexName, pAgent->cstr(), p );
-			return false;
-		}
-		tAgent.m_iPort = atoi(p);
-
-		if ( !IsPortInRange ( tAgent.m_iPort ) )
-		{
-			sphWarning ( "index '%s': agent '%s': invalid port number near '%s' - SKIPPING AGENT",
-				szIndexName, pAgent->cstr(), p );
-			return false;
-		}
-
-		while ( isdigit(*p) ) p++;
-	}
-
-	// extract index list
-	if ( *p++!=':' )
-	{
-		sphWarning ( "index '%s': agent '%s': colon expected near '%s' - SKIPPING AGENT",
-			szIndexName, pAgent->cstr(), p );
-		return false;
-	}
-	while ( isspace(*p) )
-		p++;
-	const char * sIndexList = p;
-	while ( sphIsAlpha(*p) || isspace(*p) || *p==',' )
-		p++;
-	if ( *p )
-	{
-		sphWarning ( "index '%s': agent '%s': index list expected near '%s' - SKIPPING AGENT",
-			szIndexName, pAgent->cstr(), p );
-		return false;
-	}
-	tAgent.m_sIndexes = sIndexList;
+	AgentDesc_t * pAgent = tAgent.m_pAgent;
+	assert ( pAgent );
 
 	// lookup address (if needed)
-	if ( tAgent.m_iFamily==AF_INET )
+	if ( pAgent->m_iFamily==AF_INET )
 	{
-		tAgent.m_uAddr = sphGetAddress ( tAgent.m_sHost.cstr() );
-		if ( tAgent.m_uAddr==0 )
+		pAgent->m_uAddr = sphGetAddress ( pAgent->m_sHost.cstr() );
+		if ( pAgent->m_uAddr==0 )
 		{
 			sphWarning ( "index '%s': agent '%s': failed to lookup host name '%s' (error=%s) - SKIPPING AGENT",
-				szIndexName, pAgent->cstr(), tAgent.m_sHost.cstr(), sphSockError() );
+				szIndexName, pLine->cstr(), pAgent->m_sHost.cstr(), sphSockError() );
 			return false;
 		}
 	}
 
-	tAgent.m_bBlackhole = bBlackhole;
+	pAgent->m_bBlackhole = bBlackhole;
 
 	// allocate stats slot
 	if ( g_pStats )
@@ -14445,17 +14463,164 @@ bool ConfigureAgent ( AgentDesc_t & tAgent, const CSphVariant * pAgent, const ch
 		g_tStatsMutex.Lock();
 		for ( int i=0; i<STATS_MAX_AGENTS/32; i++ )
 			if ( g_pStats->m_bmAgentStats[i]!=0xffffffffUL )
-		{
-			int j = FindBit ( g_pStats->m_bmAgentStats[i] );
-			g_pStats->m_bmAgentStats[i] |= ( 1<<j );
-			tAgent.m_iStatsIndex = i*32 + j;
-			memset ( &g_pStats->m_dAgentStats[tAgent.m_iStatsIndex], 0, sizeof(AgentStats_t) );
-			break;
-		}
+			{
+				int j = FindBit ( g_pStats->m_bmAgentStats[i] );
+				g_pStats->m_bmAgentStats[i] |= ( 1<<j );
+				pAgent->m_iStatsIndex = i*32 + j;
+				memset ( &g_pStats->m_dAgentStats[pAgent->m_iStatsIndex], 0, sizeof(AgentStats_t) );
+				break;
+			}
 		g_tStatsMutex.Unlock();
 	}
 
+	// for now just convert all 'host mirrors' (i.e. agents without indices) into 'index mirrors'
+	while ( !pAgent->m_sIndexes.IsEmpty() )
+	{
+		tAgent.PulseAgent ( false );
+		if ( tAgent.m_pAgent->m_sIndexes.IsEmpty() )
+			tAgent.m_pAgent->m_sIndexes = pAgent->m_sIndexes;
+		else
+			break;
+	}
 	return true;
+}
+enum eAgentParse { apInHost, apInPort, apGotPort, apStartIndexList, apIndexList, apDone };
+bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, const char * szIndexName, bool bBlackhole )
+{
+	eAgentParse eState = apInHost;
+	AgentDesc_t * pCurrent = tAgent.NewAgent();
+	// extract host name or path
+	const char * p = pAgent->cstr();
+	const char * pAnchor = p;
+
+	while ( eState!=apDone )
+	{
+		switch ( eState )
+		{
+		case apInHost:
+			{
+				if ( sphIsAlpha(*p) || *p=='.' || *p=='-' || *p=='/' )
+					break;
+				if ( p==pAnchor )
+				{
+					sphWarning ( "index '%s': agent '%s': host name or path expected - SKIPPING AGENT",
+						szIndexName, pAnchor );
+					return false;
+				}
+				if ( *p!=':' )
+				{
+					sphWarning ( "index '%s': agent '%s': colon expected near '%s' - SKIPPING AGENT",
+						szIndexName, pAgent->cstr(), p );
+					return false;
+				}
+				CSphString sSub = pAgent->SubString ( 0, p-pAnchor );
+				if ( sSub.cstr()[0]=='/' )
+				{
+#if USE_WINDOWS
+					sphWarning ( "index '%s': agent '%s': UNIX sockets are not supported on Windows - SKIPPING AGENT",
+						szIndexName, pAgent->cstr() );
+					return false;
+#else
+					if ( strlen ( sSub.cstr() ) + 1 > sizeof(((struct sockaddr_un *)0)->sun_path) )
+					{
+						sphWarning ( "index '%s': agent '%s': UNIX socket path is too long - SKIPPING AGENT",
+							szIndexName, pAgent->cstr() );
+						return false;
+					}
+
+					pCurrent->m_iFamily = AF_UNIX;
+					pCurrent->m_sPath = sSub;
+					p--;
+#endif
+				} else
+				{
+					pCurrent->m_iFamily = AF_INET;
+					pCurrent->m_sHost = sSub;
+				}
+				eState = apInPort;
+				pAnchor = p+1;
+				break;
+			}
+		case apInPort:
+			{
+				if ( isdigit(*p) )
+					break;
+
+				if ( p==pAnchor )
+				{
+					sphWarning ( "index '%s': agent '%s': port number expected near '%s' - SKIPPING AGENT",
+						szIndexName, pAgent->cstr(), p );
+					return false;
+				}
+				pCurrent->m_iPort = atoi ( pAnchor );
+
+				if ( !IsPortInRange ( pCurrent->m_iPort ) )
+				{
+					sphWarning ( "index '%s': agent '%s': invalid port number near '%s' - SKIPPING AGENT",
+						szIndexName, pAgent->cstr(), p );
+					return false;
+				}
+
+				if ( *p=='|' )
+				{
+					pAnchor = p+1;
+					eState = apInHost;
+					if ( !ValidateAgentDesc ( tAgent, pAgent, szIndexName, bBlackhole ) )
+						return false;
+					pCurrent = tAgent.NewAgent();
+					break;
+				}
+
+				if ( *p!=':' )
+				{
+					sphWarning ( "index '%s': agent '%s': colon expected near '%s' - SKIPPING AGENT",
+						szIndexName, pAgent->cstr(), p );
+					return false;
+				}
+
+				eState = apStartIndexList;
+				pAnchor = p+1;
+				break;
+			}
+		case apStartIndexList:
+			if ( isspace ( *p ) )
+				break;
+
+			pAnchor = p;
+			eState = apIndexList;
+			// no break;
+		case apIndexList:
+			{
+				if ( sphIsAlpha(*p) || isspace(*p) || *p==',' )
+					break;
+
+				CSphString sIndexes = pAgent->SubString ( pAnchor-pAgent->cstr(), p-pAnchor );
+
+				if ( *p && *p!='|' )
+				{
+					sphWarning ( "index '%s': agent '%s': index list expected near '%s' - SKIPPING AGENT",
+						szIndexName, pAgent->cstr(), p );
+					return false;
+				}
+				pCurrent->m_sIndexes = sIndexes;
+
+				if ( *p=='|' )
+				{
+					pAnchor = p+1;
+					eState = apInHost;
+					if ( !ValidateAgentDesc ( tAgent, pAgent, szIndexName, bBlackhole ) )
+						return false;
+					pCurrent = tAgent.NewAgent();
+					break;
+				}
+				eState = apDone;
+			}
+		} // switch (eState)
+		p++;
+	} // while (eState!=apDone)
+	bool bRes = ValidateAgentDesc ( tAgent, pAgent, szIndexName, bBlackhole );
+	tAgent.Rewind();
+	return bRes;
 }
 
 static DistributedIndex_t ConfigureDistributedIndex ( const char * szIndexName, const CSphConfigSection & hIndex )
@@ -14479,14 +14644,14 @@ static DistributedIndex_t ConfigureDistributedIndex ( const char * szIndexName, 
 	// add remote agents
 	for ( CSphVariant * pAgent = hIndex("agent"); pAgent; pAgent = pAgent->m_pNext )
 	{
-		AgentDesc_t tAgent;
+		MetaAgentDesc_t tAgent;
 		if ( ConfigureAgent ( tAgent, pAgent, szIndexName, false ) )
 			tIdx.m_dAgents.Add ( tAgent );
 	}
 
 	for ( CSphVariant * pAgent = hIndex("agent_blackhole"); pAgent; pAgent = pAgent->m_pNext )
 	{
-		AgentDesc_t tAgent;
+		MetaAgentDesc_t tAgent;
 		if ( ConfigureAgent ( tAgent, pAgent, szIndexName, true ) )
 			tIdx.m_dAgents.Add ( tAgent );
 	}
@@ -14520,7 +14685,7 @@ void FreeAgentStats ( DistributedIndex_t & tIndex )
 	g_tStatsMutex.Lock();
 	ARRAY_FOREACH ( i, tIndex.m_dAgents )
 	{
-		int iIndex = tIndex.m_dAgents[i].m_iStatsIndex;
+		int iIndex = tIndex.m_dAgents[i].m_pAgent->m_iStatsIndex;
 		if ( iIndex<0 || iIndex>=STATS_MAX_AGENTS )
 			continue;
 

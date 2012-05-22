@@ -15046,7 +15046,7 @@ static XQNode_t * ExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & t
 
 static inline bool IsWild ( char c )
 {
-	return c=='*' || c=='?';
+	return c=='*' || c=='?' || c=='%';
 }
 
 

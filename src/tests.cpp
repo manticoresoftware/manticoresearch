@@ -2237,6 +2237,23 @@ void TestWildcards()
 	assert ( sphWildcardMatch ( "abracadabra", "*a*a*a*a*a*" ) );
 	assert ( !sphWildcardMatch ( "a", "a*a?" ) );
 	assert ( !sphWildcardMatch ( "abracadabra", "*a*a*a*a*a?" ) );
+	assert ( sphWildcardMatch ( "car", "car%" ) );
+	assert ( sphWildcardMatch ( "cars", "car%" ) );
+	assert ( sphWildcardMatch ( "card", "car%" ) );
+	assert ( !sphWildcardMatch ( "carded", "car%" ) );
+	assert ( sphWildcardMatch ( "abc", "abc%" ) );
+	assert ( sphWildcardMatch ( "abcd", "abc%" ) );
+	assert ( !sphWildcardMatch ( "abcde", "abc%" ) );
+	assert ( sphWildcardMatch ( "ab", "a%b" ) );
+	assert ( sphWildcardMatch ( "acb", "a%b" ) );
+	assert ( !sphWildcardMatch ( "acdb", "a%b" ) );
+	assert ( sphWildcardMatch ( "abc", "a%bc" ) );
+	assert ( sphWildcardMatch ( "abbc", "a%bc" ) );
+	assert ( !sphWildcardMatch ( "abbbc", "a%bc" ) );
+	assert ( sphWildcardMatch ( "ab", "a%%b" ) );
+	assert ( sphWildcardMatch ( "axb", "a%%b" ) );
+	assert ( sphWildcardMatch ( "axyb", "a%%b" ) );
+	assert ( !sphWildcardMatch ( "axyzb", "a%%b" ) );
 	printf ( "ok\n" );
 }
 

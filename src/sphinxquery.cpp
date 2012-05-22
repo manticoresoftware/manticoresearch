@@ -1097,6 +1097,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTok
 	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone ( true ) );
 	pMyTokenizer->AddSpecials ( "()|-!@~\"/^$<" );
 	pMyTokenizer->AddPlainChar ( '?' );
+	pMyTokenizer->AddPlainChar ( '%' );
 	pMyTokenizer->EnableQueryParserMode ( true );
 
 	// most outcomes are errors

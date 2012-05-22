@@ -89,6 +89,12 @@ void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn )
 }
 
 
+static inline bool IsWild ( char c )
+{
+	return c=='*' || c=='?' || c=='%';
+}
+
+
 bool sphWildcardMatch ( const char * sString, const char * sPattern )
 {
 	if ( !sString || !sPattern )
@@ -105,6 +111,44 @@ bool sphWildcardMatch ( const char * sString, const char * sPattern )
 			s++;
 			p++;
 			break;
+
+		case '%':
+			// gotta match either 0 or 1 characters
+			// well, lets look ahead and see what we need to match next
+			p++;
+
+			// just a shortcut, %* can be folded to just *
+			if ( *p=='*' )
+				break;
+
+			// plain char after a hash? check the non-ambiguous cases
+			if ( !IsWild(*p) )
+			{
+				if ( s[0]!=*p )
+				{
+					// hash does not match 0 chars
+					// check if we can match 1 char, or it's a no-match
+					if ( s[1]!=*p )
+						return false;
+					s++;
+					break;
+				} else
+				{
+					// hash matches 0 chars
+					// check if we could ambiguously match 1 char too, though
+					if ( s[1]!=*p )
+						break;
+					// well, fall through to "scan both options" route
+				}
+			}
+
+			// could not decide yet
+			// so just recurse both options
+			if ( sphWildcardMatch ( s, p ) )
+				return true;
+			if ( sphWildcardMatch ( s+1, p ) )
+				return true;
+			return false;
 
 		case '*':
 			// skip all the extra stars and question marks
@@ -141,8 +185,10 @@ bool sphWildcardMatch ( const char * sString, const char * sPattern )
 	}
 
 	// string done
-	// pattern should be either done too, or a trailing star
-	return p[0]=='\0' || ( p[0]=='*' && p[1]=='\0' );
+	// pattern should be either done too, or a trailing star, or a trailing hash
+	return p[0]=='\0'
+		|| ( p[0]=='*' && p[1]=='\0' )
+		|| ( p[0]=='%' && p[1]=='\0' );
 }
 
 //////////////////////////////////////////////////////////////////////////

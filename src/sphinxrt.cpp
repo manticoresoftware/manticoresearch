@@ -876,7 +876,6 @@ public:
 
 	void			SetBufferSize ( int iBufferSize )									{ CSphWriter::SetBufferSize ( iBufferSize ); }
 	bool			OpenFile ( const CSphString & sName, CSphString & sErrorBuffer )	{ return CSphWriter::OpenFile ( sName, sErrorBuffer ); }
-	void			SetFile ( int iFD, SphOffset_t * pSharedOffset )					{ CSphWriter::SetFile ( iFD, pSharedOffset ); }
 	void			CloseFile ( bool bTruncate=false )									{ CSphWriter::CloseFile ( bTruncate ); }
 	SphOffset_t		GetPos () const														{ return m_iPos; }
 

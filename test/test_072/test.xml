@@ -29,6 +29,25 @@ index test_idx
 	path			= <Data_Path/>/test
     charset_type	= utf-8
 }
+
+source src_str
+{
+	type			= mysql
+<Sql_Settings/>
+
+	sql_query = SELECT id, body, 1000+id as idd FROM test_table
+	sql_field_string = body
+	sql_attr_uint = idd
+}
+
+index str
+{
+	source			= src_str
+	path			= <Data_Path/>/str
+    charset_type	= utf-8
+	docinfo			= extern
+}
+
 </Config>
 <DB_Create>
 CREATE TABLE `test_table` (
@@ -49,15 +68,32 @@ INSERT INTO `test_table` VALUES
 </DB_Insert>
 
 <Custom_test><![CDATA[
-$client->AddQuery ('one');
-$client->AddQuery ('two');
-$client->AddQuery ('three');
-$client->AddQuery ('four');
-$client->AddQuery ('five');
+
+$client->AddQuery ('one', 'test_idx');
+$client->AddQuery ('two', 'test_idx');
+$client->AddQuery ('three', 'test_idx');
+$client->AddQuery ('four', 'test_idx');
+$client->AddQuery ('five', 'test_idx');
 $results = $client->RunQueries ();
-for ( $i=0; $i<=4; $i++ )
+
+// regression crash on multi-query with string attribute group by OR sort by
+// result - 5
+$results[] =  $client->Query ( '', 'str' );
+
+// results - 6-8
+$client->AddQuery ( '', 'str' );
+$client->SetGroupBy ( 'body', SPH_GROUPBY_ATTR, 'idd desc' );
+$client->AddQuery ( '', 'str' );
+$client->SetSortMode ( SPH_SORT_EXTENDED, 'body ASC' );
+$client->AddQuery ( '', 'str' );
+$rr =  $client->RunQueries();
+foreach ( $rr as $r )
+	$results[] = $r;
+
+for ( $i=0; $i<count($results); $i++ )
 	if ( is_array($results) && is_array($results[$i]) )
 		unset ( $results[$i]["time"] );
+		
 ]]></Custom_test>
 
 </Test>

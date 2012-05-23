@@ -3383,6 +3383,16 @@ to add successive filters to the merge, all of which must be met in order
 for a document to become part of the final index.
 </para></listitem>
 
+<listitem><para><option>--merge-killlists</option> (and its
+shorter alias <option>--merge-klists</option>) changes the way
+kill lists are processed when merging indexes. By default, both
+kill lists get discarded after a merge. That supports the most typical
+main+delta merge scenario. With this option enabled, however, kill lists
+from both indexes get concatenated and stored into the destination index.
+Note that a source (delta) index kill list will be used to suppress rows
+from a destation (main) index at all times.
+</para></listitem>
+
 <listitem><para><option>--dump-rows &lt;FILE&gt;</option> dumps rows fetched
 by SQL source(s) into the specified file, in a MySQL compatible syntax.
 Resulting dumps are the exact representation of data as received by
@@ -3402,6 +3412,13 @@ rebuilding many big indexes, and want each one rotated into
 will send a SIGHUP signal to searchd after succesfully
 completing the work on each index. (The default behavior
 is to send a single SIGHUP after all the indexes were built.)
+</para></listitem>
+
+<listitem><para><option>--print-queries</option> prints out
+SQL queries that <filename>indexer</filename> sends to
+the database, along with SQL connection and disconnection
+events. That is useful to diagnose and fix problems with
+SQL sources.
 </para></listitem>
 
 <listitem><para><option>--print-queries</option> prints out
@@ -3484,16 +3501,12 @@ $ searchd --config /home/myuser/sphinx.conf --status
 </programlisting>
 </para></listitem>
 
-<listitem><para><option>--pidfile</option> is used to explicitly state a PID file,
-where the process information is stored regarding <filename>searchd</filename>,
-used for inter-process communications (for example, <filename>indexer</filename>
-will need to know the PID to contact <filename>searchd</filename> for rotating
-indexes). Normally, <filename>searchd</filename> would use a PID if running
-in regular mode (i.e. not with <option>--console</option>), but it is possible
-that you will be running it in console mode whilst the index is being updated
-and rotated, for which a PID file will be needed.
+<listitem><para><option>--pidfile</option> is used to explicitly force
+using a PID file (where the <filename>searchd</filename> process number
+is stored) despite any other debugging options that say otherwise
+(for instance, <option>--console</option>). This is a debugging option.
 <programlisting>
-$ searchd --config /home/myuser/sphinx.conf --pidfile /home/myuser/sphinx.pid
+$ searchd --console --pidfile
 </programlisting>
 </para></listitem>
 
@@ -3513,9 +3526,13 @@ $ searchd --config /home/myuser/sphinx.conf --console
 </programlisting>
 </para></listitem>
 
-<listitem><para><option>--logdebug</option> enables additional debug output
-in the daemon log. Should only be needed rarely, to assist with debugging
-issues that could not be easily reproduced on request.
+<listitem><para><option>--logdebug</option>, <option>--logdebugv</option>,
+and <option>--logdebugvv</option> options enable additional debug output
+in the daemon log. They differ by the logging verboseness level. These are
+debugging options, they pollute the log a lot, and thus they should
+<emphasis>not</emphasis> be normally enabled. (The normal use case for
+these is to enable them temporarily on request, to assist with some
+particularly complicated debugging session.)
 </para></listitem>
 
 <listitem><para><option>--iostats</option> is used in conjuction with the
@@ -3662,6 +3679,17 @@ on Windows platforms. It would not normally be necessary to call this directly;
 this would normally be called by Windows when the service would be started,
 although if you wanted to call this as a regular service from the command-line
 (as the complement to <option>--console</option>) you could do so in theory.
+</para></listitem>
+
+<listitem><para><option>--safetrace</option> forces <filename>searchd</filename>
+to only use system backtrace() call in crash reports. In certain (rare) scenarios,
+this might be a "safer" way to get that report. This is a debugging option.
+</para></listitem>
+
+<listitem><para><option>--nodetach</option> switch (Linux only) tells
+<filename>searchd</filename> not to detach into background. This will also
+cause log entry to be printed out to console. Query processing operates
+as usual. This is a debugging option.
 </para></listitem>
 
 </itemizedlist>
@@ -3963,6 +3991,13 @@ but checks disk chunks only.
 all the file names referenced from the index (stopwords, wordforms,
 exceptions, etc). This is useful for checking indexes built on another
 machine with possibly different path layouts.
+</para></listitem>
+<listitem><para><option>--optimize-rt-klists</option> optimizes
+the kill list memory use in the disk chunk of a given RT index. That
+is a one-off optimization intended for rather old RT indexes, created
+by development versions prior to 1.10-beta release. As of 1.10-beta
+releases, this kill list optimization (purging) should happen
+automatically, and there should never be a need to use this option.
 </para></listitem>
 </itemizedlist>
 </sect1>

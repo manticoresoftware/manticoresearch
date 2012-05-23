@@ -746,6 +746,16 @@ $ indexer mysmallindex mybigindex</programlisting>
         </varlistentry>
 
         <varlistentry>
+          <term><option>--safetrace</option></term>
+
+          <listitem>
+            <para>Forces <command>searchd</command> to only use system backtrace()
+            call in crash reports. In certain (rare) scenarios, this might be
+            a "safer" way to get that report. This is a debugging option.</para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
           <term><option>--status</option></term>
 
           <listitem>
@@ -1566,6 +1576,19 @@ zoning &gt; zoning </programlisting></para>
             from the index (stopwords, wordforms, exceptions, etc). This is
             useful for checking indexes built on another machine with possibly
             different path layouts.</para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><option>--optimize-rt-klists</option></term>
+
+          <listitem>
+            <para>optimizes the kill list memory use in the disk chunk of
+            a given RT index. That is a one-off optimization intended for
+            rather old RT indexes, created by development versions prior
+            to 1.10-beta release. As of 1.10-beta releases, this kill list
+            optimization (purging) should happen automatically, and there
+            should never be a need to use this option.</para>
           </listitem>
         </varlistentry>
       </variablelist>

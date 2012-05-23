@@ -8,7 +8,7 @@ searchd
 {
 	<searchd_settings/>
 	workers	= threads
-	thread_stack = 191K
+	thread_stack = 256K
 	binlog_path =
 }
 
@@ -78,6 +78,47 @@ else if ($res===false)
 else
 	$results[] = "total found ".mysql_num_rows ($res);
 
+// regression ext query crash on snippet generation
+$match = 'fast ';
+for ( $i=1; $i<1520; $i++ )
+        $match = $match . " | ( word word$i )";
+
+$query = "CALL SNIPPETS ( 'fast path word word1000', 'test', '$match', 1 as query_mode, 0 as limit )";
+$results[] = 'snippets fast-path ext query stack overflow';
+$res = mysql_query ( $query, $sock );
+if ($res===true)
+        $results[] = "total affected ".mysql_affected_rows($sock);
+else if ($res===false)
+        $results[] = "error ".@mysql_errno($sock)." : ".@mysql_error ($sock);
+else
+{
+        while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
+        {
+                $foo = array();
+                foreach ($row as $key => $value)
+                        $foo[$key] = $value;
+                $results[] = $foo;
+        }
+}
+
+$query = "CALL SNIPPETS ( 'not a fast path is going here word word1000 and might be others', 'test', '$match', 1 as query_mode, 40 as limit )";
+$results[] = 'snippets ext query stack overflow';
+$res = mysql_query ( $query, $sock );
+if ($res===true)
+        $results[] = "total affected ".mysql_affected_rows($sock);
+else if ($res===false)
+        $results[] = "error ".@mysql_errno($sock)." : ".@mysql_error ($sock);
+else
+{
+        while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
+        {
+                $foo = array();
+                foreach ($row as $key => $value)
+                        $foo[$key] = $value;
+                $results[] = $foo;
+        }
+}
+	
 ]]></custom_test>
 
 </test>

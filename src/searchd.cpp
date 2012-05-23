@@ -6767,7 +6767,7 @@ protected:
 	void							RunSubset ( int iStart, int iEnd );	///< run queries against index(es) from first query in the subset
 	void							RunLocalSearches ( ISphMatchSorter * pLocalSorter, const char * sDistName );
 	void							RunLocalSearchesMT ();
-	bool							RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters, CSphQueryResult ** pResults ) const;
+	bool							RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters, CSphQueryResult ** pResults, bool * pMulti ) const;
 	bool							HasExpresions ( int iStart, int iEnd ) const;
 
 	CSphVector<DWORD>				m_dMvaStorage;
@@ -7066,7 +7066,7 @@ void LocalSearchThreadFunc ( void * pArg )
 	ARRAY_FOREACH ( i, pContext->m_pSearches )
 	{
 		LocalSearch_t * pCall = pContext->m_pSearches[i];
-		pCall->m_bResult = pContext->m_pHandler->RunLocalSearch ( pCall->m_iLocal, pCall->m_ppSorters, pCall->m_ppResults );
+		pCall->m_bResult = pContext->m_pHandler->RunLocalSearch ( pCall->m_iLocal, pCall->m_ppSorters, pCall->m_ppResults, &pContext->m_pHandler->m_bMultiQueue );
 	}
 }
 
@@ -7266,7 +7266,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 }
 
 // invoked from MT searches. So, must be MT-aware!
-bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters, CSphQueryResult ** ppResults ) const
+bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters, CSphQueryResult ** ppResults, bool * pMulti ) const
 {
 	const int iQueries = m_iEnd-m_iStart+1;
 	const ServedIndex_t * pServed = UseIndex ( iLocal );
@@ -7277,6 +7277,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 	}
 	assert ( pServed->m_pIndex );
 	assert ( pServed->m_bEnabled );
+	assert ( pMulti );
 
 	// create sorters
 	int iValidSorters = 0;
@@ -7292,6 +7293,10 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 
 		if ( ppSorters[i] )
 			iValidSorters++;
+
+		// can't use multi-query for sorter with string attribute at group by or sort
+		if ( ppSorters[i] && *pMulti )
+			*pMulti = ppSorters[i]->CanMulti();
 	}
 	if ( !iValidSorters )
 	{
@@ -7322,7 +7327,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 	// do the query
 	bool bResult = false;
 	pServed->m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
-	if ( m_bMultiQueue )
+	if ( *pMulti )
 	{
 		bResult = pServed->m_pIndex->MultiQuery ( &m_dQueries[m_iStart], ppResults[0], iQueries, ppSorters, &dKlists );
 	} else
@@ -7392,10 +7397,11 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 				{
 					m_dFailuresSet[iQuery].Submit ( sLocal, sError.cstr() );
 					continue;
+				} else if ( m_bMultiQueue )
+				{
+					// can't use multi-query for sorter with string attribute at group by or sort
+					m_bMultiQueue = pSorter->CanMulti();
 				}
-				if ( !sError.IsEmpty() )
-					m_dFailuresSet[iQuery].Submit ( sLocal, sError.cstr() );
-
 				if ( !sError.IsEmpty() )
 					m_dFailuresSet[iQuery].Submit ( sLocal, sError.cstr() );
 			}
@@ -7439,7 +7445,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 		if ( m_bMultiQueue )
 		{
 			bResult = pServed->m_pIndex->MultiQuery ( &m_dQueries[m_iStart], &tStats,
-				dSorters.GetLength(), &dSorters[0], NULL );
+				dSorters.GetLength(), dSorters.Begin(), NULL );
 		} else
 		{
 			CSphVector<CSphQueryResult*> dResults ( m_dResults.GetLength() );
@@ -15526,7 +15532,13 @@ void ShowHelp ()
 		"--install\t\tinstall as Windows service\n"
 		"--delete\t\tdelete Windows service\n"
 		"--servicename <name>\tuse given service name (default is 'searchd')\n"
+		"--ntservice\t\tinternal option used to invoke a Windows service\n"
 #endif
+		"--strip-path\t\tstrip paths from stopwords, wordforms, exceptions\n"
+		"\t\t\tand other file names stored in the index header\n"
+		"--replay-flags=<OPTIONS>\n"
+		"\t\t\textra binary log replay options (the only current one\n"
+		"\t\t\tis 'accept-desc-timestamp')\n"
 		"\n"
 		"Debugging options are:\n"
 		"--console\t\trun in console mode (do not fork, do not log to files)\n"
@@ -15534,10 +15546,14 @@ void ShowHelp ()
 		"-l, --listen <spec>\tlisten on given address, port or path (overrides\n"
 		"\t\t\tconfig settings)\n"
 		"-i, --index <index>\tonly serve one given index\n"
-		"--logdebug\t\tenable additional debug information logging\n"
 #if !USE_WINDOWS
 		"--nodetach\t\tdo not detach into background\n"
 #endif
+		"--logdebug, --logdebugv, --logdebugvv\n"
+		"\t\t\tenable additional debug information logging\n"
+		"\t\t\t(with different verboseness)\n"
+		"--pidfile\t\tforce using the PID file (useful with --console)\n"
+		"--safetrace\t\tonly use system backtrace() call in crash reports\n"
 		"\n"
 		"Examples:\n"
 		"searchd --config /usr/local/sphinx/etc/sphinx.conf\n"
@@ -16595,7 +16611,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		OPT1 ( "--logdebugv" )		g_eLogLevel = SPH_LOG_VERBOSE_DEBUG;
 		OPT1 ( "--logdebugvv" )		g_eLogLevel = SPH_LOG_VERY_VERBOSE_DEBUG;
 		OPT1 ( "--safetrace" )		g_bSafeTrace = true;
-		OPT1 ( "--test" )			{ g_bWatchdog = false; bTestMode = true; }
+		OPT1 ( "--test" )			{ g_bWatchdog = false; bTestMode = true; } // internal option, do NOT document
 		OPT1 ( "--strip-path" )		g_bStripPath = true;
 
 		// FIXME! add opt=(csv)val handling here

@@ -2183,6 +2183,7 @@ public:
 	virtual const CSphSavedFile &	GetSynFileInfo () const											{ return m_pTokenizer->GetSynFileInfo (); }
 	virtual bool					EnableSentenceIndexing ( CSphString & sError )					{ return m_pTokenizer->EnableSentenceIndexing ( sError ); }
 	virtual bool					EnableZoneIndexing ( CSphString & sError )						{ return m_pTokenizer->EnableZoneIndexing ( sError ); }
+	virtual int						SkipBlended ()													{ return m_pTokenizer->SkipBlended(); }
 
 public:
 	virtual void					SetBuffer ( BYTE * sBuffer, int iLength );
@@ -5833,7 +5834,7 @@ bool CSphWriter::OpenFile ( const CSphString & sName, CSphString & sErrorBuffer 
 }
 
 
-void CSphWriter::SetFile ( int iFD, SphOffset_t * pSharedOffset )
+void CSphWriter::SetFile ( CSphAutofile & tAuto, SphOffset_t * pSharedOffset, CSphString & sError )
 {
 	assert ( m_iFD<0 && "already open" );
 	m_bOwnFile = false;
@@ -5841,12 +5842,15 @@ void CSphWriter::SetFile ( int iFD, SphOffset_t * pSharedOffset )
 	if ( !m_pBuffer )
 		m_pBuffer = new BYTE [ m_iBufferSize ];
 
-	m_iFD = iFD;
+	m_iFD = tAuto.GetFD();
+	m_sName = tAuto.GetFilename();
 	m_pPool = m_pBuffer;
 	m_iPoolUsed = 0;
 	m_iPos = 0;
 	m_iWritten = 0;
 	m_pSharedOffset = pSharedOffset;
+	m_pError = &sError;
+	assert ( m_pError );
 }
 
 
@@ -8440,7 +8444,7 @@ public:
 	CSphHitBuilder ( const CSphIndexSettings & tSettings, const CSphVector<SphWordID_t> & dHitless, bool bMerging, int iBufSize, CSphDict * pDict, CSphString * sError );
 	~CSphHitBuilder ();
 
-	bool	CreateIndexFiles ( const char * sDocName, const char * sHitName, bool bInplace, int iWriteBuffer, int iHitFD, SphOffset_t * pSharedOffset );
+	bool	CreateIndexFiles ( const char * sDocName, const char * sHitName, bool bInplace, int iWriteBuffer, CSphAutofile & tHit, SphOffset_t * pSharedOffset );
 	void	HitReset ();
 	void	cidxFinishDoclistEntry ( Hitpos_t uLastPos );
 	void	cidxHit ( CSphAggregateHit * pHit, const CSphRowitem * pAttrs );
@@ -8532,7 +8536,7 @@ void CSphHitBuilder::SetMin ( const CSphRowitem * pDynamic, int iDynamic )
 }
 
 
-bool CSphHitBuilder::CreateIndexFiles ( const char * sDocName, const char * sHitName, bool bInplace, int iWriteBuffer, int iHitFD, SphOffset_t * pSharedOffset )
+bool CSphHitBuilder::CreateIndexFiles ( const char * sDocName, const char * sHitName, bool bInplace, int iWriteBuffer, CSphAutofile & tHit, SphOffset_t * pSharedOffset )
 {
 	// doclist and hitlist files
 	m_wrDoclist.CloseFile ();
@@ -8548,8 +8552,8 @@ bool CSphHitBuilder::CreateIndexFiles ( const char * sDocName, const char * sHit
 
 	if ( bInplace )
 	{
-		sphSeek ( iHitFD, 0, SEEK_SET );
-		m_wrHitlist.SetFile ( iHitFD, pSharedOffset );
+		sphSeek ( tHit.GetFD(), 0, SEEK_SET );
+		m_wrHitlist.SetFile ( tHit, pSharedOffset, *m_pLastError );
 	} else
 	{
 		if ( !m_wrHitlist.OpenFile ( sHitName, *m_pLastError ) )
@@ -11275,7 +11279,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					sphWarn ( "failed to truncate %s", fdDocinfos.GetFilename() );
 		}
 		tMinMax.FinishCollect();
-		sphWriteThrottled ( iDocinfoFD, dMinMaxBuffer.Begin(), sizeof(DWORD) * tMinMax.GetActualSize(), "minmax_docinfo", m_sLastError, &g_tThrottle );
+		if ( !sphWriteThrottled ( iDocinfoFD, dMinMaxBuffer.Begin(), sizeof(DWORD) * tMinMax.GetActualSize(), "minmax_docinfo", m_sLastError, &g_tThrottle ) )
+			return 0;
 
 		// clean up readers
 		ARRAY_FOREACH ( i, dBins )
@@ -11361,14 +11366,14 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	// create new index files set
 	//////////////////////////////
 
-	tHitBuilder.CreateIndexFiles ( GetIndexFileName ( "spd" ).cstr(), GetIndexFileName ( "spp" ).cstr(), m_bInplaceSettings, iWriteBuffer, fdHits.GetFD(), &iSharedOffset );
+	tHitBuilder.CreateIndexFiles ( GetIndexFileName ( "spd" ).cstr(), GetIndexFileName ( "spp" ).cstr(), m_bInplaceSettings, iWriteBuffer, fdHits, &iSharedOffset );
 
 	// dict files
 	CSphAutofile fdTmpDict ( GetIndexFileName("tmp8"), SPH_O_NEW, m_sLastError, true );
 	CSphAutofile fdDict ( GetIndexFileName("spi"), SPH_O_NEW, m_sLastError, false );
 	if ( fdTmpDict.GetFD()<0 || fdDict.GetFD()<0 )
 		return 0;
-	m_pDict->DictBegin ( fdTmpDict.GetFD(), fdDict.GetFD(), iBinSize, &g_tThrottle );
+	m_pDict->DictBegin ( fdTmpDict, fdDict, iBinSize, &g_tThrottle );
 
 	// adjust min IDs, and fill header
 	assert ( m_iMinDocid>0 );
@@ -11955,7 +11960,8 @@ public:
 template < typename QWORDDST, typename QWORDSRC >
 bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, SphDocID_t iMinID, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle )
 {
-	pHitBuilder->CreateIndexFiles ( pDstIndex->GetIndexFileName("tmp.spd").cstr(), pDstIndex->GetIndexFileName("tmp.spp").cstr(), false, 0, -1, NULL );
+	CSphAutofile tDummy;
+	pHitBuilder->CreateIndexFiles ( pDstIndex->GetIndexFileName("tmp.spd").cstr(), pDstIndex->GetIndexFileName("tmp.spp").cstr(), false, 0, tDummy, NULL );
 
 	CSphDictReader tDstReader;
 	CSphDictReader tSrcReader;
@@ -12441,7 +12447,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	tBuildHeader.m_pMinRow = dMinRow.Begin();
 
 	// FIXME? is this magic dict block constant any good?..
-	pDict->DictBegin ( fdTmpDict.GetFD(), fdDict.GetFD(), iHitBufferSize, pThrottle );
+	pDict->DictBegin ( fdTmpDict, fdDict, iHitBufferSize, pThrottle );
 
 	// merge dictionaries, doclists and hitlists
 	if ( pDict->GetSettings().m_bWordDict )
@@ -16918,7 +16924,7 @@ enum
 // BASE DICTIONARY INTERFACE
 /////////////////////////////////////////////////////////////////////////////
 
-void CSphDict::DictBegin ( int, int, int, ThrottleState_t * )							{}
+void CSphDict::DictBegin ( CSphAutofile &, CSphAutofile &, int, ThrottleState_t * )							{}
 void CSphDict::DictEntry ( SphWordID_t, BYTE *, int, int, SphOffset_t, SphOffset_t )	{}
 void CSphDict::DictEndEntries ( SphOffset_t )											{}
 bool CSphDict::DictEnd ( DictHeader_t *, int, CSphString &, ThrottleState_t * )			{ return true; }
@@ -16977,7 +16983,7 @@ struct CSphDictCRCTraits : CSphDict
 
 	static void			SweepWordformContainers ( const CSphVector<CSphSavedFile> & dFiles );
 
-	virtual void DictBegin ( int iTmpDictFD, int iDictFD, int iDictLimit, ThrottleState_t * pThrottle );
+	virtual void DictBegin ( CSphAutofile & tTempDict, CSphAutofile & tDict, int iDictLimit, ThrottleState_t * pThrottle );
 	virtual void DictEntry ( SphWordID_t uWordID, BYTE * sKeyword, int iDocs, int iHits, SphOffset_t iDoclistOffset, SphOffset_t iDoclistLength );
 	virtual void DictEndEntries ( SphOffset_t iDoclistOffset );
 	virtual bool DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphString & sError, ThrottleState_t * );
@@ -17006,11 +17012,13 @@ protected:
 	CSphDict *			CloneBase ( CSphDictCRCTraits * pDict ) const;
 	virtual bool		HasState () const;
 
-	CSphWriter							m_wrDict;			///< final dict file writer
 	CSphTightVector<CSphWordlistCheckpoint>	m_dCheckpoints;		///< checkpoint offsets
-	int									m_iEntries;			///< dictionary entries stored
-	SphOffset_t							m_iLastDoclistPos;
-	SphWordID_t							m_iLastWordID;
+
+	CSphWriter			m_wrDict;			///< final dict file writer
+	CSphString			m_sWriterError;		///< writer error message storage
+	int					m_iEntries;			///< dictionary entries stored
+	SphOffset_t			m_iLastDoclistPos;
+	SphWordID_t			m_iLastWordID;
 
 private:
 	WordformContainer_t *		m_pWordforms;
@@ -18313,10 +18321,10 @@ bool CSphDictCRCTraits::StemById ( BYTE * pWord, int iStemmer )
 	return strcmp ( (char *)pWord, szBuf )!=0;
 }
 
-void CSphDictCRCTraits::DictBegin ( int, int iDictFD, int, ThrottleState_t * pThrottle )
+void CSphDictCRCTraits::DictBegin ( CSphAutofile & , CSphAutofile & tDict, int, ThrottleState_t * pThrottle )
 {
 	m_wrDict.CloseFile ();
-	m_wrDict.SetFile ( iDictFD, NULL );
+	m_wrDict.SetFile ( tDict, NULL, m_sWriterError );
 	m_wrDict.SetThrottle ( pThrottle );
 	m_wrDict.PutByte ( 1 );
 }
@@ -18337,7 +18345,7 @@ bool CSphDictCRCTraits::DictEnd ( DictHeader_t * pHeader, int, CSphString & sErr
 	m_wrDict.CloseFile ();
 
 	if ( m_wrDict.IsError() )
-		sError.SetSprintf ( "dictionary write error (out of space?)" );
+		sError = m_sWriterError;
 	return !m_wrDict.IsError();
 }
 
@@ -19083,7 +19091,7 @@ public:
 	virtual int				HitblockGetMemUse () { return m_iMemUse; }
 	virtual void			HitblockReset ();
 
-	virtual void			DictBegin ( int iTmpDictFD, int iDictFD, int iDictLimit, ThrottleState_t * pThrottle );
+	virtual void			DictBegin ( CSphAutofile & tTempDict, CSphAutofile & tDict, int iDictLimit, ThrottleState_t * pThrottle );
 	virtual void			DictEntry ( SphWordID_t uWordID, BYTE * sKeyword, int iDocs, int iHits, SphOffset_t iDoclistOffset, SphOffset_t iDoclistLength );
 	virtual void			DictEndEntries ( SphOffset_t ) {}
 	virtual bool			DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphString & sError, ThrottleState_t * pThrottle );
@@ -19378,15 +19386,15 @@ static void DictReadEntry ( CSphBin * pBin, DictKeywordTagged_t & tEntry, BYTE *
 	tEntry.m_uHint = (BYTE) pBin->ReadByte();
 }
 
-void CSphDictKeywords::DictBegin ( int iTmpDictFD, int iDictFD, int iDictLimit, ThrottleState_t * pThrottle )
+void CSphDictKeywords::DictBegin ( CSphAutofile & tTempDict, CSphAutofile & tDict, int iDictLimit, ThrottleState_t * pThrottle )
 {
-	m_iTmpFD = iTmpDictFD;
+	m_iTmpFD = tTempDict.GetFD();
 	m_wrTmpDict.CloseFile ();
-	m_wrTmpDict.SetFile ( iTmpDictFD, NULL );
+	m_wrTmpDict.SetFile ( tTempDict, NULL, m_sWriterError );
 	m_wrTmpDict.SetThrottle ( pThrottle );
 
 	m_wrDict.CloseFile ();
-	m_wrDict.SetFile ( iDictFD, NULL );
+	m_wrDict.SetFile ( tDict, NULL, m_sWriterError );
 	m_wrDict.SetThrottle ( pThrottle );
 	m_wrDict.PutByte ( 1 );
 

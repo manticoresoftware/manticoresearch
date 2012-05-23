@@ -2892,6 +2892,11 @@ static void HighlightAllFastpath ( const ExcerptQuery_t & tQuerySettings,
 		tQwordSetup.m_pWarning = &sError;
 		tQwordSetup.m_pZoneChecker = &tZoneChecker;
 
+		// got a lot of stack allocated variables (up to 30K)
+		// check that query not overflow stack here
+		if ( !sphCheckQueryHeight ( tContainer.m_tQuery.m_pRoot, sError ) )
+			return;
+
 		CSphScopedPtr<CSphHitMarker> pMarker ( CSphHitMarker::Create ( tContainer.m_tQuery.m_pRoot, tQwordSetup ) );
 		if ( !pMarker.Ptr() )
 			return;
@@ -3108,6 +3113,10 @@ void sphBuildExcerpt ( ExcerptQuery_t & tOptions, const CSphIndex * pIndex, cons
 	tSetup.m_eDocinfo = SPH_DOCINFO_EXTERN;
 	tSetup.m_pWarning = &sWarning;
 	tSetup.m_pZoneChecker = pZoneChecker.Ptr();
+
+	// check that query not overflow stack
+	if ( !sphCheckQueryHeight ( tExtQuery.m_pRoot, sError ) )
+		return;
 
 	CSphScopedPtr<CSphHitMarker> pMarker ( CSphHitMarker::Create ( tExtQuery.m_pRoot, tSetup ) );
 	if ( !pMarker.Ptr() )

@@ -42,7 +42,23 @@ public:
 	virtual void			GetLocator ( CSphAttrLocator & tOut ) const = 0;
 	virtual ESphAttr		GetResultType () const = 0;
 	virtual void			SetStringPool ( const BYTE * ) {}
+	virtual bool			CanMulti () const { return true; }
 };
+
+
+static bool HasString ( const CSphMatchComparatorState * pState )
+{
+	assert ( pState );
+
+	for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
+	{
+		if ( pState->m_eKeypart[i]==SPH_KEYPART_STRING )
+			return true;
+	}
+
+	return false;
+}
+
 
 
 /// match-sorting priority queue traits
@@ -87,6 +103,11 @@ public:
 	bool		UsesAttrs () const										{ return m_bUsesAttrs; }
 	virtual CSphMatch *	Finalize ()												{ return m_pData; }
 	virtual int			GetLength () const										{ return m_iUsed; }
+
+	virtual bool CanMulti () const
+	{
+		return !HasString ( &m_tState );
+	}
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -570,6 +591,8 @@ public:
 	{
 		m_pStringBase = pStrings;
 	}
+
+	virtual bool CanMulti () const { return false; }
 };
 
 
@@ -1246,6 +1269,20 @@ public:
 	/// check if this sorter does groupby
 	virtual bool IsGroupby () const
 	{
+		return true;
+	}
+
+	virtual bool CanMulti () const
+	{
+		if ( m_pGrouper && !m_pGrouper->CanMulti() )
+			return false;
+
+		if ( HasString ( &m_tState ) )
+			return false;
+
+		if ( HasString ( &m_tGroupSorter ) )
+			return false;
+
 		return true;
 	}
 
@@ -2307,9 +2344,12 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const CSphSchema & 
 		case SPH_GROUPBY_ATTR:
 		{
 			if ( eType!=SPH_ATTR_STRING )
+			{
 				tSettings.m_pGrouper = new CSphGrouperAttr ( tLoc );
-			else
+			} else
+			{
 				tSettings.m_pGrouper = sphCreateGrouperString ( tLoc, pQuery->m_eCollation );
+		}
 		}
 		break;
 		default:
@@ -3153,7 +3193,10 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	// now lets add @groupby etc if needed
 	if ( bGotGroupby && tSorterSchema.GetAttrIndex ( "@groupby" )<0 )
 	{
-		CSphColumnInfo tGroupby ( "@groupby", tSettings.m_pGrouper->GetResultType() );
+		ESphAttr eGroupByResult = tSettings.m_pGrouper->GetResultType();
+		if ( tSettings.m_bMva64 )
+			eGroupByResult = SPH_ATTR_BIGINT;
+		CSphColumnInfo tGroupby ( "@groupby", eGroupByResult );
 		CSphColumnInfo tCount ( "@count", SPH_ATTR_INTEGER );
 		CSphColumnInfo tDistinct ( "@distinct", SPH_ATTR_INTEGER );
 

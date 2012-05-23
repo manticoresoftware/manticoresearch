@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>blend_chars vs multiforms</name>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = \
+		SELECT 1, 'text' AS content UNION \
+		SELECT 2, '3+rd text' AS content UNION \
+		SELECT 3, '3-rd text' AS content UNION \
+		SELECT 4, '3@rd text' AS content
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+
+	charset_type	= utf-8
+	wordforms		= <this_test/>/wordforms.txt
+	blend_chars		= +, U+2D, @
+    min_word_len	= 2
+}
+</config>
+
+<db_insert>select 1;</db_insert>
+
+<sphqueries>
+<sphinxql>SELECT * FROM test WHERE MATCH('3+rd text')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<sphinxql>SELECT * FROM test WHERE MATCH('3-rd text')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<sphinxql>SELECT * FROM test WHERE MATCH('3\\@rd text')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+</sphqueries>
+
+</test>

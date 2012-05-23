@@ -682,6 +682,7 @@ struct CSphDictSettings
 
 /// abstract word dictionary interface
 struct CSphWordHit;
+class CSphAutofile;
 struct DictHeader_t;
 struct ThrottleState_t;
 struct CSphDict
@@ -772,7 +773,7 @@ public:
 
 public:
 	/// begin creating dictionary file, setup any needed internal structures
-	virtual void			DictBegin ( int iTmpDictFD, int iDictFD, int iDictLimit, ThrottleState_t * pThrottle );
+	virtual void			DictBegin ( CSphAutofile & tTempDict, CSphAutofile & tDict, int iDictLimit, ThrottleState_t * pThrottle );
 
 	/// add next keyword entry to final dict
 	virtual void			DictEntry ( SphWordID_t uWordID, BYTE * sKeyword, int iDocs, int iHits, SphOffset_t iDoclistOffset, SphOffset_t iDoclistLength );
@@ -2603,6 +2604,9 @@ public:
 
 	/// check if this sorter needs attr values
 	virtual bool		UsesAttrs () const = 0;
+
+	// check if sorter might be used in multi-queue
+	virtual bool		CanMulti () const = 0;
 
 	/// check if this sorter does groupby
 	virtual bool		IsGroupby () const = 0;

@@ -62,6 +62,24 @@ index mva_64
 	path			= <data_path/>/mva_64
 	charset_type 	= utf-8
 }
+
+source src_groupby_64
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT *, 1 as idd, 'dummy' as body FROM groupby_64
+	sql_attr_uint	= idd
+	sql_attr_multi = bigint mva1 from field
+}
+
+index groupby_64
+{
+	source			= src_groupby_64
+	path			= <data_path/>/groupby_64
+	charset_type 	= utf-8
+}
+
 </config>
 
 <sphqueries>
@@ -76,6 +94,10 @@ index mva_64
 <sphinxql><![CDATA[ select * from mva_64 where mva1<-10 ]]></sphinxql>
 <sphinxql><![CDATA[ select * from mva_64 where mva1<-1099511627775 ]]></sphinxql>
 <sphinxql><![CDATA[ select * from mva_64 where mva1>50099511627775 ]]></sphinxql>
+
+<!-- regression mva64 groupby was cut at 32bit -->
+<sphinxql>select * from groupby_64</sphinxql>
+<sphinxql>select * from groupby_64 group by mva1</sphinxql>
 </sphqueries>
 
 <queries>
@@ -138,6 +160,24 @@ INSERT INTO `mva_64` VALUES
 ( 200,	1,	'50099511627775	11099511627775	501099511627775	-2099511627775',	'dummy' ),
 ( 300,	2,	'-1099511627775	50099511627775	50099511627772	-2099511627771',	'dummy' ),
 ( 400,	2,	'-1099511627775	50099511627771	-1099511627775		55599511627775',	'dummy' )
+</db_insert>
+
+<db_create>
+CREATE TABLE `groupby_64`
+(
+	`id` int(11) NOT NULL default '0',
+	`mva1` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS `groupby_64`</db_drop>
+
+<db_insert>
+INSERT INTO `groupby_64` VALUES
+( 100,	'281474992439296' ),
+( 200,	'844424945860608' ),
+( 300,	'1970324852703232' ),
+( 400,	'281474992439296 	1970324852703232' )
 </db_insert>
 
 </test>

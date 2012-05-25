@@ -3102,6 +3102,7 @@ struct AgentConn_t : public AgentDesc_t
 
 	int64_t			m_iWall;		///< wall time spent vs this agent
 	int64_t			m_iWaited;		///< statistics of waited
+	int				m_iTag;			///< custom field-cookie.
 
 public:
 	AgentConn_t ()
@@ -3114,6 +3115,7 @@ public:
 		, m_pReplyBuf ( NULL )
 		, m_iWall ( 0 )
 		, m_iWaited ( 0 )
+		, m_iTag ( -1 )
 	{}
 
 	~AgentConn_t ()
@@ -3207,7 +3209,7 @@ static SmallStringHash_T < DistributedIndex_t >		g_hDistIndexes;
 struct IRequestBuilder_t : public ISphNoncopyable
 {
 	virtual ~IRequestBuilder_t () {} // to avoid gcc4 warns
-	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const = 0;
+	virtual void BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const = 0;
 };
 
 
@@ -3474,7 +3476,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 
 				// send request
 				NetOutputBuffer_c tOut ( tAgent.m_iSock );
-				pCtx->m_pBuilder->BuildRequest ( tAgent.m_sIndexes.cstr(), tOut );
+				pCtx->m_pBuilder->BuildRequest ( tAgent, tOut );
 				bool bFlushed = tOut.Flush (); // FIXME! handle flush failure?
 
 #ifdef	TCP_NODELAY
@@ -4093,7 +4095,7 @@ private:
 struct SearchRequestBuilder_t : public IRequestBuilder_t
 {
 						SearchRequestBuilder_t ( const CSphVector<CSphQuery> & dQueries, int iStart, int iEnd ) : m_dQueries ( dQueries ), m_iStart ( iStart ), m_iEnd ( iEnd ) {}
-	virtual void		BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const;
+	virtual void		BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
 
 protected:
 	int					CalcQueryLen ( const char * sIndexes, const CSphQuery & q ) const;
@@ -4266,8 +4268,9 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 }
 
 
-void SearchRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const
+void SearchRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const
 {
+	const char* sIndexes = tAgent.m_sIndexes.cstr();
 	int iReqLen = 8; // int num-queries
 	for ( int i=m_iStart; i<=m_iEnd; i++ )
 		iReqLen += CalcQueryLen ( sIndexes, m_dQueries[i] );
@@ -9121,7 +9124,7 @@ struct SnippetRequestBuilder_t : public IRequestBuilder_t
 	{
 		m_tWorkerMutex.Done();
 	}
-	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const;
+	virtual void BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
 
 private:
 	const SnippetsRemote_t * m_pWorker;
@@ -9137,18 +9140,16 @@ struct SnippetReplyParser_t : public IReplyParser_t
 {
 	explicit SnippetReplyParser_t ( SnippetsRemote_t * pWorker )
 		: m_pWorker ( pWorker )
-		, m_iWorker ( 0 )
 	{}
 
 	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const;
 
 private:
 	SnippetsRemote_t * m_pWorker;
-	mutable int m_iWorker;
 };
 
 
-void SnippetRequestBuilder_t::BuildRequest ( const char * sIndex, NetOutputBuffer_c & tOut ) const
+void SnippetRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const
 {
 	// it sends either all queries to each agent or sequence of queries to current agent
 	m_tWorkerMutex.Lock();
@@ -9158,6 +9159,9 @@ void SnippetRequestBuilder_t::BuildRequest ( const char * sIndex, NetOutputBuffe
 	const CSphVector<ExcerptQuery_t> & dQueries = m_pWorker->m_dQueries;
 	const ExcerptQuery_t & q = dQueries[0];
 	const SnippetWorker_t & tWorker = m_pWorker->m_dWorkers[iWorker];
+	tAgent.m_iTag = iWorker;
+
+	const char* sIndex = tAgent.m_sIndexes.cstr();
 
 	if ( m_iNumDocs < 0 )
 		m_bScattered = ( q.m_iLoadFiles & 2 )!=0;
@@ -9213,9 +9217,9 @@ void SnippetRequestBuilder_t::BuildRequest ( const char * sIndex, NetOutputBuffe
 		tOut.SendString ( dQueries[iDoc].m_sSource.cstr() );
 }
 
-bool SnippetReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
+bool SnippetReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent) const
 {
-	int iWorker = m_iWorker++;
+	int iWorker = tAgent.m_iTag;
 	CSphVector<ExcerptQuery_t> & dQueries = m_pWorker->m_dQueries;
 	const SnippetWorker_t & tWorker = m_pWorker->m_dWorkers[iWorker];
 
@@ -9939,7 +9943,7 @@ void HandleCommandKeywords ( int iSock, int iVer, InputBuffer_c & tReq )
 struct UpdateRequestBuilder_t : public IRequestBuilder_t
 {
 	explicit UpdateRequestBuilder_t ( const CSphAttrUpdate & pUpd ) : m_tUpd ( pUpd ) {}
-	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const;
+	virtual void BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
 
 protected:
 	const CSphAttrUpdate & m_tUpd;
@@ -9963,8 +9967,9 @@ protected:
 };
 
 
-void UpdateRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const
+void UpdateRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const
 {
+	const char* sIndexes = tAgent.m_sIndexes.cstr();
 	int iReqSize = 4+strlen(sIndexes); // indexes string
 	iReqSize += 4; // attrs array len, data
 	ARRAY_FOREACH ( i, m_tUpd.m_dAttrs )
@@ -11536,7 +11541,7 @@ struct SphinxqlRequestBuilder_t : public IRequestBuilder_t
 		, m_sEnd ( sQuery.cstr() + tStmt.m_iListEnd, sQuery.Length() - tStmt.m_iListEnd )
 	{
 	}
-	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const;
+	virtual void BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
 
 protected:
 	const CSphString m_sBegin;
@@ -11591,8 +11596,9 @@ protected:
 };
 
 
-void SphinxqlRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const
+void SphinxqlRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const
 {
+	const char* sIndexes = tAgent.m_sIndexes.cstr();
 	int iReqSize = strlen(sIndexes) + m_sBegin.Length() + m_sEnd.Length(); // indexes string
 
 	// header

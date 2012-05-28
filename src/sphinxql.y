@@ -28,6 +28,7 @@
 %token	TOK_BETWEEN
 %token	TOK_BY
 %token	TOK_CALL
+%token	TOK_CHARACTER
 %token	TOK_COLLATION
 %token	TOK_COMMIT
 %token	TOK_COMMITTED
@@ -137,6 +138,7 @@ statement:
 	| update
 	| show_variables
 	| show_collation
+	| show_character_set
 	| create_function
 	| drop_function
 	| attach_index
@@ -882,6 +884,13 @@ show_collation:
 		}
 	;
 
+show_character_set:
+	TOK_SHOW TOK_CHARACTER TOK_SET
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_CHARACTER_SET;
+		}
+	;
+	
 set_transaction:
 	TOK_SET opt_scope TOK_TRANSACTION TOK_ISOLATION TOK_LEVEL isolation_level
 		{

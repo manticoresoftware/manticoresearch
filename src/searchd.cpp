@@ -8166,6 +8166,7 @@ enum SqlStmt_e
 	STMT_TRUNCATE_RTINDEX,
 	STMT_SELECT_SYSVAR,
 	STMT_SHOW_COLLATION,
+	STMT_SHOW_CHARACTER_SET,
 	STMT_OPTIMIZE_INDEX,
 
 	STMT_TOTAL
@@ -9217,7 +9218,7 @@ void SnippetRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuff
 		tOut.SendString ( dQueries[iDoc].m_sSource.cstr() );
 }
 
-bool SnippetReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent) const
+bool SnippetReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const
 {
 	int iWorker = tAgent.m_iTag;
 	CSphVector<ExcerptQuery_t> & dQueries = m_pWorker->m_dQueries;
@@ -12733,6 +12734,8 @@ static const char * LogLevelName ( ESphLogLevel eLevel )
 
 void HandleMysqlShowVariables ( const SqlStmt_t &, NetOutputBuffer_c & tOut, BYTE uPacketID, SqlRowBuffer_c & dRows, SessionVars_t & tVars )
 {
+	char sTmp[SPH_MAX_NUMERIC_STR];
+
 	// result set header packet
 	tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
 	tOut.SendByte ( 2 ); // field count (level+code+message)
@@ -12753,6 +12756,8 @@ void HandleMysqlShowVariables ( const SqlStmt_t &, NetOutputBuffer_c & tOut, BYT
 	// server vars
 	SendMysqlPair ( tOut, uPacketID, dRows, "query_log_format", g_eLogFormat==LOG_FORMAT_PLAIN ? "plain" : "sphinxql" );
 	SendMysqlPair ( tOut, uPacketID, dRows, "log_level", LogLevelName ( g_eLogLevel ) );
+	snprintf ( sTmp, sizeof(sTmp), "%d", g_iMaxPacketSize );
+	SendMysqlPair ( tOut, uPacketID, dRows, "max_allowed_packet", sTmp );
 
 	// cleanup
 	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
@@ -12993,7 +12998,7 @@ public:
 			// field packets
 			SendMysqlFieldPacket ( tOut, uPacketID++, "Collation", MYSQL_COL_STRING );
 			SendMysqlFieldPacket ( tOut, uPacketID++, "Charset", MYSQL_COL_STRING );
-			SendMysqlFieldPacket ( tOut, uPacketID++, "Id", MYSQL_COL_LONG );
+			SendMysqlFieldPacket ( tOut, uPacketID++, "Id", MYSQL_COL_LONGLONG );
 			SendMysqlFieldPacket ( tOut, uPacketID++, "Default", MYSQL_COL_STRING );
 			SendMysqlFieldPacket ( tOut, uPacketID++, "Compiled", MYSQL_COL_STRING );
 			SendMysqlFieldPacket ( tOut, uPacketID++, "Sortlen", MYSQL_COL_STRING );
@@ -13002,11 +13007,38 @@ public:
 			// data packets
 			dRows.Reset();
 			dRows.PutString ( "utf8_general_ci" );
-			dRows.PutString ( "utf8" );
+			dRows.PutString ( "utf-8" );
 			dRows.PutString ( "33" );
 			dRows.PutString ( "Yes" );
 			dRows.PutString ( "Yes" );
 			dRows.PutString ( "1" );
+			tOut.SendLSBDword ( ((uPacketID++)<<24) + ( dRows.Length() ) );
+			tOut.SendBytes ( dRows.Off ( 0 ), dRows.Length() );
+
+			// done
+			dRows.Reset();
+			SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+			return;
+
+		case STMT_SHOW_CHARACTER_SET:
+			// MySQL Connector/J really expects an answer here
+			tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
+			tOut.SendByte ( 4 ); // field count (charset+description+default+maxlen)
+			tOut.SendByte ( 0 ); // extra
+
+			// field packets
+			SendMysqlFieldPacket ( tOut, uPacketID++, "Charset", MYSQL_COL_STRING );
+			SendMysqlFieldPacket ( tOut, uPacketID++, "Description", MYSQL_COL_STRING );
+			SendMysqlFieldPacket ( tOut, uPacketID++, "Default collation", MYSQL_COL_STRING );
+			SendMysqlFieldPacket ( tOut, uPacketID++, "Maxlen", MYSQL_COL_STRING );
+			SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+
+			// data packets
+			dRows.Reset();
+			dRows.PutString ( "utf8" );
+			dRows.PutString ( "UTF-8 Unicode" );
+			dRows.PutString ( "utf8_general_ci" );
+			dRows.PutString ( "3" );
 			tOut.SendLSBDword ( ((uPacketID++)<<24) + ( dRows.Length() ) );
 			tOut.SendBytes ( dRows.Off ( 0 ), dRows.Length() );
 
@@ -13093,13 +13125,19 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 		// we want interruptible calls here, so that shutdowns could be honoured
 		THD_STATE ( THD_NET_READ );
 		if ( !tIn.ReadFrom ( 4, INTERACTIVE_TIMEOUT, true ) )
+		{
+			sphLogDebugv ( "conn %s("INT64_FMT"): bailing on failed MySQL header (sockerr=%s)", sClientIP, iCID, sphSockError() );
 			break;
+		}
 
 		const int MAX_PACKET_LEN = 0xffffffL; // 16777215 bytes, max low level packet size
 		DWORD uPacketHeader = tIn.GetLSBDword ();
 		int iPacketLen = ( uPacketHeader & MAX_PACKET_LEN );
 		if ( !tIn.ReadFrom ( iPacketLen, INTERACTIVE_TIMEOUT, true ) )
+		{
+			sphWarning ( "failed to receive MySQL request body (client=%s("INT64_FMT"), exp=%d, error='%s')", sClientIP, iCID, iPacketLen, sphSockError() );
 			break;
+		}
 
 		// handle it!
 		uPacketID = 1 + (BYTE)( uPacketHeader>>24 ); // client will expect this id
@@ -13112,13 +13150,17 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 			do
 			{
 				if ( !tIn2.ReadFrom ( 4, INTERACTIVE_TIMEOUT, true ) )
+				{
+					sphLogDebugv ( "conn %s("INT64_FMT"): bailing on failed MySQL header2 (sockerr=%s)", sClientIP, iCID, sphSockError() );
 					break;
+				}
 
 				DWORD uAddon = tIn2.GetLSBDword();
 				uPacketID = 1 + (BYTE)( uAddon>>24 );
 				iAddonLen = ( uAddon & MAX_PACKET_LEN );
 				if ( !tIn.ReadFrom ( iAddonLen, INTERACTIVE_TIMEOUT, true, true ) )
 				{
+					sphWarning ( "failed to receive MySQL request body2 (client=%s("INT64_FMT"), exp=%d, error='%s')", sClientIP, iCID, iAddonLen, sphSockError() );
 					iAddonLen = -1;
 					break;
 				}

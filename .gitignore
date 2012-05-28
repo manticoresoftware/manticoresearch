@@ -1,0 +1,46 @@
+# /
+/Makefile
+/config.status
+/config.log
+/sphinx-min.conf.dist
+/sphinx.conf.dist
+/bin
+/junk
+/*.suo
+/*.ncb
+/.hg
+
+# /api/libsphinxclient/
+/api/libsphinxclient/*.ncb
+/api/libsphinxclient/*.suo
+/api/libsphinxclient/*.user
+/api/libsphinxclient/debug
+/api/libsphinxclient/release
+
+# /codeblocks/
+/codeblocks/junk
+/codeblocks/bin
+/codeblocks/*.depend
+/codeblocks/*.layout
+
+# /config/
+/config/stamp-h1
+/config/config.h
+
+# /libstemmer_c/
+/libstemmer_c/Makefile
+/libstemmer_c/.deps
+
+# /src/
+/src/indexer
+/src/indextool
+/src/search
+/src/searchd
+/src/spelldump
+/src/tests
+/src/Makefile
+/src/.deps
+/src/sphinxversion.h
+
+# /win/
+/win/*.user

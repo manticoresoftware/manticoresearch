@@ -8,4 +8,6 @@ if exist %1\.svn (
 	if exist %REVFILE% for /f "delims=" %%a in (%REVFILE%) do set oldfile=%%a
 	for /f %%i in ('hg id') do set newfile=#define SPH_SVN_TAGREV "%%i"
 	if "!newfile!" neq "!oldfile!" echo !newfile!> %REVFILE%
+) else if exist %1\.git (
+	perl %1\src\gitxrev.pl %REVFILE%
 )

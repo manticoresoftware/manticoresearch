@@ -2259,6 +2259,61 @@ void TestWildcards()
 
 //////////////////////////////////////////////////////////////////////////
 
+void TestLog2()
+{
+	printf ( "testing integer log2 implementation... " );
+	assert ( sphLog2(1)==1 );
+	assert ( sphLog2(2)==2 );
+	assert ( sphLog2(3)==2 );
+	assert ( sphLog2(4)==3 );
+	assert ( sphLog2(5)==3 );
+	assert ( sphLog2(6)==3 );
+	assert ( sphLog2(7)==3 );
+	assert ( sphLog2(8)==4 );
+	assert ( sphLog2(9)==4 );
+	assert ( sphLog2(10)==4 );
+	assert ( sphLog2(65535)==16 );
+	assert ( sphLog2(65536)==17 );
+	assert ( sphLog2(0xffffffffUL)==32 );
+	assert ( sphLog2(0x100000000ULL)==33 );
+	assert ( sphLog2(0x100000001ULL)==33 );
+	assert ( sphLog2(0x1ffffffffULL)==33 );
+	assert ( sphLog2(0x200000000ULL)==34 );
+	assert ( sphLog2(0xffffffffffffffffULL)==64 );
+	assert ( sphLog2(0xfffffffffffffffeULL)==64 );
+	assert ( sphLog2(0xefffffffffffffffULL)==64 );
+	assert ( sphLog2(0x7fffffffffffffffULL)==63 );
+	printf ( "ok\n" );
+}
+
+void BenchLog2()
+{
+	printf ( "benchmarking rand... " );
+
+	const int NRUNS = 100*1000*1000;
+	volatile int iRes = 0;
+	int64_t t;
+	
+	sphSrand ( 0 );
+	t = sphMicroTimer();
+	for ( int i=0; i<NRUNS; i++ )
+		iRes += sphRand();
+	t = sphMicroTimer() - t;
+	printf ( "%d msec, res %d\n", int(t/1000), iRes );
+
+	printf ( "benchmarking rand+log2... " );
+	sphSrand ( 0 );
+	t = sphMicroTimer();
+	for ( int i=0; i<NRUNS; i++ )
+		iRes += sphLog2(sphRand());
+	t = sphMicroTimer() - t;
+	printf ( "%d msec, res %d\n", int(t/1000), iRes );
+
+	exit(0);
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 int main ()
 {
 	// threads should be initialized before memory allocations
@@ -2279,6 +2334,7 @@ int main ()
 	BenchExpr ();
 	BenchLocators ();
 	BenchThreads ();
+	BenchLog2();
 #else
 	TestQueryParser ();
 	TestStripper ();
@@ -2295,6 +2351,7 @@ int main ()
 	TestSentenceTokenizer ();
 	TestSpanSearch ();
 	TestWildcards();
+	TestLog2();
 #endif
 
 	unlink ( g_sTmpfile );

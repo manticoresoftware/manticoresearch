@@ -86,6 +86,9 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 #define NOMINMAX
 #include <windows.h>
 
+#include <intrin.h> // for bsr
+#pragma intrinsic(_BitScanReverse)
+
 #define strcasecmp			strcmpi
 #define strncasecmp			_strnicmp
 #define snprintf			_snprintf
@@ -245,15 +248,27 @@ void			sphDie ( const char * sMessage, ... ) __attribute__ ( ( format ( printf, 
 void			sphSetDieCallback ( SphDieCallback_t pfDieCallback );
 
 /// how much bits do we need for given int
-inline int		sphLog2 ( uint64_t iValue )
+inline int sphLog2 ( uint64_t uValue )
 {
+#if USE_WINDOWS
+	DWORD uRes;
+	if ( BitScanReverse ( &uRes, DWORD(uValue>>32) ) )
+		return 33+uRes;
+	BitScanReverse ( &uRes, DWORD(uValue) );
+	return 1+uRes;
+#elif __GNUC__
+	if ( !uValue )
+		return 0;
+	return 64 - __builtin_clzl(uValue);
+#else
 	int iBits = 0;
-	while ( iValue )
+	while ( uValue )
 	{
-		iValue >>= 1;
+		uValue >>= 1;
 		iBits++;
 	}
 	return iBits;
+#endif
 }
 
 /// float vs dword conversion

@@ -7144,7 +7144,7 @@ int CSphArena::RawAlloc ( int iBytes )
 	if ( iBytes<=0 || iBytes>( ( 1 << MAX_BITS ) - (int)sizeof(int) ) )
 		return -1;
 
-	int iSizeBits = sphLog2 ( iBytes+sizeof(int)-1 ); // always reserve sizeof(int) for the tag; NOLINT
+	int iSizeBits = sphLog2 ( iBytes+3 ); // always reserve 4 bytes aka sizeof(int) for the tag
 	iSizeBits = Max ( iSizeBits, MIN_BITS );
 	assert ( iSizeBits>=MIN_BITS && iSizeBits<=MAX_BITS );
 

@@ -3147,19 +3147,6 @@ public:
 		return sName;
 	}
 
-/*	AgentConn_t & operator = ( const MetaAgentDesc_t & rhs )
-	{
-		m_pAgent->m_sHost = rhs.m_pAgent->m_sHost;
-		m_pAgent->m_iPort = rhs.m_pAgent->m_iPort;
-		m_pAgent->m_sPath = rhs.m_pAgent->m_sPath;
-		m_pAgent->m_sIndexes = rhs.m_pAgent->m_sIndexes;
-		m_pAgent->m_bBlackhole = rhs.m_pAgent->m_bBlackhole;
-		m_pAgent->m_iFamily = rhs.m_pAgent->m_iFamily;
-		m_pAgent->m_uAddr = rhs.m_pAgent->m_uAddr;
-		m_pAgent->m_iStatsIndex = rhs.m_pAgent->m_iStatsIndex;
-		return *this;
-	} */
-
 	AgentConn_t & operator = ( const AgentDesc_t & rhs )
 	{
 		m_sHost = rhs.m_sHost;

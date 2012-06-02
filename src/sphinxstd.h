@@ -252,7 +252,7 @@ inline int sphLog2 ( uint64_t uValue )
 {
 #if USE_WINDOWS
 	DWORD uRes;
-	if ( BitScanReverse ( &uRes, DWORD(uValue>>32) ) )
+	if ( BitScanReverse ( &uRes, (DWORD)( uValue>>32 ) ) )
 		return 33+uRes;
 	BitScanReverse ( &uRes, DWORD(uValue) );
 	return 1+uRes;

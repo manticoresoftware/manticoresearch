@@ -5088,26 +5088,26 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLa
 
 			assert ( pEndHits->m_uDocid==uCur );
 
-			/* load all the pairs of start and end hits for it
-			 do it by with the FSM:
-			
-			 state 'begin':
-					start marker -> set state 'inspan', startspan=pos++
-					end marker -> pos++
-					end of doc -> set state 'finish'
-			
-			 state 'inspan':
-					start marker -> startspan = pos++
-					end marker -> set state 'outspan', endspan=pos++
-					end of doc -> set state 'finish'
-			
-			 state 'outspan':
-					start marker -> set state 'inspan', commit span, startspan=pos++
-					end marker -> endspan = pos++
-					end of doc -> set state 'finish', commit span
-			
-			 state 'finish':
-					we are done. */
+			// load all the pairs of start and end hits for it
+			// do it by with the FSM:
+			//
+			// state 'begin':
+			// - start marker -> set state 'inspan', startspan=pos++
+			// - end marker -> pos++
+			// - end of doc -> set state 'finish'
+			//
+			// state 'inspan':
+			// - start marker -> startspan = pos++
+			// - end marker -> set state 'outspan', endspan=pos++
+			// - end of doc -> set state 'finish'
+			//
+			// state 'outspan':
+			// - start marker -> set state 'inspan', commit span, startspan=pos++
+			// - end marker -> endspan = pos++
+			// - end of doc -> set state 'finish', commit span
+			//
+			// state 'finish':
+			// - we are done.
 
 			int bEofDoc = 0;
 

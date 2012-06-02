@@ -252,7 +252,8 @@ public:
 	void Check ( bool bRoot )
 	{
 		assert ( bRoot || !IsEmpty() ); // empty leaves must be removed from the final tree; empty root is allowed
-		assert (!( m_dWords.GetLength() && m_eOp!=SPH_QUERY_AND && m_eOp!=SPH_QUERY_PHRASE && m_eOp!=SPH_QUERY_PROXIMITY && m_eOp!=SPH_QUERY_QUORUM )); // words are only allowed in these node types
+		assert (!( m_dWords.GetLength() && m_eOp!=SPH_QUERY_AND && m_eOp!=SPH_QUERY_PHRASE
+			&& m_eOp!=SPH_QUERY_PROXIMITY && m_eOp!=SPH_QUERY_QUORUM )); // words are only allowed in these node types
 		assert (!( m_dWords.GetLength()==1 && m_eOp!=SPH_QUERY_AND )); // 1-word leaves must be of AND type
 
 		ARRAY_FOREACH ( i, m_dChildren )

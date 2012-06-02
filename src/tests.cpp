@@ -463,7 +463,8 @@ void BenchTokenizer ( bool bUTF8 )
 		iTokens /= iPasses;
 		tmTime /= iPasses;
 
-		printf ( "run %d: %d bytes, %d tokens, %d.%03d ms, %.3f MB/sec\n", iRun, iData, iTokens, (int)(tmTime/1000), (int)(tmTime%1000), float(iData)/tmTime );
+		printf ( "run %d: %d bytes, %d tokens, %d.%03d ms, %.3f MB/sec\n", iRun, iData, iTokens,
+			(int)(tmTime/1000), (int)(tmTime%1000), float(iData)/tmTime );
 		SafeDeleteArray ( sData );
 	}
 }

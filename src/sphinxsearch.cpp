@@ -716,7 +716,7 @@ protected:
 	SphDocID_t					m_uHitsOverFor;			///< there are no more hits for matches block starting with this ID
 
 protected:
-	inline void					ConstructNode ( const CSphVector<ExtNode_i *> & dNodes, const CSphVector<WORD> & dPositions, const ISphQwordSetup & tSetup )
+	inline void ConstructNode ( const CSphVector<ExtNode_i *> & dNodes, const CSphVector<WORD> & dPositions, const ISphQwordSetup & tSetup )
 	{
 		assert ( m_pNode==NULL );
 		WORD uLPos = dPositions[0];
@@ -4357,7 +4357,8 @@ void ExtOrder_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtUnit_c::ExtUnit_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const CSphSmallBitvec& uFields, const ISphQwordSetup & tSetup, const char * sUnit )
+ExtUnit_c::ExtUnit_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const CSphSmallBitvec& uFields,
+	const ISphQwordSetup & tSetup, const char * sUnit )
 {
 	m_pArg1 = pFirst;
 	m_pArg2 = pSecond;
@@ -5562,8 +5563,12 @@ struct RankerState_ProximityBM25Exact_fn
 		if ( iDelta==m_iExpDelta && HITMAN::GetLCS ( pHlist->m_uHitpos )>=m_uMinExpPos )
 		{
 			m_uCurLCS = m_uCurLCS + BYTE(pHlist->m_uWeight);
-			if ( HITMAN::IsEnd ( pHlist->m_uHitpos ) && (int)pHlist->m_uQuerypos==m_iMaxQuerypos && HITMAN::GetPos ( pHlist->m_uHitpos )==m_iMaxQuerypos )
+			if ( HITMAN::IsEnd ( pHlist->m_uHitpos )
+				&& (int)pHlist->m_uQuerypos==m_iMaxQuerypos
+				&& HITMAN::GetPos ( pHlist->m_uHitpos )==m_iMaxQuerypos )
+			{
 				m_uExactHit |= ( 1UL << HITMAN::GetField ( pHlist->m_uHitpos ) );
+			}
 		} else
 		{
 			m_uCurLCS = BYTE(pHlist->m_uWeight);
@@ -6443,7 +6448,8 @@ static bool HasQwordDupes ( XQNode_t * pNode )
 }
 
 
-ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, CSphQueryResult * pResult, const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx )
+ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, CSphQueryResult * pResult,
+	const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx )
 {
 	// shortcut
 	const CSphIndex * pIndex = tTermSetup.m_pIndex;

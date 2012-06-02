@@ -1081,7 +1081,8 @@ static void FixupDegenerates ( XQNode_t * pNode )
 	if ( !pNode )
 		return;
 
-	if ( pNode->m_dWords.GetLength()==1 && ( pNode->GetOp()==SPH_QUERY_PHRASE || pNode->GetOp()==SPH_QUERY_PROXIMITY || pNode->GetOp()==SPH_QUERY_QUORUM ) )
+	if ( pNode->m_dWords.GetLength()==1 &&
+		( pNode->GetOp()==SPH_QUERY_PHRASE || pNode->GetOp()==SPH_QUERY_PROXIMITY || pNode->GetOp()==SPH_QUERY_QUORUM ) )
 	{
 		pNode->SetOp ( SPH_QUERY_AND );
 		return;
@@ -1092,7 +1093,8 @@ static void FixupDegenerates ( XQNode_t * pNode )
 }
 
 
-bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings )
+bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer,
+	const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings )
 {
 	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone ( true ) );
 	pMyTokenizer->AddSpecials ( "()|-!@~\"/^$<" );
@@ -1224,7 +1226,8 @@ static void xqDump ( XQNode_t * pNode, int iIndent )
 #endif
 
 
-bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings )
+bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer,
+	const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings )
 {
 	XQParser_t qp;
 	bool bRes = qp.Parse ( tParsed, sQuery, pTokenizer, pSchema, pDict, tSettings );

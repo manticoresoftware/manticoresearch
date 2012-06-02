@@ -746,7 +746,8 @@ static inline ISphFilter * ReportError ( CSphString & sError, const char * sMess
 }
 
 
-static ISphFilter * CreateFilter ( ESphAttr eAttrType, ESphFilter eFilterType, int iNumValues, const CSphAttrLocator & tLoc, CSphString & sError )
+static ISphFilter * CreateFilter ( ESphAttr eAttrType, ESphFilter eFilterType, int iNumValues,
+	const CSphAttrLocator & tLoc, CSphString & sError )
 {
 	// MVA
 	if ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET )
@@ -796,7 +797,8 @@ static ISphFilter * CreateFilter ( ESphAttr eAttrType, ESphFilter eFilterType, i
 	}
 }
 
-ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const CSphSchema & tSchema, const DWORD * pMvaPool, CSphString & sError )
+ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const CSphSchema & tSchema,
+	const DWORD * pMvaPool, CSphString & sError )
 {
 	ISphFilter * pFilter = 0;
 

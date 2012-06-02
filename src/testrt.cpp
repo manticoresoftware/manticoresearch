@@ -187,11 +187,13 @@ int main ( int argc, char ** argv )
 
 	ISphTokenizer * pTok = sphCreateUTF8Tokenizer();
 	CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt1" );
-	CSphSource * pSrc = SpawnSource ( "SELECT id, channel_id, UNIX_TIMESTAMP(published) published, title, UNCOMPRESS(content) content FROM posting WHERE id<=10000 AND id%2=0", pTok, pDict );
+	CSphSource * pSrc = SpawnSource ( "SELECT id, channel_id, UNIX_TIMESTAMP(published) published, "
+		"title, UNCOMPRESS(content) content FROM posting WHERE id<=10000 AND id%2=0", pTok, pDict );
 
 	ISphTokenizer * pTok2 = sphCreateUTF8Tokenizer();
 	CSphDict * pDict2 = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt2" );
-	CSphSource * pSrc2 = SpawnSource ( "SELECT id, channel_id, UNIX_TIMESTAMP(published) published, title, UNCOMPRESS(content) content FROM posting WHERE id<=10000 AND id%2=1", pTok2, pDict2 );
+	CSphSource * pSrc2 = SpawnSource ( "SELECT id, channel_id, UNIX_TIMESTAMP(published) published, "
+		"title, UNCOMPRESS(content) content FROM posting WHERE id<=10000 AND id%2=1", pTok2, pDict2 );
 
 	CSphSchema tSrcSchema;
 	if ( !pSrc->UpdateSchema ( &tSrcSchema, sError ) )
@@ -225,7 +227,8 @@ int main ( int argc, char ** argv )
 
 #if 0
 	// update
-	tParams.m_sQuery = "SELECT id, channel_id, UNIX_TIMESTAMP(published) published, title, UNCOMPRESS(content) content FROM rt2 WHERE id<=10000";
+	tParams.m_sQuery = "SELECT id, channel_id, UNIX_TIMESTAMP(published) published, title, "
+		"UNCOMPRESS(content) content FROM rt2 WHERE id<=10000";
 	SetupIndexing ( pSrc, tParams );
 	DoIndexing ( pSrc, pIndex );
 #endif

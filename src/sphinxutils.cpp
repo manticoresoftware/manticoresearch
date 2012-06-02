@@ -569,7 +569,8 @@ bool CSphConfigParser::ValidateKey ( const char * sKey )
 	// warn about deprecate keys
 	if ( pDesc->m_iFlags & KEY_DEPRECATED )
 		if ( ++m_iWarnings<=WARNS_THRESH )
-			fprintf ( stdout, "WARNING: key '%s' is deprecated in %s line %d; use '%s' instead.\n", sKey, m_sFileName.cstr(), m_iLine, pDesc->m_sExtra );
+			fprintf ( stdout, "WARNING: key '%s' is deprecated in %s line %d; use '%s' instead.\n",
+				sKey, m_sFileName.cstr(), m_iLine, pDesc->m_sExtra );
 
 	// warn about list/non-list keys
 	if (!( pDesc->m_iFlags & KEY_LIST ))
@@ -854,7 +855,18 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 			if ( isspace(*p) )				continue;
 			if ( *p=='#' )					{ LOC_PUSH ( S_SKIP2NL ); continue; }
 			if ( !sToken[0] )				{ LOC_ERROR ( "internal error (empty token in S_TYPE)" ); }
-			if ( IsPlainSection(sToken) )	{ if ( !AddSection ( sToken, sToken ) ) break; sToken[0] = '\0'; LOC_POP (); LOC_PUSH ( S_SEC ); LOC_PUSH ( S_CHR ); iCh = '{'; LOC_BACK(); continue; }
+			if ( IsPlainSection(sToken) )
+			{
+				if ( !AddSection ( sToken, sToken ) )
+					break;
+				sToken[0] = '\0';
+				LOC_POP();
+				LOC_PUSH ( S_SEC );
+				LOC_PUSH ( S_CHR );
+				iCh = '{';
+				LOC_BACK();
+				continue;
+			}
 			if ( IsNamedSection(sToken) )	{ m_sSectionType = sToken; sToken[0] = '\0'; LOC_POP (); LOC_PUSH ( S_SECNAME ); LOC_BACK(); continue; }
 											LOC_ERROR2 ( "invalid section type '%s'", sToken );
 		}
@@ -1765,7 +1777,8 @@ void sphBacktrace ( int iFD, bool bSafe )
 
 			if ( pFramePointer > (BYTE**) pMyStack || pFramePointer < (BYTE**) pMyStack - iStackSize )
 			{
-				sphSafeInfo ( iFD, "Wrong stack limit or frame pointer, backtrace failed (fp=%p, stack=%p, stacksize=%d)", pFramePointer, pMyStack, iStackSize );
+				sphSafeInfo ( iFD, "Wrong stack limit or frame pointer, backtrace failed (fp=%p, stack=%p, stacksize=%d)",
+					pFramePointer, pMyStack, iStackSize );
 				break;
 			}
 		}

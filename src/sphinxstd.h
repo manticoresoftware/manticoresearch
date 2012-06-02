@@ -1929,7 +1929,8 @@ public:
 		if ( m_pData==MAP_FAILED )
 		{
 			if ( m_iLength>0x7fffffffUL )
-				sError.SetSprintf ( "mmap() failed: %s (length="INT64_FMT" is over 2GB, impossible on some 32-bit systems)", strerror(errno), (int64_t)m_iLength );
+				sError.SetSprintf ( "mmap() failed: %s (length="INT64_FMT" is over 2GB, impossible on some 32-bit systems)",
+					strerror(errno), (int64_t)m_iLength );
 			else
 				sError.SetSprintf ( "mmap() failed: %s (length="INT64_FMT")", strerror(errno), (int64_t)m_iLength );
 			m_iLength = 0;

@@ -1674,9 +1674,11 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 
 #if USE_WINDOWS
 	// mini-dump reference
-	int iMiniDumpLen = snprintf ( (char *)g_dCrashQueryBuff, sizeof(g_dCrashQueryBuff), "%s %s.%p.mdmp\n", g_sMinidumpBanner, g_sMinidump, tQuery.m_pQuery );
+	int iMiniDumpLen = snprintf ( (char *)g_dCrashQueryBuff, sizeof(g_dCrashQueryBuff),
+		"%s %s.%p.mdmp\n", g_sMinidumpBanner, g_sMinidump, tQuery.m_pQuery );
 	sphWrite ( g_iLogFile, g_dCrashQueryBuff, iMiniDumpLen );
-	snprintf ( (char *)g_dCrashQueryBuff, sizeof(g_dCrashQueryBuff), "%s.%p.mdmp", g_sMinidump, tQuery.m_pQuery );
+	snprintf ( (char *)g_dCrashQueryBuff, sizeof(g_dCrashQueryBuff), "%s.%p.mdmp",
+		g_sMinidump, tQuery.m_pQuery );
 #endif
 
 	// log trace
@@ -1728,7 +1730,8 @@ void SphCrashLogger_c::SetupTimePID ()
 	char sTimeBuf[SPH_TIME_PID_MAX_SIZE];
 	sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
 
-	g_iCrashInfoLen = snprintf ( g_sCrashInfo, SPH_TIME_PID_MAX_SIZE-1, "------- FATAL: CRASH DUMP -------\n[%s] [%5d]\n", sTimeBuf, (int)getpid() );
+	g_iCrashInfoLen = snprintf ( g_sCrashInfo, SPH_TIME_PID_MAX_SIZE-1,
+		"------- FATAL: CRASH DUMP -------\n[%s] [%5d]\n", sTimeBuf, (int)getpid() );
 }
 
 void SphCrashLogger_c::SetupTLS ()
@@ -2309,11 +2312,23 @@ public:
 			return SendDword ( DWORD(iValue) );
 		}
 	bool		SendDword ( DWORD iValue )		{ return SendT<DWORD> ( htonl ( iValue ) ); }
-	bool		SendLSBDword ( DWORD v )		{ SendByte ( (BYTE)( v&0xff ) ); SendByte ( (BYTE)( (v>>8)&0xff ) ); SendByte ( (BYTE)( (v>>16)&0xff ) ); return SendByte ( (BYTE)( (v>>24)&0xff) ); }
 	bool		SendWord ( WORD iValue )		{ return SendT<WORD> ( htons ( iValue ) ); }
-	bool		SendUint64 ( uint64_t iValue )	{ SendT<DWORD> ( htonl ( (DWORD)(iValue>>32) ) ); return SendT<DWORD> ( htonl ( (DWORD)(iValue&0xffffffffUL) ) ); }
 	bool		SendFloat ( float fValue )		{ return SendT<DWORD> ( htonl ( sphF2DW ( fValue ) ) ); }
 	bool		SendByte ( BYTE uValue )		{ return SendT<BYTE> ( uValue ); }
+
+	bool SendLSBDword ( DWORD v )
+	{
+		SendByte ( (BYTE)( v & 0xff ) );
+		SendByte ( (BYTE)( (v>>8) & 0xff ) );
+		SendByte ( (BYTE)( (v>>16) & 0xff ) );
+		return SendByte ( (BYTE)( (v>>24) & 0xff) );
+	}
+
+	bool SendUint64 ( uint64_t iValue )
+	{
+		SendT<DWORD> ( htonl ( (DWORD)(iValue>>32) ) );
+		return SendT<DWORD> ( htonl ( (DWORD)(iValue & 0xffffffffUL) ) );
+	}
 
 #if USE_64BIT
 	bool		SendDocid ( SphDocID_t iValue )	{ return SendUint64 ( iValue ); }
@@ -3630,7 +3645,8 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 					// check the packet
 					if ( tReplyHeader.m_iLength<0 || tReplyHeader.m_iLength>g_iMaxPacketSize ) // FIXME! add reasonable max packet len too
 					{
-						tAgent.m_sFailure.SetSprintf ( "invalid packet size (status=%d, len=%d, max_packet_size=%d)", tReplyHeader.m_iStatus, tReplyHeader.m_iLength, g_iMaxPacketSize );
+						tAgent.m_sFailure.SetSprintf ( "invalid packet size (status=%d, len=%d, max_packet_size=%d)",
+							tReplyHeader.m_iStatus, tReplyHeader.m_iLength, g_iMaxPacketSize );
 						AGENT_STATS_INC ( tAgent, m_iWrongReplies );
 						break;
 					}
@@ -4000,7 +4016,8 @@ void ThdWorkSequental ( AgentWorkContext_t * pCtx )
 class CSphRemoteAgentsController : ISphNoncopyable
 {
 public:
-	CSphRemoteAgentsController ( int iThreads, CSphVector<AgentConn_t> & dAgents, const IRequestBuilder_t & tBuilder, int iTimeout, int iRetryMax=0, int iDelay=0 )
+	CSphRemoteAgentsController ( int iThreads, CSphVector<AgentConn_t> & dAgents,
+		const IRequestBuilder_t & tBuilder, int iTimeout, int iRetryMax=0, int iDelay=0 )
 		: m_tWorkerPool ( dAgents.GetLength() )
 	{
 		assert ( dAgents.GetLength() );
@@ -4081,7 +4098,10 @@ private:
 
 struct SearchRequestBuilder_t : public IRequestBuilder_t
 {
-						SearchRequestBuilder_t ( const CSphVector<CSphQuery> & dQueries, int iStart, int iEnd ) : m_dQueries ( dQueries ), m_iStart ( iStart ), m_iEnd ( iEnd ) {}
+	SearchRequestBuilder_t ( const CSphVector<CSphQuery> & dQueries, int iStart, int iEnd )
+		: m_dQueries ( dQueries ), m_iStart ( iStart ), m_iEnd ( iEnd )
+	{}
+
 	virtual void		BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
 
 protected:
@@ -5705,7 +5725,8 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 }
 
 
-void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pRes, const CSphVector<PoolPtrs_t> & dTag2Pools, bool bExtendedStat )
+void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pRes,
+	const CSphVector<PoolPtrs_t> & dTag2Pools, bool bExtendedStat )
 {
 	// status
 	if ( iVer>=0x10D )
@@ -6096,7 +6117,8 @@ void RemapResult ( CSphSchema * pTarget, AggrResult_t * pRes, bool bMultiSchema=
 }
 
 // rebuild the results itemlist expanding stars
-const CSphVector<CSphQueryItem> * ExpandAsterisk ( const CSphSchema & tSchema, const CSphVector<CSphQueryItem> & tItems, CSphVector<CSphQueryItem> * pExpanded, bool bNoID=false )
+const CSphVector<CSphQueryItem> * ExpandAsterisk ( const CSphSchema & tSchema,
+	const CSphVector<CSphQueryItem> & tItems, CSphVector<CSphQueryItem> * pExpanded, bool bNoID=false )
 {
 	// the result schema usually is the index schema + calculated items + @-items
 	// we need to extract the index schema only - so, look at the items
@@ -6260,7 +6282,8 @@ static void RecoverAggregateFunctions ( const CSphQuery & tQuery, const AggrResu
 }
 
 
-bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHadLocalIndexes, CSphSchema* pExtraSchema, bool bFromSphinxql=false )
+bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHadLocalIndexes,
+	CSphSchema * pExtraSchema, bool bFromSphinxql = false )
 {
 	// sanity check
 	int iExpected = 0;
@@ -7056,12 +7079,15 @@ void LocalSearchThreadFunc ( void * pArg )
 	ARRAY_FOREACH ( i, pContext->m_pSearches )
 	{
 		LocalSearch_t * pCall = pContext->m_pSearches[i];
-		pCall->m_bResult = pContext->m_pHandler->RunLocalSearch ( pCall->m_iLocal, pCall->m_ppSorters, pCall->m_ppResults, &pContext->m_pHandler->m_bMultiQueue );
+		pCall->m_bResult = pContext->m_pHandler->RunLocalSearch ( pCall->m_iLocal,
+			pCall->m_ppSorters, pCall->m_ppResults, &pContext->m_pHandler->m_bMultiQueue );
 	}
 }
 
 
-static void MergeWordStats ( CSphQueryResultMeta & tDstResult, const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hSrc, SearchFailuresLog_c * pLog, const char * sIndex )
+static void MergeWordStats ( CSphQueryResultMeta & tDstResult,
+	const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hSrc,
+	SearchFailuresLog_c * pLog, const char * sIndex )
 {
 	assert ( pLog );
 
@@ -7580,7 +7606,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			( qCheck.m_iCutoff!=qFirst.m_iCutoff ) || // cutoff
 			( qCheck.m_eSort==SPH_SORT_EXPR && qFirst.m_eSort==SPH_SORT_EXPR && qCheck.m_sSortBy!=qFirst.m_sSortBy ) || // sort expressions
 			( qCheck.m_bGeoAnchor!=qFirst.m_bGeoAnchor ) || // geodist expression
-			( qCheck.m_bGeoAnchor && qFirst.m_bGeoAnchor && ( qCheck.m_fGeoLatitude!=qFirst.m_fGeoLatitude || qCheck.m_fGeoLongitude!=qFirst.m_fGeoLongitude ) ) ) // some geodist cases
+			( qCheck.m_bGeoAnchor && qFirst.m_bGeoAnchor
+				&& ( qCheck.m_fGeoLatitude!=qFirst.m_fGeoLatitude || qCheck.m_fGeoLongitude!=qFirst.m_fGeoLongitude ) ) ) // some geodist cases
 		{
 			m_bMultiQueue = false;
 			break;
@@ -7771,7 +7798,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	if ( bDist && dAgents.GetLength() )
 	{
 		tReqBuilder = new SearchRequestBuilder_t ( m_dQueries, iStart, iEnd );
-		tDistCtrl = new CSphRemoteAgentsController ( g_iDistThreads, dAgents, *tReqBuilder.Ptr(), iAgentConnectTimeout, tFirst.m_iRetryCount, tFirst.m_iRetryDelay );
+		tDistCtrl = new CSphRemoteAgentsController ( g_iDistThreads, dAgents,
+			*tReqBuilder.Ptr(), iAgentConnectTimeout, tFirst.m_iRetryCount, tFirst.m_iRetryDelay );
 	}
 
 	/////////////////////
@@ -7820,9 +7848,13 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 					// copy errors or warnings
 					if ( !tRemoteResult.m_sError.IsEmpty() )
-						m_dFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes.cstr(), "agent %s: remote query error: %s", tAgent.GetName().cstr(), tRemoteResult.m_sError.cstr() );
+						m_dFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes.cstr(),
+							"agent %s: remote query error: %s",
+							tAgent.GetName().cstr(), tRemoteResult.m_sError.cstr() );
 					if ( !tRemoteResult.m_sWarning.IsEmpty() )
-						m_dFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes.cstr(), "agent %s: remote query warning: %s", tAgent.GetName().cstr(), tRemoteResult.m_sWarning.cstr() );
+						m_dFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes.cstr(),
+							"agent %s: remote query warning: %s",
+							tAgent.GetName().cstr(), tRemoteResult.m_sWarning.cstr() );
 
 					if ( tRemoteResult.m_iSuccesses<=0 )
 						continue;
@@ -8418,7 +8450,8 @@ void yyerror ( SqlParser_c * pParser, const char * sMessage )
 	yylex_unhold ( pParser->m_pScanner );
 
 	// create our error message
-	pParser->m_pParseError->SetSprintf ( "sphinxql: %s near '%s'", sMessage, pParser->m_pLastTokenStart ? pParser->m_pLastTokenStart : "(null)" );
+	pParser->m_pParseError->SetSprintf ( "sphinxql: %s near '%s'", sMessage,
+		pParser->m_pLastTokenStart ? pParser->m_pLastTokenStart : "(null)" );
 
 	// fixup TOK_xxx thingies
 	char * s = const_cast<char*> ( pParser->m_pParseError->cstr() );
@@ -9264,7 +9297,9 @@ static bool SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPos
 }
 
 
-static bool SetupStripperSPZ ( const CSphIndexSettings & tSettings, const ExcerptQuery_t & q, bool bSetupSPZ, CSphScopedPtr<CSphHTMLStripper> & tStripper, ISphTokenizer * pTokenizer, CSphString & sError )
+static bool SetupStripperSPZ ( const CSphIndexSettings & tSettings, const ExcerptQuery_t & q,
+	bool bSetupSPZ, CSphScopedPtr<CSphHTMLStripper> & tStripper, ISphTokenizer * pTokenizer,
+	CSphString & sError )
 {
 	if ( bSetupSPZ &&
 		( !pTokenizer->EnableSentenceIndexing ( sError ) || !pTokenizer->EnableZoneIndexing ( sError ) ) )
@@ -9307,7 +9342,8 @@ static bool SetupStripperSPZ ( const CSphIndexSettings & tSettings, const Excerp
 }
 
 
-static CSphDict * SetupExactDict ( const CSphIndexSettings & tSettings, const ExcerptQuery_t & q, CSphScopedPtr<CSphDict> & tExact, CSphDict * pDict, ISphTokenizer * pTokenizer )
+static CSphDict * SetupExactDict ( const CSphIndexSettings & tSettings, const ExcerptQuery_t & q,
+	CSphScopedPtr<CSphDict> & tExact, CSphDict * pDict, ISphTokenizer * pTokenizer )
 {
 	// handle index_exact_words
 	if ( !( q.m_bHighlightQuery && tSettings.m_bIndexExactWords ) )
@@ -9382,7 +9418,8 @@ public:
 
 		if ( tSettings.m_bHighlightQuery )
 		{
-			if ( !sphParseExtendedQuery ( m_tExtQuery, tSettings.m_sWords.cstr(), m_pQueryTokenizer, &pIndex->GetMatchSchema(), m_pDict, pIndex->GetSettings() ) )
+			if ( !sphParseExtendedQuery ( m_tExtQuery, tSettings.m_sWords.cstr(), m_pQueryTokenizer,
+				&pIndex->GetMatchSchema(), m_pDict, pIndex->GetSettings() ) )
 			{
 				sError = m_tExtQuery.m_sParseError;
 				return false;
@@ -9674,7 +9711,8 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 		{
 			// connect to remote agents and query them
 			tReqBuilder = new SnippetRequestBuilder_t ( &dRemoteSnippets );
-			tDistCtrl = new CSphRemoteAgentsController ( g_iDistThreads, dRemoteSnippets.m_dAgents, *tReqBuilder.Ptr(), dRemoteSnippets.m_iAgentConnectTimeout );
+			tDistCtrl = new CSphRemoteAgentsController ( g_iDistThreads, dRemoteSnippets.m_dAgents,
+				*tReqBuilder.Ptr(), dRemoteSnippets.m_iAgentConnectTimeout );
 		}
 
 		SnippetThreadFunc ( &dThreads[0] );
@@ -10610,7 +10648,8 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 		assert ( iLength>=0 && iLength<=g_iMaxPacketSize );
 		if ( iLength && !tBuf.ReadFrom ( iLength ) )
 		{
-			sphWarning ( "failed to receive client request body (client=%s("INT64_FMT"), exp=%d, error='%s')", sClientIP, iCID, iLength, sphSockError() );
+			sphWarning ( "failed to receive client request body (client=%s("INT64_FMT"), exp=%d, error='%s')",
+				sClientIP, iCID, iLength, sphSockError() );
 			return;
 		}
 
@@ -10748,7 +10787,8 @@ enum MysqlErrors_e
 };
 
 
-void SendMysqlErrorPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char * sStmt, const char * sError, MysqlErrors_e iErr=MYSQL_ERR_PARSE_ERROR )
+void SendMysqlErrorPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char * sStmt,
+	const char * sError, MysqlErrors_e iErr = MYSQL_ERR_PARSE_ERROR )
 {
 	if ( sError==NULL )
 		sError = "(null)";
@@ -10849,7 +10889,8 @@ struct CmpColumns_fn
 };
 
 
-void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE uPacketID, bool bReplace, bool bCommit, CSphString & sWarning )
+void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE uPacketID,
+	bool bReplace, bool bCommit, CSphString & sWarning )
 {
 	MEMORY ( SPH_MEM_INSERT_SQL );
 
@@ -11890,7 +11931,8 @@ bool HandleMysqlSelect ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SearchHandl
 }
 
 
-void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowBuffer_c & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow )
+void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowBuffer_c & dRows,
+	const AggrResult_t & tRes, bool bMoreResultsFollow )
 {
 	if ( !tRes.m_iSuccesses )
 	{
@@ -12103,7 +12145,8 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 }
 
 
-void HandleMysqlWarning ( NetOutputBuffer_c & tOut, BYTE & uPacketID, const CSphQueryResultMeta & tLastMeta, SqlRowBuffer_c & dRows, bool bMoreResultsFollow )
+void HandleMysqlWarning ( NetOutputBuffer_c & tOut, BYTE & uPacketID, const CSphQueryResultMeta & tLastMeta,
+	SqlRowBuffer_c & dRows, bool bMoreResultsFollow )
 {
 	// can't send simple ok if there are more results to send
 	// as it breaks order of multi-result output
@@ -12139,7 +12182,8 @@ void HandleMysqlWarning ( NetOutputBuffer_c & tOut, BYTE & uPacketID, const CSph
 }
 
 
-void HandleMysqlMeta ( NetOutputBuffer_c & tOut, BYTE & uPacketID, const CSphQueryResultMeta & tLastMeta, SqlRowBuffer_c & dRows, bool bStatus, bool bMoreResultsFollow )
+void HandleMysqlMeta ( NetOutputBuffer_c & tOut, BYTE & uPacketID, const CSphQueryResultMeta & tLastMeta,
+	SqlRowBuffer_c & dRows, bool bStatus, bool bMoreResultsFollow )
 {
 	CSphVector<CSphString> dStatus;
 
@@ -12844,7 +12888,8 @@ public:
 			m_tLastMeta = CSphQueryResultMeta();
 			m_tLastMeta.m_sError = m_sError;
 			m_tLastMeta.m_sWarning = "";
-			HandleMysqlInsert ( *pStmt, tOut, uPacketID, eStmt==STMT_REPLACE, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tLastMeta.m_sWarning );
+			HandleMysqlInsert ( *pStmt, tOut, uPacketID, eStmt==STMT_REPLACE,
+				m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tLastMeta.m_sWarning );
 			return;
 
 		case STMT_DELETE:
@@ -13122,7 +13167,8 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 		int iPacketLen = ( uPacketHeader & MAX_PACKET_LEN );
 		if ( !tIn.ReadFrom ( iPacketLen, INTERACTIVE_TIMEOUT, true ) )
 		{
-			sphWarning ( "failed to receive MySQL request body (client=%s("INT64_FMT"), exp=%d, error='%s')", sClientIP, iCID, iPacketLen, sphSockError() );
+			sphWarning ( "failed to receive MySQL request body (client=%s("INT64_FMT"), exp=%d, error='%s')",
+				sClientIP, iCID, iPacketLen, sphSockError() );
 			break;
 		}
 
@@ -13138,7 +13184,8 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 			{
 				if ( !tIn2.ReadFrom ( 4, INTERACTIVE_TIMEOUT, true ) )
 				{
-					sphLogDebugv ( "conn %s("INT64_FMT"): bailing on failed MySQL header2 (sockerr=%s)", sClientIP, iCID, sphSockError() );
+					sphLogDebugv ( "conn %s("INT64_FMT"): bailing on failed MySQL header2 (sockerr=%s)",
+						sClientIP, iCID, sphSockError() );
 					break;
 				}
 
@@ -13147,7 +13194,8 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 				iAddonLen = ( uAddon & MAX_PACKET_LEN );
 				if ( !tIn.ReadFrom ( iAddonLen, INTERACTIVE_TIMEOUT, true, true ) )
 				{
-					sphWarning ( "failed to receive MySQL request body2 (client=%s("INT64_FMT"), exp=%d, error='%s')", sClientIP, iCID, iAddonLen, sphSockError() );
+					sphWarning ( "failed to receive MySQL request body2 (client=%s("INT64_FMT"), exp=%d, error='%s')",
+						sClientIP, iCID, iAddonLen, sphSockError() );
 					iAddonLen = -1;
 					break;
 				}
@@ -14813,11 +14861,13 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 			// SENTENCE indexing w\o stripper is valid combination
 			if ( *sIndexZones )
 			{
-				sphWarning ( "ERROR: index '%s': has index_sp=%d, index_zones='%s' but disabled html_strip - NOT SERVING", szIndexName, iIndexSP, sIndexZones );
+				sphWarning ( "ERROR: index '%s': has index_sp=%d, index_zones='%s' but disabled html_strip - NOT SERVING",
+					szIndexName, iIndexSP, sIndexZones );
 				return ADD_ERROR;
 			} else
 			{
-				sphWarning ( "index '%s': has index_sp=%d but disabled html_strip - PARAGRAPH unavailable", szIndexName, iIndexSP );
+				sphWarning ( "index '%s': has index_sp=%d but disabled html_strip - PARAGRAPH unavailable",
+					szIndexName, iIndexSP );
 			}
 		}
 
@@ -14921,8 +14971,9 @@ bool CheckConfigChanges ()
 	DWORD uCRC32 = 0;
 	sphCalcFileCRC32 ( g_sConfigFile.cstr (), uCRC32 );
 
-	if ( g_uCfgCRC32==uCRC32 && tStat.st_mtime==g_tCfgStat.st_mtime && tStat.st_ctime==g_tCfgStat.st_ctime && tStat.st_size==g_tCfgStat.st_size )
-		return false;
+	if ( g_uCfgCRC32==uCRC32 && tStat.st_size==g_tCfgStat.st_size
+		&& tStat.st_mtime==g_tCfgStat.st_mtime && tStat.st_ctime==g_tCfgStat.st_ctime )
+			return false;
 
 	g_uCfgCRC32 = uCRC32;
 	g_tCfgStat = tStat;
@@ -15768,14 +15819,17 @@ bool SetWatchDog ( int iDevNull )
 #endif
 					)
 				{
-					sphInfo ( "Child process %d has been killed with kill or sigterm (%i). Watchdog finishes also. Good bye!", iPid, WTERMSIG ( iStatus ) );
+					sphInfo ( "Child process %d has been killed with kill or sigterm (%i). Watchdog finishes also. Good bye!",
+						iPid, WTERMSIG ( iStatus ) );
 					bShutdown = true;
 				} else
 				{
 					if ( WCOREDUMP ( iStatus ) )
-						sphInfo ( "Child process %i has been killed with signal %i, core dumped, %s", iPid, WTERMSIG ( iStatus ), sWillRestart );
+						sphInfo ( "Child process %i has been killed with signal %i, core dumped, %s",
+							iPid, WTERMSIG ( iStatus ), sWillRestart );
 					else
-						sphInfo ( "Child process %i has been killed with signal %i, %s", iPid, WTERMSIG ( iStatus ), sWillRestart );
+						sphInfo ( "Child process %i has been killed with signal %i, %s",
+							iPid, WTERMSIG ( iStatus ), sWillRestart );
 					iReincarnate = -1;
 				}
 			} else if ( WIFSTOPPED ( iStatus ) )
@@ -16587,7 +16641,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	char szPipeName[64];
 	snprintf ( szPipeName, sizeof(szPipeName), "\\\\.\\pipe\\searchd_%d", getpid() );
-	g_hPipe = CreateNamedPipe ( szPipeName, PIPE_ACCESS_INBOUND, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_NOWAIT, PIPE_UNLIMITED_INSTANCES, 0, WIN32_PIPE_BUFSIZE, NMPWAIT_NOWAIT, NULL );
+	g_hPipe = CreateNamedPipe ( szPipeName, PIPE_ACCESS_INBOUND,
+		PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_NOWAIT,
+		PIPE_UNLIMITED_INSTANCES, 0, WIN32_PIPE_BUFSIZE, NMPWAIT_NOWAIT, NULL );
 	ConnectNamedPipe ( g_hPipe, NULL );
 #endif
 

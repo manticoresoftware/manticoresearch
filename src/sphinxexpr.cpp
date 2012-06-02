@@ -389,7 +389,11 @@ struct Expr_Crc32_c : public Expr_Unary_c
 {
 	explicit Expr_Crc32_c ( ISphExpr * pFirst ) { m_pFirst = pFirst; }
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
-	virtual int IntEval ( const CSphMatch & tMatch ) const { const BYTE * pStr; return sphCRC32 ( pStr, m_pFirst->StringEval ( tMatch, &pStr ) ); }
+	virtual int IntEval ( const CSphMatch & tMatch ) const
+	{
+		const BYTE * pStr;
+		return sphCRC32 ( pStr, m_pFirst->StringEval ( tMatch, &pStr ) );
+	}
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return IntEval ( tMatch ); }
 };
 
@@ -628,25 +632,57 @@ DECLARE_BINARY_POLY ( Expr_Or,		FIRST!=0.0f || SECOND!=0.0f,		IFINT ( INTFIRST |
 
 //////////////////////////////////////////////////////////////////////////
 
+/// boring base stuff
+struct ExprThreeway_c : public ISphExpr
+{
+	ISphExpr * m_pFirst;
+	ISphExpr * m_pSecond;
+	ISphExpr * m_pThird;
+
+	ExprThreeway_c ( ISphExpr * pFirst, ISphExpr * pSecond, ISphExpr * pThird )
+		: m_pFirst ( pFirst )
+		, m_pSecond ( pSecond )
+		, m_pThird ( pThird )
+	{}
+
+	~ExprThreeway_c()
+	{
+		SafeRelease ( m_pFirst );
+		SafeRelease ( m_pSecond );
+		SafeRelease ( m_pThird );
+	}
+
+	virtual void SetMVAPool ( const DWORD * pMvaPool )
+	{
+		m_pFirst->SetMVAPool ( pMvaPool );
+		m_pSecond->SetMVAPool ( pMvaPool );
+		m_pThird->SetMVAPool ( pMvaPool );
+	}
+
+	virtual void SetStringPool ( const BYTE * pStrings )
+	{
+		m_pFirst->SetStringPool ( pStrings );
+		m_pSecond->SetStringPool ( pStrings );
+		m_pThird->SetStringPool ( pStrings );
+	}
+
+	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
+	{
+		m_pFirst->GetDependencyColumns ( dColumns );
+		m_pSecond->GetDependencyColumns ( dColumns );
+		m_pThird->GetDependencyColumns ( dColumns );
+	}
+};
+
 #define DECLARE_TERNARY(_classname,_expr,_expr2,_expr3) \
-	struct _classname : public ISphExpr \
+	struct _classname : public ExprThreeway_c \
 	{ \
-		ISphExpr * m_pFirst; \
-		ISphExpr * m_pSecond; \
-		ISphExpr * m_pThird; \
-		_classname ( ISphExpr * pFirst, ISphExpr * pSecond, ISphExpr * pThird ) : m_pFirst ( pFirst ), m_pSecond ( pSecond ), m_pThird ( pThird ) {} \
-		~_classname () { SafeRelease ( m_pFirst ); SafeRelease ( m_pSecond ); SafeRelease ( m_pThird ); } \
-		virtual void SetMVAPool ( const DWORD * pMvaPool ) { m_pFirst->SetMVAPool ( pMvaPool ); m_pSecond->SetMVAPool ( pMvaPool ); m_pThird->SetMVAPool ( pMvaPool ); } \
-		virtual void SetStringPool ( const BYTE * pStrings ) { m_pFirst->SetStringPool ( pStrings ); m_pSecond->SetStringPool ( pStrings ); m_pThird->SetStringPool ( pStrings ); } \
+		_classname ( ISphExpr * pFirst, ISphExpr * pSecond, ISphExpr * pThird ) \
+			: ExprThreeway_c ( pFirst, pSecond, pThird ) {} \
+		\
 		virtual float Eval ( const CSphMatch & tMatch ) const { return _expr; } \
 		virtual int IntEval ( const CSphMatch & tMatch ) const { return _expr2; } \
 		virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return _expr3; } \
-		virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const \
-		{ \
-			m_pFirst->GetDependencyColumns ( dColumns ); \
-			m_pSecond->GetDependencyColumns ( dColumns ); \
-			m_pThird->GetDependencyColumns ( dColumns ); \
-		} \
 	};
 
 DECLARE_TERNARY ( Expr_If_c,	( FIRST!=0.0f ) ? SECOND : THIRD,	INTFIRST ? INTSECOND : INTTHIRD,	INT64FIRST ? INT64SECOND : INT64THIRD )
@@ -976,7 +1012,8 @@ struct ExprNode_t
 	int				m_iLeft;
 	int				m_iRight;
 
-	ExprNode_t () : m_iToken ( 0 ), m_eRetType ( SPH_ATTR_NONE ), m_eArgType ( SPH_ATTR_NONE ), m_iLocator ( -1 ), m_iLeft ( -1 ), m_iRight ( -1 ) {}
+	ExprNode_t () : m_iToken ( 0 ), m_eRetType ( SPH_ATTR_NONE ), m_eArgType ( SPH_ATTR_NONE ),
+		m_iLocator ( -1 ), m_iLeft ( -1 ), m_iRight ( -1 ) {}
 
 	float FloatVal() const
 	{
@@ -1756,7 +1793,11 @@ public:
 
 	virtual void SetMVAPool ( const DWORD * pPool ) { ARRAY_FOREACH ( i, m_dArgs ) m_dArgs[i]->SetMVAPool ( pPool ); }
 	virtual void SetStringPool ( const BYTE * pPool ) { ARRAY_FOREACH ( i, m_dArgs ) m_dArgs[i]->SetStringPool ( pPool ); }
-	virtual void GetDependencyColumns ( CSphVector<int> & dDeps ) const { ARRAY_FOREACH ( i, m_dArgs ) m_dArgs[i]->GetDependencyColumns ( dDeps ); }
+	virtual void GetDependencyColumns ( CSphVector<int> & dDeps ) const
+	{
+		ARRAY_FOREACH ( i, m_dArgs )
+			m_dArgs[i]->GetDependencyColumns ( dDeps );
+	}
 };
 
 
@@ -1848,7 +1889,9 @@ ISphExpr * ExprParser_t::CreateExistNode ( const ExprNode_t & tNode )
 		iNameStart++;
 		iNameLen--;
 	}
-	while ( m_sExpr[iNameStart+iNameLen-1]!='\0' && ( m_sExpr[iNameStart+iNameLen-1]=='\'' || m_sExpr[iNameStart+iNameLen-1]==' ' ) && iNameLen )
+	while ( m_sExpr[iNameStart+iNameLen-1]!='\0'
+		&& ( m_sExpr[iNameStart+iNameLen-1]=='\'' || m_sExpr[iNameStart+iNameLen-1]==' ' )
+		&& iNameLen )
 	{
 		iNameLen--;
 	}
@@ -2448,10 +2491,25 @@ protected:
 	T ExprEval ( ISphExpr * pArg, const CSphMatch & tMatch ) const;
 };
 
-template<> int Expr_ArgVsSet_c<int>::ExprEval ( ISphExpr * pArg, const CSphMatch & tMatch ) const			{ return pArg->IntEval ( tMatch ); }
-template<> DWORD Expr_ArgVsSet_c<DWORD>::ExprEval ( ISphExpr * pArg, const CSphMatch & tMatch ) const		{ return (DWORD)pArg->IntEval ( tMatch ); }
-template<> float Expr_ArgVsSet_c<float>::ExprEval ( ISphExpr * pArg, const CSphMatch & tMatch ) const		{ return pArg->Eval ( tMatch ); }
-template<> int64_t Expr_ArgVsSet_c<int64_t>::ExprEval ( ISphExpr * pArg, const CSphMatch & tMatch ) const	{ return pArg->Int64Eval ( tMatch ); }
+template<> int Expr_ArgVsSet_c<int>::ExprEval ( ISphExpr * pArg, const CSphMatch & tMatch ) const
+{
+	return pArg->IntEval ( tMatch );
+}
+
+template<> DWORD Expr_ArgVsSet_c<DWORD>::ExprEval ( ISphExpr * pArg, const CSphMatch & tMatch ) const
+{
+	return (DWORD)pArg->IntEval ( tMatch );
+}
+
+template<> float Expr_ArgVsSet_c<float>::ExprEval ( ISphExpr * pArg, const CSphMatch & tMatch ) const
+{
+	return pArg->Eval ( tMatch );
+}
+
+template<> int64_t Expr_ArgVsSet_c<int64_t>::ExprEval ( ISphExpr * pArg, const CSphMatch & tMatch ) const
+{
+	return pArg->Int64Eval ( tMatch );
+}
 
 
 /// arg-vs-constant-set
@@ -3754,7 +3812,8 @@ struct HookCheck_fn
 };
 
 
-ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError )
+ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema,
+	ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError )
 {
 	m_sLexerError = "";
 	m_sParserError = "";
@@ -4058,7 +4117,8 @@ bool sphUDFDrop ( const char * szFunc, CSphString & sError )
 			pFunc->m_bToDrop = false;
 			g_tUdfMutex.Unlock();
 
-			sError.SetSprintf ( "DROP timed out in (still got %d users after waiting for %d seconds); please retry", pFunc->m_iUserCount, UDF_DROP_TIMEOUT_SEC );
+			sError.SetSprintf ( "DROP timed out in (still got %d users after waiting for %d seconds); please retry",
+				pFunc->m_iUserCount, UDF_DROP_TIMEOUT_SEC );
 			return false;
 		}
 	}

@@ -410,7 +410,8 @@ bool ParseMultiAttr ( const char * sBuf, CSphColumnInfo & tAttr, const char * sS
 	for ( CSphVariant * pVal = hSource(_key); pVal; pVal = pVal->m_pNext ) \
 		_arg.Add ( pVal->cstr() );
 
-void SqlAttrsConfigure ( CSphSourceParams_SQL & tParams, const CSphVariant * pHead, ESphAttr eAttrType, const char * sSourceName, bool bIndexedAttr=false )
+void SqlAttrsConfigure ( CSphSourceParams_SQL & tParams, const CSphVariant * pHead,
+	ESphAttr eAttrType, const char * sSourceName, bool bIndexedAttr = false )
 {
 	for ( const CSphVariant * pCur = pHead; pCur; pCur= pCur->m_pNext )
 	{
@@ -782,7 +783,8 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 			fprintf ( stdout, "ERROR: source '%s': xmlpipe2 should only be used with charset_type=utf-8\n", sSourceName );
 		}
 #else
-		fprintf ( stdout, "WARNING: source '%s': xmlpipe2 support NOT compiled in. To use xmlpipe2, install missing XML libraries, reconfigure, and rebuild Sphinx\n", sSourceName );
+		fprintf ( stdout, "WARNING: source '%s': xmlpipe2 support NOT compiled in. To use xmlpipe2, "
+			"install missing XML libraries, reconfigure, and rebuild Sphinx\n", sSourceName );
 #endif
 	} else
 	{
@@ -825,7 +827,8 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 
 	if ( hSource["type"]=="xmlpipe" && bWordDict )
 	{
-		fprintf ( stdout, "ERROR: source '%s': type xmlpipe incompatible with dict=keywords option use xmlpipe2 instead; skipping.\n", sSourceName );
+		fprintf ( stdout, "ERROR: source '%s': type xmlpipe incompatible with dict=keywords option;"
+			" use xmlpipe2 instead; skipping.\n", sSourceName );
 		return NULL;
 	}
 
@@ -846,7 +849,8 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 // INDEXING
 //////////////////////////////////////////////////////////////////////////
 
-bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const CSphConfigType & hSources, bool bVerbose, FILE * fpDumpRows )
+bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
+	const CSphConfigType & hSources, bool bVerbose, FILE * fpDumpRows )
 {
 	// check index type
 	bool bPlain = true;

@@ -1,0 +1,19 @@
+Index header/format changes
+============================
+
+v.20, 1.10-beta, added m_uMinMaxIndex, saving block min/max index to .spa
+v.21, 2.0.1-dev, added m_bWordDict, dict=keywords
+v.21, 2.0.1-dev, added m_bIndexSP, sentence/paragraph support
+v.21, 2.0.1-dev, changed dictionary checkpoint size from 1024 to 64
+v.22, 2.0.1-dev, added m_sZones, alpha zones support
+v.23, 2.0.1-dev, added m_iBoundaryStep, m_iStopwordStep
+v.24, 2.0.1-dev, added m_sBlendMode
+v.25, 2.0.1-beta, changed m_sZones from a single prefix to a list of masks
+v.26, 2.0.2-beta, added 64-bit MVAs
+v.27, 2.1.1-dev, added m_iInfixCodepointBytes, m_iInfixBlocksOffset, infix index to dict=keywords
+v.28, 2.1.1-dev, added support for RE field filters
+v.28, 2.1.1-dev, added m_iOvershortStep
+v.29, 2.1.1-dev, added support for multiple wordforms files
+v.30, 2.1.1-dev, added m_iEmbeddedLimit, embedded synonyms, stopwords, wordforms files
+
+--eof--

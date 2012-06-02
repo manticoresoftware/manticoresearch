@@ -2884,10 +2884,10 @@ void LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings
 		}
 	}
 
-	if ( uVersion<=28 )
-		tSettings.m_dWordforms.Resize(1);
-	else
+	if ( uVersion>=29 )
 		tSettings.m_dWordforms.Resize ( tReader.GetDword() );
+	else
+		tSettings.m_dWordforms.Resize(1);
 
 	tEmbeddedFiles.m_dWordformFiles.Resize ( tSettings.m_dWordforms.GetLength() );
 	ARRAY_FOREACH ( i, tSettings.m_dWordforms )

@@ -1385,7 +1385,7 @@ public:
 										~CWordlist ();
 	void								Reset ();
 
-	bool								ReadCP ( CSphAutofile & tFile, DWORD uVer, bool bWordDict, CSphString & sError );
+	bool								ReadCP ( CSphAutofile & tFile, DWORD uVersion, bool bWordDict, CSphString & sError );
 
 	const CSphWordlistCheckpoint *		FindCheckpoint ( const char * sWord, int iWordLen, SphWordID_t iWordID, bool bStarMode ) const;
 	bool								LookupInfixCheckpoints ( const char * sInfix, int iBytes, CSphVector<int> & dCheckpoints ) const;
@@ -26243,7 +26243,7 @@ void CWordlist::Reset ()
 	SafeDeleteArray ( m_pWords );
 }
 
-bool CWordlist::ReadCP ( CSphAutofile & tFile, DWORD uVer, bool bWordDict, CSphString & sError )
+bool CWordlist::ReadCP ( CSphAutofile & tFile, DWORD uVersion, bool bWordDict, CSphString & sError )
 {
 	assert ( ( uVer>=21 && bWordDict ) || !bWordDict );
 	assert ( m_iDictCheckpointsOffset>0 );
@@ -26286,7 +26286,7 @@ bool CWordlist::ReadCP ( CSphAutofile & tFile, DWORD uVer, bool bWordDict, CSphS
 
 			m_dCheckpoints[i].m_iWordlistOffset = tReader.GetOffset();
 		}
-	} else if ( uVer>=11 )
+	} else if ( uVersion>=11 )
 	{
 		// read v.14 checkpoints
 		ARRAY_FOREACH ( i, m_dCheckpoints )

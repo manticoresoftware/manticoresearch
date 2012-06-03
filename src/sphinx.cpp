@@ -26245,7 +26245,7 @@ void CWordlist::Reset ()
 
 bool CWordlist::ReadCP ( CSphAutofile & tFile, DWORD uVersion, bool bWordDict, CSphString & sError )
 {
-	assert ( ( uVer>=21 && bWordDict ) || !bWordDict );
+	assert ( ( uVersion>=21 && bWordDict ) || !bWordDict );
 	assert ( m_iDictCheckpointsOffset>0 );
 	assert ( m_iSize-m_iDictCheckpointsOffset<UINT_MAX );
 

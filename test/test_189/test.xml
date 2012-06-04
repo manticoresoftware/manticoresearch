@@ -108,6 +108,10 @@ INSERT INTO `test_table` VALUES
 <!-- regression schema attributes with alias -->
 <sphinxql>select idd, idd*2 as rr from dist</sphinxql>
 <sphinxql>select idd as r0, r0*2 as rr from dist</sphinxql>
+<!-- alias as shema attribute -->
+<sphinxql>select idd as agent from dist</sphinxql>
+<sphinxql>select agent as idd, idd * 3 as rr from dist</sphinxql>
+<sphinxql>select idd as agent, agent + 2 as idd, idd - 3 as rr from dist</sphinxql>
 </sphqueries>
 
 </test>

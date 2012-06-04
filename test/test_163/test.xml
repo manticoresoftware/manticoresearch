@@ -346,6 +346,8 @@ INSERT INTO `test_table` VALUES
 <!-- regression schema attributes with alias -->
 <sphinxql>select tag, idd1, idd1 * 2 as rr from dist2</sphinxql>
 <sphinxql>select tag, idd1 as r0, r0 * 2 as rr from dist2</sphinxql>
+<!-- alias as shema attribute -->
+<sphinxql>select tag, idd1 as str1, str1 as str2 from dist2</sphinxql>
 </sphqueries>
 
 </test>

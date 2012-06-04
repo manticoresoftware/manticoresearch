@@ -2956,6 +2956,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	// sorter schema
 	// adds computed expressions and groupby stuff on top of the original index schema
 	CSphSchema tSorterSchema = tSchema;
+	CSphVector<uint64_t> dQueryAttrs;
 
 	// setup overrides, detach them into dynamic part
 	ARRAY_FOREACH ( i, pQuery->m_dOverrides )
@@ -2975,6 +2976,8 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		if ( pExtra )
 			pExtra->AddAttr ( tCol, true );
 		tSorterSchema.RemoveAttr ( iIndex );
+
+		dQueryAttrs.Add ( sphFNV64 ( (const BYTE *)tCol.m_sName.cstr() ) );
 	}
 
 	// setup @geodist
@@ -2992,6 +2995,8 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		tSorterSchema.AddAttr ( tCol, true );
 		if ( pExtra )
 			pExtra->AddAttr ( tCol, true );
+
+		dQueryAttrs.Add ( sphFNV64 ( (const BYTE *)tCol.m_sName.cstr() ) );
 	}
 
 	// setup @expr
@@ -3004,6 +3009,8 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 			return NULL;
 		tCol.m_eStage = SPH_EVAL_PRESORT;
 		tSorterSchema.AddAttr ( tCol, true );
+
+		dQueryAttrs.Add ( sphFNV64 ( (const BYTE *)tCol.m_sName.cstr() ) );
 	}
 
 	// expressions from select items
@@ -3025,6 +3032,12 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 			sExprW = "@count";
 		}
 
+		if ( sExpr=="*" )
+		{
+			for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
+				dQueryAttrs.Add ( sphFNV64 ( (const BYTE *)tSchema.GetAttr ( i ).m_sName.cstr() ) );
+		}
+
 		// for now, just always pass "plain" attrs from index to sorter; they will be filtered on searchd level
 		bool bPlainAttr = ( ( sExpr=="*" || ( tSchema.GetAttrIndex ( sExpr.cstr() )>=0 && tItem.m_eAggrFunc==SPH_AGGR_NONE ) ) &&
 			( tItem.m_sAlias.IsEmpty() || tItem.m_sAlias==tItem.m_sExpr ) );
@@ -3043,32 +3056,16 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		// tricky part
 		// we might be fed with precomputed matches, but it's all or nothing
 		// the incoming match either does not have anything computed, or it has everything
-		if ( tSchema.GetAttrsCount()==tSorterSchema.GetAttrsCount() )
+		int iSorterAttr = tSorterSchema.GetAttrIndex ( tItem.m_sAlias.cstr() );
+		if ( iSorterAttr >=0 )
 		{
-			// so far we had everything, so we might be precomputed, and the alias just might already exist
-			int iSuspect = tSchema.GetAttrIndex ( tItem.m_sAlias.cstr() );
-			if ( iSuspect>=0 )
-			{
-				// however, let's ensure that it was an expression
-				if ( tSchema.GetAttr ( iSuspect ).m_pExpr.Ptr()!=NULL )
-					continue;
-
-				// otherwise we're not precomputed, *and* have a duplicate name
-				sError.SetSprintf ( "alias '%s' must be unique (conflicts with an index attribute)", tItem.m_sAlias.cstr() );
-				return NULL;
-			}
-		} else
-		{
-			// we are adding stuff, must not be precomputed, check for both kinds of dupes
-			if ( tSchema.GetAttrIndex ( tItem.m_sAlias.cstr() )>=0 )
-			{
-				sError.SetSprintf ( "alias '%s' must be unique (conflicts with an index attribute)", tItem.m_sAlias.cstr() );
-				return NULL;
-			}
-			if ( tSorterSchema.GetAttrIndex ( tItem.m_sAlias.cstr() )>=0 )
+			if ( dQueryAttrs.Contains ( sphFNV64 ( (const BYTE *)tItem.m_sAlias.cstr() ) ) )
 			{
 				sError.SetSprintf ( "alias '%s' must be unique (conflicts with another alias)", tItem.m_sAlias.cstr() );
 				return NULL;
+			} else
+			{
+				tSorterSchema.RemoveAttr ( iSorterAttr );
 			}
 		}
 
@@ -3175,6 +3172,8 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 			tExprCol.m_eStage = SPH_EVAL_PRESORT; // sorter expects computed expression
 			dAggregates.Add ( tExprCol );
 		}
+
+		dQueryAttrs.Add ( sphFNV64 ( (const BYTE *)tExprCol.m_sName.cstr() ) );
 	}
 
 	// expressions wrapped in aggregates must be at the very end of pre-groupby match

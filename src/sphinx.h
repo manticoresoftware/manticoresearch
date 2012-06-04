@@ -1305,12 +1305,11 @@ struct CSphSchema
 {
 	CSphString						m_sName;		///< my human-readable name
 	CSphVector<CSphColumnInfo>		m_dFields;		///< my fulltext-searchable fields
-	int								m_iBaseFields;	///< how much fields are base, how much are additional (only affects indexer)
 
 public:
 
 	/// ctor
-	explicit				CSphSchema ( const char * sName="(nameless)" ) : m_sName ( sName ), m_iBaseFields ( 0 ), m_iStaticSize ( 0 ) {}
+	explicit				CSphSchema ( const char * sName="(nameless)" ) : m_sName ( sName ), m_iStaticSize ( 0 ) {}
 
 	/// get field index by name
 	/// returns -1 if not found
@@ -1680,6 +1679,7 @@ public:
 	virtual void			SetDumpRows ( FILE * fpDumpRows ) { m_fpDumpRows = fpDumpRows; }
 
 	virtual SphRange_t		IterateFieldMVAStart ( int iAttr );
+	virtual bool			HasJoinedFields () { return m_iPlainFieldsLength!=m_tSchema.m_dFields.GetLength(); }
 
 protected:
 	int						ParseFieldMVA ( CSphVector < DWORD > & dMva, const char * szValue, bool bMva64 );
@@ -1699,6 +1699,7 @@ protected:
 	int						m_iMaxFileBufferSize;	///< max size of read buffer for the 'sql_file_field' fields
 	ESphOnFileFieldError	m_eOnFileFieldError;
 	FILE *					m_fpDumpRows;
+	int						m_iPlainFieldsLength;
 
 protected:
 	struct CSphBuildHitsState_t
@@ -1795,7 +1796,6 @@ struct CSphSource_SQL : CSphSource_Document
 	virtual void		PostIndex ();
 
 	virtual bool		HasAttrsConfigured () { return m_tParams.m_dAttrs.GetLength()!=0; }
-	virtual bool		HasJoinedFields () { return m_tSchema.m_iBaseFields!=m_tSchema.m_dFields.GetLength(); }
 
 	virtual ISphHits *	IterateJoinedHits ( CSphString & sError );
 

@@ -18,6 +18,25 @@ searchd
 	<searchd_settings/>
 }
 
+source pure
+{
+	type					= mysql
+	<sql_settings/>
+
+	sql_query				= select id, idd from test;
+	sql_attr_uint			= idd
+	sql_joined_field		= text from query; select id, text from test_joined;
+}
+
+index pure
+{
+	source	= pure
+	path	= <data_path/>/pure
+
+    charset_type			= utf-8
+    docinfo					= extern
+}
+
 source test
 {
 	type					= mysql
@@ -93,6 +112,8 @@ insert into test_joined (id, text) values
 	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">dog not as do sleepy</query>
 	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">"dog not as do sleepy"</query>
 	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">"do not as dog sleepy"</query>
+	<!-- regression crash on pure joined fields index indexing -->
+	<query mode="extended2" index="pure" sortmode="extended" sortby="@id asc">( dog sleepy ) | my</query>
 </queries>
 
 </test>

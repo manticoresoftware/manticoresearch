@@ -1290,7 +1290,7 @@ public:
 	virtual void		Disconnect ();
 
 	virtual bool		HasAttrsConfigured () { return false; }
-	virtual bool		IterateStart ( CSphString & ) { return true; }
+	virtual bool		IterateStart ( CSphString & ) { m_iPlainFieldsLength = m_tSchema.m_dFields.GetLength(); return true; }
 
 	virtual bool		IterateMultivaluedStart ( int, CSphString & ) { return false; }
 	virtual bool		IterateMultivaluedNext () { return false; }
@@ -5880,25 +5880,35 @@ bool RtIndex_t::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const cha
 		tDictCloned = pDictBase = pDictBase->Clone();
 	}
 
+	CSphScopedPtr<CSphDict> tDict ( NULL );
+	CSphDict * pDict = SetupStarDict ( tDict, pDictBase, pTokenizer.Ptr() );
+
+	CSphScopedPtr<CSphDict> tDict2 ( NULL );
+	pDict = SetupExactDict ( tDict2, pDict, pTokenizer.Ptr() );
+
 	while ( BYTE * pToken = pTokenizer->GetToken() )
 	{
-		const char * sToken = (const char *)pToken;
-		CSphString sWord ( sToken );
-		SphWordID_t iWord = pDictBase->GetWordID ( pToken );
+		// keep tokenized form
+		CSphString sTokenized = ( const char *)pToken;
+		SphWordID_t iWord = pDict->GetWordID ( pToken );
 		if ( iWord )
 		{
 			CSphKeywordInfo & tInfo = dKeywords.Add();
-			tInfo.m_sTokenized = sWord;
-			tInfo.m_sNormalized = sToken;
+			Swap ( tInfo.m_sTokenized, sTokenized );
+			tInfo.m_sNormalized = (const char *)pToken;
 			tInfo.m_iDocs = 0;
 			tInfo.m_iHits = 0;
+
+			if ( tInfo.m_sNormalized.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
+				*(char *)tInfo.m_sNormalized.cstr() = '=';
 
 			if ( !bGetStats )
 				continue;
 
+			tQword.Reset();
 			tQword.m_iWordID = iWord;
-			tQword.m_iDocs = 0;
-			tQword.m_iHits = 0;
+			tQword.m_sWord = tInfo.m_sTokenized;
+			tQword.m_sDictWord = tInfo.m_sNormalized;
 			ARRAY_FOREACH ( iSeg, m_pSegments )
 				RtQwordSetupSegment ( &tQword, m_pSegments[iSeg], false, m_bKeywordDict, m_iWordsCheckpoint );
 

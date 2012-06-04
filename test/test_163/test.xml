@@ -343,6 +343,9 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select * from u_dist_aa</sphinxql>
 <sphinxql>select *, exist ( ' aTTr2', 11 ) as cnd from u_dist_aa where cnd=11</sphinxql>
 <sphinxql>select *, exist ( ' Attr1', 1 ) as cnd from u_dist_aa where cnd=1</sphinxql>
+<!-- regression schema attributes with alias -->
+<sphinxql>select tag, idd1, idd1 * 2 as rr from dist2</sphinxql>
+<sphinxql>select tag, idd1 as r0, r0 * 2 as rr from dist2</sphinxql>
 </sphqueries>
 
 </test>

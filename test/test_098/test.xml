@@ -10,6 +10,7 @@ indexer
 searchd
 {
 	<searchd_settings/>
+	workers = threads
 }
 
 source src
@@ -71,6 +72,34 @@ index wf3
 	wordforms = test_098/wf3.txt
 }
 
+index rt
+{
+	type = rt
+	path			= <data_path/>/rt0
+	rt_mem_limit = 32M
+	rt_field = title
+	rt_attr_uint=gid
+	dict = keywords
+	charset_type		= utf-8
+	min_prefix_len = 1
+	enable_star = 1
+	morphology = stem_en
+	index_exact_words = 1
+}
+
+index exact_wf
+{
+	source			= src_wf3
+	path			= <data_path/>/exact_wf
+	dict = crc
+	charset_type		= utf-8
+	min_prefix_len = 1
+	enable_star = 1
+	morphology = stem_en
+	index_exact_words = 1
+}
+
+
 </config>
 
 <queries>
@@ -98,6 +127,10 @@ index wf3
 <sphinxql>CALL KEYWORDS ('run-time (run time) issue', 'wf2')</sphinxql>
 <!-- here is going regression crash on indexing wordforms vs multi-wordforms -->
 <sphinxql>SELECT * from wf3 where match ('word2word2')</sphinxql>
+<!-- here is going regression crash on CALL KEYWORDS to RT index with dict keywords -->
+<sphinxql>INSERT INTO rt VALUES ( 1, 'dummy', 100 )</sphinxql>
+<sphinxql>CALL KEYWORDS ('runs runs* =runs', 'rt', 1)</sphinxql>
+<sphinxql>CALL KEYWORDS ('runs runs* =runs', 'exact_wf', 1)</sphinxql>
 </sphqueries>
 
 

@@ -3026,9 +3026,9 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		}
 
 		// for now, just always pass "plain" attrs from index to sorter; they will be filtered on searchd level
-		if ( sExpr=="*"
-			|| ( tSchema.GetAttrIndex ( sExpr.cstr() )>=0 && tItem.m_eAggrFunc==SPH_AGGR_NONE )
-			|| IsGroupby(sExpr) || bIsCount )
+		bool bPlainAttr = ( ( sExpr=="*" || ( tSchema.GetAttrIndex ( sExpr.cstr() )>=0 && tItem.m_eAggrFunc==SPH_AGGR_NONE ) ) &&
+			( tItem.m_sAlias.IsEmpty() || tItem.m_sAlias==tItem.m_sExpr ) );
+		if ( bPlainAttr || IsGroupby(sExpr) || bIsCount )
 		{
 			continue;
 		}

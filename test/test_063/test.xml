@@ -83,6 +83,25 @@ index star
 	enable_star = 1
 }
 
+source test3
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT 1 as document_id, ' the"dog of my friend ' as text UNION SELECT 2 as document_id, ' dog"is my friend ' as text
+}
+
+index test3
+{
+	source	= test3
+	path	= <data_path/>/test3
+
+	blend_chars = -, @, "
+	<dynamic>
+		<variant>charset_type = utf-8</variant>
+		<variant>charset_type = sbcs</variant>
+	</dynamic>
+}
+
 
 </config>
 
@@ -206,6 +225,9 @@ INSERT INTO test_table VALUES
 	<!-- here is going regression blend_char into a numeric-->
 	<sphinxql>select * from test2 where match ( 'a11-22' )</sphinxql>
 	<sphinxql>select * from test2 where match ( '11-22' )</sphinxql>
+	<sphinxql>select * from test3 where match ( ' "the dog " ' )</sphinxql>
+	<sphinxql>select * from test3 where match ( ' dog " is my " ' )</sphinxql>
+	<sphinxql>select * from test3 where match ( ' dog ' )</sphinxql>
 </sphqueries>
 
 </test>

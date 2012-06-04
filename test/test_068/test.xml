@@ -26,6 +26,13 @@ source src2
 	xmlpipe_command = cat <this_test/>/data2.xml
 }
 
+source src3
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data3.xml
+	xmlpipe_fixup_utf8 = 1
+}
+
 index idx1
 {
 	source = src1
@@ -39,12 +46,21 @@ index idx2
 	path = <data_path/>/idx2
 	charset_type = utf-8
 }
+
+index idx3
+{
+	source = src3
+	path = <data_path/>/idx3
+	charset_type = utf-8
+}
 </config>
 
 <queries>
 <query index="idx1">test</query>
 <query index="idx2">test</query>
 <query index="idx1,idx2">test</query>
+<query index="idx3">est</query>
+<query index="idx3">test</query>
 </queries>
 
 </test>

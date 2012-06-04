@@ -3867,7 +3867,7 @@ int CSphTokenizerTraits<IS_UTF8>::CodepointArbitration ( int iCode, bool bWasEsc
 	{
 		bool bBlend =
 			bWasEscaped || // escaped characters should always act as blended
-			( m_bPhrase && !sphIsModifier ( iSymbol ) ) || // non-modifier special inside phrase
+			( m_bPhrase && !sphIsModifier ( iSymbol ) && iSymbol!='"' ) || // non-modifier special inside phrase
 			( m_iAccum && ( iSymbol=='@' || iSymbol=='/' || iSymbol=='-' ) ); // some specials in the middle of a token
 
 		// clear special or blend flags
@@ -10142,11 +10142,12 @@ bool CSphIndex_VLN::LoadHitlessWords ( CSphVector<SphWordID_t> & dHitlessWords )
 	if ( !tFile.Read ( &dBuffer[0], dBuffer.GetLength(), m_sLastError ) )
 		return false;
 
+	// FIXME!!! dict=keywords + hitless_words=some
 	m_pTokenizer->SetBuffer ( &dBuffer[0], dBuffer.GetLength() );
 	while ( BYTE * sToken = m_pTokenizer->GetToken() )
 		dHitlessWords.Add ( m_pDict->GetWordID ( sToken ) );
 
-	dHitlessWords.Sort();
+	dHitlessWords.Uniq();
 	return true;
 }
 
@@ -14877,6 +14878,9 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 			tInfo.m_iDocs = bGetStats ? QueryWord.m_iDocs : 0;
 			tInfo.m_iHits = bGetStats ? QueryWord.m_iHits : 0;
 			++nWords;
+
+			if ( tInfo.m_sNormalized.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
+				*(char *)tInfo.m_sNormalized.cstr() = '=';
 		}
 	}
 
@@ -16065,6 +16069,9 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	if ( !rdHits.Open ( GetIndexFileName("spp"), sError ) )
 		LOC_FAIL(( fp, "unable to open hitlist: %s", sError.cstr() ));
 
+	CSphVector<SphWordID_t> dHitlessWords;
+	LoadHitlessWords ( dHitlessWords );
+
 	////////////////////
 	// check dictionary
 	////////////////////
@@ -16076,6 +16083,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	int iWordsTotal = 0;
 
 	char sWord[MAX_KEYWORD_BYTES], sLastWord[MAX_KEYWORD_BYTES];
+	memset ( sWord, 0, sizeof(sWord) );
 	memset ( sLastWord, 0, sizeof(sLastWord) );
 
 	const int iWordPerCP = m_uVersion>=21 ? SPH_WORDLIST_CHECKPOINT : 1024;
@@ -16377,6 +16385,10 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		int iDoclistHits = 0;
 		int iHitlistHits = 0;
 
+		// FIXME!!! dict=keywords + hitless_words=some
+		bool bHitless = ( m_tSettings.m_eHitless==SPH_HITLESS_ALL ||
+			( m_tSettings.m_eHitless==SPH_HITLESS_SOME && dHitlessWords.BinarySearch ( uWordid ) ) );
+
 		for ( ;; )
 		{
 			const CSphMatch & tDoc = pQword->GetNextDoc ( pInlineStorage );
@@ -16452,12 +16464,12 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			}
 
 			// check hit count
-			if ( iDocHits!=(int)pQword->m_uMatchHits )
+			if ( iDocHits!=(int)pQword->m_uMatchHits && !bHitless )
 				LOC_FAIL(( fp, "doc hit count mismatch (wordid="UINT64_FMT"(%s), docid="DOCID_FMT", doclist=%d, hitlist=%d)",
 					(uint64_t)uWordid, sWord, pQword->m_tDoc.m_iDocID, pQword->m_uMatchHits, iDocHits ));
 
 			// check the mask
-			if ( dFieldMask!=pQword->m_dQwordFields )
+			if ( dFieldMask!=pQword->m_dQwordFields && !bHitless )
 				LOC_FAIL(( fp, "field mask mismatch (wordid="UINT64_FMT"(%s), docid="DOCID_FMT")",
 					(uint64_t)uWordid, sWord, pQword->m_tDoc.m_iDocID ));
 
@@ -16470,7 +16482,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			LOC_FAIL(( fp, "doc count mismatch (wordid="UINT64_FMT"(%s), dict=%d, doclist=%d)",
 				uint64_t(uWordid), sWord, iDictDocs, iDoclistDocs ));
 
-		if ( iDictHits!=iDoclistHits || iDictHits!=iHitlistHits )
+		if ( ( iDictHits!=iDoclistHits || iDictHits!=iHitlistHits ) && !bHitless )
 			LOC_FAIL(( fp, "hit count mismatch (wordid="UINT64_FMT"(%s), dict=%d, doclist=%d, hitlist=%d)",
 				uint64_t(uWordid), sWord, iDictHits, iDoclistHits, iHitlistHits ));
 
@@ -21813,6 +21825,7 @@ CSphSource_Document::CSphSource_Document ( const char * sName )
 	, m_iMaxFileBufferSize ( 2 * 1024 * 1024 )
 	, m_eOnFileFieldError ( FFE_IGNORE_FIELD )
 	, m_fpDumpRows ( NULL )
+	, m_iPlainFieldsLength ( 0 )
 	, m_iMaxHits ( MAX_SOURCE_HITS )
 {
 }
@@ -21827,7 +21840,7 @@ bool CSphSource_Document::IterateDocument ( CSphString & sError )
 	m_tHits.m_dData.Resize ( 0 );
 
 	m_tState = CSphBuildHitsState_t();
-	m_tState.m_iEndField = m_tSchema.m_iBaseFields ? m_tSchema.m_iBaseFields : m_tSchema.m_dFields.GetLength();
+	m_tState.m_iEndField = m_iPlainFieldsLength;
 	m_tState.m_dTmpFieldPtrs.Resize ( m_tState.m_iEndField );
 	m_tState.m_dTmpFieldStorage.Resize ( m_tState.m_iEndField );
 
@@ -22832,7 +22845,7 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 			sphWarn ( "attribute '%s' not found - IGNORING", m_tParams.m_dAttrs[i].m_sName.cstr() );
 
 	// joined fields
-	m_tSchema.m_iBaseFields = m_tSchema.m_dFields.GetLength();
+	m_iPlainFieldsLength = m_tSchema.m_dFields.GetLength();
 
 	CSphColumnInfo tCol;
 	tCol.m_iIndex = -1;
@@ -22975,7 +22988,7 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 		m_tDocInfo.m_pDynamic[i] = 0;
 
 	// split columns into fields and attrs
-	for ( int i=0; i<m_tSchema.m_iBaseFields; i++ )
+	for ( int i=0; i<m_iPlainFieldsLength; i++ )
 	{
 		// get that field
 		#if USE_ZLIB
@@ -23419,12 +23432,12 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 		} else
 		{
 			int iLastField = m_iJoinedHitField;
-			bool bRanged = ( m_iJoinedHitField>=m_tSchema.m_iBaseFields && m_iJoinedHitField<m_tSchema.m_dFields.GetLength()
+			bool bRanged = ( m_iJoinedHitField>=m_iPlainFieldsLength && m_iJoinedHitField<m_tSchema.m_dFields.GetLength()
 				&& m_tSchema.m_dFields[m_iJoinedHitField].m_eSrc==SPH_ATTRSRC_RANGEDQUERY );
 
 			// current field is over, continue to next field
 			if ( m_iJoinedHitField<0 )
-				m_iJoinedHitField = m_tSchema.m_iBaseFields;
+				m_iJoinedHitField = m_iPlainFieldsLength;
 			else if ( !bRanged || !bProcessingRanged )
 				m_iJoinedHitField++;
 
@@ -24373,7 +24386,7 @@ public:
 	virtual bool	Connect ( CSphString & sError );			///< run the command and open the pipe
 	virtual void	Disconnect ();								///< close the pipe
 
-	virtual bool	IterateStart ( CSphString & ) { return true; }	///< Connect() starts getting documents automatically, so this one is empty
+	virtual bool	IterateStart ( CSphString & ) { m_iPlainFieldsLength = m_tSchema.m_dFields.GetLength(); return true; }	///< Connect() starts getting documents automatically, so this one is empty
 	virtual BYTE **	NextDocument ( CSphString & sError );			///< parse incoming chunk and emit some hits
 
 	virtual bool	HasAttrsConfigured ()							{ return true; }	///< xmlpipe always has some attrs for now
@@ -25027,6 +25040,7 @@ bool CSphSource_XMLPipe2::ParseNextChunk ( int iBufferLen, CSphString & sError )
 				|| ( iBytes==3 && iVal<0x800 ) // and overlong 3-byte codes
 				|| ( iVal>=0xfff0 && iVal<=0xffff ) ) // and kinda-valid specials expat chokes on anyway
 			{
+				iBytes = i;
 				for ( i=0; i<iBytes; i++ )
 					p[i] = ' ';
 			}

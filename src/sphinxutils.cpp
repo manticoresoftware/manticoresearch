@@ -461,6 +461,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "sphinxql_state",			0, NULL },
 	{ "rt_merge_iops",			0, NULL },
 	{ "rt_merge_maxiosize",		0, NULL },
+	{ "ha_ping_interval",		0, NULL },
+	{ "ha_period_karma",		0, NULL },
 	{ NULL,						0, NULL }
 };
 

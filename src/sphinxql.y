@@ -20,6 +20,7 @@
 %token	TOK_SYSVAR
 %token	TOK_CONST_STRINGS
 
+%token	TOK_AGENT
 %token	TOK_AS
 %token	TOK_ASC
 %token	TOK_ATTACH
@@ -571,6 +572,7 @@ show_what:
 	TOK_WARNINGS		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_WARNINGS; }
 	| TOK_STATUS		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_STATUS; }
 	| TOK_META			{ pParser->m_pStmt->m_eStmt = STMT_SHOW_META; }
+	| TOK_AGENT TOK_STATUS		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENTSTATUS; }
 	;
 
 //////////////////////////////////////////////////////////////////////////

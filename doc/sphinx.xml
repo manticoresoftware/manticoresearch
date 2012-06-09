@@ -4891,6 +4891,84 @@ Query OK, 0 rows affected (0.05 sec)
 </programlisting>
 </sect1>
 
+<sect1 id="sphinxql-show-agent-status"><title>SHOW AGENT
+STATUS</title>
+<programlisting>
+SHOW AGENT STATUS
+</programlisting>
+<para>
+Displays the statistic of <link linkend="conf-agent">remote
+agents</link>. It includes the values like the age of the last
+request, last answer, the number of different kind of errors and
+successes, etc. The statistic is shown for every agent for last 1, 5
+and 15 intervals, each of them of <link
+linkend="conf-ha-period-karma">ha_period_karma</link> seconds.
+The command exists only in sphinxql.
+</para>
+<programlisting>
+mysql> show agent status;
++------------------------------------+-------------------+
+| Variable_name                      | Value             |
++------------------------------------+-------------------+
+| status_period_seconds              | 60                |
+| status_stored_periods              | 15                |
+| ag_0_hostname                      | 192.168.1.90:6713 |
+| ag_0_references                    | 2                 |
+| ag_0_lastquery                     | 0.61              |
+| ag_0_lastanswer                    | 0.61              |
+| ag_0_lastperiodmsec                | 0                 |
+| ag_0_1periods_query_timeouts       | 0                 |
+| ag_0_1periods_connect_timeouts     | 0                 |
+| ag_0_1periods_connect_failures     | 65                |
+| ag_0_1periods_network_errors       | 0                 |
+| ag_0_1periods_wrong_replies        | 0                 |
+| ag_0_1periods_unexpected_closings  | 0                 |
+| ag_0_1periods_succeeded_queries    | 3                 |
+| ag_0_5periods_query_timeouts       | 0                 |
+| ag_0_5periods_connect_timeouts     | 0                 |
+| ag_0_5periods_connect_failures     | 169               |
+| ag_0_5periods_network_errors       | 0                 |
+| ag_0_5periods_wrong_replies        | 0                 |
+| ag_0_5periods_unexpected_closings  | 0                 |
+| ag_0_5periods_succeeded_queries    | 113               |
+| ag_0_15periods_query_timeouts      | 0                 |
+| ag_0_15periods_connect_timeouts    | 0                 |
+| ag_0_15periods_connect_failures    | 169               |
+| ag_0_15periods_network_errors      | 0                 |
+| ag_0_15periods_wrong_replies       | 0                 |
+| ag_0_15periods_unexpected_closings | 0                 |
+| ag_0_15periods_succeeded_queries   | 113               |
+| ag_1_hostname                      | 192.168.1.90:6714 |
+| ag_1_references                    | 2                 |
+| ag_1_lastquery                     | 0.61              |
+| ag_1_lastanswer                    | 0.61              |
+| ag_1_lastperiodmsec                | 0                 |
+| ag_1_1periods_query_timeouts       | 0                 |
+| ag_1_1periods_connect_timeouts     | 0                 |
+| ag_1_1periods_connect_failures     | 0                 |
+| ag_1_1periods_network_errors       | 0                 |
+| ag_1_1periods_wrong_replies        | 0                 |
+| ag_1_1periods_unexpected_closings  | 0                 |
+| ag_1_1periods_succeeded_queries    | 68                |
+| ag_1_5periods_query_timeouts       | 0                 |
+| ag_1_5periods_connect_timeouts     | 0                 |
+| ag_1_5periods_connect_failures     | 0                 |
+| ag_1_5periods_network_errors       | 0                 |
+| ag_1_5periods_wrong_replies        | 0                 |
+| ag_1_5periods_unexpected_closings  | 0                 |
+| ag_1_5periods_succeeded_queries    | 282               |
+| ag_1_15periods_query_timeouts      | 0                 |
+| ag_1_15periods_connect_timeouts    | 0                 |
+| ag_1_15periods_connect_failures    | 0                 |
+| ag_1_15periods_network_errors      | 0                 |
+| ag_1_15periods_wrong_replies       | 0                 |
+| ag_1_15periods_unexpected_closings | 0                 |
+| ag_1_15periods_succeeded_queries   | 282               |
++------------------------------------+-------------------+
+54 rows in set (0.00 sec)
+</programlisting>
+</sect1>
+
 
 <sect1 id="sphinxql-multi-queries">
 <title>Multi-statement queries</title>
@@ -4984,6 +5062,7 @@ SELECT /*! SQL_CALC_FOUND_ROWS */ col1 FROM table1 WHERE ...
 in SphinxQL syntax (and therefore can not be used as identifiers).
 <programlisting>
 AND
+AGENT
 AS
 ASC
 AVG
@@ -9431,12 +9510,56 @@ For example:
 agent = localhost:9312|other_host:9312|other_host:9313:chunk2
 </programlisting>
 This clause defines that localhost:9312, other_host:9312 and other_host:9313 serve one and same indices, and can
-be used as full mirrors of each other. By default all the query packages will be roundly distributed on them. It mean,
-that 1-st package will be directed to localhost:9312. Second - to other_host:9312. Third - to other_host:9313, fourth - 
-again, to localhost:9312 - and so on. That mean that with N mirrors each will be loaded with 1/N of incoming packets. It is also scheduled
-to realize more complex ways to use mirrors - like special care about not-available mirrors, load balancing, etc.
-The indexes (in this case - chunk2) is assumed the same for all mirror hosts. I.e. all the mirrors will be queried with index 'chunk2', stated
+be used as full mirrors of each other. The index to be queried (in this case - chunk2)
+is assumed the same for all mirror hosts. I.e. all the mirrors will be queried with index 'chunk2', stated
 in the very end of agent clause.
+</para>
+<para>
+By default all the query
+packages will be directed to the best of the mirrors. The best one is
+calculated, using the statistic from near history, defined by the
+option <link linkend='conf-ha-period-karma'>ha_period_karma</link> in the config. During the specified period, the daemon
+stores some mirror's parameters, as total N of queries, N of
+different kinds of errors, the time of last reply, etc.
+</para>
+<para>
+When it is time to fire a query packet to a mirror, the daemon looks
+for the one with the minimal error rating (i.e. - to the mirror where
+the num_of_critical_network_errors/total_num_of_queries during the
+karma period is minimal). If there is more than one host with the same
+rating, it selects the one with the latest time of answer (i.e., if
+one answered 5 seconds ago, and another - 1 second ago, the late will be
+selected).
+</para>
+<para>
+The karma period is defined in the searchd section of the config file
+as '<link linkend="conf-ha-period-karma">ha_period_karma</link>'. This value set the length of the interval in
+seconds. Default value is 60 seconds. During the period, daemon stores all the necessary statistics
+about mirror's availability. When the period is over, it collects the
+next statistic block, etc. Totally it remembers the behavior from 15
+last periods (hard-coded), but actually for HA stuff for now used only
+one or two. The rest may be observed from sphinxql using '<link
+linkend="sphinxql-show-agent-status">SHOW AGENT
+STATUS</link>' command.
+</para>
+<para>
+For idle cases, when there is no queries fired, and so, no statistic
+is available, the daemon by default pings every mirror with the
+special ping command, and so, the HA statistic is available anyway. The ping interval is defined in
+searchd section of the config file as '<link
+linkend="conf-ha-ping-interval">ha_ping_interval</link>'. This value
+set the ping interval in milliseconds. Default value is 1000, i.e. 1
+second. If you set the value to 0, you explicitly forbid the mirror's
+pinging. This way the statistic will be available only from the real
+queries.
+</para>
+<para>
+In case when either no statistic availabe, either all the mirrors
+fails, the daemon just fire a query packet to each of the mirrors a
+row, using round-robin distribution. This is fall-back mode, not
+usual. In terms of given example it means, that 1-st package will be directed to localhost:9312.
+Second - to other_host:9312. Third - to other_host:9313, fourth - 
+again, to localhost:9312 - and so on.
 </para>
 <para>
 Another way to define the alternatives - is to explicitly set the indices also:
@@ -9447,7 +9570,6 @@ This is quite the same as previous, but here is explicitly stated that from firs
 So, the packets will be distributed the same way, but to these concrete indices.
 </para>
 </sect2>
-
 
 <sect2 id="conf-agent-blackhole"><title>agent_blackhole</title>
 <para>
@@ -11321,6 +11443,51 @@ this file gets rewritten automatically.
 <programlisting>
 sphinxql_state = uservars.sql
 </programlisting>
+</sect2>
+
+<sect2 id="conf-ha-ping-interval"><title>ha_ping_interval</title>
+<para>
+Num of milliseconds between pings to mirrored agents.
+</para>
+<para>
+When you defined a distributed index which uses alternative agents
+(i.e., <link linkend="conf-agent">mirrors</link>), and the daemon is
+in idle state (i.e., no queries fired), it became to send the special
+ping command to mirrored alternatives.
+</para>
+<para>
+By default the ha_ping_interval is 1000 milliseconds, or 1 second. If
+you want to switch off the mirror's pinging, set ha_ping_interval to
+0. It will explicitly forbids the pings.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+ha_ping_interval = 2000
+</programlisting>
+</sect2>
+
+<sect2 id="conf-ha-period-karma"><title>ha_period_karma</title>
+<para>
+Num of seconds when the statistic of <link
+linkend="conf-agent">alternative agents, or mirrors</link> affects the
+selection of the mirror for the next query. During the period, defined
+by this variable, all the statistic is collected in the one
+statistical block. When the period is over, the daemon allocates the
+next block, and up to the half of the period (when the new block
+contains too few data) it uses both the previos and the new block
+together. The collected statistic for up to 15 blocks could be
+observed using <link linkend="sphinxql-show-agent-status">SHOW AGENT
+STATUS</link> sphinxql command.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+ha_period_karma = 60
+</programlisting>
+<para>
+In this case, the affecting karma will varies between 31 and 90
+seconds - starting from the second half of the minute, and up to 30
+seconds of the next minute.
+</para>
 </sect2>
 
 

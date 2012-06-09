@@ -32,6 +32,7 @@ SPACE				[ \t\n\r]
 <ccomment>.			{ }
 <ccomment>"*/"		{ BEGIN(INITIAL); }
 
+"AGENT"				{ YYSTOREBOUNDS; return TOK_AGENT; }
 "AND"				{ YYSTOREBOUNDS; return TOK_AND; }
 "AS"				{ YYSTOREBOUNDS; return TOK_AS; }
 "ASC"				{ YYSTOREBOUNDS; return TOK_ASC; }

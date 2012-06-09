@@ -37,8 +37,8 @@ source src_a1
 	type			= mysql
 	<sql_settings/>
 
-	sql_query		= SELECT id, idd, 1 as agent, body FROM test_table where id in ( 1,2,3,4,5 )
-	sql_attr_uint	= agent
+	sql_query		= SELECT id, idd, 1 as aagent, body FROM test_table where id in ( 1,2,3,4,5 )
+	sql_attr_uint	= aagent
 	sql_attr_uint	= idd
 }
 
@@ -57,8 +57,8 @@ source src_a2
 	type			= mysql
 	<sql_settings/>
 
-	sql_query		= SELECT id, idd, 2 as agent, body FROM test_table where id in ( 5,6,7, 8, 9 )
-	sql_attr_uint	= agent
+	sql_query		= SELECT id, idd, 2 as aagent, body FROM test_table where id in ( 5,6,7, 8, 9 )
+	sql_attr_uint	= aagent
 	sql_attr_uint	= idd
 }
 
@@ -101,10 +101,10 @@ INSERT INTO `test_table` VALUES
 
 <sphqueries>
 <sphinxql>select * from dist</sphinxql>
-<sphinxql>select idd, agent from dist group by idd</sphinxql>
-<sphinxql>select *, idd, agent from dist group by idd</sphinxql>
-<sphinxql>select idd, @count, agent from dist group by idd</sphinxql>
-<sphinxql>select idd, count(*), agent from dist group by idd</sphinxql>
+<sphinxql>select idd, aagent from dist group by idd</sphinxql>
+<sphinxql>select *, idd, aagent from dist group by idd</sphinxql>
+<sphinxql>select idd, @count, aagent from dist group by idd</sphinxql>
+<sphinxql>select idd, count(*), aagent from dist group by idd</sphinxql>
 <!-- regression schema attributes with alias -->
 <sphinxql>select idd, idd*2 as rr from dist</sphinxql>
 <sphinxql>select idd as r0, r0*2 as rr from dist</sphinxql>

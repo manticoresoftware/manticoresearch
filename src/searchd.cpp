@@ -39,6 +39,7 @@
 #define SPH_ADDRPORT_SIZE		sizeof("000.000.000.000:00000")
 #define MVA_UPDATES_POOL		1048576
 #define NETOUTBUF				8192
+#define PING_INTERVAL			1000
 
 
 // don't shutdown on SIGKILL (debug purposes)
@@ -271,6 +272,8 @@ static CSphVector<int>	g_dChildren;
 static volatile bool	g_bAcceptUnlocked	= true;		// whether this preforked child is guaranteed to be *not* holding a lock around accept
 static int				g_iClientFD			= -1;
 static int				g_iDistThreads		= 0;
+static int				g_iPingInterval		= 0;		// by default ping HA agents every 1 second
+static DWORD			g_uHAPeriodKarma	= 60;		// by default use the last 1 minute statistic to determine the best HA agent
 
 enum ThdState_e
 {
@@ -479,6 +482,7 @@ enum SearchdCommand_e
 	SEARCHD_COMMAND_STATUS		= 5,
 	SEARCHD_COMMAND_FLUSHATTRS	= 7,
 	SEARCHD_COMMAND_SPHINXQL	= 8,
+	SEARCHD_COMMAND_PING		= 9,
 
 	SEARCHD_COMMAND_TOTAL
 };
@@ -493,7 +497,8 @@ enum
 	VER_COMMAND_KEYWORDS	= 0x100,
 	VER_COMMAND_STATUS		= 0x100,
 	VER_COMMAND_FLUSHATTRS	= 0x100,
-	VER_COMMAND_SPHINXQL	= 0x100
+	VER_COMMAND_SPHINXQL	= 0x100,
+	VER_COMMAND_PING		= 0x100
 };
 
 
@@ -525,16 +530,186 @@ const int	MAX_RETRY_DELAY		= 1000;
 //////////////////////////////////////////////////////////////////////////
 
 const int	STATS_MAX_AGENTS	= 1024;	///< we'll track stats for this much remote agents
+const int	STATS_MAX_DASH	= 256;	///< we'll track stats for RR of this much remote agents
+const int	STATS_DASH_TIME = 15;	///< store the history for last periods
+
+template <class DATA, int SIZE> class StaticStorage_t : public ISphNoncopyable
+{
+	DWORD			m_bmItemStats[SIZE/32];	///< per-item storage usage bitmap
+public:
+	DATA			m_dItemStats[SIZE];		///< per-item storage
+public:
+	explicit StaticStorage_t()
+	{
+		for ( int i=0; i<SIZE/32; ++i )
+			m_bmItemStats[i] = 0;
+	}
+	int AllocItem()
+	{
+		int iRes = -1;
+		for ( int i=0; i<SIZE/32; i++ )
+			if ( m_bmItemStats[i]!=0xffffffffUL )
+			{
+				int j = FindBit ( m_bmItemStats[i] );
+				m_bmItemStats[i] |= ( 1<<j );
+				iRes = i*32 + j;
+				memset ( &m_dItemStats[iRes], 0, sizeof(DATA) );
+				break;
+			}
+		return iRes;
+	}
+	void FreeItem ( int iItem )
+	{
+		if ( iItem<0 || iItem>=SIZE )
+			return;
+
+		assert ( m_bmItemStats[iItem>>5] & ( 1UL<<( iItem & 31 ) ) );
+		m_bmItemStats[iItem>>5] &= ~( 1UL<<( iItem & 31 ) );
+	}
+};
 
 /// per-agent query stats
+enum eAgentStats
+{
+	eTimeoutsQuery = 0,	///< number of time-outed queries
+	eTimeoutsConnect,	///< number of time-outed connections
+	eConnectFailures,	///< failed to connect
+	eNetworkErrors,		///< network error
+	eWrongReplies,		///< incomplete reply
+	eUnexpectedClose,	///< agent closed the connection
+	eNoErrors,			///< successfull queries, no errors
+	eMaxStat
+};
 struct AgentStats_t
 {
-	int64_t		m_iTimeoutsQuery;	///< number of time-outed queries
-	int64_t		m_iTimeoutsConnect;	///< number of time-outed connections
-	int64_t		m_iConnectFailures;	///< failed to connect
-	int64_t		m_iNetworkErrors;	///< network error
-	int64_t		m_iWrongReplies;	///< incomplete reply
-	int64_t		m_iUnexpectedClose;	///< agent closed the connection
+	int64_t		m_iStats[eMaxStat];
+	static const char * m_sNames[eMaxStat];
+
+	void Reset()
+	{
+		for ( int i=0; i<eMaxStat; ++i )
+			m_iStats[i] = 0;
+	}
+	void Add ( const AgentStats_t& rhs )
+	{
+		for ( int i=0; i<eMaxStat; ++i )
+			m_iStats[i] += rhs.m_iStats[i];
+	}
+};
+
+const char * AgentStats_t::m_sNames[eMaxStat]=
+	{ "query_timeouts", "connect_timeouts", "connect_failures",
+		"network_errors", "wrong_replies", "unexpected_closings",
+		"succeeded_queries" };
+
+struct AgentDash_t : AgentStats_t
+{
+	DWORD			m_uTimestamp;	///< adds the minutes timestamp to AgentStats_t
+};
+
+struct AgentDesc_t
+{
+	CSphString		m_sHost;		///< remote searchd host
+	int				m_iPort;		///< remote searchd port, 0 if local
+	CSphString		m_sPath;		///< local searchd UNIX socket path
+	CSphString		m_sIndexes;		///< remote index names to query
+	bool			m_bBlackhole;	///< blackhole agent flag
+	int				m_iFamily;		///< TCP or UNIX socket
+	DWORD			m_uAddr;		///< IP address
+	int				m_iStatsIndex;	///< index into global searchd stats array
+	int				m_iDashIndex;	///< index into global searchd host stats array (1 host can hold >1 agents)
+
+public:
+	AgentDesc_t ()
+		: m_iPort ( -1 )
+		, m_bBlackhole ( false )
+		, m_iFamily ( AF_INET )
+		, m_uAddr ( 0 )
+		, m_iStatsIndex ( -1 )
+	{}
+
+	CSphString GetName() const
+	{
+		CSphString sName;
+		switch ( m_iFamily )
+		{
+		case AF_INET: sName.SetSprintf ( "%s:%u", m_sHost.cstr(), m_iPort ); break;
+		case AF_UNIX: sName = m_sPath; break;
+		}
+		return sName;
+	}
+};
+
+/// per-host dashboard
+struct HostDashboard_t
+{
+	int				m_iRefCount;
+	int64_t			m_iLastAnswerTime;		// updated when we get an answer from the host
+	int64_t			m_iLastQueryTime;		// updated when we send a query to a host
+	AgentDesc_t		m_dDescriptor;			// only host info, no indices. Used for ping.
+	bool			m_bNeedPing;			// we'll ping only HA agents, not everyone
+
+private:
+	AgentDash_t	m_dStats[STATS_DASH_TIME];
+
+public:
+
+	void Init ( AgentDesc_t * pAgent )
+	{
+		m_iRefCount = 1;
+		m_iLastQueryTime = m_iLastAnswerTime = sphMicroTimer() - g_iPingInterval*1000;
+		m_dDescriptor = *pAgent;
+		m_bNeedPing = false;
+	}
+
+	inline bool IsOlder ( int64_t iTime ) const
+	{
+		return ( (iTime-m_iLastAnswerTime)>g_iPingInterval*1000 );
+	}
+
+	inline static DWORD GetCurSeconds()
+	{
+		int64_t iNow = sphMicroTimer()/1000000;
+		return 0xFFFFFFFF & iNow;
+	}
+
+	AgentDash_t*	GetCurrentStat()
+	{
+		DWORD uTime = GetCurSeconds()/g_uHAPeriodKarma;
+		int iIdx = uTime % STATS_DASH_TIME;
+		AgentDash_t & dStats = m_dStats[iIdx];
+		if ( dStats.m_uTimestamp!=uTime ) // we have new or reused stat
+			dStats.Reset();
+		dStats.m_uTimestamp = uTime;
+		return &dStats;
+	}
+
+	void GetDashStat ( AgentDash_t* pRes, int iPeriods=1 )
+	{
+		assert ( pRes );
+		pRes->Reset();
+
+		DWORD uSeconds = GetCurSeconds();
+		if ( (uSeconds % g_uHAPeriodKarma) < (g_uHAPeriodKarma/2) )
+			++iPeriods;
+
+		int iLimit = Min ( iPeriods, STATS_DASH_TIME );
+		DWORD uTime = uSeconds/g_uHAPeriodKarma;
+		int iIdx = uTime % STATS_DASH_TIME;
+		// pRes->m_uTimestamp = uTime;
+
+		for ( ; iLimit>0 ; --iLimit )
+		{
+			AgentDash_t & dStats = m_dStats[iIdx];
+			if ( dStats.m_uTimestamp==uTime ) // it might be no queries at all in the fixed time
+				pRes->Add ( dStats );
+
+			--uTime;
+			--iIdx;
+			if ( iIdx<0 )
+				iIdx = STATS_DASH_TIME-1;
+		}
+	}
 };
 
 struct SearchdStats_t
@@ -559,8 +734,9 @@ struct SearchdStats_t
 	int64_t		m_iDiskReadBytes;	///< total read IO traffic
 	int64_t		m_iDiskReadTime;	///< total read IO time
 
-	DWORD			m_bmAgentStats[STATS_MAX_AGENTS/32];	///< per-agent storage usage bitmap
-	AgentStats_t	m_dAgentStats[STATS_MAX_AGENTS];		///< per-agent storage
+	StaticStorage_t<AgentStats_t,STATS_MAX_AGENTS> m_dAgentStats;
+	StaticStorage_t<HostDashboard_t,STATS_MAX_DASH> m_dDashboard;
+	SmallStringHash_T<int>							m_hDashBoard; ///< find hosts for agents and sort them all
 };
 
 static SearchdStats_t *			g_pStats		= NULL;
@@ -2992,39 +3168,16 @@ void NetInputBuffer_c::SendErrorReply ( const char * sTemplate, ... )
 
 
 /// remote agent descriptor (stored in a global hash)
-struct AgentDesc_t
-{
-	CSphString		m_sHost;		///< remote searchd host
-	int				m_iPort;		///< remote searchd port, 0 if local
-	CSphString		m_sPath;		///< local searchd UNIX socket path
-	CSphString		m_sIndexes;		///< remote index names to query
-	bool			m_bBlackhole;	///< blackhole agent flag
-	int				m_iFamily;		///< TCP or UNIX socket
-	DWORD			m_uAddr;		///< IP address
-	int				m_iStatsIndex;	///< index into global searchd stats array
-
-public:
-	AgentDesc_t ()
-		: m_iPort ( -1 )
-		, m_bBlackhole ( false )
-		, m_iFamily ( AF_INET )
-		, m_uAddr ( 0 )
-		, m_iStatsIndex ( -1 )
-	{}
-};
 
 struct MetaAgentDesc_t
 {
 private:
 	CSphVector<AgentDesc_t> m_dAgents;
 	int				m_iCurAgent;
-public:
-	AgentDesc_t *	m_pAgent;		/// currently active agent
 
 public:
 	MetaAgentDesc_t ()
 		: m_iCurAgent ( -1 )
-		, m_pAgent ( NULL )
 	{}
 
 	MetaAgentDesc_t ( const MetaAgentDesc_t & rhs )
@@ -3032,18 +3185,23 @@ public:
 		*this = rhs;
 	}
 
+	AgentDesc_t * CurrentAgent()
+	{
+		assert ( m_iCurAgent>=0 );
+		return &m_dAgents[m_iCurAgent];
+	}
+
 	AgentDesc_t * NewAgent()
 	{
 		m_iCurAgent=m_dAgents.GetLength();
 		AgentDesc_t & tAgent = m_dAgents.Add();
-		m_pAgent=&tAgent;
-		return m_pAgent;
+		return & tAgent;
 	}
 
 	AgentDesc_t * PulseAgent ( bool bForward=true )
 	{
 		if ( m_dAgents.GetLength()==1 )
-			return m_pAgent;
+			return CurrentAgent();
 
 		if ( bForward )
 		{
@@ -3057,19 +3215,108 @@ public:
 				m_iCurAgent = m_dAgents.GetLength()-1;
 		}
 
-		m_pAgent=&m_dAgents[m_iCurAgent];
-		return m_pAgent;
+		return CurrentAgent();
 	}
 
 	AgentDesc_t * GetRRAgent()
 	{
-		return PulseAgent();
+		if ( !g_pStats )
+			return PulseAgent();
+
+		if ( m_dAgents.GetLength()==1 )
+			return CurrentAgent();
+
+		int iBestAgent = -1;
+		float fBestCriticalErrors = 1.0;
+		CSphVector<int> dCandidates;
+		dCandidates.Reserve ( m_dAgents.GetLength() );
+
+		ARRAY_FOREACH ( i, m_dAgents )
+		{
+			// no locks for g_pStats since we just reading, and read data is not critical.
+			HostDashboard_t & dDash = g_pStats->m_dDashboard.m_dItemStats[m_dAgents[i].m_iDashIndex];
+
+			AgentDash_t dDashStat;
+			dDash.GetDashStat ( &dDashStat, 1 ); // look at last 30..90 seconds.
+			int64_t iQueries = 0;
+			int64_t iCriticalErrors = 0;
+			int64_t iSuccesses = 0;
+			for ( int j=0; j<eMaxStat; ++j )
+			{
+				iQueries += dDashStat.m_iStats[j];
+				if ( j==3 ) // counters from 0 to 3 counts network critical errors
+					iCriticalErrors = iQueries;
+				if ( j==eNoErrors )
+					iSuccesses = dDashStat.m_iStats[j];
+			}
+
+			// 1. No successes queries last period (it includes the pings). Skip such node!
+			if ( !iSuccesses )
+				continue;
+
+			if ( iQueries )
+			{
+				// 2. Among good nodes - select the one(s) with lowest errors/query rating
+				float fCriticalErrors = (float) iCriticalErrors/iQueries;
+				if ( fCriticalErrors < fBestCriticalErrors )
+				{
+					dCandidates.Reset();
+					iBestAgent = i;
+					fBestCriticalErrors = fCriticalErrors;
+				} else if ( fCriticalErrors==fBestCriticalErrors )
+				{
+					dCandidates.Add ( iBestAgent );
+					iBestAgent = i;
+				}
+			}
+		}
+
+		// nothing to select, sorry. Just plain RR...
+		if ( iBestAgent < 0 )
+		{
+			sphLogDebug ( "HA selector discarded all the candidates and just fall into simple RR" );
+			return PulseAgent();
+		}
+
+		// only one node with lowest error rating. Return it.
+		if ( !dCandidates.GetLength() )
+		{
+			sphLogDebug ( "HA selected %d node with best error rating (%.2f)", iBestAgent, fBestCriticalErrors );
+			return &m_dAgents[iBestAgent];
+		}
+
+		// several nodes. Let's select the one with most late answer
+		int64_t iBestAnswerTime = g_pStats->m_dDashboard.m_dItemStats[iBestAgent].m_iLastAnswerTime;
+		ARRAY_FOREACH ( i, dCandidates )
+		{
+			if ( iBestAnswerTime < g_pStats->m_dDashboard.m_dItemStats[dCandidates[i]].m_iLastAnswerTime )
+			{
+				iBestAgent = dCandidates[i];
+				iBestAnswerTime = g_pStats->m_dDashboard.m_dItemStats[iBestAgent].m_iLastAnswerTime;
+			}
+		}
+		float fAge = (sphMicroTimer()-iBestAnswerTime)/10000.0f;
+		sphLogDebug ( "HA selected %d node with best error rating (%.2f), answered %f seconds ago", iBestAgent, fBestCriticalErrors, fAge );
+		return &m_dAgents[iBestAgent];
 	}
 
 	void Rewind ( bool bLast=true )
 	{
 		m_iCurAgent = bLast?(m_dAgents.GetLength()-1):0;
-		m_pAgent=&m_dAgents[m_iCurAgent];
+	}
+
+	void QueuePings()
+	{
+		if ( m_dAgents.GetLength() < 2 )
+			return;
+
+		if ( g_pStats )
+		{
+			g_tStatsMutex.Lock();
+			ARRAY_FOREACH ( i, m_dAgents )
+				g_pStats->m_dDashboard.m_dItemStats[m_dAgents[i].m_iDashIndex].m_bNeedPing = true;
+			g_tStatsMutex.Unlock();
+		}
 	}
 
 	const CSphVector<AgentDesc_t>& GetAgents() const
@@ -3083,7 +3330,6 @@ public:
 			return *this;
 		m_dAgents = rhs.GetAgents();
 		m_iCurAgent = rhs.m_iCurAgent;
-		m_pAgent=&m_dAgents[m_iCurAgent];
 		return *this;
 	}
 };
@@ -3152,17 +3398,6 @@ public:
 		m_iWall += sphMicroTimer ();
 	}
 
-	CSphString GetName() const
-	{
-		CSphString sName;
-		switch ( m_iFamily )
-		{
-			case AF_INET: sName.SetSprintf ( "%s:%u", m_sHost.cstr(), m_iPort ); break;
-			case AF_UNIX: sName = m_sPath; break;
-		}
-		return sName;
-	}
-
 	AgentConn_t & operator = ( const AgentDesc_t & rhs )
 	{
 		m_sHost = rhs.m_sHost;
@@ -3173,6 +3408,7 @@ public:
 		m_iFamily = rhs.m_iFamily;
 		m_uAddr = rhs.m_uAddr;
 		m_iStatsIndex = rhs.m_iStatsIndex;
+		m_iDashIndex = rhs.m_iDashIndex;
 		return *this;
 	}
 };
@@ -3222,15 +3458,21 @@ struct IReplyParser_t
 	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const = 0;
 };
 
-
-#define AGENT_STATS_INC(_agent,_counter) \
-	if ( g_pStats && _agent.m_iStatsIndex>=0 && _agent.m_iStatsIndex<STATS_MAX_AGENTS ) \
-	{ \
-		g_tStatsMutex.Lock (); \
-		g_pStats->m_dAgentStats [ _agent.m_iStatsIndex ]._counter++; \
-		g_tStatsMutex.Unlock (); \
+inline void agent_stats_inc ( AgentConn_t & tAgent, eAgentStats iCounter )
+{
+	if ( g_pStats && tAgent.m_iStatsIndex>=0 && tAgent.m_iStatsIndex<STATS_MAX_AGENTS )
+	{
+		g_tStatsMutex.Lock ();
+		g_pStats->m_dAgentStats.m_dItemStats [ tAgent.m_iStatsIndex ].m_iStats[iCounter]++;
+		if ( tAgent.m_iDashIndex>=0 && tAgent.m_iDashIndex<STATS_MAX_DASH )
+		{
+			g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].GetCurrentStat()->m_iStats[iCounter]++;
+			if ( iCounter>=eNoErrors )
+				g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iLastAnswerTime = sphMicroTimer();
+		}
+		g_tStatsMutex.Unlock ();
 	}
-
+}
 
 struct AgentConnectionContext_t
 {
@@ -3297,6 +3539,8 @@ void RemoteConnectToAgents ( AgentConn_t & tAgent )
 		g_tStatsMutex.Lock();
 		g_pStats->m_iAgentConnect++;
 		g_pStats->m_iAgentRetry += ( bAgentRetry );
+		if ( tAgent.m_iDashIndex>=0 && tAgent.m_iDashIndex<STATS_MAX_DASH )
+			g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iLastQueryTime = sphMicroTimer();
 		g_tStatsMutex.Unlock();
 	}
 
@@ -3310,7 +3554,7 @@ void RemoteConnectToAgents ( AgentConn_t & tAgent )
 			tAgent.Close ();
 			tAgent.m_sFailure.SetSprintf ( "connect() failed: %s", sphSockError(iErr) );
 			tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures
-			AGENT_STATS_INC ( tAgent, m_iConnectFailures );
+			agent_stats_inc ( tAgent, eConnectFailures );
 			return;
 
 		} else
@@ -3426,7 +3670,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 					// connect() failure
 					tAgent.m_sFailure.SetSprintf ( "connect() failed: %s", sphSockError(iErr) );
 					tAgent.Close ();
-					AGENT_STATS_INC ( tAgent, m_iConnectFailures );
+					agent_stats_inc ( tAgent, eConnectFailures );
 				} else
 				{
 					// connect() success
@@ -3449,13 +3693,13 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 						// network error
 						int iErr = sphSockGetErrno();
 						tAgent.m_sFailure.SetSprintf ( "handshake failure (errno=%d, msg=%s)", iErr, sphSockError(iErr) );
-						AGENT_STATS_INC ( tAgent, m_iNetworkErrors );
+						agent_stats_inc ( tAgent, eNetworkErrors );
 
 					} else if ( iRes>0 )
 					{
 						// incomplete reply
 						tAgent.m_sFailure.SetSprintf ( "handshake failure (exp=%d, recv=%d)", (int)sizeof(iRemoteVer), iRes );
-						AGENT_STATS_INC ( tAgent, m_iWrongReplies );
+						agent_stats_inc ( tAgent, eWrongReplies );
 
 					} else
 					{
@@ -3463,7 +3707,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 						// this might happen in out-of-sync connect-accept case; so let's retry
 						tAgent.m_sFailure = "handshake failure (connection was closed)";
 						tAgent.m_eState = AGENT_RETRY;
-						AGENT_STATS_INC ( tAgent, m_iUnexpectedClose );
+						agent_stats_inc ( tAgent, eUnexpectedClose );
 					}
 					continue;
 				}
@@ -3472,7 +3716,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 				if (!( iRemoteVer==SPHINX_SEARCHD_PROTO || iRemoteVer==0x01000000UL ) ) // workaround for all the revisions that sent it in host order...
 				{
 					tAgent.m_sFailure.SetSprintf ( "handshake failure (unexpected protocol version=%d)", iRemoteVer );
-					AGENT_STATS_INC ( tAgent, m_iWrongReplies );
+					agent_stats_inc ( tAgent, eWrongReplies );
 					tAgent.Close ();
 					continue;
 				}
@@ -3519,7 +3763,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 			tAgent.Close ();
 			tAgent.m_sFailure.SetSprintf ( "connect() timed out" );
 			tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures
-			AGENT_STATS_INC ( tAgent, m_iTimeoutsConnect );
+			agent_stats_inc ( tAgent, eTimeoutsConnect );
 		}
 	}
 
@@ -3635,7 +3879,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 					{
 						// bail out if failed
 						tAgent.m_sFailure.SetSprintf ( "failed to receive reply header" );
-						AGENT_STATS_INC ( tAgent, m_iNetworkErrors );
+						agent_stats_inc ( tAgent, eNetworkErrors );
 						break;
 					}
 
@@ -3648,7 +3892,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 					{
 						tAgent.m_sFailure.SetSprintf ( "invalid packet size (status=%d, len=%d, max_packet_size=%d)",
 							tReplyHeader.m_iStatus, tReplyHeader.m_iLength, g_iMaxPacketSize );
-						AGENT_STATS_INC ( tAgent, m_iWrongReplies );
+						agent_stats_inc ( tAgent, eWrongReplies );
 						break;
 					}
 
@@ -3680,7 +3924,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 					if ( iRes<0 )
 					{
 						tAgent.m_sFailure.SetSprintf ( "failed to receive reply body: %s", sphSockError() );
-						AGENT_STATS_INC ( tAgent, m_iNetworkErrors );
+						agent_stats_inc ( tAgent, eNetworkErrors );
 						break;
 					}
 
@@ -3725,7 +3969,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 					if ( tReq.GetError() )
 					{
 						tAgent.m_sFailure.SetSprintf ( "incomplete reply" );
-						AGENT_STATS_INC ( tAgent, m_iWrongReplies );
+						agent_stats_inc ( tAgent, eWrongReplies );
 						break;
 					}
 
@@ -3744,7 +3988,8 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 			{
 				tAgent.Close ();
 				tAgent.m_dResults.Reset ();
-			}
+			} else
+				agent_stats_inc ( tAgent, eNoErrors );
 		}
 	}
 
@@ -3760,7 +4005,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 			assert ( !tAgent.m_bSuccess );
 			tAgent.Close ();
 			tAgent.m_sFailure.SetSprintf ( "query timed out" );
-			AGENT_STATS_INC ( tAgent, m_iTimeoutsQuery );
+			agent_stats_inc ( tAgent, eTimeoutsQuery );
 		}
 	}
 
@@ -8193,6 +8438,7 @@ enum SqlStmt_e
 	STMT_SHOW_COLLATION,
 	STMT_SHOW_CHARACTER_SET,
 	STMT_OPTIMIZE_INDEX,
+	STMT_SHOW_AGENTSTATUS,
 
 	STMT_TOTAL
 };
@@ -10304,18 +10550,18 @@ void BuildStatus ( CSphVector<CSphString> & dStatus )
 		const char * sIdx = g_hDistIndexes.IterateGetKey().cstr();
 		CSphVector<MetaAgentDesc_t> & dAgents = g_hDistIndexes.IterateGet().m_dAgents;
 		ARRAY_FOREACH ( i, dAgents )
+			ARRAY_FOREACH ( j, dAgents[i].GetAgents() )
 		{
-			int iIndex = dAgents[i].m_pAgent->m_iStatsIndex;
+			int iIndex = dAgents[i].GetAgents()[j].m_iStatsIndex;
 			if ( iIndex<0 || iIndex>=STATS_MAX_AGENTS )
 				continue;
 
-			AgentStats_t & tStats = g_pStats->m_dAgentStats[iIndex];
-			dStatus.Add().SetSprintf ( "ag_%s_%d_query_timeouts", sIdx, i );		dStatus.Add().SetSprintf ( FMT64, tStats.m_iTimeoutsQuery );
-			dStatus.Add().SetSprintf ( "ag_%s_%d_connect_timeouts", sIdx, i );		dStatus.Add().SetSprintf ( FMT64, tStats.m_iTimeoutsConnect );
-			dStatus.Add().SetSprintf ( "ag_%s_%d_connect_failures", sIdx, i );		dStatus.Add().SetSprintf ( FMT64, tStats.m_iConnectFailures );
-			dStatus.Add().SetSprintf ( "ag_%s_%d_network_errors", sIdx, i );		dStatus.Add().SetSprintf ( FMT64, tStats.m_iNetworkErrors );
-			dStatus.Add().SetSprintf ( "ag_%s_%d_wrong_replies", sIdx, i );			dStatus.Add().SetSprintf ( FMT64, tStats.m_iWrongReplies );
-			dStatus.Add().SetSprintf ( "ag_%s_%d_unexpected_closings", sIdx, i );	dStatus.Add().SetSprintf ( FMT64, tStats.m_iUnexpectedClose );
+			AgentStats_t & tStats = g_pStats->m_dAgentStats.m_dItemStats[iIndex];
+			for ( int j=0; j<eMaxStat; ++j )
+			{
+				dStatus.Add().SetSprintf ( "ag_%s_%d_%s", sIdx, i, tStats.m_sNames[j] );
+				dStatus.Add().SetSprintf ( FMT64, tStats.m_iStats[j] );
+			}
 		}
 	}
 	g_tDistLock.Unlock();
@@ -10363,6 +10609,69 @@ void BuildStatus ( CSphVector<CSphString> & dStatus )
 		dStatus.Add ( "avg_query_reads" );		dStatus.Add() = OFF;
 		dStatus.Add ( "avg_query_readkb" );		dStatus.Add() = OFF;
 		dStatus.Add ( "avg_query_readtime" );	dStatus.Add() = OFF;
+	}
+}
+
+void BuildAgentStatus ( CSphVector<CSphString> & dStatus )
+{
+	if ( !g_pStats )
+	{
+		dStatus.Add("No agent status");
+		dStatus.Add("Error");
+		return;
+	}
+
+	const char * FMT64 = INT64_FMT;
+
+	dStatus.Add().SetSprintf ( "status_period_seconds" );
+	dStatus.Add().SetSprintf ( "%d", g_uHAPeriodKarma );
+	dStatus.Add().SetSprintf ( "status_stored_periods" );
+	dStatus.Add().SetSprintf ( "%d", STATS_DASH_TIME );
+
+	g_pStats->m_hDashBoard.IterateStart();
+	while ( g_pStats->m_hDashBoard.IterateNext() )
+	{
+		int iIndex = g_pStats->m_hDashBoard.IterateGet();
+		const char * sKey = g_pStats->m_hDashBoard.IterateGetKey().cstr();
+		dStatus.Add().SetSprintf ( "ag_%d_hostname", iIndex );
+		dStatus.Add().SetSprintf ( "%s", sKey );
+
+		HostDashboard_t & dDash = g_pStats->m_dDashboard.m_dItemStats[iIndex];
+		dStatus.Add().SetSprintf ( "ag_%d_references", iIndex );
+		dStatus.Add().SetSprintf ( "%d", dDash.m_iRefCount );
+		int64_t iCur = sphMicroTimer();
+		int64_t iLastAccess = iCur - dDash.m_iLastQueryTime;
+		float fPeriod = (float)iLastAccess/1000000.0f;
+		dStatus.Add().SetSprintf ( "ag_%d_lastquery", iIndex );
+		dStatus.Add().SetSprintf ( "%.2f", fPeriod );
+		iLastAccess = iCur - dDash.m_iLastAnswerTime;
+		fPeriod = (float)iLastAccess/1000000.0f;
+		dStatus.Add().SetSprintf ( "ag_%d_lastanswer", iIndex );
+		dStatus.Add().SetSprintf ( "%.2f", fPeriod );
+		int64_t iLastTimer = dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime;
+		dStatus.Add().SetSprintf ( "ag_%d_lastperiodmsec", iIndex );
+		dStatus.Add().SetSprintf ( FMT64, iLastTimer/1000 );
+
+		AgentDash_t dDashStat;
+		int iPeriods = 1;
+
+		while ( iPeriods>0 )
+		{
+			dDash.GetDashStat ( &dDashStat, iPeriods );
+
+			for ( int j=0; j<eMaxStat; ++j )
+			{
+				dStatus.Add().SetSprintf ( "ag_%d_%dperiods_%s", iIndex, iPeriods, dDashStat.m_sNames[j] );
+				dStatus.Add().SetSprintf ( FMT64, dDashStat.m_iStats[j] );
+			}
+
+			if ( iPeriods==1 )
+				iPeriods = 5;
+			else if ( iPeriods==5 )
+				iPeriods = STATS_DASH_TIME;
+			else if ( iPeriods==STATS_DASH_TIME )
+				iPeriods = -1;
+		}
 	}
 }
 
@@ -10536,6 +10845,25 @@ void HandleCommandFlush ( int iSock, int iVer, InputBuffer_c & tReq )
 #define THD_STATE(_state) { if ( pThd ) pThd->m_eThdState = _state; }
 void HandleCommandSphinxql ( int iSock, int iVer, InputBuffer_c & tReq ); // definition is below
 
+/// ping/pong exchange over API
+void HandleCommandPing ( int iSock, int iVer, InputBuffer_c & tReq )
+{
+	if ( !CheckCommandVersion ( iVer, VER_COMMAND_PING, tReq ) )
+		return;
+
+	// parse ping
+	int iCookie = tReq.GetInt();
+
+	// return last flush tag, just for the fun of it
+	NetOutputBuffer_c tOut ( iSock );
+	tOut.SendWord ( SEARCHD_OK );
+	tOut.SendWord ( VER_COMMAND_PING );
+	tOut.SendInt ( 4 ); // resplen, 1 dword
+	tOut.SendInt ( iCookie ); // echo the cookie back
+	tOut.Flush ();
+	assert ( tOut.GetError()==true || tOut.GetSentCount()==12 ); // 8+resplen
+}
+
 void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 {
 	MEMORY ( SPH_MEM_HANDLE_NONSQL );
@@ -10690,6 +11018,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 			case SEARCHD_COMMAND_STATUS:	HandleCommandStatus ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_FLUSHATTRS:HandleCommandFlush ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_SPHINXQL:	HandleCommandSphinxql ( iSock, iCommandVer, tBuf ); break;
+			case SEARCHD_COMMAND_PING:		HandleCommandPing ( iSock, iCommandVer, tBuf ); break;
 			default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
 		}
 
@@ -11565,6 +11894,93 @@ void HandleMysqlShowTables ( NetOutputBuffer_c & tOut, BYTE uPacketID )
 	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
 }
 
+// The pinger
+struct PingRequestBuilder_t : public IRequestBuilder_t
+{
+	explicit PingRequestBuilder_t ( int iCookie = 0 )
+		: m_iCookie ( iCookie )
+	{}
+	virtual void BuildRequest ( AgentConn_t &, NetOutputBuffer_c & tOut ) const
+	{
+		// header
+		tOut.SendDword ( SPHINX_SEARCHD_PROTO );
+		tOut.SendWord ( SEARCHD_COMMAND_PING );
+		tOut.SendWord ( VER_COMMAND_PING );
+		tOut.SendInt ( 4 );
+		tOut.SendInt ( m_iCookie );
+	}
+
+protected:
+	const int m_iCookie;
+};
+
+struct PingReplyParser_t : public IReplyParser_t
+{
+	explicit PingReplyParser_t ( int * pCookie )
+		: m_pCookie ( pCookie )
+	{}
+
+	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
+	{
+		*m_pCookie += tReq.GetDword ();
+		return true;
+	}
+
+protected:
+	int * m_pCookie;
+};
+
+void CheckPing()
+{
+	if ( g_iPingInterval<=0 )
+		return;
+
+	static int64_t iLastCheck = 0;
+	CSphVector<AgentConn_t> dAgents;
+	int64_t iNow = sphMicroTimer();
+	if ( (iNow-iLastCheck)<g_iPingInterval*1000 )
+		return;
+
+	int iCookie = (int)iNow;
+	iLastCheck = iNow;
+
+	g_pStats->m_hDashBoard.IterateStart();
+	while ( g_pStats->m_hDashBoard.IterateNext() )
+	{
+		int iIndex = g_pStats->m_hDashBoard.IterateGet();
+		const HostDashboard_t & dDash = g_pStats->m_dDashboard.m_dItemStats[iIndex];
+		if ( dDash.m_bNeedPing && dDash.IsOlder(iNow) )
+		{
+			AgentConn_t & dAgent = dAgents.Add ();
+			dAgent = dDash.m_dDescriptor;
+		}
+	}
+
+	CSphScopedPtr<PingRequestBuilder_t> tReqBuilder ( NULL );
+	CSphScopedPtr<CSphRemoteAgentsController> tDistCtrl ( NULL );
+	if ( dAgents.GetLength() )
+	{
+		// connect to remote agents and query them
+		tReqBuilder = new PingRequestBuilder_t ( iCookie );
+		tDistCtrl = new CSphRemoteAgentsController ( g_iDistThreads, dAgents, *tReqBuilder.Ptr(), g_iPingInterval );
+	}
+
+	int iAgentsDone = 0;
+	if ( dAgents.GetLength() )
+	{
+		iAgentsDone = tDistCtrl->Finish();
+	}
+
+	int iSuccesses = 0;
+	int iReplyCookie = 0;
+	if ( iAgentsDone )
+	{
+		PingReplyParser_t tParser ( &iReplyCookie );
+		iSuccesses = RemoteWaitForAgents ( dAgents, g_iPingInterval, tParser );
+	}
+}
+
+
 /////////////////////////////////////////////////////////////////////////////
 // SMART UPDATES HANDLER
 /////////////////////////////////////////////////////////////////////////////
@@ -12187,14 +12603,25 @@ void HandleMysqlWarning ( NetOutputBuffer_c & tOut, BYTE & uPacketID, const CSph
 
 
 void HandleMysqlMeta ( NetOutputBuffer_c & tOut, BYTE & uPacketID, const CSphQueryResultMeta & tLastMeta,
-	SqlRowBuffer_c & dRows, bool bStatus, bool bMoreResultsFollow )
+	SqlRowBuffer_c & dRows, SqlStmt_e eStmt, bool bMoreResultsFollow )
 {
 	CSphVector<CSphString> dStatus;
 
-	if ( bStatus )
+	switch ( eStmt )
+	{
+	case STMT_SHOW_STATUS:
 		BuildStatus ( dStatus );
-	else
+		break;
+	case STMT_SHOW_META:
 		BuildMeta ( dStatus, tLastMeta );
+		break;
+	case STMT_SHOW_AGENTSTATUS:
+		BuildAgentStatus ( dStatus );
+		break;
+	default:
+		assert(0); // only 'show' statements allowed here.
+		break;
+	}
 
 	// result set header packet
 	tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
@@ -12412,8 +12839,8 @@ void HandleMysqlMultiStmt ( NetOutputBuffer_c & tOut, BYTE uPacketID, const CSph
 			SendMysqlSelectResult ( tOut, uPacketID, dRows, tRes, bMoreResultsFollow );
 		} else if ( eStmt==STMT_SHOW_WARNINGS )
 			HandleMysqlWarning ( tOut, uPacketID, tMeta, dRows, bMoreResultsFollow );
-		else if ( eStmt==STMT_SHOW_STATUS || eStmt==STMT_SHOW_META )
-			HandleMysqlMeta ( tOut, uPacketID, tMeta, dRows, eStmt==STMT_SHOW_STATUS, bMoreResultsFollow );
+		else if ( eStmt==STMT_SHOW_STATUS || eStmt==STMT_SHOW_META || eStmt==STMT_SHOW_AGENTSTATUS )
+			HandleMysqlMeta ( tOut, uPacketID, tMeta, dRows, eStmt, bMoreResultsFollow );
 
 		if ( g_bGotSigterm )
 		{
@@ -12884,7 +13311,8 @@ public:
 
 		case STMT_SHOW_STATUS:
 		case STMT_SHOW_META:
-			HandleMysqlMeta ( tOut, uPacketID, m_tLastMeta, dRows, eStmt==STMT_SHOW_STATUS, false );
+		case STMT_SHOW_AGENTSTATUS:
+			HandleMysqlMeta ( tOut, uPacketID, m_tLastMeta, dRows, eStmt, false );
 			return;
 
 		case STMT_INSERT:
@@ -14533,7 +14961,7 @@ bool PrereadNewIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex, c
 
 bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, const char * szIndexName, bool bBlackhole )
 {
-	AgentDesc_t * pAgent = tAgent.m_pAgent;
+	AgentDesc_t * pAgent = tAgent.CurrentAgent();
 	assert ( pAgent );
 
 	// lookup address (if needed)
@@ -14548,30 +14976,37 @@ bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, co
 		}
 	}
 
+	// hash for dashboard
+	CSphString sHashKey = pAgent->GetName();
+
 	pAgent->m_bBlackhole = bBlackhole;
 
 	// allocate stats slot
+	// let us cheat and also allocate the dashboard slot under the same lock
 	if ( g_pStats )
 	{
 		g_tStatsMutex.Lock();
-		for ( int i=0; i<STATS_MAX_AGENTS/32; i++ )
-			if ( g_pStats->m_bmAgentStats[i]!=0xffffffffUL )
-			{
-				int j = FindBit ( g_pStats->m_bmAgentStats[i] );
-				g_pStats->m_bmAgentStats[i] |= ( 1<<j );
-				pAgent->m_iStatsIndex = i*32 + j;
-				memset ( &g_pStats->m_dAgentStats[pAgent->m_iStatsIndex], 0, sizeof(AgentStats_t) );
-				break;
-			}
+		pAgent->m_iStatsIndex = g_pStats->m_dAgentStats.AllocItem();
+		if ( g_pStats->m_hDashBoard.Exists ( sHashKey ) )
+		{
+			pAgent->m_iDashIndex = g_pStats->m_hDashBoard[sHashKey];
+			g_pStats->m_dDashboard.m_dItemStats[pAgent->m_iDashIndex].m_iRefCount++;
+		} else
+		{
+			pAgent->m_iDashIndex = g_pStats->m_dDashboard.AllocItem();
+			g_pStats->m_dDashboard.m_dItemStats[pAgent->m_iDashIndex].Init ( pAgent );
+			g_pStats->m_hDashBoard.Add ( pAgent->m_iDashIndex, sHashKey );
+		}
+
 		g_tStatsMutex.Unlock();
 	}
 
 	// for now just convert all 'host mirrors' (i.e. agents without indices) into 'index mirrors'
 	while ( !pAgent->m_sIndexes.IsEmpty() )
 	{
-		tAgent.PulseAgent ( false );
-		if ( tAgent.m_pAgent->m_sIndexes.IsEmpty() )
-			tAgent.m_pAgent->m_sIndexes = pAgent->m_sIndexes;
+		AgentDesc_t * pMyAgent = tAgent.PulseAgent ( false );
+		if ( pMyAgent->m_sIndexes.IsEmpty() )
+			pMyAgent->m_sIndexes = pAgent->m_sIndexes;
 		else
 			break;
 	}
@@ -14716,6 +15151,7 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, cons
 	} // while (eState!=apDone)
 	bool bRes = ValidateAgentDesc ( tAgent, pAgent, szIndexName, bBlackhole );
 	tAgent.Rewind();
+	tAgent.QueuePings();
 	return bRes;
 }
 
@@ -14780,14 +15216,21 @@ void FreeAgentStats ( DistributedIndex_t & tIndex )
 
 	g_tStatsMutex.Lock();
 	ARRAY_FOREACH ( i, tIndex.m_dAgents )
-	{
-		int iIndex = tIndex.m_dAgents[i].m_pAgent->m_iStatsIndex;
-		if ( iIndex<0 || iIndex>=STATS_MAX_AGENTS )
-			continue;
+		ARRAY_FOREACH ( j, tIndex.m_dAgents[i].GetAgents() )
+		{
+			const AgentDesc_t& dAgent = tIndex.m_dAgents[i].GetAgents()[j];
+			g_pStats->m_dAgentStats.FreeItem ( dAgent.m_iStatsIndex );
 
-		assert ( g_pStats->m_bmAgentStats[iIndex>>5] & ( 1UL<<( iIndex & 31 ) ) );
-		g_pStats->m_bmAgentStats[iIndex>>5] &= ~( 1UL<<( iIndex & 31 ) );
-	}
+			// now free the dashboard hosts also
+			HostDashboard_t& dDash = g_pStats->m_dDashboard.m_dItemStats[dAgent.m_iDashIndex];
+			dDash.m_iRefCount--;
+			assert ( dDash.m_iRefCount>=0 );
+			if ( dDash.m_iRefCount<=0 ) // no more agents use this host. Delete record.
+			{
+				g_pStats->m_dDashboard.FreeItem ( dAgent.m_iDashIndex );
+				g_pStats->m_hDashBoard.Delete ( dAgent.GetName() );
+			}
+		}
 	g_tStatsMutex.Unlock();
 }
 
@@ -16299,6 +16742,7 @@ void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 	CheckRotate ();
 	CheckFlush ();
 	CheckChildrenTerm();
+	CheckPing();
 
 	sphInfo ( NULL ); // flush dupes
 
@@ -16447,6 +16891,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_iPreforkChildren = hSearchd.GetInt ( "prefork", g_iPreforkChildren );
 	g_tRtThrottle.m_iMaxIOps = hSearchd.GetInt ( "rt_merge_iops", 0 );
 	g_tRtThrottle.m_iMaxIOSize = hSearchd.GetSize ( "rt_merge_maxiosize", 0 );
+	g_iPingInterval = hSearchd.GetInt ("ha_ping_interval", 1000);
+	g_uHAPeriodKarma = hSearchd.GetInt ("ha_period_karma", 60 );
 
 	if ( hSearchd ( "collation_libc_locale" ) )
 	{

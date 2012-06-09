@@ -3931,7 +3931,7 @@ public:
 			}
 
 			iSpinCount++;
-			if ( iSpinCount>1 && iSpinCount>4 ) // it could be better not to do the same work
+			if ( iSpinCount>1 && iSpinCount<4 ) // it could be better not to do the same work
 			{
 				pPool->Push ( tNext );
 				tNext = AgentWorkContext_t();
@@ -4006,6 +4006,9 @@ void ThdWorkSequental ( AgentWorkContext_t * pCtx )
 	int iToRetry = 0;
 	for ( int i=0; i<pCtx->m_iAgentCount; i++ )
 		iToRetry += ( pCtx->m_pAgents[i].m_eState==AGENT_RETRY );
+
+	if ( iToRetry )
+		pCtx->m_iRetries++;
 
 	pCtx->m_pfn = NULL;
 	if ( iToRetry && pCtx->m_iRetriesMax && pCtx->m_iRetries<=pCtx->m_iRetriesMax )

@@ -214,6 +214,7 @@ ag_dist_0_connect_failures: 0
 ag_dist_0_network_errors: 0
 ag_dist_0_wrong_replies: 0
 ag_dist_0_unexpected_closings: 0
+ag_dist_0_succeeded_queries: 1
 query_cpu: OFF
 dist_local: 0.000
 query_reads: OFF

@@ -33,7 +33,7 @@ cmd ()
 	cmd1 "$FAILLOG" "$1" "$2" "$3" 
 }
 
-cmd "mysql -u root test < example.sql" "Documents setup failed"
+cmd "mysql -utest test < example.sql" "Documents setup failed"
 
 for CONFARGS in "--with-debug" "--with-debug --enable-id64";
 do

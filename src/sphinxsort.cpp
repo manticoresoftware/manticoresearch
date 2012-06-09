@@ -3319,7 +3319,6 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 
 			int dAttrs [ CSphMatchComparatorState::MAX_ATTRS ];
 			dAttrs[0] = iSortAttr;
-			bUsesAttrs |= SetupSortStringRemap ( tSorterSchema, tStateMatch, dAttrs );
 		}
 
 		// find out what function to use and whether it needs attributes

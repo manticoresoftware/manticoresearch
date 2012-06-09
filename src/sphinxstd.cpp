@@ -778,6 +778,7 @@ CSphProcessSharedMutex::CSphProcessSharedMutex ( int iExtraSize )
 	if ( iRes )
 	{
 		m_sError.SetSprintf ( "pthread_mutexattr_setpshared, errno = %d", iRes );
+		pthread_mutexattr_destroy ( &tAttr );
 		return;
 	}
 
@@ -785,16 +786,26 @@ CSphProcessSharedMutex::CSphProcessSharedMutex ( int iExtraSize )
 	if ( !m_pStorage.Alloc ( sizeof(pthread_mutex_t) + iExtraSize, sError, sWarning ) )
 	{
 		m_sError.SetSprintf ( "storage.alloc, error='%s', warning='%s'", sError.cstr(), sWarning.cstr() );
+		pthread_mutexattr_destroy ( &tAttr );
 		return;
 	}
 
 	m_pMutex = (pthread_mutex_t*) m_pStorage.GetWritePtr ();
 	iRes = pthread_mutex_init ( m_pMutex, &tAttr );
+	
 	if ( iRes )
 	{
 		m_sError.SetSprintf ( "pthread_mutex_init, errno=%d ", iRes );
+		pthread_mutexattr_destroy ( &tAttr );
 		m_pMutex = NULL;
 		m_pStorage.Reset ();
+		return;
+	}
+
+	iRes = pthread_mutexattr_destroy ( &tAttr );
+	if ( iRes )
+	{
+		m_sError.SetSprintf ( "pthread_mutexattr_destroy, errno = %d", iRes );
 		return;
 	}
 }

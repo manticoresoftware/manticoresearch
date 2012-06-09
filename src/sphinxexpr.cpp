@@ -914,7 +914,7 @@ static int FuncHashLookup ( const char * sKey )
 		-1, -1, -1, 22, -1, 13
 	};
 
-	if ( iHash<0 || iHash>=sizeof(dIndexes)/sizeof(dIndexes[0]) )
+	if ( iHash<0 || iHash>=(int)(sizeof(dIndexes)/sizeof(dIndexes[0])) )
 		return -1;
 
 	int iFunc = dIndexes[iHash];
@@ -926,7 +926,7 @@ static int FuncHashLookup ( const char * sKey )
 
 static int FuncHashCheck()
 {
-	for ( int i=0; i<sizeof(g_dFuncs)/sizeof(g_dFuncs[0]); i++ )
+	for ( int i=0; i<(int)(sizeof(g_dFuncs)/sizeof(g_dFuncs[0])); i++ )
 	{
 		CSphString sKey ( g_dFuncs[i].m_sName );
 		sKey.ToLower();

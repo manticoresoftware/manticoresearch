@@ -938,7 +938,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 			? sphCreateDictionaryKeywords ( tDictSettings, NULL, pTokenizer, sIndexName )
 			: sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, sIndexName );
 		if ( !pDict )
-			sphDie ( "index '%s': unable to create dictionary" );
+			sphDie ( "index '%s': unable to create dictionary", sIndexName );
 
 		pTokenFilter = ISphTokenizer::CreateMultiformFilter ( pTokenizer, pDict->GetMultiWordforms () );
 		pTokenizer = pTokenFilter ? pTokenFilter : pTokenizer;

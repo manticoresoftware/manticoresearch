@@ -4401,7 +4401,6 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 						{
 							bLastInFieldFound = false;
 							uLastPosInField = 0;
-							uLastFieldId = uFieldId;
 						}
 
 						if ( uLastPosInField && uPosInField<=uLastPosInField )
@@ -4630,7 +4629,7 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 					if ( pMvaCur!=pMvaBase+uOffset )
 					{
 						LOC_FAIL(( fp, "wrong MVA offset (segment=%d, row=%u, mvaattr=%d, docid="DOCID_FMT", expected=%u, got=%u)",
-							iSegment, uRow, iItem, uLastID, uLastID, (DWORD)(pMvaCur-pMvaBase), uOffset ));
+							iSegment, uRow, iItem, uLastID, (DWORD)(pMvaCur-pMvaBase), uOffset ));
 
 						pMvaCur = pMvaBase+uOffset;
 					}

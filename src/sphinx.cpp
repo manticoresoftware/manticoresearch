@@ -69,6 +69,7 @@
 #endif
 
 #if USE_RE2
+#include <string>
 #include <re2/re2.h>
 #endif
 
@@ -4546,7 +4547,7 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 				{
 					// stray slash on a buffer end
 					// handle it as a separator
-					iCodepoint = iCode = 0;
+					iCode = 0;
 				}
 			}
 
@@ -9555,7 +9556,6 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources,
 
 			dBlockLens.Add ( pMva-pMvaPool );
 			m_tProgress.m_iAttrs += pMva-pMvaPool;
-			pMva = pMvaPool;
 		}
 	}
 
@@ -10565,7 +10565,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			{
 				ARRAY_FOREACH ( i, dFieldMvaIndexes )
 				{
-					CSphAttrLocator tLoc = dFieldMvaIndexes[i].m_tLocator;
 					int iAttr = dFieldMvaIndexes[i].m_iAttr;
 					int iMVA = dFieldMvaIndexes[i].m_iMVAAttr;
 					bool bMva64 = dFieldMvaIndexes[i].m_bMva64;
@@ -11610,7 +11609,7 @@ static bool CopyFile ( const char * sSrc, const char * sDst, CSphString & sErrSt
 			size_t iRead = sphReadThrottled ( tSrcFile.GetFD(), pData, iSize, pThrottle );
 			if ( iRead!=iSize )
 			{
-				sErrStr.SetSprintf ( "read error in %s; "INT64_FMT" of %d bytes read", sSrc, iRead, iSize );
+				sErrStr.SetSprintf ( "read error in %s; "INT64_FMT" of %d bytes read", sSrc, (int64_t)iRead, iSize );
 				break;
 			}
 
@@ -14141,8 +14140,6 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 
 		DWORD iDocinfoSize = DWORD ( tDocinfo.GetSize ( iEntrySize, true, m_sLastError )
 			/ sizeof(DWORD) );
-		if ( iDocinfoSize<0 )
-			return false;
 
 		DWORD iRealDocinfoSize = m_uMinMaxIndex ? m_uMinMaxIndex : iDocinfoSize;
 
@@ -16325,7 +16322,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			iDictDocs = rdDict.UnzipInt();
 			iDictHits = rdDict.UnzipInt();
 			int iHint = ( iDictDocs>=DOCLIST_HINT_THRESH ) ? rdDict.GetByte() : 0;
-			iHint = DoclistHintUnpack ( iDictDocs, (BYTE)iHint );
+			DoclistHintUnpack ( iDictDocs, (BYTE)iHint );
 		} else
 		{
 			// finish reading the entire entry
@@ -18543,7 +18540,7 @@ struct Infix_t
 template<>
 bool Infix_t<2>::operator == ( const Infix_t<2> & rhs ) const
 {
-	return m_Data[0]==rhs.m_Data[0] && m_Data[1]==rhs.m_Data[1] && m_Data[2];
+	return m_Data[0]==rhs.m_Data[0] && m_Data[1]==rhs.m_Data[1];
 };
 
 
@@ -22302,7 +22299,7 @@ void CSphSource_Document::BuildHits ( CSphString & sError, bool bSkipEndMarker )
 			const BYTE * sTextToIndex;
 			if ( m_tSchema.m_dFields[m_tState.m_iField].m_bFilename )
 			{
-				iFieldBytes = LoadFileField ( &sField, sError );
+				LoadFileField ( &sField, sError );
 				sTextToIndex = sField;
 				if ( m_pFieldFilter )
 					sTextToIndex = m_pFieldFilter->Apply ( sTextToIndex );
@@ -26628,7 +26625,7 @@ bool CWordlist::LookupInfixCheckpoints ( const char * sInfix, int iBytes, CSphVe
 		{
 			int iKeep = ( iCode>>4 );
 			while ( iKeep-- )
-				pOut += Utf8CharBytes ( *pOut );
+				pOut += Utf8CharBytes ( *pOut ); ///< wtf? *pOut (=sKey) is NOT initialized?
 			iCode &= 15;
 			while ( iCode-- )
 			{

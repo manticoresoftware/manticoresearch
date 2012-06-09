@@ -3051,7 +3051,7 @@ void sphBuildExcerpt ( ExcerptQuery_t & tOptions, const CSphIndex * pIndex, cons
 
 	char * pData = const_cast<char*> ( tOptions.m_sSource.cstr() );
 	CSphFixedVector<char> pBuffer ( 0 );
-	int iDataLen = tOptions.m_sSource.Length();
+	int iDataLen = 0;
 
 	if ( tOptions.m_iLoadFiles )
 	{

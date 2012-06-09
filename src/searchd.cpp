@@ -2990,6 +2990,7 @@ void NetInputBuffer_c::SendErrorReply ( const char * sTemplate, ... )
 // DISTRIBUTED QUERIES
 /////////////////////////////////////////////////////////////////////////////
 
+
 /// remote agent descriptor (stored in a global hash)
 struct AgentDesc_t
 {
@@ -4714,18 +4715,20 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 	if ( pQuery->m_eMode==SPH_MATCH_ANY || pQuery->m_eMode==SPH_MATCH_PHRASE )
 		*szRes++ = '\"';
 
-	while ( ( c = *szQuery++ )!=0 )
+	if ( iQueryLen )
 	{
-		// must be in sync with EscapeString (php api)
-		const char sMagics[] = "<\\()|-!@~\"&/^$=";
-		for ( const char * s = sMagics; *s; s++ )
-			if ( c==*s )
+		while ( ( c = *szQuery++ )!=0 )
 		{
-			*szRes++ = '\\';
-			break;
+			// must be in sync with EscapeString (php api)
+			const char sMagics[] = "<\\()|-!@~\"&/^$=";
+			for ( const char * s = sMagics; *s; s++ )
+				if ( c==*s )
+				{
+					*szRes++ = '\\';
+					break;
+				}
+			*szRes++ = c;
 		}
-
-		*szRes++ = c;
 	}
 
 	switch ( pQuery->m_eMode )
@@ -11593,23 +11596,21 @@ struct SphinxqlReplyParser_t : public IReplyParser_t
 		DWORD uSize = ( tReq.GetLSBDword() & 0x00FFFFFF ) - 1;
 		BYTE uCommand = tReq.GetByte();
 		int iAffected = 0;
-		int iWarns = 0;
-		int iError = 0;
-		int iInsert_id = 0;
 		CSphString sMessage;
 		switch ( uCommand )
 		{
 		case 0: // ok packet
 			iAffected = MysqlUnpack ( tReq, &uSize );
-			iInsert_id = MysqlUnpack ( tReq, &uSize );
-			iWarns = tReq.GetLSBDword();
+			MysqlUnpack ( tReq, &uSize ); ///< int Insert_id (don't used).
+			tReq.GetLSBDword(); ///< num of warnings, but we don't use it for now.
 			uSize -= 4;
 			if ( uSize )
 				sMessage = tReq.GetRawString ( uSize );
 			break;
 
 		case 0xff: // error packet
-			iError = tReq.GetByte() + ((int)tReq.GetByte()<<8);
+			tReq.GetByte();
+			tReq.GetByte(); ///< num of errors (2 bytes), we don't use it for now.
 			uSize -= 2;
 			if ( uSize )
 				sMessage = tReq.GetRawString ( uSize );
@@ -14576,7 +14577,7 @@ bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, co
 	}
 	return true;
 }
-enum eAgentParse { apInHost, apInPort, apGotPort, apStartIndexList, apIndexList, apDone };
+enum eAgentParse { apInHost, apInPort, apStartIndexList, apIndexList, apDone };
 bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, const char * szIndexName, bool bBlackhole )
 {
 	eAgentParse eState = apInHost;
@@ -14707,6 +14708,9 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, cons
 				}
 				eState = apDone;
 			}
+		case apDone:
+		default:
+			break;
 		} // switch (eState)
 		p++;
 	} // while (eState!=apDone)

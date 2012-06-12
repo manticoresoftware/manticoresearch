@@ -790,6 +790,11 @@ static CSphString					g_sSphinxqlState;
 
 // Windows hacks
 #undef EINTR
+#undef EWOULDBLOCK
+#undef ETIMEDOUT
+#undef EINPROGRESS
+#undef ECONNRESET
+#undef ECONNABORTED
 #define LOCK_EX			0
 #define LOCK_UN			1
 #define STDIN_FILENO	fileno(stdin)

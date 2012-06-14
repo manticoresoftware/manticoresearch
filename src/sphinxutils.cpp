@@ -1872,7 +1872,7 @@ void sphSetUnlinkOld ( bool bUnlink )
 }
 
 
-void sphUnlinkIndex ( const char * sName, bool bForce, bool bRemoveMVP )
+void sphUnlinkIndex ( const char * sName, bool bForce )
 {
 	if ( !( g_bUnlinkOld || bForce ) )
 		return;
@@ -1882,8 +1882,7 @@ void sphUnlinkIndex ( const char * sName, bool bForce, bool bRemoveMVP )
 	const char * dCurExts[EXT_COUNT] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm", ".spk", ".sps", ".mvp" };
 	char sFileName[SPH_MAX_FILENAME_LEN];
 
-	int iEnd = bRemoveMVP ? EXT_COUNT : EXT_COUNT-1;
-	for ( int j=0; j<iEnd; j++ )
+	for ( int j=0; j<EXT_COUNT; j++ )
 	{
 		snprintf ( sFileName, sizeof(sFileName), "%s%s", sName, dCurExts[j] );
 		// 'mvp' is optional file

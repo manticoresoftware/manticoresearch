@@ -16,6 +16,7 @@ searchd
 	<searchd_settings/>
 	binlog_path = #
 	workers = threads
+	attr_flush_period = 3600 # not autoflush during test run but be able to do FlushAttributes command
 }
 
 source src
@@ -74,6 +75,23 @@ index rt_mva
 
 	rt_field			= text
 	rt_attr_multi	= mva
+}
+
+source src_save
+{
+	type			= mysql
+	<sql_settings/>	
+	sql_query = SELECT id, 1 as idd, '1, 2, 3, 4, 5' as mva, 'dummy' as text FROM mva_table
+	sql_attr_uint	= idd
+	sql_attr_multi = uint mva from field
+}
+
+index mva_save
+{
+	source			= src_save
+	path			= <data_path/>/mva_save
+	charset_type 	= utf-8
+	docinfo			= extern
 }
 
 
@@ -225,6 +243,17 @@ $results = array_merge ( $results, $query ( "replace into rt_mva (id, text, mva)
 $results = array_merge ( $results, $query ( "select * from rt_mva order by id asc limit 3", $sock ) );
 $results = array_merge ( $results, $query ( "show meta", $sock ) );
 
+// regression:
+//crash on SaveAttributes
+$results[] = 'pre update flush tag - ' . $client->FlushAttributes();
+for ( $i = 0; $i<100; $i++ )
+{
+	@mysql_query ( 'UPDATE mva_save SET mva=(3,2, 1, 2) WHERE id>0' );
+	if ( @mysql_error() )
+		$results[] = 'i=$i' . @mysql_error();	
+}
+$results[] = 'post update flush tag - ' . $client->FlushAttributes();
+
 @mysql_close($sock);
 
 
@@ -239,25 +268,32 @@ $results = array_merge ( $results, $query ( "show meta", $sock ) );
 <sphinxql>select * from hung order by @id asc</sphinxql>
 </sphqueries>
 
-  <DB_Create>
+<DB_Create>
 CREATE TABLE `test_table` (
   `id` int(11) DEFAULT NULL,
   `text` varchar (255) NOT NULL,
   `section` int(11) DEFAULT NULL,
   `mva1` varchar(255) NOT NULL  
 )
-  </DB_Create>
+</DB_Create>
 
-  <DB_Drop>
-DROP TABLE IF EXISTS `test_table`
-  </DB_Drop>
+<DB_Create>CREATE TABLE `mva_table` (  `id` int(11) DEFAULT NULL)</DB_Create>
 
-  <DB_Insert>
-INSERT INTO `test_table` (`id`, `text`, `section`, `mva1`) VALUES 
+<DB_Drop>DROP TABLE IF EXISTS `test_table`</DB_Drop>
+<DB_Drop>DROP TABLE IF EXISTS `mva_table`</DB_Drop>
+
+
+<custom_insert><![CDATA[
+
+mysql_query ( "INSERT INTO `test_table` (`id`, `text`, `section`, `mva1`) VALUES 
 (1, 'test1', 101, '1001'),
 (2, 'test2', 102, '1002 1023 4456'),
 (3, 'test3', 103, '1003 1008 1010'),
-(4, 'test4', 104, '1004 1005 1006');
-  </DB_Insert>
+(4, 'test4', 104, '1004 1005 1006')" );
+
+for ( $i = 1; $i<1001; $i++ )
+	mysql_query ( "INSERT INTO `mva_table` (`id` ) VALUES ( " . $i . " )" );
+
+]]></custom_insert>
   
 </test>

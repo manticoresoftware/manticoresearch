@@ -10316,7 +10316,8 @@ static const ServedIndex_t * UpdateGetLockedIndex ( const CSphString & sName, bo
 	if ( !pLocked )
 		return NULL;
 
-	if ( !( bMvaUpdate && pLocked->m_bRT ) )
+	// MVA updates have to be done sequentially
+	if ( !bMvaUpdate )
 		return pLocked;
 
 	pLocked->Unlock();
@@ -13802,7 +13803,9 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 
 			CSphString sFakeError;
 			CSphAutofile fdTest ( sBuf, SPH_O_READ, sFakeError );
-			if ( fdTest.GetFD()<0 )
+			bool bNoMVP = ( fdTest.GetFD()<0 );
+			fdTest.Close();
+			if ( bNoMVP )
 				break; ///< no file, nothing to hold
 
 			if ( TryRename ( sIndex, sPath, g_dCurExts[EXT_MVP], g_dOldExts[EXT_MVP], false ) )
@@ -13913,7 +13916,7 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 	if ( !tIndex.m_bOnlyNew )
 	{
 		snprintf ( sFile, sizeof(sFile), "%s.old", sPath );
-		sphUnlinkIndex ( sFile, false, true );
+		sphUnlinkIndex ( sFile, false );
 	}
 
 	sphLogDebug ( "RotateIndexGreedy: the old index unlinked" );
@@ -14157,7 +14160,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	ServedIndex_t tNewIndex;
 	tNewIndex.m_bOnlyNew = pRotating->m_bOnlyNew;
 
-	tNewIndex.m_pIndex = sphCreateIndexPhrase ( NULL, NULL ); // FIXME! check if it's ok
+	tNewIndex.m_pIndex = sphCreateIndexPhrase ( sIndex.cstr(), NULL );
 	tNewIndex.m_pIndex->SetEnableStar ( pRotating->m_bStar );
 	tNewIndex.m_pIndex->m_bExpandKeywords = pRotating->m_bExpand;
 	tNewIndex.m_pIndex->SetPreopen ( pRotating->m_bPreopen || g_bPreopenIndexes );
@@ -14256,6 +14259,11 @@ static void RotateIndexMT ( const CSphString & sIndex )
 		{
 			// all went fine; swap them
 			sphLogDebug ( "all went fine; swap them" );
+
+			tNewIndex.m_pIndex->m_iTID = pServed->m_pIndex->m_iTID;
+			if ( g_pBinlog )
+				g_pBinlog->NotifyIndexFlush ( sIndex.cstr(), pServed->m_pIndex->m_iTID, false );
+
 			if ( !tNewIndex.m_pIndex->GetTokenizer() )
 				tNewIndex.m_pIndex->SetTokenizer ( pServed->m_pIndex->LeakTokenizer() );
 
@@ -14265,11 +14273,13 @@ static void RotateIndexMT ( const CSphString & sIndex )
 			Swap ( pServed->m_pIndex, tNewIndex.m_pIndex );
 			pServed->m_bEnabled = true;
 
+			// rename current MVP to old one to unlink it
+			TryRename ( sIndex.cstr(), pServed->m_sIndexPath.cstr(), g_dCurExts[EXT_MVP], g_dOldExts[EXT_MVP], false );
 			// unlink .old
 			sphLogDebug ( "unlink .old" );
 			if ( !pServed->m_bOnlyNew )
 			{
-				sphUnlinkIndex ( sOld, false, false );
+				sphUnlinkIndex ( sOld, false );
 			}
 
 			pServed->m_bOnlyNew = false;
@@ -14354,7 +14364,9 @@ void SeamlessTryToForkPrereader ()
 
 	// alloc buffer index (once per run)
 	if ( !g_pPrereading )
-		g_pPrereading = sphCreateIndexPhrase ( NULL, NULL ); // FIXME! check if it's ok
+		g_pPrereading = sphCreateIndexPhrase ( sPrereading, NULL );
+	else
+		g_pPrereading->SetName ( sPrereading );
 
 	g_pPrereading->SetEnableStar ( tServed.m_bStar );
 	g_pPrereading->m_bExpandKeywords = tServed.m_bExpand;
@@ -14802,7 +14814,7 @@ void HandlePipePreread ( PipeReader_t & tPipe, bool bFailure )
 	int iRes = tPipe.GetInt();
 	if ( !tPipe.IsError() && iRes )
 	{
-		// if preread was succesful, exchange served index and prereader buffer index
+		// if preread was successful, exchange served index and prereader buffer index
 		ServedIndex_t & tServed = g_pIndexes->GetUnlockedEntry ( sPrereading );
 		CSphIndex * pOld = tServed.m_pIndex;
 		CSphIndex * pNew = g_pPrereading;
@@ -14829,6 +14841,8 @@ void HandlePipePreread ( PipeReader_t & tPipe, bool bFailure )
 			} else
 			{
 				// all went fine; swap them
+				g_pPrereading->m_iTID = tServed.m_pIndex->m_iTID;
+
 				if ( !g_pPrereading->GetTokenizer () )
 					g_pPrereading->SetTokenizer ( tServed.m_pIndex->LeakTokenizer () );
 
@@ -14838,10 +14852,12 @@ void HandlePipePreread ( PipeReader_t & tPipe, bool bFailure )
 				Swap ( tServed.m_pIndex, g_pPrereading );
 				tServed.m_bEnabled = true;
 
+				// rename current MVP to old one to unlink it
+				TryRename ( sPrereading, tServed.m_sIndexPath.cstr(), g_dCurExts[EXT_MVP], g_dOldExts[EXT_MVP], false );
 				// unlink .old
 				if ( !tServed.m_bOnlyNew )
 				{
-					sphUnlinkIndex ( sOld, false, false );
+					sphUnlinkIndex ( sOld, false );
 				}
 
 				tServed.m_bOnlyNew = false;
@@ -16896,8 +16912,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_iPreforkChildren = hSearchd.GetInt ( "prefork", g_iPreforkChildren );
 	g_tRtThrottle.m_iMaxIOps = hSearchd.GetInt ( "rt_merge_iops", 0 );
 	g_tRtThrottle.m_iMaxIOSize = hSearchd.GetSize ( "rt_merge_maxiosize", 0 );
-	g_iPingInterval = hSearchd.GetInt ("ha_ping_interval", 1000);
-	g_uHAPeriodKarma = hSearchd.GetInt ("ha_period_karma", 60 );
+	g_iPingInterval = hSearchd.GetInt ( "ha_ping_interval", 1000 );
+	g_uHAPeriodKarma = hSearchd.GetInt ( "ha_period_karma", 60 );
 
 	if ( hSearchd ( "collation_libc_locale" ) )
 	{

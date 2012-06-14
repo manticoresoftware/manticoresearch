@@ -80,7 +80,12 @@ INSERT INTO test_table (id, text) VALUES
 	<query filter="@id" filter_value="9223372036854775808"/>
 
 	<query select="@id as sel, *" groupfunc="attr" groupattr="sel" />
+	<query filter="@id" filter_value="60000000001" />
 </queries>
+<sphqueries>
+	<!-- regression id64 less not work -->
+	<sphinxql><![CDATA[ select * from test where @id<60000000002 ]]></sphinxql>
+</sphqueries>
 
 </test>
 

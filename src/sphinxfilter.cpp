@@ -305,6 +305,12 @@ struct Filter_IdValues: public IFilter_Values
 
 struct Filter_IdRange: public IFilter_Range
 {
+	virtual void SetRange ( SphAttr_t tMin, SphAttr_t tMax )
+	{
+		m_iMinValue = Max ( 0, tMin );
+		m_iMaxValue = tMax;
+	}
+
 	virtual bool Eval ( const CSphMatch & tMatch ) const
 	{
 		const SphDocID_t uID = tMatch.m_iDocID;

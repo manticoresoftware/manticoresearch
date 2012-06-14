@@ -27,10 +27,10 @@ source src
 	<sql_settings/>
 	sql_query = SELECT id, text, section, mva1 FROM test_table
 	sql_attr_uint	= section
-<Dynamic>	
+<Dynamic>
 	<Variant>sql_attr_multi = uint mva1 from field mva1</Variant>
 	<Variant>sql_attr_multi = bigint mva1 from field mva1</Variant>
-</Dynamic>	
+</Dynamic>
 }
 
 index idx_130
@@ -73,6 +73,32 @@ for ( $i = 0; $i < 4; $i++)
 
 // find the updated match
 $results[] = $client->Query ( "test3");
+
+// regression:
+// rotation reset index name and TID
+$results[] = 'rotaiting...';
+RunIndexer ( $errors, '--all --rotate' );
+usleep ( 50000 );
+$up = $client->UpdateAttributes ( "idx_130", array("mva1"), array(2=>array(array(1,2,7))),true);
+if ( $up >= 0 )
+	$results[] = sprintf("up.ok=%d", $up);
+else
+	$results[] = sprintf("up.err=%s", $client->GetLastError());
+
+KillSearchd ( 'config.conf', 'searchd.pid', 9, false );
+usleep ( 50000 );
+
+$error = "";
+$startSta = StartSearchd ( 'config.conf', 'error.txt', 'searchd.pid', $error );
+if ( $startSta == 0 || $startSta == 2 )
+{
+	$results[] = "started=ok";
+}
+else
+{
+	$results[] = sprintf("start.err=%d local=%s client=%s", $startSta, $error, $client->GetLastError());
+}
+$results[] = $client->Query ( 'test2' );
 
 // final fixup; we don't want to compare times
 for ( $i=0; $i<count($results); $i++ )

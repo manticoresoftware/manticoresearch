@@ -2820,8 +2820,10 @@ public:
 	/// internal debugging hook, DO NOT USE
 	virtual int					DebugCheck ( FILE * fp ) = 0;
 
-	/// getter for the index name
-	const char *				GetName () const { return m_sIndexName.cstr(); }
+	/// getter for name
+	const char *				GetName () { return m_sIndexName.cstr(); }
+
+	void						SetName ( const char * sName ) { m_sIndexName = sName; }
 
 	/// get for the base file name
 	const char *				GetFilename () const { return m_sFilename.cstr(); }

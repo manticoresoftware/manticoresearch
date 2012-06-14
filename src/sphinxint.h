@@ -1205,7 +1205,7 @@ void			sphTransformExtendedQuery ( XQNode_t ** ppNode );
 bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle );
 
 void			sphSetUnlinkOld ( bool bUnlink );
-void			sphUnlinkIndex ( const char * sName, bool bForce, bool bRemoveMVP );
+void			sphUnlinkIndex ( const char * sName, bool bForce );
 
 void			WriteSchema ( CSphWriter & fdInfo, const CSphSchema & tSchema );
 void			ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema, DWORD uVersion, bool bDynamic );

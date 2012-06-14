@@ -6317,7 +6317,7 @@ bool RtIndex_t::Truncate ( CSphString & )
 	ARRAY_FOREACH ( i, m_pDiskChunks )
 	{
 		sFile.SetSprintf ( "%s.%d", m_sPath.cstr(), i );
-		sphUnlinkIndex ( sFile.cstr(), false, true );
+		sphUnlinkIndex ( sFile.cstr(), false );
 	}
 
 	// kill in-memory data, reset stats
@@ -6486,8 +6486,8 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 		SafeDelete ( pOldest );
 
 		// we might remove old index files
-		sphUnlinkIndex ( sRename.cstr(), true, true );
-		sphUnlinkIndex ( sOldest.cstr(), true, true );
+		sphUnlinkIndex ( sRename.cstr(), true );
+		sphUnlinkIndex ( sOldest.cstr(), true );
 		// FIXEME: wipe out 'merged' index files in case of error
 	}
 

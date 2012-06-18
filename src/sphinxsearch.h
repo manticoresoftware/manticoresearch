@@ -20,10 +20,6 @@
 #include "sphinxquery.h"
 
 //////////////////////////////////////////////////////////////////////////
-// PACKED HIT MACROS
-//////////////////////////////////////////////////////////////////////////
-
-//////////////////////////////////////////////////////////////////////////
 
 /// term modifiers
 enum TermPosFilter_e
@@ -35,6 +31,15 @@ enum TermPosFilter_e
 	TERM_POS_ZONES,
 	TERM_POS_ZONESPAN,
 	TERM_POS_NONE
+};
+
+
+/// decoder state saved at a certain offset
+struct SkiplistEntry_t
+{
+	SphDocID_t		m_iBaseDocid;		///< delta decoder docid base (aka docid infinum)
+	int64_t			m_iOffset;			///< offset in the doclist file (relative to the doclist start)
+	int64_t			m_iBaseHitlistPos;	///< delta decoder hitlist offset base
 };
 
 
@@ -55,6 +60,7 @@ public:
 	int				m_iDocs;		///< document count, from wordlist
 	int				m_iHits;		///< hit count, from wordlist
 	bool			m_bHasHitlist;	///< hitlist presence flag
+	CSphVector<SkiplistEntry_t>		m_dSkiplist;	///< skiplist for quicker document list seeks
 
 	// iterator state
 	CSphSmallBitvec m_dQwordFields;	///< current match fields
@@ -82,6 +88,7 @@ public:
 	}
 	virtual ~ISphQword () {}
 
+	virtual void				HintDocid ( SphDocID_t ) {}
 	virtual const CSphMatch &	GetNextDoc ( DWORD * pInlineDocinfo ) = 0;
 	virtual void				SeekHitlist ( SphOffset_t uOff ) = 0;
 	virtual Hitpos_t			GetNextHit () = 0;

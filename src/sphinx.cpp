@@ -165,6 +165,8 @@ static const int	DEFAULT_READ_BUFFER		= 262144;
 static const int	DEFAULT_READ_UNHINTED	= 32768;
 static const int	MIN_READ_BUFFER			= 8192;
 static const int	MIN_READ_UNHINTED		= 1024;
+static const int	SKIPLIST_BLOCK			= 128;		///< must be a power of two
+#define READ_NO_SIZE_HINT 0
 
 static bool					g_bSphQuiet					= false;
 
@@ -951,18 +953,6 @@ public:
 
 /////////////////////////////////////////////////////////////////////////////
 
-#define READ_NO_SIZE_HINT 0
-
-/////////////////////////////////////////////////////////////////////////////
-
-/// search filter attribute types
-enum ESphFilterAttr
-{
-	SPH_FILTERATTR_ATTR		= 0,
-	SPH_FILTERATTR_ID		= 1,
-	SPH_FILTERATTR_WEIGHT	= 2
-};
-
 class CSphIndex_VLN;
 
 /// everything required to setup search term
@@ -973,15 +963,17 @@ public:
 	const CSphAutofile &	m_tHitlist;
 	const CSphAutofile &	m_tWordlist;
 	bool					m_bSetupReaders;
+	const BYTE *			m_pSkips;
 
 	BYTE *					m_pDictBuf;
 
 public:
-	DiskIndexQwordSetup_c ( const CSphAutofile & tDoclist, const CSphAutofile & tHitlist, const CSphAutofile & tWordlist, int iDictBufSize )
+	DiskIndexQwordSetup_c ( const CSphAutofile & tDoclist, const CSphAutofile & tHitlist, const CSphAutofile & tWordlist, int iDictBufSize, const BYTE * pSkips )
 		: m_tDoclist ( tDoclist )
 		, m_tHitlist ( tHitlist )
 		, m_tWordlist ( tWordlist )
 		, m_bSetupReaders ( false )
+		, m_pSkips ( pSkips )
 		, m_pDictBuf ( NULL )
 	{
 		if ( iDictBufSize>0 )
@@ -1055,6 +1047,11 @@ public:
 };
 
 
+bool operator < ( const SkiplistEntry_t & a, SphDocID_t b )		{ return a.m_iBaseDocid<b; }
+bool operator == ( const SkiplistEntry_t & a, SphDocID_t b )	{ return a.m_iBaseDocid==b; }
+bool operator < ( SphDocID_t a, const SkiplistEntry_t & b )		{ return a<b.m_iBaseDocid; }
+
+
 /// query word from the searcher's point of view
 template < bool INLINE_HITS, bool INLINE_DOCINFO, bool DISABLE_HITLIST_SEEK >
 class DiskIndexQword_c : public DiskIndexQwordTraits_c
@@ -1062,8 +1059,7 @@ class DiskIndexQword_c : public DiskIndexQwordTraits_c
 public:
 	explicit DiskIndexQword_c ( bool bUseMinibuffer, bool bExcluded )
 		: DiskIndexQwordTraits_c ( bUseMinibuffer, bExcluded )
-	{
-	}
+	{}
 
 	virtual void Reset ()
 	{
@@ -1090,6 +1086,24 @@ public:
 			m_bHitlistOver = true;
 #endif
 		}
+	}
+
+	virtual void HintDocid ( SphDocID_t uMinID )
+	{
+		// tricky bit
+		// FindSpan() will match a block where BaseDocid is >= RefValue
+		// meaning that the subsequent ids decoded will be strictly > RefValue
+		// meaning that if previous (!) blocks end with uMinID exactly,
+		// and we use uMinID itself as RefValue, that document gets lost!
+		// OPTIMIZE? keep last matched block index maybe?
+		int iBlock = FindSpan ( m_dSkiplist, uMinID-1 );
+		if ( iBlock<0 )
+			return;
+		const SkiplistEntry_t & t = m_dSkiplist [ iBlock ];
+		m_rdDoclist.SeekTo ( t.m_iOffset, -1 );
+		m_tDoc.m_iDocID = t.m_iBaseDocid;
+		m_uHitPosition = t.m_iBaseHitlistPos;
+		m_iHitlistPos = -1;
 	}
 
 	virtual const CSphMatch & GetNextDoc ( DWORD * pDocinfo )
@@ -1306,34 +1320,18 @@ static void WriteFileInfo ( CSphWriter & tWriter, const CSphSavedFile & tInfo )
 }
 
 
-/// per-keyword data that the dictionaries store
-struct WordDictInfo_t
-{
-	SphOffset_t		m_iOffset;
-	int				m_iDocs;
-	int				m_iHits;
-	int				m_iDoclistHint;
-
-	WordDictInfo_t ()
-		: m_iOffset ( 0 )
-		, m_iDocs ( 0 )
-		, m_iHits ( 0 )
-		, m_iDoclistHint ( 0 )
-	{}
-};
-
-
 /// dict=keywords block reader
-class KeywordsBlockReader_c : public WordDictInfo_t
+class KeywordsBlockReader_c : public CSphDictEntry
 {
 private:
 	const BYTE *	m_pBuf;
 	BYTE			m_sWord [ MAX_KEYWORD_BYTES ];
 	int				m_iLen;
 	BYTE			m_uHint;
+	bool			m_bHaveSkips;
 
 public:
-	explicit		KeywordsBlockReader_c ( const BYTE * pBuf );
+	explicit		KeywordsBlockReader_c ( const BYTE * pBuf, bool bHaveSkiplists );
 	bool			UnpackWord();
 
 	const char *	GetWord() const			{ return (const char*)m_sWord; }
@@ -1378,11 +1376,12 @@ public:
 	CSphSharedBuffer<BYTE>				m_pBuf;					///< my cache
 	int									m_iMaxChunk;			///< max size of entry between checkpoints
 	SphOffset_t							m_iWordsEnd;			///< end of wordlist
+	bool								m_bHaveSkips;			///< whether there are skiplists
 
 	BYTE *								m_pWords;				///< arena for checkpoint's words
 
 public:
-										CWordlist ();
+	explicit							CWordlist ();
 										~CWordlist ();
 	void								Reset ();
 
@@ -1390,7 +1389,7 @@ public:
 
 	const CSphWordlistCheckpoint *		FindCheckpoint ( const char * sWord, int iWordLen, SphWordID_t iWordID, bool bStarMode ) const;
 	bool								LookupInfixCheckpoints ( const char * sInfix, int iBytes, CSphVector<int> & dCheckpoints ) const;
-	bool								GetWord ( const BYTE * pBuf, SphWordID_t iWordID, WordDictInfo_t & tWord ) const;
+	bool								GetWord ( const BYTE * pBuf, SphWordID_t iWordID, CSphDictEntry & tWord ) const;
 
 	const BYTE *						AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint, int iFD, BYTE * pDictBuf ) const;
 	virtual void						GetPrefixedWords ( const char * sPrefix, int iPrefixLen, const char * sWildcard, CSphVector<CSphNamedInt> & dExpanded, BYTE * pDictBuf, int iFD ) const;
@@ -1524,6 +1523,8 @@ private:
 	CSphSharedBuffer<SphAttr_t>	m_pKillList;			///< killlist
 	DWORD						m_iKillListSize;		///< killlist size (in elements)
 
+	CSphSharedBuffer<BYTE>		m_pSkiplists;			///< (compressed) skiplists data
+
 	DWORD						m_uMinMaxIndex;			///< stored min/max cache offset (counted in DWORDs)
 
 	CSphAutofile				m_tDoclistFile;			///< doclist file
@@ -1538,6 +1539,7 @@ private:
 	bool						m_bPreallocated;		///< are we ready to preread
 	DWORD						m_uVersion;				///< data files version
 	bool						m_bUse64;				///< whether the header is id64
+	bool						m_bHaveSkips;			///< whether we have skiplists
 
 	int							m_iIndexTag;			///< my ids for MVA updates pool
 	static int					m_iIndexTagSeq;			///< static ids sequence
@@ -6122,9 +6124,13 @@ void CSphReader::Reset ()
 }
 
 
+/// sizehint > 0 means we expect to read approx that much bytes
+/// sizehint == 0 means no hint, use default (happens later in UpdateCache())
+/// sizehint == -1 means reposition and adjust current hint 
 void CSphReader::SeekTo ( SphOffset_t iPos, int iSizeHint )
 {
 	assert ( iPos>=0 );
+	assert ( iSizeHint>=-1 );
 
 #ifndef NDEBUG
 #if PARANOID
@@ -6145,6 +6151,21 @@ void CSphReader::SeekTo ( SphOffset_t iPos, int iSizeHint )
 		m_iPos = iPos;
 		m_iBuffPos = 0; // for GetPos() to work properly, aaaargh
 		m_iBuffUsed = 0;
+
+		if ( iSizeHint==-1 )
+		{
+			// the adjustment bureau
+			// we need to seek but still keep the current hint
+			// happens on a skiplist jump, for instance
+			int64_t iHintLeft = m_iPos + m_iSizeHint - iPos;
+			if ( iHintLeft>0 && iHintLeft<INT_MAX )
+				iSizeHint = (int)iHintLeft;
+			else
+				iSizeHint = 0;
+		}
+
+		// get that hint
+		assert ( iSizeHint>=0 );
 		m_iSizeHint = iSizeHint;
 	}
 }
@@ -8517,11 +8538,13 @@ class CSphHitBuilder
 {
 public:
 	CSphHitBuilder ( const CSphIndexSettings & tSettings, const CSphVector<SphWordID_t> & dHitless, bool bMerging, int iBufSize, CSphDict * pDict, CSphString * sError );
-	~CSphHitBuilder ();
+	~CSphHitBuilder () {}
 
-	bool	CreateIndexFiles ( const char * sDocName, const char * sHitName, bool bInplace, int iWriteBuffer, CSphAutofile & tHit, SphOffset_t * pSharedOffset );
+	bool	CreateIndexFiles ( const char * sDocName, const char * sHitName, const char * sSkipName, bool bInplace, int iWriteBuffer, CSphAutofile & tHit, SphOffset_t * pSharedOffset );
 	void	HitReset ();
-	void	cidxFinishDoclistEntry ( Hitpos_t uLastPos );
+	void	DoclistBeginEntry ( SphDocID_t uDocid, const DWORD * pAttrs );
+	void	DoclistEndEntry ( Hitpos_t uLastPos );
+	void	DoclistEndList ();
 	void	cidxHit ( CSphAggregateHit * pHit, const CSphRowitem * pAttrs );
 	bool	cidxDone ( int iMemLimit, int iMinInfixLen, int iMaxCodepointLen, DictHeader_t * pDictHeader );
 	int		cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWORD * pDocinfo, int iDocinfos, int iStride );
@@ -8538,6 +8561,7 @@ private:
 
 	CSphWriter					m_wrDoclist;			///< wordlist writer
 	CSphWriter					m_wrHitlist;			///< hitlist writer
+	CSphWriter					m_wrSkiplist;			///< skiplist writer
 	CSphFixedVector<BYTE>		m_dWriteBuffer;			///< my write buffer (for temp files)
 	ThrottleState_t *			m_pThrottle;
 
@@ -8555,13 +8579,13 @@ private:
 	CSphSmallBitvec				m_dLastDocFields;		///< doclist entry
 	DWORD						m_uLastDocHits;			///< doclist entry
 
-	SphOffset_t					m_iLastWordDoclist;		///< wordlist entry
-	int							m_iLastWordDocs;		///< wordlist entry
-	int							m_iLastWordHits;		///< wordlist entry
+	CSphDictEntry				m_tWord;				///< dictionary entry
 
 	ESphHitFormat				m_eHitFormat;
 	ESphHitless					m_eHitless;
 	bool						m_bMerging;
+
+	CSphVector<SkiplistEntry_t>	m_dSkiplist;
 };
 
 
@@ -8585,19 +8609,14 @@ CSphHitBuilder::CSphHitBuilder ( const CSphIndexSettings & tSettings,
 	m_dLastDocFields.Unset();
 	m_uLastDocHits = 0;
 
-	m_iLastWordDoclist = 0;
-	m_iLastWordDocs = 0;
-	m_iLastWordHits = 0;
+	m_tWord.m_iDoclistOffset = 0;
+	m_tWord.m_iDocs = 0;
+	m_tWord.m_iHits = 0;
 
 	assert ( m_pDict );
 	assert ( m_pLastError );
 
 	m_pThrottle = &g_tThrottle;
-}
-
-
-CSphHitBuilder::~CSphHitBuilder ()
-{
 }
 
 
@@ -8613,12 +8632,13 @@ void CSphHitBuilder::SetMin ( const CSphRowitem * pDynamic, int iDynamic )
 }
 
 
-bool CSphHitBuilder::CreateIndexFiles ( const char * sDocName, const char * sHitName,
+bool CSphHitBuilder::CreateIndexFiles ( const char * sDocName, const char * sHitName, const char * sSkipName,
 	bool bInplace, int iWriteBuffer, CSphAutofile & tHit, SphOffset_t * pSharedOffset )
 {
 	// doclist and hitlist files
-	m_wrDoclist.CloseFile ();
-	m_wrHitlist.CloseFile ();
+	m_wrDoclist.CloseFile();
+	m_wrHitlist.CloseFile();
+	m_wrSkiplist.CloseFile();
 
 	m_wrDoclist.SetBufferSize ( m_dWriteBuffer.GetLength() );
 	m_wrHitlist.SetBufferSize ( bInplace ? iWriteBuffer : m_dWriteBuffer.GetLength() );
@@ -8638,11 +8658,15 @@ bool CSphHitBuilder::CreateIndexFiles ( const char * sDocName, const char * sHit
 			return false;
 	}
 
+	if ( !m_wrSkiplist.OpenFile ( sSkipName, *m_pLastError ) )
+		return false;
+
 	// put dummy byte (otherwise offset would start from 0, first delta would be 0
 	// and VLB encoding of offsets would fuckup)
 	BYTE bDummy = 1;
 	m_wrDoclist.PutBytes ( &bDummy, 1 );
 	m_wrHitlist.PutBytes ( &bDummy, 1 );
+	m_wrSkiplist.PutBytes ( &bDummy, 1 );
 	return true;
 }
 
@@ -8656,13 +8680,54 @@ void CSphHitBuilder::HitReset()
 }
 
 
-void CSphHitBuilder::cidxFinishDoclistEntry ( Hitpos_t uLastPos )
+// doclist entry format
+// (with the new and shiny "inline hit" format, that is)
+//
+// zint docid_delta
+// zint[] inline_attrs
+// zint doc_hits
+// if doc_hits==1:
+//		zint field_pos
+//		zint field_no
+// else:
+//		zint field_mask
+//		zint hlist_offset_delta
+//
+// so 4 bytes/doc minimum
+// avg 4-6 bytes/doc according to our tests
+
+
+void CSphHitBuilder::DoclistBeginEntry ( SphDocID_t uDocid, const DWORD * pAttrs )
 {
+	// build skiplist
+	// that is, save decoder state and doclist position per every 128 documents
+	if ( ( m_tWord.m_iDocs & ( SKIPLIST_BLOCK-1 ) )==0 )
+	{
+		SkiplistEntry_t & tBlock = m_dSkiplist.Add();
+		tBlock.m_iBaseDocid = m_tLastHit.m_iDocID;
+		tBlock.m_iOffset = m_wrDoclist.GetPos();
+		tBlock.m_iBaseHitlistPos = m_iLastHitlistPos;
+	}
+
+	// begin doclist entry
+	m_wrDoclist.ZipOffset ( uDocid - m_tLastHit.m_iDocID );
+	assert ( !pAttrs || m_dMinRow.GetLength() );
+	if ( pAttrs )
+	{
+		ARRAY_FOREACH ( i, m_dMinRow )
+			m_wrDoclist.ZipInt ( pAttrs[i] - m_dMinRow[i] );
+	}
+}
+
+
+void CSphHitBuilder::DoclistEndEntry ( Hitpos_t uLastPos )
+{
+	// end doclist entry
 	if ( m_eHitFormat==SPH_HIT_FORMAT_INLINE )
 	{
 		bool bIgnoreHits =
 			( m_eHitless==SPH_HITLESS_ALL ) ||
-			( m_eHitless==SPH_HITLESS_SOME && ( m_iLastWordDocs & 0x80000000 ) );
+			( m_eHitless==SPH_HITLESS_SOME && ( m_tWord.m_iDocs & 0x80000000 ) );
 
 		// inline the only hit into doclist (unless it is completely discarded)
 		// and finish doclist entry
@@ -8680,7 +8745,6 @@ void CSphHitBuilder::cidxFinishDoclistEntry ( Hitpos_t uLastPos )
 			m_wrDoclist.ZipInt ( m_dLastDocFields.GetMask32() );
 			m_wrDoclist.ZipOffset ( m_iLastHitlistDelta );
 		}
-
 	} else // plain format - finish doclist entry
 	{
 		assert ( m_eHitFormat==SPH_HIT_FORMAT_PLAIN );
@@ -8690,6 +8754,52 @@ void CSphHitBuilder::cidxFinishDoclistEntry ( Hitpos_t uLastPos )
 	}
 	m_dLastDocFields.Unset();
 	m_uLastDocHits = 0;
+
+	// update keyword stats
+	m_tWord.m_iDocs++;
+}
+
+
+void CSphHitBuilder::DoclistEndList ()
+{
+	// emit eof marker
+	m_wrDoclist.ZipInt ( 0 );
+
+	// emit skiplist
+	// OPTIMIZE? placing it after doclist means an extra seek on searching
+	// however placing it before means some (longer) doclist data moves while indexing
+	if ( m_tWord.m_iDocs>SKIPLIST_BLOCK )
+	{
+		assert ( m_dSkiplist.GetLength() );
+		assert ( m_dSkiplist[0].m_iOffset==m_tWord.m_iDoclistOffset );
+		assert ( m_dSkiplist[0].m_iBaseDocid==0 );
+		assert ( m_dSkiplist[0].m_iBaseHitlistPos==0 );
+
+		m_tWord.m_iSkiplistOffset = m_wrSkiplist.GetPos();
+
+		// delta coding, but with a couple of skiplist specific tricks
+		// 1) first entry is omitted, it gets reconstructed from dict itself
+		// both base values are zero, and offset equals doclist offset
+		// 2) docids are at least SKIPLIST_BLOCK apart
+		// doclist entries are at least 4*SKIPLIST_BLOCK bytes apart
+		// so we additionally subtract that to improve delta coding
+		// 3) zero deltas are allowed and *not* used as any markers,
+		// as we know the exact skiplist entry count anyway
+		SkiplistEntry_t tLast = m_dSkiplist[0];
+		for ( int i=1; i<m_dSkiplist.GetLength(); i++ )
+		{
+			const SkiplistEntry_t & t = m_dSkiplist[i];
+			assert ( t.m_iBaseDocid - tLast.m_iBaseDocid >= SKIPLIST_BLOCK );
+			assert ( t.m_iOffset - tLast.m_iOffset >= 4*SKIPLIST_BLOCK );
+			m_wrSkiplist.ZipOffset ( t.m_iBaseDocid - tLast.m_iBaseDocid - SKIPLIST_BLOCK );
+			m_wrSkiplist.ZipOffset ( t.m_iOffset - tLast.m_iOffset - 4*SKIPLIST_BLOCK );
+			m_wrSkiplist.ZipOffset ( t.m_iBaseHitlistPos - tLast.m_iBaseHitlistPos );
+			tLast = t;
+		}
+	}
+
+	// in any event, reset skiplist
+	m_dSkiplist.Resize ( 0 );
 }
 
 
@@ -8719,7 +8829,7 @@ void CSphHitBuilder::cidxHit ( CSphAggregateHit * pHit, const CSphRowitem * pAtt
 
 		// finish doclist entry, if any
 		if ( m_tLastHit.m_iDocID )
-			cidxFinishDoclistEntry ( uLastPos );
+			DoclistEndEntry ( uLastPos );
 	}
 
 	if ( bNextWord )
@@ -8728,15 +8838,17 @@ void CSphHitBuilder::cidxHit ( CSphAggregateHit * pHit, const CSphRowitem * pAtt
 		if ( m_tLastHit.m_iDocID )
 		{
 			// emit end-of-doclist marker
-			m_wrDoclist.ZipInt ( 0 );
+			DoclistEndList ();
 
 			// emit dict entry
-			m_pDict->DictEntry ( m_tLastHit.m_iWordID, m_tLastHit.m_sKeyword, m_iLastWordDocs,
-				m_iLastWordHits, m_iLastWordDoclist, m_wrDoclist.GetPos()-m_iLastWordDoclist );
+			m_tWord.m_uWordID = m_tLastHit.m_iWordID;
+			m_tWord.m_sKeyword = m_tLastHit.m_sKeyword;
+			m_tWord.m_iDoclistLength = m_wrDoclist.GetPos() - m_tWord.m_iDoclistOffset;
+			m_pDict->DictEntry ( m_tWord );
 
 			// reset trackers
-			m_iLastWordDocs = 0;
-			m_iLastWordHits = 0;
+			m_tWord.m_iDocs = 0;
+			m_tWord.m_iHits = 0;
 
 			m_tLastHit.m_iDocID = 0;
 			m_iLastHitlistPos = 0;
@@ -8753,7 +8865,7 @@ void CSphHitBuilder::cidxHit ( CSphAggregateHit * pHit, const CSphRowitem * pAtt
 			|| ( m_pDict->GetSettings().m_bWordDict &&
 				pHit->m_iWordID==m_tLastHit.m_iWordID && strcmp ( (char*)pHit->m_sKeyword, (char*)m_tLastHit.m_sKeyword )>0 )
 			|| m_bMerging );
-		m_iLastWordDoclist = m_wrDoclist.GetPos();
+		m_tWord.m_iDoclistOffset = m_wrDoclist.GetPos();
 		m_tLastHit.m_iWordID = pHit->m_iWordID;
 		if ( m_pDict->GetSettings().m_bWordDict )
 		{
@@ -8768,20 +8880,11 @@ void CSphHitBuilder::cidxHit ( CSphAggregateHit * pHit, const CSphRowitem * pAtt
 		assert ( pHit->m_iDocID>m_tLastHit.m_iDocID );
 		assert ( m_wrHitlist.GetPos()>=m_iLastHitlistPos );
 
-		m_wrDoclist.ZipOffset ( pHit->m_iDocID - m_tLastHit.m_iDocID );
-		assert ( !pAttrs || m_dMinRow.GetLength() );
-		if ( pAttrs )
-		{
-			ARRAY_FOREACH ( i, m_dMinRow )
-				m_wrDoclist.ZipInt ( pAttrs[i] - m_dMinRow[i] );
-		}
+		DoclistBeginEntry ( pHit->m_iDocID, pAttrs );
 		m_iLastHitlistDelta = m_wrHitlist.GetPos() - m_iLastHitlistPos;
 
 		m_tLastHit.m_iDocID = pHit->m_iDocID;
 		m_iLastHitlistPos = m_wrHitlist.GetPos();
-
-		// update per-word stats
-		m_iLastWordDocs++;
 	}
 
 	///////////
@@ -8797,10 +8900,10 @@ void CSphHitBuilder::cidxHit ( CSphAggregateHit * pHit, const CSphRowitem * pAtt
 
 		m_uLastDocHits += iHitCount;
 		m_dLastDocFields |= pHit->m_dFieldMask;
-		m_iLastWordHits += iHitCount;
+		m_tWord.m_iHits += iHitCount;
 
 		if ( m_eHitless==SPH_HITLESS_SOME )
-			m_iLastWordDocs |= 0x80000000;
+			m_tWord.m_iDocs |= 0x80000000;
 
 	} else // handle normal hits
 	{
@@ -8811,7 +8914,7 @@ void CSphHitBuilder::cidxHit ( CSphAggregateHit * pHit, const CSphRowitem * pAtt
 		assert ( m_tLastHit.m_iWordPos < pHit->m_iWordPos );
 		m_wrHitlist.ZipInt ( pHit->m_iWordPos - m_tLastHit.m_iWordPos );
 		m_tLastHit.m_iWordPos = pHit->m_iWordPos;
-		m_iLastWordHits++;
+		m_tWord.m_iHits++;
 
 		// update matched fields mask
 		m_dLastDocFields.Set ( HITMAN::GetField ( pHit->m_iWordPos ) );
@@ -11456,9 +11559,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	// create new index files set
 	//////////////////////////////
 
-	tHitBuilder.CreateIndexFiles ( GetIndexFileName ( "spd" ).cstr(),
-		GetIndexFileName ( "spp" ).cstr(), m_bInplaceSettings, iWriteBuffer,
-		fdHits, &iSharedOffset );
+	tHitBuilder.CreateIndexFiles ( GetIndexFileName("spd").cstr(), GetIndexFileName("spp").cstr(),
+		GetIndexFileName("spe").cstr(), m_bInplaceSettings, iWriteBuffer, fdHits, &iSharedOffset );
 
 	// dict files
 	CSphAutofile fdTmpDict ( GetIndexFileName("tmp8"), SPH_O_NEW, m_sLastError, true );
@@ -11785,8 +11887,8 @@ public:
 
 private:
 	ESphHitless		m_eHitless;
-	CSphReader		m_tReader;
-	CSphAutofile	m_tFile;
+	CSphAutoreader	m_tMyReader;
+	CSphReader *	m_pReader;
 	SphOffset_t		m_iMaxPos;
 
 	bool			m_bWordDict;
@@ -11806,14 +11908,22 @@ public:
 		m_sWord[0] = '\0';
 	}
 
-	void Setup ( const CSphString & sFilename, SphOffset_t iMaxPos, ESphHitless eHitless,
+	bool Setup ( const CSphString & sFilename, SphOffset_t iMaxPos, ESphHitless eHitless,
 		CSphString & sError, bool bWordDict, ThrottleState_t * pThrottle )
 	{
+		if ( !m_tMyReader.Open ( sFilename, sError ) )
+			return false;
+		Setup ( &m_tMyReader, iMaxPos, eHitless, bWordDict, pThrottle );
+		return true;
+	}
+
+	void Setup ( CSphReader * pReader, SphOffset_t iMaxPos, ESphHitless eHitless, bool bWordDict, ThrottleState_t * pThrottle )
+	{
+		m_pReader = pReader;
+		m_pReader->SetThrottle ( pThrottle );
+		m_pReader->SeekTo ( 1, READ_NO_SIZE_HINT );
+
 		m_iMaxPos = iMaxPos;
-		m_tFile.Open ( sFilename, SPH_O_READ, sError );
-		m_tReader.SetThrottle ( pThrottle );
-		m_tReader.SetFile ( m_tFile );
-		m_tReader.SeekTo ( 1, READ_NO_SIZE_HINT );
 		m_eHitless = eHitless;
 		m_bWordDict = bWordDict;
 		m_sWord[0] = '\0';
@@ -11822,25 +11932,25 @@ public:
 
 	bool Read()
 	{
-		if ( m_tReader.GetPos()>=m_iMaxPos )
+		if ( m_pReader->GetPos()>=m_iMaxPos )
 			return false;
 
 		// get leading value
-		SphWordID_t iWord0 = m_bWordDict ? m_tReader.GetByte() : m_tReader.UnzipWordid();
+		SphWordID_t iWord0 = m_bWordDict ? m_pReader->GetByte() : m_pReader->UnzipWordid();
 		if ( !iWord0 )
 		{
 			// handle checkpoint
 			m_iCheckpoint++;
-			m_tReader.UnzipOffset();
+			m_pReader->UnzipOffset();
 
 			m_iWordID = 0;
 			m_iDoclistOffset = 0;
 			m_sWord[0] = '\0';
 
-			if ( m_tReader.GetPos()>=m_iMaxPos )
+			if ( m_pReader->GetPos()>=m_iMaxPos )
 				return false;
 
-			iWord0 = m_bWordDict ? m_tReader.GetByte() : m_tReader.UnzipWordid(); // get next word
+			iWord0 = m_bWordDict ? m_pReader->GetByte() : m_pReader->UnzipWordid(); // get next word
 		}
 		if ( !iWord0 )
 			return false; // some failure
@@ -11861,20 +11971,20 @@ public:
 			} else
 			{
 				iDelta = uPack & 127;
-				iMatch = m_tReader.GetByte();
+				iMatch = m_pReader->GetByte();
 			}
 			assert ( iMatch+iDelta<(int)sizeof(m_sWord)-1 );
 			assert ( iMatch<=(int)strlen(m_sWord) );
 
-			m_tReader.GetBytes ( m_sWord + iMatch, iDelta );
+			m_pReader->GetBytes ( m_sWord + iMatch, iDelta );
 			m_sWord [ iMatch+iDelta ] = '\0';
 
-			m_iDoclistOffset = m_tReader.UnzipOffset();
-			m_iDocs = m_tReader.UnzipInt();
-			m_iHits = m_tReader.UnzipInt();
+			m_iDoclistOffset = m_pReader->UnzipOffset();
+			m_iDocs = m_pReader->UnzipInt();
+			m_iHits = m_pReader->UnzipInt();
 			m_iHint = 0;
 			if ( m_iDocs>=DOCLIST_HINT_THRESH )
-				m_iHint = m_tReader.GetByte();
+				m_iHint = m_pReader->GetByte();
 			DoclistHintUnpack ( m_iDocs, (BYTE) m_iHint );
 
 			m_iWordID = (SphWordID_t) sphCRC32 ( GetWord() ); // set wordID for indexing
@@ -11882,9 +11992,9 @@ public:
 		} else
 		{
 			m_iWordID += iWord0;
-			m_iDoclistOffset += m_tReader.UnzipOffset();
-			m_iDocs = m_tReader.UnzipInt();
-			m_iHits = m_tReader.UnzipInt();
+			m_iDoclistOffset += m_pReader->UnzipOffset();
+			m_iDocs = m_pReader->UnzipInt();
+			m_iHits = m_pReader->UnzipInt();
 		}
 
 			m_bHasHitlist =
@@ -11906,9 +12016,9 @@ public:
 		return iRes;
 	}
 
-	BYTE * GetWord () const { return (BYTE *)m_sWord; }
+	BYTE * GetWord() const { return (BYTE *)m_sWord; }
 
-	int GetCheckpoint () const { return m_iCheckpoint; }
+	int GetCheckpoint() const { return m_iCheckpoint; }
 };
 
 static ISphFilter * CreateMergeFilters ( const CSphVector<CSphFilterSettings> & dSettings,
@@ -12061,20 +12171,21 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 {
 	CSphAutofile tDummy;
 	pHitBuilder->CreateIndexFiles ( pDstIndex->GetIndexFileName("tmp.spd").cstr(),
-		pDstIndex->GetIndexFileName("tmp.spp").cstr(), false, 0, tDummy, NULL );
+		pDstIndex->GetIndexFileName("tmp.spp").cstr(),
+		pDstIndex->GetIndexFileName("tmp.spe").cstr(),
+		false, 0, tDummy, NULL );
 
 	CSphDictReader tDstReader;
 	CSphDictReader tSrcReader;
 
 	bool bWordDict = pHitBuilder->IsWordDict();
 
-	tDstReader.Setup ( pDstIndex->GetIndexFileName("spi"), pDstIndex->m_tWordlist.m_iWordsEnd,
-		pDstIndex->m_tSettings.m_eHitless, sError, bWordDict, pThrottle );
-	tSrcReader.Setup ( pSrcIndex->GetIndexFileName("spi"), pSrcIndex->m_tWordlist.m_iWordsEnd,
-		pSrcIndex->m_tSettings.m_eHitless, sError, bWordDict, pThrottle );
-
-	if ( !sError.IsEmpty() )
-		return false;
+	if ( !tDstReader.Setup ( pDstIndex->GetIndexFileName("spi"), pDstIndex->m_tWordlist.m_iWordsEnd,
+		pDstIndex->m_tSettings.m_eHitless, sError, bWordDict, pThrottle ) )
+			return false;
+	if ( !tSrcReader.Setup ( pSrcIndex->GetIndexFileName("spi"), pSrcIndex->m_tWordlist.m_iWordsEnd,
+		pSrcIndex->m_tSettings.m_eHitless, sError, bWordDict, pThrottle ) )
+			return false;
 
 	const SphDocID_t iDstMinID = pDstIndex->m_iMinDocid;
 	const SphDocID_t iSrcMinID = pSrcIndex->m_iMinDocid;
@@ -13358,6 +13469,11 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 
 	CSphIndex_VLN * pIndex = (CSphIndex_VLN *)m_pIndex;
 
+	// !COMMIT FIXME!
+	// the below stuff really belongs in wordlist
+	// which in turn really belongs in dictreader
+	// which in turn might or might not be a part of dict
+
 	// binary search through checkpoints for a one whose range matches word ID
 	assert ( pIndex->m_pPreread && *pIndex->m_pPreread );
 	assert ( !pIndex->m_bPreloadWordlist || !pIndex->m_tWordlist.m_pBuf.IsEmpty() );
@@ -13387,10 +13503,10 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 	const BYTE * pBuf = pIndex->m_tWordlist.AcquireDict ( pCheckpoint, m_tWordlist.GetFD(), m_pDictBuf );
 	assert ( pBuf );
 
-	WordDictInfo_t tRes;
+	CSphDictEntry tRes;
 	if ( bWordDict )
 	{
-		KeywordsBlockReader_c tCtx ( pBuf );
+		KeywordsBlockReader_c tCtx ( pBuf, m_pSkips!=NULL );
 		while ( tCtx.UnpackWord() )
 		{
 			// block is sorted
@@ -13423,7 +13539,30 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 	{
 		tWord.m_rdDoclist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
 		tWord.m_rdDoclist.SetFile ( m_tDoclist );
-		tWord.m_rdDoclist.SeekTo ( tRes.m_iOffset, tRes.m_iDoclistHint );
+
+		// read in skiplist
+		// OPTIMIZE? maybe cache hot decompressed lists?
+		// OPTIMIZE? maybe add an option to decompress on preload instead?
+		if ( m_pSkips && tRes.m_iDocs>SKIPLIST_BLOCK )
+		{
+			const BYTE * pSkip = m_pSkips + tRes.m_iSkiplistOffset;
+
+			SkiplistEntry_t & t = tWord.m_dSkiplist.Add();
+			t.m_iBaseDocid = 0;
+			t.m_iOffset = tRes.m_iDoclistOffset;
+			t.m_iBaseHitlistPos = 0;
+
+			for ( int i=1; i<( tWord.m_iDocs/SKIPLIST_BLOCK ); i++ )
+			{
+				SkiplistEntry_t & t = tWord.m_dSkiplist.Add();
+				SkiplistEntry_t & p = tWord.m_dSkiplist [ tWord.m_dSkiplist.GetLength()-2 ];
+				t.m_iBaseDocid = p.m_iBaseDocid + SKIPLIST_BLOCK + (SphDocID_t) sphUnzipOffset ( pSkip );
+				t.m_iOffset = p.m_iOffset + 4*SKIPLIST_BLOCK + sphUnzipOffset ( pSkip );
+				t.m_iBaseHitlistPos = p.m_iBaseHitlistPos + sphUnzipOffset ( pSkip );
+			}
+		}
+
+		tWord.m_rdDoclist.SeekTo ( tRes.m_iDoclistOffset, tRes.m_iDoclistHint );
 
 		tWord.m_rdHitlist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
 		tWord.m_rdHitlist.SetFile ( m_tHitlist );
@@ -13624,6 +13763,9 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 		return false;
 #endif
 	}
+
+	// skiplists
+	m_bHaveSkips = ( m_uVersion>=31 );
 
 	// docinfo
 	m_tSettings.m_eDocinfo = (ESphDocinfo) rdInfo.GetDword();
@@ -14009,7 +14151,7 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 		sphDie ( "failed to open wordlist: %s", m_sLastError.cstr() );
 
 	// aim
-	DiskIndexQwordSetup_c tTermSetup ( tDoclist, tHitlist, tWordlist, m_bPreloadWordlist ? 0 : m_tWordlist.m_iMaxChunk );
+	DiskIndexQwordSetup_c tTermSetup ( tDoclist, tHitlist, tWordlist, m_bPreloadWordlist ? 0 : m_tWordlist.m_iMaxChunk, m_pSkiplists.GetWritePtr() );
 	tTermSetup.m_pDict = m_pDict;
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
@@ -14088,9 +14230,9 @@ void CSphIndex_VLN::DebugDumpDict ( FILE * fp )
 	fprintf ( fp, "keyword,docs,hits,offset\n" );
 	ARRAY_FOREACH ( i, m_tWordlist.m_dCheckpoints )
 	{
-		KeywordsBlockReader_c tCtx ( m_tWordlist.AcquireDict ( &m_tWordlist.m_dCheckpoints[i], iFD, pBuf ) );
+		KeywordsBlockReader_c tCtx ( m_tWordlist.AcquireDict ( &m_tWordlist.m_dCheckpoints[i], iFD, pBuf ), m_bHaveSkips );
 		while ( tCtx.UnpackWord() )
-			printf ( "%s,%d,%d," INT64_FMT "\n", tCtx.GetWord(), tCtx.m_iDocs, tCtx.m_iHits, int64_t(tCtx.m_iOffset) );
+			printf ( "%s,%d,%d," INT64_FMT "\n", tCtx.GetWord(), tCtx.m_iDocs, tCtx.m_iHits, int64_t(tCtx.m_iDoclistOffset) );
 	}
 }
 
@@ -14119,6 +14261,7 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 	m_pMva.SetMlock ( bMlock );
 	m_pStrings.SetMlock ( bMlock );
 	m_pKillList.SetMlock ( bMlock );
+	m_pSkiplists.SetMlock ( bMlock );
 
 	// preload schema
 	if ( !LoadHeader ( GetIndexFileName("sph").cstr(), bStripPath, sWarning ) )
@@ -14129,6 +14272,9 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 		return false;
 
 	if ( m_uVersion>=3 && !sphIsReadable ( GetIndexFileName("spp").cstr(), &m_sLastError ) )
+		return false;
+
+	if ( m_bHaveSkips && !sphIsReadable ( GetIndexFileName("spe").cstr(), &m_sLastError ) )
 		return false;
 
 	/////////////////////
@@ -14329,6 +14475,21 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 			return false;
 	}
 
+	// prealloc skiplist
+	if ( m_bHaveSkips )
+	{
+		CSphAutofile fdSkips ( GetIndexFileName("spe"), SPH_O_READ, m_sLastError );
+		if ( fdSkips.GetFD()<0 )
+			return false;
+
+		SphOffset_t iSize = fdSkips.GetSize ( 0, true, m_sLastError );
+		if ( iSize<0 )
+			return false;
+
+		if ( iSize>0 && !m_pSkiplists.Alloc ( iSize, m_sLastError, sWarning ) )
+			return false;
+	}
+
 	bool bWordDict = false;
 	if ( m_pDict )
 		bWordDict = m_pDict->GetSettings().m_bWordDict;
@@ -14350,6 +14511,8 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 template < typename T > bool CSphIndex_VLN::PrereadSharedBuffer ( CSphSharedBuffer<T> & pBuffer,
 	const char * sExt, size_t uExpected, DWORD uOffset )
 {
+	sphLogDebug ( "prereading .%s", sExt );
+
 	if ( !pBuffer.GetLength() )
 		return true;
 
@@ -14390,24 +14553,17 @@ bool CSphIndex_VLN::Preread ()
 	if ( m_bPreloadWordlist )
 		m_tProgress.m_iBytesTotal += m_tWordlist.m_pBuf.GetLength();
 
-	sphLogDebug ( "Prereading .spa" );
 	if ( !PrereadSharedBuffer ( m_pDocinfo, "spa",
-		( m_uVersion<20 )
-			? m_uDocinfo*( ( m_bId32to64 ? 1 : DOCINFO_IDSIZE ) + m_tSchema.GetRowSize() )*sizeof(DWORD)
-			: 0,
-		m_bId32to64 ? ( 2 + m_uDocinfo + 2*m_uDocinfoIndex ) : 0 ) )
+		( m_uVersion<20 ) ? m_uDocinfo * ( ( m_bId32to64 ? 1 : DOCINFO_IDSIZE ) + m_tSchema.GetRowSize() ) * sizeof(DWORD) : 0,
+		m_bId32to64 ? ( 2 + m_uDocinfo + 2 * m_uDocinfoIndex ) : 0 ) )
 			return false;
-
-	sphLogDebug ( "Prereading .spm" );
 	if ( !PrereadSharedBuffer ( m_pMva, "spm" ) )
 		return false;
-
-	sphLogDebug ( "Prereading .sps" );
 	if ( !PrereadSharedBuffer ( m_pStrings, "sps" ) )
 		return false;
-
-	sphLogDebug ( "Prereading .spk" );
 	if ( !PrereadSharedBuffer ( m_pKillList, "spk" ) )
+		return false;
+	if ( !PrereadSharedBuffer ( m_pSkiplists, "spe" ) )
 		return false;
 
 #if PARANOID
@@ -14886,7 +15042,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 
 	DiskIndexQwordSetup_c tTermSetup ( tDummy1, tDummy2
 		, m_bPreloadWordlist ? tDummy3 : ( m_bKeepFilesOpen ? m_tWordlist.m_tFile : tWordlist )
-		, m_bPreloadWordlist ? 0 : m_tWordlist.m_iMaxChunk );
+		, m_bPreloadWordlist ? 0 : m_tWordlist.m_iMaxChunk, m_pSkiplists.GetWritePtr() );
 	tTermSetup.m_pDict = pDict;
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
@@ -15924,7 +16080,8 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	DiskIndexQwordSetup_c tTermSetup ( m_bKeepFilesOpen ? m_tDoclistFile : tDoclist,
 		m_bKeepFilesOpen ? m_tHitlistFile : tHitlist,
 		m_bPreloadWordlist ? tDummy : ( m_bKeepFilesOpen ? m_tWordlist.m_tFile : tWordlist ),
-		m_bPreloadWordlist ? 0 : m_tWordlist.m_iMaxChunk );
+		m_bPreloadWordlist ? 0 : m_tWordlist.m_iMaxChunk,
+		m_pSkiplists.GetWritePtr() );
 
 	tTermSetup.m_pDict = pDict;
 	tTermSetup.m_pIndex = this;
@@ -17062,8 +17219,8 @@ enum
 // BASE DICTIONARY INTERFACE
 /////////////////////////////////////////////////////////////////////////////
 
-void CSphDict::DictBegin ( CSphAutofile &, CSphAutofile &, int, ThrottleState_t * )							{}
-void CSphDict::DictEntry ( SphWordID_t, BYTE *, int, int, SphOffset_t, SphOffset_t )	{}
+void CSphDict::DictBegin ( CSphAutofile &, CSphAutofile &, int, ThrottleState_t * )		{}
+void CSphDict::DictEntry ( const CSphDictEntry & )										{}
 void CSphDict::DictEndEntries ( SphOffset_t )											{}
 bool CSphDict::DictEnd ( DictHeader_t *, int, CSphString &, ThrottleState_t * )			{ return true; }
 bool CSphDict::DictIsError () const														{ return true; }
@@ -17122,7 +17279,7 @@ struct CSphDictCRCTraits : CSphDict
 	static void			SweepWordformContainers ( const CSphVector<CSphSavedFile> & dFiles );
 
 	virtual void DictBegin ( CSphAutofile & tTempDict, CSphAutofile & tDict, int iDictLimit, ThrottleState_t * pThrottle );
-	virtual void DictEntry ( SphWordID_t uWordID, BYTE * sKeyword, int iDocs, int iHits, SphOffset_t iDoclistOffset, SphOffset_t iDoclistLength );
+	virtual void DictEntry ( const CSphDictEntry & tEntry );
 	virtual void DictEndEntries ( SphOffset_t iDoclistOffset );
 	virtual bool DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphString & sError, ThrottleState_t * );
 	virtual bool DictIsError () const { return m_wrDict.IsError(); }
@@ -18505,16 +18662,16 @@ bool CSphDictCRCTraits::DictEnd ( DictHeader_t * pHeader, int, CSphString & sErr
 	return !m_wrDict.IsError();
 }
 
-void CSphDictCRCTraits::DictEntry ( SphWordID_t uWordID, BYTE *, int iDocs, int iHits, SphOffset_t iDoclistOffset, SphOffset_t )
+void CSphDictCRCTraits::DictEntry ( const CSphDictEntry & tEntry )
 {
 	// insert wordlist checkpoint
 	if ( ( m_iEntries % SPH_WORDLIST_CHECKPOINT )==0 )
 	{
 		if ( m_iEntries ) // but not the 1st entry
 		{
-			assert ( iDoclistOffset > m_iLastDoclistPos );
+			assert ( tEntry.m_iDoclistOffset > m_iLastDoclistPos );
 			m_wrDict.ZipInt ( 0 ); // indicate checkpoint
-			m_wrDict.ZipOffset ( iDoclistOffset - m_iLastDoclistPos ); // store last length
+			m_wrDict.ZipOffset ( tEntry.m_iDoclistOffset - m_iLastDoclistPos ); // store last length
 		}
 
 		// restart delta coding, once per SPH_WORDLIST_CHECKPOINT entries
@@ -18525,21 +18682,25 @@ void CSphDictCRCTraits::DictEntry ( SphWordID_t uWordID, BYTE *, int iDocs, int 
 		assert ( m_wrDict.GetPos()<=UINT_MAX );
 
 		CSphWordlistCheckpoint & tCheckpoint = m_dCheckpoints.Add();
-		tCheckpoint.m_iWordID = uWordID;
+		tCheckpoint.m_iWordID = tEntry.m_uWordID;
 		tCheckpoint.m_iWordlistOffset = m_wrDict.GetPos();
 	}
 
-	assert ( iDoclistOffset > m_iLastDoclistPos );
-	m_wrDict.ZipOffset ( uWordID - m_iLastWordID ); // FIXME! slow with 32bit wordids
-	m_wrDict.ZipOffset ( iDoclistOffset - m_iLastDoclistPos );
+	assert (  tEntry.m_iDoclistOffset  > m_iLastDoclistPos );
+	m_wrDict.ZipOffset ( tEntry.m_uWordID - m_iLastWordID ); // FIXME! slow with 32bit wordids
+	m_wrDict.ZipOffset ( tEntry.m_iDoclistOffset - m_iLastDoclistPos );
 
-	m_iLastWordID = uWordID;
-	m_iLastDoclistPos = iDoclistOffset;
+	m_iLastWordID = tEntry.m_uWordID;
+	m_iLastDoclistPos = tEntry.m_iDoclistOffset;
 
-	assert ( iDocs );
-	assert ( iHits );
-	m_wrDict.ZipInt ( iDocs );
-	m_wrDict.ZipInt ( iHits );
+	assert ( tEntry.m_iDocs );
+	assert ( tEntry.m_iHits );
+	m_wrDict.ZipInt ( tEntry.m_iDocs );
+	m_wrDict.ZipInt ( tEntry.m_iHits );
+
+	// write skiplist location info, if any
+	if ( tEntry.m_iDocs > SKIPLIST_BLOCK )
+		m_wrDict.ZipOffset ( tEntry.m_iSkiplistOffset );
 
 	m_iEntries++;
 }
@@ -19200,6 +19361,7 @@ public:
 		int							m_iDocs;
 		int							m_iHits;
 		BYTE						m_uHint;
+		int							m_iSkiplistPos;		///< position in .spe file; not exactly likely to hit 2B
 	};
 
 	struct DictBlock_t
@@ -19249,7 +19411,7 @@ public:
 	virtual void			HitblockReset ();
 
 	virtual void			DictBegin ( CSphAutofile & tTempDict, CSphAutofile & tDict, int iDictLimit, ThrottleState_t * pThrottle );
-	virtual void			DictEntry ( SphWordID_t uWordID, BYTE * sKeyword, int iDocs, int iHits, SphOffset_t iDoclistOffset, SphOffset_t iDoclistLength );
+	virtual void			DictEntry ( const CSphDictEntry & tEntry );
 	virtual void			DictEndEntries ( SphOffset_t ) {}
 	virtual bool			DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphString & sError, ThrottleState_t * pThrottle );
 
@@ -19543,6 +19705,10 @@ static void DictReadEntry ( CSphBin * pBin, DictKeywordTagged_t & tEntry, BYTE *
 	tEntry.m_iDocs = pBin->UnzipInt();
 	tEntry.m_iHits = pBin->UnzipInt();
 	tEntry.m_uHint = (BYTE) pBin->ReadByte();
+	if ( tEntry.m_iDocs > SKIPLIST_BLOCK )
+		tEntry.m_iSkiplistPos = pBin->UnzipInt();
+	else
+		tEntry.m_iSkiplistPos = 0;
 }
 
 void CSphDictKeywords::DictBegin ( CSphAutofile & tTempDict, CSphAutofile & tDict, int iDictLimit, ThrottleState_t * pThrottle )
@@ -19682,6 +19848,8 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphStri
 		m_wrDict.ZipInt ( tWord.m_iHits );
 		if ( tWord.m_uHint )
 			m_wrDict.PutByte ( tWord.m_uHint );
+		if ( tWord.m_iDocs > SKIPLIST_BLOCK )
+			m_wrDict.ZipInt ( tWord.m_iSkiplistPos );
 
 		// build infixes
 		if ( pInfixer )
@@ -19801,6 +19969,9 @@ void CSphDictKeywords::DictFlush ()
 		m_wrTmpDict.ZipInt ( pWord->m_iDocs );
 		m_wrTmpDict.ZipInt ( pWord->m_iHits );
 		m_wrTmpDict.PutByte ( pWord->m_uHint );
+		assert ( ( pWord->m_iDocs > SKIPLIST_BLOCK )==( pWord->m_iSkiplistPos!=0 ) );
+		if ( pWord->m_iDocs > SKIPLIST_BLOCK )
+			m_wrTmpDict.ZipInt ( pWord->m_iSkiplistPos );
 	}
 
 	tBlock.m_iLen = (int)( m_wrTmpDict.GetPos() - tBlock.m_iPos );
@@ -19821,19 +19992,18 @@ void CSphDictKeywords::DictFlush ()
 	m_iMemUse = 0;
 }
 
-void CSphDictKeywords::DictEntry ( SphWordID_t, BYTE * sKeyword, int iDocs, int iHits,
-	SphOffset_t iDoclistOffset, SphOffset_t iDoclistLength )
+void CSphDictKeywords::DictEntry ( const CSphDictEntry & tEntry )
 {
 	// they say, this might just happen during merge
 	// FIXME! can we make merge avoid sending such keywords to dict and assert here?
-	if ( !iDocs )
+	if ( !tEntry.m_iDocs )
 		return;
 
-	assert ( iHits );
-	assert ( iDoclistLength>0 );
+	assert ( tEntry.m_iHits );
+	assert ( tEntry.m_iDoclistLength>0 );
 
 	DictKeyword_t * pWord = NULL;
-	int iLen = strlen ( (char*)sKeyword ) + 1;
+	int iLen = strlen ( (char*)tEntry.m_sKeyword ) + 1;
 
 	for ( ;; )
 	{
@@ -19870,15 +20040,18 @@ void CSphDictKeywords::DictEntry ( SphWordID_t, BYTE * sKeyword, int iDocs, int 
 	pWord = m_pDictChunk++;
 	m_iDictChunkFree--;
 	pWord->m_sKeyword = (char*)m_pKeywordChunk;
-	memcpy ( m_pKeywordChunk, sKeyword, iLen );
+	memcpy ( m_pKeywordChunk, tEntry.m_sKeyword, iLen );
 	m_pKeywordChunk[iLen-1] = '\0';
 	m_pKeywordChunk += iLen;
 	m_iKeywordChunkFree -= iLen;
 
-	pWord->m_uOff = iDoclistOffset;
-	pWord->m_iDocs = iDocs;
-	pWord->m_iHits = iHits;
-	pWord->m_uHint = sphDoclistHintPack ( iDocs, iDoclistLength );
+	pWord->m_uOff = tEntry.m_iDoclistOffset;
+	pWord->m_iDocs = tEntry.m_iDocs;
+	pWord->m_iHits = tEntry.m_iHits;
+	pWord->m_uHint = sphDoclistHintPack ( tEntry.m_iDocs, tEntry.m_iDoclistLength );
+	pWord->m_iSkiplistPos = 0;
+	if ( tEntry.m_iDocs > SKIPLIST_BLOCK )
+		pWord->m_iSkiplistPos = (int)( tEntry.m_iSkiplistOffset );
 }
 
 SphWordID_t CSphDictKeywords::GetWordID ( BYTE * pWord )
@@ -26311,6 +26484,8 @@ bool CWordlist::ReadCP ( CSphAutofile & tFile, DWORD uVersion, bool bWordDict, C
 	assert ( m_iDictCheckpointsOffset>0 );
 	assert ( m_iSize-m_iDictCheckpointsOffset<UINT_MAX );
 
+	m_bHaveSkips = ( uVersion>=31 );
+
 	////////////////////////////
 	// preload word checkpoints
 	////////////////////////////
@@ -26427,11 +26602,12 @@ const CSphWordlistCheckpoint * CWordlist::FindCheckpoint ( const char * sWord, i
 }
 
 
-KeywordsBlockReader_c::KeywordsBlockReader_c ( const BYTE * pBuf )
+KeywordsBlockReader_c::KeywordsBlockReader_c ( const BYTE * pBuf, bool bSkips )
 {
 	m_pBuf = pBuf;
 	m_sWord[0] = '\0';
 	m_iLen = 0;
+	m_bHaveSkips = bSkips;
 }
 
 
@@ -26471,18 +26647,22 @@ bool KeywordsBlockReader_c::UnpackWord()
 	m_iLen = iMatch + iDelta;
 	m_sWord[m_iLen] = '\0';
 
-	m_iOffset = sphUnzipOffset ( m_pBuf );
+	m_iDoclistOffset = sphUnzipOffset ( m_pBuf );
 	m_iDocs = sphUnzipInt ( m_pBuf );
 	m_iHits = sphUnzipInt ( m_pBuf );
 	m_uHint = ( m_iDocs>=DOCLIST_HINT_THRESH ) ? *m_pBuf++ : 0;
 	m_iDoclistHint = DoclistHintUnpack ( m_iDocs, m_uHint );
+	if ( m_bHaveSkips && ( m_iDocs > SKIPLIST_BLOCK ) )
+		m_iSkiplistOffset = sphUnzipInt ( m_pBuf );
+	else
+		m_iSkiplistOffset = 0;
 
 	assert ( m_iLen>0 );
 	return true;
 }
 
 
-bool CWordlist::GetWord ( const BYTE * pBuf, SphWordID_t iWordID, WordDictInfo_t & tWord ) const
+bool CWordlist::GetWord ( const BYTE * pBuf, SphWordID_t iWordID, CSphDictEntry & tWord ) const
 {
 	SphWordID_t iLastID = 0;
 	SphOffset_t uLastOff = 0;
@@ -26508,6 +26688,7 @@ bool CWordlist::GetWord ( const BYTE * pBuf, SphWordID_t iWordID, WordDictInfo_t
 		// unpack doc/hit count
 		const int iDocs = sphUnzipInt ( pBuf );
 		const int iHits = sphUnzipInt ( pBuf );
+		int iSkiplistPos = ( iDocs > SKIPLIST_BLOCK ) ? sphUnzipInt ( pBuf ) : 0;
 
 		assert ( iDeltaOffset );
 		assert ( iDocs );
@@ -26519,11 +26700,11 @@ bool CWordlist::GetWord ( const BYTE * pBuf, SphWordID_t iWordID, WordDictInfo_t
 			sphUnzipWordid ( pBuf ); // might be 0 at checkpoint
 			const SphOffset_t iDoclistLen = sphUnzipOffset ( pBuf );
 
-			tWord.m_iOffset = uLastOff;
+			tWord.m_iDoclistOffset = uLastOff;
 			tWord.m_iDocs = iDocs;
 			tWord.m_iHits = iHits;
 			tWord.m_iDoclistHint = (int)iDoclistLen;
-
+			tWord.m_iSkiplistOffset = iSkiplistPos;
 			return true;
 		}
 	}
@@ -26590,7 +26771,7 @@ void CWordlist::GetPrefixedWords ( const char * sPrefix, int iPrefixLen, const c
 	while ( pCheckpoint )
 	{
 		// decode wordlist chunk
-		KeywordsBlockReader_c tCtx ( AcquireDict ( pCheckpoint, iFD, pDictBuf ) );
+		KeywordsBlockReader_c tCtx ( AcquireDict ( pCheckpoint, iFD, pDictBuf ), m_bHaveSkips );
 		while ( tCtx.UnpackWord() )
 		{
 			// block is sorted
@@ -26742,7 +26923,7 @@ void CWordlist::GetInfixedWords ( const char * sInfix, int iBytes, const char * 
 	ARRAY_FOREACH ( i, dPoints )
 	{
 		// OPTIMIZE? add a quicker path than a generic wildcard for "*infix*" case?
-		KeywordsBlockReader_c tCtx ( m_pBuf.GetWritePtr() + m_dCheckpoints[dPoints[i]-1].m_iWordlistOffset );
+		KeywordsBlockReader_c tCtx ( m_pBuf.GetWritePtr() + m_dCheckpoints[dPoints[i]-1].m_iWordlistOffset, m_bHaveSkips );
 		while ( tCtx.UnpackWord() )
 			if ( sphWildcardMatch ( tCtx.GetWord(), sWildcard ) )
 				AddExpansion ( dExpanded, tCtx );
@@ -26837,7 +27018,7 @@ CSphQueryResultMeta & CSphQueryResultMeta::operator= ( const CSphQueryResultMeta
 }
 
 //////////////////////////////////////////////////////////////////////////
-// V.26 TO V.27 CONVERSION TOOL, INFIX BUILDER
+// CONVERSION TOOLS HELPERS
 //////////////////////////////////////////////////////////////////////////
 
 static void CopyBytes ( CSphWriter & wrTo, CSphReader & rdFrom, int iBytes )
@@ -26858,10 +27039,37 @@ static void CopyBytes ( CSphWriter & wrTo, CSphReader & rdFrom, int iBytes )
 }
 
 
+/// post-conversion chores
+/// rename the files, show elapsed time
+static void FinalizeUpgrade ( const char ** sRenames, const char * sBanner, const char * sPath, int64_t tmStart )
+{
+	while ( *sRenames )
+	{
+		CSphString sFrom, sTo;
+		sFrom.SetSprintf ( "%s%s", sPath, sRenames[0] );
+		sTo.SetSprintf ( "%s%s", sPath, sRenames[1] );
+		sRenames += 2;
+
+		if ( ::rename ( sFrom.cstr(), sTo.cstr() ) )
+			sphDie ( "%s: rename %s to %s failed: %s\n", sBanner,
+			sFrom.cstr(), sTo.cstr(), strerror(errno) );
+	}
+
+	// all done! yay
+	int64_t tmWall = sphMicroTimer() - tmStart;
+	fprintf ( stdout, "%s: elapsed %d.%d sec\n", sBanner,
+		(int)(tmWall/1000000), (int)((tmWall/100000)%10) );
+	fprintf ( stdout, "%s: done!\n", sBanner );
+}
+
+//////////////////////////////////////////////////////////////////////////
+// V.26 TO V.27 CONVERSION TOOL, INFIX BUILDER
+//////////////////////////////////////////////////////////////////////////
+
 void sphDictBuildInfixes ( const char * sPath )
 {
 	CSphString sFilename, sError;
-	int64_t tmWall = sphMicroTimer();
+	int64_t tmStart = sphMicroTimer();
 
 	if ( INDEX_FORMAT_VERSION!=27 )
 		sphDie ( "infix upgrade: only works in v.27 builds for now; get an older indextool or contact support", sError.cstr() );
@@ -26943,12 +27151,9 @@ void sphDictBuildInfixes ( const char * sPath )
 	// (in a separate block, so that tDictReader gets destroyed, and file closed)
 	{
 		CSphDictReader tDictReader;
-		sFilename.SetSprintf ( "%s.spi", sPath );
-		tDictReader.Setup ( sFilename, tDictHeader.m_iDictCheckpointsOffset, tIndexSettings.m_eHitless , sError, true, &g_tThrottle );
-
-		if ( !sError.IsEmpty() )
-			sphDie ( "infix upgrade: %s", sError.cstr() );
-
+		if ( !tDictReader.Setup ( sFilename.SetSprintf ( "%s.spi", sPath ),
+			tDictHeader.m_iDictCheckpointsOffset, tIndexSettings.m_eHitless, sError, true, &g_tThrottle ) )
+				sphDie ( "infix upgrade: %s", sError.cstr() );
 		while ( tDictReader.Read() )
 			pInfixer->AddWord ( tDictReader.GetWord(), tDictReader.GetCheckpoint() );
 	}
@@ -26967,7 +27172,7 @@ void sphDictBuildInfixes ( const char * sPath )
 	rdDict.SeekTo ( 0, READ_NO_SIZE_HINT );
 
 	CSphWriter wrDict;
-	sFilename.SetSprintf ( "%s.spi.infix", sPath );
+	sFilename.SetSprintf ( "%s.spi.upgrade", sPath );
 	if ( !wrDict.OpenFile ( sFilename, sError ) )
 		sphDie ( "infix upgrade: failed to open %s", sFilename.cstr() );
 
@@ -27012,7 +27217,7 @@ void sphDictBuildInfixes ( const char * sPath )
 		sphDie ( "infix upgrade: unable to create dictionary" );
 
 	CSphWriter wrHeader;
-	sFilename.SetSprintf ( "%s.sph.infix", sPath );
+	sFilename.SetSprintf ( "%s.sph.upgrade", sPath );
 	if ( !wrHeader.OpenFile ( sFilename, sError ) )
 		sphDie ( "infix upgrade: %s", sError.cstr() );
 
@@ -27033,36 +27238,486 @@ void sphDictBuildInfixes ( const char * sPath )
 	SaveDictionarySettings ( wrHeader, pDict, false, tIndexSettings.m_iEmbeddedLimit );
 	wrHeader.PutDword ( iKillListSize );
 	wrHeader.PutDword ( uMinMaxIndex );
+	wrHeader.PutDword ( 0 ); // no field filter
 
 	wrHeader.CloseFile ();
 	if ( wrHeader.IsError() )
 		sphDie ( "infix upgrade: header write error (out of space?)" );
 
-	/////////////////////////
-	// finalize (swap files)
-	/////////////////////////
-
-	// so far so good, let's rename the files
+	// all done!
 	const char * sRenames[] = {
-		".sph", ".sph.noinfix",
-		".spi", ".spi.noinfix",
-		".sph.infix", ".sph",
-		".spi.infix", ".spi" };
+		".sph", ".sph.bak",
+		".spi", ".spi.bak",
+		".sph.upgrade", ".sph",
+		".spi.upgrade", ".spi",
+		NULL };
+	FinalizeUpgrade ( sRenames, "infix upgrade", sPath, tmStart );
+}
 
-	for ( int i=0; i<8; i+=2 )
+//////////////////////////////////////////////////////////////////////////
+// V.30 TO V.31 CONVERSION TOOL, SKIPLIST BUILDER
+//////////////////////////////////////////////////////////////////////////
+
+struct EntrySkips_t
+{
+	DWORD			m_uEntry;		///< sequential index in dict
+	SphOffset_t		m_iDoclist;		///< doclist offset from dict
+	int				m_iSkiplist;	///< generated skiplist offset
+};
+
+void sphDictBuildSkiplists ( const char * sPath )
+{
+	CSphString sFilename, sError;
+	int64_t tmStart = sphMicroTimer();
+
+	if ( INDEX_FORMAT_VERSION!=31 )
+		sphDie ( "skiplists upgrade: ony works in v.31 builds for now; get an older indextool or contact support" );
+
+	// load (interesting parts from) the index header
+	CSphAutoreader rdHeader;
+	sFilename.SetSprintf ( "%s.sph", sPath );
+	if ( !rdHeader.Open ( sFilename.cstr(), sError ) )
+		sphDie ( "skiplists upgrade: %s", sError.cstr() );
+
+	// version
+	DWORD uHeader = rdHeader.GetDword ();
+	DWORD uVersion = rdHeader.GetDword();
+	bool bUse64 = ( rdHeader.GetDword()!=0 );
+	ESphDocinfo eDocinfo = (ESphDocinfo) rdHeader.GetDword();
+
+	if ( uHeader!=INDEX_MAGIC_HEADER )
+		sphDie ( "skiplists upgrade: invalid header file" );
+	if ( uVersion<21 || uVersion>30 )
+		sphDie ( "skiplists upgrade: got v.%d header, v.21 to v.30 required", uVersion );
+	if ( eDocinfo==SPH_DOCINFO_INLINE )
+		sphDie ( "skiplists upgrade: docinfo=inline is not supported yet" );
+
+	CSphSchema tSchema;
+	DictHeader_t tDictHeader;
+	CSphSourceStats tStats;
+	CSphIndexSettings tIndexSettings;
+	CSphTokenizerSettings tTokenizerSettings;
+	CSphDictSettings tDictSettings;
+	CSphEmbeddedFiles tEmbeddedFiles;
+
+	ReadSchema ( rdHeader, tSchema, uVersion, eDocinfo==SPH_DOCINFO_INLINE );
+	SphOffset_t iMinDocid = rdHeader.GetOffset();
+	tDictHeader.m_iDictCheckpointsOffset = rdHeader.GetOffset ();
+	tDictHeader.m_iDictCheckpoints = rdHeader.GetDword ();
+	tDictHeader.m_iInfixCodepointBytes = 0;
+	tDictHeader.m_iInfixBlocksOffset = 0;
+	if ( uVersion>=27 )
 	{
-		CSphString sFrom, sTo;
-		sFrom.SetSprintf ( "%s%s", sPath, sRenames[i] );
-		sTo.SetSprintf ( "%s%s", sPath, sRenames[i+1] );
-
-		if ( ::rename ( sFrom.cstr(), sTo.cstr() ) )
-			sphDie ( "infix upgrade: rename %s to %s failed: %s\n", sFrom.cstr(), sTo.cstr(), strerror(errno) );
+		tDictHeader.m_iInfixCodepointBytes = rdHeader.GetByte();
+		tDictHeader.m_iInfixBlocksOffset = rdHeader.GetDword();
+	}
+	tStats.m_iTotalDocuments = rdHeader.GetDword ();
+	tStats.m_iTotalBytes = rdHeader.GetOffset ();
+	LoadIndexSettings ( tIndexSettings, rdHeader, uVersion );
+	LoadTokenizerSettings ( rdHeader, tTokenizerSettings, tEmbeddedFiles, uVersion, sError );
+	LoadDictionarySettings ( rdHeader, tDictSettings, tEmbeddedFiles, uVersion, sError );
+	int iKillListSize = rdHeader.GetDword();
+	DWORD uMinMaxIndex = rdHeader.GetDword();
+	ISphFieldFilter * pFieldFilter = NULL;
+	if ( uVersion>=28 )
+	{
+		CSphFieldFilterSettings tFieldFilterSettings;
+		pFieldFilter = sphCreateFieldFilter ( tFieldFilterSettings, sError );
 	}
 
-	// all done! yay
-	tmWall = sphMicroTimer() - tmWall;
-	fprintf ( stdout, "infix upgrade: elapsed %d.%d sec\n", (int)(tmWall/1000000), (int)((tmWall/100000)%10) );
-	fprintf ( stdout, "infix upgrade: done!\n" );
+	if ( rdHeader.GetErrorFlag() )
+		sphDie ( "skiplists upgrade: failed to parse header" );
+	rdHeader.Close();
+
+	//////////////////////
+	// generate skiplists
+	//////////////////////
+
+	// keywords on disk might be in a different order than dictionary
+	// and random accesses on a plain disk would be extremely slow
+	// so we load the dictionary, sort by doclist offset
+	// then we walk doclists, generate skiplists, sort back by entry number
+	// then walk the disk dictionary again, lookup skiplist offset, and patch
+
+	// load the dictionary
+	CSphVector<EntrySkips_t> dSkips;
+	const bool bWordDict = tDictSettings.m_bWordDict;
+
+	CSphAutoreader rdDict;
+	if ( !rdDict.Open ( sFilename.SetSprintf ( "%s.spi",sPath ), sError ) )
+		sphDie ( "skiplists upgrade: %s", sError.cstr() );
+
+	// compute actual keyword data length
+	SphOffset_t iWordsEnd = tDictHeader.m_iDictCheckpointsOffset;
+	if ( bWordDict && tDictHeader.m_iInfixCodepointBytes )
+	{
+		rdDict.SeekTo ( tDictHeader.m_iInfixBlocksOffset, 32 ); // need just 1 entry, 32 bytes should be ok
+		rdDict.UnzipInt(); // skip block count
+		int iInfixLen = rdDict.GetByte();
+		rdDict.SkipBytes ( iInfixLen );
+		iWordsEnd = rdDict.UnzipInt() - strlen ( g_sTagInfixEntries );
+		rdDict.SeekTo ( 0, READ_NO_SIZE_HINT );
+	}
+
+	CSphDictReader * pReader = new CSphDictReader();
+	pReader->Setup ( &rdDict, iWordsEnd, tIndexSettings.m_eHitless, bWordDict, &g_tThrottle );
+
+	DWORD uEntry = 0;
+	while ( pReader->Read() )
+	{
+		if ( pReader->m_iDocs > SKIPLIST_BLOCK )
+		{
+			EntrySkips_t & t = dSkips.Add();
+			t.m_uEntry = uEntry;
+			t.m_iDoclist = pReader->m_iDoclistOffset;
+			t.m_iSkiplist = -1;
+		}
+		if ( ++uEntry==0 )
+			sphDie ( "skiplists upgrade: dictionaries over 4B entries are not supported yet!" );
+	}
+
+	// sort by doclist offset
+	dSkips.Sort ( sphMemberLess ( &EntrySkips_t::m_iDoclist ) );
+
+	// walk doclists, create skiplists
+	CSphAutoreader rdDocs;
+	if ( !rdDocs.Open ( sFilename.SetSprintf ( "%s.spd", sPath ), sError ) )
+		sphDie ( "skiplists upgrade: %s", sError.cstr() );
+
+	CSphWriter wrSkips;
+	if ( !wrSkips.OpenFile ( sFilename.SetSprintf ( "%s.spe.tmp", sPath ), sError ) )
+		sphDie ( "skiplists upgrade: failed to create %s", sFilename.cstr() );
+	wrSkips.PutByte ( 1 );
+
+	// enters manual disk doclist reader
+	// for now, require inline hit format and none/extern docinfo
+	if ( tIndexSettings.m_eHitFormat!=SPH_HIT_FORMAT_INLINE )
+		sphDie ( "skiplists upgrade: plain index format not supported yet" );
+	assert ( eDocinfo!=SPH_DOCINFO_INLINE );
+
+	int iDone = -1;
+	CSphVector<SkiplistEntry_t> dSkiplist;
+	ARRAY_FOREACH ( i, dSkips )
+	{
+		// seek to that keyword
+		// OPTIMIZE? use length hint from dict too?
+		rdDocs.SeekTo (  dSkips[i].m_iDoclist, READ_NO_SIZE_HINT );
+
+		// decode interesting bits of doclist
+		SphDocID_t uDocid = SphDocID_t(iMinDocid);
+		SphOffset_t uHitPosition = 0;
+		DWORD uDocs = 0;
+
+		for ( ;; )
+		{
+			// save current entry position
+			SphOffset_t uPos = rdDocs.GetPos();
+
+			// decode next entry
+			SphDocID_t uDelta = rdDocs.UnzipDocid();
+			if ( !uDelta )
+				break;
+
+			// build skiplist, aka save decoder state as needed
+			if ( ( uDocs & ( SKIPLIST_BLOCK-1 ) )==0 )
+			{
+				SkiplistEntry_t & t = dSkiplist.Add();
+				t.m_iBaseDocid = uDocid;
+				t.m_iOffset = uPos;
+				t.m_iBaseHitlistPos = uHitPosition;
+			}
+			uDocs++;
+
+			// do decode
+			uDocid += uDelta; // track delta-encoded docid
+			DWORD uHits = rdDocs.UnzipInt();
+			rdDocs.UnzipInt(); // skip hit field mask/data
+			if ( uHits==1 )
+				rdDocs.UnzipInt(); // skip inlined field id
+			else
+				uHitPosition += rdDocs.UnzipOffset(); // track delta-encoded hitlist offset
+		}
+
+		// alright, we built it, so save it
+		assert ( uDocs>SKIPLIST_BLOCK );
+		assert ( dSkiplist.GetLength() );
+
+		dSkips[i].m_iSkiplist = (int)wrSkips.GetPos();
+		SkiplistEntry_t tLast = dSkiplist[0];
+		for ( int j=1; j<dSkiplist.GetLength(); j++ )
+		{
+			const SkiplistEntry_t & t = dSkiplist[j];
+			assert ( t.m_iBaseDocid - tLast.m_iBaseDocid >= SKIPLIST_BLOCK );
+			assert ( t.m_iOffset - tLast.m_iOffset >= 4*SKIPLIST_BLOCK );
+			wrSkips.ZipOffset ( t.m_iBaseDocid - tLast.m_iBaseDocid - SKIPLIST_BLOCK );
+			wrSkips.ZipOffset ( t.m_iOffset - tLast.m_iOffset - 4*SKIPLIST_BLOCK );
+			wrSkips.ZipOffset ( t.m_iBaseHitlistPos - tLast.m_iBaseHitlistPos );
+			tLast = t;
+		}
+		dSkiplist.Resize ( 0 );
+
+		// progress bar
+		int iDone2 = (1+i)*100 / dSkips.GetLength();
+		if ( iDone2!= iDone )
+		{
+			iDone = iDone2;
+			fprintf ( stdout, "skiplists upgrade: building skiplists, %d%% done\r", iDone );
+		}
+	}
+	fprintf ( stdout, "skiplists upgrade: building skiplists, 100%% done\n" );
+
+	// finalize
+	wrSkips.CloseFile ();
+	if ( wrSkips.IsError() )
+		sphDie ( "skiplists upgrade: write error (out of space?)" );
+	if ( rdDocs.GetErrorFlag() )
+		sphDie ( "skiplists upgrade: doclist read error: %s", rdDocs.GetErrorMessage().cstr() );
+
+	// sort by entry id again
+	dSkips.Sort ( sphMemberLess ( &EntrySkips_t::m_uEntry ) );
+
+	/////////////////////////////
+	// write new dictionary file
+	/////////////////////////////
+
+	// converted dict writer
+	CSphWriter wrDict;
+	sFilename.SetSprintf ( "%s.spi.upgrade", sPath );
+	if ( !wrDict.OpenFile ( sFilename, sError ) )
+		sphDie ( "skiplists upgrade: failed to create %s", sFilename.cstr() );
+	wrDict.PutByte ( 1 );
+
+	// handy entry iterator
+	// we will use this one to decode entries, and rdDict for other raw access
+	pReader->Setup ( &rdDict, iWordsEnd, tIndexSettings.m_eHitless, bWordDict, &g_tThrottle );
+
+	// we have to adjust some of the entries
+	// thus we also have to recompute the offset in the checkpoints too
+	//
+	// infix hashes (if any) in dict=keywords refer to checkpoints by numbers
+	// so infix data can simply be copied around
+
+	// new checkpoints
+	CSphVector<CSphWordlistCheckpoint> dNewCP;
+	int iLastCP = 0;
+
+	// skiplist lookup
+	EntrySkips_t * pSkips = dSkips.Begin();
+	uEntry = 0;
+
+	// dict encoder state
+	SphWordID_t uLastWordid = 0; // crc case
+	SphOffset_t iLastDoclist = 0; // crc case
+	CSphKeywordDeltaWriter tLastKeyword; // keywords case
+
+	// read old entries, write new entries
+	while ( pReader->Read() )
+	{
+		// update checkpoint
+		if ( iLastCP!=pReader->GetCheckpoint() )
+		{
+			// FIXME? GetCheckpoint() is for some reason 1-based
+			if ( iLastCP )
+			{
+				wrDict.ZipInt ( 0 );
+				if ( bWordDict )
+					wrDict.ZipInt ( 0 );
+				else
+					wrDict.ZipOffset ( pReader->m_iDoclistOffset - iLastDoclist );
+			}
+			uLastWordid = 0;
+			iLastDoclist = 0;
+
+			CSphWordlistCheckpoint & cp = dNewCP.Add();
+			if ( bWordDict )
+			{
+				cp.m_sWord = strdup ( (const char*)pReader->GetWord() );
+				tLastKeyword.Reset();
+			} else
+				cp.m_iWordID = pReader->m_iWordID;
+			cp.m_iWordlistOffset = wrDict.GetPos();
+			iLastCP = pReader->GetCheckpoint();
+		}
+
+		// resave entry
+		if ( bWordDict )
+		{
+			// keywords dict path
+			const int iLen = strlen ( (const char*)pReader->GetWord() );
+			tLastKeyword.PutDelta ( wrDict, pReader->GetWord(), iLen );
+			wrDict.ZipOffset ( pReader->m_iDoclistOffset );
+			wrDict.ZipInt ( pReader->m_iDocs );
+			wrDict.ZipInt ( pReader->m_iHits );
+			if ( pReader->m_iDocs>=DOCLIST_HINT_THRESH )
+				wrDict.PutByte ( pReader->m_iHint );
+		} else
+		{
+			// crc dict path
+			assert ( pReader->m_iWordID > uLastWordid );
+			assert ( pReader->m_iDoclistOffset > iLastDoclist );
+			wrDict.ZipOffset ( pReader->m_iWordID - uLastWordid );
+			wrDict.ZipOffset ( pReader->m_iDoclistOffset - iLastDoclist );
+			wrDict.ZipInt ( pReader->m_iDocs );
+			wrDict.ZipInt ( pReader->m_iHits );
+			uLastWordid = pReader->m_iWordID;
+			iLastDoclist = pReader->m_iDoclistOffset;
+		}
+
+		// emit skiplist pointer
+		if ( pReader->m_iDocs > SKIPLIST_BLOCK )
+		{
+			// lots of checks
+			if ( uEntry!=pSkips->m_uEntry )
+				sphDie ( "skiplist upgrade: internal error, entry mismatch (expected %d, got %d)",
+					uEntry, pSkips->m_uEntry );
+			if ( pReader->m_iDoclistOffset!=pSkips->m_iDoclist )
+				sphDie ( "skiplist upgrade: internal error, offset mismatch (expected %lld, got %lld)",
+					int64_t(pReader->m_iDoclistOffset), int64_t(pSkips->m_iDoclist) );
+			if ( pSkips->m_iSkiplist<0 )
+				sphDie ( "skiplist upgrade: internal error, bad skiplist offset %d",
+					pSkips->m_iSkiplist	);
+
+			// and a bit of work
+			wrDict.ZipInt ( pSkips->m_iSkiplist );
+			pSkips++;
+		}
+
+		// next entry
+		uEntry++;
+	}
+
+	// finalize last keywords block
+	wrDict.ZipInt ( 0 );
+	if ( bWordDict )
+		wrDict.ZipInt ( 0 );
+	else
+		wrDict.ZipOffset ( rdDocs.GetFilesize() - iLastDoclist );
+
+	rdDocs.Close();
+	SafeDelete ( pReader );
+
+	// copy infix hash entries, if any
+	int iDeltaInfix = 0;
+	if ( bWordDict && tDictHeader.m_iInfixCodepointBytes )
+	{
+		if ( iWordsEnd!=rdDict.GetPos() )
+			sphDie ( "skiplist upgrade: internal error, infix hash position mismatch (expected=%lld, got=%lld)",
+				int64_t(iWordsEnd), int64_t(rdDict.GetPos()) );
+		iDeltaInfix = (int)( wrDict.GetPos() - rdDict.GetPos() );
+		CopyBytes ( wrDict, rdDict, (int)( tDictHeader.m_iDictCheckpointsOffset - iWordsEnd ) );
+	}
+
+	// write new checkpoints
+	if ( tDictHeader.m_iDictCheckpointsOffset!=rdDict.GetPos() )
+		sphDie ( "skiplist upgrade: internal error, checkpoints position mismatch (expected=%lld, got=%lld)",
+			int64_t(tDictHeader.m_iDictCheckpointsOffset), int64_t(rdDict.GetPos()) );
+	if ( tDictHeader.m_iDictCheckpoints!=dNewCP.GetLength() )
+		sphDie ( "skiplist upgrade: internal error, checkpoint count mismatch (old=%d, new=%d)",
+			tDictHeader.m_iDictCheckpoints, dNewCP.GetLength() );
+
+	tDictHeader.m_iDictCheckpointsOffset = wrDict.GetPos();
+	ARRAY_FOREACH ( i, dNewCP )
+	{
+		if ( bWordDict )
+		{
+			wrDict.PutString ( dNewCP[i].m_sWord );
+			SafeDeleteArray ( dNewCP[i].m_sWord );
+		} else
+		{
+			wrDict.PutOffset ( dNewCP[i].m_iWordID );
+		}
+		wrDict.PutOffset ( dNewCP[i].m_iWordlistOffset );
+	}
+
+	// update infix hash blocks, if any
+	// (they store direct offsets to infix hash, which just got moved)
+	if ( bWordDict && tDictHeader.m_iInfixCodepointBytes )
+	{
+		rdDict.SeekTo ( tDictHeader.m_iInfixBlocksOffset, READ_NO_SIZE_HINT );
+		int iBlocks = rdDict.UnzipInt();
+
+		wrDict.PutBytes ( g_sTagInfixBlocks, strlen ( g_sTagInfixBlocks ) );
+		tDictHeader.m_iInfixBlocksOffset = (int)wrDict.GetPos();
+
+		wrDict.ZipInt ( iBlocks );
+		for ( int i=0; i<iBlocks; i++ )
+		{
+			char sInfix[256];
+			int iBytes = rdDict.GetByte();
+			rdDict.GetBytes ( sInfix, iBytes );
+			wrDict.PutByte ( iBytes );
+			wrDict.PutBytes ( sInfix, iBytes );
+			wrDict.ZipInt ( rdDict.UnzipInt() + iDeltaInfix );
+		}
+	}
+
+	// emit new aux tail header
+	if ( bWordDict )
+	{
+		wrDict.PutBytes ( "dict-header", 11 );
+		wrDict.ZipInt ( tDictHeader.m_iDictCheckpoints );
+		wrDict.ZipOffset ( tDictHeader.m_iDictCheckpointsOffset );
+		wrDict.ZipInt ( tDictHeader.m_iInfixCodepointBytes );
+		wrDict.ZipInt ( tDictHeader.m_iInfixBlocksOffset );
+	}
+
+	wrDict.CloseFile();
+	if ( wrDict.IsError() )
+		sphDie ( "skiplists upgrade: dict write error (out of space?)" );
+
+	rdDict.Close();
+
+	////////////////////
+	// write new header
+	////////////////////
+
+	ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, sError );
+	if ( !pTokenizer )
+		sphDie ( "skiplists upgrade: %s", sError.cstr() );
+
+	CSphDict * pDict = bWordDict
+		? sphCreateDictionaryKeywords ( tDictSettings, &tEmbeddedFiles, pTokenizer, "$indexname" )
+		: sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, pTokenizer, "$indexname" );
+	if ( !pDict )
+		sphDie ( "skiplists upgrade: unable to create dictionary" );
+
+	CSphWriter wrHeader;
+	sFilename.SetSprintf ( "%s.sph.upgrade", sPath );
+	if ( !wrHeader.OpenFile ( sFilename, sError ) )
+		sphDie ( "skiplists upgrade: %s", sError.cstr() );
+
+	wrHeader.PutDword ( INDEX_MAGIC_HEADER );
+	wrHeader.PutDword ( INDEX_FORMAT_VERSION );
+	wrHeader.PutDword ( bUse64 );
+	wrHeader.PutDword ( eDocinfo );
+	WriteSchema ( wrHeader, tSchema );
+	wrHeader.PutOffset ( iMinDocid );
+	wrHeader.PutOffset ( tDictHeader.m_iDictCheckpointsOffset );
+	wrHeader.PutDword ( tDictHeader.m_iDictCheckpoints );
+	wrHeader.PutByte ( tDictHeader.m_iInfixCodepointBytes );
+	wrHeader.PutDword ( tDictHeader.m_iInfixBlocksOffset );
+	wrHeader.PutDword ( tStats.m_iTotalDocuments );
+	wrHeader.PutOffset ( tStats.m_iTotalBytes );
+	SaveIndexSettings ( wrHeader, tIndexSettings );
+	SaveTokenizerSettings ( wrHeader, pTokenizer, tIndexSettings.m_iEmbeddedLimit );
+	SaveDictionarySettings ( wrHeader, pDict, false, tIndexSettings.m_iEmbeddedLimit );
+	wrHeader.PutDword ( iKillListSize );
+	wrHeader.PutDword ( uMinMaxIndex );
+	SaveFieldFilterSettings ( wrHeader, pFieldFilter );
+
+	wrHeader.CloseFile ();
+	if ( wrHeader.IsError() )
+		sphDie ( "skiplists upgrade: header write error (out of space?)" );
+
+	// all done!
+	const char * sRenames[] = {
+		".spe.tmp", ".spe",
+		".sph", ".sph.bak",
+		".spi", ".spi.bak",
+		".sph.upgrade", ".sph",
+		".spi.upgrade", ".spi",
+		NULL };
+	FinalizeUpgrade ( sRenames, "skiplists upgrade", sPath, tmStart );
 }
 
 //

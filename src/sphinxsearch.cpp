@@ -134,6 +134,7 @@ public:
 	static ExtNode_i *			Create ( ISphQword * pQword, const XQNode_t * pNode, const ISphQwordSetup & tSetup );
 
 	virtual void				Reset ( const ISphQwordSetup & tSetup ) = 0;
+	virtual void				HintDocid ( SphDocID_t uMinID ) = 0;
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID ) = 0;
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID ) = 0;
 
@@ -273,15 +274,17 @@ public:
 class ExtTerm_c : public ExtNode_i, ISphNoncopyable
 {
 public:
-								ExtTerm_c ( ISphQword * pQword, const CSphSmallBitvec& uFields, const ISphQwordSetup & tSetup, bool bNotWeighted );
-								ExtTerm_c ( ISphQword * pQword, const ISphQwordSetup & tSetup );
-								ExtTerm_c () {} ///< to be used in pair with Init()
-								~ExtTerm_c ()
-								{
-									SafeDelete ( m_pQword );
-								}
+	ExtTerm_c ( ISphQword * pQword, const CSphSmallBitvec& uFields, const ISphQwordSetup & tSetup, bool bNotWeighted );
+	ExtTerm_c ( ISphQword * pQword, const ISphQwordSetup & tSetup );
+	ExtTerm_c () {} ///< to be used in pair with Init()
+	~ExtTerm_c ()
+	{
+		SafeDelete ( m_pQword );
+	}
+
 	void						Init ( ISphQword * pQword, const CSphSmallBitvec& uFields, const ISphQwordSetup & tSetup, bool bNotWeighted );
 	virtual void				Reset ( const ISphQwordSetup & tSetup );
+	virtual void				HintDocid ( SphDocID_t uMinID ) { m_pQword->HintDocid ( uMinID ); }
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 
@@ -339,18 +342,15 @@ void sphInterruptNow()
 volatile bool ExtTerm_c::m_bInterruptNow = false;
 
 /// single keyword streamer with artificial hitlist
-class ExtTermHitless_c: public ExtTerm_c
+class ExtTermHitless_c : public ExtTerm_c
 {
 public:
-									ExtTermHitless_c ( ISphQword * pQword, const CSphSmallBitvec& uFields, const ISphQwordSetup & tSetup, bool bNotWeighted )
-									: ExtTerm_c ( pQword, uFields, tSetup, bNotWeighted )
-									, m_uFieldPos ( 0 )
+	ExtTermHitless_c ( ISphQword * pQword, const CSphSmallBitvec& uFields, const ISphQwordSetup & tSetup, bool bNotWeighted )
+		: ExtTerm_c ( pQword, uFields, tSetup, bNotWeighted )
+		, m_uFieldPos ( 0 )
+	{}
 
-								{}
-	virtual void				Reset ( const ISphQwordSetup & )
-	{
-		m_uFieldPos = 0;
-	}
+	virtual void				Reset ( const ISphQwordSetup & ) { m_uFieldPos = 0; }
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 	virtual bool				GotHitless () { return true; }
 
@@ -593,6 +593,12 @@ public:
 		m_bPosAware = true;
 	}
 
+	virtual void HintDocid ( SphDocID_t uMinID )
+	{
+		m_pChildren[0]->HintDocid ( uMinID );
+		m_pChildren[1]->HintDocid ( uMinID );
+	}
+
 protected:
 	ExtNode_i *					m_pChildren[2];
 	const ExtDoc_t *			m_pCurDoc[2];
@@ -700,6 +706,7 @@ public:
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 	virtual bool				GotHitless () { return false; }
+	virtual void				HintDocid ( SphDocID_t uMinID ) { m_pNode->HintDocid ( uMinID ); }
 
 protected:
 	ExtNode_i *					m_pNode;				///< my and-node for all the terms
@@ -925,6 +932,12 @@ public:
 
 	virtual bool				GotHitless () { return false; }
 
+	virtual void HintDocid ( SphDocID_t uMinID )
+	{
+		ARRAY_FOREACH ( i, m_dChildren )
+			m_dChildren[i]->HintDocid ( uMinID );
+	}
+
 protected:
 	int							m_iThresh;			///< keyword count threshold
 	CSphVector<ExtNode_i*>		m_dChildren;		///< my children nodes (simply ExtTerm_c for now)
@@ -954,6 +967,12 @@ public:
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 	virtual bool				GotHitless () { return false; }
+
+	virtual void HintDocid ( SphDocID_t uMinID )
+	{
+		ARRAY_FOREACH ( i, m_dChildren )
+			m_dChildren[i]->HintDocid ( uMinID );
+	}
 
 protected:
 	CSphVector<ExtNode_i *>		m_dChildren;
@@ -989,6 +1008,12 @@ public:
 	virtual bool GotHitless ()
 	{
 		return false;
+	}
+
+	virtual void HintDocid ( SphDocID_t uMinID )
+	{
+		m_pArg1->HintDocid ( uMinID );
+		m_pArg2->HintDocid ( uMinID );
 	}
 
 	virtual void DebugDump ( int iLevel )
@@ -1405,6 +1430,7 @@ protected:
 public:
 	explicit						ExtCached_c ( const XQNode_t * pNode, const ISphQwordSetup & tSetup );
 	virtual void					Reset ( const ISphQwordSetup & tSetup );
+	virtual void					HintDocid ( SphDocID_t ) {}
 	virtual const ExtDoc_t *		GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *		GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t );
 
@@ -2495,6 +2521,7 @@ void ExtTwofer_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 }
 
 //////////////////////////////////////////////////////////////////////////
+
 const ExtDoc_t * ExtAnd_c::GetDocsChunk ( SphDocID_t * pMaxID )
 {
 	m_uMaxID = 0;
@@ -2512,8 +2539,18 @@ const ExtDoc_t * ExtAnd_c::GetDocsChunk ( SphDocID_t * pMaxID )
 			if ( iDoc!=0 )
 				break;
 
-			if ( !pCur0 ) pCur0 = m_pChildren[0]->GetDocsChunk ( NULL );
-			if ( !pCur1 ) pCur1 = m_pChildren[1]->GetDocsChunk ( NULL );
+			if ( !pCur0 )
+			{
+				if ( pCur1 && pCur1->m_uDocid!=DOCID_MAX )
+					m_pChildren[0]->HintDocid ( pCur1->m_uDocid );
+				pCur0 = m_pChildren[0]->GetDocsChunk ( NULL );
+			}
+			if ( !pCur1 )
+			{
+				if ( pCur0 && pCur0->m_uDocid!=DOCID_MAX )
+					m_pChildren[1]->HintDocid ( pCur0->m_uDocid );
+				pCur1 = m_pChildren[1]->GetDocsChunk ( NULL );
+			}
 			if ( !pCur0 || !pCur1 )
 			{
 				m_pCurDoc[0] = NULL;
@@ -6703,6 +6740,8 @@ public:
 		m_iMaxTimer = tSetup.m_iMaxTimer;
 		m_pWarning = tSetup.m_pWarning;
 	}
+
+	virtual void HintDocid ( SphDocID_t ) {}
 
 	virtual const ExtDoc_t * GetDocsChunk ( SphDocID_t * pMaxID );
 

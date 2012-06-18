@@ -46,6 +46,7 @@ void StripStdin ( const char * sIndexAttrs, const char * sRemoveElements )
 	fprintf ( stdout, "dumping stripped results...\n%s\n", &dBuffer[0] );
 }
 
+
 void ApplyMorphology ( CSphIndex * pIndex )
 {
 	CSphVector<BYTE> dInBuffer, dOutBuffer;
@@ -94,286 +95,7 @@ void ApplyMorphology ( CSphIndex * pIndex )
 	fprintf ( stdout, "dumping stemmed results...\n%s\n", sBufferToDump );
 }
 
-
-void DoOptimization ( const CSphString & sIndex, const CSphConfig & hConfig );
-
-extern void sphDictBuildInfixes ( const char * sPath );
-
-int main ( int argc, char ** argv )
-{
-	fprintf ( stdout, SPHINX_BANNER );
-	if ( argc<=1 )
-	{
-		fprintf ( stdout,
-			"Usage: indextool <COMMAND> [OPTIONS]\n"
-			"\n"
-			"Commands are:\n"
-			"--dumpheader <FILENAME.sph>\tdump index header by file name\n"
-			"--dumpconfig <FILENAME.sph>\tdump index header in config format by file name\n"
-			"--dumpheader <INDEXNAME>\tdump index header by index name\n"
-			"--dumpdocids <INDEXNAME>\tdump docids by index name\n"
-			"--dumphitlist <INDEXNAME> <KEYWORD>\n"
-			"--dumphitlist <INDEXNAME> --wordid <ID>\n"
-			"\t\t\t\tdump hits for given keyword\n"
-			"--dumpdict <INDEXNAME>\t\tdump dictionary\n"
-			"--check <INDEXNAME>\t\tperform index consistency check\n"
-			"--htmlstrip <INDEXNAME>\t\tfilter stdin using HTML stripper settings\n"
-			"\t\t\t\tfor a given index (taken from sphinx.conf)\n"
-			"--optimize-rt-klists <INDEXNAME>\n"
-			"\t\t\t\toptimize kill list memory use in RT index disk\n"
-			"\t\t\t\tchunks; either for a given index or --all\n"
-			"--build-infixes\t\t\tbuild infixes for an existing dict=keywords\n"
-			"\t\t\t\tindex (upgrades .sph, .spi in place)\n"
-			"--morph <INDEXNAME>\t\tfilter stdin using morphology settings\n"
-			"\t\t\t\tfor a given index (taken from sphinx.conf)\n"
-			"\n"
-			"Options are:\n"
-			"-c, --config <file>\t\tuse given config file instead of defaults\n"
-			"--strip-path\t\t\tstrip path from filenames referenced by index\n"
-			"\t\t\t\t(eg. stopwords, exceptions, etc)\n"
-		);
-		exit ( 0 );
-	}
-
-	//////////////////////
-	// parse command line
-	//////////////////////
-
-	#define OPT(_a1,_a2)	else if ( !strcmp(argv[i],_a1) || !strcmp(argv[i],_a2) )
-	#define OPT1(_a1)		else if ( !strcmp(argv[i],_a1) )
-
-	const char * sOptConfig = NULL;
-	CSphString sDumpHeader, sIndex, sKeyword;
-	bool bWordid = false;
-	bool bStripPath = false;
-
-	enum
-	{
-		CMD_NOTHING,
-		CMD_DUMPHEADER,
-		CMD_DUMPCONFIG,
-		CMD_DUMPDOCIDS,
-		CMD_DUMPHITLIST,
-		CMD_DUMPDICT,
-		CMD_CHECK,
-		CMD_STRIP,
-		CMD_OPTIMIZE,
-		CMD_BUILDINFIXES,
-		CMD_MORPH
-	} eCommand = CMD_NOTHING;
-
-	int i;
-	for ( i=1; i<argc; i++ )
-	{
-		if ( argv[i][0]!='-' )
-			break;
-
-		// this is an option
-		if ( (i+1)>=argc )			break;
-		OPT ( "-c", "--config" )	sOptConfig = argv[++i];
-		OPT1 ( "--dumpheader" )		{ eCommand = CMD_DUMPHEADER; sDumpHeader = argv[++i]; }
-		OPT1 ( "--dumpconfig" )		{ eCommand = CMD_DUMPCONFIG; sDumpHeader = argv[++i]; }
-		OPT1 ( "--dumpdocids" )		{ eCommand = CMD_DUMPDOCIDS; sIndex = argv[++i]; }
-		OPT1 ( "--dumpdict" )		{ eCommand = CMD_DUMPDICT; sIndex = argv[++i]; }
-		OPT1 ( "--check" )			{ eCommand = CMD_CHECK; sIndex = argv[++i]; }
-		OPT1 ( "--htmlstrip" )		{ eCommand = CMD_STRIP; sIndex = argv[++i]; }
-		OPT1 ( "--build-infixes" )	{ eCommand = CMD_BUILDINFIXES; sIndex = argv[++i]; }
-		OPT1 ( "--morph" )			{ eCommand = CMD_MORPH; sIndex = argv[++i]; }
-		OPT1 ( "--strip-path" )		{ bStripPath = true; }
-		OPT1 ( "--optimize-rt-klists" )
-		{
-			eCommand = CMD_OPTIMIZE;
-			sIndex = argv[++i];
-			if ( sIndex=="--all" )
-				sIndex = "";
-		}
-
-		// options with 2 args
-		else if ( (i+2)>=argc ) // NOLINT
-		{
-			// not enough args
-			break;
-
-		} else if ( !strcmp ( argv[i], "--dumphitlist" ) )
-		{
-			eCommand = CMD_DUMPHITLIST;
-			sIndex = argv[++i];
-
-			if ( !strcmp ( argv[i+1], "--wordid" ) )
-			{
-				if ( (i+3)<argc )
-					break; // not enough args
-				bWordid = true;
-				i++;
-			}
-
-			sKeyword = argv[++i];
-
-		} else
-		{
-			// unknown option
-			break;
-		}
-	}
-	if ( i!=argc )
-	{
-		fprintf ( stdout, "ERROR: malformed or unknown option near '%s'.\n", argv[i] );
-		return 1;
-	}
-
-	//////////////////////
-	// load proper config
-	//////////////////////
-
-	CSphConfigParser cp;
-	CSphConfig & hConf = cp.m_tConf;
-	for ( ;; )
-	{
-		if ( ( eCommand==CMD_DUMPHEADER || eCommand==CMD_DUMPCONFIG ) && sDumpHeader.Ends ( ".sph" ) )
-			break;
-
-		sphLoadConfig ( sOptConfig, false, cp );
-		break;
-	}
-
-	///////////
-	// action!
-	///////////
-
-	// common part for several commands, check and preload index
-	CSphIndex * pIndex = NULL;
-	while ( !sIndex.IsEmpty() && eCommand!=CMD_OPTIMIZE )
-	{
-		// check config
-		if ( !hConf["index"](sIndex) )
-			sphDie ( "index '%s': no such index in config\n", sIndex.cstr() );
-
-		// only need config-level settings for --htmlstrip
-		if ( eCommand==CMD_STRIP )
-			break;
-
-		if ( !hConf["index"][sIndex]("path") )
-			sphDie ( "index '%s': missing 'path' in config'\n", sIndex.cstr() );
-
-		// only need path for --build-infixes, it will access the files directly
-		if ( eCommand==CMD_BUILDINFIXES )
-			break;
-
-		// preload that index
-		CSphString sError;
-		if ( hConf["index"][sIndex]("type") && hConf["index"][sIndex]["type"]=="rt" )
-		{
-			CSphSchema tSchema;
-			bool bDictKeywords = false;
-			if ( hConf["index"][sIndex].Exists ( "dict" ) )
-				bDictKeywords = ( hConf["index"][sIndex]["dict"]=="keywords" );
-
-			if ( sphRTSchemaConfigure ( hConf["index"][sIndex], &tSchema, &sError ) )
-				pIndex = sphCreateIndexRT ( tSchema, sIndex.cstr(), 32*1024*1024, hConf["index"][sIndex]["path"].cstr(), bDictKeywords );
-		} else
-		{
-			pIndex = sphCreateIndexPhrase ( sIndex.cstr(), hConf["index"][sIndex]["path"].cstr() );
-		}
-
-		if ( !pIndex )
-			sphDie ( "index '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
-
-		// don't need any long load operations
-		pIndex->SetWordlistPreload ( false );
-
-		CSphString sWarn;
-		if ( !pIndex->Prealloc ( false, bStripPath, sWarn ) )
-			sphDie ( "index '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
-
-		if ( eCommand==CMD_MORPH )
-			break;
-
-		if ( !pIndex->Preread() )
-			sphDie ( "index '%s': preread failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
-
-		break;
-	}
-
-	// do the dew
-	switch ( eCommand )
-	{
-		case CMD_NOTHING:
-			sphDie ( "nothing to do; specify a command (run indextool w/o switches for help)" );
-
-		case CMD_DUMPHEADER:
-		case CMD_DUMPCONFIG:
-		{
-			if ( hConf("index") && hConf["index"](sDumpHeader) )
-			{
-				fprintf ( stdout, "dumping header for index '%s'...\n", sDumpHeader.cstr() );
-
-				if ( !hConf["index"][sDumpHeader]("path") )
-					sphDie ( "missing 'path' for index '%s'\n", sDumpHeader.cstr() );
-
-				sDumpHeader.SetSprintf ( "%s.sph", hConf["index"][sDumpHeader]["path"].cstr() );
-			}
-
-			fprintf ( stdout, "dumping header file '%s'...\n", sDumpHeader.cstr() );
-			CSphIndex * pIndex = sphCreateIndexPhrase ( NULL, "" );
-			pIndex->DebugDumpHeader ( stdout, sDumpHeader.cstr(), eCommand==CMD_DUMPCONFIG );
-			break;
-		}
-
-		case CMD_DUMPDOCIDS:
-			fprintf ( stdout, "dumping docids for index '%s'...\n", sIndex.cstr() );
-			pIndex->DebugDumpDocids ( stdout );
-			break;
-
-		case CMD_DUMPHITLIST:
-			fprintf ( stdout, "dumping hitlist for index '%s' keyword '%s'...\n", sIndex.cstr(), sKeyword.cstr() );
-			pIndex->DebugDumpHitlist ( stdout, sKeyword.cstr(), bWordid );
-			break;
-
-		case CMD_DUMPDICT:
-			fprintf ( stdout, "dumping dictionary for index '%s'...\n", sIndex.cstr() );
-			pIndex->DebugDumpDict ( stdout );
-			break;
-
-		case CMD_CHECK:
-			fprintf ( stdout, "checking index '%s'...\n", sIndex.cstr() );
-			return pIndex->DebugCheck ( stdout );
-
-		case CMD_STRIP:
-			{
-				const CSphConfigSection & hIndex = hConf["index"][sIndex];
-				if ( hIndex.GetInt ( "html_strip" )==0 )
-					sphDie ( "HTML stripping is not enabled in index '%s'", sIndex.cstr() );
-				StripStdin ( hIndex.GetStr ( "html_index_attrs" ), hIndex.GetStr ( "html_remove_elements" ) );
-			}
-			break;
-
-		case CMD_OPTIMIZE:
-			DoOptimization ( sIndex, hConf );
-			break;
-
-		case CMD_BUILDINFIXES:
-			{
-				const CSphConfigSection & hIndex = hConf["index"][sIndex];
-				if ( hIndex("type") && hIndex["type"]=="rt" )
-					sphDie ( "build-infixes requires a disk index" );
-				if ( !hIndex("dict") || hIndex["dict"]!="keywords" )
-					sphDie ( "build-infixes requires dict=keywords" );
-
-				fprintf ( stdout, "building infixes for index %s...\n", sIndex.cstr() );
-				sphDictBuildInfixes ( hIndex["path"].cstr() );
-			}
-			break;
-
-		case CMD_MORPH:
-			ApplyMorphology ( pIndex );
-			break;
-
-		default:
-			sphDie ( "INTERNAL ERROR: unhandled command (id=%d)", (int)eCommand );
-	}
-
-	return 0;
-}
+//////////////////////////////////////////////////////////////////////////
 
 #if USE_WINDOWS
 #include <io.h> // for open()
@@ -440,6 +162,7 @@ bool FixupFiles ( const CSphVector<CSphString> & dFiles, CSphString & sError )
 
 	return true;
 }
+
 
 bool DoKlistsOptimization ( int iRowSize, const char * sPath, int iChunkCount, CSphVector<CSphString> & dFiles )
 {
@@ -552,7 +275,8 @@ bool DoKlistsOptimization ( int iRowSize, const char * sPath, int iChunkCount, C
 	return true;
 }
 
-void DoOptimization ( const CSphString & sIndex, const CSphConfig & hConf )
+
+void OptimizeRtKlists ( const CSphString & sIndex, const CSphConfig & hConf )
 {
 	const int64_t tmStart = sphMicroTimer();
 
@@ -642,6 +366,300 @@ void DoOptimization ( const CSphString & sIndex, const CSphConfig & hConf )
 
 	const int64_t tmDone = sphMicroTimer();
 	fprintf ( stdout, "\nfinished in %.3f sec\n", float(tmDone-tmStart )/1000000.0f );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+extern void sphDictBuildInfixes ( const char * sPath );
+extern void sphDictBuildSkiplists ( const char * sPath );
+
+
+int main ( int argc, char ** argv )
+{
+	fprintf ( stdout, SPHINX_BANNER );
+	if ( argc<=1 )
+	{
+		fprintf ( stdout,
+			"Usage: indextool <COMMAND> [OPTIONS]\n"
+			"\n"
+			"Commands are:\n"
+			"--build-infixes <INDEX>\tbuild infixes for an existing dict=keywords index\n"
+			"\t\t\t(upgrades .sph, .spi in place)\n"
+			"--build-skips <INDEX>\tbuild skiplists for an existing index (builds .spe and\n"
+			"\t\t\tupgrades .sph, .spi in place)\n"
+			"--check <INDEX>\t\tperform index consistency check\n"
+			"--dumpconfig <SPH-FILE>\tdump index header in config format by file name\n"
+			"--dumpdocids <INDEX>\tdump docids by index name\n"
+			"--dumpdict <INDEX>\tdump dictionary\n"
+			"--dumpheader <SPH-FILE>\tdump index header by file name\n"
+			"--dumpheader <INDEX>\tdump index header by index name\n"
+			"--dumphitlist <INDEX> <KEYWORD>\n"
+			"--dumphitlist <INDEX> --wordid <ID>\n"
+			"\t\t\tdump hits for a given keyword\n"
+			"--htmlstrip <INDEX>\tfilter stdin using index HTML stripper settings\n"
+			"--optimize-rt-klists <INDEX>\n"
+			"\t\t\toptimize kill list memory use in RT index disk chunks;\n"
+			"\t\t\teither for a given index or --all\n"
+			"\n"
+			"Options are:\n"
+			"-c, --config <file>\tuse given config file instead of defaults\n"
+			"--strip-path\t\tstrip path from filenames referenced by index\n"
+			"\t\t\t(eg. stopwords, exceptions, etc)\n"
+		);
+		exit ( 0 );
+	}
+
+	//////////////////////
+	// parse command line
+	//////////////////////
+
+	#define OPT(_a1,_a2)	else if ( !strcmp(argv[i],_a1) || !strcmp(argv[i],_a2) )
+	#define OPT1(_a1)		else if ( !strcmp(argv[i],_a1) )
+
+	const char * sOptConfig = NULL;
+	CSphString sDumpHeader, sIndex, sKeyword;
+	bool bWordid = false;
+	bool bStripPath = false;
+
+	enum
+	{
+		CMD_NOTHING,
+		CMD_DUMPHEADER,
+		CMD_DUMPCONFIG,
+		CMD_DUMPDOCIDS,
+		CMD_DUMPHITLIST,
+		CMD_DUMPDICT,
+		CMD_CHECK,
+		CMD_STRIP,
+		CMD_OPTIMIZEKLISTS,
+		CMD_BUILDINFIXES,
+		CMD_MORPH,
+		CMD_BUILDSKIPS
+	} eCommand = CMD_NOTHING;
+
+	int i;
+	for ( i=1; i<argc; i++ )
+	{
+		if ( argv[i][0]!='-' )
+			break;
+
+		// this is an option
+		if ( (i+1)>=argc )			break;
+		OPT ( "-c", "--config" )	sOptConfig = argv[++i];
+		OPT1 ( "--dumpheader" )		{ eCommand = CMD_DUMPHEADER; sDumpHeader = argv[++i]; }
+		OPT1 ( "--dumpconfig" )		{ eCommand = CMD_DUMPCONFIG; sDumpHeader = argv[++i]; }
+		OPT1 ( "--dumpdocids" )		{ eCommand = CMD_DUMPDOCIDS; sIndex = argv[++i]; }
+		OPT1 ( "--dumpdict" )		{ eCommand = CMD_DUMPDICT; sIndex = argv[++i]; }
+		OPT1 ( "--check" )			{ eCommand = CMD_CHECK; sIndex = argv[++i]; }
+		OPT1 ( "--htmlstrip" )		{ eCommand = CMD_STRIP; sIndex = argv[++i]; }
+		OPT1 ( "--build-infixes" )	{ eCommand = CMD_BUILDINFIXES; sIndex = argv[++i]; }
+		OPT1 ( "--build-skips" )	{ eCommand = CMD_BUILDSKIPS; sIndex = argv[++i]; }
+		OPT1 ( "--morph" )			{ eCommand = CMD_MORPH; sIndex = argv[++i]; }
+		OPT1 ( "--strip-path" )		{ bStripPath = true; }
+		OPT1 ( "--optimize-rt-klists" )
+		{
+			eCommand = CMD_OPTIMIZEKLISTS;
+			sIndex = argv[++i];
+			if ( sIndex=="--all" )
+				sIndex = "";
+		}
+
+		// options with 2 args
+		else if ( (i+2)>=argc ) // NOLINT
+		{
+			// not enough args
+			break;
+
+		} else if ( !strcmp ( argv[i], "--dumphitlist" ) )
+		{
+			eCommand = CMD_DUMPHITLIST;
+			sIndex = argv[++i];
+
+			if ( !strcmp ( argv[i+1], "--wordid" ) )
+			{
+				if ( (i+3)<argc )
+					break; // not enough args
+				bWordid = true;
+				i++;
+			}
+
+			sKeyword = argv[++i];
+
+		} else
+		{
+			// unknown option
+			break;
+		}
+	}
+	if ( i!=argc )
+	{
+		fprintf ( stdout, "ERROR: malformed or unknown option near '%s'.\n", argv[i] );
+		return 1;
+	}
+
+	//////////////////////
+	// load proper config
+	//////////////////////
+
+	CSphConfigParser cp;
+	CSphConfig & hConf = cp.m_tConf;
+	for ( ;; )
+	{
+		if ( ( eCommand==CMD_DUMPHEADER || eCommand==CMD_DUMPCONFIG ) && sDumpHeader.Ends ( ".sph" ) )
+			break;
+
+		sphLoadConfig ( sOptConfig, false, cp );
+		break;
+	}
+
+	///////////
+	// action!
+	///////////
+
+	// common part for several commands, check and preload index
+	CSphIndex * pIndex = NULL;
+	while ( !sIndex.IsEmpty() && eCommand!=CMD_OPTIMIZEKLISTS )
+	{
+		// check config
+		if ( !hConf["index"](sIndex) )
+			sphDie ( "index '%s': no such index in config\n", sIndex.cstr() );
+
+		// only need config-level settings for --htmlstrip
+		if ( eCommand==CMD_STRIP )
+			break;
+
+		if ( !hConf["index"][sIndex]("path") )
+			sphDie ( "index '%s': missing 'path' in config'\n", sIndex.cstr() );
+
+		// only need path for --build-infixes, it will access the files directly
+		if ( eCommand==CMD_BUILDINFIXES )
+			break;
+
+		// preload that index
+		CSphString sError;
+		if ( hConf["index"][sIndex]("type") && hConf["index"][sIndex]["type"]=="rt" )
+		{
+			CSphSchema tSchema;
+			bool bDictKeywords = false;
+			if ( hConf["index"][sIndex].Exists ( "dict" ) )
+				bDictKeywords = ( hConf["index"][sIndex]["dict"]=="keywords" );
+
+			if ( sphRTSchemaConfigure ( hConf["index"][sIndex], &tSchema, &sError ) )
+				pIndex = sphCreateIndexRT ( tSchema, sIndex.cstr(), 32*1024*1024, hConf["index"][sIndex]["path"].cstr(), bDictKeywords );
+		} else
+		{
+			pIndex = sphCreateIndexPhrase ( sIndex.cstr(), hConf["index"][sIndex]["path"].cstr() );
+		}
+
+		if ( !pIndex )
+			sphDie ( "index '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
+
+		// don't need any long load operations
+		pIndex->SetWordlistPreload ( false );
+
+		CSphString sWarn;
+		if ( !pIndex->Prealloc ( false, bStripPath, sWarn ) )
+			sphDie ( "index '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
+
+		if ( eCommand==CMD_MORPH )
+			break;
+
+		if ( !pIndex->Preread() )
+			sphDie ( "index '%s': preread failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
+
+		break;
+	}
+
+	// do the dew
+	switch ( eCommand )
+	{
+		case CMD_NOTHING:
+			sphDie ( "nothing to do; specify a command (run indextool w/o switches for help)" );
+
+		case CMD_DUMPHEADER:
+		case CMD_DUMPCONFIG:
+		{
+			if ( hConf("index") && hConf["index"](sDumpHeader) )
+			{
+				fprintf ( stdout, "dumping header for index '%s'...\n", sDumpHeader.cstr() );
+
+				if ( !hConf["index"][sDumpHeader]("path") )
+					sphDie ( "missing 'path' for index '%s'\n", sDumpHeader.cstr() );
+
+				sDumpHeader.SetSprintf ( "%s.sph", hConf["index"][sDumpHeader]["path"].cstr() );
+			}
+
+			fprintf ( stdout, "dumping header file '%s'...\n", sDumpHeader.cstr() );
+			CSphIndex * pIndex = sphCreateIndexPhrase ( NULL, "" );
+			pIndex->DebugDumpHeader ( stdout, sDumpHeader.cstr(), eCommand==CMD_DUMPCONFIG );
+			break;
+		}
+
+		case CMD_DUMPDOCIDS:
+			fprintf ( stdout, "dumping docids for index '%s'...\n", sIndex.cstr() );
+			pIndex->DebugDumpDocids ( stdout );
+			break;
+
+		case CMD_DUMPHITLIST:
+			fprintf ( stdout, "dumping hitlist for index '%s' keyword '%s'...\n", sIndex.cstr(), sKeyword.cstr() );
+			pIndex->DebugDumpHitlist ( stdout, sKeyword.cstr(), bWordid );
+			break;
+
+		case CMD_DUMPDICT:
+			fprintf ( stdout, "dumping dictionary for index '%s'...\n", sIndex.cstr() );
+			pIndex->DebugDumpDict ( stdout );
+			break;
+
+		case CMD_CHECK:
+			fprintf ( stdout, "checking index '%s'...\n", sIndex.cstr() );
+			return pIndex->DebugCheck ( stdout );
+
+		case CMD_STRIP:
+			{
+				const CSphConfigSection & hIndex = hConf["index"][sIndex];
+				if ( hIndex.GetInt ( "html_strip" )==0 )
+					sphDie ( "HTML stripping is not enabled in index '%s'", sIndex.cstr() );
+				StripStdin ( hIndex.GetStr ( "html_index_attrs" ), hIndex.GetStr ( "html_remove_elements" ) );
+			}
+			break;
+
+		case CMD_OPTIMIZEKLISTS:
+			OptimizeRtKlists ( sIndex, hConf );
+			break;
+
+		case CMD_BUILDINFIXES:
+			{
+				const CSphConfigSection & hIndex = hConf["index"][sIndex];
+				if ( hIndex("type") && hIndex["type"]=="rt" )
+					sphDie ( "build-infixes requires a disk index" );
+				if ( !hIndex("dict") || hIndex["dict"]!="keywords" )
+					sphDie ( "build-infixes requires dict=keywords" );
+
+				fprintf ( stdout, "building infixes for index %s...\n", sIndex.cstr() );
+				sphDictBuildInfixes ( hIndex["path"].cstr() );
+			}
+			break;
+
+		case CMD_BUILDSKIPS:
+			{
+				const CSphConfigSection & hIndex = hConf["index"][sIndex];
+				if ( hIndex("type") && hIndex["type"]=="rt" )
+					sphDie ( "build-infixes requires a disk index" );
+
+				fprintf ( stdout, "building skiplists for index %s...\n", sIndex.cstr() );
+				sphDictBuildSkiplists ( hIndex["path"].cstr() );
+			}
+			break;
+
+		case CMD_MORPH:
+			ApplyMorphology ( pIndex );
+			break;
+
+		default:
+			sphDie ( "INTERNAL ERROR: unhandled command (id=%d)", (int)eCommand );
+	}
+
+	return 0;
 }
 
 //

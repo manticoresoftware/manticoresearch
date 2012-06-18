@@ -13642,6 +13642,7 @@ void CSphIndex_VLN::Dealloc ()
 	m_pStrings.Reset ();
 	m_pKillList.Reset ();
 	m_tWordlist.Reset ();
+	m_pSkiplists.Reset ();
 
 	m_uDocinfo = 0;
 	m_uMinMaxIndex = 0;

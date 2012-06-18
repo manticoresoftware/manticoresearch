@@ -50,8 +50,8 @@ int				g_iMaxFileFieldBuffer	= 1024*1024;
 
 ESphOnFileFieldError	g_eOnFileFieldError = FFE_IGNORE_FIELD;
 
-const int		EXT_COUNT = 8;
-const char *	g_dExt[EXT_COUNT] = { "sph", "spa", "spi", "spd", "spp", "spm", "spk", "sps" };
+const int		EXT_COUNT = 9;
+const char *	g_dExt[EXT_COUNT] = { "sph", "spa", "spi", "spd", "spp", "spm", "spk", "sps", "spe" };
 
 char			g_sMinidump[256];
 

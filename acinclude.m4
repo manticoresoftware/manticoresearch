@@ -52,10 +52,10 @@ do
 	then
 		MYSQL_CFLAGS=`${mysqlconfig} --cflags 2>/dev/null` 
 		MYSQL_LIBS=`${mysqlconfig} --libs 2>/dev/null`
-		MYSQL_PKGLIBDIR=`${mysqlconfig} --variable=pkglibdir 2>/dev/null`
 
 		if test [ $? -eq 0 ]
 		then
+			MYSQL_PKGLIBDIR=`echo $MYSQL_LIBS | sed -e 's/-[[^L]][[^ ]]*//g;s/\s*-L//g;'`
 			AC_MSG_RESULT([$mysqlconfig])
 			mysqlconfig=
 			break

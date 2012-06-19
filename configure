@@ -6666,10 +6666,10 @@ do
 	then
 		MYSQL_CFLAGS=`${mysqlconfig} --cflags 2>/dev/null`
 		MYSQL_LIBS=`${mysqlconfig} --libs 2>/dev/null`
-		MYSQL_PKGLIBDIR=`${mysqlconfig} --variable=pkglibdir 2>/dev/null`
 
 		if test  $? -eq 0
 		then
+			MYSQL_PKGLIBDIR=`echo $MYSQL_LIBS | sed -e 's/-[^L][^ ]*//g;s/\s*-L//g;'`
 			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $mysqlconfig" >&5
 $as_echo "$mysqlconfig" >&6; }
 			mysqlconfig=
@@ -6914,10 +6914,10 @@ do
 	then
 		MYSQL_CFLAGS=`${mysqlconfig} --cflags 2>/dev/null`
 		MYSQL_LIBS=`${mysqlconfig} --libs 2>/dev/null`
-		MYSQL_PKGLIBDIR=`${mysqlconfig} --variable=pkglibdir 2>/dev/null`
 
 		if test  $? -eq 0
 		then
+			MYSQL_PKGLIBDIR=`echo $MYSQL_LIBS | sed -e 's/-[^L][^ ]*//g;s/\s*-L//g;'`
 			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $mysqlconfig" >&5
 $as_echo "$mysqlconfig" >&6; }
 			mysqlconfig=

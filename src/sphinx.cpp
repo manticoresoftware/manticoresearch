@@ -6173,7 +6173,8 @@ void CSphReader::SeekTo ( SphOffset_t iPos, int iSizeHint )
 
 void CSphReader::SkipBytes ( int iCount )
 {
-	SeekTo ( m_iPos+m_iBuffPos+iCount, m_iSizeHint-m_iBuffPos-iCount );
+	// 0 means "no hint", so this clamp works alright
+	SeekTo ( m_iPos+m_iBuffPos+iCount, Max ( m_iSizeHint-m_iBuffPos-iCount, 0 ) );
 }
 
 

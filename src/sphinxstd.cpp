@@ -610,6 +610,7 @@ void sphMemStatDump ( int iFD )
 //////////////////////////////////////////////////////////////////////////////
 
 #else
+#ifndef SPH_DONT_OVERRIDE_MEMROUTINES
 
 void * operator new ( size_t iSize )
 {
@@ -649,6 +650,7 @@ void operator delete [] ( void * pPtr )
 		::free ( pPtr );
 }
 
+#endif // SPH_DONT_OVERRIDE_MEMROUTINES
 #endif // SPH_ALLOCS_PROFILER
 #endif // SPH_DEBUG_LEAKS
 

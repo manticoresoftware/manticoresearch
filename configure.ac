@@ -466,6 +466,20 @@ fi
 
 dnl ---
 
+AC_MSG_CHECKING([whether to enable c++ memory routines override])
+sph_enable_mem_override=yes
+AC_ARG_ENABLE([mem-override],
+    [   --enable-mem-override        enable to override std c++ mem routines in production build (default is yes). Disabling may help in some rare cases as statically linking with mysql on Mac OS X Lion.],
+    [sph_enable_mem_override=$enableval])
+if test x$sph_enable_mem_override != xno; then
+    AC_MSG_RESULT([yes])
+else
+    AC_DEFINE(SPH_DONT_OVERRIDE_MEMROUTINES, 1, [Disable overriding of c++ memory routines])
+    AC_MSG_RESULT([no])
+fi
+
+dnl --- 
+
 
 AC_ARG_WITH([syslog],
 	AC_HELP_STRING([--with-syslog], [compile with possibility to use syslog for logging (default is no)]),

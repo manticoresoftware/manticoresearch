@@ -259,51 +259,78 @@ AC_ARG_WITH([mysql],
             AC_HELP_STRING([--with-mysql], [compile with MySQL support (default is enabled)]),
             [ac_cv_use_mysql=$withval], [ac_cv_use_mysql=yes]
 )
-AC_MSG_CHECKING([whether to compile with MySQL support])
-if test x$ac_cv_use_mysql != xno; then
-	AC_MSG_RESULT([yes])
-    AC_CHECK_MYSQL([$ac_cv_use_mysql])
-    AC_DEFINE(USE_MYSQL,1,[Define to 1 if you want to compile with MySQL support])
-    AC_SUBST([MYSQL_LIBS])
-    AC_SUBST([MYSQL_CFLAGS])
-else
-	AC_MSG_RESULT([no])
-fi
-AM_CONDITIONAL(USE_MYSQL, test x$ac_cv_use_mysql != xno)
 
 # check if we should statically link the mysql library
 AC_ARG_WITH([static-mysql], 
             AC_HELP_STRING([--with-static-mysql], [link statically with MySQL library (default is no)]),
             [ac_cv_use_static_mysql=$withval], [ac_cv_use_static_mysql=no]
 )
-AC_MSG_CHECKING([whether to link statically with MySQL support])
-if test x$ac_cv_use_mysql != xno; then
-if test x$ac_cv_use_static_mysql != xno; then
-	AC_CHECK_MYSQL([$ac_cv_use_static_mysql])
-	MYSQL_LIBS=`echo $MYSQL_LIBS | sed -e 's/\-Bdynamic/\-Bstatic/g'`
-	MYSQL_LIBS="-Wl,-Bstatic $MYSQL_LIBS -Wl,-Bdynamic"
-	AC_MSG_RESULT([yes])
+
+AC_MSG_CHECKING([whether to compile with MySQL support])
+if test  x$ac_cv_use_static_mysql != xno -o x$ac_cv_use_mysql != xno
+then
+	if test x$ac_cv_use_static_mysql != xno ; then
+		AC_MSG_RESULT([static])
+    	AC_CHECK_MYSQL([$ac_cv_use_static_mysql])
+		MYSQL_LIBS=`echo $MYSQL_LIBS | sed -e "sX-lmysqlclientX\$MYSQL_PKGLIBDIR/libmysqlclient.aXg"`
+	else
+		AC_MSG_RESULT([dynamic])
+		AC_CHECK_MYSQL([$ac_cv_use_mysql])
+	fi
+    AC_DEFINE(USE_MYSQL,1,[Define to 1 if you want to compile with MySQL support])
+    AC_SUBST([MYSQL_LIBS])
+    AC_SUBST([MYSQL_CFLAGS])
 else
 	AC_MSG_RESULT([no])
 fi
-fi
+AM_CONDITIONAL(USE_MYSQL, test x$ac_cv_use_mysql != xno -o x$ac_cv_use_static_mysql != xno )
+
+dnl ---
+
+AC_ARG_WITH([syslog],
+    AC_HELP_STRING([--with-syslog], [compile with possibility to use syslog for logging (default is yes)]),
+    [ac_cv_use_syslog=$withval], [ac_cv_use_syslog=yes]
+)
+AC_MSG_CHECKING([for Syslog])
+if test [ $ac_cv_use_syslog != no ]; then
+    if test [ $have_syslog_h = yes ]; then
+        AC_DEFINE([USE_SYSLOG],1,[define to use POSIX Syslog for logging])
+        AC_MSG_RESULT([yes])
+    else
+        AC_MSG_RESULT([no])
+    fi
+else
+    AC_MSG_RESULT([disabled])
+fi    
 
 # check if we should compile with PostgreSQL support
 AC_ARG_WITH([pgsql],
             AC_HELP_STRING([--with-pgsql], [compile with PostgreSQL support (default is disabled)]),
             [ac_cv_use_pgsql=$withval], [ac_cv_use_pgsql=no]
 )
+# check if we should statically link the PostgreSQL library
+AC_ARG_WITH([static-pgsql], 
+            AC_HELP_STRING([--with-static-pgsql], [link statically with PostgreSQL library (default is no)]),
+            [ac_cv_use_static_pgsql=$withval], [ac_cv_use_static_pgsql=no]
+)
 AC_MSG_CHECKING([whether to compile with PostgreSQL support])
-if test x$ac_cv_use_pgsql != xno; then
-	AC_MSG_RESULT([yes])
-    AC_CHECK_PGSQL([$ac_cv_use_pgsql])
+if test x$ac_cv_use_static_pgsql != xno -o x$ac_cv_use_pgsql != xno
+then
+	if test x$ac_cv_use_static_pgsql != xno ; then
+		AC_MSG_RESULT([static])
+		AC_CHECK_PGSQL([$ac_cv_use_static_pgsql])
+		PGSQL_LIBS=`echo $PGSQL_LIBS | sed -e "sX-lpqX$PGSQL_PKGLIBDIR/libpq.aXg"`
+	else
+		AC_MSG_RESULT([dynamic])
+		AC_CHECK_PGSQL([ac_cv_use_pgsql])
+	fi
     AC_DEFINE(USE_PGSQL,1,[Define to 1 if you want to compile with PostgreSQL support])
     AC_SUBST([PGSQL_LIBS])
     AC_SUBST([PGSQL_CFLAGS])
 else
 	AC_MSG_RESULT([no])
 fi
-AM_CONDITIONAL(USE_PGSQL, test x$ac_cv_use_pgsql != xno)
+AM_CONDITIONAL(USE_PGSQL, test x$ac_cv_use_pgsql != xno -o x$ac_cv_use_satic_pgsql != xno )
 
 # add macports include directory
 if (echo $MYSQL_LIBS | grep -q -- -L/opt/local/lib); then
@@ -482,8 +509,8 @@ dnl ---
 
 
 AC_ARG_WITH([syslog],
-	AC_HELP_STRING([--with-syslog], [compile with possibility to use syslog for logging (default is no)]),
-	[ac_cv_use_syslog=$withval], [ac_cv_use_syslog=no]
+	AC_HELP_STRING([--with-syslog], [compile with possibility to use syslog for logging (default is yes)]),
+	[ac_cv_use_syslog=$withval], [ac_cv_use_syslog=yes]
 )
 AC_MSG_CHECKING([for Syslog])
 if test [ $ac_cv_use_syslog != no ]; then

@@ -26689,7 +26689,7 @@ bool CWordlist::GetWord ( const BYTE * pBuf, SphWordID_t iWordID, CSphDictEntry 
 		// unpack doc/hit count
 		const int iDocs = sphUnzipInt ( pBuf );
 		const int iHits = sphUnzipInt ( pBuf );
-		int iSkiplistPos = ( iDocs > SKIPLIST_BLOCK ) ? sphUnzipInt ( pBuf ) : 0;
+		int iSkiplistPos = ( m_bHaveSkips && ( iDocs > SKIPLIST_BLOCK ) ) ? sphUnzipInt ( pBuf ) : 0;
 
 		assert ( iDeltaOffset );
 		assert ( iDocs );

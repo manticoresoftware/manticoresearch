@@ -1096,12 +1096,14 @@ public:
 		// meaning that if previous (!) blocks end with uMinID exactly,
 		// and we use uMinID itself as RefValue, that document gets lost!
 		// OPTIMIZE? keep last matched block index maybe?
-		int iBlock = FindSpan ( m_dSkiplist, uMinID-1 );
+		int iBlock = FindSpan ( m_dSkiplist, uMinID - m_iMinID - 1 );
 		if ( iBlock<0 )
 			return;
 		const SkiplistEntry_t & t = m_dSkiplist [ iBlock ];
+		if ( t.m_iOffset <= m_rdDoclist.GetPos() )
+			return;
 		m_rdDoclist.SeekTo ( t.m_iOffset, -1 );
-		m_tDoc.m_iDocID = t.m_iBaseDocid;
+		m_tDoc.m_iDocID = t.m_iBaseDocid + m_iMinID;
 		m_uHitPosition = t.m_iBaseHitlistPos;
 		m_iHitlistPos = -1;
 	}

@@ -14717,8 +14717,8 @@ bool CSphIndex_VLN::Rename ( const char * sNewBase )
 	char sFrom [ SPH_MAX_FILENAME_LEN ];
 	char sTo [ SPH_MAX_FILENAME_LEN ];
 
-	const int EXT_COUNT = 9;
-	const char * sExts[EXT_COUNT] = { "spa", "spd", "sph", "spi", "spl", "spm", "spp", "spk", "sps" };
+	const int EXT_COUNT = 10;
+	const char * sExts[EXT_COUNT] = { "spa", "spd", "sph", "spi", "spl", "spm", "spp", "spk", "sps", "spe" };
 	DWORD uMask = 0;
 
 	int iExt;
@@ -14732,6 +14732,8 @@ bool CSphIndex_VLN::Rename ( const char * sNewBase )
 		if ( !strcmp ( sExt, "spk" ) && m_uVersion<10 ) // .spk files are v10+
 			continue;
 		if ( !strcmp ( sExt, "sps" ) && m_uVersion<17 ) // .spk files are v17+
+			continue;
+		if ( !strcmp ( sExt, "spe" ) && m_uVersion<31 ) // .spe files are v31+
 			continue;
 
 #if !USE_WINDOWS

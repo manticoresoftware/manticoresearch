@@ -1878,8 +1878,8 @@ void sphUnlinkIndex ( const char * sName, bool bForce )
 		return;
 
 	// FIXME! ext list must be in sync with sphinx.cpp, searchd.cpp
-	const int EXT_COUNT = 9;
-	const char * dCurExts[EXT_COUNT] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm", ".spk", ".sps", ".mvp" };
+	const int EXT_COUNT = 10;
+	const char * dCurExts[EXT_COUNT] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm", ".spk", ".sps", ".spe", ".mvp" };
 	char sFileName[SPH_MAX_FILENAME_LEN];
 
 	for ( int j=0; j<EXT_COUNT; j++ )

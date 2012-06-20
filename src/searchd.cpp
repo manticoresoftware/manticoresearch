@@ -646,6 +646,7 @@ struct HostDashboard_t
 	int				m_iRefCount;
 	int64_t			m_iLastAnswerTime;		// updated when we get an answer from the host
 	int64_t			m_iLastQueryTime;		// updated when we send a query to a host
+	int64_t			m_iErrorsARow;			// num of errors a row, updated when we update the general statistic.
 	AgentDesc_t		m_dDescriptor;			// only host info, no indices. Used for ping.
 	bool			m_bNeedPing;			// we'll ping only HA agents, not everyone
 
@@ -658,6 +659,7 @@ public:
 	{
 		m_iRefCount = 1;
 		m_iLastQueryTime = m_iLastAnswerTime = sphMicroTimer() - g_iPingInterval*1000;
+		m_iErrorsARow = 0;
 		m_dDescriptor = *pAgent;
 		m_bNeedPing = false;
 	}
@@ -3171,7 +3173,11 @@ void NetInputBuffer_c::SendErrorReply ( const char * sTemplate, ... )
 // DISTRIBUTED QUERIES
 /////////////////////////////////////////////////////////////////////////////
 
-
+enum HAStrategies_e {
+	HA_ROUNDROBIN,
+	HA_AVOIDDEAD,
+	HA_AVOIDERRORS
+};
 /// remote agent descriptor (stored in a global hash)
 
 struct MetaAgentDesc_t
@@ -3222,8 +3228,70 @@ public:
 
 		return CurrentAgent();
 	}
+	AgentDesc_t * StDiscardDead()
+	{
+		if ( !g_pStats )
+			return PulseAgent();
 
-	AgentDesc_t * GetRRAgent()
+		if ( m_dAgents.GetLength()==1 )
+			return CurrentAgent();
+
+		int iBestAgent = -1;
+		int64_t iErrARow = -1;
+		CSphVector<int> dCandidates;
+		dCandidates.Reserve ( m_dAgents.GetLength() );
+
+		ARRAY_FOREACH ( i, m_dAgents )
+		{
+			// no locks for g_pStats since we just reading, and read data is not critical.
+			HostDashboard_t & dDash = g_pStats->m_dDashboard.m_dItemStats[m_dAgents[i].m_iDashIndex];
+
+			if ( iErrARow < 0 )
+				iErrARow = dDash.m_iErrorsARow;
+
+			// 2. Among good nodes - select the one(s) with lowest errors/query rating
+			if ( iErrARow > dDash.m_iErrorsARow )
+			{
+				dCandidates.Reset();
+				iBestAgent = i;
+				iErrARow = dDash.m_iErrorsARow;
+			} else if ( iErrARow==dDash.m_iErrorsARow )
+			{
+				dCandidates.Add ( iBestAgent );
+				iBestAgent = i;
+			}
+		}
+
+		// nothing to select, sorry. Just plain RR...
+		if ( iBestAgent < 0 )
+		{
+			sphLogDebug ( "HA selector discarded all the candidates and just fall into simple RR" );
+			return PulseAgent();
+		}
+
+		// only one node with lowest error rating. Return it.
+		if ( !dCandidates.GetLength() )
+		{
+			sphLogDebug ( "HA selected %d node with best num of errors a row ("INT64_FMT")", iBestAgent, iErrARow );
+			return &m_dAgents[iBestAgent];
+		}
+
+		// several nodes. Let's select the one with most late answer
+		int64_t iBestAnswerTime = g_pStats->m_dDashboard.m_dItemStats[iBestAgent].m_iLastAnswerTime;
+		ARRAY_FOREACH ( i, dCandidates )
+		{
+			if ( iBestAnswerTime > g_pStats->m_dDashboard.m_dItemStats[dCandidates[i]].m_iLastAnswerTime )
+			{
+				iBestAgent = dCandidates[i];
+				iBestAnswerTime = g_pStats->m_dDashboard.m_dItemStats[iBestAgent].m_iLastAnswerTime;
+			}
+		}
+		float fAge = (sphMicroTimer()-iBestAnswerTime)/10000.0f;
+		sphLogDebug ( "HA selected %d node with best num of errors a row ("INT64_FMT"), answered %f seconds ago", iBestAgent, iErrARow, fAge );
+		return &m_dAgents[iBestAgent];
+	}
+
+	AgentDesc_t * StLowErrors()
 	{
 		if ( !g_pStats )
 			return PulseAgent();
@@ -3294,7 +3362,7 @@ public:
 		int64_t iBestAnswerTime = g_pStats->m_dDashboard.m_dItemStats[iBestAgent].m_iLastAnswerTime;
 		ARRAY_FOREACH ( i, dCandidates )
 		{
-			if ( iBestAnswerTime < g_pStats->m_dDashboard.m_dItemStats[dCandidates[i]].m_iLastAnswerTime )
+			if ( iBestAnswerTime > g_pStats->m_dDashboard.m_dItemStats[dCandidates[i]].m_iLastAnswerTime )
 			{
 				iBestAgent = dCandidates[i];
 				iBestAnswerTime = g_pStats->m_dDashboard.m_dItemStats[iBestAgent].m_iLastAnswerTime;
@@ -3305,14 +3373,34 @@ public:
 		return &m_dAgents[iBestAgent];
 	}
 
+
+	AgentDesc_t * GetRRAgent ( HAStrategies_e eStrategy )
+	{
+		switch ( eStrategy )
+		{
+		case HA_AVOIDDEAD:
+			return StDiscardDead();
+		case HA_AVOIDERRORS:
+			return StLowErrors();
+		case HA_ROUNDROBIN:
+		default:
+			return PulseAgent();
+		}
+	}
+
 	void Rewind ( bool bLast=true )
 	{
 		m_iCurAgent = bLast?(m_dAgents.GetLength()-1):0;
 	}
 
+	inline bool IsHA() const
+	{
+		return m_dAgents.GetLength() > 1;
+	}
+
 	void QueuePings()
 	{
-		if ( m_dAgents.GetLength() < 2 )
+		if ( !IsHA() )
 			return;
 
 		if ( g_pStats )
@@ -3426,12 +3514,14 @@ struct DistributedIndex_t
 	int							m_iAgentConnectTimeout;		///< in msec
 	int							m_iAgentQueryTimeout;		///< in msec
 	bool						m_bToDelete;				///< should be deleted
+	HAStrategies_e				m_eHaStrategy;				///< how to select the best of my agents
 
 public:
 	DistributedIndex_t ()
 		: m_iAgentConnectTimeout ( 1000 )
 		, m_iAgentQueryTimeout ( 3000 )
 		, m_bToDelete ( false )
+		, m_eHaStrategy ( HA_ROUNDROBIN )
 	{}
 	void GetAllAgents ( CSphVector<AgentConn_t> * pTarget ) const
 	{
@@ -3473,7 +3563,11 @@ inline void agent_stats_inc ( AgentConn_t & tAgent, eAgentStats iCounter )
 		{
 			g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].GetCurrentStat()->m_iStats[iCounter]++;
 			if ( iCounter>=eNoErrors )
+			{
+				g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iErrorsARow = 0;
 				g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iLastAnswerTime = sphMicroTimer();
+			} else
+				g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iErrorsARow += 1;
 		}
 		g_tStatsMutex.Unlock ();
 	}
@@ -7901,7 +7995,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 			dAgents.Resize ( pDist->m_dAgents.GetLength() );
 			ARRAY_FOREACH ( i, pDist->m_dAgents )
-				dAgents[i] = *pDist->m_dAgents[i].GetRRAgent();
+				dAgents[i] = *pDist->m_dAgents[i].GetRRAgent ( pDist->m_eHaStrategy );
 		}
 		g_tDistLock.Unlock();
 	}
@@ -9798,7 +9892,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 		dDistLocal = pDist->m_dLocal;
 		dRemoteSnippets.m_dAgents.Resize ( pDist->m_dAgents.GetLength() );
 		ARRAY_FOREACH ( i, pDist->m_dAgents )
-			dRemoteSnippets.m_dAgents[i] = *pDist->m_dAgents[i].GetRRAgent();
+			dRemoteSnippets.m_dAgents[i] = *pDist->m_dAgents[i].GetRRAgent ( pDist->m_eHaStrategy );
 	}
 	g_tDistLock.Unlock();
 
@@ -10657,6 +10751,8 @@ void BuildAgentStatus ( CSphVector<CSphString> & dStatus )
 		int64_t iLastTimer = dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime;
 		dStatus.Add().SetSprintf ( "ag_%d_lastperiodmsec", iIndex );
 		dStatus.Add().SetSprintf ( FMT64, iLastTimer/1000 );
+		dStatus.Add().SetSprintf ( "ag_%d_errorsarow", iIndex );
+		dStatus.Add().SetSprintf ( FMT64, dDash.m_iErrorsARow );
 
 		AgentDash_t dDashStat;
 		int iPeriods = 1;
@@ -11977,12 +12073,11 @@ void CheckPing()
 		iAgentsDone = tDistCtrl->Finish();
 	}
 
-	int iSuccesses = 0;
 	int iReplyCookie = 0;
 	if ( iAgentsDone )
 	{
 		PingReplyParser_t tParser ( &iReplyCookie );
-		iSuccesses = RemoteWaitForAgents ( dAgents, g_iPingInterval, tParser );
+		RemoteWaitForAgents ( dAgents, g_iPingInterval, tParser );
 	}
 }
 
@@ -15194,19 +15289,26 @@ static DistributedIndex_t ConfigureDistributedIndex ( const char * szIndexName, 
 		tIdx.m_dLocal.Add ( pLocal->cstr() );
 	}
 
+	bool bHaveHA = false;
 	// add remote agents
 	for ( CSphVariant * pAgent = hIndex("agent"); pAgent; pAgent = pAgent->m_pNext )
 	{
 		MetaAgentDesc_t tAgent;
 		if ( ConfigureAgent ( tAgent, pAgent, szIndexName, false ) )
+		{
 			tIdx.m_dAgents.Add ( tAgent );
+			bHaveHA |= tAgent.IsHA();
+		}
 	}
 
 	for ( CSphVariant * pAgent = hIndex("agent_blackhole"); pAgent; pAgent = pAgent->m_pNext )
 	{
 		MetaAgentDesc_t tAgent;
 		if ( ConfigureAgent ( tAgent, pAgent, szIndexName, true ) )
+		{
 			tIdx.m_dAgents.Add ( tAgent );
+			bHaveHA |= tAgent.IsHA();
+		}
 	}
 
 	// configure options
@@ -15224,6 +15326,23 @@ static DistributedIndex_t ConfigureDistributedIndex ( const char * szIndexName, 
 			sphWarning ( "index '%s': query_timeout must be positive, ignored", szIndexName );
 		else
 			tIdx.m_iAgentQueryTimeout = hIndex["agent_query_timeout"].intval();
+	}
+
+	// configure ha_strategy
+	if ( hIndex("ha_strategy") )
+	{
+		if ( !bHaveHA )
+			sphWarning ( "index '%s': ha_strategy defined, but no ha agents in the index", szIndexName );
+
+		tIdx.m_eHaStrategy = HA_ROUNDROBIN;
+		if ( hIndex["ha_strategy"]=="roundrobin" )
+			tIdx.m_eHaStrategy = HA_ROUNDROBIN;
+		else if ( hIndex["ha_strategy"]=="nodeads" )
+			tIdx.m_eHaStrategy = HA_AVOIDDEAD;
+		else if ( hIndex["ha_strategy"]=="noerrors" )
+			tIdx.m_eHaStrategy = HA_AVOIDERRORS;
+		else
+			sphWarning ( "index '%s': ha_strategy (%s) is unknown for me, will use roundrobin", szIndexName, hIndex["ha_strategy"].cstr() );
 	}
 
 	return tIdx;

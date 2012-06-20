@@ -363,6 +363,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "agent",					KEY_LIST, NULL },
 	{ "agent_blackhole",		KEY_LIST, NULL },
 	{ "agent_connect_timeout",	0, NULL },
+	{ "ha_strategy",			0, NULL	},
 	{ "agent_query_timeout",	0, NULL },
 	{ "html_strip",				0, NULL },
 	{ "html_index_attrs",		0, NULL },

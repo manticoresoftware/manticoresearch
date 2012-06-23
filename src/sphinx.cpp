@@ -18344,6 +18344,7 @@ void CSphDictCRCTraits::AddWordform ( WordformContainer_t * pContainer, char * s
 						pStoredMF->m_iNormalTokenLen = pMultiWordform->m_iNormalTokenLen;
 						pStoredMF->m_sNormalForm = pMultiWordform->m_sNormalForm;
 						SafeDelete ( pMultiWordform );
+						break; // otherwise, we crash next turn
 					}
 				}
 			}

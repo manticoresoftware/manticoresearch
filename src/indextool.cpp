@@ -579,6 +579,7 @@ int main ( int argc, char ** argv )
 		case CMD_DUMPHEADER:
 		case CMD_DUMPCONFIG:
 		{
+			CSphString sIndexName = "(none)";
 			if ( hConf("index") && hConf["index"](sDumpHeader) )
 			{
 				fprintf ( stdout, "dumping header for index '%s'...\n", sDumpHeader.cstr() );
@@ -586,11 +587,12 @@ int main ( int argc, char ** argv )
 				if ( !hConf["index"][sDumpHeader]("path") )
 					sphDie ( "missing 'path' for index '%s'\n", sDumpHeader.cstr() );
 
+				sIndexName = sDumpHeader;
 				sDumpHeader.SetSprintf ( "%s.sph", hConf["index"][sDumpHeader]["path"].cstr() );
-			}
+			} else
+				fprintf ( stdout, "dumping header file '%s'...\n", sDumpHeader.cstr() );
 
-			fprintf ( stdout, "dumping header file '%s'...\n", sDumpHeader.cstr() );
-			CSphIndex * pIndex = sphCreateIndexPhrase ( NULL, "" );
+			CSphIndex * pIndex = sphCreateIndexPhrase ( sIndexName.cstr(), "" );
 			pIndex->DebugDumpHeader ( stdout, sDumpHeader.cstr(), eCommand==CMD_DUMPCONFIG );
 			break;
 		}

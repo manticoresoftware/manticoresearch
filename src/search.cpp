@@ -256,7 +256,7 @@ int main ( int argc, char ** argv )
 		tQuery.m_sQuery = sQuery;
 		CSphQueryResult * pResult = NULL;
 
-		CSphIndex * pIndex = sphCreateIndexPhrase ( NULL, hIndex["path"].cstr() );
+		CSphIndex * pIndex = sphCreateIndexPhrase ( sIndexName, hIndex["path"].cstr() );
 		pIndex->SetEnableStar ( hIndex.GetInt("enable_star")!=0 );
 		pIndex->SetWordlistPreload ( hIndex.GetInt("ondisk_dict")==0 );
 

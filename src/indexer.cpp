@@ -288,25 +288,6 @@ void ShowProgress ( const CSphIndexProgress * pProgress, bool bPhaseEnd )
 	fflush ( stdout );
 }
 
-static void Logger ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
-{
-	if ( eLevel>=SPH_LOG_DEBUG )
-		return;
-
-	switch ( eLevel )
-	{
-		case SPH_LOG_FATAL: fprintf ( stdout, "FATAL: " ); break;
-		case SPH_LOG_WARNING: fprintf ( stdout, "WARNING: " ); break;
-		case SPH_LOG_INFO: fprintf ( stdout, "WARNING: " ); break;
-		case SPH_LOG_DEBUG: // yes, I know that this branch will never execute because of the condition above.
-		case SPH_LOG_VERBOSE_DEBUG:
-		case SPH_LOG_VERY_VERBOSE_DEBUG: fprintf ( stdout, "DEBUG: " ); break;
-	}
-
-	vfprintf ( stdout, sFmt, ap );
-	fprintf ( stdout, "\n" );
-}
-
 /////////////////////////////////////////////////////////////////////////////
 
 /// parse multi-valued attr definition
@@ -1519,8 +1500,6 @@ bool SendRotate ( int iPID, bool bForce )
 
 int main ( int argc, char ** argv )
 {
-	sphSetLogger ( Logger );
-
 	const char * sOptConfig = NULL;
 	bool bMerge = false;
 	CSphVector<CSphFilterSettings> dMergeDstFilters;

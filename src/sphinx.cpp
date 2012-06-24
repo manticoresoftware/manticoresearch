@@ -1004,6 +1004,10 @@ class DiskIndexQwordTraits_c : public ISphQword
 	static const int	MINIBUFFER_LEN = 1024;
 
 public:
+	/// tricky bit
+	/// m_uHitPosition is always a current position in the .spp file
+	/// base ISphQword::m_iHitlistPos carries the inlined hit data when m_iDocs==1
+	/// but this one is always a real position, used for delta coding
 	SphOffset_t		m_uHitPosition;
 	Hitpos_t		m_uInlinedHit;
 	DWORD			m_uHitState;
@@ -16306,6 +16310,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		LOC_FAIL(( fp, "dictionary needed index version not less then 21 (readed=%d)"
 			, m_uVersion ));
 
+	int iLastSkipsOffset = 0;
 	rdDict.SeekTo ( 1, READ_NO_SIZE_HINT );
 	for ( ; rdDict.GetPos()!=m_tWordlist.m_iDictCheckpointsOffset && !m_bIsEmpty; )
 	{
@@ -16412,6 +16417,16 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			if ( iDocs<=0 || iHits<=0 || iHits<iDocs )
 				LOC_FAIL(( fp, "invalid docs/hits (pos="INT64_FMT", wordid="UINT64_FMT", docs="INT64_FMT", hits="INT64_FMT")",
 					(int64_t)iDictPos, (uint64_t)uNewWordid, (int64_t)iDocs, (int64_t)iHits ));
+		}
+
+		// skiplist
+		if ( m_bHaveSkips && iDocs>SKIPLIST_BLOCK )
+		{
+			int iSkipsOffset = rdDict.UnzipInt();
+			if ( !bWordDict && iSkipsOffset<iLastSkipsOffset )
+				LOC_FAIL(( fp, "descending skiplist pos (last=%d, cur=%d, wordid=%llu)",
+					iLastSkipsOffset, iSkipsOffset, uint64_t(uNewWordid) ));
+			iLastSkipsOffset = iSkipsOffset;
 		}
 
 		// update stats, add checkpoint
@@ -16546,6 +16561,11 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			iDictHits = rdDict.UnzipInt();
 		}
 
+		// FIXME? verify skiplist content too
+		int iSkipsOffset = 0;
+		if ( m_bHaveSkips && iDictDocs>SKIPLIST_BLOCK )
+			iSkipsOffset = rdDict.UnzipInt();
+
 		// check whether the offset is as expected
 		if ( iDoclistOffset!=rdDocs.GetPos() )
 		{
@@ -16600,8 +16620,19 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		bool bHitless = ( m_tSettings.m_eHitless==SPH_HITLESS_ALL ||
 			( m_tSettings.m_eHitless==SPH_HITLESS_SOME && dHitlessWords.BinarySearch ( uWordid ) ) );
 
+		CSphVector<SkiplistEntry_t> dDoclistSkips;
 		for ( ;; )
 		{
+			// skiplist state is saved just *before* decoding those boundary entries
+			if ( m_bHaveSkips && ( iDoclistDocs & ( SKIPLIST_BLOCK-1 ) )==0 )
+			{
+				SkiplistEntry_t & tBlock = dDoclistSkips.Add();
+				tBlock.m_iBaseDocid = pQword->m_tDoc.m_iDocID;
+				tBlock.m_iOffset = pQword->m_rdDoclist.GetPos();
+				tBlock.m_iBaseHitlistPos = pQword->m_uHitPosition;
+			}
+
+			// FIXME? this can fail on a broken entry (eg fieldid over 256)
 			const CSphMatch & tDoc = pQword->GetNextDoc ( pInlineStorage );
 			if ( !tDoc.m_iDocID )
 				break;
@@ -16696,6 +16727,50 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		if ( ( iDictHits!=iDoclistHits || iDictHits!=iHitlistHits ) && !bHitless )
 			LOC_FAIL(( fp, "hit count mismatch (wordid="UINT64_FMT"(%s), dict=%d, doclist=%d, hitlist=%d)",
 				uint64_t(uWordid), sWord, iDictHits, iDoclistHits, iHitlistHits ));
+
+		while ( m_bHaveSkips && iDoclistDocs>SKIPLIST_BLOCK )
+		{
+			if ( iSkipsOffset<=0 || iSkipsOffset>(int)m_pSkiplists.GetLength() )
+			{
+				LOC_FAIL(( fp, "invalid skiplist offset (wordid=%llu(%s), off=%d, max=%d)",
+					(uint64_t)uWordid, sWord, iSkipsOffset, (int)m_pSkiplists.GetLength() ));
+				break;
+			}
+
+			// boundary adjustment
+			if ( ( iDoclistDocs & ( SKIPLIST_BLOCK-1 ) )==0 )
+				dDoclistSkips.Pop();
+
+			SkiplistEntry_t t;
+			t.m_iBaseDocid = 0;
+			t.m_iOffset = iDoclistOffset;
+			t.m_iBaseHitlistPos = 0;
+
+			const BYTE * pSkip = m_pSkiplists.GetWritePtr() + iSkipsOffset;
+			const BYTE * pMax = m_pSkiplists.GetWritePtr() + m_pSkiplists.GetLength();
+			int i = 0;
+			while ( pSkip<pMax && ++i<dDoclistSkips.GetLength() )
+			{
+				const SkiplistEntry_t & r = dDoclistSkips[i];
+				t.m_iBaseDocid += SKIPLIST_BLOCK + (SphDocID_t) sphUnzipOffset ( pSkip );
+				t.m_iOffset += 4*SKIPLIST_BLOCK + sphUnzipOffset ( pSkip );
+				t.m_iBaseHitlistPos += sphUnzipOffset ( pSkip );
+				if ( t.m_iBaseDocid!=r.m_iBaseDocid
+					|| t.m_iOffset!=r.m_iOffset ||
+					t.m_iBaseHitlistPos!=r.m_iBaseHitlistPos )
+				{
+					LOC_FAIL(( fp, "skiplist entry %d mismatch (wordid=%llu(%s), exp={%llu, %llu, %llu}, got={%llu, %llu, %llu})",
+						i, (uint64_t)uWordid, sWord,
+						(uint64_t)r.m_iBaseDocid, (uint64_t)r.m_iOffset, (uint64_t)r.m_iBaseHitlistPos,
+						(uint64_t)t.m_iBaseDocid, (uint64_t)t.m_iOffset, (uint64_t)t.m_iBaseHitlistPos ));
+					break;
+				}
+				if ( pSkip>pMax )
+					LOC_FAIL(( fp, "skiplist length mismatch (wordid=%llu(%s), exp=%d, got=%d)",
+						(uint64_t)uWordid, sWord, i, dDoclistSkips.GetLength() ));
+			}
+			break;
+		}
 
 		// move my reader instance forward too
 		rdDocs.SeekTo ( pQword->m_rdDoclist.GetPos(), READ_NO_SIZE_HINT );

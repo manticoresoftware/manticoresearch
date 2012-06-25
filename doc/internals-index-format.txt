@@ -87,13 +87,8 @@ Dictionary
 Dictionary file (.spi) lets us quickly map keywords to document lists.
 All keywords are internally replaced with their IDs, either CRC32 or FNV64
 (depending on --enable-id64 configure time setting). Dictionary essentially
-is a huge list of per-keyword entries, sorted by keyword ID:
-
-	dictionary-entry =
-		keyword-id : wordid-type, delta-encoded
-		doclist-offset : offset-type, delta-encoded
-		keyword-docs : int32
-		keyword-hits : int32
+is a huge list of per-keyword entries, sorted by keyword ID. (See the entry
+format below.)
 	
 wordid-type and offset-type might vary (ie. be either 32-bit or 64-bit)
 depending on compile-time settings.
@@ -115,6 +110,67 @@ accumulated in RAM during indexing, and then written to disk at the end
 of the dictionary file.
 
 Almost all of dictionary writing happens in cidxHit() method.
+
+dict=crc format, v.31
+----------------------
+
+byte dummy = 0x01
+keyword[] keyword_blocks
+keyword is:
+	zint wordid_delta
+	zint doclist_offset_delta
+	if wordid_delta == 0:
+		return block_end
+	zint num_docs
+	zint num_hits
+	if ver >= 31 and num_docs > SKIPLIST_BLOCK:
+		zint skiplist_pos
+		zint skiplist_len
+
+checkpoint[] checkpoints
+checkpoint is:
+	qword wordid
+	qword dict_offset
+
+dict=keywords format, v.31
+---------------------------
+
+byte dummy = 0x01
+keyword[] keyword_blocks
+keyword is:
+	byte keyword_editcode
+	byte[] keyword_delta
+	if keyword_editcode == 0:
+		assert keyword_delta = { 0 }
+		return block_end
+	zint doclist_offset
+	zint num_docs
+	zint num_hits
+	if num_docs >= DOCLIST_HINT_THRESH:
+		byte doclist_sizehint
+	if ver >= 31 and num_docs > SKIPLIST_BLOCK:
+		zint skiplist_pos
+		zint skiplist_len
+
+if min_infix_len > 0:
+	tag "infix-entries"
+	infix_entry[] infix_hash_entries
+
+checkpoint[] checkpoints
+checkpoint is:
+	dword keyword_len
+	byte[] keyword [ keyword_len ]
+	qword dict_offset
+
+if min_infix_len > 0:
+	tag "infix-blocks"
+	infix_block[] infix_hash_blocks
+
+tag "dict-header"
+zint num_checkpoints
+zint checkpoints_offset
+zint infix_codepoint_bytes
+zint infix_blocks_offset
 
 Document lists
 ---------------

@@ -465,6 +465,16 @@ struct CSphTokenizerSettings
 						CSphTokenizerSettings ();
 };
 
+
+enum ESphBigram
+{
+	SPH_BIGRAM_NONE			= 0,	///< no bigrams
+	SPH_BIGRAM_ALL			= 1,	///< index all word pairs
+	SPH_BIGRAM_FIRSTFREQ	= 2,	///< only index pairs where one of the words is in a frequent words list
+	SPH_BIGRAM_BOTHFREQ		= 3		///< only index pairs where both words are in a frequent words list
+};
+
+
 struct CSphMultiformContainer;
 class CSphWriter;
 
@@ -522,6 +532,9 @@ public:
 
 	/// create a token filter
 	static ISphTokenizer *			CreateMultiformFilter ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer );
+
+	/// create a token filter
+	static ISphTokenizer *			CreateBigramFilter ( ISphTokenizer * pTokenizer, ESphBigram eBigramIndex, const CSphString & sBigramWords, CSphString & sError );
 
 	/// save tokenizer settings to a stream
 	virtual const CSphTokenizerSettings &	GetSettings () const { return m_tSettings; }
@@ -604,8 +617,8 @@ public:
 	/// set new buffer ptr (must be within current bounds)
 	virtual void					SetBufferPtr ( const char * sNewPtr ) = 0;
 
-	// get settings hash
-	uint64_t						GetSettingsFNV () const { return m_tLC.GetFNV(); }
+	/// get settings hash
+	virtual uint64_t				GetSettingsFNV () const { return m_tLC.GetFNV(); }
 
 protected:
 	virtual bool					RemapCharacters ( const char * sConfig, DWORD uFlags, const char * sSource, bool bCanRemap, CSphString & sError );
@@ -2702,13 +2715,14 @@ struct CSphIndexSettings : public CSphSourceSettings
 	CSphString		m_sHtmlIndexAttrs;
 	CSphString		m_sHtmlRemoveElements;
 	CSphString		m_sZones;
-
 	ESphHitless		m_eHitless;
 	CSphString		m_sHitlessFile;
-
 	bool			m_bVerbose;
-
 	int				m_iEmbeddedLimit;
+
+	ESphBigram				m_eBigramIndex;
+	CSphString				m_sBigramWords;
+	CSphVector<CSphString>	m_dBigramWords;
 
 					CSphIndexSettings ();
 };

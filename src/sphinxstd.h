@@ -611,9 +611,9 @@ T * sphBinarySearch ( T * pStart, T * pEnd, const PRED & tPred, U tRef )
 
 	while ( pEnd-pStart>1 )
 	{
-		if ( tRef<tPred(*pStart) || tRef>tPred(*pEnd) )
+		if ( tRef<tPred(*pStart) || tPred(*pEnd)<tRef )
 			break;
-		assert ( tRef>tPred(*pStart) );
+		assert ( tPred(*pStart)<tRef );
 		assert ( tRef<tPred(*pEnd) );
 
 		T * pMid = pStart + (pEnd-pStart)/2;
@@ -2496,6 +2496,13 @@ public:
 		assert ( iIndex>=0 );
 		assert ( iIndex<m_iElements );
 		m_pData [ iIndex>>5 ] |= ( 1UL<<( iIndex&31 ) ); // NOLINT
+	}
+
+	void BitClear ( int iIndex )
+	{
+		assert ( iIndex>=0 );
+		assert ( iIndex<m_iElements );
+		m_pData [ iIndex>>5 ] &= ~( 1UL<<( iIndex&31 ) ); // NOLINT
 	}
 };
 

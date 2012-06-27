@@ -44,7 +44,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
-const DWORD		INDEX_FORMAT_VERSION		= 31;				///< my format version
+const DWORD		INDEX_FORMAT_VERSION		= 32;				///< my format version
 
 const char		MAGIC_SYNONYM_WHITESPACE	= 1;				// used internally in tokenizer only
 const char		MAGIC_CODE_SENTENCE			= 2;				// emitted from tokenizer on sentence boundary
@@ -54,9 +54,10 @@ const char		MAGIC_CODE_ZONE				= 4;				// emitted from stripper (and passed via 
 const char		MAGIC_WORD_HEAD				= 1;				// prepended to keyword by source, stored in (crc) dictionary
 const char		MAGIC_WORD_TAIL				= 1;				// appended to keyword by source, stored in (crc) dictionary
 const char		MAGIC_WORD_HEAD_NONSTEMMED	= 2;				// prepended to keyword by source, stored in dictionary
+const char		MAGIC_WORD_BIGRAM			= 3;				// used as a bigram (keyword pair) separator, stored in dictionary
 
-extern const char *		MAGIC_WORD_SENTENCE;
-extern const char *		MAGIC_WORD_PARAGRAPH;
+extern const char *		MAGIC_WORD_SENTENCE;	///< value is "\3sentence"
+extern const char *		MAGIC_WORD_PARAGRAPH;	///< value is "\3paragraph"
 
 //////////////////////////////////////////////////////////////////////////
 // INTERNAL GLOBALS
@@ -1201,7 +1202,7 @@ bool			sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const cha
 size_t			sphReadThrottled ( int iFD, void * pBuf, size_t iCount, ThrottleState_t * pThrottle );
 void			sphMergeStats ( CSphQueryResultMeta & tDstResult, const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hSrc );
 bool			sphCheckQueryHeight ( const struct XQNode_t * pRoot, CSphString & sError );
-void			sphTransformExtendedQuery ( XQNode_t ** ppNode );
+void			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings );
 bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle );
 
 void			sphSetUnlinkOld ( bool bUnlink );

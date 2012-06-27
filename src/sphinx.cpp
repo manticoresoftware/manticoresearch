@@ -2172,12 +2172,15 @@ struct CSphMultiformContainer
 };
 
 
-/// Token filter
-class CSphMultiformTokenizer : public ISphTokenizer
+/// token filter base (boring proxy stuff)
+class CSphTokenFilter : public ISphTokenizer
 {
+protected:
+	ISphTokenizer *		m_pTokenizer;
+
 public:
-									CSphMultiformTokenizer ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer );
-									~CSphMultiformTokenizer ();
+									CSphTokenFilter ( ISphTokenizer * pTokenizer )					: m_pTokenizer ( pTokenizer ) {}
+									~CSphTokenFilter()												{ SafeDelete ( m_pTokenizer ); }
 
 	virtual bool					SetCaseFolding ( const char * sConfig, CSphString & sError )	{ return m_pTokenizer->SetCaseFolding ( sConfig, sError ); }
 	virtual void					AddPlainChar ( char c )											{ m_pTokenizer->AddPlainChar ( c ); }
@@ -2195,12 +2198,32 @@ public:
 	virtual bool					EnableZoneIndexing ( CSphString & sError )						{ return m_pTokenizer->EnableZoneIndexing ( sError ); }
 	virtual int						SkipBlended ()													{ return m_pTokenizer->SkipBlended(); }
 
-public:
-	virtual void					SetBuffer ( BYTE * sBuffer, int iLength );
-	virtual BYTE *					GetToken ();
 	virtual int						GetCodepointLength ( int iCode ) const		{ return m_pTokenizer->GetCodepointLength ( iCode ); }
 	virtual int						GetMaxCodepointLength () const				{ return m_pTokenizer->GetMaxCodepointLength(); }
 	virtual void					EnableQueryParserMode ( bool bEnable )		{ m_pTokenizer->EnableQueryParserMode ( bEnable ); }
+
+ 	virtual bool					IsUtf8 () const								{ return m_pTokenizer->IsUtf8 (); }
+ 	virtual const char *			GetTokenStart () const						{ return m_pTokenizer->GetTokenStart(); }
+ 	virtual const char *			GetTokenEnd () const						{ return m_pTokenizer->GetTokenEnd(); }
+ 	virtual const char *			GetBufferPtr () const						{ return m_pTokenizer->GetBufferPtr(); }
+ 	virtual const char *			GetBufferEnd () const						{ return m_pTokenizer->GetBufferEnd (); }
+ 	virtual void					SetBufferPtr ( const char * sNewPtr )		{ m_pTokenizer->SetBufferPtr ( sNewPtr ); }
+ 
+ 	virtual void					SetBuffer ( BYTE * sBuffer, int iLength )	{ m_pTokenizer->SetBuffer ( sBuffer, iLength ); }
+ 	virtual BYTE *					GetToken ()									{ return m_pTokenizer->GetToken(); }
+};
+
+
+/// token filter for multiforms support
+class CSphMultiformTokenizer : public CSphTokenFilter
+{
+public:
+	CSphMultiformTokenizer ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer );
+	~CSphMultiformTokenizer ();
+
+public:
+	virtual void					SetBuffer ( BYTE * sBuffer, int iLength );
+	virtual BYTE *					GetToken ();
 	virtual void					EnableTokenizedMultiformTracking ()			{ m_bBuildMultiform = true; }
 	virtual int						GetLastTokenLen () const					{ return m_pLastToken->m_iTokenLen; }
 	virtual bool					GetBoundary ()								{ return m_pLastToken->m_bBoundary; }
@@ -2210,15 +2233,12 @@ public:
 
 public:
 	virtual ISphTokenizer *			Clone ( bool bEscaped ) const;
-	virtual bool					IsUtf8 () const				{ return m_pTokenizer->IsUtf8 (); }
 	virtual const char *			GetTokenStart () const		{ return m_pLastToken->m_szTokenStart; }
 	virtual const char *			GetTokenEnd () const		{ return m_pLastToken->m_szTokenEnd; }
 	virtual const char *			GetBufferPtr () const		{ return m_pLastToken ? m_pLastToken->m_pBufferPtr : m_pTokenizer->GetBufferPtr(); }
-	virtual const char *			GetBufferEnd () const		{ return m_pTokenizer->GetBufferEnd (); }
 	virtual void					SetBufferPtr ( const char * sNewPtr );
 
 private:
-	ISphTokenizer *					m_pTokenizer;
 	const CSphMultiformContainer *	m_pMultiWordforms;
 	int								m_iStoredStart;
 	int								m_iStoredLen;
@@ -2250,6 +2270,218 @@ private:
 #if USE_WINDOWS
 #pragma warning(default:4127) // conditional expr is const
 #endif
+
+
+/// token filter for bigram indexing
+///
+/// passes tokens through until an eligible pair is found
+/// then buffers and returns that pair as a blended token
+/// then returns the first token as a regular one
+/// then pops the first one and cycles again
+///
+/// pair (aka bigram) eligibility depends on bigram_index value
+/// "all" means that all token pairs gets indexed
+/// "first_freq" means that 1st token must be from bigram_freq_words
+/// "both_freq" means that both tokens must be from bigram_freq_words
+class CSphBigramTokenizer : public CSphTokenFilter
+{
+protected:
+	enum
+	{
+		BIGRAM_CLEAN,	///< clean slate, nothing accumulated
+		BIGRAM_PAIR,	///< just returned a pair from m_sBuf, and m_iFirst/m_pSecond are correct
+		BIGRAM_FIRST	///< just returned a first token from m_sBuf, so m_iFirst/m_pSecond are still good
+	}		m_eState;
+	BYTE	m_sBuf [ MAX_KEYWORD_BYTES ];	///< pair buffer
+	BYTE *	m_pSecond;						///< second token pointer
+	int		m_iFirst;						///< first token length, bytes
+
+	ESphBigram			m_eMode;			///< bigram indexing mode
+	int					m_iMaxLen;			///< max bigram_freq_words length
+	int					m_dWordsHash[256];	///< offsets into m_dWords hashed by 1st byte
+	CSphVector<BYTE>	m_dWords;			///< case-folded, sorted bigram_freq_words
+
+public:
+	CSphBigramTokenizer ( ISphTokenizer * pTok, ESphBigram eMode, CSphVector<CSphString> & dWords )
+		: CSphTokenFilter ( pTok )
+	{
+		assert ( pTok );
+		assert ( eMode!=SPH_BIGRAM_NONE );
+		assert ( eMode==SPH_BIGRAM_ALL || dWords.GetLength() );
+
+		m_sBuf[0] = 0;
+		m_pSecond = NULL;
+		m_eState = BIGRAM_CLEAN;
+		memset ( m_dWordsHash, 0, sizeof(m_dWordsHash) );
+
+		m_eMode = eMode;
+		m_iMaxLen = 0;
+
+		// only keep unique, real, short enough words
+		dWords.Uniq();
+		ARRAY_FOREACH ( i, dWords )
+		{
+			int iLen = Min ( dWords[i].Length(), 255 );
+			if ( !iLen )
+				continue;
+			m_iMaxLen = Max ( m_iMaxLen, iLen );
+
+			// hash word blocks by the first letter
+			BYTE uFirst = *(BYTE*)( dWords[i].cstr() );
+			if ( !m_dWordsHash [ uFirst ] )
+			{
+				m_dWords.Add ( 0 );// end marker for the previous block
+				m_dWordsHash [ uFirst ] = m_dWords.GetLength(); // hash new block
+			}
+
+			// store that word
+			int iPos = m_dWords.GetLength();
+			m_dWords.Resize ( iPos+iLen+1 );
+
+			m_dWords[iPos] = (BYTE)iLen;
+			memcpy ( &m_dWords [ iPos+1 ], dWords[i].cstr(), iLen );
+		}
+		m_dWords.Add ( 0 );
+	}
+
+	CSphBigramTokenizer ( ISphTokenizer * pTok, const CSphBigramTokenizer * pBase )
+		: CSphTokenFilter ( pTok )
+	{
+		m_sBuf[0] = 0;
+		m_pSecond = NULL;
+		m_eState = BIGRAM_CLEAN;
+		memcpy ( m_dWordsHash, pBase->m_dWordsHash, sizeof(m_dWordsHash) );
+		m_dWords = pBase->m_dWords;
+	}
+
+	ISphTokenizer * Clone ( bool bEscaped ) const
+	{
+		ISphTokenizer * pTok = m_pTokenizer->Clone ( bEscaped );
+		return new CSphBigramTokenizer ( pTok, this );
+	}
+
+	void SetBuffer ( BYTE * sBuffer, int iLength )
+	{
+		m_pTokenizer->SetBuffer ( sBuffer, iLength );
+	}
+
+	bool TokenIsBlended() const
+	{
+		if ( m_eState==BIGRAM_PAIR )
+			return true;
+		if ( m_eState==BIGRAM_FIRST )
+			return false;
+		return m_pTokenizer->TokenIsBlended();
+	}
+
+	bool IsFreq ( int iLen, BYTE * sWord )
+	{
+		// early check
+		if ( iLen>m_iMaxLen )
+			return false;
+
+		// hash lookup, then linear scan
+		int iPos = m_dWordsHash [ *sWord ];
+		if ( !iPos )
+			return false;
+		while ( m_dWords[iPos] )
+		{
+			if ( m_dWords[iPos]==iLen && !memcmp ( sWord, &m_dWords[iPos+1], iLen ) )
+				break;
+			iPos += 1+m_dWords[iPos];
+		}
+		return m_dWords[iPos]!=0;
+	}
+
+	BYTE * GetToken()
+	{
+		if ( m_eState==BIGRAM_FIRST || m_eState==BIGRAM_CLEAN )
+		{
+			BYTE * pFirst;
+			if ( m_eState==BIGRAM_FIRST )
+			{
+				// first out, clean slate again, actually
+				// and second will now become our next first
+				assert ( m_pSecond );
+				m_eState = BIGRAM_CLEAN;
+				pFirst = m_pSecond;
+				m_pSecond = NULL;
+			} else
+			{
+				// just clean slate
+				// assure we're, well, clean
+				assert ( !m_pSecond );
+				pFirst = m_pTokenizer->GetToken();
+			}
+
+			// clean slate
+			// get first non-blended token
+			if ( !pFirst )
+				return NULL;
+
+			// pass through blended
+			// could handle them as first too, but.. cumbersome
+			if ( m_pTokenizer->TokenIsBlended() )
+				return pFirst;
+
+			// check pair
+			// in first_freq and both_freq modes, 1st token must be listed
+			m_iFirst = strlen ( (const char*)pFirst );
+			if ( m_eMode!=SPH_BIGRAM_ALL && !IsFreq ( m_iFirst, pFirst ) )
+					return pFirst;
+
+			// copy it
+			// subsequent calls can and will override token accumulator
+			memcpy ( m_sBuf, pFirst, m_iFirst+1 );
+
+			// grow a pair!
+			// get a second one (lookahead, in a sense)
+			BYTE * pSecond = m_pTokenizer->GetToken();
+
+			// eof? oi
+			if ( !pSecond )
+				return m_sBuf;
+
+			// got a pair!
+			// check combined length
+			m_pSecond = pSecond;
+			int iSecond = strlen ( (const char*)pSecond );
+			if ( m_iFirst+iSecond+1 > SPH_MAX_WORD_LEN )
+			{
+				// too long pair
+				// return first token as is
+				m_eState = BIGRAM_FIRST;
+				return m_sBuf;
+			}
+
+			// check pair
+			// in freq2 mode, both tokens must be listed
+			if ( m_eMode==SPH_BIGRAM_BOTHFREQ && !IsFreq ( iSecond, m_pSecond ) )
+			{
+				m_eState = BIGRAM_FIRST;
+				return m_sBuf;
+			}
+
+			// ok, this is a eligible pair 
+			// begin with returning first+second pair (as blended)
+			m_eState = BIGRAM_PAIR;
+			m_sBuf [ m_iFirst ] = MAGIC_WORD_BIGRAM;
+			assert ( m_iFirst+strlen((const char*)pSecond) < sizeof(m_sBuf) );
+			strcpy ( (char*)m_sBuf+m_iFirst+1, (const char*)pSecond );
+			return m_sBuf;
+
+		} else if ( m_eState==BIGRAM_PAIR )
+		{
+			// pair (aka bigram) out, return first token as a regular token
+			m_eState = BIGRAM_FIRST;
+			m_sBuf [ m_iFirst ] = 0;
+			return m_sBuf;
+		}
+
+		assert ( 0 && "unhandled bigram tokenizer internal state" );
+		return NULL;
+	}
+};
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -3238,9 +3470,35 @@ ISphTokenizer * ISphTokenizer::Create ( const CSphTokenizerSettings & tSettings,
 ISphTokenizer * ISphTokenizer::CreateMultiformFilter ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer )
 {
 	if ( !pContainer )
-		return NULL;
-
+		return pTokenizer;
 	return new CSphMultiformTokenizer ( pTokenizer, pContainer );
+}
+
+
+ISphTokenizer * ISphTokenizer::CreateBigramFilter ( ISphTokenizer * pTokenizer, ESphBigram eBigramIndex, const CSphString & sBigramWords, CSphString & sError )
+{
+	assert ( pTokenizer );
+
+	if ( eBigramIndex==SPH_BIGRAM_NONE )
+		return pTokenizer;
+
+	CSphVector<CSphString> dFreq;
+	if ( eBigramIndex!=SPH_BIGRAM_ALL )
+	{
+		const BYTE * pTok = NULL;
+		pTokenizer->SetBuffer ( (BYTE*)const_cast<char*>(sBigramWords.cstr()), sBigramWords.Length() );
+		while ( ( pTok=pTokenizer->GetToken() )!=NULL )
+			dFreq.Add ( (const char*)pTok );
+
+		if ( !dFreq.GetLength() )
+		{
+			SafeDelete ( pTokenizer );
+			sError.SetSprintf ( "bigram_freq_words does not contain any valid words" );
+			return NULL;
+		}
+	}
+
+	return new CSphBigramTokenizer ( pTokenizer, eBigramIndex, dFreq );
 }
 
 
@@ -5017,7 +5275,7 @@ BYTE * CSphTokenizer_UTF8Ngram::GetToken ()
 //////////////////////////////////////////////////////////////////////////
 
 CSphMultiformTokenizer::CSphMultiformTokenizer ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer )
-	: m_pTokenizer		( pTokenizer )
+	: CSphTokenFilter ( pTokenizer )
 	, m_pMultiWordforms ( pContainer )
 	, m_iStoredStart	( 0 )
 	, m_iStoredLen		( 0 )
@@ -5209,7 +5467,6 @@ void CSphMultiformTokenizer::SetBuffer ( BYTE * sBuffer, int iLength )
 	m_pTokenizer->SetBuffer ( sBuffer, iLength );
 	SetBufferPtr ( (const char *)sBuffer );
 }
-
 
 /////////////////////////////////////////////////////////////////////////////
 // FILTER
@@ -6971,6 +7228,7 @@ CSphIndexSettings::CSphIndexSettings ()
 	, m_bHtmlStrip			( false )
 	, m_eHitless			( SPH_HITLESS_NONE )
 	, m_iEmbeddedLimit		( 0 )
+	, m_eBigramIndex		( SPH_BIGRAM_NONE )
 {
 }
 
@@ -9024,6 +9282,8 @@ void SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettin
 	tWriter.PutDword ( tSettings.m_iStopwordStep );
 	tWriter.PutDword ( tSettings.m_iOvershortStep );
 	tWriter.PutDword ( tSettings.m_iEmbeddedLimit );
+	tWriter.PutByte ( tSettings.m_eBigramIndex );
+	tWriter.PutString ( tSettings.m_sBigramWords );
 }
 
 
@@ -9073,7 +9333,6 @@ bool CSphIndex_VLN::WriteHeader ( const BuildHeader_t & tBuildHeader, CSphWriter
 
 	// field filter info
 	SaveFieldFilterSettings ( fdInfo, m_pFieldFilter );
-
 	return true;
 }
 
@@ -13727,6 +13986,12 @@ void LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DW
 
 	if ( uVersion>=30 )
 		tSettings.m_iEmbeddedLimit = (int)tReader.GetDword();
+
+	if ( uVersion>=32 )
+	{
+		tSettings.m_eBigramIndex = (ESphBigram)tReader.GetByte();
+		tSettings.m_sBigramWords = tReader.GetString();
+	}
 }
 
 
@@ -13860,8 +14125,8 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 
 		SetDictionary ( pDict );
 
-		ISphTokenizer * pTokenFilter = ISphTokenizer::CreateMultiformFilter ( pTokenizer, pDict->GetMultiWordforms () );
-		SetTokenizer ( pTokenFilter ? pTokenFilter : pTokenizer );
+		pTokenizer = ISphTokenizer::CreateMultiformFilter ( pTokenizer, pDict->GetMultiWordforms () );
+		SetTokenizer ( pTokenizer );
 	} else
 	{
 		if ( m_bId32to64 )
@@ -13884,9 +14149,20 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 		SetFieldFilter ( sphCreateFieldFilter ( tFieldFilterSettings, sWarning ) );
 	}
 
+	// post-load stuff.. for now, bigrams
+	CSphIndexSettings & s = m_tSettings;
+	if ( s.m_eBigramIndex!=SPH_BIGRAM_NONE && s.m_eBigramIndex!=SPH_BIGRAM_ALL )
+	{
+		BYTE * pTok;
+		m_pTokenizer->SetBuffer ( (BYTE*)s.m_sBigramWords.cstr(), s.m_sBigramWords.Length() );
+		while ( ( pTok=m_pTokenizer->GetToken() )!=NULL )
+			s.m_dBigramWords.Add() = (const char*)pTok;
+		s.m_dBigramWords.Sort();
+	}
+	
+
 	if ( rdInfo.GetErrorFlag() )
 		m_sLastError.SetSprintf ( "%s: failed to parse header (unexpected eof)", sHeaderName );
-
 	return !rdInfo.GetErrorFlag();
 }
 
@@ -15807,10 +16083,75 @@ static void TagExcluded ( XQNode_t * pNode, bool bNot )
 }
 
 
-void sphTransformExtendedQuery ( XQNode_t ** ppNode )
+/// optimize phrase queries if we have bigrams
+static void TransformBigrams ( XQNode_t * pNode, const CSphIndexSettings & tSettings )
+{
+	assert ( tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE );
+	assert ( tSettings.m_eBigramIndex==SPH_BIGRAM_ALL || tSettings.m_dBigramWords.GetLength() );
+
+	if ( pNode->GetOp()!=SPH_QUERY_PHRASE )
+	{
+		ARRAY_FOREACH ( i, pNode->m_dChildren )
+			TransformBigrams ( pNode->m_dChildren[i], tSettings );
+		return;
+	}
+
+	CSphBitvec bmRemove;
+	bmRemove.Init ( pNode->m_dWords.GetLength() );
+
+	for ( int i=0; i<pNode->m_dWords.GetLength()-1; i++ )
+	{
+		// check whether this pair was indexed
+		bool bBigram = false;
+		switch ( tSettings.m_eBigramIndex )
+		{
+			case SPH_BIGRAM_ALL:
+				bBigram = true;
+				break;
+			case SPH_BIGRAM_FIRSTFREQ:
+				bBigram = tSettings.m_dBigramWords.BinarySearch ( pNode->m_dWords[i].m_sWord )!=NULL;
+				break;
+			case SPH_BIGRAM_BOTHFREQ:
+				bBigram =
+					( tSettings.m_dBigramWords.BinarySearch ( pNode->m_dWords[i].m_sWord )!=NULL ) &&
+					( tSettings.m_dBigramWords.BinarySearch ( pNode->m_dWords[i+1].m_sWord )!=NULL );
+				break;
+		}
+		if ( !bBigram )
+			continue;
+
+		// replace the pair with a bigram keyword
+		// FIXME!!! set phrase weight for this "word" here
+		pNode->m_dWords[i].m_sWord.SetSprintf ( "%s%c%s",
+			pNode->m_dWords[i].m_sWord.cstr(),
+			MAGIC_WORD_BIGRAM,
+			pNode->m_dWords[i+1].m_sWord.cstr() );
+
+		// only mark for removal now, we will sweep later
+		// so that [a b c] would convert to ["a b" "b c"], not just ["a b" c]
+		bmRemove.BitClear ( i );
+		bmRemove.BitSet ( i+1 );
+	}
+
+	// remove marked words
+	int iOut = 0;
+	ARRAY_FOREACH ( i, pNode->m_dWords )
+		if ( !bmRemove.BitGet(i) )
+			pNode->m_dWords[iOut++] = pNode->m_dWords[i];
+	pNode->m_dWords.Resize ( iOut );
+
+	// fixup nodes that are not real phrases any more
+	if ( pNode->m_dWords.GetLength()==1 )
+		pNode->SetOp ( SPH_QUERY_AND );
+}
+
+
+void sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings )
 {
 	TransformQuorum ( ppNode );
 	TransformNear ( ppNode );
+	if ( tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE )
+		TransformBigrams ( *ppNode, tSettings );
 	TagExcluded ( *ppNode, false );
 }
 
@@ -15883,7 +16224,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	}
 
 	// transform query if needed (quorum transform, keyword expansion, etc.)
-	sphTransformExtendedQuery ( &tParsed.m_pRoot );
+	sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings );
 
 	// adjust stars in keywords for dict=keywords, enable_star=0 case
 	if ( pDict->GetSettings().m_bWordDict && !m_bEnableStar && ( m_tSettings.m_iMinPrefixLen>0 || m_tSettings.m_iMinInfixLen>0 ) )
@@ -15972,7 +16313,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 		if ( sphParseExtendedQuery ( dXQ[i], pQueries[i].m_sQuery.cstr(), pTokenizer, &m_tSchema, pDict, m_tSettings ) )
 		{
 			// transform query if needed (quorum transform, keyword expansion, etc.)
-			sphTransformExtendedQuery ( &dXQ[i].m_pRoot );
+			sphTransformExtendedQuery ( &dXQ[i].m_pRoot, m_tSettings );
 
 			// expanding prefix in word dictionary case
 			XQNode_t * pPrefixed = ExpandPrefix ( dXQ[i].m_pRoot, ppResults[i]->m_sError, ppResults[i] );
@@ -27053,6 +27394,15 @@ void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int64_t iDocs, int
 		} else
 		{
 			sFixed = sWord.SubString ( 1, sWord.Length()-1 );
+			pFixed = &sFixed;
+		}
+	} else
+	{
+		const char * p = strchr ( sWord.cstr(), MAGIC_WORD_BIGRAM );
+		if ( p )
+		{
+			sFixed.SetSprintf ( "\"%s\"", sWord.cstr() );
+			*( (char*)sFixed.cstr() + ( p - sWord.cstr() ) + 1 ) = ' ';
 			pFixed = &sFixed;
 		}
 	}

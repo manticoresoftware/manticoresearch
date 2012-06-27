@@ -883,11 +883,17 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		}
 	}
 
+	// configure early
+	// (need bigram settings to spawn a proper indexing tokenizer)
+	CSphString sError;
+	CSphIndexSettings tSettings;
+	if ( !sphConfIndex ( hIndex, tSettings, sError ) )
+		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
+
 	///////////////////
 	// spawn tokenizer
 	///////////////////
 
-	CSphString sError;
 	CSphTokenizerSettings tTokSettings;
 	if ( !sphConfTokenizer ( hIndex, tTokSettings, sError ) )
 		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
@@ -910,9 +916,10 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	CSphDict * pDict = NULL;
 	CSphDictSettings tDictSettings;
 
+	// setup filters
 	if ( !g_sBuildStops )
 	{
-		ISphTokenizer * pTokenFilter = NULL;
+		// multiforms filter
 		sphConfDictionary ( hIndex, tDictSettings );
 
 		pDict = tDictSettings.m_bWordDict
@@ -921,8 +928,12 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		if ( !pDict )
 			sphDie ( "index '%s': unable to create dictionary", sIndexName );
 
-		pTokenFilter = ISphTokenizer::CreateMultiformFilter ( pTokenizer, pDict->GetMultiWordforms () );
-		pTokenizer = pTokenFilter ? pTokenFilter : pTokenizer;
+		pTokenizer = ISphTokenizer::CreateMultiformFilter ( pTokenizer, pDict->GetMultiWordforms () );
+
+		// bigram filter
+		pTokenizer = ISphTokenizer::CreateBigramFilter ( pTokenizer, tSettings.m_eBigramIndex, tSettings.m_sBigramWords, sError );
+		if ( !pTokenizer )
+			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 	}
 
 	ISphFieldFilter * pFieldFilter = NULL;
@@ -1122,10 +1133,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 			exit ( 1 );
 		}
 
-		CSphString sError;
-		CSphIndexSettings tSettings;
-		if ( !sphConfIndex ( hIndex, tSettings, sError ) )
-			sphDie ( "index '%s': %s.", sIndexName, sError.cstr() );
 		tSettings.m_bVerbose = bVerbose;
 
 		if ( tSettings.m_bIndexExactWords && !pDict->HasMorphology () )

@@ -18,6 +18,7 @@
 
 #include "sphinx.h"
 #include "sphinxutils.h"
+#include "sphinxint.h"
 #include <ctype.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -396,6 +397,8 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "index_zones",			0, NULL },
 	{ "blend_mode",				0, NULL },
 	{ "regexp_filter",			KEY_LIST, NULL },
+	{ "bigram_freq_words",		0, NULL },
+	{ "bigram_index",			0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -1266,6 +1269,36 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 	tSettings.m_bIndexSP = ( hIndex.GetInt ( "index_sp" )!=0 );
 	tSettings.m_sZones = hIndex.GetStr ( "index_zones" );
 
+	// bigrams
+	tSettings.m_eBigramIndex = SPH_BIGRAM_NONE;
+	if ( hIndex("bigram_index") )
+	{
+		CSphString & s = hIndex["bigram_index"];
+		s.ToLower();
+		if ( s=="all" )
+			tSettings.m_eBigramIndex = SPH_BIGRAM_ALL;
+		else if ( s=="first_freq" )
+			tSettings.m_eBigramIndex = SPH_BIGRAM_FIRSTFREQ;
+		else if ( s=="both_freq" )
+			tSettings.m_eBigramIndex = SPH_BIGRAM_BOTHFREQ;
+		else
+		{
+			sError.SetSprintf ( "unknown bigram_index=%s (must be all, first_freq, or both_freq)", s.cstr() );
+			return false;
+		}
+	}
+
+	tSettings.m_sBigramWords = hIndex.GetStr ( "bigram_freq_words" );
+	tSettings.m_sBigramWords.Trim();
+
+	bool bEmptyOk = tSettings.m_eBigramIndex==SPH_BIGRAM_NONE || tSettings.m_eBigramIndex==SPH_BIGRAM_ALL;
+	if ( bEmptyOk!=tSettings.m_sBigramWords.IsEmpty() )
+	{
+		sError.SetSprintf ( "bigram_index=%s, bigram_freq_words must%s be empty", hIndex["bigram_index"].cstr(),
+			bEmptyOk ? "" : " not" );
+		return false;
+	}
+
 	// all good
 	return true;
 }
@@ -1307,9 +1340,8 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 	if ( bTokenizerSpawned )
 	{
-		ISphTokenizer * pTokenizer = pIndex->LeakTokenizer ();
-		ISphTokenizer * pTokenFilter = ISphTokenizer::CreateMultiformFilter ( pTokenizer, pIndex->GetDictionary ()->GetMultiWordforms () );
-		pIndex->SetTokenizer ( pTokenFilter ? pTokenFilter : pTokenizer );
+		pIndex->SetTokenizer ( ISphTokenizer::CreateMultiformFilter ( pIndex->LeakTokenizer(),
+			pIndex->GetDictionary()->GetMultiWordforms () ) );
 	}
 
 	if ( !pIndex->IsStripperInited () )

@@ -3059,6 +3059,8 @@ void LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings & tSett
 }
 
 
+/// gets called from and MUST be in sync with RtIndex_t::SaveDiskHeader()!
+/// note that SaveDiskHeader() occasionaly uses some PREVIOUS format version!
 void SaveTokenizerSettings ( CSphWriter & tWriter, ISphTokenizer * pTokenizer, int iEmbeddedLimit )
 {
 	assert ( pTokenizer );
@@ -3151,6 +3153,8 @@ void LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings
 }
 
 
+/// gets called from and MUST be in sync with RtIndex_t::SaveDiskHeader()!
+/// note that SaveDiskHeader() occasionaly uses some PREVIOUS format version!
 void SaveDictionarySettings ( CSphWriter & tWriter, CSphDict * pDict, bool bForceWordDict, int iEmbeddedLimit )
 {
 	assert ( pDict );
@@ -27702,8 +27706,8 @@ void sphDictBuildSkiplists ( const char * sPath )
 	CSphString sFilename, sError;
 	int64_t tmStart = sphMicroTimer();
 
-	if ( INDEX_FORMAT_VERSION!=31 )
-		sphDie ( "skiplists upgrade: ony works in v.31 builds for now; get an older indextool or contact support" );
+	if ( INDEX_FORMAT_VERSION!=31 && INDEX_FORMAT_VERSION!=32 )
+		sphDie ( "skiplists upgrade: ony works in v.31 to v.32 builds for now; get an older indextool or contact support" );
 
 	// load (interesting parts from) the index header
 	CSphAutoreader rdHeader;

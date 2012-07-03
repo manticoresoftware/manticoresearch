@@ -17087,7 +17087,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				dDoclistSkips.Pop();
 
 			SkiplistEntry_t t;
-			t.m_iBaseDocid = 0;
+			t.m_iBaseDocid = m_iMinDocid;
 			t.m_iOffset = iDoclistOffset;
 			t.m_iBaseHitlistPos = 0;
 

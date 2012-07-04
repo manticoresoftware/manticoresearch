@@ -2593,8 +2593,14 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 		}
 
 		// we have to dump if we can't merge even smallest segments without breaking vector constrain ( len<INT_MAX )
-		int64_t iMaxLen = Max ( iWordsRelimit, Max ( iDocsRelimit, Max ( iHitsRelimit,
-			Max ( iStringsRelimit, Max ( iMvasRelimit, Max ( iKeywordsRelimit, iRowsRelimit ) ) ) ) ) );
+		// split this way to avoid superlong string after macro expansion that kills gcov
+		int64_t iMaxLen = Max (
+			Max ( iWordsRelimit, iDocsRelimit ),
+			Max ( iHitsRelimit, iStringsRelimit ) );
+		iMaxLen = Max (
+			Max ( iMvasRelimit, iKeywordsRelimit ),
+			Max ( iMaxLen, iRowsRelimit ) );
+
 		if ( MAX_SEGMENT_VECTOR_LEN<iMaxLen )
 		{
 			bDump = true;

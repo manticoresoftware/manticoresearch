@@ -15157,7 +15157,7 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, cons
 						szIndexName, pAgent->cstr(), p );
 					return false;
 				}
-				CSphString sSub = pAgent->SubString ( 0, p-pAnchor );
+				CSphString sSub = pAgent->SubString ( pAnchor-pAgent->cstr(), p-pAnchor );
 				if ( sSub.cstr()[0]=='/' )
 				{
 #if USE_WINDOWS

@@ -11,6 +11,7 @@ indexer
 searchd
 {
 	<searchd_settings/>
+	workers = threads
 	compat_sphinxql_magics = 0
 }
 
@@ -21,6 +22,7 @@ source test
 	sql_query = SELECT * FROM test_table
 	sql_attr_uint = aa
 	sql_attr_multi = uint mm from field
+	sql_attr_string = kk
 }
 
 index test
@@ -36,7 +38,8 @@ CREATE TABLE test_table
 	id INT NOT NULL,
 	aa INT NOT NULL,
 	title VARCHAR(255) NOT NULL,
-	mm VARCHAR(255) NOT NULL
+	mm VARCHAR(255) NOT NULL,
+	kk VARCHAR(255) NOT NULL
 );
 </db_create>
 
@@ -45,9 +48,9 @@ DROP TABLE IF EXISTS test_table;
 </db_drop>
 
 <db_insert>
-INSERT INTO test_table ( id, aa, title, mm ) VALUES
-( 1, 2, 'dummy', '' ),
-( 10, 3, 'ohai', '7 40')
+INSERT INTO test_table ( id, aa, title, mm, kk ) VALUES
+( 1, 2, 'dummy', '', 'one' ),
+( 10, 3, 'ohai', '7 40', 'ten' )
 </db_insert>
 
 <sphqueries>
@@ -60,6 +63,33 @@ INSERT INTO test_table ( id, aa, title, mm ) VALUES
 <sphinxql>SELECT id, ABS(CRC32('test')) FROM test WHERE id=10</sphinxql>
 <sphinxql>SELECT id, IF(IN(mm,7),111,222) FROM test</sphinxql>
 
+<!-- various function and operators for test coverage -->
+<sphinxql>SELECT SINT(1-2) FROM test WHERE id=10</sphinxql>
+<sphinxql>SELECT FIBONACCI(5) FROM test WHERE id=10</sphinxql>
+<sphinxql>SELECT INTERVAL(1, -1,3,5.0) FROM test WHERE id=10</sphinxql>
+<sphinxql>SELECT INTERVAL(id, id-1, id+2) FROM test WHERE id=10</sphinxql>
+<sphinxql>SELECT BITDOT(5, 11,33,55) FROM test WHERE id=10</sphinxql>
+<sphinxql>SELECT GEODIST(1,1,0.9,0.9) FROM test WHERE id=10</sphinxql>
+<sphinxql>SELECT CONTAINS(POLY2D(1,2,3,4,5,6.0),2,3), CONTAINS(POLY2D(1.0,1+1,aa,4,5,6),22,3) FROM test WHERE id=10</sphinxql>
+<sphinxql>SELECT CONTAINS(GEOPOLY2D(55.7522222, 37.6155556, 40.7141667, -74.0063889, 37.9833333, 23.7333333), 51.5, -0.116667) FROM test WHERE id=10</sphinxql>
+<sphinxql>SELECT CONTAINS(GEOPOLY2D(55.7522222, 37.6155556, 40.7141667, -74.0063889, 37.9833333, 23.7333333), 43.25, -2.9666667) FROM test WHERE id=10</sphinxql>
+<sphinxql>SELECT CRC32(TO_STRING(123 + 877)) FROM test WHERE id=10</sphinxql>
+<sphinxql>SELECT ABS(-1), CEIL(1.3), FLOOR(1.3), COS(3.14/2), LN(2.7), LOG10(100), EXP(1) FROM test WHERE id=10</sphinxql>
+<sphinxql>SELECT SINT(aa), NOT SINT(aa), CRC32(kk) FROM test WHERE id=10</sphinxql>
+<sphinxql>SELECT IN(id, 10.1) FROM test WHERE id=10;</sphinxql>
+
+<sphinxql>SELECT (1=1 AND 1=0), (1=1 AND 1=1), (1=0 AND 1=0), (1=0 AND 1=1) FROM test WHERE id=10</sphinxql>
+<sphinxql>SELECT (1=1 OR 1=0), (1=1 OR 1=1), (1=0 OR 1=0), (1=0 OR 1=1) FROM test WHERE id=10</sphinxql>
+<sphinxql>SELECT NOT 1=1, NOT 1=0 FROM test WHERE id=10</sphinxql>
+<sphinxql>SELECT 1&lt;=1, 1&lt;=2, 1&lt;&gt;1, 1&lt;&gt;0 FROM test WHERE id=10</sphinxql>
+
+<sphinxql>SELECT 3/2, id*2-2.1, 1.0-(1.0+id), 2*(3*id), 2.0/(3.0*id), 3 div 2, 3.1 div 2.2 FROM test WHERE id=10</sphinxql>
+<sphinxql>SELECT (1-id)+id, (1.0/id)*id, id/2.5 FROM test WHERE id=10</sphinxql>
+<sphinxql>SELECT 1&amp;3, 1&amp;2, 1|3, 1|2, 13%10, 3%10 FROM test WHERE id=10</sphinxql>
+<sphinxql>SELECT 1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+11 FROM test WHERE id=10</sphinxql>
+
+<sphinxql>SET GLOBAL @happyvar = (432)</sphinxql>
+<sphinxql>SELECT IN(mm, @happyvar) FROM test WHERE id=10</sphinxql>
 </sphqueries>
 
 </test>

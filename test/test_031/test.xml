@@ -53,6 +53,7 @@ INSERT INTO `test_table` VALUES
 <Custom_test><![CDATA[
 $client->AddQuery ('one');
 $client->SetGeoAnchor( 'lat','long',0.5, 0.5 );
+$client->SetSelect ('*, @geodist*2 as geotwice');
 $client->SetSortMode ( SPH_SORT_EXTENDED, '@geodist ASC' );
 $client->AddQuery ('one');
 $client->SetSortMode ( SPH_SORT_EXPR, '@id' );

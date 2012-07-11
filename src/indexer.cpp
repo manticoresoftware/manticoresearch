@@ -1103,9 +1103,18 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 				continue;
 			}
 			while ( dSources[i]->IterateDocument ( sError ) && dSources[i]->m_tDocInfo.m_iDocID )
+			{
 				while ( dSources[i]->IterateHits ( sError ) )
 				{
 				}
+				if ( !sError.IsEmpty() )
+				{
+					fprintf ( stdout, "ERROR: index '%s': %s\n", sIndexName, sError.cstr() );
+					sError = "";
+				}
+			}
+			if ( !sError.IsEmpty() )
+				fprintf ( stdout, "ERROR: index '%s': %s\n", sIndexName, sError.cstr() );
 		}
 		tDict.Save ( g_sBuildStops, g_iTopStops, g_bBuildFreqs );
 

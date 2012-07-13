@@ -8,8 +8,6 @@
 <id32/>
 </requires>
 
-<skip_indexer/>
-
 <config>
 
 searchd
@@ -49,6 +47,31 @@ index v5
 	rt_field		= content
 	rt_attr_uint	= idd
 }
+
+source plain_stem_src
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select 1, 11 as gid, 'apple' as title
+	sql_attr_uint	= gid
+}
+index plain_stem
+{
+	source			= plain_stem_src
+	path			= <data_path/>/plain_stem
+	docinfo			= extern
+	charset_type	= utf-8
+	morphology = stem_en
+}
+index rt_stem
+{
+	type			= rt
+	path			= <data_path/>/rt_stem
+	rt_attr_uint	= gid
+	rt_field		= title
+	charset_type	= utf-8
+	morphology = stem_en
+} 
 
 </config>
 
@@ -161,6 +184,10 @@ $results = array_merge ( $results, $query ( "show meta", $sock ) );
 $results = array_merge ( $results, $query ( "select * from v5 where match ( 'test700 | test1800' )", $sock ) );
 $results = array_merge ( $results, $query ( "show meta", $sock ) );
 
+$results = array_merge ( $results, $query ( "CALL KEYWORDS ( 'apple', 'plain_stem', 1 )", $sock ) );
+$results = array_merge ( $results, $query ( "CALL KEYWORDS ( 'apple', 'rt_stem', 1 )", $sock ) );
+$results = array_merge ( $results, $query ( "ATTACH INDEX plain_stem TO RTINDEX rt_stem", $sock ) );
+
 $close ( $sock );
 
 $results = array_merge ( $results, $restartDaemon ( $client ) );
@@ -171,6 +198,8 @@ $results = array_merge ( $results, $insert ( "v5", 1, 20, $query, $sock ) );
 
 $results = array_merge ( $results, $query ( "select * from v5 where match ( 'test700 | test1800')", $sock ) );
 $results = array_merge ( $results, $query ( "show meta", $sock ) );
+
+$results = array_merge ( $results, $query ( "CALL KEYWORDS ( 'apple', 'rt_stem', 1 )", $sock ) );
 
 $close ( $sock );
 

@@ -152,6 +152,8 @@ int main ( int argc, char ** argv )
 
 	#undef OPT
 
+	tzset();
+
 	if ( bStdin )
 	{
 		int iPos = 0, iLeft = sizeof(sQuery)-1;

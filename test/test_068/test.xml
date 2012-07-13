@@ -53,6 +53,24 @@ index idx3
 	path = <data_path/>/idx3
 	charset_type = utf-8
 }
+
+source src_embedded
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data_embedded.xml
+	
+	xmlpipe_field = body
+	xmlpipe_attr_uint	= idd
+}
+
+index embedded
+{
+	source = src_embedded
+	path = <data_path/>/embedded
+	charset_type = utf-8
+}
+
+
 </config>
 
 <queries>
@@ -61,6 +79,7 @@ index idx3
 <query index="idx1,idx2">test</query>
 <query index="idx3">est</query>
 <query index="idx3">test</query>
+<query index="embedded">test</query>
 </queries>
 
 </test>

@@ -17240,6 +17240,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	ConnectNamedPipe ( g_hPipe, NULL );
 #endif
 
+	tzset();
+
 	if ( !g_bService )
 		fprintf ( stdout, SPHINX_BANNER );
 

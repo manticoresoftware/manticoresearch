@@ -180,9 +180,10 @@ class SphinxClient:
 		elif host.startswith('unix://'):
 			self._path = host[7:]
 			return
-		assert(isinstance(port, int))
 		self._host = host
-		self._port = port
+		if isinstance(port, int):
+			assert(port>0 and port<65536)
+			self._port = port
 		self._path = None
 
 	def SetConnectTimeout ( self, timeout ):

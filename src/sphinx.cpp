@@ -147,6 +147,13 @@ static inline float logf ( float v )
 }
 #endif
 
+#if USE_WINDOWS
+void localtime_r ( const time_t * clock, struct tm * res )
+{
+	*res = *localtime ( clock );
+}
+#endif
+
 // forward decl
 void sphWarn ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) );
 static bool sphTruncate ( int iFD );
@@ -25872,6 +25879,8 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 		{
 			sphWarn ( "%s", DecorateMessage ( "both embedded and configured schemas found; using embedded" ) );
 			m_tSchema.Reset ();
+			CSphMatch tDocInfo;
+			Swap ( m_tDocInfo, tDocInfo );
 		}
 
 		m_bFirstTagAfterDocset = false;

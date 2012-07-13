@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<sphinx:docset>
+
+<sphinx:schema>
+<sphinx:field name="title"/>
+<sphinx:field name="content"/>
+<sphinx:attr name="gid0" type="int" default="1"/>
+<sphinx:attr name="gid1" type="int" default="1"/>
+<sphinx:attr name="gid2" type="int" default="1"/>
+<sphinx:attr name="gid3" type="int" default="1"/>
+<sphinx:attr name="gid4" type="int" default="1"/>
+<sphinx:attr name="gid5" type="int" default="1"/>
+</sphinx:schema>
+
+<sphinx:document id="101"><title>test</title></sphinx:document>
+<sphinx:document id="102"><title>test</title></sphinx:document>
+<sphinx:document id="103"><title>test</title></sphinx:document>
+<sphinx:document id="104"><title>test</title></sphinx:document>
+<sphinx:document id="105"><title>test</title></sphinx:document>
+<sphinx:document id="106"><title>test</title></sphinx:document>
+<sphinx:document id="107"><title>test</title></sphinx:document>
+<sphinx:document id="108"><title>test</title></sphinx:document>
+<sphinx:document id="109"><title>test</title></sphinx:document>
+<sphinx:document id="110"><title>test</title></sphinx:document>
+
+</sphinx:docset>

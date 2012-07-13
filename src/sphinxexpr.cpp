@@ -693,13 +693,6 @@ DECLARE_TERNARY ( Expr_Mul3_c,	FIRST*SECOND*THIRD,					INTFIRST*INTSECOND*INTTHI
 
 //////////////////////////////////////////////////////////////////////////
 
-#if USE_WINDOWS
-void localtime_r ( const time_t * clock, struct tm * res )
-{
-	*res = *localtime ( clock ); // FIXME?!
-}
-#endif
-
 #define DECLARE_TIMESTAMP(_classname,_expr) \
 	DECLARE_UNARY_TRAITS ( _classname, (float)IntEval(tMatch) ) \
 		virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return IntEval(tMatch); } \

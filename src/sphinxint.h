@@ -1392,6 +1392,10 @@ BYTE sphDoclistHintPack ( SphOffset_t iDocs, SphOffset_t iLen );
 /// startup mva updates arena
 const char *		sphArenaInit ( int iMaxBytes );
 
+#if USE_WINDOWS
+void localtime_r ( const time_t * clock, struct tm * res );
+#endif
+
 #endif // _sphinxint_
 
 //

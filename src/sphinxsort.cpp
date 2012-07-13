@@ -515,7 +515,8 @@ static bool IsGroupbyMagic ( const CSphString & s )
 #define GROUPER_BEGIN_SPLIT(_name) \
 	GROUPER_BEGIN(_name) \
 	time_t tStamp = (time_t)uValue; \
-	struct tm * pSplit = localtime ( &tStamp );
+	struct tm tSplit; \
+	localtime_r ( &tStamp, &tSplit );
 
 
 GROUPER_BEGIN ( CSphGrouperAttr )
@@ -524,13 +525,13 @@ GROUPER_END
 
 
 GROUPER_BEGIN_SPLIT ( CSphGrouperDay )
-	return (pSplit->tm_year+1900)*10000 + (1+pSplit->tm_mon)*100 + pSplit->tm_mday;
+	return (tSplit.tm_year+1900)*10000 + (1+tSplit.tm_mon)*100 + tSplit.tm_mday;
 GROUPER_END
 
 
 GROUPER_BEGIN_SPLIT ( CSphGrouperWeek )
-	int iPrevSunday = (1+pSplit->tm_yday) - pSplit->tm_wday; // prev Sunday day of year, base 1
-	int iYear = pSplit->tm_year+1900;
+	int iPrevSunday = (1+tSplit.tm_yday) - tSplit.tm_wday; // prev Sunday day of year, base 1
+	int iYear = tSplit.tm_year+1900;
 	if ( iPrevSunday<=0 ) // check if we crossed year boundary
 	{
 		// adjust day and year
@@ -546,12 +547,12 @@ GROUPER_END
 
 
 GROUPER_BEGIN_SPLIT ( CSphGrouperMonth )
-	return (pSplit->tm_year+1900)*100 + (1+pSplit->tm_mon);
+	return (tSplit.tm_year+1900)*100 + (1+tSplit.tm_mon);
 GROUPER_END
 
 
 GROUPER_BEGIN_SPLIT ( CSphGrouperYear )
-	return (pSplit->tm_year+1900);
+	return (tSplit.tm_year+1900);
 GROUPER_END
 
 template <class PRED>

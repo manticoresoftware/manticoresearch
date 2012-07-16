@@ -3257,7 +3257,8 @@ public:
 				iErrARow = dDash.m_iErrorsARow;
 			} else if ( iErrARow==dDash.m_iErrorsARow )
 			{
-				dCandidates.Add ( iBestAgent );
+				if ( iBestAgent>=0 )
+					dCandidates.Add ( iBestAgent );
 				iBestAgent = i;
 			}
 		}
@@ -3338,7 +3339,8 @@ public:
 					fBestCriticalErrors = fCriticalErrors;
 				} else if ( fCriticalErrors==fBestCriticalErrors )
 				{
-					dCandidates.Add ( iBestAgent );
+					if ( iBestAgent>=0 )
+						dCandidates.Add ( iBestAgent );
 					iBestAgent = i;
 				}
 			}

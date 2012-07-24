@@ -36,6 +36,7 @@
 bool			g_bQuiet		= false;
 bool			g_bProgress		= true;
 bool			g_bPrintQueries	= false;
+bool			g_bKeepAttrs	= false;
 
 const char *	g_sBuildStops	= NULL;
 int				g_iTopStops		= 100;
@@ -1170,11 +1171,25 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 
 		pIndex->SetProgressCallback ( ShowProgress );
 		if ( bInplaceEnable )
+		{
 			pIndex->SetInplaceSettings ( iHitGap, iDocinfoGap, fRelocFactor, fWriteFactor );
+			if ( g_bKeepAttrs )
+			{
+				fprintf ( stdout, "WARNING: index '%s': inplace_enable=1: --keep-attrs has no effect, ignoring\n", sIndexName );
+				g_bKeepAttrs = false;
+			}
+		}
+
+		if ( g_bKeepAttrs && tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
+		{
+			fprintf ( stdout, "WARNING: index '%s': docinfo=inline: --keep-attrs has no effect, ignoring\n", sIndexName );
+			g_bKeepAttrs = false;
+		}
 
 		pIndex->SetFieldFilter ( pFieldFilter );
 		pIndex->SetTokenizer ( pTokenizer );
 		pIndex->SetDictionary ( pDict );
+		pIndex->SetKeepAttrs ( g_bKeepAttrs );
 		pIndex->Setup ( tSettings );
 
 		bOK = pIndex->Build ( dSources, g_iMemLimit, g_iWriteBuffer )!=0;
@@ -1604,6 +1619,10 @@ int main ( int argc, char ** argv )
 		{
 			g_bPrintQueries = true;
 
+		} else if ( strcasecmp ( argv[i], "--keep-attrs" )==0 )
+		{
+			g_bKeepAttrs = true;
+
 		} else
 		{
 			break;
@@ -1655,6 +1674,7 @@ int main ( int argc, char ** argv )
 				"\t\t\tafter merge; note that src k-list applies anyway)\n"
 				"--dump-rows <FILE>\tdump indexed rows into FILE\n"
 				"--print-queries\t\tprint SQL queries (for debugging)\n"
+				"--keep-attrs\t\tretain attributes from the old index"
 				"\n"
 				"Examples:\n"
 				"indexer --quiet myidx1\treindex 'myidx1' defined in 'sphinx.conf'\n"

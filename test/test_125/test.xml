@@ -69,7 +69,7 @@ INSERT INTO test_table ( id, aa, title, mm, kk ) VALUES
 <sphinxql>SELECT INTERVAL(1, -1,3,5.0) FROM test WHERE id=10</sphinxql>
 <sphinxql>SELECT INTERVAL(id, id-1, id+2) FROM test WHERE id=10</sphinxql>
 <sphinxql>SELECT BITDOT(5, 11,33,55) FROM test WHERE id=10</sphinxql>
-<sphinxql>SELECT GEODIST(1,1,0.9,0.9) FROM test WHERE id=10</sphinxql>
+<sphinxql>SELECT GEODIST(0,0,1,1) FROM test WHERE id=10</sphinxql>
 <sphinxql>SELECT CONTAINS(POLY2D(1,2,3,4,5,6.0),2,3), CONTAINS(POLY2D(1.0,1+1,aa,4,5,6),22,3) FROM test WHERE id=10</sphinxql>
 <sphinxql>SELECT CONTAINS(GEOPOLY2D(55.7522222, 37.6155556, 40.7141667, -74.0063889, 37.9833333, 23.7333333), 51.5, -0.116667) FROM test WHERE id=10</sphinxql>
 <sphinxql>SELECT CONTAINS(GEOPOLY2D(55.7522222, 37.6155556, 40.7141667, -74.0063889, 37.9833333, 23.7333333), 43.25, -2.9666667) FROM test WHERE id=10</sphinxql>

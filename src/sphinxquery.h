@@ -80,7 +80,6 @@ enum XQOperator_e
 struct XQLimitSpec_t
 {
 	bool					m_bFieldSpec;	///< whether field spec was already explicitly set
-	bool					m_bInvisible;	///< totally ignore this set
 	CSphSmallBitvec			m_dFieldMask;	///< fields mask (spec part)
 	int						m_iFieldMaxPos;	///< max position within field (spec part)
 	CSphVector<int>			m_dZones;		///< zone indexes in per-query zones list
@@ -94,17 +93,11 @@ public:
 
 	inline void Reset ()
 	{
-		m_bInvisible = false;
 		m_bFieldSpec = false;
 		m_iFieldMaxPos = 0;
 		m_bZoneSpan = false;
 		m_dFieldMask.Set();
 		m_dZones.Reset();
-	}
-
-	inline void Hide ()
-	{
-		m_bInvisible = true;
 	}
 
 	XQLimitSpec_t ( const XQLimitSpec_t& dLimit )
@@ -160,7 +153,7 @@ public:
 
 public:
 	/// ctor
-	explicit XQNode_t ( const XQLimitSpec_t& dSpec )
+	explicit XQNode_t ( const XQLimitSpec_t & dSpec )
 		: m_pParent ( NULL )
 		, m_eOp ( SPH_QUERY_AND )
 		, m_iOrder ( 0 )
@@ -272,12 +265,14 @@ struct XQQuery_t : public ISphNoncopyable
 	CSphVector<CSphString>	m_dZones;
 	XQNode_t *				m_pRoot;
 	bool					m_bNeedSZlist;
+	bool					m_bSingleWord;
 
 	/// ctor
 	XQQuery_t ()
 	{
 		m_pRoot = NULL;
 		m_bNeedSZlist = false;
+		m_bSingleWord = false;
 	}
 
 	/// dtor

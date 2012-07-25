@@ -1584,10 +1584,22 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, int iRow
 	int iHits = 0;
 	if ( pHits && pHits->Length() )
 	{
+		CSphWordHit tLastHit;
+		tLastHit.m_iDocID = 0;
+		tLastHit.m_iWordID = 0;
+		tLastHit.m_iWordPos = 0;
+
 		iHits = pHits->Length();
 		m_dAccum.Reserve ( m_dAccum.GetLength()+iHits );
 		for ( const CSphWordHit * pHit = pHits->First(); pHit<=pHits->Last(); pHit++ )
+		{
+			// ignore duplicate hits
+			if ( pHit->m_iDocID==tLastHit.m_iDocID && pHit->m_iWordID==tLastHit.m_iWordID && pHit->m_iWordPos==tLastHit.m_iWordPos )
+				continue;
+
 			m_dAccum.Add ( *pHit );
+			tLastHit = *pHit;
+		}
 	}
 	m_dPerDocHitsCount.Add ( iHits );
 

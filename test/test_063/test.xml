@@ -17,6 +17,7 @@ indexer
 searchd
 {
 	<searchd_settings/>
+	workers = threads
 }
 
 source test
@@ -100,6 +101,18 @@ index test3
 		<variant>charset_type = utf-8</variant>
 		<variant>charset_type = sbcs</variant>
 	</dynamic>
+}
+
+index rt
+{
+	type	 = rt
+	path	= <data_path/>/rt
+
+	blend_chars = @
+	charset_type = utf-8
+
+	rt_field	 = text
+	rt_attr_uint	 = idd
 }
 
 
@@ -228,6 +241,11 @@ INSERT INTO test_table VALUES
 	<sphinxql>select * from test3 where match ( ' "the dog " ' )</sphinxql>
 	<sphinxql>select * from test3 where match ( ' dog " is my " ' )</sphinxql>
 	<sphinxql>select * from test3 where match ( ' dog ' )</sphinxql>
+	<!-- here is going regression many same hits at RT index -->
+	<sphinxql>INSERT INTO rt VALUES ( 1, 'thatsgoingverylongwordthathasblendedpartattheand@blendedpart and word at the end', 11 )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 'thatsgoingverylongwordthathasblendedpartattheand', 'rt', 1 )</sphinxql>
+	<sphinxql>INSERT INTO rt VALUES ( 2, 'thatsgoingverylongwordthathasblendedpartattheand@blendedpart', 11 )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 'thatsgoingverylongwordthathasblendedpartattheand', 'rt', 1 )</sphinxql>
 </sphqueries>
 
 </test>

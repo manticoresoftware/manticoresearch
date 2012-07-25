@@ -10906,13 +10906,7 @@ void HandleCommandFlush ( int iSock, int iVer, InputBuffer_c & tReq )
 	if ( !CheckCommandVersion ( iVer, VER_COMMAND_FLUSHATTRS, tReq ) )
 		return;
 
-	// only if flushes are enabled
-	if ( g_iAttrFlushPeriod<=0 )
-	{
-		// flushes are disabled
-		sphLogDebug ( "attrflush: attr_flush_period<=0, command ignored" );
-
-	} else if ( g_eWorkers==MPM_NONE )
+	if ( g_eWorkers==MPM_NONE )
 	{
 		// --console mode, no async thread/process to handle the check
 		sphLogDebug ( "attrflush: --console mode, command ignored" );
@@ -10948,6 +10942,7 @@ void HandleCommandFlush ( int iSock, int iVer, InputBuffer_c & tReq )
 
 #define THD_STATE(_state) { if ( pThd ) pThd->m_eThdState = _state; }
 void HandleCommandSphinxql ( int iSock, int iVer, InputBuffer_c & tReq ); // definition is below
+void StatCountCommand ( int iCmd, int iCount=1 );
 
 /// ping/pong exchange over API
 void HandleCommandPing ( int iSock, int iVer, InputBuffer_c & tReq )
@@ -11075,12 +11070,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 		}
 
 		// count commands
-		if ( g_pStats && iCommand>=0 && iCommand<SEARCHD_COMMAND_TOTAL )
-		{
-			g_tStatsMutex.Lock();
-			g_pStats->m_iCommandCount[iCommand]++;
-			g_tStatsMutex.Unlock();
-		}
+		StatCountCommand ( iCommand );
 
 		// get request body
 		assert ( iLength>=0 && iLength<=g_iMaxPacketSize );
@@ -12902,6 +12892,8 @@ void HandleMysqlMultiStmt ( NetOutputBuffer_c & tOut, BYTE uPacketID, const CSph
 	if ( pThd )
 		pThd->m_sCommand = g_dSqlStmts[STMT_SELECT];
 
+	StatCountCommand ( SEARCHD_COMMAND_SEARCH, iSelect );
+
 	// setup query for searching
 	SearchHandler_c tHandler ( iSelect, true );
 	iSelect = 0;
@@ -13393,6 +13385,7 @@ public:
 			{
 				MEMORY ( SPH_MEM_SELECT_SQL );
 
+				StatCountCommand ( SEARCHD_COMMAND_SEARCH );
 				SearchHandler_c tHandler ( 1, true );
 				tHandler.m_dQueries[0] = dStmt.Begin()->m_tQuery;
 
@@ -13415,6 +13408,10 @@ public:
 		case STMT_SHOW_STATUS:
 		case STMT_SHOW_META:
 		case STMT_SHOW_AGENTSTATUS:
+			if ( eStmt==STMT_SHOW_STATUS )
+			{
+				StatCountCommand ( SEARCHD_COMMAND_STATUS );
+			}
 			HandleMysqlMeta ( tOut, uPacketID, m_tLastMeta, dRows, eStmt, false );
 			return;
 
@@ -13466,10 +13463,14 @@ public:
 		case STMT_CALL:
 			pStmt->m_sCallProc.ToUpper();
 			if ( pStmt->m_sCallProc=="SNIPPETS" )
+			{
+				StatCountCommand ( SEARCHD_COMMAND_EXCERPT );
 				HandleMysqlCallSnippets ( tOut, uPacketID, *pStmt );
-			else if ( pStmt->m_sCallProc=="KEYWORDS" )
+			} else if ( pStmt->m_sCallProc=="KEYWORDS" )
+			{
+				StatCountCommand ( SEARCHD_COMMAND_KEYWORDS );
 				HandleMysqlCallKeywords ( tOut, uPacketID, *pStmt );
-			else
+			} else
 			{
 				m_sError.SetSprintf ( "no such builtin procedure %s", pStmt->m_sCallProc.cstr() );
 				SendMysqlErrorPacket ( tOut, uPacketID, sQuery.cstr(), m_sError.cstr() );
@@ -13485,6 +13486,7 @@ public:
 			return;
 
 		case STMT_UPDATE:
+			StatCountCommand ( SEARCHD_COMMAND_UPDATE );
 			HandleMysqlUpdate ( tOut, uPacketID, *pStmt, sQuery, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction );
 			return;
 
@@ -13649,6 +13651,17 @@ void HandleCommandSphinxql ( int iSock, int iVer, InputBuffer_c & tReq )
 	tOut.FreezeBlock ( "\x01\x00\x20\x00\x00\x00The output buffer is overloaded.", 38 );
 	tSession.Execute ( sCommand, tOut, uDummy );
 	tOut.Flush ( true );
+}
+
+
+void StatCountCommand ( int iCmd, int iCount )
+{
+	if ( g_pStats && iCmd>=0 && iCmd<SEARCHD_COMMAND_TOTAL )
+	{
+		g_tStatsMutex.Lock();
+		g_pStats->m_iCommandCount[iCmd] += iCount;
+		g_tStatsMutex.Unlock();
+	}
 }
 
 
@@ -15897,7 +15910,7 @@ int PreforkChild ();
 
 void CheckFlush ()
 {
-	if ( g_iAttrFlushPeriod<=0 || g_pFlush->m_bFlushing )
+	if ( g_pFlush->m_bFlushing )
 		return;
 
 	// do a periodic check, unless we have a forced check
@@ -15906,7 +15919,7 @@ void CheckFlush ()
 		static int64_t tmLastCheck = -1000;
 		int64_t tmNow = sphMicroTimer();
 
-		if ( ( tmLastCheck + int64_t(g_iAttrFlushPeriod)*I64C(1000000) )>=tmNow )
+		if ( !g_iAttrFlushPeriod || ( tmLastCheck + int64_t(g_iAttrFlushPeriod)*I64C(1000000) )>=tmNow )
 			return;
 
 		tmLastCheck = tmNow;
@@ -16953,11 +16966,12 @@ void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 		g_dThd.Add ( pThd );
 		if ( !sphThreadCreate ( &pThd->m_tThd, HandlerThread, pThd, true ) )
 		{
+			int iErr = errno;
 			g_dThd.Pop();
 			SafeDelete ( pThd );
 
 			FailClient ( iClientSock, SEARCHD_RETRY, "failed to create worker thread" );
-			sphWarning ( "failed to create worker thread, threads(%d), error[%d] %s", g_dThd.GetLength(), errno, strerror(errno) );
+			sphWarning ( "failed to create worker thread, threads(%d), error[%d] %s", g_dThd.GetLength(), iErr, strerror(iErr) );
 		}
 		g_tThdMutex.Unlock ();
 		return;

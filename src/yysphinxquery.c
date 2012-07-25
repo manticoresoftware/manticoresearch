@@ -1173,7 +1173,7 @@ yyreduce:
 
   case 25:
 
-    { yyval.pNode = yyvsp[-1].pNode; if ( yyval.pNode ) yyval.pNode->m_dSpec.Hide(); pParser->m_dStateSpec.Reset(); ;}
+    { yyval.pNode = yyvsp[-1].pNode; ;}
     break;
 
   case 27:

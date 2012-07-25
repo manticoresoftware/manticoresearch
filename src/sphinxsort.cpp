@@ -2128,6 +2128,8 @@ static ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, con
 						continue;
 					if ( tItem.m_sExpr.Begins("@") )
 						iAttr = tSchema.GetAttrIndex ( tItem.m_sExpr.cstr() );
+					else if ( tItem.m_sExpr=="count(*)" )
+						iAttr = tSchema.GetAttrIndex ( "@count" );
 					break; // break in any case; because we did match the alias
 				}
 			}
@@ -3026,12 +3028,6 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		const CSphString & sExpr = tItem.m_sExpr;
 		bool bIsCount = IsCount(sExpr);
 		bHasCount |= bIsCount;
-
-		if ( bIsCount && sExpr.cstr()[0]!='@' )
-		{
-			CSphString & sExprW = const_cast < CSphString & > ( sExpr );
-			sExprW = "@count";
-		}
 
 		if ( sExpr=="*" )
 		{

@@ -1006,7 +1006,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	// parse all sources
 	CSphVector<CSphSource*> dSources;
 	bool bGotAttrs = false;
-	bool bGotJoinedFields = false;
 	bool bSpawnFailed = false;
 
 	for ( CSphVariant * pSourceName = hIndex("source"); pSourceName; pSourceName = pSourceName->m_pNext )
@@ -1027,9 +1026,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 
 		if ( pSource->HasAttrsConfigured() )
 			bGotAttrs = true;
-
-		if ( pSource->HasJoinedFields() )
-			bGotJoinedFields = true;
 
 		// strip_html, index_html_attrs
 		CSphString sError;
@@ -1160,12 +1156,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		if ( bGotAttrs && tSettings.m_eDocinfo==SPH_DOCINFO_NONE )
 		{
 			fprintf ( stdout, "FATAL: index '%s': got attributes, but docinfo is 'none' (fix your config file).\n", sIndexName );
-			exit ( 1 );
-		}
-
-		if ( bGotJoinedFields && tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
-		{
-			fprintf ( stdout, "FATAL: index '%s': got joined fields, but docinfo is 'inline' (fix your config file).\n", sIndexName );
 			exit ( 1 );
 		}
 

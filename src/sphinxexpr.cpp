@@ -3423,7 +3423,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 	Func_e eFunc = g_dFuncs[iFunc].m_eFunc;
 
 	// check args count
-	if ( iRight<0 )
+	if ( iRight<0 || eFunc==FUNC_IN )
 	{
 		int iExpectedArgc = g_dFuncs[iFunc].m_iArgs;
 		int iArgc = 0;

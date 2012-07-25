@@ -1778,6 +1778,9 @@ class SphinxConfig
 		}
 		else // for rt indexes we need to clean up all index files before the run.
 		{
+			// remove binlog files if any
+			$this->EraseIndexFiles ( 'data/binlog' );
+			
 			$pattern = "/.*?index\s+\S*?(\s*\:\s*\S*?)?\s*\{(.*?)\}.*?/s";
 			preg_match_all ( $pattern, $config, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE );
 			// parse indexes

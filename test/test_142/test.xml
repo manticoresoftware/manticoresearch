@@ -7,8 +7,6 @@
 <watchdog/>
 </requires>
 
-<skip_indexer/>
-
 <config>
 searchd
 {
@@ -49,6 +47,22 @@ index kw
 	min_prefix_len = 1
 }
 
+source src_test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select 1, 11 as idd, 'dummy'
+	sql_attr_uint	= idd
+}
+
+index test
+{
+	source			= src_test
+	path			= <data_path/>/test
+    charset_type 	= utf-8
+    docinfo			= extern
+	dict = crc
+}
 
 </config>
 
@@ -113,6 +127,10 @@ $query ( $results, "INSERT INTO kw VALUES (100, 'test stuff', 111)", $sock);
 
 $query ( $results, "SELECT * FROM crc,kw WHERE MATCH('test')", $sock );
 $query ( $results, "SELECT * FROM crc,kw", $sock );
+$query ( $results, "SELECT * FROM test", $sock );
+$query ( $results, "UPDATE test SET idd=111 WHERE id=1", $sock );
+$query ( $results, "SELECT * FROM test", $sock );
+$client->FlushAttributes();
 
 $results[]= "killing";
 KillSearchd ('config.conf', 'searchd.pid',9,false);
@@ -127,6 +145,7 @@ if ( $sock === false )
 
 $query ( $results, "SELECT * FROM crc,kw WHERE MATCH('test')", $sock );
 $query ( $results, "SELECT * FROM crc,kw", $sock );
+$query ( $results, "SELECT * FROM test", $sock );
 
 ]]></custom_test>
 

@@ -1414,12 +1414,23 @@ struct ExtCacheEntry_t
 };
 
 
+struct ExtCachedKeyword_t : public XQKeyword_t
+{
+	CSphString	m_sDictWord;
+	SphWordID_t	m_iWordID;
+	float		m_fIDF;
+	int			m_iDocs;
+	int			m_iHits;
+};
+
 /// simple in-memory multi-term cache
 class ExtCached_c : public ExtNode_i
 {
 protected:
 	CSphVector<ExtCacheEntry_t>		m_dCache;
-	CSphVector<ExtQword_t>			m_dQwords;
+	CSphFixedVector<ExtCachedKeyword_t>	m_dWords;
+	CSphSmallBitvec					m_dFieldMask;
+	bool							m_bExcluded;
 
 	int		m_iUniqDocs;
 
@@ -1438,10 +1449,14 @@ public:
 	virtual void					SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 	virtual bool					GotHitless () { return false; }
 	virtual int						GetDocsCount () { return m_iUniqDocs; }
+
+	void							FillCacheIDF ();
+	void							PopulateCache ( const ISphQwordSetup & tSetup, bool bFillStat );
 };
 
 
 ExtCached_c::ExtCached_c ( const XQNode_t * pNode, const ISphQwordSetup & tSetup )
+	: 	m_dWords ( pNode->m_dWords.GetLength() )
 {
 #ifndef NDEBUG
 	// sanity checks
@@ -1455,35 +1470,57 @@ ExtCached_c::ExtCached_c ( const XQNode_t * pNode, const ISphQwordSetup & tSetup
 	}
 #endif
 
-	m_dCache.Reserve ( pNode->m_dWords.GetLength() );
-	m_dQwords.Resize ( pNode->m_dWords.GetLength() );
 	m_iAtomPos = pNode->m_dWords[0].m_iAtomPos;
+	m_dFieldMask = pNode->m_dSpec.m_dFieldMask;
+	m_bExcluded = pNode->m_bNotWeighted;
+	m_dCache.Reserve ( pNode->m_dWords.GetLength() );
 
-	// loop all the keywords and precache them
+	// copy all the keywords
+	BYTE sTmpWord [ 3*SPH_MAX_WORD_LEN + 16 ];
 	ARRAY_FOREACH ( i, pNode->m_dWords )
 	{
-		// our little stemming buffer (morpohlogy aware dictionary might need to change the keyword)
-		BYTE sTmp [ 3*SPH_MAX_WORD_LEN + 16 ];
-		strncpy ( (char*)sTmp, pNode->m_dWords[i].m_sWord.cstr(), sizeof(sTmp) );
-		sTmp[sizeof(sTmp)-1] = '\0';
+		ExtCachedKeyword_t & tWord = m_dWords[i];
+		tWord.m_sWord = pNode->m_dWords[i].m_sWord;
+		tWord.m_bFieldStart = pNode->m_dWords[i].m_bFieldStart;
+		tWord.m_bFieldEnd = pNode->m_dWords[i].m_bFieldEnd;
+		tWord.m_uStarPosition = pNode->m_dWords[i].m_uStarPosition;
+		tWord.m_iDocs = 0;
+		tWord.m_iHits = 0;
+
+		// our little stemming buffer (morphology aware dictionary might need to change the keyword)
+		strncpy ( (char*)sTmpWord, tWord.m_sWord.cstr(), sizeof(sTmpWord) );
+		sTmpWord[sizeof(sTmpWord)-1] = '\0';
 
 		// setup keyword disk reader
-		ISphQword * pQword = tSetup.QwordSpawn ( pNode->m_dWords[i] );
-		pQword->m_sWord = pNode->m_dWords[i].m_sWord;
-		pQword->m_iWordID = tSetup.m_pDict->GetWordID ( sTmp );
-		pQword->m_sDictWord = (const char*) sTmp;
-		pQword->m_bExpanded = pNode->m_dWords[i].m_bExpanded;
+		tWord.m_iWordID = tSetup.m_pDict->GetWordID ( sTmpWord );
+		tWord.m_sDictWord = (const char *)sTmpWord;
+	}
+
+	PopulateCache ( tSetup, true );
+}
+
+void ExtCached_c::PopulateCache ( const ISphQwordSetup & tSetup, bool bFillStat )
+{
+	// loop all the keywords and precache them
+	ARRAY_FOREACH ( i, m_dWords )
+	{
+		const ExtCachedKeyword_t & tWord = m_dWords[i];
+		ISphQword * pQword = tSetup.QwordSpawn ( tWord );
+		pQword->m_sWord = tWord.m_sWord;
+		pQword->m_iWordID = tWord.m_iWordID;
+		pQword->m_sDictWord = tWord.m_sDictWord;
+		pQword->m_bExpanded = true;
 
 		bool bOk = tSetup.QwordSetup ( pQword );
 
 		// setup keyword idf and stats
-		m_dQwords[i].m_sWord = pNode->m_dWords[i].m_sWord;
-		m_dQwords[i].m_sDictWord = (const char*) sTmp;
-		m_dQwords[i].m_iDocs = pQword->m_iDocs;
-		m_dQwords[i].m_iHits = pQword->m_iHits;
-		m_dQwords[i].m_iQueryPos = m_iAtomPos;
-		m_dQwords[i].m_bExpanded = true;
-		m_dQwords[i].m_bExcluded = pNode->m_bNotWeighted;
+		if ( bFillStat )
+		{
+			m_dWords[i].m_iDocs = pQword->m_iDocs;
+			m_dWords[i].m_iHits = pQword->m_iHits;
+
+			m_iUniqDocs += pQword->m_iDocs;
+		}
 
 		if ( !bOk )
 		{
@@ -1502,13 +1539,10 @@ ExtCached_c::ExtCached_c ( const XQNode_t * pNode, const ISphQwordSetup & tSetup
 			for ( Hitpos_t uHit = pQword->GetNextHit(); uHit!=EMPTY_HIT; uHit = pQword->GetNextHit() )
 			{
 				// apply field limits
-				if ( !pNode->m_dSpec.m_dFieldMask.Test ( HITMAN::GetField(uHit) ) )
+				if ( !m_dFieldMask.Test ( HITMAN::GetField(uHit) ) )
 					continue;
 
-				// apply zone limits
-				if ( pNode->m_dSpec.m_dZones.GetLength() )
-				{
-				}
+				// FIXME!!! apply zone limits too
 
 				// ok, this hit works, copy it
 				ExtCacheEntry_t & tEntry = m_dCache.Add ();
@@ -1524,10 +1558,13 @@ ExtCached_c::ExtCached_c ( const XQNode_t * pNode, const ISphQwordSetup & tSetup
 
 	// sort from keyword order to document order
 	m_dCache.Sort();
-	m_iUniqDocs = 1;
-	for ( int i=1; i<m_dCache.GetLength(); i++ )
-		if ( m_dCache[i].m_uDocid!=m_dCache[i-1].m_uDocid )
-			m_iUniqDocs++;
+	if ( bFillStat && m_dCache.GetLength() )
+	{
+		m_iUniqDocs = 1;
+		for ( int i=1; i<m_dCache.GetLength(); i++ )
+			if ( m_dCache[i].m_uDocid!=m_dCache[i-1].m_uDocid )
+				m_iUniqDocs++;
+	}
 
 	// reset iterators
 	m_iCurDocsBegin = 0;
@@ -1536,12 +1573,11 @@ ExtCached_c::ExtCached_c ( const XQNode_t * pNode, const ISphQwordSetup & tSetup
 }
 
 
-void ExtCached_c::Reset ( const ISphQwordSetup & )
+void ExtCached_c::Reset ( const ISphQwordSetup & tSetup )
 {
-	// FIXME! should this also reset data?
-	m_iCurDocsBegin = 0;
-	m_iCurDocsEnd = 0;
-	m_iCurHit = 0;
+	m_dCache.Resize ( 0 );
+	PopulateCache ( tSetup, false );
+	FillCacheIDF();
 }
 
 
@@ -1622,36 +1658,57 @@ const ExtHit_t * ExtCached_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 
 void ExtCached_c::GetQwords ( ExtQwordsHash_t & hQwords )
 {
-	ARRAY_FOREACH ( i, m_dQwords )
-		hQwords.Add ( m_dQwords[i], m_dQwords[i].m_sWord );
+	ARRAY_FOREACH ( i, m_dWords )
+	{
+		const ExtCachedKeyword_t & tWord = m_dWords[i];
+
+		ExtQword_t tQword;
+		tQword.m_sWord = tWord.m_sWord;
+		tQword.m_sDictWord = tWord.m_sDictWord;
+		tQword.m_iDocs = tWord.m_iDocs;
+		tQword.m_iHits = tWord.m_iHits;
+		tQword.m_fIDF = -1.0f;
+		tQword.m_iQueryPos = m_iAtomPos;
+		tQword.m_bExpanded = true;
+		tQword.m_bExcluded = m_bExcluded;
+
+		hQwords.Add ( tQword, m_dWords[i].m_sWord );
+	}
 }
 
 
 void ExtCached_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 {
 	// pull idfs
-	ARRAY_FOREACH ( i, m_dQwords )
+	ARRAY_FOREACH ( i, m_dWords )
 	{
-		ExtQword_t * pHashed = hQwords ( m_dQwords[i].m_sWord );
+		ExtQword_t * pHashed = hQwords ( m_dWords[i].m_sWord );
 		if ( pHashed )
-			m_dQwords[i].m_fIDF = pHashed->m_fIDF;
+			m_dWords[i].m_fIDF = pHashed->m_fIDF;
 	}
 
+	FillCacheIDF();
+}
+
+
+void ExtCached_c::FillCacheIDF ()
+{
 	// compute tf*idf for every document
 	// store it into the opening hit
+	CSphVector<int> dWords;
 	for ( int i=0; i<m_dCache.GetLength(); )
 	{
 		// single hit fastpath
 		if ( i+1==m_dCache.GetLength() || m_dCache[i+1].m_uDocid!=m_dCache[i].m_uDocid )
 		{
-			m_dCache[i].m_fTFIDF = m_dQwords [ m_dCache[i].m_iQword ].m_fIDF / ( 1.0f+SPH_BM25_K1 );
+			m_dCache[i].m_fTFIDF = m_dWords [ m_dCache[i].m_iQword ].m_fIDF / ( 1.0f+SPH_BM25_K1 );
 			i++;
 			continue;;
 		}
 
+		dWords.Resize ( 0 );
 		int j;
 		SphDocID_t uDocid = m_dCache[i].m_uDocid;
-		CSphVector<int> dWords;
 		for ( j=i; j<m_dCache.GetLength() && m_dCache[j].m_uDocid==uDocid; j++ )
 			dWords.Add ( m_dCache[j].m_iQword );
 
@@ -1663,7 +1720,7 @@ void ExtCached_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 		{
 			if ( dWords[k]!=dWords[k-1] )
 			{
-				fTFIDF += float(iTF) / float(iTF+SPH_BM25_K1) * m_dQwords[dWords[k-1]].m_fIDF;
+				fTFIDF += float(iTF) / float(iTF+SPH_BM25_K1) * m_dWords[dWords[k-1]].m_fIDF;
 				iTF = 1;
 			} else
 			{

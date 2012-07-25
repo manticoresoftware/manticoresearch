@@ -15842,14 +15842,14 @@ struct BinaryNode_t
 	int m_iHi;
 };
 
-static void BuildExpandedTree ( const XQKeyword_t & tRootWord, CSphVector<CSphNamedInt> & dWordSrc, XQNode_t * pRoot, bool bRt )
+static void BuildExpandedTree ( const XQKeyword_t & tRootWord, CSphVector<CSphNamedInt> & dWordSrc, XQNode_t * pRoot )
 {
 	assert ( dWordSrc.GetLength() );
 	pRoot->m_dWords.Reset();
 
 	// put all tiny enough expansions in a single node
 	int iTinyStart = 0;
-	if ( pRoot->m_dSpec.m_dZones.GetLength() || bRt )
+	if ( pRoot->m_dSpec.m_dZones.GetLength() )
 	{
 		// OPTIMIZE
 		// ExtCached_c only supports field filtering but not zone filtering for now
@@ -16118,7 +16118,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 	// copy the original word (iirc it might get overwritten),
 	// and build a binary tree of all the expansions
 	const XQKeyword_t tRootWord = pNode->m_dWords[0];
-	BuildExpandedTree ( tRootWord, dExpanded, pNode, tCtx.m_bRt );
+	BuildExpandedTree ( tRootWord, dExpanded, pNode );
 
 	return pNode;
 }
@@ -16159,7 +16159,6 @@ XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphString & sError, 
 	tCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
 	tCtx.m_iExpansionLimit = m_iExpansionLimit;
 	tCtx.m_bHasMorphology = m_pDict->HasMorphology();
-	tCtx.m_bRt = false;
 
 	pNode = sphExpandXQNode ( pNode, tCtx );
 
@@ -27328,16 +27327,22 @@ const BYTE * CWordlist::AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint
 }
 
 
+int sphGetExpansionMagic ( int iDocs, int iHits )
+{
+	if ( iHits<=256 ) // magic threshold; mb make this configurable?
+		return 1;
+	else
+		return iDocs + 1;
+}
+
+
 static inline void AddExpansion ( CSphVector<CSphNamedInt> & dExpanded, const KeywordsBlockReader_c & tCtx )
 {
 	assert ( tCtx.GetWordLen() );
 
 	CSphNamedInt & tRes = dExpanded.Add();
 	tRes.m_sName = tCtx.GetWord();
-	if ( tCtx.m_iHits<=256 ) // magic threshold; mb make this configurable?
-		tRes.m_iValue = 1;
-	else
-		tRes.m_iValue = tCtx.m_iDocs + 1;
+	tRes.m_iValue = sphGetExpansionMagic ( tCtx.m_iDocs, tCtx.m_iHits );
 }
 
 

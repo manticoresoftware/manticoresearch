@@ -4827,6 +4827,12 @@ public:
 
 	virtual const CSphMatch & GetNextDoc ( DWORD * )
 	{
+		if ( !m_pDocReader )
+		{
+			m_tMatch.m_iDocID = 0;
+			return m_tMatch;
+		}
+
 		for ( ;; )
 		{
 			const RtDoc_t * pDoc = m_pDocReader->UnzipDoc();
@@ -5060,10 +5066,18 @@ bool RtIndex_t::RtQwordSetupSegment ( RtQword_t * pQword, RtSegment_t * pCurSeg,
 }
 
 
-void RtIndex_t::GetPrefixedWords ( const char * sWord, int iWordLen, const char *,
+struct DocHitPair_t
+{
+	int m_iDocs;
+	int m_iHits;
+};
+
+
+void RtIndex_t::GetPrefixedWords ( const char * sWord, int iWordLen, const char * sWildcard,
 	CSphVector<CSphNamedInt> & dPrefixedWords, BYTE *, int ) const
 {
-	SmallStringHash_T<int> hPrefixedWords;
+	const int iSkipMagic = ( *sWord<0x20 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
+	SmallStringHash_T<DocHitPair_t> hPrefixedWords;
 	ARRAY_FOREACH ( i, m_pSegments )
 	{
 		RtSegment_t * pCurSeg = m_pSegments[i];
@@ -5095,17 +5109,23 @@ void RtIndex_t::GetPrefixedWords ( const char * sWord, int iWordLen, const char 
 			if ( iCmp<0 )
 			{
 				break;
-			} else if ( iCmp==0 && iWordLen<=pWord->m_sWord[0] )
+			} else if ( iCmp==0 && iWordLen<=pWord->m_sWord[0] && sphWildcardMatch ( (const char *)pWord->m_sWord+1+iSkipMagic, sWildcard ) )
 			{
 				CSphString sExpandedWord;
 				sExpandedWord.SetBinary ( (const char *)pWord->m_sWord+1, pWord->m_sWord[0] );
-				int * pDocs = hPrefixedWords ( sExpandedWord );
-				if ( pDocs )
+				DocHitPair_t * pPair = hPrefixedWords ( sExpandedWord );
+				if ( pPair )
 				{
-					*pDocs += pWord->m_uDocs;
+					// FIXME!!! in case of REPLACED data docs\hits grows a lot and ExtCached caches less words
+					// keep track of alive docs?
+					pPair->m_iDocs += pWord->m_uDocs;
+					pPair->m_iHits += pWord->m_uHits;
 				} else
 				{
-					hPrefixedWords.Add ( pWord->m_uDocs, sExpandedWord );
+					DocHitPair_t tPair;
+					tPair.m_iDocs = pWord->m_uDocs;
+					tPair.m_iHits = pWord->m_uHits;
+					hPrefixedWords.Add ( tPair, sExpandedWord );
 				}
 			}
 			// FIXME!!! same case 'boxi*' matches 'box' document at plain index
@@ -5119,7 +5139,8 @@ void RtIndex_t::GetPrefixedWords ( const char * sWord, int iWordLen, const char 
 	{
 		CSphNamedInt & tExpanded = dPrefixedWords.Add ();
 		tExpanded.m_sName = hPrefixedWords.IterateGetKey();
-		tExpanded.m_iValue = hPrefixedWords.IterateGet();
+		const DocHitPair_t & tPair = hPrefixedWords.IterateGet();
+		tExpanded.m_iValue = sphGetExpansionMagic ( tPair.m_iDocs, tPair.m_iHits );
 	}
 }
 
@@ -5460,7 +5481,6 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		tCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
 		tCtx.m_iExpansionLimit = m_iExpansionLimit;
 		tCtx.m_bHasMorphology = m_pDict->HasMorphology();
-		tCtx.m_bRt = true;
 		tParsed.m_pRoot = sphExpandXQNode ( tParsed.m_pRoot, tCtx );
 	}
 

@@ -1560,11 +1560,15 @@ const ExtDoc_t * ExtCached_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		ExtDoc_t & tDoc = m_dDocs[iDoc++];
 		tDoc.m_uDocid = uDocid;
 		tDoc.m_pDocinfo = NULL; // no country for old inline men
+		tDoc.m_uDocFields = 0;
 		tDoc.m_uHitlistOffset = 0;
 		tDoc.m_fTFIDF = m_dCache[iEnd].m_fTFIDF;
 
 		while ( iEnd<m_dCache.GetLength() && m_dCache[iEnd].m_uDocid==uDocid )
+		{
+			tDoc.m_uDocFields |= 1<< ( HITMAN::GetField ( m_dCache[iEnd].m_uHitpos ) );
 			iEnd++;
+		}
 	}
 	m_iCurDocsEnd = iEnd;
 

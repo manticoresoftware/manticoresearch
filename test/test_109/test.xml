@@ -5,6 +5,7 @@
 searchd
 {
 <searchd_settings/>
+	seamless_rotate = 1
 	workers = threads
 	binlog_path =
 }

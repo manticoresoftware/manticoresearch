@@ -124,6 +124,11 @@ DROP TABLE IF EXISTS test_table;
 <custom_test><![CDATA[
 
 global $g_locals, $sd_address, $sd_sphinxql_port;
+
+RunIndexer ( $errors, '--rotate --merge i1-crc i2-crc' );
+RunIndexer ( $errors, '--rotate --merge i1-kw i2-kw' );
+usleep ( 100000 );
+
 $results = array();
 $sockStr = "$sd_address:$sd_sphinxql_port";
 if ($sd_address == "localhost")
@@ -139,9 +144,6 @@ if ( $sock === false )
 	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
 	return;
 }
-
-RunIndexer ( $errors, '--rotate --merge i1-crc i2-crc' );
-RunIndexer ( $errors, '--rotate --merge i1-kw i2-kw' );
 
 $title = "";
 $ctx = "";
@@ -222,6 +224,7 @@ $queryAPI = create_function('$client,$words,$idx', '
 $result = $client->Query ( $words, $idx );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError();
 ');
 
+usleep ( 100000 );
 $client->SetLimits ( 0, 1 );
 $results[] = "merge+rotate and merge of indexes v31";
 $results[] = $queryAPI ( $client, ' dummy ', 'i1-crc' );
@@ -232,3 +235,4 @@ $results[] = $queryAPI ( $client, ' dummy ', 'i1-kw' );
 ]]></custom_test>
 
 </test>
+

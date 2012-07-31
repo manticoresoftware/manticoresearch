@@ -47,6 +47,58 @@ index dummysrcmain
 	path			= <data_path/>/dummysrcmain
 }
 
+source src_1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT *, 11 as idd FROM test_table where id &lt;= 100
+	sql_attr_uint	= idd
+}
+
+source src_2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT *, 11 as idd FROM test_table where id &gt; 100
+	sql_attr_uint	= idd
+}
+
+index i1-crc
+{
+	source			= src_1
+	path			= <data_path/>/i1-crc
+	docinfo			= extern
+	charset_type	= utf-8
+	dict = crc	
+}
+
+index i2-crc
+{
+	source			= src_2
+	path			= <data_path/>/i2-crc
+	docinfo			= extern
+	charset_type	= utf-8
+	dict = crc	
+}
+
+index i1-kw
+{
+	source			= src_1
+	path			= <data_path/>/i1-kw
+	docinfo			= extern
+	charset_type	= utf-8
+	dict = keywords
+}
+
+index i2-kw
+{
+	source			= src_2
+	path			= <data_path/>/i2-kw
+	docinfo			= extern
+	charset_type	= utf-8
+	dict = keywords	
+}
+
 </config>
 
 <db_create>
@@ -60,6 +112,13 @@ CREATE TABLE test_table
 <db_drop>
 DROP TABLE IF EXISTS test_table;
 </db_drop>
+
+<custom_insert><![CDATA[
+	$q = "( 1, 'dummy word not another' )";
+	for ( $i=2; $i<1000; $i++ )
+		$q .= ", ( $i, 'dummy word not another' )";
+	mysql_query ( "insert into test_table values $q" );
+]]></custom_insert>
 
 <custom_test><![CDATA[
 
@@ -79,6 +138,9 @@ if ( $sock === false )
 	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
 	return;
 }
+
+RunIndexer ( $errors, '--rotate --merge i1-crc i2-crc' );
+RunIndexer ( $errors, '--rotate --merge i1-kw i2-kw' );
 
 $title = "";
 $ctx = "";
@@ -153,6 +215,16 @@ for ( $i=0; $i<50; $i++ )
 	$queried += mysql_num_rows ($rq);
 }
 $results[] = "segments merge: replaced=$replaced, queried=$queried";
+
+// issues with merge+rotate and merge of indexes v31
+$queryAPI = create_function('$client,$words,$idx', '
+$result = $client->Query ( $words, $idx );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError();
+');
+
+$client->SetLimits ( 0, 1 );
+$results[] = "merge+rotate and merge of indexes v31";
+$results[] = $queryAPI ( $client, ' dummy ', 'i1-crc' );
+$results[] = $queryAPI ( $client, ' dummy ', 'i1-kw' );
 
 @mysql_close($sock);
 	

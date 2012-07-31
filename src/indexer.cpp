@@ -1314,7 +1314,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 		sFrom [ sizeof(sFrom)-1 ] = '\0';
 
 		if ( bRotate )
-			snprintf ( sTo, sizeof(sTo), "%s.%s.new", sPath, g_dExt[iExt] );
+			snprintf ( sTo, sizeof(sTo), "%s.new.%s", sPath, g_dExt[iExt] );
 		else
 			snprintf ( sTo, sizeof(sTo), "%s.%s", sPath, g_dExt[iExt] );
 

@@ -493,7 +493,7 @@ enum
 {
 	VER_COMMAND_SEARCH		= 0x11A,
 	VER_COMMAND_EXCERPT		= 0x104,
-	VER_COMMAND_UPDATE		= 0x102,
+	VER_COMMAND_UPDATE		= 0x103,
 	VER_COMMAND_KEYWORDS	= 0x100,
 	VER_COMMAND_STATUS		= 0x100,
 	VER_COMMAND_FLUSHATTRS	= 0x100,
@@ -8986,6 +8986,10 @@ bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue )
 	{
 		m_pQuery->m_bReverseScan = ( tValue.m_iValue!=0 );
 
+	} else if ( sOpt=="ignore_nonexistent_columns" )
+	{
+		m_pQuery->m_bIgnoreNonexistent = ( tValue.m_iValue!=0 );
+
 	} else if ( sOpt=="comment" )
 	{
 		m_pQuery->m_sComment = tValue.m_sValue;
@@ -10350,7 +10354,7 @@ void UpdateRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuffe
 {
 	const char* sIndexes = tAgent.m_sIndexes.cstr();
 	int iReqSize = 4+strlen(sIndexes); // indexes string
-	iReqSize += 4; // attrs array len, data
+	iReqSize += 8; // attrs array len, data, non-existent flags
 	ARRAY_FOREACH ( i, m_tUpd.m_dAttrs )
 		iReqSize += 8 + strlen ( m_tUpd.m_dAttrs[i].m_sName.cstr() );
 	iReqSize += 4; // number of updates
@@ -10364,6 +10368,7 @@ void UpdateRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuffe
 
 	tOut.SendString ( sIndexes );
 	tOut.SendInt ( m_tUpd.m_dAttrs.GetLength() );
+	tOut.SendInt ( m_tUpd.m_bIgnoreNonexistent ? 1 : 0 );
 	ARRAY_FOREACH ( i, m_tUpd.m_dAttrs )
 	{
 		tOut.SendString ( m_tUpd.m_dAttrs[i].m_sName.cstr() );
@@ -10434,6 +10439,8 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq )
 	bool bMvaUpdate = false;
 
 	tUpd.m_dAttrs.Resize ( tReq.GetDword() ); // FIXME! check this
+	if ( iVer>=0x103 )
+		tUpd.m_bIgnoreNonexistent = ( tReq.GetDword() & 1 )!=0;
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
 	{
 		tUpd.m_dAttrs[i].m_sName = tReq.GetString ();

@@ -400,6 +400,7 @@ public:
 class CSphUpdateQueue : public CSphMatchQueueTraits
 {
 	CSphAttrUpdateEx *	m_pUpdate;
+	bool				m_bIgnoreNonexistent;
 private:
 	void DoUpdate()
 	{
@@ -407,6 +408,7 @@ private:
 			return;
 
 		CSphAttrUpdate tSet;
+		tSet.m_bIgnoreNonexistent = m_bIgnoreNonexistent;
 		tSet.m_dAttrs = m_pUpdate->m_pUpdate->m_dAttrs;
 		tSet.m_dPool = m_pUpdate->m_pUpdate->m_dPool;
 		tSet.m_dRowOffset.Resize ( m_iUsed );
@@ -433,9 +435,10 @@ private:
 	}
 public:
 	/// ctor
-	CSphUpdateQueue ( int iSize, CSphAttrUpdateEx * pUpdate )
+	CSphUpdateQueue ( int iSize, CSphAttrUpdateEx * pUpdate, bool bIgnoreNonexistent )
 		: CSphMatchQueueTraits ( iSize, true )
 		, m_pUpdate ( pUpdate )
+		, m_bIgnoreNonexistent ( bIgnoreNonexistent )
 	{}
 
 	/// check if this sorter does groupby
@@ -3054,7 +3057,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		// we might be fed with precomputed matches, but it's all or nothing
 		// the incoming match either does not have anything computed, or it has everything
 		int iSorterAttr = tSorterSchema.GetAttrIndex ( tItem.m_sAlias.cstr() );
-		if ( iSorterAttr >=0 )
+		if ( iSorterAttr>=0 )
 		{
 			if ( dQueryAttrs.Contains ( sphFNV64 ( (const BYTE *)tItem.m_sAlias.cstr() ) ) )
 			{
@@ -3363,7 +3366,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	if ( !bGotGroupby )
 	{
 		if ( pUpdate )
-			pTop = new CSphUpdateQueue ( pQuery->m_iMaxMatches, pUpdate );
+			pTop = new CSphUpdateQueue ( pQuery->m_iMaxMatches, pUpdate, pQuery->m_bIgnoreNonexistent );
 		else
 			pTop = CreatePlainSorter ( eMatchFunc, pQuery->m_bSortKbuffer, pQuery->m_iMaxMatches, bUsesAttrs );
 	} else

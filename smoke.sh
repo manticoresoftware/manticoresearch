@@ -33,7 +33,7 @@ cmd ()
 	cmd1 "$FAILLOG" "$1" "$2" "$3" 
 }
 
-cmd "mysql -utest test < example.sql" "Documents setup failed"
+cmd "mysql -utest test < example.sql" "Documents setup failed. Log in into mysql as admin and perform: CREATE DATABASE test; CREATE USER test@localhost; GRANT ALL PRIVILEGES ON test.* TO test@localhost;"
 
 for CONFARGS in "--with-debug" "--with-debug --enable-id64";
 do

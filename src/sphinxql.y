@@ -821,7 +821,7 @@ show_tables:
 //////////////////////////////////////////////////////////////////////////
 
 update:
-	TOK_UPDATE ident_list TOK_SET update_items_list where_clause
+	TOK_UPDATE ident_list TOK_SET update_items_list where_clause opt_option_clause
 		{
 			if ( !pParser->UpdateStatement ( &$2 ) )
 				YYERROR;

@@ -31,7 +31,7 @@ define ( "SEARCHD_COMMAND_FLUSHATTRS",	7 );
 /// current client-side command implementation versions
 define ( "VER_COMMAND_SEARCH",		0x119 );
 define ( "VER_COMMAND_EXCERPT",		0x104 );
-define ( "VER_COMMAND_UPDATE",		0x102 );
+define ( "VER_COMMAND_UPDATE",		0x103 );
 define ( "VER_COMMAND_KEYWORDS",	0x100 );
 define ( "VER_COMMAND_STATUS",		0x100 );
 define ( "VER_COMMAND_QUERY",		0x100 );
@@ -1523,11 +1523,12 @@ class SphinxClient
 
 	/// batch update given attributes in given rows in given indexes
 	/// returns amount of updated documents (0 or more) on success, or -1 on failure
-	function UpdateAttributes ( $index, $attrs, $values, $mva=false )
+	function UpdateAttributes ( $index, $attrs, $values, $mva=false, $ignorenonexistent=false )
 	{
 		// verify everything
 		assert ( is_string($index) );
 		assert ( is_bool($mva) );
+		assert ( is_bool($ignorenonexistent) );
 
 		assert ( is_array($attrs) );
 		foreach ( $attrs as $attr )
@@ -1556,6 +1557,7 @@ class SphinxClient
 		$req = pack ( "N", strlen($index) ) . $index;
 
 		$req .= pack ( "N", count($attrs) );
+		$req .= pack ( "N", $ignorenonexistent ? 1 : 0 );
 		foreach ( $attrs as $attr )
 		{
 			$req .= pack ( "N", strlen($attr) ) . $attr;

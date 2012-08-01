@@ -61,7 +61,7 @@ module Sphinx
     # excerpt command version
     VER_COMMAND_EXCERPT  = 0x102
     # update command version
-    VER_COMMAND_UPDATE   = 0x102
+    VER_COMMAND_UPDATE   = 0x103
     # keywords command version
     VER_COMMAND_KEYWORDS = 0x100
     
@@ -967,16 +967,18 @@ module Sphinx
     # * +values+ is a hash where key is document id, and value is an array of
     # * +mva+ identifies whether update MVA
     # new attribute values
+    # * +ignoreexistent+ identifies whether silently ignore updating of non-existent columns
     #
     # Returns number of actually updated documents (0 or more) on success.
     # Returns -1 on failure.
     #
     # Usage example:
     #    sphinx.UpdateAttributes('test1', ['group_id'], { 1 => [456] })
-    def UpdateAttributes(index, attrs, values, mva = false)
+    def UpdateAttributes(index, attrs, values, mva = false, ignoreexistent = false )
       # verify everything
       assert { index.instance_of? String }
       assert { mva.instance_of?(TrueClass) || mva.instance_of?(FalseClass) }
+      assert { ignoreexistent.instance_of?(TrueClass) || ignoreexistent.instance_of?(FalseClass) }
       
       assert { attrs.instance_of? Array }
       attrs.each do |attr|
@@ -1003,6 +1005,7 @@ module Sphinx
       request.put_string index
       
       request.put_int attrs.length
+      request.put_int ignoreexistent ? 1 : 0
       for attr in attrs
         request.put_string attr
         request.put_int mva ? 1 : 0

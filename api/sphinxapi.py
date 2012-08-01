@@ -33,7 +33,7 @@ SEARCHD_COMMAND_FLUSHATTRS	= 7
 # current client-side command implementation versions
 VER_COMMAND_SEARCH		= 0x119
 VER_COMMAND_EXCERPT		= 0x104
-VER_COMMAND_UPDATE		= 0x102
+VER_COMMAND_UPDATE		= 0x103
 VER_COMMAND_KEYWORDS	= 0x100
 VER_COMMAND_STATUS		= 0x100
 VER_COMMAND_FLUSHATTRS	= 0x100
@@ -907,7 +907,7 @@ class SphinxClient:
 		return res
 
 
-	def UpdateAttributes ( self, index, attrs, values, mva=False ):
+	def UpdateAttributes ( self, index, attrs, values, mva=False, ignorenonexistent=False ):
 		"""
 		Update given attribute values on given documents in given indexes.
 		Returns amount of updated documents (0 or more) on success, or -1 on failure.
@@ -917,6 +917,8 @@ class SphinxClient:
 		optional boolean parameter 'mva' points that there is update of MVA attributes.
 		In this case the 'values' must be a dict with int key (document ID) and list of lists of int values
 		(new MVA attribute values).
+		Optional boolean parameter 'ignorenonexistent' points that the update will silently ignore any warnings about
+		trying to update a column which is not exists in current index schema.
 
 		Example:
 			res = cl.UpdateAttributes ( 'test1', [ 'group_id', 'date_added' ], { 2:[123,1000000000], 4:[456,1234567890] } )
@@ -942,6 +944,9 @@ class SphinxClient:
 		req = [ pack('>L',len(index)), index ]
 
 		req.append ( pack('>L',len(attrs)) )
+		ignore_absent = 0
+		if ignorenonexistent: ignore_absent = 1
+		req.append ( pack('>L', ignore_absent )
 		mva_attr = 0
 		if mva: mva_attr = 1
 		for attr in attrs:

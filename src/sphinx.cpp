@@ -5572,6 +5572,7 @@ CSphQuery::CSphQuery ()
 	, m_sComment		( "" )
 	, m_sSelect			( "" )
 	, m_bReverseScan	( false )
+	, m_bIgnoreNonexistent ( false )
 	, m_iSQLSelectStart	( -1 )
 	, m_iSQLSelectEnd	( -1 )
 
@@ -8145,53 +8146,55 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
 	{
 		int iIndex = m_tSchema.GetAttrIndex ( tUpd.m_dAttrs[i].m_sName.cstr() );
-		if ( iIndex<0 )
+		if ( iIndex>=0 )
+		{
+			// forbid updates on non-int columns
+			const CSphColumnInfo & tCol = m_tSchema.GetAttr(iIndex);
+			if (!( tCol.m_eAttrType==SPH_ATTR_BOOL || tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP
+				|| tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET
+				|| tCol.m_eAttrType==SPH_ATTR_BIGINT || tCol.m_eAttrType==SPH_ATTR_FLOAT ))
+			{
+				sError.SetSprintf ( "attribute '%s' can not be updated "
+					"(must be boolean, integer, bigint, float, timestamp, or MVA)",
+					tUpd.m_dAttrs[i].m_sName.cstr() );
+				return -1;
+			}
+
+			// forbid updates on MVA columns if there's no arena
+			if ( ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET ) && !g_pMvaArena )
+			{
+				sError.SetSprintf ( "MVA attribute '%s' can not be updated (MVA arena not initialized)", tCol.m_sName.cstr() );
+				return -1;
+			}
+
+			bool bSrcMva = ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET );
+			bool bDstMva = ( tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT32SET || tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_INT64SET );
+			if ( bSrcMva!=bDstMva )
+			{
+				sError.SetSprintf ( "attribute '%s' MVA flag mismatch", tUpd.m_dAttrs[i].m_sName.cstr() );
+				return -1;
+			}
+
+			if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET && tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_INT64SET )
+			{
+				sError.SetSprintf ( "attribute '%s' MVA bits (dst=%d, src=%d) mismatch", tUpd.m_dAttrs[i].m_sName.cstr(),
+					tCol.m_eAttrType, tUpd.m_dAttrs[i].m_eAttrType );
+				return -1;
+			}
+
+			if ( tCol.m_eAttrType==SPH_ATTR_INT64SET )
+				uDst64 |= ( U64C(1)<<i );
+
+			dFloats.Add ( tCol.m_eAttrType==SPH_ATTR_FLOAT );
+			dLocators.Add ( tCol.m_tLocator );
+
+		} else if ( !tUpd.m_bIgnoreNonexistent )
 		{
 			sError.SetSprintf ( "attribute '%s' not found", tUpd.m_dAttrs[i].m_sName.cstr() );
 			return -1;
 		}
 
 		dBigints.Add ( tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_BIGINT );
-
-		// forbid updates on non-int columns
-		const CSphColumnInfo & tCol = m_tSchema.GetAttr(iIndex);
-		if (!( tCol.m_eAttrType==SPH_ATTR_BOOL || tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP
-			|| tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET
-			|| tCol.m_eAttrType==SPH_ATTR_BIGINT || tCol.m_eAttrType==SPH_ATTR_FLOAT ))
-		{
-			sError.SetSprintf ( "attribute '%s' can not be updated "
-				"(must be boolean, integer, bigint, float, timestamp, or MVA)",
-				tUpd.m_dAttrs[i].m_sName.cstr() );
-			return -1;
-		}
-
-		// forbid updates on MVA columns if there's no arena
-		if ( ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET ) && !g_pMvaArena )
-		{
-			sError.SetSprintf ( "MVA attribute '%s' can not be updated (MVA arena not initialized)", tCol.m_sName.cstr() );
-			return -1;
-		}
-
-		bool bSrcMva = ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET );
-		bool bDstMva = ( tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT32SET || tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_INT64SET );
-		if ( bSrcMva!=bDstMva )
-		{
-			sError.SetSprintf ( "attribute '%s' MVA flag mismatch", tUpd.m_dAttrs[i].m_sName.cstr() );
-			return -1;
-		}
-
-		if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET && tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_INT64SET )
-		{
-			sError.SetSprintf ( "attribute '%s' MVA bits (dst=%d, src=%d) mismatch", tUpd.m_dAttrs[i].m_sName.cstr(),
-				tCol.m_eAttrType, tUpd.m_dAttrs[i].m_eAttrType );
-			return -1;
-		}
-
-		if ( tCol.m_eAttrType==SPH_ATTR_INT64SET )
-			uDst64 |= ( U64C(1)<<i );
-
-		dFloats.Add ( tCol.m_eAttrType==SPH_ATTR_FLOAT );
-		dLocators.Add ( tCol.m_tLocator );
 
 		// find dupes to optimize
 		ARRAY_FOREACH ( i, dIndexes )
@@ -8202,7 +8205,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 			}
 		dIndexes.Add ( iIndex );
 	}
-	assert ( dLocators.GetLength()==tUpd.m_dAttrs.GetLength() );
+	assert ( tUpd.m_bIgnoreNonexistent || ( dLocators.GetLength()==tUpd.m_dAttrs.GetLength() ) );
 
 	// FIXME! FIXME! FIXME! overwriting just-freed blocks might hurt concurrent searchers;
 	// should implement a simplistic MVCC-style delayed-free to avoid that

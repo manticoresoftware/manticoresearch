@@ -90,7 +90,7 @@ public class SphinxClient
 	private final static int VER_MAJOR_PROTO		= 0x1;
 	private final static int VER_COMMAND_SEARCH		= 0x119;
 	private final static int VER_COMMAND_EXCERPT	= 0x102;
-	private final static int VER_COMMAND_UPDATE		= 0x102;
+	private final static int VER_COMMAND_UPDATE		= 0x103;
 	private final static int VER_COMMAND_KEYWORDS	= 0x100;
 	private final static int VER_COMMAND_FLUSHATTRS	= 0x100;
 
@@ -1219,11 +1219,12 @@ public class SphinxClient
 	 * @param attrs		array with the names of the attributes to update
 	 * @param values	array of updates; each long[] entry must contains document ID
 	 *					in the first element, and all new attribute values in the following ones
+	 * @param ignorenonexistent	the flag whether to silently ignore non existent columns up update request
 	 * @return			-1 on failure, amount of actually found and updated documents (might be 0) on success
 	 *
 	 * @throws			SphinxException on invalid parameters
 	 */
-	public int UpdateAttributes ( String index, String[] attrs, long[][] values ) throws SphinxException
+	public int UpdateAttributes ( String index, String[] attrs, long[][] values, boolean ignorenonexistent ) throws SphinxException
 	{
 		/* check args */
 		myAssert ( index!=null && index.length()>0, "no index name provided" );
@@ -1243,6 +1244,7 @@ public class SphinxClient
 			writeNetUTF8 ( req, index );
 
 			req.writeInt ( attrs.length );
+			req.writeInt ( ignorenonexistent ? 1 : 0 );
 			for ( int i=0; i<attrs.length; i++ )
 			{
 				writeNetUTF8 ( req, attrs[i] );
@@ -1301,11 +1303,12 @@ public class SphinxClient
 	 * @param docid		id of document to update
 	 * @param attrs		array with the names of the attributes to update
 	 * @param values		array of updates; each int[] entry must contains all new attribute values
+	 * @param ignorenonexistent	the flag whether to silently ignore non existent columns up update request
 	 * @return			-1 on failure, amount of actually found and updated documents (might be 0) on success
 	 *
 	 * @throws			SphinxException on invalid parameters
 	 */
-	public int UpdateAttributesMVA ( String index, long docid, String[] attrs, int[][] values ) throws SphinxException
+	public int UpdateAttributesMVA ( String index, long docid, String[] attrs, int[][] values, boolean ignorenonexistent ) throws SphinxException
 	{
 		/* check args */
 		myAssert ( index!=null && index.length()>0, "no index name provided" );
@@ -1326,6 +1329,7 @@ public class SphinxClient
 			writeNetUTF8 ( req, index );
 
 			req.writeInt ( attrs.length );
+			req.writeInt ( ignorenonexistent ? 1 : 0 );
 			for ( int i=0; i<attrs.length; i++ )
 			{
 				writeNetUTF8 ( req, attrs[i] );
@@ -1365,7 +1369,15 @@ public class SphinxClient
 		}
 	}
 	
+	public int UpdateAttributes ( String index, String[] attrs, long[][] values ) throws SphinxException
+	{
+		return UpdateAttributes ( index, attrs, values, false );
+	}
 
+	public int UpdateAttributesMVA ( String index, long docid, String[] attrs, int[][] values ) throws SphinxException
+	{
+		return UpdateAttributesMVA ( index, docid, attrs, values, false );
+	}
 
 	/**
      * Connect to searchd server, and generate keyword list for a given query.

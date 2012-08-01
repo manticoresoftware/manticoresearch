@@ -2380,6 +2380,7 @@ public:
 	CSphString		m_sOrderBy;			///< order-by clause
 
 	bool			m_bReverseScan;		///< perform scan in reverse order
+	bool			m_bIgnoreNonexistent; ///< whether to warning or not about non-existent columns in select list
 
 	int				m_iSQLSelectStart;	///< SQL parser helper
 	int				m_iSQLSelectEnd;	///< SQL parser helper
@@ -2486,6 +2487,10 @@ struct CSphAttrUpdate
 	CSphVector<SphDocID_t>			m_dDocids;		///< document IDs vector
 	CSphVector<const CSphRowitem*>	m_dRows;		///< document attribute's vector, used instead of m_dDocids.
 	CSphVector<int>					m_dRowOffset;	///< document row offsets in the pool (1 per doc, i.e. the length is the same as of m_dDocids)
+	bool							m_bIgnoreNonexistent;	///< whether to warn about non-existen attrs, or just silently ignore them
+
+	CSphAttrUpdate() : m_bIgnoreNonexistent ( false )
+	{}
 };
 
 /////////////////////////////////////////////////////////////////////////////

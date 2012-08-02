@@ -5333,16 +5333,22 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// search disk chunks
 	//////////////////////
 
-	CSphVector<CSphFilterSettings> dExtra;
 	m_tKlist.Flush();
-	// first, collect all the killlists into a vector
+
+	CSphVector<CSphString> dWrongWords;
+	SmallStringHash_T<CSphQueryResultMeta::WordStat_t> hDiskStats;
+	int64_t tmMaxTimer = 0;
+	if ( pQuery->m_uMaxQueryMsec>0 )
+		tmMaxTimer = sphMicroTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
+
+	CSphVector<SphAttr_t> dCumulativeKList;
+	CSphVector<const BYTE *> dDiskStrings ( m_pDiskChunks.GetLength() );
+	CSphVector<const DWORD *> dDiskMva ( m_pDiskChunks.GetLength() );
 	for ( int iChunk = m_pDiskChunks.GetLength()-1; iChunk>=0; iChunk-- )
 	{
-		CSphFilterSettings & tFilter = dExtra.Add();
+		// collect & sort cumulative killlist for this chunk
 		const SphAttr_t * pKlist = NULL;
 		int iKlistEntries = 0;
-
-		// For the topmost chunk we add the killlist from the ram-index
 		if ( iChunk==m_pDiskChunks.GetLength()-1 )
 		{
 			pKlist = m_tKlist.GetKillList();
@@ -5355,24 +5361,26 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		}
 
 		if ( iKlistEntries )
-			AddKillListFilter ( &tFilter, pKlist, iKlistEntries );
-	}
+		{
+			int iKListLength = dCumulativeKList.GetLength();
+			dCumulativeKList.Resize ( iKListLength+iKlistEntries );
+			for ( int i = 0; i < iKlistEntries; i++ )
+				dCumulativeKList[iKListLength+i] = pKlist[i];
 
-	CSphVector<CSphString> dWrongWords;
-	SmallStringHash_T<CSphQueryResultMeta::WordStat_t> hDiskStats;
-	int64_t tmMaxTimer = 0;
-	if ( pQuery->m_uMaxQueryMsec>0 )
-		tmMaxTimer = sphMicroTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
+			dCumulativeKList.Sort();
+		}
 
-	assert ( dExtra.GetLength()==m_pDiskChunks.GetLength() );
-	CSphVector<const BYTE *> dDiskStrings ( m_pDiskChunks.GetLength() );
-	CSphVector<const DWORD *> dDiskMva ( m_pDiskChunks.GetLength() );
-	ARRAY_FOREACH ( iChunk, m_pDiskChunks )
-	{
+		CSphVector<CSphFilterSettings> dKListFilter;
+		if ( dCumulativeKList.GetLength() )
+		{
+			CSphFilterSettings & tKListFilter = dKListFilter.Add();
+			AddKillListFilter ( &tKListFilter, dCumulativeKList.Begin(), dCumulativeKList.GetLength() );
+		}
+
 		CSphQueryResult tChunkResult;
 		// storing index in matches tag for finding strings attrs offset later, biased against default zero and segments
 		const int iTag = m_pSegments.GetLength()+iChunk+1;
-		if ( !m_pDiskChunks[iChunk]->MultiQuery ( pQuery, &tChunkResult, iSorters, ppSorters, &dExtra, iTag ) )
+		if ( !m_pDiskChunks[iChunk]->MultiQuery ( pQuery, &tChunkResult, iSorters, ppSorters, dCumulativeKList.GetLength() ? &dKListFilter : NULL, iTag ) )
 		{
 			// FIXME? maybe handle this more gracefully (convert to a warning)?
 			pResult->m_sError = tChunkResult.m_sError;
@@ -5405,13 +5413,12 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 		dDiskStrings[iChunk] = tChunkResult.m_pStrings;
 		dDiskMva[iChunk] = tChunkResult.m_pMva;
-		dExtra.Pop();
 
 		// keep last chunk statistics to check vs rt settings
-		if ( iChunk==m_pDiskChunks.GetLength()-1 )
+		if ( !iChunk )
 			hDiskStats = hSrcStats;
 
-		if ( (iChunk+1)!=m_pDiskChunks.GetLength() && tmMaxTimer>0 && sphMicroTimer()>=tmMaxTimer )
+		if ( iChunk && tmMaxTimer>0 && sphMicroTimer()>=tmMaxTimer )
 		{
 			pResult->m_sWarning = "query time exceeded max_query_time";
 			break;

@@ -1945,6 +1945,12 @@ void sphBacktrace ( int iFD, bool bSafe )
 	sphWrite ( iFD, g_sSourceTail, sizeof(g_sSourceTail)-1 );
 }
 
+void sphBacktraceSetBinaryName ( const char * sName )
+{
+	g_sBinaryName = sName;
+	g_pArgv[SPH_BT_BINARY_NAME] = g_sBinaryName.cstr();
+}
+
 #else // USE_WINDOWS
 
 const char * DoBacktrace ( int, int )
@@ -1979,14 +1985,11 @@ void sphBacktrace ( EXCEPTION_POINTERS * pExc, const char * sFile )
 		sphInfo ( "can't dump minidump" );
 }
 
-#endif // USE_WINDOWS
-
-
-void sphBacktraceSetBinaryName ( const char * sName )
+void sphBacktraceSetBinaryName ( const char * )
 {
-	g_sBinaryName = sName;
-	g_pArgv[SPH_BT_BINARY_NAME] = g_sBinaryName.cstr();
 }
+
+#endif // USE_WINDOWS
 
 
 static bool g_bUnlinkOld = true;

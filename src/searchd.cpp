@@ -8735,6 +8735,8 @@ public:
 	void			SetStatement ( const SqlNode_t& tName, SqlSet_e eSet );
 	bool			AddFloatRangeFilter ( const CSphString & sAttr, float fMin, float fMax );
 	bool			AddIntRangeFilter ( const CSphString & sAttr, int64_t iMin, int64_t iMax );
+	bool			AddIntFilterGTE ( const CSphString & sAttr, int64_t iVal );
+	bool			AddIntFilterLTE ( const CSphString & sAttr, int64_t iVal );
 	bool			AddUservarFilter ( const CSphString & sCol, const CSphString & sVar, bool bExclude );
 	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd );
 	CSphFilterSettings * AddFilter ( const CSphString & sCol, ESphFilter eType );
@@ -9251,6 +9253,28 @@ bool SqlParser_c::AddIntRangeFilter ( const CSphString & sAttr, int64_t iMin, in
 	pFilter->m_iMinValue = iMin;
 	pFilter->m_iMaxValue = iMax;
 	return true;
+}
+
+bool SqlParser_c::AddIntFilterGTE ( const CSphString & sAttr, int64_t iVal )
+{
+	CSphFilterSettings * pFilter = AddFilter ( sAttr, SPH_FILTER_RANGE );
+	if ( !pFilter )
+		return false;
+	bool bId = sAttr=="@id";
+	pFilter->m_iMinValue = iVal;
+	pFilter->m_iMaxValue = bId ? (SphAttr_t)ULLONG_MAX : LLONG_MAX;
+	return true;	
+}
+
+bool SqlParser_c::AddIntFilterLTE ( const CSphString & sAttr, int64_t iVal )
+{
+	CSphFilterSettings * pFilter = AddFilter ( sAttr, SPH_FILTER_RANGE );
+	if ( !pFilter )
+		return false;
+	bool bId = sAttr=="@id";
+	pFilter->m_iMinValue = bId ? 0 : LLONG_MIN;
+	pFilter->m_iMaxValue = iVal;
+	return true;	
 }
 
 bool SqlParser_c::AddUservarFilter ( const CSphString & sCol, const CSphString & sVar, bool bExclude )

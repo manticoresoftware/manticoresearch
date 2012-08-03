@@ -280,22 +280,22 @@ where_item:
 		}
 	| expr_ident '>' const_int
 		{
-			if ( !pParser->AddIntRangeFilter ( $1.m_sValue, $3.m_iValue+1, LLONG_MAX ) )
+			if ( !pParser->AddIntFilterGTE ( $1.m_sValue, $3.m_iValue+1 ) )
 				YYERROR;
 		}
 	| expr_ident '<' const_int
 		{
-			if ( !pParser->AddIntRangeFilter ( $1.m_sValue, LLONG_MIN, $3.m_iValue-1 ) )
+			if ( !pParser->AddIntFilterLTE ( $1.m_sValue, $3.m_iValue-1 ) )
 				YYERROR;
 		}
 	| expr_ident TOK_GTE const_int
 		{
-			if ( !pParser->AddIntRangeFilter ( $1.m_sValue, $3.m_iValue, LLONG_MAX ) )
+			if ( !pParser->AddIntFilterGTE ( $1.m_sValue, $3.m_iValue ) )
 				YYERROR;
 		}
 	| expr_ident TOK_LTE const_int
 		{
-			if ( !pParser->AddIntRangeFilter ( $1.m_sValue, LLONG_MIN, $3.m_iValue ) )
+			if ( !pParser->AddIntFilterLTE ( $1.m_sValue, $3.m_iValue ) )
 				YYERROR;
 		}
 	| expr_ident '=' const_float
@@ -358,7 +358,14 @@ expr_ident:
 
 const_int:
 	TOK_CONST_INT			{ $$.m_iInstype = TOK_CONST_INT; $$.m_iValue = $1.m_iValue; }
-	| '-' TOK_CONST_INT		{ $$.m_iInstype = TOK_CONST_INT; $$.m_iValue = -$2.m_iValue; }
+	| '-' TOK_CONST_INT
+		{
+			$$.m_iInstype = TOK_CONST_INT;
+			if ( (uint64_t)$2.m_iValue > -LLONG_MIN )
+				$$.m_iValue = LLONG_MIN;
+			else
+				$$.m_iValue = -$2.m_iValue;
+		}
 	;
 
 const_float:

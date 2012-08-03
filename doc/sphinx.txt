@@ -343,21 +343,22 @@ Table of Contents
       11.4.44. sphinxql_state
 
 A. Sphinx revision history
-   A.1. Version 2.0.4-release, 02 mar 2012
-   A.2. Version 2.0.3-release, 23 dec 2011
-   A.3. Version 2.0.2-beta, 15 nov 2011
-   A.4. Version 2.0.1-beta, 22 apr 2011
-   A.5. Version 1.10-beta, 19 jul 2010
-   A.6. Version 0.9.9-release, 02 dec 2009
-   A.7. Version 0.9.9-rc2, 08 apr 2009
-   A.8. Version 0.9.9-rc1, 17 nov 2008
-   A.9. Version 0.9.8.1, 30 oct 2008
-   A.10. Version 0.9.8, 14 jul 2008
-   A.11. Version 0.9.7, 02 apr 2007
-   A.12. Version 0.9.7-rc2, 15 dec 2006
-   A.13. Version 0.9.7-rc1, 26 oct 2006
-   A.14. Version 0.9.6, 24 jul 2006
-   A.15. Version 0.9.6-rc1, 26 jun 2006
+   A.1. Version 2.0.5-release, 28 jul 2012
+   A.2. Version 2.0.4-release, 02 mar 2012
+   A.3. Version 2.0.3-release, 23 dec 2011
+   A.4. Version 2.0.2-beta, 15 nov 2011
+   A.5. Version 2.0.1-beta, 22 apr 2011
+   A.6. Version 1.10-beta, 19 jul 2010
+   A.7. Version 0.9.9-release, 02 dec 2009
+   A.8. Version 0.9.9-rc2, 08 apr 2009
+   A.9. Version 0.9.9-rc1, 17 nov 2008
+   A.10. Version 0.9.8.1, 30 oct 2008
+   A.11. Version 0.9.8, 14 jul 2008
+   A.12. Version 0.9.7, 02 apr 2007
+   A.13. Version 0.9.7-rc2, 15 dec 2006
+   A.14. Version 0.9.7-rc1, 26 oct 2006
+   A.15. Version 0.9.6, 24 jul 2006
+   A.16. Version 0.9.6-rc1, 26 jun 2006
 
 List of Examples
 
@@ -428,70 +429,47 @@ Phrase Index. Yes, I know about CMU's Sphinx project.
 Key Sphinx features are:
 
    * high indexing and searching performance;
-
    * advanced indexing and querying tools (flexible and feature-rich text
      tokenizer, querying language, several different ranking modes, etc);
-
    * advanced result set post-processing (SELECT with expressions, WHERE,
      ORDER BY, GROUP BY etc over text search results);
-
    * proven scalability up to billions of documents, terabytes of data, and
      thousands of queries per second;
-
    * easy integration with SQL and XML data sources, and SphinxAPI,
      SphinxQL, or SphinxSE search interfaces;
-
    * easy scaling with distributed searches.
 
 To expand a bit, Sphinx:
 
    * has high indexing speed (upto 10-15 MB/sec per core on an internal
      benchmark);
-
    * has high search speed (upto 150-250 queries/sec per core against
      1,000,000 documents, 1.2 GB of data on an internal benchmark);
-
    * has high scalability (biggest known cluster indexes over 3,000,000,000
      documents, and busiest one peaks over 50,000,000 queries/day);
-
    * provides good relevance ranking through combination of phrase
      proximity ranking and statistical (BM25) ranking;
-
    * provides distributed searching capabilities;
-
    * provides document excerpts (snippets) generation;
-
    * provides searching from within application with SphinxAPI or SphinxQL
      interfaces, and from within MySQL with pluggable SphinxSE storage
      engine;
-
    * supports boolean, phrase, word proximity and other types of queries;
-
    * supports multiple full-text fields per document (upto 32 by default);
-
    * supports multiple additional attributes per document (ie. groups,
      timestamps, etc);
-
    * supports stopwords;
-
    * supports morphological word forms dictionaries;
-
    * supports tokenizing exceptions;
-
    * supports both single-byte encodings and UTF-8;
-
    * supports stemming (stemmers for English, Russian and Czech are
      built-in; and stemmers for French, Spanish, Portuguese, Italian,
      Romanian, German, Dutch, Swedish, Norwegian, Danish, Finnish,
      Hungarian, are available by building third party libstemmer library);
-
    * supports MySQL natively (all types of tables, including MyISAM,
      InnoDB, NDB, Archive, etc are supported);
-
    * supports PostgreSQL natively;
-
    * supports ODBC compliant databases (MS SQL, Oracle, etc) natively;
-
    * ...has 50+ other features not listed here, refer to API and
      configuration manual!
 
@@ -504,20 +482,15 @@ http://sphinxsearch.com/.
 Currently, Sphinx distribution tarball includes the following software:
 
    * indexer: an utility which creates fulltext indexes;
-
    * search: a simple command-line (CLI) test utility which searches
      through fulltext indexes;
-
    * searchd: a daemon which enables external software (eg. Web
      applications) to search through fulltext indexes;
-
    * sphinxapi: a set of searchd client API libraries for popular Web
      scripting languages (PHP, Python, Perl, Ruby).
-
    * spelldump: a simple command-line tool to extract the items from an
      ispell or MySpell (as bundled with OpenOffice) format dictionary to
      help customize your index, for use with wordforms.
-
    * indextool: an utility to dump miscellaneous debug information about
      the index, added in version 0.9.9-rc2.
 
@@ -558,13 +531,9 @@ Past and present employees of Sphinx Technologies Inc who should be noted
 on their work on Sphinx (in alphabetical order):
 
    * Alexander Klimenko
-
    * Alexey Dvoichenkov
-
    * Alexey Vinogradov
-
    * Ilya Kuznetsov
-
    * Stanislav Klinov
 
 Contributors
@@ -575,9 +544,7 @@ order):
 
    * Robert "coredev" Bengtsson (Sweden), initial version of PostgreSQL
      data source
-
    * Len Kranendonk, Perl API
-
    * Dmytro Shteflyuk, Ruby API
 
 Many other people have contributed ideas, bug reports, fixes, etc. Thank
@@ -635,15 +602,10 @@ run Sphinx without any modifications.
 Currently known systems Sphinx has been successfully running on are:
 
    * Linux 2.4.x, 2.6.x (many various distributions)
-
    * Windows 2000, XP, 7
-
    * FreeBSD 4.x, 5.x, 6.x, 7.x, 8.x
-
    * NetBSD 1.6, 3.0
-
    * Solaris 9, 11
-
    * Mac OS X
 
 CPU architectures known to work include i386 (aka x86), amd64 (aka x86_64),
@@ -662,7 +624,6 @@ limitations on any platform.
 On UNIX, you will need the following tools to build and install Sphinx:
 
    * a working C++ compiler. GNU gcc is known to work.
-
    * a good make program. GNU make is known to work.
 
 On Windows, you will need Microsoft Visual C/C++ Studio .NET 2005 or above.
@@ -690,10 +651,8 @@ project files) manually.
 
       * --prefix, which specifies where to install Sphinx; such as
         --prefix=/usr/local/sphinx (all of the examples use this prefix)
-
       * --with-mysql, which specifies where to look for MySQL include and
         library files, if auto-detection fails;
-
       * --with-pgsql, which specifies where to look for PostgreSQL include
         and library files.
 
@@ -730,7 +689,6 @@ pre-compiled binary files from the Downloads area on the website.
 
    2. Edit the contents of sphinx.conf.in - specifically entries relating
       to @CONFDIR@ - to paths suitable for your system.
-
    3. Install the searchd system as a Windows service:
 
       C:\Sphinx\bin> C:\Sphinx\bin\searchd --install --config
@@ -981,15 +939,10 @@ not full-text indexed; they are stored in the index as is. Currently
 supported attribute types are:
 
    * unsigned integers (1-bit to 32-bit wide);
-
    * UNIX timestamps;
-
    * floating point values (32-bit, IEEE 754 single precision);
-
    * string ordinals (specially computed integers);
-
    * strings (since 1.10-beta);
-
    * MVA, multi-value attributes (variable-length lists of 32-bit unsigned
      integers).
 
@@ -998,7 +951,6 @@ as docinfo. Docinfos can either be
 
    * stored separately from the main full-text index data ("extern"
      storage, in .spa file), or
-
    * attached to each occurence of document ID in full-text index data
      ("inline" storage, in .spd file).
 
@@ -1114,9 +1066,7 @@ term).
 To do that properly, Sphinx needs to know
 
    * what encoding is the source text in;
-
    * what characters are letters and what are not;
-
    * what letters should be folded to what letters.
 
 This should be configured on a per-index basis using charset_type and
@@ -1140,27 +1090,19 @@ submit your tables for other languages!
 With all the SQL drivers, indexing generally works as follows.
 
    * connection to the database is established;
-
    * pre-query (see Section 11.1.11, <<sql_query_pre>>) is executed to
      perform any necessary initial setup, such as setting per-connection
      encoding with MySQL;
-
    * main query (see Section 11.1.12, <<sql_query>>) is executed and the
      rows it returns are indexed;
-
    * post-query (see Section 11.1.30, <<sql_query_post>>) is executed to
      perform any necessary cleanup;
-
    * connection to the database is closed;
-
    * indexer does the sorting phase (to be pedantic, index-type specific
      post-processing);
-
    * connection to the database is established again;
-
    * post-index query (see Section 11.1.31, <<sql_query_post_index>>) is
      executed to perform any necessary final cleanup;
-
    * connection to the database is closed again.
 
 Most options, such as database user/host/password, are straightforward.
@@ -1190,9 +1132,7 @@ If the table contains document IDs from 1 to, say, 2345, then sql_query
 would be run three times:
 
    1. with $start replaced with 1 and $end replaced with 1000;
-
    2. with $start replaced with 1001 and $end replaced with 2000;
-
    3. with $start replaced with 2000 and $end replaced with 2345.
 
 Obviously, that's not much of a difference for 2000-row table, but when it
@@ -1356,7 +1296,6 @@ sphinx:field
 
       * "name", specifies the XML element name that will be treated as
         a full-text field in the subsequent documents.
-
       * "attr", specifies whether to also index this field as a string or
         word count attribute. Possible values are "string" and "wordcount".
         Introduced in version 1.10-beta.
@@ -1367,13 +1306,10 @@ sphinx:attr
 
       * "name", specifies the element name that should be treated as an
         attribute in the subsequent documents.
-
       * "type", specifies the attribute type. Possible values are "int",
         "timestamp", "str2ordinal", "bool", "float" and "multi".
-
       * "bits", specifies the bit size for "int" attribute type. Valid
         values are 1 to 32.
-
       * "default", specifies the default value for this attribute that
         should be used if the attribute's element is not present in the
         document.
@@ -1658,32 +1594,24 @@ showstopper-class issues are known, there still are a few known usage
 quirks. Those quirks are listed in this section.
 
    * Prefix and infix indexing are not supported yet.
-
    * MVAs are not supported yet.
-
    * Disk chunks optimization routine is not implemented yet.
-
    * On initial index creation, attributes are reordered by type, in the
      following order: uint, bigint, float, timestamp, string. So when using
      INSERT without an explicit column names list, specify all uint column
      values first, then bigint, etc.
-
    * Default conservative RAM chunk limit (rt_mem_limit) of 32M can lead to
      poor performance on bigger indexes, you should raise it to 256..1024M
      if you're planning to index gigabytes.
-
    * High DELETE/REPLACE rate can lead to kill-list fragmentation and
      impact searching performance.
-
    * No transaction size limits are currently imposed; too many concurrent
      INSERT/REPLACE transactions might therefore consume a lot of RAM.
-
    * In case of a damaged binlog, recovery will stop on the first damaged
      transaction, even though it's technically possible to keep looking
      further for subsequent undamaged transactions, and recover those. This
      mid-file damage case (due to flaky HDD/CDD/tape?) is supposed to be
      extremely rare, though.
-
    * Multiple INSERTs grouped in a single transaction perform better than
      equivalent single-row transactions and are recommended for batch
      loading of data.
@@ -1830,19 +1758,13 @@ compatibility reasons only.
 There are the following matching modes available:
 
    * SPH_MATCH_ALL, matches all query words (default mode);
-
    * SPH_MATCH_ANY, matches any of the query words;
-
    * SPH_MATCH_PHRASE, matches query as a phrase, requiring perfect match;
-
    * SPH_MATCH_BOOLEAN, matches query as a boolean expression (see
      Section 5.2, <<Boolean query syntax>>);
-
    * SPH_MATCH_EXTENDED, matches query as an expression in Sphinx internal
      query language (see Section 5.3, <<Extended query syntax>>);
-
    * SPH_MATCH_EXTENDED2, an alias for SPH_MATCH_EXTENDED;
-
    * SPH_MATCH_FULLSCAN, matches query, forcibly using the "full scan" mode
      as below. NB, any query terms will be ignored, such that filters,
      filter-ranges and grouping will still be applied, but no
@@ -1858,7 +1780,6 @@ The SPH_MATCH_FULLSCAN mode will be automatically activated in place of the
 specified matching mode when the following conditions are met:
 
    1. The query string is empty (ie. its length is zero).
-
    2. docinfo storage is set to extern.
 
 In full scan mode, all the indexed documents will be considered as
@@ -1996,17 +1917,14 @@ The full meaning of this search is:
 
    * Find the words 'hello' and 'world' adjacently in any field in
      a document;
-
    * Additionally, the same document must also contain the words 'example'
      and 'program' in the title field, with up to, but not including,
      5 words between the words in question; (E.g. "example PHP program"
      would be matched however "example script to introduce outside data
      into the correct context for your program" would not because two terms
      have 5 or more words between them)
-
    * Additionally, the same document must contain the word 'python' in the
      body field, but not contain either 'php' or 'perl';
-
    * Additionally, the same document must contain the word 'code' in any
      field.
 
@@ -2184,33 +2102,26 @@ Currently implemented rankers are:
 
    * SPH_RANK_PROXIMITY_BM25, the default ranking mode that uses and
      combines both phrase proximity and BM25 ranking.
-
    * SPH_RANK_BM25, statistical ranking mode which uses BM25 ranking only
      (similar to most other full-text engines). This mode is faster but may
      result in worse quality on queries which contain more than 1 keyword.
-
    * SPH_RANK_NONE, no ranking mode. This mode is obviously the fastest.
      A weight of 1 is assigned to all matches. This is sometimes called
      boolean searching that just matches the documents but does not rank
      them.
-
    * SPH_RANK_WORDCOUNT, ranking by the keyword occurrences count. This
      ranker computes the per-field keyword occurrence counts, then
      multiplies them by field weights, and sums the resulting values.
-
    * SPH_RANK_PROXIMITY, added in version 0.9.9-rc1, returns raw phrase
      proximity value as a result. This mode is internally used to emulate
      SPH_MATCH_ALL queries.
-
    * SPH_RANK_MATCHANY, added in version 0.9.9-rc1, returns rank as it was
      computed in SPH_MATCH_ANY mode ealier, and is internally used to
      emulate SPH_MATCH_ANY queries.
-
    * SPH_RANK_FIELDMASK, added in version 0.9.9-rc2, returns a 32-bit mask
      with N-th bit corresponding to N-th fulltext field, numbering from 0.
      The bit will only be set when the respective field has any keyword
      occurences satisfiying the query.
-
    * SPH_RANK_SPH04, added in version 1.10-beta, is generally based on the
      default SPH_RANK_PROXIMITY_BM25 ranker, but additionally boosts the
      matches when they occur in the very beginning or the very end of
@@ -2219,7 +2130,6 @@ Currently implemented rankers are:
      equal to it. (For instance, when the query is "Hyde Park", a document
      entitled "Hyde Park" should be ranked higher than a one entitled "Hyde
      Park, London" or "The Hyde Park Cafe".)
-
    * SPH_RANK_EXPR, added in version 2.0.2-beta, lets you specify the
      ranking formula in run time. It exposes a number of internal text
      factors and lets you define how the final weight should be computed
@@ -2243,11 +2153,8 @@ Legacy matching modes rankers
 Legacy matching modes automatically select a ranker as follows:
 
    * SPH_MATCH_ALL uses SPH_RANK_PROXIMITY ranker;
-
    * SPH_MATCH_ANY uses SPH_RANK_MATCHANY ranker;
-
    * SPH_MATCH_PHRASE uses SPH_RANK_PROXIMITY ranker;
-
    * SPH_MATCH_BOOLEAN uses SPH_RANK_NONE ranker.
 
 Expression based ranker (SPH_RANK_EXPR)
@@ -2281,20 +2188,16 @@ factors are:
 
    * bm25 (integer), a document-level BM25 estimate (computed without
      keyword occurrence filtering).
-
    * max_lcs (integer), a query-level maximum possible value that the
      sum(lcs*user_weight) expression can ever take. This can be useful for
      weight boost scaling. For instance, MATCHANY ranker formula uses this
      to guarantee that a full phrase match in any field rankes higher than
      any combination of partial matches in all fields.
-
    * field_mask (integer), a document-level 32-bit mask of matched fields.
-
    * query_word_count (integer), the number of unique keywords in a query,
      adjusted for a number of excluded keywords. For instance, both (one
      one one one) and (one !two) queries should assign a value of 1 to this
      factor, because there is just one unique non-excluded keyword.
-
    * doc_word_count (integer), the number of unique keywords matched in the
      entire document.
 
@@ -2327,21 +2230,17 @@ factors are:
      respective positions as they were in the query. Finally, if the query
      is 'hello world program' and the field contains 'hello world program',
      lcs will be 3. (Hopefully that is unsurpising at this point.)
-
    * user_weight (integer), the user specified per-field weight (refer to
      SetFieldWeights() in SphinxAPI and OPTION field_weights in SphinxQL
      respectively). The weights default to 1 if not specified explicitly.
-
    * hit_count (integer), the number of keyword occurrences that matched in
      the field. Note that a single keyword may occur multiple times. For
      example, if 'hello' occurs 3 times in a field and 'world' occurs
      5 times, hit_count will be 8.
-
    * word_count (integer), the number of unique keywords matched in the
      field. For example, if 'hello' and 'world' occur anywhere in a field,
      word_count will be 2, irregardless of how many times do both keywords
      occur.
-
    * tf_idf (float), the sum of TF*IDF over all the keywords matched in the
      field. IDF is the Inverse Document Frequency, a floating point value
      between 0 and 1 that describes how frequent is the keywords
@@ -2351,10 +2250,8 @@ factors are:
      field. As a side note, tf_idf is actually computed by summing IDF over
      all matched occurences. That's by construction equivalent to summing
      TF*IDF over all matched keywords.
-
    * min_hit_pos (integer), the position of the first matched keyword
      occurrence, counted in words. Indexing begins from position 1.
-
    * min_best_span_pos (integer), the position of the first maximum LCS
      occurrences span. For example, assume that our query was 'hello world
      program' and 'hello world' subphrase was matched twice in the field,
@@ -2363,7 +2260,6 @@ factors are:
      never as a subphrase match. In that case, min_best_span_pos will be
      13. Note how for the single keyword queries min_best_span_pos will
      always equal min_hit_pos.
-
    * exact_hit (boolean), whether a query was an exact match of the entire
      current field. Used in the SPH04 ranker.
 
@@ -2386,19 +2282,12 @@ starting with one of the existing ones. Also, the formulas define the nitty
 gritty ranker details in a nicely readable fashion.
 
    * SPH_RANK_PROXIMITY_BM25 = sum(lcs*user_weight)*1000+bm25
-
    * SPH_RANK_BM25 = bm25
-
    * SPH_RANK_NONE = 1
-
    * SPH_RANK_WORDCOUNT = sum(hit_count*user_weight)
-
    * SPH_RANK_PROXIMITY = sum(lcs*user_weight)
-
    * SPH_RANK_MATCHANY = sum((word_count+(lcs-1)*max_lcs)*user_weight)
-
    * SPH_RANK_FIELDMASK = field_mask
-
    * SPH_RANK_SPH04 =
      sum((4*lcs+2*(min_hit_pos==1)+exact_hit)*user_weight)*1000+bm25
 
@@ -2412,67 +2301,36 @@ and user-defined functions. This section documents the supported operators
 and functions. Here's the complete reference list for quick access.
 
    * Arithmetic operators: +, -, *, /, %, DIV, MOD
-
    * Comparison operators: <, > <=, >=, =, <>
-
    * Boolean operators: AND, OR, NOT
-
    * Bitwise operators: &, |
-
    * ABS()
-
    * BIGINT()
-
    * CEIL()
-
    * COS()
-
    * CRC32()
-
    * DAY()
-
    * EXP()
-
    * FIBONACCI()
-
    * FLOOR()
-
    * GEODIST()
-
    * IDIV()
-
    * IF()
-
    * IN()
-
    * INTERVAL()
-
    * LN()
-
    * LOG10()
-
    * LOG2()
-
    * MAX()
-
    * MIN()
-
    * MONTH()
-
    * NOW()
-
    * POW()
-
    * SIN()
-
    * SINT()
-
    * SQRT()
-
    * YEAR()
-
    * YEARMONTH()
-
    * YEARMONTHDAY()
 
 5.5.1. Operators
@@ -2686,20 +2544,15 @@ There are the following result sorting modes available:
 
    * SPH_SORT_RELEVANCE mode, that sorts by relevance in descending order
      (best matches first);
-
    * SPH_SORT_ATTR_DESC mode, that sorts by an attribute in descending
      order (bigger attribute values first);
-
    * SPH_SORT_ATTR_ASC mode, that sorts by an attribute in ascending order
      (smaller attribute values first);
-
    * SPH_SORT_TIME_SEGMENTS mode, that sorts by time segments (last
      hour/day/week/month) in descending order, and then by relevance in
      descending order;
-
    * SPH_SORT_EXTENDED mode, that sorts by SQL-like combination of columns
      in ASC/DESC order;
-
    * SPH_SORT_EXPR mode, that sorts by an arithmetic expression.
 
 SPH_SORT_RELEVANCE ignores any additional parameters and always sorts
@@ -2723,15 +2576,10 @@ when the search is performed, so the results would change over time. The
 segments are as follows:
 
    * last hour,
-
    * last day,
-
    * last week,
-
    * last month,
-
    * last 3 months,
-
    * everything else.
 
 These segments are hardcoded, but it is trivial to change them if
@@ -2760,13 +2608,9 @@ attributes and price is user-specified.
 Known internal attributes are:
 
    * @id (match ID)
-
    * @weight (match weight)
-
    * @rank (match weight)
-
    * @relevance (match weight)
-
    * @random (return results in random order)
 
 @rank and @relevance are just additional aliases to @weight.
@@ -2806,14 +2650,10 @@ attribute using one of the following built-in functions:
 
    * SPH_GROUPBY_DAY, extracts year, month and day in YYYYMMDD format from
      timestamp;
-
    * SPH_GROUPBY_WEEK, extracts year and first day of the week number
      (counting from year start) in YYYYNNN format from timestamp;
-
    * SPH_GROUPBY_MONTH, extracts month in YYYYMM format from timestamp;
-
    * SPH_GROUPBY_YEAR, extracts year in YYYY format from timestamp;
-
    * SPH_GROUPBY_ATTR, uses attribute value itself for grouping.
 
 The final search result set then contains one best match per group.
@@ -2825,7 +2665,6 @@ similar to SPH_SORT_EXTENDED sorting clause syntax. In addition to @id and
 @weight, group-by sorting clause may also include:
 
    * @group (groupby function value),
-
    * @count (amount of matches in group).
 
 The default mode is to sort by groupby value in descending order, ie. by
@@ -2845,9 +2684,7 @@ with SPH_GROUPBY_DAY function, then the result set will contain
 
    * one most relevant match per each day when there were any matches
      published,
-
    * with day number and per-day match count attached,
-
    * sorted by day number in descending order (ie. recent days first).
 
 Starting with version 0.9.9-rc2, aggregate functions (AVG(), MIN(), MAX(),
@@ -2869,12 +2706,9 @@ Partitioning is done manually. You should
 
    * setup several instances of Sphinx programs (indexer and searchd) on
      different servers;
-
    * make the instances index (and search) different parts of data;
-
    * configure a special distributed index on some of the searchd
      instances;
-
    * and query this index.
 
 This index only contains references to other local and remote indexes - so
@@ -2885,16 +2719,11 @@ When searchd receives a query against distributed index, it does the
 following:
 
    1. connects to configured remote agents;
-
    2. issues the query;
-
    3. sequentially searches configured local indexes (while the remote
       agents are searching);
-
    4. retrieves remote agents' search results;
-
    5. merges all the results together, removing the duplicates;
-
    6. sends the merged resuls to client.
 
 From the application's point of view, there are no differences between
@@ -2913,7 +2742,6 @@ This has a number of uses:
       whole cluster, and search requests could be balanced between masters
       to achieve a kind of HA (high availability) in case any of the nodes
       fails;
-
    2. if running within a single multi-CPU or multi-core machine, there
       would be only 1 searchd instance quering itself as an agent and thus
       utilizing all CPUs/core.
@@ -2952,17 +2780,11 @@ This log format is as follows:
 Match mode can take one of the following values:
 
    * "all" for SPH_MATCH_ALL mode;
-
    * "any" for SPH_MATCH_ANY mode;
-
    * "phr" for SPH_MATCH_PHRASE mode;
-
    * "bool" for SPH_MATCH_BOOLEAN mode;
-
    * "ext" for SPH_MATCH_EXTENDED mode;
-
    * "ext2" for SPH_MATCH_EXTENDED2 mode;
-
    * "scan" if the full scan mode was used, either by being specified with
      SPH_MATCH_FULLSCAN, or if the query was empty (as documented under
      Matching Modes)
@@ -2970,13 +2792,9 @@ Match mode can take one of the following values:
 Sort mode can take one of the following values:
 
    * "rel" for SPH_SORT_RELEVANCE mode;
-
    * "attr-" for SPH_SORT_ATTR_DESC mode;
-
    * "attr+" for SPH_SORT_ATTR_ASC mode;
-
    * "tsegs" for SPH_SORT_TIME_SEGMENTS mode;
-
    * "ext" for SPH_SORT_EXTENDED mode.
 
 Additionally, if searchd was started with --iostats, there will be a block
@@ -3021,13 +2839,9 @@ The features of SphinxQL log format compared to the default text one are as
 follows.
 
    * All request types should be logged. (This is still work in progress.)
-
    * Full statement data will be logged where possible.
-
    * Errors and warnings are logged.
-
    * The log should be automatically replayable via SphinxQL.
-
    * Additional performance counters (currently, per-agent distributed
      query times) are logged.
 
@@ -3233,11 +3047,8 @@ and the case sensitivity. Sphinx currently provides the following four
 collations.
 
    1. libc_ci
-
    2. libc_cs
-
    3. utf8_general_ci
-
    4. binary
 
 The first two collations rely on several standard C library (libc) calls
@@ -3300,12 +3111,9 @@ features at a glance are as follows.
 
    * Functions can take integer (both 32-bit and 64-bit), float, string, or
      MVA arguments.
-
    * Functions can return integer or float values.
-
    * Functions can check the argument number, types, and names and raise
      errors.
-
    * Only simple functions (that is, non-aggregate ones) are currently
      supported.
 
@@ -3370,9 +3178,7 @@ the src/sphinxudf.h interface header and documented there. RETURN_TYPE of
 the main function must be one of the following:
 
    * int for the functions that return INT.
-
    * sphinx_int64_t for the functions that return BIGINT.
-
    * float for the functions that return FLOAT.
 
 The calling sequence is as follows. myfunc_init() is called once when
@@ -3553,22 +3359,29 @@ performed. These options are:
      command line, to add successive filters to the merge, all of which
      must be met in order for a document to become part of the final index.
 
+   * --merge-killlists (and its shorter alias --merge-klists) changes the
+     way kill lists are processed when merging indexes. By default, both
+     kill lists get discarded after a merge. That supports the most typical
+     main+delta merge scenario. With this option enabled, however, kill
+     lists from both indexes get concatenated and stored into the
+     destination index. Note that a source (delta) index kill list will be
+     used to suppress rows from a destation (main) index at all times.
    * --dump-rows <FILE> dumps rows fetched by SQL source(s) into the
      specified file, in a MySQL compatible syntax. Resulting dumps are the
      exact representation of data as received by indexer and help to repeat
      indexing-time issues.
-
    * --verbose guarantees that every row that caused problems indexing
      (duplicate, zero, or missing document ID; or file field IO issues;
      etc) will be reported. By default, this option is off, and problem
      summaries may be reported instead.
-
    * --sighup-each is useful when you are rebuilding many big indexes, and
      want each one rotated into searchd as soon as possible. With
      --sighup-each, indexer will send a SIGHUP signal to searchd after
      succesfully completing the work on each index. (The default behavior
      is to send a single SIGHUP after all the indexes were built.)
-
+   * --print-queries prints out SQL queries that indexer sends to the
+     database, along with SQL connection and disconnection events. That is
+     useful to diagnose and fix problems with SQL sources.
    * --print-queries prints out SQL queries that indexer sends to the
      database, along with SQL connection and disconnection events. That is
      useful to diagnose and fix problems with SQL sources.
@@ -3595,10 +3408,8 @@ The options available to searchd on all builds are:
 
    * --help (-h for short) lists all of the parameters that can be called
      in your particular build of searchd.
-
    * --config <file> (-c <file> for short) tells searchd to use the given
      file as its configuration, just as with indexer above.
-
    * --stop is used to asynchronously stop searchd, using the details of
      the PID file as specified in the sphinx.conf file, so you may also
      need to confirm to searchd which configuration file to use with the
@@ -3619,11 +3430,8 @@ The options available to searchd on all builds are:
      Possible exit codes are as follows:
 
       * 0 on success;
-
       * 1 if connection to running searchd daemon failed;
-
       * 2 if daemon reported an error during shutdown;
-
       * 3 if daemon crashed during shutdown.
 
    * --status command is used to query running searchd instance status,
@@ -3637,15 +3445,12 @@ The options available to searchd on all builds are:
       | $ searchd --status
       | $ searchd --config /home/myuser/sphinx.conf --status
 
-   * --pidfile is used to explicitly state a PID file, where the process
-     information is stored regarding searchd, used for inter-process
-     communications (for example, indexer will need to know the PID to
-     contact searchd for rotating indexes). Normally, searchd would use
-     a PID if running in regular mode (i.e. not with --console), but it is
-     possible that you will be running it in console mode whilst the index
-     is being updated and rotated, for which a PID file will be needed.
+   * --pidfile is used to explicitly force using a PID file (where the
+     searchd process number is stored) despite any other debugging options
+     that say otherwise (for instance, --console). This is a debugging
+     option.
 
-      | $ searchd --config /home/myuser/sphinx.conf --pidfile /home/myuser/sphinx.pid
+      | $ searchd --console --pidfile
 
    * --console is used to force searchd into console mode; typically it
      will be running as a conventional server application, and will aim to
@@ -3661,9 +3466,12 @@ The options available to searchd on all builds are:
 
       | $ searchd --config /home/myuser/sphinx.conf --console
 
-   * --logdebug enables additional debug output in the daemon log. Should
-     only be needed rarely, to assist with debugging issues that could not
-     be easily reproduced on request.
+   * --logdebug, --logdebugv, and --logdebugvv options enable additional
+     debug output in the daemon log. They differ by the logging verboseness
+     level. These are debugging options, they pollute the log a lot, and
+     thus they should not be normally enabled. (The normal use case for
+     these is to enable them temporarily on request, to assist with some
+     particularly complicated debugging session.)
 
    * --iostats is used in conjuction with the logging options (the
      query_log will need to have been activated in sphinx.conf) to provide
@@ -3704,7 +3512,6 @@ The options available to searchd on all builds are:
      handler (listener) to be used for connections on this socket.
      Supported protocol values are 'sphinx' (Sphinx 0.9.x API protocol) and
      'mysql41' (MySQL protocol used since 4.1 upto at least 5.1).
-
    * --index <index> (or -i <index> for short) forces this instance of
      searchd only to serve the specified index. Like --port, above, this is
      usually for debugging purposes; more long-term changes would generally
@@ -3716,7 +3523,6 @@ The options available to searchd on all builds are:
      from the index (stopwords, wordforms, exceptions, etc). This is useful
      for picking up indexes built on another machine with possibly
      different path layouts.
-
    * --replay-flags=<OPTIONS> switch, added in version 2.0.2-beta, can be
      used to specify a list of extra binary log replay options. The
      supported options are:
@@ -3787,6 +3593,13 @@ install it as a service.
      called by Windows when the service would be started, although if you
      wanted to call this as a regular service from the command-line (as the
      complement to --console) you could do so in theory.
+   * --safetrace forces searchd to only use system backtrace() call in
+     crash reports. In certain (rare) scenarios, this might be a "safer"
+     way to get that report. This is a debugging option.
+   * --nodetach switch (Linux only) tells searchd not to detach into
+     background. This will also cause log entry to be printed out to
+     console. Query processing operates as usual. This is a debugging
+     option.
 
 Last but not least, as every other daemon, searchd supports a number of
 signals.
@@ -3843,12 +3656,10 @@ There are many options available to search. Firstly, the general options:
 
    * --config <file> (-c <file> for short) tells search to use the given
      file as its configuration, just as with indexer above.
-
    * --index <index> (-i <index> for short) tells search to limit searching
      to the specified index only; normally it would attempt to search all
      of the physical indexes listed in sphinx.conf, not any distributed
      ones.
-
    * --stdin tells search to accept the query from the standard input,
      rather than the command line. This can be useful for testing purposes
      whereby you could feed input via pipes and from scripts.
@@ -3858,12 +3669,10 @@ Options for setting matches:
    * --any (-a for short) changes the matching mode to match any of the
      words as part of the query (word1 OR word2 OR word3). In the API this
      would be equivalent to passing SPH_MATCH_ANY to SetMatchMode.
-
    * --phrase (-p for short) changes the matching mode to match all of the
      words as part of the query, and do so in the phrase given (not
      including punctuation). In the API this would be equivalent to passing
      SPH_MATCH_PHRASE to SetMatchMode.
-
    * --boolean (-b for short) changes the matching mode to Boolean
      matching. Note if using Boolean syntax matching on the command line,
      you may need to escape the symbols (with a backslash) to avoid the
@@ -3872,11 +3681,9 @@ Options for setting matches:
      process, although this can be resolved by using --stdin, as below. In
      the API this would be equivalent to passing SPH_MATCH_BOOLEAN to
      SetMatchMode.
-
    * --ext (-e for short) changes the matching mode to extended matching
      which provides various text querying operators. In the API this would
      be equivalent to passing SPH_MATCH_EXTENDED to SetMatchMode.
-
    * --filter <attr> <v> (-f <attr> <v> for short) filters the results such
      that only documents where the attribute given (attr) matches the value
      given (v). For example, --filter deleted 0 only matches documents with
@@ -3891,25 +3698,21 @@ Options for handling the results:
      matches back to the number given. If a 'group' is specified, this will
      be the number of grouped results. This defaults to 20 results if not
      specified (as do the APIs)
-
    * --offset <count> (-o <count> for short) offsets the result list by the
      number of places set by the count; this would be used for pagination
      through results, where if you have 20 results per 'page', the second
      page would begin at offset 20, the third page at offset 40, etc.
-
    * --group <attr> (-g <attr> for short) specifies that results should be
      grouped together based on the attribute specified. Like the GROUP BY
      clause in SQL, it will combine all results where the attribute given
      matches, and returns a set of results where each returned result is
      the best from each group. Unless otherwise specified, this will be the
      best match on relevance.
-
    * --groupsort <expr> (-gs <expr> for short) instructs that when results
      are grouped with --group, the expression given in <expr> shall
      determine the order of the groups. Note, this does not specify which
      is the best item within the group, only the order in which the groups
      themselves shall be returned.
-
    * --sortby <clause> (-s <clause> for short) specifies that results
      should be sorted in the order listed in <clause>. This allows you to
      specify the order you wish results to be presented in, ordering by
@@ -3922,7 +3725,6 @@ Options for handling the results:
      Additionally, like the regular sorting modes, if --group (grouping) is
      being used, this will state how to establish the best match within
      each group.
-
    * --sortexpr expr (-S expr for short) specifies that the search results
      should be presented in an order determined by an arithmetic
      expression, stated in expr. For example: --sortexpr "@weight + (
@@ -3930,15 +3732,12 @@ Options for handling the results:
      be quoted to avoid the shell dealing with the asterisk). Extended sort
      mode is discussed in more detail under the SPH_SORT_EXTENDED entry
      under the Sorting modes section of the manual.
-
    * --sort=date specifies that the results should be sorted by descending
      (i.e. most recent first) date. This requires that there is an
      attribute in the index that is set as a timestamp.
-
    * --rsort=date specifies that the results should be sorted by ascending
      (i.e. oldest first) date. This requires that there is an attribute in
      the index that is set as a timestamp.
-
    * --sort=ts specifies that the results should be sorted by timestamp in
      groups; it will return all of the documents whose timestamp is within
      the last hour, then sorted within that bracket for relevance. After,
@@ -4018,38 +3817,36 @@ The commands are as follows:
      The report provides a breakdown of all the index settings, in
      particular the entire attribute and field list. Prior to 0.9.9-rc2,
      this command was present in CLI search utility.
-
    * --dumpconfig FILENAME.sph dumps the index definition from the given
      index header file in (almost) compliant sphinx.conf file format. Added
      in version 2.0.1-beta.
-
    * --dumpheader INDEXNAME dumps index header by index name with looking
      up the header path in the configuration file.
-
    * --dumpdocids INDEXNAME dumps document IDs by index name. It takes the
      data from attribute (.spa) file and therefore requires docinfo=extern
      to work.
-
    * --dumphitlist INDEXNAME KEYWORD dumps all the hits (occurences) of
      a given keyword in a given index, with keyword specified as text.
-
    * --dumphitlist INDEXNAME --wordid ID dumps all the hits (occurences) of
      a given keyword in a given index, with keyword specified as internal
      numeric ID.
-
    * --htmlstrip INDEXNAME filters stdin using HTML stripper settings for
      a given index, and prints the filtering results to stdout. Note that
      the settings will be taken from sphinx.conf, and not the index header.
-
    * --check INDEXNAME checks the index data files for consistency errors
      that might be introduced either by bugs in indexer and/or hardware
      faults. Starting with version 2.0.2-beta, --check also works on RT
      indexes, but checks disk chunks only.
-
    * --strip-path strips the path names from all the file names referenced
      from the index (stopwords, wordforms, exceptions, etc). This is useful
      for checking indexes built on another machine with possibly different
      path layouts.
+   * --optimize-rt-klists optimizes the kill list memory use in the disk
+     chunk of a given RT index. That is a one-off optimization intended for
+     rather old RT indexes, created by development versions prior to
+     1.10-beta release. As of 1.10-beta releases, this kill list
+     optimization (purging) should happen automatically, and there should
+     never be a need to use this option.
 
 Chapter 7. SphinxQL reference
 =============================
@@ -4113,11 +3910,9 @@ omissions (such as (currently) missing support for JOINs). Specifically,
      AS is optional. Special names such as @id and @weight should currently
      be used with leading at-sign. This at-sign requirement will be lifted
      in the future.
-
    * FROM clause. FROM clause should contain the list of indexes to search
      through. Unlike in regular SQL, comma means enumeration of full-text
      indexes as in Query() API call rather than JOIN.
-
    * WHERE clause. This clause will map both to fulltext query and filters.
      Comparison operators (=, !=, <, >, <=, >=), IN, AND, NOT, and BETWEEN
      are all supported and map directly to filters. OR is not supported yet
@@ -4127,7 +3922,6 @@ omissions (such as (currently) missing support for JOINs). Specifically,
      Starting with version 2.0.1-beta, {col_name | expr_alias} [NOT] IN
      @uservar condition syntax is supported. (Refer to Section 7.7, <<SET
      syntax>> for a discussion of global user variables.)
-
    * GROUP BY clause. Currently only supports grouping by a single column.
      The column however can be a computed expression:
 
@@ -4180,7 +3974,6 @@ omissions (such as (currently) missing support for JOINs). Specifically,
    * LIMIT clause. Both LIMIT N and LIMIT M,N forms are supported. Unlike
      in regular SQL (but like in Sphinx API), an implicit LIMIT 0,20 is
      present by default.
-
    * OPTION clause. This is a Sphinx specific extension that lets you
      control a number of per-query options. The syntax is:
 
@@ -4190,26 +3983,17 @@ omissions (such as (currently) missing support for JOINs). Specifically,
 
       * 'ranker' - any of 'proximity_bm25', 'bm25', 'none', 'wordcount',
         'proximity', 'matchany', or 'fieldmask'
-
       * 'max_matches' - integer (per-query max matches value)
-
       * 'cutoff' - integer (max found matches threshold)
-
       * 'max_query_time' - integer (max search time threshold, msec)
-
       * 'retry_count' - integer (distributed retries count)
-
       * 'retry_delay' - integer (distributed retry delay, msec)
-
       * 'field_weights' - a named integer list (per-field user weights for
         ranking)
-
       * 'index_weights' - a named integer list (per-index user weights for
         ranking)
-
       * 'reverse_scan' - 0 or 1, lets you control the order in which
         full-scan query processes the rows
-
       * 'comment' - string, user comment that gets copied to a query log
         file
 
@@ -4393,9 +4177,7 @@ frameworks that may need to run this statement when connecting.
 There are the following classes of the variables:
 
    1. per-session server variable (1.10-beta and above)
-
    2. global server variable (2.0.1-beta and above)
-
    3. global user variable (2.0.1-beta and above)
 
 Global user variables are shared between concurrent sessions. Currently,
@@ -4726,10 +4508,8 @@ be lifted in future releases, as we add the needed functionality to the RT
 indexes. The complete list is as follows.
 
    * Target RT index needs to be empty.
-
    * Source disk index needs to have index_sp=0, boundary_step=0,
      stopword_step=1, dict=crc settings.
-
    * Source disk index needs to have an empty index_zones setting.
 
    | mysql> DESC rt;
@@ -4982,7 +4762,6 @@ The important changes are as follows:
 
    * @ID magic name is deprecated in favor of ID. Document ID is considered
      an attribute.
-
    * WEIGHT is no longer implicitly returned, because it is not actually
      a column (an index attribute), but rather an internal function
      computed per each row (a match). You have to explicitly ask for it,
@@ -5003,7 +4782,6 @@ The important changes are as follows:
      based on their position in the result set rather than the name (for
      instance, by using mysql_fetch_row() rather than mysql_fetch_assoc()
      in PHP), check and fix the order of columns in your queries.
-
    * SELECT * return the columns in index order, as it used to, including
      the ID column. However, SELECT * does not automatically return
      WEIGHT(). To update such queries in case you access columns by names,
@@ -6120,10 +5898,8 @@ happen outside MySQL.
 Obvious SphinxSE applications include:
 
    * easier porting of MySQL FTS applications to Sphinx;
-
    * allowing Sphinx use with progamming languages for which native APIs
      are not available yet;
-
    * optimizations when additional Sphinx result set processing on MySQL
      side is required (eg. JOINs with original document tables, additional
      MySQL-side filtering, etc).
@@ -6274,10 +6050,8 @@ separated by semicolons; and their names from values by equality sign. Any
 number of options can be specified. Available options are:
 
    * query - query text;
-
    * mode - matching mode. Must be one of "all", "any", "phrase",
      "boolean", or "extended". Default is "all";
-
    * sort - match sorting mode. Must be one of "relevance", "attr_desc",
      "attr_asc", "time_segments", or "extended". In all modes besides
      "relevance" attribute name (or sorting clause for "extended") is also
@@ -6287,16 +6061,13 @@ number of options can be specified. Available options are:
       | ... WHERE query='test;sort=extended:@weight desc, group_id asc';
 
    * offset - offset into result set, default is 0;
-
    * limit - amount of matches to retrieve from result set, default is 20;
-
    * index - names of the indexes to search:
 
       | ... WHERE query='test;index=test1;';
       | ... WHERE query='test;index=test1,test2,test3;';
 
    * minid, maxid - min and max document ID to match;
-
    * weights - comma-separated list of weights to be assigned to Sphinx
      full-text fields:
 
@@ -6499,7 +6270,6 @@ If Sphinx fails to build for some reason, please do the following:
 
    1. check that headers and libraries for your DBMS are properly installed
       (for instance, check that mysql-devel package is present);
-
    2. report Sphinx version and config file (be sure to remove the
       passwords!), MySQL (or PostgreSQL) configuration info, gcc version,
       OS version and CPU type (ie. x86, x86-64, PowerPC, etc):
@@ -6520,7 +6290,6 @@ the following:
 
    1. describe the bug (ie. both the expected behavior and actual behavior)
       and all the steps necessary to reproduce it;
-
    2. include Sphinx version and config file (be sure to remove the
       passwords!), MySQL (or PostgreSQL) version, gcc version, OS version
       and CPU type (ie. x86, x86-64, PowerPC, etc):
@@ -6539,16 +6308,12 @@ the following:
 
    4. reindex to check if any assertions are triggered (in this case, it's
       likely that the index is corrupted and causing problems);
-
    5. if the bug does not reproduce with debug versions, revert to
       non-debug and mention it in your report;
-
    6. if the bug could be easily reproduced with a small (1-100 record)
       part of your database, please provide a gzipped dump of that part;
-
    7. if the problem is related to searchd, include relevant entries from
       searchd.log and query.log in your bug report;
-
    8. if the problem is related to searchd, try running it in console mode
       and check if it dies with an assertion:
 
@@ -6568,11 +6333,9 @@ it.
       | ulimit -c 32768
 
    2. run the program and try to reproduce the bug;
-
    3. if the program crashes (either with or without an assertion), find
       the core file in current directory (it should typically print out
       "Segmentation fault (core dumped)" message);
-
    4. if the program hangs, use kill -SEGV from another console to force it
       to exit and dump core:
 
@@ -6892,9 +6655,7 @@ interesting in regard to indexing, with their respective values, are as
 follows:
 
    * CLIENT_COMPRESS = 32; can use compression protocol
-
    * CLIENT_SSL = 2048; switch to SSL after handshake
-
    * CLIENT_SECURE_CONNECTION = 32768; new 4.1 authentication
 
 For instance, you can specify 2080 (2048+32) to use both compression and
@@ -7016,9 +6777,7 @@ payloads (payload fields). It's syntax is as follows:
 where
 
    * FIELD-NAME is a joined/payload field name;
-
    * QUERY is an SQL query that must fetch values to index.
-
    * RANGE-QUERY is an optional SQL query that fetches a range of values to
      index. (Added in version 2.0.1-beta.)
 
@@ -7122,11 +6881,8 @@ if min and max IDs fetched are 12 and 3456 respectively, and the step is
 substitutions:
 
    * $start=12, $end=1011
-
    * $start=1012, $end=2011
-
    * $start=2012, $end=3011
-
    * $start=3012, $end=3456
 
 Example:
@@ -7336,11 +7092,8 @@ everything can be declared in a single line as well):
 where
 
    * ATTR-TYPE is 'uint', 'bigint' or 'timestamp'
-
    * SOURCE-TYPE is 'field', 'query', or 'ranged-query'
-
    * QUERY is SQL query used to fetch all ( docid, attrvalue ) pairs
-
    * RANGE-QUERY is SQL query used to fetch min and max ID values, similar
      to 'sql_query_range'
 
@@ -7906,20 +7659,13 @@ For reference, different index files store the following data:
 
    * .spa stores document attributes (used in extern docinfo storage mode
      only);
-
    * .spd stores matching document ID lists for each word ID;
-
    * .sph stores index header information;
-
    * .spi stores word lists (word IDs and pointers to .spd file);
-
    * .spk stores kill-lists;
-
    * .spm stores MVA data;
-
    * .spp stores hit (aka posting, aka word occurence) lists for each word
      ID;
-
    * .sps stores string attribute data.
 
 Example:
@@ -7999,17 +7745,11 @@ Built-in values that are available for use in morphology option are as
 follows:
 
    * none - do not perform any morphology processing;
-
    * stem_en - apply Porter's English stemmer;
-
    * stem_ru - apply Porter's Russian stemmer;
-
    * stem_enru - apply Porter's English and Russian stemmers;
-
    * stem_cz - apply Czech stemmer;
-
    * soundex - replace keywords with their SOUNDEX code;
-
    * metaphone - replace keywords with their METAPHONE code.
 
 Additional values provided by libstemmer are in 'libstemmer_XXX' format,
@@ -8113,20 +7853,16 @@ Sentence boundary detection rules are as follows.
 
    * Question and excalamation signs (? and !) are always a sentence
      boundary.
-
    * Trailing dot (.) is a sentence boundary, except:
 
       * When followed by a letter. That's considered a part of an
         abbreviation (as in "S.T.A.L.K.E.R" or "Goldman Sachs S.p.A.").
-
       * When followed by a comma. That's considered an abbreviation
         followed by a comma (as in "Telecom Italia S.p.A., founded in
         1994").
-
       * When followed by a space and a small letter. That's considered an
         abbreviation within a sentence (as in "News Corp. announced in
         Februrary").
-
       * When preceded by a space and a capital letter, and followed by
         a space. That's considered a middle initial (as in "John D. Doe").
 
@@ -8296,10 +8032,8 @@ of important differences.
 Short summary of the differences is as follows:
 
    * exceptions are case sensitive, wordforms are not;
-
    * exceptions can use special characters that are not in charset_table,
      wordforms fully obey charset_table;
-
    * exceptions can underperform on huge dictionaries, wordforms handle
      millions of entries well.
 
@@ -8607,15 +8341,12 @@ enable_star is 1. Searching should work as follows:
 
    1. "abcdef" query will match only those documents that contain the exact
       "abcdef" word in them.
-
    2. "abc*" query will match those documents that contain any words
       starting with "abc" (including the documents which contain the exact
       "abc" word only);
-
    3. "*cde*" query will match those documents that contain any words which
       have "cde" characters in any part of the word (including the
       documents which contain the exact "cde" word only).
-
    4. "*def" query will match those documents that contain any words ending
       with "def" (including the documents that contain the exact "def" word
       only).
@@ -9498,9 +9229,7 @@ document, or fail indexing entirely. on_file_field_error directive controls
 that behavior. The values it takes are:
 
    * ignore_field, index the current document without field;
-
    * skip_document, skip the current document but continue indexing;
-
    * fail_index, fail indexing with an error message.
 
 The problems that can arise are: open error, size error (file too big), and
@@ -9740,15 +9469,10 @@ seamless rotate, rotating an index tries to use as little RAM as possible
 and works as follows:
 
    1. new queries are temporarly rejected (with "retry" error code);
-
    2. searchd waits for all currently running queries to finish;
-
    3. old index is deallocated and its files are renamed;
-
    4. new index files are renamed and required RAM is allocated;
-
    5. new index attribute and dictionary data is preloaded to RAM;
-
    6. searchd resumes serving queries from new index.
 
 However, if there's a lot of attribute or dictionary data, then preloading
@@ -9758,15 +9482,11 @@ preloading 1-5+ GB files.
 With seamless rotate enabled, rotation works as follows:
 
    1. new index RAM storage is allocated;
-
    2. new index attribute and dictionary data is asynchronously preloaded
       to RAM;
-
    3. on success, old index is deallocated and both indexes' files are
       renamed;
-
    4. on failure, new index is deallocated;
-
    5. at any given moment, queries are served either from old or new index
       copy.
 
@@ -10132,10 +9852,8 @@ synced to disk. Three modes are supported:
    * 0, flush and sync every second. Best performance, but up to 1 second
      worth of committed transactions can be lost both on daemon crash, or
      OS/hardware crash.
-
    * 1, flush and sync every transaction. Worst performance, but every
      committed transaction data is guaranteed to be saved.
-
    * 2, flush every transaction, sync every second. Good performance, and
      every committed transaction is guaranteed to be saved in case of
      daemon crash. However, in case of OS/hardware crash up to 1 second
@@ -10393,111 +10111,186 @@ Appendix A. Sphinx revision history
 
 Table of Contents
 
-A.1. Version 2.0.4-release, 02 mar 2012
-A.2. Version 2.0.3-release, 23 dec 2011
-A.3. Version 2.0.2-beta, 15 nov 2011
-A.4. Version 2.0.1-beta, 22 apr 2011
-A.5. Version 1.10-beta, 19 jul 2010
-A.6. Version 0.9.9-release, 02 dec 2009
-A.7. Version 0.9.9-rc2, 08 apr 2009
-A.8. Version 0.9.9-rc1, 17 nov 2008
-A.9. Version 0.9.8.1, 30 oct 2008
-A.10. Version 0.9.8, 14 jul 2008
-A.11. Version 0.9.7, 02 apr 2007
-A.12. Version 0.9.7-rc2, 15 dec 2006
-A.13. Version 0.9.7-rc1, 26 oct 2006
-A.14. Version 0.9.6, 24 jul 2006
-A.15. Version 0.9.6-rc1, 26 jun 2006
+A.1. Version 2.0.5-release, 28 jul 2012
+A.2. Version 2.0.4-release, 02 mar 2012
+A.3. Version 2.0.3-release, 23 dec 2011
+A.4. Version 2.0.2-beta, 15 nov 2011
+A.5. Version 2.0.1-beta, 22 apr 2011
+A.6. Version 1.10-beta, 19 jul 2010
+A.7. Version 0.9.9-release, 02 dec 2009
+A.8. Version 0.9.9-rc2, 08 apr 2009
+A.9. Version 0.9.9-rc1, 17 nov 2008
+A.10. Version 0.9.8.1, 30 oct 2008
+A.11. Version 0.9.8, 14 jul 2008
+A.12. Version 0.9.7, 02 apr 2007
+A.13. Version 0.9.7-rc2, 15 dec 2006
+A.14. Version 0.9.7-rc1, 26 oct 2006
+A.15. Version 0.9.6, 24 jul 2006
+A.16. Version 0.9.6-rc1, 26 jun 2006
 
-A.1. Version 2.0.4-release, 02 mar 2012
+A.1. Version 2.0.5-release, 28 jul 2012
+=======================================
+
+Bug fixes
+---------
+
+   * fixed #1258, xmlpipe2 refused to index indexes with docinfo=inline
+   * fixed #1257, legacy groupby modes vs dist_threads could occasionally
+     return wrong search results (race condition)
+   * fixed #1253, missing single-word query performance optimization
+     (simplified ranker) vs prefix-expanded keywords vs dict=keywords
+   * fixed #1252, COUNT(*) vs dist_threads could occasionally crash (race
+     condition)
+   * fixed #1251, missing expression support in the IN() function
+   * fixed #1245, FlushAttributes mistakenly disabled by
+     attr_flush_period=0 setting
+   * fixed #1244, per-API-command (search, update, etc) statistics were not
+     updated by SphinxQL requests
+   * fixed #1243, misc issues (broken statistics, weights, checks) with
+     very long keywords having blended parts in RT indexes
+   * fixed #1240, embedded xmlpipe2 schema with more attributes than the
+     sphinx.conf one caused indexer to crash
+   * fixed #1239, memory leak when optimizing ABS(const) and other 1-arg
+     functions
+   * fixed #1228, #761, #1183, #1190, #1198, misc issues occasonally caused
+     by MVA updates (crash on SaveAttributes; index rotation vs index name
+     and TID; looped MVA updates; persistent MVA removal on rotation)
+   * fixed #1227, API queries with SetGeoAnchor() were logged incorrectly
+     in SphinxQL-format query logs (query_log_format=sphinxql)
+   * fixed #1214, phrase query parsing issues when blend_chars contained
+     a quote (") symbol
+   * fixed #1213, attribute aliases were not recognized by the subsequent
+     SELECT items
+   * fixed #1212, indextool failed to check hitless keywords
+   * fixed #1210, crash when indexing an index with joined fields only (no
+     regular fields)
+   * fixed #1209, xmlpipe_fixup_utf8 off by a byte on certain (pretty rare)
+     malformed sequences
+   * fixed #1202, various issues with CALL KEYWORDS vs RT indexes (crashes
+     vs dict=keywords, missing modifiers in output)
+   * fixed #1201, snippets vs query_mode=1 vs complex OR-queries could
+     occasionally crash
+   * fixed #1197, indexer running out of disk space could either crash, or
+     fail to display a proper error message
+   * fixed #1185, keywords with wildcards were not handled when
+     highlighting the entire document
+   * fixed #1184, indexer crash when ngram_chars was set, but ngram_len=0
+   * fixed #1182, indexer crash on certain combinations of docinfo=inline
+     vs bitfields
+   * fixed #1181, GROUP BY on a MVA64 was truncated at 32 bits
+   * fixed #1179, passage_boundary in snippets could get ignored (when
+     highlighting the entire document)
+   * fixed #1178, indexer could crash when charset_table specified
+     out-of-bounds codes
+   * fixed #1177, SPZ queries in snippets erroneously required
+     passage_boundary option to be explicitly set
+   * fixed #1176, multi-queries with a GROUP/ORDER BY on a string
+     attributed crashed
+   * fixed #1175, connection id mismatch in SphinxQL-format query logs
+   * fixed #1167, nested parentheses in a full-text query could mistakenly
+     reset preceding field or zone limit operator
+   * fixed #1158, float range filters were not supported in a multi-query
+     batch optimizer
+   * fixed #1157, broken gcc-4.7 build
+   * fixed #1156, empty result set instead of an error message when
+     querying distributed indexes with compat_sphinxql_magic=1 and hitting
+     an error
+   * fixed #1143, dash after a number incorrectly parsed as an operator NOT
+   * fixed #1137, searchd --stopwait hanged when the running instance
+     crashed during shutdown
+   * fixed #1136, high idle CPU load on systems without
+     pthread_timed_lock()
+   * fixed #1134, issues with prefork workers on systems without
+     pthread_timed_lock()
+   * fixed #1133, BuildExcerpts() on a distributed index with load_files
+     did not distribute the jobs
+   * fixed #1126, inaccurate hits sorting progress report on joined field
+     indexing
+   * fixed #1121, occasional bad entries (wrong characters or invalid SQL)
+     in SphinxQL-format query log
+   * fixed #1118, libsphinxclient requests failed when using SPH_RANK_EXPR
+   * fixed #1073, improved handling of wordforms/multiforms rules referring
+     to stopwords
+   * fixed #1062, bigint filter ranges truncated when searching via
+     SphinxQL
+   * fixed #1052, SphinxSE range arguments with leading zeroes mistakenly
+     parsed as octal
+   * fixed #1011, negative MVA64 values mistakenly converted to positive
+     (on indexing and/or output)
+   * fixed #974, crash when logging queries over 2048 bytes with
+     performance counters enabled
+   * fixed #909, field-end modifier was ignored when followed by
+     a non-whitespace syntax character (eg quote or bracket)
+   * fixed #907, issue with bigint filtering (large positive or negative
+     values)
+   * fixed #906, #1074, Mac OS X 10.7.3 builds (conflicting memory
+     allocation routines in Sphinx and external libs)
+   * fixed #901, #1066, sending bigger request packets was broken in Python
+     API
+   * fixed #879, filters on weight-dependent expressions did not work
+     correctly
+   * fixed #553, default/missing port value was not handled properly in
+     SetServer() API call
+   * fixed that blended vs multiforms vs min_word_len could hang the query
+     parser
+   * fixed missing command-line switches documentation
+
+A.2. Version 2.0.4-release, 02 mar 2012
 =======================================
 
 Bug fixes
 ---------
 
    * fixed #605, pack vs mysql compress
-
    * fixed #783, #862, #917, #985, #990, #1032 documentation bugs
-
    * fixed #885, bitwise AND/OR were not available via API
-
    * fixed #984, crash on indexing data with MAGIC_CODE_ZONE symbol
-
    * fixed #1004, RT index loses words from dictionary on segments merging
      with id64 enabled
-
    * fixed #1035, daemon doesn't properly handle FDs in case of socket
      overflow FD_SETSIZE ( *nix, preopen_indexes=0, worker=threads )
-
    * fixed #1038, quoted string for API select
-
    * fixed #1046, head SPZ overflow, snippet generation at non fast with
      SPZ
-
    * fixed #1048, distributed index can't sort \ filter because of missed
      attributes
-
    * fixed #1050, expression ranker vs agents
-
    * fixed #1051, added MVA64 support to UDFs
-
    * fixed #1054, max_query_time not handled properly on searching at RT
      index
-
    * fixed #1055, expansion_limit on searching at RT disk chunks
-
    * fixed #1057, daemon crashes on generating snippet with 0 documents
      provided
-
    * fixed #1060, load_files_scattered don't work
-
    * fixed #1065, libsphinxclient vs distribute index (agents)
-
    * fixed #1067, modifiers were not escaped in legacy query emulation
-
    * fixed #1071, master - agent communication got slower for a large query
-
    * fixed #1076, #1077, (redundant copying, and a possible mutex leak with
      uservars)
-
    * fixed #1078, blended vs FIELD_END
-
    * fixed #1084 crash \ index corruption on loading persist MVA
-
    * fixed #1091, RT attach of plain index with string \ MVA attributes
      prior regular attributes
-
    * fixed #1092, update got binloged with wrong TID
-
    * fixed #1098, crash on creating large expression
-
    * fixed #1099, cleaning up temporary files on fail of indexing
-
    * fixed #1100, missing xmlpipe_attr_bigint config directive
-
    * fixed #1101, now ignoring dashes within keywords when dash is not in
      charset_table
-
    * fixed #1103, ZONE operator incorrectly works on more than one keywords
      in a simple zone
-
    * fixed #1106, optimized WHERE id=value, WHERE id IN (values_list)
      clauses used in SELECT, UPDATE statements
-
    * fixed #1112, Sphinx doesn't work out-of-the-box because the collision
      of binlog_path option
-
    * fixed #1116, crash on FLUSH RTINDEX unknown-index-name
-
    * fixed #1117, occasional RT headers corruption (leading to crashes
      and/or missing results)
-
    * fixed #1119, missing expression ranker support in SphinxSE
-
    * fixed #1120, negative total_found, docs and hits counter on huge
      indexes
 
-A.2. Version 2.0.3-release, 23 dec 2011
+A.3. Version 2.0.3-release, 23 dec 2011
 =======================================
 
 Bug fixes
@@ -10505,364 +10298,232 @@ Bug fixes
 
    * fixed #1031, SphinxQL parsing syntax for MVA at insert \ replace
      statements
-
    * fixed #1027, stalls on attribute update in high-concurrency load
-
    * fixed #1026, daemon crash on malformed API command
-
    * fixed #1021, max_children option has been ignored with worker=threads
-
    * fixed #1020, crash on large attribute files loading
-
    * fixed #1014, crash on rotation when index has been removed from config
      file (worker=threads, *nix box)
-
    * fixed #1001, broken MVA files in RT index while saving disk chunk
-
    * fixed #995, crash on empty MVA updates
-
    * fixed #994, crash on daemon shutdown with seamless_rotate=0 and
      workers=threads
-
    * fixed #993, #998, crash on replay DELETE statement vs RT index with
      dict=keywords, fixed sequential INSERT into dict=keywords index right
      after INSERT into dict=crc index
-
    * fixed #991, crash on indexing mssql source with mssql_unicode enabled
-
    * fixed #983, #950, crash on host name lookup (SphinxSE with MySQL 5.5)
-
    * fixed #981, snippet inconsistency with allow_empty=0
-
    * fixed #980, broken index produced by index merge in rare cases
-
    * fixed #971, absent error message at master on agent "maxed out"
-
    * fixed #695, #815, #835, #866, malformed warnings in SphinxQL
-
    * fixed build of SphinxSE with MySQL 5.1
-
    * fixed crash log for 'fork' and 'prefork' workers
 
-A.3. Version 2.0.2-beta, 15 nov 2011
+A.4. Version 2.0.2-beta, 15 nov 2011
 ====================================
 
 Major new features
 ------------------
 
    * added keywords dictionary (dict=keywords) support to RT indexes
-
    * added MVA, index_exact_words support to RT indexes (#888)
-
    * added MVA64 (a set of BIGINTs) support to both disk and RT indexes
      (rt_attr_multi_64 directive)
-
    * added an expression-based ranker, and a number of new ranking factors
-
    * added ATTACH INDEX statement that converts a disk index to RT index
-
    * added WHERE clause support to UPDATE statement
-
    * added bigint, float, and MVA attribute support to UPDATE statement
 
 New features
 ------------
 
    * added support for upto 256 searchable fields (was upto 32 before)
-
    * added FIBONACCI() function to expressions
-
    * added load_files_scattered option to snippets
-
    * added implicit attribute type promotions in multi-index result sets
      (#939)
-
    * added index names to indexer progress message on merge (#928)
-
    * added --replay-flags switch to searchd
-
    * added string attribute support and a few previously missing snippets
      options to SphinxSE
-
    * added previously missing Status(), SetConnectTimeout() API calls to
      Python API
-
    * added ORDER BY RAND() support to SELECT statement
-
    * added Sphinx version to Windows crash log
-
    * added RT index support to indextool --check (checks disk chunks only)
      (#877)
-
    * added prefork_rotation_throttle directive (preforked children restart
      delay, in milliseconds) (#873)
-
    * added on_file_field_error directive (different sql_file_field handling
      modes)
-
    * added manpages for all the programs
-
    * added syslog logging support
-
    * added sentence, paragraph, and zone support in html_strip_mode=retain
      mode to snippets
-
    * optimized search performance with many ZONE operators
-
    * improved suggestion tool (added Levenshtein limit, removed extra DB
      fetch)
-
    * improved sentence extraction (handles salutations, starting initials
      better now)
-
    * changed max_filter_values sanity check to 10M values
 
 New SphinxQL features
 ---------------------
 
    * added FLUSH RTINDEX statement
-
    * added dist_threads directive (parallel processing), load_files,
      load_files_scattered, batch syntax (multiple documents) support to
      CALL SNIPPETS statement
-
    * added OPTION comment='...' support to SELECT statement (#944)
-
    * added SHOW VARIABLES statement
-
    * added dummy handlers for SET TRANSACTION, SET NAMES, SELECT @@sysvar
      statements, and for sql_auto_is_null, sql_mode, and @@-style variables
      (like @@tx_isolation) in SET statement (better MySQL
      frameworks/connectors support)
-
    * added complete SphinxQL error logging (all errors are logged now, not
      just SELECTs)
-
    * improved SELECT statement syntax, made expressions aliases optional
 
 Bug fixes
 ---------
 
    * fixed #982, empty binlogs prevented upgraded daemon from starting up
-
    * fixed #978, libsphinxclient build failed on sparc/sparc64 solaris
-
    * fixed #977, eliminated (most) compiler warnings
-
    * fixed #969, broken expression MVA/string argument type check prevented
      IF(IN(mva..)) and other valid expressions from working
-
    * fixed #966, NOT IN @global_var syntax was not supported
-
    * fixed #958, mem_limit over INT_MAX was not clamped
-
    * fixed #954, UTF-8 snippets could crash on malformed data
-
    * fixed #951, UTF-8 snippets could hang on malformed data
-
    * fixed #947, bad float column type was reported via SphinxQL, breaking
      some clients
-
    * fixed #940, group-by with a small enough max_matches limit could
      occasionaly crash and/or sort wrongly
-
    * fixed #932, sending huge queries to agents occasionally failed (mainly
      on Windows)
-
    * fixed #926, snippets did not highlight widlcard matches with
      morphology enabled
-
    * fixed #918, crash logger did not report a proper query in dist_threads
      case
-
    * fixed #916, watchdog caused (endless) respawns if there was a crash
      during shutdown
-
    * fixed #904, attribute names were not forcibly case-folded in some API
      calls (eg. SetGroupDistinct)
-
    * fixed #902, query parser did not support stopword_step=0
-
    * fixed #897, network sockets dangled (open but unattended) while
      replaying binlog
-
    * fixed #855, allow_empty option in snippets did not always work
      correctly
-
    * fixed #854, indexing with many bigint attributes and docinfo=inline
      crashed
-
    * fixed #838, RT MVA insertion did not sort MVA values, caused matching
      issues
-
    * fixed #833, duplicate MVA values were not eliminated on update
-
    * fixed #832, certain (overshort/incorrect) documents crashed indexing
      MS SQL Unicode columns
-
    * fixed #829, query parser did not properly handle numerics with
      blend_chars
-
    * fixed #814, group-by string attributes in RT indexes dit not always
      work correctly
-
    * fixed #812, utf8 stemming produced unexpected stems on words with
      single-byte chars
-
    * fixed #808, huge queries crashed logging with
      query_log_format=sphinxql
-
    * fixed #806, stray single-star keyword crashed on querying
-
    * fixed #798, snippets ignored index_exact_words in query_mode
-
    * fixed #797, RT klist loader had an occasional off-by-one crash
-
    * fixed #791, preopen_indexes erroneously defaulted to 0 on Windows
-
    * fixed #790, huge dictionaries (over 4 GB) did not work
-
    * fixed #786, inplace_enable could occasionally corrupt the indexes
-
    * fixed #775, doc had a typo (soundex vs metaphone)
-
    * fixed #772, snippets duplicated blended chars on a SPZ boundary
-
    * fixed #762, query parser truncated digit-only keywords over 15 digits
-
    * fixed #736, query parser dit not properly handle blended/special char
      sequence
-
    * fixed #726, rotation of an index with a changed attribute count
      crashed
-
    * fixed #687, querying multiple indexes with index weights and sort-by
      expression produced incorrect (unadjusted) weights
-
    * fixed #585, (unsupported) string ordinals were silently zeroed out
      with docinfo=inline (instead of failing)
-
    * fixed #583, certain keywords could occasionally crash multiforms
-
    * fixed that concurrent MVA updates could crash
-
    * fixed that query parser did not ignore a pure blended token with
      a leading modifier
-
    * fixed that query parser did not properly handle a modifier followed by
      a dash
-
    * fixed that substring indexing with dict=crc did not support
      index_exact_words and zones
-
    * fixed that in a rare edge case common subtree cache could crash
-
    * fixed that empty result set returned the full schema (rather than
      SELECT-ed columns)
-
    * fixed that SphinxQL did not have a sanity check for (currently
      unsupported) result set schemas over 250 attributes
-
    * fixed that updates on regular indexes were not binlogged
-
    * fixed that multi-query optimization check for expressions did not
      handle multi-index case
-
    * fixed that SphinxSE did not build vs MySQL 5.5 release
-
    * fixed that proximity_bm25 ranker could yield incorrect weight on
      duplicated keywords
-
    * fixed that prefix expansion with dict=keyword occasionally crashed
-
    * fixed that strip_path did not work on RT disk chunks
-
    * fixed that exclude filters were not properly logged in
      query_log_format=sphinxql mode
-
    * fixed that plain string attribute check in indextool --check was
      broken
-
    * fixed that Java API did not let specify a connection timeout
-
    * fixed that ordinal and wordcount attributes could not be fetched via
      SphinxQL
-
    * fixed that in a rare edge case OR/ORDER would not match properly
-
    * fixed that sending (huge) query response did not handle EINTR properly
-
    * fixed that SPH04 ranker could yield incorrectly high weight in some
      cases
-
    * fixed that C API did not let zero out cutoff, max_matches settings
-
    * fixed that on a persistent connection there were occasionally issues
      handling signals while doing network reads/waitss
-
    * fixed that in a rare edge case (field start modifier in a certain
      complex query) querying crashed
-
    * fixed that snippets did not support dist_threads with load_files=0
-
    * fixed that in some extremely rare edge cases tiny parts of an index
      could end up corrupted with dict=keywords
-
    * fixed that field/zone conditions were not propagated to expanded
      keywords with dict=keywords
 
-A.4. Version 2.0.1-beta, 22 apr 2011
+A.5. Version 2.0.1-beta, 22 apr 2011
 ====================================
 
 New general features
 --------------------
 
    * added remapping support to blend_chars directive
-
    * added multi-threaded snippet batches support (requires a batch sent
      via API, dist_threads, and load_files)
-
    * added collations (collation_server, collation_libc_locale directives)
-
    * added support for sorting and grouping on string attributes (ORDER BY,
      GROUP BY, WITHING GROUP ORDER BY)
-
    * added UDF support (plugin_dir directive; CREATE FUNCTION, DROP
      FUNCTION statements)
-
    * added query_log_format directive, SET GLOBAL query_log_format |
      log_level = ... statements; and connection id tracking
-
    * added sql_column_buffers directive, fixed out-of-buffer column
      handling in ODBC/MS SQL sources
-
    * added blend_mode directive that enables indexing multiple variants of
      a blended sequence
-
    * added UNIX socket support to C, Ruby APIs
-
    * added ranged query support to sql_joined_field
-
    * added rt_flush_period directive
-
    * added thread_stack directive
-
    * added SENTENCE, PARAGRAPH, ZONE operators (and index_sp, index_zones
      directives)
-
    * added keywords dictionary support (and dict, expansion_limit
      directives)
-
    * added passage_boundary, emit_zones options to snippets
-
    * added a watchdog process in threaded mode
-
    * added persistent MVA updates
-
    * added crash dumps to searchd.log, deprecated crash_log_path directive
-
    * added id32 index support in id64 binaries (EXPERIMENTAL)
-
    * added SphinxSE support for DELETE and REPLACE on SphinxQL tables
 
 New SphinxQL features
@@ -10870,47 +10531,32 @@ New SphinxQL features
 
    * added new, more SQL compliant SphinxQL syntax; and
      a compat_sphinxql_magics directive
-
    * added CRC32(), DAY(), MONTH(), YEAR(), YEARMONTH(), YEARMONTHDAY()
      functions
-
    * added DIV, MOD, and % operators
-
    * added reverse_scan=(0|1) option to SELECT
-
    * added support for MySQL packets over 16M
-
    * added dummy SHOW VARIABLES, SHOW COLLATION, and SET
      character_set_results support (to support handshake with certain
      client libraries and frameworks)
-
    * added mysql_version_string directive (to workaround picky MySQL client
      libraries)
-
    * added support for global filter variables, SET GLOBAL
      @uservar=(int_list)
-
    * added DELETE ... IN (id_list) syntax support
-
    * added C-style comments syntax (for example, SELECT /*!40000 some
      comment*/ id FROM test)
-
    * added UPDATE ... WHERE id=X syntax support
-
    * added SphinxQL multi-query support
-
    * added DESCRIBE, SHOW TABLES statements
 
 New command-line switches
 -------------------------
 
    * added --print-queries switch to indexer that dumps SQL queries it runs
-
    * added --sighup-each switch to indexer that rotates indexes one by one
-
    * added --strip-path switch to searchd that skips file paths embedded in
      the index(-es)
-
    * added --dumpconfig switch to indextool that dumps an index header in
      sphinx.conf format
 
@@ -10918,791 +10564,462 @@ Major changes and optimizations
 -------------------------------
 
    * changed default preopen_indexes value to 1
-
    * optimized English stemmer (results in 1.3x faster snippets and
      indexing with morphology=stem_en)
-
    * optimized snippets, 1.6x general speedup
-
    * optimized const-list parsing in SphinxQL
-
    * optimized full-document highlighting CPU/RAM use
-
    * optimized binlog replay (improved performance on K-list update)
 
 Bug fixes
 ---------
 
    * fixed #767, joined fields vs ODBC sources
-
    * fixed #757, wordforms shared by indexes with different settings
-
    * fixed #733, loading of indexes in formats prior to v.14
-
    * fixed #763, occasional snippets failures
-
    * fixed #648, occasionally missed rotations on multiple SIGHUPs
-
    * fixed #750, an RT segment merge leading to false positives and/or
      crashes in some cases
-
    * fixed #755, zones in snippets output
-
    * fixed #754, stopwords counting at snippet passage generation
-
    * fixed #723, fork/prefork index rotation in children processes
-
    * fixed #696, freeze on zero threshold in quorum operator
-
    * fixed #732, query escaping in SphinxSE
-
    * fixed #739, occasional crashes in MT mode on result set send
-
    * fixed #746, crash with a named list in SphinxQL option
-
    * fixed #674, AVG vs group order
-
    * fixed #734, occasional crashes attempting to report NULL errors
-
    * fixed #829, tail hits within field position modifier
-
    * fixed #712, missing query_mode, force_all_words snippet option
      defaults in Java API
-
    * fixed #721, added dupe removal on RT batch INSERT/REPLACE
-
    * fixed #720, potential extraneous highlighting after a blended keyword
-
    * fixed #702, exceptions vs star search
-
    * fixed #666, ext2 query grouping vs exceptions
-
    * fixed #688, WITHIN GROUP ORDER BY related crash
-
    * fixed #660, multi-queue batches vs dist_threads
-
    * fixed #678, crash on dict=keywords vs xmlpipe vs min_prefix_len
-
    * fixed #596, ECHILD vs scripted configs
-
    * fixed #653, dependency in expression, sorting, grouping
-
    * fixed #661, concurrent distributed searches vs workers=threads
-
    * fixed #646, crash on status query via UNIX socket
-
    * fixed #589, libexpat.dll missing from some Win32 build types
-
    * fixed #574, quorum match order
-
    * fixed multiple documentation issues (#372, #483, #495, #601, #623,
      #632, #654)
-
    * fixed that ondisk_dict did not affect RT indexes
-
    * fixed that string attributes check in indextool --check was
      erroneously sensitive to string data order
-
    * fixed a rare crash when using BEFORE operator
-
    * fixed an issue with multiforms vs BuildKeywords()
-
    * fixed an edge case in OR operator (emitted wrong hits order sometimes)
-
    * fixed aliasing in docinfo accessors that lead to very rare crashes
      and/or missing results
-
    * fixed a syntax error on a short token at the end of a query
-
    * fixed id64 filtering and performance degradation with range filters
-
    * fixed missing rankers in libsphinxclient
-
    * fixed missing SPH04 ranker in SphinxSE
-
    * fixed column names in sql_attr_multi sample (works with example.sql
      now)
-
    * fixed an issue with distributed local+remote setup vs aggregate
      functions
-
    * fixed case sensitive columns names in RT indexes
-
    * fixed a crash vs strings from multiple indexes in result set
-
    * fixed blended keywords vs snippets
-
    * fixed secure_connection vs MySQL protocol vs MySQL.NET connector
-
    * fixed that Python API did not works with Python 2.3
-
    * fixed overshort_step vs snippets
-
    * fixed keyword staistics vs dist_threads searching
-
    * fixed multiforms vs query parsing (vs quorum)
-
    * fixed missed quorum words vs RT segments
-
    * fixed blended keywords occasionally skipping extra character when
      querying (eg "abc[]")
-
    * fixed Python API to handle int32 values
-
    * fixed prefix and infix indexing of joined fields
-
    * fixed MVA ranged query
-
    * fixed missing blended state reset on document boundary
-
    * fixed a crash on missing index while replaying binlog
-
    * fixed an error message on filter values overrun
-
    * fixed passage duplication in snippets in weight_order mode
-
    * fixed select clauses over 1K vs remote agents
-
    * fixed overshort accounting vs soft-whitespace tokens
-
    * fixed rotation vs workers=threads
-
    * fixed schema issues vs distributed indexes
-
    * fixed blended-escaped sequence parsing issue
-
    * fixed MySQL IN clause (values order etc)
-
    * fixed that post_index did not execute when 0 documents were
      succesfully indexed
-
    * fixed field position limit vs many hits
-
    * fixed that joined fields missed an end marker at field end
-
    * fixed that xxx_step settings were missing from .sph index header
-
    * fixed libsphinxclient missing request cleanup in sphinx_query() (eg
      after network errors)
-
    * fixed that index_weights were ignored when grouping
-
    * fixed multi wordforms vs blend_chars
-
    * fixed broken MVA output in SphinxQL
-
    * fixed a few RT leaks
-
    * fixed an issue with RT string storage going missing
-
    * fixed an issue with repeated queries vs dist_threads
-
    * fixed an issue with string attributes vs buffer overrun in SphinxQL
-
    * fixed unexpected character data warnings within ignored xmlpipe tags
-
    * fixed a crash in snippets with NEAR syntax query
-
    * fixed passage duplication in snippets
-
    * fixed libsphinxclient SIGPIPE handling
-
    * fixed libsphinxclient vs VS2003 compiler bug
 
-A.5. Version 1.10-beta, 19 jul 2010
+A.6. Version 1.10-beta, 19 jul 2010
 ===================================
 
    * added RT indexes support (Chapter 4, Real-time indexes)
-
    * added prefork and threads support (workers directives)
-
    * added multi-threaded local searches in distributed indexes
      (dist_threads directive)
-
    * added common subquery cache (subtree_docs_cache, subtree_hits_cache
      directives)
-
    * added string attributes support (sql_attr_string, sql_field_string,
      xml_attr_string, xml_field_string directives)
-
    * added indexing-time word counter (sql_attr_str2wordcount,
      sql_field_str2wordcount directives)
-
    * added CALL SNIPPETS(), CALL KEYWORDS() SphinxQL statements
-
    * added field_weights, index_weights options to SphinxQL SELECT
      statement
-
    * added insert-only SphinxQL-talking tables to SphinxSE
      (connection='sphinxql://host[:port]/index')
-
    * added select option to SphinxSE queries
-
    * added backtrace on crash to searchd
-
    * added SQL+FS indexing, aka loading files by names fetched from SQL
      (sql_file_field directive)
-
    * added a watchdog in threads mode to searchd
-
    * added automatic row phantoms elimination to index merge
-
    * added hitless indexing support (hitless_words directive)
-
    * added --check, --strip-path, --htmlstrip, --dumphitlist ... --wordid
      switches to indextool
-
    * added --stopwait, --logdebug switches to searchd
-
    * added --dump-rows, --verbose switches to indexer
-
    * added "blended" characters indexing support (blend_chars directive)
-
    * added joined/payload field indexing (sql_joined_field directive)
-
    * added FlushAttributes() API call
-
    * added query_mode, force_all_words, limit_passages, limit_words,
      start_passage_id, load_files, html_strip_mode, allow_empty options,
      and %PASSAGE_ID% macro in before_match, after_match options to
      BuildExcerpts() API call
-
    * added @groupby/@count/@distinct columns support to SELECT (but not to
      expressions)
-
    * added query-time keyword expansion support (expand_keywords directive,
      SPH_RANK_SPH04 ranker)
-
    * added query batch size limit option (max_batch_queries directive; was
      hardcoded)
-
    * added SINT() function to expressions
-
    * improved SphinxQL syntax error reporting
-
    * improved expression optimizer (better constant handling)
-
    * improved dash handling within keywords (no longer treated as an
      operator)
-
    * improved snippets (better passage selection/trimming, around option
      now a hard limit)
-
    * optimized index format that yields ~20-30% smaller indexes
-
    * optimized sorting code (indexing time 1-5% faster on average; 100x
      faster in worst case)
-
    * optimized searchd startup time (moved .spa preindexing to indexer),
      added a progress bar
-
    * optimized queries against indexes with many attributes (eliminated
      redundant copying)
-
    * optimized 1-keyword queries (performace regression introduced in
      0.9.9)
-
    * optimized SphinxQL protocol overheads, and performance on bigger
      result sets
-
    * optimized unbuffered attributes writes on index merge
-
    * changed attribute handling, duplicate names are strictly forbidden now
-
    * fixed that SphinxQL sessions could stall shutdown
-
    * fixed consts with leading minus in SphinxQL
-
    * fixed AND/OR precedence in expressions
-
    * fixed #334, AVG() on integers was not computed in floats
-
    * fixed #371, attribute flush vs 2+ GB files
-
    * fixed #373, segfault on distributed queries vs certain libc versions
-
    * fixed #398, stopwords not stopped in prefix/infix indexes
-
    * fixed #404, erroneous MVA failures in indextool --check
-
    * fixed #408, segfault on certain query batches (regular scan, plus
      a scan with MVA groupby)
-
    * fixed #431, occasional shutdown hangs in preforked workers
-
    * fixed #436, trunk checkout builds vs Solaris sh
-
    * fixed #440, escaping vs parentheses declared as valid in charset_table
-
    * fixed #442, occasional non-aligned free in MVA indexing
-
    * fixed #447, occasional crashes in MVA indexing
-
    * fixed #449, pconn busyloop on aborted clients on certain arches
-
    * fixed #465, build issue on Alpha
-
    * fixed #468, build issue in libsphinxclient
-
    * fixed #472, multiple stopword files failing to load
-
    * fixed #489, buffer overflow in query logging
-
    * fixed #493, Python API assertion after error returned from Query()
-
    * fixed #500, malformed MySQL packet when sending MVAs
-
    * fixed #504, SIGPIPE in libsphinxclient
-
    * fixed #506, better MySQL protocol commands support in SphinxQL (PING
      etc)
-
    * fixed #509, indexing ranged results from stored procedures
 
-A.6. Version 0.9.9-release, 02 dec 2009
+A.7. Version 0.9.9-release, 02 dec 2009
 =======================================
 
    * added Open, Close, Status calls to libsphinxclient (C API)
-
    * added automatic persistent connection reopening to PHP, Python APIs
-
    * added 64-bit value/range filters, fullscan mode support to SphinxSE
-
    * MAJOR CHANGE, our IANA assigned ports are 9312 and 9306 respectively
      (goodbye, trusty 3312)
-
    * MAJOR CHANGE, erroneous filters now fail with an error (were silently
      ignored before)
-
    * optimized unbuffered .spa writes on merge
-
    * optimized 1-keyword queries ranking in extended2 mode
-
    * fixed #441 (IO race in case of highly conccurent load on a preopened)
-
    * fixed #434 (distrubuted indexes were not searchable via MySQL
      protocol)
-
    * fixed #317 (indexer MVA progress counter)
-
    * fixed #398 (stopwords not removed from search query)
-
    * fixed #328 (broken cutoff)
-
    * fixed #250 (now quoting paths w/spaces when installing Windows
      service)
-
    * fixed #348 (K-list was not updated on merge)
-
    * fixed #357 (destination index were not K-list-filtered on merge)
-
    * fixed #369 (precaching .spi files over 2 GBs)
-
    * fixed #438 (missing boundary proximity matches)
-
    * fixed #371 (.spa flush in case of files over 2 GBs)
-
    * fixed #373 (crashes on distributed queries via mysql proto)
-
    * fixed critical bugs in hit merging code
-
    * fixed #424 (ordinals could be misplaced during indexing in case of
      bitfields etc)
-
    * fixed #426 (failing SE build on Solaris; thanks to Ben Beecher)
-
    * fixed #423 (typo in SE caused crash on SHOW STATUS)
-
    * fixed #363 (handling of read_timeout over 2147 seconds)
-
    * fixed #376 (minor error message mismatch)
-
    * fixed #413 (minus in SphinxQL)
-
    * fixed #417 (floats w/o leading digit in SphinxQL)
-
    * fixed #403 (typo in SetFieldWeights name in Java API)
-
    * fixed index rotation vs persistent connections
-
    * fixed backslash handling in SphinxQL parser
-
    * fixed uint unpacking vs. PHP 5.2.9 (possibly other versions)
-
    * fixed #325 (filter settings send from SphinxSE)
-
    * fixed #352 (removed mysql wrapper around close() in SphinxSE)
-
    * fixed #389 (display error messages through SphinxSE status variable)
-
    * fixed linking with port-installed iconv on OS X
-
    * fixed negative 64-bit unpacking in PHP API
-
    * fixed #349 (escaping backslash in query emulation mode)
-
    * fixed #320 (disabled multi-query route when select items differ)
-
    * fixed #353 (better quorum counts check)
-
    * fixed #341 (merging of trailing hits; maybe other ranking issues too)
-
    * fixed #368 (partially; @field "" caused crashes; now resets field
      limit)
-
    * fixed #365 (field mask was leaking on field-limited terms)
-
    * fixed #339 (updated debug query dumper)
-
    * fixed #361 (added SetConnectTimeout() to Java API)
-
    * fixed #338 (added missing fullscan to mode check in Java API)
-
    * fixed #323 (added floats support to SphinxQL)
-
    * fixed #340 (support listen=port:proto syntax too)
-
    * fixed #332 (\r is legal SphinxQL space now)
-
    * fixed xmlpipe2 K-lists
-
    * fixed #322 (safety gaps in mysql protocol row buffer)
-
    * fixed #313 (return keyword stats for empty indexes too)
-
    * fixed #344 (invalid checkpoints after merge)
-
    * fixed #326 (missing CLOCK_xxx on FreeBSD)
 
-A.7. Version 0.9.9-rc2, 08 apr 2009
+A.8. Version 0.9.9-rc2, 08 apr 2009
 ===================================
 
    * added IsConnectError(), Open(), Close() calls to Java API (bug #240)
-
    * added read_buffer, read_unhinted directives
-
    * added checks for build options returned by mysql_config (builds on
      Solaris now)
-
    * added fixed-RAM index merge (bug #169)
-
    * added logging chained queries count in case of (optimized)
      multi-queries
-
    * added GEODIST() function
-
    * added --status switch to searchd
-
    * added MySpell (OpenOffice) affix file support (bug #281)
-
    * added ODBC support (both Windows and UnixODBC)
-
    * added support for @id in IN() (bug #292)
-
    * added support for aggregate functions in GROUP BY (namely AVG, MAX,
      MIN, SUM)
-
    * added MySQL UDF that builds snippets using searchd
-
    * added write_buffer directive (defaults to 1M)
-
    * added xmlpipe_fixup_utf8 directive
-
    * added suggestions sample
-
    * added microsecond precision int64 timer (bug #282)
-
    * added listen_backlog directive
-
    * added max_xmlpipe2_field directive
-
    * added initial SphinxQL support to mysql41 handler, SELECT .../SHOW
      WARNINGS/STATUS/META are handled
-
    * added support for different network protocols, and mysql41 protocol
-
    * added fieldmask ranker, updated SphinxSE list of rankers
-
    * added mysql_ssl_xxx directives
-
    * added --cpustats (requires clock_gettime()) and --status switches to
      searchd
-
    * added performance counters, Status() API call
-
    * added overshort_step and stopword_step directives
-
    * added strict order operator (aka operator before, eg. "one << two <<
      three")
-
    * added indextool utility, moved --dumpheader there, added
      --debugdocids, --dumphitlist options
-
    * added own RNG, reseeded on @random sort query (bug #183)
-
    * added field-start and field-end modifiers support (syntax is "^hello
      world$"; field-end requires reindex)
-
    * added MVA attribute support to IN() function
-
    * added AND, OR, and NOT support to expressions
-
    * improved logging of (optimized) multi-queries (now logging chained
      query count)
-
    * improved handshake error handling, fixed protocol version byte order
      (omg)
-
    * updated SphinxSE to protocol 1.22
-
    * allowed phrase_boundary_step=-1 (trick to emulate keyword expansion)
-
    * removed SPH_MAX_QUERY_WORDS limit
-
    * fixed CLI search vs documents missing from DB (bug #257)
-
    * fixed libsphinxclient results leak on subsequent sphinx_run_queries
      call (bug #256)
-
    * fixed libsphinxclient handling of zero max_matches and cutoff (bug
      #208)
-
    * fixed Java API over-64K string reads (eg. big snippets) in Java API
      (bug #181)
-
    * fixed Java API 2nd Query() after network error in 1st Query() call
      (bug #308)
-
    * fixed typo-class bugs in SetFilterFloatRange (bug #259), SetSortMode
      (bug #248)
-
    * fixed missing @@relaxed support (bug #276), fixed missing error on
      @nosuchfield queries, documented @@relaxed
-
    * fixed UNIX socket permissions to 0777 (bug #288)
-
    * fixed xmlpipe2 crash on schemas with no fields, added better document
      structure checks
-
    * fixed (and optimized) expr parser vs IN() with huge (10K+) args count
-
    * fixed double EarlyCalc() in fullscan mode (minor performance impact)
-
    * fixed phrase boundary handling in some cases (on buffer end, on
      trailing whitespace)
-
    * fixes in snippets (aka excerpts) generation
-
    * fixed inline attrs vs id64 index corruption
-
    * fixed head searchd crash on config re-parse failure
-
    * fixed handling of numeric keywords with leading zeroes such as "007"
      (bug #251)
-
    * fixed junk in SphinxSE status variables (bug #304)
-
    * fixed wordlist checkpoints serialization (bug #236)
-
    * fixed unaligned docinfo id access (bug #230)
-
    * fixed GetRawBytes() vs oversized blocks (headers with over 32K
      charset_table should now work, bug #300)
-
    * fixed buffer overflow caused by too long dest wordform, updated tests
-
    * fixed IF() return type (was always int, is deduced now)
-
    * fixed legacy queries vs. special chars vs. multiple indexes
-
    * fixed write-write-read socket access pattern vs Nagle vs delays vs
      FreeBSD (oh wow)
-
    * fixed exceptions vs query-parser issue
-
    * fixed late calc vs @weight in expressions (bug #285)
-
    * fixed early lookup/calc vs filters (bug #284)
-
    * fixed emulated MATCH_ANY queries (empty proximity and phrase queries
      are allowed now)
-
    * fixed MATCH_ANY ranker vs fields with no matches
-
    * fixed index file size vs inplace_enable (bug #245)
-
    * fixed that old logs were not closed on USR1 (bug #221)
-
    * fixed handling of '!' alias to NOT operator (bug #237)
-
    * fixed error handling vs query steps (step failure was not reported)
-
    * fixed querying vs inline attributes
-
    * fixed stupid bug in escaping code, fixed EscapeString() and made it
      static
-
    * fixed parser vs @field -keyword, foo|@field bar, "" queries (bug #310)
 
-A.8. Version 0.9.9-rc1, 17 nov 2008
+A.9. Version 0.9.9-rc1, 17 nov 2008
 ===================================
 
    * added min_stemming_len directive
-
    * added IsConnectError() API call (helps distingusih API vs remote
      errors)
-
    * added duplicate log messages filter to searchd
-
    * added --nodetach debugging switch to searchd
-
    * added blackhole agents support for debugging/testing (agent_blackhole
      directive)
-
    * added max_filters, max_filter_values directives (were hardcoded
      before)
-
    * added int64 expression evaluation path, automatic inference, and
      BIGINT() enforcer function
-
    * added crash handler for debugging (crash_log_path directive)
-
    * added MS SQL (aka SQL Server) source support (Windows only,
      mssql_winauth and mssql_unicode directives)
-
    * added indexer-side column unpacking feature (unpack_zlib,
      unpack_mysqlcompress directives)
-
    * added nested brackers and NOTs support to query language, rewritten
      query parser
-
    * added persistent connections support (Open() and Close() API calls)
-
    * added index_exact_words feature, and exact form operator to query
      language ("hello =world")
-
    * added status variables support to SphinxSE (SHOW STATUS LIKE
      'sphinx_%')
-
    * added max_packet_size directive (was hardcoded at 8M before)
-
    * added UNIX socket support, and multi-interface support (listen
      directive)
-
    * added star-syntax support to BuildExcerpts() API call
-
    * added inplace inversion of .spa and .spp (inplace_enable directive,
      1.5-2x less disk space for indexing)
-
    * added builtin Czech stemmer (morphology=stem_cz)
-
    * added IDIV(), NOW(), INTERVAL(), IN() functions to expressions
-
    * added index-level early-reject based on filters
-
    * added MVA updates feature (mva_updates_pool directive)
-
    * added select-list feature with computed expressions support (see
      SetSelect() API call, test.php --select switch), protocol 1.22
-
    * added integer expressions support (2x faster than float)
-
    * added multiforms support (multiple source words in wordforms file)
-
    * added legacy rankers (MATCH_ALL/MATCH_ANY/etc), removed legacy
      matching code (everything runs on V2 engine now)
-
    * added field position limit modifier to field operator (syntax:
      @title[50] hello world)
-
    * added killlist support (sql_query_killlist directive,
      --merge-killlists switch)
-
    * added on-disk SPI support (ondisk_dict directive)
-
    * added indexer IO stats
-
    * added periodic .spa flush (attr_flush_period directive)
-
    * added config reload on SIGHUP
-
    * added per-query attribute overrides feature (see SetOverride() API
      call); protocol 1.21
-
    * added signed 64bit attrs support (sql_attr_bigint directive)
-
    * improved HTML stripper to also skip PIs (<? ... ?>, such as <?php ...
      ?>)
-
    * improved excerpts speed (upto 50x faster on big documents)
-
    * fixed a short window of searchd inaccessibility on startup (started
      listen()ing too early before)
-
    * fixed .spa loading on systems where read() is 2GB capped
-
    * fixed infixes vs morphology issues
-
    * fixed backslash escaping, added backslash to EscapeString()
-
    * fixed handling of over-2GB dictionary files (.spi)
 
-A.9. Version 0.9.8.1, 30 oct 2008
-=================================
+A.10. Version 0.9.8.1, 30 oct 2008
+==================================
 
    * added configure script to libsphinxclient
-
    * changed proximity/quorum operator syntax to require whitespace after
      length
-
    * fixed potential head process crash on SIGPIPE during "maxed out"
      message
-
    * fixed handling of incomplete remote replies (caused over-degraded
      distributed results, in rare cases)
-
    * fixed sending of big remote requests (caused distributed requests to
      fail, in rare cases)
-
    * fixed FD_SET() overflow (caused searchd to crash on startup, in rare
      cases)
-
    * fixed MVA vs distributed indexes (caused loss of 1st MVA value in
      result set)
-
    * fixed tokenizing of exceptions terminated by specials (eg. "GPS AT&T"
      in extended mode)
-
    * fixed buffer overrun in stemmer on overlong tokens occasionally
      emitted by proximity/quorum operator parser (caused crashes on certain
      proximity/quorum queries)
-
    * fixed wordcount ranker (could be dropping hits)
-
    * fixed --merge feature (numerous different fixes, caused broken
      indexes)
-
    * fixed --merge-dst-range performance
-
    * fixed prefix/infix generation for stopwords
-
    * fixed ignore_chars vs specials
-
    * fixed misplaced F_SETLKW check (caused certain build types, eg. RPM
      build on FC8, to fail)
-
    * fixed dictionary-defined charsets support in spelldump, added \x-style
      wordchars support
-
    * fixed Java API to properly send long strings (over 64K; eg. long
      document bodies for excerpts)
-
    * fixed Python API to accept offset/limit of 'long' type
-
    * fixed default ID range (that filtered out all 64-bit values) in Java
      and Python APIs
 
-A.10. Version 0.9.8, 14 jul 2008
+A.11. Version 0.9.8, 14 jul 2008
 ================================
 
 Indexing
@@ -11710,57 +11027,37 @@ Indexing
 
    * added support for 64-bit document and keyword IDs, --enable-id64
      switch to configure
-
    * added support for floating point attributes
-
    * added support for bitfields in attributes, sql_attr_bool directive and
      bit-widths part in sql_attr_uint directive
-
    * added support for multi-valued attributes (MVA)
-
    * added metaphone preprocessor
-
    * added libstemmer library support, provides stemmers for a number of
      additional languages
-
    * added xmlpipe2 source type, that supports arbitrary fields and
      attributes
-
    * added word form dictionaries, wordforms directive (and spelldump
      utility)
-
    * added tokenizing exceptions, exceptions directive
-
    * added an option to fully remove element contents to HTML stripper,
      html_remove_elements directive
-
    * added HTML entities decoder (with full XHTML1 set support) to HTML
      stripper
-
    * added per-index HTML stripping settings, html_strip, html_index_attrs,
      and html_remove_elements directives
-
    * added IO load throttling, max_iops and max_iosize directives
-
    * added SQL load throttling, sql_ranged_throttle directive
-
    * added an option to index prefixes/infixes for given fields only,
      prefix_fields and infix_fields directives
-
    * added an option to ignore certain characters (instead of just treating
      them as whitespace), ignore_chars directive
-
    * added an option to increment word position on phrase boundary
      characters, phrase_boundary and phrase_boundary_step directives
-
    * added --merge-dst-range switch (and filters) to index merging feature
      (--merge switch)
-
    * added mysql_connect_flags directive (eg. to reduce indexing time MySQL
      network traffic and/or time)
-
    * improved ordinals sorting; now runs in fixed RAM
-
    * improved handling of documents with zero/NULL ids, now skipping them
      instead of aborting
 
@@ -11769,33 +11066,21 @@ Search daemon
 
    * added an option to unlink old index on succesful rotation, unlink_old
      directive
-
    * added an option to keep index files open at all times (fixes subtle
      races on rotation), preopen and preopen_indexes directives
-
    * added an option to profile searchd disk I/O, --iostats command-line
      option
-
    * added an option to rotate index seamlessly (fully avoids query
      stalls), seamless_rotate directive
-
    * added HTML stripping support to excerpts (uses per-index settings)
-
    * added 'exact_phrase', 'single_passage', 'use_boundaries',
      'weight_order 'options to BuildExcerpts() API call
-
    * added distributed attribute updates propagation
-
    * added distributed retries on master node side
-
    * added log reopen on SIGUSR1
-
    * added --stop switch (sends SIGTERM to running instance)
-
    * added Windows service mode, and --servicename switch
-
    * added Windows --rotate support
-
    * improved log timestamping, now with millisecond precision
 
 Querying
@@ -11803,53 +11088,34 @@ Querying
 
    * added extended engine V2 (faster, cleaner, better; SPH_MATCH_EXTENDED2
      mode)
-
    * added ranking modes support (V2 engine only; SetRankingMode() API
      call)
-
    * added quorum searching support to query language (V2 engine only;
      example: "any three of all these words"/3)
-
    * added query escaping support to query language, and EscapeString() API
      call
-
    * added multi-field syntax support to query language (example:
      "@(field1,field2) something"), and @@relaxed field checks option
-
    * added optional star-syntax ('word*') support in keywords, enable_star
      directive (for prefix/infix indexes only)
-
    * added full-scan support (query must be fully empty; can perform
      block-reject optimization)
-
    * added COUNT(DISTINCT(attr)) calculation support, SetGroupDistinct()
      API call
-
    * added group-by on MVA support, SetArrayResult() PHP API call
-
    * added per-index weights feature, SetIndexWeights() API call
-
    * added geodistance support, SetGeoAnchor() API call
-
    * added result set sorting by arbitrary expressions in run time (eg.
      "@weight+log(price)*2.5"), SPH_SORT_EXPR mode
-
    * added result set sorting by @custom compile-time sorting function (see
      src/sphinxcustomsort.inl)
-
    * added result set sorting by @random value
-
    * added result set merging for indexes with different schemas
-
    * added query comments support (3rd arg to Query()/AddQuery() API calls,
      copied verbatim to query log)
-
    * added keyword extraction support, BuildKeywords() API call
-
    * added binding field weights by name, SetFieldWeights() API call
-
    * added optional limit on query time, SetMaxQueryTime() API call
-
    * added optional limit on found matches count (4rd arg to SetLimits()
      API call, so-called 'cutoff')
 
@@ -11857,18 +11123,13 @@ APIs and SphinxSE
 -----------------
 
    * added pure C API (libsphinxclient)
-
    * added Ruby API (thanks to Dmytro Shteflyuk)
-
    * added Java API
-
    * added SphinxSE support for MVAs (use varchar), floats (use float),
      64bit docids (use bigint)
-
    * added SphinxSE options "floatrange", "geoanchor", "fieldweights",
      "indexweights", "maxquerytime", "comment", "host" and "port"; and
      support for "expr:CLAUSE"
-
    * improved SphinxSE max query size (using MySQL condition pushdown),
      upto 256K now
 
@@ -11877,345 +11138,203 @@ General
 
    * added scripting (shebang syntax) support to config files (example:
      #!/usr/bin/php in the first line)
-
    * added unified config handling and validation to all programs
-
    * added unified documentation
-
    * added .spec file for RPM builds
-
    * added automated testing suite
-
    * improved index locking, now fcntl()-based instead of buggy
      file-existence-based
-
    * fixed unaligned RAM accesses, now works on SPARC and ARM
 
 Changes and fixes since 0.9.8-rc2
 ---------------------------------
 
    * added pure C API (libsphinxclient)
-
    * added Ruby API
-
    * added SetConnectTimeout() PHP API call
-
    * added allowed type check to UpdateAttributes() handler (bug #174)
-
    * added defensive MVA checks on index preload (protection against broken
      indexes, bug #168)
-
    * added sphinx-min.conf sample file
-
    * added --without-iconv switch to configure
-
    * removed redundant -lz dependency in searchd
-
    * removed erroneous "xmlpipe2 deprecated" warning
-
    * fixed EINTR handling in piped read (bug #166)
-
    * fixup query time before logging and sending to client (bug #153)
-
    * fixed attribute updates vs full-scan early-reject index (bug #149)
-
    * fixed gcc warnings (bug #160)
-
    * fixed mysql connection attempt vs pgsql source type (bug #165)
-
    * fixed 32-bit wraparound when preloading over 2 GB files
-
    * fixed "out of memory" message vs over 2 GB allocs (bug #116)
-
    * fixed unaligned RAM access detection on ARM (where unaligned reads do
      not crash but produce wrong results)
-
    * fixed missing full scan results in some cases
-
    * fixed several bugs in --merge, --merge-dst-range
-
    * fixed @geodist vs MultiQuery and filters, @expr vs MultiQuery
-
    * fixed GetTokenEnd() vs 1-grams (was causing crash in excerpts)
-
    * fixed sql_query_range to handle empty strings in addition to NULL
      strings (Postgres specific)
-
    * fixed morphology=none vs infixes
-
    * fixed case sensitive attributes names in UpdateAttributes()
-
    * fixed ext2 ranking vs. stopwords (now using atompos from query parser)
-
    * fixed EscapeString() call
-
    * fixed escaped specials (now handled as whitespace if not in charset)
-
    * fixed schema minimizer (now handles type/size mismatches)
-
    * fixed word stats in extended2; stemmed form is now returned
-
    * fixed spelldump case folding vs dictionary-defined character sets
-
    * fixed Postgres BOOLEAN handling
-
    * fixed enforced "inline" docinfo on empty indexes (normally ok, but
      index merge was really confused)
-
    * fixed rare count(distinct) out-of-bounds issue (it occasionaly caused
      too high @distinct values)
-
    * fixed hangups on documents with id=DOCID_MAX in some cases
-
    * fixed rare crash in tokenizer (prefixed synonym vs. input stream eof)
-
    * fixed query parser vs "aaa (bbb ccc)|ddd" queries
-
    * fixed BuildExcerpts() request in Java API
-
    * fixed Postgres specific memory leak
-
    * fixed handling of overshort keywords (less than min_word_len)
-
    * fixed HTML stripper (now emits space after indexed attributes)
-
    * fixed 32-field case in query parser
-
    * fixed rare count(distinct) vs. querying multiple local indexes vs.
      reusable sorter issue
-
    * fixed sorting of negative floats in SPH_SORT_EXTENDED mode
 
-A.11. Version 0.9.7, 02 apr 2007
+A.12. Version 0.9.7, 02 apr 2007
 ================================
 
    * added support for sql_str2ordinal_column
-
    * added support for upto 5 sort-by attrs (in extended sorting mode)
-
    * added support for separate groups sorting clause (in group-by mode)
-
    * added support for on-the-fly attribute updates (PRE-ALPHA; will change
      heavily; use for preliminary testing ONLY)
-
    * added support for zero/NULL attributes
-
    * added support for 0.9.7 features to SphinxSE
-
    * added support for n-grams (alpha, 1-grams only for now)
-
    * added support for warnings reported to client
-
    * added support for exclude-filters
-
    * added support for prefix and infix indexing (see max_prefix_len,
      max_infix_len)
-
    * added @* syntax to reset current field to query language
-
    * added removal of duplicate entries in query index order
-
    * added PHP API workarounds for PHP signed/unsigned braindamage
-
    * added locks to avoid two concurrent indexers working on same index
-
    * added check for existing attributes vs. docinfo=none case
-
    * improved groupby code a lot (better precision, and upto 25x times
      faster in extreme cases)
-
    * improved error handling and reporting
-
    * improved handling of broken indexes (reports error instead of
      hanging/crashing)
-
    * improved mmap() limits for attributes and wordlists (now able to map
      over 4 GB on x64 and over 2 GB on x32 where possible)
-
    * improved malloc() pressure in head daemon (search time should not
      degrade with time any more)
-
    * improved test.php command line options
-
    * improved error reporting (distributed query, broken index etc issues
      now reported to client)
-
    * changed default network packet size to be 8M, added extra checks
-
    * fixed division by zero in BM25 on 1-document collections (in extended
      matching mode)
-
    * fixed .spl files getting unlinked
-
    * fixed crash in schema compatibility test
-
    * fixed UTF-8 Russian stemmer
-
    * fixed requested matches count when querying distributed agents
-
    * fixed signed vs. unsigned issues everywhere (ranged queries, CLI
      search output, and obtaining docid)
-
    * fixed potential crashes vs. negative query offsets
-
    * fixed 0-match docs vs. extended mode vs. stats
-
    * fixed group/timestamp filters being ignored if querying from older
      clients
-
    * fixed docs to mention pgsql source type
-
    * fixed issues with explicit '&' in extended matching mode
-
    * fixed wrong assertion in SBCS encoder
-
    * fixed crashes with no-attribute indexes after rotate
 
-A.12. Version 0.9.7-rc2, 15 dec 2006
+A.13. Version 0.9.7-rc2, 15 dec 2006
 ====================================
 
    * added support for extended matching mode (query language)
-
    * added support for extended sorting mode (sorting clauses)
-
    * added support for SBCS excerpts
-
    * added mmap()ing for attributes and wordlist (improves search time,
      speeds up fork() greatly)
-
    * fixed attribute name handling to be case insensitive
-
    * fixed default compiler options to simplify post-mortem debugging
      (added -g, removed -fomit-frame-pointer)
-
    * fixed rare memory leak
-
    * fixed "hello hello" queries in "match phrase" mode
-
    * fixed issue with excerpts, texts and overlong queries
-
    * fixed logging multiple index name (no longer tokenized)
-
    * fixed trailing stopword not flushed from tokenizer
-
    * fixed boolean evaluation
-
    * fixed pidfile being wrongly unlink()ed on bind() failure
-
    * fixed --with-mysql-includes/libs (they conflicted with well-known
      paths)
-
    * fixes for 64-bit platforms
 
-A.13. Version 0.9.7-rc1, 26 oct 2006
+A.14. Version 0.9.7-rc1, 26 oct 2006
 ====================================
 
    * added alpha index merging code
-
    * added an option to decrease max_matches per-query
-
    * added an option to specify IP address for searchd to listen on
-
    * added support for unlimited amount of configured sources and indexes
-
    * added support for group-by queries
-
    * added support for /2 range modifier in charset_table
-
    * added support for arbitrary amount of document attributes
-
    * added logging filter count and index name
-
    * added --with-debug option to configure to compile in debug mode
-
    * added -DNDEBUG when compiling in default mode
-
    * improved search time (added doclist size hints, in-memory wordlist
      cache, and used VLB coding everywhere)
-
    * improved (refactored) SQL driver code (adding new drivers should be
      very easy now)
-
    * improved exceprts generation
-
    * fixed issue with empty sources and ranged queries
-
    * fixed querying purely remote distributed indexes
-
    * fixed suffix length check in English stemmer in some cases
-
    * fixed UTF-8 decoder for codes over U+20000 (for CJK)
-
    * fixed UTF-8 encoder for 3-byte sequences (for CJK)
-
    * fixed overshort (less than min_word_len) words prepended to next field
-
    * fixed source connection order (indexer does not connect to all sources
      at once now)
-
    * fixed line numbering in config parser
-
    * fixed some issues with index rotation
 
-A.14. Version 0.9.6, 24 jul 2006
+A.15. Version 0.9.6, 24 jul 2006
 ================================
 
    * added support for empty indexes
-
    * added support for multiple sql_query_pre/post/post_index
-
    * fixed timestamp ranges filter in "match any" mode
-
    * fixed configure issues with --without-mysql and --with-pgsql options
-
    * fixed building on Solaris 9
 
-A.15. Version 0.9.6-rc1, 26 jun 2006
+A.16. Version 0.9.6-rc1, 26 jun 2006
 ====================================
 
    * added boolean queries support (experimental, beta version)
-
    * added simple file-based query cache (experimental, beta version)
-
    * added storage engine for MySQL 5.0 and 5.1 (experimental, beta
      version)
-
    * added GNU style configure script
-
    * added new searchd protocol (all binary, and should be backwards
      compatible)
-
    * added distributed searching support to searchd
-
    * added PostgreSQL driver
-
    * added excerpts generation
-
    * added min_word_len option to index
-
    * added max_matches option to searchd, removed hardcoded MAX_MATCHES
      limit
-
    * added initial documentation, and a working example.sql
-
    * added support for multiple sources per index
-
    * added soundex support
-
    * added group ID ranges support
-
    * added --stdin command-line option to search utility
-
    * added --noprogress option to indexer
-
    * added --index option to search
-
    * fixed UTF-8 decoder (3-byte codepoints did not work)
-
    * fixed PHP API to handle big result sets faster
-
    * fixed config parser to handle empty values properly
-
    * fixed redundant time(NULL) calls in time-segments mode
 
 --eof--

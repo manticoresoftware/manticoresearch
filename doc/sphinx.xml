@@ -11516,6 +11516,66 @@ seconds of the next minute.
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 
+<sect1 id="rel205"><title>Version 2.0.5-release, 28 jul 2012</title>
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+<listitem><para>fixed #1258, <code>xmlpipe2</code> refused to index indexes with <code>docinfo=inline</code></para></listitem>
+<listitem><para>fixed #1257, legacy groupby modes vs <code>dist_threads</code> could occasionally return wrong search results (race condition)</para></listitem>
+<listitem><para>fixed #1253, missing single-word query performance optimization (simplified ranker) vs prefix-expanded keywords vs <code>dict=keywords</code></para></listitem>
+<listitem><para>fixed #1252, COUNT(*) vs <link linkend="conf-dist-threads">dist_threads</link> could occasionally crash (race condition)</para></listitem>
+<listitem><para>fixed #1251, missing expression support in the <link linkend="expr-func-in">IN()</link> function</para></listitem>
+<listitem><para>fixed #1245, <link linkend="api-func-flushattributes">FlushAttributes</link> mistakenly disabled by <link linkend="conf-attr-flush-period">attr_flush_period=0</link> setting</para></listitem>
+<listitem><para>fixed #1244, per-API-command (search, update, etc) statistics were not updated by SphinxQL requests</para></listitem>
+<listitem><para>fixed #1243, misc issues (broken statistics, weights, checks) with very long keywords having blended parts in RT indexes</para></listitem>
+<listitem><para>fixed #1240, embedded <code>xmlpipe2</code> schema with more attributes than the <code>sphinx.conf</code> one caused <filename>indexer</filename> to crash</para></listitem>
+<listitem><para>fixed #1239, memory leak when optimizing <code>ABS(const)</code> and other 1-arg functions</para></listitem>
+<listitem><para>fixed #1228, #761, #1183, #1190, #1198, misc issues occasonally caused by MVA updates (crash on SaveAttributes; index rotation vs index name and TID; looped MVA updates; persistent MVA removal on rotation)</para></listitem>
+<listitem><para>fixed #1227, API queries with <code>SetGeoAnchor()</code> were logged incorrectly in SphinxQL-format query logs (<code>query_log_format=sphinxql</code>)</para></listitem>
+<listitem><para>fixed #1214, phrase query parsing issues when <link linkend="conf-blend-chars">blend_chars</link> contained a quote (&quot;) symbol</para></listitem>
+<listitem><para>fixed #1213, attribute aliases were not recognized by the subsequent <code>SELECT</code> items</para></listitem>
+<listitem><para>fixed #1212, <link linkend="ref-indextool"><filename>indextool</filename></link> failed to check hitless keywords</para></listitem>
+<listitem><para>fixed #1210, crash when indexing an index with joined fields only (no regular fields)</para></listitem>
+<listitem><para>fixed #1209, <code>xmlpipe_fixup_utf8</code> off by a byte on certain (pretty rare) malformed sequences</para></listitem>
+<listitem><para>fixed #1202, various issues with <code>CALL KEYWORDS</code> vs RT indexes (crashes vs <code>dict=keywords</code>, missing modifiers in output)</para></listitem>
+<listitem><para>fixed #1201, snippets vs <code>query_mode=1</code> vs complex OR-queries could occasionally crash</para></listitem>
+<listitem><para>fixed #1197, <filename>indexer</filename> running out of disk space could either crash, or fail to display a proper error message</para></listitem>
+<listitem><para>fixed #1185, keywords with wildcards were not handled when highlighting the entire document</para></listitem>
+<listitem><para>fixed #1184, <filename>indexer</filename> crash when <link linkend="conf-ngram-chars">ngram_chars</link> was set, but <link linkend="conf-ngram-len">ngram_len=0</link></para></listitem>
+<listitem><para>fixed #1182, <filename>indexer</filename> crash on certain combinations of <link linkend="conf-docinfo"><code>docinfo=inline</code></link> vs bitfields</para></listitem>
+<listitem><para>fixed #1181, <code>GROUP BY</code> on a MVA64 was truncated at 32 bits</para></listitem>
+<listitem><para>fixed #1179, <code>passage_boundary</code> in snippets could get ignored (when highlighting the entire document)</para></listitem>
+<listitem><para>fixed #1178, <filename>indexer</filename> could crash when <code>charset_table</code> specified out-of-bounds codes</para></listitem>
+<listitem><para>fixed #1177, SPZ queries in snippets erroneously required <link linkend="api-func-buildexcerpts">passage_boundary</link> option to be explicitly set</para></listitem>
+<listitem><para>fixed #1176, multi-queries with a <code>GROUP/ORDER BY</code> on a string attributed crashed</para></listitem>
+<listitem><para>fixed #1175, connection id mismatch in SphinxQL-format query logs</para></listitem>
+<listitem><para>fixed #1167, nested parentheses in a full-text query could mistakenly reset preceding field or zone limit operator</para></listitem>
+<listitem><para>fixed #1158, float range filters were not supported in a multi-query batch optimizer</para></listitem>
+<listitem><para>fixed #1157, broken gcc-4.7 build</para></listitem>
+<listitem><para>fixed #1156, empty result set instead of an error message when querying distributed indexes with <link linkend="conf-compat-sphinxql-magics">compat_sphinxql_magic=1</link> and hitting an error</para></listitem>
+<listitem><para>fixed #1143, dash after a number incorrectly parsed as an operator <code>NOT</code></para></listitem>
+<listitem><para>fixed #1137, <filename>searchd</filename> <link linkend="ref-searchd">--stopwait</link> hanged when the running instance crashed during shutdown</para></listitem>
+<listitem><para>fixed #1136, high idle CPU load on systems without <code>pthread_timed_lock()</code></para></listitem>
+<listitem><para>fixed #1134, issues with <code>prefork</code> workers on systems without <code>pthread_timed_lock()</code></para></listitem>
+<listitem><para>fixed #1133, <link linkend="api-func-buildexcerpts"><code>BuildExcerpts()</code></link> on a distributed index with <code>load_files</code> did not distribute the jobs</para></listitem>
+<listitem><para>fixed #1126, inaccurate hits sorting progress report on joined field indexing</para></listitem>
+<listitem><para>fixed #1121, occasional bad entries (wrong characters or invalid SQL) in SphinxQL-format query log</para></listitem>
+<listitem><para>fixed #1118, <code>libsphinxclient</code> requests failed when using <code>SPH_RANK_EXPR</code></para></listitem>
+<listitem><para>fixed #1073, improved handling of wordforms/multiforms rules referring to stopwords</para></listitem>
+<listitem><para>fixed #1062, bigint filter ranges truncated when searching via <link linkend="sphinxql-reference">SphinxQL</link></para></listitem>
+<listitem><para>fixed #1052, SphinxSE range arguments with leading zeroes mistakenly parsed as octal</para></listitem>
+<listitem><para>fixed #1011, negative MVA64 values mistakenly converted to positive (on indexing and/or output)</para></listitem>
+<listitem><para>fixed #974, crash when logging queries over 2048 bytes with performance counters enabled</para></listitem>
+<listitem><para>fixed #909, field-end modifier was ignored when followed by a non-whitespace syntax character (eg quote or bracket)</para></listitem>
+<listitem><para>fixed #907, issue with bigint filtering (large positive or negative values)</para></listitem>
+<listitem><para>fixed #906, #1074, Mac OS X 10.7.3 builds (conflicting memory allocation routines in Sphinx and external libs)</para></listitem>
+<listitem><para>fixed #901, #1066, sending bigger request packets was broken in Python API</para></listitem>
+<listitem><para>fixed #879, filters on weight-dependent expressions did not work correctly</para></listitem>
+<listitem><para>fixed #553, default/missing port value was not handled properly in <link linkend="api-func-setserver">SetServer()</link> API call</para></listitem>
+<listitem><para>fixed that blended vs multiforms vs <link linkend="conf-min-word-len">min_word_len</link> could hang the query parser</para></listitem>
+<listitem><para>fixed missing command-line switches documentation</para></listitem>
+</itemizedlist>
+</sect1>
+
 <sect1 id="rel204"><title>Version 2.0.4-release, 02 mar 2012</title>
 <bridgehead>Bug fixes</bridgehead>
 <itemizedlist>

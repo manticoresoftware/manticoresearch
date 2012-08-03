@@ -307,7 +307,7 @@ struct Filter_IdRange: public IFilter_Range
 {
 	virtual void SetRange ( SphAttr_t tMin, SphAttr_t tMax )
 	{
-		m_iMinValue = Max ( 0, tMin );
+		m_iMinValue = (SphDocID_t)Max ( 0, (SphDocID_t)tMin );
 		m_iMaxValue = tMax;
 	}
 

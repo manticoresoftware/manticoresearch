@@ -2,7 +2,7 @@
 .\"     Title: indextool
 .\"    Author: [see the "Author" section]
 .\" Generator: DocBook XSL Stylesheets v1.75.2 <http://docbook.sf.net/>
-.\"      Date: 03/02/2012
+.\"      Date: 07/27/2012
 .\"    Manual: Sphinxsearch
 .\"    Source: 2.1.0
 .\"  Language: English
@@ -94,6 +94,11 @@ and/or hardware faults\&.
 \fB\-\-strip\-path\fR
 .RS 4
 strips the path names from all the file names referenced from the index (stopwords, wordforms, exceptions, etc)\&. This is useful for checking indexes built on another machine with possibly different path layouts\&.
+.RE
+.PP
+\fB\-\-optimize\-rt\-klists\fR
+.RS 4
+optimizes the kill list memory use in the disk chunk of a given RT index\&. That is a one\-off optimization intended for rather old RT indexes, created by development versions prior to 1\&.10\-beta release\&. As of 1\&.10\-beta releases, this kill list optimization (purging) should happen automatically, and there should never be a need to use this option\&.
 .RE
 .SH "OPTIONS"
 .PP

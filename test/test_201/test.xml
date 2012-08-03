@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>attribute block subindex vs MVA</name>
+
+<requires>
+<variant_match />
+</requires>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT document_id, text, attr1, mva1 FROM main_table2
+	<dynamic>
+	<variant>sql_attr_multi	= uint mva1 from field mva1</variant>
+	<variant>sql_attr_multi	= bigint mva1 from field mva1</variant>
+	</dynamic>
+	sql_attr_uint	= attr1
+}
+
+index test2
+{
+	source			= src2
+	path			= <data_path/>/test2
+	docinfo			= extern
+	charset_type	= utf-8
+	min_word_len	= 1
+}
+</config>
+
+<queries>
+	<query filter="attr1" filter_value="101"></query>
+	<query filter="attr1" filter_value="164"></query>
+	<query filter="attr1" filter_value="165"></query>
+	<query filter="attr1" filter_value="227"></query>
+	<query filter="attr1" filter_value="228"></query>
+	<query filter="attr1" filter_value="229"></query>
+	<query filter="attr1" filter_value="230"></query>
+</queries>
+
+<db_create>
+CREATE TABLE `main_table2` (
+  `document_id` int(11) DEFAULT NULL,
+  `text` varchar(255) NOT NULL,
+  `attr1` int(11) DEFAULT NULL,
+  `mva1` varchar(255) NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `main_table2`
+</db_drop>
+
+<custom_insert><![CDATA[
+$vals = array();
+for ($i=1; $i<145; ++$i)
+	$vals[] = sprintf ("(%d,'test%d',%d,'%d')",$i,$i,100+$i,1000+$i);
+mysql_query ("INSERT INTO main_table2 VALUES ".join(',',$vals));
+]]></custom_insert>
+
+</test>

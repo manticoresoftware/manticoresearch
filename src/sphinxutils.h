@@ -208,6 +208,8 @@ void sphBacktrace ( int iFD, bool bSafe=false );
 void sphBacktrace ( EXCEPTION_POINTERS * pExc, const char * sFile );
 #endif
 
+void sphBacktraceSetBinaryName ( const char * sName );
+
 /// plain backtrace - returns static buffer with the text of the call stack
 const char * DoBacktrace ( int iDepth=0, int iSkip=0 );
 

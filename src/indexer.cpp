@@ -1680,6 +1680,7 @@ int main ( int argc, char ** argv )
 		return 1;
 	}
 
+	sphBacktraceSetBinaryName ( argv[0] );
 	SetSignalHandlers();
 
 	///////////////

@@ -1735,13 +1735,29 @@ void sphSafeInfo ( int iFD, const char * sFmt, ... )
 	sphWrite ( iFD, g_sSafeInfoBuf, iLen );
 }
 
+
+int sphSafeInfo ( char * pBuf, const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	int iLen = sphVSprintf ( pBuf, sFmt, ap ); // FIXME! make this vsnprintf
+	va_end ( ap );
+	return iLen;
+}
+
+
 #if !USE_WINDOWS
 
 #define SPH_BACKTRACE_ADDR_COUNT 128
+#define SPH_BT_BINARY_NAME 2
+#define SPH_BT_ADDRS 3
 static void * g_pBacktraceAddresses [SPH_BACKTRACE_ADDR_COUNT];
+static char g_pBacktrace[4096];
+static const char g_sSourceTail[] = "> source.txt\n";
+static const char * g_pArgv[128] = { "addr2line", "-e", "./searchd", "0x0", NULL };
+static CSphString g_sBinaryName;
 
 #if HAVE_BACKTRACE & HAVE_BACKTRACE_SYMBOLS
-static char g_pBacktrace[4096];
 const char * DoBacktrace ( int iDepth, int iSkip )
 {
 	if ( !iDepth || iDepth > SPH_BACKTRACE_ADDR_COUNT )
@@ -1827,11 +1843,11 @@ void sphBacktrace ( int iFD, bool bSafe )
 		{
 			int iRound = Min ( 65536, iStackSize );
 			pMyStack = (void *) ( ( (size_t) &pFramePointer + iRound ) & ~(size_t)65535 );
-			sphSafeInfo ( iFD, "Something wrong with thread stack, backtrace may be incorrect (fp=%p)", pFramePointer );
+			sphSafeInfo ( iFD, "Something wrong with thread stack, backtrace may be incorrect (fp=0x%p)", pFramePointer );
 
 			if ( pFramePointer > (BYTE**) pMyStack || pFramePointer < (BYTE**) pMyStack - iStackSize )
 			{
-				sphSafeInfo ( iFD, "Wrong stack limit or frame pointer, backtrace failed (fp=%p, stack=%p, stacksize=%d)",
+				sphSafeInfo ( iFD, "Wrong stack limit or frame pointer, backtrace failed (fp=0x%p, stack=0x%p, stacksize=0x%x)",
 					pFramePointer, pMyStack, iStackSize );
 				break;
 			}
@@ -1843,7 +1859,7 @@ void sphBacktrace ( int iFD, bool bSafe )
 		while ( pFramePointer < (BYTE**) pMyStack )
 		{
 			pNewFP = (BYTE**) *pFramePointer;
-			sphSafeInfo ( iFD, "%p", iFrameCount==iReturnFrameCount? *(pFramePointer + SIGRETURN_FRAME_OFFSET) : *(pFramePointer + 1) );
+			sphSafeInfo ( iFD, "0x%p", iFrameCount==iReturnFrameCount ? *(pFramePointer + SIGRETURN_FRAME_OFFSET) : *(pFramePointer + 1) );
 
 			bOk = pNewFP > pFramePointer;
 			if ( !bOk ) break;
@@ -1858,26 +1874,75 @@ void sphBacktrace ( int iFD, bool bSafe )
 		break;
 	}
 
+	int iDepth = 0;
 #if HAVE_BACKTRACE
 	sphSafeInfo ( iFD, "begin of system backtrace:" );
-	int iDepth = backtrace ( g_pBacktraceAddresses, SPH_BACKTRACE_ADDR_COUNT );
+	iDepth = backtrace ( g_pBacktraceAddresses, SPH_BACKTRACE_ADDR_COUNT );
 #if HAVE_BACKTRACE_SYMBOLS
 	sphSafeInfo ( iFD, "begin of system symbols:" );
 	backtrace_symbols_fd ( g_pBacktraceAddresses, iDepth, iFD );
 #elif !HAVE_BACKTRACE_SYMBOLS
 	sphSafeInfo ( iFD, "begin of manual symbols:" );
-	for ( int i=0; i<Depth; i++ )
+	for ( int i=0; i<iDepth; i++ )
 		sphSafeInfo ( iFD, "%p", g_pBacktraceAddresses[i] );
 #endif // HAVE_BACKTRACE_SYMBOLS
 #endif // !HAVE_BACKTRACE
 
 	if ( bOk )
 		sphSafeInfo ( iFD, "Backtrace looks OK. Now you have to do following steps:\n"
-							"  1. Run the command over the crashed binary (for example, 'indexer'):\n"
-							"     nm -n indexer > indexer.sym\n"
+							"  1. Run the command over the crashed binary (for example, 'searchd'):\n"
+							"     nm -n searchd > searchd.sym\n"
 							"  2. Attach the binary, generated .sym and the text of backtrace (see above) to the bug report.\n"
 							"Also you can read the section about resolving backtraces in the documentation.");
 	sphSafeInfo ( iFD, "-------------- backtrace ends here ---------------" );
+
+	// convert all BT addresses to source code lines
+	int iCount = Min ( iDepth, (int)( sizeof(g_pArgv)/sizeof(g_pArgv[0]) - SPH_BT_ADDRS - 1 ) );
+	sphSafeInfo ( iFD, "--- BT to source lines (depth %d): ---", iCount );
+	char * pCur = g_pBacktrace;
+	for ( int i=0; i<iCount; i++ )
+	{
+		// early our on strings buffer overrun
+		if ( pCur>=g_pBacktrace+sizeof(g_pBacktrace)-48 )
+		{
+			iCount = i;
+			break;
+		}
+		g_pArgv[i+SPH_BT_ADDRS] = pCur;
+		pCur += sphSafeInfo ( pCur, "0x%x", g_pBacktraceAddresses[i] );
+		*(pCur-1) = '\0'; // make null terminated string from EOL string
+	}
+	g_pArgv[iCount+SPH_BT_ADDRS] = NULL;
+
+	// map stdout to log file
+	if ( iFD!=1 )
+	{
+		close ( 1 );
+		dup2 ( iFD, 1 );
+	}
+	execvp ( g_pArgv[0], const_cast<char **> ( g_pArgv ) ); // using execvp instead execv to auto find addr2line in directories
+
+	// if we here - execvp failed, ask user to do conversion manually
+	sphSafeInfo ( iFD, "conversion failed (error '%s'):\n"
+		"  1. Run the command provided below over the crashed binary (for example, '%s'):\n"
+		"  2. Attach the source.txt to the bug report.", strerror ( errno ), g_pArgv[SPH_BT_BINARY_NAME] );
+
+	int iColumn = 0;
+	for ( int i=0; g_pArgv[i]!=NULL; i++ )
+	{
+		const char * s = g_pArgv[i];
+		while ( *s )
+			s++;
+		int iLen = s-g_pArgv[i];
+		sphWrite ( iFD, g_pArgv[i], iLen );
+		sphWrite ( iFD, " ", 1 );
+		int iWas = iColumn % 80;
+		iColumn += iLen;
+		int iNow = iColumn % 80;
+		if ( iNow<iWas )
+			sphWrite ( iFD, "\n", 1 );
+	}
+	sphWrite ( iFD, g_sSourceTail, sizeof(g_sSourceTail)-1 );
 }
 
 #else // USE_WINDOWS
@@ -1915,6 +1980,13 @@ void sphBacktrace ( EXCEPTION_POINTERS * pExc, const char * sFile )
 }
 
 #endif // USE_WINDOWS
+
+
+void sphBacktraceSetBinaryName ( const char * sName )
+{
+	g_sBinaryName = sName;
+	g_pArgv[SPH_BT_BINARY_NAME] = g_sBinaryName.cstr();
+}
 
 
 static bool g_bUnlinkOld = true;

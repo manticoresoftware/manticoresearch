@@ -18144,6 +18144,7 @@ int main ( int argc, char **argv )
 	sphSetLogger ( sphLog );
 	g_pUservarsHook = UservarsHook;
 	sphCollationInit ();
+	sphBacktraceSetBinaryName ( argv[0] );
 
 #if USE_WINDOWS
 	int iNameIndex = -1;

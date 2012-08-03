@@ -17411,7 +17411,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 					const DWORD uOffset = pAttrs[dMvaItems[iItem]];
 					bHasValues |= uOffset!=0;
 
-					if ( pMvaBase+uOffset>=pMvaMax )
+					if ( uOffset && pMvaBase+uOffset>=pMvaMax )
 					{
 						bIsSpaValid = false;
 						LOC_FAIL(( fp, "MVA index out of bounds (row=%u, mvaattr=%d, docid="DOCID_FMT", index=%u)",

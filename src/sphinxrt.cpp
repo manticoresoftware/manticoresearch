@@ -3025,7 +3025,7 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSe
 #endif
 
 		// collect min-max data
-		tMinMaxBuilder.Collect ( pRow, pSegment->m_dMvas.Begin(), pSegment->m_dMvas.GetLength(), sError, false );
+		Verify ( tMinMaxBuilder.Collect ( pRow, pSegment->m_dMvas.Begin(), pSegment->m_dMvas.GetLength(), sError, false ) );
 
 		if ( iMinDocID==DOCID_MAX )
 			iMinDocID = DOCINFO2ID_T<DOCID> ( pRows[iMinRow] );

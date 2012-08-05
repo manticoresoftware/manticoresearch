@@ -11734,6 +11734,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		// prepare the collector for min/max of attributes
 		AttrIndexBuilder_c tMinMax ( m_tSchema );
 		CSphVector<DWORD> dMinMaxBuffer ( tMinMax.GetExpectedSize ( m_tStats.m_iTotalDocuments ) );
+
 		// { fixed row + mva data for that row } fixed row - for MinMaxBuilder
 		CSphVector < DWORD > dMvaPool;
 		tMinMax.Prepare ( dMinMaxBuffer.Begin(), dMinMaxBuffer.Begin() + dMinMaxBuffer.GetLength() );
@@ -11812,7 +11813,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 							int iPoolOff = dMvaPool.GetLength();
 
 							sphSetRowAttr ( pAttr, dMvaLocators[i], iMvaOff );
-							sphSetRowAttr ( dMvaPool.Begin()+DOCINFO_IDSIZE, dMvaLocators[i], iPoolOff );
+							// there is the cloned row at the beginning of MVA pool, lets skip it
+							sphSetRowAttr ( dMvaPool.Begin()+DOCINFO_IDSIZE, dMvaLocators[i], iPoolOff - iDocinfoStride );
 
 							DWORD iMvaCount = rdMva.GetDword();
 							dMvaPool.Resize ( iPoolOff+iMvaCount+1 );
@@ -11827,7 +11829,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					}
 				}
 
-				tMinMax.Collect ( pCollectibleRow, dMvaPool.Begin()+iDocinfoStride, dMvaPool.GetLength()-iDocinfoStride, m_sLastError, false );
+				if ( !tMinMax.Collect ( pCollectibleRow, dMvaPool.Begin()+iDocinfoStride, dMvaPool.GetLength()-iDocinfoStride, m_sLastError, false ) )
+					return 0;
 				dMvaPool.Resize ( iDocinfoStride );
 
 				// emit it
@@ -12987,7 +12990,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 			if ( ( iDstDocID && iDstDocID < iSrcDocID ) || ( iDstDocID && !iSrcDocID ) )
 			{
-				tMinMax.Collect ( pDstRow, pDstIndex->m_pMva.GetWritePtr(), pDstIndex->m_pMva.GetNumEntries(), sError, true );
+				Verify ( tMinMax.Collect ( pDstRow, pDstIndex->m_pMva.GetWritePtr(), pDstIndex->m_pMva.GetNumEntries(), sError, true ) );
 
 				if ( dMvaLocators.GetLength() || dStringLocators.GetLength() )
 				{
@@ -13013,7 +13016,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 			} else if ( iSrcDocID )
 			{
-				tMinMax.Collect ( pSrcRow, pSrcIndex->m_pMva.GetWritePtr(), pSrcIndex->m_pMva.GetNumEntries(), sError, true );
+				Verify ( tMinMax.Collect ( pSrcRow, pSrcIndex->m_pMva.GetWritePtr(), pSrcIndex->m_pMva.GetNumEntries(), sError, true ) );
 
 				if ( dMvaLocators.GetLength() || dStringLocators.GetLength() )
 				{

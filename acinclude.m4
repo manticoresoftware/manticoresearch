@@ -298,6 +298,90 @@ fi
 ])
 
 dnl ---------------------------------------------------------------------------
+dnl Macro: AC_CHECK_LIBSTEMMER
+dnl Check the libstemmer first in custom include path in --with-libstemmer=*
+dnl If not given, try to guess common shared libs, and finally fall back into
+dnl old sphinx way which invokes statically linked lib built from the sources
+dnl ---------------------------------------------------------------------------
+
+AC_DEFUN([AC_CHECK_LIBSTEMMER],[
+
+# cflags and libs
+LIBSTEMMER_CFLAGS=
+LIBSTEMMER_LIBS=
+
+# possible includedir paths
+includedirs="/usr/include /usr/include/libstemmer /usr/include/libstemmer_c"
+
+# possible libdirs -- 64bit first in case of multiarch environments
+libdirs="/usr/lib/x86_64-linux-gnu /usr/lib64 /usr/local/lib64 /usr/lib/i386-linux-gnu /usr/lib /usr/local/lib"
+
+# possible libnames -- shared one first, then static one
+libnames="stemmer stemmer_c"
+
+# was (include) path explicitely given?
+if test [ -n "$ac_cv_use_libstemmer" -a x$ac_cv_use_libstemmer != xyes]; then
+       includedirs=$ac_cv_use_libstemmer
+fi
+
+# try to find header files
+for includedir in $includedirs
+do
+       if test [ -f $includedir/libstemmer.h ]; then
+               LIBSTEMMER_CFLAGS="-I$includedir"
+               break
+       fi
+done
+
+# try to find shared library
+for libname in $libnames
+do
+       for libdir in $libdirs
+       do
+               if test [ -f $libdir/lib${libname}.so ]; then
+                       LIBSTEMMER_LIBS="-L$libdir -l$libname"
+                       break 2
+               fi
+       done
+done
+
+# if not found, check static libs
+if test [ -z "$LIBSTEMMER_LIBS" ]; then
+       for libname in $libnames
+       do
+               for libdir in $libdirs
+               do
+                       if test [ -f $libdir/lib${libname}.a ]; then
+                               LIBSTEMMER_LIBS="$libdir/lib${libname}.a"
+                               break 2
+                       fi
+               done
+       done
+fi
+
+# if LIBSTEMMER_LIBS is not set at this moment,
+# our last chanceis to check for existance of internal copy of libstemmer_c
+# in case it doesn't exist -- we lost
+if test [ -z "$LIBSTEMMER_LIBS" ]; then
+       if test -d ./libstemmer_c && test -f libstemmer_c/include/libstemmer.h; then
+               ac_cv_use_internal_libstemmer=yes
+               LIBSTEMMER_LIBS="\$(top_srcdir)/libstemmer_c/libstemmer.a"
+               LIBSTEMMER_CFLAGS="-I\$(top_srcdir)/libstemmer_c/include"
+       else
+               AC_MSG_ERROR([missing libstemmer sources from libstemmer_c.
+
+Please download the C version of libstemmer library from
+http://snowball.tartarus.org/ and extract its sources over libstemmer_c/
+subdirectory in order to build Sphinx with libstemmer support. Or
+install the package named like 'libstemmer-dev' using your favorite
+package manager.
+])
+       fi
+fi
+
+])
+
+dnl ---------------------------------------------------------------------------
 dnl Macro: SPHINX_CONFIGURE_PART
 dnl
 dnl Tells what stage is ./configure running now, nicely formatted

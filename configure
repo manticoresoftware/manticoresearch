@@ -600,8 +600,12 @@ LTLIBOBJS
 CONFDIR
 USE_RE2_FALSE
 USE_RE2_TRUE
+USE_INTERNAL_LIBSTEMMER_FALSE
+USE_INTERNAL_LIBSTEMMER_TRUE
 USE_LIBSTEMMER_FALSE
 USE_LIBSTEMMER_TRUE
+LIBSTEMMER_CFLAGS
+LIBSTEMMER_LIBS
 USE_PGSQL_FALSE
 USE_PGSQL_TRUE
 PGSQL_CFLAGS
@@ -7469,9 +7473,6 @@ if (echo $MYSQL_LIBS | grep -q -- -L/opt/local/lib); then
    MYSQL_CFLAGS="$MYSQL_CFLAGS -I/opt/local/include"
 fi
 
-# we can now set preprocessor flags for both C and C++ compilers
-CPPFLAGS="$CPPFLAGS $MYSQL_CFLAGS $PGSQL_CFLAGS"
-
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to use 64-bit document/word IDs" >&5
 $as_echo_n "checking whether to use 64-bit document/word IDs... " >&6; }
@@ -7509,20 +7510,95 @@ fi
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to compile with libstemmer support" >&5
 $as_echo_n "checking whether to compile with libstemmer support... " >&6; }
 if test x$ac_cv_use_libstemmer != xno; then
-	if test -d libstemmer_c && test -f libstemmer_c/include/libstemmer.h; then
-		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
+	ac_cv_use_internal_libstemmer=no
 
-$as_echo "#define USE_LIBSTEMMER 1" >>confdefs.h
 
-	else
-		as_fn_error "missing libstemmer sources from libstemmer_c.
+# cflags and libs
+LIBSTEMMER_CFLAGS=
+LIBSTEMMER_LIBS=
+
+# possible includedir paths
+includedirs="/usr/include /usr/include/libstemmer /usr/include/libstemmer_c"
+
+# possible libdirs -- 64bit first in case of multiarch environments
+libdirs="/usr/lib/x86_64-linux-gnu /usr/lib64 /usr/local/lib64 /usr/lib/i386-linux-gnu /usr/lib /usr/local/lib"
+
+# possible libnames -- shared one first, then static one
+libnames="stemmer stemmer_c"
+
+# was (include) path explicitely given?
+if test  -n "$ac_cv_use_libstemmer" -a x$ac_cv_use_libstemmer != xyes; then
+       includedirs=$ac_cv_use_libstemmer
+fi
+
+# try to find header files
+for includedir in $includedirs
+do
+       if test  -f $includedir/libstemmer.h ; then
+               LIBSTEMMER_CFLAGS="-I$includedir"
+               break
+       fi
+done
+
+# try to find shared library
+for libname in $libnames
+do
+       for libdir in $libdirs
+       do
+               if test  -f $libdir/lib${libname}.so ; then
+                       LIBSTEMMER_LIBS="-L$libdir -l$libname"
+                       break 2
+               fi
+       done
+done
+
+# if not found, check static libs
+if test  -z "$LIBSTEMMER_LIBS" ; then
+       for libname in $libnames
+       do
+               for libdir in $libdirs
+               do
+                       if test  -f $libdir/lib${libname}.a ; then
+                               LIBSTEMMER_LIBS="$libdir/lib${libname}.a"
+                               break 2
+                       fi
+               done
+       done
+fi
+
+# if LIBSTEMMER_LIBS is not set at this moment,
+# our last chanceis to check for existance of internal copy of libstemmer_c
+# in case it doesn't exist -- we lost
+if test  -z "$LIBSTEMMER_LIBS" ; then
+       if test -d ./libstemmer_c && test -f libstemmer_c/include/libstemmer.h; then
+               ac_cv_use_internal_libstemmer=yes
+               LIBSTEMMER_LIBS="\$(top_srcdir)/libstemmer_c/libstemmer.a"
+               LIBSTEMMER_CFLAGS="-I\$(top_srcdir)/libstemmer_c/include"
+       else
+               as_fn_error "missing libstemmer sources from libstemmer_c.
 
 Please download the C version of libstemmer library from
 http://snowball.tartarus.org/ and extract its sources over libstemmer_c/
-subdirectory in order to build Sphinx with libstemmer support.
+subdirectory in order to build Sphinx with libstemmer support. Or
+install the package named like 'libstemmer-dev' using your favorite
+package manager.
 " "$LINENO" 5
+       fi
+fi
+
+
+	if test x$ac_cv_use_internal_libstemmer != xno ; then
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: yes, static internal" >&5
+$as_echo "yes, static internal" >&6; }
+	else
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: yes, external" >&5
+$as_echo "yes, external" >&6; }
 	fi
+
+$as_echo "#define USE_LIBSTEMMER 1" >>confdefs.h
+
+
+
 else
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
@@ -7537,6 +7613,20 @@ else
   USE_LIBSTEMMER_TRUE='#'
   USE_LIBSTEMMER_FALSE=
 fi
+
+ if test x$ac_cv_use_internal_libstemmer != xno; then
+  USE_INTERNAL_LIBSTEMMER_TRUE=
+  USE_INTERNAL_LIBSTEMMER_FALSE='#'
+else
+  USE_INTERNAL_LIBSTEMMER_TRUE='#'
+  USE_INTERNAL_LIBSTEMMER_FALSE=
+fi
+
+
+
+
+# we can now set preprocessor flags for both C and C++ compilers
+CPPFLAGS="$CPPFLAGS $MYSQL_CFLAGS $PGSQL_CFLAGS $LIBSTEMMER_CFLAGS"
 
 
 
@@ -8286,6 +8376,10 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${USE_LIBSTEMMER_TRUE}" && test -z "${USE_LIBSTEMMER_FALSE}"; then
   as_fn_error "conditional \"USE_LIBSTEMMER\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${USE_INTERNAL_LIBSTEMMER_TRUE}" && test -z "${USE_INTERNAL_LIBSTEMMER_FALSE}"; then
+  as_fn_error "conditional \"USE_INTERNAL_LIBSTEMMER\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${USE_RE2_TRUE}" && test -z "${USE_RE2_FALSE}"; then

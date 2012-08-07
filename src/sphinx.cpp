@@ -39,7 +39,7 @@
 #define SPH_READ_NOPROGRESS_CHUNK (32768*1024)
 
 #if USE_LIBSTEMMER
-#include "libstemmer.h"
+#include <libstemmer.h>
 #endif
 
 #if USE_LIBEXPAT

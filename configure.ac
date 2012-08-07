@@ -337,9 +337,6 @@ if (echo $MYSQL_LIBS | grep -q -- -L/opt/local/lib); then
    MYSQL_CFLAGS="$MYSQL_CFLAGS -I/opt/local/include"
 fi
 
-# we can now set preprocessor flags for both C and C++ compilers
-CPPFLAGS="$CPPFLAGS $MYSQL_CFLAGS $PGSQL_CFLAGS"
-
 dnl ---
 
 AC_MSG_CHECKING([whether to use 64-bit document/word IDs])
@@ -364,22 +361,29 @@ AC_ARG_WITH([libstemmer],
 
 AC_MSG_CHECKING([whether to compile with libstemmer support])
 if test x$ac_cv_use_libstemmer != xno; then
-	if test -d libstemmer_c && test -f libstemmer_c/include/libstemmer.h; then
-		AC_MSG_RESULT([yes])
-		AC_DEFINE(USE_LIBSTEMMER, 1, [libstemmer support])
+	ac_cv_use_internal_libstemmer=no
+	AC_CHECK_LIBSTEMMER([$ac_cv_use_libstemmer])
+	if test x$ac_cv_use_internal_libstemmer != xno ; then
+		AC_MSG_RESULT([yes, static internal])
 	else
-		AC_MSG_ERROR([missing libstemmer sources from libstemmer_c.
-
-Please download the C version of libstemmer library from
-http://snowball.tartarus.org/ and extract its sources over libstemmer_c/
-subdirectory in order to build Sphinx with libstemmer support.
-])
+		AC_MSG_RESULT([yes, external])
 	fi
+	AC_DEFINE(USE_LIBSTEMMER, 1, [libstemmer support])
+	AC_SUBST([LIBSTEMMER_LIBS])
+	AC_SUBST([LIBSTEMMER_CFLAGS])
 else
 	AC_MSG_RESULT([no])
 	AC_DEFINE(USE_LIBSTEMMER, 0, [libstemmer support])
 fi
 AM_CONDITIONAL(USE_LIBSTEMMER, test x$ac_cv_use_libstemmer != xno)
+AM_CONDITIONAL(USE_INTERNAL_LIBSTEMMER, test x$ac_cv_use_internal_libstemmer != xno)
+
+
+dnl ---
+
+# we can now set preprocessor flags for both C and C++ compilers
+CPPFLAGS="$CPPFLAGS $MYSQL_CFLAGS $PGSQL_CFLAGS $LIBSTEMMER_CFLAGS"
+
 
 dnl ---
 

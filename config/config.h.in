@@ -33,6 +33,9 @@
 /* Define to 1 if you have the `fork' function. */
 #undef HAVE_FORK
 
+/* Define if F_SETLKW is defined in fcntl.h */
+#undef HAVE_F_SETLKW
+
 /* Define to 1 if you have the `gethostbyname' function. */
 #undef HAVE_GETHOSTBYNAME
 
@@ -50,6 +53,9 @@
 
 /* Define to 1 if you have the <limits.h> header file. */
 #undef HAVE_LIMITS_H
+
+/* Define if LOCK_EX is defined in sys/file.h */
+#undef HAVE_LOCK_EX
 
 /* Define to 1 if you have the `logf' function. */
 #undef HAVE_LOGF
@@ -184,6 +190,9 @@
 /* Full name OS */
 #undef OS_UNAME
 
+/* Name of package */
+#undef PACKAGE
+
 /* Define to the address where bug reports for this package should be sent. */
 #undef PACKAGE_BUGREPORT
 
@@ -258,6 +267,9 @@
 
 /* define to use Zlib */
 #undef USE_ZLIB
+
+/* Version number of package */
+#undef VERSION
 
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
    significant byte first (like Motorola and SPARC, unlike Intel). */

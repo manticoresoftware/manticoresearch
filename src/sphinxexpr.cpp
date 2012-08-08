@@ -3867,7 +3867,7 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema,
 		int64_t iExprStack = sphGetStackUsed() + iMaxHeight*SPH_EXPRNODE_STACK_SIZE;
 		if ( sphMyStackSize()<=iExprStack )
 		{
-			sError.SetSprintf ( "query too complex, not enough stack (thread_stack_size=%dK or higher required)",
+			sError.SetSprintf ( "query too complex, not enough stack (thread_stack=%dK or higher required)",
 				(int)( ( iExprStack + 1024 - ( iExprStack%1024 ) ) / 1024 ) );
 			return NULL;
 		}

@@ -298,7 +298,7 @@ struct Expr_GetZonespanlist_c : public ISphExpr
 	virtual int64_t Int64Eval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
 	virtual void SetupExtraData ( ISphExtra * pData )
 	{
-		pData->GetExtraData ( (void**)&m_pData );
+		pData->ExtraData ( EXTRA_GET_DATA_ZONESPANS, (void**)&m_pData );
 	}
 };
 

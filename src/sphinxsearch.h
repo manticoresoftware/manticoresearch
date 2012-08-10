@@ -145,14 +145,6 @@ public:
 	virtual bool						QwordSetup ( ISphQword * pQword ) const = 0;
 };
 
-//////////////////////////////////////////////////////////////////////////
-/// extra possibilities query
-enum ExtraData_e
-{
-	EXTRA_DATA_ZONESPANS = 1,
-	EXTRA_DATA_ZONESPANLIST = 2
-};
-
 /// generic ranker interface
 class ISphRanker : public ISphExtra
 {

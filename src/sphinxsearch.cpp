@@ -161,10 +161,10 @@ public:
 	// but simpler due to enum instead of 128-bit GUID, and no ref. counting
 	inline bool GetExtraData ( ExtraData_e eNode, void** ppData )
 	{
-		return GetExtraDataImpl ( eNode, ppData );
+		return ExtraDataImpl ( eNode, ppData );
 	}
 private:
-	virtual bool GetExtraDataImpl ( ExtraData_e, void** )
+	virtual bool ExtraDataImpl ( ExtraData_e, void** )
 	{
 		return false;
 	}
@@ -529,7 +529,7 @@ public:
 	virtual bool				GotHitless () { return false; }
 
 private:
-	virtual bool				GetExtraDataImpl ( ExtraData_e eData, void ** ppResult );
+	virtual bool				ExtraDataImpl ( ExtraData_e eData, void ** ppResult );
 };
 
 /// single keyword streamer, with term position filtering
@@ -546,10 +546,10 @@ public:
 
 
 template<>
-bool ExtConditional<TERM_POS_ZONESPAN>::GetExtraDataImpl ( ExtraData_e eData, void ** ppResult )
+bool ExtConditional<TERM_POS_ZONESPAN>::ExtraDataImpl ( ExtraData_e eData, void ** ppResult )
 {
 	assert ( ppResult );
-	if ( eData==EXTRA_DATA_ZONESPANS )
+	if ( eData==EXTRA_GET_DATA_ZONESPANS )
 	{
 		*ppResult = &m_dFinalZones;
 		return true;
@@ -558,7 +558,7 @@ bool ExtConditional<TERM_POS_ZONESPAN>::GetExtraDataImpl ( ExtraData_e eData, vo
 }
 
 template<TermPosFilter_e T, class ExtBase>
-bool ExtConditional<T,ExtBase>::GetExtraDataImpl ( ExtraData_e, void ** )
+bool ExtConditional<T,ExtBase>::ExtraDataImpl ( ExtraData_e, void ** )
 {
 	return false;
 }
@@ -630,9 +630,9 @@ public:
 		m_pSpans = pSpans;
 		m_pLastBaseHit[0] = NULL;
 		m_pLastBaseHit[1] = NULL;
-		if ( pFirst && !pFirst->GetExtraData ( EXTRA_DATA_ZONESPANS, (void**) &m_dChildzones[0] ) )
+		if ( pFirst && !pFirst->GetExtraData ( EXTRA_GET_DATA_ZONESPANS, (void**) &m_dChildzones[0] ) )
 			assert ( false );
-		if ( pSecond && !pSecond->GetExtraData ( EXTRA_DATA_ZONESPANS, (void**) &m_dChildzones[1] ) )
+		if ( pSecond && !pSecond->GetExtraData ( EXTRA_GET_DATA_ZONESPANS, (void**) &m_dChildzones[1] ) )
 			assert ( false );
 	}
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
@@ -656,10 +656,10 @@ public:
 		ExtAndZonespanned::Init ( pFirst, pSecond, tSetup, &m_dMyZones );
 	}
 private:
-	bool GetExtraDataImpl ( ExtraData_e eData, void ** ppResult )
+	bool ExtraDataImpl ( ExtraData_e eData, void ** ppResult )
 	{
 		assert ( ppResult );
-		if ( eData==EXTRA_DATA_ZONESPANS )
+		if ( eData==EXTRA_GET_DATA_ZONESPANS )
 		{
 			*ppResult = &m_dFinalZones;
 			return true;
@@ -1162,11 +1162,17 @@ public:
 		return m_tState.Init ( tCtx.m_iWeights, &tCtx.m_dWeights[0], this, sError );
 	}
 private:
-	virtual bool GetExtraDataImpl ( void ** ppResult )
+	virtual bool ExtraDataImpl ( ExtraData_e eType, void ** ppResult )
 	{
 		assert ( ppResult );
-		*ppResult = &m_dZonespans;
-		return true;
+		switch ( eType )
+		{
+		case EXTRA_GET_DATA_ZONESPANS:
+			*ppResult = &m_dZonespans;
+			return true;
+		default:
+			return m_tState.ExtraData ( eType, ppResult );
+		}
 	}
 };
 
@@ -5375,7 +5381,7 @@ int ExtRanker_None_c::GetMatches ()
 template < typename STATE >
 ExtRanker_T<STATE>::ExtRanker_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup ) : ExtRanker_c ( tXQ, tSetup )
 {
-	if ( m_bZSlist && !m_pRoot->GetExtraData ( EXTRA_DATA_ZONESPANS, (void**) & m_pZones ))
+	if ( m_bZSlist && !m_pRoot->GetExtraData ( EXTRA_GET_DATA_ZONESPANS, (void**) & m_pZones ))
 		m_bZSlist = false;
 	if ( m_bZSlist )
 	{
@@ -5507,7 +5513,7 @@ int ExtRanker_T<STATE>::GetMatches ()
 #endif
 
 template < bool USE_BM25, bool HANDLE_DUPES >
-struct RankerState_Proximity_fn
+struct RankerState_Proximity_fn : public ISphExtra
 {
 	BYTE m_uLCS[SPH_MAX_FIELDS];
 	BYTE m_uCurLCS;
@@ -5627,7 +5633,7 @@ struct RankerState_Proximity_fn
 //////////////////////////////////////////////////////////////////////////
 
 // sph04, proximity + exact boost
-struct RankerState_ProximityBM25Exact_fn
+struct RankerState_ProximityBM25Exact_fn : public ISphExtra
 {
 	BYTE m_uLCS[SPH_MAX_FIELDS];
 	BYTE m_uCurLCS;
@@ -5789,7 +5795,7 @@ struct RankerState_MatchAny_fn : public RankerState_Proximity_fn<false,false>
 
 //////////////////////////////////////////////////////////////////////////
 
-struct RankerState_Wordcount_fn
+struct RankerState_Wordcount_fn : public ISphExtra
 {
 	DWORD m_uRank;
 	int m_iFields;
@@ -5818,7 +5824,7 @@ struct RankerState_Wordcount_fn
 
 //////////////////////////////////////////////////////////////////////////
 
-struct RankerState_Fieldmask_fn
+struct RankerState_Fieldmask_fn : public ISphExtra
 {
 	DWORD m_uRank;
 
@@ -5846,7 +5852,7 @@ struct RankerState_Fieldmask_fn
 //////////////////////////////////////////////////////////////////////////
 
 /// ranker state that computes weight dynamically based on user supplied expression (formula)
-struct RankerState_Expr_fn
+struct RankerState_Expr_fn : public ISphExtra
 {
 public:
 	// per-field and per-document stuff
@@ -5895,6 +5901,23 @@ public:
 	bool				Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError );
 	void				Update ( const ExtHit_t * pHlist );
 	DWORD				Finalize ( const CSphMatch & tMatch );
+
+private:
+	virtual bool ExtraDataImpl ( ExtraData_e eType, void ** ppResult )
+	{
+		assert ( ppResult );
+		switch ( eType )
+		{
+		case EXTRA_SET_MVAPOOL:
+			m_pExpr->SetMVAPool ( (DWORD*)ppResult );
+			return true;
+		case EXTRA_SET_STRINGPOOL:
+			m_pExpr->SetStringPool ( (BYTE*)ppResult );
+			return true;
+		default:
+			return false;
+		}
+	}
 };
 
 

@@ -5656,6 +5656,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 					dSorters[i]->SetStringPool ( m_pSegments[iSeg]->m_dStrings.Begin() );
 					dSorters[i]->SetMVAPool ( m_pSegments[iSeg]->m_dMvas.Begin() );
 				}
+				pRanker->ExtraData ( EXTRA_SET_MVAPOOL, (void**)m_pSegments[iSeg]->m_dMvas.Begin() );
+				pRanker->ExtraData ( EXTRA_SET_STRINGPOOL, (void**)m_pSegments[iSeg]->m_dStrings.Begin() );
 
 				CSphMatch * pMatch = pRanker->GetMatchesBuffer();
 				for ( ;; )

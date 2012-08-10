@@ -16637,6 +16637,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	tCtx.SetupExtraData ( pRanker.Ptr() );
 
+	pRanker->ExtraData ( EXTRA_SET_MVAPOOL, (void**)m_pMva.GetWritePtr() );
+	pRanker->ExtraData ( EXTRA_SET_STRINGPOOL, (void**)m_pStrings.GetWritePtr() );
+
 	// empty index, empty response!
 	if ( m_bIsEmpty )
 		return true;

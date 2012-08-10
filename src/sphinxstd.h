@@ -2506,17 +2506,26 @@ public:
 	}
 };
 
+/// generic COM-like uids
+enum ExtraData_e
+{
+	EXTRA_GET_DATA_ZONESPANS,
+	EXTRA_GET_DATA_ZONESPANLIST,
+	EXTRA_SET_MVAPOOL,
+	EXTRA_SET_STRINGPOOL
+};
+
 /// generic COM-like interface
 class ISphExtra
 {
 public:
 	virtual						~ISphExtra () {}
-	inline bool					GetExtraData	( void** ppData )
+	inline bool					ExtraData	( ExtraData_e eType, void** ppData )
 	{
-		return GetExtraDataImpl ( ppData );
+		return ExtraDataImpl ( eType, ppData );
 	}
 private:
-	virtual bool GetExtraDataImpl ( void** )
+	virtual bool ExtraDataImpl ( ExtraData_e, void** )
 	{
 		return false;
 	}

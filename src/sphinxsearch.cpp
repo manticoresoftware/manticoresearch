@@ -1164,10 +1164,10 @@ public:
 private:
 	virtual bool ExtraDataImpl ( ExtraData_e eType, void ** ppResult )
 	{
-		assert ( ppResult );
 		switch ( eType )
 		{
 		case EXTRA_GET_DATA_ZONESPANS:
+			assert (ppResult);
 			*ppResult = &m_dZonespans;
 			return true;
 		default:
@@ -5905,7 +5905,6 @@ public:
 private:
 	virtual bool ExtraDataImpl ( ExtraData_e eType, void ** ppResult )
 	{
-		assert ( ppResult );
 		switch ( eType )
 		{
 		case EXTRA_SET_MVAPOOL:

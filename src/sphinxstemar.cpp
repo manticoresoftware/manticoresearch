@@ -59,6 +59,8 @@
 // CHARACTER SET TESTS
 //////////////////////////////////////////////////////////////////////////
 
+typedef WORD ar_char;
+
 // AR_HAMZA_SET (U+0621, U+0624, U+0626)
 #define AR_HAMZA_SET	( c==0xA1D8U || c==0xA4D8U || c==0xA6D8U )
 
@@ -88,15 +90,15 @@
 
 
 /// remove length chars starting from start, null-terminating to new length
-#define AR_WORD_REMOVE(start, length) \
-{ \
-	int remain = ((AR_WORD_LENGTH - (length - start)) * sizeof(ar_char)); \
-	ar_char *s = (ar_char*) &word[(start * sizeof(ar_char))]; \
-	if ( remain > 0 ) { \
-		memcpy((void*)s, (void*)(s + length), remain); \
-		s = s + (remain / sizeof(ar_char)); \
-	} \
-	*s = '\0'; \
+static inline void ar_remove ( BYTE * word, int start, int length )
+{
+	int remain = ((AR_WORD_LENGTH - length - start) * sizeof(ar_char));
+	ar_char *s = (ar_char*) &word[(start * sizeof(ar_char))];
+	if ( remain > 0 ) {
+		memmove((void*)s, (void*)(s + length), remain);
+		s = s + (remain / sizeof(ar_char));
+	}
+	*s = '\0';
 }
 
 
@@ -121,7 +123,7 @@
 	while ( wlen > 0 ) { \
 		int si = wlen - 1; \
 		if ( _what ( AR_CHAR_AT(si) ) ) \
-			AR_WORD_REMOVE ( si, 1 ); \
+			ar_remove ( word, si, 1 ); \
 		wlen--; \
 	} \
 }
@@ -132,7 +134,7 @@
 { \
 	int match = ar_match_affix ( word, prefix_##count, count, 0 ); \
 	if ( match>=0 ) \
-		AR_WORD_REMOVE ( 0, count ); \
+		ar_remove ( word, 0, count ); \
 }
 
 
@@ -141,14 +143,12 @@
 { \
 	int match = ar_match_affix ( word, suffix_##count, count, 1 ); \
 	if ( match>=0 ) \
-		AR_WORD_REMOVE ( AR_WORD_LENGTH - count, count ); \
+		ar_remove ( word, AR_WORD_LENGTH - count, count ); \
 }
 
 //////////////////////////////////////////////////////////////////////////
 // TYPES
 //////////////////////////////////////////////////////////////////////////
-
-typedef WORD ar_char;
 
 struct ar_affix_t
 {
@@ -409,7 +409,7 @@ static int ar_match_form ( BYTE * word, struct ar_form_t * forms )
 		int pi = 0;
 		while ( forms[match].entry[pi].at!=0xFF )
 		{
-			AR_WORD_REMOVE ( (forms[match].entry[pi].at - pi), 1 );
+			ar_remove ( word, (forms[match].entry[pi].at - pi), 1 );
 			pi++;
 		}
 	}

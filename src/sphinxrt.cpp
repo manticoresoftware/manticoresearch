@@ -5859,13 +5859,14 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 				ARRAY_FOREACH ( i, dMvaGetLoc )
 				{
 					DWORD uAttr = 0;
-					const SphAttr_t uOff = tMatch.GetAttr ( dMvaGetLoc[i] );
-					if ( uOff>0 ) // have to fix up only existed attribute
+					const DWORD * pMva = tMatch.GetAttrMVA ( dMvaGetLoc[i], pBaseMva );
+					// have to fix up only existed attribute
+					if ( pMva )
 					{
-						assert ( uOff<( I64C(1)<<32 ) ); // should be 32 bit offset
-						assert ( !bSegmentMatch || (int)uOff<m_pSegments[iStorageSrc]->m_dMvas.GetLength() );
+						assert ( ( tMatch.GetAttr ( dMvaGetLoc[i] ) & MVA_ARENA_FLAG )<( I64C(1)<<32 ) ); // should be 32 bit offset
+						assert ( !bSegmentMatch || (int)tMatch.GetAttr ( dMvaGetLoc[i] )<m_pSegments[iStorageSrc]->m_dMvas.GetLength() );
 
-						uAttr = CopyMva ( pBaseMva + uOff, dStorageMva );
+						uAttr = CopyMva ( pMva, dStorageMva );
 					}
 
 					const CSphAttrLocator & tSet = dMvaSetLoc[i];

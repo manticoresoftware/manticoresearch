@@ -348,6 +348,8 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select tag, idd1 as r0, r0 * 2 as rr from dist2</sphinxql>
 <!-- alias as shema attribute -->
 <sphinxql>select tag, idd1 as str1, str1 as str2 from dist2</sphinxql>
+<!-- checking attribute aliases -->
+<sphinxql>select str1 as str11 from main</sphinxql>
 </sphqueries>
 
 </test>

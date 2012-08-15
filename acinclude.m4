@@ -310,6 +310,14 @@ AC_DEFUN([AC_CHECK_LIBSTEMMER],[
 LIBSTEMMER_CFLAGS=
 LIBSTEMMER_LIBS=
 
+# First check, if we have the sources of internal libstemmer.
+# If so, it has the max. priority over any other possibilities
+if test -d ./libstemmer_c && test -f libstemmer_c/include/libstemmer.h; then
+	ac_cv_use_internal_libstemmer=yes
+    LIBSTEMMER_LIBS="\$(top_srcdir)/libstemmer_c/libstemmer.a"
+    LIBSTEMMER_CFLAGS="-I\$(top_srcdir)/libstemmer_c/include"
+else
+
 # possible includedir paths
 includedirs="/usr/include /usr/include/libstemmer /usr/include/libstemmer_c"
 
@@ -323,6 +331,7 @@ libnames="stemmer stemmer_c"
 if test [ -n "$ac_cv_use_libstemmer" -a x$ac_cv_use_libstemmer != xyes]; then
        includedirs=$ac_cv_use_libstemmer
 fi
+
 
 # try to find header files
 for includedir in $includedirs
@@ -358,17 +367,11 @@ if test [ -z "$LIBSTEMMER_LIBS" ]; then
                done
        done
 fi
+fi
 
-# if LIBSTEMMER_LIBS is not set at this moment,
-# our last chanceis to check for existance of internal copy of libstemmer_c
-# in case it doesn't exist -- we lost
+# Now we either have libstemmer, or not
 if test [ -z "$LIBSTEMMER_LIBS" ]; then
-       if test -d ./libstemmer_c && test -f libstemmer_c/include/libstemmer.h; then
-               ac_cv_use_internal_libstemmer=yes
-               LIBSTEMMER_LIBS="\$(top_srcdir)/libstemmer_c/libstemmer.a"
-               LIBSTEMMER_CFLAGS="-I\$(top_srcdir)/libstemmer_c/include"
-       else
-               AC_MSG_ERROR([missing libstemmer sources from libstemmer_c.
+	AC_MSG_ERROR([missing libstemmer sources from libstemmer_c.
 
 Please download the C version of libstemmer library from
 http://snowball.tartarus.org/ and extract its sources over libstemmer_c/
@@ -376,7 +379,6 @@ subdirectory in order to build Sphinx with libstemmer support. Or
 install the package named like 'libstemmer-dev' using your favorite
 package manager.
 ])
-       fi
 fi
 
 ])

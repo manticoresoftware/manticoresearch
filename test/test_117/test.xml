@@ -28,6 +28,20 @@ index rt0
 	path = <data_path/>/index
 	rt_mem_limit      		= 128K
 }
+
+index rt_mva
+{
+	type			= rt
+	path = <data_path/>/mva
+	rt_mem_limit      		= 128K
+    docinfo			= extern
+    charset_type	= utf-8
+
+	rt_field		= title
+	rt_field		= content
+	rt_attr_uint	= idd
+	rt_attr_multi	= mva1
+}
 </config>
 
 <db_drop>
@@ -67,6 +81,32 @@ if ( $sock === false )
 	return;
 }
 
+$query = create_function('$q,$sock,$i','
+	$results = array();
+	$res = @mysql_query ( $q, $sock );
+	if ($res===true)
+	{
+		$results[] = "query $i: total_affected=" . mysql_affected_rows($sock);
+	}
+	else if ($res===false)
+	{
+		$results[] = "query $i: res=$res";
+		$results[] = "error: query: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+	}
+	else
+	{
+		$results[] = "query $i: total_rows=" . @mysql_num_rows($res) . " q=" . $q;
+		while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
+		{
+			$foo = array();
+			foreach ($row as $key => $value)
+				$foo[$key] = $value;
+			$results[] = $foo;
+		}	
+	}
+	return $results;
+');
+
 $errors = '';
 
 mysql_query ( "INSERT INTO rt0 VALUES ( 1, 'submarine', 'submarine', 1001, 300001 )", $sock );
@@ -97,30 +137,30 @@ mysql_query ( "REPLACE INTO rt0 VALUES ( 1, 'submarine', 'submarine', 11, 11 )",
 $queries = array ( "match('submarine')", "id=1" );
 for ( $i=0; $i<count ( $queries ); $i++ )
 {
-	$q = "select * from rt0 where $queries[$i]";
-	$res = @mysql_query ( $q, $sock );
-	if ($res===true)
-	{
-		$results[] = "query $i: total_affected=" . mysql_affected_rows($sock);
-	}
-	else if ($res===false)
-	{
-		$results[] = "query $i: res=$res";
-		$results[] = "error: query: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
-		return;
-	}
-	else
-	{
-		$results[] = "query $i: total_rows=" . @mysql_num_rows($res) . " str=" . $queries[$i];
-		while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
-		{
-			$foo = array();
-			foreach ($row as $key => $value)
-				$foo[$key] = $value;
-			$results[] = $foo;
-		}	
-	}
+	$results = array_merge ( $results, $query ( "select * from rt0 where $queries[$i]", $sock, $i ) );
 }
+
+// regression
+// crash on fetching updated MVA values from RT disk chunk
+$step = 100;
+$mva = '(1';
+for ($i=2; $i<101; $i++ ) $mva .= ",$i";
+$mva .= ")";
+for ( $i=2; $i<8; $i++ )
+{
+	$id = $i * $step;
+	$q = "INSERT INTO rt_mva ( id, title, content, idd, mva1 ) VALUES ( $id, 'dummy$i', 'stuff$i', $id, $mva )";
+	
+	while ( $id<$i * $step + $step )
+	{
+		$id += 1;
+		$q = $q . ", ( $id, 'dummy$id', 'stuff$id', $id, $mva )";
+	}
+	mysql_query ( $q, $sock );
+}
+
+$results = array_merge ( $results, $query ( "UPDATE rt_mva SET mva1 = (1000,1004,1001) WHERE id<400", $sock, 0 ) );
+$results = array_merge ( $results, $query ( "SELECT * FROM rt_mva WHERE id<203", $sock, 0 ) );
 
 @mysql_close($sock);
 

@@ -26711,7 +26711,7 @@ bool CSphSource_ODBC::SqlFetchRow ()
 		return false;
 
 	SQLRETURN iRet = SQLFetch ( m_hStmt );
-	if ( iRet==SQL_ERROR || iRet==SQL_INVALID_HANDLE )
+	if ( iRet==SQL_ERROR || iRet==SQL_INVALID_HANDLE || iRet==SQL_NO_DATA )
 	{
 		GetSqlError ( SQL_HANDLE_STMT, m_hStmt );
 		return false;
@@ -26722,7 +26722,6 @@ bool CSphSource_ODBC::SqlFetchRow ()
 		QueryColumn_t & tCol = m_dColumns[i];
 		switch ( tCol.m_iInd )
 		{
-			case SQL_NO_DATA:
 			case SQL_NULL_DATA:
 				tCol.m_dContents[0] = '\0';
 				tCol.m_dContents[0] = '\0';

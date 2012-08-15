@@ -55,6 +55,8 @@ index rt1
 <sphinxql>select *, count (*) as c from rt1 where match ('the') group by mva1 within group order by mva2 desc</sphinxql>
 <sphinxql>select *, count (distinct mva1) as c from rt1 group by mva1 within group order by mva2 desc</sphinxql>
 <sphinxql>select *, count (distinct mva2) as c from rt1 where match ('the') group by mva1 within group order by mva2 desc</sphinxql>
+<!-- checking mva aliases -->
+<sphinxql>select mva1 as somemva from rt1</sphinxql>
 </sphqueries>
 
 </test>

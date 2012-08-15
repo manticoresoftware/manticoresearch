@@ -3039,8 +3039,26 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		}
 
 		// for now, just always pass "plain" attrs from index to sorter; they will be filtered on searchd level
-		bool bPlainAttr = ( ( sExpr=="*" || ( tSchema.GetAttrIndex ( sExpr.cstr() )>=0 && tItem.m_eAggrFunc==SPH_AGGR_NONE ) ) &&
-			( tItem.m_sAlias.IsEmpty() || tItem.m_sAlias==tItem.m_sExpr ) );
+		int iAttrIdx = tSchema.GetAttrIndex ( sExpr.cstr() );
+		bool bPlainAttr = ( ( sExpr=="*" || ( iAttrIdx>=0 && tItem.m_eAggrFunc==SPH_AGGR_NONE ) ) &&
+							( tItem.m_sAlias.IsEmpty() || tItem.m_sAlias==tItem.m_sExpr ) );
+		// handling cases like SELECT 1+2 AS strattr, strattr FROM idx;
+		// we should see 3 in second column, not an attribute value
+		if ( !bPlainAttr && iAttrIdx>=0 &&
+			 ( tSchema.GetAttr ( iAttrIdx ).m_eAttrType==SPH_ATTR_STRING
+			   || tSchema.GetAttr ( iAttrIdx ).m_eAttrType==SPH_ATTR_UINT32SET
+			   || tSchema.GetAttr ( iAttrIdx ).m_eAttrType==SPH_ATTR_INT64SET ) )
+		{
+			bPlainAttr = true;
+			for ( int i=0; i<iItem; i++ )
+			{
+				if ( sExpr==pQuery->m_dItems[i].m_sAlias )
+				{
+					bPlainAttr = false;
+					break;
+				}
+			}
+		}
 		if ( bPlainAttr || IsGroupby(sExpr) || bIsCount )
 		{
 			continue;

@@ -5786,8 +5786,7 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 	if ( q.m_sGroupBy.IsEmpty() )
 	{
 		if ( !q.m_sSortBy.IsEmpty() ) // case API SPH_MATCH_EXTENDED2 - SPH_SORT_RELEVANCE
-			tBuf.Append ( " ORDER BY %s", q.m_sSortBy.cstr() );
-
+			FormatOrderBy ( &tBuf, " ORDER BY", q.m_eSort, q.m_sSortBy );
 	} else
 	{
 		tBuf.Append ( " GROUP BY %s", q.m_sGroupBy.cstr() );
@@ -9263,7 +9262,7 @@ bool SqlParser_c::AddIntFilterGTE ( const CSphString & sAttr, int64_t iVal )
 	bool bId = sAttr=="@id";
 	pFilter->m_iMinValue = iVal;
 	pFilter->m_iMaxValue = bId ? (SphAttr_t)ULLONG_MAX : LLONG_MAX;
-	return true;	
+	return true;
 }
 
 bool SqlParser_c::AddIntFilterLTE ( const CSphString & sAttr, int64_t iVal )
@@ -9274,7 +9273,7 @@ bool SqlParser_c::AddIntFilterLTE ( const CSphString & sAttr, int64_t iVal )
 	bool bId = sAttr=="@id";
 	pFilter->m_iMinValue = bId ? 0 : LLONG_MIN;
 	pFilter->m_iMaxValue = iVal;
-	return true;	
+	return true;
 }
 
 bool SqlParser_c::AddUservarFilter ( const CSphString & sCol, const CSphString & sVar, bool bExclude )
@@ -14386,7 +14385,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	char sCurTest [ SPH_MAX_FILENAME_LEN ];
 	snprintf ( sCurTest, sizeof(sCurTest), "%s.sph", pServed->m_sIndexPath.cstr() );
 
-	if ( !pServed->m_bOnlyNew && sphIsReadable (sCurTest) && !pOld->Rename ( sOld ) )
+	if ( !pServed->m_bOnlyNew && sphIsReadable ( sCurTest ) && !pOld->Rename ( sOld ) )
 	{
 		// FIXME! rollback inside Rename() call potentially fail
 		sphWarning ( "rotating index '%s': cur to old rename failed: %s", sIndex.cstr(), pOld->GetLastError().cstr() );

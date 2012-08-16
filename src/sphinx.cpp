@@ -9370,7 +9370,7 @@ bool CSphIndex_VLN::WriteHeader ( const BuildHeader_t & tBuildHeader, CSphWriter
 	SaveDictionarySettings ( fdInfo, m_pDict, false, m_tSettings.m_iEmbeddedLimit );
 
 	fdInfo.PutDword ( tBuildHeader.m_iKillListSize );
-	fdInfo.PutDword ( (DWORD)tBuildHeader.m_uMinMaxIndex );
+	fdInfo.PutOffset ( tBuildHeader.m_uMinMaxIndex );
 
 	// field filter info
 	SaveFieldFilterSettings ( fdInfo, m_pFieldFilter );
@@ -14312,7 +14312,9 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 	if ( m_uVersion>=10 )
 		m_iKillListSize = rdInfo.GetDword ();
 
-	if ( m_uVersion>=20 )
+	if ( m_uVersion>=33 )
+		m_uMinMaxIndex = rdInfo.GetOffset ();
+	else if ( m_uVersion>=20 )
 		m_uMinMaxIndex = rdInfo.GetDword ();
 
 	if ( m_uVersion>=28 )
@@ -14513,7 +14515,7 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 	}
 
 	fprintf ( fp, "killlist-size: %d\n", m_iKillListSize );
-	fprintf ( fp, "min-max-index: %u\n", m_uMinMaxIndex );
+	fprintf ( fp, "min-max-index: "UINT64_FMT"\n", m_uMinMaxIndex );
 
 	if ( m_pFieldFilter )
 	{
@@ -14791,16 +14793,6 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 		CSphAutofile tDocinfo ( GetIndexFileName("spa"), SPH_O_READ, m_sLastError );
 		if ( tDocinfo.GetFD()<0 )
 			return false;
-
-		// min-max index 32 bit overflow fix-up
-		int64_t iMinMaxIndex = (int64_t)m_tStats.m_iTotalDocuments * iStride;
-		if ( iMinMaxIndex>m_uMinMaxIndex )
-		{
-			bool bClamp = ( (DWORD)iMinMaxIndex==m_uMinMaxIndex );
-			sphWarning ( "min-max offset clamped (stored=0x%llx, real=0x%llx)", m_uMinMaxIndex, iMinMaxIndex );
-			if ( bClamp )
-				m_uMinMaxIndex = iMinMaxIndex;
-		}
 
 		int64_t iDocinfoSize = tDocinfo.GetSize ( iEntrySize, true, m_sLastError ) / sizeof(DWORD);
 

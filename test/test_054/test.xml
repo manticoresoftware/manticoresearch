@@ -12,22 +12,22 @@ searchd
 	<searchd_settings/>
 }
 
-source test
+source test1
 {
 	type = mysql
 	<sql_settings/>
-	sql_query = SELECT * FROM test_table
+	sql_query = SELECT * FROM test_table where document_id in ( 1, 2 )
 }
 
 index test
 {
-	source	= test
+	source	= test1
 	path	= <data_path/>/test
 }
 
 index test_crc
 {
-	source	= test
+	source	= test1
 	path	= <data_path/>/crc
 	
 	dict			= crc
@@ -37,11 +37,37 @@ index test_crc
 
 index test_kw
 {
-	source	= test
+	source	= test1
 	path	= <data_path/>/kw
 	
 	dict			= keywords
 	min_prefix_len	= 1
+	enable_star		= 1
+}
+
+source test2
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_table where document_id in ( 10, 11 )
+}
+
+index crc2
+{
+	source	= test2
+	path	= <data_path/>/crc2
+	
+	dict			= crc
+	min_infix_len	= 3
+	enable_star		= 1
+}
+index kw2
+{
+	source	= test2
+	path	= <data_path/>/kw2
+	
+	dict			= keywords
+	min_infix_len	= 3
 	enable_star		= 1
 }
 
@@ -62,7 +88,9 @@ DROP TABLE IF EXISTS test_table;
 <db_insert>
 INSERT INTO test_table ( document_id, text ) VALUES
 ( 1, 'hello world' ),
-( 2, 'one two three four five' );
+( 2, 'one two three four five' ),
+( 10, 'al all' ),
+( 11, 'always' );
 </db_insert>
 
 <queries>
@@ -82,6 +110,14 @@ INSERT INTO test_table ( document_id, text ) VALUES
 	
 	<!--here is going regresssion test-->
 	<query mode="extended2" index="test_kw">"one t* three four five"</query>
+	
+	<!--here is going regresssion test-->
+	<query mode="extended2" index="crc2">al*</query>
+	<query mode="extended2" index="crc2">alw*</query>
+	<query mode="extended2" index="kw2">al*</query>
+	<query mode="extended2" index="kw2">alw*</query>
+	<query mode="extended2" index="crc2">al* | alw*</query>
+	<query mode="extended2" index="kw2">al* | alw*</query>
 </queries>
 
 </test>

@@ -577,12 +577,16 @@ enum eAgentStats
 	eNetworkErrors,		///< network error
 	eWrongReplies,		///< incomplete reply
 	eUnexpectedClose,	///< agent closed the connection
+	eNetworkCritical = eUnexpectedClose,
+	eWarnings,			///< agent answered, but with warnings
 	eNoErrors,			///< successfull queries, no errors
+	eTotalMsecs,		///< number of microseconds in queries, total
+	eMaxCounters = eTotalMsecs,
 	eMaxStat
 };
 struct AgentStats_t
 {
-	int64_t		m_iStats[eMaxStat];
+	uint64_t		m_iStats[eMaxStat];
 	static const char * m_sNames[eMaxStat];
 
 	void Reset()
@@ -600,7 +604,7 @@ struct AgentStats_t
 const char * AgentStats_t::m_sNames[eMaxStat]=
 	{ "query_timeouts", "connect_timeouts", "connect_failures",
 		"network_errors", "wrong_replies", "unexpected_closings",
-		"succeeded_queries" };
+		"warnings", "succeeded_queries", "total_query_time" };
 
 struct AgentDash_t : AgentStats_t
 {
@@ -675,6 +679,18 @@ public:
 		return 0xFFFFFFFF & iNow;
 	}
 
+	inline static bool IsHalfPeriodChanged ( DWORD * pLast )
+	{
+		assert ( pLast );
+		DWORD uSeconds = GetCurSeconds();
+		if ( ( uSeconds - *pLast )>( g_uHAPeriodKarma / 2 ) )
+		{
+			*pLast = uSeconds;
+			return true;
+		}
+		return false;
+	}
+
 	AgentDash_t*	GetCurrentStat()
 	{
 		DWORD uTime = GetCurSeconds()/g_uHAPeriodKarma;
@@ -686,7 +702,7 @@ public:
 		return &dStats;
 	}
 
-	void GetDashStat ( AgentDash_t* pRes, int iPeriods=1 )
+	void GetDashStat ( AgentDash_t* pRes, int iPeriods=1 ) const
 	{
 		assert ( pRes );
 		pRes->Reset();
@@ -702,7 +718,7 @@ public:
 
 		for ( ; iLimit>0 ; --iLimit )
 		{
-			AgentDash_t & dStats = m_dStats[iIdx];
+			const AgentDash_t & dStats = m_dStats[iIdx];
 			if ( dStats.m_uTimestamp==uTime ) // it might be no queries at all in the fixed time
 				pRes->Add ( dStats );
 
@@ -3174,9 +3190,12 @@ void NetInputBuffer_c::SendErrorReply ( const char * sTemplate, ... )
 /////////////////////////////////////////////////////////////////////////////
 
 enum HAStrategies_e {
+	HA_NONE,
 	HA_ROUNDROBIN,
 	HA_AVOIDDEAD,
-	HA_AVOIDERRORS
+	HA_AVOIDERRORS,
+	HA_AVOIDDEADTM,			///< the same as HA_AVOIDDEAD, but uses just min timeout instead of weighted random
+	HA_AVOIDERRORSTM		///< the same as HA_AVOIDERRORS, but uses just min timeout instead of weighted random
 };
 /// remote agent descriptor (stored in a global hash)
 
@@ -3184,11 +3203,14 @@ struct MetaAgentDesc_t
 {
 private:
 	CSphVector<AgentDesc_t> m_dAgents;
+	CSphVector<float>		m_dWeights;
 	int				m_iCurAgent;
+	DWORD			m_uTimestamp;
 
 public:
 	MetaAgentDesc_t ()
 		: m_iCurAgent ( -1 )
+		, m_uTimestamp ( HostDashboard_t::GetCurSeconds() )
 	{}
 
 	MetaAgentDesc_t ( const MetaAgentDesc_t & rhs )
@@ -3206,6 +3228,7 @@ public:
 	{
 		m_iCurAgent=m_dAgents.GetLength();
 		AgentDesc_t & tAgent = m_dAgents.Add();
+		m_dWeights.Add();
 		return & tAgent;
 	}
 
@@ -3228,7 +3251,107 @@ public:
 
 		return CurrentAgent();
 	}
-	AgentDesc_t * StDiscardDead()
+
+	AgentDesc_t * RandAgent ()
+	{
+		m_iCurAgent = sphRand() % m_dAgents.GetLength();
+		return CurrentAgent();
+	}
+
+	void RecalculateWeights ( const CSphVector<int64_t> &dTimers )
+	{
+		if ( HostDashboard_t::IsHalfPeriodChanged ( &m_uTimestamp ) )
+		{
+			int64_t dMin = -1;
+			ARRAY_FOREACH ( i, dTimers )
+				if ( dTimers[i] > 0 )
+				{
+					if ( dMin<=0 )
+						dMin = dTimers[i];
+					else
+						dMin = Min ( dMin, dTimers[i] );
+				}
+
+			if ( dMin<=0 ) // no statistics, all timers bad.
+				return;
+
+			// apply coefficients
+			float fSum = 0.0f;
+			float fControl = 0.0f;
+			CSphVector<float> dCoefs ( dTimers.GetLength() );
+			ARRAY_FOREACH ( i, dTimers )
+			{
+				if ( dTimers[i] > 0 )
+				{
+					dCoefs[i] = (float)dMin/dTimers[i];
+					fSum += m_dWeights[i]* dCoefs[i];
+					fControl += m_dWeights[i];
+				}
+			}
+
+			// renormalize the weights
+#ifndef NDEBUG
+			float fCheck = 0.0;
+			sphInfo ( "Rebalancing the mirrors" );
+#endif
+			ARRAY_FOREACH ( i, m_dWeights )
+			{
+				if ( dTimers[i] > 0 )
+					m_dWeights[i] *= dCoefs[i]*fControl/fSum;
+#ifndef NDEBUG
+				fCheck += m_dWeights[i];
+				sphInfo ( "Mirror %d, new weight (%.4f)", i, m_dWeights[i] );
+#endif
+			}
+#ifndef NDEBUG
+		sphInfo ( "Rebalancing finished. The whole sum is %f", fCheck );
+#endif
+		}
+	}
+
+	void WeightedRandAgent ( int * pBestAgent, CSphVector<int> & dCandidates )
+	{
+		assert ( pBestAgent );
+		float fBound = m_dWeights[*pBestAgent];
+		float fChance = (float)sphRand()/0xFFFFFFFF;
+
+		if ( fChance<=fBound )
+			return;
+
+		ARRAY_FOREACH ( i, dCandidates )
+		{
+			fBound += m_dWeights[dCandidates[i]];
+			*pBestAgent = dCandidates[i];
+			if ( fChance<=fBound )
+				break;
+		}
+	}
+
+	inline const HostDashboard_t& GetCommonStat ( int iAgent ) const
+	{
+		return g_pStats->m_dDashboard.m_dItemStats[m_dAgents[iAgent].m_iDashIndex];
+	}
+
+	inline int64_t GetBestDelay ( int * pBestAgent, CSphVector<int> & dCandidates ) const
+	{
+		assert ( pBestAgent );
+		int64_t iBestAnswerTime = GetCommonStat ( *pBestAgent ).m_iLastAnswerTime
+			- GetCommonStat ( *pBestAgent ).m_iLastQueryTime;
+		ARRAY_FOREACH ( i, dCandidates )
+		{
+			if ( iBestAnswerTime > ( GetCommonStat ( dCandidates[i] ).m_iLastAnswerTime
+				- GetCommonStat ( dCandidates[i] ).m_iLastQueryTime ) )
+			{
+				*pBestAgent = dCandidates[i];
+				iBestAnswerTime = GetCommonStat ( *pBestAgent ).m_iLastAnswerTime
+					- GetCommonStat ( *pBestAgent ).m_iLastQueryTime;
+			}
+		}
+		return iBestAnswerTime;
+	}
+
+
+	AgentDesc_t * StDiscardDead ( bool bWeighted )
 	{
 		if ( !g_pStats )
 			return PulseAgent();
@@ -3239,12 +3362,28 @@ public:
 		int iBestAgent = -1;
 		int64_t iErrARow = -1;
 		CSphVector<int> dCandidates;
+		CSphVector<int64_t> dTimers;
 		dCandidates.Reserve ( m_dAgents.GetLength() );
+		if ( bWeighted )
+			dTimers.Resize ( m_dAgents.GetLength() );
 
 		ARRAY_FOREACH ( i, m_dAgents )
 		{
 			// no locks for g_pStats since we just reading, and read data is not critical.
-			HostDashboard_t & dDash = g_pStats->m_dDashboard.m_dItemStats[m_dAgents[i].m_iDashIndex];
+			const HostDashboard_t & dDash = GetCommonStat ( i );
+
+			if ( bWeighted )
+			{
+				AgentDash_t dDashStat;
+				dDash.GetDashStat ( &dDashStat, 1 ); // look at last 30..90 seconds.
+				uint64_t uQueries = 0;
+				for ( int j=0; j<eMaxCounters; ++j )
+					uQueries += dDashStat.m_iStats[j];
+				if ( uQueries > 0 )
+					dTimers[i] = dDashStat.m_iStats[eTotalMsecs]/uQueries;
+				else
+					dTimers[i] = -1;
+			}
 
 			if ( iErrARow < 0 )
 				iErrARow = dDash.m_iErrorsARow;
@@ -3263,6 +3402,10 @@ public:
 			}
 		}
 
+		// check if it is a time to recalculate the agent's weights
+		if ( bWeighted )
+			RecalculateWeights ( dTimers );
+
 		// nothing to select, sorry. Just plain RR...
 		if ( iBestAgent < 0 )
 		{
@@ -3277,22 +3420,28 @@ public:
 			return &m_dAgents[iBestAgent];
 		}
 
-		// several nodes. Let's select the one with most late answer
-		int64_t iBestAnswerTime = g_pStats->m_dDashboard.m_dItemStats[iBestAgent].m_iLastAnswerTime;
-		ARRAY_FOREACH ( i, dCandidates )
+		// several nodes. Let's select the one.
+		float fAge = 0.0;
+		const char * sLogStr = NULL;
+		if ( bWeighted )
 		{
-			if ( iBestAnswerTime > g_pStats->m_dDashboard.m_dItemStats[dCandidates[i]].m_iLastAnswerTime )
+			WeightedRandAgent ( &iBestAgent, dCandidates );
+			if ( g_eLogLevel>=SPH_LOG_DEBUG )
 			{
-				iBestAgent = dCandidates[i];
-				iBestAnswerTime = g_pStats->m_dDashboard.m_dItemStats[iBestAgent].m_iLastAnswerTime;
+				const HostDashboard_t & dDash = GetCommonStat ( iBestAgent );
+				fAge = ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
+				sLogStr = "HA selected %d node by weighted random, with best EaR ("INT64_FMT"), last answered in %f milliseconds";
 			}
+		} else
+		{
+			fAge = GetBestDelay ( &iBestAgent, dCandidates )/1000.0f;
+			sLogStr = "HA selected %d node with best num of errors a row ("INT64_FMT"), last answered in %f milliseconds";
 		}
-		float fAge = (sphMicroTimer()-iBestAnswerTime)/10000.0f;
-		sphLogDebug ( "HA selected %d node with best num of errors a row ("INT64_FMT"), answered %f seconds ago", iBestAgent, iErrARow, fAge );
+		sphLogDebug ( sLogStr, iBestAgent, iErrARow, fAge );
 		return &m_dAgents[iBestAgent];
 	}
 
-	AgentDesc_t * StLowErrors()
+	AgentDesc_t * StLowErrors ( bool bWeighted )
 	{
 		if ( !g_pStats )
 			return PulseAgent();
@@ -3302,49 +3451,74 @@ public:
 
 		int iBestAgent = -1;
 		float fBestCriticalErrors = 1.0;
+		float fBestAllErrors = 1.0;
 		CSphVector<int> dCandidates;
+		CSphVector<int64_t> dTimers;
 		dCandidates.Reserve ( m_dAgents.GetLength() );
+		dTimers.Resize ( m_dAgents.GetLength() );
 
 		ARRAY_FOREACH ( i, m_dAgents )
 		{
 			// no locks for g_pStats since we just reading, and read data is not critical.
-			HostDashboard_t & dDash = g_pStats->m_dDashboard.m_dItemStats[m_dAgents[i].m_iDashIndex];
+			const HostDashboard_t & dDash = GetCommonStat ( i );
 
 			AgentDash_t dDashStat;
 			dDash.GetDashStat ( &dDashStat, 1 ); // look at last 30..90 seconds.
-			int64_t iQueries = 0;
-			int64_t iCriticalErrors = 0;
-			int64_t iSuccesses = 0;
-			for ( int j=0; j<eMaxStat; ++j )
+			uint64_t uQueries = 0;
+			uint64_t uCriticalErrors = 0;
+			uint64_t uAllErrors = 0;
+			uint64_t uSuccesses = 0;
+			for ( int j=0; j<eMaxCounters; ++j )
 			{
-				iQueries += dDashStat.m_iStats[j];
-				if ( j==3 ) // counters from 0 to 3 counts network critical errors
-					iCriticalErrors = iQueries;
-				if ( j==eNoErrors )
-					iSuccesses = dDashStat.m_iStats[j];
+				if ( j==eNetworkCritical )
+					uCriticalErrors = uQueries;
+				else if ( j==eNoErrors )
+				{
+					uAllErrors = uQueries;
+					uSuccesses = dDashStat.m_iStats[j];
+				}
+				uQueries += dDashStat.m_iStats[j];
 			}
 
+			if ( uQueries > 0 )
+				dTimers[i] = dDashStat.m_iStats[eTotalMsecs]/uQueries;
+			else
+				dTimers[i] = -1;
+
 			// 1. No successes queries last period (it includes the pings). Skip such node!
-			if ( !iSuccesses )
+			if ( !uSuccesses )
 				continue;
 
-			if ( iQueries )
+			if ( uQueries )
 			{
 				// 2. Among good nodes - select the one(s) with lowest errors/query rating
-				float fCriticalErrors = (float) iCriticalErrors/iQueries;
+				float fCriticalErrors = (float) uCriticalErrors/uQueries;
+				float fAllErrors = (float) uAllErrors/uQueries;
 				if ( fCriticalErrors < fBestCriticalErrors )
 				{
 					dCandidates.Reset();
 					iBestAgent = i;
 					fBestCriticalErrors = fCriticalErrors;
+					fBestAllErrors = fAllErrors;
 				} else if ( fCriticalErrors==fBestCriticalErrors )
 				{
-					if ( iBestAgent>=0 )
-						dCandidates.Add ( iBestAgent );
-					iBestAgent = i;
+					if ( fAllErrors < fBestAllErrors )
+					{
+						dCandidates.Reset();
+						iBestAgent = i;
+						fBestAllErrors = fAllErrors;
+					} else if ( fAllErrors==fBestAllErrors )
+					{
+						if ( iBestAgent>=0 )
+							dCandidates.Add ( iBestAgent );
+						iBestAgent = i;
+					}
 				}
 			}
 		}
+
+		// check if it is a time to recalculate the agent's weights
+		RecalculateWeights ( dTimers );
 
 		// nothing to select, sorry. Just plain RR...
 		if ( iBestAgent < 0 )
@@ -3360,18 +3534,25 @@ public:
 			return &m_dAgents[iBestAgent];
 		}
 
-		// several nodes. Let's select the one with most late answer
-		int64_t iBestAnswerTime = g_pStats->m_dDashboard.m_dItemStats[iBestAgent].m_iLastAnswerTime;
-		ARRAY_FOREACH ( i, dCandidates )
+		// several nodes. Let's select the one.
+		float fAge = 0.0f;
+		const char * sLogStr = NULL;
+		if ( bWeighted )
 		{
-			if ( iBestAnswerTime > g_pStats->m_dDashboard.m_dItemStats[dCandidates[i]].m_iLastAnswerTime )
+			WeightedRandAgent ( &iBestAgent, dCandidates );
+			if ( g_eLogLevel>=SPH_LOG_DEBUG )
 			{
-				iBestAgent = dCandidates[i];
-				iBestAnswerTime = g_pStats->m_dDashboard.m_dItemStats[iBestAgent].m_iLastAnswerTime;
+				const HostDashboard_t & dDash = GetCommonStat ( iBestAgent );
+				fAge = ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
+				sLogStr = "HA selected %d node by weighted random, with best error rating (%.2f), answered %f seconds ago";
 			}
+
+		} else
+		{
+			fAge = GetBestDelay ( &iBestAgent, dCandidates )/1000.0f;
+			sLogStr = "HA selected %d node with best error rating (%.2f), last answered in %f milliseconds";
 		}
-		float fAge = (sphMicroTimer()-iBestAnswerTime)/10000.0f;
-		sphLogDebug ( "HA selected %d node with best error rating (%.2f), answered %f seconds ago", iBestAgent, fBestCriticalErrors, fAge );
+		sphLogDebug ( sLogStr, iBestAgent, fBestCriticalErrors, fAge );
 		return &m_dAgents[iBestAgent];
 	}
 
@@ -3381,18 +3562,26 @@ public:
 		switch ( eStrategy )
 		{
 		case HA_AVOIDDEAD:
-			return StDiscardDead();
+			return StDiscardDead(true);
+		case HA_AVOIDDEADTM:
+			return StDiscardDead(false);
 		case HA_AVOIDERRORS:
-			return StLowErrors();
+			return StLowErrors(true);
+		case HA_AVOIDERRORSTM:
+			return StLowErrors(false);
 		case HA_ROUNDROBIN:
-		default:
 			return PulseAgent();
+		default:
+			return RandAgent();
 		}
 	}
 
 	void Rewind ( bool bLast=true )
 	{
 		m_iCurAgent = bLast?(m_dAgents.GetLength()-1):0;
+		float fFrac = 1.0f / m_dAgents.GetLength();
+		ARRAY_FOREACH ( i, m_dWeights )
+			m_dWeights[i] = fFrac;
 	}
 
 	inline bool IsHA() const
@@ -3424,6 +3613,10 @@ public:
 		if ( this==&rhs )
 			return *this;
 		m_dAgents = rhs.GetAgents();
+		m_dWeights.Resize ( m_dAgents.GetLength() );
+		float fFrac = 1.0f / m_dAgents.GetLength();
+		ARRAY_FOREACH ( i, m_dWeights )
+			m_dWeights[i] = fFrac;
 		m_iCurAgent = rhs.m_iCurAgent;
 		return *this;
 	}
@@ -3459,6 +3652,8 @@ struct AgentConn_t : public AgentDesc_t
 
 	int64_t			m_iWall;		///< wall time spent vs this agent
 	int64_t			m_iWaited;		///< statistics of waited
+	int64_t			m_iStartQuery;	///< the timestamp of the latest request
+	int64_t			m_iEndQuery;	///< the timestamp of the end of the latest operation
 	int				m_iTag;			///< custom field-cookie.
 
 public:
@@ -3472,6 +3667,8 @@ public:
 		, m_pReplyBuf ( NULL )
 		, m_iWall ( 0 )
 		, m_iWaited ( 0 )
+		, m_iStartQuery ( 0 )
+		, m_iEndQuery ( 0 )
 		, m_iTag ( -1 )
 	{}
 
@@ -3523,7 +3720,7 @@ public:
 		: m_iAgentConnectTimeout ( 1000 )
 		, m_iAgentQueryTimeout ( 3000 )
 		, m_bToDelete ( false )
-		, m_eHaStrategy ( HA_ROUNDROBIN )
+		, m_eHaStrategy ( HA_NONE )
 	{}
 	void GetAllAgents ( CSphVector<AgentConn_t> * pTarget ) const
 	{
@@ -3565,11 +3762,13 @@ inline void agent_stats_inc ( AgentConn_t & tAgent, eAgentStats iCounter )
 		{
 			g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].GetCurrentStat()->m_iStats[iCounter]++;
 			if ( iCounter>=eNoErrors )
-			{
 				g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iErrorsARow = 0;
-				g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iLastAnswerTime = sphMicroTimer();
-			} else
+			else
 				g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iErrorsARow += 1;
+			tAgent.m_iEndQuery = sphMicroTimer();
+			g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iLastQueryTime = tAgent.m_iStartQuery;
+			g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iLastAnswerTime = tAgent.m_iEndQuery;
+			g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].GetCurrentStat()->m_iStats[eTotalMsecs]+=tAgent.m_iEndQuery-tAgent.m_iStartQuery;
 		}
 		g_tStatsMutex.Unlock ();
 	}
@@ -3640,12 +3839,11 @@ void RemoteConnectToAgents ( AgentConn_t & tAgent )
 		g_tStatsMutex.Lock();
 		g_pStats->m_iAgentConnect++;
 		g_pStats->m_iAgentRetry += ( bAgentRetry );
-		if ( tAgent.m_iDashIndex>=0 && tAgent.m_iDashIndex<STATS_MAX_DASH )
-			g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iLastQueryTime = sphMicroTimer();
 		g_tStatsMutex.Unlock();
 	}
 
-	tAgent.m_iWall -= sphMicroTimer();
+	tAgent.m_iStartQuery = sphMicroTimer();
+	tAgent.m_iWall -= tAgent.m_iStartQuery;
 
 	if ( connect ( tAgent.m_iSock, (struct sockaddr*)&ss, len )<0 )
 	{
@@ -3957,6 +4155,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 
 			// if there was no reply yet, read reply header
 			bool bFailure = true;
+			bool bWarnings = false;
 			for ( ;; )
 			{
 				if ( tAgent.m_eState==AGENT_QUERY || tAgent.m_eState==AGENT_PREREPLY )
@@ -4047,6 +4246,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 					{
 						CSphString sAgentWarning = tReq.GetString ();
 						tAgent.m_sFailure.SetSprintf ( "remote warning: %s", sAgentWarning.cstr() );
+						bWarnings = true;
 
 					} else if ( tAgent.m_iReplyStatus==SEARCHD_RETRY )
 					{
@@ -4090,7 +4290,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 				tAgent.Close ();
 				tAgent.m_dResults.Reset ();
 			} else
-				agent_stats_inc ( tAgent, eNoErrors );
+				agent_stats_inc ( tAgent, bWarnings ? eWarnings : eNoErrors );
 		}
 	}
 
@@ -10753,7 +10953,7 @@ void BuildAgentStatus ( CSphVector<CSphString> & dStatus )
 		return;
 	}
 
-	const char * FMT64 = INT64_FMT;
+	const char * FMT64 = UINT64_FMT;
 
 	dStatus.Add().SetSprintf ( "status_period_seconds" );
 	dStatus.Add().SetSprintf ( "%d", g_uHAPeriodKarma );
@@ -10771,8 +10971,8 @@ void BuildAgentStatus ( CSphVector<CSphString> & dStatus )
 		HostDashboard_t & dDash = g_pStats->m_dDashboard.m_dItemStats[iIndex];
 		dStatus.Add().SetSprintf ( "ag_%d_references", iIndex );
 		dStatus.Add().SetSprintf ( "%d", dDash.m_iRefCount );
-		int64_t iCur = sphMicroTimer();
-		int64_t iLastAccess = iCur - dDash.m_iLastQueryTime;
+		uint64_t iCur = sphMicroTimer();
+		uint64_t iLastAccess = iCur - dDash.m_iLastQueryTime;
 		float fPeriod = (float)iLastAccess/1000000.0f;
 		dStatus.Add().SetSprintf ( "ag_%d_lastquery", iIndex );
 		dStatus.Add().SetSprintf ( "%.2f", fPeriod );
@@ -10780,7 +10980,7 @@ void BuildAgentStatus ( CSphVector<CSphString> & dStatus )
 		fPeriod = (float)iLastAccess/1000000.0f;
 		dStatus.Add().SetSprintf ( "ag_%d_lastanswer", iIndex );
 		dStatus.Add().SetSprintf ( "%.2f", fPeriod );
-		int64_t iLastTimer = dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime;
+		uint64_t iLastTimer = dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime;
 		dStatus.Add().SetSprintf ( "ag_%d_lastperiodmsec", iIndex );
 		dStatus.Add().SetSprintf ( FMT64, iLastTimer/1000 );
 		dStatus.Add().SetSprintf ( "ag_%d_errorsarow", iIndex );
@@ -15325,11 +15525,12 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, cons
 	return bRes;
 }
 
-static DistributedIndex_t ConfigureDistributedIndex ( const char * szIndexName, const CSphConfigSection & hIndex )
+static void ConfigureDistributedIndex ( DistributedIndex_t * pIdx, const char * szIndexName, const CSphConfigSection & hIndex )
 {
 	assert ( hIndex("type") && hIndex["type"]=="distributed" );
+	assert ( pIdx!=NULL );
 
-	DistributedIndex_t tIdx;
+	DistributedIndex_t& tIdx = *pIdx;
 
 	// add local agents
 	for ( CSphVariant * pLocal = hIndex("local"); pLocal; pLocal = pLocal->m_pNext )
@@ -15347,29 +15548,27 @@ static DistributedIndex_t ConfigureDistributedIndex ( const char * szIndexName, 
 	// add remote agents
 	for ( CSphVariant * pAgent = hIndex("agent"); pAgent; pAgent = pAgent->m_pNext )
 	{
-		MetaAgentDesc_t tAgent;
+		MetaAgentDesc_t& tAgent = tIdx.m_dAgents.Add();
 		if ( ConfigureAgent ( tAgent, pAgent, szIndexName, false ) )
-		{
-			tIdx.m_dAgents.Add ( tAgent );
 			bHaveHA |= tAgent.IsHA();
-		}
+		else
+			tIdx.m_dAgents.Remove ( tIdx.m_dAgents.GetLength()-1 );
 	}
 
 	for ( CSphVariant * pAgent = hIndex("agent_blackhole"); pAgent; pAgent = pAgent->m_pNext )
 	{
-		MetaAgentDesc_t tAgent;
+		MetaAgentDesc_t& tAgent = tIdx.m_dAgents.Add ();
 		if ( ConfigureAgent ( tAgent, pAgent, szIndexName, true ) )
-		{
-			tIdx.m_dAgents.Add ( tAgent );
 			bHaveHA |= tAgent.IsHA();
-		}
+		else
+			tIdx.m_dAgents.Remove ( tIdx.m_dAgents.GetLength()-1 );
 	}
 
 	// configure options
 	if ( hIndex("agent_connect_timeout") )
 	{
 		if ( hIndex["agent_connect_timeout"].intval()<=0 )
-			sphWarning ( "index '%s': connect_timeout must be positive, ignored", szIndexName );
+			sphWarning ( "index '%s': agent_connect_timeout must be positive, ignored", szIndexName );
 		else
 			tIdx.m_iAgentConnectTimeout = hIndex["agent_connect_timeout"].intval();
 	}
@@ -15377,7 +15576,7 @@ static DistributedIndex_t ConfigureDistributedIndex ( const char * szIndexName, 
 	if ( hIndex("agent_query_timeout") )
 	{
 		if ( hIndex["agent_query_timeout"].intval()<=0 )
-			sphWarning ( "index '%s': query_timeout must be positive, ignored", szIndexName );
+			sphWarning ( "index '%s': agent_query_timeout must be positive, ignored", szIndexName );
 		else
 			tIdx.m_iAgentQueryTimeout = hIndex["agent_query_timeout"].intval();
 	}
@@ -15388,18 +15587,20 @@ static DistributedIndex_t ConfigureDistributedIndex ( const char * szIndexName, 
 		if ( !bHaveHA )
 			sphWarning ( "index '%s': ha_strategy defined, but no ha agents in the index", szIndexName );
 
-		tIdx.m_eHaStrategy = HA_ROUNDROBIN;
+		tIdx.m_eHaStrategy = HA_NONE;
 		if ( hIndex["ha_strategy"]=="roundrobin" )
 			tIdx.m_eHaStrategy = HA_ROUNDROBIN;
 		else if ( hIndex["ha_strategy"]=="nodeads" )
 			tIdx.m_eHaStrategy = HA_AVOIDDEAD;
+		else if ( hIndex["ha_strategy"]=="nodeadstm" )
+			tIdx.m_eHaStrategy = HA_AVOIDDEADTM;
 		else if ( hIndex["ha_strategy"]=="noerrors" )
 			tIdx.m_eHaStrategy = HA_AVOIDERRORS;
+		else if ( hIndex["ha_strategy"]=="noerrorstm" )
+			tIdx.m_eHaStrategy = HA_AVOIDERRORSTM;
 		else
 			sphWarning ( "index '%s': ha_strategy (%s) is unknown for me, will use roundrobin", szIndexName, hIndex["ha_strategy"].cstr() );
 	}
-
-	return tIdx;
 }
 
 
@@ -15437,7 +15638,8 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		// configure distributed index
 		///////////////////////////////
 
-		DistributedIndex_t tIdx = ConfigureDistributedIndex ( szIndexName, hIndex );
+		DistributedIndex_t tIdx;
+		ConfigureDistributedIndex ( &tIdx, szIndexName, hIndex );
 
 		// finally, check and add distributed index to global table
 		if ( tIdx.m_dAgents.GetLength()==0 && tIdx.m_dLocal.GetLength()==0 )
@@ -15665,7 +15867,8 @@ void ReloadIndexSettings ( CSphConfigParser * pCP )
 
 		} else if ( g_hDistIndexes.Exists ( sIndexName ) && hIndex.Exists("type") && hIndex["type"]=="distributed" )
 		{
-			DistributedIndex_t tIdx = ConfigureDistributedIndex ( sIndexName, hIndex );
+			DistributedIndex_t tIdx;
+			ConfigureDistributedIndex ( &tIdx, sIndexName, hIndex );
 
 			// finally, check and add distributed index to global table
 			if ( tIdx.m_dAgents.GetLength()==0 && tIdx.m_dLocal.GetLength()==0 )

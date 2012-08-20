@@ -8191,6 +8191,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			bDist = true;
 			iAgentConnectTimeout = pDist->m_iAgentConnectTimeout;
 			iAgentQueryTimeout = pDist->m_iAgentQueryTimeout;
+			if ( tFirst.m_iAgentQueryTimeout>0 )
+				iAgentQueryTimeout = tFirst.m_iAgentQueryTimeout;
 
 			dDistLocal = pDist->m_dLocal;
 
@@ -9204,6 +9206,10 @@ bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue )
 			m_pParseError->SetSprintf ( "unknown sort_method=%s (known values are pq, kbuffer)", sVal.cstr() );
 			return false;
 		}
+
+	} else if ( sOpt=="agent_query_timeout" )
+	{
+		m_pQuery->m_iAgentQueryTimeout = (int)tValue.m_iValue;
 
 	} else
 	{

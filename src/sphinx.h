@@ -2361,6 +2361,7 @@ public:
 
 	int				m_iRetryCount;		///< retry count, for distributed queries
 	int				m_iRetryDelay;		///< retry delay, for distributed queries
+	int				m_iAgentQueryTimeout;	///< agent query timeout override, for distributed queries
 
 	bool			m_bGeoAnchor;		///< do we have an anchor
 	CSphString		m_sGeoLatAttr;		///< latitude attr name

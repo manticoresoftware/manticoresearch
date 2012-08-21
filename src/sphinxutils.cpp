@@ -1212,9 +1212,10 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 		return false;
 	}
 
-	if ( tSettings.m_iMinInfixLen>0 && hIndex("type") && hIndex["type"]=="rt" )
+	bool bWordDict = ( strcmp ( hIndex.GetStr ( "dict", "" ), "keywords" )==0 );
+	if ( hIndex("type") && hIndex["type"]=="rt" && ( tSettings.m_iMinInfixLen>0 || tSettings.m_iMinPrefixLen>0 ) && !bWordDict )
 	{
-		sError.SetSprintf ( "RT indexes do not support infixes yet (set min_infix_len=0)" );
+		sError.SetSprintf ( "RT indexes support prefixes and infixes with only dict=keywords" );
 		return false;
 	}
 

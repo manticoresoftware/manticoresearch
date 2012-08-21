@@ -1352,17 +1352,6 @@ public:
 };
 
 
-struct InfixBlock_t
-{
-	union
-	{
-		const char *	m_sInfix;
-		DWORD			m_iInfixOffset;
-	};
-	int			m_iOffset;
-};
-
-
 // dictionary header
 struct DictHeader_t
 {
@@ -1408,7 +1397,6 @@ public:
 	bool								ReadCP ( CSphAutofile & tFile, DWORD uVersion, bool bWordDict, CSphString & sError );
 
 	const CSphWordlistCheckpoint *		FindCheckpoint ( const char * sWord, int iWordLen, SphWordID_t iWordID, bool bStarMode ) const;
-	bool								LookupInfixCheckpoints ( const char * sInfix, int iBytes, CSphVector<int> & dCheckpoints ) const;
 	bool								GetWord ( const BYTE * pBuf, SphWordID_t iWordID, CSphDictEntry & tWord ) const;
 
 	const BYTE *						AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint, int iFD, BYTE * pDictBuf ) const;
@@ -19548,20 +19536,8 @@ struct InfixHashEntry_t
 };
 
 
-class InfixBuilder_i
-{
-public:
-	explicit		InfixBuilder_i() {}
-	virtual			~InfixBuilder_i() {}
-	virtual void	AddWord ( const BYTE * pWord, int iCheckpoint ) = 0;
-	virtual void	SaveEntries ( CSphWriter & wrDict ) = 0;
-	virtual int		SaveEntryBlocks ( CSphWriter & wrDict ) = 0;
-	virtual int		GetBlocksWordsSize () const = 0;
-};
-
-
 template < int SIZE >
-class InfixBuilder_c : public InfixBuilder_i
+class InfixBuilder_c : public ISphInfixBuilder
 {
 protected:
 	static const int							LENGTH = 1048576;
@@ -19574,7 +19550,7 @@ protected:
 
 public:
 					InfixBuilder_c();
-	virtual void	AddWord ( const BYTE * pWord, int iCheckpoint );
+	virtual void	AddWord ( const BYTE * pWord, int iWordLength, int iCheckpoint );
 	virtual void	SaveEntries ( CSphWriter & wrDict );
 	virtual int		SaveEntryBlocks ( CSphWriter & wrDict );
 	virtual int		GetBlocksWordsSize () const { return m_dBlocksWords.GetLength(); }
@@ -19634,18 +19610,16 @@ InfixBuilder_c<SIZE>::InfixBuilder_c()
 
 /// single-byte case, 2-dword infixes
 template<>
-void InfixBuilder_c<2>::AddWord ( const BYTE * pWord, int iCheckpoint )
+void InfixBuilder_c<2>::AddWord ( const BYTE * pWord, int iWordLength, int iCheckpoint )
 {
-	const int iBytes = strlen ( (const char*)pWord );
-
 	Infix_t<2> sKey;
-	for ( int p=0; p<=iBytes-2; p++ )
+	for ( int p=0; p<=iWordLength-2; p++ )
 	{
 		sKey.Reset();
 
 		BYTE * pKey = (BYTE*)sKey.m_Data;
 		const BYTE * s = pWord + p;
-		const BYTE * sMax = s + Min ( 6, iBytes-p );
+		const BYTE * sMax = s + Min ( 6, iWordLength-p );
 
 		DWORD uHash = 0xffffffUL ^ g_dSphinxCRC32 [ 0xff ^ *s ];
 		*pKey++ = *s++; // copy first infix byte
@@ -19667,14 +19641,14 @@ void InfixBuilder_c<2>::AddWord ( const BYTE * pWord, int iCheckpoint )
 
 /// UTF-8 case, 3/5-dword infixes
 template < int SIZE >
-void InfixBuilder_c<SIZE>::AddWord ( const BYTE * pWord, int iCheckpoint )
+void InfixBuilder_c<SIZE>::AddWord ( const BYTE * pWord, int iWordLength, int iCheckpoint )
 {
 	int iCodes = 0; // codepoints in current word
 	BYTE dBytes[SPH_MAX_WORD_LEN+1]; // byte offset for each codepoints
 
 	// build an offsets table into the bytestring
 	dBytes[0] = 0;
-	for ( const BYTE * p = (const BYTE*)pWord; *p; )
+	for ( const BYTE * p = (const BYTE*)pWord; p<pWord+iWordLength; )
 	{
 		int iLen = 0;
 		BYTE uVal = *p;
@@ -19963,6 +19937,21 @@ int InfixBuilder_c<SIZE>::SaveEntryBlocks ( CSphWriter & wrDict )
 	}
 
 	return (int)iInfixBlocksOffset;
+}
+
+
+ISphInfixBuilder * sphCreateInfixBuilder ( int iCodepointBytes, CSphString * pError )
+{
+	assert ( pError );
+	*pError = CSphString();
+	switch ( iCodepointBytes )
+	{
+	case 0:		return NULL;
+	case 1:		return new InfixBuilder_c<2>(); // upto 6x1 bytes, 2 dwords, sbcs
+	case 2:		return new InfixBuilder_c<3>(); // upto 6x2 bytes, 3 dwords, utf-8
+	case 3:		return new InfixBuilder_c<5>(); // upto 6x3 bytes, 5 dwords, utf-8
+	default:	pError->SetSprintf ( "unhandled max infix codepoint size %d", iCodepointBytes ); return NULL;
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -20369,6 +20358,7 @@ void CSphDictKeywords::DictBegin ( CSphAutofile & tTempDict, CSphAutofile & tDic
 	m_iDictLimit = Max ( iDictLimit, KEYWORD_CHUNK + DICT_CHUNK*(int)sizeof(DictKeyword_t) ); // can't use less than 1 chunk
 }
 
+
 bool CSphDictKeywords::DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphString & sError, ThrottleState_t * pThrottle )
 {
 	DictFlush ();
@@ -20391,14 +20381,11 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphStri
 	}
 
 	// infix builder, if needed
-	InfixBuilder_i * pInfixer = NULL;
-	switch ( pHeader->m_iInfixCodepointBytes )
+	ISphInfixBuilder * pInfixer = sphCreateInfixBuilder ( pHeader->m_iInfixCodepointBytes, &sError );
+	if ( !sError.IsEmpty() )
 	{
-		case 0:		pInfixer = NULL; break;
-		case 1:		pInfixer = new InfixBuilder_c<2>(); break; // upto 6x1 bytes, 2 dwords, sbcs
-		case 2:		pInfixer = new InfixBuilder_c<3>(); break; // upto 6x2 bytes, 3 dwords, utf-8
-		case 3:		pInfixer = new InfixBuilder_c<5>(); break; // upto 6x3 bytes, 5 dwords, utf-8
-		default:	sError.SetSprintf ( "internal error: unhandled max infix codepoint size %d", pHeader->m_iInfixCodepointBytes ); return false;
+		SafeDelete ( pInfixer );
+		return false;
 	}
 
 	// initialize readers
@@ -20496,7 +20483,7 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphStri
 
 		// build infixes
 		if ( pInfixer )
-			pInfixer->AddWord ( (const BYTE*)tWord.m_sKeyword, m_dCheckpoints.GetLength() );
+			pInfixer->AddWord ( (const BYTE*)tWord.m_sKeyword, iLen, m_dCheckpoints.GetLength() );
 
 		// next
 		int iBin = tWord.m_iBlock;
@@ -27219,6 +27206,7 @@ bool CWordlist::ReadCP ( CSphAutofile & tFile, DWORD uVersion, bool bWordDict, C
 
 			m_dInfixBlocks[i].m_iOffset = tReader.UnzipInt();
 		}
+
 		// fix-up offset to pointer
 		m_pInfixBlocksWords = dInfixWords.LeakData();
 		ARRAY_FOREACH ( i, m_dInfixBlocks )
@@ -27481,30 +27469,16 @@ bool operator < ( const char * a, const InfixBlock_t & b )
 }
 
 
-/// compute utf-8 character length in bytes from its first byte
-static inline int Utf8CharBytes ( BYTE uFirst )
+bool sphLookupInfixCheckpoints ( const char * sInfix, int iBytes, const BYTE * pInfixes, const CSphVector<InfixBlock_t> & dInfixBlocks, int iInfixCodepointBytes, CSphVector<int> & dCheckpoints )
 {
-	switch ( uFirst>>4 )
-	{
-		case 12: return 2; // 110x xxxx, 2 bytes
-		case 13: return 2; // 110x xxxx, 2 bytes
-		case 14: return 3; // 1110 xxxx, 3 bytes
-		case 15: return 4; // 1111 0xxx, 4 bytes
-		default: return 1; // either 1 byte, or invalid/unsupported code
-	}
-}
-
-
-bool CWordlist::LookupInfixCheckpoints ( const char * sInfix, int iBytes, CSphVector<int> & dCheckpoints ) const
-{
-	assert ( !m_pBuf.IsEmpty() );
+	assert ( pInfixes );
 	dCheckpoints.Resize ( 0 );
 
 	// lookup block
-	int iBlock = FindSpan ( m_dInfixBlocks, sInfix );
+	int iBlock = FindSpan ( dInfixBlocks, sInfix );
 	if ( iBlock<0 )
 		return false;
-	const BYTE * pBlock = m_pBuf.GetWritePtr() + m_dInfixBlocks[iBlock].m_iOffset;
+	const BYTE * pBlock = pInfixes + dInfixBlocks[iBlock].m_iOffset;
 
 	// decode block and check for exact infix match
 	// block entry is { byte edit_code, byte[] key_append, zint data_len, zint data_deltas[] }
@@ -27518,7 +27492,7 @@ bool CWordlist::LookupInfixCheckpoints ( const char * sInfix, int iBytes, CSphVe
 			break;
 
 		BYTE * pOut = sKey;
-		if ( m_iInfixCodepointBytes==1 )
+		if ( iInfixCodepointBytes==1 )
 		{
 			pOut = sKey + ( iCode>>4 );
 			iCode &= 15;
@@ -27528,12 +27502,12 @@ bool CWordlist::LookupInfixCheckpoints ( const char * sInfix, int iBytes, CSphVe
 		{
 			int iKeep = ( iCode>>4 );
 			while ( iKeep-- )
-				pOut += Utf8CharBytes ( *pOut ); ///< wtf? *pOut (=sKey) is NOT initialized?
+				pOut += sphUtf8CharBytes ( *pOut ); ///< wtf? *pOut (=sKey) is NOT initialized?
 			assert ( pOut-sKey<=sizeof(sKey) );
 			iCode &= 15;
 			while ( iCode-- )
 			{
-				int i = Utf8CharBytes ( *pBlock );
+				int i = sphUtf8CharBytes ( *pBlock );
 				while ( i-- )
 					*pOut++ = *pBlock++;
 			}
@@ -27565,6 +27539,24 @@ bool CWordlist::LookupInfixCheckpoints ( const char * sInfix, int iBytes, CSphVe
 }
 
 
+// calculate length, upto iInfixCodepointBytes chars from infix start
+int sphGetInfixLength ( const char * sInfix, int iBytes, int iInfixCodepointBytes )
+{
+	int iBytes1 = Min ( 6, iBytes );
+	if ( iInfixCodepointBytes!=1 )
+	{
+		int iCharsLeft = 6;
+		const char * s = sInfix;
+		const char * sMax = sInfix + iBytes;
+		while ( iCharsLeft-- && s<sMax )
+			s += sphUtf8CharBytes(*s);
+		iBytes1 = (int)( s - sInfix );
+	}
+
+	return iBytes1;
+}
+
+
 void CWordlist::GetInfixedWords ( const char * sInfix, int iBytes, const char * sWildcard, CSphVector<CSphNamedInt> & dExpanded ) const
 {
 	// dict must be of keywords type, and fully cached
@@ -27576,21 +27568,12 @@ void CWordlist::GetInfixedWords ( const char * sInfix, int iBytes, const char * 
 	}
 
 	// extract key1, upto 6 chars from infix start
-	int iBytes1 = Min ( 6, iBytes );
-	if ( m_iInfixCodepointBytes!=1 )
-	{
-		int iCharsLeft = 6;
-		const char * s = sInfix;
-		const char * sMax = sInfix + iBytes;
-		while ( iCharsLeft-- && s<sMax )
-			s += Utf8CharBytes(*s);
-		iBytes1 = (int)( s - sInfix );
-	}
+	int iBytes1 = sphGetInfixLength ( sInfix, iBytes, m_iInfixCodepointBytes );
 
 	// lookup key1
 	// OPTIMIZE? maybe lookup key2 and reduce checkpoint set size, if possible?
 	CSphVector<int> dPoints;
-	if ( !LookupInfixCheckpoints ( sInfix, iBytes1, dPoints ) )
+	if ( !sphLookupInfixCheckpoints ( sInfix, iBytes1, m_pBuf.GetWritePtr(), m_dInfixBlocks, m_iInfixCodepointBytes, dPoints ) )
 		return;
 
 	// walk those checkpoints, check all their words
@@ -27819,17 +27802,11 @@ void sphDictBuildInfixes ( const char * sPath )
 	ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, sError );
 	if ( !pTokenizer )
 		sphDie ( "infix upgrade: %s", sError.cstr() );
-	tDictHeader.m_iInfixCodepointBytes = pTokenizer->GetMaxCodepointLength();
 
-	InfixBuilder_i * pInfixer = NULL;
-	switch ( tDictHeader.m_iInfixCodepointBytes )
-	{
-		case 1:		pInfixer = new InfixBuilder_c<2>(); break; // upto 6x1 bytes, 2 dwords, sbcs
-		case 2:		pInfixer = new InfixBuilder_c<3>(); break; // upto 6x2 bytes, 3 dwords, utf-8
-		case 3:		pInfixer = new InfixBuilder_c<5>(); break; // upto 6x3 bytes, 5 dwords, utf-8
-		default:	sphDie ( "infix upgrade: unhandled max infix codepoint size %d", tDictHeader.m_iInfixCodepointBytes );
-	}
-	assert ( pInfixer );
+	tDictHeader.m_iInfixCodepointBytes = pTokenizer->GetMaxCodepointLength();
+	ISphInfixBuilder * pInfixer = sphCreateInfixBuilder ( tDictHeader.m_iInfixCodepointBytes, &sError );
+	if ( !pInfixer )
+		sphDie ( "infix upgrade: %s", sError.cstr() );
 
 	// scan all dict entries, generate infixes
 	// (in a separate block, so that tDictReader gets destroyed, and file closed)
@@ -27839,7 +27816,11 @@ void sphDictBuildInfixes ( const char * sPath )
 			tDictHeader.m_iDictCheckpointsOffset, tIndexSettings.m_eHitless, sError, true, &g_tThrottle, uVersion>=31 ) )
 				sphDie ( "infix upgrade: %s", sError.cstr() );
 		while ( tDictReader.Read() )
-			pInfixer->AddWord ( tDictReader.GetWord(), tDictReader.GetCheckpoint() );
+		{
+			const BYTE * sWord = tDictReader.GetWord();
+			int iLen = strlen ( (const char *)sWord );
+			pInfixer->AddWord ( sWord, iLen, tDictReader.GetCheckpoint() );
+		}
 	}
 
 	/////////////////////////////

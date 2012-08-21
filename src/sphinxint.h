@@ -1397,6 +1397,50 @@ const char *		sphArenaInit ( int iMaxBytes );
 void localtime_r ( const time_t * clock, struct tm * res );
 #endif
 
+struct InfixBlock_t
+{
+	union
+	{
+		const char *	m_sInfix;
+		DWORD			m_iInfixOffset;
+	};
+	int			m_iOffset;
+};
+
+
+/// infix hash builder
+class ISphInfixBuilder
+{
+public:
+	explicit		ISphInfixBuilder() {}
+	virtual			~ISphInfixBuilder() {}
+	virtual void	AddWord ( const BYTE * pWord, int iWordLength, int iCheckpoint ) = 0;
+	virtual void	SaveEntries ( CSphWriter & wrDict ) = 0;
+	virtual int		SaveEntryBlocks ( CSphWriter & wrDict ) = 0;
+	virtual int		GetBlocksWordsSize () const = 0;
+};
+
+
+ISphInfixBuilder * sphCreateInfixBuilder ( int iCodepointBytes, CSphString * pError );
+bool sphLookupInfixCheckpoints ( const char * sInfix, int iBytes, const BYTE * pInfixes, const CSphVector<InfixBlock_t> & dInfixBlocks, int iInfixCodepointBytes, CSphVector<int> & dCheckpoints );
+// calculate length, upto iInfixCodepointBytes chars from infix start
+int sphGetInfixLength ( const char * sInfix, int iBytes, int iInfixCodepointBytes );
+
+
+/// compute utf-8 character length in bytes from its first byte
+inline int sphUtf8CharBytes ( BYTE uFirst )
+{
+	switch ( uFirst>>4 )
+	{
+		case 12: return 2; // 110x xxxx, 2 bytes
+		case 13: return 2; // 110x xxxx, 2 bytes
+		case 14: return 3; // 1110 xxxx, 3 bytes
+		case 15: return 4; // 1111 0xxx, 4 bytes
+		default: return 1; // either 1 byte, or invalid/unsupported code
+	}
+}
+
+
 #endif // _sphinxint_
 
 //

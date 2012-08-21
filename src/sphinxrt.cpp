@@ -339,6 +339,7 @@ public:
 
 	CSphTightVector<BYTE>			m_dWords;
 	CSphVector<RtWordCheckpoint_t>	m_dWordCheckpoints;
+	CSphTightVector<uint64_t>		m_dInfixFilterCP;
 	CSphTightVector<BYTE>		m_dDocs;
 	CSphTightVector<BYTE>		m_dHits;
 
@@ -373,7 +374,8 @@ public:
 			( (int64_t)m_dStrings.GetLimit() )*sizeof(m_dStrings[0]) +
 			( (int64_t)m_dMvas.GetLimit() )*sizeof(m_dMvas[0]) +
 			( (int64_t)m_dKeywordCheckpoints.GetLimit() )*sizeof(m_dKeywordCheckpoints[0])+
-			( (int64_t)m_dRows.GetLimit() )*sizeof(m_dRows[0]);
+			( (int64_t)m_dRows.GetLimit() )*sizeof(m_dRows[0]) +
+			( (int64_t)m_dInfixFilterCP.GetLength()*sizeof(m_dInfixFilterCP[0]) );
 	}
 
 	int GetMergeFactor () const
@@ -614,11 +616,13 @@ struct RtWordReader_T
 
 	bool			m_bWordDict;
 	int				m_iWordsCheckpoint;
+	int				m_iCheckpoint;
 
 	RtWordReader_T ( const RtSegment_t * pSeg, bool bWordDict, int iWordsCheckpoint )
 		: m_iWords ( 0 )
 		, m_bWordDict ( bWordDict )
 		, m_iWordsCheckpoint ( iWordsCheckpoint )
+		, m_iCheckpoint ( 0 )
 	{
 		m_pCur = pSeg->m_dWords.Begin();
 		m_pMax = m_pCur + pSeg->m_dWords.GetLength();
@@ -635,6 +639,7 @@ struct RtWordReader_T
 		{
 			m_tWord.m_uDoc = 0;
 			m_iWords = 1;
+			m_iCheckpoint++;
 			if ( !m_bWordDict )
 				m_tWord.m_uWordID = 0;
 		}
@@ -996,7 +1001,7 @@ struct RtIndex_t : public ISphRtIndex, public ISphNoncopyable, public ISphWordli
 {
 private:
 	static const DWORD			META_HEADER_MAGIC	= 0x54525053;	///< my magic 'SPRT' header
-	static const DWORD			META_VERSION		= 6;			///< current version
+	static const DWORD			META_VERSION		= 7;			///< current version
 
 private:
 	int							m_iStride;
@@ -1028,6 +1033,7 @@ private:
 
 	bool						m_bKeywordDict;
 	int							m_iWordsCheckpoint;
+	int							m_iMaxCodepointLength;
 
 public:
 	explicit					RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
@@ -1058,13 +1064,13 @@ private:
 
 	void						SaveMeta ( int iDiskChunks, int64_t iTID );
 	template < typename DOCID >
-	void						SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iCheckpoints, SphOffset_t iCheckpointsPosition, DWORD uKillListSize, DWORD uMinMaxSize, const CSphSourceStats & tStats, bool bForceID32=false ) const;
+	void						SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iCheckpoints, SphOffset_t iCheckpointsPosition, int iInfixBlocksOffset, int iInfixCheckpointWordsSize, DWORD uKillListSize, DWORD uMinMaxSize, const CSphSourceStats & tStats, bool bForceID32=false ) const;
 	void						SaveDiskData ( const char * sFilename, const CSphVector<RtSegment_t *> & dSegments, const CSphSourceStats & tStats ) const;
 	template < typename DOCID, typename WORDID >
 	void						SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSegment_t *> & dSegments, const CSphSourceStats & tStats ) const;
 	void						SaveDiskChunk ( int64_t iTID, const CSphVector<RtSegment_t *> & dSegments, const CSphSourceStats & tStats );
 	CSphIndex *					LoadDiskChunk ( const char * sChunk, CSphString & sError ) const;
-	bool						LoadRamChunk ( DWORD uVersion );
+	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes );
 	bool						SaveRamChunk ();
 
 	virtual void				GetPrefixedWords ( const char * sPrefix, int iPrefix, const char * sWildcard, CSphVector<CSphNamedInt> & dPrefixedWords, BYTE * pDictBuf, int iFD ) const;
@@ -1117,8 +1123,8 @@ public:
 	void						CopyDocinfo ( CSphMatch & tMatch, const DWORD * pFound ) const;
 	const CSphRowitem *			FindDocinfo ( const RtSegment_t * pSeg, SphDocID_t uDocID ) const;
 
-	bool						RtQwordSetup ( RtQword_t * pQword, RtSegment_t * pSeg ) const;
-	static bool					RtQwordSetupSegment ( RtQword_t * pQword, RtSegment_t * pSeg, bool bSetup, bool bWordDict, int iWordsCheckpoint );
+	bool						RtQwordSetup ( RtQword_t * pQword, const RtSegment_t * pSeg ) const;
+	static bool					RtQwordSetupSegment ( RtQword_t * pQword, const RtSegment_t * pSeg, bool bSetup, bool bWordDict, int iWordsCheckpoint );
 
 	CSphDict *					SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer * pTokenizer ) const;
 	CSphDict *					SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer * pTokenizer ) const;
@@ -1129,6 +1135,7 @@ public:
 
 	virtual void				SetEnableStar ( bool bEnableStar );
 	bool						IsWordDict () const { return m_bKeywordDict; }
+	void						BuildSegmentInfixes ( RtSegment_t * pSeg ) const;
 
 	// TODO: implement me
 	virtual	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) {}
@@ -2308,6 +2315,75 @@ void CopyFixupStorageAttrs ( const CSphTightVector<SRC> & dSrc, STORAGE & tStora
 }
 
 
+#define BLOOM_PER_ENTRY_VALS_COUNT 8
+#define BLOOM_HASHES_COUNT 2
+
+static bool BuildBloom ( const BYTE * sWord, int iLen, int iInfixCodepointCount, bool bUtf8, uint64_t * pBloom, int iKeyValCount )
+{
+	if ( iLen<iInfixCodepointCount )
+		return false;
+	// byte offset for each codepoints
+	BYTE dOffsets [ SPH_MAX_WORD_LEN+1 ] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+		20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42 };
+	int iCodes = iLen;
+	if ( bUtf8 )
+	{
+		// build an offsets table into the bytestring
+		iCodes = 0;
+		const BYTE * s = sWord;
+		const BYTE * sEnd = sWord + iLen;
+		while ( s<sEnd )
+		{
+			int iCodepoints = sphUtf8CharBytes ( *s );
+			assert ( iCodepoints>=1 && iCodepoints<=4 );
+			dOffsets[iCodes+1] = dOffsets[iCodes] + (BYTE)iCodepoints;
+			s += iCodepoints;
+			iCodes++;
+		}
+	}
+	if ( iCodes<iInfixCodepointCount )
+		return false;
+
+	int iKeyBytes = iKeyValCount * 64;
+	for ( int i=0; i<=iCodes-iInfixCodepointCount; i++ )
+	{
+		int iFrom = dOffsets[i];
+		int iTo = dOffsets[i+iInfixCodepointCount];
+		uint64_t uHash64 = sphFNV64 ( sWord+iFrom, iTo-iFrom );
+
+		uHash64 = ( uHash64>>32 ) ^ ( (DWORD)uHash64 );
+		int iByte = (int)( uHash64 % iKeyBytes );
+		int iPos = iByte/64;
+		uint64_t uVal = U64C(1) << ( iByte % 64 );
+
+		pBloom[iPos] |= uVal;
+	}
+	return true;
+}
+
+
+void RtIndex_t::BuildSegmentInfixes ( RtSegment_t * pSeg ) const
+{
+	if ( !m_bKeywordDict || !m_tSettings.m_iMinInfixLen )
+		return;
+
+	int iBloomSize = ( pSeg->m_dWordCheckpoints.GetLength()+1 ) * BLOOM_PER_ENTRY_VALS_COUNT * BLOOM_HASHES_COUNT;
+	pSeg->m_dInfixFilterCP.Resize ( iBloomSize );
+	// reset filters
+	memset ( pSeg->m_dInfixFilterCP.Begin(), 0, pSeg->m_dInfixFilterCP.GetLength() * sizeof ( pSeg->m_dInfixFilterCP[0] ) );
+
+	uint64_t * pRough = pSeg->m_dInfixFilterCP.Begin();
+	const RtWord_t * pWord = NULL;
+	RtWordReader_t rdDictRough ( pSeg, true, m_iWordsCheckpoint );
+	while ( ( pWord = rdDictRough.UnzipWord () )!=NULL )
+	{
+		uint64_t * pVal = pRough + rdDictRough.m_iCheckpoint * BLOOM_PER_ENTRY_VALS_COUNT * BLOOM_HASHES_COUNT;
+		BuildBloom ( pWord->m_sWord+1, pWord->m_sWord[0], 2, ( m_iMaxCodepointLength>1 ), pVal+BLOOM_PER_ENTRY_VALS_COUNT*0, BLOOM_PER_ENTRY_VALS_COUNT );
+		BuildBloom ( pWord->m_sWord+1, pWord->m_sWord[0], 4, ( m_iMaxCodepointLength>1 ), pVal+BLOOM_PER_ENTRY_VALS_COUNT*1, BLOOM_PER_ENTRY_VALS_COUNT );
+	}
+}
+
+
 RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2, const CSphVector<SphDocID_t> * pAccKlist )
 {
 	if ( pSeg1->m_iTag > pSeg2->m_iTag )
@@ -2437,6 +2513,8 @@ RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 	if ( m_bKeywordDict )
 		FixupSegmentCheckpoints ( pSeg );
 
+	BuildSegmentInfixes ( pSeg );
+
 	assert ( pSeg->m_dRows.GetLength() );
 	assert ( pSeg->m_iRows );
 	assert ( pSeg->m_iAliveRows==pSeg->m_iRows );
@@ -2451,6 +2529,7 @@ struct CmpSegments_fn
 		return a->GetMergeFactor() > b->GetMergeFactor();
 	}
 };
+
 
 void RtIndex_t::Commit ()
 {
@@ -2483,6 +2562,8 @@ void RtIndex_t::Commit ()
 	assert ( !pNewSeg || pNewSeg->m_iRows>0 );
 	assert ( !pNewSeg || pNewSeg->m_iAliveRows>0 );
 	assert ( !pNewSeg || pNewSeg->m_bTlsKlist==false );
+
+	BuildSegmentInfixes ( pNewSeg );
 
 #if PARANOID
 	if ( pNewSeg )
@@ -3083,6 +3164,10 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSe
 	WORDID uLastWordID = 0;
 	SphOffset_t uLastDocpos = 0;
 
+	CSphScopedPtr<ISphInfixBuilder> pInfixer ( NULL );
+	if ( m_tSettings.m_iMinInfixLen && m_pDict->GetSettings().m_bWordDict )
+		pInfixer = sphCreateInfixBuilder ( m_pTokenizer->GetMaxCodepointLength(), &sError );
+
 	for ( ;; )
 	{
 		// find keyword with min id
@@ -3239,6 +3324,10 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSe
 				BYTE uHint = sphDoclistHintPack ( iDocs, wrDocs.GetPos()-uLastDocpos );
 				if ( uHint )
 					wrDict.PutByte ( uHint );
+
+				// build infixes
+				if ( pInfixer.Ptr() )
+					pInfixer->AddWord ( pWord->m_sWord+1, pWord->m_sWord[0], dCheckpoints.GetLength() );
 			}
 
 			uLastDocpos = uDocpos;
@@ -3282,6 +3371,10 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSe
 	wrDict.ZipInt ( 0 ); // indicate checkpoint
 	wrDict.ZipOffset ( uOff ); // store last doclist length
 
+	// flush infix hash entries, if any
+	if ( pInfixer.Ptr() )
+		pInfixer->SaveEntries ( wrDict );
+
 	SphOffset_t iCheckpointsPosition = wrDict.GetPos();
 	if ( m_bKeywordDict )
 	{
@@ -3304,9 +3397,26 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSe
 		}
 	}
 
+	int iInfixBlockOffset = 0;
+	int iInfixCheckpointWordsSize = 0;
+	// flush infix hash blocks
+	if ( pInfixer.Ptr() )
+	{
+		iInfixBlockOffset = pInfixer->SaveEntryBlocks ( wrDict );
+		iInfixCheckpointWordsSize = pInfixer->GetBlocksWordsSize();
+	}
+
+	// flush header
+	// mostly for debugging convenience
+	// primary storage is in the index wide header
+	wrDict.PutBytes ( "dict-header", 11 );
+	wrDict.ZipInt ( dCheckpoints.GetLength() );
+	wrDict.ZipOffset ( iCheckpointsPosition );
+	wrDict.ZipInt ( m_pTokenizer->GetMaxCodepointLength() );
+	wrDict.ZipInt ( iInfixBlockOffset );
+
 	// write dummy kill-list files
 	CSphWriter wrDummy;
-
 	// dump killlist
 	sName.SetSprintf ( "%s.spk", sFilename );
 	wrDummy.OpenFile ( sName.cstr(), sError );
@@ -3315,7 +3425,7 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSe
 	wrDummy.CloseFile ();
 
 	// header
-	SaveDiskHeader ( sFilename, iMinDocID, dCheckpoints.GetLength(), iCheckpointsPosition,
+	SaveDiskHeader ( sFilename, iMinDocID, dCheckpoints.GetLength(), iCheckpointsPosition, iInfixBlockOffset, iInfixCheckpointWordsSize,
 		m_dDiskChunkKlist.GetLength(), iTotalDocs*iStride, tStats, m_bId32to64 );
 
 	// cleanup
@@ -3345,7 +3455,7 @@ void RtIndex_t::SaveDiskData ( const char * sFilename, const CSphVector<RtSegmen
 
 template < typename DOCID >
 void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iCheckpoints,
-	SphOffset_t iCheckpointsPosition, DWORD uKillListSize, DWORD uMinMaxSize,
+	SphOffset_t iCheckpointsPosition, int iInfixBlocksOffset, int iInfixCheckpointWordsSize, DWORD uKillListSize, DWORD uMinMaxSize,
 	const CSphSourceStats & tStats, bool bForceID32 ) const
 {
 	static const DWORD INDEX_MAGIC_HEADER	= 0x58485053;	///< my magic 'SPHX' header
@@ -3376,8 +3486,11 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iC
 	tWriter.PutOffset ( iCheckpointsPosition );
 	tWriter.PutDword ( iCheckpoints );
 
-	tWriter.PutByte ( 0 ); // m_iInfixCodepointBytes, v.27+
-	tWriter.PutDword ( 0 ); // m_iInfixBlocksOffset, v.27+
+	int iInfixCodepointBytes = ( m_tSettings.m_iMinInfixLen && m_pDict->GetSettings().m_bWordDict ? m_pTokenizer->GetMaxCodepointLength() : 0 );
+	tWriter.PutByte ( iInfixCodepointBytes ); // m_iInfixCodepointBytes, v.27+
+	tWriter.PutDword ( iInfixBlocksOffset ); // m_iInfixBlocksOffset, v.27+
+	// FIXME!!! save that too
+	//tWriter.PutOffset ( iInfixCheckpointWordsSize ); // m_iInfixCheckpointWordsSize, v.34+
 
 	// stats
 	tWriter.PutDword ( tStats.m_iTotalDocuments );
@@ -3398,6 +3511,9 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iC
 	tWriter.PutDword ( 1 ); // m_iStopwordStep, v.23+
 	tWriter.PutDword ( 1 );	// m_iOvershortStep
 	tWriter.PutDword ( m_tSettings.m_iEmbeddedLimit );	// v.30+
+	// FIXME!!! save that too
+	//tWriter.PutByte ( m_tSettings.m_eBigramIndex ); // v.32+
+	//tWriter.PutString ( m_tSettings.m_sBigramWords ); // v.32+
 
 	// tokenizer
 	SaveTokenizerSettings ( tWriter, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
@@ -3463,6 +3579,11 @@ void RtIndex_t::SaveMeta ( int iDiskChunks, int64_t iTID )
 
 	// meta v.5
 	wrMeta.PutDword ( m_iWordsCheckpoint );
+
+	// meta v.7
+	wrMeta.PutDword ( m_iMaxCodepointLength );
+	wrMeta.PutByte ( BLOOM_PER_ENTRY_VALS_COUNT );
+	wrMeta.PutByte ( BLOOM_HASHES_COUNT );
 
 	wrMeta.CloseFile(); // FIXME? handle errors?
 
@@ -3687,6 +3808,19 @@ bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 		m_iWordsCheckpoint = rdMeta.GetDword();
 	}
 
+	// check that infixes definition changed - going to rebuild infixes
+	bool bRebuildInfixes = false;
+	if ( uVersion>=7 )
+	{
+		m_iMaxCodepointLength = rdMeta.GetDword();
+		int iBloomKeyLen = rdMeta.GetByte();
+		int iBloomHashesCount = rdMeta.GetByte();
+		bRebuildInfixes = ( iBloomKeyLen!=BLOOM_PER_ENTRY_VALS_COUNT || iBloomHashesCount!=BLOOM_HASHES_COUNT );
+
+		sphWarning ( "infix definition changed (from len=%d, hashes=%d to len=%d, hashes=%d) - rebuilding...",
+			(int)BLOOM_PER_ENTRY_VALS_COUNT, (int)BLOOM_HASHES_COUNT, iBloomKeyLen, iBloomHashesCount );
+	}
+
 	///////////////
 	// load chunks
 	///////////////
@@ -3711,7 +3845,7 @@ bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 	}
 
 	// load ram chunk
-	bool bRamLoaded = LoadRamChunk ( uVersion );
+	bool bRamLoaded = LoadRamChunk ( uVersion, bRebuildInfixes );
 
 	// set up values for on timer save
 	m_iSavedTID = m_iTID;
@@ -3827,6 +3961,9 @@ bool RtIndex_t::SaveRamChunk ()
 		SaveVector ( wrChunk, pSeg->m_dKlist );
 		SaveVector ( wrChunk, pSeg->m_dStrings );
 		SaveVector ( wrChunk, pSeg->m_dMvas );
+
+		// infixes
+		SaveVector ( wrChunk, pSeg->m_dInfixFilterCP );
 	}
 
 	wrChunk.CloseFile();
@@ -3842,7 +3979,7 @@ bool RtIndex_t::SaveRamChunk ()
 }
 
 
-bool RtIndex_t::LoadRamChunk ( DWORD uVersion )
+bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 {
 	MEMORY ( SPH_MEM_IDX_RT );
 
@@ -3911,6 +4048,14 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion )
 		LoadVector ( rdChunk, pSeg->m_dStrings );
 		if ( uVersion>=3 )
 			LoadVector ( rdChunk, pSeg->m_dMvas );
+
+		// infixes
+		if ( uVersion>=7 )
+		{
+			LoadVector ( rdChunk, pSeg->m_dInfixFilterCP );
+			if ( bRebuildInfixes )
+				BuildSegmentInfixes ( pSeg );
+		}
 	}
 
 	RtSegment_t::m_iSegments = iSegmentSeq;
@@ -3933,6 +4078,8 @@ void RtIndex_t::PostSetup()
 		// since the RAM chunk is just stored as id32, we are no more in compat mode
 		m_bId32to64 = false;
 	}
+
+	m_iMaxCodepointLength = m_pTokenizer->GetMaxCodepointLength();
 }
 
 
@@ -4809,7 +4956,7 @@ protected:
 	DWORD				m_uNextHit;
 	RtHitReader2_t		m_tHitReader;
 
-	RtSegment_t *		m_pSeg;
+	const RtSegment_t *	m_pSeg;
 
 public:
 	RtQword_t ()
@@ -4994,7 +5141,7 @@ const CSphRowitem * RtIndex_t::FindDocinfo ( const RtSegment_t * pSeg, SphDocID_
 // for RT queries, we setup qwords several times
 // first pass (with NULL segment arg) should sum all stats over all segments
 // others passes (with non-NULL segments) should setup specific segment (including local stats)
-bool RtIndex_t::RtQwordSetupSegment ( RtQword_t * pQword, RtSegment_t * pCurSeg, bool bSetup, bool bWordDict, int iWordsCheckpoint )
+bool RtIndex_t::RtQwordSetupSegment ( RtQword_t * pQword, const RtSegment_t * pCurSeg, bool bSetup, bool bWordDict, int iWordsCheckpoint )
 {
 	if ( !pCurSeg )
 		return false;
@@ -5007,6 +5154,9 @@ bool RtIndex_t::RtQwordSetupSegment ( RtQword_t * pQword, RtSegment_t * pCurSeg,
 		iWordLen = iWordLen-1;
 	}
 
+	// no checkpoints - check all words
+	// no checkpoints matched - check only words prior to 1st checkpoint
+	// checkpoint found - check words at that checkpoint
 	RtWordReader_t tReader ( pCurSeg, bWordDict, iWordsCheckpoint );
 
 	if ( pCurSeg->m_dWordCheckpoints.GetLength() )
@@ -5145,51 +5295,115 @@ void RtIndex_t::GetPrefixedWords ( const char * sWord, int iWordLen, const char 
 }
 
 
-void RtIndex_t::GetInfixedWords ( const char * sInfix, int iBytes, const char *, CSphVector<CSphNamedInt> & dExpanded ) const
+static bool MatchBloomCheckpoint ( const uint64_t * pBloom, const uint64_t * pVals, int iWordsStride, int iCP, int iHashes )
+{
+	int dMatches[ BLOOM_HASHES_COUNT ];
+	memset ( dMatches, 0, sizeof(dMatches) );
+	int iMatch = 0;
+
+	for ( int j=0; j<iWordsStride*iHashes*BLOOM_PER_ENTRY_VALS_COUNT; j++ )
+	{
+		int iVal = j % ( BLOOM_PER_ENTRY_VALS_COUNT * iHashes );
+		uint64_t uInfix = pVals[iVal];
+		uint64_t uFilter = pBloom[ j + iCP * iWordsStride * iHashes * BLOOM_PER_ENTRY_VALS_COUNT ];
+		iMatch += ( ( uInfix & uFilter )==uInfix );
+
+		if ( j%BLOOM_PER_ENTRY_VALS_COUNT==BLOOM_PER_ENTRY_VALS_COUNT-1 )
+		{
+			dMatches[ ( j/BLOOM_PER_ENTRY_VALS_COUNT ) % iHashes ] += ( iMatch==BLOOM_PER_ENTRY_VALS_COUNT );
+			iMatch = 0;
+		}
+	}
+
+	int iMatched = 0;
+	for ( int iMatch=0; iMatch<iHashes; iMatch++ )
+	{
+		iMatched += ( dMatches[iMatch]>0 );
+	}
+
+	return ( iMatched==iHashes );
+}
+
+
+static bool ExtractInfixCheckpoints ( const char * sInfix, int iBytes, int iMaxCodepointLength, int iCPs, const CSphTightVector<uint64_t> & dFilter, CSphVector<int> & dCheckpoints )
+{
+	dCheckpoints.Resize ( 0 );
+	if ( !dFilter.GetLength() )
+		return false;
+
+	uint64_t dVals[ BLOOM_PER_ENTRY_VALS_COUNT * BLOOM_HASHES_COUNT ];
+	memset ( dVals, 0, sizeof(dVals) );
+
+	if ( !BuildBloom ( (const BYTE *)sInfix, iBytes, 2, ( iMaxCodepointLength>1 ), dVals+BLOOM_PER_ENTRY_VALS_COUNT*0, BLOOM_PER_ENTRY_VALS_COUNT ) )
+		return false;
+	BuildBloom ( (const BYTE *)sInfix, iBytes, 4, ( iMaxCodepointLength>1 ), dVals+BLOOM_PER_ENTRY_VALS_COUNT*1, BLOOM_PER_ENTRY_VALS_COUNT );
+
+	const uint64_t * pRough = dFilter.Begin();
+	for ( int i=0; i<iCPs+1; i++ )
+	{
+		if ( MatchBloomCheckpoint ( pRough, dVals, 1, i, BLOOM_HASHES_COUNT ) )
+			dCheckpoints.Add ( i );
+	}
+
+	return ( dCheckpoints.GetLength()>0 );
+}
+
+
+void RtIndex_t::GetInfixedWords ( const char * sInfix, int iBytes, const char * sWildcard, CSphVector<CSphNamedInt> & dExpanded ) const
 {
 	// sanity checks
 	if ( !sInfix || iBytes<=0 )
 		return;
 
-	// handle trailing star
-	bool bTailStar = ( sInfix[iBytes-1]=='*' );
-	if ( bTailStar )
-		iBytes--;
-
-	char cSave = sInfix[iBytes];
-	const_cast<char*>(sInfix)[iBytes] = '\0'; // for strstr() to work
-
 	// find those prefixes
-	SmallStringHash_T<int> hWords;
+	CSphVector<int> dPoints;
 
-	ARRAY_FOREACH ( i, m_pSegments )
+	SmallStringHash_T<DocHitPair_t> hWords;
+	ARRAY_FOREACH ( iSeg, m_pSegments )
 	{
-		RtSegment_t * pSeg = m_pSegments[i];
+		RtSegment_t * pSeg = m_pSegments[iSeg];
+		if ( !pSeg->m_dWords.GetLength() )
+			continue;
 
-		// for now, just good old full scan!
-		// (most useful for small segments anyway)
-		RtWordReader_t tReader ( pSeg, true, m_iWordsCheckpoint );
-		for ( ;; )
+		dPoints.Resize ( 0 );
+		if ( !ExtractInfixCheckpoints ( sInfix, iBytes, m_iMaxCodepointLength, pSeg->m_dWordCheckpoints.GetLength(), pSeg->m_dInfixFilterCP, dPoints ) )
+			continue;
+
+		// walk those checkpoints, check all their words
+		ARRAY_FOREACH ( i, dPoints )
 		{
-			// get next word
-			const RtWord_t * pWord = tReader.UnzipWord();
-			if ( !pWord )
-				break;
+			int iNext = dPoints[i];
+			int iCur = iNext-1;
+			RtWordReader_t tReader ( pSeg, true, m_iWordsCheckpoint );
+			if ( iCur>0 )
+				tReader.m_pCur = pSeg->m_dWords.Begin() + pSeg->m_dWordCheckpoints[iCur].m_iOffset;
+			if ( iNext<pSeg->m_dWordCheckpoints.GetLength() )
+				tReader.m_pMax = pSeg->m_dWords.Begin() + pSeg->m_dWordCheckpoints[iNext].m_iOffset;
 
-			// check it
-			const char * sCheck = strstr ( (const char*)pWord->m_sWord+1, sInfix );
-			if ( !sCheck )
-				continue;
-			if ( !bTailStar && sCheck[iBytes] )
-				continue;
+			int iMatches = 0;
+			const RtWord_t * pWord = NULL;
+			while ( ( pWord = tReader.UnzipWord() )!=NULL )
+			{
+				// check it
+				if ( !sphWildcardMatch ( (const char*)pWord->m_sWord+1, sWildcard ) )
+					continue;
 
-			// matched, lets add
-			CSphString sWord ( (const char*)pWord->m_sWord+1 );
-			int * pDocs = hWords ( sWord );
-			if ( pDocs )
-				*pDocs += pWord->m_uDocs;
-			else
-				hWords.Add ( pWord->m_uDocs, sWord );
+				iMatches++;
+				// matched, lets add
+				CSphString sWord ( (const char*)pWord->m_sWord+1, pWord->m_sWord[0] );
+				DocHitPair_t * pPair = hWords ( sWord );
+				if ( pPair )
+				{
+					pPair->m_iDocs += pWord->m_uDocs;
+					pPair->m_iHits += pWord->m_uHits;
+				} else
+				{
+					DocHitPair_t tPair;
+					tPair.m_iDocs = pWord->m_uDocs;
+					tPair.m_iHits = pWord->m_uHits;
+					hWords.Add ( tPair, sWord );
+				}
+			}
 		}
 	}
 
@@ -5199,14 +5413,13 @@ void RtIndex_t::GetInfixedWords ( const char * sInfix, int iBytes, const char *,
 	{
 		CSphNamedInt & tExpanded = dExpanded.Add ();
 		tExpanded.m_sName = hWords.IterateGetKey();
-		tExpanded.m_iValue = hWords.IterateGet();
+		DocHitPair_t & tPair = hWords.IterateGet();
+		tExpanded.m_iValue = sphGetExpansionMagic ( tPair.m_iDocs, tPair.m_iHits );
 	}
-
-	const_cast<char*>(sInfix)[iBytes] = cSave;
 }
 
 
-bool RtIndex_t::RtQwordSetup ( RtQword_t * pQword, RtSegment_t * pSeg ) const
+bool RtIndex_t::RtQwordSetup ( RtQword_t * pQword, const RtSegment_t * pSeg ) const
 {
 	// segment-specific setup pass
 	if ( pSeg )
@@ -7532,9 +7745,14 @@ bool RtBinlog_c::ReplayCommit ( int iBinlog, DWORD uReplayFlags, BinlogReader_c 
 			sphWarning ( "binlog: commit: unexpected tid (index=%s, indextid="INT64_FMT", logtid="INT64_FMT", pos="INT64_FMT")",
 				tIndex.m_sName.cstr(), tIndex.m_pRT->m_iTID, iTID, iTxnPos );
 
-		// cook checkpoint in case dict=keywords
+		// in case dict=keywords
+		// + cook checkpoint
+		// + build infixes
 		if ( tIndex.m_pRT->IsWordDict() && pSeg.Ptr() )
+		{
 			FixupSegmentCheckpoints ( pSeg.Ptr() );
+			tIndex.m_pRT->BuildSegmentInfixes ( pSeg.Ptr() );
+		}
 
 		// actually replay
 		tIndex.m_pRT->CommitReplayable ( pSeg.LeakPtr(), dKlist );

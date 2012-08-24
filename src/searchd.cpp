@@ -229,7 +229,7 @@ static bool				g_bPreopenIndexes	= false;
 static bool				g_bOnDiskDicts		= false;
 static bool				g_bWatchdog			= true;
 static int				g_iExpansionLimit	= 0;
-static bool				g_bCompatResults	= true;
+static bool				g_bCompatResults	= false;
 
 struct Listener_t
 {

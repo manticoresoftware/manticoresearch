@@ -12,6 +12,7 @@ indexer
 searchd
 {
 	<searchd_settings/>
+compat_sphinxql_magics = 1
 	<dynamic>
 		<variant>client_timeout = 5</variant>
 		<variant>client_timeout = 1</variant>

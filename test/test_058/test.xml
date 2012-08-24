@@ -11,6 +11,7 @@
 searchd
 {
 	<searchd_settings/>
+compat_sphinxql_magics = 1
 	seamless_rotate = 0
 	<dynamic>
 		<variant>workers = none</variant>

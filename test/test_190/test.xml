@@ -24,6 +24,7 @@ searchd
 	</agent2>
 
 	<searchd_settings/>
+compat_sphinxql_magics = 1
 	<dynamic>
 		<variant>dist_threads = 2</variant>
 		<variant></variant>

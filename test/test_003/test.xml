@@ -11,6 +11,7 @@ searchd
 {
 </Static>
 <Searchd_Settings/>
+compat_sphinxql_magics = 1
 <Static>
 }
 

@@ -14,6 +14,7 @@ indexer
 searchd
 {
 	<searchd_settings/>
+compat_sphinxql_magics = 1
 	binlog_path = #
 	workers = threads
 	attr_flush_period = 3600 # not autoflush during test run but be able to do FlushAttributes command

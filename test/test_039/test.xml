@@ -12,6 +12,7 @@ indexer
 searchd
 {
 	<searchd_settings/>
+compat_sphinxql_magics = 1
 	max_filter_values 	= 500000
 	max_packet_size 	= 64M
 	dist_threads			= 4

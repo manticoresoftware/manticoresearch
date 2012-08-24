@@ -7,6 +7,7 @@
 searchd
 {
 	<searchd_settings/>
+compat_sphinxql_magics = 1
 }
 
 source test

@@ -21,6 +21,7 @@ searchd
 <variant>	subtree_hits_cache 	= 10M</variant>
 </dynamic>
 <Searchd_Settings/>
+compat_sphinxql_magics = 1
 }
 
 source srctest

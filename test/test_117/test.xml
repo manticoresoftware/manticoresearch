@@ -8,6 +8,7 @@
 searchd
 {
 	<searchd_settings/>
+compat_sphinxql_magics = 1
 	workers = threads	
 	binlog_path =
 }

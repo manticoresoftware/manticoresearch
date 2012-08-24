@@ -11358,19 +11358,17 @@ expansion_limit = 16
 <sect2 id="conf-compat-sphinxql-magics"><title>compat_sphinxql_magics</title>
 <para>
 Legacy SphinxQL quirks compatiblity mode.
-Optional, default is 1 (keep compatibility).
+Optional, default is 0 (SQL compliance mode).
 Introduced in version 2.0.1-beta.
 </para>
 <para>
 Starting with version 2.0.1-beta, we're bringing SphinxQL in closer
 compliance with standard SQL. However, existing applications must not
 get broken, and <code>compat_sphinxql_magics</code> lets you upgrade
-safely. It defauls to 1, which enables the compatibility mode.
-However, <b>SphinxQL compatibility mode is now deprecated and
+safely. It defauls to 0, which acts in morden way.
+<b>SphinxQL compatibility mode is now deprecated and
 will be removed</b> once we complete bringing SphinxQL in line
-with standard SQL syntax. So it's advised to update the applications
-utilising SphinxQL and then switch the daemon to the new, more SQL
-compliant mode by setting <code>compat_sphinxql_magics = 0</code>.
+with standard SQL syntax.
 Please refer to <xref linkend="sphinxql-upgrading-magics"/>
 for the details and update instruction.
 </para>

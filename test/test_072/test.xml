@@ -13,6 +13,7 @@ searchd
 	subtree_docs_cache 	= 0
 	subtree_hits_cache 	= 0
 	<searchd_settings/>
+compat_sphinxql_magics = 1
 }
 
 source srctest

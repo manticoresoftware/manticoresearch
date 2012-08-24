@@ -11732,7 +11732,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		AttrIndexBuilder_c tMinMax ( m_tSchema );
 		CSphVector<DWORD> dMinMaxBuffer ( tMinMax.GetExpectedSize ( m_tStats.m_iTotalDocuments ) );
 
-		// { fixed row + mva data for that row } fixed row - for MinMaxBuilder
+		// { fixed row + dummy value ( zero offset elemination ) + mva data for that row } fixed row - for MinMaxBuilder
 		CSphVector < DWORD > dMvaPool;
 		tMinMax.Prepare ( dMinMaxBuffer.Begin(), dMinMaxBuffer.Begin() + dMinMaxBuffer.GetLength() );
 
@@ -11799,7 +11799,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					assert ( uMvaID>=DOCINFO2ID(pEntry) );
 					if ( uMvaID==DOCINFO2ID(pEntry) )
 					{
-						dMvaPool.Resize ( iDocinfoStride );
+						// fixed row + dummy value ( zero offset elemination )
+						dMvaPool.Resize ( iDocinfoStride+1 );
 						memcpy ( dMvaPool.Begin(), pEntry, iDocinfoStride * sizeof(DWORD) );
 
 						CSphRowitem * pAttr = DOCINFO2ATTRS ( pEntry );

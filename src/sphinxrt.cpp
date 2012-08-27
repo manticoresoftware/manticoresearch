@@ -2364,7 +2364,7 @@ static bool BuildBloom ( const BYTE * sWord, int iLen, int iInfixCodepointCount,
 
 void RtIndex_t::BuildSegmentInfixes ( RtSegment_t * pSeg ) const
 {
-	if ( !m_bKeywordDict || !m_tSettings.m_iMinInfixLen )
+	if ( !pSeg || !m_bKeywordDict || !m_tSettings.m_iMinInfixLen )
 		return;
 
 	int iBloomSize = ( pSeg->m_dWordCheckpoints.GetLength()+1 ) * BLOOM_PER_ENTRY_VALS_COUNT * BLOOM_HASHES_COUNT;

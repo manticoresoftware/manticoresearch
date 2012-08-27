@@ -11,6 +11,7 @@ searchd
 {
 	<searchd_settings/>
 compat_sphinxql_magics = 1
+	workers = threads
 }
 
 source test1
@@ -72,6 +73,20 @@ index kw2
 	enable_star		= 1
 }
 
+index rt_infix
+{
+	type	 = rt
+	path	= <data_path/>/rt-infix
+
+	charset_type	= utf-8
+	dict					= keywords
+	min_infix_len	= 3
+	enable_star		= 1
+
+	rt_field				= text
+	rt_attr_uint		= idd
+}
+
 </config>
 
 <db_create>
@@ -120,5 +135,11 @@ INSERT INTO test_table ( document_id, text ) VALUES
 	<query mode="extended2" index="crc2">al* | alw*</query>
 	<query mode="extended2" index="kw2">al* | alw*</query>
 </queries>
+
+<sphqueries>
+	<!-- here is going regression crash on delete doc from RT with infix -->
+	<sphinxql>INSERT INTO rt_infix VALUES ( 1, 'dummy word', 11 )</sphinxql>
+	<sphinxql>delete from rt_infix where id=1</sphinxql>
+</sphqueries>
 
 </test>

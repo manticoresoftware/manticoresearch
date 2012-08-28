@@ -16787,6 +16787,15 @@ void CheckSignals ()
 void QueryStatus ( CSphVariant * v )
 {
 	char sBuf [ SPH_ADDRESS_SIZE ];
+	char sListen [ 256 ];
+	CSphVariant tListen;
+
+	if ( !v )
+	{
+		snprintf ( sListen, sizeof ( sListen ), "127.0.0.1:%d:sphinx", SPHINXAPI_PORT );
+		tListen = CSphVariant ( sListen );
+		v = &tListen;
+	}
 
 	for ( ; v; v = v->m_pNext )
 	{
@@ -16887,6 +16896,7 @@ void QueryStatus ( CSphVariant * v )
 		sphSockClose ( iSock );
 		return;
 	}
+	sphFatal ( "failed to connect to daemon: please specify listen with sphinx protocol in your config file" );
 }
 
 

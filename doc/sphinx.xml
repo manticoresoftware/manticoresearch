@@ -11365,7 +11365,7 @@ Introduced in version 2.0.1-beta.
 Starting with version 2.0.1-beta, we're bringing SphinxQL in closer
 compliance with standard SQL. However, existing applications must not
 get broken, and <code>compat_sphinxql_magics</code> lets you upgrade
-safely. It defauls to 0, which acts in morden way.
+safely. It defauls to 0, which acts in modern way.
 <b>SphinxQL compatibility mode is now deprecated and
 will be removed</b> once we complete bringing SphinxQL in line
 with standard SQL syntax.

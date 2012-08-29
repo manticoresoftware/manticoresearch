@@ -3135,7 +3135,9 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 			// by default, lets be lazy and compute expressions as late as possible
 			tExprCol.m_eStage = SPH_EVAL_FINAL;
 
-			if ( bHasZonespanlist )
+			// but stringptr functions like ZONESPANLIST() or RANKFACTORS() that capture and
+			// store evanescent current ranker state gotta be evaluated somewhat earlier
+			if ( tExprCol.m_eAttrType==SPH_ATTR_STRINGPTR )
 				tExprCol.m_eStage = SPH_EVAL_PRESORT;
 
 			// is this expression used in filter?

@@ -5902,6 +5902,72 @@ public:
 	void				Update ( const ExtHit_t * pHlist );
 	DWORD				Finalize ( const CSphMatch & tMatch );
 
+public:
+	/// setup per-keyword data needed to compute the factors
+	/// (namely IDFs, counts, masks etc)
+	void SetQwords ( const ExtQwordsHash_t & hQwords )
+	{
+		m_dIDF.Resize ( m_iMaxQuerypos+1 );
+		ARRAY_FOREACH ( i, m_dIDF )
+			m_dIDF[i] = 0.0f;
+
+		m_iQueryWordCount = 0;
+		m_tKeywordMask.Init ( m_iMaxQuerypos+1 );
+
+		hQwords.IterateStart();
+		while ( hQwords.IterateNext() )
+		{
+			const int iPos = hQwords.IterateGet().m_iQueryPos;
+			m_dIDF [ iPos ] = hQwords.IterateGet().m_fIDF;
+			m_tKeywordMask.BitSet ( iPos );
+
+			// tricky bit
+			// for query_word_count, we only want to count keywords that are not (!) excluded by the query
+			// that is, in (aa NOT bb) case, we want a value of 1, not 2
+			if ( !hQwords.IterateGet().m_bExcluded )
+				m_iQueryWordCount++;
+		}
+	}
+
+	/// finalize per-document factors that, well, need finalization
+	void FinalizeDocFactors ( const CSphMatch & tMatch )
+	{
+		m_uDocBM25 = tMatch.m_iWeight;
+		for ( int i=0; i<m_iFields; i++ )
+		{
+			m_uWordCount[i] = sphBitCount ( m_uWordCount[i] );
+			if ( m_dMinIDF[i] > m_dMaxIDF[i] )
+				m_dMinIDF[i] = m_dMaxIDF[i] = 0; // must be FLT_MAX vs -FLT_MAX, aka no hits
+		}
+		m_uDocWordCount = sphBitCount ( m_uDocWordCount );
+	}
+
+	/// reset per-document factors, prepare for the next document
+	void ResetDocFactors()
+	{
+		// OPTIMIZE? quick full wipe? (using dwords/sse/whatever)
+		m_uCurLCS = 0;
+		m_iExpDelta = -1;
+		for ( int i=0; i<m_iFields; i++ )
+		{
+			m_uMatchMask[i] = 0;
+			m_uLCS[i] = 0;
+			m_uHitCount[i] = 0;
+			m_uWordCount[i] = 0;
+			m_dMinIDF[i] = FLT_MAX;
+			m_dMaxIDF[i] = -FLT_MAX;
+			m_dSumIDF[i] = 0;
+			m_dTFIDF[i] = 0;
+			m_iMinHitPos[i] = 0;
+			m_iMinBestSpanPos[i] = 0;
+			m_iMaxWindowHits[i] = 0;
+		}
+		m_uMatchedFields = 0;
+		m_uExactHit = 0;
+		m_uDocWordCount = 0;
+		m_dWindow.Resize ( 0 );
+	}
+
 private:
 	virtual bool ExtraDataImpl ( ExtraData_e eType, void ** ppResult )
 	{
@@ -6426,10 +6492,7 @@ void RankerState_Expr_fn::Update ( const ExtHit_t * pHlist )
 DWORD RankerState_Expr_fn::Finalize ( const CSphMatch & tMatch )
 {
 	// finishing touches
-	m_uDocBM25 = tMatch.m_iWeight;
-	for ( int i=0; i<m_iFields; i++ )
-		m_uWordCount[i] = sphBitCount ( m_uWordCount[i] );
-	m_uDocWordCount = sphBitCount ( m_uDocWordCount );
+	FinalizeDocFactors ( tMatch );
 
 	// compute expression
 	DWORD uRes = ( m_eExprType==SPH_ATTR_INTEGER )
@@ -6437,27 +6500,7 @@ DWORD RankerState_Expr_fn::Finalize ( const CSphMatch & tMatch )
 		: (DWORD)m_pExpr->Eval ( tMatch );
 
 	// cleanup
-	// OPTIMIZE? quick full wipe? (using dwords/sse/whatever)
-	m_uCurLCS = 0;
-	m_iExpDelta = -1;
-	for ( int i=0; i<m_iFields; i++ )
-	{
-		m_uMatchMask[i] = 0;
-		m_uLCS[i] = 0;
-		m_uHitCount[i] = 0;
-		m_uWordCount[i] = 0;
-		m_dMinIDF[i] = FLT_MAX;
-		m_dMaxIDF[i] = -FLT_MAX;
-		m_dSumIDF[i] = 0;
-		m_dTFIDF[i] = 0;
-		m_iMinHitPos[i] = 0;
-		m_iMinBestSpanPos[i] = 0;
-		m_iMaxWindowHits[i] = 0;
-	}
-	m_uMatchedFields = 0;
-	m_uExactHit = 0;
-	m_uDocWordCount = 0;
-	m_dWindow.Resize ( 0 );
+	ResetDocFactors();
 
 	// done
 	return uRes;
@@ -6479,30 +6522,89 @@ public:
 
 	void SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 	{
-		// this sets m_iMaxQuerypos, setups terms etc
+		// set ranker m_iMaxQuerypos, setup terms etc
 		ExtRanker_T<RankerState_Expr_fn>::SetQwordsIDF ( hQwords );
 
-		// setup our own custom stuff, begin with IDFs
-		m_tState.m_dIDF.Resize ( m_iMaxQuerypos+1 );
-		ARRAY_FOREACH ( i, m_tState.m_dIDF )
-			m_tState.m_dIDF[i] = 0.0f;
+		// set expression state stuff, like IDFs, keyword counts etc
+		m_tState.m_iMaxQuerypos = m_iMaxQuerypos;
+		m_tState.SetQwords ( hQwords );
+	}
+};
 
-		m_tState.m_iQueryWordCount = 0;
-		m_tState.m_tKeywordMask.Init ( m_iMaxQuerypos+1 );
+//////////////////////////////////////////////////////////////////////////
+// EXPRESSION FACTORS EXPORT RANKER
+//////////////////////////////////////////////////////////////////////////
 
-		hQwords.IterateStart();
-		while ( hQwords.IterateNext() )
+/// ranker state that computes BM25 as weight, but also all known factors for export purposes
+struct RankerState_Export_fn : public RankerState_Expr_fn
+{
+public:
+	CSphOrderedHash < CSphString, SphDocID_t, IdentityHash_fn, 256 > m_hFactors;
+
+public:
+	DWORD Finalize ( const CSphMatch & tMatch )
+	{
+		// finalize factor computations
+		FinalizeDocFactors ( tMatch );
+
+		// build document level factors
+		// FIXME? should we build query level factors too? max_lcs, query_word_count, etc
+		CSphString sVal;
+		sVal.SetSprintf ( "bm25=%d, field_mask=%d, doc_word_count=%d",
+			m_uDocBM25, m_uMatchedFields, m_uDocWordCount );
+
+		// build field level factors
+		for ( int i=0; i<m_iFields; i++ )
+			if ( m_uHitCount[i] )
 		{
-			const int iPos = hQwords.IterateGet().m_iQueryPos;
-			m_tState.m_dIDF [ iPos ] = hQwords.IterateGet().m_fIDF;
-			m_tState.m_tKeywordMask.BitSet ( iPos );
-
-			// tricky bit
-			// for query_word_count, we only want to count keywords that are not (!) excluded by the query
-			// that is, in (aa NOT bb) case, we want a value of 1, not 2
-			if ( !hQwords.IterateGet().m_bExcluded )
-				m_tState.m_iQueryWordCount++;
+			sVal.SetSprintf ( "%s, field%d="
+				"(lcs=%d, hit_count=%d, word_count=%d, "
+				"tf_idf=%f, min_idf=%f, max_idf=%f, sum_idf=%f, "
+				"min_hit_pos=%d, min_best_span_pos=%d, exact_hit=%d, max_window_hits=%d)",
+				sVal.cstr(), i,
+				m_uLCS[i], m_uHitCount[i], m_uWordCount[i],
+				m_dTFIDF[i], m_dMinIDF[i], m_dMaxIDF[i], m_dSumIDF[i],
+				m_iMinHitPos[i], m_iMinBestSpanPos[i], ( m_uExactHit>>i ) & 1, m_iMaxWindowHits[i] );
 		}
+
+		// export factors
+		m_hFactors.Add ( sVal, tMatch.m_iDocID );
+
+		// compute sorting expression now
+		DWORD uRes = ( m_eExprType==SPH_ATTR_INTEGER )
+			? m_pExpr->IntEval ( tMatch )
+			: (DWORD)m_pExpr->Eval ( tMatch );
+
+		// cleanup and return!
+		ResetDocFactors();
+		return uRes;
+	}
+
+	virtual bool ExtraDataImpl ( ExtraData_e eType, void ** ppResult )
+	{
+		if ( eType==EXTRA_GET_DATA_RANKFACTORS )
+			*ppResult = &m_hFactors;
+		return true;
+	}
+};
+
+/// export ranker that emits BM25 as the weight, but computes and export all the factors
+/// useful for research purposes, eg. exporting the data for machine learning
+class ExtRanker_Export_c : public ExtRanker_T<RankerState_Export_fn>
+{
+public:
+	ExtRanker_Export_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const char * sExpr, const CSphSchema & tSchema )
+		: ExtRanker_T<RankerState_Export_fn> ( tXQ, tSetup )
+	{
+		m_tState.m_sExpr = sExpr;
+		m_tState.m_pSchema = &tSchema;
+	}
+
+	void SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
+	{
+		ExtRanker_T<RankerState_Export_fn>::SetQwordsIDF ( hQwords );
+		m_tState.m_iMaxQuerypos = m_iMaxQuerypos;
+		m_tState.SetQwords ( hQwords );
 	}
 };
 
@@ -6613,6 +6715,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 		case SPH_RANK_FIELDMASK:		pRanker = new ExtRanker_T < RankerState_Fieldmask_fn > ( tXQ, tTermSetup ); break;
 		case SPH_RANK_SPH04:			pRanker = new ExtRanker_T < RankerState_ProximityBM25Exact_fn > ( tXQ, tTermSetup ); break;
 		case SPH_RANK_EXPR:				pRanker = new ExtRanker_Expr_c ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema() ); break;
+		case SPH_RANK_EXPORT:			pRanker = new ExtRanker_Export_c ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema() ); break;
 		default:
 			pResult->m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int)pQuery->m_eRanker );
 			if ( bGotDupes )

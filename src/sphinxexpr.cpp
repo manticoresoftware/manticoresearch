@@ -303,6 +303,42 @@ struct Expr_GetZonespanlist_c : public ISphExpr
 };
 
 
+struct Expr_GetRankFactors_c : public ISphExpr
+{
+	/// hash type MUST BE IN SYNC with RankerState_Export_fn in sphinxsearch.cpp
+	CSphOrderedHash < CSphString, SphDocID_t, IdentityHash_fn, 256 > * m_pFactors;
+
+	explicit Expr_GetRankFactors_c ()
+		: m_pFactors ( NULL )
+	{}
+
+	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
+	{
+		assert ( m_pFactors );
+		assert ( ppStr );
+
+		CSphString * sVal = (*m_pFactors) ( tMatch.m_iDocID );
+		if ( !sVal )
+		{
+			*ppStr = NULL;
+			return 0;
+		}
+		int iLen = sVal->Length();
+		*ppStr = (const BYTE*)sVal->Leak();
+		m_pFactors->Delete ( tMatch.m_iDocID );
+		return iLen;
+	}
+
+	virtual float Eval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
+	virtual int IntEval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
+	virtual int64_t Int64Eval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
+	virtual void SetupExtraData ( ISphExtra * pData )
+	{
+		pData->ExtraData ( EXTRA_GET_DATA_RANKFACTORS, (void**)&m_pFactors );
+	}
+};
+
+
 struct Expr_GetId_c : public ISphExpr
 {
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)tMatch.m_iDocID; }
@@ -762,7 +798,8 @@ enum Func_e
 	FUNC_GEOPOLY2D,
 	FUNC_CONTAINS,
 	FUNC_ZONESPANLIST,
-	FUNC_TO_STRING
+	FUNC_TO_STRING,
+	FUNC_RANKFACTORS
 };
 
 
@@ -819,7 +856,8 @@ static FuncDesc_t g_dFuncs[] =
 	{ "geopoly2d",		-1,	FUNC_GEOPOLY2D,		SPH_ATTR_POLY2D },
 	{ "contains",		3,	FUNC_CONTAINS,		SPH_ATTR_INTEGER },
 	{ "zonespanlist",	0,	FUNC_ZONESPANLIST,	SPH_ATTR_STRINGPTR },
-	{ "to_string",		1,	FUNC_TO_STRING,		SPH_ATTR_STRINGPTR }
+	{ "to_string",		1,	FUNC_TO_STRING,		SPH_ATTR_STRINGPTR },
+	{ "rankfactors",	0,	FUNC_RANKFACTORS,	SPH_ATTR_STRINGPTR }
 };
 
 
@@ -860,32 +898,32 @@ static int FuncHashLookup ( const char * sKey )
 {
 	static BYTE dAsso[] =
 	{
-		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 20, 66, 0, 0, 30,
-		30, 0, 15, 5, 66, 5, 66, 66, 0, 0,
-		0, 5, 15, 35, 0, 15, 25, 45, 66, 40,
-		10, 0, 10, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
-		66, 66, 66, 66, 66, 66
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+		64, 64, 64, 64, 64, 5, 64, 0, 0, 20,
+		35, 0, 20, 5, 64, 5, 64, 64, 0, 0,
+		0, 5, 15, 35, 0, 15, 40, 40, 64, 40,
+		10, 0, 5, 64, 64, 64, 64, 64, 64, 64,
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+		64, 64, 64, 64, 64, 64
 	};
 
 	const BYTE * s = (const BYTE*) sKey;
@@ -901,12 +939,12 @@ static int FuncHashLookup ( const char * sKey )
 
 	static int dIndexes[] = {
 		-1, -1, 6, -1, 17, -1, -1, 28, 20, 18,
-		16, -1, 19, 21, 7, 8, 11, 30, 1, 33,
-		31, -1, 24, 4, 12, 3, 32, 35, 9, 14,
-		-1, -1, -1, 15, 25, -1, 29, -1, 27, 2,
-		-1, -1, -1, 34, 23, -1, -1, -1, 0, 26,
-		-1, -1, -1, 5, 10, -1, -1, -1, -1, 36,
-		-1, -1, -1, 22, -1, 13
+		16, 37, 19, 21, 7, 8, 11, 30, 1, 33,
+		31, -1, 35, 4, 12, -1, 32, 24, 9, 2,
+		3, -1, -1, 34, 14, -1, -1, -1, 15, 25,
+		-1, -1, -1, 5, 26, 13, -1, -1, 0, 23,
+		-1, 29, -1, 27, 10, -1, -1, -1, -1, 36,
+		-1, -1, -1, 22
 	};
 
 	if ( iHash<0 || iHash>=(int)(sizeof(dIndexes)/sizeof(dIndexes[0])) )
@@ -2311,6 +2349,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case FUNC_GEODIST:
 		case FUNC_CONTAINS:
 		case FUNC_ZONESPANLIST:
+		case FUNC_RANKFACTORS:
 			bSkipLeft = true;
 		default:
 			break;
@@ -2441,6 +2480,8 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 						return new Expr_GetZonespanlist_c ();
 					case FUNC_TO_STRING:
 						return new Expr_ToString_c ( dArgs[0], m_dNodes [ tNode.m_iLeft ].m_eRetType );
+					case FUNC_RANKFACTORS:
+						return new Expr_GetRankFactors_c();
 				}
 				assert ( 0 && "unhandled function id" );
 				break;

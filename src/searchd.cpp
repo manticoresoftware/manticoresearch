@@ -6027,6 +6027,7 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 			case SPH_RANK_FIELDMASK:	sRanker = "fieldmask"; break;
 			case SPH_RANK_SPH04:		sRanker = "sph04"; break;
 			case SPH_RANK_EXPR:			sRanker = "expr"; break;
+			case SPH_RANK_EXPORT:		sRanker = "export";
 			default:					break;
 		}
 
@@ -9155,7 +9156,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue )
 		else if ( sVal=="matchany" )	m_pQuery->m_eRanker = SPH_RANK_MATCHANY;
 		else if ( sVal=="fieldmask" )	m_pQuery->m_eRanker = SPH_RANK_FIELDMASK;
 		else if ( sVal=="sph04" )		m_pQuery->m_eRanker = SPH_RANK_SPH04;
-		else if ( sVal=="expr" )
+		else if ( sVal=="expr" || sVal=="export" )
 		{
 			m_pParseError->SetSprintf ( "missing ranker expression (use OPTION ranker=expr('1+2') for example)" );
 			return false;
@@ -9228,9 +9229,12 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 	sOpt.ToLower ();
 	sVal.ToLower ();
 
-	if ( sOpt=="ranker" && sVal=="expr" )
+	if ( sOpt=="ranker" && ( sVal=="expr" || sVal=="export" ) )
 	{
-		m_pQuery->m_eRanker = SPH_RANK_EXPR;
+		if ( sVal=="expr" )
+			m_pQuery->m_eRanker = SPH_RANK_EXPR;
+		else
+			m_pQuery->m_eRanker = SPH_RANK_EXPORT;
 		m_pQuery->m_sRankerExpr = sArg;
 		return true;
 	} else

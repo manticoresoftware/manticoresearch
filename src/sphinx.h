@@ -2200,6 +2200,7 @@ enum ESphRankMode
 	SPH_RANK_FIELDMASK			= 6,	///< sets bits where there were matches
 	SPH_RANK_SPH04				= 7,	///< codename SPH04, phrase proximity + bm25 + head/exact boost
 	SPH_RANK_EXPR				= 8,	///< rank by user expression (eg. "sum(lcs*user_weight)*1000+bm25")
+	SPH_RANK_EXPORT				= 9,	///< rank by BM25, but compute and export all user expression factors
 
 	SPH_RANK_TOTAL,
 	SPH_RANK_DEFAULT			= SPH_RANK_PROXIMITY_BM25

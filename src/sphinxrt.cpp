@@ -3455,7 +3455,7 @@ void RtIndex_t::SaveDiskData ( const char * sFilename, const CSphVector<RtSegmen
 
 template < typename DOCID >
 void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iCheckpoints,
-	SphOffset_t iCheckpointsPosition, int iInfixBlocksOffset, int iInfixCheckpointWordsSize, DWORD uKillListSize, DWORD uMinMaxSize,
+	SphOffset_t iCheckpointsPosition, int iInfixBlocksOffset, int, DWORD uKillListSize, DWORD uMinMaxSize,
 	const CSphSourceStats & tStats, bool bForceID32 ) const
 {
 	static const DWORD INDEX_MAGIC_HEADER	= 0x58485053;	///< my magic 'SPHX' header

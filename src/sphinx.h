@@ -1472,6 +1472,7 @@ struct CSphSourceSettings
 	int		m_iOvershortStep;	///< position step on overshort token (default is 1)
 	int		m_iStopwordStep;	///< position step on stopword token (default is 1)
 	bool	m_bIndexSP;			///< whether to index sentence and paragraph delimiters
+	bool	m_bIndexFieldLens;	///< whether to index field lengths
 
 	CSphVector<CSphString>	m_dPrefixFields;	///< list of prefix fields
 	CSphVector<CSphString>	m_dInfixFields;		///< list of infix fields
@@ -1727,6 +1728,7 @@ protected:
 	ESphOnFileFieldError	m_eOnFileFieldError;
 	FILE *					m_fpDumpRows;
 	int						m_iPlainFieldsLength;
+	DWORD *					m_pFieldLengthAttrs;	///< pointer into the part of m_tDocInfo where field lengths are stored
 
 protected:
 	struct CSphBuildHitsState_t
@@ -2780,6 +2782,7 @@ public:
 	virtual int					GetKillListSize () const = 0;
 	virtual bool				HasDocid ( SphDocID_t uDocid ) const = 0;
 	virtual bool				IsRT() const { return false; }
+	virtual int64_t *			GetFieldLens() const { return NULL; }
 
 	virtual void				SetEnableStar ( bool bEnableStar ) { m_bEnableStar = bEnableStar; }
 	bool						IsStarEnabled () const { return m_bEnableStar; }

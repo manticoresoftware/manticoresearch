@@ -396,6 +396,11 @@ struct Expr_Arglist_c : public ISphExpr
 		return true;
 	}
 
+	virtual ISphExpr * GetArg ( int i ) const
+	{
+		return m_dArgs[i];
+	}
+
 	virtual float Eval ( const CSphMatch & ) const
 	{
 		assert ( 0 && "internal error: Eval() must not be explicitly called on arglist" );

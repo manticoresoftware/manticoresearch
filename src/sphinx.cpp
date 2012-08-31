@@ -1496,6 +1496,7 @@ public:
 	virtual bool				HasDocid ( SphDocID_t uDocid ) const;
 
 	virtual const CSphSourceStats &		GetStats () const { return m_tStats; }
+	virtual int64_t *					GetFieldLens() const { return m_dFieldLens.Begin(); }
 
 private:
 
@@ -1508,6 +1509,7 @@ private:
 	CSphSourceStats				m_tStats;			///< my stats
 	CSphFixedVector<CSphRowitem>	m_dMinRow;
 	SphDocID_t						m_iMinDocid;
+	CSphFixedVector<int64_t>		m_dFieldLens;	///< total per-field lengths summed over entire indexed data, in tokens
 
 private:
 
@@ -8065,6 +8067,7 @@ CSphIndex_VLN::CSphIndex_VLN ( const char* sIndexName, const char * sFilename )
 	: CSphIndex ( sIndexName, sFilename )
 	, m_iLockFD ( -1 )
 	, m_dMinRow ( 0 )
+	, m_dFieldLens ( SPH_MAX_FIELDS )
 	, m_bKeepAttrs ( false )
 {
 	m_sFilename = sFilename;
@@ -8086,6 +8089,9 @@ CSphIndex_VLN::CSphIndex_VLN ( const char* sIndexName, const char * sFilename )
 	m_pAttrsStatus = NULL;
 
 	m_iMinDocid = 0;
+
+	ARRAY_FOREACH ( i, m_dFieldLens )
+		m_dFieldLens[i] = 0;
 }
 
 
@@ -9321,6 +9327,7 @@ void SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettin
 	tWriter.PutDword ( tSettings.m_iEmbeddedLimit );
 	tWriter.PutByte ( tSettings.m_eBigramIndex );
 	tWriter.PutString ( tSettings.m_sBigramWords );
+	tWriter.PutByte ( tSettings.m_bIndexFieldLens );
 }
 
 
@@ -9371,6 +9378,12 @@ bool CSphIndex_VLN::WriteHeader ( const BuildHeader_t & tBuildHeader, CSphWriter
 
 	// field filter info
 	SaveFieldFilterSettings ( fdInfo, m_pFieldFilter );
+
+	// average field lengths
+	if ( m_tSettings.m_bIndexFieldLens )
+		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+			fdInfo.PutOffset ( m_dFieldLens[i] );
+
 	return true;
 }
 
@@ -10717,6 +10730,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	}
 
 	bool bHaveFieldMVAs = false;
+	int iFieldLens = -1;
 	CSphVector<int> dMvaIndexes;
 	CSphVector<CSphAttrLocator> dMvaLocators;
 
@@ -10728,44 +10742,44 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tCol = m_tSchema.GetAttr(i);
-		ESphAttr eAttrType = tCol.m_eAttrType;
-
-		if ( eAttrType==SPH_ATTR_UINT32SET )
+		switch ( tCol.m_eAttrType )
 		{
-			if ( tCol.m_eSrc==SPH_ATTRSRC_FIELD )
-				bHaveFieldMVAs = true;
-
-			dMvaIndexes.Add ( i );
-			dMvaLocators.Add ( tCol.m_tLocator );
-		}
-		switch ( eAttrType )
-		{
-		case SPH_ATTR_ORDINAL:
-			if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN )
-				dOrdinalAttrs.Add ( i );
-			break;
-		case SPH_ATTR_STRING:
-			dStringAttrs.Add ( i );
-			break;
-		case SPH_ATTR_WORDCOUNT:
-			dWordcountAttrs.Add ( i );
-			break;
-		default:
-			break;
+			case SPH_ATTR_UINT32SET:
+				if ( tCol.m_eSrc==SPH_ATTRSRC_FIELD )
+					bHaveFieldMVAs = true;
+				dMvaIndexes.Add ( i );
+				dMvaLocators.Add ( tCol.m_tLocator );
+				break;
+			case SPH_ATTR_ORDINAL:
+				if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN )
+					dOrdinalAttrs.Add ( i );
+				break;
+			case SPH_ATTR_STRING:
+				dStringAttrs.Add ( i );
+				break;
+			case SPH_ATTR_WORDCOUNT:
+				dWordcountAttrs.Add ( i );
+				break;
+			case SPH_ATTR_TOKENCOUNT:
+				if ( iFieldLens<0 )
+					iFieldLens = i;
+				break;
+			default:
+				break;
 		}
 	}
+
+	// this loop must NOT be merged with the previous one;
+	// mva64 must intentionally be after all the mva32
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tCol = m_tSchema.GetAttr(i);
-		ESphAttr eAttrType = tCol.m_eAttrType;
-		if ( eAttrType==SPH_ATTR_INT64SET )
-		{
-			if ( tCol.m_eSrc==SPH_ATTRSRC_FIELD )
-				bHaveFieldMVAs = true;
-
-			dMvaIndexes.Add ( i );
-			dMvaLocators.Add ( tCol.m_tLocator );
-		}
+		if ( tCol.m_eAttrType!=SPH_ATTR_INT64SET )
+			continue;
+		if ( tCol.m_eSrc==SPH_ATTRSRC_FIELD )
+			bHaveFieldMVAs = true;
+		dMvaIndexes.Add ( i );
+		dMvaLocators.Add ( tCol.m_tLocator );
 	}
 
 	bool bGotMVA = ( dMvaIndexes.GetLength()!=0 );
@@ -11274,40 +11288,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					pSource->m_tDocInfo.SetAttr ( m_tSchema.GetAttr(iAttr).m_tLocator, iNumWords );
 				}
 
-			// update min docinfo
-			assert ( pSource->m_tDocInfo.m_iDocID );
-			m_iMinDocid = Min ( m_iMinDocid, pSource->m_tDocInfo.m_iDocID );
-			if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
-				ARRAY_FOREACH ( i, m_dMinRow )
-					m_dMinRow[i] = Min ( m_dMinRow[i], pSource->m_tDocInfo.m_pDynamic[i] );
-
-			// store docinfo
-			if ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_NONE )
-			{
-				// store next entry
-				DOCINFOSETID ( pDocinfo, pSource->m_tDocInfo.m_iDocID );
-
-				// old docinfo found, use it instead of the new one
-				const DWORD * pSrc = pPrevDocinfo ? DOCINFO2ATTRS ( pPrevDocinfo ) : pSource->m_tDocInfo.m_pDynamic;
-				memcpy ( DOCINFO2ATTRS ( pDocinfo ), pSrc, sizeof(CSphRowitem)*m_tSchema.GetRowSize() );
-				pDocinfo += iDocinfoStride;
-
-				// if not inlining, flush buffer if it's full
-				// (if inlining, it will flushed later, along with the hits)
-				if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && pDocinfo>=pDocinfoMax )
-				{
-					assert ( pDocinfo==pDocinfoMax );
-					int iLen = iDocinfoMax*iDocinfoStride*sizeof(DWORD);
-
-					sphSortDocinfos ( dDocinfos.Begin(), iDocinfoMax, iDocinfoStride );
-					if ( !sphWriteThrottled ( fdDocinfos.GetFD(), dDocinfos.Begin(), iLen, "raw_docinfos", m_sLastError, &g_tThrottle ) )
-						return 0;
-
-					pDocinfo = dDocinfos.Begin();
-					iDocinfoBlocks++;
-				}
-			}
-
 			// store hits
 			while ( const ISphHits * pDocHits = pSource->IterateHits ( m_sLastWarning ) )
 			{
@@ -11383,6 +11363,51 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				m_tProgress.m_iBytes = m_tStats.m_iTotalBytes + pSource->GetStats().m_iTotalBytes;
 				m_tProgress.Show ( false );
 			}
+
+			// update min docinfo
+			assert ( pSource->m_tDocInfo.m_iDocID );
+			m_iMinDocid = Min ( m_iMinDocid, pSource->m_tDocInfo.m_iDocID );
+			if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
+				ARRAY_FOREACH ( i, m_dMinRow )
+				m_dMinRow[i] = Min ( m_dMinRow[i], pSource->m_tDocInfo.m_pDynamic[i] );
+
+			// update total field lengths
+			if ( iFieldLens>=0 )
+			{
+				ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+					m_dFieldLens[i] += pSource->m_tDocInfo.GetAttr ( m_tSchema.GetAttr ( i+iFieldLens ).m_tLocator );
+			}
+
+			// store docinfo
+			// with the advent of SPH_ATTR_TOKENCOUNT, now MUST be done AFTER iterating the hits
+			// because field lengths are computed during that iterating
+			if ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_NONE )
+			{
+				// store next entry
+				DOCINFOSETID ( pDocinfo, pSource->m_tDocInfo.m_iDocID );
+
+				// old docinfo found, use it instead of the new one
+				const DWORD * pSrc = pPrevDocinfo ? DOCINFO2ATTRS ( pPrevDocinfo ) : pSource->m_tDocInfo.m_pDynamic;
+				memcpy ( DOCINFO2ATTRS ( pDocinfo ), pSrc, sizeof(CSphRowitem)*m_tSchema.GetRowSize() );
+				pDocinfo += iDocinfoStride;
+
+				// if not inlining, flush buffer if it's full
+				// (if inlining, it will flushed later, along with the hits)
+				if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && pDocinfo>=pDocinfoMax )
+				{
+					assert ( pDocinfo==pDocinfoMax );
+					int iLen = iDocinfoMax*iDocinfoStride*sizeof(DWORD);
+
+					sphSortDocinfos ( dDocinfos.Begin(), iDocinfoMax, iDocinfoStride );
+					if ( !sphWriteThrottled ( fdDocinfos.GetFD(), dDocinfos.Begin(), iLen, "raw_docinfos", m_sLastError, &g_tThrottle ) )
+						return 0;
+
+					pDocinfo = dDocinfos.Begin();
+					iDocinfoBlocks++;
+				}
+			}
+
+			// go on, loop next document
 		}
 
 		// FIXME! uncontrolled memory usage; add checks and/or diskbased sort in the future?
@@ -14179,6 +14204,9 @@ void LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DW
 		tSettings.m_eBigramIndex = (ESphBigram)tReader.GetByte();
 		tSettings.m_sBigramWords = tReader.GetString();
 	}
+
+	if ( uVersion>=35 )
+		tSettings.m_bIndexFieldLens = ( tReader.GetByte()!=0 );
 }
 
 
@@ -14339,6 +14367,10 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 		LoadFieldFilterSettings ( rdInfo, tFieldFilterSettings );
 		SetFieldFilter ( sphCreateFieldFilter ( tFieldFilterSettings, sWarning ) );
 	}
+
+	if ( m_uVersion>=35 && m_tSettings.m_bIndexFieldLens )
+		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+			m_dFieldLens[i] = rdInfo.GetOffset(); // FIXME? ideally 64bit even when off is 32bit..
 
 	// post-load stuff.. for now, bigrams
 	CSphIndexSettings & s = m_tSettings;
@@ -22450,6 +22482,7 @@ CSphSourceSettings::CSphSourceSettings ()
 	, m_iOvershortStep ( 1 )
 	, m_iStopwordStep ( 1 )
 	, m_bIndexSP ( false )
+	, m_bIndexFieldLens ( false )
 {}
 
 
@@ -22562,6 +22595,7 @@ void CSphSource::Setup ( const CSphSourceSettings & tSettings )
 	m_bIndexSP = tSettings.m_bIndexSP;
 	m_dPrefixFields = tSettings.m_dPrefixFields;
 	m_dInfixFields = tSettings.m_dInfixFields;
+	m_bIndexFieldLens = tSettings.m_bIndexFieldLens;
 }
 
 
@@ -22681,6 +22715,7 @@ CSphSource_Document::CSphSource_Document ( const char * sName )
 	, m_eOnFileFieldError ( FFE_IGNORE_FIELD )
 	, m_fpDumpRows ( NULL )
 	, m_iPlainFieldsLength ( 0 )
+	, m_pFieldLengthAttrs ( NULL )
 	, m_iMaxHits ( MAX_SOURCE_HITS )
 {
 }
@@ -23038,10 +23073,14 @@ void CSphSource_Document::BuildSubstringHits ( SphDocID_t uDocid, bool bPayload,
 	m_tState.m_bProcessingHits = ( sWord!=NULL );
 
 	// mark trailing hits
+	// and compute fields lengths
 	if ( !bSkipEndMarker && !m_tState.m_bProcessingHits && m_tHits.Length() )
 	{
 		CSphWordHit * pHit = const_cast < CSphWordHit * > ( m_tHits.Last() );
 		Hitpos_t uRefPos = pHit->m_iWordPos;
+
+		if ( m_pFieldLengthAttrs )
+			m_pFieldLengthAttrs [ HITMAN::GetField ( pHit->m_iWordPos ) ] = HITMAN::GetPos ( pHit->m_iWordPos );
 
 		for ( ; pHit>=m_tHits.First() && pHit->m_iWordPos==uRefPos; pHit-- )
 			HITMAN::SetEndMarker ( &pHit->m_iWordPos );
@@ -23123,10 +23162,14 @@ void CSphSource_Document::BuildRegularHits ( SphDocID_t uDocid, bool bPayload, b
 	m_tState.m_bProcessingHits = ( sWord!=NULL );
 
 	// mark trailing hit
+	// and compute field lengths
 	if ( !bSkipEndMarker && !m_tState.m_bProcessingHits && m_tHits.Length() )
 	{
 		CSphWordHit * pHit = const_cast < CSphWordHit * > ( m_tHits.Last() );
 		HITMAN::SetEndMarker ( &pHit->m_iWordPos );
+
+		if ( m_pFieldLengthAttrs )
+			m_pFieldLengthAttrs [ HITMAN::GetField ( pHit->m_iWordPos ) ] = HITMAN::GetPos ( pHit->m_iWordPos );
 
 		// mark blended HEAD as trailing too
 		if ( iBlendedHitsStart>=0 )
@@ -23715,9 +23758,34 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 		m_tSchema.m_dFields.Add ( tCol );
 	}
 
+	// auto-computed length attributes
+	if ( m_bIndexFieldLens )
+	{
+		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+		{
+			const char * sField = m_tSchema.m_dFields[i].m_sName.cstr();
+			if ( m_tSchema.GetAttrIndex ( sField )>=0 )
+				LOC_ERROR ( "attribute %s conflicts with index_field_lengths=1; remove it", sField );
+
+			CSphColumnInfo tCol;
+			tCol.m_sName = sField;
+			tCol.m_eAttrType = SPH_ATTR_TOKENCOUNT;
+			m_tSchema.AddAttr ( tCol, true ); // everything's dynamic at indexing time
+		}
+	}
+
 	// alloc storage
 	m_tDocInfo.Reset ( m_tSchema.GetRowSize() );
 	m_dStrAttrs.Resize ( m_tSchema.GetAttrsCount() );
+
+	if ( m_bIndexFieldLens )
+	{
+		int iFirst = m_tSchema.GetAttrsCount() - m_tSchema.m_dFields.GetLength();
+		assert ( m_tSchema.GetAttr ( iFirst ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
+		assert ( m_tSchema.GetAttr ( iFirst+m_tSchema.m_dFields.GetLength()-1 ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
+
+		m_pFieldLengthAttrs = m_tDocInfo.m_pDynamic + ( m_tSchema.GetAttr ( iFirst ).m_tLocator.m_iBitOffset / 32 );
+	}
 
 	// check it
 	if ( m_tSchema.m_dFields.GetLength()>SPH_MAX_FIELDS )
@@ -23890,6 +23958,11 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 
 			case SPH_ATTR_BIGINT:
 				m_tDocInfo.SetAttr ( tAttr.m_tLocator, sphToInt64 ( SqlColumn ( tAttr.m_iIndex ) ) ); // FIXME? report conversion errors maybe?
+				break;
+
+			case SPH_ATTR_TOKENCOUNT:
+				// reset, and the value will be filled by IterateHits()
+				m_tDocInfo.SetAttr ( tAttr.m_tLocator, 0 );
 				break;
 
 			default:

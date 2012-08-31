@@ -576,6 +576,13 @@ index test1
 	# optional, default is empty string (do not index zones)
 	#
 	# index_zones		= title, h*, th
+
+
+	# index per-document and average per-index field lengths, in tokens
+	# required for the BM25(), BM25F() in expression ranker
+	# optional, defualt is 0 (do not index field lenghts)
+	#
+	# index_field_lengths	= 1
 }
 
 

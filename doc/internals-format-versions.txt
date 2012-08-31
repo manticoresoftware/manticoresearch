@@ -41,6 +41,8 @@ v.28, 2.1.1-dev, added m_iOvershortStep
 v.29, 2.1.1-dev, added support for multiple wordforms files
 v.30, 2.1.1-dev, added m_iEmbeddedLimit, embedded synonyms, stopwords, wordforms files
 v.31, 2.1.1-dev, added skiplists (.spe file), changed dictionary entry (added optional skiplist offset)
+...
+v.35, 2.1.1-dev, added average field lengths (in tokens) to header
 
 Revisions that touched INDEX_FORMAT_VERSION
 --------------------------------------------

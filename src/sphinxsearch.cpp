@@ -1080,6 +1080,7 @@ public:
 public:
 	// FIXME? hide and friend?
 	virtual SphZoneHit_e		IsInZone ( int iZone, const ExtHit_t * pHit, int * pLastSpan=0 );
+	virtual const CSphIndex *	GetIndex() { return m_pIndex; }
 
 public:
 	CSphMatch					m_dMatches[ExtNode_i::MAX_DOCS];	///< exposed for caller
@@ -5879,11 +5880,17 @@ public:
 	CSphBitvec			m_tKeywordMask;
 	DWORD				m_uDocWordCount;
 	int					m_iMaxWindowHits[SPH_MAX_FIELDS];
+	CSphVector<float>	m_dTF;
+	float				m_fDocBM25A;
 
 	const char *		m_sExpr;
 	ISphExpr *			m_pExpr;
 	ESphAttr			m_eExprType;
 	const CSphSchema *	m_pSchema;
+	CSphAttrLocator		m_tFieldLensLoc;
+	float				m_fAvgDocLen;
+	float				m_fParamK1;
+	float				m_fParamB;
 
 	// per-query stuff
 	int					m_iMaxLCS;
@@ -5908,8 +5915,12 @@ public:
 	void SetQwords ( const ExtQwordsHash_t & hQwords )
 	{
 		m_dIDF.Resize ( m_iMaxQuerypos+1 );
+		m_dTF.Resize ( m_iMaxQuerypos+1 );
 		ARRAY_FOREACH ( i, m_dIDF )
+		{
 			m_dIDF[i] = 0.0f;
+			m_dTF[i] = 0;
+		}
 
 		m_iQueryWordCount = 0;
 		m_tKeywordMask.Init ( m_iMaxQuerypos+1 );
@@ -5940,6 +5951,30 @@ public:
 				m_dMinIDF[i] = m_dMaxIDF[i] = 0; // must be FLT_MAX vs -FLT_MAX, aka no hits
 		}
 		m_uDocWordCount = sphBitCount ( m_uDocWordCount );
+
+		// compute real BM25
+		// with blackjack, and hookers, and field lengths, and parameters
+		//
+		// canonical idf = log ( (N-n+0.5) / (n+0.5) )
+		// sphinx idf = log ( (N-n+1) / n )
+		// and we also downscale our idf by 1/log(N+1) to map it into [-0.5, 0.5] range
+		m_fDocBM25A = 0.0f;
+		for ( int iWord=1; iWord<=m_iQueryWordCount; iWord++ )
+		{
+			float tf = m_dTF[iWord]; // OPTIMIZE? remove this vector, hook into m_uMatchHits somehow?
+			float idf = m_dIDF[iWord];
+
+			float dl = 0; // OPTIMIZE? could precopmute and store total dl in attrs, but at a storage cost
+			CSphAttrLocator tLoc = m_tFieldLensLoc;
+			for ( int i=0; i<m_iFields; i++ )
+			{
+				dl += tMatch.GetAttr ( tLoc );
+				tLoc.m_iBitOffset += 32;
+			}
+
+			m_fDocBM25A += tf / (tf + m_fParamK1*(1 - m_fParamB + m_fParamB*dl/m_fAvgDocLen)) * idf;
+		}
+		m_fDocBM25A += 0.5f; // map to [0..1] range
 	}
 
 	/// reset per-document factors, prepare for the next document
@@ -5962,10 +5997,13 @@ public:
 			m_iMinBestSpanPos[i] = 0;
 			m_iMaxWindowHits[i] = 0;
 		}
+		ARRAY_FOREACH ( i, m_dTF )
+			m_dTF[i] = 0;
 		m_uMatchedFields = 0;
 		m_uExactHit = 0;
 		m_uDocWordCount = 0;
 		m_dWindow.Resize ( 0 );
+		m_fDocBM25A = 0;
 	}
 
 private:
@@ -6009,6 +6047,7 @@ enum ExprRankerNode_e
 	XRANK_FIELD_MASK,
 	XRANK_QUERY_WORD_COUNT,
 	XRANK_DOC_WORD_COUNT,
+	XRANK_BM25A,
 
 	// field aggregation functions
 	XRANK_SUM
@@ -6070,6 +6109,27 @@ struct Expr_IntPtr_c : public ISphExpr
 	DWORD * m_pVal;
 
 	explicit Expr_IntPtr_c ( DWORD * pVal )
+		: m_pVal ( pVal )
+	{}
+
+	float Eval ( const CSphMatch & ) const
+	{
+		return (float)*m_pVal;
+	}
+
+	int IntEval ( const CSphMatch & ) const
+	{
+		return (int)*m_pVal;
+	}
+};
+
+
+/// generic per-document float factor
+struct Expr_FloatPtr_c : public ISphExpr
+{
+	float * m_pVal;
+
+	explicit Expr_FloatPtr_c ( float * pVal )
 		: m_pVal ( pVal )
 	{}
 
@@ -6199,6 +6259,8 @@ public:
 			return XRANK_SUM;
 		if ( !strcasecmp ( sFunc, "max_window_hits" ) )
 			return XRANK_MAX_WINDOW_HITS;
+		if ( !strcasecmp ( sFunc, "bm25a" ) )
+			return XRANK_BM25A;
 		return -1;
 	}
 
@@ -6230,6 +6292,18 @@ public:
 			case XRANK_FIELD_MASK:			return new Expr_IntPtr_c ( &m_pState->m_uMatchedFields );
 			case XRANK_QUERY_WORD_COUNT:	return new Expr_GetIntConst_c ( m_pState->m_iQueryWordCount );
 			case XRANK_DOC_WORD_COUNT:		return new Expr_IntPtr_c ( &m_pState->m_uDocWordCount );
+			case XRANK_BM25A:
+				{
+					// exprs we'll evaluate here must be constant; that is checked in GetReturnType()
+					// so having a dummy match with no data work alright
+					assert ( pLeft->IsArglist() );
+					CSphMatch tDummy;
+					m_pState->m_fParamK1 = pLeft->GetArg(0)->Eval ( tDummy );
+					m_pState->m_fParamB = pLeft->GetArg(1)->Eval ( tDummy );
+					m_pState->m_fParamK1 = Max ( m_pState->m_fParamK1, 0.001f );
+					m_pState->m_fParamB = Min ( Max ( m_pState->m_fParamB, 0.0f ), 1.0f );
+					return new Expr_FloatPtr_c ( &m_pState->m_fDocBM25A );
+				}
 
 			case XRANK_SUM:					return new Expr_Sum_c ( m_pState, pLeft );
 			default:						return NULL;
@@ -6284,6 +6358,16 @@ public:
 					return SPH_ATTR_NONE;
 				}
 				return SPH_ATTR_INTEGER;
+
+			case XRANK_BM25A:
+				if ( dArgs.GetLength()!=2 || !bAllConst
+					|| ( dArgs[0]!=SPH_ATTR_FLOAT && dArgs[0]!=SPH_ATTR_INTEGER )
+					|| ( dArgs[1]!=SPH_ATTR_FLOAT && dArgs[1]!=SPH_ATTR_INTEGER ) )
+				{
+					sError = "BM25A(k1,b) requires 2 constant scalar (int or float) arguments";
+					return SPH_ATTR_NONE;
+				}
+				return SPH_ATTR_FLOAT;
 
 			default:
 				sError.SetSprintf ( "internal error: unknown hook function (id=%d)", iID );
@@ -6391,6 +6475,24 @@ bool RankerState_Expr_fn::Init ( int iFields, const int * pWeights, ExtRanker_c 
 	for ( int i=0; i<iFields; i++ )
 		m_iMaxLCS += pWeights[i] * pRanker->m_iQwords;
 
+	for ( int i=0; i<m_pSchema->GetAttrsCount(); i++ )
+	{
+		if ( m_pSchema->GetAttr(i).m_eAttrType!=SPH_ATTR_TOKENCOUNT )
+			continue;
+		m_tFieldLensLoc = m_pSchema->GetAttr(i).m_tLocator;
+		break;
+	}
+
+	m_fAvgDocLen = 0;
+	const int64_t * pFieldLens = pRanker->GetIndex()->GetFieldLens();
+	if ( pFieldLens )
+		for ( int i=0; i<iFields; i++)
+			m_fAvgDocLen += pFieldLens[i];
+	m_fAvgDocLen /= pRanker->GetIndex()->GetStats().m_iTotalDocuments;
+
+	m_fParamK1 = 1.2f;
+	m_fParamB = 0.75f;
+
 	// parse expression
 	bool bUsesWeight;
 	ExprRankerHook_c tHook ( this );
@@ -6468,6 +6570,10 @@ void RankerState_Expr_fn::Update ( const ExtHit_t * pHlist )
 		m_uDocWordCount |= uHitPosMask;
 		m_dTFIDF[uField] += fIDF;
 	}
+
+	// avoid duplicate check for BM25A, BM25F though
+	// (that sort of automatically accounts for qtf factor)
+	m_dTF [ pHlist->m_uQuerypos ]++;
 
 	if ( !m_iMinHitPos[uField] )
 		m_iMinHitPos[uField] = iPos;

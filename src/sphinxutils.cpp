@@ -399,6 +399,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "regexp_filter",			KEY_LIST, NULL },
 	{ "bigram_freq_words",		0, NULL },
 	{ "bigram_index",			0, NULL },
+	{ "index_field_lengths",	0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -1170,6 +1171,7 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 	tSettings.m_iOvershortStep = Min ( Max ( hIndex.GetInt ( "overshort_step", 1 ), 0 ), 1 );
 	tSettings.m_iStopwordStep = Min ( Max ( hIndex.GetInt ( "stopword_step", 1 ), 0 ), 1 );
 	tSettings.m_iEmbeddedLimit = hIndex.GetSize ( "embedded_limit", 16384 );
+	tSettings.m_bIndexFieldLens = hIndex.GetInt ( "index_field_lengths" )!=0;
 
 	// prefix/infix fields
 	CSphString sFields;

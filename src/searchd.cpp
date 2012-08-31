@@ -12781,6 +12781,7 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 			case SPH_ATTR_BIGINT:
 			case SPH_ATTR_ORDINAL:
 			case SPH_ATTR_WORDCOUNT:
+			case SPH_ATTR_TOKENCOUNT:
 				if ( eAttrType==SPH_ATTR_BIGINT )
 					dRows.PutNumeric<SphAttr_t> ( INT64_FMT, tMatch.GetAttr(tLoc) );
 				else

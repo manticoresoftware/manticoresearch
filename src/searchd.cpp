@@ -4698,7 +4698,7 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 	iReqSize += q.m_sRawQuery.IsEmpty()
 		? q.m_sQuery.Length()
 		: q.m_sRawQuery.Length();
-	if ( q.m_eRanker==SPH_RANK_EXPR )
+	if ( q.m_eRanker==SPH_RANK_EXPR || q.m_eRanker==SPH_RANK_EXPORT )
 		iReqSize += q.m_sRankerExpr.Length() + 4;
 	ARRAY_FOREACH ( j, q.m_dFilters )
 	{
@@ -4730,7 +4730,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	tOut.SendInt ( q.m_iMaxMatches ); // limit is MAX_MATCHES
 	tOut.SendInt ( (DWORD)q.m_eMode ); // match mode
 	tOut.SendInt ( (DWORD)q.m_eRanker ); // ranking mode
-	if ( q.m_eRanker==SPH_RANK_EXPR )
+	if ( q.m_eRanker==SPH_RANK_EXPR || q.m_eRanker==SPH_RANK_EXPORT )
 		tOut.SendString ( q.m_sRankerExpr.cstr() );
 	tOut.SendInt ( q.m_eSort ); // sort mode
 	tOut.SendString ( q.m_sSortBy.cstr() ); // sort attr
@@ -5298,7 +5298,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 	if ( iVer>=0x110 )
 	{
 		tQuery.m_eRanker = (ESphRankMode) tReq.GetInt ();
-		if ( tQuery.m_eRanker==SPH_RANK_EXPR )
+		if ( tQuery.m_eRanker==SPH_RANK_EXPR || tQuery.m_eRanker==SPH_RANK_EXPORT )
 			tQuery.m_sRankerExpr = tReq.GetString();
 	}
 	tQuery.m_eSort = (ESphSortOrder) tReq.GetInt ();

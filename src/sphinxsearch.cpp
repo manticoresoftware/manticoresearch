@@ -5880,7 +5880,7 @@ public:
 	CSphBitvec			m_tKeywordMask;
 	DWORD				m_uDocWordCount;
 	int					m_iMaxWindowHits[SPH_MAX_FIELDS];
-	CSphVector<float>	m_dTF;
+	CSphVector<int>		m_dTF;
 	float				m_fDocBM25A;
 
 	const char *		m_sExpr;
@@ -6656,8 +6656,8 @@ public:
 		// build document level factors
 		// FIXME? should we build query level factors too? max_lcs, query_word_count, etc
 		CSphString sVal;
-		sVal.SetSprintf ( "bm25=%d, field_mask=%d, doc_word_count=%d",
-			m_uDocBM25, m_uMatchedFields, m_uDocWordCount );
+		sVal.SetSprintf ( "bm25=%d, bm25a=%f, field_mask=%d, doc_word_count=%d",
+			m_uDocBM25, m_fDocBM25A, m_uMatchedFields, m_uDocWordCount );
 
 		// build field level factors
 		for ( int i=0; i<m_iFields; i++ )
@@ -6671,6 +6671,13 @@ public:
 				m_uLCS[i], m_uHitCount[i], m_uWordCount[i],
 				m_dTFIDF[i], m_dMinIDF[i], m_dMaxIDF[i], m_dSumIDF[i],
 				m_iMinHitPos[i], m_iMinBestSpanPos[i], ( m_uExactHit>>i ) & 1, m_iMaxWindowHits[i] );
+		}
+
+		// build word level factors
+		for ( int i=1; i<=m_iMaxQuerypos; i++ )
+			if ( m_tKeywordMask.BitGet(i) )
+		{
+			sVal.SetSprintf ( "%s, word%d=(tf=%d, idf=%f)", sVal.cstr(), i, m_dTF[i], m_dIDF[i] );
 		}
 
 		// export factors

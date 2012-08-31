@@ -16713,7 +16713,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	// setup lookup
 	tCtx.m_bLookupFilter = ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN ) && pQuery->m_dFilters.GetLength();
-	if ( tCtx.m_dCalcFilter.GetLength() || pQuery->m_eRanker==SPH_RANK_EXPR )
+	if ( tCtx.m_dCalcFilter.GetLength() || pQuery->m_eRanker==SPH_RANK_EXPR || pQuery->m_eRanker==SPH_RANK_EXPORT )
 		tCtx.m_bLookupFilter = true; // suboptimal in case of attr-independent expressions, but we don't care
 
 	tCtx.m_bLookupSort = false;

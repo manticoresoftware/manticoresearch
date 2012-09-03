@@ -330,16 +330,6 @@ inline int sphIsAttr ( int c )
 	return ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' ) || c=='_';
 }
 
-
-/// name+int pair
-struct CSphNamedInt
-{
-	CSphString	m_sName;
-	int			m_iValue;
-
-	CSphNamedInt () : m_iValue ( 0 ) {}
-};
-
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////

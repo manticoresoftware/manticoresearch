@@ -26,6 +26,9 @@ struct CSphString;
 /// known attribute types
 enum ESphAttr
 {
+	// these types are full types
+	// their typecodes are saved in the index schema, and thus,
+	// TYPECODES MUST NOT CHANGE ONCE INTRODUCED
 	SPH_ATTR_NONE		= 0,			///< not an attribute at all
 	SPH_ATTR_INTEGER	= 1,			///< unsigned 32-bit integer
 	SPH_ATTR_TIMESTAMP	= 2,			///< this attr is a timestamp
@@ -38,8 +41,13 @@ enum ESphAttr
 	SPH_ATTR_POLY2D		= 9,			///< vector of floats, 2D polygon (see POLY2D)
 	SPH_ATTR_STRINGPTR	= 10,			///< string (binary, in-memory, stored as pointer to the zero-terminated string)
 	SPH_ATTR_TOKENCOUNT	= 11,			///< field token count (only in indexer! integer at search time)
+
 	SPH_ATTR_UINT32SET	= 0x40000001UL,	///< MVA, set of unsigned 32-bit integers
-	SPH_ATTR_INT64SET	= 0x40000002UL	///< MVA, set of signed 64-bit integers
+	SPH_ATTR_INT64SET	= 0x40000002UL,	///< MVA, set of signed 64-bit integers
+
+	// these types are runtime only
+	// used as intermediate types in the expression engine
+	SPH_ATTR_CONSTHASH	= 1000
 };
 
 /// expression evaluator
@@ -112,13 +120,30 @@ struct ISphExprHook
 	virtual void CheckExit ( int iID ) = 0;
 };
 
+/// a container used to pass hashes of constants around the evaluation tree
+struct Expr_ConstHash_c : public ISphExpr
+{
+	CSphVector<CSphNamedInt> m_dValues;
+
+	explicit Expr_ConstHash_c ( CSphVector<CSphNamedInt> & dValues )
+	{
+		m_dValues.SwapData ( dValues );
+	}
+
+	virtual float Eval ( const CSphMatch & ) const
+	{
+		assert ( 0 && "one just does not simply evaluate a const hash" );
+		return 0.0f;
+	}
+};
+
 /// parses given expression, builds evaluator
 /// returns NULL and fills sError on failure
 /// returns pointer to evaluator on success
 /// fills pAttrType with result type (for now, can be SPH_ATTR_SINT or SPH_ATTR_FLOAT)
 /// fills pUsesWeight with a flag whether match relevance is referenced in expression AST
 ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight,
-							CSphString & sError, CSphSchema * pExtra=NULL, ISphExprHook * pHook=NULL, bool * pZonespanlist=NULL );
+	CSphString & sError, CSphSchema * pExtra=NULL, ISphExprHook * pHook=NULL, bool * pZonespanlist=NULL );
 
 //////////////////////////////////////////////////////////////////////////
 

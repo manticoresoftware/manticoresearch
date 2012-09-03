@@ -398,6 +398,8 @@ struct Expr_Arglist_c : public ISphExpr
 
 	virtual ISphExpr * GetArg ( int i ) const
 	{
+		if ( i>=m_dArgs.GetLength() )
+			return NULL;
 		return m_dArgs[i];
 	}
 
@@ -1031,6 +1033,23 @@ public:
 	}
 };
 
+
+/// hash of constants
+class ConstHash_c
+{
+public:
+	CSphVector<CSphNamedInt> m_dPairs;
+
+public:
+	void Add ( const char * sKey, int64_t iValue )
+	{
+		CSphNamedInt & t = m_dPairs.Add();
+		t.m_sName = sKey;
+		t.m_iValue = (int)iValue;
+	}
+};
+
+
 /// expression tree node
 struct ExprNode_t
 {
@@ -1046,6 +1065,7 @@ struct ExprNode_t
 		int				m_iFunc;		///< built-in function id, for TOK_FUNC type
 		int				m_iArgs;		///< args count, for arglist (token==',') type
 		ConstList_c *	m_pConsts;		///< constants list, for TOK_CONST_LIST type
+		ConstHash_c *	m_pConsthash;	///< constants hash (name to const), for TOK_CONST_HASH type
 	};
 	int				m_iLeft;
 	int				m_iRight;
@@ -1105,6 +1125,9 @@ protected:
 	int						AddNodeUservar ( int iUservar );
 	int						AddNodeHookIdent ( int iID );
 	int						AddNodeHookFunc ( int iID, int iLeft );
+	int						AddNodeConsthash ( const char * sKey, int64_t iValue );
+	void					AppendToConsthash ( int iNode, const char * sKey, int64_t iValue );
+	const char *			Attr2Ident ( uint64_t uAttrLoc );
 
 private:
 	const char *			m_sExpr;
@@ -1114,6 +1137,7 @@ private:
 	CSphVector<ExprNode_t>	m_dNodes;
 	CSphVector<CSphString>	m_dUservars;
 	CSphVector<UdfCall_t*>	m_dUdfCalls;
+	CSphVector<char*>		m_dIdents;
 
 	CSphSchema *			m_pExtra;
 
@@ -1220,7 +1244,10 @@ int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp )
 	case SPH_ATTR_TIMESTAMP:
 	case SPH_ATTR_BOOL:
 	case SPH_ATTR_BIGINT:
-	case SPH_ATTR_WORDCOUNT:	iRes = tCol.m_tLocator.IsBitfield() ? TOK_ATTR_BITS : TOK_ATTR_INT; break;
+	case SPH_ATTR_WORDCOUNT:	
+	case SPH_ATTR_TOKENCOUNT:
+		iRes = tCol.m_tLocator.IsBitfield() ? TOK_ATTR_BITS : TOK_ATTR_INT;
+		break;
 	default:
 		m_sLexerError.SetSprintf ( "attribute '%s' is of unsupported type (type=%d)", sTok, tCol.m_eAttrType );
 		return -1;
@@ -1360,8 +1387,10 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 			g_tUdfMutex.Unlock();
 		}
 
-		m_sLexerError.SetSprintf ( "unknown identifier '%s' (not an attribute, not a function)", sTok.cstr() );
-		return -1;
+		// arbitrary identifier, then
+		m_dIdents.Add ( sTok.Leak() );
+		lvalp->sIdent = m_dIdents.Last();
+		return TOK_IDENT;
 	}
 
 	// check for known operators, then
@@ -1377,6 +1406,8 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		case '&':
 		case '|':
 		case '%':
+		case '{':
+		case '}':
 			return *m_pCur++;
 
 		case '<':
@@ -2495,6 +2526,11 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_UDF:			return CreateUdfNode ( tNode.m_iFunc, pLeft ); break;
 		case TOK_HOOK_IDENT:	return m_pHook->CreateNode ( tNode.m_iFunc, NULL ); break;
 		case TOK_HOOK_FUNC:		return m_pHook->CreateNode ( tNode.m_iFunc, pLeft ); break;
+		case TOK_CONST_HASH:
+			// tricky bit
+			// data gets moved (!) from node to ISphExpr at this point
+			return new Expr_ConstHash_c ( tNode.m_pConsthash->m_dPairs );
+			break;
 		default:				assert ( 0 && "unhandled token type" ); break;
 	}
 
@@ -3085,7 +3121,7 @@ bool ExprParser_t::CheckForConstSet ( int iArgsNode, int iSkip )
 	GatherArgTypes ( iArgsNode, dTypes );
 
 	for ( int i=iSkip; i<dTypes.GetLength(); i++ )
-		if ( dTypes[i]!=TOK_CONST_INT && dTypes[i]!=TOK_CONST_FLOAT )
+		if ( dTypes[i]!=TOK_CONST_INT && dTypes[i]!=TOK_CONST_FLOAT && dTypes[i]!=TOK_CONST_HASH )
 			return false;
 	return true;
 }
@@ -3292,6 +3328,10 @@ ExprParser_t::~ExprParser_t ()
 	// free any UDF calls that weren't taken over
 	ARRAY_FOREACH ( i, m_dUdfCalls )
 		SafeDelete ( m_dUdfCalls[i] );
+
+	// free temp const hash storage
+	ARRAY_FOREACH ( i, m_dIdents )
+		SafeDeleteArray ( m_dIdents[i] );
 }
 
 ESphAttr ExprParser_t::GetWidestRet ( int iLeft, int iRight )
@@ -3808,6 +3848,33 @@ int ExprParser_t::AddNodeHookFunc ( int iID, int iLeft )
 	return m_dNodes.GetLength()-1;
 }
 
+int ExprParser_t::AddNodeConsthash ( const char * sKey, int64_t iValue )
+{
+	ExprNode_t & tNode = m_dNodes.Add();
+	tNode.m_iToken = TOK_CONST_HASH;
+	tNode.m_pConsthash = new ConstHash_c();
+	tNode.m_pConsthash->Add ( sKey, iValue );
+	tNode.m_eRetType = SPH_ATTR_CONSTHASH;
+	return m_dNodes.GetLength()-1;
+}
+
+void ExprParser_t::AppendToConsthash ( int iNode, const char * sKey, int64_t iValue )
+{
+	m_dNodes[iNode].m_pConsthash->Add ( sKey, iValue );
+}
+
+const char * ExprParser_t::Attr2Ident ( uint64_t uAttrLoc )
+{
+	ExprNode_t tAttr;
+	sphUnpackAttrLocator ( uAttrLoc, &tAttr );
+
+	CSphString sIdent;
+	sIdent = m_pSchema->GetAttr ( tAttr.m_iLocator ).m_sName;
+	m_dIdents.Add ( sIdent.Leak() );
+	return m_dIdents.Last();
+}
+
+//////////////////////////////////////////////////////////////////////////
 
 struct WeightCheck_fn
 {

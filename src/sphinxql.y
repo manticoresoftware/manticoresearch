@@ -548,6 +548,7 @@ expr:
 	| expr TOK_AND expr			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr TOK_OR expr			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| '(' expr ')'				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
+	| '{' consthash '}'			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| function
 	;
 
@@ -567,6 +568,11 @@ arglist:
 arg:
 	expr
 	| TOK_QUOTED_STRING
+	;
+
+consthash:
+	TOK_IDENT '=' const_int						{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
+	| consthash ',' TOK_IDENT '=' const_int		{ $$ = $1; $$.m_iEnd = $5.m_iEnd; }
 	;
 
 //////////////////////////////////////////////////////////////////////////

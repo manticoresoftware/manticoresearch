@@ -5896,8 +5896,9 @@ public:
 	CSphBitvec			m_tKeywordMask;
 	DWORD				m_uDocWordCount;
 	int					m_iMaxWindowHits[SPH_MAX_FIELDS];
-	CSphVector<int>		m_dTF;
-	float				m_fDocBM25A;
+	CSphVector<int>		m_dTF;			///< for bm25a
+	float				m_fDocBM25A;	///< for bm25a
+	CSphVector<int>		m_dFieldTF;		///< for bm25f, per-field layout (ie all field0 tfs, then all field1 tfs, etc)
 
 	const char *		m_sExpr;
 	ISphExpr *			m_pExpr;
@@ -5905,10 +5906,12 @@ public:
 	const CSphSchema *	m_pSchema;
 	CSphAttrLocator		m_tFieldLensLoc;
 	float				m_fAvgDocLen;
+	const int64_t *		m_pFieldLens;
+	int64_t				m_iTotalDocuments;
 	float				m_fParamK1;
 	float				m_fParamB;
-	int					m_iMaxQuerypos;
-	int					m_iMaxUniqQpos;
+	int					m_iMaxQpos;			///< among all words, including dupes
+	int					m_iMaxUniqQpos;		///< among 1st occurrence of keywords in the query only
 
 	// per-query stuff
 	int					m_iMaxLCS;
@@ -5930,16 +5933,17 @@ public:
 public:
 	/// setup per-keyword data needed to compute the factors
 	/// (namely IDFs, counts, masks etc)
+	/// WARNING, CALLED EVEN BEFORE INIT()!
 	void SetQwords ( const ExtQwordsHash_t & hQwords )
 	{
-		m_dIDF.Resize ( m_iMaxQuerypos+1 );
+		m_dIDF.Resize ( m_iMaxQpos+1 ); // [MaxUniqQpos, MaxQpos] range will be all 0, but anyway
 		m_dIDF.Fill ( 0.0f );
 
-		m_dTF.Resize ( m_iMaxUniqQpos+1 );
+		m_dTF.Resize ( m_iMaxQpos+1 );
 		m_dTF.Fill ( 0 );
 
 		m_iQueryWordCount = 0;
-		m_tKeywordMask.Init ( m_iMaxQuerypos+1 );
+		m_tKeywordMask.Init ( m_iMaxUniqQpos+1 ); // will not be tracking dupes
 
 		hQwords.IterateStart();
 		while ( hQwords.IterateNext() )
@@ -5975,21 +5979,23 @@ public:
 		// canonical idf = log ( (N-n+0.5) / (n+0.5) )
 		// sphinx idf = log ( (N-n+1) / n )
 		// and we also downscale our idf by 1/log(N+1) to map it into [-0.5, 0.5] range
+
+		// compute document length
+		float dl = 0; // OPTIMIZE? could precompute and store total dl in attrs, but at a storage cost
+		CSphAttrLocator tLoc = m_tFieldLensLoc;
+		if ( tLoc.m_iBitOffset>=0 )
+			for ( int i=0; i<m_iFields; i++ )
+		{
+			dl += tMatch.GetAttr ( tLoc );
+			tLoc.m_iBitOffset += 32;
+		}
+
+		// compute BM25A (one value per document)
 		m_fDocBM25A = 0.0f;
 		for ( int iWord=1; iWord<=m_iQueryWordCount; iWord++ )
 		{
 			float tf = (float)m_dTF[iWord]; // OPTIMIZE? remove this vector, hook into m_uMatchHits somehow?
 			float idf = m_dIDF[iWord];
-
-			float dl = 0; // OPTIMIZE? could precopmute and store total dl in attrs, but at a storage cost
-			CSphAttrLocator tLoc = m_tFieldLensLoc;
-			if ( tLoc.m_iBitOffset>=0 )
-				for ( int i=0; i<m_iFields; i++ )
-			{
-				dl += tMatch.GetAttr ( tLoc );
-				tLoc.m_iBitOffset += 32;
-			}
-
 			m_fDocBM25A += tf / (tf + m_fParamK1*(1 - m_fParamB + m_fParamB*dl/m_fAvgDocLen)) * idf;
 		}
 		m_fDocBM25A += 0.5f; // map to [0..1] range
@@ -6017,6 +6023,8 @@ public:
 		}
 		ARRAY_FOREACH ( i, m_dTF )
 			m_dTF[i] = 0;
+		ARRAY_FOREACH ( i, m_dFieldTF ) // OPTIMIZE? make conditional?
+			m_dFieldTF[i] = 0;
 		m_uMatchedFields = 0;
 		m_uExactHit = 0;
 		m_uDocWordCount = 0;
@@ -6066,6 +6074,7 @@ enum ExprRankerNode_e
 	XRANK_QUERY_WORD_COUNT,
 	XRANK_DOC_WORD_COUNT,
 	XRANK_BM25A,
+	XRANK_BM25F,
 
 	// field aggregation functions
 	XRANK_SUM
@@ -6159,6 +6168,84 @@ struct Expr_FloatPtr_c : public ISphExpr
 	int IntEval ( const CSphMatch & ) const
 	{
 		return (int)*m_pVal;
+	}
+};
+
+
+struct Expr_BM25F_c : public ISphExpr
+{
+	RankerState_Expr_fn *	m_pState;
+	float					m_fK1;
+	float					m_fB;
+	float					m_fWeightedAvgDocLen;
+	CSphVector<int>			m_dWeights;		///< per field weights
+
+	explicit Expr_BM25F_c ( RankerState_Expr_fn * pState, float k1, float b, ISphExpr * pFieldWeights )
+	{
+		// bind k1, b
+		m_pState = pState;
+		m_fK1 = k1;
+		m_fB = b;
+
+		// bind weights
+		m_dWeights.Resize ( pState->m_iFields );
+		m_dWeights.Fill ( 1 );
+		if ( pFieldWeights )
+		{
+			Expr_ConstHash_c * pConstHash = dynamic_cast<Expr_ConstHash_c*> ( pFieldWeights );
+			assert ( pConstHash );
+
+			ARRAY_FOREACH ( i, pConstHash->m_dValues )
+			{
+				CSphString & sField = pConstHash->m_dValues[i].m_sName;
+				sField.ToLower();
+
+				// FIXME? report errors if field was not found?
+				ARRAY_FOREACH ( j, pState->m_pSchema->m_dFields )
+				{
+					if ( pState->m_pSchema->m_dFields[j].m_sName==sField )
+					{
+						m_dWeights[j] = pConstHash->m_dValues[i].m_iValue;
+						break;
+					}
+				}
+			}
+		}
+
+		// compute weighted avgdl
+		m_fWeightedAvgDocLen = 0;
+		if ( m_pState->m_pFieldLens )
+			ARRAY_FOREACH ( i, m_dWeights )
+				m_fWeightedAvgDocLen += m_pState->m_pFieldLens[i] * m_dWeights[i];
+		m_fWeightedAvgDocLen /= m_pState->m_iTotalDocuments;
+	}
+
+	float Eval ( const CSphMatch & tMatch ) const
+	{
+		// compute document length
+		// OPTIMIZE? could precompute and store total dl in attrs, but at a storage cost
+		// OPTIMIZE? could at least share between multiple BM25F instances, if there are many
+		float dl = 0;
+		CSphAttrLocator tLoc = m_pState->m_tFieldLensLoc;
+		if ( tLoc.m_iBitOffset>=0 )
+			for ( int i=0; i<m_pState->m_iFields; i++ )
+		{
+			dl += tMatch.GetAttr ( tLoc ) * m_dWeights[i];
+			tLoc.m_iBitOffset += 32;
+		}
+
+		// compute (the current instance of) BM25F
+		float fRes = 0.0f;
+		for ( int iWord=1; iWord<=m_pState->m_iMaxQpos; iWord++ )
+		{
+			// compute weighted TF
+			float tf = 0.0f;
+			for ( int i=0; i<m_pState->m_iFields; i++ )
+				tf += m_pState->m_dFieldTF [ iWord + i*(1+m_pState->m_iMaxQpos) ] * m_dWeights[i];
+			float idf = m_pState->m_dIDF[iWord]; // FIXME? zeroed out for dupes!
+			fRes += tf / (tf + m_fK1*(1 - m_fB + m_fB*dl/m_fWeightedAvgDocLen)) * idf;
+		}
+		return fRes + 0.5f; // map to [0..1] range
 	}
 };
 
@@ -6279,6 +6366,8 @@ public:
 			return XRANK_MAX_WINDOW_HITS;
 		if ( !strcasecmp ( sFunc, "bm25a" ) )
 			return XRANK_BM25A;
+		if ( !strcasecmp ( sFunc, "bm25f" ) )
+			return XRANK_BM25F;
 		return -1;
 	}
 
@@ -6320,7 +6409,20 @@ public:
 					m_pState->m_fParamB = pLeft->GetArg(1)->Eval ( tDummy );
 					m_pState->m_fParamK1 = Max ( m_pState->m_fParamK1, 0.001f );
 					m_pState->m_fParamB = Min ( Max ( m_pState->m_fParamB, 0.0f ), 1.0f );
+					SafeDelete ( pLeft );
 					return new Expr_FloatPtr_c ( &m_pState->m_fDocBM25A );
+				}
+			case XRANK_BM25F:
+				{
+					assert ( pLeft->IsArglist() );
+					CSphMatch tDummy;
+					float fK1 = pLeft->GetArg(0)->Eval ( tDummy );
+					float fB = pLeft->GetArg(1)->Eval ( tDummy );
+					fK1 = Max ( fK1, 0.001f );
+					fB = Min ( Max ( fB, 0.0f ), 1.0f );
+					ISphExpr * pRes = new Expr_BM25F_c ( m_pState, fK1, fB, pLeft->GetArg(2) );
+					SafeDelete ( pLeft );
+					return pRes;
 				}
 
 			case XRANK_SUM:					return new Expr_Sum_c ( m_pState, pLeft );
@@ -6357,34 +6459,97 @@ public:
 		}
 	}
 
+	/// helper to check argument types by a signature string (passed in sArgs)
+	/// every character in the signature describes a type
+	/// ? = any type
+	/// i = integer
+	/// I = integer constant
+	/// f = float
+	/// s = scalar (int/float)
+	/// h = hash
+	/// signature can also be preceded by "c:" modifier than means that all arguments must be constant
+	bool CheckArgtypes ( const CSphVector<ESphAttr> & dArgs, const char * sFuncname, const char * sArgs, bool bAllConst, CSphString & sError )
+	{
+		if ( sArgs[0]=='c' && sArgs[1]==':' )
+		{
+			if ( !bAllConst )
+			{
+				sError.SetSprintf ( "%s() requires constant arguments", sFuncname );
+				return false;
+			}
+			sArgs += 2;
+		}
+
+		int iLen = strlen ( sArgs );
+		if ( dArgs.GetLength()!=iLen )
+		{
+			sError.SetSprintf ( "%s() requires %d argument(s), not %d", sFuncname, iLen, dArgs.GetLength() );
+			return false;
+		}
+
+		ARRAY_FOREACH ( i, dArgs )
+		{
+			switch ( *sArgs++ )
+			{
+				case '?':
+					break;
+				case 'i':
+					if ( dArgs[i]!=SPH_ATTR_INTEGER )
+					{
+						sError.SetSprintf ( "argument %d to %s() must be integer", i, sFuncname );
+						return false;
+					}
+					break;
+				case 's':
+					if ( dArgs[i]!=SPH_ATTR_INTEGER && dArgs[i]!=SPH_ATTR_FLOAT )
+					{
+						sError.SetSprintf ( "argument %d to %s() must be scalar (integer or float)", i, sFuncname );
+						return false;
+					}
+					break;
+				case 'h':
+					if ( dArgs[i]!=SPH_ATTR_CONSTHASH )
+					{
+						sError.SetSprintf ( "argument %d to %s() must be a hash of constants", i, sFuncname );
+						return false;
+					}
+					break;
+				default:
+					assert ( 0 && "unknown signature code" );
+					break;
+			}
+		}
+
+		// this is important!
+		// other previous failed checks might have filled sError
+		// and if anything else up the stack checks it, we need an empty message now
+		sError = "";
+		return true;
+	}
+
 	ESphAttr GetReturnType ( int iID, const CSphVector<ESphAttr> & dArgs, bool bAllConst, CSphString & sError )
 	{
 		switch ( iID )
 		{
 			case XRANK_SUM:
-				if ( dArgs.GetLength()!=1 )
-				{
-					sError = "SUM() requires 1 argument";
+				if ( !CheckArgtypes ( dArgs, "SUM", "?", bAllConst, sError ) )
 					return SPH_ATTR_NONE;
-				}
 				return dArgs[0];
 
 			case XRANK_MAX_WINDOW_HITS:
-				if ( dArgs.GetLength()!=1 || dArgs[0]!=SPH_ATTR_INTEGER || !bAllConst )
-				{
-					sError = "MAX_WINDOW_HITS() requires 1 constant int argument";
+				if ( !CheckArgtypes ( dArgs, "MAX_WINDOW_HITS", "c:i", bAllConst, sError ) )
 					return SPH_ATTR_NONE;
-				}
 				return SPH_ATTR_INTEGER;
 
 			case XRANK_BM25A:
-				if ( dArgs.GetLength()!=2 || !bAllConst
-					|| ( dArgs[0]!=SPH_ATTR_FLOAT && dArgs[0]!=SPH_ATTR_INTEGER )
-					|| ( dArgs[1]!=SPH_ATTR_FLOAT && dArgs[1]!=SPH_ATTR_INTEGER ) )
-				{
-					sError = "BM25A(k1,b) requires 2 constant scalar (int or float) arguments";
+				if ( !CheckArgtypes ( dArgs, "BM25A", "c:ss", bAllConst, sError ) )
 					return SPH_ATTR_NONE;
-				}
+				return SPH_ATTR_FLOAT;
+
+			case XRANK_BM25F:
+				if ( !CheckArgtypes ( dArgs, "BM25F", "c:ss", bAllConst, sError ) )
+					if ( !CheckArgtypes ( dArgs, "BM25F", "c:ssh", bAllConst, sError ) )
+						return SPH_ATTR_NONE;
 				return SPH_ATTR_FLOAT;
 
 			default:
@@ -6475,7 +6640,8 @@ bool RankerState_Expr_fn::Init ( int iFields, const int * pWeights, ExtRanker_c 
 	memset ( m_iMinHitPos, 0, sizeof(m_iMinHitPos) );
 	memset ( m_iMinBestSpanPos, 0, sizeof(m_iMinBestSpanPos) );
 	memset ( m_iMaxWindowHits, 0, sizeof(m_iMaxWindowHits) );
-	m_iMaxQuerypos = pRanker->m_iMaxQpos;
+	m_iMaxQpos = pRanker->m_iMaxQpos; // already copied in SetQwords, but anyway
+	m_iMaxUniqQpos = pRanker->m_iMaxUniqQpos; 
 	m_uExactHit = 0;
 	m_uDocWordCount = 0;
 	m_iWindowSize = 1;
@@ -6502,14 +6668,19 @@ bool RankerState_Expr_fn::Init ( int iFields, const int * pWeights, ExtRanker_c 
 	}
 
 	m_fAvgDocLen = 0;
-	const int64_t * pFieldLens = pRanker->GetIndex()->GetFieldLens();
-	if ( pFieldLens )
+	m_pFieldLens = pRanker->GetIndex()->GetFieldLens();
+	if ( m_pFieldLens )
 		for ( int i=0; i<iFields; i++)
-			m_fAvgDocLen += pFieldLens[i];
-	m_fAvgDocLen /= pRanker->GetIndex()->GetStats().m_iTotalDocuments;
+			m_fAvgDocLen += m_pFieldLens[i];
+	m_iTotalDocuments = pRanker->GetIndex()->GetStats().m_iTotalDocuments;
+	m_fAvgDocLen /= m_iTotalDocuments;
 
 	m_fParamK1 = 1.2f;
 	m_fParamB = 0.75f;
+
+	// not in SetQwords, because we only get iFields here
+	m_dFieldTF.Resize ( m_iFields*(m_iMaxQpos+1) );
+	m_dFieldTF.Fill ( 0 );
 
 	// parse expression
 	bool bUsesWeight;
@@ -6549,12 +6720,12 @@ void RankerState_Expr_fn::Update ( const ExtHit_t * pHlist )
 	if ( iDelta==m_iExpDelta )
 	{
 		m_uCurLCS = m_uCurLCS + BYTE(pHlist->m_uWeight);
-		if ( HITMAN::IsEnd ( pHlist->m_uHitpos ) && (int)pHlist->m_uQuerypos==m_iMaxQuerypos && iPos==m_iMaxQuerypos )
+		if ( HITMAN::IsEnd ( pHlist->m_uHitpos ) && (int)pHlist->m_uQuerypos==m_iMaxUniqQpos && iPos==m_iMaxUniqQpos )
 			m_uExactHit |= ( 1UL << uField );
 	} else
 	{
 		m_uCurLCS = BYTE(pHlist->m_uWeight);
-		if ( iPos==1 && HITMAN::IsEnd ( pHlist->m_uHitpos ) && m_iMaxQuerypos==1 )
+		if ( iPos==1 && HITMAN::IsEnd ( pHlist->m_uHitpos ) && m_iMaxUniqQpos==1 )
 			m_uExactHit |= ( 1UL << uField );
 	}
 	if ( m_uCurLCS>m_uLCS[uField] )
@@ -6569,7 +6740,7 @@ void RankerState_Expr_fn::Update ( const ExtHit_t * pHlist )
 	m_uMatchedFields |= ( 1UL<<uField );
 
 	// keywords can be duplicated in the query, so we need this extra check
-	if ( pHlist->m_uQuerypos < m_dIDF.GetLength () && m_tKeywordMask.BitGet ( pHlist->m_uQuerypos ) )
+	if ( pHlist->m_uQuerypos <= m_iMaxUniqQpos && m_tKeywordMask.BitGet ( pHlist->m_uQuerypos ) )
 	{
 		float fIDF = m_dIDF [ pHlist->m_uQuerypos ];
 		DWORD uHitPosMask = 1<<pHlist->m_uQuerypos;
@@ -6592,6 +6763,7 @@ void RankerState_Expr_fn::Update ( const ExtHit_t * pHlist )
 	// avoid duplicate check for BM25A, BM25F though
 	// (that sort of automatically accounts for qtf factor)
 	m_dTF [ pHlist->m_uQuerypos ]++;
+	m_dFieldTF [ pHlist->m_uQuerypos + uField*(1+m_iMaxQpos) ]++;
 
 	if ( !m_iMinHitPos[uField] )
 		m_iMinHitPos[uField] = iPos;
@@ -6647,7 +6819,7 @@ public:
 	void SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 	{
 		ExtRanker_T<RankerState_Expr_fn>::SetQwordsIDF ( hQwords );
-		m_tState.m_iMaxQuerypos = m_iMaxQpos;
+		m_tState.m_iMaxQpos = m_iMaxQpos;
 		m_tState.m_iMaxUniqQpos = m_iMaxUniqQpos;
 		m_tState.SetQwords ( hQwords );
 	}
@@ -6690,7 +6862,7 @@ public:
 		}
 
 		// build word level factors
-		for ( int i=1; i<=m_iMaxQuerypos; i++ )
+		for ( int i=1; i<=m_iMaxUniqQpos; i++ )
 			if ( m_tKeywordMask.BitGet(i) )
 		{
 			sVal.SetSprintf ( "%s, word%d=(tf=%d, idf=%f)", sVal.cstr(), i, m_dTF[i], m_dIDF[i] );
@@ -6732,7 +6904,7 @@ public:
 	void SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 	{
 		ExtRanker_T<RankerState_Export_fn>::SetQwordsIDF ( hQwords );
-		m_tState.m_iMaxQuerypos = m_iMaxQpos;
+		m_tState.m_iMaxQpos = m_iMaxQpos;
 		m_tState.m_iMaxUniqQpos = m_iMaxUniqQpos;
 		m_tState.SetQwords ( hQwords );
 	}
@@ -6859,8 +7031,8 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 
 	// setup IDFs
 	ExtQwordsHash_t hQwords;
-	int iMaxUniqQpos = pRanker->GetQwords ( hQwords );
-	int iMaxQpos = -1;
+	int iMaxQpos = pRanker->GetQwords ( hQwords );
+	int iMaxUniqQpos = -1;
 
 	const int iQwords = hQwords.GetLength ();
 	const CSphSourceStats & tSourceStats = pIndex->GetStats();
@@ -6873,7 +7045,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 	{
 		ExtQword_t & tWord = hQwords.IterateGet ();
 		if ( !tWord.m_bExcluded )
-			iMaxQpos = Max ( iMaxQpos, tWord.m_iQueryPos );
+			iMaxUniqQpos = Max ( iMaxUniqQpos, tWord.m_iQueryPos );
 
 		// build IDF
 		float fIDF = 0.0f;

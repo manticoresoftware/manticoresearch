@@ -138,7 +138,7 @@ public:
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID ) = 0;
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID ) = 0;
 
-	virtual void				GetQwords ( ExtQwordsHash_t & hQwords ) = 0;
+	virtual int					GetQwords ( ExtQwordsHash_t & hQwords ) = 0;
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords ) = 0;
 	virtual bool				GotHitless () = 0;
 	virtual int					GetDocsCount () { return INT_MAX; }
@@ -288,7 +288,7 @@ public:
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 
-	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
+	virtual int					GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 	virtual bool				GotHitless () { return false; }
 	virtual int					GetDocsCount () { return m_pQword->m_iDocs; }
@@ -573,7 +573,7 @@ public:
 
 			void				Init ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup & tSetup );
 	virtual void				Reset ( const ISphQwordSetup & tSetup );
-	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
+	virtual int					GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 
 	virtual bool				GotHitless () { return m_pChildren[0]->GotHitless() || m_pChildren[1]->GotHitless(); }
@@ -703,7 +703,7 @@ public:
 								ExtNWayT ( const CSphVector<ExtNode_i *> & dNodes, const ISphQwordSetup & tSetup );
 								~ExtNWayT ();
 	virtual void				Reset ( const ISphQwordSetup & tSetup );
-	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
+	virtual int					GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 	virtual bool				GotHitless () { return false; }
 	virtual void				HintDocid ( SphDocID_t uMinID ) { m_pNode->HintDocid ( uMinID ); }
@@ -927,7 +927,7 @@ public:
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 
-	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
+	virtual int					GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 
 	virtual bool				GotHitless () { return false; }
@@ -964,7 +964,7 @@ public:
 	virtual void				Reset ( const ISphQwordSetup & tSetup );
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t );
-	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
+	virtual int					GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 	virtual bool				GotHitless () { return false; }
 
@@ -1001,7 +1001,7 @@ public:
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 	virtual void				Reset ( const ISphQwordSetup & tSetup );
-	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
+	virtual int					GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 
 public:
@@ -1073,7 +1073,7 @@ public:
 	virtual CSphMatch *			GetMatchesBuffer () { return m_dMatches; }
 	virtual const ExtDoc_t *	GetFilteredDocs ();
 
-	void						GetQwords ( ExtQwordsHash_t & hQwords )					{ if ( m_pRoot ) m_pRoot->GetQwords ( hQwords ); }
+	int							GetQwords ( ExtQwordsHash_t & hQwords )					{ return m_pRoot ? m_pRoot->GetQwords ( hQwords ) : -1; }
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 	virtual bool				InitState ( const CSphQueryContext &, CSphString & )	{ return true; }
 
@@ -1086,7 +1086,8 @@ public:
 	CSphMatch					m_dMatches[ExtNode_i::MAX_DOCS];	///< exposed for caller
 	DWORD						m_uPayloadMask;						///< exposed for ranker state functors
 	int							m_iQwords;							///< exposed for ranker state functors
-	int							m_iMaxQuerypos;						///< exposed for ranker state functors
+	int							m_iMaxQpos;							///< max in-query pos among all keywords, including dupes; for ranker state functors
+	int							m_iMaxUniqQpos;						///< max in-query pos among unique keywords only; for ranker state functors
 
 protected:
 	int							m_iInlineRowitems;
@@ -1452,7 +1453,7 @@ public:
 	virtual const ExtDoc_t *		GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *		GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t );
 
-	virtual void					GetQwords ( ExtQwordsHash_t & hQwords );
+	virtual int						GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void					SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 	virtual bool					GotHitless () { return false; }
 	virtual int						GetDocsCount () { return m_iUniqDocs; }
@@ -1663,8 +1664,9 @@ const ExtHit_t * ExtCached_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 }
 
 
-void ExtCached_c::GetQwords ( ExtQwordsHash_t & hQwords )
+int ExtCached_c::GetQwords ( ExtQwordsHash_t & hQwords )
 {
+	int iMax = -1;
 	ARRAY_FOREACH ( i, m_dWords )
 	{
 		const ExtCachedKeyword_t & tWord = m_dWords[i];
@@ -1680,7 +1682,10 @@ void ExtCached_c::GetQwords ( ExtQwordsHash_t & hQwords )
 		tQword.m_bExcluded = m_bExcluded;
 
 		hQwords.Add ( tQword, m_dWords[i].m_sWord );
+		if ( !m_bExcluded )
+			iMax = Max ( iMax, m_iAtomPos );
 	}
+	return iMax;
 }
 
 
@@ -2126,11 +2131,11 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t
 	return ( iHit!=0 ) ? m_dHits : NULL;
 }
 
-void ExtTerm_c::GetQwords ( ExtQwordsHash_t & hQwords )
+int ExtTerm_c::GetQwords ( ExtQwordsHash_t & hQwords )
 {
 	m_fIDF = 0.0f;
 	if ( m_bNotWeighted || hQwords.Exists ( m_pQword->m_sWord ) )
-		return;
+		return m_pQword->m_bExcluded ? -1 : m_pQword->m_iAtomPos;
 
 	m_fIDF = -1.0f;
 	ExtQword_t tInfo;
@@ -2143,6 +2148,7 @@ void ExtTerm_c::GetQwords ( ExtQwordsHash_t & hQwords )
 	tInfo.m_bExpanded = m_pQword->m_bExpanded;
 	tInfo.m_bExcluded = m_pQword->m_bExcluded;
 	hQwords.Add ( tInfo, m_pQword->m_sWord );
+	return m_pQword->m_bExcluded ? -1 : m_pQword->m_iAtomPos;
 }
 
 void ExtTerm_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
@@ -2576,10 +2582,11 @@ void ExtTwofer_c::Reset ( const ISphQwordSetup & tSetup )
 	m_uMatchedDocid = 0;
 }
 
-void ExtTwofer_c::GetQwords ( ExtQwordsHash_t & hQwords )
+int ExtTwofer_c::GetQwords ( ExtQwordsHash_t & hQwords )
 {
-	m_pChildren[0]->GetQwords ( hQwords );
-	m_pChildren[1]->GetQwords ( hQwords );
+	int iMax1 = m_pChildren[0]->GetQwords ( hQwords );
+	int iMax2 = m_pChildren[1]->GetQwords ( hQwords );
+	return Max ( iMax1, iMax2 );
 }
 
 void ExtTwofer_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
@@ -3228,10 +3235,10 @@ void ExtNWayT::Reset ( const ISphQwordSetup & tSetup )
 	m_dMyHits[0].m_uDocid = DOCID_MAX;
 }
 
-void ExtNWayT::GetQwords ( ExtQwordsHash_t & hQwords )
+int ExtNWayT::GetQwords ( ExtQwordsHash_t & hQwords )
 {
 	assert ( m_pNode );
-	m_pNode->GetQwords ( hQwords );
+	return m_pNode->GetQwords ( hQwords );
 }
 
 void ExtNWayT::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
@@ -3907,10 +3914,15 @@ void ExtQuorum_c::Reset ( const ISphQwordSetup & tSetup )
 		m_dChildren[i]->Reset ( tSetup );
 }
 
-void ExtQuorum_c::GetQwords ( ExtQwordsHash_t & hQwords )
+int ExtQuorum_c::GetQwords ( ExtQwordsHash_t & hQwords )
 {
+	int iMax = -1;
 	ARRAY_FOREACH ( i, m_dChildren )
-		m_dChildren[i]->GetQwords ( hQwords );
+	{
+		int iKidMax = m_dChildren[i]->GetQwords ( hQwords );
+		iMax = Max ( iMax, iKidMax );
+	}
+	return iMax;
 }
 
 void ExtQuorum_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
@@ -4448,10 +4460,15 @@ const ExtHit_t * ExtOrder_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t )
 }
 
 
-void ExtOrder_c::GetQwords ( ExtQwordsHash_t & hQwords )
+int ExtOrder_c::GetQwords ( ExtQwordsHash_t & hQwords )
 {
+	int iMax = -1;
 	ARRAY_FOREACH ( i, m_dChildren )
-		m_dChildren[i]->GetQwords ( hQwords );
+	{
+		int iKidMax = m_dChildren[i]->GetQwords ( hQwords );
+		iMax = Max ( iMax, iKidMax );
+	}
+	return iMax;
 }
 
 void ExtOrder_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
@@ -4519,10 +4536,11 @@ void ExtUnit_c::Reset ( const ISphQwordSetup & tSetup )
 }
 
 
-void ExtUnit_c::GetQwords ( ExtQwordsHash_t & hQwords )
+int ExtUnit_c::GetQwords ( ExtQwordsHash_t & hQwords )
 {
-	m_pArg1->GetQwords ( hQwords );
-	m_pArg2->GetQwords ( hQwords );
+	int iMax1 = m_pArg1->GetQwords ( hQwords );
+	int iMax2 = m_pArg2->GetQwords ( hQwords );
+	return Max ( iMax1, iMax2 );
 }
 
 
@@ -5034,12 +5052,6 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 void ExtRanker_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 {
 	m_iQwords = hQwords.GetLength ();
-
-	m_iMaxQuerypos = 0;
-	hQwords.IterateStart();
-	while ( hQwords.IterateNext() )
-		m_iMaxQuerypos = Max ( m_iMaxQuerypos, hQwords.IterateGet().m_iQueryPos );
-
 	if ( m_pRoot )
 		m_pRoot->SetQwordsIDF ( hQwords );
 }
@@ -5656,7 +5668,12 @@ struct RankerState_ProximityBM25Exact_fn : public ISphExtra
 		m_pWeights = pWeights;
 		m_uHeadHit = 0;
 		m_uExactHit = 0;
-		m_iMaxQuerypos = pRanker->m_iMaxQuerypos;
+
+		// tricky bit
+		// in expr and export rankers, this gets handled by the overridden (!) SetQwordsIDF()
+		// but in all the other ones, we need this, because SetQwordsIDF() won't touch the state by default
+		// FIXME? this is actually MaxUniqueQpos, queries like [foo|foo|foo] might break
+		m_iMaxQuerypos = pRanker->m_iMaxQpos;
 		return true;
 	}
 
@@ -5875,7 +5892,6 @@ public:
 	float				m_dSumIDF[SPH_MAX_FIELDS];
 	int					m_iMinHitPos[SPH_MAX_FIELDS];
 	int					m_iMinBestSpanPos[SPH_MAX_FIELDS];
-	int					m_iMaxQuerypos;
 	DWORD				m_uExactHit;
 	CSphBitvec			m_tKeywordMask;
 	DWORD				m_uDocWordCount;
@@ -5891,6 +5907,8 @@ public:
 	float				m_fAvgDocLen;
 	float				m_fParamK1;
 	float				m_fParamB;
+	int					m_iMaxQuerypos;
+	int					m_iMaxUniqQpos;
 
 	// per-query stuff
 	int					m_iMaxLCS;
@@ -5915,12 +5933,10 @@ public:
 	void SetQwords ( const ExtQwordsHash_t & hQwords )
 	{
 		m_dIDF.Resize ( m_iMaxQuerypos+1 );
-		m_dTF.Resize ( m_iMaxQuerypos+1 );
-		ARRAY_FOREACH ( i, m_dIDF )
-		{
-			m_dIDF[i] = 0.0f;
-			m_dTF[i] = 0;
-		}
+		m_dIDF.Fill ( 0.0f );
+
+		m_dTF.Resize ( m_iMaxUniqQpos+1 );
+		m_dTF.Fill ( 0 );
 
 		m_iQueryWordCount = 0;
 		m_tKeywordMask.Init ( m_iMaxQuerypos+1 );
@@ -5928,15 +5944,16 @@ public:
 		hQwords.IterateStart();
 		while ( hQwords.IterateNext() )
 		{
-			const int iPos = hQwords.IterateGet().m_iQueryPos;
-			m_dIDF [ iPos ] = hQwords.IterateGet().m_fIDF;
-			m_tKeywordMask.BitSet ( iPos );
-
 			// tricky bit
 			// for query_word_count, we only want to count keywords that are not (!) excluded by the query
 			// that is, in (aa NOT bb) case, we want a value of 1, not 2
-			if ( !hQwords.IterateGet().m_bExcluded )
-				m_iQueryWordCount++;
+			if ( hQwords.IterateGet().m_bExcluded )
+				continue;
+
+			const int iPos = hQwords.IterateGet().m_iQueryPos;
+			m_tKeywordMask.BitSet ( iPos ); // just to assert at early stage!
+			m_dIDF [ iPos ] = hQwords.IterateGet().m_fIDF;
+			m_iQueryWordCount++;
 		}
 	}
 
@@ -5961,12 +5978,13 @@ public:
 		m_fDocBM25A = 0.0f;
 		for ( int iWord=1; iWord<=m_iQueryWordCount; iWord++ )
 		{
-			float tf = m_dTF[iWord]; // OPTIMIZE? remove this vector, hook into m_uMatchHits somehow?
+			float tf = (float)m_dTF[iWord]; // OPTIMIZE? remove this vector, hook into m_uMatchHits somehow?
 			float idf = m_dIDF[iWord];
 
 			float dl = 0; // OPTIMIZE? could precopmute and store total dl in attrs, but at a storage cost
 			CSphAttrLocator tLoc = m_tFieldLensLoc;
-			for ( int i=0; i<m_iFields; i++ )
+			if ( tLoc.m_iBitOffset>=0 )
+				for ( int i=0; i<m_iFields; i++ )
 			{
 				dl += tMatch.GetAttr ( tLoc );
 				tLoc.m_iBitOffset += 32;
@@ -6457,7 +6475,7 @@ bool RankerState_Expr_fn::Init ( int iFields, const int * pWeights, ExtRanker_c 
 	memset ( m_iMinHitPos, 0, sizeof(m_iMinHitPos) );
 	memset ( m_iMinBestSpanPos, 0, sizeof(m_iMinBestSpanPos) );
 	memset ( m_iMaxWindowHits, 0, sizeof(m_iMaxWindowHits) );
-	m_iMaxQuerypos = pRanker->m_iMaxQuerypos;
+	m_iMaxQuerypos = pRanker->m_iMaxQpos;
 	m_uExactHit = 0;
 	m_uDocWordCount = 0;
 	m_iWindowSize = 1;
@@ -6628,11 +6646,9 @@ public:
 
 	void SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 	{
-		// set ranker m_iMaxQuerypos, setup terms etc
 		ExtRanker_T<RankerState_Expr_fn>::SetQwordsIDF ( hQwords );
-
-		// set expression state stuff, like IDFs, keyword counts etc
-		m_tState.m_iMaxQuerypos = m_iMaxQuerypos;
+		m_tState.m_iMaxQuerypos = m_iMaxQpos;
+		m_tState.m_iMaxUniqQpos = m_iMaxUniqQpos;
 		m_tState.SetQwords ( hQwords );
 	}
 };
@@ -6716,7 +6732,8 @@ public:
 	void SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 	{
 		ExtRanker_T<RankerState_Export_fn>::SetQwordsIDF ( hQwords );
-		m_tState.m_iMaxQuerypos = m_iMaxQuerypos;
+		m_tState.m_iMaxQuerypos = m_iMaxQpos;
+		m_tState.m_iMaxUniqQpos = m_iMaxUniqQpos;
 		m_tState.SetQwords ( hQwords );
 	}
 };
@@ -6842,7 +6859,8 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 
 	// setup IDFs
 	ExtQwordsHash_t hQwords;
-	pRanker->GetQwords ( hQwords );
+	int iMaxUniqQpos = pRanker->GetQwords ( hQwords );
+	int iMaxQpos = -1;
 
 	const int iQwords = hQwords.GetLength ();
 	const CSphSourceStats & tSourceStats = pIndex->GetStats();
@@ -6854,6 +6872,8 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 	while ( hQwords.IterateNext() )
 	{
 		ExtQword_t & tWord = hQwords.IterateGet ();
+		if ( !tWord.m_bExcluded )
+			iMaxQpos = Max ( iMaxQpos, tWord.m_iQueryPos );
 
 		// build IDF
 		float fIDF = 0.0f;
@@ -6876,6 +6896,8 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 		pResult->AddStat ( pWord->m_sDictWord, pWord->m_iDocs, pWord->m_iHits, pWord->m_bExpanded );
 	}
 
+	pRanker->m_iMaxQpos = iMaxQpos;
+	pRanker->m_iMaxUniqQpos = iMaxUniqQpos;
 	pRanker->SetQwordsIDF ( hQwords );
 	if ( !pRanker->InitState ( tCtx, pResult->m_sError ) )
 		SafeDelete ( pRanker );
@@ -7045,10 +7067,11 @@ public:
 
 	virtual const ExtHit_t * GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t uMaxID );
 
-	virtual void GetQwords ( ExtQwordsHash_t & hQwords )
+	virtual int GetQwords ( ExtQwordsHash_t & hQwords )
 	{
 		if ( m_pChild )
-			m_pChild->GetQwords ( hQwords );
+			return m_pChild->GetQwords ( hQwords );
+		return -1;
 	}
 
 	virtual void SetQwordsIDF ( const ExtQwordsHash_t & hQwords )

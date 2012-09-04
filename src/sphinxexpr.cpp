@@ -578,10 +578,11 @@ public:
 
 #define IABS(_arg) ( (_arg)>0 ? (_arg) : (-_arg) )
 
-DECLARE_UNARY_INT ( Expr_Neg_c,		-FIRST,			-INTFIRST,		-INT64FIRST )
-DECLARE_UNARY_INT ( Expr_Abs_c,		fabs(FIRST),	IABS(INTFIRST),	IABS(INT64FIRST) )
-DECLARE_UNARY_FLT ( Expr_Ceil_c,	float(ceil(FIRST)) )
-DECLARE_UNARY_FLT ( Expr_Floor_c,	float(floor(FIRST)) )
+DECLARE_UNARY_INT ( Expr_Neg_c,		-FIRST,					-INTFIRST,			-INT64FIRST )
+DECLARE_UNARY_INT ( Expr_Abs_c,		fabs(FIRST),			IABS(INTFIRST),		IABS(INT64FIRST) )
+DECLARE_UNARY_INT ( Expr_Ceil_c,	float(ceil(FIRST)),		int(ceil(FIRST)),	int64_t(ceil(FIRST)) )
+DECLARE_UNARY_INT ( Expr_Floor_c,	float(floor(FIRST)),	int(floor(FIRST)),	int64_t(floor(FIRST)) )
+
 DECLARE_UNARY_FLT ( Expr_Sin_c,		float(sin(FIRST)) )
 DECLARE_UNARY_FLT ( Expr_Cos_c,		float(cos(FIRST)) )
 DECLARE_UNARY_FLT ( Expr_Ln_c,		float(log(FIRST)) )
@@ -824,8 +825,8 @@ static FuncDesc_t g_dFuncs[] =
 	{ "now",			0,	FUNC_NOW,			SPH_ATTR_INTEGER },
 
 	{ "abs",			1,	FUNC_ABS,			SPH_ATTR_NONE },
-	{ "ceil",			1,	FUNC_CEIL,			SPH_ATTR_FLOAT },
-	{ "floor",			1,	FUNC_FLOOR,			SPH_ATTR_FLOAT },
+	{ "ceil",			1,	FUNC_CEIL,			SPH_ATTR_INTEGER },
+	{ "floor",			1,	FUNC_FLOOR,			SPH_ATTR_INTEGER },
 	{ "sin",			1,	FUNC_SIN,			SPH_ATTR_FLOAT },
 	{ "cos",			1,	FUNC_COS,			SPH_ATTR_FLOAT },
 	{ "ln",				1,	FUNC_LN,			SPH_ATTR_FLOAT },
@@ -1704,9 +1705,16 @@ void ExprParser_t::Optimize ( int iNode )
 		float fArg = pLeft->m_iToken==TOK_CONST_FLOAT ? pLeft->m_fConst : float(pLeft->m_iConst);
 		switch ( g_dFuncs[pRoot->m_iFunc].m_eFunc )
 		{
-			case FUNC_ABS:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fabs(fArg); break;
-			case FUNC_CEIL:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float(ceil(fArg)); break;
-			case FUNC_FLOOR:	pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float(floor(fArg)); break;
+			case FUNC_ABS:
+				pRoot->m_iToken = pLeft->m_iToken;
+				pRoot->m_iLeft = -1;
+				if ( pLeft->m_iToken==TOK_CONST_INT )
+					pRoot->m_iConst = IABS ( pLeft->m_iConst );
+				else
+					pRoot->m_fConst = fabs(fArg);
+				break;
+			case FUNC_CEIL:		pRoot->m_iToken = TOK_CONST_INT; pRoot->m_iLeft = -1; pRoot->m_iConst = (int)ceil(fArg); break;
+			case FUNC_FLOOR:	pRoot->m_iToken = TOK_CONST_INT; pRoot->m_iLeft = -1; pRoot->m_iConst = (int)floor(fArg); break;
 			case FUNC_SIN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float(sin(fArg)); break;
 			case FUNC_COS:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float(cos(fArg)); break;
 			case FUNC_LN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float(log(fArg)); break;

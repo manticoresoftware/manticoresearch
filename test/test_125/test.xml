@@ -23,6 +23,8 @@ source test
 	sql_attr_uint = aa
 	sql_attr_multi = uint mm from field
 	sql_attr_string = kk
+	sql_attr_float = f1
+	sql_attr_float = f2
 }
 
 index test
@@ -39,7 +41,9 @@ CREATE TABLE test_table
 	aa INT NOT NULL,
 	title VARCHAR(255) NOT NULL,
 	mm VARCHAR(255) NOT NULL,
-	kk VARCHAR(255) NOT NULL
+	kk VARCHAR(255) NOT NULL,
+	f1 FLOAT NOT NULL,
+	f2 FLOAT NOT NULL
 );
 </db_create>
 
@@ -48,9 +52,10 @@ DROP TABLE IF EXISTS test_table;
 </db_drop>
 
 <db_insert>
-INSERT INTO test_table ( id, aa, title, mm, kk ) VALUES
-( 1, 2, 'dummy', '', 'one' ),
-( 10, 3, 'ohai', '7 40', 'ten' )
+INSERT INTO test_table ( id, aa, title, mm, kk, f1, f2 ) VALUES
+( 1, 2, 'dummy', '', 'one', 0, 0 ),
+( 10, 3, 'ohai', '7 40', 'ten', 0, 0 ),
+( 11, 4, 'ohai2', '', 'eleventy', 0.123123, 0.456789 )
 </db_insert>
 
 <sphqueries>
@@ -91,6 +96,9 @@ INSERT INTO test_table ( id, aa, title, mm, kk ) VALUES
 
 <sphinxql>SET GLOBAL @happyvar = (432)</sphinxql>
 <sphinxql>SELECT IN(mm, @happyvar) FROM test WHERE id=10</sphinxql>
+
+<sphinxql>SELECT FLOOR(f1*1000)*100000 + FLOOR(f2*1000) FROM test WHERE id=11</sphinxql>
+<sphinxql>SELECT FLOOR(f1*1000)*10000000 + FLOOR(f2*1000) FROM test WHERE id=11</sphinxql>
 </sphqueries>
 
 </test>

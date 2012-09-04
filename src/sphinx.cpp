@@ -22903,6 +22903,39 @@ int CSphSource_Document::LoadFileField ( BYTE ** ppField, CSphString & sError )
 	return iFieldBytes;
 }
 
+
+bool CSphSource_Document::AddAutoAttrs ( CSphString & sError )
+{
+	// auto-computed length attributes
+	if ( m_bIndexFieldLens )
+	{
+		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+		{
+			CSphColumnInfo tCol;
+			tCol.m_sName.SetSprintf ( "%s_len", m_tSchema.m_dFields[i].m_sName.cstr() );
+
+			int iGot = m_tSchema.GetAttrIndex ( tCol.m_sName.cstr() );
+			if ( iGot>=0 )
+			{
+				if ( m_tSchema.GetAttr(iGot).m_eAttrType==SPH_ATTR_TOKENCOUNT )
+				{
+					// looks like we already added these
+					assert ( m_tSchema.GetAttr(iGot).m_sName==tCol.m_sName );
+					return true;
+				}
+
+				sError.SetSprintf ( "attribute %s conflicts with index_field_lengths=1; remove it", tCol.m_sName.cstr() );
+				return false;
+			}
+
+			tCol.m_eAttrType = SPH_ATTR_TOKENCOUNT;
+			m_tSchema.AddAttr ( tCol, true ); // everything's dynamic at indexing time
+		}
+	}
+	return true;
+}
+
+
 //////////////////////////////////////////////////////////////////////////
 // HIT GENERATORS
 //////////////////////////////////////////////////////////////////////////
@@ -23759,20 +23792,8 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 	}
 
 	// auto-computed length attributes
-	if ( m_bIndexFieldLens )
-	{
-		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
-		{
-			const char * sField = m_tSchema.m_dFields[i].m_sName.cstr();
-			if ( m_tSchema.GetAttrIndex ( sField )>=0 )
-				LOC_ERROR ( "attribute %s conflicts with index_field_lengths=1; remove it", sField );
-
-			CSphColumnInfo tCol;
-			tCol.m_sName = sField;
-			tCol.m_eAttrType = SPH_ATTR_TOKENCOUNT;
-			m_tSchema.AddAttr ( tCol, true ); // everything's dynamic at indexing time
-		}
-	}
+	if ( !AddAutoAttrs ( sError ) )
+		return false;
 
 	// alloc storage
 	m_tDocInfo.Reset ( m_tSchema.GetRowSize() );
@@ -25745,7 +25766,6 @@ bool CSphSource_XMLPipe2::Setup ( FILE * pPipe, const CSphConfigSection & hSourc
 	ConfigureFields ( hSource("xmlpipe_field_wordcount") );
 
 	m_dStrAttrs.Resize ( m_tSchema.GetAttrsCount() );
-
 	return true;
 }
 
@@ -25757,6 +25777,18 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 		CSphColumnInfo & tCol = m_tSchema.m_dFields[i];
 		tCol.m_eWordpart = GetWordpart ( tCol.m_sName.cstr(), m_pDict && m_pDict->GetSettings().m_bWordDict );
 	}
+
+	// tricky bit
+	// with in-config schema, attr storage gets allocated in Setup() when source is initially created
+	// so when this AddAutoAttrs() additionally changes the count, we have to change the number of attributes
+	// but Reset() prohibits that, because that is usually a programming mistake, hence the Swap() dance
+	if ( !AddAutoAttrs ( sError ) )
+		return false;
+	CSphMatch tNewDoc;
+	tNewDoc.Reset ( m_tSchema.GetRowSize () );
+	Swap ( m_tDocInfo, tNewDoc );
+
+	m_dStrAttrs.Resize ( m_tSchema.GetAttrsCount() );
 
 #if USE_LIBEXPAT
 	m_pParser = XML_ParserCreate(NULL);
@@ -26369,6 +26401,7 @@ void CSphSource_XMLPipe2::EndElement ( const char * szName )
 		m_bInDocset = false;
 	else if ( !strcmp ( szName, "sphinx:schema" ) )
 	{
+		AddAutoAttrs ( m_sError );
 		m_bInSchema = false;
 		m_tDocInfo.Reset ( m_tSchema.GetRowSize () );
 		m_dStrAttrs.Resize ( m_tSchema.GetAttrsCount() );

@@ -1708,6 +1708,9 @@ protected:
 	void					BuildSubstringHits ( SphDocID_t uDocid, bool bPayload, ESphWordpart eWordpart, bool bSkipEndMarker );
 	void					BuildRegularHits ( SphDocID_t uDocid, bool bPayload, bool bSkipEndMarker );
 
+	/// register autocomputed attributes such as field lengths (see index_field_lengths)
+	bool					AddAutoAttrs ( CSphString & sError );
+
 protected:
 	ISphHits				m_tHits;				///< my hitvector
 

@@ -676,7 +676,7 @@ public:
 	inline static DWORD GetCurSeconds()
 	{
 		int64_t iNow = sphMicroTimer()/1000000;
-		return DWORD(iNow & 0xFFFFFFFF);
+		return DWORD ( iNow & 0xFFFFFFFF );
 	}
 
 	inline static bool IsHalfPeriodChanged ( DWORD * pLast )
@@ -1194,6 +1194,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	{
 		const int levels[] = { LOG_EMERG, LOG_WARNING, LOG_INFO, LOG_DEBUG, LOG_DEBUG, LOG_DEBUG };
 		vsyslog ( levels[eLevel], sFmt, ap );
+		return;
 	}
 #endif
 
@@ -6662,8 +6663,7 @@ void RemapResult ( CSphSchema * pTarget, AggrResult_t * pRes, bool bMultiSchema=
 		iCur = iLimit;
 	}
 
-	if ( bMultiSchema )
-		assert ( iCur==pRes->m_dMatches.GetLength() );
+	assert ( !bMultiSchema || iCur==pRes->m_dMatches.GetLength() );
 	if ( &pRes->m_tSchema!=pTarget )
 		AdoptSchema ( pRes, pTarget );
 }
@@ -6885,9 +6885,9 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	// the final sorter needs the schema fields in specific order:
 
 	// shortcuts
-	CSphString sCount("@count");
-	CSphString sWeight("@weight");
-	CSphString sGroupby("@groupby");
+	const char * sCount = "@count";
+	const char * sWeight = "@weight";
+	const char * sGroupby = "@groupby";
 
 	// truly virtual schema which contains unique necessary fields.
 	CVirtualSchema tInternalSchema;
@@ -6936,11 +6936,16 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 				ARRAY_FOREACH ( j, (*pSelectItems) )
 				{
 					const CSphQueryItem & tQueryItem = (*pSelectItems)[j];
-					const CSphString & sExpr = ( tQueryItem.m_sExpr=="count(*)" ) ? sCount
-						: ( ( tQueryItem.m_sExpr=="weight()" ) ? sWeight
-						: ( ( tQueryItem.m_sExpr=="groupby()" ) ? sGroupby : tQueryItem.m_sExpr ) );
+					const char * sExpr = tQueryItem.m_sExpr.cstr();
+					if ( tQueryItem.m_sExpr=="count(*)" )
+						sExpr = sCount;
+					else if ( tQueryItem.m_sExpr=="weight()" )
+						sExpr = sWeight;
+					else if ( tQueryItem.m_sExpr=="groupby()" )
+						sExpr = sGroupby;
+
 					if ( tFrontendSchema.GetAttr(j).m_iIndex<0
-						&& ( ( sExpr.cstr() && sExpr==tCol.m_sName && tQueryItem.m_eAggrFunc==SPH_AGGR_NONE )
+						&& ( ( sExpr && tCol.m_sName==sExpr && tQueryItem.m_eAggrFunc==SPH_AGGR_NONE )
 						|| ( tQueryItem.m_sAlias.cstr() && tQueryItem.m_sAlias==tCol.m_sName ) ) )
 					{
 						bAdd = true;
@@ -6962,12 +6967,16 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 					if ( pExtraSchema->GetAttrsCount() )
 					{
 						for ( int j=0; j<pExtraSchema->GetAttrsCount(); j++ )
+						{
 							if ( pExtraSchema->GetAttr(j).m_sName==tCol.m_sName )
 								bAdd = true;
+						}
 					// the extra schema is not null, but empty - and we have no local agents
 					// so, the schema of result is already aligned to the extra, just add it
 					} else if ( !bHadLocalIndexes )
+					{
 						bAdd = true;
+					}
 				}
 				if ( !bAdd && bUsualApi && *tCol.m_sName.cstr()=='@' )
 					bAdd = true;
@@ -17287,6 +17296,7 @@ static void ParsePredictedTimeCosts ( const char * p )
 		int iValue = atoi ( sValue.cstr() );
 
 		// parse comma
+		// FIXME!!!
 		while ( sphIsSpace(*p) )
 			*p++;
 		if ( *p && *p!=',' )
@@ -17515,7 +17525,7 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const char * sOptIndex )
 		fprintf ( stdout, "precached %d indexes in %0.3f sec\n", iCounter-1, float(tmLoad)/1000000 );
 }
 
-void OpenDaemonLog ( const CSphConfigSection & hSearchd )
+void OpenDaemonLog ( const CSphConfigSection & hSearchd, bool bCloseIfOpened=false )
 {
 	// create log
 		const char * sLog = "searchd.log";
@@ -17540,6 +17550,11 @@ void OpenDaemonLog ( const CSphConfigSection & hSearchd )
 		}
 
 		umask ( 066 );
+		if ( bCloseIfOpened && g_iLogFile!=STDOUT_FILENO )
+		{
+			close ( g_iLogFile );
+			g_iLogFile = STDOUT_FILENO;
+		}
 		if ( !g_bLogSyslog )
 		{
 			g_iLogFile = open ( sLog, O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
@@ -17944,8 +17959,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( !g_bOptNoLock )
 			OpenDaemonLog ( hConf["searchd"]["searchd"] );
 		bVisualLoad = SetWatchDog ( iDevNull );
-		close ( g_iLogFile ); // just the 'IT Happens' magic - switch off, then on.
-		OpenDaemonLog ( hConf["searchd"]["searchd"] );
+		OpenDaemonLog ( hConf["searchd"]["searchd"], true ); // just the 'IT Happens' magic - switch off, then on.
 	}
 #endif
 
@@ -18089,45 +18103,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( !g_bOptNoLock )
 	{
 		// create log
-		const char * sLog = "searchd.log";
-		if ( hSearchd.Exists ( "log" ) )
-		{
-			if ( hSearchd["log"]=="syslog" )
-			{
-#if !USE_SYSLOG
-				if ( g_iLogFile<0 )
-				{
-					g_iLogFile = STDOUT_FILENO;
-					sphWarning ( "failed to use syslog for logging. You have to reconfigure --with-syslog and rebuild the daemon!" );
-					sphInfo ( "will use default file 'searchd.log' for logging." );
-				}
-#else
-				g_bLogSyslog = true;
-#endif
-			} else
-			{
-				sLog = hSearchd["log"].cstr();
-			}
-		}
-
-		umask ( 066 );
-		if ( g_iLogFile!=STDOUT_FILENO )
-		{
-			close ( g_iLogFile );
-			g_iLogFile = STDOUT_FILENO;
-		}
-		if ( !g_bLogSyslog )
-		{
-			g_iLogFile = open ( sLog, O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
-			if ( g_iLogFile<0 )
-			{
-				g_iLogFile = STDOUT_FILENO;
-				sphFatal ( "failed to open log file '%s': %s", sLog, strerror(errno) );
-			}
-		}
-
-		g_sLogFile = sLog;
-		g_bLogTty = isatty ( g_iLogFile )!=0;
+		OpenDaemonLog ( hSearchd, true );
 
 		// create query log if required
 		if ( hSearchd.Exists ( "query_log" ) )

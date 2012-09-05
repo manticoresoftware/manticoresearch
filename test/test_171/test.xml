@@ -227,6 +227,12 @@ index dist3
 <sphinxql>select id idd from dist3 group by @count</sphinxql>
 <sphinxql>select @id idd from dist3 group by count(*)</sphinxql>
 
+<!-- regression select only count ( distinct attr1 ) but group by attr2 from distributed -->
+<sphinxql>select id, count (distinct tag) tg from dist2 group by gr</sphinxql>
+<sphinxql>select id, count (distinct tag) tg from idx1, idx2 group by gr</sphinxql>
+
+
+
 </sphqueries>
 
 <db_create>

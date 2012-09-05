@@ -2014,7 +2014,7 @@ yyreduce:
 
     {
 			yyval.m_iInstype = TOK_CONST_INT;
-			if ( (uint64_t)yyvsp[0].m_iValue > -LLONG_MIN )
+			if ( (uint64_t)yyvsp[0].m_iValue > (uint64_t)LLONG_MAX )
 				yyval.m_iValue = LLONG_MIN;
 			else
 				yyval.m_iValue = -yyvsp[0].m_iValue;

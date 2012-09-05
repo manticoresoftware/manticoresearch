@@ -724,6 +724,7 @@ with_pgsql_includes
 with_pgsql_libs
 enable_id64
 with_libstemmer
+with_libexpat
 with_re2
 with_iconv
 with_unixodbc
@@ -1381,6 +1382,8 @@ Optional Packages:
   --with-pgsql-libs       path to PostgreSQL libraries
   --with-libstemmer       compile with libstemmer support (default is
                           disabled)
+  --with-libexpat         compile with expat XML library suppport (default is
+                          autodetect)
   --with-re2              compile with re2 library support (default is
                           disabled)
   --with-iconv            compile with iconv support (default is autodetect)
@@ -5933,122 +5936,6 @@ if test "$ac_res" != no; then :
 
 fi
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing XML_Parse" >&5
-$as_echo_n "checking for library containing XML_Parse... " >&6; }
-if test "${ac_cv_search_XML_Parse+set}" = set; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_func_search_save_LIBS=$LIBS
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char XML_Parse ();
-int
-main ()
-{
-return XML_Parse ();
-  ;
-  return 0;
-}
-_ACEOF
-for ac_lib in '' expat; do
-  if test -z "$ac_lib"; then
-    ac_res="none required"
-  else
-    ac_res=-l$ac_lib
-    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
-  fi
-  if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_search_XML_Parse=$ac_res
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext
-  if test "${ac_cv_search_XML_Parse+set}" = set; then :
-  break
-fi
-done
-if test "${ac_cv_search_XML_Parse+set}" = set; then :
-
-else
-  ac_cv_search_XML_Parse=no
-fi
-rm conftest.$ac_ext
-LIBS=$ac_func_search_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_XML_Parse" >&5
-$as_echo "$ac_cv_search_XML_Parse" >&6; }
-ac_res=$ac_cv_search_XML_Parse
-if test "$ac_res" != no; then :
-  test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
-  have_libexpat=yes
-else
-  have_libexpat=no
-fi
-
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing iconv" >&5
-$as_echo_n "checking for library containing iconv... " >&6; }
-if test "${ac_cv_search_iconv+set}" = set; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_func_search_save_LIBS=$LIBS
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char iconv ();
-int
-main ()
-{
-return iconv ();
-  ;
-  return 0;
-}
-_ACEOF
-for ac_lib in '' iconv; do
-  if test -z "$ac_lib"; then
-    ac_res="none required"
-  else
-    ac_res=-l$ac_lib
-    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
-  fi
-  if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_search_iconv=$ac_res
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext
-  if test "${ac_cv_search_iconv+set}" = set; then :
-  break
-fi
-done
-if test "${ac_cv_search_iconv+set}" = set; then :
-
-else
-  ac_cv_search_iconv=no
-fi
-rm conftest.$ac_ext
-LIBS=$ac_func_search_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_iconv" >&5
-$as_echo "$ac_cv_search_iconv" >&6; }
-ac_res=$ac_cv_search_iconv
-if test "$ac_res" != no; then :
-  test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
-  have_libiconv=yes
-else
-  have_libiconv=no
-fi
-
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing inflate" >&5
 $as_echo_n "checking for library containing inflate... " >&6; }
 if test "${ac_cv_search_inflate+set}" = set; then :
@@ -7632,6 +7519,17 @@ CPPFLAGS="$CPPFLAGS $MYSQL_CFLAGS $PGSQL_CFLAGS $LIBSTEMMER_CFLAGS"
 
 
 
+# Check whether --with-libexpat was given.
+if test "${with_libexpat+set}" = set; then :
+  withval=$with_libexpat; ac_cv_use_expat=$withval
+else
+  ac_cv_use_expat=yes
+
+fi
+
+
+
+
 
 # Check whether --with-re2 was given.
 if test "${with_re2+set}" = set; then :
@@ -7674,18 +7572,78 @@ fi
 got_expat=0
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for libexpat" >&5
 $as_echo_n "checking for libexpat... " >&6; }
-if test  $have_expat_h = yes -a $have_libexpat = yes ; then
+if test x$ac_cv_use_expat = xyes -a x$have_expat_h = xyes; then
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing XML_Parse" >&5
+$as_echo_n "checking for library containing XML_Parse... " >&6; }
+if test "${ac_cv_search_XML_Parse+set}" = set; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_func_search_save_LIBS=$LIBS
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char XML_Parse ();
+int
+main ()
+{
+return XML_Parse ();
+  ;
+  return 0;
+}
+_ACEOF
+for ac_lib in '' expat; do
+  if test -z "$ac_lib"; then
+    ac_res="none required"
+  else
+    ac_res=-l$ac_lib
+    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
+  fi
+  if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_search_XML_Parse=$ac_res
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext
+  if test "${ac_cv_search_XML_Parse+set}" = set; then :
+  break
+fi
+done
+if test "${ac_cv_search_XML_Parse+set}" = set; then :
+
+else
+  ac_cv_search_XML_Parse=no
+fi
+rm conftest.$ac_ext
+LIBS=$ac_func_search_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_XML_Parse" >&5
+$as_echo "$ac_cv_search_XML_Parse" >&6; }
+ac_res=$ac_cv_search_XML_Parse
+if test "$ac_res" != no; then :
+  test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
+  got_expat=1
+fi
+
+	if test $got_expat -eq 1; then
 
 $as_echo "#define USE_LIBEXPAT 1" >>confdefs.h
 
-	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: found" >&5
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: found" >&5
 $as_echo "found" >&6; }
-	got_expat=1
-else
-	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: not found" >&5
+	else
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: not found" >&5
 $as_echo "not found" >&6; }
-	{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: xmlpipe2 will NOT be available" >&5
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: xmlpipe2 will NOT be available" >&5
 $as_echo "$as_me: WARNING: xmlpipe2 will NOT be available" >&2;}
+	fi
+else
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: disabled" >&5
+$as_echo "disabled" >&6; }
 fi
 
 
@@ -7700,20 +7658,75 @@ fi
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for libiconv" >&5
 $as_echo_n "checking for libiconv... " >&6; }
-if test  $have_iconv_h = yes \
-	-a $have_libiconv = yes \
-	-a $got_expat -eq 1 \
-	-a $ac_cv_use_iconv != no ; \
-then
+if test x$ac_cv_use_iconv != xno -a x$have_iconv_h = xyes; then
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing iconv" >&5
+$as_echo_n "checking for library containing iconv... " >&6; }
+if test "${ac_cv_search_iconv+set}" = set; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_func_search_save_LIBS=$LIBS
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char iconv ();
+int
+main ()
+{
+return iconv ();
+  ;
+  return 0;
+}
+_ACEOF
+for ac_lib in '' iconv; do
+  if test -z "$ac_lib"; then
+    ac_res="none required"
+  else
+    ac_res=-l$ac_lib
+    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
+  fi
+  if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_search_iconv=$ac_res
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext
+  if test "${ac_cv_search_iconv+set}" = set; then :
+  break
+fi
+done
+if test "${ac_cv_search_iconv+set}" = set; then :
+
+else
+  ac_cv_search_iconv=no
+fi
+rm conftest.$ac_ext
+LIBS=$ac_func_search_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_iconv" >&5
+$as_echo "$ac_cv_search_iconv" >&6; }
+ac_res=$ac_cv_search_iconv
+if test "$ac_res" != no; then :
+  test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
+  have_libiconv=yes
+else
+  have_libiconv=no
+fi
+
+	if test x$have_libiconv = xyes; then
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: found" >&5
+$as_echo "found" >&6; }
 
 $as_echo "#define USE_LIBICONV 1" >>confdefs.h
 
-	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: found" >&5
-$as_echo "found" >&6; }
 
-	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for iconv() arg types" >&5
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for iconv() arg types" >&5
 $as_echo_n "checking for iconv() arg types... " >&6; }
-	ac_ext=cpp
+		ac_ext=cpp
 ac_cpp='$CXXCPP $CPPFLAGS'
 ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
 ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
@@ -7723,14 +7736,14 @@ ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
-			#include <iconv.h>
-			#include <stdio.h>
+				#include <iconv.h>
+				#include <stdio.h>
 int
 main ()
 {
 const char * inbuf;
-			iconv_t cd;
-			iconv ( cd, &inbuf, NULL, NULL, NULL );
+				iconv_t cd;
+				iconv ( cd, &inbuf, NULL, NULL, NULL );
 
   ;
   return 0;
@@ -7742,44 +7755,47 @@ else
   iconv_inbuf_const=no
 fi
 rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
-	ac_ext=c
+		ac_ext=c
 ac_cpp='$CPP $CPPFLAGS'
 ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
 ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
 ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
-	if test  $iconv_inbuf_const = yes ; then
+		if test x$iconv_inbuf_const = xyes; then
 
 $as_echo "#define ICONV_INBUF_CONST 1" >>confdefs.h
 
-		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: const char **" >&5
+			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: const char **" >&5
 $as_echo "const char **" >&6; }
-	else
+		else
 
 $as_echo "#define ICONV_INBUF_CONST 0" >>confdefs.h
 
-		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: char **" >&5
+			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: char **" >&5
 $as_echo "char **" >&6; }
-	fi
-else
-	if test  $got_expat -eq 1 ; then
-		if test  $ac_cv_use_iconv = no ; then
-			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: disabled" >&5
-$as_echo "disabled" >&6; }
-		else
+		fi
+	else
+		if test $got_expat -eq 1; then
 			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: not found" >&5
 $as_echo "not found" >&6; }
+			{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: xmlpipe2 will only support default encodings (latin-1, utf-8)" >&5
+$as_echo "$as_me: WARNING: xmlpipe2 will only support default encodings (latin-1, utf-8)" >&2;}
+		else
+			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: not required and not found" >&5
+$as_echo "not required and not found" >&6; }
 		fi
+	fi
+else
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: disabled" >&5
+$as_echo "disabled" >&6; }
+	if test $got_expat -eq 1; then
 		{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: xmlpipe2 will only support default encodings (latin-1, utf-8)" >&5
 $as_echo "$as_me: WARNING: xmlpipe2 will only support default encodings (latin-1, utf-8)" >&2;}
-	else
-		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: not required" >&5
-$as_echo "not required" >&6; }
 	fi
 fi
 
 
-if test  $have_zlib_h = yes -a $have_lz = yes ; then
+if test x$have_zlib_h = xyes -a x$have_lz = xyes; then
 
 $as_echo "#define USE_ZLIB 1" >>confdefs.h
 
@@ -7795,13 +7811,15 @@ else
 
 fi
 
+
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for UnixODBC" >&5
 $as_echo_n "checking for UnixODBC... " >&6; }
-if test  $ac_cv_use_unixodbc != no ; then
-	if test  $have_sql_h = yes ; then
-		{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing SQLConnect" >&5
-$as_echo_n "checking for library containing SQLConnect... " >&6; }
-if test "${ac_cv_search_SQLConnect+set}" = set; then :
+if test x$ac_cv_use_unixodbc = xyes; then
+	have_libodbc=no
+	if test x$have_sql_h = xyes; then
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing SQLDriverConnect" >&5
+$as_echo_n "checking for library containing SQLDriverConnect... " >&6; }
+if test "${ac_cv_search_SQLDriverConnect+set}" = set; then :
   $as_echo_n "(cached) " >&6
 else
   ac_func_search_save_LIBS=$LIBS
@@ -7814,11 +7832,11 @@ cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 #ifdef __cplusplus
 extern "C"
 #endif
-char SQLConnect ();
+char SQLDriverConnect ();
 int
 main ()
 {
-return SQLConnect ();
+return SQLDriverConnect ();
   ;
   return 0;
 }
@@ -7831,44 +7849,43 @@ for ac_lib in '' odbc iodbc; do
     LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
   fi
   if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_search_SQLConnect=$ac_res
+  ac_cv_search_SQLDriverConnect=$ac_res
 fi
 rm -f core conftest.err conftest.$ac_objext \
     conftest$ac_exeext
-  if test "${ac_cv_search_SQLConnect+set}" = set; then :
+  if test "${ac_cv_search_SQLDriverConnect+set}" = set; then :
   break
 fi
 done
-if test "${ac_cv_search_SQLConnect+set}" = set; then :
+if test "${ac_cv_search_SQLDriverConnect+set}" = set; then :
 
 else
-  ac_cv_search_SQLConnect=no
+  ac_cv_search_SQLDriverConnect=no
 fi
 rm conftest.$ac_ext
 LIBS=$ac_func_search_save_LIBS
 fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_SQLConnect" >&5
-$as_echo "$ac_cv_search_SQLConnect" >&6; }
-ac_res=$ac_cv_search_SQLConnect
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_SQLDriverConnect" >&5
+$as_echo "$ac_cv_search_SQLDriverConnect" >&6; }
+ac_res=$ac_cv_search_SQLDriverConnect
 if test "$ac_res" != no; then :
   test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
   have_libodbc=yes
-else
-  have_libodbc=no
 fi
 
-		if test  $have_libodbc = yes ; then
+	fi
+
+	if test x$have_libodbc = xyes; then
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: found" >&5
+$as_echo "found" >&6; }
 
 $as_echo "#define USE_ODBC 1" >>confdefs.h
 
-			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: found" >&5
-$as_echo "found" >&6; }
-		else
-			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: not found" >&5
+	else
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: not found" >&5
 $as_echo "not found" >&6; }
-			{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: ODBC source support will NOT be available" >&5
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: ODBC source support will NOT be available" >&5
 $as_echo "$as_me: WARNING: ODBC source support will NOT be available" >&2;}
-		fi
 	fi
 else
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: disabled" >&5
@@ -7884,7 +7901,7 @@ if test "${enable_mem_override+set}" = set; then :
   enableval=$enable_mem_override; sph_enable_mem_override=$enableval
 fi
 
-if test x$sph_enable_mem_override != xno; then
+if test x$sph_enable_mem_override = xyes; then
     { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 $as_echo "yes" >&6; }
 else
@@ -7908,8 +7925,8 @@ fi
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for Syslog" >&5
 $as_echo_n "checking for Syslog... " >&6; }
-if test  $ac_cv_use_syslog != no ; then
-	if test  $have_syslog_h = yes ; then
+if test x$ac_cv_use_syslog != xno; then
+	if test x$have_syslog_h = xyes; then
 
 $as_echo "#define USE_SYSLOG 1" >>confdefs.h
 
@@ -8235,7 +8252,7 @@ $as_echo "$TMP" >&6; }
 $as_echo "" >&6; }
 
 
-if test "$prefix" = "NONE"; then
+if test "x$prefix" = "xNONE"; then
 	my_op_prefix="/var"
 else
 	my_op_prefix="$localstatedir"

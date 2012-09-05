@@ -940,7 +940,7 @@ searchd
 
 	
 	# SphinxQL compatibility mode (legacy columns and their names)
-	# optional, default is 0 (SQL compliant syntax and result sets)
+	# optional, default is 1 (old-style)
 	#
 	# compat_sphinxql_magics	= 1
 

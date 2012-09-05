@@ -1191,7 +1191,7 @@ private:
 		switch ( eType )
 		{
 		case EXTRA_GET_DATA_ZONESPANS:
-			assert (ppResult);
+			assert ( ppResult );
 			*ppResult = &m_dZonespans;
 			return true;
 		default:
@@ -4555,6 +4555,7 @@ ExtUnit_c::~ExtUnit_c ()
 {
 	SafeDelete ( m_pArg1 );
 	SafeDelete ( m_pArg2 );
+	SafeDelete ( m_pDot );
 }
 
 
@@ -6689,7 +6690,7 @@ bool RankerState_Expr_fn::Init ( int iFields, const int * pWeights, ExtRanker_c 
 	memset ( m_iMinBestSpanPos, 0, sizeof(m_iMinBestSpanPos) );
 	memset ( m_iMaxWindowHits, 0, sizeof(m_iMaxWindowHits) );
 	m_iMaxQpos = pRanker->m_iMaxQpos; // already copied in SetQwords, but anyway
-	m_iMaxUniqQpos = pRanker->m_iMaxUniqQpos; 
+	m_iMaxUniqQpos = pRanker->m_iMaxUniqQpos;
 	m_uExactHit = 0;
 	m_uDocWordCount = 0;
 	m_iWindowSize = 1;
@@ -6718,7 +6719,7 @@ bool RankerState_Expr_fn::Init ( int iFields, const int * pWeights, ExtRanker_c 
 	m_fAvgDocLen = 0;
 	m_pFieldLens = pRanker->GetIndex()->GetFieldLens();
 	if ( m_pFieldLens )
-		for ( int i=0; i<iFields; i++)
+		for ( int i=0; i<iFields; i++ )
 			m_fAvgDocLen += m_pFieldLens[i];
 	m_iTotalDocuments = pRanker->GetIndex()->GetStats().m_iTotalDocuments;
 	m_fAvgDocLen /= m_iTotalDocuments;
@@ -6788,7 +6789,7 @@ void RankerState_Expr_fn::Update ( const ExtHit_t * pHlist )
 	m_uMatchedFields |= ( 1UL<<uField );
 
 	// keywords can be duplicated in the query, so we need this extra check
-	if ( pHlist->m_uQuerypos <= m_iMaxUniqQpos && m_tKeywordMask.BitGet ( pHlist->m_uQuerypos ) )
+	if ( pHlist->m_uQuerypos<=m_iMaxUniqQpos && m_tKeywordMask.BitGet ( pHlist->m_uQuerypos ) )
 	{
 		float fIDF = m_dIDF [ pHlist->m_uQuerypos ];
 		DWORD uHitPosMask = 1<<pHlist->m_uQuerypos;

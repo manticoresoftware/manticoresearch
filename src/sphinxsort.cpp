@@ -3045,9 +3045,9 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		// handling cases like SELECT 1+2 AS strattr, strattr FROM idx;
 		// we should see 3 in second column, not an attribute value
 		if ( !bPlainAttr && iAttrIdx>=0 &&
-			 ( tSchema.GetAttr ( iAttrIdx ).m_eAttrType==SPH_ATTR_STRING
-			   || tSchema.GetAttr ( iAttrIdx ).m_eAttrType==SPH_ATTR_UINT32SET
-			   || tSchema.GetAttr ( iAttrIdx ).m_eAttrType==SPH_ATTR_INT64SET ) )
+			( tSchema.GetAttr ( iAttrIdx ).m_eAttrType==SPH_ATTR_STRING
+			|| tSchema.GetAttr ( iAttrIdx ).m_eAttrType==SPH_ATTR_UINT32SET
+			|| tSchema.GetAttr ( iAttrIdx ).m_eAttrType==SPH_ATTR_INT64SET ) )
 		{
 			bPlainAttr = true;
 			for ( int i=0; i<iItem; i++ )
@@ -3368,11 +3368,22 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 				sError.SetSprintf ( "groups can not be sorted by @random" );
 			return NULL;
 		}
-		int idx = tSorterSchema.GetAttrIndex ( pQuery->m_sGroupBy.cstr() );
-		if ( pExtra )
-			pExtra->AddAttr ( tSorterSchema.GetAttr ( idx ), true );
 
-		FixupDependency ( tSorterSchema, &idx, 1 );
+		enum { E_CREATE_GROUP_BY = 0, E_CREATE_DISTINCT = 1, E_CREATE_COUNT = 2 };
+		int dGroupAttrs[E_CREATE_COUNT];
+		dGroupAttrs[E_CREATE_GROUP_BY] = tSorterSchema.GetAttrIndex ( pQuery->m_sGroupBy.cstr() );
+		if ( pExtra )
+			pExtra->AddAttr ( tSorterSchema.GetAttr ( dGroupAttrs[E_CREATE_GROUP_BY] ), true );
+
+		if ( bGotDistinct )
+		{
+			dGroupAttrs[E_CREATE_DISTINCT] = tSorterSchema.GetAttrIndex ( pQuery->m_sGroupDistinct.cstr() );
+			if ( pExtra )
+				pExtra->AddAttr ( tSorterSchema.GetAttr ( dGroupAttrs[E_CREATE_DISTINCT] ), true );
+		}
+
+		int iGropAttrsCount = ( bGotDistinct ? 2 : 1 );
+		FixupDependency ( tSorterSchema, dGroupAttrs, iGropAttrsCount );
 		FixupDependency ( tSorterSchema, dAttrs, CSphMatchComparatorState::MAX_ATTRS );
 
 		// GroupSortBy str attributes setup

@@ -361,7 +361,7 @@ const_int:
 	| '-' TOK_CONST_INT
 		{
 			$$.m_iInstype = TOK_CONST_INT;
-			if ( (uint64_t)$2.m_iValue > -LLONG_MIN )
+			if ( (uint64_t)$2.m_iValue > (uint64_t)LLONG_MAX )
 				$$.m_iValue = LLONG_MIN;
 			else
 				$$.m_iValue = -$2.m_iValue;

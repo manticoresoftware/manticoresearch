@@ -7253,8 +7253,8 @@ Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <op
 <option>sql_joined_field</option> lets you use two different features:
 joined fields, and payloads (payload fields). It's syntax is as follows:
 <programlisting>
-sql_joined_field = FIELD-NAME 'from'  ( 'query' | 'payload-query' ); \
-    QUERY [ ; RANGE-QUERY ]
+sql_joined_field = FIELD-NAME 'from'  ( 'query' | 'payload-query' \
+	| 'ranged-query' ); QUERY [ ; RANGE-QUERY ]
 </programlisting>
 where
 <itemizedlist>
@@ -7330,6 +7330,10 @@ by field wieghts, and adds that sum to the final rank.
 sql_joined_field = \
 	tagstext from query; \
 	SELECT docid, CONCAT('tag',tagid) FROM tags ORDER BY docid ASC
+
+sql_joined_field = bigint tag from ranged-query; \
+	SELECT id, tag FROM tags WHERE id&gt;=$start AND id&lt;=$end; \
+	SELECT MIN(id), MAX(id) FROM tags
 </programlisting>
 </sect2>
 

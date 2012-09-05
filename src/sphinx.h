@@ -1711,6 +1711,9 @@ protected:
 	/// register autocomputed attributes such as field lengths (see index_field_lengths)
 	bool					AddAutoAttrs ( CSphString & sError );
 
+	/// allocate m_tDocInfo storage, do post-alloc magic (compute pointer to field lengths, etc)
+	void					AllocDocinfo ();
+
 protected:
 	ISphHits				m_tHits;				///< my hitvector
 

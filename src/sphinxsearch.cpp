@@ -21,6 +21,15 @@
 #include <math.h>
 
 //////////////////////////////////////////////////////////////////////////
+
+/// costs for max_predicted_time estimations, in nanoseconds
+/// YMMV, defaults were estimated in a very specific environment, and then rounded off
+int g_iPredictorCostSkip	= 4096;
+int g_iPredictorCostDoc		= 384;
+int g_iPredictorCostHit		= 128;
+int g_iPredictorCostMatch	= 256;
+
+//////////////////////////////////////////////////////////////////////////
 // EXTENDED MATCHING V2
 //////////////////////////////////////////////////////////////////////////
 
@@ -270,6 +279,7 @@ public:
 	}
 };
 
+
 /// single keyword streamer
 class ExtTerm_c : public ExtNode_i, ISphNoncopyable
 {
@@ -284,7 +294,6 @@ public:
 
 	void						Init ( ISphQword * pQword, const CSphSmallBitvec& uFields, const ISphQwordSetup & tSetup, bool bNotWeighted );
 	virtual void				Reset ( const ISphQwordSetup & tSetup );
-	virtual void				HintDocid ( SphDocID_t uMinID ) { m_pQword->HintDocid ( uMinID ); }
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 
@@ -293,6 +302,15 @@ public:
 	virtual bool				GotHitless () { return false; }
 	virtual int					GetDocsCount () { return m_pQword->m_iDocs; }
 	virtual SphWordID_t			GetWordID () { return m_pQword->m_iWordID; }
+
+	virtual void HintDocid ( SphDocID_t uMinID )
+	{
+		m_pQword->HintDocid ( uMinID );
+		if ( m_pStats )
+			m_pStats->m_iSkips++;
+		if ( m_pNanoBudget )
+			*m_pNanoBudget -= g_iPredictorCostSkip;
+	}
 
 	virtual void DebugDump ( int iLevel )
 	{
@@ -329,6 +347,9 @@ protected:
 	int64_t						m_iMaxTimer;		///< work until this timestamp
 	CSphString *				m_pWarning;
 	bool						m_bNotWeighted;
+	CSphQueryStats *			m_pStats;
+	int64_t *					m_pNanoBudget;
+
 public:
 	static volatile bool		m_bInterruptNow; ///< may be set from outside to indicate the globally received sigterm
 };
@@ -1100,6 +1121,7 @@ protected:
 	CSphMatch					m_tTestMatch;
 	const CSphIndex *			m_pIndex;							///< this is he who'll do my filtering!
 	CSphQueryContext *			m_pCtx;
+	int64_t *					m_pNanoBudget;
 
 protected:
 	CSphVector<CSphString>		m_dZones;
@@ -1934,6 +1956,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 }
 
 //////////////////////////////////////////////////////////////////////////
+
 inline void ExtTerm_c::Init ( ISphQword * pQword, const CSphSmallBitvec & dFields, const ISphQwordSetup & tSetup, bool bNotWeighted )
 {
 	m_pQword = pQword;
@@ -1949,13 +1972,15 @@ inline void ExtTerm_c::Init ( ISphQword * pQword, const CSphSmallBitvec & dField
 			if ( m_dQueriedFields.m_dFieldsMask[i] )
 				m_bHasWideFields = true;
 	m_iMaxTimer = tSetup.m_iMaxTimer;
+	m_pStats = tSetup.m_pStats;
+	m_pNanoBudget = m_pStats ? m_pStats->m_pNanoBudget : NULL;
 	AllocDocinfo ( tSetup );
 }
 
 ExtTerm_c::ExtTerm_c ( ISphQword * pQword, const ISphQwordSetup & tSetup )
-: m_pQword ( pQword )
-, m_pWarning ( tSetup.m_pWarning )
-, m_bNotWeighted ( true )
+	: m_pQword ( pQword )
+	, m_pWarning ( tSetup.m_pWarning )
+	, m_bNotWeighted ( true )
 {
 	m_iAtomPos = pQword->m_iAtomPos;
 	m_pHitDoc = NULL;
@@ -1963,6 +1988,8 @@ ExtTerm_c::ExtTerm_c ( ISphQword * pQword, const ISphQwordSetup & tSetup )
 	m_dQueriedFields.Set();
 	m_bHasWideFields = tSetup.m_pIndex && ( tSetup.m_pIndex->GetMatchSchema().m_dFields.GetLength()>32 );
 	m_iMaxTimer = tSetup.m_iMaxTimer;
+	m_pStats = tSetup.m_pStats;
+	m_pNanoBudget = m_pStats ? m_pStats->m_pNanoBudget : NULL;
 	AllocDocinfo ( tSetup );
 }
 
@@ -1992,6 +2019,14 @@ const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 	{
 		if ( m_pWarning )
 			*m_pWarning = "query time exceeded max_query_time";
+		return NULL;
+	}
+
+	// max_predicted_time
+	if ( m_pNanoBudget && *m_pNanoBudget<0 )
+	{
+		if ( m_pWarning )
+			*m_pWarning = "predicted query time exceeded max_predicted_time";
 		return NULL;
 	}
 
@@ -2037,6 +2072,11 @@ const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 	}
 
 	m_pHitDoc = NULL;
+
+	if ( m_pStats )
+		m_pStats->m_iFetchedDocs += iDoc;
+	if ( m_pNanoBudget )
+		*m_pNanoBudget -= g_iPredictorCostDoc*iDoc;
 
 	return ReturnDocsChunk ( iDoc, pMaxID );
 }
@@ -2125,6 +2165,11 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t
 	m_pHitDoc = pDoc;
 	if ( iHit==0 || iHit<MAX_HITS-1 )
 		m_uHitsOverFor = uFirstMatch;
+
+	if ( m_pStats )
+		m_pStats->m_iFetchedHits += iHit;
+	if ( m_pNanoBudget )
+		*m_pNanoBudget -= g_iPredictorCostHit*iHit;
 
 	assert ( iHit>=0 && iHit<MAX_HITS );
 	m_dHits[iHit].m_uDocid = DOCID_MAX;
@@ -4928,6 +4973,7 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup 
 	m_iQwords = 0;
 	m_pIndex = tSetup.m_pIndex;
 	m_pCtx = tSetup.m_pCtx;
+	m_pNanoBudget = tSetup.m_pStats ? tSetup.m_pStats->m_pNanoBudget : NULL;
 
 	m_dZones = tXQ.m_dZones;
 	m_dZoneStart.Resize ( m_dZones.GetLength() );
@@ -5042,6 +5088,8 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 
 		if ( iDocs )
 		{
+			if ( m_pNanoBudget )
+				*m_pNanoBudget -= g_iPredictorCostMatch*iDocs;
 			m_dMyDocs[iDocs].m_uDocid = DOCID_MAX;
 			return m_dMyDocs;
 		}

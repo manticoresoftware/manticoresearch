@@ -63,8 +63,15 @@ extern const char *		MAGIC_WORD_PARAGRAPH;	///< value is "\3paragraph"
 // INTERNAL GLOBALS
 //////////////////////////////////////////////////////////////////////////
 
-/// binlog, defind in sphinxrt.cpp
+/// binlog, defined in sphinxrt.cpp
 extern class ISphBinlog *		g_pBinlog;
+
+/// costs for max_predicted_time limits, defined in sphinxsearch.cpp
+/// measured in nanoseconds (that is, 1e-9)
+extern int g_iPredictorCostSkip;
+extern int g_iPredictorCostDoc;
+extern int g_iPredictorCostHit;
+extern int g_iPredictorCostMatch;
 
 //////////////////////////////////////////////////////////////////////////
 // INTERNAL HELPER FUNCTIONS, CLASSES, ETC

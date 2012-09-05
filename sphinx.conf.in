@@ -851,8 +851,8 @@ searchd
 
 	# multi-processing mode (MPM)
 	# known values are none, fork, prefork, and threads
+	# threads is required for RT backend to work
 	# optional, default is fork
-	#
 	workers			= threads # for RT to work
 
 
@@ -943,6 +943,12 @@ searchd
 	# optional, default is 0 (SQL compliant syntax and result sets)
 	#
 	# compat_sphinxql_magics	= 1
+
+
+	# costs for max_predicted_time model, in nanoseconds
+	# optional, default is "doc=384, hit=128, skip=4096, match=256"
+	#
+	# predicted_time_costs	= doc=384, hit=128, skip=4096, match=256
 }
 
 # --eof--

@@ -468,6 +468,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "rt_merge_maxiosize",		0, NULL },
 	{ "ha_ping_interval",		0, NULL },
 	{ "ha_period_karma",		0, NULL },
+	{ "predicted_time_costs",	0, NULL },
 	{ NULL,						0, NULL }
 };
 

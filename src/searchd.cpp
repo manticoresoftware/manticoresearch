@@ -676,7 +676,7 @@ public:
 	inline static DWORD GetCurSeconds()
 	{
 		int64_t iNow = sphMicroTimer()/1000000;
-		return 0xFFFFFFFF & iNow;
+		return DWORD(iNow & 0xFFFFFFFF);
 	}
 
 	inline static bool IsHalfPeriodChanged ( DWORD * pLast )
@@ -9212,6 +9212,10 @@ bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue )
 	{
 		m_pQuery->m_iAgentQueryTimeout = (int)tValue.m_iValue;
 
+	} else if ( sOpt=="max_predicted_time" )
+	{
+		m_pQuery->m_iMaxPredictedMsec = (int)tValue.m_iValue;
+
 	} else
 	{
 		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", tIdent.m_sValue.cstr() );
@@ -17245,6 +17249,65 @@ void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 }
 
 
+static void ParsePredictedTimeCosts ( const char * p )
+{
+	// yet another mini-parser!
+	// ident=value [, ident=value [...]]
+	while ( *p )
+	{
+		// parse ident
+		while ( sphIsSpace(*p) )
+			p++;
+		if ( !*p )
+			break;
+		if ( !sphIsAlpha(*p) )
+			sphDie ( "predicted_time_costs: parse error near '%s' (identifier expected)", p );
+		const char * q = p;
+		while ( sphIsAlpha(*p) )
+			p++;
+		CSphString sIdent;
+		sIdent.SetBinary ( q, p-q );
+		sIdent.ToLower();
+
+		// parse =value
+		while ( sphIsSpace(*p) )
+			p++;
+		if ( *p!='=' )
+			sphDie ( "predicted_time_costs: parse error near '%s' (expected '=' sign)", p );
+		p++;
+		while ( sphIsSpace(*p) )
+			p++;
+		if ( *p<'0' || *p>'9' )
+			sphDie ( "predicted_time_costs: parse error near '%s' (number expected)", p );
+		q = p;
+		while ( *p>='0' && *p<='9' )
+			p++;
+		CSphString sValue;
+		sValue.SetBinary ( q, p-q );
+		int iValue = atoi ( sValue.cstr() );
+
+		// parse comma
+		while ( sphIsSpace(*p) )
+			*p++;
+		if ( *p && *p!=',' )
+			sphDie ( "predicted_time_costs: parse error near '%s' (expected ',' or end of line)", p );
+		p++;
+
+		// bind value
+		if ( sIdent=="skip" )
+			g_iPredictorCostSkip = iValue;
+		else if ( sIdent=="doc" )
+			g_iPredictorCostDoc = iValue;
+		else if ( sIdent=="hit" )
+			g_iPredictorCostHit = iValue;
+		else if ( sIdent=="match" )
+			g_iPredictorCostMatch = iValue;
+		else
+			sphDie ( "predicted_time_costs: unknown identifier '%s' (known ones are skip, doc, hit, match)", sIdent.cstr() );
+	}
+}
+
+
 void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 {
 	if ( !hConf.Exists ( "searchd" ) || !hConf["searchd"].Exists ( "searchd" ) )
@@ -17341,6 +17404,13 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 		iStackSize = Max ( iStackSize, iThreadStackSizeMin );
 		sphSetMyStackSize ( iStackSize );
 	}
+
+	if ( hSearchd("predicted_time_costs") )
+		ParsePredictedTimeCosts ( hSearchd["predicted_time_costs"].cstr() );
+
+	//////////////////////////////////////////////////
+	// prebuild MySQL wire protocol handshake packets
+	//////////////////////////////////////////////////
 
 	char sHandshake1[] =
 		"\x00\x00\x00" // packet length

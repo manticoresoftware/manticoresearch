@@ -2369,6 +2369,7 @@ public:
 	CSphVector<CSphNamedInt>	m_dFieldWeights;	///< per-field weights
 
 	DWORD			m_uMaxQueryMsec;	///< max local index search time, in milliseconds (default is 0; means no limit)
+	int				m_iMaxPredictedMsec;///< max predicted (!) search time limit, in milliseconds (0 means no limit)
 	CSphString		m_sComment;			///< comment to pass verbatim in the log file
 
 	CSphVector<CSphAttrOverride>	m_dOverrides;	///< per-query attribute value overrides

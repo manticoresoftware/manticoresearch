@@ -1807,6 +1807,7 @@ static void FoldArglist ( ISphExpr * pLeft, CSphVector<ISphExpr *> & dArgs )
 
 typedef sphinx_int64_t ( *UdfInt_fn ) ( SPH_UDF_INIT *, SPH_UDF_ARGS *, char * );
 typedef double ( *UdfDouble_fn ) ( SPH_UDF_INIT *, SPH_UDF_ARGS *, char * );
+typedef char * ( *UdfCharptr_fn) ( SPH_UDF_INIT *, SPH_UDF_ARGS *, char * );
 
 
 class Expr_Udf_c : public ISphExpr
@@ -1924,6 +1925,44 @@ public:
 };
 
 
+class Expr_UdfStringptr_c : public Expr_Udf_c
+{
+public:
+	explicit Expr_UdfStringptr_c ( UdfCall_t * pCall )
+		: Expr_Udf_c ( pCall )
+	{
+		assert ( pCall->m_pUdf->m_eRetType==SPH_ATTR_STRINGPTR );
+	}
+
+	virtual float Eval ( const CSphMatch & ) const
+	{
+		assert ( 0 && "internal error: stringptr udf evaluated as float" );
+		return 0.0f;
+	}
+
+	virtual int IntEval ( const CSphMatch & ) const
+	{
+		assert ( 0 && "internal error: stringptr udf evaluated as int" );
+		return 0;
+	}
+
+	virtual int64_t Int64Eval ( const CSphMatch & ) const
+	{
+		assert ( 0 && "internal error: stringptr udf evaluated as bigint" );
+		return 0;
+	}
+
+	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
+	{
+		FillArgs ( tMatch );
+		UdfCharptr_fn pFn = (UdfCharptr_fn) m_pCall->m_pUdf->m_fnFunc;
+		char * pRes = pFn ( &m_pCall->m_tInit, &m_pCall->m_tArgs, &m_bError ); // owned now!
+		*ppStr = (const BYTE*) pRes;
+		return pRes ? strlen(pRes) : 0;
+	}
+};
+
+
 ISphExpr * ExprParser_t::CreateUdfNode ( int iCall, ISphExpr * pLeft )
 {
 	Expr_Udf_c * pRes = NULL;
@@ -1936,8 +1975,11 @@ ISphExpr * ExprParser_t::CreateUdfNode ( int iCall, ISphExpr * pLeft )
 		case SPH_ATTR_FLOAT:
 			pRes = new Expr_UdfFloat_c ( m_dUdfCalls[iCall] );
 			break;
+		case SPH_ATTR_STRINGPTR:
+			pRes = new Expr_UdfStringptr_c ( m_dUdfCalls[iCall] );
+			break;
 		default:
-			m_sParserError.SetSprintf ( "internal error: unhandled type %d in CreateUdfNode()", m_dUdfCalls[iCall]->m_pUdf->m_eRetType );
+			m_sCreateError.SetSprintf ( "internal error: unhandled type %d in CreateUdfNode()", m_dUdfCalls[iCall]->m_pUdf->m_eRetType );
 			break;
 	}
 	if ( pRes )

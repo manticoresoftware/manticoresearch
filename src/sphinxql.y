@@ -84,6 +84,7 @@
 %token	TOK_SONAME
 %token	TOK_START
 %token	TOK_STATUS
+%token	TOK_STRING
 %token	TOK_SUM
 %token	TOK_TABLES
 %token	TOK_TO
@@ -941,6 +942,7 @@ create_function:
 udf_type:
 	TOK_INT			{ $$ = SPH_ATTR_INTEGER; }
 	| TOK_FLOAT		{ $$ = SPH_ATTR_FLOAT; }
+	| TOK_STRING	{ $$ = SPH_ATTR_STRINGPTR; }
 	;
 
 drop_function:

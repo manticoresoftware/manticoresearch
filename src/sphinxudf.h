@@ -37,6 +37,10 @@ enum sphinx_udf_argtype
 	SPH_UDF_TYPE_UINT64SET		= 6				///< sorted set of unsigned 64-bit integers
 };
 
+/// our malloc() replacement type
+/// results that are returned to searchd MUST be allocated using this replacement
+typedef void * sphinx_malloc_fn(int);
+
 /// UDF call arguments
 typedef struct st_sphinx_udf_args
 {
@@ -45,6 +49,7 @@ typedef struct st_sphinx_udf_args
 	char **						arg_values;		///< argument values (strings are not (!) ASCIIZ; see str_lengths below)
 	char **						arg_names;		///< argument names (ASCIIZ argname in 'expr AS argname' case; NULL otherwise)
 	int *						str_lengths;	///< string argument lengths
+	sphinx_malloc_fn *			fn_malloc;		///< malloc() replacement to allocate returned values
 } SPH_UDF_ARGS;
 
 /// UDF initialization

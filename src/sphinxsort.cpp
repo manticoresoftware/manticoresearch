@@ -2945,7 +2945,8 @@ static ISphMatchSorter * CreatePlainSorter ( ESphSortFunc eMatchFunc, bool bKbuf
 
 
 ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema,
-	CSphString & sError, bool bComputeItems, CSphSchema * pExtra, CSphAttrUpdateEx * pUpdate, bool * pZonespanlist )
+	CSphString & sError, bool bComputeItems, CSphSchema * pExtra, CSphAttrUpdateEx * pUpdate, bool * pZonespanlist,
+	ISphExprHook * pHook )
 {
 	// prepare for descent
 	ISphMatchSorter * pTop = NULL;
@@ -3096,16 +3097,17 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		// ideally, we would instead pass ownership of the expression to G_C() implementation
 		// and also the original expression type, and let the string conversion happen in G_C() itself
 		// but that ideal route seems somewhat more complicated in the current architecture
+		ESphEvalStage eExprStage = SPH_EVAL_FINAL;
 		if ( tItem.m_eAggrFunc==SPH_AGGR_CAT )
 		{
 			CSphString sExpr2;
 			sExpr2.SetSprintf ( "TO_STRING(%s)", sExpr.cstr() );
 			tExprCol.m_pExpr = sphExprParse ( sExpr2.cstr(), tSorterSchema, &tExprCol.m_eAttrType,
-				&tExprCol.m_bWeight, sError, pExtra, NULL, &bHasZonespanlist );
+				&tExprCol.m_bWeight, sError, pExtra, pHook, &bHasZonespanlist, &eExprStage );
 		} else
 		{
 			tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), tSorterSchema, &tExprCol.m_eAttrType,
-				&tExprCol.m_bWeight, sError, pExtra, NULL, &bHasZonespanlist );
+				&tExprCol.m_bWeight, sError, pExtra, pHook, &bHasZonespanlist, &eExprStage );
 		}
 		bNeedZonespanlist |= bHasZonespanlist;
 		tExprCol.m_eAggrFunc = tItem.m_eAggrFunc;
@@ -3132,13 +3134,12 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		// postpone aggregates, add non-aggregates
 		if ( tExprCol.m_eAggrFunc==SPH_AGGR_NONE )
 		{
+			// tricky bit
 			// by default, lets be lazy and compute expressions as late as possible
-			tExprCol.m_eStage = SPH_EVAL_FINAL;
-
 			// but stringptr functions like ZONESPANLIST() or RANKFACTORS() that capture and
 			// store evanescent current ranker state gotta be evaluated somewhat earlier
-			if ( tExprCol.m_eAttrType==SPH_ATTR_STRINGPTR )
-				tExprCol.m_eStage = SPH_EVAL_PRESORT;
+			// that gets reported from sphExprParse() a bit above
+			tExprCol.m_eStage = eExprStage;
 
 			// is this expression used in filter?
 			// OPTIMIZE? hash filters and do hash lookups?

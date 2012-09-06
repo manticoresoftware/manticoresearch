@@ -1094,6 +1094,9 @@ public:
 #else
 			m_pDynamic = new CSphRowitem [ iDynamic ];
 #endif
+			// dynamic stuff might contain pointers now (STRINGPTR type)
+			// so we gotta cleanup
+			memset ( m_pDynamic, 0, iDynamic*sizeof(CSphRowitem) );
 		}
 	}
 
@@ -1250,18 +1253,6 @@ enum ESphAggrFunc
 	SPH_AGGR_MAX,
 	SPH_AGGR_SUM,
 	SPH_AGGR_CAT
-};
-
-
-/// column evaluation stage
-enum ESphEvalStage
-{
-	SPH_EVAL_STATIC = 0,		///< static data, no real evaluation needed
-	SPH_EVAL_OVERRIDE,			///< static but possibly overridden
-	SPH_EVAL_PREFILTER,			///< expression needed for full-text candidate matches filtering
-	SPH_EVAL_PRESORT,			///< expression needed for final matches sorting
-	SPH_EVAL_SORTER,			///< expression evaluated by sorter object
-	SPH_EVAL_FINAL				///< expression not (!) used in filters/sorting; can be postponed until final result set cooking
 };
 
 
@@ -2932,7 +2923,8 @@ void				sphSetQuiet ( bool bQuiet );
 /// if the pUpdate is given, creates the updater's queue and perform the index update
 /// instead of searching
 ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError,
-						bool bComputeItems=true, CSphSchema * pExtra=NULL, CSphAttrUpdateEx * pUpdate=NULL, bool * pZonespanlist=NULL );
+	bool bComputeItems=true, CSphSchema * pExtra=NULL, CSphAttrUpdateEx * pUpdate=NULL, bool * pZonespanlist=NULL,
+	ISphExprHook * pHook=NULL );
 
 /// convert queue to sorted array, and add its entries to result's matches array
 void				sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag );

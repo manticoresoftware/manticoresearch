@@ -50,6 +50,17 @@ enum ESphAttr
 	SPH_ATTR_CONSTHASH	= 1000
 };
 
+/// column evaluation stage
+enum ESphEvalStage
+{
+	SPH_EVAL_STATIC = 0,		///< static data, no real evaluation needed
+	SPH_EVAL_OVERRIDE,			///< static but possibly overridden
+	SPH_EVAL_PREFILTER,			///< expression needed for full-text candidate matches filtering
+	SPH_EVAL_PRESORT,			///< expression needed for final matches sorting
+	SPH_EVAL_SORTER,			///< expression evaluated by sorter object
+	SPH_EVAL_FINAL				///< expression not (!) used in filters/sorting; can be postponed until final result set cooking
+};
+
 /// expression evaluator
 /// can always be evaluated in floats using Eval()
 /// can sometimes be evaluated in integers using IntEval(), depending on type as returned from sphExprParse()
@@ -88,6 +99,15 @@ public:
 
 	/// setup any extra data like external pools, etc.
 	virtual void SetupExtraData ( ISphExtra * ) {}
+};
+
+/// string expression traits
+/// can never be evaluated in floats or integers, only StringEval() is allowed
+struct ISphStringExpr : public ISphExpr
+{
+	virtual float Eval ( const CSphMatch & ) const { assert ( 0 && "one just does not simply evaluate a string as float" ); return 0; }
+	virtual int IntEval ( const CSphMatch & ) const { assert ( 0 && "one just does not simply evaluate a string as int"  ); return 0; }
+	virtual int64_t Int64Eval ( const CSphMatch & ) const { assert ( 0 && "one just does not simply evaluate a string as bigint" ); return 0; }
 };
 
 /// hook to extend expressions
@@ -142,8 +162,10 @@ struct Expr_ConstHash_c : public ISphExpr
 /// returns pointer to evaluator on success
 /// fills pAttrType with result type (for now, can be SPH_ATTR_SINT or SPH_ATTR_FLOAT)
 /// fills pUsesWeight with a flag whether match relevance is referenced in expression AST
+/// fills pEvalStage with a required (!) evaluation stage
 ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight,
-	CSphString & sError, CSphSchema * pExtra=NULL, ISphExprHook * pHook=NULL, bool * pZonespanlist=NULL );
+	CSphString & sError, CSphSchema * pExtra=NULL, ISphExprHook * pHook=NULL, bool * pZonespanlist=NULL,
+	ESphEvalStage * pEvalStage=NULL );
 
 //////////////////////////////////////////////////////////////////////////
 

@@ -100,6 +100,11 @@ static SmallStringHash_T<UdfFunc_t>		g_hUdfFuncs;
 // UDF CALL SITE
 //////////////////////////////////////////////////////////////////////////
 
+void * UdfMalloc ( int iLen )
+{
+	return new BYTE [ iLen ];
+}
+
 UdfCall_t::UdfCall_t ()
 {
 	m_pUdf = NULL;
@@ -110,6 +115,7 @@ UdfCall_t::UdfCall_t ()
 	m_tArgs.arg_values = NULL;
 	m_tArgs.arg_names = NULL;
 	m_tArgs.str_lengths = NULL;
+	m_tArgs.fn_malloc = UdfMalloc;
 }
 
 UdfCall_t::~UdfCall_t ()
@@ -238,7 +244,7 @@ struct Expr_GetInt64Const_c : public ISphExpr
 };
 
 
-struct Expr_GetStrConst_c : public ISphExpr
+struct Expr_GetStrConst_c : public ISphStringExpr
 {
 	CSphString m_sVal;
 	int m_iLen;
@@ -262,7 +268,7 @@ struct Expr_GetStrConst_c : public ISphExpr
 };
 
 
-struct Expr_GetZonespanlist_c : public ISphExpr
+struct Expr_GetZonespanlist_c : public ISphStringExpr
 {
 	CSphString m_sVal;
 	int m_iLen;
@@ -293,9 +299,6 @@ struct Expr_GetZonespanlist_c : public ISphExpr
 		return sValue.Length();
 	}
 
-	virtual float Eval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
-	virtual int IntEval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
-	virtual int64_t Int64Eval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
 	virtual void SetupExtraData ( ISphExtra * pData )
 	{
 		pData->ExtraData ( EXTRA_GET_DATA_ZONESPANS, (void**)&m_pData );
@@ -303,7 +306,7 @@ struct Expr_GetZonespanlist_c : public ISphExpr
 };
 
 
-struct Expr_GetRankFactors_c : public ISphExpr
+struct Expr_GetRankFactors_c : public ISphStringExpr
 {
 	/// hash type MUST BE IN SYNC with RankerState_Export_fn in sphinxsearch.cpp
 	CSphOrderedHash < CSphString, SphDocID_t, IdentityHash_fn, 256 > * m_pFactors;
@@ -329,9 +332,6 @@ struct Expr_GetRankFactors_c : public ISphExpr
 		return iLen;
 	}
 
-	virtual float Eval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
-	virtual int IntEval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
-	virtual int64_t Int64Eval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
 	virtual void SetupExtraData ( ISphExtra * pData )
 	{
 		pData->ExtraData ( EXTRA_GET_DATA_RANKFACTORS, (void**)&m_pFactors );
@@ -1094,6 +1094,7 @@ public:
 		: m_pHook ( pHook )
 		, m_pExtra ( pExtra )
 		, m_bHasZonespanlist ( false )
+		, m_eEvalStage ( SPH_EVAL_FINAL )
 	{}
 
 							~ExprParser_t ();
@@ -1146,6 +1147,7 @@ private:
 
 public:
 	bool					m_bHasZonespanlist;
+	ESphEvalStage			m_eEvalStage;
 
 private:
 	int						GetToken ( YYSTYPE * lvalp );
@@ -2563,10 +2565,12 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 
 					case FUNC_ZONESPANLIST:
 						m_bHasZonespanlist = true;
+						m_eEvalStage = SPH_EVAL_PRESORT;
 						return new Expr_GetZonespanlist_c ();
 					case FUNC_TO_STRING:
 						return new Expr_ToString_c ( dArgs[0], m_dNodes [ tNode.m_iLeft ].m_eRetType );
 					case FUNC_RANKFACTORS:
+						m_eEvalStage = SPH_EVAL_PRESORT;
 						return new Expr_GetRankFactors_c();
 				}
 				assert ( 0 && "unhandled function id" );
@@ -4304,13 +4308,15 @@ bool sphUDFDrop ( const char * szFunc, CSphString & sError )
 
 /// parser entry point
 ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight,
-						CSphString & sError, CSphSchema * pExtra, ISphExprHook * pHook, bool * pZonespanlist )
+	CSphString & sError, CSphSchema * pExtra, ISphExprHook * pHook, bool * pZonespanlist, ESphEvalStage * pEvalStage )
 {
 	// parse into opcodes
 	ExprParser_t tParser ( pExtra, pHook );
 	ISphExpr * bRes = tParser.Parse ( sExpr, tSchema, pAttrType, pUsesWeight, sError );
 	if ( pZonespanlist )
 		*pZonespanlist = tParser.m_bHasZonespanlist;
+	if ( pEvalStage )
+		*pEvalStage = tParser.m_eEvalStage;
 	return bRes;
 }
 

@@ -19,6 +19,8 @@
 #include "sphinx.h"
 #include "sphinxfilter.h"
 #include "sphinxrt.h"
+#include "sphinxquery.h"
+#include "sphinxexcerpt.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -1456,6 +1458,159 @@ inline int sphUtf8CharBytes ( BYTE uFirst )
 	}
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+/// snippet setupper
+/// used by searchd and SNIPPET() function in exprs
+/// should probably be refactored as a single function
+/// a precursor to sphBuildExcerpts() call
+class SnippetContext_t : ISphNoncopyable
+{
+private:
+	CSphScopedPtr<CSphDict> m_tDictCloned;
+	CSphScopedPtr<CSphDict> m_tExactDict;
+	CSphScopedPtr<ISphTokenizer> m_tQueryTokenizer;
+
+public:
+	CSphDict * m_pDict;
+	CSphScopedPtr<ISphTokenizer> m_tTokenizer;
+	CSphScopedPtr<CSphHTMLStripper> m_tStripper;
+	ISphTokenizer * m_pQueryTokenizer;
+	XQQuery_t m_tExtQuery;
+	DWORD m_eExtQuerySPZ;
+
+	SnippetContext_t()
+		: m_tDictCloned ( NULL )
+		, m_tExactDict ( NULL )
+		, m_tQueryTokenizer ( NULL )
+		, m_pDict ( NULL )
+		, m_tTokenizer ( NULL )
+		, m_tStripper ( NULL )
+		, m_pQueryTokenizer ( NULL )
+		, m_eExtQuerySPZ ( SPH_SPZ_NONE )
+	{
+	}
+
+	static CSphDict * SetupExactDict ( const CSphIndexSettings & tSettings, const ExcerptQuery_t & q,
+		CSphScopedPtr<CSphDict> & tExact, CSphDict * pDict, ISphTokenizer * pTokenizer )
+	{
+		// handle index_exact_words
+		if ( !( q.m_bHighlightQuery && tSettings.m_bIndexExactWords ) )
+			return pDict;
+
+		pTokenizer->AddPlainChar ( '=' );
+		tExact = new CSphDictExact ( pDict );
+		return tExact.Ptr();
+	}
+
+	static DWORD CollectQuerySPZ ( const XQNode_t * pNode )
+	{
+		if ( !pNode )
+			return SPH_SPZ_NONE;
+
+		DWORD eSPZ = SPH_SPZ_NONE;
+		if ( pNode->GetOp()==SPH_QUERY_SENTENCE )
+			eSPZ |= SPH_SPZ_SENTENCE;
+		else if ( pNode->GetOp()==SPH_QUERY_PARAGRAPH )
+			eSPZ |= SPH_SPZ_PARAGRAPH;
+
+		ARRAY_FOREACH ( i, pNode->m_dChildren )
+			eSPZ |= CollectQuerySPZ ( pNode->m_dChildren[i] );
+
+		return eSPZ;
+	}
+
+	static bool SetupStripperSPZ ( const CSphIndexSettings & tSettings, const ExcerptQuery_t & q,
+		bool bSetupSPZ, CSphScopedPtr<CSphHTMLStripper> & tStripper, ISphTokenizer * pTokenizer,
+		CSphString & sError )
+	{
+		if ( bSetupSPZ &&
+			( !pTokenizer->EnableSentenceIndexing ( sError ) || !pTokenizer->EnableZoneIndexing ( sError ) ) )
+		{
+			return false;
+		}
+
+
+		if ( q.m_sStripMode=="strip" || q.m_sStripMode=="retain"
+			|| ( q.m_sStripMode=="index" && tSettings.m_bHtmlStrip ) )
+		{
+			// don't strip HTML markup in 'retain' mode - proceed zones only
+			tStripper = new CSphHTMLStripper ( q.m_sStripMode!="retain" );
+
+			if ( q.m_sStripMode=="index" )
+			{
+				if (
+					!tStripper->SetIndexedAttrs ( tSettings.m_sHtmlIndexAttrs.cstr (), sError ) ||
+					!tStripper->SetRemovedElements ( tSettings.m_sHtmlRemoveElements.cstr (), sError ) )
+				{
+					sError.SetSprintf ( "HTML stripper config error: %s", sError.cstr() );
+					return false;
+				}
+			}
+
+			if ( bSetupSPZ )
+			{
+				tStripper->EnableParagraphs();
+			}
+
+			// handle zone(s) in special mode only when passage_boundary enabled
+			if ( bSetupSPZ && !tStripper->SetZones ( tSettings.m_sZones.cstr (), sError ) )
+			{
+				sError.SetSprintf ( "HTML stripper config error: %s", sError.cstr() );
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	bool Setup ( const CSphIndex * pIndex, const ExcerptQuery_t & tSettings, CSphString & sError )
+	{
+		assert ( pIndex );
+		CSphScopedPtr<CSphDict> tDictCloned ( NULL );
+		m_pDict = pIndex->GetDictionary();
+		if ( m_pDict->HasState() )
+			m_tDictCloned = m_pDict = m_pDict->Clone();
+
+		m_tTokenizer = pIndex->GetTokenizer()->Clone ( true );
+		m_pQueryTokenizer = m_tTokenizer.Ptr();
+
+		// setup exact dictionary if needed
+		m_pDict = SetupExactDict ( pIndex->GetSettings(), tSettings, m_tExactDict, m_pDict, m_tTokenizer.Ptr() );
+		// TODO!!! check star dict too
+
+		if ( tSettings.m_bHighlightQuery )
+		{
+			if ( !sphParseExtendedQuery ( m_tExtQuery, tSettings.m_sWords.cstr(), m_pQueryTokenizer,
+				&pIndex->GetMatchSchema(), m_pDict, pIndex->GetSettings() ) )
+			{
+				sError = m_tExtQuery.m_sParseError;
+				return false;
+			}
+			if ( m_tExtQuery.m_pRoot )
+				m_tExtQuery.m_pRoot->ClearFieldMask();
+
+			m_eExtQuerySPZ = SPH_SPZ_NONE;
+			m_eExtQuerySPZ |= CollectQuerySPZ ( m_tExtQuery.m_pRoot );
+			if ( m_tExtQuery.m_dZones.GetLength() )
+				m_eExtQuerySPZ |= SPH_SPZ_ZONE;
+		}
+
+		bool bSetupSPZ = ( tSettings.m_ePassageSPZ!=SPH_SPZ_NONE || m_eExtQuerySPZ!=SPH_SPZ_NONE ||
+			( tSettings.m_sStripMode=="retain" && tSettings.m_bHighlightQuery ) );
+
+		if ( !SetupStripperSPZ ( pIndex->GetSettings(), tSettings, bSetupSPZ, m_tStripper, m_tTokenizer.Ptr(), sError ) )
+			return false;
+
+		if ( bSetupSPZ )
+		{
+			m_tQueryTokenizer = pIndex->GetTokenizer()->Clone ( true );
+			m_pQueryTokenizer = m_tQueryTokenizer.Ptr();
+		}
+
+		return true;
+	}
+};
 
 #endif // _sphinxint_
 

@@ -7321,6 +7321,121 @@ private:
 	const CSphSchemaMT * m_pLock;
 };
 
+
+/// suddenly, searchd-level expression function!
+struct Expr_Snippet_c : public ISphStringExpr
+{
+	ISphExpr *					m_pArgs;
+	ISphExpr *					m_pText;
+	const BYTE *				m_sWords;
+	CSphIndex *					m_pIndex;
+	SnippetContext_t			m_tCtx;
+	mutable ExcerptQuery_t		m_tHighlight;
+
+	explicit Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex )
+		: m_pArgs ( pArglist )
+		, m_pText ( NULL )
+		, m_sWords ( NULL )
+		, m_pIndex ( pIndex )
+	{
+		assert ( pArglist->IsArglist() );
+		m_pText = pArglist->GetArg(0);
+
+		CSphMatch tDummy;
+		char * pWords;
+		pArglist->GetArg(1)->StringEval ( tDummy, (const BYTE**)&pWords );
+		m_tHighlight.m_sWords = pWords;
+
+		CSphString sError;
+		m_tCtx.Setup ( m_pIndex, m_tHighlight, sError ); // FIXME? report?
+	}
+
+	~Expr_Snippet_c()
+	{
+		SafeRelease ( m_pArgs );
+	}
+
+	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
+	{
+		*ppStr = NULL;
+
+		const BYTE * sSource = NULL;
+		int iLen = m_pText->StringEval ( tMatch, &sSource );
+
+		if ( !iLen )
+		{
+			SafeDeleteArray ( sSource );
+			return 0;
+		}
+
+		// FIXME! fill in all the missing options; use consthash?
+		CSphString sError;
+		m_tHighlight.m_sSource.Adopt ( (char**)&sSource ); // FIXME? will this break on stringattr? on strconst?
+		sphBuildExcerpt ( m_tHighlight, m_pIndex, m_tCtx.m_tStripper.Ptr(), m_tCtx.m_tExtQuery, m_tCtx.m_eExtQuerySPZ,
+			sError, m_tCtx.m_pDict, m_tCtx.m_tTokenizer.Ptr(), m_tCtx.m_pQueryTokenizer );
+
+		int iRes = m_tHighlight.m_dRes.GetLength();
+		*ppStr = m_tHighlight.m_dRes.LeakData();
+		return iRes;
+	}
+};
+
+
+/// searchd expression hook
+/// needed to implement functions that are builtin for searchd,
+/// but can not be builtin in the generic expression engine itself,
+/// like SNIPPET() function that must know about indexes, tokenizers, etc
+struct ExprHook_t : public ISphExprHook
+{
+	static const int HOOK_SNIPPET = 1;
+	CSphIndex * m_pIndex; /// BLOODY HACK
+
+	virtual int IsKnownIdent ( const char * )
+	{
+		return -1;
+	}
+
+	virtual int IsKnownFunc ( const char * sFunc )
+	{
+		if ( !strcasecmp ( sFunc, "SNIPPET" ) )
+			return HOOK_SNIPPET;
+		else
+			return -1;
+	}
+
+	virtual ISphExpr * CreateNode ( int iID, ISphExpr * pLeft )
+	{
+		assert ( iID==HOOK_SNIPPET );
+		return new Expr_Snippet_c ( pLeft, m_pIndex );
+	}
+
+	virtual ESphAttr GetIdentType ( int )
+	{
+		assert ( 0 );
+		return SPH_ATTR_NONE;
+	}
+
+	virtual ESphAttr GetReturnType ( int iID, const CSphVector<ESphAttr> & dArgs, bool, CSphString & sError )
+	{
+		assert ( iID==HOOK_SNIPPET );
+		if ( dArgs[0]!=SPH_ATTR_STRINGPTR )
+		{
+			sError = "1st argument to SNIPPET() must be a (mutable) string expression";
+			return SPH_ATTR_NONE;
+		}
+		if ( dArgs[1]!=SPH_ATTR_STRING )
+		{
+			sError = "2nd argument to SNIPPET() must be a constant string";
+			return SPH_ATTR_NONE;
+		}
+		return SPH_ATTR_STRINGPTR;
+	}
+
+	virtual void CheckEnter ( int ) {}
+	virtual void CheckExit ( int ) {}
+};
+
+
 class SearchHandler_c
 {
 	friend void LocalSearchThreadFunc ( void * pArg );
@@ -7357,6 +7472,8 @@ protected:
 
 	mutable CSphMutex				m_tLock;
 	mutable SmallStringHash_T<int>	m_hUsed;
+
+	mutable ExprHook_t				m_tHook;
 
 	const ServedIndex_t *			UseIndex ( int iLocal ) const;
 	void							ReleaseIndex ( int iLocal ) const;
@@ -7866,7 +7983,10 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 		UnlockOnDestroy dSchemaLock ( pExtraSchemaMT );
 
 		assert ( !tQuery.m_iOldVersion || tQuery.m_iOldVersion>=0x102 );
-		ppSorters[i] = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchemaMT, m_pUpdates );
+		m_tHook.m_pIndex = pServed->m_pIndex;
+		ppSorters[i] = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchemaMT, m_pUpdates,
+			NULL, // FIXME??? really NULL???
+			&m_tHook );
 
 		if ( ppSorters[i] )
 			iValidSorters++;
@@ -7969,7 +8089,8 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 				}
 
 				// create queue
-				pSorter = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchema, m_pUpdates, &tQuery.m_bZSlist );
+				m_tHook.m_pIndex = pServed->m_pIndex;
+				pSorter = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchema, m_pUpdates, &tQuery.m_bZSlist, &m_tHook );
 				if ( !pSorter )
 				{
 					m_dFailuresSet[iQuery].Submit ( sLocal, sError.cstr() );
@@ -8330,7 +8451,10 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		{
 			CSphSchemaMT * pExtraSchemaMT = m_dQueries[iStart].m_bAgent?m_dExtraSchemas[iStart].GetVirgin():NULL;
 			UnlockOnDestroy ExtraLocker ( pExtraSchemaMT );
-			pLocalSorter = sphCreateQueue ( &m_dQueries[iStart], tFirstSchema, sError, true, pExtraSchemaMT );
+			m_tHook.m_pIndex = NULL;
+			pLocalSorter = sphCreateQueue ( &m_dQueries[iStart], tFirstSchema, sError, true, pExtraSchemaMT, NULL,
+				NULL, // FIXME??? really NULL?
+				&m_tHook );
 		}
 
 		ReleaseIndex ( 0 );
@@ -9898,159 +10022,6 @@ static bool SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPos
 
 	return true;
 }
-
-
-static bool SetupStripperSPZ ( const CSphIndexSettings & tSettings, const ExcerptQuery_t & q,
-	bool bSetupSPZ, CSphScopedPtr<CSphHTMLStripper> & tStripper, ISphTokenizer * pTokenizer,
-	CSphString & sError )
-{
-	if ( bSetupSPZ &&
-		( !pTokenizer->EnableSentenceIndexing ( sError ) || !pTokenizer->EnableZoneIndexing ( sError ) ) )
-	{
-		return false;
-	}
-
-
-	if ( q.m_sStripMode=="strip" || q.m_sStripMode=="retain"
-		|| ( q.m_sStripMode=="index" && tSettings.m_bHtmlStrip ) )
-	{
-		// don't strip HTML markup in 'retain' mode - proceed zones only
-		tStripper = new CSphHTMLStripper ( q.m_sStripMode!="retain" );
-
-		if ( q.m_sStripMode=="index" )
-		{
-			if (
-				!tStripper->SetIndexedAttrs ( tSettings.m_sHtmlIndexAttrs.cstr (), sError ) ||
-				!tStripper->SetRemovedElements ( tSettings.m_sHtmlRemoveElements.cstr (), sError ) )
-			{
-				sError.SetSprintf ( "HTML stripper config error: %s", sError.cstr() );
-				return false;
-			}
-		}
-
-		if ( bSetupSPZ )
-		{
-			tStripper->EnableParagraphs();
-		}
-
-		// handle zone(s) in special mode only when passage_boundary enabled
-		if ( bSetupSPZ && !tStripper->SetZones ( tSettings.m_sZones.cstr (), sError ) )
-		{
-			sError.SetSprintf ( "HTML stripper config error: %s", sError.cstr() );
-			return false;
-		}
-	}
-
-	return true;
-}
-
-
-static CSphDict * SetupExactDict ( const CSphIndexSettings & tSettings, const ExcerptQuery_t & q,
-	CSphScopedPtr<CSphDict> & tExact, CSphDict * pDict, ISphTokenizer * pTokenizer )
-{
-	// handle index_exact_words
-	if ( !( q.m_bHighlightQuery && tSettings.m_bIndexExactWords ) )
-		return pDict;
-
-	pTokenizer->AddPlainChar ( '=' );
-	tExact = new CSphDictExact ( pDict );
-	return tExact.Ptr();
-}
-
-
-static DWORD CollectQuerySPZ ( const XQNode_t * pNode )
-{
-	if ( !pNode )
-		return SPH_SPZ_NONE;
-
-	DWORD eSPZ = SPH_SPZ_NONE;
-	if ( pNode->GetOp()==SPH_QUERY_SENTENCE )
-		eSPZ |= SPH_SPZ_SENTENCE;
-	else if ( pNode->GetOp()==SPH_QUERY_PARAGRAPH )
-		eSPZ |= SPH_SPZ_PARAGRAPH;
-
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		eSPZ |= CollectQuerySPZ ( pNode->m_dChildren[i] );
-
-	return eSPZ;
-}
-
-
-class SnippetContext_t : ISphNoncopyable
-{
-private:
-	CSphScopedPtr<CSphDict> m_tDictCloned;
-	CSphScopedPtr<CSphDict> m_tExactDict;
-	CSphScopedPtr<ISphTokenizer> m_tQueryTokenizer;
-
-public:
-	CSphDict * m_pDict;
-	CSphScopedPtr<ISphTokenizer> m_tTokenizer;
-	CSphScopedPtr<CSphHTMLStripper> m_tStripper;
-	ISphTokenizer * m_pQueryTokenizer;
-	XQQuery_t m_tExtQuery;
-	DWORD m_eExtQuerySPZ;
-
-	SnippetContext_t()
-		: m_tDictCloned ( NULL )
-		, m_tExactDict ( NULL )
-		, m_tQueryTokenizer ( NULL )
-		, m_pDict ( NULL )
-		, m_tTokenizer ( NULL )
-		, m_tStripper ( NULL )
-		, m_pQueryTokenizer ( NULL )
-		, m_eExtQuerySPZ ( SPH_SPZ_NONE )
-	{
-	}
-
-	bool Setup ( const CSphIndex * pIndex, const ExcerptQuery_t & tSettings, CSphString & sError )
-	{
-		CSphScopedPtr<CSphDict> tDictCloned ( NULL );
-		m_pDict = pIndex->GetDictionary();
-		if ( m_pDict->HasState() )
-		{
-			m_tDictCloned = m_pDict = m_pDict->Clone();
-		}
-
-		m_tTokenizer = pIndex->GetTokenizer()->Clone ( true );
-		m_pQueryTokenizer = m_tTokenizer.Ptr();
-
-		// setup exact dictionary if needed
-		m_pDict = SetupExactDict ( pIndex->GetSettings(), tSettings, m_tExactDict, m_pDict, m_tTokenizer.Ptr() );
-		// TODO!!! check star dict too
-
-		if ( tSettings.m_bHighlightQuery )
-		{
-			if ( !sphParseExtendedQuery ( m_tExtQuery, tSettings.m_sWords.cstr(), m_pQueryTokenizer,
-				&pIndex->GetMatchSchema(), m_pDict, pIndex->GetSettings() ) )
-			{
-				sError = m_tExtQuery.m_sParseError;
-				return false;
-			}
-			if ( m_tExtQuery.m_pRoot )
-				m_tExtQuery.m_pRoot->ClearFieldMask();
-
-			m_eExtQuerySPZ = SPH_SPZ_NONE;
-			m_eExtQuerySPZ |= CollectQuerySPZ ( m_tExtQuery.m_pRoot );
-			if ( m_tExtQuery.m_dZones.GetLength() )
-				m_eExtQuerySPZ |= SPH_SPZ_ZONE;
-		}
-
-		bool bSetupSPZ = ( tSettings.m_ePassageSPZ!=SPH_SPZ_NONE || m_eExtQuerySPZ!=SPH_SPZ_NONE ||
-			( tSettings.m_sStripMode=="retain" && tSettings.m_bHighlightQuery ) );
-
-		if ( !SetupStripperSPZ ( pIndex->GetSettings(), tSettings, bSetupSPZ, m_tStripper, m_tTokenizer.Ptr(), sError ) )
-			return false;
-
-		if ( bSetupSPZ )
-		{
-			m_tQueryTokenizer = pIndex->GetTokenizer()->Clone ( true );
-			m_pQueryTokenizer = m_tQueryTokenizer.Ptr();
-		}
-
-		return true;
-	}
-};
 
 
 void SnippetThreadFunc ( void * pArg )

@@ -317,8 +317,12 @@ struct Expr_GetRankFactors_c : public ISphStringExpr
 
 	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
 	{
-		assert ( m_pFactors );
 		assert ( ppStr );
+		if ( !m_pFactors )
+		{
+			*ppStr = NULL;
+			return 0;
+		}
 
 		CSphString * sVal = (*m_pFactors) ( tMatch.m_iDocID );
 		if ( !sVal )

@@ -6266,6 +6266,8 @@ struct Expr_BM25F_c : public ISphExpr
 		if ( m_pState->m_pFieldLens )
 			ARRAY_FOREACH ( i, m_dWeights )
 				m_fWeightedAvgDocLen += m_pState->m_pFieldLens[i] * m_dWeights[i];
+		else
+			m_fWeightedAvgDocLen = 1.0f;
 		m_fWeightedAvgDocLen /= m_pState->m_iTotalDocuments;
 	}
 
@@ -6716,11 +6718,13 @@ bool RankerState_Expr_fn::Init ( int iFields, const int * pWeights, ExtRanker_c 
 		break;
 	}
 
-	m_fAvgDocLen = 0;
+	m_fAvgDocLen = 0.0f;
 	m_pFieldLens = pRanker->GetIndex()->GetFieldLens();
 	if ( m_pFieldLens )
 		for ( int i=0; i<iFields; i++ )
 			m_fAvgDocLen += m_pFieldLens[i];
+	else
+		m_fAvgDocLen = 1.0f;
 	m_iTotalDocuments = pRanker->GetIndex()->GetStats().m_iTotalDocuments;
 	m_fAvgDocLen /= m_iTotalDocuments;
 

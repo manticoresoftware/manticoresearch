@@ -17271,9 +17271,8 @@ static void ParsePredictedTimeCosts ( const char * p )
 		int iValue = atoi ( sValue.cstr() );
 
 		// parse comma
-		// FIXME!!!
 		while ( sphIsSpace(*p) )
-			*p++;
+			p++;
 		if ( *p && *p!=',' )
 			sphDie ( "predicted_time_costs: parse error near '%s' (expected ',' or end of line)", p );
 		p++;

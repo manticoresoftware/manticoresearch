@@ -5569,6 +5569,7 @@ CSphQuery::CSphQuery ()
 	, m_fGeoLatitude	( 0.0f )
 	, m_fGeoLongitude	( 0.0f )
 	, m_uMaxQueryMsec	( 0 )
+	, m_iMaxPredictedMsec ( 0 )
 	, m_sComment		( "" )
 	, m_sSelect			( "" )
 	, m_bReverseScan	( false )
@@ -16723,13 +16724,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	}
 
 	// setup search terms
-	CSphQueryStats tQueryStats;
-	int64_t iNanoBudget = pQuery->m_iMaxPredictedMsec;
-	if ( iNanoBudget>0 )
-	{
-		iNanoBudget *= 1000000; // from milliseconds to nanoseconds
-		tQueryStats.m_pNanoBudget = &iNanoBudget;
-	}
 	DiskIndexQwordSetup_c tTermSetup ( m_bKeepFilesOpen ? m_tDoclistFile : tDoclist,
 		m_bKeepFilesOpen ? m_tHitlistFile : tHitlist,
 		m_bPreloadWordlist ? tDummy : ( m_bKeepFilesOpen ? m_tWordlist.m_tFile : tWordlist ),
@@ -16753,7 +16747,13 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	tTermSetup.m_bSetupReaders = true;
 	tTermSetup.m_pCtx = &tCtx;
 	tTermSetup.m_pNodeCache = pNodeCache;
-	tTermSetup.m_pStats = &tQueryStats;
+
+	// setup prediction constrain
+	CSphQueryStats tQueryStats;
+	int64_t iNanoBudget = pQuery->m_iMaxPredictedMsec * 1000000; // from milliseconds to nanoseconds
+	tQueryStats.m_pNanoBudget = &iNanoBudget;
+	if ( pQuery->m_iMaxPredictedMsec>0 )
+		tTermSetup.m_pStats = &tQueryStats;
 
 	int iIndexWeight = pQuery->GetIndexWeight ( m_sIndexName.cstr() );
 

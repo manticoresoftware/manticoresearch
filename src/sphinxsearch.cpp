@@ -1924,9 +1924,11 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 			}
 		}
 
-		// Multinear could be also non-plain, so here is the second entry for it.
+		// Multinear and phrase could be also non-plain, so here is the second entry for it.
 		if ( pNode->GetOp()==SPH_QUERY_NEAR )
 			return CreateMultiNode<ExtMultinear_c> ( pNode, tSetup, true );
+		if ( pNode->GetOp()==SPH_QUERY_PHRASE )
+			return CreateMultiNode<ExtPhrase_c> ( pNode, tSetup, true );
 
 		// generic create
 		ExtNode_i * pCur = NULL;
@@ -5251,7 +5253,7 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLa
 			SphDocID_t uCur = pStartHits->m_uDocid;
 
 			tKey.m_uDocid = uCur;
-			pZone = m_hZoneInfo.AddUnique ( ZoneInfo_t(), tKey );
+			pZone = &m_hZoneInfo.AddUnique ( tKey );
 
 			assert ( pEndHits->m_uDocid==uCur );
 

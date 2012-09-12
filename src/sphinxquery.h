@@ -140,6 +140,7 @@ private:
 
 private:
 	mutable uint64_t		m_iMagicHash;
+	mutable uint64_t		m_iFuzzyHash;
 
 public:
 	CSphVector<XQNode_t*>	m_dChildren;	///< non-plain node children
@@ -150,28 +151,14 @@ public:
 	int						m_iAtomPos;		///< atom position override (currently only used within expanded nodes)
 	bool					m_bVirtuallyPlain;	///< "virtually plain" flag (currently only used by expanded nodes)
 	bool					m_bNotWeighted;	///< this our expanded but empty word's node
+	int						m_iUser;
 
 public:
 	/// ctor
-	explicit XQNode_t ( const XQLimitSpec_t & dSpec )
-		: m_pParent ( NULL )
-		, m_eOp ( SPH_QUERY_AND )
-		, m_iOrder ( 0 )
-		, m_iCounter ( 0 )
-		, m_iMagicHash ( 0 )
-		, m_dSpec ( dSpec )
-		, m_iOpArg ( 0 )
-		, m_iAtomPos ( -1 )
-		, m_bVirtuallyPlain ( false )
-		, m_bNotWeighted ( false )
-	{}
+	explicit XQNode_t ( const XQLimitSpec_t & dSpec );
 
 	/// dtor
-	~XQNode_t ()
-	{
-		ARRAY_FOREACH ( i, m_dChildren )
-			SafeDelete ( m_dChildren[i] );
-	}
+	~XQNode_t ();
 
 	/// check if i'm empty
 	bool IsEmpty () const
@@ -224,6 +211,10 @@ public:
 	/// hash me
 	uint64_t GetHash () const;
 
+	/// fuzzy hash ( a hash value is equal for proximity and phrase nodes
+	/// with similar keywords )
+	uint64_t GetFuzzyHash () const;
+
 	/// setup new operator and args
 	void SetOp ( XQOperator_e eOp, XQNode_t * pArg1, XQNode_t * pArg2=NULL );
 
@@ -232,6 +223,8 @@ public:
 	{
 		m_eOp = eOp;
 		m_dChildren.SwapData(dArgs);
+		ARRAY_FOREACH ( i, m_dChildren )
+			m_dChildren[i]->m_pParent = this;
 	}
 
 	/// setup new operator (careful parser/transform use only)
@@ -240,18 +233,30 @@ public:
 		m_eOp = eOp;
 	}
 
+	/// return node like current
+	inline XQNode_t * Clone ();
+
+	/// force resetting magic hash value ( that changed after transformation )
+	inline bool ResetHash ();
+
 #ifndef NDEBUG
 	/// consistency check
 	void Check ( bool bRoot )
 	{
 		assert ( bRoot || !IsEmpty() ); // empty leaves must be removed from the final tree; empty root is allowed
-		assert (!( m_dWords.GetLength() && m_eOp!=SPH_QUERY_AND && m_eOp!=SPH_QUERY_PHRASE
+		assert (!( m_dWords.GetLength() && m_eOp!=SPH_QUERY_AND && m_eOp!=SPH_QUERY_OR && m_eOp!=SPH_QUERY_PHRASE
 			&& m_eOp!=SPH_QUERY_PROXIMITY && m_eOp!=SPH_QUERY_QUORUM )); // words are only allowed in these node types
-		assert (!( m_dWords.GetLength()==1 && m_eOp!=SPH_QUERY_AND )); // 1-word leaves must be of AND type
+		assert ( ( m_dWords.GetLength()==1 && ( m_eOp==SPH_QUERY_AND || m_eOp==SPH_QUERY_OR ) ) ||
+			m_dWords.GetLength()!=1 ); // 1-word leaves must be of AND | OR types
 
 		ARRAY_FOREACH ( i, m_dChildren )
+		{
+			assert ( m_dChildren[i]->m_pParent==this );
 			m_dChildren[i]->Check ( false );
+		}
 	}
+#else
+	void Check ( bool ) {}
 #endif
 };
 
@@ -292,7 +297,10 @@ struct XQQuery_t : public ISphNoncopyable
 /// b) might need to tweak stuff even we do
 bool	sphParseExtendedQuery ( XQQuery_t & tQuery, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings );
 
-/// analyse vector of trees and tag common parts of them (to cache them later)
+// perform boolean optimization on tree
+void	sphOptimizeBoolean ( XQNode_t ** pXQ, const ISphKeywordsStat * pKeywords );
+
+/// analyze vector of trees and tag common parts of them (to cache them later)
 int		sphMarkCommonSubtrees ( int iXQ, const XQQuery_t * pXQ );
 
 #endif // _sphinxquery_

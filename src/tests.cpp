@@ -759,75 +759,6 @@ void BenchExpr ()
 
 //////////////////////////////////////////////////////////////////////////
 
-CSphString ReconstructNode ( const XQNode_t * pNode, const CSphSchema & tSchema )
-{
-	CSphString sRes ( "" );
-
-	if ( !pNode )
-		return sRes;
-
-	if ( pNode->m_dWords.GetLength() )
-	{
-		// say just words to me
-		const CSphVector<XQKeyword_t> & dWords = pNode->m_dWords;
-		ARRAY_FOREACH ( i, dWords )
-			sRes.SetSprintf ( "%s %s", sRes.cstr(), dWords[i].m_sWord.cstr() );
-		sRes.Trim ();
-
-		switch ( pNode->GetOp() )
-		{
-			case SPH_QUERY_AND:			break;
-			case SPH_QUERY_PHRASE:		sRes.SetSprintf ( "\"%s\"", sRes.cstr() ); break;
-			case SPH_QUERY_PROXIMITY:	sRes.SetSprintf ( "\"%s\"~%d", sRes.cstr(), pNode->m_iOpArg ); break;
-			case SPH_QUERY_QUORUM:		sRes.SetSprintf ( "\"%s\"/%d", sRes.cstr(), pNode->m_iOpArg ); break;
-			case SPH_QUERY_NEAR:		sRes.SetSprintf ( "\"%s\"NEAR/%d", sRes.cstr(), pNode->m_iOpArg ); break;
-			default:					assert ( 0 && "unexpected op in ReconstructNode()" ); break;
-		}
-
-		if ( !pNode->m_dSpec.m_dFieldMask.TestAll(true) )
-		{
-			CSphString sFields ( "" );
-			for ( int i=0; i<CSphSmallBitvec::iTOTALBITS; i++ )
-				if ( pNode->m_dSpec.m_dFieldMask.Test(i) )
-					sFields.SetSprintf ( "%s,%s", sFields.cstr(), tSchema.m_dFields[i].m_sName.cstr() );
-
-			sRes.SetSprintf ( "( @%s: %s )", sFields.cstr()+1, sRes.cstr() );
-		} else
-		{
-			if ( pNode->GetOp()==SPH_QUERY_AND && dWords.GetLength()>1 )
-				sRes.SetSprintf ( "( %s )", sRes.cstr() ); // wrap bag of words
-		}
-
-	} else
-	{
-		ARRAY_FOREACH ( i, pNode->m_dChildren )
-		{
-			if ( !i )
-				sRes = ReconstructNode ( pNode->m_dChildren[i], tSchema );
-			else
-			{
-				const char * sOp = "(unknown-op)";
-				switch ( pNode->GetOp() )
-				{
-					case SPH_QUERY_AND:		sOp = "AND"; break;
-					case SPH_QUERY_OR:		sOp = "OR"; break;
-					case SPH_QUERY_NOT:		sOp = "NOT"; break;
-					case SPH_QUERY_ANDNOT:	sOp = "AND NOT"; break;
-					case SPH_QUERY_BEFORE:	sOp = "BEFORE"; break;
-					case SPH_QUERY_NEAR:	sOp = "NEAR"; break;
-					default:				assert ( 0 && "unexpected op in ReconstructNode()" ); break;
-				}
-				sRes.SetSprintf ( "%s %s %s", sRes.cstr(), sOp, ReconstructNode ( pNode->m_dChildren[i], tSchema ).cstr() );
-			}
-		}
-
-		if ( pNode->m_dChildren.GetLength()>1 )
-			sRes.SetSprintf ( "( %s )", sRes.cstr() );
-	}
-
-	return sRes;
-}
-
 
 void TestQueryParser ()
 {
@@ -858,30 +789,30 @@ void TestQueryParser ()
 	};
 	const QueryTest_t dTest[] =
 	{
-		{ "aaa bbb ccc",					"( aaa AND bbb AND ccc )" },
-		{ "aaa|bbb ccc",					"( ( aaa OR bbb ) AND ccc )" },
-		{ "aaa bbb|ccc",					"( aaa AND ( bbb OR ccc ) )" },
-		{ "aaa (bbb ccc)|ddd",				"( aaa AND ( ( bbb AND ccc ) OR ddd ) )" },
-		{ "aaa bbb|(ccc ddd)",				"( aaa AND ( bbb OR ( ccc AND ddd ) ) )" },
-		{ "aaa bbb|(ccc ddd)|eee|(fff)",	"( aaa AND ( bbb OR ( ccc AND ddd ) OR eee OR fff ) )" },
-		{ "aaa bbb|(ccc ddd) eee|(fff)",	"( aaa AND ( bbb OR ( ccc AND ddd ) ) AND ( eee OR fff ) )" },
-		{ "aaa (ccc ddd)|bbb|eee|(fff)",	"( aaa AND ( ( ccc AND ddd ) OR bbb OR eee OR fff ) )" },
-		{ "aaa (ccc ddd)|bbb eee|(fff)",	"( aaa AND ( ( ccc AND ddd ) OR bbb ) AND ( eee OR fff ) )" },
-		{ "aaa \"bbb ccc\"~5|ddd",			"( aaa AND ( \"bbb ccc\"~5 OR ddd ) )" },
-		{ "aaa bbb|\"ccc ddd\"~5",			"( aaa AND ( bbb OR \"ccc ddd\"~5 ) )" },
-		{ "aaa ( ( \"bbb ccc\"~3|ddd ) eee | ( fff -ggg ) )",	"( aaa AND ( ( \"bbb ccc\"~3 OR ddd ) AND ( eee OR ( fff AND NOT ggg ) ) ) )" },
-		{ "@title aaa @body ccc|(@title ddd eee)|fff ggg",		"( ( @title: aaa ) AND ( ( @body: ccc ) OR ( ( @title: ddd ) AND ( @title: eee ) ) OR ( @body: fff ) ) AND ( @body: ggg ) )" },
-		{ "@title hello world | @body sample program",			"( ( @title: hello ) AND ( ( @title: world ) OR ( @body: sample ) ) AND ( @body: program ) )" },
-		{ "@title one two three four",							"( ( @title: one ) AND ( @title: two ) AND ( @title: three ) AND ( @title: four ) )" },
-		{ "@title one (@body two three) four",					"( ( @title: one ) AND ( ( @body: two ) AND ( @body: three ) ) AND ( @title: four ) )" },
-		{ "windows 7 2000",										"( windows AND 2000 )" },
-		{ "aaa a|bbb",											"( aaa AND bbb )" },
-		{ "aaa bbb|x y z|ccc",									"( aaa AND bbb AND ccc )" },
+		{ "aaa bbb ccc",					"( aaa   bbb   ccc )" },
+		{ "aaa|bbb ccc",					"( ( aaa | bbb )   ccc )" },
+		{ "aaa bbb|ccc",					"( aaa   ( bbb | ccc ) )" },
+		{ "aaa (bbb ccc)|ddd",				"( aaa   ( ( bbb   ccc ) | ddd ) )" },
+		{ "aaa bbb|(ccc ddd)",				"( aaa   ( bbb | ( ccc   ddd ) ) )" },
+		{ "aaa bbb|(ccc ddd)|eee|(fff)",	"( aaa   ( bbb | ( ccc   ddd ) | eee | fff ) )" },
+		{ "aaa bbb|(ccc ddd) eee|(fff)",	"( aaa   ( bbb | ( ccc   ddd ) )   ( eee | fff ) )" },
+		{ "aaa (ccc ddd)|bbb|eee|(fff)",	"( aaa   ( ( ccc   ddd ) | bbb | eee | fff ) )" },
+		{ "aaa (ccc ddd)|bbb eee|(fff)",	"( aaa   ( ( ccc   ddd ) | bbb )   ( eee | fff ) )" },
+		{ "aaa \"bbb ccc\"~5|ddd",			"( aaa   ( \"bbb ccc\"~5 | ddd ) )" },
+		{ "aaa bbb|\"ccc ddd\"~5",			"( aaa   ( bbb | \"ccc ddd\"~5 ) )" },
+		{ "aaa ( ( \"bbb ccc\"~3|ddd ) eee | ( fff -ggg ) )",	"( aaa   ( ( \"bbb ccc\"~3 | ddd )   ( eee | ( fff AND NOT ggg ) ) ) )" },
+		{ "@title aaa @body ccc|(@title ddd eee)|fff ggg",		"( ( @title: aaa )   ( ( @body: ccc ) | ( ( @title: ddd )   ( @title: eee ) ) | ( @body: fff ) )   ( @body: ggg ) )" },
+		{ "@title hello world | @body sample program",			"( ( @title: hello )   ( ( @title: world ) | ( @body: sample ) )   ( @body: program ) )" },
+		{ "@title one two three four",							"( ( @title: one )   ( @title: two )   ( @title: three )   ( @title: four ) )" },
+		{ "@title one (@body two three) four",					"( ( @title: one )   ( ( @body: two )   ( @body: three ) )   ( @title: four ) )" },
+		{ "windows 7 2000",										"( windows   2000 )" },
+		{ "aaa a|bbb",											"( aaa   bbb )" },
+		{ "aaa bbb|x y z|ccc",									"( aaa   bbb   ccc )" },
 		{ "a",													"" },
 		{ "hello -world",										"( hello AND NOT world )" },
 		{ "-hello world",										"( world AND NOT hello )" },
 		{ "\"phrase (query)/3 ~on steroids\"",					"\"phrase query on steroids\"" },
-		{ "hello a world",										"( hello AND world )" },
+		{ "hello a world",										"( hello   world )" },
 		{ "-one",												"" },
 		{ "-one -two",											"" },
 		{ "\"\"",												"" },
@@ -892,24 +823,451 @@ void TestQueryParser ()
 	};
 
 
+	CSphIndexSettings tTmpSettings;
 	int nTests = sizeof(dTest)/sizeof(dTest[0]);
 	for ( int i=0; i<nTests; i++ )
 	{
 		printf ( "testing query parser, test %d/%d... ", i+1, nTests );
 
-		CSphIndexSettings tSettings;
 		XQQuery_t tQuery;
-		sphParseExtendedQuery ( tQuery, dTest[i].m_sQuery, pTokenizer.Ptr(), &tSchema, pDict.Ptr(), tSettings );
+		sphParseExtendedQuery ( tQuery, dTest[i].m_sQuery, pTokenizer.Ptr(), &tSchema, pDict.Ptr(), tTmpSettings );
+		CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
+		assert ( sReconst==dTest[i].m_sReconst );
 
-		CSphString sReconst = ReconstructNode ( tQuery.m_pRoot, tSchema );
-		if ( sReconst!=dTest[i].m_sReconst )
-		{
-			printf ( "failed!\n Expected '%s',\n got '%s'", dTest[i].m_sReconst, sReconst.cstr() );
-			assert ( sReconst==dTest[i].m_sReconst );
-		}
 		printf ( "ok\n" );
 	}
 }
+
+static CSphSourceStats g_tTmpDummyStat;
+class CSphDummyIndex : public CSphIndex
+{
+public:
+	CSphDummyIndex () : CSphIndex ( NULL, NULL ) {}
+	virtual SphAttr_t *			GetKillList () const { return NULL; }
+	virtual int					GetKillListSize () const { return 0 ; }
+	virtual bool				HasDocid ( SphDocID_t ) const { return false; }
+	virtual int					Build ( const CSphVector<CSphSource*> & , int , int ) { return 0; }
+	virtual bool				Merge ( CSphIndex * , const CSphVector<CSphFilterSettings> & , bool ) {return false; }
+	virtual bool				Prealloc ( bool , bool , CSphString & ) { return false; }
+	virtual void				Dealloc () {}
+	virtual bool				Preread () { return false; }
+	virtual void				SetBase ( const char * ) {}
+	virtual bool				Rename ( const char * ) { return false; }
+	virtual bool				Lock () { return false; }
+	virtual void				Unlock () {}
+	virtual bool				Mlock () { return false; }
+	virtual void				PostSetup() {}
+	virtual bool				EarlyReject ( CSphQueryContext * , CSphMatch & ) const { return false; }
+	virtual const CSphSourceStats &	GetStats () const { return g_tTmpDummyStat; }
+	virtual bool				MultiQuery ( const CSphQuery * , CSphQueryResult * , int , ISphMatchSorter ** , const CSphVector<CSphFilterSettings> * , int ) const { return false; }
+	virtual bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult ** , ISphMatchSorter ** , const CSphVector<CSphFilterSettings> * , int ) const { return false; }
+	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , bool , CSphString & ) const { return false; }
+	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, CSphString & sError ) const;
+	virtual int					UpdateAttributes ( const CSphAttrUpdate & , int , CSphString & ) { return -1; }
+	virtual bool				SaveAttributes ( CSphString & ) const { return false; }
+	virtual DWORD				GetAttributeStatus () const { return 0; }
+	virtual void				DebugDumpHeader ( FILE * , const char * , bool ) {}
+	virtual void				DebugDumpDocids ( FILE * ) {}
+	virtual void				DebugDumpHitlist ( FILE * , const char * , bool ) {}
+	virtual int					DebugCheck ( FILE * ) { return 0; } // NOLINT
+	virtual void				DebugDumpDict ( FILE * ) {}
+	virtual	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) {}
+
+	SmallStringHash_T < int > m_hHits;
+};
+
+
+bool CSphDummyIndex::FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, CSphString & ) const
+{
+	ARRAY_FOREACH ( i, dKeywords )
+	{
+		int * pDocs = m_hHits ( dKeywords[i].m_sTokenized );
+		dKeywords[i].m_iDocs = pDocs ? *pDocs : 0;
+	}
+
+	return true;
+}
+
+
+void TestQueryTransforms ()
+{
+	CSphSchema tSchema;
+	CSphColumnInfo tCol;
+	tCol.m_sName = "title"; tSchema.m_dFields.Add ( tCol );
+	tCol.m_sName = "body"; tSchema.m_dFields.Add ( tCol );
+
+	CSphDictSettings tDictSettings;
+	CSphScopedPtr<ISphTokenizer> pTokenizer ( sphCreateSBCSTokenizer () );
+	CSphScopedPtr<CSphDict> pDict ( sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer.Ptr(), "query" ) );
+	assert ( pTokenizer.Ptr() );
+	assert ( pDict.Ptr() );
+
+	CSphTokenizerSettings tTokenizerSetup;
+	tTokenizerSetup.m_iMinWordLen = 2;
+	tTokenizerSetup.m_sSynonymsFile = g_sTmpfile;
+	pTokenizer->Setup ( tTokenizerSetup );
+
+	CSphString sError;
+	assert ( CreateSynonymsFile ( NULL ) );
+	assert ( pTokenizer->LoadSynonyms ( g_sTmpfile, NULL, sError ) );
+
+	struct CKeywordHits {
+		const char * 	m_sKeyword;
+		int 			m_iHits;
+	};
+
+	struct QueryTest_t
+	{
+		const char *			m_sQuery;
+		const char *			m_sReconst;
+		const char *			m_sReconstTransformed;
+		const CKeywordHits *	m_pKeywordHits;
+	};
+
+	const CKeywordHits dPseudoHits [][10] =
+	{
+		{ { "nnn", 10 }, { "aaa", 1 }, { "bbb", 1 }, { 0, 0 } },
+		{ { "nnn", 10 }, { "aaa", 100 }, { "bbb", 200 }, { 0, 0 } },
+		{ { "nnn", 10 }, { "aaa", 1 }, { "bbb", 2 }, { "qqq", 500 }, { "www", 100 }, { 0, 0 } }
+	};
+
+	const QueryTest_t dTest[] =
+	{
+		// COMMON NOT
+		{
+			"( aaa !ccc ) | ( bbb !ccc )",
+			"( ( aaa AND NOT ccc ) | ( bbb AND NOT ccc ) )",
+			"( ( aaa | bbb ) AND NOT ccc )",
+			NULL
+		},
+		{
+			"( aaa bbb !ccc) | ( ddd eee !ccc ) ",
+			"( ( ( aaa   bbb ) AND NOT ccc ) | ( ( ddd   eee ) AND NOT ccc ) )",
+			"( ( ( aaa   bbb ) | ( ddd   eee ) ) AND NOT ccc )",
+			NULL
+		},
+		{
+			"( aaa bbb !ccc) | ( ddd eee !ccc ) | fff | ( ggg !jjj )",
+			"( ( ( aaa   bbb ) AND NOT ccc ) | ( ( ddd   eee ) AND NOT ccc ) | fff | ( ggg AND NOT jjj ) )",
+			"( ( ( ( aaa   bbb ) | ( ddd   eee ) ) AND NOT ccc ) | fff | ( ggg AND NOT jjj ) )",
+			NULL
+		},
+		{
+			"(aaa !bbb) | (ccc !bbb) | (ccc !eee) | (ddd !eee)",
+			"( ( aaa AND NOT bbb ) | ( ccc AND NOT bbb ) | ( ccc AND NOT eee ) | ( ddd AND NOT eee ) )",
+			"( ( ( aaa | ccc ) AND NOT bbb ) | ( ( ccc | ddd ) AND NOT eee ) )",
+			NULL
+		},
+		{
+			"((( aaa & bbb & ccc ) !eee) | ((kkk | jjj & kkk & (zzz | jjj)) !eee))",
+			"( ( ( aaa   bbb   ccc ) AND NOT eee ) | ( ( ( kkk | jjj )   kkk   ( zzz | jjj ) ) AND NOT eee ) )",
+			"( ( ( aaa   bbb   ccc ) | ( ( kkk | jjj )   kkk   ( zzz | jjj ) ) ) AND NOT eee )",
+			NULL
+		},
+		{
+			"(aaa !(aaa !nnn)) | (bbb !(aaa !nnn))",
+			"( ( aaa AND NOT ( aaa AND NOT nnn ) ) | ( bbb AND NOT ( aaa AND NOT nnn ) ) )",
+			"( ( aaa | bbb ) AND NOT ( aaa AND NOT nnn ) )",
+			NULL
+		},
+
+		// COMMON NOT WITH MIXED PHRASES/PROXIMITY terms
+		{
+			"(aaa !(\"zzz yyy\")) | (bbb !(\"zzz yyy\"~30)) | (ccc !(\"zzz yyy\"~20))",
+			"( ( aaa AND NOT \"zzz yyy\" ) | ( bbb AND NOT \"zzz yyy\"~30 ) | ( ccc AND NOT \"zzz yyy\"~20 ) )",
+			"( ( aaa | bbb | ccc ) AND NOT \"zzz yyy\"~30 )",
+			NULL
+		},
+
+		// COMMON COMPOUND NOT
+		{
+			"(aaa !(nnn ccc)) | (bbb !(nnn ddd))",
+			"( ( aaa AND NOT ( nnn   ccc ) ) | ( bbb AND NOT ( nnn   ddd ) ) )",
+			"( ( aaa AND NOT ccc ) | ( bbb AND NOT ddd ) | ( ( aaa | bbb ) AND NOT nnn ) )",
+			( const CKeywordHits * ) &dPseudoHits[0]
+		},
+		{
+			"(aaa !(ccc nnn)) | (bbb !(nnn ddd)) | (ccc !nnn)",
+			"( ( aaa AND NOT ( ccc   nnn ) ) | ( bbb AND NOT ( nnn   ddd ) ) | ( ccc AND NOT nnn ) )",
+			"( ( aaa AND NOT ccc ) | ( bbb AND NOT ddd ) | ( ( ccc | aaa | bbb ) AND NOT nnn ) )",
+			( const CKeywordHits * ) &dPseudoHits[0]
+		},
+		{
+			"(aaa !(ccc nnn)) | (bbb !(nnn ddd))",
+			"( ( aaa AND NOT ( ccc   nnn ) ) | ( bbb AND NOT ( nnn   ddd ) ) )",
+			"( ( aaa AND NOT ( ccc   nnn ) ) | ( bbb AND NOT ( nnn   ddd ) ) )",
+			( const CKeywordHits * ) &dPseudoHits[1]
+		},
+
+		// COMMON COMPOUND NOT WITH MIXED PHRASES/PROXIMITY terms
+		{
+			"(aaa !(ccc \"nnn zzz\"~20)) | (bbb !(\"nnn zzz\"~10 ddd)) | (ccc !\"nnn zzz\")",
+			"( ( aaa AND NOT ( ccc   \"nnn zzz\"~20 ) ) | ( bbb AND NOT ( \"nnn zzz\"~10   ddd ) ) | ( ccc AND NOT \"nnn zzz\" ) )",
+			"( ( aaa AND NOT ccc ) | ( bbb AND NOT ddd ) | ( ( ccc | aaa | bbb ) AND NOT \"nnn zzz\"~20 ) )",
+			( const CKeywordHits * ) &dPseudoHits[0]
+		},
+
+		// COMMON SUBTERM
+		{
+			"(aaa (nnn | ccc)) | (bbb (nnn | ddd))",
+			"( ( aaa   ( nnn | ccc ) ) | ( bbb   ( nnn | ddd ) ) )",
+			"( ( aaa   ccc ) | ( bbb   ddd ) | ( ( aaa | bbb )   nnn ) )",
+			( const CKeywordHits * ) &dPseudoHits[0]
+		},
+		{
+			"(aaa (ccc | nnn)) | (bbb (nnn | ddd)) | (ccc | nnn)",
+			"( ( aaa   ( ccc | nnn ) ) | ( bbb   ( nnn | ddd ) ) | ( ccc | nnn ) )",
+			"( ( aaa   ccc ) | ( bbb   ddd ) | ccc | nnn | ( ( aaa | bbb )   nnn ) )",
+			( const CKeywordHits * ) &dPseudoHits[0]
+		},
+		{
+			"(aaa (ccc | nnn)) | (bbb (nnn | ddd))",
+			"( ( aaa   ( ccc | nnn ) ) | ( bbb   ( nnn | ddd ) ) )",
+			"( ( aaa   ( ccc | nnn ) ) | ( bbb   ( nnn | ddd ) ) )",
+			( const CKeywordHits * ) &dPseudoHits[1]
+		},
+
+		// COMMON SUBTERM WITH MIXED PHRASES/PROXIMITY terms
+		{
+			"(aaa (ccc | \"qqq www\"~10)) | (bbb (\"qqq www\" | ddd)) | (ccc | \"qqq www\"~20)",
+			"( ( aaa   ( ccc | \"qqq www\"~10 ) ) | ( bbb   ( \"qqq www\" | ddd ) ) | ( ccc | \"qqq www\"~20 ) )",
+			"( ( aaa   ccc ) | ( bbb   ddd ) | ccc | \"qqq www\"~20 | ( ( aaa | bbb )   \"qqq www\"~10 ) )",
+			( const CKeywordHits * ) &dPseudoHits[2]
+		},
+
+		// COMMON KEYWORDS
+		{
+			"\"aaa bbb ccc ddd jjj\" | \"aaa bbb\"",
+			"( \"aaa bbb ccc ddd jjj\" | \"aaa bbb\" )",
+			"\"aaa bbb\"",
+			NULL
+		},
+		{
+			"bbb | \"aaa bbb ccc\"",
+			"( bbb | \"aaa bbb ccc\" )",
+			"bbb",
+			NULL
+		},
+		{
+			"\"aaa bbb ccc ddd jjj\" | \"bbb ccc\"",
+			"( \"aaa bbb ccc ddd jjj\" | \"bbb ccc\" )",
+			"\"bbb ccc\"",
+			NULL
+		},
+		{
+			"\"aaa bbb ccc ddd jjj\" | \"bbb jjj\"",
+			"( \"aaa bbb ccc ddd jjj\" | \"bbb jjj\" )",
+			"( \"aaa bbb ccc ddd jjj\" | \"bbb jjj\" )",
+			NULL
+		},
+		// FIXME!!! add exact phrase elimination
+		{
+			"\"aaa bbb ccc\"~10 | \"aaa bbb ccc ddd\"~20 | \"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~10",
+			"( \"aaa bbb ccc\"~10 | \"aaa bbb ccc ddd\"~20 | \"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~10 )",
+			// "( \"aaa bbb ccc ddd\"~20 | \"aaa bbb ccc\"~10 )",
+			"( \"aaa bbb ccc\"~10 | \"aaa bbb ccc ddd\"~20 | \"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~10 )",
+			NULL
+		},
+		{
+			"\"aaa bbb ccc\"~10 | \"aaa bbb ccc ddd\"~10",
+			"( \"aaa bbb ccc\"~10 | \"aaa bbb ccc ddd\"~10 )",
+			"\"aaa bbb ccc\"~10",
+			NULL
+		},
+		{
+			"\"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~10",
+			"( \"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~10 )",
+			// "\"aaa bbb ccc\"~10",
+			"( \"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~10 )",
+			NULL
+		},
+		{
+			"\"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~9",
+			"( \"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~9 )",
+			// "\"aaa bbb ccc\"~10",
+			"( \"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~9 )",
+			NULL
+		},
+		{
+			"\"aaa bbb ccc ddd eee\" | \"bbb ccc ddd\"~10",
+			"( \"aaa bbb ccc ddd eee\" | \"bbb ccc ddd\"~10 )",
+			"\"bbb ccc ddd\"~10",
+			NULL
+		},
+		{
+			"\"bbb ccc ddd\"~10 | \"ccc ddd\" | \"aaa bbb\"",
+			"( \"bbb ccc ddd\"~10 | \"ccc ddd\" | \"aaa bbb\" )",
+			"( \"bbb ccc ddd\"~10 | \"ccc ddd\" | \"aaa bbb\" )",
+			NULL
+		},
+		{
+			"\"aaa bbb ccc ddd eee\" | \"bbb ccc ddd\"~10 | \"ccc ddd\" | \"aaa bbb\"",
+			"( \"aaa bbb ccc ddd eee\" | \"bbb ccc ddd\"~10 | \"ccc ddd\" | \"aaa bbb\" )",
+			"( \"bbb ccc ddd\"~10 | \"ccc ddd\" | \"aaa bbb\" )",
+			NULL
+		},
+		{
+			"aaa | \"aaa bbb\"~10 | \"aaa ccc\"",
+			"( aaa | \"aaa bbb\"~10 | \"aaa ccc\" )",
+			"aaa",
+			NULL
+		},
+
+		// COMMON PHRASES
+		{
+			"\"aaa bbb ccc ddd\" | \"eee fff ccc ddd\"",
+			"( \"aaa bbb ccc ddd\" | \"eee fff ccc ddd\" )",
+			"( \"( \"aaa bbb\" | \"eee fff\" ) \"ccc ddd\"\" )",
+			NULL
+		},
+		{
+			"\"ccc ddd aaa bbb\" | \"ccc ddd eee fff\"",
+			"( \"ccc ddd aaa bbb\" | \"ccc ddd eee fff\" )",
+			"( \"\"ccc ddd\" ( \"aaa bbb\" | \"eee fff\" )\" )",
+			NULL
+		},
+		{
+			"\"aaa bbb ccc ddd\" | \"eee fff ccc ddd\" | \"jjj lll\"",
+			"( \"aaa bbb ccc ddd\" | \"eee fff ccc ddd\" | \"jjj lll\" )",
+			"( \"jjj lll\" | ( \"( \"aaa bbb\" | \"eee fff\" ) \"ccc ddd\"\" ) )",
+			NULL
+		},
+		{
+			"\"ccc ddd aaa bbb\" | \"ccc ddd eee fff\" | \"jjj lll\"",
+			"( \"ccc ddd aaa bbb\" | \"ccc ddd eee fff\" | \"jjj lll\" )",
+			"( \"jjj lll\" | ( \"\"ccc ddd\" ( \"aaa bbb\" | \"eee fff\" )\" ) )",
+			NULL
+		},
+		{
+			"\"aaa bbb ccc ddd xxx yyy zzz\" | \"eee fff ddd xxx yyy zzz\" | \"jjj lll\"",
+			"( \"aaa bbb ccc ddd xxx yyy zzz\" | \"eee fff ddd xxx yyy zzz\" | \"jjj lll\" )",
+			"( \"jjj lll\" | ( \"( \"aaa bbb ccc\" | \"eee fff\" ) \"ddd xxx yyy zzz\"\" ) )",
+			NULL
+		},
+		{
+			"\"ddd xxx yyy zzz aaa bbb\" | \"ddd xxx yyy zzz ccc eee fff\" | \"jjj lll\"",
+			"( \"ddd xxx yyy zzz aaa bbb\" | \"ddd xxx yyy zzz ccc eee fff\" | \"jjj lll\" )",
+			"( \"jjj lll\" | ( \"\"ddd xxx yyy zzz\" ( \"aaa bbb\" | \"ccc eee fff\" )\" ) )",
+			NULL
+		},
+		{
+			"\"xxx zzz ccc ddd\" | \"xxx zzz yyy jjj kkk\" | \"xxx zzz yyy mmm nnn\"",
+			"( \"xxx zzz ccc ddd\" | \"xxx zzz yyy jjj kkk\" | \"xxx zzz yyy mmm nnn\" )",
+			"( \"\"xxx zzz\" ( \"ccc ddd\" | \"yyy jjj kkk\" | \"yyy mmm nnn\" )\" )",
+			NULL
+		},
+		{
+			"\"aaa bbb ddd www xxx yyy zzz\" | \"aaa bbb eee www xxx yyy zzz\"",
+			"( \"aaa bbb ddd www xxx yyy zzz\" | \"aaa bbb eee www xxx yyy zzz\" )",
+			"( \"( \"aaa bbb ddd\" | \"aaa bbb eee\" ) \"www xxx yyy zzz\"\" )",
+			NULL
+		},
+		{
+			"\"www xxx yyy zzz ddd aaa bbb\" | \"www xxx yyy zzz eee aaa bbb\"",
+			"( \"www xxx yyy zzz ddd aaa bbb\" | \"www xxx yyy zzz eee aaa bbb\" )",
+			"( \"\"www xxx yyy zzz\" ( \"ddd aaa bbb\" | \"eee aaa bbb\" )\" )",
+			NULL
+		},
+		{
+			"\"xxx yyy zzz ddd\" | \"xxx yyy zzz eee\"",
+			"( \"xxx yyy zzz ddd\" | \"xxx yyy zzz eee\" )",
+			"( \"\"xxx yyy zzz\" ( ddd | eee )\" )",
+			NULL
+		},
+		{
+			"\"ddd xxx yyy zzz\" | \"eee xxx yyy zzz\"",
+			"( \"ddd xxx yyy zzz\" | \"eee xxx yyy zzz\" )",
+			"( \"( ddd | eee ) \"xxx yyy zzz\"\" )",
+			NULL
+		},
+
+		// COMMON AND NOT FACTOR
+		{
+			"( aaa !xxx ) | ( aaa !yyy ) | ( aaa !zzz )",
+			"( ( aaa AND NOT xxx ) | ( aaa AND NOT yyy ) | ( aaa AND NOT zzz ) )",
+			"( aaa AND NOT ( xxx   yyy   zzz ) )",
+			NULL
+		},
+
+		{
+			"( aaa !xxx ) | ( aaa !yyy ) | ( aaa !zzz ) | ( bbb !xxx ) | ( bbb !yyy ) | ( bbb !zzz )",
+			"( ( aaa AND NOT xxx ) | ( aaa AND NOT yyy ) | ( aaa AND NOT zzz ) | ( bbb AND NOT xxx ) | ( bbb AND NOT yyy ) | ( bbb AND NOT zzz ) )",
+			"( ( aaa | bbb ) AND NOT ( xxx   yyy   zzz ) )",
+			NULL
+		},
+
+		// COMMON AND NOT FACTOR WITH MIXED PHRASES/PROXIMITY terms
+		{
+			"( \"aaa bbb\"~10 !xxx ) | ( \"aaa bbb\"~20 !yyy ) | ( \"aaa bbb\" !zzz )",
+			"( ( \"aaa bbb\"~10 AND NOT xxx ) | ( \"aaa bbb\"~20 AND NOT yyy ) | ( \"aaa bbb\" AND NOT zzz ) )",
+			"( \"aaa bbb\"~20 AND NOT ( yyy   xxx   zzz ) )",
+			NULL
+		},
+
+		// COMMON | NOT
+		{
+			"( aaa !(nnn | nnn1) ) | ( bbb !(nnn2 | nnn) )",
+			"( ( aaa AND NOT ( nnn | nnn1 ) ) | ( bbb AND NOT ( nnn2 | nnn ) ) )",
+			"( ( ( aaa AND NOT nnn1 ) | ( bbb AND NOT nnn2 ) ) AND NOT nnn )",
+			NULL
+		},
+
+		// ExcessAndNot
+		{
+			"( (aaa ( ( ( (fff (xxx !hhh)) !kkk ) ) bbb !ccc)) !ddd ) ( ( (zzz (xxx !vvv)) !kkk ) )",
+			"( ( aaa   ( ( fff   ( xxx AND NOT hhh )   bbb ) AND NOT ( kkk | ccc ) )   ( ( zzz   ( xxx AND NOT vvv ) ) AND NOT kkk ) ) AND NOT ddd )",
+			"( ( aaa   fff   xxx   bbb   zzz   xxx ) AND NOT ( vvv | hhh | kkk | kkk | ccc | ddd ) )",
+			NULL
+		},
+
+		// COMMON | NOT WITH MIXED PHRASES/PROXIMITY terms
+		{
+			"( aaa !( \"jjj kkk\"~10 | (aaa|nnn) ) ) | ( bbb !( fff | \"jjj kkk\" ) ) | ( ccc !( (hhh kkk) | \"jjj kkk\"~20 ) )",
+			"( ( aaa AND NOT ( \"jjj kkk\"~10 | ( aaa | nnn ) ) ) | ( bbb AND NOT ( fff | \"jjj kkk\" ) ) | ( ccc AND NOT ( ( hhh   kkk ) | \"jjj kkk\"~20 ) ) )",
+			"( ( ( aaa AND NOT ( aaa | nnn ) ) | ( bbb AND NOT fff ) | ( ccc AND NOT ( hhh   kkk ) ) ) AND NOT \"jjj kkk\"~20 )",
+			NULL
+		},
+
+		{
+			NULL, NULL, NULL, NULL
+		}
+	};
+
+	CSphIndexSettings tTmpSettings;
+	const QueryTest_t * pTest = dTest;
+	while ( pTest->m_sQuery )
+	{
+		printf ( "testing query transformations, test %d/%d... ", (int)( pTest-dTest+1 ), (int)( sizeof(dTest)/sizeof(dTest[0])-1 ) );
+
+		XQQuery_t tQuery;
+		sphParseExtendedQuery ( tQuery, pTest->m_sQuery, pTokenizer.Ptr(), &tSchema, pDict.Ptr(), tTmpSettings );
+
+		CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
+
+		CSphDummyIndex tIndex;
+		if ( pTest->m_pKeywordHits )
+		{
+			for ( const CKeywordHits * pHits = pTest->m_pKeywordHits; pHits->m_sKeyword; ++pHits )
+				Verify ( tIndex.m_hHits.Add ( pHits->m_iHits, pHits->m_sKeyword ) );
+		}
+
+		sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, true, &tIndex );
+
+		CSphString sReconstTransformed = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
+
+		if ( sReconst!=pTest->m_sReconst || sReconstTransformed!=pTest->m_sReconstTransformed )
+			printf ( "\n\"%s\"\n\"%s\"\n\"%s\"\n\"%s\" -\n\"%s\" +\n", pTest->m_sQuery,
+				sReconst.cstr(), pTest->m_sReconst, pTest->m_sReconstTransformed, sReconstTransformed.cstr() );
+
+		assert ( sReconst==pTest->m_sReconst );
+		assert ( sReconstTransformed==pTest->m_sReconstTransformed );
+
+		pTest++;
+
+		printf ( "ok\n" );
+	}
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -2320,7 +2678,7 @@ void TestArabicStemmer()
 	printf ( "testing arabic stemmer... " );
 
 	// a few words, cross-verified using NLTK implementation
-	char * dTests[] =
+	const char * dTests[] =
 	{
 		"\xd8\xb0\xd9\x87\xd8\xa8\xd8\xaa\0", "\xd8\xb0\xd9\x87\xd8\xa8\0",
 		"\xd8\xa7\xd9\x84\xd8\xb7\xd8\xa7\xd9\x84\xd8\xa8\xd8\xa9\0", "\xd8\xb7\xd9\x84\xd8\xa8\0",
@@ -2347,10 +2705,10 @@ void TestArabicStemmer()
 		// "\xd8\xa7\xd9\x84\xd8\xa7\xd8\xad\xd8\xa8\xd8\xa7\xd8\xa1\0", "\xd8\xad\xd8\xa8\xd8\xa1\0",
 	};
 
-	for ( int i=0; i<sizeof(dTests)/sizeof(char*); i+=2 )
+	for ( int i=0; i<sizeof(dTests)/sizeof(dTests[0]); i+=2 )
 	{
 		char sBuf[64];
-		strcpy ( sBuf, dTests[i] );
+		snprintf ( sBuf, sizeof(sBuf), "%s", dTests[i] );
 		stem_ar_utf8 ( (BYTE*)sBuf );
 		assert ( strcmp ( sBuf, dTests[i+1] )==0 );
 	}
@@ -2389,6 +2747,7 @@ int main ()
 	BenchLog2();
 #else
 	TestQueryParser ();
+	TestQueryTransforms ();
 	TestStripper ();
 	TestTokenizer ( false );
 	TestTokenizer ( true );

@@ -222,11 +222,12 @@ DWORD			sphCRC32 ( const BYTE * pString, int iLen, DWORD uPrevCRC );
 const uint64_t	SPH_FNV64_SEED = 0xcbf29ce484222325ULL;
 uint64_t		sphFNV64 ( const BYTE * pString );
 uint64_t		sphFNV64 ( const BYTE * s, int iLen, uint64_t uPrev = SPH_FNV64_SEED );
+uint64_t		sphFNV64cont ( const BYTE * pString, uint64_t uPrev );
 
 /// calculate file crc32
 bool			sphCalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 );
 
-/// replaces all occurences of sMacro in sTemplate with textual representation of uValue
+/// replaces all occurrences of sMacro in sTemplate with textual representation of uValue
 char *			sphStrMacro ( const char * sTemplate, const char * sMacro, SphDocID_t uValue );
 
 /// try to obtain an exclusive lock on specified file
@@ -2339,6 +2340,7 @@ public:
 	int				m_iMaxMatches;	///< max matches to retrieve, default is 1000. more matches use more memory and CPU time to hold and sort them
 	bool			m_bSortKbuffer;	///< whether to use PQ or K-buffer sorting algorithm
 	bool			m_bZSlist;		///< whether the ranker has to fetch the zonespanlist with this query
+	bool			m_bIsOptimized;	///< whether to optimize boolean cases
 
 	CSphVector<CSphFilterSettings>	m_dFilters;	///< filters
 
@@ -2363,7 +2365,7 @@ public:
 	CSphVector<CSphNamedInt>	m_dFieldWeights;	///< per-field weights
 
 	DWORD			m_uMaxQueryMsec;	///< max local index search time, in milliseconds (default is 0; means no limit)
-	int				m_iMaxPredictedMsec;///< max predicted (!) search time limit, in milliseconds (0 means no limit)
+	int				m_iMaxPredictedMsec; ///< max predicted (!) search time limit, in milliseconds (0 means no limit)
 	CSphString		m_sComment;			///< comment to pass verbatim in the log file
 
 	CSphVector<CSphAttrOverride>	m_dOverrides;	///< per-query attribute value overrides
@@ -2732,8 +2734,15 @@ class CSphQueryContext;
 struct ISphFilter;
 
 
+struct ISphKeywordsStat
+{
+	virtual ~ISphKeywordsStat() {}
+	virtual bool FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, CSphString & sError ) const = 0;
+};
+
+
 /// generic fulltext index interface
-class CSphIndex
+class CSphIndex : public ISphKeywordsStat
 {
 public:
 
@@ -2818,6 +2827,7 @@ public:
 	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag=0 ) const = 0;
 	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag=0 ) const = 0;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString & sError ) const = 0;
+	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & , CSphString & ) const { return false; }
 
 public:
 	/// updates memory-cached attributes in real time

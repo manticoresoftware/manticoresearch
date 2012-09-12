@@ -1220,8 +1220,9 @@ bool			sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const cha
 size_t			sphReadThrottled ( int iFD, void * pBuf, size_t iCount, ThrottleState_t * pThrottle );
 void			sphMergeStats ( CSphQueryResultMeta & tDstResult, const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hSrc );
 bool			sphCheckQueryHeight ( const struct XQNode_t * pRoot, CSphString & sError );
-void			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings );
+void			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, bool bHasBooleanOptimization, const ISphKeywordsStat * pKeywords );
 bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle );
+CSphString		sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema );
 
 void			sphSetUnlinkOld ( bool bUnlink );
 void			sphUnlinkIndex ( const char * sName, bool bForce );

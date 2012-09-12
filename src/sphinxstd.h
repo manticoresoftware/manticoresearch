@@ -1230,7 +1230,7 @@ public:
 
 	/// add new entry
 	/// returns the pointer to just inserted or previously cached (if dupe) value
-	T* AddUnique ( const T & tValue, const KEY & tKey )
+	T & AddUnique ( const KEY & tKey )
 	{
 		unsigned int uHash = ( (unsigned int) HASHFUNC::Hash ( tKey ) ) % LENGTH;
 
@@ -1240,7 +1240,7 @@ public:
 		while ( pEntry )
 		{
 			if ( pEntry->m_tKey==tKey )
-				return &pEntry->m_tValue;
+				return pEntry->m_tValue;
 
 			ppEntry = &pEntry->m_pNextByHash;
 			pEntry = pEntry->m_pNextByHash;
@@ -1252,7 +1252,7 @@ public:
 
 		pEntry = new HashEntry_t;
 		pEntry->m_tKey = tKey;
-		pEntry->m_tValue = tValue;
+		pEntry->m_tValue = T();
 		pEntry->m_pNextByHash = NULL;
 		pEntry->m_pPrevByOrder = NULL;
 		pEntry->m_pNextByOrder = NULL;
@@ -1272,7 +1272,7 @@ public:
 		m_pLastByOrder = pEntry;
 
 		m_iLength++;
-		return &pEntry->m_tValue;
+		return pEntry->m_tValue;
 	}
 
 	/// delete an entry

@@ -9349,6 +9349,10 @@ bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue )
 	{
 		m_pQuery->m_iMaxPredictedMsec = (int)tValue.m_iValue;
 
+	} else if ( sOpt=="boolean_simplify" )
+	{
+		m_pQuery->m_bIsOptimized = true;
+
 	} else
 	{
 		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", tIdent.m_sValue.cstr() );

@@ -1475,7 +1475,8 @@ public:
 	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const;
 	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString & sError ) const;
-	template <class Qword> bool	DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString & sError ) const;
+	template <class Qword> bool	DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, bool bFillOnly, CSphString & sError ) const;
+	virtual bool 				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, CSphString & sError ) const;
 
 	virtual bool				Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists );
 
@@ -5556,6 +5557,7 @@ CSphQuery::CSphQuery ()
 	, m_iMaxMatches	( 1000 )
 	, m_bSortKbuffer	( false )
 	, m_bZSlist			( false )
+	, m_bIsOptimized	( false )
 	, m_eGroupFunc		( SPH_GROUPBY_ATTR )
 	, m_sGroupSortBy	( "@groupby desc" )
 	, m_sGroupDistinct	( "" )
@@ -15507,20 +15509,24 @@ CSphDict * CSphIndex_VLN::SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer,
 bool CSphIndex_VLN::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	const char * szQuery, bool bGetStats, CSphString & sError ) const
 {
-	WITH_QWORD ( this, false, Qword, return DoGetKeywords<Qword> ( dKeywords, szQuery, bGetStats, sError ) );
+	WITH_QWORD ( this, false, Qword, return DoGetKeywords<Qword> ( dKeywords, szQuery, bGetStats, false, sError ) );
 	return false;
 }
 
 
 template < class Qword >
 bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
-	const char * szQuery, bool bGetStats, CSphString & sError ) const
+	const char * szQuery, bool bGetStats, bool bFillOnly, CSphString & sError ) const
 {
 	if ( !m_pPreread || !*m_pPreread )
 	{
 		sError = "index not preread";
 		return false;
 	}
+
+	// short-cut if no query or keywords to fill
+	if ( ( bFillOnly && !dKeywords.GetLength() ) || ( !bFillOnly && ( !szQuery || !szQuery[0] ) ) )
+		return true;
 
 	CSphScopedPtr <CSphAutofile> pDoclist ( NULL );
 	CSphScopedPtr <CSphAutofile> pHitlist ( NULL );
@@ -15554,50 +15560,84 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	tTermSetup.m_pDict = pDict;
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
-	dKeywords.Resize ( 0 );
 
 	Qword QueryWord ( false, false );
-	CSphString sTokenized;
-	BYTE * sWord;
-	int nWords = 0;
 
-	CSphString sQbuf ( szQuery );
-	pTokenizer->SetBuffer ( (BYTE*)sQbuf.cstr(), strlen(szQuery) );
-
-	while ( ( sWord = pTokenizer->GetToken() )!=NULL )
+	if ( !bFillOnly )
 	{
-		BYTE * sMultiform = pTokenizer->GetTokenizedMultiform();
-		if ( sMultiform )
-			sTokenized = (const char*)sMultiform;
-		else
-			sTokenized = (const char*)sWord;
+		dKeywords.Resize ( 0 );
+		CSphString sTokenized;
+		BYTE * sWord;
 
-		SphWordID_t iWord = pDict->GetWordID ( sWord );
-		if ( iWord )
+		CSphString sQbuf ( szQuery );
+		pTokenizer->SetBuffer ( (BYTE*)sQbuf.cstr(), strlen(szQuery) );
+
+		while ( ( sWord = pTokenizer->GetToken() )!=NULL )
 		{
-			if ( bGetStats )
+			BYTE * sMultiform = pTokenizer->GetTokenizedMultiform();
+			if ( sMultiform )
+				sTokenized = (const char*)sMultiform;
+			else
+				sTokenized = (const char*)sWord;
+
+			SphWordID_t iWord = pDict->GetWordID ( sWord );
+			if ( iWord )
+			{
+				if ( bGetStats )
+				{
+					QueryWord.Reset ();
+					QueryWord.m_sWord = (const char*)sWord;
+					QueryWord.m_sDictWord = (const char*)sWord;
+					QueryWord.m_iWordID = iWord;
+					tTermSetup.QwordSetup ( &QueryWord );
+				}
+
+				CSphKeywordInfo & tInfo = dKeywords.Add();
+				Swap ( tInfo.m_sTokenized, sTokenized );
+				tInfo.m_sNormalized = (const char*)sWord;
+				tInfo.m_iDocs = bGetStats ? QueryWord.m_iDocs : 0;
+				tInfo.m_iHits = bGetStats ? QueryWord.m_iHits : 0;
+
+				if ( tInfo.m_sNormalized.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
+					*(char *)tInfo.m_sNormalized.cstr() = '=';
+			}
+		}
+	} else
+	{
+		BYTE sWord[MAX_KEYWORD_BYTES];
+
+		ARRAY_FOREACH ( i, dKeywords )
+		{
+			CSphKeywordInfo & tInfo = dKeywords[i];
+			int iLen = tInfo.m_sTokenized.Length();
+			memcpy ( sWord, tInfo.m_sTokenized.cstr(), iLen );
+			sWord[iLen] = '\0';
+
+			SphWordID_t iWord = pDict->GetWordID ( sWord );
+			if ( iWord )
 			{
 				QueryWord.Reset ();
-				QueryWord.m_sWord = (const char*)sWord;
+				QueryWord.m_sWord = tInfo.m_sTokenized;
 				QueryWord.m_sDictWord = (const char*)sWord;
 				QueryWord.m_iWordID = iWord;
 				tTermSetup.QwordSetup ( &QueryWord );
+
+				tInfo.m_iDocs = QueryWord.m_iDocs;
+				tInfo.m_iHits = QueryWord.m_iHits;
 			}
-
-			CSphKeywordInfo & tInfo = dKeywords.Add();
-			Swap ( tInfo.m_sTokenized, sTokenized );
-			tInfo.m_sNormalized = (const char*)sWord;
-			tInfo.m_iDocs = bGetStats ? QueryWord.m_iDocs : 0;
-			tInfo.m_iHits = bGetStats ? QueryWord.m_iHits : 0;
-			++nWords;
-
-			if ( tInfo.m_sNormalized.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
-				*(char *)tInfo.m_sNormalized.cstr() = '=';
 		}
 	}
 
 	return true;
 }
+
+
+bool CSphIndex_VLN::FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, CSphString & sError ) const
+{
+	WITH_QWORD ( this, false, Qword, return DoGetKeywords<Qword> ( dKeywords, NULL, true, true, sError ) );
+	return false;
+}
+
 
 // fix MSVC 2005 fuckup, template DoGetKeywords() just above somehow resets forScope
 #if USE_WINDOWS
@@ -15772,6 +15812,7 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 		XQNode_t * pInfix = CloneKeyword ( pNode );
 		pInfix->m_dWords[0].m_sWord.SetSprintf ( "*%s*", pNode->m_dWords[0].m_sWord.cstr() );
 		pInfix->m_dWords[0].m_uStarPosition = STAR_BOTH;
+		pInfix->m_pParent = pExpand;
 		pExpand->m_dChildren.Add ( pInfix );
 	}
 
@@ -15781,6 +15822,7 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 		assert ( pNode->m_dWords.GetLength()==1 );
 		XQNode_t * pExact = CloneKeyword ( pNode );
 		pExact->m_dWords[0].m_sWord.SetSprintf ( "=%s", pNode->m_dWords[0].m_sWord.cstr() );
+		pExact->m_pParent = pExpand;
 		pExpand->m_dChildren.Add ( pExact );
 	}
 
@@ -15797,7 +15839,10 @@ static XQNode_t * ExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & t
 	if ( pNode->m_dChildren.GetLength() )
 	{
 		ARRAY_FOREACH ( i, pNode->m_dChildren )
+		{
 			pNode->m_dChildren[i] = ExpandKeywords ( pNode->m_dChildren[i], tSettings );
+			pNode->m_dChildren[i]->m_pParent = pNode;
+		}
 		return pNode;
 	}
 
@@ -15811,6 +15856,7 @@ static XQNode_t * ExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & t
 			pWord->m_dWords.Add ( pNode->m_dWords[i] );
 			pNode->m_dChildren.Add ( ExpandKeyword ( pWord, tSettings ) );
 			pNode->m_dChildren.Last()->m_iAtomPos = pNode->m_dWords[i].m_iAtomPos;
+			pNode->m_dChildren.Last()->m_pParent = pNode;
 		}
 		pNode->m_dWords.Reset();
 		pNode->m_bVirtuallyPlain = true;
@@ -15984,6 +16030,7 @@ static void BuildExpandedTree ( const XQKeyword_t & tRootWord, CSphVector<CSphNa
 			XQNode_t * pTerm = CloneKeyword ( pRoot );
 			Swap ( pTerm->m_dWords, pCur->m_dWords );
 			pCur->m_dChildren.Add ( pTerm );
+			pTerm->m_pParent = pCur;
 		}
 
 		XQNode_t * pChild = CloneKeyword ( pRoot );
@@ -16003,7 +16050,9 @@ static void BuildExpandedTree ( const XQKeyword_t & tRootWord, CSphVector<CSphNa
 	{
 		assert ( pRoot->GetOp()==SPH_QUERY_OR );
 		assert ( pRoot->m_dChildren.GetLength() );
+		assert ( pRoot!=pTiny );
 		pRoot->m_dChildren.Add ( pTiny );
+		pTiny->m_pParent = pRoot;
 	}
 }
 
@@ -16035,6 +16084,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 		ARRAY_FOREACH ( i, pNode->m_dChildren )
 		{
 			pNode->m_dChildren[i] = sphExpandXQNode ( pNode->m_dChildren[i], tCtx );
+			pNode->m_dChildren[i]->m_pParent = pNode;
 		}
 		return pNode;
 	}
@@ -16049,6 +16099,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 			pWord->m_dWords.Add ( pNode->m_dWords[i] );
 			pNode->m_dChildren.Add ( sphExpandXQNode ( pWord, tCtx ) );
 			pNode->m_dChildren.Last()->m_iAtomPos = pNode->m_dWords[i].m_iAtomPos;
+			pNode->m_dChildren.Last()->m_pParent = pNode;
 
 			// tricky part
 			// current node may have field/zone limits attached
@@ -16223,7 +16274,7 @@ XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphString & sError, 
 	tCtx.m_bHasMorphology = m_pDict->HasMorphology();
 
 	pNode = sphExpandXQNode ( pNode, tCtx );
-
+	pNode->Check ( true );
 	SafeDeleteArray ( pBuf );
 
 	return pNode;
@@ -16251,24 +16302,34 @@ static void TransformNear ( XQNode_t ** ppNode )
 				if ( pChild->GetOp()==SPH_QUERY_AND && pChild->m_dChildren.GetLength()>0 )
 				{
 					ARRAY_FOREACH ( j, pChild->m_dChildren )
+					{
 						if ( j==0 && iStartFrom==0 )
 						{
 							// we will remove the node anyway, so just replace it with 1-st child instead
 							pNode->m_dChildren[i] = pChild->m_dChildren[j];
+							pNode->m_dChildren[i]->m_pParent = pNode;
 							iStartFrom = i+1;
 						} else
+						{
 							dArgs.Add ( pChild->m_dChildren[j] );
+						}
+					}
 					pChild->m_dChildren.Reset();
 					SafeDelete ( pChild );
 				} else if ( iStartFrom!=0 )
+				{
 					dArgs.Add ( pChild );
+				}
 			}
 
 			if ( iStartFrom!=0 )
 			{
 				pNode->m_dChildren.Resize ( iStartFrom + dArgs.GetLength() );
 				ARRAY_FOREACH ( i, dArgs )
+				{
 					pNode->m_dChildren [ i + iStartFrom ] = dArgs[i];
+					pNode->m_dChildren [ i + iStartFrom ]->m_pParent = pNode;
+				}
 			}
 		} while ( iStartFrom!=0 );
 	}
@@ -16367,13 +16428,20 @@ static void TransformBigrams ( XQNode_t * pNode, const CSphIndexSettings & tSett
 }
 
 
-void sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings )
+void sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, bool bHasBooleanOptimization, const ISphKeywordsStat * pKeywords )
 {
 	TransformQuorum ( ppNode );
+	( *ppNode )->Check ( true );
 	TransformNear ( ppNode );
+	( *ppNode )->Check ( true );
 	if ( tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE )
 		TransformBigrams ( *ppNode, tSettings );
 	TagExcluded ( *ppNode, false );
+	( *ppNode )->Check ( true );
+
+	// boolean optimization
+	if ( bHasBooleanOptimization )
+		sphOptimizeBoolean ( ppNode, pKeywords );
 }
 
 
@@ -16445,7 +16513,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	}
 
 	// transform query if needed (quorum transform, keyword expansion, etc.)
-	sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings );
+	sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, pQuery->m_bIsOptimized, this );
 
 	// adjust stars in keywords for dict=keywords, enable_star=0 case
 	if ( pDict->GetSettings().m_bWordDict && !m_bEnableStar && ( m_tSettings.m_iMinPrefixLen>0 || m_tSettings.m_iMinInfixLen>0 ) )
@@ -16458,7 +16526,10 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	tParsed.m_pRoot = pPrefixed;
 
 	if ( m_bExpandKeywords )
+	{
 		tParsed.m_pRoot = ExpandKeywords ( tParsed.m_pRoot, m_tSettings );
+		tParsed.m_pRoot->Check ( true );
+	}
 
 	if ( !sphCheckQueryHeight ( tParsed.m_pRoot, pResult->m_sError ) )
 		return false;
@@ -16534,7 +16605,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 		if ( sphParseExtendedQuery ( dXQ[i], pQueries[i].m_sQuery.cstr(), pTokenizer, &m_tSchema, pDict, m_tSettings ) )
 		{
 			// transform query if needed (quorum transform, keyword expansion, etc.)
-			sphTransformExtendedQuery ( &dXQ[i].m_pRoot, m_tSettings );
+			sphTransformExtendedQuery ( &dXQ[i].m_pRoot, m_tSettings, pQueries[i].m_bIsOptimized, this );
 
 			// expanding prefix in word dictionary case
 			XQNode_t * pPrefixed = ExpandPrefix ( dXQ[i].m_pRoot, ppResults[i]->m_sError, ppResults[i] );
@@ -16543,7 +16614,10 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 				dXQ[i].m_pRoot = pPrefixed;
 
 				if ( m_bExpandKeywords )
+				{
 					dXQ[i].m_pRoot = ExpandKeywords ( dXQ[i].m_pRoot, m_tSettings );
+					dXQ[i].m_pRoot->Check ( true );
+				}
 
 				if ( sphCheckQueryHeight ( dXQ[i].m_pRoot, ppResults[i]->m_sError ) )
 				{
@@ -18113,8 +18187,14 @@ DWORD sphCRC32 ( const BYTE * pString, int iLen, DWORD uPrevCRC )
 
 uint64_t sphFNV64 ( const BYTE * s )
 {
-	uint64_t hval = 0xcbf29ce484222325ULL;
-	while ( *s )
+	return sphFNV64cont ( s, SPH_FNV64_SEED );
+}
+
+
+uint64_t sphFNV64 ( const BYTE * s, int iLen, uint64_t uPrev )
+{
+	uint64_t hval = uPrev;
+	for ( ; iLen>0; iLen-- )
 	{
 		// xor the bottom with the current octet
 		hval ^= (uint64_t)*s++;
@@ -18126,10 +18206,10 @@ uint64_t sphFNV64 ( const BYTE * s )
 }
 
 
-uint64_t sphFNV64 ( const BYTE * s, int iLen, uint64_t uPrev )
+uint64_t sphFNV64cont ( const BYTE * s, uint64_t uPrev )
 {
 	uint64_t hval = uPrev;
-	for ( ; iLen>0; iLen-- )
+	while ( *s )
 	{
 		// xor the bottom with the current octet
 		hval ^= (uint64_t)*s++;

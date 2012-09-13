@@ -7368,9 +7368,16 @@ struct Expr_Snippet_c : public ISphStringExpr
 			return 0;
 		}
 
+		// for dynamic strings (eg. fetched by UDFs), just take ownership
+		// for static ones (eg. attributes), treat as binary (ie. mind that
+		// the trailing zero is NOT guaranteed), and copy them
+		if ( m_pText->IsStringPtr() )
+			m_tHighlight.m_sSource.Adopt ( (char**)&sSource );
+		else
+			m_tHighlight.m_sSource.SetBinary ( (const char*)sSource, iLen );
+
 		// FIXME! fill in all the missing options; use consthash?
 		CSphString sError;
-		m_tHighlight.m_sSource.Adopt ( (char**)&sSource ); // FIXME? will this break on stringattr? on strconst?
 		sphBuildExcerpt ( m_tHighlight, m_pIndex, m_tCtx.m_tStripper.Ptr(), m_tCtx.m_tExtQuery, m_tCtx.m_eExtQuerySPZ,
 			sError, m_tCtx.m_pDict, m_tCtx.m_tTokenizer.Ptr(), m_tCtx.m_pQueryTokenizer );
 
@@ -7418,9 +7425,9 @@ struct ExprHook_t : public ISphExprHook
 	virtual ESphAttr GetReturnType ( int iID, const CSphVector<ESphAttr> & dArgs, bool, CSphString & sError )
 	{
 		assert ( iID==HOOK_SNIPPET );
-		if ( dArgs[0]!=SPH_ATTR_STRINGPTR )
+		if ( dArgs[0]!=SPH_ATTR_STRINGPTR && dArgs[0]!=SPH_ATTR_STRING )
 		{
-			sError = "1st argument to SNIPPET() must be a (mutable) string expression";
+			sError = "1st argument to SNIPPET() must be a string expression";
 			return SPH_ATTR_NONE;
 		}
 		if ( dArgs[1]!=SPH_ATTR_STRING )

@@ -303,6 +303,11 @@ struct Expr_GetZonespanlist_c : public ISphStringExpr
 	{
 		pData->ExtraData ( EXTRA_GET_DATA_ZONESPANS, (void**)&m_pData );
 	}
+
+	virtual bool IsStringPtr() const
+	{
+		return true;
+	}
 };
 
 
@@ -339,6 +344,11 @@ struct Expr_GetRankFactors_c : public ISphStringExpr
 	virtual void SetupExtraData ( ISphExtra * pData )
 	{
 		pData->ExtraData ( EXTRA_GET_DATA_RANKFACTORS, (void**)&m_pFactors );
+	}
+
+	virtual bool IsStringPtr() const
+	{
+		return true;
 	}
 };
 
@@ -542,6 +552,11 @@ public:
 		}
 		*ppStr = (const BYTE *) sBuf.Leak();
 		return strlen ( (const char*) *ppStr );
+	}
+
+	virtual bool IsStringPtr() const
+	{
+		return true;
 	}
 };
 
@@ -1965,6 +1980,11 @@ public:
 		char * pRes = pFn ( &m_pCall->m_tInit, &m_pCall->m_tArgs, &m_bError ); // owned now!
 		*ppStr = (const BYTE*) pRes;
 		return pRes ? strlen(pRes) : 0;
+	}
+
+	virtual bool IsStringPtr() const
+	{
+		return true;
 	}
 };
 

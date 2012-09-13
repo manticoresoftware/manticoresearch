@@ -83,7 +83,12 @@ public:
 	virtual const DWORD * MvaEval ( const CSphMatch & ) const { assert ( 0 ); return NULL; }
 
 	/// check for arglist subtype
+	/// FIXME? replace with a single GetType() call?
 	virtual bool IsArglist () const { return false; }
+
+	/// check for stringptr subtype
+	/// FIXME? replace with a single GetType() call?
+	virtual bool IsStringPtr () const { return false; }
 
 	/// get Nth arg of an arglist
 	virtual ISphExpr * GetArg ( int ) const { return NULL; }

@@ -8458,7 +8458,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		{
 			CSphSchemaMT * pExtraSchemaMT = m_dQueries[iStart].m_bAgent?m_dExtraSchemas[iStart].GetVirgin():NULL;
 			UnlockOnDestroy ExtraLocker ( pExtraSchemaMT );
-			m_tHook.m_pIndex = NULL;
+			m_tHook.m_pIndex = pFirstIndex->m_pIndex;
 			pLocalSorter = sphCreateQueue ( &m_dQueries[iStart], tFirstSchema, sError, true, pExtraSchemaMT, NULL,
 				NULL, // FIXME??? really NULL?
 				&m_tHook );

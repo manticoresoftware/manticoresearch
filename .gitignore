@@ -8,6 +8,7 @@
 /junk
 /*.suo
 /*.ncb
+/*.sdf
 /.hg
 
 # /api/libsphinxclient/
@@ -44,3 +45,4 @@
 
 # /win/
 /win/*.user
+/win/*.filters

@@ -3006,16 +3006,18 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSe
 
 	CSphString sName, sError; // FIXME!!! report collected (sError) errors
 
-	CSphWriter wrHits, wrDocs, wrDict, wrRows;
+	CSphWriter wrHits, wrDocs, wrDict, wrRows, wrSkips;
 	sName.SetSprintf ( "%s.spp", sFilename ); wrHits.OpenFile ( sName.cstr(), sError );
 	sName.SetSprintf ( "%s.spd", sFilename ); wrDocs.OpenFile ( sName.cstr(), sError );
 	sName.SetSprintf ( "%s.spi", sFilename ); wrDict.OpenFile ( sName.cstr(), sError );
 	sName.SetSprintf ( "%s.spa", sFilename ); wrRows.OpenFile ( sName.cstr(), sError );
+	sName.SetSprintf ( "%s.spe", sFilename ); wrSkips.OpenFile ( sName.cstr(), sError );
 
-	BYTE bDummy = 1;
-	wrDict.PutBytes ( &bDummy, 1 );
-	wrDocs.PutBytes ( &bDummy, 1 );
-	wrHits.PutBytes ( &bDummy, 1 );
+
+	wrDict.PutByte ( 1 );
+	wrDocs.PutByte ( 1 );
+	wrHits.PutByte ( 1 );
+	wrSkips.PutByte ( 1 );
 
 	// we don't have enough RAM to create new merged segments
 	// and have to do N-way merge kinda in-place
@@ -3163,6 +3165,7 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSe
 	CSphKeywordDeltaWriter tLastWord;
 	WORDID uLastWordID = 0;
 	SphOffset_t uLastDocpos = 0;
+	CSphVector<SkiplistEntry_t> dSkiplist;
 
 	CSphScopedPtr<ISphInfixBuilder> pInfixer ( NULL );
 	if ( m_tSettings.m_iMinInfixLen && m_pDict->GetSettings().m_bWordDict )
@@ -3214,8 +3217,10 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSe
 		SphOffset_t uDocpos = wrDocs.GetPos();
 		DOCID uLastDoc = 0;
 		SphOffset_t uLastHitpos = 0;
+		SphDocID_t uSkiplistDocID = iMinDocID;
 		int iDocs = 0;
 		int iHits = 0;
+		dSkiplist.Resize ( 0 );
 		for ( ;; )
 		{
 			// find alive doc with min id
@@ -3234,8 +3239,17 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSe
 
 			// write doclist entry
 			const RTDOC * pDoc = pDocs[iMinReader]; // shortcut
+			// build skiplist, aka save decoder state as needed
+			if ( ( iDocs & ( SPH_SKIPLIST_BLOCK-1 ) )==0 )
+			{
+				SkiplistEntry_t & t = dSkiplist.Add();
+				t.m_iBaseDocid = uSkiplistDocID;
+				t.m_iOffset = wrDocs.GetPos();
+				t.m_iBaseHitlistPos = uLastHitpos;
+			}
 			iDocs++;
 			iHits += pDoc->m_uHits;
+			uSkiplistDocID = pDoc->m_uDocID;
 
 			wrDocs.ZipOffset ( pDoc->m_uDocID - uLastDoc - iMinDocID );
 			wrDocs.ZipInt ( pDoc->m_uHits );
@@ -3270,6 +3284,19 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSe
 			ARRAY_FOREACH ( i, pDocs )
 				while ( pDocs[i] && ( pDocs[i]->m_uDocID<=uMinID || pSegments[i]->m_dKlist.BinarySearch ( pDocs[i]->m_uDocID ) ) )
 					pDocs[i] = pDocReaders[i]->UnzipDoc();
+		}
+
+		// write skiplist
+		int iSkiplistOff = (int)wrSkips.GetPos();
+		for ( int i=1; i<dSkiplist.GetLength(); i++ )
+		{
+			const SkiplistEntry_t & tPrev = dSkiplist[i-1];
+			const SkiplistEntry_t & tCur = dSkiplist[i];
+			assert ( tCur.m_iBaseDocid - tPrev.m_iBaseDocid>=SPH_SKIPLIST_BLOCK );
+			assert ( tCur.m_iOffset - tPrev.m_iOffset>=4*SPH_SKIPLIST_BLOCK );
+			wrSkips.ZipOffset ( tCur.m_iBaseDocid - tPrev.m_iBaseDocid - SPH_SKIPLIST_BLOCK );
+			wrSkips.ZipOffset ( tCur.m_iOffset - tPrev.m_iOffset - 4*SPH_SKIPLIST_BLOCK );
+			wrSkips.ZipOffset ( tCur.m_iBaseHitlistPos - tPrev.m_iBaseHitlistPos );
 		}
 
 		// write dict entry if necessary
@@ -3329,6 +3356,10 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSe
 				if ( pInfixer.Ptr() )
 					pInfixer->AddWord ( pWord->m_sWord+1, pWord->m_sWord[0], dCheckpoints.GetLength() );
 			}
+
+			// emit skiplist pointer
+			if ( iDocs>SPH_SKIPLIST_BLOCK )
+				wrDict.ZipInt ( iSkiplistOff );
 
 			uLastDocpos = uDocpos;
 		}
@@ -3437,6 +3468,7 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSe
 		SafeDelete ( pRowIterators[i] );
 
 	// done
+	wrSkips.CloseFile ();
 	wrHits.CloseFile ();
 	wrDocs.CloseFile ();
 	wrDict.CloseFile ();
@@ -3459,7 +3491,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iC
 	const CSphSourceStats & tStats, bool bForceID32 ) const
 {
 	static const DWORD INDEX_MAGIC_HEADER	= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD INDEX_FORMAT_VERSION	= 30;			///< my format version
+	static const DWORD INDEX_FORMAT_VERSION	= 31;			///< my format version
 
 	CSphWriter tWriter;
 	CSphString sName, sError;

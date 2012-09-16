@@ -172,7 +172,6 @@ static const int	DEFAULT_READ_BUFFER		= 262144;
 static const int	DEFAULT_READ_UNHINTED	= 32768;
 static const int	MIN_READ_BUFFER			= 8192;
 static const int	MIN_READ_UNHINTED		= 1024;
-static const int	SKIPLIST_BLOCK			= 128;		///< must be a power of two
 #define READ_NO_SIZE_HINT 0
 
 static bool					g_bSphQuiet					= false;
@@ -9012,7 +9011,7 @@ void CSphHitBuilder::DoclistBeginEntry ( SphDocID_t uDocid, const DWORD * pAttrs
 {
 	// build skiplist
 	// that is, save decoder state and doclist position per every 128 documents
-	if ( ( m_tWord.m_iDocs & ( SKIPLIST_BLOCK-1 ) )==0 )
+	if ( ( m_tWord.m_iDocs & ( SPH_SKIPLIST_BLOCK-1 ) )==0 )
 	{
 		SkiplistEntry_t & tBlock = m_dSkiplist.Add();
 		tBlock.m_iBaseDocid = m_tLastHit.m_iDocID;
@@ -9079,7 +9078,7 @@ void CSphHitBuilder::DoclistEndList ()
 	// emit skiplist
 	// OPTIMIZE? placing it after doclist means an extra seek on searching
 	// however placing it before means some (longer) doclist data moves while indexing
-	if ( m_tWord.m_iDocs>SKIPLIST_BLOCK )
+	if ( m_tWord.m_iDocs>SPH_SKIPLIST_BLOCK )
 	{
 		assert ( m_dSkiplist.GetLength() );
 		assert ( m_dSkiplist[0].m_iOffset==m_tWord.m_iDoclistOffset );
@@ -9100,10 +9099,10 @@ void CSphHitBuilder::DoclistEndList ()
 		for ( int i=1; i<m_dSkiplist.GetLength(); i++ )
 		{
 			const SkiplistEntry_t & t = m_dSkiplist[i];
-			assert ( t.m_iBaseDocid - tLast.m_iBaseDocid>=SKIPLIST_BLOCK );
-			assert ( t.m_iOffset - tLast.m_iOffset>=4*SKIPLIST_BLOCK );
-			m_wrSkiplist.ZipOffset ( t.m_iBaseDocid - tLast.m_iBaseDocid - SKIPLIST_BLOCK );
-			m_wrSkiplist.ZipOffset ( t.m_iOffset - tLast.m_iOffset - 4*SKIPLIST_BLOCK );
+			assert ( t.m_iBaseDocid - tLast.m_iBaseDocid>=SPH_SKIPLIST_BLOCK );
+			assert ( t.m_iOffset - tLast.m_iOffset>=4*SPH_SKIPLIST_BLOCK );
+			m_wrSkiplist.ZipOffset ( t.m_iBaseDocid - tLast.m_iBaseDocid - SPH_SKIPLIST_BLOCK );
+			m_wrSkiplist.ZipOffset ( t.m_iOffset - tLast.m_iOffset - 4*SPH_SKIPLIST_BLOCK );
 			m_wrSkiplist.ZipOffset ( t.m_iBaseHitlistPos - tLast.m_iBaseHitlistPos );
 			tLast = t;
 		}
@@ -12447,7 +12446,7 @@ public:
 			if ( m_iDocs>=DOCLIST_HINT_THRESH )
 				m_iHint = m_pReader->GetByte();
 			DoclistHintUnpack ( m_iDocs, (BYTE) m_iHint );
-			if ( m_bHasSkips && ( m_iDocs > SKIPLIST_BLOCK ) )
+			if ( m_bHasSkips && ( m_iDocs > SPH_SKIPLIST_BLOCK ) )
 				m_pReader->UnzipInt();
 
 			m_iWordID = (SphWordID_t) sphCRC32 ( GetWord() ); // set wordID for indexing
@@ -12458,7 +12457,7 @@ public:
 			m_iDoclistOffset += m_pReader->UnzipOffset();
 			m_iDocs = m_pReader->UnzipInt();
 			m_iHits = m_pReader->UnzipInt();
-			if ( m_bHasSkips && ( m_iDocs > SKIPLIST_BLOCK ) )
+			if ( m_bHasSkips && ( m_iDocs > SPH_SKIPLIST_BLOCK ) )
 				m_pReader->UnzipOffset();
 		}
 
@@ -14024,7 +14023,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 		// read in skiplist
 		// OPTIMIZE? maybe cache hot decompressed lists?
 		// OPTIMIZE? maybe add an option to decompress on preload instead?
-		if ( m_pSkips && tRes.m_iDocs>SKIPLIST_BLOCK )
+		if ( m_pSkips && tRes.m_iDocs>SPH_SKIPLIST_BLOCK )
 		{
 			const BYTE * pSkip = m_pSkips + tRes.m_iSkiplistOffset;
 
@@ -14033,12 +14032,12 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 			t.m_iOffset = tRes.m_iDoclistOffset;
 			t.m_iBaseHitlistPos = 0;
 
-			for ( int i=1; i<( tWord.m_iDocs/SKIPLIST_BLOCK ); i++ )
+			for ( int i=1; i<( tWord.m_iDocs/SPH_SKIPLIST_BLOCK ); i++ )
 			{
 				SkiplistEntry_t & t = tWord.m_dSkiplist.Add();
 				SkiplistEntry_t & p = tWord.m_dSkiplist [ tWord.m_dSkiplist.GetLength()-2 ];
-				t.m_iBaseDocid = p.m_iBaseDocid + SKIPLIST_BLOCK + (SphDocID_t) sphUnzipOffset ( pSkip );
-				t.m_iOffset = p.m_iOffset + 4*SKIPLIST_BLOCK + sphUnzipOffset ( pSkip );
+				t.m_iBaseDocid = p.m_iBaseDocid + SPH_SKIPLIST_BLOCK + (SphDocID_t) sphUnzipOffset ( pSkip );
+				t.m_iOffset = p.m_iOffset + 4*SPH_SKIPLIST_BLOCK + sphUnzipOffset ( pSkip );
 				t.m_iBaseHitlistPos = p.m_iBaseHitlistPos + sphUnzipOffset ( pSkip );
 			}
 		}
@@ -17073,7 +17072,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		}
 
 		// skiplist
-		if ( m_bHaveSkips && iDocs>SKIPLIST_BLOCK )
+		if ( m_bHaveSkips && iDocs>SPH_SKIPLIST_BLOCK )
 		{
 			int iSkipsOffset = rdDict.UnzipInt();
 			if ( !bWordDict && iSkipsOffset<iLastSkipsOffset )
@@ -17216,7 +17215,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 		// FIXME? verify skiplist content too
 		int iSkipsOffset = 0;
-		if ( m_bHaveSkips && iDictDocs>SKIPLIST_BLOCK )
+		if ( m_bHaveSkips && iDictDocs>SPH_SKIPLIST_BLOCK )
 			iSkipsOffset = rdDict.UnzipInt();
 
 		// check whether the offset is as expected
@@ -17277,7 +17276,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		for ( ;; )
 		{
 			// skiplist state is saved just *before* decoding those boundary entries
-			if ( m_bHaveSkips && ( iDoclistDocs & ( SKIPLIST_BLOCK-1 ) )==0 )
+			if ( m_bHaveSkips && ( iDoclistDocs & ( SPH_SKIPLIST_BLOCK-1 ) )==0 )
 			{
 				SkiplistEntry_t & tBlock = dDoclistSkips.Add();
 				tBlock.m_iBaseDocid = pQword->m_tDoc.m_iDocID;
@@ -17381,7 +17380,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			LOC_FAIL(( fp, "hit count mismatch (wordid="UINT64_FMT"(%s), dict=%d, doclist=%d, hitlist=%d)",
 				uint64_t(uWordid), sWord, iDictHits, iDoclistHits, iHitlistHits ));
 
-		while ( m_bHaveSkips && iDoclistDocs>SKIPLIST_BLOCK )
+		while ( m_bHaveSkips && iDoclistDocs>SPH_SKIPLIST_BLOCK )
 		{
 			if ( iSkipsOffset<=0 || iSkipsOffset>(int)m_pSkiplists.GetLength() )
 			{
@@ -17391,7 +17390,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			}
 
 			// boundary adjustment
-			if ( ( iDoclistDocs & ( SKIPLIST_BLOCK-1 ) )==0 )
+			if ( ( iDoclistDocs & ( SPH_SKIPLIST_BLOCK-1 ) )==0 )
 				dDoclistSkips.Pop();
 
 			SkiplistEntry_t t;
@@ -17405,8 +17404,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			while ( pSkip<pMax && ++i<dDoclistSkips.GetLength() )
 			{
 				const SkiplistEntry_t & r = dDoclistSkips[i];
-				t.m_iBaseDocid += SKIPLIST_BLOCK + (SphDocID_t) sphUnzipOffset ( pSkip );
-				t.m_iOffset += 4*SKIPLIST_BLOCK + sphUnzipOffset ( pSkip );
+				t.m_iBaseDocid += SPH_SKIPLIST_BLOCK + (SphDocID_t) sphUnzipOffset ( pSkip );
+				t.m_iOffset += 4*SPH_SKIPLIST_BLOCK + sphUnzipOffset ( pSkip );
 				t.m_iBaseHitlistPos += sphUnzipOffset ( pSkip );
 				if ( t.m_iBaseDocid!=r.m_iBaseDocid
 					|| t.m_iOffset!=r.m_iOffset ||
@@ -19440,7 +19439,7 @@ void CSphDictCRCTraits::DictEntry ( const CSphDictEntry & tEntry )
 	m_wrDict.ZipInt ( tEntry.m_iHits );
 
 	// write skiplist location info, if any
-	if ( tEntry.m_iDocs > SKIPLIST_BLOCK )
+	if ( tEntry.m_iDocs > SPH_SKIPLIST_BLOCK )
 		m_wrDict.ZipOffset ( tEntry.m_iSkiplistOffset );
 
 	m_iEntries++;
@@ -20464,7 +20463,7 @@ static void DictReadEntry ( CSphBin * pBin, DictKeywordTagged_t & tEntry, BYTE *
 	tEntry.m_iDocs = pBin->UnzipInt();
 	tEntry.m_iHits = pBin->UnzipInt();
 	tEntry.m_uHint = (BYTE) pBin->ReadByte();
-	if ( tEntry.m_iDocs > SKIPLIST_BLOCK )
+	if ( tEntry.m_iDocs > SPH_SKIPLIST_BLOCK )
 		tEntry.m_iSkiplistPos = pBin->UnzipInt();
 	else
 		tEntry.m_iSkiplistPos = 0;
@@ -20605,7 +20604,7 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphStri
 		m_wrDict.ZipInt ( tWord.m_iHits );
 		if ( tWord.m_uHint )
 			m_wrDict.PutByte ( tWord.m_uHint );
-		if ( tWord.m_iDocs > SKIPLIST_BLOCK )
+		if ( tWord.m_iDocs > SPH_SKIPLIST_BLOCK )
 			m_wrDict.ZipInt ( tWord.m_iSkiplistPos );
 
 		// build infixes
@@ -20729,8 +20728,8 @@ void CSphDictKeywords::DictFlush ()
 		m_wrTmpDict.ZipInt ( pWord->m_iDocs );
 		m_wrTmpDict.ZipInt ( pWord->m_iHits );
 		m_wrTmpDict.PutByte ( pWord->m_uHint );
-		assert ( ( pWord->m_iDocs > SKIPLIST_BLOCK )==( pWord->m_iSkiplistPos!=0 ) );
-		if ( pWord->m_iDocs > SKIPLIST_BLOCK )
+		assert ( ( pWord->m_iDocs > SPH_SKIPLIST_BLOCK )==( pWord->m_iSkiplistPos!=0 ) );
+		if ( pWord->m_iDocs > SPH_SKIPLIST_BLOCK )
 			m_wrTmpDict.ZipInt ( pWord->m_iSkiplistPos );
 	}
 
@@ -20810,7 +20809,7 @@ void CSphDictKeywords::DictEntry ( const CSphDictEntry & tEntry )
 	pWord->m_iHits = tEntry.m_iHits;
 	pWord->m_uHint = sphDoclistHintPack ( tEntry.m_iDocs, tEntry.m_iDoclistLength );
 	pWord->m_iSkiplistPos = 0;
-	if ( tEntry.m_iDocs > SKIPLIST_BLOCK )
+	if ( tEntry.m_iDocs > SPH_SKIPLIST_BLOCK )
 		pWord->m_iSkiplistPos = (int)( tEntry.m_iSkiplistOffset );
 }
 
@@ -27505,7 +27504,7 @@ bool KeywordsBlockReader_c::UnpackWord()
 	m_iHits = sphUnzipInt ( m_pBuf );
 	m_uHint = ( m_iDocs>=DOCLIST_HINT_THRESH ) ? *m_pBuf++ : 0;
 	m_iDoclistHint = DoclistHintUnpack ( m_iDocs, m_uHint );
-	if ( m_bHaveSkips && ( m_iDocs > SKIPLIST_BLOCK ) )
+	if ( m_bHaveSkips && ( m_iDocs > SPH_SKIPLIST_BLOCK ) )
 		m_iSkiplistOffset = sphUnzipInt ( m_pBuf );
 	else
 		m_iSkiplistOffset = 0;
@@ -27542,7 +27541,7 @@ bool CWordlist::GetWord ( const BYTE * pBuf, SphWordID_t iWordID, CSphDictEntry 
 		const int iDocs = sphUnzipInt ( pBuf );
 		const int iHits = sphUnzipInt ( pBuf );
 		SphOffset_t iSkiplistPos = 0;
-		if ( m_bHaveSkips && ( iDocs > SKIPLIST_BLOCK ) )
+		if ( m_bHaveSkips && ( iDocs > SPH_SKIPLIST_BLOCK ) )
 			iSkiplistPos = sphUnzipOffset ( pBuf );
 
 		assert ( iDeltaOffset );
@@ -28237,7 +28236,7 @@ void sphDictBuildSkiplists ( const char * sPath )
 	DWORD uEntry = 0;
 	while ( pReader->Read() )
 	{
-		if ( pReader->m_iDocs > SKIPLIST_BLOCK )
+		if ( pReader->m_iDocs > SPH_SKIPLIST_BLOCK )
 		{
 			EntrySkips_t & t = dSkips.Add();
 			t.m_uEntry = uEntry;
@@ -28291,7 +28290,7 @@ void sphDictBuildSkiplists ( const char * sPath )
 				break;
 
 			// build skiplist, aka save decoder state as needed
-			if ( ( uDocs & ( SKIPLIST_BLOCK-1 ) )==0 )
+			if ( ( uDocs & ( SPH_SKIPLIST_BLOCK-1 ) )==0 )
 			{
 				SkiplistEntry_t & t = dSkiplist.Add();
 				t.m_iBaseDocid = uDocid;
@@ -28311,7 +28310,7 @@ void sphDictBuildSkiplists ( const char * sPath )
 		}
 
 		// alright, we built it, so save it
-		assert ( uDocs>SKIPLIST_BLOCK );
+		assert ( uDocs>SPH_SKIPLIST_BLOCK );
 		assert ( dSkiplist.GetLength() );
 
 		dSkips[i].m_iSkiplist = (int)wrSkips.GetPos();
@@ -28319,10 +28318,10 @@ void sphDictBuildSkiplists ( const char * sPath )
 		for ( int j=1; j<dSkiplist.GetLength(); j++ )
 		{
 			const SkiplistEntry_t & t = dSkiplist[j];
-			assert ( t.m_iBaseDocid - tLast.m_iBaseDocid>=SKIPLIST_BLOCK );
-			assert ( t.m_iOffset - tLast.m_iOffset>=4*SKIPLIST_BLOCK );
-			wrSkips.ZipOffset ( t.m_iBaseDocid - tLast.m_iBaseDocid - SKIPLIST_BLOCK );
-			wrSkips.ZipOffset ( t.m_iOffset - tLast.m_iOffset - 4*SKIPLIST_BLOCK );
+			assert ( t.m_iBaseDocid - tLast.m_iBaseDocid>=SPH_SKIPLIST_BLOCK );
+			assert ( t.m_iOffset - tLast.m_iOffset>=4*SPH_SKIPLIST_BLOCK );
+			wrSkips.ZipOffset ( t.m_iBaseDocid - tLast.m_iBaseDocid - SPH_SKIPLIST_BLOCK );
+			wrSkips.ZipOffset ( t.m_iOffset - tLast.m_iOffset - 4*SPH_SKIPLIST_BLOCK );
 			wrSkips.ZipOffset ( t.m_iBaseHitlistPos - tLast.m_iBaseHitlistPos );
 			tLast = t;
 		}
@@ -28436,7 +28435,7 @@ void sphDictBuildSkiplists ( const char * sPath )
 		}
 
 		// emit skiplist pointer
-		if ( pReader->m_iDocs > SKIPLIST_BLOCK )
+		if ( pReader->m_iDocs > SPH_SKIPLIST_BLOCK )
 		{
 			// lots of checks
 			if ( uEntry!=pSkips->m_uEntry )

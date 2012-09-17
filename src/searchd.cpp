@@ -7425,6 +7425,11 @@ struct ExprHook_t : public ISphExprHook
 	virtual ESphAttr GetReturnType ( int iID, const CSphVector<ESphAttr> & dArgs, bool, CSphString & sError )
 	{
 		assert ( iID==HOOK_SNIPPET );
+		if ( dArgs.GetLength()!=2  )
+		{
+			sError = "SNIPPET() requires 2 arguments";
+			return SPH_ATTR_NONE;
+		}
 		if ( dArgs[0]!=SPH_ATTR_STRINGPTR && dArgs[0]!=SPH_ATTR_STRING )
 		{
 			sError = "1st argument to SNIPPET() must be a string expression";

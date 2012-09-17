@@ -87,6 +87,9 @@ static int64_t			g_iCurBytes		= 0;
 static int				g_iTotalAllocs	= 0;
 static int				g_iPeakAllocs	= 0;
 static int64_t			g_iPeakBytes	= 0;
+#if SPH_ALLOC_FILL
+static bool				g_bFirstRandomAlloc = true;
+#endif
 
 void * sphDebugNew ( size_t iSize, const char * sFile, int iLine, bool bArray )
 {
@@ -100,6 +103,17 @@ void * sphDebugNew ( size_t iSize, const char * sFile, int iLine, bool bArray )
 	CSphMemHeader * pHeader = (CSphMemHeader*) pBlock;
 	pHeader->m_uMagic = bArray ? MEMORY_MAGIC_ARRAY : MEMORY_MAGIC_PLAIN;
 	pHeader->m_sFile = sFile;
+#if SPH_ALLOC_FILL
+	if ( g_bFirstRandomAlloc )
+	{
+		sphAutoSrand();
+		g_bFirstRandomAlloc = false;
+	}
+
+	BYTE * pBlockPtr = (BYTE*)(pHeader+1);
+	for ( size_t i = 0; i < iSize; i++ )
+		*pBlockPtr++ = BYTE(sphRand () & 0xFF);
+#endif
 #if SPH_DEBUG_BACKTRACES
 	const char * sTrace = DoBacktrace ( 0, 3 );
 	if ( sTrace )

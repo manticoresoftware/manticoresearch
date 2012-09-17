@@ -174,6 +174,7 @@ STATIC_SIZE_ASSERT ( int64_t, 8 );
 /////////////////////////////////////////////////////////////////////////////
 
 #define SPH_DEBUG_LEAKS			0
+#define SPH_ALLOC_FILL			0
 #define SPH_ALLOCS_PROFILER		0
 #define SPH_DEBUG_BACKTRACES 0 // will add not only file/line, but also full backtrace
 

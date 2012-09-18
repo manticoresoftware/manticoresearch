@@ -2358,6 +2358,8 @@ public:
 		m_sBuf[0] = 0;
 		m_pSecond = NULL;
 		m_eState = BIGRAM_CLEAN;
+		m_eMode = pBase->m_eMode;
+		m_iMaxLen = pBase->m_iMaxLen;
 		memcpy ( m_dWordsHash, pBase->m_dWordsHash, sizeof(m_dWordsHash) );
 		m_dWords = pBase->m_dWords;
 	}

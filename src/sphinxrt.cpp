@@ -1034,6 +1034,7 @@ private:
 	bool						m_bKeywordDict;
 	int							m_iWordsCheckpoint;
 	int							m_iMaxCodepointLength;
+	ISphTokenizer *				m_pTokenizerIndexing;
 
 public:
 	explicit					RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
@@ -1161,6 +1162,7 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 	, m_tmSaved ( sphMicroTimer() )
 	, m_bKeywordDict ( bKeywordDict )
 	, m_iWordsCheckpoint ( RTDICT_CHECKPOINT_V5 )
+	, m_pTokenizerIndexing ( NULL )
 {
 	MEMORY ( SPH_MEM_IDX_RT );
 
@@ -1198,6 +1200,8 @@ RtIndex_t::~RtIndex_t ()
 
 	ARRAY_FOREACH ( i, m_pDiskChunks )
 		SafeDelete ( m_pDiskChunks[i] );
+
+	SafeDelete ( m_pTokenizerIndexing );
 
 	if ( m_iLockFD>=0 )
 		::close ( m_iLockFD );
@@ -1372,7 +1376,7 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 	if ( !pAcc )
 		return false;
 
-	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( false ) ); // avoid race
+	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizerIndexing->Clone ( false ) ); // avoid race
 	CSphSource_StringVector tSrc ( iFields, ppFields, m_tSchema );
 
 	// SPZ setup
@@ -3491,7 +3495,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iC
 	const CSphSourceStats & tStats, bool bForceID32 ) const
 {
 	static const DWORD INDEX_MAGIC_HEADER	= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD INDEX_FORMAT_VERSION	= 31;			///< my format version
+	static const DWORD INDEX_FORMAT_VERSION	= 32;			///< my format version
 
 	CSphWriter tWriter;
 	CSphString sName, sError;
@@ -3543,9 +3547,8 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iC
 	tWriter.PutDword ( 1 ); // m_iStopwordStep, v.23+
 	tWriter.PutDword ( 1 );	// m_iOvershortStep
 	tWriter.PutDword ( m_tSettings.m_iEmbeddedLimit );	// v.30+
-	// FIXME!!! save that too
-	//tWriter.PutByte ( m_tSettings.m_eBigramIndex ); // v.32+
-	//tWriter.PutString ( m_tSettings.m_sBigramWords ); // v.32+
+	tWriter.PutByte ( m_tSettings.m_eBigramIndex ); // v.32+
+	tWriter.PutString ( m_tSettings.m_sBigramWords ); // v.32+
 
 	// tokenizer
 	SaveTokenizerSettings ( tWriter, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
@@ -4112,6 +4115,23 @@ void RtIndex_t::PostSetup()
 	}
 
 	m_iMaxCodepointLength = m_pTokenizer->GetMaxCodepointLength();
+
+	// bigram filter
+	if ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE && m_tSettings.m_eBigramIndex!=SPH_BIGRAM_ALL )
+	{
+		m_pTokenizer->SetBuffer ( (BYTE*)m_tSettings.m_sBigramWords.cstr(), m_tSettings.m_sBigramWords.Length() );
+
+		BYTE * pTok = NULL;
+		while ( ( pTok = m_pTokenizer->GetToken() )!=NULL )
+			m_tSettings.m_dBigramWords.Add() = (const char*)pTok;
+
+		m_tSettings.m_dBigramWords.Sort();
+	}
+	// FIXME!!! handle error
+	m_pTokenizerIndexing = m_pTokenizer->Clone ( false );
+	ISphTokenizer * pIndexing = ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError );
+	if ( pIndexing )
+		m_pTokenizerIndexing = pIndexing;
 }
 
 
@@ -6564,6 +6584,7 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 	SafeDelete ( m_pDict );
 
 	m_tSettings = pIndex->GetSettings();
+	m_tSettings.m_dBigramWords.Reset();
 	m_tSettings.m_eDocinfo = SPH_DOCINFO_EXTERN;
 
 	m_pTokenizer = pIndex->GetTokenizer()->Clone ( false );

@@ -41,7 +41,9 @@ v.28, 2.1.1-dev, added m_iOvershortStep
 v.29, 2.1.1-dev, added support for multiple wordforms files
 v.30, 2.1.1-dev, added m_iEmbeddedLimit, embedded synonyms, stopwords, wordforms files
 v.31, 2.1.1-dev, added skiplists (.spe file), changed dictionary entry (added optional skiplist offset)
-...
+v.32, 2.1.1-dev, added bigram indexing, and phrase searching with bigrams (bigram_index, bigram_freq_words directives)
+v.33, 2.1.1-dev, fixed #1274 indexing large amount of attribute data (spa>4Gb)
+v.34, 2.1.1-dev, fixed memory fragmentation on loading dictionary infix blocks
 v.35, 2.1.1-dev, added average field lengths (in tokens) to header
 
 Revisions that touched INDEX_FORMAT_VERSION
@@ -80,5 +82,9 @@ v.28, 1fc6a75d:3165, 2012-03-24, sphinxint.h:47, shodan
 v.29, 97976aef:3181, 2012-04-10, sphinxint.h:47, glook
 v.30, d70268d7:3182, 2012-04-13, sphinxint.h:47, glook
 v.31, 6a16550d:3259, 2012-06-18, sphinxint.h:47, shodan
+v.32, 5d0a1955bb1f:1417, 2012-06-27, sphinxint.h:47, shodan 
+v.33, 36d3ef73faa1:1564, 2012-08-16, sphinxint.h:47, tomat
+v.34, 1c18e86fd4e6:1570, 2012-08-17, sphinxint.h:47, tomat
+v.35, c7c6c05a57de:1906, 2012-08-31, sphinxint.h:47, shodan
 
 --eof--

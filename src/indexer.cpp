@@ -1118,6 +1118,8 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		SafeDelete ( pFieldFilter );
 		SafeDelete ( pTokenizer );
 
+		bOK = true;
+
 	} else
 	{
 		//////////

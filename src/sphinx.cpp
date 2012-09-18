@@ -16387,6 +16387,8 @@ static void TransformBigrams ( XQNode_t * pNode, const CSphIndexSettings & tSett
 		bool bBigram = false;
 		switch ( tSettings.m_eBigramIndex )
 		{
+			case SPH_BIGRAM_NONE:
+				break;
 			case SPH_BIGRAM_ALL:
 				bBigram = true;
 				break;
@@ -17077,7 +17079,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			int iSkipsOffset = rdDict.UnzipInt();
 			if ( !bWordDict && iSkipsOffset<iLastSkipsOffset )
 				LOC_FAIL(( fp, "descending skiplist pos (last=%d, cur=%d, wordid=%llu)",
-					iLastSkipsOffset, iSkipsOffset, uint64_t(uNewWordid) ));
+					iLastSkipsOffset, iSkipsOffset, UINT64(uNewWordid) ));
 			iLastSkipsOffset = iSkipsOffset;
 		}
 
@@ -17385,7 +17387,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			if ( iSkipsOffset<=0 || iSkipsOffset>(int)m_pSkiplists.GetLength() )
 			{
 				LOC_FAIL(( fp, "invalid skiplist offset (wordid=%llu(%s), off=%d, max=%d)",
-					(uint64_t)uWordid, sWord, iSkipsOffset, (int)m_pSkiplists.GetLength() ));
+					UINT64(uWordid), sWord, iSkipsOffset, (int)m_pSkiplists.GetLength() ));
 				break;
 			}
 
@@ -17412,14 +17414,14 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 					t.m_iBaseHitlistPos!=r.m_iBaseHitlistPos )
 				{
 					LOC_FAIL(( fp, "skiplist entry %d mismatch (wordid=%llu(%s), exp={%llu, %llu, %llu}, got={%llu, %llu, %llu})",
-						i, (uint64_t)uWordid, sWord,
-						(uint64_t)r.m_iBaseDocid, (uint64_t)r.m_iOffset, (uint64_t)r.m_iBaseHitlistPos,
-						(uint64_t)t.m_iBaseDocid, (uint64_t)t.m_iOffset, (uint64_t)t.m_iBaseHitlistPos ));
+						i, UINT64(uWordid), sWord,
+						UINT64(r.m_iBaseDocid), UINT64(r.m_iOffset), UINT64(r.m_iBaseHitlistPos),
+						UINT64(t.m_iBaseDocid), UINT64(t.m_iOffset), UINT64(t.m_iBaseHitlistPos) ));
 					break;
 				}
 				if ( pSkip>pMax )
 					LOC_FAIL(( fp, "skiplist length mismatch (wordid=%llu(%s), exp=%d, got=%d)",
-						(uint64_t)uWordid, sWord, i, dDoclistSkips.GetLength() ));
+						UINT64(uWordid), sWord, i, dDoclistSkips.GetLength() ));
 			}
 			break;
 		}
@@ -27704,7 +27706,7 @@ bool sphLookupInfixCheckpoints ( const char * sInfix, int iBytes, const BYTE * p
 			int iKeep = ( iCode>>4 );
 			while ( iKeep-- )
 				pOut += sphUtf8CharBytes ( *pOut ); ///< wtf? *pOut (=sKey) is NOT initialized?
-			assert ( pOut-sKey<=sizeof(sKey) );
+			assert ( pOut-sKey<=(int)sizeof(sKey) );
 			iCode &= 15;
 			while ( iCode-- )
 			{
@@ -27712,9 +27714,9 @@ bool sphLookupInfixCheckpoints ( const char * sInfix, int iBytes, const BYTE * p
 				while ( i-- )
 					*pOut++ = *pBlock++;
 			}
-			assert ( pOut-sKey<=sizeof(sKey) );
+			assert ( pOut-sKey<=(int)sizeof(sKey) );
 		}
-		assert ( pOut-sKey<sizeof(sKey) );
+		assert ( pOut-sKey<(int)sizeof(sKey) );
 #ifndef NDEBUG
 		*pOut = '\0'; // handy for debugging, but not used for real matching
 #endif
@@ -27939,7 +27941,7 @@ void sphDictBuildInfixes ( const char * sPath )
 	int64_t tmStart = sphMicroTimer();
 
 	if ( INDEX_FORMAT_VERSION!=27 )
-		sphDie ( "infix upgrade: only works in v.27 builds for now; get an older indextool or contact support", sError.cstr() );
+		sphDie ( "infix upgrade: only works in v.27 builds for now; get an older indextool or contact support" );
 
 	//////////////////////////////////////////////////
 	// load (interesting parts from) the index header
@@ -28443,7 +28445,7 @@ void sphDictBuildSkiplists ( const char * sPath )
 					uEntry, pSkips->m_uEntry );
 			if ( pReader->m_iDoclistOffset!=pSkips->m_iDoclist )
 				sphDie ( "skiplist upgrade: internal error, offset mismatch (expected %lld, got %lld)",
-					int64_t(pReader->m_iDoclistOffset), int64_t(pSkips->m_iDoclist) );
+					INT64(pReader->m_iDoclistOffset), INT64(pSkips->m_iDoclist) );
 			if ( pSkips->m_iSkiplist<0 )
 				sphDie ( "skiplist upgrade: internal error, bad skiplist offset %d",
 					pSkips->m_iSkiplist	);
@@ -28473,7 +28475,7 @@ void sphDictBuildSkiplists ( const char * sPath )
 	{
 		if ( iWordsEnd!=rdDict.GetPos() )
 			sphDie ( "skiplist upgrade: internal error, infix hash position mismatch (expected=%lld, got=%lld)",
-				int64_t(iWordsEnd), int64_t(rdDict.GetPos()) );
+				INT64(iWordsEnd), INT64(rdDict.GetPos()) );
 		iDeltaInfix = (int)( wrDict.GetPos() - rdDict.GetPos() );
 		CopyBytes ( wrDict, rdDict, (int)( tDictHeader.m_iDictCheckpointsOffset - iWordsEnd ) );
 	}
@@ -28481,7 +28483,7 @@ void sphDictBuildSkiplists ( const char * sPath )
 	// write new checkpoints
 	if ( tDictHeader.m_iDictCheckpointsOffset!=rdDict.GetPos() )
 		sphDie ( "skiplist upgrade: internal error, checkpoints position mismatch (expected=%lld, got=%lld)",
-			int64_t(tDictHeader.m_iDictCheckpointsOffset), int64_t(rdDict.GetPos()) );
+			INT64(tDictHeader.m_iDictCheckpointsOffset), INT64(rdDict.GetPos()) );
 	if ( tDictHeader.m_iDictCheckpoints!=dNewCP.GetLength() )
 		sphDie ( "skiplist upgrade: internal error, checkpoint count mismatch (old=%d, new=%d)",
 			tDictHeader.m_iDictCheckpoints, dNewCP.GetLength() );

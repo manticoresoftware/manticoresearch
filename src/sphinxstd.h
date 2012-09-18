@@ -169,6 +169,14 @@ typedef unsigned long long uint64_t;
 STATIC_SIZE_ASSERT ( uint64_t, 8 );
 STATIC_SIZE_ASSERT ( int64_t, 8 );
 
+// conversion macros that suppress %lld format warnings vs printf
+// problem is, on 64-bit Linux systems with gcc and stdint.h, int64_t is long int
+// and despite sizeof(long int)==sizeof(long long int)==8, gcc bitches about that
+// using PRIi64 instead of %lld is of course The Right Way, but ugly like fuck
+// so lets wrap them args in INT64() instead
+#define INT64(_v) ((long long int)(_v))
+#define UINT64(_v) ((unsigned long long int)(_v))
+
 /////////////////////////////////////////////////////////////////////////////
 // MEMORY MANAGEMENT
 /////////////////////////////////////////////////////////////////////////////

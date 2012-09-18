@@ -14834,7 +14834,7 @@ static void UservarsThreadFunc ( void * )
 
 	char dBuf[512];
 	const int iMaxString = 80;
-	assert ( sizeof ( dBuf )>iMaxString );
+	assert ( (int)sizeof(dBuf) > iMaxString );
 
 	CSphString sError;
 	CSphWriter tWriter;

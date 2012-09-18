@@ -2673,6 +2673,7 @@ void BenchLog2()
 
 //////////////////////////////////////////////////////////////////////////
 
+#ifndef NDEBUG
 void TestArabicStemmer()
 {
 	printf ( "testing arabic stemmer... " );
@@ -2705,7 +2706,7 @@ void TestArabicStemmer()
 		// "\xd8\xa7\xd9\x84\xd8\xa7\xd8\xad\xd8\xa8\xd8\xa7\xd8\xa1\0", "\xd8\xad\xd8\xa8\xd8\xa1\0",
 	};
 
-	for ( int i=0; i<sizeof(dTests)/sizeof(dTests[0]); i+=2 )
+	for ( int i=0; i<int(sizeof(dTests)/sizeof(dTests[0])); i+=2 )
 	{
 		char sBuf[64];
 		snprintf ( sBuf, sizeof(sBuf), "%s", dTests[i] );
@@ -2721,6 +2722,7 @@ void TestArabicStemmer()
 
 	printf ( "ok\n" );
 }
+#endif // !NDEBUG
 
 //////////////////////////////////////////////////////////////////////////
 

@@ -1932,8 +1932,8 @@ protected:
 SnippetsDocIndex_c::SnippetsDocIndex_c ( bool bQueryMode, const XQQuery_t & tQuery )
 	: m_uLastPos ( 0 )
 	, m_tQuery ( tQuery )
-	, m_bQueryMode ( bQueryMode )
 	, m_iTotalKeywordLen ( 0 )
+	, m_bQueryMode ( bQueryMode )
 {}
 
 
@@ -2745,9 +2745,9 @@ public:
 		, m_pHit		( dHits.Begin() )
 		, m_pHitEnd		( dHits.Begin()+dHits.GetLength() )
 		, m_eState		( STATE_WINDOW_SETUP )
+		, m_bQwordsChanged ( true )
 		, m_iCurToken	( 0 )
 		, m_uFoundWords	( 0 )
-		, m_bQwordsChanged ( true )
 		, m_bCollectionStopped ( false )
 	{
 		const int AVG_WORD_LEN = 5;

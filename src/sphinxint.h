@@ -388,7 +388,7 @@ struct MemTracker_c : ISphNoncopyable
 //////////////////////////////////////////////////////////////////////////
 
 #define DOCINFO_INDEX_FREQ 128 // FIXME? make this configurable
-const int	SPH_SKIPLIST_BLOCK			= 128;		///< must be a power of two
+#define SPH_SKIPLIST_BLOCK 128 ///< must be a power of two
 
 inline int64_t MVA_UPSIZE ( const DWORD * pMva )
 {
@@ -1384,7 +1384,7 @@ public:
 		BYTE iDelta = (BYTE)( iLen - iMatch );
 		assert ( iDelta>0 );
 
-		assert ( iLen<sizeof(m_sLastKeyword) );
+		assert ( iLen < (int)sizeof(m_sLastKeyword) );
 		memcpy ( m_sLastKeyword, pWord, iLen );
 		m_iLastLen = iLen;
 

@@ -6516,6 +6516,8 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 		LOC_ERROR ( "ATTACH currently requires boundary_step=0 in disk index (RT-side support not implemented yet)" );
 	if ( tSettings.m_iStopwordStep!=1 )
 		LOC_ERROR ( "ATTACH currently requires stopword_step=1 in disk index (RT-side support not implemented yet)" );
+	if ( tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN )
+		LOC_ERROR ( "ATTACH currently requires docinfo=extern in disk index (RT-side support not implemented yet)" );
 #undef LOC_ERROR
 
 	// ATTACH needs an exclusive global lock on both indexes
@@ -6560,8 +6562,13 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 	// copy tokenizer, dict etc settings from chunk0
 	SafeDelete ( m_pTokenizer );
 	SafeDelete ( m_pDict );
+
+	m_tSettings = pIndex->GetSettings();
+	m_tSettings.m_eDocinfo = SPH_DOCINFO_EXTERN;
+
 	m_pTokenizer = pIndex->GetTokenizer()->Clone ( false );
 	m_pDict = pIndex->GetDictionary()->Clone ();
+	PostSetup();
 
 	// FIXME? what about copying m_TID etc?
 

@@ -1261,7 +1261,6 @@ public:
 
 		pEntry = new HashEntry_t;
 		pEntry->m_tKey = tKey;
-		pEntry->m_tValue = T();
 		pEntry->m_pNextByHash = NULL;
 		pEntry->m_pPrevByOrder = NULL;
 		pEntry->m_pNextByOrder = NULL;
@@ -2282,7 +2281,7 @@ protected:
 
 
 /// rwlock implementation
-class CSphRwlock
+class CSphRwlock : public ISphNoncopyable
 {
 public:
 	CSphRwlock ();
@@ -2295,8 +2294,9 @@ public:
 	bool WriteLock ();
 	bool Unlock ();
 
-#if USE_WINDOWS
 private:
+	bool				m_bInitialized;
+#if USE_WINDOWS
 	HANDLE				m_hWriteMutex;
 	HANDLE				m_hReadEvent;
 	LONG				m_iReaders;

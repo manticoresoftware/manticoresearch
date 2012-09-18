@@ -96,7 +96,7 @@
 // MISC GLOBALS
 /////////////////////////////////////////////////////////////////////////////
 
-struct ServedIndex_t
+struct ServedDesc_t
 {
 	CSphIndex *			m_pIndex;
 	CSphString			m_sIndexPath;
@@ -110,14 +110,20 @@ struct ServedIndex_t
 	bool				m_bOnlyNew;
 	bool				m_bRT;
 
+						ServedDesc_t ();
+};
+
+struct ServedIndex_t : public ISphNoncopyable, public ServedDesc_t
+{
 public:
-						ServedIndex_t ();
+						ServedIndex_t () {}
 						~ServedIndex_t ();
-	void				Reset ();
 
 	void				ReadLock () const;
 	void				WriteLock () const;
 	void				Unlock () const;
+
+	bool				InitLock () const;
 
 private:
 	mutable CSphRwlock	m_tLock;
@@ -377,7 +383,7 @@ public:
 	int						GetLength () const { return BASE::GetLength(); }
 	void					Reset () { BASE::Reset(); }
 
-	bool					Add ( const ServedIndex_t & tValue, const CSphString & tKey );
+	bool					Add ( const ServedDesc_t & tDesc, const CSphString & tKey );
 	bool					Delete ( const CSphString & tKey );
 
 	const ServedIndex_t *	GetRlockedEntry ( const CSphString & tKey ) const;
@@ -849,12 +855,7 @@ void ReleaseTTYFlag()
 #endif
 }
 
-ServedIndex_t::ServedIndex_t ()
-{
-	Reset ();
-}
-
-void ServedIndex_t::Reset ()
+ServedDesc_t::ServedDesc_t ()
 {
 	m_pIndex = NULL;
 	m_bEnabled = true;
@@ -866,10 +867,6 @@ void ServedIndex_t::Reset ()
 	m_bToDelete = false;
 	m_bOnlyNew = false;
 	m_bRT = false;
-
-	m_tLock = CSphRwlock();
-	if ( g_eWorkers==MPM_THREADS )
-		m_tLock.Init();
 }
 
 ServedIndex_t::~ServedIndex_t ()
@@ -905,6 +902,11 @@ void ServedIndex_t::WriteLock () const
 			assert ( false );
 		}
 	}
+}
+
+bool ServedIndex_t::InitLock () const
+{
+	return ( g_eWorkers==MPM_THREADS ) ? m_tLock.Init () : true;
 }
 
 void ServedIndex_t::Unlock () const
@@ -994,12 +996,19 @@ void IndexHash_c::Unlock () const
 }
 
 
-bool IndexHash_c::Add ( const ServedIndex_t & tValue, const CSphString & tKey )
+bool IndexHash_c::Add ( const ServedDesc_t & tDesc, const CSphString & tKey )
 {
 	Wlock();
-	bool bRes = BASE::Add ( tValue, tKey );
+	int iPrevSize = GetLength ();
+	ServedIndex_t & tVal = BASE::AddUnique ( tKey );
+	bool bAdded = ( iPrevSize<GetLength() );
+	if ( bAdded )
+	{
+		*( (ServedDesc_t *)&tVal ) = tDesc;
+		Verify ( tVal.InitLock() );
+	}
 	Unlock();
-	return bRes;
+	return bAdded;
 }
 
 
@@ -7425,7 +7434,7 @@ struct ExprHook_t : public ISphExprHook
 	virtual ESphAttr GetReturnType ( int iID, const CSphVector<ESphAttr> & dArgs, bool, CSphString & sError )
 	{
 		assert ( iID==HOOK_SNIPPET );
-		if ( dArgs.GetLength()!=2  )
+		if ( dArgs.GetLength()!=2 )
 		{
 			sError = "SNIPPET() requires 2 arguments";
 			return SPH_ATTR_NONE;
@@ -14513,7 +14522,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 
 	sphInfo ( "rotating index '%s': started", sIndex.cstr() );
 
-	ServedIndex_t tNewIndex;
+	ServedDesc_t tNewIndex;
 	tNewIndex.m_bOnlyNew = pRotating->m_bOnlyNew;
 
 	tNewIndex.m_pIndex = sphCreateIndexPhrase ( sIndex.cstr(), NULL );
@@ -15294,7 +15303,7 @@ void CheckPipes ()
 }
 
 
-void ConfigureIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex )
+void ConfigureIndex ( ServedDesc_t & tIdx, const CSphConfigSection & hIndex )
 {
 	tIdx.m_bMlock = ( hIndex.GetInt ( "mlock", 0 )!=0 ) && !g_bOptNoLock;
 	tIdx.m_bStar = ( hIndex.GetInt ( "enable_star", 0 )!=0 );
@@ -15738,7 +15747,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 			sphWarning ( "index '%s': rt_mem_limit very low (under 8 MB)", szIndexName );
 
 		// index
-		ServedIndex_t tIdx;
+		ServedDesc_t tIdx;
 		bool bWordDict = strcmp ( hIndex.GetStr ( "dict", "" ), "keywords" )==0;
 		tIdx.m_pIndex = sphCreateIndexRT ( tSchema, szIndexName, iRamSize, hIndex["path"].cstr(), bWordDict );
 		tIdx.m_bEnabled = false;
@@ -15760,7 +15769,6 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 			return ADD_ERROR;
 		}
 
-		tIdx.Reset (); // so that the dtor wouln't delete everything
 		return ADD_RT;
 
 	} else if ( !hIndex("type") || hIndex["type"]=="plain" )
@@ -15769,7 +15777,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		// configure local index
 		/////////////////////////
 
-		ServedIndex_t tIdx;
+		ServedDesc_t tIdx;
 
 		// check path
 		if ( !hIndex.Exists ( "path" ) )
@@ -15806,7 +15814,6 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 			return ADD_ERROR;
 		}
 
-		tIdx.Reset (); // so that the dtor wouldn't delete everything
 		return ADD_LOCAL;
 
 	} else

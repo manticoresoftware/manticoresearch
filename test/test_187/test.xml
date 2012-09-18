@@ -33,6 +33,8 @@ index disk
 	source			= disk
 	path			= <data_path/>/disk
 	charset_table	= a..z, A..Z->a..z
+	html_strip = 1
+	html_remove_elements = stuff
 }
 
 index rt
@@ -87,12 +89,13 @@ CREATE TABLE test_table
 );
 </db_create>
 <db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
-<db_insert>INSERT INTO test_table VALUES
+<db_insert><![CDATA[
+INSERT INTO test_table VALUES
 ( 1, 11, 'Fare thee well' ),
-( 2, 11, 'And if for ever' ),
+( 2, 11, 'And if for ever got' ),
 ( 3, 11, 'Still for ever fare thee well' ),
-( 4, 11, 'under_score' )
-</db_insert>
+( 4, 11, 'under_score <stuff>got removed</stuff>' )
+]]></db_insert>
 
 <sphqueries>
 <sphinxql>SELECT * FROM rt</sphinxql>
@@ -106,13 +109,15 @@ CREATE TABLE test_table
 <sphinxql>DESC rt</sphinxql>
 <sphinxql>INSERT INTO rt ( id, gid, title ) VALUES ( 10, 22, 'I dub thee unforgiven' )</sphinxql>
 <sphinxql>SELECT * FROM rt WHERE MATCH('thee')</sphinxql>
-<sphinxql>INSERT INTO rt ( id, gid, title ) VALUES ( 11, 22, 'under_score_again' )</sphinxql>
+<sphinxql><![CDATA[INSERT INTO rt ( id, gid, title ) VALUES ( 11, 22, 'under_score_again <stuff>but got here</stuff>' )]]></sphinxql>
 <sphinxql>SELECT * FROM rt WHERE MATCH('under')</sphinxql>
 <sphinxql>SELECT * FROM rt_arena</sphinxql>
 <sphinxql>ATTACH INDEX plain TO RTINDEX rt_arena</sphinxql>
 <sphinxql>SELECT * FROM rt_arena where mva1=15 order by id asc</sphinxql>
 <sphinxql>SELECT * FROM rt_arena where mva1=55 order by id desc</sphinxql>
 <sphinxql>SELECT * FROM rt_arena</sphinxql>
+<!-- regression index settings have not been copied on attach -->
+<sphinxql>SELECT * FROM rt WHERE MATCH('got')</sphinxql>
 </sphqueries>
 
 </test>

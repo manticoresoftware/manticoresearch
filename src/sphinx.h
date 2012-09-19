@@ -2547,6 +2547,31 @@ struct CSphIndexProgress
 };
 
 
+/// match sorting functions
+enum ESphSortFunc
+{
+	FUNC_REL_DESC,
+	FUNC_ATTR_DESC,
+	FUNC_ATTR_ASC,
+	FUNC_TIMESEGS,
+	FUNC_GENERIC2,
+	FUNC_GENERIC3,
+	FUNC_GENERIC4,
+	FUNC_GENERIC5,
+	FUNC_CUSTOM,
+	FUNC_EXPR
+};
+
+
+/// match sorting clause parsing outcomes
+enum ESortClauseParseResult
+{
+	SORT_CLAUSE_OK,
+	SORT_CLAUSE_ERROR,
+	SORT_CLAUSE_RANDOM
+};
+
+
 /// sorting key part types
 enum ESphSortKeyPart
 {
@@ -2566,10 +2591,12 @@ struct CSphMatchComparatorState
 
 	ESphSortKeyPart		m_eKeypart[MAX_ATTRS];		///< sort-by key part type
 	CSphAttrLocator		m_tLocator[MAX_ATTRS];		///< sort-by attr locator
+	int					m_dAttrs[MAX_ATTRS];		///< sort-by attr index
 
 	DWORD				m_uAttrDesc;				///< sort order mask (if i-th bit is set, i-th attr order is DESC)
 	DWORD				m_iNow;						///< timestamp (for timesegments sorting mode)
 	SphStringCmp_fn		m_fnStrCmp;					///< string comparator
+
 
 	/// create default empty state
 	CSphMatchComparatorState ()
@@ -2578,7 +2605,10 @@ struct CSphMatchComparatorState
 		, m_fnStrCmp ( NULL )
 	{
 		for ( int i=0; i<MAX_ATTRS; i++ )
+		{
 			m_eKeypart[i] = SPH_KEYPART_ID;
+			m_dAttrs[i] = -1;
+		}
 	}
 
 	/// check if any of my attrs are bitfields
@@ -2927,6 +2957,11 @@ CSphIndex *			sphCreateIndexPhrase ( const char* szIndexName, const char * sFile
 
 /// tell libsphinx to be quiet or not (logs and loglevels to come later)
 void				sphSetQuiet ( bool bQuiet );
+
+/// parses sort clause, using a given schema
+/// fills eFunc and tState and optionally sError, returns result code
+ESortClauseParseResult	sphParseSortClause ( const CSphQuery * pQuery, const char * sClause, const CSphSchema & tSchema,
+	ESphSortFunc & eFunc, CSphMatchComparatorState & tState, CSphString & sError );
 
 /// creates proper queue for given query
 /// may return NULL on error; in this case, error message is placed in sError

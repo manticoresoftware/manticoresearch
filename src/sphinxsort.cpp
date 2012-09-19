@@ -1964,29 +1964,6 @@ struct MatchCustom_fn : public ISphMatchComparator
 static const int MAX_SORT_FIELDS = 5; // MUST be in sync with CSphMatchComparatorState::m_iAttr
 
 
-enum ESphSortFunc
-{
-	FUNC_REL_DESC,
-	FUNC_ATTR_DESC,
-	FUNC_ATTR_ASC,
-	FUNC_TIMESEGS,
-	FUNC_GENERIC2,
-	FUNC_GENERIC3,
-	FUNC_GENERIC4,
-	FUNC_GENERIC5,
-	FUNC_CUSTOM,
-	FUNC_EXPR
-};
-
-
-enum ESortClauseParseResult
-{
-	SORT_CLAUSE_OK,
-	SORT_CLAUSE_ERROR,
-	SORT_CLAUSE_RANDOM
-};
-
-
 class SortClauseTokenizer_t
 {
 protected:
@@ -2050,12 +2027,11 @@ static inline ESphSortKeyPart Attr2Keypart ( ESphAttr eType )
 }
 
 
-static ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char * sClause, const CSphSchema & tSchema,
-	ESphSortFunc & eFunc, CSphMatchComparatorState & tState, int * dAttrs, CSphString & sError, CSphSchema * pExtra = NULL )
+ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char * sClause, const CSphSchema & tSchema,
+	ESphSortFunc & eFunc, CSphMatchComparatorState & tState, CSphString & sError )
 {
-	assert ( dAttrs );
 	for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
-		dAttrs[i] = -1;
+		tState.m_dAttrs[i] = -1;
 
 	// mini parser
 	SortClauseTokenizer_t tTok ( sClause );
@@ -2145,11 +2121,9 @@ static ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, con
 			}
 
 			const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
-			if ( pExtra )
-				pExtra->AddAttr ( tCol, true );
 			tState.m_eKeypart[iField] = Attr2Keypart ( tCol.m_eAttrType );
-			tState.m_tLocator[iField] = tSchema.GetAttr(iAttr).m_tLocator;
-			dAttrs[iField] = iAttr;
+			tState.m_tLocator[iField] = tCol.m_tLocator;
+			tState.m_dAttrs[iField] = iAttr;
 		}
 	}
 
@@ -2461,7 +2435,7 @@ bool sphIsSortStringInternal ( const char * sColumnName )
 }
 
 
-static bool SetupSortStringRemap ( CSphSchema & tSorterSchema, CSphMatchComparatorState & tState, const int * dAttr )
+static bool SetupSortStringRemap ( CSphSchema & tSorterSchema, CSphMatchComparatorState & tState )
 {
 #ifndef NDEBUG
 	int iColWasCount = tSorterSchema.GetAttrsCount();
@@ -2472,10 +2446,10 @@ static bool SetupSortStringRemap ( CSphSchema & tSorterSchema, CSphMatchComparat
 		if ( tState.m_eKeypart[i]!=SPH_KEYPART_STRING )
 			continue;
 
-		assert ( dAttr[i]>=0 && dAttr[i]<iColWasCount );
+		assert ( tState.m_dAttrs[i]>=0 && tState.m_dAttrs[i]<iColWasCount );
 
 		CSphString sRemapCol;
-		sRemapCol.SetSprintf ( "%s%s", g_sIntAttrPrefix, tSorterSchema.GetAttr ( dAttr[i] ).m_sName.cstr() );
+		sRemapCol.SetSprintf ( "%s%s", g_sIntAttrPrefix, tSorterSchema.GetAttr ( tState.m_dAttrs[i] ).m_sName.cstr() );
 
 		int iRemap = tSorterSchema.GetAttrIndex ( sRemapCol.cstr() );
 		if ( iRemap==-1 )
@@ -2944,6 +2918,15 @@ static ISphMatchSorter * CreatePlainSorter ( ESphSortFunc eMatchFunc, bool bKbuf
 }
 
 
+static void ExtraAddSortkeys ( CSphSchema * pExtra, const CSphSchema & tSorterSchema, const int * dAttrs )
+{
+	if ( pExtra )
+		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
+			if ( dAttrs[i]>=0 )
+				pExtra->AddAttr ( tSorterSchema.GetAttr(dAttrs[i]), true );
+}
+
+
 ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema,
 	CSphString & sError, bool bComputeItems, CSphSchema * pExtra, CSphAttrUpdateEx * pUpdate, bool * pZonespanlist,
 	ISphExprHook * pHook )
@@ -3292,17 +3275,18 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	// matches sorting function
 	if ( pQuery->m_eSort==SPH_SORT_EXTENDED )
 	{
-		int dAttrs [ CSphMatchComparatorState::MAX_ATTRS ];
 		ESortClauseParseResult eRes = sphParseSortClause ( pQuery, pQuery->m_sSortBy.cstr(),
-			tSorterSchema, eMatchFunc, tStateMatch, dAttrs, sError, pExtra );
+			tSorterSchema, eMatchFunc, tStateMatch, sError );
+
 		if ( eRes==SORT_CLAUSE_ERROR )
 			return NULL;
 
 		if ( eRes==SORT_CLAUSE_RANDOM )
 			bRandomize = true;
 
-		bUsesAttrs = FixupDependency ( tSorterSchema, dAttrs, CSphMatchComparatorState::MAX_ATTRS );
+		ExtraAddSortkeys ( pExtra, tSorterSchema, tStateMatch.m_dAttrs );
 
+		bUsesAttrs = FixupDependency ( tSorterSchema, tStateMatch.m_dAttrs, CSphMatchComparatorState::MAX_ATTRS );
 		if ( !bUsesAttrs )
 		{
 			for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
@@ -3312,7 +3296,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 					bUsesAttrs = true;
 			}
 		}
-		bUsesAttrs |= SetupSortStringRemap ( tSorterSchema, tStateMatch, dAttrs );
+		bUsesAttrs |= SetupSortStringRemap ( tSorterSchema, tStateMatch );
 
 	} else if ( pQuery->m_eSort==SPH_SORT_EXPR )
 	{
@@ -3359,9 +3343,8 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	// groups sorting function
 	if ( bGotGroupby )
 	{
-		int dAttrs [ CSphMatchComparatorState::MAX_ATTRS ];
 		ESortClauseParseResult eRes = sphParseSortClause ( pQuery, pQuery->m_sGroupSortBy.cstr(),
-			tSorterSchema, eGroupFunc, tStateGroup, dAttrs, sError, pExtra );
+			tSorterSchema, eGroupFunc, tStateGroup, sError );
 
 		if ( eRes==SORT_CLAUSE_ERROR || eRes==SORT_CLAUSE_RANDOM )
 		{
@@ -3369,6 +3352,8 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 				sError.SetSprintf ( "groups can not be sorted by @random" );
 			return NULL;
 		}
+
+		ExtraAddSortkeys ( pExtra, tSorterSchema, tStateGroup.m_dAttrs );
 
 		enum { E_CREATE_GROUP_BY = 0, E_CREATE_DISTINCT = 1, E_CREATE_COUNT = 2 };
 		int dGroupAttrs[E_CREATE_COUNT];
@@ -3383,12 +3368,11 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 				pExtra->AddAttr ( tSorterSchema.GetAttr ( dGroupAttrs[E_CREATE_DISTINCT] ), true );
 		}
 
-		int iGropAttrsCount = ( bGotDistinct ? 2 : 1 );
-		FixupDependency ( tSorterSchema, dGroupAttrs, iGropAttrsCount );
-		FixupDependency ( tSorterSchema, dAttrs, CSphMatchComparatorState::MAX_ATTRS );
+		FixupDependency ( tSorterSchema, dGroupAttrs, bGotDistinct ? 2 : 1 );
+		FixupDependency ( tSorterSchema, tStateGroup.m_dAttrs, CSphMatchComparatorState::MAX_ATTRS );
 
 		// GroupSortBy str attributes setup
-		bUsesAttrs |= SetupSortStringRemap ( tSorterSchema, tStateGroup, dAttrs );
+		bUsesAttrs |= SetupSortStringRemap ( tSorterSchema, tStateGroup );
 	}
 
 	///////////////////

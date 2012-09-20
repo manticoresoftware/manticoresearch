@@ -203,7 +203,7 @@ command_search: 18
 command_excerpt: 4
 command_update: 4
 command_keywords: 1
-command_persist: 1
+command_persist: 2
 command_status: 1
 command_flushattrs: 0
 agent_connect: 1

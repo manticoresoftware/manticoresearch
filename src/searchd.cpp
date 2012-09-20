@@ -628,6 +628,8 @@ struct AgentDesc_t
 	DWORD			m_uAddr;		///< IP address
 	int				m_iStatsIndex;	///< index into global searchd stats array
 	int				m_iDashIndex;	///< index into global searchd host stats array (1 host can hold >1 agents)
+	bool			m_bPersistent;	///< whether to keep the persistent connection to the agent.
+	int				m_iPersSock;	///< socket number, -1 if not connected (has sense only if the connection is persistent)
 
 public:
 	AgentDesc_t ()
@@ -636,6 +638,8 @@ public:
 		, m_iFamily ( AF_INET )
 		, m_uAddr ( 0 )
 		, m_iStatsIndex ( -1 )
+		, m_bPersistent ( false )
+		, m_iPersSock ( -1 )
 	{}
 
 	CSphString GetName() const
@@ -2388,6 +2392,40 @@ int sphPoll ( int iSock, int64_t tmTimeout, bool bWrite=false )
 #endif
 }
 
+/// check if a socket is still connected
+bool sphSockEof ( int iSock )
+{
+	if ( iSock<0 )
+		return true;
+
+	char cBuf;
+
+#if HAVE_POLL
+	struct pollfd pfd;
+	pfd.fd = iSock;
+	pfd.events = POLLPRI | POLLIN;
+	if ( ::poll ( &pfd, 1, 0 )<0 )
+		return true;
+
+	if ( pfd.revents & (POLLIN|POLLPRI) )
+#else
+	fd_set fdrSet, fdeSet;
+	FD_ZERO ( &fdrSet );
+	FD_ZERO ( &fdeSet );
+	sphFDSet ( iSock, &fdrSet );
+	sphFDSet ( iSock, &fdeSet );
+	struct timeval tv = {0};
+	if ( ::select ( iSock+1, &fdrSet, NULL, &fdeSet, &tv )<0 )
+		return true;
+
+	if ( FD_ISSET ( iSock, &fdrSet ) || FD_ISSET ( iSock, &fdeSet ) )
+#endif
+		if ( ::recv ( iSock, &cBuf, sizeof(cBuf), MSG_PEEK )<=0 )
+			if ( sphSockGetErrno()!=EWOULDBLOCK )
+				return true;
+	return false;
+}
+
 
 int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr )
 {
@@ -3228,6 +3266,12 @@ public:
 		*this = rhs;
 	}
 
+	inline void SetPersistent ()
+	{
+		ARRAY_FOREACH ( i, m_dAgents )
+			m_dAgents[i].m_bPersistent = true;
+	}
+
 	AgentDesc_t * CurrentAgent()
 	{
 		assert ( m_iCurAgent>=0 );
@@ -3636,9 +3680,10 @@ public:
 enum AgentState_e
 {
 	AGENT_UNUSED,					///< agent is unused for this request
-	AGENT_CONNECT,					///< connecting to agent
-	AGENT_HELLO,					///< waiting for "VER x" hello
-	AGENT_QUERY,					///< query sent, waiting for reply
+	AGENT_CONNECTING,				///< connecting to agent in progress,
+	AGENT_HANDSHAKE,				///< waiting for "VER x" hello
+	AGENT_ESTABLISHED,				///< handshake completed. Ready to sent query
+	AGENT_QUERYED,					///< query sent, waiting for reply.
 	AGENT_PREREPLY,					///< query sent, activity detected, need to read reply
 	AGENT_REPLY,					///< reading reply
 	AGENT_RETRY						///< should retry
@@ -3648,6 +3693,8 @@ enum AgentState_e
 struct AgentConn_t : public AgentDesc_t
 {
 	int				m_iSock;		///< socket number, -1 if not connected
+	int *			m_pSock;		///< the persistent socket which we rent
+	bool			m_bFresh;		///< just created persistent connection, need SEARCHD_COMMAND_PERSIST
 	AgentState_e	m_eState;		///< current state
 
 	bool			m_bSuccess;		///< whether last request was succesful (ie. there are available results)
@@ -3669,6 +3716,7 @@ struct AgentConn_t : public AgentDesc_t
 public:
 	AgentConn_t ()
 		: m_iSock ( -1 )
+		, m_pSock ( NULL )
 		, m_eState ( AGENT_UNUSED )
 		, m_bSuccess ( false )
 		, m_iReplyStatus ( -1 )
@@ -3680,20 +3728,28 @@ public:
 		, m_iStartQuery ( 0 )
 		, m_iEndQuery ( 0 )
 		, m_iTag ( -1 )
+		, m_bFresh ( true )
 	{}
 
 	~AgentConn_t ()
 	{
-		Close ();
+		Close ( false );
+		if ( m_pSock )
+			*m_pSock = m_iSock; // return rented socket
 	}
 
-	void Close ()
+	void Close ( bool bClosePersist=true )
 	{
 		SafeDeleteArray ( m_pReplyBuf );
 		if ( m_iSock>0 )
 		{
-			sphSockClose ( m_iSock );
-			m_iSock = -1;
+			m_bFresh = false;
+			if ( m_bPersistent && bClosePersist || !m_bPersistent )
+			{
+				sphSockClose ( m_iSock );
+				m_iSock = -1;
+				m_bFresh = true;
+			}
 			if ( m_eState!=AGENT_RETRY )
 				m_eState = AGENT_UNUSED;
 		}
@@ -3711,7 +3767,22 @@ public:
 		m_uAddr = rhs.m_uAddr;
 		m_iStatsIndex = rhs.m_iStatsIndex;
 		m_iDashIndex = rhs.m_iDashIndex;
+		m_bPersistent = rhs.m_bPersistent;
+
 		return *this;
+	}
+
+	// works like =, but also adopt the persistent connection, if any.
+	void TakeTraits ( AgentDesc_t & rhs )
+	{
+		*this = rhs;
+		if ( m_bPersistent )
+		{
+			m_pSock = &rhs.m_iPersSock;
+			m_iSock = rhs.m_iPersSock;
+			rhs.m_iPersSock = -1; // we 'rent' it
+		} else
+			m_pSock = NULL;
 	}
 };
 
@@ -3803,10 +3874,21 @@ struct AgentConnectionContext_t
 	{}
 };
 
-void RemoteConnectToAgents ( AgentConn_t & tAgent )
+void RemoteConnectToAgent ( AgentConn_t & tAgent )
 {
 	bool bAgentRetry = ( tAgent.m_eState==AGENT_RETRY );
 	tAgent.m_eState = AGENT_UNUSED;
+
+	if ( tAgent.m_iSock>=0 ) // already connected
+	{
+		if ( !sphSockEof ( tAgent.m_iSock ) )
+		{
+			tAgent.m_eState = AGENT_ESTABLISHED;
+			return;
+		}
+		tAgent.Close();
+	}
+
 	tAgent.m_bSuccess = false;
 
 	socklen_t len = 0;
@@ -3869,16 +3951,16 @@ void RemoteConnectToAgents ( AgentConn_t & tAgent )
 		} else
 		{
 			// connection in progress
-			tAgent.m_eState = AGENT_CONNECT;
+			tAgent.m_eState = AGENT_CONNECTING;
 		}
 	} else
 	{
 		// socket connected, ready to read hello message
-		tAgent.m_eState = AGENT_HELLO;
+		tAgent.m_eState = AGENT_HANDSHAKE;
 	}
 }
 
-
+// process states AGENT_CONNECT, AGENT_HELLO, and notes AGENT_QUERY
 int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 {
 	assert ( pCtx->m_iTimeout>=0 );
@@ -3893,6 +3975,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 #endif
 
 	// main connection loop
+	// break if a) all connects in AGENT_QUERY state, or b) timeout
 	for ( ;; )
 	{
 		// prepare socket sets
@@ -3907,7 +3990,8 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 		for ( int i=0; i<pCtx->m_iAgentCount; i++ )
 		{
 			const AgentConn_t & tAgent = pCtx->m_pAgents[i];
-			if (!( tAgent.m_eState==AGENT_CONNECT || tAgent.m_eState==AGENT_HELLO || tAgent.m_eState==AGENT_QUERY ))
+			// select only 'initial' agents - which are not send query response.
+			if ( tAgent.m_eState<AGENT_CONNECTING || tAgent.m_eState>AGENT_QUERYED )
 			{
 #if HAVE_POLL
 				fds[i].fd = -1;
@@ -3918,15 +4002,16 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 
 			assert ( !tAgent.m_sPath.IsEmpty() || tAgent.m_iPort>0 );
 			assert ( tAgent.m_iSock>0 );
+			bool bWr = ( tAgent.m_eState==AGENT_CONNECTING || tAgent.m_eState==AGENT_ESTABLISHED );
 #if HAVE_POLL
 			fds[i].fd = tAgent.m_iSock;
-			fds[i].events = ( tAgent.m_eState==AGENT_CONNECT) ? POLLOUT : POLLIN;
+			fds[i].events = bWr ? POLLOUT : POLLIN;
 #else
-			sphFDSet ( tAgent.m_iSock, ( tAgent.m_eState==AGENT_CONNECT ) ? &fdsWrite : &fdsRead );
+			sphFDSet ( tAgent.m_iSock, bWr ? &fdsWrite : &fdsRead );
 			iMax = Max ( iMax, tAgent.m_iSock );
 #endif
 
-			if ( tAgent.m_eState!=AGENT_QUERY )
+			if ( tAgent.m_eState!=AGENT_QUERYED )
 				bDone = false;
 		}
 		if ( bDone )
@@ -3969,7 +4054,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 			// tricky part, with select, we MUST use write-set ONLY here at this check
 			// even though we can't tell connect() success from just OS send buffer availability
 			// but any check involving read-set just never ever completes, so...
-			if ( tAgent.m_eState==AGENT_CONNECT && bWriteable )
+			if ( tAgent.m_eState==AGENT_CONNECTING && bWriteable )
 			{
 				int iErr = 0;
 				socklen_t iErrLen = sizeof(iErr);
@@ -3983,13 +4068,24 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 				} else
 				{
 					// connect() success
-					tAgent.m_eState = AGENT_HELLO;
+					tAgent.m_eState = AGENT_HANDSHAKE;
+
+					// send the client's proto version right now to avoid w-w-r pattern.
+					NetOutputBuffer_c tOut ( tAgent.m_iSock );
+					tOut.SendDword ( SPHINX_CLIENT_VERSION );
+					bool bFlushed = tOut.Flush (); // FIXME! handle flush failure?
+// fix #1071
+#ifdef	TCP_NODELAY
+					int bNoDelay = 1;
+					if ( bFlushed && tAgent.m_iFamily==AF_INET )
+						setsockopt ( tAgent.m_iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&bNoDelay, sizeof(bNoDelay) );
+#endif
 				}
 				continue;
 			}
 
 			// check if hello was received
-			if ( tAgent.m_eState==AGENT_HELLO && bReadable )
+			if ( tAgent.m_eState==AGENT_HANDSHAKE && bReadable )
 			{
 				// read reply
 				int iRemoteVer;
@@ -4030,24 +4126,35 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 					continue;
 				}
 
+				NetOutputBuffer_c tOut ( tAgent.m_iSock );
+				// check if we need to reset the persistent connection
+				if ( tAgent.m_bFresh )
+				{
+					tOut.SendWord ( SEARCHD_COMMAND_PERSIST );
+					tOut.SendWord ( 0 ); // dummy version
+					tOut.SendInt ( 4 ); // request body length
+					tOut.SendInt ( 1 ); // set persistent to 1.
+					tOut.Flush ();
+					tAgent.m_bFresh = false;
+				}
+
+				tAgent.m_eState = AGENT_ESTABLISHED;
+				continue;
+			}
+
+			if ( tAgent.m_eState==AGENT_ESTABLISHED && bWriteable )
+			{
 				// send request
 				NetOutputBuffer_c tOut ( tAgent.m_iSock );
 				pCtx->m_pBuilder->BuildRequest ( tAgent, tOut );
-				bool bFlushed = tOut.Flush (); // FIXME! handle flush failure?
-
-#ifdef	TCP_NODELAY
-				int iDisable = 1;
-				if ( bFlushed && tAgent.m_iFamily==AF_INET )
-					setsockopt ( tAgent.m_iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iDisable, sizeof(iDisable) );
-#endif
-
-				tAgent.m_eState = AGENT_QUERY;
+				tOut.Flush (); // FIXME! handle flush failure?
+				tAgent.m_eState = AGENT_QUERYED;
 				iAgents++;
 				continue;
 			}
 
 			// check if queried agent replied while we were querying others
-			if ( tAgent.m_eState==AGENT_QUERY && bReadable )
+			if ( tAgent.m_eState==AGENT_QUERYED && bReadable )
 			{
 				// do not account agent wall time from here; agent is probably ready
 				tAgent.m_iWall += sphMicroTimer();
@@ -4061,7 +4168,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 	for ( int i=0; i<pCtx->m_iAgentCount; i++ )
 	{
 		AgentConn_t & tAgent = pCtx->m_pAgents[i];
-		if ( tAgent.m_eState!=AGENT_QUERY && tAgent.m_eState!=AGENT_UNUSED && tAgent.m_eState!=AGENT_RETRY && tAgent.m_eState!=AGENT_PREREPLY
+		if ( tAgent.m_eState!=AGENT_QUERYED && tAgent.m_eState!=AGENT_UNUSED && tAgent.m_eState!=AGENT_RETRY && tAgent.m_eState!=AGENT_PREREPLY
 			&& tAgent.m_eState!=AGENT_REPLY )
 		{
 			// technically, we can end up here via two different routes
@@ -4079,7 +4186,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 	return iAgents;
 }
 
-
+// processing states AGENT_QUERY, AGENT_PREREPLY and AGENT_REPLY
 int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IReplyParser_t & tParser )
 {
 	assert ( iTimeout>=0 );
@@ -4110,7 +4217,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 			if ( tAgent.m_bBlackhole )
 				continue;
 
-			if ( tAgent.m_eState==AGENT_QUERY || tAgent.m_eState==AGENT_REPLY || tAgent.m_eState==AGENT_PREREPLY )
+			if ( tAgent.m_eState==AGENT_QUERYED || tAgent.m_eState==AGENT_REPLY || tAgent.m_eState==AGENT_PREREPLY )
 			{
 				assert ( !tAgent.m_sPath.IsEmpty() || tAgent.m_iPort>0 );
 				assert ( tAgent.m_iSock>0 );
@@ -4152,7 +4259,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 			AgentConn_t & tAgent = dAgents[iAgent];
 			if ( tAgent.m_bBlackhole )
 				continue;
-			if (!( tAgent.m_eState==AGENT_QUERY || tAgent.m_eState==AGENT_REPLY || tAgent.m_eState==AGENT_PREREPLY ))
+			if (!( tAgent.m_eState==AGENT_QUERYED || tAgent.m_eState==AGENT_REPLY || tAgent.m_eState==AGENT_PREREPLY ))
 				continue;
 
 #if HAVE_POLL
@@ -4168,12 +4275,12 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 			bool bWarnings = false;
 			for ( ;; )
 			{
-				if ( tAgent.m_eState==AGENT_QUERY || tAgent.m_eState==AGENT_PREREPLY )
+				if ( tAgent.m_eState==AGENT_QUERYED || tAgent.m_eState==AGENT_PREREPLY )
 				{
 					if ( tAgent.m_eState==AGENT_PREREPLY )
 					{
 						tAgent.m_iWall -= sphMicroTimer();
-						tAgent.m_eState = AGENT_QUERY;
+						tAgent.m_eState = AGENT_QUERYED;
 					}
 
 					// try to read
@@ -4286,7 +4393,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 
 					// all is well
 					iAgents++;
-					tAgent.Close ();
+					tAgent.Close ( false );
 
 					tAgent.m_bSuccess = true;
 				}
@@ -4310,7 +4417,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 		AgentConn_t & tAgent = dAgents[iAgent];
 		if ( tAgent.m_bBlackhole )
 			tAgent.Close ();
-		else if ( tAgent.m_eState==AGENT_QUERY || tAgent.m_eState==AGENT_PREREPLY )
+		else if ( tAgent.m_eState==AGENT_QUERYED || tAgent.m_eState==AGENT_PREREPLY )
 		{
 			assert ( !tAgent.m_dResults.GetLength() );
 			assert ( !tAgent.m_bSuccess );
@@ -4525,7 +4632,7 @@ void SetNextRetry ( AgentWorkContext_t * pCtx )
 
 void ThdWorkParallel ( AgentWorkContext_t * pCtx )
 {
-	RemoteConnectToAgents ( *pCtx->m_pAgents );
+	RemoteConnectToAgent ( *pCtx->m_pAgents );
 	if ( pCtx->m_pAgents->m_eState==AGENT_UNUSED )
 	{
 		SetNextRetry ( pCtx );
@@ -4554,7 +4661,7 @@ void ThdWorkSequental ( AgentWorkContext_t * pCtx )
 		AgentConn_t & tAgent = pCtx->m_pAgents[iAgent];
 		if ( !pCtx->m_iRetries || tAgent.m_eState==AGENT_RETRY )
 		{
-			RemoteConnectToAgents ( tAgent );
+			RemoteConnectToAgent ( tAgent );
 		}
 	}
 
@@ -4842,7 +4949,6 @@ void SearchRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuffe
 	for ( int i=m_iStart; i<=m_iEnd; i++ )
 		iReqLen += CalcQueryLen ( sIndexes, m_dQueries[i] );
 
-	tOut.SendDword ( SPHINX_SEARCHD_PROTO );
 	tOut.SendWord ( SEARCHD_COMMAND_SEARCH ); // command id
 	tOut.SendWord ( VER_COMMAND_SEARCH ); // command version
 	tOut.SendInt ( iReqLen ); // request body length
@@ -8350,7 +8456,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 			dAgents.Resize ( pDist->m_dAgents.GetLength() );
 			ARRAY_FOREACH ( i, pDist->m_dAgents )
-				dAgents[i] = *pDist->m_dAgents[i].GetRRAgent ( pDist->m_eHaStrategy );
+				dAgents[i].TakeTraits ( *pDist->m_dAgents[i].GetRRAgent ( pDist->m_eHaStrategy ) );
 		}
 		g_tDistLock.Unlock();
 	}
@@ -9958,7 +10064,6 @@ void SnippetRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuff
 		}
 	}
 
-	tOut.SendDword ( SPHINX_SEARCHD_PROTO );
 	tOut.SendWord ( SEARCHD_COMMAND_EXCERPT );
 	tOut.SendWord ( VER_COMMAND_EXCERPT );
 
@@ -10140,7 +10245,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 		dDistLocal = pDist->m_dLocal;
 		dRemoteSnippets.m_dAgents.Resize ( pDist->m_dAgents.GetLength() );
 		ARRAY_FOREACH ( i, pDist->m_dAgents )
-			dRemoteSnippets.m_dAgents[i] = *pDist->m_dAgents[i].GetRRAgent ( pDist->m_eHaStrategy );
+			dRemoteSnippets.m_dAgents[i].TakeTraits ( *pDist->m_dAgents[i].GetRRAgent ( pDist->m_eHaStrategy ) );
 	}
 	g_tDistLock.Unlock();
 
@@ -10603,7 +10708,6 @@ void UpdateRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuffe
 	iReqSize += 8*m_tUpd.m_dDocids.GetLength() + 4*m_tUpd.m_dPool.GetLength(); // 64bit ids, 32bit values
 
 	// header
-	tOut.SendDword ( SPHINX_SEARCHD_PROTO );
 	tOut.SendWord ( SEARCHD_COMMAND_UPDATE );
 	tOut.SendWord ( VER_COMMAND_UPDATE );
 	tOut.SendInt ( iReqSize );
@@ -12246,7 +12350,6 @@ struct PingRequestBuilder_t : public IRequestBuilder_t
 	virtual void BuildRequest ( AgentConn_t &, NetOutputBuffer_c & tOut ) const
 	{
 		// header
-		tOut.SendDword ( SPHINX_SEARCHD_PROTO );
 		tOut.SendWord ( SEARCHD_COMMAND_PING );
 		tOut.SendWord ( VER_COMMAND_PING );
 		tOut.SendInt ( 4 );
@@ -12393,7 +12496,6 @@ void SphinxqlRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuf
 	int iReqSize = strlen(sIndexes) + m_sBegin.Length() + m_sEnd.Length(); // indexes string
 
 	// header
-	tOut.SendDword ( SPHINX_SEARCHD_PROTO );
 	tOut.SendWord ( SEARCHD_COMMAND_SPHINXQL );
 	tOut.SendWord ( VER_COMMAND_SPHINXQL );
 	tOut.SendInt ( iReqSize + 4 );
@@ -12977,8 +13079,6 @@ void HandleMysqlMeta ( NetOutputBuffer_c & tOut, BYTE & uPacketID, const CSphQue
 	SendMysqlEofPacket ( tOut, uPacketID++, 0, bMoreResultsFollow );
 
 	// send rows
-	dRows.Reset();
-
 	for ( int iRow=0; iRow<dStatus.GetLength(); iRow+=2 )
 	{
 		dRows.PutString ( dStatus[iRow+0].cstr() );
@@ -15403,7 +15503,7 @@ bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, co
 	return true;
 }
 enum eAgentParse { apInHost, apInPort, apStartIndexList, apIndexList, apDone };
-bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, const char * szIndexName, bool bBlackhole )
+bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, const char * szIndexName, bool bBlackhole, bool bPersistent=false )
 {
 	eAgentParse eState = apInHost;
 	AgentDesc_t * pCurrent = tAgent.NewAgent();
@@ -15542,6 +15642,8 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, cons
 	bool bRes = ValidateAgentDesc ( tAgent, pAgent, szIndexName, bBlackhole );
 	tAgent.Rewind();
 	tAgent.QueuePings();
+	if ( bPersistent )
+		tAgent.SetPersistent();
 	return bRes;
 }
 
@@ -15570,6 +15672,18 @@ static void ConfigureDistributedIndex ( DistributedIndex_t * pIdx, const char * 
 	{
 		MetaAgentDesc_t& tAgent = tIdx.m_dAgents.Add();
 		if ( ConfigureAgent ( tAgent, pAgent, szIndexName, false ) )
+			bHaveHA |= tAgent.IsHA();
+		else
+			tIdx.m_dAgents.Remove ( tIdx.m_dAgents.GetLength()-1 );
+	}
+
+	// for now work with client persistent connections only on per-fork basis,
+	// to avoid locks, etc.
+	bool bEnablePersistentConns = g_eWorkers!=MPM_THREADS;
+	for ( CSphVariant * pAgent = hIndex("agent_persistent"); pAgent; pAgent = pAgent->m_pNext )
+	{
+		MetaAgentDesc_t& tAgent = tIdx.m_dAgents.Add ();
+		if ( ConfigureAgent ( tAgent, pAgent, szIndexName, false, bEnablePersistentConns ) )
 			bHaveHA |= tAgent.IsHA();
 		else
 			tIdx.m_dAgents.Remove ( tIdx.m_dAgents.GetLength()-1 );
@@ -16865,7 +16979,7 @@ void QueryStatus ( CSphVariant * v )
 
 		// send request
 		NetOutputBuffer_c tOut ( iSock );
-		tOut.SendDword ( SPHINX_SEARCHD_PROTO );
+		tOut.SendDword ( SPHINX_CLIENT_VERSION );
 		tOut.SendWord ( SEARCHD_COMMAND_STATUS );
 		tOut.SendWord ( VER_COMMAND_STATUS );
 		tOut.SendInt ( 4 ); // request body length
@@ -16933,7 +17047,7 @@ void FailClient ( int iSock, SearchdStatus_e eStatus, const char * sMessage )
 	int iRespLen = 4 + strlen(sMessage);
 
 	NetOutputBuffer_c tOut ( iSock );
-	tOut.SendInt ( SPHINX_SEARCHD_PROTO );
+	tOut.SendInt ( SPHINX_CLIENT_VERSION );
 	tOut.SendWord ( (WORD)eStatus );
 	tOut.SendWord ( 0 ); // version doesn't matter
 	tOut.SendInt ( iRespLen );

@@ -1651,16 +1651,16 @@ public:
 		return strncmp ( m_sValue, sPrefix, strlen(sPrefix) )==0;
 	}
 
-	bool Ends ( const char * sPrefix ) const
+	bool Ends ( const char * sSuffix ) const
 	{
-		if ( !m_sValue || !sPrefix )
+		if ( !m_sValue || !sSuffix )
 			return false;
 
 		int iVal = strlen ( m_sValue );
-		int iPrefix = strlen ( sPrefix );
-		if ( iVal<iPrefix )
+		int iSuffix = strlen ( sSuffix );
+		if ( iVal<iSuffix )
 			return false;
-		return strncmp ( m_sValue+iVal-iPrefix, sPrefix, iPrefix )==0;
+		return strncmp ( m_sValue+iVal-iSuffix, sSuffix, iSuffix )==0;
 	}
 
 	void Trim ()

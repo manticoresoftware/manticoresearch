@@ -15,7 +15,9 @@ die()
 	echo "C API:$1"
 	[ -e "$FAILLOG" ] && rm $FAILLOG
 	
-	cmd "../../src/searchd -c smoke_test.conf --stop"
+	stop="../../src/searchd -c smoke_test.conf --stop"
+    echo "Executing: $stop\n">$FAILLOG
+    eval "$stop" 1>>$FAILLOG 2>&1
 	exit 1
 }
 

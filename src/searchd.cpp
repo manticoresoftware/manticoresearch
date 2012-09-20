@@ -11332,7 +11332,7 @@ void BuildOneAgentStatus ( VectorLike & dStatus, const CSphString& sAgent, const
 			for ( int j=0; j<eMaxStat; ++j )
 				if ( j==eTotalMsecs ) // hack. Avoid microseconds in human-readable statistic
 				{
-					float fAverageLatency = (float)dDashStat.m_iStats[eTotalMsecs]/uQueries/1000.0;
+					float fAverageLatency = (float)(( dDashStat.m_iStats[eTotalMsecs] / 1000.0 ) / uQueries );
 					if ( dStatus.MatchAddVa ( "%s_%dperiods_msecsperquery", sPrefix, iPeriods ) )
 						dStatus.Add().SetSprintf ( FLOAT, fAverageLatency );
 				} else

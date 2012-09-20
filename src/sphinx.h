@@ -1062,6 +1062,7 @@ public:
 	{
 	}
 
+private:
 	/// copy ctor. just in case
 	CSphMatch ( const CSphMatch & rhs )
 		: m_pStatic ( 0 )
@@ -1070,6 +1071,7 @@ public:
 		*this = rhs;
 	}
 
+public:
 	/// dtor. frees everything
 	~CSphMatch ()
 	{

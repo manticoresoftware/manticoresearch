@@ -712,16 +712,19 @@ public:
 		return &dStats;
 	}
 
-	void GetDashStat ( AgentDash_t* pRes, int iPeriods=1 ) const
+	int GetDashStat ( AgentDash_t* pRes, int iPeriods=1 ) const
 	{
 		assert ( pRes );
 		pRes->Reset();
+
+		int iCollected = 0;
 
 		DWORD uSeconds = GetCurSeconds();
 		if ( (uSeconds % g_uHAPeriodKarma) < (g_uHAPeriodKarma/2) )
 			++iPeriods;
 
 		int iLimit = Min ( iPeriods, STATS_DASH_TIME );
+		int iMaxExpected = iLimit + 1;
 		DWORD uTime = uSeconds/g_uHAPeriodKarma;
 		int iIdx = uTime % STATS_DASH_TIME;
 		// pRes->m_uTimestamp = uTime;
@@ -730,13 +733,18 @@ public:
 		{
 			const AgentDash_t & dStats = m_dStats[iIdx];
 			if ( dStats.m_uTimestamp==uTime ) // it might be no queries at all in the fixed time
+			{
 				pRes->Add ( dStats );
+				iCollected = iLimit;
+			}
 
 			--uTime;
 			--iIdx;
 			if ( iIdx<0 )
 				iIdx = STATS_DASH_TIME-1;
 		}
+
+		return iMaxExpected - iCollected;
 	}
 };
 
@@ -3660,6 +3668,11 @@ public:
 	const CSphVector<AgentDesc_t>& GetAgents() const
 	{
 		return m_dAgents;
+	}
+
+	const CSphVector<float>& GetWeights() const
+	{
+		return m_dWeights;
 	}
 
 	MetaAgentDesc_t & operator= ( const MetaAgentDesc_t & rhs )
@@ -9013,7 +9026,7 @@ static const char * g_dSqlStmts[STMT_TOTAL] =
 	"show_status", "show_meta", "set", "begin", "commit", "rollback", "call",
 	"desc", "show_tables", "update", "create_func", "drop_func", "attach_index",
 	"flush_rtindex", "show_variables", "truncate_rtindex", "select_sysvar",
-	"show_collation", "optimize_index"
+	"show_collation", "optimize_index", "show_agent_status"
 };
 
 
@@ -9113,6 +9126,9 @@ struct SqlStmt_t
 	CSphString				m_sUdfName;
 	CSphString				m_sUdfLib;
 	ESphAttr				m_eUdfType;
+
+	// Generic params
+	CSphString				m_sStringParam;
 
 	SqlStmt_t ()
 		: m_eStmt ( STMT_PARSE_ERROR )
@@ -10963,6 +10979,146 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq )
 	tOut.Flush ();
 }
 
+// 'like' matcher
+class CheckLike
+{
+	const char * m_sPattern;
+
+	inline bool IsNoPattern()
+	{
+		if ( !m_sPattern )
+			return true;
+		return ( (*m_sPattern)=='\0' );
+	}
+
+public:
+
+	explicit CheckLike ( const char * sPattern )
+		: m_sPattern ( sPattern )
+	{}
+
+	// classical wild-chars matching ('?'-any symbol, '*'-any symbols)
+	bool Match ( const char* sValue )
+	{
+		if ( !sValue )
+			return false;
+
+		if ( IsNoPattern() )
+			return true;
+
+		const char * sPattern = m_sPattern;
+		const char * sEnd = sPattern + strlen ( sPattern );
+		const char * sValEnd = sValue + strlen ( sValue );
+		bool bAsterisk = false;
+
+		while ( sPattern<sEnd && sValue<sValEnd )
+		{
+			switch ( *sPattern )
+			{
+			case '*' :
+				bAsterisk = true;
+				++sPattern;
+				break;
+			case '?' :
+				++sValue;
+				++sPattern;
+				break;
+			default:
+				{
+					int iSubPatLen = 1;
+					while ( (sPattern+iSubPatLen)<sEnd && sPattern[iSubPatLen]!='*' && sPattern[iSubPatLen]!='?' )
+						++iSubPatLen;
+
+					int iValLen = strlen ( sValue );
+					if ( iValLen < iSubPatLen )
+						return false;
+
+					if ( bAsterisk )
+					{
+						int iSupPos = -1;
+						for ( int i=0; i<iValLen-iSubPatLen+1; ++i )
+							if ( strncmp ( sPattern, sValue+i, iSubPatLen )==0 )
+							{
+								iSupPos = i;
+								break;
+							}
+							if ( iSupPos<0 )
+								return false;
+
+							sPattern+=iSubPatLen;
+							sValue+=iSupPos+iSubPatLen;
+					} else
+					{
+						if ( strncmp ( sPattern, sValue, iSubPatLen )!=0 )
+							return false;
+
+						sPattern+=iSubPatLen;
+						sValue+=iSubPatLen;
+					}
+					bAsterisk = false;
+				}
+			}
+		}
+
+		if ( !bAsterisk && sValue<sValEnd )
+			return false;
+
+		return true;
+	}
+};
+
+// string vector with 'like' matcher
+class VectorLike : public CSphVector<CSphString>, public CheckLike
+{
+public:
+	CSphString m_sColKey;
+	CSphString m_sColValue;
+
+public:
+
+	VectorLike ()
+		: CheckLike ( NULL )
+	{}
+
+	explicit VectorLike ( const CSphString& sPattern )
+		: CheckLike ( sPattern.cstr() )
+		, m_sColKey ( "Variable_name" )
+		, m_sColValue ( "Value" )
+	{}
+
+	inline const char * szColKey() const
+	{
+		return m_sColKey.cstr();
+	}
+
+	inline const char * szColValue() const
+	{
+		return m_sColValue.cstr();
+	}
+
+	bool MatchAdd ( const char* sValue )
+	{
+		if ( Match ( sValue ) )
+		{
+			Add ( sValue );
+			return true;
+		}
+		return false;
+	}
+
+	bool MatchAddVa ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) )
+	{
+		va_list ap;
+		CSphString sValue;
+
+		va_start ( ap, sTemplate );
+		sValue.SetSprintfVa ( sTemplate, ap );
+		va_end ( ap );
+
+		return MatchAdd ( sValue.cstr() );
+	}
+};
+
 //////////////////////////////////////////////////////////////////////////
 // STATUS HANDLER
 //////////////////////////////////////////////////////////////////////////
@@ -10972,8 +11128,7 @@ static inline void FormatMsec ( CSphString & sOut, int64_t tmTime )
 	sOut.SetSprintf ( "%d.%03d", (int)( tmTime/1000000 ), (int)( (tmTime%1000000)/1000 ) );
 }
 
-
-void BuildStatus ( CSphVector<CSphString> & dStatus )
+void BuildStatus ( VectorLike & dStatus )
 {
 	assert ( g_pStats );
 	const char * FMT64 = INT64_FMT;
@@ -10982,21 +11137,37 @@ void BuildStatus ( CSphVector<CSphString> & dStatus )
 	const int64_t iQueriesDiv = Max ( g_pStats->m_iQueries, 1 );
 	const int64_t iDistQueriesDiv = Max ( g_pStats->m_iDistQueries, 1 );
 
+	dStatus.m_sColKey = "Counter";
+
 	// FIXME? non-transactional!!!
-	dStatus.Add ( "uptime" );					dStatus.Add().SetSprintf ( "%u", (DWORD)time(NULL)-g_pStats->m_uStarted );
-	dStatus.Add ( "connections" );				dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iConnections );
-	dStatus.Add ( "maxed_out" );				dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iMaxedOut );
-	dStatus.Add ( "command_search" );			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_SEARCH] );
-	dStatus.Add ( "command_excerpt" );			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_EXCERPT] );
-	dStatus.Add ( "command_update" ); 			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_UPDATE] );
-	dStatus.Add ( "command_keywords" );			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_KEYWORDS] );
-	dStatus.Add ( "command_persist" );			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_PERSIST] );
-	dStatus.Add ( "command_status" );			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_STATUS] );
-	dStatus.Add ( "command_flushattrs" );		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_FLUSHATTRS] );
-	dStatus.Add ( "agent_connect" );			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iAgentConnect );
-	dStatus.Add ( "agent_retry" );				dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iAgentRetry );
-	dStatus.Add ( "queries" );					dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iQueries );
-	dStatus.Add ( "dist_queries" );				dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iDistQueries );
+	if ( dStatus.MatchAdd ( "uptime" ) )
+		dStatus.Add().SetSprintf ( "%u", (DWORD)time(NULL)-g_pStats->m_uStarted );
+	if ( dStatus.MatchAdd ( "connections" ) )
+		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iConnections );
+	if ( dStatus.MatchAdd ( "maxed_out" ) )
+		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iMaxedOut );
+	if ( dStatus.MatchAdd ( "command_search" ) )
+		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_SEARCH] );
+	if ( dStatus.MatchAdd ( "command_excerpt" ) )
+		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_EXCERPT] );
+	if ( dStatus.MatchAdd ( "command_update" ) )
+		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_UPDATE] );
+	if ( dStatus.MatchAdd ( "command_keywords" ) )
+		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_KEYWORDS] );
+	if ( dStatus.MatchAdd ( "command_persist" ) )
+		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_PERSIST] );
+	if ( dStatus.MatchAdd ( "command_status" ) )
+		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_STATUS] );
+	if ( dStatus.MatchAdd ( "command_flushattrs" ) )
+		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_FLUSHATTRS] );
+	if ( dStatus.MatchAdd ( "agent_connect" ) )
+		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iAgentConnect );
+	if ( dStatus.MatchAdd ( "agent_retry" ) )
+		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iAgentRetry );
+	if ( dStatus.MatchAdd ( "queries" ) )
+		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iQueries );
+	if ( dStatus.MatchAdd ( "dist_queries" ) )
+		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iDistQueries );
 
 	g_tDistLock.Lock();
 	g_hDistIndexes.IterateStart();
@@ -11013,61 +11184,84 @@ void BuildStatus ( CSphVector<CSphString> & dStatus )
 
 			AgentStats_t & tStats = g_pStats->m_dAgentStats.m_dItemStats[iIndex];
 			for ( int j=0; j<eMaxStat; ++j )
-			{
-				dStatus.Add().SetSprintf ( "ag_%s_%d_%s", sIdx, i, tStats.m_sNames[j] );
-				dStatus.Add().SetSprintf ( FMT64, tStats.m_iStats[j] );
-			}
+				if ( dStatus.MatchAddVa ( "ag_%s_%d_%s", sIdx, i, tStats.m_sNames[j] ) )
+					dStatus.Add().SetSprintf ( FMT64, tStats.m_iStats[j] );
 		}
 	}
 	g_tDistLock.Unlock();
 
-	dStatus.Add ( "query_wall" );				FormatMsec ( dStatus.Add(), g_pStats->m_iQueryTime );
+	if ( dStatus.MatchAdd ( "query_wall" ) )
+		FormatMsec ( dStatus.Add(), g_pStats->m_iQueryTime );
 
-	dStatus.Add ( "query_cpu" );
-	if ( g_bCpuStats )
-		FormatMsec ( dStatus.Add(), g_pStats->m_iQueryCpuTime );
-	else
-		dStatus.Add() = OFF;
-
-	dStatus.Add ( "dist_wall" );				FormatMsec ( dStatus.Add(), g_pStats->m_iDistWallTime );
-	dStatus.Add ( "dist_local" );				FormatMsec ( dStatus.Add(), g_pStats->m_iDistLocalTime );
-	dStatus.Add ( "dist_wait" );				FormatMsec ( dStatus.Add(), g_pStats->m_iDistWaitTime );
-
-	if ( g_bIOStats )
+	if ( dStatus.MatchAdd ( "query_cpu" ) )
 	{
-		dStatus.Add ( "query_reads" );			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iDiskReads );
-		dStatus.Add ( "query_readkb" );			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iDiskReadBytes/1024 );
-		dStatus.Add ( "query_readtime" );		FormatMsec ( dStatus.Add(), g_pStats->m_iDiskReadTime );
-	} else
-	{
-		dStatus.Add ( "query_reads" );			dStatus.Add() = OFF;
-		dStatus.Add ( "query_readkb" );			dStatus.Add() = OFF;
-		dStatus.Add ( "query_readtime" );		dStatus.Add() = OFF;
+		if ( g_bCpuStats )
+			FormatMsec ( dStatus.Add(), g_pStats->m_iQueryCpuTime );
+		else
+			dStatus.Add() = OFF;
 	}
 
-	dStatus.Add ( "avg_query_wall" );			FormatMsec ( dStatus.Add(), g_pStats->m_iQueryTime / iQueriesDiv );
-	dStatus.Add ( "avg_query_cpu" );
-	if ( g_bCpuStats )
-		FormatMsec ( dStatus.Add(), g_pStats->m_iQueryCpuTime / iQueriesDiv );
-	else
-		dStatus.Add ( OFF );
-	dStatus.Add ( "avg_dist_wall" );			FormatMsec ( dStatus.Add(), g_pStats->m_iDistWallTime / iDistQueriesDiv );
-	dStatus.Add ( "avg_dist_local" );			FormatMsec ( dStatus.Add(), g_pStats->m_iDistLocalTime / iDistQueriesDiv );
-	dStatus.Add ( "avg_dist_wait" );			FormatMsec ( dStatus.Add(), g_pStats->m_iDistWaitTime / iDistQueriesDiv );
+	if ( dStatus.MatchAdd ( "dist_wall" ) )
+		FormatMsec ( dStatus.Add(), g_pStats->m_iDistWallTime );
+	if ( dStatus.MatchAdd ( "dist_local" ) )
+		FormatMsec ( dStatus.Add(), g_pStats->m_iDistLocalTime );
+	if ( dStatus.MatchAdd ( "dist_wait" ) )
+		FormatMsec ( dStatus.Add(), g_pStats->m_iDistWaitTime );
+
 	if ( g_bIOStats )
 	{
-		dStatus.Add ( "avg_query_reads" );		dStatus.Add().SetSprintf ( "%.1f", (float)( g_pStats->m_iDiskReads*10/iQueriesDiv )/10.0f );
-		dStatus.Add ( "avg_query_readkb" );		dStatus.Add().SetSprintf ( "%.1f", (float)( g_pStats->m_iDiskReadBytes/iQueriesDiv )/1024.0f );
-		dStatus.Add ( "avg_query_readtime" );	FormatMsec ( dStatus.Add(), g_pStats->m_iDiskReadTime/iQueriesDiv );
+		if ( dStatus.MatchAdd ( "query_reads" ) )
+			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iDiskReads );
+		if ( dStatus.MatchAdd ( "query_readkb" ) )
+			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iDiskReadBytes/1024 );
+		if ( dStatus.MatchAdd ( "query_readtime" ) )
+			FormatMsec ( dStatus.Add(), g_pStats->m_iDiskReadTime );
 	} else
 	{
-		dStatus.Add ( "avg_query_reads" );		dStatus.Add() = OFF;
-		dStatus.Add ( "avg_query_readkb" );		dStatus.Add() = OFF;
-		dStatus.Add ( "avg_query_readtime" );	dStatus.Add() = OFF;
+		if ( dStatus.MatchAdd ( "query_reads" ) )
+			dStatus.Add() = OFF;
+		if ( dStatus.MatchAdd ( "query_readkb" ) )
+			dStatus.Add() = OFF;
+		if ( dStatus.MatchAdd ( "query_readtime" ) )
+			dStatus.Add() = OFF;
+	}
+
+	if ( dStatus.MatchAdd ( "avg_query_wall" ) )
+		FormatMsec ( dStatus.Add(), g_pStats->m_iQueryTime / iQueriesDiv );
+	if ( dStatus.MatchAdd ( "avg_query_cpu" ) )
+	{
+		if ( g_bCpuStats )
+			FormatMsec ( dStatus.Add(), g_pStats->m_iQueryCpuTime / iQueriesDiv );
+		else
+			dStatus.Add ( OFF );
+	}
+
+	if ( dStatus.MatchAdd ( "avg_dist_wall" ) )
+		FormatMsec ( dStatus.Add(), g_pStats->m_iDistWallTime / iDistQueriesDiv );
+	if ( dStatus.MatchAdd ( "avg_dist_local" ) )
+		FormatMsec ( dStatus.Add(), g_pStats->m_iDistLocalTime / iDistQueriesDiv );
+	if ( dStatus.MatchAdd ( "avg_dist_wait" ) )
+		FormatMsec ( dStatus.Add(), g_pStats->m_iDistWaitTime / iDistQueriesDiv );
+	if ( g_bIOStats )
+	{
+		if ( dStatus.MatchAdd ( "avg_query_reads" ) )
+			dStatus.Add().SetSprintf ( "%.1f", (float)( g_pStats->m_iDiskReads*10/iQueriesDiv )/10.0f );
+		if ( dStatus.MatchAdd ( "avg_query_readkb" ) )
+			dStatus.Add().SetSprintf ( "%.1f", (float)( g_pStats->m_iDiskReadBytes/iQueriesDiv )/1024.0f );
+		if ( dStatus.MatchAdd ( "avg_query_readtime" ) )
+			FormatMsec ( dStatus.Add(), g_pStats->m_iDiskReadTime/iQueriesDiv );
+	} else
+	{
+		if ( dStatus.MatchAdd ( "avg_query_reads" ) )
+			dStatus.Add() = OFF;
+		if ( dStatus.MatchAdd ( "avg_query_readkb" ) )
+			dStatus.Add() = OFF;
+		if ( dStatus.MatchAdd ( "avg_query_readtime" ) )
+			dStatus.Add() = OFF;
 	}
 }
 
-void BuildAgentStatus ( CSphVector<CSphString> & dStatus )
+void BuildOneAgentStatus ( VectorLike & dStatus, const CSphString& sAgent, const char * sPrefix="agent" )
 {
 	if ( !g_pStats )
 	{
@@ -11076,120 +11270,216 @@ void BuildAgentStatus ( CSphVector<CSphString> & dStatus )
 		return;
 	}
 
-	const char * FMT64 = UINT64_FMT;
-
-	dStatus.Add().SetSprintf ( "status_period_seconds" );
-	dStatus.Add().SetSprintf ( "%d", g_uHAPeriodKarma );
-	dStatus.Add().SetSprintf ( "status_stored_periods" );
-	dStatus.Add().SetSprintf ( "%d", STATS_DASH_TIME );
-
-	g_pStats->m_hDashBoard.IterateStart();
-	while ( g_pStats->m_hDashBoard.IterateNext() )
+	int * pIndex = g_pStats->m_hDashBoard ( sAgent );
+	if ( !pIndex )
 	{
-		int iIndex = g_pStats->m_hDashBoard.IterateGet();
-		const char * sKey = g_pStats->m_hDashBoard.IterateGetKey().cstr();
-		dStatus.Add().SetSprintf ( "ag_%d_hostname", iIndex );
-		dStatus.Add().SetSprintf ( "%s", sKey );
+		if ( dStatus.MatchAdd ( "status_error" ) )
+			dStatus.Add().SetSprintf ( "No such agent: %s", sAgent.cstr() );
+		return;
+	}
 
-		HostDashboard_t & dDash = g_pStats->m_dDashboard.m_dItemStats[iIndex];
-		dStatus.Add().SetSprintf ( "ag_%d_references", iIndex );
+	int & iIndex = *pIndex;
+	const char * FMT64 = UINT64_FMT;
+	const char * FLOAT = "%.2f";
+
+	if ( dStatus.MatchAddVa ( "%s_hostname", sPrefix ) )
+		dStatus.Add().SetSprintf ( "%s", sAgent.cstr() );
+
+	HostDashboard_t & dDash = g_pStats->m_dDashboard.m_dItemStats[iIndex];
+	if ( dStatus.MatchAddVa ( "%s_references", sPrefix ) )
 		dStatus.Add().SetSprintf ( "%d", dDash.m_iRefCount );
-		uint64_t iCur = sphMicroTimer();
-		uint64_t iLastAccess = iCur - dDash.m_iLastQueryTime;
-		float fPeriod = (float)iLastAccess/1000000.0f;
-		dStatus.Add().SetSprintf ( "ag_%d_lastquery", iIndex );
-		dStatus.Add().SetSprintf ( "%.2f", fPeriod );
-		iLastAccess = iCur - dDash.m_iLastAnswerTime;
-		fPeriod = (float)iLastAccess/1000000.0f;
-		dStatus.Add().SetSprintf ( "ag_%d_lastanswer", iIndex );
-		dStatus.Add().SetSprintf ( "%.2f", fPeriod );
-		uint64_t iLastTimer = dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime;
-		dStatus.Add().SetSprintf ( "ag_%d_lastperiodmsec", iIndex );
+	uint64_t iCur = sphMicroTimer();
+	uint64_t iLastAccess = iCur - dDash.m_iLastQueryTime;
+	float fPeriod = (float)iLastAccess/1000000.0f;
+	if ( dStatus.MatchAddVa ( "%s_lastquery", sPrefix ) )
+		dStatus.Add().SetSprintf ( FLOAT, fPeriod );
+	iLastAccess = iCur - dDash.m_iLastAnswerTime;
+	fPeriod = (float)iLastAccess/1000000.0f;
+	if ( dStatus.MatchAddVa ( "%s_lastanswer", sPrefix ) )
+		dStatus.Add().SetSprintf ( FLOAT, fPeriod );
+	uint64_t iLastTimer = dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime;
+	if ( dStatus.MatchAddVa ( "%s_lastperiodmsec", sPrefix ) )
 		dStatus.Add().SetSprintf ( FMT64, iLastTimer/1000 );
-		dStatus.Add().SetSprintf ( "ag_%d_errorsarow", iIndex );
+	if ( dStatus.MatchAddVa ( "%s_errorsarow", sPrefix ) )
 		dStatus.Add().SetSprintf ( FMT64, dDash.m_iErrorsARow );
 
-		AgentDash_t dDashStat;
-		int iPeriods = 1;
+	AgentDash_t dDashStat;
+	int iPeriods = 1;
+	int iHadPeriods = 0;
+	int iHavePeriods = 0;
 
-		while ( iPeriods>0 )
+	while ( iPeriods>0 )
+	{
+		iHavePeriods = dDash.GetDashStat ( &dDashStat, iPeriods );
+		uint64_t uQueries = 0;
+
+		if ( iHavePeriods!=iHadPeriods )
 		{
-			dDash.GetDashStat ( &dDashStat, iPeriods );
-
 			for ( int j=0; j<eMaxStat; ++j )
-			{
-				dStatus.Add().SetSprintf ( "ag_%d_%dperiods_%s", iIndex, iPeriods, dDashStat.m_sNames[j] );
-				dStatus.Add().SetSprintf ( FMT64, dDashStat.m_iStats[j] );
-			}
+				if ( j==eTotalMsecs ) // hack. Avoid microseconds in human-readable statistic
+				{
+					float fAverageLatency = (float)dDashStat.m_iStats[eTotalMsecs]/uQueries/1000.0;
+					if ( dStatus.MatchAddVa ( "%s_%dperiods_msecsperquery", sPrefix, iPeriods ) )
+						dStatus.Add().SetSprintf ( FLOAT, fAverageLatency );
+				} else
+				{
+					if ( dStatus.MatchAddVa ( "%s_%dperiods_%s", sPrefix, iPeriods, dDashStat.m_sNames[j] ) )
+						dStatus.Add().SetSprintf ( FMT64, dDashStat.m_iStats[j] );
+					uQueries += dDashStat.m_iStats[j];
+				}
+			iHadPeriods = iHavePeriods;
+		}
 
-			if ( iPeriods==1 )
-				iPeriods = 5;
-			else if ( iPeriods==5 )
-				iPeriods = STATS_DASH_TIME;
-			else if ( iPeriods==STATS_DASH_TIME )
-				iPeriods = -1;
+		if ( iPeriods==1 )
+			iPeriods = 5;
+		else if ( iPeriods==5 )
+			iPeriods = STATS_DASH_TIME;
+		else if ( iPeriods==STATS_DASH_TIME )
+			iPeriods = -1;
+	}
+}
+
+void BuildDistIndexStatus ( VectorLike & dStatus, const CSphString& sIndex )
+{
+	if ( !g_pStats )
+	{
+		dStatus.Add("No distrindex status");
+		dStatus.Add("Error");
+		return;
+	}
+
+	g_tDistLock.Lock();
+	DistributedIndex_t * pDistr = g_hDistIndexes(sIndex);
+	g_tDistLock.Unlock();
+
+	if ( !pDistr )
+	{
+		if ( dStatus.MatchAdd ( "status_error" ) )
+			dStatus.Add().SetSprintf ( "No such index: %s", sIndex.cstr() );
+		return;
+	}
+
+	ARRAY_FOREACH ( i, pDistr->m_dLocal )
+	{
+		if ( dStatus.MatchAddVa ( "dstindex_local_%d", i+1 ) )
+			dStatus.Add ( pDistr->m_dLocal[i].cstr() );
+	}
+
+	CSphString sKey;
+	ARRAY_FOREACH ( i, pDistr->m_dAgents )
+	{
+		MetaAgentDesc_t & tAgents = pDistr->m_dAgents[i];
+		if ( dStatus.MatchAddVa ( "dstindex_%d_is_ha", i+1 ) )
+			dStatus.Add ( tAgents.IsHA()? "1": "0" );
+
+		ARRAY_FOREACH ( j, tAgents.GetAgents() )
+		{
+			if ( tAgents.IsHA() )
+				sKey.SetSprintf ( "dstindex_%dmirror%d", i+1, j+1 );
+			else
+				sKey.SetSprintf ( "dstindex_%dagent", i+1 );
+
+			const AgentDesc_t & dDesc = tAgents.GetAgents()[j];
+
+			if ( dStatus.MatchAddVa ( "%s_id", sKey.cstr() ) )
+				dStatus.Add().SetSprintf ( "%s:%s", dDesc.GetName().cstr(), dDesc.m_sIndexes.cstr() );
+
+			if ( dStatus.MatchAddVa ( "%s_probability_weight", sKey.cstr() ) )
+				dStatus.Add().SetSprintf ( "%f", tAgents.GetWeights()[j] );
+
+			if ( dStatus.MatchAddVa ( "%s_is_blackhole", sKey.cstr() ) )
+				dStatus.Add ( dDesc.m_bBlackhole ? "1" : "0" );
+
+			if ( dStatus.MatchAddVa ( "%s_is_persistent", sKey.cstr() ) )
+				dStatus.Add ( dDesc.m_bPersistent ? "1" : "0" );
 		}
 	}
 }
 
-static void AddIOStatsToMeta ( CSphVector<CSphString> & dStatus, const CSphIOStats & tStats, const char * sPrefix )
+void BuildAgentStatus ( VectorLike & dStatus, const CSphString& sAgent )
 {
-	CSphString sName;
-	sName.SetSprintf ( "%s%s", sPrefix, "io_read_time" );
-	dStatus.Add ( sName );
-	dStatus.Add().SetSprintf ( "%d.%03d", (int)( tStats.m_iReadTime/1000 ), (int)( tStats.m_iReadTime%1000 ) );
+	if ( !g_pStats )
+	{
+		dStatus.Add("No agent status");
+		dStatus.Add("Error");
+		return;
+	}
 
-	sName.SetSprintf ( "%s%s", sPrefix, "io_read_ops" );
-	dStatus.Add ( sName );
-	dStatus.Add().SetSprintf ( "%u", tStats.m_iReadOps );
+	if ( !sAgent.IsEmpty() )
+	{
+		if ( g_hDistIndexes.Exists(sAgent) )
+			BuildDistIndexStatus ( dStatus, sAgent );
+		else
+			BuildOneAgentStatus ( dStatus, sAgent );
+		return;
+	}
 
-	sName.SetSprintf ( "%s%s", sPrefix, "io_read_kbytes" );
-	dStatus.Add ( sName );
-	dStatus.Add().SetSprintf ( "%d.%d", (int)( tStats.m_iReadBytes/1024 ), (int)( tStats.m_iReadBytes%1024 )/100 );
+	dStatus.m_sColKey = "Key";
 
-	sName.SetSprintf ( "%s%s", sPrefix, "io_write_time" );
-	dStatus.Add ( sName );
-	dStatus.Add().SetSprintf ( "%d.%03d", (int)( tStats.m_iWriteTime/1000 ), (int)( tStats.m_iWriteTime%1000 ) );
+	if ( dStatus.MatchAdd ( "status_period_seconds" ) )
+		dStatus.Add().SetSprintf ( "%d", g_uHAPeriodKarma );
+	if ( dStatus.MatchAdd ( "status_stored_periods" ) )
+		dStatus.Add().SetSprintf ( "%d", STATS_DASH_TIME );
 
-	sName.SetSprintf ( "%s%s", sPrefix, "io_write_ops" );
-	dStatus.Add ( sName );
-	dStatus.Add().SetSprintf ( "%u", tStats.m_iWriteOps );
+	g_pStats->m_hDashBoard.IterateStart();
 
-	sName.SetSprintf ( "%s%s", sPrefix, "io_write_kbytes" );
-	dStatus.Add ( sName );
-	dStatus.Add().SetSprintf ( "%d.%d", (int)( tStats.m_iWriteBytes/1024 ), (int)( tStats.m_iWriteBytes%1024 )/100 );
+	CSphString sPrefix;
+	while ( g_pStats->m_hDashBoard.IterateNext() )
+	{
+		int iIndex = g_pStats->m_hDashBoard.IterateGet();
+		const CSphString sKey = g_pStats->m_hDashBoard.IterateGetKey();
+		sPrefix.SetSprintf ( "ag_%d", iIndex );
+		BuildOneAgentStatus ( dStatus, sKey, sPrefix.cstr() );
+	}
 }
 
-void BuildMeta ( CSphVector<CSphString> & dStatus, const CSphQueryResultMeta & tMeta )
+
+
+static void AddIOStatsToMeta ( VectorLike & dStatus, const CSphIOStats & tStats, const char * sPrefix )
 {
-	if ( !tMeta.m_sError.IsEmpty() )
-	{
-		dStatus.Add ( "error" );
+	if ( dStatus.MatchAddVa ( "%s%s", sPrefix, "io_read_time" ) )
+		dStatus.Add().SetSprintf ( "%d.%03d", (int)( tStats.m_iReadTime/1000 ), (int)( tStats.m_iReadTime%1000 ) );
+
+	if ( dStatus.MatchAddVa ( "%s%s", sPrefix, "io_read_ops" ) )
+		dStatus.Add().SetSprintf ( "%u", tStats.m_iReadOps );
+
+	if ( dStatus.MatchAddVa ( "%s%s", sPrefix, "io_read_kbytes" ) )
+		dStatus.Add().SetSprintf ( "%d.%d", (int)( tStats.m_iReadBytes/1024 ), (int)( tStats.m_iReadBytes%1024 )/100 );
+
+	if ( dStatus.MatchAddVa ( "%s%s", sPrefix, "io_write_time" ) )
+		dStatus.Add().SetSprintf ( "%d.%03d", (int)( tStats.m_iWriteTime/1000 ), (int)( tStats.m_iWriteTime%1000 ) );
+
+	if ( dStatus.MatchAddVa ( "%s%s", sPrefix, "io_write_ops" ) )
+		dStatus.Add().SetSprintf ( "%u", tStats.m_iWriteOps );
+
+	if ( dStatus.MatchAddVa ( "%s%s", sPrefix, "io_write_kbytes" ) )
+		dStatus.Add().SetSprintf ( "%d.%d", (int)( tStats.m_iWriteBytes/1024 ), (int)( tStats.m_iWriteBytes%1024 )/100 );
+}
+
+void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
+{
+	if ( !tMeta.m_sError.IsEmpty() && dStatus.MatchAdd ( "error" ) )
 		dStatus.Add ( tMeta.m_sError );
-	}
 
-	if ( !tMeta.m_sWarning.IsEmpty() )
-	{
-		dStatus.Add ( "warning" );
+	if ( !tMeta.m_sWarning.IsEmpty() && dStatus.MatchAdd ( "warning" ) )
 		dStatus.Add ( tMeta.m_sWarning );
-	}
 
-	dStatus.Add ( "total" );
-	dStatus.Add().SetSprintf ( "%d", tMeta.m_iMatches );
+	if ( dStatus.MatchAdd ( "total" ) )
+		dStatus.Add().SetSprintf ( "%d", tMeta.m_iMatches );
 
-	dStatus.Add ( "total_found" );
-	dStatus.Add().SetSprintf ( INT64_FMT, tMeta.m_iTotalMatches );
+	if ( dStatus.MatchAdd ( "total_found" ) )
+		dStatus.Add().SetSprintf ( INT64_FMT, tMeta.m_iTotalMatches );
 
-	dStatus.Add ( "time" );
-	dStatus.Add().SetSprintf ( "%d.%03d", tMeta.m_iQueryTime/1000, tMeta.m_iQueryTime%1000 );
+	if ( dStatus.MatchAdd ( "time" ) )
+		dStatus.Add().SetSprintf ( "%d.%03d", tMeta.m_iQueryTime/1000, tMeta.m_iQueryTime%1000 );
 
 	if ( g_bCpuStats )
 	{
-		dStatus.Add ( "cpu_time" );
-		dStatus.Add().SetSprintf ( "%d.%03d", (int)( tMeta.m_iCpuTime/1000 ), (int)( tMeta.m_iCpuTime%1000 ) );
+		if ( dStatus.MatchAdd ( "cpu_time" ) )
+			dStatus.Add().SetSprintf ( "%d.%03d", (int)( tMeta.m_iCpuTime/1000 ), (int)( tMeta.m_iCpuTime%1000 ) );
 
-		dStatus.Add ( "agents_cpu_time" );
-		dStatus.Add().SetSprintf ( "%d.%03d", (int)( tMeta.m_iAgentCpuTime/1000 ), (int)( tMeta.m_iAgentCpuTime%1000 ) );
+		if ( dStatus.MatchAdd ( "agents_cpu_time" ) )
+			dStatus.Add().SetSprintf ( "%d.%03d", (int)( tMeta.m_iAgentCpuTime/1000 ), (int)( tMeta.m_iAgentCpuTime%1000 ) );
 	}
 
 	if ( g_bIOStats )
@@ -11204,14 +11494,14 @@ void BuildMeta ( CSphVector<CSphString> & dStatus, const CSphQueryResultMeta & t
 	{
 		const CSphQueryResultMeta::WordStat_t & tStat = tMeta.m_hWordStats.IterateGet();
 
-		dStatus.Add().SetSprintf ( "keyword[%d]", iWord );
-		dStatus.Add ( tMeta.m_hWordStats.IterateGetKey() );
+		if ( dStatus.MatchAddVa ( "keyword[%d]", iWord ) )
+			dStatus.Add ( tMeta.m_hWordStats.IterateGetKey() );
 
-		dStatus.Add().SetSprintf ( "docs[%d]", iWord );
-		dStatus.Add().SetSprintf ( INT64_FMT, tStat.m_iDocs );
+		if ( dStatus.MatchAddVa ( "docs[%d]", iWord ) )
+			dStatus.Add().SetSprintf ( INT64_FMT, tStat.m_iDocs );
 
-		dStatus.Add().SetSprintf ( "hits[%d]", iWord );
-		dStatus.Add().SetSprintf ( INT64_FMT, tStat.m_iHits );
+		if ( dStatus.MatchAddVa ( "hits[%d]", iWord ) )
+			dStatus.Add().SetSprintf ( INT64_FMT, tStat.m_iHits );
 
 		iWord++;
 	}
@@ -11229,7 +11519,7 @@ void HandleCommandStatus ( int iSock, int iVer, InputBuffer_c & tReq )
 		return;
 	}
 
-	CSphVector<CSphString> dStatus;
+	VectorLike dStatus;
 	BuildStatus ( dStatus );
 
 	int iRespLen = 8; // int rows, int cols
@@ -11606,20 +11896,6 @@ void SendMysqlErrorPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char
 	tOut.SendBytes ( sError, iErrorLen );
 }
 
-
-void SendMysqlErrorPacketEx ( NetOutputBuffer_c & tOut, BYTE uPacketID, MysqlErrors_e iErr, const char * sTemplate, ... )
-{
-	char sBuf[1024];
-	va_list ap;
-
-	va_start ( ap, sTemplate );
-	vsnprintf ( sBuf, sizeof(sBuf), sTemplate, ap );
-	va_end ( ap );
-
-	SendMysqlErrorPacket ( tOut, uPacketID, NULL, sBuf, iErr );
-}
-
-
 void SendMysqlEofPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, int iWarns, bool bMoreResults=false )
 {
 	if ( iWarns<0 ) iWarns = 0;
@@ -11670,9 +11946,246 @@ struct CmpColumns_fn
 	}
 };
 
+//////////////////////////////////////////////////////////////////////////
+// Mysql row buffer and command handler
+#define SPH_MAX_NUMERIC_STR 64
+class SqlRowBuffer_c : public ISphNoncopyable
+{
+public:
 
-void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE uPacketID,
-	bool bReplace, bool bCommit, CSphString & sWarning )
+	SqlRowBuffer_c ( BYTE * pPacketID, NetOutputBuffer_c * pOut )
+		: m_pBuf ( NULL )
+		, m_iLen ( 0 )
+		, m_iLimit ( sizeof ( m_dBuf ) )
+		, m_uPacketID ( *pPacketID )
+		, m_tOut ( *pOut )
+		, m_iSize ( 0 )
+	{}
+
+	~SqlRowBuffer_c ()
+	{
+		SafeDeleteArray ( m_pBuf );
+	}
+
+	char * Reserve ( int iLen )
+	{
+		int iNewSize = m_iLen+iLen;
+		if ( iNewSize<=m_iLimit )
+			return Get();
+
+		int iNewLimit = Max ( m_iLimit*2, iNewSize );
+		char * pBuf = new char [iNewLimit];
+		memcpy ( pBuf, m_pBuf ? m_pBuf : m_dBuf, m_iLen );
+		SafeDeleteArray ( m_pBuf );
+		m_pBuf = pBuf;
+		m_iLimit = iNewLimit;
+		return Get();
+	}
+
+	char * Get ()
+	{
+		return m_pBuf ? m_pBuf+m_iLen : m_dBuf+m_iLen;
+	}
+
+	char * Off ( int iOff )
+	{
+		assert ( iOff<m_iLimit );
+		return m_pBuf ? m_pBuf+iOff : m_dBuf+iOff;
+	}
+
+	int Length () const
+	{
+		return m_iLen;
+	}
+
+	void IncPtr ( int iLen	)
+	{
+		assert ( m_iLen+iLen<=m_iLimit );
+		m_iLen += iLen;
+	}
+
+	void Reset ()
+	{
+		m_iLen = 0;
+	}
+
+	template < typename T>
+	void PutNumeric ( const char * sFormat, T tVal )
+	{
+		Reserve ( SPH_MAX_NUMERIC_STR );
+		int iLen = snprintf ( Get()+1, SPH_MAX_NUMERIC_STR-1, sFormat, tVal );
+		*Get() = BYTE(iLen);
+		IncPtr ( 1+iLen );
+	}
+
+	void PutString ( const char * sMsg )
+	{
+		int iLen = sMsg ? strlen ( sMsg ) : 0;
+		Reserve ( 1+iLen );
+		char * pBegin = Get();
+		char * pStr = (char *)MysqlPack ( pBegin, iLen );
+		if ( pStr>pBegin )
+		{
+			memcpy ( pStr, sMsg, iLen );
+			IncPtr ( ( pStr-pBegin )+iLen );
+		}
+	}
+
+	/// more high level. Processing the whole tables.
+	// sends collected data, then reset
+	void Commit()
+	{
+		m_tOut.SendLSBDword ( ((m_uPacketID++)<<24) + ( Length() ) );
+		m_tOut.SendBytes ( Off ( 0 ), Length() );
+		Reset();
+	}
+
+	// wrappers for popular packets
+	inline void Eof ( bool bMoreResults=false, int iWarns=0 )
+	{
+		SendMysqlEofPacket ( m_tOut, m_uPacketID++, iWarns, bMoreResults );
+	}
+
+	inline void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr = MYSQL_ERR_PARSE_ERROR )
+	{
+		SendMysqlErrorPacket ( m_tOut, m_uPacketID, sStmt, sError, iErr );
+	}
+
+	inline void ErrorEx ( MysqlErrors_e iErr, const char * sTemplate, ... )
+	{
+		char sBuf[1024];
+		va_list ap;
+
+		va_start ( ap, sTemplate );
+		vsnprintf ( sBuf, sizeof(sBuf), sTemplate, ap );
+		va_end ( ap );
+
+		Error ( NULL, sBuf, iErr );
+	}
+
+	inline void Ok ( int iAffectedRows=0, int iWarns=0, const char * sMessage=NULL )
+	{
+		SendMysqlOkPacket ( m_tOut, m_uPacketID, iAffectedRows, iWarns, sMessage );
+	}
+
+	// Header of the table with defined num of columns
+	inline void HeadBegin ( int iColumns )
+	{
+		m_tOut.SendLSBDword ( ((m_uPacketID++)<<24) + 2 );
+		m_tOut.SendByte ( (BYTE)iColumns ); // colunn count
+		m_tOut.SendByte ( 0 ); // extra
+		m_iSize = iColumns;
+	}
+
+	inline void HeadEnd ( bool bMoreResults=false, int iWarns=0 )
+	{
+		Eof ( bMoreResults, iWarns );
+		Reset();
+	}
+
+	// add the next column. The EOF after the tull set will be fired automatically
+	inline void HeadColumn ( const char * sName, MysqlColumnType_e uType=MYSQL_COL_STRING )
+	{
+		assert ( m_iSize>0 && "you try to send more mysql columns than declared in InitHead" );
+		SendMysqlFieldPacket ( m_tOut, m_uPacketID++, sName, uType );
+		--m_iSize;
+	}
+
+	// Fire he header for table with iSize string columns
+	inline void HeadOfStrings ( const char ** ppNames, size_t iSize )
+	{
+		HeadBegin(iSize);
+		for ( ; iSize>0 ; --iSize )
+			HeadColumn ( *ppNames++ );
+		HeadEnd();
+	}
+
+	// table of 2 columns (we really often use them!)
+	inline void HeadTuplet ( const char * pLeft, const char * pRight )
+	{
+		HeadBegin(2);
+		HeadColumn(pLeft);
+		HeadColumn(pRight);
+		HeadEnd();
+	}
+
+	// popular pattern of 2 columns of data
+	inline void DataTuplet ( const char * pLeft, const char * pRight )
+	{
+		PutString ( pLeft );
+		PutString ( pRight );
+		Commit();
+	}
+
+	inline void DataTuplet ( const char * pLeft, int iRight )
+	{
+		char sTmp[SPH_MAX_NUMERIC_STR];
+		snprintf ( sTmp, sizeof(sTmp), "%d", iRight );
+		DataTuplet ( pLeft, sTmp );
+	}
+
+private:
+	char m_dBuf[4096];
+	char * m_pBuf;
+	int m_iLen;
+	int m_iLimit;
+	bool m_bMoreResults;
+
+private:
+	BYTE & m_uPacketID;
+	NetOutputBuffer_c & m_tOut;
+	size_t m_iSize;
+};
+
+class TableLike : public CheckLike
+				, public ISphNoncopyable
+{
+	SqlRowBuffer_c & m_tOut;
+public:
+
+	explicit TableLike ( SqlRowBuffer_c & tOut, const char * sPattern = NULL )
+		: m_tOut ( tOut )
+		, CheckLike ( sPattern )
+	{}
+
+	bool MatchAdd ( const char* sValue )
+	{
+		if ( Match ( sValue ) )
+		{
+			m_tOut.PutString ( sValue );
+			return true;
+		}
+		return false;
+	}
+
+	bool MatchAddVa ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) )
+	{
+		va_list ap;
+		CSphString sValue;
+
+		va_start ( ap, sTemplate );
+		sValue.SetSprintfVa ( sTemplate, ap );
+		va_end ( ap );
+
+		return MatchAdd ( sValue.cstr() );
+	}
+
+	// popular pattern of 2 columns of data
+	inline void MatchDataTuplet ( const char * pLeft, const char * pRight )
+	{
+		if ( Match ( pLeft ) )
+			m_tOut.DataTuplet ( pLeft, pRight );
+	}
+
+	inline void MatchDataTuplet ( const char * pLeft, int iRight )
+	{
+		if ( Match ( pLeft ) )
+			m_tOut.DataTuplet ( pLeft, iRight );
+	}
+};
+
+void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
+						bool bReplace, bool bCommit, CSphString & sWarning )
 {
 	MEMORY ( SPH_MEM_INSERT_SQL );
 
@@ -11683,7 +12196,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 	if ( !pServed )
 	{
 		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -11691,7 +12204,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 	{
 		pServed->Unlock();
 		sError.SetSprintf ( "index '%s' does not support INSERT (enabled=%d)", tStmt.m_sIndex.cstr(), pServed->m_bEnabled );
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -11707,7 +12220,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 	{
 		pServed->Unlock();
 		sError.SetSprintf ( "column count does not match schema (expected %d, got %d)", iSchemaSz, iGot );
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -11715,7 +12228,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 	{
 		pServed->Unlock();
 		sError.SetSprintf ( "column count does not match value count (expected %d, got %d)", iExp, iGot );
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -11740,7 +12253,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 		{
 			pServed->Unlock();
 			sError.SetSprintf ( "unknown column: '%s'", dCheck[i].cstr() );
-			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_PARSE_ERROR );
+			tOut.Error ( tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_PARSE_ERROR );
 			return;
 		}
 
@@ -11751,7 +12264,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 		{
 			pServed->Unlock();
 			sError.SetSprintf ( "column '%s' specified twice", dCheck[i].cstr() );
-			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_FIELD_SPECIFIED_TWICE );
+			tOut.Error ( tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_FIELD_SPECIFIED_TWICE );
 			return;
 		}
 
@@ -11765,7 +12278,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 		if ( !dInsertSchema.Exists("id") )
 		{
 			pServed->Unlock();
-			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "column list must contain an 'id' column" );
+			tOut.Error ( tStmt.m_sStmt, "column list must contain an 'id' column" );
 			return;
 		}
 		iIdIndex = dInsertSchema["id"];
@@ -11789,7 +12302,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 		if ( bIdDupe )
 		{
 			pServed->Unlock();
-			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "fields must never be named 'id' (fix your config)" );
+			tOut.Error ( tStmt.m_sStmt, "fields must never be named 'id' (fix your config)" );
 			return;
 		}
 
@@ -11812,7 +12325,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 		{
 			pServed->Unlock();
 			sError.SetSprintf ( "attributes must never be named 'id' (fix your config)" );
-			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 			return;
 		}
 	}
@@ -11943,7 +12456,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 	if ( !sError.IsEmpty() )
 	{
 		pServed->Unlock();
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -11954,7 +12467,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 	pServed->Unlock();
 
 	// my OK packet
-	SendMysqlOkPacket ( tOut, uPacketID, tStmt.m_iRowsAffected, sWarning.IsEmpty() ? 0 : 1 );
+	tOut.Ok ( tStmt.m_iRowsAffected, sWarning.IsEmpty() ? 0 : 1 );
 }
 
 
@@ -12001,7 +12514,7 @@ enum
 };
 
 
-void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt_t & tStmt )
+void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 {
 	CSphString sError;
 
@@ -12009,22 +12522,22 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 	// string data, string index, string query, [named opts]
 	if ( tStmt.m_dInsertValues.GetLength()!=3 )
 	{
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "SNIPPETS() expectes exactly 3 arguments (data, index, query)" );
+		tOut.Error ( tStmt.m_sStmt, "SNIPPETS() expectes exactly 3 arguments (data, index, query)" );
 		return;
 	}
 	if ( tStmt.m_dInsertValues[0].m_iType!=TOK_QUOTED_STRING && tStmt.m_dInsertValues[0].m_iType!=TOK_CONST_STRINGS )
 	{
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "SNIPPETS() argument 1 must be a string or a string list" );
+		tOut.Error ( tStmt.m_sStmt, "SNIPPETS() argument 1 must be a string or a string list" );
 		return;
 	}
 	if ( tStmt.m_dInsertValues[1].m_iType!=TOK_QUOTED_STRING )
 	{
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "SNIPPETS() argument 2 must be a string" );
+		tOut.Error ( tStmt.m_sStmt, "SNIPPETS() argument 2 must be a string" );
 		return;
 	}
 	if ( tStmt.m_dInsertValues[2].m_iType!=TOK_QUOTED_STRING )
 	{
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "SNIPPETS() argument 3 must be a string" );
+		tOut.Error ( tStmt.m_sStmt, "SNIPPETS() argument 3 must be a string" );
 		return;
 	}
 
@@ -12079,7 +12592,7 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 	}
 	if ( !sError.IsEmpty() )
 	{
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -12090,7 +12603,7 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 
 	if ( !sphCheckOptionsSPZ ( q, q.m_sRawPassageBoundary, sError ) )
 	{
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -12115,7 +12628,7 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 
 	if ( !MakeSnippets ( sIndex, dQueries, sError ) )
 	{
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -12128,31 +12641,26 @@ void HandleMysqlCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 	{
 		// just one last error instead of all errors is hopefully ok
 		sError.SetSprintf ( "highlighting failed: %s", sError.cstr() );
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
 	// result set header packet
-	tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
-	tOut.SendByte ( 1 ); // field count (snippet)
-	tOut.SendByte ( 0 ); // extra
-
-	// fields
-	SendMysqlFieldPacket ( tOut, uPacketID++, "snippet", MYSQL_COL_STRING );
-	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+	tOut.HeadBegin(1);
+	tOut.HeadColumn("snippet");
+	tOut.HeadEnd();
 
 	// data
 	ARRAY_FOREACH ( i, dResults )
 	{
-		const char * sResult = dResults[i] ? dResults[i] : "";
-		tOut.SendLSBDword ( ((uPacketID++)<<24) + MysqlPackedLen ( sResult ) );
-		tOut.SendMysqlString ( sResult );
+		tOut.PutString ( dResults[i] );
+		tOut.Commit();
 	}
-	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+	tOut.Eof();
 }
 
 
-void HandleMysqlCallKeywords ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt_t & tStmt )
+void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 {
 	CSphString sError;
 
@@ -12164,7 +12672,7 @@ void HandleMysqlCallKeywords ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 		|| tStmt.m_dInsertValues[1].m_iType!=TOK_QUOTED_STRING
 		|| ( iArgs==3 && tStmt.m_dInsertValues[2].m_iType!=TOK_CONST_INT ) )
 	{
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "bad argument count or types in KEYWORDS() call" );
+		tOut.Error ( tStmt.m_sStmt, "bad argument count or types in KEYWORDS() call" );
 		return;
 	}
 
@@ -12172,7 +12680,7 @@ void HandleMysqlCallKeywords ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 	if ( !pServed || !pServed->m_bEnabled || !pServed->m_pIndex )
 	{
 		sError.SetSprintf ( "no such index %s", tStmt.m_dInsertValues[1].m_sVal.cstr() );
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -12184,98 +12692,117 @@ void HandleMysqlCallKeywords ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt
 	if ( !bRes )
 	{
 		sError.SetSprintf ( "keyword extraction failed: %s", sError.cstr() );
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
 	// result set header packet
-	tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
-	tOut.SendByte ( 2 + ( bStats ? 2 : 0 ) ); // field count (tokenized, normalized, docs, hits)
-	tOut.SendByte ( 0 ); // extra
-
-	// fields
-	SendMysqlFieldPacket ( tOut, uPacketID++, "tokenized", MYSQL_COL_STRING );
-	SendMysqlFieldPacket ( tOut, uPacketID++, "normalized", MYSQL_COL_STRING );
+	tOut.HeadBegin ( bStats ? 4 : 2 );
+	tOut.HeadColumn("tokenized");
+	tOut.HeadColumn("normalized");
 	if ( bStats )
 	{
-		SendMysqlFieldPacket ( tOut, uPacketID++, "docs", MYSQL_COL_STRING );
-		SendMysqlFieldPacket ( tOut, uPacketID++, "hits", MYSQL_COL_STRING );
+		tOut.HeadColumn("docs");
+		tOut.HeadColumn("hits");
 	}
-	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+	tOut.HeadEnd();
 
 	// data
+	char sBuf[16];
 	ARRAY_FOREACH ( i, dKeywords )
 	{
 		char sDocs[16], sHits[16];
 		snprintf ( sDocs, sizeof(sDocs), "%d", dKeywords[i].m_iDocs );
 		snprintf ( sHits, sizeof(sHits), "%d", dKeywords[i].m_iHits );
 
-		int iPacketLen = MysqlPackedLen ( dKeywords[i].m_sTokenized.cstr() ) + MysqlPackedLen ( dKeywords[i].m_sNormalized.cstr() );
-		if ( bStats )
-			iPacketLen += MysqlPackedLen ( sDocs ) + MysqlPackedLen ( sHits );
-
-		tOut.SendLSBDword ( ((uPacketID++)<<24) + iPacketLen );
-		tOut.SendMysqlString ( dKeywords[i].m_sTokenized.cstr() );
-		tOut.SendMysqlString ( dKeywords[i].m_sNormalized.cstr() );
+		tOut.PutString ( dKeywords[i].m_sTokenized.cstr() );
+		tOut.PutString ( dKeywords[i].m_sNormalized.cstr() );
 		if ( bStats )
 		{
-			tOut.SendMysqlString ( sDocs );
-			tOut.SendMysqlString ( sHits );
+			snprintf ( sBuf, sizeof(sBuf), "%d", dKeywords[i].m_iDocs );
+			tOut.PutString ( sBuf );
+			snprintf ( sBuf, sizeof(sBuf), "%d", dKeywords[i].m_iHits );
+			tOut.PutString ( sBuf );
 		}
+		tOut.Commit();
 	}
-
-	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+	tOut.Eof();
 }
 
 
-void HandleMysqlDescribe ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt_t & tStmt )
+void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 {
 	const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( tStmt.m_sIndex );
+	DistributedIndex_t * pDistr = NULL;
 	if ( !pServed || !pServed->m_bEnabled || !pServed->m_pIndex )
 	{
-		CSphString sError;
-		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_NO_SUCH_TABLE );
+		g_tDistLock.Lock();
+		pDistr = g_hDistIndexes ( tStmt.m_sIndex );
+		g_tDistLock.Unlock();
+
+		if ( !pDistr )
+		{
+			CSphString sError;
+			sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
+			tOut.Error ( tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_NO_SUCH_TABLE );
+			return;
+		}
+	}
+
+	TableLike dCondOut ( tOut, tStmt.m_sStringParam.cstr() );
+
+	if ( pDistr )
+	{
+		tOut.HeadTuplet ( "Agent", "Type" );
+		ARRAY_FOREACH ( i, pDistr->m_dLocal )
+			dCondOut.MatchDataTuplet ( pDistr->m_dLocal[i].cstr(), "local" );
+
+		ARRAY_FOREACH ( i, pDistr->m_dAgents )
+		{
+			MetaAgentDesc_t & tAgents = pDistr->m_dAgents[i];
+			if ( tAgents.GetAgents().GetLength() > 1 )
+			{
+				ARRAY_FOREACH ( j, tAgents.GetAgents() )
+				{
+					CSphString sKey;
+					sKey.SetSprintf ( "remote_%d_mirror_%d", i+1, j+1 );
+					const AgentDesc_t & dDesc = tAgents.GetAgents()[j];
+					CSphString sValue;
+					sValue.SetSprintf ( "%s:%s", dDesc.GetName().cstr(), dDesc.m_sIndexes.cstr() );
+					dCondOut.MatchDataTuplet ( sValue.cstr(), sKey.cstr() );
+				}
+			} else
+			{
+				CSphString sKey;
+				sKey.SetSprintf ( "remote_%d", i+1 );
+				CSphString sValue;
+				sValue.SetSprintf ( "%s:%s", tAgents.GetAgents()[0].GetName().cstr(), tAgents.GetAgents()[0].m_sIndexes.cstr() );
+				dCondOut.MatchDataTuplet ( sValue.cstr(), sKey.cstr() );
+			}
+		}
+
+		tOut.Eof();
 		return;
 	}
 
 	// result set header packet
-	tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
-	tOut.SendByte ( 2 ); // field count (field, type)
-	tOut.SendByte ( 0 ); // extra
-
-	// fields
-	SendMysqlFieldPacket ( tOut, uPacketID++, "Field", MYSQL_COL_STRING );
-	SendMysqlFieldPacket ( tOut, uPacketID++, "Type", MYSQL_COL_STRING );
-	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+	tOut.HeadTuplet ( "Field", "Type" );
 
 	// data
-	const char * sIdType = USE_64BIT ? "bigint" : "integer";
-	tOut.SendLSBDword ( ((uPacketID++)<<24) + 3 + MysqlPackedLen ( sIdType ) );
-	tOut.SendMysqlString ( "id" );
-	tOut.SendMysqlString ( sIdType );
+	dCondOut.MatchDataTuplet ( "id", USE_64BIT ? "bigint" : "integer" );
 
 	const CSphSchema & tSchema = pServed->m_pIndex->GetMatchSchema();
 	ARRAY_FOREACH ( i, tSchema.m_dFields )
-	{
-		const CSphColumnInfo & tCol = tSchema.m_dFields[i];
-		tOut.SendLSBDword ( ((uPacketID++)<<24) + MysqlPackedLen ( tCol.m_sName.cstr() ) + 6 );
-		tOut.SendMysqlString ( tCol.m_sName.cstr() );
-		tOut.SendMysqlString ( "field" );
-	}
+		dCondOut.MatchDataTuplet ( tSchema.m_dFields[i].m_sName.cstr(), "field" );
 
 	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
-		const char * sType = sphTypeName ( tCol.m_eAttrType );
-
-		tOut.SendLSBDword ( ((uPacketID++)<<24) + MysqlPackedLen ( tCol.m_sName.cstr() ) + MysqlPackedLen ( sType ) );
-		tOut.SendMysqlString ( tCol.m_sName.cstr() );
-		tOut.SendMysqlString ( sType );
+		dCondOut.MatchDataTuplet ( tCol.m_sName.cstr(), sphTypeName ( tCol.m_eAttrType ) );
 	}
 
 	pServed->Unlock();
-	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+	tOut.Eof();
 }
 
 
@@ -12288,17 +12815,10 @@ struct IndexNameLess_fn
 };
 
 
-void HandleMysqlShowTables ( NetOutputBuffer_c & tOut, BYTE uPacketID )
+void HandleMysqlShowTables ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 {
 	// result set header packet
-	tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
-	tOut.SendByte ( 2 ); // field count (index, type)
-	tOut.SendByte ( 0 ); // extra
-
-	// fields
-	SendMysqlFieldPacket ( tOut, uPacketID++, "Index", MYSQL_COL_STRING );
-	SendMysqlFieldPacket ( tOut, uPacketID++, "Type", MYSQL_COL_STRING );
-	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+	tOut.HeadTuplet ( "Index", "Type" );
 
 	// all the indexes
 	// 0 local, 1 distributed, 2 rt
@@ -12323,6 +12843,8 @@ void HandleMysqlShowTables ( NetOutputBuffer_c & tOut, BYTE uPacketID )
 	g_tDistLock.Unlock();
 
 	dIndexes.Sort ( IndexNameLess_fn() );
+
+	TableLike dCondOut ( tOut, tStmt.m_sStringParam.cstr() );
 	ARRAY_FOREACH ( i, dIndexes )
 	{
 		const char * sType = "?";
@@ -12333,12 +12855,10 @@ void HandleMysqlShowTables ( NetOutputBuffer_c & tOut, BYTE uPacketID )
 			case 2: sType = "rt"; break;
 		}
 
-		tOut.SendLSBDword ( ((uPacketID++)<<24) + MysqlPackedLen ( dIndexes[i].m_sName.cstr() ) + MysqlPackedLen ( sType ) );
-		tOut.SendMysqlString ( dIndexes[i].m_sName.cstr() );
-		tOut.SendMysqlString ( sType );
+		dCondOut.MatchDataTuplet ( dIndexes[i].m_sName.cstr(), sType );
 	}
 
-	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+	tOut.Eof();
 }
 
 // The pinger
@@ -12573,7 +13093,7 @@ static const char * ExtractDistributedIndexes ( const CSphVector<CSphString> & d
 }
 
 
-void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit )
+void HandleMysqlUpdate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit )
 {
 	CSphString sError;
 
@@ -12583,7 +13103,7 @@ void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt
 	if ( !dIndexNames.GetLength() )
 	{
 		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -12594,7 +13114,7 @@ void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt
 	if ( ( sMissedDist = ExtractDistributedIndexes ( dIndexNames, dDistributed ) )!=NULL )
 	{
 		sError.SetSprintf ( "unknown index '%s' in update request", sMissedDist );
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -12656,107 +13176,14 @@ void HandleMysqlUpdate ( NetOutputBuffer_c & tOut, BYTE uPacketID, const SqlStmt
 
 	if ( !iSuccesses )
 	{
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sReport.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sReport.cstr() );
 		return;
 	}
 
-	SendMysqlOkPacket ( tOut, uPacketID, iUpdated, iWarns );
+	tOut.Ok ( iUpdated, iWarns );
 }
 
-//////////////////////////////////////////////////////////////////////////
-
-#define SPH_MAX_NUMERIC_STR 64
-class SqlRowBuffer_c
-{
-public:
-
-	SqlRowBuffer_c ()
-		: m_pBuf ( NULL )
-		, m_iLen ( 0 )
-		, m_iLimit ( sizeof ( m_dBuf ) )
-	{
-	}
-
-	~SqlRowBuffer_c ()
-	{
-		SafeDeleteArray ( m_pBuf );
-	}
-
-	char * Reserve ( int iLen )
-	{
-		int iNewSize = m_iLen+iLen;
-		if ( iNewSize<=m_iLimit )
-			return Get();
-
-		int iNewLimit = Max ( m_iLimit*2, iNewSize );
-		char * pBuf = new char [iNewLimit];
-		memcpy ( pBuf, m_pBuf ? m_pBuf : m_dBuf, m_iLen );
-		SafeDeleteArray ( m_pBuf );
-		m_pBuf = pBuf;
-		m_iLimit = iNewLimit;
-		return Get();
-	}
-
-	char * Get ()
-	{
-		return m_pBuf ? m_pBuf+m_iLen : m_dBuf+m_iLen;
-	}
-
-	char * Off ( int iOff )
-	{
-		assert ( iOff<m_iLimit );
-		return m_pBuf ? m_pBuf+iOff : m_dBuf+iOff;
-	}
-
-	int Length () const
-	{
-		return m_iLen;
-	}
-
-	void IncPtr ( int iLen	)
-	{
-		assert ( m_iLen+iLen<=m_iLimit );
-		m_iLen += iLen;
-	}
-
-	void Reset ()
-	{
-		m_iLen = 0;
-	}
-
-	template < typename T>
-	void PutNumeric ( const char * sFormat, T tVal )
-	{
-		Reserve ( SPH_MAX_NUMERIC_STR );
-		int iLen = snprintf ( Get()+1, SPH_MAX_NUMERIC_STR-1, sFormat, tVal );
-		*Get() = BYTE(iLen);
-		IncPtr ( 1+iLen );
-	}
-
-	void PutString ( const char * sMsg )
-	{
-		int iLen = sMsg ? strlen ( sMsg ) : 0;
-		Reserve ( 1+iLen );
-		char * pBegin = Get();
-		char * pStr = (char *)MysqlPack ( pBegin, iLen );
-		if ( pStr>pBegin )
-		{
-			memcpy ( pStr, sMsg, iLen );
-			IncPtr ( ( pStr-pBegin )+iLen );
-		}
-	}
-
-
-private:
-
-	char m_dBuf[4096];
-	char * m_pBuf;
-	int m_iLen;
-	int m_iLimit;
-};
-
-
-bool HandleMysqlSelect ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SearchHandler_c & tHandler )
+bool HandleMysqlSelect ( SqlRowBuffer_c & dRows, SearchHandler_c & tHandler )
 {
 	// lets check all query for errors
 	CSphString sError;
@@ -12777,7 +13204,7 @@ bool HandleMysqlSelect ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SearchHandl
 	if ( sError.Length() )
 	{
 		// stmt is intentionally NULL, as we did all the reporting just above
-		SendMysqlErrorPacket ( tOut, uPacketID, NULL, sError.cstr() );
+		dRows.Error ( NULL, sError.cstr() );
 		return false;
 	}
 
@@ -12787,7 +13214,7 @@ bool HandleMysqlSelect ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SearchHandl
 	if ( g_bGotSigterm )
 	{
 		sphLogDebug ( "HandleClientMySQL: got SIGTERM, sending the packet MYSQL_ERR_SERVER_SHUTDOWN" );
-		SendMysqlErrorPacket ( tOut, uPacketID, NULL, "Server shutdown in progress", MYSQL_ERR_SERVER_SHUTDOWN );
+		dRows.Error ( NULL, "Server shutdown in progress", MYSQL_ERR_SERVER_SHUTDOWN );
 		return false;
 	}
 
@@ -12795,13 +13222,12 @@ bool HandleMysqlSelect ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SearchHandl
 }
 
 
-void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowBuffer_c & dRows,
-	const AggrResult_t & tRes, bool bMoreResultsFollow )
+void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow )
 {
 	if ( !tRes.m_iSuccesses )
 	{
 		// at this point, SELECT error logging should have been handled, so pass a NULL stmt to logger
-		SendMysqlErrorPacket ( tOut, uPacketID++, NULL, tRes.m_sError.cstr() );
+		dRows.Error ( NULL, tRes.m_sError.cstr() );
 		return;
 	}
 
@@ -12821,27 +13247,25 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 		// this will show up as success in query log, as the query itself was ok
 		// but we need some kind of a notice anyway, to nail down issues based on logs only
 		sphWarning ( "selecting more than 250 columns is not supported yet" );
-		SendMysqlErrorPacket ( tOut, uPacketID++, NULL, "selecting more than 250 columns is not supported yet" );
+		dRows.Error ( NULL, "selecting more than 250 columns is not supported yet" );
 		return;
 	}
 
-	// result set header packet
-	tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
-	tOut.SendByte ( BYTE(iAttrsCount) );
-	tOut.SendByte ( 0 ); // extra
+	// result set header packet. We will attach EOF manually at the end.
+	dRows.HeadBegin ( iAttrsCount );
 
 	// field packets
 	if ( !tRes.m_dMatches.GetLength() )
 	{
 		// in case there are no matches, send a dummy schema
-		SendMysqlFieldPacket ( tOut, uPacketID++, "id", USE_64BIT ? MYSQL_COL_LONGLONG : MYSQL_COL_LONG );
+		dRows.HeadColumn ( "id", USE_64BIT ? MYSQL_COL_LONGLONG : MYSQL_COL_LONG );
 	} else
 	{
 		// send result set schema
 		if ( g_bCompatResults )
 		{
-			SendMysqlFieldPacket ( tOut, uPacketID++, "id", USE_64BIT ? MYSQL_COL_LONGLONG : MYSQL_COL_LONG );
-			SendMysqlFieldPacket ( tOut, uPacketID++, "weight", MYSQL_COL_LONG );
+			dRows.HeadColumn ( "id", USE_64BIT ? MYSQL_COL_LONGLONG : MYSQL_COL_LONG );
+			dRows.HeadColumn ( "weight", MYSQL_COL_LONG );
 		}
 
 		for ( int i=0; i<iSchemaAttrsCount; i++ )
@@ -12857,17 +13281,15 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 				eType = MYSQL_COL_LONGLONG;
 			if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_STRINGPTR )
 				eType = MYSQL_COL_STRING;
-			SendMysqlFieldPacket ( tOut, uPacketID++, tCol.m_sName.cstr(), eType );
+			dRows.HeadColumn ( tCol.m_sName.cstr(), eType );
 		}
 	}
 
-	// eof packet
+	// EOF packet is sent explicitly due to non-default params.
 	BYTE iWarns = ( !tRes.m_sWarning.IsEmpty() ) ? 1 : 0;
-	SendMysqlEofPacket ( tOut, uPacketID++, iWarns, bMoreResultsFollow );
+	dRows.HeadEnd ( bMoreResultsFollow, iWarns );
 
 	// rows
-	dRows.Reset();
-
 	for ( int iMatch = tRes.m_iOffset; iMatch < tRes.m_iOffset + tRes.m_iCount; iMatch++ )
 	{
 		const CSphMatch & tMatch = tRes.m_dMatches [ iMatch ];
@@ -12999,60 +13421,46 @@ void SendMysqlSelectResult ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowB
 				break;
 			}
 		}
-
-		tOut.SendLSBDword ( ((uPacketID++)<<24) + ( dRows.Length() ) );
-		tOut.SendBytes ( dRows.Off ( 0 ), dRows.Length() );
-		dRows.Reset();
+		dRows.Commit();
 	}
 
 	// eof packet
-	SendMysqlEofPacket ( tOut, uPacketID++, iWarns, bMoreResultsFollow );
+	dRows.Eof ( bMoreResultsFollow, iWarns );
 }
 
 
-void HandleMysqlWarning ( NetOutputBuffer_c & tOut, BYTE & uPacketID, const CSphQueryResultMeta & tLastMeta,
-	SqlRowBuffer_c & dRows, bool bMoreResultsFollow )
+void HandleMysqlWarning ( const CSphQueryResultMeta & tLastMeta, SqlRowBuffer_c & dRows, bool bMoreResultsFollow )
 {
 	// can't send simple ok if there are more results to send
 	// as it breaks order of multi-result output
 	if ( tLastMeta.m_sWarning.IsEmpty() && !bMoreResultsFollow )
 	{
-		SendMysqlOkPacket ( tOut, uPacketID );
+		dRows.Ok();
 		return;
 	}
 
 	// result set header packet
-	tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
-	tOut.SendByte ( 3 ); // field count (level+code+message)
-	tOut.SendByte ( 0 ); // extra
-
-	// field packets
-	SendMysqlFieldPacket ( tOut, uPacketID++, "Level", MYSQL_COL_STRING );
-	SendMysqlFieldPacket ( tOut, uPacketID++, "Code", MYSQL_COL_DECIMAL );
-	SendMysqlFieldPacket ( tOut, uPacketID++, "Message", MYSQL_COL_STRING );
-	SendMysqlEofPacket ( tOut, uPacketID++, 0, bMoreResultsFollow );
+	dRows.HeadBegin(3);
+	dRows.HeadColumn ( "Level" );
+	dRows.HeadColumn ( "Code", MYSQL_COL_DECIMAL );
+	dRows.HeadColumn ( "Message" );
+	dRows.HeadEnd ( bMoreResultsFollow );
 
 	// row
-	dRows.Reset();
 	dRows.PutString ( "warning" );
 	dRows.PutString ( "1000" );
 	dRows.PutString ( tLastMeta.m_sWarning.cstr() );
-
-	tOut.SendLSBDword ( ((uPacketID++)<<24) + ( dRows.Length() ) );
-	tOut.SendBytes ( dRows.Off ( 0 ), dRows.Length() );
-	dRows.Reset();
+	dRows.Commit();
 
 	// cleanup
-	SendMysqlEofPacket ( tOut, uPacketID++, 0, bMoreResultsFollow );
+	dRows.Eof ( bMoreResultsFollow );
 }
 
-
-void HandleMysqlMeta ( NetOutputBuffer_c & tOut, BYTE & uPacketID, const CSphQueryResultMeta & tLastMeta,
-	SqlRowBuffer_c & dRows, SqlStmt_e eStmt, bool bMoreResultsFollow )
+void HandleMysqlMeta ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt, const CSphQueryResultMeta & tLastMeta, bool bMoreResultsFollow )
 {
-	CSphVector<CSphString> dStatus;
+	VectorLike dStatus ( tStmt.m_sStringParam );
 
-	switch ( eStmt )
+	switch ( tStmt.m_eStmt )
 	{
 	case STMT_SHOW_STATUS:
 		BuildStatus ( dStatus );
@@ -13061,7 +13469,7 @@ void HandleMysqlMeta ( NetOutputBuffer_c & tOut, BYTE & uPacketID, const CSphQue
 		BuildMeta ( dStatus, tLastMeta );
 		break;
 	case STMT_SHOW_AGENTSTATUS:
-		BuildAgentStatus ( dStatus );
+		BuildAgentStatus ( dStatus, tStmt.m_sIndex );
 		break;
 	default:
 		assert(0); // only 'show' statements allowed here.
@@ -13069,28 +13477,14 @@ void HandleMysqlMeta ( NetOutputBuffer_c & tOut, BYTE & uPacketID, const CSphQue
 	}
 
 	// result set header packet
-	tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
-	tOut.SendByte ( 2 ); // field count (level+code+message)
-	tOut.SendByte ( 0 ); // extra
-
-	// field packets
-	SendMysqlFieldPacket ( tOut, uPacketID++, "Variable_name", MYSQL_COL_STRING );
-	SendMysqlFieldPacket ( tOut, uPacketID++, "Value", MYSQL_COL_STRING );
-	SendMysqlEofPacket ( tOut, uPacketID++, 0, bMoreResultsFollow );
+	dRows.HeadTuplet ( dStatus.szColKey(), dStatus.szColValue() );
 
 	// send rows
 	for ( int iRow=0; iRow<dStatus.GetLength(); iRow+=2 )
-	{
-		dRows.PutString ( dStatus[iRow+0].cstr() );
-		dRows.PutString ( dStatus[iRow+1].cstr() );
-
-		tOut.SendLSBDword ( ((uPacketID++)<<24) + ( dRows.Length() ) );
-		tOut.SendBytes ( dRows.Off ( 0 ), dRows.Length() );
-		dRows.Reset();
-	}
+		dRows.DataTuplet ( dStatus[iRow+0].cstr(), dStatus[iRow+1].cstr() );
 
 	// cleanup
-	SendMysqlEofPacket ( tOut, uPacketID++, 0, bMoreResultsFollow );
+	dRows.Eof ( bMoreResultsFollow );
 }
 
 
@@ -13123,7 +13517,7 @@ static void LocalIndexDoDeleteDocuments ( const char * sName, const SphDocID_t *
 }
 
 
-void HandleMysqlDelete ( const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, NetOutputBuffer_c & tOut, BYTE & uPacketID )
+void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit )
 {
 	MEMORY ( SPH_MEM_DELETE_SQL );
 
@@ -13134,7 +13528,7 @@ void HandleMysqlDelete ( const SqlStmt_t & tStmt, const CSphString & sQuery, boo
 	if ( !dNames.GetLength() )
 	{
 		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -13143,7 +13537,7 @@ void HandleMysqlDelete ( const SqlStmt_t & tStmt, const CSphString & sQuery, boo
 	if ( ( sMissedDist = ExtractDistributedIndexes ( dNames, dDistributed ) )!=NULL )
 	{
 		sError.SetSprintf ( "unknown index '%s' in delete request", sError.cstr() );
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -13156,7 +13550,7 @@ void HandleMysqlDelete ( const SqlStmt_t & tStmt, const CSphString & sQuery, boo
 				continue;
 
 			sError.SetSprintf ( "index '%s': DELETE not working on agents when autocommit=0", tStmt.m_sIndex.cstr() );
-			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 			return;
 		}
 	}
@@ -13216,15 +13610,15 @@ void HandleMysqlDelete ( const SqlStmt_t & tStmt, const CSphString & sQuery, boo
 	{
 		StrBuf_t sReport;
 		dErrors.BuildReport ( sReport );
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sReport.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sReport.cstr() );
 		return;
 	}
 
-	SendMysqlOkPacket ( tOut, uPacketID );
+	tOut.Ok();
 }
 
 
-void HandleMysqlMultiStmt ( NetOutputBuffer_c & tOut, BYTE uPacketID, const CSphVector<SqlStmt_t> & dStmt, CSphQueryResultMeta & tLastMeta,
+void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResultMeta & tLastMeta,
 	SqlRowBuffer_c & dRows, ThdDesc_t * pThd, const CSphString& sWarning )
 {
 	// select count
@@ -13254,7 +13648,7 @@ void HandleMysqlMultiStmt ( NetOutputBuffer_c & tOut, BYTE uPacketID, const CSph
 	}
 
 	// do search
-	bool bSearchOK = HandleMysqlSelect ( tOut, uPacketID, tHandler );
+	bool bSearchOK = HandleMysqlSelect ( dRows, tHandler );
 
 	// save meta for SHOW *
 	CSphQueryResultMeta tPrevMeta = tLastMeta;
@@ -13281,16 +13675,16 @@ void HandleMysqlMultiStmt ( NetOutputBuffer_c & tOut, BYTE uPacketID, const CSph
 			AggrResult_t & tRes = tHandler.m_dResults[iSelect++];
 			if ( !sWarning.IsEmpty() )
 				tRes.m_sWarning = sWarning;
-			SendMysqlSelectResult ( tOut, uPacketID, dRows, tRes, bMoreResultsFollow );
+			SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow );
 		} else if ( eStmt==STMT_SHOW_WARNINGS )
-			HandleMysqlWarning ( tOut, uPacketID, tMeta, dRows, bMoreResultsFollow );
+			HandleMysqlWarning ( tMeta, dRows, bMoreResultsFollow );
 		else if ( eStmt==STMT_SHOW_STATUS || eStmt==STMT_SHOW_META || eStmt==STMT_SHOW_AGENTSTATUS )
-			HandleMysqlMeta ( tOut, uPacketID, tMeta, dRows, eStmt, bMoreResultsFollow );
+			HandleMysqlMeta ( dRows, dStmt[i], tMeta, bMoreResultsFollow );
 
 		if ( g_bGotSigterm )
 		{
 			sphLogDebug ( "HandleMultiStmt: got SIGTERM, sending the packet MYSQL_ERR_SERVER_SHUTDOWN" );
-			SendMysqlErrorPacket ( tOut, uPacketID, NULL, "Server shutdown in progress", MYSQL_ERR_SERVER_SHUTDOWN );
+			dRows.Error ( NULL, "Server shutdown in progress", MYSQL_ERR_SERVER_SHUTDOWN );
 			return;
 		}
 	}
@@ -13359,7 +13753,7 @@ static void UservarAdd ( const CSphString & sName, CSphVector<SphAttr_t> & dVal 
 }
 
 
-void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tStmt, SessionVars_t & tVars )
+void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & tVars )
 {
 	MEMORY ( SPH_MEM_COMMIT_SET_SQL );
 	CSphString sError;
@@ -13390,7 +13784,7 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 			tVars.m_eCollation = sphCollationFromName ( sVal, &sError );
 			if ( !sError.IsEmpty() )
 			{
-				SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+				tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 				return;
 			}
 		} else if ( tStmt.m_sSetName=="character_set_results"
@@ -13403,7 +13797,7 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 		{
 			// unknown variable, return error
 			sError.SetSprintf ( "Unknown session variable '%s' in SET statement", tStmt.m_sSetName.cstr() );
-			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 			return;
 		}
 		break;
@@ -13413,7 +13807,7 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 		// global user variable
 		if ( g_eWorkers!=MPM_THREADS )
 		{
-			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "SET GLOBAL currently requires workers=threads" );
+			tOut.Error ( tStmt.m_sStmt, "SET GLOBAL currently requires workers=threads" );
 			return;
 		}
 
@@ -13432,7 +13826,7 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 		// global server variable
 		if ( g_eWorkers!=MPM_THREADS )
 		{
-			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "SET GLOBAL currently requires workers=threads" );
+			tOut.Error ( tStmt.m_sStmt, "SET GLOBAL currently requires workers=threads" );
 			return;
 		}
 
@@ -13444,7 +13838,7 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 				g_eLogFormat = LOG_FORMAT_SPHINXQL;
 			else
 			{
-				SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "Unknown query_log_format value (must be plain or sphinxql)" );
+				tOut.Error ( tStmt.m_sStmt, "Unknown query_log_format value (must be plain or sphinxql)" );
 				return;
 			}
 		} else if ( tStmt.m_sSetName=="log_level" )
@@ -13459,32 +13853,32 @@ void HandleMysqlSet ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlStmt_t & tS
 				g_eLogLevel = SPH_LOG_VERY_VERBOSE_DEBUG;
 			else
 			{
-				SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "Unknown log_level value (must be one of info, debug, debugv, debugvv)" );
+				tOut.Error ( tStmt.m_sStmt, "Unknown log_level value (must be one of info, debug, debugv, debugvv)" );
 				return;
 			}
 		} else
 		{
 			sError.SetSprintf ( "Unknown system variable '%s'", tStmt.m_sSetName.cstr() );
-			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 			return;
 		}
 		break;
 
 	default:
 		sError.SetSprintf ( "INTERNAL ERROR: unhandle SET mode %d", (int)tStmt.m_eSet );
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
 	// it went ok
-	SendMysqlOkPacket ( tOut, uPacketID );
+	tOut.Ok();
 }
 
 
-void HandleMysqlAttach ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE uPacketID )
+void HandleMysqlAttach ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
 	const CSphString & sFrom = tStmt.m_sIndex;
-	const CSphString & sTo = tStmt.m_sSetName;
+	const CSphString & sTo = tStmt.m_sStringParam;
 	CSphString sError;
 
 	ServedIndex_t * pFrom = g_pIndexes->GetWlockedEntry ( sFrom );
@@ -13496,13 +13890,13 @@ void HandleMysqlAttach ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 		|| !pTo->m_bRT )
 	{
 		if ( !pFrom || !pFrom->m_bEnabled )
-			SendMysqlErrorPacketEx ( tOut, uPacketID, MYSQL_ERR_PARSE_ERROR, "no such index '%s'", sFrom.cstr() );
+			tOut.ErrorEx ( MYSQL_ERR_PARSE_ERROR, "no such index '%s'", sFrom.cstr() );
 		else if ( !pTo || !pTo->m_bEnabled )
-			SendMysqlErrorPacketEx ( tOut, uPacketID, MYSQL_ERR_PARSE_ERROR, "no such index '%s'", sTo.cstr() );
+			tOut.ErrorEx ( MYSQL_ERR_PARSE_ERROR, "no such index '%s'", sTo.cstr() );
 		else if ( pFrom->m_bRT )
-			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "1st argument to ATTACH must be a plain index" );
+			tOut.Error ( tStmt.m_sStmt, "1st argument to ATTACH must be a plain index" );
 		else if ( pTo->m_bRT )
-			SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "2nd argument to ATTACH must be a RT index" );
+			tOut.Error ( tStmt.m_sStmt, "2nd argument to ATTACH must be a RT index" );
 
 		if ( pFrom )
 			pFrom->Unlock();
@@ -13518,7 +13912,7 @@ void HandleMysqlAttach ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 	{
 		pFrom->Unlock();
 		pTo->Unlock();
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
@@ -13526,11 +13920,11 @@ void HandleMysqlAttach ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 	pFrom->m_bEnabled = false; // so we need to disable the disk index until further notice
 	pFrom->Unlock();
 	pTo->Unlock();
-	SendMysqlOkPacket ( tOut, uPacketID );
+	tOut.Ok();
 }
 
 
-void HandleMysqlFlush ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE uPacketID )
+void HandleMysqlFlush ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
 	CSphString sError;
 	const ServedIndex_t * pIndex = g_pIndexes->GetRlockedEntry ( tStmt.m_sIndex );
@@ -13539,7 +13933,7 @@ void HandleMysqlFlush ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE 
 	{
 		if ( pIndex )
 		pIndex->Unlock();
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "FLUSH RTINDEX requires an existing RT index" );
+		tOut.Error ( tStmt.m_sStmt, "FLUSH RTINDEX requires an existing RT index" );
 		return;
 	}
 
@@ -13548,11 +13942,11 @@ void HandleMysqlFlush ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE 
 
 	pRt->ForceRamFlush();
 	pIndex->Unlock();
-	SendMysqlOkPacket ( tOut, uPacketID );
+	tOut.Ok();
 }
 
 
-void HandleMysqlTruncate ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE uPacketID )
+void HandleMysqlTruncate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
 	// get an exclusive lock
 	const ServedIndex_t * pIndex = g_pIndexes->GetWlockedEntry ( tStmt.m_sIndex );
@@ -13561,7 +13955,7 @@ void HandleMysqlTruncate ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BY
 	{
 		if ( pIndex )
 			pIndex->Unlock();
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "TRUNCATE RTINDEX requires an existing RT index" );
+		tOut.Error ( tStmt.m_sStmt, "TRUNCATE RTINDEX requires an existing RT index" );
 		return;
 	}
 
@@ -13573,13 +13967,13 @@ void HandleMysqlTruncate ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BY
 	pIndex->Unlock();
 
 	if ( !bRes )
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 	else
-		SendMysqlOkPacket ( tOut, uPacketID );
+		tOut.Ok();
 }
 
 
-void HandleMysqlOptimize ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE uPacketID )
+void HandleMysqlOptimize ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
 	// get an exclusive lock
 	const ServedIndex_t * pIndex = g_pIndexes->GetRlockedEntry ( tStmt.m_sIndex );
@@ -13588,9 +13982,9 @@ void HandleMysqlOptimize ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BY
 		pIndex->Unlock();
 
 	if ( !bValid )
-		SendMysqlErrorPacket ( tOut, uPacketID, tStmt.m_sStmt, "OPTIMIZE INDEX requires an existing RT index" );
+		tOut.Error ( tStmt.m_sStmt, "OPTIMIZE INDEX requires an existing RT index" );
 	else
-		SendMysqlOkPacket ( tOut, uPacketID );
+		tOut.Ok();
 
 	if ( bValid )
 	{
@@ -13600,16 +13994,79 @@ void HandleMysqlOptimize ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BY
 	}
 }
 
-
-void SendMysqlPair ( NetOutputBuffer_c & tOut, BYTE & uPacketID, SqlRowBuffer_c & dRows, const char * sKey, const char * sValue )
+void HandleMysqlSelectSysvar ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
-	dRows.PutString ( sKey );
-	dRows.PutString ( sValue );
-	tOut.SendLSBDword ( ((uPacketID++)<<24) + ( dRows.Length() ) );
-	tOut.SendBytes ( dRows.Off ( 0 ), dRows.Length() );
-	dRows.Reset();
+	CSphString sVar = tStmt.m_tQuery.m_sQuery;
+	sVar.ToLower();
+
+	if ( sVar=="@@session.auto_increment_increment" )
+	{
+		// MySQL Connector/J really expects an answer here
+		tOut.HeadBegin(1);
+		tOut.HeadColumn ( sVar.cstr(), MYSQL_COL_LONG );
+		tOut.HeadEnd();
+
+		// data packet, var value
+		tOut.PutString("1");
+		tOut.Commit();
+
+		// done
+		tOut.Eof();
+	} else
+	{
+		// generally, just send empty response
+		tOut.Ok();
+	}
 }
 
+void HandleMysqlShowCollations ( SqlRowBuffer_c & tOut )
+{
+	// MySQL Connector/J really expects an answer here
+	// field packets
+	tOut.HeadBegin(6);
+	tOut.HeadColumn ( "Collation" );
+	tOut.HeadColumn ( "Charset" );
+	tOut.HeadColumn ( "Id", MYSQL_COL_LONGLONG );
+	tOut.HeadColumn ( "Default" );
+	tOut.HeadColumn ( "Compiled" );
+	tOut.HeadColumn ( "Sortlen" );
+	tOut.HeadEnd();
+
+	// data packets
+	tOut.PutString ( "utf8_general_ci" );
+	tOut.PutString ( "utf-8" );
+	tOut.PutString ( "33" );
+	tOut.PutString ( "Yes" );
+	tOut.PutString ( "Yes" );
+	tOut.PutString ( "1" );
+	tOut.Commit();
+
+	// done
+	tOut.Eof();
+	return;
+}
+
+void HandleMysqlShowCharacterSet ( SqlRowBuffer_c & tOut )
+{
+	// MySQL Connector/J really expects an answer here
+	// field packets
+	tOut.HeadBegin(4);
+	tOut.HeadColumn ( "Charset" );
+	tOut.HeadColumn ( "Description" );
+	tOut.HeadColumn ( "Default collation" );
+	tOut.HeadColumn ( "Maxlen" );
+	tOut.HeadEnd();
+
+	// data packets
+	tOut.PutString ( "utf8" );
+	tOut.PutString ( "UTF-8 Unicode" );
+	tOut.PutString ( "utf8_general_ci" );
+	tOut.PutString ( "3" );
+	tOut.Commit();
+
+	// done
+	tOut.Eof();
+}
 
 const char * sphCollationToName ( ESphCollation eColl )
 {
@@ -13639,35 +14096,22 @@ static const char * LogLevelName ( ESphLogLevel eLevel )
 }
 
 
-void HandleMysqlShowVariables ( const SqlStmt_t &, NetOutputBuffer_c & tOut, BYTE uPacketID, SqlRowBuffer_c & dRows, SessionVars_t & tVars )
+void HandleMysqlShowVariables ( SqlRowBuffer_c & tOut, SessionVars_t & tVars )
 {
-	char sTmp[SPH_MAX_NUMERIC_STR];
-
 	// result set header packet
-	tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
-	tOut.SendByte ( 2 ); // field count (level+code+message)
-	tOut.SendByte ( 0 ); // extra
-
-	// field packets
-	SendMysqlFieldPacket ( tOut, uPacketID++, "Variable_name", MYSQL_COL_STRING );
-	SendMysqlFieldPacket ( tOut, uPacketID++, "Value", MYSQL_COL_STRING );
-	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
-
-	// send rows
-	dRows.Reset();
+	tOut.HeadTuplet ( "Variable_name", "Value" );
 
 	// sessions vars
-	SendMysqlPair ( tOut, uPacketID, dRows, "autocommit", tVars.m_bAutoCommit ? "1" : "0" );
-	SendMysqlPair ( tOut, uPacketID, dRows, "collation_connection", sphCollationToName ( tVars.m_eCollation ) );
+	tOut.DataTuplet ( "autocommit", tVars.m_bAutoCommit ? "1" : "0" );
+	tOut.DataTuplet ( "collation_connection", sphCollationToName ( tVars.m_eCollation ) );
 
 	// server vars
-	SendMysqlPair ( tOut, uPacketID, dRows, "query_log_format", g_eLogFormat==LOG_FORMAT_PLAIN ? "plain" : "sphinxql" );
-	SendMysqlPair ( tOut, uPacketID, dRows, "log_level", LogLevelName ( g_eLogLevel ) );
-	snprintf ( sTmp, sizeof(sTmp), "%d", g_iMaxPacketSize );
-	SendMysqlPair ( tOut, uPacketID, dRows, "max_allowed_packet", sTmp );
+	tOut.DataTuplet ( "query_log_format", g_eLogFormat==LOG_FORMAT_PLAIN ? "plain" : "sphinxql" );
+	tOut.DataTuplet ( "log_level", LogLevelName ( g_eLogLevel ) );
+	tOut.DataTuplet ( "max_allowed_packet", g_iMaxPacketSize );
 
 	// cleanup
-	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+	tOut.Eof();
 }
 
 
@@ -13685,7 +14129,7 @@ public:
 		{}
 
 	// just execute one sphinxql statement
-	void Execute ( const CSphString & sQuery, NetOutputBuffer_c & tOut, BYTE & uPacketID, ThdDesc_t * pThd=NULL )
+	void Execute ( const CSphString & sQuery, NetOutputBuffer_c & tOutput, BYTE & uPacketID, ThdDesc_t * pThd=NULL )
 	{
 		// set on query guard
 		CrashQuery_t tCrashQuery;
@@ -13712,12 +14156,12 @@ public:
 			pThd->m_sCommand = g_dSqlStmts[eStmt];
 		THD_STATE ( THD_QUERY );
 
-		SqlRowBuffer_c dRows;
+		SqlRowBuffer_c tOut ( &uPacketID, &tOutput );
 
 		// handle multi SQL query
 		if ( bParsedOK && dStmt.GetLength()>1 )
 		{
-			HandleMysqlMultiStmt ( tOut, uPacketID, dStmt, m_tLastMeta, dRows, pThd, m_sError );
+			HandleMysqlMultiStmt ( dStmt, m_tLastMeta, tOut, pThd, m_sError );
 			return;
 		}
 
@@ -13728,7 +14172,7 @@ public:
 			m_tLastMeta = CSphQueryResultMeta();
 			m_tLastMeta.m_sError = m_sError;
 			m_tLastMeta.m_sWarning = "";
-			SendMysqlErrorPacket ( tOut, uPacketID, sQuery.cstr(), m_sError.cstr() );
+			tOut.Error ( sQuery.cstr(), m_sError.cstr() );
 			return;
 
 		case STMT_SELECT:
@@ -13739,12 +14183,12 @@ public:
 				SearchHandler_c tHandler ( 1, true );
 				tHandler.m_dQueries[0] = dStmt.Begin()->m_tQuery;
 
-				if ( HandleMysqlSelect ( tOut, uPacketID, tHandler ) )
+				if ( HandleMysqlSelect ( tOut, tHandler ) )
 				{
 					// query just completed ok; reset out error message
 					m_sError = "";
 					AggrResult_t & tLast = tHandler.m_dResults.Last();
-					SendMysqlSelectResult ( tOut, uPacketID, dRows, tLast, false );
+					SendMysqlSelectResult ( tOut, tLast, false );
 				}
 
 				// save meta for SHOW META
@@ -13752,7 +14196,7 @@ public:
 				return;
 			}
 		case STMT_SHOW_WARNINGS:
-			HandleMysqlWarning ( tOut, uPacketID, m_tLastMeta, dRows, false );
+			HandleMysqlWarning ( m_tLastMeta, tOut, false );
 			return;
 
 		case STMT_SHOW_STATUS:
@@ -13762,7 +14206,7 @@ public:
 			{
 				StatCountCommand ( SEARCHD_COMMAND_STATUS );
 			}
-			HandleMysqlMeta ( tOut, uPacketID, m_tLastMeta, dRows, eStmt, false );
+			HandleMysqlMeta ( tOut, *pStmt, m_tLastMeta, false );
 			return;
 
 		case STMT_INSERT:
@@ -13770,16 +14214,16 @@ public:
 			m_tLastMeta = CSphQueryResultMeta();
 			m_tLastMeta.m_sError = m_sError;
 			m_tLastMeta.m_sWarning = "";
-			HandleMysqlInsert ( *pStmt, tOut, uPacketID, eStmt==STMT_REPLACE,
+			HandleMysqlInsert ( tOut, *pStmt, eStmt==STMT_REPLACE,
 				m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tLastMeta.m_sWarning );
 			return;
 
 		case STMT_DELETE:
-			HandleMysqlDelete ( *pStmt, sQuery, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, tOut, uPacketID );
+			HandleMysqlDelete ( tOut, *pStmt, sQuery, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction );
 			return;
 
 		case STMT_SET:
-			HandleMysqlSet ( tOut, uPacketID, *pStmt, m_tVars );
+			HandleMysqlSet ( tOut, *pStmt, m_tVars );
 			return;
 
 		case STMT_BEGIN:
@@ -13790,7 +14234,7 @@ public:
 				ISphRtIndex * pIndex = sphGetCurrentIndexRT();
 				if ( pIndex )
 					pIndex->Commit();
-				SendMysqlOkPacket ( tOut, uPacketID );
+				tOut.Ok();
 				return;
 			}
 		case STMT_COMMIT:
@@ -13807,7 +14251,7 @@ public:
 					else
 						pIndex->RollBack();
 				}
-				SendMysqlOkPacket ( tOut, uPacketID );
+				tOut.Ok();
 				return;
 			}
 		case STMT_CALL:
@@ -13815,160 +14259,84 @@ public:
 			if ( pStmt->m_sCallProc=="SNIPPETS" )
 			{
 				StatCountCommand ( SEARCHD_COMMAND_EXCERPT );
-				HandleMysqlCallSnippets ( tOut, uPacketID, *pStmt );
+				HandleMysqlCallSnippets ( tOut, *pStmt );
 			} else if ( pStmt->m_sCallProc=="KEYWORDS" )
 			{
 				StatCountCommand ( SEARCHD_COMMAND_KEYWORDS );
-				HandleMysqlCallKeywords ( tOut, uPacketID, *pStmt );
+				HandleMysqlCallKeywords ( tOut, *pStmt );
 			} else
 			{
 				m_sError.SetSprintf ( "no such builtin procedure %s", pStmt->m_sCallProc.cstr() );
-				SendMysqlErrorPacket ( tOut, uPacketID, sQuery.cstr(), m_sError.cstr() );
+				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
 			}
 			return;
 
 		case STMT_DESC:
-			HandleMysqlDescribe ( tOut, uPacketID, *pStmt );
+			HandleMysqlDescribe ( tOut, *pStmt );
 			return;
 
 		case STMT_SHOW_TABLES:
-			HandleMysqlShowTables ( tOut, uPacketID );
+			HandleMysqlShowTables ( tOut, *pStmt );
 			return;
 
 		case STMT_UPDATE:
 			StatCountCommand ( SEARCHD_COMMAND_UPDATE );
-			HandleMysqlUpdate ( tOut, uPacketID, *pStmt, sQuery, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction );
+			HandleMysqlUpdate ( tOut, *pStmt, sQuery, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction );
 			return;
 
 		case STMT_DUMMY:
-			SendMysqlOkPacket ( tOut, uPacketID );
+			tOut.Ok();
 			return;
 
 		case STMT_CREATE_FUNC:
 			if ( !sphUDFCreate ( pStmt->m_sUdfLib.cstr(), pStmt->m_sUdfName.cstr(), pStmt->m_eUdfType, m_sError ) )
-				SendMysqlErrorPacket ( tOut, uPacketID, sQuery.cstr(), m_sError.cstr() );
+				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
 			else
-				SendMysqlOkPacket ( tOut, uPacketID );
+				tOut.Ok();
 			return;
 
 		case STMT_DROP_FUNC:
 			if ( !sphUDFDrop ( pStmt->m_sUdfName.cstr(), m_sError ) )
-				SendMysqlErrorPacket ( tOut, uPacketID, sQuery.cstr(), m_sError.cstr() );
+				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
 			else
-				SendMysqlOkPacket ( tOut, uPacketID );
+				tOut.Ok();
 			return;
 
 		case STMT_ATTACH_INDEX:
-			HandleMysqlAttach ( *pStmt, tOut, uPacketID );
+			HandleMysqlAttach ( tOut, *pStmt );
 			return;
 
 		case STMT_FLUSH_RTINDEX:
-			HandleMysqlFlush ( *pStmt, tOut, uPacketID );
+			HandleMysqlFlush ( tOut, *pStmt );
 			return;
 
 		case STMT_SHOW_VARIABLES:
-			HandleMysqlShowVariables ( *pStmt, tOut, uPacketID, dRows, m_tVars );
+			HandleMysqlShowVariables ( tOut, m_tVars );
 			return;
 
 		case STMT_TRUNCATE_RTINDEX:
-			HandleMysqlTruncate ( *pStmt, tOut, uPacketID );
+			HandleMysqlTruncate ( tOut, *pStmt );
 			return;
 
 		case STMT_OPTIMIZE_INDEX:
-			HandleMysqlOptimize ( *pStmt, tOut, uPacketID );
+			HandleMysqlOptimize ( tOut, *pStmt );
 			return;
 
 		case STMT_SELECT_SYSVAR:
-			{
-				CSphString sVar = pStmt->m_tQuery.m_sQuery;
-				sVar.ToLower();
-
-				if ( sVar=="@@session.auto_increment_increment" )
-				{
-					// MySQL Connector/J really expects an answer here
-					tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
-					tOut.SendByte ( 1 ); // field count (level+code+message)
-					tOut.SendByte ( 0 ); // extra
-
-					// field packet, var name
-					SendMysqlFieldPacket ( tOut, uPacketID++, sVar.cstr(), MYSQL_COL_LONG );
-					SendMysqlEofPacket ( tOut, uPacketID++, 0 );
-
-					// data packet, var value
-					tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 ); // following string length and data
-					tOut.SendMysqlString ( "1" );
-
-					// done
-					SendMysqlEofPacket ( tOut, uPacketID++, 0 );
-				} else
-				{
-					// generally, just send empty response
-					SendMysqlOkPacket ( tOut, uPacketID );
-				}
-			}
+			HandleMysqlSelectSysvar ( tOut, * pStmt );
 			return;
 
 		case STMT_SHOW_COLLATION:
-			// MySQL Connector/J really expects an answer here
-			tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
-			tOut.SendByte ( 6 ); // field count (collation+charset+id+default+compiled+sortlen)
-			tOut.SendByte ( 0 ); // extra
-
-			// field packets
-			SendMysqlFieldPacket ( tOut, uPacketID++, "Collation", MYSQL_COL_STRING );
-			SendMysqlFieldPacket ( tOut, uPacketID++, "Charset", MYSQL_COL_STRING );
-			SendMysqlFieldPacket ( tOut, uPacketID++, "Id", MYSQL_COL_LONGLONG );
-			SendMysqlFieldPacket ( tOut, uPacketID++, "Default", MYSQL_COL_STRING );
-			SendMysqlFieldPacket ( tOut, uPacketID++, "Compiled", MYSQL_COL_STRING );
-			SendMysqlFieldPacket ( tOut, uPacketID++, "Sortlen", MYSQL_COL_STRING );
-			SendMysqlEofPacket ( tOut, uPacketID++, 0 );
-
-			// data packets
-			dRows.Reset();
-			dRows.PutString ( "utf8_general_ci" );
-			dRows.PutString ( "utf-8" );
-			dRows.PutString ( "33" );
-			dRows.PutString ( "Yes" );
-			dRows.PutString ( "Yes" );
-			dRows.PutString ( "1" );
-			tOut.SendLSBDword ( ((uPacketID++)<<24) + ( dRows.Length() ) );
-			tOut.SendBytes ( dRows.Off ( 0 ), dRows.Length() );
-
-			// done
-			dRows.Reset();
-			SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+			HandleMysqlShowCollations ( tOut );
 			return;
 
 		case STMT_SHOW_CHARACTER_SET:
-			// MySQL Connector/J really expects an answer here
-			tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
-			tOut.SendByte ( 4 ); // field count (charset+description+default+maxlen)
-			tOut.SendByte ( 0 ); // extra
-
-			// field packets
-			SendMysqlFieldPacket ( tOut, uPacketID++, "Charset", MYSQL_COL_STRING );
-			SendMysqlFieldPacket ( tOut, uPacketID++, "Description", MYSQL_COL_STRING );
-			SendMysqlFieldPacket ( tOut, uPacketID++, "Default collation", MYSQL_COL_STRING );
-			SendMysqlFieldPacket ( tOut, uPacketID++, "Maxlen", MYSQL_COL_STRING );
-			SendMysqlEofPacket ( tOut, uPacketID++, 0 );
-
-			// data packets
-			dRows.Reset();
-			dRows.PutString ( "utf8" );
-			dRows.PutString ( "UTF-8 Unicode" );
-			dRows.PutString ( "utf8_general_ci" );
-			dRows.PutString ( "3" );
-			tOut.SendLSBDword ( ((uPacketID++)<<24) + ( dRows.Length() ) );
-			tOut.SendBytes ( dRows.Off ( 0 ), dRows.Length() );
-
-			// done
-			dRows.Reset();
-			SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+			HandleMysqlShowCharacterSet ( tOut );
 			return;
 
 		default:
 			m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );
-			SendMysqlErrorPacket ( tOut, uPacketID, sQuery.cstr(), m_sError.cstr() );
+			tOut.Error ( sQuery.cstr(), m_sError.cstr() );
 			return;
 		} // switch
 	}

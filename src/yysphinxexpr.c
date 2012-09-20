@@ -157,7 +157,7 @@ typedef union YYSTYPE {
 	int				iNode;			// node, or uservar, or udf index
 	const char *	sIdent;			// generic identifier (token does NOT own ident storage; ie values are managed by parser)
 } YYSTYPE;
-/* Line 191 of yacc.c.  */
+/* Line 186 of yacc.c.  */
 
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

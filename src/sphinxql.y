@@ -58,6 +58,7 @@
 %token	TOK_INTO
 %token	TOK_ISOLATION
 %token	TOK_LEVEL
+%token	TOK_LIKE
 %token	TOK_LIMIT
 %token	TOK_MATCH
 %token	TOK_MAX
@@ -582,11 +583,26 @@ show_stmt:
 	TOK_SHOW show_what
 	;
 
+like_filter:
+	// empty
+	| TOK_LIKE TOK_QUOTED_STRING { pParser->m_pStmt->m_sStringParam = $2.m_sValue; }
+	;
+
 show_what:
 	TOK_WARNINGS		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_WARNINGS; }
-	| TOK_STATUS		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_STATUS; }
-	| TOK_META			{ pParser->m_pStmt->m_eStmt = STMT_SHOW_META; }
-	| TOK_AGENT TOK_STATUS		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENTSTATUS; }
+	| TOK_STATUS like_filter		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_STATUS; }
+	| TOK_META like_filter			{ pParser->m_pStmt->m_eStmt = STMT_SHOW_META; }
+	| TOK_AGENT TOK_STATUS like_filter	{ pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENTSTATUS; }
+	| TOK_AGENT TOK_QUOTED_STRING TOK_STATUS like_filter
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENTSTATUS;
+			pParser->m_pStmt->m_sIndex = $2.m_sValue;
+		}
+	| TOK_AGENT TOK_IDENT TOK_STATUS like_filter
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENTSTATUS;
+			pParser->m_pStmt->m_sIndex = $2.m_sValue;
+		}
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -814,7 +830,7 @@ call_opt_name:
 //////////////////////////////////////////////////////////////////////////
 
 describe:
-	describe_tok TOK_IDENT
+	describe_tok TOK_IDENT like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_DESC;
 			pParser->m_pStmt->m_sIndex = $2.m_sValue;
@@ -829,7 +845,7 @@ describe_tok:
 //////////////////////////////////////////////////////////////////////////
 
 show_tables:
-	TOK_SHOW TOK_TABLES		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_TABLES; }
+	TOK_SHOW TOK_TABLES like_filter		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_TABLES; }
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -962,7 +978,7 @@ attach_index:
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ATTACH_INDEX;
 			tStmt.m_sIndex = $3.m_sValue;
-			tStmt.m_sSetName = $6.m_sValue;
+			tStmt.m_sStringParam = $6.m_sValue;
 		}
 	;
 

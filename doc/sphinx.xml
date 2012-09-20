@@ -4549,7 +4549,7 @@ that specifies whether to return document and hit occurrence statistics.
 
 <sect1 id="sphinxql-show-tables"><title>SHOW TABLES syntax</title>
 <programlisting>
-SHOW TABLES
+SHOW TABLES [ LIKE 'pattern' ]
 </programlisting>
 <para>
 SHOW TABLES statement, introduced in version 2.0.1-beta, enumerates
@@ -4570,12 +4570,25 @@ mysql> SHOW TABLES;
 4 rows in set (0.00 sec)
 </programlisting>
 </para>
+<para>
+Optional 'LIKE' clause could be used to show not all, but filtered subset
+of the fields. The pattern in the clause may be defined using classical MS-DOS
+wildchar syntax ('?' means 'any symbol', '*' means 'any symbols').</para>
+<programlisting>
+mysql> show tables like '*4';
++-------+-------------+
+| Index | Type        |
++-------+-------------+
+| dist4 | distributed |
++-------+-------------+
+1 row in set (0.00 sec)
+</programlisting>
 </sect1>
 
 
 <sect1 id="sphinxql-describe"><title>DESCRIBE syntax</title>
 <programlisting>
-{DESC | DESCRIBE} index
+{DESC | DESCRIBE} index [ LIKE 'pattern' ]
 </programlisting>
 <para>
 DESCRIBE statement, introduced in version 2.0.1-beta, lists
@@ -4604,8 +4617,20 @@ mysql> DESC rt;
 +---------+---------+
 4 rows in set (0.00 sec)
 </programlisting>
+<para>Optional 'LIKE' clause could be used to show not all, but filtered subset
+of the fields. The pattern in the clause may be defined using classical MS-DOS
+wildchar syntax ('?' means 'any symbol', '*' means 'any symbols') </para>
+<programlisting>
+mysql> DESC distrr LIKE '192*';
++------------------------+-------------------+
+| Agent                  | Type              |
++------------------------+-------------------+
+| 192.168.0.202:6713:loc | remote_1_mirror_1 |
+| 192.168.0.202:6714:loc | remote_1_mirror_2 |
++------------------------+-------------------+
+2 rows in set (0.00 sec)
+</programlisting>
 </sect1>
-
 
 <sect1 id="sphinxql-create-function"><title>CREATE FUNCTION syntax</title>
 <programlisting>
@@ -4708,7 +4733,7 @@ Query OK, 0 rows affected (0.00 sec)
 
 <sect1 id="sphinxql-update"><title>UPDATE syntax</title>
 <programlisting>
-UPDATE index SET col1 = newval1 [, ...] WHERE where_condition
+UPDATE index SET col1 = newval1 [, ...] WHERE where_condition [OPTION opt_name = opt_value [, ...]]
 </programlisting>
 <para>
 UPDATE statement was added in version 2.0.1-beta. Multiple attributes
@@ -4748,6 +4773,18 @@ mysql> UPDATE myindex
   WHERE MATCH('hehe') AND enabled=1;
 Query OK, 148 rows affected (0.01 sec)
 </programlisting>
+<para>OPTION clause. This is a Sphinx specific extension that
+lets you control a number of per-update options. The syntax is:
+<programlisting>
+OPTION &lt;optionname&gt;=&lt;value&gt; [ , ... ]
+</programlisting>
+The list of allowed options are the same as for <link
+linkend="sphinxql-select">SELECT</link> statement. Specifically for UPDATE
+statement you can use these options:
+<itemizedlist>
+<listitem><para>'ignore_nonexistent_columns' - points that the update will silently ignore any warnings about trying to update a column which is not exists in current index schema.</para></listitem>
+</itemizedlist>
+</para>
 </sect1>
 
 
@@ -4894,11 +4931,11 @@ Query OK, 0 rows affected (0.05 sec)
 <sect1 id="sphinxql-show-agent-status"><title>SHOW AGENT
 STATUS</title>
 <programlisting>
-SHOW AGENT STATUS
+SHOW AGENT ['agent'|'index'|index] STATUS [ LIKE 'pattern' ]
 </programlisting>
 <para>
 Displays the statistic of <link linkend="conf-agent">remote
-agents</link>. It includes the values like the age of the last
+agents</link> or distributed index. It includes the values like the age of the last
 request, last answer, the number of different kind of errors and
 successes, etc. The statistic is shown for every agent for last 1, 5
 and 15 intervals, each of them of <link
@@ -4906,68 +4943,132 @@ linkend="conf-ha-period-karma">ha_period_karma</link> seconds.
 The command exists only in sphinxql.
 </para>
 <programlisting>
-mysql> show agent status;
-+------------------------------------+-------------------+
-| Variable_name                      | Value             |
-+------------------------------------+-------------------+
-| status_period_seconds              | 60                |
-| status_stored_periods              | 15                |
-| ag_0_hostname                      | 192.168.1.90:6713 |
-| ag_0_references                    | 2                 |
-| ag_0_lastquery                     | 0.61              |
-| ag_0_lastanswer                    | 0.61              |
-| ag_0_lastperiodmsec                | 0                 |
-| ag_0_1periods_query_timeouts       | 0                 |
-| ag_0_1periods_connect_timeouts     | 0                 |
-| ag_0_1periods_connect_failures     | 65                |
-| ag_0_1periods_network_errors       | 0                 |
-| ag_0_1periods_wrong_replies        | 0                 |
-| ag_0_1periods_unexpected_closings  | 0                 |
-| ag_0_1periods_succeeded_queries    | 3                 |
-| ag_0_5periods_query_timeouts       | 0                 |
-| ag_0_5periods_connect_timeouts     | 0                 |
-| ag_0_5periods_connect_failures     | 169               |
-| ag_0_5periods_network_errors       | 0                 |
-| ag_0_5periods_wrong_replies        | 0                 |
-| ag_0_5periods_unexpected_closings  | 0                 |
-| ag_0_5periods_succeeded_queries    | 113               |
-| ag_0_15periods_query_timeouts      | 0                 |
-| ag_0_15periods_connect_timeouts    | 0                 |
-| ag_0_15periods_connect_failures    | 169               |
-| ag_0_15periods_network_errors      | 0                 |
-| ag_0_15periods_wrong_replies       | 0                 |
-| ag_0_15periods_unexpected_closings | 0                 |
-| ag_0_15periods_succeeded_queries   | 113               |
-| ag_1_hostname                      | 192.168.1.90:6714 |
-| ag_1_references                    | 2                 |
-| ag_1_lastquery                     | 0.61              |
-| ag_1_lastanswer                    | 0.61              |
-| ag_1_lastperiodmsec                | 0                 |
-| ag_1_1periods_query_timeouts       | 0                 |
-| ag_1_1periods_connect_timeouts     | 0                 |
-| ag_1_1periods_connect_failures     | 0                 |
-| ag_1_1periods_network_errors       | 0                 |
-| ag_1_1periods_wrong_replies        | 0                 |
-| ag_1_1periods_unexpected_closings  | 0                 |
-| ag_1_1periods_succeeded_queries    | 68                |
-| ag_1_5periods_query_timeouts       | 0                 |
-| ag_1_5periods_connect_timeouts     | 0                 |
-| ag_1_5periods_connect_failures     | 0                 |
-| ag_1_5periods_network_errors       | 0                 |
-| ag_1_5periods_wrong_replies        | 0                 |
-| ag_1_5periods_unexpected_closings  | 0                 |
-| ag_1_5periods_succeeded_queries    | 282               |
-| ag_1_15periods_query_timeouts      | 0                 |
-| ag_1_15periods_connect_timeouts    | 0                 |
-| ag_1_15periods_connect_failures    | 0                 |
-| ag_1_15periods_network_errors      | 0                 |
-| ag_1_15periods_wrong_replies       | 0                 |
-| ag_1_15periods_unexpected_closings | 0                 |
-| ag_1_15periods_succeeded_queries   | 282               |
-+------------------------------------+-------------------+
-54 rows in set (0.00 sec)
+mysql> SHOW AGENT STATUS;
++------------------------------------+----------------------------+
+| Key                                | Value                      |
++------------------------------------+----------------------------+
+| status_period_seconds              | 60                         |
+| status_stored_periods              | 15                         |
+| ag_0_hostname                      | 192.168.0.202:6713         |
+| ag_0_references                    | 2                          |
+| ag_0_lastquery                     | 0.41                       |
+| ag_0_lastanswer                    | 0.19                       |
+| ag_0_lastperiodmsec                | 222                        |
+| ag_0_errorsarow                    | 0                          |
+| ag_0_1periods_query_timeouts       | 0                          |
+| ag_0_1periods_connect_timeouts     | 0                          |
+| ag_0_1periods_connect_failures     | 0                          |
+| ag_0_1periods_network_errors       | 0                          |
+| ag_0_1periods_wrong_replies        | 0                          |
+| ag_0_1periods_unexpected_closings  | 0                          |
+| ag_0_1periods_warnings             | 0                          |
+| ag_0_1periods_succeeded_queries    | 27                         |
+| ag_0_1periods_msecsperquery        | 232.31                     |
+| ag_0_5periods_query_timeouts       | 0                          |
+| ag_0_5periods_connect_timeouts     | 0                          |
+| ag_0_5periods_connect_failures     | 0                          |
+| ag_0_5periods_network_errors       | 0                          |
+| ag_0_5periods_wrong_replies        | 0                          |
+| ag_0_5periods_unexpected_closings  | 0                          |
+| ag_0_5periods_warnings             | 0                          |
+| ag_0_5periods_succeeded_queries    | 146                        |
+| ag_0_5periods_msecsperquery        | 231.83                     |
+| ag_1_hostname                      | 192.168.0.202:6714         |
+| ag_1_references                    | 2                          |
+| ag_1_lastquery                     | 0.41                       |
+| ag_1_lastanswer                    | 0.19                       |
+| ag_1_lastperiodmsec                | 220                        |
+| ag_1_errorsarow                    | 0                          |
+| ag_1_1periods_query_timeouts       | 0                          |
+| ag_1_1periods_connect_timeouts     | 0                          |
+| ag_1_1periods_connect_failures     | 0                          |
+| ag_1_1periods_network_errors       | 0                          |
+| ag_1_1periods_wrong_replies        | 0                          |
+| ag_1_1periods_unexpected_closings  | 0                          |
+| ag_1_1periods_warnings             | 0                          |
+| ag_1_1periods_succeeded_queries    | 27                         |
+| ag_1_1periods_msecsperquery        | 231.24                     |
+| ag_1_5periods_query_timeouts       | 0                          |
+| ag_1_5periods_connect_timeouts     | 0                          |
+| ag_1_5periods_connect_failures     | 0                          |
+| ag_1_5periods_network_errors       | 0                          |
+| ag_1_5periods_wrong_replies        | 0                          |
+| ag_1_5periods_unexpected_closings  | 0                          |
+| ag_1_5periods_warnings             | 0                          |
+| ag_1_5periods_succeeded_queries    | 146                        |
+| ag_1_5periods_msecsperquery        | 230.85                     |
++------------------------------------+----------------------------+
+50 rows in set (0.01 sec)
+</programlisting>
+<para>
+Optional 'LIKE' clause could be used to show not all, but filtered subset
+of the fields. The pattern in the clause may be defined using classical MS-DOS
+wildchar syntax ('?' means 'any symbol', '*' means 'any symbols').</para>
+<programlisting>
+mysql> SHOW AGENT STATUS LIKE '*_5period*msec*';
++-----------------------------+--------+
+| Key                         | Value  |
++-----------------------------+--------+
+| ag_0_5periods_msecsperquery | 234.72 |
+| ag_1_5periods_msecsperquery | 233.73 |
+| ag_2_5periods_msecsperquery | 343.81 |
++-----------------------------+--------+
+3 rows in set (0.00 sec)
+</programlisting>
+<para>
+You can specify the concrete agent by it's address. In this case only data
+corresponding to selected agent will be displayed. Also, the sphinx will use the
+'agent_' prefix to the fields instead of 'ag_N_'.
+</para>
+<programlisting>
+mysql> SHOW AGENT '192.168.0.202:6714' STATUS LIKE '*15periods*';
++-------------------------------------+--------+
+| Variable_name                       | Value  |
++-------------------------------------+--------+
+| agent_15periods_query_timeouts      | 0      |
+| agent_15periods_connect_timeouts    | 0      |
+| agent_15periods_connect_failures    | 0      |
+| agent_15periods_network_errors      | 0      |
+| agent_15periods_wrong_replies       | 0      |
+| agent_15periods_unexpected_closings | 0      |
+| agent_15periods_warnings            | 0      |
+| agent_15periods_succeeded_queries   | 439    |
+| agent_15periods_msecsperquery       | 231.73 |
++-------------------------------------+--------+
+9 rows in set (0.00 sec)
+</programlisting>
+<para>Finally, you can investigate the status of the agents in concrete
+distributed index. It can be achieved either with 'SHOW AGENT 'index' STATUS',
+either without quotes around the 'index'. Fot the index it is displayed whether
+it uses or not alternative agents, or mirrors, and then for every agent/mirror
+it is displayed it's address, whether it is blackhole or persistent, and also
+the probability of selection of the mirror in case when one of the
+<link linkend='conf-ha-strategy'>weighted-probability strategies</link> used for
+selectint a mirror.
+</para>
+<programlisting>
+mysql> show agent distrr status;
++--------------------------------------+--------------------------------+
+| Variable_name                        | Value                          |
++--------------------------------------+--------------------------------+
+| dstindex_1_is_ha                     | 1                              |
+| dstindex_1mirror1_id                 | 192.168.0.202:6713:loc         |
+| dstindex_1mirror1_probability_weight | 0.372864                       |
+| dstindex_1mirror1_is_blackhole       | 0                              |
+| dstindex_1mirror1_is_persistent      | 0                              |
+| dstindex_1mirror2_id                 | 192.168.0.202:6714:loc         |
+| dstindex_1mirror2_probability_weight | 0.374635                       |
+| dstindex_1mirror2_is_blackhole       | 0                              |
+| dstindex_1mirror2_is_persistent      | 0                              |
+| dstindex_1mirror3_id                 | dev1.sphinxsearch.com:6714:loc |
+| dstindex_1mirror3_probability_weight | 0.252501                       |
+| dstindex_1mirror3_is_blackhole       | 0                              |
+| dstindex_1mirror3_is_persistent      | 0                              |
++--------------------------------------+--------------------------------+
+13 rows in set (0.00 sec)
 </programlisting>
 </sect1>
+
 
 
 <sect1 id="sphinxql-multi-queries">
@@ -6199,7 +6300,7 @@ Returns false on failure. Returns a plain array of strings with excerpts (snippe
 
 
 <sect2 id="api-func-updateatttributes"><title>UpdateAttributes</title>
-<para><b>Prototype:</b> function UpdateAttributes ( $index, $attrs, $values )</para>
+<para><b>Prototype:</b> function UpdateAttributes ( $index, $attrs, $values, $mva=false, $ignorenonexistent=false )</para>
 <para>
 Instantly updates given attribute values in given documents.
 Returns number of actually updated documents (0 or more) on success, or -1 on failure.
@@ -6208,7 +6309,13 @@ Returns number of actually updated documents (0 or more) on success, or -1 on fa
 <code>$index</code> is a name of the index (or indexes) to be updated.
 <code>$attrs</code> is a plain array with string attribute names, listing attributes that are updated.
 <code>$values</code> is a hash where key is document ID, and value is a plain array of new attribute values.
-</para>
+Optional boolean parameter <code>mva</code> points that there is update of MVA
+attributes.  In this case the $values must be a dict with int key (document ID)
+and list of lists of int values (new MVA attribute values).
+Optional boolean parameter <code>$ignorenonexistent</code> points that the
+update will silently ignore any warnings about trying to update a
+column which is not exists in current index schema.  </para>
+
 <para>
 <code>$index</code> can be either a single index name or a list, like in <code>Query()</code>.
 Unlike <code>Query()</code>, wildcard is not allowed and all the indexes
@@ -9457,9 +9564,9 @@ many CPUs or cores).
 <para>
 The value format is as follows:
 <programlisting>
-agent = mirror["|"mirror["|"mirror...]]
-mirror = specification:remote-indexes-list
-specification = hostname ":" port | path["|"hostname ":" port | path["|"hostname ":" port | path...]]
+agent = address[| ...]:remote-indexes-list
+agent = address:remote-indexes-list [| ...]
+address = { hostname:port | /absolute/path/unix/socket }
 </programlisting>
 Where 'hostname' is remote host name; 'port' is remote TCP port; 'path'
 is Unix-domain socket path and 'remote-indexes-list' is a
@@ -9506,73 +9613,88 @@ agent = localhost:9312:chunk2 # contact itself
 agent = /var/run/searchd.s:chunk2
 agent = searchbox2:9312:chunk3,chunk4 # search remote indexes
 </programlisting>
+
+<bridgehead>Mirrors, or alternative agents</bridgehead>
+
 <para>
-It is also possible to define the alternative agents, or 'mirrors'. The alternatives will be used as backups
-and will help you to keep the searching alive in case when some alternative agents became not available.
-For example:
+It is also possible to define the <b>alternative agents</b>, or '<b>mirrors</b>'. The alternatives will be used as backups
+and will help you to keep the searching alive in case when some of the mirror became not available.
+For example:</para>
+
 <programlisting>
 agent = localhost:9312|other_host:9312|other_host:9313:chunk2
 </programlisting>
-This clause defines that localhost:9312, other_host:9312 and other_host:9313 serve one and same indices, and can
-be used as full mirrors of each other. The index to be queried (in this case - chunk2)
-is assumed the same for all mirror hosts. I.e. all the mirrors will be queried with index 'chunk2', stated
-in the very end of agent clause.
-</para>
+
+<para>This clause defines that <b>localhost:9312</b>, <b>other_host:9312</b> and
+<b>other_host:9313</b> serve one and same indexes, and can be used as full
+mirrors of each other. The index to be queried (in this case - <b>chunk2</b>) is
+assumed the same for all mirror hosts. I.e. all the mirrors will be queried with
+index 'chunk2', stated in the very end of agent clause.  </para>
+
 <para>
-By default all the query
-packages will be directed to the best of the mirrors. The best one is
-calculated, using the statistic from near history, defined by the
-option <link linkend='conf-ha-period-karma'>ha_period_karma</link> in the config. During the specified period, the daemon
-stores some mirror's parameters, as total N of queries, N of
-different kinds of errors, the time of last reply, etc.
-</para>
-<para>
-When it is time to fire a query packet to a mirror, the daemon looks
-for the one with the minimal error rating (i.e. - to the mirror where
-the num_of_critical_network_errors/total_num_of_queries during the
-karma period is minimal). If there is more than one host with the same
-rating, it selects the one with the latest time of answer (i.e., if
-one answered 5 seconds ago, and another - 1 second ago, the late will be
-selected).
-</para>
-<para>
-The karma period is defined in the searchd section of the config file
-as '<link linkend="conf-ha-period-karma">ha_period_karma</link>'. This value set the length of the interval in
-seconds. Default value is 60 seconds. During the period, daemon stores all the necessary statistics
-about mirror's availability. When the period is over, it collects the
-next statistic block, etc. Totally it remembers the behavior from 15
-last periods (hard-coded), but actually for HA stuff for now used only
-one or two. The rest may be observed from sphinxql using '<link
-linkend="sphinxql-show-agent-status">SHOW AGENT
-STATUS</link>' command.
-</para>
-<para>
-For idle cases, when there is no queries fired, and so, no statistic
-is available, the daemon by default pings every mirror with the
-special ping command, and so, the HA statistic is available anyway. The ping interval is defined in
-searchd section of the config file as '<link
-linkend="conf-ha-ping-interval">ha_ping_interval</link>'. This value
-set the ping interval in milliseconds. Default value is 1000, i.e. 1
-second. If you set the value to 0, you explicitly forbid the mirror's
-pinging. This way the statistic will be available only from the real
-queries.
-</para>
-<para>
-In case when either no statistic availabe, either all the mirrors
-fails, the daemon just fire a query packet to each of the mirrors a
-row, using round-robin distribution. This is fall-back mode, not
-usual. In terms of given example it means, that 1-st package will be directed to localhost:9312.
-Second - to other_host:9312. Third - to other_host:9313, fourth - 
-again, to localhost:9312 - and so on.
-</para>
-<para>
-Another way to define the alternatives - is to explicitly set the indices also:
+Another way to define the alternatives - is to explicitly name the indexes
+also:</para>
 <programlisting>
 agent = localhost:9312:chunk1|other_host:9312:chunk2
 </programlisting>
-This is quite the same as previous, but here is explicitly stated that from first mirror we need the 'chunk1', and from the second - the 'chunk2'.
-So, the packets will be distributed the same way, but to these concrete indices.
+<para>This is quite the same as previous, but here is explicitly stated that from
+first mirror we need the '<b>chunk1</b>', and from the second - the
+'<b>chunk2</b>'. So, the packets will be distributed the same way, but to these
+concrete indexes.</para>
+
+<para>
+By default all the query packages will be directed to the best of the
+mirrors. The best one may be calculated using the statistic from near history,
+defined by the option <link
+linkend='conf-ha-period-karma'>ha_period_karma</link> in the config. During the
+specified period, the daemon stores some mirror's parameters, as total N of
+queries, N of different kinds of errors, the time of last reply, etc.  </para>
+
+<para>
+When it is time to fire a query packet to a mirror, the daemon looks
+into collected near-history statistic and selects one of the mirrors using
+one of <link linkend="conf-ha-strategy">predefined strategies</link>.
 </para>
+
+<para>
+The karma period is defined in the searchd section of the config file as '<link
+linkend="conf-ha-period-karma">ha_period_karma</link>'. This value set the
+length of the interval in seconds. Default value is 60 seconds. During the
+period, daemon stores all the necessary statistics about mirror's availability.
+When the period is over, it collects the next statistic block, etc. Totally it
+remembers the behavior from 15 last periods (hard-coded), but actually for HA
+stuff for now used only one or two. The rest may be observed from sphinxql using
+'<link linkend="sphinxql-show-agent-status">SHOW AGENT STATUS</link>' command.
+</para>
+
+<para>
+For idle cases, when there is no queries fired, and so, no statistic is
+available, the daemon by default pings every mirror with the special ping
+command, and so, the HA statistics is available anyway. This is not the usual
+ICMP 'ping' packet, but the special internal command which do nothing.  The ping
+interval is defined in <link linkend="confgroup-searchd">searchd section</link>
+of the config file as '<link
+linkend="conf-ha-ping-interval">ha_ping_interval</link>'. This value set the
+ping interval in milliseconds. Default value is 1000, i.e. 1 second. If you set
+the value to 0, you explicitly forbid the mirror's pinging. This way the
+statistics will be available only from the real queries.</para>
+</sect2>
+
+<sect2 id="conf-agent-persistent"><title>agent_persistent</title>
+<para>
+Remote agent declaration in the <link linkend="distributed">distributed index</link>.
+Multi-value, optional, default is empty.
+Introduced in version 2.1.0.
+</para>
+<para>
+<option>agent_persistent</option> is used to declare persistently connected <link
+linkend="conf-agent">remote agents</link> that will be searched when given
+distributed index is searched.  The only difference from 'plain' <link
+linkend="conf-agent">remote agents</link> is that the master doesn't close the
+connection to the agent after data exchange, but keeps it opened and reuses on
+the next queries. It works exactly as if you fire the '<link
+linkend="api-func-open">open</link>' command in API just before the
+querying.</para>
 </sect2>
 
 <sect2 id="conf-agent-blackhole"><title>agent_blackhole</title>
@@ -11449,18 +11571,19 @@ sphinxql_state = uservars.sql
 
 <sect2 id="conf-ha-ping-interval"><title>ha_ping_interval</title>
 <para>
-Num of milliseconds between pings to mirrored agents.
+Number of milliseconds between ping commands to mirrors (alternative agents).
 </para>
 <para>
-When you defined a distributed index which uses alternative agents
+When you define a distributed index which uses alternative agents
 (i.e., <link linkend="conf-agent">mirrors</link>), and the daemon is
-in idle state (i.e., no queries fired), it became to send the special
-ping command to mirrored alternatives.
+in idle state (i.e., no queries fired), it sends the special
+ping command to mirrored alternatives every period of milliseconds, defined by
+this option.
 </para>
 <para>
 By default the ha_ping_interval is 1000 milliseconds, or 1 second. If
 you want to switch off the mirror's pinging, set ha_ping_interval to
-0. It will explicitly forbids the pings.
+0. It will explicitly forbid the pings.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -11470,7 +11593,7 @@ ha_ping_interval = 2000
 
 <sect2 id="conf-ha-period-karma"><title>ha_period_karma</title>
 <para>
-Num of seconds when the statistic of <link
+Number of seconds when the statistic of <link
 linkend="conf-agent">alternative agents, or mirrors</link> affects the
 selection of the mirror for the next query. During the period, defined
 by this variable, all the statistic is collected in the one
@@ -11486,10 +11609,91 @@ STATUS</link> sphinxql command.
 ha_period_karma = 60
 </programlisting>
 <para>
-In this case, the affecting karma will varies between 31 and 90
-seconds - starting from the second half of the minute, and up to 30
-seconds of the next minute.
+In this case, the affecting period will varies between 31 and 90 seconds.
+Otherwords - it will take the second half of previous minute (if any), and up to
+30 seconds of the next minute.</para>
+</sect2>
+
+<sect2 id="conf-ha-strategy"><title>ha_strategy</title>
+<para>
+The strategy to be used to select one of <link linkend="conf-agent">alternative
+agents, or mirrors</link> for a query. There are several different strategies
+provided in sphinx, which could use different values to select the 'best
+mirror'.</para>
+<para>Here is the list of possible strategies</para>
+<bridgehead>Random based</bridgehead>
+<programlisting># ha_strategy =</programlisting>
+<para>When the ha_strategy is not defined (default), the sphinx uses linear random distribution among
+mirrors. So, if you have a node with 3 mirrors, that mean that a query could be
+sent to any of them with probability 1/3.
 </para>
+
+<para>Such equaly-distributed probabilities used by default, and also in the starting period
+when no actual statistic about mirros available. But after a period when the
+statistic is collected, the strategies below recalculates the probabilities
+according the collected latencies of the mirrors. Let call it 'latency-weighted
+probabilities'. The slowest mirror get the
+less probability; the faster - takes more. For example if in the beginnig you
+have four mirrors (with probability of selection any of them 25%), and after a
+period of time sphinx found, that</para>
+<itemizedlist>
+<listitem>1-st mirror answers in ~10ms</listitem>
+<listitem>2-nd mirror answers in ~5ms</listitem>
+<listitem>3-rd mirror answers in ~30ms</listitem>
+<listitem>4-th mirror answers in ~3ms</listitem>
+</itemizedlist>
+<para>Then the sphinx will recalculate probabilites, and they will be</para>
+<itemizedlist>
+<listitem>1-st mirror - 15%</listitem>
+<listitem>2-nd mirror - 30%</listitem>
+<listitem>3-rd mirror - 5%</listitem>
+<listitem>4-th mirror - 50%</listitem>
+</itemizedlist>
+<para>Otherwords, the winner (in the case - 4-th mirror) will take the next
+query with probability 1/2 (50%), but the looser (3-rd mirror) will take just
+the 1/20 (5%) of incoming queries. The 1-st which is 3 times faster that 3-rd
+will get 3-times more probability (15% against 5%), and also the 2-nd which is 2
+times faster than 1-st will take 30% of the queries. Since we are no way
+affiliated with mr. Churov and russian elections, the sum of probabilities is always
+100%.</para>
+
+<para>After the next period of time the probabilities will be recalculated
+(corrected) again, and so on. Finally the load will be balanced the way that the
+fastest mirrors will take the most of the queries, while the slowest will take
+just part of them.</para>
+
+<programlisting>ha_strategy = nodeads</programlisting>
+<para>Defines the strategy avoiding non-answering mirrors (i.e., which have many
+errors in a row). Among the others (non-erroneous) the sphinx select one by
+random law with latency-weighted probability, described above. If it is
+impossible to select the best mirror, it falls back into equally-distributed
+random selection.</para>
+
+<programlisting>ha_strategy = noerrors</programlisting>
+<para>Defines the strategy avoiding mirrors with high errors/successes rating.
+If there are more than one mirror with the best rating, the one among them will
+be selected by random law with latency-weighted probability, described above. If it is
+impossible to select the best mirror, it falls back into equally-distributed
+random selection.</para>
+
+<bridgehead>Round-Robin based</bridgehead>
+<programlisting>ha_strategy = roundrobin</programlisting>
+<para>Defines the Round-Robin strategy. That means that all the mirrors just put
+into cycled queue, and each the next query will be fired to the next mirror in turn.</para>
+
+<programlisting>ha_strategy = nodeadstm</programlisting>
+<para>Defines the strategy avoiding non-answering mirrors (i.e, which have many
+errors in a row), and selecting the best by the shortest latency of the last query. In the case when it is
+impossible to select the best mirror (i.e., when all the mirrors didn't answer
+during a period of time, and also if all have the same latency) it
+just falls back into simple round-robin strategy.</para>
+
+<programlisting>ha_strategy = noerrorstm</programlisting>
+<para>Defines the strategy avoiding mirrors with high errors/successes rating, and selecting
+the best by the shortest latency of the last query. In the case when it is
+impossible to select the best mirror (i.e., when all the mirrors have the same
+error/successes rating, and also the same latency of the last query), it just
+falls back into simple round-robin strategy.</para>
 </sect2>
 
 

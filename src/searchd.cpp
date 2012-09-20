@@ -3416,7 +3416,7 @@ public:
 	AgentDesc_t * StDiscardDead ( bool bWeighted )
 	{
 		if ( !g_pStats )
-			return PulseAgent();
+			return ( bWeighted ? RandAgent() : PulseAgent() );
 
 		if ( m_dAgents.GetLength()==1 )
 			return CurrentAgent();
@@ -3471,8 +3471,15 @@ public:
 		// nothing to select, sorry. Just plain RR...
 		if ( iBestAgent < 0 )
 		{
-			sphLogDebug ( "HA selector discarded all the candidates and just fall into simple RR" );
-			return PulseAgent();
+			if ( bWeighted )
+			{
+				sphLogDebug ( "HA selector discarded all the candidates and just fall into simple Random" );
+				return RandAgent();
+			} else
+			{
+				sphLogDebug ( "HA selector discarded all the candidates and just fall into simple RR" );
+				return PulseAgent();
+			}
 		}
 
 		// only one node with lowest error rating. Return it.
@@ -3506,7 +3513,7 @@ public:
 	AgentDesc_t * StLowErrors ( bool bWeighted )
 	{
 		if ( !g_pStats )
-			return PulseAgent();
+			return ( bWeighted ? RandAgent() : PulseAgent() );
 
 		if ( m_dAgents.GetLength()==1 )
 			return CurrentAgent();
@@ -3585,8 +3592,15 @@ public:
 		// nothing to select, sorry. Just plain RR...
 		if ( iBestAgent < 0 )
 		{
-			sphLogDebug ( "HA selector discarded all the candidates and just fall into simple RR" );
-			return PulseAgent();
+			if ( bWeighted )
+			{
+				sphLogDebug ( "HA selector discarded all the candidates and just fall into simple Random" );
+				return RandAgent();
+			} else
+			{
+				sphLogDebug ( "HA selector discarded all the candidates and just fall into simple RR" );
+				return PulseAgent();
+			}
 		}
 
 		// only one node with lowest error rating. Return it.

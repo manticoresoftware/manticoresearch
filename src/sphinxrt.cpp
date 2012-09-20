@@ -1065,7 +1065,7 @@ private:
 
 	void						SaveMeta ( int iDiskChunks, int64_t iTID );
 	template < typename DOCID >
-	void						SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iCheckpoints, SphOffset_t iCheckpointsPosition, int iInfixBlocksOffset, int iInfixCheckpointWordsSize, DWORD uKillListSize, DWORD uMinMaxSize, const CSphSourceStats & tStats, bool bForceID32=false ) const;
+	void						SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iCheckpoints, SphOffset_t iCheckpointsPosition, int iInfixBlocksOffset, int iInfixCheckpointWordsSize, DWORD uKillListSize, uint64_t uMinMaxSize, const CSphSourceStats & tStats, bool bForceID32=false ) const;
 	void						SaveDiskData ( const char * sFilename, const CSphVector<RtSegment_t *> & dSegments, const CSphSourceStats & tStats ) const;
 	template < typename DOCID, typename WORDID >
 	void						SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSegment_t *> & dSegments, const CSphSourceStats & tStats ) const;
@@ -3459,9 +3459,10 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSe
 		wrDummy.PutBytes ( m_dDiskChunkKlist.Begin(), m_dDiskChunkKlist.GetLength()*sizeof ( SphAttr_t ) );
 	wrDummy.CloseFile ();
 
+	uint64_t uMinMax = (uint64_t)iTotalDocs * iStride;
 	// header
 	SaveDiskHeader ( sFilename, iMinDocID, dCheckpoints.GetLength(), iCheckpointsPosition, iInfixBlockOffset, iInfixCheckpointWordsSize,
-		m_dDiskChunkKlist.GetLength(), iTotalDocs*iStride, tStats, m_bId32to64 );
+		m_dDiskChunkKlist.GetLength(), uMinMax, tStats, m_bId32to64 );
 
 	// cleanup
 	ARRAY_FOREACH ( i, pWordReaders )
@@ -3491,11 +3492,11 @@ void RtIndex_t::SaveDiskData ( const char * sFilename, const CSphVector<RtSegmen
 
 template < typename DOCID >
 void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iCheckpoints,
-	SphOffset_t iCheckpointsPosition, int iInfixBlocksOffset, int, DWORD uKillListSize, DWORD uMinMaxSize,
+	SphOffset_t iCheckpointsPosition, int iInfixBlocksOffset, int iInfixCheckpointWordsSize, DWORD uKillListSize, uint64_t uMinMaxSize,
 	const CSphSourceStats & tStats, bool bForceID32 ) const
 {
 	static const DWORD INDEX_MAGIC_HEADER	= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD INDEX_FORMAT_VERSION	= 32;			///< my format version
+	static const DWORD INDEX_FORMAT_VERSION	= 34;			///< my format version
 
 	CSphWriter tWriter;
 	CSphString sName, sError;
@@ -3525,8 +3526,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iC
 	int iInfixCodepointBytes = ( m_tSettings.m_iMinInfixLen && m_pDict->GetSettings().m_bWordDict ? m_pTokenizer->GetMaxCodepointLength() : 0 );
 	tWriter.PutByte ( iInfixCodepointBytes ); // m_iInfixCodepointBytes, v.27+
 	tWriter.PutDword ( iInfixBlocksOffset ); // m_iInfixBlocksOffset, v.27+
-	// FIXME!!! save that too
-	//tWriter.PutOffset ( iInfixCheckpointWordsSize ); // m_iInfixCheckpointWordsSize, v.34+
+	tWriter.PutOffset ( iInfixCheckpointWordsSize ); // m_iInfixCheckpointWordsSize, v.34+
 
 	// stats
 	tWriter.PutDword ( tStats.m_iTotalDocuments );
@@ -3560,7 +3560,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iC
 	tWriter.PutDword ( uKillListSize );
 
 	// min-max count
-	tWriter.PutDword ( uMinMaxSize );
+	tWriter.PutOffset ( uMinMaxSize );
 
 	// field filter
 	SaveFieldFilterSettings ( tWriter, m_pFieldFilter );

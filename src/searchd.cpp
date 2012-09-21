@@ -657,7 +657,7 @@ public:
 /// per-host dashboard
 struct HostDashboard_t
 {
-	int				m_iRefCount;
+	int				m_iRefCount;			// several indexes can use this one agent
 	int64_t			m_iLastAnswerTime;		// updated when we get an answer from the host
 	int64_t			m_iLastQueryTime;		// updated when we send a query to a host
 	int64_t			m_iErrorsARow;			// num of errors a row, updated when we update the general statistic.
@@ -3911,6 +3911,8 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 		if ( !sphSockEof ( tAgent.m_iSock ) )
 		{
 			tAgent.m_eState = AGENT_ESTABLISHED;
+			tAgent.m_iStartQuery = sphMicroTimer();
+			tAgent.m_iWall -= tAgent.m_iStartQuery;
 			return;
 		}
 		tAgent.Close();
@@ -4433,7 +4435,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 			{
 				tAgent.Close ();
 				tAgent.m_dResults.Reset ();
-			} else
+			} else if ( tAgent.m_bSuccess )
 				agent_stats_inc ( tAgent, bWarnings ? eWarnings : eNoErrors );
 		}
 	}
@@ -11291,11 +11293,13 @@ void BuildOneAgentStatus ( VectorLike & dStatus, const CSphString& sAgent, const
 		return;
 	}
 
+	g_tStatsMutex.Lock ();
 	int * pIndex = g_pStats->m_hDashBoard ( sAgent );
 	if ( !pIndex )
 	{
 		if ( dStatus.MatchAdd ( "status_error" ) )
 			dStatus.Add().SetSprintf ( "No such agent: %s", sAgent.cstr() );
+		g_tStatsMutex.Unlock ();
 		return;
 	}
 
@@ -11339,9 +11343,15 @@ void BuildOneAgentStatus ( VectorLike & dStatus, const CSphString& sAgent, const
 			for ( int j=0; j<eMaxStat; ++j )
 				if ( j==eTotalMsecs ) // hack. Avoid microseconds in human-readable statistic
 				{
-					float fAverageLatency = (float)(( dDashStat.m_iStats[eTotalMsecs] / 1000.0 ) / uQueries );
-					if ( dStatus.MatchAddVa ( "%s_%dperiods_msecsperquery", sPrefix, iPeriods ) )
-						dStatus.Add().SetSprintf ( FLOAT, fAverageLatency );
+					if ( dStatus.MatchAddVa ( "%s_%dperiods_msecsperqueryy", sPrefix, iPeriods ) )
+					{
+						if ( uQueries>0 )
+						{
+							float fAverageLatency = (float)(( dDashStat.m_iStats[eTotalMsecs] / 1000.0 ) / uQueries );
+							dStatus.Add().SetSprintf ( FLOAT, fAverageLatency );
+						} else
+							dStatus.Add("n/a");
+					}
 				} else
 				{
 					if ( dStatus.MatchAddVa ( "%s_%dperiods_%s", sPrefix, iPeriods, dDashStat.m_sNames[j] ) )
@@ -11358,6 +11368,7 @@ void BuildOneAgentStatus ( VectorLike & dStatus, const CSphString& sAgent, const
 		else if ( iPeriods==STATS_DASH_TIME )
 			iPeriods = -1;
 	}
+	g_tStatsMutex.Unlock ();
 }
 
 void BuildDistIndexStatus ( VectorLike & dStatus, const CSphString& sIndex )
@@ -17835,7 +17846,10 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 		g_iClientTimeout = hSearchd["client_timeout"].intval();
 
 	if ( hSearchd.Exists ( "max_children" ) && hSearchd["max_children"].intval()>=0 )
+	{	
 		g_iMaxChildren = hSearchd["max_children"].intval();
+		g_iPreforkChildren = g_iMaxChildren;
+	}
 
 	g_bPreopenIndexes = hSearchd.GetInt ( "preopen_indexes", (int)g_bPreopenIndexes )!=0;
 	g_bOnDiskDicts = hSearchd.GetInt ( "ondisk_dict_default", (int)g_bOnDiskDicts )!=0;
@@ -17876,7 +17890,11 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_iMaxFilterValues = hSearchd.GetInt ( "max_filter_values", g_iMaxFilterValues );
 	g_iMaxBatchQueries = hSearchd.GetInt ( "max_batch_queries", g_iMaxBatchQueries );
 	g_iDistThreads = hSearchd.GetInt ( "dist_threads", g_iDistThreads );
-	g_iPreforkChildren = hSearchd.GetInt ( "prefork", g_iPreforkChildren );
+	if ( hSearchd.Exists ( "prefork" )  )
+	{
+		g_iPreforkChildren = hSearchd.GetInt ( "prefork", g_iPreforkChildren );
+		sphWarning ( "'prefork' key is deprecated. Use 'max_children' instead" );
+	}
 	g_tRtThrottle.m_iMaxIOps = hSearchd.GetInt ( "rt_merge_iops", 0 );
 	g_tRtThrottle.m_iMaxIOSize = hSearchd.GetSize ( "rt_merge_maxiosize", 0 );
 	g_iPingInterval = hSearchd.GetInt ( "ha_ping_interval", 1000 );

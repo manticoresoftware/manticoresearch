@@ -6011,12 +6011,16 @@ void FormatOrderBy ( StringBuffer_c * pBuf, const char * sPrefix, ESphSortOrder 
 	if ( eSort==SPH_SORT_EXTENDED && sSort=="@weight desc" )
 		return;
 
+	const char * sSubst = "@weight";
+	if ( sSort != "@relevance" )
+			sSubst = sSort.cstr();
+
 	switch ( eSort )
 	{
-	case SPH_SORT_ATTR_DESC:		pBuf->Append ( " %s %s DESC", sPrefix, sSort.cstr() ); break;
-	case SPH_SORT_ATTR_ASC:			pBuf->Append ( " %s %s ASC", sPrefix, sSort.cstr() ); break;
-	case SPH_SORT_TIME_SEGMENTS:	pBuf->Append ( " %s TIME_SEGMENT(%s)", sPrefix, sSort.cstr() ); break;
-	case SPH_SORT_EXTENDED:			pBuf->Append ( " %s %s", sPrefix, sSort.cstr() ); break;
+	case SPH_SORT_ATTR_DESC:		pBuf->Append ( " %s %s DESC", sPrefix, sSubst ); break;
+	case SPH_SORT_ATTR_ASC:			pBuf->Append ( " %s %s ASC", sPrefix, sSubst ); break;
+	case SPH_SORT_TIME_SEGMENTS:	pBuf->Append ( " %s TIME_SEGMENT(%s)", sPrefix, sSubst ); break;
+	case SPH_SORT_EXTENDED:			pBuf->Append ( " %s %s", sPrefix, sSubst ); break;
 	case SPH_SORT_EXPR:				pBuf->Append ( " %s BUILTIN_EXPR()", sPrefix ); break;
 	default:						pBuf->Append ( " %s mode-%d", sPrefix, (int)eSort ); break;
 	}
@@ -6188,12 +6192,12 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 	if ( !tRes.m_sError.IsEmpty() )
 	{
 		// all we have is an error
-		tBuf.Append ( " # error=%s", tRes.m_sError.cstr() );
+		tBuf.Append ( " /* error=%s */", tRes.m_sError.cstr() );
 
 	} else if ( g_bIOStats || g_bCpuStats || dAgentTimes.GetLength() || !tRes.m_sWarning.IsEmpty() )
 	{
 		// got some extra data, add a comment
-		tBuf.Append ( " #" );
+		tBuf.Append ( " /*" );
 
 		// performance counters
 		if ( g_bIOStats || g_bCpuStats )
@@ -6224,6 +6228,9 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 		// warning
 		if ( !tRes.m_sWarning.IsEmpty() )
 			tBuf.Append ( " warning=%s", tRes.m_sWarning.cstr() );
+
+		// close the comment
+		tBuf.Append ( " */" );
 	}
 
 	// line feed

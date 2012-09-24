@@ -2376,6 +2376,9 @@ public:
 	CSphString		m_sSelect;			///< select-list (attributes and/or expressions)
 	CSphString		m_sOrderBy;			///< order-by clause
 
+	CSphString		m_sOuterOrderBy;	///< temporary (?) subselect hack
+	int				m_iOuterLimit;
+
 	bool			m_bReverseScan;		///< perform scan in reverse order
 	bool			m_bIgnoreNonexistent; ///< whether to warning or not about non-existent columns in select list
 

@@ -160,8 +160,38 @@ multi_stmt_list:
 	;
 
 multi_stmt:
-	select_from
+	select
 	| show_stmt
+	;
+
+select:
+	select_from
+	| TOK_SELECT select_items_list TOK_FROM '(' subselect_start select_from ')'
+		TOK_ORDER TOK_BY order_items_list opt_outer_limit
+		{
+			assert ( pParser->m_pStmt->m_eStmt==STMT_SELECT ); // set by subselect
+			pParser->m_pQuery->m_sOuterOrderBy.SetBinary ( pParser->m_pBuf+$10.m_iStart,
+				$10.m_iEnd-$10.m_iStart );
+		}
+	;
+
+subselect_start:
+	{
+		CSphVector<CSphQueryItem> & dItems = pParser->m_pQuery->m_dItems;
+		if ( dItems.GetLength()!=1 || dItems[0].m_sExpr!="*" )
+		{
+			yyerror ( pParser, "outer select list must be a single star" );
+			YYERROR;
+		}
+		dItems.Reset();
+		pParser->ResetSelect();
+	};
+
+opt_outer_limit:
+	| TOK_LIMIT TOK_CONST_INT
+		{
+			pParser->m_pQuery->m_iOuterLimit = $2.m_iValue;
+		}
 	;
 
 select_from:
@@ -175,7 +205,8 @@ select_from:
 	opt_option_clause
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SELECT;
-			pParser->m_pQuery->m_sIndexes.SetBinary ( pParser->m_pBuf+$4.m_iStart, $4.m_iEnd-$4.m_iStart );
+			pParser->m_pQuery->m_sIndexes.SetBinary ( pParser->m_pBuf+$4.m_iStart,
+				$4.m_iEnd-$4.m_iStart );
 		}
 	;
 
@@ -185,14 +216,14 @@ select_items_list:
 	;
 
 select_item:
-	'*'						{ pParser->AddItem ( &$1 ); }
+	'*'									{ pParser->AddItem ( &$1 ); }
 	| select_expr opt_alias
 	;
 
 opt_alias:
 	// empty				
-	| TOK_IDENT					{ pParser->AliasLastItem ( &$1 ); }
-	| TOK_AS TOK_IDENT				{ pParser->AliasLastItem ( &$2 ); }
+	| TOK_IDENT							{ pParser->AliasLastItem ( &$1 ); }
+	| TOK_AS TOK_IDENT					{ pParser->AliasLastItem ( &$2 ); }
 	;
 
 select_expr:

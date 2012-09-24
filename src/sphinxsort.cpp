@@ -2325,16 +2325,11 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const CSphSchema & 
 		case SPH_GROUPBY_MONTH:		tSettings.m_pGrouper = new CSphGrouperMonth ( tLoc ); break;
 		case SPH_GROUPBY_YEAR:		tSettings.m_pGrouper = new CSphGrouperYear ( tLoc ); break;
 		case SPH_GROUPBY_ATTR:
-		{
 			if ( eType!=SPH_ATTR_STRING )
-			{
 				tSettings.m_pGrouper = new CSphGrouperAttr ( tLoc );
-			} else
-			{
+			else
 				tSettings.m_pGrouper = sphCreateGrouperString ( tLoc, pQuery->m_eCollation );
-		}
-		}
-		break;
+			break;
 		default:
 			sError.SetSprintf ( "invalid group-by mode (mode=%d)", pQuery->m_eGroupFunc );
 			return false;

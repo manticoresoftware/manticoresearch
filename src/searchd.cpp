@@ -518,9 +518,10 @@ enum SearchdStatus_e
 };
 
 
+/// master-agent API protocol extensions version
 enum
 {
-	VER_MASTER = 1
+	VER_MASTER = 2
 };
 
 
@@ -4833,14 +4834,15 @@ protected:
 
 int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuery & q ) const
 {
-	int iReqSize = 108 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
+	int iReqSize = 112 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
 		+ q.m_sSortBy.Length()
 		+ strlen ( sIndexes )
 		+ q.m_sGroupBy.Length()
 		+ q.m_sGroupSortBy.Length()
 		+ q.m_sGroupDistinct.Length()
 		+ q.m_sComment.Length()
-		+ q.m_sSelect.Length();
+		+ q.m_sSelect.Length()
+		+ q.m_sOuterOrderBy.Length();
 	iReqSize += q.m_sRawQuery.IsEmpty()
 		? q.m_sQuery.Length()
 		: q.m_sRawQuery.Length();
@@ -4866,6 +4868,8 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 	ARRAY_FOREACH ( i, q.m_dOverrides )
 		iReqSize += 12 + q.m_dOverrides[i].m_sAttr.Length() + // string attr-name; int type; int values-count
 			( q.m_dOverrides[i].m_eAttrType==SPH_ATTR_BIGINT ? 16 : 12 )*q.m_dOverrides[i].m_dValues.GetLength(); // ( bigint id; int/float/bigint value )[] values
+	if ( !q.m_sOuterOrderBy.IsEmpty() )
+		iReqSize += 4; // outer limit
 	return iReqSize;
 }
 
@@ -4873,7 +4877,10 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_c & tOut, const CSphQuery & q ) const
 {
 	tOut.SendInt ( 0 ); // offset is 0
-	tOut.SendInt ( q.m_iMaxMatches ); // limit is MAX_MATCHES
+	if ( q.m_sOuterOrderBy.IsEmpty() )
+		tOut.SendInt ( q.m_iMaxMatches ); // OPTIMIZE? normally, agent limit is max_matches, even if master limit is less
+	else
+		tOut.SendInt ( q.m_iLimit ); // with outer order by, inner limit must match between agent and master
 	tOut.SendInt ( (DWORD)q.m_eMode ); // match mode
 	tOut.SendInt ( (DWORD)q.m_eRanker ); // ranking mode
 	if ( q.m_eRanker==SPH_RANK_EXPR || q.m_eRanker==SPH_RANK_EXPORT )
@@ -4966,8 +4973,12 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 		}
 	}
 	tOut.SendString ( q.m_sSelect.cstr() );
-	// master v.1.0
-	tOut.SendDword ( q.m_eCollation );
+
+	// master-agent extensions
+	tOut.SendDword ( q.m_eCollation ); // v.1
+	tOut.SendString ( q.m_sOuterOrderBy.cstr() ); // v.2
+	if ( !q.m_sOuterOrderBy.IsEmpty() )
+		tOut.SendInt ( q.m_iOuterLimit );
 }
 
 
@@ -5374,6 +5385,11 @@ void CheckQuery ( const CSphQuery & tQuery, CSphString & sError )
 		sError.SetSprintf ( "retry delay out of bounds (delay=%d)", tQuery.m_iRetryDelay );
 		return;
 	}
+	if ( tQuery.m_iOffset>0 && !tQuery.m_sOuterOrderBy.IsEmpty() )
+	{
+		sError.SetSprintf ( "inner offset must be 0 when using outer order by" );
+		return;
+	}
 }
 
 
@@ -5730,11 +5746,17 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 		}
 	}
 
-	// master v.1.0
+	// extension v.1
 	tQuery.m_eCollation = g_eCollation;
-	if ( iMasterVer>=0x001 )
-	{
+	if ( iMasterVer>=1 )
 		tQuery.m_eCollation = (ESphCollation)tReq.GetDword();
+
+	// extension v.2
+	if ( iMasterVer>=2 )
+	{
+		tQuery.m_sOuterOrderBy = tReq.GetString();
+		if ( !tQuery.m_sOuterOrderBy.IsEmpty() )
+			tQuery.m_iOuterLimit = tReq.GetInt();
 	}
 
 	/////////////////////
@@ -6055,6 +6077,9 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 	// format request as SELECT query
 	///////////////////////////////////
 
+	if ( !q.m_sOuterOrderBy.IsEmpty() )
+		tBuf.Append ( "SELECT * FROM (" );
+
 	tBuf.Append ( "SELECT %s FROM %s", q.m_sSelect.cstr(), q.m_sIndexes.cstr() );
 
 	// WHERE clause
@@ -6182,6 +6207,14 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 
 		tBuf.Append ( iOpts++ ? ", " : " OPTION " );
 		tBuf.Append ( "ranker=%s", sRanker );
+	}
+
+	// outer order by, limit
+	if ( !q.m_sOuterOrderBy.IsEmpty() )
+	{
+		tBuf.Append ( ") ORDER BY %s", q.m_sOuterOrderBy.cstr() );
+		if ( q.m_iOuterLimit>0 )
+			tBuf.Append ( " LIMIT %d", q.m_iOuterLimit );
 	}
 
 	// finish SQL statement
@@ -6670,11 +6703,17 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 
 struct AggrResult_t : CSphQueryResult
 {
-	int							m_iTag;				///< current tag
-	CSphVector<CSphSchema>		m_dSchemas;			///< aggregated resultsets schemas (for schema minimization)
-	CSphVector<int>				m_dMatchCounts;		///< aggregated resultsets lengths (for schema minimization)
-	CSphVector<const CSphIndex*>		m_dLockedAttrs;		///< indexes which are hold in the memory untill sending result
-	CSphVector<PoolPtrs_t>		m_dTag2Pools;		///< tag to MVA and strings storage pools mapping
+	int								m_iTag;				///< current tag
+	CSphVector<CSphSchema>			m_dSchemas;			///< aggregated resultsets schemas (for schema minimization)
+	CSphVector<int>					m_dMatchCounts;		///< aggregated resultsets lengths (for schema minimization)
+	CSphVector<const CSphIndex*>	m_dLockedAttrs;		///< indexes which are hold in the memory untill sending result
+	CSphVector<PoolPtrs_t>			m_dTag2Pools;		///< tag to MVA and strings storage pools mapping
+	bool							m_bLimited;			///< whether offset, limit clauses have already been applied
+
+	AggrResult_t()
+		: m_iTag ( -1 )
+		, m_bLimited ( false )
+	{}
 };
 
 
@@ -6985,7 +7024,101 @@ static void RecoverAggregateFunctions ( const CSphQuery & tQuery, const AggrResu
 }
 
 
-bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHadLocalIndexes,
+struct MatchSortAccessor_t
+{
+	typedef CSphMatch T;
+	typedef CSphMatch * MEDIAN_TYPE;
+
+	CSphMatch m_tMedian;
+
+	MatchSortAccessor_t () {}
+	MatchSortAccessor_t ( const MatchSortAccessor_t & ) {}
+
+	~MatchSortAccessor_t()
+	{
+		m_tMedian.m_pDynamic = NULL; // not yours
+	}
+
+	MEDIAN_TYPE Key ( CSphMatch * a ) const
+	{
+		return a;
+	}
+
+	void CopyKey ( MEDIAN_TYPE * pMed, CSphMatch * pVal )
+	{
+		*pMed = &m_tMedian;
+		m_tMedian.m_iDocID = pVal->m_iDocID;
+		m_tMedian.m_iWeight = pVal->m_iWeight;
+		m_tMedian.m_pStatic = pVal->m_pStatic;
+		m_tMedian.m_pDynamic = pVal->m_pDynamic;
+	}
+
+	void Swap ( T * a, T * b ) const
+	{
+		::Swap ( *a, *b );
+	}
+
+	T * Add ( T * p, int i ) const
+	{
+		return p+i;
+	}
+
+	int Sub ( T * b, T * a ) const
+	{
+		return (int)(b-a);
+	}
+};
+
+
+struct GenericMatchSort_fn : public CSphMatchComparatorState
+{
+	bool IsLess ( const CSphMatch * a, const CSphMatch * b ) const
+	{
+		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
+			switch ( m_eKeypart[i] )
+		{
+			case SPH_KEYPART_ID:
+				if ( a->m_iDocID==b->m_iDocID )
+					continue;
+				return ( ( m_uAttrDesc>>i ) & 1 ) ^ ( a->m_iDocID < b->m_iDocID );
+
+			case SPH_KEYPART_WEIGHT:
+				if ( a->m_iDocID==b->m_iDocID )
+					continue;
+				return ( ( m_uAttrDesc>>i ) & 1 ) ^ ( a->m_iWeight < b->m_iWeight );
+
+			case SPH_KEYPART_INT:
+			{
+				register SphAttr_t aa = a->GetAttr ( m_tLocator[i] );
+				register SphAttr_t bb = b->GetAttr ( m_tLocator[i] );
+				if ( aa==bb )
+					continue;
+				return ( ( m_uAttrDesc>>i ) & 1 ) ^ ( aa < bb );
+			}
+			case SPH_KEYPART_FLOAT:
+			{
+				register float aa = a->GetAttrFloat ( m_tLocator[i] );
+				register float bb = b->GetAttrFloat ( m_tLocator[i] );
+				if ( aa==bb )
+					continue;
+				return ( ( m_uAttrDesc>>i ) & 1 ) ^ ( aa < bb );
+			}
+			case SPH_KEYPART_STRING:
+			{
+				int iCmp = CmpStrings ( *a, *b, i );
+				if ( iCmp!=0 )
+					return ( ( m_uAttrDesc>>i ) & 1 ) ^ ( iCmp < 0 );
+				break;
+			}
+		}
+		return false;
+	}
+};
+
+
+/// merges multiple result sets, remaps columns, does reorder for outer selects
+/// query is only (!) non-const to tweak order vs reorder clauses
+bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, bool bHadLocalIndexes,
 	CSphSchema * pExtraSchema, bool bFromSphinxql = false )
 {
 	// sanity check
@@ -7197,52 +7330,121 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	if ( !bHadLocalIndexes )
 		RecoverAggregateFunctions ( tQuery, tRes );
 
-	// we do not need to re-sort if there's exactly one result set
-	if ( tRes.m_iSuccesses==1 )
+	// if there's more than one result set,
+	// we now have to merge and order all the matches
+	// this is a good time to apply outer order clause, too
+	if ( tRes.m_iSuccesses>1 )
 	{
-		// convert all matches to minimal schema
+		// got outer order? gotta do a couple things
+		if ( !tQuery.m_sOuterOrderBy.IsEmpty() )
+		{
+			// first, temporarily patch up sorting clause and max_matches (we will restore them later)
+			Swap ( tQuery.m_sOuterOrderBy, tQuery.m_sGroupBy.IsEmpty() ? tQuery.m_sSortBy : tQuery.m_sGroupSortBy );
+			tQuery.m_iMaxMatches *= tRes.m_dMatchCounts.GetLength();
+			// FIXME? probably not right; 20 shards with by 300 matches might be too much
+			// but propagating too small inner max_matches to the outer is not right either
+
+			// second, apply inner limit now, before (!) reordering
+			int iOut = 0;
+			int iSetStart = 0;
+			ARRAY_FOREACH ( iSet, tRes.m_dMatchCounts )
+			{
+				assert ( tQuery.m_iOffset>=0 ); // otherwise we're doomed.. DOOMED!
+				assert ( tQuery.m_iLimit>=0 );
+				int iOldOut = iOut;
+				int iStart = iSetStart;
+				int iSetEnd = iSetStart + tRes.m_dMatchCounts[iSet];
+				int iEnd = Min ( iStart + tQuery.m_iOffset + tQuery.m_iLimit, iSetEnd );
+				iStart = Min ( iStart + tQuery.m_iOffset, iEnd );
+				for ( int i=iStart; i<iEnd; i++ )
+					Swap ( tRes.m_dMatches[iOut++], tRes.m_dMatches[i] );
+				iSetStart = iSetEnd;
+				tRes.m_dMatchCounts[iSet] = iOut - iOldOut;
+			}
+			tRes.m_dMatches.Resize ( iOut );
+		}
+
+		// so we need to bring matches to the schema that the *sorter* wants
+		// so we need to create the sorter before conversion
+		//
+		// create queue
+		// at this point, we do not need to compute anything; it all must be here
+		ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, tRes.m_tSchema, tRes.m_sError, false );
+
+		// restore outer order related patches, or it screws up the query log
+		if ( !tQuery.m_sOuterOrderBy.IsEmpty() )
+		{
+			Swap ( tQuery.m_sOuterOrderBy, tQuery.m_sGroupBy.IsEmpty() ? tQuery.m_sSortBy : tQuery.m_sGroupSortBy );
+			tQuery.m_iMaxMatches /= tRes.m_dMatchCounts.GetLength();
+		}
+
+		if ( !pSorter )
+			return false;
+
+		// reset bAllEqual flag if sorter makes new attributes
+		if ( bAllEqual )
+		{
+			// at first we count already existed internal attributes
+			// then check if sorter makes more
+			CSphVector<SphStringSorterRemap_t> dRemapAttr;
+			sphSortGetStringRemap ( tRes.m_tSchema, tRes.m_tSchema, dRemapAttr );
+			int iRemapCount = dRemapAttr.GetLength();
+			sphSortGetStringRemap ( pSorter->GetSchema(), tRes.m_tSchema, dRemapAttr );
+
+			bAllEqual = ( dRemapAttr.GetLength()<=iRemapCount );
+		}
+
+		// sorter expects this
+		tRes.m_tSchema = pSorter->GetSchema();
+
+		// convert all matches to sorter schema - at least to manage all static to dynamic
 		if ( !bAllEqual )
-			RemapResult ( &tInternalSchema, &tRes );
-		if ( !bAgent )
-			AdoptAliasedSchema ( tRes, &tFrontendSchema );
-		return true;
+			RemapResult ( &tRes.m_tSchema, &tRes );
+		RemapStrings ( pSorter, tRes );
+
+		// do the sort work!
+		tRes.m_iTotalMatches -= KillAllDupes ( pSorter, tRes, tQuery );
 	}
 
-	// if there's more than one result set, we need to re-sort the matches
-	// so we need to bring matches to the schema that the *sorter* wants
-	// so we need to create the sorter before conversion
-	//
-	// create queue
-	// at this point, we do not need to compute anything; it all must be here
-	ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, tRes.m_tSchema, tRes.m_sError, false );
-	if ( !pSorter )
-		return false;
-
-	// reset bAllEqual flag if sorter makes new attributes
-	if ( bAllEqual )
+	// apply outer order clause to single result set
+	// (multiple combined sets just got reordered above)
+	if ( tRes.m_iSuccesses==1 && !tQuery.m_sOuterOrderBy.IsEmpty() )
 	{
-		// at first we count already existed internal attributes
-		// then check if sorter makes more
-		CSphVector<SphStringSorterRemap_t> dRemapAttr;
-		sphSortGetStringRemap ( tRes.m_tSchema, tRes.m_tSchema, dRemapAttr );
-		int iRemapCount = dRemapAttr.GetLength();
-		sphSortGetStringRemap ( pSorter->GetSchema(), tRes.m_tSchema, dRemapAttr );
+		// apply inner limit
+		int iLimited = Max ( Min ( tQuery.m_iLimit, tRes.m_dMatches.GetLength() - tQuery.m_iOffset ), 0 );
+		if ( tQuery.m_iOffset>0 )
+			for ( int i=0; i<iLimited; i++ )
+				::Swap ( tRes.m_dMatches[i], tRes.m_dMatches[i+tQuery.m_iOffset] );
+		tRes.m_dMatches.Resize ( iLimited );
 
-		bAllEqual = ( dRemapAttr.GetLength()<=iRemapCount );
+		// reorder (aka outer order)
+		ESphSortFunc eFunc;
+		GenericMatchSort_fn tReorder;
+
+		ESortClauseParseResult eRes = sphParseSortClause ( &tQuery, tQuery.m_sOuterOrderBy.cstr(),
+			tRes.m_tSchema, eFunc, tReorder, tRes.m_sError );
+		if ( eRes==SORT_CLAUSE_RANDOM )
+			tRes.m_sError = "order by rand() not supported in outer select";
+		if ( eRes!=SORT_CLAUSE_OK )
+			return false;
+
+		assert ( eFunc==FUNC_GENERIC2 || eFunc==FUNC_GENERIC3 || eFunc==FUNC_GENERIC4 || eFunc==FUNC_GENERIC5 );
+		sphSort ( tRes.m_dMatches.Begin(), tRes.m_dMatches.GetLength(), tReorder, MatchSortAccessor_t() );
 	}
 
-	// sorter expects this
-	tRes.m_tSchema = pSorter->GetSchema();
+	// outer limit, if any
+	// common code for both 1-set and N-set cases
+	if ( !tQuery.m_sOuterOrderBy.IsEmpty() )
+	{
+		if ( tQuery.m_iOuterLimit>0 && tQuery.m_iOuterLimit<tRes.m_dMatches.GetLength() )
+			tRes.m_dMatches.Resize ( tQuery.m_iOuterLimit );
+		tRes.m_bLimited = true;
+	}
 
-	// convert all matches to sorter schema - at least to manage all static to dynamic
+	// all the merging and sorting is now done
+	// we can convert all matches to minimal schema
 	if ( !bAllEqual )
-		RemapResult ( &tRes.m_tSchema, &tRes );
-
-	RemapStrings ( pSorter, tRes );
-	tRes.m_iTotalMatches -= KillAllDupes ( pSorter, tRes, tQuery );
-
-	if ( !bAllEqual )
-		RemapResult ( &tInternalSchema, &tRes, false );
+		RemapResult ( &tInternalSchema, &tRes, tRes.m_iSuccesses==1 );
 	if ( !bAgent )
 		AdoptAliasedSchema ( tRes, &tFrontendSchema );
 	return true;
@@ -8829,8 +9031,15 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		// finalize
 		////////////
 
-		tRes.m_iOffset = tQuery.m_iOffset;
-		tRes.m_iCount = Max ( Min ( tQuery.m_iLimit, tRes.m_dMatches.GetLength()-tQuery.m_iOffset ), 0 );
+		if ( tRes.m_bLimited )
+		{
+			tRes.m_iOffset = 0;
+			tRes.m_iCount = tRes.m_dMatches.GetLength();
+		} else
+		{
+			tRes.m_iOffset = tQuery.m_iOffset;
+			tRes.m_iCount = Max ( Min ( tQuery.m_iLimit, tRes.m_dMatches.GetLength()-tQuery.m_iOffset ), 0 );
+		}
 	}
 
 	// stats
@@ -8981,6 +9190,11 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	int iMasterVer = 0;
 	if ( iVer>=0x118 )
 		iMasterVer = tReq.GetInt();
+	if ( iMasterVer<0 || iMasterVer>VER_MASTER )
+	{
+		tReq.SendErrorReply ( "master-agent version mismatch; update me first, then update master!" );
+		return;
+	}
 
 	// parse request
 	int iQueries = 1;
@@ -9217,7 +9431,17 @@ public:
 	void			AddItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc=SPH_AGGR_NONE, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
 	bool			AddItem ( const char * pToken, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
 	void			AliasLastItem ( SqlNode_t * pAlias );
-	void			SetSelect ( SqlNode_t * pStart, SqlNode_t * pEnd=NULL )
+
+	/// called on transition from an outer select to inner select
+	void ResetSelect()
+	{
+		if ( m_pQuery )
+			m_pQuery->m_iSQLSelectStart = m_pQuery->m_iSQLSelectEnd = -1;
+	}
+
+	/// called every time we capture a select list item
+	/// (i think there should be a simpler way to track these though)
+	void SetSelect ( SqlNode_t * pStart, SqlNode_t * pEnd=NULL )
 	{
 		if ( m_pQuery )
 		{
@@ -9229,6 +9453,7 @@ public:
 				m_pQuery->m_iSQLSelectEnd = pEnd->m_iEnd;
 		}
 	}
+
 	bool			AddSchemaItem ( SqlNode_t * pNode );
 	void			SetValue ( const char * sName, const SqlNode_t& tValue );
 	bool			SetMatch ( const SqlNode_t& tValue );
@@ -13227,8 +13452,12 @@ bool HandleMysqlSelect ( SqlRowBuffer_c & dRows, SearchHandler_c & tHandler )
 		{
 			LogQuery ( tHandler.m_dQueries[i], tHandler.m_dResults[i], dAgentTimes );
 			if ( sError.IsEmpty() )
-				sError.SetSprintf ( "query %d error: %s", i, tHandler.m_dResults[i].m_sError.cstr() );
-			else
+			{
+				if ( tHandler.m_dQueries.GetLength()==1 )
+					sError = tHandler.m_dResults[0].m_sError;
+				else
+					sError.SetSprintf ( "query %d error: %s", i, tHandler.m_dResults[i].m_sError.cstr() );
+			} else
 				sError.SetSprintf ( "%s; query %d error: %s", sError.cstr(), i, tHandler.m_dResults[i].m_sError.cstr() );
 		}
 	}

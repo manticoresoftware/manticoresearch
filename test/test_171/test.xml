@@ -95,6 +95,48 @@ index dist3
 	agent_query_timeout		= 3000
 }
 
+source distinct_s1 : src
+{
+    sql_query = select 1, 'cat', 10 as gr, 101 as tag union \
+	select 2, 'cat', 10 as gr, 101 as tag union \
+	select 3, 'cat', 10 as gr, 101 as tag union \
+	select 4, 'cat', 10 as gr, 101 as tag union \
+	select 5, 'cat', 10 as gr, 101 as tag union \
+	select 6, 'cat', 10 as gr, 101 as tag union \
+	select 7, 'cat', 10 as gr, 101 as tag union \
+	select 8, 'cat', 20 as gr, 101 as tag union \
+	select 9, 'cat', 30 as gr, 101 as tag union \
+	select 10, 'cat', 40 as gr, 101 as tag union \
+	select 11, 'cat', 30 as gr, 201 as tag 
+}
+
+source distinct_s2 : src
+{
+     sql_query = select 18, 'cat', 10 as gr, 101 as tag union \
+	select 19, 'cat', 10 as gr, 101 as tag union \
+	select 21, 'cat', 10 as gr, 101 as tag union \
+	select 24, 'cat', 10 as gr, 101 as tag union \
+	select 25, 'cat', 10 as gr, 101 as tag union \
+	select 26, 'cat', 10 as gr, 101 as tag union \
+	select 27, 'cat', 10 as gr, 101 as tag union \
+	select 28, 'cat', 10 as gr, 101 as tag union \
+	select 29, 'cat', 10 as gr, 101 as tag union \
+	select 40, 'cat', 10 as gr, 101 as tag union \
+	select 41, 'cat', 30 as gr, 201 as tag 
+} 
+
+index distinct1 : dist_no
+{
+	source			= distinct_s1
+	path			= <data_path/>/distinct1
+}
+
+index distinct2 : dist_no
+{
+	source			= distinct_s2
+	path			= <data_path/>/distinct2
+}
+
 </config>
 
 
@@ -231,7 +273,15 @@ index dist3
 <sphinxql>select id, count (distinct tag) tg from dist2 group by gr</sphinxql>
 <sphinxql>select id, count (distinct tag) tg from idx1, idx2 group by gr</sphinxql>
 
-
+<!-- regression select only count ( distinct attr1 ) + group by attr1 -->
+<sphinxql>select id, count (distinct tag), count(*) from distinct1, distinct2 group by tag</sphinxql>
+<sphinxql>select id, count (distinct gr), count(*) from distinct1, distinct2 group by gr</sphinxql>
+<sphinxql>select id, count (distinct tag), count(*) from distinct1, distinct2 group by gr</sphinxql>
+<sphinxql>select id, count (distinct gr), count(*) from distinct1, distinct2 group by tag</sphinxql>
+<sphinxql>select id, count (distinct tag), count(*) from distinct1, distinct1 group by tag</sphinxql>
+<sphinxql>select id, count (distinct gr), count(*) from distinct1, distinct1 group by gr</sphinxql>
+<sphinxql>select id, count (distinct tag), count(*) from distinct1, distinct1 group by gr</sphinxql>
+<sphinxql>select id, count (distinct gr), count(*) from distinct1, distinct1 group by tag</sphinxql>
 
 </sphqueries>
 

@@ -743,21 +743,23 @@ struct SphGroupedValue_t
 public:
 	SphGroupKey_t	m_uGroup;
 	SphAttr_t		m_uValue;
+	int				m_iCount;
 
 public:
 	SphGroupedValue_t ()
 	{}
 
-	SphGroupedValue_t ( SphGroupKey_t uGroup, SphAttr_t uValue )
+	SphGroupedValue_t ( SphGroupKey_t uGroup, SphAttr_t uValue, int iCount )
 		: m_uGroup ( uGroup )
 		, m_uValue ( uValue )
+		, m_iCount ( iCount )
 	{}
 
 	inline bool operator < ( const SphGroupedValue_t & rhs ) const
 	{
-		if ( m_uGroup<rhs.m_uGroup ) return true;
-		if ( m_uGroup>rhs.m_uGroup ) return false;
-		return m_uValue<rhs.m_uValue;
+		if ( m_uGroup!=rhs.m_uGroup ) return m_uGroup<rhs.m_uGroup;
+		if ( m_uValue!=rhs.m_uValue ) return m_uValue<rhs.m_uValue;
+		return m_iCount>rhs.m_iCount;
 	}
 
 	inline bool operator == ( const SphGroupedValue_t & rhs ) const
@@ -810,13 +812,13 @@ int CSphUniqounter::CountNext ( SphGroupKey_t * pOutGroup )
 
 	SphGroupKey_t uGroup = m_pData[m_iCountPos].m_uGroup;
 	SphAttr_t uValue = m_pData[m_iCountPos].m_uValue;
+	int iCount = m_pData[m_iCountPos].m_iCount;
 	*pOutGroup = uGroup;
 
-	int iCount = 1;
 	while ( m_iCountPos<m_iLength && m_pData[m_iCountPos].m_uGroup==uGroup )
 	{
 		if ( m_pData[m_iCountPos].m_uValue!=uValue )
-			iCount++;
+			iCount += m_pData[m_iCountPos].m_iCount;
 		uValue = m_pData[m_iCountPos].m_uValue;
 		m_iCountPos++;
 	}
@@ -1325,8 +1327,6 @@ public:
 				// it's already grouped match
 				// sum grouped matches count
 				pMatch->SetAttr ( m_tLocCount, pMatch->GetAttr ( m_tLocCount ) + tEntry.GetAttr ( m_tLocCount ) ); // OPTIMIZE! AddAttr()?
-				if ( DISTINCT )
-					pMatch->SetAttr ( m_tLocDistinct, pMatch->GetAttr ( m_tLocDistinct ) + tEntry.GetAttr ( m_tLocDistinct ) );
 			} else
 			{
 				// it's a simple match
@@ -1361,8 +1361,13 @@ public:
 		}
 
 		// submit actual distinct value in all cases
-		if ( DISTINCT && !bGrouped )
-			m_tUniq.Add ( SphGroupedValue_t ( uGroupKey, tEntry.GetAttr ( m_tDistinctLoc ) ) ); // OPTIMIZE! use simpler locator here?
+		if ( DISTINCT )
+		{
+			int iCount = 1;
+			if ( bGrouped )
+				iCount = (int)tEntry.GetAttr ( m_tSettings.m_tLocDistinct );
+			m_tUniq.Add ( SphGroupedValue_t ( uGroupKey, tEntry.GetAttr ( m_tSettings.m_tDistinctLoc ), iCount ) ); // OPTIMIZE! use simpler locator here?
+		}
 
 		// it's a dupe anyway, so we shouldn't update total matches count
 		if ( ppMatch )

@@ -15775,7 +15775,7 @@ static int sphQueryHeightCalc ( const XQNode_t * pNode )
 	return iMaxChild+iHeight;
 }
 
-#define SPH_EXTNODE_STACK_SIZE 120
+#define SPH_EXTNODE_STACK_SIZE 160
 
 bool sphCheckQueryHeight ( const XQNode_t * pRoot, CSphString & sError )
 {

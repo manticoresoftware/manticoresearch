@@ -1451,13 +1451,39 @@ void SetSignalHandlers ()
 
 #endif // USE_WINDOWS
 
-bool SendRotate ( int iPID, bool bForce )
+bool SendRotate ( const CSphConfig & hConf, bool bForce )
 {
-	if ( iPID<0 )
-		return false;
-
 	if ( !( g_bRotate && ( g_bRotateEach || bForce ) ) )
 		return false;
+
+	int iPID = -1;
+	// load config
+	if ( !hConf.Exists ( "searchd" ) )
+	{
+		fprintf ( stdout, "WARNING: 'searchd' section not found in config file.\n" );
+		return false;
+	}
+
+	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
+	if ( !hSearchd.Exists ( "pid_file" ) )
+	{
+		fprintf ( stdout, "WARNING: 'pid_file' parameter not found in 'searchd' config section.\n" );
+		return false;
+	}
+
+	// read in PID
+	FILE * fp = fopen ( hSearchd["pid_file"].cstr(), "r" );
+	if ( !fp )
+	{
+		fprintf ( stdout, "WARNING: failed to open pid_file '%s'.\n", hSearchd["pid_file"].cstr() );
+		return false;
+	}
+	if ( fscanf ( fp, "%d", &iPID )!=1 || iPID<=0 )
+	{
+		fprintf ( stdout, "WARNING: failed to scanf pid from pid_file '%s'.\n", hSearchd["pid_file"].cstr() );
+		return false;
+	}
+	fclose ( fp );
 
 #if USE_WINDOWS
 	char szPipeName[64];
@@ -1722,40 +1748,6 @@ int main ( int argc, char ** argv )
 		sphSetThrottling ( hIndexer.GetInt ( "max_iops", 0 ), hIndexer.GetSize ( "max_iosize", 0 ) );
 	}
 
-	int iPID = -1;
-	while ( g_bRotate )
-	{
-		// load config
-		if ( !hConf.Exists ( "searchd" ) )
-		{
-			fprintf ( stdout, "WARNING: 'searchd' section not found in config file.\n" );
-			break;
-		}
-
-		const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
-		if ( !hSearchd.Exists ( "pid_file" ) )
-		{
-			fprintf ( stdout, "WARNING: 'pid_file' parameter not found in 'searchd' config section.\n" );
-			break;
-		}
-
-		// read in PID
-		FILE * fp = fopen ( hSearchd["pid_file"].cstr(), "r" );
-		if ( !fp )
-		{
-			fprintf ( stdout, "WARNING: failed to open pid_file '%s'.\n", hSearchd["pid_file"].cstr() );
-			break;
-		}
-		if ( fscanf ( fp, "%d", &iPID )!=1 || iPID<=0 )
-		{
-			fprintf ( stdout, "WARNING: failed to scanf pid from pid_file '%s'.\n", hSearchd["pid_file"].cstr() );
-			break;
-		}
-		fclose ( fp );
-
-		break;
-	}
-
 	/////////////////////
 	// index each index
 	////////////////////
@@ -1793,7 +1785,7 @@ int main ( int argc, char ** argv )
 		{
 			bool bLastOk = DoIndex ( hConf["index"].IterateGet (), hConf["index"].IterateGetKey().cstr(), hConf["source"], bVerbose, fpDumpRows );
 			bIndexedOk |= bLastOk;
-			if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && SendRotate ( iPID, false ) )
+			if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && SendRotate ( hConf, false ) )
 				tmRotated = sphMicroTimer();
 		}
 	} else
@@ -1807,7 +1799,7 @@ int main ( int argc, char ** argv )
 			{
 				bool bLastOk = DoIndex ( hConf["index"][dIndexes[i]], dIndexes[i], hConf["source"], bVerbose, fpDumpRows );
 				bIndexedOk |= bLastOk;
-				if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && SendRotate ( iPID, false ) )
+				if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && SendRotate ( hConf, false ) )
 					tmRotated = sphMicroTimer();
 			}
 		}
@@ -1829,7 +1821,7 @@ int main ( int argc, char ** argv )
 
 	if ( bIndexedOk && g_bRotate )
 	{
-		if ( !SendRotate ( iPID, true ) )
+		if ( !SendRotate ( hConf, true ) )
 			fprintf ( stdout, "WARNING: indices NOT rotated.\n" );
 	}
 

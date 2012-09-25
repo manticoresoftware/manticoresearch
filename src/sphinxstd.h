@@ -720,6 +720,7 @@ public:
 	/// add entry
 	void Add ( const T & tValue )
 	{
+		assert ( (&tValue<m_pData || &tValue>=(m_pData+m_iLength)) && "inserting own value (like last()) by ref!" );
 		if ( m_iLength>=m_iLimit )
 			Reserve ( 1+m_iLength );
 		m_pData [ m_iLength++ ] = tValue;
@@ -728,6 +729,7 @@ public:
 	/// add unique entry (ie. do not add if equal to last one)
 	void AddUnique ( const T & tValue )
 	{
+		assert ( (&tValue<m_pData || &tValue>=(m_pData+m_iLength)) && "inserting own value (like last()) by ref!" );
 		if ( m_iLength>=m_iLimit )
 			Reserve ( 1+m_iLength );
 

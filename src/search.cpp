@@ -125,12 +125,24 @@ int main ( int argc, char ** argv )
 			OPT ( "-f", "--filter" )
 			{
 				DWORD uVal = strtoul ( argv[i+2], NULL, 10 );
-				tQuery.m_dFilters.Reset ();
-				tQuery.m_dFilters.Resize ( 1 );
-				tQuery.m_dFilters[0].m_eType = SPH_FILTER_VALUES;
-				tQuery.m_dFilters[0].m_dValues.Reset ();
-				tQuery.m_dFilters[0].m_dValues.Add ( uVal );
-				tQuery.m_dFilters[0].m_sAttrName = argv[i+1];
+				CSphFilterSettings * pFilter = NULL;
+				// do we already have a filter for that attribute?
+				ARRAY_FOREACH ( j, tQuery.m_dFilters )
+				{
+					if ( tQuery.m_dFilters[j].m_sAttrName==argv[i+1] )
+					{
+						pFilter = &tQuery.m_dFilters[j];
+						break;
+					}
+				}
+				if ( !pFilter )
+				{
+					pFilter = &tQuery.m_dFilters.Add ();
+					pFilter->m_eType = SPH_FILTER_VALUES;
+					pFilter->m_sAttrName = argv[i+1];
+				}
+				pFilter->m_dValues.Add ( uVal );
+				pFilter->m_dValues.Uniq ();
 				i += 2;
 			} else						break; // unknown option
 

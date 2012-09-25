@@ -894,12 +894,13 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 
 				if ( sToken[0]=='(' )
 				{
-					m_dStateSpec.Add ( m_dStateSpec.Last() );
-				} else if ( sToken[0]==')' )
+					// safe way of performing m_dStateSpec.Add ( m_dStateSpec.Last() )
+					m_dStateSpec.Add ();
+					m_dStateSpec[m_dStateSpec.GetLength()-1] = m_dStateSpec[m_dStateSpec.GetLength()-2];
+				} else if ( sToken[0]==')' && m_dStateSpec.GetLength()>1 )
 				{
 					m_dStateSpec.Pop();
 				}
-				assert ( m_dStateSpec.GetLength()>=1 );
 
 				break;
 			}
@@ -924,7 +925,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		// information about stars is lost after this point, so was have to save it now
 		DWORD uStarPosition = STAR_NONE;
 		uStarPosition |= *m_pTokenizer->GetTokenEnd()=='*' ? STAR_BACK : 0;
-		uStarPosition |= ( m_pTokenizer->GetTokenStart()!=m_pTokenizer->GetBufferPtr() ) &&
+		uStarPosition |= ( m_pTokenizer->GetTokenStart()>(const char *)m_sQuery ) &&
 			m_pTokenizer->GetTokenStart()[-1]=='*' ? STAR_FRONT : 0;
 
 		m_tPendingToken.pNode = AddKeyword ( sToken, uStarPosition );

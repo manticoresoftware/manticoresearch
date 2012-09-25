@@ -1365,8 +1365,8 @@ public:
 		{
 			int iCount = 1;
 			if ( bGrouped )
-				iCount = (int)tEntry.GetAttr ( m_tSettings.m_tLocDistinct );
-			m_tUniq.Add ( SphGroupedValue_t ( uGroupKey, tEntry.GetAttr ( m_tSettings.m_tDistinctLoc ), iCount ) ); // OPTIMIZE! use simpler locator here?
+				iCount = (int)tEntry.GetAttr ( m_tLocDistinct );
+			m_tUniq.Add ( SphGroupedValue_t ( uGroupKey, tEntry.GetAttr ( m_tDistinctLoc ), iCount ) ); // OPTIMIZE! use simpler locator here?
 		}
 
 		// it's a dupe anyway, so we shouldn't update total matches count

@@ -946,7 +946,7 @@ class SphinxClient:
 		req.append ( pack('>L',len(attrs)) )
 		ignore_absent = 0
 		if ignorenonexistent: ignore_absent = 1
-		req.append ( pack('>L', ignore_absent )
+		req.append ( pack('>L', ignore_absent ) )
 		mva_attr = 0
 		if mva: mva_attr = 1
 		for attr in attrs:

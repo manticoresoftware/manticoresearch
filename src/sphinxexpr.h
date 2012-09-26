@@ -58,7 +58,8 @@ enum ESphEvalStage
 	SPH_EVAL_PREFILTER,			///< expression needed for full-text candidate matches filtering
 	SPH_EVAL_PRESORT,			///< expression needed for final matches sorting
 	SPH_EVAL_SORTER,			///< expression evaluated by sorter object
-	SPH_EVAL_FINAL				///< expression not (!) used in filters/sorting; can be postponed until final result set cooking
+	SPH_EVAL_FINAL,				///< expression not (!) used in filters/sorting; can be postponed until final result set cooking
+	SPH_EVAL_POSTLIMIT			///< expression needs to be postponed until we apply all the LIMIT clauses (say, too expensive)
 };
 
 /// expression evaluator
@@ -129,7 +130,9 @@ struct ISphExprHook
 	virtual int IsKnownFunc ( const char * sFunc ) = 0;
 
 	/// create node by OID
-	virtual ISphExpr * CreateNode ( int iID, ISphExpr * pLeft ) = 0;
+	/// pEvalStage is an optional out-parameter
+	/// hook may fill it, but that is *not* required
+	virtual ISphExpr * CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage * pEvalStage ) = 0;
 
 	/// get identifier return type by OID
 	virtual ESphAttr GetIdentType ( int iID ) = 0;

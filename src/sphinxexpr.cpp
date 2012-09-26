@@ -2602,8 +2602,8 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 			}
 
 		case TOK_UDF:			return CreateUdfNode ( tNode.m_iFunc, pLeft ); break;
-		case TOK_HOOK_IDENT:	return m_pHook->CreateNode ( tNode.m_iFunc, NULL ); break;
-		case TOK_HOOK_FUNC:		return m_pHook->CreateNode ( tNode.m_iFunc, pLeft ); break;
+		case TOK_HOOK_IDENT:	return m_pHook->CreateNode ( tNode.m_iFunc, NULL, NULL ); break;
+		case TOK_HOOK_FUNC:		return m_pHook->CreateNode ( tNode.m_iFunc, pLeft, &m_eEvalStage ); break;
 		case TOK_CONST_HASH:
 			// tricky bit
 			// data gets moved (!) from node to ISphExpr at this point

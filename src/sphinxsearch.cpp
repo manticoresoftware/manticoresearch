@@ -6424,7 +6424,7 @@ public:
 		return -1;
 	}
 
-	ISphExpr * CreateNode ( int iID, ISphExpr * pLeft )
+	ISphExpr * CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage * )
 	{
 		int * pCF = &m_pState->m_iCurrentField; // just a shortcut
 		switch ( iID )

@@ -7441,6 +7441,51 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, bool bHadLoca
 		tRes.m_bLimited = true;
 	}
 
+	// compute post-limit stuff
+	CSphVector<int> dPostlimit;
+	for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
+		if ( tRes.m_tSchema.GetAttr(i).m_eStage == SPH_EVAL_POSTLIMIT )
+			dPostlimit.Add ( i );
+
+	if ( dPostlimit.GetLength() )
+	{
+		int iFrom = 0;
+		int iTo = tRes.m_dMatches.GetLength();
+		if ( !tRes.m_bLimited )
+		{
+			iTo = Max ( Min ( tQuery.m_iOffset + tQuery.m_iLimit, iTo ), 0 );
+			iFrom = Min ( tQuery.m_iOffset, iTo );
+		}
+
+		for ( int i=iFrom; i<iTo; i++ )
+		{
+			CSphMatch & tMatch = tRes.m_dMatches[i];
+			if ( !tMatch.m_iTag )
+				continue; // 0 tag == remote match == everything is already computed
+
+			ARRAY_FOREACH ( j, dPostlimit )
+			{
+				const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr ( dPostlimit[j] );
+
+				// OPTIMIZE? only if the tag did not change?
+				tCol.m_pExpr->SetMVAPool ( tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pMva );
+				tCol.m_pExpr->SetStringPool ( tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pStrings );
+
+				if ( tCol.m_eAttrType==SPH_ATTR_INTEGER )
+					tMatch.SetAttr ( tCol.m_tLocator, tCol.m_pExpr->IntEval(tMatch) );
+				else if ( tCol.m_eAttrType==SPH_ATTR_BIGINT )
+					tMatch.SetAttr ( tCol.m_tLocator, tCol.m_pExpr->Int64Eval(tMatch) );
+				else if ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR )
+				{
+					const BYTE * pStr = NULL;
+					tCol.m_pExpr->StringEval ( tMatch, &pStr );
+					tMatch.SetAttr ( tCol.m_tLocator, (SphAttr_t) pStr ); // FIXME! a potential leak of *previous* value?
+				} else
+					tMatch.SetAttrFloat ( tCol.m_tLocator, tCol.m_pExpr->Eval(tMatch) );
+			}
+		}
+	}
+
 	// all the merging and sorting is now done
 	// we can convert all matches to minimal schema
 	if ( !bAllEqual )
@@ -7738,6 +7783,14 @@ struct Expr_Snippet_c : public ISphStringExpr
 		*ppStr = m_tHighlight.m_dRes.LeakData();
 		return iRes;
 	}
+
+	virtual void SetStringPool ( const BYTE * pStrings )
+	{
+		if ( m_pArgs )
+			m_pArgs->SetStringPool ( pStrings );
+		if ( m_pText )
+			m_pText->SetStringPool ( pStrings );
+	}
 };
 
 
@@ -7763,9 +7816,11 @@ struct ExprHook_t : public ISphExprHook
 			return -1;
 	}
 
-	virtual ISphExpr * CreateNode ( int iID, ISphExpr * pLeft )
+	virtual ISphExpr * CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage * pEvalStage )
 	{
 		assert ( iID==HOOK_SNIPPET );
+		if ( pEvalStage )
+			*pEvalStage = SPH_EVAL_POSTLIMIT;
 		return new Expr_Snippet_c ( pLeft, m_pIndex );
 	}
 

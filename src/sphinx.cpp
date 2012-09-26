@@ -15446,6 +15446,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const CSphSchema &
 
 			case SPH_EVAL_SORTER:
 				// sorter tells it will compute itself; so just skip it
+			case SPH_EVAL_POSTLIMIT:
 				break;
 
 			default:

@@ -105,7 +105,7 @@ function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $skip )
 }
 
 
-function RunIndexer ( &$error, $params )
+function RunIndexerOnce ( &$error, $params )
 {
 	global $g_locals;
 
@@ -121,6 +121,26 @@ function RunIndexer ( &$error, $params )
 
 	$error = join ( "\n", $error );
 	return ( $retval==0 && !empty($error) ) ? 2 : $retval;
+}
+
+function RunIndexer ( &$error, $params )
+{
+    $INDEXING_TRIES = 5;
+    $INDEXING_TICK = 1000000; // msec
+
+    $tries = 0;
+
+    for ( $i=0; $i<$INDEXING_TRIES; ++$i )
+    {
+        $retval = RunIndexerOnce ( $error, $params );
+        if ( empty($error) || stripos ( $error, "failed to lock")===false )
+               break;
+	usleep ( $INDEXING_TICK );
+        ++$tries;
+    }
+    if ( $tries!=0 )
+        $error = "After $tries tries: $error";
+    return $retval;
 }
 
 

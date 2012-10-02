@@ -2380,7 +2380,7 @@ public:
 	}
 
 	// test if all bits are set or unset
-	bool TestAll ( bool bSet=false ) const
+	bool TestAll ( bool bSet ) const
 	{
 		DWORD uTest = bSet?uALLBITS:0;
 		for ( int i=0; i<IELEMENTS; i++ )

@@ -1601,6 +1601,8 @@ hello !world
 <listitem><para>field search operator: <programlisting>@title hello @body world</programlisting></para></listitem>
 <listitem><para>field position limit modifier (introduced in version 0.9.9-rc1): <programlisting>@body[50] hello</programlisting></para></listitem>
 <listitem><para>multiple-field search operator: <programlisting>@(title,body) hello world</programlisting></para></listitem>
+<listitem><para>ignore field search operator (will ignore any matches of 'hello world' from field 'title'): <programlisting>@!title hello world</programlisting></para></listitem>
+<listitem><para>ignore multiple-field search operator (if we have fields title, subject and body then @!(title) is equivalent to @(subject,body)): <programlisting>@!(title,body) hello world</programlisting></para></listitem>
 <listitem><para>all-field search operator: <programlisting>@* hello</programlisting></para></listitem>
 <listitem><para>phrase search operator: <programlisting>"hello world"</programlisting></para></listitem>
 <listitem><para>proximity search operator: <programlisting>"hello world"~10</programlisting></para></listitem>

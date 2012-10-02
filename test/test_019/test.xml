@@ -75,6 +75,9 @@ index fld
 <query  index="test" mode="extended2">77</query>
 <query  index="test" mode="extended2">0077</query>
 <query  index="test" mode="extended2">@title test</query>
+<query  index="test" mode="extended2">@!title aaa</query>
+<query  index="test" mode="extended2">@!(title,body) aaa</query>
+<query  index="test" mode="extended2">@@relaxed @!nonexistent test</query>
 <query  index="test" mode="extended2" expect_error="1">@ttitle test</query>
 <query  index="test" mode="extended2" expect_error="1">@@title test</query>
 <query  index="test" mode="extended2">@@relaxed @ttitle test</query>
@@ -126,6 +129,9 @@ INSERT INTO `test_table` VALUES
 ( 777, '', '77 lies multiplied by 77' ),
 ( 888, '', 'agent 0077' ),
 ( 999, '', '1234567812345678' ),
+( 901, 'aaa', 'aaa' ),
+( 902, 'aaa', '' ),
+( 903, '', 'aaa' ),
 (1000, 'spec1', 'dummy1' ),
 (1001, 'spec1 dummy1', '' ),
 (1002, '', 'spec1 dummy1' ),

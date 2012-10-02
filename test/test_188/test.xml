@@ -189,6 +189,12 @@ $results = array_merge ( $results, $query ( "CALL KEYWORDS ( 'apple', 'plain_ste
 $results = array_merge ( $results, $query ( "CALL KEYWORDS ( 'apple', 'rt_stem', 1 )", $sock ) );
 $results = array_merge ( $results, $query ( "ATTACH INDEX plain_stem TO RTINDEX rt_stem", $sock ) );
 
+// regression plain unavailable after ATTACH till daemon restart
+$results = array_merge ( $results, $query ( "SELECT * FROM plain_stem", $sock ) );
+RunIndexer ( $errors, '--rotate plain_stem' );
+sleep(2);
+$results = array_merge ( $results, $query ( "SELECT * FROM plain_stem", $sock ) );
+
 $close ( $sock );
 
 $results = array_merge ( $results, $restartDaemon ( $client ) );

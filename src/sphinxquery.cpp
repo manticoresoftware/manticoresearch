@@ -533,7 +533,7 @@ bool XQParser_t::ParseFields ( CSphSmallBitvec & dFields, int & iMaxFieldPos )
 			return false;
 
 		m_pTokenizer->SetBufferPtr ( pPtr );
-		if ( bNegate && ( !dFields.TestAll() ) )
+		if ( bNegate )
 			dFields.Negate();
 
 	} else
@@ -575,7 +575,7 @@ bool XQParser_t::ParseFields ( CSphSmallBitvec & dFields, int & iMaxFieldPos )
 					return false;
 
 				m_pTokenizer->SetBufferPtr ( ++pPtr );
-				if ( bNegate && ( !dFields.TestAll() ) )
+				if ( bNegate )
 					dFields.Negate();
 
 				bOK = true;
@@ -1171,7 +1171,7 @@ void XQParser_t::DeleteNodesWOFields ( XQNode_t * pNode )
 
 	for ( int i = 0; i < pNode->m_dChildren.GetLength (); )
 	{
-		if ( pNode->m_dChildren[i]->m_dSpec.m_dFieldMask.TestAll() )
+		if ( pNode->m_dChildren[i]->m_dSpec.m_dFieldMask.TestAll ( false ) )
 		{
 			XQNode_t * pChild = pNode->m_dChildren[i];
 			assert ( pChild->m_dChildren.GetLength()==0 );

@@ -42,8 +42,8 @@ v.29, 2.1.1-dev, added support for multiple wordforms files
 v.30, 2.1.1-dev, added m_iEmbeddedLimit, embedded synonyms, stopwords, wordforms files
 v.31, 2.1.1-dev, added skiplists (.spe file), changed dictionary entry (added optional skiplist offset)
 v.32, 2.1.1-dev, added bigram indexing, and phrase searching with bigrams (bigram_index, bigram_freq_words directives)
-v.33, 2.1.1-dev, fixed #1274 indexing large amount of attribute data (spa>4Gb)
-v.34, 2.1.1-dev, fixed memory fragmentation on loading dictionary infix blocks
+v.33, 2.1.1-dev, changed m_uMinMaxIndex to 64 bits (was 32 bits, fixes #1274)
+v.34, 2.1.1-dev, added m_iInfixBlocksWordsSize (to fix memory fragmentation)
 v.35, 2.1.1-dev, added average field lengths (in tokens) to header
 
 Revisions that touched INDEX_FORMAT_VERSION

@@ -28144,8 +28144,8 @@ void sphDictBuildSkiplists ( const char * sPath )
 	CSphString sFilename, sError;
 	int64_t tmStart = sphMicroTimer();
 
-	if ( INDEX_FORMAT_VERSION!=31 && INDEX_FORMAT_VERSION!=32 )
-		sphDie ( "skiplists upgrade: ony works in v.31 to v.32 builds for now; get an older indextool or contact support" );
+	if ( INDEX_FORMAT_VERSION<31 || INDEX_FORMAT_VERSION>35 )
+		sphDie ( "skiplists upgrade: ony works in v.31 to v.35 builds for now; get an older indextool or contact support" );
 
 	// load (interesting parts from) the index header
 	CSphAutoreader rdHeader;
@@ -28194,7 +28194,13 @@ void sphDictBuildSkiplists ( const char * sPath )
 	LoadTokenizerSettings ( rdHeader, tTokenizerSettings, tEmbeddedFiles, uVersion, sError );
 	LoadDictionarySettings ( rdHeader, tDictSettings, tEmbeddedFiles, uVersion, sError );
 	int iKillListSize = rdHeader.GetDword();
-	DWORD uMinMaxIndex = rdHeader.GetDword();
+
+	SphOffset_t uMinMaxIndex = 0;
+	if ( uVersion>=33 )
+		uMinMaxIndex = rdHeader.GetOffset ();
+	else if ( uVersion>=20 )
+		uMinMaxIndex = rdHeader.GetDword ();
+
 	ISphFieldFilter * pFieldFilter = NULL;
 	if ( uVersion>=28 )
 	{
@@ -28580,7 +28586,7 @@ void sphDictBuildSkiplists ( const char * sPath )
 	SaveTokenizerSettings ( wrHeader, pTokenizer, tIndexSettings.m_iEmbeddedLimit );
 	SaveDictionarySettings ( wrHeader, pDict, false, tIndexSettings.m_iEmbeddedLimit );
 	wrHeader.PutDword ( iKillListSize );
-	wrHeader.PutDword ( uMinMaxIndex );
+	wrHeader.PutOffset ( uMinMaxIndex );
 	SaveFieldFilterSettings ( wrHeader, pFieldFilter );
 
 	wrHeader.CloseFile ();

@@ -94,6 +94,30 @@ index optimized_filter
 	rt_attr_uint = idd9
 }
 
+source src_hits
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, title, 11 as idd FROM table_hits
+	sql_attr_uint	= idd
+}
+
+index hits_plain
+{
+	source			= src_hits
+	path			= <data_path/>/plain
+	docinfo			= extern
+	charset_type	= utf-8
+	hit_format = plain
+}
+
+index hits_inline
+{
+	source			= src_hits
+	path			= <data_path/>/inline
+	docinfo			= extern
+	charset_type	= utf-8
+}
 </config>
 
 <db_create>
@@ -120,9 +144,17 @@ create table test_table3
 	title varchar(64) not null
 );
 </db_create>
+<db_create>
+create table table_hits
+(
+	id int not null,
+	title varchar(16384) not null
+);
+</db_create>
 <db_drop>drop table if exists test_table1;</db_drop>
 <db_drop>drop table if exists test_table2;</db_drop>
 <db_drop>drop table if exists test_table3;</db_drop>
+<db_drop>drop table if exists table_hits;</db_drop>
 <custom_insert><![CDATA[
 
 // OR boundary
@@ -143,6 +175,19 @@ for ( $i=1; $i < 401; $i++ )
 
 for ( $i=402; $i < 602; $i++ )
 	mysql_query ( "INSERT INTO test_table3 VALUES ( $i, $i, 'aaa' )" )  or die("q6:".mysql_error()."\n$i");
+	
+// regression skiplist vs hit_format
+for ($i=1; $i<145; ++$i)
+{
+	mysql_query ("INSERT INTO table_hits VALUES ( $i, 'I like as I' ) " );
+}
+mysql_query ("INSERT INTO table_hits VALUES ( 9200, 'And I promised myself  and her  that I was going to do something with my life instead of sitting around.  I promised her I would follow my dreams of the NHL.' ) " );
+mysql_query ("INSERT INTO table_hits VALUES ( 9250, 'promised like as I' ) " );
+for ($i=9300; $i<9500; ++$i)
+{
+	mysql_query ("INSERT INTO table_hits VALUES ( $i, 'i like as ' ) " );
+}
+	
 ]]></custom_insert>
 
 <custom_test>
@@ -248,6 +293,12 @@ for ( $doc=1; $doc<1700; $doc++ )
 	$query ( $insert, $sock );
 }	
 $results = array_merge ( $results, $query ( "select * from optimized_filter where idd5>1 and idd5<20 limit 2", $sock ) );
+
+// regression skiplist vs hit_format
+$results = array_merge ( $results, $query ( "select * from hits_plain where match (' \" i promised \" ' )", $sock ) );
+$results = array_merge ( $results, $query ( "show meta", $sock ) );	
+$results = array_merge ( $results, $query ( "select * from hits_inline where match (' \" i promised \" ' )", $sock ) );
+$results = array_merge ( $results, $query ( "show meta", $sock ) );	
 
 @mysql_close ( $sock );
 

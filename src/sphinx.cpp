@@ -1114,8 +1114,7 @@ public:
 			return;
 		m_rdDoclist.SeekTo ( t.m_iOffset, -1 );
 		m_tDoc.m_iDocID = t.m_iBaseDocid + m_iMinID;
-		m_uHitPosition = t.m_iBaseHitlistPos;
-		m_iHitlistPos = -1;
+		m_uHitPosition = m_iHitlistPos = t.m_iBaseHitlistPos;
 	}
 
 	virtual const CSphMatch & GetNextDoc ( DWORD * pDocinfo )

@@ -148,7 +148,7 @@ create table test_table3
 create table table_hits
 (
 	id int not null,
-	title varchar(16384) not null
+	title varchar(256) not null
 );
 </db_create>
 <db_drop>drop table if exists test_table1;</db_drop>
@@ -177,13 +177,13 @@ for ( $i=402; $i < 602; $i++ )
 	mysql_query ( "INSERT INTO test_table3 VALUES ( $i, $i, 'aaa' )" )  or die("q6:".mysql_error()."\n$i");
 	
 // regression skiplist vs hit_format
-for ($i=1; $i<145; ++$i)
+for ($i=1; $i<145; $i++)
 {
 	mysql_query ("INSERT INTO table_hits VALUES ( $i, 'I like as I' ) " );
 }
 mysql_query ("INSERT INTO table_hits VALUES ( 9200, 'And I promised myself  and her  that I was going to do something with my life instead of sitting around.  I promised her I would follow my dreams of the NHL.' ) " );
 mysql_query ("INSERT INTO table_hits VALUES ( 9250, 'promised like as I' ) " );
-for ($i=9300; $i<9500; ++$i)
+for ($i=9300; $i<9500; $i++)
 {
 	mysql_query ("INSERT INTO table_hits VALUES ( $i, 'i like as ' ) " );
 }

@@ -163,7 +163,7 @@ public:
 	SphOffset_t		GetSize ( SphOffset_t iMinSize, bool bCheckSizeT, CSphString & sError );
 	SphOffset_t		GetSize ();
 
-	bool			Read ( void * pBuf, size_t uCount, CSphString & sError );
+	bool			Read ( void * pBuf, int64_t iCount, CSphString & sError );
 	void			SetProgressCallback ( CSphIndexProgress * pStat );
 };
 

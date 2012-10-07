@@ -699,9 +699,8 @@ SphOffset_t CSphAutofile::GetSize ()
 }
 
 
-bool CSphAutofile::Read ( void * pBuf, size_t uCount, CSphString & sError )
+bool CSphAutofile::Read ( void * pBuf, int64_t iCount, CSphString & sError )
 {
-	int64_t iCount = (int64_t) uCount;
 	int64_t iToRead = iCount;
 	BYTE * pCur = (BYTE *)pBuf;
 	while ( iToRead>0 )
@@ -17082,7 +17081,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			int iSkipsOffset = rdDict.UnzipInt();
 			if ( !bWordDict && iSkipsOffset<iLastSkipsOffset )
 				LOC_FAIL(( fp, "descending skiplist pos (last=%d, cur=%d, wordid=%llu)",
-					iLastSkipsOffset, iSkipsOffset, UINT64(uNewWordid) ));
+					iLastSkipsOffset, iSkipsOffset, UINT64 ( uNewWordid ) ));
 			iLastSkipsOffset = iSkipsOffset;
 		}
 
@@ -17390,7 +17389,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			if ( iSkipsOffset<=0 || iSkipsOffset>(int)m_pSkiplists.GetLength() )
 			{
 				LOC_FAIL(( fp, "invalid skiplist offset (wordid=%llu(%s), off=%d, max=%d)",
-					UINT64(uWordid), sWord, iSkipsOffset, (int)m_pSkiplists.GetLength() ));
+					UINT64 ( uWordid ), sWord, iSkipsOffset, (int)m_pSkiplists.GetLength() ));
 				break;
 			}
 
@@ -17417,14 +17416,14 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 					t.m_iBaseHitlistPos!=r.m_iBaseHitlistPos )
 				{
 					LOC_FAIL(( fp, "skiplist entry %d mismatch (wordid=%llu(%s), exp={%llu, %llu, %llu}, got={%llu, %llu, %llu})",
-						i, UINT64(uWordid), sWord,
-						UINT64(r.m_iBaseDocid), UINT64(r.m_iOffset), UINT64(r.m_iBaseHitlistPos),
-						UINT64(t.m_iBaseDocid), UINT64(t.m_iOffset), UINT64(t.m_iBaseHitlistPos) ));
+						i, UINT64 ( uWordid ), sWord,
+						UINT64 ( r.m_iBaseDocid ), UINT64 ( r.m_iOffset ), UINT64 ( r.m_iBaseHitlistPos ),
+						UINT64 ( t.m_iBaseDocid ), UINT64 ( t.m_iOffset ), UINT64 ( t.m_iBaseHitlistPos ) ));
 					break;
 				}
 				if ( pSkip>pMax )
 					LOC_FAIL(( fp, "skiplist length mismatch (wordid=%llu(%s), exp=%d, got=%d)",
-						UINT64(uWordid), sWord, i, dDoclistSkips.GetLength() ));
+						UINT64 ( uWordid ), sWord, i, dDoclistSkips.GetLength() ));
 			}
 			break;
 		}
@@ -28128,7 +28127,7 @@ void sphDictBuildInfixes ( const char * sPath )
 }
 
 //////////////////////////////////////////////////////////////////////////
-// V.30 TO V.31 CONVERSION TOOL, SKIPLIST BUILDER
+// V.12 TO V.31 CONVERSION TOOL, SKIPLIST BUILDER
 //////////////////////////////////////////////////////////////////////////
 
 struct EntrySkips_t
@@ -28156,12 +28155,17 @@ void sphDictBuildSkiplists ( const char * sPath )
 	DWORD uHeader = rdHeader.GetDword ();
 	DWORD uVersion = rdHeader.GetDword();
 	bool bUse64 = ( rdHeader.GetDword()!=0 );
+	bool bConvertCheckpoints = ( uVersion<=21 );
 	ESphDocinfo eDocinfo = (ESphDocinfo) rdHeader.GetDword();
+	const DWORD uLowestVersion = 12;
 
+	if ( bUse64!=USE_64BIT )
+		sphDie ( "skiplists upgrade: USE_64BIT differs, index %s, binary %s",
+			bUse64 ? "enabled" : "disabled", USE_64BIT ? "enabled" : "disabled" );
 	if ( uHeader!=INDEX_MAGIC_HEADER )
 		sphDie ( "skiplists upgrade: invalid header file" );
-	if ( uVersion<21 || uVersion>30 )
-		sphDie ( "skiplists upgrade: got v.%d header, v.21 to v.30 required", uVersion );
+	if ( uVersion<uLowestVersion )
+		sphDie ( "skiplists upgrade: got v.%d header, v.%d to v.30 required", uVersion, uLowestVersion );
 	if ( eDocinfo==SPH_DOCINFO_INLINE )
 		sphDie ( "skiplists upgrade: docinfo=inline is not supported yet" );
 
@@ -28204,8 +28208,14 @@ void sphDictBuildSkiplists ( const char * sPath )
 	if ( uVersion>=28 )
 	{
 		CSphFieldFilterSettings tFieldFilterSettings;
+		LoadFieldFilterSettings ( rdHeader, tFieldFilterSettings );
 		pFieldFilter = sphCreateFieldFilter ( tFieldFilterSettings, sError );
 	}
+
+	CSphFixedVector<uint64_t> dFieldLens ( tSchema.m_dFields.GetLength() );
+	if ( uVersion>=35 && tIndexSettings.m_bIndexFieldLens )
+		ARRAY_FOREACH ( i, tSchema.m_dFields )
+			dFieldLens[i] = rdHeader.GetOffset(); // FIXME? ideally 64bit even when off is 32bit..
 
 	if ( rdHeader.GetErrorFlag() )
 		sphDie ( "skiplists upgrade: failed to parse header" );
@@ -28271,12 +28281,6 @@ void sphDictBuildSkiplists ( const char * sPath )
 		sphDie ( "skiplists upgrade: failed to create %s", sFilename.cstr() );
 	wrSkips.PutByte ( 1 );
 
-	// enters manual disk doclist reader
-	// for now, require inline hit format and none/extern docinfo
-	if ( tIndexSettings.m_eHitFormat!=SPH_HIT_FORMAT_INLINE )
-		sphDie ( "skiplists upgrade: plain index format not supported yet" );
-	assert ( eDocinfo!=SPH_DOCINFO_INLINE );
-
 	int iDone = -1;
 	CSphVector<SkiplistEntry_t> dSkiplist;
 	ARRAY_FOREACH ( i, dSkips )
@@ -28312,12 +28316,23 @@ void sphDictBuildSkiplists ( const char * sPath )
 
 			// do decode
 			uDocid += uDelta; // track delta-encoded docid
-			DWORD uHits = rdDocs.UnzipInt();
-			rdDocs.UnzipInt(); // skip hit field mask/data
-			if ( uHits==1 )
-				rdDocs.UnzipInt(); // skip inlined field id
-			else
+			if ( tIndexSettings.m_eHitFormat==SPH_HIT_FORMAT_INLINE )
+			{
+				DWORD uHits = rdDocs.UnzipInt();
+				rdDocs.UnzipInt(); // skip hit field mask/data
+				if ( uHits==1 )
+				{
+					rdDocs.UnzipInt(); // skip inlined field id
+				} else
+				{
+					uHitPosition += rdDocs.UnzipOffset(); // track delta-encoded hitlist offset
+				}
+			} else
+			{
 				uHitPosition += rdDocs.UnzipOffset(); // track delta-encoded hitlist offset
+				rdDocs.UnzipInt(); // skip hit field mask/data
+				rdDocs.UnzipInt(); // skip hit count
+			}
 		}
 
 		// alright, we built it, so save it
@@ -28381,25 +28396,26 @@ void sphDictBuildSkiplists ( const char * sPath )
 
 	// new checkpoints
 	CSphVector<CSphWordlistCheckpoint> dNewCP;
-	int iLastCP = 0;
+	int iLastCheckpoint = 0;
 
 	// skiplist lookup
 	EntrySkips_t * pSkips = dSkips.Begin();
-	uEntry = 0;
 
 	// dict encoder state
 	SphWordID_t uLastWordid = 0; // crc case
 	SphOffset_t iLastDoclist = 0; // crc case
 	CSphKeywordDeltaWriter tLastKeyword; // keywords case
+	DWORD uWordCount = 0;
 
 	// read old entries, write new entries
 	while ( pReader->Read() )
 	{
-		// update checkpoint
-		if ( iLastCP!=pReader->GetCheckpoint() )
+		// update or regenerate checkpoint
+		if ( ( !bConvertCheckpoints && iLastCheckpoint!=pReader->GetCheckpoint() )
+			|| ( bConvertCheckpoints && ( uWordCount % SPH_WORDLIST_CHECKPOINT )==0 ) )
 		{
 			// FIXME? GetCheckpoint() is for some reason 1-based
-			if ( iLastCP )
+			if ( uWordCount )
 			{
 				wrDict.ZipInt ( 0 );
 				if ( bWordDict )
@@ -28410,15 +28426,17 @@ void sphDictBuildSkiplists ( const char * sPath )
 			uLastWordid = 0;
 			iLastDoclist = 0;
 
-			CSphWordlistCheckpoint & cp = dNewCP.Add();
+			CSphWordlistCheckpoint & tCP = dNewCP.Add();
 			if ( bWordDict )
 			{
-				cp.m_sWord = strdup ( (const char*)pReader->GetWord() );
+				tCP.m_sWord = strdup ( (const char*)pReader->GetWord() );
 				tLastKeyword.Reset();
 			} else
-				cp.m_iWordID = pReader->m_iWordID;
-			cp.m_iWordlistOffset = wrDict.GetPos();
-			iLastCP = pReader->GetCheckpoint();
+			{
+				tCP.m_iWordID = pReader->m_iWordID;
+			}
+			tCP.m_iWordlistOffset = wrDict.GetPos();
+			iLastCheckpoint = pReader->GetCheckpoint();
 		}
 
 		// resave entry
@@ -28449,12 +28467,12 @@ void sphDictBuildSkiplists ( const char * sPath )
 		if ( pReader->m_iDocs > SPH_SKIPLIST_BLOCK )
 		{
 			// lots of checks
-			if ( uEntry!=pSkips->m_uEntry )
+			if ( uWordCount!=pSkips->m_uEntry )
 				sphDie ( "skiplist upgrade: internal error, entry mismatch (expected %d, got %d)",
-					uEntry, pSkips->m_uEntry );
+					uWordCount, pSkips->m_uEntry );
 			if ( pReader->m_iDoclistOffset!=pSkips->m_iDoclist )
 				sphDie ( "skiplist upgrade: internal error, offset mismatch (expected %lld, got %lld)",
-					INT64(pReader->m_iDoclistOffset), INT64(pSkips->m_iDoclist) );
+					INT64 ( pReader->m_iDoclistOffset ), INT64 ( pSkips->m_iDoclist ) );
 			if ( pSkips->m_iSkiplist<0 )
 				sphDie ( "skiplist upgrade: internal error, bad skiplist offset %d",
 					pSkips->m_iSkiplist	);
@@ -28465,7 +28483,7 @@ void sphDictBuildSkiplists ( const char * sPath )
 		}
 
 		// next entry
-		uEntry++;
+		uWordCount++;
 	}
 
 	// finalize last keywords block
@@ -28484,7 +28502,7 @@ void sphDictBuildSkiplists ( const char * sPath )
 	{
 		if ( iWordsEnd!=rdDict.GetPos() )
 			sphDie ( "skiplist upgrade: internal error, infix hash position mismatch (expected=%lld, got=%lld)",
-				INT64(iWordsEnd), INT64(rdDict.GetPos()) );
+				INT64 ( iWordsEnd ), INT64 ( rdDict.GetPos() ) );
 		iDeltaInfix = (int)( wrDict.GetPos() - rdDict.GetPos() );
 		CopyBytes ( wrDict, rdDict, (int)( tDictHeader.m_iDictCheckpointsOffset - iWordsEnd ) );
 	}
@@ -28492,11 +28510,12 @@ void sphDictBuildSkiplists ( const char * sPath )
 	// write new checkpoints
 	if ( tDictHeader.m_iDictCheckpointsOffset!=rdDict.GetPos() )
 		sphDie ( "skiplist upgrade: internal error, checkpoints position mismatch (expected=%lld, got=%lld)",
-			INT64(tDictHeader.m_iDictCheckpointsOffset), INT64(rdDict.GetPos()) );
-	if ( tDictHeader.m_iDictCheckpoints!=dNewCP.GetLength() )
+			INT64 ( tDictHeader.m_iDictCheckpointsOffset ), INT64 ( rdDict.GetPos() ) );
+	if ( !bConvertCheckpoints && tDictHeader.m_iDictCheckpoints!=dNewCP.GetLength() )
 		sphDie ( "skiplist upgrade: internal error, checkpoint count mismatch (old=%d, new=%d)",
 			tDictHeader.m_iDictCheckpoints, dNewCP.GetLength() );
 
+	tDictHeader.m_iDictCheckpoints = dNewCP.GetLength();
 	tDictHeader.m_iDictCheckpointsOffset = wrDict.GetPos();
 	ARRAY_FOREACH ( i, dNewCP )
 	{
@@ -28550,6 +28569,77 @@ void sphDictBuildSkiplists ( const char * sPath )
 	rdDict.Close();
 
 	////////////////////
+	// build min-max attribute index
+	////////////////////
+
+	bool bShuffleAttributes = false;
+	if ( uVersion<20 )
+	{
+		int iStride = DOCINFO_IDSIZE + tSchema.GetRowSize();
+		int iEntrySize = sizeof(DWORD)*iStride;
+
+		sFilename.SetSprintf ( "%s.spa", sPath );
+		CSphAutofile rdDocinfo ( sFilename.cstr(), SPH_O_READ, sError );
+		if ( rdDocinfo.GetFD()<0 )
+			sphDie ( "skiplists upgrade: %s", sError.cstr() );
+
+		sFilename.SetSprintf ( "%s.spa.upgrade", sPath );
+		CSphWriter wrDocinfo;
+		if ( !wrDocinfo.OpenFile ( sFilename.cstr(), sError ) )
+			sphDie ( "skiplists upgrade: %s", sError.cstr() );
+
+		CSphFixedVector<DWORD> dMva ( 0 );
+		CSphAutofile tMvaFile ( sFilename.cstr(), SPH_O_READ, sError );
+		if ( tMvaFile.GetFD()>=0 && tMvaFile.GetSize()>0 )
+		{
+			uint64_t uMvaSize = tMvaFile.GetSize();
+			assert ( uMvaSize/sizeof(DWORD)<=UINT_MAX );
+			dMva.Reset ( (int)( uMvaSize/sizeof(DWORD) ) );
+			tMvaFile.Read ( dMva.Begin(), uMvaSize, sError );
+		}
+		tMvaFile.Close();
+
+		int64_t iDocinfoSize = rdDocinfo.GetSize ( iEntrySize, true, sError ) / sizeof(CSphRowitem);
+		assert ( iDocinfoSize / iStride < UINT_MAX );
+		int iRows = (int)(iDocinfoSize/iStride);
+
+		AttrIndexBuilder_c tBuilder ( tSchema );
+		CSphFixedVector<CSphRowitem> dMinMax ( tBuilder.GetExpectedSize ( tStats.m_iTotalDocuments ) );
+		tBuilder.Prepare ( dMinMax.Begin(), dMinMax.Begin() + dMinMax.GetLength() );
+
+		CSphFixedVector<CSphRowitem> dRow ( iStride );
+
+		uMinMaxIndex = 0;
+		for ( int i=0; i<iRows; i++ )
+		{
+			rdDocinfo.Read ( dRow.Begin(), iStride*sizeof(CSphRowitem), sError );
+			wrDocinfo.PutBytes ( dRow.Begin(), iStride*sizeof(CSphRowitem) );
+
+			if ( !tBuilder.Collect ( dRow.Begin(), dMva.Begin(), dMva.GetLength(), sError, true ) )
+				sphDie ( "skiplists upgrade: %s", sError.cstr() );
+
+			uMinMaxIndex += iStride;
+
+			int iDone1 = ( 1+i ) * 100 / iRows;
+			int iDone2 = ( 2+i ) * 100 / iRows;
+			if ( iDone1!=iDone2 )
+				fprintf ( stdout, "skiplists upgrade: building attribute min-max, %d%% done\r", iDone1 );
+		}
+		fprintf ( stdout, "skiplists upgrade: building attribute min-max, 100%% done\n" );
+
+		tBuilder.FinishCollect();
+		rdDocinfo.Close();
+
+		wrDocinfo.PutBytes ( dMinMax.Begin(), dMinMax.GetLength()*sizeof(CSphRowitem) );
+		wrDocinfo.CloseFile();
+		if ( wrDocinfo.IsError() )
+			sphDie ( "skiplists upgrade: attribute write error (out of space?)" );
+
+		bShuffleAttributes = true;
+	}
+
+
+	////////////////////
 	// write new header
 	////////////////////
 
@@ -28588,9 +28678,27 @@ void sphDictBuildSkiplists ( const char * sPath )
 	wrHeader.PutOffset ( uMinMaxIndex );
 	SaveFieldFilterSettings ( wrHeader, pFieldFilter );
 
+	// average field lengths
+	if ( tIndexSettings.m_bIndexFieldLens )
+		ARRAY_FOREACH ( i, tSchema.m_dFields )
+			wrHeader.PutOffset ( dFieldLens[i] );
+
 	wrHeader.CloseFile ();
 	if ( wrHeader.IsError() )
 		sphDie ( "skiplists upgrade: header write error (out of space?)" );
+
+	sFilename.SetSprintf ( "%s.sps", sPath );
+	if ( !sphIsReadable ( sFilename.cstr(), NULL ) )
+	{
+		CSphWriter wrStrings;
+		if ( !wrStrings.OpenFile ( sFilename, sError ) )
+			sphDie ( "skiplists upgrade: %s", sError.cstr() );
+
+		wrStrings.PutByte ( 0 );
+		wrStrings.CloseFile();
+		if ( wrStrings.IsError() )
+			sphDie ( "skiplists upgrade: string write error (out of space?)" );
+	}
 
 	// all done!
 	const char * sRenames[] = {
@@ -28599,6 +28707,8 @@ void sphDictBuildSkiplists ( const char * sPath )
 		".spi", ".spi.bak",
 		".sph.upgrade", ".sph",
 		".spi.upgrade", ".spi",
+		bShuffleAttributes ? ".spa" : NULL, ".spa.bak",
+		".spa.upgrade", ".spa",
 		NULL };
 	FinalizeUpgrade ( sRenames, "skiplists upgrade", sPath, tmStart );
 }

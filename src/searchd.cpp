@@ -6034,7 +6034,7 @@ void FormatOrderBy ( StringBuffer_c * pBuf, const char * sPrefix, ESphSortOrder 
 		return;
 
 	const char * sSubst = "@weight";
-	if ( sSort != "@relevance" )
+	if ( sSort!="@relevance" )
 			sSubst = sSort.cstr();
 
 	switch ( eSort )
@@ -7442,7 +7442,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, bool bHadLoca
 	// compute post-limit stuff
 	CSphVector<int> dPostlimit;
 	for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
-		if ( tRes.m_tSchema.GetAttr(i).m_eStage == SPH_EVAL_POSTLIMIT )
+		if ( tRes.m_tSchema.GetAttr(i).m_eStage==SPH_EVAL_POSTLIMIT )
 			dPostlimit.Add ( i );
 
 	if ( dPostlimit.GetLength() )
@@ -9512,10 +9512,10 @@ public:
 	bool			SetMatch ( const SqlNode_t& tValue );
 	void			AddConst ( int iList, const SqlNode_t& tValue );
 	void			SetStatement ( const SqlNode_t& tName, SqlSet_e eSet );
-	bool			AddFloatRangeFilter ( const CSphString & sAttr, float fMin, float fMax );
+	bool			AddFloatRangeFilter ( const CSphString & sAttr, float fMin, float fMax, bool bHasEqual );
 	bool			AddIntRangeFilter ( const CSphString & sAttr, int64_t iMin, int64_t iMax );
-	bool			AddIntFilterGTE ( const CSphString & sAttr, int64_t iVal );
-	bool			AddIntFilterLTE ( const CSphString & sAttr, int64_t iVal );
+	bool			AddIntFilterGreater ( const CSphString & sAttr, int64_t iVal, bool bHasEqual );
+	bool			AddIntFilterLesser ( const CSphString & sAttr, int64_t iVal, bool bHasEqual );
 	bool			AddUservarFilter ( const CSphString & sCol, const CSphString & sVar, bool bExclude );
 	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd );
 	CSphFilterSettings * AddFilter ( const CSphString & sCol, ESphFilter eType );
@@ -10029,13 +10029,14 @@ CSphFilterSettings * SqlParser_c::AddFilter ( const CSphString & sCol, ESphFilte
 	return pFilter;
 }
 
-bool SqlParser_c::AddFloatRangeFilter ( const CSphString & sAttr, float fMin, float fMax )
+bool SqlParser_c::AddFloatRangeFilter ( const CSphString & sAttr, float fMin, float fMax, bool bHasEqual )
 {
 	CSphFilterSettings * pFilter = AddFilter ( sAttr, SPH_FILTER_FLOATRANGE );
 	if ( !pFilter )
 		return false;
 	pFilter->m_fMinValue = fMin;
 	pFilter->m_fMaxValue = fMax;
+	pFilter->m_bHasEqual = bHasEqual;
 	return true;
 }
 
@@ -10049,7 +10050,7 @@ bool SqlParser_c::AddIntRangeFilter ( const CSphString & sAttr, int64_t iMin, in
 	return true;
 }
 
-bool SqlParser_c::AddIntFilterGTE ( const CSphString & sAttr, int64_t iVal )
+bool SqlParser_c::AddIntFilterGreater ( const CSphString & sAttr, int64_t iVal, bool bHasEqual )
 {
 	CSphFilterSettings * pFilter = AddFilter ( sAttr, SPH_FILTER_RANGE );
 	if ( !pFilter )
@@ -10057,10 +10058,11 @@ bool SqlParser_c::AddIntFilterGTE ( const CSphString & sAttr, int64_t iVal )
 	bool bId = sAttr=="@id";
 	pFilter->m_iMinValue = iVal;
 	pFilter->m_iMaxValue = bId ? (SphAttr_t)ULLONG_MAX : LLONG_MAX;
+	pFilter->m_bHasEqual = bHasEqual;
 	return true;
 }
 
-bool SqlParser_c::AddIntFilterLTE ( const CSphString & sAttr, int64_t iVal )
+bool SqlParser_c::AddIntFilterLesser ( const CSphString & sAttr, int64_t iVal, bool bHasEqual )
 {
 	CSphFilterSettings * pFilter = AddFilter ( sAttr, SPH_FILTER_RANGE );
 	if ( !pFilter )
@@ -10068,6 +10070,7 @@ bool SqlParser_c::AddIntFilterLTE ( const CSphString & sAttr, int64_t iVal )
 	bool bId = sAttr=="@id";
 	pFilter->m_iMinValue = bId ? 0 : LLONG_MIN;
 	pFilter->m_iMaxValue = iVal;
+	pFilter->m_bHasEqual = bHasEqual;
 	return true;
 }
 
@@ -18132,7 +18135,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 		g_iClientTimeout = hSearchd["client_timeout"].intval();
 
 	if ( hSearchd.Exists ( "max_children" ) && hSearchd["max_children"].intval()>=0 )
-	{	
+	{
 		g_iMaxChildren = hSearchd["max_children"].intval();
 		g_iPreforkChildren = g_iMaxChildren;
 	}
@@ -18176,7 +18179,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_iMaxFilterValues = hSearchd.GetInt ( "max_filter_values", g_iMaxFilterValues );
 	g_iMaxBatchQueries = hSearchd.GetInt ( "max_batch_queries", g_iMaxBatchQueries );
 	g_iDistThreads = hSearchd.GetInt ( "dist_threads", g_iDistThreads );
-	if ( hSearchd.Exists ( "prefork" )  )
+	if ( hSearchd.Exists ( "prefork" ) )
 	{
 		g_iPreforkChildren = hSearchd.GetInt ( "prefork", g_iPreforkChildren );
 		sphWarning ( "'prefork' key is deprecated. Use 'max_children' instead" );

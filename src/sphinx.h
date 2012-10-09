@@ -2227,6 +2227,7 @@ class CSphFilterSettings
 public:
 	CSphString			m_sAttrName;	///< filtered attribute name
 	bool				m_bExclude;		///< whether this is "include" or "exclude" filter (default is "include")
+	bool				m_bHasEqual;	///< has filter "equal" component (gte\lte) or pure greater\less
 
 	ESphFilter			m_eType;		///< filter type
 	union

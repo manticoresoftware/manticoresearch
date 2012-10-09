@@ -101,6 +101,23 @@ bool IFilter_Values::EvalBlockValues ( SphAttr_t uBlockMin, SphAttr_t uBlockMax 
 	return false;
 }
 
+#if USE_WINDOWS
+#pragma warning(disable:4127) // conditional expr is const for MSVC
+#endif
+
+template<bool HAS_EQUAL>
+bool EvalRange ( SphAttr_t uValue, SphAttr_t iMin, SphAttr_t iMax )
+{
+	if ( HAS_EQUAL )
+		return uValue>=iMin && uValue<=iMax;
+	else
+		return uValue>iMin && uValue<iMax;
+}
+
+#if USE_WINDOWS
+#pragma warning(default:4127) // conditional expr is const for MSVC
+#endif
+
 /// range
 struct IFilter_Range: virtual ISphFilter
 {
@@ -111,11 +128,6 @@ struct IFilter_Range: virtual ISphFilter
 	{
 		m_iMinValue = tMin;
 		m_iMaxValue = tMax;
-	}
-
-	bool EvalRange ( const SphAttr_t uValue ) const
-	{
-		return uValue>=m_iMinValue && uValue<=m_iMaxValue;
 	}
 };
 
@@ -222,12 +234,16 @@ struct Filter_SingleValueStatic32 : public Filter_SingleValue
 	}
 };
 
+#if USE_WINDOWS
+#pragma warning(disable:4127) // conditional expr is const for MSVC
+#endif
 
+template < bool HAS_EQUAL >
 struct Filter_Range: public IFilter_Attr, IFilter_Range
 {
 	virtual bool Eval ( const CSphMatch & tMatch ) const
 	{
-		return EvalRange ( tMatch.GetAttr ( m_tLocator ) );
+		return EvalRange<HAS_EQUAL> ( tMatch.GetAttr ( m_tLocator ), m_iMinValue, m_iMaxValue );
 	}
 
 	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const
@@ -237,13 +253,18 @@ struct Filter_Range: public IFilter_Attr, IFilter_Range
 
 		SphAttr_t uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS ( pMinDocinfo ), m_tLocator );
 		SphAttr_t uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS ( pMaxDocinfo ), m_tLocator );
-		return (!( m_iMaxValue<uBlockMin || m_iMinValue>uBlockMax )); // not-reject
+		// not-reject
+		if ( HAS_EQUAL )
+			return ( m_iMaxValue>=uBlockMin && m_iMinValue<=uBlockMax );
+		else
+			return ( m_iMaxValue>uBlockMin && m_iMinValue<uBlockMax );
 	}
 };
 
 // float
 
-struct Filter_FloatRange: public IFilter_Attr
+template < bool HAS_EQUAL >
+struct Filter_FloatRange : public IFilter_Attr
 {
 	float m_fMinValue;
 	float m_fMaxValue;
@@ -257,7 +278,10 @@ struct Filter_FloatRange: public IFilter_Attr
 	virtual bool Eval ( const CSphMatch & tMatch ) const
 	{
 		const float & fValue = tMatch.GetAttrFloat ( m_tLocator );
-		return fValue>=m_fMinValue && fValue<=m_fMaxValue;
+		if ( HAS_EQUAL )
+			return fValue>=m_fMinValue && fValue<=m_fMaxValue;
+		else
+			return fValue>m_fMinValue && fValue<m_fMaxValue;
 	}
 
 	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const
@@ -267,7 +291,11 @@ struct Filter_FloatRange: public IFilter_Attr
 
 		float fBlockMin = sphDW2F ( (DWORD)sphGetRowAttr ( DOCINFO2ATTRS ( pMinDocinfo ), m_tLocator ) );
 		float fBlockMax = sphDW2F ( (DWORD)sphGetRowAttr ( DOCINFO2ATTRS ( pMaxDocinfo ), m_tLocator ) );
-		return (!( m_fMaxValue<fBlockMin || m_fMinValue>fBlockMax )); // not-reject
+		// not-reject
+		if ( HAS_EQUAL )
+			return ( m_fMaxValue>=fBlockMin && m_fMinValue<=fBlockMax );
+		else
+			return ( m_fMaxValue>fBlockMin && m_fMinValue<fBlockMax );
 	}
 };
 
@@ -303,6 +331,7 @@ struct Filter_IdValues: public IFilter_Values
 	}
 };
 
+template < bool HAS_EQUAL >
 struct Filter_IdRange: public IFilter_Range
 {
 	virtual void SetRange ( SphAttr_t tMin, SphAttr_t tMax )
@@ -314,15 +343,21 @@ struct Filter_IdRange: public IFilter_Range
 	virtual bool Eval ( const CSphMatch & tMatch ) const
 	{
 		const SphDocID_t uID = tMatch.m_iDocID;
-		return uID>=(SphDocID_t)m_iMinValue && uID<=(SphDocID_t)m_iMaxValue;
+		if ( HAS_EQUAL )
+			return uID>=(SphDocID_t)m_iMinValue && uID<=(SphDocID_t)m_iMaxValue;
+		else
+			return uID>(SphDocID_t)m_iMinValue && uID<(SphDocID_t)m_iMaxValue;
 	}
 
 	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const
 	{
 		const SphDocID_t uBlockMin = DOCINFO2ID ( pMinDocinfo );
 		const SphDocID_t uBlockMax = DOCINFO2ID ( pMaxDocinfo );
-
-		return (!( (SphDocID_t)m_iMaxValue<uBlockMin || (SphDocID_t)m_iMinValue>uBlockMax ));
+		// not-reject
+		if ( HAS_EQUAL )
+			return ( (SphDocID_t)m_iMaxValue>=uBlockMin && (SphDocID_t)m_iMinValue<=uBlockMax );
+		else
+			return ( (SphDocID_t)m_iMaxValue>uBlockMin && (SphDocID_t)m_iMinValue<uBlockMax );
 	}
 
 	Filter_IdRange ()
@@ -330,6 +365,10 @@ struct Filter_IdRange: public IFilter_Range
 		m_bUsesAttrs = false;
 	}
 };
+
+#if USE_WINDOWS
+#pragma warning(default:4127) // conditional expr is const for MSVC
+#endif
 
 // weight
 
@@ -346,12 +385,13 @@ struct Filter_WeightValues: public IFilter_Values
 	}
 };
 
+template < bool HAS_EQUAL >
 struct Filter_WeightRange: public IFilter_Range
 {
 	virtual bool IsEarly () { return false; }
 	virtual bool Eval ( const CSphMatch & tMatch ) const
 	{
-		return EvalRange ( tMatch.m_iWeight );
+		return EvalRange<HAS_EQUAL> ( tMatch.m_iWeight, m_iMinValue, m_iMaxValue );
 	}
 
 	Filter_WeightRange ()
@@ -431,8 +471,21 @@ bool Filter_MVAValues<true>::MvaEval ( const DWORD * pMva, const DWORD * pMvaMax
 	return false;
 }
 
+static DWORD GetMvaValue ( const DWORD * pVal )
+{
+	return *pVal;
+}
 
-template < bool IS_MVA64 >
+static int64_t GetMvaValue ( const int64_t * pVal )
+{
+	return MVA_UPSIZE ( (const DWORD *)pVal );
+}
+
+#if USE_WINDOWS
+#pragma warning(disable:4127) // conditional expr is const for MSVC
+#endif
+
+template < typename T, bool HAS_EQUAL >
 struct Filter_MVARange: public IFilter_MVA, IFilter_Range
 {
 	virtual bool Eval ( const CSphMatch & tMatch ) const
@@ -444,57 +497,38 @@ struct Filter_MVARange: public IFilter_MVA, IFilter_Range
 		return MvaEval ( pMva, pMvaMax );
 	}
 
-	bool MvaEval ( const DWORD * pMva, const DWORD * pMvaMax ) const;
+	bool MvaEval ( const DWORD * pMva, const DWORD * pMvaMax ) const
+	{
+		const T * pEnd = (const T *)pMvaMax;
+		const T * L = (const T *)pMva;
+		const T * R = pEnd - 1;
+
+		while ( L<=R )
+		{
+			const T * pVal = L + (R - L) / 2;
+			T iMva = GetMvaValue ( pVal );
+
+			if ( m_iMinValue>iMva )
+				L = pVal + 1;
+			else if ( m_iMinValue<iMva )
+				R = pVal - 1;
+			else
+				return ( HAS_EQUAL || pVal+1<pEnd );
+		}
+		if ( L==pEnd )
+			return false;
+
+		T iMvaL = GetMvaValue ( L );
+		if ( HAS_EQUAL )
+			return iMvaL<=m_iMaxValue;
+		else
+			return iMvaL<m_iMaxValue;
+	}
 };
 
-
-template<>
-bool Filter_MVARange<false>::MvaEval ( const DWORD * pMva, const DWORD * pMvaMax ) const
-{
-	const DWORD * L = pMva;
-	const DWORD * R = pMvaMax - 1;
-
-	while ( L<=R )
-	{
-		const DWORD * m = L + (R - L) / 2;
-		if ( m_iMinValue > *m )
-			L = m + 1;
-		else if ( m_iMinValue < *m )
-			R = m - 1;
-		else
-			return true;
-	}
-	if ( L==pMvaMax )
-		return false;
-	return *L<=m_iMaxValue;
-}
-
-
-template<>
-bool Filter_MVARange<true>::MvaEval ( const DWORD * pMva, const DWORD * pMvaMax ) const
-{
-	const int64_t * L = (const int64_t *)pMva;
-	const int64_t * R = (const int64_t *)( pMvaMax - 2 );
-
-	while ( L<=R )
-	{
-		const int64_t * pVal = L + (R - L) / 2;
-		int64_t iMva = MVA_UPSIZE ( (const DWORD *)pVal );
-
-		if ( m_iMinValue>iMva )
-			L = pVal + 1;
-		else if ( m_iMinValue < iMva )
-			R = pVal - 1;
-		else
-			return true;
-	}
-	if ( L==(const int64_t *)pMvaMax )
-		return false;
-
-	int64_t iMvaL = MVA_UPSIZE ( (const DWORD *)L );
-	return iMvaL<=m_iMaxValue;
-}
-
+#if USE_WINDOWS
+#pragma warning(default:4127) // conditional expr is const for MSVC
+#endif
 
 // and
 
@@ -708,14 +742,18 @@ ISphFilter * ISphFilter::Join ( ISphFilter * pFilter )
 
 /// helper functions
 
-static ISphFilter * CreateSpecialFilter ( const CSphString & sName, ESphFilter eFilterType )
+static ISphFilter * CreateSpecialFilter ( const CSphString & sName, ESphFilter eFilterType, bool bHasEqual )
 {
 	if ( sName=="@id" )
 	{
 		switch ( eFilterType )
 		{
 			case SPH_FILTER_VALUES:	return new Filter_IdValues;
-			case SPH_FILTER_RANGE:	return new Filter_IdRange;
+			case SPH_FILTER_RANGE:
+				if ( bHasEqual )
+					return new Filter_IdRange<true>;
+				else
+					return new Filter_IdRange<false>;
 			default:
 				assert ( 0 && "invalid filter on @id" );
 				return NULL;
@@ -725,7 +763,11 @@ static ISphFilter * CreateSpecialFilter ( const CSphString & sName, ESphFilter e
 		switch ( eFilterType )
 		{
 			case SPH_FILTER_VALUES:	return new Filter_WeightValues;
-			case SPH_FILTER_RANGE:	return new Filter_WeightRange;
+			case SPH_FILTER_RANGE:
+				if ( bHasEqual )
+					return new Filter_WeightRange<true>;
+				else
+					return new Filter_WeightRange<false>;
 			default:
 				assert ( 0 && "invalid filter on @weight" );
 				return NULL;
@@ -753,7 +795,7 @@ static inline ISphFilter * ReportError ( CSphString & sError, const char * sMess
 
 
 static ISphFilter * CreateFilter ( ESphAttr eAttrType, ESphFilter eFilterType, int iNumValues,
-	const CSphAttrLocator & tLoc, CSphString & sError )
+	const CSphAttrLocator & tLoc, CSphString & sError, bool bHasEqual )
 {
 	// MVA
 	if ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET )
@@ -768,9 +810,18 @@ static ISphFilter * CreateFilter ( ESphAttr eAttrType, ESphFilter eFilterType, i
 
 		case SPH_FILTER_RANGE:
 			if ( eAttrType==SPH_ATTR_INT64SET )
-				return new Filter_MVARange<true>();
-			else
-				return new Filter_MVARange<false>();
+			{
+				if ( bHasEqual )
+					return new Filter_MVARange<int64_t, true>();
+				else
+					return new Filter_MVARange<int64_t, false>();
+			} else
+			{
+				if ( bHasEqual )
+					return new Filter_MVARange<DWORD, true>();
+				else
+					return new Filter_MVARange<DWORD, false>();
+			}
 		default:				return ReportError ( sError, "unsupported filter type '%s' on MVA column", eFilterType );
 		}
 	}
@@ -778,8 +829,13 @@ static ISphFilter * CreateFilter ( ESphAttr eAttrType, ESphFilter eFilterType, i
 	// float
 	if ( eAttrType==SPH_ATTR_FLOAT )
 	{
-		if ( eFilterType==SPH_FILTER_FLOATRANGE )
-			return new Filter_FloatRange;
+		if ( eFilterType==SPH_FILTER_FLOATRANGE || eFilterType==SPH_FILTER_RANGE )
+		{
+			if ( bHasEqual )
+				return new Filter_FloatRange<true>;
+			else
+				return new Filter_FloatRange<false>;
+		}
 
 		return ReportError ( sError, "unsupported filter type '%s' on float column", eFilterType );
 	}
@@ -798,7 +854,11 @@ static ISphFilter * CreateFilter ( ESphAttr eAttrType, ESphFilter eFilterType, i
 			{
 				return new Filter_Values();
 			}
-		case SPH_FILTER_RANGE:	return new Filter_Range();
+		case SPH_FILTER_RANGE:
+			if ( bHasEqual )
+				return new Filter_Range<true>();
+			else
+				return new Filter_Range<false>();
 		default:				return ReportError ( sError, "unsupported filter type '%s' on int column", eFilterType );
 	}
 }
@@ -811,7 +871,7 @@ ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const CSphS
 	// try to create filter on special attribute
 	const CSphString & sAttrName = tSettings.m_sAttrName;
 	if ( sAttrName.Begins("@") )
-		pFilter = CreateSpecialFilter ( sAttrName, tSettings.m_eType );
+		pFilter = CreateSpecialFilter ( sAttrName, tSettings.m_eType, tSettings.m_bHasEqual );
 
 	// fetch column info
 	const CSphColumnInfo * pAttr = NULL;
@@ -828,7 +888,7 @@ ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const CSphS
 		assert ( !pFilter );
 
 		pAttr = &tSchema.GetAttr(iAttr);
-		pFilter = CreateFilter ( pAttr->m_eAttrType, tSettings.m_eType, tSettings.GetNumValues(), pAttr->m_tLocator, sError );
+		pFilter = CreateFilter ( pAttr->m_eAttrType, tSettings.m_eType, tSettings.GetNumValues(), pAttr->m_tLocator, sError, tSettings.m_bHasEqual );
 	}
 
 	// fill filter's properties
@@ -838,7 +898,13 @@ ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const CSphS
 			pFilter->SetLocator ( pAttr->m_tLocator );
 
 		pFilter->SetRange ( tSettings.m_iMinValue, tSettings.m_iMaxValue );
-		pFilter->SetRangeFloat ( tSettings.m_fMinValue, tSettings.m_fMaxValue );
+		if ( tSettings.m_eType==SPH_FILTER_FLOATRANGE )
+		{
+			pFilter->SetRangeFloat ( tSettings.m_fMinValue, tSettings.m_fMaxValue );
+		} else
+		{
+			pFilter->SetRangeFloat ( (float)tSettings.m_iMinValue, (float)tSettings.m_iMaxValue );
+		}
 		pFilter->SetMVAStorage ( pMvaPool );
 
 		if ( tSettings.GetNumValues() > 0 )

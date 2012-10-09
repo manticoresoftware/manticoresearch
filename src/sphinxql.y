@@ -313,45 +313,53 @@ where_item:
 		}
 	| expr_ident '>' const_int
 		{
-			if ( !pParser->AddIntFilterGTE ( $1.m_sValue, $3.m_iValue+1 ) )
+			if ( !pParser->AddIntFilterGreater ( $1.m_sValue, $3.m_iValue, false ) )
 				YYERROR;
 		}
 	| expr_ident '<' const_int
 		{
-			if ( !pParser->AddIntFilterLTE ( $1.m_sValue, $3.m_iValue-1 ) )
+			if ( !pParser->AddIntFilterLesser ( $1.m_sValue, $3.m_iValue, false ) )
 				YYERROR;
 		}
 	| expr_ident TOK_GTE const_int
 		{
-			if ( !pParser->AddIntFilterGTE ( $1.m_sValue, $3.m_iValue ) )
+			if ( !pParser->AddIntFilterGreater ( $1.m_sValue, $3.m_iValue, true ) )
 				YYERROR;
 		}
 	| expr_ident TOK_LTE const_int
 		{
-			if ( !pParser->AddIntFilterLTE ( $1.m_sValue, $3.m_iValue ) )
+			if ( !pParser->AddIntFilterLesser ( $1.m_sValue, $3.m_iValue, true ) )
 				YYERROR;
 		}
 	| expr_ident '=' const_float
 	| expr_ident TOK_NE const_float
-	| expr_ident '>' const_float
-	| expr_ident '<' const_float
 		{
-			yyerror ( pParser, "only >=, <=, and BETWEEN floating-point filter types are supported in this version" );
+			yyerror ( pParser, "only >=, <=,<,>, and BETWEEN floating-point filter types are supported in this version" );
 			YYERROR;
 		}
 	| expr_ident TOK_BETWEEN const_float TOK_AND const_float
 		{
-			if ( !pParser->AddFloatRangeFilter ( $1.m_sValue, $3.m_fValue, $5.m_fValue ) )
+			if ( !pParser->AddFloatRangeFilter ( $1.m_sValue, $3.m_fValue, $5.m_fValue, true ) )
+				YYERROR;
+		}
+	| expr_ident '>' const_float
+		{
+			if ( !pParser->AddFloatRangeFilter ( $1.m_sValue, $3.m_fValue, FLT_MAX, false ) )
+				YYERROR;
+		}
+	| expr_ident '<' const_float
+		{
+			if ( !pParser->AddFloatRangeFilter ( $1.m_sValue, -FLT_MAX, $3.m_fValue, false ) )
 				YYERROR;
 		}
 	| expr_ident TOK_GTE const_float
 		{
-			if ( !pParser->AddFloatRangeFilter ( $1.m_sValue, $3.m_fValue, FLT_MAX ) )
+			if ( !pParser->AddFloatRangeFilter ( $1.m_sValue, $3.m_fValue, FLT_MAX, true ) )
 				YYERROR;
 		}
 	| expr_ident TOK_LTE const_float
 		{
-			if ( !pParser->AddFloatRangeFilter ( $1.m_sValue, -FLT_MAX, $3.m_fValue ) )
+			if ( !pParser->AddFloatRangeFilter ( $1.m_sValue, -FLT_MAX, $3.m_fValue, true ) )
 				YYERROR;
 		}
 	;

@@ -32,6 +32,36 @@ index test
 	source	= test
 	path	= <data_path/>/test
 }
+
+source cmp
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM cmp_table
+	sql_attr_multi = uint mva32 from field
+	sql_attr_multi = bigint mva64 from field
+	sql_attr_float = f1
+	sql_attr_uint = gid
+}
+index cmp
+{
+	source	= cmp
+	path	= <data_path/>/cmp
+}
+
+source cmp2
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM cmp_table
+	sql_attr_uint = f1
+	sql_attr_uint = gid
+}
+index cmp2
+{
+	source	= cmp2
+	path	= <data_path/>/cmp2
+}
 </config>
 
 <db_create>
@@ -47,15 +77,35 @@ CREATE TABLE test_table
 );
 </db_create>
 
-<db_drop>
-DROP TABLE IF EXISTS test_table;
-</db_drop>
+<db_create>
+CREATE TABLE cmp_table
+(
+	id INT NOT NULL,
+	title VARCHAR(255) NOT NULL,
+	mva32 VARCHAR(255) NOT NULL,
+	mva64 VARCHAR(255) NOT NULL,
+	f1 FLOAT NOT NULL,
+	gid INT NOT NULL
+);
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_drop>DROP TABLE IF EXISTS cmp_table;</db_drop>
+
 
 <db_insert>
 INSERT INTO test_table ( id, aa, title, mm, kk, f1, f2 ) VALUES
 ( 1, 2, 'dummy', '', 'one', 0, 0 ),
 ( 10, 3, 'ohai', '7 40', 'ten', 0, 0 ),
 ( 11, 4, 'ohai2', '', 'eleventy', 0.123123, 0.456789 )
+</db_insert>
+
+<db_insert>
+INSERT INTO cmp_table VALUES
+( 1, 'dummy', '101, 107, 102', '-100, -50, 20, 70', 1.2, 10 ),
+( 2, 'dummy', '201, 220, 210', '-200, -350 ', 21.2, 20 ),
+( 3, 'dummy', '310, 330, 301', '-300, -350, 320', 31.3, 33 ),
+( 4, 'dummy', '900, 400, 601', '1000, 500, 401', 101.2, 110 )
 </db_insert>
 
 <sphqueries>
@@ -99,6 +149,21 @@ INSERT INTO test_table ( id, aa, title, mm, kk, f1, f2 ) VALUES
 
 <sphinxql>SELECT FLOOR(f1*1000)*100000 + FLOOR(f2*1000) FROM test WHERE id=11</sphinxql>
 <sphinxql>SELECT FLOOR(f1*1000)*10000000 + FLOOR(f2*1000) FROM test WHERE id=11</sphinxql>
+
+<!-- added <,> comparsion to float and int to float conversion at filter -->
+<sphinxql>SELECT id FROM cmp, cmp2 WHERE f1>22</sphinxql>
+<sphinxql>SELECT id FROM cmp, cmp2 WHERE f1 between 21 and 32</sphinxql>
+<sphinxql>SELECT id FROM cmp WHERE f1&lt;31.3</sphinxql>
+<sphinxql>SELECT id FROM cmp WHERE f1&gt;=31.3</sphinxql>
+<sphinxql>SELECT id, mva32 FROM cmp WHERE mva32&lt;=310</sphinxql>
+<sphinxql>SELECT id, mva32 FROM cmp WHERE mva32&gt;220</sphinxql>
+<sphinxql>SELECT id, mva32 FROM cmp WHERE mva32&lt;301</sphinxql>
+<sphinxql>SELECT id, mva32 FROM cmp WHERE mva32&gt;=330</sphinxql>
+<sphinxql>SELECT id, mva64 FROM cmp WHERE mva64&lt;=-350</sphinxql>
+<sphinxql>SELECT id, mva64 FROM cmp WHERE mva64&gt;-200</sphinxql>
+<sphinxql>SELECT id, mva64 FROM cmp WHERE mva64 between -100 and 400</sphinxql>
+<sphinxql>SELECT id, mva32 FROM cmp WHERE mva32 between 105 and 205</sphinxql>
+
 </sphqueries>
 
 </test>

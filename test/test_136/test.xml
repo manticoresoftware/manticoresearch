@@ -43,6 +43,16 @@ index idx_131
     docinfo			= extern
 }
 
+index incorrectrt
+{
+	type = rt
+	path = <data_path/>/incorrectrt
+	rt_field = data
+	rt_attr_uint = gid
+	blend_chars = /
+	exceptions = <this_test/>/exceptions.txt
+}
+
 </config>
 
 <custom_test><![CDATA[

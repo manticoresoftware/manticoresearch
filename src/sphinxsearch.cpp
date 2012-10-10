@@ -2796,12 +2796,18 @@ const ExtHit_t * ExtAnd_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMa
 		// one of the hitlists is over
 		if ( !pCur0 || !pCur1 )
 		{
-			if ( !pCur0 && !pCur1 ) break; // both are over, we're done
+			// if one is over, we might still need to copy the other one. otherwise, skip it
+			if ( ( pCur0 && pCur0->m_uDocid==m_uMatchedDocid ) || ( pCur1 && pCur1->m_uDocid==m_uMatchedDocid ) )
+			{
+				continue;
+			}
+			else
+			{
+				if ( pCur0 ) while ( ( pCur0 = m_pChildren[0]->GetHitsChunk ( pDocs, uMaxID ) ) );
+				if ( pCur1 ) while ( ( pCur1 = m_pChildren[1]->GetHitsChunk ( pDocs, uMaxID ) ) );
+			}
 
-			// one is over, but we still need to copy the other one
-			m_uMatchedDocid = pCur0 ? pCur0->m_uDocid : pCur1->m_uDocid;
-			assert ( m_uMatchedDocid!=DOCID_MAX );
-			continue;
+			if ( !pCur0 && !pCur1 ) break; // both are over, we're done
 		}
 
 		// find matching doc

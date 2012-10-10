@@ -103,6 +103,7 @@ index fld
 <sphinxql>select * from fld where match ( '@title ( ( spec5 ) @body (dummy5) | text5 ) of my ' ) order by id asc</sphinxql>
 <sphinxql>select * from fld where match ( 'jolly rodger ;)' )</sphinxql>
 <sphinxql>select * from fld where match ( '(((((((((( crashing 9 brackets')</sphinxql>
+<sphinxql>select * from fld where match ( '@title(spec1 absentword) | @body(dummy1)' ) and id=1000 option ranker='wordcount', field_weights=(title=1000, body=1)</sphinxql>
 </sphqueries>
 <db_create>
 CREATE TABLE `test_table`

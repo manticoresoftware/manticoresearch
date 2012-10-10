@@ -111,6 +111,7 @@ struct ServedDesc_t
 	bool				m_bRT;
 
 						ServedDesc_t ();
+						~ServedDesc_t ();
 };
 
 struct ServedIndex_t : public ISphNoncopyable, public ServedDesc_t
@@ -882,9 +883,13 @@ ServedDesc_t::ServedDesc_t ()
 	m_bRT = false;
 }
 
-ServedIndex_t::~ServedIndex_t ()
+ServedDesc_t::~ServedDesc_t ()
 {
 	SafeDelete ( m_pIndex );
+}
+
+ServedIndex_t::~ServedIndex_t ()
+{
 	if ( g_eWorkers==MPM_THREADS )
 		Verify ( m_tLock.Done() );
 }
@@ -16592,6 +16597,9 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 			return ADD_ERROR;
 		}
 
+		// leak pointer, so it's destructor won't delete it
+		tIdx.m_pIndex = NULL;
+
 		return ADD_RT;
 
 	} else if ( !hIndex("type") || hIndex["type"]=="plain" )
@@ -16629,6 +16637,9 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 			sphWarning ( "INTERNAL ERROR: index '%s': hash add failed - NOT SERVING", szIndexName );
 			return ADD_ERROR;
 		}
+
+		// leak pointer, so it's destructor won't delete it
+		tIdx.m_pIndex = NULL;
 
 		return ADD_LOCAL;
 

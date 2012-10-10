@@ -742,7 +742,7 @@ class SphinxClient
 	/// set ranking mode
 	function SetRankingMode ( $ranker, $rankexpr="" )
 	{
-		assert ( $ranker>=0 && $ranker<SPH_RANK_TOTAL );
+		assert ( $ranker===0 || $ranker>=1 && $ranker<SPH_RANK_TOTAL );
 		assert ( is_string($rankexpr) );
 		$this->_ranker = $ranker;
 		$this->_rankexpr = $rankexpr;

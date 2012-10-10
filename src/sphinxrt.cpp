@@ -1186,9 +1186,13 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 RtIndex_t::~RtIndex_t ()
 {
 	int64_t tmSave = sphMicroTimer();
+	bool bValid = m_pTokenizer && m_pDict;
 
-	SaveRamChunk ();
-	SaveMeta ( m_pDiskChunks.GetLength(), m_iTID );
+	if ( bValid )
+	{
+		SaveRamChunk ();
+		SaveMeta ( m_pDiskChunks.GetLength(), m_iTID );
+	}
 
 	Verify ( m_tSaveInnerMutex.Done() );
 	Verify ( m_tSaveOuterMutex.Done() );
@@ -1211,7 +1215,7 @@ RtIndex_t::~RtIndex_t ()
 		g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, true );
 
 	tmSave = sphMicroTimer() - tmSave;
-	if ( tmSave>=1000 )
+	if ( tmSave>=1000 && bValid )
 	{
 		sphInfo ( "rt: index %s: ramchunk saved in %d.%03d sec",
 			m_sIndexName.cstr(), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );

@@ -871,7 +871,15 @@ ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const CSphS
 	// try to create filter on special attribute
 	const CSphString & sAttrName = tSettings.m_sAttrName;
 	if ( sAttrName.Begins("@") )
+	{
+		// HAVING is not implemented yet
+		if ( sAttrName=="@groupby" || sAttrName=="@count" || sAttrName=="@distinct" )
+		{
+			sError.SetSprintf ( "unsupported filter column '%s'", sAttrName.cstr() );
+			return NULL;
+		}
 		pFilter = CreateSpecialFilter ( sAttrName, tSettings.m_eType, tSettings.m_bHasEqual );
+	}
 
 	// fetch column info
 	const CSphColumnInfo * pAttr = NULL;
@@ -888,6 +896,12 @@ ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const CSphS
 		assert ( !pFilter );
 
 		pAttr = &tSchema.GetAttr(iAttr);
+		// HAVING is not implemented yet
+		if ( pAttr->m_eAggrFunc!=SPH_AGGR_NONE )
+		{
+			sError.SetSprintf ( "unsupported filter '%s' on aggregate column", sAttrName.cstr() );
+			return NULL;
+		}
 		pFilter = CreateFilter ( pAttr->m_eAttrType, tSettings.m_eType, tSettings.GetNumValues(), pAttr->m_tLocator, sError, tSettings.m_bHasEqual );
 	}
 

@@ -283,6 +283,8 @@ index distinct2 : dist_no
 <sphinxql>select id, count (distinct tag), count(*) from distinct1, distinct1 group by gr</sphinxql>
 <sphinxql>select id, count (distinct gr), count(*) from distinct1, distinct1 group by tag</sphinxql>
 
+<!-- incorrect(aggregate) filtering -->
+<sphinxql>select id, max(tag) as cond from idx1 where cond&lt;5 group by gr</sphinxql>
 </sphqueries>
 
 <db_create>

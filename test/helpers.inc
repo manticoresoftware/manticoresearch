@@ -1187,6 +1187,25 @@ class SphinxConfig
 			return $v;
 	}
 
+        function IsBigNum ( $v )
+        {
+            return is_int($v) && ( $v>2147483647 || $v<-2147483648 );
+        }
+
+        function FixSerialize64 ( $v, & $fixarr )
+        {
+            if ( is_array($v) )
+            {
+		foreach ( $v as $key=>$value )
+                {
+                    if ($this->IsBigNum($key))
+                        $fixarr[] = $key;
+                    $this->FixSerialize64 ( $value, $fixarr );
+                }
+            } else if ($this->IsBigNum($v))
+                $fixarr[] = $v;
+        }
+
 
 	function LoadModel ( $filename )
 	{
@@ -1916,7 +1935,26 @@ class SphinxConfig
 	function WriteModel ( $filename )
 	{
 		if ( IsModelGenMode () )
-			file_put_contents ( $filename, serialize ( $this->_results_model ) );
+                {
+                    $result = serialize ( $this->_results_model );
+                    if (PHP_INT_SIZE>4)
+                    {
+                        $keys = array();
+                        $this->FixSerialize64 ( $this->_results_model, $keys );
+                        if ( sizeof($keys)>0 )
+                        {
+                            $findes=array();
+                            $replaces=array();
+                            foreach ($keys as $key)
+                            {
+                                $findes[]="i:$key";
+                                $replaces[]="s:".strlen($key).":\"$key\"";
+                            }
+                            $result = str_replace ( $findes, $replaces, $result );
+                        }
+                    }
+                    file_put_contents ( $filename, $result );
+                }
 	}
 
 

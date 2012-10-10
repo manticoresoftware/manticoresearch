@@ -119,6 +119,15 @@ INSERT INTO `test_table` VALUES
 <!-- regression sorter gives first matches instead bests -->
 <sphinxql>select id, idd1, idd2, idd1 + idd2 as i2 from final group by idd1 order by id desc limit 0,2 option max_matches=4</sphinxql>
 <sphinxql>select id, idd1, idd2, idd1 + idd2 as i2 from final group by idd1 order by id desc limit 2,2 option max_matches=4</sphinxql>
+
+<!-- regression float unhandled filters -->
+<sphinxql>select * from test where fval&lt;=10.0</sphinxql>
+<sphinxql>select * from test where fval&gt;=10.0</sphinxql>
+<sphinxql>select * from test where fval&lt;10.0</sphinxql>
+<sphinxql>select * from test where fval&gt;10.0</sphinxql>
+<sphinxql>select * from test where fval=10.0</sphinxql>
+<sphinxql>select * from test where fval&lt;&gt;10.0</sphinxql>
+
 </sphqueries>
 
 </test>

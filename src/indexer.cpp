@@ -1625,7 +1625,7 @@ int main ( int argc, char ** argv )
 		{
 			bVerbose = true;
 
-		} else if ( ( argv[i][0]>='a' && argv[i][0]<='z' ) || ( argv[i][0]>='A' && argv[i][0]<='Z' ) )
+		} else if ( isalnum ( argv[i][0] ) || argv[i][0]=='_' )
 		{
 			dIndexes.Add ( argv[i] );
 

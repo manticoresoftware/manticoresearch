@@ -6784,6 +6784,7 @@ inline bool IsIDAttribute ( const CSphColumnInfo & tTarget )
 void AdoptSchema ( AggrResult_t * pRes, CSphSchema * pSchema )
 {
 	pSchema->m_dFields = pRes->m_tSchema.m_dFields;
+	pSchema->AdoptPtrAttrs ( pRes->m_tSchema );
 	pRes->m_tSchema = *pSchema;
 }
 

@@ -1366,6 +1366,9 @@ public:
 	/// WARNING, THIS IS A HACK THAT WILL LIKELY BREAK THE SCHEMA, DO NOT USE THIS UNLESS ABSOLUTELY SURE!
 	void					RemoveAttr ( int iIndex );
 
+	/// copy ptr attrs from another schema
+	void					AdoptPtrAttrs ( const CSphSchema & tSrc ) { m_dPtrAttrs = tSrc.m_dPtrAttrs; }
+
 public:
 	// also let the schema to clone the matches when necessary
 	void CopyStrings ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound=-1 ) const;

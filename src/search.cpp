@@ -324,7 +324,7 @@ int main ( int argc, char ** argv )
 			if ( !pIndex->MultiQuery ( &tQuery, pResult, 1, &pTop, NULL ) )
 			{
 				// failure; pull that error message
-				sError = pIndex->GetLastError();
+				sError = pResult->m_sError;
 				SafeDelete ( pResult );
 			} else
 			{

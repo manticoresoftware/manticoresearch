@@ -26,7 +26,7 @@ index test
 {
 	source				= test
 	path				= <data_path/>/test
-	blend_chars			= %
+	blend_chars			= %, @
 }
 </config>
 
@@ -44,7 +44,10 @@ CREATE TABLE test_table
 ( 2, 123, 'foo and bar' ),
 ( 3, 123, 'foo% that' ),
 ( 4, 123, 'foo%bar this' ),
-( 5, 123, '%foo there' )
+( 5, 123, '%foo there' ),
+( 6, 123, '@john' ),
+( 7, 123, 'jack@home' ),
+( 8, 123, 'jill@' )
 </db_insert>
 
 <queries>
@@ -52,6 +55,12 @@ CREATE TABLE test_table
 <query mode="extended2">bar</query>
 <query mode="extended2">foo%</query>
 <query mode="extended2">%foo</query>
+<query mode="extended2">john</query>
+<query mode="extended2">jack</query>
+<query mode="extended2">jill</query>
+<query mode="extended2">\@john</query>
+<query mode="extended2">jack@</query>
+<query mode="extended2">jill@</query>
 </queries>
 
 </test>

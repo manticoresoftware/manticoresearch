@@ -6219,6 +6219,7 @@ void CSphWriter::UnlinkFile()
 
 void CSphWriter::PutByte ( int data )
 {
+	assert(m_pPool);
 	if ( m_iPoolUsed==m_iBufferSize )
 		Flush ();
 	*m_pPool++ = BYTE ( data & 0xff );
@@ -6229,6 +6230,7 @@ void CSphWriter::PutByte ( int data )
 
 void CSphWriter::PutBytes ( const void * pData, int iSize )
 {
+	assert(m_pPool);
 	const BYTE * pBuf = (const BYTE *) pData;
 	while ( iSize>0 )
 	{
@@ -14092,6 +14094,7 @@ void CSphIndex_VLN::Unlock()
 	if ( m_iLockFD>=0 )
 	{
 		sphLogDebug ( "File ID ok, closing lock FD %d, unlinking %s", m_iLockFD, sName.cstr() );
+		sphLockUn ( m_iLockFD );
 		::close ( m_iLockFD );
 		::unlink ( sName.cstr() );
 		m_iLockFD = -1;

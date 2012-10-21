@@ -17762,6 +17762,9 @@ void FailClient ( int iSock, SearchdStatus_e eStatus, const char * sMessage )
 
 Listener_t * DoAccept ( int * pClientSock, char * sClientName )
 {
+	assert (pClientSock);
+	assert (*pClientSock==-1);
+
 	int iMaxFD = 0;
 	fd_set fdsAccept;
 	FD_ZERO ( &fdsAccept );
@@ -17895,7 +17898,7 @@ void TickPreforked ( CSphProcessSharedMutex * pAcceptMutex )
 
 	for ( ; !g_bGotSigterm && !pListener; )
 	{
-		if ( pAcceptMutex->TimedLock ( 100 ) )
+		if ( pAcceptMutex->TimedLock ( 1000000 ) )
 		{
 			if ( !g_bGotSigterm )
 				pListener = DoAccept ( &iClientSock, sClientIP );
@@ -17969,7 +17972,7 @@ static void CheckChildrenTerm ()
 }
 
 
-void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
+void TickHead ( /*CSphProcessSharedMutex * pAcceptMutex*/ bool bDontListen )
 {
 	CheckSignals ();
 	if ( !g_bHeadDaemon )
@@ -17986,14 +17989,14 @@ void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 
 	sphInfo ( NULL ); // flush dupes
 
-	if ( pAcceptMutex )
+	if ( bDontListen /*pAcceptMutex*/ )
 	{
 		// FIXME! what if all children are busy; we might want to accept here and temp fork more
 		sphSleepMsec ( 1000 );
 		return;
 	}
 
-	int iClientSock;
+	int iClientSock=-1;
 	char sClientName[SPH_ADDRPORT_SIZE];
 	Listener_t * pListener = DoAccept ( &iClientSock, sClientName );
 	if ( !pListener )
@@ -18035,6 +18038,7 @@ void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 		{
 			// parent process, continue accept()ing
 			sphSockClose ( iClientSock );
+			return;
 		}
 	}
 #endif // !USE_WINDOWS
@@ -19140,21 +19144,17 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( !g_bOptNoDetach )
 		g_bLogStdout = false;
 
-	// create flush threads
-	if ( g_eWorkers==MPM_THREADS && !sphThreadCreate ( &g_tRtFlushThread, RtFlushThreadFunc, 0 ) )
-		sphDie ( "failed to create rt-flush thread" );
-
-	// create optimize thread
+	// create optimize, flush threads. Load saved sphinxql state.
 	if ( g_eWorkers==MPM_THREADS )
 	{
+		if ( !sphThreadCreate ( &g_tRtFlushThread, RtFlushThreadFunc, 0 ) )
+			sphDie ( "failed to create rt-flush thread" );
+
 		if ( !sphThreadCreate ( &g_tOptimizeThread, OptimizeThreadFunc, 0 ) )
 			sphDie ( "failed to create optimize thread" );
 
 		g_tOptimizeQueueMutex.Init();
-	}
 
-	if ( g_eWorkers==MPM_THREADS )
-	{
 		g_tUservarsMutex.Init();
 
 		g_sSphinxqlState = hSearchd.GetStr ( "sphinxql_state" );

@@ -7495,6 +7495,8 @@ void RtBinlog_c::LockFile ( bool bLock )
 		m_iLockFD = iLockFD;
 	} else
 	{
+		if ( m_iLockFD>=0 )
+			sphLockUn ( m_iLockFD );
 		SafeClose ( m_iLockFD );
 		::unlink ( sName.cstr()	);
 	}

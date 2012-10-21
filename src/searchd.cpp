@@ -419,7 +419,7 @@ private:
 };
 
 
-static IndexHash_c *						g_pIndexes = NULL;		// served indexes hash
+static IndexHash_c *						g_pLocalIndexes = NULL;	// served (local) indexes hash
 static CSphVector<const char *>				g_dRotating;			// names of indexes to be rotated this time
 static const char *							g_sPrereading	= NULL;	// name of index currently being preread
 static CSphIndex *							g_pPrereading	= NULL;	// rotation "buffer"
@@ -438,15 +438,12 @@ CSphMutex									g_tOptimizeQueueMutex;
 CSphVector<CSphString>						g_dOptimizeQueue;
 static ThrottleState_t						g_tRtThrottle;
 
-struct DistributedMutex_t
+struct DistributedMutex_t : private CSphMutex
 {
 	void Init ();
 	void Done ();
 	void Lock ();
 	void Unlock ();
-
-private:
-	CSphMutex m_tLock;
 };
 static DistributedMutex_t					g_tDistLock;
 
@@ -1091,25 +1088,25 @@ bool IndexHash_c::Exists ( const CSphString & tKey ) const
 void DistributedMutex_t::Init ()
 {
 	if ( g_eWorkers==MPM_THREADS )
-		m_tLock.Init();
+		CSphMutex::Init();
 }
 
 void DistributedMutex_t::Done ()
 {
 	if ( g_eWorkers==MPM_THREADS )
-		m_tLock.Done();
+		CSphMutex::Done();
 }
 
 void DistributedMutex_t::Lock ()
 {
 	if ( g_eWorkers==MPM_THREADS )
-		m_tLock.Lock();
+		CSphMutex::Lock();
 }
 
 void DistributedMutex_t::Unlock()
 {
 	if ( g_eWorkers==MPM_THREADS )
-		m_tLock.Unlock();
+		CSphMutex::Unlock();
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1602,7 +1599,7 @@ void Shutdown ()
 
 		CSphString sError;
 		// save attribute updates for all local indexes
-		for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
+		for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
 		{
 			const ServedIndex_t & tServed = it.Get();
 			if ( !tServed.m_bEnabled )
@@ -1616,14 +1613,14 @@ void Shutdown ()
 		}
 
 		// unlock indexes and release locks if needed
-		for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
+		for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
 			if ( it.Get().m_pIndex )
 				it.Get().m_pIndex->Unlock();
-		g_pIndexes->Reset();
+		g_pLocalIndexes->Reset();
 
 		// clear shut down of rt indexes + binlog
 		g_tDistLock.Done();
-		SafeDelete ( g_pIndexes );
+		SafeDelete ( g_pLocalIndexes );
 		sphRTDone();
 
 		sphShutdownWordforms ();
@@ -3257,19 +3254,109 @@ enum HAStrategies_e {
 	HA_AVOIDDEADTM,			///< the same as HA_AVOIDDEAD, but uses just min timeout instead of weighted random
 	HA_AVOIDERRORSTM		///< the same as HA_AVOIDERRORS, but uses just min timeout instead of weighted random
 };
-/// remote agent descriptor (stored in a global hash)
 
+class InterWorkerStorage : public ISphNoncopyable
+{
+	CSphProcessSharedMutex *	m_pProcMutex;	///< mutex for IPC workers (fork-based), also IPC storage
+	CSphMutex *					m_pThdMutex;	///< mutex for thread workers
+	BYTE *						m_pBuffer;		///< inter-workers storage
+
+public:
+
+	explicit InterWorkerStorage ()
+		: m_pProcMutex ( NULL )
+		, m_pThdMutex ( NULL )
+		, m_pBuffer ( NULL )
+	{}
+
+	~InterWorkerStorage()
+	{
+		if ( m_pThdMutex )
+		{
+			m_pThdMutex->Done();
+			SafeDelete ( m_pThdMutex );
+		}
+
+		if ( m_pProcMutex )
+		{
+			SafeDelete ( m_pProcMutex );
+		} else if ( m_pBuffer )
+		{
+			SafeDeleteArray ( m_pBuffer );
+		}
+	}
+
+	void Init ( int iBufSize )
+	{
+		assert ( !m_pBuffer );
+		assert ( !m_pProcMutex );
+		assert ( !m_pThdMutex );
+
+
+		CSphString sError, sWarning;
+		// do we need the ipc-shared buffer and ipc-shared mutex to work with?
+		if ( g_eWorkers==MPM_FORK || g_eWorkers==MPM_PREFORK )
+		{
+			m_pProcMutex = new CSphProcessSharedMutex ( iBufSize );
+			m_pBuffer = m_pProcMutex->GetSharedData();
+		} else
+			m_pBuffer = new BYTE[iBufSize];
+
+		if ( !m_pBuffer )
+		{
+			sphWarning ( "Unabled to share the agent statistics" );
+			SafeDelete ( m_pProcMutex );
+			return;
+		}
+
+		// simple mutex is also necessary, since even in some kind of fork/prefork we also have dist_threads.
+		m_pThdMutex = new CSphMutex();
+		m_pThdMutex->Init();
+	}
+
+	inline BYTE* GetStorage()
+	{
+		return m_pBuffer;
+	}
+
+	inline bool Lock()
+	{
+		if ( m_pThdMutex && !m_pThdMutex->Lock() )
+			return false;
+
+		if ( m_pProcMutex )
+			m_pProcMutex->Lock();
+
+		return true;
+	}
+
+	inline bool Unlock()
+	{
+		if ( m_pProcMutex )
+			m_pProcMutex->Unlock();
+
+		if ( m_pThdMutex && !m_pThdMutex->Unlock() )
+			return false;
+
+		return true;
+	}
+};
+
+/// remote agent descriptor (stored in a global hash)
 struct MetaAgentDesc_t
 {
 private:
 	CSphVector<AgentDesc_t> m_dAgents;
-	CSphVector<float>		m_dWeights;
-	int				m_iCurAgent;
-	DWORD			m_uTimestamp;
+	float *					m_pWeights; /// pointer not owned, pointee IPC-shared
+	int *					m_pRRCounter; /// pointer not owned, pointee IPC-shared
+	InterWorkerStorage *	m_pLock; /// pointer not owned, lock for threads/IPC
+	DWORD					m_uTimestamp;
 
 public:
 	MetaAgentDesc_t ()
-		: m_iCurAgent ( -1 )
+		: m_pWeights ( NULL )
+		, m_pRRCounter ( NULL )
+		, m_pLock ( NULL )
 		, m_uTimestamp ( HostDashboard_t::GetCurSeconds() )
 	{}
 
@@ -3284,49 +3371,58 @@ public:
 			m_dAgents[i].m_bPersistent = true;
 	}
 
-	AgentDesc_t * CurrentAgent()
+	inline void SetHAData ( int * pRRCounter, float * pWeights, InterWorkerStorage * pLock )
 	{
-		assert ( m_iCurAgent>=0 );
-		return &m_dAgents[m_iCurAgent];
+		m_pRRCounter = pRRCounter;
+		m_pWeights = pWeights;
+		m_pLock = pLock;
+	}
+
+	AgentDesc_t * GetAgent ( int iAgent )
+	{
+		assert ( iAgent>=0 );
+		return &m_dAgents[iAgent];
 	}
 
 	AgentDesc_t * NewAgent()
 	{
-		m_iCurAgent=m_dAgents.GetLength();
 		AgentDesc_t & tAgent = m_dAgents.Add();
-		m_dWeights.Add();
 		return & tAgent;
 	}
 
-	AgentDesc_t * PulseAgent ( bool bForward=true )
+	AgentDesc_t * LastAgent()
 	{
+		assert ( m_dAgents.GetLength()>0 );
+		return &m_dAgents.Last();
+	}
+
+	AgentDesc_t * RRAgent ()
+	{
+		assert ( m_pRRCounter );
+		assert ( m_pLock );
+
 		if ( m_dAgents.GetLength()==1 )
-			return CurrentAgent();
+			return GetAgent(0);
 
-		if ( bForward )
-		{
-			++m_iCurAgent;
-			if ( m_iCurAgent==m_dAgents.GetLength() )
-				m_iCurAgent=0;
-		} else
-		{
-			--m_iCurAgent;
-			if ( m_iCurAgent==-1 )
-				m_iCurAgent = m_dAgents.GetLength()-1;
-		}
+		CSphScopedLock<InterWorkerStorage> tLock ( *m_pLock );
 
-		return CurrentAgent();
+		++*m_pRRCounter;
+		if ( *m_pRRCounter==m_dAgents.GetLength() )
+			*m_pRRCounter=0;
+
+
+		AgentDesc_t * pAgent = GetAgent ( *m_pRRCounter );
+		return pAgent;
 	}
 
 	AgentDesc_t * RandAgent ()
 	{
-		m_iCurAgent = sphRand() % m_dAgents.GetLength();
-		return CurrentAgent();
+		return GetAgent ( sphRand() % m_dAgents.GetLength() );
 	}
 
 	void RecalculateWeights ( const CSphVector<int64_t> &dTimers )
 	{
-		if ( HostDashboard_t::IsHalfPeriodChanged ( &m_uTimestamp ) )
+		if ( m_pWeights && HostDashboard_t::IsHalfPeriodChanged ( &m_uTimestamp ) )
 		{
 			int64_t dMin = -1;
 			ARRAY_FOREACH ( i, dTimers )
@@ -3345,13 +3441,15 @@ public:
 			float fSum = 0.0f;
 			float fControl = 0.0f;
 			CSphVector<float> dCoefs ( dTimers.GetLength() );
+			assert ( m_pLock );
+			CSphScopedLock<InterWorkerStorage> tLock ( *m_pLock );
 			ARRAY_FOREACH ( i, dTimers )
 			{
 				if ( dTimers[i] > 0 )
 				{
 					dCoefs[i] = (float)dMin/dTimers[i];
-					fSum += m_dWeights[i]* dCoefs[i];
-					fControl += m_dWeights[i];
+					fSum += m_pWeights[i]*dCoefs[i];
+					fControl += m_pWeights[i];
 				}
 			}
 
@@ -3360,13 +3458,13 @@ public:
 			float fCheck = 0.0;
 			sphInfo ( "Rebalancing the mirrors" );
 #endif
-			ARRAY_FOREACH ( i, m_dWeights )
+			ARRAY_FOREACH ( i, m_dAgents )
 			{
 				if ( dTimers[i] > 0 )
-					m_dWeights[i] *= dCoefs[i]*fControl/fSum;
+					m_pWeights[i] *= dCoefs[i]*fControl/fSum;
 #ifndef NDEBUG
-				fCheck += m_dWeights[i];
-				sphInfo ( "Mirror %d, new weight (%.4f)", i, m_dWeights[i] );
+				fCheck += m_pWeights[i];
+				sphInfo ( "Mirror %d, new weight (%.4f)", i, m_pWeights[i] );
 #endif
 			}
 #ifndef NDEBUG
@@ -3377,8 +3475,11 @@ public:
 
 	void WeightedRandAgent ( int * pBestAgent, CSphVector<int> & dCandidates )
 	{
+		assert ( m_pWeights );
 		assert ( pBestAgent );
-		float fBound = m_dWeights[*pBestAgent];
+		assert ( m_pLock );
+		CSphScopedLock<InterWorkerStorage> tLock ( *m_pLock );
+		float fBound = m_pWeights[*pBestAgent];
 		float fChance = (float)sphRand()/0xFFFFFFFF;
 
 		if ( fChance<=fBound )
@@ -3386,7 +3487,7 @@ public:
 
 		ARRAY_FOREACH ( i, dCandidates )
 		{
-			fBound += m_dWeights[dCandidates[i]];
+			fBound += m_pWeights[dCandidates[i]];
 			*pBestAgent = dCandidates[i];
 			if ( fChance<=fBound )
 				break;
@@ -3420,10 +3521,10 @@ public:
 	AgentDesc_t * StDiscardDead ( bool bWeighted )
 	{
 		if ( !g_pStats )
-			return ( bWeighted ? RandAgent() : PulseAgent() );
+			return ( bWeighted ? RandAgent() : RRAgent() );
 
 		if ( m_dAgents.GetLength()==1 )
-			return CurrentAgent();
+			return GetAgent(0);
 
 		int iBestAgent = -1;
 		int64_t iErrARow = -1;
@@ -3482,7 +3583,7 @@ public:
 			} else
 			{
 				sphLogDebug ( "HA selector discarded all the candidates and just fall into simple RR" );
-				return PulseAgent();
+				return RRAgent();
 			}
 		}
 
@@ -3517,10 +3618,10 @@ public:
 	AgentDesc_t * StLowErrors ( bool bWeighted )
 	{
 		if ( !g_pStats )
-			return ( bWeighted ? RandAgent() : PulseAgent() );
+			return ( bWeighted ? RandAgent() : RRAgent() );
 
 		if ( m_dAgents.GetLength()==1 )
-			return CurrentAgent();
+			return GetAgent(0);
 
 		int iBestAgent = -1;
 		float fBestCriticalErrors = 1.0;
@@ -3603,7 +3704,7 @@ public:
 			} else
 			{
 				sphLogDebug ( "HA selector discarded all the candidates and just fall into simple RR" );
-				return PulseAgent();
+				return RRAgent();
 			}
 		}
 
@@ -3650,23 +3751,21 @@ public:
 		case HA_AVOIDERRORSTM:
 			return StLowErrors(false);
 		case HA_ROUNDROBIN:
-			return PulseAgent();
+			return RRAgent();
 		default:
 			return RandAgent();
 		}
 	}
 
-	void Rewind ( bool bLast=true )
-	{
-		m_iCurAgent = bLast?(m_dAgents.GetLength()-1):0;
-		float fFrac = 1.0f / m_dAgents.GetLength();
-		ARRAY_FOREACH ( i, m_dWeights )
-			m_dWeights[i] = fFrac;
-	}
 
 	inline bool IsHA() const
 	{
 		return m_dAgents.GetLength() > 1;
+	}
+
+	inline int GetLength() const
+	{
+		return m_dAgents.GetLength();
 	}
 
 	void QueuePings()
@@ -3688,9 +3787,9 @@ public:
 		return m_dAgents;
 	}
 
-	const CSphVector<float>& GetWeights() const
+	const float* GetWeights() const
 	{
-		return m_dWeights;
+		return m_pWeights;
 	}
 
 	MetaAgentDesc_t & operator= ( const MetaAgentDesc_t & rhs )
@@ -3698,11 +3797,9 @@ public:
 		if ( this==&rhs )
 			return *this;
 		m_dAgents = rhs.GetAgents();
-		m_dWeights.Resize ( m_dAgents.GetLength() );
-		float fFrac = 1.0f / m_dAgents.GetLength();
-		ARRAY_FOREACH ( i, m_dWeights )
-			m_dWeights[i] = fFrac;
-		m_iCurAgent = rhs.m_iCurAgent;
+		m_pWeights = rhs.m_pWeights;
+		m_pRRCounter = rhs.m_pRRCounter;
+		m_pLock = rhs.m_pLock;
 		return *this;
 	}
 };
@@ -3826,6 +3923,7 @@ struct DistributedIndex_t
 	int							m_iAgentQueryTimeout;		///< in msec
 	bool						m_bToDelete;				///< should be deleted
 	HAStrategies_e				m_eHaStrategy;				///< how to select the best of my agents
+	InterWorkerStorage *		m_pHAStorage;				///< IPC HA arrays
 
 public:
 	DistributedIndex_t ()
@@ -3833,7 +3931,12 @@ public:
 		, m_iAgentQueryTimeout ( 3000 )
 		, m_bToDelete ( false )
 		, m_eHaStrategy ( HA_NONE )
+		, m_pHAStorage ( NULL )
 	{}
+	~DistributedIndex_t()
+	{
+		// m_pHAStorage has to be freed separately.
+	}
 	void GetAllAgents ( CSphVector<AgentConn_t> * pTarget ) const
 	{
 		assert ( pTarget );
@@ -3843,6 +3946,49 @@ public:
 				AgentDesc_t & dAgent = pTarget->Add();
 				dAgent = m_dAgents[i].GetAgents()[j];
 			}
+	}
+
+	void ShareHACounters()
+	{
+		int iFloatValues = 0;
+		int iRRCounters = 0;
+		ARRAY_FOREACH ( i, m_dAgents )
+			if ( m_dAgents[i].IsHA() )
+			{
+				iFloatValues += m_dAgents[i].GetLength();
+				++iRRCounters;
+			}
+
+		// nothing to share.
+		if ( !iFloatValues )
+			return;
+
+		// so, we need to share between workers iFloatValues floats and iRRCounters ints.
+		int iBufSize = iRRCounters * sizeof(int) + iFloatValues * sizeof(float); // NOLINT
+		m_pHAStorage = new InterWorkerStorage;
+		m_pHAStorage->Init ( iBufSize );
+
+		// do the sharing.
+		BYTE* pBuffer = m_pHAStorage->GetStorage();
+		ARRAY_FOREACH ( i, m_dAgents )
+			if ( m_dAgents[i].IsHA() )
+			{
+				MetaAgentDesc_t & dAgent = m_dAgents[i];
+				float* pWeights = (float*) ( pBuffer + sizeof(int) ); // NOLINT
+				float fFrac = 1.0f / dAgent.GetLength();
+				ARRAY_FOREACH ( j, dAgent ) ///< works since dAgent has method GetLength()
+					pWeights[j] = fFrac;
+				dAgent.SetHAData ( (int*)pBuffer, pWeights, m_pHAStorage );
+				pBuffer += sizeof(int) + sizeof(float)*dAgent.GetLength(); // NOLINT
+			}
+	}
+
+	void RemoveHACounters()
+	{
+		ARRAY_FOREACH ( i, m_dAgents )
+			if ( m_dAgents[i].IsHA() )
+				m_dAgents[i].SetHAData ( NULL, NULL, NULL );
+		SafeDelete ( m_pHAStorage );
 	}
 };
 
@@ -7940,7 +8086,7 @@ SearchHandler_c::~SearchHandler_c ()
 	while ( m_hUsed.IterateNext() )
 	{
 		if ( m_hUsed.IterateGet()>0 )
-			g_pIndexes->GetUnlockedEntry ( m_hUsed.IterateGetKey() ).Unlock();
+			g_pLocalIndexes->GetUnlockedEntry ( m_hUsed.IterateGetKey() ).Unlock();
 	}
 }
 
@@ -7950,7 +8096,7 @@ const ServedIndex_t * SearchHandler_c::UseIndex ( int iLocal ) const
 	assert ( iLocal>=0 && iLocal<m_dLocal.GetLength() );
 	const CSphString & sName = m_dLocal[iLocal];
 	if ( g_eWorkers!=MPM_THREADS )
-		return g_pIndexes->GetRlockedEntry ( sName );
+		return g_pLocalIndexes->GetRlockedEntry ( sName );
 
 	m_tLock.Lock();
 	int * pUseCount = m_hUsed ( sName );
@@ -7959,11 +8105,11 @@ const ServedIndex_t * SearchHandler_c::UseIndex ( int iLocal ) const
 	const ServedIndex_t * pServed = NULL;
 	if ( pUseCount && *pUseCount>0 )
 	{
-		pServed = &g_pIndexes->GetUnlockedEntry ( sName );
+		pServed = &g_pLocalIndexes->GetUnlockedEntry ( sName );
 		*pUseCount += ( pServed!=NULL );
 	} else
 	{
-		pServed = g_pIndexes->GetRlockedEntry ( sName );
+		pServed = g_pLocalIndexes->GetRlockedEntry ( sName );
 		if ( pServed )
 		{
 			if ( pUseCount )
@@ -7992,7 +8138,7 @@ void SearchHandler_c::ReleaseIndex ( int iLocal ) const
 	(*pUseCount)--;
 
 	if ( !*pUseCount )
-		g_pIndexes->GetUnlockedEntry ( sName ).Unlock();
+		g_pLocalIndexes->GetUnlockedEntry ( sName ).Unlock();
 
 	assert ( ( m_pUpdates && pUseCount && *pUseCount ) || !m_pUpdates );
 
@@ -8764,7 +8910,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		if ( tFirst.m_sIndexes=="*" )
 		{
 			// search through all local indexes
-			for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
+			for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
 				if ( it.Get ().m_bEnabled )
 					m_dLocal.Add ( it.GetKey() );
 		} else
@@ -10601,7 +10747,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 			bRemote = false;
 	}
 
-	const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( sIndex );
+	const ServedIndex_t * pServed = g_pLocalIndexes->GetRlockedEntry ( sIndex );
 
 	if ( !pServed || !pServed->m_bEnabled || !pServed->m_pIndex )
 	{
@@ -10945,7 +11091,7 @@ void HandleCommandKeywords ( int iSock, int iVer, InputBuffer_c & tReq )
 	CSphString sIndex = tReq.GetString ();
 	bool bGetStats = !!tReq.GetInt ();
 
-	const ServedIndex_t * pIndex = g_pIndexes->GetRlockedEntry ( sIndex );
+	const ServedIndex_t * pIndex = g_pLocalIndexes->GetRlockedEntry ( sIndex );
 	if ( !pIndex )
 	{
 		tReq.SendErrorReply ( "unknown local index '%s' in search request", sIndex.cstr() );
@@ -11085,7 +11231,7 @@ static void DoCommandUpdate ( const char * sIndex, const CSphAttrUpdate & tUpd,
 
 static const ServedIndex_t * UpdateGetLockedIndex ( const CSphString & sName, bool bMvaUpdate )
 {
-	const ServedIndex_t * pLocked = g_pIndexes->GetRlockedEntry ( sName );
+	const ServedIndex_t * pLocked = g_pLocalIndexes->GetRlockedEntry ( sName );
 	if ( !pLocked )
 		return NULL;
 
@@ -11094,7 +11240,7 @@ static const ServedIndex_t * UpdateGetLockedIndex ( const CSphString & sName, bo
 		return pLocked;
 
 	pLocked->Unlock();
-	return g_pIndexes->GetWlockedEntry ( sName );
+	return g_pLocalIndexes->GetWlockedEntry ( sName );
 }
 
 
@@ -11191,7 +11337,7 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq )
 	CSphVector<DistributedIndex_t> dDistributed ( dIndexNames.GetLength() ); // lock safe storage for distributed indexes
 	ARRAY_FOREACH ( i, dIndexNames )
 	{
-		if ( !g_pIndexes->Exists ( dIndexNames[i] ) )
+		if ( !g_pLocalIndexes->Exists ( dIndexNames[i] ) )
 		{
 			// search amongst distributed and copy for further processing
 			g_tDistLock.Lock();
@@ -11647,7 +11793,7 @@ void BuildDistIndexStatus ( VectorLike & dStatus, const CSphString& sIndex )
 				dStatus.Add().SetSprintf ( "%s:%s", dDesc.GetName().cstr(), dDesc.m_sIndexes.cstr() );
 
 			if ( dStatus.MatchAddVa ( "%s_probability_weight", sKey.cstr() ) )
-				dStatus.Add().SetSprintf ( "%f", tAgents.GetWeights()[j] );
+				dStatus.Add().SetSprintf ( "%f", tAgents.GetWeights()[j] ); // FIXME! IPC unsafe, if critical need to be locked.
 
 			if ( dStatus.MatchAddVa ( "%s_is_blackhole", sKey.cstr() ) )
 				dStatus.Add ( dDesc.m_bBlackhole ? "1" : "0" );
@@ -12454,7 +12600,7 @@ void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
 	CSphString sError;
 
 	// get that index
-	const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( tStmt.m_sIndex );
+	const ServedIndex_t * pServed = g_pLocalIndexes->GetRlockedEntry ( tStmt.m_sIndex );
 	if ( !pServed )
 	{
 		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
@@ -12938,7 +13084,7 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 		return;
 	}
 
-	const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( tStmt.m_dInsertValues[1].m_sVal );
+	const ServedIndex_t * pServed = g_pLocalIndexes->GetRlockedEntry ( tStmt.m_dInsertValues[1].m_sVal );
 	if ( !pServed || !pServed->m_bEnabled || !pServed->m_pIndex )
 	{
 		sError.SetSprintf ( "no such index %s", tStmt.m_dInsertValues[1].m_sVal.cstr() );
@@ -12994,7 +13140,7 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 
 void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 {
-	const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( tStmt.m_sIndex );
+	const ServedIndex_t * pServed = g_pLocalIndexes->GetRlockedEntry ( tStmt.m_sIndex );
 	DistributedIndex_t * pDistr = NULL;
 	if ( !pServed || !pServed->m_bEnabled || !pServed->m_pIndex )
 	{
@@ -13086,7 +13232,7 @@ void HandleMysqlShowTables ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 	// 0 local, 1 distributed, 2 rt
 	CSphVector<CSphNamedInt> dIndexes;
 
-	for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
+	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
 		if ( it.Get().m_bEnabled )
 	{
 		CSphNamedInt & tIdx = dIndexes.Add();
@@ -13333,7 +13479,7 @@ static const char * ExtractDistributedIndexes ( const CSphVector<CSphString> & d
 	assert ( dNames.GetLength()==dDistributed.GetLength() );
 	ARRAY_FOREACH ( i, dNames )
 	{
-		if ( !g_pIndexes->Exists ( dNames[i] ) )
+		if ( !g_pLocalIndexes->Exists ( dNames[i] ) )
 		{
 			// search amongst distributed and copy for further processing
 			g_tDistLock.Lock();
@@ -13830,7 +13976,7 @@ void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 	ARRAY_FOREACH ( iIdx, dNames )
 	{
 		const char * sName = dNames[iIdx].cstr();
-		const ServedIndex_t * pLocal = g_pIndexes->GetRlockedEntry ( sName );
+		const ServedIndex_t * pLocal = g_pLocalIndexes->GetRlockedEntry ( sName );
 		if ( pLocal )
 		{
 			LocalIndexDoDeleteDocuments ( sName, pDocs, iDocsCount, pLocal, dErrors, bCommit );
@@ -13843,7 +13989,7 @@ void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 			ARRAY_FOREACH ( i, dDistLocal )
 			{
 				const char * sDistLocal = dDistLocal[i].cstr();
-				const ServedIndex_t * pDistLocal = g_pIndexes->GetRlockedEntry ( sDistLocal );
+				const ServedIndex_t * pDistLocal = g_pLocalIndexes->GetRlockedEntry ( sDistLocal );
 				LocalIndexDoDeleteDocuments ( sDistLocal, pDocs, iDocsCount, pDistLocal, dErrors, bCommit );
 				if ( pDistLocal )
 					pDistLocal->Unlock();
@@ -14152,8 +14298,8 @@ void HandleMysqlAttach ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	const CSphString & sTo = tStmt.m_sStringParam;
 	CSphString sError;
 
-	ServedIndex_t * pFrom = g_pIndexes->GetWlockedEntry ( sFrom );
-	const ServedIndex_t * pTo = g_pIndexes->GetRlockedEntry ( sTo );
+	ServedIndex_t * pFrom = g_pLocalIndexes->GetWlockedEntry ( sFrom );
+	const ServedIndex_t * pTo = g_pLocalIndexes->GetRlockedEntry ( sTo );
 
 	if ( !pFrom || !pFrom->m_bEnabled
 		|| !pTo || !pTo->m_bEnabled
@@ -14205,7 +14351,7 @@ void HandleMysqlAttach ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 void HandleMysqlFlush ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
 	CSphString sError;
-	const ServedIndex_t * pIndex = g_pIndexes->GetRlockedEntry ( tStmt.m_sIndex );
+	const ServedIndex_t * pIndex = g_pLocalIndexes->GetRlockedEntry ( tStmt.m_sIndex );
 
 	if ( !pIndex || !pIndex->m_bEnabled || !pIndex->m_bRT )
 	{
@@ -14227,7 +14373,7 @@ void HandleMysqlFlush ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 void HandleMysqlTruncate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
 	// get an exclusive lock
-	const ServedIndex_t * pIndex = g_pIndexes->GetWlockedEntry ( tStmt.m_sIndex );
+	const ServedIndex_t * pIndex = g_pLocalIndexes->GetWlockedEntry ( tStmt.m_sIndex );
 
 	if ( !pIndex || !pIndex->m_bEnabled || !pIndex->m_bRT )
 	{
@@ -14254,7 +14400,7 @@ void HandleMysqlTruncate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 void HandleMysqlOptimize ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
 	// get an exclusive lock
-	const ServedIndex_t * pIndex = g_pIndexes->GetRlockedEntry ( tStmt.m_sIndex );
+	const ServedIndex_t * pIndex = g_pLocalIndexes->GetRlockedEntry ( tStmt.m_sIndex );
 	bool bValid = pIndex && pIndex->m_bEnabled && pIndex->m_bRT;
 	if ( pIndex )
 		pIndex->Unlock();
@@ -15222,14 +15368,14 @@ static void RtFlushThreadFunc ( void * )
 
 		// collecting available rt indexes at save time
 		CSphVector<CSphString> dRtIndexes;
-		for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
+		for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
 			if ( it.Get().m_bRT )
 				dRtIndexes.Add ( it.GetKey() );
 
 		// do check+save
 		ARRAY_FOREACH_COND ( i, dRtIndexes, !g_bShutdown )
 		{
-			const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( dRtIndexes[i] );
+			const ServedIndex_t * pServed = g_pLocalIndexes->GetRlockedEntry ( dRtIndexes[i] );
 			if ( !pServed )
 				continue;
 
@@ -15258,7 +15404,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	//////////////////
 
 	// create new index, copy some settings from existing one
-	const ServedIndex_t * pRotating = g_pIndexes->GetRlockedEntry ( sIndex );
+	const ServedIndex_t * pRotating = g_pLocalIndexes->GetRlockedEntry ( sIndex );
 	if ( !CheckServedEntry ( pRotating, sIndex.cstr() ) )
 	{
 		if ( pRotating )
@@ -15333,7 +15479,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 
 	sphLogDebug ( "activate new index" );
 
-	ServedIndex_t * pServed = g_pIndexes->GetWlockedEntry ( sIndex );
+	ServedIndex_t * pServed = g_pLocalIndexes->GetWlockedEntry ( sIndex );
 	if ( !CheckServedEntry ( pServed, sIndex.cstr() ) )
 	{
 		if ( pServed )
@@ -15468,12 +15614,12 @@ void SeamlessTryToForkPrereader ()
 
 	// next in line
 	const char * sPrereading = g_dRotating.Pop ();
-	if ( !sPrereading || !g_pIndexes->Exists ( sPrereading ) )
+	if ( !sPrereading || !g_pLocalIndexes->Exists ( sPrereading ) )
 	{
 		sphWarning ( "INTERNAL ERROR: preread attempt on unknown index '%s'", sPrereading ? sPrereading : "(NULL)" );
 		return;
 	}
-	const ServedIndex_t & tServed = g_pIndexes->GetUnlockedEntry ( sPrereading );
+	const ServedIndex_t & tServed = g_pLocalIndexes->GetUnlockedEntry ( sPrereading );
 
 	// alloc buffer index (once per run)
 	if ( !g_pPrereading )
@@ -15798,7 +15944,7 @@ void OptimizeThreadFunc ( void * )
 		}
 		g_tOptimizeQueueMutex.Unlock();
 
-		const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( sIndex );
+		const ServedIndex_t * pServed = g_pLocalIndexes->GetRlockedEntry ( sIndex );
 		if ( !pServed )
 		{
 			continue;
@@ -15928,7 +16074,7 @@ void HandlePipePreread ( PipeReader_t & tPipe, bool bFailure )
 	if ( !tPipe.IsError() && iRes )
 	{
 		// if preread was successful, exchange served index and prereader buffer index
-		ServedIndex_t & tServed = g_pIndexes->GetUnlockedEntry ( sPrereading );
+		ServedIndex_t & tServed = g_pLocalIndexes->GetUnlockedEntry ( sPrereading );
 		CSphIndex * pOld = tServed.m_pIndex;
 		CSphIndex * pNew = g_pPrereading;
 
@@ -16049,7 +16195,7 @@ void CheckPipes ()
 }
 
 
-void ConfigureIndex ( ServedDesc_t & tIdx, const CSphConfigSection & hIndex )
+void ConfigureLocalIndex ( ServedDesc_t & tIdx, const CSphConfigSection & hIndex )
 {
 	tIdx.m_bMlock = ( hIndex.GetInt ( "mlock", 0 )!=0 ) && !g_bOptNoLock;
 	tIdx.m_bStar = ( hIndex.GetInt ( "enable_star", 0 )!=0 );
@@ -16097,7 +16243,7 @@ bool PrereadNewIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex, c
 
 bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, const char * szIndexName, bool bBlackhole )
 {
-	AgentDesc_t * pAgent = tAgent.CurrentAgent();
+	AgentDesc_t * pAgent = tAgent.LastAgent();
 	assert ( pAgent );
 
 	// lookup address (if needed)
@@ -16138,13 +16284,16 @@ bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, co
 	}
 
 	// for now just convert all 'host mirrors' (i.e. agents without indices) into 'index mirrors'
-	while ( !pAgent->m_sIndexes.IsEmpty() )
+	if ( tAgent.GetLength()>1 && !pAgent->m_sIndexes.IsEmpty() )
 	{
-		AgentDesc_t * pMyAgent = tAgent.PulseAgent ( false );
-		if ( pMyAgent->m_sIndexes.IsEmpty() )
-			pMyAgent->m_sIndexes = pAgent->m_sIndexes;
-		else
-			break;
+		for ( int i=tAgent.GetLength()-2; i>=0; --i )
+		{
+			AgentDesc_t * pMyAgent = tAgent.GetAgent(i);
+			if ( pMyAgent->m_sIndexes.IsEmpty() )
+				pMyAgent->m_sIndexes = pAgent->m_sIndexes;
+			else
+				break;
+		}
 	}
 	return true;
 }
@@ -16286,7 +16435,6 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, cons
 		p++;
 	} // while (eState!=apDone)
 	bool bRes = ValidateAgentDesc ( tAgent, pAgent, szIndexName, bBlackhole );
-	tAgent.Rewind();
 	tAgent.QueuePings();
 	if ( bPersistent )
 		tAgent.SetPersistent();
@@ -16303,7 +16451,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t * pIdx, const char * 
 	// add local agents
 	for ( CSphVariant * pLocal = hIndex("local"); pLocal; pLocal = pLocal->m_pNext )
 	{
-		if ( !g_pIndexes->Exists ( pLocal->cstr() ) )
+		if ( !g_pLocalIndexes->Exists ( pLocal->cstr() ) )
 		{
 			sphWarning ( "index '%s': no such local index '%s' - SKIPPING LOCAL INDEX",
 				szIndexName, pLocal->cstr() );
@@ -16320,7 +16468,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t * pIdx, const char * 
 		if ( ConfigureAgent ( tAgent, pAgent, szIndexName, false ) )
 			bHaveHA |= tAgent.IsHA();
 		else
-			tIdx.m_dAgents.Remove ( tIdx.m_dAgents.GetLength()-1 );
+			tIdx.m_dAgents.Pop();
 	}
 
 	// for now work with client persistent connections only on per-fork basis,
@@ -16332,7 +16480,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t * pIdx, const char * 
 		if ( ConfigureAgent ( tAgent, pAgent, szIndexName, false, bEnablePersistentConns ) )
 			bHaveHA |= tAgent.IsHA();
 		else
-			tIdx.m_dAgents.Remove ( tIdx.m_dAgents.GetLength()-1 );
+			tIdx.m_dAgents.Pop();
 	}
 
 	for ( CSphVariant * pAgent = hIndex("agent_blackhole"); pAgent; pAgent = pAgent->m_pNext )
@@ -16341,7 +16489,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t * pIdx, const char * 
 		if ( ConfigureAgent ( tAgent, pAgent, szIndexName, true ) )
 			bHaveHA |= tAgent.IsHA();
 		else
-			tIdx.m_dAgents.Remove ( tIdx.m_dAgents.GetLength()-1 );
+			tIdx.m_dAgents.Pop();
 	}
 
 	// configure options
@@ -16381,6 +16529,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t * pIdx, const char * 
 		else
 			sphWarning ( "index '%s': ha_strategy (%s) is unknown for me, will use roundrobin", szIndexName, hIndex["ha_strategy"].cstr() );
 	}
+	tIdx.ShareHACounters();
 }
 
 
@@ -16406,6 +16555,7 @@ void FreeAgentStats ( DistributedIndex_t & tIndex )
 				g_pStats->m_hDashBoard.Delete ( dAgent.GetName() );
 			}
 		}
+	tIndex.RemoveHACounters();
 	g_tStatsMutex.Unlock();
 }
 
@@ -16526,7 +16676,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		tIdx.m_sIndexPath = hIndex["path"];
 		tIdx.m_bRT = true;
 
-		ConfigureIndex ( tIdx, hIndex );
+		ConfigureLocalIndex ( tIdx, hIndex );
 		tIdx.m_pIndex->SetEnableStar ( tIdx.m_bStar );
 		tIdx.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 		tIdx.m_pIndex->SetPreopen ( tIdx.m_bPreopen || g_bPreopenIndexes );
@@ -16535,7 +16685,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		tIdx.m_pIndex->Setup ( tSettings );
 
 		// hash it
-		if ( !g_pIndexes->Add ( tIdx, szIndexName ) )
+		if ( !g_pLocalIndexes->Add ( tIdx, szIndexName ) )
 		{
 			sphWarning ( "INTERNAL ERROR: index '%s': hash add failed - NOT SERVING", szIndexName );
 			return ADD_ERROR;
@@ -16562,21 +16712,21 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		}
 
 		// check name
-		if ( g_pIndexes->Exists ( szIndexName ) )
+		if ( g_pLocalIndexes->Exists ( szIndexName ) )
 		{
 			sphWarning ( "index '%s': duplicate name - NOT SERVING", szIndexName );
 			return ADD_ERROR;
 		}
 
 		// configure memlocking, star
-		ConfigureIndex ( tIdx, hIndex );
+		ConfigureLocalIndex ( tIdx, hIndex );
 
 		// try to create index
 		tIdx.m_sIndexPath = hIndex["path"];
 		PreCreatePlainIndex ( tIdx, szIndexName );
 
 		// done
-		if ( !g_pIndexes->Add ( tIdx, szIndexName ) )
+		if ( !g_pLocalIndexes->Add ( tIdx, szIndexName ) )
 		{
 			sphWarning ( "INTERNAL ERROR: index '%s': hash add failed - NOT SERVING", szIndexName );
 			return ADD_ERROR;
@@ -16627,14 +16777,14 @@ void ReloadIndexSettings ( CSphConfigParser & tCP )
 
 	g_bDoDelete = false;
 
-	for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
+	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
 		it.Get().m_bToDelete = true; ///< FIXME! What about write lock before doing this?
 
 	g_hDistIndexes.IterateStart ();
 	while ( g_hDistIndexes.IterateNext () )
 		g_hDistIndexes.IterateGet().m_bToDelete = true;
 
-	int nTotalIndexes = g_pIndexes->GetLength () + g_hDistIndexes.GetLength ();
+	int nTotalIndexes = g_pLocalIndexes->GetLength () + g_hDistIndexes.GetLength ();
 	int nChecked = 0;
 
 	const CSphConfig & hConf = tCP.m_tConf;
@@ -16644,10 +16794,10 @@ void ReloadIndexSettings ( CSphConfigParser & tCP )
 		const CSphConfigSection & hIndex = hConf["index"].IterateGet();
 		const char * sIndexName = hConf["index"].IterateGetKey().cstr();
 
-		ServedIndex_t * pServedIndex = g_pIndexes->GetWlockedEntry ( sIndexName );
+		ServedIndex_t * pServedIndex = g_pLocalIndexes->GetWlockedEntry ( sIndexName );
 		if ( pServedIndex )
 		{
-			ConfigureIndex ( *pServedIndex, hIndex );
+			ConfigureLocalIndex ( *pServedIndex, hIndex );
 			pServedIndex->m_bToDelete = false;
 			nChecked++;
 			pServedIndex->Unlock();
@@ -16660,7 +16810,6 @@ void ReloadIndexSettings ( CSphConfigParser & tCP )
 			// finally, check and add distributed index to global table
 			if ( tIdx.m_dAgents.GetLength()==0 && tIdx.m_dLocal.GetLength()==0 )
 			{
-				FreeAgentStats ( tIdx );
 				sphWarning ( "index '%s': no valid local/remote indexes in distributed index; using last valid definition", sIndexName );
 				g_hDistIndexes[sIndexName].m_bToDelete = false;
 
@@ -16676,7 +16825,7 @@ void ReloadIndexSettings ( CSphConfigParser & tCP )
 
 		} else if ( AddIndex ( sIndexName, hIndex )==ADD_LOCAL )
 		{
-			ServedIndex_t * pIndex = g_pIndexes->GetWlockedEntry ( sIndexName );
+			ServedIndex_t * pIndex = g_pLocalIndexes->GetWlockedEntry ( sIndexName );
 			if ( pIndex )
 			{
 				pIndex->m_bOnlyNew = true;
@@ -16703,7 +16852,7 @@ void CheckDelete ()
 	dToDelete.Reserve ( 8 );
 	dDistToDelete.Reserve ( 8 );
 
-	for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
+	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
 	{
 		ServedIndex_t & tIndex = it.Get();
 		if ( tIndex.m_bToDelete )
@@ -16719,7 +16868,7 @@ void CheckDelete ()
 	}
 
 	ARRAY_FOREACH ( i, dToDelete )
-		g_pIndexes->Delete ( *dToDelete[i] ); // should result in automatic CSphIndex::Unlock() via dtor call
+		g_pLocalIndexes->Delete ( *dToDelete[i] ); // should result in automatic CSphIndex::Unlock() via dtor call
 
 	g_tDistLock.Lock();
 
@@ -16758,7 +16907,7 @@ void CheckRotate ()
 			ReloadIndexSettings ( g_pCfg );
 		}
 
-		for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
+		for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
 		{
 			ServedIndex_t & tIndex = it.Get();
 			tIndex.WriteLock();
@@ -16809,7 +16958,7 @@ void CheckRotate ()
 
 	int iRotIndexes = 0;
 	// check what indexes need to be rotated
-	for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
+	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
 	{
 		const ServedIndex_t & tIndex = it.Get();
 		const CSphString & sIndex = it.GetKey();
@@ -16898,7 +17047,7 @@ void CheckReopen ()
 static void SaveIndexes ()
 {
 	CSphString sError;
-	for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
+	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
 	{
 		const ServedIndex_t & tServed = it.Get();
 		tServed.ReadLock();
@@ -16949,7 +17098,7 @@ void CheckFlush ()
 
 	// check if there are dirty indexes
 	bool bDirty = false;
-	for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
+	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
 	{
 		const ServedIndex_t & tServed = it.Get();
 		if ( tServed.m_bEnabled && tServed.m_pIndex->GetAttributeStatus() )
@@ -17705,8 +17854,8 @@ void FailClient ( int iSock, SearchdStatus_e eStatus, const char * sMessage )
 
 Listener_t * DoAccept ( int * pClientSock, char * sClientName )
 {
-	assert (pClientSock);
-	assert (*pClientSock==-1);
+	assert ( pClientSock );
+	assert ( *pClientSock==-1 );
 
 	int iMaxFD = 0;
 	fd_set fdsAccept;
@@ -17939,7 +18088,7 @@ void TickHead ( /*CSphProcessSharedMutex * pAcceptMutex*/ bool bDontListen )
 		return;
 	}
 
-	int iClientSock=-1;
+	int iClientSock = -1;
 	char sClientName[SPH_ADDRPORT_SIZE];
 	Listener_t * pListener = DoAccept ( &iClientSock, sClientName );
 	if ( !pListener )
@@ -18235,7 +18384,7 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const char * sOptIndex )
 		ESphAddIndex eAdd = AddIndex ( sIndexName, hIndex );
 		if ( eAdd==ADD_LOCAL || eAdd==ADD_RT )
 		{
-			ServedIndex_t & tIndex = g_pIndexes->GetUnlockedEntry ( sIndexName );
+			ServedIndex_t & tIndex = g_pLocalIndexes->GetUnlockedEntry ( sIndexName );
 			iCounter++;
 
 			fprintf ( stdout, "precaching index '%s'\n", sIndexName );
@@ -18835,7 +18984,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	g_iClientFD = dup ( iDevNull );
 #endif
 
-	g_pIndexes = new IndexHash_c();
+	g_pLocalIndexes = new IndexHash_c();
 
 	//////////////////////
 	// build indexes hash
@@ -18911,7 +19060,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		// child re-acquires all locks; but let's hope that's rare
 		if ( !bWatched )
 		{
-			for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
+			for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
 			{
 				ServedIndex_t & tServed = it.Get();
 				if ( tServed.m_bEnabled )
@@ -18979,7 +19128,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( !g_bOptNoDetach && !bWatched )
 	{
 		// re-lock indexes
-		for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
+		for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
 		{
 			ServedIndex_t & tServed = it.Get();
 			if ( !tServed.m_bEnabled )
@@ -19077,7 +19226,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	// replay last binlog
 	SmallStringHash_T<CSphIndex*> hIndexes;
-	for ( IndexHashIterator_c it ( g_pIndexes ); it.Next(); )
+	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
 		if ( it.Get().m_bEnabled )
 			hIndexes.Add ( it.Get().m_pIndex, it.GetKey() );
 
@@ -19140,7 +19289,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( !g_bHeadDaemon && pAcceptMutex )
 			TickPreforked ( pAcceptMutex );
 		else
-			TickHead ( pAcceptMutex );
+			TickHead ( pAcceptMutex!=0 );
 	}
 } // NOLINT function length
 

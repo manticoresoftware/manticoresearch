@@ -894,6 +894,16 @@ bool CSphProcessSharedMutex::TimedLock ( int tmSpin ) const
 }
 
 
+BYTE * CSphProcessSharedMutex::GetSharedData() const
+{
+#if !USE_WINDOWS
+	return m_pStorage.GetWritePtr () + sizeof ( pthread_mutex_t );
+#else
+	return NULL;
+#endif
+}
+
+
 const char * CSphProcessSharedMutex::GetError() const
 {
 	const char * sError = NULL;

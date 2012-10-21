@@ -2072,6 +2072,7 @@ public:
 	void	Unlock () const;
 	bool	TimedLock ( int tmSpin ) const; // wait at least tmSpin microseconds the lock will available
 	const char * GetError () const;
+	BYTE *	GetSharedData() const;
 
 protected:
 #if !USE_WINDOWS
@@ -2093,7 +2094,7 @@ public:
 	{
 		if ( m_pMutex )
 		{
-			m_pValue = reinterpret_cast<T*> ( m_pStorage.GetWritePtr () + sizeof ( pthread_mutex_t ) );
+			m_pValue = reinterpret_cast<T*> ( GetSharedData() );
 			*m_pValue = tInitValue;
 		}
 	}

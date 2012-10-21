@@ -6219,7 +6219,7 @@ void CSphWriter::UnlinkFile()
 
 void CSphWriter::PutByte ( int data )
 {
-	assert(m_pPool);
+	assert ( m_pPool );
 	if ( m_iPoolUsed==m_iBufferSize )
 		Flush ();
 	*m_pPool++ = BYTE ( data & 0xff );
@@ -6230,7 +6230,7 @@ void CSphWriter::PutByte ( int data )
 
 void CSphWriter::PutBytes ( const void * pData, int iSize )
 {
-	assert(m_pPool);
+	assert ( m_pPool );
 	const BYTE * pBuf = (const BYTE *) pData;
 	while ( iSize>0 )
 	{
@@ -7691,8 +7691,8 @@ int CSphArena::TaggedAlloc ( int iTag, int iBytes )
 		return -1; // uninitialized
 
 	assert ( iTag>=0 );
-	CSphScopedLock<CSphProcessSharedMutex> tProcLock ( m_tProcMutex );
 	CSphScopedLock<CSphMutex> tThdLock ( m_tThdMutex );
+	CSphScopedLock<CSphProcessSharedMutex> tProcLock ( m_tProcMutex );
 
 	// find that tag first
 	TagDesc_t * pTag = sphBinarySearch ( m_pTags, m_pTags+(*m_pTagCount)-1, bind ( &TagDesc_t::m_iTag ), iTag );
@@ -27948,9 +27948,9 @@ void sphDictBuildInfixes ( const char * sPath )
 	CSphString sFilename, sError;
 	int64_t tmStart = sphMicroTimer();
 
-	if ( INDEX_FORMAT_VERSION!=27 )
+#if ( INDEX_FORMAT_VERSION!=27 )
 		sphDie ( "infix upgrade: only works in v.27 builds for now; get an older indextool or contact support" );
-
+#endif
 	//////////////////////////////////////////////////
 	// load (interesting parts from) the index header
 	//////////////////////////////////////////////////
@@ -28148,8 +28148,9 @@ void sphDictBuildSkiplists ( const char * sPath )
 	CSphString sFilename, sError;
 	int64_t tmStart = sphMicroTimer();
 
-	if ( INDEX_FORMAT_VERSION<31 || INDEX_FORMAT_VERSION>35 )
+#if ( INDEX_FORMAT_VERSION<31 || INDEX_FORMAT_VERSION>35 )
 		sphDie ( "skiplists upgrade: ony works in v.31 to v.35 builds for now; get an older indextool or contact support" );
+#endif
 
 	// load (interesting parts from) the index header
 	CSphAutoreader rdHeader;

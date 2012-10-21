@@ -19,8 +19,11 @@
 
 #if !USE_WINDOWS
 #include <sys/time.h> // for gettimeofday
-#endif
 
+// define this if you want to run gprof over the threads model - to track children threads also.
+#define USE_GPROF 0
+
+#endif
 
 static int g_iThreadStackSize = 65536;
 
@@ -909,6 +912,11 @@ struct ThreadCall_t
 {
 	void			( *m_pCall )( void * pArg );
 	void *			m_pArg;
+#if USE_GPROF
+	pthread_mutex_t	m_dlock;
+	pthread_cond_t	m_dwait;
+	itimerval		m_ditimer;
+#endif
 	ThreadCall_t *	m_pNext;
 };
 SphThreadKey_t g_tThreadCleanupKey;
@@ -931,6 +939,17 @@ SPH_THDFUNC sphThreadProcWrapper ( void * pArg )
 #if SPH_ALLOCS_PROFILER
 	MemCategoryStack_t * pTLS = sphMemStatThdInit();
 #endif
+
+#if USE_GPROF
+	// Set the profile timer value
+	setitimer ( ITIMER_PROF, &( (ThreadCall_t*) pArg )->m_ditimer, NULL );
+
+	// Tell the calling thread that we don't need its data anymore
+	pthread_mutex_lock ( &( (ThreadCall_t*) pArg)->m_dlock );
+	pthread_cond_signal ( &( (ThreadCall_t*) pArg)->m_dwait );
+	pthread_mutex_unlock ( &( (ThreadCall_t*) pArg)->m_dlock );
+#endif
+
 	ThreadCall_t * pCall = (ThreadCall_t*) pArg;
 	MemorizeStack ( & cTopOfMyStack );
 	pCall->m_pCall ( pCall->m_pArg );
@@ -1032,10 +1051,29 @@ bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pA
 	if ( *pThread )
 		return true;
 #else
+
+#if USE_GPROF
+	getitimer ( ITIMER_PROF, &pCall->m_ditimer );
+	pthread_cond_init ( &pCall->m_dwait, NULL );
+	pthread_mutex_init ( &pCall->m_dlock, NULL );
+	pthread_mutex_lock ( &pCall->m_dlock );
+#endif
+
 	void * pAttr = sphThreadInit ( bDetached );
 	errno = pthread_create ( pThread, (pthread_attr_t*) pAttr, sphThreadProcWrapper, pCall );
+
+#if USE_GPROF
+	if ( !errno )
+		pthread_cond_wait ( &pCall->m_dwait, &pCall->m_dlock );
+
+	pthread_mutex_unlock ( &pCall->m_dlock );
+	pthread_mutex_destroy ( &pCall->m_dlock );
+	pthread_cond_destroy ( &pCall->m_dwait );
+#endif
+
 	if ( !errno )
 		return true;
+
 #endif
 
 	// thread creation failed so we need to cleanup ourselves

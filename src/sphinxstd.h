@@ -2081,7 +2081,6 @@ protected:
 #endif
 };
 
-
 #if !USE_WINDOWS
 /// process-shared mutex variable that survives fork
 template < typename T > class CSphProcessSharedVariable : protected CSphProcessSharedMutex, public ISphNoncopyable

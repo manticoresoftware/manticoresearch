@@ -3247,7 +3247,7 @@ void NetInputBuffer_c::SendErrorReply ( const char * sTemplate, ... )
 /////////////////////////////////////////////////////////////////////////////
 
 enum HAStrategies_e {
-	HA_NONE,
+	HA_RANDOM,
 	HA_ROUNDROBIN,
 	HA_AVOIDDEAD,
 	HA_AVOIDERRORS,
@@ -3930,7 +3930,7 @@ public:
 		: m_iAgentConnectTimeout ( 1000 )
 		, m_iAgentQueryTimeout ( 3000 )
 		, m_bToDelete ( false )
-		, m_eHaStrategy ( HA_NONE )
+		, m_eHaStrategy ( HA_RANDOM )
 		, m_pHAStorage ( NULL )
 	{}
 	~DistributedIndex_t()
@@ -16515,8 +16515,10 @@ static void ConfigureDistributedIndex ( DistributedIndex_t * pIdx, const char * 
 		if ( !bHaveHA )
 			sphWarning ( "index '%s': ha_strategy defined, but no ha agents in the index", szIndexName );
 
-		tIdx.m_eHaStrategy = HA_NONE;
-		if ( hIndex["ha_strategy"]=="roundrobin" )
+		tIdx.m_eHaStrategy = HA_RANDOM;
+		if ( hIndex["ha_strategy"]=="random" )
+			tIdx.m_eHaStrategy = HA_RANDOM;
+		else if ( hIndex["ha_strategy"]=="roundrobin" )
 			tIdx.m_eHaStrategy = HA_ROUNDROBIN;
 		else if ( hIndex["ha_strategy"]=="nodeads" )
 			tIdx.m_eHaStrategy = HA_AVOIDDEAD;
@@ -16527,7 +16529,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t * pIdx, const char * 
 		else if ( hIndex["ha_strategy"]=="noerrorstm" )
 			tIdx.m_eHaStrategy = HA_AVOIDERRORSTM;
 		else
-			sphWarning ( "index '%s': ha_strategy (%s) is unknown for me, will use roundrobin", szIndexName, hIndex["ha_strategy"].cstr() );
+			sphWarning ( "index '%s': ha_strategy (%s) is unknown for me, will use random", szIndexName, hIndex["ha_strategy"].cstr() );
 	}
 	tIdx.ShareHACounters();
 }

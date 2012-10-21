@@ -3527,8 +3527,12 @@ public:
 		if ( m_dAgents.GetLength()==1 )
 			return GetAgent(0);
 
+		// threshold errors-a-row to be counted as dead
+		int iDeadThr = 3;
+
 		int iBestAgent = -1;
 		int64_t iErrARow = -1;
+		int64_t iThisErrARow = -1;
 		CSphVector<int> dCandidates;
 		CSphVector<int64_t> dTimers;
 		dCandidates.Reserve ( m_dAgents.GetLength() );
@@ -3552,15 +3556,15 @@ public:
 			iThisErrARow = ( dDash.m_iErrorsARow<=iDeadThr ) ? 0 : dDash.m_iErrorsARow;
 
 			if ( iErrARow < 0 )
-				iErrARow = dDash.m_iErrorsARow;
+				iErrARow = iThisErrARow;
 
 			// 2. Among good nodes - select the one(s) with lowest errors/query rating
-			if ( iErrARow > dDash.m_iErrorsARow )
+			if ( iErrARow > iThisErrARow )
 			{
 				dCandidates.Reset();
 				iBestAgent = i;
-				iErrARow = dDash.m_iErrorsARow;
-			} else if ( iErrARow==dDash.m_iErrorsARow )
+				iErrARow = iThisErrARow;
+			} else if ( iErrARow==iThisErrARow )
 			{
 				if ( iBestAgent>=0 )
 					dCandidates.Add ( iBestAgent );
@@ -3609,6 +3613,9 @@ public:
 		if ( m_dAgents.GetLength()==1 )
 			return GetAgent(0);
 
+		// how much error rating is allowed
+		float fAllowedErrorRating = 0.03f; // i.e. 3 errors per 100 queries is still ok
+
 		int iBestAgent = -1;
 		float fBestCriticalErrors = 1.0;
 		float fBestAllErrors = 1.0;
@@ -3654,6 +3661,10 @@ public:
 				// 2. Among good nodes - select the one(s) with lowest errors/query rating
 				float fCriticalErrors = (float) uCriticalErrors/uQueries;
 				float fAllErrors = (float) uAllErrors/uQueries;
+				if ( fCriticalErrors <= fAllowedErrorRating )
+					fCriticalErrors = 0.0f;
+				if ( fAllErrors <= fAllowedErrorRating )
+					fAllErrors = 0.0f;
 				if ( fCriticalErrors < fBestCriticalErrors )
 				{
 					dCandidates.Reset();

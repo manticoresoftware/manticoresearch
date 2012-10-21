@@ -582,9 +582,10 @@ enum eAgentStats
 	eNetworkErrors,		///< network error
 	eWrongReplies,		///< incomplete reply
 	eUnexpectedClose,	///< agent closed the connection
-	eNetworkCritical = eUnexpectedClose,
 	eWarnings,			///< agent answered, but with warnings
+	eNetworkCritical = eWarnings,
 	eNoErrors,			///< successfull queries, no errors
+	eNetworkNonCritical = eNoErrors,
 	eTotalMsecs,		///< number of microseconds in queries, total
 	eMaxCounters = eTotalMsecs,
 	eMaxStat
@@ -3518,10 +3519,10 @@ public:
 	}
 
 
-	AgentDesc_t * StDiscardDead ( bool bWeighted )
+	AgentDesc_t * StDiscardDead ()
 	{
 		if ( !g_pStats )
-			return ( bWeighted ? RandAgent() : RRAgent() );
+			return RandAgent();
 
 		if ( m_dAgents.GetLength()==1 )
 			return GetAgent(0);
@@ -3531,26 +3532,24 @@ public:
 		CSphVector<int> dCandidates;
 		CSphVector<int64_t> dTimers;
 		dCandidates.Reserve ( m_dAgents.GetLength() );
-		if ( bWeighted )
-			dTimers.Resize ( m_dAgents.GetLength() );
+		dTimers.Resize ( m_dAgents.GetLength() );
 
 		ARRAY_FOREACH ( i, m_dAgents )
 		{
 			// no locks for g_pStats since we just reading, and read data is not critical.
 			const HostDashboard_t & dDash = GetCommonStat ( i );
 
-			if ( bWeighted )
-			{
-				AgentDash_t dDashStat;
-				dDash.GetDashStat ( &dDashStat, 1 ); // look at last 30..90 seconds.
-				uint64_t uQueries = 0;
-				for ( int j=0; j<eMaxCounters; ++j )
-					uQueries += dDashStat.m_iStats[j];
-				if ( uQueries > 0 )
-					dTimers[i] = dDashStat.m_iStats[eTotalMsecs]/uQueries;
-				else
-					dTimers[i] = -1;
-			}
+			AgentDash_t dDashStat;
+			dDash.GetDashStat ( &dDashStat, 1 ); // look at last 30..90 seconds.
+			uint64_t uQueries = 0;
+			for ( int j=0; j<eMaxCounters; ++j )
+				uQueries += dDashStat.m_iStats[j];
+			if ( uQueries > 0 )
+				dTimers[i] = dDashStat.m_iStats[eTotalMsecs]/uQueries;
+			else
+				dTimers[i] = -1;
+
+			iThisErrARow = ( dDash.m_iErrorsARow<=iDeadThr ) ? 0 : dDash.m_iErrorsARow;
 
 			if ( iErrARow < 0 )
 				iErrARow = dDash.m_iErrorsARow;
@@ -3570,21 +3569,13 @@ public:
 		}
 
 		// check if it is a time to recalculate the agent's weights
-		if ( bWeighted )
-			RecalculateWeights ( dTimers );
+		RecalculateWeights ( dTimers );
 
 		// nothing to select, sorry. Just plain RR...
 		if ( iBestAgent < 0 )
 		{
-			if ( bWeighted )
-			{
-				sphLogDebug ( "HA selector discarded all the candidates and just fall into simple Random" );
-				return RandAgent();
-			} else
-			{
-				sphLogDebug ( "HA selector discarded all the candidates and just fall into simple RR" );
-				return RRAgent();
-			}
+			sphLogDebug ( "HA selector discarded all the candidates and just fall into simple Random" );
+			return RandAgent();
 		}
 
 		// only one node with lowest error rating. Return it.
@@ -3597,28 +3588,23 @@ public:
 		// several nodes. Let's select the one.
 		float fAge = 0.0;
 		const char * sLogStr = NULL;
-		if ( bWeighted )
+
+		WeightedRandAgent ( &iBestAgent, dCandidates );
+		if ( g_eLogLevel>=SPH_LOG_DEBUG )
 		{
-			WeightedRandAgent ( &iBestAgent, dCandidates );
-			if ( g_eLogLevel>=SPH_LOG_DEBUG )
-			{
-				const HostDashboard_t & dDash = GetCommonStat ( iBestAgent );
-				fAge = ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
-				sLogStr = "HA selected %d node by weighted random, with best EaR ("INT64_FMT"), last answered in %f milliseconds";
-			}
-		} else
-		{
-			fAge = GetBestDelay ( &iBestAgent, dCandidates )/1000.0f;
-			sLogStr = "HA selected %d node with best num of errors a row ("INT64_FMT"), last answered in %f milliseconds";
+			const HostDashboard_t & dDash = GetCommonStat ( iBestAgent );
+			fAge = ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
+			sLogStr = "HA selected %d node by weighted random, with best EaR ("INT64_FMT"), last answered in %f milliseconds";
 		}
+
 		sphLogDebug ( sLogStr, iBestAgent, iErrARow, fAge );
 		return &m_dAgents[iBestAgent];
 	}
 
-	AgentDesc_t * StLowErrors ( bool bWeighted )
+	AgentDesc_t * StLowErrors()
 	{
 		if ( !g_pStats )
-			return ( bWeighted ? RandAgent() : RRAgent() );
+			return RandAgent();
 
 		if ( m_dAgents.GetLength()==1 )
 			return GetAgent(0);
@@ -3646,7 +3632,7 @@ public:
 			{
 				if ( j==eNetworkCritical )
 					uCriticalErrors = uQueries;
-				else if ( j==eNoErrors )
+				else if ( j==eNetworkNonCritical )
 				{
 					uAllErrors = uQueries;
 					uSuccesses = dDashStat.m_iStats[j];
@@ -3697,15 +3683,8 @@ public:
 		// nothing to select, sorry. Just plain RR...
 		if ( iBestAgent < 0 )
 		{
-			if ( bWeighted )
-			{
-				sphLogDebug ( "HA selector discarded all the candidates and just fall into simple Random" );
-				return RandAgent();
-			} else
-			{
-				sphLogDebug ( "HA selector discarded all the candidates and just fall into simple RR" );
-				return RRAgent();
-			}
+			sphLogDebug ( "HA selector discarded all the candidates and just fall into simple Random" );
+			return RandAgent();
 		}
 
 		// only one node with lowest error rating. Return it.
@@ -3718,21 +3697,14 @@ public:
 		// several nodes. Let's select the one.
 		float fAge = 0.0f;
 		const char * sLogStr = NULL;
-		if ( bWeighted )
+		WeightedRandAgent ( &iBestAgent, dCandidates );
+		if ( g_eLogLevel>=SPH_LOG_DEBUG )
 		{
-			WeightedRandAgent ( &iBestAgent, dCandidates );
-			if ( g_eLogLevel>=SPH_LOG_DEBUG )
-			{
-				const HostDashboard_t & dDash = GetCommonStat ( iBestAgent );
-				fAge = ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
-				sLogStr = "HA selected %d node by weighted random, with best error rating (%.2f), answered %f seconds ago";
-			}
-
-		} else
-		{
-			fAge = GetBestDelay ( &iBestAgent, dCandidates )/1000.0f;
-			sLogStr = "HA selected %d node with best error rating (%.2f), last answered in %f milliseconds";
+			const HostDashboard_t & dDash = GetCommonStat ( iBestAgent );
+			fAge = ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
+			sLogStr = "HA selected %d node by weighted random, with best error rating (%.2f), answered %f seconds ago";
 		}
+
 		sphLogDebug ( sLogStr, iBestAgent, fBestCriticalErrors, fAge );
 		return &m_dAgents[iBestAgent];
 	}
@@ -3743,13 +3715,9 @@ public:
 		switch ( eStrategy )
 		{
 		case HA_AVOIDDEAD:
-			return StDiscardDead(true);
-		case HA_AVOIDDEADTM:
-			return StDiscardDead(false);
+			return StDiscardDead();
 		case HA_AVOIDERRORS:
-			return StLowErrors(true);
-		case HA_AVOIDERRORSTM:
-			return StLowErrors(false);
+			return StLowErrors();
 		case HA_ROUNDROBIN:
 			return RRAgent();
 		default:
@@ -16522,12 +16490,8 @@ static void ConfigureDistributedIndex ( DistributedIndex_t * pIdx, const char * 
 			tIdx.m_eHaStrategy = HA_ROUNDROBIN;
 		else if ( hIndex["ha_strategy"]=="nodeads" )
 			tIdx.m_eHaStrategy = HA_AVOIDDEAD;
-		else if ( hIndex["ha_strategy"]=="nodeadstm" )
-			tIdx.m_eHaStrategy = HA_AVOIDDEADTM;
 		else if ( hIndex["ha_strategy"]=="noerrors" )
 			tIdx.m_eHaStrategy = HA_AVOIDERRORS;
-		else if ( hIndex["ha_strategy"]=="noerrorstm" )
-			tIdx.m_eHaStrategy = HA_AVOIDERRORSTM;
 		else
 			sphWarning ( "index '%s': ha_strategy (%s) is unknown for me, will use random", szIndexName, hIndex["ha_strategy"].cstr() );
 	}

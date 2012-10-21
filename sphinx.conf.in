@@ -381,13 +381,13 @@ index test1
 	# exceptions		= @CONFDIR@/data/exceptions.txt
 
 
-	# embedded file size limit, in bytes, kiloytes (16384K) or megabytes (256M)
+	# embedded file size limit
 	# optional, default is 16K
 	#
-	# exception, wordform and stopword files less than this limit are stored
-	# in the index header
+	# exceptions, wordforms, and stopwords files smaller than this limit
+	# are stored in the index; otherwise, their paths and sizes are stored
 	#
-	embedded_limit		= 1
+	# embedded_limit		= 16K
 
 	# minimum indexed word length
 	# default is 1 (index everything)
@@ -579,10 +579,40 @@ index test1
 
 
 	# index per-document and average per-index field lengths, in tokens
-	# required for the BM25(), BM25F() in expression ranker
-	# optional, defualt is 0 (do not index field lenghts)
+	# required for the BM25A(), BM25F() in expression ranker
+	# optional, default is 0 (do not index field lenghts)
 	#
 	# index_field_lengths	= 1
+
+
+	# regular expressions (regexps) to filter the fields and queries with
+	# gets applied to data source fields when indexing
+	# gets applied to search queries when searching
+	# multi-value, optional, default is empty list of regexps
+	#
+	# regexp_filter		= \b(\d+)\" => \1inch
+	# regexp_filter		= (blue|red) => color
+
+
+	# list of the words considered frequent with respect to bigram indexing
+	# optional, default is empty
+	#
+	# bigram_freq_words	= the, a, i, you, my
+
+
+	# bigram indexing mode
+	# known values are none, all, first_freq, both_freq
+	# option, default is none (do not index bigrams)
+	#
+	# bigram_index		= both_freq
+
+
+	# snippet document file name prefix
+	# preprended to file names when generating snippets using load_files option
+	# WARNING, this is a prefix (not a path), trailing slash matters!
+	# optional, default is empty
+	#
+	# snippets_file_prefix	= /mnt/mydocs/server1
 }
 
 
@@ -619,10 +649,25 @@ index dist1
 	agent			= localhost:9314:remote2,remote3
 	# agent			= /var/run/searchd.sock:remote4
 
+	# remote agent mirrors groups, aka mirrors, aka HA agents
+	# defines 2 or more interchangeable mirrors for a given index part
+	#
+	# agent			= server3:9312 | server4:9312 :indexchunk2
+	# agent			= server3:9312:chunk2server3 | server4:9312:chunk2server4
+	# agent			= server3:chunk2server3 | server4:chunk2server4
+	# agent			= server21|server22|server23:chunk2
+
+
 	# blackhole remote agent, for debugging/testing
 	# network errors and search results will be ignored
 	#
 	# agent_blackhole		= testbox:9312:testindex1,testindex2
+
+
+	# persistenly connected remote agent
+	# reduces connect() pressure, requires that workers is NOT threads
+	#
+	# agent_persistent		= testbox:9312:testindex1,testindex2
 
 
 	# remote agent connection timeout, milliseconds
@@ -631,7 +676,13 @@ index dist1
 
 	# remote agent query timeout, milliseconds
 	# optional, default is 3000 ms, ie. 3 sec
-	agent_query_timeout	= 3000
+	agent_query_timeout		= 3000
+
+	# HA mirror agent strategy
+	# optional, defaults to ??? (random mirror)
+	# know values are nodeads, noerrors, roundrobin, nodeadstm, noerrorstm
+	#
+	# ha_strategy				= nodeads
 }
 
 
@@ -949,6 +1000,35 @@ searchd
 	# optional, default is "doc=64, hit=48, skip=2048, match=64"
 	#
 	# predicted_time_costs	= doc=64, hit=48, skip=2048, match=64
+
+
+	# current SphinxQL state (uservars etc) serialization path
+	# optional, default is none (do not serialize SphinxQL state)
+	#
+	# sphinxql_state			= sphinxvars.sql
+
+
+	# maximum RT merge thread IO calls per second, and per-call IO size
+	# useful for throttling (the background) OPTIMIZE INDEX impact
+	# optional, default is 0 (unlimited)
+	#
+	# rt_merge_iops			= 40
+	# rt_merge_maxiosize		= 1M
+
+
+	# interval between agenr mirror pings, in milliseconds
+	# 0 means disable pings
+	# optional, default is 1000
+	#
+	# ha_ping_interval		= 0
+
+
+	# agent mirror statistics window size, in seconds
+	# stats older than the window size (karma) are retired
+	# that is, they will not affect master choice of agents in any way
+	# optional, default is 60 seconds
+	#
+	# ha_period_karma			= 60
 }
 
 # --eof--

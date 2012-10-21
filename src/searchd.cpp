@@ -11316,64 +11316,7 @@ public:
 		if ( IsNoPattern() )
 			return true;
 
-		const char * sPattern = m_sPattern;
-		const char * sEnd = sPattern + strlen ( sPattern );
-		const char * sValEnd = sValue + strlen ( sValue );
-		bool bAsterisk = false;
-
-		while ( sPattern<sEnd && sValue<sValEnd )
-		{
-			switch ( *sPattern )
-			{
-			case '*' :
-				bAsterisk = true;
-				++sPattern;
-				break;
-			case '?' :
-				++sValue;
-				++sPattern;
-				break;
-			default:
-				{
-					int iSubPatLen = 1;
-					while ( (sPattern+iSubPatLen)<sEnd && sPattern[iSubPatLen]!='*' && sPattern[iSubPatLen]!='?' )
-						++iSubPatLen;
-
-					int iValLen = strlen ( sValue );
-					if ( iValLen < iSubPatLen )
-						return false;
-
-					if ( bAsterisk )
-					{
-						int iSupPos = -1;
-						for ( int i=0; i<iValLen-iSubPatLen+1; ++i )
-							if ( strncmp ( sPattern, sValue+i, iSubPatLen )==0 )
-							{
-								iSupPos = i;
-								break;
-							}
-							if ( iSupPos<0 )
-								return false;
-
-							sPattern+=iSubPatLen;
-							sValue+=iSupPos+iSubPatLen;
-					} else
-					{
-						if ( strncmp ( sPattern, sValue, iSubPatLen )!=0 )
-							return false;
-
-						sPattern+=iSubPatLen;
-						sValue+=iSubPatLen;
-					}
-					bAsterisk = false;
-				}
-			}
-		}
-
-		if ( !bAsterisk && sValue<sValEnd )
-			return false;
-
-		return true;
+		return sphWildcardMatch ( sValue, m_sPattern );
 	}
 };
 

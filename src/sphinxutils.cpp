@@ -1801,6 +1801,10 @@ void sphBacktrace ( int iFD, bool bSafe )
 	sphSafeInfo ( iFD, "Program compiled with " COMPILER );
 #endif
 
+#ifdef CONFIGURE_FLAGS
+	sphSafeInfo ( iFD, "Configured with flags: "CONFIGURE_FLAGS );
+#endif
+
 #ifdef OS_UNAME
 	sphSafeInfo ( iFD, "Host OS is "OS_UNAME );
 #endif

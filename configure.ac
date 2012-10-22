@@ -69,6 +69,7 @@ syntax error
 
 AC_DEFINE_UNQUOTED([COMPILER],"$CC `$CC -dumpversion`",[Define to be the name of the compiler.])
 AC_DEFINE_UNQUOTED([OS_UNAME],"`uname -a`",[Full name OS])
+AC_DEFINE_UNQUOTED([CONFIGURE_FLAGS],"$ac_configure_args",[Flags used to configure me])
 
 dnl --------------------------------------------------------------------------
 

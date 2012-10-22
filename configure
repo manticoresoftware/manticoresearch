@@ -4403,6 +4403,11 @@ cat >>confdefs.h <<_ACEOF
 _ACEOF
 
 
+cat >>confdefs.h <<_ACEOF
+#define CONFIGURE_FLAGS "$ac_configure_args"
+_ACEOF
+
+
 
 
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: " >&5

@@ -3661,9 +3661,9 @@ public:
 				// 2. Among good nodes - select the one(s) with lowest errors/query rating
 				float fCriticalErrors = (float) uCriticalErrors/uQueries;
 				float fAllErrors = (float) uAllErrors/uQueries;
-				if ( fCriticalErrors <= fAllowedErrorRating )
+				if ( fCriticalErrors<=fAllowedErrorRating )
 					fCriticalErrors = 0.0f;
-				if ( fAllErrors <= fAllowedErrorRating )
+				if ( fAllErrors<=fAllowedErrorRating )
 					fAllErrors = 0.0f;
 				if ( fCriticalErrors < fBestCriticalErrors )
 				{

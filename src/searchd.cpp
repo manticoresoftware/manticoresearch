@@ -3901,6 +3901,7 @@ struct DistributedIndex_t
 	int							m_iAgentConnectTimeout;		///< in msec
 	int							m_iAgentQueryTimeout;		///< in msec
 	bool						m_bToDelete;				///< should be deleted
+	bool						m_bDivideRemoteRanges;			///< whether we divide big range onto agents or not
 	HAStrategies_e				m_eHaStrategy;				///< how to select the best of my agents
 	InterWorkerStorage *		m_pHAStorage;				///< IPC HA arrays
 
@@ -3911,6 +3912,7 @@ public:
 		, m_bToDelete ( false )
 		, m_eHaStrategy ( HA_RANDOM )
 		, m_pHAStorage ( NULL )
+		, m_bDivideRemoteRanges ( false )
 	{}
 	~DistributedIndex_t()
 	{
@@ -4923,8 +4925,8 @@ private:
 
 struct SearchRequestBuilder_t : public IRequestBuilder_t
 {
-	SearchRequestBuilder_t ( const CSphVector<CSphQuery> & dQueries, int iStart, int iEnd )
-		: m_dQueries ( dQueries ), m_iStart ( iStart ), m_iEnd ( iEnd )
+	SearchRequestBuilder_t ( const CSphVector<CSphQuery> & dQueries, int iStart, int iEnd, int iDivideLimits )
+		: m_dQueries ( dQueries ), m_iStart ( iStart ), m_iEnd ( iEnd ), m_iDivideLimits ( iDivideLimits )
 	{}
 
 	virtual void		BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
@@ -4937,6 +4939,7 @@ protected:
 	const CSphVector<CSphQuery> &		m_dQueries;
 	const int							m_iStart;
 	const int							m_iEnd;
+	const int							m_iDivideLimits;
 };
 
 
@@ -5008,7 +5011,12 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	if ( q.m_sOuterOrderBy.IsEmpty() )
 		tOut.SendInt ( q.m_iMaxMatches ); // OPTIMIZE? normally, agent limit is max_matches, even if master limit is less
 	else
-		tOut.SendInt ( q.m_iLimit ); // with outer order by, inner limit must match between agent and master
+	{
+		if ( m_iDivideLimits==1 )
+			tOut.SendInt ( q.m_iLimit ); // with outer order by, inner limit must match between agent and master
+		else
+			tOut.SendInt ( 1+(q.m_iLimit/m_iDivideLimits) );
+	}
 	tOut.SendInt ( (DWORD)q.m_eMode ); // match mode
 	tOut.SendInt ( (DWORD)q.m_eRanker ); // ranking mode
 	if ( q.m_eRanker==SPH_RANK_EXPR || q.m_eRanker==SPH_RANK_EXPORT )
@@ -8859,12 +8867,13 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	////////////////////////////
 
 	CSphVector<AgentConn_t> dAgents;
+	int iDivideLimits = 1;
 	CSphVector<CSphString> dDistLocal;
 	bool bDist = false;
 	int iAgentConnectTimeout = 0, iAgentQueryTimeout = 0;
 
 	{
-		g_tDistLock.Lock();
+		CSphScopedLock<DistributedMutex_t> tDistLock ( g_tDistLock );
 		DistributedIndex_t * pDist = g_hDistIndexes ( tFirst.m_sIndexes );
 		if ( pDist )
 		{
@@ -8879,8 +8888,10 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			dAgents.Resize ( pDist->m_dAgents.GetLength() );
 			ARRAY_FOREACH ( i, pDist->m_dAgents )
 				dAgents[i].TakeTraits ( *pDist->m_dAgents[i].GetRRAgent ( pDist->m_eHaStrategy ) );
+
+			if ( pDist->m_bDivideRemoteRanges )
+				iDivideLimits = dAgents.GetLength();
 		}
-		g_tDistLock.Unlock();
 	}
 
 	if ( !bDist )
@@ -9033,7 +9044,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	CSphScopedPtr<CSphRemoteAgentsController> tDistCtrl ( NULL );
 	if ( bDist && dAgents.GetLength() )
 	{
-		tReqBuilder = new SearchRequestBuilder_t ( m_dQueries, iStart, iEnd );
+		tReqBuilder = new SearchRequestBuilder_t ( m_dQueries, iStart, iEnd, iDivideLimits );
 		tDistCtrl = new CSphRemoteAgentsController ( g_iDistThreads, dAgents,
 			*tReqBuilder.Ptr(), iAgentConnectTimeout, tFirst.m_iRetryCount, tFirst.m_iRetryDelay );
 	}
@@ -16479,6 +16490,8 @@ static void ConfigureDistributedIndex ( DistributedIndex_t * pIdx, const char * 
 		else
 			tIdx.m_iAgentConnectTimeout = hIndex["agent_connect_timeout"].intval();
 	}
+
+	tIdx.m_bDivideRemoteRanges = hIndex.GetInt ( "divide_remote_ranges", 0 )!=0;
 
 	if ( hIndex("agent_query_timeout") )
 	{

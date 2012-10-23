@@ -401,6 +401,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "bigram_freq_words",		0, NULL },
 	{ "bigram_index",			0, NULL },
 	{ "index_field_lengths",	0, NULL },
+	{ "divide_remote_ranges",			0, NULL },
 	{ NULL,						0, NULL }
 };
 

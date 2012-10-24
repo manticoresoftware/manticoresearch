@@ -5009,14 +5009,13 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 {
 	tOut.SendInt ( 0 ); // offset is 0
 	if ( q.m_sOuterOrderBy.IsEmpty() )
-		tOut.SendInt ( q.m_iMaxMatches ); // OPTIMIZE? normally, agent limit is max_matches, even if master limit is less
-	else
 	{
 		if ( m_iDivideLimits==1 )
-			tOut.SendInt ( q.m_iLimit ); // with outer order by, inner limit must match between agent and master
+			tOut.SendInt ( q.m_iMaxMatches ); // OPTIMIZE? normally, agent limit is max_matches, even if master limit is less
 		else
 			tOut.SendInt ( 1+(q.m_iLimit/m_iDivideLimits) );
-	}
+	} else
+		tOut.SendInt ( q.m_iLimit ); // with outer order by, inner limit must match between agent and master
 	tOut.SendInt ( (DWORD)q.m_eMode ); // match mode
 	tOut.SendInt ( (DWORD)q.m_eRanker ); // ranking mode
 	if ( q.m_eRanker==SPH_RANK_EXPR || q.m_eRanker==SPH_RANK_EXPORT )
@@ -5062,7 +5061,10 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	}
 	tOut.SendInt ( q.m_eGroupFunc );
 	tOut.SendString ( q.m_sGroupBy.cstr() );
-	tOut.SendInt ( q.m_iMaxMatches );
+	if ( m_iDivideLimits==1 )
+		tOut.SendInt ( q.m_iMaxMatches );
+	else
+		tOut.SendInt ( 1+(q.m_iMaxMatches/m_iDivideLimits) ); // Reduce the max_matches also.
 	tOut.SendString ( q.m_sGroupSortBy.cstr() );
 	tOut.SendInt ( q.m_iCutoff );
 	tOut.SendInt ( q.m_iRetryCount );

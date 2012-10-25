@@ -6589,7 +6589,6 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 			ARRAY_FOREACH ( j, dStringPtrItems )
 			{
 				const char* pStr = (const char*) tMatch.GetAttr ( dStringPtrItems[j] );
-				assert ( pStr );
 				if ( pStr )
 					iRespLen += strlen ( pStr );
 			}
@@ -7133,6 +7132,9 @@ static int KillAllDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, const 
 			}
 		}
 	}
+
+	ARRAY_FOREACH ( i, tRes.m_dMatches )
+		tRes.m_tSchema.FreeStringPtrs ( &(tRes.m_dMatches[i]) );
 
 	tRes.m_dMatches.Reset ();
 	sphFlattenQueue ( pSorter, &tRes, -1 );

@@ -4324,6 +4324,40 @@ bool sphUDFDrop ( const char * szFunc, CSphString & sError )
 	g_tUdfMutex.Unlock();
 	return true;
 }
+
+
+static const char * UdfReturnType ( ESphAttr eType )
+{
+	switch ( eType )
+	{
+		case SPH_ATTR_INTEGER:		return "INT";
+		case SPH_ATTR_FLOAT:		return "FLOAT";
+		case SPH_ATTR_STRINGPTR:	return "STRING";
+		default:					assert ( 0 && "unknown UDF return type" ); return "???";
+	}
+}
+
+
+void sphUDFSaveState ( CSphWriter & tWriter )
+{
+	int iBasePathLen = g_sUdfDir.Length();
+	g_tUdfMutex.Lock();
+	g_hUdfFuncs.IterateStart();
+	while ( g_hUdfFuncs.IterateNext() )
+	{
+		const CSphString & sName = g_hUdfFuncs.IterateGetKey();
+		const UdfFunc_t & tDesc = g_hUdfFuncs.IterateGet();
+		if ( !tDesc.m_bToDrop )
+		{
+			CSphString sBuf;
+			sBuf.SetSprintf ( "CREATE FUNCTION %s RETURNS %s SONAME '%s';\n",
+				sName.cstr(), UdfReturnType ( tDesc.m_eRetType ), tDesc.m_pLibName->cstr() + iBasePathLen + 1 );
+			tWriter.PutBytes ( sBuf.cstr(), sBuf.Length() );
+		}
+	}
+	g_tUdfMutex.Unlock();
+}
+
 #endif // HAVE_DLOPEN
 
 //////////////////////////////////////////////////////////////////////////

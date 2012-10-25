@@ -40,6 +40,7 @@
 #define MVA_UPDATES_POOL		1048576
 #define NETOUTBUF				8192
 #define PING_INTERVAL			1000
+#define QLSTATE_FLUSH_MSEC		50
 
 
 // don't shutdown on SIGKILL (debug purposes)
@@ -814,8 +815,9 @@ struct Uservar_t
 
 static CSphMutex					g_tUservarsMutex;
 static SmallStringHash_T<Uservar_t>	g_hUservars;
-static volatile int64_t				g_tmUservars; // update timestamp
-static SphThread_t					g_tUservarsFlushThread;
+
+static volatile int64_t				g_tmSphinxqlState; // last state (uservars+udfs+...) update timestamp
+static SphThread_t					g_tSphinxqlStateFlushThread;
 static CSphString					g_sSphinxqlState;
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1547,9 +1549,7 @@ void Shutdown ()
 
 			// tell uservars flush thread to shutdown, and wait until it does
 			if ( !g_sSphinxqlState.IsEmpty() )
-			{
-				sphThreadJoin ( &g_tUservarsFlushThread );
-			}
+				sphThreadJoin ( &g_tSphinxqlStateFlushThread );
 
 			sphThreadJoin ( &g_tOptimizeThread );
 
@@ -14221,7 +14221,7 @@ void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & 
 		// create or update the variable
 		g_tUservarsMutex.Lock();
 		UservarAdd ( tStmt.m_sSetName, tStmt.m_dSetValues );
-		g_tmUservars = sphMicroTimer();
+		g_tmSphinxqlState = sphMicroTimer();
 		g_tUservarsMutex.Unlock();
 		break;
 	}
@@ -14709,6 +14709,7 @@ public:
 				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
 			else
 				tOut.Ok();
+			g_tmSphinxqlState = sphMicroTimer();
 			return;
 
 		case STMT_DROP_FUNC:
@@ -14716,6 +14717,7 @@ public:
 				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
 			else
 				tOut.Ok();
+			g_tmSphinxqlState = sphMicroTimer();
 			return;
 
 		case STMT_ATTACH_INDEX:
@@ -15715,11 +15717,9 @@ struct NamedRefVectorPair_t
 };
 
 
-#define SPH_USERVARS_AUTO_FLUSH_CHECK_PERIOD 50
-
-
-/// thread that flush changes of uservars table
-static void UservarsThreadFunc ( void * )
+/// SphinxQL state writer thread
+/// periodically flushes changes of uservars, UDFs
+static void SphinxqlStateThreadFunc ( void * )
 {
 	assert ( !g_sSphinxqlState.IsEmpty() );
 	CSphString sNewState;
@@ -15732,25 +15732,36 @@ static void UservarsThreadFunc ( void * )
 	CSphString sError;
 	CSphWriter tWriter;
 
-	int64_t tmLast = g_tmUservars;
+	int64_t tmLast = g_tmSphinxqlState;
 	while ( !g_bShutdown )
 	{
 		// stand still till save time
-		if ( tmLast==g_tmUservars )
+		if ( tmLast==g_tmSphinxqlState )
 		{
-			sphSleepMsec ( SPH_USERVARS_AUTO_FLUSH_CHECK_PERIOD );
+			sphSleepMsec ( QLSTATE_FLUSH_MSEC );
 			continue;
 		}
 
+		// close and truncate the .new file
 		tWriter.CloseFile ( true );
 		if ( !tWriter.OpenFile ( sNewState, sError ) )
 		{
-			sphWarning ( "uservar flush failed ( error '%s' ) ", sError.cstr() );
-			sphSleepMsec ( SPH_USERVARS_AUTO_FLUSH_CHECK_PERIOD );
+			sphWarning ( "sphinxql_state flush failed: %s", sError.cstr() );
+			sphSleepMsec ( QLSTATE_FLUSH_MSEC );
 			continue;
 		}
 
-		tmLast = g_tmUservars;
+		/////////////
+		// save UDFs
+		/////////////
+
+		sphUDFSaveState ( tWriter );
+
+		/////////////////
+		// save uservars
+		/////////////////
+
+		tmLast = g_tmSphinxqlState;
 		CSphVector<NamedRefVectorPair_t> dUservars;
 		dUservars.Reserve ( g_hUservars.GetLength() );
 		g_tUservarsMutex.Lock();
@@ -15770,7 +15781,7 @@ static void UservarsThreadFunc ( void * )
 		dUservars.Sort ( bind ( &NamedRefVectorPair_t::m_sName ) );
 
 		// reinitiate store process on new variables added
-		ARRAY_FOREACH_COND ( i, dUservars, tmLast==g_tmUservars )
+		ARRAY_FOREACH_COND ( i, dUservars, tmLast==g_tmSphinxqlState )
 		{
 			const CSphVector<SphAttr_t> & dVals = *dUservars[i].m_pVal;
 			int iLen = snprintf ( dBuf, sizeof ( dBuf ), "SET GLOBAL %s = ( "INT64_FMT, dUservars[i].m_sName.cstr(), dVals[0] );
@@ -15789,7 +15800,7 @@ static void UservarsThreadFunc ( void * )
 			if ( iLen )
 				tWriter.PutBytes ( dBuf, iLen );
 
-			char sTail[] = " )\n";
+			char sTail[] = " );\n";
 			tWriter.PutBytes ( sTail, sizeof ( sTail )-1 );
 		}
 
@@ -15797,13 +15808,18 @@ static void UservarsThreadFunc ( void * )
 		ARRAY_FOREACH ( i, dUservars )
 			dUservars[i].m_pVal->Release();
 
+		/////////////////////////////////
+		// writing done, flip the burger
+		/////////////////////////////////
+
 		tWriter.CloseFile();
 		if ( ::rename ( sNewState.cstr(), g_sSphinxqlState.cstr() )==0 )
 		{
 			::unlink ( sNewState.cstr() );
 		} else
 		{
-			sphWarning ( "renaming sphinxql_state file '%s' to '%s' failed: %s", sNewState.cstr(), g_sSphinxqlState.cstr(), strerror(errno) );
+			sphWarning ( "sphinxql_state flush: rename %s to %s failed: %s",
+				sNewState.cstr(), g_sSphinxqlState.cstr(), strerror(errno) );
 		}
 	}
 }
@@ -15816,6 +15832,8 @@ static bool StateReaderAddUservar ( CSphVector<char> & dLine, CSphString * sErro
 		return true;
 
 	// parser expects CSphString buffer with gap bytes at the end
+	if ( dLine.Last()==';' )
+		dLine.Pop();
 	dLine.Add ( '\0' );
 	dLine.Add ( '\0' );
 	dLine.Add ( '\0' );
@@ -15833,11 +15851,14 @@ static bool StateReaderAddUservar ( CSphVector<char> & dLine, CSphString * sErro
 		{
 			tStmt.m_dSetValues.Sort();
 			UservarAdd ( tStmt.m_sSetName, tStmt.m_dSetValues );
+		} else if ( tStmt.m_eStmt==STMT_CREATE_FUNC )
+		{
+			if ( !sphUDFCreate ( tStmt.m_sUdfLib.cstr(), tStmt.m_sUdfName.cstr(), tStmt.m_eUdfType, *sError ) )
+				bOk = false;
 		} else
 		{
 			bOk = false;
-			sError->SetSprintf ( "only 'SET GLOBAL' supported" );
-			continue;
+			sError->SetSprintf ( "unsupported statement (must be one of SET GLOBAL, CREATE FUNCTION)" );
 		}
 	}
 
@@ -15894,7 +15915,7 @@ static void UservarsStateRead ( const CSphString & sName )
 			if ( *s=='\n' || *s=='\r' )
 			{
 				if ( !StateReaderAddUservar ( dLine, &sError ) )
-					sphWarning ( "failed to parse uservar at line %d ( error '%s' )", iLines, sError.cstr() );
+					sphWarning ( "sphinxql_state: parse error at line %d: %s", 1+iLines, sError.cstr() );
 
 				dLine.Resize ( 0 );
 				s++;
@@ -15912,7 +15933,7 @@ static void UservarsStateRead ( const CSphString & sName )
 	}
 
 	if ( !StateReaderAddUservar ( dLine, &sError ) )
-		sphWarning ( "failed to parse uservar at line %d ( error '%s' )", iLines, sError.cstr() );
+		sphWarning ( "sphinxql_state: parse error at line %d: %s", 1+iLines, sError.cstr() );
 }
 
 
@@ -19245,7 +19266,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( !g_sSphinxqlState.IsEmpty() )
 		{
 			UservarsStateRead ( g_sSphinxqlState );
-			g_tmUservars = sphMicroTimer();
+			g_tmSphinxqlState = sphMicroTimer();
 
 			CSphString sError;
 			CSphWriter tWriter;
@@ -19257,12 +19278,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			::unlink ( sNewState.cstr() );
 
 			if ( !bCanWrite )
-			{
-				sphWarning ( "uservar flush disabled ( error '%s' ) ", sError.cstr() );
-			} else if ( !sphThreadCreate ( &g_tUservarsFlushThread, UservarsThreadFunc, NULL ) )
-			{
-				sphDie ( "failed to create uservars flush thread" );
-			}
+				sphWarning ( "sphinxql_state flush disabled: %s", sError.cstr() );
+			else if ( !sphThreadCreate ( &g_tSphinxqlStateFlushThread, SphinxqlStateThreadFunc, NULL ) )
+				sphDie ( "failed to create sphinxql_state writer thread" );
 		}
 	}
 

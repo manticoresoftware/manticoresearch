@@ -186,6 +186,10 @@ bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, 
 /// unload UDF function
 bool sphUDFDrop ( const char * szFunc, CSphString & sError );
 
+/// save SphinxQL state (ie. all active functions)
+class CSphWriter;
+void sphUDFSaveState ( CSphWriter & tWriter );
+
 #endif // _sphinxexpr_
 
 //

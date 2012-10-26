@@ -6891,6 +6891,15 @@ void CSphQueryResult::LeakStorages ( CSphQueryResult & tDst )
 }
 
 
+void CSphQueryResult::ClampMatches ( int iLimit )
+{
+	for ( int i=iLimit; i<m_dMatches.GetLength(); i++ )
+		m_tSchema.FreeStringPtrs ( &m_dMatches[i] );
+
+	m_dMatches.Resize ( iLimit );
+}
+
+
 /////////////////////////////////////////////////////////////////////////////
 // CHUNK READER
 /////////////////////////////////////////////////////////////////////////////

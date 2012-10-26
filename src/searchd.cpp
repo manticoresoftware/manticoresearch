@@ -7502,7 +7502,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, bool bHadLoca
 				iSetStart = iSetEnd;
 				tRes.m_dMatchCounts[iSet] = iOut - iOldOut;
 			}
-			tRes.m_dMatches.Resize ( iOut );
+			tRes.ClampMatches ( iOut );
 		}
 
 		// so we need to bring matches to the schema that the *sorter* wants
@@ -7556,7 +7556,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, bool bHadLoca
 		if ( tQuery.m_iOffset>0 )
 			for ( int i=0; i<iLimited; i++ )
 				::Swap ( tRes.m_dMatches[i], tRes.m_dMatches[i+tQuery.m_iOffset] );
-		tRes.m_dMatches.Resize ( iLimited );
+		tRes.ClampMatches ( iLimited );
 
 		// reorder (aka outer order)
 		ESphSortFunc eFunc;
@@ -7578,7 +7578,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, bool bHadLoca
 	if ( !tQuery.m_sOuterOrderBy.IsEmpty() )
 	{
 		if ( tQuery.m_iOuterLimit>0 && tQuery.m_iOuterLimit<tRes.m_dMatches.GetLength() )
-			tRes.m_dMatches.Resize ( tQuery.m_iOuterLimit );
+			tRes.ClampMatches ( tQuery.m_iOuterLimit );
 		tRes.m_bLimited = true;
 	}
 

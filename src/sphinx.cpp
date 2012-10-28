@@ -9603,7 +9603,8 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWO
 				}
 			}
 
-			assert ( pAttrs );
+			if ( !pAttrs )
+				sphDie ( "INTERNAL ERROR: pDocinfo wasn't filled?" );
 			assert ( DOCINFO2ID ( pAttrs - DOCINFO_IDSIZE )==pHit->m_iDocID );
 			iAttrID = pHit->m_iDocID;
 		}
@@ -11305,6 +11306,17 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					pSource->m_tDocInfo.SetAttr ( m_tSchema.GetAttr(iAttr).m_tLocator, iNumWords );
 				}
 
+			if ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_NONE )
+			{
+				// store next entry
+				DOCINFOSETID ( pDocinfo, pSource->m_tDocInfo.m_iDocID );
+
+				// old docinfo found, use it instead of the new one
+				const DWORD * pSrc = pPrevDocinfo ? DOCINFO2ATTRS ( pPrevDocinfo ) : pSource->m_tDocInfo.m_pDynamic;
+				memcpy ( DOCINFO2ATTRS ( pDocinfo ), pSrc, sizeof(CSphRowitem)*m_tSchema.GetRowSize() );
+				pDocinfo += iDocinfoStride;
+			}
+
 			// store hits
 			while ( const ISphHits * pDocHits = pSource->IterateHits ( m_sLastWarning ) )
 			{
@@ -11400,14 +11412,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			// because field lengths are computed during that iterating
 			if ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_NONE )
 			{
-				// store next entry
-				DOCINFOSETID ( pDocinfo, pSource->m_tDocInfo.m_iDocID );
-
-				// old docinfo found, use it instead of the new one
-				const DWORD * pSrc = pPrevDocinfo ? DOCINFO2ATTRS ( pPrevDocinfo ) : pSource->m_tDocInfo.m_pDynamic;
-				memcpy ( DOCINFO2ATTRS ( pDocinfo ), pSrc, sizeof(CSphRowitem)*m_tSchema.GetRowSize() );
-				pDocinfo += iDocinfoStride;
-
 				// if not inlining, flush buffer if it's full
 				// (if inlining, it will flushed later, along with the hits)
 				if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && pDocinfo>=pDocinfoMax )

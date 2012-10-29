@@ -1,4 +1,4 @@
-Sphinx 2.1.0-beta reference manual
+Sphinx 2.1.1-beta reference manual
 ==================================
 
 Free open-source SQL full-text search engine
@@ -103,10 +103,11 @@ Table of Contents
    7.19. ATTACH INDEX syntax
    7.20. FLUSH RTINDEX syntax
    7.21. TRUNCATE RTINDEX syntax
-   7.22. Multi-statement queries
-   7.23. Comment syntax
-   7.24. List of SphinxQL reserved keywords
-   7.25. SphinxQL upgrade notes, version 2.0.1-beta
+   7.22. SHOW AGENT STATUS
+   7.23. Multi-statement queries
+   7.24. Comment syntax
+   7.25. List of SphinxQL reserved keywords
+   7.26. SphinxQL upgrade notes, version 2.0.1-beta
 
 8. API reference
    8.1. General API functions
@@ -241,51 +242,57 @@ Table of Contents
       11.2.10. min_stemming_len
       11.2.11. stopwords
       11.2.12. wordforms
-      11.2.13. exceptions
-      11.2.14. min_word_len
-      11.2.15. charset_type
-      11.2.16. charset_table
-      11.2.17. ignore_chars
-      11.2.18. min_prefix_len
-      11.2.19. min_infix_len
-      11.2.20. prefix_fields
-      11.2.21. infix_fields
-      11.2.22. enable_star
-      11.2.23. ngram_len
-      11.2.24. ngram_chars
-      11.2.25. phrase_boundary
-      11.2.26. phrase_boundary_step
-      11.2.27. html_strip
-      11.2.28. html_index_attrs
-      11.2.29. html_remove_elements
-      11.2.30. local
-      11.2.31. agent
-      11.2.32. agent_blackhole
-      11.2.33. agent_connect_timeout
-      11.2.34. agent_query_timeout
-      11.2.35. preopen
-      11.2.36. ondisk_dict
-      11.2.37. inplace_enable
-      11.2.38. inplace_hit_gap
-      11.2.39. inplace_docinfo_gap
-      11.2.40. inplace_reloc_factor
-      11.2.41. inplace_write_factor
-      11.2.42. index_exact_words
-      11.2.43. overshort_step
-      11.2.44. stopword_step
-      11.2.45. hitless_words
-      11.2.46. expand_keywords
-      11.2.47. blend_chars
-      11.2.48. blend_mode
-      11.2.49. rt_mem_limit
-      11.2.50. rt_field
-      11.2.51. rt_attr_uint
-      11.2.52. rt_attr_bigint
-      11.2.53. rt_attr_float
-      11.2.54. rt_attr_multi
-      11.2.55. rt_attr_multi_64
-      11.2.56. rt_attr_timestamp
-      11.2.57. rt_attr_string
+      11.2.13. embedded_limit
+      11.2.14. exceptions
+      11.2.15. min_word_len
+      11.2.16. charset_type
+      11.2.17. charset_table
+      11.2.18. ignore_chars
+      11.2.19. min_prefix_len
+      11.2.20. min_infix_len
+      11.2.21. prefix_fields
+      11.2.22. infix_fields
+      11.2.23. enable_star
+      11.2.24. ngram_len
+      11.2.25. ngram_chars
+      11.2.26. phrase_boundary
+      11.2.27. phrase_boundary_step
+      11.2.28. html_strip
+      11.2.29. html_index_attrs
+      11.2.30. html_remove_elements
+      11.2.31. local
+      11.2.32. agent
+      11.2.33. agent_persistent
+      11.2.34. agent_blackhole
+      11.2.35. agent_connect_timeout
+      11.2.36. agent_query_timeout
+      11.2.37. preopen
+      11.2.38. ondisk_dict
+      11.2.39. inplace_enable
+      11.2.40. inplace_hit_gap
+      11.2.41. inplace_docinfo_gap
+      11.2.42. inplace_reloc_factor
+      11.2.43. inplace_write_factor
+      11.2.44. index_exact_words
+      11.2.45. overshort_step
+      11.2.46. stopword_step
+      11.2.47. hitless_words
+      11.2.48. expand_keywords
+      11.2.49. blend_chars
+      11.2.50. blend_mode
+      11.2.51. rt_mem_limit
+      11.2.52. rt_field
+      11.2.53. rt_attr_uint
+      11.2.54. rt_attr_bigint
+      11.2.55. rt_attr_float
+      11.2.56. rt_attr_multi
+      11.2.57. rt_attr_multi_64
+      11.2.58. rt_attr_timestamp
+      11.2.59. rt_attr_string
+      11.2.60. ha_strategy
+      11.2.61. bigram_freq_words
+      11.2.62. bigram_index
+      11.2.63. index_field_lengths
 
    11.3. indexer program configuration options
       11.3.1. mem_limit
@@ -341,6 +348,11 @@ Table of Contents
       11.4.42. watchdog
       11.4.43. prefork_rotation_throttle
       11.4.44. sphinxql_state
+      11.4.45. ha_ping_interval
+      11.4.46. ha_period_karma
+      11.4.47. rt_merge_iops
+      11.4.48. rt_merge_maxiosize
+      11.4.49. predicted_time_costs
 
 A. Sphinx revision history
    A.1. Version 2.0.5-release, 28 jul 2012
@@ -1139,8 +1151,8 @@ Obviously, that's not much of a difference for 2000-row table, but when it
 comes to indexing 10-million-row MyISAM table, ranged queries might be of
 some help.
 
-sql_post vs. sql_post_index
----------------------------
+sql_query_post vs. sql_query_post_index
+---------------------------------------
 
 The difference between post-query and post-index query is in that
 post-query is run immediately when Sphinx received all the documents, but
@@ -1861,6 +1873,16 @@ extended matching mode:
    * multiple-field search operator:
 
       | @(title,body) hello world
+
+   * ignore field search operator (will ignore any matches of 'hello world'
+     from field 'title'):
+
+      | @!title hello world
+
+   * ignore multiple-field search operator (if we have fields title,
+     subject and body then @!(title) is equivalent to @(subject,body)):
+
+      | @!(title,body) hello world
 
    * all-field search operator:
 
@@ -2906,7 +2928,7 @@ one go (more formally, one network request).
 
 Two API methods that implement multi-query mechanism are AddQuery() and
 RunQueries(). You can also run multiple queries with SphinxQL, see
-Section 7.22, <<Multi-statement queries>>. (In fact, regular Query() call
+Section 7.23, <<Multi-statement queries>>. (In fact, regular Query() call
 is internally implemented as a single AddQuery() call immediately followed
 by RunQueries() call.) AddQuery() captures the current state of all the
 query settings set by previous API calls, and memorizes the query.
@@ -3033,11 +3055,11 @@ properly.
 
 Second, we additionally need to know the language-specific string sorting
 rules. For instance, when sorting according to US rules in en_US locale,
-the accented character 'ï' (small letter i with diaeresis) should be placed
-somewhere after 'z'. However, when sorting with French rules and fr_FR
-locale in mind, it should be placed between 'i' and 'j'. And some other set
-of rules might choose to ignore accents at all, allowing 'ï' and 'i' to be
-mixed arbitrarily.
+the accented character '&iuml;' (small letter i with diaeresis) should be
+placed somewhere after 'z'. However, when sorting with French rules and
+fr_FR locale in mind, it should be placed between 'i' and 'j'. And some
+other set of rules might choose to ignore accents at all, allowing '&iuml;'
+and 'i' to be mixed arbitrarily.
 
 Third, but not least, we might need case-sensitive sorting in some
 scenarios and case-insensitive sorting in some others.
@@ -3874,10 +3896,11 @@ Table of Contents
 7.19. ATTACH INDEX syntax
 7.20. FLUSH RTINDEX syntax
 7.21. TRUNCATE RTINDEX syntax
-7.22. Multi-statement queries
-7.23. Comment syntax
-7.24. List of SphinxQL reserved keywords
-7.25. SphinxQL upgrade notes, version 2.0.1-beta
+7.22. SHOW AGENT STATUS
+7.23. Multi-statement queries
+7.24. Comment syntax
+7.25. List of SphinxQL reserved keywords
+7.26. SphinxQL upgrade notes, version 2.0.1-beta
 
 SphinxQL is our SQL dialect that exposes all of the search daemon
 functionality using a standard SQL syntax with a few Sphinx-specific
@@ -4323,7 +4346,7 @@ occurrence statistics.
 7.12. SHOW TABLES syntax
 ========================
 
-   | SHOW TABLES
+   | SHOW TABLES [ LIKE 'pattern' ]
 
 SHOW TABLES statement, introduced in version 2.0.1-beta, enumerates all
 currently active indexes along with their types. As of 2.0.1-beta, existing
@@ -4340,10 +4363,22 @@ index types are local, distributed, and rt respectively. Example:
    | +-------+-------------+
    | 4 rows in set (0.00 sec)
 
+Optional 'LIKE' clause could be used to show not all, but filtered subset
+of the fields. The pattern in the clause may be defined using classical
+MS-DOS wildchar syntax ('?' means 'any symbol', '*' means 'any symbols').
+
+   | mysql> show tables like '*4';
+   | +-------+-------------+
+   | | Index | Type        |
+   | +-------+-------------+
+   | | dist4 | distributed |
+   | +-------+-------------+
+   | 1 row in set (0.00 sec)
+
 7.13. DESCRIBE syntax
 =====================
 
-   | {DESC | DESCRIBE} index
+   | {DESC | DESCRIBE} index [ LIKE 'pattern' ]
 
 DESCRIBE statement, introduced in version 2.0.1-beta, lists index columns
 and their associated types. Columns are document ID, full-text fields, and
@@ -4363,6 +4398,19 @@ binaries were built with 32-bit or 64-bit document ID support. Example:
    | | gid     | integer |
    | +---------+---------+
    | 4 rows in set (0.00 sec)
+
+Optional 'LIKE' clause could be used to show not all, but filtered subset
+of the fields. The pattern in the clause may be defined using classical
+MS-DOS wildchar syntax ('?' means 'any symbol', '*' means 'any symbols')
+
+   | mysql> DESC distrr LIKE '192*';
+   | +------------------------+-------------------+
+   | | Agent                  | Type              |
+   | +------------------------+-------------------+
+   | | 192.168.0.202:6713:loc | remote_1_mirror_1 |
+   | | 192.168.0.202:6714:loc | remote_1_mirror_2 |
+   | +------------------------+-------------------+
+   | 2 rows in set (0.00 sec)
 
 7.14. CREATE FUNCTION syntax
 ============================
@@ -4445,7 +4493,7 @@ with frameworks and connectors that automatically execute this statement.
 7.18. UPDATE syntax
 ===================
 
-   | UPDATE index SET col1 = newval1 [, ...] WHERE where_condition
+   | UPDATE index SET col1 = newval1 [, ...] WHERE where_condition [OPTION opt_name = opt_value [, ...]]
 
 UPDATE statement was added in version 2.0.1-beta. Multiple attributes and
 values can be specified in a single statement. Both RT and disk indexes are
@@ -4479,6 +4527,18 @@ comma-separated lists in parentheses. To erase the MVA value, just assign
    |     mvattr2=()
    |   WHERE MATCH('hehe') AND enabled=1;
    | Query OK, 148 rows affected (0.01 sec)
+
+OPTION clause. This is a Sphinx specific extension that lets you control
+a number of per-update options. The syntax is:
+
+   | OPTION <optionname>=<value> [ , ... ]
+
+The list of allowed options are the same as for SELECT statement.
+Specifically for UPDATE statement you can use these options:
+
+   * 'ignore_nonexistent_columns' - points that the update will silently
+     ignore any warnings about trying to update a column which is not
+     exists in current index schema.
 
 7.19. ATTACH INDEX syntax
 =========================
@@ -4602,7 +4662,138 @@ data files, and releases the associated binary logs.
    | mysql> TRUNCATE RTINDEX rt;
    | Query OK, 0 rows affected (0.05 sec)
 
-7.22. Multi-statement queries
+7.22. SHOW AGENT STATUS
+=======================
+
+   | SHOW AGENT ['agent'|'index'|index] STATUS [ LIKE 'pattern' ]
+
+Displays the statistic of remote agents or distributed index. It includes
+the values like the age of the last request, last answer, the number of
+different kind of errors and successes, etc. The statistic is shown for
+every agent for last 1, 5 and 15 intervals, each of them of ha_period_karma
+seconds. The command exists only in sphinxql.
+
+   | mysql> SHOW AGENT STATUS;
+   | +------------------------------------+----------------------------+
+   | | Key                                | Value                      |
+   | +------------------------------------+----------------------------+
+   | | status_period_seconds              | 60                         |
+   | | status_stored_periods              | 15                         |
+   | | ag_0_hostname                      | 192.168.0.202:6713         |
+   | | ag_0_references                    | 2                          |
+   | | ag_0_lastquery                     | 0.41                       |
+   | | ag_0_lastanswer                    | 0.19                       |
+   | | ag_0_lastperiodmsec                | 222                        |
+   | | ag_0_errorsarow                    | 0                          |
+   | | ag_0_1periods_query_timeouts       | 0                          |
+   | | ag_0_1periods_connect_timeouts     | 0                          |
+   | | ag_0_1periods_connect_failures     | 0                          |
+   | | ag_0_1periods_network_errors       | 0                          |
+   | | ag_0_1periods_wrong_replies        | 0                          |
+   | | ag_0_1periods_unexpected_closings  | 0                          |
+   | | ag_0_1periods_warnings             | 0                          |
+   | | ag_0_1periods_succeeded_queries    | 27                         |
+   | | ag_0_1periods_msecsperquery        | 232.31                     |
+   | | ag_0_5periods_query_timeouts       | 0                          |
+   | | ag_0_5periods_connect_timeouts     | 0                          |
+   | | ag_0_5periods_connect_failures     | 0                          |
+   | | ag_0_5periods_network_errors       | 0                          |
+   | | ag_0_5periods_wrong_replies        | 0                          |
+   | | ag_0_5periods_unexpected_closings  | 0                          |
+   | | ag_0_5periods_warnings             | 0                          |
+   | | ag_0_5periods_succeeded_queries    | 146                        |
+   | | ag_0_5periods_msecsperquery        | 231.83                     |
+   | | ag_1_hostname                      | 192.168.0.202:6714         |
+   | | ag_1_references                    | 2                          |
+   | | ag_1_lastquery                     | 0.41                       |
+   | | ag_1_lastanswer                    | 0.19                       |
+   | | ag_1_lastperiodmsec                | 220                        |
+   | | ag_1_errorsarow                    | 0                          |
+   | | ag_1_1periods_query_timeouts       | 0                          |
+   | | ag_1_1periods_connect_timeouts     | 0                          |
+   | | ag_1_1periods_connect_failures     | 0                          |
+   | | ag_1_1periods_network_errors       | 0                          |
+   | | ag_1_1periods_wrong_replies        | 0                          |
+   | | ag_1_1periods_unexpected_closings  | 0                          |
+   | | ag_1_1periods_warnings             | 0                          |
+   | | ag_1_1periods_succeeded_queries    | 27                         |
+   | | ag_1_1periods_msecsperquery        | 231.24                     |
+   | | ag_1_5periods_query_timeouts       | 0                          |
+   | | ag_1_5periods_connect_timeouts     | 0                          |
+   | | ag_1_5periods_connect_failures     | 0                          |
+   | | ag_1_5periods_network_errors       | 0                          |
+   | | ag_1_5periods_wrong_replies        | 0                          |
+   | | ag_1_5periods_unexpected_closings  | 0                          |
+   | | ag_1_5periods_warnings             | 0                          |
+   | | ag_1_5periods_succeeded_queries    | 146                        |
+   | | ag_1_5periods_msecsperquery        | 230.85                     |
+   | +------------------------------------+----------------------------+
+   | 50 rows in set (0.01 sec)
+
+Optional 'LIKE' clause could be used to show not all, but filtered subset
+of the fields. The pattern in the clause may be defined using classical
+MS-DOS wildchar syntax ('?' means 'any symbol', '*' means 'any symbols').
+
+   | mysql> SHOW AGENT STATUS LIKE '*_5period*msec*';
+   | +-----------------------------+--------+
+   | | Key                         | Value  |
+   | +-----------------------------+--------+
+   | | ag_0_5periods_msecsperquery | 234.72 |
+   | | ag_1_5periods_msecsperquery | 233.73 |
+   | | ag_2_5periods_msecsperquery | 343.81 |
+   | +-----------------------------+--------+
+   | 3 rows in set (0.00 sec)
+
+You can specify the concrete agent by it's address. In this case only data
+corresponding to selected agent will be displayed. Also, the sphinx will
+use the 'agent_' prefix to the fields instead of 'ag_N_'.
+
+   | mysql> SHOW AGENT '192.168.0.202:6714' STATUS LIKE '*15periods*';
+   | +-------------------------------------+--------+
+   | | Variable_name                       | Value  |
+   | +-------------------------------------+--------+
+   | | agent_15periods_query_timeouts      | 0      |
+   | | agent_15periods_connect_timeouts    | 0      |
+   | | agent_15periods_connect_failures    | 0      |
+   | | agent_15periods_network_errors      | 0      |
+   | | agent_15periods_wrong_replies       | 0      |
+   | | agent_15periods_unexpected_closings | 0      |
+   | | agent_15periods_warnings            | 0      |
+   | | agent_15periods_succeeded_queries   | 439    |
+   | | agent_15periods_msecsperquery       | 231.73 |
+   | +-------------------------------------+--------+
+   | 9 rows in set (0.00 sec)
+
+Finally, you can investigate the status of the agents in concrete
+distributed index. It can be achieved either with 'SHOW AGENT 'index'
+STATUS', either without quotes around the 'index'. Fot the index it is
+displayed whether it uses or not alternative agents, or mirrors, and then
+for every agent/mirror it is displayed it's address, whether it is
+blackhole or persistent, and also the probability of selection of the
+mirror in case when one of the weighted-probability strategies used for
+selectint a mirror.
+
+   | mysql> show agent distrr status;
+   | +--------------------------------------+--------------------------------+
+   | | Variable_name                        | Value                          |
+   | +--------------------------------------+--------------------------------+
+   | | dstindex_1_is_ha                     | 1                              |
+   | | dstindex_1mirror1_id                 | 192.168.0.202:6713:loc         |
+   | | dstindex_1mirror1_probability_weight | 0.372864                       |
+   | | dstindex_1mirror1_is_blackhole       | 0                              |
+   | | dstindex_1mirror1_is_persistent      | 0                              |
+   | | dstindex_1mirror2_id                 | 192.168.0.202:6714:loc         |
+   | | dstindex_1mirror2_probability_weight | 0.374635                       |
+   | | dstindex_1mirror2_is_blackhole       | 0                              |
+   | | dstindex_1mirror2_is_persistent      | 0                              |
+   | | dstindex_1mirror3_id                 | dev1.sphinxsearch.com:6714:loc |
+   | | dstindex_1mirror3_probability_weight | 0.252501                       |
+   | | dstindex_1mirror3_is_blackhole       | 0                              |
+   | | dstindex_1mirror3_is_persistent      | 0                              |
+   | +--------------------------------------+--------------------------------+
+   | 13 rows in set (0.00 sec)
+
+7.23. Multi-statement queries
 =============================
 
 Starting version 2.0.1-beta, SphinxQL supports multi-statement queries, or
@@ -4660,7 +4851,7 @@ WARNINGS, SHOW STATUS, and SHOW META. Arbitrary sequence of these
 statements are allowed. The results sets returned should match those that
 would be returned if the batched queries were sent one by one.
 
-7.23. Comment syntax
+7.24. Comment syntax
 ====================
 
 Since version 2.0.1-beta, SphinxQL supports C-style comment syntax.
@@ -4673,13 +4864,14 @@ between Sphinx and MySQL.)
 
    | SELECT /*! SQL_CALC_FOUND_ROWS */ col1 FROM table1 WHERE ...
 
-7.24. List of SphinxQL reserved keywords
+7.25. List of SphinxQL reserved keywords
 ========================================
 
 A complete alphabetical list of keywords that are currently reserved in
 SphinxQL syntax (and therefore can not be used as identifiers).
 
    | AND
+   | AGENT
    | AS
    | ASC
    | AVG
@@ -4731,7 +4923,7 @@ SphinxQL syntax (and therefore can not be used as identifiers).
    | WHERE
    | WITHIN
 
-7.25. SphinxQL upgrade notes, version 2.0.1-beta
+7.26. SphinxQL upgrade notes, version 2.0.1-beta
 ================================================
 
 This section only applies to existing applications that use SphinxQL
@@ -5665,7 +5857,7 @@ additional optional highlighting parameters:
    'dist_threads' param in the config to the value greater than 1, and then
    invoke the snippets generation over the distributed index, which contain
    only one(!) local agent and several remotes. Starting with version
-   2.1.0-dev, the snippets_file_prefix option is also in the game and the
+   2.1.1-beta, the snippets_file_prefix option is also in the game and the
    final filename is calculated by concatenation of the prefix with given
    name. Otherwords, when snippets_file_prefix is '/var/data' and filename
    is 'text.txt' the sphinx will try to generate the snippets from the file
@@ -5734,7 +5926,8 @@ Returns false on failure. Returns a plain array of strings with excerpts
 8.7.2. UpdateAttributes
 -----------------------
 
-Prototype: function UpdateAttributes ( $index, $attrs, $values )
+Prototype: function UpdateAttributes ( $index, $attrs, $values, $mva=false,
+$ignorenonexistent=false )
 
 Instantly updates given attribute values in given documents. Returns number
 of actually updated documents (0 or more) on success, or -1 on failure.
@@ -5742,7 +5935,12 @@ of actually updated documents (0 or more) on success, or -1 on failure.
 $index is a name of the index (or indexes) to be updated. $attrs is a plain
 array with string attribute names, listing attributes that are updated.
 $values is a hash where key is document ID, and value is a plain array of
-new attribute values.
+new attribute values. Optional boolean parameter mva points that there is
+update of MVA attributes. In this case the $values must be a dict with int
+key (document ID) and list of lists of int values (new MVA attribute
+values). Optional boolean parameter $ignorenonexistent points that the
+update will silently ignore any warnings about trying to update a column
+which is not exists in current index schema.
 
 $index can be either a single index name or a list, like in Query(). Unlike
 Query(), wildcard is not allowed and all the indexes to update must be
@@ -6443,51 +6641,57 @@ Table of Contents
    11.2.10. min_stemming_len
    11.2.11. stopwords
    11.2.12. wordforms
-   11.2.13. exceptions
-   11.2.14. min_word_len
-   11.2.15. charset_type
-   11.2.16. charset_table
-   11.2.17. ignore_chars
-   11.2.18. min_prefix_len
-   11.2.19. min_infix_len
-   11.2.20. prefix_fields
-   11.2.21. infix_fields
-   11.2.22. enable_star
-   11.2.23. ngram_len
-   11.2.24. ngram_chars
-   11.2.25. phrase_boundary
-   11.2.26. phrase_boundary_step
-   11.2.27. html_strip
-   11.2.28. html_index_attrs
-   11.2.29. html_remove_elements
-   11.2.30. local
-   11.2.31. agent
-   11.2.32. agent_blackhole
-   11.2.33. agent_connect_timeout
-   11.2.34. agent_query_timeout
-   11.2.35. preopen
-   11.2.36. ondisk_dict
-   11.2.37. inplace_enable
-   11.2.38. inplace_hit_gap
-   11.2.39. inplace_docinfo_gap
-   11.2.40. inplace_reloc_factor
-   11.2.41. inplace_write_factor
-   11.2.42. index_exact_words
-   11.2.43. overshort_step
-   11.2.44. stopword_step
-   11.2.45. hitless_words
-   11.2.46. expand_keywords
-   11.2.47. blend_chars
-   11.2.48. blend_mode
-   11.2.49. rt_mem_limit
-   11.2.50. rt_field
-   11.2.51. rt_attr_uint
-   11.2.52. rt_attr_bigint
-   11.2.53. rt_attr_float
-   11.2.54. rt_attr_multi
-   11.2.55. rt_attr_multi_64
-   11.2.56. rt_attr_timestamp
-   11.2.57. rt_attr_string
+   11.2.13. embedded_limit
+   11.2.14. exceptions
+   11.2.15. min_word_len
+   11.2.16. charset_type
+   11.2.17. charset_table
+   11.2.18. ignore_chars
+   11.2.19. min_prefix_len
+   11.2.20. min_infix_len
+   11.2.21. prefix_fields
+   11.2.22. infix_fields
+   11.2.23. enable_star
+   11.2.24. ngram_len
+   11.2.25. ngram_chars
+   11.2.26. phrase_boundary
+   11.2.27. phrase_boundary_step
+   11.2.28. html_strip
+   11.2.29. html_index_attrs
+   11.2.30. html_remove_elements
+   11.2.31. local
+   11.2.32. agent
+   11.2.33. agent_persistent
+   11.2.34. agent_blackhole
+   11.2.35. agent_connect_timeout
+   11.2.36. agent_query_timeout
+   11.2.37. preopen
+   11.2.38. ondisk_dict
+   11.2.39. inplace_enable
+   11.2.40. inplace_hit_gap
+   11.2.41. inplace_docinfo_gap
+   11.2.42. inplace_reloc_factor
+   11.2.43. inplace_write_factor
+   11.2.44. index_exact_words
+   11.2.45. overshort_step
+   11.2.46. stopword_step
+   11.2.47. hitless_words
+   11.2.48. expand_keywords
+   11.2.49. blend_chars
+   11.2.50. blend_mode
+   11.2.51. rt_mem_limit
+   11.2.52. rt_field
+   11.2.53. rt_attr_uint
+   11.2.54. rt_attr_bigint
+   11.2.55. rt_attr_float
+   11.2.56. rt_attr_multi
+   11.2.57. rt_attr_multi_64
+   11.2.58. rt_attr_timestamp
+   11.2.59. rt_attr_string
+   11.2.60. ha_strategy
+   11.2.61. bigram_freq_words
+   11.2.62. bigram_index
+   11.2.63. index_field_lengths
 
 11.3. indexer program configuration options
    11.3.1. mem_limit
@@ -6543,6 +6747,11 @@ Table of Contents
    11.4.42. watchdog
    11.4.43. prefork_rotation_throttle
    11.4.44. sphinxql_state
+   11.4.45. ha_ping_interval
+   11.4.46. ha_period_karma
+   11.4.47. rt_merge_iops
+   11.4.48. rt_merge_maxiosize
+   11.4.49. predicted_time_costs
 
 11.1. Data source configuration options
 =======================================
@@ -6771,8 +6980,8 @@ list of queries. Applies to SQL source types (mysql, pgsql, mssql) only.
 sql_joined_field lets you use two different features: joined fields, and
 payloads (payload fields). It's syntax is as follows:
 
-   | sql_joined_field = FIELD-NAME 'from'  ( 'query' | 'payload-query' ); \
-   |     QUERY [ ; RANGE-QUERY ]
+   | sql_joined_field = FIELD-NAME 'from'  ( 'query' | 'payload-query' \
+   | 	| 'ranged-query' ); QUERY [ ; RANGE-QUERY ]
 
 where
 
@@ -6838,6 +7047,10 @@ Example:
    | sql_joined_field = \
    | 	tagstext from query; \
    | 	SELECT docid, CONCAT('tag',tagid) FROM tags ORDER BY docid ASC
+   | 
+   | sql_joined_field = bigint tag from ranged-query; \
+   | 	SELECT id, tag FROM tags WHERE id>=$start AND id<=$end; \
+   | 	SELECT MIN(id), MAX(id) FROM tags
 
 11.1.14. sql_query_range
 ------------------------
@@ -7796,8 +8009,8 @@ And most dictionaries will be much more compact that a billion keywords, as
 a typical spoken human language has in the region of 1 to 10 million word
 forms.) Second, and more importantly, substring searches are not directly
 possible with control sums. Sphinx alleviated that by pre-indexing all the
-possible substrings as separate keywords (see Section 11.2.18,
-<<min_prefix_len>>, Section 11.2.19, <<min_infix_len>> directives). That
+possible substrings as separate keywords (see Section 11.2.19,
+<<min_prefix_len>>, Section 11.2.20, <<min_infix_len>> directives). That
 actually has an added benefit of matching substrings in the quickest way
 possible. But at the same time pre-indexing all substrings grows the index
 size a lot (factors of 3-10x and even more would not be unusual) and
@@ -8019,7 +8232,30 @@ Example:
 
    | wordforms = /usr/local/sphinx/data/wordforms.txt
 
-11.2.13. exceptions
+11.2.13. embedded_limit
+-----------------------
+
+Embedded exceptions, wordforms, or stopwords file size limit. Optional,
+default is 16K. Added in version 2.1.1-beta.
+
+Before 2.1.1-beta, the contents of exceptions, wordforms, or stopwords
+files were always kept in the files. Only the file names were stored into
+the index. Starting with 2.1.1-beta, indexer can either save the file name,
+or embed the file contents directly into the index. Files sized under
+embedded_limit get stored into the index. For bigger files, only the file
+names are stored.
+
+With smaller files, such embedding reduces the number of the external files
+on which the index depends, and helps maintenance. But at the same time it
+makes no sense to embed a 100 MB wordforms dictionary into a tiny delta
+index. So there needs to be a size threshold, and embedded_limit is that
+threshold.
+
+Example:
+
+   | embedded_limit = 32K
+
+11.2.14. exceptions
 -------------------
 
 Tokenizing exceptions file. Optional, default is empty.
@@ -8095,7 +8331,7 @@ Example:
 
    | exceptions = /usr/local/sphinx/data/exceptions.txt
 
-11.2.14. min_word_len
+11.2.15. min_word_len
 ---------------------
 
 Minimum indexed word length. Optional, default is 1 (index everything).
@@ -8108,7 +8344,7 @@ Example:
 
    | min_word_len = 4
 
-11.2.15. charset_type
+11.2.16. charset_type
 ---------------------
 
 Character set encoding type. Optional, default is 'sbcs'. Known values are
@@ -8133,7 +8369,7 @@ Example:
 
    | charset_type = utf-8
 
-11.2.16. charset_table
+11.2.17. charset_table
 ----------------------
 
 Accepted characters table, with case folding rules. Optional, default value
@@ -8205,7 +8441,7 @@ Example:
    | charset_table = 0..9, A..Z->a..z, _, a..z, \
    | 	U+410..U+42F->U+430..U+44F, U+430..U+44F
 
-11.2.17. ignore_chars
+11.2.18. ignore_chars
 ---------------------
 
 Ignored characters list. Optional, default is empty.
@@ -8225,7 +8461,7 @@ Example:
 
    | ignore_chars = U+AD
 
-11.2.18. min_prefix_len
+11.2.19. min_prefix_len
 -----------------------
 
 Minimum word prefix length to index. Optional, default is 0 (do not index
@@ -8262,7 +8498,7 @@ Example:
 
    | min_prefix_len = 3
 
-11.2.19. min_infix_len
+11.2.20. min_infix_len
 ----------------------
 
 Minimum infix prefix length to index. Optional, default is 0 (do not index
@@ -8288,7 +8524,7 @@ Example:
 
    | min_infix_len = 3
 
-11.2.20. prefix_fields
+11.2.21. prefix_fields
 ----------------------
 
 The list of full-text fields to limit prefix indexing to. Optional, default
@@ -8305,7 +8541,7 @@ Example:
 
    | prefix_fields = url, domain
 
-11.2.21. infix_fields
+11.2.22. infix_fields
 ---------------------
 
 The list of full-text fields to limit infix indexing to. Optional, default
@@ -8318,7 +8554,7 @@ Example:
 
    | infix_fields = url, domain
 
-11.2.22. enable_star
+11.2.23. enable_star
 --------------------
 
 Enables star-syntax (or wildcard syntax) when searching through
@@ -8355,7 +8591,7 @@ Example:
 
    | enable_star = 1
 
-11.2.23. ngram_len
+11.2.24. ngram_len
 ------------------
 
 N-gram lengths for N-gram indexing. Optional, default is 0 (disable n-gram
@@ -8395,7 +8631,7 @@ Example:
 
    | ngram_len = 1
 
-11.2.24. ngram_chars
+11.2.25. ngram_chars
 --------------------
 
 N-gram characters list. Optional, default is empty.
@@ -8409,7 +8645,7 @@ Example:
 
    | ngram_chars = U+3000..U+2FA1F
 
-11.2.25. phrase_boundary
+11.2.26. phrase_boundary
 ------------------------
 
 Phrase boundary characters list. Optional, default is empty.
@@ -8435,7 +8671,7 @@ Example:
 
    | phrase_boundary = ., ?, !, U+2026 # horizontal ellipsis
 
-11.2.26. phrase_boundary_step
+11.2.27. phrase_boundary_step
 -----------------------------
 
 Phrase boundary word position increment. Optional, default is 0.
@@ -8447,7 +8683,7 @@ Example:
 
    | phrase_boundary_step = 100
 
-11.2.27. html_strip
+11.2.28. html_strip
 -------------------
 
 Whether to strip HTML markup from incoming full-text data. Optional,
@@ -8486,7 +8722,7 @@ Example:
 
    | html_strip = 1
 
-11.2.28. html_index_attrs
+11.2.29. html_index_attrs
 -------------------------
 
 A list of markup attributes to index when stripping HTML. Optional, default
@@ -8500,7 +8736,7 @@ Example:
 
    | html_index_attrs = img=alt,title; a=title;
 
-11.2.29. html_remove_elements
+11.2.30. html_remove_elements
 -----------------------------
 
 A list of HTML elements for which to strip contents along with the elements
@@ -8519,7 +8755,7 @@ Example:
 
    | html_remove_elements = style, script
 
-11.2.30. local
+11.2.31. local
 --------------
 
 Local index declaration in the distributed index. Multi-value, optional,
@@ -8536,7 +8772,7 @@ in the distributed index, you should use dist_threads directive, see
 Section 11.4.29, <<dist_threads>>.
 
 Before dist_threads, there also was a legacy solution to configure searchd
-to query itself instead of using local indexes (refer to Section 11.2.31,
+to query itself instead of using local indexes (refer to Section 11.2.32,
 <<agent>> for the details). However, that creates redundant CPU and network
 load, and dist_threads is now strongly suggested instead.
 
@@ -8545,66 +8781,149 @@ Example:
    | local = chunk1
    | local = chunk2
 
-11.2.31. agent
+11.2.32. agent
 --------------
 
 Remote agent declaration in the distributed index. Multi-value, optional,
 default is empty.
 
-This setting is used to declare remote agents that will be searched when
-given distributed index is searched. The agents can be thought of as
-network pointers that specify host, port, and index names. In the basic
-case agents would correspond to remote physical machines. More formally,
-that is not always correct: you can point several agents to the same remote
-machine; or you can even point agents to the very same single instance of
-searchd (in order to utilize many CPUs or cores).
+agent directive declares remote agents that are searched every time when
+the enclosing distributed index is searched. The agents are, essentially,
+pointers to networked indexes. Prior to version 2.1.1-beta, the value
+format was:
 
-The value format is as follows:
+   | agent = address:index-list
 
-   | agent = specification:remote-indexes-list
-   | specification = hostname ":" port | path
+Starting with 2.1.1-beta, the value can additionally specify multiple
+alternatives (agent mirrors) for either the address only, or the address
+and index list:
 
-Where 'hostname' is remote host name; 'port' is remote TCP port; 'path' is
-Unix-domain socket path and 'remote-indexes-list' is a comma-separated list
-of remote index names.
+   | agent = address1 [ | address2 [...] ]:index-list
+   | agent = address1:index-list [ | address2:index-list [...] ]
 
-All agents will be searched in parallel. However, all indexes specified for
-a given agent will be searched sequentially in this agent. This lets you
-fine-tune the configuration to the hardware. For instance, if two remote
-indexes are stored on the same physical HDD, it's better to configure one
-agent with several sequentially searched indexes to avoid HDD steping. If
-they are stored on different HDDs, having two agents will be advantageous,
-because the work will be fully parallelized. The same applies to CPUs;
-though CPU performance impact caused by two processes stepping on each
-other is somewhat smaller and frequently can be ignored at all.
+In both cases the address specification must be one of the following:
 
-On machines with many CPUs and/or HDDs, agents can be pointed to the same
-machine to utilize all of the hardware in parallel and reduce query
-latency. There is no need to setup several searchd instances for that; it's
-legal to configure the instance to contact itself. Here's an example setup,
-intended for a 4-CPU machine, that will use up to 4 CPUs in parallel to
-process each query:
+   | address = hostname:port # eg. server2:9312
+   | address = /absolute/unix/socket/path # eg. /var/run/sphinx2.sock
 
-   | index dist
-   | {
-   | 	type = distributed
-   | 	local = chunk1
-   | 	agent = localhost:9312:chunk2
-   | 	agent = localhost:9312:chunk3
-   | 	agent = localhost:9312:chunk4
-   | }
+Where hostname is the remote host name, port is the remote TCP port number,
+index-list is a comma-separated list of index names, and square braces []
+designate an optional clause.
 
-Note how one of the chunks is searched locally and the same instance of
-searchd queries itself to launch searches through three other ones in
-parallel.
+In other words, you can point every single agent to one or more remote
+indexes, residing on one or more networked servers. There are absolutely no
+restrictions on the pointers. To point out a couple importang things, the
+host can be localhost, and the remote index can be a distributed index in
+turn, all that is legal. That enables a bunch of very different usage
+modes:
+
+   * sharding over multiple agent servers, and creating an arbitrary
+     cluster topology;
+   * sharding over multiple agent servers, mirrored for HA/LB (High
+     Availability and Load Balancing) purposes (starting with 2.1.1-beta);
+   * sharding within localhost, to utilize multiple cores (historical and
+     not recommended in versions 1.x and above, use multiple local indexes
+     and dist_threads directive instead);
+
+All agents are searched in parallel. An index list is passed verbatim to
+the remote agent. How exactly that list is searched within the agent (ie.
+sequentially or in parallel too) depends solely on the agent configuration
+(ie. dist_threads directive). Master has no remote control over that.
 
 Example:
 
-   | agent = localhost:9312:chunk2 # contact itself
-   | agent = /var/run/searchd.s:chunk2
-   | agent = searchbox2:9312:chunk3,chunk4 # search remote indexes
+   | # config on box2
+   | # sharding an index over 3 servers
+   | agent = box2:9312:chunk2
+   | agent = box3:9312:chunk3
+   | 
+   | # config on box2
+   | # sharding an index over 3 servers
+   | agent = box1:9312:chunk2
+   | agent = box3:9312:chunk3
+   | 
+   | # config on box3
+   | # sharding an index over 3 servers
+   | agent = box1:9312:chunk2
+   | agent = box2:9312:chunk3
 
-11.2.32. agent_blackhole
+Agent mirrors
+New syntax added in 2.1.1-beta lets you define so-called agent mirrors that
+can be used interchangeably when processing a search query. Master server
+keeps track of mirror status (alive or dead) and response times, and does
+automatic failover and load balancing based on that. For example, this
+line:
+
+   | agent = box1:9312|box2:9312|box3:9312:chunk2
+
+Declares that box1:9312, box2:9312, and box3:9312 all have an index called
+chunk2, and can be used as interchangeable mirrors. If any single of those
+servers go down, the queries will be distributed between the other two.
+When it gets back up, master will detect that and begin routing queries to
+all three boxes again.
+
+Another way to define the mirrors is to explicitly specify the index list
+for every mirror:
+
+   | agent = box1:9312:box1chunk2|box2:9312:box2chunk2
+
+This works essentially the same as the previous example, but different
+index names will be used when querying different severs: box1chunk2 when
+querying box1:9312, and box2chunk when querying box2:9312.
+
+By default, all queries are routed to the best of the mirrors. The best one
+is picked based on the recent statistics, as controlled by the
+ha_period_karma config directive. Master stores a number of metrics (total
+query count, error count, response time, etc) recently observed for every
+agent. It groups those by time spans, and karma is that time span length.
+The best agent mirror is then determined dynamically based on the last
+2 such time spans. Specific algorithm that will be used to pick a mirror
+can be configured ha_strategy directive.
+
+The karma period is in seconds and defaults to 60 seconds. Master stores
+upto 15 karma spans with per-agent statistics for instrumentation purposes
+(see SHOW AGENT STATUS statement). However, only the last 2 spans out of
+those are ever used for HA/LB logic.
+
+When there are no queries, master sends a regular ping command every
+ha_ping_interval milliseconds in order to have some statistics and at least
+check, whether the remote host is still alive. ha_ping_interval defauls to
+1000 msec. Setting it to 0 disables pings and statistics will only be
+accumulated based on actual queries.
+
+Example:
+
+   | # sharding index over 4 servers total
+   | # in just 2 chunks but with 2 failover mirrors for each chunk
+   | # box1, box2 carry chunk1 as local
+   | # box3, box4 carry chunk2 as local
+   | 
+   | # config on box1, box2
+   | agent = box3:9312|box4:9312:chunk2
+   | 
+   | # config on box3, box4
+   | agent = box1:9312|box2:9312:chunk1
+
+11.2.33. agent_persistent
+-------------------------
+
+Persistenly connected remote agent declaration. Multi-value, optional,
+default is empty. Introduced in version 2.1.1-beta.
+
+agent_persistent directive syntax matches that of the agent directive. The
+only difference is that the master will not open a new connection to the
+agent for every query and then close it. Rather, it will keep a connection
+open and attempt to reuse for the subsequent queries.
+
+Persistent master-agent connections reduce TCP port pressure, and save on
+connection handshakes. As of r3450, they are not supported in
+workers=threads mode.
+
+Example:
+
+   | agent_persistent = remotebox:9312:index2
+
+11.2.34. agent_blackhole
 ------------------------
 
 Remote blackhole agent declaration in the distributed index. Multi-value,
@@ -8624,7 +8943,7 @@ Example:
 
    | agent_blackhole = testbox:9312:testindex1,testindex2
 
-11.2.33. agent_connect_timeout
+11.2.35. agent_connect_timeout
 ------------------------------
 
 Remote agent connection timeout, in milliseconds. Optional, default is 1000
@@ -8639,7 +8958,7 @@ Example:
 
    | agent_connect_timeout = 300
 
-11.2.34. agent_query_timeout
+11.2.36. agent_query_timeout
 ----------------------------
 
 Remote agent query timeout, in milliseconds. Optional, default is 3000 (ie.
@@ -8656,7 +8975,7 @@ Example:
 
    | agent_query_timeout = 10000 # our query can be long, allow up to 10 sec
 
-11.2.35. preopen
+11.2.37. preopen
 ----------------
 
 Whether to pre-open all index files, or open them per each query. Optional,
@@ -8678,7 +8997,7 @@ Example:
 
    | preopen = 1
 
-11.2.36. ondisk_dict
+11.2.38. ondisk_dict
 --------------------
 
 Whether to keep the dictionary file (.spi) for this index on disk, or
@@ -8697,7 +9016,7 @@ Example:
 
    | ondisk_dict = 1
 
-11.2.37. inplace_enable
+11.2.39. inplace_enable
 -----------------------
 
 Whether to enable in-place index inversion. Optional, default is 0 (use
@@ -8727,7 +9046,7 @@ Example:
 
    | inplace_enable = 1
 
-11.2.38. inplace_hit_gap
+11.2.40. inplace_hit_gap
 ------------------------
 
 In-place inversion fine-tuning option. Controls preallocated hitlist gap
@@ -8739,7 +9058,7 @@ Example:
 
    | inplace_hit_gap = 1M
 
-11.2.39. inplace_docinfo_gap
+11.2.41. inplace_docinfo_gap
 ----------------------------
 
 In-place inversion fine-tuning option. Controls preallocated docinfo gap
@@ -8751,7 +9070,7 @@ Example:
 
    | inplace_docinfo_gap = 1M
 
-11.2.40. inplace_reloc_factor
+11.2.42. inplace_reloc_factor
 -----------------------------
 
 In-place inversion fine-tuning option. Controls relocation buffer size
@@ -8764,7 +9083,7 @@ Example:
 
    | inplace_reloc_factor = 0.1
 
-11.2.41. inplace_write_factor
+11.2.43. inplace_write_factor
 -----------------------------
 
 In-place inversion fine-tuning option. Controls in-place write buffer size
@@ -8777,7 +9096,7 @@ Example:
 
    | inplace_write_factor = 0.1
 
-11.2.42. index_exact_words
+11.2.44. index_exact_words
 --------------------------
 
 Whether to index the original keywords along with the stemmed/remapped
@@ -8794,7 +9113,7 @@ Example:
 
    | index_exact_words = 1
 
-11.2.43. overshort_step
+11.2.45. overshort_step
 -----------------------
 
 Position increment on overshort (less that min_word_len) keywords.
@@ -8807,7 +9126,7 @@ Example:
 
    | overshort_step = 1
 
-11.2.44. stopword_step
+11.2.46. stopword_step
 ----------------------
 
 Position increment on stopwords. Optional, allowed values are 0 and 1,
@@ -8819,7 +9138,7 @@ Example:
 
    | stopword_step = 1
 
-11.2.45. hitless_words
+11.2.47. hitless_words
 ----------------------
 
 Hitless words list. Optional, allowed values are 'all', or a list file
@@ -8856,7 +9175,7 @@ Example:
 
    | hitless_words = all
 
-11.2.46. expand_keywords
+11.2.48. expand_keywords
 ------------------------
 
 Expand keywords with exact forms and/or stars when possible. Optional,
@@ -8888,7 +9207,7 @@ Example:
 
    | expand_keywords = 1
 
-11.2.47. blend_chars
+11.2.49. blend_chars
 --------------------
 
 Blended characters list. Optional, default is empty. Introduced in version
@@ -8930,7 +9249,7 @@ Example:
    | blend_chars = +, &, U+23
    | blend_chars = +, &->+ # 2.0.1 and above
 
-11.2.48. blend_mode
+11.2.50. blend_mode
 -------------------
 
 Blended tokens indexing mode. Optional, default is trim_none. Introduced in
@@ -8988,7 +9307,7 @@ Example:
 
    | blend_mode = trim_tail, skip_pure
 
-11.2.49. rt_mem_limit
+11.2.51. rt_mem_limit
 ---------------------
 
 RAM chunk size limit. Optional, default is empty. Introduced in version
@@ -9009,7 +9328,7 @@ Example:
 
    | rt_mem_limit = 512M
 
-11.2.50. rt_field
+11.2.52. rt_field
 -----------------
 
 Full-text field declaration. Multi-value, mandatory Introduced in version
@@ -9026,7 +9345,7 @@ Example:
    | rt_field = title
    | rt_field = content
 
-11.2.51. rt_attr_uint
+11.2.53. rt_attr_uint
 ---------------------
 
 Unsigned integer attribute declaration. Multi-value (an arbitrary number of
@@ -9037,7 +9356,7 @@ Example:
 
    | rt_attr_uint = gid
 
-11.2.52. rt_attr_bigint
+11.2.54. rt_attr_bigint
 -----------------------
 
 BIGINT attribute declaration. Multi-value (an arbitrary number of
@@ -9048,7 +9367,7 @@ Example:
 
    | rt_attr_bigint = guid
 
-11.2.53. rt_attr_float
+11.2.55. rt_attr_float
 ----------------------
 
 Floating point attribute declaration. Multi-value (an arbitrary number of
@@ -9059,7 +9378,7 @@ Example:
 
    | rt_attr_float = gpa
 
-11.2.54. rt_attr_multi
+11.2.56. rt_attr_multi
 ----------------------
 
 Multi-valued attribute (MVA) declaration. Declares the UNSIGNED INTEGER
@@ -9070,7 +9389,7 @@ Example:
 
    | rt_attr_multi = my_tags
 
-11.2.55. rt_attr_multi_64
+11.2.57. rt_attr_multi_64
 -------------------------
 
 Multi-valued attribute (MVA) declaration. Declares the BIGINT (signed
@@ -9081,7 +9400,7 @@ Example:
 
    | rt_attr_multi_64 = my_wide_tags
 
-11.2.56. rt_attr_timestamp
+11.2.58. rt_attr_timestamp
 --------------------------
 
 Timestamp attribute declaration. Multi-value (an arbitrary number of
@@ -9091,7 +9410,7 @@ Example:
 
    | rt_attr_timestamp = date_added
 
-11.2.57. rt_attr_string
+11.2.59. rt_attr_string
 -----------------------
 
 String attribute declaration. Multi-value (an arbitrary number of
@@ -9100,6 +9419,175 @@ attributes is allowed), optional. Introduced in version 1.10-beta.
 Example:
 
    | rt_attr_string = author
+
+11.2.60. ha_strategy
+--------------------
+
+Agent mirror selection strategy, for load balancing. Optional, default is
+random. Added in 2.1.1-beta.
+
+The strategy used for mirror selection, or in other words, choosing
+a specific agent mirror in a distributed index. Essentially, this directive
+controls how exactly master does the load balancing between the configured
+mirror agent nodes. As of 2.1.1-beta, the following strategies are
+implemented:
+
+Simple random balancing
+
+   | ha_strategy = random
+
+The default balancing mode. Simple linear random distribution among the
+mirrors. That is, equal selection probability are assigned to every mirror.
+Kind of similar to round-robin (RR), but unlike RR, does not impose
+a strict selection order.
+
+Adaptive randomized balancing
+The default simple random strategy does not take mirror status, error rate,
+and, most importantly, actual response latencies into account. So to
+accomodate for heterogenous clusters and/or temporary spikes in agent node
+load, we have a group of balancing strategies that dynamically adjusts the
+probabilities based on the actual query latencies observed by the master.
+
+The adaptive strategies based on latency-weighted probabilities basically
+work as follows:
+
+   * latency stats are accumulated, in blocks of ha_period_karma seconds;
+   * once per karma period, latency-weighted probabilities get recomputed;
+   * once per request (including ping requests), "dead or alive" flag is
+     adjusted.
+
+Currently (as of 2.1.1-beta), we begin with equal probabilities (or
+percentages, for brevity), and on every step, scale them by the inverse of
+the latencies observed during the last "karma" period, and then renormalize
+them. For example, if during the first 60 seconds after the master startup
+4 mirrors had latencies of 10, 5, 30, and 3 msec/query respectively, the
+first adjustment step would go as follow:
+
+   * initial percentages: 0.25, 0.25, 0.25, 0.2%;
+   * observed latencies: 10 ms, 5 ms, 30 ms, 3 ms;
+   * inverse latencies: 0.1, 0.2, 0.0333, 0.333;
+   * scaled percentages: 0.025, 0.05, 0.008333, 0.0833;
+   * renormalized percentages: 0.15, 0.30, 0.05, 0.50.
+
+Meaning that the 1st mirror would have a 15% chance of being chosen during
+the next karma period, the 2nd one a 30% chance, the 3rd one (slowest at 30
+ms) only a 5% chance, and the 4th and the fastest one (at 3 ms) a 50%
+chance. Then, after that period, the second adjustment step would update
+those chances again, and so on.
+
+The rationale here is, once the observed latencies stabilize, the latency
+weighted probabilities stabilize as well. So all these adjustment
+iterations are supposed to converge at a point where the average latencies
+are (roughly) equal over all mirrors.
+
+   | ha_strategy = nodeads
+
+Latency-weighted probabilities, but dead mirrors are excluded from the
+selection. "Dead" mirror is defined as a mirror that resulted in multiple
+hard errors (eg. network failure, or no answer, etc) in a row.
+
+   | ha_strategy = noerrors
+
+Latency-weighted probabilities, but mirrors with worse errors/success ratio
+are excluded from the selection.
+
+Round-robin balancing
+
+   | ha_strategy = roundrobin
+
+Simple round-robin selection, that is, selecting the 1st mirror in the
+list, then the 2nd one, then the 3rd one, etc, and then repeating the
+process once the last mirror in the list is reached. Unlike with the
+randomized strategies, RR imposes a strict querying order (1, 2, 3, ..,
+N-1, N, 1, 2, 3, ... and so on) and guarantees that no two subsequent
+queries will be sent to the same mirror.
+
+11.2.61. bigram_freq_words
+--------------------------
+
+A list of keywords considered "frequent" when indexing bigrams. Optional,
+default is empty. Added in 2.1.1-beta.
+
+Bigram indexing is a feature to accelerate phrase searches. When indexing,
+it stores a document list for either all or some of the adjacent words
+pairs into the index. Such a list can then be used at searching time to
+significantly accelerate phrase or sub-phrase matching.
+
+Some of the bigram indexing modes (see Section 11.2.62, <<bigram_index>>)
+require to define a list of frequent keywords. These are not to be confused
+with stopwords! Stopwords are completely eliminated when both indexing and
+searching. Frequent keywords are only used by bigrams to determine whether
+to index a current word pair or not.
+
+bigram_freq_words lets you define a list of such keywords.
+
+Example:
+
+   | bigram_freq_words = the, a, you, i
+
+11.2.62. bigram_index
+---------------------
+
+Bigram indexing mode. Optional, default is none. Added in 2.1.1-beta.
+
+Bigram indexing is a feature to accelerate phrase searches. When indexing,
+it stores a document list for either all or some of the adjacent words
+pairs into the index. Such a list can then be used at searching time to
+significantly accelerate phrase or sub-phrase matching.
+
+bigram_index controls the selection of specific word pairs. The known modes
+are:
+
+   * all, index every single word pair. (NB: probably totally not worth it
+     even on a moderately sized index, but added anyway for the sake of
+     completeness.)
+   * first_freq, only index word pairs where the first word is in a list of
+     frequent words (see Section 11.2.61, <<bigram_freq_words>>). For
+     example, with bigram_freq_words = the, in, i, a, indexing "alone in
+     the dark" text will result in "in the" and "the dark" pairs being
+     stored as bigrams, because they begin with a frequent keyword (either
+     "in" or "the" respectively), but "alone in" would not be indexed,
+     because "in" is a second word in that pair.
+
+   * both_freq, only index word pairs where both words are frequent.
+     Continuing with the same example, in this mode indexing "alone in the
+     dark" would only store "in the" (the very worst of them all from
+     searching perspective) as a bigram, but none of the other word pairs.
+
+For most usecases, both_freq would be the best mode, but your mileage may
+vary.
+
+Example:
+
+   | bigram_freq_words = both_freq
+
+11.2.63. index_field_lengths
+----------------------------
+
+Enables computing and storing of field lengths (both per-document and
+average per-index values) into the index. Optional, default is 0 (do not
+compute and store). Added in 2.1.1-beta.
+
+When index_fields_lengths is set to 1, indexer will 1) create a respective
+length attribute for every full-text field, sharing the same name; 2)
+compute a field length (counted in keywords) for every document and store
+in to a respective attribute; 3) compute the per-index averages. The
+lengths attributes will have a special TOKENCOUNT type, but their values
+are in fact regular 32-bit integeres, and their values are generally
+accessible.
+
+BM25A() and BM25F() functions in the expression ranker are based on these
+lengths and require index_fields_lengths to be enabled. Historically,
+Sphinx used a simplified, stripped-down variant of BM25 that, unlike the
+complete function, did not account for document length. (We later realized
+that it should have been called BM15 from the start.) Starting with
+2.1.1-beta, we added support for both a complete variant of BM25, and its
+extension towards multiple fields, called BM25F. They require per-document
+length and per-field lengths, respectively. Hence the additional directive.
+
+Example:
+
+   | index_field_lengths = 1
 
 11.3. indexer program configuration options
 ===========================================
@@ -9886,28 +10374,28 @@ Example:
 11.4.33. snippets_file_prefix
 -----------------------------
 
-The prefix for the files, used in distributed snippets generation together
-with load_files and load_files_scattered options. Optional, default is
-empty (""). Introduced in version 2.1.0-dev.
+A prefix to prepend to the local file names when generating snippets.
+Optional, default is empty. Introduced in version 2.1.1-beta.
 
-Specifies the prefix, which will be attached in the front of all files,
-involved in indirect snippets generation. Note, that this is namely prefix,
-not the path. So, if you want to provide the path to the folder here, don't
-forget to append the trailing path separator to it.
+This prefix can be used in distributed snippets generation along with
+load_files or load_files_scattered options.
+
+Note how this is a prefix, and not a path! Meaning that if a prefix is set
+to "server1" and the request refers to "file23", searchd will attempt to
+open "server1file23" (all of that without quotes). So if you need it to be
+a path, you have to mention the trailing slash.
+
+Note also that this is a local option, it does not affect the agents
+anyhow. So you can safely set a prefix on a master server. The requests
+routed to the agents will not be affected by the master's setting. They
+will however be affected by the agent's own settings.
+
+This might be useful, for instance, when the document storage locations (be
+those local storage or NAS mountpoints) are incosistent across the servers.
 
 Example:
 
-   | snippets_file_prefix = /var/data/
-
-With such setting you can then invoke the snippets generation for
-'file.txt', and the sphinx will actually try to open the
-'/var/data/file.txt'.
-
-The option only affects the local daemon and not touches the agents. So, in
-above example if you use distributed snippets generation, only the master
-will try to open '/var/data/file.txt', but all remote agents will receive
-just 'file.txt' as was queried - and so, they will try to open the file
-with their own prefixes (if any).
+   | snippets_file_prefix = /mnt/common/server1/
 
 11.4.34. collation_server
 -------------------------
@@ -10036,19 +10524,16 @@ Example:
 11.4.41. compat_sphinxql_magics
 -------------------------------
 
-Legacy SphinxQL quirks compatiblity mode. Optional, default is 1 (keep
-compatibility). Introduced in version 2.0.1-beta.
+Legacy SphinxQL quirks compatiblity mode. Optional, default is 0 (SQL
+compliance mode). Introduced in version 2.0.1-beta.
 
 Starting with version 2.0.1-beta, we're bringing SphinxQL in closer
 compliance with standard SQL. However, existing applications must not get
 broken, and compat_sphinxql_magics lets you upgrade safely. It defauls to
-1, which enables the compatibility mode. However, SphinxQL compatibility
-mode is now deprecated and will be removed once we complete bringing
-SphinxQL in line with standard SQL syntax. So it's advised to update the
-applications utilising SphinxQL and then switch the daemon to the new, more
-SQL compliant mode by setting compat_sphinxql_magics = 0. Please refer to
-Section 7.25, <<SphinxQL upgrade notes, version 2.0.1-beta>> for the
-details and update instruction.
+0, which acts in modern way. SphinxQL compatibility mode is now deprecated
+and will be removed once we complete bringing SphinxQL in line with
+standard SQL syntax. Please refer to Section 7.26, <<SphinxQL upgrade
+notes, version 2.0.1-beta>> for the details and update instruction.
 
 Example:
 
@@ -10105,6 +10590,134 @@ SET GLOBAL), this file gets rewritten automatically.
 Example:
 
    | sphinxql_state = uservars.sql
+
+11.4.45. ha_ping_interval
+-------------------------
+
+Interval between agent mirror pings, in milliseconds. Optional, default is
+1000. Added in 2.1.1-beta.
+
+For a distributed index with agent mirrors in it (see more in ???), master
+sends all mirrors a ping command during the idle periods. This is to track
+the current agent status (alive or dead, network roundtrip, etc). The
+interval between such pings is defined by this directive.
+
+To disable pings, set ha_ping_interval to 0.
+
+Example:
+
+   | ha_ping_interval = 0
+
+11.4.46. ha_period_karma
+------------------------
+
+Agent mirror statistics window size, in seconds. Optional, default is 60.
+Added in 2.1.1-beta.
+
+For a distributed index with agent mirrors in it (see more in ???), master
+tracks several different per-mirror counters. These counters are then used
+for failover and balancing. (Master picks the best mirror to use based on
+the counters.) Counters are accumulated in blocks of ha_period_karma
+seconds.
+
+After beginning a new block, master may still use the accumulated values
+from the previous one, until the new one is half full. Thus, any previous
+history stops affecting the mirror choice after 1.5 times ha_period_karma
+seconds at most.
+
+Despite that at most 2 blocks are used for mirror selection, upto 15 last
+blocks are actually stored, for instrumentation purposes. They can be
+inspected using SHOW AGENT STATUS statement.
+
+Example:
+
+   | ha_period_karma = 120
+
+11.4.47. rt_merge_iops
+----------------------
+
+A maximum number of I/O operations that the RT chunks merge thread is
+allowed to start per second. Optional, default is 0 (no limit). Added in
+2.1.1-beta.
+
+This directive lets you throttle down the I/O impact arising from the
+OPTIMIZE statements. It is guaranteed that all the RT optimization activity
+will not generate more disk iops (I/Os per second) than the configured
+limit.
+
+Example:
+
+   | rt_merge_iops = 40
+
+11.4.48. rt_merge_maxiosize
+---------------------------
+
+A maximum size of an I/O operation that the RT chunks merge thread is
+allowed to start. Optional, default is 0 (no limit). Added in 2.1.1-beta.
+
+This directive lets you throttle down the I/O impact arising from the
+OPTIMIZE statements. I/Os bigger than this limit will be broken down into
+2 or more I/Os, which will then be accounted as separate I/Os with regards
+to the rt_merge_iops limit. Thus, it is guaranteed that all the
+optimization activity will not generate more than (rt_merge_iops *
+rt_merge_maxiosize) bytes of disk I/O per second.
+
+Example:
+
+   | rt_merge_maxiosize = 1M
+
+11.4.49. predicted_time_costs
+-----------------------------
+
+Costs for the query time prediction model, in nanoseconds. Optional,
+default is "doc=64, hit=48, skip=2048, match=64" (without the quotes).
+Added in 2.1.1-beta.
+
+Terminating queries before completion based on their execution time (via
+either SetMaxQueryTime() API call, or SELECT ... OPTION max_query_time
+SphinxQL satement) is a nice safety net, but it comes with an inborn
+drawback: indeterministic (unstable) results. That is, if you repeat the
+very same (complex) search query with a time limit several times, the time
+limit will get hit at different stages, and you will get different result
+sets.
+
+Starting with 2.1.1-beta, there is a new option, SELECT ... OPTION
+max_predicted_time, that lets you limit the query time and get stable,
+repeatable results. Instead of regularly checking the actual current time
+while evaluating the query, which is indeterministic, it predicts the
+current running time using a simple linear model instead:
+
+   | predicted_time =
+   | 	doc_cost * processed_documents +
+   | 	hit_cost * processed_hits +
+   | 	skip_cost * skiplist_jumps +
+   | 	match_cost * found_matches
+
+The query is then terminated early when the predicted_time reaches a given
+limit.
+
+Of course, this is not a hard limit on the actual time spent (it is,
+however, a hard limit on the amount of processing work done), and a simple
+linear model is in no way an ideally precise one. So the wall clock time
+may be either below or over the target limit. However, the error margins
+are quite acceptable: for instance, in our experiments with a 100 msec
+target limit the majority of the test queries fell into a 95 to 105 msec
+range, and all of the queries were in a 80 to 120 msec range. Also, as
+a nice side effect, using the modeled query time instead of measuring
+actual run time results in somewhat less gettimeofday() calls, too.
+
+No two server makes and models are identical, so predicted_time_costs
+directive lets you configure the costs for the model above. For
+convenience, they are integers, counted in nanoseconds. (The limit in
+max_predicted_time is counted in milliseconds, and having to specify cost
+values as 0.000128 ms instead of 128 ns is somewhat more error prone.) It
+is not necessary to specify all 4 costs at once, as the missed one will
+take the default values. However, we strongly suggest to specify all of
+them, for readability.
+
+Example:
+
+   | predicted_time_costs = doc=128, hit=96, skip=4096, match=128
 
 Appendix A. Sphinx revision history
 ===================================

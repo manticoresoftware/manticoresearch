@@ -1016,7 +1016,7 @@ searchd
 	# rt_merge_maxiosize		= 1M
 
 
-	# interval between agenr mirror pings, in milliseconds
+	# interval between agent mirror pings, in milliseconds
 	# 0 means disable pings
 	# optional, default is 1000
 	#

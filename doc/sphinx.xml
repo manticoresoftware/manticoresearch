@@ -8902,6 +8902,34 @@ wordforms = /usr/local/sphinx/data/wordforms.txt
 </sect2>
 
 
+<sect2 id="conf-embedded-limit"><title>embedded_limit</title>
+<para>
+Embedded exceptions, wordforms, or stopwords file size limit.
+Optional, default is 16K.
+Added in version 2.1.1-beta.
+</para>
+<para>
+Before 2.1.1-beta, the contents of exceptions, wordforms, or stopwords
+files were always kept in the files. Only the file names were stored into
+the index. Starting with 2.1.1-beta, indexer can either save the file name,
+or embed the file contents directly into the index. Files sized under
+<code>embedded_limit</code> get stored into the index. For bigger files,
+only the file names are stored.
+</para>
+<para>
+With smaller files, such embedding reduces the number of the external
+files on which the index depends, and helps maintenance. But at the same
+time it makes no sense to embed a 100 MB wordforms dictionary into a tiny
+delta index. So there needs to be a size threshold, and <code>embedded_limit</code>
+is that threshold.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+embedded_limit = 32K
+</programlisting>
+</sect2>
+
+
 <sect2 id="conf-exceptions"><title>exceptions</title>
 <para>
 Tokenizing exceptions file.
@@ -9554,150 +9582,163 @@ Remote agent declaration in the <link linkend="distributed">distributed index</l
 Multi-value, optional, default is empty.
 </para>
 <para>
-This setting is used to declare remote agents that will be searched
-when given distributed index is searched. The agents can be thought of
-as network pointers that specify host, port, and index names. In the basic
-case agents would correspond to remote physical machines. More formally,
-that is not always correct: you can point several agents to the
-same remote machine; or you can even point agents to the very same
-single instance of <filename>searchd</filename> (in order to utilize
-many CPUs or cores).
-</para>
-<para>
-The value format is as follows:
+<code>agent</code> directive declares remote agents that are searched
+every time when the enclosing distributed index is searched. The agents
+are, essentially, pointers to networked indexes. Prior to version 2.1.1-beta,
+the value format was:
 <programlisting>
-agent = address[| ...]:remote-indexes-list
-agent = address:remote-indexes-list [| ...]
-address = { hostname:port | /absolute/path/unix/socket }
+agent = address:index-list
 </programlisting>
-Where 'hostname' is remote host name; 'port' is remote TCP port; 'path'
-is Unix-domain socket path and 'remote-indexes-list' is a
-comma-separated list of remote index names.
-</para>
-<para>
-All agents will be searched in parallel. However, all indexes
-specified for a given agent will be searched sequentially
-in this agent. This lets you fine-tune the configuration
-to the hardware. For instance, if two remote indexes are stored
-on the same physical HDD, it's better to configure one agent
-with several sequentially searched indexes to avoid HDD steping.
-If they are stored on different HDDs, having two agents will be
-advantageous, because the work will be fully parallelized.
-The same applies to CPUs; though CPU performance impact caused
-by two processes stepping on each other is somewhat smaller
-and frequently can be ignored at all.
-</para>
-<para>
-On machines with many CPUs and/or HDDs, agents can be pointed
-to the same machine to utilize all of the hardware in parallel
-and reduce query latency. There is no need to setup several
-<filename>searchd</filename> instances for that; it's legal
-to configure the instance to contact itself. Here's an example
-setup, intended for a 4-CPU machine, that will use up to
-4 CPUs in parallel to process each query:
+Starting with 2.1.1-beta, the value can additionally specify multiple
+alternatives (agent mirrors) for either the address only, or the address
+and index list:
 <programlisting>
-index dist
-{
-	type = distributed
-	local = chunk1
-	agent = localhost:9312:chunk2
-	agent = localhost:9312:chunk3
-	agent = localhost:9312:chunk4
-}
+agent = address1 [ | address2 [...] ]:index-list
+agent = address1:index-list [ | address2:index-list [...] ]
 </programlisting>
-Note how one of the chunks is searched locally and the same instance
-of searchd queries itself to launch searches through three other ones
-in parallel.
+In both cases the address specification must be one of the following:
+<programlisting>
+address = hostname:port # eg. server2:9312
+address = /absolute/unix/socket/path # eg. /var/run/sphinx2.sock
+</programlisting>
+Where
+<code>hostname</code> is the remote host name,
+<code>port</code> is the remote TCP port number,
+<code>index-list</code> is a comma-separated list of index names,
+and square braces [] designate an optional clause.
+</para>
+<para>
+In other words, you can point every single agent to one or more remote
+indexes, residing on one or more networked servers. There are absolutely
+no restrictions on the pointers. To point out a couple importang things,
+the host can be localhost, and the remote index can be a distributed
+index in turn, all that is legal. That enables a bunch of very different
+usage modes:
+<itemizedlist>
+<listitem><para>sharding over multiple agent servers, and creating
+an arbitrary cluster topology;</para></listitem>
+<listitem><para>sharding over multiple agent servers, mirrored
+for HA/LB (High Availability and Load Balancing) purposes
+(starting with 2.1.1-beta);</para></listitem>
+<listitem><para>sharding within localhost, to utilize multiple cores
+(historical and not recommended in versions 1.x and above, use multiple
+local indexes and dist_threads directive instead);</para></listitem>
+</itemizedlist>
+</para>
+<para>
+All agents are searched in parallel. An index list is passed verbatim
+to the remote agent. How exactly that list is searched within the agent
+(ie. sequentially or in parallel too) depends solely on the agent
+configuration (ie. dist_threads directive). Master has no remote
+control over that.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
-agent = localhost:9312:chunk2 # contact itself
-agent = /var/run/searchd.s:chunk2
-agent = searchbox2:9312:chunk3,chunk4 # search remote indexes
+# config on box2
+# sharding an index over 3 servers
+agent = box2:9312:chunk2
+agent = box3:9312:chunk3
+
+# config on box2
+# sharding an index over 3 servers
+agent = box1:9312:chunk2
+agent = box3:9312:chunk3
+
+# config on box3
+# sharding an index over 3 servers
+agent = box1:9312:chunk2
+agent = box2:9312:chunk3
 </programlisting>
-
-<bridgehead>Mirrors, or alternative agents</bridgehead>
-
+<bridgehead>Agent mirrors</bridgehead>
 <para>
-It is also possible to define the <b>alternative agents</b>, or '<b>mirrors</b>'. The alternatives will be used as backups
-and will help you to keep the searching alive in case when some of the mirror became not available.
-For example:</para>
-
+New syntax added in 2.1.1-beta lets you define so-called <b>agent mirrors</b>
+that can be used interchangeably when processing a search query. Master server
+keeps track of mirror status (alive or dead) and response times, and does
+automatic failover and load balancing based on that. For example, this line:</para>
 <programlisting>
-agent = localhost:9312|other_host:9312|other_host:9313:chunk2
+agent = box1:9312|box2:9312|box3:9312:chunk2
 </programlisting>
-
-<para>This clause defines that <b>localhost:9312</b>, <b>other_host:9312</b> and
-<b>other_host:9313</b> serve one and same indexes, and can be used as full
-mirrors of each other. The index to be queried (in this case - <b>chunk2</b>) is
-assumed the same for all mirror hosts. I.e. all the mirrors will be queried with
-index 'chunk2', stated in the very end of agent clause.  </para>
-
+<para>Declares that box1:9312, box2:9312, and box3:9312 all have an index
+called chunk2, and can be used as interchangeable mirrors. If any single
+of those servers go down, the queries will be distributed between
+the other two. When it gets back up, master will detect that and begin
+routing queries to all three boxes again.
+</para>
 <para>
-Another way to define the alternatives - is to explicitly name the indexes
-also:</para>
+Another way to define the mirrors is to explicitly specify the index list
+for every mirror:</para>
 <programlisting>
-agent = localhost:9312:chunk1|other_host:9312:chunk2
+agent = box1:9312:box1chunk2|box2:9312:box2chunk2
 </programlisting>
-<para>This is quite the same as previous, but here is explicitly stated that from
-first mirror we need the '<b>chunk1</b>', and from the second - the
-'<b>chunk2</b>'. So, the packets will be distributed the same way, but to these
-concrete indexes.</para>
-
-<para>
-By default all the query packages will be directed to the best of the
-mirrors. The best one may be calculated using the statistic from near history,
-defined by the option <link
-linkend='conf-ha-period-karma'>ha_period_karma</link> in the config. During the
-specified period, the daemon stores some mirror's parameters, as total N of
-queries, N of different kinds of errors, the time of last reply, etc.  </para>
-
-<para>
-When it is time to fire a query packet to a mirror, the daemon looks
-into collected near-history statistic and selects one of the mirrors using
-one of <link linkend="conf-ha-strategy">predefined strategies</link>.
+<para>This works essentially the same as the previous example, but different
+index names will be used when querying different severs: box1chunk2 when querying
+box1:9312, and box2chunk when querying box2:9312.
 </para>
-
 <para>
-The karma period is defined in the searchd section of the config file as '<link
-linkend="conf-ha-period-karma">ha_period_karma</link>'. This value set the
-length of the interval in seconds. Default value is 60 seconds. During the
-period, daemon stores all the necessary statistics about mirror's availability.
-When the period is over, it collects the next statistic block, etc. Totally it
-remembers the behavior from 15 last periods (hard-coded), but actually for HA
-stuff for now used only one or two. The rest may be observed from sphinxql using
-'<link linkend="sphinxql-show-agent-status">SHOW AGENT STATUS</link>' command.
+By default, all queries are routed to the best of the mirrors. The best one
+is picked based on the recent statistics, as controlled by the
+<link linkend="conf-ha-period-karma">ha_period_karma</link> config directive.
+Master stores a number of metrics (total query count, error count, response
+time, etc) recently observed for every agent. It groups those by time spans,
+and karma is that time span length. The best agent mirror is then determined
+dynamically based on the last 2 such time spans. Specific algorithm that
+will be used to pick a mirror can be configured
+<link linkend="conf-ha-strategy">ha_strategy</link> directive.
 </para>
-
 <para>
-For idle cases, when there is no queries fired, and so, no statistic is
-available, the daemon by default pings every mirror with the special ping
-command, and so, the HA statistics is available anyway. This is not the usual
-ICMP 'ping' packet, but the special internal command which do nothing.  The ping
-interval is defined in <link linkend="confgroup-searchd">searchd section</link>
-of the config file as '<link
-linkend="conf-ha-ping-interval">ha_ping_interval</link>'. This value set the
-ping interval in milliseconds. Default value is 1000, i.e. 1 second. If you set
-the value to 0, you explicitly forbid the mirror's pinging. This way the
-statistics will be available only from the real queries.</para>
+The karma period is in seconds and defaults to 60 seconds. Master stores
+upto 15 karma spans with per-agent statistics for instrumentation purposes
+(see  <link linkend="sphinxql-show-agent-status">SHOW AGENT STATUS</link>
+statement). However, only the last 2 spans out of those are ever used for
+HA/LB logic.
+</para>
+<para>
+When there are no queries, master sends a regular ping command every
+<link linkend="conf-ha-ping-interval">ha_ping_interval</link> milliseconds
+in order to have some statistics and at least check, whether the remote
+host is still alive. ha_ping_interval defauls to 1000 msec. Setting it to 0
+disables pings and statistics will only be accumulated based on actual queries.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+# sharding index over 4 servers total
+# in just 2 chunks but with 2 failover mirrors for each chunk
+# box1, box2 carry chunk1 as local
+# box3, box4 carry chunk2 as local
+
+# config on box1, box2
+agent = box3:9312|box4:9312:chunk2
+
+# config on box3, box4
+agent = box1:9312|box2:9312:chunk1
+</programlisting>
 </sect2>
+
 
 <sect2 id="conf-agent-persistent"><title>agent_persistent</title>
 <para>
-Remote agent declaration in the <link linkend="distributed">distributed index</link>.
+Persistenly connected remote agent declaration.
 Multi-value, optional, default is empty.
 Introduced in version 2.1.1-beta.
 </para>
 <para>
-<option>agent_persistent</option> is used to declare persistently connected <link
-linkend="conf-agent">remote agents</link> that will be searched when given
-distributed index is searched.  The only difference from 'plain' <link
-linkend="conf-agent">remote agents</link> is that the master doesn't close the
-connection to the agent after data exchange, but keeps it opened and reuses on
-the next queries. It works exactly as if you fire the '<link
-linkend="api-func-open">open</link>' command in API just before the
-querying.</para>
+<option>agent_persistent</option> directive syntax matches that of
+the <link linkend="conf-agent">agent</link> directive. The only difference
+is that the master will <b>not</b> open a new connection to the agent for
+every query and then close it. Rather, it will keep a connection open and
+attempt to reuse for the subsequent queries.
+</para>
+<para>
+Persistent master-agent connections reduce TCP port pressure, and
+save on connection handshakes. As of r3450, they are <b>not</b> supported
+in workers=threads mode.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+agent_persistent = remotebox:9312:index2
+</programlisting>
 </sect2>
+
 
 <sect2 id="conf-agent-blackhole"><title>agent_blackhole</title>
 <para>
@@ -10325,6 +10366,201 @@ Introduced in version 1.10-beta.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 rt_attr_string = author
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-ha-strategy"><title>ha_strategy</title>
+<para>
+Agent mirror selection strategy, for load balancing.
+Optional, default is random.
+Added in 2.1.1-beta.
+</para>
+<para>
+The strategy used for mirror selection, or in other words, choosing
+a specific <link linkend="conf-agent">agent mirror</link> in a distributed
+index. Essentially, this directive controls how exactly master does the
+load balancing between the configured mirror agent nodes.
+As of 2.1.1-beta, the following strategies are implemented:
+</para>
+<bridgehead>Simple random balancing</bridgehead>
+<programlisting>ha_strategy = random</programlisting>
+<para>
+The default balancing mode. Simple linear random distribution among the mirrors.
+That is, equal selection probability are assigned to every mirror. Kind of similar
+to round-robin (RR), but unlike RR, does not impose a strict selection order.
+</para>
+<bridgehead>Adaptive randomized balancing</bridgehead>
+<para>
+The default simple random strategy does not take mirror status, error rate,
+and, most importantly, actual response latencies into account. So to accomodate
+for heterogenous clusters and/or temporary spikes in agent node load, we have
+a group of balancing strategies that dynamically adjusts the probabilities
+based on the actual query latencies observed by the master.
+</para>
+<para>
+The adaptive strategies based on <b>latency-weighted probabilities</b>
+basically work as follows:
+<itemizedlist>
+<listitem><para>latency stats are accumulated, in blocks of ha_period_karma seconds;</para></listitem>
+<listitem><para>once per karma period, latency-weighted probabilities get recomputed;</para></listitem>
+<listitem><para>once per request (including ping requests), "dead or alive" flag is adjusted.</para></listitem>
+</itemizedlist>
+Currently (as of 2.1.1-beta), we begin with equal probabilities (or percentages,
+for brevity), and on every step, scale them by the inverse of the latencies observed
+during the last "karma" period, and then renormalize them.  For example, if during
+the first 60 seconds after the master startup 4 mirrors had latencies of
+10, 5, 30, and 3 msec/query respectively, the first adjustment step
+would go as follow:
+<itemizedlist>
+<listitem><para>initial percentages: 0.25, 0.25, 0.25, 0.2%;</para></listitem>
+<listitem><para>observed latencies: 10 ms, 5 ms, 30 ms, 3 ms;</para></listitem>
+<listitem><para>inverse latencies: 0.1, 0.2, 0.0333, 0.333;</para></listitem>
+<listitem><para>scaled percentages: 0.025, 0.05, 0.008333, 0.0833;</para></listitem>
+<listitem><para>renormalized percentages: 0.15, 0.30, 0.05, 0.50.</para></listitem>
+</itemizedlist>
+Meaning that the 1st mirror would have a 15% chance of being chosen during
+the next karma period, the 2nd one a 30% chance, the 3rd one (slowest at 30 ms)
+only a 5% chance, and the 4th and the fastest one (at 3 ms) a 50% chance.
+Then, after that period, the second adjustment step would update those chances
+again, and so on.
+</para>
+<para>
+The rationale here is, once the <b>observed latencies</b> stabilize,
+the <b>latency weighted probabilities</b> stabilize as well. So all these
+adjustment iterations are supposed to converge at a point where the average
+latencies are (roughly) equal over all mirrors.
+</para>
+<programlisting>ha_strategy = nodeads</programlisting>
+<para>
+Latency-weighted probabilities, but dead mirrors are excluded from
+the selection. "Dead" mirror is defined as a mirror that resulted
+in multiple hard errors (eg. network failure, or no answer, etc) in a row.
+</para>
+<programlisting>ha_strategy = noerrors</programlisting>
+<para>
+Latency-weighted probabilities, but mirrors with worse errors/success ratio
+are excluded from the selection.
+</para>
+<bridgehead>Round-robin balancing</bridgehead>
+<programlisting>ha_strategy = roundrobin</programlisting>
+<para>Simple round-robin selection, that is, selecting the 1st mirror
+in the list, then the 2nd one, then the 3rd one, etc, and then repeating
+the process once the last mirror in the list is reached. Unlike with
+the randomized strategies, RR imposes a strict querying order (1, 2, 3, ..,
+N-1, N, 1, 2, 3, ... and so on) and <emphasis>guarantees</emphasis> that
+no two subsequent queries will be sent to the same mirror.
+</para>
+</sect2>
+
+
+<sect2 id="conf-bigram-freq-words"><title>bigram_freq_words</title>
+<para>
+A list of keywords considered "frequent" when indexing bigrams.
+Optional, default is empty.
+Added in 2.1.1-beta.
+</para>
+<para>
+Bigram indexing is a feature to accelerate phrase searches.
+When indexing, it stores a document list for either all or some
+of the adjacent words pairs into the index. Such a list can then be used
+at searching time to significantly accelerate phrase or sub-phrase
+matching.
+</para>
+<para>
+Some of the bigram indexing modes (see <xref linkend="conf-bigram-index"/>)
+require to define a list of frequent keywords. These are <b>not</b> to be
+confused with stopwords! Stopwords are completely eliminated when both indexing
+and searching. Frequent keywords are only used by bigrams to determine whether
+to index a current word pair or not.
+</para>
+<para>
+<code>bigram_freq_words</code> lets you define a list of such keywords.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+bigram_freq_words = the, a, you, i
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-bigram-index"><title>bigram_index</title>
+<para>
+Bigram indexing mode.
+Optional, default is none.
+Added in 2.1.1-beta.
+</para>
+<para>
+Bigram indexing is a feature to accelerate phrase searches.
+When indexing, it stores a document list for either all or some
+of the adjacent words pairs into the index. Such a list can then be used
+at searching time to significantly accelerate phrase or sub-phrase
+matching.
+</para>
+<para>
+<code>bigram_index</code> controls the selection of specific word pairs.
+The known modes are:
+<itemizedlist>
+<listitem><para><code>all</code>, index every single word pair.
+(NB: probably totally not worth it even on a moderately sized index,
+but added anyway for the sake of completeness.)
+</para></listitem>
+<listitem><para><code>first_freq</code>, only index word pairs
+where the <emphasis>first</emphasis> word is in a list of frequent words
+(see <xref linkend="conf-bigram-freq-words"/>). For example, with
+<code>bigram_freq_words = the, in, i, a</code>, indexing
+"alone in the dark" text will result in "in the" and "the dark" pairs
+being stored as bigrams, because they begin with a frequent keyword
+(either "in" or "the" respectively), but "alone in" would <b>not</b>
+be indexed, because "in" is a <emphasis>second</emphasis> word in that pair.
+</para></listitem>
+<listitem><para><code>both_freq</code>, only index word pairs where
+both words are frequent. Continuing with the same example, in this mode
+indexing "alone in the dark" would only store "in the" (the very worst
+of them all from searching perspective) as a bigram, but none of the
+other word pairs.
+</para></listitem>
+</itemizedlist>
+For most usecases, <code>both_freq</code> would be the best mode, but
+your mileage may vary.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+bigram_freq_words = both_freq
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-index-field-lengths"><title>index_field_lengths</title>
+<para>
+Enables computing and storing of field lengths (both per-document and
+average per-index values) into the index.
+Optional, default is 0 (do not compute and store).
+Added in 2.1.1-beta.
+</para>
+<para>
+When <code>index_fields_lengths</code> is set to 1, <filename>indexer</filename>
+will 1) create a respective length attribute for every full-text field,
+sharing the same name; 2) compute a field length (counted in keywords) for
+every document and store in to a respective attribute; 3) compute the per-index
+averages. The lengths attributes will have a special TOKENCOUNT type, but their
+values are in fact regular 32-bit integeres, and their values are generally
+accessible.
+</para>
+<para>
+BM25A() and BM25F() functions in the expression ranker are based
+on these lengths and require <code>index_fields_lengths</code> to be enabled.
+Historically, Sphinx used a simplified, stripped-down variant of BM25 that,
+unlike the complete function, did <b>not</b> account for document length.
+(We later realized that it should have been called BM15 from the start.)
+Starting with 2.1.1-beta, we added support for both a complete variant of BM25,
+and its extension towards multiple fields, called BM25F. They require
+per-document length and per-field lengths, respectively. Hence the additional
+directive.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+index_field_lengths = 1
 </programlisting>
 </sect2>
 
@@ -11301,29 +11537,34 @@ binlog_max_log_size = 16M
 
 <sect2 id="conf-snippets-file-prefix"><title>snippets_file_prefix</title>
 <para>
-The prefix for the files, used in distributed snippets generation together with 
-<option>load_files</option> and <option>load_files_scattered</option> options.
-Optional, default is empty ("").
+A prefix to prepend to the local file names when generating snippets.
+Optional, default is empty.
 Introduced in version 2.1.1-beta.
 </para>
 <para>
-Specifies the prefix, which will be attached in the front of all files,
-involved in indirect snippets generation. Note, that this is namely prefix,
-not the path. So, if you want to provide the path to the folder here,
-don't forget to append the trailing path separator to it.
+This prefix can be used in distributed snippets generation along with
+<option>load_files</option> or <option>load_files_scattered</option> options.
+</para>
+<para>
+Note how this is a prefix, and <b>not</b> a path! Meaning that if a prefix
+is set to "server1" and the request refers to "file23", <filename>searchd</filename>
+will attempt to open "server1file23" (all of that without quotes). So if you
+need it to be a path, you have to mention the trailing slash.
+</para>
+<para>
+Note also that this is a local option, it does not affect the agents anyhow.
+So you can safely set a prefix on a master server. The requests routed to the
+agents will not be affected by the master's setting. They will however be affected
+by the agent's own settings.
+</para>
+<para>
+This might be useful, for instance, when the document storage locations
+(be those local storage or NAS mountpoints) are incosistent across the servers.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
-snippets_file_prefix = /var/data/
+snippets_file_prefix = /mnt/common/server1/
 </programlisting>
-<para>With such setting you can then invoke the snippets generation for 'file.txt',
-and the sphinx will actually try to open the '/var/data/file.txt'.
-</para>
-<para>The option only affects the local daemon and not touches the agents. So, in above example
-if you use distributed snippets generation, only the master will try to open '/var/data/file.txt',
-but all remote agents will receive just 'file.txt' as was queried - and so, they will try to
-open the file with their own prefixes (if any).
-</para>
 </sect2>
 
 
@@ -11571,137 +11812,166 @@ sphinxql_state = uservars.sql
 </programlisting>
 </sect2>
 
+
 <sect2 id="conf-ha-ping-interval"><title>ha_ping_interval</title>
 <para>
-Number of milliseconds between ping commands to mirrors (alternative agents).
+Interval between agent mirror pings, in milliseconds.
+Optional, default is 1000.
+Added in 2.1.1-beta.
 </para>
 <para>
-When you define a distributed index which uses alternative agents
-(i.e., <link linkend="conf-agent">mirrors</link>), and the daemon is
-in idle state (i.e., no queries fired), it sends the special
-ping command to mirrored alternatives every period of milliseconds, defined by
-this option.
+For a distributed index with agent mirrors in it (see more in ???),
+master sends all mirrors a ping command during the idle periods.
+This is to track the current agent status (alive or dead, network
+roundtrip, etc). The interval between such pings is defined
+by this directive.
 </para>
 <para>
-By default the ha_ping_interval is 1000 milliseconds, or 1 second. If
-you want to switch off the mirror's pinging, set ha_ping_interval to
-0. It will explicitly forbid the pings.
+To disable pings, set ha_ping_interval to 0.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
-ha_ping_interval = 2000
+ha_ping_interval = 0
 </programlisting>
 </sect2>
+
 
 <sect2 id="conf-ha-period-karma"><title>ha_period_karma</title>
 <para>
-Number of seconds when the statistic of <link
-linkend="conf-agent">alternative agents, or mirrors</link> affects the
-selection of the mirror for the next query. During the period, defined
-by this variable, all the statistic is collected in the one
-statistical block. When the period is over, the daemon allocates the
-next block, and up to the half of the period (when the new block
-contains too few data) it uses both the previos and the new block
-together. The collected statistic for up to 15 blocks could be
-observed using <link linkend="sphinxql-show-agent-status">SHOW AGENT
-STATUS</link> sphinxql command.
+Agent mirror statistics window size, in seconds.
+Optional, default is 60.
+Added in 2.1.1-beta.
+</para>
+<para>
+For a distributed index with agent mirrors in it (see more in ???),
+master tracks several different per-mirror counters. These counters
+are then used for failover and balancing. (Master picks the best
+mirror to use based on the counters.) Counters are accumulated in
+blocks of <code>ha_period_karma</code> seconds.
+</para>
+<para>
+After beginning a new block, master may still use the accumulated
+values from the previous one, until the new one is half full. Thus,
+any previous history stops affecting the mirror choice after
+1.5 times ha_period_karma seconds at most.
+</para>
+<para>
+Despite that at most 2 blocks are used for mirror selection,
+upto 15 last blocks are actually stored, for instrumentation purposes.
+They can be inspected using
+<link linkend="sphinxql-show-agent-status">SHOW AGENT STATUS</link> 
+statement.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
-ha_period_karma = 60
+ha_period_karma = 120
 </programlisting>
-<para>
-In this case, the affecting period will varies between 31 and 90 seconds.
-Otherwords - it will take the second half of previous minute (if any), and up to
-30 seconds of the next minute.</para>
 </sect2>
 
-<sect2 id="conf-ha-strategy"><title>ha_strategy</title>
+
+<sect2 id="conf-rt-merge-iops"><title>rt_merge_iops</title>
 <para>
-The strategy to be used to select one of <link linkend="conf-agent">alternative
-agents, or mirrors</link> for a query. There are several different strategies
-provided in sphinx, which could use different values to select the 'best
-mirror'.</para>
-<para>Here is the list of possible strategies</para>
-<bridgehead>Random based</bridgehead>
-<programlisting># ha_strategy =</programlisting>
-<para>When the ha_strategy is not defined (default), the sphinx uses linear random distribution among
-mirrors. So, if you have a node with 3 mirrors, that mean that a query could be
-sent to any of them with probability 1/3.
+A maximum number of I/O operations that the RT chunks merge
+thread is allowed to start per second.
+Optional, default is 0 (no limit).
+Added in 2.1.1-beta.
 </para>
+<para>
+This directive lets you throttle down the I/O impact arising from
+the <code>OPTIMIZE</code> statements. It is guaranteed that all the
+RT optimization activity will not generate more disk iops (I/Os per second)
+than the configured limit.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+rt_merge_iops = 40
+</programlisting>
+</sect2>
 
-<para>Such equaly-distributed probabilities used by default, and also in the starting period
-when no actual statistic about mirros available. But after a period when the
-statistic is collected, the strategies below recalculates the probabilities
-according the collected latencies of the mirrors. Let call it 'latency-weighted
-probabilities'. The slowest mirror get the
-less probability; the faster - takes more. For example if in the beginnig you
-have four mirrors (with probability of selection any of them 25%), and after a
-period of time sphinx found, that</para>
-<itemizedlist>
-<listitem>1-st mirror answers in ~10ms</listitem>
-<listitem>2-nd mirror answers in ~5ms</listitem>
-<listitem>3-rd mirror answers in ~30ms</listitem>
-<listitem>4-th mirror answers in ~3ms</listitem>
-</itemizedlist>
-<para>Then the sphinx will recalculate probabilites, and they will be</para>
-<itemizedlist>
-<listitem>1-st mirror - 15%</listitem>
-<listitem>2-nd mirror - 30%</listitem>
-<listitem>3-rd mirror - 5%</listitem>
-<listitem>4-th mirror - 50%</listitem>
-</itemizedlist>
-<para>Otherwords, the winner (in the case - 4-th mirror) will take the next
-query with probability 1/2 (50%), but the looser (3-rd mirror) will take just
-the 1/20 (5%) of incoming queries. The 1-st which is 3 times faster that 3-rd
-will get 3-times more probability (15% against 5%), and also the 2-nd which is 2
-times faster than 1-st will take 30% of the queries. Since we are no way
-affiliated with mr. Churov and russian elections, the sum of probabilities is always
-100%.</para>
 
-<para>After the next period of time the probabilities will be recalculated
-(corrected) again, and so on. Finally the load will be balanced the way that the
-fastest mirrors will take the most of the queries, while the slowest will take
-just part of them.</para>
+<sect2 id="conf-rt-merge-maxiosize"><title>rt_merge_maxiosize</title>
+<para>
+A maximum size of an I/O operation that the RT chunks merge
+thread is allowed to start.
+Optional, default is 0 (no limit).
+Added in 2.1.1-beta.
+</para>
+<para>
+This directive lets you throttle down the I/O impact arising from
+the <code>OPTIMIZE</code> statements. I/Os bigger than this limit will be
+broken down into 2 or more I/Os, which will then be accounted as separate I/Os
+with regards to the <link linkend="conf-rt-merge-iops">rt_merge_iops</link>
+limit. Thus, it is guaranteed that all the optimization activity will not
+generate more than (rt_merge_iops * rt_merge_maxiosize) bytes of disk I/O
+per second.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+rt_merge_maxiosize = 1M
+</programlisting>
+</sect2>
 
-<programlisting>ha_strategy = nodeads</programlisting>
-<para>Defines the strategy avoiding non-answering mirrors (i.e., which have many
-errors in a row). Among the others (non-erroneous) the sphinx select one by
-random law with latency-weighted probability, described above. If it is
-impossible to select the best mirror, it falls back into equally-distributed
-random selection.</para>
 
-<programlisting>ha_strategy = noerrors</programlisting>
-<para>Defines the strategy avoiding mirrors with high errors/successes rating.
-If there are more than one mirror with the best rating, the one among them will
-be selected by random law with latency-weighted probability, described above. If it is
-impossible to select the best mirror, it falls back into equally-distributed
-random selection.</para>
-
-<bridgehead>Round-Robin based</bridgehead>
-<programlisting>ha_strategy = roundrobin</programlisting>
-<para>Defines the Round-Robin strategy. That means that all the mirrors just put
-into cycled queue, and each the next query will be fired to the next mirror in turn.</para>
-
-<programlisting>ha_strategy = nodeadstm</programlisting>
-<para>Defines the strategy avoiding non-answering mirrors (i.e, which have many
-errors in a row), and selecting the best by the shortest latency of the last query. In the case when it is
-impossible to select the best mirror (i.e., when all the mirrors didn't answer
-during a period of time, and also if all have the same latency) it
-just falls back into simple round-robin strategy.</para>
-
-<programlisting>ha_strategy = noerrorstm</programlisting>
-<para>Defines the strategy avoiding mirrors with high errors/successes rating, and selecting
-the best by the shortest latency of the last query. In the case when it is
-impossible to select the best mirror (i.e., when all the mirrors have the same
-error/successes rating, and also the same latency of the last query), it just
-falls back into simple round-robin strategy.</para>
+<sect2 id="conf-predicted-time-costs"><title>predicted_time_costs</title>
+<para>
+Costs for the query time prediction model, in nanoseconds.
+Optional, default is "doc=64, hit=48, skip=2048, match=64" (without the quotes).
+Added in 2.1.1-beta.
+</para>
+<para>
+Terminating queries before completion based on their execution time
+(via either <link linkend="api-func-setmaxquerytime">SetMaxQueryTime()</link>
+API call, or <link linkend="sphinxql-select">SELECT ... OPTION max_query_time</link>
+SphinxQL satement) is a nice safety net, but it comes with an inborn drawback:
+indeterministic (unstable) results. That is, if you repeat the very same (complex)
+search query with a time limit several times, the time limit will get hit
+at different stages, and you will get <emphasis>different</emphasis> result sets.
+</para>
+<para>
+Starting with 2.1.1-beta, there is a new option,
+<link linkend="sphinxql-select">SELECT ... OPTION max_predicted_time</link>,
+that lets you limit the query time <emphasis>and</emphasis> get stable,
+repeatable results. Instead of regularly checking the actual current time
+while evaluating the query, which is indeterministic, it predicts the current
+running time using a simple linear model instead:
+<programlisting>
+predicted_time =
+	doc_cost * processed_documents +
+	hit_cost * processed_hits +
+	skip_cost * skiplist_jumps +
+	match_cost * found_matches
+</programlisting>
+The query is then terminated early when the <code>predicted_time</code>
+reaches a given limit.
+</para>
+<para>
+Of course, this is not a hard limit on the actual time spent (it is, however,
+a hard limit on the amount of <emphasis>processing</emphasis> work done), and
+a simple linear model is in no way an ideally precise one. So the wall clock time
+<emphasis>may</emphasis> be either below or over the target limit. However,
+the error margins are quite acceptable: for instance, in our experiments with
+a 100 msec target limit the majority of the test queries fell into a 95 to 105 msec
+range, and <emphasis>all</emphasis> of the queries were in a 80 to 120 msec range.
+Also, as a nice side effect, using the modeled query time instead of measuring
+actual run time results in somewhat less gettimeofday() calls, too.
+</para>
+<para>
+No two server makes and models are identical, so <code>predicted_time_costs</code>
+directive lets you configure the costs for the model above. For convenience, they are
+integers, counted in nanoseconds. (The limit in max_predicted_time is counted
+in milliseconds, and having to specify cost values as 0.000128 ms instead of 128 ns
+is somewhat more error prone.) It is not necessary to specify all 4 costs at once,
+as the missed one will take the default values. However, we strongly suggest
+to specify all of them, for readability.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+predicted_time_costs = doc=128, hit=96, skip=4096, match=128
+</programlisting>
 </sect2>
 
 
 </sect1>
-
-
 </chapter>
 
 <!--

@@ -27961,9 +27961,9 @@ void sphDictBuildInfixes ( const char * sPath )
 	CSphString sFilename, sError;
 	int64_t tmStart = sphMicroTimer();
 
-#if ( INDEX_FORMAT_VERSION!=27 )
+	if ( INDEX_FORMAT_VERSION!=27 )
 		sphDie ( "infix upgrade: only works in v.27 builds for now; get an older indextool or contact support" );
-#endif
+
 	//////////////////////////////////////////////////
 	// load (interesting parts from) the index header
 	//////////////////////////////////////////////////
@@ -28161,9 +28161,9 @@ void sphDictBuildSkiplists ( const char * sPath )
 	CSphString sFilename, sError;
 	int64_t tmStart = sphMicroTimer();
 
-#if ( INDEX_FORMAT_VERSION<31 || INDEX_FORMAT_VERSION>35 )
+	if ( INDEX_FORMAT_VERSION<31 || INDEX_FORMAT_VERSION>35 )
 		sphDie ( "skiplists upgrade: ony works in v.31 to v.35 builds for now; get an older indextool or contact support" );
-#endif
+
 
 	// load (interesting parts from) the index header
 	CSphAutoreader rdHeader;

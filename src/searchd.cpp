@@ -1460,7 +1460,7 @@ public:
 			// build current span
 			StrBuf_t sSpan;
 			if ( iSpanStart )
-				sSpan += "; ";
+				sSpan += ";\n";
 			sSpan += "index ";
 			for ( int j=iSpanStart; j<i; j++ )
 			{

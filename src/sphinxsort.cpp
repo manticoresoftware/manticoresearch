@@ -82,8 +82,8 @@ public:
 		: m_iUsed ( 0 )
 		, m_iSize ( iSize )
 		, m_bUsesAttrs ( bUsesAttrs )
-		, m_iDataLength ( iSize )
 		, m_iAllocatedSize ( iSize )
+		, m_iDataLength ( iSize )
 	{
 		assert ( iSize>0 );
 		m_pData = new CSphMatch [ iSize ];

@@ -1178,7 +1178,7 @@ protected:
 	CSphVector<int>		m_dZonespans; // zonespanlists for my matches
 
 public:
-					ExtRanker_T<STATE> ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup );
+					ExtRanker_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup );
 	virtual int		GetMatches ();
 
 	virtual bool InitState ( const CSphQueryContext & tCtx, CSphString & sError )
@@ -6331,7 +6331,7 @@ private:
 
 
 template <>
-virtual bool RankerState_Expr_fn<false>::ExtraDataImpl ( ExtraData_e eType, void ** ppResult )
+bool RankerState_Expr_fn<false>::ExtraDataImpl ( ExtraData_e eType, void ** ppResult )
 {
 	switch ( eType )
 	{
@@ -6347,7 +6347,7 @@ virtual bool RankerState_Expr_fn<false>::ExtraDataImpl ( ExtraData_e eType, void
 }
 
 template <>
-virtual bool RankerState_Expr_fn<true>::ExtraDataImpl ( ExtraData_e eType, void ** ppResult )
+bool RankerState_Expr_fn<true>::ExtraDataImpl ( ExtraData_e eType, void ** ppResult )
 {
 	switch ( eType )
 	{
@@ -7185,7 +7185,8 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS>::PackFactors ( int * pSize )
 		}
 	}
 
-	*pPack++ = (pPack-pPackStart)*sizeof(DWORD);
+	*pPack = (pPack-pPackStart)*sizeof(DWORD);
+	pPack++;
 
 	if ( pSize )
 	{
@@ -7239,30 +7240,30 @@ DWORD RankerState_Expr_fn<NEED_PACKEDFACTORS>::Finalize ( const CSphMatch & tMat
 
 /// expression ranker
 template < bool NEED_PACKEDFACTORS >
-class ExtRanker_Expr_T : public ExtRanker_T<RankerState_Expr_fn<NEED_PACKEDFACTORS>>
+class ExtRanker_Expr_T : public ExtRanker_T< RankerState_Expr_fn<NEED_PACKEDFACTORS> >
 {
 public:
 	ExtRanker_Expr_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const char * sExpr, const CSphSchema & tSchema )
-		: ExtRanker_T<RankerState_Expr_fn<NEED_PACKEDFACTORS>> ( tXQ, tSetup )
+		: ExtRanker_T< RankerState_Expr_fn<NEED_PACKEDFACTORS> > ( tXQ, tSetup )
 	{
 		// tricky bit, we stash the pointer to expr here, but it will be parsed
 		// somewhat later during InitState() call, when IDFs etc are computed
-		m_tState.m_sExpr = sExpr;
-		m_tState.m_pSchema = &tSchema;
+		this->m_tState.m_sExpr = sExpr;
+		this->m_tState.m_pSchema = &tSchema;
 	}
 
 	void SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 	{
-		ExtRanker_T<RankerState_Expr_fn <NEED_PACKEDFACTORS> >::SetQwordsIDF ( hQwords );
-		m_tState.m_iMaxQpos = m_iMaxQpos;
-		m_tState.m_iMaxUniqQpos = m_iMaxUniqQpos;
-		m_tState.SetQwords ( hQwords );
+		ExtRanker_T< RankerState_Expr_fn<NEED_PACKEDFACTORS> >::SetQwordsIDF ( hQwords );
+		this->m_tState.m_iMaxQpos = this->m_iMaxQpos;
+		this->m_tState.m_iMaxUniqQpos = this->m_iMaxUniqQpos;
+		this->m_tState.SetQwords ( hQwords );
 	}
 
 	virtual int GetMatches ()
 	{
 		if ( NEED_PACKEDFACTORS )
-			m_tState.FlushMatches ();
+			this->m_tState.FlushMatches ();
 
 		return ExtRanker_T<RankerState_Expr_fn <NEED_PACKEDFACTORS> >::GetMatches ();
 	}

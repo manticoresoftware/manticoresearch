@@ -5984,7 +5984,9 @@ void CSphSchema::AddAttr ( const CSphColumnInfo & tCol, bool bDynamic )
 	if ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR )
 	{
 		iBits = ROWITEMPTR_BITS;
-		m_dPtrAttrs.Add ( dUsed.GetLength() );
+		PtrAttr_t & tPtrAttr = m_dPtrAttrs.Add();
+		tPtrAttr.m_iOffset = dUsed.GetLength();
+		tPtrAttr.m_sName = tCol.m_sName;
 	}
 	tLoc.m_iBitCount = iBits;
 	if ( iBits>=ROWITEM_BITS )
@@ -6043,8 +6045,29 @@ void CSphSchema::RemoveAttr ( int iIndex )
 
 	// do remove
 	m_dAttrs.Remove ( iIndex );
-	m_dPtrAttrs.RemoveValue ( iItem );
+
+	ARRAY_FOREACH ( i, m_dPtrAttrs )
+		if ( m_dPtrAttrs[i].m_iOffset==iItem )
+		{
+			m_dPtrAttrs.Remove(i);
+			break;
+		}
 }
+
+
+void CSphSchema::AdoptPtrAttrs ( const CSphSchema & tSrc )
+{
+	m_dPtrAttrs.Reset();
+	ARRAY_FOREACH ( iSrcPtrAttr, tSrc.m_dPtrAttrs )
+		ARRAY_FOREACH ( iAttr, m_dAttrs )
+			if ( tSrc.m_dPtrAttrs[iSrcPtrAttr].m_sName==m_dAttrs[iAttr].m_sName )
+			{
+				PtrAttr_t & tPtrAttr = m_dPtrAttrs.Add();
+				tPtrAttr.m_iOffset = m_dAttrs[iAttr].m_tLocator.m_iBitOffset / ROWITEM_BITS;
+				tPtrAttr.m_sName = m_dAttrs[iAttr].m_sName;
+			}
+}
+
 
 void CSphSchema::CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const
 {
@@ -6067,12 +6090,12 @@ void CSphSchema::CopyStrings ( CSphMatch * pDst, const CSphMatch & rhs, int iUpB
 	if ( iUpBound<0 )
 	{
 		ARRAY_FOREACH ( i, m_dPtrAttrs )
-			*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i]) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i])).Leak();
+			*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i].m_iOffset) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i].m_iOffset)).Leak();
 	} else
 	{
 		ARRAY_FOREACH ( i, m_dPtrAttrs )
-			if ( m_dPtrAttrs[i] < iUpBound )
-				*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i]) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i])).Leak();
+			if ( m_dPtrAttrs[i].m_iOffset < iUpBound )
+				*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i].m_iOffset) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i].m_iOffset)).Leak();
 			else
 				break;
 	}
@@ -6091,12 +6114,12 @@ void CSphSchema::FreeStringPtrs ( CSphMatch * pMatch, int iUpBound ) const
 	if ( iUpBound<0 )
 	{
 		ARRAY_FOREACH ( i, m_dPtrAttrs )
-			sStr.Adopt ( (char**) (pMatch->m_pDynamic+m_dPtrAttrs[i]));
+			sStr.Adopt ( (char**) (pMatch->m_pDynamic+m_dPtrAttrs[i].m_iOffset));
 	} else
 	{
 		ARRAY_FOREACH ( i, m_dPtrAttrs )
-			if ( m_dPtrAttrs[i] < iUpBound )
-				sStr.Adopt ( (char**) (pMatch->m_pDynamic+m_dPtrAttrs[i]));
+			if ( m_dPtrAttrs[i].m_iOffset < iUpBound )
+				sStr.Adopt ( (char**) (pMatch->m_pDynamic+m_dPtrAttrs[i].m_iOffset));
 			else
 				break;
 	}

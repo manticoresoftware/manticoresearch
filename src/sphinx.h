@@ -1367,7 +1367,7 @@ public:
 	void					RemoveAttr ( int iIndex );
 
 	/// copy ptr attrs from another schema
-	void					AdoptPtrAttrs ( const CSphSchema & tSrc ) { m_dPtrAttrs = tSrc.m_dPtrAttrs; }
+	void					AdoptPtrAttrs ( const CSphSchema & tSrc );
 
 public:
 	// also let the schema to clone the matches when necessary
@@ -1386,8 +1386,15 @@ protected:
 	CSphVector<CSphColumnInfo>		m_dAttrs;			///< all my attributes
 	CSphVector<int>					m_dStaticUsed;		///< static row part map (amount of used bits in each rowitem)
 	CSphVector<int>					m_dDynamicUsed;		///< dynamic row part map
-	CSphVector<int>					m_dPtrAttrs;		///< the pointers which has to be copied and deleted
 	int								m_iStaticSize;		///< static row size (can be different from m_dStaticUsed.GetLength() because of gaps)
+
+	struct PtrAttr_t
+	{
+		int			m_iOffset;
+		CSphString	m_sName;
+	};
+
+	CSphVector<PtrAttr_t>			m_dPtrAttrs;		///< attributes which have to be copied and deleted
 };
 
 /// HTML stripper

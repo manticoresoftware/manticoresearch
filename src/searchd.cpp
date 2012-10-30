@@ -8536,6 +8536,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 
 	// create sorters
 	int iValidSorters = 0;
+	bool bPackedFactors = false;
 	for ( int i=0; i<iQueries; i++ )
 	{
 		CSphString& sError = ppResults[i]->m_sError;
@@ -8547,7 +8548,9 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 		m_tHook.m_pIndex = pServed->m_pIndex;
 		ppSorters[i] = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchemaMT, m_pUpdates,
 			NULL, // FIXME??? really NULL???
-			&m_tHook );
+			NULL, &m_tHook );
+
+		bPackedFactors |= tQuery.m_bPackedFactors;
 
 		if ( ppSorters[i] )
 			iValidSorters++;
@@ -8630,6 +8633,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 		ARRAY_FOREACH ( i, dSorters )
 			dSorters[i] = NULL;
 
+		bool bNeedFactors = false;
 		int iValidSorters = 0;
 		for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
 		{
@@ -8651,7 +8655,8 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 
 				// create queue
 				m_tHook.m_pIndex = pServed->m_pIndex;
-				pSorter = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchema, m_pUpdates, &tQuery.m_bZSlist, &m_tHook );
+				pSorter = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchema, m_pUpdates, &tQuery.m_bZSlist, &tQuery.m_bPackedFactors, &m_tHook );
+				bNeedFactors |= tQuery.m_bPackedFactors;
 				if ( !pSorter )
 				{
 					m_dFailuresSet[iQuery].Submit ( sLocal, sError.cstr() );
@@ -8703,6 +8708,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 		pServed->m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
 		if ( m_bMultiQueue )
 		{
+			m_dQueries[m_iStart].m_bPackedFactors = bNeedFactors;
 			bResult = pServed->m_pIndex->MultiQuery ( &m_dQueries[m_iStart], &tStats,
 				dSorters.GetLength(), dSorters.Begin(), NULL );
 		} else
@@ -9018,7 +9024,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			m_tHook.m_pIndex = pFirstIndex->m_pIndex;
 			pLocalSorter = sphCreateQueue ( &m_dQueries[iStart], tFirstSchema, sError, true, pExtraSchemaMT, NULL,
 				NULL, // FIXME??? really NULL?
-				&m_tHook );
+				&(m_dQueries[iStart].m_bPackedFactors), &m_tHook );
 		}
 
 		ReleaseIndex ( 0 );

@@ -21,6 +21,7 @@
 %token <iAttrLocator>	TOK_ATTR_MVA32
 %token <iAttrLocator>	TOK_ATTR_MVA64
 %token <iAttrLocator>	TOK_ATTR_STRING
+%token <iAttrLocator>	TOK_ATTR_FACTORS
 %token <iFunc>			TOK_FUNC
 %token <iFunc>			TOK_FUNC_IN
 %token <iNode>			TOK_USERVAR
@@ -123,6 +124,7 @@ arg:
 	| TOK_ATTR_STRING				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_STRING, $1 ); }
 	| TOK_ATTR_MVA32				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA32, $1 ); }
 	| TOK_ATTR_MVA64				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA64, $1 ); }
+	| TOK_ATTR_FACTORS				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_FACTORS, $1 ); }
 	| TOK_CONST_STRING				{ $$ = pParser->AddNodeString ( $1 ); }
 	;
 

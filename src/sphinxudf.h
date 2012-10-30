@@ -34,7 +34,8 @@ enum sphinx_udf_argtype
 	SPH_UDF_TYPE_INT64			= 3,			///< signed 64-bit integer
 	SPH_UDF_TYPE_FLOAT			= 4,			///< single-precision IEEE 754 float
 	SPH_UDF_TYPE_STRING			= 5,			///< non-ASCIIZ string, with a separately stored length
-	SPH_UDF_TYPE_UINT64SET		= 6				///< sorted set of unsigned 64-bit integers
+	SPH_UDF_TYPE_UINT64SET		= 6,			///< sorted set of unsigned 64-bit integers
+	SPH_UDF_TYPE_FACTORS		= 7				///< packed ranking factors
 };
 
 /// our malloc() replacement type

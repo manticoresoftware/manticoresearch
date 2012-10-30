@@ -74,6 +74,7 @@ protected:
 
 private:
 	int							m_iAllocatedSize;
+	int							m_iDataLength;
 
 public:
 	/// ctor
@@ -81,6 +82,7 @@ public:
 		: m_iUsed ( 0 )
 		, m_iSize ( iSize )
 		, m_bUsesAttrs ( bUsesAttrs )
+		, m_iDataLength ( iSize )
 		, m_iAllocatedSize ( iSize )
 	{
 		assert ( iSize>0 );
@@ -103,6 +105,7 @@ public:
 	bool		UsesAttrs () const										{ return m_bUsesAttrs; }
 	virtual CSphMatch *	Finalize ()												{ return m_pData; }
 	virtual int			GetLength () const										{ return m_iUsed; }
+	virtual int			GetDataLength () const									{ return m_iDataLength; }
 
 	virtual bool CanMulti () const
 	{
@@ -110,20 +113,28 @@ public:
 	}
 };
 
+
+#if USE_WINDOWS
+#pragma warning(disable:4127) // conditional expr is const for MSVC
+#endif
+
 //////////////////////////////////////////////////////////////////////////
 // SORTING QUEUES
 //////////////////////////////////////////////////////////////////////////
 
 /// heap sorter
 /// plain binary heap based PQ
-template < typename COMP >
+template < typename COMP, bool NOTIFICATIONS >
 class CSphMatchQueue : public CSphMatchQueueTraits
 {
 public:
 	/// ctor
 	CSphMatchQueue ( int iSize, bool bUsesAttrs )
 		: CSphMatchQueueTraits ( iSize, bUsesAttrs )
-	{}
+	{
+		if ( NOTIFICATIONS )
+			m_dJustPopped.Reserve(1);
+	}
 
 	/// check if this sorter does groupby
 	virtual bool IsGroupby () const
@@ -136,6 +147,12 @@ public:
 	{
 		m_iTotal++;
 
+		if ( NOTIFICATIONS )
+		{
+			m_iJustPushed = 0;
+			m_dJustPopped.Resize(0);
+		}
+
 		if ( m_iUsed==m_iSize )
 		{
 			// if it's worse that current min, reject it, else pop off current min
@@ -147,6 +164,10 @@ public:
 
 		// do add
 		m_tSchema.CloneMatch ( m_pData+m_iUsed, tEntry );
+
+		if ( NOTIFICATIONS )
+			m_iJustPushed = tEntry.m_iDocID;
+
 		int iEntry = m_iUsed++;
 
 		// sift up if needed, so that worst (lesser) ones float to the top
@@ -181,6 +202,14 @@ public:
 		// make the last entry my new root
 		Swap ( m_pData[0], m_pData[m_iUsed] );
 		m_tSchema.FreeStringPtrs ( &m_pData[m_iUsed] );
+
+		if ( NOTIFICATIONS )
+		{
+			if ( m_dJustPopped.GetLength() )
+				m_dJustPopped[0] = m_pData[m_iUsed].m_iDocID;
+			else
+				m_dJustPopped.Add ( m_pData[m_iUsed].m_iDocID );
+		}
 
 		// sift down if needed
 		int iEntry = 0;
@@ -225,6 +254,11 @@ public:
 		m_iTotal = 0;
 	}
 };
+
+
+#if USE_WINDOWS
+#pragma warning(default:4127) // conditional expr is const for MSVC
+#endif
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -274,9 +308,14 @@ struct MatchSort_fn
 	}
 };
 
+
+#if USE_WINDOWS
+#pragma warning(disable:4127) // conditional expr is const for MSVC
+#endif
+
 /// K-buffer (generalized double buffer) sorter
 /// faster worst-case but slower average-case than the heap sorter
-template < typename COMP >
+template < typename COMP, bool NOTIFICATIONS >
 class CSphKbufferMatchQueue : public CSphMatchQueueTraits
 {
 protected:
@@ -294,6 +333,9 @@ public:
 		, m_pWorst ( NULL )
 		, m_bFinalized ( false )
 	{
+		if ( NOTIFICATIONS )
+			m_dJustPopped.Reserve ( m_iSize );
+
 		m_iSize /= COEFF;
 	}
 
@@ -308,6 +350,12 @@ public:
 	{
 		assert ( !m_bFinalized );
 
+		if ( NOTIFICATIONS )
+		{
+			m_iJustPushed = 0;
+			m_dJustPopped.Resize(0);
+		}
+
 		// quick early rejection checks
 		m_iTotal++;
 		if ( m_pWorst && COMP::IsLess ( tEntry, *m_pWorst, m_tState ) )
@@ -317,6 +365,9 @@ public:
 		// fill the data, back to front
 		m_iUsed++;
 		m_tSchema.CloneMatch ( m_pEnd-m_iUsed, tEntry );
+
+		if ( NOTIFICATIONS )
+			m_iJustPushed = tEntry.m_iDocID;
 
 		// do the initial sort once
 		if ( m_iTotal==m_iSize )
@@ -333,6 +384,13 @@ public:
 		{
 			MatchSort_fn<COMP> tComp ( m_tState, m_tSchema );
 			sphSort ( m_pData, m_iUsed, tComp, tComp );
+
+			if ( NOTIFICATIONS )
+			{
+				for ( CSphMatch * pMatch = m_pData; pMatch < m_pEnd-m_iSize; pMatch++ )
+					m_dJustPopped.Add ( pMatch->m_iDocID );
+			}
+
 			m_iUsed = m_iSize;
 			m_pWorst = m_pEnd-m_iSize;
 		}
@@ -393,6 +451,11 @@ public:
 		m_bFinalized = false;
 	}
 };
+
+
+#if USE_WINDOWS
+#pragma warning(default:4127) // conditional expr is const for MSVC
+#endif
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1124,7 +1187,7 @@ struct GroupSorter_fn : public CSphMatchComparatorState, public SphAccessor_T<CS
 };
 
 /// match sorter with k-buffering and group-by
-template < typename COMPGROUP, bool DISTINCT >
+template < typename COMPGROUP, bool DISTINCT, bool NOTIFICATIONS >
 class CSphKBufferGroupSorter : public CSphMatchQueueTraits, protected CSphGroupSorterSettings
 {
 protected:
@@ -1163,6 +1226,9 @@ public:
 	{
 		assert ( GROUPBY_FACTOR>1 );
 		assert ( DISTINCT==false || tSettings.m_tDistinctLoc.m_iBitOffset>=0 );
+
+		if ( NOTIFICATIONS )
+			m_dJustPopped.Reserve ( m_iSize );
 	}
 
 	/// schema setup
@@ -1313,6 +1379,12 @@ public:
 	/// add entry to the queue
 	virtual bool PushEx ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, bool bGrouped )
 	{
+		if ( NOTIFICATIONS )
+		{
+			m_iJustPushed = 0;
+			m_dJustPopped.Resize(0);
+		}
+
 		// if this group is already hashed, we only need to update the corresponding match
 		CSphMatch ** ppMatch = m_hGroup2Match ( uGroupKey );
 		if ( ppMatch )
@@ -1381,6 +1453,9 @@ public:
 		assert ( m_iUsed<m_iSize );
 		CSphMatch & tNew = m_pData [ m_iUsed++ ];
 		m_tSchema.CloneMatch ( &tNew, tEntry );
+
+		if ( NOTIFICATIONS )
+			m_iJustPushed = tNew.m_iDocID;
 
 		if ( !bGrouped )
 		{
@@ -1512,6 +1587,12 @@ protected:
 		SortGroups ();
 		CalcAvg ( false );
 
+		if ( NOTIFICATIONS )
+		{
+			for ( int i = m_iUsed-iCut; i < m_iUsed; i++ )
+				m_dJustPopped.Add ( m_pData[i].m_iDocID );
+		}
+
 		// cut groups
 		m_iUsed -= iCut;
 
@@ -1553,8 +1634,8 @@ protected:
 
 
 /// match sorter with k-buffering and group-by for MVAs
-template < typename COMPGROUP, bool DISTINCT >
-class CSphKBufferMVAGroupSorter : public CSphKBufferGroupSorter < COMPGROUP, DISTINCT >
+template < typename COMPGROUP, bool DISTINCT, bool NOTIFICATIONS >
+class CSphKBufferMVAGroupSorter : public CSphKBufferGroupSorter < COMPGROUP, DISTINCT, NOTIFICATIONS >
 {
 protected:
 	const DWORD *		m_pMva;		///< pointer to MVA pool for incoming matches
@@ -1564,7 +1645,7 @@ protected:
 public:
 	/// ctor
 	CSphKBufferMVAGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
-		: CSphKBufferGroupSorter < COMPGROUP, DISTINCT > ( pComp, pQuery, tSettings )
+		: CSphKBufferGroupSorter < COMPGROUP, DISTINCT, NOTIFICATIONS > ( pComp, pQuery, tSettings )
 		, m_pMva ( NULL )
 		, m_bMva64 ( tSettings.m_bMva64 )
 	{
@@ -2158,42 +2239,60 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 
 template < typename COMPGROUP >
 static ISphMatchSorter * sphCreateSorter3rd ( const ISphMatchComparator * pComp, const CSphQuery * pQuery,
-	const CSphGroupSorterSettings & tSettings )
+	const CSphGroupSorterSettings & tSettings, bool bHasPackedFactors )
 {
 	if ( tSettings.m_bMVA )
 	{
 		if ( tSettings.m_bDistinct==true )
-			return new CSphKBufferMVAGroupSorter < COMPGROUP, true > ( pComp, pQuery, tSettings);
-		else
-			return new CSphKBufferMVAGroupSorter < COMPGROUP, false > ( pComp, pQuery, tSettings );
+		{
+			if ( bHasPackedFactors )
+				return new CSphKBufferMVAGroupSorter < COMPGROUP, true, true > ( pComp, pQuery, tSettings);
+			else
+				return new CSphKBufferMVAGroupSorter < COMPGROUP, true, false > ( pComp, pQuery, tSettings);
+		} else
+		{
+			if ( bHasPackedFactors )
+				return new CSphKBufferMVAGroupSorter < COMPGROUP, false, true > ( pComp, pQuery, tSettings );
+			else
+				return new CSphKBufferMVAGroupSorter < COMPGROUP, false, false > ( pComp, pQuery, tSettings );
+		}
 	} else
 	{
 		if ( tSettings.m_bDistinct==true )
-			return new CSphKBufferGroupSorter < COMPGROUP, true > ( pComp, pQuery, tSettings );
-		else
-			return new CSphKBufferGroupSorter < COMPGROUP, false > ( pComp, pQuery, tSettings );
+		{
+			if ( bHasPackedFactors )
+				return new CSphKBufferGroupSorter < COMPGROUP, true, true > ( pComp, pQuery, tSettings );
+			else
+				return new CSphKBufferGroupSorter < COMPGROUP, true, false > ( pComp, pQuery, tSettings );
+		} else
+		{
+			if ( bHasPackedFactors )
+				return new CSphKBufferGroupSorter < COMPGROUP, false, true > ( pComp, pQuery, tSettings );
+			else
+				return new CSphKBufferGroupSorter < COMPGROUP, false, false > ( pComp, pQuery, tSettings );
+		}
 	}
 }
 
 
 static ISphMatchSorter * sphCreateSorter2nd ( ESphSortFunc eGroupFunc, const ISphMatchComparator * pComp,
-	const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
+	const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings, bool bHasPackedFactors )
 {
 	switch ( eGroupFunc )
 	{
-		case FUNC_GENERIC2:		return sphCreateSorter3rd<MatchGeneric2_fn>	( pComp, pQuery, tSettings ); break;
-		case FUNC_GENERIC3:		return sphCreateSorter3rd<MatchGeneric3_fn>	( pComp, pQuery, tSettings ); break;
-		case FUNC_GENERIC4:		return sphCreateSorter3rd<MatchGeneric4_fn>	( pComp, pQuery, tSettings ); break;
-		case FUNC_GENERIC5:		return sphCreateSorter3rd<MatchGeneric5_fn>	( pComp, pQuery, tSettings ); break;
-		case FUNC_CUSTOM:		return sphCreateSorter3rd<MatchCustom_fn>	( pComp, pQuery, tSettings ); break;
-		case FUNC_EXPR:			return sphCreateSorter3rd<MatchExpr_fn>		( pComp, pQuery, tSettings ); break;
+		case FUNC_GENERIC2:		return sphCreateSorter3rd<MatchGeneric2_fn>	( pComp, pQuery, tSettings, bHasPackedFactors ); break;
+		case FUNC_GENERIC3:		return sphCreateSorter3rd<MatchGeneric3_fn>	( pComp, pQuery, tSettings, bHasPackedFactors ); break;
+		case FUNC_GENERIC4:		return sphCreateSorter3rd<MatchGeneric4_fn>	( pComp, pQuery, tSettings, bHasPackedFactors ); break;
+		case FUNC_GENERIC5:		return sphCreateSorter3rd<MatchGeneric5_fn>	( pComp, pQuery, tSettings, bHasPackedFactors ); break;
+		case FUNC_CUSTOM:		return sphCreateSorter3rd<MatchCustom_fn>	( pComp, pQuery, tSettings, bHasPackedFactors ); break;
+		case FUNC_EXPR:			return sphCreateSorter3rd<MatchExpr_fn>		( pComp, pQuery, tSettings, bHasPackedFactors ); break;
 		default:				return NULL;
 	}
 }
 
 
 static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, ESphSortFunc eGroupFunc,
-	const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
+	const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings, bool bHasPackedFactors )
 {
 	ISphMatchComparator * pComp = NULL;
 	switch ( eMatchFunc )
@@ -2211,7 +2310,7 @@ static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, ESphSortF
 	}
 
 	assert ( pComp );
-	return sphCreateSorter2nd ( eGroupFunc, pComp, pQuery, tSettings );
+	return sphCreateSorter2nd ( eGroupFunc, pComp, pQuery, tSettings, bHasPackedFactors );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -2890,29 +2989,38 @@ CSphGrouper * sphCreateGrouperString ( const CSphAttrLocator & tLoc, ESphCollati
 /////////////////////////
 
 template < typename COMP >
-static ISphMatchSorter * CreatePlainSorter ( bool bKbuffer, int iMaxMatches, bool bUsesAttrs )
+static ISphMatchSorter * CreatePlainSorter ( bool bKbuffer, int iMaxMatches, bool bUsesAttrs, bool bFactors )
 {
 	if ( bKbuffer )
-		return new CSphKbufferMatchQueue<COMP> ( iMaxMatches, bUsesAttrs );
-	else
-		return new CSphMatchQueue<COMP> ( iMaxMatches, bUsesAttrs );
+	{
+		if ( bFactors )
+			return new CSphKbufferMatchQueue<COMP, true> ( iMaxMatches, bUsesAttrs );
+		else
+			return new CSphKbufferMatchQueue<COMP, false> ( iMaxMatches, bUsesAttrs );
+	} else
+	{
+		if ( bFactors )
+			return new CSphMatchQueue<COMP, true> ( iMaxMatches, bUsesAttrs );
+		else
+			return new CSphMatchQueue<COMP, false> ( iMaxMatches, bUsesAttrs );
+	}
 }
 
 
-static ISphMatchSorter * CreatePlainSorter ( ESphSortFunc eMatchFunc, bool bKbuffer, int iMaxMatches, bool bUsesAttrs )
+static ISphMatchSorter * CreatePlainSorter ( ESphSortFunc eMatchFunc, bool bKbuffer, int iMaxMatches, bool bUsesAttrs, bool bFactors )
 {
 	switch ( eMatchFunc )
 	{
-		case FUNC_REL_DESC:		return CreatePlainSorter<MatchRelevanceLt_fn>	( bKbuffer, iMaxMatches, bUsesAttrs ); break;
-		case FUNC_ATTR_DESC:	return CreatePlainSorter<MatchAttrLt_fn>		( bKbuffer, iMaxMatches, bUsesAttrs ); break;
-		case FUNC_ATTR_ASC:		return CreatePlainSorter<MatchAttrGt_fn>		( bKbuffer, iMaxMatches, bUsesAttrs ); break;
-		case FUNC_TIMESEGS:		return CreatePlainSorter<MatchTimeSegments_fn>	( bKbuffer, iMaxMatches, bUsesAttrs ); break;
-		case FUNC_GENERIC2:		return CreatePlainSorter<MatchGeneric2_fn>		( bKbuffer, iMaxMatches, bUsesAttrs ); break;
-		case FUNC_GENERIC3:		return CreatePlainSorter<MatchGeneric3_fn>		( bKbuffer, iMaxMatches, bUsesAttrs ); break;
-		case FUNC_GENERIC4:		return CreatePlainSorter<MatchGeneric4_fn>		( bKbuffer, iMaxMatches, bUsesAttrs ); break;
-		case FUNC_GENERIC5:		return CreatePlainSorter<MatchGeneric5_fn>		( bKbuffer, iMaxMatches, bUsesAttrs ); break;
-		case FUNC_CUSTOM:		return CreatePlainSorter<MatchCustom_fn>		( bKbuffer, iMaxMatches, bUsesAttrs ); break;
-		case FUNC_EXPR:			return CreatePlainSorter<MatchExpr_fn>			( bKbuffer, iMaxMatches, bUsesAttrs ); break;
+		case FUNC_REL_DESC:		return CreatePlainSorter<MatchRelevanceLt_fn>	( bKbuffer, iMaxMatches, bUsesAttrs, bFactors ); break;
+		case FUNC_ATTR_DESC:	return CreatePlainSorter<MatchAttrLt_fn>		( bKbuffer, iMaxMatches, bUsesAttrs, bFactors ); break;
+		case FUNC_ATTR_ASC:		return CreatePlainSorter<MatchAttrGt_fn>		( bKbuffer, iMaxMatches, bUsesAttrs, bFactors ); break;
+		case FUNC_TIMESEGS:		return CreatePlainSorter<MatchTimeSegments_fn>	( bKbuffer, iMaxMatches, bUsesAttrs, bFactors ); break;
+		case FUNC_GENERIC2:		return CreatePlainSorter<MatchGeneric2_fn>		( bKbuffer, iMaxMatches, bUsesAttrs, bFactors ); break;
+		case FUNC_GENERIC3:		return CreatePlainSorter<MatchGeneric3_fn>		( bKbuffer, iMaxMatches, bUsesAttrs, bFactors ); break;
+		case FUNC_GENERIC4:		return CreatePlainSorter<MatchGeneric4_fn>		( bKbuffer, iMaxMatches, bUsesAttrs, bFactors ); break;
+		case FUNC_GENERIC5:		return CreatePlainSorter<MatchGeneric5_fn>		( bKbuffer, iMaxMatches, bUsesAttrs, bFactors ); break;
+		case FUNC_CUSTOM:		return CreatePlainSorter<MatchCustom_fn>		( bKbuffer, iMaxMatches, bUsesAttrs, bFactors ); break;
+		case FUNC_EXPR:			return CreatePlainSorter<MatchExpr_fn>			( bKbuffer, iMaxMatches, bUsesAttrs, bFactors ); break;
 		default:				return NULL;
 	}
 }
@@ -2923,13 +3031,13 @@ static void ExtraAddSortkeys ( CSphSchema * pExtra, const CSphSchema & tSorterSc
 	if ( pExtra )
 		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 			if ( dAttrs[i]>=0 )
-				pExtra->AddAttr ( tSorterSchema.GetAttr(dAttrs[i]), true );
+				pExtra->AddAttr ( tSorterSchema.GetAttr ( dAttrs[i] ), true );
 }
 
 
 ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema,
 	CSphString & sError, bool bComputeItems, CSphSchema * pExtra, CSphAttrUpdateEx * pUpdate, bool * pZonespanlist,
-	ISphExprHook * pHook )
+	bool * pPackedFactors, ISphExprHook * pHook )
 {
 	// prepare for descent
 	ISphMatchSorter * pTop = NULL;
@@ -2938,6 +3046,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	sError = "";
 	bool bHasZonespanlist = false;
 	bool bNeedZonespanlist = false;
+	bool bNeedPackedFactors = false;
 
 	///////////////////////////////////////
 	// build incoming and outgoing schemas
@@ -3081,17 +3190,20 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		// and also the original expression type, and let the string conversion happen in G_C() itself
 		// but that ideal route seems somewhat more complicated in the current architecture
 		ESphEvalStage eExprStage = SPH_EVAL_FINAL;
+		bool bHasPackedFactors = false;
 		if ( tItem.m_eAggrFunc==SPH_AGGR_CAT )
 		{
 			CSphString sExpr2;
 			sExpr2.SetSprintf ( "TO_STRING(%s)", sExpr.cstr() );
 			tExprCol.m_pExpr = sphExprParse ( sExpr2.cstr(), tSorterSchema, &tExprCol.m_eAttrType,
-				&tExprCol.m_bWeight, sError, pExtra, pHook, &bHasZonespanlist, &eExprStage );
+				&tExprCol.m_bWeight, sError, pExtra, pHook, &bHasZonespanlist, &bHasPackedFactors, &eExprStage );
 		} else
 		{
 			tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), tSorterSchema, &tExprCol.m_eAttrType,
-				&tExprCol.m_bWeight, sError, pExtra, pHook, &bHasZonespanlist, &eExprStage );
+				&tExprCol.m_bWeight, sError, pExtra, pHook, &bHasZonespanlist, &bHasPackedFactors, &eExprStage );
 		}
+
+		bNeedPackedFactors |= bHasPackedFactors;
 		bNeedZonespanlist |= bHasZonespanlist;
 		tExprCol.m_eAggrFunc = tItem.m_eAggrFunc;
 		if ( !tExprCol.m_pExpr )
@@ -3384,10 +3496,10 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		if ( pUpdate )
 			pTop = new CSphUpdateQueue ( pQuery->m_iMaxMatches, pUpdate, pQuery->m_bIgnoreNonexistent );
 		else
-			pTop = CreatePlainSorter ( eMatchFunc, pQuery->m_bSortKbuffer, pQuery->m_iMaxMatches, bUsesAttrs );
+			pTop = CreatePlainSorter ( eMatchFunc, pQuery->m_bSortKbuffer, pQuery->m_iMaxMatches, bUsesAttrs, bNeedPackedFactors );
 	} else
 	{
-		pTop = sphCreateSorter1st ( eMatchFunc, eGroupFunc, pQuery, tSettings );
+		pTop = sphCreateSorter1st ( eMatchFunc, eGroupFunc, pQuery, tSettings, bNeedPackedFactors );
 	}
 
 	if ( !pTop )
@@ -3428,6 +3540,9 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 
 	if ( pZonespanlist )
 		*pZonespanlist = bNeedZonespanlist;
+
+	if ( pPackedFactors )
+		*pPackedFactors = bNeedPackedFactors;
 
 	return pTop;
 }

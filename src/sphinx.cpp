@@ -5559,6 +5559,7 @@ CSphQuery::CSphQuery ()
 	, m_iMaxMatches	( 1000 )
 	, m_bSortKbuffer	( false )
 	, m_bZSlist			( false )
+	, m_bPackedFactors	( false )
 	, m_bIsOptimized	( false )
 	, m_eGroupFunc		( SPH_GROUPBY_ATTR )
 	, m_sGroupSortBy	( "@groupby desc" )
@@ -6099,6 +6100,14 @@ void CSphSchema::FreeStringPtrs ( CSphMatch * pMatch, int iUpBound ) const
 			else
 				break;
 	}
+
+	ARRAY_FOREACH ( i, m_dAttrs )
+		if ( m_dAttrs[i].m_eAttrType==SPH_ATTR_FACTORS )
+		{
+			SphAttr_t tAttr = pMatch->GetAttr ( m_dAttrs[i].m_tLocator );
+			delete [] (BYTE*)tAttr;
+			pMatch->SetAttr ( m_dAttrs[i].m_tLocator, 0 );
+		}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -13541,7 +13550,9 @@ static inline void CalcContextItems ( CSphMatch & tMatch, const CSphVector<CSphQ
 			const BYTE * pStr = NULL;
 			tCalc.m_pExpr->StringEval ( tMatch, &pStr );
 			tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t) pStr ); // FIXME! a potential leak of *previous* value?
-		} else
+		} else if ( tCalc.m_eType==SPH_ATTR_FACTORS )
+			tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t)tCalc.m_pExpr->FactorEval(tMatch) );
+		else
 			tMatch.SetAttrFloat ( tCalc.m_tLoc, tCalc.m_pExpr->Eval(tMatch) );
 	}
 }
@@ -13669,6 +13680,12 @@ bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 						break;
 				}
 				bNewMatch |= ppSorters[iSorter]->Push ( pMatch[i] );
+
+				if ( pQuery->m_bPackedFactors )
+				{
+					pRanker->ExtraData ( EXTRA_SET_MATCHPUSHED, (void**)&(ppSorters[iSorter]->m_iJustPushed) );
+					pRanker->ExtraData ( EXTRA_SET_MATCHPOPPED, (void**)&(ppSorters[iSorter]->m_dJustPopped) );
+				}
 			}
 			pCtx->FreeStrSort ( pMatch[i] );
 
@@ -16792,6 +16809,12 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	pRanker->ExtraData ( EXTRA_SET_MVAPOOL, (void**)m_pMva.GetWritePtr() );
 	pRanker->ExtraData ( EXTRA_SET_STRINGPOOL, (void**)m_pStrings.GetWritePtr() );
+
+	int iMatchPoolSize = 0;
+	for ( int i=0; i<iSorters; i++ )
+		iMatchPoolSize += ppSorters[i]->GetDataLength();
+
+	pRanker->ExtraData ( EXTRA_SET_MAXMATCHES, (void**)&iMatchPoolSize );
 
 	// empty index, empty response!
 	if ( m_bIsEmpty )

@@ -5923,10 +5923,237 @@ struct RankerState_Fieldmask_fn : public ISphExtra
 };
 
 //////////////////////////////////////////////////////////////////////////
+
+struct FactorHashEntry_t
+{
+	SphDocID_t			m_iId;
+	int					m_iRefCount;
+	BYTE *				m_pData;
+	FactorHashEntry_t *	m_pPrev;
+	FactorHashEntry_t *	m_pNext;
+};
+
+
+class FactorPool_c
+{
+public:
+					FactorPool_c ();
+
+	void			Prealloc ( int iElementSize, int nElements );
+	BYTE *			Alloc ();
+	void			Free ( BYTE * pPtr );
+	int				GetElementSize() const;
+	int				GetIntElementSize () const;
+	void			AddToHash ( SphDocID_t iId, BYTE * pPacked );
+	void			AddRef ( SphDocID_t iId );
+	void			Release ( SphDocID_t iId );
+	void			Flush ();
+
+	bool			IsInitialized() const;
+	CSphTightVector<FactorHashEntry_t *> * GetHashPtr();
+
+private:
+	int				m_iElementSize;
+	int				m_iNextFree;
+
+	CSphTightVector<BYTE>	m_dPool;
+	CSphTightVector<int>	m_dFree;
+	CSphTightVector<FactorHashEntry_t *> m_dHash;
+
+	FactorHashEntry_t * Find ( SphDocID_t iId ) const;
+	inline DWORD	HashFunc ( SphDocID_t iId ) const;
+	bool			FlushEntry ( FactorHashEntry_t * pEntry );
+};
+
+
+FactorPool_c::FactorPool_c ()
+	: m_iElementSize	( 0 )
+	, m_iNextFree		( 0 )
+{
+}
+
+
+void FactorPool_c::Prealloc ( int iElementSize, int nElements )
+{
+	m_iElementSize = iElementSize;
+
+	m_dPool.Resize ( nElements*GetIntElementSize() );
+	m_dHash.Resize ( nElements );
+	m_dFree.Reserve ( nElements );
+
+	memset ( m_dHash.Begin(), 0, sizeof(m_dHash[0])*m_dHash.GetLength() );
+}
+
+
+BYTE * FactorPool_c::Alloc ()
+{
+	if ( m_dFree.GetLength() )
+	{
+		int iIndex = m_dFree.Pop();
+		return m_dPool.Begin() + iIndex*GetIntElementSize();
+	}
+
+	assert ( m_iNextFree<=m_dPool.GetLength() / GetIntElementSize() );
+
+	BYTE * pAllocated = m_dPool.Begin()+m_iNextFree*GetIntElementSize();
+	m_iNextFree++;
+	return pAllocated;
+}
+
+
+void FactorPool_c::Free ( BYTE * pPtr )
+{
+	if ( !pPtr )
+		return;
+
+	assert ( (pPtr-m_dPool.Begin() ) % GetIntElementSize()==0);
+	assert ( pPtr>=m_dPool.Begin() && pPtr<&( m_dPool.Last() ) );
+
+	int iIndex = ( pPtr-m_dPool.Begin() )/GetIntElementSize();
+	m_dFree.Add(iIndex);
+}
+
+
+int FactorPool_c::GetIntElementSize () const
+{
+	return m_iElementSize+sizeof(FactorHashEntry_t);
+}
+
+
+int	FactorPool_c::GetElementSize() const
+{
+	return m_iElementSize;
+}
+
+
+void FactorPool_c::AddToHash ( SphDocID_t iId, BYTE * pPacked )
+{
+	FactorHashEntry_t * pNew = (FactorHashEntry_t *)(pPacked+m_iElementSize);
+	memset ( pNew, 0, sizeof(FactorHashEntry_t) );
+
+	DWORD uKey = HashFunc(iId);
+	if ( m_dHash[uKey] )
+	{
+		FactorHashEntry_t * pStart = m_dHash[uKey];
+		pNew->m_pPrev = NULL;
+		pNew->m_pNext = pStart;
+		pStart->m_pPrev = pNew;
+	}
+
+	pNew->m_pData = pPacked;
+	pNew->m_iId = iId;
+	m_dHash[uKey] = pNew;
+}
+
+
+FactorHashEntry_t * FactorPool_c::Find ( SphDocID_t iId ) const
+{
+	DWORD uKey = HashFunc(iId);
+	if ( m_dHash[uKey] )
+	{
+		FactorHashEntry_t * pEntry = m_dHash[uKey];
+		while ( pEntry )
+		{
+			if ( pEntry->m_iId==iId )
+				return pEntry;
+
+			pEntry = pEntry->m_pNext;
+		}
+	}
+
+	return NULL;
+}
+
+
+void FactorPool_c::AddRef ( SphDocID_t iId )
+{
+	if ( !iId )
+		return;
+
+	FactorHashEntry_t * pEntry = Find ( iId );
+	if ( pEntry )
+		pEntry->m_iRefCount++;
+}
+
+
+void FactorPool_c::Release ( SphDocID_t iId )
+{
+	if ( !iId )
+		return;
+
+	FactorHashEntry_t * pEntry = Find ( iId );
+	if ( pEntry )
+	{
+		pEntry->m_iRefCount--;
+		bool bHead = !pEntry->m_pPrev;
+		FactorHashEntry_t * pNext = pEntry->m_pNext;
+		if ( FlushEntry ( pEntry ) && bHead )
+			m_dHash[HashFunc(iId)] = pNext;
+	}
+}
+
+
+bool FactorPool_c::FlushEntry ( FactorHashEntry_t * pEntry )
+{
+	assert ( pEntry->m_iRefCount>=0 );
+	if ( pEntry->m_iRefCount )
+		return false;
+
+	assert ( pEntry );
+	if ( pEntry->m_pPrev )
+		pEntry->m_pPrev->m_pNext = pEntry->m_pNext;
+
+	if ( pEntry->m_pNext )
+		pEntry->m_pNext->m_pPrev = pEntry->m_pPrev;
+
+	Free ( pEntry->m_pData );
+
+	return true;
+};
+
+
+void FactorPool_c::Flush()
+{
+	ARRAY_FOREACH ( i, m_dHash )
+	{
+		FactorHashEntry_t * pEntry = m_dHash[i];
+		while ( pEntry )
+		{
+			FactorHashEntry_t * pNext = pEntry->m_pNext;
+			bool bHead = !pEntry->m_pPrev;
+			if ( FlushEntry(pEntry) && bHead )
+				m_dHash[i] = pNext;
+
+			pEntry = pNext;
+		}
+	}
+}
+
+
+inline DWORD FactorPool_c::HashFunc ( SphDocID_t iId ) const
+{
+	return iId % m_dHash.GetLength();
+}
+
+
+bool FactorPool_c::IsInitialized() const
+{
+	return !!m_iElementSize;
+}
+
+
+CSphTightVector<FactorHashEntry_t *> * FactorPool_c::GetHashPtr ()
+{
+	return &m_dHash;
+}
+
+
+//////////////////////////////////////////////////////////////////////////
 // EXPRESSION RANKER
 //////////////////////////////////////////////////////////////////////////
 
 /// ranker state that computes weight dynamically based on user supplied expression (formula)
+template < bool NEED_PACKEDFACTORS = false >
 struct RankerState_Expr_fn : public ISphExtra
 {
 public:
@@ -5969,6 +6196,9 @@ public:
 	float				m_fParamB;
 	int					m_iMaxQpos;			///< among all words, including dupes
 	int					m_iMaxUniqQpos;		///< among 1st occurrence of keywords in the query only
+
+	FactorPool_c 		m_tFactorPool;
+	int					m_iMaxMatches;
 
 	// per-query stuff
 	int					m_iMaxLCS;
@@ -6089,22 +6319,64 @@ public:
 		m_fDocBM25A = 0;
 	}
 
-private:
-	virtual bool ExtraDataImpl ( ExtraData_e eType, void ** ppResult )
+	void FlushMatches ()
 	{
-		switch ( eType )
-		{
-		case EXTRA_SET_MVAPOOL:
-			m_pExpr->SetMVAPool ( (DWORD*)ppResult );
-			return true;
-		case EXTRA_SET_STRINGPOOL:
-			m_pExpr->SetStringPool ( (BYTE*)ppResult );
-			return true;
-		default:
-			return false;
-		}
+		m_tFactorPool.Flush ();
 	}
+
+private:
+	virtual bool	ExtraDataImpl ( ExtraData_e eType, void ** ppResult );
+	BYTE *			PackFactors ( int * pSize = NULL );
 };
+
+
+template <>
+virtual bool RankerState_Expr_fn<false>::ExtraDataImpl ( ExtraData_e eType, void ** ppResult )
+{
+	switch ( eType )
+	{
+	case EXTRA_SET_MVAPOOL:
+		m_pExpr->SetMVAPool ( (DWORD*)ppResult );
+		return true;
+	case EXTRA_SET_STRINGPOOL:
+		m_pExpr->SetStringPool ( (BYTE*)ppResult );
+		return true;
+	default:
+		return false;
+	}
+}
+
+template <>
+virtual bool RankerState_Expr_fn<true>::ExtraDataImpl ( ExtraData_e eType, void ** ppResult )
+{
+	switch ( eType )
+	{
+	case EXTRA_SET_MVAPOOL:
+		m_pExpr->SetMVAPool ( (DWORD*)ppResult );
+		return true;
+	case EXTRA_SET_STRINGPOOL:
+		m_pExpr->SetStringPool ( (BYTE*)ppResult );
+		return true;
+	case EXTRA_SET_MAXMATCHES:
+		m_iMaxMatches = *(int*)ppResult;
+		return true;
+	case EXTRA_SET_MATCHPUSHED:
+		m_tFactorPool.AddRef ( *(SphDocID_t*)ppResult );
+		return true;
+	case EXTRA_SET_MATCHPOPPED:
+		{
+			const CSphTightVector<SphDocID_t> & dReleased = *(CSphTightVector<SphDocID_t>*)ppResult;
+			ARRAY_FOREACH ( i, dReleased )
+				m_tFactorPool.Release ( dReleased[i] );
+		}
+		return true;
+	case EXTRA_GET_DATA_RANKFACTORS:
+		*ppResult = m_tFactorPool.GetHashPtr();
+		return true;
+	default:
+		return false;
+	}
+}
 
 
 /// extra expression ranker node types
@@ -6228,16 +6500,16 @@ struct Expr_FloatPtr_c : public ISphExpr
 	}
 };
 
-
-struct Expr_BM25F_c : public ISphExpr
+template < bool NEED_PACKEDFACTORS >
+struct Expr_BM25F_T : public ISphExpr
 {
-	RankerState_Expr_fn *	m_pState;
+	RankerState_Expr_fn<NEED_PACKEDFACTORS> * m_pState;
 	float					m_fK1;
 	float					m_fB;
 	float					m_fWeightedAvgDocLen;
 	CSphVector<int>			m_dWeights;		///< per field weights
 
-	explicit Expr_BM25F_c ( RankerState_Expr_fn * pState, float k1, float b, ISphExpr * pFieldWeights )
+	explicit Expr_BM25F_T ( RankerState_Expr_fn<NEED_PACKEDFACTORS> * pState, float k1, float b, ISphExpr * pFieldWeights )
 	{
 		// bind k1, b
 		m_pState = pState;
@@ -6310,12 +6582,13 @@ struct Expr_BM25F_c : public ISphExpr
 
 
 /// function that sums sub-expressions over matched fields
-struct Expr_Sum_c : public ISphExpr
+template < bool NEED_PACKEDFACTORS >
+struct Expr_Sum_T : public ISphExpr
 {
-	RankerState_Expr_fn *	m_pState;
+	RankerState_Expr_fn<NEED_PACKEDFACTORS> * m_pState;
 	ISphExpr *				m_pArg;
 
-	Expr_Sum_c ( RankerState_Expr_fn * pState, ISphExpr * pArg )
+	Expr_Sum_T ( RankerState_Expr_fn<NEED_PACKEDFACTORS> * pState, ISphExpr * pArg )
 		: m_pState ( pState )
 		, m_pArg ( pArg )
 	{}
@@ -6364,15 +6637,16 @@ struct Expr_GetIntConst_c : public ISphExpr
 
 
 /// hook that exposes field-level factors, document-level factors, and matched field SUM() function to generic expressions
-class ExprRankerHook_c : public ISphExprHook
+template < bool NEED_PACKEDFACTORS >
+class ExprRankerHook_T : public ISphExprHook
 {
 public:
-	RankerState_Expr_fn *	m_pState;
+	RankerState_Expr_fn<NEED_PACKEDFACTORS> * m_pState;
 	const char *			m_sCheckError;
 	bool					m_bCheckInFieldAggr;
 
 public:
-	explicit ExprRankerHook_c ( RankerState_Expr_fn * pState )
+	explicit ExprRankerHook_T ( RankerState_Expr_fn<NEED_PACKEDFACTORS> * pState )
 		: m_pState ( pState )
 		, m_sCheckError ( NULL )
 		, m_bCheckInFieldAggr ( false )
@@ -6479,12 +6753,12 @@ public:
 					float fB = pLeft->GetArg(1)->Eval ( tDummy );
 					fK1 = Max ( fK1, 0.001f );
 					fB = Min ( Max ( fB, 0.0f ), 1.0f );
-					ISphExpr * pRes = new Expr_BM25F_c ( m_pState, fK1, fB, pLeft->GetArg(2) );
+					ISphExpr * pRes = new Expr_BM25F_T<NEED_PACKEDFACTORS> ( m_pState, fK1, fB, pLeft->GetArg(2) );
 					SafeDelete ( pLeft );
 					return pRes;
 				}
 
-			case XRANK_SUM:					return new Expr_Sum_c ( m_pState, pLeft );
+			case XRANK_SUM:					return new Expr_Sum_T<NEED_PACKEDFACTORS> ( m_pState, pLeft );
 			default:						return NULL;
 		}
 	}
@@ -6663,24 +6937,28 @@ public:
 
 
 /// ctor
-RankerState_Expr_fn::RankerState_Expr_fn ()
+template < bool NEED_PACKEDFACTORS >
+RankerState_Expr_fn <NEED_PACKEDFACTORS>::RankerState_Expr_fn ()
 	: m_pWeights ( NULL )
 	, m_sExpr ( NULL )
 	, m_pExpr ( NULL )
+	, m_iMaxMatches ( 0 )
 	, m_iMaxLCS ( 0 )
 	, m_iQueryWordCount ( 0 )
 {}
 
 
 /// dtor
-RankerState_Expr_fn::~RankerState_Expr_fn ()
+template < bool NEED_PACKEDFACTORS >
+RankerState_Expr_fn <NEED_PACKEDFACTORS>::~RankerState_Expr_fn ()
 {
 	SafeRelease ( m_pExpr );
 }
 
 
 /// initialize ranker state
-bool RankerState_Expr_fn::Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError )
+template < bool NEED_PACKEDFACTORS >
+bool RankerState_Expr_fn<NEED_PACKEDFACTORS>::Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError )
 {
 	// cleanup factors
 	memset ( m_uLCS, 0, sizeof(m_uLCS) );
@@ -6745,7 +7023,7 @@ bool RankerState_Expr_fn::Init ( int iFields, const int * pWeights, ExtRanker_c 
 
 	// parse expression
 	bool bUsesWeight;
-	ExprRankerHook_c tHook ( this );
+	ExprRankerHook_T<NEED_PACKEDFACTORS> tHook ( this );
 	m_pExpr = sphExprParse ( m_sExpr, *m_pSchema, &m_eExprType, &bUsesWeight, sError, NULL, &tHook );
 	if ( !m_pExpr )
 		return false;
@@ -6771,7 +7049,8 @@ bool RankerState_Expr_fn::Init ( int iFields, const int * pWeights, ExtRanker_c 
 
 
 /// process next hit, update factors
-void RankerState_Expr_fn::Update ( const ExtHit_t * pHlist )
+template < bool NEED_PACKEDFACTORS >
+void RankerState_Expr_fn<NEED_PACKEDFACTORS>::Update ( const ExtHit_t * pHlist )
 {
 	const DWORD uField = HITMAN::GetField ( pHlist->m_uHitpos );
 	const int iPos = HITMAN::GetPos ( pHlist->m_uHitpos );
@@ -6845,11 +7124,105 @@ void RankerState_Expr_fn::Update ( const ExtHit_t * pHlist )
 }
 
 
+template < bool NEED_PACKEDFACTORS >
+BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS>::PackFactors ( int * pSize )
+{
+	DWORD * pPackStart = NULL;
+
+	if ( pSize )
+	{
+		const DWORD MAX_PACKED_SIZE=2048;
+		pPackStart = new DWORD [MAX_PACKED_SIZE];
+	} else
+	{
+		pPackStart = (DWORD *)m_tFactorPool.Alloc();
+		assert ( pPackStart );
+	}
+
+	DWORD * pPack = pPackStart;
+
+	// document level factors
+	*pPack++ = m_uDocBM25;
+	*pPack++ = (DWORD)m_fDocBM25A;
+	*pPack++ = m_uMatchedFields;
+	*pPack++ = m_uDocWordCount;
+
+	// field level factors
+	*pPack++ = (DWORD)m_iFields;
+
+	for ( int i=0; i<m_iFields; i++ )
+	{
+		DWORD uHit = m_uHitCount[i];
+		*pPack++ = uHit;
+
+		if ( uHit || pSize )
+		{
+			*pPack++ = (DWORD)i;
+			*pPack++ = m_uLCS[i];
+			*pPack++ = m_uWordCount[i];
+			*pPack++ = (DWORD)m_dTFIDF[i];
+			*pPack++ = (DWORD)m_dMinIDF[i];
+			*pPack++ = (DWORD)m_dMaxIDF[i];
+			*pPack++ = (DWORD)m_dSumIDF[i];
+			*pPack++ = (DWORD)m_iMinHitPos[i];
+			*pPack++ = (DWORD)m_iMinBestSpanPos[i];
+			*pPack++ = ( m_uExactHit>>i ) & 1;
+			*pPack++ = (DWORD)m_iMaxWindowHits[i];
+		}
+	}
+
+	// word level factors
+	*pPack++ = (DWORD)m_iMaxUniqQpos;
+	for ( int i=1; i<=m_iMaxUniqQpos; i++ )
+	{
+		DWORD uKeywordMask = m_tKeywordMask.BitGet(i);
+		*pPack++ = uKeywordMask;
+		if ( uKeywordMask || pSize )
+		{
+			*pPack++ = (DWORD)i;
+			*pPack++ = (DWORD)m_dTF[i];
+			*pPack++ = (DWORD)m_dIDF[i];
+		}
+	}
+
+	*pPack++ = (pPack-pPackStart)*sizeof(DWORD);
+
+	if ( pSize )
+	{
+		*pSize = (pPack-pPackStart)*sizeof(DWORD);
+		delete [] pPackStart;
+		return NULL;
+	}
+
+	assert ( (pPack-pPackStart)*sizeof(DWORD)<=(DWORD)m_tFactorPool.GetElementSize() );
+
+	return (BYTE*)pPackStart;
+}
+
+
+#if USE_WINDOWS
+#pragma warning(disable:4127) // conditional expr is const for MSVC
+#endif
+
 /// finish document processing, compute weight from factors
-DWORD RankerState_Expr_fn::Finalize ( const CSphMatch & tMatch )
+template < bool NEED_PACKEDFACTORS >
+DWORD RankerState_Expr_fn<NEED_PACKEDFACTORS>::Finalize ( const CSphMatch & tMatch )
 {
 	// finishing touches
 	FinalizeDocFactors ( tMatch );
+
+	if ( NEED_PACKEDFACTORS )
+	{
+		// pack factors
+		if ( !m_tFactorPool.IsInitialized() )
+		{
+			int iPoolElementSize = 0;
+			PackFactors ( &iPoolElementSize );
+			m_tFactorPool.Prealloc ( iPoolElementSize, m_iMaxMatches+ExtNode_i::MAX_DOCS );
+		}
+
+		m_tFactorPool.AddToHash ( tMatch.m_iDocID, PackFactors() );
+	}
 
 	// compute expression
 	DWORD uRes = ( m_eExprType==SPH_ATTR_INTEGER )
@@ -6865,11 +7238,12 @@ DWORD RankerState_Expr_fn::Finalize ( const CSphMatch & tMatch )
 
 
 /// expression ranker
-class ExtRanker_Expr_c : public ExtRanker_T<RankerState_Expr_fn>
+template < bool NEED_PACKEDFACTORS >
+class ExtRanker_Expr_T : public ExtRanker_T<RankerState_Expr_fn<NEED_PACKEDFACTORS>>
 {
 public:
-	ExtRanker_Expr_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const char * sExpr, const CSphSchema & tSchema )
-		: ExtRanker_T<RankerState_Expr_fn> ( tXQ, tSetup )
+	ExtRanker_Expr_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const char * sExpr, const CSphSchema & tSchema )
+		: ExtRanker_T<RankerState_Expr_fn<NEED_PACKEDFACTORS>> ( tXQ, tSetup )
 	{
 		// tricky bit, we stash the pointer to expr here, but it will be parsed
 		// somewhat later during InitState() call, when IDFs etc are computed
@@ -6879,19 +7253,33 @@ public:
 
 	void SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 	{
-		ExtRanker_T<RankerState_Expr_fn>::SetQwordsIDF ( hQwords );
+		ExtRanker_T<RankerState_Expr_fn <NEED_PACKEDFACTORS> >::SetQwordsIDF ( hQwords );
 		m_tState.m_iMaxQpos = m_iMaxQpos;
 		m_tState.m_iMaxUniqQpos = m_iMaxUniqQpos;
 		m_tState.SetQwords ( hQwords );
 	}
+
+	virtual int GetMatches ()
+	{
+		if ( NEED_PACKEDFACTORS )
+			m_tState.FlushMatches ();
+
+		return ExtRanker_T<RankerState_Expr_fn <NEED_PACKEDFACTORS> >::GetMatches ();
+	}
 };
+
+
+#if USE_WINDOWS
+#pragma warning(default:4127) // conditional expr is const for MSVC
+#endif
+
 
 //////////////////////////////////////////////////////////////////////////
 // EXPRESSION FACTORS EXPORT RANKER
 //////////////////////////////////////////////////////////////////////////
 
 /// ranker state that computes BM25 as weight, but also all known factors for export purposes
-struct RankerState_Export_fn : public RankerState_Expr_fn
+struct RankerState_Export_fn : public RankerState_Expr_fn<>
 {
 public:
 	CSphOrderedHash < CSphString, SphDocID_t, IdentityHash_fn, 256 > m_hFactors;
@@ -7077,7 +7465,13 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 		case SPH_RANK_MATCHANY:			pRanker = new ExtRanker_T < RankerState_MatchAny_fn > ( tXQ, tTermSetup ); break;
 		case SPH_RANK_FIELDMASK:		pRanker = new ExtRanker_T < RankerState_Fieldmask_fn > ( tXQ, tTermSetup ); break;
 		case SPH_RANK_SPH04:			pRanker = new ExtRanker_T < RankerState_ProximityBM25Exact_fn > ( tXQ, tTermSetup ); break;
-		case SPH_RANK_EXPR:				pRanker = new ExtRanker_Expr_c ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema() ); break;
+		case SPH_RANK_EXPR:
+			if ( pQuery->m_bPackedFactors )
+				pRanker = new ExtRanker_Expr_T <true> ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema() );
+			else
+				pRanker = new ExtRanker_Expr_T <false> ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema() );
+			break;
+
 		case SPH_RANK_EXPORT:			pRanker = new ExtRanker_Export_c ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema() ); break;
 		default:
 			pResult->m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int)pQuery->m_eRanker );

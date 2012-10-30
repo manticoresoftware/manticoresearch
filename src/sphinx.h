@@ -2347,6 +2347,7 @@ public:
 	int				m_iMaxMatches;	///< max matches to retrieve, default is 1000. more matches use more memory and CPU time to hold and sort them
 	bool			m_bSortKbuffer;	///< whether to use PQ or K-buffer sorting algorithm
 	bool			m_bZSlist;		///< whether the ranker has to fetch the zonespanlist with this query
+	bool			m_bPackedFactors; ///< whether we have packedfactors in our query
 	bool			m_bIsOptimized;	///< whether to optimize boolean cases
 
 	CSphVector<CSphFilterSettings>	m_dFilters;	///< filters
@@ -2658,13 +2659,15 @@ class ISphMatchSorter
 public:
 	bool				m_bRandomize;
 	int64_t				m_iTotal;
+	SphDocID_t			m_iJustPushed;
+	CSphTightVector<SphDocID_t> m_dJustPopped;
 
 protected:
 	CSphSchema			m_tSchema;		///< sorter schema (adds dynamic attributes on top of index schema)
 
 public:
 	/// ctor
-						ISphMatchSorter () : m_bRandomize ( false ), m_iTotal ( 0 ) {}
+						ISphMatchSorter () : m_bRandomize ( false ), m_iTotal ( 0 ), m_iJustPushed ( 0 ) {}
 
 	/// virtualizing dtor
 	virtual				~ISphMatchSorter () {}
@@ -2706,6 +2709,9 @@ public:
 
 	/// get entries count
 	virtual int			GetLength () const = 0;
+
+	/// get internal buffer length
+	virtual int			GetDataLength () const = 0;
 
 	/// get total count of non-duplicates Push()ed through this queue
 	virtual int64_t		GetTotalCount () const { return m_iTotal; }
@@ -2980,7 +2986,7 @@ ESortClauseParseResult	sphParseSortClause ( const CSphQuery * pQuery, const char
 /// instead of searching
 ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError,
 	bool bComputeItems=true, CSphSchema * pExtra=NULL, CSphAttrUpdateEx * pUpdate=NULL, bool * pZonespanlist=NULL,
-	ISphExprHook * pHook=NULL );
+	bool * pPackedFactors=NULL, ISphExprHook * pHook=NULL );
 
 /// convert queue to sorted array, and add its entries to result's matches array
 void				sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag );

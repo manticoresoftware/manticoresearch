@@ -41,6 +41,7 @@ enum ESphAttr
 	SPH_ATTR_POLY2D		= 9,			///< vector of floats, 2D polygon (see POLY2D)
 	SPH_ATTR_STRINGPTR	= 10,			///< string (binary, in-memory, stored as pointer to the zero-terminated string)
 	SPH_ATTR_TOKENCOUNT	= 11,			///< field token count (only in indexer! integer at search time)
+	SPH_ATTR_FACTORS	= 12,			///< packed search factors (binary, in-memory, pooled)
 
 	SPH_ATTR_UINT32SET	= 0x40000001UL,	///< MVA, set of unsigned 32-bit integers
 	SPH_ATTR_INT64SET	= 0x40000002UL,	///< MVA, set of signed 64-bit integers
@@ -83,6 +84,9 @@ public:
 	/// evaluate MVA attr
 	virtual const DWORD * MvaEval ( const CSphMatch & ) const { assert ( 0 ); return NULL; }
 
+	/// evaluate Packed factors
+	virtual const DWORD * FactorEval ( const CSphMatch & ) const { assert ( 0 ); return NULL; }
+
 	/// check for arglist subtype
 	/// FIXME? replace with a single GetType() call?
 	virtual bool IsArglist () const { return false; }
@@ -112,7 +116,7 @@ public:
 struct ISphStringExpr : public ISphExpr
 {
 	virtual float Eval ( const CSphMatch & ) const { assert ( 0 && "one just does not simply evaluate a string as float" ); return 0; }
-	virtual int IntEval ( const CSphMatch & ) const { assert ( 0 && "one just does not simply evaluate a string as int"  ); return 0; }
+	virtual int IntEval ( const CSphMatch & ) const { assert ( 0 && "one just does not simply evaluate a string as int" ); return 0; }
 	virtual int64_t Int64Eval ( const CSphMatch & ) const { assert ( 0 && "one just does not simply evaluate a string as bigint" ); return 0; }
 };
 
@@ -172,7 +176,7 @@ struct Expr_ConstHash_c : public ISphExpr
 /// fills pUsesWeight with a flag whether match relevance is referenced in expression AST
 /// fills pEvalStage with a required (!) evaluation stage
 ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight,
-	CSphString & sError, CSphSchema * pExtra=NULL, ISphExprHook * pHook=NULL, bool * pZonespanlist=NULL,
+	CSphString & sError, CSphSchema * pExtra=NULL, ISphExprHook * pHook=NULL, bool * pZonespanlist=NULL, bool * pPackedFactors=NULL,
 	ESphEvalStage * pEvalStage=NULL );
 
 //////////////////////////////////////////////////////////////////////////

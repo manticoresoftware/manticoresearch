@@ -214,6 +214,14 @@ struct Expr_GetMva_c : public ExprLocatorTraits_t
 };
 
 
+struct Expr_GetFactorsAttr_c : public ExprLocatorTraits_t
+{
+	Expr_GetFactorsAttr_c ( const CSphAttrLocator & tLocator, int iLocator ) : ExprLocatorTraits_t ( tLocator, iLocator ) {}
+	virtual float Eval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
+	virtual const DWORD * FactorEval ( const CSphMatch & tMatch ) const { return (DWORD *)tMatch.GetAttr ( m_tLocator ); }
+};
+
+
 struct Expr_GetConst_c : public ISphExpr
 {
 	float m_fValue;
@@ -344,6 +352,58 @@ struct Expr_GetRankFactors_c : public ISphStringExpr
 	virtual void SetupExtraData ( ISphExtra * pData )
 	{
 		pData->ExtraData ( EXTRA_GET_DATA_RANKFACTORS, (void**)&m_pFactors );
+	}
+
+	virtual bool IsStringPtr() const
+	{
+		return true;
+	}
+};
+
+
+struct Expr_GetPackedFactors_c : public ISphStringExpr
+{
+	/// hash type MUST BE IN SYNC with RankerState_Expr_fn in sphinxsearch.cpp
+	struct FactorHashEntry_t
+	{
+		SphDocID_t			m_iId;
+		int					m_iRefCount;
+		BYTE *				m_pData;
+		FactorHashEntry_t *	m_pPrev;
+		FactorHashEntry_t *	m_pNext;
+	};
+
+	CSphTightVector<FactorHashEntry_t *> * m_pHash;
+
+	explicit Expr_GetPackedFactors_c ()
+		: m_pHash ( NULL )
+	{}
+
+	virtual const DWORD * FactorEval ( const CSphMatch & tMatch ) const
+	{
+		if ( !m_pHash || !m_pHash->GetLength() )
+			return NULL;
+
+		FactorHashEntry_t * pEntry = (*m_pHash)[tMatch.m_iDocID % m_pHash->GetLength()];
+		assert ( pEntry );
+
+		while ( pEntry && pEntry->m_iId!=tMatch.m_iDocID )
+			pEntry = pEntry->m_pNext;
+
+		if ( !pEntry )
+			return NULL;
+
+		DWORD uDataLen = (BYTE *)pEntry - (BYTE *)pEntry->m_pData;
+
+		BYTE * pData = new BYTE[uDataLen];
+		memcpy ( pData, pEntry->m_pData, uDataLen );
+
+		return (DWORD *)pData;
+	}
+
+	virtual void SetupExtraData ( ISphExtra * pData )
+	{
+		pData->ExtraData ( EXTRA_GET_DATA_RANKFACTORS, (void**)&m_pHash );
 	}
 
 	virtual bool IsStringPtr() const
@@ -826,7 +886,8 @@ enum Func_e
 	FUNC_CONTAINS,
 	FUNC_ZONESPANLIST,
 	FUNC_TO_STRING,
-	FUNC_RANKFACTORS
+	FUNC_RANKFACTORS,
+	FUNC_PACKEDFACTORS
 };
 
 
@@ -884,7 +945,8 @@ static FuncDesc_t g_dFuncs[] =
 	{ "contains",		3,	FUNC_CONTAINS,		SPH_ATTR_INTEGER },
 	{ "zonespanlist",	0,	FUNC_ZONESPANLIST,	SPH_ATTR_STRINGPTR },
 	{ "to_string",		1,	FUNC_TO_STRING,		SPH_ATTR_STRINGPTR },
-	{ "rankfactors",	0,	FUNC_RANKFACTORS,	SPH_ATTR_STRINGPTR }
+	{ "rankfactors",	0,	FUNC_RANKFACTORS,	SPH_ATTR_STRINGPTR },
+	{ "packedfactors",	0,	FUNC_PACKEDFACTORS, SPH_ATTR_FACTORS }
 };
 
 
@@ -925,32 +987,32 @@ static int FuncHashLookup ( const char * sKey )
 {
 	static BYTE dAsso[] =
 	{
-		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-		64, 64, 64, 64, 64, 5, 64, 0, 0, 20,
-		35, 0, 20, 5, 64, 5, 64, 64, 0, 0,
-		0, 5, 15, 35, 0, 15, 40, 40, 64, 40,
-		10, 0, 5, 64, 64, 64, 64, 64, 64, 64,
-		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-		64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-		64, 64, 64, 64, 64, 64
+		77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
+		77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
+		77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
+		77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
+		77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
+		77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
+		77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
+		77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
+		77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
+		77, 77, 77, 77, 77, 5, 77, 0, 15, 15,
+		50, 0, 15, 5, 77, 5, 77, 77, 0, 0,
+		0, 5, 10, 10, 0, 25, 50, 25, 77, 50,
+		10, 0, 10, 77, 77, 77, 77, 77, 77, 77,
+		77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
+		77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
+		77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
+		77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
+		77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
+		77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
+		77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
+		77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
+		77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
+		77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
+		77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
+		77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
+		77, 77, 77, 77, 77, 77
 	};
 
 	const BYTE * s = (const BYTE*) sKey;
@@ -964,14 +1026,16 @@ static int FuncHashLookup ( const char * sKey )
 						break;
 	}
 
-	static int dIndexes[] = {
+	static int dIndexes[] =
+	{
 		-1, -1, 6, -1, 17, -1, -1, 28, 20, 18,
-		16, 37, 19, 21, 7, 8, 11, 30, 1, 33,
-		31, -1, 35, 4, 12, -1, 32, 24, 9, 2,
-		3, -1, -1, 34, 14, -1, -1, -1, 15, 25,
-		-1, -1, -1, 5, 26, 13, -1, -1, 0, 23,
-		-1, 29, -1, 27, 10, -1, -1, -1, -1, 36,
-		-1, -1, -1, 22
+		16, 37, 19, 21, 7, 8, -1, 30, -1, 33,
+		31, 32, 24, 9, 2, 3, -1, 35, 34, 26,
+		-1, 11, -1, 4, 12, 13, -1, -1, 38, 10,
+		-1, -1, -1, 1, 14, -1, -1, -1, 5, -1,
+		-1, -1, -1, 15, 25, -1, -1, -1, 0, -1,
+		-1, -1, -1, 27, 23, -1, -1, -1, 22, 36,
+		-1, -1, -1, -1, -1, -1, 29
 	};
 
 	if ( iHash<0 || iHash>=(int)(sizeof(dIndexes)/sizeof(dIndexes[0])) )
@@ -1113,6 +1177,7 @@ public:
 		: m_pHook ( pHook )
 		, m_pExtra ( pExtra )
 		, m_bHasZonespanlist ( false )
+		, m_bHasPackedFactors ( false )
 		, m_eEvalStage ( SPH_EVAL_FINAL )
 	{}
 
@@ -1166,6 +1231,7 @@ private:
 
 public:
 	bool					m_bHasZonespanlist;
+	bool					m_bHasPackedFactors;
 	ESphEvalStage			m_eEvalStage;
 
 private:
@@ -1262,11 +1328,12 @@ int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp )
 	case SPH_ATTR_UINT32SET:	iRes = TOK_ATTR_MVA32; break;
 	case SPH_ATTR_INT64SET:		iRes = TOK_ATTR_MVA64; break;
 	case SPH_ATTR_STRING:		iRes = TOK_ATTR_STRING; break;
+	case SPH_ATTR_FACTORS:		iRes = TOK_ATTR_FACTORS; break;
 	case SPH_ATTR_INTEGER:
 	case SPH_ATTR_TIMESTAMP:
 	case SPH_ATTR_BOOL:
 	case SPH_ATTR_BIGINT:
-	case SPH_ATTR_WORDCOUNT:	
+	case SPH_ATTR_WORDCOUNT:
 	case SPH_ATTR_TOKENCOUNT:
 		iRes = tCol.m_tLocator.IsBitfield() ? TOK_ATTR_BITS : TOK_ATTR_INT;
 		break;
@@ -1885,6 +1952,7 @@ public:
 				case SPH_UDF_TYPE_STRING:		tArgs.str_lengths[i] = m_dArgs[i]->StringEval ( tMatch, (const BYTE**)&tArgs.arg_values[i] ); break;
 				case SPH_UDF_TYPE_UINT32SET:	tArgs.arg_values[i] = (char*) m_dArgs[i]->MvaEval ( tMatch ); break;
 				case SPH_UDF_TYPE_UINT64SET:	tArgs.arg_values[i] = (char*) m_dArgs[i]->MvaEval ( tMatch ); break;
+				case SPH_UDF_TYPE_FACTORS:		tArgs.arg_values[i] = (char*) m_dArgs[i]->FactorEval ( tMatch ); break;
 				default:						assert ( 0 ); m_dArgvals[i] = 0; break;
 			}
 		}
@@ -2462,6 +2530,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case FUNC_CONTAINS:
 		case FUNC_ZONESPANLIST:
 		case FUNC_RANKFACTORS:
+		case FUNC_PACKEDFACTORS:
 			bSkipLeft = true;
 		default:
 			break;
@@ -2485,6 +2554,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_ATTR_STRING:	return new Expr_GetString_c ( tNode.m_tLocator, tNode.m_iLocator );
 		case TOK_ATTR_MVA64:
 		case TOK_ATTR_MVA32:	return new Expr_GetMva_c ( tNode.m_tLocator, tNode.m_iLocator );
+		case TOK_ATTR_FACTORS:	return new Expr_GetFactorsAttr_c ( tNode.m_tLocator, tNode.m_iLocator );
 
 		case TOK_CONST_FLOAT:	return new Expr_GetConst_c ( tNode.m_fConst );
 		case TOK_CONST_INT:
@@ -2596,6 +2666,10 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_RANKFACTORS:
 						m_eEvalStage = SPH_EVAL_PRESORT;
 						return new Expr_GetRankFactors_c();
+					case FUNC_PACKEDFACTORS:
+						m_bHasPackedFactors = true;
+						m_eEvalStage = SPH_EVAL_FINAL;
+						return new Expr_GetPackedFactors_c();
 				}
 				assert ( 0 && "unhandled function id" );
 				break;
@@ -3459,7 +3533,8 @@ int ExprParser_t::AddNodeString ( int64_t iValue )
 int ExprParser_t::AddNodeAttr ( int iTokenType, uint64_t uAttrLocator )
 {
 	assert ( iTokenType==TOK_ATTR_INT || iTokenType==TOK_ATTR_BITS || iTokenType==TOK_ATTR_FLOAT
-		|| iTokenType==TOK_ATTR_MVA32 || iTokenType==TOK_ATTR_MVA64 || iTokenType==TOK_ATTR_STRING );
+		|| iTokenType==TOK_ATTR_MVA32 || iTokenType==TOK_ATTR_MVA64 || iTokenType==TOK_ATTR_STRING
+		|| iTokenType==TOK_ATTR_FACTORS );
 	ExprNode_t & tNode = m_dNodes.Add ();
 	tNode.m_iToken = iTokenType;
 	sphUnpackAttrLocator ( uAttrLocator, &tNode );
@@ -3468,6 +3543,7 @@ int ExprParser_t::AddNodeAttr ( int iTokenType, uint64_t uAttrLocator )
 	else if ( iTokenType==TOK_ATTR_MVA32 )		tNode.m_eRetType = SPH_ATTR_UINT32SET;
 	else if ( iTokenType==TOK_ATTR_MVA64 )		tNode.m_eRetType = SPH_ATTR_INT64SET;
 	else if ( iTokenType==TOK_ATTR_STRING )		tNode.m_eRetType = SPH_ATTR_STRING;
+	else if ( iTokenType==TOK_ATTR_FACTORS )	tNode.m_eRetType = SPH_ATTR_FACTORS;
 	else if ( tNode.m_tLocator.m_iBitCount>32 )	tNode.m_eRetType = SPH_ATTR_BIGINT;
 	else										tNode.m_eRetType = SPH_ATTR_INTEGER;
 	return m_dNodes.GetLength()-1;
@@ -3827,6 +3903,9 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 					break;
 				case SPH_ATTR_INT64SET:
 					eRes = SPH_UDF_TYPE_UINT64SET;
+					break;
+				case SPH_ATTR_FACTORS:
+					eRes = SPH_UDF_TYPE_FACTORS;
 					break;
 				default:
 					m_sParserError.SetSprintf ( "internal error: unmapped UDF argument type (arg=%d, type=%d)", i, dArgTypes[i] );
@@ -4366,7 +4445,7 @@ void sphUDFSaveState ( CSphWriter & tWriter )
 
 /// parser entry point
 ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight,
-	CSphString & sError, CSphSchema * pExtra, ISphExprHook * pHook, bool * pZonespanlist, ESphEvalStage * pEvalStage )
+	CSphString & sError, CSphSchema * pExtra, ISphExprHook * pHook, bool * pZonespanlist, bool * pPackedFactors, ESphEvalStage * pEvalStage )
 {
 	// parse into opcodes
 	ExprParser_t tParser ( pExtra, pHook );
@@ -4375,6 +4454,8 @@ ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, ESphAt
 		*pZonespanlist = tParser.m_bHasZonespanlist;
 	if ( pEvalStage )
 		*pEvalStage = tParser.m_eEvalStage;
+	if ( pPackedFactors )
+		*pPackedFactors = tParser.m_bHasPackedFactors;
 	return bRes;
 }
 

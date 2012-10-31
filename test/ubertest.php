@@ -38,6 +38,7 @@ if ( !is_array($args) || empty($args) )
 	print ( "--no-demo\t\tJust skip all tests without models. Else - run them, but never fail (for debugging)\n");
 	print ( "--no-marks\t\tDon't mark the output of every test in the logs.\n");
 	print ( "--ignore-weights\tIgnore differences in weights. (Useful for testing that reference database changes are ok.)\n" );
+	print ( "--cwd\t\t\tchange directory to ubertest.php location (for git bisect)\n" );
 	print ( "\nEnvironment variables are:\n" );
 	print ( "DBUSER\t\t\tuse 'USER' as MySQL user\n" );
 	print ( "DBPASS\t\t\tuse 'PASS' as MySQL password\n" );
@@ -85,6 +86,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="--no-drop-db" )				$locals['no_drop_db'] = true;
 	else if ( $arg=="--no-demo" )					$g_skipdemo = true;
 	else if ( $arg=="--no-marks" )					$g_usemarks = false;
+	else if ( $arg=="--cwd" )						chdir ( DIRNAME ( __FILE__ ) );
 	else if ( is_dir($arg) )						$test_dirs[] = $arg;
 	else if ( preg_match ( "/^(\\d+)-(\\d+)$/", $arg, $range ) )
 	{

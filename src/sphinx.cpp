@@ -17030,10 +17030,15 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 	int iLastSkipsOffset = 0;
 	rdDict.SeekTo ( 1, READ_NO_SIZE_HINT );
-	for ( ; rdDict.GetPos()!=m_tWordlist.m_iDictCheckpointsOffset && !m_bIsEmpty; )
+	SphOffset_t iWordsEnd = m_tWordlist.m_iWordsEnd;
+	bool bCheckInfixes = bWordDict && m_tWordlist.m_iInfixCodepointBytes && m_tWordlist.m_dInfixBlocks.GetLength();
+	bool bUtf8 = ( m_pTokenizer && m_pTokenizer->IsUtf8() );
+	CSphVector<int> dInfix2CP;
+
+	while ( rdDict.GetPos()!=iWordsEnd && !m_bIsEmpty )
 	{
 		// sanity checks
-		if ( rdDict.GetPos()>=m_tWordlist.m_iDictCheckpointsOffset )
+		if ( rdDict.GetPos()>=iWordsEnd )
 		{
 			LOC_FAIL(( fp, "reading past checkpoints" ));
 			break;
@@ -17048,7 +17053,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		{
 			rdDict.UnzipOffset();
 
-			if ( ( iWordsTotal%iWordPerCP )!=0 && rdDict.GetPos()!=m_tWordlist.m_iDictCheckpointsOffset )
+			if ( ( iWordsTotal%iWordPerCP )!=0 && rdDict.GetPos()!=iWordsEnd )
 				LOC_FAIL(( fp, "unexpected checkpoint (pos="INT64_FMT", word=%d, words=%d, expected=%d)",
 					iDictPos, iWordsTotal, ( iWordsTotal%iWordPerCP ), iWordPerCP ));
 
@@ -17115,7 +17120,6 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 					(int64_t)iDictPos, sWord, (int64_t)iDocs, (int64_t)iHits ));
 
 			memcpy ( sLastWord, sWord, sizeof(sLastWord) );
-
 		} else
 		{
 			// finish reading the entire entry
@@ -17160,6 +17164,28 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				tCP.m_sWord = sWordChecked;
 			} else
 				tCP.m_iWordID = uNewWordid;
+		}
+
+		// check infixes
+		if ( bCheckInfixes )
+		{
+			int iWordBytes = strnlen ( sWord, sizeof(sWord) );
+			int iWordCodepoints = bUtf8 ? sphUTF8Len ( sWord ) : iWordBytes;
+
+			if ( iWordCodepoints>=m_tSettings.m_iMinInfixLen )
+			{
+				dInfix2CP.Resize ( 0 );
+
+				int iInfixBytes = sphGetInfixLength ( sWord, iWordBytes, m_tWordlist.m_iInfixCodepointBytes );
+				sphLookupInfixCheckpoints ( sWord, iInfixBytes, m_tWordlist.m_pBuf.GetWritePtr(), m_tWordlist.m_dInfixBlocks,
+					m_tWordlist.m_iInfixCodepointBytes, dInfix2CP );
+
+				if ( !dInfix2CP.BinarySearch ( dCheckpoints.GetLength() ) )
+				{
+					LOC_FAIL(( fp, "infix not found for word '%s' (%d), checkpoint %d, readpos="INT64_FMT,
+						sWord, iWordsTotal, dCheckpoints.GetLength(), (int64_t)iDictPos ));
+				}
+			}
 		}
 
 		uWordid = uNewWordid;
@@ -17228,7 +17254,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	int iDictDocs, iDictHits;
 
 	int iWordsChecked = 0;
-	for ( ;rdDict.GetPos()<m_tWordlist.m_iDictCheckpointsOffset; )
+	while ( rdDict.GetPos()<iWordsEnd )
 	{
 		const SphWordID_t iDeltaWord = bWordDict ? rdDict.GetByte() : rdDict.UnzipWordid();
 		if ( !iDeltaWord )

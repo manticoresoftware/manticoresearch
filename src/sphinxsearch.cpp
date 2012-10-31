@@ -7293,33 +7293,50 @@ public:
 
 		// build document level factors
 		// FIXME? should we build query level factors too? max_lcs, query_word_count, etc
-		CSphString sVal;
-		sVal.SetSprintf ( "bm25=%d, bm25a=%f, field_mask=%d, doc_word_count=%d",
+		const int MAX_STR_LEN = 1024;
+		CSphVector<char> dVal;
+		dVal.Resize ( MAX_STR_LEN );
+		snprintf ( dVal.Begin(), dVal.GetLength(), "bm25=%d, bm25a=%f, field_mask=%d, doc_word_count=%d",
 			m_uDocBM25, m_fDocBM25A, m_uMatchedFields, m_uDocWordCount );
+
+		char sTmp[MAX_STR_LEN];
 
 		// build field level factors
 		for ( int i=0; i<m_iFields; i++ )
 			if ( m_uHitCount[i] )
 		{
-			sVal.SetSprintf ( "%s, field%d="
+			snprintf ( sTmp, MAX_STR_LEN, ", field%d="
 				"(lcs=%d, hit_count=%d, word_count=%d, "
 				"tf_idf=%f, min_idf=%f, max_idf=%f, sum_idf=%f, "
 				"min_hit_pos=%d, min_best_span_pos=%d, exact_hit=%d, max_window_hits=%d)",
-				sVal.cstr(), i,
+				i,
 				m_uLCS[i], m_uHitCount[i], m_uWordCount[i],
 				m_dTFIDF[i], m_dMinIDF[i], m_dMaxIDF[i], m_dSumIDF[i],
 				m_iMinHitPos[i], m_iMinBestSpanPos[i], ( m_uExactHit>>i ) & 1, m_iMaxWindowHits[i] );
+
+			int iValLen = strlen ( dVal.Begin() );
+			int iTotalLen = iValLen+strlen(sTmp);
+			if ( dVal.GetLength() < iTotalLen+1 )
+				dVal.Resize ( iTotalLen+1 );
+
+			strcpy ( &(dVal[iValLen]), sTmp );
 		}
 
 		// build word level factors
 		for ( int i=1; i<=m_iMaxUniqQpos; i++ )
 			if ( m_tKeywordMask.BitGet(i) )
 		{
-			sVal.SetSprintf ( "%s, word%d=(tf=%d, idf=%f)", sVal.cstr(), i, m_dTF[i], m_dIDF[i] );
+			snprintf ( sTmp, MAX_STR_LEN, ", word%d=(tf=%d, idf=%f)", i, m_dTF[i], m_dIDF[i] );
+			int iValLen = strlen ( dVal.Begin() );
+			int iTotalLen = iValLen+strlen(sTmp);
+			if ( dVal.GetLength() < iTotalLen+1 )
+				dVal.Resize ( iTotalLen+1 );
+
+			strcpy ( &(dVal[iValLen]), sTmp );
 		}
 
 		// export factors
-		m_hFactors.Add ( sVal, tMatch.m_iDocID );
+		m_hFactors.Add ( dVal.Begin(), tMatch.m_iDocID );
 
 		// compute sorting expression now
 		DWORD uRes = ( m_eExprType==SPH_ATTR_INTEGER )

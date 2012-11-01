@@ -248,6 +248,22 @@ index u_dist_aa
 	local = idx_attr2
 }
 
+source src_mva
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, body, 2 as tag, '100, 400, 500' as mva  FROM test_table
+	sql_attr_uint = tag
+	sql_attr_multi = uint mva from field
+	sql_field_string = body
+}
+index idx_mva
+{
+	source			= src_mva
+	docinfo			= extern
+	path			= <data_path/>/idx_mva
+}
+
 </agent0>
 
 <agent1>
@@ -350,6 +366,10 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select tag, idd1 as str1, str1 as str2 from dist2</sphinxql>
 <!-- checking attribute aliases -->
 <sphinxql>select str1 as str11 from main</sphinxql>
+
+<!-- regression exist -->
+<sphinxql>select *, exist ( 'mva', 1000 ) + id as cnd1 from idx_mva where cnd1 &lt; 5</sphinxql>
+<sphinxql>select *, exist ( 'body', 1 ) as b from idx_mva</sphinxql>
 </sphqueries>
 
 </test>

@@ -2119,9 +2119,17 @@ ISphExpr * ExprParser_t::CreateExistNode ( const ExprNode_t & tNode )
 
 	CSphString sAttr ( m_sExpr+iNameStart, iNameLen );
 	int iLoc = m_pSchema->GetAttrIndex ( sAttr.cstr() );
+
 	if ( iLoc>=0 )
 	{
-		const CSphAttrLocator & tLoc = m_pSchema->GetAttr ( iLoc ).m_tLocator;
+		const CSphColumnInfo & tCol = m_pSchema->GetAttr ( iLoc );
+		if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_STRING )
+		{
+			m_sCreateError = "MVA and STRING in EXIST() prohibited";
+			return NULL;
+		}
+
+		const CSphAttrLocator & tLoc = tCol.m_tLocator;
 		if ( tNode.m_eRetType==SPH_ATTR_FLOAT )
 			return new Expr_GetFloat_c ( tLoc, iLoc );
 		else

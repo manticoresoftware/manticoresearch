@@ -496,7 +496,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x11A,
+	VER_COMMAND_SEARCH		= 0x11B, // 1.27
 	VER_COMMAND_EXCERPT		= 0x104,
 	VER_COMMAND_UPDATE		= 0x103,
 	VER_COMMAND_KEYWORDS	= 0x100,
@@ -4965,7 +4965,7 @@ protected:
 
 int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuery & q ) const
 {
-	int iReqSize = 112 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
+	int iReqSize = 116 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
 		+ q.m_sSortBy.Length()
 		+ strlen ( sIndexes )
 		+ q.m_sGroupBy.Length()
@@ -5001,12 +5001,37 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 			( q.m_dOverrides[i].m_eAttrType==SPH_ATTR_BIGINT ? 16 : 12 )*q.m_dOverrides[i].m_dValues.GetLength(); // ( bigint id; int/float/bigint value )[] values
 	if ( !q.m_sOuterOrderBy.IsEmpty() )
 		iReqSize += 4; // outer limit
+	if ( q.m_iMaxPredictedMsec>0 )
+		iReqSize += 4;
 	return iReqSize;
 }
 
 
+/// qflag means Query Flag
+/// names are internal to searchd and may be changed for clarity
+/// values are communicated over network between searchds and APIs and MUST NOT CHANGE
+enum
+{
+	QFLAG_REVERSE_SCAN			= 1UL << 0,
+	QFLAG_SORT_KBUFFER			= 1UL << 1,
+	QFLAG_MAX_PREDICTED_TIME	= 1UL << 2,
+	QFLAG_SIMPLIFY				= 1UL << 3,
+	QFLAG_PLAIN_IDF				= 1UL << 4,
+};
+
 void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_c & tOut, const CSphQuery & q ) const
 {
+	// starting with command version 1.27, flags go first
+	// reason being, i might add flags that affect *any* of the subsequent data (eg. qflag_pack_ints)
+	DWORD uFlags = 0;
+	uFlags |= QFLAG_REVERSE_SCAN * q.m_bReverseScan;
+	uFlags |= QFLAG_SORT_KBUFFER * q.m_bSortKbuffer;
+	uFlags |= QFLAG_MAX_PREDICTED_TIME * ( q.m_iMaxPredictedMsec > 0 );
+	uFlags |= QFLAG_SIMPLIFY * q.m_bSimplify;
+	uFlags |= QFLAG_PLAIN_IDF * q.m_bPlainIDF;
+	tOut.SendDword ( uFlags );
+
+	// The Search Legacy
 	tOut.SendInt ( 0 ); // offset is 0
 	if ( q.m_sOuterOrderBy.IsEmpty() )
 	{
@@ -5111,6 +5136,8 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 		}
 	}
 	tOut.SendString ( q.m_sSelect.cstr() );
+	if ( q.m_iMaxPredictedMsec>0 )
+		tOut.SendInt ( q.m_iMaxPredictedMsec );
 
 	// master-agent extensions
 	tOut.SendDword ( q.m_eCollation ); // v.1
@@ -5593,6 +5620,11 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 {
 	tQuery.m_iOldVersion = iVer;
 
+	// v.1.27+ flags come first
+	DWORD uFlags = 0;
+	if ( iVer>=0x11B )
+		uFlags = tReq.GetDword();
+
 	// v.1.0. mode, limits, weights, ID/TS ranges
 	tQuery.m_iOffset = tReq.GetInt ();
 	tQuery.m_iLimit = tReq.GetInt ();
@@ -5885,6 +5917,20 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 			tReq.SendErrorReply ( "select: %s", sError.cstr() );
 			return false;
 		}
+	}
+
+	// v.1.27
+	if ( iVer>=0x11B )
+	{
+		// parse simple flags
+		tQuery.m_bReverseScan = !!( uFlags & QFLAG_REVERSE_SCAN );
+		tQuery.m_bSortKbuffer = !!( uFlags & QFLAG_SORT_KBUFFER );
+		tQuery.m_bSimplify = !!( uFlags & QFLAG_SIMPLIFY );
+		tQuery.m_bPlainIDF = !!( uFlags & QFLAG_PLAIN_IDF );
+
+		// fetch optional stuff
+		if ( uFlags & QFLAG_MAX_PREDICTED_TIME )
+			tQuery.m_iMaxPredictedMsec = tReq.GetInt();
 	}
 
 	// extension v.1

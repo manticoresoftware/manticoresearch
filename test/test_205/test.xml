@@ -1,0 +1,93 @@
+<test>
+<name>idf=plain vs distributed</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+	compat_sphinxql_magics = 0
+}
+
+source src_base
+{
+	type = mysql
+	<sql_settings/>
+}
+
+source src_1 : src_base
+{
+	sql_query = SELECT * FROM test_table WHERE gid=1
+	sql_attr_uint = gid
+}
+
+source src_2 : src_1
+{
+	sql_query = SELECT * FROM test_table WHERE gid=2
+	sql_attr_uint = gid
+}
+
+index i1
+{
+	source			= src_1
+	path			= <data_path/>/i1
+	docinfo			= extern
+	charset_type 	= utf-8
+	
+}
+
+index i2
+{
+	source			= src_2
+	path			= <data_path/>/i2
+	docinfo			= extern
+	charset_type 	= utf-8
+	
+}
+
+index dd
+{
+	type			= distributed
+	agent			= <my_address/>:i1
+	agent			= <my_address/>:i2
+}
+
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INT NOT NULL,
+	gid INT NOT NULL,
+	text VARCHAR(255) NOT NULL DEFAULT ''
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table VALUES
+( 1, 1, 'da one' ),
+( 2, 1, 'da two' ),
+( 3, 1, 'da three' ),
+
+( 11, 2, 'da blow' ),
+( 12, 2, 'da pills' ),
+( 13, 2, 'da yak' ),
+( 14, 2, 'da herb' ),
+( 15, 2, 'da blow' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>select *, weight() from dd where match('da')</sphinxql>
+<sphinxql>select *, weight() from dd where match('da') option idf=plain</sphinxql>
+</sphqueries>
+
+</test>

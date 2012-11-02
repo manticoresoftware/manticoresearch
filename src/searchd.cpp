@@ -9954,7 +9954,19 @@ bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue )
 
 	} else if ( sOpt=="boolean_simplify" )
 	{
-		m_pQuery->m_bIsOptimized = true;
+		m_pQuery->m_bSimplify = true;
+
+	} else if ( sOpt=="idf" )
+	{
+		if ( sVal=="normalized" )
+			m_pQuery->m_bPlainIDF = false;
+		else if ( sVal=="plain" )
+			m_pQuery->m_bPlainIDF = true;
+		else
+		{
+			m_pParseError->SetSprintf ( "unknown idf=%s (known values are plain, normalized)", sVal.cstr() );
+			return false;
+		}
 
 	} else
 	{

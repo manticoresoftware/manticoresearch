@@ -2798,16 +2798,15 @@ const ExtHit_t * ExtAnd_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMa
 		{
 			// if one is over, we might still need to copy the other one. otherwise, skip it
 			if ( ( pCur0 && pCur0->m_uDocid==m_uMatchedDocid ) || ( pCur1 && pCur1->m_uDocid==m_uMatchedDocid ) )
-			{
 				continue;
-			}
-			else
-			{
-				if ( pCur0 ) while ( ( pCur0 = m_pChildren[0]->GetHitsChunk ( pDocs, uMaxID ) ) );
-				if ( pCur1 ) while ( ( pCur1 = m_pChildren[1]->GetHitsChunk ( pDocs, uMaxID ) ) );
-			}
 
-			if ( !pCur0 && !pCur1 ) break; // both are over, we're done
+			if ( pCur0 )
+				while ( ( pCur0 = m_pChildren[0]->GetHitsChunk ( pDocs, uMaxID ) )!=NULL );
+			if ( pCur1 )
+				while ( ( pCur1 = m_pChildren[1]->GetHitsChunk ( pDocs, uMaxID ) )!=NULL );
+
+			if ( !pCur0 && !pCur1 )
+				break; // both are over, we're done
 		}
 
 		// find matching doc
@@ -7524,11 +7523,37 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 		float fIDF = 0.0f;
 		if ( tWord.m_iDocs )
 		{
+			// (word_docs > total_docs) case *is* occasionally possible
+			// because of dupes, or delayed purging in RT, etc
 			const int iTotalClamped = Max ( tSourceStats.m_iTotalDocuments, tWord.m_iDocs );
-			float fLogTotal = logf ( float ( 1+iTotalClamped ) );
-			fIDF = logf ( float ( iTotalClamped-tWord.m_iDocs+1 )
-				/ float ( tWord.m_iDocs ) )
-				/ ( 2*iQwords*fLogTotal );
+
+			if ( !pQuery->m_bPlainIDF )
+			{
+				// bm25 variant, idf = log((N-n+1)/n), as per Robertson et al
+				//
+				// idf \in [-log(N), log(N)]
+				// weight \in [-NumWords*log(N), NumWords*log(N)]
+				// we want weight \in [0, 1] range
+				// we prescale idfs and get weight \in [-0.5, 0.5] range
+				// then add 0.5 as our final step
+				//
+				// for the record, idf = log((N-n+0.5)/(n+0.5)) in the original paper
+				// but our variant is a bit easier to compute, and has a better (symmetric) range
+				float fLogTotal = logf ( float ( 1+iTotalClamped ) );
+				fIDF = logf ( float ( iTotalClamped-tWord.m_iDocs+1 ) / float ( tWord.m_iDocs ) )
+					/ ( 2*iQwords*fLogTotal );
+			} else
+			{
+				// plain variant, idf=log(N/n), as per Sparck-Jones
+				//
+				// idf \in [0, log(N)]
+				// weight \in [0, NumWords*log(N)]
+				// we prescale idfs and get weight in [0, 0.5] range
+				// then add 0.5 as our final step
+				float fLogTotal = logf ( float ( 1+iTotalClamped ) );
+				fIDF = logf ( float ( iTotalClamped ) / float ( tWord.m_iDocs ) )
+					/ ( 2*iQwords*fLogTotal );
+			}
 		}
 		tWord.m_fIDF = fIDF;
 		dWords.Add ( &tWord );

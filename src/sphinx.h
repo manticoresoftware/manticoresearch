@@ -2354,8 +2354,9 @@ public:
 	int				m_iMaxMatches;	///< max matches to retrieve, default is 1000. more matches use more memory and CPU time to hold and sort them
 	bool			m_bSortKbuffer;	///< whether to use PQ or K-buffer sorting algorithm
 	bool			m_bZSlist;		///< whether the ranker has to fetch the zonespanlist with this query
-	bool			m_bPackedFactors; ///< whether we have packedfactors in our query
-	bool			m_bIsOptimized;	///< whether to optimize boolean cases
+	bool			m_bPackedFactors;	///< whether we have packedfactors in our query
+	bool			m_bSimplify;	///< whether to apply boolean simplification
+	bool			m_bPlainIDF;	///< whether to use PlainIDF=log(N/n) or NormalizedIDF=log((N-n+1)/n)
 
 	CSphVector<CSphFilterSettings>	m_dFilters;	///< filters
 

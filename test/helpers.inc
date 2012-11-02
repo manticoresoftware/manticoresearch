@@ -710,6 +710,7 @@ class SphinxConfig
 					case "phrase":		$mode = SPH_MATCH_PHRASE; break;
 					case "extended":	$mode = SPH_MATCH_EXTENDED; break;
 					case "extended2":	$mode = SPH_MATCH_EXTENDED2; break;
+					case "fullscan":	$mode = SPH_MATCH_FULLSCAN; break;
 					default:
 						printf ( "$config_file: unknown matching mode '%s'\n", $mode_s );
 						return false;

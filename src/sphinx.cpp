@@ -15839,7 +15839,7 @@ bool sphCheckQueryHeight ( const XQNode_t * pRoot, CSphString & sError )
 		iHeight = sphQueryHeightCalc ( pRoot );
 
 	int64_t iQueryStack = sphGetStackUsed() + iHeight*SPH_EXTNODE_STACK_SIZE;
-	bool bValid = ( sphMyStackSize()>=iQueryStack );
+	bool bValid = ( g_iThreadStackSize>=iQueryStack );
 	if ( !bValid )
 		sError.SetSprintf ( "query too complex, not enough stack (thread_stack=%dK or higher required)",
 			(int)( ( iQueryStack + 1024 - ( iQueryStack%1024 ) ) / 1024 ) );
@@ -16709,6 +16709,10 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 		CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
 		bResult = false;
 		for ( int j=0; j<iQueries; j++ )
+		{
+			// fullscan case
+			if ( pQueries[j].m_sQuery.IsEmpty() )
+				continue;
 			if ( dXQ[j].m_pRoot && ppSorters[j]
 					&& ParsedMultiQuery ( &pQueries[j], ppResults[j], 1, &ppSorters[j], dXQ[j], pDict, pExtraFilters, &tNodeCache, iTag ) )
 			{
@@ -16716,6 +16720,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 				ppResults[j]->m_iMultiplier = iCommonSubtrees ? iQueries : 1;
 			} else
 				ppResults[j]->m_iMultiplier = -1;
+		}
 	}
 
 	SafeDelete ( pTokenizer );
@@ -23685,7 +23690,7 @@ bool CSphSource_SQL::RunQueryStep ( const char * sQuery, CSphString & sError )
 	assert ( sQuery );
 
 	char sValues [ MACRO_COUNT ] [ iBufSize ];
-	SphDocID_t uNextID = Min ( m_uCurrentID + m_tParams.m_iRangeStep - 1, m_uMaxID );
+	SphDocID_t uNextID = Min ( m_uCurrentID + (SphDocID_t)m_tParams.m_iRangeStep - 1, m_uMaxID );
 	snprintf ( sValues[0], iBufSize, DOCID_FMT, m_uCurrentID );
 	snprintf ( sValues[1], iBufSize, DOCID_FMT, uNextID );
 	g_iIndexerCurrentRangeMin = m_uCurrentID;
@@ -23784,10 +23789,10 @@ bool CSphSource_SQL::SetupRanges ( const char * sRangeQuery, const char * sQuery
 {
 	// check step
 	if ( m_tParams.m_iRangeStep<=0 )
-		LOC_ERROR ( "sql_range_step=%d: must be positive", m_tParams.m_iRangeStep );
+		LOC_ERROR ( "sql_range_step="INT64_FMT": must be non-zero positive", m_tParams.m_iRangeStep );
 
 	if ( m_tParams.m_iRangeStep<128 )
-		sphWarn ( "sql_range_step=%d: too small; might hurt indexing performance!", m_tParams.m_iRangeStep );
+		sphWarn ( "sql_range_step="INT64_FMT": too small; might hurt indexing performance!", m_tParams.m_iRangeStep );
 
 	// check query for macros
 	for ( int i=0; i<MACRO_COUNT; i++ )

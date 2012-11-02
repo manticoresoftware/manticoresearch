@@ -44,7 +44,7 @@ bool			g_bRotate		= false;
 bool			g_bRotateEach	= false;
 bool			g_bBuildFreqs	= false;
 
-int				g_iMemLimit				= 0;
+int				g_iMemLimit				= 32*1024*1024;
 int				g_iMaxXmlpipe2Field		= 0;
 int				g_iWriteBuffer			= 0;
 int				g_iMaxFileFieldBuffer	= 1024*1024;
@@ -382,6 +382,11 @@ bool ParseMultiAttr ( const char * sBuf, CSphColumnInfo & tAttr, const char * sS
 	if ( hSource.Exists(_key) && hSource[_key].intval() ) \
 		_arg = hSource[_key].intval();
 
+// get int64_t
+#define LOC_GETL(_arg,_key) \
+	if ( hSource.Exists(_key) ) \
+		_arg = hSource[_key].int64val();
+
 // get bool
 #define LOC_GETB(_arg,_key) \
 	if ( hSource.Exists(_key) ) \
@@ -572,7 +577,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 	LOC_GETA ( tParams.m_dQueryPost,		"sql_query_post" );
 	LOC_GETS ( tParams.m_sQueryRange,		"sql_query_range" );
 	LOC_GETA ( tParams.m_dQueryPostIndex,	"sql_query_post_index" );
-	LOC_GETI ( tParams.m_iRangeStep,		"sql_range_step" );
+	LOC_GETL ( tParams.m_iRangeStep,		"sql_range_step" );
 	LOC_GETS ( tParams.m_sQueryKilllist,	"sql_query_killlist" );
 
 	LOC_GETI ( tParams.m_iRangedThrottle,	"sql_ranged_throttle" );
@@ -825,6 +830,7 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 #undef LOC_CHECK
 #undef LOC_GETS
 #undef LOC_GETI
+#undef LOC_GETL
 #undef LOC_GETA
 
 //////////////////////////////////////////////////////////////////////////
@@ -1517,7 +1523,7 @@ bool SendRotate ( const CSphConfig & hConf, bool bForce )
 		BYTE uWrite = 0;
 		BOOL bResult = WriteFile ( hPipe, &uWrite, 1, &uWritten, NULL );
 		if ( bResult )
-			fprintf ( stdout, "rotating indices: succesfully sent SIGHUP to searchd (pid=%d).\n", iPID );
+			fprintf ( stdout, "rotating indices: successfully sent SIGHUP to searchd (pid=%d).\n", iPID );
 		else
 			fprintf ( stdout, "WARNING: failed to send SIGHUP to searchd (pid=%d, GetLastError()=%d)\n", iPID, GetLastError () );
 
@@ -1529,7 +1535,7 @@ bool SendRotate ( const CSphConfig & hConf, bool bForce )
 	if ( iErr==0 )
 	{
 		if ( !g_bQuiet )
-			fprintf ( stdout, "rotating indices: succesfully sent SIGHUP to searchd (pid=%d).\n", iPID );
+			fprintf ( stdout, "rotating indices: successfully sent SIGHUP to searchd (pid=%d).\n", iPID );
 	} else
 	{
 		switch ( errno )
@@ -1722,12 +1728,11 @@ int main ( int argc, char ** argv )
 	if ( !hConf ( "source" ) )
 		sphDie ( "no indexes found in config file '%s'", sOptConfig );
 
-	g_iMemLimit = 0;
 	if ( hConf("indexer") && hConf["indexer"]("indexer") )
 	{
 		CSphConfigSection & hIndexer = hConf["indexer"]["indexer"];
 
-		g_iMemLimit = hIndexer.GetSize ( "mem_limit", 0 );
+		g_iMemLimit = hIndexer.GetSize ( "mem_limit", g_iMemLimit );
 		g_iMaxXmlpipe2Field = hIndexer.GetSize ( "max_xmlpipe2_field", 2*1024*1024 );
 		g_iWriteBuffer = hIndexer.GetSize ( "write_buffer", 1024*1024 );
 		g_iMaxFileFieldBuffer = Max ( 1024*1024, hIndexer.GetSize ( "max_file_field_buffer", 8*1024*1024 ) );

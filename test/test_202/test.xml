@@ -92,7 +92,8 @@ StopSearchd ('config.conf', 'searchd.pid');
 foreach ( array ( 'spa', 'spd', 'spe', 'spi', 'spk', 'spm', 'spp', 'sps', 'sph' ) as $ext )
 {
 	$path = 'data/plain2.' . $ext;
-	unlink ( $path );
+	if ( file_exists ( $path ) )
+		unlink ( $path );
 	if ( file_exists ( $path ) )
 		print 'error';
 }

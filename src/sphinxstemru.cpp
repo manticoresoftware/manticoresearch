@@ -70,6 +70,7 @@ struct RussianAlphabetWin1251_t
 // UTF-8 implementation
 /////////////////////////////////////////////////////////////////////////////
 
+#if USE_LITTLE_ENDIAN
 struct RussianAlphabetUTF8_t
 {
 	enum
@@ -109,6 +110,47 @@ struct RussianAlphabetUTF8_t
 		YA	= 0x8FD1U
 	};
 };
+#else
+struct RussianAlphabetUTF8_t
+{
+	enum
+	{
+		A	= 0xD0B0U,
+		B	= 0xD0B1U,
+		V	= 0xD0B2U,
+		G	= 0xD0B3U,
+		D	= 0xD0B4U,
+		E	= 0xD0B5U,
+		YO	= 0xD191U,
+		ZH	= 0xD0B6U,
+		Z	= 0xD0B7U,
+		I	= 0xD0B8U,
+		IY	= 0xD0B9U,
+		K	= 0xD0BAU,
+		L	= 0xD0BBU,
+		M	= 0xD0BCU,
+		N	= 0xD0BDU,
+		O	= 0xD0BEU,
+		P	= 0xD0BFU,
+		R	= 0xD180U,
+		S	= 0xD181U,
+		T	= 0xD182U,
+		U	= 0xD183U,
+		F	= 0xD184U,
+		H	= 0xD185U,
+		TS	= 0xD186U,
+		CH	= 0xD187U,
+		SH	= 0xD188U,
+		SCH	= 0xD189U,
+		TVY	= 0xD18AU, // TVYordiy znak
+		Y	= 0xD18BU,
+		MYA	= 0xD18CU, // MYAgkiy znak
+		EE	= 0xD18DU,
+		YU	= 0xD18EU,
+		YA	= 0xD18FU
+	};
+};
+#endif
 
 #define LOC_CHAR_TYPE		unsigned short
 #define LOC_PREFIX(_a)		_a##_utf8

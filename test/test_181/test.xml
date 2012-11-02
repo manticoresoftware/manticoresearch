@@ -73,6 +73,8 @@ create table test_table
 <queries>
 <query mode="extended2" ranker="wordcount" sortmode="expr" sortby="@weight" index_weights="test1:10 test2:1">asdf</query>
 <query mode="extended2" index="test1" index_weights="test1:11"></query>
+<query mode="fullscan" index="test1" index_weights="test1:11"></query>
+<query mode="fullscan" index="test1" index_weights="test1:11">something</query>
 </queries>
 
 <sphqueries>

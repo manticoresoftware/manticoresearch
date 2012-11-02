@@ -60,7 +60,7 @@ AC_PROG_RANLIB
 AC_COMPILE_IFELSE([
 #ifdef __GNUC__
 #if __GNUC__ > 3 || (__GNUC__ == 3 && __GNUC_MINOR__ > 3)
-void main() {}
+int main() {}
 #else
 syntax error
 #endif

@@ -1780,8 +1780,8 @@ struct CSphSourceParams_SQL
 	CSphString						m_sQuery;
 	CSphString						m_sQueryRange;
 	CSphString						m_sQueryKilllist;
-	int								m_iRangeStep;
-	int								m_iRefRangeStep;
+	int64_t							m_iRangeStep;
+	int64_t							m_iRefRangeStep;
 	bool							m_bPrintQueries;
 
 	CSphVector<CSphString>			m_dQueryPre;

@@ -1721,6 +1721,7 @@ struct CSphVariant : public CSphString
 {
 protected:
 	int				m_iValue;
+	int64_t			m_i64Value;
 	float			m_fValue;
 
 public:
@@ -1732,6 +1733,7 @@ public:
 	CSphVariant ()
 		: CSphString ()
 		, m_iValue ( 0 )
+		, m_i64Value ( 0 )
 		, m_fValue ( 0.0f )
 		, m_pNext ( NULL )
 		, m_bTag ( false )
@@ -1742,6 +1744,7 @@ public:
 	CSphVariant ( const char * sString ) // NOLINT desired implicit conversion
 		: CSphString ( sString )
 		, m_iValue ( m_sValue ? atoi ( m_sValue ) : 0 )
+		, m_i64Value ( m_sValue ? (int64_t)strtoull ( m_sValue, NULL, 10 ) : 0 )
 		, m_fValue ( m_sValue ? (float)atof ( m_sValue ) : 0.0f )
 		, m_pNext ( NULL )
 	{
@@ -1751,6 +1754,7 @@ public:
 	CSphVariant ( const CSphVariant & rhs )
 		: CSphString ()
 		, m_iValue ( 0 )
+		, m_i64Value ( 0 )
 		, m_fValue ( 0.0f )
 		, m_pNext ( NULL )
 	{
@@ -1770,6 +1774,12 @@ public:
 		return m_iValue;
 	}
 
+	/// int64_t value getter
+	int64_t int64val () const
+	{
+		return m_i64Value;
+	}
+
 	/// float value getter
 	float floatval () const
 	{
@@ -1785,6 +1795,7 @@ public:
 
 		CSphString::operator = ( rhs );
 		m_iValue = rhs.m_iValue;
+		m_i64Value = rhs.m_i64Value;
 		m_fValue = rhs.m_fValue;
 
 		return *this;
@@ -2123,6 +2134,8 @@ protected:
 
 //////////////////////////////////////////////////////////////////////////
 
+extern int g_iThreadStackSize;
+
 /// my thread handle and thread func magic
 #if USE_WINDOWS
 typedef HANDLE SphThread_t;
@@ -2161,9 +2174,6 @@ void * sphMyStack ();
 
 /// get size of used stack
 int64_t sphGetStackUsed();
-
-/// get the size of my thread's stack
-int sphMyStackSize ();
 
 /// set the size of my thread's stack
 void sphSetMyStackSize ( int iStackSize );

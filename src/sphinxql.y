@@ -439,8 +439,7 @@ opt_group_clause:
 group_clause:
 	TOK_GROUP TOK_BY expr_ident
 		{
-			pParser->m_pQuery->m_eGroupFunc = SPH_GROUPBY_ATTR;
-			pParser->m_pQuery->m_sGroupBy = $3.m_sValue;
+			pParser->SetGroupBy ( $3.m_sValue );
 		}
 	;
 
@@ -650,12 +649,17 @@ show_what:
 
 //////////////////////////////////////////////////////////////////////////
 
-set_value:
+simple_set_value:
 	TOK_IDENT
 	| TOK_NULL
 	| TOK_QUOTED_STRING
 	| TOK_CONST_INT
 	| TOK_CONST_FLOAT
+	;
+
+set_value:
+	simple_set_value
+	| set_value '-' simple_set_value
 	;
 
 set_stmt:

@@ -21,9 +21,11 @@ source test
 {
 	type				= mysql
 	<sql_settings/>
-	sql_query			= select * from test_table
+	sql_query			= select *, '1,2,3' mva32, '1,2,3' mva64 from test_table
 	sql_attr_uint		= gid
 	sql_field_string	= title
+	sql_attr_multi		= uint mva32 from field mva32
+	sql_attr_multi		= bigint mva64 from field mva64
 }
 
 index test
@@ -92,6 +94,10 @@ INSERT INTO test_table VALUES
 <!-- check that duplicate query words work -->
 <sphinxql>select id, gid, weight(), title from test where match('seven|seven|seven') option ranker=expr('sum(lcs)*1000+bm25')</sphinxql>
 
++<!-- rel20 regressions -->
++<sphinxql>select id, gid, weight(), title from test where match('mary') option ranker=expr('crc32(title)')</sphinxql>
++<sphinxql>select id, gid, weight(), title from test where match('mary') option ranker=expr('in(mva32,1)')</sphinxql>
++<sphinxql>select id, gid, weight(), title from test where match('mary') option ranker=expr('in(mva64,1)')</sphinxql>
 </sphqueries>
 
 </test>

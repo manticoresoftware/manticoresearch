@@ -3804,7 +3804,7 @@ struct AgentConn_t : public AgentDesc_t
 	bool			m_bFresh;		///< just created persistent connection, need SEARCHD_COMMAND_PERSIST
 	AgentState_e	m_eState;		///< current state
 
-	bool			m_bSuccess;		///< whether last request was succesful (ie. there are available results)
+	bool			m_bSuccess;		///< whether last request was successful (ie. there are available results)
 	CSphString		m_sFailure;		///< failure message
 
 	int				m_iReplyStatus;	///< reply status code
@@ -5546,6 +5546,9 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 
 	if ( pQuery->m_eMode==SPH_MATCH_BOOLEAN )
 		pQuery->m_eRanker = SPH_RANK_NONE;
+
+	if ( pQuery->m_eMode==SPH_MATCH_FULLSCAN )
+		pQuery->m_sQuery = "";
 
 	if ( pQuery->m_eMode!=SPH_MATCH_ALL && pQuery->m_eMode!=SPH_MATCH_ANY && pQuery->m_eMode!=SPH_MATCH_PHRASE )
 		return;
@@ -7331,9 +7334,6 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, bool bHadLoca
 			{
 				if ( *tCol.m_sName.cstr()=='@' )
 				{
-					CSphColumnInfo & tItem = tFrontendSchema.GetWAttrs().Add();
-					tItem.m_iIndex = tInternalSchema.GetAttrsCount();
-					tItem.m_sName = tCol.m_sName;
 					ARRAY_FOREACH ( j, (*pSelectItems) )
 						if ( tFrontendSchema.GetAttr(j).m_iIndex<0
 							&& ( (*pSelectItems)[j].m_sExpr.cstr() && (*pSelectItems)[j].m_sExpr==tCol.m_sName ) )
@@ -7344,6 +7344,12 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, bool bHadLoca
 							dKnownItems.Add(j);
 							++iKnownItems;
 						}
+					if ( tFrontendSchema.GetAttr ( tCol.m_sName.cstr() )==NULL )
+					{
+						CSphColumnInfo & tItem = tFrontendSchema.GetWAttrs().Add();
+						tItem.m_iIndex = tInternalSchema.GetAttrsCount();
+						tItem.m_sName = tCol.m_sName;
+					}
 				} else
 					ARRAY_FOREACH ( j, (*pSelectItems) )
 						if ( tFrontendSchema.GetAttr(j).m_iIndex<0
@@ -9190,7 +9196,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		tRes.m_dTag2Pools[0].m_pMva = m_dMvaStorage.Begin();
 		tRes.m_dTag2Pools[0].m_pStrings = m_dStringsStorage.Begin();
 
-		// if there were no succesful searches at all, this is an error
+		// if there were no successful searches at all, this is an error
 		if ( !tRes.m_iSuccesses )
 		{
 			StrBuf_t sFailures;
@@ -9669,6 +9675,7 @@ public:
 	bool			AddIntFilterGreater ( const CSphString & sAttr, int64_t iVal, bool bHasEqual );
 	bool			AddIntFilterLesser ( const CSphString & sAttr, int64_t iVal, bool bHasEqual );
 	bool			AddUservarFilter ( const CSphString & sCol, const CSphString & sVar, bool bExclude );
+	void			SetGroupBy ( const CSphString & sGroupBy );
 	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd );
 	CSphFilterSettings * AddFilter ( const CSphString & sCol, ESphFilter eType );
 	inline CSphFilterSettings * AddValuesFilter ( const SqlNode_t& sCol )
@@ -10043,6 +10050,13 @@ bool SqlParser_c::AddItem ( const char * pToken, SqlNode_t * pStart, SqlNode_t *
 	tItem.m_sExpr.ToLower();
 	AutoAlias ( tItem, pStart, pEnd );
 	return SetNewSyntax();
+}
+
+void SqlParser_c::SetGroupBy ( const CSphString & sGroupBy )
+{
+	m_pQuery->m_eGroupFunc = SPH_GROUPBY_ATTR;
+	m_pQuery->m_sGroupBy = sGroupBy;
+	m_pQuery->m_sGroupBy.ToLower();
 }
 
 bool SqlParser_c::AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd )
@@ -14335,7 +14349,7 @@ void HandleMysqlAttach ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 
 	pTo->Unlock();
 
-	// after a succesfull Attach() RT index owns it
+	// after a successfull Attach() RT index owns it
 	// so we need to create dummy disk index until further notice
 	pFrom->m_pIndex = NULL;
 	pFrom->m_bEnabled = false;
@@ -17061,6 +17075,13 @@ void CheckReopen ()
 		}
 	}
 
+#if !USE_WINDOWS
+	if ( g_eWorkers==MPM_PREFORK )
+		ARRAY_FOREACH ( i, g_dChildren )
+			kill ( g_dChildren[i], SIGUSR1 );
+#endif
+
+
 	g_bGotSigusr1 = 0;
 }
 
@@ -17343,7 +17364,7 @@ void ServiceInstall ( int argc, char ** argv )
 
 	} else
 	{
-		sphInfo ( "Service '%s' installed succesfully.", g_sServiceName );
+		sphInfo ( "Service '%s' installed successfully.", g_sServiceName );
 	}
 
 	CSphString sDesc;
@@ -17385,7 +17406,7 @@ void ServiceDelete ()
 	if ( !bRes )
 		sphFatal ( "DeleteService() failed: %s", WinErrorInfo() );
 	else
-		sphInfo ( "Service '%s' deleted succesfully.", g_sServiceName );
+		sphInfo ( "Service '%s' deleted successfully.", g_sServiceName );
 }
 #endif // USE_WINDOWS
 
@@ -17397,7 +17418,7 @@ void ShowHelp ()
 		"\n"
 		"Options are:\n"
 		"-h, --help\t\tdisplay this help message\n"
-		"-c, -config <file>\tread configuration from specified file\n"
+		"-c, --config <file>\tread configuration from specified file\n"
 		"\t\t\t(default is sphinx.conf)\n"
 		"--stop\t\t\tsend SIGTERM to currently running searchd\n"
 		"--stopwait\t\tsend SIGTERM and wait until actual exit\n"
@@ -18758,7 +18779,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 		if ( bTerminatedOk )
 		{
-			sphInfo ( "stop: succesfully terminated pid %d", iPid );
+			sphInfo ( "stop: successfully terminated pid %d", iPid );
 			exit ( 0 );
 		} else
 			sphFatal ( "stop: error terminating pid %d", iPid );

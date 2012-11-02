@@ -250,6 +250,9 @@ index distlfake
  <query index="disthfake" select="gr+1 as t,tag" groupattr="t" groupsort="tag asc"/> 
  <query index="distlfake" select="gr+1 as t,tag" groupattr="t" groupsort="tag asc"/> 
 
+<!-- Handle magic duplicates in API -->
+<query index="dist_no" select="gr" groupattr="gr"/>
+<query index="dist_no" select="gr, @groupby, @count" groupattr="gr"/>
 
 </queries>
 
@@ -335,6 +338,10 @@ index distlfake
 
 <!-- another regression chrash on sort of 0 matches -->
 <sphinxql>select * from dist50 where match ( 'broken merge' )</sphinxql>
+
+<!-- Handle magic duplicates in SphinxQL -->
+<sphinxql>select gr from dist_no group by gr</sphinxql>
+<sphinxql>select gr, @groupby, @count from dist_no group by gr</sphinxql>
 
 </sphqueries>
 

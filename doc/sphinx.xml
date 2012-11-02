@@ -1326,13 +1326,11 @@ on subsequent startup.
 
 <sect1 id="rt-caveats"><title>Known caveats with RT indexes</title>
 <para>
-As of 1.10-beta, RT indexes are a beta quality feature: while no major,
-showstopper-class issues are known, there still are a few known usage quirks.
-Those quirks are listed in this section.
+RT indexes are currently quality feature, but there are still a few known
+usage quirks. Those quirks are listed in this section.
 </para>
 <itemizedlist>
-<listitem><para>Prefix and infix indexing are not supported yet.</para></listitem>
-<listitem><para>MVAs are not supported yet.</para></listitem>
+<listitem><para>Prefix indexing is supported with dict = keywords starting 2.0.2-beta. Infix indexing is experimental in trunk.</para></listitem>
 <listitem><para>Disk chunks optimization routine is not implemented yet.</para></listitem>
 <listitem><para>On initial index creation, attributes are reordered by type,
 in the following order: uint, bigint, float, timestamp, string. So when
@@ -4026,8 +4024,8 @@ SELECT
     FROM index [, index2 ...]
     [WHERE where_condition]
     [GROUP BY {col_name | expr_alias}]
-    [ORDER BY {col_name | expr_alias} {ASC | DESC} [, ...]]
     [WITHIN GROUP ORDER BY {col_name | expr_alias} {ASC | DESC}]
+    [ORDER BY {col_name | expr_alias} {ASC | DESC} [, ...]]
     [LIMIT offset, row_count]
     [OPTION opt_name = opt_value [, ...]]
 </programlisting>
@@ -7780,9 +7778,8 @@ There's a fixed size limit of 4 MB per value. Also, <filename>searchd</filename>
 will currently cache all the values in RAM, which is an additional implicit limit.
 </para>
 <para>
-As of 1.10-beta, strings can only be used for storage and retrieval.
-They can not participate in expressions, be used for filtering, sorting,
-or grouping (ie. in WHERE, ORDER or GROUP clauses). Note that attributes
+Starting from 2.0.1-beta string attributes can be used for sorting and
+grouping(ORDER BY, GROUP BY, WITHING GROUP ORDER BY). Note that attributes
 declared using <option>sql_attr_string</option> will <b>not</b> be full-text
 indexed; you can use <link linkend="conf-sql-field-string">sql_field_string</link>
 directive for that.
@@ -11993,6 +11990,64 @@ predicted_time_costs = doc=128, hit=96, skip=4096, match=128
 -->
 
 <appendix id="changelog"><title>Sphinx revision history</title>
+
+<sect1 id="rel206"><title>Version 2.0.6-release, 22 oct 2012</title>
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+<listitem><para>fixed #1322, J connector seems to be broken in rel20 , but works in trunk</para></listitem>
+<listitem><para>fixed #1321, 'set names utf8' passes, but 'set names utf-8' doesn't because of syntax error '-'</para></listitem>
+<listitem><para>fixed #1318, unhandled float comparison operators at filter</para></listitem>
+<listitem><para>fixed #1317, FD leaks on thread seamless rotation</para></listitem>
+<listitem><para>fixed #1313, crash on stopping daemon with incorrect RT index config</para></listitem>
+<listitem><para>fixed #1306, 'jolly roger ;)', and '(((((((((9 brackets)' crashes <filename>searchd</filename></para></listitem>
+<listitem><para>fixed #1304, OS X debug compilation</para></listitem>
+<listitem><para>fixed #1302, daemon random crashes on OS X</para></listitem>
+<listitem><para>fixed #1301, <filename>indexer</filename> fails to send rotate signal</para></listitem>
+<listitem><para>fixed #1300, lost index settings on attach</para></listitem>
+<listitem><para>fixed #1299, daemon failed to rotate <link linkend="sphinxql-attach-index">ATTACH</link>ed plain index</para></listitem>
+<listitem><para>fixed #1289, <link linkend="extended-syntax">SENTENCE</link> or <link linkend="extended-syntax">PARAGRAPH</link> searching leak memory</para></listitem>
+<listitem><para>fixes #1285, crash on running <filename>searchd</filename> with <filename>syslog</filename> and <filename>watchdog</filename></para></listitem>
+<listitem><para>fixed #1279, linking against explicitly disabled iconv. Also added <code>--with-libexpat</code> to config options, which sometimes required on systems without XML support</para></listitem>
+<listitem><para>fixed #1278, broken <link linkend="conf-odbc-dsn">unixODBC</link> detection in configure script.</para></listitem>
+<listitem><para>fixed #1277, broken build on some toolchains (like uClibc) where not defined <code>LLONG_MIN</code>, added <code>ULLONG_MAX</code></para></listitem>
+<listitem><para>fixed #1274, large <filename>spa</filename> ( >4GB ) file hasn't loaded</para></listitem>
+<listitem><para>fixed #1269, crash at RT index with <link linkend="mva">MVA</link> from disk chunk previously updated</para></listitem>
+<listitem><para>fixed #1268, unuseful warning removed</para></listitem>
+<listitem><para>fixed #1264, string and MVA attributes aliasing works again</para></listitem>
+<listitem><para>fixed #1254, its now possible to add indexes using <link linkend="ref-indexer">--rotate</link></para></listitem>
+<listitem><para>fixed #1249, <link linkend="sphinxql-reference">SphinxQL</link> unusable with PHP >= 5.4.5</para></listitem>
+<listitem><para>fixed #1246, attributes of 100 character length not being saved</para></listitem>
+<listitem><para>fixed #1234, case sensitive <link linkend="sphinxql-select">GROUP BY</link> attribute</para></listitem>
+<listitem><para>fixed #1216, typos, <link linkend="conf-mem-limit">mem_limit</link> default size and <link linkend="rt-indexes">RT documentation</link></para></listitem>
+<listitem><para>fixed #1148, RT documentation updated</para></listitem>
+<listitem><para>fixed #1140, mem_limit default value</para></listitem>
+<listitem><para>fixed #1138, updated documentation on <link linkend="conf-sql-attr-string">sql_attr_string</link></para></listitem>
+<listitem><para>fixed #1129, snippets vs empty files and empty filenames</para></listitem>
+<listitem><para>fixed #1123, configure compatibility fix</para></listitem>
+<listitem><para>fixed #1122, 64bit <link linkend="conf-sql-range-step">sql_range_step</link></para></listitem>
+<listitem><para>fixed #1082, crashes and deadlocks on OS X with <code>workers=threads</code> and field leak of read-write lock</para></listitem>
+<listitem><para>fixed #1081, select only count distinct attr1 but group by attr2</para></listitem>
+<listitem><para>fixed #1064, mistake while working with timestamp functions</para></listitem>
+<listitem><para>fixed #1043, inaccurate distinct count in case many indexes or distributed index</para></listitem>
+<listitem><para>fixed #1042, arithmetic expressions overflow</para></listitem>
+<listitem><para>fixed #1007, Russian stemming on big endian systems</para></listitem>
+<listitem><para>fixed #986, asserting in <link linkend="api-func-setrankingmode">SetRankingMode</link> (PHP API)</para></listitem>
+<listitem><para>fixed #975, incorrect ranking in some rare cases</para></listitem>
+<listitem><para>fixed #967, Python API type checking error</para></listitem>
+<listitem><para>fixed #934, API vs fullscan vs non-empty query</para></listitem>
+<listitem><para>fixed #899, error if using <link linkend="api-func-setfilterrange">SetFilterRange</link> as HAVING from SQL</para></listitem>
+<listitem><para>fixed #867, <filename>indexer</filename> accepts index names starting with digit or _</para></listitem>
+<listitem><para>fixed #699, signed vs unsigned 64-bit DocIDs in SphinxQL</para></listitem>
+<listitem><para>fixed #668, now ignoring single @ character (incorrect field operator)</para></listitem>
+<listitem><para>fixed #611, @! operator vs non-existent field, updated documentation</para></listitem>
+<listitem><para>fixed #412, multiple <code>--filter</code> arguments work as they should in search utility</para></listitem>
+<listitem><para>fixed #108, support for system libstemmer library. The sources of libstemmer placed into <filename>libstemmer_c</filename> is preferred, but the system lib will be tried if no sources found</para></listitem>
+<listitem><para>fixed <link linkend="sphinxql-select">ORDER BY</link> output at query log with SphinxQL mode</para></listitem>
+<listitem><para>fixed documentation entry about <link linkend="conf-sql-joined-field">sql_joined_field</link></para></listitem>
+<listitem><para>fixed sample config file</para></listitem>
+<listitem><para>fixed x64 configurations for libstemmer</para></listitem>
+</itemizedlist>
+</sect1>
 
 <sect1 id="rel205"><title>Version 2.0.5-release, 28 jul 2012</title>
 <bridgehead>Bug fixes</bridgehead>

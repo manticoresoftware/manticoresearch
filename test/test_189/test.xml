@@ -104,7 +104,7 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select idd, aagent from dist group by idd</sphinxql>
 <sphinxql>select *, idd, aagent from dist group by idd</sphinxql>
 <sphinxql>select idd, @count, aagent from dist group by idd</sphinxql>
-<sphinxql>select idd, count(*), aagent from dist group by idd</sphinxql>
+<sphinxql>select idd, count(*), aagent from dist group by idD</sphinxql>
 <!-- regression schema attributes with alias -->
 <sphinxql>select idd, idd*2 as rr from dist</sphinxql>
 <sphinxql>select idd as r0, r0*2 as rr from dist</sphinxql>

@@ -73,6 +73,12 @@ $client->SetSelect('manufacturers_id');
 $client->SetGroupBy ('manufacturers_id', SPH_GROUPBY_ATTR, 'manufacturers_id desc');
 $client->AddQuery ($query, $index);
 
+//fullscan query should return something while in multiquery with fulltext query
+$client->SetSelect('*');
+$client->SetLimits(0, 1);
+$client->ResetGroupBy();
+$client->AddQuery ('text1', $index);
+
 //Run queries
 $results = $client->RunQueries(); 
 ]]></Query_Settings>

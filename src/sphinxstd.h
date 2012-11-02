@@ -58,6 +58,14 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 #include <sys/types.h>
 #endif
 
+#ifndef USE_WINDOWS
+#ifdef _MSC_VER
+#define USE_WINDOWS 1
+#else
+#define USE_WINDOWS 0
+#endif // _MSC_VER
+#endif
+
 #if !USE_WINDOWS
 #include <sys/mman.h>
 #include <errno.h>
@@ -284,6 +292,10 @@ inline DWORD sphF2DW ( float f )	{ union { float f; DWORD d; } u; u.f = f; retur
 
 /// dword vs float conversion
 inline float sphDW2F ( DWORD d )	{ union { float f; DWORD d; } u; u.d = d; return u.f; }
+
+/// microsecond precision timestamp
+/// current UNIX timestamp in seconds multiplied by 1000000, plus microseconds since the beginning of current second
+int64_t		sphMicroTimer ();
 
 //////////////////////////////////////////////////////////////////////////
 // RANDOM NUMBERS GENERATOR

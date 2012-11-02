@@ -210,10 +210,6 @@ inline const	DWORD *	STATIC2DOCINFO ( const DWORD * pAttrs )	{ return STATIC2DOC
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// microsecond precision timestamp
-/// current UNIX timestamp in seconds multiplied by 1000000, plus microseconds since the beginning of current second
-int64_t			sphMicroTimer ();
-
 /// Sphinx CRC32 implementation
 DWORD			sphCRC32 ( const BYTE * pString );
 DWORD			sphCRC32 ( const BYTE * pString, int iLen );

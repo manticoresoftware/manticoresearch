@@ -15857,14 +15857,14 @@ static XQNode_t * CloneKeyword ( const XQNode_t * pNode )
 }
 
 
-static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tSettings )
+static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tSettings, bool bStarEnabled )
 {
 	assert ( pNode );
 
 	XQNode_t * pExpand = new XQNode_t ( pNode->m_dSpec );
 	pExpand->SetOp ( SPH_QUERY_OR, pNode );
 
-	if ( tSettings.m_iMinInfixLen>0 )
+	if ( tSettings.m_iMinInfixLen>0 && bStarEnabled )
 	{
 		assert ( pNode->m_dChildren.GetLength()==0 );
 		assert ( pNode->m_dWords.GetLength()==1 );
@@ -15888,7 +15888,7 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 	return pExpand;
 }
 
-static XQNode_t * ExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & tSettings )
+XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & tSettings, bool bStarEnabled )
 {
 	// only if expansion makes sense at all
 	if ( tSettings.m_iMinInfixLen<=0 && !tSettings.m_bIndexExactWords )
@@ -15899,7 +15899,7 @@ static XQNode_t * ExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & t
 	{
 		ARRAY_FOREACH ( i, pNode->m_dChildren )
 		{
-			pNode->m_dChildren[i] = ExpandKeywords ( pNode->m_dChildren[i], tSettings );
+			pNode->m_dChildren[i] = sphQueryExpandKeywords ( pNode->m_dChildren[i], tSettings, bStarEnabled );
 			pNode->m_dChildren[i]->m_pParent = pNode;
 		}
 		return pNode;
@@ -15913,7 +15913,7 @@ static XQNode_t * ExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & t
 		{
 			XQNode_t * pWord = new XQNode_t ( pNode->m_dSpec );
 			pWord->m_dWords.Add ( pNode->m_dWords[i] );
-			pNode->m_dChildren.Add ( ExpandKeyword ( pWord, tSettings ) );
+			pNode->m_dChildren.Add ( ExpandKeyword ( pWord, tSettings, bStarEnabled ) );
 			pNode->m_dChildren.Last()->m_iAtomPos = pNode->m_dWords[i].m_iAtomPos;
 			pNode->m_dChildren.Last()->m_pParent = pNode;
 		}
@@ -15939,7 +15939,7 @@ static XQNode_t * ExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & t
 	}
 
 	// do the expansion
-	return ExpandKeyword ( pNode, tSettings );
+	return ExpandKeyword ( pNode, tSettings, bStarEnabled );
 }
 
 
@@ -15949,12 +15949,12 @@ static inline bool IsWild ( char c )
 }
 
 
-static void AdjustStars ( XQNode_t * pNode, const CSphIndexSettings & tSettings )
+void sphQueryAdjustStars ( XQNode_t * pNode, const CSphIndexSettings & tSettings )
 {
 	if ( pNode->m_dChildren.GetLength() )
 	{
 		ARRAY_FOREACH ( i, pNode->m_dChildren )
-			AdjustStars ( pNode->m_dChildren[i], tSettings );
+			sphQueryAdjustStars ( pNode->m_dChildren[i], tSettings );
 		return;
 	}
 
@@ -16578,19 +16578,19 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 
 	// adjust stars in keywords for dict=keywords, enable_star=0 case
 	if ( pDict->GetSettings().m_bWordDict && !m_bEnableStar && ( m_tSettings.m_iMinPrefixLen>0 || m_tSettings.m_iMinInfixLen>0 ) )
-		AdjustStars ( tParsed.m_pRoot, m_tSettings );
+		sphQueryAdjustStars ( tParsed.m_pRoot, m_tSettings );
+
+	if ( m_bExpandKeywords )
+	{
+		tParsed.m_pRoot = sphQueryExpandKeywords ( tParsed.m_pRoot, m_tSettings, m_bEnableStar );
+		tParsed.m_pRoot->Check ( true );
+	}
 
 	// expanding prefix in word dictionary case
 	XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, pResult->m_sError, pResult );
 	if ( !pPrefixed )
 		return false;
 	tParsed.m_pRoot = pPrefixed;
-
-	if ( m_bExpandKeywords )
-	{
-		tParsed.m_pRoot = ExpandKeywords ( tParsed.m_pRoot, m_tSettings );
-		tParsed.m_pRoot->Check ( true );
-	}
 
 	if ( !sphCheckQueryHeight ( tParsed.m_pRoot, pResult->m_sError ) )
 		return false;
@@ -16668,17 +16668,21 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 			// transform query if needed (quorum transform, keyword expansion, etc.)
 			sphTransformExtendedQuery ( &dXQ[i].m_pRoot, m_tSettings, pQueries[i].m_bSimplify, this );
 
+			// adjust stars in keywords for dict=keywords, enable_star=0 case
+			if ( pDict->GetSettings().m_bWordDict && !m_bEnableStar && ( m_tSettings.m_iMinPrefixLen>0 || m_tSettings.m_iMinInfixLen>0 ) )
+				sphQueryAdjustStars ( dXQ[i].m_pRoot, m_tSettings );
+
+			if ( m_bExpandKeywords )
+			{
+				dXQ[i].m_pRoot = sphQueryExpandKeywords ( dXQ[i].m_pRoot, m_tSettings, m_bEnableStar );
+				dXQ[i].m_pRoot->Check ( true );
+			}
+
 			// expanding prefix in word dictionary case
 			XQNode_t * pPrefixed = ExpandPrefix ( dXQ[i].m_pRoot, ppResults[i]->m_sError, ppResults[i] );
 			if ( pPrefixed )
 			{
 				dXQ[i].m_pRoot = pPrefixed;
-
-				if ( m_bExpandKeywords )
-				{
-					dXQ[i].m_pRoot = ExpandKeywords ( dXQ[i].m_pRoot, m_tSettings );
-					dXQ[i].m_pRoot->Check ( true );
-				}
 
 				if ( sphCheckQueryHeight ( dXQ[i].m_pRoot, ppResults[i]->m_sError ) )
 				{

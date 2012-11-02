@@ -5745,6 +5745,16 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// transform query if needed (quorum transform, keyword expansion, etc.)
 	sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, pQuery->m_bSimplify, this );
 
+	// adjust stars in keywords for dict=keywords, enable_star=0 case
+	if ( pDict->GetSettings().m_bWordDict && !m_bEnableStar && ( m_tSettings.m_iMinPrefixLen>0 || m_tSettings.m_iMinInfixLen>0 ) )
+		sphQueryAdjustStars ( tParsed.m_pRoot, m_tSettings );
+
+	if ( m_bExpandKeywords )
+	{
+		tParsed.m_pRoot = sphQueryExpandKeywords ( tParsed.m_pRoot, m_tSettings, m_bEnableStar );
+		tParsed.m_pRoot->Check ( true );
+	}
+
 	// expanding prefix in word dictionary case
 	if ( m_bEnableStar && m_bKeywordDict )
 	{

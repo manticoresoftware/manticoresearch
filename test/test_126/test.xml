@@ -12,7 +12,7 @@ indexer
 searchd
 {
 	<searchd_settings/>
-compat_sphinxql_magics = 1
+	workers = threads
 }
 
 source srctest
@@ -32,15 +32,48 @@ index test
 	index_exact_words	= 1
 	expand_keywords	= 1
 }
+
+index expanded_plain
+{
+	source			= srctest
+	path			= <data_path/>/expanded-plain
+	charset_type 	= utf-8
+	docinfo = extern
+	dict = keywords
+	expand_keywords	= 1
+	min_infix_len = 3
+	enable_star = 1
+}
+
+index expanded_rt
+{
+	type = rt
+	path			= <data_path/>/expanded-rt
+	charset_type 	= utf-8
+	dict = keywords
+	expand_keywords	= 1
+	min_infix_len = 3
+	enable_star = 1
+	rt_field = title
+	rt_attr_uint = idd	
+}
 </config>
 
 <queries>
-<query mode="extended2">dog run</query>
-<query mode="extended2">=dog =run</query>
-<query mode="phrase">dog run</query>
-<query mode="phrase">=dog =run</query>
-<query mode="phrase">dog* run</query>
+<query mode="extended2" index="test">dog run</query>
+<query mode="extended2" index="test">=dog =run</query>
+<query mode="phrase" index="test">dog run</query>
+<query mode="phrase" index="test">=dog =run</query>
+<query mode="phrase" index="test">dog* run</query>
+<!-- regression wrong word expansion -->
+<query mode="extended2" index="expanded_plain">run</query>
 </queries>
+
+<sphqueries>
+<sphinxql>insert into expanded_rt values ( 1,  'dog runs', 11 ), ( 2,  'dogs run', 22 ), ( 3,  'dogs running', 33 ), ( 4,  'dog run', 44 )</sphinxql>
+<sphinxql>select * from expanded_rt where match ( 'run' )</sphinxql>
+<sphinxql>show meta</sphinxql>
+</sphqueries>
 
 <db_create>
 CREATE TABLE `test_table`

@@ -329,6 +329,9 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "sql_field_str2wordcount",	KEY_LIST, NULL },
 	{ "sql_file_field",			KEY_LIST, NULL },
 	{ "sql_column_buffers",		0, NULL },
+	{ "hook_connect",		0, NULL },
+	{ "hook_query_range",			0, NULL },
+	{ "hook_post_index",		0, NULL },
 	{ NULL,						0, NULL }
 };
 

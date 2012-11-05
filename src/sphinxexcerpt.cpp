@@ -2251,7 +2251,7 @@ public:
 		m_pDoc = m_pTokenizer->GetBufferPtr();
 	}
 
-	~TokenFunctorTraits_c () {}
+	virtual ~TokenFunctorTraits_c () {}
 
 	void ResultEmit ( const char * pSrc, int iLen, bool bHasPassageMacro=false, int iPassageId=0,
 		const char * pPost=NULL, int iPostLen=0 )

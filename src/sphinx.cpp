@@ -23535,6 +23535,60 @@ bool CSphSource_SQL::Setup ( const CSphSourceParams_SQL & tParams )
 	return true;
 }
 
+const char * SubstituteParams ( const char * sQuery, const char * const * dMacroses, const char ** dValues, int iMcount )
+{
+	// OPTIMIZE? things can be precalculated
+	const char * sCur = sQuery;
+	int iLen = 0;
+	while ( *sCur )
+	{
+		if ( *sCur=='$' )
+		{
+			int i;
+			for ( i=0; i<iMcount; i++ )
+				if ( strncmp ( dMacroses[i], sCur, strlen ( dMacroses[i] ) )==0 )
+				{
+					sCur += strlen ( dMacroses[i] );
+					iLen += strlen ( dValues[i] );
+					break;
+				}
+				if ( i<iMcount )
+					continue;
+		}
+
+		sCur++;
+		iLen++;
+	}
+	iLen++; // trailing zero
+
+	// do interpolation
+	char * sRes = new char [ iLen ];
+	sCur = sQuery;
+
+	char * sDst = sRes;
+	while ( *sCur )
+	{
+		if ( *sCur=='$' )
+		{
+			int i;
+			for ( i=0; i<iMcount; i++ )
+				if ( strncmp ( dMacroses[i], sCur, strlen ( dMacroses[i] ) )==0 )
+				{
+					strcpy ( sDst, dValues[i] ); // NOLINT
+					sCur += strlen ( dMacroses[i] );
+					sDst += strlen ( dValues[i] );
+					break;
+				}
+				if ( i<iMcount )
+					continue;
+		}
+		*sDst++ = *sCur++;
+	}
+	*sDst++ = '\0';
+	assert ( sDst-sRes==iLen );
+	return sRes;
+}
+
 
 bool CSphSource_SQL::RunQueryStep ( const char * sQuery, CSphString & sError )
 {
@@ -23546,7 +23600,7 @@ bool CSphSource_SQL::RunQueryStep ( const char * sQuery, CSphString & sError )
 		return false;
 
 	static const int iBufSize = 32;
-	char * sRes = NULL;
+	const char * sRes = NULL;
 
 	sphSleepMsec ( m_tParams.m_iRangedThrottle );
 
@@ -23560,62 +23614,17 @@ bool CSphSource_SQL::RunQueryStep ( const char * sQuery, CSphString & sError )
 	assert ( sQuery );
 
 	char sValues [ MACRO_COUNT ] [ iBufSize ];
+	const char * pValues [ MACRO_COUNT ];
 	SphDocID_t uNextID = Min ( m_uCurrentID + (SphDocID_t)m_tParams.m_iRangeStep - 1, m_uMaxID );
 	snprintf ( sValues[0], iBufSize, DOCID_FMT, m_uCurrentID );
 	snprintf ( sValues[1], iBufSize, DOCID_FMT, uNextID );
+	pValues[0] = sValues[0];
+	pValues[1] = sValues[1];
 	g_iIndexerCurrentRangeMin = m_uCurrentID;
 	g_iIndexerCurrentRangeMax = uNextID;
 	m_uCurrentID = 1 + uNextID;
 
-	// OPTIMIZE? things can be precalculated
-	const char * sCur = sQuery;
-	int iLen = 0;
-	while ( *sCur )
-	{
-		if ( *sCur=='$' )
-		{
-			int i;
-			for ( i=0; i<MACRO_COUNT; i++ )
-				if ( strncmp ( MACRO_VALUES[i], sCur, strlen ( MACRO_VALUES[i] ) )==0 )
-			{
-				sCur += strlen ( MACRO_VALUES[i] );
-				iLen += strlen ( sValues[i] );
-				break;
-			}
-			if ( i<MACRO_COUNT )
-				continue;
-		}
-
-		sCur++;
-		iLen++;
-	}
-	iLen++; // trailing zero
-
-	// do interpolation
-	sRes = new char [ iLen ];
-	sCur = sQuery;
-
-	char * sDst = sRes;
-	while ( *sCur )
-	{
-		if ( *sCur=='$' )
-		{
-			int i;
-			for ( i=0; i<MACRO_COUNT; i++ )
-				if ( strncmp ( MACRO_VALUES[i], sCur, strlen ( MACRO_VALUES[i] ) )==0 )
-			{
-				strcpy ( sDst, sValues[i] ); // NOLINT
-				sCur += strlen ( MACRO_VALUES[i] );
-				sDst += strlen ( sValues[i] );
-				break;
-			}
-			if ( i<MACRO_COUNT )
-				continue;
-		}
-		*sDst++ = *sCur++;
-	}
-	*sDst++ = '\0';
-	assert ( sDst-sRes==iLen );
+	sRes = SubstituteParams ( sQuery, MACRO_VALUES, pValues, MACRO_COUNT );
 
 	// run query
 	SqlDismissResult ();
@@ -23628,6 +23637,83 @@ bool CSphSource_SQL::RunQueryStep ( const char * sQuery, CSphString & sError )
 	return bRes;
 }
 
+static void HookConnect ( const char* szCommand )
+{
+	FILE * pPipe = popen ( szCommand, "r" );
+	if ( !pPipe )
+		return;
+
+	const int MAX_BUF_SIZE = 1024;
+	BYTE dBuf [MAX_BUF_SIZE];
+	fread ( dBuf, 1, MAX_BUF_SIZE, pPipe );
+	pclose ( pPipe );
+}
+
+inline static const char* skipspace ( const char* pBuf, const char* pBufEnd )
+{
+	assert ( pBuf );
+	assert ( pBufEnd );
+
+	while ( (pBuf<pBufEnd) && isspace ( *pBuf ) )
+		++pBuf;
+	return pBuf;
+}
+
+inline static const char* scannumber ( const char* pBuf, const char* pBufEnd, SphDocID_t* pRes )
+{
+	assert ( pBuf );
+	assert ( pBufEnd );
+	assert ( pRes );
+
+	if ( pBuf<pBufEnd )
+	{
+		*pRes = 0;
+		// FIXME! could check for overflow
+		while ( isdigit ( *pBuf ) && pBuf<pBufEnd )
+			(*pRes) = 10*(*pRes) + (int)( (*pBuf++)-'0' );
+	}
+	return pBuf;
+}
+
+static void HookQueryRange ( const char* szCommand, SphDocID_t* pMin, SphDocID_t* pMax )
+{
+	FILE * pPipe = popen ( szCommand, "r" );
+	if ( !pPipe )
+		return;
+
+	const int MAX_BUF_SIZE = 1024;
+	char dBuf [MAX_BUF_SIZE];
+	int iRead = (int)fread ( dBuf, 1, MAX_BUF_SIZE, pPipe );
+	pclose ( pPipe );
+	const char* pStart = dBuf;
+	const char* pEnd = pStart + iRead;
+	// leading whitespace and 1-st number
+	pStart = skipspace ( pStart, pEnd );
+	pStart = scannumber ( pStart, pEnd, pMin );
+	// whitespace and 2-nd number
+	pStart = skipspace ( pStart, pEnd );
+	pStart = scannumber ( pStart, pEnd, pMax );
+}
+
+static void HookPostIndex ( const char* szCommand, SphDocID_t uLastIndexed )
+{
+	const char * sMacro = "$maxid";
+	char sValue[32];
+	const char* pValue = sValue;
+	snprintf ( sValue, sizeof(sValue), DOCID_FMT, uLastIndexed );
+
+	const char * pCmd = SubstituteParams ( szCommand, &sMacro, &pValue, 1 );
+
+	FILE * pPipe = popen ( pCmd, "r" );
+	SafeDeleteArray ( pCmd );
+	if ( !pPipe )
+		return;
+
+	const int MAX_BUF_SIZE = 1024;
+	BYTE dBuf [MAX_BUF_SIZE];
+	fread ( dBuf, 1, MAX_BUF_SIZE, pPipe );
+	pclose ( pPipe );
+}
 
 /// connect to SQL server
 bool CSphSource_SQL::Connect ( CSphString & sError )
@@ -23647,6 +23733,8 @@ bool CSphSource_SQL::Connect ( CSphString & sError )
 
 	// all good
 	m_bSqlConnected = true;
+	if ( !m_tParams.m_sHookConnect.IsEmpty() )
+		HookConnect ( m_tParams.m_sHookConnect.cstr() );
 	return true;
 }
 
@@ -23712,6 +23800,18 @@ bool CSphSource_SQL::SetupRanges ( const char * sRangeQuery, const char * sQuery
 	}
 
 	SqlDismissResult ();
+
+	if ( !m_tParams.m_sHookQueryRange.IsEmpty() )
+	{
+		HookQueryRange ( m_tParams.m_sHookQueryRange.cstr(), &m_uMinID, &m_uMaxID );
+		if ( m_uMinID<=0 )
+			LOC_ERROR ( "hook_query_range: min_id="DOCID_FMT": must be positive 32/64-bit unsigned integer", m_uMinID );
+		if ( m_uMaxID<=0 )
+			LOC_ERROR ( "hook_query_range: max_id="DOCID_FMT": must be positive 32/64-bit unsigned integer", m_uMaxID );
+		if ( m_uMinID>m_uMaxID )
+			LOC_ERROR2 ( "hook_query_range: min_id="DOCID_FMT", max_id="DOCID_FMT": min_id must be less than max_id", m_uMinID, m_uMaxID );
+	}
+
 	return true;
 }
 
@@ -24084,40 +24184,47 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 
 void CSphSource_SQL::PostIndex ()
 {
-	if ( !m_tParams.m_dQueryPostIndex.GetLength() )
+	if ( ( !m_tParams.m_dQueryPostIndex.GetLength() ) && m_tParams.m_sHookPostIndex.IsEmpty() )
 		return;
 
 	assert ( !m_bSqlConnected );
 
-	#define LOC_SQL_ERROR(_msg) { sSqlError = _msg; break; }
-
 	const char * sSqlError = NULL;
-	for ( ;; )
+	if ( m_tParams.m_dQueryPostIndex.GetLength() )
 	{
-		if ( !SqlConnect () )
-			LOC_SQL_ERROR ( "mysql_real_connect" );
+#define LOC_SQL_ERROR(_msg) { sSqlError = _msg; break; }
 
-		ARRAY_FOREACH ( i, m_tParams.m_dQueryPostIndex )
+		for ( ;; )
 		{
-			char * sQuery = sphStrMacro ( m_tParams.m_dQueryPostIndex[i].cstr(), "$maxid", m_uMaxFetchedID );
-			bool bRes = SqlQuery ( sQuery );
-			delete [] sQuery;
+			if ( !SqlConnect () )
+				LOC_SQL_ERROR ( "mysql_real_connect" );
 
-			if ( !bRes )
-				LOC_SQL_ERROR ( "sql_query_post_index" );
+			ARRAY_FOREACH ( i, m_tParams.m_dQueryPostIndex )
+			{
+				char * sQuery = sphStrMacro ( m_tParams.m_dQueryPostIndex[i].cstr(), "$maxid", m_uMaxFetchedID );
+				bool bRes = SqlQuery ( sQuery );
+				delete [] sQuery;
 
-			SqlDismissResult ();
+				if ( !bRes )
+					LOC_SQL_ERROR ( "sql_query_post_index" );
+
+				SqlDismissResult ();
+			}
+
+			break;
 		}
 
-		break;
+		if ( sSqlError )
+			sphWarn ( "%s: %s (DSN=%s)", sSqlError, SqlError(), m_sSqlDSN.cstr() );
+
+#undef LOC_SQL_ERROR
+
+		SqlDisconnect ();
 	}
-
-	if ( sSqlError )
-		sphWarn ( "%s: %s (DSN=%s)", sSqlError, SqlError(), m_sSqlDSN.cstr() );
-
-	#undef LOC_SQL_ERROR
-
-	SqlDisconnect ();
+	if ( !m_tParams.m_sHookPostIndex.IsEmpty() )
+	{
+		HookPostIndex ( m_tParams.m_sHookPostIndex.cstr(), m_uMaxFetchedID );
+	}
 }
 
 
@@ -27898,7 +28005,7 @@ void sphDictBuildInfixes ( const char * sPath )
 	CSphString sFilename, sError;
 	int64_t tmStart = sphMicroTimer();
 
-	if ( INDEX_FORMAT_VERSION!=27 )
+if ( INDEX_FORMAT_VERSION!=27 )
 		sphDie ( "infix upgrade: only works in v.27 builds for now; get an older indextool or contact support" );
 
 	//////////////////////////////////////////////////
@@ -28098,9 +28205,8 @@ void sphDictBuildSkiplists ( const char * sPath )
 	CSphString sFilename, sError;
 	int64_t tmStart = sphMicroTimer();
 
-	if ( INDEX_FORMAT_VERSION<31 || INDEX_FORMAT_VERSION>35 )
+if ( INDEX_FORMAT_VERSION<31 || INDEX_FORMAT_VERSION>35 )
 		sphDie ( "skiplists upgrade: ony works in v.31 to v.35 builds for now; get an older indextool or contact support" );
-
 
 	// load (interesting parts from) the index header
 	CSphAutoreader rdHeader;

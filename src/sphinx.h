@@ -1802,6 +1802,11 @@ struct CSphSourceParams_SQL
 	CSphString						m_sDB;
 	int								m_iPort;
 
+	// hooks
+	CSphString						m_sHookConnect;
+	CSphString						m_sHookQueryRange;
+	CSphString						m_sHookPostIndex;
+
 	CSphSourceParams_SQL ();
 };
 

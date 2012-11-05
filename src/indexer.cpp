@@ -579,6 +579,9 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 	LOC_GETA ( tParams.m_dQueryPostIndex,	"sql_query_post_index" );
 	LOC_GETL ( tParams.m_iRangeStep,		"sql_range_step" );
 	LOC_GETS ( tParams.m_sQueryKilllist,	"sql_query_killlist" );
+	LOC_GETS ( tParams.m_sHookConnect,		"hook_connect" );
+	LOC_GETS ( tParams.m_sHookQueryRange,	"hook_query_range" );
+	LOC_GETS ( tParams.m_sHookPostIndex,	"hook_post_index" );
 
 	LOC_GETI ( tParams.m_iRangedThrottle,	"sql_ranged_throttle" );
 

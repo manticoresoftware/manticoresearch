@@ -2488,7 +2488,6 @@ public:
 	virtual					~CSphQueryResult ();	///< dtor, which releases all owned stuff
 
 	void					LeakStorages ( CSphQueryResult & tDst );
-	void					ClampMatches ( int iLimit );
 };
 
 /////////////////////////////////////////////////////////////////////////////

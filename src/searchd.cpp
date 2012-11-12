@@ -6900,6 +6900,27 @@ struct AggrResult_t : CSphQueryResult
 		: m_iTag ( -1 )
 		, m_bLimited ( false )
 	{}
+
+	void ClampMatches ( int iLimit )
+	{
+		if ( m_dMatches.GetLength()<=iLimit )
+			return;
+
+		int nMatches = 0;
+		ARRAY_FOREACH ( i, m_dMatchCounts )
+		{
+			nMatches += m_dMatchCounts[i];
+
+			if ( iLimit < nMatches )
+			{
+				int iFrom = Max ( iLimit, nMatches-m_dMatchCounts[i] );
+				for ( int j=iFrom; j<nMatches; j++ )
+					m_dSchemas[i].FreeStringPtrs ( &m_dMatches[j] );
+			}
+		}
+
+		m_dMatches.Resize ( iLimit );
+	}
 };
 
 

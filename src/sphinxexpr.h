@@ -41,7 +41,6 @@ enum ESphAttr
 	SPH_ATTR_POLY2D		= 9,			///< vector of floats, 2D polygon (see POLY2D)
 	SPH_ATTR_STRINGPTR	= 10,			///< string (binary, in-memory, stored as pointer to the zero-terminated string)
 	SPH_ATTR_TOKENCOUNT	= 11,			///< field token count (only in indexer! integer at search time)
-	SPH_ATTR_FACTORS	= 12,			///< packed search factors (binary, in-memory, pooled)
 
 	SPH_ATTR_UINT32SET	= 0x40000001UL,	///< MVA, set of unsigned 32-bit integers
 	SPH_ATTR_INT64SET	= 0x40000002UL,	///< MVA, set of signed 64-bit integers
@@ -49,6 +48,7 @@ enum ESphAttr
 	// these types are runtime only
 	// used as intermediate types in the expression engine
 	SPH_ATTR_CONSTHASH	= 1000
+	SPH_ATTR_FACTORS	= 1001,			///< packed search factors (binary, in-memory, pooled)
 };
 
 /// column evaluation stage

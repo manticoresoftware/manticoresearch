@@ -6027,6 +6027,7 @@ void CSphSchema::AdoptPtrAttrs ( const CSphSchema & tSrc )
 				PtrAttr_t & tPtrAttr = m_dPtrAttrs.Add();
 				tPtrAttr.m_iOffset = m_dAttrs[iAttr].m_tLocator.m_iBitOffset / ROWITEM_BITS;
 				tPtrAttr.m_sName = m_dAttrs[iAttr].m_sName;
+				break;
 			}
 }
 
@@ -6069,21 +6070,21 @@ void CSphSchema::FreeStringPtrs ( CSphMatch * pMatch, int iUpBound ) const
 	if ( !pMatch->m_pDynamic )
 		return;
 
-	if ( m_dPtrAttrs.GetLength()==0 )
-		return;
-
-	CSphString sStr;
-	if ( iUpBound<0 )
+	if ( m_dPtrAttrs.GetLength() )
 	{
-		ARRAY_FOREACH ( i, m_dPtrAttrs )
-			sStr.Adopt ( (char**) (pMatch->m_pDynamic+m_dPtrAttrs[i].m_iOffset));
-	} else
-	{
-		ARRAY_FOREACH ( i, m_dPtrAttrs )
-			if ( m_dPtrAttrs[i].m_iOffset < iUpBound )
+		CSphString sStr;
+		if ( iUpBound<0 )
+		{
+			ARRAY_FOREACH ( i, m_dPtrAttrs )
 				sStr.Adopt ( (char**) (pMatch->m_pDynamic+m_dPtrAttrs[i].m_iOffset));
-			else
-				break;
+		} else
+		{
+			ARRAY_FOREACH ( i, m_dPtrAttrs )
+				if ( m_dPtrAttrs[i].m_iOffset < iUpBound )
+					sStr.Adopt ( (char**) (pMatch->m_pDynamic+m_dPtrAttrs[i].m_iOffset));
+				else
+					break;
+		}
 	}
 
 	ARRAY_FOREACH ( i, m_dAttrs )

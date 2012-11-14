@@ -6901,21 +6901,29 @@ struct AggrResult_t : CSphQueryResult
 		, m_bLimited ( false )
 	{}
 
-	void ClampMatches ( int iLimit )
+	void ClampMatches ( int iLimit, bool bCommonSchema )
 	{
 		if ( m_dMatches.GetLength()<=iLimit )
 			return;
 
-		int nMatches = 0;
-		ARRAY_FOREACH ( i, m_dMatchCounts )
+		if ( bCommonSchema )
 		{
-			nMatches += m_dMatchCounts[i];
-
-			if ( iLimit < nMatches )
+			for ( int i = iLimit; i < m_dMatches.GetLength(); i++ )
+				m_tSchema.FreeStringPtrs ( &m_dMatches[i] );
+		}
+		else
+		{
+			int nMatches = 0;
+			ARRAY_FOREACH ( i, m_dMatchCounts )
 			{
-				int iFrom = Max ( iLimit, nMatches-m_dMatchCounts[i] );
-				for ( int j=iFrom; j<nMatches; j++ )
-					m_dSchemas[i].FreeStringPtrs ( &m_dMatches[j] );
+				nMatches += m_dMatchCounts[i];
+
+				if ( iLimit < nMatches )
+				{
+					int iFrom = Max ( iLimit, nMatches-m_dMatchCounts[i] );
+					for ( int j=iFrom; j<nMatches; j++ )
+						m_dSchemas[i].FreeStringPtrs ( &m_dMatches[j] );
+				}
 			}
 		}
 
@@ -7358,6 +7366,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, bool bHadLoca
 	bool bAllEqual = true;
 	bool bAgent = tQuery.m_bAgent;
 	bool bUsualApi = !( bAgent || bFromSphinxql );
+	bool bRemapped = false;
 
 	for ( int i=1; i<tRes.m_dSchemas.GetLength(); i++ )
 	{
@@ -7575,7 +7584,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, bool bHadLoca
 				iSetStart = iSetEnd;
 				tRes.m_dMatchCounts[iSet] = iOut - iOldOut;
 			}
-			tRes.ClampMatches ( iOut );
+			tRes.ClampMatches ( iOut, bAllEqual ); // false means no common schema; true == use common schema
 		}
 
 		// so we need to bring matches to the schema that the *sorter* wants
@@ -7615,6 +7624,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, bool bHadLoca
 		if ( !bAllEqual )
 			RemapResult ( &tRes.m_tSchema, &tRes );
 		RemapStrings ( pSorter, tRes );
+		bRemapped = true;
 
 		// do the sort work!
 		tRes.m_iTotalMatches -= KillAllDupes ( pSorter, tRes, tQuery );
@@ -7629,7 +7639,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, bool bHadLoca
 		if ( tQuery.m_iOffset>0 )
 			for ( int i=0; i<iLimited; i++ )
 				::Swap ( tRes.m_dMatches[i], tRes.m_dMatches[i+tQuery.m_iOffset] );
-		tRes.ClampMatches ( iLimited );
+		tRes.ClampMatches ( iLimited, bAllEqual );
 
 		// reorder (aka outer order)
 		ESphSortFunc eFunc;
@@ -7651,7 +7661,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, bool bHadLoca
 	if ( !tQuery.m_sOuterOrderBy.IsEmpty() )
 	{
 		if ( tQuery.m_iOuterLimit>0 && tQuery.m_iOuterLimit<tRes.m_dMatches.GetLength() )
-			tRes.ClampMatches ( tQuery.m_iOuterLimit );
+			tRes.ClampMatches ( tQuery.m_iOuterLimit, bRemapped || bAllEqual );
 		tRes.m_bLimited = true;
 	}
 

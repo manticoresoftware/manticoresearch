@@ -15,6 +15,7 @@
 
 #include "sphinxfilter.h"
 #include "sphinxint.h"
+#include "sphinxjson.h"
 
 #if USE_WINDOWS
 #pragma warning(disable:4250) // inheritance via dominance is our intent
@@ -672,6 +673,12 @@ struct Filter_And: public ISphFilter
 			m_dFilters[i]->SetMVAStorage ( pMva );
 	}
 
+	virtual void SetStringStorage ( const BYTE * pStrings )
+	{
+		ARRAY_FOREACH ( i, m_dFilters )
+			m_dFilters[i]->SetStringStorage ( pStrings );
+	}
+
 	virtual ISphFilter * Optimize()
 	{
 		if ( m_dFilters.GetLength()==2 )
@@ -725,6 +732,11 @@ struct Filter_Not: public ISphFilter
 	virtual void SetMVAStorage ( const DWORD * pMva )
 	{
 		m_pFilter->SetMVAStorage ( pMva );
+	}
+
+	virtual void SetStringStorage ( const BYTE * pStrings )
+	{
+		m_pFilter->SetStringStorage ( pStrings );
 	}
 };
 
@@ -863,12 +875,163 @@ static ISphFilter * CreateFilter ( ESphAttr eAttrType, ESphFilter eFilterType, i
 	}
 }
 
-ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const CSphSchema & tSchema,
-	const DWORD * pMvaPool, CSphString & sError )
+//////////////////////////////////////////////////////////////////////////
+// JSON STUFF
+//////////////////////////////////////////////////////////////////////////
+
+/// i can not seem to handle multiple inheritance well
+template<typename BASE>
+class JsonFilter_c : public BASE
+{
+protected:
+	CSphAttrLocator		m_tLoc;
+	const BYTE *		m_pStrings;
+	JsonKey_t			m_tKey;
+
+public:
+	JsonFilter_c ( const CSphAttrLocator & tLoc, const char * pInCol )
+		: m_tLoc ( tLoc )
+		, m_pStrings ( NULL )
+		, m_tKey ( pInCol )
+	{}
+
+	virtual void SetStringStorage ( const BYTE * pStrings )
+	{
+		m_pStrings = pStrings;
+	}
+
+	ESphJsonType GetKey ( const BYTE ** ppKey, const CSphMatch & tMatch ) const
+	{
+		assert ( ppKey );
+		if ( !m_pStrings )
+			return JSON_EOF;
+		SphAttr_t uOff = tMatch.GetAttr ( m_tLoc );
+		if ( !uOff )
+			return JSON_EOF;
+		const BYTE * pData = m_pStrings + uOff;
+		sphUnpackStr ( pData, &pData ); // FIXME! maybe use the returned length for an extra check
+		return sphJsonFindKey ( ppKey, pData, m_tKey );
+	}
+};
+
+
+class JsonFilterValues_c : public JsonFilter_c<IFilter_Values>
+{
+public:
+	JsonFilterValues_c ( const CSphAttrLocator & tLoc, const char * pInCol )
+		: JsonFilter_c<IFilter_Values> ( tLoc, pInCol )
+	{}
+
+	virtual bool Eval ( const CSphMatch & tMatch ) const
+	{
+		const BYTE * pValue;
+		ESphJsonType eRes = GetKey ( &pValue, tMatch );
+		switch ( eRes )
+		{
+			case JSON_INT32:
+				return EvalValues ( (DWORD)sphJsonLoadInt ( &pValue ) );
+			case JSON_INT64:
+				return EvalValues ( sphJsonLoadBigint ( &pValue ) );
+			default:
+				return false;
+		}
+	}
+};
+
+
+template < bool HAS_EQUALS >
+class JsonFilterRange_c : public JsonFilter_c<IFilter_Range>
+{
+public:
+	JsonFilterRange_c ( const CSphAttrLocator & tLoc, const char * pInCol )
+		: JsonFilter_c<IFilter_Range> ( tLoc, pInCol )
+	{}
+
+	virtual bool Eval ( const CSphMatch & tMatch ) const
+	{
+		const BYTE * pValue;
+		ESphJsonType eRes = GetKey ( &pValue, tMatch );
+		switch ( eRes )
+		{
+			case JSON_INT32:
+				return EvalRange<HAS_EQUALS> ( sphJsonLoadInt ( &pValue ), m_iMinValue, m_iMaxValue );
+			case JSON_INT64:
+				return EvalRange<HAS_EQUALS> ( sphJsonLoadBigint ( &pValue ), m_iMinValue, m_iMaxValue );
+			default:
+				return false;
+		}
+	}
+};
+
+
+class JsonFilterString_c : public JsonFilter_c<ISphFilter>
+{
+protected:
+	CSphString	m_sRef;
+	int			m_iRef;
+
+public:
+	JsonFilterString_c ( const CSphAttrLocator & tLoc, const char * pInCol )
+		: JsonFilter_c<ISphFilter> ( tLoc, pInCol )
+	{}
+
+	virtual void SetRefString ( const CSphString & sRef )
+	{
+		m_sRef = sRef;
+		m_iRef = sRef.Length();
+	}
+
+	virtual bool Eval ( const CSphMatch & tMatch ) const
+	{
+		const BYTE * pValue;
+		ESphJsonType eRes = GetKey ( &pValue, tMatch );
+		switch ( eRes )
+		{
+			case JSON_STRING:
+			{
+				// !COMMIT support collations
+				int iLen = sphJsonUnpackInt ( &pValue );
+				return iLen==m_iRef && iLen && memcmp ( pValue, m_sRef.cstr(), iLen )==0;
+			}
+			default:
+				return false;
+		}
+	}
+};
+
+
+static ISphFilter * CreateFilterJson ( const CSphColumnInfo * pAttr, ESphFilter eType, const char * pInCol, bool bRangeEq, CSphString & sError )
+{
+	assert ( pAttr );
+	assert ( pAttr->m_eAttrType==SPH_ATTR_JSON );
+
+	switch ( eType )
+	{
+		case SPH_FILTER_VALUES:
+			return new JsonFilterValues_c ( pAttr->m_tLocator, pInCol );
+		case SPH_FILTER_RANGE:
+			if ( bRangeEq )
+				return new JsonFilterRange_c<true> ( pAttr->m_tLocator, pInCol );
+			else
+				return new JsonFilterRange_c<false> ( pAttr->m_tLocator, pInCol );
+		case SPH_FILTER_STRING:
+			return new JsonFilterString_c ( pAttr->m_tLocator, pInCol );
+		default:
+			sError = "this filter type on JSON subfields is not implemented yet";
+			return NULL;
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+// PUBLIC FACING INTERFACE
+//////////////////////////////////////////////////////////////////////////
+
+ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const CSphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError )
 {
 	ISphFilter * pFilter = 0;
+	const CSphColumnInfo * pAttr = NULL;
 
-	// try to create filter on special attribute
+	// try to create a filter on a special attribute
 	const CSphString & sAttrName = tSettings.m_sAttrName;
 	if ( sAttrName.Begins("@") )
 	{
@@ -881,28 +1044,53 @@ ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const CSphS
 		pFilter = CreateSpecialFilter ( sAttrName, tSettings.m_eType, tSettings.m_bHasEqual );
 	}
 
-	// fetch column info
-	const CSphColumnInfo * pAttr = NULL;
-	const int iAttr = tSchema.GetAttrIndex ( sAttrName.cstr() );
-	if ( iAttr<0 )
+	// try to create a filter on a JSON attribute
+	const char * pDot = strchr ( sAttrName.cstr(), '.' );
+	if ( pDot )
 	{
-		if ( !pFilter ) // might be special
+		CSphString sCol = sAttrName;
+		char * pCol = const_cast<char*> ( sAttrName.cstr() );
+		char * pInCol = pCol + ( pDot - sAttrName.cstr() );
+		*pInCol++ = '\0'; // zero out that dot
+
+		const int iAttr = tSchema.GetAttrIndex ( pCol );
+		if ( iAttr<0 )
+		{
+			sError.SetSprintf ( "no such attribute '%s'", pCol );
+			return NULL;
+		}
+
+		pAttr = &tSchema.GetAttr(iAttr);
+		if ( pAttr->m_eAttrType!=SPH_ATTR_JSON )
+		{
+			sError.SetSprintf ( "attribute '%s' does not have subfields (must be sql_attr_json)", pCol );
+			return NULL;
+		}
+
+		pFilter = CreateFilterJson ( pAttr, tSettings.m_eType, pInCol, tSettings.m_bHasEqual, sError );
+		if ( !pFilter )
+			return NULL;
+	}
+
+	// try to lookup a regular attribute
+	if ( !pFilter )
+	{
+		const int iAttr = tSchema.GetAttrIndex ( sAttrName.cstr() );
+		if ( iAttr<0 )
 		{
 			sError.SetSprintf ( "no such filter attribute '%s'", sAttrName.cstr() );
 			return NULL; // no such attribute
-		}
-	} else
-	{
-		assert ( !pFilter );
-
-		pAttr = &tSchema.GetAttr(iAttr);
-		// HAVING is not implemented yet
-		if ( pAttr->m_eAggrFunc!=SPH_AGGR_NONE )
+		} else
 		{
-			sError.SetSprintf ( "unsupported filter '%s' on aggregate column", sAttrName.cstr() );
-			return NULL;
+			pAttr = &tSchema.GetAttr(iAttr);
+			if ( pAttr->m_eAggrFunc!=SPH_AGGR_NONE )
+			{
+				// HAVING is not implemented yet
+				sError.SetSprintf ( "unsupported filter '%s' on aggregate column", sAttrName.cstr() );
+				return NULL;
+			}
+			pFilter = CreateFilter ( pAttr->m_eAttrType, tSettings.m_eType, tSettings.GetNumValues(), pAttr->m_tLocator, sError, tSettings.m_bHasEqual );
 		}
-		pFilter = CreateFilter ( pAttr->m_eAttrType, tSettings.m_eType, tSettings.GetNumValues(), pAttr->m_tLocator, sError, tSettings.m_bHasEqual );
 	}
 
 	// fill filter's properties
@@ -911,25 +1099,23 @@ ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const CSphS
 		if ( pAttr )
 			pFilter->SetLocator ( pAttr->m_tLocator );
 
+		pFilter->SetMVAStorage ( pMvaPool );
+		pFilter->SetStringStorage ( pStrings );
+
 		pFilter->SetRange ( tSettings.m_iMinValue, tSettings.m_iMaxValue );
 		if ( tSettings.m_eType==SPH_FILTER_FLOATRANGE )
-		{
 			pFilter->SetRangeFloat ( tSettings.m_fMinValue, tSettings.m_fMaxValue );
-		} else
-		{
+		else
 			pFilter->SetRangeFloat ( (float)tSettings.m_iMinValue, (float)tSettings.m_iMaxValue );
-		}
-		pFilter->SetMVAStorage ( pMvaPool );
 
+		pFilter->SetRefString ( tSettings.m_sRefString );
 		if ( tSettings.GetNumValues() > 0 )
 		{
 			pFilter->SetValues ( tSettings.GetValueArray(), tSettings.GetNumValues() );
-
 #ifndef NDEBUG
 			// check that the values are actually sorted
 			const SphAttr_t * pValues = tSettings.GetValueArray();
 			int iValues = tSettings.GetNumValues ();
-
 			for ( int i=1; i<iValues; i++ )
 				assert ( pValues[i]>=pValues[i-1] );
 #endif

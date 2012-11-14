@@ -366,6 +366,16 @@ where_item:
 			if ( !pParser->AddFloatRangeFilter ( $1.m_sValue, -FLT_MAX, $3.m_fValue, true ) )
 				YYERROR;
 		}
+	| expr_ident '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddStringFilter ( $1.m_sValue, $3.m_sValue, false ) )
+				YYERROR;
+		}
+	| expr_ident TOK_NE TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddStringFilter ( $1.m_sValue, $3.m_sValue, true ) )
+				YYERROR;
+		}
 	;
 
 expr_ident:

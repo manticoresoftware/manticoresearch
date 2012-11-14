@@ -19,6 +19,7 @@
 #include "sphinxrt.h"
 #include "sphinxint.h"
 #include "sphinxquery.h"
+#include "sphinxjson.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -9754,8 +9755,10 @@ public:
 	bool			AddUservarFilter ( const CSphString & sCol, const CSphString & sVar, bool bExclude );
 	void			SetGroupBy ( const CSphString & sGroupBy );
 	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd );
-	CSphFilterSettings * AddFilter ( const CSphString & sCol, ESphFilter eType );
-	inline CSphFilterSettings * AddValuesFilter ( const SqlNode_t& sCol )
+	CSphFilterSettings *	AddFilter ( const CSphString & sCol, ESphFilter eType );
+	bool			AddStringFilter ( const CSphString & sCol, const CSphString & sVal, bool bExclude );
+
+	CSphFilterSettings * AddValuesFilter ( const SqlNode_t& sCol )
 	{
 		return AddFilter ( sCol.m_sValue, SPH_FILTER_VALUES );
 	}
@@ -10357,6 +10360,18 @@ bool SqlParser_c::AddUservarFilter ( const CSphString & sCol, const CSphString &
 	pFilter->SetExternalValues ( pVar->m_pVal->Begin(), pVar->m_pVal->GetLength() );
 	return true;
 }
+
+
+bool SqlParser_c::AddStringFilter ( const CSphString & sCol, const CSphString & sVal, bool bExclude )
+{
+	CSphFilterSettings * pFilter = AddFilter ( sCol, SPH_FILTER_STRING );
+	if ( !pFilter )
+		return false;
+	pFilter->m_sRefString = sVal;
+	pFilter->m_bExclude = bExclude;
+	return true;
+}
+
 
 bool SqlParser_c::IsGoodSyntax ()
 {
@@ -13884,6 +13899,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 				}
 
 			case SPH_ATTR_STRING:
+			case SPH_ATTR_JSON:
 				{
 					const BYTE * pStrings = tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pStrings;
 
@@ -13898,6 +13914,14 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 						iLen = sphUnpackStr ( pStrings+uOffset, &pStr );
 					}
 
+					CSphVector<BYTE> dJson;
+					if ( eAttrType==SPH_ATTR_JSON )
+					{
+						sphJsonFormat ( dJson, pStr );
+						pStr = dJson.Begin();
+						iLen = dJson.GetLength();
+					}
+
 					// send length
 					dRows.Reserve ( iLen+4 );
 					char * pOutStr = (char*)MysqlPack ( dRows.Get(), iLen );
@@ -13909,6 +13933,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 					dRows.IncPtr ( pOutStr-dRows.Get()+iLen );
 					break;
 				}
+
 			case SPH_ATTR_STRINGPTR:
 				{
 					int iLen = 0;

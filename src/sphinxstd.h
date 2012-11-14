@@ -293,6 +293,12 @@ inline DWORD sphF2DW ( float f )	{ union { float f; DWORD d; } u; u.f = f; retur
 /// dword vs float conversion
 inline float sphDW2F ( DWORD d )	{ union { float f; DWORD d; } u; u.d = d; return u.f; }
 
+/// double to bigint conversion
+inline uint64_t sphD2QW ( double f )	{ union { double f; uint64_t d; } u; u.f = f; return u.d; }
+
+/// bigint to double conversion
+inline double sphQW2D ( uint64_t d )	{ union { double f; uint64_t d; } u; u.d = d; return u.f; }
+
 /// microsecond precision timestamp
 /// current UNIX timestamp in seconds multiplied by 1000000, plus microseconds since the beginning of current second
 int64_t		sphMicroTimer ();

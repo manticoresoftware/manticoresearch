@@ -293,8 +293,8 @@ public:
 
 	void						BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema, int iIndexWeight );
 	bool						SetupCalc ( CSphQueryResult * pResult, const CSphSchema & tInSchema, const CSphSchema & tSchema, const DWORD * pMvaPool );
+	bool						CreateFilters ( bool bFullscan, const CSphVector<CSphFilterSettings> * pdFilters, const CSphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError );
 	void						SetupExtraData ( ISphExtra * pData );
-	bool						CreateFilters ( bool bFullscan, const CSphVector<CSphFilterSettings> * pdFilters, const CSphSchema & tSchema, const DWORD * pMvaPool, CSphString & sError );
 	bool						SetupOverrides ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema );
 
 	void						CalcFilter ( CSphMatch & tMatch ) const;
@@ -1005,6 +1005,7 @@ inline const char * sphTypeName ( ESphAttr eType )
 		case SPH_ATTR_FLOAT:		return "float";
 		case SPH_ATTR_BIGINT:		return "bigint";
 		case SPH_ATTR_STRING:		return "string";
+		case SPH_ATTR_JSON:			return "json";
 		case SPH_ATTR_WORDCOUNT:	return "wordcount";
 		case SPH_ATTR_STRINGPTR:	return "stringptr";
 		case SPH_ATTR_UINT32SET:	return "mva";
@@ -1026,6 +1027,7 @@ inline const char * sphTypeDirective ( ESphAttr eType )
 		case SPH_ATTR_BIGINT:		return "sql_attr_bigint";
 		case SPH_ATTR_STRING:
 		case SPH_ATTR_STRINGPTR:	return "sql_attr_string";
+		case SPH_ATTR_JSON:			return "sql_attr_json";
 		case SPH_ATTR_WORDCOUNT:	return "sql_attr_wordcount";
 		case SPH_ATTR_UINT32SET:	return "sql_attr_multi";
 		case SPH_ATTR_INT64SET:		return "sql_attr_multi bigint";
@@ -1036,8 +1038,9 @@ inline const char * sphTypeDirective ( ESphAttr eType )
 inline void SqlUnescape ( CSphString & sRes, const char * sEscaped, int iLen )
 {
 	assert ( iLen>=2 );
-	assert ( sEscaped[0]=='\'' );
-	assert ( sEscaped[iLen-1]=='\'' );
+	assert (
+		( sEscaped[0]=='\'' && sEscaped[iLen-1]=='\'' ) ||
+		( sEscaped[0]=='"' && sEscaped[iLen-1]=='"' ) );
 
 	// skip heading and trailing quotes
 	const char * s = sEscaped+1;

@@ -329,8 +329,9 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "sql_field_str2wordcount",	KEY_LIST, NULL },
 	{ "sql_file_field",			KEY_LIST, NULL },
 	{ "sql_column_buffers",		0, NULL },
-	{ "hook_connect",		0, NULL },
-	{ "hook_query_range",			0, NULL },
+	{ "sql_attr_json",			KEY_LIST, NULL },
+	{ "hook_connect",			0, NULL },
+	{ "hook_query_range",		0, NULL },
 	{ "hook_post_index",		0, NULL },
 	{ NULL,						0, NULL }
 };
@@ -418,6 +419,8 @@ static KeyDesc_t g_dKeysIndexer[] =
 	{ "max_file_field_buffer",	0, NULL },
 	{ "write_buffer",			0, NULL },
 	{ "on_file_field_error",	0, NULL },
+	{ "on_json_attr_error",		0, NULL },
+	{ "json_autoconv_numbers",	0, NULL },
 	{ NULL,						0, NULL }
 };
 

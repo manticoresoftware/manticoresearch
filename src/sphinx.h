@@ -2228,7 +2228,8 @@ enum ESphFilter
 {
 	SPH_FILTER_VALUES		= 0,	///< filter by integer values set
 	SPH_FILTER_RANGE		= 1,	///< filter by integer range
-	SPH_FILTER_FLOATRANGE	= 2		///< filter by float range
+	SPH_FILTER_FLOATRANGE	= 2,	///< filter by float range
+	SPH_FILTER_STRING		= 3		///< filter by string value
 };
 
 
@@ -2251,7 +2252,8 @@ public:
 		SphAttr_t		m_iMaxValue;	///< range max
 		float			m_fMaxValue;	///< range max
 	};
-	CSphVector<SphAttr_t>	m_dValues;		///< integer values set
+	CSphVector<SphAttr_t>	m_dValues;	///< integer values set
+	CSphString			m_sRefString;	///< reference string value
 
 public:
 						CSphFilterSettings ();
@@ -2982,6 +2984,11 @@ CSphIndex *			sphCreateIndexPhrase ( const char* szIndexName, const char * sFile
 
 /// tell libsphinx to be quiet or not (logs and loglevels to come later)
 void				sphSetQuiet ( bool bQuiet );
+
+/// set JSON attribute indexing options
+/// bStrict is whether to stop indexing on error, or just ignore the attribute value
+/// bAutoconvNumbers is whether to auto-convert eligible (!) strings to integers and floats, or keep them as strings
+void				sphSetJsonOptions ( bool bStrict, bool bAutoconvNumbers );
 
 /// parses sort clause, using a given schema
 /// fills eFunc and tState and optionally sError, returns result code

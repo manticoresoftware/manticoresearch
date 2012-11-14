@@ -21,6 +21,7 @@
 #include "sphinxfilter.h"
 #include "sphinxint.h"
 #include "sphinxsearch.h"
+#include "sphinxjson.h"
 
 #include <ctype.h>
 #include <fcntl.h>
@@ -175,6 +176,8 @@ static const int	MIN_READ_UNHINTED		= 1024;
 #define READ_NO_SIZE_HINT 0
 
 static bool					g_bSphQuiet					= false;
+static bool					g_bJsonStrict				= false;
+static bool					g_bJsonAutoconvNumbers		= false;
 
 static int					g_iReadBuffer				= DEFAULT_READ_BUFFER;
 static int					g_iReadUnhinted				= DEFAULT_READ_UNHINTED;
@@ -10759,6 +10762,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					dOrdinalAttrs.Add ( i );
 				break;
 			case SPH_ATTR_STRING:
+			case SPH_ATTR_JSON:
 				dStringAttrs.Add ( i );
 				break;
 			case SPH_ATTR_WORDCOUNT:
@@ -11213,7 +11217,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				}
 			}
 
-			// store strings
+			// store strings and JSON blobs
 			if ( pPrevDocinfo )
 			{
 				CSphRowitem * pPrevAttrs = DOCINFO2ATTRS ( pPrevDocinfo );
@@ -11248,7 +11252,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 						}
 					}
 				}
-
 			} else
 			{
 				ARRAY_FOREACH ( i, dStringAttrs )
@@ -11259,27 +11262,66 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					const char * sData = pSource->m_dStrAttrs[dStringAttrs[i]].cstr();
 					int iLen = sData ? strlen ( sData ) : 0;
 
-					if ( iLen )
+					// no data
+					if ( !iLen )
 					{
-						// calc offset, do sanity checks
-						SphOffset_t uOff = tStrWriter.GetPos();
-						if ( uint64_t(uOff)>>32 )
-						{
-							m_sLastError.SetSprintf ( "too many string attributes (current index format allows up to 4 GB)" );
-							return 0;
-						}
-						pSource->m_tDocInfo.SetAttr ( m_tSchema.GetAttr ( dStringAttrs[i] ).m_tLocator, DWORD(uOff) );
-
-						// pack length, emit it, emit data
-						BYTE dPackedLen[4];
-						int iLenLen = sphPackStrlen ( dPackedLen, iLen );
-						tStrWriter.PutBytes ( &dPackedLen, iLenLen );
-						tStrWriter.PutBytes ( sData, iLen );
-					} else
-					{
-						// no data
 						pSource->m_tDocInfo.SetAttr ( m_tSchema.GetAttr ( dStringAttrs[i] ).m_tLocator, 0 );
+						continue;
 					}
+
+					// handle JSON
+					CSphVector<BYTE> dBuf; // FIXME? optimize?
+					if ( m_tSchema.GetAttr(dStringAttrs[i]).m_eAttrType==SPH_ATTR_JSON ) // FIXME? optimize?
+					{
+						// WARNING, tricky bit
+						// flex lexer needs last two (!) bytes to be zeroes
+						// asciiz string supplies one, and we fill out the extra one
+						// and that works, because CSphString always allocates a small extra gap
+						char * pData = const_cast<char*>(sData);
+						pData[iLen+1] = '\0';
+
+						if ( !sphJsonParse ( dBuf, pData, g_bJsonAutoconvNumbers, m_sLastError ) )
+						{
+							m_sLastError.SetSprintf ( "document " DOCID_FMT ", attribute %s: JSON error: %s",
+								pSource->m_tDocInfo.m_iDocID, m_tSchema.GetAttr ( dStringAttrs[i] ).m_sName.cstr(),
+								m_sLastError.cstr() );
+
+							// bail?
+							if ( g_bJsonStrict )
+								return 0;
+
+							// warn and ignore
+							sphWarning ( "%s", m_sLastError.cstr() );
+							m_sLastError = "";
+							pSource->m_tDocInfo.SetAttr ( m_tSchema.GetAttr ( dStringAttrs[i] ).m_tLocator, 0 );
+							continue;
+						}
+						if ( !dBuf.GetLength() )
+						{
+							// empty SphinxBSON, need not save any data
+							pSource->m_tDocInfo.SetAttr ( m_tSchema.GetAttr ( dStringAttrs[i] ).m_tLocator, 0 );
+							continue;
+						}
+
+						// let's go save the newly built SphinxBSON blob
+						sData = (const char*)dBuf.Begin();
+						iLen = dBuf.GetLength();
+					}
+
+					// calc offset, do sanity checks
+					SphOffset_t uOff = tStrWriter.GetPos();
+					if ( uint64_t(uOff)>>32 )
+					{
+						m_sLastError.SetSprintf ( "too many string attributes (current index format allows up to 4 GB)" );
+						return 0;
+					}
+					pSource->m_tDocInfo.SetAttr ( m_tSchema.GetAttr ( dStringAttrs[i] ).m_tLocator, DWORD(uOff) );
+
+					// pack length, emit it, emit data
+					BYTE dPackedLen[4];
+					int iLenLen = sphPackStrlen ( dPackedLen, iLen );
+					tStrWriter.PutBytes ( &dPackedLen, iLenLen );
+					tStrWriter.PutBytes ( sData, iLen );
 				}
 			}
 
@@ -12488,13 +12530,13 @@ public:
 };
 
 static ISphFilter * CreateMergeFilters ( const CSphVector<CSphFilterSettings> & dSettings,
-	const CSphSchema & tSchema, const DWORD * pMvaPool )
+	const CSphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings )
 {
 	CSphString sError;
 	ISphFilter * pResult = NULL;
 	ARRAY_FOREACH ( i, dSettings )
 	{
-		ISphFilter * pFilter = sphCreateFilter ( dSettings[i], tSchema, pMvaPool, sError );
+		ISphFilter * pFilter = sphCreateFilter ( dSettings[i], tSchema, pMvaPool, pStrings, sError );
 		if ( pFilter )
 			pResult = sphJoinFilters ( pResult, pFilter );
 	}
@@ -12870,7 +12912,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSett
 	}
 
 	// create filters
-	CSphScopedPtr<ISphFilter> pFilter ( CreateMergeFilters ( dFilters, m_tSchema, GetMVAPool() ) );
+	CSphScopedPtr<ISphFilter> pFilter ( CreateMergeFilters ( dFilters, m_tSchema, GetMVAPool(), m_pStrings.GetWritePtr() ) );
 	DWORD nKillListSize = pSource->GetKillListSize ();
 	if ( nKillListSize )
 	{
@@ -12884,7 +12926,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSett
 		tKillListFilter.m_sAttrName = "@id";
 		tKillListFilter.SetExternalValues ( pKillList, nKillListSize );
 
-		ISphFilter * pKillListFilter = sphCreateFilter ( tKillListFilter, m_tSchema, GetMVAPool(), m_sLastError );
+		ISphFilter * pKillListFilter = sphCreateFilter ( tKillListFilter, m_tSchema, GetMVAPool(), m_pStrings.GetWritePtr(), m_sLastError );
 		pFilter = sphJoinFilters ( pFilter.LeakPtr(), pKillListFilter );
 	}
 
@@ -12949,7 +12991,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		const CSphColumnInfo & tInfo = tDstSchema.GetAttr(i);
 		if ( tInfo.m_eAttrType==SPH_ATTR_UINT32SET )
 			dMvaLocators.Add ( tInfo.m_tLocator );
-		if ( tInfo.m_eAttrType==SPH_ATTR_STRING )
+		if ( tInfo.m_eAttrType==SPH_ATTR_STRING || tInfo.m_eAttrType==SPH_ATTR_JSON )
 			dStringLocators.Add ( tInfo.m_tLocator );
 	}
 	for ( int i=0; i<tDstSchema.GetAttrsCount(); i++ )
@@ -13107,7 +13149,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		tKLF.m_iMaxValue = dPhantomKiller.Last();
 		tKLF.m_sAttrName = "@id";
 		tKLF.SetExternalValues ( &dPhantomKiller[0], dPhantomKiller.GetLength() );
-		ISphFilter * pSpaFilter = sphCreateFilter ( tKLF, pDstIndex->m_tSchema, pDstIndex->GetMVAPool(), sError );
+		ISphFilter * pSpaFilter = sphCreateFilter ( tKLF, pDstIndex->m_tSchema, pDstIndex->GetMVAPool(), pDstIndex->m_pStrings.GetWritePtr(), sError );
 		pFilter = sphJoinFilters ( pFilter, pSpaFilter );
 	}
 
@@ -13591,6 +13633,12 @@ void CSphQueryContext::SetStringPool ( const BYTE * pStrings )
 
 	ARRAY_FOREACH ( i, m_dCalcFinal )
 		m_dCalcFinal[i].m_pExpr->SetStringPool ( pStrings );
+
+	if ( m_pFilter )
+		m_pFilter->SetStringStorage ( pStrings );
+
+	if ( m_pWeightFilter )
+		m_pWeightFilter->SetStringStorage ( pStrings );
 }
 
 
@@ -13722,9 +13770,9 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	tCtx.SetStringPool ( m_pStrings.GetWritePtr() );
 
 	// setup filters
-	if ( !tCtx.CreateFilters ( true, &pQuery->m_dFilters, pResult->m_tSchema, GetMVAPool(), pResult->m_sError ) )
+	if ( !tCtx.CreateFilters ( true, &pQuery->m_dFilters, pResult->m_tSchema, GetMVAPool(), m_pStrings.GetWritePtr(), pResult->m_sError ) )
 		return false;
-	if ( !tCtx.CreateFilters ( true, pExtraFilters, pResult->m_tSchema, GetMVAPool(), pResult->m_sError ) )
+	if ( !tCtx.CreateFilters ( true, pExtraFilters, pResult->m_tSchema, GetMVAPool(), m_pStrings.GetWritePtr(), pResult->m_sError ) )
 		return false;
 
 	// check if we can early reject the whole index
@@ -15669,7 +15717,7 @@ static bool IsWeightColumn ( const CSphString & sAttr, const CSphSchema & tSchem
 
 bool CSphQueryContext::CreateFilters ( bool bFullscan,
 	const CSphVector<CSphFilterSettings> * pdFilters, const CSphSchema & tSchema,
-	const DWORD * pMvaPool, CSphString & sError )
+	const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError )
 {
 	if ( !pdFilters )
 		return true;
@@ -15684,7 +15732,7 @@ bool CSphQueryContext::CreateFilters ( bool bFullscan,
 		if ( bFullscan && bWeight )
 			continue; // @weight is not avaiable in fullscan mode
 
-		ISphFilter * pFilter = sphCreateFilter ( tFilter, tSchema, pMvaPool, sError );
+		ISphFilter * pFilter = sphCreateFilter ( tFilter, tSchema, pMvaPool, pStrings, sError );
 		if ( !pFilter )
 			return false;
 
@@ -16805,9 +16853,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	assert ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN || !m_pDocinfo.IsEmpty() ); // check that docinfo is preloaded
 
 	// setup filters
-	if ( !tCtx.CreateFilters ( pQuery->m_sQuery.IsEmpty(), &pQuery->m_dFilters, pResult->m_tSchema, GetMVAPool(), pResult->m_sError ) )
+	if ( !tCtx.CreateFilters ( pQuery->m_sQuery.IsEmpty(), &pQuery->m_dFilters, pResult->m_tSchema, GetMVAPool(), m_pStrings.GetWritePtr(), pResult->m_sError ) )
 		return false;
-	if ( !tCtx.CreateFilters ( pQuery->m_sQuery.IsEmpty(), pExtraFilters, pResult->m_tSchema, GetMVAPool(), pResult->m_sError ) )
+	if ( !tCtx.CreateFilters ( pQuery->m_sQuery.IsEmpty(), pExtraFilters, pResult->m_tSchema, GetMVAPool(), m_pStrings.GetWritePtr(), pResult->m_sError ) )
 		return false;
 
 	// check if we can early reject the whole index
@@ -17539,7 +17587,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				dMvaItems.Add ( tAttr.m_tLocator.m_iBitOffset/ROWITEM_BITS );
 			} else if ( tAttr.m_eAttrType==SPH_ATTR_FLOAT )
 				dFloatItems.Add	( tAttr.m_tLocator );
-			else if ( tAttr.m_eAttrType==SPH_ATTR_STRING )
+			else if ( tAttr.m_eAttrType==SPH_ATTR_STRING || tAttr.m_eAttrType==SPH_ATTR_JSON )
 				dStrItems.Add ( tAttr.m_tLocator );
 		}
 		int iMva64 = dMvaItems.GetLength();
@@ -24128,6 +24176,7 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 		{
 			case SPH_ATTR_ORDINAL:
 			case SPH_ATTR_STRING:
+			case SPH_ATTR_JSON:
 			case SPH_ATTR_WORDCOUNT:
 				// memorize string, fixup NULLs
 				m_dStrAttrs[i] = SqlColumn ( tAttr.m_iIndex );
@@ -25926,7 +25975,9 @@ bool CSphSource_XMLPipe2::Setup ( FILE * pPipe, const CSphConfigSection & hSourc
 	ConfigureAttrs ( hSource("xmlpipe_attr_multi"),			SPH_ATTR_UINT32SET );
 	ConfigureAttrs ( hSource("xmlpipe_attr_multi_64"),		SPH_ATTR_INT64SET );
 	ConfigureAttrs ( hSource("xmlpipe_attr_string"),		SPH_ATTR_STRING );
+	ConfigureAttrs ( hSource("xmlpipe_attr_json"),			SPH_ATTR_JSON );
 	ConfigureAttrs ( hSource("xmlpipe_attr_wordcount"),		SPH_ATTR_WORDCOUNT );
+
 	ConfigureAttrs ( hSource("xmlpipe_field_string"),		SPH_ATTR_STRING );
 	ConfigureAttrs ( hSource("xmlpipe_field_wordcount"),	SPH_ATTR_WORDCOUNT );
 
@@ -26262,6 +26313,7 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 			{
 				case SPH_ATTR_ORDINAL:
 				case SPH_ATTR_STRING:
+				case SPH_ATTR_JSON:
 				case SPH_ATTR_WORDCOUNT:
 					m_dStrAttrs[i] = sAttrValue.cstr ();
 					if ( !m_dStrAttrs[i].cstr() )
@@ -26378,6 +26430,8 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 				bIsAttr = true;
 				if ( !strcmp ( dAttrs[1], "string" ) )
 					Info.m_eAttrType = SPH_ATTR_STRING;
+				else if ( !strcmp ( dAttrs[1], "json" ) )
+					Info.m_eAttrType = SPH_ATTR_JSON;
 				else if ( !strcmp ( dAttrs[1], "wordcount" ) )
 					Info.m_eAttrType = SPH_ATTR_WORDCOUNT;
 
@@ -26430,6 +26484,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 				else if ( !strcmp ( szType, "float" ) )			Info.m_eAttrType = SPH_ATTR_FLOAT;
 				else if ( !strcmp ( szType, "bigint" ) )		Info.m_eAttrType = SPH_ATTR_BIGINT;
 				else if ( !strcmp ( szType, "string" ) )		Info.m_eAttrType = SPH_ATTR_STRING;
+				else if ( !strcmp ( szType, "json" ) )			Info.m_eAttrType = SPH_ATTR_JSON;
 				else if ( !strcmp ( szType, "wordcount" ) )		Info.m_eAttrType = SPH_ATTR_WORDCOUNT;
 				else if ( !strcmp ( szType, "multi" ) )
 				{
@@ -27265,6 +27320,13 @@ void CSphSource_MSSQL::OdbcPostConnect ()
 void sphSetQuiet ( bool bQuiet )
 {
 	g_bSphQuiet = bQuiet;
+}
+
+
+void sphSetJsonOptions ( bool bStrict, bool bAutoconvNumbers )
+{
+	g_bJsonStrict = bStrict;
+	g_bJsonAutoconvNumbers = bAutoconvNumbers;
 }
 
 

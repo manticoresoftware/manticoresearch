@@ -1557,10 +1557,13 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, int iRow
 	for ( int i=0; i<pSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tColumn = pSchema.GetAttr(i);
-		if ( tColumn.m_eAttrType==SPH_ATTR_STRING )
+		if ( tColumn.m_eAttrType==SPH_ATTR_STRING || tColumn.m_eAttrType==SPH_ATTR_JSON )
 		{
 			const char * pStr = ppStr ? ppStr[iAttr++] : NULL;
 			const int iLen = pStr ? strlen ( pStr ) : 0;
+
+			// FIXME! might need to add some json conversion magic here,
+			// but how would be go about reporting errors?
 
 			if ( iLen )
 			{
@@ -2187,6 +2190,7 @@ public:
 		: m_tDst ( tDst )
 	{
 		ExtractLocators ( tSchema, SPH_ATTR_STRING, m_dLocators );
+		ExtractLocators ( tSchema, SPH_ATTR_JSON, m_dLocators );
 	}
 	const CSphVector<CSphAttrLocator> & GetLocators () const { return m_dLocators; }
 	void SetDocid ( SphDocID_t ) {}
@@ -2218,6 +2222,7 @@ public:
 		: m_dDst ( dDst )
 	{
 		ExtractLocators ( tSchema, SPH_ATTR_STRING, m_dLocators );
+		ExtractLocators ( tSchema, SPH_ATTR_JSON, m_dLocators );
 	}
 	const CSphVector<CSphAttrLocator> & GetLocators () const { return m_dLocators; }
 	void SetDocid ( SphDocID_t ) {}
@@ -5829,7 +5834,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		// setup filters
 		// FIXME! setup filters MVA pool
 		bool bFullscan = ( pQuery->m_eMode==SPH_MATCH_FULLSCAN || pQuery->m_sQuery.IsEmpty() );
-		if ( !tCtx.CreateFilters ( bFullscan, &pQuery->m_dFilters, pResult->m_tSchema, NULL, pResult->m_sError ) )
+		if ( !tCtx.CreateFilters ( bFullscan, &pQuery->m_dFilters, pResult->m_tSchema, NULL, NULL, pResult->m_sError ) )
 		{
 			m_tRwlock.Unlock ();
 			return false;
@@ -6744,7 +6749,7 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 			tFilterSettings.m_iMaxValue = dKlist.Last();
 			tFilterSettings.m_sAttrName = "@id";
 			tFilterSettings.SetExternalValues ( dKlist.Begin(), dKlist.GetLength() );
-			pFilter = sphCreateFilter ( tFilterSettings, tSchema, NULL, sError );
+			pFilter = sphCreateFilter ( tFilterSettings, tSchema, NULL, NULL, sError );
 		}
 
 		// merge data to disk ( data is constant during that phase )
@@ -8098,11 +8103,9 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema * pSche
 	}
 
 	// attrs
-	const int iNumTypes = 7;
-	const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_float",
-		"rt_attr_timestamp", "rt_attr_string", "rt_attr_multi", "rt_attr_multi_64" };
-	const ESphAttr iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_FLOAT,
-		SPH_ATTR_TIMESTAMP, SPH_ATTR_STRING, SPH_ATTR_UINT32SET, SPH_ATTR_INT64SET };
+	const int iNumTypes = 8;
+	const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_float", "rt_attr_timestamp", "rt_attr_string", "rt_attr_multi", "rt_attr_multi_64", "rt_attr_json" };
+	const ESphAttr iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_FLOAT, SPH_ATTR_TIMESTAMP, SPH_ATTR_STRING, SPH_ATTR_UINT32SET, SPH_ATTR_INT64SET, SPH_ATTR_JSON };
 
 	for ( int iType=0; iType<iNumTypes; iType++ )
 	{

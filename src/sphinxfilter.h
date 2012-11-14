@@ -25,6 +25,8 @@ struct ISphFilter
 	virtual void SetRangeFloat ( float, float ) {}
 	virtual void SetValues ( const SphAttr_t *, int ) {}
 	virtual void SetMVAStorage ( const DWORD * ) {}
+	virtual void SetStringStorage ( const BYTE * ) {}
+	virtual void SetRefString ( const CSphString & ) {}
 
 	virtual ~ISphFilter () {}
 
@@ -54,7 +56,7 @@ protected :
 	bool m_bUsesAttrs;
 };
 
-ISphFilter * sphCreateFilter ( const CSphFilterSettings &, const CSphSchema &, const DWORD * pMva, CSphString & sError );
+ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const CSphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError );
 ISphFilter * sphJoinFilters ( ISphFilter *, ISphFilter * );
 
 #endif // _sphinxfilter_

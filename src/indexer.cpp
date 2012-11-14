@@ -596,7 +596,9 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 	SqlAttrsConfigure ( tParams,	hSource("sql_attr_float"),			SPH_ATTR_FLOAT,		sSourceName );
 	SqlAttrsConfigure ( tParams,	hSource("sql_attr_bigint"),			SPH_ATTR_BIGINT,	sSourceName );
 	SqlAttrsConfigure ( tParams,	hSource("sql_attr_string"),			SPH_ATTR_STRING,	sSourceName );
+	SqlAttrsConfigure ( tParams,	hSource("sql_attr_json"),			SPH_ATTR_JSON,		sSourceName );
 	SqlAttrsConfigure ( tParams,	hSource("sql_attr_str2wordcount"),	SPH_ATTR_WORDCOUNT,	sSourceName );
+
 	SqlAttrsConfigure ( tParams,	hSource("sql_field_string"),		SPH_ATTR_STRING,	sSourceName, true );
 	SqlAttrsConfigure ( tParams,	hSource("sql_field_str2wordcount"),	SPH_ATTR_STRING,	sSourceName, true );
 
@@ -1752,6 +1754,21 @@ int main ( int argc, char ** argv )
 			else
 				sphDie ( "unknown on_field_field_error value (must be one of ignore_field, skip_document, fail_index)" );
 		}
+
+		bool bJsonStrict = false;
+		bool bJsonAutoconvNumbers = false;
+		if ( hIndexer("on_json_attr_error") )
+		{
+			const CSphString & sVal = hIndexer["on_json_attr_error"];
+			if ( sVal=="ignore_attr" )
+				bJsonStrict = false;
+			else if ( sVal=="fail_index" )
+				bJsonStrict = true;
+			else
+				sphDie ( "unknown on_json_attr_error value (must be one of ignore_attr, fail_index)" );
+		}
+		bJsonAutoconvNumbers = ( hIndexer.GetInt ( "json_autoconv_numbers", 0 )!=0 );
+		sphSetJsonOptions ( bJsonStrict, bJsonAutoconvNumbers );
 
 		sphSetThrottling ( hIndexer.GetInt ( "max_iops", 0 ), hIndexer.GetSize ( "max_iosize", 0 ) );
 	}

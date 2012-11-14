@@ -47,8 +47,8 @@ enum ESphAttr
 
 	// these types are runtime only
 	// used as intermediate types in the expression engine
-	SPH_ATTR_CONSTHASH	= 1000
-	SPH_ATTR_FACTORS	= 1001,			///< packed search factors (binary, in-memory, pooled)
+	SPH_ATTR_CONSTHASH	= 1000,
+	SPH_ATTR_FACTORS	= 1001			///< packed search factors (binary, in-memory, pooled)
 };
 
 /// column evaluation stage

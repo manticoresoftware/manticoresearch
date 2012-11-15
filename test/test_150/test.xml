@@ -52,6 +52,37 @@ index rt
 	enable_star	= 1
 }
 
+source plain_prefix
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query_pre = SET NAMES utf8
+	sql_query		= select 1000 as id, 1 as gid, 'Москва родимая' as text
+	sql_attr_uint	= gid
+}
+index plain_prefix
+{
+	source			= plain_prefix
+	path			= <data_path/>/plain_prefix
+
+	dict			= keywords
+	min_prefix_len	= 1
+	enable_star	= 1
+}
+index rt_prefix
+{
+	type			= rt
+	path			= <data_path/>/rt_prefix
+	docinfo			= extern
+	charset_type	= utf-8
+	rt_field		= data
+	rt_attr_uint		= idd
+	dict			= keywords
+	min_prefix_len	= 1
+	enable_star	= 1
+}
+
+
 </config>
 
 <db_create>
@@ -83,6 +114,10 @@ create table test_table
 <sphinxql>insert into rt values ( 3, 'testing is going not here', 13 )</sphinxql>
 <sphinxql>select * from rt where match ( 't*' )</sphinxql>
 <sphinxql>show meta</sphinxql>
+<!-- regression prefix vs utf-8 codepoint -->
+<sphinxql>insert into rt_prefix values ( 1001, 'Москва ква', 23 )</sphinxql>
+<sphinxql>select * from plain_prefix where match ( 'Мос*' )</sphinxql>
+<sphinxql>select * from rt_prefix where match ( 'Мос*' )</sphinxql>
 </sphqueries>
 
 </test>

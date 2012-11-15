@@ -11271,7 +11271,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 					// handle JSON
 					CSphVector<BYTE> dBuf; // FIXME? optimize?
-					if ( m_tSchema.GetAttr(dStringAttrs[i]).m_eAttrType==SPH_ATTR_JSON ) // FIXME? optimize?
+					if ( m_tSchema.GetAttr ( dStringAttrs[i] ).m_eAttrType==SPH_ATTR_JSON ) // FIXME? optimize?
 					{
 						// WARNING, tricky bit
 						// flex lexer needs last two (!) bytes to be zeroes
@@ -27755,7 +27755,7 @@ void CWordlist::GetPrefixedWords ( const char * sPrefix, int iPrefixLen, const c
 		return;
 
 	const CSphWordlistCheckpoint * pCheckpoint = FindCheckpoint ( sPrefix, iPrefixLen, 0, true );
-	const int iSkipMagic = ( *sPrefix<0x20 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
+	const int iSkipMagic = ( BYTE(*sPrefix)<0x20 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
 	while ( pCheckpoint )
 	{
 		// decode wordlist chunk

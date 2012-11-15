@@ -5287,7 +5287,7 @@ struct DocHitPair_t
 void RtIndex_t::GetPrefixedWords ( const char * sWord, int iWordLen, const char * sWildcard,
 	CSphVector<CSphNamedInt> & dPrefixedWords, BYTE *, int ) const
 {
-	const int iSkipMagic = ( *sWord<0x20 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
+	const int iSkipMagic = ( BYTE(*sWord)<0x20 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
 	SmallStringHash_T<DocHitPair_t> hPrefixedWords;
 	ARRAY_FOREACH ( i, m_pSegments )
 	{

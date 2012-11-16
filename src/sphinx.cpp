@@ -11339,6 +11339,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				}
 
 			// store hits
+			int iCurDocHits = 0;
 			while ( const ISphHits * pDocHits = pSource->IterateHits ( m_sLastWarning ) )
 			{
 				int iDocHits = pDocHits->Length();
@@ -11355,11 +11356,14 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 				memcpy ( pHits, pDocHits->First(), iDocHits*sizeof(CSphWordHit) );
 				pHits += iDocHits;
+				if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
+					iCurDocHits += iDocHits;
 
 				// check if we need to flush
-				if ( pHits<pHitsMax
+				if ( ( pHits<pHitsMax
 					&& !( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE && pDocinfo>=pDocinfoMax )
 					&& !( iDictSize && m_pDict->HitblockGetMemUse() > iDictSize ) )
+					|| pHits-dHits.Begin()==iCurDocHits )
 				{
 					continue;
 				}
@@ -11369,12 +11373,14 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				g_iIndexerPoolStartHit = pHits-dHits.Begin();
 
 				// sort hits
-				int iHits = pHits - dHits.Begin();
+				// store hits for all docs except current, because current docinfo wasn't filled yet
+				int iHits = pHits - dHits.Begin() - iCurDocHits;
 				{
 					PROFILE ( sort_hits );
 					sphSort ( dHits.Begin(), iHits, CmpHit_fn() );
 					m_pDict->HitblockPatch ( dHits.Begin(), iHits );
 				}
+				CSphWordHit * pCurDocHits = pHits - iCurDocHits;
 				pHits = dHits.Begin();
 
 				if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
@@ -11388,14 +11394,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					dHitBlocks.Add ( tHitBuilder.cidxWriteRawVLB ( fdHits.GetFD(), dHits.Begin(), iHits,
 						dDocinfos.Begin(), iDocs, iDocinfoStride ) );
 
-					// we are inlining, so if there are more hits in this document,
-					// we'll need to know it's info next flush
-					if ( iDocHits )
-					{
-						DOCINFOSETID ( pDocinfo, pSource->m_tDocInfo.m_iDocID );
-						memcpy ( DOCINFO2ATTRS ( pDocinfo ), pSource->m_tDocInfo.m_pDynamic, sizeof(CSphRowitem)*m_tSchema.GetRowSize() );
-						pDocinfo += iDocinfoStride;
-					}
+					memcpy ( dHits.Begin(), pCurDocHits, sizeof(CSphWordHit)*iCurDocHits );
+					pHits += iCurDocHits;
 				} else
 				{
 					// we're not inlining, so only flush hits, docs are flushed independently

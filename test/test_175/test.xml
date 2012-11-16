@@ -118,6 +118,23 @@ index hits_inline
 	docinfo			= extern
 	charset_type	= utf-8
 }
+
+<!-- flushing hits+docinfo in inline mode (bug #1310) -->
+source src_inline
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1 id, REPEAT('a ', 1024*1024-32768), 32 gid UNION SELECT 2 id, REPEAT('a ', 32768), 32 gid
+	sql_attr_bigint = gid
+}
+
+index idx_inline
+{
+	source			= src_inline
+	path			= <data_path/>/idx_inline
+	charset_type = utf-8
+	docinfo = inline
+}
 </config>
 
 <db_create>

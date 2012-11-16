@@ -405,7 +405,8 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "bigram_freq_words",		0, NULL },
 	{ "bigram_index",			0, NULL },
 	{ "index_field_lengths",	0, NULL },
-	{ "divide_remote_ranges",			0, NULL },
+	{ "divide_remote_ranges",	0, NULL },
+	{ "stopwords_stem",			0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -1065,6 +1066,7 @@ void sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tS
 	tSettings.m_sMorphology = hIndex.GetStr ( "morphology" );
 	tSettings.m_sStopwords = hIndex.GetStr ( "stopwords" );
 	tSettings.m_iMinStemmingLen = hIndex.GetInt ( "min_stemming_len", 1 );
+	tSettings.m_bStopwordsStem = hIndex.GetInt ( "stopwords_stem" )!=0;
 
 	for ( CSphVariant * pWordforms = hIndex("wordforms"); pWordforms; pWordforms = pWordforms->m_pNext )
 	{

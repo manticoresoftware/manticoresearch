@@ -3124,6 +3124,9 @@ void LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings
 	tSettings.m_bWordDict = false; // default to crc for old indexes
 	if ( uVersion>=21 )
 		tSettings.m_bWordDict = ( tReader.GetByte()!=0 );
+
+	if ( uVersion>=36 )
+		tSettings.m_bStopwordsStem = ( tReader.GetByte()!=0 );
 }
 
 
@@ -3172,6 +3175,7 @@ void SaveDictionarySettings ( CSphWriter & tWriter, CSphDict * pDict, bool bForc
 
 	tWriter.PutDword ( tSettings.m_iMinStemmingLen );
 	tWriter.PutByte ( tSettings.m_bWordDict || bForceWordDict );
+	tWriter.PutByte ( tSettings.m_bStopwordsStem );
 }
 
 
@@ -13274,6 +13278,9 @@ SphWordID_t CSphDictStar::GetWordID ( BYTE * pWord )
 	char sBuf [ 16+3*SPH_MAX_WORD_LEN ];
 	assert ( strlen ( (const char*)pWord ) < 16+3*SPH_MAX_WORD_LEN );
 
+	if ( m_pDict->GetSettings().m_bStopwordsStem && m_pDict->IsStopWord ( pWord ) )
+		return 0;
+
 	m_pDict->ApplyStemmers ( pWord );
 
 	int iLen = strlen ( (const char*)pWord );
@@ -13285,15 +13292,17 @@ SphWordID_t CSphDictStar::GetWordID ( BYTE * pWord )
 	{
 		if ( sBuf[iLen-1]=='*' )
 		{
-			sBuf[iLen-1] = '\0';
+			iLen--;
+			sBuf[iLen] = '\0';
 		} else
 		{
 			sBuf[iLen] = MAGIC_WORD_TAIL;
-			sBuf[iLen+1] = '\0';
+			iLen++;
+			sBuf[iLen] = '\0';
 		}
 	}
 
-	return m_pDict->GetWordID ( (BYTE*)sBuf );
+	return m_pDict->GetWordID ( (BYTE*)sBuf, iLen, !m_pDict->GetSettings().m_bStopwordsStem );
 }
 
 
@@ -13328,8 +13337,12 @@ SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
 
 	if ( !bHeadStar && !bTailStar )
 	{
+		if ( m_pDict->GetSettings().m_bStopwordsStem && IsStopWord ( pWord ) )
+			return 0;
+
 		m_pDict->ApplyStemmers ( pWord );
-		if ( IsStopWord ( pWord ) )
+
+		if ( !m_pDict->GetSettings().m_bStopwordsStem && IsStopWord ( pWord ) )
 			return 0;
 	}
 
@@ -18659,10 +18672,15 @@ SphWordID_t CSphDictCRC<false>::DoCrc ( const BYTE * pWord, int iLen ) const
 template < bool CRC32DICT >
 SphWordID_t CSphDictCRC<CRC32DICT>::GetWordID ( BYTE * pWord )
 {
+	// apply stopword filter before stemmers
+	if ( GetSettings().m_bStopwordsStem && !FilterStopword ( DoCrc ( pWord ) ) )
+		return 0;
+
 	// skip stemmers for magic words
 	if ( pWord[0]>=0x20 )
 		ApplyStemmers ( pWord );
-	return FilterStopword ( DoCrc ( pWord ) );
+
+	return GetSettings().m_bStopwordsStem ? DoCrc ( pWord ) : FilterStopword ( DoCrc ( pWord ) );
 }
 
 

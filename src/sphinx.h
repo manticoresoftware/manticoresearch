@@ -672,11 +672,13 @@ struct CSphDictSettings
 	int				m_iMinStemmingLen;
 	bool			m_bWordDict;
 	bool			m_bCrc32;
+	bool			m_bStopwordsStem;
 
 	CSphDictSettings ()
 		: m_iMinStemmingLen ( 1 )
 		, m_bWordDict ( false )
 		, m_bCrc32 ( !USE_64BIT )
+		, m_bStopwordsStem ( false )
 	{}
 };
 

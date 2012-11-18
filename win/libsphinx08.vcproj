@@ -317,6 +317,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\src\sphinxjson.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\src\sphinxmetaphone.cpp"
 				>
 			</File>
@@ -424,6 +428,10 @@
 			</File>
 			<File
 				RelativePath="..\src\sphinxint.h"
+				>
+			</File>
+			<File
+				RelativePath="..\src\sphinxjson.h"
 				>
 			</File>
 			<File

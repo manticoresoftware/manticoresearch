@@ -185,6 +185,13 @@ index sub_dist_2
 	agent				= <my_address/>:sub_loc_2
 }
 
+index dist_offset
+{
+	type					= distributed
+	agent				= <my_address/>:sub_loc_1
+	agent				= <my_address/>:sub_loc_2
+	divide_remote_ranges = 1
+}
 
 </config>
 
@@ -340,6 +347,9 @@ index sub_dist_2
 <sphinxql>SELECT * FROM ( SELECT * FROM sub_dist_1 ORDER BY id desc LIMIT 7 ) ORDER BY id desc LIMIT 4,3</sphinxql>
 <sphinxql>SELECT * FROM ( SELECT * FROM sub_dist_2 ORDER BY id asc LIMIT 11 ) ORDER BY id desc LIMIT 1,5</sphinxql>
 <sphinxql>SELECT * FROM ( SELECT * FROM sub_dist_loc ORDER BY id asc LIMIT 5 ) ORDER BY id desc LIMIT 2,4</sphinxql>
+
+<!-- regression missed offset and wrong limit at agent with divide_remote_ranges -->
+<sphinxql>SELECT * FROM dist_offset ORDER BY id asc LIMIT 23, 5</sphinxql>
 
 </sphqueries>
 

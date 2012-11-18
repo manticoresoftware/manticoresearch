@@ -5039,7 +5039,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 		if ( m_iDivideLimits==1 )
 			tOut.SendInt ( q.m_iMaxMatches ); // OPTIMIZE? normally, agent limit is max_matches, even if master limit is less
 		else // FIXEME!!! that is broken with offset + limit
-			tOut.SendInt ( 1+(q.m_iLimit/m_iDivideLimits) );
+			tOut.SendInt ( 1 + ( ( q.m_iOffset + q.m_iLimit )/m_iDivideLimits) );
 	} else
 	{
 		// with outer order by, inner limit must match between agent and master

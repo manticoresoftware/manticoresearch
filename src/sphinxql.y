@@ -192,6 +192,11 @@ opt_outer_limit:
 		{
 			pParser->m_pQuery->m_iOuterLimit = $2.m_iValue;
 		}
+	| TOK_LIMIT TOK_CONST_INT ',' TOK_CONST_INT
+		{
+			pParser->m_pQuery->m_iOuterOffset = $2.m_iValue;
+			pParser->m_pQuery->m_iOuterLimit = $4.m_iValue;
+		}
 	;
 
 select_from:

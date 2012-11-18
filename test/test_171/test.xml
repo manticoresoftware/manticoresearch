@@ -137,6 +137,55 @@ index distinct2 : dist_no
 	path			= <data_path/>/distinct2
 }
 
+<!-- regression sub select offset -->
+source sub_src_1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT id, 1 as tag, text FROM sub_table WHERE id%2=1
+	sql_attr_uint	= tag
+}
+source sub_src_2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT id, 1 as tag, text FROM sub_table WHERE id%2=0
+	sql_attr_uint	= tag
+}
+index sub_loc_1
+{
+	source			= sub_src_1
+	path			= <data_path/>/sub_loc_1
+	docinfo			= extern
+	charset_type	= utf-8
+}
+index sub_loc_2
+{
+	source			= sub_src_2
+	path			= <data_path/>/sub_loc_2
+	docinfo			= extern
+	charset_type	= utf-8
+}
+index sub_dist_loc
+{
+	type					= distributed
+	local					= sub_loc_1
+	local					= sub_loc_2
+}
+index sub_dist_1
+{
+	type					= distributed
+	agent				= <my_address/>:sub_loc_1
+	agent				= <my_address/>:sub_loc_2
+}
+index sub_dist_2
+{
+	type					= distributed
+	local					= sub_dist_1
+	agent				= <my_address/>:sub_loc_2
+}
+
+
 </config>
 
 
@@ -285,6 +334,13 @@ index distinct2 : dist_no
 
 <!-- incorrect(aggregate) filtering -->
 <sphinxql>select id, max(tag) as cond from idx1 where cond&lt;5 group by gr</sphinxql>
+
+<!-- regression sub select offset -->
+<sphinxql>SELECT * FROM ( SELECT * FROM sub_dist_loc ORDER BY id asc LIMIT 15 ) ORDER BY id desc LIMIT 3,5</sphinxql>
+<sphinxql>SELECT * FROM ( SELECT * FROM sub_dist_1 ORDER BY id desc LIMIT 7 ) ORDER BY id desc LIMIT 4,3</sphinxql>
+<sphinxql>SELECT * FROM ( SELECT * FROM sub_dist_2 ORDER BY id asc LIMIT 11 ) ORDER BY id desc LIMIT 1,5</sphinxql>
+<sphinxql>SELECT * FROM ( SELECT * FROM sub_dist_loc ORDER BY id asc LIMIT 5 ) ORDER BY id desc LIMIT 2,4</sphinxql>
+
 </sphqueries>
 
 <db_create>
@@ -315,6 +371,29 @@ INSERT INTO `test_table` VALUES
 ( 8, 2, 6, 'test'),
 ( 9, 2, 5, 'test'),
 ( 10, 2, 4, 'test')
+</db_insert>
+
+<db_create>
+CREATE TABLE `sub_table` (
+  `id` int(11),
+  `text` varchar(255) NOT NULL
+)
+</db_create>
+ <db_drop>
+DROP TABLE IF EXISTS `sub_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `sub_table` VALUES
+( 1, 'test of'),( 2, 'my test'),( 3, 'test is'),( 4, 'goes to test'),( 5, 'test was'),
+( 6, 'test of'),( 7, 'my test'),( 8, 'test is'),( 9, 'goes to test'),( 10, 'test was'),
+( 11, 'test of'),( 12, 'my test'),( 13, 'test is'),( 14, 'goes to test'),( 15, 'test was'),
+( 16, 'test of'),( 17, 'my test'),( 18, 'test is'),( 19, 'goes to test'),( 20, 'test was'),
+( 21, 'test of'),( 22, 'my test'),( 23, 'test is'),( 24, 'goes to test'),( 25, 'test was'),
+( 101, 'test of'),( 102, 'my test'),( 103, 'test is'),( 104, 'goes to test'),( 105, 'test was'),
+( 106, 'test of'),( 107, 'my test'),( 108, 'test is'),( 109, 'goes to test'),( 110, 'test was'),
+( 111, 'test of'),( 112, 'my test'),( 113, 'test is'),( 114, 'goes to test'),( 115, 'test was'),
+( 116, 'test of'),( 117, 'my test'),( 118, 'test is'),( 119, 'goes to test'),( 120, 'test was')
 </db_insert>
 
 </test>

@@ -5038,10 +5038,13 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	{
 		if ( m_iDivideLimits==1 )
 			tOut.SendInt ( q.m_iMaxMatches ); // OPTIMIZE? normally, agent limit is max_matches, even if master limit is less
-		else
+		else // FIXEME!!! that is broken with offset + limit
 			tOut.SendInt ( 1+(q.m_iLimit/m_iDivideLimits) );
 	} else
-		tOut.SendInt ( q.m_iLimit ); // with outer order by, inner limit must match between agent and master
+	{
+		// with outer order by, inner limit must match between agent and master
+		tOut.SendInt ( q.m_iLimit );
+	}
 	tOut.SendInt ( (DWORD)q.m_eMode ); // match mode
 	tOut.SendInt ( (DWORD)q.m_eRanker ); // ranking mode
 	if ( q.m_eRanker==SPH_RANK_EXPR || q.m_eRanker==SPH_RANK_EXPORT )
@@ -5144,7 +5147,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	tOut.SendDword ( q.m_eCollation ); // v.1
 	tOut.SendString ( q.m_sOuterOrderBy.cstr() ); // v.2
 	if ( !q.m_sOuterOrderBy.IsEmpty() )
-		tOut.SendInt ( q.m_iOuterLimit );
+		tOut.SendInt ( q.m_iOuterOffset + q.m_iOuterLimit );
 }
 
 
@@ -5554,6 +5557,12 @@ void CheckQuery ( const CSphQuery & tQuery, CSphString & sError )
 	if ( tQuery.m_iOffset>0 && !tQuery.m_sOuterOrderBy.IsEmpty() )
 	{
 		sError.SetSprintf ( "inner offset must be 0 when using outer order by" );
+		return;
+	}
+	if ( tQuery.m_iOuterOffset+tQuery.m_iOuterLimit>tQuery.m_iLimit )
+	{
+		sError.SetSprintf ( "outer window must be smaller than inner limit (inner limit=%d, outer offset=%d, outer limit=%d)",
+			tQuery.m_iLimit, tQuery.m_iOuterOffset, tQuery.m_iOuterLimit );
 		return;
 	}
 }
@@ -6401,7 +6410,9 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 	if ( !q.m_sOuterOrderBy.IsEmpty() )
 	{
 		tBuf.Append ( ") ORDER BY %s", q.m_sOuterOrderBy.cstr() );
-		if ( q.m_iOuterLimit>0 )
+		if ( q.m_iOuterOffset>0 )
+			tBuf.Append ( " LIMIT %d, %d", q.m_iOuterOffset, q.m_iOuterLimit );
+		else if ( q.m_iOuterLimit>0 )
 			tBuf.Append ( " LIMIT %d", q.m_iOuterLimit );
 	}
 
@@ -6650,7 +6661,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 
 
 void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pRes,
-	const CSphVector<PoolPtrs_t> & dTag2Pools, bool bExtendedStat )
+	const CSphVector<PoolPtrs_t> & dTag2Pools, bool bExtendedStat, bool bLimitedMatches )
 {
 	// status
 	if ( iVer>=0x10D )
@@ -6845,7 +6856,11 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 			}
 		}
 	}
-	tOut.SendInt ( pRes->m_dMatches.GetLength() );
+	if ( bLimitedMatches )
+		tOut.SendInt ( pRes->m_iCount );
+	else
+		tOut.SendInt ( pRes->m_dMatches.GetLength() );
+
 	tOut.SendAsDword ( pRes->m_iTotalMatches );
 	tOut.SendInt ( Max ( pRes->m_iQueryTime, 0 ) );
 
@@ -6895,11 +6910,9 @@ struct AggrResult_t : CSphQueryResult
 	CSphVector<int>					m_dMatchCounts;		///< aggregated resultsets lengths (for schema minimization)
 	CSphVector<const CSphIndex*>	m_dLockedAttrs;		///< indexes which are hold in the memory untill sending result
 	CSphVector<PoolPtrs_t>			m_dTag2Pools;		///< tag to MVA and strings storage pools mapping
-	bool							m_bLimited;			///< whether offset, limit clauses have already been applied
 
 	AggrResult_t()
 		: m_iTag ( -1 )
-		, m_bLimited ( false )
 	{}
 
 	void ClampMatches ( int iLimit, bool bCommonSchema )
@@ -6911,8 +6924,7 @@ struct AggrResult_t : CSphQueryResult
 		{
 			for ( int i = iLimit; i < m_dMatches.GetLength(); i++ )
 				m_tSchema.FreeStringPtrs ( &m_dMatches[i] );
-		}
-		else
+		} else
 		{
 			int nMatches = 0;
 			ARRAY_FOREACH ( i, m_dMatchCounts )
@@ -7573,13 +7585,12 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, bool bHadLoca
 			int iSetStart = 0;
 			ARRAY_FOREACH ( iSet, tRes.m_dMatchCounts )
 			{
-				assert ( tQuery.m_iOffset>=0 ); // otherwise we're doomed.. DOOMED!
 				assert ( tQuery.m_iLimit>=0 );
 				int iOldOut = iOut;
 				int iStart = iSetStart;
 				int iSetEnd = iSetStart + tRes.m_dMatchCounts[iSet];
-				int iEnd = Min ( iStart + tQuery.m_iOffset + tQuery.m_iLimit, iSetEnd );
-				iStart = Min ( iStart + tQuery.m_iOffset, iEnd );
+				int iEnd = Min ( iStart + tQuery.m_iLimit, iSetEnd );
+				iStart = Min ( iStart, iEnd );
 				for ( int i=iStart; i<iEnd; i++ )
 					Swap ( tRes.m_dMatches[iOut++], tRes.m_dMatches[i] );
 				iSetStart = iSetEnd;
@@ -7636,11 +7647,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, bool bHadLoca
 	if ( tRes.m_iSuccesses==1 && !tQuery.m_sOuterOrderBy.IsEmpty() )
 	{
 		// apply inner limit
-		int iLimited = Max ( Min ( tQuery.m_iLimit, tRes.m_dMatches.GetLength() - tQuery.m_iOffset ), 0 );
-		if ( tQuery.m_iOffset>0 )
-			for ( int i=0; i<iLimited; i++ )
-				::Swap ( tRes.m_dMatches[i], tRes.m_dMatches[i+tQuery.m_iOffset] );
-		tRes.ClampMatches ( iLimited, bAllEqual );
+		tRes.ClampMatches ( tQuery.m_iLimit, bAllEqual );
 
 		// reorder (aka outer order)
 		ESphSortFunc eFunc;
@@ -7657,15 +7664,6 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, bool bHadLoca
 		sphSort ( tRes.m_dMatches.Begin(), tRes.m_dMatches.GetLength(), tReorder, MatchSortAccessor_t() );
 	}
 
-	// outer limit, if any
-	// common code for both 1-set and N-set cases
-	if ( !tQuery.m_sOuterOrderBy.IsEmpty() )
-	{
-		if ( tQuery.m_iOuterLimit>0 && tQuery.m_iOuterLimit<tRes.m_dMatches.GetLength() )
-			tRes.ClampMatches ( tQuery.m_iOuterLimit, bRemapped || bAllEqual );
-		tRes.m_bLimited = true;
-	}
-
 	// compute post-limit stuff
 	CSphVector<int> dPostlimit;
 	for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
@@ -7674,13 +7672,15 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, bool bHadLoca
 
 	if ( dPostlimit.GetLength() )
 	{
-		int iFrom = 0;
+		// post compute matches only between offset - limit
+		// however at agent we can't estimate limit.offset at master merged result set
+		// but master don't provide offset to agents only offset+limit as limit
+		// so computing all matches up to iiner.limit \ outer.limit
 		int iTo = tRes.m_dMatches.GetLength();
-		if ( !tRes.m_bLimited )
-		{
-			iTo = Max ( Min ( tQuery.m_iOffset + tQuery.m_iLimit, iTo ), 0 );
-			iFrom = Min ( tQuery.m_iOffset, iTo );
-		}
+		int iOff = Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
+		int iCount = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
+		iTo = Max ( Min ( iOff + iCount, iTo ), 0 );
+		int iFrom = Min ( iOff, iTo );
 
 		for ( int i=iFrom; i<iTo; i++ )
 		{
@@ -8264,7 +8264,7 @@ void SearchHandler_c::RunUpdates ( const CSphQuery & tQuery, const CSphString & 
 	{
 		StrBuf_t sFailures;
 		m_dFailuresSet[0].BuildReport ( sFailures );
-		tRes.m_sWarning = sFailures.cstr(); // FIXME!!! commint warnings too
+		tRes.m_sWarning = sFailures.cstr(); // FIXME!!! commit warnings too
 	}
 
 	const CSphIOStats & tIO = sphStopIOStats ();
@@ -9320,15 +9320,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		// finalize
 		////////////
 
-		if ( tRes.m_bLimited )
-		{
-			tRes.m_iOffset = 0;
-			tRes.m_iCount = tRes.m_dMatches.GetLength();
-		} else
-		{
-			tRes.m_iOffset = tQuery.m_iOffset;
-			tRes.m_iCount = Max ( Min ( tQuery.m_iLimit, tRes.m_dMatches.GetLength()-tQuery.m_iOffset ), 0 );
-		}
+		tRes.m_iOffset = Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
+		tRes.m_iCount = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
+		tRes.m_iCount = Max ( Min ( tRes.m_iCount, tRes.m_dMatches.GetLength()-tRes.m_iOffset ), 0 );
 	}
 
 	// stats
@@ -9444,7 +9438,10 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 		tOut.SendWord ( VER_COMMAND_SEARCH );
 		tOut.SendInt ( iReplyLen );
 
-		SendResult ( iVer, tOut, &tRes, tRes.m_dTag2Pools, bExtendedStat );
+		const CSphQuery & tQuery = tHandler.m_dQueries[0];
+		bool bLimitedMatches = tQuery.m_bAgent && tQuery.m_iLimit;
+
+		SendResult ( iVer, tOut, &tRes, tRes.m_dTag2Pools, bExtendedStat, bLimitedMatches );
 
 	} else
 	{
@@ -9457,7 +9454,11 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 		tOut.SendInt ( iReplyLen );
 
 		ARRAY_FOREACH ( i, tHandler.m_dQueries )
-			SendResult ( iVer, tOut, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, bExtendedStat );
+		{
+			const CSphQuery & tQuery = tHandler.m_dQueries[i];
+			bool bLimitedMatches = tQuery.m_bAgent && tQuery.m_iLimit;
+			SendResult ( iVer, tOut, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, bExtendedStat, bLimitedMatches );
+		}
 	}
 
 	tOut.Flush ();

@@ -81,6 +81,9 @@ index embedded
 <query index="idx3">est</query>
 <query index="idx3">test</query>
 <query index="embedded">test</query>
+<query index="idx1" mode="extended2">aaa bbb ccc</query>
+<query index="idx1" mode="extended2">^aaa ccc$</query>
+<query index="idx1" mode="extended2">^bbb | ^ccc | aaa$ | bbb$</query>
 </queries>
 
 </test>

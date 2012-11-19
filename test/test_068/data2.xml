@@ -15,7 +15,7 @@
 <sphinx:document id="1">
 <gid>123</gid>
 <title>test one</title>
-<title>duplicate title (won't be indexed)</title>
+<title>duplicate title</title>
 <content>updated with new content and gid</content>
 </sphinx:document>
 

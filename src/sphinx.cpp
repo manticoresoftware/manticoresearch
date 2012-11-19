@@ -25602,9 +25602,9 @@ public:
 private:
 	struct Document_t
 	{
-		SphDocID_t				m_iDocID;
-		CSphVector<CSphString>	m_dFields;
-		CSphVector<CSphString>	m_dAttrs;
+		SphDocID_t					m_iDocID;
+		CSphVector < CSphVector<BYTE> >	m_dFields;
+		CSphVector<CSphString>		m_dAttrs;
 	};
 
 	Document_t *				m_pCurDocument;
@@ -26370,7 +26370,7 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 
 		m_dFieldPtrs.Resize ( nFields );
 		for ( int i = 0; i < nFields; ++i )
-			m_dFieldPtrs[i] = (BYTE*)( pDocument->m_dFields [i].cstr() );
+			m_dFieldPtrs[i] = pDocument->m_dFields[i].Begin();
 
 		return (BYTE **)&( m_dFieldPtrs[0] );
 	}
@@ -26561,6 +26561,9 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 
 		m_pCurDocument->m_iDocID = 0;
 		m_pCurDocument->m_dFields.Resize ( m_tSchema.m_dFields.GetLength () );
+		// for safety
+		ARRAY_FOREACH ( i, m_pCurDocument->m_dFields )
+			m_pCurDocument->m_dFields[i].Add ( '\0' );
 		m_pCurDocument->m_dAttrs.Resize ( m_tSchema.GetAttrsCount () );
 
 		if ( pAttrs[0] && pAttrs[1] && pAttrs[0][0] && pAttrs[1][0] )
@@ -26676,10 +26679,13 @@ void CSphSource_XMLPipe2::EndElement ( const char * szName )
 			if ( m_iCurField!=-1 )
 			{
 				assert ( m_pCurDocument );
-				if ( !m_pCurDocument->m_dFields [ m_iCurField ].IsEmpty () )
-					sphWarn ( "duplicate text node <%s> - using first value", m_tSchema.m_dFields [ m_iCurField ].m_sName.cstr() );
-				else
-					m_pCurDocument->m_dFields [ m_iCurField ].SetBinary ( (char*)m_pFieldBuffer, m_iFieldBufferLen );
+				CSphVector<BYTE> & dBuf = m_pCurDocument->m_dFields [ m_iCurField ];
+
+				dBuf.Last() = ' ';
+				dBuf.Reserve ( dBuf.GetLength() + m_iFieldBufferLen + 6 ); // 6 is a safety gap
+				memcpy ( dBuf.Begin()+dBuf.GetLength(), m_pFieldBuffer, m_iFieldBufferLen );
+				dBuf.Resize ( dBuf.GetLength()+m_iFieldBufferLen );
+				dBuf.Add ( '\0' );
 			}
 			if ( m_iCurAttr!=-1 )
 			{
@@ -28891,3 +28897,4 @@ if ( INDEX_FORMAT_VERSION<31 || INDEX_FORMAT_VERSION>35 )
 //
 // $Id$
 //
+

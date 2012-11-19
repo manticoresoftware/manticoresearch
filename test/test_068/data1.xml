@@ -27,4 +27,11 @@
 <content>this is to test groups</content>
 </sphinx:document>
 
+<sphinx:document id="5">
+<title>aaa</title>
+<title>bbb</title>
+<!-- missed <content> -->
+<title>ccc</title>
+</sphinx:document>
+
 </sphinx:docset>

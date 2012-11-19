@@ -4173,9 +4173,12 @@ void sphBuildExcerpt ( ExcerptQuery_t & tOptions, const CSphIndex * pIndex, cons
 			sFilename.SetSprintf ( "%s%s", tOptions.m_sFilePrefix.cstr(), tOptions.m_sSource.cstr() );
 			if ( tFile.Open ( sFilename.cstr(), SPH_O_READ, sError )<0 )
 				return;
-		} else
-			if ( tFile.Open ( tOptions.m_sSource.cstr(), SPH_O_READ, sError )<0 )
-				return;
+		} else if ( tOptions.m_sSource.IsEmpty() )
+		{
+			sError.SetSprintf ( "snippet file name is empty" );
+			return;
+		} else if ( tFile.Open ( tOptions.m_sSource.cstr(), SPH_O_READ, sError )<0 )
+			return;
 
 		// will this ever trigger? time will tell; email me if it does!
 		if ( tFile.GetSize()+1>=(SphOffset_t)INT_MAX )
@@ -4185,7 +4188,7 @@ void sphBuildExcerpt ( ExcerptQuery_t & tOptions, const CSphIndex * pIndex, cons
 		}
 
 		int iFileSize = (int)tFile.GetSize();
-		if ( iFileSize<=0 )
+		if ( iFileSize<0 )
 			return;
 
 		iDataLen = iFileSize+1;

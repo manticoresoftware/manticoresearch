@@ -37,6 +37,9 @@ $opts = array( 'load_files'=>true, 'limit'=>0 );
 
 $results[] = $client->BuildExcerpts($docs, 'test', 'end point', $opts );
 $results[] = $client->BuildExcerpts($docs, 'test', 'not_found', $opts );
+$results[] = $client->BuildExcerpts(array( 'test_130/empty.txt' ), 'test', 'end point', $opts );
+$results[] = $client->BuildExcerpts(array( '' ), 'test', 'not_found', $opts );
+$results[] = $client->GetLastError();
 
 ]]></custom_test>
 

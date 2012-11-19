@@ -64,6 +64,7 @@ CREATE TABLE test_table
 	<SPHinxQL>select * from test where match( 'couple PARAGRAPH trooper' )</SPHinxQL>	
 	<SPHinxQL>select * from test where match( 'of PARAGRAPH trooper' )</SPHinxQL>	
 	<SPHinxQL>select * from test where match( 'ZONE:zone_A "couple of"~2' )</SPHinxQL>	
+	<SPHinxQL>select * from test where match( '"one two"~0' )</SPHinxQL>
 </SPHQueries>
 
 </Test>

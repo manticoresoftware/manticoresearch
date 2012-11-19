@@ -16844,11 +16844,15 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	// bind weights
 	tCtx.BindWeights ( pQuery, m_tSchema, iIndexWeight );
 
+	SmallStringHash_T<CSphQueryResultMeta::WordStat_t> hPrevWordStat = pResult->m_hWordStats;
+
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
 	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tXQ, pQuery, pResult, tTermSetup, tCtx ) );
 	if ( !pRanker.Ptr() )
 		return false;
+
+	sphCheckWordStats ( hPrevWordStat, pResult->m_hWordStats, m_sIndexName.cstr(), pResult->m_sWarning );
 
 	tCtx.SetupExtraData ( pRanker.Ptr() );
 
@@ -26672,12 +26676,18 @@ void CSphSource_XMLPipe2::EndElement ( const char * szName )
 			if ( m_iCurField!=-1 )
 			{
 				assert ( m_pCurDocument );
-				m_pCurDocument->m_dFields [m_iCurField].SetBinary ( (char*)m_pFieldBuffer, m_iFieldBufferLen );
+				if ( !m_pCurDocument->m_dFields [ m_iCurField ].IsEmpty () )
+					sphWarn ( "duplicate text node <%s> - using first value", m_tSchema.m_dFields [ m_iCurField ].m_sName.cstr() );
+				else
+					m_pCurDocument->m_dFields [ m_iCurField ].SetBinary ( (char*)m_pFieldBuffer, m_iFieldBufferLen );
 			}
 			if ( m_iCurAttr!=-1 )
 			{
 				assert ( m_pCurDocument );
-				m_pCurDocument->m_dAttrs [m_iCurAttr].SetBinary ( (char*)m_pFieldBuffer, m_iFieldBufferLen );
+				if ( !m_pCurDocument->m_dAttrs [ m_iCurAttr ].IsEmpty () )
+					sphWarn ( "duplicate attribute node <%s> - using first value", m_tSchema.GetAttr ( m_iCurAttr ).m_sName.cstr() );
+				else
+					m_pCurDocument->m_dAttrs [ m_iCurAttr ].SetBinary ( (char*)m_pFieldBuffer, m_iFieldBufferLen );
 			}
 
 			m_iFieldBufferLen = 0;
@@ -27934,6 +27944,35 @@ void CWordlist::GetInfixedWords ( const char * sInfix, int iBytes, const char * 
 				AddExpansion ( dExpanded, tCtx );
 	}
 }
+
+
+void sphCheckWordStats ( const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hDst, const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hSrc, const char * sIndex, CSphString & sWarning )
+{
+	if ( !hDst.GetLength() )
+		return;
+
+	bool bHasHead = false;
+	hSrc.IterateStart();
+	while ( hSrc.IterateNext() )
+	{
+		const CSphQueryResultMeta::WordStat_t * pDstStat = hDst ( hSrc.IterateGetKey() );
+		const CSphQueryResultMeta::WordStat_t & tSrcStat = hSrc.IterateGet();
+
+		// all indexes should produce same terms for same query
+		if ( !pDstStat && !tSrcStat.m_bExpanded )
+		{
+			if ( !bHasHead )
+			{
+				sWarning.SetSprintf ( "index '%s': query word(s) mismatch: %s", sIndex, hSrc.IterateGetKey().cstr() );
+				bHasHead = true;
+			} else
+			{
+				sWarning.SetSprintf ( "%s, %s", sWarning.cstr(), hSrc.IterateGetKey().cstr() );
+			}
+		}
+	}
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 // CSphQueryResultMeta

@@ -7,9 +7,9 @@ INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include
                     ${CMAKE_SOURCE_DIR}/extra/yassl/include
                     ${CMAKE_SOURCE_DIR}/regex)
 
-SET(SPHINX_SOURCES ha_sphinx.cc)
+SET(SPHINX_SOURCES ha_sphinx.cc snippets_udf.cc)
 IF(MYSQL_VERSION_ID LESS 50515) 
-ADD_LIBRARY(sphinx ha_sphinx.cc)
+ADD_LIBRARY(sphinx ha_sphinx.cc snippets_udf.cc)
 ELSE()
 SET(SPHINX_PLUGIN_DYNAMIC "ha_sphinx")
 MYSQL_ADD_PLUGIN(sphinx ${SPHINX_SOURCES} STORAGE_ENGINE MODULE_ONLY LINK_LIBRARIES mysys)

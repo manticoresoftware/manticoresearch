@@ -58,7 +58,7 @@ for ( $i = 0; $i < 4; $i++)
 	else
 		$results[] = sprintf("up.err=%s", $client->GetLastError());
 
-	KillSearchd ( 'config.conf', 'searchd.pid', 9, false );
+	KillSearchd ( 'config.conf', 'searchd.pid', 'KILL', false );
 
 	usleep ( 50000 );
 
@@ -86,7 +86,7 @@ if ( $up >= 0 )
 else
 	$results[] = sprintf("up.err=%s", $client->GetLastError());
 
-KillSearchd ( 'config.conf', 'searchd.pid', 9, false );
+KillSearchd ( 'config.conf', 'searchd.pid', 'KILL', false );
 usleep ( 50000 );
 
 $error = "";

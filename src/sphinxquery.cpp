@@ -1197,7 +1197,7 @@ void XQParser_t::DeleteNodesWOFields ( XQNode_t * pNode )
 }
 
 
-static bool CheckQuorum ( XQNode_t * pNode, CSphString * pError )
+static bool CheckQuorumProximity ( XQNode_t * pNode, CSphString * pError )
 {
 	assert ( pError );
 	if ( !pNode )
@@ -1209,10 +1209,16 @@ static bool CheckQuorum ( XQNode_t * pNode, CSphString * pError )
 		return false;
 	}
 
+	if ( pNode->GetOp()==SPH_QUERY_PROXIMITY && pNode->m_iOpArg<1 )
+	{
+		pError->SetSprintf ( "proximity threshold too low (%d)", pNode->m_iOpArg );
+		return false;
+	}
+
 	bool bValid = true;
 	ARRAY_FOREACH_COND ( i, pNode->m_dChildren, bValid )
 	{
-		bValid &= CheckQuorum ( pNode->m_dChildren[i], pError );
+		bValid &= CheckQuorumProximity ( pNode->m_dChildren[i], pError );
 	}
 
 	return bValid;
@@ -1294,7 +1300,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTok
 		return false;
 	}
 
-	if ( !CheckQuorum ( m_pRoot, &m_pParsed->m_sParseError ) )
+	if ( !CheckQuorumProximity ( m_pRoot, &m_pParsed->m_sParseError ) )
 	{
 		Cleanup();
 		return false;

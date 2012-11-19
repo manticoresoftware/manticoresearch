@@ -134,7 +134,7 @@ $query ( $results, "SELECT * FROM test", $sock );
 $client->FlushAttributes();
 
 $results[]= "killing";
-KillSearchd ('config.conf', 'searchd.pid',9,false);
+KillSearchd ('config.conf', 'searchd.pid','KILL',false);
 StartSearchd ( "config.conf", "error.txt", 'searchd.pid', $error, true );
 
 $results[] = "connecting again";

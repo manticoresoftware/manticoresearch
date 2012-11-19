@@ -193,6 +193,48 @@ index dist_offset
 	divide_remote_ranges = 1
 }
 
+source words_src : src
+{
+     sql_query = SELECT 1 as id, 11 as idd, 'yes of' as title UNION  SELECT 2 as id, 22 as idd, 'yes pey' as title
+	sql_query_pre = SET NAMES UTF8
+	sql_attr_uint	= idd
+} 
+index words1
+{
+	source			= words_src
+	path			= <data_path/>/words1
+	docinfo			= extern
+	charset_type	= utf-8
+	charset_table	= 0..9, A..Z->a..z, _, a..z
+}
+index words2
+{
+	source			= words_src
+	path			= <data_path/>/words2
+	docinfo			= extern
+	charset_type	= utf-8
+	charset_table	= 0..9, A..X->a..x, _, a..x
+}
+index words_rt1
+{
+	type = rt
+	path			= <data_path/>/words_rt1
+	charset_type	= utf-8
+	charset_table	= 0..9, A..Z->a..z, _, a..z
+	rt_field = title
+	rt_attr_uint = idd
+}
+index words_rt2
+{
+	type = rt
+	path			= <data_path/>/words_rt2
+	charset_type	= utf-8
+	charset_table	= 0..9, A..X->a..x, _, a..x
+	rt_field = title
+	rt_attr_uint = idd
+}
+
+
 </config>
 
 
@@ -350,6 +392,16 @@ index dist_offset
 
 <!-- regression missed offset and wrong limit at agent with divide_remote_ranges -->
 <sphinxql>SELECT * FROM dist_offset ORDER BY id asc LIMIT 23, 5</sphinxql>
+
+<!-- regression missed warning when words statistics varies -->
+<sphinxql>INSERT INTO words_rt1 VALUES ( 100, 'yes of', 111 ), ( 102, 'yes pey', 122 )</sphinxql>
+<sphinxql>INSERT INTO words_rt2 VALUES ( 200, 'yes of', 211 ), ( 202, 'yes pey', 222 )</sphinxql>
+<sphinxql>select * from words1, words2 where match('yes | pey')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from words_rt1, words_rt2 where match('yes | pey')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from words_rt1, words2 where match('yes | pey')</sphinxql>
+<sphinxql>show meta</sphinxql>
 
 </sphqueries>
 

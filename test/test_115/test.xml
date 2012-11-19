@@ -71,6 +71,8 @@ index idx
 <sphinxql>CALL SNIPPETS ('U.S.S.S.B s s s s today s s s s s tomorrow', 'idx', 'B NEAR/7 today', 1 as query_mode)</sphinxql>
 <sphinxql>CALL SNIPPETS ('U.S.S.S.A s s s s today s s s s s tomorrow', 'idx', 'A NEAR/7 today', 1 as query_mode)</sphinxql>
 <sphinxql>select * from idx where match ('oy NEAR/1 vey') and @id>=22</sphinxql>
+<sphinxql>select * from idx where match ('x NEAR/2 x') and @id=3</sphinxql>
+<sphinxql>select * from idx where match ('x NEAR/2 x NEAR/2 x') and @id=9</sphinxql>
 </sphqueries>
 
 <db_create>

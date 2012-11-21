@@ -85,7 +85,7 @@ inline DWORD sphJsonUnpackInt ( const BYTE ** pp )
 }
 
 /// parse JSON, convert it into SphinxBSON blob
-bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, CSphString & sError );
+bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, CSphString & sError );
 
 /// convert SphinxBSON blob back to JSON document
 void sphJsonFormat ( CSphVector<BYTE> & dOut, const BYTE * pData );

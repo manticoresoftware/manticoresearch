@@ -312,6 +312,7 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "xmlpipe_attr_multi_64",	KEY_LIST, NULL },
 	{ "xmlpipe_attr_string",	KEY_LIST, NULL },
 	{ "xmlpipe_attr_wordcount",	KEY_LIST, NULL },
+	{ "xmlpipe_attr_json",		KEY_LIST, NULL },
 	{ "xmlpipe_field_string",	KEY_LIST, NULL },
 	{ "xmlpipe_field_wordcount",	KEY_LIST, NULL },
 	{ "xmlpipe_fixup_utf8",		0, NULL },
@@ -422,6 +423,7 @@ static KeyDesc_t g_dKeysIndexer[] =
 	{ "on_file_field_error",	0, NULL },
 	{ "on_json_attr_error",		0, NULL },
 	{ "json_autoconv_numbers",	0, NULL },
+	{ "json_autoconv_keynames",	0, NULL },
 	{ NULL,						0, NULL }
 };
 

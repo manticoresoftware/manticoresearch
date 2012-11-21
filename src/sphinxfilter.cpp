@@ -1049,9 +1049,10 @@ ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const CSphS
 	if ( pDot )
 	{
 		CSphString sCol = sAttrName;
-		char * pCol = const_cast<char*> ( sAttrName.cstr() );
-		char * pInCol = pCol + ( pDot - sAttrName.cstr() );
-		*pInCol++ = '\0'; // zero out that dot
+		int iDot = pDot - sAttrName.cstr();
+		char * pCol = const_cast<char*> ( sCol.cstr() );
+		*( pCol + iDot ) = '\0'; // zero out that dot
+		const char * pInCol = sAttrName.cstr() + iDot + 1;
 
 		const int iAttr = tSchema.GetAttrIndex ( pCol );
 		if ( iAttr<0 )

@@ -1757,6 +1757,7 @@ int main ( int argc, char ** argv )
 
 		bool bJsonStrict = false;
 		bool bJsonAutoconvNumbers = false;
+		bool bJsonKeynamesToLowercase = false;
 		if ( hIndexer("on_json_attr_error") )
 		{
 			const CSphString & sVal = hIndexer["on_json_attr_error"];
@@ -1767,8 +1768,18 @@ int main ( int argc, char ** argv )
 			else
 				sphDie ( "unknown on_json_attr_error value (must be one of ignore_attr, fail_index)" );
 		}
+
+		if ( hIndexer("json_autoconv_keynames") )
+		{
+			const CSphString & sVal = hIndexer["json_autoconv_keynames"];
+			if ( sVal=="lowercase" )
+				bJsonKeynamesToLowercase = true;
+			else
+				sphDie ( "unknown json_autoconv_keynames value (must be 'lowercase')" );
+		}
+
 		bJsonAutoconvNumbers = ( hIndexer.GetInt ( "json_autoconv_numbers", 0 )!=0 );
-		sphSetJsonOptions ( bJsonStrict, bJsonAutoconvNumbers );
+		sphSetJsonOptions ( bJsonStrict, bJsonAutoconvNumbers, bJsonKeynamesToLowercase );
 
 		sphSetThrottling ( hIndexer.GetInt ( "max_iops", 0 ), hIndexer.GetSize ( "max_iosize", 0 ) );
 	}

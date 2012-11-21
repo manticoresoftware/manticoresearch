@@ -2480,9 +2480,10 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const CSphSchema & 
 	{
 		// got a dot, check for json attr
 		CSphString sCol = pQuery->m_sGroupBy;
-		char * pCol = const_cast<char*> ( pQuery->m_sGroupBy.cstr() );
-		char * pInCol = pCol + ( pDot - pQuery->m_sGroupBy.cstr() );
-		*pInCol++ = '\0'; // zero out that dot
+		int iDot = pDot - pQuery->m_sGroupBy.cstr();
+		char * pCol = const_cast<char*> ( sCol.cstr() );
+		*( pCol + iDot ) = '\0'; // zero out that dot
+		const char * pInCol = pQuery->m_sGroupBy.cstr() + iDot + 1;
 
 		const int iAttr = tSchema.GetAttrIndex ( pCol );
 		if ( iAttr<0 )

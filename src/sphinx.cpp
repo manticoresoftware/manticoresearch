@@ -178,6 +178,7 @@ static const int	MIN_READ_UNHINTED		= 1024;
 static bool					g_bSphQuiet					= false;
 static bool					g_bJsonStrict				= false;
 static bool					g_bJsonAutoconvNumbers		= false;
+static bool					g_bJsonKeynamesToLowercase	= false;
 
 static int					g_iReadBuffer				= DEFAULT_READ_BUFFER;
 static int					g_iReadUnhinted				= DEFAULT_READ_UNHINTED;
@@ -11285,7 +11286,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 						char * pData = const_cast<char*>(sData);
 						pData[iLen+1] = '\0';
 
-						if ( !sphJsonParse ( dBuf, pData, g_bJsonAutoconvNumbers, m_sLastError ) )
+						if ( !sphJsonParse ( dBuf, pData, g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase, m_sLastError ) )
 						{
 							m_sLastError.SetSprintf ( "document " DOCID_FMT ", attribute %s: JSON error: %s",
 								pSource->m_tDocInfo.m_iDocID, m_tSchema.GetAttr ( dStringAttrs[i] ).m_sName.cstr(),
@@ -27358,10 +27359,11 @@ void sphSetQuiet ( bool bQuiet )
 }
 
 
-void sphSetJsonOptions ( bool bStrict, bool bAutoconvNumbers )
+void sphSetJsonOptions ( bool bStrict, bool bAutoconvNumbers, bool bKeynamesToLowercase )
 {
 	g_bJsonStrict = bStrict;
 	g_bJsonAutoconvNumbers = bAutoconvNumbers;
+	g_bJsonKeynamesToLowercase = bKeynamesToLowercase;
 }
 
 

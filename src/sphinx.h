@@ -2991,7 +2991,8 @@ void				sphSetQuiet ( bool bQuiet );
 /// set JSON attribute indexing options
 /// bStrict is whether to stop indexing on error, or just ignore the attribute value
 /// bAutoconvNumbers is whether to auto-convert eligible (!) strings to integers and floats, or keep them as strings
-void				sphSetJsonOptions ( bool bStrict, bool bAutoconvNumbers );
+/// bKeynamesToLowercase is whether to convert all key names to lowercase
+void				sphSetJsonOptions ( bool bStrict, bool bAutoconvNumbers, bool bKeynamesToLowercase );
 
 /// parses sort clause, using a given schema
 /// fills eFunc and tState and optionally sError, returns result code

@@ -50,9 +50,10 @@ public:
 	int					m_iTopLevelKeys;
 	DWORD				m_uTopLevelMask;
 	bool				m_bAutoconv;
+	bool				m_bToLowercase;
 
 public:
-	JsonParser_c ( CSphVector<BYTE> & dBuffer, bool bAutoconv, CSphString & sError )
+	JsonParser_c ( CSphVector<BYTE> & dBuffer, bool bAutoconv, bool bToLowercase, CSphString & sError )
 		: m_pScanner ( NULL )
 		, m_pLastToken ( NULL )
 		, m_dBuffer ( dBuffer )
@@ -60,6 +61,7 @@ public:
 		, m_iTopLevelKeys ( 0 )
 		, m_uTopLevelMask ( 0 )
 		, m_bAutoconv ( bAutoconv )
+		, m_bToLowercase ( bToLowercase )
 	{
 		// reserve space for Bloom mask
 		for ( int i=0; i<4; i++ )
@@ -143,9 +145,18 @@ protected:
 public:
 	bool Add ( const char * sKey, JsonNode_t & tNode )
 	{
+		const char * sFixedKey = sKey;
+		CSphString sLowercasedKey;
+		if ( m_bToLowercase )
+		{
+			sLowercasedKey = sKey;
+			sLowercasedKey.ToLower();
+			sFixedKey = sLowercasedKey.cstr();
+		}
+
 		// for now, every key is top-level
 		m_iTopLevelKeys++;
-		m_uTopLevelMask |= sphJsonKeyMask ( sKey );
+		m_uTopLevelMask |= sphJsonKeyMask ( sFixedKey );
 
 		// attempt to fixup type
 		// convert int/float formatted as string back to numeric, if possible
@@ -199,7 +210,7 @@ public:
 
 		// pack the type and the key
 		m_dBuffer.Add ( (BYTE)tNode.m_eType );
-		PackStr ( sKey );
+		PackStr ( sFixedKey );
 
 		// now pack the data
 		switch ( tNode.m_eType )
@@ -266,7 +277,7 @@ void yyerror ( JsonParser_c * pParser, const char * sMessage )
 
 #include "yysphinxjson.c"
 
-bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, CSphString & sError )
+bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, CSphString & sError )
 {
 	int iLen = strlen ( sData );
 	if ( sData[iLen+1]!=0 )
@@ -275,7 +286,7 @@ bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, CSph
 		return false;
 	}
 
-	JsonParser_c tParser ( dData, bAutoconv, sError );
+	JsonParser_c tParser ( dData, bAutoconv, bToLowercase, sError );
 	yy2lex_init ( &tParser.m_pScanner );
 
 	YY_BUFFER_STATE tLexerBuffer = yy2_scan_buffer ( sData, iLen+2, tParser.m_pScanner );

@@ -6750,19 +6750,24 @@ int CSphReader::GetLine ( char * sBuffer, int iMaxLen )
 
 #else
 
-#define SPH_UNZIP_IMPL(_type,_getexpr) \
-	register DWORD b = 0; \
-	register _type v = 0; \
-	do { b = _getexpr; v = ( v<<7 ) + ( b&0x7f ); } while ( b&0x80 ); \
-	return v;
+#define SPH_VARINT_DECODE(_type,_getexpr) \
+	register DWORD b = _getexpr; \
+	register _type res = 0; \
+	while ( b & 0x80 ) \
+	{ \
+		res = ( res<<7 ) + ( b & 0x7f ); \
+		b = _getexpr; \
+	} \
+	res = ( res<<7 ) + b; \
+	return res;
 
 #endif // PARANOID
 
-DWORD sphUnzipInt ( const BYTE * & pBuf )			{ SPH_UNZIP_IMPL ( DWORD, *pBuf++ ); }
-SphOffset_t sphUnzipOffset ( const BYTE * & pBuf )	{ SPH_UNZIP_IMPL ( SphOffset_t, *pBuf++ ); }
+DWORD sphUnzipInt ( const BYTE * & pBuf )			{ SPH_VARINT_DECODE ( DWORD, *pBuf++ ); }
+SphOffset_t sphUnzipOffset ( const BYTE * & pBuf )	{ SPH_VARINT_DECODE ( SphOffset_t, *pBuf++ ); }
 
-DWORD CSphReader::UnzipInt ()			{ SPH_UNZIP_IMPL ( DWORD, GetByte() ); }
-SphOffset_t CSphReader::UnzipOffset ()	{ SPH_UNZIP_IMPL ( SphOffset_t, GetByte() ); }
+DWORD CSphReader::UnzipInt ()			{ SPH_VARINT_DECODE ( DWORD, GetByte() ); }
+SphOffset_t CSphReader::UnzipOffset ()	{ SPH_VARINT_DECODE ( SphOffset_t, GetByte() ); }
 
 
 #if USE_64BIT

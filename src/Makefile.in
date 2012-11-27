@@ -34,7 +34,7 @@ NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
 bin_PROGRAMS = indexer$(EXEEXT) searchd$(EXEEXT) search$(EXEEXT) \
-	spelldump$(EXEEXT) indextool$(EXEEXT)
+	spelldump$(EXEEXT) indextool$(EXEEXT) wordbreaker$(EXEEXT)
 noinst_PROGRAMS = tests$(EXEEXT)
 subdir = src
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
@@ -93,6 +93,10 @@ am_tests_OBJECTS = tests.$(OBJEXT)
 tests_OBJECTS = $(am_tests_OBJECTS)
 tests_LDADD = $(LDADD)
 tests_DEPENDENCIES = $(am__DEPENDENCIES_3)
+am_wordbreaker_OBJECTS = wordbreaker.$(OBJEXT)
+wordbreaker_OBJECTS = $(am_wordbreaker_OBJECTS)
+wordbreaker_LDADD = $(LDADD)
+wordbreaker_DEPENDENCIES = $(am__DEPENDENCIES_3)
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/config
 depcomp = $(SHELL) $(top_srcdir)/config/depcomp
 am__depfiles_maybe = depfiles
@@ -104,10 +108,10 @@ CXXLINK = $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
 	-o $@
 SOURCES = $(libsphinx_a_SOURCES) $(indexer_SOURCES) \
 	$(indextool_SOURCES) $(search_SOURCES) $(searchd_SOURCES) \
-	$(spelldump_SOURCES) $(tests_SOURCES)
+	$(spelldump_SOURCES) $(tests_SOURCES) $(wordbreaker_SOURCES)
 DIST_SOURCES = $(libsphinx_a_SOURCES) $(indexer_SOURCES) \
 	$(indextool_SOURCES) $(search_SOURCES) $(searchd_SOURCES) \
-	$(spelldump_SOURCES) $(tests_SOURCES)
+	$(spelldump_SOURCES) $(tests_SOURCES) $(wordbreaker_SOURCES)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -225,6 +229,7 @@ search_SOURCES = search.cpp
 spelldump_SOURCES = spelldump.cpp
 indextool_SOURCES = indextool.cpp
 tests_SOURCES = tests.cpp
+wordbreaker_SOURCES = wordbreaker.cpp
 BUILT_SOURCES = extract-version
 @USE_RE2_FALSE@LIBRE2_LIBS = 
 @USE_RE2_TRUE@LIBRE2_LIBS = $(top_srcdir)/libre2/obj/libre2.a
@@ -333,6 +338,9 @@ spelldump$(EXEEXT): $(spelldump_OBJECTS) $(spelldump_DEPENDENCIES)
 tests$(EXEEXT): $(tests_OBJECTS) $(tests_DEPENDENCIES) 
 	@rm -f tests$(EXEEXT)
 	$(CXXLINK) $(tests_OBJECTS) $(tests_LDADD) $(LIBS)
+wordbreaker$(EXEEXT): $(wordbreaker_OBJECTS) $(wordbreaker_DEPENDENCIES) 
+	@rm -f wordbreaker$(EXEEXT)
+	$(CXXLINK) $(wordbreaker_OBJECTS) $(wordbreaker_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -363,6 +371,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxstemru.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxutils.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/wordbreaker.Po@am__quote@
 
 .cpp.o:
 @am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

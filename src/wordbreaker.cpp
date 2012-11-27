@@ -28,7 +28,7 @@ inline int IsAlpha ( int c )
 }
 
 // copied over from sphinxutils; remove at some point
-void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn )
+void StrSplit ( CSphVector<CSphString> & dOut, const char * sIn )
 {
 	if ( !sIn )
 		return;
@@ -409,7 +409,7 @@ void UrlBreakTest ( const char * sTestFile )
 
 		// parse!
 		CSphVector<CSphString> & dTest = dTests.Add();
-		sphSplit ( dTest, p );
+		StrSplit ( dTest, p );
 		if ( dTest.GetLength()<2 )
 		{
 			if ( dTest.GetLength()==1 )

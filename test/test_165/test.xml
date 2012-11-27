@@ -44,7 +44,7 @@ index star
 	source			= srcstar
 	path			= <data_path/>/star
     charset_type 	= utf-8
-	charset_table = 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, *
+	charset_table	= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, *, %, ?
 	exceptions		= test_165/synonyms2.txt
 	enable_star = 1
 	min_prefix_len = 1
@@ -96,7 +96,8 @@ INSERT INTO `star_table` VALUES
 ( 1,  'action*packed movies are not for family' ),
 ( 2,  'action movies are mostly blockbasters' ),
 ( 3,  'action packed movies published recently' ),
-( 4,  'recent DVD pack as collection' )
+( 4,  'recent DVD pack as collection' ),
+( 5,  'a?c x%z' )
 </db_insert>
 
 
@@ -122,6 +123,9 @@ INSERT INTO `star_table` VALUES
 <sphinxql>CALL SNIPPETS('; the test', 'snip', ';doggy the', 1 as force_all_words )</sphinxql>
 <sphinxql>CALL SNIPPETS('; the test', 'snip', 'doggy the', 1 as force_all_words )</sphinxql>
 <sphinxql>CALL SNIPPETS('; the test', 'snip', 'doggy the', 0 as force_all_words )</sphinxql>
+
+<sphinxql>select * from star where match ('a?c')</sphinxql>
+<sphinxql>select * from star where match ('x%z')</sphinxql>
 </sphqueries>
 
 </test>

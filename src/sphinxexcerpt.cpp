@@ -1043,8 +1043,18 @@ void ExcerptGen_c::BuildExcerpt ( ExcerptQuery_t & tQuery )
 
 	// alloc, fill and return the result
 	m_dResult.Add ( 0 );
-
-	tQuery.m_dRes.SwapData ( m_dResult );
+	// if was stripped
+	if ( tQuery.m_sStripMode=="strip" || tQuery.m_sStripMode=="index" )
+	{
+		// replacing sphinx magic (refer to sphinxint.h) characters in output
+		for ( BYTE * s=m_dResult.Begin(); *s; s++ )
+		{
+			BYTE c = ( *s>0 && *s<=5 )?( ' ' ):( *s );
+			tQuery.m_dRes.Add ( c );
+		}
+		tQuery.m_dRes.Add ( '\0' );
+	} else
+		tQuery.m_dRes.SwapData ( m_dResult );
 	return;
 }
 

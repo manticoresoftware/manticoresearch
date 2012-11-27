@@ -1371,6 +1371,11 @@ static bool myisattr ( char c )
 		c=='_';
 }
 
+static bool myismagic ( char c )
+{
+	return c=='@';
+}
+
 
 bool CSphSEQuery::ParseField ( char * sField )
 {
@@ -1576,13 +1581,13 @@ bool CSphSEQuery::ParseField ( char * sField )
 			tFilter.m_bExclude = ( strcmp ( sName, "!filter" )==0 );
 
 			// get the attr name
-			while ( (*sValue) && !myisattr(*sValue) )
+			while ( (*sValue) && !( myisattr(*sValue) || myismagic(*sValue) ) )
 				sValue++;
 			if ( !*sValue )
 				break;
 
 			tFilter.m_sAttrName = sValue;
-			while ( (*sValue) && myisattr(*sValue) )
+			while ( (*sValue) && ( myisattr(*sValue) || myismagic(*sValue) ) )
 				sValue++;
 			if ( !*sValue )
 				break;

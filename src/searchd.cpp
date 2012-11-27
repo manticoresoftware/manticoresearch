@@ -361,7 +361,7 @@ static volatile sig_atomic_t g_bGotSigusr1		= 0;	// we just received SIGUSR1; ne
 static CSphSharedBuffer<DWORD>	g_bDaemonAtShutdown;
 static volatile bool			g_bShutdown = false;
 
-static CSphVector<int>	g_dTermChildren;				// children to send term signal on rotation is done
+static CSphVector<int>	g_dHupChildren;					// children to send hup signal on rotation is done
 static int64_t			g_tmRotateChildren		= 0;	// pause to next children term signal after rotation is done
 static int				g_iRotationThrottle		= 0;	// pause between children term signals after rotation is done
 
@@ -15723,14 +15723,13 @@ void IndexRotationDone ()
 	if ( g_iRotationThrottle && g_eWorkers==MPM_PREFORK )
 	{
 		ARRAY_FOREACH ( i, g_dChildren )
-			g_dTermChildren.Add ( g_dChildren[i] );
+			g_dHupChildren.Add ( g_dChildren[i] );
 	} else
 	{
 		// forcibly restart children serving persistent connections and/or preforked ones
-		// FIXME! check how both signals are handled in both cases
-		int iSignal = ( g_eWorkers==MPM_PREFORK ) ? SIGTERM : SIGHUP;
+		// FIXME! check how both signals are handled in case of FORK and PREFORK
 		ARRAY_FOREACH ( i, g_dChildren )
-			kill ( g_dChildren[i], iSignal );
+			kill ( g_dChildren[i], SIGHUP );
 	}
 #endif
 
@@ -18139,18 +18138,18 @@ void TickPreforked ( CSphProcessSharedMutex * pAcceptMutex )
 	assert ( !g_bHeadDaemon );
 	assert ( pAcceptMutex );
 
-	if ( g_bGotSigterm )
+	if ( g_bGotSigterm || g_bGotSighup )
 		exit ( 0 );
 
 	int iClientSock = -1;
 	char sClientIP[SPH_ADDRPORT_SIZE];
 	Listener_t * pListener = NULL;
 
-	for ( ; !g_bGotSigterm && !pListener; )
+	for ( ; !g_bGotSigterm && !pListener && !g_bGotSighup; )
 	{
 		if ( pAcceptMutex->TimedLock ( 1000000 ) )
 		{
-			if ( !g_bGotSigterm )
+			if ( !g_bGotSigterm && !g_bGotSighup )
 				pListener = DoAccept ( &iClientSock, sClientIP );
 
 			pAcceptMutex->Unlock();
@@ -18208,15 +18207,14 @@ void HandlerThread ( void * pArg )
 }
 
 
-static void CheckChildrenTerm ()
+static void CheckChildrenHup ()
 {
 #if !USE_WINDOWS
-	if ( g_eWorkers!=MPM_PREFORK || !g_dTermChildren.GetLength() || g_tmRotateChildren>sphMicroTimer() )
+	if ( g_eWorkers!=MPM_PREFORK || !g_dHupChildren.GetLength() || g_tmRotateChildren>sphMicroTimer() )
 		return;
 
-	sphLogDebugvv ( "killing child %d ( %d )", g_dTermChildren.Last(), g_dTermChildren.GetLength() );
-	kill ( g_dTermChildren.Last(), SIGTERM );
-	g_dTermChildren.Resize ( g_dTermChildren.GetLength()-1 );
+	sphLogDebugvv ( "sending sighup to child %d ( %d )", g_dHupChildren.Last(), g_dHupChildren.GetLength() );
+	kill ( g_dHupChildren.Pop(), SIGHUP );
 	g_tmRotateChildren = sphMicroTimer() + g_iRotationThrottle*1000;
 #endif
 }
@@ -18234,7 +18232,7 @@ void TickHead ( /*CSphProcessSharedMutex * pAcceptMutex*/ bool bDontListen )
 	CheckDelete ();
 	CheckRotate ();
 	CheckFlush ();
-	CheckChildrenTerm();
+	CheckChildrenHup();
 	CheckPing();
 
 	sphInfo ( NULL ); // flush dupes

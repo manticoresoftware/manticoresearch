@@ -1200,7 +1200,7 @@ inline void Swap ( CSphMatch & a, CSphMatch & b )
 /// source statistics
 struct CSphSourceStats
 {
-	int				m_iTotalDocuments;	///< how much documents
+	int64_t			m_iTotalDocuments;	///< how much documents
 	int64_t			m_iTotalBytes;		///< how much bytes
 
 	/// ctor
@@ -2533,7 +2533,7 @@ struct CSphIndexProgress
 
 	Phase_e			m_ePhase;		///< current indexing phase
 
-	int				m_iDocuments;	///< PHASE_COLLECT: documents collected so far
+	int64_t			m_iDocuments;	///< PHASE_COLLECT: documents collected so far
 	int64_t			m_iBytes;		///< PHASE_COLLECT: bytes collected so far;
 									///< PHASE_PREREAD: bytes read so far;
 	int64_t			m_iBytesTotal;	///< PHASE_PREREAD: total bytes to read;

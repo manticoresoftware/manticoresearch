@@ -37,6 +37,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "testrt", "win\testrt05.vcpr
 		{6A1685DE-0265-4243-965F-96CB53EBBCA6} = {6A1685DE-0265-4243-965F-96CB53EBBCA6}
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wordbreaker", "win\wordbreaker05.vcproj", "{D16E0BAE-B9A5-439C-B9F1-CC92F6AED103}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -109,6 +111,12 @@ Global
 		{651CEFE5-9BDB-4003-9D35-8D05FA2C06D7}.Release|Win32.Build.0 = Release|Win32
 		{651CEFE5-9BDB-4003-9D35-8D05FA2C06D7}.Release|x64.ActiveCfg = Release|x64
 		{651CEFE5-9BDB-4003-9D35-8D05FA2C06D7}.Release|x64.Build.0 = Release|x64
+		{D16E0BAE-B9A5-439C-B9F1-CC92F6AED103}.Debug|Win32.ActiveCfg = Debug|Win32
+		{D16E0BAE-B9A5-439C-B9F1-CC92F6AED103}.Debug|Win32.Build.0 = Debug|Win32
+		{D16E0BAE-B9A5-439C-B9F1-CC92F6AED103}.Debug|x64.ActiveCfg = Debug|Win32
+		{D16E0BAE-B9A5-439C-B9F1-CC92F6AED103}.Release|Win32.ActiveCfg = Release|Win32
+		{D16E0BAE-B9A5-439C-B9F1-CC92F6AED103}.Release|Win32.Build.0 = Release|Win32
+		{D16E0BAE-B9A5-439C-B9F1-CC92F6AED103}.Release|x64.ActiveCfg = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

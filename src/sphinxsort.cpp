@@ -679,12 +679,14 @@ public:
 class CSphGrouperJson : public CSphGrouperString<BinaryHash_fn>
 {
 protected:
-	JsonKey_t m_tKey;
+	CSphString	m_sKey;
+	JsonKey_t	m_tKey;
 
 public:
 	explicit CSphGrouperJson ( const CSphAttrLocator & tLoc, const char * sKey )
 		: CSphGrouperString<BinaryHash_fn> ( tLoc )
-		, m_tKey ( sKey )
+		, m_sKey ( sKey )
+		, m_tKey ( m_sKey.cstr() )
 	{}
 
 	virtual SphGroupKey_t KeyFromValue ( SphAttr_t uValue ) const
@@ -1022,6 +1024,8 @@ struct CSphGroupSorterSettings
 	bool				m_bMVA;				///< whether we're grouping by MVA attribute
 	bool				m_bMva64;
 	CSphGrouper *		m_pGrouper;			///< group key calculator
+	CSphString			m_sJson;			// JSON attribute name
+	CSphString			m_sJsonSub;			// JSON sub field name
 
 	CSphGroupSorterSettings ()
 		: m_bDistinct ( false )
@@ -2479,22 +2483,21 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const CSphSchema & 
 	if ( pDot )
 	{
 		// got a dot, check for json attr
-		CSphString sCol = pQuery->m_sGroupBy;
+		tSettings.m_sJson = pQuery->m_sGroupBy;
 		int iDot = pDot - pQuery->m_sGroupBy.cstr();
-		char * pCol = const_cast<char*> ( sCol.cstr() );
-		*( pCol + iDot ) = '\0'; // zero out that dot
-		const char * pInCol = pQuery->m_sGroupBy.cstr() + iDot + 1;
+		tSettings.m_sJson.SetBinary ( pQuery->m_sGroupBy.cstr(), iDot );
+		tSettings.m_sJsonSub = pQuery->m_sGroupBy.cstr() + iDot + 1;
 
-		const int iAttr = tSchema.GetAttrIndex ( pCol );
+		const int iAttr = tSchema.GetAttrIndex ( tSettings.m_sJson.cstr() );
 		if ( iAttr<0 )
 		{
-			sError.SetSprintf ( "groupby: no such attribute '%s'", pCol );
+			sError.SetSprintf ( "groupby: no such attribute '%s'", tSettings.m_sJson.cstr() );
 			return false;
 		}
 
 		if ( tSchema.GetAttr(iAttr).m_eAttrType!=SPH_ATTR_JSON )
 		{
-			sError.SetSprintf ( "groupby: attribute '%s' does not have subfields (must be sql_attr_json)", pCol );
+			sError.SetSprintf ( "groupby: attribute '%s' does not have subfields (must be sql_attr_json)", tSettings.m_sJson.cstr() );
 			return false;
 		}
 
@@ -2505,7 +2508,7 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const CSphSchema & 
 		}
 
 		// FIXME! handle collations here?
-		tSettings.m_pGrouper = new CSphGrouperJson ( tSchema.GetAttr(iAttr).m_tLocator, pInCol );
+		tSettings.m_pGrouper = new CSphGrouperJson ( tSchema.GetAttr(iAttr).m_tLocator, tSettings.m_sJsonSub.cstr() );
 
 	} else
 	{
@@ -3556,7 +3559,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 
 		enum { E_CREATE_GROUP_BY = 0, E_CREATE_DISTINCT = 1, E_CREATE_COUNT = 2 };
 		int dGroupAttrs[E_CREATE_COUNT];
-		dGroupAttrs[E_CREATE_GROUP_BY] = tSorterSchema.GetAttrIndex ( pQuery->m_sGroupBy.cstr() );
+		dGroupAttrs[E_CREATE_GROUP_BY] = tSorterSchema.GetAttrIndex ( tSettings.m_sJson.IsEmpty() ? pQuery->m_sGroupBy.cstr() : tSettings.m_sJson.cstr() );
 		if ( pExtra )
 			pExtra->AddAttr ( tSorterSchema.GetAttr ( dGroupAttrs[E_CREATE_GROUP_BY] ), true );
 

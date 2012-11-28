@@ -521,7 +521,7 @@ enum SearchdStatus_e
 /// master-agent API protocol extensions version
 enum
 {
-	VER_MASTER = 2
+	VER_MASTER = 3
 };
 
 
@@ -5179,6 +5179,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 	for ( int iRes=0; iRes<iResults; iRes++ )
 		tAgent.m_dResults[iRes].m_iSuccesses = 0;
 
+	CSphVector<BYTE> dStringPool ( 512 );
 	for ( int iRes=0; iRes<iResults; iRes++ )
 	{
 		CSphQueryResult & tRes = tAgent.m_dResults [ iRes ];
@@ -5273,10 +5274,11 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 					{
 						tMatch.SetAttr ( tAttr.m_tLocator, tReq.GetUint64() );
 
-					} else if ( tAttr.m_eAttrType==SPH_ATTR_STRING )
+					} else if ( tAttr.m_eAttrType==SPH_ATTR_STRING || tAttr.m_eAttrType==SPH_ATTR_JSON )
 					{
-						CSphString sValue = tReq.GetString();
-						int iLen = sValue.Length();
+						dStringPool.Resize ( 0 );
+						tReq.GetString ( dStringPool );
+						int iLen = dStringPool.GetLength();
 
 						int iOff = m_dStringsStorage.GetLength();
 						tMatch.SetAttr ( tAttr.m_tLocator, iOff );
@@ -5284,7 +5286,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 						m_dStringsStorage.Resize ( iOff+3+iLen );
 						BYTE * pBuf = &m_dStringsStorage[iOff];
 						pBuf += sphPackStrlen ( pBuf, iLen );
-						memcpy ( pBuf, sValue.cstr(), iLen );
+						memcpy ( pBuf, dStringPool.Begin(), iLen );
 
 					} else if ( tAttr.m_eAttrType==SPH_ATTR_STRINGPTR )
 					{
@@ -6521,7 +6523,7 @@ static int SendGetAttrCount ( const CSphSchema & tSchema )
 }
 
 
-int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<PoolPtrs_t> & dTag2Pools, bool bExtendedStat )
+int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<PoolPtrs_t> & dTag2Pools, bool bAgentMode, int iMasterVer )
 {
 	int iRespLen = 0;
 
@@ -6578,7 +6580,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 	}
 
 	// agents send additional flag from words statistics
-	if ( bExtendedStat )
+	if ( bAgentMode )
 		iRespLen += pRes->m_hWordStats.GetLength();
 
 	pRes->m_hWordStats.IterateStart();
@@ -6589,6 +6591,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 	CSphVector<CSphAttrLocator> dMvaItems;
 	CSphVector<CSphAttrLocator> dStringItems;
 	CSphVector<CSphAttrLocator> dStringPtrItems;
+	CSphVector<CSphAttrLocator> dJsonItems;
 	for ( int i=0; i<iAttrsCount; i++ )
 	{
 		const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(i);
@@ -6598,6 +6601,8 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 			dStringItems.Add ( tCol.m_tLocator );
 		if ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR )
 			dStringPtrItems.Add ( tCol.m_tLocator );
+		if ( tCol.m_eAttrType==SPH_ATTR_JSON )
+			dJsonItems.Add ( tCol.m_tLocator );
 	}
 
 	if ( iVer>=0x10C && dMvaItems.GetLength() )
@@ -6632,7 +6637,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 		}
 	}
 
-	if ( iVer>=0x11A && bExtendedStat )
+	if ( iVer>=0x11A && bAgentMode )
 	{
 		iRespLen += 1;			// stats mask
 		if ( g_bIOStats )
@@ -6656,12 +6661,43 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 		}
 	}
 
+	if ( iVer>=0x117 && dJsonItems.GetLength() )
+	{
+		CSphVector<BYTE> dJson ( 512 );
+		// to master pass JSON as raw data
+		for ( int i=0; i<pRes->m_iCount; i++ )
+		{
+			const CSphMatch & tMatch = pRes->m_dMatches [ pRes->m_iOffset+i ];
+			const BYTE * pPool = dTag2Pools [ tMatch.m_iTag ].m_pStrings;
+			ARRAY_FOREACH ( j, dJsonItems )
+			{
+				DWORD uOffset = (DWORD) tMatch.GetAttr ( dJsonItems[j] );
+				assert ( !uOffset || pPool );
+				if ( !uOffset ) // magic zero
+					continue;
+
+				const BYTE * pStr = NULL;
+				int iRawLen = sphUnpackStr ( pPool + uOffset, &pStr );
+
+				if ( bAgentMode && iMasterVer>=3 )
+				{
+					iRespLen += iRawLen;
+				} else
+				{
+					dJson.Resize ( 0 );
+					sphJsonFormat ( dJson, pStr );
+					iRespLen += dJson.GetLength();
+				}
+			}
+		}
+	}
+
 	return iRespLen;
 }
 
 
 void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pRes,
-	const CSphVector<PoolPtrs_t> & dTag2Pools, bool bExtendedStat, bool bLimitedMatches )
+	const CSphVector<PoolPtrs_t> & dTag2Pools, bool bAgentMode, bool bLimitedMatches, int iMasterVer )
 {
 	// status
 	if ( iVer>=0x10D )
@@ -6710,7 +6746,10 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 		{
 			const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(i);
 			tOut.SendString ( tCol.m_sName.cstr() );
-			tOut.SendDword ( (DWORD)tCol.m_eAttrType );
+			if ( tCol.m_eAttrType==SPH_ATTR_JSON && !bAgentMode )
+				tOut.SendDword ( (DWORD)SPH_ATTR_STRING );
+			else
+				tOut.SendDword ( (DWORD)tCol.m_eAttrType );
 		}
 	}
 
@@ -6734,6 +6773,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 	if ( iVer>=0x108 )
 		tOut.SendInt ( USE_64BIT );
 
+	CSphVector<BYTE> dJson;
 	for ( int i=0; i<pRes->m_iCount; i++ )
 	{
 		const CSphMatch & tMatch = pRes->m_dMatches [ pRes->m_iOffset+i ];
@@ -6797,7 +6837,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 						}
 					}
 
-				} else if ( tAttr.m_eAttrType==SPH_ATTR_STRING )
+				} else if ( tAttr.m_eAttrType==SPH_ATTR_STRING || ( tAttr.m_eAttrType==SPH_ATTR_JSON && bAgentMode && iMasterVer>=3 ) )
 				{
 					// send string attr
 					if ( iVer<0x117 )
@@ -6842,6 +6882,32 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 							tOut.SendBytes ( pString, iLen );
 						}
 					}
+				} else if ( tAttr.m_eAttrType==SPH_ATTR_JSON )
+				{
+					// send JSON attr
+					if ( iVer<0x117 )
+					{
+						// for older clients, just send int value of 0
+						tOut.SendDword ( 0 );
+					} else
+					{
+						// or as formatted string
+						DWORD uOffset = (DWORD) tMatch.GetAttr ( tAttr.m_tLocator );
+						assert ( !uOffset || pStrings );
+						if ( !uOffset ) // magic zero
+						{
+							tOut.SendDword ( 0 ); // null string
+						} else
+						{
+							dJson.Resize ( 0 );
+							const BYTE * pStr = NULL;
+							sphUnpackStr ( pStrings + uOffset, &pStr );
+							sphJsonFormat ( dJson, pStr );
+
+							tOut.SendDword ( dJson.GetLength() );
+							tOut.SendBytes ( dJson.Begin(), dJson.GetLength() );
+						}
+					}
 
 				} else
 				{
@@ -6864,7 +6930,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 	tOut.SendAsDword ( pRes->m_iTotalMatches );
 	tOut.SendInt ( Max ( pRes->m_iQueryTime, 0 ) );
 
-	if ( iVer>=0x11A && bExtendedStat )
+	if ( iVer>=0x11A && bAgentMode )
 	{
 		BYTE uStatMask = ( g_bCpuStats ? 2 : 0 ) | ( g_bIOStats ? 1 : 0 );
 		tOut.SendByte ( uStatMask );
@@ -6896,7 +6962,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 		tOut.SendString ( pRes->m_hWordStats.IterateGetKey().cstr() );
 		tOut.SendAsDword ( tStat.m_iDocs );
 		tOut.SendAsDword ( tStat.m_iHits );
-		if ( bExtendedStat )
+		if ( bAgentMode )
 			tOut.SendByte ( tStat.m_bExpanded );
 	}
 }
@@ -9416,7 +9482,7 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 	// serve the response
 	NetOutputBuffer_c tOut ( iSock );
 	int iReplyLen = 0;
-	bool bExtendedStat = ( iMasterVer>0 );
+	bool bAgentMode = ( iMasterVer>0 );
 
 	if ( iVer<=0x10C )
 	{
@@ -9430,7 +9496,7 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 			return;
 		}
 
-		iReplyLen = CalcResultLength ( iVer, &tRes, tRes.m_dTag2Pools, bExtendedStat );
+		iReplyLen = CalcResultLength ( iVer, &tRes, tRes.m_dTag2Pools, bAgentMode, iMasterVer );
 		bool bWarning = ( iVer>=0x106 && !tRes.m_sWarning.IsEmpty() );
 
 		// send it
@@ -9441,12 +9507,12 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 		const CSphQuery & tQuery = tHandler.m_dQueries[0];
 		bool bLimitedMatches = tQuery.m_bAgent && tQuery.m_iLimit;
 
-		SendResult ( iVer, tOut, &tRes, tRes.m_dTag2Pools, bExtendedStat, bLimitedMatches );
+		SendResult ( iVer, tOut, &tRes, tRes.m_dTag2Pools, bAgentMode, bLimitedMatches, iMasterVer );
 
 	} else
 	{
 		ARRAY_FOREACH ( i, tHandler.m_dQueries )
-			iReplyLen += CalcResultLength ( iVer, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, bExtendedStat );
+			iReplyLen += CalcResultLength ( iVer, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, bAgentMode, iMasterVer );
 
 		// send it
 		tOut.SendWord ( (WORD)SEARCHD_OK );
@@ -9457,7 +9523,7 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 		{
 			const CSphQuery & tQuery = tHandler.m_dQueries[i];
 			bool bLimitedMatches = tQuery.m_bAgent && tQuery.m_iLimit;
-			SendResult ( iVer, tOut, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, bExtendedStat, bLimitedMatches );
+			SendResult ( iVer, tOut, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, bAgentMode, bLimitedMatches, iMasterVer );
 		}
 	}
 

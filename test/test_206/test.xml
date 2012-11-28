@@ -14,6 +14,7 @@ indexer
 searchd
 {
 	<searchd_settings/>
+	workers = threads
 	compat_sphinxql_magics = 0
 }
 
@@ -30,6 +31,73 @@ index test
 {
 	source			= test
 	path			= <data_path/>/test
+}
+
+source src1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select *, 1 as gid, 'dummy' as title from json_table where id%3=1
+	sql_attr_uint	= gid
+	sql_attr_json	= j
+}
+source src2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select *, 2 as gid, 'dummy' as title from json_table where id%3=2
+	sql_attr_uint	= gid
+	sql_attr_json	= j
+}
+source src3
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select *, 3 as gid, 'dummy' as title from json_table where id%3=0
+	sql_attr_uint	= gid
+	sql_attr_json	= j
+}
+
+index i1
+{
+	source		= src1
+	path			= <data_path/>/i1
+}
+index i2
+{
+	source		= src2
+	path			= <data_path/>/i2
+}
+index i3
+{
+	source		= src3
+	path			= <data_path/>/i3
+}
+
+index loc
+{
+	type			= distributed
+	local			= i1
+	local			= i2
+}
+index dist
+{
+	type			= distributed
+	agent		= <my_address/>:i1
+	agent		= <my_address/>:i2
+}
+index dist1
+{
+	type			= distributed
+	agent		= <my_address/>:i1
+	agent		= <my_address/>:i2
+	local			= i3
+}
+index loc1
+{
+	type			= distributed
+	local			= i1
+	agent		= <my_address/>:i2
 }
 </config>
 
@@ -100,8 +168,38 @@ And so the teacher turned it out, but still it lingered near.",
 	f4:16777217.123}'),
 (15,3,'invalid json','{ this is not valid }')
 </db_insert>
+<db_create>CREATE TABLE `json_table` ( `id` int(11) NOT NULL, `j` varchar(8192) NOT NULL );</db_create>
+<db_drop>DROP TABLE IF EXISTS `json_table`;</db_drop>
+<db_insert>
+INSERT INTO `json_table` VALUES
+(1,'{"uid":123}'),
+(2,'{"uid":234}'),
+(3,'{"uid":345}'),
+(4,'{"uid":456}'),
+(5,'{"uid":567}'),
+(6,'{"uid":678}'),
+(7,'{"uid":123}'),
+(8,'{"uid":567}'),
+(9,'{"uid":345}')
+</db_insert>
+
+<queries>
+<!-- json via API -->
+<query index="loc" select="*, @count" groupattr="j.uid" sortmode="extended" sortby="id asc" groupsort="id asc"/>
+<query index="loc1" select="*, @count" groupattr="j.uid" sortmode="extended" sortby="id asc" groupsort="id asc"/>
+<query index="dist" select="*, @count" groupattr="j.uid" sortmode="extended" sortby="id asc" groupsort="id asc"/>
+<query index="dist1" select="*, @count" groupattr="j.uid" sortmode="extended" sortby="id asc" groupsort="id asc"/>
+</queries>
 
 <sphqueries>
+<!-- group by vs distributed index -->
+<sphinxql>select *, count(*) from loc group by j.uid order by id asc</sphinxql>
+<sphinxql>select *, count(*) from loc1 group by j.uid order by id asc</sphinxql>
+<sphinxql>select *, count(*) from dist group by j.uid order by id asc</sphinxql>
+<sphinxql>select *, count(*) from dist1 group by j.uid order by id asc</sphinxql>
+<!-- query that cause crash -->
+<sphinxql>select * from count() loc group by j.uid</sphinxql>
+
 <sphinxql>select * from test</sphinxql>
 <sphinxql>select * from test where j.uid&gt;200</sphinxql>
 <sphinxql>select * from test where j.t1&gt;0</sphinxql>

@@ -20,7 +20,7 @@
 
 #define DICT_COMPOUND_MIN		6			// keywords longer than this are potential compounds
 #define DICT_COMPOUND_THRESH	0.0001f		// penalize a no-split with a rare potential compound (that occurs in less than this percentage)
-#define DICT_COMPOUND_COEFF		1.9f		// penalization factor
+#define DICT_COMPOUND_COEFF		1.53f		// penalization factor
 
 #include "sphinxstd.h"
 #include <math.h>

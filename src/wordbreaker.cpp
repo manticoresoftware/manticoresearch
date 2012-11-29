@@ -434,12 +434,22 @@ void UrlBreakTest ( const char * sTestFile )
 	fclose ( fp );
 
 	// self check
+	int iNosplit = 0;
 	ARRAY_FOREACH ( i, dTests )
 	{
+		if ( dTests[i][1]==dTests[i][0] )
+		{
+//			printf ( "WARNING: base %s is the only substring\n", dTests[i][0].cstr() );
+			iNosplit++;
+		}
+
 		for ( int j=1; j<dTests[i].GetLength(); j++ )
 			if ( !strstr ( dTests[i][0].cstr(), dTests[i][j].cstr() ) )
 				printf ( "WARNING: substring %s not found in base %s\n", dTests[i][j].cstr(), dTests[i][0].cstr() );
 	}
+	if ( iNosplit )
+		printf ( "total %d nosplits, %.3f of the test suite\n",
+			iNosplit, float(iNosplit)/dTests.GetLength(), dTests.GetLength() );
 
 	int iTotal = 0;
 	int iGood = 0;
@@ -487,6 +497,7 @@ void UrlBreakTest ( const char * sTestFile )
 	// results
 	printf ( "prec %.3f, wall %d msec, %d good, %d total\n",
 		float(iGood)/iTotal, (int)( ( sphMicroTimer() - tmWall )/1000 ), iGood, iTotal );
+	printf ( "prec %.3f, %d total w/o nosplits\n", float(iGood)/(iTotal-iNosplit), iTotal-iNosplit );
 }
 
 

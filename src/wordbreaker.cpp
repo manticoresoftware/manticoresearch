@@ -13,10 +13,14 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#define PREFER_ALLDICT		0
-#define UNKNOWN_WORD_COEFF	3.0f
-#define DICT_THRESH			12
-#define DEFAULT_DICT		"wordbreaker-dict.txt"
+#define PREFER_ALLDICT			0
+#define UNKNOWN_WORD_COEFF		3.0f
+#define DICT_THRESH				12
+#define DEFAULT_DICT			"wordbreaker-dict.txt"
+
+#define DICT_COMPOUND_MIN		6			// keywords longer than this are potential compounds
+#define DICT_COMPOUND_THRESH	0.0001f		// penalize a no-split with a rare potential compound (that occurs in less than this percentage)
+#define DICT_COMPOUND_COEFF		1.9f		// penalization factor
 
 #include "sphinxstd.h"
 #include <math.h>
@@ -213,8 +217,10 @@ struct Split_t
 		if ( m_bAllDict!=rhs.m_bAllDict )
 			return m_bAllDict < rhs.m_bAllDict;
 #endif
-		if ( m_bAnyDict!=rhs.m_bAnyDict )
-			return m_bAnyDict < rhs.m_bAnyDict;
+		// do not (!) check anydict flag on an initial empty split
+		if ( m_Pos.GetLength() )
+			if ( m_bAnyDict!=rhs.m_bAnyDict )
+				return m_bAnyDict < rhs.m_bAnyDict;
 		return m_fProb < rhs.m_fProb;
 	}
 };
@@ -297,6 +303,13 @@ void UrlBreak ( Split_t & tBest, const char * sWord )
 	tBest.m_Pos.Add ( iLen );
 	tBest.m_fProb = p.m_fProb;
 	tBest.m_bAllDict = tBest.m_bAnyDict = p.m_bDict;
+
+	if ( iLen>=DICT_COMPOUND_MIN && tBest.m_bAllDict )
+	{
+		static const float THRESH = logf ( DICT_COMPOUND_THRESH );
+		if ( tBest.m_fProb<=THRESH )
+			tBest.m_fProb *= DICT_COMPOUND_COEFF;
+	}
 
 	// work the current splits
 	CSphVector<Split_t> dSplits2;
@@ -462,11 +475,13 @@ void UrlBreakTest ( const char * sTestFile )
 			iGood++;
 
 		// debug dump
+#ifndef NDEBUG
 		if ( !bGood )
 		{
-//			printf ( "%d msec, %s => ", (int)( ( sphMicroTimer() - tmWord )/1000 ), sWord );
-//			tBest.Dump ( sWord );
+			printf ( "%d msec, %s => ", (int)( ( sphMicroTimer() - tmWord )/1000 ), sWord );
+			tBest.Dump ( sWord );
 		}
+#endif
 	}
 
 	// results

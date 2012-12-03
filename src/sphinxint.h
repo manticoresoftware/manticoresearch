@@ -1215,7 +1215,6 @@ struct ThrottleState_t
 void			SafeClose ( int & iFD );
 const BYTE *	SkipQuoted ( const BYTE * p );
 
-ISphExpr *		sphSortSetupExpr ( const CSphString & sName, const CSphSchema & tIndexSchema );
 bool			sphSortGetStringRemap ( const CSphSchema & tSorterSchema, const CSphSchema & tIndexSchema, CSphVector<SphStringSorterRemap_t> & dAttrs );
 bool			sphIsSortStringInternal ( const char * sColumnName );
 

@@ -5131,7 +5131,7 @@ bool RtIndex_t::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) cons
 	if ( pCtx->m_bLookupFilter || pCtx->m_bLookupSort )
 		CopyDocinfo ( tMatch, FindDocinfo ( (RtSegment_t*)pCtx->m_pIndexData, tMatch.m_iDocID ) );
 
-	pCtx->CalcFilter ( tMatch );
+	pCtx->CalcFilter ( tMatch ); // FIXME!!! leak of filtered STRING_PTR
 	return pCtx->m_pFilter ? !pCtx->m_pFilter->Eval ( tMatch ) : false;
 }
 
@@ -5883,7 +5883,10 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 					tCtx.CalcFilter ( tMatch );
 					if ( tCtx.m_pFilter && !tCtx.m_pFilter->Eval ( tMatch ) )
+					{
+						tCtx.FreeStrFilter ( tMatch );
 						continue;
+					}
 
 					tCtx.CalcSort ( tMatch );
 					tCtx.CalcFinal ( tMatch ); // OPTIMIZE? could be possibly done later
@@ -5953,7 +5956,11 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 							pMatch[i].m_iWeight = ( sphRand() & 0xffff );
 
 						if ( tCtx.m_pWeightFilter && !tCtx.m_pWeightFilter->Eval ( pMatch[i] ) )
+						{
+							tCtx.FreeStrSort ( pMatch[i] );
+							tCtx.FreeStrFinal ( pMatch[i] );
 							continue;
+						}
 
 						// storing segment in matches tag for finding strings attrs offset later, biased against default zero
 						pMatch[i].m_iTag = iSeg+1;
@@ -5961,6 +5968,10 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 						bool bNewMatch = false;
 						ARRAY_FOREACH ( iSorter, dSorters )
 							bNewMatch |= dSorters[iSorter]->Push ( pMatch[i] );
+
+						// stringptr expressions should be duplicated (or taken over) at this point
+						tCtx.FreeStrSort ( pMatch[i] );
+						tCtx.FreeStrFinal ( pMatch[i] );
 
 						if ( bNewMatch )
 							if ( --iCutoff==0 )

@@ -13474,7 +13474,7 @@ bool CSphIndex_VLN::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) 
 	// might be needed even when we do not have a filter
 	if ( pCtx->m_bLookupFilter )
 		CopyDocinfo ( pCtx, tMatch, FindDocinfo ( tMatch.m_iDocID ) );
-	pCtx->CalcFilter ( tMatch );
+	pCtx->CalcFilter ( tMatch ); // FIXME!!! leak of filtered STRING_PTR
 
 	return pCtx->m_pFilter ? !pCtx->m_pFilter->Eval ( tMatch ) : false;
 }
@@ -13706,7 +13706,10 @@ bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 			pCtx->CalcSort ( pMatch[i] );
 
 			if ( pCtx->m_pWeightFilter && !pCtx->m_pWeightFilter->Eval ( pMatch[i] ) )
+			{
+				pCtx->FreeStrSort ( pMatch[i] );
 				continue;
+			}
 
 			pMatch[i].m_iTag = iTag;
 
@@ -13862,6 +13865,9 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 			for ( int iSorter=0; iSorter<iSorters; iSorter++ )
 				ppSorters[iSorter]->Push ( tMatch );
+
+			// stringptr expressions should be duplicated (or taken over) at this point
+			tCtx.FreeStrSort ( tMatch );
 		}
 	} else
 	{
@@ -13897,11 +13903,18 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 					tMatch.m_iDocID = DOCINFO2ID ( pDocinfo );
 					tMatch.m_pStatic = DOCINFO2ATTRS ( pDocinfo );
 					if ( !tCtx.m_pFilter->Eval ( tMatch ) )
+					{
+						tCtx.FreeStrFilter ( tMatch );
 						continue;
+					}
+
 					if ( bRandomize )
 						tMatch.m_iWeight = ( sphRand() & 0xffff );
 					for ( int iSorter=0; iSorter<iSorters; iSorter++ )
 						ppSorters[iSorter]->Push ( tMatch );
+
+					// stringptr expressions should be duplicated (or taken over) at this point
+					tCtx.FreeStrFilter ( tMatch );
 				}
 			} else
 			{
@@ -13917,7 +13930,10 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 					// early filter only (no late filters in full-scan because of no @weight)
 					tCtx.CalcFilter ( tMatch );
 					if ( tCtx.m_pFilter && !tCtx.m_pFilter->Eval ( tMatch ) )
+					{
+						tCtx.FreeStrFilter ( tMatch );
 						continue;
+					}
 
 					// submit match to sorters
 					tCtx.CalcSort ( tMatch );
@@ -13927,6 +13943,10 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 					bool bNewMatch = false;
 					for ( int iSorter=0; iSorter<iSorters; iSorter++ )
 						bNewMatch |= ppSorters[iSorter]->Push ( tMatch );
+
+					// stringptr expressions should be duplicated (or taken over) at this point
+					tCtx.FreeStrFilter ( tMatch );
+					tCtx.FreeStrSort ( tMatch );
 
 					// handle cutoff
 					if ( bNewMatch && --iCutoff==0 )
@@ -15497,8 +15517,6 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const CSphSchema &
 			case SPH_EVAL_FINAL:
 			{
 				ISphExpr * pExpr = tIn.m_pExpr.Ptr();
-				if ( !pExpr )
-					pExpr = sphSortSetupExpr ( tIn.m_sName, tSchema );
 				if ( !pExpr )
 				{
 					pResult->m_sError.SetSprintf ( "INTERNAL ERROR: incoming-schema expression missing evaluator (stage=%d, in=%s)",

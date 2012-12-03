@@ -116,6 +116,13 @@ INSERT INTO `test_table` VALUES
 <!-- regression sorter gives first matches instead bests -->
 <sphinxql>select id, str1 from rt group by idd1 order by id asc limit 0,2 option max_matches=2</sphinxql>
 <sphinxql>select id, str1 from rt group by idd1 order by id asc limit 2,2 option max_matches=4</sphinxql>
+<!-- added sorting by STRING_PTR -->
+<sphinxql>select id, idd1, to_string(idd1) as c from plain order by idd1 asc, id desc</sphinxql>
+<sphinxql>select id, idd1, to_string(idd1) as c from plain order by c desc, id desc</sphinxql>
+<sphinxql>select id, idd1, to_string(idd1) as c from plain where match ( 'the' ) order by c desc, id desc</sphinxql>
+<sphinxql>select id, idd2, idd2+4 as i, to_string(i) as c from rt order by i asc, id desc</sphinxql>
+<sphinxql>select id, idd2, idd2+4 as i, to_string(i) as c from rt order by c desc, id desc</sphinxql>
+<sphinxql>select id, idd2, to_string(idd1) as c from rt where match ( 'the' ) order by c desc, id asc</sphinxql>
 </sphqueries>
 
 </test>

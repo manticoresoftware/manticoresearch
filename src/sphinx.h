@@ -2604,10 +2604,11 @@ enum ESphSortKeyPart
 	SPH_KEYPART_WEIGHT,
 	SPH_KEYPART_INT,
 	SPH_KEYPART_FLOAT,
-	SPH_KEYPART_STRING
+	SPH_KEYPART_STRING,
+	SPH_KEYPART_STRINGPTR
 };
 
-typedef int ( *SphStringCmp_fn )( const BYTE * pStr1, const BYTE * pStr2 );
+typedef int ( *SphStringCmp_fn )( const BYTE * pStr1, const BYTE * pStr2, bool bPacked );
 
 /// match comparator state
 struct CSphMatchComparatorState
@@ -2648,7 +2649,7 @@ struct CSphMatchComparatorState
 	inline int CmpStrings ( const CSphMatch & a, const CSphMatch & b, int iAttr ) const
 	{
 		assert ( iAttr>=0 && iAttr<MAX_ATTRS );
-		assert ( m_eKeypart[iAttr]==SPH_KEYPART_STRING );
+		assert ( m_eKeypart[iAttr]==SPH_KEYPART_STRING || m_eKeypart[iAttr]==SPH_KEYPART_STRINGPTR );
 		assert ( m_fnStrCmp );
 
 		const BYTE * aa = (const BYTE*) a.GetAttr ( m_tLocator[iAttr] );
@@ -2661,7 +2662,7 @@ struct CSphMatchComparatorState
 				return -1;
 			return 1;
 		}
-		return m_fnStrCmp ( aa, bb );
+		return m_fnStrCmp ( aa, bb, ( m_eKeypart[iAttr]==SPH_KEYPART_STRING ) );
 	}
 };
 

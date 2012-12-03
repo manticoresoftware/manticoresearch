@@ -7401,6 +7401,7 @@ struct GenericMatchSort_fn : public CSphMatchComparatorState
 					continue;
 				return ( ( m_uAttrDesc>>i ) & 1 ) ^ ( aa < bb );
 			}
+			case SPH_KEYPART_STRINGPTR:
 			case SPH_KEYPART_STRING:
 			{
 				int iCmp = CmpStrings ( *a, *b, i );
@@ -19440,7 +19441,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			sphDie ( "failed to create rotation thread" );
 
 		// reserving max to keep memory consumption constant between frames
-		g_dThd.Reserve ( g_iMaxChildren*2 );
+		g_dThd.Reserve ( Max ( g_iMaxChildren*2, 64 ) );
 
 		g_tDistLock.Init();
 		g_tFlushMutex.Init();

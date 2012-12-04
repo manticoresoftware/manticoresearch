@@ -29,7 +29,7 @@ struct JsonNode_t
 	CSphString				m_sValue;
 	int64_t					m_iValue;
 	double					m_fValue;
-	CSphVector<CSphString>	m_dValue; //!COMMIT warning! slow!! implement Swap!!!
+	CSphVector<CSphString>	m_dValue; // !COMMIT warning! slow!! implement Swap!!!
 
 	JsonNode_t ()
 	{}
@@ -111,21 +111,21 @@ protected:
 		} else if ( v<65536 )
 		{
 			m_dBuffer.Add ( 252 );
-			m_dBuffer.Add ( BYTE( v & 255 ) );
-			m_dBuffer.Add ( BYTE( ( v>>8 ) & 255 ) );
+			m_dBuffer.Add ( BYTE ( v & 255 ) );
+			m_dBuffer.Add ( BYTE ( ( v>>8 ) & 255 ) );
 		} else if ( v<16777216 )
 		{
 			m_dBuffer.Add ( 253 );
-			m_dBuffer.Add ( BYTE( v & 255 ) );
-			m_dBuffer.Add ( BYTE( ( v>>8 ) & 255 ) );
-			m_dBuffer.Add ( BYTE( ( v>>16 ) & 255 ) );
+			m_dBuffer.Add ( BYTE ( v & 255 ) );
+			m_dBuffer.Add ( BYTE ( ( v>>8 ) & 255 ) );
+			m_dBuffer.Add ( BYTE ( ( v>>16 ) & 255 ) );
 		} else
 		{
 			m_dBuffer.Add ( 253 );
-			m_dBuffer.Add ( BYTE( v & 255 ) );
-			m_dBuffer.Add ( BYTE( ( v>>8 ) & 255 ) );
-			m_dBuffer.Add ( BYTE( ( v>>16 ) & 255 ) );
-			m_dBuffer.Add ( BYTE( ( v>>24 ) & 255 ) );
+			m_dBuffer.Add ( BYTE ( v & 255 ) );
+			m_dBuffer.Add ( BYTE ( ( v>>8 ) & 255 ) );
+			m_dBuffer.Add ( BYTE ( ( v>>16 ) & 255 ) );
+			m_dBuffer.Add ( BYTE ( ( v>>24 ) & 255 ) );
 		}
 	}
 
@@ -160,7 +160,7 @@ public:
 
 		// attempt to fixup type
 		// convert int/float formatted as string back to numeric, if possible
-		while ( m_bAutoconv && tNode.m_eType==JSON_STRING  )
+		while ( m_bAutoconv && tNode.m_eType==JSON_STRING )
 		{
 			// check whether the string looks like a numeric
 			const char * p = tNode.m_sValue.cstr();
@@ -255,7 +255,7 @@ public:
 		// store bloom mask, eof marker
 		for ( int i=0; i<4; i++ )
 		{
-			m_dBuffer[i] = BYTE( m_uTopLevelMask & 0xff );
+			m_dBuffer[i] = BYTE ( m_uTopLevelMask & 0xff );
 			m_uTopLevelMask >>= 8;
 		}
 		m_dBuffer.Add ( JSON_EOF );
@@ -341,7 +341,7 @@ ESphJsonType sphJsonFindKey ( const BYTE ** ppValue, const BYTE * pData, const J
 
 		// check if key matches
 		int iNameLen = sphJsonUnpackInt ( &p );
-		if ( iNameLen==tKey.m_iLen && strncasecmp ( tKey.m_sKey, (const char*)p, iNameLen )==0 )
+		if ( iNameLen==tKey.m_iLen && tKey.m_uKey==sphFNV64 ( p, iNameLen, SPH_FNV64_SEED ) )
 		{
 			*ppValue = p + iNameLen;
 			return eType;
@@ -462,6 +462,42 @@ void sphJsonFormat ( CSphVector<BYTE> & dOut, const BYTE * pData )
 		}
 	}
 }
+
+
+bool sphJsonNameSplit ( const char * sName, CSphString * sColumn, CSphString * sKey )
+{
+	if ( !sName )
+		return false;
+
+	const char * pDot = strchr ( sName, '.' );
+	if ( !pDot )
+		return false;
+
+	int iDot = pDot - sName;
+	if ( sColumn )
+		sColumn->SetBinary ( sName, iDot );
+
+	if ( sKey )
+		*sKey = sName + iDot + 1;
+
+	return true;
+}
+
+
+JsonKey_t::JsonKey_t ()
+	: m_uKey ( 0 )
+	, m_uMask ( 0 )
+	, m_iLen ( 0 )
+{}
+
+
+JsonKey_t::JsonKey_t ( const char * sKey )
+{
+	m_uMask = sphJsonKeyMask ( sKey );
+	m_iLen = strlen ( sKey );
+	m_uKey = sphFNV64 ( (const BYTE *)sKey, m_iLen, SPH_FNV64_SEED );
+}
+
 
 //
 // $Id$

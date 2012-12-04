@@ -2608,6 +2608,18 @@ enum ESphSortKeyPart
 	SPH_KEYPART_STRINGPTR
 };
 
+
+/// JSON key lookup stuff
+struct JsonKey_t
+{
+	uint64_t		m_uKey;		///< name hash
+	DWORD			m_uMask;	///< Bloom mask for this key
+	int				m_iLen;		///< name length, in bytes
+
+	JsonKey_t ();
+	explicit JsonKey_t ( const char * sKey );
+};
+
 typedef int ( *SphStringCmp_fn )( const BYTE * pStr1, const BYTE * pStr2, bool bPacked );
 
 /// match comparator state
@@ -2617,6 +2629,7 @@ struct CSphMatchComparatorState
 
 	ESphSortKeyPart		m_eKeypart[MAX_ATTRS];		///< sort-by key part type
 	CSphAttrLocator		m_tLocator[MAX_ATTRS];		///< sort-by attr locator
+	JsonKey_t			m_tSubKeys[MAX_ATTRS];		///< sort-by attr sub-locator
 	int					m_dAttrs[MAX_ATTRS];		///< sort-by attr index
 
 	DWORD				m_uAttrDesc;				///< sort order mask (if i-th bit is set, i-th attr order is DESC)

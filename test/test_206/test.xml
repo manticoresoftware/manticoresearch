@@ -215,6 +215,9 @@ INSERT INTO `json_table` VALUES
 <sphinxql>select * from test where j.GID=12</sphinxql>
 <sphinxql>select * from test where id=13</sphinxql>
 <sphinxql>select * from test where id=14</sphinxql>
+<!-- ORDER BY, NULL(able) values are presented first if you do ORDER BY ... ASC and last if you do ORDER BY ... DESC -->
+<sphinxql>select id, j from test order by j.name asc, j.gid desc</sphinxql>
+<sphinxql>select id, j from test order by j.name desc, j.gid asc</sphinxql>
 </sphqueries>
 
 </test>

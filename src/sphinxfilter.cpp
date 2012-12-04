@@ -1045,30 +1045,23 @@ ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const CSphS
 	}
 
 	// try to create a filter on a JSON attribute
-	const char * pDot = strchr ( sAttrName.cstr(), '.' );
-	if ( pDot )
+	CSphString sJsonCol, sJsonKey;
+	if ( sphJsonNameSplit ( sAttrName.cstr(), &sJsonCol, &sJsonKey ) )
 	{
-		CSphString sCol = sAttrName;
-		int iDot = pDot - sAttrName.cstr();
-		char * pCol = const_cast<char*> ( sCol.cstr() );
-		*( pCol + iDot ) = '\0'; // zero out that dot
-		const char * pInCol = sAttrName.cstr() + iDot + 1;
-
-		const int iAttr = tSchema.GetAttrIndex ( pCol );
-		if ( iAttr<0 )
+		pAttr = tSchema.GetAttr ( sJsonCol.cstr() );
+		if ( !pAttr )
 		{
-			sError.SetSprintf ( "no such attribute '%s'", pCol );
+			sError.SetSprintf ( "no such attribute '%s'", sJsonCol.cstr() );
 			return NULL;
 		}
 
-		pAttr = &tSchema.GetAttr(iAttr);
 		if ( pAttr->m_eAttrType!=SPH_ATTR_JSON )
 		{
-			sError.SetSprintf ( "attribute '%s' does not have subfields (must be sql_attr_json)", pCol );
+			sError.SetSprintf ( "attribute '%s' does not have subfields (must be sql_attr_json)", sJsonCol.cstr() );
 			return NULL;
 		}
 
-		pFilter = CreateFilterJson ( pAttr, tSettings.m_eType, pInCol, tSettings.m_bHasEqual, sError );
+		pFilter = CreateFilterJson ( pAttr, tSettings.m_eType, sJsonKey.cstr(), tSettings.m_bHasEqual, sError );
 		if ( !pFilter )
 			return NULL;
 	}

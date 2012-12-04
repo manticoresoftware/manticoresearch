@@ -53,7 +53,7 @@ static bool HasString ( const CSphMatchComparatorState * pState )
 
 	for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 	{
-		if ( pState->m_eKeypart[i]==SPH_KEYPART_STRING || pState->m_eKeypart[i]==SPH_KEYPART_STRINGPTR )
+		if ( pState->m_eKeypart[i]==SPH_KEYPART_STRING || pState->m_eKeypart[i]==SPH_KEYPART_STRINGPTR || ( pState->m_tSubKeys[i].m_uKey>0 ) )
 			return true;
 	}
 
@@ -679,14 +679,12 @@ public:
 class CSphGrouperJson : public CSphGrouperString<BinaryHash_fn>
 {
 protected:
-	CSphString	m_sKey;
 	JsonKey_t	m_tKey;
 
 public:
 	explicit CSphGrouperJson ( const CSphAttrLocator & tLoc, const char * sKey )
 		: CSphGrouperString<BinaryHash_fn> ( tLoc )
-		, m_sKey ( sKey )
-		, m_tKey ( m_sKey.cstr() )
+		, m_tKey ( sKey )
 	{}
 
 	virtual SphGroupKey_t KeyFromValue ( SphAttr_t uValue ) const
@@ -1024,8 +1022,6 @@ struct CSphGroupSorterSettings
 	bool				m_bMVA;				///< whether we're grouping by MVA attribute
 	bool				m_bMva64;
 	CSphGrouper *		m_pGrouper;			///< group key calculator
-	CSphString			m_sJson;			// JSON attribute name
-	CSphString			m_sJsonSub;			// JSON sub field name
 
 	CSphGroupSorterSettings ()
 		: m_bDistinct ( false )
@@ -2127,8 +2123,8 @@ protected:
 protected:
 	char ToLower ( char c )
 	{
-		// 0..9, A..Z->a..z, _, a..z, @
-		if ( ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || c=='_' || c=='@' )
+		// 0..9, A..Z->a..z, _, a..z, @, .
+		if ( ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || c=='_' || c=='@' || c=='.' )
 			return c;
 		if ( c>='A' && c<='Z' )
 			return c-'A'+'a';
@@ -2175,6 +2171,7 @@ static inline ESphSortKeyPart Attr2Keypart ( ESphAttr eType )
 	{
 		case SPH_ATTR_FLOAT:	return SPH_KEYPART_FLOAT;
 		case SPH_ATTR_STRING:	return SPH_KEYPART_STRING;
+		case SPH_ATTR_JSON:
 		case SPH_ATTR_STRINGPTR: return SPH_KEYPART_STRINGPTR;
 		default:				return SPH_KEYPART_INT;
 	}
@@ -2250,6 +2247,17 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 
 			// try to lookup plain attr in sorter schema
 			int iAttr = tSchema.GetAttrIndex ( pTok );
+
+			// try JSON fields
+			if ( iAttr<0 )
+			{
+				CSphString sJsonCol, sJSonKey;
+				if ( sphJsonNameSplit ( pTok, &sJsonCol, &sJSonKey ) )
+					iAttr = tSchema.GetAttrIndex ( sJsonCol.cstr() );
+
+				if ( iAttr>0 )
+					tState.m_tSubKeys[iField] = JsonKey_t ( sJSonKey.cstr() );
+			}
 
 			// try to lookup aliased count(*) in select items
 			if ( iAttr<0 )
@@ -2467,7 +2475,7 @@ void ExprGeodist_t::GetDependencyColumns ( CSphVector<int> & dColumns ) const
 static CSphGrouper * sphCreateGrouperString ( const CSphAttrLocator & tLoc, ESphCollation eCollation );
 
 static bool SetupGroupbySettings ( const CSphQuery * pQuery, const CSphSchema & tSchema,
-	CSphGroupSorterSettings & tSettings, CSphString & sError )
+	CSphGroupSorterSettings & tSettings, CSphString & sJsonColumn, CSphString & sError )
 {
 	tSettings.m_tDistinctLoc.m_iBitOffset = -1;
 
@@ -2480,26 +2488,19 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const CSphSchema & 
 		return false;
 	}
 
-	// FIXME? common code here and in sphinxfilter.cpp
-	const char * pDot = strchr ( pQuery->m_sGroupBy.cstr(), '.' );
-	if ( pDot )
+	CSphString sJsonKey;
+	if ( sphJsonNameSplit ( pQuery->m_sGroupBy.cstr(), &sJsonColumn, &sJsonKey ) )
 	{
-		// got a dot, check for json attr
-		tSettings.m_sJson = pQuery->m_sGroupBy;
-		int iDot = pDot - pQuery->m_sGroupBy.cstr();
-		tSettings.m_sJson.SetBinary ( pQuery->m_sGroupBy.cstr(), iDot );
-		tSettings.m_sJsonSub = pQuery->m_sGroupBy.cstr() + iDot + 1;
-
-		const int iAttr = tSchema.GetAttrIndex ( tSettings.m_sJson.cstr() );
+		const int iAttr = tSchema.GetAttrIndex ( sJsonColumn.cstr() );
 		if ( iAttr<0 )
 		{
-			sError.SetSprintf ( "groupby: no such attribute '%s'", tSettings.m_sJson.cstr() );
+			sError.SetSprintf ( "groupby: no such attribute '%s'", sJsonColumn.cstr() );
 			return false;
 		}
 
 		if ( tSchema.GetAttr(iAttr).m_eAttrType!=SPH_ATTR_JSON )
 		{
-			sError.SetSprintf ( "groupby: attribute '%s' does not have subfields (must be sql_attr_json)", tSettings.m_sJson.cstr() );
+			sError.SetSprintf ( "groupby: attribute '%s' does not have subfields (must be sql_attr_json)", sJsonColumn.cstr() );
 			return false;
 		}
 
@@ -2510,7 +2511,7 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const CSphSchema & 
 		}
 
 		// FIXME! handle collations here?
-		tSettings.m_pGrouper = new CSphGrouperJson ( tSchema.GetAttr(iAttr).m_tLocator, tSettings.m_sJsonSub.cstr() );
+		tSettings.m_pGrouper = new CSphGrouperJson ( tSchema.GetAttr(iAttr).m_tLocator, sJsonKey.cstr() );
 
 	} else
 	{
@@ -2627,6 +2628,109 @@ struct ExprSortStringAttrFixup_c : public ISphExpr
 };
 
 
+// expression that transform string pool base + offset -> ptr
+struct ExprSortJson2StringPtr_c : public ISphExpr
+{
+	const BYTE *			m_pStrings; ///< string pool; base for offset of string attributes
+	const CSphAttrLocator	m_tJsonCol; ///< JSON attribute to fix
+	JsonKey_t				m_tJsonKey;
+
+	ExprSortJson2StringPtr_c ( const CSphAttrLocator & tLocator, const JsonKey_t & tJsonKey )
+		: m_pStrings ( NULL )
+		, m_tJsonCol ( tLocator )
+		, m_tJsonKey ( tJsonKey )
+	{
+	}
+
+	virtual bool IsStringPtr () const { return true; }
+
+	virtual float Eval ( const CSphMatch & ) const { assert ( 0 ); return 0.0f; }
+
+	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
+	{
+		if ( !m_pStrings )
+		{
+			*ppStr = NULL;
+			return 0;
+		}
+
+		SphAttr_t uOff = tMatch.GetAttr ( m_tJsonCol );
+		if ( !uOff )
+		{
+			*ppStr = NULL;
+			return 0;
+		}
+
+		const BYTE * pJsonRaw = m_pStrings + uOff;
+		sphUnpackStr ( pJsonRaw, &pJsonRaw );
+
+		const BYTE * pVal = NULL;
+		ESphJsonType eJson = sphJsonFindKey ( &pVal, pJsonRaw, m_tJsonKey );
+
+		CSphString sVal;
+
+		// FIXME!!! make string length configurable for STRING and STRING_VECTOR to compare and allocate only Min(String.Length, CMP_LENGTH)
+		switch ( eJson )
+		{
+		case JSON_INT32:
+			sVal.SetSprintf ( "%d", sphJsonLoadInt ( &pVal ) );
+			break;
+		case JSON_INT64:
+			sVal.SetSprintf ( INT64_FMT, sphJsonLoadBigint ( &pVal ) );
+			break;
+		case JSON_DOUBLE:
+			sVal.SetSprintf ( "%f", sphQW2D ( sphJsonLoadBigint ( &pVal ) ) );
+			break;
+		case JSON_STRING:
+		{
+			int iLen = sphJsonUnpackInt ( &pVal );
+			sVal.SetBinary ( (const char *)pVal, iLen );
+			break;
+		}
+		case JSON_STRING_VECTOR:
+		{
+			int iTotalLen = sphJsonUnpackInt ( &pVal );
+			int iCount = sphJsonUnpackInt ( &pVal );
+
+			CSphFixedVector<BYTE> dBuf ( iTotalLen + 4 ); // data and tail GAP
+			BYTE * pDst = dBuf.Begin();
+
+			// head element
+			if ( iCount )
+			{
+				int iElemLen = sphJsonUnpackInt ( &pVal );
+				memcpy ( pDst, pVal, iElemLen );
+				pDst += iElemLen;
+			}
+
+			// tail elements separated by space
+			for ( int i=1; i<iCount; i++ )
+			{
+				*pDst++ = ' ';
+				int iElemLen = sphJsonUnpackInt ( &pVal );
+				memcpy ( pDst, pVal, iElemLen );
+				pDst += iElemLen;
+			}
+
+			int iStrLen = pDst-dBuf.Begin();
+			// filling junk space
+			while ( pDst<dBuf.Begin()+dBuf.GetLength() )
+				*pDst++ = '\0';
+
+			*ppStr = dBuf.LeakData();
+			return iStrLen;
+		}
+		}
+
+		int iStriLen = sVal.Length();
+		*ppStr = (const BYTE *)sVal.Leak();
+		return iStriLen;
+	}
+
+	virtual void SetStringPool ( const BYTE * pStrings ) { m_pStrings = pStrings; }
+};
+
+
 static const char g_sIntAttrPrefix[] = "@int_str2ptr_";
 
 
@@ -2637,7 +2741,8 @@ bool sphIsSortStringInternal ( const char * sColumnName )
 }
 
 
-static bool SetupSortStringRemap ( CSphSchema & tSorterSchema, CSphMatchComparatorState & tState )
+// only STRING ( static packed ) and JSON fields mush be remapped
+static bool SetupSortRemap ( CSphSchema & tSorterSchema, CSphMatchComparatorState & tState )
 {
 #ifndef NDEBUG
 	int iColWasCount = tSorterSchema.GetAttrsCount();
@@ -2645,20 +2750,27 @@ static bool SetupSortStringRemap ( CSphSchema & tSorterSchema, CSphMatchComparat
 	bool bUsesAtrrs = false;
 	for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 	{
-		if ( !( tState.m_eKeypart[i]==SPH_KEYPART_STRING || tState.m_eKeypart[i]==SPH_ATTR_STRINGPTR ) )
+		if ( !( tState.m_eKeypart[i]==SPH_KEYPART_STRING || tState.m_tSubKeys[i].m_uKey ) )
 			continue;
 
 		assert ( tState.m_dAttrs[i]>=0 && tState.m_dAttrs[i]<iColWasCount );
 
+		bool bIsJson = ( tState.m_tSubKeys[i].m_uKey>0 );
 		CSphString sRemapCol;
-		sRemapCol.SetSprintf ( "%s%s", g_sIntAttrPrefix, tSorterSchema.GetAttr ( tState.m_dAttrs[i] ).m_sName.cstr() );
+		if ( bIsJson )
+			sRemapCol.SetSprintf ( "%s%s"UINT64_FMT, g_sIntAttrPrefix, tSorterSchema.GetAttr ( tState.m_dAttrs[i] ).m_sName.cstr(), tState.m_tSubKeys[i].m_uKey );
+		else
+			sRemapCol.SetSprintf ( "%s%s", g_sIntAttrPrefix, tSorterSchema.GetAttr ( tState.m_dAttrs[i] ).m_sName.cstr() );
 
 		int iRemap = tSorterSchema.GetAttrIndex ( sRemapCol.cstr() );
 		if ( iRemap==-1 )
 		{
-			CSphColumnInfo tRemapCol ( sRemapCol.cstr(), SPH_ATTR_BIGINT );
+			CSphColumnInfo tRemapCol ( sRemapCol.cstr(), bIsJson ? SPH_ATTR_STRINGPTR : SPH_ATTR_BIGINT );
 			tRemapCol.m_eStage = SPH_EVAL_PRESORT;
-			tRemapCol.m_pExpr = new ExprSortStringAttrFixup_c ( tState.m_tLocator[i] );
+			if ( bIsJson )
+				tRemapCol.m_pExpr = new ExprSortJson2StringPtr_c ( tState.m_tLocator[i], tState.m_tSubKeys[i] );
+			else
+				tRemapCol.m_pExpr = new ExprSortStringAttrFixup_c ( tState.m_tLocator[i] );
 
 			iRemap = tSorterSchema.GetAttrsCount();
 			tSorterSchema.AddAttr ( tRemapCol, true );
@@ -3415,8 +3527,9 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	// setup groupby settings, create shortcuts
 	////////////////////////////////////////////
 
+	CSphString sJsonColumn;
 	CSphGroupSorterSettings tSettings;
-	if ( !SetupGroupbySettings ( pQuery, tSorterSchema, tSettings, sError ) )
+	if ( !SetupGroupbySettings ( pQuery, tSorterSchema, tSettings, sJsonColumn, sError ) )
 		return NULL;
 
 	const bool bGotGroupby = !pQuery->m_sGroupBy.IsEmpty(); // or else, check in SetupGroupbySettings() would already fail
@@ -3519,7 +3632,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 					bUsesAttrs = true;
 			}
 		}
-		bUsesAttrs |= SetupSortStringRemap ( tSorterSchema, tStateMatch );
+		bUsesAttrs |= SetupSortRemap ( tSorterSchema, tStateMatch );
 
 	} else if ( pQuery->m_eSort==SPH_SORT_EXPR )
 	{
@@ -3580,7 +3693,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 
 		enum { E_CREATE_GROUP_BY = 0, E_CREATE_DISTINCT = 1, E_CREATE_COUNT = 2 };
 		int dGroupAttrs[E_CREATE_COUNT];
-		dGroupAttrs[E_CREATE_GROUP_BY] = tSorterSchema.GetAttrIndex ( tSettings.m_sJson.IsEmpty() ? pQuery->m_sGroupBy.cstr() : tSettings.m_sJson.cstr() );
+		dGroupAttrs[E_CREATE_GROUP_BY] = tSorterSchema.GetAttrIndex ( sJsonColumn.IsEmpty() ? pQuery->m_sGroupBy.cstr() : sJsonColumn.cstr() );
 		if ( pExtra )
 			pExtra->AddAttr ( tSorterSchema.GetAttr ( dGroupAttrs[E_CREATE_GROUP_BY] ), true );
 
@@ -3595,7 +3708,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		FixupDependency ( tSorterSchema, tStateGroup.m_dAttrs, CSphMatchComparatorState::MAX_ATTRS );
 
 		// GroupSortBy str attributes setup
-		bUsesAttrs |= SetupSortStringRemap ( tSorterSchema, tStateGroup );
+		bUsesAttrs |= SetupSortRemap ( tSorterSchema, tStateGroup );
 	}
 
 	///////////////////

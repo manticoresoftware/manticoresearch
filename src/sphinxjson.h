@@ -93,23 +93,11 @@ void sphJsonFormat ( CSphVector<BYTE> & dOut, const BYTE * pData );
 /// compute key mask (for Bloom filtering) from the key name
 DWORD sphJsonKeyMask ( const char * sKey );
 
-/// key lookup stuff
-struct JsonKey_t
-{
-	DWORD			m_uMask;	///< Bloom mask for this key
-	int				m_iLen;		///< name length, in bytes
-	const char *	m_sKey;		///< name data
-
-	explicit JsonKey_t ( const char * sKey )
-	{
-		m_uMask = sphJsonKeyMask ( sKey );
-		m_iLen = strlen ( sKey );
-		m_sKey = sKey;
-	}
-};
-
 /// find value by key in SphinxBSON blob, return associated type
 ESphJsonType sphJsonFindKey ( const BYTE ** ppValue, const BYTE * pData, const JsonKey_t & tKey );
+
+/// split name to object and key parts, return false if not JSON name
+bool sphJsonNameSplit ( const char * sName, CSphString * sColumn, CSphString * sKey );
 
 #endif // _sphinxjson_
 

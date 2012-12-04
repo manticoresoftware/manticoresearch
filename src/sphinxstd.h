@@ -1132,6 +1132,14 @@ public:
 	{
 		return m_iSize;
 	}
+
+	T * LeakData ()
+	{
+		T * pData = m_pData;
+		m_pData = NULL;
+		Reset ( 0 );
+		return pData;
+	}
 };
 
 //////////////////////////////////////////////////////////////////////////

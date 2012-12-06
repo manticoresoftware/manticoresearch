@@ -134,6 +134,11 @@ INSERT INTO test_table ( document_id, text ) VALUES
 	<query mode="extended2" index="kw2">alw*</query>
 	<query mode="extended2" index="crc2">al* | alw*</query>
 	<query mode="extended2" index="kw2">al* | alw*</query>
+	<!-- here is precent quorum test -->
+	<query mode="extended2" index="test"> "one world"/0.1 </query>
+	<query mode="extended2" index="test"> "five tree oak one two hive"/0.4 </query>
+	<query mode="extended2" index="test"> "five tree oak one two hive"/0.59 </query>
+	<query mode="extended2" index="test"> "five tree oak one two hive"/0.60 </query>
 </queries>
 
 <sphqueries>

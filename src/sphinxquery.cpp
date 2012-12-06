@@ -158,9 +158,10 @@ XQNode_t::XQNode_t ( const XQLimitSpec_t & dSpec )
 , m_dSpec ( dSpec )
 , m_iOpArg ( 0 )
 , m_iAtomPos ( -1 )
+, m_iUser ( 0 )
 , m_bVirtuallyPlain ( false )
 , m_bNotWeighted ( false )
-, m_iUser ( 0 )
+, m_bPercentOp ( false )
 {
 #ifdef XQ_DUMP_NODE_ADDR
 	printf ( "node new 0x%08x\n", this );
@@ -335,6 +336,7 @@ XQNode_t * XQNode_t::Clone ()
 	pRet->m_iAtomPos = m_iAtomPos;
 	pRet->m_bVirtuallyPlain = m_bVirtuallyPlain;
 	pRet->m_bNotWeighted = m_bNotWeighted;
+	pRet->m_bPercentOp = m_bPercentOp;
 
 	if ( m_dChildren.GetLength()==0 )
 		return pRet;
@@ -724,8 +726,17 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		const char * p = m_pLastTokenStart;
 		while ( p<sEnd && isspace ( *(BYTE*)p ) ) p++; // to avoid CRT assertions on Windows
 
+		int iDots = 0;
 		const char * sToken = p;
-		while ( p<sEnd && isdigit ( *(BYTE*)p ) ) p++;
+		while ( p<sEnd && ( isdigit ( *(BYTE*)p ) || *p=='.' ) )
+		{
+			iDots += ( *p=='.' );
+			p++;
+		}
+
+		// must be float number but got many dots or only dot
+		if ( iDots && ( iDots>1 || p-sToken==iDots ) )
+			p = sToken;
 
 		static const int NUMBER_BUF_LEN = 10; // max strlen of int32
 		if ( p>sToken && p-sToken<NUMBER_BUF_LEN
@@ -744,7 +755,10 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 				int iNumberLen = Min ( (int)sizeof(sNumberBuf)-1, int(p-sToken) );
 				memcpy ( sNumberBuf, sToken, iNumberLen );
 				sNumberBuf[iNumberLen] = '\0';
-				m_tPendingToken.tInt.iValue = atoi ( sNumberBuf );
+				if ( iDots )
+					m_tPendingToken.tInt.fValue = (float)strtod ( sNumberBuf, NULL );
+				else
+					m_tPendingToken.tInt.iValue = atoi ( sNumberBuf );
 
 				// check if it can be used as a keyword too
 				m_pTokenizer->SetBuffer ( (BYTE*)sNumberBuf, iNumberLen );
@@ -764,7 +778,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 				}
 
 				m_iPendingNulls = 0;
-				m_iPendingType = TOK_INT;
+				m_iPendingType = iDots ? TOK_FLOAT : TOK_INT;
 				break;
 			}
 		}
@@ -1203,9 +1217,14 @@ static bool CheckQuorumProximity ( XQNode_t * pNode, CSphString * pError )
 	if ( !pNode )
 		return true;
 
-	if ( pNode->GetOp()==SPH_QUERY_QUORUM && pNode->m_iOpArg<=0 )
+	bool bQuorumPassed = ( pNode->GetOp()!=SPH_QUERY_QUORUM ||
+		( pNode->m_iOpArg>0 && ( !pNode->m_bPercentOp || pNode->m_iOpArg<=100 ) ) );
+	if ( !bQuorumPassed )
 	{
-		pError->SetSprintf ( "quorum threshold too low (%d)", pNode->m_iOpArg );
+		if ( pNode->m_bPercentOp )
+			pError->SetSprintf ( "quorum threshold out of bounds 0.0 and 1.0f (%f)", 1.0f / 100.0f * pNode->m_iOpArg );
+		else
+			pError->SetSprintf ( "quorum threshold too low (%d)", pNode->m_iOpArg );
 		return false;
 	}
 

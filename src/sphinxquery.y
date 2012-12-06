@@ -15,6 +15,7 @@
 	{
 		int			iValue;
 		int			iStrIndex;
+		float		fValue;
 	} tInt;
 	struct							// field spec
 	{
@@ -27,6 +28,7 @@
 %token <pNode>			TOK_KEYWORD
 %token <tInt>			TOK_NEAR
 %token <tInt>			TOK_INT
+%token <tInt>			TOK_FLOAT
 %token <tFieldLimit>	TOK_FIELDLIMIT
 %token <iZoneVec>		TOK_ZONE
 %token <iZoneVec>		TOK_ZONESPAN
@@ -89,9 +91,11 @@ atom:
 	| '"' '"'							{ $$ = NULL; }
 	| '"' '"' '~' TOK_INT				{ $$ = NULL; }
 	| '"' '"' '/' TOK_INT				{ $$ = NULL; }
+	| '"' '"' '/' TOK_FLOAT			{ $$ = NULL; }
 	| '"' phrase '"'					{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_PHRASE); } }
 	| '"' phrase '"' '~' TOK_INT		{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_PROXIMITY ); $$->m_iOpArg = $5.iValue; } }
 	| '"' phrase '"' '/' TOK_INT		{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_QUORUM ); $$->m_iOpArg = $5.iValue; } }
+	| '"' phrase '"' '/' TOK_FLOAT	{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_QUORUM ); $$->m_iOpArg = $5.fValue * 100; $$->m_bPercentOp = true; } }
 	| '(' expr ')'						{ $$ = $2; }
 
 	;
@@ -106,6 +110,7 @@ keyword:
 rawkeyword:
 	TOK_KEYWORD							{ $$ = $1; }
 	| TOK_INT							{ $$ = pParser->AddKeyword ( ( $1.iStrIndex>=0 ) ? pParser->m_dIntTokens[$1.iStrIndex].cstr() : NULL ); }
+	| TOK_FLOAT						{ $$ = pParser->AddKeyword ( ( $1.iStrIndex>=0 ) ? pParser->m_dIntTokens[$1.iStrIndex].cstr() : NULL ); }
 	;
 
 sentence:

@@ -149,9 +149,10 @@ public:
 	CSphVector<XQKeyword_t>	m_dWords;		///< query words (plain node)
 	int						m_iOpArg;		///< operator argument (proximity distance, quorum count)
 	int						m_iAtomPos;		///< atom position override (currently only used within expanded nodes)
+	int						m_iUser;
 	bool					m_bVirtuallyPlain;	///< "virtually plain" flag (currently only used by expanded nodes)
 	bool					m_bNotWeighted;	///< this our expanded but empty word's node
-	int						m_iUser;
+	bool					m_bPercentOp;
 
 public:
 	/// ctor

@@ -962,6 +962,8 @@ public:
 			m_dChildren[i]->HintDocid ( uMinID );
 	}
 
+	static int GetThreshold ( const XQNode_t & tNode, int iQwords );
+
 protected:
 	int							m_iThresh;			///< keyword count threshold
 	CSphVector<ExtNode_i*>		m_dChildren;		///< my children nodes (simply ExtTerm_c for now)
@@ -1807,10 +1809,10 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 			{
 				assert ( pNode->m_dWords.GetLength()==0 || pNode->m_dChildren.GetLength()==0 );
 				int iQuorumCount = pNode->m_dWords.GetLength()+pNode->m_dChildren.GetLength();
-				if ( pNode->m_iOpArg>=iQuorumCount )
+				if ( ExtQuorum_c::GetThreshold ( *pNode, iQuorumCount )>=iQuorumCount )
 				{
 					// threshold is too high
-					if ( tSetup.m_pWarning )
+					if ( tSetup.m_pWarning && !pNode->m_bPercentOp )
 						tSetup.m_pWarning->SetSprintf ( "quorum threshold too high (words=%d, thresh=%d); replacing quorum operator with AND operator",
 							iQuorumCount, pNode->m_iOpArg );
 
@@ -3913,8 +3915,9 @@ ExtQuorum_c::ExtQuorum_c ( CSphVector<ExtNode_i*> & dQwords, const XQNode_t & tN
 {
 	assert ( tNode.GetOp()==SPH_QUERY_QUORUM );
 
-	m_iThresh = tNode.m_iOpArg;
 	m_bDone = false;
+	m_iThresh = GetThreshold ( tNode, dQwords.GetLength() );
+	m_iThresh = Max ( m_iThresh, 1 );
 
 	assert ( dQwords.GetLength()>1 ); // use TERM instead
 	assert ( dQwords.GetLength()<=256 ); // internal masks are upto 256 bits
@@ -4159,6 +4162,11 @@ const ExtHit_t * ExtQuorum_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 	assert ( iHit>=0 && iHit<MAX_HITS );
 	m_dHits[iHit].m_uDocid = DOCID_MAX;
 	return ( iHit!=0 ) ? m_dHits : NULL;
+}
+
+int ExtQuorum_c::GetThreshold ( const XQNode_t & tNode, int iQwords )
+{
+	return ( tNode.m_bPercentOp ? (int)floor ( 1.0f / 100.0f * tNode.m_iOpArg * iQwords + 0.5 ) : tNode.m_iOpArg );
 }
 
 //////////////////////////////////////////////////////////////////////////

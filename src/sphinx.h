@@ -1392,7 +1392,10 @@ protected:
 		CSphString	m_sName;
 	};
 
+	friend void FixupPtrAttrs ( const CSphVector<PtrAttr_t> &, const CSphVector<CSphColumnInfo> &, CSphVector<PtrAttr_t> & );
+
 	CSphVector<PtrAttr_t>			m_dPtrAttrs;		///< attributes which have to be copied and deleted
+	CSphVector<PtrAttr_t>			m_dFactorAttrs;		///< these are the names and offsets of SPH_ATTR_FACTORS attributes
 };
 
 /// HTML stripper
@@ -2359,7 +2362,6 @@ public:
 	int				m_iMaxMatches;	///< max matches to retrieve, default is 1000. more matches use more memory and CPU time to hold and sort them
 	bool			m_bSortKbuffer;	///< whether to use PQ or K-buffer sorting algorithm
 	bool			m_bZSlist;		///< whether the ranker has to fetch the zonespanlist with this query
-	bool			m_bPackedFactors;	///< whether we have packedfactors in our query
 	bool			m_bSimplify;	///< whether to apply boolean simplification
 	bool			m_bPlainIDF;	///< whether to use PlainIDF=log(N/n) or NormalizedIDF=log((N-n+1)/n)
 
@@ -2898,8 +2900,8 @@ public:
 	virtual bool						EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const = 0;
 	virtual const CSphSourceStats &		GetStats () const = 0;
 	void						SetCacheSize ( int iMaxCachedDocs, int iMaxCachedHits );
-	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag=0 ) const = 0;
-	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag=0 ) const = 0;
+	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag=0, bool bFactors = false ) const = 0;
+	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag=0, bool bFactors = false ) const = 0;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString & sError ) const = 0;
 	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & , CSphString & ) const { return false; }
 

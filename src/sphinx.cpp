@@ -1473,8 +1473,8 @@ public:
 	virtual void				Unlock ();
 	virtual void				PostSetup() {}
 
-	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const;
-	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const;
+	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag, bool bFactors ) const;
+	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag, bool bFactors ) const;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString & sError ) const;
 	template <class Qword> bool	DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, bool bFillOnly, CSphString & sError ) const;
 	virtual bool 				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, CSphString & sError ) const;
@@ -1565,7 +1565,7 @@ private:
 private:
 	CSphString					GetIndexFileName ( const char * sExt ) const;
 
-	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict, const CSphVector<CSphFilterSettings> * pExtraFilters, CSphQueryNodeCache * pNodeCache, int iTag ) const;
+	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict, const CSphVector<CSphFilterSettings> * pExtraFilters, CSphQueryNodeCache * pNodeCache, int iTag, bool bFactors ) const;
 	bool						MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const;
 	bool						MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker, int iTag ) const;
 
@@ -5528,7 +5528,6 @@ CSphQuery::CSphQuery ()
 	, m_iMaxMatches	( 1000 )
 	, m_bSortKbuffer	( false )
 	, m_bZSlist			( false )
-	, m_bPackedFactors	( false )
 	, m_bSimplify		( false )
 	, m_bPlainIDF		( false )
 	, m_eGroupFunc		( SPH_GROUPBY_ATTR )
@@ -5930,6 +5929,7 @@ void CSphSchema::ResetAttrs ()
 	m_dStaticUsed.Reset();
 	m_dDynamicUsed.Reset();
 	m_dPtrAttrs.Reset();
+	m_dFactorAttrs.Reset();
 	m_iStaticSize = 0;
 }
 
@@ -5956,6 +5956,13 @@ void CSphSchema::AddAttr ( const CSphColumnInfo & tCol, bool bDynamic )
 	{
 		iBits = ROWITEMPTR_BITS;
 		PtrAttr_t & tPtrAttr = m_dPtrAttrs.Add();
+		tPtrAttr.m_iOffset = dUsed.GetLength();
+		tPtrAttr.m_sName = tCol.m_sName;
+	}
+	if ( tCol.m_eAttrType==SPH_ATTR_FACTORS )
+	{
+		iBits = ROWITEMPTR_BITS;
+		PtrAttr_t & tPtrAttr = m_dFactorAttrs.Add();
 		tPtrAttr.m_iOffset = dUsed.GetLength();
 		tPtrAttr.m_sName = tCol.m_sName;
 	}
@@ -6023,21 +6030,35 @@ void CSphSchema::RemoveAttr ( int iIndex )
 			m_dPtrAttrs.Remove(i);
 			break;
 		}
+
+	ARRAY_FOREACH ( i, m_dFactorAttrs )
+		if ( m_dFactorAttrs[i].m_iOffset==iItem )
+		{
+			m_dFactorAttrs.Remove(i);
+			break;
+		}
+}
+
+
+void FixupPtrAttrs ( const CSphVector<CSphSchema::PtrAttr_t> & dSrcPtrAttrs, const CSphVector<CSphColumnInfo> & dDstAttrs, CSphVector<CSphSchema::PtrAttr_t> & dDstPtrAttrs )
+{
+	dDstPtrAttrs.Reset();
+	ARRAY_FOREACH ( iSrcPtrAttr, dSrcPtrAttrs )
+		ARRAY_FOREACH ( iDstAttr, dDstAttrs )
+			if ( dSrcPtrAttrs[iSrcPtrAttr].m_sName==dDstAttrs[iDstAttr].m_sName )
+			{
+				CSphSchema::PtrAttr_t & tPtrAttr = dDstPtrAttrs.Add();
+				tPtrAttr.m_iOffset = dDstAttrs[iDstAttr].m_tLocator.m_iBitOffset / ROWITEM_BITS;
+				tPtrAttr.m_sName = dDstAttrs[iDstAttr].m_sName;
+				break;
+			}
 }
 
 
 void CSphSchema::AdoptPtrAttrs ( const CSphSchema & tSrc )
 {
-	m_dPtrAttrs.Reset();
-	ARRAY_FOREACH ( iSrcPtrAttr, tSrc.m_dPtrAttrs )
-		ARRAY_FOREACH ( iAttr, m_dAttrs )
-			if ( tSrc.m_dPtrAttrs[iSrcPtrAttr].m_sName==m_dAttrs[iAttr].m_sName )
-			{
-				PtrAttr_t & tPtrAttr = m_dPtrAttrs.Add();
-				tPtrAttr.m_iOffset = m_dAttrs[iAttr].m_tLocator.m_iBitOffset / ROWITEM_BITS;
-				tPtrAttr.m_sName = m_dAttrs[iAttr].m_sName;
-				break;
-			}
+	FixupPtrAttrs ( tSrc.m_dPtrAttrs, m_dAttrs, m_dPtrAttrs );
+	FixupPtrAttrs ( tSrc.m_dFactorAttrs, m_dAttrs, m_dFactorAttrs );
 }
 
 
@@ -6071,6 +6092,23 @@ void CSphSchema::CopyStrings ( CSphMatch * pDst, const CSphMatch & rhs, int iUpB
 			else
 				break;
 	}
+
+	// not immediately obvious: this is not needed while pushing matches to sorters; factors are held in an outer hash table
+	// but it is necessary to copy factors when combining results from several indexes via a sorter because at this moment matches are the owners of factor data
+	ARRAY_FOREACH ( i, m_dFactorAttrs )
+	{
+		int iOffset = m_dFactorAttrs[i].m_iOffset;
+		BYTE * pData = *(BYTE**)(rhs.m_pDynamic+iOffset);
+		if ( pData )
+		{
+			DWORD uDataSize = *(DWORD*)pData;
+			assert ( uDataSize );
+
+			BYTE * pCopy = new BYTE[uDataSize];
+			memcpy ( pCopy, pData, uDataSize );
+			*(BYTE**)(pDst->m_pDynamic+iOffset) = pCopy;
+		}
+	}
 }
 
 void CSphSchema::FreeStringPtrs ( CSphMatch * pMatch, int iUpBound ) const
@@ -6096,13 +6134,16 @@ void CSphSchema::FreeStringPtrs ( CSphMatch * pMatch, int iUpBound ) const
 		}
 	}
 
-	ARRAY_FOREACH ( i, m_dAttrs )
-		if ( m_dAttrs[i].m_eAttrType==SPH_ATTR_FACTORS )
+	ARRAY_FOREACH ( i, m_dFactorAttrs )
+	{
+		int iOffset = m_dFactorAttrs[i].m_iOffset;
+		BYTE * pData = *(BYTE**)(pMatch->m_pDynamic+iOffset);
+		if ( pData )
 		{
-			SphAttr_t tAttr = pMatch->GetAttr ( m_dAttrs[i].m_tLocator );
-			delete [] (BYTE*)tAttr;
-			pMatch->SetAttr ( m_dAttrs[i].m_tLocator, 0 );
+			delete [] pData;
+			*(BYTE**)(pMatch->m_pDynamic+iOffset) = NULL;
 		}
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -13729,7 +13770,7 @@ bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 				}
 				bNewMatch |= ppSorters[iSorter]->Push ( pMatch[i] );
 
-				if ( pQuery->m_bPackedFactors )
+				if ( pCtx->m_bPackedFactors )
 				{
 					pRanker->ExtraData ( EXTRA_SET_MATCHPUSHED, (void**)&(ppSorters[iSorter]->m_iJustPushed) );
 					pRanker->ExtraData ( EXTRA_SET_MATCHPOPPED, (void**)&(ppSorters[iSorter]->m_dJustPopped) );
@@ -15413,6 +15454,7 @@ CSphQueryContext::CSphQueryContext ()
 	m_iWeights = 0;
 	m_bLookupFilter = false;
 	m_bLookupSort = false;
+	m_bPackedFactors = false;
 	m_pFilter = NULL;
 	m_pWeightFilter = NULL;
 	m_pIndexData = NULL;
@@ -16562,7 +16604,7 @@ struct CmpPSortersByRandom_fn
 /// one regular query vs many sorters
 bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult,
 	int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters,
-	int iTag ) const
+	int iTag, bool bFactors ) const
 {
 	assert ( pQuery );
 
@@ -16645,7 +16687,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	tParsed.m_bNeedSZlist = pQuery->m_bZSlist;
 
 	CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
-	bool bResult = ParsedMultiQuery ( pQuery, pResult, iSorters, &dSorters[0], tParsed, pDict, pExtraFilters, &tNodeCache, iTag );
+	bool bResult = ParsedMultiQuery ( pQuery, pResult, iSorters, &dSorters[0], tParsed, pDict, pExtraFilters, &tNodeCache, iTag, bFactors );
 
 	return bResult;
 }
@@ -16655,11 +16697,11 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 /// returns true if at least one query succeeded. The failed queries indicated with pResult->m_iMultiplier==-1
 bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 	CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters,
-	const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const
+	const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag, bool bFactors ) const
 {
 	// ensure we have multiple queries
 	if ( iQueries==1 )
-		return MultiQuery ( pQueries, ppResults[0], 1, ppSorters, pExtraFilters, iTag );
+		return MultiQuery ( pQueries, ppResults[0], 1, ppSorters, pExtraFilters, iTag, bFactors );
 
 	MEMORY ( SPH_MEM_IDX_DISK_MULTY_QUERY_EX );
 
@@ -16761,7 +16803,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 			if ( pQueries[j].m_sQuery.IsEmpty() )
 				continue;
 			if ( dXQ[j].m_pRoot && ppSorters[j]
-					&& ParsedMultiQuery ( &pQueries[j], ppResults[j], 1, &ppSorters[j], dXQ[j], pDict, pExtraFilters, &tNodeCache, iTag ) )
+					&& ParsedMultiQuery ( &pQueries[j], ppResults[j], 1, &ppSorters[j], dXQ[j], pDict, pExtraFilters, &tNodeCache, iTag, bFactors ) )
 			{
 				bResult = true;
 				ppResults[j]->m_iMultiplier = iCommonSubtrees ? iQueries : 1;
@@ -16776,7 +16818,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 
 bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult,
 	int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict,
-	const CSphVector<CSphFilterSettings> * pExtraFilters, CSphQueryNodeCache * pNodeCache, int iTag ) const
+	const CSphVector<CSphFilterSettings> * pExtraFilters, CSphQueryNodeCache * pNodeCache, int iTag, bool bFactors ) const
 {
 	assert ( pQuery );
 	assert ( pResult );
@@ -16819,6 +16861,8 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	// set string pool for string on_sort expression fix up
 	tCtx.SetStringPool ( m_pStrings.GetWritePtr() );
+
+	tCtx.m_bPackedFactors = bFactors;
 
 	// open files
 	CSphAutofile tDoclist, tHitlist, tWordlist, tDummy;

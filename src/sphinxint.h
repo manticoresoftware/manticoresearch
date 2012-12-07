@@ -268,6 +268,8 @@ public:
 	bool						m_bLookupFilter;		///< row data lookup required at filtering stage
 	bool						m_bLookupSort;			///< row data lookup required at sorting stage
 
+	bool						m_bPackedFactors;		///< whether we need to store packed factors for our query
+
 	ISphFilter *				m_pFilter;
 	ISphFilter *				m_pWeightFilter;
 

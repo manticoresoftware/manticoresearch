@@ -7153,6 +7153,9 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS>::PackFactors ( int * pSize )
 
 	DWORD * pPack = pPackStart;
 
+	// leave space for size
+	pPack++;
+
 	// document level factors
 	*pPack++ = m_uDocBM25;
 	*pPack++ = (DWORD)m_fDocBM25A;
@@ -7197,8 +7200,7 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS>::PackFactors ( int * pSize )
 		}
 	}
 
-	*pPack = (pPack-pPackStart)*sizeof(DWORD);
-	pPack++;
+	*pPackStart = (pPack-pPackStart)*sizeof(DWORD);
 
 	if ( pSize )
 	{
@@ -7496,7 +7498,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 		case SPH_RANK_FIELDMASK:		pRanker = new ExtRanker_T < RankerState_Fieldmask_fn > ( tXQ, tTermSetup ); break;
 		case SPH_RANK_SPH04:			pRanker = new ExtRanker_T < RankerState_ProximityBM25Exact_fn > ( tXQ, tTermSetup ); break;
 		case SPH_RANK_EXPR:
-			if ( pQuery->m_bPackedFactors )
+			if ( tCtx.m_bPackedFactors )
 				pRanker = new ExtRanker_Expr_T <true> ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema() );
 			else
 				pRanker = new ExtRanker_Expr_T <false> ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema() );

@@ -8166,7 +8166,7 @@ public:
 
 protected:
 	void							RunSubset ( int iStart, int iEnd );	///< run queries against index(es) from first query in the subset
-	void							RunLocalSearches ( ISphMatchSorter * pLocalSorter, const char * sDistName );
+	void							RunLocalSearches ( ISphMatchSorter * pLocalSorter, const char * sDistName, bool bFactors );
 	void							RunLocalSearchesMT ();
 	bool							RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters, CSphQueryResult ** pResults, bool * pMulti ) const;
 	bool							HasExpresions ( int iStart, int iEnd ) const;
@@ -8308,7 +8308,7 @@ void SearchHandler_c::RunUpdates ( const CSphQuery & tQuery, const CSphString & 
 	if ( g_bIOStats )
 		sphStartIOStats ();
 
-	RunLocalSearches ( NULL, NULL );
+	RunLocalSearches ( NULL, NULL, false );
 	tmLocal += sphMicroTimer();
 
 	OnRunFinished();
@@ -8687,7 +8687,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 
 	// create sorters
 	int iValidSorters = 0;
-	bool bPackedFactors = false;
+	bool bNeedFactors = false;
 	for ( int i=0; i<iQueries; i++ )
 	{
 		CSphString& sError = ppResults[i]->m_sError;
@@ -8697,11 +8697,12 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 
 		assert ( !tQuery.m_iOldVersion || tQuery.m_iOldVersion>=0x102 );
 		m_tHook.m_pIndex = pServed->m_pIndex;
+		bool bFactors = false;
 		ppSorters[i] = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchemaMT, m_pUpdates,
 			NULL, // FIXME??? really NULL???
-			NULL, &m_tHook );
+			&bFactors, &m_tHook );
 
-		bPackedFactors |= tQuery.m_bPackedFactors;
+		bNeedFactors |= bFactors;
 
 		if ( ppSorters[i] )
 			iValidSorters++;
@@ -8741,10 +8742,10 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 	pServed->m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
 	if ( *pMulti )
 	{
-		bResult = pServed->m_pIndex->MultiQuery ( &m_dQueries[m_iStart], ppResults[0], iQueries, ppSorters, &dKlists );
+		bResult = pServed->m_pIndex->MultiQuery ( &m_dQueries[m_iStart], ppResults[0], iQueries, ppSorters, &dKlists, 0, bNeedFactors );
 	} else
 	{
-		bResult = pServed->m_pIndex->MultiQueryEx ( iQueries, &m_dQueries[m_iStart], ppResults, ppSorters, &dKlists );
+		bResult = pServed->m_pIndex->MultiQueryEx ( iQueries, &m_dQueries[m_iStart], ppResults, ppSorters, &dKlists, 0, bNeedFactors );
 	}
 
 	ARRAY_FOREACH ( i, dLocked )
@@ -8754,7 +8755,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 }
 
 
-void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const char * sDistName )
+void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const char * sDistName, bool bFactors )
 {
 	if ( g_iDistThreads>1 && m_dLocal.GetLength()>1 )
 	{
@@ -8784,7 +8785,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 		ARRAY_FOREACH ( i, dSorters )
 			dSorters[i] = NULL;
 
-		bool bNeedFactors = false;
+		bool bNeedFactors = bFactors;
 		int iValidSorters = 0;
 		for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
 		{
@@ -8806,8 +8807,9 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 
 				// create queue
 				m_tHook.m_pIndex = pServed->m_pIndex;
-				pSorter = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchema, m_pUpdates, &tQuery.m_bZSlist, &tQuery.m_bPackedFactors, &m_tHook );
-				bNeedFactors |= tQuery.m_bPackedFactors;
+				bool bFactors = false;
+				pSorter = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchema, m_pUpdates, &tQuery.m_bZSlist, &bFactors, &m_tHook );
+				bNeedFactors |= bFactors;
 				if ( !pSorter )
 				{
 					m_dFailuresSet[iQuery].Submit ( sLocal, sError.cstr() );
@@ -8859,9 +8861,8 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 		pServed->m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
 		if ( m_bMultiQueue )
 		{
-			m_dQueries[m_iStart].m_bPackedFactors = bNeedFactors;
 			bResult = pServed->m_pIndex->MultiQuery ( &m_dQueries[m_iStart], &tStats,
-				dSorters.GetLength(), dSorters.Begin(), NULL );
+				dSorters.GetLength(), dSorters.Begin(), NULL, 0, bNeedFactors );
 		} else
 		{
 			CSphVector<CSphQueryResult*> dResults ( m_dResults.GetLength() );
@@ -8869,7 +8870,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 				dResults[i] = &m_dResults[i];
 
 			bResult = pServed->m_pIndex->MultiQueryEx ( dSorters.GetLength(),
-				&m_dQueries[m_iStart], &dResults[m_iStart], &dSorters[0], NULL );
+				&m_dQueries[m_iStart], &dResults[m_iStart], &dSorters[0], NULL, 0, bNeedFactors );
 		}
 
 		// handle results
@@ -9139,6 +9140,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// optimize single-query, same-schema local searches
 	/////////////////////////////////////////////////////
 
+	bool bLocalFactors = false;
 	ISphMatchSorter * pLocalSorter = NULL;
 	while ( iStart==iEnd && m_dLocal.GetLength()>1 )
 	{
@@ -9175,7 +9177,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			m_tHook.m_pIndex = pFirstIndex->m_pIndex;
 			pLocalSorter = sphCreateQueue ( &m_dQueries[iStart], tFirstSchema, sError, true, pExtraSchemaMT, NULL,
 				NULL, // FIXME??? really NULL?
-				&(m_dQueries[iStart].m_bPackedFactors), &m_tHook );
+				&bLocalFactors, &m_tHook );
 		}
 
 		ReleaseIndex ( 0 );
@@ -9219,7 +9221,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	if ( m_dLocal.GetLength() )
 	{
 		tmLocal = -sphMicroTimer();
-		RunLocalSearches ( pLocalSorter, bDist ? tFirst.m_sIndexes.cstr() : NULL );
+		RunLocalSearches ( pLocalSorter, bDist ? tFirst.m_sIndexes.cstr() : NULL, bLocalFactors );
 		tmLocal += sphMicroTimer();
 	}
 

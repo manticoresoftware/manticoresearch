@@ -497,7 +497,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x11B, // 1.27
+	VER_COMMAND_SEARCH		= 0x11C, // 1.28
 	VER_COMMAND_EXCERPT		= 0x104,
 	VER_COMMAND_UPDATE		= 0x103,
 	VER_COMMAND_KEYWORDS	= 0x100,
@@ -2641,6 +2641,7 @@ public:
 	CSphString		GetRawString ( int iLen );
 	bool			GetString ( CSphVector<BYTE> & dBuffer );
 	int				GetDwords ( DWORD ** pBuffer, int iMax, const char * sErrorTemplate );
+	bool			GetBytes ( void * pBuf, int iLen );
 	bool			GetError () { return m_bError; }
 
 	template < typename T > bool	GetDwords ( CSphVector<T> & dBuffer, int iMax, const char * sErrorTemplate );
@@ -2656,7 +2657,6 @@ protected:
 
 protected:
 	void						SetError ( bool bError ) { m_bError = bError; }
-	bool						GetBytes ( void * pBuf, int iLen );
 	template < typename T > T	GetT ();
 };
 
@@ -5292,6 +5292,13 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 					{
 						CSphString sValue = tReq.GetString();
 						tMatch.SetAttr ( tAttr.m_tLocator, (SphAttr_t) sValue.Leak() );
+					} else if ( tAttr.m_eAttrType==SPH_ATTR_FACTORS )
+					{
+						DWORD uLength = tReq.GetDword();
+						BYTE * pData = new BYTE[uLength];
+						*(DWORD *)pData = uLength;
+						tReq.GetBytes ( pData+sizeof(DWORD), uLength-sizeof(DWORD) );
+						tMatch.SetAttr ( tAttr.m_tLocator, (SphAttr_t) pData );
 					} else
 					{
 						tMatch.SetAttr ( tAttr.m_tLocator, tReq.GetDword() );
@@ -6592,17 +6599,29 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 	CSphVector<CSphAttrLocator> dStringItems;
 	CSphVector<CSphAttrLocator> dStringPtrItems;
 	CSphVector<CSphAttrLocator> dJsonItems;
+	CSphVector<CSphAttrLocator> dFactorItems;
 	for ( int i=0; i<iAttrsCount; i++ )
 	{
 		const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(i);
-		if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET )
+		switch ( tCol.m_eAttrType )
+		{
+		case SPH_ATTR_UINT32SET:
+		case SPH_ATTR_INT64SET:
 			dMvaItems.Add ( tCol.m_tLocator );
-		if ( tCol.m_eAttrType==SPH_ATTR_STRING )
+			break;
+		case SPH_ATTR_STRING:
 			dStringItems.Add ( tCol.m_tLocator );
-		if ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR )
+			break;
+		case SPH_ATTR_STRINGPTR:
 			dStringPtrItems.Add ( tCol.m_tLocator );
-		if ( tCol.m_eAttrType==SPH_ATTR_JSON )
+			break;
+		case SPH_ATTR_JSON:
 			dJsonItems.Add ( tCol.m_tLocator );
+			break;
+		case SPH_ATTR_FACTORS:
+			dFactorItems.Add ( tCol.m_tLocator );
+			break;
+		}
 	}
 
 	if ( iVer>=0x10C && dMvaItems.GetLength() )
@@ -6688,6 +6707,20 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 					sphJsonFormat ( dJson, pStr );
 					iRespLen += dJson.GetLength();
 				}
+			}
+		}
+	}
+
+	if ( iVer>=0x11C && dFactorItems.GetLength() )
+	{
+		for ( int i=0; i<pRes->m_iCount; i++ )
+		{
+			const CSphMatch & tMatch = pRes->m_dMatches [ pRes->m_iOffset+i ];
+			ARRAY_FOREACH ( j, dFactorItems )
+			{
+				DWORD * pData = (DWORD *) tMatch.GetAttr ( dFactorItems[j] );
+				if ( pData )
+					iRespLen += *pData-sizeof(DWORD);
 			}
 		}
 	}
@@ -6908,7 +6941,22 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 							tOut.SendBytes ( dJson.Begin(), dJson.GetLength() );
 						}
 					}
-
+				} else if ( tAttr.m_eAttrType==SPH_ATTR_FACTORS )
+				{
+					if ( iVer<0x11C )
+						tOut.SendDword ( 0 );
+					else
+					{
+						BYTE * pData = (BYTE*) tMatch.GetAttr ( tAttr.m_tLocator );
+						if ( !pData )
+							tOut.SendDword ( 0 );
+						else
+						{
+							DWORD uLength = *(DWORD*)pData;
+							tOut.SendDword ( uLength );
+							tOut.SendBytes ( pData+sizeof(DWORD), uLength-sizeof(DWORD) );
+						}
+					}
 				} else
 				{
 					// send plain attr

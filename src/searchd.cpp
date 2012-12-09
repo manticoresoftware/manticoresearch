@@ -2641,7 +2641,6 @@ public:
 	CSphString		GetRawString ( int iLen );
 	bool			GetString ( CSphVector<BYTE> & dBuffer );
 	int				GetDwords ( DWORD ** pBuffer, int iMax, const char * sErrorTemplate );
-	bool			GetBytes ( void * pBuf, int iLen );
 	bool			GetError () { return m_bError; }
 	bool			GetBytes ( void * pBuf, int iLen );
 

@@ -180,7 +180,8 @@ INSERT INTO `json_table` VALUES
 (6,'{"uid":678}'),
 (7,'{"uid":123}'),
 (8,'{"uid":567}'),
-(9,'{"uid":345}')
+(9,'{"uid":345}'),
+( 100, '' )
 </db_insert>
 
 <queries>

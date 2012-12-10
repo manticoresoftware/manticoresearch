@@ -4289,7 +4289,6 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 				{
 					// connect() success
 					tAgent.m_eState = AGENT_HANDSHAKE;
-
 					// send the client's proto version right now to avoid w-w-r pattern.
 					NetOutputBuffer_c tOut ( tAgent.m_iSock );
 					tOut.SendDword ( SPHINX_CLIENT_VERSION );
@@ -4675,7 +4674,9 @@ class ThdWorkPool_t : ISphNoncopyable
 private:
 	CSphMutex m_tDataLock;
 	CSphMutex m_tStatLock;
-
+public:
+	CSphAutoEvent m_tChanged;
+private:
 	AgentWorkContext_t * m_dData;	// works array
 	int m_iLen;
 
@@ -4683,8 +4684,8 @@ private:
 	int m_iTail;					// ring buffer end
 
 	volatile int m_iWorkersCount;			// count of works to be done
-	int m_iAgentsDone;				// count of agents that finished their works
-	int m_iAgentsReported;			// count of agents that reported of their work done
+	volatile int m_iAgentsDone;				// count of agents that finished their works
+	volatile int m_iAgentsReported;			// count of agents that reported of their work done
 
 	CrashQuery_t m_tCrashQuery;		// query that got reported on crash
 
@@ -4706,10 +4707,12 @@ public:
 
 		m_tDataLock.Init();
 		m_tStatLock.Init();
+		m_tChanged.Init ( &m_tStatLock );
 	}
 
 	~ThdWorkPool_t ()
 	{
+		m_tChanged.Done();
 		m_tStatLock.Done();
 		m_tDataLock.Done();
 		SafeDeleteArray ( m_dData );
@@ -4721,13 +4724,10 @@ public:
 		if ( m_iTail==m_iHead ) // quick path for empty pool
 			return tRes;
 
-		m_tDataLock.Lock();
+		CSphScopedLock<CSphMutex> tData ( m_tDataLock ); // lock on create, unlock on destroy
 
 		if ( m_iTail==m_iHead ) // it might be empty now as another thread could steal work till that moment
-		{
-			m_tDataLock.Unlock();
 			return tRes;
-		}
 
 		tRes = m_dData[m_iHead];
 		assert ( tRes.m_pfn );
@@ -4736,7 +4736,6 @@ public:
 #endif
 		m_iHead = ( m_iHead+1 ) % m_iLen;
 
-		m_tDataLock.Unlock();
 		return tRes;
 	}
 
@@ -4799,7 +4798,7 @@ public:
 			if ( !tNext.m_pfn ) // pop new work if current is done
 			{
 				iSpinCount = 0;
-				iPopCount++;
+				++iPopCount;
 				tNext = pPool->Pop();
 				if ( !tNext.m_pfn ) // if there is no work at queue - worker done
 					break;
@@ -4808,10 +4807,10 @@ public:
 			tNext.m_pfn ( &tNext );
 			if ( tNext.m_iAgentsDone || !tNext.m_pfn )
 			{
-				pPool->m_tStatLock.Lock();
+				CSphScopedLock<CSphMutex> tStat ( pPool->m_tStatLock );
 				pPool->m_iAgentsDone += tNext.m_iAgentsDone;
 				pPool->m_iWorkersCount -= ( tNext.m_pfn==NULL );
-				pPool->m_tStatLock.Unlock();
+				pPool->m_tChanged.SetEvent();
 			}
 
 			iSpinCount++;
@@ -4952,17 +4951,14 @@ public:
 	// check that there are no works to do
 	bool IsDone ()
 	{
-		bool bHasWorks = m_tWorkerPool.HasActiveWorkers();
-		return !bHasWorks;
+		return m_tWorkerPool.HasActiveWorkers()==0;
 	}
 
 	// block execution while there are works to do
 	int Finish ()
 	{
-		for ( ; !IsDone(); )
-		{
-			sphSleepMsec ( 0 );
-		}
+		while ( !IsDone() )
+			WaitAgentsEvent();
 
 		return m_tWorkerPool.GetReadyTotal();
 	}
@@ -4971,6 +4967,10 @@ public:
 	bool HasReadyAgents ()
 	{
 		return ( m_tWorkerPool.GetReadyCount()>0 );
+	}
+	void WaitAgentsEvent ()
+	{
+		m_tWorkerPool.m_tChanged.WaitEvent();
 	}
 
 private:
@@ -6295,7 +6295,6 @@ private:
 	}
 };
 
-
 void FormatOrderBy ( StringBuffer_c * pBuf, const char * sPrefix, ESphSortOrder eSort, const CSphString & sSort )
 {
 	assert ( pBuf );
@@ -6316,7 +6315,6 @@ void FormatOrderBy ( StringBuffer_c * pBuf, const char * sPrefix, ESphSortOrder 
 	default:						pBuf->Append ( " %s mode-%d", sPrefix, (int)eSort ); break;
 	}
 }
-
 
 void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const CSphVector<int64_t> & dAgentTimes )
 {
@@ -8472,7 +8470,7 @@ void SearchHandler_c::RunUpdates ( const CSphQuery & tQuery, const CSphString & 
 	LogQuery ( m_dQueries[0], m_dResults[0], m_dAgentTimes[0] );
 };
 
-void SearchHandler_c::RunQueries ()
+void SearchHandler_c::RunQueries()
 {
 	///////////////////////////////
 	// choose path and run queries
@@ -8496,7 +8494,6 @@ void SearchHandler_c::RunQueries ()
 		///////////////////////////////
 		// batch queries to same index
 		///////////////////////////////
-
 		RunSubset ( 0, m_dQueries.GetLength()-1 );
 		ARRAY_FOREACH ( i, m_dQueries )
 			LogQuery ( m_dQueries[i], m_dResults[i], m_dAgentTimes[i] );
@@ -9321,7 +9318,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	if ( !bDist )
 		tFirst.m_iRetryCount = 0;
 
-
 	// connect to remote agents and query them, if required
 	CSphScopedPtr<SearchRequestBuilder_t> tReqBuilder ( NULL );
 	CSphScopedPtr<CSphRemoteAgentsController> tDistCtrl ( NULL );
@@ -9348,81 +9344,81 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	///////////////////////
 	// poll remote queries
 	///////////////////////
-
 	bool bDistDone = false;
-	while ( bDist && dAgents.GetLength() && !bDistDone )
+	if ( bDist && dAgents.GetLength() )
 	{
-		bDistDone = tDistCtrl->IsDone();
-
-		// don't forget to check incoming replies after send was over
-
-		// wait for remote queries to complete
-		if ( tDistCtrl->HasReadyAgents() )
+		while ( !bDistDone )
 		{
-			SearchReplyParser_t tParser ( iStart, iEnd, m_dMvaStorage, m_dStringsStorage );
-			int iMsecLeft = iAgentQueryTimeout - (int)( tmLocal/1000 );
-			int iReplys = RemoteWaitForAgents ( dAgents, Max ( iMsecLeft, 0 ), tParser );
-
-			// check if there were valid (though might be 0-matches) replies, and merge them
-			if ( iReplys )
-				ARRAY_FOREACH ( iAgent, dAgents )
+			// don't forget to check incoming replies after send was over
+			tDistCtrl->WaitAgentsEvent();
+			bDistDone = tDistCtrl->IsDone();
+			// wait for remote queries to complete
+			if ( tDistCtrl->HasReadyAgents() )
 			{
-				AgentConn_t & tAgent = dAgents[iAgent];
-				if ( !tAgent.m_bSuccess )
-					continue;
-
-				// merge this agent's results
-				for ( int iRes=iStart; iRes<=iEnd; iRes++ )
+				SearchReplyParser_t tParser ( iStart, iEnd, m_dMvaStorage, m_dStringsStorage );
+				int iMsecLeft = iAgentQueryTimeout - (int)( tmLocal/1000 );
+				int iReplys = RemoteWaitForAgents ( dAgents, Max ( iMsecLeft, 0 ), tParser );
+				// check if there were valid (though might be 0-matches) replies, and merge them
+				if ( iReplys )
+					ARRAY_FOREACH ( iAgent, dAgents )
 				{
-					const CSphQueryResult & tRemoteResult = tAgent.m_dResults[iRes-iStart];
-
-					// copy errors or warnings
-					if ( !tRemoteResult.m_sError.IsEmpty() )
-						m_dFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes.cstr(),
-							"agent %s: remote query error: %s",
-							tAgent.GetName().cstr(), tRemoteResult.m_sError.cstr() );
-					if ( !tRemoteResult.m_sWarning.IsEmpty() )
-						m_dFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes.cstr(),
-							"agent %s: remote query warning: %s",
-							tAgent.GetName().cstr(), tRemoteResult.m_sWarning.cstr() );
-
-					if ( tRemoteResult.m_iSuccesses<=0 )
+					AgentConn_t & tAgent = dAgents[iAgent];
+					if ( !tAgent.m_bSuccess )
 						continue;
 
-					AggrResult_t & tRes = m_dResults[iRes];
-					tRes.m_iSuccesses++;
-
-					ARRAY_FOREACH ( i, tRemoteResult.m_dMatches )
+					// merge this agent's results
+					for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 					{
-						tRes.m_dMatches.Add();
-						tRemoteResult.m_tSchema.CloneWholeMatch ( &tRes.m_dMatches.Last(), tRemoteResult.m_dMatches[i] );
-						tRes.m_dMatches.Last().m_iTag = 0; // all remote MVA values go to special pool which is at index 0
+						const CSphQueryResult & tRemoteResult = tAgent.m_dResults[iRes-iStart];
+
+						// copy errors or warnings
+						if ( !tRemoteResult.m_sError.IsEmpty() )
+							m_dFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes.cstr(),
+								"agent %s: remote query error: %s",
+								tAgent.GetName().cstr(), tRemoteResult.m_sError.cstr() );
+						if ( !tRemoteResult.m_sWarning.IsEmpty() )
+							m_dFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes.cstr(),
+								"agent %s: remote query warning: %s",
+								tAgent.GetName().cstr(), tRemoteResult.m_sWarning.cstr() );
+
+						if ( tRemoteResult.m_iSuccesses<=0 )
+							continue;
+
+						AggrResult_t & tRes = m_dResults[iRes];
+						tRes.m_iSuccesses++;
+
+						ARRAY_FOREACH ( i, tRemoteResult.m_dMatches )
+						{
+							tRes.m_dMatches.Add();
+							tRemoteResult.m_tSchema.CloneWholeMatch ( &tRes.m_dMatches.Last(), tRemoteResult.m_dMatches[i] );
+							tRes.m_dMatches.Last().m_iTag = 0; // all remote MVA values go to special pool which is at index 0
+						}
+
+						tRes.m_dMatchCounts.Add ( tRemoteResult.m_dMatches.GetLength() );
+						tRes.m_dSchemas.Add ( tRemoteResult.m_tSchema );
+						// note how we do NOT add per-index weight here; remote agents are all tagged 0 (which contains weight 1)
+
+						// merge this agent's stats
+						tRes.m_iTotalMatches += tRemoteResult.m_iTotalMatches;
+						tRes.m_iQueryTime += tRemoteResult.m_iQueryTime;
+						tRes.m_iAgentCpuTime += tRemoteResult.m_iCpuTime;
+						tRes.m_tAgentIOStats += tRemoteResult.m_tIOStats;
+
+						// merge this agent's words
+						MergeWordStats ( tRes, tRemoteResult.m_hWordStats, &m_dFailuresSet[iRes], tFirst.m_sIndexes.cstr() );
 					}
 
-					tRes.m_dMatchCounts.Add ( tRemoteResult.m_dMatches.GetLength() );
-					tRes.m_dSchemas.Add ( tRemoteResult.m_tSchema );
-					// note how we do NOT add per-index weight here; remote agents are all tagged 0 (which contains weight 1)
-
-					// merge this agent's stats
-					tRes.m_iTotalMatches += tRemoteResult.m_iTotalMatches;
-					tRes.m_iQueryTime += tRemoteResult.m_iQueryTime;
-					tRes.m_iAgentCpuTime += tRemoteResult.m_iCpuTime;
-					tRes.m_tAgentIOStats += tRemoteResult.m_tIOStats;
-
-					// merge this agent's words
-					MergeWordStats ( tRes, tRemoteResult.m_hWordStats, &m_dFailuresSet[iRes], tFirst.m_sIndexes.cstr() );
+					// dismissed
+					tAgent.m_dResults.Reset ();
+					tAgent.m_bSuccess = false;
+					tAgent.m_sFailure = "";
 				}
-
-				// dismissed
-				tAgent.m_dResults.Reset ();
-				tAgent.m_bSuccess = false;
-				tAgent.m_sFailure = "";
 			}
-		}
 
-		if ( !bDistDone )
-			sphSleepMsec ( tFirst.m_iRetryDelay );
-	}
+			if ( tFirst.m_iRetryDelay && !bDistDone )
+				sphSleepMsec ( tFirst.m_iRetryDelay );
+		} // while ( !bDistDone )
+	} // if ( bDist && dAgents.GetLength() )
 
 	// submit failures from failed agents
 	// copy timings from all agents
@@ -9458,7 +9454,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	/////////////////////
 	// merge all results
 	/////////////////////
-
 	for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 	{
 		AggrResult_t & tRes = m_dResults[iRes];
@@ -9698,7 +9693,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			return;
 
 	// run queries, send response
-	tHandler.RunQueries ();
+	tHandler.RunQueries();
 	SendSearchResponse ( tHandler, tReq, iSock, iVer, iMasterVer );
 }
 
@@ -13935,7 +13930,7 @@ bool HandleMysqlSelect ( SqlRowBuffer_c & dRows, SearchHandler_c & tHandler )
 	}
 
 	// actual searching
-	tHandler.RunQueries ();
+	tHandler.RunQueries();
 
 	if ( g_bGotSigterm )
 	{
@@ -15261,7 +15256,6 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 		// handle query packet
 		assert ( uMysqlCmd==MYSQL_COM_QUERY );
 		sQuery = tIn.GetRawString ( iPacketLen-1 );
-
 		tSession.Execute ( sQuery, tOut, uPacketID, pThd );
 	} // for (;;)
 
@@ -19683,7 +19677,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			sphFatal ( "listen() failed: %s", sphSockError() );
 
 	sphInfo ( "accepting connections" );
-
 	for ( ;; )
 	{
 		SphCrashLogger_c::SetupTimePID();

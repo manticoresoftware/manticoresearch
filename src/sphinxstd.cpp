@@ -1262,7 +1262,7 @@ bool sphIsLtLib()
 #endif
 
 //////////////////////////////////////////////////////////////////////////
-// MUTEX
+// MUTEX and EVENT
 //////////////////////////////////////////////////////////////////////////
 
 #if USE_WINDOWS
@@ -1296,6 +1296,40 @@ bool CSphMutex::Unlock ()
 	return ReleaseMutex ( m_hMutex )==TRUE;
 }
 
+bool CSphAutoEvent::Init(CSphMutex *)
+{
+	m_bSent = false;
+	m_hEvent = CreateEvent ( NULL, FALSE, FALSE, NULL );
+	m_bInitialized = ( m_hEvent!=0 );
+		return m_bInitialized;
+}
+
+bool CSphAutoEvent::Done()
+{
+	if ( !m_bInitialized )
+		return true;
+
+	m_bInitialized = false;
+	return CloseHandle ( m_hEvent )==TRUE;
+}
+
+void CSphAutoEvent::SetEvent()
+{
+	::SetEvent ( m_hEvent );
+	m_bSent = true;
+}
+
+bool CSphAutoEvent::WaitEvent()
+{
+	if ( m_bSent )
+	{
+		m_bSent = false;
+		return true;
+	}
+	DWORD uWait = WaitForSingleObject ( m_hEvent, INFINITE );
+	return !( uWait==WAIT_FAILED || uWait==WAIT_TIMEOUT );
+}
+
 #else
 
 // UNIX mutex implementation
@@ -1323,6 +1357,48 @@ bool CSphMutex::Lock ()
 bool CSphMutex::Unlock ()
 {
 	return ( pthread_mutex_unlock ( &m_tMutex )==0 );
+}
+
+bool CSphAutoEvent::Init(CSphMutex * pMutex)
+{
+	m_bSent = false;
+	assert ( pMutex );
+	if ( !pMutex )
+		return false;
+	m_pMutex = pMutex->GetInternalMutex();
+	m_bInitialized = ( pthread_cond_init ( &m_tCond, NULL )==0 );
+	return m_bInitialized;
+}
+
+bool CSphAutoEvent::Done ()
+{
+	if ( !m_bInitialized )
+		return true;
+
+	m_bInitialized = false;
+	return ( pthread_cond_destroy ( &m_tCond ) )==0;
+}
+
+void CSphAutoEvent::SetEvent ()
+{
+	if (!m_bInitialized)
+		return;
+//	pthread_mutex_lock ( m_pMutex ); // locking is done from outside
+	pthread_cond_signal ( &m_tCond );
+//	pthread_mutex_unlock ( m_pMutex );
+	m_bSent = true;
+}
+
+bool CSphAutoEvent::WaitEvent ()
+{
+	if (!m_bInitialized)
+		return true;
+	pthread_mutex_lock ( m_pMutex );
+	if ( !m_bSent )
+	pthread_cond_wait ( &m_tCond, m_pMutex );
+	m_bSent = false;
+	pthread_mutex_unlock ( m_pMutex );
+	return true;
 }
 
 #endif

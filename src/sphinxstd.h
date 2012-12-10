@@ -2243,6 +2243,34 @@ protected:
 	HANDLE m_hMutex;
 #else
 	pthread_mutex_t m_tMutex;
+public:
+	inline pthread_mutex_t* GetInternalMutex()
+	{
+		return &m_tMutex;
+	}
+#endif
+};
+
+// event implementation
+class CSphAutoEvent
+{
+public:
+	CSphAutoEvent () {};
+	~CSphAutoEvent() {};
+
+	bool Init(CSphMutex *);
+	bool Done();
+	void SetEvent();
+	bool WaitEvent();
+
+protected:
+	bool m_bInitialized;
+	bool m_bSent;
+#if USE_WINDOWS
+	HANDLE m_hEvent;
+#else
+	pthread_cond_t m_tCond;
+	pthread_mutex_t* m_pMutex;
 #endif
 };
 
@@ -2284,7 +2312,6 @@ public:
 protected:
 	T &	m_tMutexRef;
 };
-
 
 /// MT-aware refcounted base
 /// mutex protected, might be slow

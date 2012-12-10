@@ -847,8 +847,19 @@ CSphProcessSharedMutex::CSphProcessSharedMutex ( int iExtraSize )
 	}
 #endif // __FreeBSD__
 }
+
+CSphProcessSharedMutex::~CSphProcessSharedMutex()
+{
+	if ( m_pMutex )
+	{
+		pthread_mutex_destroy ( m_pMutex );
+		m_pMutex = NULL;
+	}
+}
 #else
 CSphProcessSharedMutex::CSphProcessSharedMutex ( int )
+{}
+CSphProcessSharedMutex::~CSphProcessSharedMutex()
 {}
 #endif
 

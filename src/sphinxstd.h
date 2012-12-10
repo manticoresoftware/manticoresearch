@@ -2108,6 +2108,7 @@ class CSphProcessSharedMutex
 {
 public:
 	explicit CSphProcessSharedMutex ( int iExtraSize=0 );
+	~CSphProcessSharedMutex(); // not virtual for now.
 	void	Lock () const;
 	void	Unlock () const;
 	bool	TimedLock ( int tmSpin ) const; // wait at least tmSpin microseconds the lock will available

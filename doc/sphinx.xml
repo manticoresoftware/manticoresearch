@@ -9723,11 +9723,17 @@ Introduced in version 2.1.1-beta.
 the <link linkend="conf-agent">agent</link> directive. The only difference
 is that the master will <b>not</b> open a new connection to the agent for
 every query and then close it. Rather, it will keep a connection open and
-attempt to reuse for the subsequent queries.
+attempt to reuse for the subsequent queries. The maximal number of such persistent connections per one agent host
+is limited by <link linkend="conf-persistent-connections-limit">persistent_connections_limit</link> option of searchd section.
+</para>
+<para>
+Note, that you <b>have</b> to set the last one in something greater than 0 if you want to use persistent agent connections.
+Otherwise - when <link linkend="conf-persistent-connections-limit">persistent_connections_limit</link> is not defined, it assumes
+the zero num of persistent connections, and 'agent_persistent' acts exactly as simple 'agent'.
 </para>
 <para>
 Persistent master-agent connections reduce TCP port pressure, and
-save on connection handshakes. As of r3450, they are <b>not</b> supported
+save on connection handshakes. As of r3564, they are supported <b>only</b>
 in workers=threads mode.
 </para>
 <bridgehead>Example:</bridgehead>
@@ -11862,6 +11868,22 @@ statement.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 ha_period_karma = 120
+</programlisting>
+</sect2>
+
+<sect2 id="conf-persistent-connections-limit"><title>persistent_connections_limit</title>
+<para>
+The maxinum # of simultaneos persistent connections to remote <link linkend="conf-agent-persistent">persistent agents</link>.
+Each time connecting agent defined under 'agent_persistent' we try to reuse existing connection (if any), or connect and save the connection for the future.
+However we can't hold unlimited # of such persistent connections, since each one holds a worker on agent size (and finally we'll receive the 'maxed out' error,
+when all of them are busy). This very directive limits the number. It affects the num of connections to each agent's host, across all distributed indexes.
+</para>
+<para>
+It is reasonable to set the value equal or less than <link linkend="conf-max-matches">max_matches</link> option of the agents.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+persistent_connections_limit = 29 # assume that each host of agents has max_children = 30 (or 29).
 </programlisting>
 </sect2>
 

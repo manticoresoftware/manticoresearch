@@ -671,7 +671,7 @@ index dist1
 
 
 	# persistenly connected remote agent
-	# reduces connect() pressure, requires that workers is NOT threads
+	# reduces connect() pressure, requires that workers IS threads
 	#
 	# agent_persistent		= testbox:9312:testindex1,testindex2
 
@@ -810,6 +810,11 @@ searchd
 	# maximum amount of children to fork (concurrent searches to run)
 	# optional, default is 0 (unlimited)
 	max_children		= 30
+
+	# maximum amount of persistent connections from this master to each agent host
+	# optional, but necessary if you use agent_persistent. It is reasonable to set the value
+	# as max_children, or less on the agent's hosts.
+	persistent_connections_limit	= 30
 
 	# PID file, searchd process ID file name
 	# mandatory

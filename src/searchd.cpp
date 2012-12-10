@@ -229,6 +229,8 @@ static LogFormat_e		g_eLogFormat	= LOG_FORMAT_PLAIN;
 static int				g_iReadTimeout		= 5;	// sec
 static int				g_iWriteTimeout		= 5;
 static int				g_iClientTimeout	= 300;
+static int				g_iPersistentPoolSize	= 0;
+static CSphVector<int>	g_dPersistentConnections; // protect by CSphScopedLock<ThreadsOnlyMutex_t> tLock ( g_tPersLock );
 static int				g_iMaxChildren		= 0;
 #if !USE_WINDOWS
 static bool				g_bPreopenIndexes	= true;
@@ -440,14 +442,15 @@ CSphMutex									g_tOptimizeQueueMutex;
 CSphVector<CSphString>						g_dOptimizeQueue;
 static ThrottleState_t						g_tRtThrottle;
 
-struct DistributedMutex_t : private CSphMutex
+struct ThreadsOnlyMutex_t : private CSphMutex
 {
 	void Init ();
 	void Done ();
 	void Lock ();
 	void Unlock ();
 };
-static DistributedMutex_t					g_tDistLock;
+static ThreadsOnlyMutex_t					g_tDistLock;
+static ThreadsOnlyMutex_t					g_tPersLock;
 
 enum
 {
@@ -619,6 +622,51 @@ struct AgentDash_t : AgentStats_t
 	DWORD			m_uTimestamp;	///< adds the minutes timestamp to AgentStats_t
 };
 
+class RentPersistent
+{
+	int				m_iPersPool;
+
+public:
+	explicit RentPersistent ( int iPersPool )
+		: m_iPersPool ( iPersPool )
+	{}
+
+	void Init ( int iPersPool )
+	{
+		m_iPersPool = iPersPool;
+	}
+
+	int RentConnection ()
+	{
+		// for the moment we try to return already connected socket.
+		CSphScopedLock<ThreadsOnlyMutex_t> tLock ( g_tPersLock );
+		int* pFree = &g_dPersistentConnections[m_iPersPool];
+		if ( *pFree==-1 ) // fresh pool, just cleared. All slots are free
+			*pFree = g_iPersistentPoolSize;
+		if ( !*pFree )
+			return -2; // means 'no free slots'
+		int iSocket = g_dPersistentConnections[m_iPersPool+*pFree];
+		g_dPersistentConnections[m_iPersPool+*pFree]=-1;
+		--(*pFree);
+		return iSocket;
+	}
+
+	void ReturnConnection ( int iSocket )
+	{
+		// for the moment we try to return already connected socket.
+		CSphScopedLock<ThreadsOnlyMutex_t> tLock ( g_tPersLock );
+		int* pFree = &g_dPersistentConnections[m_iPersPool];
+		assert ( *pFree<g_iPersistentPoolSize );
+		if ( *pFree==g_iPersistentPoolSize )
+		{
+			sphSockClose ( iSocket );
+			return;
+		}
+		++(*pFree);
+		g_dPersistentConnections[m_iPersPool+*pFree]=iSocket;
+	}
+};
+
 struct AgentDesc_t
 {
 	CSphString		m_sHost;		///< remote searchd host
@@ -631,7 +679,8 @@ struct AgentDesc_t
 	int				m_iStatsIndex;	///< index into global searchd stats array
 	int				m_iDashIndex;	///< index into global searchd host stats array (1 host can hold >1 agents)
 	bool			m_bPersistent;	///< whether to keep the persistent connection to the agent.
-	int				m_iPersSock;	///< socket number, -1 if not connected (has sense only if the connection is persistent)
+	RentPersistent	m_dPersPool;	///< socket number, -1 if not connected (has sense only if the connection is persistent)
+	int				m_iPersPool;	///< socket number, -1 if not connected (has sense only if the connection is persistent)
 
 public:
 	AgentDesc_t ()
@@ -641,7 +690,7 @@ public:
 		, m_uAddr ( 0 )
 		, m_iStatsIndex ( -1 )
 		, m_bPersistent ( false )
-		, m_iPersSock ( -1 )
+		, m_dPersPool ( -1 )
 	{}
 
 	CSphString GetName() const
@@ -1089,25 +1138,25 @@ bool IndexHash_c::Exists ( const CSphString & tKey ) const
 //////////////////////////////////////////////////////////////////////////
 
 
-void DistributedMutex_t::Init ()
+void ThreadsOnlyMutex_t::Init ()
 {
 	if ( g_eWorkers==MPM_THREADS )
 		CSphMutex::Init();
 }
 
-void DistributedMutex_t::Done ()
+void ThreadsOnlyMutex_t::Done ()
 {
 	if ( g_eWorkers==MPM_THREADS )
 		CSphMutex::Done();
 }
 
-void DistributedMutex_t::Lock ()
+void ThreadsOnlyMutex_t::Lock ()
 {
 	if ( g_eWorkers==MPM_THREADS )
 		CSphMutex::Lock();
 }
 
-void DistributedMutex_t::Unlock()
+void ThreadsOnlyMutex_t::Unlock()
 {
 	if ( g_eWorkers==MPM_THREADS )
 		CSphMutex::Unlock();
@@ -1631,6 +1680,18 @@ void Shutdown ()
 	ARRAY_FOREACH ( i, g_dListeners )
 		if ( g_dListeners[i].m_iSock>=0 )
 			sphSockClose ( g_dListeners[i].m_iSock );
+
+	{
+		CSphScopedLock<ThreadsOnlyMutex_t> tLock ( g_tPersLock );
+		ARRAY_FOREACH ( i, g_dPersistentConnections )
+		{
+			if ( ( i % g_iPersistentPoolSize ) && g_dPersistentConnections[i]>=0 )
+				sphSockClose ( g_dPersistentConnections[i] );
+			g_dPersistentConnections[i] = -1;
+		}
+	}
+
+	g_tPersLock.Done();
 
 #if USE_WINDOWS
 	CloseHandle ( g_hPipe );
@@ -3801,7 +3862,6 @@ enum AgentState_e
 struct AgentConn_t : public AgentDesc_t
 {
 	int				m_iSock;		///< socket number, -1 if not connected
-	int *			m_pSock;		///< the persistent socket which we rent
 	bool			m_bFresh;		///< just created persistent connection, need SEARCHD_COMMAND_PERSIST
 	AgentState_e	m_eState;		///< current state
 
@@ -3824,7 +3884,6 @@ struct AgentConn_t : public AgentDesc_t
 public:
 	AgentConn_t ()
 		: m_iSock ( -1 )
-		, m_pSock ( NULL )
 		, m_eState ( AGENT_UNUSED )
 		, m_bSuccess ( false )
 		, m_iReplyStatus ( -1 )
@@ -3842,8 +3901,8 @@ public:
 	~AgentConn_t ()
 	{
 		Close ( false );
-		if ( m_pSock )
-			*m_pSock = m_iSock; // return rented socket
+		if ( m_bPersistent )
+			m_dPersPool.ReturnConnection ( m_iSock );
 	}
 
 	void Close ( bool bClosePersist=true )
@@ -3876,6 +3935,7 @@ public:
 		m_iStatsIndex = rhs.m_iStatsIndex;
 		m_iDashIndex = rhs.m_iDashIndex;
 		m_bPersistent = rhs.m_bPersistent;
+		m_dPersPool = rhs.m_dPersPool;
 
 		return *this;
 	}
@@ -3886,11 +3946,10 @@ public:
 		*this = rhs;
 		if ( m_bPersistent )
 		{
-			m_pSock = &rhs.m_iPersSock;
-			m_iSock = rhs.m_iPersSock;
-			rhs.m_iPersSock = -1; // we 'rent' it
-		} else
-			m_pSock = NULL;
+			m_iSock = m_dPersPool.RentConnection();
+			if ( m_iSock==-2 ) // no free persistent connections. This connection will be not persistent
+				m_bPersistent = false;
+		}
 	}
 };
 
@@ -6464,8 +6523,8 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 			tBuf.Append ( " agents=(" );
 			ARRAY_FOREACH ( i, dAgentTimes )
 				tBuf.Append ( i ? ", %d.%03d" : "%d.%03d",
-					(int)(dAgentTimes[i]/1000000),
-					(int)((dAgentTimes[i]/1000)%1000) );
+					(int)(dAgentTimes[i]/1000),
+					(int)(dAgentTimes[i]%1000) );
 
 			tBuf.Append ( ")" );
 		}
@@ -9096,7 +9155,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	int iAgentConnectTimeout = 0, iAgentQueryTimeout = 0;
 
 	{
-		CSphScopedLock<DistributedMutex_t> tDistLock ( g_tDistLock );
+		CSphScopedLock<ThreadsOnlyMutex_t> tDistLock ( g_tDistLock );
 		DistributedIndex_t * pDist = g_hDistIndexes ( tFirst.m_sIndexes );
 		if ( pDist )
 		{
@@ -9374,7 +9433,13 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			const AgentConn_t & tAgent = dAgents[i];
 
 			for ( int j=iStart; j<=iEnd; j++ )
-				m_dAgentTimes[j].Add ( tAgent.m_iWall / ( iEnd-iStart+1 ) );
+			{
+				assert ( tAgent.m_iWall>=0 );
+				if ( tAgent.m_iWall<0 )
+					m_dAgentTimes[j].Add ( ( tAgent.m_iWall + sphMicroTimer() ) / ( 1000 * ( iEnd-iStart+1 ) ) );
+				else
+					m_dAgentTimes[j].Add ( ( tAgent.m_iWall ) / ( 1000 * ( iEnd-iStart+1 ) ) );
+			}
 
 			if ( !tAgent.m_bSuccess && !tAgent.m_sFailure.IsEmpty() )
 				for ( int j=iStart; j<=iEnd; j++ )
@@ -16750,12 +16815,17 @@ static void ConfigureDistributedIndex ( DistributedIndex_t * pIdx, const char * 
 			tIdx.m_dAgents.Pop();
 	}
 
-	// for now work with client persistent connections only on per-fork basis,
+	// for now work with client persistent connections only on per-thread basis,
 	// to avoid locks, etc.
-	bool bEnablePersistentConns = g_eWorkers!=MPM_THREADS;
+	bool bEnablePersistentConns = g_eWorkers==MPM_THREADS;
 	for ( CSphVariant * pAgent = hIndex("agent_persistent"); pAgent; pAgent = pAgent->m_pNext )
 	{
 		MetaAgentDesc_t& tAgent = tIdx.m_dAgents.Add ();
+		if ( !g_iPersistentPoolSize )
+		{
+			sphWarning ( "index '%s': agent_persistent used, but no persistent_connections_limit defined. Fall back to non-persistent agent", szIndexName );
+			bEnablePersistentConns = false;
+		}
 		if ( ConfigureAgent ( tAgent, pAgent, szIndexName, false, bEnablePersistentConns ) )
 			bHaveHA |= tAgent.IsHA();
 		else
@@ -17046,6 +17116,53 @@ bool CheckConfigChanges ()
 	return true;
 }
 
+void InitPersistentPool()
+{
+	if ( g_eWorkers==MPM_THREADS && g_iPersistentPoolSize )
+	{
+		// always close all persistent connections before (re)calculation.
+		CSphScopedLock<ThreadsOnlyMutex_t> tLock ( g_tPersLock );
+		ARRAY_FOREACH ( i, g_dPersistentConnections )
+		{
+			if ( ( i % g_iPersistentPoolSize ) && g_dPersistentConnections[i]>=0 )
+				sphSockClose ( g_dPersistentConnections[i] );
+			g_dPersistentConnections[i] = -1;
+		}
+
+		// Set global pools for every uniq persistent host (addr:port or socket).
+		// 1-st host pooled at g_dPersistentConnections[0],
+		// 2-nd at g_dPersistentConnections[iStride],
+		// n-th at g_dPersistentConnections[iStride*(n-1)].(iStride==g_iPersistentPoolSize)
+		CSphOrderedHash < int, int, IdentityHash_fn, STATS_MAX_DASH > hPersCounter;
+		int iPoolSize = 0;
+		int iStride = g_iPersistentPoolSize + 1; // 1 int for # of free item, then the data
+		g_hDistIndexes.IterateStart ();
+		while ( g_hDistIndexes.IterateNext () )
+		{
+			DistributedIndex_t & tIndex = g_hDistIndexes.IterateGet ();
+			if ( tIndex.m_dAgents.GetLength() )
+				ARRAY_FOREACH ( i, tIndex.m_dAgents )
+				ARRAY_FOREACH ( j, tIndex.m_dAgents[i] )
+				if ( tIndex.m_dAgents[i].GetAgent(j)->m_bPersistent )
+				{
+					AgentDesc_t* pAgent = tIndex.m_dAgents[i].GetAgent(j);
+					if ( hPersCounter.Exists ( pAgent->m_iDashIndex ) )
+						// host already met. Copy existing offset
+						pAgent->m_dPersPool.Init ( hPersCounter[pAgent->m_iDashIndex] );
+					else
+					{
+						// New host. Allocate new stride.
+						pAgent->m_dPersPool.Init ( iPoolSize );
+						hPersCounter.Add ( iPoolSize, pAgent->m_iDashIndex );
+						iPoolSize += iStride;
+					}
+				}
+		}
+		g_dPersistentConnections.Resize ( iPoolSize );
+		ARRAY_FOREACH ( i, g_dPersistentConnections )
+			g_dPersistentConnections[i] = -1; // means "Not in use"
+	}
+}
 
 void ReloadIndexSettings ( CSphConfigParser & tCP )
 {
@@ -17113,6 +17230,8 @@ void ReloadIndexSettings ( CSphConfigParser & tCP )
 			}
 		}
 	}
+
+	InitPersistentPool();
 
 	if ( nChecked < nTotalIndexes )
 		g_bDoDelete = true;
@@ -18534,6 +18653,9 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 		g_iPreforkChildren = g_iMaxChildren;
 	}
 
+	if ( hSearchd.Exists ( "persistent_connections_limit" ) && hSearchd["persistent_connections_limit"].intval()>=0 )
+		g_iPersistentPoolSize = hSearchd["persistent_connections_limit"].intval();
+
 	g_bPreopenIndexes = hSearchd.GetInt ( "preopen_indexes", (int)g_bPreopenIndexes )!=0;
 	g_bOnDiskDicts = hSearchd.GetInt ( "ondisk_dict_default", (int)g_bOnDiskDicts )!=0;
 	sphSetUnlinkOld ( hSearchd.GetInt ( "unlink_old", 1 )!=0 );
@@ -18714,6 +18836,10 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const char * sOptIndex )
 		if ( eAdd!=ADD_ERROR )
 			iValidIndexes++;
 	}
+
+	InitPersistentPool();
+
+
 
 	tmLoad += sphMicroTimer();
 	if ( !iValidIndexes )
@@ -19159,6 +19285,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	}
 #endif
 
+	// here we either since plain startup, either being resurrected (forked) by watchdog.
 	// create the pid
 	if ( bOptPIDFile )
 	{
@@ -19171,6 +19298,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( bOptPIDFile && !sphLockEx ( g_iPidFD, false ) )
 		sphFatal ( "failed to lock pid file '%s': %s (searchd already running?)", g_sPidFile, strerror(errno) );
 
+	// Actions on resurrection
 	if ( bWatched && !bVisualLoad && CheckConfigChanges() )
 	{
 		// reparse the config file
@@ -19180,16 +19308,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 		sphInfo ( "Reconfigure the daemon" );
 		ConfigureSearchd ( hConf, bOptPIDFile );
-		// reinit the arena
-		const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
-
-		sphInfo ( "Reload the indexes" );
-		const char * sArenaError = sphArenaInit ( hSearchd.GetSize ( "mva_updates_pool", MVA_UPDATES_POOL ) );
-		if ( sArenaError )
-			sphWarning ( "process shared mutex unsupported, MVA update disabled ( %s )", sArenaError );
-
-		// reload all the indexes
-		ConfigureAndPreload ( hConf, sOptIndex );
 	}
 
 	// hSearchdpre might be dead if we reloaded the config.
@@ -19508,6 +19626,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 		g_tDistLock.Init();
 		g_tFlushMutex.Init();
+		g_tPersLock.Init();
 	}
 
 	// replay last binlog
@@ -19647,6 +19766,8 @@ int main ( int argc, char **argv )
 
 	return ServiceMain ( argc, argv );
 }
+
+
 
 //
 // $Id$

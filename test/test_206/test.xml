@@ -3,6 +3,8 @@
 
 <name>JSON attributes</name>
 
+<requires><sphinxql_keep_null/></requires>
+
 <config>
 indexer
 {
@@ -99,6 +101,19 @@ index loc1
 	local			= i1
 	agent		= <my_address/>:i2
 }
+
+index loc_field
+{
+	type			= distributed
+	local			= test
+	agent		= <my_address/>:i2
+}
+index dist_field
+{
+	type			= distributed
+	local			= <my_address/>:i2
+	agent		= <my_address/>:test
+}
 </config>
 
 <db_create>
@@ -190,6 +205,11 @@ INSERT INTO `json_table` VALUES
 <query index="loc1" select="*, @count" groupattr="j.uid" sortmode="extended" sortby="id asc" groupsort="id asc"/>
 <query index="dist" select="*, @count" groupattr="j.uid" sortmode="extended" sortby="id asc" groupsort="id asc"/>
 <query index="dist1" select="*, @count" groupattr="j.uid" sortmode="extended" sortby="id asc" groupsort="id asc"/>
+<!-- json.field via API -->
+<query index="loc_field" select="id, j.uid, j.name" filter="j.uid" filter_range="249 1000"/>
+<query index="loc_field" select="id, j.uid, j.name" sortmode="extended" sortby="j.name asc, j.gid desc"/>
+<query index="dist_field" select="id, j.name, j.uid" sortmode="extended" sortby="j.name desc, j.gid asc"/>
+<query index="dist_field" select="id, j.name, j.34, j.179, j.uid, j.sv,  j.t6, j. f2, j.f1"/>
 </queries>
 
 <sphqueries>
@@ -219,6 +239,11 @@ INSERT INTO `json_table` VALUES
 <!-- ORDER BY, NULL(able) values are presented first if you do ORDER BY ... ASC and last if you do ORDER BY ... DESC -->
 <sphinxql>select id, j from test order by j.name asc, j.gid desc</sphinxql>
 <sphinxql>select id, j from test order by j.name desc, j.gid asc</sphinxql>
+<!-- json.field via SphinxQL -->
+<sphinxql>select id, j.uid, j.name from loc_field where j.uid>250</sphinxql>
+<sphinxql>select id, j.uid, j.name from loc_field order by j.name asc, j.gid desc</sphinxql>
+<sphinxql>select id, j.name, j.uid from dist_field order by j.name desc, j.gid asc</sphinxql>
+<sphinxql>select id, j.name, j.34, j.179, j.uid, j.sv,  j.t6, j. f2, j.f1 from dist_field </sphinxql>
 </sphqueries>
 
 </test>

@@ -2248,14 +2248,14 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 			// try to lookup plain attr in sorter schema
 			int iAttr = tSchema.GetAttrIndex ( pTok );
 
-			// try JSON fields
-			if ( iAttr<0 )
+			// try JSON attribute and use JSON attribute instead of JSON field
+			if ( iAttr<0 || ( iAttr>=0 && tSchema.GetAttr ( iAttr ).m_eAttrType==SPH_ATTR_JSON_FIELD ) )
 			{
 				CSphString sJsonCol, sJSonKey;
 				if ( sphJsonNameSplit ( pTok, &sJsonCol, &sJSonKey ) )
 					iAttr = tSchema.GetAttrIndex ( sJsonCol.cstr() );
 
-				if ( iAttr>0 )
+				if ( iAttr>=0 )
 					tState.m_tSubKeys[iField] = JsonKey_t ( sJSonKey.cstr() );
 			}
 
@@ -2789,7 +2789,8 @@ bool sphSortGetStringRemap ( const CSphSchema & tSorterSchema, const CSphSchema 
 	for ( int i=0; i<tSorterSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tDst = tSorterSchema.GetAttr(i);
-		if ( !tDst.m_sName.Begins ( g_sIntAttrPrefix ) )
+		// remap only static strings
+		if ( !tDst.m_sName.Begins ( g_sIntAttrPrefix ) || tDst.m_eAttrType==SPH_ATTR_STRINGPTR )
 			continue;
 
 		const CSphColumnInfo * pSrcCol = tIndexSchema.GetAttr ( tDst.m_sName.cstr()+sizeof(g_sIntAttrPrefix)-1 );
@@ -3414,7 +3415,25 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		// but that ideal route seems somewhat more complicated in the current architecture
 		ESphEvalStage eExprStage = SPH_EVAL_FINAL;
 		bool bHasPackedFactors = false;
-		if ( tItem.m_eAggrFunc==SPH_AGGR_CAT )
+
+		// FIXME!!! move JSON column to common expression parser
+		CSphString sJsonCol, sJsonFeild;
+		int iJson = -1;
+		const CSphColumnInfo * pJson = NULL;
+		bool bIsJsonField = sphJsonNameSplit ( tItem.m_sExpr.cstr(), &sJsonCol, &sJsonFeild );
+		if ( bIsJsonField )
+		{
+			iJson = tSorterSchema.GetAttrIndex ( sJsonCol.cstr() );
+			if ( iJson>=0 )
+				pJson = &tSorterSchema.GetAttr ( iJson );
+		}
+
+		if ( pJson && pJson->m_eAttrType==SPH_ATTR_JSON )
+		{
+			tExprCol.m_eAttrType = SPH_ATTR_JSON_FIELD;
+			tExprCol.m_pExpr = sphExprJsonField ( *pJson, iJson, sJsonFeild.cstr() );
+
+		} else if ( tItem.m_eAggrFunc==SPH_AGGR_CAT )
 		{
 			CSphString sExpr2;
 			sExpr2.SetSprintf ( "TO_STRING(%s)", sExpr.cstr() );
@@ -3461,6 +3480,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 
 			// is this expression used in filter?
 			// OPTIMIZE? hash filters and do hash lookups?
+			if ( tExprCol.m_eAttrType!=SPH_ATTR_JSON_FIELD )
 			ARRAY_FOREACH ( i, pQuery->m_dFilters )
 				if ( pQuery->m_dFilters[i].m_sAttrName==tExprCol.m_sName )
 			{

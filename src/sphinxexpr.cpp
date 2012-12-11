@@ -18,6 +18,7 @@
 #include "sphinxudf.h"
 #include "sphinxutils.h"
 #include "sphinxint.h"
+#include "sphinxjson.h"
 #include <time.h>
 #include <math.h>
 
@@ -619,6 +620,61 @@ public:
 		return true;
 	}
 };
+
+
+struct Expr_JsonField_c : public ISphExpr
+{
+protected:
+	const BYTE *	m_pStrings;
+	JsonKey_t		m_tField;
+	CSphAttrLocator	m_tLocator;
+	int				m_iAttr;
+
+public:
+	Expr_JsonField_c ( const CSphColumnInfo & tCol, int iAttr, const char * sField )
+		: m_pStrings ( NULL )
+		, m_tField ( sField )
+		, m_tLocator ( tCol.m_tLocator )
+		, m_iAttr ( iAttr )
+	{}
+
+	virtual void SetStringPool ( const BYTE * pStrings )
+	{
+		m_pStrings = pStrings;
+	}
+
+	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
+	{
+		dColumns.Add ( m_iAttr );
+	}
+
+	virtual float Eval ( const CSphMatch & ) const
+	{
+		assert ( 0 && "one just does not simply evaluate a JSON as float" );
+		return 0;
+	}
+
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const
+	{
+		DWORD uOff = (DWORD)tMatch.GetAttr ( m_tLocator );
+		if ( !uOff )
+			return 0;
+
+		const BYTE * pVal = NULL;
+		const BYTE * pSrc = NULL;
+		sphUnpackStr ( m_pStrings+uOff, &pSrc );
+		ESphJsonType eJson = sphJsonFindKey ( &pVal, pSrc, m_tField );
+		if ( eJson==JSON_EOF )
+			return 0;
+
+		assert ( m_pStrings+uOff<pVal );
+
+		// keep actual attribute type and offset to data packed
+		int64_t iPacked = ( ( (int64_t)( pVal-m_pStrings ) ) | ( ( (int64_t)eJson )<<32 ) );
+		return iPacked;
+	}
+};
+
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -4446,6 +4502,13 @@ void sphUDFSaveState ( CSphWriter & tWriter )
 }
 
 #endif // HAVE_DLOPEN
+
+
+ISphExpr * sphExprJsonField ( const CSphColumnInfo & tCol, int iAttr, const char * sField )
+{
+	return new Expr_JsonField_c ( tCol, iAttr, sField );
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 // PUBLIC STUFF

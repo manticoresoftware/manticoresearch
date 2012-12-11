@@ -22,6 +22,7 @@
 class CSphMatch;
 struct CSphSchema;
 struct CSphString;
+struct CSphColumnInfo;
 
 /// known attribute types
 enum ESphAttr
@@ -49,7 +50,8 @@ enum ESphAttr
 	// these types are runtime only
 	// used as intermediate types in the expression engine
 	SPH_ATTR_CONSTHASH	= 1000,
-	SPH_ATTR_FACTORS	= 1001			///< packed search factors (binary, in-memory, pooled)
+	SPH_ATTR_FACTORS	= 1001,			///< packed search factors (binary, in-memory, pooled)
+	SPH_ATTR_JSON_FIELD	= 1002			///< points to particular field in JSON column subset
 };
 
 /// column evaluation stage
@@ -194,6 +196,9 @@ bool sphUDFDrop ( const char * szFunc, CSphString & sError );
 /// save SphinxQL state (ie. all active functions)
 class CSphWriter;
 void sphUDFSaveState ( CSphWriter & tWriter );
+
+/// JSON expression wrapper
+ISphExpr * sphExprJsonField ( const CSphColumnInfo & tCol, int iAttr, const char * sField );
 
 #endif // _sphinxexpr_
 

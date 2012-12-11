@@ -1345,7 +1345,11 @@ class SphinxConfig
 				foreach ($result["rows"] as $row)
 				{
 					foreach ($row as $value)
+					{
+						if ( $this->Requires("sphinxql_keep_null") && is_null ( $value ) )
+							$value = 'NULL';
 						$str .= "\t$value";
+					}
 					$str .="\n";
 				}
 				$str .="$result[total_rows] rows in set\n";

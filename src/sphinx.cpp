@@ -5652,7 +5652,7 @@ int SelectParser_t::GetToken ( YYSTYPE * lvalp )
 	if ( sphIsAttr ( m_pCur[0] ) || ( m_pCur[0]=='@' && sphIsAttr ( m_pCur[1] ) && !isdigit ( m_pCur[1] ) ) )
 	{
 		m_pCur++;
-		while ( sphIsAttr ( *m_pCur ) ) m_pCur++;
+		while ( sphIsAttr ( *m_pCur ) || *m_pCur=='.' ) m_pCur++; // json.field is valid attribute name now
 		lvalp->m_iEnd = m_pCur-m_pStart;
 
 		#define LOC_CHECK(_str,_len,_ret) \
@@ -5949,7 +5949,7 @@ void CSphSchema::AddAttr ( const CSphColumnInfo & tCol, bool bDynamic )
 	int iBits = ROWITEM_BITS;
 	if ( tCol.m_tLocator.m_iBitCount>0 )		iBits = tCol.m_tLocator.m_iBitCount;
 	if ( tCol.m_eAttrType==SPH_ATTR_BOOL )		iBits = 1;
-	if ( tCol.m_eAttrType==SPH_ATTR_BIGINT )	iBits = 64;
+	if ( tCol.m_eAttrType==SPH_ATTR_BIGINT || tCol.m_eAttrType==SPH_ATTR_JSON_FIELD )	iBits = 64;
 	tLoc.m_bDynamic = bDynamic;
 	CSphVector<int> & dUsed = bDynamic ? m_dDynamicUsed : m_dStaticUsed;
 	if ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR )
@@ -13623,7 +13623,7 @@ static inline void CalcContextItems ( CSphMatch & tMatch, const CSphVector<CSphQ
 		const CSphQueryContext::CalcItem_t & tCalc = dItems[i];
 		if ( tCalc.m_eType==SPH_ATTR_INTEGER )
 			tMatch.SetAttr ( tCalc.m_tLoc, tCalc.m_pExpr->IntEval(tMatch) );
-		else if ( tCalc.m_eType==SPH_ATTR_BIGINT )
+		else if ( tCalc.m_eType==SPH_ATTR_BIGINT || tCalc.m_eType==SPH_ATTR_JSON_FIELD )
 			tMatch.SetAttr ( tCalc.m_tLoc, tCalc.m_pExpr->Int64Eval(tMatch) );
 		else if ( tCalc.m_eType==SPH_ATTR_STRINGPTR )
 		{

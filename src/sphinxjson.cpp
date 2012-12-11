@@ -376,6 +376,7 @@ ESphJsonType sphJsonFindKey ( const BYTE ** ppValue, const BYTE * pData, const J
 static const BYTE * JsonFormatStr ( CSphVector<BYTE> & dOut, const BYTE * p )
 {
 	int iLen = sphJsonUnpackInt ( &p );
+	dOut.Reserve ( dOut.GetLength()+iLen );
 	dOut.Add ( '"' );
 	while ( iLen-- )
 	{
@@ -414,53 +415,65 @@ void sphJsonFormat ( CSphVector<BYTE> & dOut, const BYTE * pData )
 		p = JsonFormatStr ( dOut, p );
 		dOut.Add ( ':' );
 
-		// format value
-		switch ( eType )
-		{
-			case JSON_INT32:
-			{
-				char sBuf[16];
-				snprintf ( sBuf, sizeof(sBuf), "%d", sphJsonLoadInt ( &p ) );
-				for ( char * p = sBuf; *p; p++ )
-					dOut.Add ( *p );
-				break;
-			}
-			case JSON_INT64:
-			{
-				char sBuf[32];
-				snprintf ( sBuf, sizeof(sBuf), "%lld", sphJsonLoadBigint ( &p ) );
-				for ( char * p = sBuf; *p; p++ )
-					dOut.Add ( *p );
-				break;
-			}
-			case JSON_DOUBLE:
-			{
-				char sBuf[32];
-				snprintf ( sBuf, sizeof(sBuf), "%f", sphQW2D ( sphJsonLoadBigint ( &p ) ) );
-				for ( char * p = sBuf; *p; p++ )
-					dOut.Add ( *p );
-				break;
-			}
-			case JSON_STRING:
-				p = JsonFormatStr ( dOut, p );
-				break;
-			case JSON_STRING_VECTOR:
-			{
-				sphJsonUnpackInt ( &p ); // skip total length
-				int iVals = sphJsonUnpackInt ( &p );
-
-				dOut.Add ( '[' );
-				for ( int i=0; i<iVals; i++ )
-				{
-					if ( i )
-						dOut.Add ( ',' );
-					p = JsonFormatStr ( dOut, p );
-				}
-				dOut.Add ( ']' );
-				break;
-			}
-		}
+		p = sphJsonFieldFormat ( dOut, p, eType );
 	}
+}
+
+const BYTE * sphJsonFieldFormat ( CSphVector<BYTE> & dOut, const BYTE * pData, ESphJsonType eType )
+{
+	const BYTE * p = pData;
+
+	// format value
+	switch ( eType )
+	{
+	case JSON_INT32:
+	{
+		int iOff = dOut.GetLength();
+		dOut.Resize ( iOff+32 );
+		int iLen = snprintf ( (char *)dOut.Begin()+iOff, 32, "%d", sphJsonLoadInt ( &p ) );
+		dOut.Resize ( iOff+iLen );
+		break;
+	}
+	case JSON_INT64:
+	{
+		int iOff = dOut.GetLength();
+		dOut.Resize ( iOff+32 );
+		int iLen = snprintf ( (char *)dOut.Begin()+iOff, 32, "%lld", sphJsonLoadBigint ( &p ) );
+		dOut.Resize ( iOff+iLen );
+		break;
+	}
+	case JSON_DOUBLE:
+	{
+		int iOff = dOut.GetLength();
+		dOut.Resize ( iOff+32 );
+		int iLen = snprintf ( (char *)dOut.Begin()+iOff, 32, "%f", sphQW2D ( sphJsonLoadBigint ( &p ) ) );
+		dOut.Resize ( iOff+iLen );
+		break;
+	}
+	case JSON_STRING:
+		p = JsonFormatStr ( dOut, p );
+		break;
+	case JSON_STRING_VECTOR:
+	{
+		int iLen = sphJsonUnpackInt ( &p );
+		dOut.Reserve ( dOut.GetLength()+iLen );
+		int iVals = sphJsonUnpackInt ( &p );
+
+		dOut.Add ( '[' );
+		if ( iVals )
+			p = JsonFormatStr ( dOut, p );
+
+		for ( int i=1; i<iVals; i++ )
+		{
+			dOut.Add ( ',' );
+			p = JsonFormatStr ( dOut, p );
+		}
+		dOut.Add ( ']' );
+		break;
+	}
+	}
+
+	return p;
 }
 
 

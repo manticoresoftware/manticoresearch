@@ -90,6 +90,9 @@ bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool
 /// convert SphinxBSON blob back to JSON document
 void sphJsonFormat ( CSphVector<BYTE> & dOut, const BYTE * pData );
 
+/// convert SphinxBSON blob back to JSON document
+const BYTE * sphJsonFieldFormat ( CSphVector<BYTE> & dOut, const BYTE * pData, ESphJsonType eType );
+
 /// compute key mask (for Bloom filtering) from the key name
 DWORD sphJsonKeyMask ( const char * sKey );
 

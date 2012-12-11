@@ -206,10 +206,10 @@ INSERT INTO `json_table` VALUES
 <query index="dist" select="*, @count" groupattr="j.uid" sortmode="extended" sortby="id asc" groupsort="id asc"/>
 <query index="dist1" select="*, @count" groupattr="j.uid" sortmode="extended" sortby="id asc" groupsort="id asc"/>
 <!-- json.field via API -->
-<query index="loc_field" select="id, j.uid, j.name" filter="j.uid" filter_range="249 1000"/>
-<query index="loc_field" select="id, j.uid, j.name" sortmode="extended" sortby="j.name asc, j.gid desc"/>
-<query index="dist_field" select="id, j.name, j.uid" sortmode="extended" sortby="j.name desc, j.gid asc"/>
-<query index="dist_field" select="id, j.name, j.34, j.179, j.uid, j.sv,  j.t6, j. f2, j.f1"/>
+<query index="loc_field" select="bigint ( id ), j.uid, j.name" filter="j.uid" filter_range="249 1000"/>
+<query index="loc_field" select="bigint ( id ), j.uid, j.name" sortmode="extended" sortby="j.name asc, j.gid desc"/>
+<query index="dist_field" select="bigint ( id ), j.name, j.uid" sortmode="extended" sortby="j.name desc, j.gid asc"/>
+<query index="dist_field" select="bigint ( id ), j.name, j.34, j.179, j.uid, j.sv,  j.t6, j. f2, j.f1"/>
 </queries>
 
 <sphqueries>

@@ -13656,16 +13656,28 @@ void CSphQueryContext::CalcFinal ( CSphMatch & tMatch ) const
 
 static inline void FreeStrItems ( CSphMatch & tMatch, const CSphVector<CSphQueryContext::CalcItem_t> & dItems )
 {
+	if ( !tMatch.m_pDynamic )
+		return;
+
 	ARRAY_FOREACH ( i, dItems )
 	{
 		const CSphQueryContext::CalcItem_t & tCalc = dItems[i];
-		if ( tCalc.m_eType==SPH_ATTR_STRINGPTR )
+		switch ( tCalc.m_eType )
 		{
-			if ( !tMatch.m_pDynamic )
-				continue;
+		case SPH_ATTR_STRINGPTR:
+			{
+				CSphString sStr;
+				sStr.Adopt ( (char**) (tMatch.m_pDynamic+tCalc.m_tLoc.m_iBitOffset/ROWITEM_BITS));
+			}
+			break;
 
-			CSphString sStr;
-			sStr.Adopt ( (char**) (tMatch.m_pDynamic+tCalc.m_tLoc.m_iBitOffset/ROWITEM_BITS));
+		case SPH_ATTR_FACTORS:
+			{
+				BYTE * pData = (BYTE *)tMatch.GetAttr ( tCalc.m_tLoc );
+				delete [] pData;
+				tMatch.SetAttr ( tCalc.m_tLoc, 0 );
+			}
+			break;
 		}
 	}
 }

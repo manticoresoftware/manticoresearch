@@ -66,10 +66,10 @@ void ApplyMorphology ( CSphIndex * pIndex )
 	dInBuffer.Add(0);
 	dOutBuffer.Reserve ( dInBuffer.GetLength() );
 
-	ISphTokenizer * pTokenizer = pIndex->GetTokenizer();
+	CSphScopedPtr<ISphTokenizer> pTokenizer ( pIndex->GetTokenizer()->Clone ( false ) );
 	CSphDict * pDict = pIndex->GetDictionary();
 	BYTE * sBufferToDump = &dInBuffer[0];
-	if ( pTokenizer )
+	if ( pTokenizer.Ptr() )
 	{
 		pTokenizer->SetBuffer ( &dInBuffer[0], dInBuffer.GetLength() );
 		while ( BYTE * sToken = pTokenizer->GetToken() )

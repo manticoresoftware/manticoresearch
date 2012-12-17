@@ -193,10 +193,10 @@ public:
 	virtual SphWordID_t	GetWordID ( BYTE * pWord );
 	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool );
 
-	virtual void		LoadStopwords ( const char *, ISphTokenizer * ) {}
+	virtual void		LoadStopwords ( const char *, const ISphTokenizer * ) {}
 	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & ) {}
 	virtual void		WriteStopwords ( CSphWriter & ) {}
-	virtual bool		LoadWordforms ( const CSphVector<CSphString> &, const CSphEmbeddedFiles *, ISphTokenizer *, const char * ) { return true; }
+	virtual bool		LoadWordforms ( const CSphVector<CSphString> &, const CSphEmbeddedFiles *, const ISphTokenizer *, const char * ) { return true; }
 	virtual void		WriteWordforms ( CSphWriter & ) {}
 	virtual bool		SetMorphology ( const char *, bool ) { return true; }
 

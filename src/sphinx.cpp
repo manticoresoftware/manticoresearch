@@ -18198,10 +18198,10 @@ struct CSphDictCRCTraits : CSphDict
 						CSphDictCRCTraits ();
 	virtual				~CSphDictCRCTraits ();
 
-	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer );
+	virtual void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer );
 	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords );
 	virtual void		WriteStopwords ( CSphWriter & tWriter );
-	virtual bool		LoadWordforms ( const CSphVector<CSphString> & dFiles, const CSphEmbeddedFiles * pEmbedded, ISphTokenizer * pTokenizer, const char * sIndex );
+	virtual bool		LoadWordforms ( const CSphVector<CSphString> & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex );
 	virtual void		WriteWordforms ( CSphWriter & tWriter );
 	virtual bool		SetMorphology ( const char * szMorph, bool bUseUTF8 );
 	virtual bool		HasMorphology() const;
@@ -18811,7 +18811,7 @@ bool CSphDictCRC<CRC32DICT>::IsStopWord ( const BYTE * pWord ) const
 
 //////////////////////////////////////////////////////////////////////////
 
-void CSphDictCRCTraits::LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer )
+void CSphDictCRCTraits::LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer )
 {
 	assert ( !m_pStopwords );
 	assert ( !m_iStopwords );
@@ -18822,10 +18822,11 @@ void CSphDictCRCTraits::LoadStopwords ( const char * sFiles, ISphTokenizer * pTo
 
 	m_dSWFileInfos.Resize ( 0 );
 
-	char * sList = new char [ 1+strlen(sFiles) ];
-	strcpy ( sList, sFiles ); // NOLINT
+	CSphScopedPtr<ISphTokenizer> tTokenizer ( pTokenizer->Clone ( false ) );
+	CSphFixedVector<char> dList ( 1+strlen(sFiles) );
+	strcpy ( dList.Begin(), sFiles ); // NOLINT
 
-	char * pCur = sList;
+	char * pCur = dList.Begin();
 	char * sName = NULL;
 
 	CSphVector<SphWordID_t> dStop;
@@ -18870,8 +18871,8 @@ void CSphDictCRCTraits::LoadStopwords ( const char * sFiles, ISphTokenizer * pTo
 		int iLength = (int)fread ( pBuffer, 1, (size_t)st.st_size, fp );
 
 		BYTE * pToken;
-		pTokenizer->SetBuffer ( pBuffer, iLength );
-		while ( ( pToken = pTokenizer->GetToken() )!=NULL )
+		tTokenizer->SetBuffer ( pBuffer, iLength );
+		while ( ( pToken = tTokenizer->GetToken() )!=NULL )
 			dStop.Add ( GetWordID ( pToken ) );
 
 		// close file
@@ -18879,8 +18880,6 @@ void CSphDictCRCTraits::LoadStopwords ( const char * sFiles, ISphTokenizer * pTo
 
 		SafeDeleteArray ( pBuffer );
 	}
-
-	SafeDeleteArray ( sList );
 
 	// sort stopwords
 	dStop.Uniq();
@@ -19269,7 +19268,7 @@ WordformContainer_t * CSphDictCRCTraits::LoadWordformContainer ( const CSphVecto
 
 
 bool CSphDictCRCTraits::LoadWordforms ( const CSphVector<CSphString> & dFiles,
-	const CSphEmbeddedFiles * pEmbedded, ISphTokenizer * pTokenizer, const char * sIndex )
+	const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex )
 {
 	if ( pEmbedded )
 	{
@@ -21250,10 +21249,10 @@ public:
 		return iOff;
 	}
 
-	virtual void LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer ) { m_pBase->LoadStopwords ( sFiles, pTokenizer ); }
+	virtual void LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer ) { m_pBase->LoadStopwords ( sFiles, pTokenizer ); }
 	virtual void LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) { m_pBase->LoadStopwords ( dStopwords ); }
 	virtual void WriteStopwords ( CSphWriter & tWriter ) { m_pBase->WriteStopwords ( tWriter ); }
-	virtual bool LoadWordforms ( const CSphVector<CSphString> & dFiles, const CSphEmbeddedFiles * pEmbedded, ISphTokenizer * pTokenizer, const char * sIndex ) { return m_pBase->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
+	virtual bool LoadWordforms ( const CSphVector<CSphString> & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) { return m_pBase->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
 	virtual void WriteWordforms ( CSphWriter & tWriter ) { m_pBase->WriteWordforms ( tWriter ); }
 	virtual bool SetMorphology ( const char * szMorph, bool bUseUTF8 ) { return m_pBase->SetMorphology ( szMorph, bUseUTF8 ); }
 	virtual void Setup ( const CSphDictSettings & tSettings ) { m_pBase->Setup ( tSettings ); }
@@ -21277,7 +21276,7 @@ ISphRtDictWraper * sphCreateRtKeywordsDictionaryWrapper ( CSphDict * pBase )
 //////////////////////////////////////////////////////////////////////////
 
 static CSphDict * SetupDictionary ( CSphDict * pDict, const CSphDictSettings & tSettings,
-	const CSphEmbeddedFiles * pFiles, ISphTokenizer * pTokenizer, const char * sIndex )
+	const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex )
 {
 	assert ( pTokenizer );
 	assert ( pDict );
@@ -21297,7 +21296,7 @@ static CSphDict * SetupDictionary ( CSphDict * pDict, const CSphDictSettings & t
 
 
 CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings,
-	const CSphEmbeddedFiles * pFiles, ISphTokenizer * pTokenizer, const char * sIndex )
+	const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex )
 {
 	CSphDict * pDict = NULL;
 	if ( tSettings.m_bCrc32 )

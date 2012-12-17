@@ -735,7 +735,7 @@ struct CSphDict
 	virtual void		ApplyStemmers ( BYTE * ) {}
 
 	/// load stopwords from given files
-	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer ) = 0;
+	virtual void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer ) = 0;
 
 	/// load stopwords from an array
 	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) = 0;
@@ -744,7 +744,7 @@ struct CSphDict
 	virtual void		WriteStopwords ( CSphWriter & tWriter ) = 0;
 
 	/// load wordforms from a given list of files
-	virtual bool		LoadWordforms ( const CSphVector<CSphString> &, const CSphEmbeddedFiles * pEmbedded, ISphTokenizer * pTokenizer, const char * sIndex ) = 0;
+	virtual bool		LoadWordforms ( const CSphVector<CSphString> &, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) = 0;
 
 	/// write wordforms to a file
 	virtual void		WriteWordforms ( CSphWriter & tWriter ) = 0;
@@ -814,7 +814,7 @@ public:
 
 
 /// CRC32/FNV64 dictionary factory
-CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, ISphTokenizer * pTokenizer, const char * sIndex );
+CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex );
 
 /// keyword-storing dictionary factory
 CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, ISphTokenizer * pTokenizer, const char * sIndex );
@@ -2842,7 +2842,7 @@ public:
 	virtual void				SetWordlistPreload ( bool bValue ) { m_bPreloadWordlist = bValue; }
 	void						SetFieldFilter ( ISphFieldFilter * pFilter );
 	void						SetTokenizer ( ISphTokenizer * pTokenizer );
-	ISphTokenizer *				GetTokenizer () const { return m_pTokenizer; }
+	const ISphTokenizer *		GetTokenizer () const { return m_pTokenizer; }
 	ISphTokenizer *				LeakTokenizer ();
 	void						SetDictionary ( CSphDict * pDict );
 	CSphDict *					GetDictionary () const { return m_pDict; }

@@ -408,6 +408,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "index_field_lengths",	0, NULL },
 	{ "divide_remote_ranges",	0, NULL },
 	{ "stopwords_stem",			0, NULL },
+	{ "global_idf",				0, NULL },
 	{ NULL,						0, NULL }
 };
 

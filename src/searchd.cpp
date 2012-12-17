@@ -5077,6 +5077,7 @@ enum
 	QFLAG_MAX_PREDICTED_TIME	= 1UL << 2,
 	QFLAG_SIMPLIFY				= 1UL << 3,
 	QFLAG_PLAIN_IDF				= 1UL << 4,
+	QFLAG_GLOBAL_IDF			= 1UL << 5,
 };
 
 void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_c & tOut, const CSphQuery & q ) const
@@ -5089,6 +5090,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	uFlags |= QFLAG_MAX_PREDICTED_TIME * ( q.m_iMaxPredictedMsec > 0 );
 	uFlags |= QFLAG_SIMPLIFY * q.m_bSimplify;
 	uFlags |= QFLAG_PLAIN_IDF * q.m_bPlainIDF;
+	uFlags |= QFLAG_GLOBAL_IDF * q.m_bGlobalIDF;
 	tOut.SendDword ( uFlags );
 
 	// The Search Legacy
@@ -6037,6 +6039,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 		tQuery.m_bSortKbuffer = !!( uFlags & QFLAG_SORT_KBUFFER );
 		tQuery.m_bSimplify = !!( uFlags & QFLAG_SIMPLIFY );
 		tQuery.m_bPlainIDF = !!( uFlags & QFLAG_PLAIN_IDF );
+		tQuery.m_bGlobalIDF = !!( uFlags & QFLAG_GLOBAL_IDF );
 
 		// fetch optional stuff
 		if ( uFlags & QFLAG_MAX_PREDICTED_TIME )
@@ -10349,6 +10352,9 @@ bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue )
 			m_pParseError->SetSprintf ( "unknown idf=%s (known values are plain, normalized)", sVal.cstr() );
 			return false;
 		}
+	} else if ( sOpt=="global_idf" )
+	{
+		m_pQuery->m_bGlobalIDF = true;
 
 	} else
 	{
@@ -17219,6 +17225,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		// try to create index
 		tIdx.m_sIndexPath = hIndex["path"];
 		PreCreatePlainIndex ( tIdx, szIndexName );
+		tIdx.m_pIndex->SetGlobalIDFPath ( hIndex.GetStr ( "global_idf" ) );
 
 		// done
 		if ( !g_pLocalIndexes->Add ( tIdx, szIndexName ) )
@@ -17435,6 +17442,14 @@ void CheckRotate ()
 		return;
 
 	sphLogDebug ( "CheckRotate invoked" );
+
+	// rotate global idf before prereading indexes
+	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
+	{
+		ServedIndex_t & tIndex = it.Get();
+		assert ( tIndex.m_pIndex );
+		tIndex.m_pIndex->RotateGlobalIDF();
+	}
 
 	/////////////////////
 	// RAM-greedy rotate

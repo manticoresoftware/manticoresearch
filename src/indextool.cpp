@@ -276,6 +276,155 @@ bool DoKlistsOptimization ( int iRowSize, const char * sPath, int iChunkCount, C
 }
 
 
+bool BuildGlobalIDF ( const CSphString & sFilename, const CSphVector<CSphString> & dFiles, CSphString & sError, bool bSkipUnique, bool bTextFile )
+{
+	typedef CSphOrderedHash<int, uint64_t, IdentityHash_fn, 1024*1024*64> IDFHash_t;
+
+	// preallocate 64M hash
+	const int64_t tmStart = sphMicroTimer ();
+	IDFHash_t * pHash = new IDFHash_t();
+	IDFHash_t & hWords = *pHash;
+
+	int64_t iTotalDocuments = 0;
+	int64_t iTotalWords = 0;
+
+	ARRAY_FOREACH ( i, dFiles )
+	{
+		CSphAutoreader tReader;
+		if ( !tReader.Open ( dFiles[i], sError ) )
+			return false;
+
+		fprintf ( stdout, "reading %s...\n", dFiles[i].cstr() );
+
+		const SphOffset_t iSize = tReader.GetFilesize();
+		if ( iSize > INT_MAX )
+		{
+			fprintf ( stdout, "ERROR: dictionaries over 2048 MB not supported, skipping %s\n", dFiles[i].cstr() );
+			continue;
+		}
+
+		char * pData = new char [ (int)iSize ];
+		tReader.GetBytes ( pData, (int)iSize );
+		char *pEnd = pData+iSize;
+
+		if ( bTextFile )
+		{
+			char * p = pData;
+			while ( p<pEnd )
+			{
+				// strchr ought to be faster than incremental search
+				char * p0 = strchr ( p, '\n' );
+				if ( !p0 )
+					break;
+				*p0 = '\0';
+
+				// find keyword pattern ( ^<keyword>,<docs>,... )
+				char * p1 = strchr ( p, ',' );
+				if ( p1 )
+				{
+					char * p2 = strchr ( p1+1, ',' );
+					if ( p2 )
+					{
+						*p1 = *p2 = '\0';
+
+						int iDocs = atoi ( p1+1 );
+						if ( iDocs )
+						{
+							// calculate keyword id
+							uint64_t uWordID = sphFNV64 ( (BYTE*)p );
+
+							int * pDocs = hWords ( uWordID );
+							if ( pDocs )
+								*pDocs += iDocs;
+							else
+								hWords.Add ( iDocs, uWordID );
+
+							iTotalWords++;
+						}
+					}
+				} else
+				{
+					// keyword pattern not found (rather rare case), try to parse as a header, then
+					char sSearch[] = "total-documents: ";
+					if ( strstr ( p, sSearch )==p )
+						iTotalDocuments += atoi ( p+strlen(sSearch) ); // sizeof may vary
+				}
+
+				// advance to the next line
+				p = p0+1;
+			}
+		} else
+		{
+			// parse binary file
+			char * p = pData;
+
+			iTotalDocuments += *(DWORD*)p;
+			p += sizeof(DWORD);
+
+			while ( p<pEnd )
+			{
+				uint64_t uWordID = *(uint64_t*)p;
+				p += sizeof(uint64_t);
+
+				int iDocs = int(*(DWORD*)p);
+				p += sizeof(DWORD);
+
+				int * pDocs = hWords ( uWordID );
+				if ( pDocs )
+					*pDocs += iDocs;
+				else
+					hWords.Add ( iDocs, uWordID );
+
+				iTotalWords++;
+			}
+		}
+		SafeDeleteArray ( pData );
+	}
+
+	// skip unique words and sort by id
+	CSphVector<uint64_t> dWords;
+
+	hWords.IterateStart ();
+	while ( hWords.IterateNext () )
+	{
+		uint64_t uWordID = hWords.IterateGetKey ();
+		int iDocs = hWords.IterateGet ();
+		if ( !bSkipUnique || iDocs>1 )
+			dWords.Add ( uWordID );
+	}
+
+	dWords.Sort ();
+
+	fprintf ( stdout, INT64_FMT" documents, %d words ("INT64_FMT" read, "INT64_FMT" merged, %d skipped)\n", iTotalDocuments,
+		dWords.GetLength(), iTotalWords, iTotalWords-hWords.GetLength(), hWords.GetLength()-dWords.GetLength() );
+
+	// write to disk
+	fprintf ( stdout, "writing %s...\n", sFilename.cstr() );
+
+	CSphWriter tWriter;
+	if ( !tWriter.OpenFile ( sFilename, sError ) )
+		return false;
+
+	iTotalDocuments = Max ( iTotalDocuments, INT_MAX );
+	tWriter.PutDword ( (DWORD)iTotalDocuments );
+
+	ARRAY_FOREACH ( i, dWords )
+	{
+		tWriter.PutBytes ( &dWords[i], sizeof(uint64_t) );
+		tWriter.PutDword ( *hWords ( dWords[i] ) );
+	}
+
+	tWriter.CloseFile ();
+
+	SafeDelete ( pHash );
+
+	int tmWallMsec = (int)( ( sphMicroTimer() - tmStart )/1000 );
+	fprintf ( stdout, "finished in %d.%d sec\n", tmWallMsec/1000, (tmWallMsec/100)%10 );
+
+	return true;
+}
+
+
 void OptimizeRtKlists ( const CSphString & sIndex, const CSphConfig & hConf )
 {
 	const int64_t tmStart = sphMicroTimer();
@@ -390,6 +539,7 @@ int main ( int argc, char ** argv )
 			"--check <INDEX>\t\tperform index consistency check\n"
 			"--dumpconfig <SPH-FILE>\tdump index header in config format by file name\n"
 			"--dumpdocids <INDEX>\tdump docids by index name\n"
+			"--dumpdict <SPI-FILE>\tdump dictionary by file name\n"
 			"--dumpdict <INDEX>\tdump dictionary\n"
 			"--dumpheader <SPH-FILE>\tdump index header by file name\n"
 			"--dumpheader <INDEX>\tdump index header by index name\n"
@@ -400,11 +550,17 @@ int main ( int argc, char ** argv )
 			"--optimize-rt-klists <INDEX>\n"
 			"\t\t\toptimize kill list memory use in RT index disk chunks;\n"
 			"\t\t\teither for a given index or --all\n"
+			"--buildidf <index1.dict> [index2.dict ...] [--skip-uniq] --out <global.idf>\n"
+			"\t\t\tjoin dictionary dumps with statistics (--stats) into an .idf file\n"
+			"--mergeidf <node1.idf> [node2.idf ...] [--skip-uniq] --out <global.idf>\n"
+			"\t\t\tmerge several .idf files into one file\n"
 			"\n"
 			"Options are:\n"
 			"-c, --config <file>\tuse given config file instead of defaults\n"
 			"--strip-path\t\tstrip path from filenames referenced by index\n"
 			"\t\t\t(eg. stopwords, exceptions, etc)\n"
+			"--stats\t\t\tshow total statistics in the dictionary dump\n"
+			"--skip-uniq\t\tskip unique (df=1) words in the .idf files\n"
 		);
 		exit ( 0 );
 	}
@@ -420,6 +576,11 @@ int main ( int argc, char ** argv )
 	CSphString sDumpHeader, sIndex, sKeyword;
 	bool bWordid = false;
 	bool bStripPath = false;
+	CSphVector<CSphString> dFiles;
+	CSphString sOut;
+	bool bStats = false;
+	bool bSkipUnique = false;
+	CSphString sDumpDict;
 
 	enum
 	{
@@ -434,7 +595,9 @@ int main ( int argc, char ** argv )
 		CMD_OPTIMIZEKLISTS,
 		CMD_BUILDINFIXES,
 		CMD_MORPH,
-		CMD_BUILDSKIPS
+		CMD_BUILDSKIPS,
+		CMD_BUILDIDF,
+		CMD_MERGEIDF
 	} eCommand = CMD_NOTHING;
 
 	int i;
@@ -449,7 +612,6 @@ int main ( int argc, char ** argv )
 		OPT1 ( "--dumpheader" )		{ eCommand = CMD_DUMPHEADER; sDumpHeader = argv[++i]; }
 		OPT1 ( "--dumpconfig" )		{ eCommand = CMD_DUMPCONFIG; sDumpHeader = argv[++i]; }
 		OPT1 ( "--dumpdocids" )		{ eCommand = CMD_DUMPDOCIDS; sIndex = argv[++i]; }
-		OPT1 ( "--dumpdict" )		{ eCommand = CMD_DUMPDICT; sIndex = argv[++i]; }
 		OPT1 ( "--check" )			{ eCommand = CMD_CHECK; sIndex = argv[++i]; }
 		OPT1 ( "--htmlstrip" )		{ eCommand = CMD_STRIP; sIndex = argv[++i]; }
 		OPT1 ( "--build-infixes" )	{ eCommand = CMD_BUILDINFIXES; sIndex = argv[++i]; }
@@ -462,6 +624,16 @@ int main ( int argc, char ** argv )
 			sIndex = argv[++i];
 			if ( sIndex=="--all" )
 				sIndex = "";
+		}
+		OPT1 ( "--dumpdict" )
+		{
+			eCommand = CMD_DUMPDICT;
+			sDumpDict = argv[++i];
+			if ( (i+1)<argc && !strcmp ( argv[i+1], "--stats" ) )
+			{
+				bStats = true;
+				i++;
+			}
 		}
 
 		// options with 2 args
@@ -485,6 +657,32 @@ int main ( int argc, char ** argv )
 
 			sKeyword = argv[++i];
 
+		} else if ( !strcmp ( argv[i], "--buildidf" ) || !strcmp ( argv[i], "--mergeidf" ) )
+		{
+			eCommand = !strcmp ( argv[i], "--buildidf" ) ? CMD_BUILDIDF : CMD_MERGEIDF;
+			while ( ++i<argc )
+			{
+				if ( !strcmp ( argv[i], "--out" ) )
+				{
+					if ( (i+1)>=argc )
+						break; // too few args
+					sOut = argv[++i];
+
+				} else if ( !strcmp ( argv[i], "--skip-uniq" ) )
+				{
+					bSkipUnique = true;
+
+				} else if ( argv[i][0]=='-' )
+				{
+					break; // unknown switch
+
+				} else
+				{
+					dFiles.Add ( argv[i] ); // handle everything else as a file name
+				}
+			}
+			break;
+
 		} else
 		{
 			// unknown option
@@ -507,6 +705,16 @@ int main ( int argc, char ** argv )
 	{
 		if ( ( eCommand==CMD_DUMPHEADER || eCommand==CMD_DUMPCONFIG ) && sDumpHeader.Ends ( ".sph" ) )
 			break;
+
+		if ( eCommand==CMD_BUILDIDF || eCommand==CMD_MERGEIDF )
+			break;
+
+		if ( eCommand==CMD_DUMPDICT )
+		{
+			if ( sDumpDict.Ends ( ".spi" ) )
+				break;
+			sIndex = sDumpDict;
+		}
 
 		sphLoadConfig ( sOptConfig, false, cp );
 		break;
@@ -609,9 +817,35 @@ int main ( int argc, char ** argv )
 			break;
 
 		case CMD_DUMPDICT:
-			fprintf ( stdout, "dumping dictionary for index '%s'...\n", sIndex.cstr() );
+		{
+			if ( sDumpDict.Ends ( ".spi" ) )
+			{
+				fprintf ( stdout, "dumping dictionary file '%s'...\n", sDumpDict.cstr() );
+
+				sIndex = sDumpDict.SubString ( 0, sDumpDict.Length()-4 );
+				pIndex = sphCreateIndexPhrase ( sIndex.cstr(), sIndex.cstr() );
+
+				CSphString sError;
+				if ( !pIndex )
+					sphDie ( "index '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
+
+				pIndex->SetWordlistPreload ( true );
+
+				CSphString sWarn;
+				if ( !pIndex->Prealloc ( false, bStripPath, sWarn ) )
+					sphDie ( "index '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
+
+				if ( !pIndex->Preread() )
+					sphDie ( "index '%s': preread failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
+			}
+			else
+				fprintf ( stdout, "dumping dictionary for index '%s'...\n", sIndex.cstr() );
+
+			if ( bStats )
+				fprintf ( stdout, "total-documents: %d\n", pIndex->GetStats().m_iTotalDocuments );
 			pIndex->DebugDumpDict ( stdout );
 			break;
+		}
 
 		case CMD_CHECK:
 			fprintf ( stdout, "checking index '%s'...\n", sIndex.cstr() );
@@ -657,6 +891,22 @@ int main ( int argc, char ** argv )
 		case CMD_MORPH:
 			ApplyMorphology ( pIndex );
 			break;
+
+		case CMD_BUILDIDF:
+		{
+			CSphString sError;
+			if ( !BuildGlobalIDF ( sOut, dFiles, sError, bSkipUnique, true ) )
+				fprintf ( stdout, "ERROR: %s\n", sError.cstr() );
+			break;
+		}
+
+		case CMD_MERGEIDF:
+		{
+			CSphString sError;
+			if ( !BuildGlobalIDF ( sOut, dFiles, sError, bSkipUnique, false ) )
+				fprintf ( stdout, "ERROR: %s\n", sError.cstr() );
+			break;
+		}
 
 		default:
 			sphDie ( "INTERNAL ERROR: unhandled command (id=%d)", (int)eCommand );

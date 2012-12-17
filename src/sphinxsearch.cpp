@@ -7536,7 +7536,9 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 
 		// build IDF
 		float fIDF = 0.0f;
-		if ( tWord.m_iDocs )
+		if ( pQuery->m_bGlobalIDF )
+			fIDF = pIndex->GetGlobalIDF ( tWord.m_sWord, tWord.m_iDocs, iQwords, pQuery->m_bPlainIDF );
+		else if ( tWord.m_iDocs )
 		{
 			// (word_docs > total_docs) case *is* occasionally possible
 			// because of dupes, or delayed purging in RT, etc

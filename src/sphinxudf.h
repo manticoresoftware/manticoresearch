@@ -23,6 +23,9 @@
 #ifndef _sphinxudf_
 #define _sphinxudf_
 
+/// current udf version
+#define SPH_UDF_VERSION 1
+
 /// error buffer size
 #define SPH_UDF_ERROR_LEN 256
 

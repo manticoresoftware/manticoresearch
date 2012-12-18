@@ -112,7 +112,7 @@ int sphinx_factors_unpack ( const unsigned int * in, SPH_UDF_FACTORS * out )
 	}
 
 	// do a safety check, and return
-	return ( size!=(in-pack)*sizeof(unsigned int) ) ? 1 : 0;
+	return ( size!=( (int)(in-pack) * (int)sizeof(unsigned int) ) ) ? 1 : 0;
 }
 
 

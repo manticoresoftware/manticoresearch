@@ -21,6 +21,11 @@
 #include "sphinxquery.h"
 #include "sphinxjson.h"
 
+extern "C"
+{
+#include "sphinxudf.h"
+}
+
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -14067,6 +14072,49 @@ bool HandleMysqlSelect ( SqlRowBuffer_c & dRows, SearchHandler_c & tHandler )
 }
 
 
+static void FormatFactors ( CSphVector<BYTE> & dOut, const SPH_UDF_FACTORS & tFactors )
+{
+	const int MAX_STR_LEN = 512;
+	int iLen;
+	int iOff = dOut.GetLength();
+	dOut.Resize ( iOff+MAX_STR_LEN );
+	iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, "bm25=%d, bm25a=%f, field_mask=%u, doc_word_count=%d",
+		tFactors.doc_bm25, tFactors.doc_bm25a, tFactors.matched_fields, tFactors.doc_word_count );
+	dOut.Resize ( iOff+iLen );
+
+	for ( int i = 0; i < tFactors.num_fields; i++ )
+	{
+		const SPH_UDF_FIELD_FACTORS & tField = tFactors.field[i];
+		if ( !tField.hit_count )
+			continue;
+
+		iOff = dOut.GetLength();
+		dOut.Resize( iOff+MAX_STR_LEN );
+		iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, ", field%d="
+				"(lcs=%u, hit_count=%u, word_count=%u, "
+				"tf_idf=%f, min_idf=%f, max_idf=%f, sum_idf=%f, "
+				"min_hit_pos=%d, min_best_span_pos=%d, exact_hit=%u, max_window_hits=%d)",
+				i,
+				tField.lcs, tField.hit_count, tField.word_count,
+				tField.tf_idf, tField.min_idf, tField.max_idf, tField.sum_idf,
+				tField.min_hit_pos, tField.min_best_span_pos, ( tField.exact_hit>>i ) & 1, tField.max_window_hits );
+		dOut.Resize ( iOff+iLen );
+	}
+
+	for ( int i = 0; i < tFactors.max_uniq_qpos; i++ )
+	{
+		const SPH_UDF_TERM_FACTORS & tTerm = tFactors.term[i];
+		if ( !tTerm.keyword_mask )
+			continue;
+
+		iOff = dOut.GetLength();
+		dOut.Resize( iOff+MAX_STR_LEN );
+		iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, ", word%d=(tf=%d, idf=%f)", i, tTerm.tf, tTerm.idf );
+		dOut.Resize ( iOff+iLen );
+	}
+}
+
+
 void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow )
 {
 	if ( !tRes.m_iSuccesses )
@@ -14124,7 +14172,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 				eType = MYSQL_COL_FLOAT;
 			if ( tCol.m_eAttrType==SPH_ATTR_BIGINT )
 				eType = MYSQL_COL_LONGLONG;
-			if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_STRINGPTR )
+			if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_STRINGPTR || tCol.m_eAttrType==SPH_ATTR_FACTORS )
 				eType = MYSQL_COL_STRING;
 			dRows.HeadColumn ( tCol.m_sName.cstr(), eType );
 		}
@@ -14135,7 +14183,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 	dRows.HeadEnd ( bMoreResultsFollow, iWarns );
 
 	// FIXME!!! replace that vector relocations by SqlRowBuffer
-	CSphVector<BYTE> dJson;
+	CSphVector<BYTE> dTmp;
 
 	// rows
 	for ( int iMatch = tRes.m_iOffset; iMatch < tRes.m_iOffset + tRes.m_iCount; iMatch++ )
@@ -14234,10 +14282,10 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 
 					if ( eAttrType==SPH_ATTR_JSON )
 					{
-						dJson.Resize ( 0 );
-						sphJsonFormat ( dJson, pStr );
-						pStr = dJson.Begin();
-						iLen = dJson.GetLength();
+						dTmp.Resize ( 0 );
+						sphJsonFormat ( dTmp, pStr );
+						pStr = dTmp.Begin();
+						iLen = dTmp.GetLength();
 					}
 
 					// send length
@@ -14270,6 +14318,36 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 					dRows.IncPtr ( pOutStr-dRows.Get()+iLen );
 					break;
 				}
+
+			case SPH_ATTR_FACTORS:
+				{
+					int iLen = 0;
+					const BYTE * pStr = NULL;
+					const unsigned int * pFactors = (unsigned int*) tMatch.GetAttr ( tLoc );
+					if ( pFactors )
+					{
+						SPH_UDF_FACTORS tUnpacked;
+						sphinx_factors_init ( &tUnpacked );
+						sphinx_factors_unpack ( pFactors, &tUnpacked );
+						dTmp.Resize ( 0 );
+						FormatFactors ( dTmp, tUnpacked );
+						sphinx_factors_deinit ( &tUnpacked );
+						iLen = dTmp.GetLength();
+						pStr = dTmp.Begin();
+					}
+
+					// send length
+					dRows.Reserve ( iLen+4 );
+					char * pOutStr = (char*)MysqlPack ( dRows.Get(), iLen );
+
+					// send string data
+					if ( iLen )
+						memcpy ( pOutStr, pStr, iLen );
+
+					dRows.IncPtr ( pOutStr-dRows.Get()+iLen );
+					break;
+				}
+
 			case SPH_ATTR_JSON_FIELD:
 				{
 					uint64_t uTypeOffset = tMatch.GetAttr ( tLoc );
@@ -14283,18 +14361,18 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 					} else
 					{
 						// send string to client
-						dJson.Resize ( 0 );
+						dTmp.Resize ( 0 );
 						const BYTE * pStrings = tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pStrings;
-						sphJsonFieldFormat ( dJson, pStrings+uOff, eJson );
+						sphJsonFieldFormat ( dTmp, pStrings+uOff, eJson );
 
 						// send length
-						int iLen = dJson.GetLength();
+						int iLen = dTmp.GetLength();
 						dRows.Reserve ( iLen+4 );
 						char * pOutStr = (char*)MysqlPack ( dRows.Get(), iLen );
 
 						// send string data
 						if ( iLen )
-							memcpy ( pOutStr, dJson.Begin(), iLen );
+							memcpy ( pOutStr, dTmp.Begin(), iLen );
 
 						dRows.IncPtr ( pOutStr-dRows.Get()+iLen );
 					}

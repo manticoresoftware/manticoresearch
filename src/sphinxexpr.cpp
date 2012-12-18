@@ -15,7 +15,12 @@
 
 #include "sphinx.h"
 #include "sphinxexpr.h"
-#include "sphinxudf.h"
+
+extern "C"
+{
+	#include "sphinxudf.h"
+}
+
 #include "sphinxutils.h"
 #include "sphinxint.h"
 #include "sphinxjson.h"
@@ -404,7 +409,7 @@ struct Expr_GetPackedFactors_c : public ISphStringExpr
 
 	virtual void SetupExtraData ( ISphExtra * pData )
 	{
-		pData->ExtraData ( EXTRA_GET_DATA_RANKFACTORS, (void**)&m_pHash );
+		pData->ExtraData ( EXTRA_GET_DATA_PACKEDFACTORS, (void**)&m_pHash );
 	}
 
 	virtual bool IsStringPtr() const

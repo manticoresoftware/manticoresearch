@@ -6382,7 +6382,7 @@ bool RankerState_Expr_fn<true>::ExtraDataImpl ( ExtraData_e eType, void ** ppRes
 				m_tFactorPool.Release ( dReleased[i] );
 		}
 		return true;
-	case EXTRA_GET_DATA_RANKFACTORS:
+	case EXTRA_GET_DATA_PACKEDFACTORS:
 		*ppResult = m_tFactorPool.GetHashPtr();
 		return true;
 	default:
@@ -7158,7 +7158,7 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS>::PackFactors ( int * pSize )
 
 	// document level factors
 	*pPack++ = m_uDocBM25;
-	*pPack++ = (DWORD)m_fDocBM25A;
+	*pPack++ = *(DWORD*)&m_fDocBM25A;
 	*pPack++ = m_uMatchedFields;
 	*pPack++ = m_uDocWordCount;
 
@@ -7175,10 +7175,10 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS>::PackFactors ( int * pSize )
 			*pPack++ = (DWORD)i;
 			*pPack++ = m_uLCS[i];
 			*pPack++ = m_uWordCount[i];
-			*pPack++ = (DWORD)m_dTFIDF[i];
-			*pPack++ = (DWORD)m_dMinIDF[i];
-			*pPack++ = (DWORD)m_dMaxIDF[i];
-			*pPack++ = (DWORD)m_dSumIDF[i];
+			*pPack++ = *(DWORD*)&m_dTFIDF[i];
+			*pPack++ = *(DWORD*)&m_dMinIDF[i];
+			*pPack++ = *(DWORD*)&m_dMaxIDF[i];
+			*pPack++ = *(DWORD*)&m_dSumIDF[i];
 			*pPack++ = (DWORD)m_iMinHitPos[i];
 			*pPack++ = (DWORD)m_iMinBestSpanPos[i];
 			*pPack++ = ( m_uExactHit>>i ) & 1;
@@ -7196,7 +7196,7 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS>::PackFactors ( int * pSize )
 		{
 			*pPack++ = (DWORD)i;
 			*pPack++ = (DWORD)m_dTF[i];
-			*pPack++ = (DWORD)m_dIDF[i];
+			*pPack++ = *(DWORD*)&m_dIDF[i];
 		}
 	}
 

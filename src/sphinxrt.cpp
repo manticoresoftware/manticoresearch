@@ -3538,7 +3538,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iC
 	tWriter.PutDword ( iInfixCheckpointWordsSize ); // m_iInfixCheckpointWordsSize, v.34+
 
 	// stats
-	tWriter.PutDword ( tStats.m_iTotalDocuments );
+	tWriter.PutDword ( (DWORD)tStats.m_iTotalDocuments ); // FIXME? we don't expect over 4G docs per just 1 local index
 	tWriter.PutOffset ( tStats.m_iTotalBytes );
 
 	// index settings
@@ -3611,7 +3611,7 @@ void RtIndex_t::SaveMeta ( int iDiskChunks, int64_t iTID )
 	wrMeta.PutDword ( META_VERSION );
 	wrMeta.PutDword ( iDiskChunks );
 	wrMeta.PutDword ( m_iDiskBase );
-	wrMeta.PutDword ( m_tStats.m_iTotalDocuments );
+	wrMeta.PutDword ( (DWORD)m_tStats.m_iTotalDocuments ); // FIXME? we don't expect over 4G docs per just 1 local index
 	wrMeta.PutOffset ( m_tStats.m_iTotalBytes ); // FIXME? need PutQword ideally
 	wrMeta.PutOffset ( iTID );
 

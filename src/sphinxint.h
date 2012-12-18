@@ -454,9 +454,11 @@ public:
 	}
 
 	/// how many DWORDs will we need for block index
-	inline DWORD GetExpectedSize ( DWORD uMaxDocs ) const
+	inline DWORD GetExpectedSize ( int64_t uMaxDocs ) const
 	{
-		DWORD uDocinfoIndex = ( uMaxDocs + DOCINFO_INDEX_FREQ - 1 ) / DOCINFO_INDEX_FREQ;
+		assert ( uMaxDocs>=0 );
+		assert ( uMaxDocs<=UINT_MAX ); // we don't expect 4G docs per just 1 local index!
+		DWORD uDocinfoIndex = ( DWORD(uMaxDocs) + DOCINFO_INDEX_FREQ - 1 ) / DOCINFO_INDEX_FREQ;
 		return 2 * ( 1 + uDocinfoIndex ) * m_uStride;
 	}
 };

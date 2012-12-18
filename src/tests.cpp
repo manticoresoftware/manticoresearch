@@ -2141,7 +2141,7 @@ void TestRTWeightBoundary ()
 
 		pSrc->Disconnect();
 
-		CheckRT ( pSrc->GetStats().m_iTotalDocuments, 1, "docs committed" );
+		CheckRT ( (int)pSrc->GetStats().m_iTotalDocuments, 1, "docs committed" );
 
 		CSphQuery tQuery;
 		CSphQueryResult tResult;

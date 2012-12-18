@@ -365,6 +365,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\src\sphinxudf.c"
+				>
+			</File>
+			<File
 				RelativePath="..\src\sphinxutils.cpp"
 				>
 			</File>

@@ -133,6 +133,7 @@
     <ClCompile Include="..\src\sphinxstemcz.cpp" />
     <ClCompile Include="..\src\sphinxstemen.cpp" />
     <ClCompile Include="..\src\sphinxstemru.cpp" />
+    <ClCompile Include="..\src\sphinxudf.c" />
     <ClCompile Include="..\src\sphinxutils.cpp" />
   </ItemGroup>
   <ItemGroup>

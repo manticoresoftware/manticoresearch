@@ -71,7 +71,6 @@ struct UdfFunc_t
 	UdfLib_t *			m_pLib;			///< library descriptor (pointer to library hash value)
 	const CSphString *	m_pLibName;		///< library name (pointer to library hash key)
 	ESphAttr			m_eRetType;		///< function type, currently FLOAT or INT
-	UdfVer_fn			m_fnVer;		///< per-library version control function, mandatory
 	UdfInit_fn			m_fnInit;		///< per-query init function, mandatory
 	UdfDeinit_fn		m_fnDeinit;		///< per-query deinit function, optional
 	void *				m_fnFunc;		///< per-row worker function, mandatory
@@ -4376,7 +4375,6 @@ bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, 
 	// lookup and check function symbols
 	CSphString sName;
 	tFunc.m_fnFunc = dlsym ( pHandle, sFunc.cstr() );
-	tFunc.m_fnVer = (UdfVer_fn) dlsym ( pHandle, sName.SetSprintf ( "%s_ver", sFunc.cstr() ).cstr() );
 	tFunc.m_fnInit = (UdfInit_fn) dlsym ( pHandle, sName.SetSprintf ( "%s_init", sFunc.cstr() ).cstr() );
 	tFunc.m_fnDeinit = (UdfDeinit_fn) dlsym ( pHandle, sName.SetSprintf ( "%s_deinit", sFunc.cstr() ).cstr() );
 
@@ -4389,27 +4387,26 @@ bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, 
 		return false;
 	}
 
-	if ( !tFunc.m_fnVer )
-	{
-		sError.SetSprintf ( "symbol '%s_ver' not found in '%s': update your UDF implementation", sFunc.cstr(), szLib  );
-		if ( bLoaded )
-			dlclose ( pHandle );
-		g_tUdfMutex.Unlock();
-		return false;
-	}
-
-	if ( tFunc.m_fnVer() < SPH_UDF_VERSION )
-	{
-		sError.SetSprintf ( "library '%s' was compiled using an older version of sphinxudf.h; it needs to be recompiled", szLib );
-		if ( bLoaded )
-			dlclose ( pHandle );
-		g_tUdfMutex.Unlock();
-		return false;
-	}
-	
 	// add library
 	if ( bLoaded )
 	{
+		UdfVer_fn fnVer = (UdfVer_fn) dlsym ( pHandle, sName.SetSprintf ( "%s_ver", sFunc.cstr() ).cstr() );
+		if ( !fnVer )
+		{
+			sError.SetSprintf ( "symbol '%s_ver' not found in '%s': update your UDF implementation", sFunc.cstr(), szLib );
+			dlclose ( pHandle );
+			g_tUdfMutex.Unlock();
+			return false;
+		}
+
+		if ( fnVer() < SPH_UDF_VERSION )
+		{
+			sError.SetSprintf ( "library '%s' was compiled using an older version of sphinxudf.h; it needs to be recompiled", szLib );
+			dlclose ( pHandle );
+			g_tUdfMutex.Unlock();
+			return false;
+		}
+
 		UdfLib_t tLib;
 		tLib.m_iFuncs = 1;
 		tLib.m_pHandle = pHandle;

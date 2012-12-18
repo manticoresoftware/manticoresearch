@@ -28235,6 +28235,10 @@ static void FinalizeUpgrade ( const char ** sRenames, const char * sBanner, cons
 	fprintf ( stdout, "%s: done!\n", sBanner );
 }
 
+#if USE_WINDOWS
+#pragma warning(disable:4127) // conditional expr is const for MSVC
+#endif
+
 //////////////////////////////////////////////////////////////////////////
 // V.26 TO V.27 CONVERSION TOOL, INFIX BUILDER
 //////////////////////////////////////////////////////////////////////////
@@ -29015,6 +29019,11 @@ void sphDictBuildSkiplists ( const char * sPath )
 	FinalizeUpgrade ( sRenames, "skiplists upgrade", sPath, tmStart );
 }
 
+#if USE_WINDOWS
+#pragma warning(default:4127) // conditional expr is const for MSVC
+#endif
+
+
 //////////////////////////////////////////////////////////////////////////
 
 bool CSphGlobalIDF::Preload ( const CSphString & sFilename, CSphString & sError )
@@ -29027,14 +29036,14 @@ bool CSphGlobalIDF::Preload ( const CSphString & sFilename, CSphString & sError 
 
 	const SphOffset_t iSize = tReader.GetFilesize()-sizeof(DWORD);
 
-	int iTotalWords = int( iSize/sizeof(IDFWord_t) );
+	int iTotalWords = int ( iSize/sizeof(IDFWord_t) );
 
 	m_dWords.Resize ( iTotalWords );
-	tReader.GetBytes ( (BYTE*)m_dWords.Begin(), iSize );
+	tReader.GetBytes ( (BYTE*)m_dWords.Begin(), (int)iSize );
 	tReader.Close();
 
 	// build lookup table if needed
-	int iHashSize = int( 1 << HASH_BITS );
+	int iHashSize = int ( 1 << HASH_BITS );
 	if ( iTotalWords > iHashSize*8 )
 	{
 		m_dHash.Resize ( iHashSize+2 );

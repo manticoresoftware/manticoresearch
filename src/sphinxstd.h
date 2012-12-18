@@ -2255,10 +2255,10 @@ public:
 class CSphAutoEvent
 {
 public:
-	CSphAutoEvent () {};
-	~CSphAutoEvent() {};
+	CSphAutoEvent () {}
+	~CSphAutoEvent() {}
 
-	bool Init(CSphMutex *);
+	bool Init ( CSphMutex * pMutex );
 	bool Done();
 	void SetEvent();
 	bool WaitEvent();

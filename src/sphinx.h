@@ -2364,7 +2364,7 @@ public:
 	bool			m_bZSlist;		///< whether the ranker has to fetch the zonespanlist with this query
 	bool			m_bSimplify;	///< whether to apply boolean simplification
 	bool			m_bPlainIDF;	///< whether to use PlainIDF=log(N/n) or NormalizedIDF=log((N-n+1)/n)
-	bool			m_bGlobalIDF;	///< whether to use local indexes or a global idf file	
+	bool			m_bGlobalIDF;	///< whether to use local indexes or a global idf file
 
 	CSphVector<CSphFilterSettings>	m_dFilters;	///< filters
 

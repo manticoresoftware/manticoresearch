@@ -837,8 +837,7 @@ int main ( int argc, char ** argv )
 
 				if ( !pIndex->Preread() )
 					sphDie ( "index '%s': preread failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
-			}
-			else
+			} else
 				fprintf ( stdout, "dumping dictionary for index '%s'...\n", sIndex.cstr() );
 
 			if ( bStats )

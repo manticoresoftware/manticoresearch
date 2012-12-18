@@ -1296,7 +1296,7 @@ bool CSphMutex::Unlock ()
 	return ReleaseMutex ( m_hMutex )==TRUE;
 }
 
-bool CSphAutoEvent::Init(CSphMutex *)
+bool CSphAutoEvent::Init ( CSphMutex * )
 {
 	m_bSent = false;
 	m_hEvent = CreateEvent ( NULL, FALSE, FALSE, NULL );
@@ -1359,7 +1359,7 @@ bool CSphMutex::Unlock ()
 	return ( pthread_mutex_unlock ( &m_tMutex )==0 );
 }
 
-bool CSphAutoEvent::Init(CSphMutex * pMutex)
+bool CSphAutoEvent::Init ( CSphMutex * pMutex )
 {
 	m_bSent = false;
 	assert ( pMutex );
@@ -1381,17 +1381,17 @@ bool CSphAutoEvent::Done ()
 
 void CSphAutoEvent::SetEvent ()
 {
-	if (!m_bInitialized)
+	if ( !m_bInitialized )
 		return;
-//	pthread_mutex_lock ( m_pMutex ); // locking is done from outside
+// pthread_mutex_lock ( m_pMutex ); // locking is done from outside
 	pthread_cond_signal ( &m_tCond );
-//	pthread_mutex_unlock ( m_pMutex );
+// pthread_mutex_unlock ( m_pMutex );
 	m_bSent = true;
 }
 
 bool CSphAutoEvent::WaitEvent ()
 {
-	if (!m_bInitialized)
+	if ( !m_bInitialized )
 		return true;
 	pthread_mutex_lock ( m_pMutex );
 	if ( !m_bSent )

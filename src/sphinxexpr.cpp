@@ -3356,7 +3356,7 @@ void ExprParser_t::WalkTree ( int iRoot, T & FUNCTOR )
 	if ( iRoot>=0 )
 	{
 		const ExprNode_t & tNode = m_dNodes[iRoot];
-		FUNCTOR.Enter ( tNode );
+		FUNCTOR.Enter ( tNode, m_dNodes );
 		WalkTree ( tNode.m_iLeft, FUNCTOR );
 		WalkTree ( tNode.m_iRight, FUNCTOR );
 		FUNCTOR.Exit ( tNode );
@@ -4104,6 +4104,40 @@ const char * ExprParser_t::Attr2Ident ( uint64_t uAttrLoc )
 
 //////////////////////////////////////////////////////////////////////////
 
+struct TypeCheck_fn
+{
+	bool * m_pRes;
+
+	explicit TypeCheck_fn ( bool * pRes )
+		: m_pRes ( pRes )
+	{
+		*m_pRes = false;
+	}
+
+	void Enter ( const ExprNode_t & tNode, const CSphVector<ExprNode_t> & dNodes )
+	{
+		bool bNumberOp = tNode.m_iToken=='+' || tNode.m_iToken=='-' || tNode.m_iToken=='*' || tNode.m_iToken=='/';
+		if ( bNumberOp )
+		{
+			bool bLeftNumeric =	tNode.m_iLeft==-1 ? false : IsNumericNode ( dNodes[tNode.m_iLeft] );
+			bool bRightNumeric = tNode.m_iRight==-1 ? false : IsNumericNode ( dNodes[tNode.m_iRight] );
+
+			if ( !bLeftNumeric || !bRightNumeric )
+				*m_pRes = true;
+		}
+	}
+
+	void Exit ( const ExprNode_t & )
+	{}
+
+	bool IsNumericNode ( const ExprNode_t & tNode )
+	{
+		return tNode.m_eRetType==SPH_ATTR_INTEGER || tNode.m_eRetType==SPH_ATTR_ORDINAL || tNode.m_eRetType==SPH_ATTR_BOOL || tNode.m_eRetType==SPH_ATTR_FLOAT ||
+			tNode.m_eRetType==SPH_ATTR_BIGINT || tNode.m_eRetType==SPH_ATTR_WORDCOUNT || tNode.m_eRetType==SPH_ATTR_TOKENCOUNT || tNode.m_eRetType==SPH_ATTR_TIMESTAMP;
+	}
+};
+
+
 struct WeightCheck_fn
 {
 	bool * m_pRes;
@@ -4115,7 +4149,7 @@ struct WeightCheck_fn
 		*m_pRes = false;
 	}
 
-	void Enter ( const ExprNode_t & tNode )
+	void Enter ( const ExprNode_t & tNode, const CSphVector<ExprNode_t> & )
 	{
 		if ( tNode.m_iToken==TOK_WEIGHT )
 			*m_pRes = true;
@@ -4134,7 +4168,7 @@ struct HookCheck_fn
 		: m_pHook ( pHook )
 	{}
 
-	void Enter ( const ExprNode_t & tNode )
+	void Enter ( const ExprNode_t & tNode, const CSphVector<ExprNode_t> & )
 	{
 		if ( tNode.m_iToken==TOK_HOOK_IDENT || tNode.m_iToken==TOK_HOOK_FUNC )
 			m_pHook->CheckEnter ( tNode.m_iFunc );
@@ -4213,6 +4247,15 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema,
 #if 0
 	Dump ( m_iParsed );
 #endif
+
+	bool bTypeMismatch;
+	TypeCheck_fn tFunctor ( &bTypeMismatch );
+	WalkTree ( m_iParsed, tFunctor );
+	if ( bTypeMismatch )
+	{
+		sError.SetSprintf ( "numeric operation applied to non-numeric operands" );
+		return NULL;
+	}
 
 	// create evaluator
 	ISphExpr * pRes = CreateTree ( m_iParsed );

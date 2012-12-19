@@ -1570,7 +1570,7 @@ private:
 	CSphString					GetIndexFileName ( const char * sExt ) const;
 
 	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict, const CSphVector<CSphFilterSettings> * pExtraFilters, CSphQueryNodeCache * pNodeCache, int iTag, bool bFactors ) const;
-	bool						MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const;
+	bool						MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag, bool bFactors ) const;
 	bool						MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker, int iTag ) const;
 
 	const DWORD *				FindDocinfo ( SphDocID_t uDocID ) const;
@@ -13828,7 +13828,7 @@ bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 //////////////////////////////////////////////////////////////////////////
 
 bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult,
-	int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const
+	int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag, bool bFactors ) const
 {
 	assert ( pQuery->m_sQuery.IsEmpty() );
 	assert ( iTag>=0 );
@@ -13846,6 +13846,9 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 		pResult->m_sError = "fullscan requires extern docinfo";
 		return false;
 	}
+
+	if ( bFactors )
+		pResult->m_sWarning.SetSprintf ( "packedfactors() will not work with a fullscan; you need to specify a query" );
 
 	// check if index has data
 	if ( m_bIsEmpty || m_uDocinfo<=0 || m_pDocinfo.IsEmpty() )
@@ -16678,7 +16681,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 
 	// fast path for scans
 	if ( pQuery->m_sQuery.IsEmpty() )
-		return MultiScan ( pQuery, pResult, iSorters, &dSorters[0], pExtraFilters, iTag );
+		return MultiScan ( pQuery, pResult, iSorters, &dSorters[0], pExtraFilters, iTag, bFactors );
 
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( false ) );
 
@@ -16789,7 +16792,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 		// fast path for scans
 		if ( pQueries[i].m_sQuery.IsEmpty() )
 		{
-			if ( MultiScan ( pQueries + i, ppResults[i], 1, &ppSorters[i], pExtraFilters, iTag ) )
+			if ( MultiScan ( pQueries + i, ppResults[i], 1, &ppSorters[i], pExtraFilters, iTag, bFactors ) )
 				bResultScan = true;
 			else
 				ppResults[i]->m_iMultiplier = -1; ///< show that this particular query failed
@@ -16972,6 +16975,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tXQ, pQuery, pResult, tTermSetup, tCtx ) );
 	if ( !pRanker.Ptr() )
 		return false;
+
+	if ( bFactors && pQuery->m_eRanker!=SPH_RANK_EXPR )
+		pResult->m_sWarning.SetSprintf ( "packedfactors() requires using an expression ranker" );
 
 	sphCheckWordStats ( hPrevWordStat, pResult->m_hWordStats, m_sIndexName.cstr(), pResult->m_sWarning );
 

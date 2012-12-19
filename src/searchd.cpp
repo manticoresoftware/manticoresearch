@@ -5666,12 +5666,6 @@ void CheckQuery ( const CSphQuery & tQuery, CSphString & sError )
 		sError.SetSprintf ( "inner offset must be 0 when using outer order by" );
 		return;
 	}
-	if ( tQuery.m_iOuterOffset+tQuery.m_iOuterLimit>tQuery.m_iLimit )
-	{
-		sError.SetSprintf ( "outer window must be smaller than inner limit (inner limit=%d, outer offset=%d, outer limit=%d)",
-			tQuery.m_iLimit, tQuery.m_iOuterOffset, tQuery.m_iOuterLimit );
-		return;
-	}
 }
 
 
@@ -7973,6 +7967,14 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, bool bHadLoca
 	for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
 		if ( tRes.m_tSchema.GetAttr(i).m_eStage==SPH_EVAL_POSTLIMIT )
 			dPostlimit.Add ( i );
+
+	if ( tQuery.m_iOuterOffset+tQuery.m_iOuterLimit>tQuery.m_iLimit )
+	{
+		tRes.m_sWarning.SetSprintf ( "outer window must be smaller than inner limit (inner limit=%d, outer offset=%d, outer limit=%d); clamping outer window",
+			tQuery.m_iLimit, tQuery.m_iOuterOffset, tQuery.m_iOuterLimit );
+
+		tQuery.m_iOuterLimit = Max ( tQuery.m_iLimit-tQuery.m_iOuterOffset, 0 );
+	}
 
 	if ( dPostlimit.GetLength() )
 	{

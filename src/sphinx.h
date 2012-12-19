@@ -3070,7 +3070,7 @@ protected:
 
 	CSphVector<IDFWord_t>	m_dWords;
 	CSphVector<int>			m_dHash;
-	int						m_iTotalDocuments;
+	int64_t					m_iTotalDocuments;
 };
 
 /////////////////////////////////////////////////////////////////////////////

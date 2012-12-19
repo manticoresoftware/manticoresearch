@@ -29032,9 +29032,9 @@ bool CSphGlobalIDF::Preload ( const CSphString & sFilename, CSphString & sError 
 	if ( !tReader.Open ( sFilename, sError ) )
 		return false;
 
-	m_iTotalDocuments = tReader.GetDword();
+	m_iTotalDocuments = tReader.GetOffset();
 
-	const SphOffset_t iSize = tReader.GetFilesize()-sizeof(DWORD);
+	const SphOffset_t iSize = tReader.GetFilesize () - sizeof(SphOffset_t);
 
 	int iTotalWords = int ( iSize/sizeof(IDFWord_t) );
 
@@ -29106,8 +29106,8 @@ const int CSphGlobalIDF::GetCount ( const CSphString & sWord )
 
 float CSphGlobalIDF::GetIDF ( const CSphString & sWord, int iDocsLocal, int iQwords, bool bPlainIDF )
 {
-	const int iDocs = Max ( iDocsLocal, GetCount ( sWord ) );
-	const int iTotalClamped = Max ( m_iTotalDocuments, iDocs );
+	const int64_t iDocs = Max ( iDocsLocal, GetCount ( sWord ) );
+	const int64_t iTotalClamped = Max ( m_iTotalDocuments, iDocs );
 
 	if ( bPlainIDF )
 	{

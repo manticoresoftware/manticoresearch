@@ -358,8 +358,8 @@ bool BuildGlobalIDF ( const CSphString & sFilename, const CSphVector<CSphString>
 			// parse binary file
 			char * p = pData;
 
-			iTotalDocuments += *(DWORD*)p;
-			p += sizeof(DWORD);
+			iTotalDocuments += *(int64_t*)p;
+			p += sizeof(int64_t);
 
 			while ( p<pEnd )
 			{
@@ -405,8 +405,7 @@ bool BuildGlobalIDF ( const CSphString & sFilename, const CSphVector<CSphString>
 	if ( !tWriter.OpenFile ( sFilename, sError ) )
 		return false;
 
-	iTotalDocuments = Max ( iTotalDocuments, INT_MAX );
-	tWriter.PutDword ( (DWORD)iTotalDocuments );
+	tWriter.PutOffset ( iTotalDocuments );
 
 	ARRAY_FOREACH ( i, dWords )
 	{

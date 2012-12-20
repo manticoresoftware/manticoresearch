@@ -2028,6 +2028,12 @@ public:
 		ARRAY_FOREACH ( i, m_dArgs )
 			m_dArgs[i]->GetDependencyColumns ( dDeps );
 	}
+
+	virtual void SetupExtraData ( ISphExtra * pExtraData )
+	{
+		ARRAY_FOREACH ( i, m_dArgs )
+			m_dArgs[i]->SetupExtraData ( pExtraData );
+	}
 };
 
 

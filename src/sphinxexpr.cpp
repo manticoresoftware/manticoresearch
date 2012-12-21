@@ -4439,7 +4439,12 @@ bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, 
 	// add library
 	if ( bLoaded )
 	{
-		UdfVer_fn fnVer = (UdfVer_fn) dlsym ( pHandle, sName.SetSprintf ( "%s_ver", sFunc.cstr() ).cstr() );
+		CSphString sLib = szLib;
+		const char * pDot = strchr ( sLib.cstr(), '.' );
+		if ( pDot )
+			sLib = sLib.SubString ( 0, pDot-sLib.cstr() );
+
+		UdfVer_fn fnVer = (UdfVer_fn) dlsym ( pHandle, sName.SetSprintf ( "%s_ver", sLib.cstr() ).cstr() );
 		if ( !fnVer )
 		{
 			sError.SetSprintf ( "symbol '%s_ver' not found in '%s': update your UDF implementation", sFunc.cstr(), szLib );

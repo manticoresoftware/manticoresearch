@@ -9852,7 +9852,8 @@ enum SqlStmt_e
 	STMT_SHOW_COLLATION,
 	STMT_SHOW_CHARACTER_SET,
 	STMT_OPTIMIZE_INDEX,
-	STMT_SHOW_AGENTSTATUS,
+	STMT_SHOW_AGENT_STATUS,
+	STMT_SHOW_INDEX_STATUS,
 
 	STMT_TOTAL
 };
@@ -12965,10 +12966,10 @@ public:
 		Commit();
 	}
 
-	inline void DataTuplet ( const char * pLeft, int iRight )
+	inline void DataTuplet ( const char * pLeft, int64_t iRight )
 	{
 		char sTmp[SPH_MAX_NUMERIC_STR];
-		snprintf ( sTmp, sizeof(sTmp), "%d", iRight );
+		snprintf ( sTmp, sizeof(sTmp), "%lld", iRight );
 		DataTuplet ( pLeft, sTmp );
 	}
 
@@ -14436,7 +14437,7 @@ void HandleMysqlMeta ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt, const CS
 	case STMT_SHOW_META:
 		BuildMeta ( dStatus, tLastMeta );
 		break;
-	case STMT_SHOW_AGENTSTATUS:
+	case STMT_SHOW_AGENT_STATUS:
 		BuildAgentStatus ( dStatus, tStmt.m_sIndex );
 		break;
 	default:
@@ -14646,7 +14647,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow );
 		} else if ( eStmt==STMT_SHOW_WARNINGS )
 			HandleMysqlWarning ( tMeta, dRows, bMoreResultsFollow );
-		else if ( eStmt==STMT_SHOW_STATUS || eStmt==STMT_SHOW_META || eStmt==STMT_SHOW_AGENTSTATUS )
+		else if ( eStmt==STMT_SHOW_STATUS || eStmt==STMT_SHOW_META || eStmt==STMT_SHOW_AGENT_STATUS )
 			HandleMysqlMeta ( dRows, dStmt[i], tMeta, bMoreResultsFollow );
 
 		if ( g_bGotSigterm )
@@ -15095,6 +15096,43 @@ void HandleMysqlShowVariables ( SqlRowBuffer_c & tOut, SessionVars_t & tVars )
 }
 
 
+void HandleMysqlShowIndexStatus ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+{
+	CSphString sError;
+	const ServedIndex_t * pServed = g_pLocalIndexes->GetRlockedEntry ( tStmt.m_sIndex );
+
+	if ( !pServed || !pServed->m_bEnabled )
+	{
+		if ( pServed )
+			pServed->Unlock();
+		tOut.Error ( tStmt.m_sStmt, "SHOW INDEX STATUS requires an existing index" );
+		return;
+	}
+
+	CSphIndex * pIndex = pServed->m_pIndex;
+
+	tOut.HeadTuplet ( "Variable_name", "Value" );
+
+	tOut.DataTuplet ( "index_type", pServed->m_bRT ? "rt" : "disk" );
+	tOut.DataTuplet ( "indexed_documents", pIndex->GetStats().m_iTotalDocuments );
+	tOut.DataTuplet ( "indexed_bytes", pIndex->GetStats().m_iTotalBytes );
+
+	const int64_t * pFieldLens = pIndex->GetFieldLens();
+	const CSphVector<CSphColumnInfo> & dFields = pIndex->GetMatchSchema().m_dFields;
+
+	ARRAY_FOREACH ( i, dFields )
+	{
+		CSphString sKey;
+		sKey.SetSprintf ( "field_tokens_%s", dFields[i].m_sName.cstr() );
+		tOut.DataTuplet ( sKey.cstr(), pFieldLens[i] );
+	}
+
+	pServed->Unlock();
+	tOut.Eof();
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 class CSphinxqlSession : public ISphNoncopyable
 {
 	CSphString &		m_sError;
@@ -15181,7 +15219,7 @@ public:
 
 		case STMT_SHOW_STATUS:
 		case STMT_SHOW_META:
-		case STMT_SHOW_AGENTSTATUS:
+		case STMT_SHOW_AGENT_STATUS:
 			if ( eStmt==STMT_SHOW_STATUS )
 			{
 				StatCountCommand ( SEARCHD_COMMAND_STATUS );
@@ -15305,7 +15343,7 @@ public:
 			return;
 
 		case STMT_SELECT_SYSVAR:
-			HandleMysqlSelectSysvar ( tOut, * pStmt );
+			HandleMysqlSelectSysvar ( tOut, *pStmt );
 			return;
 
 		case STMT_SHOW_COLLATION:
@@ -15314,6 +15352,10 @@ public:
 
 		case STMT_SHOW_CHARACTER_SET:
 			HandleMysqlShowCharacterSet ( tOut );
+			return;
+
+		case STMT_SHOW_INDEX_STATUS:
+			HandleMysqlShowIndexStatus ( tOut, *pStmt );
 			return;
 
 		default:

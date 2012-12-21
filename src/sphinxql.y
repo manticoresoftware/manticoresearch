@@ -642,22 +642,27 @@ show_stmt:
 
 like_filter:
 	// empty
-	| TOK_LIKE TOK_QUOTED_STRING { pParser->m_pStmt->m_sStringParam = $2.m_sValue; }
+	| TOK_LIKE TOK_QUOTED_STRING		{ pParser->m_pStmt->m_sStringParam = $2.m_sValue; }
 	;
 
 show_what:
-	TOK_WARNINGS		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_WARNINGS; }
-	| TOK_STATUS like_filter		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_STATUS; }
-	| TOK_META like_filter			{ pParser->m_pStmt->m_eStmt = STMT_SHOW_META; }
-	| TOK_AGENT TOK_STATUS like_filter	{ pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENTSTATUS; }
+	TOK_WARNINGS						{ pParser->m_pStmt->m_eStmt = STMT_SHOW_WARNINGS; }
+	| TOK_STATUS like_filter			{ pParser->m_pStmt->m_eStmt = STMT_SHOW_STATUS; }
+	| TOK_META like_filter				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_META; }
+	| TOK_AGENT TOK_STATUS like_filter	{ pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS; }
 	| TOK_AGENT TOK_QUOTED_STRING TOK_STATUS like_filter
 		{
-			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENTSTATUS;
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS;
 			pParser->m_pStmt->m_sIndex = $2.m_sValue;
 		}
 	| TOK_AGENT TOK_IDENT TOK_STATUS like_filter
 		{
-			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENTSTATUS;
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS;
+			pParser->m_pStmt->m_sIndex = $2.m_sValue;
+		}
+	| TOK_INDEX TOK_IDENT TOK_STATUS
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_STATUS;
 			pParser->m_pStmt->m_sIndex = $2.m_sValue;
 		}
 	;
@@ -1073,7 +1078,7 @@ sysvar_name:
 		}
 	;
 
-////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////
 
 truncate:
 	TOK_TRUNCATE TOK_RTINDEX TOK_IDENT
@@ -1084,7 +1089,7 @@ truncate:
 		}
 	;
 
-////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////
 
 optimize_index:
 	TOK_OPTIMIZE TOK_INDEX TOK_IDENT

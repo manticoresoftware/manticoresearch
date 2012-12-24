@@ -2983,7 +2983,6 @@ protected:
 
 public:
 	float						GetGlobalIDF ( const CSphString & sWord, int iDocsLocal, int iQwords, bool bPlainIDF ) const;
-	void						RotateGlobalIDF ();
 	void						SetGlobalIDFPath ( const char * sPath ) { m_sGlobalIDFPath = sPath; }
 
 protected:
@@ -3043,35 +3042,6 @@ bool				sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema
 
 /// initialize collation tables
 void				sphCollationInit ();
-
-/// global idf
-class CSphGlobalIDF
-{
-public:
-	CSphGlobalIDF ()
-		: m_iTotalDocuments ( 0 )
-	{}
-
-	bool			Preload ( const CSphString & sFilename, CSphString & sError );
-	const int		GetCount ( const CSphString & sWord );
-	float			GetIDF ( const CSphString & sWord, int iDocsLocal, int iQwords, bool bPlainIDF );
-
-protected:
-#pragma pack(push,4)
-	struct IDFWord_t
-	{
-		uint64_t			m_uWordID;
-		DWORD				m_iCount;
-	};
-#pragma pack(pop)
-	STATIC_SIZE_ASSERT		( IDFWord_t, 12 );
-
-	static const int		HASH_BITS = 16;
-
-	CSphVector<IDFWord_t>	m_dWords;
-	CSphVector<int>			m_dHash;
-	int64_t					m_iTotalDocuments;
-};
 
 /////////////////////////////////////////////////////////////////////////////
 

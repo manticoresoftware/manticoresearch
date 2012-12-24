@@ -17347,7 +17347,14 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		// try to create index
 		tIdx.m_sIndexPath = hIndex["path"];
 		PreCreatePlainIndex ( tIdx, szIndexName );
-		tIdx.m_pIndex->SetGlobalIDFPath ( hIndex.GetStr ( "global_idf" ) );
+
+		if ( hIndex.Exists ( "global_idf" ) )
+		{
+			if ( g_eWorkers==MPM_FORK || g_eWorkers==MPM_PREFORK )
+				sphWarning ( "index '%s': global IDF requires workers=threads; IGNORED", szIndexName );
+			else
+				tIdx.m_pIndex->SetGlobalIDFPath ( hIndex.GetStr ( "global_idf" ) );
+		}
 
 		// done
 		if ( !g_pLocalIndexes->Add ( tIdx, szIndexName ) )
@@ -17564,14 +17571,6 @@ void CheckRotate ()
 		return;
 
 	sphLogDebug ( "CheckRotate invoked" );
-
-	// rotate global idf before prereading indexes
-	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
-	{
-		ServedIndex_t & tIndex = it.Get();
-		assert ( tIndex.m_pIndex );
-		tIndex.m_pIndex->RotateGlobalIDF();
-	}
 
 	/////////////////////
 	// RAM-greedy rotate

@@ -1221,6 +1221,8 @@ const BYTE *	SkipQuoted ( const BYTE * p );
 
 bool			sphSortGetStringRemap ( const CSphSchema & tSorterSchema, const CSphSchema & tIndexSchema, CSphVector<SphStringSorterRemap_t> & dAttrs );
 bool			sphIsSortStringInternal ( const char * sColumnName );
+/// make string lowercase but keep case of JSON.field
+void			sphColumnToLowercase ( char * sVal );
 
 bool			sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * sName, CSphString & sError, ThrottleState_t * pThrottle );
 size_t			sphReadThrottled ( int iFD, void * pBuf, size_t iCount, ThrottleState_t * pThrottle );

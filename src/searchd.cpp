@@ -10435,9 +10435,11 @@ void SqlParser_c::AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode
 	if ( pStart && pEnd )
 	{
 		tItem.m_sAlias.SetBinary ( m_pBuf + pStart->m_iStart, pEnd->m_iEnd - pStart->m_iStart );
-		tItem.m_sAlias.ToLower();
+		sphColumnToLowercase ( const_cast<char *>( tItem.m_sAlias.cstr() ) );
 	} else
+	{
 		tItem.m_sAlias = tItem.m_sExpr;
+	}
 	SetSelect ( pStart, pEnd );
 }
 
@@ -10445,7 +10447,7 @@ void SqlParser_c::AddItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFunc, SqlNode_t
 {
 	CSphQueryItem & tItem = m_pQuery->m_dItems.Add();
 	tItem.m_sExpr.SetBinary ( m_pBuf + pExpr->m_iStart, pExpr->m_iEnd - pExpr->m_iStart );
-	tItem.m_sExpr.ToLower();
+	sphColumnToLowercase ( const_cast<char *>( tItem.m_sExpr.cstr() ) );
 	tItem.m_eAggrFunc = eAggrFunc;
 	AutoAlias ( tItem, pStart?pStart:pExpr, pEnd?pEnd:pExpr );
 }
@@ -10455,7 +10457,7 @@ bool SqlParser_c::AddItem ( const char * pToken, SqlNode_t * pStart, SqlNode_t *
 	CSphQueryItem & tItem = m_pQuery->m_dItems.Add();
 	tItem.m_sExpr = pToken;
 	tItem.m_eAggrFunc = SPH_AGGR_NONE;
-	tItem.m_sExpr.ToLower();
+	sphColumnToLowercase ( const_cast<char *>( tItem.m_sExpr.cstr() ) );
 	AutoAlias ( tItem, pStart, pEnd );
 	return SetNewSyntax();
 }
@@ -10464,7 +10466,7 @@ void SqlParser_c::SetGroupBy ( const CSphString & sGroupBy )
 {
 	m_pQuery->m_eGroupFunc = SPH_GROUPBY_ATTR;
 	m_pQuery->m_sGroupBy = sGroupBy;
-	m_pQuery->m_sGroupBy.ToLower();
+	sphColumnToLowercase ( const_cast<char *>( m_pQuery->m_sGroupBy.cstr() ) );
 }
 
 bool SqlParser_c::AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd )
@@ -10599,7 +10601,7 @@ CSphFilterSettings * SqlParser_c::AddFilter ( const CSphString & sCol, ESphFilte
 	CSphFilterSettings * pFilter = &m_pQuery->m_dFilters.Add();
 	pFilter->m_sAttrName = sCol;
 	pFilter->m_eType = eType;
-	pFilter->m_sAttrName.ToLower();
+	sphColumnToLowercase ( const_cast<char *>( pFilter->m_sAttrName.cstr() ) );
 	return pFilter;
 }
 

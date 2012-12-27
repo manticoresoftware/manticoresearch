@@ -114,6 +114,21 @@ index dist_field
 	local			= <my_address/>:i2
 	agent		= <my_address/>:test
 }
+
+source src_case
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select *, 11 as gid, 'dummy' as title from json_case
+	sql_attr_uint	= gid
+	sql_attr_json	= j
+}
+
+index json_case
+{
+	source		= src_case
+	path			= <data_path/>/case
+}
 </config>
 
 <db_create>
@@ -198,6 +213,20 @@ INSERT INTO `json_table` VALUES
 (9,'{"uid":345}'),
 ( 100, '' )
 </db_insert>
+<db_create>CREATE TABLE `json_case` ( `id` int(11) NOT NULL, `j` varchar(8192) NOT NULL );</db_create>
+<db_drop>DROP TABLE IF EXISTS `json_case`;</db_drop>
+<db_insert>
+INSERT INTO `json_case` VALUES
+(1,'{"Attr":123,	"aTTr":12,	"Str":"nope",		"STR":"yep"		}'),
+(2,'{"Attr":23,				 			"Str":"nope",		"STR":"yep2"	}'),
+(3,'{"Attr":123,	"aTTr":12,							"STR":"yep"		}'),
+(4,'{"Attr":123,	"aTTr":212,	"Str":"nope11"							}'),
+(5,'{"Attr":12,		 "aTTr":12														}'),
+(6,'{											"Str":"nope", 	"STR":"yep"		}'),
+(7,'{						"aTTr":212,							"STR":"yep2"	}'),
+(8,'{"Attr":12,							"Str":"nope11"							}')
+</db_insert>
+
 
 <queries>
 <!-- json via API -->
@@ -233,7 +262,7 @@ INSERT INTO `json_table` VALUES
 <sphinxql>select * from test where j.gid=315</sphinxql>
 <sphinxql>select * from test where j.gid='315'</sphinxql>
 <sphinxql>select * from test where j.gid>315</sphinxql>
-<sphinxql>select * from test where j.GID=12</sphinxql>
+<sphinxql>select * from test where j.gid=12</sphinxql>
 <sphinxql>select * from test where id=13</sphinxql>
 <sphinxql>select * from test where id=14</sphinxql>
 <!-- ORDER BY, NULL(able) values are presented first if you do ORDER BY ... ASC and last if you do ORDER BY ... DESC -->
@@ -244,6 +273,20 @@ INSERT INTO `json_table` VALUES
 <sphinxql>select id, j.uid, j.name from loc_field order by j.name asc, j.gid desc</sphinxql>
 <sphinxql>select id, j.name, j.uid from dist_field order by j.name desc, j.gid asc</sphinxql>
 <sphinxql>select id, j.name, j.34, j.179, j.uid, j.sv,  j.t6, j. f2, j.f1 from dist_field </sphinxql>
+<!-- json.field case -->
+<sphinxql>select id, j.Attr as j1, j.aTTr j2, j.Str as j3, j.STR j4 from json_case</sphinxql>
+<sphinxql>select id, j.Attr, j.aTTr, j.Str, j.STR from json_case where j.Attr>100</sphinxql>
+<sphinxql>select id, j.Attr, j.aTTr, j.Str, j.STR from json_case where j.aTTr&lt;100</sphinxql>
+<sphinxql>select id, j.Attr, j.aTTr, j.Str, j.STR from json_case where j.Str='nope'</sphinxql>
+<sphinxql>select id, j.Attr, j.aTTr, j.Str, j.STR from json_case where j.STR='yep'</sphinxql>
+<sphinxql>select id, count(*) c, j.Attr, j.aTTr, j.Str, j.STR from json_case group by j.Attr</sphinxql>
+<sphinxql>select id, count(*) c, j.Attr, j.aTTr, j.Str, j.STR from json_case group by j.aTTr</sphinxql>
+<sphinxql>select id, count(*) c, j.Attr, j.aTTr, j.Str, j.STR from json_case group by j.Str</sphinxql>
+<sphinxql>select id, count(*) c, j.Attr, j.aTTr, j.Str, j.STR from json_case group by j.STR</sphinxql>
+<sphinxql>select id, j.Attr, j.aTTr, j.Str, j.STR from json_case order by j.Attr asc, id desc</sphinxql>
+<sphinxql>select id, j.Attr, j.aTTr, j.Str, j.STR from json_case order by j.aTTr desc, id desc</sphinxql>
+<sphinxql>select id, j.Attr, j.aTTr, j.Str, j.STR from json_case order by j.Str asc, id desc</sphinxql>
+<sphinxql>select id, j.Attr, j.aTTr, j.Str, j.STR from json_case order by j.STR desc, id desc</sphinxql>
 </sphqueries>
 
 </test>

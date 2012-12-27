@@ -1281,22 +1281,7 @@ struct CSphColumnInfo
 	bool							m_bWeight;		///< is a weight column
 
 	/// handy ctor
-	CSphColumnInfo ( const char * sName=NULL, ESphAttr eType=SPH_ATTR_NONE )
-		: m_sName ( sName )
-		, m_eAttrType ( eType )
-		, m_eWordpart ( SPH_WORDPART_WHOLE )
-		, m_bIndexed ( false )
-		, m_iIndex ( -1 )
-		, m_eSrc ( SPH_ATTRSRC_NONE )
-		, m_pExpr ( NULL )
-		, m_eAggrFunc ( SPH_AGGR_NONE )
-		, m_eStage ( SPH_EVAL_STATIC )
-		, m_bPayload ( false )
-		, m_bFilename ( false )
-		, m_bWeight ( false )
-	{
-		m_sName.ToLower ();
-	}
+	CSphColumnInfo ( const char * sName=NULL, ESphAttr eType=SPH_ATTR_NONE );
 
 	/// equality comparison checks name, type, and locator
 	bool operator == ( const CSphColumnInfo & rhs ) const

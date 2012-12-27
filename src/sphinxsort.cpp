@@ -2139,8 +2139,15 @@ public:
 		m_pMax = m_pBuf+iLen;
 		m_pCur = m_pBuf;
 
+		// make string lowercase but keep case of JSON.field
+		bool bJson = false;
 		for ( int i=0; i<=iLen; i++ )
-			m_pBuf[i] = ToLower ( sBuffer[i] );
+		{
+			char cSrc = sBuffer[i];
+			char cDst = ToLower ( cSrc );
+			bJson = ( cSrc=='.' || ( bJson && cDst>0 ) ); // keep case of valid char sequence after '.' symbol
+			m_pBuf[i] = bJson ? cSrc : cDst;
+		}
 	}
 
 	~SortClauseTokenizer_t ()

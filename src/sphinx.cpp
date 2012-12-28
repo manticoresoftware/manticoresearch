@@ -16148,12 +16148,6 @@ XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & 
 }
 
 
-static inline bool IsWild ( char c )
-{
-	return c=='*' || c=='?' || c=='%';
-}
-
-
 void sphQueryAdjustStars ( XQNode_t * pNode, const CSphIndexSettings & tSettings )
 {
 	if ( pNode->m_dChildren.GetLength() )
@@ -16170,9 +16164,9 @@ void sphQueryAdjustStars ( XQNode_t * pNode, const CSphIndexSettings & tSettings
 		// trim all wildcards
 		const char * s = sWord.cstr();
 		int iLen = sWord.Length();
-		while ( iLen>0 && IsWild ( s[iLen-1] ) )
+		while ( iLen>0 && sphIsWild ( s[iLen-1] ) )
 			iLen--;
-		while ( iLen>0 && IsWild(*s) )
+		while ( iLen>0 && sphIsWild(*s) )
 		{
 			s++;
 			iLen--;
@@ -16390,7 +16384,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 
 	int iWilds = 0;
 	for ( const char * s = sFull; *s; s++ )
-		if ( IsWild(*s) )
+		if ( sphIsWild(*s) )
 			iWilds++;
 
 	// no wildcards, or just wildcards? do not expand
@@ -16398,7 +16392,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 		return pNode;
 
 	CSphVector<CSphNamedInt> dExpanded;
-	if ( !IsWild(*sFull) || tCtx.m_iMinInfixLen==0 )
+	if ( !sphIsWild(*sFull) || tCtx.m_iMinInfixLen==0 )
 	{
 		// do prefix expansion
 		// remove exact form modifier, if any
@@ -16409,7 +16403,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 		// skip leading wildcards
 		// (in case we got here on non-infixed index path)
 		const char * sWildcard = sPrefix;
-		while ( IsWild ( *sPrefix ) )
+		while ( sphIsWild ( *sPrefix ) )
 		{
 			sPrefix++;
 			sWildcard++;
@@ -16417,7 +16411,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 
 		// compute non-wildcard prefix length
 		int iPrefix = 0;
-		for ( const char * s = sPrefix; *s && !IsWild(*s); s++ )
+		for ( const char * s = sPrefix; *s && !sphIsWild(*s); s++ )
 			iPrefix++;
 
 		// do not expand prefixes under min length
@@ -16440,7 +16434,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 	} else
 	{
 		// do infix expansion
-		assert ( IsWild(*sFull) );
+		assert ( sphIsWild(*sFull) );
 		assert ( tCtx.m_iMinInfixLen>0 );
 
 		// find the longest substring of non-wildcards
@@ -16450,7 +16444,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 
 		for ( const char * s = sFull; *s; s++ )
 		{
-			if ( IsWild(*s) )
+			if ( sphIsWild(*s) )
 			{
 				iCur = 0;
 			} else if ( ++iCur > iMaxInfix )

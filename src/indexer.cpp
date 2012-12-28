@@ -1565,6 +1565,7 @@ int main ( int argc, char ** argv )
 	CSphVector<CSphFilterSettings> dMergeDstFilters;
 
 	CSphVector<const char *> dIndexes;
+	CSphVector<const char *> dWildIndexes;
 	bool bIndexAll = false;
 	bool bMergeKillLists = false;
 	bool bVerbose = false;
@@ -1636,9 +1637,25 @@ int main ( int argc, char ** argv )
 		{
 			bVerbose = true;
 
-		} else if ( isalnum ( argv[i][0] ) || argv[i][0]=='_' )
+		} else if ( isalnum ( argv[i][0] ) || argv[i][0]=='_' || sphIsWild ( argv[i][0] ) )
 		{
-			dIndexes.Add ( argv[i] );
+			bool bHasWilds = false;
+			const char * s = argv[i];
+
+			while ( *s )
+			{
+				if ( sphIsWild( *s ) )
+				{
+					bHasWilds = true;
+					break;
+				}
+				s++;
+			}
+			
+			if ( bHasWilds )
+				dWildIndexes.Add ( argv[i] );
+			else
+				dIndexes.Add ( argv[i] );
 
 		} else if ( strcasecmp ( argv[i], "--dump-rows" )==0 && (i+1)<argc )
 		{
@@ -1713,7 +1730,7 @@ int main ( int argc, char ** argv )
 		return 1;
 	}
 
-	if ( !bMerge && !bIndexAll && !dIndexes.GetLength() )
+	if ( !bMerge && !bIndexAll && !dIndexes.GetLength() && !dWildIndexes.GetLength() )
 	{
 		fprintf ( stdout, "ERROR: nothing to do.\n" );
 		return 1;
@@ -1794,6 +1811,20 @@ int main ( int argc, char ** argv )
 		fpDumpRows = fopen ( sDumpRows.cstr(), "wb+" );
 		if ( !fpDumpRows )
 			sphDie ( "failed to open %s: %s", sDumpRows.cstr(), strerror(errno) );
+	}
+
+	hConf["index"].IterateStart();
+	while ( hConf["index"].IterateNext() )
+	{
+		ARRAY_FOREACH ( i, dWildIndexes )
+		{
+			if ( sphWildcardMatch ( hConf["index"].IterateGetKey().cstr(), dWildIndexes[i] ) )
+			{
+				dIndexes.Add ( hConf["index"].IterateGetKey().cstr() );
+				// do not add index twice
+				break;
+			}
+		}
 	}
 
 	sphStartIOStats ();

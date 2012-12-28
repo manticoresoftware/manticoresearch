@@ -99,7 +99,7 @@ foreach ( array ( 'spa', 'spd', 'spe', 'spi', 'spk', 'spm', 'spp', 'sps', 'sph' 
 }
 $state = StartSearchd ('config.conf', 'error.txt', 'searchd.pid', $error);
 
-RunIndexer ( $errors, '--rotate plain2' ); // adding plain2 index
+RunIndexer ( $errors, '--rotate "p*lain2"' ); // adding plain2 index
 sleep(2);
 
 $query = create_function('$client','

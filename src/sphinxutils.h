@@ -45,6 +45,13 @@ inline bool sphIsModifier ( int iSymbol )
 }
 
 
+/// all wildcards
+inline bool sphIsWild ( char c )
+{
+	return c=='*' || c=='?' || c=='%';
+}
+
+
 /// string splitter, extracts sequences of alphas (as in sphIsAlpha)
 void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn );
 

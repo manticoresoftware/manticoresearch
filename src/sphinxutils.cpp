@@ -90,12 +90,6 @@ void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn )
 }
 
 
-static inline bool IsWild ( char c )
-{
-	return c=='*' || c=='?' || c=='%';
-}
-
-
 bool sphWildcardMatch ( const char * sString, const char * sPattern )
 {
 	if ( !sString || !sPattern )
@@ -123,7 +117,7 @@ bool sphWildcardMatch ( const char * sString, const char * sPattern )
 				break;
 
 			// plain char after a hash? check the non-ambiguous cases
-			if ( !IsWild(*p) )
+			if ( !sphIsWild(*p) )
 			{
 				if ( s[0]!=*p )
 				{

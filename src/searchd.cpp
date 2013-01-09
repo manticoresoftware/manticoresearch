@@ -4195,8 +4195,12 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 	int iAgents = 0;
 	int64_t tmMaxTimer = sphMicroTimer() + pCtx->m_iTimeout*1000; // in microseconds
 
+	CSphVector<int> dWorkingSet;
+	dWorkingSet.Reserve( pCtx->m_iAgentCount );
+
 #if HAVE_POLL
-	CSphVector<struct pollfd> fds ( pCtx->m_iAgentCount );
+	CSphVector<struct pollfd> fds;
+	fds.Reserve ( pCtx->m_iAgentCount );
 #endif
 
 	// main connection loop
@@ -4204,7 +4208,11 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 	for ( ;; )
 	{
 		// prepare socket sets
-#if !HAVE_POLL
+		dWorkingSet.Reset();
+
+#if HAVE_POLL
+        fds.Reset();
+#else
 		int iMax = 0;
 		fd_set fdsRead, fdsWrite;
 		FD_ZERO ( &fdsRead );
@@ -4217,25 +4225,20 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 			const AgentConn_t & tAgent = pCtx->m_pAgents[i];
 			// select only 'initial' agents - which are not send query response.
 			if ( tAgent.m_eState<AGENT_CONNECTING || tAgent.m_eState>AGENT_QUERYED )
-			{
-#if HAVE_POLL
-				fds[i].fd = -1;
-				fds[i].events = 0;
-#endif
 				continue;
-			}
 
 			assert ( !tAgent.m_sPath.IsEmpty() || tAgent.m_iPort>0 );
 			assert ( tAgent.m_iSock>0 );
 			bool bWr = ( tAgent.m_eState==AGENT_CONNECTING || tAgent.m_eState==AGENT_ESTABLISHED );
+			dWorkingSet.Add(i);
 #if HAVE_POLL
-			fds[i].fd = tAgent.m_iSock;
-			fds[i].events = bWr ? POLLOUT : POLLIN;
+			pollfd& pfd = fds.Add();
+			pfd.fd = tAgent.m_iSock;
+			pfd.events = bWr ? POLLOUT : POLLIN;
 #else
 			sphFDSet ( tAgent.m_iSock, bWr ? &fdsWrite : &fdsRead );
 			iMax = Max ( iMax, tAgent.m_iSock );
 #endif
-
 			if ( tAgent.m_eState!=AGENT_QUERYED )
 				bDone = false;
 		}
@@ -4264,9 +4267,9 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 			continue;
 
 		// ok, something did happen, so loop the agents and do them checks
-		for ( int i=0; i<pCtx->m_iAgentCount; i++ )
+		ARRAY_FOREACH ( i, dWorkingSet )
 		{
-			AgentConn_t & tAgent = pCtx->m_pAgents[i];
+			AgentConn_t & tAgent = pCtx->m_pAgents[dWorkingSet[i]];
 #if HAVE_POLL
 			bool bReadable = ( fds[i].revents & POLLIN )!=0;
 			bool bWriteable = ( fds[i].revents & POLLOUT )!=0;
@@ -4418,13 +4421,21 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 	int iAgents = 0;
 	int64_t tmMaxTimer = sphMicroTimer() + iTimeout*1000; // in microseconds
 
+	CSphVector<int> dWorkingSet;
+	dWorkingSet.Reserve( dAgents.GetLength() );
+
 #if HAVE_POLL
-	CSphVector<struct pollfd> fds ( dAgents.GetLength() );
+	CSphVector<struct pollfd> fds;
+	fds.Reserve ( dAgents.GetLength() );
 #endif
 
 	for ( ;; )
 	{
-#if !HAVE_POLL
+        dWorkingSet.Reset();
+
+#if HAVE_POLL
+        fds.Reset();
+#else
 		int iMax = 0;
 		fd_set fdsRead;
 		FD_ZERO ( &fdsRead );
@@ -4433,10 +4444,6 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 		bool bDone = true;
 		ARRAY_FOREACH ( iAgent, dAgents )
 		{
-#if HAVE_POLL
-			fds[iAgent].fd = -1;
-			fds[iAgent].events = 0;
-#endif
 			AgentConn_t & tAgent = dAgents[iAgent];
 			if ( tAgent.m_bBlackhole )
 				continue;
@@ -4446,9 +4453,11 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 				assert ( !tAgent.m_sPath.IsEmpty() || tAgent.m_iPort>0 );
 				assert ( tAgent.m_iSock>0 );
 
+				dWorkingSet.Add(iAgent);
 #if HAVE_POLL
-				fds[iAgent].fd = tAgent.m_iSock;
-				fds[iAgent].events = POLLIN;
+                pollfd& pfd = fds.Add();
+                pfd.fd = tAgent.m_iSock;
+                pfd.events = POLLIN;
 #else
 				sphFDSet ( tAgent.m_iSock, &fdsRead );
 				iMax = Max ( iMax, tAgent.m_iSock );
@@ -4478,16 +4487,16 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 		if ( iSelected<=0 )
 			continue;
 
-		ARRAY_FOREACH ( iAgent, dAgents )
+		ARRAY_FOREACH ( i, dWorkingSet )
 		{
-			AgentConn_t & tAgent = dAgents[iAgent];
+			AgentConn_t & tAgent = dAgents[dWorkingSet[i]];
 			if ( tAgent.m_bBlackhole )
 				continue;
 			if (!( tAgent.m_eState==AGENT_QUERYED || tAgent.m_eState==AGENT_REPLY || tAgent.m_eState==AGENT_PREREPLY ))
 				continue;
 
 #if HAVE_POLL
-			if (!( fds[iAgent].revents & POLLIN ))
+			if (!( fds[i].revents & POLLIN ))
 				continue;
 #else
 			if ( !FD_ISSET ( tAgent.m_iSock, &fdsRead ) )

@@ -3475,7 +3475,7 @@ public:
 		CSphScopedLock<InterWorkerStorage> tLock ( *m_pLock );
 
 		++*m_pRRCounter;
-		if ( *m_pRRCounter==m_dAgents.GetLength() )
+		if ( *m_pRRCounter<0 || *m_pRRCounter>(m_dAgents.GetLength()-1) )
 			*m_pRRCounter=0;
 
 
@@ -12228,7 +12228,7 @@ void BuildDistIndexStatus ( VectorLike & dStatus, const CSphString& sIndex )
 			if ( dStatus.MatchAddVa ( "%s_id", sKey.cstr() ) )
 				dStatus.Add().SetSprintf ( "%s:%s", dDesc.GetName().cstr(), dDesc.m_sIndexes.cstr() );
 
-			if ( dStatus.MatchAddVa ( "%s_probability_weight", sKey.cstr() ) )
+			if ( tAgents.IsHA() && dStatus.MatchAddVa ( "%s_probability_weight", sKey.cstr() ) )
 				dStatus.Add().SetSprintf ( "%f", tAgents.GetWeights()[j] ); // FIXME! IPC unsafe, if critical need to be locked.
 
 			if ( dStatus.MatchAddVa ( "%s_is_blackhole", sKey.cstr() ) )

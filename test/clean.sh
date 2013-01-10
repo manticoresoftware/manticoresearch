@@ -11,9 +11,12 @@ do
 	rm -fr "$i/Conf/"
 done
 
-# clean files
+# clean test index data files
 rm -f data/*.sp*
 rm -f data/*.mvp
 rm -f data/*.meta data/*.lock data/*.kill data/*.ram
 rm -f data/binlog.*
+
+# clean test runs logs
 rm -f *.log
+rm -f searchd.pid error.txt config.conf

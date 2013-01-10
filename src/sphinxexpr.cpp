@@ -4464,7 +4464,7 @@ bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, 
 		UdfVer_fn fnVer = (UdfVer_fn) dlsym ( pHandle, sName.SetSprintf ( "%s_ver", sLib.cstr() ).cstr() );
 		if ( !fnVer )
 		{
-			sError.SetSprintf ( "symbol '%s_ver' not found in '%s': update your UDF implementation", sFunc.cstr(), szLib );
+			sError.SetSprintf ( "symbol '%s_ver' not found in '%s': update your UDF implementation", sLib.cstr(), szLib );
 			dlclose ( pHandle );
 			g_tUdfMutex.Unlock();
 			return false;

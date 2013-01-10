@@ -30,6 +30,14 @@
 #define DLLEXPORT
 #endif
 
+/// UDF version control
+/// gets called once when the library is loaded
+DLLEXPORT int udfexample_ver ()
+{
+	return SPH_UDF_VERSION;
+}
+
+
 /// UDF initialization
 /// gets called on every query, when query begins
 /// args are filled with values for a particular query

@@ -97,7 +97,8 @@ struct UdfCall_t
 // hack hack hack
 UservarIntSet_c * ( *g_pUservarsHook )( const CSphString & sUservar );
 
-static bool								g_bUdfEnabled = false;
+static bool								g_bUdfEnabled = false;		///< is there any UDF support all?
+static bool								g_bUdfLocked = false;		///< do we allow CREATE/DROP at this point?
 static CSphString						g_sUdfDir;
 static CSphStaticMutex					g_tUdfMutex;
 static SmallStringHash_T<UdfLib_t>		g_hUdfLibs;
@@ -4328,12 +4329,16 @@ const char * dlerror()
 }
 #endif // USE_WINDOWS
 
-
 #if !HAVE_DLOPEN
 
 void sphUDFInit ( const char * )
 {
 	return;
+}
+
+void sphUDFLock ( bool bLocked )
+{
+	g_bUdfLocked = bLocked;
 }
 
 bool sphUDFCreate ( const char *, const char *, ESphAttr, CSphString & sError )
@@ -4357,6 +4362,13 @@ void sphUDFInit ( const char * sUdfDir )
 
 	g_sUdfDir = sUdfDir;
 	g_bUdfEnabled = true;
+	g_bUdfLocked = false;
+}
+
+
+void sphUDFLock (  bool bLocked )
+{
+	g_bUdfLocked = bLocked;
 }
 
 
@@ -4364,7 +4376,12 @@ bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, 
 {
 	if ( !g_bUdfEnabled )
 	{
-		sError = "UDF support disabled (requires workers=threads; and a valid plugin_dir)";
+		sError = "UDF support disabled (requires a valid plugin_dir)";
+		return false;
+	}
+	if ( g_bUdfLocked )
+	{
+		sError = "CREATE FUNCTION is disabled (fully dynamic UDFs require workers=threads)";
 		return false;
 	}
 
@@ -4484,6 +4501,12 @@ bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, 
 
 bool sphUDFDrop ( const char * szFunc, CSphString & sError )
 {
+	if ( g_bUdfLocked )
+	{
+		sError = "DROP FUNCTION is disabled (fully dynamic UDFs require workers=threads)";
+		return false;
+	}
+
 	CSphString sFunc ( szFunc );
 	sFunc.ToLower();
 

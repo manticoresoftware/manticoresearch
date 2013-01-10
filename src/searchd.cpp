@@ -16324,6 +16324,9 @@ void SeamlessForkPrereader ()
 		IndexRotationDone ();
 }
 
+//////////////////////////////////////////////////////////////////////////
+// SPHINXQL STATE
+//////////////////////////////////////////////////////////////////////////
 
 struct NamedRefVectorPair_t
 {
@@ -16440,7 +16443,8 @@ static void SphinxqlStateThreadFunc ( void * )
 }
 
 
-static bool StateReaderAddUservar ( CSphVector<char> & dLine, CSphString * sError )
+/// process a single line from sphinxql state/startup script
+static bool SphinxqlStateLine ( CSphVector<char> & dLine, CSphString * sError )
 {
 	assert ( sError );
 	if ( !dLine.GetLength() )
@@ -16464,8 +16468,12 @@ static bool StateReaderAddUservar ( CSphVector<char> & dLine, CSphString * sErro
 		SqlStmt_t & tStmt = dStmt[i];
 		if ( tStmt.m_eStmt==STMT_SET && tStmt.m_eSet==SET_GLOBAL_UVAR )
 		{
-			tStmt.m_dSetValues.Sort();
-			UservarAdd ( tStmt.m_sSetName, tStmt.m_dSetValues );
+			// just ignore uservars in non-threads modes
+			if ( g_eWorkers==MPM_THREADS )
+			{
+				tStmt.m_dSetValues.Sort();
+				UservarAdd ( tStmt.m_sSetName, tStmt.m_dSetValues );
+			}
 		} else if ( tStmt.m_eStmt==STMT_CREATE_FUNC )
 		{
 			if ( !sphUDFCreate ( tStmt.m_sUdfLib.cstr(), tStmt.m_sUdfName.cstr(), tStmt.m_eUdfType, *sError ) )
@@ -16482,7 +16490,7 @@ static bool StateReaderAddUservar ( CSphVector<char> & dLine, CSphString * sErro
 
 
 /// uservars table reader
-static void UservarsStateRead ( const CSphString & sName )
+static void SphinxqlStateRead ( const CSphString & sName )
 {
 	if ( sName.IsEmpty() )
 		return;
@@ -16529,7 +16537,7 @@ static void UservarsStateRead ( const CSphString & sName )
 			bEscaped = false;
 			if ( *s=='\n' || *s=='\r' )
 			{
-				if ( !StateReaderAddUservar ( dLine, &sError ) )
+				if ( !SphinxqlStateLine ( dLine, &sError ) )
 					sphWarning ( "sphinxql_state: parse error at line %d: %s", 1+iLines, sError.cstr() );
 
 				dLine.Resize ( 0 );
@@ -16547,10 +16555,11 @@ static void UservarsStateRead ( const CSphString & sName )
 		}
 	}
 
-	if ( !StateReaderAddUservar ( dLine, &sError ) )
+	if ( !SphinxqlStateLine ( dLine, &sError ) )
 		sphWarning ( "sphinxql_state: parse error at line %d: %s", 1+iLines, sError.cstr() );
 }
 
+//////////////////////////////////////////////////////////////////////////
 
 void OptimizeThreadFunc ( void * )
 {
@@ -19620,10 +19629,11 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	{
 		if ( !sphThreadKeyCreate ( &g_tConnKey ) )
 			sphFatal ( "failed to create TLS for connection ID" );
-
-		// for simplicity, UDFs are going to be available in threaded mode only for now
-		sphUDFInit ( hSearchd.GetStr ( "plugin_dir" ) );
 	}
+
+	// UDFs can now be loaded on startup in both threads and prefork mode
+	// however, dynamic CREATE/DROP will only work in threads (we forbid them later)
+	sphUDFInit ( hSearchd.GetStr ( "plugin_dir" ) );
 
 	////////////////////
 	// network startup
@@ -19933,7 +19943,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( !g_bOptNoDetach )
 		g_bLogStdout = false;
 
-	// create optimize, flush threads. Load saved sphinxql state.
+	// threads mode
+	// create optimize and flush threads, and load saved sphinxql state
 	if ( g_eWorkers==MPM_THREADS )
 	{
 		if ( !sphThreadCreate ( &g_tRtFlushThread, RtFlushThreadFunc, 0 ) )
@@ -19949,7 +19960,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		g_sSphinxqlState = hSearchd.GetStr ( "sphinxql_state" );
 		if ( !g_sSphinxqlState.IsEmpty() )
 		{
-			UservarsStateRead ( g_sSphinxqlState );
+			SphinxqlStateRead ( g_sSphinxqlState );
 			g_tmSphinxqlState = sphMicroTimer();
 
 			CSphString sError;
@@ -19966,6 +19977,16 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			else if ( !sphThreadCreate ( &g_tSphinxqlStateFlushThread, SphinxqlStateThreadFunc, NULL ) )
 				sphDie ( "failed to create sphinxql_state writer thread" );
 		}
+	}
+
+	// fork/prefork mode
+	// load UDFs from sphinxql state, then disable dynamic CREATE/DROP FUNCTION
+	if ( g_eWorkers==MPM_FORK || g_eWorkers==MPM_PREFORK )
+	{
+		g_sSphinxqlState = hSearchd.GetStr ( "sphinxql_state" );
+		if ( !g_sSphinxqlState.IsEmpty() )
+			SphinxqlStateRead ( g_sSphinxqlState );
+		sphUDFLock ( true );
 	}
 
 	// almost ready, time to start listening

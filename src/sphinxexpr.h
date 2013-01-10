@@ -187,6 +187,9 @@ ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, ESphAt
 /// initialize UDF manager
 void sphUDFInit ( const char * sUdfDir );
 
+/// enable/disable dynamic CREATE/DROP
+void sphUDFLock ( bool bLocked );
+
 /// load UDF function
 bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, CSphString & sError );
 

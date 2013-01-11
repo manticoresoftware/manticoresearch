@@ -775,6 +775,23 @@ int main ( int argc, char ** argv )
 		if ( !pIndex->Preread() )
 			sphDie ( "index '%s': preread failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
 
+		if ( hConf["index"][sIndex]("hitless_words") )
+		{
+			CSphIndexSettings tSettings = pIndex->GetSettings();
+
+			const CSphString & sValue = hConf["index"][sIndex]["hitless_words"];
+			if ( sValue=="all" )
+			{
+				tSettings.m_eHitless = SPH_HITLESS_ALL;
+			} else
+			{
+				tSettings.m_eHitless = SPH_HITLESS_SOME;
+				tSettings.m_sHitlessFiles = sValue;
+			}
+
+			pIndex->Setup ( tSettings );
+		}
+
 		break;
 	}
 

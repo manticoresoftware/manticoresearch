@@ -14,10 +14,26 @@ searchd
 compat_sphinxql_magics = 1
 	seamless_rotate = 0
 	<dynamic>
-		<variant>workers = none</variant>
+		<variant>
+			seamless_rotate = 0
+			workers = none
+		</variant>
+		<variant>
+			seamless_rotate = 0
+			workers = threads
+			binlog_path =
+		</variant>
 		<variant>
 			workers = threads
 			binlog_path =
+			preopen_indexes = 1
+			seamless_rotate = 0
+		</variant>
+		<variant>
+			workers = threads
+			binlog_path =
+			preopen_indexes = 1
+			seamless_rotate = 1
 		</variant>
 	</dynamic>
 }

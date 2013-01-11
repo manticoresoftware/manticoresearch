@@ -5894,6 +5894,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 					tCtx.CalcSort ( tMatch );
 					tCtx.CalcFinal ( tMatch ); // OPTIMIZE? could be possibly done later
 
+					if ( bRandomize )
+						tMatch.m_iWeight = ( sphRand() & 0xffff );
+
 					// storing segment in matches tag for finding strings attrs offset later, biased against default zero
 					tMatch.m_iTag = iSeg+1;
 

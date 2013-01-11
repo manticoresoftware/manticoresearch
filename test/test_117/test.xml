@@ -43,6 +43,14 @@ index rt_mva
 	rt_attr_uint	= idd
 	rt_attr_multi	= mva1
 }
+
+index rt_rand
+{
+	type			= rt
+	path			= <data_path/>/rt_rand
+	rt_field		= text
+	rt_attr_uint	= gid
+}
 </config>
 
 <db_drop>
@@ -162,6 +170,29 @@ for ( $i=2; $i<8; $i++ )
 
 $results = array_merge ( $results, $query ( "UPDATE rt_mva SET mva1 = (1000,1004,1001) WHERE id<400", $sock, 0 ) );
 $results = array_merge ( $results, $query ( "SELECT * FROM rt_mva WHERE id<203", $sock, 0 ) );
+
+$ROWS = 5;
+$RUNS = 5;
+$ids = array();
+$random_works = false;
+
+for ( $i=1; $i<=$ROWS; $i++ )
+	mysql_query ( "INSERT INTO rt_rand VALUES ($i, 'a', 1)", $sock );
+
+for ($i=0; $i<$RUNS; $i++)
+{
+	$res = mysql_query ( "SELECT id FROM rt_rand ORDER BY RAND()", $sock );
+	while  ( $row=mysql_fetch_assoc($res) )
+		$ids[] = $row['id'];
+}
+
+for ( $i=1; $i<$RUNS; $i++ )
+{
+	for ( $j=0; $j<$ROWS; $j++ )
+		$random_works |= ( $ids [ $j ]!=$ids [ $i*$ROWS+$j ] );
+}
+
+$results[] = $random_works;
 
 @mysql_close($sock);
 

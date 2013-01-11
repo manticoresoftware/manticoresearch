@@ -2777,7 +2777,7 @@ struct CSphIndexSettings : public CSphSourceSettings
 	CSphString		m_sHtmlRemoveElements;
 	CSphString		m_sZones;
 	ESphHitless		m_eHitless;
-	CSphString		m_sHitlessFile;
+	CSphString		m_sHitlessFiles;
 	bool			m_bVerbose;
 	int				m_iEmbeddedLimit;
 

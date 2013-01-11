@@ -822,7 +822,7 @@ be run three times:
 <orderedlist>
 <listitem><para>with <option>$start</option> replaced with 1 and <option>$end</option> replaced with 1000;</para></listitem>
 <listitem><para>with <option>$start</option> replaced with 1001 and <option>$end</option> replaced with 2000;</para></listitem>
-<listitem><para>with <option>$start</option> replaced with 2000 and <option>$end</option> replaced with 2345.</para></listitem>
+<listitem><para>with <option>$start</option> replaced with 2001 and <option>$end</option> replaced with 2345.</para></listitem>
 </orderedlist>
 Obviously, that's not much of a difference for 2000-row table,
 but when it comes to indexing 10-million-row MyISAM table,
@@ -4047,7 +4047,8 @@ the future.
 <listitem><para>FROM clause. FROM clause should contain the list of indexes
 to search through. Unlike in regular SQL, comma means enumeration of
 full-text indexes as in <link linkend="api-func-query">Query()</link>
-API call rather than JOIN.
+API call rather than JOIN. Index name should be according to the rules of
+a C identifier.
 </para></listitem>
 <listitem><para>WHERE clause. This clause will map both to fulltext query
 and filters. Comparison operators (=, !=, &lt;, &gt;, &lt;=, &gt;=), IN,

@@ -4232,12 +4232,16 @@ int ExtOrder_c::GetNextHit ( SphDocID_t uDocid )
 			continue;
 
 		// skip until proper hit
-		while ( m_pHits[i]->m_uDocid < uDocid )
+		while ( m_pHits[i]->m_uDocid!=DOCID_MAX && m_pHits[i]->m_uDocid<uDocid )
 			m_pHits[i]++;
 
 		// hit-chunk over? request next one, and rescan
 		if ( m_pHits[i]->m_uDocid==DOCID_MAX )
 		{
+			// hits and docs over here
+			if ( !m_pDocsChunk[i] )
+				return -1;
+
 			m_pHits[i] = m_dChildren[i]->GetHitsChunk ( m_pDocsChunk[i], m_dMaxID[i] );
 			i--;
 			continue;

@@ -141,7 +141,7 @@ protected:
 class CSphAutofile : ISphNoncopyable
 {
 protected:
-	int			m_iFD;			///< my file descriptior
+	int			m_iFD;			///< my file descriptor
 	CSphString	m_sFilename;	///< my file name
 	bool		m_bTemporary;	///< whether to unlink this file on Close()
 	bool		m_bWouldTemporary; ///< backup of the m_bTemporary

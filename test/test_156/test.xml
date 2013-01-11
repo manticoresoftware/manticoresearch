@@ -90,6 +90,10 @@ create table mva
 <sphinxql>select * from test where match ('@text g*')</sphinxql>
 <sphinxql>select * from test where match ('natural')</sphinxql>
 <sphinxql>select * from test where mva=1001</sphinxql>
+<sphinxql>select * from test where match ('@text')</sphinxql>
+<sphinxql>select * from test where match ('@text ')</sphinxql>
+<sphinxql>select * from test where match ('@text {')</sphinxql>
+<sphinxql>select * from test where match ('everyone @text {')</sphinxql>
 </sphqueries>
 
 </test>

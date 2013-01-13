@@ -11888,7 +11888,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	int iDupes = 0;
 	int iMinBlock = -1;
 
-	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && dHitBlocks.GetLength() )
+	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && iDocinfoBlocks )
 	{
 		// initialize readers
 		assert ( dBins.GetLength()==0 );
@@ -15072,8 +15072,17 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 	if ( m_tWordlist.m_iSize<0 )
 		return false;
 
-	m_bIsEmpty = ( m_tWordlist.m_iSize<=1 );
-	if ( m_bIsEmpty!=( m_tWordlist.m_dCheckpoints.GetLength()==0 ) )
+	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN )
+	{
+		CSphAutofile tDocinfo ( GetIndexFileName("spa"), SPH_O_READ, m_sLastError );
+		if ( tDocinfo.GetFD()<0 )
+			return false;
+
+		m_bIsEmpty = ( tDocinfo.GetSize ( 0, false, m_sLastError )==0 );
+	} else
+		m_bIsEmpty = ( m_tWordlist.m_iSize<=1 );
+
+	if ( ( m_tWordlist.m_iSize<=1 )!=( m_tWordlist.m_dCheckpoints.GetLength()==0 ) )
 		sphWarning ( "wordlist size mismatch (size="INT64_FMT", checkpoints=%d)", m_tWordlist.m_iSize, m_tWordlist.m_dCheckpoints.GetLength() );
 
 	// make sure checkpoints are loadable
@@ -15220,15 +15229,6 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 				if ( !m_pStrings.Alloc ( DWORD(iStringsSize), m_sLastError, sWarning ) )
 					return false;
 		}
-	} else if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && m_bIsEmpty )
-		{
-			CSphAutofile tDocinfo ( GetIndexFileName("spa"), SPH_O_READ, m_sLastError );
-			if ( tDocinfo.GetFD()>0 )
-			{
-				SphOffset_t iDocinfoSize = tDocinfo.GetSize ( 0, false, m_sLastError );
-				if ( iDocinfoSize )
-					sphWarning ( "IsEmpty != attribute size ("INT64_FMT")", iDocinfoSize );
-			}
 	}
 
 

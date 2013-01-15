@@ -2798,8 +2798,14 @@ struct ISphFilter;
 
 struct ISphKeywordsStat
 {
-	virtual ~ISphKeywordsStat() {}
-	virtual bool FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, CSphString & sError ) const = 0;
+	virtual			~ISphKeywordsStat() {}
+	virtual bool	FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, CSphString & sError ) const = 0;
+};
+
+
+struct CSphIndexStatus
+{
+	int64_t			m_iRamUse;
 };
 
 
@@ -2883,8 +2889,14 @@ public:
 	virtual void				PostSetup() = 0;
 
 public:
-	virtual bool						EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const = 0;
+	/// return index document, bytes totals (FIXME? remove this in favor of GetStatus() maybe?)
 	virtual const CSphSourceStats &		GetStats () const = 0;
+
+	/// return additional index info
+	virtual CSphIndexStatus				GetStatus () const = 0;
+
+public:
+	virtual bool				EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const = 0;
 	void						SetCacheSize ( int iMaxCachedDocs, int iMaxCachedHits );
 	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag=0, bool bFactors = false ) const = 0;
 	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag=0, bool bFactors = false ) const = 0;

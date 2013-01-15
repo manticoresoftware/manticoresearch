@@ -1544,6 +1544,7 @@ public:
 
 	virtual const CSphSourceStats &		GetStats () const { return m_tStats; }
 	virtual int64_t *					GetFieldLens() const { return m_tSettings.m_bIndexFieldLens ? m_dFieldLens.Begin() : NULL; }
+	virtual CSphIndexStatus				GetStatus () const;
 
 private:
 
@@ -17219,6 +17220,27 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	pResult->m_tIOStats += tEndStats - tStartStats;
 
 	return true;
+}
+
+//////////////////////////////////////////////////////////////////////////
+// INDEX STATUS
+//////////////////////////////////////////////////////////////////////////
+
+CSphIndexStatus CSphIndex_VLN::GetStatus () const
+{
+	CSphIndexStatus tRes;
+	tRes.m_iRamUse = sizeof(CSphIndex_VLN)
+		+ m_dMinRow.GetLength()*int(sizeof(CSphRowitem))
+		+ m_dFieldLens.GetLength()*8
+		+ m_pDocinfo.GetLength()
+		+ m_pDocinfoHash.GetLength()
+		+ m_pMva.GetLength()
+		+ m_pStrings.GetLength()
+		+ m_tWordlist.m_pBuf.GetLength()
+		+ m_pKillList.GetLength()
+		+ m_pSkiplists.GetLength()
+		+ m_dShared.GetLength();
+	return tRes;
 }
 
 //////////////////////////////////////////////////////////////////////////

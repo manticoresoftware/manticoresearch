@@ -15129,14 +15129,19 @@ void HandleMysqlShowIndexStatus ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt
 	tOut.DataTuplet ( "indexed_bytes", pIndex->GetStats().m_iTotalBytes );
 
 	const int64_t * pFieldLens = pIndex->GetFieldLens();
-	const CSphVector<CSphColumnInfo> & dFields = pIndex->GetMatchSchema().m_dFields;
-
-	ARRAY_FOREACH ( i, dFields )
+	if ( pFieldLens )
 	{
-		CSphString sKey;
-		sKey.SetSprintf ( "field_tokens_%s", dFields[i].m_sName.cstr() );
-		tOut.DataTuplet ( sKey.cstr(), pFieldLens[i] );
+		const CSphVector<CSphColumnInfo> & dFields = pIndex->GetMatchSchema().m_dFields;
+		ARRAY_FOREACH ( i, dFields )
+		{
+			CSphString sKey;
+			sKey.SetSprintf ( "field_tokens_%s", dFields[i].m_sName.cstr() );
+			tOut.DataTuplet ( sKey.cstr(), pFieldLens[i] );
+		}
 	}
+
+	CSphIndexStatus tStatus = pIndex->GetStatus();
+	tOut.DataTuplet ( "ram_bytes", tStatus.m_iRamUse );
 
 	pServed->Unlock();
 	tOut.Eof();

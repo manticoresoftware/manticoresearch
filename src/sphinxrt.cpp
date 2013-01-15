@@ -1116,6 +1116,7 @@ public:
 public:
 	virtual bool						EarlyReject ( CSphQueryContext * pCtx, CSphMatch & ) const;
 	virtual const CSphSourceStats &		GetStats () const { return m_tStats; }
+	virtual CSphIndexStatus				GetStatus () const;
 
 	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag, bool bFactors ) const;
 	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag, bool bFactors ) const;
@@ -6685,7 +6686,6 @@ bool RtIndex_t::Truncate ( CSphString & )
 	return true;
 }
 
-
 //////////////////////////////////////////////////////////////////////////
 // OPTIMIZE
 //////////////////////////////////////////////////////////////////////////
@@ -6844,6 +6844,33 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 
 	sphInfo ( "rt: index %s: optimized chunk(s) %d ( of %d ) in %d.%03d sec",
 		m_sIndexName.cstr(), iChunks-m_pDiskChunks.GetLength(), iChunks, (int)(tmPass/1000000), (int)((tmPass/1000)%1000) );
+}
+
+//////////////////////////////////////////////////////////////////////////
+// STATUS
+//////////////////////////////////////////////////////////////////////////
+
+CSphIndexStatus RtIndex_t::GetStatus () const
+{
+	CSphIndexStatus tRes;
+	Verify ( m_tRwlock.ReadLock() );
+
+	tRes.m_iRamUse = sizeof(RtIndex_t)
+		+ m_pSegments.GetLength()*int(sizeof(RtSegment_t) + sizeof(RtSegment_t*))
+		+ m_dNewSegmentKlist.GetLength()*int(sizeof(SphDocID_t))
+		+ m_dDiskChunkKlist.GetLength()*int(sizeof(SphAttr_t))
+		+ m_pDiskChunks.GetLength()*int(sizeof(CSphIndex*));
+
+	tRes.m_iRamUse += GetUsedRam();
+
+	ARRAY_FOREACH ( i, m_pDiskChunks )
+	{
+		CSphIndexStatus tDisk = m_pDiskChunks[i]->GetStatus();
+		tRes.m_iRamUse += tDisk.m_iRamUse;
+	}
+
+	Verify ( m_tRwlock.Unlock() );
+	return tRes;
 }
 
 //////////////////////////////////////////////////////////////////////////

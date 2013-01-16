@@ -4222,13 +4222,22 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 		bool bDone = true;
 		for ( int i=0; i<pCtx->m_iAgentCount; i++ )
 		{
-			const AgentConn_t & tAgent = pCtx->m_pAgents[i];
+			AgentConn_t & tAgent = pCtx->m_pAgents[i];
 			// select only 'initial' agents - which are not send query response.
 			if ( tAgent.m_eState<AGENT_CONNECTING || tAgent.m_eState>AGENT_QUERYED )
 				continue;
 
 			assert ( !tAgent.m_sPath.IsEmpty() || tAgent.m_iPort>0 );
 			assert ( tAgent.m_iSock>0 );
+			if ( tAgent.m_iSock<=0 || ( tAgent.m_sPath.IsEmpty() && tAgent.m_iPort<=0 ) )
+			{
+				tAgent.Close ();
+				tAgent.m_sFailure.SetSprintf ( "invalid agent in querying. Socket %d, Path %s, Port %d", tAgent.m_iSock, tAgent.m_sPath.cstr(), tAgent.m_iPort );
+				tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures
+				agent_stats_inc ( tAgent, eConnectFailures );
+				continue;
+			}
+
 			bool bWr = ( tAgent.m_eState==AGENT_CONNECTING || tAgent.m_eState==AGENT_ESTABLISHED );
 			dWorkingSet.Add(i);
 #if HAVE_POLL

@@ -536,6 +536,7 @@ int main ( int argc, char ** argv )
 			"--build-skips <INDEX>\tbuild skiplists for an existing index (builds .spe and\n"
 			"\t\t\tupgrades .sph, .spi in place)\n"
 			"--check <INDEX>\t\tperform index consistency check\n"
+			"--checkconfig\t\tperform config consistency check\n"
 			"--dumpconfig <SPH-FILE>\tdump index header in config format by file name\n"
 			"--dumpdocids <INDEX>\tdump docids by index name\n"
 			"--dumpdict <SPI-FILE>\tdump dictionary by file name\n"
@@ -596,7 +597,8 @@ int main ( int argc, char ** argv )
 		CMD_MORPH,
 		CMD_BUILDSKIPS,
 		CMD_BUILDIDF,
-		CMD_MERGEIDF
+		CMD_MERGEIDF,
+		CMD_CHECKCONFIG
 	} eCommand = CMD_NOTHING;
 
 	int i;
@@ -617,6 +619,7 @@ int main ( int argc, char ** argv )
 		OPT1 ( "--build-skips" )	{ eCommand = CMD_BUILDSKIPS; sIndex = argv[++i]; }
 		OPT1 ( "--morph" )			{ eCommand = CMD_MORPH; sIndex = argv[++i]; }
 		OPT1 ( "--strip-path" )		{ bStripPath = true; }
+		OPT1 ( "--checkconfig" )	{ eCommand = CMD_CHECKCONFIG; }
 		OPT1 ( "--optimize-rt-klists" )
 		{
 			eCommand = CMD_OPTIMIZEKLISTS;
@@ -722,6 +725,53 @@ int main ( int argc, char ** argv )
 	///////////
 	// action!
 	///////////
+
+	if ( eCommand==CMD_CHECKCONFIG )
+	{
+		fprintf ( stdout, "config valid\nchecking index(es) ... " );
+
+		bool bError = false;
+		// config parser made sure that index(es) present
+		const CSphConfigType & hIndexes = hConf ["index"];
+
+		hIndexes.IterateStart();
+		while ( hIndexes.IterateNext() )
+		{
+			const CSphConfigSection & tIndex = hIndexes.IterateGet();
+			const CSphString * pPath = tIndex ( "path" );
+			if ( !pPath )
+				continue;
+
+			const CSphString * pType = tIndex ( "type" );
+			if ( pType && ( *pType=="rt" || *pType=="distributed" ) )
+				continue;
+
+			// checking index presence by sph file available
+			CSphString sHeader, sError;
+			sHeader.SetSprintf ( "%s.sph", pPath->cstr() );
+			CSphAutoreader rdHeader;
+			if ( !rdHeader.Open ( sHeader, sError ) )
+			{
+				// nice looking output
+				if ( !bError )
+					fprintf ( stdout, "\nmissed index(es): '%s'", hIndexes.IterateGetKey().cstr() );
+				else
+					fprintf ( stdout, ", '%s'", hIndexes.IterateGetKey().cstr() );
+
+				bError = true;
+			}
+		}
+		if ( !bError )
+		{
+			fprintf ( stdout, "ok\n" );
+			exit ( 0 );
+		} else
+		{
+			fprintf ( stdout, "\n" );
+			exit ( 1 );
+		}
+	}
+
 
 	// common part for several commands, check and preload index
 	CSphIndex * pIndex = NULL;

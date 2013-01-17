@@ -1826,7 +1826,7 @@ void sphBacktrace ( int iFD, bool bSafe )
 
 	while ( pMyStack && !bSafe )
 	{
-		sphSafeInfo ( iFD, "begin of manual backtrace:" );
+		sphSafeInfo ( iFD, "Trying manual backtrace:" );
 		BYTE ** pFramePointer = NULL;
 
 		int iFrameCount = 0;
@@ -1848,7 +1848,7 @@ void sphBacktrace ( int iFD, bool bSafe )
 
 		if ( !pFramePointer )
 		{
-			sphSafeInfo ( iFD, "Frame pointer is null, backtrace failed (did you build with -fomit-frame-pointer?)" );
+			sphSafeInfo ( iFD, "Frame pointer is null, manual backtrace failed (did you build with -fomit-frame-pointer?)" );
 			break;
 		}
 
@@ -1856,11 +1856,11 @@ void sphBacktrace ( int iFD, bool bSafe )
 		{
 			int iRound = Min ( 65536, iStackSize );
 			pMyStack = (void *) ( ( (size_t) &pFramePointer + iRound ) & ~(size_t)65535 );
-			sphSafeInfo ( iFD, "Something wrong with thread stack, backtrace may be incorrect (fp=0x%p)", pFramePointer );
+			sphSafeInfo ( iFD, "Something wrong with thread stack, manual backtrace may be incorrect (fp=0x%p)", pFramePointer );
 
 			if ( pFramePointer > (BYTE**) pMyStack || pFramePointer < (BYTE**) pMyStack - iStackSize )
 			{
-				sphSafeInfo ( iFD, "Wrong stack limit or frame pointer, backtrace failed (fp=0x%p, stack=0x%p, stacksize=0x%x)",
+				sphSafeInfo ( iFD, "Wrong stack limit or frame pointer, manual backtrace failed (fp=0x%p, stack=0x%p, stacksize=0x%x)",
 					pFramePointer, pMyStack, iStackSize );
 				break;
 			}
@@ -1882,15 +1882,17 @@ void sphBacktrace ( int iFD, bool bSafe )
 		}
 
 		if ( !bOk )
-			sphSafeInfo ( iFD, "Something wrong in frame pointers, backtrace failed (fp=%p)", pNewFP );
+			sphSafeInfo ( iFD, "Something wrong in frame pointers, manual backtrace failed (fp=%p)", pNewFP );
 
 		break;
 	}
 
 	int iDepth = 0;
 #if HAVE_BACKTRACE
-	sphSafeInfo ( iFD, "begin of system backtrace:" );
+	sphSafeInfo ( iFD, "Trying system backtrace:" );
 	iDepth = backtrace ( g_pBacktraceAddresses, SPH_BACKTRACE_ADDR_COUNT );
+	if ( iDepth>0 )
+		bOk = true;
 #if HAVE_BACKTRACE_SYMBOLS
 	sphSafeInfo ( iFD, "begin of system symbols:" );
 	backtrace_symbols_fd ( g_pBacktraceAddresses, iDepth, iFD );
@@ -1901,13 +1903,14 @@ void sphBacktrace ( int iFD, bool bSafe )
 #endif // HAVE_BACKTRACE_SYMBOLS
 #endif // !HAVE_BACKTRACE
 
+	sphSafeInfo ( iFD, "-------------- backtrace ends here ---------------" );
+
 	if ( bOk )
 		sphSafeInfo ( iFD, "Backtrace looks OK. Now you have to do following steps:\n"
 							"  1. Run the command over the crashed binary (for example, 'searchd'):\n"
 							"     nm -n searchd > searchd.sym\n"
 							"  2. Attach the binary, generated .sym and the text of backtrace (see above) to the bug report.\n"
 							"Also you can read the section about resolving backtraces in the documentation.");
-	sphSafeInfo ( iFD, "-------------- backtrace ends here ---------------" );
 
 	// convert all BT addresses to source code lines
 	int iCount = Min ( iDepth, (int)( sizeof(g_pArgv)/sizeof(g_pArgv[0]) - SPH_BT_ADDRS - 1 ) );
@@ -1927,35 +1930,73 @@ void sphBacktrace ( int iFD, bool bSafe )
 	}
 	g_pArgv[iCount+SPH_BT_ADDRS] = NULL;
 
-	// map stdout to log file
-	if ( iFD!=1 )
-	{
-		close ( 1 );
-		dup2 ( iFD, 1 );
-	}
-	execvp ( g_pArgv[0], const_cast<char **> ( g_pArgv ) ); // using execvp instead execv to auto find addr2line in directories
+	int iChild = fork();
 
-	// if we here - execvp failed, ask user to do conversion manually
-	sphSafeInfo ( iFD, "conversion failed (error '%s'):\n"
-		"  1. Run the command provided below over the crashed binary (for example, '%s'):\n"
-		"  2. Attach the source.txt to the bug report.", strerror ( errno ), g_pArgv[SPH_BT_BINARY_NAME] );
-
-	int iColumn = 0;
-	for ( int i=0; g_pArgv[i]!=NULL; i++ )
+	if ( iChild==0 )
 	{
-		const char * s = g_pArgv[i];
-		while ( *s )
-			s++;
-		int iLen = s-g_pArgv[i];
-		sphWrite ( iFD, g_pArgv[i], iLen );
-		sphWrite ( iFD, " ", 1 );
-		int iWas = iColumn % 80;
-		iColumn += iLen;
-		int iNow = iColumn % 80;
-		if ( iNow<iWas )
-			sphWrite ( iFD, "\n", 1 );
+		// map stdout to log file
+		if ( iFD!=1 )
+		{
+			close ( 1 );
+			dup2 ( iFD, 1 );
+		}
+
+		execvp ( g_pArgv[0], const_cast<char **> ( g_pArgv ) ); // using execvp instead execv to auto find addr2line in directories
+
+		// if we here - execvp failed, ask user to do conversion manually
+		sphSafeInfo ( iFD, "conversion failed (error '%s'):\n"
+			"  1. Run the command provided below over the crashed binary (for example, '%s'):\n"
+			"  2. Attach the source.txt to the bug report.", strerror ( errno ), g_pArgv[SPH_BT_BINARY_NAME] );
+
+		int iColumn = 0;
+		for ( int i=0; g_pArgv[i]!=NULL; i++ )
+		{
+			const char * s = g_pArgv[i];
+			while ( *s )
+				s++;
+			int iLen = s-g_pArgv[i];
+			sphWrite ( iFD, g_pArgv[i], iLen );
+			sphWrite ( iFD, " ", 1 );
+			int iWas = iColumn % 80;
+			iColumn += iLen;
+			int iNow = iColumn % 80;
+			if ( iNow<iWas )
+				sphWrite ( iFD, "\n", 1 );
+		}
+		sphWrite ( iFD, g_sSourceTail, sizeof(g_sSourceTail)-1 );
+		exit ( 1 );
+
+	} else
+	if ( iChild==-1 )
+	{
+		sphSafeInfo ( iFD, "fork for running execvp failed: [%d] %s", errno, strerror(errno) );
+		return;
 	}
-	sphWrite ( iFD, g_sSourceTail, sizeof(g_sSourceTail)-1 );
+
+	int iStatus, iResult;
+	do
+	{
+		// can be interrupted by pretty much anything (e.g. SIGCHLD from other searchd children)
+		iResult = waitpid ( iChild, &iStatus, 0 );
+
+		// they say this can happen if child exited and SIGCHLD was ignored
+		// a cleaner one would be to temporary handle it here, but can we be bothered
+		if ( iResult==-1 && errno==ECHILD )
+		{
+			iResult = iChild;
+			iStatus = 0;
+		}
+
+		if ( iResult==-1 && errno!=EINTR )
+		{
+			sphSafeInfo ( iFD, "waitpid() failed: [%d] %s", errno, strerror(errno) );
+			return;
+		}
+	} while ( iResult!=iChild );
+
+//	fsync ( iFD );
+
+	sphSafeInfo ( iFD, "--- BT to source lines finished ---" );
 }
 
 void sphBacktraceSetBinaryName ( const char * sName )

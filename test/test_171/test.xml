@@ -403,6 +403,16 @@ index words_rt2
 <sphinxql>select * from words_rt1, words2 where match('yes | pey')</sphinxql>
 <sphinxql>show meta</sphinxql>
 
+<!-- implicit group by -->
+<sphinxql>SELECT id, COUNT(*) FROM dist_no</sphinxql>
+<sphinxql>SELECT id, MIN(gr) FROM dist_no</sphinxql>
+<sphinxql>SELECT id, COUNT(DISTINCT gr) FROM dist_no</sphinxql>
+<sphinxql>SELECT id, COUNT(*) FROM dist_no WITHIN GROUP ORDER BY id DESC</sphinxql>
+
+<sphinxql>SELECT id, COUNT(*) FROM dist2</sphinxql>
+<sphinxql>SELECT id, MIN(gr) FROM dist2</sphinxql>
+<sphinxql>SELECT id, COUNT(DISTINCT gr) FROM dist2</sphinxql>
+
 </sphqueries>
 
 <db_create>

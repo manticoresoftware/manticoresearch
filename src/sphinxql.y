@@ -466,6 +466,11 @@ opt_group_order_clause:
 group_order_clause:
 	TOK_WITHIN TOK_GROUP TOK_ORDER TOK_BY order_items_list
 		{
+			if ( pParser->m_pQuery->m_sGroupBy.IsEmpty() )
+			{
+				yyerror ( pParser, "you must specify GROUP BY element in order to use WITHIN GROUP ORDER BY clause" );
+				YYERROR;
+			}
 			pParser->m_pQuery->m_sSortBy.SetBinary ( pParser->m_pBuf+$5.m_iStart, $5.m_iEnd-$5.m_iStart );
 		}
 	;

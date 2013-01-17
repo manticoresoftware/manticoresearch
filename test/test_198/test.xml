@@ -62,7 +62,7 @@ create table test_table
 <sphinxql>select * from test where match('ZONESPAN:zoneC kings and ships')</sphinxql>
 <sphinxql>select * from test where match('ZONESPAN:zoneC and ships')</sphinxql>
 <sphinxql>select * from test where match('ZONESPAN:zoneC kings and')</sphinxql>
-<sphinxql>select * from test where match('ZONESPAN:zoneC and kings')</sphinxql>
+<sphinxql>select * from test,asdf where match('ZONESPAN:zoneC and kings') option ignore_nonexistent_indexes=1</sphinxql>
 </sphqueries>
 
 </test>

@@ -9350,6 +9350,11 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				// check that it exists
 				if ( !pServedIndex )
 				{
+					if ( tFirst.m_bIgnoreNonexistentIndexes )
+					{
+						m_dLocal.Remove ( i-- );
+						continue;
+					}
 					for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 						m_dResults[iRes].m_sError.SetSprintf ( "unknown local index '%s' in search request", m_dLocal[i].cstr() );
 					return;
@@ -10378,6 +10383,10 @@ bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue )
 	} else if ( sOpt=="global_idf" )
 	{
 		m_pQuery->m_bGlobalIDF = true;
+
+	} else if ( sOpt=="ignore_nonexistent_indexes" )
+	{
+		m_pQuery->m_bIgnoreNonexistentIndexes = ( tValue.m_iValue!=0 );
 
 	} else
 	{

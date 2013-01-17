@@ -5595,6 +5595,7 @@ CSphQuery::CSphQuery ()
 	, m_iOuterLimit		( 0 )
 	, m_bReverseScan	( false )
 	, m_bIgnoreNonexistent ( false )
+	, m_bIgnoreNonexistentIndexes ( false )
 	, m_iSQLSelectStart	( -1 )
 	, m_iSQLSelectEnd	( -1 )
 

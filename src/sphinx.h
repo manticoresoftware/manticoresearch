@@ -2388,6 +2388,7 @@ public:
 
 	bool			m_bReverseScan;		///< perform scan in reverse order
 	bool			m_bIgnoreNonexistent; ///< whether to warning or not about non-existent columns in select list
+	bool			m_bIgnoreNonexistentIndexes; ///< whether to error or not about non-existent indexes in index list
 
 	int				m_iSQLSelectStart;	///< SQL parser helper
 	int				m_iSQLSelectEnd;	///< SQL parser helper

@@ -57,6 +57,23 @@ index expanded_rt
 	rt_field = title
 	rt_attr_uint = idd	
 }
+
+<!-- regression crash of daemon with empty dict=keywords and infixes enabled -->
+source src_empty
+{
+        type                    = mysql
+	<sql_settings/>
+        sql_query               = SELECT * FROM empty_table
+        sql_attr_uint           = uid
+}
+index empty
+{
+        type                    = plain
+        path                    = <data_path/>/empty_kw
+        source                  = src_empty
+        min_infix_len           = 3
+        dict                    = keywords
+}
 </config>
 
 <queries>
@@ -67,6 +84,8 @@ index expanded_rt
 <query mode="phrase" index="test">dog* run</query>
 <!-- regression wrong word expansion -->
 <query mode="extended2" index="expanded_plain">run</query>
+<!-- regression crash of daemon with empty dict=keywords and infixes enabled -->
+<query mode="extended2" index="empty">*dog*</query>
 </queries>
 
 <sphqueries>
@@ -82,10 +101,16 @@ CREATE TABLE `test_table`
 	`body` varchar(255) NOT NULL default ''
 )
 </db_create>
+<db_create>
+CREATE TABLE `empty_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
 
-<db_drop>
-DROP TABLE IF EXISTS `test_table`
-</db_drop>
+<db_drop>DROP TABLE IF EXISTS `test_table`</db_drop>
+<db_drop>DROP TABLE IF EXISTS `empty_table`</db_drop>
 
 <db_insert>
 INSERT INTO `test_table` VALUES

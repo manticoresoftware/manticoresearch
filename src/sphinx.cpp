@@ -27758,7 +27758,7 @@ bool CWordlist::ReadCP ( CSphAutofile & tFile, DWORD uVersion, bool bWordDict, C
 	////////////////////////////
 
 	int iCheckpointOnlySize = (int)(m_iSize-m_iDictCheckpointsOffset);
-	if ( m_iInfixCodepointBytes )
+	if ( m_iInfixCodepointBytes && m_iInfixBlocksOffset )
 		iCheckpointOnlySize = (int)(m_iInfixBlocksOffset - strlen ( g_sTagInfixBlocks ) - m_iDictCheckpointsOffset);
 
 	CSphReader tReader;
@@ -27816,7 +27816,7 @@ bool CWordlist::ReadCP ( CSphAutofile & tFile, DWORD uVersion, bool bWordDict, C
 	// preload infix blocks
 	////////////////////////
 
-	if ( m_iInfixCodepointBytes )
+	if ( m_iInfixCodepointBytes && m_iInfixBlocksOffset )
 	{
 		// reading to vector as old version doesn't store total infix words length
 		CSphTightVector<BYTE> dInfixWords;
@@ -27845,9 +27845,9 @@ bool CWordlist::ReadCP ( CSphAutofile & tFile, DWORD uVersion, bool bWordDict, C
 	}
 
 	// set wordlist end
-	assert ( !m_iInfixCodepointBytes || m_dInfixBlocks.GetLength() );
+	assert ( !m_iInfixCodepointBytes || !m_iInfixBlocksOffset || m_dInfixBlocks.GetLength() );
 	m_iWordsEnd = m_iDictCheckpointsOffset;
-	if ( m_iInfixCodepointBytes )
+	if ( m_iInfixCodepointBytes && m_iInfixBlocksOffset )
 	{
 		m_iWordsEnd = m_dInfixBlocks.Begin()->m_iOffset - strlen ( g_sTagInfixEntries );
 	}
@@ -28193,10 +28193,7 @@ void CWordlist::GetInfixedWords ( const char * sInfix, int iBytes, const char * 
 	// dict must be of keywords type, and fully cached
 	// mmap()ed in the worst case, should we ever banish it to disk again
 	if ( m_pBuf.IsEmpty() || !m_dCheckpoints.GetLength() )
-	{
-		assert ( 0 && "internal error: expansion vs empty keywords dict" );
 		return;
-	}
 
 	// extract key1, upto 6 chars from infix start
 	int iBytes1 = sphGetInfixLength ( sInfix, iBytes, m_iInfixCodepointBytes );

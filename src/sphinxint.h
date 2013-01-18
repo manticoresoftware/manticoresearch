@@ -46,7 +46,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
-const DWORD		INDEX_FORMAT_VERSION		= 36;				///< my format version
+const DWORD		INDEX_FORMAT_VERSION		= 37;				///< my format version
 
 const char		MAGIC_SYNONYM_WHITESPACE	= 1;				// used internally in tokenizer only
 const char		MAGIC_CODE_SENTENCE			= 2;				// emitted from tokenizer on sentence boundary
@@ -99,6 +99,7 @@ public:
 	void			PutOffset ( SphOffset_t uValue ) { PutBytes ( &uValue, sizeof(SphOffset_t) ); }
 	void			PutString ( const char * szString );
 	void			PutString ( const CSphString & sString );
+	void			Tag ( const char * sTag );
 
 	void			SeekTo ( SphOffset_t pos ); ///< seeking inside the buffer will truncate it
 
@@ -192,6 +193,7 @@ public:
 	SphOffset_t	GetOffset ();
 	CSphString	GetString ();
 	int			GetLine ( char * sBuffer, int iMaxLen );
+	bool		Tag ( const char * sTag );
 
 	DWORD		UnzipInt ();
 	SphOffset_t	UnzipOffset ();
@@ -1120,7 +1122,7 @@ public:
 	virtual void		WriteStopwords ( CSphWriter & tWriter ) { m_pDict->WriteStopwords ( tWriter ); }
 	virtual bool		LoadWordforms ( const CSphVector<CSphString> & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) { return m_pDict->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
 	virtual void		WriteWordforms ( CSphWriter & tWriter ) { m_pDict->WriteWordforms ( tWriter ); }
-	virtual bool		SetMorphology ( const char * szMorph, bool bUseUTF8 ) { return m_pDict->SetMorphology ( szMorph, bUseUTF8 ); }
+	virtual int			SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sMessage ) { return m_pDict->SetMorphology ( szMorph, bUseUTF8, sMessage ); }
 
 	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) { return m_pDict->GetWordID ( pWord, iLen, bFilterStops ); }
 
@@ -1168,6 +1170,51 @@ class CSphDictExact : public CSphDictTraits
 public:
 	explicit CSphDictExact ( CSphDict * pDict ) : CSphDictTraits ( pDict ) {}
 	virtual SphWordID_t	GetWordID ( BYTE * pWord );
+};
+
+//////////////////////////////////////////////////////////////////////////
+// TOKEN FILTER
+//////////////////////////////////////////////////////////////////////////
+
+/// token filter base (boring proxy stuff)
+class CSphTokenFilter : public ISphTokenizer
+{
+protected:
+	ISphTokenizer *		m_pTokenizer;
+
+public:
+	explicit						CSphTokenFilter ( ISphTokenizer * pTokenizer )					: m_pTokenizer ( pTokenizer ) {}
+									~CSphTokenFilter()												{ SafeDelete ( m_pTokenizer ); }
+
+	virtual bool					SetCaseFolding ( const char * sConfig, CSphString & sError )	{ return m_pTokenizer->SetCaseFolding ( sConfig, sError ); }
+	virtual void					AddPlainChar ( char c )											{ m_pTokenizer->AddPlainChar ( c ); }
+	virtual void					AddSpecials ( const char * sSpecials )							{ m_pTokenizer->AddSpecials ( sSpecials ); }
+	virtual bool					SetIgnoreChars ( const char * sIgnored, CSphString & sError )	{ return m_pTokenizer->SetIgnoreChars ( sIgnored, sError ); }
+	virtual bool					SetNgramChars ( const char * sConfig, CSphString & sError )		{ return m_pTokenizer->SetNgramChars ( sConfig, sError ); }
+	virtual void					SetNgramLen ( int iLen )										{ m_pTokenizer->SetNgramLen ( iLen ); }
+	virtual bool					LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError ) { return m_pTokenizer->LoadSynonyms ( sFilename, pFiles, sError ); }
+	virtual void					WriteSynonyms ( CSphWriter & tWriter )							{ return m_pTokenizer->WriteSynonyms ( tWriter ); }
+	virtual bool					SetBoundary ( const char * sConfig, CSphString & sError )		{ return m_pTokenizer->SetBoundary ( sConfig, sError ); }
+	virtual void					Setup ( const CSphTokenizerSettings & tSettings )				{ m_pTokenizer->Setup ( tSettings ); }
+	virtual const CSphTokenizerSettings &	GetSettings () const									{ return m_pTokenizer->GetSettings (); }
+	virtual const CSphSavedFile &	GetSynFileInfo () const											{ return m_pTokenizer->GetSynFileInfo (); }
+	virtual bool					EnableSentenceIndexing ( CSphString & sError )					{ return m_pTokenizer->EnableSentenceIndexing ( sError ); }
+	virtual bool					EnableZoneIndexing ( CSphString & sError )						{ return m_pTokenizer->EnableZoneIndexing ( sError ); }
+	virtual int						SkipBlended ()													{ return m_pTokenizer->SkipBlended(); }
+
+	virtual int						GetCodepointLength ( int iCode ) const		{ return m_pTokenizer->GetCodepointLength ( iCode ); }
+	virtual int						GetMaxCodepointLength () const				{ return m_pTokenizer->GetMaxCodepointLength(); }
+	virtual void					EnableQueryParserMode ( bool bEnable )		{ m_pTokenizer->EnableQueryParserMode ( bEnable ); }
+
+	virtual bool					IsUtf8 () const								{ return m_pTokenizer->IsUtf8 (); }
+	virtual const char *			GetTokenStart () const						{ return m_pTokenizer->GetTokenStart(); }
+	virtual const char *			GetTokenEnd () const						{ return m_pTokenizer->GetTokenEnd(); }
+	virtual const char *			GetBufferPtr () const						{ return m_pTokenizer->GetBufferPtr(); }
+	virtual const char *			GetBufferEnd () const						{ return m_pTokenizer->GetBufferEnd (); }
+	virtual void					SetBufferPtr ( const char * sNewPtr )		{ m_pTokenizer->SetBufferPtr ( sNewPtr ); }
+
+	virtual void					SetBuffer ( BYTE * sBuffer, int iLength )	{ m_pTokenizer->SetBuffer ( sBuffer, iLength ); }
+	virtual BYTE *					GetToken ()									{ return m_pTokenizer->GetToken(); }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1229,6 +1276,7 @@ size_t			sphReadThrottled ( int iFD, void * pBuf, size_t iCount, ThrottleState_t
 void			sphCheckWordStats ( const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hDst, const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hSrc, const char * sIndex, CSphString & sWarning );
 bool			sphCheckQueryHeight ( const struct XQNode_t * pRoot, CSphString & sError );
 void			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, bool bHasBooleanOptimization, const ISphKeywordsStat * pKeywords );
+void			TransformAotFilter ( XQNode_t * pNode, bool bUtf8, const CSphWordforms * pWordforms );
 bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle );
 CSphString		sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema );
 

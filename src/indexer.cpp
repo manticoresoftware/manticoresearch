@@ -16,6 +16,7 @@
 #include "sphinx.h"
 #include "sphinxint.h"
 #include "sphinxutils.h"
+#include "sphinxstem.h"
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <ctype.h>
@@ -198,7 +199,7 @@ public:
 	virtual void		WriteStopwords ( CSphWriter & ) {}
 	virtual bool		LoadWordforms ( const CSphVector<CSphString> &, const CSphEmbeddedFiles *, const ISphTokenizer *, const char * ) { return true; }
 	virtual void		WriteWordforms ( CSphWriter & ) {}
-	virtual bool		SetMorphology ( const char *, bool ) { return true; }
+	virtual int			SetMorphology ( const char *, bool, CSphString & ) { return ST_OK; }
 
 	virtual void		Setup ( const CSphDictSettings & tSettings ) { m_tSettings = tSettings; }
 	virtual const CSphDictSettings & GetSettings () const { return m_tSettings; }
@@ -934,11 +935,19 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		// multiforms filter
 		sphConfDictionary ( hIndex, tDictSettings );
 
+		if ( tSettings.m_bAotFilter )
+		{
+			CSphString sDictFile;
+			sDictFile.SetSprintf ( "%s/ru.pak", g_sLemmatizerBase.cstr() );
+			if ( !sphAotInitRu ( sDictFile, sError ) )
+				sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
+		}
+
 		pDict = tDictSettings.m_bWordDict
-			? sphCreateDictionaryKeywords ( tDictSettings, NULL, pTokenizer, sIndexName )
-			: sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, sIndexName );
+			? sphCreateDictionaryKeywords ( tDictSettings, NULL, pTokenizer, sIndexName, sError )
+			: sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, sIndexName, sError );
 		if ( !pDict )
-			sphDie ( "index '%s': unable to create dictionary", sIndexName );
+			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
 		pTokenizer = ISphTokenizer::CreateMultiformFilter ( pTokenizer, pDict->GetMultiWordforms () );
 
@@ -946,6 +955,10 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		pTokenizer = ISphTokenizer::CreateBigramFilter ( pTokenizer, tSettings.m_eBigramIndex, tSettings.m_sBigramWords, sError );
 		if ( !pTokenizer )
 			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
+
+		// aot filter
+		if ( tSettings.m_bAotFilter )
+			pTokenizer = sphAotCreateFilter ( pTokenizer, pDict );
 	}
 
 	ISphFieldFilter * pFieldFilter = NULL;
@@ -1799,6 +1812,9 @@ int main ( int argc, char ** argv )
 		sphSetJsonOptions ( bJsonStrict, bJsonAutoconvNumbers, bJsonKeynamesToLowercase );
 
 		sphSetThrottling ( hIndexer.GetInt ( "max_iops", 0 ), hIndexer.GetSize ( "max_iosize", 0 ) );
+
+		if ( hIndexer("lemmatizer_base") )
+			g_sLemmatizerBase = hIndexer["lemmatizer_base"];
 	}
 
 	/////////////////////

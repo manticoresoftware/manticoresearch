@@ -16868,7 +16868,10 @@ bool PrereadNewIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex, c
 {
 	CSphString sWarning;
 
-	if ( !tIdx.m_pIndex->Prealloc ( tIdx.m_bMlock, g_bStripPath, sWarning ) || !tIdx.m_pIndex->Preread() )
+	bool bOk = tIdx.m_pIndex->Prealloc ( tIdx.m_bMlock, g_bStripPath, sWarning );
+	if ( bOk )
+		bOk = tIdx.m_pIndex->Preread();
+	if ( !bOk )
 	{
 		sphWarning ( "index '%s': preload: %s; NOT SERVING", szIndexName, tIdx.m_pIndex->GetLastError().cstr() );
 		return false;
@@ -19093,6 +19096,9 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	memcpy ( p+sizeof(sHandshake1)-1, sVersion, iLen+1 );
 	memcpy ( p+sizeof(sHandshake1)+iLen, sHandshake2, sizeof(sHandshake2)-1 );
 	g_sMysqlHandshake[0] = (char)(g_iMysqlHandshake-4); // safe, as long as buffer size is 128
+
+	if ( hConf("indexer") && hConf["indexer"]("indexer") && hConf["indexer"]["indexer"]("lemmatizer_base") )
+		g_sLemmatizerBase = hConf["indexer"]["indexer"]["lemmatizer_base"];
 }
 
 void ConfigureAndPreload ( const CSphConfig & hConf, const char * sOptIndex )

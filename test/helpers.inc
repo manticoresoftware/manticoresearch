@@ -662,7 +662,7 @@ class SphinxConfig
 	function Load ( $config_file )
 	{
 		// load the file
-		$doc = new DOMDocument ( "1.0", "utf-8" );
+		$doc = new DOMDocument ( "1.0" );
 		if ( !$doc->load ( $config_file ) )
 			return false;
 
@@ -697,8 +697,7 @@ class SphinxConfig
 			// new and cool
 			foreach ( ChildrenArray ( $qs, "query" ) as $q )
 			{
-				$res = array ( "query" => array ( $q->nodeValue ) );
-
+				$res = array ( "query" => array ( iconv ( 'utf-8', $doc->encoding, $q->nodeValue ) ) );
 				// parse query mode
 				$mode = 0;
 				$mode_s = $q->getAttribute("mode");
@@ -837,8 +836,9 @@ class SphinxConfig
 			$this->_use_sphinxql = true;
 			// new and cool
 			foreach ( ChildrenArray ( $qs, "sphinxql" ) as $q )
-				$this->_sphqueries[] = array ( "query" => $q->nodeValue );
+				$this->_sphqueries[] = array ( "query" => iconv ( 'utf-8', $doc->encoding, $q->nodeValue ) );
 		}
+
 
 
 		// extract my settings
@@ -853,7 +853,7 @@ class SphinxConfig
 			$this->_db_drop []=$node->nodeValue;
 
 		foreach ( ChildrenArray ( $xml, "db_insert" ) as $node )
-			$this->_db_insert []=$node->nodeValue;
+			$this->_db_insert [] = iconv ( 'utf-8', $doc->encoding, $node->nodeValue );
 
 		foreach ( ChildrenArray ( $xml, "custom_insert" ) as $node )
 			$this->_custom_insert []=$node->nodeValue;
@@ -2076,7 +2076,7 @@ function EraseDirContents ( $path )
 	{
 		while ( ( $file = readdir ( $fp ) ) !== false )
 		{ 
-		if ( $file != "." && $file != ".." && !is_dir ( $file ) )
+		if ( $file!="." && $file!=".." && !is_dir ( $file ) && $file!="stub.txt" )
 				unlink ( "$path/$file" ); 
 		} 
 
@@ -2102,7 +2102,7 @@ function CopyDirContents ( $from, $to )
 
 function CheckConfig ( $config, $path )
 {
-	global $g_id64, $g_re2, $windows;
+	global $g_id64, $g_re2, $windows, $g_locals;
 	
 	if ( $config->Requires("id64") && !$g_id64 )
 	{
@@ -2140,6 +2140,12 @@ function CheckConfig ( $config, $path )
 		return false;
 	}
 
+	if ( $config->Requires("lemmatizer_base") && !isset($g_locals["lemmatizer_base"]) )
+	{
+		printf ( "SKIPPING %s, %s - lemmatizer_base required, add it to your ~/.sphinx\n", $path, $config->Name () );
+		return false;
+	}
+
 	return true;
 }
 
@@ -2153,7 +2159,7 @@ function MarkTest ( $logfile, $test_dir )
 
 function RunTest ( $test_dir, $skipdemo, $usemarks )
 {
-	global	$indexer_data_path, $agents, $sd_pid_file, $sd_managed_searchd,
+	global	$index_data_path, $agents, $sd_pid_file, $sd_managed_searchd,
 			$sd_skip_indexer, $g_id64, $windows, $g_locals, $sd_log, $sd_query_log;
 
 	$model_file = $test_dir."/model.bin";
@@ -2256,7 +2262,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 		}
 		$config->WriteConfig ( "config.conf", "all", $msg, $config->NumAgents () < 2 );
 
-		EraseDirContents ( $indexer_data_path );
+		EraseDirContents ( $index_data_path );
 		if ( $config->Requires( "pre_copy_ref" ) )
 			CopyDirContents ( $test_dir . "/refdata/", "data/" );
 

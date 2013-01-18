@@ -673,6 +673,7 @@ struct CSphDictSettings
 	bool			m_bWordDict;
 	bool			m_bCrc32;
 	bool			m_bStopwordsStem;
+	CSphString		m_sMorphFingerprint;		///< not used for creation; only for a check when loading
 
 	CSphDictSettings ()
 		: m_iMinStemmingLen ( 1 )
@@ -697,13 +698,48 @@ struct CSphDictEntry
 	int				m_iDoclistHint;		///< raw document list length hint value (0..255 range, 1 byte)
 };
 
+
+/// stored normal form
+struct CSphStoredNF
+{
+	CSphString					m_sWord;
+	bool						m_bAfterMorphology;
+};
+
+
+/// wordforms container
+struct CSphWordforms
+{
+	int							m_iRefCount;
+	CSphVector<CSphSavedFile>	m_dFiles;
+	uint64_t					m_uTokenizerFNV;
+	CSphString					m_sIndexName;
+	bool						m_bHavePostMorphNF;
+	CSphVector <CSphStoredNF>	m_dNormalForms;
+	CSphMultiformContainer *	m_pMultiWordforms;
+	CSphOrderedHash < int, CSphString, CSphStrHashFunc, 1048576 >	m_dHash;
+
+	CSphWordforms ();
+	~CSphWordforms ();
+
+	bool						IsEqual ( const CSphVector<CSphSavedFile> & dFiles );
+	bool						ToNormalForm ( BYTE * pWord, bool bBefore ) const;
+};
+
+
 /// abstract word dictionary interface
 struct CSphWordHit;
 class CSphAutofile;
 struct DictHeader_t;
 struct ThrottleState_t;
-struct CSphDict
+class CSphDict
 {
+public:
+	static const int	ST_OK = 0;
+	static const int	ST_ERROR = 1;
+	static const int	ST_WARNING = 2;
+
+public:
 	/// virtualizing dtor
 	virtual				~CSphDict () {}
 
@@ -749,10 +785,21 @@ struct CSphDict
 	/// write wordforms to a file
 	virtual void		WriteWordforms ( CSphWriter & tWriter ) = 0;
 
-	/// set morphology
-	virtual bool		SetMorphology ( const char * szMorph, bool bUseUTF8 ) = 0;
+	/// get wordforms
+	virtual const CSphWordforms *	GetWordforms() { return NULL; }
 
+	/// disable wordforms processing
+	virtual void		DisableWordforms() {}
+
+	/// set morphology
+	/// returns 0 on success, 1 on hard error, 2 on a warning (see ST_xxx constants)
+	virtual int			SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sMessage ) = 0;
+
+	/// are there any morphological processors?
 	virtual bool		HasMorphology () const { return false; }
+
+	/// morphological data fingerprint (lemmatizer filenames and crc32s)
+	virtual const CSphString &	GetMorphDataFingerprint () const { return m_sMorphFingerprint; }
 
 	/// setup dictionary using settings
 	virtual void		Setup ( const CSphDictSettings & tSettings ) = 0;
@@ -810,14 +857,17 @@ public:
 
 	/// make a clone
 	virtual CSphDict *		Clone () const { return NULL; }
+
+protected:
+	CSphString				m_sMorphFingerprint;
 };
 
 
 /// CRC32/FNV64 dictionary factory
-CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex );
+CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError );
 
 /// keyword-storing dictionary factory
-CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, ISphTokenizer * pTokenizer, const char * sIndex );
+CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError );
 
 /// clear wordform cache
 void sphShutdownWordforms ();
@@ -2786,6 +2836,8 @@ struct CSphIndexSettings : public CSphSourceSettings
 	CSphString				m_sBigramWords;
 	CSphVector<CSphString>	m_dBigramWords;
 
+	bool			m_bAotFilter;	///< lemmatize_ru_all forces us to transform queries on the index level too
+
 					CSphIndexSettings ();
 };
 
@@ -3040,6 +3092,10 @@ bool				sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema
 
 /// initialize collation tables
 void				sphCollationInit ();
+
+//////////////////////////////////////////////////////////////////////////
+
+extern CSphString g_sLemmatizerBase;
 
 /////////////////////////////////////////////////////////////////////////////
 

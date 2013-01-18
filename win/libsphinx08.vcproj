@@ -305,6 +305,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\src\sphinxaot.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\src\sphinxexcerpt.cpp"
 				>
 			</File>

@@ -49,6 +49,26 @@ void	stem_soundex ( BYTE * pWord );
 /// double metaphone stemmer
 void	stem_dmetaphone ( BYTE * pWord, bool bUTF8 );
 
+/// init AOT lemmatizer
+bool	sphAotInitRu ( const CSphString & sDictFile, CSphString & sError );
+
+/// lemmatize (or guess a normal form) a Russian word in Windows-1251 encoding
+void	sphAotLemmatizeRu1251 ( BYTE * pWord );
+
+/// lemmatize (or guess a normal form) a Russian word in UTF-8 encoding, return a single "best" lemma
+void	sphAotLemmatizeRuUTF8 ( BYTE * pWord );
+
+/// lemmatize (or guess a normal form) a Russian word, return all lemmas
+void	sphAotLemmatizeRu ( CSphVector<CSphString> & dLemmas, const BYTE * pWord, bool bUtf8 );
+
+/// get lemmatizer dictionary info (file name, crc)
+const CSphNamedInt &	sphAotDictinfoRu();
+
+/// create token filter that returns all morphological hypotheses
+/// NOTE, takes over wordforms from pDict, in AOT case they must be handled by the fitler
+class CSphTokenFilter;
+CSphTokenFilter *		sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pDict );
+
 #endif // _sphinxstem_
 
 //

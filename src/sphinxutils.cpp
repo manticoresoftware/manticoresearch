@@ -419,6 +419,7 @@ static KeyDesc_t g_dKeysIndexer[] =
 	{ "on_json_attr_error",		0, NULL },
 	{ "json_autoconv_numbers",	0, NULL },
 	{ "json_autoconv_keynames",	0, NULL },
+	{ "lemmatizer_base",		0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -1125,20 +1126,11 @@ void sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tS
 
 		globfree ( &tGlob );
 #endif
-		dFilesFound.Sort();
+
+		dFilesFound.Uniq();
 		ARRAY_FOREACH ( i, dFilesFound )
 			tSettings.m_dWordforms.Add ( dFilesFound[i] );
 	}
-
-	// remove duplicate wordform files
-	for ( int i = tSettings.m_dWordforms.GetLength()-1; i>=0; i-- )
-		for ( int j = i-1; j>=0; j-- )
-			if ( tSettings.m_dWordforms[i]==tSettings.m_dWordforms[j] )
-			{
-				fprintf ( stdout, "WARNING: duplicate wordform file found '%s' : ignoring\n", tSettings.m_dWordforms[i].cstr() );
-				tSettings.m_dWordforms.Remove(j);
-				i--;
-			}
 
 	if ( hIndex("dict") )
 	{
@@ -1308,6 +1300,12 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 		return false;
 	}
 
+	// aot
+	CSphVector<CSphString> dMorphs;
+	sphSplit ( dMorphs, hIndex.GetStr ( "morphology" ) );
+
+	tSettings.m_bAotFilter = ARRAY_ANY ( tSettings.m_bAotFilter, dMorphs, dMorphs[_any]=="lemmatize_ru_all" );
+
 	// all good
 	return true;
 }
@@ -1337,10 +1335,10 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		if ( pIndex->m_bId32to64 )
 			tSettings.m_bCrc32 = true;
 		sphConfDictionary ( hIndex, tSettings );
-		CSphDict * pDict = sphCreateDictionaryCRC ( tSettings, NULL, pIndex->GetTokenizer (), pIndex->GetName() );
+		CSphDict * pDict = sphCreateDictionaryCRC ( tSettings, NULL, pIndex->GetTokenizer (), pIndex->GetName(), sError );
 		if ( !pDict )
 		{
-			sphWarning ( "index '%s': unable to create dictionary", pIndex->GetName() );
+			sphWarning ( "index '%s': %s", pIndex->GetName(), sError.cstr() );
 			return false;
 		}
 

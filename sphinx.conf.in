@@ -770,6 +770,12 @@ indexer
 	# optional, default is 8M, minimum is 1M
 	#
 	# max_file_field_buffer	= 32M
+
+
+	# lemmatizer dictionaries base path
+	# optional, defaut is /usr/local/share (see ./configure --datadir)
+	#
+	# lemmatizer_base = /usr/local/share/sphinx/dicts
 }
 
 #############################################################################

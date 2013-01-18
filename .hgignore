@@ -16,3 +16,8 @@ glob:codeblocks/*.depend
 glob:codeblocks/*.layout
 glob:*/sphinxversion.h
 glob:*.pyc
+glob:src/*.o
+
+glob:CodeAnalyst/
+glob:aotdata/
+glob:data/

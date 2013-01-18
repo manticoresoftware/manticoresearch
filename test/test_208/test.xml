@@ -1,0 +1,343 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<test>
+
+<requires>
+<lemmatizer_base/>
+</requires>
+
+<name>aot morphology</name>
+
+<config>
+indexer
+{
+	lemmatizer_base	= <local>lemmatizer_base</local>
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers				= threads
+}
+
+source test1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query_pre	= set names cp1251
+	sql_query		= select id, gid, title from test_table
+	sql_attr_uint	= gid
+}
+
+index test1
+{
+	source			= test1
+	path			= <data_path/>/test1
+	charset_type	= sbcs
+	morphology		= lemmatize_ru_all
+	blend_chars		= @, .
+	wordforms		= <this_test/>/wordforms.txt
+}
+
+index test2 : test1
+{
+	path			= <data_path/>/test2
+	morphology		= lemmatize_ru
+}
+
+index testrt1
+{
+	type			= rt
+	path			= <data_path/>/testrt1
+	charset_type	= sbcs
+	morphology		= lemmatize_ru_all
+	blend_chars		= @, .
+	wordforms		= <this_test/>/wordforms.txt
+	rt_attr_uint	= gid
+	rt_field		= title
+}
+
+index testrt2 : testrt1
+{
+	path			= <data_path/>/testrt2
+	morphology		= lemmatize_ru
+}
+
+index incorrectmorph : testrt1
+{
+	path			= <data_path/>/incorrectmorph
+	morphology		= stem_ru, lemmatize_ru
+}
+
+source stalin_src
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query_pre	= set names cp1251
+	sql_query		= select * from test_table where id=1000
+	sql_attr_uint	= gid
+}
+
+index stalin_plain
+{
+	source			= stalin_src
+	path			= <data_path/>/stalin_plain
+	charset_type	= sbcs
+	morphology		= lemmatize_ru
+	enable_star		= 1
+	min_infix_len	= 2
+	expand_keywords	= 1	
+}
+
+index stalin_rt
+{
+	type			= rt
+	path			= <data_path/>/stalin_rt
+	charset_type	= sbcs
+	morphology		= lemmatize_ru_all
+	dict			= keywords
+	enable_star		= 1
+	min_infix_len	= 2
+	expand_keywords	= 1
+	rt_field		= text
+	rt_attr_uint	= gid
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) NOT NULL
+) DEFAULT CHARSET=CP1251;
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
+<db_insert>SET NAMES cp1251</db_insert>
+<db_insert>INSERT INTO test_table VALUES
+	( 1, 11, 'они стали есть' ),
+	( 2, 11, 'Крыса из Нержавеющей Стали' ),
+	( 3, 11, 'воруй@убивай' ),
+	( 4, 11, 'воровал' ),
+	( 5, 11, 'убиваю' ),
+	( 6, 11, 'вокзал г.Зажопинска' ),
+	( 7, 11, 'бросить бы все, да в Зажопинск' ),
+	( 8, 11, 'Лучшая рыба это колбаса!' ),
+	( 9, 11, 'косой шакал' ),
+	( 10, 11, 'косая линия' ),
+	( 11, 11, 'длинная коса' ),
+	( 12, 11, 'для __лицо' ),
+	( 13, 11, 'длить __лица' ),
+	( 14, 11, 'глава12раздел' ),
+	( 15, 11, 'попил клейстера' ),
+	( 16, 11, 'понюхал клея' ),
+	( 17, 11, 'Ё моё' ),
+	( 18, 11, 'я санктение люблю спб' ),
+	( 1000, 11, 'сталин начал курить' )
+</db_insert>
+
+<queries>
+<query index="test1" mode="extended2">сталь</query>
+<query index="test1" mode="extended2">стать</query>
+<query index="test1" mode="extended2">сталью</query>
+<query index="test1" mode="extended2">стали</query>
+<query index="test1" mode="extended2">"они стали"</query>
+<query index="test1" mode="extended2">воруй@убивай</query>
+<query index="test1" mode="extended2">воровать</query>
+<query index="test1" mode="extended2">убивать</query>
+<query index="test1" mode="extended2">воруй</query>
+<query index="test1" mode="extended2">убивай</query>
+<query index="test1" mode="extended2">Зажопинск</query>
+<query index="test1" mode="extended2">Зажопинска</query>
+<query index="test1" mode="extended2">"вокзал г зажопинск"</query>
+<query index="test1" mode="extended2">рыба</query>
+<query index="test1" mode="extended2">селедка</query>
+<query index="test1" mode="extended2">косой</query>
+<query index="test1" mode="extended2">косая</query>
+<query index="test1" mode="extended2">для</query>
+<query index="test1" mode="extended2">длить</query>
+<query index="test1" mode="extended2">__лицо</query>
+<query index="test1" mode="extended2">__лица</query>
+<query index="test1" mode="extended2">глава12раздел</query>
+<query index="test1" mode="extended2">клейстеру</query>
+<query index="test1" mode="extended2">клей</query>
+<query index="test1" mode="extended2">ё</query>
+
+<query index="test2" mode="extended2">сталь</query>
+<query index="test2" mode="extended2">стать</query>
+<query index="test2" mode="extended2">сталью</query>
+<query index="test2" mode="extended2">стали</query>
+<query index="test2" mode="extended2">"они стали"</query>
+<query index="test2" mode="extended2">воруй@убивай</query>
+<query index="test2" mode="extended2">воровать</query>
+<query index="test2" mode="extended2">убивать</query>
+<query index="test2" mode="extended2">воруй</query>
+<query index="test2" mode="extended2">убивай</query>
+<query index="test2" mode="extended2">Зажопинск</query>
+<query index="test2" mode="extended2">Зажопинска</query>
+<query index="test2" mode="extended2">"вокзал г зажопинск"</query>
+<query index="test2" mode="extended2">рыба</query>
+<query index="test2" mode="extended2">селедка</query>
+<query index="test2" mode="extended2">косой</query>
+<query index="test2" mode="extended2">косая</query>
+<query index="test2" mode="extended2">для</query>
+<query index="test2" mode="extended2">длить</query>
+<query index="test2" mode="extended2">__лицо</query>
+<query index="test2" mode="extended2">__лица</query>
+<query index="test2" mode="extended2">глава12раздел</query>
+<query index="test2" mode="extended2">клейстеру</query>
+<query index="test2" mode="extended2">клей</query>
+<query index="test2" mode="extended2">ё</query>
+</queries>
+
+<sphqueries>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('сталь')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('стать')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('сталью')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('стали')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('"они стали"')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('воруй@убивай')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('воровать')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('убивать')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('воруй')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('убивай')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('Зажопинск')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('Зажопинска')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('"вокзал г зажопинск"')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('рыба')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('селедка')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('косой')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('косая')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('для')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('длить')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('__лицо')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('__лица')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('глава12раздел')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('клейстеру')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('клей')</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('ё')</sphinxql>
+
+<sphinxql>SELECT * FROM test2 WHERE MATCH('сталь')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('стать')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('сталью')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('стали')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('"они стали"')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('воруй@убивай')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('воровать')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('убивать')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('воруй')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('убивай')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('Зажопинск')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('Зажопинска')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('"вокзал г зажопинск"')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('рыба')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('селедка')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('косой')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('косая')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('для')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('длить')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('__лицо')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('__лица')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('глава12раздел')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('клейстеру')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('клей')</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('ё')</sphinxql>
+
+<sphinxql>INSERT INTO testrt1 VALUES ( 1, 'они стали есть', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt1 VALUES ( 2, 'Крыса из Нержавеющей Стали', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt1 VALUES ( 3, 'воруй@убивай', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt1 VALUES ( 4, 'воровал', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt1 VALUES ( 5, 'убиваю', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt1 VALUES ( 6, 'вокзал г.Зажопинска', 11)</sphinxql>
+<sphinxql>INSERT INTO testrt1 VALUES ( 7, 'бросить бы все, да в Зажопинск', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt1 VALUES ( 8, 'Лучшая рыба это колбаса!', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt1 VALUES ( 9, 'косой шакал', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt1 VALUES ( 10, 'косая линия', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt1 VALUES ( 11, 'длинная коса', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt1 VALUES ( 12, 'для __лицо', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt1 VALUES ( 13, 'длить __лица', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt1 VALUES ( 14, 'глава12раздел', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt1 VALUES ( 15, 'попил клейстера', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt1 VALUES ( 16, 'понюхал клея', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt1 VALUES ( 17, 'Ё моё', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt1 VALUES ( 18, 'я санктение люблю спб', 11 )</sphinxql>
+
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('сталь')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('стать')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('сталью')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('стали')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('"они стали"')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('воруй@убивай')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('воровать')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('убивать')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('воруй')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('убивай')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('Зажопинск')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('Зажопинска')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('"вокзал г зажопинск"')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('рыба')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('селедка')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('косой')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('косая')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('для')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('длить')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('__лицо')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('__лица')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('глава12раздел')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('клейстеру')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('клей')</sphinxql>
+<sphinxql>SELECT * FROM testrt1 WHERE MATCH('ё')</sphinxql>
+
+<sphinxql>INSERT INTO testrt2 VALUES ( 1, 'они стали есть', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt2 VALUES ( 2, 'Крыса из Нержавеющей Стали', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt2 VALUES ( 3, 'воруй@убивай', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt2 VALUES ( 4, 'воровал', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt2 VALUES ( 5, 'убиваю', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt2 VALUES ( 6, 'вокзал г.Зажопинска', 11)</sphinxql>
+<sphinxql>INSERT INTO testrt2 VALUES ( 7, 'бросить бы все, да в Зажопинск', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt2 VALUES ( 8, 'Лучшая рыба это колбаса!', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt2 VALUES ( 9, 'косой шакал', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt2 VALUES ( 10, 'косая линия', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt2 VALUES ( 11, 'длинная коса', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt2 VALUES ( 12, 'для __лицо', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt2 VALUES ( 13, 'длить __лица', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt2 VALUES ( 14, 'глава12раздел', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt2 VALUES ( 15, 'попил клейстера', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt2 VALUES ( 16, 'понюхал клея', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt2 VALUES ( 17, 'Ё моё', 11 )</sphinxql>
+<sphinxql>INSERT INTO testrt2 VALUES ( 18, 'я санктение люблю спб', 11 )</sphinxql>
+
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('сталь')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('стать')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('сталью')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('стали')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('"они стали"')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('воруй@убивай')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('воровать')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('убивать')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('воруй')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('убивай')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('Зажопинск')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('Зажопинска')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('"вокзал г зажопинск"')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('рыба')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('селедка')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('косой')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('косая')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('для')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('длить')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('__лицо')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('__лица')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('глава12раздел')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('клейстеру')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('клей')</sphinxql>
+<sphinxql>SELECT * FROM testrt2 WHERE MATCH('ё')</sphinxql>
+
+<sphinxql>SELECT * FROM incorrectmorph</sphinxql>
+
+<sphinxql>REPLACE INTO stalin_rt VALUES ( 1000, 'сталин начал курить', 11 )</sphinxql>
+<sphinxql>SELECT * FROM stalin_rt WHERE MATCH('стали')</sphinxql>
+<sphinxql>SELECT * FROM stalin_plain WHERE MATCH('стали')</sphinxql>
+<sphinxql>SELECT * FROM stalin_plain WHERE MATCH('стали') ORDER BY id ASC, gid ASC</sphinxql>
+</sphqueries>
+
+</test>

@@ -767,9 +767,10 @@ void TestQueryParser ()
 	tCol.m_sName = "title"; tSchema.m_dFields.Add ( tCol );
 	tCol.m_sName = "body"; tSchema.m_dFields.Add ( tCol );
 
+	CSphString sError;
 	CSphDictSettings tDictSettings;
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( sphCreateSBCSTokenizer () );
-	CSphScopedPtr<CSphDict> pDict ( sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer.Ptr(), "query" ) );
+	CSphScopedPtr<CSphDict> pDict ( sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer.Ptr(), "query", sError ) );
 	assert ( pTokenizer.Ptr() );
 	assert ( pDict.Ptr() );
 
@@ -778,7 +779,6 @@ void TestQueryParser ()
 	tTokenizerSetup.m_sSynonymsFile = g_sTmpfile;
 	pTokenizer->Setup ( tTokenizerSetup );
 
-	CSphString sError;
 	assert ( CreateSynonymsFile ( NULL ) );
 	assert ( pTokenizer->LoadSynonyms ( g_sTmpfile, NULL, sError ) );
 
@@ -897,18 +897,19 @@ void TestQueryTransforms ()
 	tCol.m_sName = "title"; tSchema.m_dFields.Add ( tCol );
 	tCol.m_sName = "body"; tSchema.m_dFields.Add ( tCol );
 
+	CSphString sError;
 	CSphDictSettings tDictSettings;
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( sphCreateSBCSTokenizer () );
-	CSphScopedPtr<CSphDict> pDict ( sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer.Ptr(), "query" ) );
+	CSphScopedPtr<CSphDict> pDict ( sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer.Ptr(), "query", sError ) );
 	assert ( pTokenizer.Ptr() );
 	assert ( pDict.Ptr() );
+	assert ( sError.IsEmpty() );
 
 	CSphTokenizerSettings tTokenizerSetup;
 	tTokenizerSetup.m_iMinWordLen = 2;
 	tTokenizerSetup.m_sSynonymsFile = g_sTmpfile;
 	pTokenizer->Setup ( tTokenizerSetup );
 
-	CSphString sError;
 	assert ( CreateSynonymsFile ( NULL ) );
 	assert ( pTokenizer->LoadSynonyms ( g_sTmpfile, NULL, sError ) );
 
@@ -2078,7 +2079,7 @@ void TestRTWeightBoundary ()
 		CSphDictSettings tDictSettings;
 
 		ISphTokenizer * pTok = sphCreateUTF8Tokenizer();
-		CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "weight" );
+		CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "weight", sError );
 
 		CSphColumnInfo tCol;
 		CSphSchema tSrcSchema;
@@ -2253,7 +2254,7 @@ void TestRTSendVsMerge ()
 	CSphDictSettings tDictSettings;
 
 	ISphTokenizer * pTok = sphCreateUTF8Tokenizer();
-	CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt" );
+	CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", sError );
 
 	CSphColumnInfo tCol;
 	CSphSchema tSrcSchema;

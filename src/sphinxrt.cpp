@@ -1382,6 +1382,9 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 		return false;
 
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizerIndexing->Clone ( false ) ); // avoid race
+	if ( m_tSettings.m_bAotFilter )
+		pTokenizer = sphAotCreateFilter ( pTokenizer.LeakPtr(), m_pDict ); // OPTIMIZE? do not create filter on each(!) INSERT
+		
 	CSphSource_StringVector tSrc ( iFields, ppFields, m_tSchema );
 
 	// SPZ setup
@@ -3506,7 +3509,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iC
 	const CSphSourceStats & tStats, bool bForceID32 ) const
 {
 	static const DWORD INDEX_MAGIC_HEADER	= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD INDEX_FORMAT_VERSION	= 36;			///< my format version
+	static const DWORD INDEX_FORMAT_VERSION	= 37;			///< my format version
 
 	CSphWriter tWriter;
 	CSphString sName, sError;
@@ -3753,6 +3756,14 @@ bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 		return false;
 	}
 
+	if ( m_tSettings.m_bAotFilter )
+	{
+		CSphString sDictFile;
+		sDictFile.SetSprintf ( "%s/ru.pak", g_sLemmatizerBase.cstr() );
+		if ( !sphAotInitRu ( sDictFile, m_sLastError ) )
+			return false;
+	}
+
 	/////////////
 	// load meta
 	/////////////
@@ -3836,10 +3847,10 @@ bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 
 		// recreate dictionary
 		SafeDelete ( m_pDict );
-		m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr() );
+		m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), m_sLastError );
 		if ( !m_pDict )
 		{
-			m_sLastError.SetSprintf ( "index '%s': unable to create dictionary", m_sIndexName.cstr() );
+			m_sLastError.SetSprintf ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
 			return false;
 		}
 
@@ -5754,7 +5765,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		return false;
 	}
 
-	// transform query if needed (quorum transform, keyword expansion, etc.)
+	// transform query if needed (quorum transform, etc.)
 	sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, pQuery->m_bSimplify, this );
 
 	// adjust stars in keywords for dict=keywords, enable_star=0 case
@@ -5766,6 +5777,10 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		tParsed.m_pRoot = sphQueryExpandKeywords ( tParsed.m_pRoot, m_tSettings, m_bEnableStar );
 		tParsed.m_pRoot->Check ( true );
 	}
+
+	// this should be after keyword expansion
+	if ( m_tSettings.m_bAotFilter )
+		TransformAotFilter ( tParsed.m_pRoot, pTokenizer->IsUtf8(), pDict->GetWordforms() );
 
 	// expanding prefix in word dictionary case
 	if ( m_bEnableStar && m_bKeywordDict )

@@ -18,6 +18,7 @@
 
 #include "sphinx.h"
 #include "sphinxutils.h"
+#include "sphinxstem.h"
 
 /// RAM based updateable backend interface
 class ISphRtIndex : public CSphIndex

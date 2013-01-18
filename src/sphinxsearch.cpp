@@ -1244,7 +1244,9 @@ static ISphQword * CreateQueryWord ( const XQKeyword_t & tWord, const ISphQwordS
 
 	ISphQword * pWord = tSetup.QwordSpawn ( tWord );
 	pWord->m_sWord = tWord.m_sWord;
-	pWord->m_iWordID = tSetup.m_pDict->GetWordID ( sTmp );
+	pWord->m_iWordID = tWord.m_bMorphed
+		? tSetup.m_pDict->GetWordIDNonStemmed ( sTmp )
+		: tSetup.m_pDict->GetWordID ( sTmp );
 	pWord->m_sDictWord = (char*)sTmp;
 	pWord->m_bExpanded = tWord.m_bExpanded;
 	tSetup.QwordSetup ( pWord );

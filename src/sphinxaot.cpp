@@ -677,6 +677,8 @@ static inline BYTE * Emit ( BYTE * sOut, BYTE uChar );
 template<>
 inline BYTE * Emit<false> ( BYTE * sOut, BYTE uChar )
 {
+	if ( uChar=='-' )
+		return sOut;
 	*sOut++ = uChar | 0x20;
 	return sOut;
 }
@@ -684,6 +686,8 @@ inline BYTE * Emit<false> ( BYTE * sOut, BYTE uChar )
 template<>
 inline BYTE * Emit<true> ( BYTE * sOut, BYTE uChar )
 {
+	if ( uChar=='-' )
+		return sOut;
 	assert ( uChar!=0xA8 && uChar!=0xB8 ); // no country for yo
 	uChar |= 0x20; // lowercase, E0..FF range now
 	if ( uChar & 0x10 )
@@ -836,16 +840,6 @@ void sphAotLemmatizeRu1251 ( BYTE * pWord )
 				strcpy ( (char*)pWord, (char*)sBuf );
 		}
 	}
-
-	const BYTE * s = pWord;
-	BYTE * d = pWord;
-	while ( *s )
-	{
-		if ( *s!='-' )
-			*d++ = *s;
-		s++;
-	}
-	*d = '\0';
 }
 
 

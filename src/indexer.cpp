@@ -1815,6 +1815,7 @@ int main ( int argc, char ** argv )
 
 		if ( hIndexer("lemmatizer_base") )
 			g_sLemmatizerBase = hIndexer["lemmatizer_base"];
+		sphAotSetCacheSize ( hIndexer.GetSize ( "lemmatizer_cache", 262144 ));
 	}
 
 	/////////////////////

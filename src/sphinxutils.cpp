@@ -420,6 +420,7 @@ static KeyDesc_t g_dKeysIndexer[] =
 	{ "json_autoconv_numbers",	0, NULL },
 	{ "json_autoconv_keynames",	0, NULL },
 	{ "lemmatizer_base",		0, NULL },
+	{ "lemmatizer_cache",		0, NULL },
 	{ NULL,						0, NULL }
 };
 

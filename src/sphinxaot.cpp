@@ -31,6 +31,9 @@ const int	AOT_MAX_ALPHABET_SIZE		= 54;
 const DWORD	AOT_NOFORM					= 0xffffffffUL;
 
 
+static int	g_iCacheSize				= 262144; // in bytes, so 256K
+
+
 #define		AOT_MODEL_NO(_a)	((_a)>>18)
 #define		AOT_ITEM_NO(_a)		(((_a)&0x3FFFF)>>9)
 #define		AOT_PREFIX_NO(_a)	((_a)&0x1FF)
@@ -97,15 +100,15 @@ struct CMorphAutomRelation
 class CMorphAutomat : public CABCEncoder
 {
 protected:
-	static const int		CACHE_SIZE	= 1000;
-
 	CMorphAutomNode *		m_pNodes;
 	int						m_NodesCount;
 	CMorphAutomRelation *	m_pRelations;
 	int						m_RelationsCount;
-	CSphVector<int>			m_ChildrenCache;
 
-	void	BuildChildrenCache();
+	int						m_iCacheSize;
+	CSphTightVector<int>	m_ChildrenCache;
+
+	void	BuildChildrenCache ( int iCacheSize );
 	int		FindStringAndPassAnnotChar ( const BYTE * pText ) const;
 
 public:
@@ -114,6 +117,7 @@ public:
 		, m_NodesCount ( 0 )
 		, m_pRelations ( NULL )
 		, m_RelationsCount ( 0 )
+		, m_iCacheSize ( 0 )
 	{}
 
 	~CMorphAutomat ()
@@ -127,7 +131,7 @@ public:
 	const CMorphAutomNode			GetNode ( int i ) const				{ return m_pNodes[i]; }
 
 public:
-	bool	LoadPak ( CSphReader & rd );
+	bool	LoadPak ( CSphReader & rd, int iCacheSize );
 	void	GetInnerMorphInfos ( const BYTE * pText, DWORD * Infos ) const;
 	int		NextNode ( int NodeNo, BYTE Child ) const;
 };
@@ -220,12 +224,15 @@ void CABCEncoder::InitAlphabet ( const AlphabetDesc_t & tDesc )
 
 //////////////////////////////////////////////////////////////////////////
 
-void CMorphAutomat::BuildChildrenCache()
+void CMorphAutomat::BuildChildrenCache ( int iCacheSize )
 {
-	int Count = Min ( m_NodesCount, CACHE_SIZE );
-	m_ChildrenCache.Resize ( Count*AOT_MAX_ALPHABET_SIZE );
+	iCacheSize /= AOT_MAX_ALPHABET_SIZE*4;
+	iCacheSize = Max ( iCacheSize, 0 );
+	m_iCacheSize = Min ( m_NodesCount, iCacheSize );
+
+	m_ChildrenCache.Resize ( m_iCacheSize*AOT_MAX_ALPHABET_SIZE );
 	m_ChildrenCache.Fill ( -1 );
-	for ( int NodeNo=0; NodeNo<Count; NodeNo++ )
+	for ( int NodeNo=0; NodeNo<m_iCacheSize; NodeNo++ )
 	{
 		const CMorphAutomRelation * pStart = m_pRelations + m_pNodes [ NodeNo ].GetChildrenStart();
 		const CMorphAutomRelation * pEnd = pStart + GetChildrenCount ( NodeNo );
@@ -238,7 +245,7 @@ void CMorphAutomat::BuildChildrenCache()
 }
 
 
-bool CMorphAutomat::LoadPak ( CSphReader & rd )
+bool CMorphAutomat::LoadPak ( CSphReader & rd, int iCacheSize )
 {
 	rd.Tag ( "automaton-nodes" );
 	m_NodesCount = rd.UnzipInt();
@@ -254,14 +261,14 @@ bool CMorphAutomat::LoadPak ( CSphReader & rd )
 		return false;
 
 	m_pNodes [ m_NodesCount ].m_Data = m_RelationsCount;
-	BuildChildrenCache();
+	BuildChildrenCache ( iCacheSize );
 	return true;
 }
 
 
 int CMorphAutomat::NextNode ( int NodeNo, BYTE RelationChar ) const
 {
-	if ( NodeNo<CACHE_SIZE )
+	if ( NodeNo<m_iCacheSize )
 	{
 		int z = m_Alphabet2Code [ RelationChar ];
 		if ( z==-1 )
@@ -565,8 +572,9 @@ bool CLemmatizer::LoadPak ( CSphReader & rd )
 	rd.Tag ( "uc-table" );
 	rd.GetBytes ( m_UC, 256 );
 
+	// caching forms can help a lot (from 4% with 256K cache to 13% with 110M cache)
 	rd.Tag ( "forms-automaton" );
-	m_FormAutomat.LoadPak ( rd );
+	m_FormAutomat.LoadPak ( rd, g_iCacheSize );
 
 	rd.Tag ( "flexia-models" );
 	m_FlexiaModels.Resize ( rd.UnzipInt() );
@@ -610,8 +618,9 @@ bool CLemmatizer::LoadPak ( CSphReader & rd )
 	m_NPSs.Resize ( rd.UnzipInt() );
 	rd.GetBytes ( m_NPSs.Begin(), m_NPSs.GetLength() );
 
+	// caching predictions does not measurably affect performance though
 	rd.Tag ( "prediction-automaton" );
-	m_SuffixAutomat.LoadPak ( rd );
+	m_SuffixAutomat.LoadPak ( rd, 0 );
 
 	rd.Tag ( "eof" );
 	return !rd.GetErrorFlag();
@@ -623,6 +632,11 @@ bool CLemmatizer::LoadPak ( CSphReader & rd )
 
 static CLemmatizer *	g_pLemmatizer = NULL;
 static CSphNamedInt		g_tDictinfo;
+
+void sphAotSetCacheSize ( int iCacheSize )
+{
+	g_iCacheSize = Max ( iCacheSize, 0 );
+}
 
 bool sphAotInitRu ( const CSphString & sDictFile, CSphString & sError )
 {

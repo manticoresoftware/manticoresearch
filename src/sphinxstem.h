@@ -49,6 +49,9 @@ void	stem_soundex ( BYTE * pWord );
 /// double metaphone stemmer
 void	stem_dmetaphone ( BYTE * pWord, bool bUTF8 );
 
+/// pre-init AOT setup, cache size (in bytes)
+void	sphAotSetCacheSize ( int iCacheSize );
+
 /// init AOT lemmatizer
 bool	sphAotInitRu ( const CSphString & sDictFile, CSphString & sError );
 

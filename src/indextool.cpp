@@ -907,7 +907,7 @@ int main ( int argc, char ** argv )
 				fprintf ( stdout, "dumping dictionary for index '%s'...\n", sIndex.cstr() );
 
 			if ( bStats )
-				fprintf ( stdout, "total-documents: %d\n", pIndex->GetStats().m_iTotalDocuments );
+				fprintf ( stdout, "total-documents: "INT64_FMT"\n", pIndex->GetStats().m_iTotalDocuments );
 			pIndex->DebugDumpDict ( stdout );
 			break;
 		}

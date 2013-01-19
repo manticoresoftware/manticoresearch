@@ -713,7 +713,7 @@ public:
 				break;
 			case JSON_INT64:
 				// FIXME! OPTIMIZE!
-				snprintf ( sBuf, sizeof(sBuf), "%lld", sphJsonLoadBigint ( &pValue ) );
+				snprintf ( sBuf, sizeof(sBuf), INT64_FMT, sphJsonLoadBigint ( &pValue ) );
 				break;
 			case JSON_DOUBLE:
 				snprintf ( sBuf, sizeof(sBuf), "%f", sphQW2D ( sphJsonLoadBigint ( &pValue ) ) );
@@ -1819,7 +1819,7 @@ protected:
 
 public:
 	/// ctor
-	CSphImplicitGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
+	CSphImplicitGroupSorter ( const ISphMatchComparator * DEBUGARG(pComp), const CSphQuery *, const CSphGroupSorterSettings & tSettings )
 		: CSphGroupSorterSettings ( tSettings )
 		, m_bDataInitialized ( false )
 		, m_iPregroupDynamic ( 0 )
@@ -3080,6 +3080,8 @@ struct ExprSortJson2StringPtr_c : public ISphExpr
 			*ppStr = dBuf.LeakData();
 			return iStrLen;
 		}
+		case JSON_EOF:
+		break;
 		}
 
 		int iStriLen = sVal.Length();

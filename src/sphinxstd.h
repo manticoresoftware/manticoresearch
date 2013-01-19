@@ -87,6 +87,14 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 #define __analysis_assume(_arg)
 #endif
 
+
+/// some function arguments only need to have a name in debug builds
+#ifndef NDEBUG
+#define DEBUGARG(_arg) _arg
+#else
+#define DEBUGARG(_arg)
+#endif
+
 /////////////////////////////////////////////////////////////////////////////
 // PORTABILITY
 /////////////////////////////////////////////////////////////////////////////
@@ -860,16 +868,22 @@ public:
 		SafeDeleteArray ( m_pData );
 	}
 
-	/// query current length
+	/// query current length, in elements
 	inline int GetLength () const
 	{
 		return m_iLength;
 	}
 
-	/// query current reserved size
+	/// query current reserved size, in elements
 	inline int GetLimit () const
 	{
 		return m_iLimit;
+	}
+
+	/// query currently used RAM, in bytes
+	inline int GetSizeBytes() const
+	{
+		return m_iLimit*sizeof(T);
 	}
 
 public:
@@ -1131,6 +1145,11 @@ public:
 	int GetLength() const
 	{
 		return m_iSize;
+	}
+
+	int GetSizeBytes() const
+	{
+		return m_iSize*sizeof(T);
 	}
 
 	T * LeakData ()

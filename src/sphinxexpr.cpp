@@ -4366,7 +4366,7 @@ void sphUDFInit ( const char * sUdfDir )
 }
 
 
-void sphUDFLock (  bool bLocked )
+void sphUDFLock ( bool bLocked )
 {
 	g_bUdfLocked = bLocked;
 }

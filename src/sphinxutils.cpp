@@ -1992,8 +1992,6 @@ void sphBacktrace ( int iFD, bool bSafe )
 		}
 	} while ( iResult!=iChild );
 
-//	fsync ( iFD );
-
 	sphSafeInfo ( iFD, "--- BT to source lines finished ---" );
 }
 

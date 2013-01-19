@@ -313,7 +313,6 @@ void UrlBreak ( Split_t & tBest, const char * sWord )
 
 	// work the current splits
 	CSphVector<Split_t> dSplits2;
-	int iIter = 0;
 	while ( dSplits.GetLength() )
 	{
 		int iWorkedSplits = 0;
@@ -449,7 +448,7 @@ void UrlBreakTest ( const char * sTestFile )
 	}
 	if ( iNosplit )
 		printf ( "total %d nosplits, %.3f of the test suite\n",
-			iNosplit, float(iNosplit)/dTests.GetLength(), dTests.GetLength() );
+			iNosplit, float(iNosplit)/dTests.GetLength() );
 
 	int iTotal = 0;
 	int iGood = 0;
@@ -537,7 +536,9 @@ void UrlBreakBench ( const char * sBenchFile )
 			if ( *p )
 				*p++ = '\0';
 
+#if 0
 			int64_t tmWord = sphMicroTimer();
+#endif
 			UrlBreak ( tBest, sUrl );
 
 #if 0
@@ -624,8 +625,7 @@ int main ( int argc, char ** argv )
 			"\n"
 			"Options are:\n"
 			"--dict <FILENAME>\tuse FILENAME as a frequency dictionary\n"
-			"\t\t\t(default is " DEFAULT_DICT ")\n",
-			sDict
+			"\t\t\t(default is " DEFAULT_DICT ")\n"
 		);
 		return 0;
 	}

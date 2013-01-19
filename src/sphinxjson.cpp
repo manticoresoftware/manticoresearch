@@ -191,7 +191,7 @@ public:
 			// OPTIMIZE?
 			char sVal[32];
 			int64_t iVal = strtoll ( tNode.m_sValue.cstr(), NULL, 10 );
-			snprintf ( sVal, sizeof(sVal), "%lld", iVal );
+			snprintf ( sVal, sizeof(sVal), INT64_FMT, iVal );
 			if ( tNode.m_sValue==sVal )
 			{
 				tNode.m_eType = JSON_INT64;
@@ -367,6 +367,8 @@ ESphJsonType sphJsonFindKey ( const BYTE ** ppValue, const BYTE * pData, const J
 			iSkip = sphJsonUnpackInt ( &p );
 			p += iSkip;
 			break;
+		case JSON_EOF:
+			break;
 		}
 	}
 }
@@ -438,7 +440,7 @@ const BYTE * sphJsonFieldFormat ( CSphVector<BYTE> & dOut, const BYTE * pData, E
 	{
 		int iOff = dOut.GetLength();
 		dOut.Resize ( iOff+32 );
-		int iLen = snprintf ( (char *)dOut.Begin()+iOff, 32, "%lld", sphJsonLoadBigint ( &p ) );
+		int iLen = snprintf ( (char *)dOut.Begin()+iOff, 32, INT64_FMT, sphJsonLoadBigint ( &p ) );
 		dOut.Resize ( iOff+iLen );
 		break;
 	}
@@ -471,6 +473,8 @@ const BYTE * sphJsonFieldFormat ( CSphVector<BYTE> & dOut, const BYTE * pData, E
 		dOut.Add ( ']' );
 		break;
 	}
+	case JSON_EOF:
+		break;
 	}
 
 	return p;

@@ -7339,7 +7339,7 @@ public:
 			if ( dVal.GetLength() < iTotalLen+1 )
 				dVal.Resize ( iTotalLen+1 );
 
-			strcpy ( &(dVal[iValLen]), sTmp );
+			strcpy ( &(dVal[iValLen]), sTmp ); //NOLINT
 		}
 
 		// build word level factors
@@ -7352,7 +7352,7 @@ public:
 			if ( dVal.GetLength() < iTotalLen+1 )
 				dVal.Resize ( iTotalLen+1 );
 
-			strcpy ( &(dVal[iValLen]), sTmp );
+			strcpy ( &(dVal[iValLen]), sTmp ); //NOLINT
 		}
 
 		// export factors

@@ -1657,14 +1657,14 @@ int main ( int argc, char ** argv )
 
 			while ( *s )
 			{
-				if ( sphIsWild( *s ) )
+				if ( sphIsWild(*s) )
 				{
 					bHasWilds = true;
 					break;
 				}
 				s++;
 			}
-			
+
 			if ( bHasWilds )
 				dWildIndexes.Add ( argv[i] );
 			else

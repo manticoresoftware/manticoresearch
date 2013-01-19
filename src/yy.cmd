@@ -14,6 +14,7 @@ perl -npe "s/^yyerrlab1:/\/\/yyerrlab1:/m;s/  __attr/\/\/  __attr/" -i.bak yysph
 perl -npe "s/^yyerrlab1:/\/\/yyerrlab1:/m;s/  __attr/\/\/  __attr/" -i.bak yysphinxquery.c
 perl -npe "s/  __attr/\/\/  __attr/" -i.bak yysphinxjson.c
 perl -npe "s/(#include <unistd.h>)/#if !USE_WINDOWS\n\1\n#endif/;s/\(size_t\) num_to_read/num_to_read/" -i.bak llsphinxql.c
+perl -npe "s/\(size_t\) num_to_read/num_to_read/" -i.bak llsphinxjson.c
 
 if exist ..\.git todos yysphinxql.patch
 patch -s -p0 -i yysphinxql.patch

@@ -3886,6 +3886,7 @@ struct AgentConn_t : public AgentDesc_t
 public:
 	AgentConn_t ()
 		: m_iSock ( -1 )
+		, m_bFresh ( true )
 		, m_eState ( AGENT_UNUSED )
 		, m_bSuccess ( false )
 		, m_iReplyStatus ( -1 )
@@ -3897,7 +3898,6 @@ public:
 		, m_iStartQuery ( 0 )
 		, m_iEndQuery ( 0 )
 		, m_iTag ( -1 )
-		, m_bFresh ( true )
 	{}
 
 	~AgentConn_t ()
@@ -3913,7 +3913,7 @@ public:
 		if ( m_iSock>0 )
 		{
 			m_bFresh = false;
-			if ( m_bPersistent && bClosePersist || !m_bPersistent )
+			if ( ( m_bPersistent && bClosePersist ) || !m_bPersistent )
 			{
 				sphSockClose ( m_iSock );
 				m_iSock = -1;
@@ -3972,9 +3972,9 @@ public:
 		: m_iAgentConnectTimeout ( 1000 )
 		, m_iAgentQueryTimeout ( 3000 )
 		, m_bToDelete ( false )
+		, m_bDivideRemoteRanges ( false )
 		, m_eHaStrategy ( HA_RANDOM )
 		, m_pHAStorage ( NULL )
-		, m_bDivideRemoteRanges ( false )
 	{}
 	~DistributedIndex_t()
 	{
@@ -4193,7 +4193,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 	int64_t tmMaxTimer = sphMicroTimer() + pCtx->m_iTimeout*1000; // in microseconds
 
 	CSphVector<int> dWorkingSet;
-	dWorkingSet.Reserve( pCtx->m_iAgentCount );
+	dWorkingSet.Reserve ( pCtx->m_iAgentCount );
 
 #if HAVE_POLL
 	CSphVector<struct pollfd> fds;
@@ -4208,7 +4208,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 		dWorkingSet.Reset();
 
 #if HAVE_POLL
-        fds.Reset();
+		fds.Reset();
 #else
 		int iMax = 0;
 		fd_set fdsRead, fdsWrite;
@@ -4428,7 +4428,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 	int64_t tmMaxTimer = sphMicroTimer() + iTimeout*1000; // in microseconds
 
 	CSphVector<int> dWorkingSet;
-	dWorkingSet.Reserve( dAgents.GetLength() );
+	dWorkingSet.Reserve ( dAgents.GetLength() );
 
 #if HAVE_POLL
 	CSphVector<struct pollfd> fds;
@@ -4437,10 +4437,10 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 
 	for ( ;; )
 	{
-        dWorkingSet.Reset();
+		dWorkingSet.Reset();
 
 #if HAVE_POLL
-        fds.Reset();
+		fds.Reset();
 #else
 		int iMax = 0;
 		fd_set fdsRead;
@@ -4461,9 +4461,9 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 
 				dWorkingSet.Add(iAgent);
 #if HAVE_POLL
-                pollfd& pfd = fds.Add();
-                pfd.fd = tAgent.m_iSock;
-                pfd.events = POLLIN;
+				pollfd & pfd = fds.Add();
+				pfd.fd = tAgent.m_iSock;
+				pfd.events = POLLIN;
 #else
 				sphFDSet ( tAgent.m_iSock, &fdsRead );
 				iMax = Max ( iMax, tAgent.m_iSock );
@@ -5405,6 +5405,9 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 							case JSON_STRING:
 							case JSON_STRING_VECTOR:
 								iLen = tReq.GetDword();
+								break;
+							default:
+								// default size is 4, as initialized above
 								break;
 							}
 
@@ -6735,6 +6738,8 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 		case SPH_ATTR_FACTORS:
 			dFactorItems.Add ( tCol.m_tLocator );
 			break;
+		default:
+			break;
 		}
 	}
 
@@ -6869,6 +6874,8 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 							iRespLen += sphJsonUnpackInt ( &pData );
 							iRespLen += pData-pPacked;
 						}
+						break;
+					default:
 						break;
 					}
 				} else
@@ -8362,7 +8369,7 @@ struct ExprHook_t : public ISphExprHook
 			return -1;
 	}
 
-	virtual ISphExpr * CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage * pEvalStage )
+	virtual ISphExpr * CreateNode ( int DEBUGARG(iID), ISphExpr * pLeft, ESphEvalStage * pEvalStage )
 	{
 		assert ( iID==HOOK_SNIPPET );
 		if ( pEvalStage )
@@ -8376,7 +8383,7 @@ struct ExprHook_t : public ISphExprHook
 		return SPH_ATTR_NONE;
 	}
 
-	virtual ESphAttr GetReturnType ( int iID, const CSphVector<ESphAttr> & dArgs, bool, CSphString & sError )
+	virtual ESphAttr GetReturnType ( int DEBUGARG(iID), const CSphVector<ESphAttr> & dArgs, bool, CSphString & sError )
 	{
 		assert ( iID==HOOK_SNIPPET );
 		if ( dArgs.GetLength()!=2 )
@@ -12995,7 +13002,7 @@ public:
 	inline void DataTuplet ( const char * pLeft, int64_t iRight )
 	{
 		char sTmp[SPH_MAX_NUMERIC_STR];
-		snprintf ( sTmp, sizeof(sTmp), "%lld", iRight );
+		snprintf ( sTmp, sizeof(sTmp), INT64_FMT, iRight );
 		DataTuplet ( pLeft, sTmp );
 	}
 
@@ -13019,8 +13026,8 @@ class TableLike : public CheckLike
 public:
 
 	explicit TableLike ( SqlRowBuffer_c & tOut, const char * sPattern = NULL )
-		: m_tOut ( tOut )
-		, CheckLike ( sPattern )
+		: CheckLike ( sPattern )
+		, m_tOut ( tOut )
 	{}
 
 	bool MatchAdd ( const char* sValue )

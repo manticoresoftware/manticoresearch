@@ -1384,7 +1384,7 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizerIndexing->Clone ( false ) ); // avoid race
 	if ( m_tSettings.m_bAotFilter )
 		pTokenizer = sphAotCreateFilter ( pTokenizer.LeakPtr(), m_pDict ); // OPTIMIZE? do not create filter on each(!) INSERT
-		
+
 	CSphSource_StringVector tSrc ( iFields, ppFields, m_tSchema );
 
 	// SPZ setup
@@ -6871,10 +6871,11 @@ CSphIndexStatus RtIndex_t::GetStatus () const
 	Verify ( m_tRwlock.ReadLock() );
 
 	tRes.m_iRamUse = sizeof(RtIndex_t)
-		+ m_pSegments.GetLength()*int(sizeof(RtSegment_t) + sizeof(RtSegment_t*))
-		+ m_dNewSegmentKlist.GetLength()*int(sizeof(SphDocID_t))
-		+ m_dDiskChunkKlist.GetLength()*int(sizeof(SphAttr_t))
-		+ m_pDiskChunks.GetLength()*int(sizeof(CSphIndex*));
+		+ m_pSegments.GetSizeBytes()
+		+ m_pSegments.GetLength()*int(sizeof(RtSegment_t))
+		+ m_dNewSegmentKlist.GetSizeBytes()
+		+ m_dDiskChunkKlist.GetSizeBytes()
+		+ m_pDiskChunks.GetSizeBytes();
 
 	tRes.m_iRamUse += GetUsedRam();
 

@@ -865,38 +865,49 @@ static inline bool IsAlphaUtf8 ( const BYTE * pWord )
 /// returns 0 and aborts early if non-russian letters are encountered
 static inline int Utf8ToWin1251 ( BYTE * pOut, const BYTE * pWord )
 {
+	// YO, win A8, utf D0 81
+	// A..YA, win C0..DF, utf D0 90..D0 AF
+	// a..p, win E0..EF, utf D0 B0..D0 BF
+	// r..ya, win F0..FF, utf D1 80..D1 8F
+	// yo, win B8, utf D1 91
+	static const BYTE dTable[128] =
+	{
+		0, 0xa8, 0, 0, 0, 0, 0, 0, // 00
+		0, 0, 0, 0, 0, 0, 0, 0, // 08
+		0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, // 10
+		0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf, // 18
+		0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7, // 20
+		0xd8, 0xd9, 0xda, 0xdb, 0xdc, 0xdd, 0xde, 0xdf, // 28
+		0xe0, 0xe1, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7, // 30
+		0xe8, 0xe9, 0xea, 0xeb, 0xec, 0xed, 0xee, 0xef, // 38
+		0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, // 40
+		0xf8, 0xf9, 0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff, // 48
+		0, 0xb8, 0, 0, 0, 0, 0, 0, // 50
+		0, 0, 0, 0, 0, 0, 0, 0, // 58
+		0, 0, 0, 0, 0, 0, 0, 0, // 60
+		0, 0, 0, 0, 0, 0, 0, 0, // 68
+		0, 0, 0, 0, 0, 0, 0, 0, // 70
+		0, 0, 0, 0, 0, 0, 0, 0 // 78
+	};
+
 	BYTE * pStart = pOut;
 	while ( *pWord )
 	{
-		// FIXME? support yo?
-		if ( pWord[0]==0xD0 )
-		{
-			// A..YA, C0..DF, D0 90..D0 AF
-			// a..p, E0..EF, D0 B0..D0 BF
-			// YO, A8, D0 81
-			BYTE uRes = pWord[1] + 0x30;
-			if ( uRes>=0xC0 ) // we don't check for < 0xF0, that is invalid UTF-8
-				*pOut++ = uRes;
-			else if ( uRes==0xB1 )
-				*pOut++ = 0xA8;
-			else
-				return 0;
-		} else if ( pWord[0]==0xD1 )
-		{
-			// r..ya, F0..FF, D1 80..D1 8F
-			// yo, B8, D1 91
-			if ( ( pWord[1] & 0xF0 )==0x80 )
-				*pOut++ = pWord[1] + 0x70;
-			else if ( pWord[1]==0x91 )
-				*pOut++ = 0xB8;
-			else
-				return 0;
-		} else
-		{
-			return false;
-		}
+		// russian utf-8 letters begin with either D0 or D1
+		// and any valid 2nd utf-8 byte must be in 80..BF range
+		if ( ( *pWord & 0xFE )!=0xD0 )
+			return 0;
+		assert ( pWord[1]>=0x80 && pWord[1]<0xC0 );
+
+		// table index D0 80..BF to 0..3F, and D1 80..BF to 40..7F
+		register BYTE uWin = dTable [ ( pWord[1] & 0x7F ) + ( ( pWord[0] & 1 )<<6 ) ];
 		pWord += 2;
+
+		if ( !uWin )
+			return 0;
+		*pOut++ = uWin;
 	}
+
 	*pOut = '\0';
 	return (int)( pOut-pStart );
 }
@@ -972,10 +983,7 @@ void sphAotLemmatizeRu ( CSphVector<CSphString> & dLemmas, const BYTE * pWord, b
 			sForm [ iFormLen++ ] = *pWord++;
 		sForm [ iFormLen ] = '\0';
 	}
-	if ( !iFormLen )
-		return;
-
-	if ( iFormLen==1 )
+	if ( iFormLen<=1 )
 		return;
 
 	if ( IsFreq2(sForm) || IsFreq3(sForm) )
@@ -1137,11 +1145,8 @@ public:
 			m_sForm [ m_iFormLen ] = '\0';
 		}
 
-		if ( !m_iFormLen )
-			return pToken;
-
 		// do nothing with one-char words
-		if ( m_iFormLen==1 )
+		if ( m_iFormLen<=1 )
 			return pToken;
 
 		// handle a few most frequent 2-char, 3-char pass-through words

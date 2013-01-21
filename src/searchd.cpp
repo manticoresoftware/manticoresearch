@@ -4284,36 +4284,52 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 			bool bWriteable = FD_ISSET ( tAgent.m_iSock, &fdsWrite )!=0;
 #endif
 
-			// check if connection completed
-			// tricky part, with select, we MUST use write-set ONLY here at this check
-			// even though we can't tell connect() success from just OS send buffer availability
-			// but any check involving read-set just never ever completes, so...
-			if ( tAgent.m_eState==AGENT_CONNECTING && bWriteable )
+			if ( tAgent.m_eState==AGENT_CONNECTING )
 			{
-				int iErr = 0;
-				socklen_t iErrLen = sizeof(iErr);
-				getsockopt ( tAgent.m_iSock, SOL_SOCKET, SO_ERROR, (char*)&iErr, &iErrLen );
-				if ( iErr )
+#if HAVE_POLL
+				if ( ( fds[i].revents & ( POLLERR | POLLHUP ) )!=0 )
 				{
+					int iErr = 0;
+					socklen_t iErrLen = sizeof(iErr);
+					getsockopt ( tAgent.m_iSock, SOL_SOCKET, SO_ERROR, (char*)&iErr, &iErrLen );
 					// connect() failure
 					tAgent.m_sFailure.SetSprintf ( "connect() failed: %s", sphSockError(iErr) );
 					tAgent.Close ();
 					agent_stats_inc ( tAgent, eConnectFailures );
-				} else
+					continue;
+				}
+#else
+				// check if connection completed
+				// tricky part, with select, we MUST use write-set ONLY here at this check
+				// even though we can't tell connect() success from just OS send buffer availability
+				// but any check involving read-set just never ever completes, so...
+				if ( bWriteable )
 				{
-					// connect() success
-					tAgent.m_eState = AGENT_HANDSHAKE;
-					// send the client's proto version right now to avoid w-w-r pattern.
-					NetOutputBuffer_c tOut ( tAgent.m_iSock );
-					tOut.SendDword ( SPHINX_CLIENT_VERSION );
-					bool bFlushed = tOut.Flush (); // FIXME! handle flush failure?
+					int iErr = 0;
+					socklen_t iErrLen = sizeof(iErr);
+					getsockopt ( tAgent.m_iSock, SOL_SOCKET, SO_ERROR, (char*)&iErr, &iErrLen );
+					if ( iErr )
+					{
+						// connect() failure
+						tAgent.m_sFailure.SetSprintf ( "connect() failed: %s", sphSockError(iErr) );
+						tAgent.Close ();
+						agent_stats_inc ( tAgent, eConnectFailures );
+						continue;
+					}
+				}
+#endif
+				// connect() success
+				tAgent.m_eState = AGENT_HANDSHAKE;
+				// send the client's proto version right now to avoid w-w-r pattern.
+				NetOutputBuffer_c tOut ( tAgent.m_iSock );
+				tOut.SendDword ( SPHINX_CLIENT_VERSION );
+				bool bFlushed = tOut.Flush (); // FIXME! handle flush failure?
 // fix #1071
 #ifdef	TCP_NODELAY
-					int bNoDelay = 1;
-					if ( bFlushed && tAgent.m_iFamily==AF_INET )
-						setsockopt ( tAgent.m_iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&bNoDelay, sizeof(bNoDelay) );
+				int bNoDelay = 1;
+				if ( bFlushed && tAgent.m_iFamily==AF_INET )
+					setsockopt ( tAgent.m_iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&bNoDelay, sizeof(bNoDelay) );
 #endif
-				}
 				continue;
 			}
 

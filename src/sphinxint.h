@@ -94,7 +94,7 @@ public:
 	void			UnlinkFile (); /// some shit happened (outside) and the file is no more actual.
 
 	void			PutByte ( int uValue );
-	void			PutBytes ( const void * pData, int iSize );
+	void			PutBytes ( const void * pData, int64_t iSize );
 	void			PutDword ( DWORD uValue ) { PutBytes ( &uValue, sizeof(DWORD) ); }
 	void			PutOffset ( SphOffset_t uValue ) { PutBytes ( &uValue, sizeof(SphOffset_t) ); }
 	void			PutString ( const char * szString );
@@ -400,7 +400,7 @@ inline int64_t MVA_UPSIZE ( const DWORD * pMva )
 	return iMva;
 }
 
-
+// FIXME!!! for over INT_MAX attributes
 /// attr min-max builder
 template < typename DOCID = SphDocID_t >
 class AttrIndexBuilder_t : ISphNoncopyable
@@ -450,18 +450,17 @@ public:
 
 	/// actually used part of output buffer, only used with index merge
 	/// (we reserve space for rows from both indexes, but might kill some rows)
-	inline DWORD GetActualSize() const
+	inline int64_t GetActualSize() const
 	{
-		return 2 * m_uElements * m_uStride;
+		return int64_t ( m_uElements ) * m_uStride * 2;
 	}
 
 	/// how many DWORDs will we need for block index
-	inline DWORD GetExpectedSize ( int64_t uMaxDocs ) const
+	inline int64_t GetExpectedSize ( int64_t iMaxDocs ) const
 	{
-		assert ( uMaxDocs>=0 );
-		assert ( uMaxDocs<=UINT_MAX ); // we don't expect 4G docs per just 1 local index!
-		DWORD uDocinfoIndex = ( DWORD(uMaxDocs) + DOCINFO_INDEX_FREQ - 1 ) / DOCINFO_INDEX_FREQ;
-		return 2 * ( 1 + uDocinfoIndex ) * m_uStride;
+		assert ( iMaxDocs>=0 );
+		int64_t iDocinfoIndex = ( iMaxDocs + DOCINFO_INDEX_FREQ - 1 ) / DOCINFO_INDEX_FREQ;
+		return ( iDocinfoIndex + 1 ) * m_uStride * 2;
 	}
 };
 

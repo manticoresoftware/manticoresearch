@@ -7549,7 +7549,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 			// (word_docs > total_docs) case *is* occasionally possible
 			// because of dupes, or delayed purging in RT, etc
 			// FIXME? we don't expect over 4G docs per just 1 local index
-			const DWORD iTotalClamped = Max ( (DWORD)tSourceStats.m_iTotalDocuments, DWORD(tWord.m_iDocs) );
+			const int64_t iTotalClamped = Max ( tSourceStats.m_iTotalDocuments, int64_t(tWord.m_iDocs) );
 
 			if ( !pQuery->m_bPlainIDF )
 			{

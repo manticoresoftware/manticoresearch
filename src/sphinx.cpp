@@ -1516,7 +1516,7 @@ public:
 	virtual void				Dealloc ();
 
 	virtual bool				Preread ();
-	template<typename T> bool	PrereadSharedBuffer ( CSphSharedBuffer<T> & pBuffer, const char * sExt, size_t uExpected=0, DWORD uOffset=0 );
+	template<typename T> bool	PrereadSharedBuffer ( CSphSharedBuffer<T> & pBuffer, const char * sExt, int64_t iExpected=0, int64_t iOffset=0 );
 
 	virtual void				SetBase ( const char * sNewBase );
 	virtual bool				Rename ( const char * sNewBase );
@@ -1577,9 +1577,9 @@ private:
 	static const int			DOCINFO_HASH_BITS	= 18;	// FIXME! make this configurable
 
 	CSphSharedBuffer<DWORD>		m_pDocinfo;				///< my docinfo cache
-	DWORD						m_uDocinfo;				///< my docinfo cache size
+	int64_t						m_iDocinfo;				///< my docinfo cache size
 	CSphSharedBuffer<DWORD>		m_pDocinfoHash;			///< hashed ids, to accelerate lookups
-	DWORD						m_uDocinfoIndex;		///< docinfo "index" entries count (each entry is 2x docinfo rows, for min/max)
+	int64_t						m_iDocinfoIndex;		///< docinfo "index" entries count (each entry is 2x docinfo rows, for min/max)
 	DWORD *						m_pDocinfoIndex;		///< docinfo "index", to accelerate filtering during full-scan (2x rows for each block, and 2x rows for the whole index, 1+m_uDocinfoIndex entries)
 
 	CSphSharedBuffer<DWORD>		m_pMva;					///< my multi-valued attrs cache
@@ -6321,13 +6321,13 @@ void CSphWriter::PutByte ( int data )
 }
 
 
-void CSphWriter::PutBytes ( const void * pData, int iSize )
+void CSphWriter::PutBytes ( const void * pData, int64_t iSize )
 {
 	assert ( m_pPool );
 	const BYTE * pBuf = (const BYTE *) pData;
 	while ( iSize>0 )
 	{
-		int iPut = Min ( iSize, m_iBufferSize );
+		int iPut = ( iSize<m_iBufferSize ? int(iSize) : m_iBufferSize ); // comparison int64 to int32
 		if ( m_iPoolUsed+iPut>m_iBufferSize )
 			Flush ();
 		assert ( m_iPoolUsed+iPut<=m_iBufferSize );
@@ -6838,7 +6838,7 @@ int CSphReader::GetLine ( char * sBuffer, int iMaxLen )
 
 #if PARANOID
 
-#define SPH_UNZIP_IMPL(_type,_getexpr) \
+#define SPH_VARINT_DECODE(_type,_getexpr) \
 	register DWORD b = 0; \
 	register _type v = 0; \
 	int it = 0; \
@@ -8217,8 +8217,8 @@ CSphIndex_VLN::CSphIndex_VLN ( const char* sIndexName, const char * sFilename )
 {
 	m_sFilename = sFilename;
 
-	m_uDocinfo = 0;
-	m_uDocinfoIndex = 0;
+	m_iDocinfo = 0;
+	m_iDocinfoIndex = 0;
 	m_pDocinfoIndex = NULL;
 
 	m_bPreallocated = false;
@@ -8274,7 +8274,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 
 	// check if we have to
 	assert ( (int)uRows==tUpd.m_dRowOffset.GetLength() );
-	if ( !m_uDocinfo || !uRows )
+	if ( !m_iDocinfo || !uRows )
 		return 0;
 
 	if ( g_pBinlog )
@@ -8444,10 +8444,10 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 		if ( !pEntry )
 			continue; // no such id
 
-		int iBlock = ( pEntry-m_pDocinfo.GetWritePtr() ) / ( iRowStride*DOCINFO_INDEX_FREQ );
-		DWORD * pBlockRanges = const_cast < DWORD * > ( &m_pDocinfoIndex[2*iBlock*iRowStride] );
-		DWORD * pIndexRanges = const_cast < DWORD * > ( &m_pDocinfoIndex[2*m_uDocinfoIndex*iRowStride] );
-		assert ( iBlock>=0 && iBlock<(int)m_uDocinfoIndex );
+		int64_t iBlock = int64_t ( pEntry-m_pDocinfo.GetWritePtr() ) / ( iRowStride*DOCINFO_INDEX_FREQ );
+		DWORD * pBlockRanges = const_cast < DWORD * > ( &m_pDocinfoIndex[iBlock*iRowStride*2] );
+		DWORD * pIndexRanges = const_cast < DWORD * > ( &m_pDocinfoIndex[m_iDocinfoIndex*iRowStride*2] );
+		assert ( iBlock>=0 && iBlock<m_iDocinfoIndex );
 
 		assert ( bRaw || ( DOCINFO2ID(pEntry)==tUpd.m_dDocids[iUpd] ) );
 		pEntry = DOCINFO2ATTRS(pEntry);
@@ -8718,30 +8718,29 @@ bool CSphIndex_VLN::LoadPersistentMVA ( CSphString & sError )
 
 bool CSphIndex_VLN::PrecomputeMinMax()
 {
-	if ( !m_uDocinfo )
+	if ( !m_iDocinfo )
 		return true;
 
 	AttrIndexBuilder_c tBuilder ( m_tSchema );
-	tBuilder.Prepare ( m_pDocinfoIndex, m_pDocinfoIndex + 2*( 1+m_uDocinfoIndex )*( DOCINFO_IDSIZE + m_tSchema.GetRowSize() ) );
+	tBuilder.Prepare ( m_pDocinfoIndex, m_pDocinfoIndex + ( m_iDocinfoIndex+1 ) * 2 * ( DOCINFO_IDSIZE + m_tSchema.GetRowSize() ) );
 
-	DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
-	DWORD uProgressEntry = 0;
+	int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 	m_tProgress.m_ePhase = CSphIndexProgress::PHASE_PRECOMPUTE;
 	m_tProgress.m_iDone = 0;
 	m_uMinMaxIndex = 0;
 
-	for ( DWORD uIndexEntry=0; uIndexEntry<m_uDocinfo; uIndexEntry++ )
+	for ( int64_t iIndexEntry=0; iIndexEntry<m_iDocinfo; iIndexEntry++ )
 	{
-		if ( !tBuilder.Collect ( &m_pDocinfo[(int64_t(uIndexEntry))*uStride], m_pMva.GetWritePtr(),
+		if ( !tBuilder.Collect ( m_pDocinfo.GetWritePtr() + iIndexEntry * iStride, m_pMva.GetWritePtr(),
 			(int64_t)m_pMva.GetNumEntries(), m_sLastError, true ) )
 				return false;
-		m_uMinMaxIndex += uStride;
+		m_uMinMaxIndex += iStride;
 
 		// show progress
-		if ( uIndexEntry==uProgressEntry )
+		int64_t iDone = (iIndexEntry+1)*1000/m_iDocinfoIndex;
+		if ( iDone!=m_tProgress.m_iDone )
 		{
-			uProgressEntry = Min ( uIndexEntry+1000, m_uDocinfoIndex-1 );
-			m_tProgress.m_iDone = (uIndexEntry+1)*1000/m_uDocinfoIndex;
+			m_tProgress.m_iDone = (int)iDone;
 			m_tProgress.Show ( m_tProgress.m_iDone==1000 );
 		}
 	}
@@ -8788,14 +8787,14 @@ bool CSphIndex_VLN::JuggleFile ( const char* szExt, CSphString & sError, bool bN
 
 bool CSphIndex_VLN::SaveAttributes ( CSphString & sError ) const
 {
-	if ( !m_pAttrsStatus || !*m_pAttrsStatus || !m_uDocinfo )
+	if ( !m_pAttrsStatus || !*m_pAttrsStatus || !m_iDocinfo )
 		return true;
 
 	DWORD uAttrStatus = *m_pAttrsStatus;
 
 	sphLogDebugvv ( "index '%s' attrs (%d) saving...", m_sIndexName.cstr(), uAttrStatus );
 
-	assert ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && m_uDocinfo && m_pDocinfo.GetWritePtr() );
+	assert ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && m_iDocinfo && m_pDocinfo.GetWritePtr() );
 
 	for ( ; uAttrStatus & ATTRS_MVA_UPDATED ; )
 	{
@@ -8873,19 +8872,19 @@ bool CSphIndex_VLN::SaveAttributes ( CSphString & sError ) const
 		return false;
 	}
 
-	assert ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && m_uDocinfo && m_pDocinfo.GetWritePtr() );
+	assert ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && m_iDocinfo && m_pDocinfo.GetWritePtr() );
 
 	// save current state
 	CSphAutofile fdTmpnew ( GetIndexFileName("spa.tmpnew"), SPH_O_NEW, sError );
 	if ( fdTmpnew.GetFD()<0 )
 		return false;
 
-	size_t uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
-	size_t uSize = uStride*size_t(m_uDocinfo)*sizeof(DWORD);
+	int uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+	int64_t iSize = m_iDocinfo*sizeof(DWORD)*uStride;
 	if ( m_uVersion>=20 )
-		uSize += 2*(1+m_uDocinfoIndex)*uStride*sizeof(CSphRowitem);
+		iSize += (m_iDocinfoIndex+1)*uStride*sizeof(CSphRowitem)*2;
 
-	if ( !sphWriteThrottled ( fdTmpnew.GetFD(), m_pDocinfo.GetWritePtr(), uSize, "docinfo", sError, &g_tThrottle ) )
+	if ( !sphWriteThrottled ( fdTmpnew.GetFD(), m_pDocinfo.GetWritePtr(), iSize, "docinfo", sError, &g_tThrottle ) )
 		return false;
 
 	fdTmpnew.Close ();
@@ -11704,6 +11703,12 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		m_tStats.m_iTotalBytes += pSource->GetStats().m_iTotalBytes;
 	}
 
+	if ( m_tStats.m_iTotalDocuments>=INT_MAX )
+	{
+		m_sLastError.SetSprintf ( "index over %d documents not supported (got documents count="INT64_FMT")", INT_MAX, m_tStats.m_iTotalDocuments );
+		return 0;
+	}
+
 	// flush last docinfo block
 	int iDocinfoLastBlockSize = 0;
 	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && pDocinfo>dDocinfos.Begin() )
@@ -11968,11 +11973,18 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 		// prepare the collector for min/max of attributes
 		AttrIndexBuilder_c tMinMax ( m_tSchema );
-		CSphVector<DWORD> dMinMaxBuffer ( tMinMax.GetExpectedSize ( m_tStats.m_iTotalDocuments ) );
+		int64_t iMinMaxSize = tMinMax.GetExpectedSize ( m_tStats.m_iTotalDocuments );
+		if ( iMinMaxSize>INT_MAX || m_tStats.m_iTotalDocuments>INT_MAX )
+		{
+			m_sLastError.SetSprintf ( "attribute files (.spa) over 128 GB are not supported (min-max approximate="INT64_FMT", documents count="INT64_FMT")",
+				iMinMaxSize, m_tStats.m_iTotalDocuments );
+			return 0;
+		}
+		CSphFixedVector<DWORD> dMinMaxBuffer ( (int)iMinMaxSize );
 
 		// { fixed row + dummy value ( zero offset elemination ) + mva data for that row } fixed row - for MinMaxBuilder
 		CSphVector < DWORD > dMvaPool;
-		tMinMax.Prepare ( dMinMaxBuffer.Begin(), dMinMaxBuffer.Begin() + dMinMaxBuffer.GetLength() );
+		tMinMax.Prepare ( dMinMaxBuffer.Begin(), dMinMaxBuffer.Begin() + dMinMaxBuffer.GetLength() ); // FIXME!!! for over INT_MAX blocks
 
 		SphDocID_t uLastDupe = 0;
 		while ( qDocinfo.GetLength() )
@@ -12137,8 +12149,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					sphWarn ( "failed to truncate %s", fdDocinfos.GetFilename() );
 		}
 		tMinMax.FinishCollect();
-		if ( !sphWriteThrottled ( iDocinfoFD, dMinMaxBuffer.Begin(),
-			sizeof(DWORD)*tMinMax.GetActualSize(), "minmax_docinfo", m_sLastError, &g_tThrottle ) )
+		int64_t iMinMaxRealSize = tMinMax.GetActualSize() * sizeof(DWORD);
+		if ( !sphWriteThrottled ( iDocinfoFD, dMinMaxBuffer.Begin(), iMinMaxRealSize, "minmax_docinfo", m_sLastError, &g_tThrottle ) )
 				return 0;
 
 		// clean up readers
@@ -12710,6 +12722,16 @@ static ISphFilter * CreateMergeFilters ( const CSphVector<CSphFilterSettings> & 
 	return pResult;
 }
 
+static bool CheckDocsCount ( int64_t iDocs, CSphString & sError )
+{
+	if ( iDocs<INT_MAX )
+		return true;
+
+	sError.SetSprintf ( "index over %d documents not supported (got "INT64_FMT" documents)", INT_MAX, iDocs );
+	return false;
+}
+
+
 class CSphMerger
 {
 private:
@@ -13170,7 +13192,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 	CSphVector<SphAttr_t> dPhantomKiller;
 
-	int iTotalDocuments = 0;
+	int64_t iTotalDocuments = 0;
 	bool bNeedInfinum = true;
 	// minimal docid-1 for merging
 	SphDocID_t iMergeInfinum = 0;
@@ -13185,23 +13207,30 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		if ( !wrRows.OpenFile ( pDstIndex->GetIndexFileName("tmp.spa"), sError ) )
 			return false;
 
+		int64_t iExpectedDocs = pDstIndex->m_tStats.m_iTotalDocuments + pSrcIndex->GetStats().m_iTotalDocuments;
 		AttrIndexBuilder_c tMinMax ( pDstIndex->m_tSchema );
-		CSphVector<DWORD> dMinMaxBuffer ( tMinMax.GetExpectedSize ( pDstIndex->m_tStats.m_iTotalDocuments
-			+ pSrcIndex->GetStats().m_iTotalDocuments ) );
-		tMinMax.Prepare ( dMinMaxBuffer.Begin(), dMinMaxBuffer.Begin() + dMinMaxBuffer.GetLength() );
+		int64_t iMinMaxSize = tMinMax.GetExpectedSize ( iExpectedDocs );
+		if ( iMinMaxSize>INT_MAX || iExpectedDocs>INT_MAX )
+		{
+			sError.SetSprintf ( "attribute files (.spa) over 128 GB are not supported (min-max approximate="INT64_FMT", documents count="INT64_FMT")",
+				iMinMaxSize, iExpectedDocs );
+			return false;
+		}
+		CSphFixedVector<DWORD> dMinMaxBuffer ( (int)iMinMaxSize );
+		tMinMax.Prepare ( dMinMaxBuffer.Begin(), dMinMaxBuffer.Begin() + dMinMaxBuffer.GetLength() ); // FIXME!!! for over INT_MAX blocks
 
 		const DWORD * pSrcRow = pSrcIndex->m_pDocinfo.GetWritePtr(); // they *can* be null if the respective index is empty
 		const DWORD * pDstRow = pDstIndex->m_pDocinfo.GetWritePtr();
 
-		DWORD iSrcCount = 0;
-		DWORD iDstCount = 0;
+		int64_t iSrcCount = 0;
+		int64_t iDstCount = 0;
 
 		CSphMatch tMatch;
-		while ( iSrcCount < pSrcIndex->m_uDocinfo || iDstCount < pDstIndex->m_uDocinfo )
+		while ( iSrcCount < pSrcIndex->m_iDocinfo || iDstCount < pDstIndex->m_iDocinfo )
 		{
 			SphDocID_t iDstDocID, iSrcDocID;
 
-			if ( iDstCount < pDstIndex->m_uDocinfo )
+			if ( iDstCount < pDstIndex->m_iDocinfo )
 			{
 				iDstDocID = DOCINFO2ID ( pDstRow );
 				if ( pFilter )
@@ -13219,7 +13248,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 			} else
 				iDstDocID = 0;
 
-			if ( iSrcCount < pSrcIndex->m_uDocinfo )
+			if ( iSrcCount < pSrcIndex->m_iDocinfo )
 				iSrcDocID = DOCINFO2ID ( pSrcRow );
 			else
 				iSrcDocID = 0;
@@ -13287,7 +13316,8 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		if ( iTotalDocuments )
 		{
 			tMinMax.FinishCollect();
-			wrRows.PutBytes ( &dMinMaxBuffer[0], sizeof(DWORD) * tMinMax.GetActualSize() );
+			int64_t iMinMaxSize = tMinMax.GetActualSize() * sizeof(DWORD);
+			wrRows.PutBytes ( dMinMaxBuffer.Begin(), iMinMaxSize );
 		}
 		wrRows.CloseFile();
 		if ( wrRows.IsError() )
@@ -13308,6 +13338,9 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		CSphAutofile fdSpa ( pDstIndex->GetIndexFileName("tmp.spa"), SPH_O_NEW, sError );
 		fdSpa.Close();
 	}
+
+	if ( !CheckDocsCount ( iTotalDocuments, sError ) )
+		return false;
 
 	// create phantom killlist filter
 	if ( dPhantomKiller.GetLength() )
@@ -13650,7 +13683,7 @@ bool CSphIndex_VLN::HasDocid ( SphDocID_t uDocid ) const
 
 const DWORD * CSphIndex_VLN::FindDocinfo ( SphDocID_t uDocID ) const
 {
-	if ( m_uDocinfo<=0 )
+	if ( m_iDocinfo<=0 )
 		return NULL;
 
 	assert ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN );
@@ -13658,10 +13691,10 @@ const DWORD * CSphIndex_VLN::FindDocinfo ( SphDocID_t uDocID ) const
 	assert ( m_tSchema.GetAttrsCount() );
 
 	int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
-	int iStart = 0;
-	int iEnd = m_uDocinfo-1;
+	int64_t iStart = 0;
+	int64_t iEnd = m_iDocinfo-1;
 
-#define LOC_ROW(_index) &m_pDocinfo [ int64_t(_index)*iStride ]
+#define LOC_ROW(_index) &m_pDocinfo [ _index*iStride ]
 #define LOC_ID(_index) DOCINFO2ID(LOC_ROW(_index))
 
 	if ( m_pDocinfoHash.GetLength() )
@@ -13671,12 +13704,12 @@ const DWORD * CSphIndex_VLN::FindDocinfo ( SphDocID_t uDocID ) const
 		if ( uDocID<uFirst || uDocID>uLast )
 			return NULL;
 
-		DWORD uHash = (DWORD)( ( uDocID - uFirst ) >> m_pDocinfoHash[0] );
-		if ( uHash > ( 1 << DOCINFO_HASH_BITS ) ) // possible in case of broken data, for instance
+		int64_t iHash = ( ( uDocID - uFirst ) >> m_pDocinfoHash[0] );
+		if ( iHash > ( 1 << DOCINFO_HASH_BITS ) ) // possible in case of broken data, for instance
 			return NULL;
 
-		iStart = m_pDocinfoHash [ uHash+1 ];
-		iEnd = m_pDocinfoHash [ uHash+2 ] - 1;
+		iStart = m_pDocinfoHash [ iHash+1 ];
+		iEnd = m_pDocinfoHash [ iHash+2 ] - 1;
 	}
 
 	if ( uDocID==LOC_ID(iStart) )
@@ -13693,7 +13726,7 @@ const DWORD * CSphIndex_VLN::FindDocinfo ( SphDocID_t uDocID ) const
 		assert ( uDocID > LOC_ID(iStart) );
 		assert ( uDocID < LOC_ID(iEnd) );
 
-		int iMid = iStart + (iEnd-iStart)/2;
+		int64_t iMid = iStart + (iEnd-iStart)/2;
 		if ( uDocID==LOC_ID(iMid) )
 			return LOC_ROW(iMid);
 		else if ( uDocID<LOC_ID(iMid) )
@@ -13944,7 +13977,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 		pResult->m_sWarning.SetSprintf ( "packedfactors() will not work with a fullscan; you need to specify a query" );
 
 	// check if index has data
-	if ( m_bIsEmpty || m_uDocinfo<=0 || m_pDocinfo.IsEmpty() )
+	if ( m_bIsEmpty || m_iDocinfo<=0 || m_pDocinfo.IsEmpty() )
 		return true;
 
 	// start counting
@@ -13975,10 +14008,10 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 		return false;
 
 	// check if we can early reject the whole index
-	if ( tCtx.m_pFilter && m_uDocinfoIndex )
+	if ( tCtx.m_pFilter && m_iDocinfoIndex )
 	{
 		DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
-		DWORD * pMinEntry = const_cast<DWORD*> ( &m_pDocinfoIndex [ 2*m_uDocinfoIndex*uStride ] );
+		DWORD * pMinEntry = const_cast<DWORD*> ( &m_pDocinfoIndex [ m_iDocinfoIndex*uStride*2 ] );
 		DWORD * pMaxEntry = pMinEntry + uStride;
 
 		if ( !tCtx.m_pFilter->EvalBlock ( pMinEntry, pMaxEntry ) )
@@ -14046,17 +14079,17 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	{
 		// do scan
 		DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
-		DWORD uStart = pQuery->m_bReverseScan ? ( m_uDocinfoIndex-1 ) : 0;
+		int64_t iStart = pQuery->m_bReverseScan ? ( m_iDocinfoIndex-1 ) : 0;
 		int iStep = pQuery->m_bReverseScan ? -1 : 1;
 
 		int iCutoff = pQuery->m_iCutoff;
 		if ( iCutoff<=0 )
 			iCutoff = -1;
 
-		for ( DWORD uIndexEntry=uStart; uIndexEntry<m_uDocinfoIndex; uIndexEntry+=iStep )
+		for ( int64_t iIndexEntry=iStart; iIndexEntry<m_iDocinfoIndex; iIndexEntry+=iStep )
 		{
 			// block-level filtering
-			const DWORD * pMin = &m_pDocinfoIndex[2*uIndexEntry*uStride];
+			const DWORD * pMin = &m_pDocinfoIndex[ iIndexEntry*uStride*2 ];
 			const DWORD * pMax = pMin + uStride;
 
 			// check applicable filters
@@ -14064,8 +14097,8 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 				continue;
 
 			// row-level filtering
-			const DWORD * pBlockStart = &m_pDocinfo [ ( int64_t ( uIndexEntry ) )*uStride*DOCINFO_INDEX_FREQ ];
-			const DWORD * pBlockEnd = &m_pDocinfo [ ( int64_t ( Min ( ( uIndexEntry+1 )*DOCINFO_INDEX_FREQ, m_uDocinfo ) - 1 ) )*uStride ];
+			const DWORD * pBlockStart = &m_pDocinfo [ iIndexEntry*uStride*DOCINFO_INDEX_FREQ ];
+			const DWORD * pBlockEnd = &m_pDocinfo [ ( Min ( ( iIndexEntry+1 )*DOCINFO_INDEX_FREQ, m_iDocinfo ) - 1 ) * uStride ];
 
 			if ( !tCtx.m_pOverrides && tCtx.m_pFilter && !pQuery->m_iCutoff
 				&& !tCtx.m_dCalcFilter.GetLength() && !tCtx.m_dCalcSort.GetLength() )
@@ -14124,7 +14157,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 					// handle cutoff
 					if ( bNewMatch && --iCutoff==0 )
 					{
-						uIndexEntry = m_uDocinfoIndex; // outer break
+						iIndexEntry = m_iDocinfoIndex; // outer break
 						break;
 					}
 				}
@@ -14399,7 +14432,7 @@ void CSphIndex_VLN::Dealloc ()
 	m_tWordlist.Reset ();
 	m_pSkiplists.Reset ();
 
-	m_uDocinfo = 0;
+	m_iDocinfo = 0;
 	m_uMinMaxIndex = 0;
 	m_tSettings.m_eDocinfo = SPH_DOCINFO_NONE;
 
@@ -14883,25 +14916,25 @@ void CSphIndex_VLN::DebugDumpDocids ( FILE * fp )
 
 	const int iRowStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 
-	const DWORD uNumMinMaxRow = ( m_uVersion>=20 ) ? ( 2*(1+m_uDocinfoIndex)*iRowStride ) : 0;
-	const int64_t uNumRows = (m_pDocinfo.GetNumEntries()-uNumMinMaxRow) / iRowStride; // all 32bit, as we don't expect 2 billion documents per single physical index
+	const int64_t iNumMinMaxRow = ( m_uVersion>=20 ) ? ( (m_iDocinfoIndex+1)*iRowStride*2 ) : 0;
+	const int64_t iNumRows = (m_pDocinfo.GetNumEntries()-iNumMinMaxRow) / iRowStride;
 
-	const uint64_t uDocinfoSize = iRowStride*size_t(m_uDocinfo)*sizeof(DWORD);
-	const uint64_t uMinmaxSize = uNumMinMaxRow*sizeof(CSphRowitem);
+	const int64_t iDocinfoSize = iRowStride*m_iDocinfo*sizeof(DWORD);
+	const int64_t iMinmaxSize = iNumMinMaxRow*sizeof(CSphRowitem);
 
-	fprintf ( fp, "docinfo-bytes: docinfo="UINT64_FMT", min-max="UINT64_FMT", total="UINT64_FMT"\n"
-		, uDocinfoSize, uMinmaxSize, (uint64_t)m_pDocinfo.GetLength() );
+	fprintf ( fp, "docinfo-bytes: docinfo="INT64_FMT", min-max="INT64_FMT", total="UINT64_FMT"\n"
+		, iDocinfoSize, iMinmaxSize, (uint64_t)m_pDocinfo.GetLength() );
 	fprintf ( fp, "docinfo-stride: %d\n", (int)(iRowStride*sizeof(DWORD)) );
-	fprintf ( fp, "docinfo-rows: "INT64_FMT"\n", uNumRows );
+	fprintf ( fp, "docinfo-rows: "INT64_FMT"\n", iNumRows );
 
 	if ( !m_pDocinfo.GetNumEntries() )
 		return;
 
 	DWORD * pDocinfo = m_pDocinfo.GetWritePtr();
-	for ( DWORD uRow=0; uRow<uNumRows; uRow++, pDocinfo+=iRowStride )
-		printf ( "%u. id=" DOCID_FMT "\n", uRow+1, DOCINFO2ID ( pDocinfo ) );
-	printf ( "--- min-max=%d ---\n", uNumMinMaxRow );
-	for ( DWORD uRow=0; uRow<2*(1+m_uDocinfoIndex); uRow++, pDocinfo+=iRowStride )
+	for ( int64_t iRow=0; iRow<iNumRows; iRow++, pDocinfo+=iRowStride )
+		printf ( INT64_FMT". id=" DOCID_FMT "\n", iRow+1, DOCINFO2ID ( pDocinfo ) );
+	printf ( "--- min-max="INT64_FMT" ---\n", iNumMinMaxRow );
+	for ( int64_t iRow=0; iRow<(m_iDocinfoIndex+1)*2; iRow++, pDocinfo+=iRowStride )
 		printf ( "id=" DOCID_FMT "\n", DOCINFO2ID ( pDocinfo ) );
 }
 
@@ -15149,38 +15182,27 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 			return false;
 
 		int64_t iDocinfoSize = tDocinfo.GetSize ( iEntrySize, true, m_sLastError ) / sizeof(DWORD);
-
 		int64_t iRealDocinfoSize = m_uMinMaxIndex ? m_uMinMaxIndex : iDocinfoSize;
-
-		// intentionally losing data; we don't support more than 4B documents per instance yet
-		m_uDocinfo = (DWORD)( iRealDocinfoSize / iStride );
-		if ( iRealDocinfoSize!=(int64_t)m_uDocinfo*iStride && !m_bId32to64 )
-		{
-			m_sLastError.SetSprintf ( "docinfo size check mismatch (4B document limit hit?)" );
-			return false;
-		}
+		m_iDocinfo = iRealDocinfoSize / iStride;
 
 		if ( m_bId32to64 )
 		{
-			// check also the case of id32 here, and correct m_uDocinfo for it
-			m_uDocinfo = (DWORD)( iRealDocinfoSize / iStride2 );
-			if ( iRealDocinfoSize!=m_uDocinfo*iStride2 )
-			{
-				m_sLastError.SetSprintf ( "docinfo size check mismatch (4B document limit hit?)" );
-				return false;
-			}
+			// check also the case of id32 here, and correct m_iDocinfo for it
+			m_iDocinfo = iRealDocinfoSize / iStride2;
 			m_uMinMaxIndex = m_uMinMaxIndex / iStride2 * iStride;
 		}
 
+		if ( !CheckDocsCount ( m_iDocinfo, m_sLastError ) )
+			return false;
 
 		if ( m_uVersion < 20 )
 		{
 			if ( m_bId32to64 )
 				iDocinfoSize = iDocinfoSize / iStride2 * iStride;
-			m_uDocinfoIndex = (DWORD)( ( m_uDocinfo+DOCINFO_INDEX_FREQ-1 ) / DOCINFO_INDEX_FREQ );
+			m_iDocinfoIndex = ( m_iDocinfo+DOCINFO_INDEX_FREQ-1 ) / DOCINFO_INDEX_FREQ;
 
 			// prealloc docinfo
-			if ( !m_pDocinfo.Alloc ( iDocinfoSize + 2*(1+m_uDocinfoIndex)*iStride + ( m_bId32to64 ? m_uDocinfo : 0 ), m_sLastError, sWarning ) )
+			if ( !m_pDocinfo.Alloc ( iDocinfoSize + (m_iDocinfoIndex+1)*iStride*2 + ( m_bId32to64 ? m_iDocinfo : 0 ), m_sLastError, sWarning ) )
 				return false;
 
 			m_pDocinfoIndex = m_pDocinfo.GetWritePtr()+iDocinfoSize;
@@ -15192,15 +15214,15 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 				return false;
 			}
 
-			m_uDocinfoIndex = (DWORD)( ( ( iDocinfoSize - iRealDocinfoSize ) / (m_bId32to64?iStride2:iStride) / 2 ) - 1 );
+			m_iDocinfoIndex = ( ( iDocinfoSize - iRealDocinfoSize ) / (m_bId32to64?iStride2:iStride) / 2 ) - 1;
 
 			// prealloc docinfo
-			if ( !m_pDocinfo.Alloc ( iDocinfoSize + ( m_bId32to64 ? ( 2 + m_uDocinfo + 2*m_uDocinfoIndex ) : 0 ), m_sLastError, sWarning ) )
+			if ( !m_pDocinfo.Alloc ( iDocinfoSize + ( m_bId32to64 ? ( m_iDocinfo + m_iDocinfoIndex*2 + 2 ) : 0 ), m_sLastError, sWarning ) )
 				return false;
 
 #if PARANOID
-			DWORD uDocinfoIndex = ( m_uDocinfo+DOCINFO_INDEX_FREQ-1 ) / DOCINFO_INDEX_FREQ;
-			assert ( uDocinfoIndex==m_uDocinfoIndex );
+			int64_t uDocinfoIndex = ( m_iDocinfo+DOCINFO_INDEX_FREQ-1 ) / DOCINFO_INDEX_FREQ;
+			assert ( uDocinfoIndex==m_iDocinfoIndex );
 #endif
 
 			m_pDocinfoIndex = m_pDocinfo.GetWritePtr()+m_uMinMaxIndex;
@@ -15312,7 +15334,7 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 
 
 template < typename T > bool CSphIndex_VLN::PrereadSharedBuffer ( CSphSharedBuffer<T> & pBuffer,
-	const char * sExt, size_t uExpected, DWORD uOffset )
+	const char * sExt, int64_t iExpected, int64_t iOffset )
 {
 	sphLogDebug ( "prereading .%s", sExt );
 
@@ -15324,9 +15346,9 @@ template < typename T > bool CSphIndex_VLN::PrereadSharedBuffer ( CSphSharedBuff
 		return false;
 
 	fdBuf.SetProgressCallback ( &m_tProgress );
-	if ( uExpected==0 )
-		uExpected = size_t ( pBuffer.GetLength() ) - uOffset*sizeof(T);
-	return fdBuf.Read ( pBuffer.GetWritePtr() + uOffset, uExpected, m_sLastError );
+	if ( iExpected==0 )
+		iExpected = int64_t ( pBuffer.GetLength() ) - iOffset*sizeof(T);
+	return fdBuf.Read ( pBuffer.GetWritePtr() + iOffset, iExpected, m_sLastError );
 }
 
 
@@ -15356,9 +15378,10 @@ bool CSphIndex_VLN::Preread ()
 	if ( m_bPreloadWordlist )
 		m_tProgress.m_iBytesTotal += m_tWordlist.m_pBuf.GetLength();
 
-	if ( !PrereadSharedBuffer ( m_pDocinfo, "spa",
-		( m_uVersion<20 ) ? m_uDocinfo * ( ( m_bId32to64 ? 1 : DOCINFO_IDSIZE ) + m_tSchema.GetRowSize() ) * sizeof(DWORD) : 0,
-		m_bId32to64 ? ( 2 + m_uDocinfo + 2 * m_uDocinfoIndex ) : 0 ) )
+	int64_t iExpected = ( m_uVersion<20 ? m_iDocinfo * ( ( m_bId32to64 ? 1 : DOCINFO_IDSIZE ) + m_tSchema.GetRowSize() ) * sizeof(DWORD) : 0 );
+	int64_t iOffset = ( m_bId32to64 ? ( m_iDocinfo + 2 + m_iDocinfoIndex * 2 ) : 0 );
+
+	if ( !PrereadSharedBuffer ( m_pDocinfo, "spa", iExpected, iOffset ) )
 			return false;
 	if ( !PrereadSharedBuffer ( m_pMva, "spm" ) )
 		return false;
@@ -15392,12 +15415,12 @@ bool CSphIndex_VLN::Preread ()
 	// convert id32 to id64
 	if ( m_pDocinfo.GetLength() && m_bId32to64 )
 	{
-		DWORD *pTarget = m_pDocinfo.GetWritePtr();
-		DWORD *pSource = pTarget + 2 + m_uDocinfo + 2 * m_uDocinfoIndex;
+		DWORD * pTarget = m_pDocinfo.GetWritePtr();
+		const DWORD * pSource = pTarget + m_iDocinfo + 2 + m_iDocinfoIndex * 2;
 		int iStride = m_tSchema.GetRowSize();
 		SphDocID_t uDoc;
-		DWORD uLimit = m_uDocinfo + ( ( m_uVersion < 20 ) ? 0 : 2 + 2 * m_uDocinfoIndex );
-		for ( DWORD u=0; u<uLimit; u++ )
+		int64_t iLimit = m_iDocinfo + ( ( m_uVersion < 20 ) ? 0 : m_iDocinfoIndex * 2 + 2 );
+		for ( int64_t i=0; i<iLimit; i++ )
 		{
 			uDoc = *pSource; ///< wide id32 to id64
 			DOCINFOSETID ( pTarget, uDoc );
@@ -15411,9 +15434,10 @@ bool CSphIndex_VLN::Preread ()
 	// build attributes hash
 	if ( m_pDocinfo.GetLength() && m_pDocinfoHash.GetLength() )
 	{
+		assert ( CheckDocsCount ( m_iDocinfo, m_sLastError ) );
 		int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 		SphDocID_t uFirst = DOCINFO2ID ( &m_pDocinfo[0] );
-		SphDocID_t uRange = DOCINFO2ID ( &m_pDocinfo[( int64_t ( m_uDocinfo-1 ) )*iStride] ) - uFirst;
+		SphDocID_t uRange = DOCINFO2ID ( &m_pDocinfo[ ( m_iDocinfo-1)*iStride ] ) - uFirst;
 		DWORD iShift = 0;
 		while ( uRange>=( 1 << DOCINFO_HASH_BITS ) )
 		{
@@ -15426,21 +15450,21 @@ bool CSphIndex_VLN::Preread ()
 		*pHash = 0;
 		DWORD uLastHash = 0;
 
-		for ( DWORD i=1; i<m_uDocinfo; i++ )
+		for ( int64_t i=1; i<m_iDocinfo; i++ )
 		{
-			assert ( DOCINFO2ID ( &m_pDocinfo[( int64_t ( i ) )*iStride] )>uFirst
-				&& DOCINFO2ID ( &m_pDocinfo[( int64_t ( i-1 ) )*iStride] ) < DOCINFO2ID ( &m_pDocinfo[( int64_t ( i ) )*iStride] )
+			assert ( DOCINFO2ID ( &m_pDocinfo[ i*iStride ] )>uFirst
+				&& DOCINFO2ID ( &m_pDocinfo[ ( i-1 )*iStride ] ) < DOCINFO2ID ( &m_pDocinfo[ i*iStride ] )
 				&& "descending document ID found" );
-			DWORD uHash = (DWORD)( ( DOCINFO2ID ( &m_pDocinfo[( int64_t ( i ) )*iStride] ) - uFirst ) >> iShift );
+			DWORD uHash = (DWORD)( ( DOCINFO2ID ( &m_pDocinfo[ i*iStride ] ) - uFirst ) >> iShift );
 			if ( uHash==uLastHash )
 				continue;
 
 			while ( uLastHash<uHash )
-				pHash [ ++uLastHash ] = i;
+				pHash [ ++uLastHash ] = (DWORD)i;
 
 			uLastHash = uHash;
 		}
-		pHash [ ++uLastHash ] = m_uDocinfo;
+		pHash [ ++uLastHash ] = (DWORD)m_iDocinfo;
 	}
 
 	// persist MVA needs valid DocinfoHash
@@ -15471,7 +15495,7 @@ bool CSphIndex_VLN::Preread ()
 
 	// for each docinfo entry, verify that MVA attrs point to right storage location
 	int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
-	for ( DWORD iDoc=0; iDoc<m_uDocinfo && dMvaRowitem.GetLength(); iDoc++ )
+	for ( int64_t iDoc=0; iDoc<m_iDocinfo && dMvaRowitem.GetLength(); iDoc++ )
 	{
 		CSphRowitem * pRow = m_pDocinfo.GetWritePtr() + ( iDoc*iStride );
 		CSphRowitem * pAttrs = DOCINFO2ATTRS(pRow);
@@ -17249,10 +17273,10 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 		return false;
 
 	// check if we can early reject the whole index
-	if ( tCtx.m_pFilter && m_uDocinfoIndex )
+	if ( tCtx.m_pFilter && m_iDocinfoIndex )
 	{
 		DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
-		DWORD * pMinEntry = const_cast<DWORD*> ( &m_pDocinfoIndex [ 2*m_uDocinfoIndex*uStride ] );
+		DWORD * pMinEntry = const_cast<DWORD*> ( &m_pDocinfoIndex [ m_iDocinfoIndex*uStride*2 ] );
 		DWORD * pMaxEntry = pMinEntry + uStride;
 
 		if ( !tCtx.m_pFilter->EvalBlock ( pMinEntry, pMaxEntry ) )
@@ -17972,15 +17996,15 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		fprintf ( fp, "checking rows...\n" );
 
 		// sizes and counts
-		DWORD uRowsTotal = m_uDocinfo;
+		int64_t iRowsTotal = m_iDocinfo;
 		DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 
-		DWORD uAllRowsTotal = uRowsTotal;
-		uAllRowsTotal += 2*(1+m_uDocinfoIndex); // should had been fixed up to v.20 by the loader
+		int64_t iAllRowsTotal = iRowsTotal;
+		iAllRowsTotal += (m_iDocinfoIndex+1)*2; // should had been fixed up to v.20 by the loader
 
-		if ( uAllRowsTotal*uStride!=m_pDocinfo.GetNumEntries() )
-			LOC_FAIL(( fp, "rowitems count mismatch (expected=%u, loaded="INT64_FMT")",
-				uAllRowsTotal*uStride, (int64_t)m_pDocinfo.GetNumEntries() ));
+		if ( iAllRowsTotal*uStride!=(int64_t)m_pDocinfo.GetNumEntries() )
+			LOC_FAIL(( fp, "rowitems count mismatch (expected="INT64_FMT", loaded="INT64_FMT")",
+				iAllRowsTotal*uStride, (int64_t)m_pDocinfo.GetNumEntries() ));
 
 		// extract rowitem indexes for MVAs etc
 		// (ie. attr types that we can and will run additional checks on)
@@ -18053,13 +18077,13 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		int iOrphan = 0;
 		SphDocID_t uLastID = 0;
 
-		for ( DWORD uRow=0; uRow<uRowsTotal; uRow++, pRow+=uStride )
+		for ( int64_t iRow=0; iRow<iRowsTotal; iRow++, pRow+=uStride )
 		{
 			// check that ids are ascending
 			bool bIsSpaValid = uLastID < DOCINFO2ID(pRow);
 			if ( !bIsSpaValid )
-				LOC_FAIL(( fp, "docid decreased (row=%u, id="DOCID_FMT", lastid="DOCID_FMT")",
-					uRow, DOCINFO2ID(pRow), uLastID ));
+				LOC_FAIL(( fp, "docid decreased (row="INT64_FMT", id="DOCID_FMT", lastid="DOCID_FMT")",
+					iRow, DOCINFO2ID(pRow), uLastID ));
 
 			uLastID = DOCINFO2ID(pRow);
 
@@ -18080,8 +18104,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 					if ( uOffset && pMvaBase+uOffset>=pMvaMax )
 					{
 						bIsSpaValid = false;
-						LOC_FAIL(( fp, "MVA index out of bounds (row=%u, mvaattr=%d, docid="DOCID_FMT", index=%u)",
-							uRow, iItem, uLastID, uOffset ));
+						LOC_FAIL(( fp, "MVA index out of bounds (row="INT64_FMT", mvaattr=%d, docid="DOCID_FMT", index=%u)",
+							iRow, iItem, uLastID, uOffset ));
 					}
 
 					if ( uOffset && pMvaBase+uOffset<pMvaMax && !pMvaSpaFixed )
@@ -18101,12 +18125,12 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 					pMva = DOCINFO2ATTRS(pMva);
 
 					if ( bLastIDChecked && uLastID==uMvaID )
-						LOC_FAIL(( fp, "duplicate docid found (row=%u, docid expected="DOCID_FMT", got="DOCID_FMT", index=%u)",
-							uRow, uLastID, uMvaID, (DWORD)(pMva-pMvaBase) ));
+						LOC_FAIL(( fp, "duplicate docid found (row="INT64_FMT", docid expected="DOCID_FMT", got="DOCID_FMT", index=%u)",
+							iRow, uLastID, uMvaID, (DWORD)(pMva-pMvaBase) ));
 
 					if ( uMvaID<uLastMvaID )
-						LOC_FAIL(( fp, "MVA docid decreased (row=%u, spa docid="DOCID_FMT", last MVA docid="DOCID_FMT", MVA docid="DOCID_FMT", index=%u)",
-							uRow, uLastID, uLastMvaID, uMvaID, (DWORD)(pMva-pMvaBase) ));
+						LOC_FAIL(( fp, "MVA docid decreased (row="INT64_FMT", spa docid="DOCID_FMT", last MVA docid="DOCID_FMT", MVA docid="DOCID_FMT", index=%u)",
+							iRow, uLastID, uLastMvaID, uMvaID, (DWORD)(pMva-pMvaBase) ));
 
 					bool bIsMvaCorrect = uLastMvaID<=uMvaID && uMvaID<=uLastID;
 					uLastMvaID = uMvaID;
@@ -18119,8 +18143,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 						// check offset (index)
 						if ( uMvaID==uLastID && uSpaOffset && bIsSpaValid && pMva!=pMvaBase+uSpaOffset )
 						{
-							LOC_FAIL(( fp, "unexpected MVA docid (row=%u, mvaattr=%d, docid expected="DOCID_FMT", got="DOCID_FMT", expected=%u, got=%u)",
-								uRow, iItem, uLastID, uMvaID, (DWORD)(pMva-pMvaBase), uSpaOffset ));
+							LOC_FAIL(( fp, "unexpected MVA docid (row="INT64_FMT", mvaattr=%d, docid expected="DOCID_FMT", got="DOCID_FMT", expected=%u, got=%u)",
+								iRow, iItem, uLastID, uMvaID, (DWORD)(pMva-pMvaBase), uSpaOffset ));
 							// it's unexpected but it's our best guess
 							// but do fix up only once, to prevent infinite loop
 							if ( !bLastIDChecked )
@@ -18129,8 +18153,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 						if ( pMva>=pMvaMax )
 						{
-							LOC_FAIL(( fp, "MVA index out of bounds (row=%u, mvaattr=%d, docid expected="DOCID_FMT", got="DOCID_FMT", index=%u)",
-								uRow, iItem, uLastID, uMvaID, (DWORD)(pMva-pMvaBase) ));
+							LOC_FAIL(( fp, "MVA index out of bounds (row="INT64_FMT", mvaattr=%d, docid expected="DOCID_FMT", got="DOCID_FMT", index=%u)",
+								iRow, iItem, uLastID, uMvaID, (DWORD)(pMva-pMvaBase) ));
 							bIsMvaCorrect = false;
 							continue;
 						}
@@ -18140,8 +18164,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 						if ( pMva+uValues-1>=pMvaMax )
 						{
-							LOC_FAIL(( fp, "MVA count out of bounds (row=%u, mvaattr=%d, docid expected="DOCID_FMT", got="DOCID_FMT", count=%u)",
-								uRow, iItem, uLastID, uMvaID, uValues ));
+							LOC_FAIL(( fp, "MVA count out of bounds (row="INT64_FMT", mvaattr=%d, docid expected="DOCID_FMT", got="DOCID_FMT", count=%u)",
+								iRow, iItem, uLastID, uMvaID, uValues ));
 							pMva += uValues;
 							bIsMvaCorrect = false;
 							continue;
@@ -18164,8 +18188,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 							if ( iCur<=iPrev )
 							{
-								LOC_FAIL(( fp, "unsorted MVA values (row=%u, mvaattr=%d, docid expected="DOCID_FMT", got="DOCID_FMT", val[%u]=%u, val[%u]=%u)",
-									uRow, iItem, uLastID, uMvaID, ( iItem>=iMva64 ? uVal-2 : uVal-1 ), (unsigned int)iPrev, uVal, (unsigned int)iCur ));
+								LOC_FAIL(( fp, "unsorted MVA values (row="INT64_FMT", mvaattr=%d, docid expected="DOCID_FMT", got="DOCID_FMT", val[%u]=%u, val[%u]=%u)",
+									iRow, iItem, uLastID, uMvaID, ( iItem>=iMva64 ? uVal-2 : uVal-1 ), (unsigned int)iPrev, uVal, (unsigned int)iCur ));
 								bIsMvaCorrect = false;
 							}
 
@@ -18185,8 +18209,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				}
 
 				if ( !bLastIDChecked && bHasValues )
-					LOC_FAIL(( fp, "missed or damaged MVA (row=%u, docid expected="DOCID_FMT")",
-						uRow, uLastID ));
+					LOC_FAIL(( fp, "missed or damaged MVA (row="INT64_FMT", docid expected="DOCID_FMT")",
+						iRow, uLastID ));
 			}
 
 			///////////////////////////
@@ -18202,13 +18226,13 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 				// check normalized
 				if ( uExp==0 && uMantissa!=0 )
-					LOC_FAIL(( fp, "float attribute value is unnormalized (row=%u, attr=%d, id="DOCID_FMT", raw=0x%x, value=%f)",
-						uRow, iItem, uLastID, uValue, sphDW2F ( uValue ) ));
+					LOC_FAIL(( fp, "float attribute value is unnormalized (row="INT64_FMT", attr=%d, id="DOCID_FMT", raw=0x%x, value=%f)",
+						iRow, iItem, uLastID, uValue, sphDW2F ( uValue ) ));
 
 				// check +-inf
 				if ( uExp==0xff && uMantissa==0 )
-					LOC_FAIL(( fp, "float attribute is infinity (row=%u, attr=%d, id="DOCID_FMT", raw=0x%x, value=%f)",
-						uRow, iItem, uLastID, uValue, sphDW2F ( uValue ) ));
+					LOC_FAIL(( fp, "float attribute is infinity (row="INT64_FMT", attr=%d, id="DOCID_FMT", raw=0x%x, value=%f)",
+						iRow, iItem, uLastID, uValue, sphDW2F ( uValue ) ));
 			}
 
 			/////////////////
@@ -18222,8 +18246,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				const DWORD uOffset = (DWORD)sphGetRowAttr ( pAttrs, dStrItems[ iItem ] );
 				if ( uOffset>=m_pStrings.GetNumEntries() )
 				{
-					LOC_FAIL(( fp, "string offset out of bounds (row=%u, stringattr=%d, docid="DOCID_FMT", index=%u)",
-						uRow, iItem, uLastID, uOffset ));
+					LOC_FAIL(( fp, "string offset out of bounds (row="INT64_FMT", stringattr=%d, docid="DOCID_FMT", index=%u)",
+						iRow, iItem, uLastID, uOffset ));
 					continue;
 				}
 
@@ -18236,8 +18260,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				// check that length is sane
 				if ( pStr+iLen-1>=m_pStrings.GetWritePtr()+m_pStrings.GetLength() )
 				{
-					LOC_FAIL(( fp, "string length out of bounds (row=%u, stringattr=%d, docid="DOCID_FMT", index=%u)",
-						uRow, iItem, uLastID, (unsigned int)( pStr-m_pStrings.GetWritePtr()+iLen-1 ) ));
+					LOC_FAIL(( fp, "string length out of bounds (row="INT64_FMT", stringattr=%d, docid="DOCID_FMT", index=%u)",
+						iRow, iItem, uLastID, (unsigned int)( pStr-m_pStrings.GetWritePtr()+iLen-1 ) ));
 					continue;
 				}
 
@@ -18245,15 +18269,15 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				// (that is, that we don't point in the middle of some other data)
 				if ( !dStringOffsets.BinarySearch ( uOffset ) )
 				{
-					LOC_FAIL(( fp, "string offset is not a string start (row=%u, stringattr=%d, docid="DOCID_FMT", offset=%u)",
-						uRow, iItem, uLastID, uOffset ));
+					LOC_FAIL(( fp, "string offset is not a string start (row="INT64_FMT", stringattr=%d, docid="DOCID_FMT", offset=%u)",
+						iRow, iItem, uLastID, uOffset ));
 				}
 			}
 
 			// progress bar
-			if ( uRow%1000==0 && bProgress )
+			if ( iRow%1000==0 && bProgress )
 			{
-				fprintf ( fp, "%d/%d\r", uRow, uRowsTotal );
+				fprintf ( fp, INT64_FMT"/"INT64_FMT"\r", iRow, iRowsTotal );
 				fflush ( fp );
 			}
 		}
@@ -18268,52 +18292,52 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		fprintf ( fp, "checking attribute blocks index...\n" );
 
 		// check size
-		const DWORD uTempDocinfoIndex = ( m_uDocinfo+DOCINFO_INDEX_FREQ-1 ) / DOCINFO_INDEX_FREQ;
-		if ( uTempDocinfoIndex!=m_uDocinfoIndex )
-			LOC_FAIL(( fp, "block count differs (expected=%d, got=%d)",
-				uTempDocinfoIndex, m_uDocinfoIndex ));
+		const int64_t iTempDocinfoIndex = ( m_iDocinfo+DOCINFO_INDEX_FREQ-1 ) / DOCINFO_INDEX_FREQ;
+		if ( iTempDocinfoIndex!=m_iDocinfoIndex )
+			LOC_FAIL(( fp, "block count differs (expected="INT64_FMT", got="INT64_FMT")",
+				iTempDocinfoIndex, m_iDocinfoIndex ));
 
 		const DWORD uMinMaxStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
-		const DWORD * pDocinfoIndexMax = m_pDocinfoIndex + 2*( 1+m_uDocinfoIndex )*uMinMaxStride;
+		const DWORD * pDocinfoIndexMax = m_pDocinfoIndex + ( m_iDocinfoIndex+1 )*uMinMaxStride*2;
 
-		for ( DWORD uIndexEntry=0; uIndexEntry<m_uDocinfo; uIndexEntry++ )
+		for ( int64_t iIndexEntry=0; iIndexEntry<m_iDocinfo; iIndexEntry++ )
 		{
-			const DWORD uBlock = uIndexEntry / DOCINFO_INDEX_FREQ;
+			const int64_t iBlock = iIndexEntry / DOCINFO_INDEX_FREQ;
 
 			// we have to do some checks in border cases, for example: when move from 1st to 2nd block
-			const DWORD uPrevEntryBlock = ( uIndexEntry-1 )/DOCINFO_INDEX_FREQ;
-			const bool bIsBordersCheckTime = uPrevEntryBlock!=uBlock;
+			const int64_t iPrevEntryBlock = ( iIndexEntry-1 )/DOCINFO_INDEX_FREQ;
+			const bool bIsBordersCheckTime = ( iPrevEntryBlock!=iBlock );
 
-			const DWORD * pAttr = m_pDocinfo.GetWritePtr() + uIndexEntry * uMinMaxStride;
+			const DWORD * pAttr = m_pDocinfo.GetWritePtr() + iIndexEntry * uMinMaxStride;
 			const SphDocID_t uDocID = DOCINFO2ID(pAttr);
 
-			const DWORD * pMinEntry = m_pDocinfoIndex + 2 * uBlock * uMinMaxStride;
+			const DWORD * pMinEntry = m_pDocinfoIndex + iBlock * uMinMaxStride * 2;
 			const DWORD * pMaxEntry = pMinEntry + uMinMaxStride;
 			const DWORD * pMinAttrs = DOCINFO2ATTRS ( pMinEntry );
 			const DWORD * pMaxAttrs = pMinAttrs + uMinMaxStride;
 
 			// check docid vs global range
 			if ( pMaxEntry+uMinMaxStride > pDocinfoIndexMax )
-				LOC_FAIL(( fp, "unexpected block index end (row=%u, docid="DOCID_FMT", block=%d, max=%u, cur=%u)",
-					uIndexEntry, uDocID, uBlock, (DWORD)(pDocinfoIndexMax-m_pDocinfoIndex), (DWORD)(pMaxEntry+uMinMaxStride-m_pDocinfoIndex) ));
+				LOC_FAIL(( fp, "unexpected block index end (row="INT64_FMT", docid="DOCID_FMT", block="INT64_FMT", max="INT64_FMT", cur="INT64_FMT")",
+					iIndexEntry, uDocID, iBlock, int64_t ( pDocinfoIndexMax-m_pDocinfoIndex ), int64_t ( pMaxEntry+uMinMaxStride-m_pDocinfoIndex ) ));
 
 			// check attribute location vs global range
 			if ( pMaxAttrs+uMinMaxStride > pDocinfoIndexMax )
-				LOC_FAIL(( fp, "attribute position out of blocks index (row=%u, docid="DOCID_FMT", block=%u, expected<%u, got=%u)",
-					uIndexEntry, uDocID, uBlock, (DWORD)(pDocinfoIndexMax-m_pDocinfoIndex), (DWORD)(pMaxAttrs+uMinMaxStride-m_pDocinfoIndex) ));
+				LOC_FAIL(( fp, "attribute position out of blocks index (row="INT64_FMT", docid="DOCID_FMT", block="INT64_FMT", expected<"INT64_FMT", got="INT64_FMT")",
+					iIndexEntry, uDocID, iBlock, int64_t ( pDocinfoIndexMax-m_pDocinfoIndex ), int64_t ( pMaxAttrs+uMinMaxStride-m_pDocinfoIndex ) ));
 
-			const SphDocID_t uMinDocID = *(SphDocID_t*)pMinEntry;
-			const SphDocID_t uMaxDocID = *(SphDocID_t*)pMaxEntry;
+			const SphDocID_t uMinDocID = DOCINFO2ID ( pMinEntry );
+			const SphDocID_t uMaxDocID = DOCINFO2ID ( pMaxEntry );
 
 			// checks is docid min max range valid
 			if ( uMinDocID > uMaxDocID && bIsBordersCheckTime )
-				LOC_FAIL(( fp, "invalid docid range (row=%u, block=%d, min="DOCID_FMT", max="DOCID_FMT")",
-					uIndexEntry, uBlock, uMinDocID, uMaxDocID ));
+				LOC_FAIL(( fp, "invalid docid range (row="INT64_FMT", block="INT64_FMT", min="DOCID_FMT", max="DOCID_FMT")",
+					iIndexEntry, iBlock, uMinDocID, uMaxDocID ));
 
 			// checks docid vs blocks range
 			if ( uDocID < uMinDocID || uDocID > uMaxDocID )
-				LOC_FAIL(( fp, "unexpected docid range (row=%u, docid="DOCID_FMT", block=%d, min="DOCID_FMT", max="DOCID_FMT")",
-					uIndexEntry, uDocID, uBlock, uMinDocID, uMaxDocID ));
+				LOC_FAIL(( fp, "unexpected docid range (row="INT64_FMT", docid="DOCID_FMT", block="INT64_FMT", min="DOCID_FMT", max="DOCID_FMT")",
+					iIndexEntry, uDocID, iBlock, uMinDocID, uMaxDocID ));
 
 			bool bIsFirstMva = true;
 
@@ -18336,12 +18360,12 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 						// checks is attribute min max range valid
 						if ( uMin > uMax && bIsBordersCheckTime )
-							LOC_FAIL(( fp, "invalid attribute range (row=%u, block=%d, min="INT64_FMT", max="INT64_FMT")",
-								uIndexEntry, uBlock, uMin, uMax ));
+							LOC_FAIL(( fp, "invalid attribute range (row="INT64_FMT", block="INT64_FMT", min="INT64_FMT", max="INT64_FMT")",
+								iIndexEntry, iBlock, uMin, uMax ));
 
 						if ( uVal < uMin || uVal > uMax )
-							LOC_FAIL(( fp, "unexpected attribute value (row=%u, attr=%u, docid="DOCID_FMT", block=%d, value=0x%x, min=0x%x, max=0x%x)",
-								uIndexEntry, iItem, uDocID, uBlock, (DWORD)uVal, (DWORD)uMin, (DWORD)uMax ));
+							LOC_FAIL(( fp, "unexpected attribute value (row="INT64_FMT", attr=%u, docid="DOCID_FMT", block="INT64_FMT", value=0x"UINT64_FMT", min=0x"UINT64_FMT", max=0x"UINT64_FMT")",
+								iIndexEntry, iItem, uDocID, iBlock, uint64_t(uVal), uint64_t(uMin), uint64_t(uMax) ));
 					}
 					break;
 
@@ -18353,12 +18377,12 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 						// checks is attribute min max range valid
 						if ( fMin > fMax && bIsBordersCheckTime )
-							LOC_FAIL(( fp, "invalid attribute range (row=%u, block=%d, min=%f, max=%f)",
-								uIndexEntry, uBlock, fMin, fMax ));
+							LOC_FAIL(( fp, "invalid attribute range (row="INT64_FMT", block="INT64_FMT", min=%f, max=%f)",
+								iIndexEntry, iBlock, fMin, fMax ));
 
 						if ( fVal < fMin || fVal > fMax )
-							LOC_FAIL(( fp, "unexpected attribute value (row=%u, attr=%u, docid="DOCID_FMT", block=%d, value=%f, min=%f, max=%f)",
-								uIndexEntry, iItem, uDocID, uBlock, fVal, fMin, fMax ));
+							LOC_FAIL(( fp, "unexpected attribute value (row="INT64_FMT", attr=%u, docid="DOCID_FMT", block="INT64_FMT", value=%f, min=%f, max=%f)",
+								iIndexEntry, iItem, uDocID, iBlock, fVal, fMin, fMax ));
 					}
 					break;
 
@@ -18369,8 +18393,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 						// checks is MVA attribute min max range valid
 						if ( uMin > uMax && bIsBordersCheckTime && uMin!=0xffffffff && uMax!=0 )
-							LOC_FAIL(( fp, "invalid MVA range (row=%u, block=%d, min=0x%x, max=0x%x)",
-							uIndexEntry, uBlock, uMin, uMax ));
+							LOC_FAIL(( fp, "invalid MVA range (row="INT64_FMT", block="INT64_FMT", min=0x%x, max=0x%x)",
+							iIndexEntry, iBlock, uMin, uMax ));
 
 						SphAttr_t uOff = sphGetRowAttr ( pSpaRow, tCol.m_tLocator );
 						if ( !uOff )
@@ -18385,8 +18409,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 						if ( pMvaDocID && DOCINFO2ID ( pMvaDocID )!=uDocID )
 						{
-							LOC_FAIL(( fp, "unexpected MVA docid (row=%u, mvaattr=%d, expected="DOCID_FMT", got="DOCID_FMT", block=%d, index=%u)",
-								uIndexEntry, iItem, uDocID, DOCINFO2ID ( pMvaDocID ), uBlock, (DWORD)uOff ));
+							LOC_FAIL(( fp, "unexpected MVA docid (row="INT64_FMT", mvaattr=%d, expected="DOCID_FMT", got="DOCID_FMT", block="INT64_FMT", index=%u)",
+								iIndexEntry, iItem, uDocID, DOCINFO2ID ( pMvaDocID ), iBlock, (DWORD)uOff ));
 							break;
 						}
 
@@ -18399,8 +18423,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 						{
 							const DWORD uVal = *pMva++;
 							if ( uVal < uMin || uVal > uMax )
-								LOC_FAIL(( fp, "unexpected MVA value (row=%u, attr=%u, docid="DOCID_FMT", block=%d, index=%u, value=0x%x, min=0x%x, max=0x%x)",
-								uIndexEntry, iItem, uDocID, uBlock, iVal, (DWORD)uVal, (DWORD)uMin, (DWORD)uMax ));
+								LOC_FAIL(( fp, "unexpected MVA value (row="INT64_FMT", attr=%u, docid="DOCID_FMT", block="INT64_FMT", index=%u, value=0x%x, min=0x%x, max=0x%x)",
+									iIndexEntry, iItem, uDocID, iBlock, iVal, (DWORD)uVal, (DWORD)uMin, (DWORD)uMax ));
 						}
 					}
 					break;
@@ -18411,9 +18435,9 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			}
 
 			// progress bar
-			if ( uIndexEntry%1000==0 && bProgress )
+			if ( iIndexEntry%1000==0 && bProgress )
 			{
-				fprintf ( fp, "%d/%d\r", uIndexEntry, m_uDocinfo );
+				fprintf ( fp, INT64_FMT"/"INT64_FMT"\r", iIndexEntry, m_iDocinfo );
 				fflush ( fp );
 			}
 		}
@@ -29237,8 +29261,11 @@ void sphDictBuildSkiplists ( const char * sPath )
 		int iRows = (int)(iDocinfoSize/iStride);
 
 		AttrIndexBuilder_c tBuilder ( tSchema );
-		CSphFixedVector<CSphRowitem> dMinMax ( tBuilder.GetExpectedSize ( tStats.m_iTotalDocuments ) );
-		tBuilder.Prepare ( dMinMax.Begin(), dMinMax.Begin() + dMinMax.GetLength() );
+		int64_t iMinMaxSize = tBuilder.GetExpectedSize ( tStats.m_iTotalDocuments );
+		if ( iMinMaxSize>INT_MAX )
+			sphDie ( "attribute files (.spa) over 128 GB are not supported" );
+		CSphFixedVector<CSphRowitem> dMinMax ( (int)iMinMaxSize );
+		tBuilder.Prepare ( dMinMax.Begin(), dMinMax.Begin() + dMinMax.GetLength() ); // FIXME!!! for over INT_MAX blocks
 
 		CSphFixedVector<CSphRowitem> dRow ( iStride );
 

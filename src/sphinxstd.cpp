@@ -852,7 +852,11 @@ CSphProcessSharedMutex::~CSphProcessSharedMutex()
 {
 	if ( m_pMutex )
 	{
+#ifdef __FreeBSD__
+		sem_destroy ( m_pMutex );
+#else
 		pthread_mutex_destroy ( m_pMutex );
+#endif
 		m_pMutex = NULL;
 	}
 }

@@ -26,6 +26,8 @@ if ( !file_exists ( "$test_path/current.spell" ) )
 
 $model = file_get_contents ( "$test_path/model.spell" );
 $result = file_get_contents ( "$test_path/current.spell" );
+$model = str_replace ( $model, "\r\n", "\n" );
+$result = str_replace ( $result, "\r\n", "\n" );
 if ( $model != $result )
 {
 	if ( $windows )

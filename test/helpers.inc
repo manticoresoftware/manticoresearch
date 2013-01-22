@@ -1328,7 +1328,7 @@ class SphinxConfig
 
 		if ( array_key_exists ("sphinxql", $result) )
 		{
-			$str = "sphinxql> $result[sphinxql];\n";
+			$str = "sphinxql-$nquery> $result[sphinxql];\n";
 			if ( array_key_exists ("total_affected", $result) )
 			{
 				$str .= "Query OK, $result[total_affected] rows affected\n";

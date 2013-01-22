@@ -32,6 +32,7 @@ if exist ..\.git (
 	fromdos yysphinxql.h
 	fromdos yysphinxquery.h
 	fromdos yysphinxselect.h
+	fromdos yysphinxjson.h
 )
 
 del /q *.bak 2>nul

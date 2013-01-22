@@ -167,11 +167,9 @@ multi_stmt:
 select:
 	select_from
 	| TOK_SELECT select_items_list TOK_FROM '(' subselect_start select_from ')'
-		TOK_ORDER TOK_BY order_items_list opt_outer_limit
+		opt_outer_order opt_outer_limit
 		{
 			assert ( pParser->m_pStmt->m_eStmt==STMT_SELECT ); // set by subselect
-			pParser->m_pQuery->m_sOuterOrderBy.SetBinary ( pParser->m_pBuf+$10.m_iStart,
-				$10.m_iEnd-$10.m_iStart );
 		}
 	;
 
@@ -187,7 +185,21 @@ subselect_start:
 		pParser->ResetSelect();
 	};
 
+
+opt_outer_order:
+	// nothing
+		{
+			pParser->m_pQuery->m_sOuterOrderBy = pParser->m_pQuery->m_sOrderBy;
+		}
+	| TOK_ORDER TOK_BY order_items_list
+		{
+			pParser->m_pQuery->m_sOuterOrderBy.SetBinary ( pParser->m_pBuf+$3.m_iStart,
+				$3.m_iEnd-$3.m_iStart );
+		}
+	;
+
 opt_outer_limit:
+	// nothing
 	| TOK_LIMIT TOK_CONST_INT
 		{
 			pParser->m_pQuery->m_iOuterLimit = $2.m_iValue;

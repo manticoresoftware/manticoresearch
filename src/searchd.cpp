@@ -6560,12 +6560,12 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 	if ( !tRes.m_sError.IsEmpty() )
 	{
 		// all we have is an error
-		tBuf.Append ( " /* error=%s */", tRes.m_sError.cstr() );
+		tBuf.Append ( " /""* error=%s */", tRes.m_sError.cstr() );
 
 	} else if ( g_bIOStats || g_bCpuStats || dAgentTimes.GetLength() || !tRes.m_sWarning.IsEmpty() )
 	{
 		// got some extra data, add a comment
-		tBuf.Append ( " /*" );
+		tBuf.Append ( " /""*" );
 
 		// performance counters
 		if ( g_bIOStats || g_bCpuStats )
@@ -7686,7 +7686,7 @@ struct GenericMatchSort_fn : public CSphMatchComparatorState
 
 /// merges multiple result sets, remaps columns, does reorder for outer selects
 /// query is only (!) non-const to tweak order vs reorder clauses
-bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, bool bHadLocalIndexes,
+bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, int iAgents,
 	CSphSchema * pExtraSchema, bool bFromSphinxql = false )
 {
 	// sanity check
@@ -7829,7 +7829,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, bool bHadLoca
 						}
 					// the extra schema is not null, but empty - and we have no local agents
 					// so, the schema of result is already aligned to the extra, just add it
-					} else if ( !bHadLocalIndexes )
+					} else if ( !iLocals )
 					{
 						bAdd = true;
 					}
@@ -7899,7 +7899,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, bool bHadLoca
 	// tricky bit
 	// in purely distributed case, all schemas are received from the wire, and miss aggregate functions info
 	// thus, we need to re-assign that info
-	if ( !bHadLocalIndexes )
+	if ( !iLocals )
 		RecoverAggregateFunctions ( tQuery, tRes );
 
 	// if there's more than one result set,
@@ -8006,12 +8006,17 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, bool bHadLoca
 		if ( tRes.m_tSchema.GetAttr(i).m_eStage==SPH_EVAL_POSTLIMIT )
 			dPostlimit.Add ( i );
 
-	if ( tQuery.m_iOuterOffset+tQuery.m_iOuterLimit>tQuery.m_iLimit )
+	// lets catch a (potential) minor application mistake
+	// if this check causes any grief, just erase it already
+	if ( iAgents )
 	{
-		tRes.m_sWarning.SetSprintf ( "outer window must be smaller than inner limit (inner limit=%d, outer offset=%d, outer limit=%d); clamping outer window",
-			tQuery.m_iLimit, tQuery.m_iOuterOffset, tQuery.m_iOuterLimit );
-
-		tQuery.m_iOuterLimit = Max ( tQuery.m_iLimit-tQuery.m_iOuterOffset, 0 );
+		int iIndexes = iLocals + iAgents;
+		int iOuter = tQuery.m_iOuterOffset+tQuery.m_iOuterLimit;
+		if ( tQuery.m_iLimit*iIndexes < iOuter )
+		{
+			tRes.m_sWarning.SetSprintf ( "inner limit too small (inner=%d by indexes=%d less than outer=%d)",
+				tQuery.m_iLimit, iIndexes, iOuter );
+		}
 	}
 
 	if ( dPostlimit.GetLength() )
@@ -8455,6 +8460,7 @@ protected:
 	int								m_iEnd;			///< subset end
 	bool							m_bMultiQueue;	///< whether current subset is subject to multi-queue optimization
 	CSphVector<CSphString>			m_dLocal;		///< local indexes for the current subset
+	int								m_iAgents;		///< how many agents do we have
 	mutable CSphVector<CSphSchemaMT>		m_dExtraSchemas; ///< the extra fields for agents
 	bool							m_bSphinxql;	///< if the query get from sphinxql - to avoid applying sphinxql magick for others
 	CSphAttrUpdateEx *				m_pUpdates;		///< holder for updates
@@ -8473,7 +8479,9 @@ protected:
 
 SearchHandler_c::SearchHandler_c ( int iQueries, bool bSphinxql )
 {
-	m_iStart = m_iEnd = 0;
+	m_iStart = 0;
+	m_iEnd = 0;
+	m_iAgents = 0;
 	m_bMultiQueue = false;
 
 	m_dQueries.Resize ( iQueries );
@@ -9332,6 +9340,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		}
 	}
 
+	m_iAgents = dAgents.GetLength();
+
 	if ( !bDist )
 	{
 		// they're all local, build the list
@@ -9655,7 +9665,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				if ( pExtraSchema )
 					pExtraSchema->RLock();
 				UnlockOnDestroy SchemaLocker ( pExtraSchema );
-				if ( !MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength()!=0, pExtraSchema, m_bSphinxql ) )
+				if ( !MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength(), m_iAgents, pExtraSchema, m_bSphinxql ) )
 				{
 					tRes.m_iSuccesses = 0;
 					return;
@@ -18816,7 +18826,7 @@ static void CheckChildrenHup ()
 }
 
 
-void TickHead ( /*CSphProcessSharedMutex * pAcceptMutex*/ bool bDontListen )
+void TickHead ( bool bDontListen )
 {
 	CheckSignals ();
 	if ( !g_bHeadDaemon )
@@ -18833,7 +18843,7 @@ void TickHead ( /*CSphProcessSharedMutex * pAcceptMutex*/ bool bDontListen )
 
 	sphInfo ( NULL ); // flush dupes
 
-	if ( bDontListen /*pAcceptMutex*/ )
+	if ( bDontListen )
 	{
 		// FIXME! what if all children are busy; we might want to accept here and temp fork more
 		sphSleepMsec ( 1000 );

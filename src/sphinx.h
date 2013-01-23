@@ -251,8 +251,17 @@ void			sphInterruptNow();
 void			sphSetProcessInfo ( bool bHead );
 #endif
 
-struct CSphIOStats
+
+/// initialize IO statistics collecting
+bool			sphInitIOStats ();
+
+/// clean up IO statistics collector
+void			sphDoneIOStats ();
+
+
+class CSphIOStats
 {
+public:
 	int64_t		m_iReadTime;
 	DWORD		m_iReadOps;
 	int64_t		m_iReadBytes;
@@ -260,22 +269,20 @@ struct CSphIOStats
 	DWORD		m_iWriteOps;
 	int64_t		m_iWriteBytes;
 
-					CSphIOStats ();
+	CSphIOStats ();
+	~CSphIOStats ();
 
-	CSphIOStats		operator + ( const CSphIOStats & tOp ) const;
-	CSphIOStats		operator - ( const CSphIOStats & tOp ) const;
-	CSphIOStats		operator / ( int iOp ) const;
-	CSphIOStats &	operator += ( const CSphIOStats & tOp );
+	void		Start();
+	void		Stop();
+
+	void		Add ( const CSphIOStats & b );
+	bool		IsEnabled() { return m_bEnabled; }
+
+private:
+	bool		m_bEnabled;
+	CSphIOStats * m_pPrev;
 };
 
-/// clear stats, starts collecting
-void				sphStartIOStats ();
-
-/// take a peek at current stats
-const CSphIOStats &	sphPeekIOStats ();
-
-/// stops collecting stats, returns results
-const CSphIOStats &	sphStopIOStats ();
 
 //////////////////////////////////////////////////////////////////////////
 

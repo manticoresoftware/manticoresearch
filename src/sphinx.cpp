@@ -532,8 +532,25 @@ void sphSetProcessInfo ( bool bHead )
 
 #endif // USE_WINDOWS
 
+// whatever to collect IO stats
 static bool g_bCollectIOStats = false;
-static CSphIOStats g_IOStats;
+static SphThreadKey_t g_tIOStatsTls;
+
+
+bool sphInitIOStats ()
+{
+	if ( !sphThreadKeyCreate ( &g_tIOStatsTls ) )
+		return false;
+
+	g_bCollectIOStats = true;
+	return true;
+}
+
+void sphDoneIOStats ()
+{
+	sphThreadKeyDelete ( g_tIOStatsTls );
+	g_bCollectIOStats = false;
+}
 
 
 CSphIOStats::CSphIOStats ()
@@ -543,89 +560,75 @@ CSphIOStats::CSphIOStats ()
 	, m_iWriteTime ( 0 )
 	, m_iWriteOps ( 0 )
 	, m_iWriteBytes ( 0 )
+	, m_pPrev ( NULL )
+{}
+
+
+CSphIOStats::~CSphIOStats ()
 {
+	Stop();
 }
 
-CSphIOStats CSphIOStats::operator + ( const CSphIOStats & tOp ) const
-{
-	CSphIOStats tTmp ( *this );
-	tTmp.m_iReadBytes += tOp.m_iReadBytes;
-	tTmp.m_iReadOps += tOp.m_iReadOps;
-	tTmp.m_iReadTime += tOp.m_iReadTime;
-	tTmp.m_iWriteBytes += tOp.m_iWriteBytes;
-	tTmp.m_iWriteOps += tOp.m_iWriteOps;
-	tTmp.m_iWriteTime += tOp.m_iWriteTime;
 
-	return tTmp;
+void CSphIOStats::Start()
+{
+	if ( !g_bCollectIOStats )
+		return;
+
+	m_pPrev = (CSphIOStats *)sphThreadGet ( g_tIOStatsTls );
+	sphThreadSet ( g_tIOStatsTls, this );
+	m_bEnabled = true;
 }
 
-CSphIOStats CSphIOStats::operator - ( const CSphIOStats & tOp ) const
+void CSphIOStats::Stop()
 {
-	CSphIOStats tTmp ( *this );
-	assert ( tTmp.m_iReadOps>=tOp.m_iReadOps && tTmp.m_iWriteOps>=tOp.m_iWriteOps );
+	if ( !g_bCollectIOStats )
+		return;
 
-	tTmp.m_iReadBytes -= tOp.m_iReadBytes;
-	tTmp.m_iReadOps -= tOp.m_iReadOps;
-	tTmp.m_iReadTime -= tOp.m_iReadTime;
-	tTmp.m_iWriteBytes -= tOp.m_iWriteBytes;
-	tTmp.m_iWriteOps -= tOp.m_iWriteOps;
-	tTmp.m_iWriteTime -= tOp.m_iWriteTime;
-
-	assert ( tTmp.m_iReadBytes>=0 && tTmp.m_iReadTime>=0 && tTmp.m_iWriteBytes>=0 && tTmp.m_iWriteTime>=0 );
-
-	return tTmp;
+	m_bEnabled = false;
+	sphThreadSet ( g_tIOStatsTls, m_pPrev );
 }
 
-CSphIOStats CSphIOStats::operator / ( int iOp ) const
-{
-	CSphIOStats tTmp ( *this );
-	tTmp.m_iReadBytes /= iOp;
-	tTmp.m_iReadOps /= iOp;
-	tTmp.m_iReadTime /= iOp;
-	tTmp.m_iWriteBytes /= iOp;
-	tTmp.m_iWriteOps /= iOp;
-	tTmp.m_iWriteTime /= iOp;
 
-	return tTmp;
+void CSphIOStats::Add ( const CSphIOStats & b )
+{
+	m_iReadTime += b.m_iReadTime;
+	m_iReadOps += b.m_iReadOps;
+	m_iReadBytes += b.m_iReadBytes;
+	m_iWriteTime += b.m_iWriteTime;
+	m_iWriteOps += b.m_iWriteOps;
+	m_iWriteBytes += b.m_iWriteBytes;
 }
 
-CSphIOStats & CSphIOStats::operator += ( const CSphIOStats & tOp )
-{
-	*this = *this + tOp;
-	return *this;
-}
 
-void sphStartIOStats ()
+static CSphIOStats * GetIOStats ()
 {
-	g_bCollectIOStats = true;
-	memset ( &g_IOStats, 0, sizeof ( g_IOStats ) );
-}
+	if ( !g_bCollectIOStats )
+		return NULL;
 
-const CSphIOStats &	sphPeekIOStats ()
-{
-	return g_IOStats;
-}
+	CSphIOStats * pIOStats = (CSphIOStats *)sphThreadGet ( g_tIOStatsTls );
 
-const CSphIOStats & sphStopIOStats ()
-{
-	g_bCollectIOStats = false;
-	return g_IOStats;
+	if ( !pIOStats || !pIOStats->IsEnabled() )
+		return NULL;
+	else
+		return pIOStats;
 }
 
 
 static size_t sphRead ( int iFD, void * pBuf, size_t iCount )
 {
+	CSphIOStats * pIOStats = GetIOStats();
 	int64_t tmStart = 0;
-	if ( g_bCollectIOStats )
+	if ( pIOStats )
 		tmStart = sphMicroTimer();
 
 	size_t uRead = (size_t) ::read ( iFD, pBuf, iCount );
 
-	if ( g_bCollectIOStats )
+	if ( pIOStats )
 	{
-		g_IOStats.m_iReadTime += sphMicroTimer() - tmStart;
-		g_IOStats.m_iReadOps++;
-		g_IOStats.m_iReadBytes += iCount;
+		pIOStats->m_iReadTime += sphMicroTimer() - tmStart;
+		pIOStats->m_iReadOps++;
+		pIOStats->m_iReadBytes += iCount;
 	}
 
 	return uRead;
@@ -1705,6 +1708,8 @@ bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char 
 	if ( pThrottle->m_iMaxIOSize>=4096 )
 		iChunkSize = Min ( iChunkSize, pThrottle->m_iMaxIOSize );
 
+	CSphIOStats * pIOStats = GetIOStats();
+
 	// while there's data, write it chunk by chunk
 	const BYTE * p = (const BYTE*) pBuf;
 	while ( iCount>0 )
@@ -1714,7 +1719,7 @@ bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char 
 
 		// write (and maybe time)
 		int64_t tmTimer = 0;
-		if ( g_bCollectIOStats )
+		if ( pIOStats )
 			tmTimer = sphMicroTimer();
 
 		int iToWrite = iChunkSize;
@@ -1723,11 +1728,11 @@ bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char 
 
 		int iWritten = ::write ( iFD, p, iToWrite );
 
-		if ( g_bCollectIOStats )
+		if ( pIOStats )
 		{
-			g_IOStats.m_iWriteTime += sphMicroTimer() - tmTimer;
-			g_IOStats.m_iWriteOps++;
-			g_IOStats.m_iWriteBytes += iToWrite;
+			pIOStats->m_iWriteTime += sphMicroTimer() - tmTimer;
+			pIOStats->m_iWriteOps++;
+			pIOStats->m_iWriteBytes += iToWrite;
 		}
 
 		// success? rinse, repeat
@@ -6595,8 +6600,9 @@ int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
 	if ( iBytes==0 )
 		return 0;
 
+	CSphIOStats * pIOStats = GetIOStats();
 	int64_t tmStart = 0;
-	if ( g_bCollectIOStats )
+	if ( pIOStats )
 		tmStart = sphMicroTimer();
 
 	HANDLE hFile;
@@ -6620,11 +6626,11 @@ int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
 		return -1;
 	}
 
-	if ( g_bCollectIOStats )
+	if ( pIOStats )
 	{
-		g_IOStats.m_iReadTime += sphMicroTimer() - tmStart;
-		g_IOStats.m_iReadOps++;
-		g_IOStats.m_iReadBytes += iBytes;
+		pIOStats->m_iReadTime += sphMicroTimer() - tmStart;
+		pIOStats->m_iReadOps++;
+		pIOStats->m_iReadBytes += iBytes;
 	}
 
 	return uRes;
@@ -6636,14 +6642,18 @@ int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
 // atomic seek+read for non-Windows systems with pread() call
 int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
 {
-	if ( !g_bCollectIOStats )
+	CSphIOStats * pIOStats = GetIOStats();
+	if ( !pIOStats )
 		return ::pread ( iFD, pBuf, iBytes, iOffset );
 
 	int64_t tmStart = sphMicroTimer();
 	int iRes = (int) ::pread ( iFD, pBuf, iBytes, iOffset );
-	g_IOStats.m_iReadTime += sphMicroTimer() - tmStart;
-	g_IOStats.m_iReadOps++;
-	g_IOStats.m_iReadBytes += iBytes;
+	if ( pIOStats )
+	{
+		pIOStats->m_iReadTime += sphMicroTimer() - tmStart;
+		pIOStats->m_iReadOps++;
+		pIOStats->m_iReadBytes += iBytes;
+	}
 	return iRes;
 }
 
@@ -17064,6 +17074,8 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 			continue;
 		}
 
+		ppResults[i]->m_tIOStats.Start();
+
 		// parse query
 		if ( sphParseExtendedQuery ( dXQ[i], pQueries[i].m_sQuery.cstr(), pTokenizer, &m_tSchema, pDict, m_tSettings ) )
 		{
@@ -17108,6 +17120,8 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 			ppResults[i]->m_sError = dXQ[i].m_sParseError;
 			ppResults[i]->m_iMultiplier = -1;
 		}
+
+		ppResults[i]->m_tIOStats.Stop();
 	}
 
 	// continue only if we have at least one non-failed
@@ -17124,13 +17138,20 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 			// fullscan case
 			if ( pQueries[j].m_sQuery.IsEmpty() )
 				continue;
+
+			ppResults[j]->m_tIOStats.Start();
+
 			if ( dXQ[j].m_pRoot && ppSorters[j]
 					&& ParsedMultiQuery ( &pQueries[j], ppResults[j], 1, &ppSorters[j], dXQ[j], pDict, pExtraFilters, &tNodeCache, iTag, bFactors ) )
 			{
 				bResult = true;
 				ppResults[j]->m_iMultiplier = iCommonSubtrees ? iQueries : 1;
 			} else
+			{
 				ppResults[j]->m_iMultiplier = -1;
+			}
+
+			ppResults[j]->m_tIOStats.Stop();
 		}
 	}
 
@@ -17150,7 +17171,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	// start counting
 	int64_t tmQueryStart = sphMicroTimer();
-	CSphIOStats tStartStats = sphPeekIOStats();
 
 	///////////////////
 	// setup searching
@@ -17375,9 +17395,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	printf ( "qtm %d, %d, %d, %d, %d\n", int(tmWall), tQueryStats.m_iFetchedDocs,
 		tQueryStats.m_iFetchedHits, tQueryStats.m_iSkips, ppSorters[0]->GetTotalCount() );
 #endif
-
-	CSphIOStats tEndStats = sphPeekIOStats();
-	pResult->m_tIOStats += tEndStats - tStartStats;
 
 	return true;
 }

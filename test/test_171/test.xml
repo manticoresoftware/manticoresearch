@@ -234,6 +234,13 @@ index words_rt2
 	rt_attr_uint = idd
 }
 
+index dist_just1
+{
+	type					= distributed
+	agent				= <my_address/>:idx1
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
 
 </config>
 
@@ -412,6 +419,11 @@ index words_rt2
 <sphinxql>SELECT id, COUNT(*) FROM dist2</sphinxql>
 <sphinxql>SELECT id, MIN(gr) FROM dist2</sphinxql>
 <sphinxql>SELECT id, COUNT(DISTINCT gr) FROM dist2</sphinxql>
+
+<!-- < and > were <= and >= at distributed index -->
+<sphinxql>SELECT * FROM idx1</sphinxql>
+<sphinxql>SELECT * FROM idx1 WHERE id&gt;1</sphinxql>
+<sphinxql>SELECT * FROM dist_just1 WHERE id&gt;1</sphinxql>
 
 </sphqueries>
 

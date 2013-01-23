@@ -11929,31 +11929,38 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq )
 // 'like' matcher
 class CheckLike
 {
-	const char * m_sPattern;
-
-	inline bool IsNoPattern()
-	{
-		if ( !m_sPattern )
-			return true;
-		return ( (*m_sPattern)=='\0' );
-	}
+private:
+	CSphString m_sPattern;
 
 public:
-
 	explicit CheckLike ( const char * sPattern )
-		: m_sPattern ( sPattern )
-	{}
-
-	// classical wild-chars matching ('?'-any symbol, '*'-any symbols)
-	bool Match ( const char* sValue )
 	{
-		if ( !sValue )
-			return false;
+		if ( !sPattern )
+			return;
 
-		if ( IsNoPattern() )
-			return true;
+		m_sPattern.Reserve ( 2*strlen ( sPattern ) );
+		char * d = const_cast<char*> ( m_sPattern.cstr() );
 
-		return sphWildcardMatch ( sValue, m_sPattern );
+		// remap from SQL LIKE syntax to Sphinx wildcards syntax
+		// '_' maps to '?', match any single char
+		// '%' maps to '*', match zero or mor chars
+		for ( const char * s = sPattern; *s; s++ )
+		{
+			switch ( *s )
+			{
+				case '_':	*d++ = '?'; break;
+				case '%':	*d++ = '*'; break;
+				case '?':	*d++ = '\\'; *d++ = '?'; break;
+				case '*':	*d++ = '\\'; *d++ = '*'; break;
+				default:	*d++ = *s; break;
+			}
+		}
+		*d = '\0';
+	}
+
+	bool Match ( const char * sValue )
+	{
+		return sValue && ( m_sPattern.IsEmpty() || sphWildcardMatch ( sValue, m_sPattern.cstr() ) );
 	}
 };
 

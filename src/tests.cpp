@@ -2615,6 +2615,11 @@ void TestWildcards()
 	assert ( sphWildcardMatch ( "axb", "a%%b" ) );
 	assert ( sphWildcardMatch ( "axyb", "a%%b" ) );
 	assert ( !sphWildcardMatch ( "axyzb", "a%%b" ) );
+	assert ( sphWildcardMatch ( "a*b", "a?b" ) );
+	assert ( sphWildcardMatch ( "a*b", "a*b" ) );
+	assert ( sphWildcardMatch ( "a*b", "a\\*b" ) );
+	assert ( !sphWildcardMatch ( "acb", "a\\*b" ) );
+	assert ( !sphWildcardMatch ( "acdeb", "a\\*b" ) );
 	printf ( "ok\n" );
 }
 

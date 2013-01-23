@@ -101,6 +101,13 @@ bool sphWildcardMatch ( const char * sString, const char * sPattern )
 	{
 		switch ( *p )
 		{
+		case '\\':
+			// escaped char, strict match the next one literally
+			p++;
+			if ( *s++!=*p++ )
+				return false;
+			break;
+
 		case '?':
 			// match any character
 			s++;

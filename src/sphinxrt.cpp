@@ -3509,7 +3509,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iC
 	const CSphSourceStats & tStats, bool bForceID32 ) const
 {
 	static const DWORD INDEX_MAGIC_HEADER	= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD INDEX_FORMAT_VERSION	= 37;			///< my format version
+	static const DWORD INDEX_FORMAT_VERSION	= 38;			///< my format version
 
 	CSphWriter tWriter;
 	CSphString sName, sError;
@@ -3548,6 +3548,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iC
 	// index settings
 	tWriter.PutDword ( m_tSettings.m_iMinPrefixLen );
 	tWriter.PutDword ( m_tSettings.m_iMinInfixLen );
+	tWriter.PutDword ( m_tSettings.m_iMaxSubstringLen );
 	tWriter.PutByte ( m_tSettings.m_bHtmlStrip ? 1 : 0 );
 	tWriter.PutString ( m_tSettings.m_sHtmlIndexAttrs.cstr () );
 	tWriter.PutString ( m_tSettings.m_sHtmlRemoveElements.cstr () );

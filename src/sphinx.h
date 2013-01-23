@@ -1505,6 +1505,7 @@ struct CSphSourceSettings
 {
 	int		m_iMinPrefixLen;	///< min indexable prefix (0 means don't index prefixes)
 	int		m_iMinInfixLen;		///< min indexable infix length (0 means don't index infixes)
+	int		m_iMaxSubstringLen;	///< max indexable infix and prefix (0 means don't limit infixes and prefixes)
 	int		m_iBoundaryStep;	///< additional boundary word position increment
 	bool	m_bIndexExactWords;	///< exact (non-stemmed) word indexing flag
 	int		m_iOvershortStep;	///< position step on overshort token (default is 1)

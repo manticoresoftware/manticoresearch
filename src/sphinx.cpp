@@ -3401,7 +3401,6 @@ static BYTE * sphTrim ( BYTE * s )
 void ISphTokenizer::Setup ( const CSphTokenizerSettings & tSettings )
 {
 	m_tSettings = tSettings;
-	m_tSettings.m_iMinWordLen = Max ( tSettings.m_iMinWordLen, 1 );
 }
 
 
@@ -9467,6 +9466,7 @@ void SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettin
 {
 	tWriter.PutDword ( tSettings.m_iMinPrefixLen );
 	tWriter.PutDword ( tSettings.m_iMinInfixLen );
+	tWriter.PutDword ( tSettings.m_iMaxSubstringLen );
 	tWriter.PutByte ( tSettings.m_bHtmlStrip ? 1 : 0 );
 	tWriter.PutString ( tSettings.m_sHtmlIndexAttrs.cstr () );
 	tWriter.PutString ( tSettings.m_sHtmlRemoveElements.cstr () );
@@ -14479,6 +14479,9 @@ void LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DW
 			Swap ( tSettings.m_iMinPrefixLen, tSettings.m_iMinInfixLen );
 	}
 
+	if ( uVersion>=38 )
+		tSettings.m_iMaxSubstringLen = tReader.GetDword();
+
 	if ( uVersion>=9 )
 	{
 		tSettings.m_bHtmlStrip = !!tReader.GetByte ();
@@ -14779,6 +14782,8 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 			fprintf ( fp, "\tmin_prefix_len = %d\n", m_tSettings.m_iMinPrefixLen );
 		if ( m_tSettings.m_iMinInfixLen )
 			fprintf ( fp, "\tmin_prefix_len = %d\n", m_tSettings.m_iMinInfixLen );
+		if ( m_tSettings.m_iMaxSubstringLen )
+			fprintf ( fp, "\tmax_substring_len = %d\n", m_tSettings.m_iMaxSubstringLen );
 		if ( m_tSettings.m_bIndexExactWords )
 			fprintf ( fp, "\tindex_exact_words = %d\n", m_tSettings.m_bIndexExactWords ? 1 : 0 );
 		if ( m_tSettings.m_bHtmlStrip )
@@ -14871,6 +14876,7 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 
 	fprintf ( fp, "min-prefix-len: %d\n", m_tSettings.m_iMinPrefixLen );
 	fprintf ( fp, "min-infix-len: %d\n", m_tSettings.m_iMinInfixLen );
+	fprintf ( fp, "max-substring-len: %d\n", m_tSettings.m_iMaxSubstringLen );
 	fprintf ( fp, "exact-words: %d\n", m_tSettings.m_bIndexExactWords ? 1 : 0 );
 	fprintf ( fp, "html-strip: %d\n", m_tSettings.m_bHtmlStrip ? 1 : 0 );
 	fprintf ( fp, "html-index-attrs: %s\n", m_tSettings.m_sHtmlIndexAttrs.cstr () );
@@ -23086,6 +23092,7 @@ ISphFieldFilter * sphCreateFieldFilter ( const CSphFieldFilterSettings &, CSphSt
 CSphSourceSettings::CSphSourceSettings ()
 	: m_iMinPrefixLen ( 0 )
 	, m_iMinInfixLen ( 0 )
+	, m_iMaxSubstringLen ( 0 )
 	, m_iBoundaryStep ( 0 )
 	, m_bIndexExactWords ( false )
 	, m_iOvershortStep ( 1 )
@@ -23197,6 +23204,7 @@ void CSphSource::Setup ( const CSphSourceSettings & tSettings )
 {
 	m_iMinPrefixLen = Max ( tSettings.m_iMinPrefixLen, 0 );
 	m_iMinInfixLen = Max ( tSettings.m_iMinInfixLen, 0 );
+	m_iMaxSubstringLen = Max ( tSettings.m_iMaxSubstringLen, 0 );
 	m_iBoundaryStep = Max ( tSettings.m_iBoundaryStep, -1 );
 	m_bIndexExactWords = tSettings.m_bIndexExactWords;
 	m_iOvershortStep = Min ( Max ( tSettings.m_iOvershortStep, 0 ), 1 );
@@ -23715,7 +23723,11 @@ void CSphSource_Document::BuildSubstringHits ( SphDocID_t uDocid, bool bPayload,
 			for ( int i = 0; i < iMinInfixLen; i++ )
 				sInfixEnd += m_pTokenizer->GetCodepointLength ( *sInfixEnd );
 
-			for ( int i=iMinInfixLen; i<=iLen-iStart; i++ )
+			int iMaxSubLen = ( iLen-iStart );
+			if ( m_iMaxSubstringLen )
+				iMaxSubLen = Min ( m_iMaxSubstringLen, iMaxSubLen );
+
+			for ( int i=iMinInfixLen; i<=iMaxSubLen; i++ )
 			{
 				m_tHits.AddHit ( uDocid, m_pDict->GetWordID ( sInfix, sInfixEnd-sInfix, false ), m_tState.m_iHitPos );
 

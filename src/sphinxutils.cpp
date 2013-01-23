@@ -350,6 +350,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "ignore_chars",			0, NULL },
 	{ "min_prefix_len",			0, NULL },
 	{ "min_infix_len",			0, NULL },
+	{ "max_substring_len",		0, NULL },
 	{ "prefix_fields",			0, NULL },
 	{ "infix_fields",			0, NULL },
 	{ "enable_star",			0, NULL },
@@ -1044,7 +1045,7 @@ bool sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings 
 	}
 
 	tSettings.m_sCaseFolding = hIndex.GetStr ( "charset_table" );
-	tSettings.m_iMinWordLen = Max ( hIndex.GetInt ( "min_word_len" ), 0 );
+	tSettings.m_iMinWordLen = Max ( hIndex.GetInt ( "min_word_len", 1 ), 1 );
 	tSettings.m_sNgramChars = hIndex.GetStr ( "ngram_chars" );
 	tSettings.m_sSynonymsFile = hIndex.GetStr ( "exceptions" ); // new option name
 	if ( tSettings.m_sSynonymsFile.IsEmpty() )
@@ -1168,6 +1169,7 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 	// misc settings
 	tSettings.m_iMinPrefixLen = Max ( hIndex.GetInt ( "min_prefix_len" ), 0 );
 	tSettings.m_iMinInfixLen = Max ( hIndex.GetInt ( "min_infix_len" ), 0 );
+	tSettings.m_iMaxSubstringLen = Max ( hIndex.GetInt ( "max_substring_len" ), 0 );
 	tSettings.m_iBoundaryStep = Max ( hIndex.GetInt ( "phrase_boundary_step" ), -1 );
 	tSettings.m_bIndexExactWords = hIndex.GetInt ( "index_exact_words" )!=0;
 	tSettings.m_iOvershortStep = Min ( Max ( hIndex.GetInt ( "overshort_step", 1 ), 0 ), 1 );
@@ -1216,10 +1218,28 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 		return false;
 	}
 
+	if ( tSettings.m_iMaxSubstringLen && tSettings.m_iMaxSubstringLen<tSettings.m_iMinInfixLen )
+	{
+		sError.SetSprintf ( "max_substring_len=%d is less than min_infix_len=%d", tSettings.m_iMaxSubstringLen, tSettings.m_iMinInfixLen );
+		return false;
+	}
+
+	if ( tSettings.m_iMaxSubstringLen && tSettings.m_iMaxSubstringLen<tSettings.m_iMinPrefixLen )
+	{
+		sError.SetSprintf ( "max_substring_len=%d is less than min_prefix_len=%d", tSettings.m_iMaxSubstringLen, tSettings.m_iMinPrefixLen );
+		return false;
+	}
+
 	bool bWordDict = ( strcmp ( hIndex.GetStr ( "dict", "" ), "keywords" )==0 );
 	if ( hIndex("type") && hIndex["type"]=="rt" && ( tSettings.m_iMinInfixLen>0 || tSettings.m_iMinPrefixLen>0 ) && !bWordDict )
 	{
 		sError.SetSprintf ( "RT indexes support prefixes and infixes with only dict=keywords" );
+		return false;
+	}
+
+	if ( bWordDict && tSettings.m_iMaxSubstringLen>0 )
+	{
+		sError.SetSprintf ( "max_substring_len can not be used with dict=keywords" );
 		return false;
 	}
 

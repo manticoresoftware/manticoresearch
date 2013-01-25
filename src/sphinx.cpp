@@ -10953,6 +10953,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		}
 	}
 
+	// no field lengths for docinfo=inline
+	assert ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN || iFieldLens==-1 );
+
 	// this loop must NOT be merged with the previous one;
 	// mva64 must intentionally be after all the mva32
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
@@ -11510,8 +11513,22 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					pSource->m_tDocInfo.SetAttr ( m_tSchema.GetAttr(iAttr).m_tLocator, iNumWords );
 				}
 
+			// docinfo=inline might be flushed while collecting hits
+			if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
+			{
+				// store next entry
+				DOCINFOSETID ( pDocinfo, pSource->m_tDocInfo.m_iDocID );
+				memcpy ( DOCINFO2ATTRS ( pDocinfo ), pSource->m_tDocInfo.m_pDynamic, sizeof(CSphRowitem)*m_tSchema.GetRowSize() );
+				pDocinfo += iDocinfoStride;
+
+				// update min docinfo
+				assert ( pSource->m_tDocInfo.m_iDocID );
+				m_iMinDocid = Min ( m_iMinDocid, pSource->m_tDocInfo.m_iDocID );
+				ARRAY_FOREACH ( i, m_dMinRow )
+					m_dMinRow[i] = Min ( m_dMinRow[i], pSource->m_tDocInfo.m_pDynamic[i] );
+			}
+
 			// store hits
-			int iCurDocHits = 0;
 			while ( const ISphHits * pDocHits = pSource->IterateHits ( m_sLastWarning ) )
 			{
 				int iDocHits = pDocHits->Length();
@@ -11528,14 +11545,11 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 				memcpy ( pHits, pDocHits->First(), iDocHits*sizeof(CSphWordHit) );
 				pHits += iDocHits;
-				if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
-					iCurDocHits += iDocHits;
 
 				// check if we need to flush
-				if ( ( pHits<pHitsMax
+				if ( pHits<pHitsMax
 					&& !( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE && pDocinfo>=pDocinfoMax )
 					&& !( iDictSize && m_pDict->HitblockGetMemUse() > iDictSize ) )
-					|| pHits-dHits.Begin()==iCurDocHits )
 				{
 					continue;
 				}
@@ -11545,14 +11559,12 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				g_iIndexerPoolStartHit = pHits-dHits.Begin();
 
 				// sort hits
-				// store hits for all docs except current, because current docinfo wasn't filled yet
-				int iHits = pHits - dHits.Begin() - iCurDocHits;
+				int iHits = pHits - dHits.Begin();
 				{
 					PROFILE ( sort_hits );
 					sphSort ( dHits.Begin(), iHits, CmpHit_fn() );
 					m_pDict->HitblockPatch ( dHits.Begin(), iHits );
 				}
-				CSphWordHit * pCurDocHits = pHits - iCurDocHits;
 				pHits = dHits.Begin();
 
 				if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
@@ -11561,13 +11573,19 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					int iDocs = ( pDocinfo - dDocinfos.Begin() ) / iDocinfoStride;
 					pDocinfo = dDocinfos.Begin();
 
-					sphSortDocinfos ( pDocinfo, iDocs, iDocinfoStride );
+					sphSortDocinfos ( dDocinfos.Begin(), iDocs, iDocinfoStride );
 
 					dHitBlocks.Add ( tHitBuilder.cidxWriteRawVLB ( fdHits.GetFD(), dHits.Begin(), iHits,
 						dDocinfos.Begin(), iDocs, iDocinfoStride ) );
 
-					memcpy ( dHits.Begin(), pCurDocHits, sizeof(CSphWordHit)*iCurDocHits );
-					pHits += iCurDocHits;
+					// we are inlining, so if there are more hits in this document,
+					// we'll need to know it's info next flush
+					if ( iDocHits )
+					{
+						DOCINFOSETID ( pDocinfo, pSource->m_tDocInfo.m_iDocID );
+						memcpy ( DOCINFO2ATTRS ( pDocinfo ), pSource->m_tDocInfo.m_pDynamic, sizeof(CSphRowitem)*m_tSchema.GetRowSize() );
+						pDocinfo += iDocinfoStride;
+					}
 				} else
 				{
 					// we're not inlining, so only flush hits, docs are flushed independently
@@ -11590,8 +11608,10 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			assert ( pSource->m_tDocInfo.m_iDocID );
 			m_iMinDocid = Min ( m_iMinDocid, pSource->m_tDocInfo.m_iDocID );
 			if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
+			{
 				ARRAY_FOREACH ( i, m_dMinRow )
-				m_dMinRow[i] = Min ( m_dMinRow[i], pSource->m_tDocInfo.m_pDynamic[i] );
+					m_dMinRow[i] = Min ( m_dMinRow[i], pSource->m_tDocInfo.m_pDynamic[i] );
+			}
 
 			// update total field lengths
 			if ( iFieldLens>=0 )
@@ -11603,7 +11623,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			// store docinfo
 			// with the advent of SPH_ATTR_TOKENCOUNT, now MUST be done AFTER iterating the hits
 			// because field lengths are computed during that iterating
-			if ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_NONE )
+			if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN )
 			{
 				// store next entry
 				DOCINFOSETID ( pDocinfo, pSource->m_tDocInfo.m_iDocID );
@@ -11615,7 +11635,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 				// if not inlining, flush buffer if it's full
 				// (if inlining, it will flushed later, along with the hits)
-				if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && pDocinfo>=pDocinfoMax )
+				if ( pDocinfo>=pDocinfoMax )
 				{
 					assert ( pDocinfo==pDocinfoMax );
 					int iLen = iDocinfoMax*iDocinfoStride*sizeof(DWORD);

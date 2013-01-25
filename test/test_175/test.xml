@@ -135,6 +135,31 @@ index idx_inline
 	charset_type = utf-8
 	docinfo = inline
 }
+
+source src_inline2
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT id, title, CRC32(id+11) + 31 gid1, CRC32(id+13) + 32 gid2, CRC32(id+17) + 33 gid3, CRC32(id+19) + 34 gid4, CRC32(id+23) + 35 gid5, CRC32(id+27) + 36 gid6, CRC32(id+29) + 37 gid7, CRC32(id+31) + 38 gid8, CRC32(id+37) + 39 gid9 from table_inline2
+	sql_attr_bigint = gid1
+	sql_attr_bigint = gid2
+	sql_attr_bigint = gid3
+	sql_attr_bigint = gid4
+	sql_attr_bigint = gid5
+	sql_attr_bigint = gid6
+	sql_attr_bigint = gid7
+	sql_attr_bigint = gid8
+	sql_attr_bigint = gid9
+}
+
+index idx_inline2
+{
+	source			= src_inline2
+	path			= <data_path/>/idx_inline2
+	charset_type = utf-8
+	docinfo = inline
+	dict = keywords
+}
 </config>
 
 <db_create>
@@ -168,10 +193,19 @@ create table table_hits
 	title varchar(256) not null
 );
 </db_create>
+<db_create>
+create table table_inline2
+(
+	id int not null,
+	title varchar(21000) not null
+) ENGINE=MYISAM;
+</db_create>
+
 <db_drop>drop table if exists test_table1;</db_drop>
 <db_drop>drop table if exists test_table2;</db_drop>
 <db_drop>drop table if exists test_table3;</db_drop>
 <db_drop>drop table if exists table_hits;</db_drop>
+<db_drop>drop table if exists table_inline2;</db_drop>
 <custom_insert><![CDATA[
 
 // OR boundary
@@ -203,6 +237,23 @@ mysql_query ("INSERT INTO table_hits VALUES ( 9250, 'promised like as I' ) " );
 for ($i=9300; $i<9500; $i++)
 {
 	mysql_query ("INSERT INTO table_hits VALUES ( $i, 'i like as ' ) " );
+}
+
+// regression docinfo=inline tail hits
+for ($i=1; $i<350; $i++)
+{
+	$text = ' his from other planet ';
+	for ( $j=0; $j<550; $j++ )
+	{
+		$text .= ' there are also good people located ';
+		$pos = ( $i + 1 ) * ( $j + 1 ) * 13;
+		$pos = $pos % ( strlen ( $text ) - 3 );
+		$text[$pos + 0] = 'c';
+		$text[$pos + 1] = 'o';
+		$text[$pos + 2] = 's';
+	}
+	$text .= ' good game ';
+	mysql_query ("INSERT INTO table_inline2 VALUES ( $i, ' $text ' ) " ) or die("q-inline-2: at doc=$i ".mysql_error()."\n$i");
 }
 	
 ]]></custom_insert>
@@ -316,6 +367,9 @@ $results = array_merge ( $results, $query ( "select * from hits_plain where matc
 $results = array_merge ( $results, $query ( "show meta", $sock ) );	
 $results = array_merge ( $results, $query ( "select * from hits_inline where match (' \" i promised \" ' )", $sock ) );
 $results = array_merge ( $results, $query ( "show meta", $sock ) );	
+
+// regression docinfo=inline tail hits
+$results = array_merge ( $results, $query ( "select * from idx_inline2 where match (' good game ' ) and id>340", $sock ) );
 
 @mysql_close ( $sock );
 

@@ -42,7 +42,7 @@ public:
 	virtual bool DeleteDocument ( const SphDocID_t * pDocs, int iDocs, CSphString & sError ) = 0;
 
 	/// commit pending changes
-	virtual void Commit () = 0;
+	virtual void Commit ( int * pDeleted=NULL ) = 0;
 
 	/// undo pending changes
 	virtual void RollBack () = 0;

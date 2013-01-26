@@ -1043,9 +1043,9 @@ public:
 	virtual bool				AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning );
 	virtual bool				AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError );
 	virtual bool				DeleteDocument ( const SphDocID_t * pDocs, int iDocs, CSphString & sError );
-	virtual void				Commit ();
+	virtual void				Commit ( int * pDeleted=NULL );
 	virtual void				RollBack ();
-	void						CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t> & dAccKlist ); // FIXME? protect?
+	void						CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t> & dAccKlist, int * pTotalKilled=NULL ); // FIXME? protect?
 	virtual void				CheckRamFlush ();
 	virtual void				ForceRamFlush ( bool bPeriodic=false );
 	virtual void				ForceDiskChunk ();
@@ -2548,7 +2548,7 @@ struct CmpSegments_fn
 };
 
 
-void RtIndex_t::Commit ()
+void RtIndex_t::Commit ( int * pDeleted )
 {
 	assert ( g_bRTChangesAllowed );
 	MEMORY ( SPH_MEM_IDX_RT );
@@ -2598,7 +2598,7 @@ void RtIndex_t::Commit ()
 	pAcc->m_dAccumKlist.Uniq ();
 
 	// now on to the stuff that needs locking and recovery
-	CommitReplayable ( pNewSeg, pAcc->m_dAccumKlist );
+	CommitReplayable ( pNewSeg, pAcc->m_dAccumKlist, pDeleted );
 
 	// done; cleanup accum
 	pAcc->m_pIndex = NULL;
@@ -2609,7 +2609,7 @@ void RtIndex_t::Commit ()
 	pAcc->GrabLastWarning ( sWarning );
 }
 
-void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t> & dAccKlist )
+void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t> & dAccKlist, int * pTotalKilled )
 {
 	int iNewDocs = pNewSeg ? pNewSeg->m_iRows : 0;
 
@@ -2881,6 +2881,10 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 	m_pSegments.Resize ( m_iDoubleBuffer );
 	ARRAY_FOREACH ( i, dSegments )
 		m_pSegments.Add ( dSegments[i] );
+
+	// tell about DELETE affected_rows
+	if ( pTotalKilled )
+		*pTotalKilled = iTotalKilled;
 
 	// update stats
 	m_tStats.m_iTotalDocuments += iNewDocs - iTotalKilled;

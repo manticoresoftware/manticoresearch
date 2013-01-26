@@ -14521,13 +14521,13 @@ void HandleMysqlMeta ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt, const CS
 }
 
 
-static void LocalIndexDoDeleteDocuments ( const char * sName, const SphDocID_t * pDocs, int iCount,
+static int LocalIndexDoDeleteDocuments ( const char * sName, const SphDocID_t * pDocs, int iCount,
 											const ServedIndex_t * pLocked, SearchFailuresLog_c & dErrors, bool bCommit )
 {
 	if ( !pLocked )
 	{
 		dErrors.Submit ( sName, "no such index" );
-		return;
+		return 0;
 	}
 
 	CSphString sError;
@@ -14536,17 +14536,20 @@ static void LocalIndexDoDeleteDocuments ( const char * sName, const SphDocID_t *
 	{
 		sError.SetSprintf ( "does not support DELETE (enabled=%d)", pLocked->m_bEnabled );
 		dErrors.Submit ( sName, sError.cstr() );
-		return;
+		return 0;
 	}
 
 	if ( !pIndex->DeleteDocument ( pDocs, iCount, sError ) )
 	{
 		dErrors.Submit ( sName, sError.cstr() );
-		return;
+		return 0;
 	}
 
+	int iAffected = 0;
 	if ( bCommit )
-		pIndex->Commit();
+		pIndex->Commit ( &iAffected );
+
+	return iAffected;
 }
 
 
@@ -14592,6 +14595,7 @@ void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 	SearchFailuresLog_c dErrors;
 	const SphDocID_t * pDocs = tStmt.m_dDeleteIds.Begin();
 	int iDocsCount = tStmt.m_dDeleteIds.GetLength();
+	int iAffected = 0;
 
 	// delete for local indexes
 	ARRAY_FOREACH ( iIdx, dNames )
@@ -14600,7 +14604,7 @@ void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 		const ServedIndex_t * pLocal = g_pLocalIndexes->GetRlockedEntry ( sName );
 		if ( pLocal )
 		{
-			LocalIndexDoDeleteDocuments ( sName, pDocs, iDocsCount, pLocal, dErrors, bCommit );
+			iAffected += LocalIndexDoDeleteDocuments ( sName, pDocs, iDocsCount, pLocal, dErrors, bCommit );
 			pLocal->Unlock();
 		} else
 		{
@@ -14611,7 +14615,7 @@ void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 			{
 				const char * sDistLocal = dDistLocal[i].cstr();
 				const ServedIndex_t * pDistLocal = g_pLocalIndexes->GetRlockedEntry ( sDistLocal );
-				LocalIndexDoDeleteDocuments ( sDistLocal, pDocs, iDocsCount, pDistLocal, dErrors, bCommit );
+				iAffected += LocalIndexDoDeleteDocuments ( sDistLocal, pDocs, iDocsCount, pDistLocal, dErrors, bCommit );
 				if ( pDistLocal )
 					pDistLocal->Unlock();
 			}
@@ -14635,6 +14639,7 @@ void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 				int iWarns = 0;
 				SphinxqlReplyParser_t tParser ( &iGot, &iWarns );
 				RemoteWaitForAgents ( dAgents, tDist.m_iAgentQueryTimeout, tParser ); // FIXME? profile update time too?
+				iAffected += iGot;
 			}
 		}
 	}
@@ -14647,7 +14652,7 @@ void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 		return;
 	}
 
-	tOut.Ok();
+	tOut.Ok ( iAffected );
 }
 
 

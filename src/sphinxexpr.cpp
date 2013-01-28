@@ -4408,8 +4408,8 @@ bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, 
 	}
 
 	// lookup or load library
-	CSphString sLib;
-	sLib.SetSprintf ( "%s/%s", g_sUdfDir.cstr(), szLib );
+	CSphString sLibfile;
+	sLibfile.SetSprintf ( "%s/%s", g_sUdfDir.cstr(), szLib );
 
 	UdfFunc_t tFunc;
 	tFunc.m_eRetType = eRetType;
@@ -4418,11 +4418,11 @@ bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, 
 
 	bool bLoaded = false;
 	void * pHandle = NULL;
-	tFunc.m_pLib = g_hUdfLibs ( sLib );
+	tFunc.m_pLib = g_hUdfLibs ( szLib );
 	if ( !tFunc.m_pLib )
 	{
 		bLoaded = true;
-		pHandle = dlopen ( sLib.cstr(), RTLD_LAZY | RTLD_LOCAL );
+		pHandle = dlopen ( sLibfile.cstr(), RTLD_LAZY | RTLD_LOCAL );
 		if ( !pHandle )
 		{
 			const char * sDlerror = dlerror();
@@ -4430,7 +4430,7 @@ bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, 
 			g_tUdfMutex.Unlock();
 			return false;
 		}
-		sphLogDebug ( "dlopen(%s)=%p", sLib.cstr(), pHandle );
+		sphLogDebug ( "dlopen(%s)=%p", sLibfile.cstr(), pHandle );
 
 	} else
 	{
@@ -4456,15 +4456,15 @@ bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, 
 	// add library
 	if ( bLoaded )
 	{
-		CSphString sLib = szLib;
-		const char * pDot = strchr ( sLib.cstr(), '.' );
+		CSphString sBasename = szLib;
+		const char * pDot = strchr ( sBasename.cstr(), '.' );
 		if ( pDot )
-			sLib = sLib.SubString ( 0, pDot-sLib.cstr() );
+			sBasename = sBasename.SubString ( 0, pDot-sBasename.cstr() );
 
-		UdfVer_fn fnVer = (UdfVer_fn) dlsym ( pHandle, sName.SetSprintf ( "%s_ver", sLib.cstr() ).cstr() );
+		UdfVer_fn fnVer = (UdfVer_fn) dlsym ( pHandle, sName.SetSprintf ( "%s_ver", sBasename.cstr() ).cstr() );
 		if ( !fnVer )
 		{
-			sError.SetSprintf ( "symbol '%s_ver' not found in '%s': update your UDF implementation", sLib.cstr(), szLib );
+			sError.SetSprintf ( "symbol '%s_ver' not found in '%s': update your UDF implementation", sBasename.cstr(), szLib );
 			dlclose ( pHandle );
 			g_tUdfMutex.Unlock();
 			return false;
@@ -4481,13 +4481,13 @@ bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, 
 		UdfLib_t tLib;
 		tLib.m_iFuncs = 1;
 		tLib.m_pHandle = pHandle;
-		Verify ( g_hUdfLibs.Add ( tLib, sLib ) );
-		tFunc.m_pLib = g_hUdfLibs ( sLib );
+		Verify ( g_hUdfLibs.Add ( tLib, szLib ) );
+		tFunc.m_pLib = g_hUdfLibs ( szLib );
 	} else
 	{
 		tFunc.m_pLib->m_iFuncs++;
 	}
-	tFunc.m_pLibName = g_hUdfLibs.GetKeyPtr ( sLib );
+	tFunc.m_pLibName = g_hUdfLibs.GetKeyPtr ( szLib );
 	assert ( tFunc.m_pLib );
 
 	// add function

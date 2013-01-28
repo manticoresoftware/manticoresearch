@@ -69,7 +69,7 @@ struct UdfLib_t
 struct UdfFunc_t
 {
 	UdfLib_t *			m_pLib;			///< library descriptor (pointer to library hash value)
-	const CSphString *	m_pLibName;		///< library name (pointer to library hash key)
+	const CSphString *	m_pLibName;		///< library name (pointer to library hash key; filename only, no path!)
 	ESphAttr			m_eRetType;		///< function type, currently FLOAT or INT
 	UdfInit_fn			m_fnInit;		///< per-query init function, mandatory
 	UdfDeinit_fn		m_fnDeinit;		///< per-query deinit function, optional
@@ -101,8 +101,8 @@ static bool								g_bUdfEnabled = false;		///< is there any UDF support all?
 static bool								g_bUdfLocked = false;		///< do we allow CREATE/DROP at this point?
 static CSphString						g_sUdfDir;
 static CSphStaticMutex					g_tUdfMutex;
-static SmallStringHash_T<UdfLib_t>		g_hUdfLibs;
-static SmallStringHash_T<UdfFunc_t>		g_hUdfFuncs;
+static SmallStringHash_T<UdfLib_t>		g_hUdfLibs;					///< key is the filename (no path)
+static SmallStringHash_T<UdfFunc_t>		g_hUdfFuncs;				///< key is the function name
 
 //////////////////////////////////////////////////////////////////////////
 // UDF CALL SITE
@@ -4583,7 +4583,6 @@ static const char * UdfReturnType ( ESphAttr eType )
 
 void sphUDFSaveState ( CSphWriter & tWriter )
 {
-	int iBasePathLen = g_sUdfDir.Length();
 	g_tUdfMutex.Lock();
 	g_hUdfFuncs.IterateStart();
 	while ( g_hUdfFuncs.IterateNext() )
@@ -4594,7 +4593,7 @@ void sphUDFSaveState ( CSphWriter & tWriter )
 		{
 			CSphString sBuf;
 			sBuf.SetSprintf ( "CREATE FUNCTION %s RETURNS %s SONAME '%s';\n",
-				sName.cstr(), UdfReturnType ( tDesc.m_eRetType ), tDesc.m_pLibName->cstr() + iBasePathLen + 1 );
+				sName.cstr(), UdfReturnType ( tDesc.m_eRetType ), tDesc.m_pLibName->cstr() );
 			tWriter.PutBytes ( sBuf.cstr(), sBuf.Length() );
 		}
 	}

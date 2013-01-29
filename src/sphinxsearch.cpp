@@ -1500,6 +1500,7 @@ ExtCached_c::ExtCached_c ( const XQNode_t * pNode, const ISphQwordSetup & tSetup
 	// this node must be only created for a huge OR of tiny expansions
 	assert ( pNode->GetOp()==SPH_QUERY_OR );
 	assert ( pNode->m_dWords.GetLength() );
+	assert ( tSetup.m_eDocinfo!=SPH_DOCINFO_INLINE );
 	ARRAY_FOREACH ( i, pNode->m_dWords )
 	{
 		assert ( pNode->m_dWords[i].m_iAtomPos==pNode->m_dWords[0].m_iAtomPos );

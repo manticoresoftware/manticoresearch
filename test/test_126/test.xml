@@ -74,6 +74,28 @@ index empty
         min_infix_len           = 3
         dict                    = keywords
 }
+
+<!-- regression crash of daemon with docinfo=inline and dict=keywords -->
+source src_inline
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT *, document_id+100 as idd FROM test_table
+	sql_attr_uint = idd
+}
+
+index plain_inline
+{
+	source			= src_inline
+	path			= <data_path/>/plain-inline
+	charset_type 	= utf-8
+	docinfo = inline
+	dict = keywords
+	min_prefix_len = 1
+	enable_star = 1
+}
+
 </config>
 
 <queries>
@@ -86,6 +108,8 @@ index empty
 <query mode="extended2" index="expanded_plain">run</query>
 <!-- regression crash of daemon with empty dict=keywords and infixes enabled -->
 <query mode="extended2" index="empty">*dog*</query>
+<!-- regression crash of daemon with docinfo=inline and dict=keywords -->
+<query mode="extended2" index="plain_inline">run*</query>
 </queries>
 
 <sphqueries>

@@ -1397,6 +1397,7 @@ struct ExpansionContext_t
 	int m_iMinInfixLen;
 	int m_iExpansionLimit;
 	bool m_bHasMorphology;
+	bool m_bMergeSingles;
 };
 
 

@@ -16325,18 +16325,19 @@ struct BinaryNode_t
 	int m_iHi;
 };
 
-static void BuildExpandedTree ( const XQKeyword_t & tRootWord, CSphVector<CSphNamedInt> & dWordSrc, XQNode_t * pRoot )
+static void BuildExpandedTree ( const XQKeyword_t & tRootWord, CSphVector<CSphNamedInt> & dWordSrc, XQNode_t * pRoot, bool bMergeSingles )
 {
 	assert ( dWordSrc.GetLength() );
 	pRoot->m_dWords.Reset();
 
 	// put all tiny enough expansions in a single node
 	int iTinyStart = 0;
-	if ( pRoot->m_dSpec.m_dZones.GetLength() )
+	if ( pRoot->m_dSpec.m_dZones.GetLength() || !bMergeSingles )
 	{
 		// OPTIMIZE
 		// ExtCached_c only supports field filtering but not zone filtering for now
 		// so we skip tiny expansions optimizations in that case; we also do that in RT case
+		// FIXME!!! why not in RT case??? check that case and perf
 		iTinyStart = dWordSrc.GetLength();
 	} else
 	{
@@ -16607,7 +16608,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 	// copy the original word (iirc it might get overwritten),
 	// and build a binary tree of all the expansions
 	const XQKeyword_t tRootWord = pNode->m_dWords[0];
-	BuildExpandedTree ( tRootWord, dExpanded, pNode );
+	BuildExpandedTree ( tRootWord, dExpanded, pNode, tCtx.m_bMergeSingles );
 
 	return pNode;
 }
@@ -16648,6 +16649,7 @@ XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphString & sError, 
 	tCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
 	tCtx.m_iExpansionLimit = m_iExpansionLimit;
 	tCtx.m_bHasMorphology = m_pDict->HasMorphology();
+	tCtx.m_bMergeSingles = ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_INLINE );
 
 	pNode = sphExpandXQNode ( pNode, tCtx );
 	pNode->Check ( true );

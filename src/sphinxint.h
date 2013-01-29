@@ -298,7 +298,6 @@ public:
 	void						BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema, int iIndexWeight );
 	bool						SetupCalc ( CSphQueryResult * pResult, const CSphSchema & tInSchema, const CSphSchema & tSchema, const DWORD * pMvaPool );
 	bool						CreateFilters ( bool bFullscan, const CSphVector<CSphFilterSettings> * pdFilters, const CSphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError );
-	void						SetupExtraData ( ISphExtra * pData );
 	bool						SetupOverrides ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema );
 
 	void						CalcFilter ( CSphMatch & tMatch ) const;
@@ -309,9 +308,11 @@ public:
 	void						FreeStrSort ( CSphMatch & tMatch ) const;
 	void						FreeStrFinal ( CSphMatch & tMatch ) const;
 
-	// rt index bind pools at segment searching, not at time it setups context
+	// note that RT index bind pools at segment searching, not at time it setups context
+	void						ExprCommand ( ESphExprCommand eCmd, void * pArg );
 	void						SetStringPool ( const BYTE * pStrings );
 	void						SetMVAPool ( const DWORD * pMva );
+	void						SetupExtraData ( ISphExtra * pData );
 };
 
 //////////////////////////////////////////////////////////////////////////

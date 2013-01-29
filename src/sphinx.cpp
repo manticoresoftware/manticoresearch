@@ -13879,20 +13879,23 @@ void CSphQueryContext::FreeStrFinal ( CSphMatch & tMatch ) const
 	FreeStrItems ( tMatch, m_dCalcFinal );
 }
 
-void CSphQueryContext::SetStringPool ( const BYTE * pStrings )
+
+void CSphQueryContext::ExprCommand ( ESphExprCommand eCmd, void * pArg )
 {
 	ARRAY_FOREACH ( i, m_dCalcFilter )
-		m_dCalcFilter[i].m_pExpr->SetStringPool ( pStrings );
-
+		m_dCalcFilter[i].m_pExpr->Command ( eCmd, pArg );
 	ARRAY_FOREACH ( i, m_dCalcSort )
-		m_dCalcSort[i].m_pExpr->SetStringPool ( pStrings );
-
+		m_dCalcSort[i].m_pExpr->Command ( eCmd, pArg );
 	ARRAY_FOREACH ( i, m_dCalcFinal )
-		m_dCalcFinal[i].m_pExpr->SetStringPool ( pStrings );
+		m_dCalcFinal[i].m_pExpr->Command ( eCmd, pArg );
+}
 
+
+void CSphQueryContext::SetStringPool ( const BYTE * pStrings )
+{
+	ExprCommand ( SPH_EXPR_SET_STRING_POOL, (void*)pStrings );
 	if ( m_pFilter )
 		m_pFilter->SetStringStorage ( pStrings );
-
 	if ( m_pWeightFilter )
 		m_pWeightFilter->SetStringStorage ( pStrings );
 }
@@ -13900,20 +13903,17 @@ void CSphQueryContext::SetStringPool ( const BYTE * pStrings )
 
 void CSphQueryContext::SetMVAPool ( const DWORD * pMva )
 {
-	ARRAY_FOREACH ( i, m_dCalcFilter )
-		m_dCalcFilter[i].m_pExpr->SetMVAPool ( pMva );
-
-	ARRAY_FOREACH ( i, m_dCalcSort )
-		m_dCalcSort[i].m_pExpr->SetMVAPool ( pMva );
-
-	ARRAY_FOREACH ( i, m_dCalcFinal )
-		m_dCalcFinal[i].m_pExpr->SetMVAPool ( pMva );
-
+	ExprCommand ( SPH_EXPR_SET_MVA_POOL, (void*)pMva );
 	if ( m_pFilter )
 		m_pFilter->SetMVAStorage ( pMva );
-
 	if ( m_pWeightFilter )
 		m_pWeightFilter->SetMVAStorage ( pMva );
+}
+
+
+void CSphQueryContext::SetupExtraData ( ISphExtra * pData )
+{
+	ExprCommand ( SPH_EXPR_SET_EXTRA_DATA, pData );
 }
 
 
@@ -15820,7 +15820,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const CSphSchema &
 				tCalc.m_eType = tIn.m_eAttrType;
 				tCalc.m_tLoc = tIn.m_tLocator;
 				tCalc.m_pExpr = pExpr;
-				tCalc.m_pExpr->SetMVAPool ( pMvaPool );
+				tCalc.m_pExpr->Command ( SPH_EXPR_SET_MVA_POOL, (void*)pMvaPool );
 
 				switch ( tIn.m_eStage )
 				{
@@ -15848,17 +15848,6 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const CSphSchema &
 	return true;
 }
 
-void CSphQueryContext::SetupExtraData ( ISphExtra * pData )
-{
-	ARRAY_FOREACH ( i, m_dCalcFilter )
-		m_dCalcFilter[i].m_pExpr->SetupExtraData ( pData );
-
-	ARRAY_FOREACH ( i, m_dCalcSort )
-		m_dCalcSort[i].m_pExpr->SetupExtraData ( pData );
-
-	ARRAY_FOREACH ( i, m_dCalcFinal )
-		m_dCalcFinal[i].m_pExpr->SetupExtraData ( pData );
-}
 
 CSphDict * CSphIndex_VLN::SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer & tTokenizer ) const
 {

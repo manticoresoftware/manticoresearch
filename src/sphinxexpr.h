@@ -66,6 +66,17 @@ enum ESphEvalStage
 	SPH_EVAL_POSTLIMIT			///< expression needs to be postponed until we apply all the LIMIT clauses (say, too expensive)
 };
 
+/// expression tree wide commands
+/// FIXME? maybe merge with ExtraData_e?
+enum ESphExprCommand
+{
+	SPH_EXPR_SET_MVA_POOL,
+	SPH_EXPR_SET_STRING_POOL,
+	SPH_EXPR_SET_EXTRA_DATA,
+	SPH_EXPR_GET_DEPENDENT_COLS,
+	SPH_EXPR_GET_UDF
+};
+
 /// expression evaluator
 /// can always be evaluated in floats using Eval()
 /// can sometimes be evaluated in integers using IntEval(), depending on type as returned from sphExprParse()
@@ -101,17 +112,8 @@ public:
 	/// get Nth arg of an arglist
 	virtual ISphExpr * GetArg ( int ) const { return NULL; }
 
-	/// setup MVA pool
-	virtual void SetMVAPool ( const DWORD * ) {}
-
-	/// setup sting pool
-	virtual void SetStringPool ( const BYTE * ) {}
-
-	/// get schema columns index which affect expression
-	virtual void GetDependencyColumns ( CSphVector<int> & ) const {}
-
-	/// setup any extra data like external pools, etc.
-	virtual void SetupExtraData ( ISphExtra * ) {}
+	/// run a tree wide action
+	virtual void Command ( ESphExprCommand, void * ) {}
 };
 
 /// string expression traits

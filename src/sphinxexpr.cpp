@@ -150,9 +150,11 @@ struct ExprLocatorTraits_t : public ISphExpr
 	int m_iLocator;
 
 	ExprLocatorTraits_t ( const CSphAttrLocator & tLocator, int iLocator ) : m_tLocator ( tLocator ), m_iLocator ( iLocator ) {}
-	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
+
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
-		dColumns.Add ( m_iLocator );
+		if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS )
+			static_cast < CSphVector<int>* >(pArg)->Add (m_iLocator );
 	}
 };
 
@@ -197,7 +199,7 @@ struct Expr_GetString_c : public ExprLocatorTraits_t
 
 	Expr_GetString_c ( const CSphAttrLocator & tLocator, int iLocator ) : ExprLocatorTraits_t ( tLocator, iLocator ) {}
 	virtual float Eval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
-	virtual void SetStringPool ( const BYTE * pStrings ) { m_pStrings = pStrings; }
+	virtual void Command ( ESphExprCommand eCmd, void * pArg ) { if ( eCmd==SPH_EXPR_SET_STRING_POOL ) m_pStrings = (const BYTE*)pArg; }
 
 	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
 	{
@@ -217,7 +219,7 @@ struct Expr_GetMva_c : public ExprLocatorTraits_t
 
 	Expr_GetMva_c ( const CSphAttrLocator & tLocator, int iLocator ) : ExprLocatorTraits_t ( tLocator, iLocator ) {}
 	virtual float Eval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
-	virtual void SetMVAPool ( const DWORD * pMva ) { m_pMva = pMva; }
+	virtual void Command ( ESphExprCommand eCmd, void * pArg ) { if ( eCmd==SPH_EXPR_SET_MVA_POOL ) m_pMva = (const DWORD*)pArg; }
 	virtual const DWORD * MvaEval ( const CSphMatch & tMatch ) const { return tMatch.GetAttrMVA ( m_tLocator, m_pMva ); }
 };
 
@@ -315,9 +317,10 @@ struct Expr_GetZonespanlist_c : public ISphStringExpr
 		return sValue.Length();
 	}
 
-	virtual void SetupExtraData ( ISphExtra * pData )
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
-		pData->ExtraData ( EXTRA_GET_DATA_ZONESPANS, (void**)&m_pData );
+		if ( eCmd==SPH_EXPR_SET_EXTRA_DATA )
+			static_cast<ISphExtra*>(pArg)->ExtraData ( EXTRA_GET_DATA_ZONESPANS, (void**)&m_pData );
 	}
 
 	virtual bool IsStringPtr() const
@@ -357,9 +360,10 @@ struct Expr_GetRankFactors_c : public ISphStringExpr
 		return iLen;
 	}
 
-	virtual void SetupExtraData ( ISphExtra * pData )
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
-		pData->ExtraData ( EXTRA_GET_DATA_RANKFACTORS, (void**)&m_pFactors );
+		if ( eCmd==SPH_EXPR_SET_EXTRA_DATA )
+			static_cast<ISphExtra*>(pArg)->ExtraData ( EXTRA_GET_DATA_RANKFACTORS, (void**)&m_pFactors );
 	}
 
 	virtual bool IsStringPtr() const
@@ -409,9 +413,10 @@ struct Expr_GetPackedFactors_c : public ISphStringExpr
 		return (DWORD *)pData;
 	}
 
-	virtual void SetupExtraData ( ISphExtra * pData )
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
-		pData->ExtraData ( EXTRA_GET_DATA_PACKEDFACTORS, (void**)&m_pHash );
+		if ( eCmd==SPH_EXPR_SET_EXTRA_DATA )
+			static_cast<ISphExtra*>(pArg)->ExtraData ( EXTRA_GET_DATA_PACKEDFACTORS, (void**)&m_pHash );
 	}
 
 	virtual bool IsStringPtr() const
@@ -491,10 +496,10 @@ struct Expr_Arglist_c : public ISphExpr
 		return 0.0f;
 	}
 
-	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
 		ARRAY_FOREACH ( i, m_dArgs )
-			m_dArgs[i]->GetDependencyColumns ( dColumns );
+			m_dArgs[i]->Command ( eCmd, pArg );
 	}
 };
 
@@ -504,17 +509,16 @@ struct Expr_Unary_c : public ISphExpr
 {
 	ISphExpr * m_pFirst;
 
+	Expr_Unary_c ( ISphExpr * p ) : m_pFirst(p) {}
 	~Expr_Unary_c() { SafeRelease ( m_pFirst ); }
 
-	virtual void SetMVAPool ( const DWORD * pMvaPool ) { m_pFirst->SetMVAPool ( pMvaPool ); }
-	virtual void SetStringPool ( const BYTE * pStrings ) { m_pFirst->SetStringPool ( pStrings ); }
-	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const { m_pFirst->GetDependencyColumns ( dColumns ); }
+	virtual void Command ( ESphExprCommand eCmd, void * pArg ) { m_pFirst->Command ( eCmd, pArg ); }
 };
 
 
 struct Expr_Crc32_c : public Expr_Unary_c
 {
-	explicit Expr_Crc32_c ( ISphExpr * pFirst ) { m_pFirst = pFirst; }
+	explicit Expr_Crc32_c ( ISphExpr * pFirst ) : Expr_Unary_c ( pFirst ) {}
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
 	virtual int IntEval ( const CSphMatch & tMatch ) const
 	{
@@ -543,7 +547,7 @@ static inline int Fibonacci ( int i )
 
 struct Expr_Fibonacci_c : public Expr_Unary_c
 {
-	explicit Expr_Fibonacci_c ( ISphExpr * pFirst ) { m_pFirst = pFirst; }
+	explicit Expr_Fibonacci_c ( ISphExpr * pFirst ) : Expr_Unary_c ( pFirst ) {}
 
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
 	virtual int IntEval ( const CSphMatch & tMatch ) const { return Fibonacci ( m_pFirst->IntEval ( tMatch ) ); }
@@ -558,10 +562,9 @@ protected:
 
 public:
 	Expr_ToString_c ( ISphExpr * pArg, ESphAttr eArg )
-	{
-		m_pFirst = pArg;
-		m_eArg = eArg;
-	}
+		: Expr_Unary_c ( pArg )
+		, m_eArg ( eArg )
+	{}
 
 	virtual float Eval ( const CSphMatch & ) const
 	{
@@ -645,14 +648,12 @@ public:
 		, m_iAttr ( iAttr )
 	{}
 
-	virtual void SetStringPool ( const BYTE * pStrings )
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
-		m_pStrings = pStrings;
-	}
-
-	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
-	{
-		dColumns.Add ( m_iAttr );
+		if ( eCmd==SPH_EXPR_SET_STRING_POOL )
+			m_pStrings = (const BYTE*)pArg;
+		if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS )
+			static_cast < CSphVector<int>* > ( pArg )->Add ( m_iAttr );
 	}
 
 	virtual float Eval ( const CSphMatch & ) const
@@ -698,15 +699,10 @@ public:
 #define INT64THIRD	m_pThird->Int64Eval(tMatch)
 
 #define DECLARE_UNARY_TRAITS(_classname,_expr) \
-	struct _classname : public ISphExpr \
+	struct _classname : public Expr_Unary_c \
 	{ \
-		ISphExpr * m_pFirst; \
-		explicit _classname ( ISphExpr * pFirst ) : m_pFirst ( pFirst ) {}; \
-		~_classname () { SafeRelease ( m_pFirst ); } \
-		virtual void SetMVAPool ( const DWORD * pMvaPool ) { m_pFirst->SetMVAPool ( pMvaPool ); } \
-		virtual void SetStringPool ( const BYTE * pStrings ) { m_pFirst->SetStringPool ( pStrings ); } \
+		explicit _classname ( ISphExpr * pFirst ) : Expr_Unary_c ( pFirst ) {}; \
 		virtual float Eval ( const CSphMatch & tMatch ) const { return _expr; } \
-		virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const { m_pFirst->GetDependencyColumns ( dColumns ); } \
 
 #define DECLARE_UNARY_FLT(_classname,_expr) \
 		DECLARE_UNARY_TRAITS ( _classname, _expr ) \
@@ -746,13 +742,7 @@ DECLARE_UNARY_INT ( Expr_Sint_c,		(float)(INTFIRST),			INTFIRST,		INTFIRST )
 		ISphExpr * m_pSecond; \
 		_classname ( ISphExpr * pFirst, ISphExpr * pSecond ) : m_pFirst ( pFirst ), m_pSecond ( pSecond ) {} \
 		~_classname () { SafeRelease ( m_pFirst ); SafeRelease ( m_pSecond ); } \
-		virtual void SetMVAPool ( const DWORD * pMvaPool ) { m_pFirst->SetMVAPool ( pMvaPool ); m_pSecond->SetMVAPool ( pMvaPool ); } \
-		virtual void SetStringPool ( const BYTE * pStrings ) { m_pFirst->SetStringPool ( pStrings ); m_pSecond->SetStringPool ( pStrings ); } \
-		virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const \
-		{ \
-			m_pFirst->GetDependencyColumns ( dColumns ); \
-			m_pSecond->GetDependencyColumns ( dColumns ); \
-		} \
+		virtual void Command ( ESphExprCommand eCmd, void * pArg ) { m_pFirst->Command ( eCmd, pArg ); m_pSecond->Command ( eCmd, pArg ); }
 
 #define DECLARE_END() };
 
@@ -840,25 +830,11 @@ struct ExprThreeway_c : public ISphExpr
 		SafeRelease ( m_pThird );
 	}
 
-	virtual void SetMVAPool ( const DWORD * pMvaPool )
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
-		m_pFirst->SetMVAPool ( pMvaPool );
-		m_pSecond->SetMVAPool ( pMvaPool );
-		m_pThird->SetMVAPool ( pMvaPool );
-	}
-
-	virtual void SetStringPool ( const BYTE * pStrings )
-	{
-		m_pFirst->SetStringPool ( pStrings );
-		m_pSecond->SetStringPool ( pStrings );
-		m_pThird->SetStringPool ( pStrings );
-	}
-
-	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
-	{
-		m_pFirst->GetDependencyColumns ( dColumns );
-		m_pSecond->GetDependencyColumns ( dColumns );
-		m_pThird->GetDependencyColumns ( dColumns );
+		m_pFirst->Command ( eCmd, pArg );
+		m_pSecond->Command ( eCmd, pArg );
+		m_pThird->Command ( eCmd, pArg );
 	}
 };
 
@@ -2022,18 +1998,10 @@ public:
 		}
 	}
 
-	virtual void SetMVAPool ( const DWORD * pPool ) { ARRAY_FOREACH ( i, m_dArgs ) m_dArgs[i]->SetMVAPool ( pPool ); }
-	virtual void SetStringPool ( const BYTE * pPool ) { ARRAY_FOREACH ( i, m_dArgs ) m_dArgs[i]->SetStringPool ( pPool ); }
-	virtual void GetDependencyColumns ( CSphVector<int> & dDeps ) const
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
 		ARRAY_FOREACH ( i, m_dArgs )
-			m_dArgs[i]->GetDependencyColumns ( dDeps );
-	}
-
-	virtual void SetupExtraData ( ISphExtra * pExtraData )
-	{
-		ARRAY_FOREACH ( i, m_dArgs )
-			m_dArgs[i]->SetupExtraData ( pExtraData );
+			m_dArgs[i]->Command ( eCmd, pArg );
 	}
 };
 
@@ -2284,10 +2252,10 @@ public:
 		return IntEval ( tMatch );
 	}
 
-	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
-		m_pLat->GetDependencyColumns ( dColumns );
-		m_pLon->GetDependencyColumns ( dColumns );
+		m_pLat->Command ( eCmd, pArg );
+		m_pLon->Command ( eCmd, pArg );
 	}
 
 	// FIXME! implement SetStringPool?
@@ -2535,10 +2503,10 @@ public:
 		return Contains ( m_pLat->Eval(tMatch), m_pLon->Eval(tMatch), dPoly.GetLength(), dPoly.Begin() );
 	}
 
-	virtual void SetStringPool ( const BYTE * pPool )
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
-		Expr_Contains_c::SetStringPool ( pPool );
-		m_pStr->SetStringPool ( pPool );
+		Expr_Contains_c::Command ( eCmd, pArg );
+		m_pStr->Command ( eCmd, pArg );
 	}
 };
 
@@ -2788,11 +2756,6 @@ public:
 	virtual int IntEval ( const CSphMatch & tMatch ) const = 0;
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float) IntEval ( tMatch ); }
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return IntEval ( tMatch ); }
-	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
-	{
-		assert ( m_pArg );
-		m_pArg->GetDependencyColumns ( dColumns );
-	}
 
 protected:
 	T ExprEval ( ISphExpr * pArg, const CSphMatch & tMatch ) const;
@@ -2881,8 +2844,7 @@ public:
 		return this->m_dValues.GetLength();
 	}
 
-	virtual void SetMVAPool ( const DWORD * pMvaPool ) { this->m_pArg->SetMVAPool ( pMvaPool ); }
-	virtual void SetStringPool ( const BYTE * pStrings ) { this->m_pArg->SetStringPool ( pStrings ); }
+	virtual void Command ( ESphExprCommand eCmd, void * pArg ) { this->m_pArg->Command ( eCmd, pArg ); }
 };
 
 
@@ -2912,25 +2874,11 @@ public:
 		return m_dTurnPoints.GetLength();
 	}
 
-	virtual void SetMVAPool ( const DWORD * pMvaPool )
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
-		this->m_pArg->SetMVAPool ( pMvaPool );
+		this->m_pArg->Command ( eCmd, pArg );
 		ARRAY_FOREACH ( i, m_dTurnPoints )
-			m_dTurnPoints[i]->SetMVAPool ( pMvaPool );
-	}
-
-	virtual void SetStringPool ( const BYTE * pStrings )
-	{
-		this->m_pArg->SetStringPool ( pStrings );
-		ARRAY_FOREACH ( i, m_dTurnPoints )
-			m_dTurnPoints[i]->SetStringPool ( pStrings );
-	}
-
-	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
-	{
-		Expr_ArgVsSet_c<T>::GetDependencyColumns ( dColumns );
-		ARRAY_FOREACH ( i, m_dTurnPoints )
-			m_dTurnPoints[i]->GetDependencyColumns ( dColumns );
+			m_dTurnPoints[i]->Command ( eCmd, pArg );
 	}
 };
 
@@ -2955,8 +2903,7 @@ public:
 		return this->m_dValues.BinarySearch ( val )!=NULL;
 	}
 
-	virtual void SetMVAPool ( const DWORD * pMvaPool ) { this->m_pArg->SetMVAPool ( pMvaPool ); }
-	virtual void SetStringPool ( const BYTE * pStrings ) { this->m_pArg->SetStringPool ( pStrings ); }
+	virtual void Command ( ESphExprCommand eCmd, void * pArg ) { this->m_pArg->Command ( eCmd, pArg ); }
 };
 
 
@@ -2987,8 +2934,7 @@ public:
 		return m_pConsts->BinarySearch ( iVal )!=NULL;
 	}
 
-	virtual void SetMVAPool ( const DWORD * pMvaPool ) { this->m_pArg->SetMVAPool ( pMvaPool ); }
-	virtual void SetStringPool ( const BYTE * pStrings ) { this->m_pArg->SetStringPool ( pStrings ); }
+	virtual void Command ( ESphExprCommand eCmd, void * pArg ) { this->m_pArg->Command ( eCmd, pArg ); }
 };
 
 
@@ -3027,14 +2973,12 @@ public:
 		return MvaEval ( pMva );
 	}
 
-	virtual void SetMVAPool ( const DWORD * pMvaPool )
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
-		m_pMvaPool = pMvaPool; // finally, some real setup work!!!
-	}
-
-	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
-	{
-		dColumns.Add ( m_iLocator );
+		if ( eCmd==SPH_EXPR_SET_MVA_POOL )
+			m_pMvaPool = (const DWORD*)pArg;
+		if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS )
+			static_cast < CSphVector<int>* > ( pArg )->Add ( m_iLocator );
 	}
 
 protected:
@@ -3162,25 +3106,11 @@ public:
 		return (int64_t) DoEval ( tMatch );
 	}
 
-	virtual void SetMVAPool ( const DWORD * pMvaPool )
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
-		this->m_pArg->SetMVAPool ( pMvaPool );
+		this->m_pArg->Command ( eCmd, pArg );
 		ARRAY_FOREACH ( i, m_dBitWeights )
-			m_dBitWeights[i]->SetMVAPool ( pMvaPool );
-	}
-
-	virtual void SetStringPool ( const BYTE * pStrings )
-	{
-		this->m_pArg->SetStringPool ( pStrings );
-		ARRAY_FOREACH ( i, m_dBitWeights )
-			m_dBitWeights[i]->SetStringPool ( pStrings );
-	}
-
-	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
-	{
-		Expr_ArgVsSet_c<T>::GetDependencyColumns ( dColumns );
-		ARRAY_FOREACH ( i, m_dBitWeights )
-			m_dBitWeights[i]->GetDependencyColumns ( dColumns );
+			m_dBitWeights[i]->Command ( eCmd, pArg );
 	}
 };
 
@@ -3204,10 +3134,13 @@ public:
 		return CalcGeodist ( tMatch.GetAttrFloat ( m_tLat ), tMatch.GetAttrFloat ( m_tLon ), m_fAnchorLat, m_fAnchorLon );
 	}
 
-	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
+	virtual void Command ( ESphExprCommand eCmd, void * pArg ) const
 	{
-		dColumns.Add ( m_iLat );
-		dColumns.Add ( m_iLon );
+		if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS )
+		{
+			static_cast < CSphVector<int>* > ( pArg )->Add ( m_iLat );
+			static_cast < CSphVector<int>* > ( pArg )->Add ( m_iLon );
+		}
 	}
 
 private:
@@ -3243,10 +3176,10 @@ public:
 		return CalcGeodist ( m_pLat->Eval(tMatch), m_pLon->Eval(tMatch), m_fAnchorLat, m_fAnchorLon );
 	}
 
-	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
-		m_pLat->GetDependencyColumns ( dColumns );
-		m_pLon->GetDependencyColumns ( dColumns );
+		m_pLat->Command ( eCmd, pArg );
+		m_pLon->Command ( eCmd, pArg );
 	}
 
 private:
@@ -3281,12 +3214,12 @@ public:
 		return CalcGeodist ( m_pLat->Eval(tMatch), m_pLon->Eval(tMatch), m_pAnchorLat->Eval(tMatch), m_pAnchorLon->Eval(tMatch) );
 	}
 
-	virtual void GetDependencyColumns ( CSphVector<int> & dColumns ) const
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
-		m_pLat->GetDependencyColumns ( dColumns );
-		m_pLon->GetDependencyColumns ( dColumns );
-		m_pAnchorLat->GetDependencyColumns ( dColumns );
-		m_pAnchorLon->GetDependencyColumns ( dColumns );
+		m_pLat->Command ( eCmd, pArg );
+		m_pLon->Command ( eCmd, pArg );
+		m_pAnchorLat->Command ( eCmd, pArg );
+		m_pAnchorLon->Command ( eCmd, pArg );
 	}
 
 private:

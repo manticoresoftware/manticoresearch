@@ -6356,10 +6356,10 @@ bool RankerState_Expr_fn<false>::ExtraDataImpl ( ExtraData_e eType, void ** ppRe
 	switch ( eType )
 	{
 	case EXTRA_SET_MVAPOOL:
-		m_pExpr->SetMVAPool ( (DWORD*)ppResult );
+		m_pExpr->Command ( SPH_EXPR_SET_MVA_POOL, (DWORD*)ppResult );
 		return true;
 	case EXTRA_SET_STRINGPOOL:
-		m_pExpr->SetStringPool ( (BYTE*)ppResult );
+		m_pExpr->Command ( SPH_EXPR_SET_STRING_POOL, (BYTE*)ppResult );
 		return true;
 	default:
 		return false;
@@ -6372,10 +6372,10 @@ bool RankerState_Expr_fn<true>::ExtraDataImpl ( ExtraData_e eType, void ** ppRes
 	switch ( eType )
 	{
 	case EXTRA_SET_MVAPOOL:
-		m_pExpr->SetMVAPool ( (DWORD*)ppResult );
+		m_pExpr->Command ( SPH_EXPR_SET_MVA_POOL, (DWORD*)ppResult );
 		return true;
 	case EXTRA_SET_STRINGPOOL:
-		m_pExpr->SetStringPool ( (BYTE*)ppResult );
+		m_pExpr->Command ( SPH_EXPR_SET_STRING_POOL, (BYTE*)ppResult );
 		return true;
 	case EXTRA_SET_MAXMATCHES:
 		m_iMaxMatches = *(int*)ppResult;

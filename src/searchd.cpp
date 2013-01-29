@@ -8048,8 +8048,8 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 				const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr ( dPostlimit[j] );
 
 				// OPTIMIZE? only if the tag did not change?
-				tCol.m_pExpr->SetMVAPool ( tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pMva );
-				tCol.m_pExpr->SetStringPool ( tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pStrings );
+				tCol.m_pExpr->Command ( SPH_EXPR_SET_MVA_POOL, (void*)tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pMva );
+				tCol.m_pExpr->Command ( SPH_EXPR_SET_STRING_POOL, (void*)tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pStrings );
 
 				if ( tCol.m_eAttrType==SPH_ATTR_INTEGER )
 					tMatch.SetAttr ( tCol.m_tLocator, tCol.m_pExpr->IntEval(tMatch) );
@@ -8367,9 +8367,9 @@ struct Expr_Snippet_c : public ISphStringExpr
 	virtual void SetStringPool ( const BYTE * pStrings )
 	{
 		if ( m_pArgs )
-			m_pArgs->SetStringPool ( pStrings );
+			m_pArgs->Command ( SPH_EXPR_SET_STRING_POOL, (void*)pStrings );
 		if ( m_pText )
-			m_pText->SetStringPool ( pStrings );
+			m_pText->Command ( SPH_EXPR_SET_STRING_POOL, (void*)pStrings );
 	}
 };
 

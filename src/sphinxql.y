@@ -272,14 +272,10 @@ where_clause:
 
 where_expr:
 	where_item
-	| where_expr TOK_AND where_item 
+	| where_expr TOK_AND where_expr
+	| '(' where_expr ')'
 	;
 
-expr_float_unhandled:	
-	| expr_ident '=' const_float
-	| expr_ident TOK_NE const_float
-	;
-	
 where_item:
 	TOK_MATCH '(' TOK_QUOTED_STRING ')'
 		{
@@ -355,7 +351,7 @@ where_item:
 		}
 	| expr_float_unhandled
 		{
-			yyerror ( pParser, "only >=, <=,<,>, and BETWEEN floating-point filter types are supported in this version" );
+			yyerror ( pParser, "EQ and NEQ filters on floats are not (yet?) supported" );
 			YYERROR;
 		}
 	| expr_ident TOK_BETWEEN const_float TOK_AND const_float
@@ -393,6 +389,11 @@ where_item:
 			if ( !pParser->AddStringFilter ( $1.m_sValue, $3.m_sValue, true ) )
 				YYERROR;
 		}
+	;
+
+expr_float_unhandled:
+	expr_ident '=' const_float
+	| expr_ident TOK_NE const_float
 	;
 
 expr_ident:
@@ -599,8 +600,8 @@ named_const:
 
 expr:
 	TOK_IDENT
-	| TOK_ATIDENT	{ if ( !pParser->SetOldSyntax() ) YYERROR; }
-	| TOK_ID	{ if ( !pParser->SetNewSyntax() ) YYERROR; }
+	| TOK_ATIDENT				{ if ( !pParser->SetOldSyntax() ) YYERROR; }
+	| TOK_ID					{ if ( !pParser->SetNewSyntax() ) YYERROR; }
 	| TOK_CONST_INT
 	| TOK_CONST_FLOAT
 	| TOK_USERVAR

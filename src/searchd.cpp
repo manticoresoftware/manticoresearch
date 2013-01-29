@@ -10654,7 +10654,7 @@ CSphFilterSettings * SqlParser_c::AddFilter ( const CSphString & sCol, ESphFilte
 		return NULL;
 	}
 	CSphFilterSettings * pFilter = &m_pQuery->m_dFilters.Add();
-	pFilter->m_sAttrName = sCol;
+	pFilter->m_sAttrName = ( sCol=="id" ) ? "@id" : sCol ;
 	pFilter->m_eType = eType;
 	sphColumnToLowercase ( const_cast<char *>( pFilter->m_sAttrName.cstr() ) );
 	return pFilter;
@@ -10686,7 +10686,7 @@ bool SqlParser_c::AddIntFilterGreater ( const CSphString & sAttr, int64_t iVal, 
 	CSphFilterSettings * pFilter = AddFilter ( sAttr, SPH_FILTER_RANGE );
 	if ( !pFilter )
 		return false;
-	bool bId = sAttr=="@id";
+	bool bId = ( sAttr=="@id" ) || ( sAttr=="id" );
 	pFilter->m_iMinValue = iVal;
 	pFilter->m_iMaxValue = bId ? (SphAttr_t)ULLONG_MAX : LLONG_MAX;
 	pFilter->m_bHasEqual = bHasEqual;
@@ -10698,7 +10698,7 @@ bool SqlParser_c::AddIntFilterLesser ( const CSphString & sAttr, int64_t iVal, b
 	CSphFilterSettings * pFilter = AddFilter ( sAttr, SPH_FILTER_RANGE );
 	if ( !pFilter )
 		return false;
-	bool bId = sAttr=="@id";
+	bool bId = ( sAttr=="@id" ) || ( sAttr=="id" );
 	pFilter->m_iMinValue = bId ? 0 : LLONG_MIN;
 	pFilter->m_iMaxValue = iVal;
 	pFilter->m_bHasEqual = bHasEqual;

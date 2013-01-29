@@ -181,6 +181,10 @@ typedef unsigned long long uint64_t;
 #define UINT64_MAX U64C(0xffffffffffffffff)
 #endif
 
+#ifndef INT64_MIN
+#define INT64_MIN I64C(0x8000000000000000)
+#endif
+
 #ifndef INT64_MAX
 #define INT64_MAX I64C(0x7fffffffffffffff)
 #endif

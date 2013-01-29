@@ -6438,6 +6438,7 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 		{
 			if ( bDeflowered )
 				tBuf.Append ( " AND" );
+			bDeflowered = true;
 
 			const CSphFilterSettings & f = q.m_dFilters[i];
 			switch ( f.m_eType )
@@ -6468,21 +6469,46 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 					break;
 
 				case SPH_FILTER_RANGE:
-					if ( f.m_bExclude )
-						tBuf.Append ( " %s NOT BETWEEN "INT64_FMT" AND "INT64_FMT,
-						f.m_sAttrName.cstr(), f.m_iMinValue, f.m_iMaxValue );
-					else
-						tBuf.Append ( " %s BETWEEN "INT64_FMT" AND "INT64_FMT,
-							f.m_sAttrName.cstr(), f.m_iMinValue, f.m_iMaxValue );
+					if ( f.m_iMinValue==INT64_MIN || ( f.m_iMinValue==0 && f.m_sAttrName=="@id" ) )
+					{
+						// no min, thus (attr<maxval)
+						const char * sOps[2][2] = { { "<", "<=" }, { ">=", ">" } };
+						tBuf.Append ( " %s%s"INT64_FMT, f.m_sAttrName.cstr(),
+							sOps [ f.m_bExclude ][ f.m_bHasEqual ], f.m_iMaxValue );
+					} else if ( f.m_iMaxValue==INT64_MAX || ( f.m_iMaxValue==-1 && f.m_sAttrName=="@id" ) )
+					{
+						// mo max, thus (attr>minval)
+						const char * sOps[2][2] = { { ">", ">=" }, { "<", "<=" } };
+						tBuf.Append ( " %s%s"INT64_FMT, f.m_sAttrName.cstr(),
+							sOps [ f.m_bExclude ][ f.m_bHasEqual ], f.m_iMinValue );
+					} else
+					{
+						tBuf.Append ( " %s%s BETWEEN "INT64_FMT" AND "INT64_FMT,
+							f.m_sAttrName.cstr(), f.m_bExclude ? " NOT" : "",
+							f.m_iMinValue + !f.m_bHasEqual, f.m_iMaxValue - !f.m_bHasEqual );
+					}
 					break;
 
 				case SPH_FILTER_FLOATRANGE:
-					if ( f.m_bExclude )
-						tBuf.Append ( " %s NOT BETWEEN %f AND %f",
-						f.m_sAttrName.cstr(), f.m_fMinValue, f.m_fMaxValue );
-					else
-						tBuf.Append ( " %s BETWEEN %f AND %f",
-							f.m_sAttrName.cstr(), f.m_fMinValue, f.m_fMaxValue );
+					if ( f.m_fMinValue==-FLT_MAX )
+					{
+						// no min, thus (attr<maxval)
+						const char * sOps[2][2] = { { "<", "<=" }, { ">=", ">" } };
+						tBuf.Append ( " %s%s%f", f.m_sAttrName.cstr(),
+							sOps [ f.m_bExclude ][ f.m_bHasEqual ], f.m_fMaxValue );
+					} else if ( f.m_fMaxValue==FLT_MAX )
+					{
+						// mo max, thus (attr>minval)
+						const char * sOps[2][2] = { { ">", ">=" }, { "<", "<=" } };
+						tBuf.Append ( " %s%s%f", f.m_sAttrName.cstr(),
+							sOps [ f.m_bExclude ][ f.m_bHasEqual ], f.m_fMinValue );
+					} else
+					{
+						// FIXME? need we handle m_bHasEqual here?
+						tBuf.Append ( " %s%s BETWEEN %f AND %f",
+							f.m_sAttrName.cstr(), f.m_bExclude ? " NOT" : "",
+							f.m_fMinValue, f.m_fMaxValue );
+					}
 					break;
 
 				default:

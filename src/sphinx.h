@@ -2800,6 +2800,9 @@ public:
 	/// entries are stored in properly sorted order,
 	/// if iTag is non-negative, entries are also tagged; otherwise, their tag's unchanged
 	virtual void		Flatten ( CSphMatch * pTo, int iTag ) = 0;
+
+	/// compute sorted indexes
+	virtual void		BuildFlatIndexes ( CSphVector<int> & ) {}
 };
 
 

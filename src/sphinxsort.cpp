@@ -123,6 +123,23 @@ public:
 // SORTING QUEUES
 //////////////////////////////////////////////////////////////////////////
 
+template < typename COMP >
+struct CompareIndex_fn
+{
+	const CSphMatch * m_pBase;
+	const CSphMatchComparatorState * m_pState;
+
+	CompareIndex_fn ( const CSphMatch * pBase, const CSphMatchComparatorState * pState )
+		: m_pBase ( pBase )
+		, m_pState ( pState )
+	{}
+
+	bool IsLess ( int a, int b ) const
+	{
+		return COMP::IsLess ( m_pBase[b], m_pBase[a], *m_pState );
+	}
+};
+
 /// heap sorter
 /// plain binary heap based PQ
 template < typename COMP, bool NOTIFICATIONS >
@@ -253,6 +270,14 @@ public:
 			Pop ();
 		}
 		m_iTotal = 0;
+	}
+
+	void BuildFlatIndexes ( CSphVector<int> & dIndexes )
+	{
+		dIndexes.Resize ( GetLength() );
+		ARRAY_FOREACH ( i, dIndexes )
+			dIndexes[i] = i;
+		dIndexes.Sort ( CompareIndex_fn<COMP> ( m_pData, &m_tState ) );
 	}
 };
 
@@ -1966,7 +1991,7 @@ public:
 	}
 
 	/// store all entries into specified location in sorted order, and remove them from queue
-	void Flatten ( CSphMatch * pTo, int iTag )
+	virtual void Flatten ( CSphMatch * pTo, int iTag )
 	{
 		assert ( m_bDataInitialized );
 

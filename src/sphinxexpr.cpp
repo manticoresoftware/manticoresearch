@@ -2000,6 +2000,11 @@ public:
 
 	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
+		if ( eCmd==SPH_EXPR_GET_UDF )
+		{
+			*((bool*)pArg) = true;
+			return;
+		}
 		ARRAY_FOREACH ( i, m_dArgs )
 			m_dArgs[i]->Command ( eCmd, pArg );
 	}

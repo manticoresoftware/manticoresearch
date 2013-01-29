@@ -17384,13 +17384,45 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 			const int iCount = pTop->GetLength ();
 			CSphMatch * const pTail = pHead + iCount;
 
-			for ( CSphMatch * pCur=pHead; pCur<pTail; pCur++ )
-				if ( pCur->m_iTag<0 )
+			bool bGotUDF = false;
+			ARRAY_FOREACH_COND ( i, tCtx.m_dCalcFinal, !bGotUDF )
+				tCtx.m_dCalcFinal[i].m_pExpr->Command ( SPH_EXPR_GET_UDF, &bGotUDF );
+
+			CSphVector<int> dIndexes;
+			if ( bGotUDF )
 			{
-				if ( bFinalLookup )
-					CopyDocinfo ( &tCtx, *pCur, FindDocinfo ( pCur->m_iDocID ) );
-				tCtx.CalcFinal ( *pCur );
-				pCur->m_iTag = iTag;
+				pTop->BuildFlatIndexes ( dIndexes );
+				bGotUDF = ( dIndexes.GetLength()!=0 );
+			}
+
+			if ( bGotUDF )
+			{
+				// we now promise to UDFs that final-stage calls will be evaluated
+				// a) over the final, pre-limit result set
+				// b) in the final result set order
+				ARRAY_FOREACH ( i, dIndexes )
+				{
+					assert ( dIndexes[i]>=0 && dIndexes[i]<iCount );
+					CSphMatch * pCur = pHead + dIndexes[i];
+					if ( pCur->m_iTag>=0 )
+						continue;
+					if ( bFinalLookup )
+						CopyDocinfo ( &tCtx, *pCur, FindDocinfo ( pCur->m_iDocID ) );
+					tCtx.CalcFinal ( *pCur );
+					pCur->m_iTag = iTag;
+				}
+
+			} else
+			{
+				// just evaluate in heap order
+				for ( CSphMatch * pCur=pHead; pCur<pTail; pCur++ )
+					if ( pCur->m_iTag<0 )
+				{
+					if ( bFinalLookup )
+						CopyDocinfo ( &tCtx, *pCur, FindDocinfo ( pCur->m_iDocID ) );
+					tCtx.CalcFinal ( *pCur );
+					pCur->m_iTag = iTag;
+				}
 			}
 		}
 

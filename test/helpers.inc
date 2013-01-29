@@ -282,7 +282,7 @@ function StopSearchd ( $config, $pidfile )
 	if ( file_exists($pidfile) && count(file($pidfile)) )
 	{
 		$path = $g_locals['searchd'];
-		exec ( "$path --config $config --stop" );
+		exec ( "$path --config $config --stopwait" );
 
 		$i = 0;
 		while ( file_exists ( $pidfile ) && $i < $action_retries )

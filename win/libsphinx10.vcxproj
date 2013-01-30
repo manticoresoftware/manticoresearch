@@ -119,9 +119,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\src\sphinx.cpp" />
+    <ClCompile Include="..\src\sphinxaot.cpp" />
     <ClCompile Include="..\src\sphinxexcerpt.cpp" />
     <ClCompile Include="..\src\sphinxexpr.cpp" />
     <ClCompile Include="..\src\sphinxfilter.cpp" />
+    <ClCompile Include="..\src\sphinxjson.cpp" />
     <ClCompile Include="..\src\sphinxmetaphone.cpp" />
     <ClCompile Include="..\src\sphinxquery.cpp" />
     <ClCompile Include="..\src\sphinxrt.cpp" />
@@ -149,6 +151,7 @@
     <ClInclude Include="..\src\sphinxexpr.h" />
     <ClInclude Include="..\src\sphinxfilter.h" />
     <ClInclude Include="..\src\sphinxint.h" />
+    <ClInclude Include="..\src\sphinxjson.h" />
     <ClInclude Include="..\src\sphinxquery.h" />
     <ClInclude Include="..\src\sphinxrt.h" />
     <ClInclude Include="..\src\sphinxsearch.h" />

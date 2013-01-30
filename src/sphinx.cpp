@@ -235,7 +235,7 @@ protected:
 
 /// global idf definitions hash
 static SmallStringHash_T <CSphGlobalIDF * >	g_hGlobalIDFs;
-static CSphMutex							g_tGlobalIDFLock;
+static CSphStaticMutex						g_tGlobalIDFLock;
 
 /////////////////////////////////////////////////////////////////////////////
 // COMPILE-TIME CHECKS
@@ -29620,17 +29620,10 @@ void sphUpdateGlobalIDFs ( const CSphVector<CSphString> & dFiles )
 }
 
 
-void sphInitGlobalIDFs ()
-{
-	g_tGlobalIDFLock.Init ();
-}
-
-
 void sphShutdownGlobalIDFs ()
 {
 	CSphVector<CSphString> dEmptyFiles;
 	sphUpdateGlobalIDFs ( dEmptyFiles );
-	g_tGlobalIDFLock.Done ();
 }
 
 

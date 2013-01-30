@@ -19209,9 +19209,6 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const char * sOptIndex )
 	int iValidIndexes = 0;
 	int64_t tmLoad = -sphMicroTimer();
 
-	// init global dictionary
-	sphInitGlobalIDFs ();
-
 	hConf["index"].IterateStart ();
 	while ( hConf["index"].IterateNext() )
 	{

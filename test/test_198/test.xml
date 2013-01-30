@@ -63,6 +63,9 @@ create table test_table
 <sphinxql>select * from test where match('ZONESPAN:zoneC and ships')</sphinxql>
 <sphinxql>select * from test where match('ZONESPAN:zoneC kings and')</sphinxql>
 <sphinxql>select * from test,asdf where match('ZONESPAN:zoneC and kings') option ignore_nonexistent_indexes=1</sphinxql>
+<sphinxql>SELECT 2e-1 FROM test LIMIT 1</sphinxql>
+<sphinxql>SELECT .5E1 FROM test LIMIT 1</sphinxql>
+<sphinxql>SELECT 6.e+10 FROM test LIMIT 1</sphinxql>
 </sphqueries>
 
 </test>

@@ -294,6 +294,9 @@ int main ( int argc, char ** argv )
 			if ( !sphFixupIndexSettings ( pIndex, hIndex, sError ) )
 				sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
+			if ( hIndex ( "global_idf" ) && !sphPrereadGlobalIDF ( hIndex.GetStr ( "global_idf" ), sError ) )
+				sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
+
 			// lookup first timestamp if needed
 			// FIXME! remove this?
 			if ( tQuery.m_eSort!=SPH_SORT_RELEVANCE && tQuery.m_eSort!=SPH_SORT_EXTENDED && tQuery.m_eSort!=SPH_SORT_EXPR )

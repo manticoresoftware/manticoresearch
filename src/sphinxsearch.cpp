@@ -360,6 +360,11 @@ void sphInterruptNow()
 	ExtTerm_c::m_bInterruptNow = true;
 }
 
+bool sphInterrupted()
+{
+	return ExtTerm_c::m_bInterruptNow;
+}
+
 volatile bool ExtTerm_c::m_bInterruptNow = false;
 
 /// single keyword streamer with artificial hitlist

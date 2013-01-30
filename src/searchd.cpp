@@ -116,6 +116,7 @@ struct ServedDesc_t
 	bool				m_bToDelete;
 	bool				m_bOnlyNew;
 	bool				m_bRT;
+	CSphString			m_sGlobalIDFPath;
 
 						ServedDesc_t ();
 						~ServedDesc_t ();
@@ -437,6 +438,8 @@ static CSphMutex							g_tRotateQueueMutex;
 static CSphVector<CSphString>				g_dRotateQueue;		// FIXME? maybe replace it with lockless ring buffer
 static CSphMutex							g_tRotateConfigMutex;
 static SphThread_t							g_tRotateThread;
+static SphThread_t							g_tRotationServiceThread;
+static volatile bool						g_bInvokeRotationService = false;
 
 /// flush parameters of rt indexes
 static SphThread_t							g_tRtFlushThread;
@@ -1622,6 +1625,8 @@ void Shutdown ()
 			g_tOptimizeQueueMutex.Done();
 		}
 
+		sphThreadJoin ( &g_tRotationServiceThread );
+
 #if !USE_WINDOWS
 		if ( g_eWorkers==MPM_FORK || g_eWorkers==MPM_PREFORK )
 		{
@@ -1681,6 +1686,7 @@ void Shutdown ()
 		sphRTDone();
 
 		sphShutdownWordforms ();
+		sphShutdownGlobalIDFs ();
 	}
 
 	ARRAY_FOREACH ( i, g_dListeners )
@@ -15801,6 +15807,7 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 	CSphString sWarning;
 	ISphTokenizer * pTokenizer = tIndex.m_pIndex->LeakTokenizer (); // FIXME! disable support of that old indexes and remove this bullshit
 	CSphDict * pDictionary = tIndex.m_pIndex->LeakDictionary ();
+	tIndex.m_pIndex->SetGlobalIDFPath ( tIndex.m_sGlobalIDFPath );
 
 	if ( !tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, g_bStripPath, sWarning ) || !tIndex.m_pIndex->Preread() )
 	{
@@ -16121,6 +16128,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	tNewIndex.m_pIndex->m_bExpandKeywords = pRotating->m_bExpand;
 	tNewIndex.m_pIndex->SetPreopen ( pRotating->m_bPreopen || g_bPreopenIndexes );
 	tNewIndex.m_pIndex->SetWordlistPreload ( !pRotating->m_bOnDiskDict && !g_bOnDiskDicts );
+	tNewIndex.m_pIndex->SetGlobalIDFPath ( pRotating->m_sGlobalIDFPath );
 
 	// rebase new index
 	char sNewPath [ SPH_MAX_FILENAME_LEN ];
@@ -16302,6 +16310,7 @@ void IndexRotationDone ()
 #endif
 
 	g_iRotateCount = Max ( 0, g_iRotateCount-1 );
+	g_bInvokeRotationService = true;
 	sphInfo ( "rotating finished" );
 }
 
@@ -16329,6 +16338,7 @@ void SeamlessTryToForkPrereader ()
 	g_pPrereading->m_bExpandKeywords = tServed.m_bExpand;
 	g_pPrereading->SetPreopen ( tServed.m_bPreopen || g_bPreopenIndexes );
 	g_pPrereading->SetWordlistPreload ( !tServed.m_bOnDiskDict && !g_bOnDiskDicts );
+	g_pPrereading->SetGlobalIDFPath ( tServed.m_sGlobalIDFPath );
 
 	// rebase buffer index
 	char sNewPath [ SPH_MAX_FILENAME_LEN ];
@@ -16928,6 +16938,7 @@ void ConfigureLocalIndex ( ServedDesc_t & tIdx, const CSphConfigSection & hIndex
 	tIdx.m_bExpand = ( hIndex.GetInt ( "expand_keywords", 0 )!=0 );
 	tIdx.m_bPreopen = ( hIndex.GetInt ( "preopen", 0 )!=0 );
 	tIdx.m_bOnDiskDict = ( hIndex.GetInt ( "ondisk_dict", 0 )!=0 );
+	tIdx.m_sGlobalIDFPath = hIndex.GetStr ( "global_idf" );
 }
 
 
@@ -17302,6 +17313,7 @@ void PreCreatePlainIndex ( ServedDesc_t & tServed, const char * sName )
 	tServed.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 	tServed.m_pIndex->SetPreopen ( tServed.m_bPreopen || g_bPreopenIndexes );
 	tServed.m_pIndex->SetWordlistPreload ( !tServed.m_bOnDiskDict && !g_bOnDiskDicts );
+	tServed.m_pIndex->SetGlobalIDFPath ( tServed.m_sGlobalIDFPath );
 	tServed.m_bEnabled = false;
 }
 
@@ -17416,6 +17428,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		tIdx.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 		tIdx.m_pIndex->SetPreopen ( tIdx.m_bPreopen || g_bPreopenIndexes );
 		tIdx.m_pIndex->SetWordlistPreload ( !tIdx.m_bOnDiskDict && !g_bOnDiskDicts );
+		tIdx.m_pIndex->SetGlobalIDFPath ( tIdx.m_sGlobalIDFPath );
 
 		tIdx.m_pIndex->Setup ( tSettings );
 
@@ -17459,14 +17472,6 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		// try to create index
 		tIdx.m_sIndexPath = hIndex["path"];
 		PreCreatePlainIndex ( tIdx, szIndexName );
-
-		if ( hIndex.Exists ( "global_idf" ) )
-		{
-			if ( g_eWorkers==MPM_FORK || g_eWorkers==MPM_PREFORK )
-				sphWarning ( "index '%s': global IDF requires workers=threads; IGNORED", szIndexName );
-			else
-				tIdx.m_pIndex->SetGlobalIDFPath ( hIndex.GetStr ( "global_idf" ) );
-		}
 
 		// done
 		if ( !g_pLocalIndexes->Add ( tIdx, szIndexName ) )
@@ -17676,6 +17681,33 @@ void CheckDelete ()
 }
 
 
+void CheckRotateGlobalIDFs ()
+{
+	CSphVector <CSphString> dFiles;
+	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
+	{
+		ServedIndex_t & tIndex = it.Get();
+		if ( tIndex.m_bEnabled && !tIndex.m_sGlobalIDFPath.IsEmpty() )
+			dFiles.Add ( tIndex.m_sGlobalIDFPath );
+	}
+	sphUpdateGlobalIDFs ( dFiles );
+}
+
+
+void RotationServiceThreadFunc ( void * )
+{
+	while ( !g_bShutdown )
+	{
+		if ( g_bInvokeRotationService )
+		{
+			CheckRotateGlobalIDFs ();
+			g_bInvokeRotationService = false;
+		}
+		sphSleepMsec ( 50 );
+	}
+}
+
+
 void CheckRotate ()
 {
 	// do we need to rotate now?
@@ -17789,6 +17821,7 @@ void CheckRotate ()
 	{
 		g_iRotateCount = Max ( 0, g_iRotateCount-1 );
 		sphWarning ( "nothing to rotate after SIGHUP ( in queue=%d )", g_iRotateCount );
+		g_bInvokeRotationService = true;
 	}
 
 	if ( g_eWorkers!=MPM_THREADS && iRotIndexes )
@@ -19176,6 +19209,9 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const char * sOptIndex )
 	int iValidIndexes = 0;
 	int64_t tmLoad = -sphMicroTimer();
 
+	// init global dictionary
+	sphInitGlobalIDFs ();
+
 	hConf["index"].IterateStart ();
 	while ( hConf["index"].IterateNext() )
 	{
@@ -19227,6 +19263,10 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const char * sOptIndex )
 
 			if ( !tIndex.m_bEnabled )
 				continue;
+
+			if ( !tIndex.m_sGlobalIDFPath.IsEmpty() )
+				if ( !sphPrereadGlobalIDF ( tIndex.m_sGlobalIDFPath, sError ) )
+					sphWarning ( "index '%s': global IDF unavailable - IGNORING", sIndexName );
 		}
 
 		if ( eAdd!=ADD_ERROR )
@@ -20086,6 +20126,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			SphinxqlStateRead ( g_sSphinxqlState );
 		sphUDFLock ( true );
 	}
+
+	if ( !sphThreadCreate ( &g_tRotationServiceThread, RotationServiceThreadFunc, 0 ) )
+			sphDie ( "failed to create rotation service thread" );
 
 	// almost ready, time to start listening
 	int iBacklog = hSearchd.GetInt ( "listen_backlog", SEARCHD_BACKLOG );

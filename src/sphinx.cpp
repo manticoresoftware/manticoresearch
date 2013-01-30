@@ -199,40 +199,42 @@ int64_t		g_iIndexerCurrentRangeMax	= 0;
 int64_t		g_iIndexerPoolStartDocID	= 0;
 int64_t		g_iIndexerPoolStartHit		= 0;
 
-/// global idf
+
+/// global IDF
 class CSphGlobalIDF
 {
 public:
 	CSphGlobalIDF ()
 		: m_iTotalDocuments ( 0 )
+		, m_iTotalWords ( 0 )
 	{}
 
-	bool			Preload ( const CSphString & sFilename, CSphString & sError );
-	const int		GetCount ( const CSphString & sWord );
+	bool			Touch ( const CSphString & sFilename );
+	bool			Preread ( const CSphString & sFilename, CSphString & sError );
+	const DWORD		GetDocs ( const CSphString & sWord ) const;
 	float			GetIDF ( const CSphString & sWord, int iDocsLocal, int iQwords, bool bPlainIDF );
 
 protected:
 #pragma pack(push,4)
 	struct IDFWord_t
 	{
-		uint64_t			m_uWordID;
-		DWORD				m_iCount;
+		uint64_t				m_uWordID;
+		DWORD					m_iDocs;
 	};
 #pragma pack(pop)
-	STATIC_SIZE_ASSERT		( IDFWord_t, 12 );
+	STATIC_SIZE_ASSERT			( IDFWord_t, 12 );
 
-	static const int		HASH_BITS = 16;
-
-	CSphVector<IDFWord_t>	m_dWords;
-	CSphVector<int>			m_dHash;
-	int64_t					m_iTotalDocuments;
-
-public:
-	SphOffset_t				m_uMTime;
+	static const int			HASH_BITS = 16;
+	int64_t						m_iTotalDocuments;
+	int64_t						m_iTotalWords;
+	SphOffset_t					m_uMTime;
+	CSphSharedBuffer<IDFWord_t>	m_pWords;
+	CSphSharedBuffer<int64_t>	m_pHash;
 };
 
+
 /// global idf definitions hash
-static SmallStringHash_T<CSphGlobalIDF>		g_hGlobalIDFs;
+static SmallStringHash_T <CSphGlobalIDF * >	g_hGlobalIDFs;
 static CSphMutex							g_tGlobalIDFLock;
 
 /////////////////////////////////////////////////////////////////////////////
@@ -8203,8 +8205,8 @@ void CSphIndex::SetCacheSize ( int iMaxCachedDocs, int iMaxCachedHits )
 float CSphIndex::GetGlobalIDF ( const CSphString & sWord, int iDocsLocal, int iQwords, bool bPlainIDF ) const
 {
 	g_tGlobalIDFLock.Lock ();
-	CSphGlobalIDF * pGlobalIDF = g_hGlobalIDFs ( m_sGlobalIDFPath );
-	float fIDF = pGlobalIDF ? pGlobalIDF->GetIDF ( sWord, iDocsLocal, iQwords, bPlainIDF ) : 0.0f;
+	CSphGlobalIDF ** ppGlobalIDF = g_hGlobalIDFs ( m_sGlobalIDFPath );
+	float fIDF = ppGlobalIDF && *ppGlobalIDF ? ( *ppGlobalIDF )->GetIDF ( sWord, iDocsLocal, iQwords, bPlainIDF ) : 0.0f;
 	g_tGlobalIDFLock.Unlock ();
 	return fIDF;
 }
@@ -15557,43 +15559,6 @@ bool CSphIndex_VLN::Preread ()
 		}
 	}
 #endif // PARANOID
-
-	// prereading global idf
-	if ( !m_sGlobalIDFPath.IsEmpty() )
-	{
-		g_tGlobalIDFLock.Lock ();
-
-		// get file modification time
-		struct_stat tStat;
-		memset ( &tStat, 0, sizeof ( tStat ) );
-		if ( stat ( m_sGlobalIDFPath.cstr(), &tStat ) < 0 )
-			memset ( &tStat, 0, sizeof ( tStat ) );
-
-		SphOffset_t uMTime = tStat.st_mtime;
-
-		// if modified then delete from the global hash
-		if ( g_hGlobalIDFs ( m_sGlobalIDFPath ) )
-		{
-			if ( uMTime!=g_hGlobalIDFs ( m_sGlobalIDFPath )->m_uMTime )
-				g_hGlobalIDFs.Delete ( m_sGlobalIDFPath );
-		}
-
-		// preread if wasn't added or was deleted from the hash
-		if ( !g_hGlobalIDFs ( m_sGlobalIDFPath ) )
-		{
-			sphLogDebug ( "Prereading global idf" );
-			g_hGlobalIDFs.Add ( CSphGlobalIDF(), m_sGlobalIDFPath );
-			if ( !g_hGlobalIDFs ( m_sGlobalIDFPath )->Preload ( m_sGlobalIDFPath, m_sLastError ) )
-			{
-				g_hGlobalIDFs.Delete ( m_sGlobalIDFPath );
-				g_tGlobalIDFLock.Unlock ();
-				return false;
-			}
-			// set file modification time
-			g_hGlobalIDFs ( m_sGlobalIDFPath )->m_uMTime = uMTime;
-		}
-		g_tGlobalIDFLock.Unlock ();
-	}
 
 	*m_pPreread = 1;
 	sphLogDebug ( "Preread successfully finished" );
@@ -29445,6 +29410,230 @@ void sphDictBuildSkiplists ( const char * sPath )
 	FinalizeUpgrade ( sRenames, "skiplists upgrade", sPath, tmStart );
 }
 
+
+bool CSphGlobalIDF::Touch ( const CSphString & sFilename )
+{
+	// update m_uMTime, return true if modified
+	struct_stat tStat;
+	memset ( &tStat, 0, sizeof ( tStat ) );
+	if ( stat ( sFilename.cstr(), &tStat ) < 0 )
+		memset ( &tStat, 0, sizeof ( tStat ) );
+	bool bModified = ( m_uMTime!=tStat.st_mtime );
+	m_uMTime = tStat.st_mtime;
+	return bModified;
+}
+
+
+bool CSphGlobalIDF::Preread ( const CSphString & sFilename, CSphString & sError )
+{
+	Touch ( sFilename );
+
+	CSphAutoreader tReader;
+	if ( !tReader.Open ( sFilename, sError ) )
+		return false;
+
+	m_iTotalDocuments = tReader.GetOffset ();
+	const SphOffset_t iSize = tReader.GetFilesize () - sizeof(SphOffset_t);
+	m_iTotalWords = iSize/sizeof(IDFWord_t);
+
+	// allocate words cache
+	CSphString sWarning;
+	if ( !m_pWords.Alloc ( m_iTotalWords, sError, sWarning ) )
+		return false;
+
+	// allocate lookup table if needed
+	int iHashSize = (int)( U64C(1) << HASH_BITS );
+	if ( m_iTotalWords > iHashSize*8 )
+	{
+		if ( !m_pHash.Alloc ( iHashSize+2, sError, sWarning ) )
+			return false;
+	}
+
+	// read file into memory (may exceed 2GB)
+	const int iBlockSize = 10485760; // 10M block
+	for ( SphOffset_t iRead=0; iRead<iSize && !sphInterrupted(); iRead+=iBlockSize )
+		tReader.GetBytes ( (BYTE*)m_pWords.GetWritePtr()+iRead, iRead+iBlockSize>iSize ? (int)( iSize-iRead ) : iBlockSize );
+
+	if ( sphInterrupted() )
+		return false;
+
+	// build lookup table
+	if ( m_pHash.GetLength () )
+	{
+		int64_t * pHash = m_pHash.GetWritePtr();
+
+		uint64_t uFirst = m_pWords[0].m_uWordID;
+		uint64_t uRange = m_pWords[m_iTotalWords-1].m_uWordID - uFirst;
+
+		DWORD iShift = 0;
+		while ( uRange>=( U64C(1) << HASH_BITS ) )
+		{
+			iShift++;
+			uRange >>= 1;
+		}
+
+		pHash[0] = iShift;
+		pHash[1] = 0;
+		DWORD uLastHash = 0;
+
+		for ( int64_t i=1; i<m_iTotalWords; i++ )
+		{
+			// check for interrupt (throttled for speed)
+			if ( ( i&0xffff )==0 && sphInterrupted() )
+				return false;
+
+			DWORD uHash = (DWORD)( ( m_pWords[i].m_uWordID-uFirst ) >> iShift );
+
+			if ( uHash==uLastHash )
+				continue;
+
+			while ( uLastHash<uHash )
+				pHash [ ++uLastHash+1 ] = i;
+
+			uLastHash = uHash;
+		}
+		pHash [ ++uLastHash+1 ] = m_iTotalWords;
+	}
+	return true;
+}
+
+
+const DWORD CSphGlobalIDF::GetDocs ( const CSphString & sWord ) const
+{
+	uint64_t uWordID = sphFNV64 ( (BYTE*)sWord.cstr() );
+
+	int64_t iStart = 0;
+	int64_t iEnd = m_iTotalWords-1;
+
+	const IDFWord_t * pWords = (IDFWord_t *)m_pWords.GetWritePtr ();
+
+	if ( m_pHash.GetLength () )
+	{
+		uint64_t uFirst = pWords[0].m_uWordID;
+		DWORD uHash = (DWORD)( ( uWordID-uFirst ) >> m_pHash[0] );
+		if ( uHash > ( U64C(1) << HASH_BITS ) )
+			return 0;
+
+		iStart = m_pHash [ uHash+1 ];
+		iEnd = m_pHash [ uHash+2 ] - 1;
+	}
+
+	const IDFWord_t * pWord = sphBinarySearch ( pWords+iStart, pWords+iEnd, bind ( &IDFWord_t::m_uWordID ), uWordID );
+	return pWord ? pWord->m_iDocs : 0;
+}
+
+
+float CSphGlobalIDF::GetIDF ( const CSphString & sWord, int iDocsLocal, int iQwords, bool bPlainIDF )
+{
+	const int64_t iDocs = Max ( iDocsLocal, (int64_t)GetDocs ( sWord ) );
+	const int64_t iTotalClamped = Max ( m_iTotalDocuments, iDocs );
+
+	if ( bPlainIDF )
+	{
+		float fLogTotal = logf ( float ( 1+iTotalClamped ) );
+		return logf ( float ( iTotalClamped-iDocs+1 ) / float ( iDocs ) )
+			/ ( 2*iQwords*fLogTotal );
+	} else
+	{
+		float fLogTotal = logf ( float ( 1+iTotalClamped ) );
+		return logf ( float ( iTotalClamped ) / float ( iDocs ) )
+			/ ( 2*iQwords*fLogTotal );
+	}
+}
+
+
+bool sphPrereadGlobalIDF ( const CSphString & sPath, CSphString & sError )
+{
+	g_tGlobalIDFLock.Lock ();
+
+	CSphGlobalIDF ** ppGlobalIDF = g_hGlobalIDFs ( sPath );
+	bool bExpired = ( ppGlobalIDF && *ppGlobalIDF && (*ppGlobalIDF)->Touch ( sPath ) );
+
+	if ( !ppGlobalIDF || bExpired )
+	{
+		if ( bExpired )
+			sphLogDebug ( "Reloading global IDF (%s)", sPath.cstr() );
+		else
+			sphLogDebug ( "Loading global IDF (%s)", sPath.cstr() );
+
+		// unlock while prereading
+		g_tGlobalIDFLock.Unlock ();
+
+		CSphGlobalIDF * pGlobalIDF = new CSphGlobalIDF ();
+		if ( !pGlobalIDF->Preread ( sPath, sError ) )
+		{
+			SafeDelete ( pGlobalIDF );
+			return false;
+		}
+
+		// lock while updating
+		g_tGlobalIDFLock.Lock ();
+
+		if ( bExpired )
+		{
+			ppGlobalIDF = g_hGlobalIDFs ( sPath );
+			if ( ppGlobalIDF )
+			{
+				CSphGlobalIDF * pOld = *ppGlobalIDF;
+				*ppGlobalIDF = pGlobalIDF;
+				SafeDelete ( pOld );
+			}
+		}
+		else
+		{
+			if ( !g_hGlobalIDFs.Add ( pGlobalIDF, sPath ) )
+				SafeDelete ( pGlobalIDF );
+		}
+	}
+
+	g_tGlobalIDFLock.Unlock ();
+
+	return true;
+}
+
+
+void sphUpdateGlobalIDFs ( const CSphVector<CSphString> & dFiles )
+{
+	// delete unlisted entries
+	g_tGlobalIDFLock.Lock ();
+	g_hGlobalIDFs.IterateStart ();
+	while ( g_hGlobalIDFs.IterateNext () )
+	{
+		const CSphString & sKey = g_hGlobalIDFs.IterateGetKey ();
+		if ( !dFiles.Contains ( sKey ) )
+		{
+			sphLogDebug ( "Unloading global IDF (%s)", sKey.cstr() );
+			SafeDelete ( g_hGlobalIDFs.IterateGet () );
+			g_hGlobalIDFs.Delete ( sKey );
+		}
+	}
+	g_tGlobalIDFLock.Unlock ();
+
+	// load/rotate remaining entries
+	CSphString sError;
+	ARRAY_FOREACH ( i, dFiles )
+	{
+		CSphString sPath = dFiles[i];
+		if ( !sphPrereadGlobalIDF ( sPath, sError ) )
+			sphLogDebug ( "Could not load global IDF (%s): %s", sPath.cstr(), sError.cstr() );
+	}
+}
+
+
+void sphInitGlobalIDFs ()
+{
+	g_tGlobalIDFLock.Init ();
+}
+
+
+void sphShutdownGlobalIDFs ()
+{
+	CSphVector<CSphString> dEmptyFiles;
+	sphUpdateGlobalIDFs ( dEmptyFiles );
+	g_tGlobalIDFLock.Done ();
+}
+
+
 #if USE_WINDOWS
 #pragma warning(default:4127) // conditional expr is const for MSVC
 #endif
@@ -29452,101 +29641,6 @@ void sphDictBuildSkiplists ( const char * sPath )
 
 //////////////////////////////////////////////////////////////////////////
 
-bool CSphGlobalIDF::Preload ( const CSphString & sFilename, CSphString & sError )
-{
-	CSphAutoreader tReader;
-	if ( !tReader.Open ( sFilename, sError ) )
-		return false;
-
-	m_iTotalDocuments = tReader.GetOffset();
-
-	const SphOffset_t iSize = tReader.GetFilesize () - sizeof(SphOffset_t);
-
-	int iTotalWords = int ( iSize/sizeof(IDFWord_t) );
-
-	m_dWords.Resize ( iTotalWords );
-	tReader.GetBytes ( (BYTE*)m_dWords.Begin(), (int)iSize );
-	tReader.Close();
-
-	// build lookup table if needed
-	int iHashSize = int ( 1 << HASH_BITS );
-	if ( iTotalWords > iHashSize*8 )
-	{
-		m_dHash.Resize ( iHashSize+2 );
-
-		uint64_t uFirst = m_dWords[0].m_uWordID;
-		uint64_t uRange = m_dWords[iTotalWords-1].m_uWordID - uFirst;
-
-		DWORD iShift = 0;
-		while ( uRange>=( 1 << HASH_BITS ) )
-		{
-			iShift++;
-			uRange >>= 1;
-		}
-
-		m_dHash[0] = iShift;
-		m_dHash[1] = 0;
-		DWORD uLastHash = 0;
-
-		for ( int i=1; i<iTotalWords; i++ )
-		{
-			DWORD uHash = (DWORD)( ( m_dWords[i].m_uWordID-uFirst ) >> iShift );
-
-			if ( uHash==uLastHash )
-				continue;
-
-			while ( uLastHash<uHash )
-				m_dHash [ ++uLastHash+1 ] = i;
-
-			uLastHash = uHash;
-		}
-		m_dHash [ ++uLastHash+1 ] = iTotalWords;
-	}
-
-	return true;
-}
-
-
-const int CSphGlobalIDF::GetCount ( const CSphString & sWord )
-{
-	uint64_t uWordID = sphFNV64 ( (BYTE*)sWord.cstr() );
-
-	int iStart = 0;
-	int iEnd = m_dWords.GetLength()-1;
-
-	if ( m_dHash.GetLength() )
-	{
-		uint64_t uFirst = m_dWords[0].m_uWordID;
-		DWORD uHash = (DWORD)( ( uWordID-uFirst ) >> m_dHash[0] );
-		if ( uHash > ( 1 << HASH_BITS ) )
-			return 0;
-
-		iStart = m_dHash [ uHash+1 ];
-		iEnd = m_dHash [ uHash+2 ] - 1;
-	}
-
-	const IDFWord_t * pWord = sphBinarySearch ( &m_dWords[iStart], &m_dWords[iEnd], bind ( &IDFWord_t::m_uWordID ), uWordID );
-	return pWord ? pWord->m_iCount : 0;
-}
-
-
-float CSphGlobalIDF::GetIDF ( const CSphString & sWord, int iDocsLocal, int iQwords, bool bPlainIDF )
-{
-	const int64_t iDocs = Max ( iDocsLocal, GetCount ( sWord ) );
-	const int64_t iTotalClamped = Max ( m_iTotalDocuments, iDocs );
-
-	if ( bPlainIDF )
-	{
-			float fLogTotal = logf ( float ( 1+iTotalClamped ) );
-			return logf ( float ( iTotalClamped-iDocs+1 ) / float ( iDocs ) )
-				/ ( 2*iQwords*fLogTotal );
-	} else
-	{
-			float fLogTotal = logf ( float ( 1+iTotalClamped ) );
-			return logf ( float ( iTotalClamped ) / float ( iDocs ) )
-				/ ( 2*iQwords*fLogTotal );
-	}
-}
 
 //
 // $Id$

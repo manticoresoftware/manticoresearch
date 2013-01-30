@@ -246,6 +246,9 @@ void			sphSetThrottling ( int iMaxIOps, int iMaxIOSize );
 /// immediately interrupt current query
 void			sphInterruptNow();
 
+/// check if we got interrupted
+bool			sphInterrupted();
+
 #if !USE_WINDOWS
 /// set process info
 void			sphSetProcessInfo ( bool bHead );
@@ -878,6 +881,12 @@ CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, con
 
 /// clear wordform cache
 void sphShutdownWordforms ();
+
+/// update/clear global IDF cache
+bool sphPrereadGlobalIDF ( const CSphString & sPath, CSphString & sError );
+void sphUpdateGlobalIDFs ( const CSphVector<CSphString> & dFiles );
+void sphInitGlobalIDFs ();
+void sphShutdownGlobalIDFs ();
 
 /////////////////////////////////////////////////////////////////////////////
 // DATASOURCES
@@ -3043,8 +3052,8 @@ protected:
 	CSphString					m_sFilename;
 
 public:
+	void						SetGlobalIDFPath ( const CSphString & sPath ) { m_sGlobalIDFPath = sPath; }
 	float						GetGlobalIDF ( const CSphString & sWord, int iDocsLocal, int iQwords, bool bPlainIDF ) const;
-	void						SetGlobalIDFPath ( const char * sPath ) { m_sGlobalIDFPath = sPath; }
 
 protected:
 	CSphString					m_sGlobalIDFPath;

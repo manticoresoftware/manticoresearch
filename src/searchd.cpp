@@ -18235,7 +18235,7 @@ void ShowHelp ()
 		"-p, --port <port>\tlisten on given port (overrides config setting)\n"
 		"-l, --listen <spec>\tlisten on given address, port or path (overrides\n"
 		"\t\t\tconfig settings)\n"
-		"-i, --index <index>\tonly serve one given index\n"
+		"-i, --index <index>\tonly serve given index(es)\n"
 #if !USE_WINDOWS
 		"--nodetach\t\tdo not detach into background\n"
 #endif
@@ -19203,7 +19203,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 		g_sLemmatizerBase = hConf["indexer"]["indexer"]["lemmatizer_base"];
 }
 
-void ConfigureAndPreload ( const CSphConfig & hConf, const char * sOptIndex )
+void ConfigureAndPreload ( const CSphConfig & hConf, const CSphVector<const char *> & dOptIndexes )
 {
 	int iCounter = 1;
 	int iValidIndexes = 0;
@@ -19215,8 +19215,17 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const char * sOptIndex )
 		const CSphConfigSection & hIndex = hConf["index"].IterateGet();
 		const char * sIndexName = hConf["index"].IterateGetKey().cstr();
 
-		if ( g_bOptNoDetach && sOptIndex && strcasecmp ( sIndexName, sOptIndex )!=0 )
-			continue;
+		if ( g_bOptNoDetach && dOptIndexes.GetLength()!=0 )
+		{
+			bool bSkipIndex = true;
+
+			ARRAY_FOREACH_COND ( i, dOptIndexes, bSkipIndex )
+				if ( !strcasecmp ( sIndexName, dOptIndexes[i] ) )
+					bSkipIndex = false;
+
+			if ( bSkipIndex )
+				continue;
+		}
 
 		ESphAddIndex eAdd = AddIndex ( sIndexName, hIndex );
 		if ( eAdd==ADD_LOCAL || eAdd==ADD_RT )
@@ -19374,7 +19383,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	bool			bOptStopWait = false;
 	bool			bOptStatus = false;
 	bool			bOptPIDFile = false;
-	const char *	sOptIndex = NULL;
+	CSphVector<const char *>	dOptIndexes;
 
 	int				iOptPort = 0;
 	bool			bOptPort = false;
@@ -19428,7 +19437,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		OPT ( "-c", "--config" )	g_sConfigFile = argv[++i];
 		OPT ( "-p", "--port" )		{ bOptPort = true; iOptPort = atoi ( argv[++i] ); }
 		OPT ( "-l", "--listen" )	{ bOptListen = true; sOptListen = argv[++i]; }
-		OPT ( "-i", "--index" )		sOptIndex = argv[++i];
+		OPT ( "-i", "--index" )		dOptIndexes.Add ( argv[++i] );
 #if USE_WINDOWS
 		OPT1 ( "--servicename" )	++i; // it's valid but handled elsewhere
 #endif
@@ -19835,7 +19844,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	// configure and preload
 
-	ConfigureAndPreload ( hConf, sOptIndex );
+	ConfigureAndPreload ( hConf, dOptIndexes );
 
 	///////////
 	// startup

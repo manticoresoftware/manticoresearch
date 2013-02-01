@@ -449,7 +449,7 @@ void BenchTokenizer ( bool bUTF8 )
 			pTokenizer->LoadSynonyms ( g_sTmpfile, NULL, sError );
 		pTokenizer->AddSpecials ( "!-" );
 
-		const int iPasses = 10;
+		const int iPasses = 200;
 		int iTokens = 0;
 
 		int64_t tmTime = -sphMicroTimer();

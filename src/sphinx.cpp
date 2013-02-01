@@ -4335,7 +4335,8 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 				iLastCodepoint = iCode;
 			}
 
-			iFolded = CodepointArbitration ( iFolded, false, *m_pCur );
+			if ( m_bQueryMode || m_bDetectSentences )
+				iFolded = CodepointArbitration ( iFolded, false, *m_pCur );
 
 			iLastFolded = iFolded;
 
@@ -4580,7 +4581,8 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 					iLast = iCode;
 				}
 
-				iFolded = CodepointArbitration ( iFolded, false, *m_pCur );
+				if ( m_bQueryMode || m_bDetectSentences )
+					iFolded = CodepointArbitration ( iFolded, false, *m_pCur );
 
 				if ( IsSeparator ( iFolded, false ) )
 				{
@@ -4848,7 +4850,8 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 			}
 		}
 
-		iCode = CodepointArbitration ( iCode, bWasEscaped, *m_pCur );
+		if ( m_bQueryMode || m_bDetectSentences )
+			iCode = CodepointArbitration ( iCode, bWasEscaped, *m_pCur );
 
 		// handle ignored chars
 		if ( iCode & FLAG_CODEPOINT_IGNORE )
@@ -5088,7 +5091,8 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 		}
 
 		// handle all the flags..
-		iCode = CodepointArbitration ( iCode, bWasEscaped, *m_pCur );
+		if ( m_bQueryMode || m_bDetectSentences )
+			iCode = CodepointArbitration ( iCode, bWasEscaped, *m_pCur );
 
 		// handle ignored chars
 		if ( iCode & FLAG_CODEPOINT_IGNORE )

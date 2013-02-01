@@ -2262,7 +2262,9 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 		}
 		$config->WriteConfig ( "config.conf", "all", $msg, $config->NumAgents () < 2 );
 
-		EraseDirContents ( $index_data_path );
+		if ( !$sd_skip_indexer )
+			EraseDirContents ( $index_data_path );
+
 		if ( $config->Requires( "pre_copy_ref" ) )
 			CopyDirContents ( $test_dir . "/refdata/", "data/" );
 

@@ -160,6 +160,37 @@ index idx_inline2
 	docinfo = inline
 	dict = keywords
 }
+
+<!-- quorum tail vs quorum duplicates -->
+source src_quorum_tail
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT *, 100 + id as idd from table_quorum_tail
+	sql_attr_bigint = idd
+}
+index idx_qt
+{
+	source			= src_quorum_tail
+	path			= <data_path/>/idx_quorum_tail
+	charset_type = utf-8
+	docinfo = extern
+}
+
+source src_quorum_tail_2
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT *, 100 + id as idd from table_quorum_tail_2
+	sql_attr_bigint = idd
+}
+index idx_qt_2
+{
+	source			= src_quorum_tail_2
+	path			= <data_path/>/idx_quorum_tail_2
+	charset_type = utf-8
+	docinfo = extern
+}
 </config>
 
 <db_create>
@@ -200,12 +231,27 @@ create table table_inline2
 	title varchar(21000) not null
 ) ENGINE=MYISAM;
 </db_create>
-
+<db_create>
+create table table_quorum_tail
+(
+	id int not null,
+	title varchar(4096) not null
+);
+</db_create>
+<db_create>
+create table table_quorum_tail_2
+(
+	id int not null,
+	title varchar(64) not null
+);
+</db_create>
 <db_drop>drop table if exists test_table1;</db_drop>
 <db_drop>drop table if exists test_table2;</db_drop>
 <db_drop>drop table if exists test_table3;</db_drop>
 <db_drop>drop table if exists table_hits;</db_drop>
 <db_drop>drop table if exists table_inline2;</db_drop>
+<db_drop>drop table if exists table_quorum_tail;</db_drop>
+<db_drop>drop table if exists table_quorum_tail_2;</db_drop>
 <custom_insert><![CDATA[
 
 // OR boundary
@@ -256,6 +302,27 @@ for ($i=1; $i<350; $i++)
 	mysql_query ("INSERT INTO table_inline2 VALUES ( $i, ' $text ' ) " ) or die("q-inline-2: at doc=$i ".mysql_error()."\n$i");
 }
 	
+// quorum tail vs quorum duplicates
+for ($i=1; $i<4; $i++)
+{
+	mysql_query ( "INSERT INTO table_quorum_tail VALUES ( $i, 'I like as I we as I let me as I' ) " ) or die("qd:".mysql_error()."\n$i");
+}
+// double tail from child
+for ($i=100; $i<103; $i++)
+{
+	mysql_query ( "INSERT INTO table_quorum_tail VALUES ( $i, 'walk away from me' ) " ) or die("qd:".mysql_error()."\n$i");
+}
+$text = '';
+for ($i=1; $i<1100; $i++)
+{
+	$text .= 'me ';
+}
+mysql_query ("INSERT INTO table_quorum_tail VALUES ( 104, '$text walk as we or other like.' ) " ) or die("qd:".mysql_error()."\n$i");
+mysql_query ("INSERT INTO table_quorum_tail VALUES ( 105, 'me me me walk as we or other like.' ) " ) or die("qd:".mysql_error()."\n$i");
+for ($i=1; $i<514; $i++)
+{
+	mysql_query ( "INSERT INTO table_quorum_tail_2 VALUES ( $i, 'match that dude' ) " ) or die("qd-2:".mysql_error()."\n$i");
+}
 ]]></custom_insert>
 
 <custom_test>
@@ -370,6 +437,14 @@ $results = array_merge ( $results, $query ( "show meta", $sock ) );
 
 // regression docinfo=inline tail hits
 $results = array_merge ( $results, $query ( "select * from idx_inline2 where match (' good game ' ) and id>340", $sock ) );
+
+// quorum tail vs quorum duplicates
+$results = array_merge ( $results, $query ( "select * from idx_qt where match (' \" I I I I do my best \"/4 ' )", $sock ) );
+$results = array_merge ( $results, $query ( "select * from idx_qt where match (' \" me me me notfound \"/2 NEAR/5 like ' )", $sock ) );
+$results = array_merge ( $results, $query ( "select * from idx_qt where match (' \" me me me notfound \"/2 NEAR/6 like ' )", $sock ) );
+$results = array_merge ( $results, $query ( "select * from idx_qt where match (' \" me me me notfound \"/2 NEAR/7 like ' )", $sock ) );
+
+$results = array_merge ( $results, $query ( "select *, weight() from idx_qt_2 where match (' \" match match that pal \"/2 ' ) order by id desc limit 5 option ranker=wordcount", $sock ) );
 
 @mysql_close ( $sock );
 

@@ -151,7 +151,8 @@ public:
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords ) = 0;
 	virtual bool				GotHitless () = 0;
 	virtual int					GetDocsCount () { return INT_MAX; }
-	virtual SphWordID_t			GetWordID () { return 0; }		///< for now, only used for duplicate keyword checks in quorum operator
+	virtual uint64_t			GetWordID () const { return 0; }			///< for now, only used for duplicate keyword checks in quorum operator
+	virtual bool				HasHitConstrain () const { return false; }	///< for now, only used for duplicate keyword checks in quorum operator
 
 	void DebugIndent ( int iLevel )
 	{
@@ -301,7 +302,18 @@ public:
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 	virtual bool				GotHitless () { return false; }
 	virtual int					GetDocsCount () { return m_pQword->m_iDocs; }
-	virtual SphWordID_t			GetWordID () { return m_pQword->m_iWordID; }
+	virtual uint64_t			GetWordID () const
+	{
+		if ( m_pQword->m_iWordID )
+			return m_pQword->m_iWordID;
+		else
+			return sphFNV64 ( (const BYTE *)m_pQword->m_sDictWord.cstr() );
+	}
+	virtual bool				HasHitConstrain() const
+	{
+		// whatever any field fit
+		return !m_dQueriedFields.TestAll ( true );
+	}
 
 	virtual void HintDocid ( SphDocID_t uMinID )
 	{
@@ -339,8 +351,6 @@ public:
 
 protected:
 	ISphQword *					m_pQword;
-	ExtDoc_t *					m_pHitDoc;			///< points to entry in m_dDocs which GetHitsChunk() currently emits hits for
-	SphDocID_t					m_uHitsOverFor;		///< there are no more hits for matches block starting with this ID
 	CSphSmallBitvec				m_dQueriedFields;	///< accepted fields mask
 	bool						m_bHasWideFields;	///< whether fields mask for this term refer to fields 32+
 	float						m_fIDF;				///< IDF for this term (might be 0.0f for non-1st occurences in query)
@@ -349,6 +359,10 @@ protected:
 	bool						m_bNotWeighted;
 	CSphQueryStats *			m_pStats;
 	int64_t *					m_pNanoBudget;
+
+	ExtDoc_t *					m_pLastChecked;		///< points to entry in m_dDocs which GetHitsChunk() currently emits hits for
+	SphDocID_t					m_uMatchChecked;	///< there are no more hits for matches block starting with this ID
+	bool						m_bTail;			///< should we emit more hits for current docid or proceed furthwer
 
 public:
 	static volatile bool		m_bInterruptNow; ///< may be set from outside to indicate the globally received sigterm
@@ -556,6 +570,7 @@ public:
 
 private:
 	virtual bool				ExtraDataImpl ( ExtraData_e eData, void ** ppResult );
+	virtual bool				HasHitConstrain () const { return ExtBase::HasHitConstrain(); }
 };
 
 /// single keyword streamer, with term position filtering
@@ -588,6 +603,19 @@ bool ExtConditional<T,ExtBase>::ExtraDataImpl ( ExtraData_e, void ** )
 {
 	return false;
 }
+
+template<>
+bool ExtConditional<TERM_POS_ZONES>::HasHitConstrain () const
+{
+	return ( m_dZones.GetLength()>0 || ExtTerm_c::HasHitConstrain() );
+}
+
+template<>
+bool ExtConditional<TERM_POS_ZONESPAN>::HasHitConstrain () const
+{
+	return ( m_dZones.GetLength()>0 || ExtTerm_c::HasHitConstrain() );
+}
+
 
 /// multi-node binary-operation streamer traits
 class ExtTwofer_c : public ExtNode_i
@@ -961,27 +989,64 @@ public:
 
 	virtual bool				GotHitless () { return false; }
 
-	virtual void HintDocid ( SphDocID_t uMinID )
+	virtual void				HintDocid ( SphDocID_t uMinID )
 	{
 		ARRAY_FOREACH ( i, m_dChildren )
-			m_dChildren[i]->HintDocid ( uMinID );
+			if ( m_dChildren[i].m_pTerm )
+				m_dChildren[i].m_pTerm->HintDocid ( uMinID );
 	}
 
-	static int GetThreshold ( const XQNode_t & tNode, int iQwords );
-
-protected:
-	int							m_iThresh;			///< keyword count threshold
-	CSphVector<ExtNode_i*>		m_dChildren;		///< my children nodes (simply ExtTerm_c for now)
-	CSphVector<const ExtDoc_t*>	m_pCurDoc;			///< current positions into children doclists
-	CSphVector<const ExtHit_t*>	m_pCurHit;			///< current positions into children hitlists
-	CSphSmallBitvec				m_bmMask;			///< mask of nodes that count toward threshold
-	int							m_iMaskEnd;			///< index of the last bit in mask
-	bool						m_bDone;			///< am i done
-	SphDocID_t					m_uMatchedDocid;	///< current docid for hitlist emission
+	static int					GetThreshold ( const XQNode_t & tNode, int iQwords );
 
 private:
-	CSphSmallBitvec				m_bmInitialMask;	///< backup mask for Reset()
-	CSphVector<ExtNode_i*>		m_dInitialChildren;	///< my children nodes (simply ExtTerm_c for now)
+
+	struct TermTuple_t
+	{
+		ExtNode_i *			m_pTerm;		///< my children nodes (simply ExtTerm_c for now)
+		const ExtDoc_t *	m_pCurDoc;		///< current positions into children doclists
+		const ExtHit_t *	m_pCurHit;		///< current positions into children hitlists
+		int					m_iCount;		///< terms count in case of dupes
+		bool				m_bStandStill;	///< should we emit hits to proceed further
+	};
+
+	ExtHit_t					m_dQuorumHits[MAX_HITS];	///< buffer for all my quorum hits; inherited m_dHits will receive filtered results
+	int							m_iMyHitCount;				///< hits collected so far
+	int							m_iMyLast;					///< hits processed so far
+	CSphVector<TermTuple_t>		m_dInitialChildren;			///< my children nodes (simply ExtTerm_c for now)
+	CSphVector<TermTuple_t>		m_dChildren;
+	SphDocID_t					m_uMatchedDocid;			///< tial docid for hitlist emission
+	int							m_iThresh;					///< keyword count threshold
+	bool						m_bHasHitConstrain;			///< should we analize hits on docs collecting
+	bool						m_bHasDupes;				///< should we analize hits on docs collecting
+
+	// check for hits that matches and return flag that docs might be advanced
+	bool						CollectMatchingHits ( SphDocID_t uDocid, int iQuorum );
+	const ExtHit_t *			GetHitsChunkDupes ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
+	const ExtHit_t *			GetHitsChunkDupesTail ();
+	const ExtHit_t *			GetHitsChunkSimple ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
+
+	int							CountQuorum ( bool bFixDupes )
+	{
+		if ( !m_bHasDupes )
+			return m_dChildren.GetLength();
+
+		int iSum = 0;
+		bool bHasDupes = false;
+		ARRAY_FOREACH ( i, m_dChildren )
+		{
+			iSum += m_dChildren[i].m_iCount;
+			bHasDupes |= ( m_dChildren[i].m_iCount>1 );
+		}
+		m_bHasDupes = bFixDupes ? bHasDupes : m_bHasDupes;
+		return iSum;
+	}
+
+	inline const ExtHit_t *		ReturnHitsChunk ( int iCount )
+	{
+		assert ( iCount>=0 && iCount<MAX_HITS );
+		m_dHits[iCount].m_uDocid = DOCID_MAX;
+		return iCount ? m_dHits : NULL;
+	}
 };
 
 
@@ -1263,21 +1328,6 @@ static ISphQword * CreateQueryWord ( const XQKeyword_t & tWord, const ISphQwordS
 
 	pWord->m_iAtomPos = tWord.m_iAtomPos;
 	return pWord;
-}
-
-
-static void CalcDupeMask ( CSphSmallBitvec * pMask, const CSphVector<ExtNode_i *> & dNodes )
-{
-	pMask->Unset();
-	ARRAY_FOREACH ( i, dNodes )
-	{
-		bool bUniq = true;
-		for ( int j = i + 1; j < dNodes.GetLength() && bUniq; j++ )
-			if ( dNodes[i]->GetWordID()==dNodes[j]->GetWordID() )
-				bUniq = false;
-		if ( bUniq )
-			pMask->Set(i);
-	}
 }
 
 
@@ -1831,7 +1881,9 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 						tSetup.m_pWarning->SetSprintf ( "too many words (%d) for quorum; replacing with an AND", iQuorumCount );
 
 				} else // everything is ok; create quorum node
+				{
 					return CreateMultiNode<ExtQuorum_c> ( pNode, tSetup, false );
+				}
 
 				// couldn't create quorum, make an AND node instead
 				CSphVector<ExtNode_i*> dTerms;
@@ -1978,8 +2030,9 @@ inline void ExtTerm_c::Init ( ISphQword * pQword, const CSphSmallBitvec & dField
 	m_pWarning = tSetup.m_pWarning;
 	m_bNotWeighted = bNotWeighted;
 	m_iAtomPos = pQword->m_iAtomPos;
-	m_pHitDoc = NULL;
-	m_uHitsOverFor = 0;
+	m_pLastChecked = m_dDocs;
+	m_uMatchChecked = 0;
+	m_bTail = false;
 	m_dQueriedFields = dFields;
 	m_bHasWideFields = false;
 	if ( tSetup.m_pIndex && tSetup.m_pIndex->GetMatchSchema().m_dFields.GetLength()>32 )
@@ -1998,8 +2051,9 @@ ExtTerm_c::ExtTerm_c ( ISphQword * pQword, const ISphQwordSetup & tSetup )
 	, m_bNotWeighted ( true )
 {
 	m_iAtomPos = pQword->m_iAtomPos;
-	m_pHitDoc = NULL;
-	m_uHitsOverFor = 0;
+	m_pLastChecked = m_dDocs;
+	m_uMatchChecked = 0;
+	m_bTail = false;
 	m_dQueriedFields.Set();
 	m_bHasWideFields = tSetup.m_pIndex && ( tSetup.m_pIndex->GetMatchSchema().m_dFields.GetLength()>32 );
 	m_iMaxTimer = tSetup.m_iMaxTimer;
@@ -2015,8 +2069,9 @@ ExtTerm_c::ExtTerm_c ( ISphQword * pQword, const CSphSmallBitvec & dFields, cons
 
 void ExtTerm_c::Reset ( const ISphQwordSetup & tSetup )
 {
-	m_pHitDoc = NULL;
-	m_uHitsOverFor = 0;
+	m_pLastChecked = m_dDocs;
+	m_uMatchChecked = 0;
+	m_bTail = false;
 	m_iMaxTimer = tSetup.m_iMaxTimer;
 	m_pQword->Reset ();
 	tSetup.QwordSetup ( m_pQword );
@@ -2024,6 +2079,9 @@ void ExtTerm_c::Reset ( const ISphQwordSetup & tSetup )
 
 const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 {
+	m_pLastChecked = m_dDocs;
+	m_bTail = false;
+
 	if ( !m_pQword->m_iDocs )
 		return NULL;
 
@@ -2086,8 +2144,6 @@ const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		pDocinfo += m_iStride;
 	}
 
-	m_pHitDoc = NULL;
-
 	if ( m_pStats )
 		m_pStats->m_iFetchedDocs += iDoc;
 	if ( m_pNanoBudget )
@@ -2100,16 +2156,15 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t
 {
 	if ( !pMatched )
 		return NULL;
-	SphDocID_t uFirstMatch = pMatched->m_uDocid;
 
 	// aim to the right document
-	ExtDoc_t * pDoc = m_pHitDoc;
-	m_pHitDoc = NULL;
+	ExtDoc_t * pDoc = m_pLastChecked;
+	assert ( pDoc && pDoc>=m_dDocs && pDoc<m_dDocs+MAX_DOCS );
 
-	if ( !pDoc )
+	if ( !m_bTail )
 	{
 		// if we already emitted hits for this matches block, do not do that again
-		if ( uFirstMatch==m_uHitsOverFor )
+		if ( pMatched->m_uDocid==m_uMatchChecked )
 			return NULL;
 
 		// early reject whole block
@@ -2117,22 +2172,17 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t
 		if ( m_uMaxID && m_dDocs[0].m_uDocid > uMaxID ) return NULL;
 
 		// find match
-		pDoc = m_dDocs;
+		m_uMatchChecked = pMatched->m_uDocid;
 		do
 		{
 			while ( pDoc->m_uDocid < pMatched->m_uDocid ) pDoc++;
+			m_pLastChecked = pDoc;
 			if ( pDoc->m_uDocid==DOCID_MAX )
-			{
-				m_uHitsOverFor = uFirstMatch;
 				return NULL; // matched docs block is over for me, gimme another one
-			}
 
 			while ( pMatched->m_uDocid < pDoc->m_uDocid ) pMatched++;
 			if ( pMatched->m_uDocid==DOCID_MAX )
-			{
-				m_uHitsOverFor = uFirstMatch;
 				return NULL; // matched doc block did not yet begin for me, gimme another one
-			}
 		} while ( pDoc->m_uDocid!=pMatched->m_uDocid );
 
 		// setup hitlist reader
@@ -2141,6 +2191,7 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t
 
 	// hit emission
 	int iHit = 0;
+	m_bTail = false;
 	while ( iHit<MAX_HITS-1 )
 	{
 		// get next hit
@@ -2149,9 +2200,11 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t
 		{
 			// no more hits; get next acceptable document
 			pDoc++;
+			m_pLastChecked = pDoc;
 			do
 			{
 				while ( pDoc->m_uDocid < pMatched->m_uDocid ) pDoc++;
+				m_pLastChecked = pDoc;
 				if ( pDoc->m_uDocid==DOCID_MAX ) { pDoc = NULL; break; } // matched docs block is over for me, gimme another one
 
 				while ( pMatched->m_uDocid < pDoc->m_uDocid ) pMatched++;
@@ -2177,9 +2230,8 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t
 		tHit.m_uWeight = tHit.m_uMatchlen = tHit.m_uSpanlen = 1;
 	}
 
-	m_pHitDoc = pDoc;
-	if ( iHit==0 || iHit<MAX_HITS-1 )
-		m_uHitsOverFor = uFirstMatch;
+	if ( iHit==MAX_HITS-1 )
+		m_bTail = true;
 
 	if ( m_pStats )
 		m_pStats->m_iFetchedHits += iHit;
@@ -2226,16 +2278,15 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, Sph
 {
 	if ( !pMatched )
 		return NULL;
-	SphDocID_t uFirstMatch = pMatched->m_uDocid;
 
 	// aim to the right document
-	ExtDoc_t * pDoc = m_pHitDoc;
-	m_pHitDoc = NULL;
+	ExtDoc_t * pDoc = m_pLastChecked;
+	assert ( pDoc && pDoc>=m_dDocs && pDoc<m_dDocs+MAX_DOCS );
 
-	if ( !pDoc )
+	if ( !m_bTail )
 	{
 		// if we already emitted hits for this matches block, do not do that again
-		if ( uFirstMatch==m_uHitsOverFor )
+		if ( pMatched->m_uDocid==m_uMatchChecked )
 			return NULL;
 
 		// early reject whole block
@@ -2243,22 +2294,17 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, Sph
 		if ( m_uMaxID && m_dDocs[0].m_uDocid > uMaxID ) return NULL;
 
 		// find match
-		pDoc = m_dDocs;
+		m_uMatchChecked = pMatched->m_uDocid;
 		do
 		{
 			while ( pDoc->m_uDocid < pMatched->m_uDocid ) pDoc++;
+			m_pLastChecked = pDoc;
 			if ( pDoc->m_uDocid==DOCID_MAX )
-			{
-				m_uHitsOverFor = uFirstMatch;
 				return NULL; // matched docs block is over for me, gimme another one
-			}
 
 			while ( pMatched->m_uDocid < pDoc->m_uDocid ) pMatched++;
 			if ( pMatched->m_uDocid==DOCID_MAX )
-			{
-				m_uHitsOverFor = uFirstMatch;
 				return NULL; // matched doc block did not yet begin for me, gimme another one
-			}
 		} while ( pDoc->m_uDocid!=pMatched->m_uDocid );
 
 		m_uFieldPos = 0;
@@ -2266,6 +2312,7 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, Sph
 
 	// hit emission
 	int iHit = 0;
+	m_bTail = false;
 	for ( ;; )
 	{
 		if ( ( m_uFieldPos<32 && ( pDoc->m_uDocFields & ( 1 << m_uFieldPos ) ) ) // not necessary
@@ -2290,9 +2337,11 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, Sph
 
 		// field mask is empty, get next document
 		pDoc++;
+		m_pLastChecked = pDoc;
 		do
 		{
 			while ( pDoc->m_uDocid < pMatched->m_uDocid ) pDoc++;
+			m_pLastChecked = pDoc;
 			if ( pDoc->m_uDocid==DOCID_MAX ) { pDoc = NULL; break; } // matched docs block is over for me, gimme another one
 
 			while ( pMatched->m_uDocid < pDoc->m_uDocid ) pMatched++;
@@ -2305,9 +2354,8 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, Sph
 		m_uFieldPos = 0;
 	}
 
-	m_pHitDoc = pDoc;
-	if ( iHit==0 || iHit<MAX_HITS-1 )
-		m_uHitsOverFor = uFirstMatch;
+	if ( iHit==MAX_HITS-1 )
+		m_bTail = true;
 
 	assert ( iHit>=0 && iHit<MAX_HITS );
 	m_dHits[iHit].m_uDocid = DOCID_MAX;
@@ -3919,13 +3967,31 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 
 //////////////////////////////////////////////////////////////////////////
 
+struct QuorumDupeNodeHash_t
+{
+	uint64_t m_uWordID;
+	int m_iIndex;
+
+	bool operator < ( const QuorumDupeNodeHash_t & b ) const
+	{
+		if ( m_uWordID==b.m_uWordID )
+			return m_iIndex<b.m_iIndex;
+		else
+			return m_uWordID<b.m_uWordID;
+	}
+};
+
 ExtQuorum_c::ExtQuorum_c ( CSphVector<ExtNode_i*> & dQwords, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
 {
 	assert ( tNode.GetOp()==SPH_QUERY_QUORUM );
+	assert ( dQwords.GetLength()<MAX_HITS );
 
-	m_bDone = false;
 	m_iThresh = GetThreshold ( tNode, dQwords.GetLength() );
 	m_iThresh = Max ( m_iThresh, 1 );
+	m_iMyHitCount = 0;
+	m_iMyLast = 0;
+	m_bHasHitConstrain = false;
+	m_bHasDupes = false;
 
 	assert ( dQwords.GetLength()>1 ); // use TERM instead
 	assert ( dQwords.GetLength()<=256 ); // internal masks are upto 256 bits
@@ -3933,24 +3999,50 @@ ExtQuorum_c::ExtQuorum_c ( CSphVector<ExtNode_i*> & dQwords, const XQNode_t & tN
 	assert ( m_iThresh<dQwords.GetLength() ); // use AND instead
 
 	if ( dQwords.GetLength()>0 )
-		m_iAtomPos = dQwords[0]->m_iAtomPos;
-
-	ARRAY_FOREACH ( i, dQwords )
 	{
-		m_dInitialChildren.Add ( dQwords[i] );
-		m_pCurDoc.Add ( NULL );
-		m_pCurHit.Add ( NULL );
+		m_iAtomPos = dQwords[0]->m_iAtomPos;
+		m_bHasHitConstrain = dQwords[0]->HasHitConstrain();
+
+		// compute duplicate keywords mask (aka dupe mask)
+		// FIXME! will (likely) now fail with quorum+expand+dupes, need a new test?
+		// FIXME! will fail with wordforms and stuff; sorry, no wordforms vs expand vs quorum support for now!
+		CSphFixedVector<QuorumDupeNodeHash_t> dHashes ( dQwords.GetLength() );
+		ARRAY_FOREACH ( i, dQwords )
+		{
+			dHashes[i].m_uWordID = dQwords[i]->GetWordID();
+			dHashes[i].m_iIndex = i;
+		}
+		sphSort ( dHashes.Begin(), dHashes.GetLength() );
+
+		QuorumDupeNodeHash_t tParent = *dHashes.Begin();
+		m_dInitialChildren.Add().m_pTerm = dQwords[tParent.m_iIndex];
+		m_dInitialChildren.Last().m_iCount = 1;
+		tParent.m_iIndex = 0;
+
+		for ( int i=1; i<dHashes.GetLength(); i++ )
+		{
+			QuorumDupeNodeHash_t & tElem = dHashes[i];
+			if ( tParent.m_uWordID!=tElem.m_uWordID )
+			{
+				tParent = tElem;
+				tParent.m_iIndex = m_dInitialChildren.GetLength();
+				m_dInitialChildren.Add().m_pTerm = dQwords [ tElem.m_iIndex ];
+				m_dInitialChildren.Last().m_iCount = 1;
+			} else
+			{
+				m_dInitialChildren[tParent.m_iIndex].m_iCount++;
+				SafeDelete ( dQwords[tElem.m_iIndex] );
+				m_bHasDupes = true;
+			}
+		}
 	}
 
+	ARRAY_FOREACH ( i, m_dInitialChildren )
+	{
+		m_dInitialChildren[i].m_pCurDoc = NULL;
+		m_dInitialChildren[i].m_pCurHit = NULL;
+	}
 	m_dChildren = m_dInitialChildren;
-
-	// compute duplicate keywords mask (aka dupe mask)
-	// FIXME! will (likely) now fail with quorum+expand+dupes, need a new test?
-	// FIXME! will fail with wordforms and stuff; sorry, no wordforms vs expand vs quorum support for now!
-	CSphSmallBitvec bmDupes;
-	CalcDupeMask ( &bmDupes, dQwords );
-	m_bmMask = m_bmInitialMask = bmDupes;
-	m_iMaskEnd = dQwords.GetLength() - 1;
 	m_uMatchedDocid = 0;
 
 	AllocDocinfo ( tSetup );
@@ -3959,29 +4051,18 @@ ExtQuorum_c::ExtQuorum_c ( CSphVector<ExtNode_i*> & dQwords, const XQNode_t & tN
 ExtQuorum_c::~ExtQuorum_c ()
 {
 	ARRAY_FOREACH ( i, m_dInitialChildren )
-		SafeDelete ( m_dInitialChildren[i] );
+		SafeDelete ( m_dInitialChildren[i].m_pTerm );
 }
 
 void ExtQuorum_c::Reset ( const ISphQwordSetup & tSetup )
 {
-	m_bDone = false;
-
-	m_pCurDoc.Resize ( m_dInitialChildren.GetLength() );
-	m_pCurHit.Resize ( m_dInitialChildren.GetLength() );
-	m_dChildren.Resize ( m_dInitialChildren.GetLength() );
-	ARRAY_FOREACH ( i, m_dInitialChildren )
-	{
-		m_dChildren[i] = m_dInitialChildren[i];
-		m_pCurDoc[i] = NULL;
-		m_pCurHit[i] = NULL;
-	}
-
-	m_bmMask = m_bmInitialMask;
-	m_iMaskEnd = m_dChildren.GetLength() - 1;
+	m_dChildren = m_dInitialChildren;
 	m_uMatchedDocid = 0;
+	m_iMyHitCount = 0;
+	m_iMyLast = 0;
 
 	ARRAY_FOREACH ( i, m_dChildren )
-		m_dChildren[i]->Reset ( tSetup );
+		m_dChildren[i].m_pTerm->Reset ( tSetup );
 }
 
 int ExtQuorum_c::GetQwords ( ExtQwordsHash_t & hQwords )
@@ -3989,7 +4070,7 @@ int ExtQuorum_c::GetQwords ( ExtQwordsHash_t & hQwords )
 	int iMax = -1;
 	ARRAY_FOREACH ( i, m_dChildren )
 	{
-		int iKidMax = m_dChildren[i]->GetQwords ( hQwords );
+		int iKidMax = m_dChildren[i].m_pTerm->GetQwords ( hQwords );
 		iMax = Max ( iMax, iKidMax );
 	}
 	return iMax;
@@ -3998,51 +4079,48 @@ int ExtQuorum_c::GetQwords ( ExtQwordsHash_t & hQwords )
 void ExtQuorum_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 {
 	ARRAY_FOREACH ( i, m_dChildren )
-		m_dChildren[i]->SetQwordsIDF ( hQwords );
+		m_dChildren[i].m_pTerm->SetQwordsIDF ( hQwords );
 }
 
 const ExtDoc_t * ExtQuorum_c::GetDocsChunk ( SphDocID_t * pMaxID )
 {
 	// warmup
-	ARRAY_FOREACH ( i, m_pCurDoc )
-		if ( !m_pCurDoc[i] || m_pCurDoc[i]->m_uDocid==DOCID_MAX )
+	int iQuorumLeft = CountQuorum ( true );
+	ARRAY_FOREACH ( i, m_dChildren )
 	{
-		m_pCurDoc[i] = m_dChildren[i]->GetDocsChunk ( NULL );
-		if ( m_pCurDoc[i] )
+		TermTuple_t & tElem = m_dChildren[i];
+		tElem.m_bStandStill = false; // clear this-round-match flag
+		if ( tElem.m_pCurDoc && tElem.m_pCurDoc->m_uDocid!=DOCID_MAX )
 			continue;
 
-		if ( m_dChildren.GetLength()==m_iThresh )
-		{
-			m_bDone = true;
-			break;
-		}
-
-		// replace i-th bit with the last one
-		m_bmMask.Unset(i); // clear i-th bit
-		if ( m_bmMask.Test ( m_iMaskEnd ) )
-			m_bmMask.Set(i); // set i-th bit to end bit; OPTIMIZE? can be made unconditional
-		m_iMaskEnd--;
+		tElem.m_pCurDoc = tElem.m_pTerm->GetDocsChunk ( pMaxID );
+		if ( tElem.m_pCurDoc )
+			continue;
 
 		m_dChildren.RemoveFast ( i );
-		m_pCurDoc.RemoveFast ( i );
-		m_pCurHit.RemoveFast ( i );
 		i--;
+
+		iQuorumLeft = CountQuorum ( true );
+		if ( iQuorumLeft<m_iThresh )
+		{
+			m_dChildren.Resize ( 0 );
+			break;
+		}
 	}
 
 	// early out
-	if ( m_bDone )
+	if ( !m_dChildren.GetLength() )
 		return NULL;
 
 	// main loop
-	CSphSmallBitvec bmTouched; // bitmask of children that actually produced matches this time
-	bmTouched.Unset();
-
 	int iDoc = 0;
-	bool bDone = false;
 	CSphRowitem * pDocinfo = m_pDocinfo;
-	while ( iDoc<MAX_DOCS-1 && !bDone )
+	bool bProceed2HitChunk = false;
+	m_iMyHitCount = 0;
+	m_iMyLast = 0;
+	while ( iDoc<MAX_DOCS-1 && ( !m_bHasDupes || m_iMyHitCount+iQuorumLeft<MAX_HITS ) && iQuorumLeft>=m_iThresh && !bProceed2HitChunk )
 	{
-		// find min document ID, count occurences
+		// find min document ID, count occurrences
 		ExtDoc_t tCand;
 
 		tCand.m_uDocid = DOCID_MAX; // current candidate id
@@ -4051,69 +4129,65 @@ const ExtDoc_t * ExtQuorum_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		tCand.m_uDocFields = 0; // non necessary
 		tCand.m_fTFIDF = 0.0f;
 
-		int iCandMatches = 0; // amount of children that match current candidate
-		ARRAY_FOREACH ( i, m_pCurDoc )
+		int iQuorum = 0;
+		ARRAY_FOREACH ( i, m_dChildren )
 		{
-			assert ( m_pCurDoc[i]->m_uDocid && m_pCurDoc[i]->m_uDocid!=DOCID_MAX );
-			if ( m_pCurDoc[i]->m_uDocid < tCand.m_uDocid )
+			TermTuple_t & tElem = m_dChildren[i];
+			assert ( tElem.m_pCurDoc->m_uDocid && tElem.m_pCurDoc->m_uDocid!=DOCID_MAX );
+			if ( tElem.m_pCurDoc->m_uDocid < tCand.m_uDocid )
 			{
-				tCand = *m_pCurDoc[i];
-				iCandMatches = m_bmMask.Test(i);
-
-			} else if ( m_pCurDoc[i]->m_uDocid==tCand.m_uDocid )
+				tCand = *tElem.m_pCurDoc;
+				iQuorum = tElem.m_iCount;
+			} else if ( tElem.m_pCurDoc->m_uDocid==tCand.m_uDocid )
 			{
-				tCand.m_uDocFields |= m_pCurDoc[i]->m_uDocFields; // non necessary
-				tCand.m_fTFIDF += m_pCurDoc[i]->m_fTFIDF;
-				iCandMatches += m_bmMask.Test(i);
+				tCand.m_uDocFields |= tElem.m_pCurDoc->m_uDocFields; // FIXME!!! check hits in case of dupes or field constrain
+				tCand.m_fTFIDF += tElem.m_pCurDoc->m_fTFIDF;
+				iQuorum += tElem.m_iCount;
 			}
 		}
 
-		// submit match
-		if ( iCandMatches>=m_iThresh )
+		// FIXME!!! check that tail hits should be processed right after CollectMatchingHits
+		if ( iQuorum>=m_iThresh && ( !m_bHasDupes || CollectMatchingHits ( tCand.m_uDocid, m_iThresh ) ) )
+		{
 			CopyExtDoc ( m_dDocs[iDoc++], tCand, &pDocinfo, m_iStride );
 
+			// FIXME!!! move to children advancing
+			ARRAY_FOREACH ( i, m_dChildren )
+			{
+				if ( m_dChildren[i].m_pCurDoc->m_uDocid==tCand.m_uDocid )
+					m_dChildren[i].m_bStandStill = true;
+			}
+		}
+
 		// advance children
-		ARRAY_FOREACH ( i, m_pCurDoc )
-			if ( m_pCurDoc[i]->m_uDocid==tCand.m_uDocid )
+		int iWasChildren = m_dChildren.GetLength();
+		ARRAY_FOREACH ( i, m_dChildren )
 		{
-			if ( iCandMatches>=m_iThresh )
-				bmTouched.Set(i);
-
-			m_pCurDoc[i]++;
-			if ( m_pCurDoc[i]->m_uDocid!=DOCID_MAX )
+			TermTuple_t & tElem = m_dChildren[i];
+			if ( tElem.m_pCurDoc->m_uDocid!=tCand.m_uDocid )
 				continue;
 
-			if ( bmTouched.Test(i) )
-			{
-				bDone = true;
-				continue; // NOT break. because we still need to advance some further children!
-			}
-
-			m_pCurDoc[i] = m_dChildren[i]->GetDocsChunk ( NULL );
-			if ( m_pCurDoc[i] )
+			tElem.m_pCurDoc++;
+			if ( tElem.m_pCurDoc->m_uDocid!=DOCID_MAX )
 				continue;
 
-			if ( m_dChildren.GetLength()==m_iThresh )
+			// should grab hits first
+			if ( tElem.m_bStandStill )
 			{
-				bDone = m_bDone = true;
-				break;
+				bProceed2HitChunk = true;
+				continue; // still should fast forward rest of children to pass current doc-id
 			}
 
-			// replace i-th bit with the last one
-			m_bmMask.Unset(i); // clear i-th bit
-			if ( m_bmMask.Test ( m_iMaskEnd ) )
-				m_bmMask.Set(i); // set i-th bit to end bit; OPTIMIZE? can be made unconditional
-			m_iMaskEnd--;
-
-			bmTouched.Unset(i);
-			if ( bmTouched.Test ( m_dChildren.GetLength()-1 ) )
-				bmTouched.Set(i);
+			tElem.m_pCurDoc = tElem.m_pTerm->GetDocsChunk ( NULL );
+			if ( tElem.m_pCurDoc )
+				continue;
 
 			m_dChildren.RemoveFast ( i );
-			m_pCurDoc.RemoveFast ( i );
-			m_pCurHit.RemoveFast ( i );
 			i--;
 		}
+
+		if ( iWasChildren!=m_dChildren.GetLength() )
+			iQuorumLeft = CountQuorum ( false );
 	}
 
 	return ReturnDocsChunk ( iDoc, pMaxID );
@@ -4121,62 +4195,319 @@ const ExtDoc_t * ExtQuorum_c::GetDocsChunk ( SphDocID_t * pMaxID )
 
 const ExtHit_t * ExtQuorum_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
 {
+	// dupe tail hits
+	if ( m_bHasDupes && m_uMatchedDocid )
+		return GetHitsChunkDupesTail();
+
+	// quorum-buffer path
+	if ( m_bHasDupes )
+		return GetHitsChunkDupes ( pDocs, uMaxID );
+
+	return GetHitsChunkSimple ( pDocs, uMaxID );
+}
+
+const ExtHit_t * ExtQuorum_c::GetHitsChunkDupesTail ()
+{
+	ExtDoc_t dTailDocs[2];
+	dTailDocs[0].m_uDocid = m_uMatchedDocid;
+	dTailDocs[1].m_uDocid = DOCID_MAX;
+	int iHit = 0;
+	while ( iHit<MAX_HITS-1 )
+	{
+		int iMinChild = -1;
+		DWORD uMinPos = UINT_MAX;
+		ARRAY_FOREACH ( i, m_dChildren )
+		{
+			const ExtHit_t * pCurHit = m_dChildren[i].m_pCurHit;
+			if ( pCurHit && pCurHit->m_uDocid==m_uMatchedDocid && HITMAN::GetLCS ( pCurHit->m_uHitpos ) < uMinPos )
+			{
+				uMinPos = HITMAN::GetLCS ( pCurHit->m_uHitpos );
+				iMinChild = i;
+			}
+		}
+
+		// no hits found at children
+		if ( iMinChild<0 )
+		{
+			m_uMatchedDocid = 0;
+			break;
+		}
+
+		m_dHits[iHit++] = *m_dChildren[iMinChild].m_pCurHit;
+		m_dChildren[iMinChild].m_pCurHit++;
+		if ( m_dChildren[iMinChild].m_pCurHit->m_uDocid==DOCID_MAX )
+			m_dChildren[iMinChild].m_pCurHit = m_dChildren[iMinChild].m_pTerm->GetHitsChunk ( dTailDocs, m_uMatchedDocid );
+	}
+
+	return ReturnHitsChunk ( iHit );
+}
+
+struct QuorumCmpHitPos_fn
+{
+	inline bool IsLess ( const ExtHit_t & a, const ExtHit_t & b ) const
+	{
+		return HITMAN::GetLCS ( a.m_uHitpos )<HITMAN::GetLCS ( b.m_uHitpos );
+	}
+};
+
+const ExtHit_t * ExtQuorum_c::GetHitsChunkDupes ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
+{
+	// quorum-buffer path
+	int iHit = 0;
+	while ( m_iMyLast<m_iMyHitCount && iHit<MAX_HITS-1 && pDocs->m_uDocid!=DOCID_MAX )
+	{
+		SphDocID_t uDocid = pDocs->m_uDocid;
+		while ( m_dQuorumHits[m_iMyLast].m_uDocid<uDocid && m_iMyLast<m_iMyHitCount )
+			m_iMyLast++;
+
+		// find hits for current doc
+		int iLen = 0;
+		while ( m_dQuorumHits[m_iMyLast+iLen].m_uDocid==uDocid && m_iMyLast+iLen<m_iMyHitCount )
+			iLen++;
+
+		// proceed next document in case no hits found
+		if ( !iLen )
+		{
+			pDocs++;
+			continue;
+		}
+
+		// order hits by hit-position for current doc
+		sphSort ( m_dQuorumHits+m_iMyLast, iLen, QuorumCmpHitPos_fn() );
+
+		int iMyEnd = m_iMyLast + iLen;
+		bool bCheckChildren = ( iMyEnd==MAX_HITS ); // should check children too in case quorum-buffer full
+		while ( iHit<MAX_HITS-1 )
+		{
+			int iMinChild = -1;
+			DWORD uMinPos = ( m_iMyLast<iMyEnd ? HITMAN::GetLCS ( m_dQuorumHits[m_iMyLast].m_uHitpos ) : UINT_MAX );
+			if ( bCheckChildren )
+			{
+				ARRAY_FOREACH ( i, m_dChildren )
+				{
+					const ExtHit_t * pCurHit = m_dChildren[i].m_pCurHit;
+					if ( pCurHit && pCurHit->m_uDocid==uDocid && HITMAN::GetLCS ( pCurHit->m_uHitpos ) < uMinPos )
+					{
+						uMinPos = HITMAN::GetLCS ( pCurHit->m_uHitpos );
+						iMinChild = i;
+					}
+				}
+			}
+
+			// no hits found at children and quorum-buffer over
+			if ( iMinChild<0 && m_iMyLast==iMyEnd )
+			{
+				pDocs++;
+				bCheckChildren = false;
+				break;
+			}
+
+			if ( iMinChild<0 )
+			{
+				m_dHits[iHit++] = m_dQuorumHits[m_iMyLast++];
+			} else
+			{
+				m_dHits[iHit++] = *m_dChildren[iMinChild].m_pCurHit;
+				m_dChildren[iMinChild].m_pCurHit++;
+				if ( m_dChildren[iMinChild].m_pCurHit->m_uDocid==DOCID_MAX )
+					m_dChildren[iMinChild].m_pCurHit = m_dChildren[iMinChild].m_pTerm->GetHitsChunk ( pDocs, uMaxID );
+			}
+		}
+
+		if ( m_iMyLast==iMyEnd && bCheckChildren ) // quorum-buffer over but children still have hits
+			m_uMatchedDocid = uDocid;
+	}
+
+	return ReturnHitsChunk ( iHit );
+}
+
+const ExtHit_t * ExtQuorum_c::GetHitsChunkSimple ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
+{
 	// warmup
-	ARRAY_FOREACH ( i, m_pCurHit )
-		if ( !m_pCurHit[i] || m_pCurHit[i]->m_uDocid==DOCID_MAX )
-			m_pCurHit[i] = m_dChildren[i]->GetHitsChunk ( pDocs, uMaxID );
+	bool bHasHits = false;
+	ARRAY_FOREACH ( i, m_dChildren )
+	{
+		TermTuple_t & tElem = m_dChildren[i];
+		if ( !tElem.m_pCurHit || tElem.m_pCurHit->m_uDocid==DOCID_MAX )
+			tElem.m_pCurHit = tElem.m_pTerm->GetHitsChunk ( pDocs, uMaxID );
+
+		bHasHits |= ( tElem.m_pCurHit!=NULL );
+	}
+
+	if ( !bHasHits )
+		return ReturnHitsChunk ( 0 );
 
 	// main loop
 	int iHit = 0;
 	while ( iHit<MAX_HITS-1 )
 	{
-		// get min id
+		int iMinChild = -1;
+		DWORD uMinPos = UINT_MAX;
+
+		if ( m_uMatchedDocid )
+		{
+			// emit that id while possible
+			// OPTIMIZE: full linear scan for min pos and emission, eww
+			ARRAY_FOREACH ( i, m_dChildren )
+			{
+				const ExtHit_t * pCurHit = m_dChildren[i].m_pCurHit;
+				if ( pCurHit && pCurHit->m_uDocid==m_uMatchedDocid && HITMAN::GetLCS ( pCurHit->m_uHitpos ) < uMinPos )
+				{
+					uMinPos = HITMAN::GetLCS ( pCurHit->m_uHitpos ); // !COMMIT bench/fix, is LCS right here?
+					iMinChild = i;
+				}
+			}
+
+			if ( iMinChild<0 )
+			{
+				SphDocID_t uLastDoc = m_uMatchedDocid;
+				m_uMatchedDocid = 0;
+				while ( pDocs->m_uDocid!=DOCID_MAX && pDocs->m_uDocid<=uLastDoc )
+					pDocs++;
+			}
+		}
+
+		// get min common incoming docs and hits doc-id
 		if ( !m_uMatchedDocid )
 		{
-			m_uMatchedDocid = DOCID_MAX;
-			ARRAY_FOREACH ( i, m_pCurHit )
-				if ( m_pCurHit[i] )
+			bool bDocMatched = false;
+			while ( !bDocMatched && pDocs->m_uDocid!=DOCID_MAX )
 			{
-				assert ( m_pCurHit[i]->m_uDocid!=DOCID_MAX );
-				m_uMatchedDocid = Min ( m_uMatchedDocid, m_pCurHit[i]->m_uDocid );
+				iMinChild = -1;
+				uMinPos = UINT_MAX;
+				ARRAY_FOREACH ( i, m_dChildren )
+				{
+					TermTuple_t & tElem = m_dChildren[i];
+					if ( !tElem.m_pCurHit )
+						continue;
+
+					// fast forward hits
+					while ( tElem.m_pCurHit->m_uDocid<pDocs->m_uDocid && tElem.m_pCurHit->m_uDocid!=DOCID_MAX )
+						tElem.m_pCurHit++;
+
+					if ( tElem.m_pCurHit->m_uDocid==pDocs->m_uDocid )
+					{
+						bDocMatched = true;
+						if ( HITMAN::GetLCS ( tElem.m_pCurHit->m_uHitpos ) < uMinPos )
+						{
+							uMinPos = HITMAN::GetLCS ( tElem.m_pCurHit->m_uHitpos );
+							iMinChild = i;
+						}
+					}
+
+					// rescan current child
+					if ( tElem.m_pCurHit->m_uDocid==DOCID_MAX )
+					{
+						tElem.m_pCurHit = tElem.m_pTerm->GetHitsChunk ( pDocs, uMaxID );
+						i -= ( tElem.m_pCurHit ? 1 : 0 );
+					}
+				}
+
+				if ( !bDocMatched )
+					pDocs++;
 			}
-			if ( m_uMatchedDocid==DOCID_MAX )
+
+			assert ( !bDocMatched || pDocs->m_uDocid!=DOCID_MAX );
+			if ( bDocMatched )
+				m_uMatchedDocid = pDocs->m_uDocid;
+			else
 				break;
 		}
 
-		// emit that id while possible
-		// OPTIMIZE: full linear scan for min pos and emission, eww
-		int iMinChild = -1;
-		DWORD uMinPos = UINT_MAX;
-		ARRAY_FOREACH ( i, m_pCurHit )
-			if ( m_pCurHit[i] && m_pCurHit[i]->m_uDocid==m_uMatchedDocid )
-				if ( HITMAN::GetLCS ( m_pCurHit[i]->m_uHitpos ) < uMinPos )
-		{
-			uMinPos = HITMAN::GetLCS ( m_pCurHit[i]->m_uHitpos ); // !COMMIT bench/fix, is LCS right here?
-			iMinChild = i;
-		}
-
-		if ( iMinChild<0 )
-		{
-			m_uMatchedDocid = 0;
-			continue;
-		}
-
-		m_dHits[iHit++] = *m_pCurHit[iMinChild];
-		m_pCurHit[iMinChild]++;
-
-		if ( m_pCurHit[iMinChild]->m_uDocid==DOCID_MAX )
-			m_pCurHit[iMinChild] = m_dChildren[iMinChild]->GetHitsChunk ( pDocs, uMaxID );
+		assert ( iMinChild>=0 );
+		m_dHits[iHit++] = *m_dChildren[iMinChild].m_pCurHit;
+		m_dChildren[iMinChild].m_pCurHit++;
+		if ( m_dChildren[iMinChild].m_pCurHit->m_uDocid==DOCID_MAX )
+			m_dChildren[iMinChild].m_pCurHit = m_dChildren[iMinChild].m_pTerm->GetHitsChunk ( pDocs, uMaxID );
 	}
 
-	assert ( iHit>=0 && iHit<MAX_HITS );
-	m_dHits[iHit].m_uDocid = DOCID_MAX;
-	return ( iHit!=0 ) ? m_dHits : NULL;
+	return ReturnHitsChunk ( iHit );
 }
 
 int ExtQuorum_c::GetThreshold ( const XQNode_t & tNode, int iQwords )
 {
-	return ( tNode.m_bPercentOp ? (int)floor ( 1.0f / 100.0f * tNode.m_iOpArg * iQwords + 0.5 ) : tNode.m_iOpArg );
+	return ( tNode.m_bPercentOp ? (int)floor ( 1.0f / 100.0f * tNode.m_iOpArg * iQwords + 0.5f ) : tNode.m_iOpArg );
+}
+
+bool ExtQuorum_c::CollectMatchingHits ( SphDocID_t uDocid, int iThreshold )
+{
+	assert ( m_dQuorumHits+m_iMyHitCount+CountQuorum ( false )<m_dQuorumHits+MAX_HITS ); // is there a space for all quorum hits?
+
+	ExtHit_t * pHitBuf = m_dQuorumHits + m_iMyHitCount;
+	int iQuorum = 0;
+	int iTermHits = 0;
+	ARRAY_FOREACH ( i, m_dChildren )
+	{
+		TermTuple_t & tElem = m_dChildren[i];
+
+		// getting more hits
+		if ( !tElem.m_pCurHit || tElem.m_pCurHit->m_uDocid==DOCID_MAX )
+			tElem.m_pCurHit = tElem.m_pTerm->GetHitsChunk ( tElem.m_pCurDoc, uDocid );
+
+		// that hit stream over for now
+		if ( !tElem.m_pCurHit || tElem.m_pCurHit->m_uDocid==DOCID_MAX )
+		{
+			iTermHits = 0;
+			continue;
+		}
+
+		while ( tElem.m_pCurHit->m_uDocid!=DOCID_MAX && tElem.m_pCurHit->m_uDocid<uDocid )
+			tElem.m_pCurHit++;
+
+		// collect matched hits but only up to quorum.count per-term
+		while ( tElem.m_pCurHit->m_uDocid==uDocid && iTermHits<tElem.m_iCount )
+		{
+			*pHitBuf++ = *tElem.m_pCurHit++;
+			iQuorum++;
+			iTermHits++;
+		}
+
+		// got quorum - no need to check further
+		if ( iQuorum>=iThreshold )
+			break;
+
+		// there might be tail hits - rescan current child
+		if ( tElem.m_pCurHit->m_uDocid==DOCID_MAX )
+		{
+			i--;
+		} else
+		{
+			iTermHits = 0;
+		}
+	}
+
+	// discard collected hits is case of no quorum matched
+	if ( iQuorum<iThreshold )
+		return false;
+
+	// collect all hits to move docs/hits further
+	ARRAY_FOREACH ( i, m_dChildren )
+	{
+		TermTuple_t & tElem = m_dChildren[i];
+
+		// getting more hits
+		if ( !tElem.m_pCurHit || tElem.m_pCurHit->m_uDocid==DOCID_MAX )
+			tElem.m_pCurHit = tElem.m_pTerm->GetHitsChunk ( tElem.m_pCurDoc, uDocid );
+
+		// hit stream over for current term
+		if ( !tElem.m_pCurHit || tElem.m_pCurHit->m_uDocid==DOCID_MAX )
+			continue;
+
+		// collect all hits
+		while ( tElem.m_pCurHit->m_uDocid==uDocid && pHitBuf<m_dQuorumHits+MAX_HITS )
+			*pHitBuf++ = *tElem.m_pCurHit++;
+
+		// no more space left at quorum-buffer
+		if ( pHitBuf>=m_dQuorumHits+MAX_HITS )
+			break;
+
+		// there might be tail hits - rescan current child
+		if ( tElem.m_pCurHit->m_uDocid==DOCID_MAX )
+			i--;
+	}
+
+	m_iMyHitCount = pHitBuf - m_dQuorumHits;
+	return true;
 }
 
 //////////////////////////////////////////////////////////////////////////

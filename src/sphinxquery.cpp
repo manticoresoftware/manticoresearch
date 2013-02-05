@@ -1268,7 +1268,6 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTok
 	pMyTokenizer->AddSpecials ( "()|-!@~\"/^$<" );
 	pMyTokenizer->AddPlainChar ( '?' );
 	pMyTokenizer->AddPlainChar ( '%' );
-	pMyTokenizer->EnableQueryParserMode ( true );
 
 	// most outcomes are errors
 	SafeDelete ( tParsed.m_pRoot );

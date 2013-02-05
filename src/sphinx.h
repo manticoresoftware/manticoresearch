@@ -378,6 +378,9 @@ inline bool operator < ( const CSphRemapRange & a, const CSphRemapRange & b )
 class CSphLowercaser
 {
 	friend class ISphTokenizer;
+	friend class CSphTokenizer_UTF8_Base;
+	template<bool> friend class CSphTokenizerBase2;
+
 public:
 				CSphLowercaser ();
 				~CSphLowercaser ();
@@ -554,14 +557,6 @@ public:
 	/// get max codepoint length
 	virtual int						GetMaxCodepointLength () const = 0;
 
-	/// handle tokens less than min_word_len if they match filter
-	virtual void					EnableQueryParserMode ( bool bEnable )
-									{
-										m_bQueryMode = bEnable;
-										m_bShortTokenFilter = bEnable;
-										m_uBlendVariants = BLEND_TRIM_NONE;
-									}
-
 	/// enable indexing-time sentence boundary detection, and paragraph indexing
 	virtual bool					EnableSentenceIndexing ( CSphString & sError );
 
@@ -595,7 +590,7 @@ public:
 
 public:
 	/// spawn a clone of my own
-	virtual ISphTokenizer *			Clone ( bool bEscaped ) const = 0;
+	virtual ISphTokenizer *			Clone ( bool bQueryMode ) const = 0;
 
 	/// SBCS or UTF-8?
 	virtual bool					IsUtf8 () const = 0;
@@ -636,7 +631,6 @@ protected:
 	bool							m_bBoundary;				///< boundary flag (true immediately after boundary codepoint)
 	int								m_iBoundaryOffset;			///< boundary character offset (in bytes)
 	bool							m_bWasSpecial;				///< special token flag
-	bool							m_bEscaped;					///< backslash handling flag
 	int								m_iOvershortCount;			///< skipped overshort tokens count
 
 	bool							m_bBlended;					///< whether last token (as in just returned from GetToken()) was blended
@@ -648,7 +642,6 @@ protected:
 	bool							m_bBlendSkipPure;			///< skip purely blended tokens
 
 	bool							m_bShortTokenFilter;		///< short token filter flag
-	bool							m_bQueryMode;				///< is this indexing time or searching time?
 	bool							m_bDetectSentences;			///< should we detect sentence boundaries?
 
 	CSphTokenizerSettings			m_tSettings;				///< tokenizer settings

@@ -2035,34 +2035,64 @@ struct CSphSynonym
 };
 
 
-/// tokenizer implementation traits
-template < bool IS_UTF8 >
-class CSphTokenizerTraits : public ISphTokenizer
+/// base that is completely identical in both SBCS and UTF8 tokenizers
+class CSphTokenizerBase : public ISphTokenizer
 {
 public:
-	CSphTokenizerTraits ();
+	CSphTokenizerBase ();
 
 	virtual bool			SetCaseFolding ( const char * sConfig, CSphString & sError );
 	virtual bool			LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError );
 	virtual void			WriteSynonyms ( CSphWriter & tWriter );
-	virtual void			CloneBase ( const CSphTokenizerTraits<IS_UTF8> * pFrom, bool bEscaped );
+	virtual void			CloneBase ( const CSphTokenizerBase * pFrom, bool bQueryMode );
 
 	virtual const char *	GetTokenStart () const		{ return (const char *) m_pTokenStart; }
 	virtual const char *	GetTokenEnd () const		{ return (const char *) m_pTokenEnd; }
 	virtual const char *	GetBufferPtr () const		{ return (const char *) m_pCur; }
 	virtual const char *	GetBufferEnd () const		{ return (const char *) m_pBufferMax; }
 	virtual void			SetBufferPtr ( const char * sNewPtr );
-	virtual int				SkipBlended ();
+
+	virtual bool			SetBlendChars ( const char * sConfig, CSphString & sError );
 
 protected:
-	BYTE *	GetTokenSyn ();
 	bool	BlendAdjust ( BYTE * pPosition );
-	BYTE *	GetBlendedVariant ();
-	int		CodepointArbitration ( int iCodepoint, bool bWasEscaped, BYTE uNextByte );
+	int		CodepointArbitrationI ( int iCodepoint );
+	int		CodepointArbitrationQ ( int iCodepoint, bool bWasEscaped, BYTE uNextByte );
 
 	typedef CSphOrderedHash <int, int, IdentityHash_fn, 4096> CSphSynonymHash;
 	bool	LoadSynonym ( char * sBuffer, const char * szFilename, int iLine, CSphSynonymHash & tHash, CSphString & sError );
 
+
+protected:
+	BYTE *				m_pBuffer;							///< my buffer
+	BYTE *				m_pBufferMax;						///< max buffer ptr, exclusive (ie. this ptr is invalid, but every ptr below is ok)
+	BYTE *				m_pCur;								///< current position
+	BYTE *				m_pTokenStart;						///< last token start point
+	BYTE *				m_pTokenEnd;						///< last token end point
+
+	BYTE				m_sAccum [ 3*SPH_MAX_WORD_LEN+3 ];	///< folded token accumulator
+	BYTE *				m_pAccum;							///< current accumulator position
+	int					m_iAccum;							///< boundary token size
+
+	BYTE				m_sAccumBlend [ 3*SPH_MAX_WORD_LEN+3 ];	///< blend-acc, an accumulator copy for additional blended variants
+	int					m_iBlendNormalStart;					///< points to first normal char in the accumulators (might be NULL)
+	int					m_iBlendNormalEnd;						///< points just past (!) last normal char in the accumulators (might be NULL)
+
+	CSphVector<CSphSynonym>			m_dSynonyms;				///< active synonyms
+	CSphVector<int>					m_dSynStart;				///< map 1st byte to candidate range start
+	CSphVector<int>					m_dSynEnd;					///< map 1st byte to candidate range end
+
+	bool	m_bHasBlend;
+	BYTE *	m_pBlendStart;
+	BYTE *	m_pBlendEnd;
+};
+
+
+/// methods taht get specialized with regards to charset type
+/// aka GetCodepoint() decoder and everything that depends on it
+template < bool IS_UTF8 >
+class CSphTokenizerBase2 : public CSphTokenizerBase
+{
 protected:
 	/// get codepoint
 	inline int GetCodepoint ()
@@ -2104,64 +2134,59 @@ protected:
 	}
 
 protected:
-	BYTE *				m_pBuffer;							///< my buffer
-	BYTE *				m_pBufferMax;						///< max buffer ptr, exclusive (ie. this ptr is invalid, but every ptr below is ok)
-	BYTE *				m_pCur;								///< current position
-	BYTE *				m_pTokenStart;						///< last token start point
-	BYTE *				m_pTokenEnd;						///< last token end point
+	BYTE *			GetTokenSyn ( bool bQueryMode );
+	BYTE *			GetBlendedVariant ();
 
-	BYTE				m_sAccum [ 3*SPH_MAX_WORD_LEN+3 ];	///< folded token accumulator
-	BYTE *				m_pAccum;							///< current accumulator position
-	int					m_iAccum;							///< boundary token size
-
-	BYTE				m_sAccumBlend [ 3*SPH_MAX_WORD_LEN+3 ];	///< blend-acc, an accumulator copy for additional blended variants
-	int					m_iBlendNormalStart;					///< points to first normal char in the accumulators (might be NULL)
-	int					m_iBlendNormalEnd;						///< points just past (!) last normal char in the accumulators (might be NULL)
-
-	CSphVector<CSphSynonym>			m_dSynonyms;				///< active synonyms
-	CSphVector<int>					m_dSynStart;				///< map 1st byte to candidate range start
-	CSphVector<int>					m_dSynEnd;					///< map 1st byte to candidate range end
-
-	BYTE *	m_pBlendStart;
-	BYTE *	m_pBlendEnd;
+public:
+	virtual int		SkipBlended ();
 };
 
 
 /// single-byte charset tokenizer
-class CSphTokenizer_SBCS : public CSphTokenizerTraits<false>
+template < bool IS_QUERY >
+class CSphTokenizer_SBCS : public CSphTokenizerBase2<false>
 {
 public:
 								CSphTokenizer_SBCS ();
 
 	virtual void				SetBuffer ( BYTE * sBuffer, int iLength );
 	virtual BYTE *				GetToken ();
-	virtual ISphTokenizer *		Clone ( bool bEscaped ) const;
+	virtual ISphTokenizer *		Clone ( bool bQueryMode ) const;
 	virtual bool				IsUtf8 () const { return false; }
 	virtual int					GetCodepointLength ( int ) const { return 1; }
 	virtual int					GetMaxCodepointLength () const { return 1; }
 };
 
 
-/// UTF-8 tokenizer
-class CSphTokenizer_UTF8 : public CSphTokenizerTraits<true>
+/// templated UTF-8 implementation of GetToken
+class CSphTokenizer_UTF8_Base : public CSphTokenizerBase2<true>
 {
-public:
-								CSphTokenizer_UTF8 ();
-
-	virtual void				SetBuffer ( BYTE * sBuffer, int iLength );
-	virtual BYTE *				GetToken ();
-	virtual ISphTokenizer *		Clone ( bool bEscaped ) const;
-	virtual bool				IsUtf8 () const { return true; }
-	virtual int					GetCodepointLength ( int iCode ) const;
-	virtual int					GetMaxCodepointLength () const { return m_tLC.GetMaxCodepointLength(); }
-
 protected:
+	template < bool IS_QUERY, bool IS_BLEND >
+	BYTE *						DoGetToken();
+
 	void						FlushAccum ();
 };
 
 
+/// UTF-8 tokenizer
+template < bool IS_QUERY >
+class CSphTokenizer_UTF8 : public CSphTokenizer_UTF8_Base
+{
+public:
+								CSphTokenizer_UTF8 ();
+	virtual void				SetBuffer ( BYTE * sBuffer, int iLength );
+	virtual BYTE *				GetToken ();
+	virtual ISphTokenizer *		Clone ( bool bQueryMode ) const;
+	virtual bool				IsUtf8 () const { return true; }
+	virtual int					GetCodepointLength ( int iCode ) const;
+	virtual int					GetMaxCodepointLength () const { return m_tLC.GetMaxCodepointLength(); }
+};
+
+
 /// UTF-8 tokenizer with n-grams
-class CSphTokenizer_UTF8Ngram : public CSphTokenizer_UTF8
+template < bool IS_QUERY >
+class CSphTokenizer_UTF8Ngram : public CSphTokenizer_UTF8<IS_QUERY>
 {
 public:
 						CSphTokenizer_UTF8Ngram () : m_iNgramLen ( 1 ) {}
@@ -2221,7 +2246,7 @@ public:
 	virtual BYTE *					GetTokenizedMultiform ()					{ return m_sTokenizedMultiform[0] ? m_sTokenizedMultiform : NULL; }
 
 public:
-	virtual ISphTokenizer *			Clone ( bool bEscaped ) const;
+	virtual ISphTokenizer *			Clone ( bool bQueryMode ) const;
 	virtual const char *			GetTokenStart () const		{ return m_pLastToken->m_szTokenStart; }
 	virtual const char *			GetTokenEnd () const		{ return m_pLastToken->m_szTokenEnd; }
 	virtual const char *			GetBufferPtr () const		{ return m_pLastToken ? m_pLastToken->m_pBufferPtr : m_pTokenizer->GetBufferPtr(); }
@@ -2345,9 +2370,9 @@ public:
 		m_dWords = pBase->m_dWords;
 	}
 
-	ISphTokenizer * Clone ( bool bEscaped ) const
+	ISphTokenizer * Clone ( bool bQueryMode ) const
 	{
-		ISphTokenizer * pTok = m_pTokenizer->Clone ( bEscaped );
+		ISphTokenizer * pTok = m_pTokenizer->Clone ( bQueryMode );
 		return new CSphBigramTokenizer ( pTok, this );
 	}
 
@@ -2478,18 +2503,18 @@ public:
 
 ISphTokenizer * sphCreateSBCSTokenizer ()
 {
-	return new CSphTokenizer_SBCS ();
+	return new CSphTokenizer_SBCS<false> ();
 }
 
 
 ISphTokenizer * sphCreateUTF8Tokenizer ()
 {
-	return new CSphTokenizer_UTF8 ();
+	return new CSphTokenizer_UTF8<false> ();
 }
 
 ISphTokenizer * sphCreateUTF8NgramTokenizer ()
 {
-	return new CSphTokenizer_UTF8Ngram ();
+	return new CSphTokenizer_UTF8Ngram<false> ();
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2516,16 +2541,19 @@ CSphLowercaser::CSphLowercaser ()
 
 void CSphLowercaser::Reset()
 {
-	m_iChunks = 0;
-	for ( int i=0; i<CHUNK_COUNT; i++ )
-		m_pChunk[i] = NULL;
 	SafeDeleteArray ( m_pData );
+	m_pData = new int [ CHUNK_SIZE ];
+	memset ( m_pData, 0, CHUNK_SIZE*sizeof(int) );
+	m_iChunks = 1;
+	m_pChunk[0] = m_pData; // chunk 0 must always be allocated, for utf-8 tokenizer shortcut to work
+	for ( int i=1; i<CHUNK_COUNT; i++ )
+		m_pChunk[i] = NULL;
 }
 
 
 CSphLowercaser::~CSphLowercaser ()
 {
-	Reset ();
+	SafeDeleteArray ( m_pData );
 }
 
 
@@ -2534,7 +2562,7 @@ void CSphLowercaser::SetRemap ( const CSphLowercaser * pLC )
 	if ( !pLC )
 		return;
 
-	Reset ();
+	SafeDeleteArray ( m_pData );
 
 	m_iChunks = pLC->m_iChunks;
 	m_pData = new int [ m_iChunks*CHUNK_SIZE ];
@@ -3247,7 +3275,6 @@ ISphTokenizer::ISphTokenizer ()
 	, m_bTokenBoundary ( false )
 	, m_bBoundary ( false )
 	, m_bWasSpecial ( false )
-	, m_bEscaped ( false )
 	, m_iOvershortCount ( 0 )
 	, m_bBlended ( false )
 	, m_bNonBlended ( true )
@@ -3257,7 +3284,6 @@ ISphTokenizer::ISphTokenizer ()
 	, m_uBlendVariantsPending ( 0 )
 	, m_bBlendSkipPure ( false )
 	, m_bShortTokenFilter ( false )
-	, m_bQueryMode ( false )
 	, m_bDetectSentences ( false )
 	, m_bPhrase ( false )
 {}
@@ -3545,14 +3571,14 @@ bool ISphTokenizer::EnableZoneIndexing ( CSphString & sError )
 
 //////////////////////////////////////////////////////////////////////////
 
-template < bool IS_UTF8 >
-CSphTokenizerTraits<IS_UTF8>::CSphTokenizerTraits ()
+CSphTokenizerBase::CSphTokenizerBase ()
 	: m_pBuffer		( NULL )
 	, m_pBufferMax	( NULL )
 	, m_pCur		( NULL )
 	, m_pTokenStart ( NULL )
 	, m_pTokenEnd	( NULL )
 	, m_iAccum		( 0 )
+	, m_bHasBlend	( false )
 	, m_pBlendStart		( NULL )
 	, m_pBlendEnd		( NULL )
 {
@@ -3560,20 +3586,28 @@ CSphTokenizerTraits<IS_UTF8>::CSphTokenizerTraits ()
 }
 
 
-template < bool IS_UTF8 >
-bool CSphTokenizerTraits<IS_UTF8>::SetCaseFolding ( const char * sConfig, CSphString & sError )
+bool CSphTokenizerBase::SetCaseFolding ( const char * sConfig, CSphString & sError )
 {
 	if ( m_dSynonyms.GetLength() )
 	{
 		sError = "SetCaseFolding() must not be called after LoadSynonyms()";
 		return false;
 	}
+	m_bHasBlend = false;
 	return ISphTokenizer::SetCaseFolding ( sConfig, sError );
 }
 
 
-template < bool IS_UTF8 >
-bool CSphTokenizerTraits<IS_UTF8>::LoadSynonym ( char * sBuffer, const char * sFilename,
+bool CSphTokenizerBase::SetBlendChars ( const char * sConfig, CSphString & sError )
+{
+	bool bRes = ISphTokenizer::SetBlendChars ( sConfig, sError );
+	if ( bRes )
+		m_bHasBlend = true;
+	return bRes;
+}
+
+
+bool CSphTokenizerBase::LoadSynonym ( char * sBuffer, const char * sFilename,
 	int iLine, CSphSynonymHash & tHash, CSphString & sError )
 {
 	CSphVector<CSphString> dFrom;
@@ -3666,8 +3700,7 @@ bool CSphTokenizerTraits<IS_UTF8>::LoadSynonym ( char * sBuffer, const char * sF
 }
 
 
-template < bool IS_UTF8 >
-bool CSphTokenizerTraits<IS_UTF8>::LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError )
+bool CSphTokenizerBase::LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError )
 {
 	m_dSynonyms.Reset ();
 
@@ -3736,8 +3769,7 @@ bool CSphTokenizerTraits<IS_UTF8>::LoadSynonyms ( const char * sFilename, const 
 }
 
 
-template < bool IS_UTF8 >
-void CSphTokenizerTraits<IS_UTF8>::WriteSynonyms ( CSphWriter & tWriter )
+void CSphTokenizerBase::WriteSynonyms ( CSphWriter & tWriter )
 {
 	tWriter.PutDword ( m_dSynonyms.GetLength() );
 	ARRAY_FOREACH ( i, m_dSynonyms )
@@ -3759,31 +3791,32 @@ void CSphTokenizerTraits<IS_UTF8>::WriteSynonyms ( CSphWriter & tWriter )
 }
 
 
-template < bool IS_UTF8 >
-void CSphTokenizerTraits<IS_UTF8>::CloneBase ( const CSphTokenizerTraits<IS_UTF8> * pFrom, bool bEscaped )
+void CSphTokenizerBase::CloneBase ( const CSphTokenizerBase * pFrom, bool bQueryMode )
 {
 	m_tLC = pFrom->m_tLC;
 	m_dSynonyms = pFrom->m_dSynonyms;
 	m_dSynStart = pFrom->m_dSynStart;
 	m_dSynEnd = pFrom->m_dSynEnd;
 	m_tSettings = pFrom->m_tSettings;
-	m_bEscaped = bEscaped;
+	m_bHasBlend = pFrom->m_bHasBlend;
 	m_uBlendVariants = pFrom->m_uBlendVariants;
 	m_bBlendSkipPure = pFrom->m_bBlendSkipPure;
 
-	if ( bEscaped )
+	m_bShortTokenFilter = bQueryMode;
+	if ( bQueryMode )
 	{
 		CSphVector<CSphRemapRange> dRemaps;
 		CSphRemapRange Range;
 		Range.m_iStart = Range.m_iEnd = Range.m_iRemapStart = '\\';
 		dRemaps.Add ( Range );
 		m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_SPECIAL );
+
+		m_uBlendVariants = BLEND_TRIM_NONE;
 	}
 }
 
 
-template < bool IS_UTF8 >
-void CSphTokenizerTraits<IS_UTF8>::SetBufferPtr ( const char * sNewPtr )
+void CSphTokenizerBase::SetBufferPtr ( const char * sNewPtr )
 {
 	assert ( (BYTE*)sNewPtr>=m_pBuffer && (BYTE*)sNewPtr<=m_pBufferMax );
 	m_pCur = Min ( m_pBufferMax, Max ( m_pBuffer, (BYTE*)sNewPtr ) );
@@ -3795,32 +3828,47 @@ void CSphTokenizerTraits<IS_UTF8>::SetBufferPtr ( const char * sNewPtr )
 
 
 template < bool IS_UTF8 >
-int CSphTokenizerTraits<IS_UTF8>::SkipBlended()
+int CSphTokenizerBase2<IS_UTF8>::SkipBlended()
 {
 	if ( !m_pBlendEnd )
 		return 0;
 
-	bool bQuery = m_bQueryMode;
 	BYTE * pMax = m_pBufferMax;
-
-	m_bQueryMode = false;
 	m_pBufferMax = m_pBlendEnd;
 
-	int iBlended = 0;
-	while ( GetToken() )
+	// loop until the blended token end
+	int iBlended = 0; // how many blended subtokens we have seen so far
+	int iAccum = 0; // how many non-blended chars in a row we have seen so far
+	while ( m_pCur < m_pBufferMax )
+	{
+		int iCode = GetCodepoint();
+		if ( iCode=='\\' )
+			iCode = GetCodepoint(); // no boundary check, GetCP does it
+		iCode = m_tLC.ToLower ( iCode ); // no -1 check, ToLower does it
+		if ( iCode<0 )
+			iCode = 0;
+		if ( iCode & FLAG_CODEPOINT_BLEND )
+			iCode = 0;
+		if ( iCode & MASK_CODEPOINT )
+		{
+			iAccum++;
+			continue;
+		}
+		if ( iAccum>=m_tSettings.m_iMinWordLen )
+			iBlended++;
+		iAccum = 0;
+	}
+	if ( iAccum>=m_tSettings.m_iMinWordLen )
 		iBlended++;
 
-	m_bQueryMode = bQuery;
 	m_pBufferMax = pMax;
-
 	return iBlended;
 }
 
 
 /// adjusts blending magic when we're about to return a token (any token)
 /// returns false if current token should be skipped, true otherwise
-template < bool IS_UTF8 >
-bool CSphTokenizerTraits<IS_UTF8>::BlendAdjust ( BYTE * pCur )
+bool CSphTokenizerBase::BlendAdjust ( BYTE * pCur )
 {
 	// check if all we got is a bunch of blended characters (pure-blended case)
 	if ( m_bBlended && !m_bNonBlended )
@@ -3873,7 +3921,7 @@ static inline void CopySubstring ( BYTE * pDst, const BYTE * pSrc, int iLen )
 
 
 template < bool IS_UTF8 >
-BYTE * CSphTokenizerTraits<IS_UTF8>::GetBlendedVariant ()
+BYTE * CSphTokenizerBase2<IS_UTF8>::GetBlendedVariant ()
 {
 	// we can get called on several occasions
 	// case 1, a new blended token was just accumulated
@@ -4037,98 +4085,89 @@ static inline bool IsBoundary ( BYTE c, bool bPhrase )
 }
 
 
-template < bool IS_UTF8 >
-int CSphTokenizerTraits<IS_UTF8>::CodepointArbitration ( int iCode, bool bWasEscaped, BYTE uNextByte )
+int CSphTokenizerBase::CodepointArbitrationI ( int iCode )
 {
-	/////////////////////////////
-	// indexing time arbitration
-	/////////////////////////////
-
-	if ( !m_bQueryMode )
-	{
-		int iSymbol = iCode & MASK_CODEPOINT;
-
-		// detect sentence boundaries
-		// FIXME! should use charset_table (or add a new directive) and support languages other than English
-		if ( m_bDetectSentences )
-		{
-			if ( iSymbol=='?' || iSymbol=='!' )
-			{
-				// definitely a sentence boundary
-				return MAGIC_CODE_SENTENCE | FLAG_CODEPOINT_SPECIAL;
-			}
-
-			if ( iSymbol=='.' )
-			{
-				// inline dot ("in the U.K and"), not a boundary
-				bool bInwordDot = ( sphIsAlpha ( m_pCur[0] ) || m_pCur[0]==',' );
-
-				// followed by a small letter or an opening paren, not a boundary
-				// FIXME? might want to scan for more than one space
-				// Yoyodine Inc. exists ...
-				// Yoyodine Inc. (the company) ..
-				bool bInphraseDot = ( sphIsSpace ( m_pCur[0] )
-					&& ( ( 'a'<=m_pCur[1] && m_pCur[1]<='z' )
-						|| ( m_pCur[1]=='(' && 'a'<=m_pCur[2] && m_pCur[2]<='z' ) ) );
-
-				// preceded by something that looks like a middle name, opening first name, salutation
-				bool bMiddleName = false;
-				switch ( m_iAccum )
-				{
-					case 1:
-						// 1-char capital letter
-						// example: J. R. R. Tolkien, who wrote Hobbit ...
-						// example: John D. Doe ...
-						bMiddleName = IsCapital ( m_pCur[-2] );
-						break;
-					case 2:
-						// 2-char token starting with a capital
-						if ( IsCapital ( m_pCur[-3] ) )
-						{
-							// capital+small
-							// example: Known as Mr. Doe ...
-							if ( !IsCapital ( m_pCur[-2] ) )
-								bMiddleName = true;
-
-							// known capital+capital (MR, DR, MS)
-							if (
-								( m_pCur[-3]=='M' && m_pCur[-2]=='R' ) ||
-								( m_pCur[-3]=='M' && m_pCur[-2]=='S' ) ||
-								( m_pCur[-3]=='D' && m_pCur[-2]=='R' ) )
-									bMiddleName = true;
-						}
-						break;
-					case 3:
-						// preceded by a known 3-byte token (MRS, DRS)
-						// example: Survived by Mrs. Doe ...
-						if ( ( m_sAccum[0]=='m' || m_sAccum[0]=='d' ) && m_sAccum[1]=='r' && m_sAccum[2]=='s' )
-							bMiddleName = true;
-						break;
-				}
-
-				if ( !bInwordDot && !bInphraseDot && !bMiddleName )
-				{
-					// sentence boundary
-					return MAGIC_CODE_SENTENCE | FLAG_CODEPOINT_SPECIAL;
-				} else
-				{
-					// just a character
-					if ( ( iCode & MASK_FLAGS )==FLAG_CODEPOINT_SPECIAL )
-						return 0; // special only, not dual? then in this context, it is a separator
-					else
-						return iCode & ~( FLAG_CODEPOINT_SPECIAL | FLAG_CODEPOINT_DUAL ); // perhaps it was blended, so return the original code
-				}
-			}
-		}
-
-		// pass-through
+	if ( !m_bDetectSentences )
 		return iCode;
+
+	// detect sentence boundaries
+	// FIXME! should use charset_table (or add a new directive) and support languages other than English
+	int iSymbol = iCode & MASK_CODEPOINT;
+	if ( iSymbol=='?' || iSymbol=='!' )
+	{
+		// definitely a sentence boundary
+		return MAGIC_CODE_SENTENCE | FLAG_CODEPOINT_SPECIAL;
 	}
 
-	//////////////////////////
-	// query time arbitration
-	//////////////////////////
+	if ( iSymbol=='.' )
+	{
+		// inline dot ("in the U.K and"), not a boundary
+		bool bInwordDot = ( sphIsAlpha ( m_pCur[0] ) || m_pCur[0]==',' );
 
+		// followed by a small letter or an opening paren, not a boundary
+		// FIXME? might want to scan for more than one space
+		// Yoyodine Inc. exists ...
+		// Yoyodine Inc. (the company) ..
+		bool bInphraseDot = ( sphIsSpace ( m_pCur[0] )
+			&& ( ( 'a'<=m_pCur[1] && m_pCur[1]<='z' )
+				|| ( m_pCur[1]=='(' && 'a'<=m_pCur[2] && m_pCur[2]<='z' ) ) );
+
+		// preceded by something that looks like a middle name, opening first name, salutation
+		bool bMiddleName = false;
+		switch ( m_iAccum )
+		{
+			case 1:
+				// 1-char capital letter
+				// example: J. R. R. Tolkien, who wrote Hobbit ...
+				// example: John D. Doe ...
+				bMiddleName = IsCapital ( m_pCur[-2] );
+				break;
+			case 2:
+				// 2-char token starting with a capital
+				if ( IsCapital ( m_pCur[-3] ) )
+				{
+					// capital+small
+					// example: Known as Mr. Doe ...
+					if ( !IsCapital ( m_pCur[-2] ) )
+						bMiddleName = true;
+
+					// known capital+capital (MR, DR, MS)
+					if (
+						( m_pCur[-3]=='M' && m_pCur[-2]=='R' ) ||
+						( m_pCur[-3]=='M' && m_pCur[-2]=='S' ) ||
+						( m_pCur[-3]=='D' && m_pCur[-2]=='R' ) )
+							bMiddleName = true;
+				}
+				break;
+			case 3:
+				// preceded by a known 3-byte token (MRS, DRS)
+				// example: Survived by Mrs. Doe ...
+				if ( ( m_sAccum[0]=='m' || m_sAccum[0]=='d' ) && m_sAccum[1]=='r' && m_sAccum[2]=='s' )
+					bMiddleName = true;
+				break;
+		}
+
+		if ( !bInwordDot && !bInphraseDot && !bMiddleName )
+		{
+			// sentence boundary
+			return MAGIC_CODE_SENTENCE | FLAG_CODEPOINT_SPECIAL;
+		} else
+		{
+			// just a character
+			if ( ( iCode & MASK_FLAGS )==FLAG_CODEPOINT_SPECIAL )
+				return 0; // special only, not dual? then in this context, it is a separator
+			else
+				return iCode & ~( FLAG_CODEPOINT_SPECIAL | FLAG_CODEPOINT_DUAL ); // perhaps it was blended, so return the original code
+		}
+	}
+
+	// pass-through
+	return iCode;
+}
+
+
+int CSphTokenizerBase::CodepointArbitrationQ ( int iCode, bool bWasEscaped, BYTE uNextByte )
+{
 	if ( iCode & FLAG_CODEPOINT_NGRAM )
 		return iCode; // ngrams are handled elsewhere
 
@@ -4223,7 +4262,11 @@ static inline SynCheck_e SynCheckPrefix ( const CSphSynonym & tCandidate, int iO
 }
 
 
-static inline bool IsSeparator ( int iFolded, bool bFirst )
+#if !USE_WINDOWS
+#define __forceinline inline
+#endif
+
+static __forceinline bool IsSeparator ( int iFolded, bool bFirst )
 {
 	// eternal separator
 	if ( iFolded<0 || ( iFolded & MASK_CODEPOINT )==0 )
@@ -4260,12 +4303,16 @@ static inline bool Special2Simple ( int & iCodepoint )
 	return false;
 }
 
+
+#if USE_WINDOWS
+#pragma warning(disable:4127) // conditional expr is const for MSVC
+#endif
+
 template < bool IS_UTF8 >
-BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
+BYTE * CSphTokenizerBase2<IS_UTF8>::GetTokenSyn ( bool bQueryMode )
 {
 	assert ( m_dSynonyms.GetLength() );
 
-	bool bEscaped = m_bEscaped;
 	BYTE * pCur;
 
 	m_bTokenBoundary = false;
@@ -4294,8 +4341,19 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 			// store current position (to be able to restart from it on folded boundary)
 			pCur = m_pCur;
 
-			// get next codepoint
-			int iCode = GetCodepoint();
+			// get next codepoint, fold it, lookup flags
+			int iCode;
+			int iFolded;
+			if ( pCur<m_pBufferMax && *pCur<128 )
+			{
+				// fastpath, ascii7 is identical in both SBCS and UTF8 encodings
+				iCode = *m_pCur++;
+				iFolded = m_tLC.m_pChunk[0][iCode];
+			} else
+			{
+				iCode = GetCodepoint(); // advances m_pCur
+				iFolded = m_tLC.ToLower ( iCode );
+			}
 
 			// handle early-out
 			if ( iCode<0 )
@@ -4309,18 +4367,12 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 					break;
 			}
 
-			// fold codepoint (and lookup flags!)
-			int iFolded = m_tLC.ToLower ( iCode );
-
 			// handle boundaries
 			if ( m_bBoundary && ( iFolded==0 ) ) m_bTokenBoundary = true;
 			m_bBoundary = ( iFolded & FLAG_CODEPOINT_BOUNDARY )!=0;
 
-			// skip continuous whitespace
-			if ( iLastFolded==0 && iFolded==0 )
-				continue;
-
-			if ( bEscaped )
+			// handle escapes
+			if ( bQueryMode )
 			{
 				if ( iCode=='\\' && iLastCodepoint!='\\' )
 				{
@@ -4335,8 +4387,15 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 				iLastCodepoint = iCode;
 			}
 
-			if ( m_bQueryMode || m_bDetectSentences )
-				iFolded = CodepointArbitration ( iFolded, false, *m_pCur );
+			// skip continuous whitespace
+			// (must be here, because boundaries and escapes might fold to whitespace)
+			if ( iLastFolded==0 && iFolded==0 )
+				continue;
+
+			if ( bQueryMode )
+				iFolded = CodepointArbitrationQ ( iFolded, false, *m_pCur );
+			else if ( m_bDetectSentences )
+				iFolded = CodepointArbitrationI ( iFolded );
 
 			iLastFolded = iFolded;
 
@@ -4556,33 +4615,41 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 		// find the proper separator
 		if ( !pFirstSeparator )
 		{
-			int iLast = 0;
-
 			// if there was none, scan until found
 			for ( ;; )
 			{
 				pCur = m_pCur;
-				int iCode = *pCur;
-				int iFolded = m_tLC.ToLower ( GetCodepoint() );
+
+				int iCode;
+				int iFolded;
+				if ( pCur<m_pBufferMax && *pCur<128 )
+				{
+					// fastpath, ascii7 is identical in both SBCS and UTF8 encodings
+					iCode = *m_pCur++;
+					iFolded = m_tLC.m_pChunk[0][iCode];
+				} else
+				{
+					iCode = GetCodepoint(); // advances m_pCur
+					iFolded = m_tLC.ToLower ( iCode );
+				}
+
 				if ( iFolded<0 )
 					break; // eof
 
-				if ( bEscaped )
+				if ( bQueryMode && iCode=='\\' )
 				{
-					if ( iCode=='\\' && iLast!='\\' )
-					{
-						iLast = iCode;
-						continue;
-					}
-
-					if ( iLast=='\\' && !Special2Simple ( iFolded ) )
+					iCode = GetCodepoint(); // advances m_pCur
+					iFolded = m_tLC.ToLower ( iCode );
+					if ( iFolded<0 )
 						break;
-
-					iLast = iCode;
+					if ( !Special2Simple ( iFolded ) )
+						break;
 				}
 
-				if ( m_bQueryMode || m_bDetectSentences )
-					iFolded = CodepointArbitration ( iFolded, false, *m_pCur );
+				if ( bQueryMode )
+					iFolded = CodepointArbitrationQ ( iFolded, false, *m_pCur );
+				else if ( m_bDetectSentences )
+					iFolded = CodepointArbitrationI ( iFolded );
 
 				if ( IsSeparator ( iFolded, false ) )
 				{
@@ -4591,7 +4658,18 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 					break;
 				}
 
-				AccumCodepoint ( iFolded & MASK_CODEPOINT );
+				// the hottest accumulation point
+				// so do this manually, no function calls, that is quickest
+				if ( m_iAccum<SPH_MAX_WORD_LEN )
+				{
+					m_iAccum++;
+					if ( IS_UTF8 )
+					{
+						iFolded &= MASK_CODEPOINT;
+						SPH_UTF8_ENCODE ( m_pAccum, iFolded );
+					} else
+						*m_pAccum++ = BYTE(iFolded);
+				}
 			}
 		} else
 		{
@@ -4629,6 +4707,11 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 		return m_sAccum;
 	}
 }
+
+#if USE_WINDOWS
+#pragma warning(default:4127) // conditional expr is const for MSVC
+#endif
+
 
 bool ISphTokenizer::RemapCharacters ( const char * sConfig, DWORD uFlags, const char * sSource, bool bCanRemap, CSphString & sError )
 {
@@ -4746,14 +4829,16 @@ bool ISphTokenizer::SetBlendMode ( const char * sMode, CSphString & sError )
 
 /////////////////////////////////////////////////////////////////////////////
 
-CSphTokenizer_SBCS::CSphTokenizer_SBCS ()
+template < bool IS_QUERY >
+CSphTokenizer_SBCS<IS_QUERY>::CSphTokenizer_SBCS ()
 {
 	CSphString sTmp;
 	SetCaseFolding ( SPHINX_DEFAULT_SBCS_TABLE, sTmp );
 }
 
 
-void CSphTokenizer_SBCS::SetBuffer ( BYTE * sBuffer, int iLength )
+template < bool IS_QUERY >
+void CSphTokenizer_SBCS<IS_QUERY>::SetBuffer ( BYTE * sBuffer, int iLength )
 {
 	// check that old one is over and that new length is sane
 	assert ( iLength>=0 );
@@ -4770,7 +4855,12 @@ void CSphTokenizer_SBCS::SetBuffer ( BYTE * sBuffer, int iLength )
 }
 
 
-BYTE * CSphTokenizer_SBCS::GetToken ()
+#if USE_WINDOWS
+#pragma warning(disable:4127) // conditional expr is const for MSVC
+#endif
+
+template < bool IS_QUERY >
+BYTE * CSphTokenizer_SBCS<IS_QUERY>::GetToken ()
 {
 	m_bWasSpecial = false;
 	m_bBlended = false;
@@ -4778,15 +4868,13 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 	m_bTokenBoundary = false;
 
 	if ( m_dSynonyms.GetLength() )
-		return GetTokenSyn ();
+		return GetTokenSyn ( IS_QUERY );
 
 	// return pending blending variants
 	BYTE * pVar = GetBlendedVariant ();
 	if ( pVar )
 		return pVar;
 	m_bBlendedPart = ( m_pBlendEnd!=NULL );
-
-	const bool bUseEscape = m_bEscaped;
 
 	for ( ;; )
 	{
@@ -4805,7 +4893,7 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 			iCode = m_tLC.ToLower ( iCodepoint );
 
 			// handle escaping
-			if ( bUseEscape && iCodepoint=='\\' )
+			if ( IS_QUERY && iCodepoint=='\\' )
 			{
 				if ( m_pCur<m_pBufferMax )
 				{
@@ -4850,8 +4938,11 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 			}
 		}
 
-		if ( m_bQueryMode || m_bDetectSentences )
-			iCode = CodepointArbitration ( iCode, bWasEscaped, *m_pCur );
+		// handle all the flags..
+		if ( IS_QUERY )
+			iCode = CodepointArbitrationQ ( iCode, bWasEscaped, *m_pCur );
+		else if ( m_bDetectSentences )
+			iCode = CodepointArbitrationI ( iCode );
 
 		// handle ignored chars
 		if ( iCode & FLAG_CODEPOINT_IGNORE )
@@ -4977,31 +5068,44 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 			// tricky bit
 			// heading modifiers must not (!) affected blended status
 			// eg. we want stuff like '=-' (w/o apostrophes) thrown away when pure_blend is on
-			if (!( m_bQueryMode && !m_iAccum && sphIsModifier(iCode) ) )
+			if (!( IS_QUERY && !m_iAccum && sphIsModifier(iCode) ) )
 				m_bNonBlended = m_bNonBlended || bNoBlend;
 			m_sAccum[m_iAccum++] = (BYTE)iCode;
 		}
 	}
 }
 
+#if USE_WINDOWS
+#pragma warning(default:4127) // conditional expr is const for MSVC
+#endif
 
-ISphTokenizer * CSphTokenizer_SBCS::Clone ( bool bEscaped ) const
+
+
+template < bool IS_QUERY >
+ISphTokenizer * CSphTokenizer_SBCS<IS_QUERY>::Clone ( bool bQueryMode ) const
 {
-	CSphTokenizer_SBCS * pClone = new CSphTokenizer_SBCS ();
-	pClone->CloneBase ( this, bEscaped );
+	CSphTokenizerBase * pClone;
+	if ( bQueryMode )
+		pClone = new CSphTokenizer_SBCS<true>();
+	else
+		pClone = new CSphTokenizer_SBCS<false>();
+	pClone->CloneBase ( this, bQueryMode );
 	return pClone;
 }
 
 /////////////////////////////////////////////////////////////////////////////
 
-CSphTokenizer_UTF8::CSphTokenizer_UTF8 ()
+template < bool IS_QUERY >
+CSphTokenizer_UTF8<IS_QUERY>::CSphTokenizer_UTF8 ()
 {
 	CSphString sTmp;
 	SetCaseFolding ( SPHINX_DEFAULT_UTF8_TABLE, sTmp );
+	m_bHasBlend = false;
 }
 
 
-void CSphTokenizer_UTF8::SetBuffer ( BYTE * sBuffer, int iLength )
+template < bool IS_QUERY >
+void CSphTokenizer_UTF8<IS_QUERY>::SetBuffer ( BYTE * sBuffer, int iLength )
 {
 	// check that old one is over and that new length is sane
 	assert ( iLength>=0 );
@@ -5023,7 +5127,12 @@ void CSphTokenizer_UTF8::SetBuffer ( BYTE * sBuffer, int iLength )
 }
 
 
-BYTE * CSphTokenizer_UTF8::GetToken ()
+#if USE_WINDOWS
+#pragma warning(disable:4127) // conditional expr is const for MSVC
+#endif
+
+template < bool IS_QUERY >
+BYTE * CSphTokenizer_UTF8<IS_QUERY>::GetToken ()
 {
 	m_bWasSpecial = false;
 	m_bBlended = false;
@@ -5031,31 +5140,50 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 	m_bTokenBoundary = false;
 
 	if ( m_dSynonyms.GetLength() )
-		return GetTokenSyn ();
+		return GetTokenSyn ( IS_QUERY );
 
+	return m_bHasBlend
+		? DoGetToken<IS_QUERY,true>()
+		: DoGetToken<IS_QUERY,false>();
+}
+
+
+template < bool IS_QUERY, bool IS_BLEND >
+BYTE * CSphTokenizer_UTF8_Base::DoGetToken ()
+{
 	// return pending blending variants
-	BYTE * pVar = GetBlendedVariant ();
-	if ( pVar )
-		return pVar;
-	m_bBlendedPart = ( m_pBlendEnd!=NULL );
-
-	// whether this tokenizer supports escaping
-	const bool bUseEscape = m_bEscaped;
+	if ( IS_BLEND )
+	{
+		BYTE * pVar = GetBlendedVariant ();
+		if ( pVar )
+			return pVar;
+		m_bBlendedPart = ( m_pBlendEnd!=NULL );
+	}
 
 	// in query mode, lets capture (soft-whitespace hard-whitespace) sequences and adjust overshort counter
 	// sample queries would be (one NEAR $$$) or (one | $$$ two) where $ is not a valid character
-	bool bGotNonToken = ( !m_bQueryMode || m_bPhrase ); // only do this in query mode, never in indexing mode, never within phrases
+	bool bGotNonToken = ( !IS_QUERY || m_bPhrase ); // only do this in query mode, never in indexing mode, never within phrases
 	bool bGotSoft = false; // hey Beavis he said soft huh huhhuh
 
 	for ( ;; )
 	{
 		// get next codepoint
 		BYTE * pCur = m_pCur; // to redo special char, if there's a token already
-		int iCodePoint = GetCodepoint(); // advances m_pCur
-		int iCode = m_tLC.ToLower ( iCodePoint );
+
+		int iCodePoint;
+		int iCode;
+		if ( pCur<m_pBufferMax && *pCur<128 )
+		{
+			iCodePoint = *m_pCur++;
+			iCode = m_tLC.m_pChunk[0][iCodePoint];
+		} else
+		{
+			iCodePoint = GetCodepoint(); // advances m_pCur
+			iCode = m_tLC.ToLower ( iCodePoint );
+		}
 
 		// handle escaping
-		bool bWasEscaped = ( bUseEscape && iCodePoint=='\\' ); // whether current codepoint was escaped
+		bool bWasEscaped = ( IS_QUERY && iCodePoint=='\\' ); // whether current codepoint was escaped
 		if ( bWasEscaped )
 		{
 			iCodePoint = GetCodepoint();
@@ -5076,30 +5204,33 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 					if ( m_iLastTokenLen )
 						m_iOvershortCount++;
 					m_iLastTokenLen = 0;
-					BlendAdjust ( pCur );
+					if ( IS_BLEND )
+						BlendAdjust ( pCur );
 					return NULL;
 				}
 			}
 
 			// return trailing word
-			if ( !BlendAdjust ( pCur ) )
+			if ( IS_BLEND && !BlendAdjust ( pCur ) )
 				return NULL;
 			m_pTokenEnd = m_pCur;
-			if ( m_bBlended )
+			if ( IS_BLEND && m_bBlended )
 				return GetBlendedVariant();
 			return m_sAccum;
 		}
 
 		// handle all the flags..
-		if ( m_bQueryMode || m_bDetectSentences )
-			iCode = CodepointArbitration ( iCode, bWasEscaped, *m_pCur );
+		if ( IS_QUERY )
+			iCode = CodepointArbitrationQ ( iCode, bWasEscaped, *m_pCur );
+		else if ( m_bDetectSentences )
+			iCode = CodepointArbitrationI ( iCode );
 
 		// handle ignored chars
 		if ( iCode & FLAG_CODEPOINT_IGNORE )
 			continue;
 
 		// handle blended characters
-		if ( iCode & FLAG_CODEPOINT_BLEND )
+		if ( IS_BLEND && ( iCode & FLAG_CODEPOINT_BLEND ) )
 		{
 			if ( m_pBlendEnd )
 				iCode = 0;
@@ -5144,7 +5275,7 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 		if ( iCode==0 || m_bBoundary )
 		{
 			FlushAccum ();
-			if ( !BlendAdjust ( pCur ) )
+			if ( IS_BLEND && !BlendAdjust ( pCur ) )
 				continue;
 
 			if ( m_iLastTokenLen<m_tSettings.m_iMinWordLen
@@ -5156,7 +5287,7 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			} else
 			{
 				m_pTokenEnd = pCur;
-				if ( m_bBlended )
+				if ( IS_BLEND && m_bBlended )
 					return GetBlendedVariant();
 				return m_sAccum;
 			}
@@ -5193,10 +5324,13 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			}
 
 			FlushAccum ();
-			if ( !BlendAdjust ( pCur ) )
-				continue;
-			if ( m_bBlended )
-				return GetBlendedVariant();
+			if ( IS_BLEND )
+			{
+				if ( !BlendAdjust ( pCur ) )
+					continue;
+				if ( m_bBlended )
+					return GetBlendedVariant();
+			}
 			return m_sAccum;
 		}
 
@@ -5206,16 +5340,28 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 		// tricky bit
 		// heading modifiers must not (!) affected blended status
 		// eg. we want stuff like '=-' (w/o apostrophes) thrown away when pure_blend is on
-		if (!( m_bQueryMode && !m_iAccum && sphIsModifier ( iCode & MASK_CODEPOINT ) ) )
-			m_bNonBlended = m_bNonBlended || !( iCode & FLAG_CODEPOINT_BLEND );
+		if ( IS_BLEND )
+			if (!( IS_QUERY && !m_iAccum && sphIsModifier ( iCode & MASK_CODEPOINT ) ) )
+				m_bNonBlended = m_bNonBlended || !( iCode & FLAG_CODEPOINT_BLEND );
 
 		// just accumulate
-		AccumCodepoint ( iCode & MASK_CODEPOINT );
+		// manual inlining of utf8 encoder gives us a few extra percent
+		// which is important here, this is a hotspot
+		if ( m_iAccum<SPH_MAX_WORD_LEN )
+		{
+			iCode &= MASK_CODEPOINT;
+			m_iAccum++;
+			SPH_UTF8_ENCODE ( m_pAccum, iCode );
+		}
 	}
 }
 
+#if USE_WINDOWS
+#pragma warning(default:4127) // conditional expr is const for MSVC
+#endif
 
-void CSphTokenizer_UTF8::FlushAccum ()
+
+void CSphTokenizer_UTF8_Base::FlushAccum ()
 {
 	assert ( m_pAccum-m_sAccum < (int)sizeof(m_sAccum) );
 	m_iLastTokenLen = m_iAccum;
@@ -5225,15 +5371,21 @@ void CSphTokenizer_UTF8::FlushAccum ()
 }
 
 
-ISphTokenizer * CSphTokenizer_UTF8::Clone ( bool bEscaped ) const
+template < bool IS_QUERY >
+ISphTokenizer * CSphTokenizer_UTF8<IS_QUERY>::Clone ( bool bQueryMode ) const
 {
-	CSphTokenizer_UTF8 * pClone = new CSphTokenizer_UTF8 ();
-	pClone->CloneBase ( this, bEscaped );
+	CSphTokenizerBase * pClone;
+	if ( bQueryMode )
+		pClone = new CSphTokenizer_UTF8<true>();
+	else
+		pClone = new CSphTokenizer_UTF8<false>();
+	pClone->CloneBase ( this, bQueryMode );
 	return pClone;
 }
 
 
-int CSphTokenizer_UTF8::GetCodepointLength ( int iCode ) const
+template < bool IS_QUERY >
+int CSphTokenizer_UTF8<IS_QUERY>::GetCodepointLength ( int iCode ) const
 {
 	if ( iCode<128 )
 		return 1;
@@ -5251,7 +5403,8 @@ int CSphTokenizer_UTF8::GetCodepointLength ( int iCode ) const
 
 /////////////////////////////////////////////////////////////////////////////
 
-bool CSphTokenizer_UTF8Ngram::SetNgramChars ( const char * sConfig, CSphString & sError )
+template < bool IS_QUERY >
+bool CSphTokenizer_UTF8Ngram<IS_QUERY>::SetNgramChars ( const char * sConfig, CSphString & sError )
 {
 	CSphVector<CSphRemapRange> dRemaps;
 	CSphCharsetDefinitionParser tParser;
@@ -5261,24 +5414,27 @@ bool CSphTokenizer_UTF8Ngram::SetNgramChars ( const char * sConfig, CSphString &
 		return false;
 	}
 
-	m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_NGRAM | FLAG_CODEPOINT_SPECIAL ); // !COMMIT support other n-gram lengths than 1
+	// gcc braindamage requires this
+	this->m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_NGRAM | FLAG_CODEPOINT_SPECIAL ); // !COMMIT support other n-gram lengths than 1
 	m_sNgramCharsStr = sConfig;
 	return true;
 }
 
 
-void CSphTokenizer_UTF8Ngram::SetNgramLen ( int iLen )
+template < bool IS_QUERY >
+void CSphTokenizer_UTF8Ngram<IS_QUERY>::SetNgramLen ( int iLen )
 {
 	assert ( iLen>0 );
 	m_iNgramLen = iLen;
 }
 
 
-BYTE * CSphTokenizer_UTF8Ngram::GetToken ()
+template < bool IS_QUERY >
+BYTE * CSphTokenizer_UTF8Ngram<IS_QUERY>::GetToken ()
 {
 	// !COMMIT support other n-gram lengths than 1
 	assert ( m_iNgramLen==1 );
-	return CSphTokenizer_UTF8::GetToken ();
+	return CSphTokenizer_UTF8<IS_QUERY>::GetToken ();
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -5456,9 +5612,9 @@ BYTE * CSphMultiformTokenizer::GetToken ()
 }
 
 
-ISphTokenizer * CSphMultiformTokenizer::Clone ( bool bEscaped ) const
+ISphTokenizer * CSphMultiformTokenizer::Clone ( bool bQueryMode ) const
 {
-	ISphTokenizer * pClone = m_pTokenizer->Clone ( bEscaped );
+	ISphTokenizer * pClone = m_pTokenizer->Clone ( bQueryMode );
 	return CreateMultiformFilter ( pClone, m_pMultiWordforms );
 }
 

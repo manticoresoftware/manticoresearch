@@ -906,6 +906,25 @@ inline int sphUTF8Decode ( BYTE * & pBuf )
 }
 
 
+/// encode UTF-8 codepoint to buffer, macro version for the Really Critical places
+#define SPH_UTF8_ENCODE(_ptr,_code) \
+	if ( (_code)<0x80 ) \
+	{ \
+		*_ptr++ = (BYTE)( (_code) & 0x7F ); \
+	} else if ( iCode<0x800 ) \
+	{ \
+		_ptr[0] = (BYTE)( ( ((_code)>>6) & 0x1F ) | 0xC0 ); \
+		_ptr[1] = (BYTE)( ( (_code) & 0x3F ) | 0x80 ); \
+		_ptr += 2; \
+	} else \
+	{ \
+		_ptr[0] = (BYTE)( ( ((_code)>>12) & 0x0F ) | 0xE0 ); \
+		_ptr[1] = (BYTE)( ( ((_code)>>6) & 0x3F ) | 0x80 ); \
+		_ptr[2] = (BYTE)( ( (_code) & 0x3F ) | 0x80 ); \
+		_ptr += 3; \
+	}
+
+
 /// encode UTF-8 codepoint to buffer
 /// returns number of bytes used
 inline int sphUTF8Encode ( BYTE * pBuf, int iCode )
@@ -1204,7 +1223,6 @@ public:
 
 	virtual int						GetCodepointLength ( int iCode ) const		{ return m_pTokenizer->GetCodepointLength ( iCode ); }
 	virtual int						GetMaxCodepointLength () const				{ return m_pTokenizer->GetMaxCodepointLength(); }
-	virtual void					EnableQueryParserMode ( bool bEnable )		{ m_pTokenizer->EnableQueryParserMode ( bEnable ); }
 
 	virtual bool					IsUtf8 () const								{ return m_pTokenizer->IsUtf8 (); }
 	virtual const char *			GetTokenStart () const						{ return m_pTokenizer->GetTokenStart(); }
@@ -1630,7 +1648,7 @@ public:
 		if ( m_pDict->HasState() )
 			m_tDictCloned = m_pDict = m_pDict->Clone();
 
-		m_tTokenizer = pIndex->GetTokenizer()->Clone ( true );
+		m_tTokenizer = pIndex->GetTokenizer()->Clone ( false );
 		m_pQueryTokenizer = m_tTokenizer.Ptr();
 
 		// setup exact dictionary if needed

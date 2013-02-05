@@ -428,15 +428,37 @@ private:
 	IndexHash_c::HashEntry_t *	m_pIterator;
 };
 
+struct ThreadsOnlyMutex_t
+{
+	bool Init ();
+	void Done ();
+	void Lock ();
+	void Unlock ();
+
+private:
+	CSphMutex m_tLock;
+};
+
+struct StaticThreadsOnlyMutex_t
+{
+	StaticThreadsOnlyMutex_t ();
+	~StaticThreadsOnlyMutex_t ();
+	void Lock ();
+	void Unlock ();
+
+private:
+	CSphMutex m_tLock;
+};
+
 
 static IndexHash_c *						g_pLocalIndexes = NULL;	// served (local) indexes hash
 static CSphVector<const char *>				g_dRotating;			// names of indexes to be rotated this time
 static const char *							g_sPrereading	= NULL;	// name of index currently being preread
 static CSphIndex *							g_pPrereading	= NULL;	// rotation "buffer"
 
-static CSphMutex							g_tRotateQueueMutex;
+static ThreadsOnlyMutex_t					g_tRotateQueueMutex;
 static CSphVector<CSphString>				g_dRotateQueue;		// FIXME? maybe replace it with lockless ring buffer
-static CSphMutex							g_tRotateConfigMutex;
+static ThreadsOnlyMutex_t					g_tRotateConfigMutex;
 static SphThread_t							g_tRotateThread;
 static SphThread_t							g_tRotationServiceThread;
 static volatile bool						g_bInvokeRotationService = false;
@@ -450,15 +472,8 @@ CSphMutex									g_tOptimizeQueueMutex;
 CSphVector<CSphString>						g_dOptimizeQueue;
 static ThrottleState_t						g_tRtThrottle;
 
-struct ThreadsOnlyMutex_t : private CSphMutex
-{
-	void Init ();
-	void Done ();
-	void Lock ();
-	void Unlock ();
-};
-static ThreadsOnlyMutex_t					g_tDistLock;
-static ThreadsOnlyMutex_t					g_tPersLock;
+static StaticThreadsOnlyMutex_t				g_tDistLock;
+static StaticThreadsOnlyMutex_t				g_tPersLock;
 
 enum
 {
@@ -647,7 +662,7 @@ public:
 	int RentConnection ()
 	{
 		// for the moment we try to return already connected socket.
-		CSphScopedLock<ThreadsOnlyMutex_t> tLock ( g_tPersLock );
+		CSphScopedLock<StaticThreadsOnlyMutex_t> tLock ( g_tPersLock );
 		int* pFree = &g_dPersistentConnections[m_iPersPool];
 		if ( *pFree==-1 ) // fresh pool, just cleared. All slots are free
 			*pFree = g_iPersistentPoolSize;
@@ -662,7 +677,7 @@ public:
 	void ReturnConnection ( int iSocket )
 	{
 		// for the moment we try to return already connected socket.
-		CSphScopedLock<ThreadsOnlyMutex_t> tLock ( g_tPersLock );
+		CSphScopedLock<StaticThreadsOnlyMutex_t> tLock ( g_tPersLock );
 		int* pFree = &g_dPersistentConnections[m_iPersPool];
 		assert ( *pFree<g_iPersistentPoolSize );
 		if ( *pFree==g_iPersistentPoolSize )
@@ -1146,28 +1161,52 @@ bool IndexHash_c::Exists ( const CSphString & tKey ) const
 //////////////////////////////////////////////////////////////////////////
 
 
-void ThreadsOnlyMutex_t::Init ()
+bool ThreadsOnlyMutex_t::Init ()
 {
 	if ( g_eWorkers==MPM_THREADS )
-		CSphMutex::Init();
+		return m_tLock.Init();
+	else
+		return true;
 }
 
 void ThreadsOnlyMutex_t::Done ()
 {
 	if ( g_eWorkers==MPM_THREADS )
-		CSphMutex::Done();
+		m_tLock.Done();
 }
 
 void ThreadsOnlyMutex_t::Lock ()
 {
 	if ( g_eWorkers==MPM_THREADS )
-		CSphMutex::Lock();
+		m_tLock.Lock();
 }
 
 void ThreadsOnlyMutex_t::Unlock()
 {
 	if ( g_eWorkers==MPM_THREADS )
-		CSphMutex::Unlock();
+		m_tLock.Unlock();
+}
+
+StaticThreadsOnlyMutex_t::StaticThreadsOnlyMutex_t ()
+{
+	m_tLock.Init();
+}
+
+StaticThreadsOnlyMutex_t::~StaticThreadsOnlyMutex_t ()
+{
+	m_tLock.Done();
+}
+
+void StaticThreadsOnlyMutex_t::Lock ()
+{
+	if ( g_eWorkers==MPM_THREADS )
+		m_tLock.Lock();
+}
+
+void StaticThreadsOnlyMutex_t::Unlock()
+{
+	if ( g_eWorkers==MPM_THREADS )
+		m_tLock.Unlock();
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1602,8 +1641,6 @@ void Shutdown ()
 			{
 				sphThreadJoin ( &g_tRotateThread );
 			}
-			g_tRotateQueueMutex.Done();
-			g_tRotateConfigMutex.Done();
 
 			// tell uservars flush thread to shutdown, and wait until it does
 			if ( !g_sSphinxqlState.IsEmpty() )
@@ -1619,11 +1656,12 @@ void Shutdown ()
 			g_tThdMutex.Lock();
 			g_dThd.Reset();
 			g_tThdMutex.Unlock();
-			g_tThdMutex.Done();
 			g_tFlushMutex.Done();
 			g_tUservarsMutex.Done();
 			g_tOptimizeQueueMutex.Done();
 		}
+		g_tRotateQueueMutex.Done();
+		g_tRotateConfigMutex.Done();
 
 		sphThreadJoin ( &g_tRotationServiceThread );
 
@@ -1680,7 +1718,6 @@ void Shutdown ()
 		g_pLocalIndexes->Reset();
 
 		// clear shut down of rt indexes + binlog
-		g_tDistLock.Done();
 		SafeDelete ( g_pLocalIndexes );
 		sphDoneIOStats();
 		sphRTDone();
@@ -1694,7 +1731,7 @@ void Shutdown ()
 			sphSockClose ( g_dListeners[i].m_iSock );
 
 	{
-		CSphScopedLock<ThreadsOnlyMutex_t> tLock ( g_tPersLock );
+		CSphScopedLock<StaticThreadsOnlyMutex_t> tLock ( g_tPersLock );
 		ARRAY_FOREACH ( i, g_dPersistentConnections )
 		{
 			if ( ( i % g_iPersistentPoolSize ) && g_dPersistentConnections[i]>=0 )
@@ -1702,8 +1739,6 @@ void Shutdown ()
 			g_dPersistentConnections[i] = -1;
 		}
 	}
-
-	g_tPersLock.Done();
 
 #if USE_WINDOWS
 	CloseHandle ( g_hPipe );
@@ -9353,7 +9388,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	int iAgentConnectTimeout = 0, iAgentQueryTimeout = 0;
 
 	{
-		CSphScopedLock<ThreadsOnlyMutex_t> tDistLock ( g_tDistLock );
+		CSphScopedLock<StaticThreadsOnlyMutex_t> tDistLock ( g_tDistLock );
 		DistributedIndex_t * pDist = g_hDistIndexes ( tFirst.m_sIndexes );
 		if ( pDist )
 		{
@@ -10686,7 +10721,7 @@ CSphFilterSettings * SqlParser_c::AddFilter ( const CSphString & sCol, ESphFilte
 		return NULL;
 	}
 	CSphFilterSettings * pFilter = &m_pQuery->m_dFilters.Add();
-	pFilter->m_sAttrName = ( sCol=="id" ) ? "@id" : sCol ;
+	pFilter->m_sAttrName = ( sCol=="id" ) ? "@id" : sCol;
 	pFilter->m_eType = eType;
 	sphColumnToLowercase ( const_cast<char *>( pFilter->m_sAttrName.cstr() ) );
 	return pFilter;
@@ -17519,7 +17554,7 @@ void InitPersistentPool()
 	if ( g_eWorkers==MPM_THREADS && g_iPersistentPoolSize )
 	{
 		// always close all persistent connections before (re)calculation.
-		CSphScopedLock<ThreadsOnlyMutex_t> tLock ( g_tPersLock );
+		CSphScopedLock<StaticThreadsOnlyMutex_t> tLock ( g_tPersLock );
 		ARRAY_FOREACH ( i, g_dPersistentConnections )
 		{
 			if ( ( i % g_iPersistentPoolSize ) && g_dPersistentConnections[i]>=0 )
@@ -20055,21 +20090,19 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	}
 #endif
 
+	if ( !g_tRotateQueueMutex.Init() || !g_tRotateConfigMutex.Init() )
+		sphDie ( "failed to init rotations mutexes" );
+
 	// in threaded mode, create a dedicated rotation thread
 	if ( g_eWorkers==MPM_THREADS )
 	{
-		if ( !g_tThdMutex.Init() || !g_tRotateQueueMutex.Init() || !g_tRotateConfigMutex.Init() )
-			sphDie ( "failed to init mutex" );
-
 		if ( g_bSeamlessRotate && !sphThreadCreate ( &g_tRotateThread, RotationThreadFunc, 0 ) )
 			sphDie ( "failed to create rotation thread" );
 
 		// reserving max to keep memory consumption constant between frames
 		g_dThd.Reserve ( Max ( g_iMaxChildren*2, 64 ) );
 
-		g_tDistLock.Init();
 		g_tFlushMutex.Init();
-		g_tPersLock.Init();
 	}
 
 	// replay last binlog

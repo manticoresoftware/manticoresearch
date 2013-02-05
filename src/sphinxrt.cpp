@@ -8092,7 +8092,6 @@ void sphRTInit ()
 	MEMORY ( SPH_MEM_BINLOG );
 
 	g_bRTChangesAllowed = false;
-	Verify ( RtSegment_t::m_tSegmentSeq.Init() );
 	Verify ( sphThreadKeyCreate ( &g_tTlsAccumKey ) );
 
 	g_pRtBinlog = new RtBinlog_c();
@@ -8117,7 +8116,6 @@ void sphRTConfigure ( const CSphConfigSection & hSearchd, bool bTestMode )
 void sphRTDone ()
 {
 	sphThreadKeyDelete ( g_tTlsAccumKey );
-	Verify ( RtSegment_t::m_tSegmentSeq.Done() );
 	// its valid for "searchd --stop" case
 	SafeDelete ( g_pBinlog );
 }

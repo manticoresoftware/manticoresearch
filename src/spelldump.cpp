@@ -293,7 +293,11 @@ bool CISpellAffixRule::CheckSuffix ( const CSphString & sWord ) const
 	int iCondI = m_iCondLen-1;
 	for ( int i=m_iWordLen-1; iCondI>=0 && i>=0; --i )
 	{
-		if ( m_sCondition.cstr()[iCondI]!=']' )
+		if ( m_sCondition.cstr()[iCondI]=='.' )
+		{
+			--iCondI;
+		}
+		else if ( m_sCondition.cstr()[iCondI]!=']' )
 		{
 			if ( m_sCondition.cstr()[iCondI]!=sWord.cstr()[i] )
 				return false;

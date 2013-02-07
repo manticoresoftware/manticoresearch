@@ -8267,7 +8267,6 @@ CSphIndex::CSphIndex ( const char * sIndexName, const char * sFilename )
 	, m_bExpandKeywords ( false )
 	, m_iExpansionLimit ( 0 )
 	, m_tSchema ( sFilename )
-	, m_sLastError ( "(no error message)" )
 	, m_bInplaceSettings ( false )
 	, m_iHitGap ( 0 )
 	, m_iDocinfoGap ( 0 )
@@ -15379,9 +15378,13 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 		if ( tDocinfo.GetFD()<0 )
 			return false;
 
-		int64_t iDocinfoSize = tDocinfo.GetSize ( iEntrySize, true, m_sLastError ) / sizeof(DWORD);
+		int64_t iDocinfoSize = tDocinfo.GetSize ( iEntrySize, true, m_sLastError );
+		if ( iDocinfoSize<0 )
+			return false;
+		iDocinfoSize = iDocinfoSize / sizeof(DWORD);
 		int64_t iRealDocinfoSize = m_uMinMaxIndex ? m_uMinMaxIndex : iDocinfoSize;
 		m_iDocinfo = iRealDocinfoSize / iStride;
+
 
 		if ( m_bId32to64 )
 		{
@@ -15409,6 +15412,8 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 			if ( iDocinfoSize < iRealDocinfoSize )
 			{
 				m_sLastError.SetSprintf ( "precomputed chunk size check mismatch" );
+				sphLogDebug ( "precomputed chunk size check mismatch (size="INT64_FMT", real="INT64_FMT", min-max="INT64_FMT", count="INT64_FMT")",
+					iDocinfoSize, iRealDocinfoSize, m_uMinMaxIndex, m_iDocinfo );
 				return false;
 			}
 
@@ -15632,6 +15637,7 @@ bool CSphIndex_VLN::Preread ()
 	// build attributes hash
 	if ( m_pDocinfo.GetLength() && m_pDocinfoHash.GetLength() )
 	{
+		sphLogDebug ( "Hashing docinfo" );
 		assert ( CheckDocsCount ( m_iDocinfo, m_sLastError ) );
 		int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 		SphDocID_t uFirst = DOCINFO2ID ( &m_pDocinfo[0] );
@@ -29738,8 +29744,7 @@ bool sphPrereadGlobalIDF ( const CSphString & sPath, CSphString & sError )
 				*ppGlobalIDF = pGlobalIDF;
 				SafeDelete ( pOld );
 			}
-		}
-		else
+		} else
 		{
 			if ( !g_hGlobalIDFs.Add ( pGlobalIDF, sPath ) )
 				SafeDelete ( pGlobalIDF );

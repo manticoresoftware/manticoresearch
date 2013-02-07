@@ -1385,6 +1385,8 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 			pIndex->GetDictionary()->GetMultiWordforms () ) );
 	}
 
+	pIndex->SetupQueryTokenizer();
+
 	if ( !pIndex->IsStripperInited () )
 	{
 		CSphIndexSettings tSettings = pIndex->GetSettings ();

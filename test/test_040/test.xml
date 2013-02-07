@@ -12,7 +12,7 @@ indexer
 searchd
 {
 	<searchd_settings/>
-compat_sphinxql_magics = 1
+	compat_sphinxql_magics = 1
 }
 
 source srctest
@@ -28,6 +28,8 @@ index test_idx
 	path			= <data_path/>/test
 	charset_type	= utf-8
 	min_word_len	= 1
+	min_infix_len	= 1
+	enable_star		= 1
 }
 
 </config>

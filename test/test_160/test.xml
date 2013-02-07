@@ -29,6 +29,8 @@ index test
 	html_strip		= 1
 	index_sp		= 1
 	index_zones		= zone*
+	min_infix_len	= 1
+	enable_star		= 1
 }
 
 index multiform
@@ -38,6 +40,8 @@ index multiform
 
 	charset_type	= utf-8
 	wordforms		= test_160/multiwordorms.txt
+	min_infix_len	= 1
+	enable_star		= 1
 }
 
 </config>

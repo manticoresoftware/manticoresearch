@@ -1073,12 +1073,12 @@ public:
 		}
 	}
 
-	ISphTokenizer * Clone ( bool bQueryMode ) const
+	ISphTokenizer * Clone ( ESphTokenizerClone eMode ) const
 	{
 		// this token filter must NOT be created as escaped
 		// it must only be used during indexing time, NEVER in searching time
-		assert ( !bQueryMode );
-		CSphAotTokenizer<IS_UTF8> * pClone = new CSphAotTokenizer ( m_pTokenizer->Clone ( bQueryMode ), NULL );
+		assert ( eMode==SPH_CLONE_INDEX );
+		CSphAotTokenizer<IS_UTF8> * pClone = new CSphAotTokenizer ( m_pTokenizer->Clone ( eMode ), NULL );
 		if ( m_pWordforms )
 			pClone->m_pWordforms = m_pWordforms;
 		return pClone;

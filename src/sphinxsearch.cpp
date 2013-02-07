@@ -1576,7 +1576,6 @@ ExtCached_c::ExtCached_c ( const XQNode_t * pNode, const ISphQwordSetup & tSetup
 		tWord.m_sWord = pNode->m_dWords[i].m_sWord;
 		tWord.m_bFieldStart = pNode->m_dWords[i].m_bFieldStart;
 		tWord.m_bFieldEnd = pNode->m_dWords[i].m_bFieldEnd;
-		tWord.m_uStarPosition = pNode->m_dWords[i].m_uStarPosition;
 		tWord.m_iDocs = 0;
 		tWord.m_iHits = 0;
 

@@ -378,6 +378,7 @@ inline bool operator < ( const CSphRemapRange & a, const CSphRemapRange & b )
 class CSphLowercaser
 {
 	friend class ISphTokenizer;
+	friend class CSphTokenizerBase;
 	friend class CSphTokenizer_UTF8_Base;
 	template<bool> friend class CSphTokenizerBase2;
 
@@ -473,6 +474,14 @@ enum ESphBigram
 	SPH_BIGRAM_ALL			= 1,	///< index all word pairs
 	SPH_BIGRAM_FIRSTFREQ	= 2,	///< only index pairs where one of the words is in a frequent words list
 	SPH_BIGRAM_BOTHFREQ		= 3		///< only index pairs where both words are in a frequent words list
+};
+
+
+enum ESphTokenizerClone
+{
+	SPH_CLONE_INDEX,				///< clone tokenizer and set indexing mode
+	SPH_CLONE_QUERY,				///< clone tokenizer and set querying mode
+	SPH_CLONE_QUERY_LIGHTWEIGHT		///< lightweight clone for querying (can parse, can NOT modify settings, shares pointers to the original lowercaser table)
 };
 
 
@@ -590,7 +599,7 @@ public:
 
 public:
 	/// spawn a clone of my own
-	virtual ISphTokenizer *			Clone ( bool bQueryMode ) const = 0;
+	virtual ISphTokenizer *			Clone ( ESphTokenizerClone eMode ) const = 0;
 
 	/// SBCS or UTF-8?
 	virtual bool					IsUtf8 () const = 0;
@@ -2900,7 +2909,9 @@ public:
 	virtual void				SetWordlistPreload ( bool bValue ) { m_bPreloadWordlist = bValue; }
 	void						SetFieldFilter ( ISphFieldFilter * pFilter );
 	void						SetTokenizer ( ISphTokenizer * pTokenizer );
+	void						SetupQueryTokenizer();
 	const ISphTokenizer *		GetTokenizer () const { return m_pTokenizer; }
+	const ISphTokenizer *		GetQueryTokenizer () const { return m_pQueryTokenizer; }
 	ISphTokenizer *				LeakTokenizer ();
 	void						SetDictionary ( CSphDict * pDict );
 	CSphDict *					GetDictionary () const { return m_pDict; }
@@ -2915,6 +2926,7 @@ public:
 	virtual bool				IsRT() const { return false; }
 	virtual int64_t *			GetFieldLens() const { return NULL; }
 
+	virtual bool				IsStarDict() const { return m_bEnableStar; } // disk index overrides this to support super-old legacy formats
 	virtual void				SetEnableStar ( bool bEnableStar ) { m_bEnableStar = bEnableStar; }
 	bool						IsStarEnabled () const { return m_bEnableStar; }
 
@@ -3037,6 +3049,7 @@ protected:
 
 	ISphFieldFilter *			m_pFieldFilter;
 	ISphTokenizer *				m_pTokenizer;
+	ISphTokenizer *				m_pQueryTokenizer;
 	CSphDict *					m_pDict;
 
 	int							m_iMaxCachedDocs;

@@ -50,7 +50,7 @@ public:
 	int				GetToken ( YYSTYPE * lvalp );
 
 	void			AddQuery ( XQNode_t * pNode );
-	XQNode_t *		AddKeyword ( const char * sKeyword, DWORD uStar = STAR_NONE );
+	XQNode_t *		AddKeyword ( const char * sKeyword );
 	XQNode_t *		AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight );
 	XQNode_t *		AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pRight, int iOpArg=0 );
 
@@ -943,13 +943,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 				m_iAtomPos--;
 		}
 
-		// information about stars is lost after this point, so was have to save it now
-		DWORD uStarPosition = STAR_NONE;
-		uStarPosition |= *m_pTokenizer->GetTokenEnd()=='*' ? STAR_BACK : 0;
-		uStarPosition |= ( m_pTokenizer->GetTokenStart()>(const char *)m_sQuery ) &&
-			m_pTokenizer->GetTokenStart()[-1]=='*' ? STAR_FRONT : 0;
-
-		m_tPendingToken.pNode = AddKeyword ( sToken, uStarPosition );
+		m_tPendingToken.pNode = AddKeyword ( sToken );
 		m_iPendingType = TOK_KEYWORD;
 
 		if ( m_pTokenizer->TokenIsBlended() )
@@ -984,11 +978,9 @@ void XQParser_t::AddQuery ( XQNode_t * pNode )
 }
 
 
-XQNode_t * XQParser_t::AddKeyword ( const char * sKeyword, DWORD uStarPosition )
+XQNode_t * XQParser_t::AddKeyword ( const char * sKeyword )
 {
 	XQKeyword_t tAW ( sKeyword, m_iAtomPos );
-	tAW.m_uStarPosition = uStarPosition;
-
 	XQNode_t * pNode = new XQNode_t ( *m_dStateSpec.Last() );
 	pNode->m_dWords.Add ( tAW );
 
@@ -1264,10 +1256,8 @@ static void FixupDegenerates ( XQNode_t * pNode )
 bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer,
 	const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings )
 {
-	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone ( true ) );
-	pMyTokenizer->AddSpecials ( "()|-!@~\"/^$<" );
-	pMyTokenizer->AddPlainChar ( '?' );
-	pMyTokenizer->AddPlainChar ( '%' );
+	// FIXME? might wanna verify somehow that pTokenizer has all the specials etc from sphSetupQueryTokenizer
+	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) );
 
 	// most outcomes are errors
 	SafeDelete ( tParsed.m_pRoot );
@@ -3864,6 +3854,14 @@ void sphOptimizeBoolean ( XQNode_t ** ppRoot, const ISphKeywordsStat * pKeywords
 	if ( tmDelta>10 )
 		printf ( "optimized boolean in %d.%03d msec", (int)(tmDelta/1000), (int)(tmDelta%1000) );
 #endif
+}
+
+
+void sphSetupQueryTokenizer ( ISphTokenizer * pTokenizer )
+{
+	pTokenizer->AddSpecials ( "()|-!@~\"/^$<" );
+	pTokenizer->AddPlainChar ( '?' );
+	pTokenizer->AddPlainChar ( '%' );
 }
 
 

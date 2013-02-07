@@ -100,7 +100,7 @@ ISphTokenizer * CreateTestTokenizer ( bool bUTF8, DWORD uMode )
 	// the official way is to Clone() an indexing mode one, so we do that
 	// however, Clone() adds backslash as a special
 	// and that must be done *after* SetCaseFolding, otherwise it's not special any more
-	ISphTokenizer * pTokenizer1 = pTokenizer->Clone ( true );
+	ISphTokenizer * pTokenizer1 = pTokenizer->Clone ( SPH_CLONE_QUERY );
 	SafeDelete ( pTokenizer );
 
 	return pTokenizer1;
@@ -241,7 +241,7 @@ void TestTokenizer ( bool bUTF8 )
 
 		// test short word callbacks
 		printf ( "%s for short token handling\n", sPrefix );
-		ISphTokenizer * pShortTokenizer = pTokenizer->Clone ( true );
+		ISphTokenizer * pShortTokenizer = pTokenizer->Clone ( SPH_CLONE_QUERY );
 		pShortTokenizer->AddPlainChar ( '*' );
 
 		CSphTokenizerSettings tSettings = pShortTokenizer->GetSettings();
@@ -847,25 +847,29 @@ void BenchExpr ()
 
 void TestQueryParser ()
 {
+	CSphString sError;
+
 	CSphSchema tSchema;
 	CSphColumnInfo tCol;
 	tCol.m_sName = "title"; tSchema.m_dFields.Add ( tCol );
 	tCol.m_sName = "body"; tSchema.m_dFields.Add ( tCol );
 
-	CSphString sError;
-	CSphDictSettings tDictSettings;
-	CSphScopedPtr<ISphTokenizer> pTokenizer ( sphCreateSBCSTokenizer () );
-	CSphScopedPtr<CSphDict> pDict ( sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer.Ptr(), "query", sError ) );
-	assert ( pTokenizer.Ptr() );
-	assert ( pDict.Ptr() );
-
+	CSphScopedPtr<ISphTokenizer> pBase ( sphCreateSBCSTokenizer () );
 	CSphTokenizerSettings tTokenizerSetup;
 	tTokenizerSetup.m_iMinWordLen = 2;
 	tTokenizerSetup.m_sSynonymsFile = g_sTmpfile;
-	pTokenizer->Setup ( tTokenizerSetup );
-
+	pBase->Setup ( tTokenizerSetup );
 	assert ( CreateSynonymsFile ( NULL ) );
-	assert ( pTokenizer->LoadSynonyms ( g_sTmpfile, NULL, sError ) );
+	assert ( pBase->LoadSynonyms ( g_sTmpfile, NULL, sError ) );
+
+	CSphScopedPtr<ISphTokenizer> pTokenizer ( pBase->Clone ( SPH_CLONE_QUERY ) );
+	sphSetupQueryTokenizer ( pTokenizer.Ptr() );
+
+	CSphDictSettings tDictSettings;
+	CSphScopedPtr<CSphDict> pDict ( sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer.Ptr(), "query", sError ) );
+
+	assert ( pTokenizer.Ptr() );
+	assert ( pDict.Ptr() );
 
 	struct QueryTest_t
 	{
@@ -984,19 +988,22 @@ void TestQueryTransforms ()
 
 	CSphString sError;
 	CSphDictSettings tDictSettings;
-	CSphScopedPtr<ISphTokenizer> pTokenizer ( sphCreateSBCSTokenizer () );
-	CSphScopedPtr<CSphDict> pDict ( sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer.Ptr(), "query", sError ) );
-	assert ( pTokenizer.Ptr() );
+	CSphScopedPtr<ISphTokenizer> pBase ( sphCreateSBCSTokenizer () );
+	CSphScopedPtr<CSphDict> pDict ( sphCreateDictionaryCRC ( tDictSettings, NULL, pBase.Ptr(), "query", sError ) );
+	assert ( pBase.Ptr() );
 	assert ( pDict.Ptr() );
 	assert ( sError.IsEmpty() );
 
 	CSphTokenizerSettings tTokenizerSetup;
 	tTokenizerSetup.m_iMinWordLen = 2;
 	tTokenizerSetup.m_sSynonymsFile = g_sTmpfile;
-	pTokenizer->Setup ( tTokenizerSetup );
+	pBase->Setup ( tTokenizerSetup );
 
 	assert ( CreateSynonymsFile ( NULL ) );
-	assert ( pTokenizer->LoadSynonyms ( g_sTmpfile, NULL, sError ) );
+	assert ( pBase->LoadSynonyms ( g_sTmpfile, NULL, sError ) );
+
+	CSphScopedPtr<ISphTokenizer> pTokenizer ( pBase->Clone ( SPH_CLONE_QUERY ) );
+	sphSetupQueryTokenizer ( pTokenizer.Ptr() );
 
 	struct CKeywordHits {
 		const char * 	m_sKeyword;
@@ -2206,7 +2213,7 @@ void TestRTWeightBoundary ()
 		// in favor of tokenizer/dict loaded from the saved settings in meta
 		// however, source still needs those guys!
 		// so for simplicity i just clone them
-		pIndex->SetTokenizer ( pTok->Clone ( false ) );
+		pIndex->SetTokenizer ( pTok->Clone ( SPH_CLONE_INDEX ) );
 		pIndex->SetDictionary ( pDict->Clone() );
 		Verify ( pIndex->Prealloc ( false, false, sError ) );
 

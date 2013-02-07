@@ -1545,7 +1545,6 @@ class SnippetContext_t : ISphNoncopyable
 private:
 	CSphScopedPtr<CSphDict> m_tDictCloned;
 	CSphScopedPtr<CSphDict> m_tExactDict;
-	CSphScopedPtr<ISphTokenizer> m_tQueryTokenizer;
 
 public:
 	CSphDict * m_pDict;
@@ -1558,7 +1557,6 @@ public:
 	SnippetContext_t()
 		: m_tDictCloned ( NULL )
 		, m_tExactDict ( NULL )
-		, m_tQueryTokenizer ( NULL )
 		, m_pDict ( NULL )
 		, m_tTokenizer ( NULL )
 		, m_tStripper ( NULL )
@@ -1567,15 +1565,20 @@ public:
 	{
 	}
 
+	~SnippetContext_t()
+	{
+		SafeDelete ( m_pQueryTokenizer );
+	}
+
 	static CSphDict * SetupExactDict ( const CSphIndexSettings & tSettings, const ExcerptQuery_t & q,
-		CSphScopedPtr<CSphDict> & tExact, CSphDict * pDict, ISphTokenizer * pTokenizer )
+		CSphScopedPtr<CSphDict> & tExact, CSphDict * pDict,ISphTokenizer * pTok )
 	{
 		// handle index_exact_words
 		if ( !( q.m_bHighlightQuery && tSettings.m_bIndexExactWords ) )
 			return pDict;
 
-		pTokenizer->AddPlainChar ( '=' );
 		tExact = new CSphDictExact ( pDict );
+		pTok->AddPlainChar ( '=' );
 		return tExact.Ptr();
 	}
 
@@ -1647,17 +1650,16 @@ public:
 		m_pDict = pIndex->GetDictionary();
 		if ( m_pDict->HasState() )
 			m_tDictCloned = m_pDict = m_pDict->Clone();
-
-		m_tTokenizer = pIndex->GetTokenizer()->Clone ( false );
-		m_pQueryTokenizer = m_tTokenizer.Ptr();
+		m_tTokenizer = pIndex->GetTokenizer()->Clone ( SPH_CLONE_INDEX ); // OPTIMIZE! do a lightweight indexing clone here
+		m_pQueryTokenizer = pIndex->GetQueryTokenizer()->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT );
 
 		// setup exact dictionary if needed
 		m_pDict = SetupExactDict ( pIndex->GetSettings(), tSettings, m_tExactDict, m_pDict, m_tTokenizer.Ptr() );
-		// TODO!!! check star dict too
 
 		if ( tSettings.m_bHighlightQuery )
 		{
-			if ( !sphParseExtendedQuery ( m_tExtQuery, tSettings.m_sWords.cstr(), m_pQueryTokenizer,
+			// OPTIMIZE? double lightweight clone here? but then again it's lightweight
+			if ( !sphParseExtendedQuery ( m_tExtQuery, tSettings.m_sWords.cstr(), pIndex->GetQueryTokenizer(),
 				&pIndex->GetMatchSchema(), m_pDict, pIndex->GetSettings() ) )
 			{
 				sError = m_tExtQuery.m_sParseError;
@@ -1677,12 +1679,6 @@ public:
 
 		if ( !SetupStripperSPZ ( pIndex->GetSettings(), tSettings, bSetupSPZ, m_tStripper, m_tTokenizer.Ptr(), sError ) )
 			return false;
-
-		if ( bSetupSPZ )
-		{
-			m_tQueryTokenizer = pIndex->GetTokenizer()->Clone ( true );
-			m_pQueryTokenizer = m_tQueryTokenizer.Ptr();
-		}
 
 		return true;
 	}

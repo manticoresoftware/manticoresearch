@@ -3,7 +3,7 @@
 $OUTPUT = "sphinxversion.h";
 $OUTPUT = $ARGV[0] if ( $#ARGV==0 );
 
-$out = `git log -1 --format="commit %h%nbody %b"'`;
+$out = `git log -1 --format="commit %h%nbody %b"`;
 $gitid = $1 if ( $out =~ /^commit (\w+)/ );
 $svnid = $1 if ( $out =~ /git-svn-id: .*?\@(\d+)/ );
 

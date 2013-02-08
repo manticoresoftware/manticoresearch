@@ -78,7 +78,7 @@ SPHINX_CONFIGURE_PART([checking for header files])
 # Checks for header files.
 AC_HEADER_STDC
 AC_HEADER_SYS_WAIT
-AC_CHECK_HEADERS([fcntl.h limits.h netdb.h netinet/in.h stdlib.h string.h sys/file.h sys/socket.h sys/time.h unistd.h pthread.h execinfo.h])
+AC_CHECK_HEADERS([fcntl.h limits.h netdb.h netinet/in.h stdlib.h string.h sys/file.h sys/socket.h sys/time.h unistd.h pthread.h execinfo.h sys/epoll.h])
 AC_CHECK_HEADER(expat.h,[have_expat_h=yes],[have_expat_h=no])
 AC_CHECK_HEADER(iconv.h,[have_iconv_h=yes],[have_iconv_h=no])
 AC_CHECK_HEADER(zlib.h,[have_zlib_h=yes],[have_zlib_h=no])
@@ -115,6 +115,17 @@ AC_SEARCH_LIBS([inflate],[z],[have_lz=yes],[have_lz=no])
 AC_SEARCH_LIBS([logf],[m])
 AC_CHECK_FUNCS([dup2 gethostbyname gettimeofday memmove memset select socket strcasecmp strchr strerror strncasecmp strstr strtol logf pread poll])
 AC_CHECK_FUNCS([backtrace backtrace_symbols])
+
+# Neither defined or undefined. So, check.
+if test "z$ac_cv_func_epoll" != "zno" && test "z$ac_cv_func_epoll" != "zyes" ; then
+	AC_CHECK_FUNCS(epoll_ctl, [ac_cv_func_epoll=yes], )
+fi
+
+if test "x$ac_cv_func_epoll" = "xyes" && test "x$ac_cv_header_sys_epoll_h" = "xyes" ; then
+	AC_DEFINE(HAVE_EPOLL, 1,
+		[Define if your system supports the epoll system calls])
+	AC_LIBOBJ(epoll)
+fi
 
 # most systems require the program be linked with librt library to use
 # the function clock_gettime 

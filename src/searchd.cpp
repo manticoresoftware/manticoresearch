@@ -81,7 +81,11 @@ extern "C"
 	#include <netdb.h>
 
 	#if HAVE_POLL
-	#include <poll.h>
+		#include <poll.h>
+	#endif
+
+	#if HAVE_EPOLL
+		#include <sys/epoll.h>
 	#endif
 
 	// there's no MSG_NOSIGNAL on OS X
@@ -2492,6 +2496,7 @@ int sphSetSockNB ( int iSock )
 /// wait until socket is readable or writable
 int sphPoll ( int iSock, int64_t tmTimeout, bool bWrite=false )
 {
+// don't need to use epoll for only one socket.
 #if HAVE_POLL
 	struct pollfd pfd;
 	pfd.fd = iSock;
@@ -2518,7 +2523,7 @@ bool sphSockEof ( int iSock )
 		return true;
 
 	char cBuf;
-
+// don't need to use epoll for only one socket
 #if HAVE_POLL
 	struct pollfd pfd;
 	pfd.fd = iSock;
@@ -3896,10 +3901,10 @@ public:
 enum AgentState_e
 {
 	AGENT_UNUSED,					///< agent is unused for this request
-	AGENT_CONNECTING,				///< connecting to agent in progress,
-	AGENT_HANDSHAKE,				///< waiting for "VER x" hello
-	AGENT_ESTABLISHED,				///< handshake completed. Ready to sent query
-	AGENT_QUERYED,					///< query sent, waiting for reply.
+	AGENT_CONNECTING,				///< connecting to agent in progress, write handshake on socket ready
+	AGENT_HANDSHAKE,				///< waiting for "VER x" hello, read response on socket ready
+	AGENT_ESTABLISHED,				///< handshake completed. Ready to sent query, write query on socket ready
+	AGENT_QUERYED,					///< query sent, waiting for reply. read reply on socket ready
 	AGENT_PREREPLY,					///< query sent, activity detected, need to read reply
 	AGENT_REPLY,					///< reading reply
 	AGENT_RETRY						///< should retry
@@ -4227,7 +4232,8 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 	}
 }
 
-// process states AGENT_CONNECT, AGENT_HELLO, and notes AGENT_QUERY
+// process states AGENT_CONNECTING, AGENT_HANDSHAKE, AGENT_ESTABLISHED and notes AGENT_QUERYED
+// called in serial order with RemoteConnectToAgents (so, the context is NOT changed during the call).
 int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 {
 	assert ( pCtx->m_iTimeout>=0 );
@@ -4237,9 +4243,14 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 	int iAgents = 0;
 	int64_t tmMaxTimer = sphMicroTimer() + pCtx->m_iTimeout*1000; // in microseconds
 
+#if HAVE_EPOLL
+	int eid = epoll_create ( pCtx->m_iAgentCount );
+	CSphVector<epoll_event> dEvents ( pCtx->m_iAgentCount );
+	epoll_event dEvent;
+	int iEvents = 0;
+#else
 	CSphVector<int> dWorkingSet;
 	dWorkingSet.Reserve ( pCtx->m_iAgentCount );
-
 #if HAVE_POLL
 	CSphVector<struct pollfd> fds;
 	fds.Reserve ( pCtx->m_iAgentCount );
@@ -4251,7 +4262,6 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 	{
 		// prepare socket sets
 		dWorkingSet.Reset();
-
 #if HAVE_POLL
 		fds.Reset();
 #else
@@ -4260,6 +4270,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 		FD_ZERO ( &fdsRead );
 		FD_ZERO ( &fdsWrite );
 #endif
+#endif // HAVE_EPOLL
 
 		bool bDone = true;
 		for ( int i=0; i<pCtx->m_iAgentCount; i++ )
@@ -4281,6 +4292,12 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 			}
 
 			bool bWr = ( tAgent.m_eState==AGENT_CONNECTING || tAgent.m_eState==AGENT_ESTABLISHED );
+#if HAVE_EPOLL
+			dEvent.events = bWr ? EPOLLOUT : EPOLLIN;
+			dEvent.data.ptr = &tAgent;
+			epoll_ctl ( eid, EPOLL_CTL_ADD, tAgent.m_iSock, &dEvent );
+			++iEvents;
+#else
 			dWorkingSet.Add(i);
 #if HAVE_POLL
 			pollfd& pfd = fds.Add();
@@ -4290,9 +4307,16 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 			sphFDSet ( tAgent.m_iSock, bWr ? &fdsWrite : &fdsRead );
 			iMax = Max ( iMax, tAgent.m_iSock );
 #endif
+#endif // HAVE_EPOLL
 			if ( tAgent.m_eState!=AGENT_QUERYED )
 				bDone = false;
 		}
+
+#if HAVE_EPOLL
+	for ( ;; )
+	{
+		bDone = iEvents==0;
+#endif
 		if ( bDone )
 			break;
 
@@ -4303,7 +4327,9 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 			break; // FIXME? what about iTimeout==0 case?
 
 		// do poll
-#if HAVE_POLL
+#if HAVE_EPOLL
+		int iSelected = ::epoll_wait ( eid, dEvents.Begin(), dEvents.GetLength(), int( tmMicroLeft/1000 ) );
+#elif HAVE_POLL
 		int iSelected = ::poll ( fds.Begin(), fds.GetLength(), int( tmMicroLeft/1000 ) );
 #else
 		struct timeval tvTimeout;
@@ -4314,10 +4340,18 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 
 		// update counters, and loop again if nothing happened
 		pCtx->m_pAgents->m_iWaited += sphMicroTimer() - tmSelect;
+		// todo: do we need to check for EINTR here? Or the fact of timeout is enough anyway?
 		if ( iSelected<=0 )
 			continue;
 
 		// ok, something did happen, so loop the agents and do them checks
+#if HAVE_EPOLL
+		for ( int i=0; i<iSelected; ++i )
+		{
+			AgentConn_t & tAgent = *(AgentConn_t*)dEvents[i].data.ptr;
+			bool bReadable = ( dEvents[i].events & EPOLLIN )!=0;
+			bool bWriteable = ( dEvents[i].events & EPOLLOUT )!=0;
+#else
 		ARRAY_FOREACH ( i, dWorkingSet )
 		{
 			AgentConn_t & tAgent = pCtx->m_pAgents[dWorkingSet[i]];
@@ -4328,12 +4362,19 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 			bool bReadable = FD_ISSET ( tAgent.m_iSock, &fdsRead )!=0;
 			bool bWriteable = FD_ISSET ( tAgent.m_iSock, &fdsWrite )!=0;
 #endif
-
+#endif
 			if ( tAgent.m_eState==AGENT_CONNECTING )
 			{
-#if HAVE_POLL
+#if HAVE_EPOLL | HAVE_POLL
+#if HAVE_EPOLL
+				if ( ( dEvents[i].events & ( EPOLLERR | EPOLLHUP ) )!=0 )
+				{
+					epoll_ctl ( eid, EPOLL_CTL_DEL, tAgent.m_iSock, &dEvent );
+					--iEvents;
+#else
 				if ( ( fds[i].revents & ( POLLERR | POLLHUP ) )!=0 )
 				{
+#endif
 					int iErr = 0;
 					socklen_t iErrLen = sizeof(iErr);
 					getsockopt ( tAgent.m_iSock, SOL_SOCKET, SO_ERROR, (char*)&iErr, &iErrLen );
@@ -4369,6 +4410,12 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 				NetOutputBuffer_c tOut ( tAgent.m_iSock );
 				tOut.SendDword ( SPHINX_CLIENT_VERSION );
 				bool bFlushed = tOut.Flush (); // FIXME! handle flush failure?
+#if HAVE_EPOLL
+				dEvent.events = EPOLLIN;
+				dEvent.data.ptr = &tAgent;
+				epoll_ctl ( eid, EPOLL_CTL_MOD, tAgent.m_iSock, &dEvent );
+#endif
+
 // fix #1071
 #ifdef	TCP_NODELAY
 				int bNoDelay = 1;
@@ -4386,6 +4433,10 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 				int iRes = sphSockRecv ( tAgent.m_iSock, (char*)&iRemoteVer, sizeof(iRemoteVer) );
 				if ( iRes!=sizeof(iRemoteVer) )
 				{
+#if HAVE_EPOLL
+					epoll_ctl ( eid, EPOLL_CTL_DEL, tAgent.m_iSock, &dEvent );
+					--iEvents;
+#endif
 					tAgent.Close ();
 					if ( iRes<0 )
 					{
@@ -4433,6 +4484,11 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 				}
 
 				tAgent.m_eState = AGENT_ESTABLISHED;
+#if HAVE_EPOLL
+				dEvent.events = EPOLLOUT;
+				dEvent.data.ptr = &tAgent;
+				epoll_ctl ( eid, EPOLL_CTL_MOD, tAgent.m_iSock, &dEvent );
+#endif
 				continue;
 			}
 
@@ -4444,6 +4500,11 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 				tOut.Flush (); // FIXME! handle flush failure?
 				tAgent.m_eState = AGENT_QUERYED;
 				iAgents++;
+#if HAVE_EPOLL
+				dEvent.events = EPOLLIN;
+				dEvent.data.ptr = &tAgent;
+				epoll_ctl ( eid, EPOLL_CTL_MOD, tAgent.m_iSock, &dEvent );
+#endif
 				continue;
 			}
 
@@ -4453,10 +4514,18 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 				// do not account agent wall time from here; agent is probably ready
 				tAgent.m_iWall += sphMicroTimer();
 				tAgent.m_eState = AGENT_PREREPLY;
+#if HAVE_EPOLL
+				epoll_ctl ( eid, EPOLL_CTL_DEL, tAgent.m_iSock, &dEvent );
+				--iEvents;
+#endif
 				continue;
 			}
 		}
 	}
+
+#if HAVE_EPOLL
+	close (eid);
+#endif
 
 	// check if connection timed out
 	for ( int i=0; i<pCtx->m_iAgentCount; i++ )
@@ -4488,6 +4557,13 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 	int iAgents = 0;
 	int64_t tmMaxTimer = sphMicroTimer() + iTimeout*1000; // in microseconds
 
+
+#if HAVE_EPOLL
+	int eid = epoll_create ( dAgents.GetLength() );
+	CSphVector<epoll_event> dEvents ( dAgents.GetLength() );
+	epoll_event dEvent;
+	int iEvents = 0;
+#else
 	CSphVector<int> dWorkingSet;
 	dWorkingSet.Reserve ( dAgents.GetLength() );
 
@@ -4507,6 +4583,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 		fd_set fdsRead;
 		FD_ZERO ( &fdsRead );
 #endif
+#endif // HAVE_EPOLL
 
 		bool bDone = true;
 		ARRAY_FOREACH ( iAgent, dAgents )
@@ -4519,7 +4596,12 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 			{
 				assert ( !tAgent.m_sPath.IsEmpty() || tAgent.m_iPort>0 );
 				assert ( tAgent.m_iSock>0 );
-
+#if HAVE_EPOLL
+				dEvent.events = EPOLLIN;
+				dEvent.data.ptr = &tAgent;
+				epoll_ctl ( eid, EPOLL_CTL_ADD, tAgent.m_iSock, &dEvent );
+				++iEvents;
+#else
 				dWorkingSet.Add(iAgent);
 #if HAVE_POLL
 				pollfd & pfd = fds.Add();
@@ -4529,9 +4611,16 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 				sphFDSet ( tAgent.m_iSock, &fdsRead );
 				iMax = Max ( iMax, tAgent.m_iSock );
 #endif
+#endif
 				bDone = false;
 			}
 		}
+
+#if HAVE_EPOLL
+	for ( ;; )
+	{
+		bDone = iEvents==0;
+#endif
 		if ( bDone )
 			break;
 
@@ -4540,7 +4629,9 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 		if ( tmMicroLeft<=0 ) // FIXME? what about iTimeout==0 case?
 			break;
 
-#if HAVE_POLL
+#if HAVE_EPOLL
+		int iSelected = ::epoll_wait ( eid, dEvents.Begin(), dEvents.GetLength(), int( tmMicroLeft/1000 ) );
+#elif HAVE_POLL
 		int iSelected = ::poll ( fds.Begin(), fds.GetLength(), int( tmMicroLeft/1000 ) );
 #else
 		struct timeval tvTimeout;
@@ -4554,21 +4645,28 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 		if ( iSelected<=0 )
 			continue;
 
+#if HAVE_EPOLL
+		for ( int i=0; i<iSelected; ++i )
+		{
+			AgentConn_t & tAgent = *(AgentConn_t*)dEvents[i].data.ptr;
+#else
 		ARRAY_FOREACH ( i, dWorkingSet )
 		{
 			AgentConn_t & tAgent = dAgents[dWorkingSet[i]];
+#endif
 			if ( tAgent.m_bBlackhole )
 				continue;
 			if (!( tAgent.m_eState==AGENT_QUERYED || tAgent.m_eState==AGENT_REPLY || tAgent.m_eState==AGENT_PREREPLY ))
 				continue;
 
-#if HAVE_POLL
+#if HAVE_EPOLL
+			if (!( dEvents[i].events & POLLIN ))
+#elif HAVE_POLL
 			if (!( fds[i].revents & POLLIN ))
-				continue;
 #else
 			if ( !FD_ISSET ( tAgent.m_iSock, &fdsRead ) )
-				continue;
 #endif
+				continue;
 
 			// if there was no reply yet, read reply header
 			bool bFailure = true;
@@ -4694,7 +4792,10 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 					// all is well
 					iAgents++;
 					tAgent.Close ( false );
-
+#if HAVE_EPOLL
+					epoll_ctl ( eid, EPOLL_CTL_DEL, tAgent.m_iSock, &dEvent );
+					--iEvents;
+#endif
 					tAgent.m_bSuccess = true;
 				}
 
@@ -4704,12 +4805,20 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 
 			if ( bFailure )
 			{
+#if HAVE_EPOLL
+					epoll_ctl ( eid, EPOLL_CTL_DEL, tAgent.m_iSock, &dEvent );
+					--iEvents;
+#endif
 				tAgent.Close ();
 				tAgent.m_dResults.Reset ();
 			} else if ( tAgent.m_bSuccess )
 				agent_stats_inc ( tAgent, bWarnings ? eWarnings : eNoErrors );
 		}
 	}
+
+#if HAVE_EPOLL
+	close ( eid );
+#endif
 
 	// close timed-out agents
 	ARRAY_FOREACH ( iAgent, dAgents )

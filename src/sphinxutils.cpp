@@ -2105,6 +2105,23 @@ void sphUnlinkIndex ( const char * sName, bool bForce )
 }
 
 
+void sphCheckDuplicatePaths ( const CSphConfig & hConf )
+{
+	CSphOrderedHash < CSphString, CSphString, CSphStrHashFunc, 256 > hPaths;
+	hConf["index"].IterateStart ();
+	while ( hConf["index"].IterateNext() )
+	{
+		CSphConfigSection & hIndex = hConf["index"].IterateGet ();
+		if ( hIndex ( "path" ) )
+		{
+			const CSphString & sIndex = hConf["index"].IterateGetKey ();
+			if ( hPaths ( hIndex["path"] ) )
+				sphDie ( "duplicate paths: index '%s' has the same path as '%s'.\n", sIndex.cstr(), hPaths[hIndex["path"]].cstr() );
+			hPaths.Add ( sIndex, hIndex["path"] );
+		}
+	}
+}
+
 
 //
 // $Id$

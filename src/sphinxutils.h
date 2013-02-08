@@ -220,6 +220,8 @@ void sphBacktraceSetBinaryName ( const char * sName );
 /// plain backtrace - returns static buffer with the text of the call stack
 const char * DoBacktrace ( int iDepth=0, int iSkip=0 );
 
+void sphCheckDuplicatePaths ( const CSphConfig & hConf );
+
 #endif // _sphinxutils_
 
 //

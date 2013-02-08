@@ -1763,6 +1763,8 @@ int main ( int argc, char ** argv )
 	if ( !hConf ( "source" ) )
 		sphDie ( "no indexes found in config file '%s'", sOptConfig );
 
+	sphCheckDuplicatePaths ( hConf );
+
 	if ( hConf("indexer") && hConf["indexer"]("indexer") )
 	{
 		CSphConfigSection & hIndexer = hConf["indexer"]["indexer"];

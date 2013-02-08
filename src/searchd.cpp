@@ -19101,6 +19101,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	if ( !hConf.Exists ( "index" ) )
 		sphFatal ( "no indexes found in '%s'", g_sConfigFile.cstr () );
 
+	sphCheckDuplicatePaths ( hConf );
+
 	if ( bOptPIDFile )
 		if ( !hSearchd ( "pid_file" ) )
 			sphFatal ( "mandatory option 'pid_file' not found in 'searchd' section" );
@@ -19721,6 +19723,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	/////////////////////
 
 	ConfigureSearchd ( hConf, bOptPIDFile );
+
 	g_bWatchdog = hSearchdpre.GetInt ( "watchdog", g_bWatchdog )!=0;
 
 	if ( hSearchdpre("workers") )

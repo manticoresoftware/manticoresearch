@@ -3462,7 +3462,7 @@ struct MetaAgentDesc_t
 {
 private:
 	CSphVector<AgentDesc_t> m_dAgents;
-	float *					m_pWeights; /// pointer not owned, pointee IPC-shared
+	WORD *					m_pWeights; /// pointer not owned, pointee IPC-shared
 	int *					m_pRRCounter; /// pointer not owned, pointee IPC-shared
 	InterWorkerStorage *	m_pLock; /// pointer not owned, lock for threads/IPC
 	DWORD					m_uTimestamp;
@@ -3486,7 +3486,7 @@ public:
 			m_dAgents[i].m_bPersistent = true;
 	}
 
-	inline void SetHAData ( int * pRRCounter, float * pWeights, InterWorkerStorage * pLock )
+	inline void SetHAData ( int * pRRCounter, WORD * pWeights, InterWorkerStorage * pLock )
 	{
 		m_pRRCounter = pRRCounter;
 		m_pWeights = pWeights;
@@ -3598,17 +3598,20 @@ public:
 		assert ( pBestAgent );
 		assert ( m_pLock );
 		CSphScopedLock<InterWorkerStorage> tLock ( *m_pLock );
-		float fBound = m_pWeights[*pBestAgent];
-		float fChance = (float)sphRand()/0xFFFFFFFF;
+		DWORD uBound = m_pWeights[*pBestAgent];
+		DWORD uLimit = uBound;
+		ARRAY_FOREACH ( i, dCandidates )
+			uLimit += m_pWeights[dCandidates[i]];
+		DWORD uChance = uLimit * sphRand()/0xFFFFFFFF;
 
-		if ( fChance<=fBound )
+		if ( uChance<=uBound )
 			return;
 
 		ARRAY_FOREACH ( i, dCandidates )
 		{
-			fBound += m_pWeights[dCandidates[i]];
+			uBound += m_pWeights[dCandidates[i]];
 			*pBestAgent = dCandidates[i];
-			if ( fChance<=fBound )
+			if ( uChance<=uBound )
 				break;
 		}
 	}
@@ -3884,7 +3887,7 @@ public:
 		return m_dAgents;
 	}
 
-	const float* GetWeights() const
+	const WORD* GetWeights() const
 	{
 		return m_pWeights;
 	}
@@ -4047,21 +4050,21 @@ public:
 
 	void ShareHACounters()
 	{
-		int iFloatValues = 0;
+		int iSharedValues = 0;
 		int iRRCounters = 0;
 		ARRAY_FOREACH ( i, m_dAgents )
 			if ( m_dAgents[i].IsHA() )
 			{
-				iFloatValues += m_dAgents[i].GetLength();
+				iSharedValues += m_dAgents[i].GetLength();
 				++iRRCounters;
 			}
 
 		// nothing to share.
-		if ( !iFloatValues )
+		if ( !iSharedValues )
 			return;
 
 		// so, we need to share between workers iFloatValues floats and iRRCounters ints.
-		int iBufSize = iRRCounters * sizeof(int) + iFloatValues * sizeof(float); // NOLINT
+		int iBufSize = iRRCounters * sizeof(int) + iSharedValues * sizeof(WORD) * 2; // NOLINT
 		m_pHAStorage = new InterWorkerStorage;
 		m_pHAStorage->Init ( iBufSize );
 
@@ -4071,10 +4074,10 @@ public:
 			if ( m_dAgents[i].IsHA() )
 			{
 				MetaAgentDesc_t & dAgent = m_dAgents[i];
-				float* pWeights = (float*) ( pBuffer + sizeof(int) ); // NOLINT
-				float fFrac = 1.0f / dAgent.GetLength();
+				WORD* pWeights = (WORD*) ( pBuffer + sizeof(int) ); // NOLINT
+				WORD dFrac = 0xFFFF / dAgent.GetLength();
 				ARRAY_FOREACH ( j, dAgent ) ///< works since dAgent has method GetLength()
-					pWeights[j] = fFrac;
+					pWeights[j] = dFrac;
 				dAgent.SetHAData ( (int*)pBuffer, pWeights, m_pHAStorage );
 				pBuffer += sizeof(int) + sizeof(float)*dAgent.GetLength(); // NOLINT
 			}

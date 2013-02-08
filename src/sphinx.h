@@ -2493,6 +2493,7 @@ class CSphQueryResultMeta
 {
 public:
 	int						m_iQueryTime;		///< query time, milliseconds
+	int						m_iRealQueryTime;	///< query time, measured just from start to finish of the query. In milliseconds
 	int64_t					m_iCpuTime;			///< user time, microseconds
 	int						m_iMultiplier;		///< multi-query multiplier, -1 to indicate error
 

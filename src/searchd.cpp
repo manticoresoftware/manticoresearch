@@ -3557,7 +3557,7 @@ public:
 				return;
 
 			// apply coefficients
- 			float fNormale = 0;
+			float fNormale = 0;
 			CSphVector<float> dCoefs ( dTimers.GetLength() );
 			assert ( m_pLock );
 			CSphScopedLock<InterWorkerStorage> tLock ( *m_pLock );
@@ -3569,7 +3569,7 @@ public:
 					dCoefs[i] = fMin_value/m_pWeights[i];
 				if ( m_pWeights[i]*dCoefs[i] < fMin_value )
 					dCoefs[i] = fMin_value/m_pWeights[i]; // restrict balancing like 1/0 into 0.9/0.1
- 				fNormale += m_pWeights[i]*dCoefs[i];
+				fNormale += m_pWeights[i]*dCoefs[i];
 			}
 
 			// renormalize the weights
@@ -4531,7 +4531,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 	}
 
 #if HAVE_EPOLL
-	close (eid);
+	close ( eid );
 #endif
 
 	// check if connection timed out
@@ -6312,6 +6312,8 @@ void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 
 	// querytime sec
 	int iQueryTime = Max ( tRes.m_iQueryTime, 0 );
+	int iRealTime = Max ( tRes.m_iRealQueryTime, 0 );
+	p += snprintf ( p, pMax-p, " %d.%03d sec", iRealTime/1000, iRealTime%1000 );
 	p += snprintf ( p, pMax-p, " %d.%03d sec", iQueryTime/1000, iQueryTime%1000 );
 
 	// optional multi-query multiplier
@@ -6560,14 +6562,15 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 
 	// time, conn id, wall, found
 	int iQueryTime = Max ( tRes.m_iQueryTime, 0 );
+	int iRealTime = Max ( tRes.m_iRealQueryTime, 0 );
 	tBuf.Append ( "/""* " );
 	tBuf.AppendCurrentTime();
 	if ( tRes.m_iMultiplier>1 )
-		tBuf.Append ( " conn %d wall %d.%03d x%d found "INT64_FMT" *""/ ",
-			iCid, iQueryTime/1000, iQueryTime%1000, tRes.m_iMultiplier, tRes.m_iTotalMatches );
+		tBuf.Append ( " conn %d real %d.%03d wall %d.%03d x%d found "INT64_FMT" *""/ ",
+			iCid, iRealTime/1000, iRealTime%1000, iQueryTime/1000, iQueryTime%1000, tRes.m_iMultiplier, tRes.m_iTotalMatches );
 	else
-		tBuf.Append ( " conn %d wall %d.%03d found "INT64_FMT" *""/ ",
-			iCid, iQueryTime/1000, iQueryTime%1000, tRes.m_iTotalMatches );
+		tBuf.Append ( " conn %d real %d.%03d wall %d.%03d found "INT64_FMT" *""/ ",
+			iCid, iRealTime/1000, iRealTime%1000, iQueryTime/1000, iQueryTime%1000, tRes.m_iTotalMatches );
 
 	///////////////////////////////////
 	// format request as SELECT query
@@ -9892,6 +9895,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 		{
 			m_dResults[iRes].m_iQueryTime = (int)( tmSubset/1000/iQueries );
+			m_dResults[iRes].m_iRealQueryTime = (int)( tmSubset/1000/iQueries );
 			m_dResults[iRes].m_iCpuTime = tmCpu/iQueries;
 		}
 	} else
@@ -9910,6 +9914,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 		{
 			m_dResults[iRes].m_iQueryTime += (int)(tmDeltaWall/1000);
+			m_dResults[iRes].m_iRealQueryTime = (int)( tmSubset/1000/iQueries );
 			m_dResults[iRes].m_iCpuTime += tmDeltaCpu;
 		}
 	}

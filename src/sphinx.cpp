@@ -7222,6 +7222,7 @@ CSphQueryResult::CSphQueryResult ()
 	: m_tSchema ( "query_result" )
 {
 	m_iQueryTime = 0;
+	m_iRealQueryTime = 0;
 	m_iCpuTime = 0;
 	m_iMultiplier = 1;
 	m_iTotalMatches = 0;
@@ -28736,6 +28737,7 @@ void sphCheckWordStats ( const SmallStringHash_T<CSphQueryResultMeta::WordStat_t
 
 CSphQueryResultMeta::CSphQueryResultMeta ()
 : m_iQueryTime ( 0 )
+, m_iRealQueryTime ( 0 )
 , m_iCpuTime ( 0 )
 , m_iMultiplier ( 1 )
 , m_iMatches ( 0 )
@@ -28803,6 +28805,7 @@ CSphQueryResultMeta::CSphQueryResultMeta ( const CSphQueryResultMeta & tMeta )
 CSphQueryResultMeta & CSphQueryResultMeta::operator= ( const CSphQueryResultMeta & tMeta )
 {
 	m_iQueryTime = tMeta.m_iQueryTime;
+	m_iRealQueryTime = tMeta.m_iRealQueryTime;
 	m_iCpuTime = tMeta.m_iCpuTime;
 	m_iMultiplier = tMeta.m_iMultiplier;
 	m_iMatches = tMeta.m_iMatches;

@@ -3537,6 +3537,10 @@ public:
 
 	void RecalculateWeights ( const CSphVector<int64_t> &dTimers )
 	{
+		// minimal probability must not fall below the original one with this coef.
+		const float fMin_coef = 0.1f;
+		float fMin_value = fMin_coef/m_dAgents.GetLength();
+
 		if ( m_pWeights && HostDashboard_t::IsHalfPeriodChanged ( &m_uTimestamp ) )
 		{
 			int64_t dMin = -1;
@@ -3553,37 +3557,37 @@ public:
 				return;
 
 			// apply coefficients
-			float fSum = 0.0f;
-			float fControl = 0.0f;
+ 			float fNormale = 0;
 			CSphVector<float> dCoefs ( dTimers.GetLength() );
 			assert ( m_pLock );
 			CSphScopedLock<InterWorkerStorage> tLock ( *m_pLock );
 			ARRAY_FOREACH ( i, dTimers )
 			{
 				if ( dTimers[i] > 0 )
-				{
 					dCoefs[i] = (float)dMin/dTimers[i];
-					fSum += m_pWeights[i]*dCoefs[i];
-					fControl += m_pWeights[i];
-				}
+				else
+					dCoefs[i] = fMin_value/m_pWeights[i];
+				if ( m_pWeights[i]*dCoefs[i] < fMin_value )
+					dCoefs[i] = fMin_value/m_pWeights[i]; // restrict balancing like 1/0 into 0.9/0.1
+ 				fNormale += m_pWeights[i]*dCoefs[i];
 			}
 
 			// renormalize the weights
+			fNormale = 65535/fNormale;
 #ifndef NDEBUG
-			float fCheck = 0.0;
+			DWORD uCheck = 0;
 			sphInfo ( "Rebalancing the mirrors" );
 #endif
 			ARRAY_FOREACH ( i, m_dAgents )
 			{
-				if ( dTimers[i] > 0 )
-					m_pWeights[i] *= dCoefs[i]*fControl/fSum;
+				m_pWeights[i] *= dCoefs[i]*fNormale;
 #ifndef NDEBUG
-				fCheck += m_pWeights[i];
-				sphInfo ( "Mirror %d, new weight (%.4f)", i, m_pWeights[i] );
+				uCheck += m_pWeights[i];
+				sphInfo ( "Mirror %d, new weight (%d)", i, m_pWeights[i] );
 #endif
 			}
 #ifndef NDEBUG
-		sphInfo ( "Rebalancing finished. The whole sum is %f", fCheck );
+		sphInfo ( "Rebalancing finished. The whole sum is %d", uCheck );
 #endif
 		}
 	}
@@ -12471,7 +12475,7 @@ void BuildDistIndexStatus ( VectorLike & dStatus, const CSphString& sIndex )
 				dStatus.Add().SetSprintf ( "%s:%s", dDesc.GetName().cstr(), dDesc.m_sIndexes.cstr() );
 
 			if ( tAgents.IsHA() && dStatus.MatchAddVa ( "%s_probability_weight", sKey.cstr() ) )
-				dStatus.Add().SetSprintf ( "%f", tAgents.GetWeights()[j] ); // FIXME! IPC unsafe, if critical need to be locked.
+				dStatus.Add().SetSprintf ( "%d", (DWORD)(tAgents.GetWeights()[j]) ); // FIXME! IPC unsafe, if critical need to be locked.
 
 			if ( dStatus.MatchAddVa ( "%s_is_blackhole", sKey.cstr() ) )
 				dStatus.Add ( dDesc.m_bBlackhole ? "1" : "0" );

@@ -7,7 +7,7 @@
 		<Option compiler="gcc" />
 		<Build>
 			<Target title="Debug">
-				<Option output="./bin/Debug/libsphinx" prefix_auto="1" extension_auto="1" />
+				<Option output="./bin/Debug/sphinx" prefix_auto="1" extension_auto="1" />
 				<Option working_dir="" />
 				<Option object_output="./junk/Debug" />
 				<Option type="2" />
@@ -21,7 +21,7 @@
 				</Compiler>
 			</Target>
 			<Target title="Release">
-				<Option output="./bin/Release/libsphinx" prefix_auto="1" extension_auto="1" />
+				<Option output="./bin/Release/sphinx" prefix_auto="1" extension_auto="1" />
 				<Option working_dir="" />
 				<Option object_output="./junk/Release" />
 				<Option type="2" />
@@ -48,6 +48,7 @@
 		</ExtraCommands>
 		<Unit filename="../src/sphinx.cpp" />
 		<Unit filename="../src/sphinx.h" />
+		<Unit filename="../src/sphinxaot.cpp" />
 		<Unit filename="../src/sphinxexcerpt.cpp" />
 		<Unit filename="../src/sphinxexcerpt.h" />
 		<Unit filename="../src/sphinxexpr.cpp" />
@@ -55,6 +56,8 @@
 		<Unit filename="../src/sphinxfilter.cpp" />
 		<Unit filename="../src/sphinxfilter.h" />
 		<Unit filename="../src/sphinxint.h" />
+		<Unit filename="../src/sphinxjson.cpp" />
+		<Unit filename="../src/sphinxjson.h" />
 		<Unit filename="../src/sphinxmetaphone.cpp" />
 		<Unit filename="../src/sphinxquery.cpp" />
 		<Unit filename="../src/sphinxquery.h" />
@@ -72,13 +75,17 @@
 		<Unit filename="../src/sphinxstemen.cpp" />
 		<Unit filename="../src/sphinxstemru.cpp" />
 		<Unit filename="../src/sphinxtimers.h" />
+		<Unit filename="../src/sphinxudf.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="../src/sphinxutils.cpp" />
 		<Unit filename="../src/sphinxutils.h" />
 		<Extensions>
 			<AutoVersioning>
 				<Scheme minor_max="10" build_max="0" rev_max="0" rev_rand_max="10" build_times_to_increment_minor="100" />
-				<Settings autoincrement="1" date_declarations="1" do_auto_increment="0" ask_to_increment="0" language="C++" svn="0" svn_directory="" header_path="version.h" />
+				<Settings autoincrement="1" date_declarations="1" update_manifest="247" do_auto_increment="0" ask_to_increment="0" language="C++" svn="0" svn_directory="" header_path="version.h" />
 				<Changes_Log show_changes_editor="0" app_title="released version %M.%m.%b of %p" changeslog_path="ChangesLog.txt" />
+				<Code header_guard="VERSION_H" namespace="AutoVersion" prefix="" />
 			</AutoVersioning>
 			<envvars />
 			<code_completion />

@@ -129,6 +129,14 @@ index json_case
 	source		= src_case
 	path			= <data_path/>/case
 }
+
+index rt
+{
+	type = rt
+	path = <data_path/>/rt
+	rt_field = title
+	rt_attr_json = data
+}
 </config>
 
 <db_create>
@@ -287,6 +295,16 @@ INSERT INTO `json_case` VALUES
 <sphinxql>select id, j.Attr, j.aTTr, j.Str, j.STR from json_case order by j.aTTr desc, id desc</sphinxql>
 <sphinxql>select id, j.Attr, j.aTTr, j.Str, j.STR from json_case order by j.Str asc, id desc</sphinxql>
 <sphinxql>select id, j.Attr, j.aTTr, j.Str, j.STR from json_case order by j.STR desc, id desc</sphinxql>
+<!-- json vs rt -->
+<sphinxql>insert into rt (id, title, data) values (1, 'title1','{attr1:10, attr2:"test1"}')</sphinxql>
+<sphinxql>insert into rt (id, title, data) values (2, 'title2','{attr1:20, attr2:"test2"}')</sphinxql>
+<sphinxql>insert into rt (id, title, data) values (3, 'title3','{attr1:30, attr2:"test3"}')</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+<sphinxql>select * from rt where data.attr1=20</sphinxql>
+<sphinxql>select * from rt group by data.attr1</sphinxql>
+<sphinxql>replace into rt (id, data) values (3, '{attr1:100, attr2:"replaced", new_attr:"text"}')</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+<sphinxql>select * from rt group by data.new_attr</sphinxql>
 </sphqueries>
 
 </test>

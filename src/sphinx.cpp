@@ -169,6 +169,10 @@ const char *		SPHINX_DEFAULT_UTF8_TABLE	= "0..9, A..Z->a..z, _, a..z, U+410..U+4
 const char *		MAGIC_WORD_SENTENCE		= "\3sentence";		// emitted from source on sentence boundary, stored in dictionary
 const char *		MAGIC_WORD_PARAGRAPH	= "\3paragraph";	// emitted from source on paragraph boundary, stored in dictionary
 
+bool				g_bJsonStrict				= false;
+bool				g_bJsonAutoconvNumbers		= false;
+bool				g_bJsonKeynamesToLowercase	= false;
+
 static const int	DEFAULT_READ_BUFFER		= 262144;
 static const int	DEFAULT_READ_UNHINTED	= 32768;
 static const int	MIN_READ_BUFFER			= 8192;
@@ -176,9 +180,6 @@ static const int	MIN_READ_UNHINTED		= 1024;
 #define READ_NO_SIZE_HINT 0
 
 static bool			g_bSphQuiet					= false;
-static bool			g_bJsonStrict				= false;
-static bool			g_bJsonAutoconvNumbers		= false;
-static bool			g_bJsonKeynamesToLowercase	= false;
 
 static int			g_iReadBuffer			= DEFAULT_READ_BUFFER;
 static int			g_iReadUnhinted			= DEFAULT_READ_UNHINTED;

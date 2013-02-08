@@ -399,6 +399,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "rt_attr_string",			KEY_LIST, NULL },
 	{ "rt_attr_multi",			KEY_LIST, NULL },
 	{ "rt_attr_multi_64",		KEY_LIST, NULL },
+	{ "rt_attr_json",			KEY_LIST, NULL },
 	{ "rt_mem_limit",			0, NULL },
 	{ "dict",					0, NULL },
 	{ "index_sp",				0, NULL },

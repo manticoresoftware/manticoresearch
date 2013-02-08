@@ -10338,6 +10338,7 @@ public:
 			case SPH_ATTR_STRING:
 			case SPH_ATTR_UINT32SET:
 			case SPH_ATTR_INT64SET:
+			case SPH_ATTR_JSON:
 				CSphMatch::SetAttr ( tLoc, 0 );
 				break;
 			default:
@@ -13350,20 +13351,22 @@ void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
 				// sanity checks
 				if ( tVal.m_iType!=TOK_QUOTED_STRING && tVal.m_iType!=TOK_CONST_INT && tVal.m_iType!=TOK_CONST_FLOAT && tVal.m_iType!=TOK_CONST_MVA )
 				{
-					sError.SetSprintf ( "raw %d, column %d: internal error: unknown insval type %d", 1+c, 1+iQuerySchemaIdx, tVal.m_iType ); // 1 for human base
+					sError.SetSprintf ( "row %d, column %d: internal error: unknown insval type %d", 1+c, 1+iQuerySchemaIdx, tVal.m_iType ); // 1 for human base
 					break;
 				}
 				if ( tVal.m_iType==TOK_CONST_MVA && !( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET ) )
 				{
-					sError.SetSprintf ( "raw %d, column %d: MVA value specified for a non-MVA column", 1+c, 1+iQuerySchemaIdx ); // 1 for human base
+					sError.SetSprintf ( "row %d, column %d: MVA value specified for a non-MVA column", 1+c, 1+iQuerySchemaIdx ); // 1 for human base
 					break;
 				}
 				if ( ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET ) && tVal.m_iType!=TOK_CONST_MVA )
 				{
-					sError.SetSprintf ( "raw %d, column %d: non-MVA value specified for a MVA column", 1+c, 1+iQuerySchemaIdx ); // 1 for human base
+					sError.SetSprintf ( "row %d, column %d: non-MVA value specified for a MVA column", 1+c, 1+iQuerySchemaIdx ); // 1 for human base
 					break;
 				}
 
+				// ok, checks passed; do work
+				// MVA column? grab the values
 				if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET )
 				{
 					// collect data from scattered insvals
@@ -13395,7 +13398,7 @@ void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
 
 				// FIXME? index schema is lawfully static, but our temp match obviously needs to be dynamic
 				bResult = tDoc.SetAttr ( tLoc, tVal, tCol.m_eAttrType );
-				if ( tCol.m_eAttrType==SPH_ATTR_STRING )
+				if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_JSON )
 					dStrings.Add ( tVal.m_sVal.cstr() );
 			}
 

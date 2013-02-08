@@ -35,7 +35,7 @@ public:
 
 	/// insert/update document in current txn
 	/// fails in case of two open txns to different indexes
-	virtual bool AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError ) = 0;
+	virtual bool AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning ) = 0;
 
 	/// delete document in current txn
 	/// fails in case of two open txns to different indexes

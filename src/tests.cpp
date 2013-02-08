@@ -2167,7 +2167,7 @@ void TestRTWeightBoundary ()
 		printf ( "testing rt indexing, test %d/%d... ", 1+iPass, RT_PASS_COUNT );
 		TestRTInit ();
 
-		CSphString sError;
+		CSphString sError, sWarning;
 		CSphDictSettings tDictSettings;
 
 		ISphTokenizer * pTok = sphCreateUTF8Tokenizer();
@@ -2229,7 +2229,7 @@ void TestRTWeightBoundary ()
 			if ( !pHits )
 				break;
 
-			pIndex->AddDocument ( pHits, pSrc->m_tDocInfo, NULL, dMvas, sError );
+			pIndex->AddDocument ( pHits, pSrc->m_tDocInfo, NULL, dMvas, sError, sWarning );
 			pIndex->Commit ();
 		}
 
@@ -2342,7 +2342,7 @@ void TestRTSendVsMerge ()
 
 	TestRTInit ();
 
-	CSphString sError;
+	CSphString sError, sWarning;
 	CSphDictSettings tDictSettings;
 
 	ISphTokenizer * pTok = sphCreateUTF8Tokenizer();
@@ -2408,7 +2408,7 @@ void TestRTSendVsMerge ()
 		if ( !pHits )
 			break;
 
-		pIndex->AddDocument ( pHits, pSrc->m_tDocInfo, NULL, dMvas, sError );
+		pIndex->AddDocument ( pHits, pSrc->m_tDocInfo, NULL, dMvas, sError, sWarning );
 		if ( pSrc->m_tDocInfo.m_iDocID==350 )
 		{
 			pIndex->Commit ();

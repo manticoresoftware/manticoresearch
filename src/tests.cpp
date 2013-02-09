@@ -530,7 +530,6 @@ void BenchTokenizer ( bool bUTF8 )
 	char * sData = LoadFile ( "./utf8.txt", &iData, false );
 	if ( sData )
 	{
-
 		ISphTokenizer * pTokenizer = sphCreateUTF8Tokenizer ();
 
 		const int iPasses = 200;
@@ -2744,7 +2743,17 @@ void TestLog2()
 	printf ( "ok\n" );
 }
 
-void BenchLog2()
+const int TIMER_THREAD_NRUNS = 10*1000*1000;
+
+void BenchTimerThread ( void * pEndtime )
+{
+	volatile int iRes = 0;
+	for ( int i=0; i<TIMER_THREAD_NRUNS; i++ )
+		iRes += (int)sphMicroTimer();
+	*(int64_t*)pEndtime = sphMicroTimer();
+}
+
+void BenchMisc()
 {
 	printf ( "benchmarking rand... " );
 
@@ -2757,17 +2766,56 @@ void BenchLog2()
 	for ( int i=0; i<NRUNS; i++ )
 		iRes += sphRand();
 	t = sphMicroTimer() - t;
-	printf ( "%d msec, res %d\n", (int)( t/1000 ), iRes );
+	printf ( "%d msec per %dM calls, res %d\n", (int)( t/1000 ), (int)( NRUNS/1000000 ), iRes );
 
 	printf ( "benchmarking rand+log2... " );
 	sphSrand ( 0 );
+	iRes = 0;
 	t = sphMicroTimer();
 	for ( int i=0; i<NRUNS; i++ )
 		iRes += sphLog2 ( sphRand() );
 	t = sphMicroTimer() - t;
-	printf ( "%d msec, res %d\n", (int)( t/1000 ), iRes );
+	printf ( "%d msec per %dM calls, res %d\n", (int)( t/1000 ), (int)( NRUNS/1000000 ), iRes );
 
-	exit(0);
+	printf ( "benchmarking timer... " );
+	t = sphMicroTimer();
+	for ( int i=0; i<NRUNS; i++ )
+		iRes += (int)sphMicroTimer();
+	t = sphMicroTimer() - t;
+	printf ( "%d msec per %dM calls, res %d\n", (int)( t/1000 ), (int)( NRUNS/1000000 ), iRes );
+
+	printf ( "benchmarking threaded timer... " );
+
+	const int THREADS = 10;
+	SphThread_t dThd [ THREADS ];
+
+	int64_t tmStart = sphMicroTimer();
+	int64_t tmEnd [ THREADS ];
+	sphThreadInit ( false );
+
+	for ( int i=0; i<THREADS; i++ )
+		sphThreadCreate ( &dThd[i], BenchTimerThread, &tmEnd[i], false );
+	for ( int i=0; i<THREADS; i++ )
+		if ( !sphThreadJoin ( &dThd[i] ) )
+			sphDie ( "thread_join failed" );
+
+	int64_t iMin = INT64_MAX;
+	int64_t iMax = 0;
+	int64_t iAvg = 0;
+	for ( int i=0; i<THREADS; i++ )
+	{
+		int64_t t = tmEnd[i] - tmStart;
+		iMin = Min ( iMin, t );
+		iMax = Max ( iMax, t );
+		iAvg += t;
+	}
+	iMin /= 1000;
+	iMax /= 1000;
+	iAvg /= 1000*THREADS;
+
+	printf ( "avg %d, min %d, max %d msec (%dM calls, %d threads)\n",
+		int(iAvg), int(iMin), int(iMax),
+		(int)( TIMER_THREAD_NRUNS/1000000 ), THREADS );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -2839,13 +2887,13 @@ int main ()
 #endif
 
 #ifdef NDEBUG
+	BenchMisc();
 	BenchStripper ();
 	BenchTokenizer ( false );
 	BenchTokenizer ( true );
 	BenchExpr ();
 	BenchLocators ();
 	BenchThreads ();
-	BenchLog2();
 #else
 	TestQueryParser ();
 	TestQueryTransforms ();

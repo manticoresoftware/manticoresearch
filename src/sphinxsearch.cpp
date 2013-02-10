@@ -5395,15 +5395,26 @@ void ExtRanker_c::Reset ( const ISphQwordSetup & tSetup )
 
 const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 {
+	ESphQueryState eState = SPH_QSTATE_TOTAL;
+	CSphQueryProfile * pProfile = m_pCtx->m_pProfile;
+
 	for ( ;; )
 	{
 		// get another chunk
 		m_uMaxID = 0;
+		if ( pProfile )
+			eState = pProfile->Switch ( SPH_QSTATE_GET_DOCS );
 		const ExtDoc_t * pCand = m_pRoot->GetDocsChunk ( &m_uMaxID );
 		if ( !pCand )
+		{
+			if ( pProfile )
+				pProfile->Switch ( eState );
 			return NULL;
+		}
 
 		// create matches, and filter them
+		if ( pProfile )
+			pProfile->Switch ( SPH_QSTATE_FILTER );
 		int iDocs = 0;
 		while ( pCand->m_uDocid!=DOCID_MAX )
 		{
@@ -5456,6 +5467,8 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 			if ( m_pNanoBudget )
 				*m_pNanoBudget -= g_iPredictorCostMatch*iDocs;
 			m_dMyDocs[iDocs].m_uDocid = DOCID_MAX;
+			if ( pProfile )
+				pProfile->Switch ( eState );
 			return m_dMyDocs;
 		}
 	}
@@ -5817,12 +5830,26 @@ ExtRanker_T<STATE>::ExtRanker_T ( const XQQuery_t & tXQ, const ISphQwordSetup & 
 	m_pHitBase = NULL;
 }
 
+
+static inline const ExtHit_t * RankerGetHits ( CSphQueryProfile * pProfile, ExtNode_i * pRoot, const ExtDoc_t * pDocs, SphDocID_t uMaxID )
+{
+	if ( !pProfile )
+		return pRoot->GetHitsChunk ( pDocs, uMaxID );
+
+	pProfile->Switch ( SPH_QSTATE_GET_HITS );
+	const ExtHit_t * pHlist = pRoot->GetHitsChunk ( pDocs, uMaxID );
+	pProfile->Switch ( SPH_QSTATE_RANK );
+	return pHlist;
+}
+
+
 template < typename STATE >
 int ExtRanker_T<STATE>::GetMatches ()
 {
 	if ( !m_pRoot )
 		return 0;
 
+	CSphQueryProfile * pProfile = m_pCtx->m_pProfile;
 	int iMatches = 0;
 	const ExtHit_t * pHlist = m_pHitlist;
 	const ExtHit_t * pHitBase = m_pHitBase;
@@ -5842,11 +5869,14 @@ int ExtRanker_T<STATE>::GetMatches ()
 	// warmup if necessary
 	if ( !pHlist )
 	{
-		if ( !pDocs ) pDocs = GetFilteredDocs ();
-		if ( !pDocs ) return iMatches;
+		if ( !pDocs )
+			pDocs = GetFilteredDocs ();
+		if ( !pDocs )
+			return iMatches;
 
-		pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
-		if ( !pHlist ) return iMatches;
+		pHlist = RankerGetHits ( pProfile, m_pRoot, pDocs, m_uMaxID );
+		if ( !pHlist )
+			return iMatches;
 	}
 
 	if ( !pHitBase )
@@ -5878,7 +5908,7 @@ int ExtRanker_T<STATE>::GetMatches ()
 		if ( pHlist->m_uDocid==DOCID_MAX )
 		{
 			assert ( pDocs );
-			pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
+			pHlist = RankerGetHits ( pProfile, m_pRoot, pDocs, m_uMaxID );
 			if ( pHlist )
 				continue;
 		}

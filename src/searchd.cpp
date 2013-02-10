@@ -2671,6 +2671,9 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr 
 class NetOutputBuffer_c
 {
 public:
+	CSphQueryProfile *	m_pProfile;
+
+public:
 	explicit	NetOutputBuffer_c ( int iSock );
 
 	bool		SendInt ( int iValue )			{ return SendT<int> ( htonl ( iValue ) ); }
@@ -2812,7 +2815,8 @@ protected:
 /////////////////////////////////////////////////////////////////////////////
 
 NetOutputBuffer_c::NetOutputBuffer_c ( int iSock )
-	: m_pBuffer ( m_dBuffer )
+	: m_pProfile ( NULL )
+	, m_pBuffer ( m_dBuffer )
 	, m_iSock ( iSock )
 	, m_bError ( false )
 	, m_iSent ( 0 )
@@ -3012,6 +3016,10 @@ bool NetOutputBuffer_c::Flush ( bool bUnfreeze )
 	assert ( iLen<=(int)sizeof(m_dBuffer) );
 	char * pBuffer = (char *)&m_dBuffer[0];
 
+	ESphQueryState eOld = SPH_QSTATE_TOTAL;
+	if ( m_pProfile )
+		eOld = m_pProfile->Switch ( SPH_QSTATE_NET_WRITE );
+
 	const int64_t tmMaxTimer = sphMicroTimer() + g_iWriteTimeout*1000000; // in microseconds
 	while ( !m_bError )
 	{
@@ -3066,6 +3074,9 @@ bool NetOutputBuffer_c::Flush ( bool bUnfreeze )
 			}
 		}
 	}
+
+	if ( m_pProfile )
+		m_pProfile->Switch ( eOld );
 
 	m_pBuffer = m_dBuffer;
 	return !m_bError;
@@ -3580,7 +3591,7 @@ public:
 #endif
 			ARRAY_FOREACH ( i, m_dAgents )
 			{
-				m_pWeights[i] *= dCoefs[i]*fNormale;
+				m_pWeights[i] = WORD(m_pWeights[i]*dCoefs[i]*fNormale);
 #ifndef NDEBUG
 				uCheck += m_pWeights[i];
 				sphInfo ( "Mirror %d, new weight (%d)", i, m_pWeights[i] );
@@ -4075,7 +4086,7 @@ public:
 			{
 				MetaAgentDesc_t & dAgent = m_dAgents[i];
 				WORD* pWeights = (WORD*) ( pBuffer + sizeof(int) ); // NOLINT
-				WORD dFrac = 0xFFFF / dAgent.GetLength();
+				WORD dFrac = WORD(0xFFFF / dAgent.GetLength());
 				ARRAY_FOREACH ( j, dAgent ) ///< works since dAgent has method GetLength()
 					pWeights[j] = dFrac;
 				dAgent.SetHAData ( (int*)pBuffer, pWeights, m_pHAStorage );
@@ -8640,6 +8651,7 @@ public:
 	CSphVector<AggrResult_t>		m_dResults;						///< results which i obtained
 	CSphVector<SearchFailuresLog_c>	m_dFailuresSet;					///< failure logs for each query
 	CSphVector < CSphVector<int64_t> >	m_dAgentTimes;				///< per-agent time stats
+	CSphQueryProfile *				m_pProfile;
 
 protected:
 	void							RunSubset ( int iStart, int iEnd );	///< run queries against index(es) from first query in the subset
@@ -8698,6 +8710,8 @@ SearchHandler_c::SearchHandler_c ( int iQueries, bool bSphinxql )
 		m_dResults[i].m_iTag = 1; // first avail tag for local storage ptrs
 		m_dResults[i].m_dTag2Pools.Add (); // reserved index 0 for remote mva storage ptr; we'll fix this up later
 	}
+
+	m_pProfile = NULL;
 }
 
 
@@ -9461,6 +9475,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 		m_dResults[iRes].m_iSuccesses = 0;
 
+	if ( iStart==iEnd && m_pProfile )
+		m_dResults[iStart].m_pProfile = m_pProfile;
+
 	////////////////////////////////////////////////////////////////
 	// check for single-query, multi-queue optimization possibility
 	////////////////////////////////////////////////////////////////
@@ -9684,6 +9701,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		tFirst.m_iRetryCount = 0;
 
 	// connect to remote agents and query them, if required
+	if ( m_pProfile )
+		m_pProfile->Switch ( SPH_QSTATE_DIST_CONNECT );
+
 	CSphScopedPtr<SearchRequestBuilder_t> tReqBuilder ( NULL );
 	CSphScopedPtr<CSphRemoteAgentsController> tDistCtrl ( NULL );
 	if ( bDist && dAgents.GetLength() )
@@ -9709,6 +9729,10 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	///////////////////////
 	// poll remote queries
 	///////////////////////
+
+	if ( m_pProfile )
+		m_pProfile->Switch ( SPH_QSTATE_DIST_WAIT );
+
 	bool bDistDone = false;
 	if ( bDist && dAgents.GetLength() )
 	{
@@ -9819,6 +9843,10 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	/////////////////////
 	// merge all results
 	/////////////////////
+
+	if ( m_pProfile )
+		m_pProfile->Switch ( SPH_QSTATE_AGGREGATE );
+
 	CSphIOStats tIO;
 
 	for ( int iRes=iStart; iRes<=iEnd; iRes++ )
@@ -9943,6 +9971,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		g_pStats->m_iDiskReadBytes += tIO.m_iReadBytes;
 		g_tStatsMutex.Unlock();
 	}
+
+	if ( m_pProfile )
+		m_pProfile->Switch ( SPH_QSTATE_UNKNOWN );
 }
 
 
@@ -10096,6 +10127,7 @@ enum SqlStmt_e
 	STMT_OPTIMIZE_INDEX,
 	STMT_SHOW_AGENT_STATUS,
 	STMT_SHOW_INDEX_STATUS,
+	STMT_SHOW_PROFILE,
 
 	STMT_TOTAL
 };
@@ -14928,11 +14960,13 @@ struct SessionVars_t
 	bool			m_bAutoCommit;
 	bool			m_bInTransaction;
 	ESphCollation	m_eCollation;
+	bool			m_bProfile;
 
 	SessionVars_t ()
 		: m_bAutoCommit ( true )
 		, m_bInTransaction ( false )
 		, m_eCollation ( g_eCollation )
+		, m_bProfile ( false )
 	{}
 };
 
@@ -15024,6 +15058,11 @@ void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & 
 			|| tStmt.m_sSetName=="sql_mode" )
 		{
 			// per-session CHARACTER_SET_RESULTS et al; just ignore for now
+
+		} else if ( tStmt.m_sSetName=="profiling" )
+		{
+			// per-session PROFILING
+			tVars.m_bProfile = ( tStmt.m_iSetValue!=0 );
 
 		} else
 		{
@@ -15399,6 +15438,33 @@ void HandleMysqlShowIndexStatus ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt
 	tOut.Eof();
 }
 
+
+void HandleMysqlShowProfile ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p )
+{
+	#define SPH_QUERY_STATE(_name,_desc) _desc,
+	static const char * dStates [ SPH_QSTATE_TOTAL ] = { SPH_QUERY_STATES };
+	#undef SPH_QUERY_STATES
+
+	tOut.HeadBegin ( 3 );
+	tOut.HeadColumn ( "Status" );
+	tOut.HeadColumn ( "Duration" );
+	tOut.HeadColumn ( "Switches" );
+	tOut.HeadEnd();
+	for ( int i=0; i<SPH_QSTATE_TOTAL; i++ )
+	{
+		if ( p.m_dSwitches[i]<=0 )
+			continue;
+		char sTime[32];
+		snprintf ( sTime, sizeof(sTime), "%d.%06d", int(p.m_tmTotal[i]/1000000), int(p.m_tmTotal[i]%1000000) );
+		tOut.PutString ( dStates[i] );
+		tOut.PutString ( sTime );
+		tOut.PutNumeric ( "%d", p.m_dSwitches[i] );
+		tOut.Commit();
+	}
+	tOut.Eof();
+}
+
+
 //////////////////////////////////////////////////////////////////////////
 
 class CSphinxqlSession : public ISphNoncopyable
@@ -15409,13 +15475,24 @@ public:
 	CSphQueryResultMeta m_tLastMeta;
 	SessionVars_t		m_tVars;
 
-public:
-	explicit CSphinxqlSession ( CSphString & sError ) :
-		m_sError ( sError )
-		{}
+	CSphQueryProfile	m_tProfile;
+	CSphQueryProfile	m_tLastProfile;
 
+public:
+	explicit CSphinxqlSession ( CSphString & sError )
+		: m_sError ( sError )
+	{
+	}
+
+public:
 	// just execute one sphinxql statement
-	void Execute ( const CSphString & sQuery, NetOutputBuffer_c & tOutput, BYTE & uPacketID, ThdDesc_t * pThd=NULL )
+	//
+	// IMPORTANT! this does NOT start or stop profiling, as there a few external
+	// things (client net reads and writes) that we want to profile, too
+	//
+	// returns true if the current profile should be kept (default)
+	// returns false if profile should be discarded (eg. SHOW PROFILE case)
+	bool Execute ( const CSphString & sQuery, NetOutputBuffer_c & tOutput, BYTE & uPacketID, ThdDesc_t * pThd=NULL )
 	{
 		// set on query guard
 		CrashQuery_t tCrashQuery;
@@ -15425,8 +15502,14 @@ public:
 		SphCrashLogger_c::SetLastQuery ( tCrashQuery );
 
 		// parse SQL query
+		if ( m_tVars.m_bProfile )
+			m_tProfile.Switch ( SPH_QSTATE_SQL_PARSE );
+
 		CSphVector<SqlStmt_t> dStmt;
 		bool bParsedOK = ParseSqlQuery ( sQuery.cstr(), tCrashQuery.m_iSize, dStmt, m_sError, m_tVars.m_eCollation );
+
+		if ( m_tVars.m_bProfile )
+			m_tProfile.Switch ( SPH_QSTATE_UNKNOWN );
 
 		SqlStmt_e eStmt = STMT_PARSE_ERROR;
 		if ( bParsedOK )
@@ -15448,7 +15531,7 @@ public:
 		if ( bParsedOK && dStmt.GetLength()>1 )
 		{
 			HandleMysqlMultiStmt ( dStmt, m_tLastMeta, tOut, pThd, m_sError );
-			return;
+			return true; // FIXME? how does this work with profiling?
 		}
 
 		// handle SQL query
@@ -15459,7 +15542,7 @@ public:
 			m_tLastMeta.m_sError = m_sError;
 			m_tLastMeta.m_sWarning = "";
 			tOut.Error ( sQuery.cstr(), m_sError.cstr() );
-			return;
+			return true;
 
 		case STMT_SELECT:
 			{
@@ -15468,6 +15551,8 @@ public:
 				StatCountCommand ( SEARCHD_COMMAND_SEARCH );
 				SearchHandler_c tHandler ( 1, true );
 				tHandler.m_dQueries[0] = dStmt.Begin()->m_tQuery;
+				if ( m_tVars.m_bProfile )
+					tHandler.m_pProfile = &m_tProfile;
 
 				if ( HandleMysqlSelect ( tOut, tHandler ) )
 				{
@@ -15477,13 +15562,13 @@ public:
 					SendMysqlSelectResult ( tOut, tLast, false );
 				}
 
-				// save meta for SHOW META
+				// save meta for SHOW META (profile is saved elsewhere)
 				m_tLastMeta = tHandler.m_dResults.Last();
-				return;
+				return true;
 			}
 		case STMT_SHOW_WARNINGS:
 			HandleMysqlWarning ( m_tLastMeta, tOut, false );
-			return;
+			return true;
 
 		case STMT_SHOW_STATUS:
 		case STMT_SHOW_META:
@@ -15493,7 +15578,7 @@ public:
 				StatCountCommand ( SEARCHD_COMMAND_STATUS );
 			}
 			HandleMysqlMeta ( tOut, *pStmt, m_tLastMeta, false );
-			return;
+			return true;
 
 		case STMT_INSERT:
 		case STMT_REPLACE:
@@ -15502,15 +15587,15 @@ public:
 			m_tLastMeta.m_sWarning = "";
 			HandleMysqlInsert ( tOut, *pStmt, eStmt==STMT_REPLACE,
 				m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tLastMeta.m_sWarning );
-			return;
+			return true;
 
 		case STMT_DELETE:
 			HandleMysqlDelete ( tOut, *pStmt, sQuery, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction );
-			return;
+			return true;
 
 		case STMT_SET:
 			HandleMysqlSet ( tOut, *pStmt, m_tVars );
-			return;
+			return false;
 
 		case STMT_BEGIN:
 			{
@@ -15521,7 +15606,7 @@ public:
 				if ( pIndex )
 					pIndex->Commit();
 				tOut.Ok();
-				return;
+				return true;
 			}
 		case STMT_COMMIT:
 		case STMT_ROLLBACK:
@@ -15538,7 +15623,7 @@ public:
 						pIndex->RollBack();
 				}
 				tOut.Ok();
-				return;
+				return true;
 			}
 		case STMT_CALL:
 			pStmt->m_sCallProc.ToUpper();
@@ -15555,24 +15640,24 @@ public:
 				m_sError.SetSprintf ( "no such builtin procedure %s", pStmt->m_sCallProc.cstr() );
 				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
 			}
-			return;
+			return true;
 
 		case STMT_DESC:
 			HandleMysqlDescribe ( tOut, *pStmt );
-			return;
+			return true;
 
 		case STMT_SHOW_TABLES:
 			HandleMysqlShowTables ( tOut, *pStmt );
-			return;
+			return true;
 
 		case STMT_UPDATE:
 			StatCountCommand ( SEARCHD_COMMAND_UPDATE );
 			HandleMysqlUpdate ( tOut, *pStmt, sQuery, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction );
-			return;
+			return true;
 
 		case STMT_DUMMY:
 			tOut.Ok();
-			return;
+			return true;
 
 		case STMT_CREATE_FUNC:
 			if ( !sphUDFCreate ( pStmt->m_sUdfLib.cstr(), pStmt->m_sUdfName.cstr(), pStmt->m_eUdfType, m_sError ) )
@@ -15580,7 +15665,7 @@ public:
 			else
 				tOut.Ok();
 			g_tmSphinxqlState = sphMicroTimer();
-			return;
+			return true;
 
 		case STMT_DROP_FUNC:
 			if ( !sphUDFDrop ( pStmt->m_sUdfName.cstr(), m_sError ) )
@@ -15588,48 +15673,52 @@ public:
 			else
 				tOut.Ok();
 			g_tmSphinxqlState = sphMicroTimer();
-			return;
+			return true;
 
 		case STMT_ATTACH_INDEX:
 			HandleMysqlAttach ( tOut, *pStmt );
-			return;
+			return true;
 
 		case STMT_FLUSH_RTINDEX:
 			HandleMysqlFlush ( tOut, *pStmt );
-			return;
+			return true;
 
 		case STMT_SHOW_VARIABLES:
 			HandleMysqlShowVariables ( tOut, m_tVars );
-			return;
+			return true;
 
 		case STMT_TRUNCATE_RTINDEX:
 			HandleMysqlTruncate ( tOut, *pStmt );
-			return;
+			return true;
 
 		case STMT_OPTIMIZE_INDEX:
 			HandleMysqlOptimize ( tOut, *pStmt );
-			return;
+			return true;
 
 		case STMT_SELECT_SYSVAR:
 			HandleMysqlSelectSysvar ( tOut, *pStmt );
-			return;
+			return true;
 
 		case STMT_SHOW_COLLATION:
 			HandleMysqlShowCollations ( tOut );
-			return;
+			return true;
 
 		case STMT_SHOW_CHARACTER_SET:
 			HandleMysqlShowCharacterSet ( tOut );
-			return;
+			return true;
 
 		case STMT_SHOW_INDEX_STATUS:
 			HandleMysqlShowIndexStatus ( tOut, *pStmt );
-			return;
+			return true;
+
+		case STMT_SHOW_PROFILE:
+			HandleMysqlShowProfile ( tOut, m_tLastProfile );
+			return false;
 
 		default:
 			m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );
 			tOut.Error ( sQuery.cstr(), m_sError.cstr() );
-			return;
+			return true;
 		} // switch
 	}
 };
@@ -15706,11 +15795,6 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 		tCrashQuery.m_bMySQL = true;
 		SphCrashLogger_c::SetLastQuery ( tCrashQuery );
 
-		// send the packet formed on the previous cycle
-		THD_STATE ( THD_NET_WRITE );
-		if ( !tOut.Flush() )
-			break;
-
 		// get next packet
 		// we want interruptible calls here, so that shutdowns could be honoured
 		THD_STATE ( THD_NET_READ );
@@ -15720,6 +15804,16 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 			break;
 		}
 
+		// setup per-query profiling
+		assert ( !tOut.m_pProfile ); // at the loop start, must be NULL, even when profiling is enabeld
+		bool bProfile = tSession.m_tVars.m_bProfile; // the current statement might change it
+		if ( bProfile )
+		{
+			tSession.m_tProfile.Start ( SPH_QSTATE_NET_READ );
+			tOut.m_pProfile = &tSession.m_tProfile;
+		}
+
+		// keep getting that packet
 		const int MAX_PACKET_LEN = 0xffffffL; // 16777215 bytes, max low level packet size
 		DWORD uPacketHeader = tIn.GetLSBDword ();
 		int iPacketLen = ( uPacketHeader & MAX_PACKET_LEN );
@@ -15729,6 +15823,9 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 				sClientIP, iCID, iPacketLen, sphSockError() );
 			break;
 		}
+
+		if ( bProfile )
+			tSession.m_tProfile.Switch ( SPH_QSTATE_UNKNOWN );
 
 		// handle it!
 		uPacketID = 1 + (BYTE)( uPacketHeader>>24 ); // client will expect this id
@@ -15766,44 +15863,60 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 		// handle auth packet
 		if ( !bAuthed )
 		{
+			THD_STATE ( THD_NET_WRITE );
 			bAuthed = true;
 			SendMysqlOkPacket ( tOut, uPacketID );
+			if ( !tOut.Flush() )
+				break;
 			continue;
 		}
 
 		// get command, handle special packets
 		const BYTE uMysqlCmd = tIn.GetByte ();
 		if ( uMysqlCmd==MYSQL_COM_QUIT )
-		{
-			// client is done
 			break;
 
-		} else if ( uMysqlCmd==MYSQL_COM_PING || uMysqlCmd==MYSQL_COM_INIT_DB )
+		bool bKeepProfile = true;
+		switch ( uMysqlCmd )
 		{
-			// client wants a pong
-			SendMysqlOkPacket ( tOut, uPacketID );
-			continue;
+			case MYSQL_COM_PING:
+			case MYSQL_COM_INIT_DB:
+				// client wants a pong
+				SendMysqlOkPacket ( tOut, uPacketID );
+				break;
 
-		} else if ( uMysqlCmd==MYSQL_COM_SET_OPTION )
-		{
-			// bMulti = ( tIn.GetWord()==MYSQL_OPTION_MULTI_STATEMENTS_ON ); // that's how we could double check and validate multi query
-			// server reporting success in response to COM_SET_OPTION and COM_DEBUG
-			SendMysqlEofPacket ( tOut, uPacketID, 0 );
-			continue;
+			case MYSQL_COM_SET_OPTION:
+				// bMulti = ( tIn.GetWord()==MYSQL_OPTION_MULTI_STATEMENTS_ON ); // that's how we could double check and validate multi query
+				// server reporting success in response to COM_SET_OPTION and COM_DEBUG
+				SendMysqlEofPacket ( tOut, uPacketID, 0 );
+				break;
 
-		} else if ( uMysqlCmd!=MYSQL_COM_QUERY )
-		{
-			// default case, unknown command
-			// (and query is handled just below)
-			sError.SetSprintf ( "unknown command (code=%d)", uMysqlCmd );
-			SendMysqlErrorPacket ( tOut, uPacketID, sQuery.cstr(), sError.cstr(), MYSQL_ERR_UNKNOWN_COM_ERROR );
-			continue;
+			case MYSQL_COM_QUERY:
+				// handle query packet
+				assert ( uMysqlCmd==MYSQL_COM_QUERY );
+				sQuery = tIn.GetRawString ( iPacketLen-1 );
+				bKeepProfile = tSession.Execute ( sQuery, tOut, uPacketID, pThd );
+				break;
+
+			default:
+				// default case, unknown command
+				sError.SetSprintf ( "unknown command (code=%d)", uMysqlCmd );
+				SendMysqlErrorPacket ( tOut, uPacketID, sQuery.cstr(), sError.cstr(), MYSQL_ERR_UNKNOWN_COM_ERROR );
+				break;
 		}
 
-		// handle query packet
-		assert ( uMysqlCmd==MYSQL_COM_QUERY );
-		sQuery = tIn.GetRawString ( iPacketLen-1 );
-		tSession.Execute ( sQuery, tOut, uPacketID, pThd );
+		// send the response packet
+		THD_STATE ( THD_NET_WRITE );
+		if ( !tOut.Flush() )
+			break;
+
+		// finalize query profile
+		if ( bProfile )
+			tSession.m_tProfile.Stop();
+		if ( uMysqlCmd==MYSQL_COM_QUERY && bKeepProfile )
+			tSession.m_tLastProfile = tSession.m_tProfile;
+		tOut.m_pProfile = NULL;
+
 	} // for (;;)
 
 	// set off query guard

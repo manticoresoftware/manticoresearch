@@ -753,17 +753,18 @@ public:
 	const CSphAutofile &	m_tWordlist;
 	bool					m_bSetupReaders;
 	const BYTE *			m_pSkips;
-
 	BYTE *					m_pDictBuf;
+	CSphQueryProfile *		m_pProfile;
 
 public:
-	DiskIndexQwordSetup_c ( const CSphAutofile & tDoclist, const CSphAutofile & tHitlist, const CSphAutofile & tWordlist, int iDictBufSize, const BYTE * pSkips )
+	DiskIndexQwordSetup_c ( const CSphAutofile & tDoclist, const CSphAutofile & tHitlist, const CSphAutofile & tWordlist, int iDictBufSize, const BYTE * pSkips, CSphQueryProfile * pProfile )
 		: m_tDoclist ( tDoclist )
 		, m_tHitlist ( tHitlist )
 		, m_tWordlist ( tWordlist )
 		, m_bSetupReaders ( false )
 		, m_pSkips ( pSkips )
 		, m_pDictBuf ( NULL )
+		, m_pProfile ( pProfile )
 	{
 		if ( iDictBufSize>0 )
 			m_pDictBuf = new BYTE [iDictBufSize];
@@ -813,6 +814,7 @@ public:
 
 	SphDocID_t		m_iMinID;		///< min ID to fixup
 	int				m_iInlineAttrs;	///< inline attributes count
+
 	const CSphRowitem *	m_pInlineFixup;	///< inline attributes fixup (POINTER TO EXTERNAL DATA, NOT MANAGED BY THIS CLASS!)
 
 #ifndef NDEBUG
@@ -859,7 +861,7 @@ public:
 		m_uHitPosition = 0;
 		m_uHitState = 0;
 		m_rdDoclist.Reset ();
-		m_rdHitlist.Reset ();
+		m_rdDoclist.Reset ();
 		ISphQword::Reset();
 		m_iHitPos = EMPTY_HIT;
 		m_iInlineAttrs = 0;
@@ -1348,7 +1350,7 @@ private:
 
 	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict, const CSphVector<CSphFilterSettings> * pExtraFilters, CSphQueryNodeCache * pNodeCache, int iTag, bool bFactors ) const;
 	bool						MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag, bool bFactors ) const;
-	bool						MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker, int iTag ) const;
+	void						MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker, int iTag ) const;
 
 	const DWORD *				FindDocinfo ( SphDocID_t uDocID ) const;
 	void						CopyDocinfo ( CSphQueryContext * pCtx, CSphMatch & tMatch, const DWORD * pFound ) const;
@@ -6433,7 +6435,9 @@ void CSphWriter::SeekTo ( SphOffset_t iPos )
 ///////////////////////////////////////////////////////////////////////////////
 
 CSphReader::CSphReader ( BYTE * pBuf, int iSize )
-	: m_iFD ( -1 )
+	: m_pProfile ( NULL )
+	, m_eProfileState ( SPH_QSTATE_IO )
+	, m_iFD ( -1 )
 	, m_iPos ( 0 )
 	, m_iBuffPos ( 0 )
 	, m_iBuffUsed ( 0 )
@@ -6622,7 +6626,10 @@ int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
 
 void CSphReader::UpdateCache ()
 {
-	// PROFILE ( read_hits );
+	ESphQueryState eOld = SPH_QSTATE_TOTAL;
+	if ( m_pProfile )
+		eOld = m_pProfile->Switch ( m_eProfileState );
+
 	assert ( m_iFD>=0 );
 
 	// alloc buf on first actual read
@@ -6652,12 +6659,16 @@ void CSphReader::UpdateCache ()
 		m_bError = true;
 		m_sError.SetSprintf ( "pread error in %s: pos="INT64_FMT", len=%d, code=%d, msg=%s",
 			m_sFilename.cstr(), (int64_t)iNewPos, iReadLen, errno, strerror(errno) );
+		if ( m_pProfile )
+			m_pProfile->Switch ( eOld );
 		return;
 	}
 
 	// all fine, adjust offset and hint
 	m_iSizeHint -= m_iBuffUsed;
 	m_iPos = iNewPos;
+	if ( m_pProfile )
+		m_pProfile->Switch ( eOld );
 }
 
 
@@ -6953,6 +6964,7 @@ CSphQueryResult::CSphQueryResult ()
 	m_iOffset = 0;
 	m_iCount = 0;
 	m_iSuccesses = 0;
+	m_pProfile = NULL;
 }
 
 
@@ -13879,9 +13891,11 @@ void CSphQueryContext::SetupExtraData ( ISphExtra * pData )
 }
 
 
-bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery,
+void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery,
 	int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker, int iTag ) const
 {
+	CSphQueryProfile * pProfile = pCtx->m_pProfile;
+
 	int iCutoff = pQuery->m_iCutoff;
 	if ( iCutoff<=0 )
 		iCutoff = -1;
@@ -13890,10 +13904,13 @@ bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 	CSphMatch * pMatch = pRanker->GetMatchesBuffer();
 	for ( ;; )
 	{
+		// ranker does profile switches internally
 		int iMatches = pRanker->GetMatches();
 		if ( iMatches<=0 )
 			break;
 
+		if ( pProfile )
+			pProfile->Switch ( SPH_QSTATE_SORT );
 		for ( int i=0; i<iMatches; i++ )
 		{
 			if ( pCtx->m_bLookupSort )
@@ -13940,7 +13957,9 @@ bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 		if ( iCutoff==0 )
 			break;
 	}
-	return true;
+
+	if ( pProfile )
+		pProfile->Switch ( SPH_QSTATE_UNKNOWN );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -14318,6 +14337,8 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 	{
 		tWord.m_rdDoclist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
 		tWord.m_rdDoclist.SetFile ( m_tDoclist );
+		tWord.m_rdDoclist.m_pProfile = m_pProfile;
+		tWord.m_rdDoclist.m_eProfileState = SPH_QSTATE_READ_DOCS;
 
 		// read in skiplist
 		// OPTIMIZE? maybe cache hot decompressed lists?
@@ -14345,6 +14366,8 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 
 		tWord.m_rdHitlist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
 		tWord.m_rdHitlist.SetFile ( m_tHitlist );
+		tWord.m_rdHitlist.m_pProfile = m_pProfile;
+		tWord.m_rdHitlist.m_eProfileState = SPH_QSTATE_READ_HITS;
 	}
 
 	return true;
@@ -14988,7 +15011,7 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 		sphDie ( "failed to open wordlist: %s", m_sLastError.cstr() );
 
 	// aim
-	DiskIndexQwordSetup_c tTermSetup ( tDoclist, tHitlist, tWordlist, m_bPreloadWordlist ? 0 : m_tWordlist.m_iMaxChunk, m_pSkiplists.GetWritePtr() );
+	DiskIndexQwordSetup_c tTermSetup ( tDoclist, tHitlist, tWordlist, m_bPreloadWordlist ? 0 : m_tWordlist.m_iMaxChunk, m_pSkiplists.GetWritePtr(), NULL );
 	tTermSetup.m_pDict = m_pDict;
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
@@ -15641,6 +15664,7 @@ CSphQueryContext::CSphQueryContext ()
 	m_pFilter = NULL;
 	m_pWeightFilter = NULL;
 	m_pIndexData = NULL;
+	m_pProfile = NULL;
 }
 
 CSphQueryContext::~CSphQueryContext ()
@@ -15873,7 +15897,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 
 	DiskIndexQwordSetup_c tTermSetup ( tDummy1, tDummy2
 		, m_bPreloadWordlist ? tDummy3 : ( m_bKeepFilesOpen ? m_tWordlist.m_tFile : tWordlist )
-		, m_bPreloadWordlist ? 0 : m_tWordlist.m_iMaxChunk, m_pSkiplists.GetWritePtr() );
+		, m_bPreloadWordlist ? 0 : m_tWordlist.m_iMaxChunk, m_pSkiplists.GetWritePtr(), NULL );
 	tTermSetup.m_pDict = pDict;
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
@@ -16882,6 +16906,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	int iTag, bool bFactors ) const
 {
 	assert ( pQuery );
+	CSphQueryProfile * pProfile = pResult->m_pProfile;
 
 	MEMORY ( SPH_MEM_IDX_DISK_MULTY_QUERY );
 
@@ -16905,6 +16930,9 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	if ( pQuery->m_sQuery.IsEmpty() )
 		return MultiScan ( pQuery, pResult, iSorters, &dSorters[0], pExtraFilters, iTag, bFactors );
 
+	if ( pProfile )
+		pProfile->Switch ( SPH_QSTATE_DICT_SETUP );
+
 	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
 	CSphDict * pDictBase = m_pDict;
 	if ( pDictBase->HasState() )
@@ -16921,14 +16949,20 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 		sModifiedQuery = m_pFieldFilter->Apply ( sModifiedQuery );
 
 	// parse query
+	if ( pProfile )
+		pProfile->Switch ( SPH_QSTATE_PARSE );
+
 	XQQuery_t tParsed;
 	if ( !sphParseExtendedQuery ( tParsed, (const char*)sModifiedQuery, m_pQueryTokenizer, &m_tSchema, pDict, m_tSettings ) )
 	{
+		// FIXME? might wanna reset profile to unknown state
 		pResult->m_sError = tParsed.m_sParseError;
 		return false;
 	}
 
 	// transform query if needed (quorum transform, etc.)
+	if ( pProfile )
+		pProfile->Switch ( SPH_QSTATE_TRANSFORMS );
 	sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, pQuery->m_bSimplify, this );
 
 	// adjust stars in keywords for dict=keywords, enable_star=0 case
@@ -17114,6 +17148,10 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	// start counting
 	int64_t tmQueryStart = sphMicroTimer();
 
+	CSphQueryProfile * pProfile = pResult->m_pProfile;
+	if ( pProfile)
+		pProfile->Switch ( SPH_QSTATE_INIT );
+
 	///////////////////
 	// setup searching
 	///////////////////
@@ -17137,6 +17175,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx;
+	tCtx.m_pProfile = pProfile;
 	if ( !tCtx.SetupCalc ( pResult, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, GetMVAPool() ) )
 		return false;
 
@@ -17149,6 +17188,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	CSphAutofile tDoclist, tHitlist, tWordlist, tDummy;
 	if ( !m_bKeepFilesOpen )
 	{
+		if ( pProfile)
+			pProfile->Switch ( SPH_QSTATE_OPEN );
+
 		if ( tDoclist.Open ( GetIndexFileName("spd"), SPH_O_READ, pResult->m_sError ) < 0 )
 			return false;
 
@@ -17159,12 +17201,15 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 			return false;
 	}
 
+	if ( pProfile)
+		pProfile->Switch ( SPH_QSTATE_INIT );
+
 	// setup search terms
 	DiskIndexQwordSetup_c tTermSetup ( m_bKeepFilesOpen ? m_tDoclistFile : tDoclist,
 		m_bKeepFilesOpen ? m_tHitlistFile : tHitlist,
 		m_bPreloadWordlist ? tDummy : ( m_bKeepFilesOpen ? m_tWordlist.m_tFile : tWordlist ),
 		m_bPreloadWordlist ? 0 : m_tWordlist.m_iMaxChunk,
-		m_pSkiplists.GetWritePtr() );
+		m_pSkiplists.GetWritePtr(), pProfile );
 
 	tTermSetup.m_pDict = pDict;
 	tTermSetup.m_pIndex = this;
@@ -17282,8 +17327,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 		case SPH_MATCH_EXTENDED:
 		case SPH_MATCH_EXTENDED2:
 		case SPH_MATCH_BOOLEAN:
-			if ( !MatchExtended ( &tCtx, pQuery, iSorters, ppSorters, pRanker.Ptr(), iMyTag ) )
-				return false;
+			MatchExtended ( &tCtx, pQuery, iSorters, ppSorters, pRanker.Ptr(), iMyTag );
 			break;
 
 		default:
@@ -17293,6 +17337,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	////////////////////
 	// cook result sets
 	////////////////////
+
+	if ( pProfile)
+		pProfile->Switch ( SPH_QSTATE_FINALIZE );
 
 	// adjust result sets
 	for ( int iSorter=0; iSorter<iSorters; iSorter++ )
@@ -17359,6 +17406,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	printf ( "qtm %d, %d, %d, %d, %d\n", int(tmWall), tQueryStats.m_iFetchedDocs,
 		tQueryStats.m_iFetchedHits, tQueryStats.m_iSkips, ppSorters[0]->GetTotalCount() );
 #endif
+
+	if ( pProfile)
+		pProfile->Switch ( SPH_QSTATE_UNKNOWN );
 
 	return true;
 }

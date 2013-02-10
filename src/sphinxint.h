@@ -177,6 +177,10 @@ public:
 class CSphReader
 {
 public:
+	CSphQueryProfile *	m_pProfile;
+	ESphQueryState		m_eProfileState;
+
+public:
 	CSphReader ( BYTE * pBuf=NULL, int iSize=0 );
 	virtual		~CSphReader ();
 
@@ -294,6 +298,7 @@ public:
 	CSphVector<CSphAttrLocator>				m_dOverrideOut;
 
 	void *						m_pIndexData;			///< backend specific data
+	CSphQueryProfile *			m_pProfile;
 
 public:
 	CSphQueryContext ();

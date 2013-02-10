@@ -245,284 +245,6 @@ static CSphStaticMutex						g_tGlobalIDFLock;
 STATIC_SIZE_ASSERT ( SphOffset_t, 8 );
 
 /////////////////////////////////////////////////////////////////////////////
-// INTERNAL PROFILER
-/////////////////////////////////////////////////////////////////////////////
-
-#define SPH_INTERNAL_PROFILER 0
-
-#if SPH_INTERNAL_PROFILER
-
-enum ESphTimer
-{
-	TIMER_root = 0,
-
-	#define DECLARE_TIMER(_arg) TIMER_##_arg,
-	#include "sphinxtimers.h"
-	#undef DECLARE_TIMER
-
-	TIMERS_TOTAL
-};
-
-
-static const char * const g_dTimerNames [ TIMERS_TOTAL ] =
-{
-	"root",
-
-	#define DECLARE_TIMER(_arg) #_arg,
-	#include "sphinxtimers.h" // NOLINT
-	#undef DECLARE_TIMER
-};
-
-
-struct CSphTimer
-{
-	int64_t			m_iMicroSec;		///< time as clocked raw
-	int				m_iCalls;			///< number of times this timer was called
-
-	int				m_iChildrenCalls;	///< number of times all subtimers (children, grandchildren etc) of this timer were called
-	int64_t			m_iMicroSecAdj;		///< guessed (!) time after timer costs adjustment, including subtimer costs
-	int64_t			m_iMicroSecSelf;	///< guessed (!) self time
-
-	ESphTimer		m_eTimer;
-	int				m_iParent;
-	int				m_iChild;
-	int				m_iNext;
-	int				m_iPrev;
-
-	CSphTimer ()
-	{
-		Alloc ( TIMER_root, -1 );
-	}
-
-	void Alloc ( ESphTimer eTimer, int iParent )
-	{
-		m_iParent = iParent;
-		m_iChild = -1;
-		m_iNext = -1;
-		m_iPrev = -1;
-		m_eTimer = eTimer;
-		m_iMicroSec = 0;
-		m_iMicroSecAdj = 0;
-		m_iCalls = 0;
-		m_iChildrenCalls = 0;
-	}
-
-	void Start ()
-	{
-		m_iMicroSec -= sphMicroTimer ();
-		m_iCalls++;
-	}
-
-	void Stop ()
-	{
-		m_iMicroSec += sphMicroTimer ();
-	}
-};
-
-static const int	SPH_MAX_TIMERS					= 128;
-static const int	SPH_TIMER_TRIALS				= 16384;
-
-static int			g_iTimer						= -1;
-static int			g_iTimers						= 0;
-static CSphTimer	g_dTimers [ SPH_MAX_TIMERS ];
-static int64_t		g_iTimerTrialsWall				= 0;
-
-void sphProfilerInit ()
-{
-	assert ( g_iTimers==0 );
-	assert ( g_iTimer==-1 );
-
-	// start root timer
-	g_iTimers = 1;
-	g_iTimer = 0;
-	g_dTimers[g_iTimer].Alloc ( TIMER_root, -1 );
-	g_dTimers[g_iTimer].Start ();
-}
-
-
-void sphProfilerPush ( ESphTimer eTimer )
-{
-	assert ( g_iTimer>=0 && g_iTimer<SPH_MAX_TIMERS );
-	assert ( eTimer!=TIMER_root );
-
-	// search for match timer in current timer's children list
-	int iTimer;
-	for ( iTimer=g_dTimers[g_iTimer].m_iChild; iTimer>0; iTimer=g_dTimers[iTimer].m_iNext )
-	{
-		if ( g_dTimers[iTimer].m_eTimer==eTimer )
-			break;
-	}
-
-	// not found? let's alloc
-	if ( iTimer<0 )
-	{
-		assert ( g_iTimers<SPH_MAX_TIMERS );
-		iTimer = g_iTimers++;
-
-		// create child and make current timer it's parent
-		g_dTimers[iTimer].Alloc ( eTimer, g_iTimer );
-
-		// make it new children list head
-		g_dTimers[iTimer].m_iNext = g_dTimers[g_iTimer].m_iChild;
-		if ( g_dTimers[g_iTimer].m_iChild>=0 )
-			g_dTimers [ g_dTimers[g_iTimer].m_iChild ].m_iPrev = iTimer;
-		g_dTimers[g_iTimer].m_iChild = iTimer;
-	}
-
-	// make it new current one
-	assert ( iTimer>0 );
-	g_dTimers[iTimer].Start ();
-	g_iTimer = iTimer;
-}
-
-
-void sphProfilerPop ( ESphTimer eTimer )
-{
-	assert ( g_iTimer>0 && g_iTimer<SPH_MAX_TIMERS );
-	assert ( g_dTimers[g_iTimer].m_eTimer==eTimer );
-
-	g_dTimers[g_iTimer].Stop ();
-	g_iTimer = g_dTimers[g_iTimer].m_iParent;
-	assert ( g_iTimer>=0 && g_iTimer<SPH_MAX_TIMERS );
-}
-
-
-static void sphProfilerAdjust ( int iTimer )
-{
-	CSphTimer & tTimer = g_dTimers[iTimer];
-	tTimer.m_iChildrenCalls = 0;
-
-	// adjust all my children first
-	// count the subtimer call totals along the way, too
-	for ( int iChild=tTimer.m_iChild; iChild>0; iChild=g_dTimers[iChild].m_iNext )
-	{
-		sphProfilerAdjust ( iChild );
-		tTimer.m_iChildrenCalls += g_dTimers[iChild].m_iCalls + g_dTimers[iChild].m_iChildrenCalls;
-	}
-
-	// adjust my raw time, remove all the timer costs from it
-	// my own costs are 1x sphMicroTimer() call per start/stop cycle
-	// subtimer costs are 2x sphMicroTimer() calls per start/stop cycle
-	tTimer.m_iMicroSecAdj = tTimer.m_iMicroSec - ( ( tTimer.m_iCalls + 2*tTimer.m_iChildrenCalls )*g_iTimerTrialsWall / SPH_TIMER_TRIALS );
-
-	// now calculate self time
-	// as adjusted time (all subtimer costs removed) minus all subtimer self time
-	tTimer.m_iMicroSecSelf = tTimer.m_iMicroSecAdj;
-	for ( int iChild=tTimer.m_iChild; iChild>0; iChild=g_dTimers[iChild].m_iNext )
-		tTimer.m_iMicroSecSelf -= g_dTimers[iChild].m_iMicroSecSelf;
-}
-
-
-void sphProfilerDone ()
-{
-	assert ( g_iTimers>0 );
-	assert ( g_iTimer==0 );
-
-	// stop root timer
-	g_iTimers = 0;
-	g_iTimer = -1;
-	g_dTimers[0].Stop ();
-
-	// bench adjustments
-	for ( int iRun=0; iRun<3; iRun++ )
-	{
-		int64_t iTrial = sphMicroTimer();
-		for ( int i=0; i<SPH_TIMER_TRIALS-1; i++ )
-			sphMicroTimer();
-		iTrial = sphMicroTimer()-iTrial;
-
-		if ( iRun!=0 )
-			g_iTimerTrialsWall = Min ( g_iTimerTrialsWall, iTrial );
-		else
-			g_iTimerTrialsWall = iTrial;
-	}
-
-	// apply those adjustments
-	sphProfilerAdjust ( 0 );
-}
-
-
-void sphProfilerShow ( int iTimer=0, int iLevel=0 )
-{
-	assert ( g_iTimers==0 );
-	assert ( g_iTimer==-1 );
-
-	if ( iTimer==0 )
-		fprintf ( stdout, "--- PROFILE ---\n" );
-
-	// show this timer
-	CSphTimer & tTimer = g_dTimers[iTimer];
-	if ( tTimer.m_iMicroSec<50 )
-		return;
-
-	char sName[32];
-	for ( int i=0; i<iLevel; i++ )
-		sName[2*i] = sName[2*i+1] = ' ';
-	sName[2*iLevel] = '\0';
-	strncat ( sName, g_dTimerNames [ tTimer.m_eTimer ], sizeof(sName) );
-
-	fprintf ( stdout, "%-32s | %6d.%02d ms | %6d.%02d ms self | %d calls\n",
-		sName,
-		(int)(tTimer.m_iMicroSecAdj/1000), (int)(tTimer.m_iMicroSecAdj%1000)/10,
-		(int)(tTimer.m_iMicroSecSelf/1000), (int)(tTimer.m_iMicroSecSelf%1000)/10,
-		tTimer.m_iCalls );
-
-	// dump my children
-	int iChild = tTimer.m_iChild;
-	while ( iChild>0 && g_dTimers[iChild].m_iNext>0 )
-		iChild = g_dTimers[iChild].m_iNext;
-
-	while ( iChild>0 )
-	{
-		sphProfilerShow ( iChild, 1+iLevel );
-		iChild = g_dTimers[iChild].m_iPrev;
-	}
-
-	if ( iTimer==0 )
-		fprintf ( stdout, "---------------\n" );
-}
-
-
-class CSphEasyTimer
-{
-public:
-	explicit CSphEasyTimer ( ESphTimer eTimer )
-		: m_eTimer ( eTimer )
-	{
-		if ( g_iTimer>=0 )
-			sphProfilerPush ( m_eTimer );
-	}
-
-	~CSphEasyTimer ()
-	{
-		if ( g_iTimer>=0 )
-			sphProfilerPop ( m_eTimer );
-	}
-
-protected:
-	ESphTimer		m_eTimer;
-};
-
-
-#define PROFILER_INIT() sphProfilerInit()
-#define PROFILER_DONE() sphProfilerDone()
-#define PROFILE_BEGIN(_arg) sphProfilerPush(TIMER_##_arg)
-#define PROFILE_END(_arg) sphProfilerPop(TIMER_##_arg)
-#define PROFILE_SHOW() sphProfilerShow()
-#define PROFILE(_arg) CSphEasyTimer __t_##_arg ( TIMER_##_arg );
-
-#else
-
-#define PROFILER_INIT()
-#define PROFILER_DONE()
-#define PROFILE_BEGIN(_arg)
-#define PROFILE_END(_arg)
-#define PROFILE_SHOW()
-#define PROFILE(_arg)
-
-#endif // SPH_INTERNAL_PROFILER
-
-/////////////////////////////////////////////////////////////////////////////
 
 #if !USE_WINDOWS
 
@@ -6640,7 +6362,7 @@ void CSphWriter::ZipOffsets ( CSphVector<SphOffset_t> * pData )
 
 void CSphWriter::Flush ()
 {
-	PROFILE ( write_hits );
+	// PROFILE ( write_hits );
 
 	if ( m_pSharedOffset && *m_pSharedOffset!=m_iWritten )
 		sphSeek ( m_iFD, m_iWritten, SEEK_SET );
@@ -6900,7 +6622,7 @@ int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
 
 void CSphReader::UpdateCache ()
 {
-	PROFILE ( read_hits );
+	// PROFILE ( read_hits );
 	assert ( m_iFD>=0 );
 
 	// alloc buf on first actual read
@@ -7340,7 +7062,7 @@ int CSphBin::ReadByte ()
 
 	if ( !m_iLeft )
 	{
-		PROFILE ( read_hits );
+		// PROFILE ( read_hits );
 		if ( *m_pFilePos!=m_iFilePos )
 		{
 			sphSeek ( m_iFile, m_iFilePos, SEEK_SET );
@@ -9872,7 +9594,7 @@ inline int encodeKeyword ( BYTE * pBuf, const char * pKeyword )
 
 int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWORD * pDocinfo, int iDocinfos, int iStride )
 {
-	PROFILE ( write_hits );
+	// PROFILE ( write_hits );
 
 	assert ( pHit );
 	assert ( iHits>0 );
@@ -11094,8 +10816,6 @@ private:
 
 int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer )
 {
-	PROFILER_INIT ();
-
 	assert ( dSources.GetLength() );
 
 	CSphVector<SphWordID_t> dHitlessWords;
@@ -11413,7 +11133,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		m_dMinRow[i] = ROWITEM_MAX;
 
 	// build raw log
-	PROFILE_BEGIN ( collect_hits );
+	// PROFILE_BEGIN ( collect_hits );
 
 	m_tStats.Reset ();
 	m_tProgress.m_ePhase = CSphIndexProgress::PHASE_COLLECT;
@@ -11805,7 +11525,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				// sort hits
 				int iHits = pHits - dHits.Begin();
 				{
-					PROFILE ( sort_hits );
+					// PROFILE ( sort_hits );
 					sphSort ( dHits.Begin(), iHits, CmpHit_fn() );
 					m_pDict->HitblockPatch ( dHits.Begin(), iHits );
 				}
@@ -11939,7 +11659,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 						// sort hits
 						int iHits = pHits - dHits.Begin();
 						{
-							PROFILE ( sort_hits );
+							// PROFILE ( sort_hits );
 							sphSort ( dHits.Begin(), iHits, CmpHit_fn() );
 							m_pDict->HitblockPatch ( dHits.Begin(), iHits );
 						}
@@ -12003,7 +11723,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	{
 		int iHits = pHits - dHits.Begin();
 		{
-			PROFILE ( sort_hits );
+			// PROFILE ( sort_hits );
 			sphSort ( dHits.Begin(), iHits, CmpHit_fn() );
 			m_pDict->HitblockPatch ( dHits.Begin(), iHits );
 		}
@@ -12068,7 +11788,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	m_tProgress.m_iBytes = m_tStats.m_iTotalBytes;
 	m_tProgress.Show ( true );
 
-	PROFILE_END ( collect_hits );
+	// PROFILE_END ( collect_hits );
 
 	///////////////////////////////////////
 	// collect and sort multi-valued attrs
@@ -12468,7 +12188,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	// sort and write compressed index
 	///////////////////////////////////
 
-	PROFILE_BEGIN ( invert_hits );
+	// PROFILE_BEGIN ( invert_hits );
 
 	// initialize readers
 	assert ( dBins.GetLength()==0 );
@@ -12648,7 +12368,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	if ( iDupes )
 		sphWarn ( "%d duplicate document id pairs found", iDupes );
 
-	PROFILE_END ( invert_hits );
+	// PROFILE_END ( invert_hits );
 
 	BuildHeader_t tBuildHeader ( m_tStats );
 	if ( !tHitBuilder.cidxDone ( iMemoryLimit, m_tSettings.m_iMinInfixLen, m_pTokenizer->GetMaxCodepointLength(), &tBuildHeader ) )
@@ -12669,8 +12389,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	ARRAY_FOREACH ( i, dSources )
 		dSources[i]->PostIndex ();
 
-	PROFILER_DONE ();
-	PROFILE_SHOW ();
 	dFileWatchdog.AllIsDone();
 	return 1;
 } // NOLINT function length
@@ -17400,9 +17118,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	// setup searching
 	///////////////////
 
-	PROFILER_INIT ();
-	PROFILE_BEGIN ( query_init );
-
 	// non-ready index, empty response!
 	if ( !m_pPreread || !*m_pPreread )
 	{
@@ -17551,8 +17266,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	if ( !tCtx.SetupOverrides ( pQuery, pResult, m_tSchema ) )
 		return false;
 
-	PROFILE_END ( query_init );
-
 	//////////////////////////////////////
 	// find and weight matching documents
 	//////////////////////////////////////
@@ -17561,7 +17274,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	bool bFinalPass = bFinalLookup || tCtx.m_dCalcFinal.GetLength();
 	int iMyTag = bFinalPass ? -1 : iTag;
 
-	PROFILE_BEGIN ( query_match );
 	switch ( pQuery->m_eMode )
 	{
 		case SPH_MATCH_ALL:
@@ -17577,7 +17289,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 		default:
 			sphDie ( "INTERNAL ERROR: unknown matching mode (mode=%d)", pQuery->m_eMode );
 	}
-	PROFILE_END ( query_match );
 
 	////////////////////
 	// cook result sets
@@ -17639,9 +17350,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 		pResult->m_pMva = m_pMva.GetWritePtr();
 		pResult->m_pStrings = m_pStrings.GetWritePtr();
 	}
-
-	PROFILER_DONE ();
-	PROFILE_SHOW ();
 
 	// query timer
 	int64_t tmWall = sphMicroTimer() - tmQueryStart;
@@ -23592,7 +23300,7 @@ bool CSphSource_Document::IterateDocument ( CSphString & sError )
 {
 	assert ( m_pTokenizer );
 	assert ( !m_tState.m_bProcessingHits );
-	PROFILE ( src_document );
+	// PROFILE ( src_document );
 
 	m_tHits.m_dData.Resize ( 0 );
 
@@ -24854,7 +24562,7 @@ void CSphSource_SQL::Disconnect ()
 
 BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 {
-	PROFILE ( src_sql );
+	// PROFILE ( src_sql );
 	assert ( m_bSqlConnected );
 
 	// get next non-zero-id row
@@ -25910,7 +25618,7 @@ bool CSphSource_XMLPipe::Connect ( CSphString & )
 
 bool CSphSource_XMLPipe::IterateDocument ( CSphString & sError )
 {
-	PROFILE ( src_xmlpipe );
+	// PROFILE ( src_xmlpipe );
 	char sTitle [ 1024 ]; // FIXME?
 
 	assert ( m_pPipe );

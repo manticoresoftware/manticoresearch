@@ -276,146 +276,304 @@ bool DoKlistsOptimization ( int iRowSize, const char * sPath, int iChunkCount, C
 }
 
 
-bool BuildGlobalIDF ( const CSphString & sFilename, const CSphVector<CSphString> & dFiles, CSphString & sError, bool bSkipUnique, bool bTextFile )
+#pragma pack(push,4)
+struct IDFWord_t
 {
-	typedef CSphOrderedHash<int, uint64_t, IdentityHash_fn, 1024*1024*64> IDFHash_t;
+	uint64_t	m_uWordID;
+	DWORD		m_iDocs;
+};
+#pragma pack(pop)
+STATIC_SIZE_ASSERT	( IDFWord_t, 12 );
 
-	// preallocate 64M hash
-	const int64_t tmStart = sphMicroTimer ();
-	IDFHash_t * pHash = new IDFHash_t();
-	IDFHash_t & hWords = *pHash;
+
+bool BuildIDF ( const CSphString & sFilename, const CSphVector<CSphString> & dFiles, CSphString & sError, bool bSkipUnique )
+{
+	// text dictionaries are ordered alphabetically - we can use that fact while reading
+	// to merge duplicates, calculate total number of occurrences and process bSkipUnique
+	// this method is about 3x faster and consumes ~2x less memory than a hash based one
+
+	typedef char StringBuffer_t [ 3*SPH_MAX_WORD_LEN+16 ];
 
 	int64_t iTotalDocuments = 0;
 	int64_t iTotalWords = 0;
+	int64_t iReadWords = 0;
+	int64_t iMergedWords = 0;
+	int64_t iSkippedWords = 0;
+	int64_t iReadBytes = 0;
+	int64_t iTotalBytes = 0;
+
+	const int64_t tmStart = sphMicroTimer ();
+
+	int iFiles = dFiles.GetLength ();
+
+	CSphVector<CSphAutoreader> dReaders ( iFiles );
 
 	ARRAY_FOREACH ( i, dFiles )
 	{
-		CSphAutoreader tReader;
-		if ( !tReader.Open ( dFiles[i], sError ) )
+		if ( !dReaders[i].Open ( dFiles[i], sError ) )
 			return false;
+		iTotalBytes += dReaders[i].GetFilesize ();
+	}
 
-		fprintf ( stdout, "reading %s...\n", dFiles[i].cstr() );
+	// internal state
+	StringBuffer_t * dWords = new StringBuffer_t [ iFiles ];
+	CSphVector<int> dDocs ( iFiles );
+	CSphVector<bool> dFinished ( iFiles );
+	dFinished.Fill ( false );
+	bool bPreread = false;
 
-		const SphOffset_t iSize = tReader.GetFilesize();
-		if ( iSize > INT_MAX )
+	// current entry
+	StringBuffer_t sWord = {0};
+	DWORD iDocs = 0;
+
+	// output vector, preallocate 10M
+	CSphTightVector<IDFWord_t> dEntries;
+	dEntries.Reserve ( 1024*1024*10 );
+
+	for ( int i=0;; )
+	{
+		// read next input
+		for ( ;; )
 		{
-			fprintf ( stdout, "ERROR: dictionaries over 2048 MB not supported, skipping %s\n", dFiles[i].cstr() );
-			continue;
-		}
-
-		char * pData = new char [ (int)iSize ];
-		tReader.GetBytes ( pData, (int)iSize );
-		char *pEnd = pData+iSize;
-
-		if ( bTextFile )
-		{
-			char * p = pData;
-			while ( p<pEnd )
+			int iLen;
+			char * sBuffer = dWords[i];
+			if ( ( iLen = dReaders[i].GetLine ( sBuffer, sizeof(StringBuffer_t) ) )>=0 )
 			{
-				// strchr ought to be faster than incremental search
-				char * p0 = strchr ( p, '\n' );
-				if ( !p0 )
-					break;
-				*p0 = '\0';
+				iReadBytes += iLen;
 
 				// find keyword pattern ( ^<keyword>,<docs>,... )
-				char * p1 = strchr ( p, ',' );
+				char * p1 = strchr ( sBuffer, ',' );
 				if ( p1 )
 				{
 					char * p2 = strchr ( p1+1, ',' );
 					if ( p2 )
 					{
 						*p1 = *p2 = '\0';
-
 						int iDocs = atoi ( p1+1 );
 						if ( iDocs )
 						{
-							// calculate keyword id
-							uint64_t uWordID = sphFNV64 ( (BYTE*)p );
-
-							int * pDocs = hWords ( uWordID );
-							if ( pDocs )
-								*pDocs += iDocs;
-							else
-								hWords.Add ( iDocs, uWordID );
-
-							iTotalWords++;
+							dDocs[i] = iDocs;
+							iReadWords++;
+							break;
 						}
 					}
 				} else
 				{
 					// keyword pattern not found (rather rare case), try to parse as a header, then
 					char sSearch[] = "total-documents: ";
-					if ( strstr ( p, sSearch )==p )
-						iTotalDocuments += atoi ( p+strlen(sSearch) ); // sizeof may vary
+					if ( strstr ( sBuffer, sSearch )==sBuffer )
+						iTotalDocuments += atoi ( sBuffer+strlen(sSearch) );
 				}
-
-				// advance to the next line
-				p = p0+1;
-			}
-		} else
-		{
-			// parse binary file
-			char * p = pData;
-
-			iTotalDocuments += *(int64_t*)p;
-			p += sizeof(int64_t);
-
-			while ( p<pEnd )
+			} else
 			{
-				uint64_t uWordID = *(uint64_t*)p;
-				p += sizeof(uint64_t);
-
-				int iDocs = int(*(DWORD*)p);
-				p += sizeof(DWORD);
-
-				int * pDocs = hWords ( uWordID );
-				if ( pDocs )
-					*pDocs += iDocs;
-				else
-					hWords.Add ( iDocs, uWordID );
-
-				iTotalWords++;
+				dFinished[i] = true;
+				break;
 			}
 		}
-		SafeDeleteArray ( pData );
+
+		bool bEnd = !dFinished.Contains ( false );
+
+		i++;
+		if ( !bPreread && i==iFiles )
+			bPreread = true;
+
+		if ( bPreread )
+		{
+			// find the next smallest input
+			i = 0;
+			for ( int j=0; j<iFiles; j++ )
+				if ( !dFinished[j] && ( dFinished[i] || strcmp ( dWords[i], dWords[j] )>0 ) )
+					i = j;
+
+			// merge if we got the same word
+			if ( !strcmp ( sWord, dWords[i] ) && !bEnd )
+			{
+				iDocs += dDocs[i];
+				iMergedWords++;
+			} else
+			{
+				if ( sWord[0]!='\0' )
+				{
+					if ( !bSkipUnique || iDocs>1 )
+					{
+						IDFWord_t & tEntry = dEntries.Add ();
+						tEntry.m_uWordID = sphFNV64 ( (BYTE*)sWord );
+						tEntry.m_iDocs = iDocs;
+						iTotalWords++;
+					} else
+						iSkippedWords++;
+				}
+
+				strcpy ( sWord, dWords[i] ); // NOLINT
+				iDocs = dDocs[i];
+			}
+		}
+
+		if ( ( iReadWords & 0xffff )==0 || bEnd )
+			fprintf ( stderr, "read %.1f of %.1f MB, %.1f%% done%c", ( bEnd ? float(iTotalBytes) : float(iReadBytes) )/1000000.0f,
+			float(iTotalBytes)/1000000.0f, bEnd ? 100.0f : float(iReadBytes)*100.0f/float(iTotalBytes), bEnd ? '\n' : '\r' );
+
+		if ( bEnd )
+			break;
 	}
 
-	// skip unique words and sort by id
-	CSphVector<uint64_t> dWords;
+	SafeDeleteArray ( dWords );
 
-	hWords.IterateStart ();
-	while ( hWords.IterateNext () )
-	{
-		uint64_t uWordID = hWords.IterateGetKey ();
-		int iDocs = hWords.IterateGet ();
-		if ( !bSkipUnique || iDocs>1 )
-			dWords.Add ( uWordID );
-	}
-
-	dWords.Sort ();
-
-	fprintf ( stdout, INT64_FMT" documents, %d words ("INT64_FMT" read, "INT64_FMT" merged, %d skipped)\n", iTotalDocuments,
-		dWords.GetLength(), iTotalWords, iTotalWords-hWords.GetLength(), hWords.GetLength()-dWords.GetLength() );
+	fprintf ( stdout, INT64_FMT" documents, "INT64_FMT" words ("INT64_FMT" read, "INT64_FMT" merged, "INT64_FMT" skipped)\n",
+		iTotalDocuments, iTotalWords, iReadWords, iMergedWords, iSkippedWords );
 
 	// write to disk
-	fprintf ( stdout, "writing %s...\n", sFilename.cstr() );
+	fprintf ( stdout, "writing %s (%1.fM)...\n", sFilename.cstr(), float(iTotalWords*sizeof(IDFWord_t))/1000000.0f );
+
+	dEntries.Sort ( bind ( &IDFWord_t::m_uWordID ) );
 
 	CSphWriter tWriter;
 	if ( !tWriter.OpenFile ( sFilename, sError ) )
 		return false;
 
+	// write file header
 	tWriter.PutOffset ( iTotalDocuments );
 
-	ARRAY_FOREACH ( i, dWords )
+	// write data
+	tWriter.PutBytes ( dEntries.Begin(), dEntries.GetLength()*sizeof(IDFWord_t) );
+
+	int tmWallMsec = (int)( ( sphMicroTimer() - tmStart )/1000 );
+	fprintf ( stdout, "finished in %d.%d sec\n", tmWallMsec/1000, (tmWallMsec/100)%10 );
+
+	return true;
+}
+
+
+bool MergeIDF ( const CSphString & sFilename, const CSphVector<CSphString> & dFiles, CSphString & sError, bool bSkipUnique )
+{
+	// binary dictionaries are ordered by 64-bit word id, we can use that for merging.
+	// read every file, check repeating word ids, merge if found, write to disk if not
+	// memory requirements are about ~4KB per input file (used for buffered reading)
+
+	int64_t iTotalDocuments = 0;
+	int64_t iTotalWords = 0;
+	int64_t iReadWords = 0;
+	int64_t iMergedWords = 0;
+	int64_t iSkippedWords = 0;
+	int64_t iReadBytes = 0;
+	int64_t iTotalBytes = 0;
+
+	const int64_t tmStart = sphMicroTimer ();
+
+	int iFiles = dFiles.GetLength ();
+
+	// internal state
+	CSphVector<CSphAutoreader> dReaders ( iFiles );
+	CSphVector<IDFWord_t> dWords ( iFiles );
+	CSphVector<int64_t> dRead ( iFiles );
+	CSphVector<int64_t> dSize ( iFiles );
+	CSphVector<BYTE*> dBuffers ( iFiles );
+	CSphVector<bool> dFinished ( iFiles );
+	dFinished.Fill ( false );
+	bool bPreread = false;
+
+	// current entry
+	IDFWord_t tWord;
+	tWord.m_uWordID = 0;
+	tWord.m_iDocs = 0;
+
+	// preread buffer
+	const int iEntrySize = sizeof(int64_t)+sizeof(DWORD);
+	const int iBufferSize = iEntrySize*256;
+
+	// initialize vectors
+	ARRAY_FOREACH ( i, dFiles )
 	{
-		tWriter.PutBytes ( &dWords[i], sizeof(uint64_t) );
-		tWriter.PutDword ( *hWords ( dWords[i] ) );
+		if ( !dReaders[i].Open ( dFiles[i], sError ) )
+			return false;
+		iTotalDocuments += dReaders[i].GetOffset ();
+		dRead[i] = 0;
+		dSize[i] = dReaders[i].GetFilesize() - sizeof( SphOffset_t );
+		dBuffers[i] = new BYTE [ iBufferSize ];
+		iTotalBytes += dSize[i];
 	}
 
-	tWriter.CloseFile ();
+	// open output file
+	CSphWriter tWriter;
+	if ( !tWriter.OpenFile ( sFilename, sError ) )
+		return false;
 
-	SafeDelete ( pHash );
+	// write file header
+	tWriter.PutOffset ( iTotalDocuments );
+
+	for ( int i=0;; )
+	{
+		if ( dRead[i]<dSize[i] )
+		{
+			iReadBytes += iEntrySize;
+
+			// This part basically does the following:
+			// dWords[i].m_uWordID = dReaders[i].GetOffset ();
+			// dWords[i].m_iDocs = dReaders[i].GetDword ();
+			// but reading by 12 bytes seems quite slow (SetBuffers doesn't help)
+			// the only way to speed it up is to buffer up a few entries manually
+
+			int iOffset = (int)( dRead[i] % iBufferSize );
+			if ( iOffset==0 )
+				dReaders[i].GetBytes ( dBuffers[i], ( dSize[i]-dRead[i] )<iBufferSize ? (int)( dSize[i]-dRead[i] ) : iBufferSize );
+
+			dWords[i].m_uWordID = *(uint64_t*)( dBuffers[i]+iOffset );
+			dWords[i].m_iDocs = *(DWORD*)( dBuffers[i]+iOffset+sizeof(uint64_t) );
+
+			dRead[i] += iEntrySize;
+			iReadWords++;
+		} else
+			dFinished[i] = true;
+
+		bool bEnd = !dFinished.Contains ( false );
+
+		i++;
+		if ( !bPreread && i==iFiles )
+			bPreread = true;
+
+		if ( bPreread )
+		{
+			// find the next smallest input
+			i = 0;
+			for ( int j=0; j<iFiles; j++ )
+				if ( !dFinished[j] && ( dFinished[i] || dWords[i].m_uWordID>dWords[j].m_uWordID ) )
+					i = j;
+
+			// merge if we got the same word
+			if ( tWord.m_uWordID==dWords[i].m_uWordID && !bEnd )
+			{
+				tWord.m_iDocs += dWords[i].m_iDocs;
+				iMergedWords++;
+			} else
+			{
+				if ( tWord.m_uWordID )
+				{
+					if ( !bSkipUnique || tWord.m_iDocs>1 )
+					{
+						tWriter.PutOffset ( tWord.m_uWordID );
+						tWriter.PutDword ( tWord.m_iDocs );
+						iTotalWords++;
+					} else
+						iSkippedWords++;
+				}
+
+				tWord = dWords[i];
+			}
+		}
+
+		if ( ( iReadWords & 0xffff )==0 || bEnd )
+			fprintf ( stderr, "read %.1f of %.1f MB, %.1f%% done%c", ( bEnd ? float(iTotalBytes) : float(iReadBytes) )/1000000.0f,
+			float(iTotalBytes)/1000000.0f, bEnd ? 100.0f : float(iReadBytes)*100.0f/float(iTotalBytes), bEnd ? '\n' : '\r' );
+
+		if ( bEnd )
+			break;
+	}
+
+	ARRAY_FOREACH ( i, dFiles )
+		SafeDeleteArray ( dBuffers[i] );
+
+	fprintf ( stdout, INT64_FMT" documents, "INT64_FMT" words ("INT64_FMT" read, "INT64_FMT" merged, "INT64_FMT" skipped)\n",
+		iTotalDocuments, iTotalWords, iReadWords, iMergedWords, iSkippedWords );
 
 	int tmWallMsec = (int)( ( sphMicroTimer() - tmStart )/1000 );
 	fprintf ( stdout, "finished in %d.%d sec\n", tmWallMsec/1000, (tmWallMsec/100)%10 );
@@ -960,7 +1118,7 @@ int main ( int argc, char ** argv )
 		case CMD_BUILDIDF:
 		{
 			CSphString sError;
-			if ( !BuildGlobalIDF ( sOut, dFiles, sError, bSkipUnique, true ) )
+			if ( !BuildIDF ( sOut, dFiles, sError, bSkipUnique ) )
 				fprintf ( stdout, "ERROR: %s\n", sError.cstr() );
 			break;
 		}
@@ -968,7 +1126,7 @@ int main ( int argc, char ** argv )
 		case CMD_MERGEIDF:
 		{
 			CSphString sError;
-			if ( !BuildGlobalIDF ( sOut, dFiles, sError, bSkipUnique, false ) )
+			if ( !MergeIDF ( sOut, dFiles, sError, bSkipUnique ) )
 				fprintf ( stdout, "ERROR: %s\n", sError.cstr() );
 			break;
 		}

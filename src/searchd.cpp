@@ -527,7 +527,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x11C, // 1.28
+	VER_COMMAND_SEARCH		= 0x11D, // 1.29
 	VER_COMMAND_EXCERPT		= 0x104,
 	VER_COMMAND_UPDATE		= 0x103,
 	VER_COMMAND_KEYWORDS	= 0x100,
@@ -3591,7 +3591,7 @@ public:
 #endif
 			ARRAY_FOREACH ( i, m_dAgents )
 			{
-				m_pWeights[i] = WORD(m_pWeights[i]*dCoefs[i]*fNormale);
+				m_pWeights[i] = WORD ( m_pWeights[i]*dCoefs[i]*fNormale );
 #ifndef NDEBUG
 				uCheck += m_pWeights[i];
 				sphInfo ( "Mirror %d, new weight (%d)", i, m_pWeights[i] );
@@ -4086,7 +4086,7 @@ public:
 			{
 				MetaAgentDesc_t & dAgent = m_dAgents[i];
 				WORD* pWeights = (WORD*) ( pBuffer + sizeof(int) ); // NOLINT
-				WORD dFrac = WORD(0xFFFF / dAgent.GetLength());
+				WORD dFrac = WORD ( 0xFFFF / dAgent.GetLength() );
 				ARRAY_FOREACH ( j, dAgent ) ///< works since dAgent has method GetLength()
 					pWeights[j] = dFrac;
 				dAgent.SetHAData ( (int*)pBuffer, pWeights, m_pHAStorage );
@@ -5233,7 +5233,7 @@ protected:
 
 int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuery & q ) const
 {
-	int iReqSize = 116 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
+	int iReqSize = 120 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
 		+ q.m_sSortBy.Length()
 		+ strlen ( sIndexes )
 		+ q.m_sGroupBy.Length()
@@ -5412,6 +5412,9 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	tOut.SendString ( q.m_sSelect.cstr() );
 	if ( q.m_iMaxPredictedMsec>0 )
 		tOut.SendInt ( q.m_iMaxPredictedMsec );
+
+	// emulate empty client order by (client ver 1.29) as master sends fixed outer offset+limits
+	tOut.SendString ( NULL );
 
 	// master-agent extensions
 	tOut.SendDword ( q.m_eCollation ); // v.1
@@ -6253,6 +6256,17 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 		// fetch optional stuff
 		if ( uFlags & QFLAG_MAX_PREDICTED_TIME )
 			tQuery.m_iMaxPredictedMsec = tReq.GetInt();
+	}
+
+	// v.1.29
+	if ( iVer>=0x11D )
+	{
+		tQuery.m_sOuterOrderBy = tReq.GetString();
+		if ( !tQuery.m_sOuterOrderBy.IsEmpty() )
+		{
+			tQuery.m_iOuterOffset = tReq.GetDword();
+			tQuery.m_iOuterLimit = tReq.GetDword();
+		}
 	}
 
 	// extension v.1
@@ -15916,7 +15930,6 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 		if ( uMysqlCmd==MYSQL_COM_QUERY && bKeepProfile )
 			tSession.m_tLastProfile = tSession.m_tProfile;
 		tOut.m_pProfile = NULL;
-
 	} // for (;;)
 
 	// set off query guard

@@ -31,7 +31,7 @@ SEARCHD_COMMAND_STATUS		= 5
 SEARCHD_COMMAND_FLUSHATTRS	= 7
 
 # current client-side command implementation versions
-VER_COMMAND_SEARCH		= 0x11C
+VER_COMMAND_SEARCH		= 0x11D
 VER_COMMAND_EXCERPT		= 0x104
 VER_COMMAND_UPDATE		= 0x103
 VER_COMMAND_KEYWORDS	= 0x100
@@ -141,18 +141,21 @@ class SphinxClient:
 		self._indexweights	= {}							# per-index weights
 		self._ranker		= SPH_RANK_PROXIMITY_BM25		# ranking mode
 		self._rankexpr		= ''							# ranking expression for SPH_RANK_EXPR
-		self._maxquerytime	= 0								# max query time, milliseconds (default is 0, do not limit)
-		self._timeout = 1.0										# connection timeout
+		self._maxquerytime	= 0						# max query time, milliseconds (default is 0, do not limit)
+		self._timeout = 1.0								# connection timeout
 		self._fieldweights	= {}							# per-field-name weights
 		self._overrides		= {}							# per-query attribute values overrides
-		self._select		= '*'							# select-list (attributes or expressions, with optional aliases)
+		self._select		= '*'								# select-list (attributes or expressions, with optional aliases)
+		self._query_flags	= 0							# per-query various flags
+		self._predictedtime = 0							# per-query max_predicted_time
+		self._outerorderby = ''							# outer match sort by
+		self._outeroffset = 0								# outer offset
+		self._outerlimit = 0								# outer limit
 		
 		self._error			= ''							# last error message
 		self._warning		= ''							# last warning message
 		self._reqs			= []							# requests array for multi-query
-		self._query_flags	= 0							# per-query various flags
-		self._predictedtime = 0							# per-query max_predicted_time
-
+		
 	def __del__ (self):
 		if self._socket:
 			self._socket.close()
@@ -506,6 +509,16 @@ class SphinxClient:
 		if name=="idf":
 			self._query_flags = SetBit ( self._query_flags, 4, value=="plain" )
 
+	def SetOuter ( self, orderby, offset, limit ):
+		assert(isinstance(orderby, str))
+		assert(isinstance(offset, (int, long)))
+		assert(isinstance(limit, (int, long)))
+		assert ( offset>=0 )
+		assert ( limit>0 )
+
+		self._outerorderby = orderby
+		self._outeroffset = offset
+		self._outerlimit = limit
 			
 	def ResetOverrides (self):
 		self._overrides = {}
@@ -655,6 +668,13 @@ class SphinxClient:
 		if self._predictedtime>0:
 			req.append ( pack('>L', self._predictedtime ) )
 
+		# outer
+		if len(self._outerorderby) == 0:
+			req.append ( pack ('>L', 0))
+		else:
+			req.append ( pack('>L',len(self._outerorderby)) + self._outerorderby )
+			req.append ( pack ( '>2L', self._outeroffset, self._outerlimit ) )
+			
 		# send query, get response
 		req = ''.join(req)
 

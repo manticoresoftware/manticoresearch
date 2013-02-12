@@ -29,7 +29,7 @@ define ( "SEARCHD_COMMAND_STATUS",		5 );
 define ( "SEARCHD_COMMAND_FLUSHATTRS",	7 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x11C );
+define ( "VER_COMMAND_SEARCH",		0x11D );
 define ( "VER_COMMAND_EXCERPT",		0x104 );
 define ( "VER_COMMAND_UPDATE",		0x103 );
 define ( "VER_COMMAND_KEYWORDS",	0x100 );
@@ -428,6 +428,9 @@ class SphinxClient
 	var $_select;		///< select-list (attributes or expressions, with optional aliases)
 	var $_query_flags; ///< per-query various flags
 	var $_predictedtime; ///< per-query max_predicted_time
+	var $_outerorderby; ///< outer match sort by
+	var $_outeroffset; ///< outer offset
+	var $_outerlimit; ///< outer limit
 
 	var $_error;		///< last error message
 	var $_warning;		///< last warning message
@@ -967,7 +970,22 @@ class SphinxClient
 		if ( $flag_name=="boolean_simplify" )	$this->_query_flags = SetBit ( $this->_query_flags, 3, $flag_value );
 		if ( $flag_name=="idf" )	$this->_query_flags = SetBit ( $this->_query_flags, 4, $flag_value=="plain" );
 	}
+	
+	/// set outer order by parameters
+	function SetOuter ( $orderby, $offset, $limit )
+	{
+		assert ( is_string($orderby) );
+		assert ( is_int($offset) );
+		assert ( is_int($limit) );
+		assert ( $offset>=0 );
+		assert ( $limit>0 );
 
+		$this->_outerorderby = $orderby;
+		$this->_outeroffset = $offset;
+		$this->_outerlimit = $limit;
+	}
+
+	
 	//////////////////////////////////////////////////////////////////////////////
 
 	/// clear all filters (for multi-queries)
@@ -1141,6 +1159,15 @@ class SphinxClient
 		// max_predicted_time
 		if ( $this->_predictedtime>0 )
 			$req .= pack ( "N", (int)$this->_predictedtime );
+			
+		if ( empty($this->_outerorderby) )
+		{
+			$req .= pack ( "N", 0 );
+		} else
+		{		 
+			$req .= pack ( "N", strlen($this->_outerorderby) ) . $this->_outerorderby;
+			$req .= pack ( "NN", $this->_outeroffset, $this->_outerlimit );
+		}
 
 		// mbstring workaround
 		$this->_MBPop ();

@@ -170,6 +170,10 @@ struct st_sphinx_client
 	const char *			select_list;
 	int						query_flags;
 	int						predicted_time;
+	const char *			outer_orderby;
+	int						outer_offset;
+	int						outer_limit;
+
 
 	int						num_reqs;
 	int						req_lens [ MAX_REQS ];
@@ -204,7 +208,7 @@ sphinx_client * sphinx_create ( sphinx_bool copy_args )
 		return NULL;
 
 	// initialize defaults and return
-	client->ver_search				= 0x11C; // 0x113 for 0.9.8, 0x116 for 0.9.9rc2
+	client->ver_search				= 0x11D; // 0x113 for 0.9.8, 0x116 for 0.9.9rc2
 	client->copy_args				= copy_args;
 	client->head_alloc				= NULL;
 
@@ -254,6 +258,9 @@ sphinx_client * sphinx_create ( sphinx_bool copy_args )
 	client->select_list				= NULL;
 	client->query_flags				= 0;
 	client->predicted_time			= 0;
+	client->outer_orderby			= NULL;
+	client->outer_offset			= 0;
+	client->outer_limit				= 0;
 
 	client->num_reqs				= 0;
 	client->response_len			= 0;
@@ -884,7 +891,16 @@ void set_bit ( int * flags, int bit, sphinx_bool enable )
 
 sphinx_bool sphinx_set_query_flags ( sphinx_client * client, const char * flag_name, sphinx_bool enabled, int max_predicted_msec )
 {
-	if ( !flag_name || !*flag_name )
+	if ( !client )
+		return SPH_FALSE;
+
+	if ( client->ver_search<0x11B )
+	{
+		set_error ( client, "sphinx_set_query_flags not supported by chosen protocol version" );
+		return SPH_FALSE;
+	}
+
+	if ( !flag_name || !flag_name[0] )
 	{
 		set_error ( client, "invalid arguments (empty flag_name)" );
 		return SPH_FALSE;
@@ -925,6 +941,25 @@ void sphinx_reset_query_flag ( sphinx_client * client )
 {
 	client->query_flags = 0;
 	client->predicted_time = 0;
+}
+
+
+sphinx_bool sphinx_set_outer ( sphinx_client * client, const char * orderby, int offset, int limit )
+{
+	if ( !client )
+		return SPH_FALSE;
+
+	if ( client->ver_search<0x11D )
+	{
+		set_error ( client, "sphinx_set_outer not supported by chosen protocol version" );
+		return SPH_FALSE;
+	}
+
+	unchain ( client, client->outer_orderby );
+	client->outer_orderby = strchain ( client, orderby );
+	client->outer_offset = offset;
+	client->outer_limit = limit;
+	return SPH_TRUE;
 }
 
 
@@ -1063,6 +1098,15 @@ static int calc_req_len ( sphinx_client * client, const char * query, const char
 
 	if ( client->ver_search>=0x11B )
 		res += 4 + ( client->predicted_time>0 ? 4 : 0 );
+
+	if ( client->ver_search>=0x11D )
+	{
+		// string outer order by + int outer offset + int outer limit
+		if ( safestrlen ( client->outer_orderby )>0 )
+			res += safestrlen ( client->outer_orderby ) + 12;
+		else
+			res += 4;
+	}
 
 	return (int)res;
 }
@@ -1269,6 +1313,19 @@ int sphinx_add_query ( sphinx_client * client, const char * query, const char * 
 
 	if ( client->ver_search>=0x11B && client->predicted_time>0 )
 		send_int ( &req, client->predicted_time );
+
+	if ( client->ver_search>=0x11D )
+	{
+		if ( safestrlen ( client->outer_orderby )>0 )
+		{
+			send_str ( &req, client->outer_orderby );
+			send_int ( &req, client->outer_offset );
+			send_int ( &req, client->outer_limit );
+		} else
+		{
+			send_str ( &req, NULL );
+		}
+	}
 
 	if ( !req )
 	{

@@ -7856,7 +7856,7 @@ struct GenericMatchSort_fn : public CSphMatchComparatorState
 				return ( ( m_uAttrDesc>>i ) & 1 ) ^ ( a->m_iDocID < b->m_iDocID );
 
 			case SPH_KEYPART_WEIGHT:
-				if ( a->m_iDocID==b->m_iDocID )
+				if ( a->m_iWeight==b->m_iWeight )
 					continue;
 				return ( ( m_uAttrDesc>>i ) & 1 ) ^ ( a->m_iWeight < b->m_iWeight );
 

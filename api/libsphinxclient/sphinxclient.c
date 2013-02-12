@@ -168,6 +168,8 @@ struct st_sphinx_client
 	int						max_overrides;
 	struct st_override *	overrides;
 	const char *			select_list;
+	int						query_flags;
+	int						predicted_time;
 
 	int						num_reqs;
 	int						req_lens [ MAX_REQS ];
@@ -202,7 +204,7 @@ sphinx_client * sphinx_create ( sphinx_bool copy_args )
 		return NULL;
 
 	// initialize defaults and return
-	client->ver_search				= 0x119; // 0x113 for 0.9.8, 0x116 for 0.9.9rc2
+	client->ver_search				= 0x11C; // 0x113 for 0.9.8, 0x116 for 0.9.9rc2
 	client->copy_args				= copy_args;
 	client->head_alloc				= NULL;
 
@@ -250,6 +252,8 @@ sphinx_client * sphinx_create ( sphinx_bool copy_args )
 	client->max_overrides			= 0;
 	client->overrides				= NULL;
 	client->select_list				= NULL;
+	client->query_flags				= 0;
+	client->predicted_time			= 0;
 
 	client->num_reqs				= 0;
 	client->response_len			= 0;
@@ -868,6 +872,62 @@ sphinx_bool sphinx_set_select ( sphinx_client * client, const char * select_list
 }
 
 
+void set_bit ( int * flags, int bit, sphinx_bool enable )
+{
+	int bit_mask = 1<<bit;
+	if ( enable )
+		*flags |= bit_mask;
+	else
+		*flags &= ( 0xff ^ bit_mask );
+}
+
+
+sphinx_bool sphinx_set_query_flags ( sphinx_client * client, const char * flag_name, sphinx_bool enabled, int max_predicted_msec )
+{
+	if ( !flag_name || !*flag_name )
+	{
+		set_error ( client, "invalid arguments (empty flag_name)" );
+		return SPH_FALSE;
+	}
+	if ( strcmp ( flag_name, "max_predicted_time")==0 && max_predicted_msec<0 )
+	{
+		set_error ( client, "invalid arguments (max_predicted_time must be >0)" );
+		return SPH_FALSE;
+	}
+
+	if ( strcmp ( flag_name, "reverse_scan")==0 )
+	{
+		set_bit ( &client->query_flags, 0, enabled );
+	} else if ( strcmp ( flag_name, "sort_method_kbuffer")==0 )
+	{
+			set_bit ( &client->query_flags, 1, enabled );
+	} else if ( strcmp ( flag_name, "max_predicted_time")==0 )
+	{
+		client->predicted_time = max_predicted_msec;
+		set_bit ( &client->query_flags, 2, max_predicted_msec>0 );
+	} else if ( strcmp ( flag_name, "boolean_simplify")==0 )
+	{
+		set_bit ( &client->query_flags, 3, enabled );
+	} else if ( strcmp ( flag_name, "idf_plain")==0 )
+	{
+		set_bit ( &client->query_flags, 4, enabled );
+	} else
+	{
+		set_error ( client, "invalid arguments (unknown flag_name)" );
+		return SPH_FALSE;
+	}
+
+	return SPH_TRUE;
+}
+
+
+void sphinx_reset_query_flag ( sphinx_client * client )
+{
+	client->query_flags = 0;
+	client->predicted_time = 0;
+}
+
+
 void sphinx_reset_filters ( sphinx_client * client )
 {
 	int i;
@@ -1001,6 +1061,9 @@ static int calc_req_len ( sphinx_client * client, const char * query, const char
 	if ( client->ver_search>=0x116 )
 		res += 4 + safestrlen ( client->select_list ); // string select_list
 
+	if ( client->ver_search>=0x11B )
+		res += 4 + ( client->predicted_time>0 ? 4 : 0 );
+
 	return (int)res;
 }
 
@@ -1090,6 +1153,9 @@ int sphinx_add_query ( sphinx_client * client, const char * query, const char * 
 	client->reqs[client->num_reqs] = req;
 	client->req_lens[client->num_reqs] = req_len;
 	client->num_reqs++;
+
+	if ( client->ver_search>=0x11B )
+		send_int ( &req, client->query_flags );
 
 	send_int ( &req, client->offset );
 	send_int ( &req, client->limit );
@@ -1200,6 +1266,9 @@ int sphinx_add_query ( sphinx_client * client, const char * query, const char * 
 
 	if ( client->ver_search>=0x116 )
 		send_str ( &req, client->select_list );
+
+	if ( client->ver_search>=0x11B && client->predicted_time>0 )
+		send_int ( &req, client->predicted_time );
 
 	if ( !req )
 	{
@@ -1941,6 +2010,11 @@ sphinx_result * sphinx_run_queries ( sphinx_client * client )
 					case SPH_ATTR_FLOAT:	pval->float_value = unpack_float ( &p ); break;
 					case SPH_ATTR_BIGINT:	pval->int_value = unpack_qword ( &p ); break;
 					case SPH_ATTR_STRING:	pval->string = unpack_str ( &p ); break;
+					case SPH_ATTR_FACTORS:
+						len = unpack_int ( &p );
+						if ( len )
+							p += len-sizeof(unsigned int);
+						break;
 					default:				pval->int_value = unpack_int ( &p ); break;
 				}
 				pval++;

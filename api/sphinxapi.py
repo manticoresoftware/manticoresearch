@@ -31,7 +31,7 @@ SEARCHD_COMMAND_STATUS		= 5
 SEARCHD_COMMAND_FLUSHATTRS	= 7
 
 # current client-side command implementation versions
-VER_COMMAND_SEARCH		= 0x119
+VER_COMMAND_SEARCH		= 0x11C
 VER_COMMAND_EXCERPT		= 0x104
 VER_COMMAND_UPDATE		= 0x103
 VER_COMMAND_KEYWORDS	= 0x100
@@ -87,6 +87,7 @@ SPH_ATTR_BOOL			= 4
 SPH_ATTR_FLOAT			= 5
 SPH_ATTR_BIGINT			= 6
 SPH_ATTR_STRING			= 7
+SPH_ATTR_FACTORS		= 1001
 SPH_ATTR_MULTI			= 0X40000001L
 SPH_ATTR_MULTI64		= 0X40000002L
 
@@ -149,6 +150,8 @@ class SphinxClient:
 		self._error			= ''							# last error message
 		self._warning		= ''							# last warning message
 		self._reqs			= []							# requests array for multi-query
+		self._query_flags	= 0							# per-query various flags
+		self._predictedtime = 0							# per-query max_predicted_time
 
 	def __del__ (self):
 		if self._socket:
@@ -485,7 +488,25 @@ class SphinxClient:
 		assert(isinstance(select, str))
 		self._select = select
 
+	def SetQueryFlag ( self, name, value ):
+		known_names = [ "reverse_scan", "sort_method", "max_predicted_time", "boolean_simplify", "idf" ]
+		flags = { "reverse_scan":[0, 1], "sort_method":["pq", "kbuffer"],"max_predicted_time":[0], "boolean_simplify":[True, False], "idf":["normalized", "plain"] }
+		assert ( name in known_names )
+		assert ( value in flags[name] or ( name=="max_predicted_time" and isinstance(value, (int, long)) and value>=0))
+		
+		if name=="reverse_scan":
+			self._query_flags = SetBit ( self._query_flags, 0, value==1 )
+		if name=="sort_method":
+			self._query_flags = SetBit ( self._query_flags, 1, value=="kbuffer" )
+		if name=="max_predicted_time":
+			self._query_flags = SetBit ( self._query_flags, 2, value>0 )
+			self._predictedtime = int(value)
+		if name=="boolean_simplify":
+			self._query_flags= SetBit ( self._query_flags, 3, value )
+		if name=="idf":
+			self._query_flags = SetBit ( self._query_flags, 4, value=="plain" )
 
+			
 	def ResetOverrides (self):
 		self._overrides = {}
 
@@ -507,6 +528,9 @@ class SphinxClient:
 		self._groupsort = '@group desc'
 		self._groupdistinct = ''
 
+	def ResetQueryFlag (self):
+		self._query_flags = 0
+		self._predictedtime = 0
 
 	def Query (self, query, index='*', comment=''):
 		"""
@@ -533,7 +557,7 @@ class SphinxClient:
 		"""
 		# build request
 		req = []
-		req.append(pack('>4L', self._offset, self._limit, self._mode, self._ranker))
+		req.append(pack('>5L', self._query_flags, self._offset, self._limit, self._mode, self._ranker))
 		if self._ranker==SPH_RANK_EXPR:
 			req.append(pack('>L', len(self._rankexpr)))
 			req.append(self._rankexpr)
@@ -628,6 +652,8 @@ class SphinxClient:
 		# select-list
 		req.append ( pack('>L', len(self._select)) )
 		req.append ( self._select )
+		if self._predictedtime>0:
+			req.append ( pack('>L', self._predictedtime ) )
 
 		# send query, get response
 		req = ''.join(req)
@@ -746,6 +772,14 @@ class SphinxClient:
 						if slen>0:
 							match['attrs'][attrs[i][0]] = response[p:p+slen]
 						p += slen-4
+					elif attrs[i][1] == SPH_ATTR_FACTORS:
+						slen = unpack('>L', response[p:p+4])[0]
+						p += 4
+						match['attrs'][attrs[i][0]] = ''
+						if slen>0:
+							match['attrs'][attrs[i][0]] = response[p:p+slen-4]
+							p += slen-4
+						p -= 4
 					elif attrs[i][1] == SPH_ATTR_MULTI:
 						match['attrs'][attrs[i][0]] = []
 						nvals = unpack('>L', response[p:p+4])[0]
@@ -1132,7 +1166,17 @@ def AssertInt32 ( value ):
 def AssertUInt32 ( value ):
 	assert(isinstance(value, (int, long)))
 	assert(value>=0 and value<=2**32-1)
-		
+
+def SetBit ( flag, bit, on ):
+	if on:
+		flag += ( 1<<bit )
+	else:
+		reset = 255 ^ ( 1<<bit )
+		flag = flag & reset
+
+	return flag
+
+	
 #
 # $Id$
 #

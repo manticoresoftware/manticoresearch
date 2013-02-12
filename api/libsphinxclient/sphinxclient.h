@@ -87,6 +87,7 @@ enum
 	SPH_ATTR_FLOAT			= 5,
 	SPH_ATTR_BIGINT			= 6,
 	SPH_ATTR_STRING			= 7,
+	SPH_ATTR_FACTORS		= 1001,
 	SPH_ATTR_MULTI			= 0x40000001UL,
 	SPH_ATTR_MULTI64		= 0x40000002UL
 };
@@ -218,6 +219,9 @@ sphinx_bool					sphinx_set_groupby_distinct		( sphinx_client * client, const cha
 sphinx_bool					sphinx_set_retries				( sphinx_client * client, int count, int delay );
 sphinx_bool					sphinx_add_override				( sphinx_client * client, const char * attr, const sphinx_uint64_t * docids, int num_values, const unsigned int * values );
 sphinx_bool					sphinx_set_select				( sphinx_client * client, const char * select_list );
+
+sphinx_bool					sphinx_set_query_flags			( sphinx_client * client, const char * flag_name, sphinx_bool enabled, int max_predicted_msec );
+void						sphinx_reset_query_flags		( sphinx_client * client );
 
 void						sphinx_reset_filters			( sphinx_client * client );
 void						sphinx_reset_groupby			( sphinx_client * client );

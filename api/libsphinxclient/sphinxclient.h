@@ -222,7 +222,8 @@ sphinx_bool					sphinx_set_select				( sphinx_client * client, const char * sele
 
 sphinx_bool					sphinx_set_query_flags			( sphinx_client * client, const char * flag_name, sphinx_bool enabled, int max_predicted_msec );
 void						sphinx_reset_query_flags		( sphinx_client * client );
-sphinx_bool					sphinx_set_outer				( sphinx_client * client, const char * orderby, int offset, int limit );
+sphinx_bool					sphinx_set_outer_select			( sphinx_client * client, const char * orderby, int offset, int limit );
+void						sphinx_reset_outer_select		( sphinx_client * client );
 
 void						sphinx_reset_filters			( sphinx_client * client );
 void						sphinx_reset_groupby			( sphinx_client * client );

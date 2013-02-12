@@ -2454,6 +2454,7 @@ public:
 	CSphString		m_sOuterOrderBy;	///< temporary (?) subselect hack
 	int				m_iOuterOffset;		///< keep and apply outer offset at master
 	int				m_iOuterLimit;
+	bool			m_bHasOuter;
 
 	bool			m_bReverseScan;		///< perform scan in reverse order
 	bool			m_bIgnoreNonexistent; ///< whether to warning or not about non-existent columns in select list

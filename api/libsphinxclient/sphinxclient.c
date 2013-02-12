@@ -173,6 +173,7 @@ struct st_sphinx_client
 	const char *			outer_orderby;
 	int						outer_offset;
 	int						outer_limit;
+	sphinx_bool				has_outer;
 
 
 	int						num_reqs;
@@ -261,6 +262,7 @@ sphinx_client * sphinx_create ( sphinx_bool copy_args )
 	client->outer_orderby			= NULL;
 	client->outer_offset			= 0;
 	client->outer_limit				= 0;
+	client->has_outer				= SPH_FALSE;
 
 	client->num_reqs				= 0;
 	client->response_len			= 0;
@@ -944,7 +946,7 @@ void sphinx_reset_query_flag ( sphinx_client * client )
 }
 
 
-sphinx_bool sphinx_set_outer ( sphinx_client * client, const char * orderby, int offset, int limit )
+sphinx_bool sphinx_set_outer_select ( sphinx_client * client, const char * orderby, int offset, int limit )
 {
 	if ( !client )
 		return SPH_FALSE;
@@ -959,7 +961,21 @@ sphinx_bool sphinx_set_outer ( sphinx_client * client, const char * orderby, int
 	client->outer_orderby = strchain ( client, orderby );
 	client->outer_offset = offset;
 	client->outer_limit = limit;
+	client->has_outer = SPH_TRUE;
 	return SPH_TRUE;
+}
+
+
+void sphinx_reset_outer_select ( sphinx_client * client )
+{
+	if ( !client )
+		return;
+
+	unchain ( client, client->outer_orderby );
+	client->outer_orderby = NULL;
+	client->outer_offset = 0;
+	client->outer_limit = 0;
+	client->has_outer = SPH_FALSE;
 }
 
 
@@ -1100,13 +1116,7 @@ static int calc_req_len ( sphinx_client * client, const char * query, const char
 		res += 4 + ( client->predicted_time>0 ? 4 : 0 );
 
 	if ( client->ver_search>=0x11D )
-	{
-		// string outer order by + int outer offset + int outer limit
-		if ( safestrlen ( client->outer_orderby )>0 )
-			res += safestrlen ( client->outer_orderby ) + 12;
-		else
-			res += 4;
-	}
+		res += safestrlen ( client->outer_orderby ) + 16; // string outer order by + int outer offset + int outer limit + has outer flag
 
 	return (int)res;
 }
@@ -1316,15 +1326,10 @@ int sphinx_add_query ( sphinx_client * client, const char * query, const char * 
 
 	if ( client->ver_search>=0x11D )
 	{
-		if ( safestrlen ( client->outer_orderby )>0 )
-		{
-			send_str ( &req, client->outer_orderby );
-			send_int ( &req, client->outer_offset );
-			send_int ( &req, client->outer_limit );
-		} else
-		{
-			send_str ( &req, NULL );
-		}
+		send_str ( &req, client->outer_orderby );
+		send_int ( &req, client->outer_offset );
+		send_int ( &req, client->outer_limit );
+		send_int ( &req, client->has_outer );
 	}
 
 	if ( !req )

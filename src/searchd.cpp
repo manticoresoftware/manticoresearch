@@ -5233,7 +5233,7 @@ protected:
 
 int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuery & q ) const
 {
-	int iReqSize = 120 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
+	int iReqSize = 132 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
 		+ q.m_sSortBy.Length()
 		+ strlen ( sIndexes )
 		+ q.m_sGroupBy.Length()
@@ -5267,7 +5267,7 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 	ARRAY_FOREACH ( i, q.m_dOverrides )
 		iReqSize += 12 + q.m_dOverrides[i].m_sAttr.Length() + // string attr-name; int type; int values-count
 			( q.m_dOverrides[i].m_eAttrType==SPH_ATTR_BIGINT ? 16 : 12 )*q.m_dOverrides[i].m_dValues.GetLength(); // ( bigint id; int/float/bigint value )[] values
-	if ( !q.m_sOuterOrderBy.IsEmpty() )
+	if ( q.m_bHasOuter )
 		iReqSize += 4; // outer limit
 	if ( q.m_iMaxPredictedMsec>0 )
 		iReqSize += 4;
@@ -5303,7 +5303,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 
 	// The Search Legacy
 	tOut.SendInt ( 0 ); // offset is 0
-	if ( q.m_sOuterOrderBy.IsEmpty() )
+	if ( !q.m_bHasOuter )
 	{
 		if ( m_iDivideLimits==1 )
 			tOut.SendInt ( q.m_iMaxMatches ); // OPTIMIZE? normally, agent limit is max_matches, even if master limit is less
@@ -5413,13 +5413,16 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	if ( q.m_iMaxPredictedMsec>0 )
 		tOut.SendInt ( q.m_iMaxPredictedMsec );
 
-	// emulate empty client order by (client ver 1.29) as master sends fixed outer offset+limits
+	// emulate empty sud-select for agent (client ver 1.29) as master sends fixed outer offset+limits
 	tOut.SendString ( NULL );
+	tOut.SendInt ( 0 );
+	tOut.SendInt ( 0 );
+	tOut.SendInt ( q.m_bHasOuter );
 
 	// master-agent extensions
 	tOut.SendDword ( q.m_eCollation ); // v.1
 	tOut.SendString ( q.m_sOuterOrderBy.cstr() ); // v.2
-	if ( !q.m_sOuterOrderBy.IsEmpty() )
+	if ( q.m_bHasOuter )
 		tOut.SendInt ( q.m_iOuterOffset + q.m_iOuterLimit );
 }
 
@@ -5871,7 +5874,7 @@ void CheckQuery ( const CSphQuery & tQuery, CSphString & sError )
 		sError.SetSprintf ( "retry delay out of bounds (delay=%d)", tQuery.m_iRetryDelay );
 		return;
 	}
-	if ( tQuery.m_iOffset>0 && !tQuery.m_sOuterOrderBy.IsEmpty() )
+	if ( tQuery.m_iOffset>0 && tQuery.m_bHasOuter )
 	{
 		sError.SetSprintf ( "inner offset must be 0 when using outer order by" );
 		return;
@@ -5933,6 +5936,13 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 		case SPH_MATCH_ANY:		pQuery->m_eRanker = SPH_RANK_MATCHANY; strncpy ( szRes, "\"/1", 8 ); break;
 		case SPH_MATCH_PHRASE:	pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes++ = '\"'; *szRes = '\0'; break;
 		default:				return;
+	}
+
+	if ( !pQuery->m_bHasOuter )
+	{
+		pQuery->m_sOuterOrderBy = "";
+		pQuery->m_iOuterOffset = 0;
+		pQuery->m_iOuterLimit = 0;
 	}
 }
 
@@ -6262,11 +6272,9 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 	if ( iVer>=0x11D )
 	{
 		tQuery.m_sOuterOrderBy = tReq.GetString();
-		if ( !tQuery.m_sOuterOrderBy.IsEmpty() )
-		{
-			tQuery.m_iOuterOffset = tReq.GetDword();
-			tQuery.m_iOuterLimit = tReq.GetDword();
-		}
+		tQuery.m_iOuterOffset = tReq.GetDword();
+		tQuery.m_iOuterLimit = tReq.GetDword();
+		tQuery.m_bHasOuter = ( tReq.GetInt()!=0 );
 	}
 
 	// extension v.1
@@ -6278,7 +6286,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 	if ( iMasterVer>=2 )
 	{
 		tQuery.m_sOuterOrderBy = tReq.GetString();
-		if ( !tQuery.m_sOuterOrderBy.IsEmpty() )
+		if ( tQuery.m_bHasOuter )
 			tQuery.m_iOuterLimit = tReq.GetInt();
 	}
 
@@ -6601,7 +6609,7 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 	// format request as SELECT query
 	///////////////////////////////////
 
-	if ( !q.m_sOuterOrderBy.IsEmpty() )
+	if ( q.m_bHasOuter )
 		tBuf.Append ( "SELECT * FROM (" );
 
 	tBuf.Append ( "SELECT %s FROM %s", q.m_sSelect.cstr(), q.m_sIndexes.cstr() );
@@ -6760,9 +6768,11 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 	}
 
 	// outer order by, limit
-	if ( !q.m_sOuterOrderBy.IsEmpty() )
+	if ( q.m_bHasOuter )
 	{
-		tBuf.Append ( ") ORDER BY %s", q.m_sOuterOrderBy.cstr() );
+		tBuf.Append ( ")" );
+		if ( !q.m_sOuterOrderBy.IsEmpty() )
+			tBuf.Append ( " ORDER BY %s", q.m_sOuterOrderBy.cstr() );
 		if ( q.m_iOuterOffset>0 )
 			tBuf.Append ( " LIMIT %d, %d", q.m_iOuterOffset, q.m_iOuterLimit );
 		else if ( q.m_iOuterLimit>0 )
@@ -8127,11 +8137,13 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	// this is a good time to apply outer order clause, too
 	if ( tRes.m_iSuccesses>1 )
 	{
+		ESphSortOrder eQuerySort = ( tQuery.m_sOuterOrderBy.IsEmpty() ? SPH_SORT_RELEVANCE : SPH_SORT_EXTENDED );
 		// got outer order? gotta do a couple things
-		if ( !tQuery.m_sOuterOrderBy.IsEmpty() )
+		if ( tQuery.m_bHasOuter )
 		{
 			// first, temporarily patch up sorting clause and max_matches (we will restore them later)
 			Swap ( tQuery.m_sOuterOrderBy, tQuery.m_sGroupBy.IsEmpty() ? tQuery.m_sSortBy : tQuery.m_sGroupSortBy );
+			Swap ( eQuerySort, tQuery.m_eSort );
 			tQuery.m_iMaxMatches *= tRes.m_dMatchCounts.GetLength();
 			// FIXME? probably not right; 20 shards with by 300 matches might be too much
 			// but propagating too small inner max_matches to the outer is not right either
@@ -8163,9 +8175,10 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, tRes.m_tSchema, tRes.m_sError, false );
 
 		// restore outer order related patches, or it screws up the query log
-		if ( !tQuery.m_sOuterOrderBy.IsEmpty() )
+		if ( tQuery.m_bHasOuter )
 		{
 			Swap ( tQuery.m_sOuterOrderBy, tQuery.m_sGroupBy.IsEmpty() ? tQuery.m_sSortBy : tQuery.m_sGroupSortBy );
+			Swap ( eQuerySort, tQuery.m_eSort );
 			tQuery.m_iMaxMatches /= tRes.m_dMatchCounts.GetLength();
 		}
 
@@ -8200,11 +8213,12 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 
 	// apply outer order clause to single result set
 	// (multiple combined sets just got reordered above)
-	if ( tRes.m_iSuccesses==1 && !tQuery.m_sOuterOrderBy.IsEmpty() )
-	{
-		// apply inner limit
+	// apply inner limit first
+	if ( tRes.m_iSuccesses==1 && tQuery.m_bHasOuter )
 		tRes.ClampMatches ( tQuery.m_iLimit, bAllEqual );
 
+	if ( tRes.m_iSuccesses==1 && tQuery.m_bHasOuter && !tQuery.m_sOuterOrderBy.IsEmpty() )
+	{
 		// reorder (aka outer order)
 		ESphSortFunc eFunc;
 		GenericMatchSort_fn tReorder;

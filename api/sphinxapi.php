@@ -431,6 +431,7 @@ class SphinxClient
 	var $_outerorderby; ///< outer match sort by
 	var $_outeroffset; ///< outer offset
 	var $_outerlimit; ///< outer limit
+	var $_hasouter;
 
 	var $_error;		///< last error message
 	var $_warning;		///< last warning message
@@ -482,6 +483,10 @@ class SphinxClient
 		$this->_select		= "*";
 		$this->_query_flags = 0;
 		$this->_predictedtime = 0;
+		$this->_outerorderby = "";
+		$this->_outeroffset = 0;
+		$this->_outerlimit = 0;
+		$this->_hasouter = false;
 
 		$this->_error		= ""; // per-reply fields (for single-query case)
 		$this->_warning		= "";
@@ -972,7 +977,7 @@ class SphinxClient
 	}
 	
 	/// set outer order by parameters
-	function SetOuter ( $orderby, $offset, $limit )
+	function SetOuterSelect ( $orderby, $offset, $limit )
 	{
 		assert ( is_string($orderby) );
 		assert ( is_int($offset) );
@@ -983,6 +988,7 @@ class SphinxClient
 		$this->_outerorderby = $orderby;
 		$this->_outeroffset = $offset;
 		$this->_outerlimit = $limit;
+		$this->_hasouter = true;
 	}
 
 	
@@ -1014,6 +1020,14 @@ class SphinxClient
 	{
 		$this->_query_flags = 0;
 		$this->_predictedtime = 0;
+	}
+
+	function ResetOuterSelect ()
+	{
+		$this->_outerorderby = '';
+		$this->_outeroffset = 0;
+		$this->_outerlimit = 0;
+		$this->_hasouter = false;
 	}
 
 	//////////////////////////////////////////////////////////////////////////////
@@ -1160,14 +1174,12 @@ class SphinxClient
 		if ( $this->_predictedtime>0 )
 			$req .= pack ( "N", (int)$this->_predictedtime );
 			
-		if ( empty($this->_outerorderby) )
-		{
+		$req .= pack ( "N", strlen($this->_outerorderby) ) . $this->_outerorderby;
+		$req .= pack ( "NN", $this->_outeroffset, $this->_outerlimit );
+		if ( $this->_hasouter )
+			$req .= pack ( "N", 1 );
+		else
 			$req .= pack ( "N", 0 );
-		} else
-		{		 
-			$req .= pack ( "N", strlen($this->_outerorderby) ) . $this->_outerorderby;
-			$req .= pack ( "NN", $this->_outeroffset, $this->_outerlimit );
-		}
 
 		// mbstring workaround
 		$this->_MBPop ();

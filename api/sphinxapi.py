@@ -151,6 +151,7 @@ class SphinxClient:
 		self._outerorderby = ''							# outer match sort by
 		self._outeroffset = 0								# outer offset
 		self._outerlimit = 0								# outer limit
+		self._hasouter = False							# sub-select enabled
 		
 		self._error			= ''							# last error message
 		self._warning		= ''							# last warning message
@@ -509,7 +510,7 @@ class SphinxClient:
 		if name=="idf":
 			self._query_flags = SetBit ( self._query_flags, 4, value=="plain" )
 
-	def SetOuter ( self, orderby, offset, limit ):
+	def SetOuterSelect ( self, orderby, offset, limit ):
 		assert(isinstance(orderby, str))
 		assert(isinstance(offset, (int, long)))
 		assert(isinstance(limit, (int, long)))
@@ -519,6 +520,7 @@ class SphinxClient:
 		self._outerorderby = orderby
 		self._outeroffset = offset
 		self._outerlimit = limit
+		self._hasouter = True
 			
 	def ResetOverrides (self):
 		self._overrides = {}
@@ -544,6 +546,12 @@ class SphinxClient:
 	def ResetQueryFlag (self):
 		self._query_flags = 0
 		self._predictedtime = 0
+		
+	def ResetOuterSelect (self):
+		self._outerorderby = ''
+		self._outeroffset = 0
+		self._outerlimit = 0
+		self._hasouter = False
 
 	def Query (self, query, index='*', comment=''):
 		"""
@@ -669,11 +677,12 @@ class SphinxClient:
 			req.append ( pack('>L', self._predictedtime ) )
 
 		# outer
-		if len(self._outerorderby) == 0:
-			req.append ( pack ('>L', 0))
+		req.append ( pack('>L',len(self._outerorderby)) + self._outerorderby )
+		req.append ( pack ( '>2L', self._outeroffset, self._outerlimit ) )
+		if self._hasouter:
+			req.append ( pack('>L', 1) )
 		else:
-			req.append ( pack('>L',len(self._outerorderby)) + self._outerorderby )
-			req.append ( pack ( '>2L', self._outeroffset, self._outerlimit ) )
+			req.append ( pack('>L', 0) )
 			
 		# send query, get response
 		req = ''.join(req)

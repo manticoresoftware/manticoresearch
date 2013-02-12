@@ -188,14 +188,11 @@ subselect_start:
 
 
 opt_outer_order:
-	// nothing
-		{
-			pParser->m_pQuery->m_sOuterOrderBy = pParser->m_pQuery->m_sOrderBy;
-		}
-	| TOK_ORDER TOK_BY order_items_list
+	TOK_ORDER TOK_BY order_items_list
 		{
 			pParser->m_pQuery->m_sOuterOrderBy.SetBinary ( pParser->m_pBuf+$3.m_iStart,
 				$3.m_iEnd-$3.m_iStart );
+			pParser->m_pQuery->m_bHasOuter = true;
 		}
 	;
 
@@ -204,11 +201,13 @@ opt_outer_limit:
 	| TOK_LIMIT TOK_CONST_INT
 		{
 			pParser->m_pQuery->m_iOuterLimit = $2.m_iValue;
+			pParser->m_pQuery->m_bHasOuter = true;
 		}
 	| TOK_LIMIT TOK_CONST_INT ',' TOK_CONST_INT
 		{
 			pParser->m_pQuery->m_iOuterOffset = $2.m_iValue;
 			pParser->m_pQuery->m_iOuterLimit = $4.m_iValue;
+			pParser->m_pQuery->m_bHasOuter = true;
 		}
 	;
 

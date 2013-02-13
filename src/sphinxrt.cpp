@@ -1417,7 +1417,13 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 
 	ISphHits * pHits = tSrc.IterateHits ( sError );
 	pAcc->GrabLastWarning ( sWarning );
-	return AddDocument ( pHits, tDoc, ppStr, dMvas, sError, sWarning );
+
+	if ( !AddDocument ( pHits, tDoc, ppStr, dMvas, sError, sWarning ) )
+		return false;
+
+	m_tStats.m_iTotalBytes += tSrc.GetStats().m_iTotalBytes;
+
+	return true;
 }
 
 

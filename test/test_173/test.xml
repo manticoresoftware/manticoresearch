@@ -51,11 +51,47 @@ index idxx
 	local = idx1
 }
 
+<!-- regression: warning from dist_threads local index got lost -->
+source src_warn: src
+{
+	sql_query_range = SELECT 1,2
+}
+
+index warn1
+{
+	source			= src_warn
+	path			= <data_path/>/warn1
+	min_prefix_len = 5
+	enable_star =1
+}
+
+index warn2
+{
+	source			= src_warn
+	path			= <data_path/>/warn2
+	min_prefix_len = 5
+	enable_star =1
+}
+
+index dist_warn
+{
+	type = distributed
+	local = warn1
+	local = warn2
+}
+
 </config>
 
 <sphqueries>
 <sphinxql>select attru, attru+attrs ss from idx</sphinxql>
 <sphinxql>select attru, attru+attrs ss from idxx</sphinxql>
+<!-- regression: warning from dist_threads local index got lost -->
+<sphinxql>select * from warn1 where match (' the box* ' )</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from dist_warn where match (' the box* ' )</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from warn1, warn2 where match (' the box* ' )</sphinxql>
+<sphinxql>show meta</sphinxql>
 </sphqueries>
 
 <db_create>

@@ -9169,6 +9169,9 @@ void SearchHandler_c::RunLocalSearchesMT ()
 
 			// extract matches from sorter
 			FlattenToRes ( pSorter, tRes );
+
+			if ( !tRaw.m_sWarning.IsEmpty() )
+				m_dFailuresSet[iQuery].Submit ( sLocal, tRaw.m_sWarning.cstr() );
 		}
 	}
 

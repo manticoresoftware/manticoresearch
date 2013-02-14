@@ -29,6 +29,25 @@ index test
 	path	= <data_path/>/test
 	docinfo	= extern
 }
+
+source utf1
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 101, CONCAT(CONCAT('12 dog ', UNHEX ('F4808080') ), '24 doggy show') title, 100 as idd
+	sql_attr_uint	= idd
+}
+
+index utf1
+{
+	source	= utf1
+	path	= <data_path/>/utf1
+	docinfo	= extern
+	charset_type = utf-8
+	enable_star = 1
+	min_infix_len = 3
+	dict = keywords	
+}
 </config>
 
 <db_create>
@@ -69,4 +88,17 @@ DROP TABLE IF EXISTS test_table;
 	<sphinxql>select * from test</sphinxql>
 </sphqueries>
 
+<custom_test><![CDATA[
+
+$client->AddQuery ( "dog \xF4\x80\x80\x8024", 'utf1' );
+$results = $client->RunQueries ();
+
+if ( is_array($results) )
+	for ( $i=0; $i<count($results); $i++ )
+		if ( is_array($results[$i]) )
+			unset ( $results[$i]["time"] );
+			
+$results[] = $client->BuildKeywords ( "dog \xF4\x80\x80\x8024", 'utf1', True );	
+]]></custom_test>
+			
 </test>

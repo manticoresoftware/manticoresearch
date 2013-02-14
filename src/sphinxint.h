@@ -920,17 +920,24 @@ inline int sphUTF8Decode ( BYTE * & pBuf )
 	if ( (_code)<0x80 ) \
 	{ \
 		*_ptr++ = (BYTE)( (_code) & 0x7F ); \
-	} else if ( iCode<0x800 ) \
+	} else if ( (_code)<0x800 ) \
 	{ \
 		_ptr[0] = (BYTE)( ( ((_code)>>6) & 0x1F ) | 0xC0 ); \
 		_ptr[1] = (BYTE)( ( (_code) & 0x3F ) | 0x80 ); \
 		_ptr += 2; \
-	} else \
+	} else if ( (_code)<0x8000 )\
 	{ \
 		_ptr[0] = (BYTE)( ( ((_code)>>12) & 0x0F ) | 0xE0 ); \
 		_ptr[1] = (BYTE)( ( ((_code)>>6) & 0x3F ) | 0x80 ); \
 		_ptr[2] = (BYTE)( ( (_code) & 0x3F ) | 0x80 ); \
 		_ptr += 3; \
+	} else \
+	{ \
+		_ptr[0] = (BYTE)( ( ((_code)>>18) & 0x0F ) | 0xF0 ); \
+		_ptr[1] = (BYTE)( ( ((_code)>>12) & 0x3F ) | 0x80 ); \
+		_ptr[2] = (BYTE)( ( ((_code)>>6) & 0x3F ) | 0x80 ); \
+		_ptr[3] = (BYTE)( ( (_code) & 0x3F ) | 0x80 ); \
+		_ptr += 4; \
 	}
 
 
@@ -949,12 +956,19 @@ inline int sphUTF8Encode ( BYTE * pBuf, int iCode )
 		pBuf[1] = (BYTE)( ( iCode & 0x3F ) | 0x80 );
 		return 2;
 
-	} else
+	} else if ( iCode<0x8000 )
 	{
 		pBuf[0] = (BYTE)( ( (iCode>>12) & 0x0F ) | 0xE0 );
 		pBuf[1] = (BYTE)( ( (iCode>>6) & 0x3F ) | 0x80 );
 		pBuf[2] = (BYTE)( ( iCode & 0x3F ) | 0x80 );
 		return 3;
+	} else
+	{
+		pBuf[0] = (BYTE)( ( (iCode>>18) & 0x0F ) | 0xF0 );
+		pBuf[1] = (BYTE)( ( (iCode>>12) & 0x3F ) | 0x80 );
+		pBuf[2] = (BYTE)( ( (iCode>>6) & 0x3F ) | 0x80 );
+		pBuf[3] = (BYTE)( ( iCode & 0x3F ) | 0x80 );
+		return 4;
 	}
 }
 
@@ -1580,7 +1594,7 @@ public:
 	}
 
 	static CSphDict * SetupExactDict ( const CSphIndexSettings & tSettings, const ExcerptQuery_t & q,
-		CSphScopedPtr<CSphDict> & tExact, CSphDict * pDict,ISphTokenizer * pTok )
+		CSphScopedPtr<CSphDict> & tExact, CSphDict * pDict, ISphTokenizer * pTok )
 	{
 		// handle index_exact_words
 		if ( !( q.m_bHighlightQuery && tSettings.m_bIndexExactWords ) )

@@ -455,6 +455,23 @@ void TestTokenizer ( bool bUTF8 )
 	assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "\xD1\x87\xD0\xB0" ) );
 	assert ( !pTokenizer->GetToken() );
 	SafeDelete ( pTokenizer );
+	printf ( "test utf8 4-bytes codepoint\n" );
+	BYTE sTest21[] = "\xF4\x80\x80\x80\x32\x34\x20";
+	BYTE sRes21[SPH_MAX_WORD_LEN];
+
+	memset ( sRes21, 0, sizeof(sRes21) );
+	BYTE * pTest21 = sTest21;
+	int iCode21 = sphUTF8Decode ( pTest21 );
+	assert ( sphUTF8Encode ( sRes21, iCode21 )==4 );
+	assert ( sTest21[0]==sRes21[0] && sTest21[1]==sRes21[1] && sTest21[2]==sRes21[2] && sTest21[3]==sRes21[3] );
+	memset ( sRes21, 0, sizeof(sRes21) );
+	BYTE * pRes21 = sRes21;
+	SPH_UTF8_ENCODE ( pRes21, iCode21 );
+	assert ( sTest21[0]==sRes21[0] && sTest21[1]==sRes21[1] && sTest21[2]==sRes21[2] && sTest21[3]==sRes21[3] );
+
+	pTokenizer = sphCreateUTF8Tokenizer();
+	pTokenizer->SetBuffer ( (BYTE*)sTest21, sizeof(sTest21) );
+	assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "\xF4\x80\x80\x80\x32\x34" ) );
 }
 
 

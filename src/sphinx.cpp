@@ -3588,7 +3588,7 @@ void CSphTokenizerBase::CloneBase ( const CSphTokenizerBase * pFrom, ESphTokeniz
 		{
 			// FIXME? avoid double lightweight clones, too?
 			assert ( pFrom->m_eMode!=SPH_CLONE_INDEX );
-			assert ( pFrom->m_tLC.ToLower('\\') & FLAG_CODEPOINT_SPECIAL );
+			assert ( pFrom->m_tLC.ToLower ( '\\' ) & FLAG_CODEPOINT_SPECIAL );
 
 			// lightweight tokenizer clone
 			// copy 3 KB of lowercaser chunk pointers, but do NOT copy the table data
@@ -17151,7 +17151,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	int64_t tmQueryStart = sphMicroTimer();
 
 	CSphQueryProfile * pProfile = pResult->m_pProfile;
-	if ( pProfile)
+	if ( pProfile )
 		pProfile->Switch ( SPH_QSTATE_INIT );
 
 	///////////////////
@@ -17190,7 +17190,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	CSphAutofile tDoclist, tHitlist, tWordlist, tDummy;
 	if ( !m_bKeepFilesOpen )
 	{
-		if ( pProfile)
+		if ( pProfile )
 			pProfile->Switch ( SPH_QSTATE_OPEN );
 
 		if ( tDoclist.Open ( GetIndexFileName("spd"), SPH_O_READ, pResult->m_sError ) < 0 )
@@ -17203,7 +17203,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 			return false;
 	}
 
-	if ( pProfile)
+	if ( pProfile )
 		pProfile->Switch ( SPH_QSTATE_INIT );
 
 	// setup search terms
@@ -17340,7 +17340,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	// cook result sets
 	////////////////////
 
-	if ( pProfile)
+	if ( pProfile )
 		pProfile->Switch ( SPH_QSTATE_FINALIZE );
 
 	// adjust result sets
@@ -17409,7 +17409,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 		tQueryStats.m_iFetchedHits, tQueryStats.m_iSkips, ppSorters[0]->GetTotalCount() );
 #endif
 
-	if ( pProfile)
+	if ( pProfile )
 		pProfile->Switch ( SPH_QSTATE_UNKNOWN );
 
 	return true;
@@ -20310,7 +20310,7 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE * pWord, int iWordLength, int iC
 		if ( !iLen )
 			iLen = 1;
 
-		assert ( iLen>=1 && iLen<=3 );
+		assert ( iLen>=1 && iLen<=4 );
 		p += iLen;
 
 		dBytes[iCodes+1] = dBytes[iCodes] + (BYTE)iLen;

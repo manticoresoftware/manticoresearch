@@ -311,36 +311,22 @@ index dist_just1
 <sphinxql>select gr from dist3 where weight()=1</sphinxql>
 <sphinxql>select gr from dist3 where @weight=1</sphinxql>
 
-<!-- The warnings on old syntax -->
-<sphinxql>select @id idd from dist_no where match('test')</sphinxql>
-<sphinxql>show warnings</sphinxql>
-<sphinxql>select @count cnt from dist_no group by gr</sphinxql>
-<sphinxql>show warnings</sphinxql>
-<sphinxql>select @weight cnt from dist_no group by gr</sphinxql>
-<sphinxql>show warnings</sphinxql>
-<sphinxql>select @id idd from dist0 where match('test')</sphinxql>
-<sphinxql>show warnings</sphinxql>
-<sphinxql>select @count cnt from dist0 group by gr</sphinxql>
-<sphinxql>show warnings</sphinxql>
-<sphinxql>select @weight cnt from dist0 group by gr</sphinxql>
-<sphinxql>show warnings</sphinxql>
-<sphinxql>select @id idd from dist1 where match('test')</sphinxql>
-<sphinxql>show warnings</sphinxql>
-<sphinxql>select @count cnt from dist1 group by gr</sphinxql>
-<sphinxql>show warnings</sphinxql>
-<sphinxql>select @weight cnt from dist1 group by gr</sphinxql>
-<sphinxql>show warnings</sphinxql>
-<sphinxql>select @id idd from dist2 where match('test')</sphinxql>
-<sphinxql>show warnings</sphinxql>
-<sphinxql>select @count cnt from dist2 group by gr</sphinxql>
-<sphinxql>show warnings</sphinxql>
-<sphinxql>select @weight cnt from dist2 group by gr</sphinxql>
-<sphinxql>show warnings</sphinxql>
-<sphinxql>select @id idd from dist3 where match('test')</sphinxql>
-<sphinxql>show warnings</sphinxql>
-<sphinxql>select @count cnt from dist3 group by gr</sphinxql>
-<sphinxql>show warnings</sphinxql>
-<sphinxql>select @weight cnt from dist3 group by gr</sphinxql>
+<!-- Checking group by result sets (formerly warnings on old syntax) -->
+<sphinxql>select id idd from dist_no where match('test')</sphinxql>
+<sphinxql>select count(*) cnt from dist_no group by gr</sphinxql>
+<sphinxql>select weight() cnt from dist_no group by gr</sphinxql>
+<sphinxql>select id idd from dist0 where match('test')</sphinxql>
+<sphinxql>select count(*) cnt from dist0 group by gr</sphinxql>
+<sphinxql>select weight() cnt from dist0 group by gr</sphinxql>
+<sphinxql>select id idd from dist1 where match('test')</sphinxql>
+<sphinxql>select count(*) cnt from dist1 group by gr</sphinxql>
+<sphinxql>select weight() cnt from dist1 group by gr</sphinxql>
+<sphinxql>select id idd from dist2 where match('test')</sphinxql>
+<sphinxql>select count(*) cnt from dist2 group by gr</sphinxql>
+<sphinxql>select weight() cnt from dist2 group by gr</sphinxql>
+<sphinxql>select id idd from dist3 where match('test')</sphinxql>
+<sphinxql>select count(*) cnt from dist3 group by gr</sphinxql>
+<sphinxql>select weight() cnt from dist3 group by gr</sphinxql>
 
 <!-- Mixing old and new syntax -->
 <sphinxql>select @id idd, count(*) cnt from dist_no group by gr</sphinxql>
@@ -427,6 +413,8 @@ index dist_just1
 
 <!-- regression sub select order by weight -->
 <sphinxql>SELECT * FROM ( SELECT @id, @weight FROM sub_dist_loc WHERE MATCH ( 'test ( my | of )' ) ORDER BY @weight asc, @id desc LIMIT 15 ) ORDER BY @weight desc, @id asc LIMIT 0, 5</sphinxql>
+<!-- same, not using deprecated syntax -->
+<sphinxql>SELECT * FROM ( SELECT id, weight() as wgt FROM sub_dist_loc WHERE MATCH ( 'test ( my | of )' ) ORDER BY wgt asc, id desc LIMIT 15 ) ORDER BY wgt desc, id asc LIMIT 0, 5</sphinxql>
 
 </sphqueries>
 

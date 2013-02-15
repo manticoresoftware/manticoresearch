@@ -11079,8 +11079,11 @@ bool ParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStm
 	if ( iRes!=0 || !dStmt.GetLength() )
 		return false;
 
-	if ( tParser.IsDeprecatedSyntax() )
+	if ( tParser.IsDeprecatedSyntax() && !g_bCompatResults )
+	{
 		sError = "Using the old-fashion @variables (@count, @weight, etc.) is deprecated";
+		return false;
+	}
 
 	return true;
 }

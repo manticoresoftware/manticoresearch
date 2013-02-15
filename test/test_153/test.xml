@@ -328,6 +328,13 @@ index distlfake
 <sphinxql>select @id as idd, tag+1 as t from dist52 order by gr asc</sphinxql>
 <sphinxql>select @id as idd, gr,tag+1 as t from idx51 order by gr asc</sphinxql>
 <sphinxql>select @id as idd, tag+1 as t from idx51 order by gr asc</sphinxql>
+<!-- same, not using deprecated syntax -->
+<sphinxql>select id as idd, gr,tag+1 as t from dist50 order by gr asc</sphinxql>
+<sphinxql>select id as idd, tag+1 as t from dist50 order by gr asc</sphinxql>
+<sphinxql>select id as idd, gr,tag+1 as t from dist52 order by gr asc</sphinxql>
+<sphinxql>select id as idd, tag+1 as t from dist52 order by gr asc</sphinxql>
+<sphinxql>select id as idd, gr,tag+1 as t from idx51 order by gr asc</sphinxql>
+<sphinxql>select id as idd, tag+1 as t from idx51 order by gr asc</sphinxql>
 
 
 <!-- todo: Faked index: attr 'tag' is absent in some cases -->
@@ -335,6 +342,12 @@ index distlfake
 <sphinxql>select @id as idd, gr+1 as t from disthfakeb group by t order by tag asc</sphinxql>
 <sphinxql>select @id as idd, gr+1 as t from disthfake group by t order by tag asc</sphinxql>
 <sphinxql>select @id as idd, gr+1 as t from distlfake group by t order by tag asc</sphinxql>
+<!-- same, not using deprecated syntax -->
+<sphinxql>select id as idd, gr+1 as t from distfake group by t order by tag asc</sphinxql>
+<sphinxql>select id as idd, gr+1 as t from disthfakeb group by t order by tag asc</sphinxql>
+<sphinxql>select id as idd, gr+1 as t from disthfake group by t order by tag asc</sphinxql>
+<sphinxql>select id as idd, gr+1 as t from distlfake group by t order by tag asc</sphinxql>
+
 
 <!-- another regression chrash on sort of 0 matches -->
 <sphinxql>select * from dist50 where match ( 'broken merge' )</sphinxql>
@@ -342,6 +355,8 @@ index distlfake
 <!-- Handle magic duplicates in SphinxQL -->
 <sphinxql>select gr from dist_no group by gr</sphinxql>
 <sphinxql>select gr, @groupby, @count from dist_no group by gr</sphinxql>
+<!-- same, not using deprecated syntax -->
+<sphinxql>select gr, groupby(), count(*) from dist_no group by gr</sphinxql>
 
 </sphqueries>
 

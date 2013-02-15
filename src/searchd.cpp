@@ -8592,12 +8592,15 @@ struct Expr_Snippet_c : public ISphStringExpr
 		return iRes;
 	}
 
-	virtual void SetStringPool ( const BYTE * pStrings )
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
+		if ( eCmd!=SPH_EXPR_SET_STRING_POOL )
+			return;
+
 		if ( m_pArgs )
-			m_pArgs->Command ( SPH_EXPR_SET_STRING_POOL, (void*)pStrings );
+			m_pArgs->Command ( SPH_EXPR_SET_STRING_POOL, pArg );
 		if ( m_pText )
-			m_pText->Command ( SPH_EXPR_SET_STRING_POOL, (void*)pStrings );
+			m_pText->Command ( SPH_EXPR_SET_STRING_POOL, pArg );
 	}
 };
 

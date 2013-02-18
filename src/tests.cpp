@@ -746,7 +746,7 @@ void TestExpr ()
 		printf ( "testing expression evaluation, test %d/%d... ", 1+iTest, nTests );
 
 		CSphString sError;
-		CSphScopedPtr<ISphExpr> pExpr ( sphExprParse ( dTests[iTest].m_sExpr, tSchema, NULL, NULL, sError ) );
+		CSphScopedPtr<ISphExpr> pExpr ( sphExprParse ( dTests[iTest].m_sExpr, tSchema, NULL, NULL, sError, NULL ) );
 		if ( !pExpr.Ptr() )
 		{
 			printf ( "FAILED; %s\n", sError.cstr() );
@@ -821,7 +821,7 @@ void BenchExpr ()
 
 		ESphAttr uType;
 		CSphString sError;
-		CSphScopedPtr<ISphExpr> pExpr ( sphExprParse ( dBench[iRun].m_sExpr, tSchema, &uType, NULL, sError ) );
+		CSphScopedPtr<ISphExpr> pExpr ( sphExprParse ( dBench[iRun].m_sExpr, tSchema, &uType, NULL, sError, NULL ) );
 		if ( !pExpr.Ptr() )
 		{
 			printf ( "FAILED; %s\n", sError.cstr() );
@@ -2257,7 +2257,7 @@ void TestRTWeightBoundary ()
 		CSphQueryResult tResult;
 		tQuery.m_sQuery = "@title cat";
 
-		ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, pIndex->GetMatchSchema(), tResult.m_sError, false );
+		ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, pIndex->GetMatchSchema(), tResult.m_sError, NULL, false );
 		assert ( pSorter );
 		Verify ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, NULL ) );
 		sphFlattenQueue ( pSorter, &tResult, 0 );
@@ -2410,7 +2410,7 @@ void TestRTSendVsMerge ()
 	CSphQueryResult tResult;
 	tQuery.m_sQuery = "@title cat";
 
-	ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, pIndex->GetMatchSchema(), tResult.m_sError, false );
+	ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, pIndex->GetMatchSchema(), tResult.m_sError, NULL, false );
 	assert ( pSorter );
 
 	CSphVector<DWORD> dMvas;

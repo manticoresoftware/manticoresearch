@@ -3657,7 +3657,7 @@ static void ExtraAddSortkeys ( CSphSchema * pExtra, const CSphSchema & tSorterSc
 
 
 ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema,
-	CSphString & sError, bool bComputeItems, CSphSchema * pExtra, CSphAttrUpdateEx * pUpdate, bool * pZonespanlist,
+	CSphString & sError, CSphQueryProfile * pProfiler, bool bComputeItems, CSphSchema * pExtra, CSphAttrUpdateEx * pUpdate, bool * pZonespanlist,
 	bool * pPackedFactors, ISphExprHook * pHook )
 {
 	// prepare for descent
@@ -3723,7 +3723,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	if ( pQuery->m_eSort==SPH_SORT_EXPR && tSorterSchema.GetAttrIndex ( "@expr" )<0 )
 	{
 		CSphColumnInfo tCol ( "@expr", SPH_ATTR_FLOAT ); // enforce float type for backwards compatibility (ie. too lazy to fix those tests right now)
-		tCol.m_pExpr = sphExprParse ( pQuery->m_sSortBy.cstr(), tSorterSchema, NULL, NULL, sError, pExtra, NULL, &bHasZonespanlist );
+		tCol.m_pExpr = sphExprParse ( pQuery->m_sSortBy.cstr(), tSorterSchema, NULL, NULL, sError, pProfiler, pExtra, NULL, &bHasZonespanlist );
 		bNeedZonespanlist |= bHasZonespanlist;
 		if ( !tCol.m_pExpr )
 			return NULL;
@@ -3835,11 +3835,11 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 			CSphString sExpr2;
 			sExpr2.SetSprintf ( "TO_STRING(%s)", sExpr.cstr() );
 			tExprCol.m_pExpr = sphExprParse ( sExpr2.cstr(), tSorterSchema, &tExprCol.m_eAttrType,
-				&tExprCol.m_bWeight, sError, pExtra, pHook, &bHasZonespanlist, &bHasPackedFactors, &eExprStage );
+				&tExprCol.m_bWeight, sError, pProfiler, pExtra, pHook, &bHasZonespanlist, &bHasPackedFactors, &eExprStage );
 		} else
 		{
 			tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), tSorterSchema, &tExprCol.m_eAttrType,
-				&tExprCol.m_bWeight, sError, pExtra, pHook, &bHasZonespanlist, &bHasPackedFactors, &eExprStage );
+				&tExprCol.m_bWeight, sError, pProfiler, pExtra, pHook, &bHasZonespanlist, &bHasPackedFactors, &eExprStage );
 		}
 
 		bNeedPackedFactors |= bHasPackedFactors;

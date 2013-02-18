@@ -180,9 +180,10 @@ struct Expr_ConstHash_c : public ISphExpr
 /// fills pAttrType with result type (for now, can be SPH_ATTR_SINT or SPH_ATTR_FLOAT)
 /// fills pUsesWeight with a flag whether match relevance is referenced in expression AST
 /// fills pEvalStage with a required (!) evaluation stage
+class CSphQueryProfile;
 ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight,
-	CSphString & sError, CSphSchema * pExtra=NULL, ISphExprHook * pHook=NULL, bool * pZonespanlist=NULL, bool * pPackedFactors=NULL,
-	ESphEvalStage * pEvalStage=NULL );
+	CSphString & sError, CSphQueryProfile * pProfiler, CSphSchema * pExtra=NULL, ISphExprHook * pHook=NULL,
+	bool * pZonespanlist=NULL, bool * pPackedFactors=NULL, ESphEvalStage * pEvalStage=NULL );
 
 //////////////////////////////////////////////////////////////////////////
 

@@ -83,6 +83,117 @@ extern bool g_bJsonKeynamesToLowercase;
 // INTERNAL HELPER FUNCTIONS, CLASSES, ETC
 //////////////////////////////////////////////////////////////////////////
 
+
+/// some low-level query stats
+struct CSphQueryStats
+{
+	int64_t *	m_pNanoBudget;		///< pointer to max_predicted_time budget (counted in nanosec)
+	DWORD		m_iFetchedDocs;		///< processed documents
+	DWORD		m_iFetchedHits;		///< processed hits (aka positions)
+	DWORD		m_iSkips;			///< number of Skip() calls
+
+	CSphQueryStats()
+		: m_pNanoBudget ( NULL )
+		, m_iFetchedDocs ( 0 )
+		, m_iFetchedHits ( 0 )
+		, m_iSkips ( 0 )
+	{}
+};
+
+
+#define SPH_QUERY_STATES \
+	SPH_QUERY_STATE ( UNKNOWN,		"unknown" ) \
+	SPH_QUERY_STATE ( NET_READ,		"net_read" ) \
+	SPH_QUERY_STATE ( IO,			"io" ) \
+	SPH_QUERY_STATE ( DIST_CONNECT,	"dist_connect" ) \
+	SPH_QUERY_STATE ( SQL_PARSE,	"sql_parse" ) \
+	SPH_QUERY_STATE ( DICT_SETUP,	"dict_setup" ) \
+	SPH_QUERY_STATE ( PARSE,		"parse" ) \
+	SPH_QUERY_STATE ( TRANSFORMS,	"transforms" ) \
+	SPH_QUERY_STATE ( INIT,			"init" ) \
+	SPH_QUERY_STATE ( OPEN,			"open" ) \
+	SPH_QUERY_STATE ( READ_DOCS,	"read_docs" ) \
+	SPH_QUERY_STATE ( READ_HITS,	"read_hits" ) \
+	SPH_QUERY_STATE ( GET_DOCS,		"get_docs" ) \
+	SPH_QUERY_STATE ( GET_HITS,		"get_hits" ) \
+	SPH_QUERY_STATE ( FILTER,		"filter" ) \
+	SPH_QUERY_STATE ( RANK,			"rank" ) \
+	SPH_QUERY_STATE ( SORT,			"sort" ) \
+	SPH_QUERY_STATE ( FINALIZE,		"finalize" ) \
+	SPH_QUERY_STATE ( DIST_WAIT,	"dist_wait" ) \
+	SPH_QUERY_STATE ( AGGREGATE,	"aggregate" ) \
+	SPH_QUERY_STATE ( NET_WRITE,	"net_write" ) \
+	SPH_QUERY_STATE ( EVAL_POST,	"eval_post" ) \
+	SPH_QUERY_STATE ( SNIPPET,		"eval_snippet" ) \
+	SPH_QUERY_STATE ( EVAL_UDF,		"eval_udf" )
+
+
+/// possible query states, used for profiling
+enum ESphQueryState
+{
+	SPH_QSTATE_INFINUM = -1,
+
+#define SPH_QUERY_STATE(_name,_desc) SPH_QSTATE_##_name,
+	SPH_QUERY_STATES
+#undef SPH_QUERY_STATE
+
+	SPH_QSTATE_TOTAL
+};
+STATIC_ASSERT ( SPH_QSTATE_UNKNOWN==0, BAD_QUERY_STATE_ENUM_BASE );
+
+
+/// search query profile
+class CSphQueryProfile
+{
+public:
+	ESphQueryState	m_eState;							///< current state
+	int64_t			m_tmStamp;							///< timestamp when we entered the current state
+
+	int				m_dSwitches [ SPH_QSTATE_TOTAL+1 ];	///< number of switches to given state
+	int64_t			m_tmTotal [ SPH_QSTATE_TOTAL+1 ];	///< total time spent per state
+	CSphQueryStats	m_tStats;							///< query prediction counters
+	bool			m_bHasPrediction;					///< is prediction counters set?
+
+public:
+	/// create empty and stopped profile
+	CSphQueryProfile()
+	{
+		Start ( SPH_QSTATE_TOTAL );
+	}
+
+	/// switch to a new query state, and record a timestamp
+	/// returns previous state, to simplify Push/Pop like scenarios
+	ESphQueryState Switch ( ESphQueryState eNew )
+	{
+		int64_t tmNow = sphMicroTimer();
+		ESphQueryState eOld = m_eState;
+		m_dSwitches [ eOld ]++;
+		m_tmTotal [ eOld ] += tmNow - m_tmStamp;
+		m_eState = eNew;
+		m_tmStamp = tmNow;
+		return eOld;
+	}
+
+	/// reset everything and start profiling from a given state
+	void Start ( ESphQueryState eNew )
+	{
+		memset ( m_dSwitches, 0, sizeof(m_dSwitches) );
+		memset ( m_tmTotal, 0, sizeof(m_tmTotal) );
+		m_eState = eNew;
+		m_tmStamp = sphMicroTimer();
+
+		m_tStats = CSphQueryStats();
+		m_bHasPrediction = false;
+	}
+
+	/// stop profiling
+	void Stop()
+	{
+		Switch ( SPH_QSTATE_TOTAL );
+	}
+};
+
+
 /// file writer with write buffering and int encoder
 class CSphWriter : ISphNoncopyable
 {

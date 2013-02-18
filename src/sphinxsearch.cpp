@@ -7410,7 +7410,7 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS>::Init ( int iFields, const int * pW
 	// parse expression
 	bool bUsesWeight;
 	ExprRankerHook_T<NEED_PACKEDFACTORS> tHook ( this );
-	m_pExpr = sphExprParse ( m_sExpr, *m_pSchema, &m_eExprType, &bUsesWeight, sError, NULL, &tHook );
+	m_pExpr = sphExprParse ( m_sExpr, *m_pSchema, &m_eExprType, &bUsesWeight, sError, NULL, NULL, &tHook ); // FIXME!!! profile UDF here too
 	if ( !m_pExpr )
 		return false;
 	if ( m_eExprType!=SPH_ATTR_INTEGER && m_eExprType!=SPH_ATTR_FLOAT )

@@ -17233,9 +17233,10 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	// setup prediction constrain
 	CSphQueryStats tQueryStats;
+	bool bCollectPredictionCounters = ( pQuery->m_iMaxPredictedMsec>0 );
 	int64_t iNanoBudget = pQuery->m_iMaxPredictedMsec * 1000000; // from milliseconds to nanoseconds
 	tQueryStats.m_pNanoBudget = &iNanoBudget;
-	if ( pQuery->m_iMaxPredictedMsec>0 )
+	if ( bCollectPredictionCounters )
 		tTermSetup.m_pStats = &tQueryStats;
 
 	int iIndexWeight = pQuery->GetIndexWeight ( m_sIndexName.cstr() );
@@ -17410,7 +17411,16 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 #endif
 
 	if ( pProfile )
+	{
 		pProfile->Switch ( SPH_QSTATE_UNKNOWN );
+		if ( bCollectPredictionCounters )
+		{
+			pProfile->m_tStats.m_iFetchedDocs += tQueryStats.m_iFetchedDocs;
+			pProfile->m_tStats.m_iFetchedHits += tQueryStats.m_iFetchedHits;
+			pProfile->m_tStats.m_iSkips += tQueryStats.m_iSkips;
+			pProfile->m_bHasPrediction = true;
+		}
+	}
 
 	return true;
 }

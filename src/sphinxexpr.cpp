@@ -154,7 +154,7 @@ struct ExprLocatorTraits_t : public ISphExpr
 	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
 		if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS )
-			static_cast < CSphVector<int>* >(pArg)->Add (m_iLocator );
+			static_cast < CSphVector<int>* >(pArg)->Add ( m_iLocator );
 	}
 };
 
@@ -509,7 +509,7 @@ struct Expr_Unary_c : public ISphExpr
 {
 	ISphExpr * m_pFirst;
 
-	Expr_Unary_c ( ISphExpr * p ) : m_pFirst(p) {}
+	explicit Expr_Unary_c ( ISphExpr * p ) : m_pFirst(p) {}
 	~Expr_Unary_c() { SafeRelease ( m_pFirst ); }
 
 	virtual void Command ( ESphExprCommand eCmd, void * pArg ) { m_pFirst->Command ( eCmd, pArg ); }
@@ -1212,12 +1212,13 @@ class ExprParser_t
 	friend void				yyerror ( ExprParser_t * pParser, const char * sMessage );
 
 public:
-	ExprParser_t ( CSphSchema * pExtra, ISphExprHook * pHook )
+	ExprParser_t ( CSphSchema * pExtra, ISphExprHook * pHook, CSphQueryProfile * pProfiler )
 		: m_pHook ( pHook )
 		, m_pExtra ( pExtra )
 		, m_bHasZonespanlist ( false )
 		, m_bHasPackedFactors ( false )
 		, m_eEvalStage ( SPH_EVAL_FINAL )
+		, m_pProfiler ( pProfiler )
 	{}
 
 							~ExprParser_t ();
@@ -1229,6 +1230,7 @@ protected:
 	CSphString				m_sParserError;
 	CSphString				m_sCreateError;
 	ISphExprHook *			m_pHook;
+	CSphQueryProfile *		m_pProfiler;
 
 protected:
 	ESphAttr				GetWidestRet ( int iLeft, int iRight );
@@ -1947,11 +1949,13 @@ protected:
 	UdfCall_t *						m_pCall;
 	mutable CSphVector<int64_t>		m_dArgvals;
 	mutable char					m_bError;
+	CSphQueryProfile *				m_pProfiler;
 
 public:
-	explicit Expr_Udf_c ( UdfCall_t * pCall )
+	explicit Expr_Udf_c ( UdfCall_t * pCall, CSphQueryProfile * pProfiler )
 		: m_pCall ( pCall )
 		, m_bError ( 0 )
+		, m_pProfiler ( pProfiler )
 	{
 		SPH_UDF_ARGS & tArgs = m_pCall->m_tArgs;
 
@@ -2014,19 +2018,32 @@ public:
 class Expr_UdfInt_c : public Expr_Udf_c
 {
 public:
-	explicit Expr_UdfInt_c ( UdfCall_t * pCall )
-		: Expr_Udf_c ( pCall )
+	explicit Expr_UdfInt_c ( UdfCall_t * pCall, CSphQueryProfile * pProfiler )
+		: Expr_Udf_c ( pCall, pProfiler )
 	{
 		assert ( pCall->m_pUdf->m_eRetType==SPH_ATTR_INTEGER || pCall->m_pUdf->m_eRetType==SPH_ATTR_BIGINT );
 	}
 
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const
 	{
+		ESphQueryState eOld = SPH_QSTATE_TOTAL;
+		if ( m_pProfiler )
+			eOld = m_pProfiler->Switch ( SPH_QSTATE_EVAL_UDF );
+
 		if ( m_bError )
+		{
+			if ( m_pProfiler )
+				m_pProfiler->Switch ( eOld );
 			return 0;
+		}
+
 		FillArgs ( tMatch );
 		UdfInt_fn pFn = (UdfInt_fn) m_pCall->m_pUdf->m_fnFunc;
-		return (int) pFn ( &m_pCall->m_tInit, &m_pCall->m_tArgs, &m_bError );
+		int64_t iRes = (int) pFn ( &m_pCall->m_tInit, &m_pCall->m_tArgs, &m_bError );
+
+		if ( m_pProfiler )
+			m_pProfiler->Switch ( eOld );
+		return iRes;
 	}
 
 	virtual int IntEval ( const CSphMatch & tMatch ) const { return (int) Int64Eval ( tMatch ); }
@@ -2037,19 +2054,32 @@ public:
 class Expr_UdfFloat_c : public Expr_Udf_c
 {
 public:
-	explicit Expr_UdfFloat_c ( UdfCall_t * pCall )
-		: Expr_Udf_c ( pCall )
+	explicit Expr_UdfFloat_c ( UdfCall_t * pCall, CSphQueryProfile * pProfiler )
+		: Expr_Udf_c ( pCall, pProfiler )
 	{
 		assert ( pCall->m_pUdf->m_eRetType==SPH_ATTR_FLOAT );
 	}
 
 	virtual float Eval ( const CSphMatch & tMatch ) const
 	{
+		ESphQueryState eOld = SPH_QSTATE_TOTAL;
+		if ( m_pProfiler )
+			eOld = m_pProfiler->Switch ( SPH_QSTATE_EVAL_UDF );
+
 		if ( m_bError )
+		{
+			if ( m_pProfiler )
+				m_pProfiler->Switch ( eOld );
 			return 0;
+		}
+
 		FillArgs ( tMatch );
 		UdfDouble_fn pFn = (UdfDouble_fn) m_pCall->m_pUdf->m_fnFunc;
-		return (float) pFn ( &m_pCall->m_tInit, &m_pCall->m_tArgs, &m_bError );
+		float fRes = (float) pFn ( &m_pCall->m_tInit, &m_pCall->m_tArgs, &m_bError );
+
+		if ( m_pProfiler )
+			m_pProfiler->Switch ( eOld );
+		return fRes;
 	}
 
 	virtual int IntEval ( const CSphMatch & tMatch ) const { return (int) Eval ( tMatch ); }
@@ -2060,8 +2090,8 @@ public:
 class Expr_UdfStringptr_c : public Expr_Udf_c
 {
 public:
-	explicit Expr_UdfStringptr_c ( UdfCall_t * pCall )
-		: Expr_Udf_c ( pCall )
+	explicit Expr_UdfStringptr_c ( UdfCall_t * pCall, CSphQueryProfile * pProfiler )
+		: Expr_Udf_c ( pCall, pProfiler )
 	{
 		assert ( pCall->m_pUdf->m_eRetType==SPH_ATTR_STRINGPTR );
 	}
@@ -2086,11 +2116,20 @@ public:
 
 	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
 	{
+		ESphQueryState eOld = SPH_QSTATE_TOTAL;
+		if ( m_pProfiler )
+			eOld = m_pProfiler->Switch ( SPH_QSTATE_EVAL_UDF );
+
 		FillArgs ( tMatch );
 		UdfCharptr_fn pFn = (UdfCharptr_fn) m_pCall->m_pUdf->m_fnFunc;
 		char * pRes = pFn ( &m_pCall->m_tInit, &m_pCall->m_tArgs, &m_bError ); // owned now!
 		*ppStr = (const BYTE*) pRes;
-		return pRes ? strlen(pRes) : 0;
+		int iLen = ( pRes ? strlen(pRes) : 0 );
+
+		if ( m_pProfiler )
+			m_pProfiler->Switch ( eOld );
+
+		return iLen;
 	}
 
 	virtual bool IsStringPtr() const
@@ -2107,13 +2146,13 @@ ISphExpr * ExprParser_t::CreateUdfNode ( int iCall, ISphExpr * pLeft )
 	{
 		case SPH_ATTR_INTEGER:
 		case SPH_ATTR_BIGINT:
-			pRes = new Expr_UdfInt_c ( m_dUdfCalls[iCall] );
+			pRes = new Expr_UdfInt_c ( m_dUdfCalls[iCall], m_pProfiler );
 			break;
 		case SPH_ATTR_FLOAT:
-			pRes = new Expr_UdfFloat_c ( m_dUdfCalls[iCall] );
+			pRes = new Expr_UdfFloat_c ( m_dUdfCalls[iCall], m_pProfiler );
 			break;
 		case SPH_ATTR_STRINGPTR:
-			pRes = new Expr_UdfStringptr_c ( m_dUdfCalls[iCall] );
+			pRes = new Expr_UdfStringptr_c ( m_dUdfCalls[iCall], m_pProfiler );
 			break;
 		default:
 			m_sCreateError.SetSprintf ( "internal error: unhandled type %d in CreateUdfNode()", m_dUdfCalls[iCall]->m_pUdf->m_eRetType );
@@ -4553,10 +4592,10 @@ ISphExpr * sphExprJsonField ( const CSphColumnInfo & tCol, int iAttr, const char
 
 /// parser entry point
 ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight,
-	CSphString & sError, CSphSchema * pExtra, ISphExprHook * pHook, bool * pZonespanlist, bool * pPackedFactors, ESphEvalStage * pEvalStage )
+	CSphString & sError, CSphQueryProfile * pProfiler, CSphSchema * pExtra, ISphExprHook * pHook, bool * pZonespanlist, bool * pPackedFactors, ESphEvalStage * pEvalStage )
 {
 	// parse into opcodes
-	ExprParser_t tParser ( pExtra, pHook );
+	ExprParser_t tParser ( pExtra, pHook, pProfiler );
 	ISphExpr * bRes = tParser.Parse ( sExpr, tSchema, pAttrType, pUsesWeight, sError );
 	if ( pZonespanlist )
 		*pZonespanlist = tParser.m_bHasZonespanlist;

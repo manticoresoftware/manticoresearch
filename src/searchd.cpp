@@ -7917,7 +7917,7 @@ struct GenericMatchSort_fn : public CSphMatchComparatorState
 /// merges multiple result sets, remaps columns, does reorder for outer selects
 /// query is only (!) non-const to tweak order vs reorder clauses
 bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, int iAgents,
-	CSphSchema * pExtraSchema, bool bFromSphinxql = false )
+	CSphSchema * pExtraSchema, CSphQueryProfile * pProfiler, bool bFromSphinxql )
 {
 	// sanity check
 	int iExpected = 0;
@@ -8172,7 +8172,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		//
 		// create queue
 		// at this point, we do not need to compute anything; it all must be here
-		ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, tRes.m_tSchema, tRes.m_sError, false );
+		ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, tRes.m_tSchema, tRes.m_sError, NULL, false );
 
 		// restore outer order related patches, or it screws up the query log
 		if ( tQuery.m_bHasOuter )
@@ -8265,6 +8265,10 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		iTo = Max ( Min ( iOff + iCount, iTo ), 0 );
 		int iFrom = Min ( iOff, iTo );
 
+		ESphQueryState eOld = SPH_QSTATE_TOTAL;
+		if ( pProfiler )
+			eOld = pProfiler->Switch ( SPH_QSTATE_EVAL_POST );
+
 		for ( int i=iFrom; i<iTo; i++ )
 		{
 			CSphMatch & tMatch = tRes.m_dMatches[i];
@@ -8292,6 +8296,9 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 					tMatch.SetAttrFloat ( tCol.m_tLocator, tCol.m_pExpr->Eval(tMatch) );
 			}
 		}
+
+		if ( pProfiler )
+			pProfiler->Switch ( eOld );
 	}
 
 	// all the merging and sorting is now done
@@ -8397,7 +8404,7 @@ bool MinimizeAggrResultCompat ( AggrResult_t & tRes, const CSphQuery & tQuery, b
 	{
 		// create queue
 		// at this point, we do not need to compute anything; it all must be here
-		pSorter = sphCreateQueue ( &tQuery, tRes.m_tSchema, tRes.m_sError, false );
+		pSorter = sphCreateQueue ( &tQuery, tRes.m_tSchema, tRes.m_sError, NULL, false );
 		if ( !pSorter )
 			return false;
 
@@ -8537,12 +8544,14 @@ struct Expr_Snippet_c : public ISphStringExpr
 	CSphIndex *					m_pIndex;
 	SnippetContext_t			m_tCtx;
 	mutable ExcerptQuery_t		m_tHighlight;
+	CSphQueryProfile *			m_pProfiler;
 
-	explicit Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex )
+	explicit Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQueryProfile * pProfiler )
 		: m_pArgs ( pArglist )
 		, m_pText ( NULL )
 		, m_sWords ( NULL )
 		, m_pIndex ( pIndex )
+		, m_pProfiler ( pProfiler )
 	{
 		assert ( pArglist->IsArglist() );
 		m_pText = pArglist->GetArg(0);
@@ -8563,6 +8572,10 @@ struct Expr_Snippet_c : public ISphStringExpr
 
 	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
 	{
+		ESphQueryState eOld = SPH_QSTATE_TOTAL;
+		if ( m_pProfiler )
+			eOld = m_pProfiler->Switch ( SPH_QSTATE_SNIPPET );
+
 		*ppStr = NULL;
 
 		const BYTE * sSource = NULL;
@@ -8571,6 +8584,8 @@ struct Expr_Snippet_c : public ISphStringExpr
 		if ( !iLen )
 		{
 			SafeDeleteArray ( sSource );
+			if ( m_pProfiler )
+				m_pProfiler->Switch ( eOld );
 			return 0;
 		}
 
@@ -8589,6 +8604,8 @@ struct Expr_Snippet_c : public ISphStringExpr
 
 		int iRes = m_tHighlight.m_dRes.GetLength();
 		*ppStr = m_tHighlight.m_dRes.LeakData();
+		if ( m_pProfiler )
+			m_pProfiler->Switch ( eOld );
 		return iRes;
 	}
 
@@ -8613,6 +8630,12 @@ struct ExprHook_t : public ISphExprHook
 {
 	static const int HOOK_SNIPPET = 1;
 	CSphIndex * m_pIndex; /// BLOODY HACK
+	CSphQueryProfile * m_pProfiler;
+
+	ExprHook_t ()
+		: m_pIndex ( NULL )
+		, m_pProfiler ( NULL )
+	{}
 
 	virtual int IsKnownIdent ( const char * )
 	{
@@ -8632,7 +8655,7 @@ struct ExprHook_t : public ISphExprHook
 		assert ( iID==HOOK_SNIPPET );
 		if ( pEvalStage )
 			*pEvalStage = SPH_EVAL_POSTLIMIT;
-		return new Expr_Snippet_c ( pLeft, m_pIndex );
+		return new Expr_Snippet_c ( pLeft, m_pIndex, m_pProfiler );
 	}
 
 	virtual ESphAttr GetIdentType ( int )
@@ -8743,6 +8766,7 @@ SearchHandler_c::SearchHandler_c ( int iQueries, bool bSphinxql )
 	}
 
 	m_pProfile = NULL;
+	m_tHook.m_pProfiler = NULL;
 }
 
 
@@ -9208,7 +9232,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 	bool bNeedFactors = false;
 	for ( int i=0; i<iQueries; i++ )
 	{
-		CSphString& sError = ppResults[i]->m_sError;
+		CSphString & sError = ppResults[i]->m_sError;
 		const CSphQuery & tQuery = m_dQueries[i+m_iStart];
 		CSphSchemaMT * pExtraSchemaMT = tQuery.m_bAgent?m_dExtraSchemas[i+m_iStart].GetVirgin():NULL;
 		UnlockOnDestroy dSchemaLock ( pExtraSchemaMT );
@@ -9216,7 +9240,9 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 		assert ( !tQuery.m_iOldVersion || tQuery.m_iOldVersion>=0x102 );
 		m_tHook.m_pIndex = pServed->m_pIndex;
 		bool bFactors = false;
-		ppSorters[i] = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchemaMT, m_pUpdates,
+		ppSorters[i] = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError,
+			m_pProfile, // FIXME!!! race here
+			true, pExtraSchemaMT, m_pUpdates,
 			NULL, // FIXME??? really NULL???
 			&bFactors, &m_tHook );
 
@@ -9328,7 +9354,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 				// create queue
 				m_tHook.m_pIndex = pServed->m_pIndex;
 				bool bFactors = false;
-				pSorter = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, true, pExtraSchema, m_pUpdates, &tQuery.m_bZSlist, &bFactors, &m_tHook );
+				pSorter = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, m_pProfile, true, pExtraSchema, m_pUpdates, &tQuery.m_bZSlist, &bFactors, &m_tHook );
 				bNeedFactors |= bFactors;
 				if ( !pSorter )
 				{
@@ -9510,7 +9536,10 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		m_dResults[iRes].m_iSuccesses = 0;
 
 	if ( iStart==iEnd && m_pProfile )
+	{
 		m_dResults[iStart].m_pProfile = m_pProfile;
+		m_tHook.m_pProfiler = m_pProfile;
+	}
 
 	////////////////////////////////////////////////////////////////
 	// check for single-query, multi-queue optimization possibility
@@ -9708,7 +9737,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			CSphSchemaMT * pExtraSchemaMT = m_dQueries[iStart].m_bAgent?m_dExtraSchemas[iStart].GetVirgin():NULL;
 			UnlockOnDestroy ExtraLocker ( pExtraSchemaMT );
 			m_tHook.m_pIndex = pFirstIndex->m_pIndex;
-			pLocalSorter = sphCreateQueue ( &m_dQueries[iStart], tFirstSchema, sError, true, pExtraSchemaMT, NULL,
+			pLocalSorter = sphCreateQueue ( &m_dQueries[iStart], tFirstSchema, sError, m_pProfile, true, pExtraSchemaMT, NULL,
 				NULL, // FIXME??? really NULL?
 				&bLocalFactors, &m_tHook );
 		}
@@ -9921,7 +9950,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				if ( pExtraSchema )
 					pExtraSchema->RLock();
 				UnlockOnDestroy SchemaLocker ( pExtraSchema );
-				if ( !MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength(), m_iAgents, pExtraSchema, m_bSphinxql ) )
+				if ( !MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength(), m_iAgents, pExtraSchema, m_pProfile, m_bSphinxql ) )
 				{
 					tRes.m_iSuccesses = 0;
 					return;
@@ -12623,7 +12652,7 @@ static void AddIOStatsToMeta ( VectorLike & dStatus, const CSphIOStats & tStats,
 		dStatus.Add().SetSprintf ( "%d.%d", (int)( tStats.m_iWriteBytes/1024 ), (int)( tStats.m_iWriteBytes%1024 )/100 );
 }
 
-void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
+void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta, const CSphQueryStats * pPredictionCounters )
 {
 	if ( !tMeta.m_sError.IsEmpty() && dStatus.MatchAdd ( "error" ) )
 		dStatus.Add ( tMeta.m_sError );
@@ -12654,6 +12683,17 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 		AddIOStatsToMeta ( dStatus, tMeta.m_tIOStats, "" );
 		AddIOStatsToMeta ( dStatus, tMeta.m_tAgentIOStats, "agent_" );
 	}
+
+	if ( pPredictionCounters )
+	{
+		if ( dStatus.MatchAdd ( "prediction_fetched_docs" ) )
+			dStatus.Add().SetSprintf ( "%d", pPredictionCounters->m_iFetchedDocs );
+		if ( dStatus.MatchAdd ( "prediction_fetched_hits" ) )
+			dStatus.Add().SetSprintf ( "%d", pPredictionCounters->m_iFetchedHits );
+		if ( dStatus.MatchAdd ( "prediction_skips" ) )
+			dStatus.Add().SetSprintf ( "%d", pPredictionCounters->m_iSkips );
+	}
+
 
 	int iWord = 0;
 	tMeta.m_hWordStats.IterateStart();
@@ -14752,7 +14792,7 @@ void HandleMysqlWarning ( const CSphQueryResultMeta & tLastMeta, SqlRowBuffer_c 
 	dRows.Eof ( bMoreResultsFollow );
 }
 
-void HandleMysqlMeta ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt, const CSphQueryResultMeta & tLastMeta, bool bMoreResultsFollow )
+void HandleMysqlMeta ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt, const CSphQueryResultMeta & tLastMeta, const CSphQueryStats * pPredictionCounters, bool bMoreResultsFollow )
 {
 	VectorLike dStatus ( tStmt.m_sStringParam );
 
@@ -14762,7 +14802,7 @@ void HandleMysqlMeta ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt, const CS
 		BuildStatus ( dStatus );
 		break;
 	case STMT_SHOW_META:
-		BuildMeta ( dStatus, tLastMeta );
+		BuildMeta ( dStatus, tLastMeta, pPredictionCounters );
 		break;
 	case STMT_SHOW_AGENT_STATUS:
 		BuildAgentStatus ( dStatus, tStmt.m_sIndex );
@@ -14980,7 +15020,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		} else if ( eStmt==STMT_SHOW_WARNINGS )
 			HandleMysqlWarning ( tMeta, dRows, bMoreResultsFollow );
 		else if ( eStmt==STMT_SHOW_STATUS || eStmt==STMT_SHOW_META || eStmt==STMT_SHOW_AGENT_STATUS )
-			HandleMysqlMeta ( dRows, dStmt[i], tMeta, bMoreResultsFollow );
+			HandleMysqlMeta ( dRows, dStmt[i], tMeta, NULL, bMoreResultsFollow ); // FIXME!!! add profiler and prediction counters
 
 		if ( g_bGotSigterm )
 		{
@@ -15614,7 +15654,7 @@ public:
 			{
 				StatCountCommand ( SEARCHD_COMMAND_STATUS );
 			}
-			HandleMysqlMeta ( tOut, *pStmt, m_tLastMeta, false );
+			HandleMysqlMeta ( tOut, *pStmt, m_tLastMeta, ( m_tLastProfile.m_bHasPrediction ? &m_tLastProfile.m_tStats : NULL ), false );
 			return true;
 
 		case STMT_INSERT:

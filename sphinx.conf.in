@@ -209,6 +209,13 @@ source src1
 	# sql_attr_str2wordcount	= stitle
 
 
+	# JSON attribute declaration
+	# multi-value (an arbitrary number of these is allowed), optional
+	# lets you store a JSON document as an (in-memory) attribute for later use
+	#
+	# sql_attr_json		= properties
+
+
 	# combined field plus attribute declaration (from a single column)
 	# stores column as an attribute, but also indexes it as a full-text field
 	#
@@ -261,6 +268,25 @@ source src1
 	# unpack_mysqlcompress_maxsize	= 16M
 
 
+	# hook command to run when SQL connection succeeds
+	# optional, default value is empty (do nothing)
+	#
+	# hook_connect			= bash sql_connect.sh
+
+
+	# hook command to run after (any) SQL range query
+	# it may print out "minid maxid" (w/o quotes) to override the range
+	# optional, default value is empty (do nothing)
+	#
+	# hook_query_range		= bash sql_query_range.sh
+
+
+	# hook command to run on successful indexing completion
+	# $maxid expands to max document ID actually fetched from DB
+	# optional, default value is empty (do nothing)
+	#
+	# hook_post_index		= bash sql_post_index.sh $maxid
+
 	#####################################################################
 	## xmlpipe2 settings
 	#####################################################################
@@ -282,9 +308,21 @@ source src1
 	# xmlpipe2 attribute declaration
 	# multi-value, optional, default is empty
 	# all xmlpipe_attr_XXX options are fully similar to sql_attr_XXX
+	# examples:
 	#
 	# xmlpipe_attr_timestamp	= published
 	# xmlpipe_attr_uint	= author_id
+	# xmlpipe_attr_str2ordinal= author
+	# xmlpipe_attr_bool	= is_enabled
+	# xmlpipe_attr_float	= latitude
+	# xmlpipe_attr_bigint	= guid
+	# xmlpipe_attr_multi	= tags
+	# xmlpipe_attr_multi_64	= tags64
+	# xmlpipe_attr_string	= title
+	# xmlpipe_attr_wordcount	= title_num_words
+	# xmlpipe_attr_json	= extra_data
+	# xmlpipe_field_string	= content
+	# xmlpipe_field_wordcount	= content_num_words
 
 
 	# perform UTF-8 validation, and filter out incorrect codes
@@ -334,6 +372,15 @@ index test1
 	# optional, default is 'extern'
 	# known values are 'none', 'extern' and 'inline'
 	docinfo			= extern
+
+	# dictionary type, 'crc' or 'keywords'
+	# crc is faster to index when no substring/wildcards searches are needed
+	# crc with substrings might be faster to search but is much slower to index
+	# (because all substrings are pre-extracted as individual keywords)
+	# keywords is much faster to index with substrings, and index is much (3-10x) smaller
+	# keywords supports wildcards, crc does not, and never will
+	# optional, default is 'crc'
+	dict			= keywords
 
 	# memory locking for cached data (.spa and .spi), to prevent swapping
 	# optional, default is 0 (do not mlock)
@@ -428,6 +475,12 @@ index test1
 	# optional, default is 0 (do not index infixes)
 	#
 	# min_infix_len		= 0
+
+
+	# maximum substring (prefix or infix) length to index
+	# optional, default is 0 (do not limit substring length)
+	#
+	# max_substring_len	= 8
 
 
 	# list of fields to limit prefix/infix indexing to
@@ -619,6 +672,12 @@ index test1
 	# optional, default is 0 (apply stopwords after stemming)
 	#
 	# stopwords_unstemmed	= 0
+
+
+	# path to a global (cluster-wide) keyword IDFs file
+	# optional, default is empty (use local IDFs)
+	#
+	# global_idf		= /usr/local/sphinx/var/global.idf
 }
 
 
@@ -722,12 +781,15 @@ index rt
 	rt_attr_uint		= gid
 
 	# RT indexes currently support the following attribute types:
-	# uint, bigint, float, timestamp, string
+	# uint, bigint, float, timestamp, string, mva, mva64, json
 	#
 	# rt_attr_bigint		= guid
 	# rt_attr_float		= gpa
 	# rt_attr_timestamp	= ts_added
 	# rt_attr_string		= author
+	# rt_attr_multi		= tags
+	# rt_attr_multi_64	= tags64
+	# rt_attr_json		= extra_data
 }
 
 #############################################################################
@@ -772,10 +834,46 @@ indexer
 	# max_file_field_buffer	= 32M
 
 
+	# how to handle IO errors in file fields
+	# known values are 'ignore_field', 'skip_document', and 'fail_index'
+	# optional, default is 'ignore_field'
+	#
+	# on_file_field_error = skip_document
+
+
+	# how to handle syntax errors in JSON attributes
+	# known values are 'ignore_attr' and 'fail_index'
+	# optional, default is 'ignore_attr'
+	#
+	# on_json_attr_error = fail_index
+
+
+	# whether to auto-convert numeric values from strings in JSON attributes
+	# with auto-conversion, string value with actually numeric data
+	# (as in {"key":"12345"}) gets stored as a number, rather than string
+	# optional, allowed values are 0 and 1, default is 0 (do not convert)
+	#
+	# json_autoconv_numbers = 1
+
+
+	# whether and how to auto-convert key names in JSON attributes
+	# known value is 'lowercase'
+	# optional, default is unspecified (do nothing)
+	#
+	# json_autoconv_keynames = lowercase
+
+
 	# lemmatizer dictionaries base path
 	# optional, defaut is /usr/local/share (see ./configure --datadir)
 	#
 	# lemmatizer_base = /usr/local/share/sphinx/dicts
+
+
+	# lemmatizer cache size
+	# improves the indexing time when the lemmatization is enabled
+	# optional, default is 256K
+	#
+	# lemmatizer_cache = 512M
 }
 
 #############################################################################
@@ -1046,6 +1144,19 @@ searchd
 	# optional, default is 60 seconds
 	#
 	# ha_period_karma			= 60
+
+
+	# delay between preforked children restarts on rotation, in milliseconds
+	# optional, default is 0 (no delay)
+	#
+	# prefork_rotation_throttle	= 100
+
+
+	# a prefix to prepend to the local file names when creating snippets
+	# with load_files and/or load_files_scatter options
+	# optional, default is empty
+	#
+	# snippets_file_prefix		= /mnt/common/server1/
 }
 
 # --eof--

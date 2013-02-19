@@ -918,7 +918,7 @@ call_opt_name:
 describe:
 	describe_tok TOK_IDENT like_filter
 		{
-			pParser->m_pStmt->m_eStmt = STMT_DESC;
+			pParser->m_pStmt->m_eStmt = STMT_DESCRIBE;
 			pParser->m_pStmt->m_sIndex = $2.m_sValue;
 		}
 	;
@@ -1034,7 +1034,7 @@ create_function:
 	TOK_CREATE TOK_FUNCTION TOK_IDENT TOK_RETURNS udf_type TOK_SONAME TOK_QUOTED_STRING
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_CREATE_FUNC;
+			tStmt.m_eStmt = STMT_CREATE_FUNCTION;
 			tStmt.m_sUdfName = $3.m_sValue;
 			tStmt.m_sUdfLib = $7.m_sValue;
 			tStmt.m_eUdfType = (ESphAttr) $5;
@@ -1051,7 +1051,7 @@ drop_function:
 	TOK_DROP TOK_FUNCTION TOK_IDENT
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_DROP_FUNC;
+			tStmt.m_eStmt = STMT_DROP_FUNCTION;
 			tStmt.m_sUdfName = $3.m_sValue;
 		}
 	;

@@ -20,6 +20,7 @@ type sphinx.xml ^
 	| perl -pe "s/<\/b>/<\/emphasis>/g" ^
 	| perl -pe "s/(fixed|bug) #(\d+)/\1 <ulink url=\"http:\/\/sphinxsearch.com\/bugs\/view.php\?id=\2\">#\2<\/ulink>/" ^
 	| xsltproc ^
+		--nonet ^
 		--stringparam section.autolabel 1 ^
 		--stringparam section.label.includes.component.label 1 ^
 		%XSLTARGS% ^
@@ -34,3 +35,6 @@ type sphinx.xml ^
 	> sphinx.html
 
 perl html2txt.pl < sphinx.html > sphinx.txt
+
+fromdos sphinx.html
+fromdos sphinx.txt

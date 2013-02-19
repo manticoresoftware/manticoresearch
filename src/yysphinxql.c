@@ -2758,7 +2758,7 @@ yyreduce:
   case 237:
 
     {
-			pParser->m_pStmt->m_eStmt = STMT_DESC;
+			pParser->m_pStmt->m_eStmt = STMT_DESCRIBE;
 			pParser->m_pStmt->m_sIndex = yyvsp[-1].m_sValue;
 		;}
     break;
@@ -2837,7 +2837,7 @@ yyreduce:
 
     {
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_CREATE_FUNC;
+			tStmt.m_eStmt = STMT_CREATE_FUNCTION;
 			tStmt.m_sUdfName = yyvsp[-4].m_sValue;
 			tStmt.m_sUdfLib = yyvsp[0].m_sValue;
 			tStmt.m_eUdfType = (ESphAttr) yyvsp[-2].m_iValue;
@@ -2863,7 +2863,7 @@ yyreduce:
 
     {
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_DROP_FUNC;
+			tStmt.m_eStmt = STMT_DROP_FUNCTION;
 			tStmt.m_sUdfName = yyvsp[0].m_sValue;
 		;}
     break;

@@ -10521,12 +10521,12 @@ enum SqlStmt_e
 	STMT_BEGIN,
 	STMT_COMMIT,
 	STMT_ROLLBACK,
-	STMT_CALL,
-	STMT_DESC,
+	STMT_CALL, // check.pl STMT_CALL_SNIPPETS STMT_CALL_KEYWORDS
+	STMT_DESCRIBE,
 	STMT_SHOW_TABLES,
 	STMT_UPDATE,
-	STMT_CREATE_FUNC,
-	STMT_DROP_FUNC,
+	STMT_CREATE_FUNCTION,
+	STMT_DROP_FUNCTION,
 	STMT_ATTACH_INDEX,
 	STMT_FLUSH_RTINDEX,
 	STMT_SHOW_VARIABLES,
@@ -16050,6 +16050,9 @@ public:
 				return true;
 			}
 		case STMT_CALL:
+			// IMPORTANT! if you add a new builtin here, do also add it
+			// in the comment to STMT_CALL line in SqlStmt_e declaration,
+			// the one that lists expansions for doc/check.pl
 			pStmt->m_sCallProc.ToUpper();
 			if ( pStmt->m_sCallProc=="SNIPPETS" )
 			{
@@ -16066,7 +16069,7 @@ public:
 			}
 			return true;
 
-		case STMT_DESC:
+		case STMT_DESCRIBE:
 			HandleMysqlDescribe ( tOut, *pStmt );
 			return true;
 
@@ -16083,7 +16086,7 @@ public:
 			tOut.Ok();
 			return true;
 
-		case STMT_CREATE_FUNC:
+		case STMT_CREATE_FUNCTION:
 			if ( !sphUDFCreate ( pStmt->m_sUdfLib.cstr(), pStmt->m_sUdfName.cstr(), pStmt->m_eUdfType, m_sError ) )
 				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
 			else
@@ -16091,7 +16094,7 @@ public:
 			g_tmSphinxqlState = sphMicroTimer();
 			return true;
 
-		case STMT_DROP_FUNC:
+		case STMT_DROP_FUNCTION:
 			if ( !sphUDFDrop ( pStmt->m_sUdfName.cstr(), m_sError ) )
 				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
 			else
@@ -17271,7 +17274,7 @@ static bool SphinxqlStateLine ( CSphVector<char> & dLine, CSphString * sError )
 				tStmt.m_dSetValues.Sort();
 				UservarAdd ( tStmt.m_sSetName, tStmt.m_dSetValues );
 			}
-		} else if ( tStmt.m_eStmt==STMT_CREATE_FUNC )
+		} else if ( tStmt.m_eStmt==STMT_CREATE_FUNCTION )
 		{
 			if ( !sphUDFCreate ( tStmt.m_sUdfLib.cstr(), tStmt.m_sUdfName.cstr(), tStmt.m_eUdfType, *sError ) )
 				bOk = false;

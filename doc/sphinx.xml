@@ -124,6 +124,7 @@ are available by building third party <ulink url="http://snowball.tartarus.org/"
 <listitem><para><filename>spelldump</filename>: a simple command-line tool to extract the items from an <filename>ispell</filename> or <filename>MySpell</filename>
 (as bundled with OpenOffice) format dictionary to help customize your index, for use with <link linkend="conf-wordforms">wordforms</link>.</para></listitem>
 <listitem><para><filename>indextool</filename>: an utility to dump miscellaneous debug information about the index, added in version 0.9.9-rc2.</para></listitem>
+<listitem><para><filename>wordbreaker</filename>: an utility to break down compound words into separate words, added in version 2.1.1.</para></listitem>
 </itemizedlist>
 </para>
 </sect1>
@@ -277,37 +278,37 @@ specific project files) manually.
 <sect1 id="installing"><title>Installing Sphinx on Linux</title>
 <para><orderedlist>
 <listitem>
-	<para>
-	Extract everything from the distribution tarball (haven't you already?)
-	and go to the <filename>sphinx</filename> subdirectory. (We are using
-	version 2.0.1-beta here for the sake of example only; be sure to change this
-	to a specific version you're using.)
-	</para>
+    <para>
+    Extract everything from the distribution tarball (haven't you already?)
+    and go to the <filename>sphinx</filename> subdirectory. (We are using
+    version 2.0.1-beta here for the sake of example only; be sure to change this
+    to a specific version you're using.)
+    </para>
 <para><literallayout><userinput>$ tar xzvf sphinx-2.0.1-beta.tar.gz
 $ cd sphinx
 </userinput></literallayout></para></listitem>
 <listitem>
-	<para>Run the configuration program:</para>
-	<para><literallayout><userinput>$ ./configure</userinput></literallayout></para>
-	<para>
-	There's a number of options to configure. The complete listing may
-	be obtained by using <option>--help</option> switch. The most important ones are:
-	<itemizedlist>
-		<listitem><para><option>--prefix</option>, which specifies where to install Sphinx; such as <option>--prefix=/usr/local/sphinx</option> (all of the examples use this prefix)</para></listitem>
-		<listitem><para><option>--with-mysql</option>, which specifies where to look for MySQL include and library files, if auto-detection fails;</para></listitem>
-		<listitem><para><option>--with-static-mysql</option>, which builds Sphinx with statically linked MySQL support;</para></listitem>
-		<listitem><para><option>--with-pgsql</option>, which specifies where to look for PostgreSQL include and library files.</para></listitem>
-		<listitem><para><option>--with-static-pgsql</option>, which builds Sphinx with statically linked PostgreSQL support;</para></listitem>
-	</itemizedlist>
-	</para></listitem>
+    <para>Run the configuration program:</para>
+    <para><literallayout><userinput>$ ./configure</userinput></literallayout></para>
+    <para>
+    There's a number of options to configure. The complete listing may
+    be obtained by using <option>--help</option> switch. The most important ones are:
+    <itemizedlist>
+        <listitem><para><option>--prefix</option>, which specifies where to install Sphinx; such as <option>--prefix=/usr/local/sphinx</option> (all of the examples use this prefix)</para></listitem>
+        <listitem><para><option>--with-mysql</option>, which specifies where to look for MySQL include and library files, if auto-detection fails;</para></listitem>
+        <listitem><para><option>--with-static-mysql</option>, which builds Sphinx with statically linked MySQL support;</para></listitem>
+        <listitem><para><option>--with-pgsql</option>, which specifies where to look for PostgreSQL include and library files.</para></listitem>
+        <listitem><para><option>--with-static-pgsql</option>, which builds Sphinx with statically linked PostgreSQL support;</para></listitem>
+    </itemizedlist>
+    </para></listitem>
 <listitem>
-	<para>Build the binaries:</para>
-	<para><literallayout><userinput>$ make</userinput></literallayout></para></listitem>
+    <para>Build the binaries:</para>
+    <para><literallayout><userinput>$ make</userinput></literallayout></para></listitem>
 <listitem>
-	<para>Install the binaries in the directory of your choice:
-	(defaults to <filename>/usr/local/bin/</filename> on *nix systems,
-	but is overridden with <option>configure --prefix</option>)</para>
-	<para><literallayout><userinput>$ make install</userinput></literallayout></para></listitem>
+    <para>Install the binaries in the directory of your choice:
+    (defaults to <filename>/usr/local/bin/</filename> on *nix systems,
+    but is overridden with <option>configure --prefix</option>)</para>
+    <para><literallayout><userinput>$ make install</userinput></literallayout></para></listitem>
 </orderedlist></para>
 </sect1>
 
@@ -317,32 +318,32 @@ unless you are preparing code patches, you can use the pre-compiled binary files
 area on the website.</para>
 <orderedlist>
 <listitem>
-	<para>Extract everything from the .zip file you have downloaded -
-	<filename>sphinx-2.0.1-beta-win32.zip</filename>,
-	or <filename>sphinx-2.0.1-beta-win32-pgsql.zip</filename> if you need PostgresSQL support as well.
-	(We are using version 2.0.1-beta here for the sake of example only;
-	be sure to change this to a specific version you're using.)
-	You can use Windows Explorer in Windows XP and up to extract the files,
-	or a freeware package like 7Zip to open the archive.</para>
-	<para>For the remainder of this guide, we will assume that the folders are unzipped into <filename>C:\Sphinx</filename>,
-	such that <filename>searchd.exe</filename> can be found in <filename>C:\Sphinx\bin\searchd.exe</filename>. If you decide
-	to use any different location for the folders or configuration file, please change it accordingly.</para></listitem>
+    <para>Extract everything from the .zip file you have downloaded -
+    <filename>sphinx-2.0.1-beta-win32.zip</filename>,
+    or <filename>sphinx-2.0.1-beta-win32-pgsql.zip</filename> if you need PostgresSQL support as well.
+    (We are using version 2.0.1-beta here for the sake of example only;
+    be sure to change this to a specific version you're using.)
+    You can use Windows Explorer in Windows XP and up to extract the files,
+    or a freeware package like 7Zip to open the archive.</para>
+    <para>For the remainder of this guide, we will assume that the folders are unzipped into <filename>C:\Sphinx</filename>,
+    such that <filename>searchd.exe</filename> can be found in <filename>C:\Sphinx\bin\searchd.exe</filename>. If you decide
+    to use any different location for the folders or configuration file, please change it accordingly.</para></listitem>
 <listitem>
-	<para>Edit the contents of sphinx.conf.in - specifically entries relating to @CONFDIR@ - to paths suitable for your system.</para></listitem>
+    <para>Edit the contents of sphinx.conf.in - specifically entries relating to @CONFDIR@ - to paths suitable for your system.</para></listitem>
 <listitem>
-	<para>Install the <filename>searchd</filename> system as a Windows service:</para>
-	<para><userinput>C:\Sphinx\bin&gt; C:\Sphinx\bin\searchd --install --config C:\Sphinx\sphinx.conf.in --servicename SphinxSearch</userinput></para></listitem>
+    <para>Install the <filename>searchd</filename> system as a Windows service:</para>
+    <para><userinput>C:\Sphinx\bin&gt; C:\Sphinx\bin\searchd --install --config C:\Sphinx\sphinx.conf.in --servicename SphinxSearch</userinput></para></listitem>
 <listitem>
-	<para>The <filename>searchd</filename> service will now be listed in the Services panel
-	within the Management Console, available from Administrative Tools. It will not have been
-	started, as you will need to configure it and build your indexes with <filename>indexer</filename>
-	before starting the service. A guide to do this can be found under
-	<link linkend="quick-tour">Quick tour</link>.</para>
-	<para>During the next steps of the install (which involve running indexer pretty much as
-	you would on Linux) you may find that you get an error relating to libmysql.dll not being found.
-	If you have MySQL installed, you should find a copy of this library in your Windows directory,
-	or sometimes in Windows\System32, or failing that in the MySQL core directories. If you
-	do receive an error please copy libmysql.dll into the bin directory.</para></listitem>
+    <para>The <filename>searchd</filename> service will now be listed in the Services panel
+    within the Management Console, available from Administrative Tools. It will not have been
+    started, as you will need to configure it and build your indexes with <filename>indexer</filename>
+    before starting the service. A guide to do this can be found under
+    <link linkend="quick-tour">Quick tour</link>.</para>
+    <para>During the next steps of the install (which involve running indexer pretty much as
+    you would on Linux) you may find that you get an error relating to libmysql.dll not being found.
+    If you have MySQL installed, you should find a copy of this library in your Windows directory,
+    or sometimes in Windows\System32, or failing that in the MySQL core directories. If you
+    do receive an error please copy libmysql.dll into the bin directory.</para></listitem>
 </orderedlist>
 </sect1>
 
@@ -392,32 +393,32 @@ To use Sphinx, you will need to:
 </para>
 <orderedlist>
 <listitem>
-	<para>Create a configuration file.</para>
-	<para>
-	Default configuration file name is <filename>sphinx.conf</filename>.
-	All Sphinx programs look for this file in current working directory
-	by default.
-	</para>
-	<para>
-	Sample configuration file, <filename>sphinx.conf.dist</filename>, which has
-	all the options documented, is created by <filename>configure</filename>.
-	Copy and edit that sample file to make your own configuration: (assuming Sphinx is installed into <filename>/usr/local/sphinx/</filename>)
-	</para>
+    <para>Create a configuration file.</para>
+    <para>
+    Default configuration file name is <filename>sphinx.conf</filename>.
+    All Sphinx programs look for this file in current working directory
+    by default.
+    </para>
+    <para>
+    Sample configuration file, <filename>sphinx.conf.dist</filename>, which has
+    all the options documented, is created by <filename>configure</filename>.
+    Copy and edit that sample file to make your own configuration: (assuming Sphinx is installed into <filename>/usr/local/sphinx/</filename>)
+    </para>
 <para><literallayout><userinput>$ cd /usr/local/sphinx/etc
 $ cp sphinx.conf.dist sphinx.conf
 $ vi sphinx.conf</userinput></literallayout></para>
-	<para>
-	Sample configuration file is setup to index <filename>documents</filename>
-	table from MySQL database <filename>test</filename>; so there's <filename>example.sql</filename>
-	sample data file to populate that table with a few documents for testing purposes:
-	</para>
-	<para><literallayout><userinput>$ mysql -u test &lt; /usr/local/sphinx/etc/example.sql</userinput></literallayout></para></listitem>
+    <para>
+    Sample configuration file is setup to index <filename>documents</filename>
+    table from MySQL database <filename>test</filename>; so there's <filename>example.sql</filename>
+    sample data file to populate that table with a few documents for testing purposes:
+    </para>
+    <para><literallayout><userinput>$ mysql -u test &lt; /usr/local/sphinx/etc/example.sql</userinput></literallayout></para></listitem>
 <listitem>
-	<para>Run the indexer to create full-text index from your data:</para>
+    <para>Run the indexer to create full-text index from your data:</para>
 <para><literallayout><userinput>$ cd /usr/local/sphinx/etc
 $ /usr/local/sphinx/bin/indexer --all</userinput></literallayout></para></listitem>
 <listitem>
-	<para>Query your newly created index!</para></listitem>
+    <para>Query your newly created index!</para></listitem>
 </orderedlist>
 <para>
 To query the index from command line, use <filename>search</filename> utility:
@@ -428,24 +429,24 @@ $ /usr/local/sphinx/bin/search test</userinput></literallayout></para>
 To query the index from your PHP scripts, you need to:
 </para>
 <orderedlist>
-	<listitem>
-		<para>Run the search daemon which your script will talk to:</para>
+    <listitem>
+        <para>Run the search daemon which your script will talk to:</para>
 <para><literallayout><userinput>$ cd /usr/local/sphinx/etc
 $ /usr/local/sphinx/bin/searchd</userinput></literallayout>
-	</para></listitem>
-	<listitem>
-		<para>
-		Run the attached PHP API test script (to ensure that the daemon
-		was succesfully started and is ready to serve the queries):
-		</para>
+    </para></listitem>
+    <listitem>
+        <para>
+        Run the attached PHP API test script (to ensure that the daemon
+        was succesfully started and is ready to serve the queries):
+        </para>
 <para><literallayout><userinput>$ cd sphinx/api
 $ php test.php test</userinput></literallayout>
-	</para></listitem>
-	<listitem>
-		<para>
-		Include the API (it's located in <filename>api/sphinxapi.php</filename>)
-		into your own scripts and use it.
-	</para></listitem>
+    </para></listitem>
+    <listitem>
+        <para>
+        Include the API (it's located in <filename>api/sphinxapi.php</filename>)
+        into your own scripts and use it.
+    </para></listitem>
 </orderedlist>
 <para>
 Happy searching!
@@ -573,7 +574,7 @@ setup filtering, sorting, and grouping. Here as an example.
 <programlisting>
 ...
 sql_query = SELECT id, title, content, \
-	author_id, forum_id, post_date FROM my_forum_posts
+    author_id, forum_id, post_date FROM my_forum_posts
 sql_attr_uint = author_id
 sql_attr_uint = forum_id
 sql_attr_timestamp = post_date
@@ -600,6 +601,7 @@ Currently supported attribute types are:
 <listitem><para>floating point values (32-bit, IEEE 754 single precision);</para></listitem>
 <listitem><para>string ordinals (specially computed integers);</para></listitem>
 <listitem><para><link linkend="conf-sql-attr-string">strings</link> (since 1.10-beta);</para></listitem>
+<listitem><para><link linkend="conf-sql-attr-json">JSON</link> (since 2.1.1-beta);</para></listitem>
 <listitem><para><link linkend="mva">MVA</link>, multi-value attributes (variable-length lists of 32-bit unsigned integers).</para></listitem>
 </itemizedlist>
 </para>
@@ -692,20 +694,49 @@ the process of building index from text is called <glossterm>indexing</glossterm
 Different index types are well suited for different tasks.
 For example, a disk-based tree-based index would be easy to
 update (ie. insert new documents to existing index), but rather
-slow to search. Therefore, Sphinx architecture allows for different
-<glossterm>index types</glossterm> to be implemented easily.
+slow to search. Sphinx architecture allows internally for different
+<glossterm>index types</glossterm>, or <glossterm>backends</glossterm>,
+to be implemented comparatively easily.
 </para>
 <para>
-The only index type which is implemented in Sphinx at the moment is
-designed for maximum indexing and searching speed. This comes at a cost
-of updates being really slow; theoretically, it might be slower to
-update this type of index than than to reindex it from scratch.
-However, this very frequently could be worked around with
-muiltiple indexes, see <xref linkend="live-updates"/> for details.
+Starting with 1.10-beta, Sphinx provides 2 different backends:
+a <b>disk index</b> backend, and a <b>RT (realtime) index</b> backend.
 </para>
 <para>
-It is planned to implement more index types, including the
-type which would be updateable in real time.
+<b>Disk indexes</b> are designed to provide maximum indexing and searching
+speed, while keeping the RAM footprint as low as possible. That comes
+at a cost of text index updates. You can not update an existing document or
+incrementally add a new document to a disk index. You only can batch
+rebuild the entire disk index from scratch. (Note that you still can
+update document's <b>attributes</b> on the fly, even with the disk
+indexes.)
+</para>
+<para>
+This "rebuild only" limitation might look as a big constraint
+at a first glance. But in reality, it can very frequently be worked
+around rather easily by setting up muiltiple disk indexes, searching
+through them all, and only rebuilding the one with a fraction
+of the most recently changed data.
+See <xref linkend="live-updates"/> for details.
+</para>
+<para>
+<b>RT indexes</b> enable you to implement dynamic updates and
+incremental additions to the full text index. RT stands for Real Time
+and they are indeed "soft realtime" in terms of writes, meaning that
+most index changes become available for searching as quick as 1 millisecond
+or less, but could occasionally stall for seconds. (Searches will still work
+even during that occasional writing stall.) Refer to
+<xref linkend="rt-indexes"/> for details.
+</para>
+<para>
+Last but not least, Sphinx supports so-called <b>distributed indexes</b>.
+Compared to disk and RT indexes, those are not a real physical backend,
+but rather just lists of either local or remote indexes that can be
+searched transparently to the application, with Sphinx doing all the chores
+of sending search requests to remote machines in the cluster, aggregating
+the result sets, retrying the failed requests, and even doing some
+load balancing. See <xref linkend="distributed"/> for a discussion
+of distributed indexes.
 </para>
 <para>
 There can be as many indexes per configuration file as necessary.
@@ -793,15 +824,15 @@ With all the SQL drivers, indexing generally works as follows.
 <itemizedlist>
 <listitem><para>connection to the database is established;</para></listitem>
 <listitem><para>pre-query (see <xref linkend="conf-sql-query-pre"/>) is executed
-	to perform any necessary initial setup, such as setting per-connection encoding with MySQL;</para></listitem>
+    to perform any necessary initial setup, such as setting per-connection encoding with MySQL;</para></listitem>
 <listitem><para>main query (see <xref linkend="conf-sql-query"/>) is executed and the rows it returns are indexed;</para></listitem>
 <listitem><para>post-query (see <xref linkend="conf-sql-query-post"/>) is executed
-	to perform any necessary cleanup;</para></listitem>
+    to perform any necessary cleanup;</para></listitem>
 <listitem><para>connection to the database is closed;</para></listitem>
 <listitem><para>indexer does the sorting phase (to be pedantic, index-type specific post-processing);</para></listitem>
 <listitem><para>connection to the database is established again;</para></listitem>
 <listitem><para>post-index query (see <xref linkend="conf-sql-query-post-index"/>) is executed
-	to perform any necessary final cleanup;</para></listitem>
+    to perform any necessary final cleanup;</para></listitem>
 <listitem><para>connection to the database is closed again.</para></listitem>
 </itemizedlist>
 Most options, such as database user/host/password, are straightforward.
@@ -822,7 +853,7 @@ Here's an example.
 <programlisting>
 # in sphinx.conf
 
-sql_query_range	= SELECT MIN(id),MAX(id) FROM documents
+sql_query_range = SELECT MIN(id),MAX(id) FROM documents
 sql_range_step = 1000
 sql_query = SELECT * FROM documents WHERE id&gt;=$start AND id&lt;=$end
 </programlisting>
@@ -998,54 +1029,54 @@ parsed data it returns is always in UTF-8.
 XML elements (tags) recognized by xmlpipe2 (and their attributes where applicable) are:
 <variablelist>
 <varlistentry>
-	<term>sphinx:docset</term>
-	<listitem><para>Mandatory top-level element, denotes and contains xmlpipe2 document set.</para></listitem>
+    <term>sphinx:docset</term>
+    <listitem><para>Mandatory top-level element, denotes and contains xmlpipe2 document set.</para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>sphinx:schema</term>
-	<listitem><para>Optional element, must either occur as the very first child
-		of sphinx:docset, or never occur at all. Declares the document schema.
-		Contains field and attribute declarations. If present, overrides
-		per-source settings from the configuration file.
-	</para></listitem>
+    <term>sphinx:schema</term>
+    <listitem><para>Optional element, must either occur as the very first child
+        of sphinx:docset, or never occur at all. Declares the document schema.
+        Contains field and attribute declarations. If present, overrides
+        per-source settings from the configuration file.
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>sphinx:field</term>
-	<listitem><para>Optional element, child of sphinx:schema. Declares a full-text field.
-		Known attributes are:
-		<itemizedlist>
-		<listitem><para>"name", specifies the XML element name that will be treated as a full-text field in the subsequent documents.</para></listitem>
-		<listitem><para>"attr", specifies whether to also index this field as a string or word count attribute. Possible values are "string" and "wordcount". Introduced in version 1.10-beta.</para></listitem>
-		</itemizedlist>
-	</para></listitem>
+    <term>sphinx:field</term>
+    <listitem><para>Optional element, child of sphinx:schema. Declares a full-text field.
+        Known attributes are:
+        <itemizedlist>
+        <listitem><para>"name", specifies the XML element name that will be treated as a full-text field in the subsequent documents.</para></listitem>
+        <listitem><para>"attr", specifies whether to also index this field as a string or word count attribute. Possible values are "string" and "wordcount". Introduced in version 1.10-beta.</para></listitem>
+        </itemizedlist>
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>sphinx:attr</term>
-	<listitem><para>Optional element, child of sphinx:schema. Declares an attribute.
-		Known attributes are:
-		<itemizedlist>
-		<listitem><para>"name", specifies the element name that should be treated as an attribute in the subsequent documents.</para></listitem>
-		<listitem><para>"type", specifies the attribute type. Possible values are "int", "timestamp", "str2ordinal", "bool", "float" and "multi".</para></listitem>
-		<listitem><para>"bits", specifies the bit size for "int" attribute type. Valid values are 1 to 32.</para></listitem>
-		<listitem><para>"default", specifies the default value for this attribute that should be used if the attribute's element is not present in the document.</para></listitem>
-		</itemizedlist>
-	</para></listitem>
+    <term>sphinx:attr</term>
+    <listitem><para>Optional element, child of sphinx:schema. Declares an attribute.
+        Known attributes are:
+        <itemizedlist>
+        <listitem><para>"name", specifies the element name that should be treated as an attribute in the subsequent documents.</para></listitem>
+        <listitem><para>"type", specifies the attribute type. Possible values are "int", "timestamp", "str2ordinal", "bool", "float" and "multi".</para></listitem>
+        <listitem><para>"bits", specifies the bit size for "int" attribute type. Valid values are 1 to 32.</para></listitem>
+        <listitem><para>"default", specifies the default value for this attribute that should be used if the attribute's element is not present in the document.</para></listitem>
+        </itemizedlist>
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>sphinx:document</term>
-	<listitem><para>Mandatory element, must be a child of sphinx:docset.
-		Contains arbitrary other elements with field and attribute values
-		to be indexed, as declared either using sphinx:field and sphinx:attr
-		elements or in the configuration file. The only known attribute
-		is "id" that must contain the unique integer document ID.
-	</para></listitem>
+    <term>sphinx:document</term>
+    <listitem><para>Mandatory element, must be a child of sphinx:docset.
+        Contains arbitrary other elements with field and attribute values
+        to be indexed, as declared either using sphinx:field and sphinx:attr
+        elements or in the configuration file. The only known attribute
+        is "id" that must contain the unique integer document ID.
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>sphinx:killlist</term>
-	<listitem><para>Optional element, child of sphinx:docset.
-		Contains a number of "id" elements whose contents are document IDs
-		to be put into a <link linkend="conf-sql-query-killlist">kill-list</link> for this index.
-	</para></listitem>
+    <term>sphinx:killlist</term>
+    <listitem><para>Optional element, child of sphinx:docset.
+        Contains a number of "id" elements whose contents are document IDs
+        to be put into a <link linkend="conf-sql-query-killlist">kill-list</link> for this index.
+    </para></listitem>
 </varlistentry>
 </variablelist>
 </para>
@@ -1228,11 +1259,11 @@ attributes. Here's an example:
 <programlisting>
 index rt
 {
-	type = rt
-	path = /usr/local/sphinx/data/rt
-	rt_field = title
-	rt_field = content
-	rt_attr_uint = gid
+    type = rt
+    path = /usr/local/sphinx/data/rt
+    rt_field = title
+    rt_field = content
+    rt_attr_uint = gid
 }
 </programlisting>
 </example>
@@ -1530,11 +1561,11 @@ There are the following matching modes available:
 <listitem><para>SPH_MATCH_PHRASE, matches query as a phrase, requiring perfect match;</para></listitem>
 <listitem><para>SPH_MATCH_BOOLEAN, matches query as a boolean expression (see <xref linkend="boolean-syntax"/>);</para></listitem>
 <listitem><para>SPH_MATCH_EXTENDED, matches query as an expression in Sphinx internal query language
-	(see <xref linkend="extended-syntax"/>);</para></listitem>
+    (see <xref linkend="extended-syntax"/>);</para></listitem>
 <listitem><para>SPH_MATCH_EXTENDED2, an alias for SPH_MATCH_EXTENDED;</para></listitem>
 <listitem><para>SPH_MATCH_FULLSCAN, matches query, forcibly using the "full scan" mode as below.
-	NB, any query terms will be ignored, such that filters, filter-ranges and grouping
-	will still be applied, but no text-matching.</para></listitem>
+    NB, any query terms will be ignored, such that filters, filter-ranges and grouping
+    will still be applied, but no text-matching.</para></listitem>
 </itemizedlist>
 </para>
 <para>
@@ -1664,9 +1695,9 @@ The full meaning of this search is:
 <itemizedlist>
 <listitem><para>Find the words 'hello' and 'world' adjacently in any field in a document;</para></listitem>
 <listitem><para>Additionally, the same document must also contain the words 'example' and 'program'
-	in the title field, with up to, but not including, 5 words between the words in question;
-	(E.g. "example PHP program" would be matched however "example script to introduce outside data
-	into the correct context for your program" would not because two terms have 5 or more words between them)</para></listitem>
+    in the title field, with up to, but not including, 5 words between the words in question;
+    (E.g. "example PHP program" would be matched however "example script to introduce outside data
+    into the correct context for your program" would not because two terms have 5 or more words between them)</para></listitem>
 <listitem><para>Additionally, the same document must contain the word 'python' in the body field, but not contain either 'php' or 'perl';</para></listitem>
 <listitem><para>Additionally, the same document must contain the word 'code' in any field.</para></listitem>
 </itemizedlist>
@@ -1709,6 +1740,11 @@ Quorum matching operator introduces a kind of fuzzy matching.
 It will only match those documents that pass a given threshold of given words.
 The example above ("the world is a wonderful place"/3) will match all documents
 that have at least 3 of the 6 specified words. Operator is limited to 255 keywords.
+Instead of an absolute number, you can also specify a number between 0.0 and 1.0
+(standing for 0% and 100%), and Sphinx will match only documents with at least
+the specified percentage of given words. The same example above could also have
+been written "the world is a wonderful place"/0.5 and it would match documents
+with at least 50% of the 6 words.
 </para>
 <para>
 Strict order operator (aka operator "before"), introduced in version 0.9.9-rc2,
@@ -2537,6 +2573,86 @@ is constant.
 </para></listitem>
 </varlistentry>
 
+<varlistentry>
+<term id="expr-func-packedfactors">PACKEDFACTORS()</term>
+<listitem>
+<para>
+PACKEDFACTORS(), introduced in version 2.1.1-beta, can be used in queries, 
+either to just see all the weighting factors calculated when doing the matching, or to
+provide a binary attribute that can be used to write a custom ranking UDF.
+This function works only if expression ranker is specified and the query 
+is not a full scan, otherwise it will return an error.
+</para>
+<para>
+It can be used to implement custom ranking functions in UDFs, as in
+<programlisting>
+SELECT *, CUSTOM_RANK(PACKEDFACTORS()) AS r
+FROM my_index
+WHERE match('hello')
+ORDER BY r DESC
+OPTION ranker=expr('1');
+</programlisting>
+Where CUSTOM_RANK() is a function implemented in an UDF. It should declare a 
+SPH_UDF_FACTORS structure (defined in <filename>sphinxudf.h</filename>), initialize this structure,
+unpack the factors into it before usage, and deinitialize it afterwards, as follows:
+<programlisting>
+SPH_UDF_FACTORS factors;
+sphinx_factors_init(&amp;factors);
+sphinx_factors_unpack((DWORD*)args-&gt;arg_values[0], &amp;factors);
+// ... can use the contents of factors variable here ...
+sphinx_factors_deinit(&amp;factors);
+</programlisting>
+</para>
+<para>
+PACKEDFACTORS() data is available at all query stages, not just
+when doing the initial matching and ranking pass. That enables
+another particularly interesting application of PACKEDFACTORS(),
+namely <b>re-ranking</b>.
+</para>
+<para>
+In the example just above, we used an expression-based ranker with
+a dummy expression, and sorted the result set by the value computed
+by our UDF. In other words, we used the UDF to <emphasis>rank</emphasis>
+all our results. Assume now, for the sake of an example, that our UDF
+is extremely expensive to compute and has a throughput of just
+10,000 calls per second. Assume that our query matches 1,000,000 documents.
+To maintain reasonable performance, we would then want to use a (much)
+simpler expression to do most of our ranking, and then apply the
+expensive UDF to only a few top results, say, top-100 results.
+Or, in other words, build top-100 results using a simpler ranking
+function and then <emphasis>re-rank</emphasis> those with a complex one.
+We can do that just as well with subselects:
+<programlisting>
+SELECT * FROM (
+    SELECT *, CUSTOM_RANK(PACKEDFACTORS()) AS r
+    FROM my_index WHERE match('hello')
+    OPTION ranker=expr('sum(lcs)*1000+bm25')
+	ORDER BY WEIGHT() DESC
+    LIMIT 100
+) ORDER BY r DESC LIMIT 10
+</programlisting>
+In this example, expression-based ranker will be called for every
+matched document to compute WEIGHT(). So it will get called 1,000,000
+times. But the UDF computation can be postponed until the outer sort.
+And it also will be done for just the top-100 matches by WEIGHT(),
+according to the inner limit. So the UDF will only get called 100 times.
+And then the final top-10 matches by UDF value will be selected
+and returned to the application.
+</para>
+<para>
+For reference, in the distributed case PACKEDFACTORS() data gets
+sent from the agents to master in a binary format, too. This makes
+it technically feasible to implement additional re-ranking pass
+(or passes) on the master node, if needed.
+</para>
+<para>
+If used with SphinxQL but not called from any UDFs, the result of PACKEDFACTORS()
+is simply formatted as plain text, which can be used to manually assess the ranking
+factors. Note that this feature is not currently supported by the Sphinx API.
+</para>	
+</listitem>
+</varlistentry>
+	
 </variablelist>
 </sect2>
 
@@ -2628,7 +2744,7 @@ expression, involving attribute values, internal attributes (@id and @weight),
 arithmetic operations, and a number of built-in functions. Here's an example:
 <programlisting>
 $cl->SetSortMode ( SPH_SORT_EXPR,
-	"@weight + ( user_karma + ln(pageviews) )*0.1" );
+    "@weight + ( user_karma + ln(pageviews) )*0.1" );
 </programlisting>
 The operators and functions supported in the expressions are discussed
 in a separate section, <xref linkend="expressions"/>.
@@ -3307,7 +3423,7 @@ covers these tools and how to use them.</para>
 
 
 <sect1 id="ref-indexer"><title><filename>indexer</filename> command reference</title>
-<para><filename>indexer</filename> is the first of the two principle tools
+<para><filename>indexer</filename> is the first of the two principal tools
 as part of Sphinx. Invoked from either the command line directly, or as part
 of a larger script, <filename>indexer</filename> is solely responsible
 for gathering the data that will be searchable.</para>
@@ -3546,21 +3662,21 @@ $ searchd [OPTIONS]
 <itemizedlist>
 
 <listitem><para><option>--help</option> (<option>-h</option> for short) lists all of the
-	parameters that can be called in your particular build of <filename>searchd</filename>.
+    parameters that can be called in your particular build of <filename>searchd</filename>.
 </para></listitem>
 
 <listitem><para><option>--config &lt;file&gt;</option> (<option>-c &lt;file&gt;</option> for short)
-	tells <filename>searchd</filename> to use the given file as its configuration,
-	just as with <filename>indexer</filename> above.
+    tells <filename>searchd</filename> to use the given file as its configuration,
+    just as with <filename>indexer</filename> above.
 </para></listitem>
 
 <listitem><para><option>--stop</option> is used to asynchronously stop <filename>searchd</filename>,
-	using the details of the PID file as specified in the <filename>sphinx.conf</filename> file,
-	so you may also need to confirm to <filename>searchd</filename> which configuration
-	file to use with the <option>--config</option> option. NB, calling <option>--stop</option>
-	will also make sure any changes applied to the indexes with
-	<link linkend="api-func-updateatttributes"><code>UpdateAttributes()</code></link>
-	will be applied to the index files themselves. Example:
+    using the details of the PID file as specified in the <filename>sphinx.conf</filename> file,
+    so you may also need to confirm to <filename>searchd</filename> which configuration
+    file to use with the <option>--config</option> option. NB, calling <option>--stop</option>
+    will also make sure any changes applied to the indexes with
+    <link linkend="api-func-updateatttributes"><code>UpdateAttributes()</code></link>
+    will be applied to the index files themselves. Example:
 <programlisting>
 $ searchd --config /home/myuser/sphinx.conf --stop
 </programlisting>
@@ -3575,12 +3691,12 @@ the pending attribute changes) and exits. Example:
 $ searchd --config /home/myuser/sphinx.conf --stopwait
 </programlisting>
 Possible exit codes are as follows:
-	<itemizedlist>
-	<listitem><para>0 on success;</para></listitem>
-	<listitem><para>1 if connection to running searchd daemon failed;</para></listitem>
-	<listitem><para>2 if daemon reported an error during shutdown;</para></listitem>
-	<listitem><para>3 if daemon crashed during shutdown.</para></listitem>
-	</itemizedlist>
+    <itemizedlist>
+    <listitem><para>0 on success;</para></listitem>
+    <listitem><para>1 if connection to running searchd daemon failed;</para></listitem>
+    <listitem><para>2 if daemon reported an error during shutdown;</para></listitem>
+    <listitem><para>3 if daemon crashed during shutdown.</para></listitem>
+    </itemizedlist>
 </para></listitem>
 
 <listitem><para><option>--status</option> command is used to query running
@@ -3701,11 +3817,11 @@ machine with possibly different path layouts.
 added in version 2.0.2-beta, can be used to specify a list of extra binary log
 replay options. The supported options are:
 <itemizedlist>
-	<listitem><para><option>accept-desc-timestamp</option>,
-	ignore descending transaction timestamps and replay such
-	transactions anyway (the default behavior is to exit
-	with an error).
-	</para></listitem>
+    <listitem><para><option>accept-desc-timestamp</option>,
+    ignore descending transaction timestamps and replay such
+    transactions anyway (the default behavior is to exit
+    with an error).
+    </para></listitem>
 </itemizedlist>
 Example:
 <programlisting>
@@ -3792,21 +3908,21 @@ as usual. This is a debugging option.
 Last but not least, as every other daemon, <filename>searchd</filename> supports a number of signals.
 <variablelist>
 <varlistentry>
-	<term>SIGTERM</term>
-	<listitem><para>Initiates a clean shutdown. New queries will not be handled; but queries
-	that are already started will not be forcibly interrupted.</para></listitem>
+    <term>SIGTERM</term>
+    <listitem><para>Initiates a clean shutdown. New queries will not be handled; but queries
+    that are already started will not be forcibly interrupted.</para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>SIGHUP</term>
-	<listitem><para>Initiates index rotation. Depending on the value of
-	<link linkend="conf-seamless-rotate">seamless_rotate</link> setting,
-	new queries might be shortly stalled; clients will receive temporary
-	errors.</para></listitem>
+    <term>SIGHUP</term>
+    <listitem><para>Initiates index rotation. Depending on the value of
+    <link linkend="conf-seamless-rotate">seamless_rotate</link> setting,
+    new queries might be shortly stalled; clients will receive temporary
+    errors.</para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>SIGUSR1</term>
-	<listitem><para>Forces reopen of searchd log and query log files, letting
-	you implement log file rotation.</para></listitem>
+    <term>SIGUSR1</term>
+    <listitem><para>Forces reopen of searchd log and query log files, letting
+    you implement log file rotation.</para></listitem>
 </varlistentry>
 </variablelist>
 </para>
@@ -4044,6 +4160,10 @@ overrides the built-in config file names.
 The commands are as follows:
 </para>
 <itemizedlist>
+<listitem><para><option>--checkconfig</option> just loads and verifies the
+config file to check if it's valid, without syntax errors.
+This option was added in version 2.1.1-beta.
+</para></listitem>
 <listitem><para><option>--build-infixes INDEXNAME</option> build infixes for
 an existing dict=keywords index (upgrades .sph, .spi in place). You can use
 this option for legacy index files that already use dict=keywords, but now
@@ -4110,6 +4230,52 @@ automatically, and there should never be a need to use this option.
 </sect1>
 
 
+<sect1 id="ref-wordbreaker"><title><filename>wordbreaker</filename> command reference</title>
+<para>
+<filename>wordbreaker</filename> is one of the helper tools within
+the Sphinx package, introduced in version 2.1.1-beta. It is used to
+split compound words, as usual in URLs, into its component words.
+For example, this tool can split "lordoftherings" into its four 
+component words, or "http://manofsteel.warnerbros.com" into "man 
+of steel warner bros". This helps searching, without requiring
+prefixes or infixes: searching for "sphinx" wouldn't match "sphinxsearch"
+but if you break the compound word and index the separate components,
+you'll get a match without the costs of prefix and infix larger index files.
+</para>
+<para>Examples of its usage are:</para>
+<programlisting>
+echo manofsteel | bin/wordbreaker -dict dict.txt split
+</programlisting>
+<para>The input stream will be separated in words using the <option>-dict</option>
+dictionary file. (The dictionary should match the language of the compound word.)
+The <option>split</option> command breaks words from the standard input, and
+outputs the result in the standard output. There are also <option>test</option> and
+<option>bench</option> commands that let you test the splitting quality and benchmark
+the splitting functionality.
+</para>
+<para>Wordbreaker
+Wordbreaker needs a dictionary to recognize individual substrings within a string. To
+differentiate between different guesses, it uses the relative frequency of each
+word in the dictionary: higher frequency means higher split probability. You can 
+generate such a file using the <filename>indexer</filename> tool, as in
+<programlisting>
+indexer --buildstops dict.txt 100000 --buildfreqs myindex -c /path/to/sphinx.conf   
+</programlisting>
+which will write the 100,000 most frequent words, along with their counts, from
+myindex into dict.txt. The output file is a text file, so you can edit it by hand,
+if need be, to add or remove words.
+</para>
+<para>See 
+<ulink url="http://sphinxsearch.com/blog/2013/01/29/a-new-tool-in-the-trunk-wordbreaker/">
+http://sphinxsearch.com/blog/2013/01/29/a-new-tool-in-the-trunk-wordbreaker/</ulink>
+for more on this tool.
+</para>
+</sect1>
+
+
+
+
+
 </chapter>
 <chapter id="sphinxql-reference"><title>SphinxQL reference</title>
 
@@ -4133,7 +4299,7 @@ SELECT
     [GROUP BY {col_name | expr_alias}]
     [WITHIN GROUP ORDER BY {col_name | expr_alias} {ASC | DESC}]
     [ORDER BY {col_name | expr_alias} {ASC | DESC} [, ...]]
-    [LIMIT offset, row_count]
+    [LIMIT [offset,] row_count]
     [OPTION opt_name = opt_value [, ...]]
 </programlisting>
 <para>
@@ -4152,29 +4318,54 @@ be used with leading at-sign. This at-sign requirement will be lifted in
 the future.
 </para>
 </listitem>
+
+<!-- FIXME? move this to the functions reference? -->
 <listitem>
-<para>EXIST() function is supported. EXIST ( "attr-name", default-value ) replaces non-existent columns with default values. Returns attr-name value or default-value if that attribute does not exist. Currently function does not support STRING and MVA attributes, but that is going to be improved in future. This function is handy when you are
-searching several index files, which might not have the same exact scheme. Introduced in 2.1.1-beta:
+<para>EXIST() function (added in version 2.1.1-beta) is supported.
+EXIST ( "attr-name", default-value )
+replaces non-existent columns with default values. It returns either a value
+of an attribute specified by 'attr-name', or 'default-value' if that
+attribute does not exist. As of 2.1.1-beta it does not support STRING
+or MVA attributes. This function is handy when you are searching through
+several indexes with different schemas.
 </para>
 <programlisting>
 SELECT *, EXIST('gid', 6) as cnd FROM i1, i2 WHERE cnd>5
 </programlisting>
 </listitem>
 
+<!-- FIXME? move this to the functions reference? -->
 <listitem>
-    <para>SNIPPET() function is supported, since version 2.1.1-beta. This is a wrapper around the snippets functionality, available via CALL SNIPPETS. (The latter command provides more This function takes two arguments: the text to highlight, and a query, both of which must be constants. The intended use is as in SELECT id, SNIPPET(myUdf(id), "my.query") FROM myIndex WHERE MATCH("my.query") and myUdf() would be a UDF that would fetch a document from storage, given its id. This means that the result set can be fetched from Sphinx, without having to fetch the documents in the application, and then pushing them again to Sphinx for highlighting.
-    </para>
-    <para>SNIPPET() is a "post limit" function, that gets applied not only after a WHERE or ORDER BY clause, but also after a LIMIT. So, if you have LIMIT 20,10, SNIPPET() will be called only a maximum of 10 times.
+<para>SNIPPET() function (added in version 2.1.1-beta) is supported.
+This is a wrapper around the snippets functionality, similar to what is
+available via CALL SNIPPETS. This function takes two arguments: the text
+to highlight, and a query. The intended use is as follows:
+<programlisting>
+SELECT id, SNIPPET(myUdf(id), "my.query")
+FROM myIndex WHERE MATCH("my.query")
+</programlisting>
+where myUdf() would be a UDF that fetches a document by its ID from
+some external storage. This enables applications to fetch the entire
+result set directly from Sphinx in one query, without having to separately
+fetch the documents in the application and then send them back to Sphinx
+for highlighting.
+</para>
+<para>
+SNIPPET() is a so-called "post limit" function, meaning that computing
+snippets is postponed not just until the entire final result set is ready,
+but even after the LIMIT clause is applied. For example, with a LIMIT 20,10
+clause, SNIPPET() will be called at most 10 times.
 </para>
 </listitem>
 
 <listitem>
-    <para>FROM clause. FROM clause should contain the list of indexes
+<para>FROM clause. FROM clause should contain the list of indexes
 to search through. Unlike in regular SQL, comma means enumeration of
 full-text indexes as in <link linkend="api-func-query">Query()</link>
 API call rather than JOIN. Index name should be according to the rules of
 a C identifier.
 </para></listitem>
+
 <listitem><para>WHERE clause. This clause will map both to fulltext query
 and filters. Comparison operators (=, !=, &lt;, &gt;, &lt;=, &gt;=), IN,
 AND, NOT, and BETWEEN are all supported and map directly to filters.
@@ -4199,16 +4390,35 @@ Explicit support might be added in the future. COUNT(DISTINCT attr)
 is supported. Currently there can be at most one COUNT(DISTINCT)
 per query and an argument needs to be an attribute. Both current
 restrictions on COUNT(DISTINCT) might be lifted in the future.
-GROUPBY() function is supported, returns GROUP BY key and replaces @groupby which is deprecated starting with 2.1.1-beta.
+A special GROUPBY() function is also supported. It returns the
+GROUP BY key (and replaces the deprecated @groupby magic variable).
+That is particularly useful when grouping by an MVA value, in order
+to pick the specific value that was used to create the current group.
 <programlisting>
 SELECT *, AVG(price) AS avgprice, COUNT(DISTINCT storeid), GROUPBY()
 FROM products
 WHERE MATCH('ipod')
 GROUP BY vendorid
 </programlisting>
+</para>
+<para>
 Starting with 2.0.1-beta, GROUP BY on a string attribute is supported,
 with respect for current collation (see <xref linkend="collations"/>).
-</para></listitem>
+</para>
+<para>
+You can sort the result set by (an alias of) the aggregate value.
+<programlisting>
+SELECT group_id, MAX(id) AS max_id
+FROM my_index WHERE MATCH('the')
+GROUP BY group_id ORDER BY max_id DESC
+</programlisting>
+However you can not use aggregate values in the WHERE clause.
+(HAVING clause would be required for that, just as in standard SQL,
+and that is not yet supported.)
+</para>
+</listitem>
+
+<!-- FIXME? move this to the functions reference? -->
 <listitem>
 <para>GROUP_CONCAT() function is supported, starting with version 2.1.1-beta.
 When you group by an attribute, the result set only shows attributes from a single document representing the whole group.
@@ -4218,12 +4428,21 @@ GROUP_CONCAT() produces a comma-separated list of the attribute values of all do
 SELECT id, GROUP_CONCAT(price) as pricesList, GROUPBY() AS name FROM shops GROUP BY shopName;
 </programlisting>
 </listitem>
+
+<!-- FIXME? move this to the functions reference? -->
 <listitem>
-<para>ZONESPANLIST() function returns pairs of matched zonespans. Each pair contains the matched zonespan id, a colon, and the order number of the matched zonespan.
-For example, if a document reads <b><i>text</i> the <i>text</i></b>, and you query for 'ZONESPAN:(i,b) text', then ZONESPANLIST() will return the string
-"1:1 1:2 2:1" meaning that the first zonespan matched "text" in spans 1 and 2, and the second zonespan in (only) span 1. This was added in version 2.1.1-beta.
+<para>
+ZONESPANLIST() function returns pairs of matched zone spans. Each pair
+contains the matched zone span identifier, a colon, and the order number
+of the matched zone span. For example, if a document reads
+<![CDATA[<b><i>text</i> the <i>text</i></b>]]>, and you query for
+'ZONESPAN:(i,b) text', then ZONESPANLIST() will return the string
+"1:1 1:2 2:1" meaning that the first zone span matched "text"
+in spans 1 and 2, and the second zone span in span 1 only.
+This was added in version 2.1.1-beta.
 </para>
 </listitem>
+
 <listitem>
     <para>WITHIN GROUP ORDER BY clause. This is a Sphinx specific
 extension that lets you control how the best row within a group
@@ -4239,6 +4458,7 @@ ORDER BY timeseg DESC, @weight DESC
 Starting with 2.0.1-beta, WITHIN GROUP ORDER BY on a string attribute is supported,
 with respect for current collation (see <xref linkend="collations"/>).
 </para></listitem>
+
 <listitem><para>ORDER BY clause. Unlike in regular SQL, only column names
 (not expressions) are allowed and explicit ASC and DESC are required.
 The columns however can be computed expressions:
@@ -4279,10 +4499,33 @@ Supported options and respectively allowed values are:
 <listitem><para>'comment' - string, user comment that gets copied to a query log file</para></listitem>
 <listitem><para>'cutoff' - integer (max found matches threshold)</para></listitem>
 <listitem><para>'field_weights' - a named integer list (per-field user weights for ranking)</para></listitem>
+<listitem><para>'global_idf' - use global statistics (frequencies)
+from the <link linkend="conf-global-idf">global_idf file</link> for IDF
+computations, rather than the local index statistics.
+Added in version 2.1.1-beta.
+</para></listitem>
+<listitem><para>'idf' - either 'normalized' (default) or 'plain'. Added in version 2.1.1-beta.
+The standard IDF (Inverse Document Frequency) calculation may cause
+undesired keyword penalization effects in the BM25 weighting functions.
+For instance, if you search for [the | something] and [the] occurs
+in more than 50% of the documents, then documents with both keywords
+[the] and [something] will get <b>less</b> weight than documents with
+just one keyword [something]. Using <code>OPTION idf=plain</code> avoids this.
+<itemizedlist>
+<listitem><para>idf=normalized: bm25 variant, idf = log((N-n+1)/n), as per Robertson et al</para></listitem>
+<listitem><para>idf=plain: plain variant, idf=log(N/n), as per Sparck-Jones</para></listitem>
+</itemizedlist>
+where <b>N</b> is the collection size and <b>n</b> is the number of matched
+documents. Hence plain IDF varies in [0, log(N)] range, and keywords
+are never penalized; while the normalized IDF varies in [-log(N), log(N)]
+range, and too frequent keywords are penalized.
+</para></listitem>
 <listitem><para>'index_weights' - a named integer list (per-index user weights for ranking)</para></listitem>
 <listitem><para>'max_matches' - integer (per-query max matches value)</para></listitem>
 <listitem><para>'max_query_time' - integer (max search time threshold, msec)</para></listitem>
-<listitem><para>'ranker' - any of 'proximity_bm25', 'bm25', 'none', 'wordcount', 'proximity', 'matchany', or 'fieldmask'</para></listitem>
+<listitem><para>'ranker' - any of 'proximity_bm25', 'bm25', 'none', 'wordcount', 'proximity',
+	'matchany', 'fieldmask', 'sph04', 'expr', or 'export' (refer to <xref linkend="weighting"/>
+	for more details on each ranker)</para></listitem>
 <listitem><para>'retry_count' - integer (distributed retries count)</para></listitem>
 <listitem><para>'retry_delay' - integer (distributed retry delay, msec)</para></listitem>
 <listitem><para>'reverse_scan' - 0 or 1, lets you control the order in which full-scan query processes the rows</para></listitem>
@@ -4302,9 +4545,22 @@ OPTION ranker=bm25, max_matches=3000,
 </sect1>
 
 
+<sect1 id="sphinxql-select-sysvar"><title>SELECT @@system_variable syntax</title>
+<programlisting>
+SELECT @@system_variable [LIMIT [offset,] row_count]
+</programlisting>
+<para>
+Added in version 2.0.2-beta, this is currently a placeholder
+query that does nothing and reports success. That is in order
+to keep compatibility with frameworks and connectors that
+automatically execute this statement.
+</para>
+</sect1>
+
+
 <sect1 id="sphinxql-show-meta"><title>SHOW META syntax</title>
 <programlisting>
-SHOW META
+SHOW META [ LIKE pattern ]
 </programlisting>
 <para><b>SHOW META</b> shows additional meta-information about the latest
 query such as query time and keyword statistics. IO and CPU counters will only be available if searchd was started with --iostats and --cpustats switches respectively.
@@ -4354,8 +4610,20 @@ mysql> SHOW META;
 </programlisting>
 </para>
 <para>
-Since version 2.1.1-beta, you can also use SHOW META LIKE "pattern" to pick and show just the variables
-that match the given pattern. You can user "?" and "*" wildcards in the pattern.
+Starting version 2.1.1-beta, you can also use the optional LIKE clause.
+It lets you pick just the variables that match a pattern. The pattern syntax
+is that of regular SQL wildcards, that is, '%' means any number of any
+characters, and '_' means a single character:
+<programlisting>
+mysql> SHOW META LIKE 'total%';
++-----------------------+-------+
+| Variable_name         | Value |
++-----------------------+-------+
+| total                 | 3     |
+| total_found           | 3     |
++-----------------------+-------+
+2 rows in set (0.00 sec)
+</programlisting>
 </para>
 </sect1>
 
@@ -4397,6 +4665,9 @@ Message: quorum threshold too high (words=2, thresh=3); replacing quorum operato
 
 
 <sect1 id="sphinxql-show-status"><title>SHOW STATUS syntax</title>
+<programlisting>
+SHOW STATUS [ LIKE pattern ]
+</programlisting>
 <para><b>SHOW STATUS</b>, introduced in version 0.9.9-rc2,
 displays a number of useful performance counters. IO and CPU
 counters will only be available if searchd was started with --iostats and --cpustats
@@ -4440,8 +4711,8 @@ mysql> SHOW STATUS;
 </programlisting>
 </para>
 <para>
-Since version 2.1.1-beta, you can also use SHOW STATUS LIKE "pattern" to pick and show just the variables
-that match the given pattern. You can user "?" and "*" wildcards in the pattern.
+Starting from version 2.1.1-beta, an optional LIKE clause is supported.
+Refer to <xref linkend="sphinxql-show-meta"/> for its syntax details.
 </para>
 </sect1>
 
@@ -4449,8 +4720,8 @@ that match the given pattern. You can user "?" and "*" wildcards in the pattern.
 <sect1 id="sphinxql-insert"><title>INSERT and REPLACE syntax</title>
 <programlisting>
 {INSERT | REPLACE} INTO index [(column, ...)]
-	VALUES (value, ...)
-	[, (...)]
+    VALUES (value, ...)
+    [, (...)]
 </programlisting>
 <para>
 INSERT statement, introduced in version 1.10-beta, is only supported for RT indexes.
@@ -4473,6 +4744,18 @@ specified.
 <para>
 Multiple rows can be inserted using a single INSERT statement by providing
 several comma-separated, parens-enclosed lists of rows values.
+</para>
+</sect1>
+
+
+<sect1 id="sphinxql-replace"><title>REPLACE syntax</title>
+<programlisting>
+{INSERT | REPLACE} INTO index [(column, ...)]
+	VALUES (value, ...)
+	[, (...)]
+</programlisting>
+<para>
+REPLACE syntax is identical to INSERT syntax and is discussed in <xref linkend="sphinxql-insert"/>.
 </para>
 </sect1>
 
@@ -4639,9 +4922,9 @@ Query OK, 0 rows affected (0.00 sec)
 <sect1 id="sphinxql-set-transaction"><title>SET TRANSACTION syntax</title>
 <programlisting>
 SET TRANSACTION ISOLATION LEVEL { READ UNCOMMITTED
-	| READ COMMITTED
-	| REPEATABLE READ
-	| SERIALIZABLE }
+    | READ COMMITTED
+    | REPEATABLE READ
+    | SERIALIZABLE }
 </programlisting>
 <para>
 SET TRANSACTION statement, introduced in version 2.0.2-beta, does nothing.
@@ -4683,6 +4966,26 @@ Transactions are limited to a single RT index, and also limited in size.
 They are atomic, consistent, overly isolated, and durable. Overly isolated
 means that the changes are not only invisible to the concurrent transactions
 but even to the current session itself.
+</para>
+</sect1>
+
+
+<sect1 id="sphinxql-begin"><title>BEGIN syntax</title>
+<programlisting>
+START TRANSACTION | BEGIN
+</programlisting>
+<para>
+BEGIN syntax is discussed in detail in <xref linkend="sphinxql-commit"/>.
+</para>
+</sect1>
+
+
+<sect1 id="sphinxql-rollback"><title>ROLLBACK syntax</title>
+<programlisting>
+ROLLBACK
+</programlisting>
+<para>
+ROLLBACK syntax is discussed in detail in <xref linkend="sphinxql-commit"/>.
 </para>
 </sect1>
 
@@ -4734,7 +5037,7 @@ that specifies whether to return document and hit occurrence statistics.
 
 <sect1 id="sphinxql-show-tables"><title>SHOW TABLES syntax</title>
 <programlisting>
-SHOW TABLES [ LIKE 'pattern' ]
+SHOW TABLES [ LIKE pattern ]
 </programlisting>
 <para>
 SHOW TABLES statement, introduced in version 2.0.1-beta, enumerates
@@ -4756,11 +5059,11 @@ mysql> SHOW TABLES;
 </programlisting>
 </para>
 <para>
-Since version 2.1.1-beta, you can use the optional 'LIKE' clause to show just a filtered subset
-of all tables. The pattern in the clause may be defined using classical MS-DOS
-wildchar syntax ('?' means 'any symbol', '*' means 'any symbols').</para>
+Starting from version 2.1.1-beta, an optional LIKE clause is supported.
+Refer to <xref linkend="sphinxql-show-meta"/> for its syntax details.
+</para>
 <programlisting>
-mysql> show tables like '*4';
+mysql> SHOW TABLES LIKE '%4';
 +-------+-------------+
 | Index | Type        |
 +-------+-------------+
@@ -4773,7 +5076,7 @@ mysql> show tables like '*4';
 
 <sect1 id="sphinxql-describe"><title>DESCRIBE syntax</title>
 <programlisting>
-{DESC | DESCRIBE} index [ LIKE 'pattern' ]
+{DESC | DESCRIBE} index [ LIKE pattern ]
 </programlisting>
 <para>
 DESCRIBE statement, introduced in version 2.0.1-beta, lists
@@ -4802,26 +5105,17 @@ mysql> DESC rt;
 +---------+---------+
 4 rows in set (0.00 sec)
 </programlisting>
-<para>Since version 2.1.1-beta, you can use the optional 'LIKE' clause to show just a filtered subset
-of the fields. The pattern in the clause may be defined using classical MS-DOS
-wildchar syntax ('?' means 'any symbol', '*' means 'any symbols') </para>
-<programlisting>
-mysql> DESC distrr LIKE '192*';
-+------------------------+-------------------+
-| Agent                  | Type              |
-+------------------------+-------------------+
-| 192.168.0.202:6713:loc | remote_1_mirror_1 |
-| 192.168.0.202:6714:loc | remote_1_mirror_2 |
-+------------------------+-------------------+
-2 rows in set (0.00 sec)
-</programlisting>
+<para>
+Starting from version 2.1.1-beta, an optional LIKE clause is supported.
+Refer to <xref linkend="sphinxql-show-meta"/> for its syntax details.
+</para>
 </sect1>
 
 <sect1 id="sphinxql-create-function"><title>CREATE FUNCTION syntax</title>
 <programlisting>
 CREATE FUNCTION udf_name
-	RETURNS {INT | BIGINT | FLOAT | STRING}
-	SONAME 'udf_lib_file'
+    RETURNS {INT | BIGINT | FLOAT | STRING}
+    SONAME 'udf_lib_file'
 </programlisting>
 <para>
 CREATE FUNCTION statement, introduced in version 2.0.1-beta,
@@ -4897,8 +5191,8 @@ mysql> SHOW GLOBAL VARIABLES;
 4 rows in set (0.00 sec)
 </programlisting>
 <para>
-Starting from 2.1.1-beta, support for WHERE variable_name clause was added. Note
-that the MySQL LIKE option isn't available, at least yet.
+Starting from 2.1.1-beta, support for WHERE variable_name clause was added,
+to help certain connectors.
 </para>
 </para>
 </sect1>
@@ -4917,6 +5211,29 @@ automatically execute this statement.
 <programlisting>
 mysql> SHOW COLLATION;
 Query OK, 0 rows affected (0.00 sec)
+</programlisting>
+</sect1>
+
+
+<sect1 id="sphinxql-show-character-set"><title>SHOW CHARACTER SET syntax</title>
+<programlisting>
+SHOW CHARACTER SET
+</programlisting>
+<para>
+Added in version 2.1.1-beta, this is currently a placeholder
+query that does nothing and reports that a UTF-8 character set
+is available. It was added in order
+to keep compatibility with frameworks and connectors that
+automatically execute this statement.
+</para>
+<programlisting>
+mysql> SHOW CHARACTER SET;
++---------+---------------+-------------------+--------+
+| Charset | Description   | Default collation | Maxlen |
++---------+---------------+-------------------+--------+
+| utf8    | UTF-8 Unicode | utf8_general_ci   | 3      |
++---------+---------------+-------------------+--------+
+1 row in set (0.00 sec)
 </programlisting>
 </sect1>
 
@@ -5129,7 +5446,7 @@ You also need to use this command before attaching an index; see <xref linkend="
 
 <sect1 id="sphinxql-show-agent-status"><title>SHOW AGENT STATUS</title>
 <programlisting>
-SHOW AGENT ['agent'|'index'|index] STATUS [ LIKE 'pattern' ]
+SHOW AGENT ['agent'|'index'|index] STATUS [ LIKE pattern ]
 </programlisting>
 <para>
 Displays the statistic of <link linkend="conf-agent">remote
@@ -5199,11 +5516,11 @@ mysql> SHOW AGENT STATUS;
 50 rows in set (0.01 sec)
 </programlisting>
 <para>
-Since version 2.1.1-beta, you can use the optional 'LIKE' clause to show just a filtered subset
-of values. The pattern in the clause may be defined using classical MS-DOS
-wildchar syntax ('?' means 'any symbol', '*' means 'any symbols').</para>
+Starting from version 2.1.1-beta, an optional LIKE clause is supported.
+Refer to <xref linkend="sphinxql-show-meta"/> for its syntax details.
+</para>
 <programlisting>
-mysql> SHOW AGENT STATUS LIKE '*_5period*msec*';
+mysql> SHOW AGENT STATUS LIKE '%5period%msec%';
 +-----------------------------+--------+
 | Key                         | Value  |
 +-----------------------------+--------+
@@ -5214,12 +5531,12 @@ mysql> SHOW AGENT STATUS LIKE '*_5period*msec*';
 3 rows in set (0.00 sec)
 </programlisting>
 <para>
-You can specify the concrete agent by it's address. In this case only data
-corresponding to selected agent will be displayed. Also, the sphinx will use the
-'agent_' prefix to the fields instead of 'ag_N_'.
+You can specify a particular agent by its address. In this case only
+that agent's data will be displayed. Also, 'agent_' prefix will be used
+instead of 'ag_N_':
 </para>
 <programlisting>
-mysql> SHOW AGENT '192.168.0.202:6714' STATUS LIKE '*15periods*';
+mysql> SHOW AGENT '192.168.0.202:6714' STATUS LIKE '%15periods%';
 +-------------------------------------+--------+
 | Variable_name                       | Value  |
 +-------------------------------------+--------+
@@ -5235,17 +5552,17 @@ mysql> SHOW AGENT '192.168.0.202:6714' STATUS LIKE '*15periods*';
 +-------------------------------------+--------+
 9 rows in set (0.00 sec)
 </programlisting>
-<para>Finally, you can investigate the status of the agents in concrete
-distributed index. It can be achieved either with 'SHOW AGENT 'index' STATUS',
-either without quotes around the 'index'. Fot the index it is displayed whether
-it uses or not alternative agents, or mirrors, and then for every agent/mirror
-it is displayed it's address, whether it is blackhole or persistent, and also
-the probability of selection of the mirror in case when one of the
-<link linkend='conf-ha-strategy'>weighted-probability strategies</link> used for
-selectint a mirror.
+<para>Finally, you can check the status of the agents in a specific
+distributed index. It can be done with a SHOW AGENT index STATUS statement.
+That statement shows the index HA status (ie. whether or not it uses
+agent mirrors at all), and then the mirror information (specifically:
+address, blackhole and persisent flags, and the mirror selection
+probability used when one of the
+<link linkend='conf-ha-strategy'>weighted-probability strategies</link>
+is in effect).
 </para>
 <programlisting>
-mysql> show agent distrr status;
+mysql> SHOW AGENT dist_index STATUS;
 +--------------------------------------+--------------------------------+
 | Variable_name                        | Value                          |
 +--------------------------------------+--------------------------------+
@@ -5404,6 +5721,54 @@ mysql&gt; SHOW INDEX lj STATUS;
 | ram_bytes            | 64705411   |
 +----------------------+------------+
 6 rows in set (0.00 sec)
+</programlisting>
+</sect1>
+
+
+<sect1 id="sphinxql-optimize-index"><title>OPTIMIZE INDEX syntax</title>
+<programlisting>
+OPTIMIZE INDEX index_name
+</programlisting>
+<para>
+Available since version 2.1.1-beta, OPTIMIZE statement enqueues
+a RT index for optimization in a background thread.
+</para>
+<para>
+Over time, RT indexes can grow fragmented into many disk chunks
+and/or tainted with deleted, but unpurged data, impacting search
+performance. When that happens, they can be optimized. Basically,
+the optimization pass merges together disk chunks pairs, purging
+off documents suppressed by K-list as it goes.
+</para>
+<para>
+That is a lengthy and IO intensive process, so to limit the
+impact, all the actual merge work is executed serially in
+a special background thread, and the OPTIMIZE statement simply
+adds a job to its queue. Currently, there is no way to check
+the index or queue status (that might be added in the future
+to the SHOW INDEX STATUS and SHOW STATUS statements respectively).
+The optimization thread cen be IO-throttled, you can control the
+maximum number of IOs per second and the maximum IO size
+with <link linkend="conf-rt-merge-iops">rt_merge_iops</link>
+and <link linkend="conf-rt-merge-maxiosize">rt_merge_maxiosize</link>
+directives respectively. The optimization jobs queue is lost
+on daemon crash.
+</para>
+<para>
+The RT index being optimized stays online and available
+for both searching and updates at (almost) all times during
+the optimization. It gets locked (very) briefly every time
+that a pair of disk chunks is merged succesfully, to rename
+the old and the new files, and update the index header.
+</para>
+<para>
+At the moment, OPTIMIZE needs to be issued manually,
+the indexes will <emphasis>not</emphasis> be optimized
+automatically. That might change in the future releases.
+</para>
+<programlisting>
+mysql> OPTIMIZE INDEX rt;
+Query OK, 0 rows affected (0.00 sec)
 </programlisting>
 </sect1>
 
@@ -6215,8 +6580,8 @@ $cl->SetGroupDistinct ( "vendor" );
 can be expressed using the following SQL clauses:
 <programlisting>
 SELECT id, weight, all-attributes,
-	COUNT(DISTINCT vendor) AS @distinct,
-	COUNT(*) AS @count
+    COUNT(DISTINCT vendor) AS @distinct,
+    COUNT(*) AS @count
 FROM products
 GROUP BY category
 ORDER BY @count DESC
@@ -6277,32 +6642,32 @@ and additional general per-query statistics. The result set is a hash
 of hash) with the following keys and values:
 <variablelist>
 <varlistentry>
-	<term>"matches":</term>
-	<listitem><para>Hash which maps found document IDs to another small hash containing document weight and attribute values
-		(or an array of the similar small hashes if <link linkend="api-func-setarrayresult">SetArrayResult()</link> was enabled).
-	</para></listitem>
+    <term>"matches":</term>
+    <listitem><para>Hash which maps found document IDs to another small hash containing document weight and attribute values
+        (or an array of the similar small hashes if <link linkend="api-func-setarrayresult">SetArrayResult()</link> was enabled).
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"total":</term>
-	<listitem><para>Total amount of matches retrieved <emphasis>on server</emphasis> (ie. to the server side result set) by this query.
-		You can retrieve up to this amount of matches from server for this query text with current query settings.
-	</para></listitem>
+    <term>"total":</term>
+    <listitem><para>Total amount of matches retrieved <emphasis>on server</emphasis> (ie. to the server side result set) by this query.
+        You can retrieve up to this amount of matches from server for this query text with current query settings.
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"total_found":</term>
-	<listitem><para>Total amount of matching documents in index (that were found and procesed on server).</para></listitem>
+    <term>"total_found":</term>
+    <listitem><para>Total amount of matching documents in index (that were found and procesed on server).</para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"words":</term>
-	<listitem><para>Hash which maps query keywords (case-folded, stemmed, and otherwise processed) to a small hash with per-keyword statitics ("docs", "hits").</para></listitem>
+    <term>"words":</term>
+    <listitem><para>Hash which maps query keywords (case-folded, stemmed, and otherwise processed) to a small hash with per-keyword statitics ("docs", "hits").</para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"error":</term>
-	<listitem><para>Query error message reported by <filename>searchd</filename> (string, human readable). Empty if there were no errors.</para></listitem>
+    <term>"error":</term>
+    <listitem><para>Query error message reported by <filename>searchd</filename> (string, human readable). Empty if there were no errors.</para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"warning":</term>
-	<listitem><para>Query warning message reported by <filename>searchd</filename> (string, human readable). Empty if there were no warnings.</para></listitem>
+    <term>"warning":</term>
+    <listitem><para>Query warning message reported by <filename>searchd</filename> (string, human readable). Empty if there were no warnings.</para></listitem>
 </varlistentry>
 </variablelist>
 </para>
@@ -6469,153 +6834,152 @@ Starting with version 0.9.9-rc1, keywords can contain wildcards, that work simil
 <code>$opts</code> is a hash which contains additional optional highlighting parameters:
 <variablelist>
 <varlistentry>
-	<term>"before_match":</term>
-	<listitem><para>A string to insert before a keyword match. Starting with version 1.10-beta,
-	a %PASSAGE_ID% macro can be used in this string. The macro is replaced with an incrementing
-	passage number within a current snippet. Numbering starts at 1 by default but can be
-	overridden with "start_passage_id" option. In a multi-document call, %PASSAGE_ID% would
-	restart at every given document. Default is "&lt;b&gt;".</para></listitem>
+    <term>"before_match":</term>
+    <listitem><para>A string to insert before a keyword match. Starting with version 1.10-beta,
+    a %PASSAGE_ID% macro can be used in this string. The macro is replaced with an incrementing
+    passage number within a current snippet. Numbering starts at 1 by default but can be
+    overridden with "start_passage_id" option. In a multi-document call, %PASSAGE_ID% would
+    restart at every given document. Default is "&lt;b&gt;".</para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"after_match":</term>
-	<listitem><para>A string to insert after a keyword match. Starting with version 1.10-beta,
-	a %PASSAGE_ID% macro can be used in this string. Default is "&lt;/b&gt;".</para></listitem>
+    <term>"after_match":</term>
+    <listitem><para>A string to insert after a keyword match. Starting with version 1.10-beta,
+    a %PASSAGE_ID% macro can be used in this string. Default is "&lt;/b&gt;".</para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"chunk_separator":</term>
-	<listitem><para>A string to insert between snippet chunks (passages). Default is "&#160;...&#160;".</para></listitem>
+    <term>"chunk_separator":</term>
+    <listitem><para>A string to insert between snippet chunks (passages). Default is "&#160;...&#160;".</para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"limit":</term>
-	<listitem><para>Maximum snippet size, in symbols (codepoints). Integer, default is 256.</para></listitem>
+    <term>"limit":</term>
+    <listitem><para>Maximum snippet size, in symbols (codepoints). Integer, default is 256.</para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"around":</term>
-	<listitem><para>How much words to pick around each matching keywords block. Integer, default is 5.</para></listitem>
+    <term>"around":</term>
+    <listitem><para>How much words to pick around each matching keywords block. Integer, default is 5.</para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"exact_phrase":</term>
-	<listitem><para>Whether to highlight exact query phrase matches only instead of individual keywords. Boolean, default is false.</para></listitem>
+    <term>"exact_phrase":</term>
+    <listitem><para>Whether to highlight exact query phrase matches only instead of individual keywords. Boolean, default is false.</para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"single_passage":</term>
-	<listitem><para>Whether to extract single best passage only. Boolean, default is false.</para></listitem>
+    <term>"use_boundaries":</term>
+    <listitem><para>Whether to additionaly break passages by phrase
+    boundary characters, as configured in index settings with
+    <link linkend="conf-phrase-boundary">phrase_boundary</link>
+    directive. Boolean, default is false.
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"use_boundaries":</term>
-	<listitem><para>Whether to additionaly break passages by phrase
-	boundary characters, as configured in index settings with
-	<link linkend="conf-phrase-boundary">phrase_boundary</link>
-	directive. Boolean, default is false.
-	</para></listitem>
+    <term>"weight_order":</term>
+    <listitem><para>Whether to sort the extracted passages in order of relevance (decreasing weight),
+    or in order of appearance in the document (increasing position). Boolean, default is false.</para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"weight_order":</term>
-	<listitem><para>Whether to sort the extracted passages in order of relevance (decreasing weight),
-	or in order of appearance in the document (increasing position). Boolean, default is false.</para></listitem>
+    <term>"query_mode":</term>
+    <listitem><para>Added in version 1.10-beta. Whether to handle $words as a query in
+    <link linkend="extended-syntax">extended syntax</link>, or as a bag of words
+    (default behavior). For instance, in query mode ("one two" | "three four") will
+    only highlight and include those occurrences "one two" or "three four" when
+    the two words from each pair are adjacent to each other. In default mode,
+    any single occurrence of "one", "two", "three", or "four" would be
+    highlighted. Boolean, default is false.
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"query_mode":</term>
-	<listitem><para>Added in version 1.10-beta. Whether to handle $words as a query in
-	<link linkend="extended-syntax">extended syntax</link>, or as a bag of words
-	(default behavior). For instance, in query mode ("one two" | "three four") will
-	only highlight and include those occurrences "one two" or "three four" when
-	the two words from each pair are adjacent to each other. In default mode,
-	any single occurrence of "one", "two", "three", or "four" would be
-	highlighted. Boolean, default is false.
-	</para></listitem>
+    <term>"force_all_words":</term>
+    <listitem><para>Added in version 1.10-beta. Ignores the snippet length limit until it
+    includes all the keywords. Boolean, default is false.
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"force_all_words":</term>
-	<listitem><para>Added in version 1.10-beta. Ignores the snippet length limit until it
-	includes all the keywords. Boolean, default is false.
-	</para></listitem>
+    <term>"limit_passages":</term>
+    <listitem><para>Added in version 1.10-beta. Limits the maximum number of passages
+    that can be included into the snippet. Integer, default is 0 (no limit).
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"limit_passages":</term>
-	<listitem><para>Added in version 1.10-beta. Limits the maximum number of passages
-	that can be included into the snippet. Integer, default is 0 (no limit).
-	</para></listitem>
+    <term>"limit_words":</term>
+    <listitem><para>Added in version 1.10-beta. Limits the maximum number of words
+    that can be included into the snippet. Note the limit applies to any words, and
+    not just the matched keywords to highlight. For example, if we are highlighting
+    "Mary" and a passage "Mary had a little lamb" is selected, then it contributes
+    5 words to this limit, not just 1. Integer, default is 0 (no limit).
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"limit_words":</term>
-	<listitem><para>Added in version 1.10-beta. Limits the maximum number of keywords
-	that can be included into the snippet. Integer, default is 0 (no limit).
-	</para></listitem>
+    <term>"start_passage_id":</term>
+    <listitem><para>Added in version 1.10-beta. Specifies the starting value of
+    %PASSAGE_ID% macro (that gets detected and expanded in <option>before_match</option>,
+    <option>after_match</option> strings). Integer, default is 1.
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"start_passage_id":</term>
-	<listitem><para>Added in version 1.10-beta. Specifies the starting value of
-	%PASSAGE_ID% macro (that gets detected and expanded in <option>before_match</option>,
-	<option>after_match</option> strings). Integer, default is 1.
-	</para></listitem>
+    <term>"load_files":</term>
+    <listitem><para>Added in version 1.10-beta. Whether to handle $docs as data
+    to extract snippets from (default behavior), or to treat it as file names,
+    and load data from specified files on the server side. Starting with
+    version 2.0.1-beta, up to <link linkend="conf-dist-threads">dist_threads</link>
+    worker threads per request will be created to parallelize the work
+    when this flag is enabled. Boolean, default is false. Starting with version 2.0.2-beta,
+    building of the snippets could be parallelized between remote agents. Just set the <link linkend='conf-dist-threads'>'dist_threads'</link> param in the config
+    to the value greater than 1, and then invoke the snippets
+    generation over the distributed index, which contain only one(!) <link linkend='conf-local'>local</link> agent and several remotes.
+    Starting with version 2.1.1-beta, the <link linkend="conf-snippets-file-prefix">snippets_file_prefix</link> option is
+    also in the game and the final filename is calculated by concatenation of the prefix with given name.
+    Otherwords, when snippets_file_prefix is '/var/data' and filename is 'text.txt' the sphinx will try to generate the snippets
+    from the file '/var/datatext.txt', which is exactly '/var/data' + 'text.txt'.
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"load_files":</term>
-	<listitem><para>Added in version 1.10-beta. Whether to handle $docs as data
-	to extract snippets from (default behavior), or to treat it as file names,
-	and load data from specified files on the server side. Starting with
-	version 2.0.1-beta, up to <link linkend="conf-dist-threads">dist_threads</link>
-	worker threads per request will be created to parallelize the work
-	when this flag is enabled. Boolean, default is false. Starting with version 2.0.2-beta,
-	building of the snippets could be parallelized between remote agents. Just set the <link linkend='conf-dist-threads'>'dist_threads'</link> param in the config
-	to the value greater than 1, and then invoke the snippets
-	generation over the distributed index, which contain only one(!) <link linkend='conf-local'>local</link> agent and several remotes.
-	Starting with version 2.1.1-beta, the <link linkend="conf-snippets-file-prefix">snippets_file_prefix</link> option is
-	also in the game and the final filename is calculated by concatenation of the prefix with given name.
-	Otherwords, when snippets_file_prefix is '/var/data' and filename is 'text.txt' the sphinx will try to generate the snippets
-	from the file '/var/datatext.txt', which is exactly '/var/data' + 'text.txt'.
-	</para></listitem>
-</varlistentry>
-<varlistentry>
-	<term>"load_files_scattered":</term>
-	<listitem><para>Added in version 2.0.2-beta. It works only with distributed snippets generation
-	with remote agents. The source files for snippets could be distributed among different agents, and the main daemon will merge
-	together all non-erroneous results. So, if one agent of the distributed index has 'file1.txt', another has 'file2.txt' and you call for the snippets
-	with both these files, the sphinx will merge results from the agents together, so you will get the snippets from both 'file1.txt' and 'file2.txt'.
-	Boolean, default is false.
-	</para>
-	<para>If the "load_files" is also set, the request will return the error in case if any of the files is not available anywhere. Otherwise (if "load_files" is not set)
-	it will just return the empty strings for all absent files. The master instance reset this flag when distributes the snippets among agents. So, for agents the absence of a file
-	is not critical error, but for the master it might be so. If you want to be sure that all snippets are actually created, set both "load_files_scattered" and "load_files". If the
-	absense of some snippets caused by some agents is not critical for you - set just "load_files_scattered", leaving "load_files" not set.
-	</para>
+    <term>"load_files_scattered":</term>
+    <listitem><para>Added in version 2.0.2-beta. It works only with distributed snippets generation
+    with remote agents. The source files for snippets could be distributed among different agents, and the main daemon will merge
+    together all non-erroneous results. So, if one agent of the distributed index has 'file1.txt', another has 'file2.txt' and you call for the snippets
+    with both these files, the sphinx will merge results from the agents together, so you will get the snippets from both 'file1.txt' and 'file2.txt'.
+    Boolean, default is false.
+    </para>
+    <para>If the "load_files" is also set, the request will return the error in case if any of the files is not available anywhere. Otherwise (if "load_files" is not set)
+    it will just return the empty strings for all absent files. The master instance reset this flag when distributes the snippets among agents. So, for agents the absence of a file
+    is not critical error, but for the master it might be so. If you want to be sure that all snippets are actually created, set both "load_files_scattered" and "load_files". If the
+    absense of some snippets caused by some agents is not critical for you - set just "load_files_scattered", leaving "load_files" not set.
+    </para>
 </listitem>
 </varlistentry>
 <varlistentry>
-	<term>"html_strip_mode":</term>
-	<listitem><para>Added in version 1.10-beta. HTML stripping mode setting.
-	Defaults to "index", which means that index settings will be used.
-	The other values are "none" and "strip", that forcibly skip or apply
-	stripping irregardless of index settings; and "retain", that retains
-	HTML markup and protects it from highlighting. The "retain" mode can
-	only be used when highlighting full documents and thus requires that
-	no snippet size limits are set. String, allowed values are "none",
-	"strip", "index", and "retain".
-	</para></listitem>
+    <term>"html_strip_mode":</term>
+    <listitem><para>Added in version 1.10-beta. HTML stripping mode setting.
+    Defaults to "index", which means that index settings will be used.
+    The other values are "none" and "strip", that forcibly skip or apply
+    stripping irregardless of index settings; and "retain", that retains
+    HTML markup and protects it from highlighting. The "retain" mode can
+    only be used when highlighting full documents and thus requires that
+    no snippet size limits are set. String, allowed values are "none",
+    "strip", "index", and "retain".
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"allow_empty":</term>
-	<listitem><para>Added in version 1.10-beta. Allows empty string to be
-	returned as highlighting result when a snippet could not be generated
-	(no keywords match, or no passages fit the limit). By default,
-	the beginning of original text would be returned instead of an empty
-	string. Boolean, default is false.
-	</para></listitem>
+    <term>"allow_empty":</term>
+    <listitem><para>Added in version 1.10-beta. Allows empty string to be
+    returned as highlighting result when a snippet could not be generated
+    (no keywords match, or no passages fit the limit). By default,
+    the beginning of original text would be returned instead of an empty
+    string. Boolean, default is false.
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"passage_boundary":</term>
-	<listitem><para>Added in version 2.0.1-beta. Ensures that passages do not
-	cross a sentence, paragraph, or zone boundary (when used with an index
-	that has the respective indexing settings enabled). String, allowed
-	values are "sentence", "paragraph", and "zone".
-	</para></listitem>
+    <term>"passage_boundary":</term>
+    <listitem><para>Added in version 2.0.1-beta. Ensures that passages do not
+    cross a sentence, paragraph, or zone boundary (when used with an index
+    that has the respective indexing settings enabled). String, allowed
+    values are "sentence", "paragraph", and "zone".
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>"emit_zones":</term>
-	<listitem><para>Added in version 2.0.1-beta. Emits an HTML tag with
-	an enclosing zone name before each passage. Boolean, default is false.
-	</para></listitem>
+    <term>"emit_zones":</term>
+    <listitem><para>Added in version 2.0.1-beta. Emits an HTML tag with
+    an enclosing zone name before each passage. Boolean, default is false.
+    </para></listitem>
 </varlistentry>
 </variablelist>
 </para>
@@ -6674,7 +7038,7 @@ Usage example:
 <programlisting>
 $cl->UpdateAttributes ( "test1", array("group_id"), array(1=>array(456)) );
 $cl->UpdateAttributes ( "products", array ( "price", "amount_in_stock" ),
-	array ( 1001=>array(123,5), 1002=>array(37,11), 1003=>(25,129) ) );
+    array ( 1001=>array(123,5), 1002=>array(37,11), 1003=>(25,129) ) );
 </programlisting>
 The first sample statement will update document 1 in index "test1", setting "group_id" to 456.
 The second one will update documents 1001, 1002 and 1003 in index "products". For document 1001,
@@ -6738,7 +7102,7 @@ Usage example:
 <programlisting>
 $status = $cl->Status ();
 foreach ( $status as $row )
-	print join ( ": ", $row ) . "\n";
+    print join ( ": ", $row ) . "\n";
 </programlisting>
 </sect2>
 
@@ -6775,7 +7139,7 @@ Usage example:
 <programlisting>
 $status = $cl->FlushAttributes ();
 if ( $status&lt;0 )
-	print "ERROR: " . $cl->GetLastError();
+    print "ERROR: " . $cl->GetLastError();
 </programlisting>
 </sect2>
 
@@ -6829,7 +7193,7 @@ Obvious SphinxSE applications include:
 <listitem><para>easier porting of MySQL FTS applications to Sphinx;</para></listitem>
 <listitem><para>allowing Sphinx use with progamming languages for which native APIs are not available yet;</para></listitem>
 <listitem><para>optimizations when additional Sphinx result set processing on MySQL side is required
-	(eg. JOINs with original document tables, additional MySQL-side filtering, etc).</para></listitem>
+    (eg. JOINs with original document tables, additional MySQL-side filtering, etc).</para></listitem>
 </itemizedlist>
 </para>
 </sect1>
@@ -7019,7 +7383,7 @@ Any number of options can be specified. Available options are:
 <itemizedlist>
 <listitem><para>query - query text;</para></listitem>
 <listitem><para>mode - matching mode. Must be one of "all", "any", "phrase",
-	"boolean", or "extended". Default is "all";</para></listitem>
+    "boolean", or "extended". Default is "all";</para></listitem>
 <listitem><para>sort - match sorting mode. Must be one of "relevance", "attr_desc",
 "attr_asc", "time_segments", or "extended". In all modes besides "relevance"
 attribute name (or sorting clause for "extended") is also required after a colon:
@@ -7051,13 +7415,24 @@ attribute name (or sorting clause for "extended") is also required after a colon
 ... WHERE query='test;!filter=group_id,3,11;';
 </programlisting>
 </para></listitem>
-<listitem><para>range, !range - comma-separated attribute name, min and max value to match:
+<listitem><para>range, !range - comma-separated (integer or bigint) Sphinx attribute name,
+and min and max values to match:
 <programlisting>
 # include groups from 3 to 7, inclusive
 ... WHERE query='test;range=group_id,3,7;';
 
 # exclude groups from 5 to 25
 ... WHERE query='test;!range=group_id,5,25;';
+</programlisting>
+</para></listitem>
+<listitem><para>floatrange, !floatrange - comma-separated (floating point) Sphinx attribute name,
+and min and max values to match:
+<programlisting>
+# filter by a float size
+... WHERE query='test;floatrange=size,2,3;';
+
+# pick all results within 1000 meter from geoanchor
+... WHERE query='test;floatrange=@geodist,0,1000;';
 </programlisting>
 </para></listitem>
 <listitem><para>maxmatches - per-query max matches value, as in max_matches parameter to
@@ -7102,6 +7477,12 @@ to use when searching through several indexes:
 ... WHERE query='test;indexweights=idx_exact,2,idx_stemmed,1;';
 </programlisting>
 </para></listitem>
+<listitem><para>fieldweights - comma-separated list of per-field weights
+that can be used by the ranker:
+<programlisting>
+... WHERE query='test;fieldweights=title,10,abstract,3,content,1;';
+</programlisting>
+</para></listitem>
 <listitem><para>comment - a string to mark this query in query log
 (mapping to $comment parameter in <link linkend="api-func-query">Query()</link> API call):
 <programlisting>
@@ -7124,9 +7505,10 @@ and TCP port, respectively:
 as in <link linkend="api-func-setrankingmode">SetRankingMode()</link> API call
 (the only mode that supports full query syntax).
 Known values are "proximity_bm25", "bm25", "none", "wordcount", "proximity",
-"matchany", "fieldmask"; and, starting with 2.0.4-release, "expr:EXPRESSION"
+"matchany", "fieldmask", "sph04" (starting with 1.10-beta),
+"expr:EXPRESSION" (starting with 2.0.4-release)
 syntax to support expression-based ranker (where EXPRESSION should be replaced
-with your specific ranking formula) or "export:EXPRESSION":
+with your specific ranking formula), and "export:EXPRESSION" (starting with 2.1.1-beta):
 <programlisting>
 ... WHERE query='test;mode=extended;ranker=bm25;';
 ... WHERE query='test;mode=extended;ranker=expr:sum(lcs);';
@@ -7587,6 +7969,65 @@ sql_sock = /tmp/mysql.sock
 </sect2>
 
 
+<sect2 id="conf-json-autoconv-numbers"><title>json_autoconv_numbers</title>
+<para>
+Automatically detect and convert possible JSON
+strings that represent numbers, into numeric attributes.
+Optional, defalt value is 0 (do not convert strings into numbers).
+Added in 2.1.1-beta.
+</para>
+<para>
+When this option is 1, values such as "1234" will be indexed as numbers instead
+of strings; if the option is 0, such values will be indexed as strings.
+This conversion applies to any data source, that is, JSON attributes originating
+from either SQL or XMLpipe sources will all be affected.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+json_autoconv_numbers = 1
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-json-autoconv-keynames"><title>json_autoconv_keynames</title>
+<para>
+Whether and how to auto-convert key names within JSON attributes.
+Known value is 'lowercase'.
+Optional, defalt value is unspecified (do not convert anything).
+Added in 2.1.1-beta.
+</para>
+<para>
+When this directive is set to 'lowercase', key names within JSON attributes
+will be automatically brought to lower case when indexing.
+This conversion applies to any data source, that is, JSON attributes originating
+from either SQL or XMLpipe sources will all be affected.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+json_autoconv_keynames = lowercase
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-on-json-attr-error"><title>on_json_attr_error</title>
+<para>
+What to do if JSON format errors are found. 
+Optional, default value is <option>ignore_attr</option> (ignore errors).
+Applies only to <option>sql_attr_json</option> attributes.
+Added in 2.1.1-beta.
+</para>
+<para>
+By default, JSON format errors are ignored (<option>ignore_attr</option>) and
+the indexer tool will just show a warning. Setting this option to <option>fail_index</option>
+will rather make indexing fail at the first JSON format error.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+on_json_attr_error = ignore_attr
+</programlisting>
+</sect2>
+
+
 <sect2 id="conf-mysql-connect-flags"><title>mysql_connect_flags</title>
 <para>
 MySQL client connection flags.
@@ -7724,9 +8165,9 @@ to <filename>configure</filename> allows to build with 64-bit document and word 
 <bridgehead>Example:</bridgehead>
 <programlisting>
 sql_query = \
-	SELECT id, group_id, UNIX_TIMESTAMP(date_added) AS date_added, \
-		title, content \
-	FROM documents
+    SELECT id, group_id, UNIX_TIMESTAMP(date_added) AS date_added, \
+        title, content \
+    FROM documents
 </programlisting>
 </sect2>
 
@@ -7742,7 +8183,7 @@ Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <op
 joined fields, and payloads (payload fields). It's syntax is as follows:
 <programlisting>
 sql_joined_field = FIELD-NAME 'from'  ( 'query' | 'payload-query' \
-	| 'ranged-query' ); QUERY [ ; RANGE-QUERY ]
+    | 'ranged-query' ); QUERY [ ; RANGE-QUERY ]
 </programlisting>
 where
 <itemizedlist>
@@ -7816,12 +8257,12 @@ by field wieghts, and adds that sum to the final rank.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 sql_joined_field = \
-	tagstext from query; \
-	SELECT docid, CONCAT('tag',tagid) FROM tags ORDER BY docid ASC
+    tagstext from query; \
+    SELECT docid, CONCAT('tag',tagid) FROM tags ORDER BY docid ASC
 
 sql_joined_field = bigint tag from ranged-query; \
-	SELECT id, tag FROM tags WHERE id&gt;=$start AND id&lt;=$end; \
-	SELECT MIN(id), MAX(id) FROM tags
+    SELECT id, tag FROM tags WHERE id&gt;=$start AND id&lt;=$end; \
+    SELECT MIN(id), MAX(id) FROM tags ORDER BY docid ASC
 </programlisting>
 </sect2>
 
@@ -7930,11 +8371,18 @@ indexes, in this case just 'main'. So to get the expected results,
 we should put all the updated <emphasis>and</emphasis> deleted
 document IDs into it.
 </para>
+<para>
+Note that in the distributed index setup, K-lists are <b>local
+to every node in the cluster</b>. They are <b>not</b> get transmitted
+over the network when sending queries. (Because that might be too much
+of an impact when the K-list is huge.) You will need to setup a
+separate per-server K-lists in that case.
+</para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
 sql_query_killlist = \
-	SELECT id FROM documents WHERE updated_ts>=@last_reindex UNION \
-	SELECT id FROM documents_deleted WHERE deleted_ts>=@last_reindex
+    SELECT id FROM documents WHERE updated_ts>=@last_reindex UNION \
+    SELECT id FROM documents_deleted WHERE deleted_ts>=@last_reindex
 </programlisting>
 </sect2>
 
@@ -8125,8 +8573,8 @@ The declaration format is as follows (backslashes are for clarity only;
 everything can be declared in a single line as well):
 <programlisting>
 sql_attr_multi = ATTR-TYPE ATTR-NAME 'from' SOURCE-TYPE \
-	[;QUERY] \
-	[;RANGE-QUERY]
+    [;QUERY] \
+    [;RANGE-QUERY]
 </programlisting>
 where
 <itemizedlist>
@@ -8140,11 +8588,10 @@ where
 <programlisting>
 sql_attr_multi = uint tag from query; SELECT id, tag FROM tags
 sql_attr_multi = bigint tag from ranged-query; \
-	SELECT id, tag FROM tags WHERE id&gt;=$start AND id&lt;=$end; \
-	SELECT MIN(id), MAX(id) FROM tags
+    SELECT id, tag FROM tags WHERE id&gt;=$start AND id&lt;=$end; \
+    SELECT MIN(id), MAX(id) FROM tags
 </programlisting>
 </sect2>
-
 
 <sect2 id="conf-sql-attr-string"><title>sql_attr_string</title>
 <para>
@@ -8168,6 +8615,45 @@ directive for that.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 sql_attr_string = title # will be stored but will not be indexed
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-sql-attr-json"><title>sql_attr_json</title>
+<para>
+JSON attribute declaration.
+Multi-value (ie. there may be more than one such attribute declared), optional.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
+Introduced in version 2.1.1-beta.
+</para>
+<para>
+When indexing JSON attributes, Sphinx expects a text field
+with JSON formatted data. Currently, only one level JSON objects are supported.
+Integer, float, strings, and string array values are accepted. 
+<programlisting>
+{
+    "id": 1,
+    "gid": 2,
+    "title": "some title",
+    "tags": [
+        "tag1",
+        "tag2",
+        "tag3"
+    ]
+}
+</programlisting>
+These attributes allow Sphinx to work with documents without a fixed set of
+attribute columns. When you filter on a key of a JSON attribute, documents
+that don't include the key will simply be ignored.
+</para>
+<para>
+You can read more on JSON attributes in <ulink
+url="http://sphinxsearch.com/blog/2013/02/07/sphinx-2-1-json-attributes/">
+http://sphinxsearch.com/blog/2013/02/07/sphinx-2-1-json-attributes/</ulink>.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_attr_json = properties
 </programlisting>
 </sect2>
 
@@ -8585,6 +9071,45 @@ xmlpipe_attr_string = subject
 </sect2>
 
 
+<sect2 id="conf-xmlpipe-attr-wordcount"><title>xmlpipe_attr_wordcount</title>
+<para>
+Word-count attribute declaration.
+Multi-value (ie. there may be more than one such attribute declared), optional.
+Introduced in version 1.10-beta.
+</para>
+<para>
+Word-count attribute takes a string column, tokenizes it according
+to index settings, and stores the resulting number of tokens in an attribute.
+This number of tokens ("word count") is a normal integer that can be later
+used, for instance, in custom ranking expressions (boost shorter titles,
+help identify exact field matches, etc).
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+xmlpipe_attr_wordcount = title_wc
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-xmlpipe-attr-json"><title>xmlpipe_attr_json</title>
+<para>
+JSON attribute declaration.
+Multi-value (ie. there may be more than one such attribute declared), optional.
+Introduced in version 2.1.1-beta.
+</para>
+<para>
+This directive is used to declare that the contents of a given
+XML tag are to be treated as a JSON document and stored into a Sphinx
+index for later use. Refer to <xref linkend="conf-sql-attr-json"/>
+for more details on the JSON attributes.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+xmlpipe_attr_json = properties
+</programlisting>
+</sect2>
+
+
 <sect2 id="conf-xmlpipe-fixup-utf8"><title>xmlpipe_fixup_utf8</title>
 <para>
 Perform Sphinx-side UTF-8 validation and filtering to prevent XML parser from choking on non-UTF-8 documents.
@@ -8776,14 +9301,14 @@ include:
 <programlisting>
 source src1
 {
-	sql_query = SELECT id*10+1, ... FROM table1
-	...
+    sql_query = SELECT id*10+1, ... FROM table1
+    ...
 }
 
 source src2
 {
-	sql_query = SELECT id*10+2, ... FROM table2
-	...
+    sql_query = SELECT id*10+2, ... FROM table2
+    ...
 }
 </programlisting>
 </para></listitem>
@@ -8792,16 +9317,16 @@ storing source ID simply as an attribute:
 <programlisting>
 source src1
 {
-	sql_query = SELECT id, 1 AS source_id FROM table1
-	sql_attr_uint = source_id
-	...
+    sql_query = SELECT id, 1 AS source_id FROM table1
+    sql_attr_uint = source_id
+    ...
 }
 
 source src2
 {
-	sql_query = SELECT id, 2 AS source_id FROM table2
-	sql_attr_uint = source_id
-	...
+    sql_query = SELECT id, 2 AS source_id FROM table2
+    sql_attr_uint = source_id
+    ...
 }
 </programlisting>
 </para></listitem>
@@ -9132,12 +9657,12 @@ Sentence boundary detection rules are as follows.
 <itemizedlist>
 <listitem><para>Question and excalamation signs (? and !) are always a sentence boundary.</para></listitem>
 <listitem><para>Trailing dot (.) is a sentence boundary, except:
-	<itemizedlist>
-	<listitem><para>When followed by a letter. That's considered a part of an abbreviation (as in "S.T.A.L.K.E.R" or "Goldman Sachs S.p.A.").</para></listitem>
-	<listitem><para>When followed by a comma. That's considered an abbreviation followed by a comma (as in "Telecom Italia S.p.A., founded in 1994").</para></listitem>
-	<listitem><para>When followed by a space and a small letter. That's considered an abbreviation within a sentence (as in "News Corp. announced in Februrary").</para></listitem>
-	<listitem><para>When preceded by a space and a capital letter, and followed by a space. That's considered a middle initial (as in "John D. Doe").</para></listitem>
-	</itemizedlist>
+    <itemizedlist>
+    <listitem><para>When followed by a letter. That's considered a part of an abbreviation (as in "S.T.A.L.K.E.R" or "Goldman Sachs S.p.A.").</para></listitem>
+    <listitem><para>When followed by a comma. That's considered an abbreviation followed by a comma (as in "Telecom Italia S.p.A., founded in 1994").</para></listitem>
+    <listitem><para>When followed by a space and a small letter. That's considered an abbreviation within a sentence (as in "News Corp. announced in Februrary").</para></listitem>
+    <listitem><para>When preceded by a space and a capital letter, and followed by a space. That's considered a middle initial (as in "John D. Doe").</para></listitem>
+    </itemizedlist>
 </para></listitem>
 </itemizedlist>
 </para>
@@ -9240,8 +9765,12 @@ will be loaded. Stopwords file format is simple plain text. The encoding
 must match index encoding specified in <link linkend="conf-charset-type">charset_type</link>.
 File data will be tokenized with respect to <link linkend="conf-charset-table">charset_table</link>
 settings, so you can use the same separators as in the indexed data.
-The <link linkend="conf-morphology">stemmers</link> will also be
-applied when parsing stopwords file.
+</para>
+<para>
+The <link linkend="conf-morphology">stemmers</link> will normally be
+applied when parsing stopwords file. That might however lead to undesired
+results. Starting with 2.1.1-beta, you can turn that off with
+<link linkend="conf-stopwords-unstemmed">stopwords_unstemmed</link>.
 </para>
 <para>
 Starting with version 2.1.1-beta small enough files are stored in the index
@@ -9252,7 +9781,8 @@ While stopwords are not indexed, they still do affect the keyword positions.
 For instance, assume that "the" is a stopword, that document 1 contains the line
 "in office", and that document 2 contains "in the office". Searching for "in office"
 as for exact phrase will only return the first document, as expected, even though
-"the" in the second one is stopped.
+"the" in the second one is stopped. That behavior can be tweaked through the
+<link linkend="conf-stopword-step">stopword_step</link> directive.
 </para>
 <para>
 Stopwords files can either be created manually, or semi-automatically.
@@ -9565,45 +10095,45 @@ several syntax shortcuts that let you map ranges of characters
 at once. The complete list is as follows:
 <variablelist>
 <varlistentry>
-	<term>A-&gt;a</term>
-	<listitem><para>Single char mapping, declares source char 'A' as allowed
-		to occur within keywords and maps it to destination char 'a'
-		(but does <emphasis>not</emphasis> declare 'a' as allowed).
-	</para></listitem>
+    <term>A-&gt;a</term>
+    <listitem><para>Single char mapping, declares source char 'A' as allowed
+        to occur within keywords and maps it to destination char 'a'
+        (but does <emphasis>not</emphasis> declare 'a' as allowed).
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>A..Z-&gt;a..z</term>
-	<listitem><para>Range mapping, declares all chars in source range
-		as allowed and maps them to the destination range. Does <emphasis>not</emphasis>
-		declare destination range as allowed. Also checks ranges' lengths
-		(the lengths must be equal).
-	</para></listitem>
+    <term>A..Z-&gt;a..z</term>
+    <listitem><para>Range mapping, declares all chars in source range
+        as allowed and maps them to the destination range. Does <emphasis>not</emphasis>
+        declare destination range as allowed. Also checks ranges' lengths
+        (the lengths must be equal).
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>a</term>
-	<listitem><para>Stray char mapping, declares a character as allowed
-		and maps it to itself. Equivalent to a-&gt;a single char mapping.
-	</para></listitem>
+    <term>a</term>
+    <listitem><para>Stray char mapping, declares a character as allowed
+        and maps it to itself. Equivalent to a-&gt;a single char mapping.
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>a..z</term>
-	<listitem><para>Stray range mapping, declares all characters in range
-		as allowed and maps them to themselves. Equivalent to
-		a..z-&gt;a..z range mapping.
-	</para></listitem>
+    <term>a..z</term>
+    <listitem><para>Stray range mapping, declares all characters in range
+        as allowed and maps them to themselves. Equivalent to
+        a..z-&gt;a..z range mapping.
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>A..Z/2</term>
-	<listitem><para>Checkerboard range map. Maps every pair of chars
-		to the second char. More formally, declares odd characters
-		in range as allowed and maps them to the even ones; also
-		declares even characters as allowed and maps them to themselves.
-		For instance, A..Z/2 is equivalent to A-&gt;B, B-&gt;B, C-&gt;D, D-&gt;D,
-		..., Y-&gt;Z, Z-&gt;Z. This mapping shortcut is helpful for
-		a number of Unicode blocks where uppercase and lowercase
-		letters go in such interleaved order instead of contiguous
-		chunks.
-	</para></listitem>
+    <term>A..Z/2</term>
+    <listitem><para>Checkerboard range map. Maps every pair of chars
+        to the second char. More formally, declares odd characters
+        in range as allowed and maps them to the even ones; also
+        declares even characters as allowed and maps them to themselves.
+        For instance, A..Z/2 is equivalent to A-&gt;B, B-&gt;B, C-&gt;D, D-&gt;D,
+        ..., Y-&gt;Z, Z-&gt;Z. This mapping shortcut is helpful for
+        a number of Unicode blocks where uppercase and lowercase
+        letters go in such interleaved order instead of contiguous
+        chunks.
+    </para></listitem>
 </varlistentry>
 </variablelist>
 </para>
@@ -9620,11 +10150,11 @@ encode space, U+2E to encode dot, U+2C to encode comma.
 <programlisting>
 # 'sbcs' defaults for English and Russian
 charset_table = 0..9, A..Z-&gt;a..z, _, a..z, \
-	U+A8-&gt;U+B8, U+B8, U+C0..U+DF-&gt;U+E0..U+FF, U+E0..U+FF
+    U+A8-&gt;U+B8, U+B8, U+C0..U+DF-&gt;U+E0..U+FF, U+E0..U+FF
 
 # 'utf-8' defaults for English and Russian
 charset_table = 0..9, A..Z-&gt;a..z, _, a..z, \
-	U+410..U+42F-&gt;U+430..U+44F, U+430..U+44F
+    U+410..U+42F-&gt;U+430..U+44F, U+430..U+44F
 </programlisting>
 </sect2>
 
@@ -9724,6 +10254,50 @@ can be applied.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 min_infix_len = 3
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-max-substring-len"><title>max_substring_len</title>
+<para>
+Maximum substring (either prefix or infix) length to index.
+Optional, default is 0 (do not limit indexed substrings).
+Applies to dict=crc only.
+</para>
+<para>
+By default, substring (either prefix or infix) indexing in the
+<link linkend="conf-dict">dict=crc mode</link> will index <b>all</b>
+the possible substrings as separate keywords. That might result
+in an overly large index. So the <code>max_substring_len</code>
+directive lets you limit the impact of substring indexing
+by skipping too-long substrings (which, chances are, will never
+get searched for anyway).
+</para>
+<para>
+For example, a test index of 10,000 blog posts takes this
+much disk space depending on the settings:
+<itemizedlist>
+<listitem>6.4 MB baseline (no substrings)</listitem>
+<listitem>24.3 MB (3.8x) with min_prefix_len = 3</listitem>
+<listitem>22.2 MB (3.5x) with min_prefix_len = 3, max_substring_len = 8</listitem>
+<listitem>19.3 MB (3.0x) with min_prefix_len = 3, max_substring_len = 6</listitem>
+<listitem>94.3 MB (14.7x) with min_infix_len = 3</listitem>
+<listitem>84.6 MB (13.2x) with min_infix_len = 3, max_substring_len = 8</listitem>
+<listitem>70.7 MB (11.0x) with min_infix_len = 3, max_substring_len = 6</listitem>
+</itemizedlist>
+So in this test limiting the max substring length saved us
+10-15% on the index size.
+</para>
+<para>
+There is no performance impact associtated with substring length
+when using dict=keywords mode, so this directive is not applicable
+and intentionally forbidden in that case. If required, you can still
+limit the length of a subtring that you search for in the application
+code.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+max_substring_len = 12
 </programlisting>
 </sect2>
 
@@ -9997,7 +10571,7 @@ Optional, default is empty string (do not strip contents of any elements).
 <para>
 This feature allows to strip element contents, ie. everything that
 is between the opening and the closing tags. It is useful to remove
-embedded scripts, CSS, etc.	Short tag form for empty elements
+embedded scripts, CSS, etc. Short tag form for empty elements
 (ie. &lt;br /&gt;) is properly supported; ie. the text that
 follows such tag will <b>not</b> be removed.
 </para>
@@ -10660,24 +11234,24 @@ Regular keywords (resulting from that token by replacing blended
 with whitespace) are always be indexed.
 <variablelist>
 <varlistentry>
-	<term>trim_none</term>
-	<listitem><para>Index the entire token.</para></listitem>
+    <term>trim_none</term>
+    <listitem><para>Index the entire token.</para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>trim_head</term>
-	<listitem><para>Trim heading blended characters, and index the resulting token.</para></listitem>
+    <term>trim_head</term>
+    <listitem><para>Trim heading blended characters, and index the resulting token.</para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>trim_tail</term>
-	<listitem><para>Trim trailing blended characters, and index the resulting token.</para></listitem>
+    <term>trim_tail</term>
+    <listitem><para>Trim trailing blended characters, and index the resulting token.</para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>trim_both</term>
-	<listitem><para>Trim both heading and trailing blended characters, and index the resulting token.</para></listitem>
+    <term>trim_both</term>
+    <listitem><para>Trim both heading and trailing blended characters, and index the resulting token.</para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>skip_pure</term>
-	<listitem><para>Do not index the token if it's purely blended, that is, consists of blended characters only.</para></listitem>
+    <term>skip_pure</term>
+    <listitem><para>Do not index the token if it's purely blended, that is, consists of blended characters only.</para></listitem>
 </varlistentry>
 </variablelist>
 Returning to the "@dude!" example above, setting <option>blend_mode = trim_head,
@@ -10843,6 +11417,22 @@ Introduced in version 1.10-beta.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 rt_attr_string = author
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-rt-attr-json"><title>rt_attr_json</title>
+<para>
+JSON attribute declaration.
+Multi-value (ie. there may be more than one such attribute declared), optional.
+Introduced in version 2.1.1-beta.
+</para>
+<para>
+Refer to <xref linkend="conf-sql-attr-json"/> for more details on the JSON attributes.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+rt_attr_json = properties
 </programlisting>
 </sect2>
 
@@ -11038,6 +11628,127 @@ directive.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 index_field_lengths = 1
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-regexp-filter"><title>regexp_filter</title>
+<para>
+Regular expressions (regexps) to filter the fields and queries with.
+Optional, multi-value, default is an empty list of regexps.
+Added in 2.1.1-beta.
+</para>
+<para>
+In certain applications (like product search) there can be
+many different ways to call a model, or a product, or a property,
+and so on. For instance, 'iphone 3gs' and 'iphone 3 gs'
+(or even 'iphone3 gs') are very likely to mean the same
+product. Or, for a more tricky example, '13-inch', '13 inch',
+'13"', and '13in' in a laptop screen size descriptions do mean
+the same.
+</para>
+<para>
+Regexps provide you with a mechanism to specify a number of rules
+specific to your application to handle such cases. In the first
+'iphone 3gs' example, you could possibly get away with a wordforms
+files tailored to handle a handful of iPhone models. However even
+in a comparatively simple second '13-inch' example there is just
+way too many individual forms and you are better off specifying
+rules that would normalize both '13-inch' and '13in' to something
+identical.
+</para>
+<para>
+Regular expressions listed in <code>regexp_filter</code> are
+applied in the order they are listed. That happens at the earliest
+stage possible, before any other processing, even before tokenization.
+That is, regexps are applied to the raw source fields when indeixng,
+and to the raw search query text when searching.
+</para>
+<para>
+We use the <ulink url="http://code.google.com/p/re2/">RE2 engine</ulink>
+to implement regexps. So when building from the source, the library must be
+installed in the system and Sphinx must be configured built with a
+<code>--with-re2</code> switch. Binary packages should come with RE2
+builtin.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+# index '13-inch' as '13inch'
+regexp_filter = \b(\d+)\" => \1inch
+
+# index 'blue' or 'red' as 'color'
+regexp_filter = (blue|red) => color
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-stopwords-unstemmed"><title>stopwords_unstemmed</title>
+<para>
+Whether to apply stopwords before or after stemming.
+Optional, default is 0 (apply stopword filter after stemming).
+Added in 2.1.1-beta.
+</para>
+<para>
+By default, stopwords are stemmed themselves, and applied to
+tokens <emphasis>after</emphasis> stemming (or any other morphology
+processing). In other words, by default, a token is stopped when
+stem(token) == stem(stopword). That can lead to unexpected results
+when a token gets (erroneously) stemmed to a stopped root. For example,
+'Andes' gets stemmed to 'and' by our current stemmer implementation,
+so when 'and' is a stopword, 'Andes' is also stopped.
+</para>
+<para>
+stopwords_unstemmed directive fixes that issue. When it's enabled,
+stopwords are applied before stemming (and therefore to the original
+word forms), and the tokens are stopped when token == stopword.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+stopwords_unstemmed = 1
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-global-idf"><title>global_idf</title>
+<para>
+The path to a file with global (cluster-wide) keyword IDFs.
+Optional, default is empty (use local IDFs).
+Added in 2.1.1-beta.
+</para>
+<para>
+On a multi-index cluster, per-keyword frequencies are quite
+likely to differ across different indexes. That means that when
+the ranking function uses TF-IDF based values, such as BM25 family
+of factors, the results might be ranked slightly different
+depending on what cluster node they reside.
+</para>
+<para>
+The easiest way to fix that issue is to create and utilize
+a global frequency dictionary, or a global IDF file for short.
+This directive lets you specify the location of that file.
+It it suggested (but not required) to use a .idf extension.
+When the IDF file is specified for a given index <emphasis>and</emphasis>
+and OPTION global_idf is set to 1, the engine will use the keyword
+frequencies and collection documents count from the global_idf file,
+rather than just the local index. That way, IDFs and the values
+that depend on them will stay consistent across the cluster.
+</para>
+<para>
+IDF files can be shared across multiple indexes. Only a single
+copy of an IDF file will be loaded by <filename>searchd</filename>,
+even when many indexes refer to that file. Should the contents of
+an IDF file change, the new contents can be loaded with a SIGHUP.
+</para>
+<para>
+You can build an .idf file using <filename>indextool</filename>
+utility, by dumping dictionaries using <code>--dumpdict</code> switch
+first, then converting those to .idf format using <code>--buildidf</code>,
+then merging all .idf files across cluser using <code>--mergeidf</code>.
+Refer to <xref linkend="ref-indextool"/> for more information.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+global_idf = /usr/local/sphinx/var/global.idf
 </programlisting>
 </sect2>
 
@@ -11886,30 +12597,30 @@ Lets you choose how <filename>searchd</filename> processes multiple
 concurrent requests. The possible values are:
 <variablelist>
 <varlistentry>
-	<term>none</term>
-	<listitem><para>All requests will be handled serially, one-by-one.
-		Prior to 1.x, this was the only mode available on Windows.
-	</para></listitem>
+    <term>none</term>
+    <listitem><para>All requests will be handled serially, one-by-one.
+        Prior to 1.x, this was the only mode available on Windows.
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>fork</term>
-	<listitem><para>A new child process will be forked to handle every
-		incoming request. Historically, this is the default mode.
-	</para></listitem>
+    <term>fork</term>
+    <listitem><para>A new child process will be forked to handle every
+        incoming request. Historically, this is the default mode.
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>prefork</term>
-	<listitem><para>On startup, <filename>searchd</filename> will pre-fork
-		a number of worker processes, and pass the incoming requests
-		to one of those children.
-	</para></listitem>
+    <term>prefork</term>
+    <listitem><para>On startup, <filename>searchd</filename> will pre-fork
+        a number of worker processes, and pass the incoming requests
+        to one of those children.
+    </para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>threads</term>
-	<listitem><para>A new thread will be created to handle every
-		incoming request. This is the only mode compatible with
-		RT indexing backend.
-	</para></listitem>
+    <term>threads</term>
+    <listitem><para>A new thread will be created to handle every
+        incoming request. This is the only mode compatible with
+        RT indexing backend.
+    </para></listitem>
 </varlistentry>
 </variablelist>
 </para>
@@ -11975,11 +12686,11 @@ of document data to process is significant (hundreds of megabytes).
 <programlisting>
 index dist_test
 {
-	type = distributed
-	local = chunk1
-	local = chunk2
-	local = chunk3
-	local = chunk4
+    type = distributed
+    local = chunk1
+    local = chunk2
+    local = chunk3
+    local = chunk4
 }
 
 # ...
@@ -12503,10 +13214,10 @@ while evaluating the query, which is indeterministic, it predicts the current
 running time using a simple linear model instead:
 <programlisting>
 predicted_time =
-	doc_cost * processed_documents +
-	hit_cost * processed_hits +
-	skip_cost * skiplist_jumps +
-	match_cost * found_matches
+    doc_cost * processed_documents +
+    hit_cost * processed_hits +
+    skip_cost * skiplist_jumps +
+    match_cost * found_matches
 </programlisting>
 The query is then terminated early when the <code>predicted_time</code>
 reaches a given limit.
@@ -12560,6 +13271,79 @@ predicted_time_costs = doc=128, hit=96, skip=4096, match=128
 -->
 
 <appendix id="changelog"><title>Sphinx revision history</title>
+
+<sect1 id="rel211"><title>Version 2.1.1-beta, 20 feb 2013</title>
+<bridgehead>Major new features</bridgehead>
+<itemizedlist>
+<listitem><para>added query profiling (SET PROFILING=1 and <link linkend="sphinxql-show-profile">SHOW PROFILE</link> statements)</para></listitem>
+<listitem><para>added AOT-based Russian lemmatizer (<link linkend="conf-morphology">morphology={lemmatize_ru | lemmatize_ru_all}</link>, <link linkend="conf-lemmatizer-base">lemmatizer_base</link>, and <link linkend="conf-lemmatizer-cache">lemmatizer_cache</link> directives)</para></listitem>
+<listitem><para>added <link linkend="ref-wordbreaker">wordbreaker</link>, a tool to split compounds into individual words</para></listitem>
+<listitem><para>added JSON attributes support (<link linkend="conf-sql-attr-json">sql_attr_json</link>, <link linkend="conf-on-json-attr-error">on_json_attr_error</link>, <link linkend="conf-json-autoconv-numbers">json_autoconv_numbers</link>, <link linkend="conf-json-autoconv-keynames">json_autoconv_keynames</link> directives)</para></listitem>
+<listitem><para>added initial subselects support, SELECT * FROM (SELECT ... ORDER BY cond1 LIMIT X) ORDER BY cond2 LIMIT Y</para></listitem>
+<listitem><para>added bigram indexing, and phrase searching with bigrams (<link linkend="conf-bigram-index">bigram_index</link>, <link linkend="conf-bigram-freq-words">bigram_freq_words</link> directives)</para></listitem>
+<listitem><para>added HA/LB support, ha_strategy and agent_persistent directives, SHOW AGENT STATUS statement</para></listitem>
+<listitem><para>added RT index optimiation (<link linkend="sphinxql-optimize-index">OPTIMIZE INDEX</link> statement, <link linkend="conf-rt-merge-iops">rt_merge_iops</link> and <link linkend="conf-rt-merge-maxiosize">rt_merge_maxiosize</link> directives)</para></listitem>
+<listitem><para>added wildcards support to <link linkend="conf-dict">dict=keywords</link> (eg. "t?st*")</para></listitem>
+<listitem><para>added substring search support (min_infix_len=2 and above) to <link linkend="conf-dict">dict=keywords</link></para></listitem>
+</itemizedlist>
+<bridgehead>New features</bridgehead>
+<itemizedlist>
+<listitem><para>added --checkconfig switch to <link linkend="ref-indextool">indextool</link> to check config file for correctness (bug #1395)</para></listitem>
+<listitem><para>added global IDF support (<link linkend="conf-global-idf">global_idf</link> directive, <link linkend="sphinxql-select">OPTION global_idf</link>)</para></listitem>
+<listitem><para>added "term1 term2 term3"/0.5 <link linkend="extended-syntax">quorum fraction syntax</link> (bug #1372)</para></listitem>
+<listitem><para>added an option to apply stopwords before morphology, <link linkend="conf-stopwords-unstemmed">stopwords_unstemmed</link> directive</para></listitem>
+<listitem><para>added an alternative method to compute keyword IDFs, <link linkend="sphinxql-select">OPTION idf=plain</link></para></listitem>
+<listitem><para>added boolean query optimizations, <link linkend="sphinxql-select">OPTION boolean_simplify=1</link> (bug #1294)</para></listitem>
+<listitem><para>added stringptr return type support to UDFs, and <link linkend="sphinxql-create-function">CREATE FUNCTION ... RETURNS STRING syntax</link></para></listitem>
+<listitem><para>added early query termination by predicted execution time (<link linkend="sphinxql-select">OPTION max_predicted_time</link>, and <link linkend="conf-predicted-time-costs">predicted_time_costs</link> directive)</para></listitem>
+<listitem><para>added <link linkend="conf-index-field-lengths">index_field_lengths</link> directive, BM25A() and BM25F() functions to <link linkend="expression-ranker">expression ranker</link></para></listitem>
+<listitem><para>added ranker=export, and <link linkend="expr-func-packedfactors">PACKEDFACTORS()</link> function</para></listitem>
+<listitem><para>added <link linkend="sphinxql-select">OPTION agent_query_timeout</link></para></listitem>
+<listitem><para>added support for attribute files over 4 GB (bug #1274)</para></listitem>
+<listitem><para>added addr2line output to crash reports (bug #1265)</para></listitem>
+<listitem><para>added <link linkend="sphinxql-update">OPTION ignore_nonexistent_columns</link> to UPDATE, and a respective <link linkend="api-func-updateatttributes">UpdateAttributes()</link> argument</para></listitem>
+<listitem><para>added --keep-attrs switch to <link linkend="ref-indexer">indexer</link></para></listitem>
+<listitem><para>added --with-static-mysql, --with-static-pgsql switches to configure</para></listitem>
+<listitem><para>added double-buffering for RT <link linkend="sphinxql-insert">INSERTs</link> (bug #1200)</para></listitem>
+<listitem><para>added --morph, --dumpdict switch to <link linkend="ref-indextool">indextool</link></para></listitem>
+<listitem><para>added support for multiple wordforms files, comment syntax, and pre/post-morphology <link linkend="conf-wordforms">wordforms</link></para></listitem>
+<listitem><para>added <link linkend="sphinxql-select">ZONESPANLIST()</link><!-- FIXME separate entry --> builtin function</para></listitem>
+<listitem><para>added <link linkend="conf-regexp-filter">regexp_filter</link> directive, regexp document/query filtering support (uses RE2)</para></listitem>
+<listitem><para>added min_idf, max_idf, sum_idf <link linkend="expression-ranker">ranking factors</link></para></listitem>
+<listitem><para>added uservars persistence, and <link linkend="conf-sphinxql-state">sphinxql_state</link> directive (bug #1132)</para></listitem>
+<listitem><para>added <link linkend="expr-func-poly2d">POLY2D</link>, <link linkend="expr-func-geopoly2d">GEOPOLY2D</link>, <link linkend="expr-func-contains">CONTAINS</link> functions</para></listitem>
+<listitem><para>added <link linkend="extended-syntax">ZONESPAN</link> operator</para></listitem>
+<listitem><para>added <link linkend="conf-snippets-file-prefix">snippets_file_prefix</link> directive</para></listitem>
+<listitem><para>added Arabic stemmer, <link linkend="conf-morphology">morphology=stem_ar</link> directive (bug #519)</para></listitem>
+<listitem><para>added <link linkend="sphinxql-select">OPTION sort_method={pq | kbuffer}</link>, an alternative match sorting method</para></listitem>
+<listitem><para>added SPZ (<link linkend="conf-index-sp">sentence, paragraph</link>, <link linkend="conf-index-zones">zone</link>) support to RT indexes</para></listitem>
+<listitem><para>added support for upto 255 keywords in <link linkend="extended-syntax">quorum operator</link> (bug #1030)</para></listitem>
+<listitem><para>added multi-threaded agent querying (bug #1000)</para></listitem>
+</itemizedlist>
+<bridgehead>New SphinxQL features</bridgehead>
+<itemizedlist>
+<listitem><para>added <link linkend="sphinxql-show-index-status">SHOW INDEX indexname STATUS</link> statement</para></listitem>
+<listitem><para>added LIKE clause support to multiple SHOW xxx statements</para></listitem>
+<listitem><para>added <link linkend="sphinxql-select">SNIPPET()</link><!-- FIXME! separate entry --> function</para></listitem>
+<listitem><para>added <link linkend="sphinxql-select">GROUP_CONCAT()</link> aggregate function</para></listitem>
+<listitem><para>added <link linkend="sphinxql-select">GROUPBY()</link> builtin function</para></listitem>
+<listitem><para>added iostats and cpustats to <link linkend="sphinxql-show-meta">SHOW META</link></para></listitem>
+<listitem><para>added support for <link linkend="sphinxql-delete">DELETE</link> statement over distributed indexes (bug #1104)</para></listitem>
+<listitem><para>added <link linkend="sphinxql-select">EXIST('attr_name', default_value)</link><!-- FIXME separate entry --> builtin function (bug #1037)</para></listitem>
+<listitem><para>added <link linkend="sphinxql-show-variables">SHOW VARIABLES WHERE variable_name='xxx'</link> syntax</para></listitem>
+<listitem><para>added <link linkend="sphinxql-truncate-rtindex">TRUNCATE RTINDEX</link> statement</para></listitem>
+</itemizedlist>
+<bridgehead>Major behavior changes and optimizations</bridgehead>
+<itemizedlist>
+<listitem><para>changed that UDFs are now allowed in fork/prefork modes via <link linkend="conf-sphinxql-state">sphinxql_state</link> startup script</para></listitem>
+<listitem><para>changed that <link linkend="conf-compat-sphinxql-magics">compat_sphinxql_magics</link> now defaults to 0</para></listitem>
+<listitem><para>changed that small enough exceptions, wordforms, stopwords files are now embedded into the index header</para></listitem>
+<listitem><para>changed that <link linkend="conf-rt-mem-limit">rt_mem_limit</link> can now be over 2 GB (bug #1059)</para></listitem>
+<listitem><para>optimized tokenizer (upto 1.25x indexing and snippets speedup)</para></listitem>
+<listitem><para>optimized multi-keyword searching (added skiplists)</para></listitem>
+<listitem><para>optimized filtering and scan in several frequent cases (single-value, 2-arg, 3-arg WHERE clauses)</para></listitem>
+</itemizedlist>
+</sect1>
 
 <sect1 id="rel206"><title>Version 2.0.6-release, 22 oct 2012</title>
 <bridgehead>Bug fixes</bridgehead>
@@ -13009,22 +13793,22 @@ predicted_time_costs = doc=128, hit=96, skip=4096, match=128
 <listitem><para>added prefork and threads support (<link linkend="conf-workers">workers</link> directives)</para></listitem>
 <listitem><para>added multi-threaded local searches in distributed indexes (<link linkend="conf-dist-threads">dist_threads</link> directive)</para></listitem>
 <listitem><para>added common subquery cache (<link linkend="conf-subtree-docs-cache">subtree_docs_cache</link>,
-	<link linkend="conf-subtree-hits-cache">subtree_hits_cache</link> directives)</para></listitem>
+    <link linkend="conf-subtree-hits-cache">subtree_hits_cache</link> directives)</para></listitem>
 <listitem><para>added string attributes support (<link linkend="conf-sql-attr-string">sql_attr_string</link>,
-	<link linkend="conf-sql-field-string">sql_field_string</link>,
-	<link linkend="conf-xmlpipe-attr-string">xml_attr_string</link>,
-	<link linkend="conf-xmlpipe-field-string">xml_field_string</link> directives)</para></listitem>
+    <link linkend="conf-sql-field-string">sql_field_string</link>,
+    <link linkend="conf-xmlpipe-attr-string">xml_attr_string</link>,
+    <link linkend="conf-xmlpipe-field-string">xml_field_string</link> directives)</para></listitem>
 <listitem><para>added indexing-time word counter (<link linkend="conf-sql-attr-str2wordcount">sql_attr_str2wordcount</link>,
-	<link linkend="conf-sql-field-str2wordcount">sql_field_str2wordcount</link> directives)</para></listitem>
+    <link linkend="conf-sql-field-str2wordcount">sql_field_str2wordcount</link> directives)</para></listitem>
 <listitem><para>added <link linkend="sphinxql-call-snippets">CALL SNIPPETS()</link>,
-	<link linkend="sphinxql-call-keywords">CALL KEYWORDS()</link> SphinxQL statements</para></listitem>
+    <link linkend="sphinxql-call-keywords">CALL KEYWORDS()</link> SphinxQL statements</para></listitem>
 <listitem><para>added <option>field_weights</option>, <option>index_weights</option> options to
-	SphinxQL <link linkend="sphinxql-select">SELECT</link> statement</para></listitem>
+    SphinxQL <link linkend="sphinxql-select">SELECT</link> statement</para></listitem>
 <listitem><para>added insert-only SphinxQL-talking tables to SphinxSE (connection='sphinxql://host[:port]/index')</para></listitem>
 <listitem><para>added <option>select</option> option to SphinxSE queries</para></listitem>
 <listitem><para>added backtrace on crash to <filename>searchd</filename></para></listitem>
 <listitem><para>added SQL+FS indexing, aka loading files by names fetched from SQL
-	(<link linkend="conf-sql-file-field">sql_file_field</link> directive)</para></listitem>
+    (<link linkend="conf-sql-file-field">sql_file_field</link> directive)</para></listitem>
 <listitem><para>added a watchdog in threads mode to <filename>searchd</filename></para></listitem>
 <listitem><para>added automatic row phantoms elimination to index merge</para></listitem>
 <listitem><para>added hitless indexing support (hitless_words directive)</para></listitem>
@@ -13035,11 +13819,11 @@ predicted_time_costs = doc=128, hit=96, skip=4096, match=128
 <listitem><para>added joined/payload field indexing (<link linkend="conf-sql-joined-field">sql_joined_field</link> directive)</para></listitem>
 <listitem><para>added <link linkend="api-func-flushattributes">FlushAttributes() API call</link></para></listitem>
 <listitem><para>added query_mode, force_all_words, limit_passages, limit_words, start_passage_id, load_files, html_strip_mode,
-	allow_empty options, and %PASSAGE_ID% macro in before_match, after_match options
-	to <link linkend="api-func-buildexcerpts">BuildExcerpts()</link> API call</para></listitem>
+    allow_empty options, and %PASSAGE_ID% macro in before_match, after_match options
+    to <link linkend="api-func-buildexcerpts">BuildExcerpts()</link> API call</para></listitem>
 <listitem><para>added @groupby/@count/@distinct columns support to SELECT (but not to expressions)</para></listitem>
 <listitem><para>added query-time keyword expansion support (<link linkend="conf-expand-keywords">expand_keywords</link> directive,
-	<link linkend="api-func-setrankingmode">SPH_RANK_SPH04</link> ranker)</para></listitem>
+    <link linkend="api-func-setrankingmode">SPH_RANK_SPH04</link> ranker)</para></listitem>
 <listitem><para>added query batch size limit option (<link linkend="conf-max-batch-queries">max_batch_queries</link> directive; was hardcoded)</para></listitem>
 <listitem><para>added SINT() function to expressions</para></listitem>
 <listitem><para>improved SphinxQL syntax error reporting</para></listitem>

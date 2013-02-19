@@ -684,14 +684,14 @@ struct CSphDictSettings
 	int				m_iMinStemmingLen;
 	bool			m_bWordDict;
 	bool			m_bCrc32;
-	bool			m_bStopwordsStem;
+	bool			m_bStopwordsUnstemmed;
 	CSphString		m_sMorphFingerprint;		///< not used for creation; only for a check when loading
 
 	CSphDictSettings ()
 		: m_iMinStemmingLen ( 1 )
 		, m_bWordDict ( false )
 		, m_bCrc32 ( !USE_64BIT )
-		, m_bStopwordsStem ( false )
+		, m_bStopwordsUnstemmed ( false )
 	{}
 };
 

@@ -614,11 +614,11 @@ index test1
 	#
 	# snippets_file_prefix	= /mnt/mydocs/server1
 
-	# stopword filter mode
-	# specifies whether to apply stopword filter before or after stemming
-	# optional, default is 0 (apply stopword filter after stemming)
+
+	# whether to apply stopwords before or after stemming
+	# optional, default is 0 (apply stopwords after stemming)
 	#
-	# stopwords_stem	= 1
+	# stopwords_unstemmed	= 0
 }
 
 

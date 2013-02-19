@@ -2929,7 +2929,7 @@ void LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings
 		tSettings.m_bWordDict = ( tReader.GetByte()!=0 );
 
 	if ( uVersion>=36 )
-		tSettings.m_bStopwordsStem = ( tReader.GetByte()!=0 );
+		tSettings.m_bStopwordsUnstemmed = ( tReader.GetByte()!=0 );
 
 	if ( uVersion>=37 )
 		tSettings.m_sMorphFingerprint = tReader.GetString();
@@ -2981,7 +2981,7 @@ void SaveDictionarySettings ( CSphWriter & tWriter, CSphDict * pDict, bool bForc
 
 	tWriter.PutDword ( tSettings.m_iMinStemmingLen );
 	tWriter.PutByte ( tSettings.m_bWordDict || bForceWordDict );
-	tWriter.PutByte ( tSettings.m_bStopwordsStem );
+	tWriter.PutByte ( tSettings.m_bStopwordsUnstemmed );
 	tWriter.PutString ( pDict->GetMorphDataFingerprint() );
 }
 
@@ -13483,7 +13483,7 @@ SphWordID_t CSphDictStar::GetWordID ( BYTE * pWord )
 	char sBuf [ 16+3*SPH_MAX_WORD_LEN ];
 	assert ( strlen ( (const char*)pWord ) < 16+3*SPH_MAX_WORD_LEN );
 
-	if ( m_pDict->GetSettings().m_bStopwordsStem && m_pDict->IsStopWord ( pWord ) )
+	if ( m_pDict->GetSettings().m_bStopwordsUnstemmed && m_pDict->IsStopWord ( pWord ) )
 		return 0;
 
 	m_pDict->ApplyStemmers ( pWord );
@@ -13507,7 +13507,7 @@ SphWordID_t CSphDictStar::GetWordID ( BYTE * pWord )
 		}
 	}
 
-	return m_pDict->GetWordID ( (BYTE*)sBuf, iLen, !m_pDict->GetSettings().m_bStopwordsStem );
+	return m_pDict->GetWordID ( (BYTE*)sBuf, iLen, !m_pDict->GetSettings().m_bStopwordsUnstemmed );
 }
 
 
@@ -13542,12 +13542,12 @@ SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
 
 	if ( !bHeadStar && !bTailStar )
 	{
-		if ( m_pDict->GetSettings().m_bStopwordsStem && IsStopWord ( pWord ) )
+		if ( m_pDict->GetSettings().m_bStopwordsUnstemmed && IsStopWord ( pWord ) )
 			return 0;
 
 		m_pDict->ApplyStemmers ( pWord );
 
-		if ( !m_pDict->GetSettings().m_bStopwordsStem && IsStopWord ( pWord ) )
+		if ( !m_pDict->GetSettings().m_bStopwordsUnstemmed && IsStopWord ( pWord ) )
 			return 0;
 	}
 
@@ -19181,14 +19181,16 @@ template < bool CRC32DICT >
 SphWordID_t CSphDictCRC<CRC32DICT>::GetWordID ( BYTE * pWord )
 {
 	// apply stopword filter before stemmers
-	if ( GetSettings().m_bStopwordsStem && !FilterStopword ( DoCrc ( pWord ) ) )
+	if ( GetSettings().m_bStopwordsUnstemmed && !FilterStopword ( DoCrc ( pWord ) ) )
 		return 0;
 
 	// skip stemmers for magic words
 	if ( pWord[0]>=0x20 )
 		ApplyStemmers ( pWord );
 
-	return GetSettings().m_bStopwordsStem ? DoCrc ( pWord ) : FilterStopword ( DoCrc ( pWord ) );
+	return GetSettings().m_bStopwordsUnstemmed
+		? DoCrc ( pWord )
+		: FilterStopword ( DoCrc ( pWord ) );
 }
 
 
@@ -19293,7 +19295,10 @@ void CSphDictCRCTraits::LoadStopwords ( const char * sFiles, const ISphTokenizer
 		BYTE * pToken;
 		tTokenizer->SetBuffer ( pBuffer, iLength );
 		while ( ( pToken = tTokenizer->GetToken() )!=NULL )
-			dStop.Add ( GetWordID ( pToken ) );
+			if ( m_tSettings.m_bStopwordsUnstemmed )
+				dStop.Add ( GetWordIDNonStemmed ( pToken ) );
+			else
+				dStop.Add ( GetWordID ( pToken ) );
 
 		// close file
 		fclose ( fp );

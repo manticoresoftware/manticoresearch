@@ -19,6 +19,7 @@
 %token	TOK_USERVAR
 %token	TOK_SYSVAR
 %token	TOK_CONST_STRINGS
+%token	TOK_BAD_NUMERIC
 
 %token	TOK_AGENT
 %token	TOK_AS

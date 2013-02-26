@@ -3,8 +3,8 @@
 //
 
 //
-// Copyright (c) 2011-2012, Andrew Aksyonoff
-// Copyright (c) 2011-2012, Sphinx Technologies Inc
+// Copyright (c) 2011-2013, Andrew Aksyonoff
+// Copyright (c) 2011-2013, Sphinx Technologies Inc
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -13,7 +13,7 @@
 // did not, you can find it at http://www.gnu.org/
 //
 // Based on AOT lemmatizer, http://aot.ru/
-// Copyright (c) 2004-2012, Alexey Sokirko and others
+// Copyright (c) 2004-2013, Alexey Sokirko and others
 //
 
 #include "sphinx.h"

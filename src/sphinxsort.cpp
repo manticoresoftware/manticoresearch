@@ -3,8 +3,8 @@
 //
 
 //
-// Copyright (c) 2001-2012, Andrew Aksyonoff
-// Copyright (c) 2008-2012, Sphinx Technologies Inc
+// Copyright (c) 2001-2013, Andrew Aksyonoff
+// Copyright (c) 2008-2013, Sphinx Technologies Inc
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -4083,9 +4083,6 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 			const CSphColumnInfo & tAttr = tSorterSchema.GetAttr ( iSortAttr );
 			tStateMatch.m_eKeypart[0] = Attr2Keypart ( tAttr.m_eAttrType );
 			tStateMatch.m_tLocator[0] = tAttr.m_tLocator;
-
-			int dAttrs [ CSphMatchComparatorState::MAX_ATTRS ];
-			dAttrs[0] = iSortAttr;
 		}
 
 		// find out what function to use and whether it needs attributes

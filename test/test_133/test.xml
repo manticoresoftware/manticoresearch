@@ -110,6 +110,8 @@ Now the sands become a crust
 And most of you have gone away
 You have gone away'));]]></db_insert>
 
+<db_insert><![CDATA[insert into test_table values ( 500, 5, '<zone_5>asdf</zone_5');]]></db_insert>
+
 
 <queries>
 <query mode="extended2">one SENTENCE two</query>

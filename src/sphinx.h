@@ -485,6 +485,14 @@ enum ESphTokenizerClone
 };
 
 
+enum ESphTokenMorph
+{
+	SPH_TOKEN_MORPH_RAW,			///< no morphology applied, tokenizer does not handle morphology
+	SPH_TOKEN_MORPH_ORIGINAL,		///< no morphology applied, but tokenizer handles morphology
+	SPH_TOKEN_MORPH_GUESS			///< morphology applied
+};
+
+
 struct CSphMultiformContainer;
 class CSphWriter;
 
@@ -593,6 +601,9 @@ public:
 	/// get original tokenized multiform (if any); NULL means there was none
 	virtual BYTE *					GetTokenizedMultiform () { return NULL; }
 
+	/// check whether this token is a generated morphological guess
+	ESphTokenMorph					GetTokenMorph() const { return m_eTokenMorph; }
+
 	virtual bool					TokenIsBlended () const { return m_bBlended; }
 	virtual bool					TokenIsBlendedPart () const { return m_bBlendedPart; }
 	virtual int						SkipBlended () { return 0; }
@@ -641,6 +652,7 @@ protected:
 	int								m_iBoundaryOffset;			///< boundary character offset (in bytes)
 	bool							m_bWasSpecial;				///< special token flag
 	int								m_iOvershortCount;			///< skipped overshort tokens count
+	ESphTokenMorph					m_eTokenMorph;				///< whether last token was a generated morphological guess
 
 	bool							m_bBlended;					///< whether last token (as in just returned from GetToken()) was blended
 	bool							m_bNonBlended;				///< internal, whether there were any normal chars in that blended token
@@ -1926,7 +1938,16 @@ protected:
 	static const char * const	MACRO_VALUES [ MACRO_COUNT ];
 
 protected:
-	bool					SetupRanges ( const char * sRangeQuery, const char * sQuery, const char * sPrefix, CSphString & sError );
+	/// by what reason the internal SetupRanges called
+	enum ERangesReason
+	{
+		SRE_DOCS,
+		SRE_MVA,
+		SRE_JOINEDHITS
+	};
+
+protected:
+	bool					SetupRanges ( const char * sRangeQuery, const char * sQuery, const char * sPrefix, CSphString & sError, ERangesReason iReason );
 	bool					RunQueryStep ( const char * sQuery, CSphString & sError );
 
 protected:
@@ -2278,7 +2299,8 @@ enum ESphGroupBy
 	SPH_GROUPBY_MONTH	= 2,	///< group by month
 	SPH_GROUPBY_YEAR	= 3,	///< group by year
 	SPH_GROUPBY_ATTR	= 4,	///< group by attribute value
-	SPH_GROUPBY_ATTRPAIR= 5		///< group by sequential attrs pair (rendered redundant by 64bit attrs support; removed)
+	SPH_GROUPBY_ATTRPAIR= 5,	///< group by sequential attrs pair (rendered redundant by 64bit attrs support; removed)
+	SPH_GROUPBY_MULTIPLE= 6		///< group by on multiple attribute values
 };
 
 
@@ -2422,7 +2444,7 @@ public:
 
 	CSphVector<CSphFilterSettings>	m_dFilters;	///< filters
 
-	CSphString		m_sGroupBy;			///< group-by attribute name
+	CSphString		m_sGroupBy;			///< group-by attribute name(s)
 	ESphGroupBy		m_eGroupFunc;		///< function to pre-process group-by attribute value with
 	CSphString		m_sGroupSortBy;		///< sorting clause for groups in group-by mode
 	CSphString		m_sGroupDistinct;	///< count distinct values for this attribute

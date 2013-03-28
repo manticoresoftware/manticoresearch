@@ -29,7 +29,7 @@ const int	AOT_MIN_PREDICTION_SUFFIX	= 3;
 const BYTE	AOT_MORPH_ANNOT_CHAR		= '+';
 const int	AOT_MAX_ALPHABET_SIZE		= 54;
 const DWORD	AOT_NOFORM					= 0xffffffffUL;
-
+const DWORD	AOT_ORIGFORM				= 0xfffffffeUL;
 
 static int	g_iCacheSize				= 262144; // in bytes, so 256K
 
@@ -1051,10 +1051,13 @@ protected:
 	DWORD		m_FindResults[12];					///< max results is like 6
 	int			m_iCurrent;							///< index in m_FindResults that was just returned, -1 means no blending
 	BYTE		m_sToken [ SPH_MAX_WORD_LEN*3+4 ];	///< to hold generated lemmas
+	BYTE		m_sOrigToken [ SPH_MAX_WORD_LEN*3+4 ];	///< to hold original token
+	bool		m_bIndexExact;
+
 	const CSphWordforms *	m_pWordforms;
 
 public:
-	CSphAotTokenizer ( ISphTokenizer * pTok, CSphDict * pDict )
+	CSphAotTokenizer ( ISphTokenizer * pTok, CSphDict * pDict, bool bIndexExact )
 		: CSphTokenFilter ( pTok )
 	{
 		assert ( pTok );
@@ -1071,6 +1074,7 @@ public:
 			m_pWordforms = pDict->GetWordforms();
 			pDict->DisableWordforms();
 		}
+		m_bIndexExact = bIndexExact;
 	}
 
 	ISphTokenizer * Clone ( ESphTokenizerClone eMode ) const
@@ -1078,7 +1082,7 @@ public:
 		// this token filter must NOT be created as escaped
 		// it must only be used during indexing time, NEVER in searching time
 		assert ( eMode==SPH_CLONE_INDEX );
-		CSphAotTokenizer<IS_UTF8> * pClone = new CSphAotTokenizer ( m_pTokenizer->Clone ( eMode ), NULL );
+		CSphAotTokenizer<IS_UTF8> * pClone = new CSphAotTokenizer ( m_pTokenizer->Clone ( eMode ), NULL, m_bIndexExact );
 		if ( m_pWordforms )
 			pClone->m_pWordforms = m_pWordforms;
 		return pClone;
@@ -1096,11 +1100,23 @@ public:
 
 	BYTE * GetToken()
 	{
+		m_eTokenMorph = SPH_TOKEN_MORPH_GUESS;
+
 		// any pending lemmas left?
 		if ( m_iCurrent>=0 )
 		{
 			++m_iCurrent;
 			assert ( m_FindResults[m_iCurrent]!=AOT_NOFORM );
+
+			// return original token
+			if ( m_FindResults[m_iCurrent]==AOT_ORIGFORM )
+			{
+				assert ( m_FindResults[m_iCurrent+1]==AOT_NOFORM );
+				strncpy ( (char*)m_sToken, (char*)m_sOrigToken, sizeof(m_sToken) );
+				m_iCurrent = -1;
+				m_eTokenMorph = SPH_TOKEN_MORPH_ORIGINAL;
+				return m_sToken;
+			}
 
 			// generate that lemma
 			const CFlexiaModel & M = g_pLemmatizer->m_FlexiaModels [ AOT_MODEL_NO ( m_FindResults [ m_iCurrent ] ) ];
@@ -1176,6 +1192,17 @@ public:
 			return pToken;
 		}
 
+		// schedule original form for return, if needed
+		if ( m_bIndexExact )
+		{
+			int i = 1;
+			while ( m_FindResults[i]!=AOT_NOFORM )
+				i++;
+			m_FindResults[i] = AOT_ORIGFORM;
+			m_FindResults[i+1] = AOT_NOFORM;
+			strncpy ( (char*)m_sOrigToken, (char*)pToken, sizeof(m_sOrigToken) );
+		}
+
 		// in any event, prepare the first lemma for return
 		const CFlexiaModel & M = g_pLemmatizer->m_FlexiaModels [ AOT_MODEL_NO ( m_FindResults[0] ) ];
 		const CMorphForm & F = M [ AOT_ITEM_NO ( m_FindResults[0] ) ];
@@ -1197,12 +1224,12 @@ public:
 #pragma warning(default:4127) // conditional expr is const for MSVC
 #endif
 
-CSphTokenFilter * sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pDict )
+CSphTokenFilter * sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pDict, bool bIndexExact )
 {
 	if ( pTokenizer->IsUtf8() )
-		return new CSphAotTokenizer<true> ( pTokenizer, pDict );
+		return new CSphAotTokenizer<true> ( pTokenizer, pDict, bIndexExact );
 	else
-		return new CSphAotTokenizer<false> ( pTokenizer, pDict );
+		return new CSphAotTokenizer<false> ( pTokenizer, pDict, bIndexExact );
 }
 
 //

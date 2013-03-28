@@ -370,6 +370,11 @@ function CompareResultSetFixup ( &$set, $roundoff, $variants_match )
 		if ( @$set["words"] )
 			foreach ( $set["words"] as $word=>$info )
 				$set["words"][$word] = array ( "hits"=>-1, "docs"=>-1 );
+		if ( isset($set["sphinxql"]) && isset($set["rows"]) )
+		{
+			for ( $i=0; $i<count($set["rows"]); $i++ )
+				unset($set["rows"][$i]["weight()"]);
+		}
 	}
 
 	//foreach ( preg_split ( "/\\W+/", "time warning status fields resarray roundoff words" ) as $key )

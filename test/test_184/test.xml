@@ -32,6 +32,7 @@ index test
 {
 	source				= test
 	path				= <data_path/>/test
+	index_field_lengths = 1
 }
 
 index dist
@@ -41,6 +42,40 @@ index dist
 	agent_connect_timeout	= 1000
 	agent_query_timeout		= 3000	
 }
+
+source src_ext
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data_ext.xml
+	xmlpipe_field = title
+	xmlpipe_field = content
+	xmlpipe_attr_uint = gid
+}
+
+source src_int
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data_int.xml
+}
+
+index xml_ext
+{
+	source				= src_ext
+	path				= <data_path/>/xml_ext
+	charset_type		= utf-8
+	docinfo				= extern
+	index_field_lengths = 1
+}
+
+index xml_int
+{
+	source				= src_int
+	path				= <data_path/>/xml_int
+	charset_type		= utf-8
+	docinfo				= extern
+	index_field_lengths = 1
+}
+
 </config>
 
 <db_create>
@@ -98,6 +133,22 @@ INSERT INTO test_table VALUES
 +<sphinxql>select id, gid, weight(), title from test where match('mary') option ranker=expr('crc32(title)')</sphinxql>
 +<sphinxql>select id, gid, weight(), title from test where match('mary') option ranker=expr('in(mva32,1)')</sphinxql>
 +<sphinxql>select id, gid, weight(), title from test where match('mary') option ranker=expr('in(mva64,1)')</sphinxql>
+
+<!-- bm25f expression vs ranker function -->
+<sphinxql>select id, weight() as w1, FLOOR ( bm25f(1.2, 0.8, {content=10}) * 100000 ) as w2 from test where match('Mary lamb') option ranker=expr('bm25f(1.2, 0.8, {content=10}) * 1000')</sphinxql>
+<sphinxql>select id, weight() as w1, FLOOR ( bm25f(1.2, 0.8, {content=1000}) * 100000 ) as w2 from test where match('Mary lamb') option ranker=expr('bm25f(1.2, 0.8, {content=10}) * 1000')</sphinxql>
+<sphinxql>select id, weight() as w1, FLOOR ( bm25f(2.2, 0.5) * 100000 ) as w2, FLOOR ( bm25f(1.2, 0.8, {content=10}) * 100000 ) as w3 from test where match('Mary lamb') option ranker=expr('bm25f(10.2, 0.5) * 1000')</sphinxql>
+<sphinxql>select id, weight() as w1, bm25f(2.2, 0.5) * 1000 as w2 from test where match('Mary lamb')</sphinxql>
+<sphinxql>show warnings</sphinxql>
+
+<!-- regression hash vs attr-name -->
+<sphinxql>select id, weight() as w1, FLOOR ( bm25f(1.2, 0.8, {title=10}) * 100000 ) as w2 from test where match('Mary lamb') option ranker=expr('bm25f(1.2, 0.8, {title=10}) * 1000')</sphinxql>
+<sphinxql>select id, weight() as w1, FLOOR ( bm25f(1.2, 0.8, {title=2}) * 100000 ) as w2 from test where match('Mary lamb') option ranker=expr('bm25f(1.2, 0.8, {title=10}) * 1000')</sphinxql>
+
+<!-- index_field_lengths vs xml schema config defined and embeded -->
+<sphinxql>select id, weight() as w1, FLOOR ( bm25f(2.2, 0.5) * 100000 ) as w2, FLOOR ( bm25f(1.2, 0.8, {content=10}) * 100000 ) as w3 from xml_ext where match('Mary lamb') option ranker=expr('bm25f(10.2, 0.5) * 1000')</sphinxql>
+<sphinxql>select id, weight() as w1, FLOOR ( bm25f(2.2, 0.5) * 100000 ) as w2, FLOOR ( bm25f(1.2, 0.8, {content=10}) * 100000 ) as w3 from xml_int where match('Mary lamb') option ranker=expr('bm25f(10.2, 0.5) * 1000')</sphinxql>
+
 </sphqueries>
 
 </test>

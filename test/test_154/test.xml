@@ -31,7 +31,7 @@ index plain
     docinfo			= extern
     charset_type	= utf-8
 	path			= <data_path/>/plain
-	stopwords		= test_154/stopwords.txt
+	stopwords		= <this_test/>/stopwords.txt
 }
 
 index rt
@@ -40,7 +40,7 @@ index rt
     docinfo			= extern
     charset_type	= utf-8
 	path			= <data_path/>/rt
-	stopwords		= test_154/stopwords.txt
+	stopwords		= <this_test/>/stopwords.txt
 
 	rt_attr_uint	= idd1
 	rt_field		= body

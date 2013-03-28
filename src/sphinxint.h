@@ -377,6 +377,38 @@ public:
 
 //////////////////////////////////////////////////////////////////////////
 
+/// generic COM-like uids
+enum ExtraData_e
+{
+	EXTRA_GET_DATA_ZONESPANS,
+	EXTRA_GET_DATA_ZONESPANLIST,
+	EXTRA_GET_DATA_RANKFACTORS,
+	EXTRA_GET_DATA_PACKEDFACTORS,
+	EXTRA_GET_DATA_RANKER_STATE,
+	EXTRA_SET_MVAPOOL,
+	EXTRA_SET_STRINGPOOL,
+	EXTRA_SET_MAXMATCHES,
+	EXTRA_SET_MATCHPUSHED,
+	EXTRA_SET_MATCHPOPPED
+};
+
+/// generic COM-like interface
+class ISphExtra
+{
+public:
+	virtual						~ISphExtra () {}
+	inline bool					ExtraData	( ExtraData_e eType, void** ppData )
+	{
+		return ExtraDataImpl ( eType, ppData );
+	}
+private:
+	virtual bool ExtraDataImpl ( ExtraData_e, void** )
+	{
+		return false;
+	}
+};
+
+
 /// per-query search context
 /// everything that index needs to compute/create to process the query
 class CSphQueryContext
@@ -977,6 +1009,8 @@ inline int FindBit ( DWORD uValue )
 // INLINES, UTF-8 TOOLS
 //////////////////////////////////////////////////////////////////////////
 
+#define SPH_MAX_UTF8_BYTES 4
+
 /// decode UTF-8 codepoint
 /// advances buffer ptr in all cases but end of buffer
 ///
@@ -1003,7 +1037,7 @@ inline int sphUTF8Decode ( BYTE * & pBuf )
 	}
 
 	// check for valid number of bytes
-	if ( iBytes<2 || iBytes>4 )
+	if ( iBytes<2 || iBytes>SPH_MAX_UTF8_BYTES )
 		return -1;
 
 	int iCode = ( v >> iBytes );
@@ -1147,6 +1181,37 @@ public:
 	virtual ~ISphZoneCheck () {}
 	virtual SphZoneHit_e IsInZone ( int iZone, const ExtHit_t * pHit, int * pLastSpan=0 ) = 0;
 };
+
+
+struct SphFactorHashEntry_t
+{
+	SphDocID_t				m_iId;
+	int						m_iRefCount;
+	BYTE *					m_pData;
+	SphFactorHashEntry_t *	m_pPrev;
+	SphFactorHashEntry_t *	m_pNext;
+};
+
+typedef CSphTightVector<SphFactorHashEntry_t *> SphFactorHash_t;
+
+
+struct SphExtraDataRankerState_t
+{
+	const CSphSchema *	m_pSchema;
+	const int64_t *		m_pFieldLens;
+	CSphAttrLocator		m_tFieldLensLoc;
+	int64_t				m_iTotalDocuments;
+	int					m_iFields;
+	int					m_iMaxQpos;
+	SphExtraDataRankerState_t ()
+		: m_pSchema ( NULL )
+		, m_pFieldLens ( NULL )
+		, m_iTotalDocuments ( 0 )
+		, m_iFields ( 0 )
+		, m_iMaxQpos ( 0 )
+	{ }
+};
+
 
 //////////////////////////////////////////////////////////////////////////
 // INLINES, MISC
@@ -1427,7 +1492,7 @@ void			sphCheckWordStats ( const SmallStringHash_T<CSphQueryResultMeta::WordStat
 bool			sphCheckQueryHeight ( const struct XQNode_t * pRoot, CSphString & sError );
 void			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, bool bHasBooleanOptimization, const ISphKeywordsStat * pKeywords );
 void			TransformAotFilter ( XQNode_t * pNode, bool bUtf8, const CSphWordforms * pWordforms );
-bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle );
+bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pForceTerminate );
 CSphString		sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema );
 
 void			sphSetUnlinkOld ( bool bUnlink );
@@ -1443,6 +1508,22 @@ void			SaveDictionarySettings ( CSphWriter & tWriter, CSphDict * pDict, bool bFo
 void			LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings, CSphEmbeddedFiles & tEmbeddedFiles, DWORD uVersion, CSphString & sWarning );
 void			SaveFieldFilterSettings ( CSphWriter & tWriter, ISphFieldFilter * pFieldFilter );
 
+DWORD ReadVersion ( const char * sPath, CSphString & sError );
+
+enum ESphExtType
+{
+	SPH_EXT_CUR,
+	SPH_EXT_NEW,
+	SPH_EXT_OLD,
+	SPH_EXT_LOC
+};
+
+const char ** sphGetExts ( ESphExtType eType, DWORD uVersion=INDEX_FORMAT_VERSION );
+
+int sphGetExtCount ( DWORD uVersion=INDEX_FORMAT_VERSION );
+
+const char * sphGetCurMvp();
+const char * sphGetOldMvp();
 
 int sphDictCmp ( const char * pStr1, int iLen1, const char * pStr2, int iLen2 );
 int sphDictCmpStrictly ( const char * pStr1, int iLen1, const char * pStr2, int iLen2 );

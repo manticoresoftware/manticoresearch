@@ -37,6 +37,9 @@ index test
 <sphinxql>DESCRIBE test LIKE 'g_oup%'</sphinxql>
 <sphinxql>SHOW TABLES LIKE '__s_'</sphinxql>
 <sphinxql>SHOW AGENT STATUS LIKE '%seconds%'</sphinxql>
+
+<sphinxql>SELECT *, GROUPBY(), COUNT(*) FROM test GROUP BY group_id, group_id2</sphinxql>
+<sphinxql>SELECT *, GROUPBY(), COUNT(*) FROM test GROUP BY group_id2, group_id, group_id2</sphinxql>
 </sphqueries>
 
 <db_create>

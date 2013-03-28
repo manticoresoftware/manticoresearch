@@ -31,7 +31,10 @@ index test
 
 	html_strip		= 1
     index_zones		= zone*
-	dict			= keywords	
+	<dynamic>
+	  <variant>dict			= keywords</variant>
+	  <variant>dict			= crc</variant>
+	</dynamic>
 	enable_star		= 1
 	<dynamic>
 		<variant>min_prefix_len	= 0</variant>
@@ -55,6 +58,7 @@ create table test_table
 <query mode="extended2">"la belette"</query>
 <query mode="extended2">ZONE:zoneB "la belette"</query>
 <query mode="extended2">ZONE:nonZone "la belette"</query>
+<query mode="extended2">ZONE:zoneA le renard</query>
 </queries>
 
 </test>

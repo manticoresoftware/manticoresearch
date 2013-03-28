@@ -2092,14 +2092,12 @@ void sphUnlinkIndex ( const char * sName, bool bForce )
 	if ( !( g_bUnlinkOld || bForce ) )
 		return;
 
-	// FIXME! ext list must be in sync with sphinx.cpp, searchd.cpp
-	const int EXT_COUNT = 10;
-	const char * dCurExts[EXT_COUNT] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm", ".spk", ".sps", ".spe", ".mvp" };
 	char sFileName[SPH_MAX_FILENAME_LEN];
 
-	for ( int j=0; j<EXT_COUNT; j++ )
+	// +1 is for .mvp
+	for ( int i=0; i<sphGetExtCount()+1; i++ )
 	{
-		snprintf ( sFileName, sizeof(sFileName), "%s%s", sName, dCurExts[j] );
+		snprintf ( sFileName, sizeof(sFileName), "%s%s", sName, sphGetExts ( SPH_EXT_CUR )[i] );
 		// 'mvp' is optional file
 		if ( ::unlink ( sFileName ) && errno!=ENOENT )
 			sphWarning ( "unlink failed (file '%s', error '%s'", sFileName, strerror(errno) );

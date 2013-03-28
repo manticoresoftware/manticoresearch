@@ -70,7 +70,7 @@ const CSphNamedInt &	sphAotDictinfoRu();
 /// create token filter that returns all morphological hypotheses
 /// NOTE, takes over wordforms from pDict, in AOT case they must be handled by the fitler
 class CSphTokenFilter;
-CSphTokenFilter *		sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pDict );
+CSphTokenFilter *		sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pDict, bool bIndexExact );
 
 #endif // _sphinxstem_
 

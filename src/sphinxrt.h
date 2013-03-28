@@ -67,7 +67,7 @@ public:
 
 /// initialize subsystem
 class CSphConfigSection;
-void sphRTInit ();
+void sphRTInit ( const CSphConfigSection & hSearchd, bool bTestMode );
 void sphRTConfigure ( const CSphConfigSection & hSearchd, bool bTestMode );
 bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema * pSchema, CSphString * pError );
 

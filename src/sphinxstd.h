@@ -899,10 +899,10 @@ public:
 
 		Sort ();
 
-		int iSrc = 0, iDst = 0;
+		int iSrc = 1, iDst = 1;
 		while ( iSrc<m_iLength )
 		{
-			if ( iDst>0 && m_pData[iDst-1]==m_pData[iSrc] )
+			if ( m_pData[iDst-1]==m_pData[iSrc] )
 				iSrc++;
 			else
 				m_pData[iDst++] = m_pData[iSrc++];
@@ -2631,35 +2631,6 @@ public:
 	}
 };
 
-/// generic COM-like uids
-enum ExtraData_e
-{
-	EXTRA_GET_DATA_ZONESPANS,
-	EXTRA_GET_DATA_ZONESPANLIST,
-	EXTRA_GET_DATA_RANKFACTORS,
-	EXTRA_GET_DATA_PACKEDFACTORS,
-	EXTRA_SET_MVAPOOL,
-	EXTRA_SET_STRINGPOOL,
-	EXTRA_SET_MAXMATCHES,
-	EXTRA_SET_MATCHPUSHED,
-	EXTRA_SET_MATCHPOPPED
-};
-
-/// generic COM-like interface
-class ISphExtra
-{
-public:
-	virtual						~ISphExtra () {}
-	inline bool					ExtraData	( ExtraData_e eType, void** ppData )
-	{
-		return ExtraDataImpl ( eType, ppData );
-	}
-private:
-	virtual bool ExtraDataImpl ( ExtraData_e, void** )
-	{
-		return false;
-	}
-};
 
 #endif // _sphinxstd_
 

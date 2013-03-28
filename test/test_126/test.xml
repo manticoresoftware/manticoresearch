@@ -116,6 +116,8 @@ index plain_inline
 <sphinxql>insert into expanded_rt values ( 1,  'dog runs', 11 ), ( 2,  'dogs run', 22 ), ( 3,  'dogs running', 33 ), ( 4,  'dog run', 44 )</sphinxql>
 <sphinxql>select * from expanded_rt where match ( 'run' )</sphinxql>
 <sphinxql>show meta</sphinxql>
+<sphinxql>select * from expanded_plain where match ( 'run' )</sphinxql>
+<sphinxql>show meta</sphinxql>
 </sphqueries>
 
 <db_create>

@@ -137,6 +137,20 @@ index rt
 	rt_field = title
 	rt_attr_json = data
 }
+
+source json_attr
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * from json_attr
+	sql_attr_json	= json
+}
+
+index json_attr
+{
+	source = json_attr
+	path=<data_path/>/json_attr
+}
 </config>
 
 <db_create>
@@ -235,6 +249,15 @@ INSERT INTO `json_case` VALUES
 (8,'{"Attr":12,							"Str":"nope11"							}')
 </db_insert>
 
+<db_create>CREATE TABLE json_attr ( id INTEGER NOT NULL, gid INTEGER NOT NULL, json VARCHAR(255) NOT NULL )</db_create>
+<db_drop>DROP TABLE IF EXISTS `json_attr`;</db_drop>
+<db_insert>
+INSERT INTO json_attr ( id, gid, json ) VALUES
+    ( 123, 1, '{"username":"Alice","year":2000,"floatkey": 1.01}' ),
+    ( 234, 1, '{"username":"Bob","year":2001,"floatkey": 2.22}' ),
+    ( 345, 2, '{"username":"Charlie","year":2002,"floatkey": 3.00}' ),
+    ( 456, 2, '{"username":"Damon","year":2003,"floatkey": 4.44}' )
+</db_insert>
 
 <queries>
 <!-- json via API -->
@@ -305,6 +328,36 @@ INSERT INTO `json_case` VALUES
 <sphinxql>replace into rt (id, data) values (3, '{attr1:100, attr2:"replaced", new_attr:"text"}')</sphinxql>
 <sphinxql>select * from rt</sphinxql>
 <sphinxql>select * from rt group by data.new_attr</sphinxql>
+<sphinxql>select data.attr2 from rt group by data.new_attr</sphinxql>
+<!-- quoting check -->
+<sphinxql>select * from json_attr</sphinxql>
+<sphinxql>select json.username from json_attr where id=123</sphinxql>
+<sphinxql>select json.year from json_attr where id=123</sphinxql>
+<!-- floats check -->
+<sphinxql>select * from json_attr where json.floatkey>1.234</sphinxql>
+<sphinxql>select * from json_attr where json.floatkey between 1 and 3</sphinxql>
+<sphinxql>select * from json_attr where json.floatkey between 1.01 and 3.0</sphinxql>
+<sphinxql>select * from json_attr where json.floatkey between 1.01 and 1.02</sphinxql>
+<sphinxql>select * from json_attr where json.floatkey>2.22</sphinxql>
+<sphinxql>select * from json_attr where json.floatkey>=2.22</sphinxql>
+<!-- json in multiple -->
+<sphinxql>select *, groupby(), count(*) from test group by gid, j.t1, j.gid</sphinxql>
+<!-- type conversion -->
+<sphinxql>select double(json.year) from json_attr</sphinxql>
+<sphinxql>select double(json.floatkey) from json_attr</sphinxql>
+<sphinxql>select sum(integer(json.year)) from json_attr</sphinxql>
+<sphinxql>select sum(double(json.floatkey)) from json_attr</sphinxql>
+<sphinxql>select avg(double(json.floatkey)) from json_attr</sphinxql>
+<sphinxql>select avg(integer(json.floatkey)) from json_attr</sphinxql>
+<sphinxql>select min(bigint(json.floatkey)) from json_attr</sphinxql>
+<sphinxql>select min(bigint(json.year)) from json_attr</sphinxql>
+<sphinxql>select max(double(json.floatkey)) from json_attr</sphinxql>
+<sphinxql>select max(integer(json.floatkey)) from json_attr</sphinxql>
+<sphinxql>select double(json.year) as year from json_attr where year>=2002.0</sphinxql>
+<sphinxql>select integer(json.floatkey) as floatkey from json_attr where floatkey>=2</sphinxql>
+<!-- multiple conditions -->
+<sphinxql>select * from json_attr where json.year=2000 and json.floatkey>=1.01</sphinxql>
+<sphinxql>select * from json_attr where json.year=2000 and json.floatkey>=1.01 and json.username='Alice'</sphinxql>
 </sphqueries>
 
 </test>

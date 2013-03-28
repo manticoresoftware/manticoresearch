@@ -58,7 +58,7 @@ index test
 	
     phrase_boundary			= .
     phrase_boundary_step	= 2
-	stopwords				= test_146/stopwords.txt
+	stopwords				= <this_test/>/stopwords.txt
 }
 </config>
 

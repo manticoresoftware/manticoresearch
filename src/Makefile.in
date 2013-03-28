@@ -59,8 +59,8 @@ am__objects_1 = sphinx.$(OBJEXT) sphinxexcerpt.$(OBJEXT) \
 	sphinxstemar.$(OBJEXT) sphinxutils.$(OBJEXT) \
 	sphinxstd.$(OBJEXT) sphinxsort.$(OBJEXT) sphinxexpr.$(OBJEXT) \
 	sphinxfilter.$(OBJEXT) sphinxsearch.$(OBJEXT) \
-	sphinxrt.$(OBJEXT) sphinxjson.$(OBJEXT) \
-	sphinxudf.$(OBJEXT) sphinxaot.$(OBJEXT)
+	sphinxrt.$(OBJEXT) sphinxjson.$(OBJEXT) sphinxudf.$(OBJEXT) \
+	sphinxaot.$(OBJEXT)
 am_libsphinx_a_OBJECTS = $(am__objects_1)
 libsphinx_a_OBJECTS = $(am_libsphinx_a_OBJECTS)
 am__installdirs = "$(DESTDIR)$(bindir)"

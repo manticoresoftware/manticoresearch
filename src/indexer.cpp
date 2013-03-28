@@ -734,6 +734,7 @@ CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * 
 	LOC_GETB ( tParams.m_bWinAuth, "mssql_winauth" );
 	LOC_GETB ( tParams.m_bUnicode, "mssql_unicode" );
 	LOC_GETS ( tParams.m_sColBuffers, "sql_column_buffers" );
+	LOC_GETS ( tParams.m_sOdbcDSN, "odbc_dsn" ); // a shortcut, may be used instead of other specific combination
 
 	CSphSource_MSSQL * pSrc = new CSphSource_MSSQL ( sSourceName );
 	if ( !pSrc->Setup ( tParams ) )
@@ -958,7 +959,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 
 		// aot filter
 		if ( tSettings.m_bAotFilter )
-			pTokenizer = sphAotCreateFilter ( pTokenizer, pDict );
+			pTokenizer = sphAotCreateFilter ( pTokenizer, pDict, tSettings.m_bIndexExactWords );
 	}
 
 	ISphFieldFilter * pFieldFilter = NULL;

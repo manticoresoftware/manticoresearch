@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>index format backwards compatibility pt.2</name>
+
+<requires>
+<id32/>
+<non-rt/>
+<non-windows/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	<dynamic>
+	  <variant>seamless_rotate = 0</variant>
+	  <variant>seamless_rotate = 1</variant>
+	</dynamic>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = select 1, 'dummy'
+}
+
+index plain
+{
+	source	= test
+	path	= <data_path/>/plain
+}
+
+</config>
+
+<custom_test><![CDATA[
+
+$results[] = $client->Query ( 'dummy', 'plain' );
+$results[] = $client->Query ( 'something', 'plain' );
+
+$files = array ( 'spa', 'spd', 'sph', 'spi', 'spk', 'spm', 'spp', 'sps' );
+foreach ( $files as $ext )
+	copy ( "test_212/refdata/plain.new.$ext", "data/plain.new.$ext" );
+
+$pid = file_get_contents ( 'searchd.pid' );
+posix_kill ( (int)$pid, 1 );
+sleep(1);
+
+$results[] = $client->Query ( 'dummy', 'plain' );
+$results[] = $client->Query ( 'something', 'plain' );
+
+for ( $i=0; $i<count($results); $i++ )
+	if ( is_array( $results[$i]) )
+		unset ( $results[$i]["time"] );
+]]></custom_test>
+
+
+</test>

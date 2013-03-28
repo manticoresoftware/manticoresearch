@@ -1306,7 +1306,7 @@ ExtNode_i::ExtNode_i ()
 }
 
 
-static ISphQword * CreateQueryWord ( const XQKeyword_t & tWord, const ISphQwordSetup & tSetup )
+static ISphQword * CreateQueryWord ( const XQKeyword_t & tWord, const ISphQwordSetup & tSetup, CSphDict * pZonesDict=NULL )
 {
 	BYTE sTmp [ 3*SPH_MAX_WORD_LEN + 16 ];
 	strncpy ( (char*)sTmp, tWord.m_sWord.cstr(), sizeof(sTmp) );
@@ -1314,9 +1314,10 @@ static ISphQword * CreateQueryWord ( const XQKeyword_t & tWord, const ISphQwordS
 
 	ISphQword * pWord = tSetup.QwordSpawn ( tWord );
 	pWord->m_sWord = tWord.m_sWord;
+	CSphDict * pDict = pZonesDict ? pZonesDict : tSetup.m_pDict;
 	pWord->m_iWordID = tWord.m_bMorphed
-		? tSetup.m_pDict->GetWordIDNonStemmed ( sTmp )
-		: tSetup.m_pDict->GetWordID ( sTmp );
+		? pDict->GetWordIDNonStemmed ( sTmp )
+		: pDict->GetWordID ( sTmp );
 	pWord->m_sDictWord = (char*)sTmp;
 	pWord->m_bExpanded = tWord.m_bExpanded;
 	tSetup.QwordSetup ( pWord );
@@ -1635,6 +1636,12 @@ void ExtCached_c::PopulateCache ( const ISphQwordSetup & tSetup, bool bFillStat 
 					continue;
 
 				// FIXME!!! apply zone limits too
+
+				// apply field-start/field-end modifiers
+				if ( tWord.m_bFieldStart && HITMAN::GetPos(uHit)!=1 )
+					continue;
+				if ( tWord.m_bFieldEnd && HITMAN::IsEnd(uHit) )
+					continue;
 
 				// ok, this hit works, copy it
 				ExtCacheEntry_t & tEntry = m_dCache.Add ();
@@ -5349,18 +5356,25 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup 
 	m_dZoneMin.Fill	( DOCID_MAX );
 	m_bZSlist = tXQ.m_bNeedSZlist;
 
+	CSphDict * pZonesDict = NULL;
+	// workaround for a particular case with following conditions
+	if ( m_pIndex->IsStarEnabled() && !m_pIndex->GetDictionary()->GetSettings().m_bWordDict && m_dZones.GetLength() )
+		pZonesDict = m_pIndex->GetDictionary()->Clone();
+
 	ARRAY_FOREACH ( i, m_dZones )
 	{
 		XQKeyword_t tDot;
 
 		tDot.m_sWord.SetSprintf ( "%c%s", MAGIC_CODE_ZONE, m_dZones[i].cstr() );
-		m_dZoneStartTerm.Add ( new ExtTerm_c ( CreateQueryWord ( tDot, tSetup ), tSetup ) );
+		m_dZoneStartTerm.Add ( new ExtTerm_c ( CreateQueryWord ( tDot, tSetup, pZonesDict ), tSetup ) );
 		m_dZoneStart[i] = NULL;
 
 		tDot.m_sWord.SetSprintf ( "%c/%s", MAGIC_CODE_ZONE, m_dZones[i].cstr() );
-		m_dZoneEndTerm.Add ( new ExtTerm_c ( CreateQueryWord ( tDot, tSetup ), tSetup ) );
+		m_dZoneEndTerm.Add ( new ExtTerm_c ( CreateQueryWord ( tDot, tSetup, pZonesDict ), tSetup ) );
 		m_dZoneEnd[i] = NULL;
 	}
+
+	SafeDelete ( pZonesDict );
 }
 
 
@@ -6310,16 +6324,6 @@ struct RankerState_Fieldmask_fn : public ISphExtra
 
 //////////////////////////////////////////////////////////////////////////
 
-struct FactorHashEntry_t
-{
-	SphDocID_t			m_iId;
-	int					m_iRefCount;
-	BYTE *				m_pData;
-	FactorHashEntry_t *	m_pPrev;
-	FactorHashEntry_t *	m_pNext;
-};
-
-
 class FactorPool_c
 {
 public:
@@ -6336,7 +6340,7 @@ public:
 	void			Flush ();
 
 	bool			IsInitialized() const;
-	CSphTightVector<FactorHashEntry_t *> * GetHashPtr();
+	SphFactorHash_t * GetHashPtr();
 
 private:
 	int				m_iElementSize;
@@ -6344,11 +6348,11 @@ private:
 
 	CSphTightVector<BYTE>	m_dPool;
 	CSphTightVector<int>	m_dFree;
-	CSphTightVector<FactorHashEntry_t *> m_dHash;
+	SphFactorHash_t			m_dHash;
 
-	FactorHashEntry_t * Find ( SphDocID_t iId ) const;
+	SphFactorHashEntry_t * Find ( SphDocID_t iId ) const;
 	inline DWORD	HashFunc ( SphDocID_t iId ) const;
-	bool			FlushEntry ( FactorHashEntry_t * pEntry );
+	bool			FlushEntry ( SphFactorHashEntry_t * pEntry );
 };
 
 
@@ -6402,7 +6406,7 @@ void FactorPool_c::Free ( BYTE * pPtr )
 
 int FactorPool_c::GetIntElementSize () const
 {
-	return m_iElementSize+sizeof(FactorHashEntry_t);
+	return m_iElementSize+sizeof(SphFactorHashEntry_t);
 }
 
 
@@ -6414,13 +6418,13 @@ int	FactorPool_c::GetElementSize() const
 
 void FactorPool_c::AddToHash ( SphDocID_t iId, BYTE * pPacked )
 {
-	FactorHashEntry_t * pNew = (FactorHashEntry_t *)(pPacked+m_iElementSize);
-	memset ( pNew, 0, sizeof(FactorHashEntry_t) );
+	SphFactorHashEntry_t * pNew = (SphFactorHashEntry_t *)(pPacked+m_iElementSize);
+	memset ( pNew, 0, sizeof(SphFactorHashEntry_t) );
 
 	DWORD uKey = HashFunc(iId);
 	if ( m_dHash[uKey] )
 	{
-		FactorHashEntry_t * pStart = m_dHash[uKey];
+		SphFactorHashEntry_t * pStart = m_dHash[uKey];
 		pNew->m_pPrev = NULL;
 		pNew->m_pNext = pStart;
 		pStart->m_pPrev = pNew;
@@ -6432,12 +6436,12 @@ void FactorPool_c::AddToHash ( SphDocID_t iId, BYTE * pPacked )
 }
 
 
-FactorHashEntry_t * FactorPool_c::Find ( SphDocID_t iId ) const
+SphFactorHashEntry_t * FactorPool_c::Find ( SphDocID_t iId ) const
 {
 	DWORD uKey = HashFunc(iId);
 	if ( m_dHash[uKey] )
 	{
-		FactorHashEntry_t * pEntry = m_dHash[uKey];
+		SphFactorHashEntry_t * pEntry = m_dHash[uKey];
 		while ( pEntry )
 		{
 			if ( pEntry->m_iId==iId )
@@ -6456,7 +6460,7 @@ void FactorPool_c::AddRef ( SphDocID_t iId )
 	if ( !iId )
 		return;
 
-	FactorHashEntry_t * pEntry = Find ( iId );
+	SphFactorHashEntry_t * pEntry = Find ( iId );
 	if ( pEntry )
 		pEntry->m_iRefCount++;
 }
@@ -6467,19 +6471,19 @@ void FactorPool_c::Release ( SphDocID_t iId )
 	if ( !iId )
 		return;
 
-	FactorHashEntry_t * pEntry = Find ( iId );
+	SphFactorHashEntry_t * pEntry = Find ( iId );
 	if ( pEntry )
 	{
 		pEntry->m_iRefCount--;
 		bool bHead = !pEntry->m_pPrev;
-		FactorHashEntry_t * pNext = pEntry->m_pNext;
+		SphFactorHashEntry_t * pNext = pEntry->m_pNext;
 		if ( FlushEntry ( pEntry ) && bHead )
 			m_dHash[HashFunc(iId)] = pNext;
 	}
 }
 
 
-bool FactorPool_c::FlushEntry ( FactorHashEntry_t * pEntry )
+bool FactorPool_c::FlushEntry ( SphFactorHashEntry_t * pEntry )
 {
 	assert ( pEntry->m_iRefCount>=0 );
 	if ( pEntry->m_iRefCount )
@@ -6502,10 +6506,10 @@ void FactorPool_c::Flush()
 {
 	ARRAY_FOREACH ( i, m_dHash )
 	{
-		FactorHashEntry_t * pEntry = m_dHash[i];
+		SphFactorHashEntry_t * pEntry = m_dHash[i];
 		while ( pEntry )
 		{
-			FactorHashEntry_t * pNext = pEntry->m_pNext;
+			SphFactorHashEntry_t * pNext = pEntry->m_pNext;
 			bool bHead = !pEntry->m_pPrev;
 			if ( FlushEntry(pEntry) && bHead )
 				m_dHash[i] = pNext;
@@ -6528,7 +6532,7 @@ bool FactorPool_c::IsInitialized() const
 }
 
 
-CSphTightVector<FactorHashEntry_t *> * FactorPool_c::GetHashPtr ()
+SphFactorHash_t * FactorPool_c::GetHashPtr ()
 {
 	return &m_dHash;
 }
@@ -6759,6 +6763,17 @@ bool RankerState_Expr_fn<true>::ExtraDataImpl ( ExtraData_e eType, void ** ppRes
 	case EXTRA_GET_DATA_PACKEDFACTORS:
 		*ppResult = m_tFactorPool.GetHashPtr();
 		return true;
+	case EXTRA_GET_DATA_RANKER_STATE:
+		{
+			SphExtraDataRankerState_t * pState = (SphExtraDataRankerState_t *)ppResult;
+			pState->m_iFields = m_iFields;
+			pState->m_pSchema = m_pSchema;
+			pState->m_pFieldLens = m_pFieldLens;
+			pState->m_iTotalDocuments = m_iTotalDocuments;
+			pState->m_tFieldLensLoc = m_tFieldLensLoc;
+			pState->m_iMaxQpos = m_iMaxQpos;
+		}
+		return true;
 	default:
 		return false;
 	}
@@ -6912,18 +6927,11 @@ struct Expr_BM25F_T : public ISphExpr
 
 			ARRAY_FOREACH ( i, pConstHash->m_dValues )
 			{
-				CSphString & sField = pConstHash->m_dValues[i].m_sName;
-				sField.ToLower();
-
 				// FIXME? report errors if field was not found?
-				ARRAY_FOREACH ( j, pState->m_pSchema->m_dFields )
-				{
-					if ( pState->m_pSchema->m_dFields[j].m_sName==sField )
-					{
-						m_dWeights[j] = pConstHash->m_dValues[i].m_iValue;
-						break;
-					}
-				}
+				CSphString & sField = pConstHash->m_dValues[i].m_sName;
+				int iField = pState->m_pSchema->GetFieldIndex ( sField.cstr() );
+				if ( iField>=0 )
+					m_dWeights[iField] = pConstHash->m_dValues[i].m_iValue;
 			}
 		}
 
@@ -6960,7 +6968,7 @@ struct Expr_BM25F_T : public ISphExpr
 			for ( int i=0; i<m_pState->m_iFields; i++ )
 				tf += m_pState->m_dFieldTF [ iWord + i*(1+m_pState->m_iMaxQpos) ] * m_dWeights[i];
 			float idf = m_pState->m_dIDF[iWord]; // FIXME? zeroed out for dupes!
-			fRes += tf / (tf + m_fK1*(1 - m_fB + m_fB*dl/m_fWeightedAvgDocLen)) * idf;
+			fRes += tf / (tf + m_fK1*(1.0f - m_fB + m_fB*dl/m_fWeightedAvgDocLen)) * idf;
 		}
 		return fRes + 0.5f; // map to [0..1] range
 	}
@@ -6978,6 +6986,11 @@ struct Expr_Sum_T : public ISphExpr
 		: m_pState ( pState )
 		, m_pArg ( pArg )
 	{}
+
+	virtual ~Expr_Sum_T()
+	{
+		SafeRelease ( m_pArg );
+	}
 
 	float Eval ( const CSphMatch & tMatch ) const
 	{
@@ -7573,6 +7586,13 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS>::PackFactors ( int * pSize )
 			*pPack++ = *(DWORD*)&m_dIDF[i];
 		}
 	}
+
+	// m_dFieldTF = iWord + iField * ( 1 + iWordsCount )
+	// FIXME! pack these sparse factors ( however these should fit into fixed-size FactorPool block )
+	*pPack++ = m_dFieldTF.GetLength();
+	if ( !pSize )
+		memcpy ( pPack, m_dFieldTF.Begin(), m_dFieldTF.GetLength()*sizeof(m_dFieldTF[0]) );
+	pPack += m_dFieldTF.GetLength();
 
 	*pPackStart = (pPack-pPackStart)*sizeof(DWORD);
 

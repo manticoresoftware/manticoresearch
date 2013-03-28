@@ -22,7 +22,7 @@ index test
 	path			= <data_path/>/test
 
 	charset_type	= utf-8
-	wordforms = test_143/wordforms.txt
+	wordforms = <this_test/>/wordforms.txt
 	blend_chars = +
 }
 

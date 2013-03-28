@@ -24,7 +24,7 @@
 #define _sphinxudf_
 
 /// current udf version
-#define SPH_UDF_VERSION 1
+#define SPH_UDF_VERSION 2
 
 /// error buffer size
 #define SPH_UDF_ERROR_LEN 256
@@ -43,7 +43,7 @@ enum sphinx_udf_argtype
 
 /// our malloc() replacement type
 /// results that are returned to searchd MUST be allocated using this replacement
-typedef void * sphinx_malloc_fn(int);
+typedef void * sphinx_malloc_fn ( int );
 
 /// UDF call arguments
 typedef struct st_sphinx_udf_args
@@ -112,10 +112,11 @@ typedef struct st_sphinx_factors
 
 	SPH_UDF_FIELD_FACTORS *	field;
 	SPH_UDF_TERM_FACTORS *	term;
+	int *					field_tf;
 } SPH_UDF_FACTORS;
 
 
-/// helper function that must be called to initialize the SPH_UDF_FACTORS structure 
+/// helper function that must be called to initialize the SPH_UDF_FACTORS structure
 /// before it is passed to sphinx_factors_unpack
 /// returns 0 on success
 /// returns an error code on error

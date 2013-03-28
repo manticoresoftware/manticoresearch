@@ -113,7 +113,7 @@ AC_SEARCH_LIBS([setsockopt],[socket])
 AC_SEARCH_LIBS([gethostbyname],[nsl socket resolv])
 AC_SEARCH_LIBS([inflate],[z],[have_lz=yes],[have_lz=no])
 AC_SEARCH_LIBS([logf],[m])
-AC_CHECK_FUNCS([dup2 gethostbyname gettimeofday memmove memset select socket strcasecmp strchr strerror strncasecmp strstr strtol logf pread poll])
+AC_CHECK_FUNCS([dup2 gethostbyname gettimeofday memmove memset select socket strcasecmp strchr strerror strncasecmp strnlen strstr strtol logf pread poll])
 AC_CHECK_FUNCS([backtrace backtrace_symbols])
 
 # Neither defined or undefined. So, check.

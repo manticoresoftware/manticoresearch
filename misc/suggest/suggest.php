@@ -6,6 +6,9 @@ define ( "LENGTH_THRESHOLD", 2 );
 define ( "LEVENSHTEIN_THRESHOLD", 2 );
 define ( "TOP_COUNT", 10 );
 
+// error_reporting ( E_ALL ^ E_NOTICE );
+mb_internal_encoding ( "utf-8" );
+
 require ( "../../api/sphinxapi.php" );
 
 /// build a list of trigrams for a given keywords
@@ -14,8 +17,8 @@ function BuildTrigrams ( $keyword )
 	$t = "__" . $keyword . "__";
 
 	$trigrams = "";
-	for ( $i=0; $i<strlen($t)-2; $i++ )
-		$trigrams .= substr ( $t, $i, 3 ) . " ";
+	for ( $i=0; $i<mb_strlen($t)-2; $i++ )
+		$trigrams .= mb_substr ( $t, $i, 3 ) . " ";
 
 	return $trigrams;
 }
@@ -41,7 +44,7 @@ CREATE TABLE suggest (
 	$m = 0;
 	while ( $line = fgets ( $in, 1024 ) )
 	{
-		list ( $keyword, $freq ) = split ( " ", trim ( $line ) );
+		list ( $keyword, $freq ) = preg_split ( "/[\s,]+/", trim ( $line ) );
 
 		if ( $freq<FREQ_THRESHOLD || strstr ( $keyword, "_" )!==false || strstr ( $keyword, "'" )!==false )
 			continue;
@@ -86,7 +89,8 @@ function MakeSuggestion ( $keyword )
   	$cl->SetArrayResult ( true );
 
   	// pull top-N best trigram matches and run them through Levenshtein
-	$res = $cl->Query ( $query, "suggest", 0, TOP_COUNT );
+	$cl->SetLimits ( 0, TOP_COUNT );
+	$res = $cl->Query ( $query, "suggest" );
 
 	if ( !$res || !$res["matches"] )
 		return false;
@@ -97,10 +101,13 @@ function MakeSuggestion ( $keyword )
 
 		foreach ( $res["matches"] as $match )
 		{
-			$w = $match["keyword"];
+			$w = $match["attrs"]["keyword"];
 			$myrank = @$match["attrs"]["myrank"];
 			if ( $myrank )
 				$myrank = ", myrank=$myrank";
+
+			// FIXME? add costs?
+			// FIXME! does not work with UTF-8.. THIS! IS!! PHP!!!
 			$levdist = levenshtein ( $keyword, $w );
 
 			print "id=$match[id], weight=$match[weight], freq={$match[attrs][freq]}{$myrank}, word=$w, levdist=$levdist\n";

@@ -928,13 +928,6 @@ static CSphString					g_sSphinxqlState;
 
 #endif // USE_WINDOWS
 
-// FIXME! must be in sync with sphinx.cpp
-const int EXT_COUNT = 9;
-const int EXT_MVP = 9;
-const char * g_dNewExts[EXT_COUNT] = { ".new.sph", ".new.spa", ".new.spi", ".new.spd", ".new.spp", ".new.spm", ".new.spk", ".new.sps", ".new.spe" };
-const char * g_dOldExts[] = { ".old.sph", ".old.spa", ".old.spi", ".old.spd", ".old.spp", ".old.spm", ".old.spk", ".old.sps", ".old.spe", ".old.mvp" };
-const char * g_dCurExts[] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm", ".spk", ".sps", ".spe", ".mvp" };
-
 /////////////////////////////////////////////////////////////////////////////
 // MISC
 /////////////////////////////////////////////////////////////////////////////
@@ -1420,50 +1413,129 @@ void LogWarning ( const char * sWarning )
 
 /////////////////////////////////////////////////////////////////////////////
 
-struct StrBuf_t
+// string buffer
+// it's usually static(2k) but could grow dynamically then necessary
+class StringBuffer_c : ISphNoncopyable
 {
-protected:
-	char		m_sBuf [ 2048 ];
-	char *		m_pBuf;
-	int			m_iLeft;
+private:
+#define MAX_STATIC_BUFFER 2048
+	char m_sStatic [ MAX_STATIC_BUFFER ];
+	char * m_pDynamic;
+	char * m_pCur;
+	int m_iSize;
 
 public:
-	StrBuf_t ()
+	StringBuffer_c ()
+		: m_pDynamic ( NULL )
+		, m_iSize ( MAX_STATIC_BUFFER )
 	{
-		memset ( m_sBuf, 0, sizeof(m_sBuf) );
-		m_iLeft = sizeof(m_sBuf)-1;
-		m_pBuf = m_sBuf;
+		m_pCur = m_sStatic;
 	}
 
-	const char * cstr ()
+	~StringBuffer_c ()
 	{
-		return m_sBuf;
+		SafeDeleteArray ( m_pDynamic );
 	}
 
-	int GetLength ()
+	void Append ( const char * sFormat, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) )
 	{
-		return sizeof(m_sBuf)-1-m_iLeft;
+		if ( !sFormat || !*sFormat )
+			return;
+
+		for ( ;; )
+		{
+			int iLen = -1;
+			if ( Left()>0 )
+			{
+				va_list ap;
+				va_start ( ap, sFormat );
+				iLen = vsnprintf ( m_pCur, Left(), sFormat, ap );
+				va_end ( ap );
+			}
+
+			if ( iLen!=-1 && Length()+iLen<m_iSize )
+			{
+				m_pCur += iLen;
+				break;
+			} else
+			{
+				Grow();
+			}
+		}
 	}
 
-	bool Append ( const char * s, bool bWhole )
+	void AppendEscapedFixupSpace ( const char * sText )
 	{
-		if ( !s )
-			return false;
-		int iLen = strlen(s);
-		if ( bWhole && m_iLeft<iLen )
-			return false;
+		if ( !sText || !*sText )
+			return;
 
-		iLen = Min ( m_iLeft, iLen );
-		memcpy ( m_pBuf, s, iLen );
-		m_pBuf += iLen;
-		m_iLeft -= iLen;
-		return true;
+		const char * pBuf = sText;
+		int iEsc = 0;
+		for ( ; *pBuf; )
+		{
+			char s = *pBuf++;
+			iEsc = ( s=='\\' || s=='\'' ) ? ( iEsc+1 ) : iEsc;
+		}
+
+		int iLen = pBuf-sText;
+
+		if ( Left()<iLen+iEsc )
+			Grow ( iLen+iEsc );
+
+		pBuf = sText;
+		for ( ; *pBuf; )
+		{
+			char s = *pBuf++;
+			if ( s=='\\' || s=='\'' )
+			{
+				*m_pCur++ = '\\';
+				*m_pCur++ = s;
+			} else if ( sphIsSpace ( s ) )
+			{
+				*m_pCur++ = ' ';
+			} else
+			{
+				*m_pCur++ = s;
+			}
+		}
 	}
 
-	const StrBuf_t & operator += ( const char * s )
+	void AppendCurrentTime ()
+	{
+		if ( Left()<64 )
+			Grow ();
+
+		int iLen = sphFormatCurrentTime ( m_pCur, Left() );
+		assert ( Length()+iLen<=m_iSize );
+		m_pCur += iLen;
+	}
+
+	int Length() const { return m_pDynamic ? ( m_pCur-m_pDynamic ) : ( m_pCur-m_sStatic ); }
+
+	const char * cstr () const { return m_pDynamic ? m_pDynamic : m_sStatic; }
+
+	const StringBuffer_c & operator += ( const char * s )
 	{
 		Append ( s, false );
 		return *this;
+	}
+
+private:
+	int Left () const { return m_iSize-Length(); }
+
+	void Grow ( int iAdd=0 )
+	{
+		int iNewLen = m_iSize*2;
+		if ( ( m_iSize+iAdd )>( m_iSize*2 ) )
+			iNewLen = m_iSize+iAdd;
+
+		int iUsed = Length();
+		char * pDynamic = new char [iNewLen];
+		memcpy ( pDynamic, m_pDynamic ? m_pDynamic : m_sStatic, iUsed );
+		SafeDeleteArray ( m_pDynamic );
+		m_pDynamic = pDynamic;
+		m_pCur = pDynamic + iUsed;
+		m_iSize = iNewLen;
 	}
 };
 
@@ -1542,7 +1614,7 @@ public:
 		return m_dLog.GetLength()==0;
 	}
 
-	void BuildReport ( StrBuf_t & sReport )
+	void BuildReport ( StringBuffer_c & sReport )
 	{
 		if ( IsEmpty() )
 			return;
@@ -1559,7 +1631,7 @@ public:
 					continue;
 
 			// build current span
-			StrBuf_t sSpan;
+			StringBuffer_c sSpan;
 			if ( iSpanStart )
 				sSpan += ";\n";
 			sSpan += "index ";
@@ -1570,12 +1642,10 @@ public:
 				sSpan += m_dLog[j].m_sIndex.cstr();
 			}
 			sSpan += ": ";
-			if ( !sSpan.Append ( m_dLog[iSpanStart].m_sError.cstr(), true ) )
-				break;
+			sSpan.Append ( m_dLog[iSpanStart].m_sError.cstr(), true );
 
 			// flush current span
-			if ( !sReport.Append ( sSpan.cstr(), true ) )
-				break;
+			sReport.Append ( sSpan.cstr(), true );
 
 			// done
 			iSpanStart = i;
@@ -6798,128 +6868,6 @@ void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 #endif
 }
 
-
-// string buffer
-// it's usually static(2k) but could grow dynamically then necessary
-class StringBuffer_c : ISphNoncopyable
-{
-private:
-#define MAX_STATIC_BUFFER 2048
-	char m_sStatic [ MAX_STATIC_BUFFER ];
-	char * m_pDynamic;
-	char * m_pCur;
-	int m_iSize;
-
-public:
-	StringBuffer_c ()
-		: m_pDynamic ( NULL )
-		, m_iSize ( MAX_STATIC_BUFFER )
-	{
-		m_pCur = m_sStatic;
-	}
-
-	~StringBuffer_c ()
-	{
-		SafeDeleteArray ( m_pDynamic );
-	}
-
-
-	void Append ( const char * sFormat, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) )
-	{
-		if ( !sFormat || !*sFormat )
-			return;
-
-		for ( ;; )
-		{
-			int iLen = -1;
-			if ( Left()>0 )
-			{
-				va_list ap;
-				va_start ( ap, sFormat );
-				iLen = vsnprintf ( m_pCur, Left(), sFormat, ap );
-				va_end ( ap );
-			}
-
-			if ( iLen!=-1 && Length()+iLen<m_iSize )
-			{
-				m_pCur += iLen;
-				break;
-			} else
-			{
-				Grow();
-			}
-		}
-	}
-
-	void AppendEscapedFixupSpace ( const char * sText )
-	{
-		if ( !sText || !*sText )
-			return;
-
-		const char * pBuf = sText;
-		int iEsc = 0;
-		for ( ; *pBuf; )
-		{
-			char s = *pBuf++;
-			iEsc = ( s=='\\' || s=='\'' ) ? ( iEsc+1 ) : iEsc;
-		}
-
-		int iLen = pBuf-sText;
-
-		if ( Left()<iLen+iEsc )
-			Grow ( iLen+iEsc );
-
-		pBuf = sText;
-		for ( ; *pBuf; )
-		{
-			char s = *pBuf++;
-			if ( s=='\\' || s=='\'' )
-			{
-				*m_pCur++ = '\\';
-				*m_pCur++ = s;
-			} else if ( sphIsSpace ( s ) )
-			{
-				*m_pCur++ = ' ';
-			} else
-			{
-				*m_pCur++ = s;
-			}
-		}
-	}
-
-	void AppendCurrentTime ()
-	{
-		if ( Left()<64 )
-			Grow ();
-
-		int iLen = sphFormatCurrentTime ( m_pCur, Left() );
-		assert ( Length()+iLen<=m_iSize );
-		m_pCur += iLen;
-	}
-
-	int Length() const { return m_pDynamic ? ( m_pCur-m_pDynamic ) : ( m_pCur-m_sStatic ); }
-
-	const char * cstr () const { return m_pDynamic ? m_pDynamic : m_sStatic; }
-
-private:
-	int Left () const { return m_iSize-Length(); }
-
-	void Grow ( int iAdd=0 )
-	{
-		int iNewLen = m_iSize*2;
-		if ( ( m_iSize+iAdd )>( m_iSize*2 ) )
-			iNewLen = m_iSize+iAdd;
-
-		int iUsed = Length();
-		char * pDynamic = new char [iNewLen];
-		memcpy ( pDynamic, m_pDynamic ? m_pDynamic : m_sStatic, iUsed );
-		SafeDeleteArray ( m_pDynamic );
-		m_pDynamic = pDynamic;
-		m_pCur = pDynamic + iUsed;
-		m_iSize = iNewLen;
-	}
-};
-
 void FormatOrderBy ( StringBuffer_c * pBuf, const char * sPrefix, ESphSortOrder eSort, const CSphString & sSort )
 {
 	assert ( pBuf );
@@ -7486,7 +7434,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 				{
 					// to client send as string
 					dJson.Resize ( 0 );
-					sphJsonFieldFormat ( dJson, pStrings+uOff, eJson );
+					sphJsonFieldFormat ( dJson, pStrings+uOff, eJson, false );
 					iRespLen += dJson.GetLength();
 				}
 			}
@@ -7626,136 +7574,167 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 			for ( int j=0; j<iAttrsCount; j++ )
 			{
 				const CSphColumnInfo & tAttr = pRes->m_tSchema.GetAttr(j);
-				if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_INT64SET )
+				switch ( tAttr.m_eAttrType )
 				{
-					assert ( tMatch.GetAttr ( tAttr.m_tLocator )==0 || pMvaPool );
-					const DWORD * pValues = tMatch.GetAttrMVA ( tAttr.m_tLocator, pMvaPool );
-					if ( iVer<0x10C || !pValues )
+				case SPH_ATTR_UINT32SET:
+				case SPH_ATTR_INT64SET:
 					{
-						// for older clients, fixups column value to 0
-						// for newer clients, means that there are 0 values
-						tOut.SendDword ( 0 );
-					} else
-					{
-						// send MVA values
-						int iValues = *pValues++;
-						tOut.SendDword ( iValues );
-						if ( tAttr.m_eAttrType==SPH_ATTR_INT64SET )
+						assert ( tMatch.GetAttr ( tAttr.m_tLocator )==0 || pMvaPool );
+						const DWORD * pValues = tMatch.GetAttrMVA ( tAttr.m_tLocator, pMvaPool );
+						if ( iVer<0x10C || !pValues )
 						{
-							assert ( ( iValues%2 )==0 );
-							while ( iValues )
-							{
-								uint64_t uVal = (uint64_t)MVA_UPSIZE ( pValues );
-								tOut.SendUint64 ( uVal );
-								pValues += 2;
-								iValues -= 2;
-							}
+							// for older clients, fixups column value to 0
+							// for newer clients, means that there are 0 values
+							tOut.SendDword ( 0 );
 						} else
 						{
-							while ( iValues-- )
-								tOut.SendDword ( *pValues++ );
+							// send MVA values
+							int iValues = *pValues++;
+							tOut.SendDword ( iValues );
+							if ( tAttr.m_eAttrType==SPH_ATTR_INT64SET )
+							{
+								assert ( ( iValues%2 )==0 );
+								while ( iValues )
+								{
+									uint64_t uVal = (uint64_t)MVA_UPSIZE ( pValues );
+									tOut.SendUint64 ( uVal );
+									pValues += 2;
+									iValues -= 2;
+								}
+							} else
+							{
+								while ( iValues-- )
+									tOut.SendDword ( *pValues++ );
+							}
 						}
+						break;
 					}
-				} else if ( iVer<0x117 && ( tAttr.m_eAttrType==SPH_ATTR_STRING || tAttr.m_eAttrType==SPH_ATTR_STRINGPTR ||
-					tAttr.m_eAttrType==SPH_ATTR_JSON || tAttr.m_eAttrType==SPH_ATTR_JSON_FIELD ) )
-				{
-					// for older clients, just send int value of 0
-					tOut.SendDword ( 0 );
-
-				} else if ( tAttr.m_eAttrType==SPH_ATTR_STRING || ( tAttr.m_eAttrType==SPH_ATTR_JSON && bSendJson ) )
-				{
-					// for newer clients, send binary string either STRING or JSON attribute
-					DWORD uOffset = (DWORD) tMatch.GetAttr ( tAttr.m_tLocator );
-					if ( !uOffset ) // magic zero
+				case SPH_ATTR_JSON:
 					{
-						tOut.SendDword ( 0 ); // null string
-					} else
-					{
-						const BYTE * pStr;
-						assert ( pStrings );
-						int iLen = sphUnpackStr ( pStrings+uOffset, &pStr );
-						tOut.SendDword ( iLen );
-						tOut.SendBytes ( pStr, iLen );
-					}
-
-				} else if ( tAttr.m_eAttrType==SPH_ATTR_STRINGPTR )
-				{
-					// for newer clients, send binary string
-					const char* pString = (const char*) tMatch.GetAttr ( tAttr.m_tLocator );
-					if ( !pString ) // magic zero
-					{
-						tOut.SendDword ( 0 ); // null string
-					} else
-					{
-						int iLen = strlen ( pString );
-						tOut.SendDword ( iLen );
-						tOut.SendBytes ( pString, iLen );
-					}
-				} else if ( tAttr.m_eAttrType==SPH_ATTR_JSON )
-				{
-					// formatted string to client
-					DWORD uOffset = (DWORD) tMatch.GetAttr ( tAttr.m_tLocator );
-					assert ( !uOffset || pStrings );
-					if ( !uOffset ) // magic zero
-					{
-							tOut.SendDword ( sizeof(g_sJsonNull)-1 );
-							tOut.SendBytes ( g_sJsonNull, sizeof(g_sJsonNull)-1 );
-					} else
-					{
-						dJson.Resize ( 0 );
-						const BYTE * pStr = NULL;
-						sphUnpackStr ( pStrings + uOffset, &pStr );
-						sphJsonFormat ( dJson, pStr );
-
-						tOut.SendDword ( dJson.GetLength() );
-						tOut.SendBytes ( dJson.Begin(), dJson.GetLength() );
-					}
-
-				} else if ( tAttr.m_eAttrType==SPH_ATTR_JSON_FIELD )
-				{
-					uint64_t uTypeOffset = tMatch.GetAttr ( tAttr.m_tLocator );
-					ESphJsonType eJson = ESphJsonType ( uTypeOffset>>32 );
-					DWORD uOff = (DWORD)uTypeOffset;
-					assert ( !uOff || pStrings );
-					if ( !uOff )
-					{
-						// no key found - NULL value
-						if ( bSendJsonField )
-							tOut.SendByte ( JSON_EOF );
-						else
-							tOut.SendDword ( 0 );
-
-					} else if ( bSendJsonField )
-					{
-						// to master send packed data
-						tOut.SendByte ( (BYTE)eJson );
-
-						const BYTE * pData = pStrings+uOff;
-						int iLen = ( eJson==JSON_INT64 || eJson==JSON_DOUBLE ? 8 : 4 );
-
-						if ( eJson==JSON_STRING || eJson==JSON_STRING_VECTOR )
+						if ( iVer<0x117 )
 						{
-							const BYTE * pPacked = pData;
-							iLen = sphJsonUnpackInt ( &pPacked ); // string(s) data len
-							iLen += pPacked-pData; // packed length
+							tOut.SendDword ( 0 );
+							break;
+						}
+						if ( !bSendJson )
+						{
+							// formatted string to client
+							DWORD uOffset = (DWORD) tMatch.GetAttr ( tAttr.m_tLocator );
+							assert ( !uOffset || pStrings );
+							if ( !uOffset ) // magic zero
+							{
+								tOut.SendDword ( sizeof(g_sJsonNull)-1 );
+								tOut.SendBytes ( g_sJsonNull, sizeof(g_sJsonNull)-1 );
+							} else
+							{
+								dJson.Resize ( 0 );
+								const BYTE * pStr = NULL;
+								sphUnpackStr ( pStrings + uOffset, &pStr );
+								sphJsonFormat ( dJson, pStr );
+
+								tOut.SendDword ( dJson.GetLength() );
+								tOut.SendBytes ( dJson.Begin(), dJson.GetLength() );
+							}
+							break;
+						}
+						// no break at the end, pass to SPH_ATTR_STRING
+					}
+				case SPH_ATTR_STRING:
+					{
+						if ( iVer<0x117 )
+						{
+							tOut.SendDword ( 0 );
+							break;
+						}
+						// for newer clients, send binary string either STRING or JSON attribute
+						DWORD uOffset = (DWORD) tMatch.GetAttr ( tAttr.m_tLocator );
+						if ( !uOffset ) // magic zero
+						{
+							tOut.SendDword ( 0 ); // null string
+						} else
+						{
+							const BYTE * pStr;
+							assert ( pStrings );
+							int iLen = sphUnpackStr ( pStrings+uOffset, &pStr );
 							tOut.SendDword ( iLen );
+							tOut.SendBytes ( pStr, iLen );
+						}
+						break;
+					}
+				case SPH_ATTR_STRINGPTR:
+					{
+						if ( iVer<0x117 )
+						{
+							tOut.SendDword ( 0 );
+							break;
+						}
+						// for newer clients, send binary string
+						const char* pString = (const char*) tMatch.GetAttr ( tAttr.m_tLocator );
+						if ( !pString ) // magic zero
+						{
+							tOut.SendDword ( 0 ); // null string
+						} else
+						{
+							int iLen = strlen ( pString );
+							tOut.SendDword ( iLen );
+							tOut.SendBytes ( pString, iLen );
+						}
+						break;
+					}
+				case SPH_ATTR_JSON_FIELD:
+					{
+						if ( iVer<0x117 )
+						{
+							tOut.SendDword ( 0 );
+							break;
 						}
 
-						tOut.SendBytes ( pData, iLen );
-					} else
-					{
-						// to client send data as string
-						dJson.Resize ( 0 );
-						sphJsonFieldFormat ( dJson, pStrings+uOff, eJson );
-						tOut.SendDword ( dJson.GetLength() );
-						tOut.SendBytes ( dJson.Begin(), dJson.GetLength() );
+						uint64_t uTypeOffset = tMatch.GetAttr ( tAttr.m_tLocator );
+						ESphJsonType eJson = ESphJsonType ( uTypeOffset>>32 );
+						DWORD uOff = (DWORD)uTypeOffset;
+						assert ( !uOff || pStrings );
+						if ( !uOff )
+						{
+							// no key found - NULL value
+							if ( bSendJsonField )
+								tOut.SendByte ( JSON_EOF );
+							else
+								tOut.SendDword ( 0 );
+
+						} else if ( bSendJsonField )
+						{
+							// to master send packed data
+							tOut.SendByte ( (BYTE)eJson );
+
+							const BYTE * pData = pStrings+uOff;
+							int iLen = ( eJson==JSON_INT64 || eJson==JSON_DOUBLE ? 8 : 4 );
+
+							if ( eJson==JSON_STRING || eJson==JSON_STRING_VECTOR )
+							{
+								const BYTE * pPacked = pData;
+								iLen = sphJsonUnpackInt ( &pPacked ); // string(s) data len
+								iLen += pPacked-pData; // packed length
+								tOut.SendDword ( iLen );
+							}
+
+							tOut.SendBytes ( pData, iLen );
+						} else
+						{
+							// to client send data as string
+							dJson.Resize ( 0 );
+							sphJsonFieldFormat ( dJson, pStrings+uOff, eJson, false );
+							tOut.SendDword ( dJson.GetLength() );
+							tOut.SendBytes ( dJson.Begin(), dJson.GetLength() );
+						}
+						break;
 					}
-				} else if ( tAttr.m_eAttrType==SPH_ATTR_FACTORS )
-				{
-					if ( iVer<0x11C )
-						tOut.SendDword ( 0 );
-					else
+				case SPH_ATTR_FACTORS:
 					{
+						if ( iVer<0x11C )
+						{
+							tOut.SendDword ( 0 );
+							break;
+						}
 						BYTE * pData = (BYTE*) tMatch.GetAttr ( tAttr.m_tLocator );
 						if ( !pData )
 							tOut.SendDword ( 0 );
@@ -7765,20 +7744,25 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 							tOut.SendDword ( uLength );
 							tOut.SendBytes ( pData+sizeof(DWORD), uLength-sizeof(DWORD) );
 						}
+						break;
 					}
-				} else
-				{
-					// send plain attr
-					if ( tAttr.m_eAttrType==SPH_ATTR_FLOAT )
-						tOut.SendFloat ( tMatch.GetAttrFloat ( tAttr.m_tLocator ) );
-					else if ( iVer>=0x114 && tAttr.m_eAttrType==SPH_ATTR_BIGINT )
+				case SPH_ATTR_FLOAT:
+					tOut.SendFloat ( tMatch.GetAttrFloat ( tAttr.m_tLocator ) );
+					break;
+				case SPH_ATTR_BIGINT:
+					if ( iVer>=0x114 )
+					{
 						tOut.SendUint64 ( tMatch.GetAttr ( tAttr.m_tLocator ) );
-					else
-						tOut.SendDword ( (DWORD)tMatch.GetAttr ( tAttr.m_tLocator ) );
-				}
-			}
-		}
-	}
+						break;
+					}
+					// no break here
+				default:
+					tOut.SendDword ( (DWORD)tMatch.GetAttr ( tAttr.m_tLocator ) );
+					break;
+				} /// end switch ( tAttr.m_eAttrType )
+			} /// end for ( int j=0; j<iAttrsCount; j++ )
+		} /// end else if ( iVer<=0x101 )
+	} /// end for ( int i=0; i<pRes->m_iCount; i++ )
 	if ( bLimitedMatches )
 		tOut.SendInt ( pRes->m_iCount );
 	else
@@ -9229,13 +9213,13 @@ void SearchHandler_c::RunUpdates ( const CSphQuery & tQuery, const CSphString & 
 
 	if ( !tRes.m_iSuccesses )
 	{
-		StrBuf_t sFailures;
+		StringBuffer_c sFailures;
 		m_dFailuresSet[0].BuildReport ( sFailures );
 		*pUpdates->m_pError = sFailures.cstr();
 
 	} else if ( !tRes.m_sError.IsEmpty() )
 	{
-		StrBuf_t sFailures;
+		StringBuffer_c sFailures;
 		m_dFailuresSet[0].BuildReport ( sFailures );
 		tRes.m_sWarning = sFailures.cstr(); // FIXME!!! commit warnings too
 	}
@@ -10285,7 +10269,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		// if there were no successful searches at all, this is an error
 		if ( !tRes.m_iSuccesses )
 		{
-			StrBuf_t sFailures;
+			StringBuffer_c sFailures;
 			m_dFailuresSet[iRes].BuildReport ( sFailures );
 
 			tRes.m_sError = sFailures.cstr();
@@ -10319,7 +10303,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 		if ( !m_dFailuresSet[iRes].IsEmpty() )
 		{
-			StrBuf_t sFailures;
+			StringBuffer_c sFailures;
 			m_dFailuresSet[iRes].BuildReport ( sFailures );
 			tRes.m_sWarning = sFailures.cstr();
 		}
@@ -10762,7 +10746,7 @@ public:
 	bool			AddIntFilterGreater ( const CSphString & sAttr, int64_t iVal, bool bHasEqual );
 	bool			AddIntFilterLesser ( const CSphString & sAttr, int64_t iVal, bool bHasEqual );
 	bool			AddUservarFilter ( const CSphString & sCol, const CSphString & sVar, bool bExclude );
-	void			SetGroupBy ( const CSphString & sGroupBy );
+	void			AddGroupBy ( const CSphString & sGroupBy );
 	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd );
 	CSphFilterSettings *	AddFilter ( const CSphString & sCol, ESphFilter eType );
 	bool			AddStringFilter ( const CSphString & sCol, const CSphString & sVal, bool bExclude );
@@ -11163,11 +11147,20 @@ bool SqlParser_c::AddItem ( const char * pToken, SqlNode_t * pStart, SqlNode_t *
 	return SetNewSyntax();
 }
 
-void SqlParser_c::SetGroupBy ( const CSphString & sGroupBy )
+void SqlParser_c::AddGroupBy ( const CSphString & sGroupBy )
 {
-	m_pQuery->m_eGroupFunc = SPH_GROUPBY_ATTR;
-	m_pQuery->m_sGroupBy = sGroupBy;
-	sphColumnToLowercase ( const_cast<char *>( m_pQuery->m_sGroupBy.cstr() ) );
+	if ( m_pQuery->m_sGroupBy.IsEmpty() )
+	{
+		m_pQuery->m_eGroupFunc = SPH_GROUPBY_ATTR;
+		m_pQuery->m_sGroupBy = sGroupBy;
+		sphColumnToLowercase ( const_cast<char *>( m_pQuery->m_sGroupBy.cstr() ) );
+	} else
+	{
+		m_pQuery->m_eGroupFunc = SPH_GROUPBY_MULTIPLE;
+		CSphString sTmp = sGroupBy;
+		sphColumnToLowercase ( const_cast<char *>( sTmp.cstr() ) );
+		m_pQuery->m_sGroupBy.SetSprintf ( "%s, %s", m_pQuery->m_sGroupBy.cstr(), sTmp.cstr() );
+	}
 }
 
 bool SqlParser_c::AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd )
@@ -12549,7 +12542,7 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq )
 	}
 
 	// serve reply to client
-	StrBuf_t sReport;
+	StringBuffer_c sReport;
 	dFails.BuildReport ( sReport );
 
 	if ( !iSuccesses )
@@ -14746,7 +14739,7 @@ void HandleMysqlUpdate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 		}
 	}
 
-	StrBuf_t sReport;
+	StringBuffer_c sReport;
 	dFails.BuildReport ( sReport );
 
 	if ( !iSuccesses )
@@ -15092,7 +15085,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 						// send string to client
 						dTmp.Resize ( 0 );
 						const BYTE * pStrings = tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pStrings;
-						sphJsonFieldFormat ( dTmp, pStrings+uOff, eJson );
+						sphJsonFieldFormat ( dTmp, pStrings+uOff, eJson, false );
 
 						// send length
 						int iLen = dTmp.GetLength();
@@ -15308,7 +15301,7 @@ void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 
 	if ( !dErrors.IsEmpty() )
 	{
-		StrBuf_t sReport;
+		StringBuffer_c sReport;
 		dErrors.BuildReport ( sReport );
 		tOut.Error ( tStmt.m_sStmt, sReport.cstr() );
 		return;
@@ -15327,11 +15320,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		if ( dStmt[i].m_eStmt==STMT_SELECT )
 			iSelect++;
 
-	if ( !iSelect )
-	{
-		tLastMeta = CSphQueryResultMeta();
-		return;
-	}
+	CSphQueryResultMeta tPrevMeta = tLastMeta;
 
 	if ( pThd )
 		pThd->m_sCommand = g_dSqlStmts[STMT_SELECT];
@@ -15348,11 +15337,14 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	}
 
 	// do search
-	bool bSearchOK = HandleMysqlSelect ( dRows, tHandler );
+	bool bSearchOK = true;
+	if ( iSelect )
+	{
+		bSearchOK = HandleMysqlSelect ( dRows, tHandler );
 
-	// save meta for SHOW *
-	CSphQueryResultMeta tPrevMeta = tLastMeta;
-	tLastMeta = tHandler.m_dResults.Last();
+		// save meta for SHOW *
+		tLastMeta = tHandler.m_dResults.Last();
+	}
 
 	if ( !bSearchOK )
 		return;
@@ -15966,6 +15958,7 @@ public:
 		// handle multi SQL query
 		if ( bParsedOK && dStmt.GetLength()>1 )
 		{
+			m_sError = "";
 			HandleMysqlMultiStmt ( dStmt, m_tLastMeta, tOut, pThd, m_sError );
 			return true; // FIXME? how does this work with profiling?
 		}
@@ -16418,7 +16411,7 @@ bool HasFiles ( const ServedIndex_t & tIndex, const char ** dExts )
 	char sFile [ SPH_MAX_FILENAME_LEN ];
 	const char * sPath = tIndex.m_sIndexPath.cstr();
 
-	for ( int i=0; i<EXT_COUNT; i++ )
+	for ( int i=0; i<sphGetExtCount(); i++ )
 	{
 		snprintf ( sFile, sizeof(sFile), "%s%s", sPath, dExts[i] );
 		if ( !sphIsReadable ( sFile ) )
@@ -16435,10 +16428,18 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 	char sFile [ SPH_MAX_FILENAME_LEN ];
 	const char * sPath = tIndex.m_sIndexPath.cstr();
 
+	CSphString sError;
+	DWORD uVersion = ReadVersion ( sPath, sError );
 
-	for ( int i=0; i<EXT_COUNT; i++ )
+	if ( !sError.IsEmpty() )
 	{
-		snprintf ( sFile, sizeof(sFile), "%s%s", sPath, g_dNewExts[i] );
+		// no files - no rotation
+		return false;
+	}
+
+	for ( int i=0; i<sphGetExtCount ( uVersion ); i++ )
+	{
+		snprintf ( sFile, sizeof(sFile), "%s%s", sPath, sphGetExts ( SPH_EXT_NEW, uVersion )[i]);
 		if ( !sphIsReadable ( sFile ) )
 		{
 			if ( i>0 )
@@ -16456,15 +16457,15 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 	if ( !tIndex.m_bOnlyNew )
 	{
 		// rename current to old
-		for ( int i=0; i<EXT_COUNT; i++ )
+		for ( int i=0; i<sphGetExtCount ( uVersion ); i++ )
 		{
-			snprintf ( sFile, sizeof(sFile), "%s%s", sPath, g_dCurExts[i] );
-			if ( !sphIsReadable ( sFile ) || TryRename ( sIndex, sPath, g_dCurExts[i], g_dOldExts[i], false ) )
+			snprintf ( sFile, sizeof(sFile), "%s%s", sPath, sphGetExts ( SPH_EXT_CUR, uVersion )[i] );
+			if ( !sphIsReadable ( sFile ) || TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_CUR, uVersion )[i], sphGetExts ( SPH_EXT_OLD, uVersion )[i], false ) )
 				continue;
 
 			// rollback
 			for ( int j=0; j<i; j++ )
-				TryRename ( sIndex, sPath, g_dOldExts[j], g_dCurExts[j], true );
+				TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_OLD, uVersion )[j], sphGetExts ( SPH_EXT_CUR, uVersion )[j], true );
 
 			sphWarning ( "rotating index '%s': rename to .old failed; using old index", sIndex );
 			return false;
@@ -16474,7 +16475,7 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 		for ( ;; )
 		{
 			char sBuf [ SPH_MAX_FILENAME_LEN ];
-			snprintf ( sBuf, sizeof(sBuf), "%s%s", sPath, g_dCurExts[EXT_MVP] );
+			snprintf ( sBuf, sizeof(sBuf), "%s%s", sPath, sphGetCurMvp() );
 
 			CSphString sFakeError;
 			CSphAutofile fdTest ( sBuf, SPH_O_READ, sFakeError );
@@ -16483,12 +16484,12 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 			if ( bNoMVP )
 				break; ///< no file, nothing to hold
 
-			if ( TryRename ( sIndex, sPath, g_dCurExts[EXT_MVP], g_dOldExts[EXT_MVP], false, false ) )
+			if ( TryRename ( sIndex, sPath, sphGetCurMvp(), sphGetOldMvp(), false, false ) )
 				break;
 
 			// rollback
-			for ( int j=0; j<EXT_COUNT; j++ )
-				TryRename ( sIndex, sPath, g_dOldExts[j], g_dCurExts[j], true );
+			for ( int j=0; j<sphGetExtCount ( uVersion ); j++ )
+				TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_OLD, uVersion )[j], sphGetExts ( SPH_EXT_CUR, uVersion )[j], true );
 
 			break;
 		}
@@ -16496,19 +16497,19 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 	}
 
 	// rename new to current
-	for ( int i=0; i<EXT_COUNT; i++ )
+	for ( int i=0; i<sphGetExtCount ( uVersion ); i++ )
 	{
-		if ( TryRename ( sIndex, sPath, g_dNewExts[i], g_dCurExts[i], false ) )
+		if ( TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_NEW, uVersion )[i], sphGetExts ( SPH_EXT_CUR, uVersion )[i], false ) )
 			continue;
 
 		// rollback new ones we already renamed
 		for ( int j=0; j<i; j++ )
-			TryRename ( sIndex, sPath, g_dCurExts[j], g_dNewExts[j], true );
+			TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_CUR, uVersion )[j], sphGetExts ( SPH_EXT_NEW, uVersion )[j], true );
 
 		// rollback old ones
 		if ( !tIndex.m_bOnlyNew )
-			for ( int j=0; j<=EXT_COUNT; j++ ) ///< <=, not <, since we have the .mvp at the end of these lists
-				TryRename ( sIndex, sPath, g_dOldExts[j], g_dCurExts[j], true );
+			for ( int j=0; j<=sphGetExtCount ( uVersion ); j++ ) ///< <=, not <, since we have the .mvp at the end of these lists
+				TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_OLD, uVersion )[j], sphGetExts ( SPH_EXT_CUR, uVersion )[j], true );
 
 		return false;
 	}
@@ -16534,12 +16535,12 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 			sphWarning ( "rotating index '%s': .new preload failed: %s", sIndex, tIndex.m_pIndex->GetLastError().cstr() );
 
 			// try to recover
-			for ( int j=0; j<EXT_COUNT; j++ )
+			for ( int j=0; j<sphGetExtCount ( uVersion ); j++ )
 			{
-				TryRename ( sIndex, sPath, g_dCurExts[j], g_dNewExts[j], true );
-				TryRename ( sIndex, sPath, g_dOldExts[j], g_dCurExts[j], true );
+				TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_CUR, uVersion )[j], sphGetExts ( SPH_EXT_NEW, uVersion )[j], true );
+				TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_OLD, uVersion )[j], sphGetExts ( SPH_EXT_CUR, uVersion )[j], true );
 			}
-			TryRename ( sIndex, sPath, g_dOldExts[EXT_MVP], g_dCurExts[EXT_MVP], false, false );
+			TryRename ( sIndex, sPath, sphGetOldMvp(), sphGetCurMvp(), false, false );
 			sphLogDebug ( "RotateIndexGreedy: has recovered" );
 
 			if ( !tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, g_bStripPath, sWarning ) || !tIndex.m_pIndex->Preread() )
@@ -16953,7 +16954,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 			pServed->m_bEnabled = true;
 
 			// rename current MVP to old one to unlink it
-			TryRename ( sIndex.cstr(), pServed->m_sIndexPath.cstr(), g_dCurExts[EXT_MVP], g_dOldExts[EXT_MVP], false, false );
+			TryRename ( sIndex.cstr(), pServed->m_sIndexPath.cstr(), sphGetCurMvp(), sphGetOldMvp(), false, false );
 			// unlink .old
 			sphLogDebug ( "unlink .old" );
 			if ( !pServed->m_bOnlyNew )
@@ -17563,7 +17564,7 @@ void HandlePipePreread ( PipeReader_t & tPipe, bool bFailure )
 				tServed.m_bEnabled = true;
 
 				// rename current MVP to old one to unlink it
-				TryRename ( sPrereading, tServed.m_sIndexPath.cstr(), g_dCurExts[EXT_MVP], g_dOldExts[EXT_MVP], false, false );
+				TryRename ( sPrereading, tServed.m_sIndexPath.cstr(), sphGetCurMvp(), sphGetOldMvp(), false, false );
 				// unlink .old
 				if ( !tServed.m_bOnlyNew )
 				{
@@ -18466,6 +18467,12 @@ void CheckRotate ()
 			tIndex.WriteLock();
 			const char * sIndex = it.GetKey().cstr();
 			assert ( tIndex.m_pIndex );
+
+			if ( tIndex.m_bRT )
+			{
+				tIndex.Unlock();
+				continue;
+			}
 
 			bool bWasAdded = tIndex.m_bOnlyNew;
 			RotateIndexGreedy ( tIndex, sIndex );
@@ -19968,9 +19975,9 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const CSphVector<const char
 			fflush ( stdout );
 			tIndex.m_pIndex->SetProgressCallback ( ShowProgress );
 
-			if ( HasFiles ( tIndex, g_dNewExts ) )
+			if ( HasFiles ( tIndex, sphGetExts ( SPH_EXT_NEW ) ) )
 			{
-				tIndex.m_bOnlyNew = !HasFiles ( tIndex, g_dCurExts );
+				tIndex.m_bOnlyNew = !HasFiles ( tIndex, sphGetExts ( SPH_EXT_CUR ) );
 				if ( RotateIndexGreedy ( tIndex, sIndexName ) )
 				{
 					CSphString sError;
@@ -20607,7 +20614,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	///////////
 
 	if ( g_eWorkers==MPM_THREADS )
-		sphRTInit();
+		sphRTInit( hSearchd, bTestMode );
 
 	if ( hSearchd.Exists ( "snippets_file_prefix" ) )
 		g_sSnippetsFilePrefix = hSearchd["snippets_file_prefix"].cstr();

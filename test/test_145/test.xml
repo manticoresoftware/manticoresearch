@@ -23,7 +23,7 @@ index test
 	path			= <data_path/>/test
 
 	charset_type	= utf-8
-	stopwords		= test_145/stopwords.txt
+	stopwords		= <this_test/>/stopwords.txt
 	morphology		= stem_en
 	
 	phrase_boundary = U+002C

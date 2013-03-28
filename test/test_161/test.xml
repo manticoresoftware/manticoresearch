@@ -18,7 +18,7 @@ compat_sphinxql_magics = 1
 source src
 {
 	type				= xmlpipe2
-	xmlpipe_command		= cat test_161/data1.xml
+	xmlpipe_command		= cat <this_test/>/data1.xml
 	
 	xmlpipe_field		= title
 	xmlpipe_attr_uint	= paper_id

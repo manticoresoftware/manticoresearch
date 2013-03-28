@@ -42,7 +42,7 @@ index wf1
 	morphology			= stem_en
 	charset_type		= utf-8
 	charset_table	= 0..9, A..Z->a..z, a..z,
-	wordforms = test_098/wordforms.txt
+	wordforms = <this_test/>/wordforms.txt
 }
 
 index wf2
@@ -52,7 +52,7 @@ index wf2
 	morphology			= stem_en
 	charset_type		= utf-8
 	charset_table	= 0..9, A..Z->a..z, a..z, -
-	wordforms = test_098/wordforms.txt
+	wordforms = <this_test/>/wordforms.txt
 }
 
 source src_wf3
@@ -70,7 +70,7 @@ index wf3
 	morphology			= stem_en
 	charset_type		= utf-8
 	charset_table 	= -, 0..9, A..Z->a..z, _, a..z
-	wordforms = test_098/wf3.txt
+	wordforms = <this_test/>/wf3.txt
 }
 
 index rt

@@ -164,6 +164,9 @@ INSERT INTO cmp_table VALUES
 <sphinxql>SELECT id, mva64 FROM cmp WHERE mva64 between -100 and 400</sphinxql>
 <sphinxql>SELECT id, mva32 FROM cmp WHERE mva32 between 105 and 205</sphinxql>
 
+<!-- lets check that WEIGHT() works in expressions -->
+<sphinxql>SELECT id, WEIGHT()*10 FROM test WHERE MATCH('ohai')</sphinxql>
+
 </sphqueries>
 
 </test>

@@ -3020,6 +3020,10 @@ public:
 
 	virtual DWORD				GetAttributeStatus () const = 0;
 
+	virtual bool				CreateFilesWithAttr ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError ) = 0;
+
+	virtual bool				AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError ) = 0;
+
 public:
 	/// internal debugging hook, DO NOT USE
 	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig ) = 0;

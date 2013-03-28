@@ -2097,7 +2097,7 @@ void sphUnlinkIndex ( const char * sName, bool bForce )
 	// +1 is for .mvp
 	for ( int i=0; i<sphGetExtCount()+1; i++ )
 	{
-		snprintf ( sFileName, sizeof(sFileName), "%s%s", sName, sphGetExts ( SPH_EXT_CUR )[i] );
+		snprintf ( sFileName, sizeof(sFileName), "%s%s", sName, sphGetExts ( SPH_EXT_TYPE_CUR )[i] );
 		// 'mvp' is optional file
 		if ( ::unlink ( sFileName ) && errno!=ENOENT )
 			sphWarning ( "unlink failed (file '%s', error '%s'", sFileName, strerror(errno) );

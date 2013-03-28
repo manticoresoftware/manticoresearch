@@ -1085,6 +1085,8 @@ private:
 	virtual void				GetPrefixedWords ( const char * sPrefix, int iPrefix, const char * sWildcard, CSphVector<CSphNamedInt> & dPrefixedWords, BYTE * pDictBuf, int iFD ) const;
 	virtual void				GetInfixedWords ( const char * sInfix, int iInfix, const char * sWildcard, CSphVector<CSphNamedInt> & dPrefixedWords ) const;
 
+	bool						RenameWithRollback ( const ESphExt * dExts, int nExts, ESphExtType eExtTypeFrom, ESphExtType eExtTypeTo, CSphString & sError );
+
 public:
 #if USE_WINDOWS
 #pragma warning(push,1)
@@ -1111,6 +1113,8 @@ public:
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError );
 	virtual bool				SaveAttributes ( CSphString & sError ) const { return true; }
 	virtual DWORD				GetAttributeStatus () const { return 0; }
+	virtual bool				CreateFilesWithAttr ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError );
+	virtual bool				AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError );
 
 	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig ) {}
 	virtual void				DebugDumpDocids ( FILE * fp ) {}
@@ -6714,6 +6718,200 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 
 	// all done
 	return iUpdated;
+}
+
+static bool RenameChunk ( const char * sIndex, const char * sPrefix, const char * sFromPostfix, const char * sToPostfix )
+{
+	char sFrom [ SPH_MAX_FILENAME_LEN ];
+	char sTo [ SPH_MAX_FILENAME_LEN ];
+
+	snprintf ( sFrom, sizeof(sFrom), "%s%s", sPrefix, sFromPostfix );
+	snprintf ( sTo, sizeof(sTo), "%s%s", sPrefix, sToPostfix );
+
+#if USE_WINDOWS
+	::unlink ( sTo );
+#endif
+
+	if ( rename ( sFrom, sTo ) )
+	{
+		sphWarning ( "adding attribute to index '%s': rename '%s' to '%s' failed: %s", sIndex, sFrom, sTo, strerror(errno) );
+		return false;
+	}
+
+	return true;
+}
+
+bool RtIndex_t::RenameWithRollback ( const ESphExt * dExts, int nExts, ESphExtType eExtTypeFrom, ESphExtType eExtTypeTo, CSphString & sError )
+{
+	CSphString sChunk;
+	int iFailedChunk = -1;
+	int iFailedExt = -1;
+	ARRAY_FOREACH_COND ( iDiskChunk, m_pDiskChunks, iFailedChunk==-1 )
+	{
+		sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), iDiskChunk+m_iDiskBase );
+		for ( int iExt = 0; iExt < nExts&& iFailedExt==-1; iExt++ )
+			if ( !RenameChunk ( m_sIndexName.cstr(), sChunk.cstr(), sphGetExt ( eExtTypeFrom, dExts[iExt] ), sphGetExt ( eExtTypeTo, dExts[iExt] ) ) )
+				iFailedExt = iExt;
+
+		// failed? rollback last chunk
+		if ( iFailedExt!=-1 )
+		{
+			sError.SetSprintf ( "adding attribute to RT index '%s, chunk %s': rename failed; using old index", m_sIndexName.cstr(), sChunk.cstr() );
+			for ( int iExt = iFailedExt; iExt>=0; iExt-- )
+				RenameChunk ( m_sIndexName.cstr(), sChunk.cstr(), sphGetExt ( eExtTypeTo, dExts[iExt] ), sphGetExt ( eExtTypeFrom, dExts[iExt] ) );
+
+			iFailedChunk = iDiskChunk-1;
+		}
+	}
+
+	// failed? rollback all chunks
+	for ( int iDiskChunk = iFailedChunk; iDiskChunk>=0; iDiskChunk-- )
+		for ( int iExt = 0; iExt < nExts; iExt++ )
+			RenameChunk ( m_sIndexName.cstr(), sChunk.cstr(), sphGetExt ( eExtTypeTo, dExts[iExt] ), sphGetExt ( eExtTypeFrom, dExts[iExt] ) );
+
+	return iFailedChunk==-1 && iFailedExt==-1;
+}
+
+bool RtIndex_t::CreateFilesWithAttr ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError )
+{
+	// fixme: use some unified approach to these exts
+	const int NUM_EXTS_USED = 2;
+	const ESphExt dExtsUsed[NUM_EXTS_USED] = { SPH_EXT_SPH, SPH_EXT_SPA };
+
+	if ( !m_pDiskChunks.GetLength() )
+		return true;
+
+	// disk chunks must have attributes
+	if ( !m_tSchema.GetAttrsCount() )
+	{
+		sError = "index must already have attributes";
+		return false;
+	}
+
+	m_tRwlock.ReadLock();
+
+	if ( m_tSchema.GetAttr ( sAttrName.cstr() ) )
+	{
+		sError.SetSprintf ( "'%s' attribute already in schema", sAttrName.cstr() );
+		m_tRwlock.Unlock();
+		return false;
+	}
+
+	int iFailedChunk = -1;
+	ARRAY_FOREACH_COND ( iDiskChunk, m_pDiskChunks, iFailedChunk==-1 )
+		if ( !m_pDiskChunks[iDiskChunk]->CreateFilesWithAttr ( sAttrName.cstr(), eAttrType, sError ) )
+			iFailedChunk = iDiskChunk;
+
+	// cleanup if failed
+	char sFileName[SPH_MAX_FILENAME_LEN];
+	for ( int iDiskChunk = iFailedChunk; iDiskChunk>=0; iDiskChunk-- )
+		for ( int iExt = 0; iExt < NUM_EXTS_USED; iExt++ )
+		{
+			snprintf ( sFileName, sizeof(sFileName), "%s.%d%s", m_sPath.cstr(), iDiskChunk+m_iDiskBase, sphGetExt ( SPH_EXT_TYPE_NEW, dExtsUsed[iExt] ) );
+
+			if ( ::unlink ( sFileName ) && errno!=ENOENT )
+				sphWarning ( "unlink failed (file '%s', error '%s'", sFileName, strerror(errno) );
+		}
+
+	if ( iFailedChunk!=-1 )
+	{
+		m_tRwlock.Unlock();
+		return false;
+	}
+
+	// current to old
+	if ( !RenameWithRollback ( dExtsUsed, NUM_EXTS_USED, SPH_EXT_TYPE_CUR, SPH_EXT_TYPE_OLD, sError ) )
+	{
+		m_tRwlock.Unlock();
+		return false;
+	}
+
+	if ( !RenameWithRollback ( dExtsUsed, NUM_EXTS_USED, SPH_EXT_TYPE_NEW, SPH_EXT_TYPE_CUR, sError ) )
+	{
+		m_tRwlock.Unlock();
+		return false;
+	}
+
+	// unlink old
+	ARRAY_FOREACH ( iDiskChunk, m_pDiskChunks )
+		for ( int iExt = 0; iExt < NUM_EXTS_USED; iExt++ )
+		{
+			snprintf ( sFileName, sizeof(sFileName), "%s.%d%s", m_sPath.cstr(), iDiskChunk+m_iDiskBase, sphGetExt ( SPH_EXT_TYPE_OLD, dExtsUsed[iExt] ) );
+			if ( ::unlink ( sFileName ) && errno!=ENOENT )
+				sphWarning ( "unlink failed (file '%s', error '%s'", sFileName, strerror(errno) );
+		}
+
+	m_tRwlock.Unlock();
+
+	return true;
+}
+
+bool RtIndex_t::AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError )
+{
+	if ( m_tSchema.GetAttr ( sAttrName.cstr() ) )
+	{
+		sError.SetSprintf ( "'%s' attribute already in schema", sAttrName.cstr() );
+		return false;
+	}
+
+	if ( m_pDiskChunks.GetLength() && !m_tSchema.GetAttrsCount() )
+	{
+		sError = "index must already have attributes";
+		return false;
+	}
+
+	m_tRwlock.WriteLock();
+
+	int iOldStride = m_iStride;
+
+	CSphColumnInfo tInfo ( sAttrName.cstr(), eAttrType );
+	m_tSchema.AddAttr ( tInfo, false );
+	const CSphColumnInfo * pNewAttr = m_tSchema.GetAttr ( sAttrName.cstr() );
+
+	m_iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+
+	// modify the in-memory data of disk chunks
+	// fixme: we can't rollback in-memory changes, so we just show errors here for now
+	ARRAY_FOREACH ( iDiskChunk, m_pDiskChunks )
+		if ( !m_pDiskChunks[iDiskChunk]->AddAttribute ( sAttrName, eAttrType, sError ) )
+			sphWarning ( "adding attribute to %s.%d: %s", m_sPath.cstr(), iDiskChunk+m_iDiskBase, sError.cstr() );
+
+	// now modify the ramchunk
+	ARRAY_FOREACH ( iSegment, m_pSegments )
+	{
+		RtSegment_t * pSeg = m_pSegments[iSegment];
+		assert ( pSeg );
+		CSphTightVector<CSphRowitem> dNewRows;
+		dNewRows.Resize ( pSeg->m_dRows.GetLength() / iOldStride * m_iStride );
+		CSphRowitem * pOldDocinfo = pSeg->m_dRows.Begin();
+		CSphRowitem * pOldDocinfoEnd = pOldDocinfo+pSeg->m_dRows.GetLength();
+		CSphRowitem * pNewDocinfo = dNewRows.Begin();
+
+		while ( pOldDocinfo < pOldDocinfoEnd )
+		{
+			SphDocID_t tDocId = DOCINFO2ID ( pOldDocinfo );
+			DWORD * pAttrs = DOCINFO2ATTRS ( pOldDocinfo );
+			memcpy ( DOCINFO2ATTRS ( pNewDocinfo ), pAttrs, m_tSchema.GetRowSize()*sizeof(CSphRowitem) );
+			sphSetRowAttr ( DOCINFO2ATTRS ( pNewDocinfo ), pNewAttr->m_tLocator, 0 );
+			DOCINFOSETID ( pNewDocinfo, tDocId );
+			pOldDocinfo += iOldStride;
+			pNewDocinfo += m_iStride;
+		}
+
+		pSeg->m_dRows.SwapData ( dNewRows );
+	}
+
+	// fixme: we can't rollback at this point
+	Verify ( SaveRamChunk () );
+
+	SaveMeta ( m_pDiskChunks.GetLength(), m_iTID );
+
+	// fixme: notify that it was ALTER that caused the flush
+	g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
+
+	m_tRwlock.Unlock();
+
+	return true;
 }
 
 //////////////////////////////////////////////////////////////////////////

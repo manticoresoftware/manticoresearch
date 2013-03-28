@@ -120,6 +120,7 @@ struct ServedDesc_t
 	bool				m_bToDelete;
 	bool				m_bOnlyNew;
 	bool				m_bRT;
+	bool				m_bAlterEnabled;
 	CSphString			m_sGlobalIDFPath;
 
 						ServedDesc_t ();
@@ -136,7 +137,7 @@ public:
 	void				WriteLock () const;
 	void				Unlock () const;
 
-	bool				InitLock () const;
+	bool				InitLock ( bool bProcessShared, CSphString & sError ) const;
 
 private:
 	mutable CSphRwlock	m_tLock;
@@ -951,6 +952,7 @@ ServedDesc_t::ServedDesc_t ()
 	m_bToDelete = false;
 	m_bOnlyNew = false;
 	m_bRT = false;
+	m_bAlterEnabled = true;
 }
 
 ServedDesc_t::~ServedDesc_t ()
@@ -960,54 +962,48 @@ ServedDesc_t::~ServedDesc_t ()
 
 ServedIndex_t::~ServedIndex_t ()
 {
-	if ( g_eWorkers==MPM_THREADS )
-		Verify ( m_tLock.Done() );
+	Verify ( m_tLock.Done() );
 }
 
 void ServedIndex_t::ReadLock () const
 {
-	if ( g_eWorkers==MPM_THREADS )
+	if ( m_tLock.ReadLock() )
+		sphLogDebugvv ( "ReadLock %p", this );
+	else
 	{
-		if ( m_tLock.ReadLock() )
-			sphLogDebugvv ( "ReadLock %p", this );
-		else
-		{
-			sphLogDebug ( "ReadLock %p failed", this );
-			assert ( false );
-		}
+		sphLogDebug ( "ReadLock %p failed", this );
+		assert ( false );
 	}
 }
 
 void ServedIndex_t::WriteLock () const
 {
-	if ( g_eWorkers==MPM_THREADS )
+	if ( m_tLock.WriteLock() )
+		sphLogDebugvv ( "WriteLock %p", this );
+	else
 	{
-		if ( m_tLock.WriteLock() )
-			sphLogDebugvv ( "WriteLock %p", this );
-		else
-		{
-			sphLogDebug ( "WriteLock %p failed", this );
-			assert ( false );
-		}
+		sphLogDebug ( "WriteLock %p failed", this );
+		assert ( false );
 	}
 }
 
-bool ServedIndex_t::InitLock () const
+bool ServedIndex_t::InitLock ( bool bProcessShared, CSphString & sError ) const
 {
-	return ( g_eWorkers==MPM_THREADS ) ? m_tLock.Init () : true;
+	bool bRes = m_tLock.Init ( bProcessShared );
+	if ( !bRes )
+		sError = m_tLock.GetError();
+
+	return true;
 }
 
 void ServedIndex_t::Unlock () const
 {
-	if ( g_eWorkers==MPM_THREADS )
+	if ( m_tLock.Unlock() )
+		sphLogDebugvv ( "Unlock %p", this );
+	else
 	{
-		if ( m_tLock.Unlock() )
-			sphLogDebugvv ( "Unlock %p", this );
-		else
-		{
-			sphLogDebug ( "Unlock %p failed", this );
-			assert ( false );
-		}
+		sphLogDebug ( "Unlock %p failed", this );
+		assert ( false );
 	}
 }
 
@@ -1093,7 +1089,13 @@ bool IndexHash_c::Add ( const ServedDesc_t & tDesc, const CSphString & tKey )
 	if ( bAdded )
 	{
 		*( (ServedDesc_t *)&tVal ) = tDesc;
-		Verify ( tVal.InitLock() );
+		CSphString sError;
+		if ( !tVal.InitLock ( true, sError ) )
+		{
+			tVal.m_bAlterEnabled = true;
+			sphWarning ( "failed to init process shared rwlock: %s; ALTER disabled", sError.cstr() );
+			Verify ( tVal.InitLock ( false, sError ) );
+		}
 	}
 	Unlock();
 	return bAdded;
@@ -9069,7 +9071,7 @@ protected:
 	bool							m_bSphinxql;	///< if the query get from sphinxql - to avoid applying sphinxql magick for others
 	CSphAttrUpdateEx *				m_pUpdates;		///< holder for updates
 
-	mutable CSphMutex				m_tLock;
+	mutable CSphProcessSharedMutex	m_tLock;
 	mutable SmallStringHash_T<int>	m_hUsed;
 
 	mutable ExprHook_t				m_tHook;
@@ -9093,7 +9095,6 @@ SearchHandler_c::SearchHandler_c ( int iQueries, bool bSphinxql )
 	m_dFailuresSet.Resize ( iQueries );
 	m_dExtraSchemas.Resize ( iQueries );
 	m_dAgentTimes.Resize ( iQueries );
-	m_tLock.Init();
 	m_bSphinxql = bSphinxql;
 	m_pUpdates = NULL;
 
@@ -9110,12 +9111,13 @@ SearchHandler_c::SearchHandler_c ( int iQueries, bool bSphinxql )
 
 	m_pProfile = NULL;
 	m_tHook.m_pProfiler = NULL;
+
+	assert ( !m_tLock.GetError() );
 }
 
 
 SearchHandler_c::~SearchHandler_c ()
 {
-	m_tLock.Done();
 	m_hUsed.IterateStart();
 	while ( m_hUsed.IterateNext() )
 	{
@@ -9129,8 +9131,6 @@ const ServedIndex_t * SearchHandler_c::UseIndex ( int iLocal ) const
 {
 	assert ( iLocal>=0 && iLocal<m_dLocal.GetLength() );
 	const CSphString & sName = m_dLocal[iLocal];
-	if ( g_eWorkers!=MPM_THREADS )
-		return g_pLocalIndexes->GetRlockedEntry ( sName );
 
 	m_tLock.Lock();
 	int * pUseCount = m_hUsed ( sName );
@@ -9161,8 +9161,6 @@ const ServedIndex_t * SearchHandler_c::UseIndex ( int iLocal ) const
 void SearchHandler_c::ReleaseIndex ( int iLocal ) const
 {
 	assert ( iLocal>=0 && iLocal<m_dLocal.GetLength() );
-	if ( g_eWorkers!=MPM_THREADS )
-		return;
 
 	const CSphString & sName = m_dLocal[iLocal];
 	m_tLock.Lock();
@@ -10534,6 +10532,7 @@ enum SqlStmt_e
 	STMT_SHOW_AGENT_STATUS,
 	STMT_SHOW_INDEX_STATUS,
 	STMT_SHOW_PROFILE,
+	STMT_ALTER,
 
 	STMT_TOTAL
 };
@@ -10611,7 +10610,7 @@ struct SqlStmt_t
 	CSphQuery				m_tQuery;
 	CSphVector < CSphRefcountedPtr<UservarIntSet_c> > m_dRefs;
 
-	// used by INSERT, DELETE, CALL, DESC, ATTACH
+	// used by INSERT, DELETE, CALL, DESC, ATTACH, ALTER
 	CSphString				m_sIndex;
 
 	// INSERT (and CALL) specific
@@ -10645,6 +10644,10 @@ struct SqlStmt_t
 	CSphString				m_sUdfName;
 	CSphString				m_sUdfLib;
 	ESphAttr				m_eUdfType;
+
+	// ALTER specific
+	CSphString				m_sAlterAttr;
+	CSphString				m_sAlterColType;
 
 	// Generic params
 	CSphString				m_sStringParam;
@@ -10776,6 +10779,7 @@ public:
 	int							AllocNamedVec ();
 	CSphVector<CSphNamedInt> &	GetNamedVec ( int iIndex );
 	void						FreeNamedVec ( int iIndex );
+	bool						AlterStatement ( SqlNode_t * pNode );
 	bool						UpdateStatement ( SqlNode_t * pNode );
 	void						UpdateAttr ( const CSphString&, const SqlNode_t * pValue, ESphAttr eType = SPH_ATTR_INTEGER );
 	void						UpdateMVAAttr ( const CSphString& sName, const SqlNode_t& dValues );
@@ -11211,6 +11215,16 @@ void SqlParser_c::SetStatement ( const YYSTYPE& tName, SqlSet_e eSet )
 	m_pStmt->m_eStmt = STMT_SET;
 	m_pStmt->m_eSet = eSet;
 	m_pStmt->m_sSetName = tName.m_sValue;
+}
+
+bool SqlParser_c::AlterStatement ( SqlNode_t * pNode )
+{
+	m_pStmt->m_eStmt = STMT_ALTER;
+	m_pStmt->m_iListStart = pNode->m_iStart;
+	m_pStmt->m_iListEnd = pNode->m_iEnd;
+	m_pStmt->m_sIndex.SetBinary ( m_pBuf + pNode->m_iStart, pNode->m_iEnd - pNode->m_iStart );
+	m_pStmt->m_tUpdate.m_dRowOffset.Add ( 0 );
+	return true;
 }
 
 bool SqlParser_c::UpdateStatement ( SqlNode_t * pNode )
@@ -15893,6 +15907,194 @@ void HandleMysqlShowProfile ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p 
 }
 
 
+bool TryRename ( const char * sIndex, const char * sPrefix, const char * sFromPostfix, const char * sToPostfix, const char * sAction, bool bFatal, bool bCheckExist=true );
+
+
+static ESphAttr StrToAlterAttrType ( const CSphString & sStr )
+{
+	CSphString sTmp = sStr;
+	sTmp.ToLower();
+
+	if ( sTmp=="integer" )
+		return SPH_ATTR_INTEGER;
+	else if ( sTmp=="float" )
+		return SPH_ATTR_FLOAT;
+	else if ( sTmp=="bigint" )
+		return SPH_ATTR_BIGINT;
+
+	return SPH_ATTR_NONE;
+}
+
+
+void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+{
+	MEMORY ( SPH_MEM_ALTER_SQL );
+
+	SearchFailuresLog_c dErrors;
+	CSphString sError;
+
+	ESphAttr eAlterColType = StrToAlterAttrType ( tStmt.m_sAlterColType );
+	if ( eAlterColType==SPH_ATTR_NONE )
+	{
+		sError.SetSprintf ( "unsupported attribute type '%s'", tStmt.m_sAlterColType.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	CSphVector<CSphString> dNames;
+	ParseIndexList ( tStmt.m_sIndex, dNames );
+	if ( !dNames.GetLength() )
+	{
+		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	bool bHaveDist = false;
+	ARRAY_FOREACH_COND ( i, dNames, !bHaveDist )
+		if ( !g_pLocalIndexes->Exists ( dNames[i] ) )
+		{
+			g_tDistLock.Lock();
+			bHaveDist = !!g_hDistIndexes ( dNames[i] );
+			g_tDistLock.Unlock();
+		}
+
+	if ( bHaveDist )
+	{
+		sError.SetSprintf ( "ALTER is only supported on local (not distributed) indexes" );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	ARRAY_FOREACH ( iIdx, dNames )
+	{
+		const char * sName = dNames[iIdx].cstr();
+		const ServedIndex_t * pLocal = g_pLocalIndexes->GetWlockedEntry ( sName );
+		if ( pLocal )
+		{
+			if ( !pLocal->m_bEnabled )
+			{
+				dErrors.Submit ( sName, "does not support ALTER (enabled=false)" );
+				pLocal->Unlock();
+				continue;
+			}
+
+			if ( !pLocal->m_bAlterEnabled )
+			{
+				dErrors.Submit ( sName, "ALTER disabled for this index" );
+				pLocal->Unlock();
+				continue;
+			}
+
+			if ( pLocal->m_pIndex->m_bId32to64 )
+			{
+				dErrors.Submit ( sName, "index is 32bit; executable is 64bit: ALTER disabled" );
+				pLocal->Unlock();
+				continue;
+			}
+
+			if ( pLocal->m_pIndex->GetSettings().m_eDocinfo==SPH_DOCINFO_INLINE )
+			{
+				dErrors.Submit ( sName, "docinfo is inline: ALTER disabled" );
+				pLocal->Unlock();
+				continue;
+			}
+
+			CSphString sAttrToAdd = tStmt.m_sAlterAttr;
+			sAttrToAdd.ToLower();
+
+			if ( pLocal->m_pIndex->IsRT() )
+			{
+				if ( !pLocal->m_pIndex->CreateFilesWithAttr ( sAttrToAdd, eAlterColType, sError ) )
+				{
+					dErrors.Submit ( sName, sError.cstr() );
+					pLocal->Unlock();
+					continue;
+				}
+
+				pLocal->m_pIndex->AddAttribute ( sAttrToAdd, eAlterColType, sError );
+			} else
+			{
+				if ( !pLocal->m_pIndex->CreateFilesWithAttr ( sAttrToAdd, eAlterColType, sError ) )
+				{
+					dErrors.Submit ( sName, sError.cstr() );
+					pLocal->Unlock();
+					continue;
+				}
+
+				const char * szIndexName = pLocal->m_pIndex->GetName();
+				const char * szIndexPath = pLocal->m_sIndexPath.cstr();
+
+				// current to old
+				const int NUM_EXTS_USED = 2;
+				const ESphExt dExtsUsed[NUM_EXTS_USED] = { SPH_EXT_SPH, SPH_EXT_SPA };
+				const char * szAction = "adding attribute to";
+				int iFailed = -1;
+				for ( int iExt = 0; iExt < NUM_EXTS_USED && iFailed==-1; iExt++ )
+					if ( !TryRename ( szIndexName, szIndexPath, sphGetExt ( SPH_EXT_TYPE_CUR, dExtsUsed[iExt] ), sphGetExt ( SPH_EXT_TYPE_OLD, dExtsUsed[iExt] ), szAction, false ) )
+						iFailed = iExt;
+
+				// failed? rollback
+				if ( iFailed!=-1 )
+				{
+					for ( int iExt = iFailed; iExt>=0; iExt-- )
+						TryRename ( szIndexName, szIndexPath, sphGetExt ( SPH_EXT_TYPE_OLD, dExtsUsed[iExt] ), sphGetExt ( SPH_EXT_TYPE_CUR, dExtsUsed[iExt] ), szAction, true );
+
+					sphWarning ( "adding attribute to index '%s': rename to .old failed; using old index", szIndexName );
+
+					pLocal->Unlock();
+					continue;
+				}
+
+				// new to cur
+				for ( int iExt = 0; iExt < NUM_EXTS_USED && iFailed==-1; iExt++ )
+					if ( !TryRename ( szIndexName, szIndexPath, sphGetExt ( SPH_EXT_TYPE_NEW, dExtsUsed[iExt] ), sphGetExt ( SPH_EXT_TYPE_CUR, dExtsUsed[iExt] ), szAction, false ) )
+						iFailed = iExt;
+
+				// rollback
+				if ( iFailed!=-1 )
+				{
+					for ( int iExt = iFailed; iExt>=0; iExt-- )
+						TryRename ( szIndexName, szIndexPath, sphGetExt ( SPH_EXT_TYPE_CUR, dExtsUsed[iExt] ), sphGetExt ( SPH_EXT_TYPE_NEW, dExtsUsed[iExt] ), szAction, true );
+
+					sphWarning ( "adding attribute to index '%s': .new rename failed; using old index", szIndexName );
+
+					// rollback again
+					for ( int iExt = 0; iExt < NUM_EXTS_USED; iExt++ )
+						TryRename ( szIndexName, szIndexPath, sphGetExt ( SPH_EXT_TYPE_OLD, dExtsUsed[iExt] ), sphGetExt ( SPH_EXT_TYPE_CUR, dExtsUsed[iExt] ), szAction, true );
+
+					pLocal->Unlock();
+					continue;
+				}
+
+				// unlink old
+				char sFileName[SPH_MAX_FILENAME_LEN];
+				for ( int iExt = 0; iExt < NUM_EXTS_USED; iExt++ )
+				{
+					snprintf ( sFileName, sizeof(sFileName), "%s%s", szIndexPath, sphGetExt ( SPH_EXT_TYPE_OLD, dExtsUsed[iExt] ) );
+					if ( ::unlink ( sFileName ) && errno!=ENOENT )
+						sphWarning ( "unlink failed (file '%s', error '%s'", sFileName, strerror(errno) );
+				}
+
+				// modify the in-memory version
+				pLocal->m_pIndex->AddAttribute ( sAttrToAdd, eAlterColType, sError );
+			}
+
+			pLocal->Unlock();
+		}
+	}
+
+	if ( !dErrors.IsEmpty() )
+	{
+		StringBuffer_c sReport;
+		dErrors.BuildReport ( sReport );
+		tOut.Error ( tStmt.m_sStmt, sReport.cstr() );
+		return;
+	} else
+		tOut.Ok();
+}
+
+
 //////////////////////////////////////////////////////////////////////////
 
 class CSphinxqlSession : public ISphNoncopyable
@@ -16147,6 +16349,10 @@ public:
 			HandleMysqlShowProfile ( tOut, m_tLastProfile );
 			return false;
 
+		case STMT_ALTER:
+			HandleMysqlAlter ( tOut, *pStmt );
+			return true;
+
 		default:
 			m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );
 			tOut.Error ( sQuery.cstr(), m_sError.cstr() );
@@ -16372,7 +16578,7 @@ void HandleClient ( ProtocolType_e eProto, int iSock, const char * sClientIP, Th
 // INDEX ROTATION
 /////////////////////////////////////////////////////////////////////////////
 
-bool TryRename ( const char * sIndex, const char * sPrefix, const char * sFromPostfix, const char * sToPostfix, bool bFatal, bool bCheckExist=true )
+bool TryRename ( const char * sIndex, const char * sPrefix, const char * sFromPostfix, const char * sToPostfix, const char * sAction, bool bFatal, bool bCheckExist )
 {
 	char sFrom [ SPH_MAX_FILENAME_LEN ];
 	char sTo [ SPH_MAX_FILENAME_LEN ];
@@ -16392,12 +16598,12 @@ bool TryRename ( const char * sIndex, const char * sPrefix, const char * sFromPo
 	{
 		if ( bFatal )
 		{
-			sphFatal ( "rotating index '%s': rollback rename '%s' to '%s' failed: %s",
-				sIndex, sFrom, sTo, strerror(errno) );
+			sphFatal ( "%s index '%s': rollback rename '%s' to '%s' failed: %s",
+				sAction, sIndex, sFrom, sTo, strerror(errno) );
 		} else
 		{
-			sphWarning ( "rotating index '%s': rename '%s' to '%s' failed: %s",
-				sIndex, sFrom, sTo, strerror(errno) );
+			sphWarning ( "%s index '%s': rename '%s' to '%s' failed: %s",
+				sAction, sIndex, sFrom, sTo, strerror(errno) );
 		}
 		return false;
 	}
@@ -16427,6 +16633,7 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 	sphLogDebug ( "RotateIndexGreedy for '%s' invoked", sIndex );
 	char sFile [ SPH_MAX_FILENAME_LEN ];
 	const char * sPath = tIndex.m_sIndexPath.cstr();
+	const char * sAction = "rotating";
 
 	CSphString sError;
 	DWORD uVersion = ReadVersion ( sPath, sError );
@@ -16439,7 +16646,7 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 
 	for ( int i=0; i<sphGetExtCount ( uVersion ); i++ )
 	{
-		snprintf ( sFile, sizeof(sFile), "%s%s", sPath, sphGetExts ( SPH_EXT_NEW, uVersion )[i]);
+		snprintf ( sFile, sizeof(sFile), "%s%s", sPath, sphGetExts ( SPH_EXT_TYPE_NEW, uVersion )[i]);
 		if ( !sphIsReadable ( sFile ) )
 		{
 			if ( i>0 )
@@ -16459,13 +16666,13 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 		// rename current to old
 		for ( int i=0; i<sphGetExtCount ( uVersion ); i++ )
 		{
-			snprintf ( sFile, sizeof(sFile), "%s%s", sPath, sphGetExts ( SPH_EXT_CUR, uVersion )[i] );
-			if ( !sphIsReadable ( sFile ) || TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_CUR, uVersion )[i], sphGetExts ( SPH_EXT_OLD, uVersion )[i], false ) )
+			snprintf ( sFile, sizeof(sFile), "%s%s", sPath, sphGetExts ( SPH_EXT_TYPE_CUR, uVersion )[i] );
+			if ( !sphIsReadable ( sFile ) || TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_TYPE_CUR, uVersion )[i], sphGetExts ( SPH_EXT_TYPE_OLD, uVersion )[i], sAction, false ) )
 				continue;
 
 			// rollback
 			for ( int j=0; j<i; j++ )
-				TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_OLD, uVersion )[j], sphGetExts ( SPH_EXT_CUR, uVersion )[j], true );
+				TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_TYPE_OLD, uVersion )[j], sphGetExts ( SPH_EXT_TYPE_CUR, uVersion )[j], sAction, true );
 
 			sphWarning ( "rotating index '%s': rename to .old failed; using old index", sIndex );
 			return false;
@@ -16475,7 +16682,7 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 		for ( ;; )
 		{
 			char sBuf [ SPH_MAX_FILENAME_LEN ];
-			snprintf ( sBuf, sizeof(sBuf), "%s%s", sPath, sphGetCurMvp() );
+			snprintf ( sBuf, sizeof(sBuf), "%s%s", sPath, sphGetExt ( SPH_EXT_TYPE_CUR, SPH_EXT_MVP ) );
 
 			CSphString sFakeError;
 			CSphAutofile fdTest ( sBuf, SPH_O_READ, sFakeError );
@@ -16484,12 +16691,12 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 			if ( bNoMVP )
 				break; ///< no file, nothing to hold
 
-			if ( TryRename ( sIndex, sPath, sphGetCurMvp(), sphGetOldMvp(), false, false ) )
+			if ( TryRename ( sIndex, sPath, sphGetExt ( SPH_EXT_TYPE_CUR, SPH_EXT_MVP ), sphGetExt ( SPH_EXT_TYPE_OLD, SPH_EXT_MVP ), sAction, false, false ) )
 				break;
 
 			// rollback
 			for ( int j=0; j<sphGetExtCount ( uVersion ); j++ )
-				TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_OLD, uVersion )[j], sphGetExts ( SPH_EXT_CUR, uVersion )[j], true );
+				TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_TYPE_OLD, uVersion )[j], sphGetExts ( SPH_EXT_TYPE_CUR, uVersion )[j], sAction, true );
 
 			break;
 		}
@@ -16499,17 +16706,17 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 	// rename new to current
 	for ( int i=0; i<sphGetExtCount ( uVersion ); i++ )
 	{
-		if ( TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_NEW, uVersion )[i], sphGetExts ( SPH_EXT_CUR, uVersion )[i], false ) )
+		if ( TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_TYPE_NEW, uVersion )[i], sphGetExts ( SPH_EXT_TYPE_CUR, uVersion )[i], sAction, false ) )
 			continue;
 
 		// rollback new ones we already renamed
 		for ( int j=0; j<i; j++ )
-			TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_CUR, uVersion )[j], sphGetExts ( SPH_EXT_NEW, uVersion )[j], true );
+			TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_TYPE_CUR, uVersion )[j], sphGetExts ( SPH_EXT_TYPE_NEW, uVersion )[j], sAction, true );
 
 		// rollback old ones
 		if ( !tIndex.m_bOnlyNew )
 			for ( int j=0; j<=sphGetExtCount ( uVersion ); j++ ) ///< <=, not <, since we have the .mvp at the end of these lists
-				TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_OLD, uVersion )[j], sphGetExts ( SPH_EXT_CUR, uVersion )[j], true );
+				TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_TYPE_OLD, uVersion )[j], sphGetExts ( SPH_EXT_TYPE_CUR, uVersion )[j], sAction, true );
 
 		return false;
 	}
@@ -16537,10 +16744,10 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 			// try to recover
 			for ( int j=0; j<sphGetExtCount ( uVersion ); j++ )
 			{
-				TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_CUR, uVersion )[j], sphGetExts ( SPH_EXT_NEW, uVersion )[j], true );
-				TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_OLD, uVersion )[j], sphGetExts ( SPH_EXT_CUR, uVersion )[j], true );
+				TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_TYPE_CUR, uVersion )[j], sphGetExts ( SPH_EXT_TYPE_NEW, uVersion )[j], sAction, true );
+				TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_TYPE_OLD, uVersion )[j], sphGetExts ( SPH_EXT_TYPE_CUR, uVersion )[j], sAction, true );
 			}
-			TryRename ( sIndex, sPath, sphGetOldMvp(), sphGetCurMvp(), false, false );
+			TryRename ( sIndex, sPath, sphGetExt ( SPH_EXT_TYPE_OLD, SPH_EXT_MVP ), sphGetExt ( SPH_EXT_TYPE_CUR, SPH_EXT_MVP ), sAction, false, false );
 			sphLogDebug ( "RotateIndexGreedy: has recovered" );
 
 			if ( !tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, g_bStripPath, sWarning ) || !tIndex.m_pIndex->Preread() )
@@ -16833,6 +17040,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	}
 
 	sphInfo ( "rotating index '%s': started", sIndex.cstr() );
+	const char * sAction = "rotating";
 
 	ServedDesc_t tNewIndex;
 	tNewIndex.m_bOnlyNew = pRotating->m_bOnlyNew;
@@ -16954,7 +17162,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 			pServed->m_bEnabled = true;
 
 			// rename current MVP to old one to unlink it
-			TryRename ( sIndex.cstr(), pServed->m_sIndexPath.cstr(), sphGetCurMvp(), sphGetOldMvp(), false, false );
+			TryRename ( sIndex.cstr(), pServed->m_sIndexPath.cstr(), sphGetExt ( SPH_EXT_TYPE_CUR, SPH_EXT_MVP ), sphGetExt ( SPH_EXT_TYPE_OLD, SPH_EXT_MVP ), sAction, false, false );
 			// unlink .old
 			sphLogDebug ( "unlink .old" );
 			if ( !pServed->m_bOnlyNew )
@@ -17563,8 +17771,10 @@ void HandlePipePreread ( PipeReader_t & tPipe, bool bFailure )
 				Swap ( tServed.m_pIndex, g_pPrereading );
 				tServed.m_bEnabled = true;
 
+				const char * sAction = "rotating";
+
 				// rename current MVP to old one to unlink it
-				TryRename ( sPrereading, tServed.m_sIndexPath.cstr(), sphGetCurMvp(), sphGetOldMvp(), false, false );
+				TryRename ( sPrereading, tServed.m_sIndexPath.cstr(), sphGetExt ( SPH_EXT_TYPE_CUR, SPH_EXT_MVP ), sphGetExt ( SPH_EXT_TYPE_OLD, SPH_EXT_MVP ), sAction, false, false );
 				// unlink .old
 				if ( !tServed.m_bOnlyNew )
 				{
@@ -19975,9 +20185,9 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const CSphVector<const char
 			fflush ( stdout );
 			tIndex.m_pIndex->SetProgressCallback ( ShowProgress );
 
-			if ( HasFiles ( tIndex, sphGetExts ( SPH_EXT_NEW ) ) )
+			if ( HasFiles ( tIndex, sphGetExts ( SPH_EXT_TYPE_NEW ) ) )
 			{
-				tIndex.m_bOnlyNew = !HasFiles ( tIndex, sphGetExts ( SPH_EXT_CUR ) );
+				tIndex.m_bOnlyNew = !HasFiles ( tIndex, sphGetExts ( SPH_EXT_TYPE_CUR ) );
 				if ( RotateIndexGreedy ( tIndex, sIndexName ) )
 				{
 					CSphString sError;
@@ -20614,7 +20824,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	///////////
 
 	if ( g_eWorkers==MPM_THREADS )
-		sphRTInit( hSearchd, bTestMode );
+		sphRTInit ( hSearchd, bTestMode );
 
 	if ( hSearchd.Exists ( "snippets_file_prefix" ) )
 		g_sSnippetsFilePrefix = hSearchd["snippets_file_prefix"].cstr();

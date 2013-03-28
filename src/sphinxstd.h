@@ -2117,6 +2117,14 @@ public:
 		return m_iEntries;
 	}
 
+	void Swap ( CSphSharedBuffer & tBuf )
+	{
+		::Swap ( m_pData, tBuf.m_pData );
+		::Swap ( m_iLength, tBuf.m_iLength );
+		::Swap ( m_iEntries, tBuf.m_iEntries );
+		::Swap ( m_bMlock, tBuf.m_bMlock );
+	}
+
 protected:
 	T *					m_pData;	///< data storage
 	size_t				m_iLength;	///< data length, bytes
@@ -2393,8 +2401,10 @@ public:
 	CSphRwlock ();
 	~CSphRwlock () {}
 
-	bool Init ();
+	bool Init ( bool bProcessShared = false );
 	bool Done ();
+
+	const char * GetError () const;
 
 	bool ReadLock ();
 	bool WriteLock ();
@@ -2402,6 +2412,7 @@ public:
 
 private:
 	bool				m_bInitialized;
+	CSphString			m_sError;
 #if USE_WINDOWS
 	HANDLE				m_hWriteMutex;
 	HANDLE				m_hReadEvent;

@@ -496,6 +496,7 @@ namespace Memory
 		SPH_MEM_COMMIT_SET_SQL,
 		SPH_MEM_COMMIT_BEGIN_SQL,
 		SPH_MEM_COMMIT_SQL,
+		SPH_MEM_ALTER_SQL,
 
 		SPH_MEM_IDX_DISK_MULTY_QUERY,
 		SPH_MEM_IDX_DISK_MULTY_QUERY_EX,
@@ -1512,18 +1513,22 @@ DWORD ReadVersion ( const char * sPath, CSphString & sError );
 
 enum ESphExtType
 {
-	SPH_EXT_CUR,
-	SPH_EXT_NEW,
-	SPH_EXT_OLD,
-	SPH_EXT_LOC
+	SPH_EXT_TYPE_CUR = 0,
+	SPH_EXT_TYPE_NEW,
+	SPH_EXT_TYPE_OLD,
+	SPH_EXT_TYPE_LOC
+};
+
+enum ESphExt
+{
+	SPH_EXT_SPH = 0,
+	SPH_EXT_SPA = 1,
+	SPH_EXT_MVP = 9
 };
 
 const char ** sphGetExts ( ESphExtType eType, DWORD uVersion=INDEX_FORMAT_VERSION );
-
 int sphGetExtCount ( DWORD uVersion=INDEX_FORMAT_VERSION );
-
-const char * sphGetCurMvp();
-const char * sphGetOldMvp();
+const char * sphGetExt ( ESphExtType eType, ESphExt eExt );
 
 int sphDictCmp ( const char * pStr1, int iLen1, const char * pStr2, int iLen2 );
 int sphDictCmpStrictly ( const char * pStr1, int iLen1, const char * pStr2, int iLen2 );

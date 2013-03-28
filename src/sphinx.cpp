@@ -1256,26 +1256,29 @@ static const char * g_dOldExts31[] = { ".old.sph", ".old.spa", ".old.spi", ".old
 static const char * g_dCurExts31[] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm", ".spk", ".sps", ".spe", ".mvp" };
 static const char * g_dLocExts31[] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm", ".spk", ".sps", ".spe", ".spl" };
 
+const char ** g_pppAllExts[] = { g_dCurExts31, g_dNewExts31, g_dOldExts31, g_dLocExts31 };
+
+
 const char ** sphGetExts ( ESphExtType eType, DWORD uVersion )
 {
 	if ( uVersion<31 )
 	{
 		switch ( eType )
 		{
-		case SPH_EXT_NEW: return g_dNewExts17;
-		case SPH_EXT_OLD: return g_dOldExts17;
-		case SPH_EXT_CUR: return g_dCurExts17;
-		case SPH_EXT_LOC: return g_dLocExts17;
+		case SPH_EXT_TYPE_NEW: return g_dNewExts17;
+		case SPH_EXT_TYPE_OLD: return g_dOldExts17;
+		case SPH_EXT_TYPE_CUR: return g_dCurExts17;
+		case SPH_EXT_TYPE_LOC: return g_dLocExts17;
 		}
 
 	} else
 	{
 		switch ( eType )
 		{
-		case SPH_EXT_NEW: return g_dNewExts31;
-		case SPH_EXT_OLD: return g_dOldExts31;
-		case SPH_EXT_CUR: return g_dCurExts31;
-		case SPH_EXT_LOC: return g_dLocExts31;
+		case SPH_EXT_TYPE_NEW: return g_dNewExts31;
+		case SPH_EXT_TYPE_OLD: return g_dOldExts31;
+		case SPH_EXT_TYPE_CUR: return g_dCurExts31;
+		case SPH_EXT_TYPE_LOC: return g_dLocExts31;
 		}
 	}
 
@@ -1291,14 +1294,18 @@ int sphGetExtCount ( DWORD uVersion )
 		return 9;
 }
 
-const char * sphGetCurMvp()
+const char * sphGetExt ( ESphExtType eType, ESphExt eExt )
 {
-	return g_dCurExts31[9];
-}
+	if ( eExt==SPH_EXT_MVP )
+	{
+		assert ( eType==SPH_EXT_TYPE_CUR || eType==SPH_EXT_TYPE_OLD );
+		return g_pppAllExts[eType][eExt];
+	}
 
-const char * sphGetOldMvp()
-{
-	return g_dOldExts31[9];
+	assert ( eType>=0 && eType<=sizeof(g_pppAllExts)/sizeof(g_pppAllExts[0]) );
+	assert ( eExt>=0 && eExt<=sizeof(g_pppAllExts[0])/sizeof(g_pppAllExts[0][0]));
+
+	return g_pppAllExts[eType][eExt];
 }
 
 /// this is my actual VLN-compressed phrase index implementation
@@ -1354,6 +1361,9 @@ public:
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError );
 	virtual bool				SaveAttributes ( CSphString & sError ) const;
 	virtual DWORD				GetAttributeStatus () const;
+
+	virtual bool				CreateFilesWithAttr ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError );
+	virtual bool				AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError );
 
 	bool						EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const;
 
@@ -1462,6 +1472,8 @@ private:
 
 	bool						JuggleFile ( const char* szExt, CSphString & sError, bool bNeedOrigin=true ) const;
 	XQNode_t *					ExpandPrefix ( XQNode_t * pNode, CSphString & sError, CSphQueryResultMeta * pResult ) const;
+
+	void						CopyDocinfo ( DWORD * & pDocinfo, DWORD * pTmpDocinfo, const CSphColumnInfo * pNewAttr, int iOldStride );
 
 	bool						BuildDone ( const BuildHeader_t & tBuildHeader, CSphString & sError ) const;
 };
@@ -8993,6 +9005,135 @@ DWORD CSphIndex_VLN::GetAttributeStatus () const
 	return *m_pAttrsStatus;
 }
 
+void CSphIndex_VLN::CopyDocinfo ( DWORD * & pDocinfo, DWORD * pTmpDocinfo, const CSphColumnInfo * pNewAttr, int iOldStride )
+{
+	SphDocID_t tDocId = DOCINFO2ID ( pDocinfo );
+	DWORD * pAttrs = DOCINFO2ATTRS ( pDocinfo );
+	memcpy ( DOCINFO2ATTRS ( pTmpDocinfo ), pAttrs, m_tSchema.GetRowSize()*sizeof(CSphRowitem) );
+	sphSetRowAttr ( DOCINFO2ATTRS ( pTmpDocinfo ), pNewAttr->m_tLocator, 0 );
+	DOCINFOSETID ( pTmpDocinfo, tDocId );
+	pDocinfo += iOldStride;
+}
+
+bool CSphIndex_VLN::CreateFilesWithAttr ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError )
+{
+	if ( m_tSchema.GetAttr ( sAttrName.cstr() ) )
+	{
+		sError.SetSprintf ( "'%s' attribute already in schema", sAttrName.cstr() );
+		return false;
+	}
+
+	CSphSchema tNewSchema = m_tSchema;
+	CSphColumnInfo tInfo ( sAttrName.cstr(), eAttrType );
+	tNewSchema.AddAttr ( tInfo, false );
+
+	CSphFixedVector<CSphRowitem> dMinRow ( tNewSchema.GetRowSize() );
+	int iOldStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+	int iNewStride = DOCINFO_IDSIZE + tNewSchema.GetRowSize();
+
+	int64_t uNewMinMaxIndex = m_iDocinfo*iNewStride;
+
+	BuildHeader_t tBuildHeader ( m_tStats );
+	tBuildHeader.m_sHeaderExtension = "new.sph";
+	tBuildHeader.m_pThrottle = &g_tThrottle;
+	tBuildHeader.m_pMinRow = dMinRow.Begin();
+	tBuildHeader.m_iMinDocid = m_iMinDocid;
+	tBuildHeader.m_iKillListSize = m_iKillListSize;
+	tBuildHeader.m_uMinMaxIndex = uNewMinMaxIndex;
+
+	*(DictHeader_t*)&tBuildHeader = *(DictHeader_t*)&m_tWordlist;
+
+	CSphSchema tOldSchema = m_tSchema;
+	m_tSchema = tNewSchema;
+
+	// save the header
+	bool bBuildRes = BuildDone ( tBuildHeader, sError );
+	m_tSchema = tOldSchema;
+	if ( !bBuildRes )
+		return false;
+
+	// generate a new .SPA file
+	CSphWriter tSPAWriter;
+	tSPAWriter.SetBufferSize ( 524288 );
+	CSphString sSPAfile = GetIndexFileName ( "new.spa" );
+	if ( !tSPAWriter.OpenFile ( sSPAfile, sError ) )
+		return false;
+
+	DWORD * pDocinfo = m_pDocinfo.GetWritePtr();
+	if ( !pDocinfo )
+	{
+		sError = "index must have at least one attribute";
+		return false;
+	}
+
+	CSphFixedVector<DWORD> dTmpDocinfos ( iNewStride );
+	DWORD * pTmpDocinfo = dTmpDocinfos.Begin();
+
+	const CSphColumnInfo * pNewAttr = tNewSchema.GetAttr ( sAttrName.cstr() );
+	assert ( pNewAttr );
+
+	for ( int i = 0; i < m_iDocinfo + (m_iDocinfoIndex+1)*2 && !tSPAWriter.IsError(); i++ )
+	{
+		CopyDocinfo ( pDocinfo, pTmpDocinfo, pNewAttr, iOldStride );
+		tSPAWriter.PutBytes ( pTmpDocinfo, iNewStride*sizeof(DWORD) );
+	}
+
+	if ( tSPAWriter.IsError() )
+	{
+		sError.SetSprintf ( "error writing to %s", sSPAfile.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
+
+bool CSphIndex_VLN::AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError )
+{
+	if ( m_tSchema.GetAttr ( sAttrName.cstr() ) )
+	{
+		sError.SetSprintf ( "'%s' attribute already in schema", sAttrName.cstr() );
+		return false;
+	}
+
+	int iOldStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+
+	CSphColumnInfo tInfo ( sAttrName.cstr(), eAttrType );
+	m_tSchema.AddAttr ( tInfo, false );
+
+	int iNewStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+
+	m_uMinMaxIndex = m_iDocinfo*iNewStride;
+	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_NONE )
+		m_tSettings.m_eDocinfo = SPH_DOCINFO_EXTERN;
+
+	const CSphColumnInfo * pNewAttr = m_tSchema.GetAttr ( sAttrName.cstr() );
+	assert ( pNewAttr );
+
+	CSphString sWarning;
+	DWORD * pDocinfo = m_pDocinfo.GetWritePtr();
+	CSphSharedBuffer<DWORD> pNewDocinfo;
+
+	// fixme: this could cause inconsistency between on-disk and in-memory data
+	if ( !pNewDocinfo.Alloc ( m_iDocinfo*iNewStride + (m_iDocinfoIndex+1)*iNewStride*2, sError, sWarning ) )
+		return false;
+
+	DWORD * pNewDocinfos = pNewDocinfo.GetWritePtr();
+	assert ( pNewDocinfos );
+
+	for ( int i = 0; i < m_iDocinfo + (m_iDocinfoIndex+1)*2; i++ )
+	{
+		CopyDocinfo ( pDocinfo, pNewDocinfos, pNewAttr, iOldStride );
+		pNewDocinfos += iNewStride;
+	}
+
+	m_pDocinfo.Swap ( pNewDocinfo );
+
+	m_pDocinfoIndex = m_pDocinfo.GetWritePtr() + m_iDocinfo*iNewStride;
+
+	return true;
+}
+
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -15684,7 +15825,7 @@ bool CSphIndex_VLN::Rename ( const char * sNewBase )
 
 	// +1 for ".spl"
 	int iExtCount = sphGetExtCount() + 1;
-	const char ** sExts = sphGetExts ( SPH_EXT_LOC );
+	const char ** sExts = sphGetExts ( SPH_EXT_TYPE_LOC );
 	DWORD uMask = 0;
 
 	int iExt;

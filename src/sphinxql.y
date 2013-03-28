@@ -21,7 +21,9 @@
 %token	TOK_CONST_STRINGS
 %token	TOK_BAD_NUMERIC
 
+%token	TOK_ADD
 %token	TOK_AGENT
+%token	TOK_ALTER
 %token	TOK_AS
 %token	TOK_ASC
 %token	TOK_ATTACH
@@ -32,6 +34,7 @@
 %token	TOK_CALL
 %token	TOK_CHARACTER
 %token	TOK_COLLATION
+%token	TOK_COLUMN
 %token	TOK_COMMIT
 %token	TOK_COMMITTED
 %token	TOK_COUNT
@@ -89,6 +92,7 @@
 %token	TOK_STATUS
 %token	TOK_STRING
 %token	TOK_SUM
+%token	TOK_TABLE
 %token	TOK_TABLES
 %token	TOK_TO
 %token	TOK_TRANSACTION
@@ -152,6 +156,7 @@ statement:
 	| select_sysvar
 	| truncate
 	| optimize_index
+	| alter
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -975,6 +980,19 @@ update_item:
 		{
 			SqlNode_t tNoValues;
 			pParser->UpdateMVAAttr ( $1.m_sValue, tNoValues );
+		}
+	;
+
+//////////////////////////////////////////////////////////////////////////
+
+alter:
+	TOK_ALTER TOK_TABLE TOK_IDENT TOK_ADD TOK_COLUMN TOK_IDENT TOK_IDENT
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_ALTER;
+			tStmt.m_sIndex = $3.m_sValue;
+			tStmt.m_sAlterAttr = $6.m_sValue;
+			tStmt.m_sAlterColType = $7.m_sValue;
 		}
 	;
 

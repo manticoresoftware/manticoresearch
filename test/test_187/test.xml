@@ -78,6 +78,31 @@ index rt_arena
 	charset_type	= utf-8
 } 
 
+source src_a1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select id, title, 'dummy' as body, gid from test_table
+	sql_attr_uint	= gid
+}
+
+index a1
+{
+	source			= src_a1
+	path			= <data_path/>/a1
+	charset_type	= utf-8
+}
+
+index rt1
+{
+	type			= rt
+	path			= data/rt1
+	rt_field		= title
+	rt_field		= body
+	rt_attr_uint	= gid
+	charset_type	= utf-8
+} 
+
 </config>
 
 <db_create>
@@ -118,6 +143,12 @@ INSERT INTO test_table VALUES
 <sphinxql>SELECT * FROM rt_arena</sphinxql>
 <!-- regression index settings have not been copied on attach -->
 <sphinxql>SELECT * FROM rt WHERE MATCH('got')</sphinxql>
+<!-- regression attach to existed RT index -->
+<sphinxql>INSERT INTO rt1 ( id, gid, title, body ) VALUES ( 1, 22, 'dust me', 'well' ), ( 5, 22, 'dure me', 'thee off' ), ( 6, 22, 'dub me', 'thee well' )</sphinxql>
+<sphinxql>ATTACH INDEX a1 TO RTINDEX rt1</sphinxql>
+<sphinxql>SELECT * FROM rt1</sphinxql>
+<sphinxql>SELECT * FROM rt1 WHERE MATCH('well')</sphinxql>
+<sphinxql>SELECT * FROM rt1 WHERE MATCH('me | thee')</sphinxql>
 </sphqueries>
 
 </test>

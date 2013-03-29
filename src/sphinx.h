@@ -631,7 +631,7 @@ public:
 	virtual void					SetBufferPtr ( const char * sNewPtr ) = 0;
 
 	/// get settings hash
-	virtual uint64_t				GetSettingsFNV () const { return m_tLC.GetFNV(); }
+	virtual uint64_t				GetSettingsFNV () const;
 
 protected:
 	virtual bool					RemapCharacters ( const char * sConfig, DWORD uFlags, const char * sSource, bool bCanRemap, CSphString & sError );
@@ -881,6 +881,9 @@ public:
 
 	/// make a clone
 	virtual CSphDict *		Clone () const { return NULL; }
+
+	/// get settings hash
+	virtual uint64_t		GetSettingsFNV () const = 0;
 
 protected:
 	CSphString				m_sMorphFingerprint;
@@ -3047,6 +3050,12 @@ public:
 
 	/// get for the base file name
 	const char *				GetFilename () const { return m_sFilename.cstr(); }
+
+	/// internal make document id list from external docinfo, DO NOT USE
+	virtual bool BuildDocList ( SphAttr_t ** ppDocList, int64_t * pCount, CSphString * pError ) const;
+
+	/// internal replace kill-list and rewrite spk file, DO NOT USE
+	virtual bool				ReplaceKillist ( const SphAttr_t *, int ) { return true; }
 
 public:
 	int64_t						m_iTID;

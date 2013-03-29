@@ -206,6 +206,7 @@ public:
 	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () { return m_dSWFileInfos; }
 	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () { return m_dWFFileInfos; }
 	virtual const CSphMultiformContainer * GetMultiWordforms () const { return NULL; }
+	virtual uint64_t		GetSettingsFNV () const { return 0; }
 
 	virtual bool IsStopWord ( const BYTE * ) const { return false; }
 

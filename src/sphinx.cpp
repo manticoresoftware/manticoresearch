@@ -1376,6 +1376,8 @@ public:
 	virtual const CSphSourceStats &		GetStats () const { return m_tStats; }
 	virtual int64_t *					GetFieldLens() const { return m_tSettings.m_bIndexFieldLens ? m_dFieldLens.Begin() : NULL; }
 	virtual CSphIndexStatus				GetStatus () const;
+	virtual bool 				BuildDocList ( SphAttr_t ** ppDocList, int64_t * pCount, CSphString * pError ) const;
+	virtual bool				ReplaceKillist ( const SphAttr_t * pKillist, int iCount );
 
 private:
 
@@ -1873,6 +1875,7 @@ public:
 	virtual const char *	GetBufferPtr () const		{ return (const char *) m_pCur; }
 	virtual const char *	GetBufferEnd () const		{ return (const char *) m_pBufferMax; }
 	virtual void			SetBufferPtr ( const char * sNewPtr );
+	virtual uint64_t		GetSettingsFNV () const;
 
 	virtual bool			SetBlendChars ( const char * sConfig, CSphString & sError );
 
@@ -2107,6 +2110,7 @@ public:
 	virtual const char *			GetTokenEnd () const		{ return m_pLastToken->m_szTokenEnd; }
 	virtual const char *			GetBufferPtr () const		{ return m_pLastToken ? m_pLastToken->m_pBufferPtr : m_pTokenizer->GetBufferPtr(); }
 	virtual void					SetBufferPtr ( const char * sNewPtr );
+	virtual uint64_t				GetSettingsFNV () const;
 
 private:
 	const CSphMultiformContainer *	m_pMultiWordforms;
@@ -2352,6 +2356,13 @@ public:
 
 		assert ( 0 && "unhandled bigram tokenizer internal state" );
 		return NULL;
+	}
+
+	uint64_t GetSettingsFNV () const
+	{
+		uint64_t uHash = CSphTokenFilter::GetSettingsFNV();
+		uHash = sphFNV64 ( m_dWords.Begin(), m_dWords.GetLength(), uHash );
+		return uHash;
 	}
 };
 
@@ -3426,6 +3437,25 @@ bool ISphTokenizer::EnableZoneIndexing ( CSphString & sError )
 	return AddSpecialsSPZ ( sSpecials, "index_zones", sError );
 }
 
+uint64_t ISphTokenizer::GetSettingsFNV () const
+{
+	uint64_t uHash = m_tLC.GetFNV();
+
+	DWORD uFlags = 0;
+	if ( m_bBlendSkipPure )
+		uFlags |= 1<<1;
+	if ( m_bShortTokenFilter )
+		uFlags |= 1<<2;
+	uHash = sphFNV64 ( (const BYTE *)&uFlags, sizeof(uFlags), uHash );
+	uHash = sphFNV64 ( (const BYTE *)&m_uBlendVariants, sizeof(m_uBlendVariants), uHash );
+
+	uHash = sphFNV64 ( (const BYTE *)&m_tSettings.m_iType, sizeof(m_tSettings.m_iType), uHash );
+	uHash = sphFNV64 ( (const BYTE *)&m_tSettings.m_iMinWordLen, sizeof(m_tSettings.m_iMinWordLen), uHash );
+	uHash = sphFNV64 ( (const BYTE *)&m_tSettings.m_iNgramLen, sizeof(m_tSettings.m_iNgramLen), uHash );
+
+	return uHash;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 CSphTokenizerBase::CSphTokenizerBase ()
@@ -3701,6 +3731,18 @@ void CSphTokenizerBase::CloneBase ( const CSphTokenizerBase * pFrom, ESphTokeniz
 			break;
 		}
 	}
+}
+
+uint64_t CSphTokenizerBase::GetSettingsFNV () const
+{
+	uint64_t uHash = ISphTokenizer::GetSettingsFNV();
+
+	DWORD uFlags = 0;
+	if ( m_bHasBlend )
+		uFlags |= 1<<0;
+	uHash = sphFNV64 ( (const BYTE *)&uFlags, sizeof(uFlags), uHash );
+
+	return uHash;
 }
 
 
@@ -5526,6 +5568,14 @@ void CSphMultiformTokenizer::SetBuffer ( BYTE * sBuffer, int iLength )
 	m_pTokenizer->SetBuffer ( sBuffer, iLength );
 	SetBufferPtr ( (const char *)sBuffer );
 }
+
+uint64_t CSphMultiformTokenizer::GetSettingsFNV () const
+{
+	uint64_t uHash = CSphTokenFilter::GetSettingsFNV();
+	uHash ^= (uint64_t)m_pMultiWordforms;
+	return uHash;
+}
+
 
 /////////////////////////////////////////////////////////////////////////////
 // FILTER
@@ -8295,6 +8345,16 @@ float CSphIndex::GetGlobalIDF ( const CSphString & sWord, int iDocsLocal, int iQ
 	g_tGlobalIDFLock.Unlock ();
 	return fIDF;
 }
+
+
+bool CSphIndex::BuildDocList ( SphAttr_t ** ppDocList, int64_t * pCount, CSphString * ) const
+{
+	assert ( *ppDocList && pCount );
+	*ppDocList = NULL;
+	*pCount = 0;
+	return true;
+}
+
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -13929,6 +13989,71 @@ SphAttr_t * CSphIndex_VLN::GetKillList () const
 }
 
 
+bool CSphIndex_VLN::BuildDocList ( SphAttr_t ** ppDocList, int64_t * pCount, CSphString * pError ) const
+{
+	assert ( ppDocList && pCount && pError );
+	*ppDocList = NULL;
+	*pCount = 0;
+	if ( !m_iDocinfo )
+		return true;
+
+	// new[] might fail on 32bit here
+	int64_t iSizeMax = (size_t)m_iDocinfo;
+	if ( iSizeMax!=m_iDocinfo )
+	{
+		pError->SetSprintf ( "doc-list build size_t overflow (docs count="INT64_FMT", size max="INT64_FMT")", m_iDocinfo, iSizeMax );
+		return false;
+	}
+
+	int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+	SphAttr_t * pDst = new SphAttr_t [(size_t)m_iDocinfo];
+	*ppDocList = pDst;
+	*pCount = m_iDocinfo;
+
+	for ( int64_t i=0; i<m_iDocinfo; i++ )
+		*pDst++ = DOCINFO2ID ( m_pDocinfo.GetWritePtr() + i*iStride );
+
+	return true;
+}
+
+bool CSphIndex_VLN::ReplaceKillist ( const SphAttr_t * pKillist, int iCount )
+{
+	// dump killlist
+	CSphAutofile fdKillList ( GetIndexFileName("spk"), SPH_O_NEW, m_sLastError );
+	if ( fdKillList.GetFD()<0 )
+		return false;
+
+	if ( !sphWriteThrottled ( fdKillList.GetFD(), pKillist, iCount*sizeof(SphAttr_t), "kill list", m_sLastError, &g_tThrottle ) )
+		return false;
+
+	fdKillList.Close ();
+
+	BuildHeader_t tBuildHeader ( m_tStats );
+	(DictHeader_t &)tBuildHeader = (DictHeader_t)m_tWordlist;
+	tBuildHeader.m_sHeaderExtension = "sph";
+	tBuildHeader.m_pThrottle = &g_tThrottle;
+	tBuildHeader.m_iMinDocid = m_iMinDocid;
+	tBuildHeader.m_iKillListSize = iCount;
+	tBuildHeader.m_uMinMaxIndex = m_uMinMaxIndex;
+
+	if ( !BuildDone ( tBuildHeader, m_sLastError ) )
+		return false;
+
+	m_pKillList.Reset ();
+	m_iKillListSize = 0;
+	if ( iCount )
+	{
+		if ( !m_pKillList.Alloc ( iCount, m_sLastError, m_sLastWarning ) )
+			return false;
+
+		memcpy ( m_pKillList.GetWritePtr(), pKillist, sizeof(SphAttr_t)*iCount );
+		m_iKillListSize = iCount;
+	}
+
+	return true;
+}
+
+
 bool CSphIndex_VLN::HasDocid ( SphDocID_t uDocid ) const
 {
 	return FindDocinfo ( uDocid )!=NULL;
@@ -18843,6 +18968,7 @@ struct CSphDictCRCTraits : CSphDict
 	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () { return m_dSWFileInfos; }
 	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () { return m_dWFFileInfos; }
 	virtual const CSphMultiformContainer * GetMultiWordforms () const;
+	virtual uint64_t	GetSettingsFNV () const;
 
 	static void			SweepWordformContainers ( const CSphVector<CSphSavedFile> & dFiles );
 
@@ -19377,6 +19503,35 @@ void CSphDictCRCTraits::ApplyStemmers ( BYTE * pWord )
 const CSphMultiformContainer * CSphDictCRCTraits::GetMultiWordforms () const
 {
 	return m_pWordforms ? m_pWordforms->m_pMultiWordforms : NULL;
+}
+
+uint64_t CSphDictCRCTraits::GetSettingsFNV () const
+{
+	uint64_t uHash = (uint64_t)m_pWordforms;
+
+	if ( m_pStopwords )
+		uHash = sphFNV64 ( (const BYTE *)m_pStopwords, m_iStopwords*sizeof(*m_pStopwords), uHash );
+
+	uHash = sphFNV64 ( (const BYTE *)&m_tSettings.m_iMinStemmingLen, sizeof(m_tSettings.m_iMinStemmingLen), uHash );
+	DWORD uFlags = 0;
+	if ( m_tSettings.m_bWordDict )
+		uFlags |= 1<<0;
+	if ( m_tSettings.m_bCrc32 )
+		uFlags |= 1<<1;
+	if ( m_tSettings.m_bStopwordsUnstemmed )
+		uFlags |= 1<<2;
+	uHash = sphFNV64 ( (const BYTE *)&uFlags, sizeof(uFlags), uHash );
+
+	uHash = sphFNV64 ( (const BYTE *)m_dMorph.Begin(), m_dMorph.GetLength()*sizeof(m_dMorph[0]), uHash );
+#if USE_LIBSTEMMER
+	ARRAY_FOREACH ( i, m_dDescStemmers )
+	{
+		uHash = sphFNV64 ( m_dDescStemmers[i].m_sAlgo.cstr(), m_dDescStemmers[i].m_sAlgo.Length(), uHash );
+		uHash = sphFNV64 ( m_dDescStemmers[i].m_sEnc.cstr(), m_dDescStemmers[i].m_sEnc.Lenght(), uHash );
+	}
+#endif
+
+	return uHash;
 }
 
 CSphDict * CSphDictCRCTraits::CloneBase ( CSphDictCRCTraits * pDict ) const
@@ -21955,6 +22110,7 @@ public:
 	virtual bool IsStopWord ( const BYTE * pWord ) const { return m_pBase->IsStopWord ( pWord ); }
 	virtual const char * GetLastWarning() const { return m_iKeywordsOverrun ? m_sWarning.cstr() : NULL; }
 	virtual void ResetWarning () { m_iKeywordsOverrun = 0; }
+	virtual uint64_t GetSettingsFNV () const { return m_pBase->GetSettingsFNV(); }
 };
 
 ISphRtDictWraper * sphCreateRtKeywordsDictionaryWrapper ( CSphDict * pBase )

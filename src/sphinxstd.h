@@ -678,6 +678,22 @@ T * sphBinarySearch ( T * pStart, T * pEnd, T & tRef )
 	return sphBinarySearch ( pStart, pEnd, SphIdentityFunctor_T<T>(), tRef );
 }
 
+/// generic uniq
+template < typename T, typename T_COUNTER >
+T_COUNTER sphUniq ( T * pData, T_COUNTER iCount )
+{
+	T_COUNTER iSrc = 1, iDst = 1;
+	while ( iSrc<iCount )
+	{
+		if ( pData[iDst-1]==pData[iSrc] )
+			iSrc++;
+		else
+			pData[iDst++] = pData[iSrc++];
+	}
+	return iDst;
+}
+
+
 //////////////////////////////////////////////////////////////////////////
 
 /// default vector policy
@@ -898,17 +914,8 @@ public:
 			return;
 
 		Sort ();
-
-		int iSrc = 1, iDst = 1;
-		while ( iSrc<m_iLength )
-		{
-			if ( m_pData[iDst-1]==m_pData[iSrc] )
-				iSrc++;
-			else
-				m_pData[iDst++] = m_pData[iSrc++];
-		}
-
-		Resize ( iDst );
+		int iLeft = sphUniq ( m_pData, m_iLength );
+		Resize ( iLeft );
 	}
 
 	/// default sort

@@ -1351,7 +1351,8 @@ public:
 	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () { return m_pDict->GetWordformsFileInfos (); }
 	virtual const CSphMultiformContainer * GetMultiWordforms () const { return m_pDict->GetMultiWordforms (); }
 
-	virtual bool IsStopWord ( const BYTE * pWord ) const { return m_pDict->IsStopWord ( pWord ); }
+	virtual bool		IsStopWord ( const BYTE * pWord ) const { return m_pDict->IsStopWord ( pWord ); }
+	virtual uint64_t	GetSettingsFNV () const { return m_pDict->GetSettingsFNV(); }
 
 protected:
 	CSphDict *			m_pDict;
@@ -1430,6 +1431,7 @@ public:
 	virtual const char *			GetBufferPtr () const						{ return m_pTokenizer->GetBufferPtr(); }
 	virtual const char *			GetBufferEnd () const						{ return m_pTokenizer->GetBufferEnd (); }
 	virtual void					SetBufferPtr ( const char * sNewPtr )		{ m_pTokenizer->SetBufferPtr ( sNewPtr ); }
+	virtual uint64_t				GetSettingsFNV () const						{ return m_pTokenizer->GetSettingsFNV(); }
 
 	virtual void					SetBuffer ( BYTE * sBuffer, int iLength )	{ m_pTokenizer->SetBuffer ( sBuffer, iLength ); }
 	virtual BYTE *					GetToken ()									{ return m_pTokenizer->GetToken(); }

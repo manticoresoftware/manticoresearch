@@ -3083,13 +3083,13 @@ void RtIndex_t::ForceDiskChunk ()
 
 	Verify ( m_tWriterMutex.Lock() );
 	Verify ( m_tSaveOuterMutex.Lock() );
+	Verify ( m_tRwlock.WriteLock() );
 
 	m_tKlist.Flush();
 	m_dDiskChunkKlist.Reset ( m_tKlist.GetKillListSize() );
-	if ( m_tKlist.GetKillListSize() )
-	{
-		memcpy ( m_dDiskChunkKlist.Begin(), m_tKlist.GetKillList(), sizeof(SphAttr_t)*m_tKlist.GetKillListSize() );
-	}
+	memcpy ( m_dDiskChunkKlist.Begin(), m_tKlist.GetKillList(), sizeof(SphAttr_t)*m_tKlist.GetKillListSize() );
+	Verify ( m_tRwlock.Unlock() );
+
 	SaveDiskChunk ( m_iTID, m_pSegments, m_tStats );
 
 	Verify ( m_tSaveOuterMutex.Unlock() );
@@ -6920,6 +6920,8 @@ bool RtIndex_t::AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType,
 
 bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 {
+	bool bEmptyRT = ( !m_pSegments.GetLength() && !m_pDiskChunks.GetLength() );
+
 	// safeguards
 	// we do not support some of the disk index features in RT just yet
 #define LOC_ERROR(_arg) { sError = _arg; return false; }
@@ -6930,48 +6932,117 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 		LOC_ERROR ( "ATTACH currently requires stopword_step=1 in disk index (RT-side support not implemented yet)" );
 	if ( tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN )
 		LOC_ERROR ( "ATTACH currently requires docinfo=extern in disk index (RT-side support not implemented yet)" );
+	// ATTACH to exist index require these checks
+	if ( !bEmptyRT )
+	{
+		if ( m_pTokenizer->GetSettingsFNV()!=pIndex->GetTokenizer()->GetSettingsFNV() )
+			LOC_ERROR ( "ATTACH currently requires same tokenizer settings (RT-side support not implemented yet)" );
+		if ( m_pDict->GetSettingsFNV()!=pIndex->GetDictionary()->GetSettingsFNV() )
+			LOC_ERROR ( "ATTACH currently requires same dictionary settings (RT-side support not implemented yet)" );
+		if ( !GetMatchSchema().CompareTo ( pIndex->GetMatchSchema(), sError, true ) )
+			LOC_ERROR ( "ATTACH currently requires same attributes declaration (RT-side support not implemented yet)" );
+	}
 #undef LOC_ERROR
 
-	// ATTACH needs an exclusive global lock on both indexes
-	// source disk index must come in locked internally
-	// target RT index lock is acquired here
-	Verify ( m_tWriterMutex.Lock() );
-	Verify ( m_tSaveOuterMutex.Lock() );
-	Verify ( m_tRwlock.WriteLock() );
-
-	// for now, let's do the simplest possible thing
-	// and attach new data to empty RT indexes only
-	bool bHasData = ( m_pDiskChunks.GetLength()!=0 );
-	ARRAY_FOREACH_COND ( i, m_pSegments, !bHasData )
-		bHasData = ( m_pSegments[i]->m_iAliveRows!=0 );
-
-	if ( bHasData )
+	if ( !bEmptyRT )
 	{
-		Verify ( m_tRwlock.Unlock() );
-		Verify ( m_tSaveOuterMutex.Unlock() );
-		Verify ( m_tWriterMutex.Unlock() );
-		sError.SetSprintf ( "ATTACH currently supports empty target RT indexes only" );
-		return false;
+		SphAttr_t * pIndexDocList = NULL;
+		int64_t iCount = 0;
+		if ( !pIndex->BuildDocList ( &pIndexDocList, &iCount, &sError ) )
+		{
+			sError.SetSprintf ( "ATTACH failed, %s", sError.cstr() );
+			return false;
+		}
+
+		// new[] might fail on 32bit here
+		// sphSort is 32bit too
+		int64_t iSizeMax = (size_t)( iCount + pIndex->GetKillListSize() );
+		if ( iCount + pIndex->GetKillListSize()!=iSizeMax )
+		{
+			SafeDeleteArray ( pIndexDocList );
+			sError.SetSprintf ( "ATTACH failed, documents overflow (count="INT64_FMT", size max="INT64_FMT")", iCount + pIndex->GetKillListSize(), iSizeMax );
+			return false;
+		}
+
+		SphAttr_t * pCombined = new SphAttr_t[(size_t)( iCount + pIndex->GetKillListSize() )];
+		memcpy ( pCombined, pIndexDocList, (size_t)( sizeof(SphAttr_t) * iCount ) );
+		memcpy ( pCombined+iCount, pIndex->GetKillList(), sizeof(SphAttr_t) * pIndex->GetKillListSize() );
+		iCount += pIndex->GetKillListSize();
+		SafeDeleteArray ( pIndexDocList );
+
+		// lock-less ForceDiskChunk
+		m_tKlist.Flush();
+		m_dDiskChunkKlist.Reset ( m_tKlist.GetKillListSize() );
+		memcpy ( m_dDiskChunkKlist.Begin(), m_tKlist.GetKillList(), sizeof(SphAttr_t)*m_tKlist.GetKillListSize() );
+
+		SaveDiskChunk ( m_iTID, m_pSegments, m_tStats );
+
+		// kill-list drying up
+		for ( int iIndex=m_pDiskChunks.GetLength()-1; iIndex>=0 && iCount; iIndex-- )
+		{
+			const CSphIndex * pIndex = m_pDiskChunks[iIndex];
+			for ( int i=0; i<iCount; i++ )
+			{
+				SphAttr_t uDocid = pCombined[i];
+				if ( !pIndex->HasDocid ( (SphDocID_t)uDocid ) )
+					continue;
+
+				// we just found the most recent chunk with our suspect docid
+				// let's check whether it's already killed by subsequent chunks, or gets killed now
+				bool bKeep = true;
+				for ( int k=i+1; k<m_pDiskChunks.GetLength() && bKeep; k++ )
+				{
+					const CSphIndex * pKilled = m_pDiskChunks[k];
+					bKeep = ( sphBinarySearch ( pKilled->GetKillList(), pKilled->GetKillList() + pKilled->GetKillListSize() - 1, uDocid )==NULL );
+				}
+
+				if ( !bKeep )
+				{
+					// RemoveFast
+					pCombined[i] = pCombined[iCount-1];
+					iCount--;
+				}
+			}
+		}
+
+		// sort by id and got rid of duplicates
+		sphSort ( pCombined, (int)iCount );
+		iCount = sphUniq ( pCombined, iCount );
+
+		iSizeMax = (size_t)iCount;
+		if ( iCount!=iSizeMax )
+		{
+			SafeDeleteArray ( pCombined );
+			sError.SetSprintf ( "ATTACH failed, kill-list overflow (size="INT64_FMT", size max="INT64_FMT")", iCount, iSizeMax );
+			return false;
+		}
+
+		bool bKillistDone = pIndex->ReplaceKillist ( pCombined, (int)iCount );
+		SafeDeleteArray ( pCombined );
+
+		if ( !bKillistDone )
+		{
+			sError.SetSprintf ( "ATTACH failed, kill-list replacement error (error='%s', warning='%s'", pIndex->GetLastError().cstr(), pIndex->GetLastWarning().cstr() );
+			return false;
+		}
 	}
 
-	// rename that source index to our chunk0
+	// rename that source index to our last chunk
 	CSphString sChunk;
-	sChunk.SetSprintf ( "%s.0", m_sPath.cstr() );
+	sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), m_pDiskChunks.GetLength()+m_iDiskBase );
 	if ( !pIndex->Rename ( sChunk.cstr() ) )
 	{
-		Verify ( m_tRwlock.Unlock() );
-		Verify ( m_tSaveOuterMutex.Unlock() );
-		Verify ( m_tWriterMutex.Unlock() );
-		sError.SetSprintf ( "ATTACH failed: %s", pIndex->GetLastError().cstr() );
+		sError.SetSprintf ( "ATTACH failed, %s", pIndex->GetLastError().cstr() );
 		return false;
 	}
 
-	// copy schema from chunk0 schema
+	// copy schema from new index
 	m_tSchema = pIndex->GetMatchSchema();
-	m_tStats = pIndex->GetStats();
 	m_iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+	m_tStats.m_iTotalBytes += pIndex->GetStats().m_iTotalBytes;
+	m_tStats.m_iTotalDocuments += pIndex->GetStats().m_iTotalDocuments;
 
-	// copy tokenizer, dict etc settings from chunk0
+	// copy tokenizer, dict etc settings from new index
 	SafeDelete ( m_pTokenizer );
 	SafeDelete ( m_pDict );
 
@@ -6986,7 +7057,6 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 	// FIXME? what about copying m_TID etc?
 
 	// recreate disk chunk list, resave header file
-	m_iDiskBase = 0;
 	m_pDiskChunks.Add ( pIndex );
 	SaveMeta ( m_pDiskChunks.GetLength(), m_iTID );
 
@@ -6994,9 +7064,6 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 	// g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
 
 	// all done
-	Verify ( m_tRwlock.Unlock() );
-	Verify ( m_tSaveOuterMutex.Unlock() );
-	Verify ( m_tWriterMutex.Unlock() );
 	return true;
 }
 

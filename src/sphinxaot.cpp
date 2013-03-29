@@ -21,7 +21,7 @@
 #include "sphinxutils.h"
 
 //////////////////////////////////////////////////////////////////////////
-// LEMMATIZER 
+// LEMMATIZER
 //////////////////////////////////////////////////////////////////////////
 
 const BYTE	AOT_POS_UNKNOWN				= 0xff;
@@ -735,9 +735,9 @@ inline void CreateLemma ( BYTE * sOut, const BYTE * sBase, int iBaseLen, bool bF
 	if ( m_bFound
 		|| (
 		( m_InputWordBase.substr ( 0, LemmPrefix.length() )==LemmPrefix ) &&
-		( m_InputWordBase.substr ( LemmPrefix.length(), F.m_PrefixStr.length() ) == F.m_PrefixStr ) ) )
+		( m_InputWordBase.substr ( LemmPrefix.length(), F.m_PrefixStr.length() )==F.m_PrefixStr ) ) )
 	{
-		m_InputWordBase.erase(0, LemmPrefix.length()+ M.m_PrefixStr.length());
+		m_InputWordBase.erase ( 0, LemmPrefix.length()+ M.m_PrefixStr.length() );
 		m_bPrefixesWereCut = true;
 	}
 #endif
@@ -1130,7 +1130,7 @@ public:
 			if ( m_pWordforms && m_pWordforms->m_bHavePostMorphNF )
 				m_pWordforms->ToNormalForm ( m_sToken, false );
 
-			return m_sToken;			
+			return m_sToken;
 		}
 
 		// ok, time to work on a next word
@@ -1217,6 +1217,15 @@ public:
 			m_pWordforms->ToNormalForm ( pToken, false );
 
 		return pToken;
+	}
+
+	uint64_t GetSettingsFNV () const
+	{
+		uint64_t uHash = CSphTokenFilter::GetSettingsFNV();
+		uHash ^= (uint64_t)m_pWordforms;
+		DWORD uFlags = m_bIndexExact ? 1 : 0;
+		uHash = sphFNV64 ( (const BYTE *)uFlags, sizeof(uFlags), uHash );
+		return uHash;
 	}
 };
 

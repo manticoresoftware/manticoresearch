@@ -19526,8 +19526,8 @@ uint64_t CSphDictCRCTraits::GetSettingsFNV () const
 #if USE_LIBSTEMMER
 	ARRAY_FOREACH ( i, m_dDescStemmers )
 	{
-		uHash = sphFNV64 ( m_dDescStemmers[i].m_sAlgo.cstr(), m_dDescStemmers[i].m_sAlgo.Length(), uHash );
-		uHash = sphFNV64 ( m_dDescStemmers[i].m_sEnc.cstr(), m_dDescStemmers[i].m_sEnc.Lenght(), uHash );
+		uHash = sphFNV64 ( (const BYTE *)m_dDescStemmers[i].m_sAlgo.cstr(), m_dDescStemmers[i].m_sAlgo.Length(), uHash );
+		uHash = sphFNV64 ( (const BYTE *)m_dDescStemmers[i].m_sEnc.cstr(), m_dDescStemmers[i].m_sEnc.Length(), uHash );
 	}
 #endif
 

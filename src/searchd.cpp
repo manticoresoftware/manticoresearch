@@ -10647,7 +10647,7 @@ struct SqlStmt_t
 
 	// ALTER specific
 	CSphString				m_sAlterAttr;
-	CSphString				m_sAlterColType;
+	ESphAttr				m_eAlterColType;
 
 	// Generic params
 	CSphString				m_sStringParam;
@@ -15933,10 +15933,9 @@ void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	SearchFailuresLog_c dErrors;
 	CSphString sError;
 
-	ESphAttr eAlterColType = StrToAlterAttrType ( tStmt.m_sAlterColType );
-	if ( eAlterColType==SPH_ATTR_NONE )
+	if ( tStmt.m_eAlterColType==SPH_ATTR_NONE )
 	{
-		sError.SetSprintf ( "unsupported attribute type '%s'", tStmt.m_sAlterColType.cstr() );
+		sError.SetSprintf ( "unsupported attribute type '%d'", tStmt.m_eAlterColType );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
@@ -16005,17 +16004,17 @@ void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 
 			if ( pLocal->m_pIndex->IsRT() )
 			{
-				if ( !pLocal->m_pIndex->CreateFilesWithAttr ( sAttrToAdd, eAlterColType, sError ) )
+				if ( !pLocal->m_pIndex->CreateFilesWithAttr ( sAttrToAdd, tStmt.m_eAlterColType, sError ) )
 				{
 					dErrors.Submit ( sName, sError.cstr() );
 					pLocal->Unlock();
 					continue;
 				}
 
-				pLocal->m_pIndex->AddAttribute ( sAttrToAdd, eAlterColType, sError );
+				pLocal->m_pIndex->AddAttribute ( sAttrToAdd, tStmt.m_eAlterColType, sError );
 			} else
 			{
-				if ( !pLocal->m_pIndex->CreateFilesWithAttr ( sAttrToAdd, eAlterColType, sError ) )
+				if ( !pLocal->m_pIndex->CreateFilesWithAttr ( sAttrToAdd, tStmt.m_eAlterColType, sError ) )
 				{
 					dErrors.Submit ( sName, sError.cstr() );
 					pLocal->Unlock();
@@ -16077,7 +16076,7 @@ void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 				}
 
 				// modify the in-memory version
-				pLocal->m_pIndex->AddAttribute ( sAttrToAdd, eAlterColType, sError );
+				pLocal->m_pIndex->AddAttribute ( sAttrToAdd, tStmt.m_eAlterColType, sError );
 			}
 
 			pLocal->Unlock();

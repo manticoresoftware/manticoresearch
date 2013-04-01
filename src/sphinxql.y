@@ -30,6 +30,7 @@
 %token	TOK_AVG
 %token	TOK_BEGIN
 %token	TOK_BETWEEN
+%token	TOK_BIGINT
 %token	TOK_BY
 %token	TOK_CALL
 %token	TOK_CHARACTER
@@ -59,6 +60,7 @@
 %token	TOK_INDEX
 %token	TOK_INSERT
 %token	TOK_INT
+%token	TOK_INTEGER
 %token	TOK_INTO
 %token	TOK_ISOLATION
 %token	TOK_LEVEL
@@ -645,6 +647,9 @@ expr:
 function:
 	TOK_IDENT '(' arglist ')'	{ $$ = $1; $$.m_iEnd = $4.m_iEnd; }
 	| TOK_IN '(' arglist ')'	{ $$ = $1; $$.m_iEnd = $4.m_iEnd; }			// handle exception from 'ident' rule
+	| TOK_INTEGER '(' arglist ')'	{ $$ = $1; $$.m_iEnd = $4.m_iEnd; }
+	| TOK_BIGINT '(' arglist ')'	{ $$ = $1; $$.m_iEnd = $4.m_iEnd; }
+	| TOK_FLOAT '(' arglist ')'	{ $$ = $1; $$.m_iEnd = $4.m_iEnd; }
 	| TOK_IDENT '(' ')'			{ $$ = $1; $$.m_iEnd = $3.m_iEnd }
 	| TOK_MIN '(' expr ',' expr ')'		{ $$ = $1; $$.m_iEnd = $6.m_iEnd }	// handle clash with aggregate functions
 	| TOK_MAX '(' expr ',' expr ')'		{ $$ = $1; $$.m_iEnd = $6.m_iEnd }
@@ -985,14 +990,20 @@ update_item:
 
 //////////////////////////////////////////////////////////////////////////
 
+alter_col_type:
+	TOK_INTEGER 	{ $$.m_iValue = SPH_ATTR_INTEGER; }
+	| TOK_BIGINT	{ $$.m_iValue = SPH_ATTR_BIGINT; }
+	| TOK_FLOAT		{ $$.m_iValue = SPH_ATTR_FLOAT; }
+	;
+
 alter:
-	TOK_ALTER TOK_TABLE TOK_IDENT TOK_ADD TOK_COLUMN TOK_IDENT TOK_IDENT
+	TOK_ALTER TOK_TABLE TOK_IDENT TOK_ADD TOK_COLUMN TOK_IDENT alter_col_type
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ALTER;
 			tStmt.m_sIndex = $3.m_sValue;
 			tStmt.m_sAlterAttr = $6.m_sValue;
-			tStmt.m_sAlterColType = $7.m_sValue;
+			tStmt.m_eAlterColType = (ESphAttr)$7.m_iValue;
 		}
 	;
 

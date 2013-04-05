@@ -2078,9 +2078,11 @@ void TestStridedSort ()
 	}
 
 	// regression of uniq vs empty array
-	DWORD dUniq[] = { 1, 3, 1, 1 };
+	DWORD dUniq[] = { 1, 1, 3, 1 };
+	int iCount = sizeof(dUniq)/sizeof(dUniq[0]);
 	assert ( sphUniq ( dUniq, 0 )==0 );
-	assert ( sphUniq ( dUniq, sizeof(dUniq)/sizeof(dUniq[0]) )==2 && dUniq[0]==1 && dUniq[1]==3 );
+	sphSort ( dUniq, iCount );
+	assert ( sphUniq ( dUniq, iCount )==2 && dUniq[0]==1 && dUniq[1]==3 );
 	CSphVector<DWORD> dUniq1;
 	dUniq1.Uniq();
 	assert ( dUniq1.GetLength()==0 );

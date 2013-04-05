@@ -2527,6 +2527,23 @@ public:
 };
 
 
+/// some low-level query stats
+struct CSphQueryStats
+{
+	int64_t *	m_pNanoBudget;		///< pointer to max_predicted_time budget (counted in nanosec)
+	DWORD		m_iFetchedDocs;		///< processed documents
+	DWORD		m_iFetchedHits;		///< processed hits (aka positions)
+	DWORD		m_iSkips;			///< number of Skip() calls
+
+	CSphQueryStats()
+		: m_pNanoBudget ( NULL )
+		, m_iFetchedDocs ( 0 )
+		, m_iFetchedHits ( 0 )
+		, m_iSkips ( 0 )
+	{}
+};
+
+
 /// search query meta-info
 class CSphQueryResultMeta
 {
@@ -2556,6 +2573,12 @@ public:
 	CSphIOStats				m_tIOStats;			///< i/o stats for the query
 	int64_t					m_iAgentCpuTime;	///< agent cpu time (for distributed searches)
 	CSphIOStats				m_tAgentIOStats;	///< agent IO stats (for distributed searches)
+
+	int64_t					m_iPredictedTime;		///< local predicted time
+	int64_t					m_iAgentPredictedTime;	///< distrubuted predicted time
+
+	CSphQueryStats 			m_tStats;			///< query prediction counters
+	bool					m_bHasPrediction;	///< is prediction counters set?
 
 	CSphString				m_sError;			///< error message
 	CSphString				m_sWarning;			///< warning message

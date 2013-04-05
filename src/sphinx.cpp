@@ -5909,6 +5909,14 @@ void SelectParser_t::AddOption ( YYSTYPE * pOpt, YYSTYPE * pVal )
 	{
 		if ( IsTokenEqual ( pVal, "kbuffer" ) )
 			m_pQuery->m_bSortKbuffer = true;
+	} else if ( IsTokenEqual ( pOpt, "max_predicted_time" ) )
+	{
+		char szNumber[256];
+		int iLen = pVal->m_iEnd-pVal->m_iStart;
+		assert ( iLen < (int)sizeof(szNumber) );
+		strncpy ( szNumber, m_pStart+pVal->m_iStart, iLen );
+		int64_t iMaxPredicted = strtoull ( szNumber, NULL, 10 );
+		m_pQuery->m_iMaxPredictedMsec = int(iMaxPredicted > INT_MAX ? INT_MAX : iMaxPredicted );
 	}
 }
 
@@ -17603,7 +17611,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	// setup prediction constrain
 	CSphQueryStats tQueryStats;
 	bool bCollectPredictionCounters = ( pQuery->m_iMaxPredictedMsec>0 );
-	int64_t iNanoBudget = pQuery->m_iMaxPredictedMsec * 1000000; // from milliseconds to nanoseconds
+	int64_t iNanoBudget = (int64_t)(pQuery->m_iMaxPredictedMsec) * 1000000; // from milliseconds to nanoseconds
 	tQueryStats.m_pNanoBudget = &iNanoBudget;
 	if ( bCollectPredictionCounters )
 		tTermSetup.m_pStats = &tQueryStats;
@@ -17778,15 +17786,14 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 #endif
 
 	if ( pProfile )
-	{
 		pProfile->Switch ( SPH_QSTATE_UNKNOWN );
-		if ( bCollectPredictionCounters )
-		{
-			pProfile->m_tStats.m_iFetchedDocs += tQueryStats.m_iFetchedDocs;
-			pProfile->m_tStats.m_iFetchedHits += tQueryStats.m_iFetchedHits;
-			pProfile->m_tStats.m_iSkips += tQueryStats.m_iSkips;
-			pProfile->m_bHasPrediction = true;
-		}
+
+	if ( bCollectPredictionCounters )
+	{
+		pResult->m_tStats.m_iFetchedDocs += tQueryStats.m_iFetchedDocs;
+		pResult->m_tStats.m_iFetchedHits += tQueryStats.m_iFetchedHits;
+		pResult->m_tStats.m_iSkips += tQueryStats.m_iSkips;
+		pResult->m_bHasPrediction = true;
 	}
 
 	return true;
@@ -28962,6 +28969,9 @@ CSphQueryResultMeta::CSphQueryResultMeta ()
 , m_iMatches ( 0 )
 , m_iTotalMatches ( 0 )
 , m_iAgentCpuTime ( 0 )
+, m_iPredictedTime ( 0 )
+, m_iAgentPredictedTime ( 0 )
+, m_bHasPrediction ( false )
 {
 }
 
@@ -29032,6 +29042,11 @@ CSphQueryResultMeta & CSphQueryResultMeta::operator= ( const CSphQueryResultMeta
 	m_tIOStats = tMeta.m_tIOStats;
 	m_iAgentCpuTime = tMeta.m_iAgentCpuTime;
 	m_tAgentIOStats = tMeta.m_tAgentIOStats;
+	m_iPredictedTime = tMeta.m_iPredictedTime;
+	m_iAgentPredictedTime = tMeta.m_iAgentPredictedTime;
+
+	m_tStats = tMeta.m_tStats;
+	m_bHasPrediction = tMeta.m_bHasPrediction;
 
 	m_sError = tMeta.m_sError;
 	m_sWarning = tMeta.m_sWarning;

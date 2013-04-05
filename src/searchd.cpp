@@ -849,6 +849,9 @@ struct SearchdStats_t
 	int64_t		m_iDiskReadBytes;	///< total read IO traffic
 	int64_t		m_iDiskReadTime;	///< total read IO time
 
+	int64_t		m_iPredictedTime;	///< total agent predicted query time
+	int64_t		m_iAgentPredictedTime;	///< total agent predicted query time
+
 	StaticStorage_t<AgentStats_t,STATS_MAX_AGENTS> m_dAgentStats;
 	StaticStorage_t<HostDashboard_t,STATS_MAX_DASH> m_dDashboard;
 	SmallStringHash_T<int>							m_hDashBoard; ///< find hosts for agents and sort them all
@@ -6088,6 +6091,9 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 		if ( uStatMask & 2 )
 			tRes.m_iCpuTime = tReq.GetUint64();
 
+		if ( uStatMask & 4 )
+			tRes.m_iPredictedTime = tReq.GetUint64();
+
 		const int iWordsCount = tReq.GetInt (); // FIXME! sanity check?
 		if ( iRetrieved!=iMatches )
 		{
@@ -7230,7 +7236,7 @@ public:
 
 static char g_sJsonNull[] = "{}";
 
-int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphTaggedVector & dTag2Pools, bool bAgentMode, int iMasterVer )
+int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphTaggedVector & dTag2Pools, bool bAgentMode, const CSphQuery & tQuery, int iMasterVer )
 {
 	int iRespLen = 0;
 
@@ -7373,6 +7379,9 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphTaggedV
 
 		if ( g_bCpuStats )
 			iRespLen += 8;		// CPU Stats
+
+		if ( tQuery.m_iMaxPredictedMsec > 0 )
+			iRespLen += 8;		// predicted time
 	}
 
 	if ( iVer>=0x117 && dStringPtrItems.GetLength() )
@@ -7498,7 +7507,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphTaggedV
 
 
 void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pRes,
-					const CSphTaggedVector & dTag2Pools, bool bAgentMode, bool bLimitedMatches, int iMasterVer )
+					const CSphTaggedVector & dTag2Pools, bool bAgentMode, const CSphQuery & tQuery, int iMasterVer )
 {
 	// status
 	if ( iVer>=0x10D )
@@ -7801,7 +7810,8 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 			} /// end for ( int j=0; j<iAttrsCount; j++ )
 		} /// end else if ( iVer<=0x101 )
 	} /// end for ( int i=0; i<pRes->m_iCount; i++ )
-	if ( bLimitedMatches )
+
+	if ( tQuery.m_bAgent && tQuery.m_iLimit )
 		tOut.SendInt ( pRes->m_iCount );
 	else
 		tOut.SendInt ( pRes->m_dMatches.GetLength() );
@@ -7811,7 +7821,9 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 
 	if ( iVer>=0x11A && bAgentMode )
 	{
-		BYTE uStatMask = ( g_bCpuStats ? 2 : 0 ) | ( g_bIOStats ? 1 : 0 );
+		bool bNeedPredictedTime = tQuery.m_iMaxPredictedMsec > 0;
+
+		BYTE uStatMask = ( bNeedPredictedTime ? 4 : 0 ) | ( g_bCpuStats ? 2 : 0 ) | ( g_bIOStats ? 1 : 0 );
 		tOut.SendByte ( uStatMask );
 
 		if ( g_bIOStats )
@@ -7831,6 +7843,9 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 			int64_t iCpuTime = pRes->m_iCpuTime + pRes->m_iAgentCpuTime;
 			tOut.SendUint64 ( iCpuTime );
 		}
+
+		if ( bNeedPredictedTime )
+			tOut.SendUint64 ( pRes->m_iPredictedTime+pRes->m_iAgentPredictedTime );
 	}
 
 	tOut.SendInt ( pRes->m_hWordStats.GetLength() );
@@ -9428,6 +9443,19 @@ static void MergeWordStats ( CSphQueryResultMeta & tDstResult,
 }
 
 
+static int64_t CalcPredictedTimeMsec ( const CSphQueryResult & tRes )
+{
+	assert ( tRes.m_bHasPrediction );
+
+	int64_t iNanoResult = int64_t(g_iPredictorCostSkip)*tRes.m_tStats.m_iSkips+
+		g_iPredictorCostDoc*tRes.m_tStats.m_iFetchedDocs+
+		g_iPredictorCostHit*tRes.m_tStats.m_iFetchedHits+
+		g_iPredictorCostMatch*tRes.m_iTotalMatches;
+
+	return iNanoResult/1000000;
+}
+
+
 static void FlattenToRes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, int iTag )
 {
 	assert ( pSorter );
@@ -9573,6 +9601,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 			tRes.m_iMultiplier = m_bMultiQueue ? iQueries : 1;
 			tRes.m_iCpuTime += tRaw.m_iCpuTime / tRes.m_iMultiplier;
 			tRes.m_tIOStats.Add ( tRaw.m_tIOStats );
+			tRes.m_iPredictedTime = tRes.m_bHasPrediction ? CalcPredictedTimeMsec ( tRes ) : 0;
 
 			// extract matches from sorter
 			FlattenToRes ( pSorter, tRes, iOrderTag+iQuery-m_iStart );
@@ -9848,6 +9877,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 				tRes.m_iSuccesses++;
 				tRes.m_tSchema = pSorter->GetSchema();
 				tRes.m_iTotalMatches += pSorter->GetTotalCount();
+				tRes.m_iPredictedTime = tRes.m_bHasPrediction ? CalcPredictedTimeMsec ( tRes ) : 0;
 
 				// extract matches from sorter
 				FlattenToRes ( pSorter, tRes, iOrderTag+iQuery-m_iStart );
@@ -10285,6 +10315,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 						tRes.m_iQueryTime += tRemoteResult.m_iQueryTime;
 						tRes.m_iAgentCpuTime += tRemoteResult.m_iCpuTime;
 						tRes.m_tAgentIOStats.Add ( tRemoteResult.m_tIOStats );
+						tRes.m_iAgentPredictedTime += tRemoteResult.m_iPredictedTime;
 
 						// merge this agent's words
 						MergeWordStats ( tRes, tRemoteResult.m_hWordStats, &m_dFailuresSet[iRes], tFirst.m_sIndexes.cstr() );
@@ -10523,7 +10554,7 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 			return;
 		}
 
-		iReplyLen = CalcResultLength ( iVer, &tRes, tRes.m_dTag2Pools, bAgentMode, iMasterVer );
+		iReplyLen = CalcResultLength ( iVer, &tRes, tRes.m_dTag2Pools, bAgentMode, tHandler.m_dQueries[0], iMasterVer );
 		bool bWarning = ( iVer>=0x106 && !tRes.m_sWarning.IsEmpty() );
 
 		// send it
@@ -10531,15 +10562,12 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 		tOut.SendWord ( VER_COMMAND_SEARCH );
 		tOut.SendInt ( iReplyLen );
 
-		const CSphQuery & tQuery = tHandler.m_dQueries[0];
-		bool bLimitedMatches = tQuery.m_bAgent && tQuery.m_iLimit;
-
-		SendResult ( iVer, tOut, &tRes, tRes.m_dTag2Pools, bAgentMode, bLimitedMatches, iMasterVer );
+		SendResult ( iVer, tOut, &tRes, tRes.m_dTag2Pools, bAgentMode, tHandler.m_dQueries[0], iMasterVer );
 
 	} else
 	{
 		ARRAY_FOREACH ( i, tHandler.m_dQueries )
-			iReplyLen += CalcResultLength ( iVer, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, bAgentMode, iMasterVer );
+			iReplyLen += CalcResultLength ( iVer, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, bAgentMode, tHandler.m_dQueries[i], iMasterVer );
 
 		// send it
 		tOut.SendWord ( (WORD)SEARCHD_OK );
@@ -10547,11 +10575,7 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 		tOut.SendInt ( iReplyLen );
 
 		ARRAY_FOREACH ( i, tHandler.m_dQueries )
-		{
-			const CSphQuery & tQuery = tHandler.m_dQueries[i];
-			bool bLimitedMatches = tQuery.m_bAgent && tQuery.m_iLimit;
-			SendResult ( iVer, tOut, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, bAgentMode, bLimitedMatches, iMasterVer );
-		}
+			SendResult ( iVer, tOut, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, bAgentMode, tHandler.m_dQueries[i], iMasterVer );
 	}
 
 	tOut.Flush ();
@@ -10598,6 +10622,19 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	// run queries, send response
 	tHandler.RunQueries();
 	SendSearchResponse ( tHandler, tReq, iSock, iVer, iMasterVer );
+
+	int64_t iTotalPredictedTime = 0;
+	int64_t iTotalAgentPredictedTime = 0;
+	ARRAY_FOREACH ( i, tHandler.m_dResults )
+	{
+		iTotalPredictedTime += tHandler.m_dResults[i].m_iPredictedTime;
+		iTotalAgentPredictedTime += tHandler.m_dResults[i].m_iAgentPredictedTime;
+	}
+
+	g_tStatsMutex.Lock();
+	g_pStats->m_iPredictedTime += iTotalPredictedTime;
+	g_pStats->m_iAgentPredictedTime += iTotalAgentPredictedTime;
+	g_tStatsMutex.Unlock();
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -11237,7 +11274,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue )
 
 	} else if ( sOpt=="max_predicted_time" )
 	{
-		m_pQuery->m_iMaxPredictedMsec = (int)tValue.m_iValue;
+		m_pQuery->m_iMaxPredictedMsec = int ( tValue.m_iValue > INT_MAX ? INT_MAX : tValue.m_iValue );
 
 	} else if ( sOpt=="boolean_simplify" )
 	{
@@ -13018,6 +13055,14 @@ void BuildStatus ( VectorLike & dStatus )
 			dStatus.Add() = OFF;
 	}
 
+	if ( g_pStats->m_iPredictedTime || g_pStats->m_iAgentPredictedTime )
+	{
+		if ( dStatus.MatchAdd ( "predicted_time" ) )
+			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iPredictedTime );
+		if ( dStatus.MatchAdd ( "dist_predicted_time" ) )
+			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iAgentPredictedTime );
+	}
+
 	if ( dStatus.MatchAdd ( "avg_query_wall" ) )
 		FormatMsec ( dStatus.Add(), g_pStats->m_iQueryTime / iQueriesDiv );
 	if ( dStatus.MatchAdd ( "avg_query_cpu" ) )
@@ -13257,7 +13302,7 @@ static void AddIOStatsToMeta ( VectorLike & dStatus, const CSphIOStats & tStats,
 		dStatus.Add().SetSprintf ( "%d.%d", (int)( tStats.m_iWriteBytes/1024 ), (int)( tStats.m_iWriteBytes%1024 )/100 );
 }
 
-void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta, const CSphQueryStats * pPredictionCounters )
+void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 {
 	if ( !tMeta.m_sError.IsEmpty() && dStatus.MatchAdd ( "error" ) )
 		dStatus.Add ( tMeta.m_sError );
@@ -13289,14 +13334,19 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta, const 
 		AddIOStatsToMeta ( dStatus, tMeta.m_tAgentIOStats, "agent_" );
 	}
 
-	if ( pPredictionCounters )
+	if ( tMeta.m_bHasPrediction )
 	{
 		if ( dStatus.MatchAdd ( "prediction_fetched_docs" ) )
-			dStatus.Add().SetSprintf ( "%d", pPredictionCounters->m_iFetchedDocs );
+			dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iFetchedDocs );
 		if ( dStatus.MatchAdd ( "prediction_fetched_hits" ) )
-			dStatus.Add().SetSprintf ( "%d", pPredictionCounters->m_iFetchedHits );
+			dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iFetchedHits );
 		if ( dStatus.MatchAdd ( "prediction_skips" ) )
-			dStatus.Add().SetSprintf ( "%d", pPredictionCounters->m_iSkips );
+			dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iSkips );
+
+		if ( dStatus.MatchAdd ( "predicted_time" ) )
+			dStatus.Add().SetSprintf ( "%lld", tMeta.m_iPredictedTime );
+		if ( dStatus.MatchAdd ( "dist_predicted_time" ) )
+			dStatus.Add().SetSprintf ( "%lld", tMeta.m_iAgentPredictedTime );
 	}
 
 
@@ -15397,7 +15447,7 @@ void HandleMysqlWarning ( const CSphQueryResultMeta & tLastMeta, SqlRowBuffer_c 
 	dRows.Eof ( bMoreResultsFollow );
 }
 
-void HandleMysqlMeta ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt, const CSphQueryResultMeta & tLastMeta, const CSphQueryStats * pPredictionCounters, bool bMoreResultsFollow )
+void HandleMysqlMeta ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt, const CSphQueryResultMeta & tLastMeta, bool bMoreResultsFollow )
 {
 	VectorLike dStatus ( tStmt.m_sStringParam );
 
@@ -15407,7 +15457,7 @@ void HandleMysqlMeta ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt, const CS
 		BuildStatus ( dStatus );
 		break;
 	case STMT_SHOW_META:
-		BuildMeta ( dStatus, tLastMeta, pPredictionCounters );
+		BuildMeta ( dStatus, tLastMeta );
 		break;
 	case STMT_SHOW_AGENT_STATUS:
 		BuildAgentStatus ( dStatus, tStmt.m_sIndex );
@@ -15624,7 +15674,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		} else if ( eStmt==STMT_SHOW_WARNINGS )
 			HandleMysqlWarning ( tMeta, dRows, bMoreResultsFollow );
 		else if ( eStmt==STMT_SHOW_STATUS || eStmt==STMT_SHOW_META || eStmt==STMT_SHOW_AGENT_STATUS )
-			HandleMysqlMeta ( dRows, dStmt[i], tMeta, NULL, bMoreResultsFollow ); // FIXME!!! add profiler and prediction counters
+			HandleMysqlMeta ( dRows, dStmt[i], tMeta, bMoreResultsFollow ); // FIXME!!! add profiler and prediction counters
 
 		if ( g_bGotSigterm )
 		{
@@ -16149,22 +16199,6 @@ void HandleMysqlShowProfile ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p 
 bool TryRename ( const char * sIndex, const char * sPrefix, const char * sFromPostfix, const char * sToPostfix, const char * sAction, bool bFatal, bool bCheckExist=true );
 
 
-static ESphAttr StrToAlterAttrType ( const CSphString & sStr )
-{
-	CSphString sTmp = sStr;
-	sTmp.ToLower();
-
-	if ( sTmp=="integer" )
-		return SPH_ATTR_INTEGER;
-	else if ( sTmp=="float" )
-		return SPH_ATTR_FLOAT;
-	else if ( sTmp=="bigint" )
-		return SPH_ATTR_BIGINT;
-
-	return SPH_ATTR_NONE;
-}
-
-
 void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
 	MEMORY ( SPH_MEM_ALTER_SQL );
@@ -16446,7 +16480,7 @@ public:
 			{
 				StatCountCommand ( SEARCHD_COMMAND_STATUS );
 			}
-			HandleMysqlMeta ( tOut, *pStmt, m_tLastMeta, ( m_tLastProfile.m_bHasPrediction ? &m_tLastProfile.m_tStats : NULL ), false );
+			HandleMysqlMeta ( tOut, *pStmt, m_tLastMeta, false );
 			return true;
 
 		case STMT_INSERT:

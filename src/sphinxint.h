@@ -83,24 +83,6 @@ extern bool g_bJsonKeynamesToLowercase;
 // INTERNAL HELPER FUNCTIONS, CLASSES, ETC
 //////////////////////////////////////////////////////////////////////////
 
-
-/// some low-level query stats
-struct CSphQueryStats
-{
-	int64_t *	m_pNanoBudget;		///< pointer to max_predicted_time budget (counted in nanosec)
-	DWORD		m_iFetchedDocs;		///< processed documents
-	DWORD		m_iFetchedHits;		///< processed hits (aka positions)
-	DWORD		m_iSkips;			///< number of Skip() calls
-
-	CSphQueryStats()
-		: m_pNanoBudget ( NULL )
-		, m_iFetchedDocs ( 0 )
-		, m_iFetchedHits ( 0 )
-		, m_iSkips ( 0 )
-	{}
-};
-
-
 #define SPH_QUERY_STATES \
 	SPH_QUERY_STATE ( UNKNOWN,		"unknown" ) \
 	SPH_QUERY_STATE ( NET_READ,		"net_read" ) \
@@ -152,8 +134,6 @@ public:
 
 	int				m_dSwitches [ SPH_QSTATE_TOTAL+1 ];	///< number of switches to given state
 	int64_t			m_tmTotal [ SPH_QSTATE_TOTAL+1 ];	///< total time spent per state
-	CSphQueryStats	m_tStats;							///< query prediction counters
-	bool			m_bHasPrediction;					///< is prediction counters set?
 
 public:
 	/// create empty and stopped profile
@@ -182,9 +162,6 @@ public:
 		memset ( m_tmTotal, 0, sizeof(m_tmTotal) );
 		m_eState = eNew;
 		m_tmStamp = sphMicroTimer();
-
-		m_tStats = CSphQueryStats();
-		m_bHasPrediction = false;
 	}
 
 	/// stop profiling

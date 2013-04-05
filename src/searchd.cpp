@@ -10284,7 +10284,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				if ( !MinimizeAggrResultCompat ( tRes, tQuery, m_dLocal.GetLength()!=0 ) )
 				{
 					tRes.m_iSuccesses = 0;
-					return;
+					return; // FIXME? really return, not just continue?
 				}
 			} else
 			{
@@ -10294,7 +10294,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				if ( !MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength(), m_iAgents, pExtraSchema, m_pProfile, m_bSphinxql ) )
 				{
 					tRes.m_iSuccesses = 0;
-					return;
+					return; // FIXME? really return, not just continue?
 				}
 			}
 		}
@@ -10315,7 +10315,29 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		tRes.m_iCount = Max ( Min ( tRes.m_iCount, tRes.m_dMatches.GetLength()-tRes.m_iOffset ), 0 );
 	}
 
+	/////////////////////////////////
+	// functions on a table argument
+	/////////////////////////////////
+
+	for ( int iRes=iStart; iRes<=iEnd; iRes++ )
+	{
+		AggrResult_t & tRes = m_dResults[iRes];
+		CSphQuery & tQuery = m_dQueries[iRes];
+
+		// FIXME! log such queries properly?
+		if ( tQuery.m_pTableFunc )
+		{
+			if ( m_pProfile )
+				m_pProfile->Switch ( SPH_QSTATE_TABLE_FUNC );
+			if ( !tQuery.m_pTableFunc->Process ( &tRes, tRes.m_sError ) )
+				tRes.m_iSuccesses = 0;
+		}
+	}
+
+	/////////
 	// stats
+	/////////
+
 	tmSubset = sphMicroTimer() - tmSubset;
 	tmCpu = sphCpuTimer() - tmCpu;
 
@@ -10496,6 +10518,107 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 }
 
 //////////////////////////////////////////////////////////////////////////
+// TABLE FUNCTIONS
+//////////////////////////////////////////////////////////////////////////
+
+// table functions take an arbitrary result set as their input,
+// and return a new, processed, (completely) different one as their output
+// 
+// 1st argument should be the input result set, but a table function
+// can optionally take and handle more arguments
+//
+// table function can completely (!) change the result set
+// including (!) the schema
+// 
+// for now, only builtin table functions are supported
+// UDFs are planned when the internal call interface is stabilized
+
+#define LOC_ERROR1(_msg,_arg1) { sError.SetSprintf ( _msg, _arg1 ); return false; }
+
+class CSphTableFuncRemoveRepeats : public ISphTableFunc
+{
+protected:
+	CSphString	m_sCol;
+	int			m_iOffset;
+	int			m_iLimit;
+
+public:
+	virtual bool ValidateArgs ( const CSphVector<CSphString> & dArgs, const CSphQuery &, CSphString & sError )
+	{
+		if ( dArgs.GetLength()!=3 )
+			LOC_ERROR1 ( "REMOVE_REPEATS() requires 4 arguments (result_set, column, offset, limit)", 0 );
+		if ( !isdigit ( *dArgs[1].cstr() ) )
+			LOC_ERROR1 ( "REMOVE_REPEATS() argument 3 (offset) must be integer", 0 );
+		if ( !isdigit ( *dArgs[2].cstr() ) )
+			LOC_ERROR1 ( "REMOVE_REPEATS() argument 4 (limit) must be integer", 0 );
+
+		m_sCol = dArgs[0];
+		m_iOffset = atoi ( dArgs[1].cstr() );
+		m_iLimit = atoi ( dArgs[2].cstr() );
+
+		if ( !m_iLimit )
+			LOC_ERROR1 ( "REMOVE_REPEATS() argument 4 (limit) must be greater than 0", 0 );
+		return true;
+	}
+
+
+	virtual bool Process ( CSphQueryResult * pResult, CSphString & sError )
+	{
+		assert ( pResult );
+
+		CSphSwapVector<CSphMatch> & dMatches = pResult->m_dMatches;
+		if ( !dMatches.GetLength() )
+			return true;
+
+		const CSphColumnInfo * pCol = pResult->m_tSchema.GetAttr ( m_sCol.cstr() );
+		if ( !pCol )
+			LOC_ERROR1 ( "REMOVE_REPEATS() argument 2 (column %s) not found in result set", m_sCol.cstr() );
+		if ( pCol->m_eAttrType!=SPH_ATTR_INTEGER && pCol->m_eAttrType!=SPH_ATTR_BIGINT && pCol->m_eAttrType!=SPH_ATTR_TOKENCOUNT )
+			LOC_ERROR1 ( "REMOVE_REPEATS() argument 2 (column %s) must be of INTEGER or BIGINT type", m_sCol.cstr() );
+
+		// LIMIT N,M clause must be applied before (!) table function
+		// so we scan source matches N to N+M-1
+		//
+		// within those matches, we filter out repeats in a given column,
+		// skip first m_iOffset eligible ones, and emit m_iLimit more
+		SphAttr_t iLastValue = dMatches [ pResult->m_iOffset ].GetAttr ( pCol->m_tLocator ) - 1;
+		int iOutPos = 0;
+
+		for ( int i=pResult->m_iOffset; i<Min ( dMatches.GetLength(), pResult->m_iOffset+pResult->m_iCount ); i++ )
+		{
+			// skip repeats
+			SphAttr_t iCur = dMatches[i].GetAttr ( pCol->m_tLocator );
+			if ( iCur==iLastValue )
+				continue;
+
+			// update last value, skip eligible rows according to tablefunc offset
+			iLastValue = iCur;
+			if ( m_iOffset>0 )
+			{
+				m_iOffset--;
+				continue;
+			}
+
+			// emit!
+			if ( iOutPos!=i )
+				Swap ( dMatches[iOutPos], dMatches[i] );
+
+			// break if we reached the tablefunc limit
+			if ( ++iOutPos==m_iLimit )
+				break;
+		}
+
+		// adjust the result set limits
+		dMatches.Resize ( iOutPos );
+		pResult->m_iOffset = 0;
+		pResult->m_iCount = dMatches.GetLength();
+		return true;
+	}
+};
+
+#undef LOC_ERROR1
+
+//////////////////////////////////////////////////////////////////////////
 // SQL PARSER
 //////////////////////////////////////////////////////////////////////////
 
@@ -10609,6 +10732,9 @@ struct SqlStmt_t
 	// SELECT specific
 	CSphQuery				m_tQuery;
 	CSphVector < CSphRefcountedPtr<UservarIntSet_c> > m_dRefs;
+
+	CSphString				m_sTableFunc;
+	CSphVector<CSphString>	m_dTableFuncArgs;
 
 	// used by INSERT, DELETE, CALL, DESC, ATTACH, ALTER
 	CSphString				m_sIndex;
@@ -11466,11 +11592,41 @@ bool ParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStm
 
 	ARRAY_FOREACH ( i, dStmt )
 	{
+		// select expressions will be reparsed again, by an expression parser,
+		// when we have an index to actually bind variables, and create a tree
+		//
+		// so at SQL parse stage, we only do quick validation, and at this point,
+		// we just store the select list for later use by the expression parser
 		CSphQuery & tQuery = dStmt[i].m_tQuery;
 		if ( tQuery.m_iSQLSelectStart>=0 )
 		{
 			tQuery.m_sSelect.SetBinary ( tParser.m_pBuf + tQuery.m_iSQLSelectStart,
 				tQuery.m_iSQLSelectEnd - tQuery.m_iSQLSelectStart );
+		}
+
+		// validate tablefuncs
+		// tablefuncs are searchd-level builtins rather than common expression-level functions
+		// so validation happens here, expression parser does not know tablefuncs (ignorance is bliss)
+		if ( dStmt[i].m_eStmt==STMT_SELECT && !dStmt[i].m_sTableFunc.IsEmpty() )
+		{
+			CSphString & sFunc = dStmt[i].m_sTableFunc;
+			sFunc.ToUpper();
+
+			ISphTableFunc * pFunc = NULL;
+			if ( sFunc=="REMOVE_REPEATS" )
+				pFunc = new CSphTableFuncRemoveRepeats();
+
+			if ( !pFunc )
+			{
+				sError.SetSprintf ( "unknown table function %s()", sFunc.cstr() );
+				return false;
+			}
+			if ( !pFunc->ValidateArgs ( dStmt[i].m_dTableFuncArgs, tQuery, sError ) )
+			{
+				SafeDelete ( pFunc );
+				return false;
+			}
+			tQuery.m_pTableFunc = pFunc;
 		}
 	}
 

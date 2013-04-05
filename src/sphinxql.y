@@ -180,6 +180,33 @@ select:
 		{
 			assert ( pParser->m_pStmt->m_eStmt==STMT_SELECT ); // set by subselect
 		}
+	| TOK_SELECT TOK_IDENT '(' '(' select_from ')' opt_tablefunc_args ')'
+		{
+			assert ( pParser->m_pStmt->m_eStmt==STMT_SELECT ); // set by table argument
+			pParser->m_pStmt->m_sTableFunc = $2.m_sValue;
+		}
+	;
+
+opt_tablefunc_args:
+	// nothing
+	| ',' tablefunc_args_list
+	;
+
+tablefunc_args_list:
+	tablefunc_arg
+		{
+			pParser->m_pStmt->m_dTableFuncArgs.Add ( $1.m_sValue );
+		}
+	| tablefunc_args_list ',' tablefunc_arg
+		{
+			pParser->m_pStmt->m_dTableFuncArgs.Add ( $3.m_sValue );
+		}
+	;
+
+tablefunc_arg:
+	TOK_IDENT
+	| TOK_CONST_INT		{ $$.m_sValue.SetSprintf ( "%d", $1.m_iValue ); }
+	| TOK_ID			{ $$.m_sValue = "id"; }
 	;
 
 subselect_start:

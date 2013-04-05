@@ -125,7 +125,8 @@ struct CSphQueryStats
 	SPH_QUERY_STATE ( NET_WRITE,	"net_write" ) \
 	SPH_QUERY_STATE ( EVAL_POST,	"eval_post" ) \
 	SPH_QUERY_STATE ( SNIPPET,		"eval_snippet" ) \
-	SPH_QUERY_STATE ( EVAL_UDF,		"eval_udf" )
+	SPH_QUERY_STATE ( EVAL_UDF,		"eval_udf" ) \
+	SPH_QUERY_STATE ( TABLE_FUNC,	"table_func" )
 
 
 /// possible query states, used for profiling

@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>table functions (REMOVE_REPEATS etc)</name>
+
+<requires>
+<variant_match/>
+</requires>  
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+	<dynamic>
+		<variant>dist_threads = 0</variant>
+		<variant>dist_threads = 4</variant>
+	</dynamic>
+}
+
+source test1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select *, 1 iid from test_table where (id%2)=1
+	sql_attr_uint	= gid
+	sql_attr_uint	= iid
+}
+
+source test2 : test1
+{
+	sql_query		= select *, 2 iid from test_table where (id%2)=0
+}
+
+index test1
+{
+	source			= test1
+	path			= <data_path/>/test1
+}
+
+index test2
+{
+	source			= test2
+	path			= <data_path/>/test2
+}
+
+index dist1
+{
+	type = distributed
+	local = test1
+	local = test2
+}
+
+index dist2
+{
+	type = distributed
+	agent = <my_address/>:test1
+	agent = <my_address/>:test2
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>INSERT INTO test_table VALUES
+( 1, 1, 'one' ),
+( 2, 1, 'two' ),
+( 3, 1, 'three' ),
+( 4, 1, 'four' ),
+( 5, 1, 'five' ),
+( 6, 1, 'six' ),
+( 7, 1, 'seven' ),
+( 8, 1, 'eight' ),
+( 9, 1, 'nine' ),
+( 10, 1, 'ten' );
+</db_insert>
+
+<sphqueries>
+<sphinxql>select remove_repeats((select * from dist1), gid, 0, 10)</sphinxql>
+<sphinxql>select remove_repeats((select * from dist1), iid, 0, 10)</sphinxql>
+<sphinxql>select * from dist1 where match('one|three|four|five') order by id asc</sphinxql>
+<sphinxql>select remove_repeats((select * from dist1 where match('one|three|four|five') order by id asc), iid, 0, 10)</sphinxql>
+<sphinxql>select remove_repeats((select * from dist1 where match('one|three|four|five') order by id asc), iid, 0, 2)</sphinxql>
+<sphinxql>select remove_repeats((select * from dist2 where match('one|three|four|five') order by id asc), iid, 0, 10)</sphinxql>
+<sphinxql>select remove_repeats((select * from dist2 where match('one|three|four|five') order by id asc), iid, 0, 2)</sphinxql>
+</sphqueries>
+
+</test>

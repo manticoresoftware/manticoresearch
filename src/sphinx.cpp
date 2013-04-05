@@ -5677,6 +5677,8 @@ CSphQuery::CSphQuery ()
 	, m_bReverseScan	( false )
 	, m_bIgnoreNonexistent ( false )
 	, m_bIgnoreNonexistentIndexes ( false )
+	, m_pTableFunc		( NULL )
+
 	, m_iSQLSelectStart	( -1 )
 	, m_iSQLSelectEnd	( -1 )
 

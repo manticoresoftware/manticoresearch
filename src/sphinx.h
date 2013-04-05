@@ -2421,6 +2421,19 @@ enum ESphCollation
 };
 
 
+/// table function interface
+class CSphQuery;
+class CSphQueryResult;
+class ISphTableFunc
+{
+public:
+	virtual			~ISphTableFunc() {};
+	virtual bool	ValidateArgs ( const CSphVector<CSphString> & dArgs, const CSphQuery & tQuery, CSphString & sError ) = 0;
+	virtual bool	Process ( CSphQueryResult * pResult, CSphString & sError ) = 0;
+	virtual bool	LimitPushdown ( int, int ) { return false; } // FIXME! implement this
+};
+
+
 /// search query
 class CSphQuery
 {
@@ -2485,6 +2498,9 @@ public:
 	bool			m_bIgnoreNonexistent; ///< whether to warning or not about non-existent columns in select list
 	bool			m_bIgnoreNonexistentIndexes; ///< whether to error or not about non-existent indexes in index list
 
+	ISphTableFunc *	m_pTableFunc;		///< post-query
+
+public:
 	int				m_iSQLSelectStart;	///< SQL parser helper
 	int				m_iSQLSelectEnd;	///< SQL parser helper
 

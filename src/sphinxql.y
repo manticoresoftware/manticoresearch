@@ -174,16 +174,20 @@ multi_stmt:
 	;
 
 select:
+	select1
+	| TOK_SELECT TOK_IDENT '(' '(' select1 ')' opt_tablefunc_args ')'
+		{
+			assert ( pParser->m_pStmt->m_eStmt==STMT_SELECT ); // set by table argument
+			pParser->m_pStmt->m_sTableFunc = $2.m_sValue;
+		}
+	;
+
+select1:
 	select_from
 	| TOK_SELECT select_items_list TOK_FROM '(' subselect_start select_from ')'
 		opt_outer_order opt_outer_limit
 		{
 			assert ( pParser->m_pStmt->m_eStmt==STMT_SELECT ); // set by subselect
-		}
-	| TOK_SELECT TOK_IDENT '(' '(' select_from ')' opt_tablefunc_args ')'
-		{
-			assert ( pParser->m_pStmt->m_eStmt==STMT_SELECT ); // set by table argument
-			pParser->m_pStmt->m_sTableFunc = $2.m_sValue;
 		}
 	;
 

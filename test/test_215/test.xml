@@ -74,11 +74,11 @@ CREATE TABLE test_table
 </db_create>
 <db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
 <db_insert>INSERT INTO test_table VALUES
-( 1, 1, 'one' ),
-( 2, 1, 'two' ),
-( 3, 1, 'three' ),
-( 4, 1, 'four' ),
-( 5, 1, 'five' ),
+( 1, 1, 'test one' ),
+( 2, 1, 'test two' ),
+( 3, 1, 'test three' ),
+( 4, 1, 'test four' ),
+( 5, 1, 'test five' ),
 ( 6, 1, 'six' ),
 ( 7, 1, 'seven' ),
 ( 8, 1, 'eight' ),
@@ -94,6 +94,8 @@ CREATE TABLE test_table
 <sphinxql>select remove_repeats((select * from dist1 where match('one|three|four|five') order by id asc), iid, 0, 2)</sphinxql>
 <sphinxql>select remove_repeats((select * from dist2 where match('one|three|four|five') order by id asc), iid, 0, 10)</sphinxql>
 <sphinxql>select remove_repeats((select * from dist2 where match('one|three|four|five') order by id asc), iid, 0, 2)</sphinxql>
+<sphinxql>select * from (select *, weight() w from dist2 where match('test') order by id asc) order by w desc</sphinxql>
+<sphinxql>select remove_repeats((select * from (select *, weight() w from dist2 where match('test') order by id asc) order by w desc), iid, 0, 2)</sphinxql>
 </sphqueries>
 
 </test>

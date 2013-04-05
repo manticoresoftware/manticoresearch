@@ -2076,6 +2076,20 @@ void TestStridedSort ()
 		const int iNrmCount = Max ( iRndCount, 1 );
 		TestStridedSortPass ( iNrmStride, iNrmCount );
 	}
+
+	// regression of uniq vs empty array
+	DWORD dUniq[] = { 1, 3, 1, 1 };
+	assert ( sphUniq ( dUniq, 0 )==0 );
+	assert ( sphUniq ( dUniq, sizeof(dUniq)/sizeof(dUniq[0]) )==2 && dUniq[0]==1 && dUniq[1]==3 );
+	CSphVector<DWORD> dUniq1;
+	dUniq1.Uniq();
+	assert ( dUniq1.GetLength()==0 );
+	dUniq1.Add ( 1 );
+	dUniq1.Add ( 3 );
+	dUniq1.Add ( 1 );
+	dUniq1.Add ( 1 );
+	dUniq1.Uniq();
+	assert ( dUniq1.GetLength()==2 && dUniq1[0]==1 && dUniq1[1]==3 );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -2942,3 +2956,4 @@ int main ()
 //
 // $Id$
 //
+

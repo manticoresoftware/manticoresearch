@@ -682,6 +682,9 @@ T * sphBinarySearch ( T * pStart, T * pEnd, T & tRef )
 template < typename T, typename T_COUNTER >
 T_COUNTER sphUniq ( T * pData, T_COUNTER iCount )
 {
+	if ( !iCount )
+		return 0;
+
 	T_COUNTER iSrc = 1, iDst = 1;
 	while ( iSrc<iCount )
 	{

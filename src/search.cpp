@@ -325,7 +325,7 @@ int main ( int argc, char ** argv )
 			}
 
 			pResult = new CSphQueryResult();
-			if ( !pIndex->MultiQuery ( &tQuery, pResult, 1, &pTop, NULL ) )
+			if ( !pIndex->MultiQuery ( &tQuery, pResult, 1, &pTop, NULL, 1 ) )
 			{
 				// failure; pull that error message
 				sError = pResult->m_sError;

@@ -965,8 +965,8 @@ public:
 	virtual bool				EarlyReject ( CSphQueryContext * , CSphMatch & ) const { return false; }
 	virtual const CSphSourceStats &	GetStats () const { return g_tTmpDummyStat; }
 	virtual CSphIndexStatus			GetStatus () const { CSphIndexStatus tRes; tRes.m_iRamUse = 0; return tRes; }
-	virtual bool				MultiQuery ( const CSphQuery * , CSphQueryResult * , int , ISphMatchSorter ** , const CSphVector<CSphFilterSettings> * , int, bool ) const { return false; }
-	virtual bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult ** , ISphMatchSorter ** , const CSphVector<CSphFilterSettings> * , int, bool ) const { return false; }
+	virtual bool				MultiQuery ( const CSphQuery * , CSphQueryResult * , int , ISphMatchSorter ** , const CSphVector<CSphFilterSettings> * , int, int, bool ) const { return false; }
+	virtual bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult ** , ISphMatchSorter ** , const CSphVector<CSphFilterSettings> * , int, int, bool ) const { return false; }
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , bool , CSphString & ) const { return false; }
 	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, CSphString & sError ) const;
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & , int , CSphString & ) { return -1; }
@@ -2277,7 +2277,7 @@ void TestRTWeightBoundary ()
 
 		ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, pIndex->GetMatchSchema(), tResult.m_sError, NULL, false );
 		assert ( pSorter );
-		Verify ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, NULL ) );
+		Verify ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, NULL, 1 ) );
 		sphFlattenQueue ( pSorter, &tResult, 0 );
 		CheckRT ( tResult.m_dMatches.GetLength(), 1, "results found" );
 		CheckRT ( (int)tResult.m_dMatches[0].m_iDocID, 1, "docID" );
@@ -2446,7 +2446,7 @@ void TestRTSendVsMerge ()
 		if ( pSrc->m_tDocInfo.m_iDocID==350 )
 		{
 			pIndex->Commit ();
-			Verify ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, NULL ) );
+			Verify ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, NULL, 1 ) );
 			sphFlattenQueue ( pSorter, &tResult, 0 );
 		}
 	}

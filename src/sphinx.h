@@ -2427,7 +2427,7 @@ class CSphQueryResult;
 class ISphTableFunc
 {
 public:
-	virtual			~ISphTableFunc() {};
+	virtual			~ISphTableFunc() {}
 	virtual bool	ValidateArgs ( const CSphVector<CSphString> & dArgs, const CSphQuery & tQuery, CSphString & sError ) = 0;
 	virtual bool	Process ( CSphQueryResult * pResult, CSphString & sError ) = 0;
 	virtual bool	LimitPushdown ( int, int ) { return false; } // FIXME! implement this
@@ -2521,9 +2521,6 @@ public:
 public:
 					CSphQuery ();		///< ctor, fills defaults
 					~CSphQuery ();		///< dtor, frees owned stuff
-
-	/// return index weight from m_dIndexWeights; or 1 by default
-	int				GetIndexWeight ( const char * sName ) const;
 
 	/// parse select list string into items
 	bool			ParseSelectList ( CSphString & sError );
@@ -3022,8 +3019,8 @@ public:
 public:
 	virtual bool				EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const = 0;
 	void						SetCacheSize ( int iMaxCachedDocs, int iMaxCachedHits );
-	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag=0, bool bFactors = false ) const = 0;
-	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag=0, bool bFactors = false ) const = 0;
+	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iIndexWeight, int iTag=0, bool bFactors = false ) const = 0;
+	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iIndexWeight, int iTag=0, bool bFactors = false ) const = 0;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString & sError ) const = 0;
 	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & , CSphString & ) const { return false; }
 

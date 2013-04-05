@@ -1130,8 +1130,8 @@ public:
 	virtual const CSphSourceStats &		GetStats () const { return m_tStats; }
 	virtual CSphIndexStatus				GetStatus () const;
 
-	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag, bool bFactors ) const;
-	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag, bool bFactors ) const;
+	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iIndexWeight, int iTag, bool bFactors ) const;
+	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iIndexWeight, int iTag, bool bFactors ) const;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString & sError ) const;
 
 	void						CopyDocinfo ( CSphMatch & tMatch, const DWORD * pFound ) const;
@@ -5661,7 +5661,7 @@ struct CSphAttrTypedLocator : public CSphAttrLocator
 // FIXME? any chance to factor out common backend agnostic code?
 // FIXME? do we need to support pExtraFilters?
 bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters,
-	ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> *, int iTag, bool bFactors ) const
+	ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> *, int iIndexWeight, int iTag, bool bFactors ) const
 {
 	assert ( ppSorters );
 
@@ -5771,7 +5771,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		CSphQueryResult tChunkResult;
 		// storing index in matches tag for finding strings attrs offset later, biased against default zero and segments
 		const int iTag = m_pSegments.GetLength()+iChunk+1;
-		if ( !m_pDiskChunks[iChunk]->MultiQuery ( pQuery, &tChunkResult, iSorters, ppSorters, dCumulativeKList.GetLength() ? &dKListFilter : NULL, iTag, bFactors ) )
+		if ( !m_pDiskChunks[iChunk]->MultiQuery ( pQuery, &tChunkResult, iSorters, ppSorters, dCumulativeKList.GetLength() ? &dKListFilter : NULL, iIndexWeight, iTag, bFactors ) )
 		{
 			// FIXME? maybe handle this more gracefully (convert to a warning)?
 			pResult->m_sError = tChunkResult.m_sError;
@@ -5852,8 +5852,6 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	tTermSetup.m_pWarning = &pResult->m_sWarning;
 	tTermSetup.m_pSeg = NULL;
 	tTermSetup.m_pCtx = &tCtx;
-
-	int iIndexWeight = pQuery->GetIndexWeight ( m_sIndexName.cstr() );
 
 	// bind weights
 	tCtx.BindWeights ( pQuery, m_tSchema, iIndexWeight );
@@ -5976,7 +5974,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			// FIXME? OPTIMIZE? add shortcuts here too?
 			CSphMatch tMatch;
 			tMatch.Reset ( pResult->m_tSchema.GetDynamicSize() );
-			tMatch.m_iWeight = pQuery->GetIndexWeight ( m_sIndexName.cstr() );
+			tMatch.m_iWeight = iIndexWeight;
 
 			int iCutoff = pQuery->m_iCutoff;
 			if ( iCutoff<=0 )
@@ -6360,12 +6358,12 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 }
 
 bool RtIndex_t::MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults,
-	ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag, bool bFactors ) const
+								ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iIndexWeight, int iTag, bool bFactors ) const
 {
 	// FIXME! OPTIMIZE! implement common subtree cache here
 	bool bResult = false;
 	for ( int i=0; i<iQueries; i++ )
-		if ( MultiQuery ( &ppQueries[i], ppResults[i], 1, &ppSorters[i], pExtraFilters, iTag, bFactors ) )
+		if ( MultiQuery ( &ppQueries[i], ppResults[i], 1, &ppSorters[i], pExtraFilters, iIndexWeight, iTag, bFactors ) )
 			bResult = true;
 		else
 			ppResults[i]->m_iMultiplier = -1;

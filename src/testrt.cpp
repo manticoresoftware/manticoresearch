@@ -51,7 +51,7 @@ void DoSearch ( CSphIndex * pIndex )
 	{
 		printf ( "failed to create sorter; error=%s", tResult.m_sError.cstr() );
 
-	} else if ( !pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, NULL ) )
+	} else if ( !pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, NULL, 1 ) )
 	{
 		printf ( "query failed; error=%s", pIndex->GetLastError().cstr() );
 

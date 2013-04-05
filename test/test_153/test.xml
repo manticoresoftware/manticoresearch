@@ -205,6 +205,58 @@ index distlfake
 }
 
 
+source src_proxy1 : auth
+{
+	sql_query = SELECT 1, 11 as idd, 'the box' text UNION SELECT 2, 11 as idd, 'the fox' text UNION SELECT 3, 11 as idd, 'the fort nox' text UNION SELECT 4, 11 as idd, 'of the box' text UNION SELECT 5, 11 as idd, 'not the box' text
+	sql_attr_uint	= idd
+}
+
+source src_proxy2 : auth
+{
+	sql_query = SELECT 5, 22 as idd, 'of the box' text UNION SELECT 6, 22 as idd, 'we are the boxes' text UNION SELECT 7, 22 as idd, 'how is the fox' text UNION SELECT 8, 22 as idd, 'for the nox' text UNION SELECT 9, 22 as idd, 'from the box' text
+	sql_attr_uint	= idd
+}
+
+
+index proxy_loc1 : dist_no
+{
+	source			= src_proxy1
+	path			= <data_path/>/proxy_loc1
+}
+
+index proxy_loc2 : dist_no
+{
+	source			= src_proxy2
+	path			= <data_path/>/proxy_loc2
+}
+
+
+index dist_w1
+{
+	type					= distributed
+	local					= proxy_loc2
+	agent					= <my_address/>:proxy_loc1
+}
+
+index dist_endpoint
+{
+	type					= distributed
+	local					= proxy_loc1
+}
+
+index dist_proxy1
+{
+	type					= distributed
+	agent					= <my_address/>:dist_endpoint
+}
+
+index dist_w2
+{
+	type					= distributed
+	local					= proxy_loc2
+	agent					= <my_address/>:dist_proxy1
+}
+
 </config>
 
 
@@ -357,7 +409,18 @@ index distlfake
 <sphinxql>select gr, @groupby, @count from dist_no group by gr</sphinxql>
 <!-- same, not using deprecated syntax -->
 <sphinxql>select gr, groupby(), count(*) from dist_no group by gr</sphinxql>
-
+<!-- regression distributed with weight -->
+<sphinxql>SELECT *, weight() as w FROM dist_w1 ORDER BY id asc OPTION index_weights=(dist_w1=10)</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM dist_w2 ORDER BY id asc OPTION index_weights=(dist_w2=10)</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM dist_w1 WHERE MATCH ('the') ORDER BY id asc OPTION index_weights=(dist_w1=10)</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM dist_w2 WHERE MATCH ('the') ORDER BY id asc OPTION index_weights=(dist_w2=10)</sphinxql>
+<!-- regression mix of distributed and local with weight -->
+<sphinxql>SELECT *, weight() as w FROM proxy_loc2, dist_w1 ORDER BY id asc OPTION index_weights=(proxy_loc2=2, dist_w1=10, dist_w2=100)</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM dist_w1, proxy_loc2 ORDER BY id asc OPTION index_weights=(proxy_loc2=2, dist_w1=10, dist_w2=100)</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM proxy_loc2, dist_w1, dist_w2 ORDER BY id asc OPTION index_weights=(proxy_loc2=2, dist_w1=10, dist_w2=100)</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM dist_w2, dist_w1, proxy_loc2  ORDER BY id asc OPTION index_weights=(proxy_loc2=2, dist_w1=10, dist_w2=100)</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM proxy_loc2, dist_w1, dist_w2  WHERE MATCH ('the') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100)</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM dist_w2, dist_w1, proxy_loc2  WHERE MATCH ('the') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100)</sphinxql>
 </sphqueries>
 
 <db_create>

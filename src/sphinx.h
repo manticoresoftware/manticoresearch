@@ -562,8 +562,7 @@ public:
 
 public:
 	/// pass next buffer
-	/// buffer is non-const because we fixup zeroes with spaces; everything else is const
-	virtual void					SetBuffer ( BYTE * sBuffer, int iLength ) = 0;
+	virtual void					SetBuffer ( const BYTE * sBuffer, int iLength ) = 0;
 
 	/// get next token
 	virtual BYTE *					GetToken () = 0;

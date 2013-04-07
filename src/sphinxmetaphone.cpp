@@ -626,8 +626,8 @@ void stem_dmetaphone ( BYTE * pWord, bool bUTF8 )
 		iAdvance = 1;
 	}
 
-	BYTE * pPtr = sOriginal;
-	BYTE * pLastPtr = sOriginal;
+	const BYTE * pPtr = sOriginal;
+	const BYTE * pLastPtr = sOriginal;
 	int iCode = -1;
 
 	if ( bUTF8 )

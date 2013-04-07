@@ -1840,7 +1840,7 @@ const DWORD * CSphMatch::GetAttrMVA ( const CSphAttrLocator & tLoc, const DWORD 
 #if USE_WINDOWS
 #pragma warning(disable:4127) // conditional expr is const for MSVC
 #endif
-inline int sphUTF8Decode ( BYTE * & pBuf ); // forward ref for GCC
+inline int sphUTF8Decode ( const BYTE * & pBuf ); // forward ref for GCC
 inline int sphUTF8Encode ( BYTE * pBuf, int iCode ); // forward ref for GCC
 
 
@@ -1908,7 +1908,7 @@ public:
 	}
 
 protected:
-	bool	BlendAdjust ( BYTE * pPosition );
+	bool	BlendAdjust ( const BYTE * pPosition );
 	int		CodepointArbitrationI ( int iCodepoint );
 	int		CodepointArbitrationQ ( int iCodepoint, bool bWasEscaped, BYTE uNextByte );
 
@@ -1917,11 +1917,11 @@ protected:
 
 
 protected:
-	BYTE *				m_pBuffer;							///< my buffer
-	BYTE *				m_pBufferMax;						///< max buffer ptr, exclusive (ie. this ptr is invalid, but every ptr below is ok)
-	BYTE *				m_pCur;								///< current position
-	BYTE *				m_pTokenStart;						///< last token start point
-	BYTE *				m_pTokenEnd;						///< last token end point
+	const BYTE *		m_pBuffer;							///< my buffer
+	const BYTE *		m_pBufferMax;						///< max buffer ptr, exclusive (ie. this ptr is invalid, but every ptr below is ok)
+	const BYTE *		m_pCur;								///< current position
+	const BYTE *		m_pTokenStart;						///< last token start point
+	const BYTE *		m_pTokenEnd;						///< last token end point
 
 	BYTE				m_sAccum [ 3*SPH_MAX_WORD_LEN+3 ];	///< folded token accumulator
 	BYTE *				m_pAccum;							///< current accumulator position
@@ -1935,9 +1935,9 @@ protected:
 	CSphVector<int>					m_dSynStart;				///< map 1st byte to candidate range start
 	CSphVector<int>					m_dSynEnd;					///< map 1st byte to candidate range end
 
-	bool	m_bHasBlend;
-	BYTE *	m_pBlendStart;
-	BYTE *	m_pBlendEnd;
+	bool			m_bHasBlend;
+	const BYTE *	m_pBlendStart;
+	const BYTE *	m_pBlendEnd;
 
 	ESphTokenizerClone	m_eMode;
 };
@@ -2008,7 +2008,7 @@ class CSphTokenizer_SBCS : public CSphTokenizerBase2<false>
 public:
 								CSphTokenizer_SBCS ();
 
-	virtual void				SetBuffer ( BYTE * sBuffer, int iLength );
+	virtual void				SetBuffer ( const BYTE * sBuffer, int iLength );
 	virtual BYTE *				GetToken ();
 	virtual ISphTokenizer *		Clone ( ESphTokenizerClone eMode ) const;
 	virtual bool				IsUtf8 () const { return false; }
@@ -2034,7 +2034,7 @@ class CSphTokenizer_UTF8 : public CSphTokenizer_UTF8_Base
 {
 public:
 								CSphTokenizer_UTF8 ();
-	virtual void				SetBuffer ( BYTE * sBuffer, int iLength );
+	virtual void				SetBuffer ( const BYTE * sBuffer, int iLength );
 	virtual BYTE *				GetToken ();
 	virtual ISphTokenizer *		Clone ( ESphTokenizerClone eMode ) const;
 	virtual bool				IsUtf8 () const { return true; }
@@ -2095,7 +2095,7 @@ public:
 	~CSphMultiformTokenizer ();
 
 public:
-	virtual void					SetBuffer ( BYTE * sBuffer, int iLength );
+	virtual void					SetBuffer ( const BYTE * sBuffer, int iLength );
 	virtual BYTE *					GetToken ();
 	virtual void					EnableTokenizedMultiformTracking ()			{ m_bBuildMultiform = true; }
 	virtual int						GetLastTokenLen () const					{ return m_pLastToken->m_iTokenLen; }
@@ -2236,7 +2236,7 @@ public:
 		return new CSphBigramTokenizer ( pTok, this );
 	}
 
-	void SetBuffer ( BYTE * sBuffer, int iLength )
+	void SetBuffer ( const BYTE * sBuffer, int iLength )
 	{
 		m_pTokenizer->SetBuffer ( sBuffer, iLength );
 	}
@@ -3223,7 +3223,7 @@ void ISphTokenizer::AddSpecials ( const char * sSpecials )
 }
 
 
-static int TokenizeOnWhitespace ( CSphVector<CSphString> & dTokens, BYTE * sFrom, bool bUtf8 )
+static int TokenizeOnWhitespace ( CSphVector<CSphString> & dTokens, const BYTE * sFrom, bool bUtf8 )
 {
 	BYTE sAccum [ 3*SPH_MAX_WORD_LEN+16 ];
 	BYTE * pAccum = sAccum;
@@ -3384,7 +3384,7 @@ ISphTokenizer * ISphTokenizer::CreateBigramFilter ( ISphTokenizer * pTokenizer, 
 	if ( eBigramIndex!=SPH_BIGRAM_ALL )
 	{
 		const BYTE * pTok = NULL;
-		pTokenizer->SetBuffer ( (BYTE*)const_cast<char*> ( sBigramWords.cstr() ), sBigramWords.Length() );
+		pTokenizer->SetBuffer ( (const BYTE*)sBigramWords.cstr(), sBigramWords.Length() );
 		while ( ( pTok = pTokenizer->GetToken() )!=NULL )
 			dFreq.Add ( (const char*)pTok );
 
@@ -3511,7 +3511,7 @@ bool CSphTokenizerBase::LoadSynonym ( char * sBuffer, const char * sFilename,
 		return false;
 	}
 
-	BYTE * sFrom = (BYTE *) sBuffer;
+	const BYTE * sFrom = (BYTE *) sBuffer;
 	BYTE * sTo = (BYTE *)( sSplit + strlen ( "=>" ) );
 	*sSplit = '\0';
 
@@ -3763,7 +3763,7 @@ int CSphTokenizerBase2<IS_UTF8>::SkipBlended()
 	if ( !m_pBlendEnd )
 		return 0;
 
-	BYTE * pMax = m_pBufferMax;
+	const BYTE * pMax = m_pBufferMax;
 	m_pBufferMax = m_pBlendEnd;
 
 	// loop until the blended token end
@@ -3798,7 +3798,7 @@ int CSphTokenizerBase2<IS_UTF8>::SkipBlended()
 
 /// adjusts blending magic when we're about to return a token (any token)
 /// returns false if current token should be skipped, true otherwise
-bool CSphTokenizerBase::BlendAdjust ( BYTE * pCur )
+bool CSphTokenizerBase::BlendAdjust ( const BYTE * pCur )
 {
 	// check if all we got is a bunch of blended characters (pure-blended case)
 	if ( m_bBlended && !m_bNonBlended )
@@ -3866,7 +3866,7 @@ BYTE * CSphTokenizerBase2<IS_UTF8>::GetBlendedVariant ()
 		m_iBlendNormalEnd = -1;
 
 		// OPTIMIZE? we can skip this based on non-blended flag from adjust
-		BYTE * p = m_sAccum;
+		const BYTE * p = m_sAccum;
 		while ( *p )
 		{
 			int iLast = (int)( p-m_sAccum );
@@ -4243,13 +4243,13 @@ BYTE * CSphTokenizerBase2<IS_UTF8>::GetTokenSyn ( bool bQueryMode )
 {
 	assert ( m_dSynonyms.GetLength() );
 
-	BYTE * pCur;
+	const BYTE * pCur;
 
 	m_bTokenBoundary = false;
 	for ( ;; )
 	{
 		// initialize accumulators and range
-		BYTE * pFirstSeparator = NULL;
+		const BYTE * pFirstSeparator = NULL;
 
 		m_iAccum = 0;
 		m_pAccum = m_sAccum;
@@ -4260,10 +4260,10 @@ BYTE * CSphTokenizerBase2<IS_UTF8>::GetTokenSyn ( bool bQueryMode )
 
 		int iLastCodepoint = 0;
 		int iLastFolded = 0;
-		BYTE * pRescan = NULL;
+		const BYTE * pRescan = NULL;
 
 		int iExact = -1;
-		BYTE * pExact = NULL;
+		const BYTE * pExact = NULL;
 
 		// main refinement loop
 		for ( ;; )
@@ -4772,7 +4772,7 @@ CSphTokenizer_SBCS<IS_QUERY>::CSphTokenizer_SBCS ()
 
 
 template < bool IS_QUERY >
-void CSphTokenizer_SBCS<IS_QUERY>::SetBuffer ( BYTE * sBuffer, int iLength )
+void CSphTokenizer_SBCS<IS_QUERY>::SetBuffer ( const BYTE * sBuffer, int iLength )
 {
 	// check that old one is over and that new length is sane
 	assert ( iLength>=0 );
@@ -4813,7 +4813,7 @@ BYTE * CSphTokenizer_SBCS<IS_QUERY>::GetToken ()
 	for ( ;; )
 	{
 		// memorize buffer start
-		BYTE * pCur = m_pCur;
+		const BYTE * pCur = m_pCur;
 
 		// get next codepoint, real or virtual
 		int iCodepoint = 0;
@@ -5039,7 +5039,7 @@ CSphTokenizer_UTF8<IS_QUERY>::CSphTokenizer_UTF8 ()
 
 
 template < bool IS_QUERY >
-void CSphTokenizer_UTF8<IS_QUERY>::SetBuffer ( BYTE * sBuffer, int iLength )
+void CSphTokenizer_UTF8<IS_QUERY>::SetBuffer ( const BYTE * sBuffer, int iLength )
 {
 	// check that old one is over and that new length is sane
 	assert ( iLength>=0 );
@@ -5050,11 +5050,6 @@ void CSphTokenizer_UTF8<IS_QUERY>::SetBuffer ( BYTE * sBuffer, int iLength )
 	m_pCur = sBuffer;
 	m_pTokenStart = m_pTokenEnd = NULL;
 	m_pBlendStart = m_pBlendEnd = NULL;
-
-	// fixup embedded zeroes with spaces
-	for ( BYTE * p = m_pBuffer; p < m_pBufferMax; p++ )
-		if ( !*p )
-			*p = ' ';
 
 	m_iOvershortCount = 0;
 	m_bBoundary = m_bTokenBoundary = false;
@@ -5102,7 +5097,7 @@ BYTE * CSphTokenizer_UTF8_Base::DoGetToken ()
 	for ( ;; )
 	{
 		// get next codepoint
-		BYTE * pCur = m_pCur; // to redo special char, if there's a token already
+		const BYTE * pCur = m_pCur; // to redo special char, if there's a token already
 
 		int iCodePoint;
 		int iCode;
@@ -5563,7 +5558,7 @@ void CSphMultiformTokenizer::SetBufferPtr ( const char * sNewPtr )
 	m_pTokenizer->SetBufferPtr ( sNewPtr );
 }
 
-void CSphMultiformTokenizer::SetBuffer ( BYTE * sBuffer, int iLength )
+void CSphMultiformTokenizer::SetBuffer ( const BYTE * sBuffer, int iLength )
 {
 	m_pTokenizer->SetBuffer ( sBuffer, iLength );
 	SetBufferPtr ( (const char *)sBuffer );

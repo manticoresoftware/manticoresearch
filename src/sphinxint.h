@@ -991,17 +991,17 @@ inline int FindBit ( DWORD uValue )
 #define SPH_MAX_UTF8_BYTES 4
 
 /// decode UTF-8 codepoint
-/// advances buffer ptr in all cases but end of buffer
+/// advances buffer ptr in all cases, including the end of buffer (ie. zero byte)!
+/// so eof MUST be handled, otherwise, you get OOB
 ///
 /// returns -1 on failure
 /// returns 0 on end of buffer
 /// returns codepoint on success
-inline int sphUTF8Decode ( BYTE * & pBuf )
+inline int sphUTF8Decode ( const BYTE * & pBuf )
 {
-	BYTE v = *pBuf;
+	BYTE v = *pBuf++;
 	if ( !v )
 		return 0;
-	pBuf++;
 
 	// check for 7-bit case
 	if ( v<128 )
@@ -1103,7 +1103,7 @@ inline int sphUTF8Len ( const char * pStr )
 	if ( !pStr || *pStr=='\0' )
 		return 0;
 
-	BYTE * pBuf = (BYTE*) pStr;
+	const BYTE * pBuf = (const BYTE*) pStr;
 	int iRes = 0, iCode;
 
 	while ( ( iCode = sphUTF8Decode(pBuf) )!=0 )
@@ -1120,8 +1120,8 @@ inline int sphUTF8Len ( const char * pStr, int iMax )
 	if ( !pStr || *pStr=='\0' )
 		return 0;
 
-	BYTE * pBuf = (BYTE*) pStr;
-	BYTE * pMax = pBuf + iMax;
+	const BYTE * pBuf = (const BYTE*) pStr;
+	const BYTE * pMax = pBuf + iMax;
 	int iRes = 0, iCode;
 
 	while ( pBuf<pMax && iRes<iMax && ( iCode = sphUTF8Decode ( pBuf ) )!=0 )
@@ -1411,8 +1411,8 @@ public:
 	virtual void					SetBufferPtr ( const char * sNewPtr )		{ m_pTokenizer->SetBufferPtr ( sNewPtr ); }
 	virtual uint64_t				GetSettingsFNV () const						{ return m_pTokenizer->GetSettingsFNV(); }
 
-	virtual void					SetBuffer ( BYTE * sBuffer, int iLength )	{ m_pTokenizer->SetBuffer ( sBuffer, iLength ); }
-	virtual BYTE *					GetToken ()									{ return m_pTokenizer->GetToken(); }
+	virtual void					SetBuffer ( const BYTE * sBuffer, int iLength )	{ m_pTokenizer->SetBuffer ( sBuffer, iLength ); }
+	virtual BYTE *					GetToken ()										{ return m_pTokenizer->GetToken(); }
 };
 
 //////////////////////////////////////////////////////////////////////////

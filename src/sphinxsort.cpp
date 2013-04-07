@@ -3623,11 +3623,8 @@ static inline int CollateUTF8CI ( int iCode )
 /// utf8_general_ci
 int CollateUtf8GeneralCI ( const BYTE * pArg1, const BYTE * pArg2, bool bPacked )
 {
-	// some const breakage and mess
-	// we MUST NOT actually modify the data
-	// but sphUTF8Decode() calls currently need non-const pointers
-	BYTE * pStr1 = (BYTE*) pArg1;
-	BYTE * pStr2 = (BYTE*) pArg2;
+	const BYTE * pStr1 = pArg1;
+	const BYTE * pStr2 = pArg2;
 	const BYTE * pMax1 = NULL;
 	const BYTE * pMax2 = NULL;
 	if ( bPacked )
@@ -3739,7 +3736,7 @@ public:
 		uint64_t uAcc = uPrev;
 		while ( iLen-- )
 		{
-			BYTE * pCur = (BYTE *)pStr++;
+			const BYTE * pCur = pStr++;
 			int iCode = sphUTF8Decode ( pCur );
 			iCode = CollateUTF8CI ( iCode );
 			uAcc = sphFNV64 ( (const BYTE *)&iCode, 4, uAcc );

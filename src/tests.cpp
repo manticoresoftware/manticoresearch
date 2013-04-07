@@ -334,6 +334,18 @@ void TestTokenizer ( bool bUTF8 )
 		assert ( *pTokenizer->GetTokenStart()=='d' );
 		assert ( *pTokenizer->GetTokenEnd()=='\0' );
 
+		// test embedded zeroes
+		printf ( "%s vs embedded zeroes\n", sPrefix );
+
+		char sLine7[] = "abc\0\0\0defgh";
+		pTokenizer->SetBuffer ( (BYTE*)sLine7, 9 );
+
+		assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "abc" ) );
+		assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "def" ) );
+		assert ( !pTokenizer->GetToken() );
+		assert ( !pTokenizer->GetToken() );
+		assert ( !pTokenizer->GetToken() );
+
 		// done
 		SafeDelete ( pTokenizer );
 	}
@@ -460,7 +472,7 @@ void TestTokenizer ( bool bUTF8 )
 	BYTE sRes21[SPH_MAX_WORD_LEN];
 
 	memset ( sRes21, 0, sizeof(sRes21) );
-	BYTE * pTest21 = sTest21;
+	const BYTE * pTest21 = sTest21;
 	int iCode21 = sphUTF8Decode ( pTest21 );
 	assert ( sphUTF8Encode ( sRes21, iCode21 )==4 );
 	assert ( sTest21[0]==sRes21[0] && sTest21[1]==sRes21[1] && sTest21[2]==sRes21[2] && sTest21[3]==sRes21[3] );

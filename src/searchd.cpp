@@ -9295,45 +9295,23 @@ void SearchHandler_c::RunUpdates ( const CSphQuery & tQuery, const CSphString & 
 
 void SearchHandler_c::RunQueries()
 {
-	///////////////////////////////
-	// choose path and run queries
-	///////////////////////////////
-
 	// check if all queries are to the same index
-	bool bSameIndex = false;
-	if ( m_dQueries.GetLength()>1 )
-	{
-		bSameIndex = true;
-		ARRAY_FOREACH ( i, m_dQueries )
-			if ( m_dQueries[i].m_sIndexes!=m_dQueries[0].m_sIndexes )
-		{
-			bSameIndex = false;
-			break;
-		}
-	}
-
+	bool bSameIndex = ARRAY_ALL ( bSameIndex, m_dQueries, m_dQueries[_all].m_sIndexes==m_dQueries[0].m_sIndexes );
 	if ( bSameIndex )
 	{
-		///////////////////////////////
 		// batch queries to same index
-		///////////////////////////////
 		RunSubset ( 0, m_dQueries.GetLength()-1 );
 		ARRAY_FOREACH ( i, m_dQueries )
 			LogQuery ( m_dQueries[i], m_dResults[i], m_dAgentTimes[i] );
-
 	} else
 	{
-		/////////////////////////////////////////////
 		// fallback; just work each query separately
-		/////////////////////////////////////////////
-
 		ARRAY_FOREACH ( i, m_dQueries )
 		{
 			RunSubset ( i, i );
 			LogQuery ( m_dQueries[i], m_dResults[i], m_dAgentTimes[i] );
 		}
 	}
-
 	OnRunFinished();
 }
 
@@ -10776,19 +10754,21 @@ enum SqlStmt_e
 	STMT_SHOW_INDEX_STATUS,
 	STMT_SHOW_PROFILE,
 	STMT_ALTER,
+	STMT_SHOW_PLAN,
 
 	STMT_TOTAL
 };
 
 
+// FIXME? verify or generate these automatically somehow?
 static const char * g_dSqlStmts[STMT_TOTAL] =
 {
 	"parse_error", "dummy", "select", "insert", "replace", "delete", "show_warnings",
 	"show_status", "show_meta", "set", "begin", "commit", "rollback", "call",
 	"desc", "show_tables", "update", "create_func", "drop_func", "attach_index",
 	"flush_rtindex", "show_variables", "truncate_rtindex", "select_sysvar",
-	"show_collation", "optimize_index", "show_agent_status", "show_index_status",
-	"show_profile", "alter"
+	"show_collation", "show_character_set", "optimize_index", "show_agent_status",
+	"show_index_status", "show_profile", "show_plan"
 };
 
 
@@ -14226,7 +14206,7 @@ void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
 			if ( iQuerySchemaIdx < 0 )
 			{
 				bResult = tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );
-				if ( tCol.m_eAttrType==SPH_ATTR_STRING )
+				if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_JSON )
 					dStrings.Add ( NULL );
 				if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET )
 					dMvas.Add ( 0 );
@@ -16368,6 +16348,20 @@ void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 }
 
 
+void HandleMysqlShowPlan ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p )
+{
+	tOut.HeadBegin ( 2 );
+	tOut.HeadColumn ( "Variable" );
+	tOut.HeadColumn ( "Value" );
+	tOut.HeadEnd();
+
+	tOut.PutString ( "transformed_tree" );
+	tOut.PutString ( p.m_sTransformedTree.cstr() );
+	tOut.Commit();
+
+	tOut.Eof();
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 class CSphinxqlSession : public ISphNoncopyable
@@ -16620,11 +16614,15 @@ public:
 
 		case STMT_SHOW_PROFILE:
 			HandleMysqlShowProfile ( tOut, m_tLastProfile );
-			return false;
+			return false; // do not profile this call, keep last query profile
 
 		case STMT_ALTER:
 			HandleMysqlAlter ( tOut, *pStmt );
 			return true;
+
+		case STMT_SHOW_PLAN:
+			HandleMysqlShowPlan ( tOut, m_tLastProfile );
+			return false; // do not profile this call, keep last query profile
 
 		default:
 			m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );
@@ -16769,6 +16767,11 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 			} while ( iAddonLen==MAX_PACKET_LEN );
 			if ( iAddonLen<0 )
 				break;
+			if ( iPacketLen<0 || iPacketLen>g_iMaxPacketSize )
+			{
+				sphWarning ( "ill-formed client request (length=%d out of bounds)", iPacketLen );
+				break;
+			}
 		}
 
 		// handle auth packet
@@ -16806,6 +16809,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 				// handle query packet
 				assert ( uMysqlCmd==MYSQL_COM_QUERY );
 				sQuery = tIn.GetRawString ( iPacketLen-1 );
+				assert ( !tIn.GetError() );
 				bKeepProfile = tSession.Execute ( sQuery, tOut, uPacketID, pThd );
 				break;
 
@@ -17321,6 +17325,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	tNewIndex.m_pIndex = sphCreateIndexPhrase ( sIndex.cstr(), NULL );
 	tNewIndex.m_pIndex->SetEnableStar ( pRotating->m_bStar );
 	tNewIndex.m_pIndex->m_bExpandKeywords = pRotating->m_bExpand;
+	tNewIndex.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 	tNewIndex.m_pIndex->SetPreopen ( pRotating->m_bPreopen || g_bPreopenIndexes );
 	tNewIndex.m_pIndex->SetWordlistPreload ( !pRotating->m_bOnDiskDict && !g_bOnDiskDicts );
 	tNewIndex.m_pIndex->SetGlobalIDFPath ( pRotating->m_sGlobalIDFPath );
@@ -17531,6 +17536,7 @@ void SeamlessTryToForkPrereader ()
 
 	g_pPrereading->SetEnableStar ( tServed.m_bStar );
 	g_pPrereading->m_bExpandKeywords = tServed.m_bExpand;
+	g_pPrereading->m_iExpansionLimit = g_iExpansionLimit;
 	g_pPrereading->SetPreopen ( tServed.m_bPreopen || g_bPreopenIndexes );
 	g_pPrereading->SetWordlistPreload ( !tServed.m_bOnDiskDict && !g_bOnDiskDicts );
 	g_pPrereading->SetGlobalIDFPath ( tServed.m_sGlobalIDFPath );

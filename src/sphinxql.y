@@ -76,6 +76,7 @@
 %token	TOK_OPTION
 %token	TOK_ORDER
 %token	TOK_OPTIMIZE
+%token	TOK_PLAN
 %token	TOK_PROFILE
 %token	TOK_RAND
 %token	TOK_READ
@@ -719,6 +720,7 @@ show_what:
 	| TOK_META like_filter				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_META; }
 	| TOK_AGENT TOK_STATUS like_filter	{ pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS; }
 	| TOK_PROFILE						{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PROFILE; }
+	| TOK_PLAN							{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLAN; }
 	| TOK_AGENT TOK_QUOTED_STRING TOK_STATUS like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS;

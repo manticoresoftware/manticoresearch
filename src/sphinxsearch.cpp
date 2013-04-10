@@ -5318,6 +5318,92 @@ const ExtHit_t * ExtUnit_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t )
 
 //////////////////////////////////////////////////////////////////////////
 
+static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const CSphVector<CSphString> & dZones,
+	CSphStringBuilder & tRes, int iIdent )
+{
+	if ( iIdent )
+		tRes.Appendf ( "\n" );
+	for ( int i=0; i<iIdent; i++ )
+		tRes.Appendf ( "  " );
+	switch ( pNode->GetOp() )
+	{
+		case SPH_QUERY_AND:			tRes.Appendf ( "AND(" ); break;
+		case SPH_QUERY_OR:			tRes.Appendf ( "OR(" ); break;
+		case SPH_QUERY_NOT:			tRes.Appendf ( "NOT(" ); break;
+		case SPH_QUERY_ANDNOT:		tRes.Appendf ( "ANDNOT(" ); break;
+		case SPH_QUERY_BEFORE:		tRes.Appendf ( "BEFORE(" ); break;
+		case SPH_QUERY_PHRASE:		tRes.Appendf ( "PHRASE(" ); break;
+		case SPH_QUERY_PROXIMITY:	tRes.Appendf ( "PROXIMITY(distance=%d, ", pNode->m_iOpArg ); break;
+		case SPH_QUERY_QUORUM:		tRes.Appendf ( "QUORUM(count=%d, ", pNode->m_iOpArg ); break;
+		case SPH_QUERY_NEAR:		tRes.Appendf ( "NEAR(distance=%d", pNode->m_iOpArg ); break;
+		case SPH_QUERY_SENTENCE:	tRes.Appendf ( "SENTENCE(" ); break;
+		case SPH_QUERY_PARAGRAPH:	tRes.Appendf ( "PARAGRAPH(" ); break;
+		default:					tRes.Appendf ( "OPERATOR-%d(", pNode->GetOp() ); break;
+	}
+
+	if ( pNode->m_dChildren.GetLength() && pNode->m_dWords.GetLength() )
+		tRes.Appendf("virtually-plain, ");
+
+	// dump spec for keyword nodes
+	// FIXME? double check that spec does *not* affect non keyword nodes
+	if ( !pNode->m_dSpec.IsEmpty() && pNode->m_dWords.GetLength() )
+	{
+		const XQLimitSpec_t & s = pNode->m_dSpec;
+		if ( s.m_bFieldSpec && !s.m_dFieldMask.TestAll ( true ) )
+		{
+			tRes.Appendf ( "fields=(" ).ResetSeparator();
+			ARRAY_FOREACH ( i, tSchema.m_dFields )
+				if ( s.m_dFieldMask.Test(i) )
+					tRes.AppendSeparator ( ", " ).Appendf ( "%s", tSchema.m_dFields[i].m_sName.cstr() );
+			tRes.Appendf ( "), " );
+		}
+
+		if ( s.m_iFieldMaxPos )
+			tRes.Appendf ( "max_field_pos=%d, ", s.m_iFieldMaxPos );
+
+		if ( s.m_dZones.GetLength() )
+		{
+			tRes.Appendf ( s.m_bZoneSpan ? "zonespans=(" : "zones=(" ).ResetSeparator();
+			ARRAY_FOREACH ( i, s.m_dZones )
+				tRes.AppendSeparator ( ", " ).Appendf ( "%s", dZones [ s.m_dZones[i] ].cstr() );
+			tRes.Appendf ( "), " );
+		}
+	}
+
+	if ( pNode->m_dChildren.GetLength() )
+	{
+		ARRAY_FOREACH ( i, pNode->m_dChildren )
+		{
+			if ( i>0 )
+				tRes.Appendf ( ", " );
+			Explain ( pNode->m_dChildren[i], tSchema, dZones, tRes, iIdent+1 );
+		}
+	} else
+	{
+		assert ( pNode->m_dWords.GetLength() );
+		ARRAY_FOREACH ( i, pNode->m_dWords )
+		{
+			const XQKeyword_t & w = pNode->m_dWords[i];
+			if ( i>0 )
+				tRes.Appendf(", ");
+			tRes.Appendf ( "KEYWORD(%s, querypos=%d", w.m_sWord.cstr(), w.m_iAtomPos );
+			if ( w.m_bExcluded )
+				tRes.Appendf ( ", excluded" );
+			if ( w.m_bExpanded )
+				tRes.Appendf ( ", expanded" );
+			if ( w.m_bFieldStart )
+				tRes.Appendf ( ", field_start" );
+			if ( w.m_bFieldEnd )
+				tRes.Appendf ( ", field_end" );
+			if ( w.m_bMorphed )
+				tRes.Appendf ( ", morphed" );
+			tRes.Appendf ( ")" );
+		}
+	}
+	tRes.Appendf(")");
+}
+
+
 ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup )
 {
 	assert ( tSetup.m_pCtx );
@@ -5333,10 +5419,24 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup 
 	assert ( tXQ.m_pRoot );
 	tSetup.m_pZoneChecker = this;
 	m_pRoot = ExtNode_i::Create ( tXQ.m_pRoot, tSetup );
+
 #if SPH_TREE_DUMP
 	if ( m_pRoot )
 		m_pRoot->DebugDump(0);
 #endif
+
+	// we generally have three (!) trees for each query
+	// 1) parsed tree, a raw result of query parsing
+	// 2) transformed tree, with star expansions, morphology, and other transfomations
+	// 3) evaluation tree, with tiny keywords cache, and other optimizations
+	// tXQ.m_pRoot, passed to ranker from the index, is the transformed tree
+	// m_pRoot, internal to ranker, is the evaluation tree
+	if ( tSetup.m_pCtx->m_pProfile )
+	{
+		tSetup.m_pCtx->m_pProfile->m_sTransformedTree.Reset();
+		Explain ( tXQ.m_pRoot, tSetup.m_pIndex->GetMatchSchema(), tXQ.m_dZones,
+			tSetup.m_pCtx->m_pProfile->m_sTransformedTree, 0 );
+	}
 
 	m_pDoclist = NULL;
 	m_pHitlist = NULL;

@@ -2920,6 +2920,35 @@ void TestArabicStemmer()
 
 //////////////////////////////////////////////////////////////////////////
 
+void TestAppendf()
+{
+	CSphStringBuilder sRes;
+	sRes.Appendf ( "12345678" );
+	sRes.Appendf ( "this is my rifle this is my gun" );
+	sRes.Appendf ( " int=%d float=%f string=%s", 123, 456.789, "helloworld" );
+	assert ( strcmp ( sRes.cstr(), "12345678this is my rifle this is my gun int=123 float=456.789000 string=helloworld" )==0 );
+}
+
+void BenchAppendf()
+{
+	int64_t tm1 = sphMicroTimer();
+	CSphStringBuilder sRes1;
+	for ( int i=0; i<200; i++ )
+		sRes1.Appendf ( "%d ", i );
+	tm1 = sphMicroTimer() - tm1;
+
+	int64_t tm2 = sphMicroTimer();
+	CSphString sRes2;
+	sRes2.SetSprintf ( "%d ", 0 );
+	for ( int i=1; i<200; i++ )
+		sRes2.SetSprintf ( "%s%d ", sRes2.cstr(), i );
+	tm2 = sphMicroTimer() - tm2;
+
+	printf ( "benchmarking stringbuilder... %d microsec builder vs %d microsec string\n", int(tm1), int(tm2) );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 int main ()
 {
 	// threads should be initialized before memory allocations
@@ -2934,6 +2963,7 @@ int main ()
 #endif
 
 #ifdef NDEBUG
+	BenchAppendf();
 	BenchMisc();
 	BenchStripper ();
 	BenchTokenizer ( false );
@@ -2942,6 +2972,7 @@ int main ()
 	BenchLocators ();
 	BenchThreads ();
 #else
+	TestAppendf();
 	TestQueryParser ();
 	TestQueryTransforms ();
 	TestStripper ();

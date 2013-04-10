@@ -1417,7 +1417,8 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		fprintf ( stdout, "WARNING: no morphology, index_exact_words=1 has no effect, ignoring\n" );
 	}
 
-	if ( pDict->GetSettings().m_bWordDict && pDict->HasMorphology() && tSettings.m_iMinPrefixLen && !tSettings.m_bIndexExactWords )
+	if ( pDict->GetSettings().m_bWordDict && pDict->HasMorphology() &&
+		( tSettings.m_iMinPrefixLen || tSettings.m_iMinInfixLen ) && !tSettings.m_bIndexExactWords )
 	{
 		tSettings.m_bIndexExactWords = true;
 		pIndex->Setup ( tSettings );

@@ -5773,6 +5773,53 @@ Query OK, 0 rows affected (0.00 sec)
 </sect1>
 
 
+<sect1 id="sphinxql-show-plan"><title>SHOW PLAN syntax</title>
+<programlisting>
+SHOW PLAN
+</programlisting>
+<para>
+SHOW PLAN statement, added in 2.1.2-beta, displays the execution plan
+of the previous SELECT statment. The plan gets generated and stored
+during the actual execution, so profiling must be enabled in the current
+session <b>before</b> running that statement. That can be done
+with a <code>SET profiling=1</code> statement.
+</para>
+<para>
+Here's a complete instrumentation example:
+<programlisting>
+mysql> SET profiling=1 \G
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> SELECT id FROM lj WHERE MATCH('the i') LIMIT 1 \G
+*************************** 1. row ***************************
+id: 39815
+1 row in set (1.53 sec)
+
+mysql> SHOW PLAN \G
+*************************** 1. row ***************************
+Variable: transformed_tree
+   Value: AND(
+  AND(KEYWORD(the, querypos=1)),
+  AND(KEYWORD(i, querypos=2)))
+1 row in set (0.00 sec)
+</programlisting>
+And here's a less trivial example that shows how the actually
+evaluated query tree can be rather different from the original one
+because of expansions and other transformations:
+<programlisting>
+mysql> SELECT * FROM test WHERE MATCH('@title abc* @body hey') \G SHOW PLAN \G
+...
+*************************** 1. row ***************************
+Variable: transformed_tree
+   Value: AND(
+  OR(fields=(title), KEYWORD(abcx, querypos=1, expanded), KEYWORD(abcm, querypos=1, expanded)),
+  AND(fields=(body), KEYWORD(hey, querypos=2)))
+1 row in set (0.00 sec)
+</programlisting>
+</para>
+</sect1>
+
+
 <sect1 id="sphinxql-multi-queries">
 <title>Multi-statement queries</title>
 <para>
@@ -13345,9 +13392,14 @@ predicted_time_costs = doc=128, hit=96, skip=4096, match=128
 </itemizedlist>
 </sect1>
 
-<sect1 id="rel207"><title>Version 2.0.7-release, 26 feb 2013</title>
+<sect1 id="rel207"><title>Version 2.0.7-release, 26 mar 2013</title>
 <bridgehead>Bug fixes</bridgehead>
 <itemizedlist>
+<listitem><para>fixed #1475, memory leak in the expression parser</para></listitem>
+<listitem><para>fixed #1457, error messages over 2KB were clipped</para></listitem>
+<listitem><para>fixed #1454, searchd did not display an error message when the binlog path did not exist</para></listitem>
+<listitem><para>fixed #1441, SHOW META in a query batch was returning the last non-batch error</para></listitem>
+<listitem><para>fixed #1435, typo in the documentation</para></listitem>
 <listitem><para>fixed #1430, rt_flush_period now works even with a disabled binlog</para></listitem>
 <listitem><para>fixed #1427, overlong 4-byte UTF-8 codes in source text could cause indexer crashes or index corruption</para></listitem>
 <listitem><para>fixed #1418, warnings from local index searches were lost with dist_threads&gt;0</para></listitem>

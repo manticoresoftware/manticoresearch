@@ -46,6 +46,7 @@ index rt_multy_str
 <sphinxql>insert into rt (id, gid, author, title) values (2, 123, 'Lewis Carrol', 'Through the looking glass')</sphinxql>
 <sphinxql>insert into rt (id, gid, author, title) values (3, 234, 'O.Henry', 'Cabbages and Kings')</sphinxql>
 <sphinxql>select * from rt</sphinxql>
+<sphinxql>select * from rt where author='Lewis Carrol'</sphinxql>
 
 <sphinxql>insert into rt_multy_str values (1, 'lewis carrol', 1001, 'rabit hole', 'looking glass', 'at 1890')</sphinxql>
 <sphinxql>insert into rt_multy_str values (10, 'mad max', 1010, 'post future', 'fuel less world', 'at 2100')</sphinxql>

@@ -19903,6 +19903,14 @@ void CSphDictCRCTraits::AddWordform ( CSphWordforms * pContainer, char * sBuffer
 
 	CSphString sTo ( (const char *)pTo );
 
+	int iLastTokenLen = pTokenizer->GetLastTokenLen();
+	if ( !pTokenizer->TokenIsBlended () && pTokenizer->GetToken () )
+	{
+		sphWarning ( "invalid mapping (must be exactly 1 destination keyword) ( wordforms='%s' ). Fix your wordforms file '%s'.",
+					 sBuffer, szFile );
+		return;
+	}
+
 	if ( tMultiWordform.Ptr() )
 	{
 		if ( bAfterMorphology )
@@ -20003,7 +20011,7 @@ void CSphDictCRCTraits::AddWordform ( CSphWordforms * pContainer, char * sBuffer
 	{
 		CSphMultiform * pMultiWordform = tMultiWordform.LeakPtr();
 		pMultiWordform->m_sNormalForm = sTo;
-		pMultiWordform->m_iNormalTokenLen = pTokenizer->GetLastTokenLen ();
+		pMultiWordform->m_iNormalTokenLen = iLastTokenLen;
 		if ( !pContainer->m_pMultiWordforms )
 			pContainer->m_pMultiWordforms = new CSphMultiformContainer;
 

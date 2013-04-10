@@ -632,6 +632,9 @@ public:
 	/// get settings hash
 	virtual uint64_t				GetSettingsFNV () const;
 
+	/// get (readonly) lowercaser
+	const CSphLowercaser &			GetLowercaser() const  { return m_tLC; }
+
 protected:
 	virtual bool					RemapCharacters ( const char * sConfig, DWORD uFlags, const char * sSource, bool bCanRemap, CSphString & sError );
 	virtual bool					AddSpecialsSPZ ( const char * sSpecials, const char * sDirective, CSphString & sError );

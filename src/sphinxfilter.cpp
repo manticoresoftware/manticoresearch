@@ -811,6 +811,7 @@ static inline ISphFilter * ReportError ( CSphString & sError, const char * sMess
 		case SPH_FILTER_VALUES:			sFilterName = "intvalues"; break;
 		case SPH_FILTER_RANGE:			sFilterName = "intrange"; break;
 		case SPH_FILTER_FLOATRANGE:		sFilterName = "floatrange"; break;
+		case SPH_FILTER_STRING:			sFilterName = "string"; break;
 		default:						sFilterName.SetSprintf ( "(filter-type-%d)", eFilterType ); break;
 	}
 
@@ -864,6 +865,9 @@ static ISphFilter * CreateFilter ( ESphAttr eAttrType, ESphFilter eFilterType, i
 
 		return ReportError ( sError, "unsupported filter type '%s' on float column", eFilterType );
 	}
+
+	if ( eAttrType==SPH_ATTR_STRING || eAttrType==SPH_ATTR_STRINGPTR )
+		return ReportError ( sError, "unsupported filter type '%s' on string column", eFilterType );
 
 	// non-float, non-MVA
 	switch ( eFilterType )
@@ -1011,21 +1015,26 @@ public:
 	virtual bool Eval ( const CSphMatch & tMatch ) const
 	{
 		const BYTE * pValue;
+		float fValue;
 		ESphJsonType eRes = GetKey ( &pValue, tMatch );
 		switch ( eRes )
 		{
+			case JSON_INT32:
+				fValue = (float)sphJsonLoadInt ( &pValue );
+				break;
+			case JSON_INT64:
+				fValue = (float)sphJsonLoadBigint ( &pValue );
+				break;
 			case JSON_DOUBLE:
-			{
-				// convert to float (fails comparison tests otherwise, e.g. 1.010>1.010f)
-				float fValue = (float)sphQW2D ( sphJsonLoadBigint ( &pValue ) );
-				if ( HAS_EQUALS )
-					return fValue>=m_fMinValue && fValue<=m_fMaxValue;
-				else
-					return fValue>m_fMinValue && fValue<m_fMaxValue;
-			}
-		default:
-			return false;
+				fValue = (float)sphQW2D ( sphJsonLoadBigint ( &pValue ) );
+				break;
+			default:
+				return false;
 		}
+		if ( HAS_EQUALS )
+			return fValue>=m_fMinValue && fValue<=m_fMaxValue;
+		else
+			return fValue>m_fMinValue && fValue<m_fMaxValue;
 	}
 };
 

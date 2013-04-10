@@ -42,6 +42,7 @@ index test
 <sphinxql>SHOW META</sphinxql>
 <sphinxql>SELECT * FROM test WHERE MATCH('3\\@rd text')</sphinxql>
 <sphinxql>SHOW META</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'man', 'test' )</sphinxql>
 </sphqueries>
 
 </test>

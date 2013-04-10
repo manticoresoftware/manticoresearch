@@ -151,6 +151,15 @@ index json_attr
 	source = json_attr
 	path=<data_path/>/json_attr
 }
+
+index rt1
+{
+	type = rt
+	path = <data_path/>/rt1
+	rt_field = title
+	rt_attr_string = s1
+	rt_attr_json = j1
+}
 </config>
 
 <db_create>
@@ -358,6 +367,15 @@ INSERT INTO json_attr ( id, gid, json ) VALUES
 <!-- multiple conditions -->
 <sphinxql>select * from json_attr where json.year=2000 and json.floatkey>=1.01</sphinxql>
 <sphinxql>select * from json_attr where json.year=2000 and json.floatkey>=1.01 and json.username='Alice'</sphinxql>
+<!-- regression json missed on RT insert -->
+<sphinxql>insert into rt1 (id, title) values (100, 'title1' )</sphinxql>
+<sphinxql>select * from rt1 where id=100</sphinxql>
+<!-- filtering integers using floating point precision -->
+<sphinxql>select * from json_attr where json.year>=2001 and json.year&lt;2003</sphinxql>
+<sphinxql>select * from json_attr where json.year>=2001.0 and json.year&lt;2003</sphinxql>
+<sphinxql>select * from json_attr where json.year>=2001.0 and json.year&lt;2003.0</sphinxql>
+<sphinxql>select * from json_attr where json.year>=2000.0001 and json.year&lt;2003.0001</sphinxql>
+<sphinxql>select * from json_attr where json.year>=2000.000001 and json.year&lt;2003.000001</sphinxql>
 </sphqueries>
 
 </test>

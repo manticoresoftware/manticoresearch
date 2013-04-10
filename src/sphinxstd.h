@@ -1776,6 +1776,92 @@ inline void Swap ( CSphString & v1, CSphString & v2 )
 	v1.Swap ( v2 );
 }
 
+
+/// string builder
+/// somewhat quicker than a series of SetSprintf()s
+/// lets you build strings bigger than 1024 bytes, too
+class CSphStringBuilder
+{
+protected:
+	char *	m_sBuffer;
+	int		m_iSize;
+	int		m_iUsed;
+	bool	m_bFirstSeparator;
+
+public:
+	CSphStringBuilder()
+	{
+		Reset();
+	}
+
+	void Reset()
+	{
+		m_iSize = 256;
+		m_iUsed = 0;
+		m_sBuffer = new char [ m_iSize ];
+		m_sBuffer[0] = '\0';
+		m_bFirstSeparator = true;
+	}
+
+	CSphStringBuilder & Appendf ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) )
+	{
+		assert ( m_sBuffer );
+		assert ( m_iUsed<m_iSize );
+
+		for ( ;; )
+		{
+			int iLeft = m_iSize - m_iUsed;
+
+			// try to append
+			va_list ap;
+			va_start ( ap, sTemplate );
+			int iPrinted = vsnprintf ( m_sBuffer+m_iUsed, iLeft, sTemplate, ap );
+			va_end ( ap );
+
+			// success? bail
+			// note that we check for strictly less, not less or equal
+			// that is because vsnprintf does *not* count the trailing zero
+			// meaning that if we had N bytes left, and N bytes w/o the zero were printed,
+			// we do not have a trailing zero anymore, but vsnprintf succeeds anyway
+			if ( iPrinted>=0 && iPrinted<iLeft )
+			{
+				m_iUsed += iPrinted;
+				break;
+			}
+
+			// we need more chars!
+			if ( iPrinted<0 )
+				m_iSize += 256; // happens on Windows; lets assume we need 256 more chars
+			else
+				m_iSize += ( iPrinted - iLeft + 64 ); // get all the needed chars and 64 more for future calls
+
+			char * pNew = new char [ m_iSize ];
+			memcpy ( pNew, m_sBuffer, m_iUsed+1 );
+			Swap ( pNew, m_sBuffer );
+			SafeDeleteArray ( pNew );
+		}
+		return *this;
+	}
+
+	void ResetSeparator ()
+	{
+		m_bFirstSeparator = true;
+	}
+
+	CSphStringBuilder & AppendSeparator ( const char * sSep )
+	{
+		if ( !m_bFirstSeparator )
+			Appendf ( "%s", sSep ); // OPTIMIZE?
+		m_bFirstSeparator = false;
+		return *this;
+	}
+
+	const char * cstr() const
+	{
+		return m_sBuffer;
+	}
+};
+
 /////////////////////////////////////////////////////////////////////////////
 
 /// immutable string/int/float variant list proxy

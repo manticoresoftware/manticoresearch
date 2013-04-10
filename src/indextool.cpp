@@ -19,6 +19,9 @@
 #include "sphinxrt.h"
 #include <time.h>
 
+#if USE_WINDOWS
+#include <io.h> // for setmode on windows
+#endif
 
 void StripStdin ( const char * sIndexAttrs, const char * sRemoveElements )
 {
@@ -93,6 +96,83 @@ void ApplyMorphology ( CSphIndex * pIndex )
 	}
 
 	fprintf ( stdout, "dumping stemmed results...\n%s\n", sBufferToDump );
+}
+
+
+void CharsetFold ( CSphIndex * pIndex, FILE * fp )
+{
+	CSphVector<BYTE> sBuf1 ( 16384 );
+	CSphVector<BYTE> sBuf2 ( 16384 );
+
+	bool bUtf = pIndex->GetTokenizer()->IsUtf8();
+	if ( !bUtf )
+		sphDie ( "sorry, --fold vs SBCS is not supported just yet" );
+
+	CSphLowercaser tLC = pIndex->GetTokenizer()->GetLowercaser();
+
+#if USE_WINDOWS
+	setmode ( fileno(stdout), O_BINARY );
+#endif
+
+	int iBuf1 = 0; // how many leftover bytes from previous iteration
+	while ( !feof(fp) )
+	{
+		int iGot = fread ( sBuf1.Begin()+iBuf1, 1, sBuf1.GetLength()-iBuf1, fp );
+		if ( iGot<0 )
+			sphDie ( "read error: %s", strerror(errno) );
+
+		if ( iGot==0 )
+			if ( feof(fp) )
+				if ( iBuf1==0 )
+					break;
+
+
+		const BYTE * pIn = sBuf1.Begin();
+		const BYTE * pInMax = pIn + iBuf1 + iGot;
+
+		if ( pIn==pInMax && feof(fp) )
+			break;
+
+		// tricky bit
+		// on full buffer, and not an eof, terminate a bit early
+		// to avoid codepoint vs buffer boundary issue
+		if ( ( iBuf1+iGot )==sBuf1.GetLength() && iGot!=0 )
+			pInMax -= 16;
+
+		// do folding
+		BYTE * pOut = sBuf2.Begin();
+		BYTE * pOutMax = pOut + sBuf2.GetLength() - 16;
+		while ( pIn < pInMax )
+		{
+			int iCode = sphUTF8Decode ( pIn );
+			if ( iCode==0 )
+				pIn++; // decoder does not do that!
+			assert ( iCode>=0 );
+
+			if ( iCode!=0x09 && iCode!=0x0A && iCode!=0x0D )
+			{
+				iCode = tLC.ToLower ( iCode ) & 0xffffffUL;
+				if ( !iCode )
+					iCode = 0x20;
+			}
+
+			pOut += sphUTF8Encode ( pOut, iCode );
+			if ( pOut >= pOutMax )
+			{
+				fwrite ( sBuf2.Begin(), 1, pOut-sBuf2.Begin(), stdout );
+				pOut = sBuf2.Begin();
+			}
+		}
+		fwrite ( sBuf2.Begin(), 1, pOut-sBuf2.Begin(), stdout );
+
+		// now move around leftovers
+		BYTE * pRealEnd = sBuf1.Begin() + iBuf1 + iGot;
+		if ( pIn < pRealEnd )
+		{
+			iBuf1 = pRealEnd - pIn;
+			memmove ( sBuf1.Begin(), pIn, iBuf1 );
+		}
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -682,9 +762,9 @@ extern void sphDictBuildSkiplists ( const char * sPath );
 
 int main ( int argc, char ** argv )
 {
-	fprintf ( stdout, SPHINX_BANNER );
 	if ( argc<=1 )
 	{
+		fprintf ( stdout, SPHINX_BANNER );
 		fprintf ( stdout,
 			"Usage: indextool <COMMAND> [OPTIONS]\n"
 			"\n"
@@ -704,17 +784,19 @@ int main ( int argc, char ** argv )
 			"--dumphitlist <INDEX> <KEYWORD>\n"
 			"--dumphitlist <INDEX> --wordid <ID>\n"
 			"\t\t\tdump hits for a given keyword\n"
+			"--fold <INDEX> [FILE]\tfold FILE or stdin using INDEX charset_table\n"
 			"--htmlstrip <INDEX>\tfilter stdin using index HTML stripper settings\n"
 			"--optimize-rt-klists <INDEX>\n"
 			"\t\t\toptimize kill list memory use in RT index disk chunks;\n"
 			"\t\t\teither for a given index or --all\n"
-			"--buildidf <index1.dict> [index2.dict ...] [--skip-uniq] --out <global.idf>\n"
-			"\t\t\tjoin dictionary dumps with statistics (--stats) into an .idf file\n"
-			"--mergeidf <node1.idf> [node2.idf ...] [--skip-uniq] --out <global.idf>\n"
+			"--buildidf <INDEX1.dict> [INDEX2.dict ...] [--skip-uniq] --out <GLOBAL.idf>\n"
+			"\t\t\tjoin --stats dictionary dumps into global.idf file\n"
+			"--mergeidf <NODE1.idf> [NODE2.idf ...] [--skip-uniq] --out <GLOBAL.idf>\n"
 			"\t\t\tmerge several .idf files into one file\n"
 			"\n"
 			"Options are:\n"
 			"-c, --config <file>\tuse given config file instead of defaults\n"
+			"-q, --quiet\t\tbe quiet, skip banner etc (useful with --fold etc)\n"
 			"--strip-path\t\tstrip path from filenames referenced by index\n"
 			"\t\t\t(eg. stopwords, exceptions, etc)\n"
 			"--stats\t\t\tshow total statistics in the dictionary dump\n"
@@ -731,7 +813,7 @@ int main ( int argc, char ** argv )
 	#define OPT1(_a1)		else if ( !strcmp(argv[i],_a1) )
 
 	const char * sOptConfig = NULL;
-	CSphString sDumpHeader, sIndex, sKeyword;
+	CSphString sDumpHeader, sIndex, sKeyword, sFoldFile;
 	bool bWordid = false;
 	bool bStripPath = false;
 	CSphVector<CSphString> dFiles;
@@ -739,6 +821,7 @@ int main ( int argc, char ** argv )
 	bool bStats = false;
 	bool bSkipUnique = false;
 	CSphString sDumpDict;
+	bool bQuiet = false;
 
 	enum
 	{
@@ -756,16 +839,19 @@ int main ( int argc, char ** argv )
 		CMD_BUILDSKIPS,
 		CMD_BUILDIDF,
 		CMD_MERGEIDF,
-		CMD_CHECKCONFIG
+		CMD_CHECKCONFIG,
+		CMD_FOLD
 	} eCommand = CMD_NOTHING;
 
 	int i;
 	for ( i=1; i<argc; i++ )
 	{
-		if ( argv[i][0]!='-' )
-			break;
+		// handle argless options
+		if ( argv[i][0]!='-' ) break;
+		OPT ( "-q", "--quiet" )		{ bQuiet = true; continue; }
+		OPT1 ( "--strip-path" )		{ bStripPath = true; continue; }
 
-		// this is an option
+		// handle options/commands with 1+ args
 		if ( (i+1)>=argc )			break;
 		OPT ( "-c", "--config" )	sOptConfig = argv[++i];
 		OPT1 ( "--dumpheader" )		{ eCommand = CMD_DUMPHEADER; sDumpHeader = argv[++i]; }
@@ -776,7 +862,6 @@ int main ( int argc, char ** argv )
 		OPT1 ( "--build-infixes" )	{ eCommand = CMD_BUILDINFIXES; sIndex = argv[++i]; }
 		OPT1 ( "--build-skips" )	{ eCommand = CMD_BUILDSKIPS; sIndex = argv[++i]; }
 		OPT1 ( "--morph" )			{ eCommand = CMD_MORPH; sIndex = argv[++i]; }
-		OPT1 ( "--strip-path" )		{ bStripPath = true; }
 		OPT1 ( "--checkconfig" )	{ eCommand = CMD_CHECKCONFIG; }
 		OPT1 ( "--optimize-rt-klists" )
 		{
@@ -794,6 +879,13 @@ int main ( int argc, char ** argv )
 				bStats = true;
 				i++;
 			}
+		}
+		OPT1 ( "--fold" )
+		{
+			eCommand = CMD_FOLD;
+			sIndex = argv[++i];
+			if ( (i+1)<argc && argv[i+1][0]!='-' )
+				sFoldFile = argv[++i];
 		}
 
 		// options with 2 args
@@ -849,6 +941,10 @@ int main ( int argc, char ** argv )
 			break;
 		}
 	}
+
+	if ( !bQuiet )
+		fprintf ( stdout, SPHINX_BANNER );
+
 	if ( i!=argc )
 	{
 		fprintf ( stdout, "ERROR: malformed or unknown option near '%s'.\n", argv[i] );
@@ -876,7 +972,7 @@ int main ( int argc, char ** argv )
 			sIndex = sDumpDict;
 		}
 
-		sphLoadConfig ( sOptConfig, false, cp );
+		sphLoadConfig ( sOptConfig, bQuiet, cp );
 		break;
 	}
 
@@ -1130,6 +1226,21 @@ int main ( int argc, char ** argv )
 				fprintf ( stdout, "ERROR: %s\n", sError.cstr() );
 			break;
 		}
+
+		case CMD_FOLD:
+			{
+				FILE * fp = stdin;
+				if ( !sFoldFile.IsEmpty() )
+				{
+					fp = fopen ( sFoldFile.cstr(), "rb" );
+					if ( !fp )
+						sphDie ( "failed to topen %s\n", sFoldFile.cstr() );
+				}
+				CharsetFold ( pIndex, fp );
+				if ( fp!=stdin )
+					fclose ( fp );
+			}
+			break;
 
 		default:
 			sphDie ( "INTERNAL ERROR: unhandled command (id=%d)", (int)eCommand );

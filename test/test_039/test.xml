@@ -14,7 +14,7 @@ searchd
 	<searchd_settings/>
 compat_sphinxql_magics = 1
 	max_filter_values 	= 500000
-	max_packet_size 	= 64M
+	max_packet_size 	= 18M
 	dist_threads			= 4
 	read_timeout			= 1
 }
@@ -130,6 +130,73 @@ if ( !$res )
 }
 unset ( $res["time"] );
 $results[] = $res;
+
+$make_sock = create_function ( '&$results', '
+
+	global $sd_address, $sd_sphinxql_port, $error;
+
+	$sockStr = "$sd_address:$sd_sphinxql_port";
+	if ($sd_address == "localhost")
+		$sockStr = "127.0.0.1:$sd_sphinxql_port";
+	$sock = @mysql_connect ( $sockStr,"","", true );
+	
+	if ( $sock === false )
+	{
+		$results[] = "error: can not connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+	}
+	return $sock;
+');
+
+$query = create_function ( '&$results, $q, $sock,$vars', '
+	
+	$res = @mysql_query ( $q, $sock );
+	if ($res===true)
+	{
+		$results[] = "total_affected:" . mysql_affected_rows($sock);
+	}
+	else if ($res===false)
+	{
+		$results[] = "failed";
+	}
+	else
+	{
+		$results[] = "ok";
+		while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
+		{
+			$has_key = false;
+			foreach ( $vars as $v )
+				$has_key |=  in_array ( $v, $row );
+			
+			if ( !$has_key )
+				continue;
+			
+			$vals = "";
+			foreach ($row as $v)
+			{
+				$vals .= $v . " ";
+			}
+			
+			$results[] = trim ( $vals );
+		}			
+	}
+');
+
+$sock = $make_sock( $results );
+if ( $sock === false )
+	return;
+
+$vars = array("connections", "command_status", "queries");
+$query ( $results, "show status", $sock, $vars );
+// regression crash on SphinxQL packet overflow max_packet_size
+$ids = "2";
+for ( $i=3; $i<400000; $i++ )
+	$ids .= "    ,      " . $i;
+$query ( $results, "show meta IN ( group_id,1,$ids ) as c1, IN ( group_id,1,$ids ) as c2, IN ( group_id,1,$ids ) as c3", $sock, array() );
+@mysql_close($sock);
+$sock = $make_sock( $results );
+if ( $sock === false )
+	return;
+$query ( $results, "show status", $sock, $vars );
 
 ]]>
 </custom_test>

@@ -100,6 +100,11 @@ public:
 		m_dZones.Reset();
 	}
 
+	bool IsEmpty() const
+	{
+		return m_bFieldSpec==false && m_iFieldMaxPos==0 && m_bZoneSpan==false && m_dZones.GetLength()==0;
+	}
+
 	XQLimitSpec_t ( const XQLimitSpec_t& dLimit )
 	{
 		if ( this==&dLimit )

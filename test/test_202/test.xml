@@ -7,7 +7,8 @@
 <non-windows/>
 </requires>
 
-<config>
+<config>#!/usr/bin/python
+print """
 indexer
 {
 	mem_limit = 32M
@@ -55,7 +56,18 @@ index plain2
 	path = <data_path/>/plain2
 	docinfo = none
 }
+"""
 
+file_exists = False
+try:
+	with open('part.conf'):
+		file_exists = True
+except IOError:
+	pass
+
+if file_exists==True:
+	with open('part.conf') as f:
+		print f.read()
 </config>
 
 <db_drop>drop table if exists test_table</db_drop>
@@ -86,7 +98,12 @@ insert into test_table values
 
 <custom_test><![CDATA[
 
+$results = array();
 $error = '';
+
+$query = create_function('$client, $index','
+$result = $client->Query ( "first", $index );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError();
+');
 
 StopSearchd ('config.conf', 'searchd.pid');
 foreach ( array ( 'spa', 'spd', 'spe', 'spi', 'spk', 'spm', 'spp', 'sps', 'sph' ) as $ext )
@@ -99,16 +116,18 @@ foreach ( array ( 'spa', 'spd', 'spe', 'spi', 'spk', 'spm', 'spp', 'sps', 'sph' 
 }
 $state = StartSearchd ('config.conf', 'error.txt', 'searchd.pid', $error);
 
-RunIndexer ( $errors, '--rotate "p*lain2"' ); // adding plain2 index
+
+$results[] = $query ( $client, 'plain3' );
+$path = "part.conf";
+file_put_contents ( $path, "index plain3\n{\nsource = sql\npath = data/plain3\n}\n" );
+
+RunIndexer ( $errors, '--rotate p*lain2 plain3' ); // adding indexes
 sleep(2);
 
-$query = create_function('$client','
-$result = $client->Query ( "first", "plain2" );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError();
-');
+unlink($path);
+$results[] = $query ( $client, 'plain3' );
 
-$results = array();
-
-$results[] = $query ( $client );
+$results[] = $query ( $client, 'plain2' );
 
 ]]></custom_test>
 

@@ -2,7 +2,7 @@ exact_phrase=0
 n=1, res=this is my <b>test</b> <b>text</b> to be highlighted ... 
 n=2, res=another <b>test</b> <b>text</b> to be highlighted, below limit
 n=3, res=<b>test</b> number three, without phrase match
-n=4, res=final <b>test</b>, not only without  ...  with swapped phrase <b>text</b> <b>test</b> as well
+n=4, res= ...  <b>test</b>, not only without ... with swapped phrase <b>text</b> <b>test</b> as well
 
 exact_phrase=1
 n=1, res=this is my <b>test text</b> to be highlighted ... 
@@ -14,7 +14,7 @@ passage_boundary=zone
 n=1, res= ...  manager <b>it</b>. <b>Is</b> Filing this report and. <b>It</b> <b>is</b> signed hereby represent. That <b>it</b> <b>is</b> all information.are <b>It</b> or <b>is</b> cool <b>It</b> <b>is</b> cooler <b>It</b> <b>is</b> another ... 
 
 passage_boundary=sentence
-n=1, res= ... The institutional investment manager <b>it</b>. ... <b>Is</b> Filing this report and. ... <b>It</b> <b>is</b> signed hereby represent. ... That <b>it</b> <b>is</b> all information.are <b>It</b> or <b>is</b> cool <b>It</b> <b>is</b> cooler <b>It</b> <b>is</b> another place! ... 
+n=1, res= ...  institutional investment manager <b>it</b> ... <b>Is</b> Filing this report  ... <b>It</b> <b>is</b> signed hereby  ...  <b>it</b> <b>is</b> all information.are <b>It</b> or <b>is</b> cool <b>It</b> <b>is</b> cooler <b>It</b> <b>is</b> another place! ... 
 
 build_keywords result:
 1. tokenized=hello, normalized=hello, docs=0, hits=0

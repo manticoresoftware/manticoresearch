@@ -148,6 +148,7 @@ index rt
 <sphinxql>update rt set gid=3212, bfloat=55.5, bint=2340000000000 where id=1</sphinxql>
 <sphinxql>select * from rt</sphinxql>
 <sphinxql>select 100500some from rt</sphinxql>
+<sphinxql>select `id` from rt</sphinxql>
 </sphqueries>
 
   <DB_Create>

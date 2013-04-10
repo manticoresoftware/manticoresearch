@@ -1088,7 +1088,8 @@ enum Func_e
 	FUNC_PACKEDFACTORS,
 	FUNC_BM25F,
 	FUNC_INTEGER,
-	FUNC_DOUBLE
+	FUNC_DOUBLE,
+	FUNC_LENGTH
 };
 
 
@@ -1150,7 +1151,8 @@ static FuncDesc_t g_dFuncs[] =
 	{ "packedfactors",	0,	FUNC_PACKEDFACTORS, SPH_ATTR_FACTORS },
 	{ "bm25f",			-1,	FUNC_BM25F,			SPH_ATTR_FLOAT },
 	{ "integer",		1,	FUNC_INTEGER,		SPH_ATTR_INTEGER },
-	{ "double",			1,	FUNC_DOUBLE,		SPH_ATTR_FLOAT }
+	{ "double",			1,	FUNC_DOUBLE,		SPH_ATTR_FLOAT },
+	{ "length",			1,	FUNC_LENGTH,		SPH_ATTR_INTEGER }
 };
 
 
@@ -1217,6 +1219,7 @@ static int FuncHashLookup ( const char * sKey )
 		79, 79, 79, 79, 79, 79, 79, 79, 79, 79,
 		79, 79, 79, 79, 79, 79, 79, 79, 79, 79,
 		79, 79, 79, 79, 79, 79
+
 	};
 
 	const BYTE * s = (const BYTE*) sKey;
@@ -1232,7 +1235,7 @@ static int FuncHashLookup ( const char * sKey )
 
 	static int dIndexes[] =
 	{
-		-1, -1, 6, -1, 17, -1, -1, 28, 20, 18,
+		-1, -1, 6, -1, 17, -1, 42, 28, 20, 18,
 		16, 37, 19, -1, 7, 8, -1, 30, -1, 33,
 		-1, -1, 40, 27, 2, -1, 32, 24, 34, 26,
 		3, -1, 35, 4, 12, 13, -1, -1, 15, 25,
@@ -1461,6 +1464,7 @@ private:
 	ISphExpr *				CreateTree ( int iNode );
 	ISphExpr *				CreateIntervalNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs );
 	ISphExpr *				CreateInNode ( int iNode );
+	ISphExpr *				CreateLengthNode ( const ExprNode_t & tNode );
 	ISphExpr *				CreateGeodistNode ( int iArgs );
 	ISphExpr *				CreateBitdotNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs );
 	ISphExpr *				CreateUdfNode ( int iCall, ISphExpr * pLeft );
@@ -2956,6 +2960,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 
 					case FUNC_INTERVAL:	return CreateIntervalNode ( tNode.m_iLeft, dArgs );
 					case FUNC_IN:		return CreateInNode ( iNode );
+					case FUNC_LENGTH:	return CreateLengthNode ( tNode );
 					case FUNC_BITDOT:	return CreateBitdotNode ( tNode.m_iLeft, dArgs );
 
 					case FUNC_GEODIST:	return CreateGeodistNode ( tNode.m_iLeft );
@@ -3350,6 +3355,42 @@ int Expr_MVAIn_c<true>::MvaEval ( const DWORD * pMva ) const
 	return 0;
 }
 
+/// LENGTH() evaluator for MVAs
+class Expr_MVALength_c : public ISphExpr
+{
+protected:
+	CSphAttrLocator		m_tLocator;
+	int					m_iLocator;
+	const DWORD *		m_pMvaPool;
+
+public:
+	Expr_MVALength_c ( const CSphAttrLocator & tLoc, int iLocator )
+		: m_tLocator ( tLoc )
+		, m_iLocator ( iLocator )
+		, m_pMvaPool ( NULL )
+	{
+		assert ( tLoc.m_iBitOffset>=0 && tLoc.m_iBitCount>0 );
+	}
+
+	virtual int IntEval ( const CSphMatch & tMatch ) const
+	{
+		const DWORD * pMva = tMatch.GetAttrMVA ( m_tLocator, m_pMvaPool );
+		if ( !pMva )
+			return 0;
+		return (int)*pMva;
+	}
+
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
+	{
+		if ( eCmd==SPH_EXPR_SET_MVA_POOL )
+			m_pMvaPool = (const DWORD*)pArg;
+		if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS )
+			static_cast < CSphVector<int>* > ( pArg )->Add ( m_iLocator );
+	}
+
+	virtual float	Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
+};
+
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -3692,6 +3733,22 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 }
 
 
+ISphExpr * ExprParser_t::CreateLengthNode ( const ExprNode_t & tNode )
+{
+	const ExprNode_t & tLeft = m_dNodes [ tNode.m_iLeft ];
+
+	switch ( tLeft.m_iToken )
+	{
+		case TOK_ATTR_MVA32:
+		case TOK_ATTR_MVA64:
+			return new Expr_MVALength_c ( tLeft.m_tLocator, tLeft.m_iLocator );
+		default:
+			m_sCreateError = "LENGTH() argument must be MVA";
+			return NULL;
+	}
+}
+
+
 ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 {
 	CSphVector<int> dArgs;
@@ -4016,7 +4073,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 		m_sParserError.SetSprintf ( "%s() arguments can not be string", g_dFuncs[iFunc].m_sName );
 		return -1;
 	}
-	if ( bGotMva && !(eFunc==FUNC_IN || eFunc==FUNC_TO_STRING ) )
+	if ( bGotMva && !(eFunc==FUNC_IN || eFunc==FUNC_TO_STRING || eFunc==FUNC_LENGTH ) )
 	{
 		m_sParserError.SetSprintf ( "%s() arguments can not be MVA", g_dFuncs[iFunc].m_sName );
 		return -1;

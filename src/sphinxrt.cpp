@@ -3787,7 +3787,7 @@ CSphIndex * RtIndex_t::LoadDiskChunk ( const char * sChunk, CSphString & sError 
 	MEMORY ( SPH_MEM_IDX_DISK );
 
 	// !COMMIT handle errors gracefully instead of dying
-	CSphIndex * pDiskChunk = sphCreateIndexPhrase ( m_sIndexName.cstr(), sChunk );
+	CSphIndex * pDiskChunk = sphCreateIndexPhrase ( sChunk, sChunk );
 	if ( !pDiskChunk )
 	{
 		sError.SetSprintf ( "disk chunk %s: alloc failed", sChunk );
@@ -3796,6 +3796,7 @@ CSphIndex * RtIndex_t::LoadDiskChunk ( const char * sChunk, CSphString & sError 
 
 	pDiskChunk->SetWordlistPreload ( m_bPreloadWordlist );
 	pDiskChunk->m_iExpansionLimit = m_iExpansionLimit;
+	pDiskChunk->SetBinlog ( false );
 	pDiskChunk->SetEnableStar ( m_bEnableStar );
 
 	CSphString sWarning;
@@ -7051,6 +7052,10 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 	m_pTokenizer = pIndex->GetTokenizer()->Clone ( SPH_CLONE_INDEX );
 	m_pDict = pIndex->GetDictionary()->Clone ();
 	PostSetup();
+	CSphString sName;
+	sName.SetSprintf ( "%s_%d", m_sIndexName.cstr(), m_pDiskChunks.GetLength() );
+	pIndex->SetName ( sName.cstr() );
+	pIndex->SetBinlog ( false );
 
 	// FIXME? what about copying m_TID etc?
 

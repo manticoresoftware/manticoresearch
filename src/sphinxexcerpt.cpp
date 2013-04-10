@@ -1506,7 +1506,11 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 		{
 			// there might be just enough space to partially display this passage
 			if ( ( iTotalCodes + iKeywordsLength )<=tQuery.m_iLimit )
+			{
 				dShow.Add ( tBest );
+				iTotalWords += tBest.m_iWords;
+				iTotalCodes += tBest.m_iCodes;
+			}
 			break;
 		}
 
@@ -1973,7 +1977,7 @@ void SnippetsDocIndex_c::ParseQuery ( const char * sQuery, ISphTokenizer * pToke
 				continue;
 
 			m_dAllKeywords.Add ( (const char*)sWord );
-			if ( sWord[0]=='*' || sWord [ strlen((const char*)sWord)-1 ]=='*' )
+			if ( sWord[0]=='*' || sWord [ strlen ( (const char*)sWord)-1 ]=='*' )
 				AddWordStar ( (const char *)sWord );
 			else
 				AddWord ( uWordID, pTokenizer->GetLastTokenLen() );

@@ -145,7 +145,7 @@ EXPONENT			[eE](\+|-)?{DIGIT}+
 [a-zA-Z_0-9]+		{ YYSTOREBOUNDS; return TOK_BAD_NUMERIC; }
 @{ID}				{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_USERVAR; }
 @@{ID}				{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_SYSVAR; }
-"`ID`"				{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_ID; }
+"`ID`"				{ YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; lvalp->m_sValue.SetBinary ( yytext+1, strlen(yytext)-2 ); return TOK_ID; }
 `{ID}`				{ YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; lvalp->m_sValue.SetBinary ( yytext+1, strlen(yytext)-2 ); return TOK_IDENT; }
 
 {SPACE}+			{ ; }

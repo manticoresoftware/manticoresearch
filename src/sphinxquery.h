@@ -20,14 +20,6 @@
 
 //////////////////////////////////////////////////////////////////////////////
 
-enum XQStarPosition
-{
-	STAR_NONE	= 0,
-	STAR_FRONT	= 1,
-	STAR_BACK	= 2,
-	STAR_BOTH	= 3
-};
-
 /// extended query word with attached position within atom
 struct XQKeyword_t
 {

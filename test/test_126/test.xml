@@ -33,6 +33,23 @@ index test
 	expand_keywords	= 1
 }
 
+source src_prefix
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT 1, 'force all' UNION SELECT 2, 'forcing me' UNION SELECT 3, 'foam stuff'
+}
+index prefix
+{
+	source			= src_prefix
+	path			= <data_path/>/prefix
+	charset_type 	= utf-8
+	expand_keywords	= 1
+	min_prefix_len = 2
+	enable_star = 1
+}
+
 index expanded_plain
 {
 	source			= srctest
@@ -99,6 +116,14 @@ index plain_inline
 </config>
 
 <queries>
+<query mode="extended2" index="test">dog run</query>
+<query mode="extended2" index="test">=dog =run</query>
+<query mode="phrase" index="test">dog run</query>
+<query mode="phrase" index="test">=dog =run</query>
+<query mode="phrase" index="test">dog* run</query>
+<!-- regression expand_keywords vs prefix -->
+<query mode="extended2" index="prefix">for</query>
+<query mode="extended2" index="prefix">fo</query>
 <query mode="extended2" index="test">dog run</query>
 <query mode="extended2" index="test">=dog =run</query>
 <query mode="phrase" index="test">dog run</query>

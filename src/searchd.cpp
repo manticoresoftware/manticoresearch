@@ -18705,7 +18705,35 @@ bool CheckConfigChanges ()
 		memset ( &tStat, 0, sizeof ( tStat ) );
 
 	DWORD uCRC32 = 0;
+
+#if !USE_WINDOWS
+	char sBuf [ 8192 ];
+	FILE * fp = NULL;
+
+	fp = fopen ( g_sConfigFile.cstr (), "rb" );
+	if ( !fp )
+		return true;
+	fgets ( sBuf, sizeof(sBuf), fp );
+	fclose ( fp );
+
+	char * p = sBuf;
+	while ( isspace(*p) )
+		p++;
+	if ( p[0]=='#' && p[1]=='!' )
+	{
+		p += 2;
+
+		CSphVector<char> dContent;
+		char sError [ 1024 ];
+		if ( !TryToExec ( p, p+strlen(p), g_sConfigFile.cstr(), dContent, sError, sizeof(sError) ) )
+			return true;
+
+		uCRC32 = sphCRC32 ( (const BYTE*)dContent.Begin(), dContent.GetLength() );
+	} else
+		sphCalcFileCRC32 ( g_sConfigFile.cstr (), uCRC32 );
+#else
 	sphCalcFileCRC32 ( g_sConfigFile.cstr (), uCRC32 );
+#endif
 
 	if ( g_uCfgCRC32==uCRC32 && tStat.st_size==g_tCfgStat.st_size
 		&& tStat.st_mtime==g_tCfgStat.st_mtime && tStat.st_ctime==g_tCfgStat.st_ctime )

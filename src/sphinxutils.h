@@ -132,6 +132,10 @@ protected:
 	char *			GetBufferString ( char * szDest, int iMax, const char * & szSource );
 };
 
+#if !USE_WINDOWS
+bool TryToExec ( char * pBuffer, char * pEnd, const char * szFilename, CSphVector<char> & dResult, char * sError, int iErrorLen );
+#endif
+
 /////////////////////////////////////////////////////////////////////////////
 
 enum

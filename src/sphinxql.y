@@ -403,6 +403,16 @@ where_item:
 			if ( !pParser->AddFloatRangeFilter ( $1.m_sValue, $3.m_fValue, $5.m_fValue, true ) )
 				YYERROR;
 		}
+	| expr_ident TOK_BETWEEN const_int TOK_AND const_float
+		{
+			if ( !pParser->AddFloatRangeFilter ( $1.m_sValue, $3.m_iValue, $5.m_fValue, true ) )
+				YYERROR;
+		}
+	| expr_ident TOK_BETWEEN const_float TOK_AND const_int
+		{
+			if ( !pParser->AddFloatRangeFilter ( $1.m_sValue, $3.m_fValue, $5.m_iValue, true ) )
+				YYERROR;
+		}
 	| expr_ident '>' const_float
 		{
 			if ( !pParser->AddFloatRangeFilter ( $1.m_sValue, $3.m_fValue, FLT_MAX, false ) )

@@ -633,7 +633,7 @@ public:
 	virtual uint64_t				GetSettingsFNV () const;
 
 	/// get (readonly) lowercaser
-	const CSphLowercaser &			GetLowercaser() const  { return m_tLC; }
+	const CSphLowercaser &			GetLowercaser() const { return m_tLC; }
 
 protected:
 	virtual bool					RemapCharacters ( const char * sConfig, DWORD uFlags, const char * sSource, bool bCanRemap, CSphString & sError );
@@ -2992,6 +2992,7 @@ public:
 	virtual int					GetKillListSize () const = 0;
 	virtual bool				HasDocid ( SphDocID_t uDocid ) const = 0;
 	virtual bool				IsRT() const { return false; }
+	void						SetBinlog ( bool bBinlog ) { m_bBinlog = bBinlog; }
 	virtual int64_t *			GetFieldLens() const { return NULL; }
 
 	virtual bool				IsStarDict() const { return m_bEnableStar; } // disk index overrides this to support super-old legacy formats
@@ -3115,6 +3116,7 @@ protected:
 
 	bool						m_bKeepFilesOpen;		///< keep files open to avoid race on seamless rotation
 	bool						m_bPreloadWordlist;		///< preload wordlists or keep them on disk
+	bool						m_bBinlog;
 
 	bool						m_bStripperInited;		///< was stripper initialized (old index version (<9) handling)
 	bool						m_bEnableStar;			///< enable star-syntax

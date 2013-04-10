@@ -180,6 +180,7 @@ static const int	MIN_READ_UNHINTED		= 1024;
 #define READ_NO_SIZE_HINT 0
 
 static bool			g_bSphQuiet					= false;
+static bool			g_bDebugCheck				= false;
 
 static int			g_iReadBuffer			= DEFAULT_READ_BUFFER;
 static int			g_iReadUnhinted			= DEFAULT_READ_UNHINTED;
@@ -8227,6 +8228,7 @@ CSphIndex::CSphIndex ( const char * sIndexName, const char * sFilename )
 	, m_fWriteFactor ( 0.0f )
 	, m_bKeepFilesOpen ( false )
 	, m_bPreloadWordlist ( true )
+	, m_bBinlog ( true )
 	, m_bStripperInited ( true )
 	, m_bEnableStar ( false )
 	, m_bId32to64 ( false )
@@ -8430,7 +8432,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 	if ( !m_iDocinfo || !uRows )
 		return 0;
 
-	if ( g_pBinlog )
+	if ( m_bBinlog && g_pBinlog )
 		g_pBinlog->BinlogUpdateAttributes ( &m_iTID, m_sIndexName.cstr(), tUpd );
 
 	// remap update schema to index schema
@@ -9045,7 +9047,7 @@ bool CSphIndex_VLN::SaveAttributes ( CSphString & sError ) const
 	if ( !JuggleFile ( "spa", sError ) )
 		return false;
 
-	if ( g_pBinlog )
+	if ( m_bBinlog && g_pBinlog )
 		g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
 
 	if ( *m_pAttrsStatus==uAttrStatus )
@@ -15833,7 +15835,7 @@ bool CSphIndex_VLN::Preread ()
 	}
 
 	// build attributes hash
-	if ( m_pDocinfo.GetLength() && m_pDocinfoHash.GetLength() )
+	if ( m_pDocinfo.GetLength() && m_pDocinfoHash.GetLength() && !g_bDebugCheck )
 	{
 		sphLogDebug ( "Hashing docinfo" );
 		assert ( CheckDocsCount ( m_iDocinfo, m_sLastError ) );
@@ -16527,6 +16529,14 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 		pInfix->m_dWords[0].m_sWord.SetSprintf ( "*%s*", pNode->m_dWords[0].m_sWord.cstr() );
 		pInfix->m_pParent = pExpand;
 		pExpand->m_dChildren.Add ( pInfix );
+	} else if ( tSettings.m_iMinPrefixLen>0 )
+	{
+		assert ( pNode->m_dChildren.GetLength()==0 );
+		assert ( pNode->m_dWords.GetLength()==1 );
+		XQNode_t * pPrefix = CloneKeyword ( pNode );
+		pPrefix->m_dWords[0].m_sWord.SetSprintf ( "%s*", pNode->m_dWords[0].m_sWord.cstr() );
+		pPrefix->m_pParent = pExpand;
+		pExpand->m_dChildren.Add ( pPrefix );
 	}
 
 	if ( tSettings.m_bIndexExactWords )
@@ -16545,7 +16555,7 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & tSettings, bool bStarEnabled )
 {
 	// only if expansion makes sense at all
-	if ( tSettings.m_iMinInfixLen<=0 && !tSettings.m_bIndexExactWords )
+	if ( tSettings.m_iMinInfixLen<=0 && tSettings.m_iMinPrefixLen<=0 && !tSettings.m_bIndexExactWords )
 		return pNode;
 
 	// process children for composite nodes
@@ -19907,7 +19917,7 @@ void CSphDictCRCTraits::AddWordform ( CSphWordforms * pContainer, char * sBuffer
 	if ( !pTokenizer->TokenIsBlended () && pTokenizer->GetToken () )
 	{
 		sphWarning ( "invalid mapping (must be exactly 1 destination keyword) ( wordforms='%s' ). Fix your wordforms file '%s'.",
-					 sBuffer, szFile );
+					sBuffer, szFile );
 		return;
 	}
 
@@ -28337,6 +28347,12 @@ void CSphSource_MSSQL::OdbcPostConnect ()
 void sphSetQuiet ( bool bQuiet )
 {
 	g_bSphQuiet = bQuiet;
+}
+
+
+void sphSetDebugCheck ()
+{
+	g_bDebugCheck = true;
 }
 
 

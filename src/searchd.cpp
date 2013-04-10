@@ -10660,7 +10660,7 @@ public:
 	}
 
 
-	virtual bool Process ( CSphQueryResult * pResult, CSphString & sError )
+	virtual bool Process ( AggrResult_t * pResult, CSphString & sError )
 	{
 		assert ( pResult );
 
@@ -10671,26 +10671,48 @@ public:
 		const CSphColumnInfo * pCol = pResult->m_tSchema.GetAttr ( m_sCol.cstr() );
 		if ( !pCol )
 			LOC_ERROR1 ( "REMOVE_REPEATS() argument 2 (column %s) not found in result set", m_sCol.cstr() );
-		if ( pCol->m_eAttrType!=SPH_ATTR_INTEGER && pCol->m_eAttrType!=SPH_ATTR_BIGINT && pCol->m_eAttrType!=SPH_ATTR_TOKENCOUNT )
-			LOC_ERROR1 ( "REMOVE_REPEATS() argument 2 (column %s) must be of INTEGER or BIGINT type", m_sCol.cstr() );
+
+		ESphAttr t = pCol->m_eAttrType;
+		if ( t!=SPH_ATTR_INTEGER && t!=SPH_ATTR_BIGINT && t!=SPH_ATTR_TOKENCOUNT && t!=SPH_ATTR_STRINGPTR && t!=SPH_ATTR_STRING )
+			LOC_ERROR1 ( "REMOVE_REPEATS() argument 2 (column %s) must be of INTEGER, BIGINT, or STRINGPTR type", m_sCol.cstr() );
+
+		// we need to initialize the "last seen" value with a key that
+		// is guaranteed to be different from the 1st match that we will scan
+		// hence (val-1) for scalars, and NULL for strings
+		SphAttr_t iLastValue = ( t==SPH_ATTR_STRING || t==SPH_ATTR_STRINGPTR )
+			? 0
+			: ( dMatches [ pResult->m_iOffset ].GetAttr ( pCol->m_tLocator ) - 1 );
 
 		// LIMIT N,M clause must be applied before (!) table function
 		// so we scan source matches N to N+M-1
 		//
 		// within those matches, we filter out repeats in a given column,
 		// skip first m_iOffset eligible ones, and emit m_iLimit more
-		SphAttr_t iLastValue = dMatches [ pResult->m_iOffset ].GetAttr ( pCol->m_tLocator ) - 1;
 		int iOutPos = 0;
-
 		for ( int i=pResult->m_iOffset; i<Min ( dMatches.GetLength(), pResult->m_iOffset+pResult->m_iCount ); i++ )
 		{
-			// skip repeats
+			// get value, skip repeats
 			SphAttr_t iCur = dMatches[i].GetAttr ( pCol->m_tLocator );
+			if ( t==SPH_ATTR_STRING && iCur!=0 )
+				iCur = (SphAttr_t)( pResult->m_dTag2Pools [ dMatches[i].m_iTag ].m_pStrings + iCur );
+
 			if ( iCur==iLastValue )
 				continue;
+			if ( iCur && iLastValue && t==SPH_ATTR_STRINGPTR && strcmp ( (const char*)iCur, (const char*)iLastValue )==0 )
+				continue;
+			if ( iCur && iLastValue && t==SPH_ATTR_STRING )
+			{
+				const BYTE * a = (const BYTE*) iCur;
+				const BYTE * b = (const BYTE*) iLastValue;
+				int iLen1 = sphUnpackStr ( a, &a );
+				int iLen2 = sphUnpackStr ( b, &b );
+				if ( iLen1==iLen2 && memcmp ( a, b, iLen1 )==0 )
+					continue;
+			}
 
-			// update last value, skip eligible rows according to tablefunc offset
 			iLastValue = iCur;
+
+			// skip eligible rows according to tablefunc offset
 			if ( m_iOffset>0 )
 			{
 				m_iOffset--;

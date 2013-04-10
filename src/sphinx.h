@@ -2425,13 +2425,13 @@ enum ESphCollation
 
 /// table function interface
 class CSphQuery;
-class CSphQueryResult;
+struct AggrResult_t;
 class ISphTableFunc
 {
 public:
 	virtual			~ISphTableFunc() {}
 	virtual bool	ValidateArgs ( const CSphVector<CSphString> & dArgs, const CSphQuery & tQuery, CSphString & sError ) = 0;
-	virtual bool	Process ( CSphQueryResult * pResult, CSphString & sError ) = 0;
+	virtual bool	Process ( AggrResult_t * pResult, CSphString & sError ) = 0;
 	virtual bool	LimitPushdown ( int, int ) { return false; } // FIXME! implement this
 };
 

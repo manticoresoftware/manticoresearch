@@ -10787,7 +10787,8 @@ static const char * g_dSqlStmts[STMT_TOTAL] =
 	"show_status", "show_meta", "set", "begin", "commit", "rollback", "call",
 	"desc", "show_tables", "update", "create_func", "drop_func", "attach_index",
 	"flush_rtindex", "show_variables", "truncate_rtindex", "select_sysvar",
-	"show_collation", "optimize_index", "show_agent_status"
+	"show_collation", "optimize_index", "show_agent_status", "show_index_status",
+	"show_profile", "alter"
 };
 
 

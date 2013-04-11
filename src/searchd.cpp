@@ -8146,40 +8146,13 @@ static int KillAllDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, const 
 		TaggedMatchSorter_fn fnSort;
 		sphSort ( tRes.m_dMatches.Begin(), tRes.m_dMatches.GetLength(), fnSort, fnSort );
 
-		// fold them matches
-		if ( tQuery.m_dIndexWeights.GetLength() )
+		// by default, simply remove dupes (select first by tag)
+		ARRAY_FOREACH ( i, tRes.m_dMatches )
 		{
-			// if there were per-index weights, compute weighted ranks sum
-			int iCur = 0;
-			int iMax = tRes.m_dMatches.GetLength();
-
-			while ( iCur<iMax )
-			{
-				CSphMatch & tMatch = tRes.m_dMatches[iCur++];
-
-				while ( iCur<iMax && tRes.m_dMatches[iCur].m_iDocID==tMatch.m_iDocID )
-				{
-					const CSphMatch & tDupe = tRes.m_dMatches[iCur];
-					int iAddWeight = tDupe.m_iWeight;
-					tMatch.m_iWeight += iAddWeight;
-
-					iDupes++;
-					iCur++;
-				}
-
-				pSorter->Push ( tMatch );
-			}
-
-		} else
-		{
-			// by default, simply remove dupes (select first by tag)
-			ARRAY_FOREACH ( i, tRes.m_dMatches )
-			{
-				if ( i==0 || tRes.m_dMatches[i].m_iDocID!=tRes.m_dMatches[i-1].m_iDocID )
-					pSorter->Push ( tRes.m_dMatches[i] );
-				else
-					iDupes++;
-			}
+			if ( i==0 || tRes.m_dMatches[i].m_iDocID!=tRes.m_dMatches[i-1].m_iDocID )
+				pSorter->Push ( tRes.m_dMatches[i] );
+			else
+				iDupes++;
 		}
 	}
 

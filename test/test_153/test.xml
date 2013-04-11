@@ -421,6 +421,17 @@ index dist_w2
 <sphinxql>SELECT *, weight() as w FROM dist_w2, dist_w1, proxy_loc2  ORDER BY id asc OPTION index_weights=(proxy_loc2=2, dist_w1=10, dist_w2=100)</sphinxql>
 <sphinxql>SELECT *, weight() as w FROM proxy_loc2, dist_w1, dist_w2  WHERE MATCH ('the') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100)</sphinxql>
 <sphinxql>SELECT *, weight() as w FROM dist_w2, dist_w1, proxy_loc2  WHERE MATCH ('the') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100)</sphinxql>
+<!-- regression index_weights vs rankers-->
+<sphinxql>SELECT *, weight() as w FROM proxy_loc2, dist_w1, dist_w2  WHERE MATCH ('the | box') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100)</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM dist_w2, dist_w1, proxy_loc2  WHERE MATCH ('the | box') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100)</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM proxy_loc2, dist_w1, dist_w2  WHERE MATCH ('the | box') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100), ranker=proximity_bm25</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM dist_w2, dist_w1, proxy_loc2  WHERE MATCH ('the | box') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100), ranker=proximity_bm25</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM proxy_loc2, dist_w1, dist_w2  WHERE MATCH ('the | box') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100), ranker=expr('sum(lcs)*1000+bm25')</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM dist_w2, dist_w1, proxy_loc2  WHERE MATCH ('the | box') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100), ranker=expr('sum(lcs)*1000+bm25')</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM proxy_loc2, dist_w1, dist_w2  WHERE MATCH ('the | box') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100), ranker=bm25</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM dist_w2, dist_w1, proxy_loc2  WHERE MATCH ('the | box') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100), ranker=bm25</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM proxy_loc2, dist_w1, dist_w2  WHERE MATCH ('the | box') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100), ranker=wordcount</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM dist_w2, dist_w1, proxy_loc2  WHERE MATCH ('the | box') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100), ranker=wordcount</sphinxql>
 </sphqueries>
 
 <db_create>

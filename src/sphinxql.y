@@ -514,7 +514,15 @@ const_list:
 
 opt_group_clause:
 	// empty
-	| TOK_GROUP TOK_BY group_items_list
+	| TOK_GROUP opt_int TOK_BY group_items_list
+	;
+
+opt_int:
+	// empty
+	| TOK_CONST_INT
+		{
+			pParser->SetGroupbyLimit ( $1.m_iValue );
+		}
 	;
 
 group_items_list:

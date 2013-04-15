@@ -1232,12 +1232,7 @@ static bool CheckQuorumProximity ( XQNode_t * pNode, CSphString * pError )
 		return false;
 	}
 
-	bool bValid = true;
-	ARRAY_FOREACH_COND ( i, pNode->m_dChildren, bValid )
-	{
-		bValid &= CheckQuorumProximity ( pNode->m_dChildren[i], pError );
-	}
-
+	bool bValid = ARRAY_ALL ( bValid, pNode->m_dChildren, CheckQuorumProximity ( pNode->m_dChildren[_all], pError ) );
 	return bValid;
 }
 

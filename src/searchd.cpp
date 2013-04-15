@@ -552,7 +552,7 @@ enum SearchdStatus_e
 /// master-agent API protocol extensions version
 enum
 {
-	VER_MASTER = 5
+	VER_MASTER = 6
 };
 
 
@@ -5671,7 +5671,7 @@ protected:
 
 int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuery & q, bool bAgentWeight ) const
 {
-	int iReqSize = 132 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
+	int iReqSize = 136 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
 		+ q.m_sSortBy.Length()
 		+ strlen ( sIndexes )
 		+ q.m_sGroupBy.Length()
@@ -5876,6 +5876,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	tOut.SendString ( q.m_sOuterOrderBy.cstr() ); // v.2
 	if ( q.m_bHasOuter )
 		tOut.SendInt ( q.m_iOuterOffset + q.m_iOuterLimit );
+	tOut.SendInt ( q.m_iGroupbyLimit );
 }
 
 
@@ -6744,6 +6745,11 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 		tQuery.m_sOuterOrderBy = tReq.GetString();
 		if ( tQuery.m_bHasOuter )
 			tQuery.m_iOuterLimit = tReq.GetInt();
+	}
+
+	if ( iMasterVer>=6 )
+	{
+		tQuery.m_iGroupbyLimit = tReq.GetInt();
 	}
 
 	/////////////////////
@@ -8132,12 +8138,18 @@ static int KillAllDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, const 
 		// groupby sorter does that automagically
 		pSorter->SetMVAPool ( NULL ); // because we must be able to group on @groupby anyway
 		pSorter->SetStringPool ( NULL );
+		int iMC = 0;
+		int iBound = 0;
+
 		ARRAY_FOREACH ( i, tRes.m_dMatches )
 		{
 			CSphMatch & tMatch = tRes.m_dMatches[i];
 
-			if ( !pSorter->PushGrouped ( tMatch ) )
+			if ( !pSorter->PushGrouped ( tMatch, i==iBound ) )
 				iDupes++;
+
+			if ( i==iBound )
+				iBound += tRes.m_dMatchCounts[iMC++];
 		}
 	} else
 	{
@@ -9306,7 +9318,10 @@ int64_t sphCpuTimer ()
 	if ( !g_bCpuStats )
 		return 0;
 
-#if defined(CLOCK_PROCESS_CPUTIME_ID)
+#if defined (CLOCK_THREAD_CPUTIME_ID)
+// CPU time (user+sys), Linux style, current thread
+#define LOC_CLOCK CLOCK_PROCESS_CPUTIME_ID
+#elif defined(CLOCK_PROCESS_CPUTIME_ID)
 // CPU time (user+sys), Linux style
 #define LOC_CLOCK CLOCK_PROCESS_CPUTIME_ID
 #elif defined(CLOCK_PROF)
@@ -11005,6 +11020,7 @@ public:
 	bool						UpdateStatement ( SqlNode_t * pNode );
 	void						UpdateAttr ( const CSphString&, const SqlNode_t * pValue, ESphAttr eType = SPH_ATTR_INTEGER );
 	void						UpdateMVAAttr ( const CSphString& sName, const SqlNode_t& dValues );
+	void						SetGroupbyLimit ( int iLimit );
 private:
 	void			AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
 	void			AddUpdatedAttr ( const CSphString&, ESphAttr eType );
@@ -11387,6 +11403,11 @@ void SqlParser_c::AddGroupBy ( const CSphString & sGroupBy )
 		sphColumnToLowercase ( const_cast<char *>( sTmp.cstr() ) );
 		m_pQuery->m_sGroupBy.SetSprintf ( "%s, %s", m_pQuery->m_sGroupBy.cstr(), sTmp.cstr() );
 	}
+}
+
+void SqlParser_c::SetGroupbyLimit ( int iLimit )
+{
+	m_pQuery->m_iGroupbyLimit = iLimit;
 }
 
 bool SqlParser_c::AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd )

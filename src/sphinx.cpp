@@ -5677,6 +5677,7 @@ CSphQuery::CSphQuery ()
 
 	, m_iSQLSelectStart	( -1 )
 	, m_iSQLSelectEnd	( -1 )
+	, m_iGroupbyLimit	( 1 )
 
 	, m_iOldVersion		( 0 )
 	, m_iOldGroups		( 0 )
@@ -6219,31 +6220,41 @@ void CSphSchema::AdoptPtrAttrs ( const CSphSchema & tSrc )
 }
 
 
-void CSphSchema::CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const
+void CSphSchema::CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound ) const
 {
 	assert ( pDst );
-	FreeStringPtrs ( pDst );
-	pDst->Clone ( rhs, GetDynamicSize() );
-	CopyStrings ( pDst, rhs );
+	FreeStringPtrs ( pDst, 0, iUpBound );
+	pDst->Combine ( rhs, GetDynamicSize(), iUpBound );
+	CopyPtrs ( pDst, rhs, iUpBound );
 };
+
+void CSphSchema::CombineMatch ( CSphMatch * pDst, const CSphMatch & rhs1, const CSphMatch & rhs2, int iUpBound ) const
+{
+	assert ( pDst );
+	FreeStringPtrs ( pDst, (pDst==&rhs1)?iUpBound:0 );
+	pDst->Combine ( rhs1, GetDynamicSize(), iUpBound, &rhs2 );
+	CombinePtrs ( pDst, rhs1, rhs2, iUpBound );
+}
 
 void CSphSchema::CloneWholeMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const
 {
 	assert ( pDst );
 	FreeStringPtrs ( pDst );
-	pDst->Clone ( rhs, GetRowSize() );
-	CopyStrings ( pDst, rhs );
+	pDst->Combine ( rhs, GetRowSize() );
+	CopyPtrs ( pDst, rhs );
 };
 
-void CSphSchema::CopyStrings ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound ) const
+void CSphSchema::CopyPtrs ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound ) const
 {
+	int i = 0;
+
 	if ( iUpBound<0 )
 	{
 		ARRAY_FOREACH ( i, m_dPtrAttrs )
 			*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i].m_iOffset) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i].m_iOffset)).Leak();
 	} else
 	{
-		ARRAY_FOREACH ( i, m_dPtrAttrs )
+		for ( ; i<m_dPtrAttrs.GetLength(); ++i )
 			if ( m_dPtrAttrs[i].m_iOffset < iUpBound )
 				*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i].m_iOffset) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i].m_iOffset)).Leak();
 			else
@@ -6268,7 +6279,35 @@ void CSphSchema::CopyStrings ( CSphMatch * pDst, const CSphMatch & rhs, int iUpB
 	}
 }
 
-void CSphSchema::FreeStringPtrs ( CSphMatch * pMatch, int iUpBound ) const
+void CSphSchema::CombinePtrs ( CSphMatch * pDst, const CSphMatch & rhs1, const CSphMatch & rhs2, int iUpBound ) const
+{
+	ARRAY_FOREACH ( i, m_dPtrAttrs )
+	{
+		const CSphMatch & rhs = ( m_dPtrAttrs[i].m_iOffset < iUpBound ) ? rhs1 : rhs2;
+		if ( pDst!=&rhs )
+			*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i].m_iOffset) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i].m_iOffset)).Leak();
+	}
+
+	// not immediately obvious: this is not needed while pushing matches to sorters; factors are held in an outer hash table
+	// but it is necessary to copy factors when combining results from several indexes via a sorter because at this moment matches are the owners of factor data
+	if ( pDst!=&rhs1 )
+		ARRAY_FOREACH ( i, m_dFactorAttrs )
+		{
+			int iOffset = m_dFactorAttrs[i].m_iOffset;
+			BYTE * pData = *(BYTE**)(rhs1.m_pDynamic+iOffset);
+			if ( pData )
+			{
+				DWORD uDataSize = *(DWORD*)pData;
+				assert ( uDataSize );
+
+				BYTE * pCopy = new BYTE[uDataSize];
+				memcpy ( pCopy, pData, uDataSize );
+				*(BYTE**)(pDst->m_pDynamic+iOffset) = pCopy;
+			}
+		}
+}
+
+void CSphSchema::FreeStringPtrs ( CSphMatch * pMatch, int iLowBound, int iUpBound ) const
 {
 	assert ( pMatch );
 	if ( !pMatch->m_pDynamic )
@@ -6280,20 +6319,30 @@ void CSphSchema::FreeStringPtrs ( CSphMatch * pMatch, int iUpBound ) const
 		if ( iUpBound<0 )
 		{
 			ARRAY_FOREACH ( i, m_dPtrAttrs )
+			{
+				if ( m_dPtrAttrs[i].m_iOffset<iLowBound )
+					continue;
 				sStr.Adopt ( (char**) (pMatch->m_pDynamic+m_dPtrAttrs[i].m_iOffset));
+			}
 		} else
 		{
 			ARRAY_FOREACH ( i, m_dPtrAttrs )
-				if ( m_dPtrAttrs[i].m_iOffset < iUpBound )
+			{
+				if ( m_dPtrAttrs[i].m_iOffset<iLowBound )
+					continue;
+				if ( m_dPtrAttrs[i].m_iOffset<iUpBound )
 					sStr.Adopt ( (char**) (pMatch->m_pDynamic+m_dPtrAttrs[i].m_iOffset));
 				else
 					break;
+			}
 		}
 	}
 
 	ARRAY_FOREACH ( i, m_dFactorAttrs )
 	{
 		int iOffset = m_dFactorAttrs[i].m_iOffset;
+		if ( iOffset<iLowBound )
+			continue;
 		BYTE * pData = *(BYTE**)(pMatch->m_pDynamic+iOffset);
 		if ( pData )
 		{

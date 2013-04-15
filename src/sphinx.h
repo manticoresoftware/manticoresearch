@@ -1189,16 +1189,21 @@ public:
 
 private:
 	/// assignment
-	void Clone ( const CSphMatch & rhs, int iDynamic )
+	void Combine ( const CSphMatch & rhs, int iDynamic, int iUpBound=-1, const CSphMatch * prhs2=NULL )
 	{
 		// check that we're either initializing a new one, or NOT changing the current size
 		assert ( iDynamic>=0 );
 		assert ( !m_pDynamic || iDynamic==(int)m_pDynamic[-1] );
+		if ( iUpBound<0 )
+			iUpBound = iDynamic;
 
-		m_iDocID = rhs.m_iDocID;
-		m_iWeight = rhs.m_iWeight;
-		m_pStatic = rhs.m_pStatic;
-		m_iTag = rhs.m_iTag;
+		if ( this!=&rhs )
+		{
+			m_iDocID = rhs.m_iDocID;
+			m_iWeight = rhs.m_iWeight;
+			m_pStatic = rhs.m_pStatic;
+			m_iTag = rhs.m_iTag;
+		}
 
 		if ( iDynamic )
 		{
@@ -1212,9 +1217,18 @@ private:
 #endif
 			}
 
-			assert ( rhs.m_pDynamic );
-			assert ( m_pDynamic[-1]==rhs.m_pDynamic[-1] ); // ensure we're not changing X to Y
-			memcpy ( m_pDynamic, rhs.m_pDynamic, iDynamic*sizeof(CSphRowitem) );
+			if ( this!=&rhs )
+			{
+				assert ( rhs.m_pDynamic );
+				assert ( m_pDynamic[-1]==rhs.m_pDynamic[-1] ); // ensure we're not changing X to Y
+				memcpy ( m_pDynamic, rhs.m_pDynamic, iUpBound*sizeof(CSphRowitem) );
+			}
+			if ( prhs2 && iUpBound<iDynamic )
+			{
+				assert ( prhs2->m_pDynamic );
+				assert ( m_pDynamic[-1]==prhs2->m_pDynamic[-1] ); // ensure we're not changing X to Y
+				memcpy ( m_pDynamic+iUpBound, prhs2->m_pDynamic+iUpBound, (iDynamic-iUpBound)*sizeof(CSphRowitem) );
+			}
 		}
 	}
 
@@ -1437,18 +1451,23 @@ public:
 	/// copy ptr attrs from another schema
 	void					AdoptPtrAttrs ( const CSphSchema & tSrc );
 
-public:
+protected:
 	// also let the schema to clone the matches when necessary
-	void CopyStrings ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound=-1 ) const;
+	void CopyPtrs ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound=-1 ) const;
+	void CombinePtrs ( CSphMatch * pDst, const CSphMatch & rhs1, const CSphMatch & rhs2, int iUpBound ) const;
 
-	// simple copy - clone the fields, copy the dynamic part.
-	void CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const;
+public:
+	// simple copy - clone the fields, copy the whole dynamic part, or just all up to some defined bound
+	void CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound=-1 ) const;
+
+	// clone low part from 1-st match, high from the 2-nd.
+	void CombineMatch ( CSphMatch * pDst, const CSphMatch & rhs1, const CSphMatch & rhs2, int iUpBound=-1 ) const;
 
 	// full copy - for pure dynamic matches.
 	void CloneWholeMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const;
 
 	// free the linked strings and/or just initialize the pointers with NULL
-	void FreeStringPtrs ( CSphMatch * pMatch, int iUpBound=-1 ) const;
+	void FreeStringPtrs ( CSphMatch * pMatch, int iLowBound=0, int iUpBound=-1 ) const;
 
 protected:
 	CSphVector<CSphColumnInfo>		m_dAttrs;			///< all my attributes
@@ -2506,6 +2525,8 @@ public:
 	int				m_iSQLSelectStart;	///< SQL parser helper
 	int				m_iSQLSelectEnd;	///< SQL parser helper
 
+	int				m_iGroupbyLimit;	///< number of elems within group
+
 public:
 	int				m_iOldVersion;		///< version, to fixup old queries
 	int				m_iOldGroups;		///< 0.9.6 group filter values count
@@ -2857,8 +2878,8 @@ public:
 	/// returns true otherwise (even if it was not actually inserted)
 	virtual bool		Push ( const CSphMatch & tEntry ) = 0;
 
-	/// submit pre-grouped match
-	virtual bool		PushGrouped ( const CSphMatch & tEntry ) = 0;
+	/// submit pre-grouped match. bNewSet indicates that the match begins the bunch of matches got from one source
+	virtual bool		PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) = 0;
 
 	/// get entries count
 	virtual int			GetLength () const = 0;

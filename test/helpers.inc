@@ -405,6 +405,81 @@ function ChildrenArray ( $node, $name="" )
 	return $res;
 }
 
+function NextState ( &$iter, &$limits, $ps )
+{
+    if ( $ps>count($limits) )
+        return;
+    ++$iter[$ps];
+    if ( $iter[$ps]>=$limits[$ps])
+    {
+        $iter[$ps]=0;
+        NextState ($iter,$limits,$ps+1);
+    }
+}
+
+function GetVariants ( $qnode, $enc )
+{
+    $res = array();
+    $iters = array();
+    $limits = array();
+    $pos = array();
+    $values = array();
+    $members = array();
+
+    foreach ( ChildrenArray ( $qnode) as $node )
+    {
+        if ( $node->nodeType != XML_TEXT_NODE && $node->nodeType != XML_DOCUMENT_NODE
+            && strtolower ( $node->nodeName ) == "variants" )
+        {
+            $limits[] = $node->attributes->length;
+            $vals = array();
+            foreach ( AttrArray ($node) as $attr )
+                $vals[] = iconv ( 'utf-8', $enc, $attr->nodeValue );
+            $values[] = $vals;
+            $iters[] = 0;
+            $pos[] = count ($members);
+            $members[] = $vals[0];
+        } else
+          $members[] = iconv ( 'utf-8', $enc, $node->nodeValue );
+    }
+
+    $num_states = 1;
+    for ( $i=0; $i<count($limits); ++$i)
+        $num_states = $num_states * $limits[$i];
+
+    $text=implode ( '', $members );
+    $res[] = $text;
+    for ( $i=1; $i<$num_states; ++$i)
+    {
+        NextState ( $iters, $limits, 0);
+        for ( $j=0; $j<count ($pos); ++$j)
+            $members[$pos[$j]] = $values[$j][$iters[$j]];
+        $text=implode ( ' ', $members );
+        $res[] = $text;
+    }
+    return $res;
+}
+
+function AttrArray ( $node, $name="" )
+{
+    $res = array ();
+    if ( !empty($node) && $node->hasAttributes() )
+        for ( $i=0; $i<$node->attributes->length; $i++ )
+        {
+            $child = $node->attributes->item ( $i );
+            if ( $name=="" || strtolower($child->nodeName)==$name )
+                $res[] = $child;
+        }
+    return $res;
+}
+
+function GetfirstAttr ( $node )
+{
+    if ( !empty($node) && $node->hasAttributes() )
+        return $node->attributes->item (0);
+    return NULL;
+}
+
 
 function GetFirstChild ( $node, $name )
 {
@@ -664,6 +739,7 @@ class SphinxConfig
 		return $result;
 	}
 
+
 	function Load ( $config_file )
 	{
 		// load the file
@@ -694,6 +770,21 @@ class SphinxConfig
 			foreach ( ChildrenArray ( $indexer_run, "run" ) as $run )
 				$this->_indexer_runs [] = $run->nodeValue;
 		}
+
+        // extract meta-indexes
+        $use_meta = true;
+        $metaindexes = array();
+        foreach ( ChildrenArray ( $xml, "metaindex" ) as $meta )
+        {
+            $tmp = array();
+            foreach ( ChildrenArray ( $meta, "index") as $idx )
+                $tmp[] = iconv ( 'utf-8', $doc->encoding, $idx->nodeValue );
+
+            $name = GetFirstAttr ( $meta );
+            $metaindexes[$name->nodeValue] = $tmp;
+        }
+        if ( empty ($metaindexes) )
+            $use_meta = false;
 
 		// extract queries
 		$qs = GetFirstChild ( $xml, "queries" );
@@ -840,8 +931,18 @@ class SphinxConfig
 		{
 			$this->_use_sphinxql = true;
 			// new and cool
-			foreach ( ChildrenArray ( $qs, "sphinxql" ) as $q )
-				$this->_sphqueries[] = array ( "query" => iconv ( 'utf-8', $doc->encoding, $q->nodeValue ) );
+            if ( $use_meta )
+            {
+                foreach ( ChildrenArray ( $qs, "sphinxql" ) as $q )
+                    foreach ( GetVariants ( $q, $doc->encoding ) as $query )
+                        foreach ( $metaindexes as $name=>$indexes )
+                            foreach ($indexes as $index)
+                                $this->_sphqueries[] = str_replace ( $name, $index, $query);
+            } else
+            {
+                foreach ( ChildrenArray ( $qs, "sphinxql" ) as $q )
+                    $this->_sphqueries[] = iconv ( 'utf-8', $doc->encoding, $q->nodeValue );
+            }
 		}
 
 
@@ -916,9 +1017,9 @@ class SphinxConfig
 		{
 			$query = 'show meta';
 			if ( $bench === false )
-				$query = $this->_sphqueries[$n]["query"];
+				$query = $this->_sphqueries[$n];
 			else if ( ($n%2)==0 )
-				$query = $this->_sphqueries[$n/2]["query"];
+				$query = $this->_sphqueries[$n/2];
 		
 			$query_result = array ();
 			

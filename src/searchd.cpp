@@ -7223,21 +7223,35 @@ static int SendGetAttrCount ( const CSphSchema & tSchema )
 	return iCount;
 }
 
-class CSphTaggedVector : public CSphVector<PoolPtrs_t>
+class CSphTaggedVector
 {
 public:
 	const PoolPtrs_t & operator [] ( int iTag ) const
 	{
 		int iIndex = iTag & 0x7FFFFFF;
-		assert ( iIndex>=0 && iIndex<m_iLength );
-		return m_pData [ iIndex ];
+		assert ( iIndex>=0 && iIndex<m_dPool.GetLength() );
+		return ( iIndex==iTag ? m_dPool [ iIndex ] : m_tRemote );
 	}
 	PoolPtrs_t & operator [] ( int iTag )
 	{
 		int iIndex = iTag & 0x7FFFFFF;
-		assert ( iIndex>=0 && iIndex<m_iLength );
-		return m_pData [ iIndex ];
+		assert ( iIndex>=0 && iIndex<m_dPool.GetLength() );
+		return ( iIndex==iTag ? m_dPool [ iIndex ] : m_tRemote );
 	}
+
+	void SetRemote ( const PoolPtrs_t & tRemote )
+	{
+		m_tRemote = tRemote;
+	}
+
+	void Resize ( int iSize )
+	{
+		m_dPool.Resize ( iSize );
+	}
+
+private:
+	CSphVector<PoolPtrs_t> m_dPool;
+	PoolPtrs_t m_tRemote;
 };
 
 static char g_sJsonNull[] = "{}";
@@ -10259,10 +10273,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 						AggrResult_t & tRes = m_dResults[iRes];
 						tRes.m_iSuccesses++;
 
-						PoolPtrs_t & tPoolPtrs = tRes.m_dTag2Pools[iOrderTag + iRes - iStart];
-						assert ( !tPoolPtrs.m_pMva && !tPoolPtrs.m_pStrings );
-						tPoolPtrs.m_pMva = m_dMvaStorage.Begin();
-						tPoolPtrs.m_pStrings = m_dStringsStorage.Begin();
+						assert ( !tRes.m_dTag2Pools[iOrderTag + iRes - iStart].m_pMva && !tRes.m_dTag2Pools[iOrderTag + iRes - iStart].m_pStrings );
 
 						tRes.m_dMatches.Reserve ( tRemoteResult.m_dMatches.GetLength() );
 						ARRAY_FOREACH ( i, tRemoteResult.m_dMatches )
@@ -10335,6 +10346,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		m_pProfile->Switch ( SPH_QSTATE_AGGREGATE );
 
 	CSphIOStats tIO;
+	PoolPtrs_t tRemotePool;
+	tRemotePool.m_pMva = m_dMvaStorage.Begin();
+	tRemotePool.m_pStrings = m_dStringsStorage.Begin();
 
 	for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 	{
@@ -10342,6 +10356,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		CSphQuery & tQuery = m_dQueries[iRes];
 		CSphSchemaMT * pExtraSchema = tQuery.m_bAgent ? m_dExtraSchemas.Begin() + ( bWasLocalSorter ? 0 : iRes ) : NULL;
 
+		// minimize sorters needs these pointers
+		tRes.m_dTag2Pools.SetRemote ( tRemotePool );
 		tIO.Add ( tRes.m_tIOStats );
 
 		// if there were no successful searches at all, this is an error

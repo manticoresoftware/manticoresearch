@@ -1804,15 +1804,15 @@ public:
 
 			if ( m_iGLimit==1 )
 			{
-				if ( NOTIFICATIONS )
-				{
-					m_iJustPushed = tEntry.m_iDocID;
-					m_dJustPopped.Add ( pMatch->m_iDocID );
-				}
-
 				// if new entry is more relevant, update from it
 				if ( m_pComp->VirtualIsLess ( *pMatch, tEntry, m_tState ) )
 				{
+					if ( NOTIFICATIONS )
+					{
+						m_iJustPushed = tEntry.m_iDocID;
+						m_dJustPopped.Add ( pMatch->m_iDocID );
+					}
+
 					// clone the low part of the match
 					m_tSchema.CloneMatch ( pMatch, tEntry, m_iPregroupDynamic );
 				}

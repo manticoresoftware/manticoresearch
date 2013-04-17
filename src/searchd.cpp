@@ -236,6 +236,8 @@ static bool				g_bQuerySyslog	= false;
 static CSphString		g_sLogFile;							// log file name
 static bool				g_bLogTty		= false;			// cached isatty(g_iLogFile)
 static LogFormat_e		g_eLogFormat	= LOG_FORMAT_PLAIN;
+static bool				g_bShortenIn	= false;			// whether to cut list in IN() clauses.
+static int				g_iShortenInLimit = 128;			// how many values will be pushed into log uncutted
 
 static int				g_iReadTimeout		= 5;	// sec
 static int				g_iWriteTimeout		= 5;
@@ -6993,13 +6995,35 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 						else
 							tBuf.Append ( " %s IN (", f.m_sAttrName.cstr() );
 
-						ARRAY_FOREACH ( j, f.m_dValues )
+						if ( g_bShortenIn && ( g_iShortenInLimit+1<f.m_dValues.GetLength() ) )
 						{
-							if ( j )
-								tBuf.Append ( ","INT64_FMT, (int64_t)f.m_dValues[j] );
-							else
-								tBuf.Append ( INT64_FMT, (int64_t)f.m_dValues[j] );
-						}
+							// for really long IN-lists optionally format them as N,N,N,N,...N,N,N, with ellipsis inside.
+							int iLimit = g_iShortenInLimit-3;
+							for ( int j=0; j<iLimit; ++j )
+							{
+								if ( j )
+									tBuf.Append ( ","INT64_FMT, (int64_t)f.m_dValues[j] );
+								else
+									tBuf.Append ( INT64_FMT, (int64_t)f.m_dValues[j] );
+							}
+							iLimit = f.m_dValues.GetLength();
+							tBuf.Append ( "%s", ",..." );
+							for ( int j=iLimit-3; j<iLimit; ++j )
+							{
+								if ( j )
+									tBuf.Append ( ","INT64_FMT, (int64_t)f.m_dValues[j] );
+								else
+									tBuf.Append ( INT64_FMT, (int64_t)f.m_dValues[j] );
+							}
+
+						} else
+							ARRAY_FOREACH ( j, f.m_dValues )
+							{
+								if ( j )
+									tBuf.Append ( ","INT64_FMT, (int64_t)f.m_dValues[j] );
+								else
+									tBuf.Append ( INT64_FMT, (int64_t)f.m_dValues[j] );
+							}
 						tBuf.Append ( ")" );
 					}
 					break;
@@ -21170,8 +21194,26 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	else
 		g_sSnippetsFilePrefix = "";
 
-	if ( !strcmp ( hSearchd.GetStr ( "query_log_format", "plain" ), "sphinxql" ) )
+	const char* sLogFormat = hSearchd.GetStr ( "query_log_format", "plain" );
+	if ( !strcmp ( sLogFormat, "sphinxql" ) )
 		g_eLogFormat = LOG_FORMAT_SPHINXQL;
+	else if ( strcmp ( sLogFormat, "plain" ) )
+	{
+		CSphVector<CSphString> dParams;
+		sphSplit ( dParams, sLogFormat );
+		ARRAY_FOREACH ( i, dParams )
+		{
+			sLogFormat = dParams[i].cstr();
+			if ( !strcmp ( sLogFormat, "sphinxql" ) )
+				g_eLogFormat = LOG_FORMAT_SPHINXQL;
+			else if ( !strcmp ( sLogFormat, "plain" ) )
+				g_eLogFormat = LOG_FORMAT_PLAIN;
+			else if ( !strcmp ( sLogFormat, "compact_in" ) )
+				g_bShortenIn = true;
+		}
+		if ( g_bShortenIn && g_eLogFormat==LOG_FORMAT_PLAIN )
+			sphWarning ( "combination of query_log_format=plain and option compact_in is not supported." );
+	}
 
 	// prepare to detach
 	if ( !g_bOptNoDetach )

@@ -93,19 +93,11 @@ int sphinx_factors_unpack ( const unsigned int * in, SPH_UDF_FACTORS * out )
 			f->min_best_span_pos = (int)*in++;
 			f->exact_hit = *in++;
 			f->max_window_hits = (int)*in++;
+			f->min_gaps = (int)*in++;
 		} else
 		{
+			// everything else is already zeroed out by memset() above
 			f->id = i;
-			f->lcs = 0;
-			f->word_count = 0;
-			f->tf_idf = 0.0f;
-			f->min_idf = 0.0f;
-			f->max_idf = 0.0f;
-			f->sum_idf = 0.0f;
-			f->min_hit_pos = 0;
-			f->min_best_span_pos = 0;
-			f->exact_hit = 0;
-			f->max_window_hits = 0;
 		}
 	}
 

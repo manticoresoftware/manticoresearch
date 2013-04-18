@@ -6642,6 +6642,15 @@ SphFactorHash_t * FactorPool_c::GetHashPtr ()
 // EXPRESSION RANKER
 //////////////////////////////////////////////////////////////////////////
 
+/// lean hit
+/// only stores keyword id and hit position
+struct LeanHit_t
+{
+	WORD		m_uQuerypos;
+	Hitpos_t	m_uHitpos;
+};
+
+
 /// ranker state that computes weight dynamically based on user supplied expression (formula)
 template < bool NEED_PACKEDFACTORS = false >
 struct RankerState_Expr_fn : public ISphExtra
@@ -6699,6 +6708,12 @@ public:
 	CSphVector<DWORD>	m_dWindow;
 	int					m_iWindowSize;
 
+	bool					m_bHaveMinWindow;			///< whether to compute minimum matching window
+	int						m_iMinWindowWords;			///< how many unique words have we seen so far
+	CSphVector<LeanHit_t>	m_dMinWindowHits;			///< current minimum matching window candidate hits
+	CSphVector<int>			m_dMinWindowCounts;			///< maps querypos indexes to number of occurrencess in m_dMinWindowHits
+	int						m_iMinGaps[SPH_MAX_FIELDS];	///< number of gaps in the minimum matching window
+
 public:
 						RankerState_Expr_fn ();
 						~RankerState_Expr_fn ();
@@ -6718,6 +6733,9 @@ public:
 
 		m_dTF.Resize ( m_iMaxQpos+1 );
 		m_dTF.Fill ( 0 );
+
+		m_dMinWindowCounts.Resize ( m_iMaxQpos+1 );
+		m_dMinWindowCounts.Fill ( 0 );
 
 		m_iQueryWordCount = 0;
 		m_tKeywordMask.Init ( m_iMaxUniqQpos+1 ); // will not be tracking dupes
@@ -6797,16 +6815,18 @@ public:
 			m_iMinHitPos[i] = 0;
 			m_iMinBestSpanPos[i] = 0;
 			m_iMaxWindowHits[i] = 0;
+			m_iMinGaps[i] = 0;
 		}
-		ARRAY_FOREACH ( i, m_dTF )
-			m_dTF[i] = 0;
-		ARRAY_FOREACH ( i, m_dFieldTF ) // OPTIMIZE? make conditional?
-			m_dFieldTF[i] = 0;
+		m_dTF.Fill ( 0 );
+		m_dFieldTF.Fill ( 0 ); // OPTIMIZE? make conditional?
 		m_uMatchedFields = 0;
 		m_uExactHit = 0;
 		m_uDocWordCount = 0;
 		m_dWindow.Resize ( 0 );
 		m_fDocBM25A = 0;
+		m_dMinWindowHits.Resize ( 0 );
+		m_dMinWindowCounts.Fill ( 0 );
+		m_iMinWindowWords = 0;
 	}
 
 	void FlushMatches ()
@@ -6896,6 +6916,7 @@ enum ExprRankerNode_e
 	XRANK_MIN_BEST_SPAN_POS,
 	XRANK_EXACT_HIT,
 	XRANK_MAX_WINDOW_HITS,
+	XRANK_MIN_GAPS,
 
 	// document level factors
 	XRANK_BM25,
@@ -7187,6 +7208,9 @@ public:
 			return XRANK_QUERY_WORD_COUNT;
 		if ( !strcasecmp ( sIdent, "doc_word_count" ) )
 			return XRANK_DOC_WORD_COUNT;
+
+		if ( !strcasecmp ( sIdent, "min_gaps" ) )
+			return XRANK_MIN_GAPS;
 		return -1;
 	}
 
@@ -7225,6 +7249,9 @@ public:
 					m_pState->m_iWindowSize = pLeft->IntEval ( tDummy ); // must be constant; checked in GetReturnType()
 					return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMaxWindowHits );
 				}
+			case XRANK_MIN_GAPS:
+				m_pState->m_bHaveMinWindow = true;
+				return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinGaps );
 
 			case XRANK_BM25:				return new Expr_IntPtr_c ( &m_pState->m_uDocBM25 );
 			case XRANK_MAX_LCS:				return new Expr_GetIntConst_c ( m_pState->m_iMaxLCS );
@@ -7279,6 +7306,7 @@ public:
 			case XRANK_FIELD_MASK:
 			case XRANK_QUERY_WORD_COUNT:
 			case XRANK_DOC_WORD_COUNT:
+			case XRANK_MIN_GAPS:
 				return SPH_ATTR_INTEGER;
 			case XRANK_TF_IDF:
 			case XRANK_MIN_IDF:
@@ -7476,11 +7504,15 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS>::Init ( int iFields, const int * pW
 	memset ( m_iMinHitPos, 0, sizeof(m_iMinHitPos) );
 	memset ( m_iMinBestSpanPos, 0, sizeof(m_iMinBestSpanPos) );
 	memset ( m_iMaxWindowHits, 0, sizeof(m_iMaxWindowHits) );
+	memset ( m_iMinGaps, 0, sizeof(m_iMinGaps) );
 	m_iMaxQpos = pRanker->m_iMaxQpos; // already copied in SetQwords, but anyway
 	m_iMaxUniqQpos = pRanker->m_iMaxUniqQpos;
 	m_uExactHit = 0;
 	m_uDocWordCount = 0;
 	m_iWindowSize = 1;
+	m_bHaveMinWindow = false;
+	m_iMinWindowWords = 0;
+	m_dMinWindowHits.Reserve ( 32 );
 
 	for ( int i=0; i < SPH_MAX_FIELDS; i++ )
 	{
@@ -7579,7 +7611,8 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS>::Update ( const ExtHit_t * pHlist )
 	m_uMatchedFields |= ( 1UL<<uField );
 
 	// keywords can be duplicated in the query, so we need this extra check
-	if ( pHlist->m_uQuerypos<=m_iMaxUniqQpos && m_tKeywordMask.BitGet ( pHlist->m_uQuerypos ) )
+	bool bUniq = pHlist->m_uQuerypos<=m_iMaxUniqQpos && m_tKeywordMask.BitGet ( pHlist->m_uQuerypos );
+	if ( bUniq )
 	{
 		float fIDF = m_dIDF [ pHlist->m_uQuerypos ];
 		DWORD uHitPosMask = 1<<pHlist->m_uQuerypos;
@@ -7620,6 +7653,70 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS>::Update ( const ExtHit_t * pHlist )
 	}
 	m_dWindow.Add ( pHlist->m_uHitpos );
 	m_iMaxWindowHits[uField] = Max ( m_iMaxWindowHits[uField], m_dWindow.GetLength() );
+
+	// update the minimum MW, aka matching window, for min_gaps and ymw factors
+	// we keep a window with all the positions of all the matched words
+	// we keep it left-minimal at all times, so that leftmost keyword only occurs once
+	// thus, when a previously unseen keyword is added, the window is guaranteed to be minimal
+	while ( bUniq && m_bHaveMinWindow )
+	{
+		// handle field switch
+		if ( m_dMinWindowHits.GetLength() && HITMAN::GetField ( m_dMinWindowHits.Last().m_uHitpos )!=(int)uField )
+		{
+			m_dMinWindowHits.Resize ( 0 );
+			m_dMinWindowCounts.Fill ( 0 );
+			m_iMinWindowWords = 0;
+		}
+
+		// assert we are left-minimal
+		assert ( m_dMinWindowHits.GetLength()==0 || m_dMinWindowCounts [ m_dMinWindowHits[0].m_uQuerypos ]==1 );
+
+		// another occurrence of the trailing word?
+		// just update hitpos, effectively dumping the current occurrence
+		if ( m_dMinWindowHits.GetLength() && m_dMinWindowHits.Last().m_uQuerypos==pHlist->m_uQuerypos )
+		{
+			m_dMinWindowHits.Last().m_uHitpos = pHlist->m_uHitpos;
+			break;
+		}
+
+		// add that word
+		LeanHit_t & t = m_dMinWindowHits.Add();
+		t.m_uQuerypos = pHlist->m_uQuerypos;
+		t.m_uHitpos = pHlist->m_uHitpos;
+
+		int iWord = pHlist->m_uQuerypos;
+		m_dMinWindowCounts[iWord]++;
+
+		// new, previously unseen keyword? just update the window size
+		if ( m_dMinWindowCounts[iWord]==1 )
+		{
+			m_iMinGaps[uField] = iPos - HITMAN::GetPos ( m_dMinWindowHits[0].m_uHitpos ) - m_iMinWindowWords;
+			m_iMinWindowWords++;
+			break;
+		}
+
+		// check if we can shrink the left boundary
+		if ( iWord!=m_dMinWindowHits[0].m_uQuerypos )
+			break;
+
+		// yes, we can!
+		// keep removing the leftmost keyword until it's unique (in the window) again
+		assert ( m_dMinWindowCounts [ m_dMinWindowHits[0].m_uQuerypos ]==2 );
+		int iShrink = 0;
+		while ( m_dMinWindowCounts [ m_dMinWindowHits [ iShrink ].m_uQuerypos ]!=1 )
+		{
+			m_dMinWindowCounts [ m_dMinWindowHits [ iShrink ].m_uQuerypos ]--;
+			iShrink++;
+		}
+
+		int iNewLen = m_dMinWindowHits.GetLength() - iShrink;
+		memmove ( m_dMinWindowHits.Begin(), &m_dMinWindowHits[iShrink], iNewLen*sizeof(LeanHit_t) );
+		m_dMinWindowHits.Resize ( iNewLen );
+
+		int iNewGaps = iPos - HITMAN::GetPos ( m_dMinWindowHits[0].m_uHitpos ) - m_iMinWindowWords + 1;
+		m_iMinGaps[uField] = Min ( m_iMinGaps[uField], iNewGaps );
+		break;
+	}
 }
 
 
@@ -7670,6 +7767,7 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS>::PackFactors ( int * pSize )
 			*pPack++ = (DWORD)m_iMinBestSpanPos[i];
 			*pPack++ = ( m_uExactHit>>i ) & 1;
 			*pPack++ = (DWORD)m_iMaxWindowHits[i];
+			*pPack++ = (DWORD)m_iMinGaps[i];
 		}
 	}
 

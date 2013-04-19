@@ -2095,6 +2095,21 @@ public:
 	CSphMultiformTokenizer ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer );
 	~CSphMultiformTokenizer ();
 
+	virtual bool					SetCaseFolding ( const char * sConfig, CSphString & sError )	{ return m_pTokenizer->SetCaseFolding ( sConfig, sError ); }
+	virtual void					AddPlainChar ( char c )											{ m_pTokenizer->AddPlainChar ( c ); }
+	virtual void					AddSpecials ( const char * sSpecials )							{ m_pTokenizer->AddSpecials ( sSpecials ); }
+	virtual bool					SetIgnoreChars ( const char * sIgnored, CSphString & sError )	{ return m_pTokenizer->SetIgnoreChars ( sIgnored, sError ); }
+	virtual bool					SetNgramChars ( const char * sConfig, CSphString & sError )		{ return m_pTokenizer->SetNgramChars ( sConfig, sError ); }
+	virtual void					SetNgramLen ( int iLen )										{ m_pTokenizer->SetNgramLen ( iLen ); }
+	virtual bool					LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError ) { return m_pTokenizer->LoadSynonyms ( sFilename, pFiles, sError ); }
+	virtual bool					SetBoundary ( const char * sConfig, CSphString & sError )		{ return m_pTokenizer->SetBoundary ( sConfig, sError ); }
+	virtual void					Setup ( const CSphTokenizerSettings & tSettings )				{ m_pTokenizer->Setup ( tSettings ); }
+	virtual const CSphTokenizerSettings &	GetSettings () const									{ return m_pTokenizer->GetSettings (); }
+	virtual const CSphSavedFile &	GetSynFileInfo () const											{ return m_pTokenizer->GetSynFileInfo (); }
+	virtual bool					EnableSentenceIndexing ( CSphString & sError )					{ return m_pTokenizer->EnableSentenceIndexing ( sError ); }
+	virtual bool					EnableZoneIndexing ( CSphString & sError )						{ return m_pTokenizer->EnableZoneIndexing ( sError ); }
+	virtual int						SkipBlended ()													{ assert ( m_pLastToken->m_bBlended || m_pLastToken->m_bBlendedPart ); return m_pTokenizer->SkipBlended(); }
+
 public:
 	virtual void					SetBuffer ( const BYTE * sBuffer, int iLength );
 	virtual BYTE *					GetToken ();
@@ -2104,6 +2119,8 @@ public:
 	virtual bool					WasTokenSpecial ()							{ return m_pLastToken->m_bSpecial; }
 	virtual int						GetOvershortCount ()						{ return m_pLastToken->m_iOvershortCount; }
 	virtual BYTE *					GetTokenizedMultiform ()					{ return m_sTokenizedMultiform[0] ? m_sTokenizedMultiform : NULL; }
+	virtual bool					TokenIsBlended () const { return m_pLastToken->m_bBlended; }
+	virtual bool					TokenIsBlendedPart () const { return m_pLastToken->m_bBlendedPart; }
 
 public:
 	virtual ISphTokenizer *			Clone ( ESphTokenizerClone eMode ) const;
@@ -2125,13 +2142,15 @@ private:
 	struct StoredToken_t
 	{
 		BYTE			m_sToken [3*SPH_MAX_WORD_LEN+4];
-		int				m_iTokenLen;
-		bool			m_bBoundary;
-		bool			m_bSpecial;
-		int				m_iOvershortCount;
 		const char *	m_szTokenStart;
 		const char *	m_szTokenEnd;
 		const char *	m_pBufferPtr;
+		int				m_iTokenLen;
+		int				m_iOvershortCount;
+		bool			m_bBoundary;
+		bool			m_bSpecial;
+		bool			m_bBlended;
+		bool			m_bBlendedPart;
 	};
 
 	CSphVector<StoredToken_t>		m_dStoredTokens;
@@ -3143,6 +3162,8 @@ ISphTokenizer::ISphTokenizer ()
 	, m_bTokenBoundary ( false )
 	, m_bBoundary ( false )
 	, m_bWasSpecial ( false )
+	, m_bWasSynonym ( false )
+	, m_bEscaped ( false )
 	, m_iOvershortCount ( 0 )
 	, m_eTokenMorph ( SPH_TOKEN_MORPH_RAW )
 	, m_bBlended ( false )
@@ -4244,6 +4265,7 @@ BYTE * CSphTokenizerBase2<IS_UTF8>::GetTokenSyn ( bool bQueryMode )
 {
 	assert ( m_dSynonyms.GetLength() );
 
+	m_bWasSynonym = false;
 	const BYTE * pCur;
 
 	m_bTokenBoundary = false;
@@ -4408,6 +4430,7 @@ BYTE * CSphTokenizerBase2<IS_UTF8>::GetTokenSyn ( bool bQueryMode )
 				if ( bJustSpecial || ( iFolded & FLAG_CODEPOINT_SPECIAL )!=0 ) m_pCur = pCur; \
 				strncpy ( (char*)m_sAccum, m_dSynonyms[_idx].m_sTo.cstr(), sizeof(m_sAccum) ); \
 				m_iLastTokenLen = m_dSynonyms[_idx].m_iToLen; \
+				m_bWasSynonym = true; \
 				return m_sAccum; \
 			}
 
@@ -5393,13 +5416,15 @@ CSphMultiformTokenizer::~CSphMultiformTokenizer ()
 
 void CSphMultiformTokenizer::FillTokenInfo ( StoredToken_t * pToken )
 {
-	pToken->m_bBoundary = m_pTokenizer->GetBoundary ();
-	pToken->m_bSpecial = m_pTokenizer->WasTokenSpecial ();
-	pToken->m_iOvershortCount = m_pTokenizer->GetOvershortCount ();
-	pToken->m_iTokenLen = m_pTokenizer->GetLastTokenLen ();
 	pToken->m_szTokenStart = m_pTokenizer->GetTokenStart ();
 	pToken->m_szTokenEnd = m_pTokenizer->GetTokenEnd ();
+	pToken->m_iOvershortCount = m_pTokenizer->GetOvershortCount ();
+	pToken->m_iTokenLen = m_pTokenizer->GetLastTokenLen ();
 	pToken->m_pBufferPtr = m_pTokenizer->GetBufferPtr ();
+	pToken->m_bBoundary = m_pTokenizer->GetBoundary ();
+	pToken->m_bSpecial = m_pTokenizer->WasTokenSpecial ();
+	pToken->m_bBlended = m_pTokenizer->TokenIsBlended();
+	pToken->m_bBlendedPart = m_pTokenizer->TokenIsBlendedPart();
 }
 
 
@@ -5460,6 +5485,10 @@ BYTE * CSphMultiformTokenizer::GetToken ()
 		FillTokenInfo ( &(m_dStoredTokens[iIndex]) );
 		strcpy ( (char *)m_dStoredTokens[iIndex].m_sToken, (const char *)pToken ); // NOLINT
 		m_iStoredLen++;
+
+		// FIXME!!! multi-form stops at blended ( not clean what to do with blended parts and complete \ incomplete multi-form matching )
+		if ( m_dStoredTokens[iIndex].m_bBlended || m_dStoredTokens[iIndex].m_bBlendedPart )
+			break;
 	}
 
 	if ( !m_iStoredLen )
@@ -5783,6 +5812,8 @@ int SelectParser_t::GetToken ( YYSTYPE * lvalp )
 		LOC_CHECK ( "OR", 2, TOK_OR );
 		LOC_CHECK ( "AND", 3, TOK_AND );
 		LOC_CHECK ( "NOT", 3, TOK_NOT );
+		LOC_CHECK ( "DIV", 3, TOK_DIV );
+		LOC_CHECK ( "MOD", 3, TOK_MOD );
 		LOC_CHECK ( "AVG", 3, SEL_AVG );
 		LOC_CHECK ( "MIN", 3, SEL_MIN );
 		LOC_CHECK ( "MAX", 3, SEL_MAX );

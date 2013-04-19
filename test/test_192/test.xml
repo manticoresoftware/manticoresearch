@@ -31,6 +31,37 @@ index test
 	blend_chars		= +, U+2D, @
     min_word_len	= 2
 }
+
+source test1
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'test 3+3+3+3+real text' AS content
+}
+
+index test10
+{
+	source			= test1
+	path			= <data_path/>/test10
+
+	charset_type	= utf-8
+	charset_table	= 0..9, A..Z->a..z, _, a..z
+	blend_chars		= +
+	min_word_len	= 2
+}
+
+index test11
+{
+	source			= test1
+	path			= <data_path/>/test11
+
+	charset_type	= utf-8
+	charset_table	= 0..9, A..Z->a..z, _, a..z
+	blend_chars		= +
+	min_word_len	= 2
+	min_prefix_len = 2
+	enable_star = 1
+}
 </config>
 
 <db_insert>select 1;</db_insert>
@@ -43,6 +74,22 @@ index test
 <sphinxql>SELECT * FROM test WHERE MATCH('3\\@rd text')</sphinxql>
 <sphinxql>SHOW META</sphinxql>
 <sphinxql>CALL KEYWORDS ( 'man', 'test' )</sphinxql>
+<!-- regression - incomplete multi-form vs blended part with wrong hit position -->
+<sphinxql>SELECT * FROM test WHERE MATCH('"a rd text"')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<!-- regression - blended part vs overshort -->
+<sphinxql>SELECT * FROM test10 WHERE MATCH('"test a text"')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<sphinxql>SELECT * FROM test11 WHERE MATCH('"test a text"')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<sphinxql>CALL SNIPPETS ( 'test 3+3+3+3+real text' , 'test10', ' "test a text" ', 1 as query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS ( 'test 3+3+3+3+real text' , 'test10', ' "test a text" ', 0 as query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS ( 'test 3+3+3+3+real text' , 'test10', ' "test a text" ', 1 as query_mode, 0 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS ( 'test 3+3+3+3+real text' , 'test10', ' "test a text" ', 0 as query_mode, 0 as limit )</sphinxql>
+<sphinxql>SELECT * FROM test WHERE MATCH(' " 3 rd text " ')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<!-- regression - incomplete multi-form vs blended part -->
+<sphinxql>CALL SNIPPETS ( 'the+ rd box+ must ' , 'test', ' not found ', 1 as query_mode, 0 as limit )</sphinxql>
 </sphqueries>
 
 </test>

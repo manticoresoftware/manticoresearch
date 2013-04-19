@@ -1051,7 +1051,7 @@ inline int sphUTF8Decode ( const BYTE * & pBuf )
 		_ptr[0] = (BYTE)( ( ((_code)>>6) & 0x1F ) | 0xC0 ); \
 		_ptr[1] = (BYTE)( ( (_code) & 0x3F ) | 0x80 ); \
 		_ptr += 2; \
-	} else if ( (_code)<0x8000 )\
+	} else if ( (_code)<0x10000 )\
 	{ \
 		_ptr[0] = (BYTE)( ( ((_code)>>12) & 0x0F ) | 0xE0 ); \
 		_ptr[1] = (BYTE)( ( ((_code)>>6) & 0x3F ) | 0x80 ); \
@@ -1082,7 +1082,7 @@ inline int sphUTF8Encode ( BYTE * pBuf, int iCode )
 		pBuf[1] = (BYTE)( ( iCode & 0x3F ) | 0x80 );
 		return 2;
 
-	} else if ( iCode<0x8000 )
+	} else if ( iCode<0x10000 )
 	{
 		pBuf[0] = (BYTE)( ( (iCode>>12) & 0x0F ) | 0xE0 );
 		pBuf[1] = (BYTE)( ( (iCode>>6) & 0x3F ) | 0x80 );

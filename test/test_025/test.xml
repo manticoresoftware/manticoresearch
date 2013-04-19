@@ -78,6 +78,7 @@ index test
 <query mode="phrase">hello me* world</query>
 <query mode="phrase">hello two* world</query>
 <query mode="phrase">hello four* world</query>
+<query mode="phrase">4 you</query>
 </queries>
 
 <db_create>
@@ -109,7 +110,8 @@ INSERT INTO `test_table` VALUES
 ( 13, 'hello aaaaa world' ),
 ( 14, 'hello me world' ),
 ( 15, 'hello two world' ),
-( 16, 'hello four world' )
+( 16, 'hello four world' ),
+( 17, '4you' )
 </db_insert>
 
 </test>

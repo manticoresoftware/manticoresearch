@@ -24,6 +24,8 @@
 %token SEL_COMMENT_OPEN
 %token SEL_COMMENT_CLOSE
 
+%token TOK_DIV
+%token TOK_MOD
 %token TOK_NEG
 %token TOK_LTE
 %token TOK_GTE
@@ -38,7 +40,7 @@
 %left TOK_EQ TOK_NE
 %left '<' '>' TOK_LTE TOK_GTE
 %left '+' '-'
-%left '*' '/'
+%left '*' '/' TOK_DIV '%' TOK_MOD
 %nonassoc TOK_NEG
 %nonassoc TOK_NOT
 
@@ -88,8 +90,11 @@ expr:
 	| expr '/' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr '<' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr '>' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
-	| expr '|' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr '&' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
+	| expr '|' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
+	| expr '%' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
+	| expr TOK_DIV expr			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
+	| expr TOK_MOD expr			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr TOK_LTE expr			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr TOK_GTE expr			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr TOK_EQ expr			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }

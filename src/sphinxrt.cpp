@@ -1038,6 +1038,7 @@ private:
 	int64_t						m_iSavedTID;
 	int64_t						m_iSavedRam;
 	int64_t						m_tmSaved;
+	mutable DWORD				m_uDiskAttrStatus;
 
 	bool						m_bKeywordDict;
 	int							m_iWordsCheckpoint;
@@ -1111,8 +1112,8 @@ public:
 	virtual bool				IsRT() const { return true; }
 
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError );
-	virtual bool				SaveAttributes ( CSphString & sError ) const { return true; }
-	virtual DWORD				GetAttributeStatus () const { return 0; }
+	virtual bool				SaveAttributes ( CSphString & sError ) const;
+	virtual DWORD				GetAttributeStatus () const { return m_uDiskAttrStatus; }
 	virtual bool				CreateFilesWithAttr ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError );
 	virtual bool				AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError );
 
@@ -1173,6 +1174,7 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 	, m_iSavedTID ( m_iTID )
 	, m_iSavedRam ( 0 )
 	, m_tmSaved ( sphMicroTimer() )
+	, m_uDiskAttrStatus ( 0 )
 	, m_bKeywordDict ( bKeywordDict )
 	, m_iWordsCheckpoint ( RTDICT_CHECKPOINT_V5 )
 	, m_pTokenizerIndexing ( NULL )
@@ -6703,6 +6705,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 
 			// update stats
 			iUpdated += iRes;
+			m_uDiskAttrStatus |= m_pDiskChunks[iChunk]->GetAttributeStatus();
 
 			// we only need to update the most fresh chunk
 			if ( iRes>0 )
@@ -6719,6 +6722,27 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 	// all done
 	return iUpdated;
 }
+
+
+bool RtIndex_t::SaveAttributes ( CSphString & sError ) const
+{
+	if ( !m_pDiskChunks.GetLength() )
+		return true;
+
+	DWORD uStatus = m_uDiskAttrStatus;
+	bool bAllSaved = true;
+	m_tRwlock.ReadLock();
+	ARRAY_FOREACH ( i, m_pDiskChunks )
+	{
+		bAllSaved &= m_pDiskChunks[i]->SaveAttributes ( sError );
+	}
+	m_tRwlock.Unlock();
+	if ( uStatus==m_uDiskAttrStatus )
+		m_uDiskAttrStatus = 0;
+
+	return bAllSaved;
+}
+
 
 static bool RenameChunk ( const char * sIndex, const char * sPrefix, const char * sFromPostfix, const char * sToPostfix )
 {

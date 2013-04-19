@@ -1789,12 +1789,17 @@ protected:
 	bool	m_bFirstSeparator;
 
 public:
-	CSphStringBuilder()
+	CSphStringBuilder ()
 	{
-		Reset();
+		Reset ();
 	}
 
-	void Reset()
+	~CSphStringBuilder ()
+	{
+		SafeDeleteArray ( m_sBuffer );
+	}
+
+	void Reset ()
 	{
 		m_iSize = 256;
 		m_iUsed = 0;
@@ -1830,15 +1835,9 @@ public:
 			}
 
 			// we need more chars!
-			if ( iPrinted<0 )
-				m_iSize += 256; // happens on Windows; lets assume we need 256 more chars
-			else
-				m_iSize += ( iPrinted - iLeft + 64 ); // get all the needed chars and 64 more for future calls
-
-			char * pNew = new char [ m_iSize ];
-			memcpy ( pNew, m_sBuffer, m_iUsed+1 );
-			Swap ( pNew, m_sBuffer );
-			SafeDeleteArray ( pNew );
+			// either 256 (happens on Windows; lets assume we need 256 more chars)
+			// or get all the needed chars and 64 more for future calls
+			Grow ( iPrinted<0 ? 256 : iPrinted - iLeft + 64 );
 		}
 		return *this;
 	}
@@ -1851,7 +1850,7 @@ public:
 	CSphStringBuilder & AppendSeparator ( const char * sSep )
 	{
 		if ( !m_bFirstSeparator )
-			Appendf ( "%s", sSep ); // OPTIMIZE?
+			*this += sSep;
 		m_bFirstSeparator = false;
 		return *this;
 	}
@@ -1859,6 +1858,89 @@ public:
 	const char * cstr() const
 	{
 		return m_sBuffer;
+	}
+
+	int Length ()
+	{
+		return m_iUsed;
+	}
+
+	const CSphStringBuilder & operator += ( const char * sText )
+	{
+		if ( !sText || *sText=='\0' )
+			return *this;
+
+		int iLen = strlen ( sText );
+		int iLeft = m_iSize - m_iUsed;
+		if ( iLen>=iLeft )
+			Grow ( iLen - iLeft + 64 );
+
+		memcpy ( m_sBuffer+m_iUsed, sText, iLen+1 );
+		m_iUsed += iLen;
+		return *this;
+	}
+
+	const CSphStringBuilder & operator = ( const CSphStringBuilder & rhs )
+	{
+		if ( this!=&rhs )
+		{
+			m_iUsed = rhs.m_iUsed;
+			m_iSize = rhs.m_iSize;
+			m_bFirstSeparator = rhs.m_bFirstSeparator;
+			SafeDeleteArray ( m_sBuffer );
+			m_sBuffer = new char [ m_iSize ];
+			memcpy ( m_sBuffer, rhs.m_sBuffer, m_iUsed+1 );
+		}
+		return *this;
+	}
+
+	void AppendEscaped ( const char * sText, bool bEscape=true, bool bFixupSpace=true )
+	{
+		if ( !sText || !*sText )
+			return;
+
+		const char * pBuf = sText;
+		int iEsc = 0;
+		for ( ; *pBuf; )
+		{
+			char s = *pBuf++;
+			iEsc = ( bEscape && ( s=='\\' || s=='\'' ) ) ? ( iEsc+1 ) : iEsc;
+		}
+
+		int iLen = pBuf - sText + iEsc;
+		int iLeft = m_iSize - m_iUsed;
+		if ( iLen>=iLeft )
+			Grow ( iLen - iLeft + 64 );
+
+		pBuf = sText;
+		char * pCur = m_sBuffer+m_iUsed;
+		for ( ; *pBuf; )
+		{
+			char s = *pBuf++;
+			if ( bEscape && ( s=='\\' || s=='\'' ) )
+			{
+				*pCur++ = '\\';
+				*pCur++ = s;
+			} else if ( bFixupSpace && ( s==' ' || s=='\t' || s=='\n' || s=='\r' ) )
+			{
+				*pCur++ = ' ';
+			} else
+			{
+				*pCur++ = s;
+			}
+		}
+		*pCur = '\0';
+		m_iUsed = pCur-m_sBuffer;
+	}
+
+private:
+	void Grow ( int iLen )
+	{
+		m_iSize += iLen;
+		char * pNew = new char [ m_iSize ];
+		memcpy ( pNew, m_sBuffer, m_iUsed+1 );
+		Swap ( pNew, m_sBuffer );
+		SafeDeleteArray ( pNew );
 	}
 };
 

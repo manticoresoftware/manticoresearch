@@ -108,10 +108,29 @@ INSERT INTO cmp_table VALUES
 ( 4, 'dummy', '900, 400, 601', '1000, 500, 401', 101.2, 110 )
 </db_insert>
 
+<query_attributes>
+	<attr>aa</attr>
+	<attr>sel</attr>
+</query_attributes>
+
+<queries>
+	<query select="aa div 2 as sel, *" index="test"/>
+	<query select="aa / 2 as sel, *" index="test"/>
+	<query select="aa mod 2 as sel, *" index="test"/>
+	<query select="aa % 2 as sel, *" index="test"/>
+</queries>
+	
+
 <sphqueries>
 
 <!-- test boolean operator precedence -->
 <sphinxql>SELECT 0 AND 0 OR 1 AS a, 0 AND 1 OR 1 AS b, 1 OR 0 AND 0 AS c, 1 OR 1 AND 0 AS d FROM test WHERE id=1</sphinxql>
+
+<!-- test common ariphmetic -->
+<sphinxql>SELECT id, aa div 2 as sel from test</sphinxql>
+<sphinxql>SELECT id, aa / 2 as sel from test</sphinxql>
+<sphinxql>SELECT id, aa mod 2 as sel from test</sphinxql>
+<sphinxql>SELECT id, aa % 2 as sel from test</sphinxql>
 
 <!-- test argument type check -->
 <sphinxql>SELECT id, CRC32('test') FROM test WHERE id=10</sphinxql>

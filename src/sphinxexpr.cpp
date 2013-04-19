@@ -832,9 +832,8 @@ public:
 			case JSON_INT32:	return (T)sphJsonLoadInt ( &pVal );
 			case JSON_INT64:	return (T)sphJsonLoadBigint ( &pVal );
 			case JSON_DOUBLE:	return (T)sphQW2D ( sphJsonLoadBigint ( &pVal ) );
+			default:			return (T)0;
 		}
-
-		return 0;
 	}
 
 	virtual float Eval ( const CSphMatch & tMatch ) const { return TypeEval<float> ( tMatch ); }
@@ -1219,7 +1218,6 @@ static int FuncHashLookup ( const char * sKey )
 		79, 79, 79, 79, 79, 79, 79, 79, 79, 79,
 		79, 79, 79, 79, 79, 79, 79, 79, 79, 79,
 		79, 79, 79, 79, 79, 79
-
 	};
 
 	const BYTE * s = (const BYTE*) sKey;

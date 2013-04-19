@@ -2070,13 +2070,13 @@ Currently implemented field-level factors are:
 <itemizedlist>
 <listitem><para>
 <code>lcs</code> (integer), the length of a maximum verbatim match between
-the document and the query, coutned in words. LCS stands for Longest Common
+the document and the query, counted in words. LCS stands for Longest Common
 Subsequence (or Subset). Takes a minimum value of 1 when only stray keywords
 were matched in a field, and a maximum value of query keywords count
 when the entire query was matched in a field verbatim (in the exact
 query keywords order). For example, if the query is 'hello world'
 and the field contains these two words quoted from the query (that is,
-adjacent to each other, and exaclty in the query order), <code>lcs</code>
+adjacent to each other, and exactly in the query order), <code>lcs</code>
 will be 2. For example, if the query is 'hello world program' and
 the field contains 'hello world', <code>lcs</code> will be 2.
 Note that any subset of the query keyword works, not just a subset
@@ -2085,7 +2085,7 @@ and the field contains 'hello (test program)', <code>lcs</code> will be 2
 just as well, because both 'hello' and 'program' matched in the same
 respective positions as they were in the query. Finally, if the query
 is 'hello world program' and the field contains 'hello world program',
-<code>lcs</code> will be 3. (Hopefully that is unsurpising at this point.)
+<code>lcs</code> will be 3. (Hopefully that is unsurprising at this point.)
 </para></listitem>
 <listitem><para>
 <code>user_weight</code> (integer), the user specified per-field weight

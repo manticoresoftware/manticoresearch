@@ -2480,8 +2480,9 @@ public:
 	bool			m_bSortKbuffer;	///< whether to use PQ or K-buffer sorting algorithm
 	bool			m_bZSlist;		///< whether the ranker has to fetch the zonespanlist with this query
 	bool			m_bSimplify;	///< whether to apply boolean simplification
-	bool			m_bPlainIDF;	///< whether to use PlainIDF=log(N/n) or NormalizedIDF=log((N-n+1)/n)
-	bool			m_bGlobalIDF;	///< whether to use local indexes or a global idf file
+	bool			m_bPlainIDF;		///< whether to use PlainIDF=log(N/n) or NormalizedIDF=log((N-n+1)/n)
+	bool			m_bGlobalIDF;		///< whether to use local indexes or a global idf file
+	bool			m_bNormalizedTFIDF;	///< whether to scale IDFs by query word count, so that TF*IDF is normalized
 
 	CSphVector<CSphFilterSettings>	m_dFilters;	///< filters
 
@@ -3164,7 +3165,7 @@ protected:
 
 public:
 	void						SetGlobalIDFPath ( const CSphString & sPath ) { m_sGlobalIDFPath = sPath; }
-	float						GetGlobalIDF ( const CSphString & sWord, int iDocsLocal, int iQwords, bool bPlainIDF ) const;
+	float						GetGlobalIDF ( const CSphString & sWord, int iDocsLocal, bool bPlainIDF ) const;
 
 protected:
 	CSphString					m_sGlobalIDFPath;

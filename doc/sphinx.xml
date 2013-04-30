@@ -4504,21 +4504,45 @@ from the <link linkend="conf-global-idf">global_idf file</link> for IDF
 computations, rather than the local index statistics.
 Added in version 2.1.1-beta.
 </para></listitem>
-<listitem><para>'idf' - either 'normalized' (default) or 'plain'. Added in version 2.1.1-beta.
-The standard IDF (Inverse Document Frequency) calculation may cause
-undesired keyword penalization effects in the BM25 weighting functions.
-For instance, if you search for [the | something] and [the] occurs
+<listitem><para>'idf' - a quoted, comma-separated list of IDF computation flags. Added in version 2.1.1-beta.
+Known flags are:
+<itemizedlist>
+<listitem><para>normalized: BM25 variant, idf = log((N-n+1)/n), as per Robertson et al</para></listitem>
+<listitem><para>plain: plain variant, idf = log(N/n), as per Sparck-Jones</para></listitem>
+<listitem><para>tfidf_normalized (added in 2.2.1-beta): additionally divide IDF by query word count, so that TF*IDF fits into [0, 1] range</para></listitem>
+<listitem><para>tfidf_unnormalized (added in 2.2.1-beta): do not additionally divide IDF by query word count</para></listitem>
+</itemizedlist>
+where <b>N</b> is the collection size and <b>n</b> is the number of matched
+documents.
+</para><para>
+The historically default IDF (Inverse Document Frequency) in Sphinx
+is equivalent to <code>OPTION idf='normalized,tfidf_normalized'</code>,
+and those normalizations may cause several undesired effects.
+</para><para>
+First, idf=normalized causes keyword penalization. For instance,
+if you search for [the | something] and [the] occurs
 in more than 50% of the documents, then documents with both keywords
 [the] and [something] will get <b>less</b> weight than documents with
 just one keyword [something]. Using <code>OPTION idf=plain</code> avoids this.
-<itemizedlist>
-<listitem><para>idf=normalized: bm25 variant, idf = log((N-n+1)/n), as per Robertson et al</para></listitem>
-<listitem><para>idf=plain: plain variant, idf=log(N/n), as per Sparck-Jones</para></listitem>
-</itemizedlist>
-where <b>N</b> is the collection size and <b>n</b> is the number of matched
-documents. Hence plain IDF varies in [0, log(N)] range, and keywords
+Plain IDF varies in [0, log(N)] range, and keywords
 are never penalized; while the normalized IDF varies in [-log(N), log(N)]
 range, and too frequent keywords are penalized.
+</para><para>
+Second, idf=tfidf_normalized causes IDF drift over queries. Historically,
+we additionally divided IDF by query keyword count, so that the entire
+sum(tf*idf) over all keywords would still fit into [0,1] range. However,
+that means that queries [word1] and [word1 | nonmatchingword2] would
+assign different weights to the exactly same result set, because the IDFs
+for both "word1" and "nonmatchingword2" would be divided by 2.
+<code>OPTION idf=tfidf_unnormalized</code> fixes that. Note that
+BM25, BM25A, BM25F() ranking factors will be scale accordingly
+once you disable this normalization.
+</para><para>
+IDF flags can be mixed; 'plain' and 'normalized' are mutually exclusive;
+'tfidf_unnormalized' and 'tfidf_normalized' are mutually exclusive;
+and unspecified flags in such a mututally exclusive group take their
+defaults. That means that <code>OPTION idf=plain</code> is equivalent
+to a complete <code>OPTION idf='plain,tfidf_normalized'</code> specification.
 </para></listitem>
 <listitem><para>'index_weights' - a named integer list (per-index user weights for ranking)</para></listitem>
 <listitem><para>'max_matches' - integer (per-query max matches value)</para></listitem>

@@ -214,7 +214,7 @@ public:
 	bool			Touch ( const CSphString & sFilename );
 	bool			Preread ( const CSphString & sFilename, CSphString & sError );
 	const DWORD		GetDocs ( const CSphString & sWord ) const;
-	float			GetIDF ( const CSphString & sWord, int iDocsLocal, int iQwords, bool bPlainIDF );
+	float			GetIDF ( const CSphString & sWord, int iDocsLocal, bool bPlainIDF );
 
 protected:
 #pragma pack(push,4)
@@ -5682,6 +5682,7 @@ CSphQuery::CSphQuery ()
 	, m_bSimplify		( false )
 	, m_bPlainIDF		( false )
 	, m_bGlobalIDF		( false )
+	, m_bNormalizedTFIDF( true )
 	, m_eGroupFunc		( SPH_GROUPBY_ATTR )
 	, m_sGroupSortBy	( "@groupby desc" )
 	, m_sGroupDistinct	( "" )
@@ -8416,11 +8417,11 @@ void CSphIndex::SetCacheSize ( int iMaxCachedDocs, int iMaxCachedHits )
 }
 
 
-float CSphIndex::GetGlobalIDF ( const CSphString & sWord, int iDocsLocal, int iQwords, bool bPlainIDF ) const
+float CSphIndex::GetGlobalIDF ( const CSphString & sWord, int iDocsLocal, bool bPlainIDF ) const
 {
 	g_tGlobalIDFLock.Lock ();
 	CSphGlobalIDF ** ppGlobalIDF = g_hGlobalIDFs ( m_sGlobalIDFPath );
-	float fIDF = ppGlobalIDF && *ppGlobalIDF ? ( *ppGlobalIDF )->GetIDF ( sWord, iDocsLocal, iQwords, bPlainIDF ) : 0.0f;
+	float fIDF = ppGlobalIDF && *ppGlobalIDF ? ( *ppGlobalIDF )->GetIDF ( sWord, iDocsLocal, bPlainIDF ) : 0.0f;
 	g_tGlobalIDFLock.Unlock ();
 	return fIDF;
 }
@@ -30104,7 +30105,7 @@ const DWORD CSphGlobalIDF::GetDocs ( const CSphString & sWord ) const
 }
 
 
-float CSphGlobalIDF::GetIDF ( const CSphString & sWord, int iDocsLocal, int iQwords, bool bPlainIDF )
+float CSphGlobalIDF::GetIDF ( const CSphString & sWord, int iDocsLocal, bool bPlainIDF )
 {
 	const int64_t iDocs = Max ( iDocsLocal, (int64_t)GetDocs ( sWord ) );
 	const int64_t iTotalClamped = Max ( m_iTotalDocuments, iDocs );
@@ -30113,12 +30114,12 @@ float CSphGlobalIDF::GetIDF ( const CSphString & sWord, int iDocsLocal, int iQwo
 	{
 		float fLogTotal = logf ( float ( 1+iTotalClamped ) );
 		return logf ( float ( iTotalClamped-iDocs+1 ) / float ( iDocs ) )
-			/ ( 2*iQwords*fLogTotal );
+			/ ( 2*fLogTotal );
 	} else
 	{
 		float fLogTotal = logf ( float ( 1+iTotalClamped ) );
 		return logf ( float ( iTotalClamped ) / float ( iDocs ) )
-			/ ( 2*iQwords*fLogTotal );
+			/ ( 2*fLogTotal );
 	}
 }
 

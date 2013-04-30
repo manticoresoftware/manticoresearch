@@ -11189,14 +11189,25 @@ bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue )
 
 	} else if ( sOpt=="idf" )
 	{
-		if ( sVal=="normalized" )
-			m_pQuery->m_bPlainIDF = false;
-		else if ( sVal=="plain" )
-			m_pQuery->m_bPlainIDF = true;
-		else
+		CSphVector<CSphString> dOpts;
+		sphSplit ( dOpts, sVal.cstr() );
+
+		ARRAY_FOREACH ( i, dOpts )
 		{
-			m_pParseError->SetSprintf ( "unknown idf=%s (known values are plain, normalized)", sVal.cstr() );
-			return false;
+			if ( dOpts[i]=="normalized" )
+				m_pQuery->m_bPlainIDF = false;
+			else if ( dOpts[i]=="plain" )
+				m_pQuery->m_bPlainIDF = true;
+			else if ( dOpts[i]=="tfidf_normalized" )
+				m_pQuery->m_bNormalizedTFIDF = true;
+			else if ( dOpts[i]=="tfidf_unnormalized" )
+				m_pQuery->m_bNormalizedTFIDF = false;
+			else
+			{
+				m_pParseError->SetSprintf ( "unknown flag %s in idf=%s (known values are plain, normalized, tfidf_normalized, tfidf_unnormalized)",
+					dOpts[i].cstr(), sVal.cstr() );
+				return false;
+			}
 		}
 	} else if ( sOpt=="global_idf" )
 	{

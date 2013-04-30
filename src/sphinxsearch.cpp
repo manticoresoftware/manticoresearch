@@ -8129,7 +8129,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 		// build IDF
 		float fIDF = 0.0f;
 		if ( pQuery->m_bGlobalIDF )
-			fIDF = pIndex->GetGlobalIDF ( tWord.m_sWord, tWord.m_iDocs, iQwords, pQuery->m_bPlainIDF );
+			fIDF = pIndex->GetGlobalIDF ( tWord.m_sWord, tWord.m_iDocs, pQuery->m_bPlainIDF );
 		else if ( tWord.m_iDocs )
 		{
 			// (word_docs > total_docs) case *is* occasionally possible
@@ -8151,7 +8151,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 				// but our variant is a bit easier to compute, and has a better (symmetric) range
 				float fLogTotal = logf ( float ( 1+iTotalClamped ) );
 				fIDF = logf ( float ( iTotalClamped-tWord.m_iDocs+1 ) / float ( tWord.m_iDocs ) )
-					/ ( 2*iQwords*fLogTotal );
+					/ ( 2*fLogTotal );
 			} else
 			{
 				// plain variant, idf=log(N/n), as per Sparck-Jones
@@ -8162,9 +8162,14 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 				// then add 0.5 as our final step
 				float fLogTotal = logf ( float ( 1+iTotalClamped ) );
 				fIDF = logf ( float ( iTotalClamped ) / float ( tWord.m_iDocs ) )
-					/ ( 2*iQwords*fLogTotal );
+					/ ( 2*fLogTotal );
 			}
 		}
+
+		// optionally normalize IDFs so that sum(TF*IDF) fits into [0, 1]
+		if ( pQuery->m_bNormalizedTFIDF )
+			fIDF /= iQwords;
+
 		tWord.m_fIDF = fIDF;
 		dWords.Add ( &tWord );
 	}

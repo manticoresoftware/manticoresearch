@@ -6648,6 +6648,13 @@ struct LeanHit_t
 {
 	WORD		m_uQuerypos;
 	Hitpos_t	m_uHitpos;
+
+	LeanHit_t & operator = ( const ExtHit_t & rhs )
+	{
+		m_uQuerypos = rhs.m_uQuerypos;
+		m_uHitpos = rhs.m_uHitpos;
+		return *this;
+	}
 };
 
 
@@ -6708,7 +6715,7 @@ public:
 	CSphVector<DWORD>	m_dWindow;
 	int					m_iWindowSize;
 
-	bool					m_bHaveMinWindow;			///< whether to compute minimum matching window
+	int						m_iHaveMinWindow;			///< whether to compute minimum matching window, and over how many query words
 	int						m_iMinWindowWords;			///< how many unique words have we seen so far
 	CSphVector<LeanHit_t>	m_dMinWindowHits;			///< current minimum matching window candidate hits
 	CSphVector<int>			m_dMinWindowCounts;			///< maps querypos indexes to number of occurrencess in m_dMinWindowHits
@@ -6833,6 +6840,18 @@ public:
 	{
 		m_tFactorPool.Flush ();
 	}
+
+protected:
+	inline void UpdateGap ( int iField, int iWords, int iGap )
+	{
+		if ( m_iMinWindowWords<iWords || ( m_iMinWindowWords==iWords && m_iMinGaps[iField]>iGap ) )
+		{
+			m_iMinGaps[iField] = iGap;
+			m_iMinWindowWords = iWords;
+		}
+	}
+
+	void			UpdateMinGaps ( const ExtHit_t * pHlist );
 
 private:
 	virtual bool	ExtraDataImpl ( ExtraData_e eType, void ** ppResult );
@@ -7250,7 +7269,7 @@ public:
 					return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMaxWindowHits );
 				}
 			case XRANK_MIN_GAPS:
-				m_pState->m_bHaveMinWindow = true;
+				m_pState->m_iHaveMinWindow = m_pState->m_iMaxUniqQpos;
 				return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinGaps );
 
 			case XRANK_BM25:				return new Expr_IntPtr_c ( &m_pState->m_uDocBM25 );
@@ -7510,7 +7529,7 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS>::Init ( int iFields, const int * pW
 	m_uExactHit = 0;
 	m_uDocWordCount = 0;
 	m_iWindowSize = 1;
-	m_bHaveMinWindow = false;
+	m_iHaveMinWindow = 0;
 	m_iMinWindowWords = 0;
 	m_dMinWindowHits.Reserve ( 32 );
 
@@ -7654,69 +7673,155 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS>::Update ( const ExtHit_t * pHlist )
 	m_dWindow.Add ( pHlist->m_uHitpos );
 	m_iMaxWindowHits[uField] = Max ( m_iMaxWindowHits[uField], m_dWindow.GetLength() );
 
+	// update min_gaps factor
+	if ( bUniq && m_iHaveMinWindow>1 )
+		switch ( m_iHaveMinWindow )
+	{
+		// 2 keywords, special path
+		case 2:
+			if ( m_dMinWindowHits.GetLength() && HITMAN::GetField ( m_dMinWindowHits[0].m_uHitpos )!=(int)uField )
+			{
+				m_iMinWindowWords = 0;
+				m_dMinWindowHits.Resize ( 0 );
+			}
+
+			if ( !m_dMinWindowHits.GetLength() )
+			{
+				m_dMinWindowHits.Add() = *pHlist; // {} => {A}
+				break;
+			}
+
+			assert ( m_dMinWindowHits.GetLength()==1 );
+			if ( pHlist->m_uQuerypos==m_dMinWindowHits[0].m_uQuerypos )
+				m_dMinWindowHits[0].m_uHitpos = pHlist->m_uHitpos;
+			else
+			{
+				UpdateGap ( uField, 2, HITMAN::GetPos ( pHlist->m_uHitpos ) - HITMAN::GetPos ( m_dMinWindowHits[0].m_uHitpos ) - 1 );
+				m_dMinWindowHits[0] = *pHlist;
+			}
+			break;
+
+		// 3 keywords, special path
+		case 3:
+			if ( m_dMinWindowHits.GetLength() && HITMAN::GetField ( m_dMinWindowHits.Last().m_uHitpos )!=(int)uField )
+			{
+				m_iMinWindowWords = 0;
+				m_dMinWindowHits.Resize ( 0 );
+			}
+
+			// how many unique words are already there in the current candidate?
+			switch ( m_dMinWindowHits.GetLength() )
+			{
+				case 0:
+					m_dMinWindowHits.Add() = *pHlist; // {} => {A}
+					break;
+
+				case 1:
+					if ( m_dMinWindowHits[0].m_uQuerypos==pHlist->m_uQuerypos )
+						m_dMinWindowHits[0] = *pHlist; // {A} + A2 => {A2}
+					else
+					{
+						UpdateGap ( uField, 2, HITMAN::GetPos ( pHlist->m_uHitpos ) - HITMAN::GetPos ( m_dMinWindowHits[0].m_uHitpos) - 1 );
+						m_dMinWindowHits.Add() = *pHlist; // {A} + B => {A,B}
+					}
+					break;
+
+				case 2:
+					if ( m_dMinWindowHits[0].m_uQuerypos==pHlist->m_uQuerypos )
+					{
+						UpdateGap ( uField, 2, HITMAN::GetPos ( pHlist->m_uHitpos ) - HITMAN::GetPos ( m_dMinWindowHits[1].m_uHitpos) - 1 );
+						m_dMinWindowHits[0] = m_dMinWindowHits[1]; // {A,B} + A2 => {B,A2}
+						m_dMinWindowHits[1] = *pHlist;
+					} else if ( m_dMinWindowHits[1].m_uQuerypos==pHlist->m_uQuerypos )
+					{
+						m_dMinWindowHits[1] = *pHlist; // {A,B} + B2 => {A,B2}
+					} else
+					{
+						// new {A,B,C} window!
+						// handle, and then immediately reduce it to {B,C}
+						UpdateGap ( uField, 3, HITMAN::GetPos ( pHlist->m_uHitpos ) - HITMAN::GetPos ( m_dMinWindowHits[0].m_uHitpos ) - 2 );
+						m_dMinWindowHits[0] = m_dMinWindowHits[1];
+						m_dMinWindowHits[1] = *pHlist;
+					}
+					break;
+
+				default:
+					assert ( 0 && "min_gaps current window size not in 0..2 range; must not happen" );
+			}
+			break;
+
+		// slow generic update
+		default:
+			UpdateMinGaps ( pHlist );
+			break;
+	}
+}
+
+
+template < bool PF >
+void RankerState_Expr_fn<PF>::UpdateMinGaps ( const ExtHit_t * pHlist )
+{
 	// update the minimum MW, aka matching window, for min_gaps and ymw factors
 	// we keep a window with all the positions of all the matched words
 	// we keep it left-minimal at all times, so that leftmost keyword only occurs once
 	// thus, when a previously unseen keyword is added, the window is guaranteed to be minimal
-	while ( bUniq && m_bHaveMinWindow )
+
+	// handle field switch
+	const int iField = HITMAN::GetField ( pHlist->m_uHitpos );
+	if ( m_dMinWindowHits.GetLength() && HITMAN::GetField ( m_dMinWindowHits.Last().m_uHitpos )!=iField )
 	{
-		// handle field switch
-		if ( m_dMinWindowHits.GetLength() && HITMAN::GetField ( m_dMinWindowHits.Last().m_uHitpos )!=(int)uField )
-		{
-			m_dMinWindowHits.Resize ( 0 );
-			m_dMinWindowCounts.Fill ( 0 );
-			m_iMinWindowWords = 0;
-		}
-
-		// assert we are left-minimal
-		assert ( m_dMinWindowHits.GetLength()==0 || m_dMinWindowCounts [ m_dMinWindowHits[0].m_uQuerypos ]==1 );
-
-		// another occurrence of the trailing word?
-		// just update hitpos, effectively dumping the current occurrence
-		if ( m_dMinWindowHits.GetLength() && m_dMinWindowHits.Last().m_uQuerypos==pHlist->m_uQuerypos )
-		{
-			m_dMinWindowHits.Last().m_uHitpos = pHlist->m_uHitpos;
-			break;
-		}
-
-		// add that word
-		LeanHit_t & t = m_dMinWindowHits.Add();
-		t.m_uQuerypos = pHlist->m_uQuerypos;
-		t.m_uHitpos = pHlist->m_uHitpos;
-
-		int iWord = pHlist->m_uQuerypos;
-		m_dMinWindowCounts[iWord]++;
-
-		// new, previously unseen keyword? just update the window size
-		if ( m_dMinWindowCounts[iWord]==1 )
-		{
-			m_iMinGaps[uField] = iPos - HITMAN::GetPos ( m_dMinWindowHits[0].m_uHitpos ) - m_iMinWindowWords;
-			m_iMinWindowWords++;
-			break;
-		}
-
-		// check if we can shrink the left boundary
-		if ( iWord!=m_dMinWindowHits[0].m_uQuerypos )
-			break;
-
-		// yes, we can!
-		// keep removing the leftmost keyword until it's unique (in the window) again
-		assert ( m_dMinWindowCounts [ m_dMinWindowHits[0].m_uQuerypos ]==2 );
-		int iShrink = 0;
-		while ( m_dMinWindowCounts [ m_dMinWindowHits [ iShrink ].m_uQuerypos ]!=1 )
-		{
-			m_dMinWindowCounts [ m_dMinWindowHits [ iShrink ].m_uQuerypos ]--;
-			iShrink++;
-		}
-
-		int iNewLen = m_dMinWindowHits.GetLength() - iShrink;
-		memmove ( m_dMinWindowHits.Begin(), &m_dMinWindowHits[iShrink], iNewLen*sizeof(LeanHit_t) );
-		m_dMinWindowHits.Resize ( iNewLen );
-
-		int iNewGaps = iPos - HITMAN::GetPos ( m_dMinWindowHits[0].m_uHitpos ) - m_iMinWindowWords + 1;
-		m_iMinGaps[uField] = Min ( m_iMinGaps[uField], iNewGaps );
-		break;
+		m_dMinWindowHits.Resize ( 0 );
+		m_dMinWindowCounts.Fill ( 0 );
+		m_iMinWindowWords = 0;
 	}
+
+	// assert we are left-minimal
+	assert ( m_dMinWindowHits.GetLength()==0 || m_dMinWindowCounts [ m_dMinWindowHits[0].m_uQuerypos ]==1 );
+
+	// another occurrence of the trailing word?
+	// just update hitpos, effectively dumping the current occurrence
+	if ( m_dMinWindowHits.GetLength() && m_dMinWindowHits.Last().m_uQuerypos==pHlist->m_uQuerypos )
+	{
+		m_dMinWindowHits.Last().m_uHitpos = pHlist->m_uHitpos;
+		return;
+	}
+
+	// add that word
+	LeanHit_t & t = m_dMinWindowHits.Add();
+	t.m_uQuerypos = pHlist->m_uQuerypos;
+	t.m_uHitpos = pHlist->m_uHitpos;
+
+	int iWord = pHlist->m_uQuerypos;
+	m_dMinWindowCounts[iWord]++;
+
+	// new, previously unseen keyword? just update the window size
+	if ( m_dMinWindowCounts[iWord]==1 )
+	{
+		m_iMinGaps[iField] = HITMAN::GetPos ( pHlist->m_uHitpos ) - HITMAN::GetPos ( m_dMinWindowHits[0].m_uHitpos ) - m_iMinWindowWords;
+		m_iMinWindowWords++;
+		return;
+	}
+
+	// check if we can shrink the left boundary
+	if ( iWord!=m_dMinWindowHits[0].m_uQuerypos )
+		return;
+
+	// yes, we can!
+	// keep removing the leftmost keyword until it's unique (in the window) again
+	assert ( m_dMinWindowCounts [ m_dMinWindowHits[0].m_uQuerypos ]==2 );
+	int iShrink = 0;
+	while ( m_dMinWindowCounts [ m_dMinWindowHits [ iShrink ].m_uQuerypos ]!=1 )
+	{
+		m_dMinWindowCounts [ m_dMinWindowHits [ iShrink ].m_uQuerypos ]--;
+		iShrink++;
+	}
+
+	int iNewLen = m_dMinWindowHits.GetLength() - iShrink;
+	memmove ( m_dMinWindowHits.Begin(), &m_dMinWindowHits[iShrink], iNewLen*sizeof(LeanHit_t) );
+	m_dMinWindowHits.Resize ( iNewLen );
+
+	int iNewGaps = HITMAN::GetPos ( pHlist->m_uHitpos ) - HITMAN::GetPos ( m_dMinWindowHits[0].m_uHitpos ) - m_iMinWindowWords + 1;
+	m_iMinGaps[iField] = Min ( m_iMinGaps[iField], iNewGaps );
 }
 
 

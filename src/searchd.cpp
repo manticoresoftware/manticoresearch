@@ -710,7 +710,6 @@ struct AgentDesc_t
 	int				m_iDashIndex;	///< index into global searchd host stats array (1 host can hold >1 agents)
 	bool			m_bPersistent;	///< whether to keep the persistent connection to the agent.
 	RentPersistent	m_dPersPool;	///< socket number, -1 if not connected (has sense only if the connection is persistent)
-	int				m_iPersPool;	///< socket number, -1 if not connected (has sense only if the connection is persistent)
 
 public:
 	AgentDesc_t ()
@@ -719,6 +718,7 @@ public:
 		, m_iFamily ( AF_INET )
 		, m_uAddr ( 0 )
 		, m_iStatsIndex ( -1 )
+		, m_iDashIndex ( 0 )
 		, m_bPersistent ( false )
 		, m_dPersPool ( -1 )
 	{}
@@ -4011,6 +4011,7 @@ public:
 			if ( m_iSock==-2 ) // no free persistent connections. This connection will be not persistent
 				m_bPersistent = false;
 		}
+		m_bFresh = ( m_bPersistent && m_iSock<0 );
 	}
 };
 
@@ -4244,6 +4245,18 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 		}
 	} else
 	{
+		// connect() success
+		// send the client's proto version right now to avoid w-w-r pattern.
+		NetOutputBuffer_c tOut ( tAgent.m_iSock );
+		tOut.SendDword ( SPHINX_CLIENT_VERSION );
+		bool bFlushed = tOut.Flush (); // FIXME! handle flush failure?
+		// fix #1071
+#ifdef	TCP_NODELAY
+		int bNoDelay = 1;
+		if ( bFlushed && tAgent.m_iFamily==AF_INET )
+			setsockopt ( tAgent.m_iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&bNoDelay, sizeof(bNoDelay) );
+#endif
+
 		// socket connected, ready to read hello message
 		tAgent.m_eState = AGENT_HANDSHAKE;
 	}
@@ -4396,7 +4409,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 
 				NetOutputBuffer_c tOut ( tAgent.m_iSock );
 				// check if we need to reset the persistent connection
-				if ( tAgent.m_bFresh )
+				if ( tAgent.m_bFresh && tAgent.m_bPersistent )
 				{
 					tOut.SendWord ( SEARCHD_COMMAND_PERSIST );
 					tOut.SendWord ( 0 ); // dummy version
@@ -4878,7 +4891,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 
 				NetOutputBuffer_c tOut ( tAgent.m_iSock );
 				// check if we need to reset the persistent connection
-				if ( tAgent.m_bFresh )
+				if ( tAgent.m_bFresh && tAgent.m_bPersistent )
 				{
 					tOut.SendWord ( SEARCHD_COMMAND_PERSIST );
 					tOut.SendWord ( 0 ); // dummy version
@@ -7849,12 +7862,37 @@ class CVirtualSchema : public CSphSchema
 {
 public:
 	inline CSphColumnInfo & LastColumn() { return m_dAttrs.Last(); }
-	inline CSphColumnInfo &	GetWAttr ( int iIndex ) { return m_dAttrs[iIndex]; }
-	inline CSphVector<CSphColumnInfo> & GetWAttrs () { return m_dAttrs; }
+	inline CSphColumnInfo & GetWAttr ( int iIndex ) { return m_dAttrs[iIndex]; }
+
+	inline void RemoveAttrPlain ( int iIdx )
+	{
+		if ( m_pAttrs )
+		{
+			for ( int i=iIdx+1; i<m_dAttrs.GetLength(); i++ )
+				(*m_pAttrs) [ m_dAttrs[i].m_sName ]--;
+			m_pAttrs->Delete ( m_dAttrs [ iIdx ].m_sName );
+		}
+		m_dAttrs.Remove ( iIdx );
+	}
+
 	inline void AlignSizes ( const CSphSchema& tProof )
 	{
 		m_dDynamicUsed.Resize ( tProof.GetDynamicSize() );
 		m_iStaticSize = tProof.GetStaticSize();
+	}
+
+	void InsertAttr ( int iIdx, const CSphColumnInfo & tCol )
+	{
+		if ( m_dAttrs.GetLength()==HASH_THRESH )
+			UpdateHash();
+
+		m_dAttrs.Insert ( iIdx, tCol );
+		if ( m_pAttrs )
+		{
+			m_pAttrs->Add ( iIdx, m_dAttrs [ iIdx ].m_sName );
+			for ( int i=iIdx+1; i<m_dAttrs.GetLength(); i++ )
+				(*m_pAttrs) [ m_dAttrs[i].m_sName ]++;
+		}
 	}
 };
 
@@ -7875,7 +7913,7 @@ void AddIDAttribute ( CVirtualSchema * pSchema )
 
 	CSphColumnInfo tId;
 	MkIdAttribute ( &tId );
-	pSchema->GetWAttrs().Insert ( 0, tId );
+	pSchema->InsertAttr ( 0, tId );
 }
 
 inline bool IsIDAttribute ( const CSphColumnInfo & tTarget )
@@ -8268,7 +8306,10 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	CVirtualSchema tInternalSchema;
 	// truly virtual schema for final result returning
 	CVirtualSchema tFrontendSchema;
-	tFrontendSchema.GetWAttrs().Resize ( pSelectItems->GetLength() );
+	CSphColumnInfo tEmpty;
+	// beware of incorrect hash inside of tFrontendSchema!
+	ARRAY_FOREACH ( i, (*pSelectItems) )
+		tFrontendSchema.InsertAttr ( i, tEmpty );
 
 	CSphVector<int> dKnownItems;
 	int iKnownItems = 0;
@@ -8291,11 +8332,13 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 							dKnownItems.Add(j);
 							++iKnownItems;
 						}
+					tFrontendSchema.UpdateHash();
 					if ( tFrontendSchema.GetAttr ( tCol.m_sName.cstr() )==NULL )
 					{
-						CSphColumnInfo & tItem = tFrontendSchema.GetWAttrs().Add();
+						CSphColumnInfo tItem;
 						tItem.m_iIndex = tInternalSchema.GetAttrsCount();
 						tItem.m_sName = tCol.m_sName;
+						tFrontendSchema.InsertAttr ( tFrontendSchema.GetAttrsCount(), tItem );
 					}
 				} else
 					ARRAY_FOREACH ( j, (*pSelectItems) )
@@ -8382,6 +8425,8 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		bAllEqual &= ( tRes.m_tSchema.GetAttrsCount()==tInternalSchema.GetAttrsCount() );
 	}
 
+	tFrontendSchema.UpdateHash();
+
 	// check if we actually have all required columns already
 	if ( iKnownItems<pSelectItems->GetLength() )
 	{
@@ -8408,7 +8453,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	// and set up the locators for the fields
 	if ( !bAgent )
 	{
-		ARRAY_FOREACH ( i, tFrontendSchema.GetWAttrs() )
+		for ( int i=0; i<tFrontendSchema.GetAttrsCount(); i++ )
 		{
 			CSphColumnInfo & tCol = tFrontendSchema.GetWAttr(i);
 			const CSphColumnInfo & tSource = tInternalSchema.GetAttr ( tCol.m_iIndex );
@@ -8646,7 +8691,7 @@ bool MinimizeAggrResultCompat ( AggrResult_t & tRes, const CSphQuery & tQuery, b
 	if ( bStar && !bHadLocalIndexes && tRes.m_tSchema.GetAttr(iStar).m_sName=="id" )
 	{
 		CVirtualSchema * pSchema = (CVirtualSchema *)&tRes.m_tSchema;
-		pSchema->GetWAttrs().Remove(iStar);
+		pSchema->RemoveAttrPlain ( iStar );
 	}
 
 	if ( !bStar && tQuery.m_dItems.GetLength() )
@@ -10669,6 +10714,7 @@ enum SqlStmt_e
 	STMT_DROP_FUNCTION,
 	STMT_ATTACH_INDEX,
 	STMT_FLUSH_RTINDEX,
+	STMT_FLUSH_RAMCHUNK,
 	STMT_SHOW_VARIABLES,
 	STMT_TRUNCATE_RTINDEX,
 	STMT_SELECT_SYSVAR,
@@ -10691,7 +10737,7 @@ static const char * g_dSqlStmts[STMT_TOTAL] =
 	"parse_error", "dummy", "select", "insert", "replace", "delete", "show_warnings",
 	"show_status", "show_meta", "set", "begin", "commit", "rollback", "call",
 	"desc", "show_tables", "update", "create_func", "drop_func", "attach_index",
-	"flush_rtindex", "show_variables", "truncate_rtindex", "select_sysvar",
+	"flush_rtindex", "flush_ramchunk", "show_variables", "truncate_rtindex", "select_sysvar",
 	"show_collation", "show_character_set", "optimize_index", "show_agent_status",
 	"show_index_status", "show_profile", "show_plan"
 };
@@ -15863,7 +15909,7 @@ void HandleMysqlAttach ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 }
 
 
-void HandleMysqlFlush ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+void HandleMysqlFlushRtindex ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
 	CSphString sError;
 	const ServedIndex_t * pIndex = g_pLocalIndexes->GetRlockedEntry ( tStmt.m_sIndex );
@@ -15880,6 +15926,28 @@ void HandleMysqlFlush ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	assert ( pRt );
 
 	pRt->ForceRamFlush();
+	pIndex->Unlock();
+	tOut.Ok();
+}
+
+
+void HandleMysqlFlushRamchunk ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+{
+	CSphString sError;
+	const ServedIndex_t * pIndex = g_pLocalIndexes->GetRlockedEntry ( tStmt.m_sIndex );
+
+	if ( !pIndex || !pIndex->m_bEnabled || !pIndex->m_bRT )
+	{
+		if ( pIndex )
+			pIndex->Unlock();
+		tOut.Error ( tStmt.m_sStmt, "FLUSH RAMCHUNK requires an existing RT index" );
+		return;
+	}
+
+	ISphRtIndex * pRt = dynamic_cast<ISphRtIndex*> ( pIndex->m_pIndex );
+	assert ( pRt );
+
+	pRt->ForceDiskChunk();
 	pIndex->Unlock();
 	tOut.Ok();
 }
@@ -16525,7 +16593,11 @@ public:
 			return true;
 
 		case STMT_FLUSH_RTINDEX:
-			HandleMysqlFlush ( tOut, *pStmt );
+			HandleMysqlFlushRtindex ( tOut, *pStmt );
+			return true;
+
+		case STMT_FLUSH_RAMCHUNK:
+			HandleMysqlFlushRamchunk ( tOut, *pStmt );
 			return true;
 
 		case STMT_SHOW_VARIABLES:

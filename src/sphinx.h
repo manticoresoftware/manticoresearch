@@ -1407,7 +1407,16 @@ struct CSphSchema
 public:
 
 	/// ctor
-	explicit				CSphSchema ( const char * sName="(nameless)" ) : m_sName ( sName ), m_iStaticSize ( 0 ) {}
+	explicit				CSphSchema ( const char * sName="(nameless)" ) : m_sName ( sName ), m_pAttrs ( NULL ), m_iStaticSize ( 0 ) {}
+
+	/// copy ctor
+							CSphSchema ( const CSphSchema & rhs );
+
+	/// dtor
+							~CSphSchema ()	{ SafeDelete ( m_pAttrs ); }
+
+	/// copy
+	CSphSchema &			operator= ( const CSphSchema & rhs );
 
 	/// get field index by name
 	/// returns -1 if not found
@@ -1455,6 +1464,9 @@ public:
 	/// copy ptr attrs from another schema
 	void					AdoptPtrAttrs ( const CSphSchema & tSrc );
 
+	/// update hash
+	void					UpdateHash ();
+
 protected:
 	// also let the schema to clone the matches when necessary
 	void CopyPtrs ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound=-1 ) const;
@@ -1475,9 +1487,12 @@ public:
 
 protected:
 	CSphVector<CSphColumnInfo>		m_dAttrs;			///< all my attributes
+	SmallStringHash_T<int> *		m_pAttrs;			///< for improving attribute by name search speed
 	CSphVector<int>					m_dStaticUsed;		///< static row part map (amount of used bits in each rowitem)
 	CSphVector<int>					m_dDynamicUsed;		///< dynamic row part map
 	int								m_iStaticSize;		///< static row size (can be different from m_dStaticUsed.GetLength() because of gaps)
+
+	static const int HASH_THRESH = 32;
 
 	struct PtrAttr_t
 	{

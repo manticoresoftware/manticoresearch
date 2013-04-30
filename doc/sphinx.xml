@@ -5447,6 +5447,35 @@ Query OK, 0 rows affected (0.05 sec)
 </sect1>
 
 
+<sect1 id="sphinxql-flush-ramchunk"><title>FLUSH RAMCHUNK syntax</title>
+<programlisting>
+FLUSH RAMCHUNK rtindex
+</programlisting>
+<para>
+FLUSH RAMCHUNK statement, added in version 2.1.2-beta, forcibly
+creates a new disk chunk in a RT index.
+</para>
+<para>
+Normally, RT index would flush and convert the contents of the
+RAM chunk into a new disk chunk automatically, once the RAM chunk
+reaches the maximum allowed
+<link linkend="conf-rt-mem-limit">rt_mem_limit</link> size.
+However, for debugging and testing it might be useful to forcibly
+create a new disk chunk, and FLUSH RAMCHUNK statement does exactly that.
+</para>
+<para>
+Note that using FLUSH RAMCHUNK increases RT index fragmentation.
+Most likely, you want to use FLUSH RTINDEX instead. We suggest that
+you abstain from using this statement unless you're absolutely sure
+what you're doing.
+</para>
+<programlisting>
+mysql> FLUSH RAMCHUNK rt;
+Query OK, 0 rows affected (0.05 sec)
+</programlisting>
+</sect1>
+
+
 <sect1 id="sphinxql-truncate-rtindex"><title>TRUNCATE RTINDEX syntax</title>
 <programlisting>
 TRUNCATE RTINDEX rtindex
@@ -13413,6 +13442,32 @@ predicted_time_costs = doc=128, hit=96, skip=4096, match=128
 <listitem><para>optimized tokenizer (upto 1.25x indexing and snippets speedup)</para></listitem>
 <listitem><para>optimized multi-keyword searching (added skiplists)</para></listitem>
 <listitem><para>optimized filtering and scan in several frequent cases (single-value, 2-arg, 3-arg WHERE clauses)</para></listitem>
+</itemizedlist>
+</sect1>
+
+<sect1 id="rel208"><title>Version 2.0.8-release, 26 apr 2013</title>
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+<listitem><para>fixed #1515, log strings over 2KB were clipped when <link linkend="conf-query-log-format">query_log_format=plain</link></para></listitem>
+<listitem><para>fixed #1514, RT index disk chunk lose attribute update on daemon restart</para></listitem>
+<listitem><para>fixed #1512, crash while formatting log messages</para></listitem>
+<listitem><para>fixed #1511, crash on indexing PostgreSQL data source with <link linkend="mva">MVA</link> attributes</para></listitem>
+<listitem><para>fixed #1509, <link linkend="conf-blend-chars">blend_chars</link> vs incomplete multi-form and overshort</para></listitem>
+<listitem><para>fixed #1504, RT binlog replay vs descending tid on update</para></listitem>
+<listitem><para>fixed #1499, <link linkend="conf-sql-field-str2wordcount">sql_field_str2wordcount</link> actually is int, not string</para></listitem>
+<listitem><para>fixed #1498, now working with exceptions starting with number too</para></listitem>
+<listitem><para>fixed #1496, multiple destination keywords in wordform</para></listitem>
+<listitem><para>fixed #1494, lost 'mod', '%' operations in select list. Also corrected few typers in the doc.</para></listitem>
+<listitem><para>fixed #1490, <link linkend="conf-expand-keywords">expand_keywords</link> vs prefix</para></listitem>
+<listitem><para>fixed #1487, `id` in expression fixed</para></listitem>
+<listitem><para>fixed #1483, snippets limits fix</para></listitem>
+<listitem><para>fixed #1481, shebang config changes check on rotation</para></listitem>
+<listitem><para>fixed #1479, port handling in <link linkend="api-reference">PHP Sphinx API</link></para></listitem>
+<listitem><para>fixed #1474, daemon crash at SphinxQL packet overflows <link linkend="conf-max-packet-size">max_packet_size</link></para></listitem>
+<listitem><para>fixed #1472, crash on loading index to <filename>indextool</filename> for check</para></listitem>
+<listitem><para>fixed #1465, <link linkend="conf-expansion-limit">expansion_limit</link> got lost in index rotation</para></listitem>
+<listitem><para>fixed #1427, #1506, utf8 3 and 4-bytes codepoints</para></listitem>
+<listitem><para>fixed #1405, between with mixed int float values</para></listitem>
 </itemizedlist>
 </sect1>
 

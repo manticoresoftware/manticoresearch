@@ -5682,7 +5682,7 @@ CSphQuery::CSphQuery ()
 	, m_bSimplify		( false )
 	, m_bPlainIDF		( false )
 	, m_bGlobalIDF		( false )
-	, m_bNormalizedTFIDF( true )
+	, m_bNormalizedTFIDF ( true )
 	, m_eGroupFunc		( SPH_GROUPBY_ATTR )
 	, m_sGroupSortBy	( "@groupby desc" )
 	, m_sGroupDistinct	( "" )
@@ -6009,6 +6009,36 @@ CSphColumnInfo::CSphColumnInfo ( const char * sName, ESphAttr eType )
 }
 
 
+CSphSchema::CSphSchema ( const CSphSchema & rhs )
+{
+	m_pAttrs = NULL;
+	*this = rhs;
+}
+
+CSphSchema & CSphSchema::operator= ( const CSphSchema & rhs )
+{
+	m_sName = rhs.m_sName;
+	m_dFields = rhs.m_dFields;
+	m_dAttrs = rhs.m_dAttrs;
+
+	if ( rhs.m_pAttrs )
+	{
+		if ( !m_pAttrs )
+			m_pAttrs = new SmallStringHash_T<int> ( *rhs.m_pAttrs );
+		else
+			*m_pAttrs = *rhs.m_pAttrs;
+	} else
+		SafeDelete ( m_pAttrs );
+
+	m_dStaticUsed = rhs.m_dStaticUsed;
+	m_dDynamicUsed = rhs.m_dDynamicUsed;
+	m_iStaticSize = rhs.m_iStaticSize;
+	m_dPtrAttrs = rhs.m_dPtrAttrs;
+	m_dFactorAttrs = rhs.m_dFactorAttrs;
+
+	return *this;
+}
+
 bool CSphSchema::CompareTo ( const CSphSchema & rhs, CSphString & sError, bool bFullComparison ) const
 {
 	// check attr count
@@ -6090,9 +6120,21 @@ int CSphSchema::GetAttrIndex ( const char * sName ) const
 {
 	if ( !sName )
 		return -1;
+
+	if ( m_pAttrs )
+	{
+		int * p = (*m_pAttrs) ( sName );
+		if ( p )
+		{
+			assert ( *p>=0 && *p<m_dAttrs.GetLength() );
+			return *p;
+		}
+	}
+
 	ARRAY_FOREACH ( i, m_dAttrs )
 		if ( m_dAttrs[i].m_sName==sName )
 			return i;
+
 	return -1;
 }
 
@@ -6116,6 +6158,7 @@ void CSphSchema::Reset ()
 void CSphSchema::ResetAttrs ()
 {
 	m_dAttrs.Reset();
+	SafeDelete ( m_pAttrs );
 	m_dStaticUsed.Reset();
 	m_dDynamicUsed.Reset();
 	m_dPtrAttrs.Reset();
@@ -6130,8 +6173,12 @@ void CSphSchema::AddAttr ( const CSphColumnInfo & tCol, bool bDynamic )
 	if ( tCol.m_eAttrType==SPH_ATTR_NONE )
 		return;
 
+	if ( m_dAttrs.GetLength()==HASH_THRESH )
+		UpdateHash();
 	m_dAttrs.Add ( tCol );
 	CSphAttrLocator & tLoc = m_dAttrs.Last().m_tLocator;
+	if ( m_pAttrs )
+		m_pAttrs->Add ( m_dAttrs.GetLength()-1, m_dAttrs.Last().m_sName );
 
 	if ( tLoc.IsID() )
 		return;
@@ -6212,6 +6259,12 @@ void CSphSchema::RemoveAttr ( int iIndex )
 	}
 
 	// do remove
+	if ( m_pAttrs )
+	{
+		for ( int i=iIndex+1 ;i<m_dAttrs.GetLength(); i++ )
+			(*m_pAttrs) [ m_dAttrs[i].m_sName ]--;
+		m_pAttrs->Delete ( m_dAttrs [ iIndex ].m_sName );
+	}
 	m_dAttrs.Remove ( iIndex );
 
 	ARRAY_FOREACH ( i, m_dPtrAttrs )
@@ -6249,6 +6302,20 @@ void CSphSchema::AdoptPtrAttrs ( const CSphSchema & tSrc )
 {
 	FixupPtrAttrs ( tSrc.m_dPtrAttrs, m_dAttrs, m_dPtrAttrs );
 	FixupPtrAttrs ( tSrc.m_dFactorAttrs, m_dAttrs, m_dFactorAttrs );
+}
+
+
+void CSphSchema::UpdateHash()
+{
+	if ( !m_pAttrs && m_dAttrs.GetLength()<HASH_THRESH )
+		return;
+
+	if ( !m_pAttrs )
+		m_pAttrs = new SmallStringHash_T<int>();
+
+	m_pAttrs->Reset();
+	ARRAY_FOREACH ( i, m_dAttrs )
+		m_pAttrs->Add ( i, m_dAttrs[i].m_sName );
 }
 
 
@@ -25071,7 +25138,9 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 		const CSphColumnInfo & tAttr = m_tParams.m_dAttrs[i];
 		if ( ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_INT64SET ) && tAttr.m_eSrc!=SPH_ATTRSRC_FIELD )
 		{
-			m_tSchema.AddAttr ( tAttr, true ); // all attributes are dynamic at indexing time
+			CSphColumnInfo tMva = tAttr;
+			tMva.m_iIndex = m_tSchema.GetAttrsCount();
+			m_tSchema.AddAttr ( tMva, true ); // all attributes are dynamic at indexing time
 			dFound[i] = true;
 		}
 	}
@@ -26008,7 +26077,7 @@ bool CSphSource_PgSQL::IterateStart ( CSphString & sError )
 		m_dIsColumnBool[i] = false;
 
 	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
-		m_dIsColumnBool [ m_tSchema.GetAttr(i).m_iIndex ] = m_tSchema.GetAttr(i).m_eAttrType==SPH_ATTR_BOOL;
+		m_dIsColumnBool [ m_tSchema.GetAttr(i).m_iIndex ] = ( m_tSchema.GetAttr(i).m_eAttrType==SPH_ATTR_BOOL );
 
 	return true;
 }
@@ -26124,7 +26193,7 @@ bool CSphSource_PgSQL::SqlFetchRow ()
 }
 
 
-DWORD CSphSource_PgSQL::SqlColumnLength ( int iIndex )
+DWORD CSphSource_PgSQL::SqlColumnLength ( int )
 {
 	return 0;
 }

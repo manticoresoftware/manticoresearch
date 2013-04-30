@@ -1438,7 +1438,7 @@ public:
 		return *this;
 	}
 
-	/// copyint ctor
+	/// copying ctor
 	CSphOrderedHash<T,KEY,HASHFUNC,LENGTH> ( const CSphOrderedHash<T,KEY,HASHFUNC,LENGTH> & rhs )
 		: m_pFirstByOrder ( NULL )
 		, m_pLastByOrder ( NULL )

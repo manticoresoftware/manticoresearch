@@ -9522,10 +9522,15 @@ void SearchHandler_c::RunLocalSearchesMT ()
 			// move external attributes storage from tRaw to actual result
 			tRaw.LeakStorages ( tRes );
 
+			tRes.m_bHasPrediction |= tRaw.m_bHasPrediction;
 			tRes.m_iMultiplier = m_bMultiQueue ? iQueries : 1;
 			tRes.m_iCpuTime += tRaw.m_iCpuTime / tRes.m_iMultiplier;
 			tRes.m_tIOStats.Add ( tRaw.m_tIOStats );
-			tRes.m_iPredictedTime = tRes.m_bHasPrediction ? CalcPredictedTimeMsec ( tRes ) : 0;
+			if ( tRaw.m_bHasPrediction )
+			{
+				tRes.m_tStats.Add ( tRaw.m_tStats );
+				tRes.m_iPredictedTime = CalcPredictedTimeMsec ( tRes );
+			}
 
 			// extract matches from sorter
 			FlattenToRes ( pSorter, tRes, iOrderTag+iQuery-m_iStart );

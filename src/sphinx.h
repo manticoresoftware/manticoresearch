@@ -2578,12 +2578,9 @@ struct CSphQueryStats
 	DWORD		m_iFetchedHits;		///< processed hits (aka positions)
 	DWORD		m_iSkips;			///< number of Skip() calls
 
-	CSphQueryStats()
-		: m_pNanoBudget ( NULL )
-		, m_iFetchedDocs ( 0 )
-		, m_iFetchedHits ( 0 )
-		, m_iSkips ( 0 )
-	{}
+				CSphQueryStats();
+
+	void		Add ( const CSphQueryStats & tStats );
 };
 
 

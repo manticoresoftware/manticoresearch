@@ -15092,8 +15092,8 @@ static void FormatFactors ( CSphVector<BYTE> & dOut, const SPH_UDF_FACTORS & tFa
 
 	for ( int i = 0; i < tFactors.num_fields; i++ )
 	{
-		const SPH_UDF_FIELD_FACTORS & tField = tFactors.field[i];
-		if ( !tField.hit_count )
+		const SPH_UDF_FIELD_FACTORS & f = tFactors.field[i];
+		if ( !f.hit_count )
 			continue;
 
 		iOff = dOut.GetLength();
@@ -15102,12 +15102,12 @@ static void FormatFactors ( CSphVector<BYTE> & dOut, const SPH_UDF_FACTORS & tFa
 				"(lcs=%u, hit_count=%u, word_count=%u, "
 				"tf_idf=%f, min_idf=%f, max_idf=%f, sum_idf=%f, "
 				"min_hit_pos=%d, min_best_span_pos=%d, exact_hit=%u, max_window_hits=%d, "
-				"min_gaps=%d)",
+				"min_gaps=%d, exact_order=%d)",
 				i,
-				tField.lcs, tField.hit_count, tField.word_count,
-				tField.tf_idf, tField.min_idf, tField.max_idf, tField.sum_idf,
-				tField.min_hit_pos, tField.min_best_span_pos, ( tField.exact_hit>>i ) & 1, tField.max_window_hits,
-				tField.min_gaps );
+				f.lcs, f.hit_count, f.word_count,
+				f.tf_idf, f.min_idf, f.max_idf, f.sum_idf,
+				f.min_hit_pos, f.min_best_span_pos, ( f.exact_hit>>i ) & 1, f.max_window_hits,
+				f.min_gaps, f.exact_order );
 		dOut.Resize ( iOff+iLen );
 	}
 

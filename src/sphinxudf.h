@@ -24,7 +24,7 @@
 #define _sphinxudf_
 
 /// current udf version
-#define SPH_UDF_VERSION 3
+#define SPH_UDF_VERSION 4
 
 /// error buffer size
 #define SPH_UDF_ERROR_LEN 256
@@ -87,9 +87,11 @@ typedef struct st_sphinx_field_factors
 	float			sum_idf;
 	int				min_hit_pos;
 	int				min_best_span_pos;
-	unsigned int	exact_hit;
+	char			exact_hit;
 	int				max_window_hits;
 	int				min_gaps;			///< added in v.3
+	char			exact_order;		///< added in v.4
+	float			atc;				///< added in v.4
 } SPH_UDF_FIELD_FACTORS;
 
 /// unpacked representation of all the term-level ranking factors

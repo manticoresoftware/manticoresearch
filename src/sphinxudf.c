@@ -49,6 +49,7 @@ int sphinx_factors_unpack ( const unsigned int * in, SPH_UDF_FACTORS * out )
 	SPH_UDF_FIELD_FACTORS * f;
 	SPH_UDF_TERM_FACTORS * t;
 	int i, size, fields;
+	unsigned int exact_hit_mask, exact_order_mask;
 
 	if ( !in || !out )
 		return 1;
@@ -67,6 +68,9 @@ int sphinx_factors_unpack ( const unsigned int * in, SPH_UDF_FACTORS * out )
 	// extract field-level factors
 	if ( out->num_fields > SPH_UDF_MAX_FIELD_FACTORS )
 		return 1;
+
+	exact_hit_mask = *in++;
+	exact_order_mask = *in++;
 
 	if ( out->num_fields > 0 )
 	{
@@ -91,9 +95,12 @@ int sphinx_factors_unpack ( const unsigned int * in, SPH_UDF_FACTORS * out )
 			f->sum_idf = *(float*)in++;
 			f->min_hit_pos = (int)*in++;
 			f->min_best_span_pos = (int)*in++;
-			f->exact_hit = *in++;
 			f->max_window_hits = (int)*in++;
 			f->min_gaps = (int)*in++;
+			f->atc = *(float*)in++;
+
+			f->exact_hit = (char)( ( exact_hit_mask >> i ) & 1 );
+			f->exact_order = (char)( ( exact_order_mask >> i ) & 1 );
 		} else
 		{
 			// everything else is already zeroed out by memset() above

@@ -6683,12 +6683,14 @@ public:
 	int					m_iMinHitPos[SPH_MAX_FIELDS];
 	int					m_iMinBestSpanPos[SPH_MAX_FIELDS];
 	DWORD				m_uExactHit;
+	DWORD				m_uExactOrder;
 	CSphBitvec			m_tKeywordMask;
 	DWORD				m_uDocWordCount;
 	int					m_iMaxWindowHits[SPH_MAX_FIELDS];
 	CSphVector<int>		m_dTF;			///< for bm25a
 	float				m_fDocBM25A;	///< for bm25a
 	CSphVector<int>		m_dFieldTF;		///< for bm25f, per-field layout (ie all field0 tfs, then all field1 tfs, etc)
+	int					m_iMinGaps[SPH_MAX_FIELDS];		///< number of gaps in the minimum matching window
 
 	const char *		m_sExpr;
 	ISphExpr *			m_pExpr;
@@ -6712,14 +6714,20 @@ public:
 
 public:
 	// internal state, and factor settings
+	// max_window_hits(n)
 	CSphVector<DWORD>	m_dWindow;
 	int					m_iWindowSize;
 
+	// min_gaps
 	int						m_iHaveMinWindow;			///< whether to compute minimum matching window, and over how many query words
 	int						m_iMinWindowWords;			///< how many unique words have we seen so far
 	CSphVector<LeanHit_t>	m_dMinWindowHits;			///< current minimum matching window candidate hits
 	CSphVector<int>			m_dMinWindowCounts;			///< maps querypos indexes to number of occurrencess in m_dMinWindowHits
-	int						m_iMinGaps[SPH_MAX_FIELDS];	///< number of gaps in the minimum matching window
+
+	// exact_order
+	int					m_iLastField;
+	int					m_iLastQuerypos;
+	int					m_iExactOrderWords;
 
 public:
 						RankerState_Expr_fn ();
@@ -6828,12 +6836,16 @@ public:
 		m_dFieldTF.Fill ( 0 ); // OPTIMIZE? make conditional?
 		m_uMatchedFields = 0;
 		m_uExactHit = 0;
+		m_uExactOrder = 0;
 		m_uDocWordCount = 0;
 		m_dWindow.Resize ( 0 );
 		m_fDocBM25A = 0;
 		m_dMinWindowHits.Resize ( 0 );
 		m_dMinWindowCounts.Fill ( 0 );
 		m_iMinWindowWords = 0;
+		m_iLastField = -1;
+		m_iLastQuerypos = 0;
+		m_iExactOrderWords = 0;
 	}
 
 	void FlushMatches ()
@@ -6934,6 +6946,7 @@ enum ExprRankerNode_e
 	XRANK_MIN_HIT_POS,
 	XRANK_MIN_BEST_SPAN_POS,
 	XRANK_EXACT_HIT,
+	XRANK_EXACT_ORDER,
 	XRANK_MAX_WINDOW_HITS,
 	XRANK_MIN_GAPS,
 
@@ -7216,6 +7229,8 @@ public:
 			return XRANK_MIN_BEST_SPAN_POS;
 		if ( !strcasecmp ( sIdent, "exact_hit" ) )
 			return XRANK_EXACT_HIT;
+		if ( !strcasecmp ( sIdent, "exact_order" ) )
+			return XRANK_EXACT_ORDER;
 
 		if ( !strcasecmp ( sIdent, "bm25" ) )
 			return XRANK_BM25;
@@ -7262,6 +7277,7 @@ public:
 			case XRANK_MIN_HIT_POS:			return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinHitPos );
 			case XRANK_MIN_BEST_SPAN_POS:	return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinBestSpanPos );
 			case XRANK_EXACT_HIT:			return new Expr_FieldFactor_c<bool> ( pCF, &m_pState->m_uExactHit );
+			case XRANK_EXACT_ORDER:			return new Expr_FieldFactor_c<bool> ( pCF, &m_pState->m_uExactOrder );
 			case XRANK_MAX_WINDOW_HITS:
 				{
 					CSphMatch tDummy;
@@ -7319,6 +7335,7 @@ public:
 			case XRANK_MIN_HIT_POS:
 			case XRANK_MIN_BEST_SPAN_POS:
 			case XRANK_EXACT_HIT:
+			case XRANK_EXACT_ORDER:
 			case XRANK_MAX_WINDOW_HITS:
 			case XRANK_BM25: // doc-level
 			case XRANK_MAX_LCS:
@@ -7651,6 +7668,20 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS>::Update ( const ExtHit_t * pHlist )
 	m_dWindow.Add ( pHlist->m_uHitpos );
 	m_iMaxWindowHits[uField] = Max ( m_iMaxWindowHits[uField], m_dWindow.GetLength() );
 
+	// update exact_order factor
+	if ( (int)uField!=m_iLastField )
+	{
+		m_iLastQuerypos = 0;
+		m_iExactOrderWords = 0;
+		m_iLastField = (int)uField;
+	}
+	if ( pHlist->m_uQuerypos==m_iLastQuerypos+1 )
+	{
+		if ( ++m_iExactOrderWords==m_iQueryWordCount )
+			m_uExactOrder |= ( 1UL << uField );
+		m_iLastQuerypos++;
+	}
+
 	// update min_gaps factor
 	if ( bUniq && m_iHaveMinWindow>1 )
 		switch ( m_iHaveMinWindow )
@@ -7810,8 +7841,8 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS>::PackFactors ( int * pSize )
 
 	if ( pSize )
 	{
-		const DWORD MAX_PACKED_SIZE=2048;
-		pPackStart = new DWORD [MAX_PACKED_SIZE];
+		const DWORD MAX_PACKED_SIZE = 2048;
+		pPackStart = new DWORD [ MAX_PACKED_SIZE ];
 	} else
 	{
 		pPackStart = (DWORD *)m_tFactorPool.Alloc();
@@ -7831,6 +7862,8 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS>::PackFactors ( int * pSize )
 
 	// field level factors
 	*pPack++ = (DWORD)m_iFields;
+	*pPack++ = m_uExactHit; // added in v.4 (made exact_hit a mask instead of pre-v.4 per-field int)
+	*pPack++ = m_uExactOrder; // added in v.4
 
 	for ( int i=0; i<m_iFields; i++ )
 	{
@@ -7848,9 +7881,10 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS>::PackFactors ( int * pSize )
 			*pPack++ = *(DWORD*)&m_dSumIDF[i];
 			*pPack++ = (DWORD)m_iMinHitPos[i];
 			*pPack++ = (DWORD)m_iMinBestSpanPos[i];
-			*pPack++ = ( m_uExactHit>>i ) & 1;
+			// had exact_hit here before v.4
 			*pPack++ = (DWORD)m_iMaxWindowHits[i];
-			*pPack++ = (DWORD)m_iMinGaps[i];
+			*pPack++ = (DWORD)m_iMinGaps[i]; // added in v.3
+			*pPack++ = sphF2DW ( 0.0f ); // added in v.4
 		}
 	}
 

@@ -5594,6 +5594,9 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 			case SPH_FILTER_VALUES:		iReqSize += 4 + 8*tFilter.GetNumValues (); break; // int values-count; uint64[] values
 			case SPH_FILTER_RANGE:		iReqSize += 16; break; // uint64 min-val, max-val
 			case SPH_FILTER_FLOATRANGE:	iReqSize += 8; break; // int/float min-val,max-val
+			case SPH_FILTER_STRING:
+				assert ( 0 && "internal error: string filter vs distributed indexes is not implemented" );
+				break;
 		}
 	}
 	if ( q.m_bGeoAnchor )
@@ -5651,7 +5654,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	{
 		if ( m_iDivideLimits==1 )
 			tOut.SendInt ( q.m_iMaxMatches ); // OPTIMIZE? normally, agent limit is max_matches, even if master limit is less
-		else // FIXEME!!! that is broken with offset + limit
+		else // FIXME!!! that is broken with offset + limit
 			tOut.SendInt ( 1 + ( ( q.m_iOffset + q.m_iLimit )/m_iDivideLimits) );
 	} else
 	{
@@ -5697,6 +5700,10 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 			case SPH_FILTER_FLOATRANGE:
 				tOut.SendFloat ( tFilter.m_fMinValue );
 				tOut.SendFloat ( tFilter.m_fMaxValue );
+				break;
+
+			case SPH_FILTER_STRING:
+				assert ( 0 && "internal error: string filter vs distributed indexes is not implemented" );
 				break;
 		}
 		tOut.SendInt ( tFilter.m_bExclude );
@@ -6913,7 +6920,7 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 					break;
 
 				case SPH_FILTER_RANGE:
-					if ( f.m_iMinValue==INT64_MIN || ( f.m_iMinValue==0 && f.m_sAttrName=="@id" ) )
+					if ( f.m_iMinValue==int64_t(INT64_MIN) || ( f.m_iMinValue==0 && f.m_sAttrName=="@id" ) )
 					{
 						// no min, thus (attr<maxval)
 						const char * sOps[2][2] = { { "<", "<=" }, { ">=", ">" } };
@@ -10584,6 +10591,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 // for now, only builtin table functions are supported
 // UDFs are planned when the internal call interface is stabilized
 
+#define LOC_ERROR(_msg) { sError = _msg; return false; }
 #define LOC_ERROR1(_msg,_arg1) { sError.SetSprintf ( _msg, _arg1 ); return false; }
 
 class CSphTableFuncRemoveRepeats : public ISphTableFunc
@@ -10597,18 +10605,18 @@ public:
 	virtual bool ValidateArgs ( const CSphVector<CSphString> & dArgs, const CSphQuery &, CSphString & sError )
 	{
 		if ( dArgs.GetLength()!=3 )
-			LOC_ERROR1 ( "REMOVE_REPEATS() requires 4 arguments (result_set, column, offset, limit)", 0 );
+			LOC_ERROR ( "REMOVE_REPEATS() requires 4 arguments (result_set, column, offset, limit)" );
 		if ( !isdigit ( *dArgs[1].cstr() ) )
-			LOC_ERROR1 ( "REMOVE_REPEATS() argument 3 (offset) must be integer", 0 );
+			LOC_ERROR ( "REMOVE_REPEATS() argument 3 (offset) must be integer" );
 		if ( !isdigit ( *dArgs[2].cstr() ) )
-			LOC_ERROR1 ( "REMOVE_REPEATS() argument 4 (limit) must be integer", 0 );
+			LOC_ERROR ( "REMOVE_REPEATS() argument 4 (limit) must be integer" );
 
 		m_sCol = dArgs[0];
 		m_iOffset = atoi ( dArgs[1].cstr() );
 		m_iLimit = atoi ( dArgs[2].cstr() );
 
 		if ( !m_iLimit )
-			LOC_ERROR1 ( "REMOVE_REPEATS() argument 4 (limit) must be greater than 0", 0 );
+			LOC_ERROR ( "REMOVE_REPEATS() argument 4 (limit) must be greater than 0" );
 		return true;
 	}
 
@@ -10690,6 +10698,7 @@ public:
 };
 
 #undef LOC_ERROR1
+#undef LOC_ERROR
 
 //////////////////////////////////////////////////////////////////////////
 // SQL PARSER
@@ -13318,9 +13327,9 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 			dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iSkips );
 
 		if ( dStatus.MatchAdd ( "predicted_time" ) )
-			dStatus.Add().SetSprintf ( "%lld", tMeta.m_iPredictedTime );
+			dStatus.Add().SetSprintf ( "%lld", INT64 ( tMeta.m_iPredictedTime ) );
 		if ( dStatus.MatchAdd ( "dist_predicted_time" ) )
-			dStatus.Add().SetSprintf ( "%lld", tMeta.m_iAgentPredictedTime );
+			dStatus.Add().SetSprintf ( "%lld", INT64 ( tMeta.m_iAgentPredictedTime ) );
 	}
 
 
@@ -18734,8 +18743,10 @@ bool CheckConfigChanges ()
 	fp = fopen ( g_sConfigFile.cstr (), "rb" );
 	if ( !fp )
 		return true;
-	fgets ( sBuf, sizeof(sBuf), fp );
+	bool bGotLine = fgets ( sBuf, sizeof(sBuf), fp );
 	fclose ( fp );
+	if ( !bGotLine )
+		return true;
 
 	char * p = sBuf;
 	while ( isspace(*p) )

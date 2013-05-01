@@ -212,7 +212,7 @@ tablefunc_args_list:
 
 tablefunc_arg:
 	TOK_IDENT
-	| TOK_CONST_INT		{ $$.m_sValue.SetSprintf ( "%d", $1.m_iValue ); }
+	| TOK_CONST_INT		{ $$.m_sValue.SetSprintf ( "%lld", INT64($1.m_iValue) ); }
 	| TOK_ID			{ $$.m_sValue = "id"; }
 	;
 

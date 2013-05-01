@@ -72,7 +72,7 @@ typedef union YYSTYPE {
 	} tFieldLimit;
 	int				iZoneVec;
 } YYSTYPE;
-/* Line 1204 of yacc.c.  */
+/* Line 1248 of yacc.c.  */
 
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

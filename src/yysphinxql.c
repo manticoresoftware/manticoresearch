@@ -1932,7 +1932,7 @@ yyreduce:
 
   case 40:
 
-    { yyval.m_sValue.SetSprintf ( "%d", yyvsp[0].m_iValue ); ;}
+    { yyval.m_sValue.SetSprintf ( "%lld", INT64(yyvsp[0].m_iValue) ); ;}
     break;
 
   case 41:

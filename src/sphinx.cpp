@@ -1303,8 +1303,8 @@ const char * sphGetExt ( ESphExtType eType, ESphExt eExt )
 		return g_pppAllExts[eType][eExt];
 	}
 
-	assert ( eType>=0 && eType<=sizeof(g_pppAllExts)/sizeof(g_pppAllExts[0]) );
-	assert ( eExt>=0 && eExt<=sizeof(g_pppAllExts[0])/sizeof(g_pppAllExts[0][0]));
+	assert ( eType>=0 && eType<=(int)sizeof(g_pppAllExts)/(int)sizeof(g_pppAllExts[0]) );
+	assert ( eExt>=0 && eExt<=(int)sizeof(g_pppAllExts[0])/(int)sizeof(g_pppAllExts[0][0]));
 
 	return g_pppAllExts[eType][eExt];
 }
@@ -1979,7 +1979,7 @@ protected:
 		// throw away everything which is over the token size
 		bool bFit = ( m_iAccum<SPH_MAX_WORD_LEN );
 		if ( IS_UTF8 )
-			bFit &= ( m_pAccum-m_sAccum+SPH_MAX_UTF8_BYTES<=sizeof(m_sAccum));
+			bFit &= ( m_pAccum-m_sAccum+SPH_MAX_UTF8_BYTES<=(int)sizeof(m_sAccum));
 
 		if ( bFit )
 		{
@@ -3276,7 +3276,7 @@ static int TokenizeOnWhitespace ( CSphVector<CSphString> & dTokens, const BYTE *
 			// accumulate everything else
 			if ( iAccum<SPH_MAX_WORD_LEN )
 			{
-				if ( bUtf8 && ( pAccum-sAccum+SPH_MAX_UTF8_BYTES<=sizeof(sAccum) ) )
+				if ( bUtf8 && ( pAccum-sAccum+SPH_MAX_UTF8_BYTES<=(int)sizeof(sAccum) ) )
 				{
 					pAccum += sphUTF8Encode ( pAccum, iCode );
 					iAccum++;
@@ -4616,7 +4616,7 @@ BYTE * CSphTokenizerBase2<IS_UTF8>::GetTokenSyn ( bool bQueryMode )
 				// so do this manually, no function calls, that is quickest
 				bool bFit = ( m_iAccum<SPH_MAX_WORD_LEN );
 				if ( IS_UTF8 )
-					bFit &= ( m_pAccum-m_sAccum+SPH_MAX_UTF8_BYTES<=sizeof(m_sAccum) );
+					bFit &= ( m_pAccum-m_sAccum+SPH_MAX_UTF8_BYTES<=(int)sizeof(m_sAccum) );
 
 				if ( bFit )
 				{
@@ -5300,7 +5300,7 @@ BYTE * CSphTokenizer_UTF8_Base::DoGetToken ()
 		// just accumulate
 		// manual inlining of utf8 encoder gives us a few extra percent
 		// which is important here, this is a hotspot
-		if ( m_iAccum<SPH_MAX_WORD_LEN && ( m_pAccum-m_sAccum+SPH_MAX_UTF8_BYTES<=sizeof(m_sAccum) ) )
+		if ( m_iAccum<SPH_MAX_WORD_LEN && ( m_pAccum-m_sAccum+SPH_MAX_UTF8_BYTES<=(int)sizeof(m_sAccum) ) )
 		{
 			iCode &= MASK_CODEPOINT;
 			m_iAccum++;
@@ -24846,10 +24846,6 @@ static bool HookConnect ( const char* szCommand )
 	FILE * pPipe = popen ( szCommand, "r" );
 	if ( !pPipe )
 		return false;
-
-	const int MAX_BUF_SIZE = 1024;
-	BYTE dBuf [MAX_BUF_SIZE];
-	fread ( dBuf, 1, MAX_BUF_SIZE, pPipe );
 	pclose ( pPipe );
 	return true;
 }
@@ -24914,10 +24910,6 @@ static bool HookPostIndex ( const char* szCommand, SphDocID_t uLastIndexed )
 	SafeDeleteArray ( pCmd );
 	if ( !pPipe )
 		return false;
-
-	const int MAX_BUF_SIZE = 1024;
-	BYTE dBuf [MAX_BUF_SIZE];
-	fread ( dBuf, 1, MAX_BUF_SIZE, pPipe );
 	pclose ( pPipe );
 	return true;
 }

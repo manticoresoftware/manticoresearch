@@ -6280,12 +6280,13 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 							{
 								assert ( uOff<( I64C(1)<<32 ) ); // should be 32 bit offset
 								assert ( !bSegmentMatch || (int)uOff<m_pSegments[iStorageSrc]->m_dStrings.GetLength() );
-								iAttr = CopyPackedString ( pBaseString + uOff, dStorageString );
+								DWORD uRebased = CopyPackedString ( pBaseString + uOff, dStorageString );
+								iAttr = uRebased;
 								// store the map of full jsons in order to map json fields
 								if ( tLoc.m_eAttrType==SPH_ATTR_JSON )
 								{
 									dOriginalJson.Add ( (DWORD)uOff );
-									dMovedJson.Add ( iAttr );
+									dMovedJson.Add ( uRebased );
 								}
 							}
 						}
@@ -6317,7 +6318,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 									int k = -1;
 									int iDistance = -1;
 									ARRAY_FOREACH ( j, dOriginalJson )
-										if ( iDistance < 0 || ( uOff - dOriginalJson[j]>=0 && uOff - dOriginalJson[j] < iDistance ) )
+										if ( iDistance < 0 || ( uOff>=dOriginalJson[j] && uOff<( dOriginalJson[j]+iDistance ) ) )
 										{
 											iDistance = uOff - dOriginalJson[j];
 											k = j;

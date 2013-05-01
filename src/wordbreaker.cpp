@@ -455,7 +455,9 @@ void UrlBreakTest ( const char * sTestFile )
 	int64_t tmWall = sphMicroTimer();
 	ARRAY_FOREACH ( iTest, dTests )
 	{
+#ifndef NDEBUG
 		int64_t tmWord = sphMicroTimer();
+#endif
 		const char * sWord = dTests[iTest][0].cstr();
 
 		// break into keywords

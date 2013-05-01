@@ -453,7 +453,11 @@ struct Expr_BM25F_c : public ISphExpr
 
 		SPH_UDF_FACTORS tUnpacked;
 		sphinx_factors_init ( &tUnpacked );
+#ifndef NDEBUG
 		Verify ( sphinx_factors_unpack ( (const unsigned int*)pEntry->m_pData, &tUnpacked )==0 );
+#else
+		sphinx_factors_unpack ( (const unsigned int*)pEntry->m_pData, &tUnpacked ); // fix MSVC Release warning
+#endif
 
 		// compute document length
 		// OPTIMIZE? could precompute and store total dl in attrs, but at a storage cost

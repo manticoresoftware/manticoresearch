@@ -7506,38 +7506,16 @@ RankerState_Expr_fn <NEED_PACKEDFACTORS>::~RankerState_Expr_fn ()
 template < bool NEED_PACKEDFACTORS >
 bool RankerState_Expr_fn<NEED_PACKEDFACTORS>::Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError )
 {
-	// cleanup factors
-	memset ( m_uLCS, 0, sizeof(m_uLCS) );
-	memset ( m_uMatchMask, 0, sizeof(m_uMatchMask) );
-	m_uCurLCS = 0;
-	m_iExpDelta = -INT_MAX;
 	m_iFields = iFields;
 	m_pWeights = pWeights;
 	m_uDocBM25 = 0;
-	m_uMatchedFields = 0;
 	m_iCurrentField = 0;
-	memset ( m_uHitCount, 0, sizeof(m_uHitCount) );
-	memset ( m_uWordCount, 0, sizeof(m_uWordCount) );
-	memset ( m_dTFIDF, 0, sizeof(m_dTFIDF) );
-	memset ( m_dSumIDF, 0, sizeof(m_dSumIDF) );
-	memset ( m_iMinHitPos, 0, sizeof(m_iMinHitPos) );
-	memset ( m_iMinBestSpanPos, 0, sizeof(m_iMinBestSpanPos) );
-	memset ( m_iMaxWindowHits, 0, sizeof(m_iMaxWindowHits) );
-	memset ( m_iMinGaps, 0, sizeof(m_iMinGaps) );
 	m_iMaxQpos = pRanker->m_iMaxQpos; // already copied in SetQwords, but anyway
 	m_iMaxUniqQpos = pRanker->m_iMaxUniqQpos;
-	m_uExactHit = 0;
-	m_uDocWordCount = 0;
 	m_iWindowSize = 1;
 	m_iHaveMinWindow = 0;
-	m_iMinWindowWords = 0;
 	m_dMinWindowHits.Reserve ( 32 );
-
-	for ( int i=0; i < SPH_MAX_FIELDS; i++ )
-	{
-		m_dMinIDF[i] = FLT_MAX;
-		m_dMaxIDF[i] = -FLT_MAX;
-	}
+	ResetDocFactors();
 
 	// compute query level constants
 	// max_lcs, aka m_iMaxLCS (for matchany ranker emulation) gets computed here

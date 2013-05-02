@@ -534,7 +534,7 @@ enum
 	VER_COMMAND_EXCERPT		= 0x104,
 	VER_COMMAND_UPDATE		= 0x103,
 	VER_COMMAND_KEYWORDS	= 0x100,
-	VER_COMMAND_STATUS		= 0x100,
+	VER_COMMAND_STATUS		= 0x101,
 	VER_COMMAND_FLUSHATTRS	= 0x100,
 	VER_COMMAND_SPHINXQL	= 0x100,
 	VER_COMMAND_PING		= 0x100
@@ -10525,7 +10525,7 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 }
 
 
-void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
+void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq, CSphQueryResultMeta* pMeta )
 {
 	MEMORY ( SPH_MEM_SEARCH_NONSQL );
 
@@ -10568,6 +10568,9 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		iTotalPredictedTime += tHandler.m_dResults[i].m_iPredictedTime;
 		iTotalAgentPredictedTime += tHandler.m_dResults[i].m_iAgentPredictedTime;
 	}
+
+	if ( pMeta )
+		*pMeta = tHandler.m_dResults[tHandler.m_dResults.GetLength()-1];
 
 	g_tStatsMutex.Lock();
 	g_pStats->m_iPredictedTime += iTotalPredictedTime;
@@ -13353,7 +13356,7 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 }
 
 
-void HandleCommandStatus ( int iSock, int iVer, InputBuffer_c & tReq )
+void HandleCommandStatus ( int iSock, int iVer, InputBuffer_c & tReq, const CSphQueryResultMeta* pMeta )
 {
 	if ( !CheckCommandVersion ( iVer, VER_COMMAND_STATUS, tReq ) )
 		return;
@@ -13364,8 +13367,14 @@ void HandleCommandStatus ( int iSock, int iVer, InputBuffer_c & tReq )
 		return;
 	}
 
+	bool bGlobalStat = tReq.GetDword ();
+
 	VectorLike dStatus;
-	BuildStatus ( dStatus );
+
+	if ( bGlobalStat || !pMeta )
+		BuildStatus ( dStatus );
+	else
+		BuildMeta ( dStatus, *pMeta );
 
 	int iRespLen = 8; // int rows, int cols
 	ARRAY_FOREACH ( i, dStatus )
@@ -13481,6 +13490,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 	}
 
 	int iPconnIdle = 0;
+	CSphQueryResultMeta dMyMeta;
 	do
 	{
 		// in "persistent connection" mode, we want interruptible waits
@@ -13588,7 +13598,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 		sphLogDebugv ( "conn %s("INT64_FMT"): got command %d, handling", sClientIP, iCID, iCommand );
 		switch ( iCommand )
 		{
-			case SEARCHD_COMMAND_SEARCH:	HandleCommandSearch ( iSock, iCommandVer, tBuf ); break;
+			case SEARCHD_COMMAND_SEARCH:	HandleCommandSearch ( iSock, iCommandVer, tBuf, &dMyMeta ); break;
 			case SEARCHD_COMMAND_EXCERPT:	HandleCommandExcerpt ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_KEYWORDS:	HandleCommandKeywords ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_UPDATE:	HandleCommandUpdate ( iSock, iCommandVer, tBuf ); break;
@@ -13597,7 +13607,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 				iTimeout = 1;
 				sphLogDebugv ( "conn %s("INT64_FMT"): pconn is now %s", sClientIP, iCID, bPersist ? "on" : "off" );
 				break;
-			case SEARCHD_COMMAND_STATUS:	HandleCommandStatus ( iSock, iCommandVer, tBuf ); break;
+			case SEARCHD_COMMAND_STATUS:	HandleCommandStatus ( iSock, iCommandVer, tBuf, &dMyMeta ); break;
 			case SEARCHD_COMMAND_FLUSHATTRS:HandleCommandFlush ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_SPHINXQL:	HandleCommandSphinxql ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_PING:		HandleCommandPing ( iSock, iCommandVer, tBuf ); break;

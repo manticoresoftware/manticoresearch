@@ -33,7 +33,7 @@ define ( "VER_COMMAND_SEARCH",		0x11D );
 define ( "VER_COMMAND_EXCERPT",		0x104 );
 define ( "VER_COMMAND_UPDATE",		0x103 );
 define ( "VER_COMMAND_KEYWORDS",	0x100 );
-define ( "VER_COMMAND_STATUS",		0x100 );
+define ( "VER_COMMAND_STATUS",		0x101 );
 define ( "VER_COMMAND_QUERY",		0x100 );
 define ( "VER_COMMAND_FLUSHATTRS",	0x100 );
 
@@ -1740,8 +1740,10 @@ class SphinxClient
 	// status
 	//////////////////////////////////////////////////////////////////////////
 
-	function Status ()
+	function Status ($session=false)
 	{
+        assert ( is_bool($session) );
+
 		$this->_MBPush ();
 		if (!( $fp = $this->_Connect() ))
 		{
@@ -1749,7 +1751,7 @@ class SphinxClient
 			return false;
 		}
 
-		$req = pack ( "nnNN", SEARCHD_COMMAND_STATUS, VER_COMMAND_STATUS, 4, 1 ); // len=4, body=1
+		$req = pack ( "nnNN", SEARCHD_COMMAND_STATUS, VER_COMMAND_STATUS, 4, $session?0:1 ); // len=4, body=1
 		if ( !( $this->_Send ( $fp, $req, 12 ) ) ||
 			 !( $response = $this->_GetResponse ( $fp, VER_COMMAND_STATUS ) ) )
 		{

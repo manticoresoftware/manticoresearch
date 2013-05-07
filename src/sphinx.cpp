@@ -74,6 +74,11 @@
 #include <re2/re2.h>
 #endif
 
+#if USE_RLP
+#include "bt_rlp_c.h"
+#include <bt_xwchar.h>
+#endif
+
 #if USE_WINDOWS
 	#include <io.h> // for open()
 
@@ -136,6 +141,13 @@
 	#pragma message("Automatically linking with re2.lib")
 #endif
 
+#if ( USE_WINDOWS && USE_RLP )
+	#pragma comment(linker, "/defaultlib:btrlpc.lib")
+	#pragma message("Automatically linking with btrlpc.lib")
+	#pragma comment(linker, "/defaultlib:btutils.lib")
+	#pragma message("Automatically linking with btutils.lib")
+#endif
+
 /////////////////////////////////////////////////////////////////////////////
 
 typedef Hitman_c<8> HITMAN;
@@ -191,6 +203,10 @@ static int			g_iReadUnhinted			= DEFAULT_READ_UNHINTED;
 
 CSphString			g_sLemmatizerBase		= SHAREDIR;
 
+#if USE_RLP
+CSphString			g_sRLPRoot				= SHAREDIR;
+CSphString			g_sRLPEnv				= SHAREDIR"/rlp-environment.xml";
+#endif
 
 // quick hack for indexer crash reporting
 // one day, these might turn into a callback or something
@@ -2388,6 +2404,350 @@ public:
 
 /////////////////////////////////////////////////////////////////////////////
 
+#if USE_RLP
+
+BT_RLP_EnvironmentC * g_pRLPEnv = NULL;
+int g_iRLPEnvRefCount = 0;
+
+static void RLPLog ( void *, int iChannel, const char * szMessage )
+{
+	switch ( iChannel )
+	{
+	case 0:
+		sphWarning ( "%s", szMessage );
+		break;
+
+	case 1:
+		sphLogFatal ( "%s", szMessage );
+		break;
+
+	default:
+		sphInfo ( "%s", szMessage );
+		break;
+	}
+}
+
+static bool sphRLPInit ( const char * szRootPath, const char * szEnvPath, CSphString & sError )
+{
+	if ( !g_pRLPEnv )
+	{
+		if ( !BT_RLP_CLibrary_VersionIsCompatible ( BT_RLP_CLIBRARY_INTERFACE_VERSION ) )
+		{
+			sError.SetSprintf ( "RLP library mismatch: have %ld expect %d", BT_RLP_CLibrary_VersionNumber(), BT_RLP_CLIBRARY_INTERFACE_VERSION );
+			return false;
+		}
+
+		BT_RLP_Environment_SetBTRootDirectory ( szRootPath );
+		BT_RLP_Environment_SetLogCallbackFunction ( NULL, RLPLog );
+		BT_RLP_Environment_SetLogLevel ( "error" );
+
+		g_pRLPEnv = BT_RLP_Environment_Create();
+		if ( !g_pRLPEnv )
+		{
+			sError = "Unable to initialize RLP environment";
+			return false;
+		}
+
+		BT_Result iRes = BT_RLP_Environment_InitializeFromFile ( g_pRLPEnv, szEnvPath );
+		if ( iRes!=BT_OK )
+		{
+			sError = "Unable to initialize the RLP environment";
+			return false;
+		}
+	}
+
+	g_iRLPEnvRefCount++;
+	return true;
+}
+
+
+static void sphRLPFree ()
+{
+	g_iRLPEnvRefCount--;
+	if ( !g_iRLPEnvRefCount )
+	{
+		assert ( g_pRLPEnv );
+		BT_RLP_Environment_Destroy ( g_pRLPEnv );
+		g_pRLPEnv = NULL;
+	}
+}
+
+
+class CSphRLPTokenizer : public CSphTokenFilter
+{
+public:
+	CSphRLPTokenizer ( ISphTokenizer * pTok, const char * szRootPath, const char * szEnvPath, const char * szCtxPath )
+		: CSphTokenFilter ( pTok )
+		, m_pContext ( NULL )
+		, m_pFactory ( NULL )
+		, m_pTokenIterator ( NULL )
+		, m_sRootPath ( szRootPath )
+		, m_sEnvPath ( szEnvPath )
+		, m_sCtxPath ( szCtxPath )
+		, m_bChineseBuffer ( false )
+		, m_bInitialized ( false )
+		, m_bCloned ( false )
+		, m_iLargeSegmentOffset ( 0 )
+	{
+		assert ( pTok );
+	}
+
+	~CSphRLPTokenizer()
+	{
+		assert ( g_pRLPEnv );
+
+		if ( !m_bCloned )
+		{
+			if ( m_pTokenIterator )
+				BT_RLP_TokenIterator_Destroy ( m_pTokenIterator );
+
+			if ( m_pFactory )
+				BT_RLP_TokenIteratorFactory_Destroy ( m_pFactory );
+
+			if ( m_pContext )
+				BT_RLP_Environment_DestroyContext ( g_pRLPEnv, m_pContext );
+
+			sphRLPFree();
+		}
+	}
+
+	bool Init ( CSphString & sError )
+	{
+		assert ( !m_bInitialized && !m_bCloned );
+
+		if ( !sphRLPInit ( m_sRootPath.cstr(), m_sEnvPath.cstr(), sError ) )
+			return false;
+
+		assert ( g_pRLPEnv );
+
+		BT_Result iRes = BT_RLP_Environment_GetContextFromFile ( g_pRLPEnv, m_sCtxPath.cstr(), &m_pContext );
+		if ( iRes!=BT_OK )
+		{
+			sError = "Unable to create RLP context";
+			return false;
+		}
+
+		m_pFactory = BT_RLP_TokenIteratorFactory_Create();
+		if ( !m_pFactory )
+		{
+			sError = "Unable to create RLP token iterator factory";
+			return false;
+		}
+
+		m_bInitialized = true;
+
+		return true;
+	}
+
+	ISphTokenizer * Clone ( ESphTokenizerClone eMode ) const
+	{
+		ISphTokenizer * pTok = m_pTokenizer->Clone ( eMode );
+
+		CSphRLPTokenizer * pClone;
+		if ( eMode==SPH_CLONE_QUERY_LIGHTWEIGHT )
+		{
+			pClone = new CSphRLPTokenizer ( pTok, m_sRootPath.cstr(), m_sEnvPath.cstr(), m_sCtxPath.cstr() );
+			pClone->m_pContext = m_pContext;
+			pClone->m_pFactory = m_pFactory;
+			pClone->m_pTokenIterator = m_pTokenIterator;
+			pClone->m_bInitialized = true;
+			pClone->m_bCloned = true;
+		} else
+		{
+			pClone = new CSphRLPTokenizer ( pTok, m_sRootPath.cstr(), m_sEnvPath.cstr(), m_sCtxPath.cstr() );
+			CSphString sError;
+			Verify ( pClone->Init ( sError ) );
+		}
+
+		return pClone;
+	}
+
+	void SetBuffer ( const BYTE * szBuffer, int iBufferLength )
+	{
+		assert ( m_bInitialized && g_pRLPEnv && m_pContext && m_pFactory );
+
+		m_bChineseBuffer = DetectChinese ( szBuffer, iBufferLength );
+		if ( m_bChineseBuffer )
+		{
+			int iLength = iBufferLength;
+			if ( iBufferLength>=MAX_CHUNK_SIZE )
+			{
+				m_dLargeBuffer.Resize ( iLength );
+				memcpy ( m_dLargeBuffer.Begin(), szBuffer, iBufferLength );
+				iLength = GetNextLengthToSegment ( szBuffer, iBufferLength );
+				m_iLargeSegmentOffset = iLength;
+			}
+
+			ProcessBufferRLP ( szBuffer, iLength );
+		} else
+			m_pTokenizer->SetBuffer ( szBuffer, iBufferLength );
+	}
+
+	BYTE * GetToken()
+	{
+		assert ( m_bInitialized && g_pRLPEnv && m_pContext && m_pFactory );
+
+		if ( m_bChineseBuffer )
+		{
+			BYTE * pToken = GetNextTokenRLP();
+			if ( pToken )
+				return pToken;
+
+			DestroyIteratorRLP();
+
+			while ( m_dLargeBuffer.GetLength() )
+			{
+				BYTE * pBuffer = m_dLargeBuffer.Begin()+m_iLargeSegmentOffset;
+				int iBufferLength = m_dLargeBuffer.GetLength()-m_iLargeSegmentOffset;
+				int iLength = GetNextLengthToSegment ( pBuffer, iBufferLength );
+				if ( iLength )
+				{
+					ProcessBufferRLP ( pBuffer, iLength );
+					m_iLargeSegmentOffset += iLength;
+
+					pToken = GetNextTokenRLP();
+					if ( pToken )
+						return pToken;
+					else
+						DestroyIteratorRLP();
+				} else
+				{
+					m_dLargeBuffer.Resize(0);
+					m_iLargeSegmentOffset = 0;
+				}
+			}
+
+			return NULL;
+		} else
+			return m_pTokenizer->GetToken();
+	}
+
+	bool GetMorphFlag () const
+	{
+		return !m_bChineseBuffer;
+	}
+
+private:
+	BT_RLP_ContextC *		m_pContext;
+	BT_RLP_TokenIteratorFactoryC * m_pFactory;
+	BT_RLP_TokenIteratorC *	m_pTokenIterator;
+	CSphString				m_sRootPath;
+	CSphString				m_sEnvPath;
+	CSphString				m_sCtxPath;
+	bool					m_bChineseBuffer;
+	bool					m_bInitialized;
+	bool					m_bCloned;
+	static const int		MAX_CHUNK_SIZE = 10485760;
+	static const int		MAX_TOKEN_LEN = 1024;
+	CSphTightVector<BYTE>	m_dLargeBuffer;
+	int						m_iLargeSegmentOffset;
+	BYTE					m_dUTF8Buffer[MAX_TOKEN_LEN];
+
+
+	bool IsChineseCode ( int iCode ) const
+	{
+		return ( ( iCode>=0x2E80 && iCode<=0x2EF3 ) ||	// CJK radicals
+			( iCode>=0x2F00 && iCode<=0x2FD5 ) ||	// Kangxi radicals
+			( iCode>=0x3105 && iCode<=0x312D ) ||	// Bopomofo
+			( iCode>=0x31C0 && iCode<=0x31E3 ) ||	// CJK strokes
+			( iCode>=0x3400 && iCode<=0x4DB5 ) ||	// CJK Ideograph Extension A
+			( iCode>=0x4E00 && iCode<=0x9FCC ) ||	// Ideograph
+			( iCode>=0xF900 && iCode<=0xFAD9 ) ||	// compatibility ideographs
+			( iCode>=0x20000 && iCode<=0x2FA1D ) );	// CJK Ideograph Extensions B/C/D, and compatibility ideographs
+	}
+
+	bool IsChineseSeparator ( int iCode ) const
+	{
+		assert ( m_pTokenizer );
+		return ( iCode>=0x3000 && iCode<=0x303F ) || !m_pTokenizer->GetLowercaser().ToLower ( iCode );
+	}
+
+	bool DetectChinese ( const BYTE * szBuffer, int iLength ) const
+	{
+		const BYTE * pBuffer = szBuffer;
+		while ( pBuffer<szBuffer+iLength )
+		{
+			int iCode = sphUTF8Decode ( pBuffer );
+			if ( IsChineseCode ( iCode ) )
+				return true;
+		}
+
+		return false;
+	}
+
+	bool IsJunkPOS ( const char * szPOS ) const
+	{
+		if ( !szPOS )
+			return true;
+
+		return ( !strcmp ( szPOS, "EOS" ) || !strcmp ( szPOS, "PUNCT" ) );
+	}
+
+	void ProcessBufferRLP ( const BYTE * pBuffer, int iLength )
+	{
+		assert ( !m_pTokenIterator );
+
+		BT_Result iRes = BT_RLP_Context_ProcessBuffer ( m_pContext, pBuffer, iLength, BT_LANGUAGE_SIMPLIFIED_CHINESE, "UTF-8", NULL );
+		// iteration should still work ok in this case
+		if ( iRes!=BT_OK )
+			sphWarning ( "BT_RLP_Context_ProcessBuffer error" );
+
+		m_pTokenIterator = BT_RLP_TokenIteratorFactory_CreateIterator ( m_pFactory, m_pContext );
+		if ( !m_pTokenIterator )
+			sphWarning ( "BT_RLP_TokenIteratorFactory_CreateIterator error" );
+	}
+
+	BYTE * GetNextTokenRLP()
+	{
+		if ( !m_pTokenIterator )
+			return NULL;
+
+		while ( BT_RLP_TokenIterator_Next ( m_pTokenIterator ) )
+		{
+			const BT_Char16 * pToken = BT_RLP_TokenIterator_GetToken ( m_pTokenIterator );
+			const char * szPartOfSpeech = BT_RLP_TokenIterator_GetPartOfSpeech ( m_pTokenIterator );
+			assert ( pToken );
+
+			if ( IsJunkPOS ( szPartOfSpeech ) )
+				continue;
+
+			bt_xutf16toutf8 ( (char*)m_dUTF8Buffer, pToken, sizeof(m_dUTF8Buffer) );
+
+			return &(m_dUTF8Buffer[0]);
+		}
+
+		return NULL;
+	}
+
+	void DestroyIteratorRLP()
+	{
+		if ( m_pTokenIterator )
+		{
+			BT_RLP_TokenIterator_Destroy ( m_pTokenIterator );
+			m_pTokenIterator = NULL;
+		}
+	}
+
+	int GetNextLengthToSegment ( const BYTE * pBuffer, int iLength ) const
+	{
+		const BYTE * pCurBuf = pBuffer;
+		const BYTE * pLastSeparator = NULL;
+		int iLengthLeft = Min ( iLength, MAX_CHUNK_SIZE );
+		while ( pCurBuf<pBuffer+iLengthLeft )
+		{
+			int iCode = sphUTF8Decode ( pCurBuf );
+			if ( IsChineseSeparator ( iCode ) )
+				pLastSeparator = pCurBuf;
+		}
+
+		return pLastSeparator ? pLastSeparator-pBuffer : iLengthLeft;
+	}
+};
+
+#endif
+
+//////////////////////////////////////////////////////////////////////////
+
 ISphTokenizer * sphCreateSBCSTokenizer ()
 {
 	return new CSphTokenizer_SBCS<false> ();
@@ -3422,6 +3782,31 @@ ISphTokenizer * ISphTokenizer::CreateBigramFilter ( ISphTokenizer * pTokenizer, 
 }
 
 
+#if USE_RLP
+ISphTokenizer * ISphTokenizer::CreateRLPFilter ( ISphTokenizer * pTokenizer, bool bChineseRLP, const char * szRLPRoot,
+												const char * szRLPEnv, const char * szRLPCtx, CSphString & sError )
+{
+	assert ( pTokenizer );
+	if ( !bChineseRLP )
+		return pTokenizer;
+
+	if ( !pTokenizer->IsUtf8() )
+	{
+		sError.SetSprintf ( "rlp_chinese requires UTF-8" );
+		SafeDelete ( pTokenizer );
+		return NULL;
+	}
+
+	CSphRLPTokenizer * pRLP = new CSphRLPTokenizer ( pTokenizer, szRLPRoot, szRLPEnv, szRLPCtx );
+	if ( !pRLP->Init ( sError ) )
+	{
+		SafeDelete ( pTokenizer );
+		SafeDelete ( pRLP );
+	}
+
+	return pRLP;
+}
+#endif
 
 bool ISphTokenizer::AddSpecialsSPZ ( const char * sSpecials, const char * sDirective, CSphString & sError )
 {
@@ -7692,6 +8077,7 @@ CSphIndexSettings::CSphIndexSettings ()
 	, m_iEmbeddedLimit		( 0 )
 	, m_eBigramIndex		( SPH_BIGRAM_NONE )
 	, m_bAotFilter			( false )
+	, m_bChineseRLP			( false )
 {
 }
 
@@ -9925,6 +10311,8 @@ void SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettin
 	tWriter.PutByte ( tSettings.m_eBigramIndex );
 	tWriter.PutString ( tSettings.m_sBigramWords );
 	tWriter.PutByte ( tSettings.m_bIndexFieldLens );
+	tWriter.PutByte ( tSettings.m_bChineseRLP ? 1 : 0 );
+	tWriter.PutString ( tSettings.m_sRLPContext );
 }
 
 
@@ -15081,6 +15469,12 @@ void LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DW
 
 	if ( uVersion>=35 )
 		tSettings.m_bIndexFieldLens = ( tReader.GetByte()!=0 );
+
+	if ( uVersion>=39 )
+	{
+		tSettings.m_bChineseRLP = ( tReader.GetByte()!=0 );
+		tSettings.m_sRLPContext = tReader.GetString();
+	}
 }
 
 
@@ -15219,6 +15613,15 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 		SetDictionary ( pDict );
 
 		pTokenizer = ISphTokenizer::CreateMultiformFilter ( pTokenizer, pDict->GetMultiWordforms () );
+
+#if USE_RLP
+		pTokenizer = ISphTokenizer::CreateRLPFilter ( pTokenizer, m_tSettings.m_bChineseRLP, g_sRLPRoot.cstr(),
+			g_sRLPEnv.cstr(), m_tSettings.m_sRLPContext.cstr(), m_sLastError );
+
+		if ( !m_sLastError.IsEmpty() )
+			return false;
+#endif
+
 		SetTokenizer ( pTokenizer );
 		SetupQueryTokenizer();
 
@@ -19145,7 +19548,7 @@ struct CSphDictCRCTraits : CSphDict
 	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () { return m_dWFFileInfos; }
 	virtual const CSphMultiformContainer * GetMultiWordforms () const;
 	virtual uint64_t	GetSettingsFNV () const;
-
+	virtual void		SetApplyMorph ( bool bApply ) { m_bApplyMorph = bApply; }
 	static void			SweepWordformContainers ( const CSphVector<CSphSavedFile> & dFiles );
 
 	virtual void DictBegin ( CSphAutofile & tTempDict, CSphAutofile & tDict, int iDictLimit, ThrottleState_t * pThrottle );
@@ -19169,6 +19572,7 @@ protected:
 	int					m_iStopwords;	///< stopwords count
 	SphWordID_t *		m_pStopwords;	///< stopwords ID list
 	CSphFixedVector<SphWordID_t> m_dStopwordContainer;
+	bool				m_bApplyMorph;
 
 protected:
 	int					ParseMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError );
@@ -19396,6 +19800,7 @@ CSphDictCRCTraits::CSphDictCRCTraits ()
 	: m_iStopwords	( 0 )
 	, m_pStopwords	( NULL )
 	, m_dStopwordContainer ( 0 )
+	, m_bApplyMorph ( true )
 	, m_iEntries ( 0 )
 	, m_iLastDoclistPos ( 0 )
 	, m_iLastWordID ( 0 )
@@ -19642,6 +20047,9 @@ int CSphDictCRCTraits::InitMorph ( const char * szMorph, int iLength, bool bUseU
 	}
 #endif
 
+	if ( iLength==11 && !strncmp ( szMorph, "rlp_chinese", iLength ) )
+		return ST_OK;
+
 	sMessage.SetBinary ( szMorph, iLength );
 	sMessage.SetSprintf ( "unknown stemmer %s; skipped", sMessage.cstr() );
 	return ST_WARNING;
@@ -19659,6 +20067,9 @@ int CSphDictCRCTraits::AddMorph ( int iMorph )
 
 void CSphDictCRCTraits::ApplyStemmers ( BYTE * pWord )
 {
+	if ( !m_bApplyMorph )
+		return;
+
 	// try wordforms
 	if ( !m_bDisableWordforms && m_pWordforms && m_pWordforms->ToNormalForm ( pWord, true ) )
 		return;
@@ -19731,15 +20142,21 @@ CSphDict * CSphDictCRCTraits::CloneBase ( CSphDictCRCTraits * pDict ) const
 	}
 #endif
 
+	pDict->m_bApplyMorph = m_bApplyMorph;
+
 	return pDict;
 }
 
 bool CSphDictCRCTraits::HasState() const
 {
+#if USE_RLP
+	return true;
+#else
 #if !USE_LIBSTEMMER
 	return false;
 #else
 	return ( m_dDescStemmers.GetLength()>0 );
+#endif
 #endif
 }
 
@@ -22295,6 +22712,7 @@ public:
 	virtual const char * GetLastWarning() const { return m_iKeywordsOverrun ? m_sWarning.cstr() : NULL; }
 	virtual void ResetWarning () { m_iKeywordsOverrun = 0; }
 	virtual uint64_t GetSettingsFNV () const { return m_pBase->GetSettingsFNV(); }
+	virtual void SetApplyMorph ( bool bApply ) { m_pBase->SetApplyMorph ( bApply ); }
 };
 
 ISphRtDictWraper * sphCreateRtKeywordsDictionaryWrapper ( CSphDict * pBase )
@@ -24256,7 +24674,7 @@ static int TrackBlendedStart ( const ISphTokenizer * pTokenizer, int iBlendedHit
 
 #define BUILD_SUBSTRING_HITS_COUNT 4
 
-void CSphSource_Document::BuildSubstringHits ( SphDocID_t uDocid, bool bPayload, ESphWordpart eWordpart, bool bSkipEndMarker )
+void CSphSource_Document::BuildSubstringHits ( CSphDict * pDict, SphDocID_t uDocid, bool bPayload, ESphWordpart eWordpart, bool bSkipEndMarker )
 {
 	bool bPrefixField = ( eWordpart==SPH_WORDPART_PREFIX );
 	bool bInfixMode = m_iMinInfixLen > 0;
@@ -24305,7 +24723,7 @@ void CSphSource_Document::BuildSubstringHits ( SphDocID_t uDocid, bool bPayload,
 			memcpy ( sBuf + 1, sWord, iBytes );
 			sBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
 			sBuf[iBytes+1] = '\0';
-			m_tHits.AddHit ( uDocid, m_pDict->GetWordIDNonStemmed ( sBuf ), m_tState.m_iHitPos );
+			m_tHits.AddHit ( uDocid, pDict->GetWordIDNonStemmed ( sBuf ), m_tState.m_iHitPos );
 		}
 
 		memcpy ( sBuf + 1, sWord, iBytes );
@@ -24313,7 +24731,7 @@ void CSphSource_Document::BuildSubstringHits ( SphDocID_t uDocid, bool bPayload,
 		sBuf[iBytes+1] = '\0';
 
 		// stemmed word w/markers
-		SphWordID_t iWord = m_pDict->GetWordIDWithMarkers ( sBuf );
+		SphWordID_t iWord = pDict->GetWordIDWithMarkers ( sBuf );
 		if ( !iWord )
 		{
 			m_tState.m_iBuildLastStep = m_iStopwordStep;
@@ -24328,7 +24746,7 @@ void CSphSource_Document::BuildSubstringHits ( SphDocID_t uDocid, bool bPayload,
 
 		// stemmed word w/o markers
 		if ( strcmp ( (const char *)sBuf + 1, (const char *)sWord ) )
-			m_tHits.AddHit ( uDocid, m_pDict->GetWordID ( sBuf + 1, iStemmedLen - 2, true ), m_tState.m_iHitPos );
+			m_tHits.AddHit ( uDocid, pDict->GetWordID ( sBuf + 1, iStemmedLen - 2, true ), m_tState.m_iHitPos );
 
 		// restore word
 		memcpy ( sBuf + 1, sWord, iBytes );
@@ -24339,7 +24757,7 @@ void CSphSource_Document::BuildSubstringHits ( SphDocID_t uDocid, bool bPayload,
 		if ( iMinInfixLen > iLen )
 		{
 			// index full word
-			m_tHits.AddHit ( uDocid, m_pDict->GetWordID ( sWord ), m_tState.m_iHitPos );
+			m_tHits.AddHit ( uDocid, pDict->GetWordID ( sWord ), m_tState.m_iHitPos );
 			continue;
 		}
 
@@ -24360,15 +24778,15 @@ void CSphSource_Document::BuildSubstringHits ( SphDocID_t uDocid, bool bPayload,
 
 			for ( int i=iMinInfixLen; i<=iMaxSubLen; i++ )
 			{
-				m_tHits.AddHit ( uDocid, m_pDict->GetWordID ( sInfix, sInfixEnd-sInfix, false ), m_tState.m_iHitPos );
+				m_tHits.AddHit ( uDocid, pDict->GetWordID ( sInfix, sInfixEnd-sInfix, false ), m_tState.m_iHitPos );
 
 				// word start: add magic head
 				if ( bInfixMode && iStart==0 )
-					m_tHits.AddHit ( uDocid, m_pDict->GetWordID ( sInfix - 1, sInfixEnd-sInfix + 1, false ), m_tState.m_iHitPos );
+					m_tHits.AddHit ( uDocid, pDict->GetWordID ( sInfix - 1, sInfixEnd-sInfix + 1, false ), m_tState.m_iHitPos );
 
 				// word end: add magic tail
 				if ( bInfixMode && i==iLen-iStart )
-					m_tHits.AddHit ( uDocid, m_pDict->GetWordID ( sInfix, sInfixEnd-sInfix+1, false ), m_tState.m_iHitPos );
+					m_tHits.AddHit ( uDocid, pDict->GetWordID ( sInfix, sInfixEnd-sInfix+1, false ), m_tState.m_iHitPos );
 
 				sInfixEnd += m_pTokenizer->GetCodepointLength ( *sInfixEnd );
 			}
@@ -24409,9 +24827,9 @@ void CSphSource_Document::BuildSubstringHits ( SphDocID_t uDocid, bool bPayload,
 
 #define BUILD_REGULAR_HITS_COUNT 6
 
-void CSphSource_Document::BuildRegularHits ( SphDocID_t uDocid, bool bPayload, bool bSkipEndMarker )
+void CSphSource_Document::BuildRegularHits ( CSphDict * pDict, SphDocID_t uDocid, bool bPayload, bool bSkipEndMarker )
 {
-	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
+	bool bWordDict = pDict->GetSettings().m_bWordDict;
 	bool bGlobalPartialMatch = !bWordDict && ( m_iMinPrefixLen > 0 || m_iMinInfixLen > 0 );
 
 	if ( !m_tState.m_bProcessingHits )
@@ -24445,7 +24863,7 @@ void CSphSource_Document::BuildRegularHits ( SphDocID_t uDocid, bool bPayload, b
 			memcpy ( sBuf + 1, sWord, iBytes );
 			sBuf[0] = MAGIC_WORD_HEAD;
 			sBuf[iBytes+1] = '\0';
-			m_tHits.AddHit ( uDocid, m_pDict->GetWordIDWithMarkers ( sBuf ), m_tState.m_iHitPos );
+			m_tHits.AddHit ( uDocid, pDict->GetWordIDWithMarkers ( sBuf ), m_tState.m_iHitPos );
 		}
 
 		ESphTokenMorph eMorph = m_pTokenizer->GetTokenMorph();
@@ -24455,7 +24873,7 @@ void CSphSource_Document::BuildRegularHits ( SphDocID_t uDocid, bool bPayload, b
 			memcpy ( sBuf + 1, sWord, iBytes );
 			sBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
 			sBuf[iBytes+1] = '\0';
-			m_tHits.AddHit ( uDocid, m_pDict->GetWordIDNonStemmed ( sBuf ), m_tState.m_iHitPos );
+			m_tHits.AddHit ( uDocid, pDict->GetWordIDNonStemmed ( sBuf ), m_tState.m_iHitPos );
 		}
 
 		if ( m_bIndexExactWords && eMorph==SPH_TOKEN_MORPH_ORIGINAL )
@@ -24464,7 +24882,7 @@ void CSphSource_Document::BuildRegularHits ( SphDocID_t uDocid, bool bPayload, b
 			continue;
 		}
 
-		SphWordID_t iWord = m_pDict->GetWordID ( sWord );
+		SphWordID_t iWord = pDict->GetWordID ( sWord );
 		if ( iWord )
 		{
 #if 0
@@ -24549,12 +24967,21 @@ void CSphSource_Document::BuildHits ( CSphString & sError, bool bSkipEndMarker )
 			m_tState.m_iHitPos = HITMAN::Create ( m_tState.m_iField, m_tState.m_iStartPos );
 		}
 
+		CSphDict * pDict = m_pDict;
+		CSphScopedPtr<CSphDict> tDictCloned ( NULL );
+		if ( m_pDict->HasState() )
+		{
+			pDict = m_pDict->Clone();
+			pDict->SetApplyMorph ( m_pTokenizer->GetMorphFlag() );
+			tDictCloned = pDict;
+		}
+
 		const CSphColumnInfo & tField = m_tSchema.m_dFields[m_tState.m_iField];
 
 		if ( tField.m_eWordpart!=SPH_WORDPART_WHOLE )
-			BuildSubstringHits ( uDocid, tField.m_bPayload, tField.m_eWordpart, bSkipEndMarker );
+			BuildSubstringHits ( pDict, uDocid, tField.m_bPayload, tField.m_eWordpart, bSkipEndMarker );
 		else
-			BuildRegularHits ( uDocid, tField.m_bPayload, bSkipEndMarker );
+			BuildRegularHits ( pDict, uDocid, tField.m_bPayload, bSkipEndMarker );
 
 		if ( m_tState.m_bProcessingHits )
 			break;

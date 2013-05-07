@@ -427,6 +427,27 @@ AM_CONDITIONAL(USE_RE2, test x$ac_cv_use_re2 != xno)
 
 dnl ---
 
+AC_ARG_WITH([rlp],
+	AC_HELP_STRING([--with-rlp], [compile with RLP library support (default is disabled)]),
+	[ac_cv_use_rlp=$withval], [ac_cv_use_rlp=no]
+)
+
+AC_MSG_CHECKING([whether to compile with RLP library support])
+if test x$ac_cv_use_rlp != xno; then
+	if test -d rlp && test -f rlp/rlp/include/bt_rlp_c.h; then
+		AC_MSG_RESULT([yes])
+		AC_DEFINE(USE_RLP, 1, [RLP library support])
+	else
+		AC_MSG_ERROR([missing RLP sources from librlp])
+	fi
+else
+	AC_MSG_RESULT([no])
+	AC_DEFINE(USE_RLP, 0, [RLP library support])
+fi
+AM_CONDITIONAL(USE_RLP, test x$ac_cv_use_rlp != xno)
+
+dnl ---
+
 got_expat=0
 AC_MSG_CHECKING([for libexpat])
 if test x$ac_cv_use_expat = xyes -a x$have_expat_h = xyes; then

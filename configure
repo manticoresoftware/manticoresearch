@@ -598,6 +598,8 @@ ac_subst_vars='am__EXEEXT_FALSE
 am__EXEEXT_TRUE
 LTLIBOBJS
 CONFDIR
+USE_RLP_FALSE
+USE_RLP_TRUE
 USE_RE2_FALSE
 USE_RE2_TRUE
 USE_INTERNAL_LIBSTEMMER_FALSE
@@ -726,6 +728,7 @@ enable_id64
 with_libstemmer
 with_libexpat
 with_re2
+with_rlp
 with_iconv
 with_unixodbc
 enable_mem_override
@@ -1385,6 +1388,8 @@ Optional Packages:
   --with-libexpat         compile with expat XML library suppport (default is
                           autodetect)
   --with-re2              compile with re2 library support (default is
+                          disabled)
+  --with-rlp              compile with RLP library support (default is
                           disabled)
   --with-iconv            compile with iconv support (default is autodetect)
   --with-unixodbc         compile with UnixODBC support (default is
@@ -7604,6 +7609,45 @@ fi
 
 
 
+
+# Check whether --with-rlp was given.
+if test "${with_rlp+set}" = set; then :
+  withval=$with_rlp; ac_cv_use_rlp=$withval
+else
+  ac_cv_use_rlp=no
+
+fi
+
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to compile with RLP library support" >&5
+$as_echo_n "checking whether to compile with RLP library support... " >&6; }
+if test x$ac_cv_use_rlp != xno; then
+	if test -d rlp && test -f rlp/rlp/include/bt_rlp_c.h; then
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+
+$as_echo "#define USE_RLP 1" >>confdefs.h
+
+	else
+		as_fn_error "missing RLP sources from librlp" "$LINENO" 5
+	fi
+else
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+
+$as_echo "#define USE_RLP 0" >>confdefs.h
+
+fi
+ if test x$ac_cv_use_rlp != xno; then
+  USE_RLP_TRUE=
+  USE_RLP_FALSE='#'
+else
+  USE_RLP_TRUE='#'
+  USE_RLP_FALSE=
+fi
+
+
+
 got_expat=0
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for libexpat" >&5
 $as_echo_n "checking for libexpat... " >&6; }
@@ -8438,6 +8482,10 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${USE_RE2_TRUE}" && test -z "${USE_RE2_FALSE}"; then
   as_fn_error "conditional \"USE_RE2\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${USE_RLP_TRUE}" && test -z "${USE_RLP_FALSE}"; then
+  as_fn_error "conditional \"USE_RLP\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 

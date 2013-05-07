@@ -207,6 +207,7 @@ public:
 	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () { return m_dWFFileInfos; }
 	virtual const CSphMultiformContainer * GetMultiWordforms () const { return NULL; }
 	virtual uint64_t		GetSettingsFNV () const { return 0; }
+	virtual void		SetApplyMorph ( bool ) {}
 
 	virtual bool IsStopWord ( const BYTE * ) const { return false; }
 
@@ -961,6 +962,13 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		// aot filter
 		if ( tSettings.m_bAotFilter )
 			pTokenizer = sphAotCreateFilter ( pTokenizer, pDict, tSettings.m_bIndexExactWords );
+
+#if USE_RLP
+		pTokenizer = ISphTokenizer::CreateRLPFilter ( pTokenizer, tSettings.m_bChineseRLP, g_sRLPRoot.cstr(),
+			g_sRLPEnv.cstr(), tSettings.m_sRLPContext.cstr(), sError );
+		if ( !pTokenizer )
+			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
+#endif
 	}
 
 	ISphFieldFilter * pFieldFilter = NULL;
@@ -1817,10 +1825,10 @@ int main ( int argc, char ** argv )
 
 		sphSetThrottling ( hIndexer.GetInt ( "max_iops", 0 ), hIndexer.GetSize ( "max_iosize", 0 ) );
 
-		if ( hIndexer("lemmatizer_base") )
-			g_sLemmatizerBase = hIndexer["lemmatizer_base"];
 		sphAotSetCacheSize ( hIndexer.GetSize ( "lemmatizer_cache", 262144 ) );
 	}
+
+	sphConfigureCommon ( hConf );
 
 	/////////////////////
 	// index each index

@@ -27,6 +27,7 @@
 	#define USE_LIBXML		0	/// whether to compile libxml support
 	#define	USE_LIBSTEMMER	0	/// whether to compile libstemmber support
 	#define	USE_RE2			0	/// whether to compile RE2 support
+	#define USE_RLP			0	/// whether to compile RLP support
 	#define USE_WINDOWS		1	/// whether to compile for Windows
 	#define USE_SYSLOG		0	/// whether to use syslog for logging
 
@@ -554,6 +555,11 @@ public:
 	/// create a token filter
 	static ISphTokenizer *			CreateBigramFilter ( ISphTokenizer * pTokenizer, ESphBigram eBigramIndex, const CSphString & sBigramWords, CSphString & sError );
 
+#if USE_RLP
+	/// create a RLP token filter
+	static ISphTokenizer *			CreateRLPFilter ( ISphTokenizer * pTokenizer, bool bChineseRLP, const char * szRLPRoot,	const char * szRLPEnv, const char * szRLPCtx, CSphString & sError );
+#endif
+
 	/// save tokenizer settings to a stream
 	virtual const CSphTokenizerSettings &	GetSettings () const { return m_tSettings; }
 
@@ -578,6 +584,9 @@ public:
 
 	/// enable zone indexing
 	virtual bool					EnableZoneIndexing ( CSphString & sError );
+
+	// shows whether morphology needs to be applied to this token or not
+	virtual bool					GetMorphFlag () const { return true; }
 
 	/// enable tokenized multiform tracking
 	virtual void					EnableTokenizedMultiformTracking () {}
@@ -890,6 +899,9 @@ public:
 
 	/// get settings hash
 	virtual uint64_t		GetSettingsFNV () const = 0;
+
+	/// apply morphology or not
+	virtual void			SetApplyMorph ( bool bApply ) = 0;
 
 protected:
 	CSphString				m_sMorphFingerprint;
@@ -1820,8 +1832,8 @@ protected:
 	int						LoadFileField ( BYTE ** ppField, CSphString & sError );
 
 	bool					BuildZoneHits ( SphDocID_t uDocid, BYTE * sWord );
-	void					BuildSubstringHits ( SphDocID_t uDocid, bool bPayload, ESphWordpart eWordpart, bool bSkipEndMarker );
-	void					BuildRegularHits ( SphDocID_t uDocid, bool bPayload, bool bSkipEndMarker );
+	void					BuildSubstringHits ( CSphDict * pDict, SphDocID_t uDocid, bool bPayload, ESphWordpart eWordpart, bool bSkipEndMarker );
+	void					BuildRegularHits ( CSphDict * pDict, SphDocID_t uDocid, bool bPayload, bool bSkipEndMarker );
 
 	/// register autocomputed attributes such as field lengths (see index_field_lengths)
 	bool					AddAutoAttrs ( CSphString & sError );
@@ -2965,6 +2977,8 @@ struct CSphIndexSettings : public CSphSourceSettings
 	CSphVector<CSphString>	m_dBigramWords;
 
 	bool			m_bAotFilter;	///< lemmatize_ru_all forces us to transform queries on the index level too
+	bool			m_bChineseRLP;	///< chinese RLP filter
+	CSphString		m_sRLPContext;	///< path to RLP context file
 
 					CSphIndexSettings ();
 };
@@ -3240,6 +3254,11 @@ void				sphCollationInit ();
 //////////////////////////////////////////////////////////////////////////
 
 extern CSphString g_sLemmatizerBase;
+
+#if USE_RLP
+extern CSphString g_sRLPRoot;
+extern CSphString g_sRLPEnv;
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 

@@ -748,6 +748,11 @@ index dist1
 	# know values are nodeads, noerrors, roundrobin, nodeadstm, noerrorstm
 	#
 	# ha_strategy				= nodeads
+
+	# path to RLP context file
+	# optional, defaut is empty
+	#
+	# rlp_context = /usr/local/share/sphinx/rlp/rlp-context.xml
 }
 
 
@@ -861,12 +866,6 @@ indexer
 	# optional, default is unspecified (do nothing)
 	#
 	# json_autoconv_keynames = lowercase
-
-
-	# lemmatizer dictionaries base path
-	# optional, defaut is /usr/local/share (see ./configure --datadir)
-	#
-	# lemmatizer_base = /usr/local/share/sphinx/dicts
 
 
 	# lemmatizer cache size
@@ -1157,6 +1156,29 @@ searchd
 	# optional, default is empty
 	#
 	# snippets_file_prefix		= /mnt/common/server1/
+}
+
+#############################################################################
+## common settings
+#############################################################################
+
+common
+{
+
+	# lemmatizer dictionaries base path
+	# optional, defaut is /usr/local/share (see ./configure --datadir)
+	#
+	# lemmatizer_base = /usr/local/share/sphinx/dicts
+
+	# path to RLP root directory
+	# optional, defaut is /usr/local/share (see ./configure --datadir)
+	#
+	# rlp_root = /usr/local/share/sphinx/rlp
+
+	# path to RLP environment file
+	# optional, defaut is /usr/local/share/rlp-environment.xml (see ./configure --datadir)
+	#
+	# rlp_environment = /usr/local/share/sphinx/rlp/rlp/etc/rlp-environment.xml
 }
 
 # --eof--

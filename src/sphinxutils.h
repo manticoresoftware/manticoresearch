@@ -226,6 +226,10 @@ const char * DoBacktrace ( int iDepth=0, int iSkip=0 );
 
 void sphCheckDuplicatePaths ( const CSphConfig & hConf );
 
+/// set globals from the common config section
+void sphConfigureCommon ( const CSphConfig & hConf );
+
+
 #endif // _sphinxutils_
 
 //

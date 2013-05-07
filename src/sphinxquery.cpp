@@ -1326,6 +1326,8 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTok
 		return false;
 	}
 
+	pDict->SetApplyMorph ( m_pTokenizer->GetMorphFlag() );
+
 	// all ok; might want to create a dummy node to indicate that
 	m_dSpawned.Reset();
 	tParsed.m_pRoot = m_pRoot ? m_pRoot : new XQNode_t ( *m_dStateSpec.Last() );

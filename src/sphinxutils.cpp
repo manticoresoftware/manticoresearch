@@ -413,6 +413,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "divide_remote_ranges",	KEY_HIDDEN, NULL },
 	{ "stopwords_unstemmed",	0, NULL },
 	{ "global_idf",				0, NULL },
+	{ "rlp_context",			0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -429,7 +430,6 @@ static KeyDesc_t g_dKeysIndexer[] =
 	{ "on_json_attr_error",		0, NULL },
 	{ "json_autoconv_numbers",	0, NULL },
 	{ "json_autoconv_keynames",	0, NULL },
-	{ "lemmatizer_base",		0, NULL },
 	{ "lemmatizer_cache",		0, NULL },
 	{ NULL,						0, NULL }
 };
@@ -491,6 +491,14 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ NULL,						0, NULL }
 };
 
+/// allowed keys for common section
+static KeyDesc_t g_dKeysCommon[] =
+{
+	{ "lemmatizer_base",		0, NULL },
+	{ "rlp_root",				0, NULL },
+	{ "rlp_environment",		0, NULL }
+};
+
 //////////////////////////////////////////////////////////////////////////
 
 CSphConfigParser::CSphConfigParser ()
@@ -505,6 +513,7 @@ bool CSphConfigParser::IsPlainSection ( const char * sKey )
 	if ( !strcasecmp ( sKey, "indexer" ) )		return true;
 	if ( !strcasecmp ( sKey, "searchd" ) )		return true;
 	if ( !strcasecmp ( sKey, "search" ) )		return true;
+	if ( !strcasecmp ( sKey, "common" ) )		return true;
 	return false;
 }
 
@@ -578,6 +587,7 @@ bool CSphConfigParser::ValidateKey ( const char * sKey )
 	else if ( m_sSectionType=="index" )		pDesc = g_dKeysIndex;
 	else if ( m_sSectionType=="indexer" )	pDesc = g_dKeysIndexer;
 	else if ( m_sSectionType=="searchd" )	pDesc = g_dKeysSearchd;
+	else if ( m_sSectionType=="common" )	pDesc = g_dKeysCommon;
 	if ( !pDesc )
 	{
 		snprintf ( m_sError, sizeof(m_sError), "unknown section type '%s'", m_sSectionType.cstr() );
@@ -1346,6 +1356,17 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 	sphSplit ( dMorphs, hIndex.GetStr ( "morphology" ) );
 
 	tSettings.m_bAotFilter = ARRAY_ANY ( tSettings.m_bAotFilter, dMorphs, dMorphs[_any]=="lemmatize_ru_all" );
+
+	tSettings.m_bChineseRLP = ARRAY_ANY ( tSettings.m_bChineseRLP, dMorphs, dMorphs[_any]=="rlp_chinese" );
+	tSettings.m_sRLPContext = hIndex.GetStr ( "rlp_context" );
+
+#if !USE_RLP
+	if ( tSettings.m_bChineseRLP || !tSettings.m_sRLPContext.IsEmpty() )
+	{
+		tSettings.m_bChineseRLP = false;
+		fprintf ( stdout, "WARNING: RLP options specified, but no RLP support compiled; ignoring\n" );
+	}
+#endif
 
 	// all good
 	return true;
@@ -2125,6 +2146,20 @@ void sphCheckDuplicatePaths ( const CSphConfig & hConf )
 				sphDie ( "duplicate paths: index '%s' has the same path as '%s'.\n", sIndex.cstr(), hPaths[hIndex["path"]].cstr() );
 			hPaths.Add ( sIndex, hIndex["path"] );
 		}
+	}
+}
+
+
+void sphConfigureCommon ( const CSphConfig & hConf )
+{
+	if ( hConf("common") && hConf["common"]("common") )
+	{
+		CSphConfigSection & hCommon = hConf["common"]["common"];
+		g_sLemmatizerBase = hCommon.GetStr ( "lemmatizer_base" );
+#if USE_RLP
+		g_sRLPRoot = hCommon.GetStr ( "rlp_root" );
+		g_sRLPEnv = hCommon.GetStr ( "rlp_environment" );
+#endif
 	}
 }
 

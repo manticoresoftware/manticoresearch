@@ -98,7 +98,8 @@ int sphinx_factors_unpack ( const unsigned int * in, SPH_UDF_FACTORS * out )
 			f->max_window_hits = (int)*in++;
 			f->min_gaps = (int)*in++;
 			f->atc = *(float*)in++;
-
+			f->lccs = *in++;
+			f->wlccs = *(float*)in++;
 			f->exact_hit = (char)( ( exact_hit_mask >> i ) & 1 );
 			f->exact_order = (char)( ( exact_order_mask >> i ) & 1 );
 		} else

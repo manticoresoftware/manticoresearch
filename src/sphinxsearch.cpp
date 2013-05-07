@@ -6729,6 +6729,38 @@ public:
 	int					m_iLastQuerypos;
 	int					m_iExactOrderWords;
 
+	// LCCS and Weighted LCCS
+	BYTE				m_dLCCS[SPH_MAX_FIELDS];
+	float				m_dWLCCS[SPH_MAX_FIELDS];
+	CSphVector<WORD>	m_dNextQueryPos;				///< words positions might have gaps due to stop-words
+	WORD				m_iQueryPosLCCS;
+	int					m_iHitPosLCCS;
+	BYTE				m_iLenLCCS;
+	float				m_fWeightLCCS;
+
+	// ATC
+#define XRANK_ATC_WINDOW_LEN 10
+#define XRANK_ATC_BUFFER_LEN 30
+#define XRANK_ATC_DUP_DIV 0.25f
+#define XRANK_ATC_EXP 1.75f
+	struct AtcHit_t
+	{
+		int			m_iHitpos;
+		WORD		m_uQuerypos;
+	};
+	AtcHit_t			m_dAtcHits[XRANK_ATC_BUFFER_LEN];	///< ATC hits ring buffer
+	int					m_iAtcHitStart;						///< hits start at ring buffer
+	int					m_iAtcHitCount;						///< hits amount in buffer
+	CSphVector<float>	m_dAtcTerms;						///< per-word ATC
+	CSphBitvec			m_dAtcProcessedTerms;				///< temporary processed mask
+	DWORD				m_uAtcField;						///< currently processed field
+	float				m_dAtc[SPH_MAX_FIELDS];				///< ATC per-field values
+	bool				m_bAtcHeadProcessed;				///< flag for hits from buffer start to window start
+	bool				m_bHaveAtc;							///< calculate ATC?
+
+	void				UpdateATC ( bool bFlushField );
+	float				TermTC ( int iTerm, bool bLeft );
+
 public:
 						RankerState_Expr_fn ();
 						~RankerState_Expr_fn ();
@@ -6754,6 +6786,8 @@ public:
 
 		m_iQueryWordCount = 0;
 		m_tKeywordMask.Init ( m_iMaxUniqQpos+1 ); // will not be tracking dupes
+		CSphVector<WORD> dQueryPos;
+		dQueryPos.Reserve ( m_iMaxQpos+1 );
 
 		hQwords.IterateStart();
 		while ( hQwords.IterateNext() )
@@ -6768,6 +6802,18 @@ public:
 			m_tKeywordMask.BitSet ( iPos ); // just to assert at early stage!
 			m_dIDF [ iPos ] = hQwords.IterateGet().m_fIDF;
 			m_iQueryWordCount++;
+			dQueryPos.Add ( (WORD)iPos );
+		}
+
+		// set next term position for current term in query (degenerates to +1 in the simplest case)
+		dQueryPos.Sort();
+		m_dNextQueryPos.Resize ( m_iMaxQpos+1 );
+		m_dNextQueryPos.Fill ( (WORD)-1 ); // WORD_MAX filler
+		for ( int i=0; i<dQueryPos.GetLength()-1; i++ )
+		{
+			WORD iCutPos = dQueryPos[i];
+			WORD iNextPos = dQueryPos[i+1];
+			m_dNextQueryPos[iCutPos] = iNextPos;
 		}
 	}
 
@@ -6831,6 +6877,7 @@ public:
 			m_iMinBestSpanPos[i] = 0;
 			m_iMaxWindowHits[i] = 0;
 			m_iMinGaps[i] = 0;
+			m_dAtc[i] = 0.0f;
 		}
 		m_dTF.Fill ( 0 );
 		m_dFieldTF.Fill ( 0 ); // OPTIMIZE? make conditional?
@@ -6846,6 +6893,11 @@ public:
 		m_iLastField = -1;
 		m_iLastQuerypos = 0;
 		m_iExactOrderWords = 0;
+
+		m_dAtcTerms.Fill ( 0.0f );
+		m_iAtcHitStart = 0;
+		m_iAtcHitCount = 0;
+		m_uAtcField = 0;
 	}
 
 	void FlushMatches ()
@@ -6949,6 +7001,9 @@ enum ExprRankerNode_e
 	XRANK_EXACT_ORDER,
 	XRANK_MAX_WINDOW_HITS,
 	XRANK_MIN_GAPS,
+	XRANK_LCCS,
+	XRANK_WLCCS,
+	XRANK_ATC,
 
 	// document level factors
 	XRANK_BM25,
@@ -7245,6 +7300,14 @@ public:
 
 		if ( !strcasecmp ( sIdent, "min_gaps" ) )
 			return XRANK_MIN_GAPS;
+
+		if ( !strcasecmp ( sIdent, "lccs" ) )
+			return XRANK_LCCS;
+		if ( !strcasecmp ( sIdent, "wlccs" ) )
+			return XRANK_WLCCS;
+		if ( !strcasecmp ( sIdent, "atc" ) )
+			return XRANK_ATC;
+
 		return -1;
 	}
 
@@ -7287,6 +7350,13 @@ public:
 			case XRANK_MIN_GAPS:
 				m_pState->m_iHaveMinWindow = m_pState->m_iMaxUniqQpos;
 				return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinGaps );
+			case XRANK_LCCS:
+				return new Expr_FieldFactor_c<BYTE> ( pCF, m_pState->m_dLCCS );
+			case XRANK_WLCCS:
+				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dWLCCS );
+			case XRANK_ATC:
+				m_pState->m_bHaveAtc = true;
+				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dAtc );
 
 			case XRANK_BM25:				return new Expr_IntPtr_c ( &m_pState->m_uDocBM25 );
 			case XRANK_MAX_LCS:				return new Expr_GetIntConst_c ( m_pState->m_iMaxLCS );
@@ -7343,11 +7413,14 @@ public:
 			case XRANK_QUERY_WORD_COUNT:
 			case XRANK_DOC_WORD_COUNT:
 			case XRANK_MIN_GAPS:
+			case XRANK_LCCS:
 				return SPH_ATTR_INTEGER;
 			case XRANK_TF_IDF:
 			case XRANK_MIN_IDF:
 			case XRANK_MAX_IDF:
 			case XRANK_SUM_IDF:
+			case XRANK_WLCCS:
+			case XRANK_ATC:
 				return SPH_ATTR_FLOAT;
 			default:
 				assert ( 0 );
@@ -7471,6 +7544,8 @@ public:
 			case XRANK_MIN_BEST_SPAN_POS:
 			case XRANK_EXACT_HIT:
 			case XRANK_MAX_WINDOW_HITS:
+			case XRANK_LCCS:
+			case XRANK_WLCCS:
 				if ( !m_bCheckInFieldAggr )
 					m_sCheckError = "field factors must only occur withing field aggregates in ranking expression";
 				break;
@@ -7508,6 +7583,11 @@ RankerState_Expr_fn <NEED_PACKEDFACTORS>::RankerState_Expr_fn ()
 	, m_iMaxMatches ( 0 )
 	, m_iMaxLCS ( 0 )
 	, m_iQueryWordCount ( 0 )
+	, m_iAtcHitStart ( 0 )
+	, m_iAtcHitCount ( 0 )
+	, m_uAtcField ( 0 )
+	, m_bAtcHeadProcessed ( false )
+	, m_bHaveAtc ( false )
 {}
 
 
@@ -7532,6 +7612,15 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS>::Init ( int iFields, const int * pW
 	m_iWindowSize = 1;
 	m_iHaveMinWindow = 0;
 	m_dMinWindowHits.Reserve ( 32 );
+	memset ( m_dLCCS, 0 , sizeof(m_dLCCS) );
+	memset ( m_dWLCCS, 0, sizeof(m_dWLCCS) );
+	m_iQueryPosLCCS = 0;
+	m_iHitPosLCCS = 0;
+	m_iLenLCCS = 0;
+	m_fWeightLCCS = 0.0f;
+	m_dAtcTerms.Resize ( m_iMaxQpos + 1 );
+	m_dAtcProcessedTerms.Init ( m_iMaxQpos + 1 );
+	m_bAtcHeadProcessed = false;
 	ResetDocFactors();
 
 	// compute query level constants
@@ -7619,6 +7708,49 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS>::Update ( const ExtHit_t * pHlist )
 		m_iMinBestSpanPos[uField] = iPos - m_uCurLCS + 1;
 	}
 	m_iExpDelta = iDelta + pHlist->m_uSpanlen - 1;
+
+	// update LCCS
+	if ( m_iQueryPosLCCS==pHlist->m_uQuerypos && m_iHitPosLCCS==iPos )
+	{
+		m_iLenLCCS++;
+		m_fWeightLCCS += m_dIDF [ pHlist->m_uQuerypos ];
+	} else
+	{
+		m_iLenLCCS = 1;
+		m_fWeightLCCS = m_dIDF [ pHlist->m_uQuerypos ];
+	}
+	WORD iNextQPos = m_dNextQueryPos [ pHlist->m_uQuerypos ];
+	m_iQueryPosLCCS = iNextQPos;
+	m_iHitPosLCCS = iPos + pHlist->m_uSpanlen + iNextQPos - pHlist->m_uQuerypos - 1;
+	if ( m_dLCCS[uField]<=m_iLenLCCS ) // FIXME!!! check weight too or keep length and weight separate
+	{
+		m_dLCCS[uField] = m_iLenLCCS;
+		m_dWLCCS[uField] = m_fWeightLCCS;
+	}
+
+	// update ATC
+	if ( m_bHaveAtc )
+	{
+		if ( m_uAtcField!=uField || m_iAtcHitCount==XRANK_ATC_BUFFER_LEN )
+		{
+			UpdateATC ( m_uAtcField!=uField );
+			if ( m_uAtcField!=uField )
+			{
+				m_uAtcField = uField;
+			}
+			if ( m_iAtcHitCount==XRANK_ATC_BUFFER_LEN ) // advance ring buffer
+			{
+				m_iAtcHitStart = ( m_iAtcHitStart + XRANK_ATC_WINDOW_LEN ) % XRANK_ATC_BUFFER_LEN;
+				m_iAtcHitCount -= XRANK_ATC_WINDOW_LEN;
+			}
+		}
+		assert ( m_iAtcHitStart<XRANK_ATC_BUFFER_LEN && m_iAtcHitCount<XRANK_ATC_BUFFER_LEN );
+		int iRing = ( m_iAtcHitStart + m_iAtcHitCount ) % XRANK_ATC_BUFFER_LEN;
+		AtcHit_t & tAtcHit = m_dAtcHits [ iRing ];
+		tAtcHit.m_iHitpos = iPos;
+		tAtcHit.m_uQuerypos = pHlist->m_uQuerypos;
+		m_iAtcHitCount++;
+	}
 
 	// update other stuff
 	m_uMatchMask[uField] |= ( 1<<(pHlist->m_uQuerypos-1) );
@@ -7730,7 +7862,7 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS>::Update ( const ExtHit_t * pHlist )
 						m_dMinWindowHits[0] = *pHlist; // {A} + A2 => {A2}
 					else
 					{
-						UpdateGap ( uField, 2, HITMAN::GetPos ( pHlist->m_uHitpos ) - HITMAN::GetPos ( m_dMinWindowHits[0].m_uHitpos) - 1 );
+						UpdateGap ( uField, 2, HITMAN::GetPos ( pHlist->m_uHitpos ) - HITMAN::GetPos ( m_dMinWindowHits[0].m_uHitpos ) - 1 );
 						m_dMinWindowHits.Add() = *pHlist; // {A} + B => {A,B}
 					}
 					break;
@@ -7738,7 +7870,7 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS>::Update ( const ExtHit_t * pHlist )
 				case 2:
 					if ( m_dMinWindowHits[0].m_uQuerypos==pHlist->m_uQuerypos )
 					{
-						UpdateGap ( uField, 2, HITMAN::GetPos ( pHlist->m_uHitpos ) - HITMAN::GetPos ( m_dMinWindowHits[1].m_uHitpos) - 1 );
+						UpdateGap ( uField, 2, HITMAN::GetPos ( pHlist->m_uHitpos ) - HITMAN::GetPos ( m_dMinWindowHits[1].m_uHitpos ) - 1 );
 						m_dMinWindowHits[0] = m_dMinWindowHits[1]; // {A,B} + A2 => {B,A2}
 						m_dMinWindowHits[1] = *pHlist;
 					} else if ( m_dMinWindowHits[1].m_uQuerypos==pHlist->m_uQuerypos )
@@ -7884,7 +8016,9 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS>::PackFactors ( int * pSize )
 			// had exact_hit here before v.4
 			*pPack++ = (DWORD)m_iMaxWindowHits[i];
 			*pPack++ = (DWORD)m_iMinGaps[i]; // added in v.3
-			*pPack++ = sphF2DW ( 0.0f ); // added in v.4
+			*pPack++ = *(DWORD*)&m_dAtc[i];			// added in v.4
+			*pPack++ = m_dLCCS[i];					// added in v.5
+			*pPack++ = *(DWORD*)&m_dWLCCS[i];	// added in v.5
 		}
 	}
 
@@ -7934,6 +8068,7 @@ DWORD RankerState_Expr_fn<NEED_PACKEDFACTORS>::Finalize ( const CSphMatch & tMat
 {
 	// finishing touches
 	FinalizeDocFactors ( tMatch );
+	UpdateATC ( true );
 
 	if ( NEED_PACKEDFACTORS )
 	{
@@ -7958,6 +8093,102 @@ DWORD RankerState_Expr_fn<NEED_PACKEDFACTORS>::Finalize ( const CSphMatch & tMat
 
 	// done
 	return uRes;
+}
+
+
+template < bool NEED_PACKEDFACTORS >
+float RankerState_Expr_fn<NEED_PACKEDFACTORS>::TermTC ( int iTerm, bool bLeft )
+{
+	// border case short-cut
+	if ( ( bLeft && iTerm==m_iAtcHitStart ) || ( !bLeft && iTerm==m_iAtcHitStart+m_iAtcHitCount-1 ) )
+		return 0.0f;
+
+	int iRing = iTerm % XRANK_ATC_BUFFER_LEN;
+	int iHitpos = m_dAtcHits[iRing].m_iHitpos;
+	WORD uQuerypos = m_dAtcHits[iRing].m_uQuerypos;
+
+	m_dAtcProcessedTerms.Clear();
+
+	float fTC = 0.0f;
+
+	// loop bounds for down \ up climbing
+	int iStart, iEnd, iStep;
+	if ( bLeft )
+	{
+		iStart = iTerm - 1;
+		iEnd = Max ( iStart - XRANK_ATC_WINDOW_LEN, m_iAtcHitStart-1 );
+		iStep = -1;
+	} else
+	{
+		iStart = iTerm + 1;
+		iEnd = Min ( iStart + XRANK_ATC_WINDOW_LEN, m_iAtcHitStart + m_iAtcHitCount );
+		iStep = 1;
+	}
+
+	int iFound = 0;
+	for ( int i=iStart; i!=iEnd && iFound!=m_iMaxQpos; i+=iStep )
+	{
+		int iRing = i % XRANK_ATC_BUFFER_LEN;
+		const AtcHit_t & tCur = m_dAtcHits[iRing];
+		bool bGotDup = ( uQuerypos==tCur.m_uQuerypos );
+
+		if ( m_dAtcProcessedTerms.BitGet ( tCur.m_uQuerypos ) || iHitpos==tCur.m_iHitpos )
+			continue;
+
+		float fWeightedDist = pow ( float ( abs ( iHitpos - tCur.m_iHitpos ) ), XRANK_ATC_EXP );
+		float fTermTC = ( m_dIDF[tCur.m_uQuerypos] / fWeightedDist );
+		if ( bGotDup )
+			fTermTC *= XRANK_ATC_DUP_DIV;
+		fTC += fTermTC;
+
+		m_dAtcProcessedTerms.BitSet ( tCur.m_uQuerypos );
+		iFound++;
+	}
+
+	return fTC;
+}
+
+
+template < bool NEED_PACKEDFACTORS >
+void RankerState_Expr_fn<NEED_PACKEDFACTORS>::UpdateATC ( bool bFlushField )
+{
+	if ( !m_iAtcHitCount )
+		return;
+
+	int iWindowStart = m_iAtcHitStart + XRANK_ATC_WINDOW_LEN;
+	int iWindowEnd = Min ( iWindowStart + XRANK_ATC_WINDOW_LEN, m_iAtcHitStart+m_iAtcHitCount );
+	// border cases (hits: +below ATC window collected since start of buffer; +at the end of buffer and less then ATC window)
+	if ( !m_bAtcHeadProcessed )
+		iWindowStart = m_iAtcHitStart;
+	if ( bFlushField )
+		iWindowEnd = m_iAtcHitStart+m_iAtcHitCount;
+
+	assert ( iWindowStart<iWindowEnd && iWindowStart>=m_iAtcHitStart && iWindowEnd<=m_iAtcHitStart+m_iAtcHitCount );
+	// per term ATC
+	// sigma(t' E query) ( idf(t') \ left_deltapos(t, t')^z + idf (t') \ right_deltapos(t,t')^z ) * ( t==t' ? 0.25 : 1 )
+	for ( int iWinPos=iWindowStart; iWinPos<iWindowEnd; iWinPos++ )
+	{
+		float fTC = TermTC ( iWinPos, true ) + TermTC ( iWinPos, false );
+
+		int iRing = iWinPos % XRANK_ATC_BUFFER_LEN;
+		m_dAtcTerms [ m_dAtcHits[iRing].m_uQuerypos ] += fTC;
+	}
+
+	m_bAtcHeadProcessed = true;
+	if ( bFlushField )
+	{
+		float fWeightedSum = 0.0f;
+		ARRAY_FOREACH ( i, m_dAtcTerms )
+		{
+			fWeightedSum += m_dAtcTerms[i] * m_dIDF[i];
+			m_dAtcTerms[i] = 0.0f;
+		}
+
+		m_dAtc[m_uAtcField] = log ( 1.0f + fWeightedSum );
+		m_iAtcHitStart = 0;
+		m_iAtcHitCount = 0;
+		m_bAtcHeadProcessed = false;
+	}
 }
 
 

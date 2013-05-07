@@ -2782,19 +2782,23 @@ public:
 
 	void Init ( int iElements )
 	{
-		assert ( iElements>0 );
+		assert ( iElements>=0 );
 		m_iElements = iElements;
 		if ( iElements > int(sizeof(m_uStatic)*8) )
 		{
 			int iSize = (m_iElements+31)/32;
 			m_pData = new DWORD [ iSize ];
-			memset ( m_pData, 0, sizeof(DWORD)*iSize );
 		} else
 		{
 			m_pData = m_uStatic;
-			for ( int i=0; i<int(sizeof(m_uStatic)/sizeof(m_uStatic[0])); i++ )
-				m_uStatic[i] = 0;
 		}
+		Clear();
+	}
+
+	void Clear ()
+	{
+		int iSize = (m_iElements+31)/32;
+		memset ( m_pData, 0, sizeof(DWORD)*iSize );
 	}
 
 	bool BitGet ( int iIndex ) const

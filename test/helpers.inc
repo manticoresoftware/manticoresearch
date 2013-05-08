@@ -2208,7 +2208,7 @@ function CopyDirContents ( $from, $to )
 
 function CheckConfig ( $config, $path )
 {
-	global $g_id64, $g_re2, $windows, $g_locals;
+	global $g_id64, $g_re2, $g_rlp, $windows, $g_locals;
 	
 	if ( $config->Requires("id64") && !$g_id64 )
 	{
@@ -2237,6 +2237,12 @@ function CheckConfig ( $config, $path )
 	if ( $config->Requires("re2") && !$g_re2 )
 	{
 		printf ( "SKIPPING %s, %s - compile with regexp support to run this test\n", $path, $config->Name () );
+		return false;
+	}
+
+	if ( $config->Requires("rlp") && !$g_rlp )
+	{
+		printf ( "SKIPPING %s, %s - compile with RLP support to run this test\n", $path, $config->Name () );
 		return false;
 	}
 

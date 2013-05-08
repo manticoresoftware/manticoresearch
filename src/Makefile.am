@@ -34,8 +34,8 @@ if USE_RLP
 RLP_LIBS = -L$(top_srcdir)/rlp/lib/amd64-glibc25-gcc42 -lbtrlpc -lbtrlpcore -lbtutils
 RLP_INC = -I$(top_srcdir)/rlp/rlp/include -I$(top_srcdir)/rlp/utilities/include -D_REENTRANT
 else
-LIBRLP_LIBS =
-LIBRLP_INC =
+RLP_LIBS =
+RLP_INC =
 endif
 
 AM_CPPFLAGS = $(LIBRE2_INC) $(RLP_INC) -DSYSCONFDIR="\"$(sysconfdir)\"" -DDATADIR="\"$(localstatedir)/data\""

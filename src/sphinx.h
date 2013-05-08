@@ -1832,8 +1832,8 @@ protected:
 	int						LoadFileField ( BYTE ** ppField, CSphString & sError );
 
 	bool					BuildZoneHits ( SphDocID_t uDocid, BYTE * sWord );
-	void					BuildSubstringHits ( CSphDict * pDict, SphDocID_t uDocid, bool bPayload, ESphWordpart eWordpart, bool bSkipEndMarker );
-	void					BuildRegularHits ( CSphDict * pDict, SphDocID_t uDocid, bool bPayload, bool bSkipEndMarker );
+	void					BuildSubstringHits ( SphDocID_t uDocid, bool bPayload, ESphWordpart eWordpart, bool bSkipEndMarker );
+	void					BuildRegularHits ( SphDocID_t uDocid, bool bPayload, bool bSkipEndMarker );
 
 	/// register autocomputed attributes such as field lengths (see index_field_lengths)
 	bool					AddAutoAttrs ( CSphString & sError );

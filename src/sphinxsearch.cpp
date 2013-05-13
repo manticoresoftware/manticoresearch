@@ -3813,6 +3813,7 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 			{
 				p = const_cast<WORD *>( m_dNpos.BinarySearch ( m_dRing [ RingTail() ].m_uNodepos ) );
 				*p = uNpos;
+				m_dNpos.Sort();
 				m_dRing [ RingTail() ].m_uNodepos = uNpos;
 				m_dRing [ RingTail() ].m_uQuerypos = uQpos;
 			}

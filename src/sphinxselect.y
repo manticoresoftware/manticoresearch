@@ -121,9 +121,15 @@ arglist:
 	arg
 	| arglist ',' arg
 	;
+
+consthash:
+	SEL_TOKEN TOK_EQ SEL_TOKEN
+	| consthash ',' SEL_TOKEN TOK_EQ SEL_TOKEN
+	;	
 	
 arg:
 	expr
+	| '{' consthash '}'
 	| TOK_CONST_STRING
 	;
 

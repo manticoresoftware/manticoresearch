@@ -149,6 +149,9 @@ INSERT INTO test_table VALUES
 <sphinxql>select id, weight() as w1, FLOOR ( bm25f(2.2, 0.5) * 100000 ) as w2, FLOOR ( bm25f(1.2, 0.8, {content=10}) * 100000 ) as w3 from xml_ext where match('Mary lamb') option ranker=expr('bm25f(10.2, 0.5) * 1000')</sphinxql>
 <sphinxql>select id, weight() as w1, FLOOR ( bm25f(2.2, 0.5) * 100000 ) as w2, FLOOR ( bm25f(1.2, 0.8, {content=10}) * 100000 ) as w3 from xml_int where match('Mary lamb') option ranker=expr('bm25f(10.2, 0.5) * 1000')</sphinxql>
 
+<!-- regression bm25f expression vs agent -->
+<sphinxql>select id, weight() as w1, FLOOR ( bm25f(1.2, 0.8, {content=10}) * 100000 ) as w2 from dist where match('Mary lamb') option ranker=expr('bm25f(1.2, 0.8, {content=10}) * 1000')</sphinxql>
+
 </sphqueries>
 
 </test>

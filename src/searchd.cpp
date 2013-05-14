@@ -4285,7 +4285,6 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 	{
 		if ( !iEvents )
 		{
-			bool bDone = true;
 			for ( int i=0; i<pCtx->m_iAgentCount; i++ )
 			{
 				AgentConn_t & tAgent = pCtx->m_pAgents[i];
@@ -4305,13 +4304,21 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 				dEvent.data.ptr = &tAgent;
 				epoll_ctl ( eid, EPOLL_CTL_ADD, tAgent.m_iSock, &dEvent );
 				++iEvents;
-				if ( tAgent.m_eState!=AGENT_QUERYED )
-					bDone = false;
 			}
-
-			if ( bDone )
-				break;
 		}
+
+		bool bDone = true;
+		for ( int i=0; i<pCtx->m_iAgentCount; i++ )
+		{
+			AgentConn_t & tAgent = pCtx->m_pAgents[i];
+			// select only 'initial' agents - which are not send query response.
+			if ( tAgent.m_eState<AGENT_CONNECTING || tAgent.m_eState>AGENT_QUERYED )
+				continue;
+			if ( tAgent.m_eState!=AGENT_QUERYED )
+				bDone = false;
+		}
+		if ( bDone )
+			break;
 
 		// compute timeout
 		int64_t tmSelect = sphMicroTimer();
@@ -4434,7 +4441,6 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 				tOut.Flush (); // FIXME! handle flush failure?
 				tAgent.m_eState = AGENT_QUERYED;
 				iAgents++;
-				--iEvents;
 				dEvent.events = EPOLLIN;
 				dEvent.data.ptr = &tAgent;
 				epoll_ctl ( eid, EPOLL_CTL_MOD, tAgent.m_iSock, &dEvent );

@@ -863,6 +863,9 @@ static SearchdStats_t *			g_pStats		= NULL;
 static CSphSharedBuffer<SearchdStats_t>	g_tStatsBuffer;
 static CSphProcessSharedMutex	g_tStatsMutex;
 
+static CSphQueryResultMeta		g_tLastMeta;
+static CSphMutex				g_tLastMetaMutex;
+
 //////////////////////////////////////////////////////////////////////////
 
 struct FlushState_t
@@ -1641,6 +1644,8 @@ void Shutdown ()
 		g_tRotateConfigMutex.Done();
 
 		sphThreadJoin ( &g_tRotationServiceThread );
+
+		g_tLastMetaMutex.Done();
 
 #if !USE_WINDOWS
 		if ( g_eWorkers==MPM_FORK || g_eWorkers==MPM_PREFORK )
@@ -10531,7 +10536,7 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 }
 
 
-void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq, CSphQueryResultMeta* pMeta )
+void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 {
 	MEMORY ( SPH_MEM_SEARCH_NONSQL );
 
@@ -10575,8 +10580,9 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq, CSphQueryR
 		iTotalAgentPredictedTime += tHandler.m_dResults[i].m_iAgentPredictedTime;
 	}
 
-	if ( pMeta )
-		*pMeta = tHandler.m_dResults[tHandler.m_dResults.GetLength()-1];
+	g_tLastMetaMutex.Lock();
+	g_tLastMeta = tHandler.m_dResults[tHandler.m_dResults.GetLength()-1];
+	g_tLastMetaMutex.Unlock();
 
 	g_tStatsMutex.Lock();
 	g_pStats->m_iPredictedTime += iTotalPredictedTime;
@@ -13362,7 +13368,7 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 }
 
 
-void HandleCommandStatus ( int iSock, int iVer, InputBuffer_c & tReq, const CSphQueryResultMeta* pMeta )
+void HandleCommandStatus ( int iSock, int iVer, InputBuffer_c & tReq )
 {
 	if ( !CheckCommandVersion ( iVer, VER_COMMAND_STATUS, tReq ) )
 		return;
@@ -13377,10 +13383,14 @@ void HandleCommandStatus ( int iSock, int iVer, InputBuffer_c & tReq, const CSph
 
 	VectorLike dStatus;
 
-	if ( bGlobalStat || !pMeta )
+	if ( bGlobalStat )
 		BuildStatus ( dStatus );
 	else
-		BuildMeta ( dStatus, *pMeta );
+	{
+		g_tLastMetaMutex.Lock();
+		BuildMeta ( dStatus, g_tLastMeta );
+		g_tLastMetaMutex.Unlock();
+	}
 
 	int iRespLen = 8; // int rows, int cols
 	ARRAY_FOREACH ( i, dStatus )
@@ -13496,7 +13506,6 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 	}
 
 	int iPconnIdle = 0;
-	CSphQueryResultMeta dMyMeta;
 	do
 	{
 		// in "persistent connection" mode, we want interruptible waits
@@ -13604,7 +13613,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 		sphLogDebugv ( "conn %s("INT64_FMT"): got command %d, handling", sClientIP, iCID, iCommand );
 		switch ( iCommand )
 		{
-			case SEARCHD_COMMAND_SEARCH:	HandleCommandSearch ( iSock, iCommandVer, tBuf, &dMyMeta ); break;
+			case SEARCHD_COMMAND_SEARCH:	HandleCommandSearch ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_EXCERPT:	HandleCommandExcerpt ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_KEYWORDS:	HandleCommandKeywords ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_UPDATE:	HandleCommandUpdate ( iSock, iCommandVer, tBuf ); break;
@@ -13613,7 +13622,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 				iTimeout = 1;
 				sphLogDebugv ( "conn %s("INT64_FMT"): pconn is now %s", sClientIP, iCID, bPersist ? "on" : "off" );
 				break;
-			case SEARCHD_COMMAND_STATUS:	HandleCommandStatus ( iSock, iCommandVer, tBuf, &dMyMeta ); break;
+			case SEARCHD_COMMAND_STATUS:	HandleCommandStatus ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_FLUSHATTRS:HandleCommandFlush ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_SPHINXQL:	HandleCommandSphinxql ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_PING:		HandleCommandPing ( iSock, iCommandVer, tBuf ); break;
@@ -21357,6 +21366,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		}
 	}
 #endif
+
+	if ( !g_tLastMetaMutex.Init() )
+		sphDie ( "failed to init meta mutex" );
 
 	if ( !g_tRotateQueueMutex.Init() || !g_tRotateConfigMutex.Init() )
 		sphDie ( "failed to init rotations mutexes" );

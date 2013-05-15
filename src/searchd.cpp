@@ -998,7 +998,7 @@ bool ServedIndex_t::InitLock ( bool bProcessShared, CSphString & sError ) const
 	if ( !bRes )
 		sError = m_tLock.GetError();
 
-	return true;
+	return bRes;
 }
 
 void ServedIndex_t::Unlock () const
@@ -1097,7 +1097,7 @@ bool IndexHash_c::Add ( const ServedDesc_t & tDesc, const CSphString & tKey )
 		CSphString sError;
 		if ( !tVal.InitLock ( true, sError ) )
 		{
-			tVal.m_bAlterEnabled = true;
+			tVal.m_bAlterEnabled = false;
 			sphWarning ( "failed to init process shared rwlock: %s; ALTER disabled", sError.cstr() );
 			Verify ( tVal.InitLock ( false, sError ) );
 		}
@@ -9291,7 +9291,7 @@ int64_t sphCpuTimer ()
 
 #if defined (CLOCK_THREAD_CPUTIME_ID)
 // CPU time (user+sys), Linux style, current thread
-#define LOC_CLOCK CLOCK_PROCESS_CPUTIME_ID
+#define LOC_CLOCK CLOCK_THREAD_CPUTIME_ID
 #elif defined(CLOCK_PROCESS_CPUTIME_ID)
 // CPU time (user+sys), Linux style
 #define LOC_CLOCK CLOCK_PROCESS_CPUTIME_ID

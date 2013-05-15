@@ -864,7 +864,7 @@ static CSphSharedBuffer<SearchdStats_t>	g_tStatsBuffer;
 static CSphProcessSharedMutex	g_tStatsMutex;
 
 static CSphQueryResultMeta		g_tLastMeta;
-static CSphMutex				g_tLastMetaMutex;
+static StaticThreadsOnlyMutex_t g_tLastMetaMutex;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1644,8 +1644,6 @@ void Shutdown ()
 		g_tRotateConfigMutex.Done();
 
 		sphThreadJoin ( &g_tRotationServiceThread );
-
-		g_tLastMetaMutex.Done();
 
 #if !USE_WINDOWS
 		if ( g_eWorkers==MPM_FORK || g_eWorkers==MPM_PREFORK )
@@ -21366,9 +21364,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		}
 	}
 #endif
-
-	if ( !g_tLastMetaMutex.Init() )
-		sphDie ( "failed to init meta mutex" );
 
 	if ( !g_tRotateQueueMutex.Init() || !g_tRotateConfigMutex.Init() )
 		sphDie ( "failed to init rotations mutexes" );

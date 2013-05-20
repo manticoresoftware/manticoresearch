@@ -5671,6 +5671,179 @@ struct CSphAttrTypedLocator : public CSphAttrLocator
 	}
 };
 
+struct SphFinalMatchCounter_t : ISphMatchProcessor
+{
+	int		m_iCount;
+	int		m_iSegments;
+
+	explicit SphFinalMatchCounter_t ( int iSegments )
+		: m_iCount ( 0 )
+		, m_iSegments ( iSegments )
+	{ }
+
+	virtual void Process ( CSphMatch * pMatch )
+	{
+		int iMatchSegment = pMatch->m_iTag-1;
+		if ( iMatchSegment>=0 && iMatchSegment<m_iSegments )
+			m_iCount++;
+	}
+};
+
+struct SphFinalMatchCopy_t : ISphMatchProcessor
+{
+	CSphRowitem *	m_pStorage;
+	int				m_iSegments;
+	int				m_iStaticSize;
+	bool			m_bForce;
+#ifndef NDEBUG
+	CSphRowitem * m_pEnd;
+#endif
+
+	SphFinalMatchCopy_t ( CSphRowitem * pStorage, int iSegments, int iStaticSize, bool bForce )
+		: m_pStorage ( pStorage )
+		, m_iSegments ( iSegments )
+		, m_iStaticSize ( iStaticSize )
+		, m_bForce ( bForce )
+	{ }
+
+	virtual void Process ( CSphMatch * pMatch )
+	{
+		const int iMatchSegment = pMatch->m_iTag-1;
+		if ( m_bForce || ( iMatchSegment>=0 && iMatchSegment<m_iSegments ) )
+		{
+			assert ( m_pStorage+m_iStaticSize<=m_pEnd );
+
+			memcpy ( m_pStorage, STATIC2DOCINFO ( pMatch->m_pStatic ), sizeof(CSphRowitem)*m_iStaticSize );
+			pMatch->m_pStatic = DOCINFO2ATTRS ( m_pStorage );
+			DOCINFOSETID ( m_pStorage, (SphDocID_t)0 ); // the zero docid will show that the data was copied
+			m_pStorage += m_iStaticSize;
+		}
+	}
+};
+
+struct SphFinalArenaCopy_t : ISphMatchProcessor
+{
+	const CSphVector<RtSegment_t *> & m_pSegments;
+	const CSphVector<const BYTE *> & m_dDiskStrings;
+	const CSphVector<const DWORD *> & m_dDiskMva;
+	const CSphVector<CSphAttrTypedLocator> & m_dGetLoc;
+	const CSphVector<CSphAttrLocator> & m_dSetLoc;
+
+	CSphFixedVector<int> m_dJsonAssoc;
+	CSphVector<DWORD> m_dOriginalJson;
+	CSphVector<DWORD> m_dMovedJson;
+
+	CSphTightVector<BYTE> m_dStorageString;
+	CSphTightVector<DWORD> m_dStorageMva;
+
+	SphFinalArenaCopy_t ( const CSphVector<RtSegment_t *> & pSegments, const CSphVector<const BYTE *> & dDiskStrings,
+		const CSphVector<const DWORD *> & dDiskMva, const CSphVector<CSphAttrTypedLocator> & dGetLoc, const CSphVector<CSphAttrLocator> & dSetLoc,
+		int iJsonFields )
+		: m_pSegments ( pSegments )
+		, m_dDiskStrings ( dDiskStrings )
+		, m_dDiskMva ( dDiskMva )
+		, m_dGetLoc ( dGetLoc )
+		, m_dSetLoc ( dSetLoc )
+		, m_dJsonAssoc ( iJsonFields )
+	{
+		m_dStorageString.Add ( 0 );
+		m_dStorageMva.Add ( 0 );
+		ARRAY_FOREACH ( i, m_dJsonAssoc )
+			m_dJsonAssoc[i] = -1;
+	}
+
+	virtual void Process ( CSphMatch * pMatch )
+	{
+		assert ( pMatch->m_iTag>=1 && pMatch->m_iTag<m_pSegments.GetLength()+m_dDiskStrings.GetLength()+1 );
+
+		const int iSegCount = m_pSegments.GetLength();
+		const int iStorageSrc = pMatch->m_iTag-1;
+		bool bSegmentMatch = ( iStorageSrc<iSegCount );
+		const BYTE * pBaseString = bSegmentMatch ? m_pSegments[iStorageSrc]->m_dStrings.Begin() : m_dDiskStrings[ iStorageSrc-iSegCount ];
+		const DWORD * pBaseMva = bSegmentMatch ? m_pSegments[iStorageSrc]->m_dMvas.Begin() : m_dDiskMva[ iStorageSrc-iSegCount ];
+
+		int iJson = 0;
+		m_dOriginalJson.Resize ( 0 );
+		m_dMovedJson.Resize ( 0 );
+
+		ARRAY_FOREACH ( i, m_dGetLoc )
+		{
+			int64_t iAttr = 0;
+			const CSphAttrTypedLocator& tLoc = m_dGetLoc[i];
+
+			switch ( tLoc.m_eAttrType )
+			{
+			case SPH_ATTR_STRING:
+			case SPH_ATTR_JSON:
+			{
+				const SphAttr_t uOff = pMatch->GetAttr ( tLoc );
+				if ( uOff>0 )
+				{
+					assert ( uOff<( I64C(1)<<32 ) ); // should be 32 bit offset
+					assert ( !bSegmentMatch || (int)uOff<m_pSegments[iStorageSrc]->m_dStrings.GetLength() );
+					DWORD uRebased = CopyPackedString ( pBaseString + uOff, m_dStorageString );
+					iAttr = uRebased;
+					// store the map of full jsons in order to map json fields
+					if ( tLoc.m_eAttrType==SPH_ATTR_JSON )
+					{
+						m_dOriginalJson.Add ( (DWORD)uOff );
+						m_dMovedJson.Add ( uRebased );
+					}
+				}
+			}
+			break;
+			case SPH_ATTR_UINT32SET:
+			case SPH_ATTR_INT64SET:
+			{
+				const DWORD * pMva = pMatch->GetAttrMVA ( tLoc, pBaseMva );
+				// have to fix up only existed attribute
+				if ( pMva )
+				{
+					assert ( ( pMatch->GetAttr ( tLoc ) & MVA_ARENA_FLAG )<( I64C(1)<<32 ) ); // should be 32 bit offset
+					assert ( !bSegmentMatch || (int)pMatch->GetAttr ( tLoc )<m_pSegments[iStorageSrc]->m_dMvas.GetLength() );
+					iAttr = CopyMva ( pMva, m_dStorageMva );
+				}
+			}
+			break;
+			case SPH_ATTR_JSON_FIELD:
+			{
+				iAttr = pMatch->GetAttr ( tLoc );
+				if ( iAttr )
+				{
+					ESphJsonType eJson = ESphJsonType ( iAttr>>32 );
+					DWORD uOff = (DWORD)iAttr;
+					if ( m_dJsonAssoc[iJson]<0 )
+					{
+						// tricky part. We have packed json field, but it points somewhere into original json.
+						// since all jsons already relocated, we have to find the original (source) and recalculate the locator
+						int k = -1;
+						int iDistance = -1;
+						ARRAY_FOREACH ( j, m_dOriginalJson )
+							if ( iDistance<0 || ( uOff>=m_dOriginalJson[j] && uOff<( m_dOriginalJson[j]+iDistance ) ) )
+							{
+								iDistance = uOff - m_dOriginalJson[j];
+								k = j;
+							}
+							assert ( k>=0 );
+							m_dJsonAssoc[iJson] = k;
+					}
+					DWORD uNew = m_dMovedJson [ m_dJsonAssoc[iJson] ] - m_dOriginalJson [ m_dJsonAssoc[iJson] ] + uOff;
+					++iJson;
+					iAttr = ( ( (int64_t)uNew ) | ( ( (int64_t)eJson )<<32 ) );
+				}
+			}
+			break;
+			default:
+				break;
+			}
+
+			const CSphAttrLocator & tSet = m_dSetLoc[i];
+			assert ( !tSet.m_bDynamic || tSet.GetMaxRowitem() < (int)pMatch->m_pDynamic[-1] );
+			sphSetRowAttr ( tSet.m_bDynamic ? pMatch->m_pDynamic : const_cast<CSphRowitem*>( pMatch->m_pStatic ), tSet, iAttr );
+		}
+	}
+};
+
 
 // FIXME! missing MVA, index_exact_words support
 // FIXME? missing enable_star, legacy match modes support
@@ -6134,7 +6307,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	CSphVector<CSphAttrTypedLocator> dGetLoc;
 	CSphVector<CSphAttrLocator> dSetLoc;
-	CSphVector<int> dJsonAssoc;
+	int iJsonFields = 0;
 	for ( int i=0; i<pResult->m_tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tSetInfo = pResult->m_tSchema.GetAttr(i);
@@ -6147,20 +6320,23 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			dGetLoc.Add().Set ( m_tSchema.GetAttr ( iInLocator ).m_tLocator, tSetInfo.m_eAttrType );
 			dSetLoc.Add ( tSetInfo.m_tLocator );
 		}
+		iJsonFields += ( tSetInfo.m_eAttrType==SPH_ATTR_JSON_FIELD );
 	}
 
 	// put the json fields attrs at the very end (surely after all json attrs)
-	for ( int i=0; i<pResult->m_tSchema.GetAttrsCount(); i++ )
+	if ( iJsonFields )
 	{
-		const CSphColumnInfo & tSetInfo = pResult->m_tSchema.GetAttr(i);
-		if ( tSetInfo.m_eAttrType==SPH_ATTR_JSON_FIELD )
+		for ( int i=0; i<pResult->m_tSchema.GetAttrsCount(); i++ )
 		{
-			const int iInLocator = pResult->m_tSchema.GetAttrIndex ( tSetInfo.m_sName.cstr() );
-			assert ( iInLocator>=0 );
+			const CSphColumnInfo & tSetInfo = pResult->m_tSchema.GetAttr(i);
+			if ( tSetInfo.m_eAttrType==SPH_ATTR_JSON_FIELD )
+			{
+				const int iInLocator = pResult->m_tSchema.GetAttrIndex ( tSetInfo.m_sName.cstr() );
+				assert ( iInLocator>=0 );
 
-			dGetLoc.Add().Set ( pResult->m_tSchema.GetAttr ( iInLocator ).m_tLocator, SPH_ATTR_JSON_FIELD );
-			dSetLoc.Add ( tSetInfo.m_tLocator );
-			dJsonAssoc.Add ( -1 );
+				dGetLoc.Add().Set ( pResult->m_tSchema.GetAttr ( iInLocator ).m_tLocator, SPH_ATTR_JSON_FIELD );
+				dSetLoc.Add ( tSetInfo.m_tLocator );
+			}
 		}
 	}
 
@@ -6181,58 +6357,40 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		// and copy real match's data to arena
 
 		int iFixupCount = 0;
+		SphFinalMatchCounter_t fnCounter ( iSegmentsTotal );
 
 		ARRAY_FOREACH ( iSorter, dSorters )
 		{
 			ISphMatchSorter * pSorter = dSorters[iSorter];
-
-			const CSphMatch * pMatches = pSorter->Finalize();
 			const int iMatchesCount = pSorter->GetLength();
 
 			if ( bHasArenaAttrs || bOptimizing )
 			{
 				iFixupCount += iMatchesCount;
 				continue;
-			}
-
-			// copying only RT segments docinfo (no need to copy docinfo from disk chunks)
-			for ( int i=0; i<iMatchesCount; i++ )
+			} else
 			{
-				const int iMatchSegment = pMatches[i].m_iTag-1;
-				if ( iMatchSegment>=0 && iMatchSegment< iSegmentsTotal )
-					iFixupCount++;
+				// copying only RT segments docinfo (no need to copy docinfo from disk chunks)
+				pSorter->Finalize ( fnCounter, false );
 			}
 		}
+		iFixupCount += fnCounter.m_iCount;
 
 		if ( iFixupCount>0 || bHasArenaAttrs || bOptimizing )
 		{
 			const int iStaticSize = m_tSchema.GetStaticSize() + DWSIZEOF ( SphDocID_t );
 			CSphRowitem * pAttr = new CSphRowitem [ iFixupCount * iStaticSize ];
 			pResult->m_dStorage2Free.Add ( (BYTE*)pAttr );
+
+			SphFinalMatchCopy_t fnCopy ( pAttr, iSegmentsTotal, iStaticSize, ( bHasArenaAttrs || bOptimizing ) );
 #ifndef NDEBUG
-			CSphRowitem * pEnd = pAttr + iFixupCount * iStaticSize;
+			fnCopy.m_pEnd = pAttr + iFixupCount * iStaticSize;
 #endif
 
 			ARRAY_FOREACH ( iSorter, dSorters )
 			{
 				ISphMatchSorter * pSorter = dSorters[iSorter];
-
-				CSphMatch * pMatches = pSorter->Finalize();
-				const int iMatchesCount = pSorter->GetLength();
-
-				for ( int i=0; i<iMatchesCount; i++ )
-				{
-					const int iMatchSegment = pMatches[i].m_iTag-1;
-					if ( ( iMatchSegment>=0 && iMatchSegment< iSegmentsTotal ) || bHasArenaAttrs || bOptimizing )
-					{
-						assert ( pAttr+iStaticSize<=pEnd );
-
-						memcpy ( pAttr, STATIC2DOCINFO ( pMatches[i].m_pStatic ), sizeof(CSphRowitem)*iStaticSize );
-						pMatches[i].m_pStatic = DOCINFO2ATTRS ( pAttr );
-						DOCINFOSETID ( pAttr, (SphDocID_t)0 ); // the zero docid will show that the data was copied
-						pAttr += iStaticSize;
-					}
-				}
+				pSorter->Finalize ( fnCopy, false );
 			}
 		}
 	}
@@ -6247,123 +6405,23 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	if ( bHasArenaAttrs || bOptimizing )
 	{
 		assert ( !pResult->m_pStrings && !pResult->m_pMva );
-		CSphTightVector<BYTE> dStorageString;
-		CSphTightVector<DWORD> dStorageMva;
-		dStorageString.Add ( 0 );
-		dStorageMva.Add ( 0 );
-
-		CSphVector<DWORD> dOriginalJson;
-		CSphVector<DWORD> dMovedJson;
+		SphFinalArenaCopy_t fnArena ( m_pSegments, dDiskStrings, dDiskMva, dGetLoc, dSetLoc, iJsonFields );
 
 		ARRAY_FOREACH ( iSorter, dSorters )
 		{
 			ISphMatchSorter * pSorter = dSorters[iSorter];
-
-			CSphMatch * pMatches = pSorter->Finalize();
-			const int iMatchesCount = pSorter->GetLength();
-
-			for ( int i=0; i<iMatchesCount; i++ )
-			{
-				CSphMatch & tMatch = pMatches[i];
-
-				const int iSegCount = m_pSegments.GetLength();
-				assert ( tMatch.m_iTag>=1 && tMatch.m_iTag<iSegCount+dDiskStrings.GetLength()+1 );
-
-				const int iStorageSrc = tMatch.m_iTag-1;
-				bool bSegmentMatch = ( iStorageSrc < iSegCount );
-				const BYTE * pBaseString = bSegmentMatch ? m_pSegments[iStorageSrc]->m_dStrings.Begin() : dDiskStrings[ iStorageSrc-iSegCount ];
-				const DWORD * pBaseMva = bSegmentMatch ? m_pSegments[iStorageSrc]->m_dMvas.Begin() : dDiskMva[ iStorageSrc-iSegCount ];
-
-				int iJson = 0;
-				dOriginalJson.Reset();
-				dMovedJson.Reset();
-
-				ARRAY_FOREACH ( i, dGetLoc )
-				{
-					int64_t iAttr = 0;
-					const CSphAttrTypedLocator& tLoc = dGetLoc[i];
-
-					switch ( tLoc.m_eAttrType )
-					{
-					case SPH_ATTR_STRING:
-					case SPH_ATTR_JSON:
-						{
-							const SphAttr_t uOff = tMatch.GetAttr ( tLoc );
-							if ( uOff>0 )
-							{
-								assert ( uOff<( I64C(1)<<32 ) ); // should be 32 bit offset
-								assert ( !bSegmentMatch || (int)uOff<m_pSegments[iStorageSrc]->m_dStrings.GetLength() );
-								DWORD uRebased = CopyPackedString ( pBaseString + uOff, dStorageString );
-								iAttr = uRebased;
-								// store the map of full jsons in order to map json fields
-								if ( tLoc.m_eAttrType==SPH_ATTR_JSON )
-								{
-									dOriginalJson.Add ( (DWORD)uOff );
-									dMovedJson.Add ( uRebased );
-								}
-							}
-						}
-						break;
-					case SPH_ATTR_UINT32SET:
-					case SPH_ATTR_INT64SET:
-						{
-							const DWORD * pMva = tMatch.GetAttrMVA ( tLoc, pBaseMva );
-							// have to fix up only existed attribute
-							if ( pMva )
-							{
-								assert ( ( tMatch.GetAttr ( tLoc ) & MVA_ARENA_FLAG )<( I64C(1)<<32 ) ); // should be 32 bit offset
-								assert ( !bSegmentMatch || (int)tMatch.GetAttr ( tLoc )<m_pSegments[iStorageSrc]->m_dMvas.GetLength() );
-								iAttr = CopyMva ( pMva, dStorageMva );
-							}
-						}
-						break;
-					case SPH_ATTR_JSON_FIELD:
-						{
-							iAttr = tMatch.GetAttr ( tLoc );
-							if ( iAttr )
-							{
-								ESphJsonType eJson = ESphJsonType ( iAttr>>32 );
-								DWORD uOff = (DWORD)iAttr;
-								if ( dJsonAssoc[iJson]<0 )
-								{
-									// tricky part. We have packed json field, but it points somewhere into original json.
-									// since all jsons already relocated, we have to find the original (source) and recalculate the locator
-									int k = -1;
-									int iDistance = -1;
-									ARRAY_FOREACH ( j, dOriginalJson )
-										if ( iDistance < 0 || ( uOff>=dOriginalJson[j] && uOff<( dOriginalJson[j]+iDistance ) ) )
-										{
-											iDistance = uOff - dOriginalJson[j];
-											k = j;
-										}
-									assert ( k>=0 );
-									dJsonAssoc[iJson] = k;
-								}
-								DWORD uNew = dMovedJson[dJsonAssoc[iJson]] - dOriginalJson[dJsonAssoc[iJson]] + uOff;
-								++iJson;
-								iAttr = ( ( (int64_t)uNew ) | ( ( (int64_t)eJson )<<32 ) );
-							}
-						}
-					default:
-						break;
-					}
-
-					const CSphAttrLocator & tSet = dSetLoc[i];
-					assert ( !tSet.m_bDynamic || tSet.GetMaxRowitem() < (int)tMatch.m_pDynamic[-1] );
-					sphSetRowAttr ( tSet.m_bDynamic ? tMatch.m_pDynamic : const_cast<CSphRowitem*>( tMatch.m_pStatic ), tSet, iAttr );
-				}
-			}
+			pSorter->Finalize ( fnArena, false );
 		}
 
-		if ( dStorageString.GetLength()>1 )
+		if ( fnArena.m_dStorageString.GetLength()>1 )
 		{
-			BYTE * pStrings = dStorageString.LeakData ();
+			BYTE * pStrings = fnArena.m_dStorageString.LeakData ();
 			pResult->m_dStorage2Free.Add ( pStrings );
 			pResult->m_pStrings = pStrings;
 		}
-		if ( dStorageMva.GetLength()>1 )
+		if ( fnArena.m_dStorageMva.GetLength()>1 )
 		{
-			DWORD * pMva = dStorageMva.LeakData();
+			DWORD * pMva = fnArena.m_dStorageMva.LeakData();
 			pResult->m_dStorage2Free.Add ( (BYTE*)pMva );
 			pResult->m_pMva = pMva;
 		}

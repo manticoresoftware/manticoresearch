@@ -1331,6 +1331,7 @@ class CSphIndex_VLN : public CSphIndex
 	friend class DiskIndexQwordSetup_c;
 	friend class CSphMerger;
 	friend class AttrIndexBuilder_t<SphDocID_t>;
+	friend struct SphFinalMatchCalc_t;
 
 public:
 	explicit					CSphIndex_VLN ( const char* sIndexName, const char * sFilename );
@@ -1466,7 +1467,7 @@ private:
 	void						MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker, int iTag, int iIndexWeight ) const;
 
 	const DWORD *				FindDocinfo ( SphDocID_t uDocID ) const;
-	void						CopyDocinfo ( CSphQueryContext * pCtx, CSphMatch & tMatch, const DWORD * pFound ) const;
+	void						CopyDocinfo ( const CSphQueryContext * pCtx, CSphMatch & tMatch, const DWORD * pFound ) const;
 
 	bool						BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphFixedVector<CSphWordHit> & dHits, int iArenaSize, int iFieldFD, int nFieldMVAs, int iFieldMVAInPool, CSphIndex_VLN * pPrevIndex );
 
@@ -14672,7 +14673,7 @@ const DWORD * CSphIndex_VLN::FindDocinfo ( SphDocID_t uDocID ) const
 	return NULL;
 }
 
-void CSphIndex_VLN::CopyDocinfo ( CSphQueryContext * pCtx, CSphMatch & tMatch, const DWORD * pFound ) const
+void CSphIndex_VLN::CopyDocinfo ( const CSphQueryContext * pCtx, CSphMatch & tMatch, const DWORD * pFound ) const
 {
 	if ( !pFound )
 		return;
@@ -14893,6 +14894,33 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 
 //////////////////////////////////////////////////////////////////////////
 
+
+struct SphFinalMatchCalc_t : ISphMatchProcessor, ISphNoncopyable
+{
+	const CSphIndex_VLN *		m_pDocinfoSrc;
+	const CSphQueryContext &	m_tCtx;
+	int							m_iTag;
+
+	SphFinalMatchCalc_t ( int iTag, const CSphIndex_VLN * pIndex, const CSphQueryContext & tCtx )
+		: m_pDocinfoSrc ( pIndex )
+		, m_tCtx ( tCtx )
+		, m_iTag ( iTag )
+	{ }
+
+	virtual void Process ( CSphMatch * pMatch )
+	{
+		if ( pMatch->m_iTag>=0 )
+			return;
+
+		if ( m_pDocinfoSrc )
+			m_pDocinfoSrc->CopyDocinfo ( &m_tCtx, *pMatch, m_pDocinfoSrc->FindDocinfo ( pMatch->m_iDocID ) );
+
+		m_tCtx.CalcFinal ( *pMatch );
+		pMatch->m_iTag = m_iTag;
+	}
+};
+
+
 bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult,
 	int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iIndexWeight, int iTag, bool bFactors ) const
 {
@@ -15109,22 +15137,12 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 	// do final expression calculations
 	if ( tCtx.m_dCalcFinal.GetLength() )
-		for ( int iSorter=0; iSorter<iSorters; iSorter++ )
 	{
-		ISphMatchSorter * pTop = ppSorters[iSorter];
-		CSphMatch * const pHead = pTop->Finalize();
-		const int iCount = pTop->GetLength ();
-		if ( !iCount )
-			continue;
-
-		CSphMatch * const pTail = pHead + iCount;
-		for ( CSphMatch * pCur=pHead; pCur<pTail; pCur++ )
+		SphFinalMatchCalc_t tFinal ( iTag, NULL, tCtx );
+		for ( int iSorter=0; iSorter<iSorters; iSorter++ )
 		{
-			if ( pCur->m_iTag<0 )
-			{
-				tCtx.CalcFinal ( *pCur );
-				pCur->m_iTag = iTag;
-			}
+			ISphMatchSorter * pTop = ppSorters[iSorter];
+			pTop->Finalize ( tFinal, false );
 		}
 	}
 
@@ -18297,61 +18315,26 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 		pProfile->Switch ( SPH_QSTATE_FINALIZE );
 
 	// adjust result sets
-	for ( int iSorter=0; iSorter<iSorters; iSorter++ )
+	if ( bFinalPass )
 	{
-		ISphMatchSorter * pTop = ppSorters[iSorter];
-		if ( pTop->GetLength() && bFinalPass )
+		// GotUDF means promise to UDFs that final-stage calls will be evaluated
+		// a) over the final, pre-limit result set
+		// b) in the final result set order
+		bool bGotUDF = false;
+		ARRAY_FOREACH_COND ( i, tCtx.m_dCalcFinal, !bGotUDF )
+			tCtx.m_dCalcFinal[i].m_pExpr->Command ( SPH_EXPR_GET_UDF, &bGotUDF );
+
+		SphFinalMatchCalc_t tProcessor ( iTag, bFinalLookup ? this : NULL, tCtx );
+		for ( int iSorter=0; iSorter<iSorters; iSorter++ )
 		{
-			CSphMatch * const pHead = pTop->Finalize();
-			const int iCount = pTop->GetLength ();
-			CSphMatch * const pTail = pHead + iCount;
-
-			bool bGotUDF = false;
-			ARRAY_FOREACH_COND ( i, tCtx.m_dCalcFinal, !bGotUDF )
-				tCtx.m_dCalcFinal[i].m_pExpr->Command ( SPH_EXPR_GET_UDF, &bGotUDF );
-
-			CSphVector<int> dIndexes;
-			if ( bGotUDF )
-			{
-				pTop->BuildFlatIndexes ( dIndexes );
-				bGotUDF = ( dIndexes.GetLength()!=0 );
-			}
-
-			if ( bGotUDF )
-			{
-				// we now promise to UDFs that final-stage calls will be evaluated
-				// a) over the final, pre-limit result set
-				// b) in the final result set order
-				ARRAY_FOREACH ( i, dIndexes )
-				{
-					assert ( dIndexes[i]>=0 && dIndexes[i]<iCount );
-					CSphMatch * pCur = pHead + dIndexes[i];
-					if ( pCur->m_iTag>=0 )
-						continue;
-					if ( bFinalLookup )
-						CopyDocinfo ( &tCtx, *pCur, FindDocinfo ( pCur->m_iDocID ) );
-					tCtx.CalcFinal ( *pCur );
-					pCur->m_iTag = iTag;
-				}
-
-			} else
-			{
-				// just evaluate in heap order
-				for ( CSphMatch * pCur=pHead; pCur<pTail; pCur++ )
-					if ( pCur->m_iTag<0 )
-				{
-					if ( bFinalLookup )
-						CopyDocinfo ( &tCtx, *pCur, FindDocinfo ( pCur->m_iDocID ) );
-					tCtx.CalcFinal ( *pCur );
-					pCur->m_iTag = iTag;
-				}
-			}
+			ISphMatchSorter * pTop = ppSorters[iSorter];
+			pTop->Finalize ( tProcessor, bGotUDF );
 		}
-
-		// mva and string pools ptrs
-		pResult->m_pMva = m_pMva.GetWritePtr();
-		pResult->m_pStrings = m_pStrings.GetWritePtr();
 	}
+
+	// mva and string pools ptrs
+	pResult->m_pMva = m_pMva.GetWritePtr();
+	pResult->m_pStrings = m_pStrings.GetWritePtr();
 
 	// query timer
 	int64_t tmWall = sphMicroTimer() - tmQueryStart;

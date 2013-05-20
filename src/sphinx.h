@@ -2856,6 +2856,14 @@ struct CSphMatchComparatorState
 };
 
 
+/// match processor interface
+struct ISphMatchProcessor
+{
+	virtual ~ISphMatchProcessor () {}
+	virtual void Process ( CSphMatch * pMatch ) = 0;
+};
+
+
 /// generic match sorter interface
 class ISphMatchSorter
 {
@@ -2919,19 +2927,13 @@ public:
 	/// get total count of non-duplicates Push()ed through this queue
 	virtual int64_t		GetTotalCount () const { return m_iTotal; }
 
-	/// get first entry ptr
-	/// used for docinfo lookup
-	/// entries order does NOT matter and is NOT guaranteed
-	/// however top GetLength() entries MUST be stored linearly starting from Finalize()
-	virtual CSphMatch *	Finalize () = 0;
+	/// process collected entries up to length count
+	virtual void		Finalize ( ISphMatchProcessor & tProcessor, bool bCallProcessInResultSetOrder ) = 0;
 
 	/// store all entries into specified location and remove them from the queue
 	/// entries are stored in properly sorted order,
 	/// if iTag is non-negative, entries are also tagged; otherwise, their tag's unchanged
 	virtual void		Flatten ( CSphMatch * pTo, int iTag ) = 0;
-
-	/// compute sorted indexes
-	virtual void		BuildFlatIndexes ( CSphVector<int> & ) {}
 };
 
 

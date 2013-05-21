@@ -8,7 +8,7 @@
 <name>aot morphology</name>
 
 <config>
-indexer
+common
 {
 	lemmatizer_base	= <local>lemmatizer_base</local>
 }

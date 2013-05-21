@@ -5642,6 +5642,7 @@ enum
 	QFLAG_SIMPLIFY				= 1UL << 3,
 	QFLAG_PLAIN_IDF				= 1UL << 4,
 	QFLAG_GLOBAL_IDF			= 1UL << 5,
+	QFLAG_NORMALIZED_TF			= 1UL << 6,
 };
 
 void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_c & tOut, const CSphQuery & q, bool bAgentWeight, int iWeight ) const
@@ -5655,6 +5656,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	uFlags |= QFLAG_SIMPLIFY * q.m_bSimplify;
 	uFlags |= QFLAG_PLAIN_IDF * q.m_bPlainIDF;
 	uFlags |= QFLAG_GLOBAL_IDF * q.m_bGlobalIDF;
+	uFlags |= QFLAG_NORMALIZED_TF * q.m_bNormalizedTFIDF;
 	tOut.SendDword ( uFlags );
 
 	// The Search Legacy
@@ -6635,6 +6637,9 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 		tQuery.m_bSimplify = !!( uFlags & QFLAG_SIMPLIFY );
 		tQuery.m_bPlainIDF = !!( uFlags & QFLAG_PLAIN_IDF );
 		tQuery.m_bGlobalIDF = !!( uFlags & QFLAG_GLOBAL_IDF );
+		// FIXME!!! client sends false for now, implemets tfidf* flags
+		if ( iMasterVer>0 )
+			tQuery.m_bNormalizedTFIDF = !!( uFlags & QFLAG_NORMALIZED_TF );
 
 		// fetch optional stuff
 		if ( uFlags & QFLAG_MAX_PREDICTED_TIME )

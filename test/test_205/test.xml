@@ -88,6 +88,11 @@ INSERT INTO test_table VALUES
 <sphqueries>
 <sphinxql>select *, weight() from dd where match('da')</sphinxql>
 <sphinxql>select *, weight() from dd where match('da') option idf=plain</sphinxql>
+<!-- regression idf options vs distributed index -->
+<sphinxql>select *, packedfactors() as f, weight() from i1,i2 where match('da blow') option idf=plain,idf=tfidf_unnormalized, ranker=expr('sum(lcs*user_weight)*1000+bm25')</sphinxql>
+<sphinxql>select *, packedfactors() as f, weight() from dd where match('da blow') option idf=plain,idf=tfidf_unnormalized, ranker=expr('sum(lcs*user_weight)*1000+bm25')</sphinxql>
+<sphinxql>select *, packedfactors() as f, weight() from i1,i2 where match('da blow') option idf=plain,idf=tfidf_normalized, ranker=expr('sum(lcs*user_weight)*1000+bm25')</sphinxql>
+<sphinxql>select *, packedfactors() as f, weight() from dd where match('da blow') option idf=plain,idf=tfidf_normalized, ranker=expr('sum(lcs*user_weight)*1000+bm25')</sphinxql>
 </sphqueries>
 
 </test>

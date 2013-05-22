@@ -7926,7 +7926,7 @@ public:
 		{
 			WORD & uPos = GetBucketPos ( m_dAttrs [ iIdx ].m_sName.cstr() );
 			m_dAttrs [ iIdx ].m_uNext = uPos;
-			uPos = iIdx;
+			uPos = WORD(iIdx);
 		}
 	}
 };
@@ -15147,11 +15147,11 @@ static void FormatFactors ( CSphVector<BYTE> & dOut, const SPH_UDF_FACTORS & tFa
 
 		iOff = dOut.GetLength();
 		dOut.Resize ( iOff+MAX_STR_LEN );
-		iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, ", field%d="
+		iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, ",\nfield%d="
 				"(lcs=%u, hit_count=%u, word_count=%u, "
 				"tf_idf=%f, min_idf=%f, max_idf=%f, sum_idf=%f, "
 				"min_hit_pos=%d, min_best_span_pos=%d, exact_hit=%u, max_window_hits=%d, "
-				"min_gaps=%d, exact_order=%d, lccs=%d, wlccs=%f, atc=%f)",
+				"\n*** min_gaps=%d, exact_order=%d, lccs=%d, wlccs=%f, atc=%f)",
 				i,
 				f.lcs, f.hit_count, f.word_count,
 				f.tf_idf, f.min_idf, f.max_idf, f.sum_idf,

@@ -7817,6 +7817,9 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS>::Update ( const ExtHit_t * pHlist )
 
 	// update min_gaps factor
 	if ( bUniq && m_iHaveMinWindow>1 )
+	{
+		printf("hit f=%d, p=%d, qp=%d =>", HITMAN::GetField(pHlist->m_uHitpos), HITMAN::GetPos(pHlist->m_uHitpos), pHlist->m_uQuerypos);/*!COMMIT*/
+
 		switch ( m_iHaveMinWindow )
 	{
 		// 2 keywords, special path
@@ -7896,6 +7899,8 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS>::Update ( const ExtHit_t * pHlist )
 		default:
 			UpdateMinGaps ( pHlist );
 			break;
+	}
+		printf("f=%d, min_gaps=%d, min_words=%d\n", uField, m_iMinGaps[uField], m_iMinWindowWords); /*!COMMIT*/
 	}
 }
 

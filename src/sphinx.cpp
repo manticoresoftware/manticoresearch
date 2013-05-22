@@ -6567,7 +6567,7 @@ void CSphSchema::AddAttr ( const CSphColumnInfo & tCol, bool bDynamic )
 	{
 		WORD & uPos = GetBucketPos ( m_dAttrs.Last().m_sName.cstr() );
 		m_dAttrs.Last().m_uNext = uPos;
-		uPos = ( m_dAttrs.GetLength()-1 );
+		uPos = (WORD)( m_dAttrs.GetLength()-1 );
 	}
 
 	if ( tLoc.IsID() )
@@ -6850,7 +6850,7 @@ void CSphSchema::RebuildHash ()
 	{
 		WORD & uPos = GetBucketPos ( m_dAttrs[i].m_sName.cstr() );
 		m_dAttrs[i].m_uNext = uPos;
-		uPos = i;
+		uPos = WORD(i);
 	}
 }
 
@@ -6861,10 +6861,10 @@ void CSphSchema::UpdateHash ( int iStartIndex, int iAddVal )
 
 	ARRAY_FOREACH ( i, m_dAttrs )
 		if ( m_dAttrs[i].m_uNext>iStartIndex )
-			m_dAttrs[i].m_uNext += iAddVal;
+			m_dAttrs[i].m_uNext = (WORD)( m_dAttrs[i].m_uNext + iAddVal );
 	for ( int i=0; i<BUCKET_COUNT; i++ )
 		if ( m_dBuckets[i]!=0xffff && m_dBuckets[i]>iStartIndex )
-			m_dBuckets[i] += iAddVal;
+			m_dBuckets[i] = (WORD)( m_dBuckets[i] + iAddVal );
 }
 
 void CSphSchema::Swap ( CSphSchema & rhs )

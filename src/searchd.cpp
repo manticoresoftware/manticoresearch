@@ -10374,7 +10374,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		}
 
 		// minimize schema and remove dupes
-		assert ( tRes.m_tSchema==tRes.m_dSchemas[0] );
+		// assuming here ( tRes.m_tSchema==tRes.m_dSchemas[0] )
 		if ( tRes.m_iSuccesses>1 || tQuery.m_dItems.GetLength() )
 		{
 			if ( g_bCompatResults && !tQuery.m_bAgent )

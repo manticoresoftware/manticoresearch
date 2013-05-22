@@ -15147,7 +15147,7 @@ static void FormatFactors ( CSphVector<BYTE> & dOut, const SPH_UDF_FACTORS & tFa
 
 		iOff = dOut.GetLength();
 		dOut.Resize ( iOff+MAX_STR_LEN );
-		iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, ",\nfield%d="
+		iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, ", field%d="
 				"(lcs=%u, hit_count=%u, word_count=%u, "
 				"tf_idf=%f, min_idf=%f, max_idf=%f, sum_idf=%f, "
 				"min_hit_pos=%d, min_best_span_pos=%d, exact_hit=%u, max_window_hits=%d, "

@@ -15151,7 +15151,7 @@ static void FormatFactors ( CSphVector<BYTE> & dOut, const SPH_UDF_FACTORS & tFa
 				"(lcs=%u, hit_count=%u, word_count=%u, "
 				"tf_idf=%f, min_idf=%f, max_idf=%f, sum_idf=%f, "
 				"min_hit_pos=%d, min_best_span_pos=%d, exact_hit=%u, max_window_hits=%d, "
-				"\n*** min_gaps=%d, exact_order=%d, lccs=%d, wlccs=%f, atc=%f)",
+				"min_gaps=%d, exact_order=%d, lccs=%d, wlccs=%f, atc=%f)",
 				i,
 				f.lcs, f.hit_count, f.word_count,
 				f.tf_idf, f.min_idf, f.max_idf, f.sum_idf,

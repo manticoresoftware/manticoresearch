@@ -1395,6 +1395,8 @@ struct CSphColumnInfo
 	bool							m_bFilename;	///< column is a file name
 	bool							m_bWeight;		///< is a weight column
 
+	WORD							m_uNext;		///< next in linked list for hash in CSphSchema
+
 	/// handy ctor
 	CSphColumnInfo ( const char * sName=NULL, ESphAttr eType=SPH_ATTR_NONE );
 
@@ -1419,16 +1421,7 @@ struct CSphSchema
 public:
 
 	/// ctor
-	explicit				CSphSchema ( const char * sName="(nameless)" ) : m_sName ( sName ), m_pAttrs ( NULL ), m_iStaticSize ( 0 ) {}
-
-	/// copy ctor
-							CSphSchema ( const CSphSchema & rhs );
-
-	/// dtor
-							~CSphSchema ()	{ SafeDelete ( m_pAttrs ); }
-
-	/// copy
-	CSphSchema &			operator= ( const CSphSchema & rhs );
+	explicit				CSphSchema ( const char * sName="(nameless)" );
 
 	/// get field index by name
 	/// returns -1 if not found
@@ -1476,9 +1469,6 @@ public:
 	/// copy ptr attrs from another schema
 	void					AdoptPtrAttrs ( const CSphSchema & tSrc );
 
-	/// update hash
-	void					UpdateHash ();
-
 protected:
 	// also let the schema to clone the matches when necessary
 	void CopyPtrs ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound=-1 ) const;
@@ -1497,14 +1487,22 @@ public:
 	// free the linked strings and/or just initialize the pointers with NULL
 	void FreeStringPtrs ( CSphMatch * pMatch, int iLowBound=0, int iUpBound=-1 ) const;
 
+	// returns 0xFFFF if bucket list is empty and position otherwise
+	WORD & GetBucketPos ( const char * sName );
+
+	void RebuildHash ();
+
 protected:
 	CSphVector<CSphColumnInfo>		m_dAttrs;			///< all my attributes
-	SmallStringHash_T<int> *		m_pAttrs;			///< for improving attribute by name search speed
 	CSphVector<int>					m_dStaticUsed;		///< static row part map (amount of used bits in each rowitem)
 	CSphVector<int>					m_dDynamicUsed;		///< dynamic row part map
 	int								m_iStaticSize;		///< static row size (can be different from m_dStaticUsed.GetLength() because of gaps)
 
-	static const int HASH_THRESH = 32;
+	void UpdateHash ( int iStartIdx, int iAddVal );
+
+	static const int	HASH_THRESH		= 32;
+	static const int	BUCKET_COUNT	= 256;
+	WORD				m_dBuckets [ BUCKET_COUNT ];	///< uses indexes in m_dAttrs as ptrs; 0xffff is like NULL in this hash
 
 	struct PtrAttr_t
 	{

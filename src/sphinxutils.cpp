@@ -401,6 +401,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "rt_attr_multi",			KEY_LIST, NULL },
 	{ "rt_attr_multi_64",		KEY_LIST, NULL },
 	{ "rt_attr_json",			KEY_LIST, NULL },
+	{ "rt_attr_bool",			KEY_LIST, NULL },
 	{ "rt_mem_limit",			0, NULL },
 	{ "dict",					0, NULL },
 	{ "index_sp",				0, NULL },
@@ -667,12 +668,11 @@ bool TryToExec ( char * pBuffer, char * pEnd, const char * szFilename, CSphVecto
 
 		exit ( 1 );
 
-	} else
-		if ( iChild==-1 )
-		{
-			snprintf ( sError, iErrorLen, "fork failed: [%d] %s", errno, strerror(errno) );
-			return false;
-		}
+	} else if ( iChild==-1 )
+	{
+		snprintf ( sError, iErrorLen, "fork failed: [%d] %s", errno, strerror(errno) );
+		return false;
+	}
 
 	close ( iWrite );
 
@@ -694,6 +694,7 @@ bool TryToExec ( char * pBuffer, char * pEnd, const char * szFilename, CSphVecto
 		iTotalRead += iBytesRead;
 	}
 	while ( iBytesRead > 0 );
+	close ( iRead );
 
 	int iStatus, iResult;
 	do

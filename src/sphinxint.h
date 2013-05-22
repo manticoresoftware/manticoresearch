@@ -755,6 +755,8 @@ void AttrIndexBuilder_t<DOCID>::Prepare ( DWORD * pOutBuffer, DWORD * pOutMax )
 {
 	m_pOutBuffer = pOutBuffer;
 	m_pOutMax = pOutMax;
+	memset ( pOutBuffer, 0, ( pOutMax-pOutBuffer )*sizeof(DWORD) );
+
 	m_uElements = 0;
 	m_uIndexStart = m_uIndexLast = 0;
 	ARRAY_FOREACH ( i, m_dIntIndexMin )

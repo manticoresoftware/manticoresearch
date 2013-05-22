@@ -6407,40 +6407,20 @@ CSphColumnInfo::CSphColumnInfo ( const char * sName, ESphAttr eType )
 	, m_bPayload ( false )
 	, m_bFilename ( false )
 	, m_bWeight ( false )
+	, m_uNext ( 0xffff )
 {
 	sphColumnToLowercase ( const_cast<char *>( m_sName.cstr() ) );
 }
 
 
-CSphSchema::CSphSchema ( const CSphSchema & rhs )
+CSphSchema::CSphSchema ( const char * sName )
+	: m_sName ( sName )
+	, m_iStaticSize ( 0 )
 {
-	m_pAttrs = NULL;
-	*this = rhs;
+	for ( int i=0; i<BUCKET_COUNT; i++ )
+		m_dBuckets[i] = 0xffff;
 }
 
-CSphSchema & CSphSchema::operator= ( const CSphSchema & rhs )
-{
-	m_sName = rhs.m_sName;
-	m_dFields = rhs.m_dFields;
-	m_dAttrs = rhs.m_dAttrs;
-
-	if ( rhs.m_pAttrs )
-	{
-		if ( !m_pAttrs )
-			m_pAttrs = new SmallStringHash_T<int> ( *rhs.m_pAttrs );
-		else
-			*m_pAttrs = *rhs.m_pAttrs;
-	} else
-		SafeDelete ( m_pAttrs );
-
-	m_dStaticUsed = rhs.m_dStaticUsed;
-	m_dDynamicUsed = rhs.m_dDynamicUsed;
-	m_iStaticSize = rhs.m_iStaticSize;
-	m_dPtrAttrs = rhs.m_dPtrAttrs;
-	m_dFactorAttrs = rhs.m_dFactorAttrs;
-
-	return *this;
-}
 
 bool CSphSchema::CompareTo ( const CSphSchema & rhs, CSphString & sError, bool bFullComparison ) const
 {
@@ -6524,14 +6504,14 @@ int CSphSchema::GetAttrIndex ( const char * sName ) const
 	if ( !sName )
 		return -1;
 
-	if ( m_pAttrs )
+	if ( m_dAttrs.GetLength()>=HASH_THRESH )
 	{
-		int * p = (*m_pAttrs) ( sName );
-		if ( p )
-		{
-			assert ( *p>=0 && *p<m_dAttrs.GetLength() );
-			return *p;
-		}
+		DWORD uCrc = sphCRC32 ( (const BYTE*)sName );
+		DWORD uPos = m_dBuckets [ uCrc%BUCKET_COUNT ];
+		while ( uPos!=0xffff && m_dAttrs [ uPos ].m_sName!=sName )
+			uPos = m_dAttrs [ uPos ].m_uNext;
+
+		return (short)uPos; // 0xffff == -1 is our "end of list" marker
 	}
 
 	ARRAY_FOREACH ( i, m_dAttrs )
@@ -6561,7 +6541,8 @@ void CSphSchema::Reset ()
 void CSphSchema::ResetAttrs ()
 {
 	m_dAttrs.Reset();
-	SafeDelete ( m_pAttrs );
+	for ( int i=0; i<BUCKET_COUNT; i++ )
+		m_dBuckets[i] = 0xffff;
 	m_dStaticUsed.Reset();
 	m_dDynamicUsed.Reset();
 	m_dPtrAttrs.Reset();
@@ -6576,12 +6557,18 @@ void CSphSchema::AddAttr ( const CSphColumnInfo & tCol, bool bDynamic )
 	if ( tCol.m_eAttrType==SPH_ATTR_NONE )
 		return;
 
-	if ( m_dAttrs.GetLength()==HASH_THRESH )
-		UpdateHash();
 	m_dAttrs.Add ( tCol );
 	CSphAttrLocator & tLoc = m_dAttrs.Last().m_tLocator;
-	if ( m_pAttrs )
-		m_pAttrs->Add ( m_dAttrs.GetLength()-1, m_dAttrs.Last().m_sName );
+
+	// hash add
+	if ( m_dAttrs.GetLength()==HASH_THRESH )
+		RebuildHash();
+	else if ( m_dAttrs.GetLength()>HASH_THRESH )
+	{
+		WORD & uPos = GetBucketPos ( m_dAttrs.Last().m_sName.cstr() );
+		m_dAttrs.Last().m_uNext = uPos;
+		uPos = ( m_dAttrs.GetLength()-1 );
+	}
 
 	if ( tLoc.IsID() )
 		return;
@@ -6661,14 +6648,18 @@ void CSphSchema::RemoveAttr ( int iIndex )
 			m_iStaticSize--;
 	}
 
-	// do remove
-	if ( m_pAttrs )
+	// hash delete
+	if ( m_dAttrs.GetLength()>HASH_THRESH )
 	{
-		for ( int i=iIndex+1 ;i<m_dAttrs.GetLength(); i++ )
-			(*m_pAttrs) [ m_dAttrs[i].m_sName ]--;
-		m_pAttrs->Delete ( m_dAttrs [ iIndex ].m_sName );
+		WORD & uPos = GetBucketPos ( m_dAttrs [ iIndex ].m_sName.cstr() );
+		while ( m_dAttrs [ uPos ].m_sName!=m_dAttrs [ iIndex ].m_sName )
+			uPos = m_dAttrs [ uPos ].m_uNext;
+		uPos = m_dAttrs [ uPos ].m_uNext;
 	}
+
 	m_dAttrs.Remove ( iIndex );
+
+	UpdateHash ( iIndex, -1 );
 
 	ARRAY_FOREACH ( i, m_dPtrAttrs )
 		if ( m_dPtrAttrs[i].m_iOffset==iItem )
@@ -6705,20 +6696,6 @@ void CSphSchema::AdoptPtrAttrs ( const CSphSchema & tSrc )
 {
 	FixupPtrAttrs ( tSrc.m_dPtrAttrs, m_dAttrs, m_dPtrAttrs );
 	FixupPtrAttrs ( tSrc.m_dFactorAttrs, m_dAttrs, m_dFactorAttrs );
-}
-
-
-void CSphSchema::UpdateHash()
-{
-	if ( !m_pAttrs && m_dAttrs.GetLength()<HASH_THRESH )
-		return;
-
-	if ( !m_pAttrs )
-		m_pAttrs = new SmallStringHash_T<int>();
-
-	m_pAttrs->Reset();
-	ARRAY_FOREACH ( i, m_dAttrs )
-		m_pAttrs->Add ( i, m_dAttrs[i].m_sName );
 }
 
 
@@ -6852,6 +6829,42 @@ void CSphSchema::FreeStringPtrs ( CSphMatch * pMatch, int iLowBound, int iUpBoun
 			*(BYTE**)(pMatch->m_pDynamic+iOffset) = NULL;
 		}
 	}
+}
+
+WORD & CSphSchema::GetBucketPos ( const char * sName )
+{
+	DWORD uCrc = sphCRC32 ( (const BYTE*)sName );
+
+	return m_dBuckets [ uCrc % BUCKET_COUNT ];
+}
+
+void CSphSchema::RebuildHash ()
+{
+	if ( m_dAttrs.GetLength()<HASH_THRESH )
+		return;
+
+	for ( int i=0; i<BUCKET_COUNT; i++ )
+		m_dBuckets[i] = 0xffff;
+
+	ARRAY_FOREACH ( i, m_dAttrs )
+	{
+		WORD & uPos = GetBucketPos ( m_dAttrs[i].m_sName.cstr() );
+		m_dAttrs[i].m_uNext = uPos;
+		uPos = i;
+	}
+}
+
+void CSphSchema::UpdateHash ( int iStartIndex, int iAddVal )
+{
+	if ( m_dAttrs.GetLength()<HASH_THRESH )
+		return;
+
+	ARRAY_FOREACH ( i, m_dAttrs )
+		if ( m_dAttrs[i].m_uNext>iStartIndex )
+			m_dAttrs[i].m_uNext += iAddVal;
+	for ( int i=0; i<BUCKET_COUNT; i++ )
+		if ( m_dBuckets[i]!=0xffff && m_dBuckets[i]>iStartIndex )
+			m_dBuckets[i] += iAddVal;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

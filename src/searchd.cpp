@@ -2699,6 +2699,8 @@ public:
 #endif
 
 	bool		SendString ( const char * sStr );
+
+	bool		SendMysqlInt ( int iVal );
 	bool		SendMysqlString ( const char * sStr );
 
 	bool		Flush ( bool bUnfreeze=false );
@@ -2841,16 +2843,22 @@ bool NetOutputBuffer_c::SendString ( const char * sStr )
 }
 
 
+int MysqlPackedLen ( int iLen )
+{
+	if ( iLen<251 )
+		return 1;
+	if ( iLen<=0xffff )
+		return 3;
+	if ( iLen<=0xffffff )
+		return 4;
+	return 9;
+}
+
+
 int MysqlPackedLen ( const char * sStr )
 {
 	int iLen = strlen(sStr);
-	if ( iLen<251 )
-		return 1 + iLen;
-	if ( iLen<=0xffff )
-		return 3 + iLen;
-	if ( iLen<=0xffffff )
-		return 4 + iLen;
-	return 9 + iLen;
+	return MysqlPackedLen ( iLen ) + iLen;
 }
 
 
@@ -2927,6 +2935,16 @@ int MysqlUnpack ( InputBuffer_c & tReq, DWORD * pSize )
 	tReq.GetByte();
 	*pSize -= 8;
 	return iRes;
+}
+
+
+bool NetOutputBuffer_c::SendMysqlInt ( int iVal )
+{
+	if ( m_bError )
+		return false;
+	BYTE dBuf[12];
+	BYTE * pBuf = (BYTE*) MysqlPack ( dBuf, iVal );
+	return SendBytes ( dBuf, (int)( pBuf-dBuf ) );
 }
 
 
@@ -7887,13 +7905,18 @@ public:
 
 	inline void RemoveAttrPlain ( int iIdx )
 	{
-		if ( m_pAttrs )
+		// hash delete
+		if ( m_dAttrs.GetLength()>HASH_THRESH )
 		{
-			for ( int i=iIdx+1; i<m_dAttrs.GetLength(); i++ )
-				(*m_pAttrs) [ m_dAttrs[i].m_sName ]--;
-			m_pAttrs->Delete ( m_dAttrs [ iIdx ].m_sName );
+			WORD & uPos = GetBucketPos ( m_dAttrs [ iIdx ].m_sName.cstr() );
+			while ( m_dAttrs [ uPos ].m_sName!=m_dAttrs [ iIdx ].m_sName )
+				uPos = m_dAttrs [ uPos ].m_uNext;
+			uPos = m_dAttrs [ uPos ].m_uNext;
 		}
+
 		m_dAttrs.Remove ( iIdx );
+
+		UpdateHash ( iIdx, -1 );
 	}
 
 	inline void AlignSizes ( const CSphSchema& tProof )
@@ -7904,15 +7927,18 @@ public:
 
 	void InsertAttr ( int iIdx, const CSphColumnInfo & tCol )
 	{
-		if ( m_dAttrs.GetLength()==HASH_THRESH )
-			UpdateHash();
+		UpdateHash ( iIdx-1, 1 );
 
 		m_dAttrs.Insert ( iIdx, tCol );
-		if ( m_pAttrs )
+
+		// hash add
+		if ( m_dAttrs.GetLength()==HASH_THRESH )
+			RebuildHash();
+		else if ( m_dAttrs.GetLength()>HASH_THRESH )
 		{
-			m_pAttrs->Add ( iIdx, m_dAttrs [ iIdx ].m_sName );
-			for ( int i=iIdx+1; i<m_dAttrs.GetLength(); i++ )
-				(*m_pAttrs) [ m_dAttrs[i].m_sName ]++;
+			WORD & uPos = GetBucketPos ( m_dAttrs [ iIdx ].m_sName.cstr() );
+			m_dAttrs [ iIdx ].m_uNext = uPos;
+			uPos = iIdx;
 		}
 	}
 };
@@ -8328,6 +8354,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	// truly virtual schema for final result returning
 	CVirtualSchema tFrontendSchema;
 	CSphColumnInfo tEmpty;
+	tEmpty.m_sName = "";
 	// beware of incorrect hash inside of tFrontendSchema!
 	ARRAY_FOREACH ( i, (*pSelectItems) )
 		tFrontendSchema.InsertAttr ( i, tEmpty );
@@ -8353,7 +8380,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 							dKnownItems.Add(j);
 							++iKnownItems;
 						}
-					tFrontendSchema.UpdateHash();
+					tFrontendSchema.RebuildHash();
 					if ( tFrontendSchema.GetAttr ( tCol.m_sName.cstr() )==NULL )
 					{
 						CSphColumnInfo tItem;
@@ -8446,7 +8473,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		bAllEqual &= ( tRes.m_tSchema.GetAttrsCount()==tInternalSchema.GetAttrsCount() );
 	}
 
-	tFrontendSchema.UpdateHash();
+	tFrontendSchema.RebuildHash();
 
 	// check if we actually have all required columns already
 	if ( iKnownItems<pSelectItems->GetLength() )
@@ -11116,6 +11143,7 @@ public:
 		{
 			case SPH_ATTR_INTEGER:
 			case SPH_ATTR_TIMESTAMP:
+			case SPH_ATTR_BOOL:
 				CSphMatch::SetAttr ( tLoc, ToInt(tVal) );
 				break;
 			case SPH_ATTR_BIGINT:
@@ -13951,8 +13979,8 @@ public:
 	// Header of the table with defined num of columns
 	inline void HeadBegin ( int iColumns )
 	{
-		m_tOut.SendLSBDword ( ((m_uPacketID++)<<24) + 2 );
-		m_tOut.SendByte ( (BYTE)iColumns ); // colunn count
+		m_tOut.SendLSBDword ( ((m_uPacketID++)<<24) + MysqlPackedLen ( iColumns ) + 1 );
+		m_tOut.SendMysqlInt ( iColumns );
 		m_tOut.SendByte ( 0 ); // extra
 		m_iSize = iColumns;
 	}
@@ -15172,14 +15200,6 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 		iAttrsCount = iSchemaAttrsCount;
 		if ( g_bCompatResults )
 			iAttrsCount += 2;
-	}
-	if ( iAttrsCount>=251 )
-	{
-		// this will show up as success in query log, as the query itself was ok
-		// but we need some kind of a notice anyway, to nail down issues based on logs only
-		sphWarning ( "selecting more than 250 columns is not supported yet" );
-		dRows.Error ( NULL, "selecting more than 250 columns is not supported yet" );
-		return;
 	}
 
 	// result set header packet. We will attach EOF manually at the end.
@@ -21538,8 +21558,6 @@ int main ( int argc, char **argv )
 
 	return ServiceMain ( argc, argv );
 }
-
-
 
 //
 // $Id$

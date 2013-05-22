@@ -630,7 +630,8 @@ struct Expr_Crc32_c : public Expr_Unary_c
 	virtual int IntEval ( const CSphMatch & tMatch ) const
 	{
 		const BYTE * pStr;
-		return sphCRC32 ( pStr, m_pFirst->StringEval ( tMatch, &pStr ) );
+		int iLen = m_pFirst->StringEval ( tMatch, &pStr );
+		return sphCRC32 ( pStr, iLen );
 	}
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return IntEval ( tMatch ); }
 };

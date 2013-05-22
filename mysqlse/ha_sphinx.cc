@@ -303,7 +303,11 @@ struct CSphSEShare
 	bool			m_bSphinxQL;	///< is this read-only SphinxAPI table, or write-only SphinxQL table?
 	uint			m_iTableNameLen;
 	uint			m_iUseCount;
+#if MYSQL_VERSION_ID<50610
 	CHARSET_INFO *	m_pTableQueryCharset;
+#else	
+	const CHARSET_INFO *	m_pTableQueryCharset;
+#endif	
 
 	int					m_iTableFields;
 	char **				m_sTableField;
@@ -432,7 +436,11 @@ struct CSphSEThreadData
 	bool				m_bQuery;
 	char				m_sQuery[MAX_QUERY_LEN];
 
+#if MYSQL_VERSION_ID<50610
 	CHARSET_INFO *		m_pQueryCharset;
+#else
+	const CHARSET_INFO *		m_pQueryCharset;
+#endif	
 
 	bool				m_bReplace;		///< are we doing an INSERT or REPLACE
 
@@ -2669,12 +2677,16 @@ bool ha_sphinx::UnpackStats ( CSphSEStats * pStats )
 
 
 /// condition pushdown implementation, to properly intercept WHERE clauses on my columns
+#if MYSQL_VERSION_ID<50610
 const COND * ha_sphinx::cond_push ( const COND * cond )
+#else
+const Item * ha_sphinx::cond_push ( const Item *cond )
+#endif
 {
 	// catch the simplest case: query_column="some text"
 	for ( ;; )
 	{
-		if ( cond->type()!=COND::FUNC_ITEM )
+		if ( cond->type()!=Item::FUNC_ITEM )
 			break;
 
 		Item_func * condf = (Item_func *)cond;
@@ -2690,7 +2702,7 @@ const COND * ha_sphinx::cond_push ( const COND * cond )
 		if ( !m_pShare->m_bSphinxQL )
 		{
 			// on non-QL tables, intercept query=value condition for SELECT
-			if (!( args[0]->type()==COND::FIELD_ITEM && args[1]->type()==COND::STRING_ITEM ))
+			if (!( args[0]->type()==Item::FIELD_ITEM && args[1]->type()==Item::STRING_ITEM ))
 				break;
 
 			Item_field * pField = (Item_field *) args[0];
@@ -2706,7 +2718,7 @@ const COND * ha_sphinx::cond_push ( const COND * cond )
 
 		} else
 		{
-			if (!( args[0]->type()==COND::FIELD_ITEM && args[1]->type()==COND::INT_ITEM ))
+			if (!( args[0]->type()==Item::FIELD_ITEM && args[1]->type()==Item::INT_ITEM ))
 				break;
 
 			// on QL tables, intercept id=value condition for DELETE
@@ -3295,6 +3307,9 @@ ha_rows ha_sphinx::records_in_range ( uint, key_range *, key_range * )
 	SPH_RET(3); // low number to force index usage
 }
 
+#if MYSQL_VERSION_ID < 50610
+#define user_defined_key_parts key_parts
+#endif
 
 // create() is called to create a database. The variable name will have the name
 // of the table. When create() is called you do not need to worry about opening
@@ -3363,7 +3378,7 @@ int ha_sphinx::create ( const char * name, TABLE * table, HA_CREATE_INFO * )
 		// check index
 		if (
 			table->s->keys!=1 ||
-			table->key_info[0].key_parts!=1 ||
+			table->key_info[0].user_defined_key_parts!=1 ||
 			strcasecmp ( table->key_info[0].key_part[0].field->field_name, table->field[2]->field_name ) )
 		{
 			my_snprintf ( sError, sizeof(sError), "%s: there must be an index on '%s' column",
@@ -3397,7 +3412,7 @@ int ha_sphinx::create ( const char * name, TABLE * table, HA_CREATE_INFO * )
 		// check index
 		if (
 			table->s->keys!=1 ||
-			table->key_info[0].key_parts!=1 ||
+			table->key_info[0].user_defined_key_parts!=1 ||
 			strcasecmp ( table->key_info[0].key_part[0].field->field_name, "id" ) )
 		{
 			my_snprintf ( sError, sizeof(sError), "%s: 'id' column must be indexed", name );

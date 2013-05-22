@@ -3169,7 +3169,7 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSe
 	tMvaWriter.OpenFile ( sName.cstr(), sError );
 	tMvaWriter.PutDword ( 0 ); // dummy dword, to reserve magic zero offset
 
-	DOCID iMinDocID = DOCID_MAX;
+	DOCID iMinDocID = DOCID(-1); // DOCID_MAX works but id64 builds result in a compiler warning
 	CSphRowitem * pFixedRow = new CSphRowitem[iStride];
 
 #ifndef NDEBUG

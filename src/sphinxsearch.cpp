@@ -6623,7 +6623,7 @@ void FactorPool_c::Flush()
 
 inline DWORD FactorPool_c::HashFunc ( SphDocID_t iId ) const
 {
-	return iId % m_dHash.GetLength();
+	return (int)( iId % m_dHash.GetLength() );
 }
 
 

@@ -6224,54 +6224,42 @@ void ParseIndexList ( const CSphString & sIndexes, CSphVector<CSphString> & dOut
 
 void CheckQuery ( const CSphQuery & tQuery, CSphString & sError )
 {
+	#define LOC_ERROR1(_msg,_arg1) { sError.SetSprintf ( _msg, _arg1 ); return; }
+	#define LOC_ERROR2(_msg,_arg1,_arg2) { sError.SetSprintf ( _msg, _arg1, _arg2 ); return; }
+
 	sError = NULL;
+
 	if ( tQuery.m_eMode<0 || tQuery.m_eMode>SPH_MATCH_TOTAL )
-	{
-		sError.SetSprintf ( "invalid match mode %d", tQuery.m_eMode );
-		return;
-	}
+		LOC_ERROR1 ( "invalid match mode %d", tQuery.m_eMode );
+
 	if ( tQuery.m_eRanker<0 || tQuery.m_eRanker>SPH_RANK_TOTAL )
-	{
-		sError.SetSprintf ( "invalid ranking mode %d", tQuery.m_eRanker );
-		return;
-	}
+		LOC_ERROR1 ( "invalid ranking mode %d", tQuery.m_eRanker );
+
 	if ( tQuery.m_iMaxMatches<1 || tQuery.m_iMaxMatches>g_iMaxMatches )
-	{
-		sError.SetSprintf ( "per-query max_matches=%d out of bounds (per-server max_matches=%d)",
+		LOC_ERROR2 ( "per-query max_matches=%d out of bounds (per-server max_matches=%d)",
 			tQuery.m_iMaxMatches, g_iMaxMatches );
-		return;
-	}
+
 	if ( tQuery.m_iOffset<0 || tQuery.m_iOffset>=tQuery.m_iMaxMatches )
-	{
-		sError.SetSprintf ( "offset out of bounds (offset=%d, max_matches=%d)",
+		LOC_ERROR2 ( "offset out of bounds (offset=%d, max_matches=%d)",
 			tQuery.m_iOffset, tQuery.m_iMaxMatches );
-		return;
-	}
+
 	if ( tQuery.m_iLimit<0 )
-	{
-		sError.SetSprintf ( "limit out of bounds (limit=%d)", tQuery.m_iLimit );
-		return;
-	}
+		LOC_ERROR1 ( "limit out of bounds (limit=%d)", tQuery.m_iLimit );
+
 	if ( tQuery.m_iCutoff<0 )
-	{
-		sError.SetSprintf ( "cutoff out of bounds (cutoff=%d)", tQuery.m_iCutoff );
-		return;
-	}
+		LOC_ERROR1 ( "cutoff out of bounds (cutoff=%d)", tQuery.m_iCutoff );
+
 	if ( tQuery.m_iRetryCount<0 || tQuery.m_iRetryCount>MAX_RETRY_COUNT )
-	{
-		sError.SetSprintf ( "retry count out of bounds (count=%d)", tQuery.m_iRetryCount );
-		return;
-	}
+		LOC_ERROR1 ( "retry count out of bounds (count=%d)", tQuery.m_iRetryCount );
+
 	if ( tQuery.m_iRetryDelay<0 || tQuery.m_iRetryDelay>MAX_RETRY_DELAY )
-	{
-		sError.SetSprintf ( "retry delay out of bounds (delay=%d)", tQuery.m_iRetryDelay );
-		return;
-	}
+		LOC_ERROR1 ( "retry delay out of bounds (delay=%d)", tQuery.m_iRetryDelay );
+
 	if ( tQuery.m_iOffset>0 && tQuery.m_bHasOuter )
-	{
-		sError.SetSprintf ( "inner offset must be 0 when using outer order by" );
-		return;
-	}
+		LOC_ERROR1 ( "inner offset must be 0 when using outer order by (offset=%d)", tQuery.m_iOffset );
+
+	#undef LOC_ERROR1
+	#undef LOC_ERROR2
 }
 
 
@@ -13415,7 +13403,7 @@ void HandleCommandStatus ( int iSock, int iVer, InputBuffer_c & tReq )
 		return;
 	}
 
-	bool bGlobalStat = tReq.GetDword ();
+	bool bGlobalStat = tReq.GetDword ()!=0;
 
 	VectorLike dStatus;
 

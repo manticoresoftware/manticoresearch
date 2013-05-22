@@ -20,8 +20,12 @@
 #include <time.h>
 
 #if USE_WINDOWS
-#include <io.h> // for setmode on windows
+#include <io.h> // for setmode(). open() on windows
+#define sphSeek		_lseeki64
+#else
+#define sphSeek		lseek
 #endif
+
 
 void StripStdin ( const char * sIndexAttrs, const char * sRemoveElements )
 {
@@ -176,13 +180,6 @@ void CharsetFold ( CSphIndex * pIndex, FILE * fp )
 }
 
 //////////////////////////////////////////////////////////////////////////
-
-#if USE_WINDOWS
-#include <io.h> // for open()
-#define sphSeek		_lseeki64
-#else
-#define sphSeek		lseek
-#endif
 
 bool FixupFiles ( const CSphVector<CSphString> & dFiles, CSphString & sError )
 {

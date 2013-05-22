@@ -387,7 +387,7 @@ struct Expr_GetPackedFactors_c : public ISphStringExpr
 		if ( !m_pHash || !m_pHash->GetLength() )
 			return NULL;
 
-		SphFactorHashEntry_t * pEntry = (*m_pHash)[tMatch.m_iDocID % m_pHash->GetLength()];
+		SphFactorHashEntry_t * pEntry = (*m_pHash)[ (int)( tMatch.m_iDocID % m_pHash->GetLength() ) ];
 		assert ( pEntry );
 
 		while ( pEntry && pEntry->m_iId!=tMatch.m_iDocID )
@@ -442,7 +442,7 @@ struct Expr_BM25F_c : public ISphExpr
 		if ( !m_pHash || !m_pHash->GetLength() )
 			return 0.0f;
 
-		SphFactorHashEntry_t * pEntry = (*m_pHash)[tMatch.m_iDocID % m_pHash->GetLength()];
+		SphFactorHashEntry_t * pEntry = (*m_pHash)[ (int)( tMatch.m_iDocID % m_pHash->GetLength() ) ];
 		assert ( pEntry );
 
 		while ( pEntry && pEntry->m_iId!=tMatch.m_iDocID )

@@ -6867,6 +6867,24 @@ void CSphSchema::UpdateHash ( int iStartIndex, int iAddVal )
 			m_dBuckets[i] += iAddVal;
 }
 
+void CSphSchema::Swap ( CSphSchema & rhs )
+{
+	::Swap ( m_sName, rhs.m_sName );
+	m_dFields.SwapData ( rhs.m_dFields );
+	m_dAttrs.SwapData ( rhs.m_dAttrs );
+	m_dStaticUsed.SwapData ( rhs.m_dStaticUsed );
+	m_dDynamicUsed.SwapData ( rhs.m_dDynamicUsed );
+	::Swap ( m_iStaticSize, rhs.m_iStaticSize );
+
+	WORD dTmp [ BUCKET_COUNT ];
+	memcpy ( dTmp, m_dBuckets, sizeof(dTmp) );
+	memcpy ( m_dBuckets, rhs.m_dBuckets, sizeof(m_dBuckets) );
+	memcpy ( rhs.m_dBuckets, dTmp, sizeof(rhs.m_dBuckets) );
+
+	m_dPtrAttrs.SwapData ( rhs.m_dPtrAttrs );
+	m_dFactorAttrs.SwapData ( rhs.m_dFactorAttrs );
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // BIT-ENCODED FILE OUTPUT
 ///////////////////////////////////////////////////////////////////////////////
@@ -14983,9 +15001,9 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	tCtx.SetStringPool ( m_pStrings.GetWritePtr() );
 
 	// setup filters
-	if ( !tCtx.CreateFilters ( true, &pQuery->m_dFilters, pResult->m_tSchema, GetMVAPool(), m_pStrings.GetWritePtr(), pResult->m_sError ) )
+	if ( !tCtx.CreateFilters ( true, &pQuery->m_dFilters, ppSorters[iMaxSchemaIndex]->GetSchema(), GetMVAPool(), m_pStrings.GetWritePtr(), pResult->m_sError ) )
 		return false;
-	if ( !tCtx.CreateFilters ( true, pExtraFilters, pResult->m_tSchema, GetMVAPool(), m_pStrings.GetWritePtr(), pResult->m_sError ) )
+	if ( !tCtx.CreateFilters ( true, pExtraFilters, ppSorters[iMaxSchemaIndex]->GetSchema(), GetMVAPool(), m_pStrings.GetWritePtr(), pResult->m_sError ) )
 		return false;
 
 	// check if we can early reject the whole index
@@ -15014,14 +15032,14 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	}
 
 	// setup overrides
-	if ( !tCtx.SetupOverrides ( pQuery, pResult, m_tSchema ) )
+	if ( !tCtx.SetupOverrides ( pQuery, pResult, m_tSchema, ppSorters[iMaxSchemaIndex]->GetSchema() ) )
 		return false;
 
 	// prepare to work them rows
 	bool bRandomize = ppSorters[0]->m_bRandomize;
 
 	CSphMatch tMatch;
-	tMatch.Reset ( pResult->m_tSchema.GetDynamicSize() );
+	tMatch.Reset ( ppSorters[iMaxSchemaIndex]->GetSchema().GetDynamicSize() );
 	tMatch.m_iWeight = iIndexWeight;
 	tMatch.m_iTag = tCtx.m_dCalcFinal.GetLength() ? -1 : iTag;
 
@@ -16735,7 +16753,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const CSphSchema &
 							sphDumpAttr(tIn).cstr(), sphDumpAttr(*pMy).cstr() );
 						return false;
 					}
-				}
+					}
 				break;
 			}
 
@@ -16780,7 +16798,6 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const CSphSchema &
 	}
 
 	// ok, we can emit matches in this schema (incoming for sorter, outgoing for index/searcher)
-	pResult->m_tSchema = tInSchema;
 	return true;
 }
 
@@ -17004,7 +17021,7 @@ bool CSphQueryContext::CreateFilters ( bool bFullscan,
 }
 
 
-bool CSphQueryContext::SetupOverrides ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema )
+bool CSphQueryContext::SetupOverrides ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema, const CSphSchema & tOutgoingSchema )
 {
 	m_pOverrides = NULL;
 	m_dOverrideIn.Resize ( pQuery->m_dOverrides.GetLength() );
@@ -17027,7 +17044,7 @@ bool CSphQueryContext::SetupOverrides ( const CSphQuery * pQuery, CSphQueryResul
 			return false;
 		}
 
-		const CSphColumnInfo * pOutCol = pResult->m_tSchema.GetAttr ( pQuery->m_dOverrides[i].m_sAttr.cstr() );
+		const CSphColumnInfo * pOutCol = tOutgoingSchema.GetAttr ( pQuery->m_dOverrides[i].m_sAttr.cstr() );
 		if ( !pOutCol )
 		{
 			pResult->m_sError.SetSprintf ( "attribute override: unknown attribute name '%s' in outgoing schema", sAttr );
@@ -18207,7 +18224,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 		tTermSetup.m_iInlineRowitems = m_tSchema.GetRowSize();
 		tTermSetup.m_pMinRow = m_dMinRow.Begin();
 	}
-	tTermSetup.m_iDynamicRowitems = pResult->m_tSchema.GetDynamicSize();
+	tTermSetup.m_iDynamicRowitems = ppSorters[iMaxSchemaIndex]->GetSchema().GetDynamicSize();
 
 	if ( pQuery->m_uMaxQueryMsec>0 )
 		tTermSetup.m_iMaxTimer = sphMicroTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
@@ -18257,9 +18274,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	assert ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN || !m_pDocinfo.IsEmpty() ); // check that docinfo is preloaded
 
 	// setup filters
-	if ( !tCtx.CreateFilters ( pQuery->m_sQuery.IsEmpty(), &pQuery->m_dFilters, pResult->m_tSchema, GetMVAPool(), m_pStrings.GetWritePtr(), pResult->m_sError ) )
+	if ( !tCtx.CreateFilters ( pQuery->m_sQuery.IsEmpty(), &pQuery->m_dFilters, ppSorters[iMaxSchemaIndex]->GetSchema(), GetMVAPool(), m_pStrings.GetWritePtr(), pResult->m_sError ) )
 		return false;
-	if ( !tCtx.CreateFilters ( pQuery->m_sQuery.IsEmpty(), pExtraFilters, pResult->m_tSchema, GetMVAPool(), m_pStrings.GetWritePtr(), pResult->m_sError ) )
+	if ( !tCtx.CreateFilters ( pQuery->m_sQuery.IsEmpty(), pExtraFilters, ppSorters[iMaxSchemaIndex]->GetSchema(), GetMVAPool(), m_pStrings.GetWritePtr(), pResult->m_sError ) )
 		return false;
 
 	// check if we can early reject the whole index
@@ -18294,7 +18311,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	}
 
 	// setup overrides
-	if ( !tCtx.SetupOverrides ( pQuery, pResult, m_tSchema ) )
+	if ( !tCtx.SetupOverrides ( pQuery, pResult, m_tSchema, ppSorters[iMaxSchemaIndex]->GetSchema() ) )
 		return false;
 
 	//////////////////////////////////////

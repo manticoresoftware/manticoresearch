@@ -114,27 +114,27 @@ You have gone away'));]]></db_insert>
 
 
 <queries>
-<query mode="extended2">one SENTENCE two</query>
-<query mode="extended2">one SENTENCE two three</query>
-<query mode="extended2">one SENTENCE two SENTENCE three</query>
-<query mode="extended2">"one two" SENTENCE three</query>
-<query mode="extended2">zam SENTENCE ram</query>
+<query mode="extended2" index="test">one SENTENCE two</query>
+<query mode="extended2" index="test">one SENTENCE two three</query>
+<query mode="extended2" index="test">one SENTENCE two SENTENCE three</query>
+<query mode="extended2" index="test">"one two" SENTENCE three</query>
+<query mode="extended2" index="test">zam SENTENCE ram</query>
 
-<query mode="extended2">fox PARAGRAPH dog</query>
-<query mode="extended2">sentence SENTENCE paragraph</query>
-<query mode="extended2">sentence PARAGRAPH paragraph</query>
+<query mode="extended2" index="test">fox PARAGRAPH dog</query>
+<query mode="extended2" index="test">sentence SENTENCE paragraph</query>
+<query mode="extended2" index="test">sentence PARAGRAPH paragraph</query>
 
-<query mode="extended2">ZONE:zoneA walrus</query>
-<query mode="extended2">ZONE:zoneB walrus</query>
-<query mode="extended2">ZONE:zoneA walrus time</query>
-<query mode="extended2">ZONE:zoneB walrus time</query>
-<query mode="extended2">ZONE:zoneC cabbages and kings</query>
-<query mode="extended2">ZONE:zoneC kings and ships</query>
-<query mode="extended2">ZONE:(zoneA,zoneB) sweet disagree</query>
-<query mode="extended2">"Who am I"</query>
-<query mode="extended2">"of this"</query>
-<query mode="extended2">ZONE:zoneA "like this"</query>
-<query mode="extended2">strikes</query>
+<query mode="extended2" index="test">ZONE:zoneA walrus</query>
+<query mode="extended2" index="test">ZONE:zoneB walrus</query>
+<query mode="extended2" index="test">ZONE:zoneA walrus time</query>
+<query mode="extended2" index="test">ZONE:zoneB walrus time</query>
+<query mode="extended2" index="test">ZONE:zoneC cabbages and kings</query>
+<query mode="extended2" index="test">ZONE:zoneC kings and ships</query>
+<query mode="extended2" index="test">ZONE:(zoneA,zoneB) sweet disagree</query>
+<query mode="extended2" index="test">"Who am I"</query>
+<query mode="extended2" index="test">"of this"</query>
+<query mode="extended2" index="test">ZONE:zoneA "like this"</query>
+<query mode="extended2" index="test">strikes</query>
 </queries>
 
 <sphqueries>

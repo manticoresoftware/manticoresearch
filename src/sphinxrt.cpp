@@ -6035,7 +6035,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	tTermSetup.m_pDict = pDict;
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
-	tTermSetup.m_iDynamicRowitems = pResult->m_tSchema.GetDynamicSize();
+	tTermSetup.m_iDynamicRowitems = dSorters[iMaxSchemaIndex]->GetSchema().GetDynamicSize();
 	if ( pQuery->m_uMaxQueryMsec>0 )
 		tTermSetup.m_iMaxTimer = sphMicroTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
 	tTermSetup.m_pWarning = &pResult->m_sWarning;
@@ -6132,7 +6132,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		// setup filters
 		// FIXME! setup filters MVA pool
 		bool bFullscan = ( pQuery->m_eMode==SPH_MATCH_FULLSCAN || pQuery->m_sQuery.IsEmpty() );
-		if ( !tCtx.CreateFilters ( bFullscan, &pQuery->m_dFilters, pResult->m_tSchema, NULL, NULL, pResult->m_sError ) )
+		if ( !tCtx.CreateFilters ( bFullscan, &pQuery->m_dFilters, dSorters[iMaxSchemaIndex]->GetSchema(), NULL, NULL, pResult->m_sError ) )
 		{
 			m_tRwlock.Unlock ();
 			return false;
@@ -6162,7 +6162,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			// full scan
 			// FIXME? OPTIMIZE? add shortcuts here too?
 			CSphMatch tMatch;
-			tMatch.Reset ( pResult->m_tSchema.GetDynamicSize() );
+			tMatch.Reset ( dSorters[iMaxSchemaIndex]->GetSchema().GetDynamicSize() );
 			tMatch.m_iWeight = iIndexWeight;
 
 			int iCutoff = pQuery->m_iCutoff;
@@ -6308,9 +6308,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	CSphVector<CSphAttrTypedLocator> dGetLoc;
 	CSphVector<CSphAttrLocator> dSetLoc;
 	int iJsonFields = 0;
-	for ( int i=0; i<pResult->m_tSchema.GetAttrsCount(); i++ )
+	for ( int i=0; i<dSorters[iMaxSchemaIndex]->GetSchema().GetAttrsCount(); i++ )
 	{
-		const CSphColumnInfo & tSetInfo = pResult->m_tSchema.GetAttr(i);
+		const CSphColumnInfo & tSetInfo = dSorters[iMaxSchemaIndex]->GetSchema().GetAttr(i);
 		if ( tSetInfo.m_eAttrType==SPH_ATTR_STRING || tSetInfo.m_eAttrType==SPH_ATTR_JSON
 			|| tSetInfo.m_eAttrType==SPH_ATTR_UINT32SET || tSetInfo.m_eAttrType==SPH_ATTR_INT64SET )
 		{
@@ -6326,15 +6326,15 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// put the json fields attrs at the very end (surely after all json attrs)
 	if ( iJsonFields )
 	{
-		for ( int i=0; i<pResult->m_tSchema.GetAttrsCount(); i++ )
+		for ( int i=0; i<dSorters[iMaxSchemaIndex]->GetSchema().GetAttrsCount(); i++ )
 		{
-			const CSphColumnInfo & tSetInfo = pResult->m_tSchema.GetAttr(i);
+			const CSphColumnInfo & tSetInfo = dSorters[iMaxSchemaIndex]->GetSchema().GetAttr(i);
 			if ( tSetInfo.m_eAttrType==SPH_ATTR_JSON_FIELD )
 			{
-				const int iInLocator = pResult->m_tSchema.GetAttrIndex ( tSetInfo.m_sName.cstr() );
+				const int iInLocator = dSorters[iMaxSchemaIndex]->GetSchema().GetAttrIndex ( tSetInfo.m_sName.cstr() );
 				assert ( iInLocator>=0 );
 
-				dGetLoc.Add().Set ( pResult->m_tSchema.GetAttr ( iInLocator ).m_tLocator, SPH_ATTR_JSON_FIELD );
+				dGetLoc.Add().Set ( dSorters[iMaxSchemaIndex]->GetSchema().GetAttr ( iInLocator ).m_tLocator, SPH_ATTR_JSON_FIELD );
 				dSetLoc.Add ( tSetInfo.m_tLocator );
 			}
 		}

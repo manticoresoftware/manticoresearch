@@ -1487,10 +1487,14 @@ public:
 	// free the linked strings and/or just initialize the pointers with NULL
 	void FreeStringPtrs ( CSphMatch * pMatch, int iLowBound=0, int iUpBound=-1 ) const;
 
-	// returns 0xFFFF if bucket list is empty and position otherwise
+	// returns 0xffff if bucket list is empty and position otherwise
 	WORD & GetBucketPos ( const char * sName );
 
+	// reset and add all elements
 	void RebuildHash ();
+
+	// exchange dynamic part
+	void Swap ( CSphSchema & rhs );
 
 protected:
 	CSphVector<CSphColumnInfo>		m_dAttrs;			///< all my attributes
@@ -2902,8 +2906,10 @@ public:
 	/// set string pool pointer (for string+groupby sorters)
 	virtual void		SetStringPool ( const BYTE * ) {}
 
-	/// set schemas
-	virtual void				SetSchema ( const CSphSchema & tSchema ) { m_tSchema = tSchema; }
+	/// swap schemas
+	virtual void				SetSchema ( CSphSchema & tSchema ) { SwapSchema ( tSchema ); }
+
+	virtual void				SwapSchema ( CSphSchema & tSchema ) { m_tSchema.Swap ( tSchema ); }
 
 	/// get incoming schema
 	virtual const CSphSchema &	GetSchema () const { return m_tSchema; }

@@ -7973,7 +7973,7 @@ void AdoptSchema ( AggrResult_t * pRes, CSphSchema * pSchema )
 {
 	pSchema->m_dFields = pRes->m_tSchema.m_dFields;
 	pSchema->AdoptPtrAttrs ( pRes->m_tSchema );
-	pRes->m_tSchema = *pSchema;
+	pRes->m_tSchema.Swap ( *pSchema );
 }
 
 void AdoptAliasedSchema ( AggrResult_t & tRes, CVirtualSchema * pSchema )
@@ -8318,7 +8318,6 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		AddIDAttribute ( (CVirtualSchema*) &tRes.m_tSchema );
 		return true;
 	}
-	tRes.m_tSchema = tRes.m_dSchemas[0];
 	bool bAllEqual = true;
 	bool bAgent = tQuery.m_bAgent;
 	bool bUsualApi = !( bAgent || bFromSphinxql );
@@ -9435,7 +9434,7 @@ static void FlattenToRes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, int i
 	if ( pSorter->GetLength() )
 	{
 		tRes.m_dMatchCounts.Add ( pSorter->GetLength() );
-		tRes.m_dSchemas.Add ( tRes.m_tSchema );
+		tRes.m_dSchemas.Add ( pSorter->GetSchema() );
 		PoolPtrs_t & tPoolPtrs = tRes.m_dTag2Pools[iTag];
 		assert ( !tPoolPtrs.m_pMva && !tPoolPtrs.m_pStrings );
 		tPoolPtrs.m_pMva = tRes.m_pMva;
@@ -9560,7 +9559,6 @@ void SearchHandler_c::RunLocalSearchesMT ()
 			CSphQueryResult & tRaw = dResults[iResultIndex];
 
 			tRes.m_iSuccesses++;
-			tRes.m_tSchema = pSorter->GetSchema();
 			tRes.m_iTotalMatches += pSorter->GetTotalCount();
 
 			tRes.m_pMva = tRaw.m_pMva;
@@ -9582,6 +9580,9 @@ void SearchHandler_c::RunLocalSearchesMT ()
 
 			// extract matches from sorter
 			FlattenToRes ( pSorter, tRes, iOrderTag+iQuery-m_iStart );
+
+			// take schema from sorter - it doesn't need it anymore
+			pSorter->SwapSchema ( tRes.m_tSchema );
 
 			if ( !tRaw.m_sWarning.IsEmpty() )
 				m_dFailuresSet[iQuery].Submit ( sLocal, tRaw.m_sWarning.cstr() );
@@ -9852,7 +9853,9 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 				}
 
 				tRes.m_iSuccesses++;
-				tRes.m_tSchema = pSorter->GetSchema();
+				// lets do this schema copy just once
+				if ( tRes.m_iSuccesses==1 )
+					tRes.m_tSchema = pSorter->GetSchema();
 				tRes.m_iTotalMatches += pSorter->GetTotalCount();
 				tRes.m_iPredictedTime = tRes.m_bHasPrediction ? CalcPredictedTimeMsec ( tRes ) : 0;
 
@@ -10269,6 +10272,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 						AggrResult_t & tRes = m_dResults[iRes];
 						tRes.m_iSuccesses++;
+						// copy scheme once
+						if ( tRes.m_iSuccesses==1 )
+							tRes.m_tSchema = tRemoteResult.m_tSchema;
 
 						assert ( !tRes.m_dTag2Pools[iOrderTag + iRes - iStart].m_pMva && !tRes.m_dTag2Pools[iOrderTag + iRes - iStart].m_pStrings );
 
@@ -10368,8 +10374,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		}
 
 		// minimize schema and remove dupes
-		if ( tRes.m_dSchemas.GetLength() )
-			tRes.m_tSchema = tRes.m_dSchemas[0];
+		assert ( tRes.m_tSchema==tRes.m_dSchemas[0] );
 		if ( tRes.m_iSuccesses>1 || tQuery.m_dItems.GetLength() )
 		{
 			if ( g_bCompatResults && !tQuery.m_bAgent )

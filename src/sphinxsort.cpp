@@ -1556,9 +1556,9 @@ public:
 	}
 
 	/// schema setup
-	virtual void SetSchema ( const CSphSchema & tSchema )
+	virtual void SetSchema ( CSphSchema & tSchema )
 	{
-		m_tSchema = tSchema;
+		SwapSchema ( tSchema );
 		m_tGroupSorter.m_pCloner = &m_tSchema;
 
 		bool bAggrStarted = false;
@@ -2438,9 +2438,9 @@ public:
 	}
 
 	/// schema setup
-	virtual void SetSchema ( const CSphSchema & tSchema )
+	virtual void SetSchema ( CSphSchema & tSchema )
 	{
-		m_tSchema = tSchema;
+		SwapSchema ( tSchema );
 
 		bool bAggrStarted = false;
 		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )

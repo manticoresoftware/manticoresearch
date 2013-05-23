@@ -53,7 +53,7 @@ void	stem_dmetaphone ( BYTE * pWord, bool bUTF8 );
 void	sphAotSetCacheSize ( int iCacheSize );
 
 // simple order aot languages
-enum AOT_LANGS {AOT_BEGIN=0,AOT_RU=AOT_BEGIN,AOT_EN,AOT_LENGTH};
+enum AOT_LANGS {AOT_BEGIN=0,AOT_RU=AOT_BEGIN,AOT_EN,AOT_DE,AOT_LENGTH};
 
 // aot lemmatize names
 extern const char* AOT_LANGUAGES [AOT_LENGTH];
@@ -68,12 +68,19 @@ void	sphAotLemmatizeRu1251 ( BYTE * pWord );
 /// lemmatize (or guess a normal form) a Russian word in UTF-8 encoding, return a single "best" lemma
 void	sphAotLemmatizeRuUTF8 ( BYTE * pWord );
 
+/// lemmatize (or guess a normal form) a German word in Windows-1252 encoding
+void	sphAotLemmatizeDe1252 ( BYTE * pWord );
+
+/// lemmatize (or guess a normal form) a German word in UTF-8 encoding, return a single "best" lemma
+void	sphAotLemmatizeDeUTF8 ( BYTE * pWord );
+
 /// lemmatize (or guess a normal form) a word in single-byte ASCII encoding, return a single "best" lemma
 void	sphAotLemmatize ( BYTE * pWord, int iLang );
 
 // functions below by design used in search time
 /// lemmatize (or guess a normal form) a Russian word, return all lemmas
 void	sphAotLemmatizeRu ( CSphVector<CSphString> & dLemmas, const BYTE * pWord, bool bUtf8 );
+void	sphAotLemmatizeDe ( CSphVector<CSphString> & dLemmas, const BYTE * pWord, bool bUtf8 );
 void	sphAotLemmatize ( CSphVector<CSphString> & dLemmas, const BYTE * pWord, int iLang );
 
 /// get lemmatizer dictionary info (file name, crc)

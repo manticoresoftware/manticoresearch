@@ -157,7 +157,7 @@ class CLemmatizer
 protected:
 	static const int			MAX_PREFIX_LEN = 12;
 	static const bool			m_bMaximalPrediction = false;
-	static const bool			m_bIsGerman = false;
+	bool						m_bIsGerman;
 
 	BYTE						m_UC[256];
 
@@ -178,6 +178,9 @@ protected:
 	void						PredictByDataBase ( const BYTE * pWord, int iLen, DWORD * results, bool is_cap ) const;
 
 public:
+	explicit CLemmatizer ( bool IsGerman = false )
+		: m_bIsGerman ( IsGerman )
+	{}
 	CSphVector<CFlexiaModel>	m_FlexiaModels;			///< flexia models
 	int							m_iLang;					///< my language
 
@@ -650,7 +653,7 @@ bool CLemmatizer::LoadPak ( CSphReader & rd )
 // SPHINX MORPHOLOGY INTERFACE
 //////////////////////////////////////////////////////////////////////////
 
-const char* AOT_LANGUAGES[AOT_LENGTH] = {"ru", "en" };
+const char* AOT_LANGUAGES[AOT_LENGTH] = {"ru", "en", "de" };
 
 static CLemmatizer *	g_pLemmatizers[AOT_LENGTH] = {0};
 static CSphNamedInt		g_tDictinfos[AOT_LENGTH];
@@ -669,7 +672,7 @@ bool AotInit ( const CSphString & sDictFile, CSphString & sError, int iLang )
 	if ( rdFile.Open ( sDictFile, SPH_O_READ, sError )<0 )
 		return false;
 
-	g_pLemmatizers[iLang] = new CLemmatizer ();
+	g_pLemmatizers[iLang] = new CLemmatizer ( iLang==AOT_DE );
 	g_pLemmatizers[iLang]->m_iLang = iLang;
 
 	CSphReader rd;
@@ -711,7 +714,30 @@ static inline bool IsAlpha1251 ( BYTE c )
 	return ( c>=0xC0 || c==0xA8 || c==0xB8 );
 }
 
+static inline bool IsGermanAlpha1252 ( BYTE c )
+{
+	if ( c==0xb5 || c==0xdf )
+		return true;
 
+	BYTE lc = c | 0x20;
+	switch ( lc )
+	{
+	case 0xe2:
+	case 0xe4:
+	case 0xe7:
+	case 0xe8:
+	case 0xe9:
+	case 0xea:
+	case 0xf1:
+	case 0xf4:
+	case 0xf6:
+	case 0xfb:
+	case 0xfc:
+		return true;
+	default:
+		return ( lc>0x60 && lc<0x7b );
+	}
+}
 
 static inline bool IsAlphaAscii ( BYTE c )
 {
@@ -719,7 +745,7 @@ static inline bool IsAlphaAscii ( BYTE c )
 	return ( lc>0x60 && lc<0x7b );
 }
 
-enum EMMITERS {EMIT_1BYTE, EMIT_UTF8RU};
+enum EMMITERS {EMIT_1BYTE, EMIT_UTF8RU, EMIT_UTF8};
 template < EMMITERS >
 inline BYTE * Emit ( BYTE * sOut, BYTE uChar )
 {
@@ -747,6 +773,24 @@ inline BYTE * Emit<EMIT_UTF8RU> ( BYTE * sOut, BYTE uChar )
 		*sOut++ = 0xD0;
 		*sOut++ = uChar - 0x30;
 	}
+	return sOut;
+}
+
+template<>
+inline BYTE * Emit<EMIT_UTF8> ( BYTE * sOut, BYTE uChar )
+{
+	if ( uChar=='-' )
+		return sOut;
+
+	if ( uChar!=0xDF ) // don't touch 'ss' umlaut
+		uChar |= 0x20;
+
+	if ( uChar & 0x80 )
+	{
+		*sOut++ = 0xC0 | (uChar>>6);
+		*sOut++ = 0x80 | (uChar&0x3F); // NOLINT
+	} else
+		*sOut++ = uChar;
 	return sOut;
 }
 
@@ -829,6 +873,11 @@ static inline bool IsEnFreq2 ( BYTE * )
 	return false;
 }
 
+static inline bool IsDeFreq2 ( BYTE * )
+{
+	// stub
+	return false;
+}
 
 static inline bool IsRuFreq3 ( BYTE * pWord )
 {
@@ -845,6 +894,11 @@ static inline bool IsEnFreq3 ( BYTE * )
 	return false;
 }
 
+static inline bool IsDeFreq3 ( BYTE * )
+{
+	// stub
+	return false;
+}
 
 void sphAotLemmatizeRu1251 ( BYTE * pWord )
 {
@@ -893,7 +947,7 @@ void sphAotLemmatizeRu1251 ( BYTE * pWord )
 			BYTE sBuf[256];
 			CreateLemma<EMIT_1BYTE> ( sBuf, sForm, iFormLen, bFound, M, F );
 			if ( strcmp ( (char*)sBuf, (char*)pWord )<0 )
-				strcpy ( (char*)pWord, (char*)sBuf );
+				strcpy ( (char*)pWord, (char*)sBuf ); // NOLINT
 		}
 	}
 }
@@ -909,6 +963,9 @@ void sphAotLemmatize ( BYTE * pWord, int iLang )
 
 	// handle a few most frequent 2-char, 3-char pass-through words
 	if ( iLang==AOT_EN && IsEnFreq2(pWord) || IsEnFreq3(pWord) )
+		return;
+
+	if ( iLang==AOT_DE && IsDeFreq2(pWord) || IsDeFreq3(pWord) )
 		return;
 
 	// do lemmatizing
@@ -945,7 +1002,7 @@ void sphAotLemmatize ( BYTE * pWord, int iLang )
 			BYTE sBuf[256];
 			CreateLemma<EMIT_1BYTE> ( sBuf, sForm, iFormLen, bFound, M, F );
 			if ( strcmp ( (char*)sBuf, (char*)pWord )<0 )
-				strcpy ( (char*)pWord, (char*)sBuf );
+				strcpy ( (char*)pWord, (char*)sBuf ); // NOLINT
 		}
 	}
 }
@@ -967,6 +1024,57 @@ static inline bool IsRussianAlphaUtf8 ( const BYTE * pWord )
 	return false;
 }
 
+void sphAotLemmatizeDe1252 ( BYTE * pWord )
+{
+	// i must be initialized
+	assert ( g_pLemmatizers[AOT_DE] );
+
+	// pass-through 1-char words, and non-German words
+	if ( !IsGermanAlpha1252(*pWord) || !pWord[1] )
+		return;
+
+	// handle a few most frequent 2-char, 3-char pass-through words
+	if ( IsDeFreq2(pWord) || IsDeFreq3(pWord) )
+		return;
+
+	// do lemmatizing
+	// input keyword moves into sForm; LemmatizeWord() will also case fold sForm
+	// we will generate results using sForm into pWord; so we need this extra copy
+	BYTE sForm [ SPH_MAX_WORD_LEN*3+4 ]; // aka MAX_KEYWORD_BYTES
+	int iFormLen = 0;
+
+	// faster than strlen and strcpy..
+	for ( BYTE * p=pWord; *p; )
+		sForm[iFormLen++] = *p++;
+	sForm[iFormLen] = '\0';
+
+	DWORD FindResults[12]; // max results is like 6
+	bool bFound = g_pLemmatizers[AOT_DE]->LemmatizeWord ( (BYTE*)sForm, FindResults );
+	if ( FindResults[0]==AOT_NOFORM )
+		return;
+
+	// pick a single form
+	// picks a noun, if possible, and otherwise prefers shorter forms
+	bool bNoun = false;
+	for ( int i=0; FindResults[i]!=AOT_NOFORM; i++ )
+	{
+		const CFlexiaModel & M = g_pLemmatizers[AOT_DE]->m_FlexiaModels [ AOT_MODEL_NO ( FindResults[i] ) ];
+		const CMorphForm & F = M [ AOT_ITEM_NO ( FindResults[i] ) ];
+
+		bool bNewNoun = ( F.m_POS==0 );
+		if ( i==0 || ( !bNoun && bNewNoun ) )
+		{
+			CreateLemma<EMIT_1BYTE> ( pWord, sForm, iFormLen, bFound, M, F );
+			bNoun = bNewNoun;
+		} else if ( bNoun==bNewNoun )
+		{
+			BYTE sBuf[256];
+			CreateLemma<EMIT_1BYTE> ( sBuf, sForm, iFormLen, bFound, M, F );
+			if ( strcmp ( (char*)sBuf, (char*)pWord )<0 )
+				strcpy ( (char*)pWord, (char*)sBuf ); // NOLINT
+		}
+	}
+}
 
 /// returns length in bytes (aka chars) if all letters were russian and converted
 /// returns 0 and aborts early if non-russian letters are encountered
@@ -1019,6 +1127,67 @@ static inline int Utf8ToWin1251 ( BYTE * pOut, const BYTE * pWord )
 	return (int)( pOut-pStart );
 }
 
+/// returns length in bytes (aka chars) if all letters were converted
+/// returns 0 and aborts early if non-western letters are encountered
+static inline int Utf8ToWin1252 ( BYTE * pOut, const BYTE * pWord )
+{
+	BYTE * pStart = pOut;
+	while ( *pWord )
+	{
+		if ( (*pWord)&0x80 )
+		{
+			if ( ((*pWord)&0xFC)==0xC0 )
+			{
+				*pOut++ = ( pWord[1] & 0x7F ) + ( ( pWord[0] & 3 )<<6 );
+				pWord += 2;
+			} else
+				return 0;
+		} else
+			*pOut++ = *pWord++;
+	}
+
+	*pOut = '\0';
+	return (int)( pOut-pStart );
+}
+
+static inline bool IsGermanAlphaUtf8 ( const BYTE * pWord )
+{
+	// letters, windows-1252, utf-8
+	// A..Z, trivial
+	if ( pWord[0]>0x40 && pWord[0]<0x5b )
+		return true;
+
+	// a..z, also trivial
+	if ( pWord[0]>0x60 && pWord[0]<0x7b )
+		return true;
+
+	// mu, 0xb5
+	if ( pWord[0]==0xC2 && pWord[1]==0xB5 )
+		return true;
+
+	// some upper
+	if ( pWord[0]==0xC3 )
+	{
+		if ( pWord[1]==0X9F ) // ss umlaut
+			return true;
+		switch ( pWord[1] | 0x20 )
+		{
+			case 0xA2: // umlauts
+			case 0xA4:
+			case 0xA7:
+			case 0xA8:
+			case 0xA9:
+			case 0xAa:
+			case 0xB1:
+			case 0xB4:
+			case 0xB6:
+			case 0xBb:
+			case 0xBc:
+				return true;
+		}
+	}
+	return false;
+}
 
 static inline void Win1251ToLowercaseUtf8 ( BYTE * pOut, const BYTE * pWord )
 {
@@ -1044,6 +1213,21 @@ static inline void Win1251ToLowercaseUtf8 ( BYTE * pOut, const BYTE * pWord )
 	*pOut++ = '\0';
 }
 
+static inline void Win1252ToLowercaseUtf8 ( BYTE * pOut, const BYTE * pWord )
+{
+	while ( *pWord )
+	{
+		if ( !((*pWord)&0x80) )
+			*pOut++ = *pWord | 0x20;
+		else
+		{
+			*pOut++ = 0xC0 | ((*pWord)>>6);
+			*pOut++ = 0x80 | ((*pWord)&0x3F);
+		}
+		++pWord;
+	}
+	*pOut++ = '\0';
+}
 
 void sphAotLemmatizeRuUTF8 ( BYTE * pWord )
 {
@@ -1065,6 +1249,25 @@ void sphAotLemmatizeRuUTF8 ( BYTE * pWord )
 	Win1251ToLowercaseUtf8 ( pWord, sBuf );
 }
 
+void sphAotLemmatizeDeUTF8 ( BYTE * pWord )
+{
+	// i must be initialized
+	assert ( g_pLemmatizers[AOT_DE] );
+
+	// only if the word is german
+	if ( !IsGermanAlphaUtf8(pWord) )
+		return;
+
+	// convert to Windows-1252
+	// failure means we should not lemmatize this
+	BYTE sBuf [ SPH_MAX_WORD_LEN+4 ];
+	if ( !Utf8ToWin1252 ( sBuf, pWord ) )
+		return;
+
+	// lemmatize, convert back, done!
+	sphAotLemmatizeDe1252 ( sBuf );
+	Win1252ToLowercaseUtf8 ( pWord, sBuf );
+}
 
 void sphAotLemmatizeRu ( CSphVector<CSphString> & dLemmas, const BYTE * pWord, bool bUtf8 )
 {
@@ -1119,6 +1322,58 @@ void sphAotLemmatizeRu ( CSphVector<CSphString> & dLemmas, const BYTE * pWord, b
 	dLemmas.Uniq();
 }
 
+void sphAotLemmatizeDe ( CSphVector<CSphString> & dLemmas, const BYTE * pWord, bool bUtf8 )
+{
+	assert ( g_pLemmatizers[AOT_DE] );
+	if ( bUtf8 )
+	{
+		if ( !IsGermanAlphaUtf8(pWord) )
+			return;
+	} else
+	{
+		if ( !IsGermanAlpha1252(*pWord) )
+			return;
+	}
+
+	BYTE sForm [ SPH_MAX_WORD_LEN+4 ];
+	int iFormLen = 0;
+	if ( bUtf8 )
+	{
+		iFormLen = Utf8ToWin1252 ( sForm, pWord );
+	} else
+	{
+		while ( *pWord )
+			sForm [ iFormLen++ ] = *pWord++;
+		sForm [ iFormLen ] = '\0';
+	}
+	if ( iFormLen<=1 )
+		return;
+
+	if ( IsDeFreq2(sForm) || IsDeFreq3(sForm) )
+		return;
+
+	DWORD FindResults[12]; // max results is like 6
+	bool bFound = g_pLemmatizers[AOT_DE]->LemmatizeWord ( (BYTE*)sForm, FindResults );
+	if ( FindResults[0]==AOT_NOFORM )
+		return;
+
+	for ( int i=0; FindResults[i]!=AOT_NOFORM; i++ )
+	{
+		const CFlexiaModel & M = g_pLemmatizers[AOT_DE]->m_FlexiaModels [ AOT_MODEL_NO ( FindResults[i] ) ];
+		const CMorphForm & F = M [ AOT_ITEM_NO ( FindResults[i] ) ];
+
+		BYTE sRes [ 3*SPH_MAX_WORD_LEN+4 ];
+		if ( bUtf8 )
+			CreateLemma<EMIT_UTF8> ( sRes, sForm, iFormLen, bFound, M, F );
+		else
+			CreateLemma<EMIT_1BYTE> ( sRes, sForm, iFormLen, bFound, M, F );
+
+		dLemmas.Add ( (const char*)sRes );
+	}
+
+	// OPTIMIZE?
+	dLemmas.Uniq();
+}
 
 // generic lemmatize for other languages
 void sphAotLemmatize ( CSphVector<CSphString> & dLemmas, const BYTE * pWord, int iLang )
@@ -1140,6 +1395,9 @@ void sphAotLemmatize ( CSphVector<CSphString> & dLemmas, const BYTE * pWord, int
 		return;
 
 	if ( iLang==AOT_EN && IsEnFreq2(sForm) || IsEnFreq3(sForm) )
+		return;
+
+	if ( iLang==AOT_DE && IsDeFreq2(sForm) || IsDeFreq3(sForm) )
 		return;
 
 	DWORD FindResults[12]; // max results is like 6
@@ -1373,6 +1631,7 @@ public:
 	}
 };
 
+template < bool IS_UTF8 >
 class CSphAotTokenizer : public CSphAotTokenizerTmpl
 {
 	AOT_LANGS		m_iLang;
@@ -1387,7 +1646,7 @@ public:
 		// this token filter must NOT be created as escaped
 		// it must only be used during indexing time, NEVER in searching time
 		assert ( eMode==SPH_CLONE_INDEX );
-		CSphAotTokenizer * pClone = new CSphAotTokenizer ( m_pTokenizer->Clone ( eMode ), NULL, m_bIndexExact, m_iLang );
+		CSphAotTokenizer * pClone = new CSphAotTokenizer<IS_UTF8> ( m_pTokenizer->Clone ( eMode ), NULL, m_bIndexExact, m_iLang );
 		if ( m_pWordforms )
 			pClone->m_pWordforms = m_pWordforms;
 		return pClone;
@@ -1416,7 +1675,7 @@ public:
 			// generate that lemma
 			const CFlexiaModel & M = g_pLemmatizers[m_iLang]->m_FlexiaModels [ AOT_MODEL_NO ( m_FindResults [ m_iCurrent ] ) ];
 			const CMorphForm & F = M [ AOT_ITEM_NO ( m_FindResults [ m_iCurrent ] ) ];
-			CreateLemma<EMIT_1BYTE> ( m_sToken, m_sForm, m_iFormLen, m_bFound, M, F );
+			CreateLemma<IS_UTF8?EMIT_UTF8:EMIT_1BYTE> ( m_sToken, m_sForm, m_iFormLen, m_bFound, M, F );
 
 			// is this the last one? gotta tag it non-blended
 			if ( m_FindResults [ m_iCurrent+1 ]==AOT_NOFORM )
@@ -1443,17 +1702,32 @@ public:
 			return pToken;
 
 		// pass-through 1-char "words"
-		if ( pToken[1]=='\0' )
+		if ( pToken [ 1+IS_UTF8 ]=='\0' )
 			return pToken;
 
-		// convert or copy regular tokens
-		// manual strlen and memcpy; faster this way
-		BYTE * p = pToken;
-		m_iFormLen = 0;
-		while ( *p )
-			m_sForm [ m_iFormLen++ ] = *p++;
-		m_sForm [ m_iFormLen ] = '\0';
+		// pass-through non-Russian words
+		if ( IS_UTF8 && m_iLang==AOT_DE )
+		{
+			if ( !IsGermanAlphaUtf8 ( pToken ) )
+				return pToken;
+		} else
+		{
+			if ( !IsGermanAlpha1252 ( pToken[0] ) )
+				return pToken;
+		}
 
+		// convert or copy regular tokens
+		if ( IS_UTF8 && m_iLang==AOT_DE )
+			m_iFormLen = Utf8ToWin1252 ( m_sForm, pToken );
+		else
+		{
+			// manual strlen and memcpy; faster this way
+			BYTE * p = pToken;
+			m_iFormLen = 0;
+			while ( *p )
+				m_sForm [ m_iFormLen++ ] = *p++;
+			m_sForm [ m_iFormLen ] = '\0';
+		}
 
 		// do nothing with one-char words
 		if ( m_iFormLen<=1 )
@@ -1461,7 +1735,8 @@ public:
 
 		// handle a few most frequent 2-char, 3-char pass-through words
 		// OPTIMIZE? move up?
-		if ( m_iLang==AOT_EN && ( IsEnFreq2 ( m_sForm ) || IsEnFreq3 ( m_sForm ) ) )
+		if ( ( m_iLang==AOT_DE && IsDeFreq2 ( m_sForm ) || IsDeFreq3 ( m_sForm ) )
+			|| ( m_iLang==AOT_EN && IsEnFreq2 ( m_sForm ) || IsEnFreq3 ( m_sForm ) ) )
 			return pToken;
 
 		// lemmatize
@@ -1486,7 +1761,7 @@ public:
 		// in any event, prepare the first lemma for return
 		const CFlexiaModel & M = g_pLemmatizers[m_iLang]->m_FlexiaModels [ AOT_MODEL_NO ( m_FindResults[0] ) ];
 		const CMorphForm & F = M [ AOT_ITEM_NO ( m_FindResults[0] ) ];
-		CreateLemma<EMIT_1BYTE> ( pToken, m_sForm, m_iFormLen, m_bFound, M, F );
+		CreateLemma<IS_UTF8?EMIT_UTF8:EMIT_1BYTE> ( pToken, m_sForm, m_iFormLen, m_bFound, M, F );
 
 		// schedule lemmas 2+ for return
 		if ( m_FindResults[1]!=AOT_NOFORM )
@@ -1521,7 +1796,10 @@ CSphTokenFilter * sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pD
 					pDerivedTokenizer = new CSphAotTokenizerRu<false> ( pTokenizer, pDict, bIndexExact );
 			} else
 			{
-				pDerivedTokenizer = new CSphAotTokenizer ( pTokenizer, pDict, bIndexExact, i );
+				if ( pTokenizer->IsUtf8() )
+					pDerivedTokenizer = new CSphAotTokenizer<true> ( pTokenizer, pDict, bIndexExact, i);
+				else
+					pDerivedTokenizer = new CSphAotTokenizer<false> ( pTokenizer, pDict, bIndexExact, i );
 			}
 			pTokenizer = pDerivedTokenizer;
 		}

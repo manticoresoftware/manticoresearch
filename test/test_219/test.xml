@@ -5,7 +5,7 @@
 <lemmatizer_base/>
 </requires>
 
-<name>aot morphology for english</name>
+<name>aot morphology for english and german</name>
 
 <config>
 common
@@ -50,6 +50,13 @@ index test2ruen : test2
 	morphology		= lemmatize_en,lemmatize_ru
 }
 
+index test2red : test2
+{
+	path			= <data_path/>/testruende2
+	charset_table = 0..9, A..Z, a..z, _, U+C0..U+D6, U+D9..U+DF, U+E0..U+F6, U+F9..U+FF, U+410..U+42F->U+430..U+44F, U+430..U+44F
+	morphology		= lemmatize_en,lemmatize_ru,lemmatize_de	
+}
+
 index testrt1
 {
 	type			= rt
@@ -74,12 +81,20 @@ index testrt2ruen : testrt2
 	morphology		= lemmatize_en,lemmatize_ru
 }
 
+index testrt2red : testrt2
+{
+	path			= <data_path/>/testred2
+	charset_table = 0..9, A..Z, a..z, _, U+C0..U+D6, U+D9..U+DF, U+E0..U+F6, U+F9..U+FF, U+410..U+42F->U+430..U+44F, U+430..U+44F
+	morphology		= lemmatize_en,lemmatize_ru,lemmatize_de
+}
+
 </config>
 
 <metaindex name='META:rt'>
 	<index>testrt1</index>
 	<index>testrt2</index>
 	<index>testrt2ruen</index>
+	<index>testrt2red</index>
 </metaindex>
 
 <metaindex name='META:all'>
@@ -89,6 +104,7 @@ index testrt2ruen : testrt2
 	<index>testrt1</index>
 	<index>testrt2</index>
 	<index>testrt2ruen</index>
+	<index>testrt2red</index>
 </metaindex>
 
 <db_create>
@@ -109,7 +125,7 @@ CREATE TABLE test_table
 	( 5, 11, 'as it become known' ),
 	( 6, 11, 'somebody indices' ),
 	( 7, 11, 'nobody@nowhere knew everything super' ),
-	( 8, 11, 'стали well-known как путин' )
+	( 8, 11, 'стали well-known как путин markieren' )
 </db_insert>
 
 <sphqueries>
@@ -120,7 +136,7 @@ CREATE TABLE test_table
 <sphinxql>INSERT INTO META:rt VALUES ( 5, 'as it become known', 11 )</sphinxql>
 <sphinxql>INSERT INTO META:rt VALUES ( 6, 'somebody indices', 11 )</sphinxql>
 <sphinxql>INSERT INTO META:rt VALUES ( 7, 'nobody@nowhere knew everything super', 11 )</sphinxql>
-<sphinxql>INSERT INTO META:rt VALUES ( 8, 'стали well-known как путин', 11 )</sphinxql>
+<sphinxql>INSERT INTO META:rt VALUES ( 8, 'стали well-known как путин markieren', 11 )</sphinxql>
 
 <sphinxql>SELECT * FROM META:all WHERE MATCH('wife'); SHOW META</sphinxql>
 <sphinxql>SELECT * FROM META:all WHERE MATCH('wives'); SHOW META</sphinxql>
@@ -133,6 +149,8 @@ CREATE TABLE test_table
 <sphinxql>SELECT * FROM META:all WHERE MATCH('nobody@nowhere knows'); SHOW META</sphinxql>
 <sphinxql>SELECT * FROM META:all WHERE MATCH('путина knew стали'); SHOW META</sphinxql>
 <sphinxql>SELECT * FROM META:all WHERE MATCH('путин стал knows'); SHOW META</sphinxql>
+<sphinxql>SELECT * FROM META:all WHERE MATCH('путина markierte'); SHOW META</sphinxql>
+<sphinxql>SELECT * FROM META:all WHERE MATCH('knew markierte'); SHOW META</sphinxql>
 </sphqueries>
 
 </test>

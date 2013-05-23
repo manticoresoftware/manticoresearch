@@ -17803,6 +17803,8 @@ static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tK
 		{
 			if ( i==AOT_RU )
 				sphAotLemmatizeRu ( dLemmas, (BYTE*)tKeyword.m_sWord.cstr(), bUtf8 );
+			else if ( i==AOT_DE )
+				sphAotLemmatizeDe ( dLemmas, (BYTE*)tKeyword.m_sWord.cstr(), bUtf8 );
 			else
 				sphAotLemmatize ( dLemmas, (BYTE*)tKeyword.m_sWord.cstr(), i );
 		}
@@ -19531,9 +19533,12 @@ enum
 	SPH_MORPH_AOTLEMMER_BASE,
 	SPH_MORPH_AOTLEMMER_RU_UTF8 = SPH_MORPH_AOTLEMMER_BASE,
 	SPH_MORPH_AOTLEMMER_EN,
+	SPH_MORPH_AOTLEMMER_DE_CP1252,
+	SPH_MORPH_AOTLEMMER_DE_UTF8,
 	SPH_MORPH_AOTLEMMER_BASE_ALL,
 	SPH_MORPH_AOTLEMMER_RU_ALL = SPH_MORPH_AOTLEMMER_BASE_ALL,
 	SPH_MORPH_AOTLEMMER_EN_ALL,
+	SPH_MORPH_AOTLEMMER_DE_ALL,
 	SPH_MORPH_LIBSTEMMER_FIRST,
 	SPH_MORPH_LIBSTEMMER_LAST = SPH_MORPH_LIBSTEMMER_FIRST + 64
 };
@@ -19973,6 +19978,8 @@ int CSphDictCRCTraits::InitMorph ( const char * szMorph, int iLength, bool bUseU
 				return ST_ERROR;
 			}
 
+			// no test for SPH_MORPH_STEM_DE since we doesn't have it.
+
 			if ( m_dMorph.Contains ( SPH_MORPH_AOTLEMMER_BASE_ALL+j ) )
 			{
 				sMessage.SetSprintf ( "%s and %s clash", buf, buf_all );
@@ -19988,6 +19995,8 @@ int CSphDictCRCTraits::InitMorph ( const char * szMorph, int iLength, bool bUseU
 			int iMorph = j + SPH_MORPH_AOTLEMMER_BASE;
 			if ( j==AOT_RU )
 				iMorph = bUseUTF8 ? SPH_MORPH_AOTLEMMER_RU_UTF8 : SPH_MORPH_AOTLEMMER_RU_CP1251;
+			else if ( j==AOT_DE )
+				iMorph = bUseUTF8 ? SPH_MORPH_AOTLEMMER_DE_UTF8 : SPH_MORPH_AOTLEMMER_DE_CP1252;
 
 			if ( !m_dMorph.Contains ( iMorph ) )
 			{
@@ -20978,9 +20987,17 @@ bool CSphDictCRCTraits::StemById ( BYTE * pWord, int iStemmer )
 		sphAotLemmatize ( pWord, AOT_EN );
 		break;
 
+	case SPH_MORPH_AOTLEMMER_DE_UTF8:
+		sphAotLemmatizeDeUTF8 ( pWord );
+		break;
+
+	case SPH_MORPH_AOTLEMMER_DE_CP1252:
+		sphAotLemmatizeDe1252 ( pWord );
+		break;
 
 	case SPH_MORPH_AOTLEMMER_RU_ALL:
 	case SPH_MORPH_AOTLEMMER_EN_ALL:
+	case SPH_MORPH_AOTLEMMER_DE_ALL:
 		// do the real work somewhere else
 		// this is mostly for warning suppressing and making some features like
 		// index_exact_words=1 vs expand_keywords=1 work

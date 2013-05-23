@@ -247,6 +247,7 @@ int							sphinx_update_attributes		( sphinx_client * client, const char * index
 int							sphinx_update_attributes_mva	( sphinx_client * client, const char * index, const char * attr, sphinx_uint64_t docid, int num_values, const unsigned int * values );
 sphinx_keyword_info *		sphinx_build_keywords			( sphinx_client * client, const char * query, const char * index, sphinx_bool hits, int * out_num_keywords );
 char **						sphinx_status					( sphinx_client * client, int * num_rows, int * num_cols );
+char **						sphinx_status_extended			( sphinx_client * client, int * num_rows, int * num_cols, int local );
 void						sphinx_status_destroy			( char ** status, int num_rows, int num_cols );
 
 /////////////////////////////////////////////////////////////////////////////

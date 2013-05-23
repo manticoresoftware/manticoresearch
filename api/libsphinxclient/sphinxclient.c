@@ -81,7 +81,7 @@ enum
 	VER_COMMAND_EXCERPT			= 0x103,
 	VER_COMMAND_UPDATE			= 0x102,
 	VER_COMMAND_KEYWORDS		= 0x100,
-	VER_COMMAND_STATUS			= 0x100
+	VER_COMMAND_STATUS			= 0x101
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2554,8 +2554,12 @@ sphinx_keyword_info * sphinx_build_keywords ( sphinx_client * client, const char
 }
 
 //////////////////////////////////////////////////////////////////////////
-
 char ** sphinx_status ( sphinx_client * client, int * num_rows, int * num_cols )
+{
+	return sphinx_status_extended ( client, num_rows, num_cols, 0 );
+}
+
+char ** sphinx_status_extended ( sphinx_client * client, int * num_rows, int * num_cols, int local )
 {
 	int i, j, k, n;
 	char *p, *pmax, *req, *buf, **res;
@@ -2576,11 +2580,16 @@ char ** sphinx_status ( sphinx_client * client, int * num_rows, int * num_cols )
 		return NULL;
 	}
 
+	if (local)
+		local=0;
+	else
+		local=1;
+
 	req = buf;
 	send_word ( &req, SEARCHD_COMMAND_STATUS );
 	send_word ( &req, VER_COMMAND_STATUS );
 	send_int ( &req, 4 );
-	send_int ( &req, 1 );
+	send_int ( &req, local );
 
 	// send query, get response
 	if ( !net_simple_query ( client, buf, 12 ) )

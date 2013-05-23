@@ -13413,6 +13413,13 @@ void HandleCommandStatus ( int iSock, int iVer, InputBuffer_c & tReq )
 	{
 		g_tLastMetaMutex.Lock();
 		BuildMeta ( dStatus, g_tLastMeta );
+		if ( g_pStats->m_iPredictedTime || g_pStats->m_iAgentPredictedTime )
+		{
+			if ( dStatus.MatchAdd ( "predicted_time" ) )
+				dStatus.Add().SetSprintf ( INT64_FMT, g_pStats->m_iPredictedTime );
+			if ( dStatus.MatchAdd ( "dist_predicted_time" ) )
+				dStatus.Add().SetSprintf ( INT64_FMT, g_pStats->m_iAgentPredictedTime );
+		}
 		g_tLastMetaMutex.Unlock();
 	}
 

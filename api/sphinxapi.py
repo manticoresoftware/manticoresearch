@@ -35,7 +35,7 @@ VER_COMMAND_SEARCH		= 0x11D
 VER_COMMAND_EXCERPT		= 0x104
 VER_COMMAND_UPDATE		= 0x103
 VER_COMMAND_KEYWORDS	= 0x100
-VER_COMMAND_STATUS		= 0x100
+VER_COMMAND_STATUS		= 0x101
 VER_COMMAND_FLUSHATTRS	= 0x100
 
 # known searchd status codes
@@ -1109,7 +1109,7 @@ class SphinxClient:
 
 		return res
 
-	def Status ( self ):
+	def Status ( self, session=False ):
 		"""
 		Get the status
 		"""
@@ -1119,7 +1119,11 @@ class SphinxClient:
 		if not sock:
 			return None
 
-		req = pack ( '>2HLL', SEARCHD_COMMAND_STATUS, VER_COMMAND_STATUS, 4, 1 )
+		sess = 1
+		if session:
+			sess = 0
+
+		req = pack ( '>2HLL', SEARCHD_COMMAND_STATUS, VER_COMMAND_STATUS, 4, sess )
 		self._Send ( sock, req )
 
 		response = self._GetResponse ( sock, VER_COMMAND_STATUS )

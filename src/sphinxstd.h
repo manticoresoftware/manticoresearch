@@ -2532,6 +2532,24 @@ protected:
 	T &	m_tMutexRef;
 };
 
+/// scoped locked shared variable
+template < typename LOCK >
+class CSphScopedLockedShare : public CSphScopedLock<LOCK>
+{
+public:
+	/// lock on creation
+	explicit CSphScopedLockedShare ( LOCK & tMutex )
+		: CSphScopedLock<LOCK> ( tMutex )
+	{}
+
+	template <typename T>
+	inline T& SharedValue()
+	{
+		return *(T*)(this->m_tMutexRef.GetSharedData());
+	}
+};
+
+
 /// MT-aware refcounted base
 /// mutex protected, might be slow
 struct ISphRefcountedMT : public ISphNoncopyable

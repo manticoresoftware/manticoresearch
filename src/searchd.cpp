@@ -281,6 +281,7 @@ static CSphString		g_sSnippetsFilePrefix;
 #if !USE_WINDOWS
 static CSphProcessSharedVariable<bool> g_tHaveTTY ( true );
 #endif
+
 enum Mpm_e
 {
 	MPM_NONE,		///< process queries in a loop one by one (eg. in --console)
@@ -338,7 +339,6 @@ static CSphVector<ThdDesc_t*>	g_dThd;				///< existing threads table
 static int						g_iConnID = 0;		///< global conn-id in none/fork/threads; current conn-id in prefork
 static SphThreadKey_t			g_tConnKey;			///< current conn-id TLS in threads
 static int *					g_pConnID = NULL;	///< global conn-id ptr in prefork
-static CSphSharedBuffer<BYTE>	g_dConnID;			///< global conn-id storage in prefork (protected by accept mutex)
 
 // handshake
 static char						g_sMysqlHandshake[128];
@@ -481,6 +481,10 @@ static ThrottleState_t						g_tRtThrottle;
 
 static StaticThreadsOnlyMutex_t				g_tDistLock;
 static StaticThreadsOnlyMutex_t				g_tPersLock;
+
+class InterWorkerStorage;
+static InterWorkerStorage*					g_pPersistentInUse;
+static const DWORD							g_uAtLeastUnpersistent = 1; // how many workers will never became persistent
 
 enum
 {
@@ -3446,7 +3450,7 @@ public:
 		m_pThdMutex->Init();
 	}
 
-	inline BYTE* GetStorage()
+	inline BYTE* GetSharedData()
 	{
 		return m_pBuffer;
 	}
@@ -4093,7 +4097,7 @@ public:
 		m_pHAStorage->Init ( iBufSize );
 
 		// do the sharing.
-		BYTE* pBuffer = m_pHAStorage->GetStorage();
+		BYTE* pBuffer = m_pHAStorage->GetSharedData();
 		ARRAY_FOREACH ( i, m_dAgents )
 			if ( m_dAgents[i].IsHA() )
 			{
@@ -13507,6 +13511,14 @@ void HandleCommandPing ( int iSock, int iVer, InputBuffer_c & tReq )
 	assert ( tOut.GetError()==true || tOut.GetSentCount()==12 ); // 8+resplen
 }
 
+inline void DecPersCount()
+{
+	CSphScopedLockedShare<InterWorkerStorage> dPersNum ( *g_pPersistentInUse );
+	DWORD& uPers = dPersNum.SharedValue<DWORD>();
+	if ( uPers )
+		--uPers;
+}
+
 void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 {
 	MEMORY ( SPH_MEM_HANDLE_NONSQL );
@@ -13592,6 +13604,8 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 			//
 			// sphWarning ( "failed to receive client version and request (client=%s, error=%s)", sClientIP, sphSockError() );
 			sphLogDebugv ( "conn %s("INT64_FMT"): bailing on failed request header (sockerr=%s)", sClientIP, iCID, sphSockError() );
+			if ( bPersist )
+				DecPersCount();
 			return;
 		}
 
@@ -13610,6 +13624,9 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 			if ( iCommand<0 || iCommand>=SEARCHD_COMMAND_TOTAL )
 				sphWarning ( "ill-formed client request (command=%d, SEARCHD_COMMAND_TOTAL=%d)", iCommand, SEARCHD_COMMAND_TOTAL );
 
+			if ( bPersist )
+				DecPersCount();
+
 			return;
 		}
 
@@ -13622,6 +13639,10 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 		{
 			sphWarning ( "failed to receive client request body (client=%s("INT64_FMT"), exp=%d, error='%s')",
 				sClientIP, iCID, iLength, sphSockError() );
+
+			if ( bPersist )
+				DecPersCount();
+
 			return;
 		}
 
@@ -13649,9 +13670,25 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 			case SEARCHD_COMMAND_KEYWORDS:	HandleCommandKeywords ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_UPDATE:	HandleCommandUpdate ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_PERSIST:
-				bPersist = ( tBuf.GetInt()!=0 );
-				iTimeout = 1;
-				sphLogDebugv ( "conn %s("INT64_FMT"): pconn is now %s", sClientIP, iCID, bPersist ? "on" : "off" );
+				{
+					bPersist = ( tBuf.GetInt()!=0 );
+					iTimeout = 1;
+					sphLogDebugv ( "conn %s("INT64_FMT"): pconn is now %s", sClientIP, iCID, bPersist ? "on" : "off" );
+					CSphScopedLockedShare<InterWorkerStorage> dPersNum ( *g_pPersistentInUse );
+					DWORD uMaxChildren = (g_eWorkers==MPM_PREFORK)?g_iPreforkChildren:g_iMaxChildren;
+					DWORD& uPers = dPersNum.SharedValue<DWORD>();
+					if ( bPersist )
+					{
+						if ( uMaxChildren && uPers+g_uAtLeastUnpersistent>=uMaxChildren )
+							bPersist = false; // this node can't became persistent
+						else
+							++uPers;
+					} else
+					{
+						if ( uPers )
+							--uPers;
+					}
+				}
 				break;
 			case SEARCHD_COMMAND_STATUS:	HandleCommandStatus ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_FLUSHATTRS:HandleCommandFlush ( iSock, iCommandVer, tBuf ); break;
@@ -13663,6 +13700,9 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 		// set off query guard
 		SphCrashLogger_c::SetLastQuery ( CrashQuery_t() );
 	} while ( bPersist );
+
+	if ( bPersist )
+		DecPersCount();
 
 	sphLogDebugv ( "conn %s("INT64_FMT"): exiting", sClientIP, iCID );
 }
@@ -21104,8 +21144,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	g_pFlush = InitSharedBuffer ( g_tFlushBuffer, 1 );
 	g_pStats->m_uStarted = (DWORD)time(NULL);
 
-	if ( g_eWorkers==MPM_PREFORK )
-		g_pConnID = (int*) InitSharedBuffer ( g_dConnID, sizeof(g_iConnID) );
+	// g_pConnId for prefork will be initialized later, together with mutex
 
 	if ( g_eWorkers==MPM_THREADS )
 	{
@@ -21368,9 +21407,11 @@ int WINAPI ServiceMain ( int argc, char **argv )
 #if !USE_WINDOWS
 	if ( g_eWorkers==MPM_PREFORK )
 	{
-		pAcceptMutex = new CSphProcessSharedMutex();
+		pAcceptMutex = new CSphProcessSharedMutex ( sizeof(g_iConnID) );
 		if ( !pAcceptMutex )
 			sphFatal ( "failed to create process-shared mutex" );
+
+		g_pConnID = (int*) pAcceptMutex->GetSharedData();
 
 		if ( !pAcceptMutex->GetError() )
 		{
@@ -21389,6 +21430,13 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		}
 	}
 #endif
+
+	g_pPersistentInUse = new InterWorkerStorage;
+	g_pPersistentInUse->Init ( sizeof(DWORD) );
+	{
+		CSphScopedLockedShare<InterWorkerStorage> dPersNum ( *g_pPersistentInUse );
+		dPersNum.SharedValue<DWORD>() = 0;
+	}
 
 	if ( !g_tRotateQueueMutex.Init() || !g_tRotateConfigMutex.Init() )
 		sphDie ( "failed to init rotations mutexes" );

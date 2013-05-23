@@ -116,6 +116,9 @@ public:
 	bool					m_bEmptyStopword;
 	int						m_iOvershortStep;
 
+	int						m_iQuorumQuote;
+	int						m_iQuorumFSlash;
+
 	CSphVector<CSphString>	m_dIntTokens;
 
 	CSphVector < CSphVector<int> >	m_dZoneVecs;
@@ -382,6 +385,8 @@ XQParser_t::XQParser_t ()
 	, m_bWasBlended ( false )
 	, m_bQuoted ( false )
 	, m_bEmptyStopword ( false )
+	, m_iQuorumQuote ( -1 )
+	, m_iQuorumFSlash ( -1 )
 {
 	m_dSpecPool.Add ( new XQLimitSpec_t() );
 	m_dStateSpec.Add ( m_dSpecPool.Last() );
@@ -737,6 +742,9 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		// must be float number but got many dots or only dot
 		if ( iDots && ( iDots>1 || p-sToken==iDots ) )
 			p = sToken;
+		// float as number allowed only as quorum argument and regular keywords stream otherwise
+		if ( iDots==1 && ( m_iQuorumQuote!=m_iQuorumFSlash || m_iQuorumQuote!=m_iAtomPos ) )
+			p = sToken;
 
 		static const int NUMBER_BUF_LEN = 10; // max strlen of int32
 		if ( p>sToken && p-sToken<NUMBER_BUF_LEN
@@ -917,6 +925,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 				}
 			} else
 			{
+				bool bWasQuoted = m_bQuoted;
 				// all the other specials are passed to parser verbatim
 				if ( sToken[0]=='"' )
 					m_bQuoted = !m_bQuoted;
@@ -932,6 +941,11 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 				{
 					m_dStateSpec.Pop();
 				}
+
+				if ( bWasQuoted && !m_bQuoted )
+					m_iQuorumQuote = m_iAtomPos;
+				else if ( sToken[0]=='/' )
+					m_iQuorumFSlash = m_iAtomPos;
 
 				break;
 			}

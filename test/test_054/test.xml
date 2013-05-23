@@ -87,6 +87,29 @@ index rt_infix
 	rt_attr_uint		= idd
 }
 
+source num1
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1 id, 11 idd, 'set up 3.51 from data' text
+}
+
+index num2t
+{
+	source	= num1
+	path	= <data_path/>/num1
+	charset_type	= utf-8
+	charset_table	= 0..9, A..Z->a..z, _, a..z
+}
+
+index num1t
+{
+	source	= num1
+	path	= <data_path/>/num2
+	charset_type	= utf-8
+	charset_table	= 0..9, A..Z->a..z, _, a..z, U+2E
+}
+
 </config>
 
 <db_create>
@@ -145,6 +168,23 @@ INSERT INTO test_table ( document_id, text ) VALUES
 	<!-- here is going regression crash on delete doc from RT with infix -->
 	<sphinxql>INSERT INTO rt_infix VALUES ( 1, 'dummy word', 11 )</sphinxql>
 	<sphinxql>delete from rt_infix where id=1</sphinxql>
+	<!-- regression float at full-text -->
+	<sphinxql>CALL KEYWORDS ( ' 3.51 ', 'num2t' )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( ' 3.51 ', 'num1t' )</sphinxql>
+	<sphinxql>SELECT * FROM num2t WHERE MATCH ( ' 3.51 ' )</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM num1t WHERE MATCH ( ' 3.51 ' )</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM num2t WHERE MATCH ( ' 3 51 ' )</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM num2t WHERE MATCH ( ' "set of 3.51"/0.7 ' )</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM num1t WHERE MATCH ( ' "set of 3.51"/0.7 ' )</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM num2t WHERE MATCH ( ' "set of 3 51"/0.7 ' )</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM num1t WHERE MATCH ( ' "set of 3 51"/0.7 ' )</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
 </sphqueries>
 
 </test>

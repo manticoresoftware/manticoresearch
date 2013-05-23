@@ -37,6 +37,13 @@ function mysql_wr ($q, $conn)
 	return @mysql_query ( $q, $conn );
 }
 
+function mysqli_wr ($q, $conn)
+{
+//	printf ( "$q\n");
+    return @mysqli_query ( $conn, $q );
+}
+
+
 function ConnectDB ()
 {
 	global $g_locals;
@@ -934,10 +941,24 @@ class SphinxConfig
             if ( $use_meta )
             {
                 foreach ( ChildrenArray ( $qs, "sphinxql" ) as $q )
-                    foreach ( GetVariants ( $q, $doc->encoding ) as $query )
-                        foreach ( $metaindexes as $name=>$indexes )
-                            foreach ($indexes as $index)
-                                $this->_sphqueries[] = str_replace ( $name, $index, $query);
+                {
+                    $was_replaced = false;
+                    foreach ( $metaindexes as $name=>$indexes )
+                        foreach ($indexes as $index)
+                        {
+                            $foo = 0;
+                            $res = str_replace ( $name, $index, GetVariants ( $q, $doc->encoding ), $foo );
+                            if ($foo>0)
+                            {
+                                $was_replaced = true;
+                                foreach ($res as $r)
+                                    $this->_sphqueries[]=$r;
+                            }
+                        }
+                    if (!$was_replaced) // no metaindexes; emit 'as is'
+                        foreach ( GetVariants ( $q, $doc->encoding ) as $r)
+                            $this->_sphqueries[]=$r;
+                 }
             } else
             {
                 foreach ( ChildrenArray ( $qs, "sphinxql" ) as $q )
@@ -1004,12 +1025,10 @@ class SphinxConfig
 		global $sd_address, $sd_sphinxql_port, $action_retries, $action_wait_timeout;
 		$total = $done = 0;
 		if ($sd_address == "localhost")
-			$connect_string = "127.0.0.1:$sd_sphinxql_port";
-		else
-			$connect_string = "$sd_address:$sd_sphinxql_port";
-		$connection = @mysql_connect ( $connect_string );
+            $sd_address = "127.0.0.1";
+		$connection = @mysqli_connect ( $sd_address, '', '', '', $sd_sphinxql_port );
 		if ( $connection === false )
-			return false;
+            return false;
 		$qcount = count($this->_sphqueries);
 		if ( $bench === true )
 			$qcount *= 2;
@@ -1027,32 +1046,84 @@ class SphinxConfig
 			if ( $bench===false && ( stripos ( $query, 'show' )!==false ) && ( stripos ( $query, 'meta' )!==false ) )
 				$no_time = true;
 			
-			$query_result["sphinxql"]=$query;
-			$result = mysql_wr ($query,$connection);
-			if ($result===true)
-				$query_result["total_affected"] = mysql_affected_rows($connection);
-			else if ($result===false)
-			{
-				$query_result["error"] = mysql_error( $connection );
-				$query_result["errno"] = mysql_errno( $connection );
-			} else
-			{
-				$query_result["total_rows"] = mysql_num_rows($result);
-				while ($row = mysql_fetch_array($result, MYSQL_ASSOC))
-				{
-					if ( $no_time===true && array_key_exists ( 'Variable_name', $row ) && $row['Variable_name']=='time' )
-						continue;
-					$query_result["rows"][] = $row;
-				}
-				mysql_free_result($result);
-			}
-			$this->_results[] = $query_result;
+            if ( strpos ($query, ";")===FALSE ) // process a single-query line
+                // FIXME! If a query contains ';' it would be false positive for such codepath.
+            {
+                $query_result["sphinxql"]=$query;
+                $result = mysqli_wr ($query,$connection);
+                if ($result===true)
+                    $query_result["total_affected"] = mysqli_affected_rows($connection);
+                else if ($result===false)
+                {
+                    $query_result["error"] = mysqli_error( $connection );
+                    $query_result["errno"] = mysqli_errno( $connection );
+                } else
+                {
+                    $query_result["total_rows"] = mysqli_num_rows($result);
+                    while ($row = mysqli_fetch_array($result, MYSQL_ASSOC))
+                    {
+                        if ( $no_time===true && array_key_exists ( 'Variable_name', $row ) && $row['Variable_name']=='time' )
+                            continue;
+                        $query_result["rows"][] = $row;
+                    }
+                    mysqli_free_result($result);
+                }
+                $this->_results[] = $query_result;
+            } else
+            {
+                $parts = explode (';',$query);
+                if ( mysqli_multi_query ($connection,$query) )
+                {
+                    $resultset_num = 0;
+                    do {
+                        if ($result = mysqli_store_result($connection))
+                        {
+                            $query_result["total_rows"] = mysqli_num_rows ($result);
+                            if (array_key_exists ("rows", $query_result) )
+                                unset ($query_result["rows"]);
+                            while ($row = mysqli_fetch_array($result, MYSQL_ASSOC))
+                            {
+                                if ( $no_time===true && array_key_exists ( 'Variable_name', $row ) && $row['Variable_name']=='time' )
+                                    continue;
+                                $query_result["rows"][] = $row;
+                            }
+                            mysqli_free_result($result);
+                        } else
+                        {
+                            if (mysqli_field_count($connection)) // there were some fields. An error occured.
+                            {
+                                $query_result["error"] = mysqli_error( $connection );
+                                $query_result["errno"] = mysqli_errno( $connection );
+                            } else
+                                $query_result["total_affected"] = mysqli_affected_rows($connection);
+                        }
+                        if ($resultset_num==0)
+                            $query_result["sphinxql"]="$query";
+                        else
+                            $query_result["sphinxql"]="$parts[$resultset_num] /* result ".($resultset_num+1)." of previous multistatement */";
+                        ++$resultset_num;
+                        $this->_results[] = $query_result;
+                        if (!mysqli_more_results($connection))
+                            break;
+                        if ( IsModelGenMode () )
+                        {
+                            $this->_results_model[$this->SubtestNo ()][] = $query_result;
+                        }
+                    } while (mysqli_next_result($connection));
+                } else
+                {
+                    $query_result["sphinxql"]=$query;
+                    $query_result["error"] = mysqli_error( $connection );
+                    $query_result["errno"] = mysqli_errno( $connection );
+                    $this->_results[] = $query_result;
+                }
+            }
 			if ( IsModelGenMode () )
 			{
 				$this->_results_model[$this->SubtestNo ()][] = $query_result;
 			}
 		}
-		mysql_close ( $connection );
+		mysqli_close ( $connection );
 		return true;
 	}
 
@@ -1642,6 +1713,12 @@ class SphinxConfig
 
 		foreach ( $this->_results_model [ $this->SubtestNo() ] as $ref )
 		{
+            if (!array_key_exists ($nquery,$this->_results))
+            {
+                printf ( "FAILED, model has more results than current test.\n" );
+                break;
+            }
+
 			$cur = $this->_results[$nquery];
 			if ( $this->CompareResultSets ( $ref, $cur ) )
 			{

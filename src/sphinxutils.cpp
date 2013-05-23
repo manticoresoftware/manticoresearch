@@ -1356,7 +1356,18 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 	CSphVector<CSphString> dMorphs;
 	sphSplit ( dMorphs, hIndex.GetStr ( "morphology" ) );
 
-	tSettings.m_bAotFilter = ARRAY_ANY ( tSettings.m_bAotFilter, dMorphs, dMorphs[_any]=="lemmatize_ru_all" );
+	tSettings.m_uAotFilterMask = 0;
+	for ( int j=0; j<AOT_LENGTH; ++j )
+	{
+		char buf_all[20];
+		sprintf ( buf_all, "lemmatize_%s_all", AOT_LANGUAGES[j] ); //NOLINT
+		ARRAY_FOREACH ( i, dMorphs )
+			if ( dMorphs[i]==buf_all )
+			{
+				tSettings.m_uAotFilterMask |= (1UL) << j;
+				break;
+			}
+	}
 
 	tSettings.m_bChineseRLP = ARRAY_ANY ( tSettings.m_bChineseRLP, dMorphs, dMorphs[_any]=="rlp_chinese" );
 	tSettings.m_sRLPContext = hIndex.GetStr ( "rlp_context" );

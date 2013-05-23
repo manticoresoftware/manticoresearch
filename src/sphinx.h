@@ -2982,7 +2982,7 @@ struct CSphIndexSettings : public CSphSourceSettings
 	CSphString				m_sBigramWords;
 	CSphVector<CSphString>	m_dBigramWords;
 
-	bool			m_bAotFilter;	///< lemmatize_ru_all forces us to transform queries on the index level too
+	DWORD			m_uAotFilterMask;	///< lemmatize_XX_all forces us to transform queries on the index level too
 	bool			m_bChineseRLP;	///< chinese RLP filter
 	CSphString		m_sRLPContext;	///< path to RLP context file
 

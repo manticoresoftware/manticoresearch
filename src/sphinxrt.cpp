@@ -1396,8 +1396,8 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 		return false;
 
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ) ); // avoid race
-	if ( m_tSettings.m_bAotFilter )
-		pTokenizer = sphAotCreateFilter ( pTokenizer.LeakPtr(), m_pDict, m_tSettings.m_bIndexExactWords ); // OPTIMIZE? do not create filter on each(!) INSERT
+	if ( m_tSettings.m_uAotFilterMask )
+		pTokenizer = sphAotCreateFilter ( pTokenizer.LeakPtr(), m_pDict, m_tSettings.m_bIndexExactWords, m_tSettings.m_uAotFilterMask ); // OPTIMIZE? do not create filter on each(!) INSERT
 
 	CSphSource_StringVector tSrc ( iFields, ppFields, m_tSchema );
 
@@ -3846,14 +3846,6 @@ bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 		return false;
 	}
 
-	if ( m_tSettings.m_bAotFilter )
-	{
-		CSphString sDictFile;
-		sDictFile.SetSprintf ( "%s/ru.pak", g_sLemmatizerBase.cstr() );
-		if ( !sphAotInitRu ( sDictFile, m_sLastError ) )
-			return false;
-	}
-
 	/////////////
 	// load meta
 	/////////////
@@ -6068,8 +6060,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	}
 
 	// this should be after keyword expansion
-	if ( m_tSettings.m_bAotFilter )
-		TransformAotFilter ( tParsed.m_pRoot, pTokenizer->IsUtf8(), pDict->GetWordforms() );
+	if ( m_tSettings.m_uAotFilterMask )
+		TransformAotFilter ( tParsed.m_pRoot, pTokenizer->IsUtf8(), pDict->GetWordforms(), m_tSettings.m_uAotFilterMask );
 
 	// expanding prefix in word dictionary case
 	if ( m_bEnableStar && m_bKeywordDict )

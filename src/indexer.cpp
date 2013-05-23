@@ -938,14 +938,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		// multiforms filter
 		sphConfDictionary ( hIndex, tDictSettings );
 
-		if ( tSettings.m_bAotFilter )
-		{
-			CSphString sDictFile;
-			sDictFile.SetSprintf ( "%s/ru.pak", g_sLemmatizerBase.cstr() );
-			if ( !sphAotInitRu ( sDictFile, sError ) )
-				sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
-		}
-
 		pDict = tDictSettings.m_bWordDict
 			? sphCreateDictionaryKeywords ( tDictSettings, NULL, pTokenizer, sIndexName, sError )
 			: sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, sIndexName, sError );
@@ -960,8 +952,8 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
 		// aot filter
-		if ( tSettings.m_bAotFilter )
-			pTokenizer = sphAotCreateFilter ( pTokenizer, pDict, tSettings.m_bIndexExactWords );
+		if ( tSettings.m_uAotFilterMask )
+			pTokenizer = sphAotCreateFilter ( pTokenizer, pDict, tSettings.m_bIndexExactWords, tSettings.m_uAotFilterMask );
 
 #if USE_RLP
 		pTokenizer = ISphTokenizer::CreateRLPFilter ( pTokenizer, tSettings.m_bChineseRLP, g_sRLPRoot.cstr(),

@@ -8105,7 +8105,7 @@ CSphIndexSettings::CSphIndexSettings ()
 	, m_eHitless			( SPH_HITLESS_NONE )
 	, m_iEmbeddedLimit		( 0 )
 	, m_eBigramIndex		( SPH_BIGRAM_NONE )
-	, m_bAotFilter			( false )
+	, m_uAotFilterMask		( 0 )
 	, m_bChineseRLP			( false )
 {
 }
@@ -15674,16 +15674,19 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 		// initialize AOT if needed
 		CSphVector<CSphString> dMorphs;
 		sphSplit ( dMorphs, tDictSettings.m_sMorphology.cstr() );
-		m_tSettings.m_bAotFilter = ARRAY_ANY ( m_tSettings.m_bAotFilter, dMorphs,
-			dMorphs[_any]=="lemmatize_ru_all" );
-
-		if ( m_tSettings.m_bAotFilter )
+		m_tSettings.m_uAotFilterMask = 0;
+		for ( int j=0; j<AOT_LENGTH; ++j )
 		{
-			CSphString sDictFile;
-			sDictFile.SetSprintf ( "%s/ru.pak", g_sLemmatizerBase.cstr() );
-			if ( !sphAotInitRu ( sDictFile, m_sLastError ) )
-				return false;
+			char buf_all[20];
+			sprintf ( buf_all, "lemmatize_%s_all", AOT_LANGUAGES[j] ); // NOLINT
+			ARRAY_FOREACH ( i, dMorphs )
+				if ( dMorphs[i]==buf_all )
+				{
+					m_tSettings.m_uAotFilterMask |= (1UL) << j;
+					break;
+				}
 		}
+
 	} else
 	{
 		if ( m_bId32to64 )
@@ -17772,7 +17775,8 @@ static void TransformBigrams ( XQNode_t * pNode, const CSphIndexSettings & tSett
 
 /// create a node from a set of lemmas
 /// WARNING, tKeyword might or might not be pointing to pNode->m_dWords[0]
-static void TransformAotFilter ( XQNode_t * pNode, const XQKeyword_t & tKeyword, bool bUtf8, const CSphWordforms * pWordforms )
+/// Called from the daemon side (searchd) in time of query
+static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tKeyword, bool bUtf8, const CSphWordforms * pWordforms, DWORD uLangMask )
 {
 	assert ( pNode->m_dWords.GetLength()<=1 );
 	assert ( pNode->m_dChildren.GetLength()==0 );
@@ -17793,7 +17797,16 @@ static void TransformAotFilter ( XQNode_t * pNode, const XQKeyword_t & tKeyword,
 	}
 
 	CSphVector<CSphString> dLemmas;
-	sphAotLemmatizeRu ( dLemmas, (BYTE*)tKeyword.m_sWord.cstr(), bUtf8 );
+	for ( int i=AOT_BEGIN; i<AOT_LENGTH; ++i )
+	{
+		if ( uLangMask & (1UL<<i) )
+		{
+			if ( i==AOT_RU )
+				sphAotLemmatizeRu ( dLemmas, (BYTE*)tKeyword.m_sWord.cstr(), bUtf8 );
+			else
+				sphAotLemmatize ( dLemmas, (BYTE*)tKeyword.m_sWord.cstr(), i );
+		}
+	}
 
 	// post-morph wordforms
 	if ( pWordforms && pWordforms->m_bHavePostMorphNF )
@@ -17841,11 +17854,12 @@ static void TransformAotFilter ( XQNode_t * pNode, const XQKeyword_t & tKeyword,
 /// replaces tokens with their respective morph guesses subtrees
 /// used in lemmatize_ru_all morphology processing mode that can generate multiple guesses
 /// in other modes, there is always exactly one morph guess, and the dictionary handles it
-void TransformAotFilter ( XQNode_t * pNode, bool bUtf8, const CSphWordforms * pWordforms )
+/// Called from the daemon side (searchd)
+void TransformAotFilter ( XQNode_t * pNode, bool bUtf8, const CSphWordforms * pWordforms, DWORD uLangMask )
 {
 	// case one, regular operator (and empty nodes)
 	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		TransformAotFilter ( pNode->m_dChildren[i], bUtf8, pWordforms );
+		TransformAotFilter ( pNode->m_dChildren[i], bUtf8, pWordforms, uLangMask );
 	if ( pNode->m_dChildren.GetLength() || pNode->m_dWords.GetLength()==0 )
 		return;
 
@@ -17862,7 +17876,7 @@ void TransformAotFilter ( XQNode_t * pNode, bool bUtf8, const CSphWordforms * pW
 			pNew->m_pParent = pNode;
 			pNew->m_iAtomPos = pNode->m_dWords[i].m_iAtomPos;
 			pNode->m_dChildren.Add ( pNew );
-			TransformAotFilter ( pNew, pNode->m_dWords[i], bUtf8, pWordforms );
+			TransformAotFilterKeyword ( pNew, pNode->m_dWords[i], bUtf8, pWordforms, uLangMask );
 		}
 
 		pNode->m_dWords.Reset();
@@ -17872,7 +17886,7 @@ void TransformAotFilter ( XQNode_t * pNode, bool bUtf8, const CSphWordforms * pW
 
 	// case three, plain old single keyword
 	assert ( pNode->m_dWords.GetLength()==1 );
-	TransformAotFilter ( pNode, pNode->m_dWords[0], bUtf8, pWordforms );
+	TransformAotFilterKeyword ( pNode, pNode->m_dWords[0], bUtf8, pWordforms, uLangMask );
 }
 
 
@@ -17980,8 +17994,8 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	}
 
 	// this should be after keyword expansion
-	if ( m_tSettings.m_bAotFilter )
-		TransformAotFilter ( tParsed.m_pRoot, m_pQueryTokenizer->IsUtf8(), pDict->GetWordforms() );
+	if ( m_tSettings.m_uAotFilterMask )
+		TransformAotFilter ( tParsed.m_pRoot, m_pQueryTokenizer->IsUtf8(), pDict->GetWordforms(), m_tSettings.m_uAotFilterMask );
 
 	// expanding prefix in word dictionary case
 	XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, pResult->m_sError, pResult );
@@ -18074,8 +18088,8 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 			}
 
 			// this should be after keyword expansion
-			if ( m_tSettings.m_bAotFilter )
-				TransformAotFilter ( dXQ[i].m_pRoot, m_pQueryTokenizer->IsUtf8(), pDict->GetWordforms() );
+			if ( m_tSettings.m_uAotFilterMask )
+				TransformAotFilter ( dXQ[i].m_pRoot, m_pQueryTokenizer->IsUtf8(), pDict->GetWordforms(), m_tSettings.m_uAotFilterMask );
 
 			// expanding prefix in word dictionary case
 			XQNode_t * pPrefixed = ExpandPrefix ( dXQ[i].m_pRoot, ppResults[i]->m_sError, ppResults[i] );
@@ -19514,8 +19528,12 @@ enum
 	SPH_MORPH_METAPHONE_SBCS,
 	SPH_MORPH_METAPHONE_UTF8,
 	SPH_MORPH_AOTLEMMER_RU_CP1251,
-	SPH_MORPH_AOTLEMMER_RU_UTF8,
-	SPH_MORPH_AOTLEMMER_RU_ALL,
+	SPH_MORPH_AOTLEMMER_BASE,
+	SPH_MORPH_AOTLEMMER_RU_UTF8 = SPH_MORPH_AOTLEMMER_BASE,
+	SPH_MORPH_AOTLEMMER_EN,
+	SPH_MORPH_AOTLEMMER_BASE_ALL,
+	SPH_MORPH_AOTLEMMER_RU_ALL = SPH_MORPH_AOTLEMMER_BASE_ALL,
+	SPH_MORPH_AOTLEMMER_EN_ALL,
 	SPH_MORPH_LIBSTEMMER_FIRST,
 	SPH_MORPH_LIBSTEMMER_LAST = SPH_MORPH_LIBSTEMMER_FIRST + 64
 };
@@ -19900,6 +19918,18 @@ int CSphDictCRCTraits::InitMorph ( const char * szMorph, int iLength, bool bUseU
 
 	if ( iLength==7 && !strncmp ( szMorph, "stem_en", iLength ) )
 	{
+		if ( m_dMorph.Contains ( SPH_MORPH_AOTLEMMER_EN ) )
+		{
+			sMessage.SetSprintf ( "stem_en and lemmatize_en clash" );
+			return ST_ERROR;
+		}
+
+		if ( m_dMorph.Contains ( SPH_MORPH_AOTLEMMER_EN_ALL ) )
+		{
+			sMessage.SetSprintf ( "stem_en and lemmatize_en_all clash" );
+			return ST_ERROR;
+		}
+
 		stem_en_init ();
 		return AddMorph ( SPH_MORPH_STEM_EN );
 	}
@@ -19922,51 +19952,80 @@ int CSphDictCRCTraits::InitMorph ( const char * szMorph, int iLength, bool bUseU
 		return AddMorph ( bUseUTF8 ? SPH_MORPH_STEM_RU_UTF8 : SPH_MORPH_STEM_RU_CP1251 );
 	}
 
-	if ( iLength==12 && !strncmp ( szMorph, "lemmatize_ru", iLength ) )
+	for ( int j=0; j<AOT_LENGTH; ++j )
 	{
-		if ( m_dMorph.Contains ( SPH_MORPH_STEM_RU_CP1251 ) || m_dMorph.Contains ( SPH_MORPH_STEM_RU_UTF8 ) )
+		char buf[20];
+		char buf_all[20];
+		sprintf ( buf, "lemmatize_%s", AOT_LANGUAGES[j] ); // NOLINT
+		sprintf ( buf_all, "lemmatize_%s_all", AOT_LANGUAGES[j] ); // NOLINT
+
+		if ( iLength==12 && !strncmp ( szMorph, buf, iLength ) )
 		{
-			sMessage.SetSprintf ( "stem_ru and lemmatize_ru clash" );
-			return ST_ERROR;
+			if ( j==AOT_RU && ( m_dMorph.Contains ( SPH_MORPH_STEM_RU_CP1251 ) || m_dMorph.Contains ( SPH_MORPH_STEM_RU_UTF8 ) ) )
+			{
+				sMessage.SetSprintf ( "stem_ru and lemmatize_ru clash" );
+				return ST_ERROR;
+			}
+
+			if ( j==AOT_EN && m_dMorph.Contains ( SPH_MORPH_STEM_EN ) )
+			{
+				sMessage.SetSprintf ( "stem_en and lemmatize_en clash" );
+				return ST_ERROR;
+			}
+
+			if ( m_dMorph.Contains ( SPH_MORPH_AOTLEMMER_BASE_ALL+j ) )
+			{
+				sMessage.SetSprintf ( "%s and %s clash", buf, buf_all );
+				return ST_ERROR;
+			}
+
+			CSphString sDictFile;
+			sDictFile.SetSprintf ( "%s/%s.pak", g_sLemmatizerBase.cstr(), AOT_LANGUAGES[j] );
+			if ( !sphAotInit ( sDictFile, sMessage, j ) )
+				return ST_ERROR;
+
+			// add manually instead of AddMorph(), because we need to update that fingerprint
+			int iMorph = j + SPH_MORPH_AOTLEMMER_BASE;
+			if ( j==AOT_RU )
+				iMorph = bUseUTF8 ? SPH_MORPH_AOTLEMMER_RU_UTF8 : SPH_MORPH_AOTLEMMER_RU_CP1251;
+
+			if ( !m_dMorph.Contains ( iMorph ) )
+			{
+				if ( m_sMorphFingerprint.IsEmpty() )
+					m_sMorphFingerprint.SetSprintf ( "%s:%08x"
+						, sphAotDictinfo(j).m_sName.cstr()
+						, sphAotDictinfo(j).m_iValue );
+				else
+					m_sMorphFingerprint.SetSprintf ( "%s;%s:%08x"
+					, m_sMorphFingerprint.cstr()
+					, sphAotDictinfo(j).m_sName.cstr()
+					, sphAotDictinfo(j).m_iValue );
+				m_dMorph.Add ( iMorph );
+			}
+			return ST_OK;
 		}
 
-		if ( m_dMorph.Contains ( SPH_MORPH_AOTLEMMER_RU_ALL ) )
+		if ( iLength==16 && !strncmp ( szMorph, buf_all, iLength ) )
 		{
-			sMessage.SetSprintf ( "lemmatize_ru and lemmatize_ru_all clash" );
-			return ST_ERROR;
+			if ( j==AOT_RU && ( m_dMorph.Contains ( SPH_MORPH_STEM_RU_CP1251 ) || m_dMorph.Contains ( SPH_MORPH_STEM_RU_UTF8 ) ) )
+			{
+				sMessage.SetSprintf ( "stem_ru and lemmatize_ru_all clash" );
+				return ST_ERROR;
+			}
+
+			if ( m_dMorph.Contains ( SPH_MORPH_AOTLEMMER_BASE+j ) )
+			{
+				sMessage.SetSprintf ( "%s and %s clash", buf, buf_all );
+				return ST_ERROR;
+			}
+
+			CSphString sDictFile;
+			sDictFile.SetSprintf ( "%s/%s.pak", g_sLemmatizerBase.cstr(), AOT_LANGUAGES[j] );
+			if ( !sphAotInit ( sDictFile, sMessage, j ) )
+				return ST_ERROR;
+
+			return AddMorph ( SPH_MORPH_AOTLEMMER_BASE_ALL+j );
 		}
-
-		CSphString sDictFile;
-		sDictFile.SetSprintf ( "%s/ru.pak", g_sLemmatizerBase.cstr() );
-		if ( !sphAotInitRu ( sDictFile, sMessage ) )
-			return ST_ERROR;
-
-		// add manually instead of AddMorph(), because we need to update that fingerprint
-		int iMorph = bUseUTF8 ? SPH_MORPH_AOTLEMMER_RU_UTF8 : SPH_MORPH_AOTLEMMER_RU_CP1251;
-		if ( !m_dMorph.Contains ( iMorph ) )
-		{
-			assert ( m_sMorphFingerprint.IsEmpty() ); // otherwise, append a command and dictionfo
-			m_sMorphFingerprint.SetSprintf ( "%s:%08x", sphAotDictinfoRu().m_sName.cstr(), sphAotDictinfoRu().m_iValue );
-			m_dMorph.Add ( iMorph );
-		}
-		return ST_OK;
-	}
-
-	if ( iLength==16 && !strncmp ( szMorph, "lemmatize_ru_all", iLength ) )
-	{
-		if ( m_dMorph.Contains ( SPH_MORPH_STEM_RU_CP1251 ) || m_dMorph.Contains ( SPH_MORPH_STEM_RU_UTF8 ) )
-		{
-			sMessage.SetSprintf ( "stem_ru and lemmatize_ru_all clash" );
-			return ST_ERROR;
-		}
-
-		if ( m_dMorph.Contains ( SPH_MORPH_AOTLEMMER_RU_CP1251 ) || m_dMorph.Contains ( SPH_MORPH_AOTLEMMER_RU_UTF8 ) )
-		{
-			sMessage.SetSprintf ( "lemmatize_ru and lemmatize_ru_all clash" );
-			return ST_ERROR;
-		}
-
-		return AddMorph ( SPH_MORPH_AOTLEMMER_RU_ALL );
 	}
 
 	if ( iLength==7 && !strncmp ( szMorph, "stem_cz", iLength ) )
@@ -20915,7 +20974,13 @@ bool CSphDictCRCTraits::StemById ( BYTE * pWord, int iStemmer )
 		sphAotLemmatizeRuUTF8 ( pWord );
 		break;
 
+	case SPH_MORPH_AOTLEMMER_EN:
+		sphAotLemmatize ( pWord, AOT_EN );
+		break;
+
+
 	case SPH_MORPH_AOTLEMMER_RU_ALL:
+	case SPH_MORPH_AOTLEMMER_EN_ALL:
 		// do the real work somewhere else
 		// this is mostly for warning suppressing and making some features like
 		// index_exact_words=1 vs expand_keywords=1 work

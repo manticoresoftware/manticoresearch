@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<requires>
+<lemmatizer_base/>
+</requires>
+
+<name>aot morphology for english</name>
+
+<config>
+common
+{
+	lemmatizer_base	= <local>lemmatizer_base</local>
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers				= threads
+}
+
+source test1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query_pre	= set names utf8
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+}
+
+index test1
+{
+	source			= test1
+	path			= <data_path/>/testen1
+	charset_type	= utf-8
+	morphology		= lemmatize_en_all
+	blend_chars		= @, .
+	wordforms		= <this_test/>/wordforms.txt
+}
+
+index test2 : test1
+{
+	path			= <data_path/>/testen2
+	morphology		= lemmatize_en
+}
+
+index test2ruen : test2
+{
+	path			= <data_path/>/testruen2
+	morphology		= lemmatize_en,lemmatize_ru
+}
+
+index testrt1
+{
+	type			= rt
+	path			= <data_path/>/testenrt1
+	charset_type	= utf-8
+	morphology		= lemmatize_en_all
+	blend_chars		= @, .
+	wordforms		= <this_test/>/wordforms.txt
+	rt_attr_uint	= gid
+	rt_field		= title
+}
+
+index testrt2 : testrt1
+{
+	path			= <data_path/>/testenrt2
+	morphology		= lemmatize_en
+}
+
+index testrt2ruen : testrt2
+{
+	path			= <data_path/>/testruenrt2
+	morphology		= lemmatize_en,lemmatize_ru
+}
+
+</config>
+
+<metaindex name='META:rt'>
+	<index>testrt1</index>
+	<index>testrt2</index>
+	<index>testrt2ruen</index>
+</metaindex>
+
+<metaindex name='META:all'>
+	<index>test1</index>
+	<index>test2</index>
+	<index>test2ruen</index>
+	<index>testrt1</index>
+	<index>testrt2</index>
+	<index>testrt2ruen</index>
+</metaindex>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) CHARACTER SET utf8 NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
+<db_insert>SET NAMES utf8</db_insert>
+<db_insert>INSERT INTO test_table VALUES
+	( 1, 11, 'wives and men' ),
+	( 2, 11, 'wife and man' ),
+	( 3, 11, 'children and women' ),
+	( 4, 11, 'child and woman' ),
+	( 5, 11, 'as it become known' ),
+	( 6, 11, 'somebody indices' ),
+	( 7, 11, 'nobody@nowhere knew everything super' ),
+	( 8, 11, 'стали well-known как путин' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>INSERT INTO META:rt VALUES ( 1, 'wives and men', 11 )</sphinxql>
+<sphinxql>INSERT INTO META:rt VALUES ( 2, 'wife and man', 11 )</sphinxql>
+<sphinxql>INSERT INTO META:rt VALUES ( 3, 'children and women', 11 )</sphinxql>
+<sphinxql>INSERT INTO META:rt VALUES ( 4, 'child and woman', 11 )</sphinxql>
+<sphinxql>INSERT INTO META:rt VALUES ( 5, 'as it become known', 11 )</sphinxql>
+<sphinxql>INSERT INTO META:rt VALUES ( 6, 'somebody indices', 11 )</sphinxql>
+<sphinxql>INSERT INTO META:rt VALUES ( 7, 'nobody@nowhere knew everything super', 11 )</sphinxql>
+<sphinxql>INSERT INTO META:rt VALUES ( 8, 'стали well-known как путин', 11 )</sphinxql>
+
+<sphinxql>SELECT * FROM META:all WHERE MATCH('wife'); SHOW META</sphinxql>
+<sphinxql>SELECT * FROM META:all WHERE MATCH('wives'); SHOW META</sphinxql>
+<sphinxql>SELECT * FROM META:all WHERE MATCH('man'); SHOW META</sphinxql>
+<sphinxql>SELECT * FROM META:all WHERE MATCH('men'); SHOW META</sphinxql>
+<sphinxql>SELECT * FROM META:all WHERE MATCH('super'); SHOW META</sphinxql>
+<sphinxql>SELECT * FROM META:all WHERE MATCH('puper'); SHOW META</sphinxql>
+<sphinxql>SELECT * FROM META:all WHERE MATCH('"child and woman"'); SHOW META</sphinxql>
+<sphinxql>SELECT * FROM META:all WHERE MATCH('"children and women"'); SHOW META</sphinxql>
+<sphinxql>SELECT * FROM META:all WHERE MATCH('nobody@nowhere knows'); SHOW META</sphinxql>
+<sphinxql>SELECT * FROM META:all WHERE MATCH('путина knew стали'); SHOW META</sphinxql>
+<sphinxql>SELECT * FROM META:all WHERE MATCH('путин стал knows'); SHOW META</sphinxql>
+</sphqueries>
+
+</test>

@@ -97,6 +97,7 @@ struct st_filter
 	float					fmin;
 	float					fmax;
 	int						exclude;
+	const char *			svalue;
 };
 
 
@@ -209,7 +210,7 @@ sphinx_client * sphinx_create ( sphinx_bool copy_args )
 		return NULL;
 
 	// initialize defaults and return
-	client->ver_search				= 0x11D; // 0x113 for 0.9.8, 0x116 for 0.9.9rc2
+	client->ver_search				= 0x11E; // 0x113 for 0.9.8, 0x116 for 0.9.9rc2
 	client->copy_args				= copy_args;
 	client->head_alloc				= NULL;
 
@@ -257,7 +258,7 @@ sphinx_client * sphinx_create ( sphinx_bool copy_args )
 	client->max_overrides			= 0;
 	client->overrides				= NULL;
 	client->select_list				= NULL;
-	client->query_flags				= 0;
+	client->query_flags				= 1<<6;
 	client->predicted_time			= 0;
 	client->outer_orderby			= NULL;
 	client->outer_offset			= 0;
@@ -705,6 +706,30 @@ sphinx_bool sphinx_add_filter ( sphinx_client * client, const char * attr, int n
 }
 
 
+sphinx_bool sphinx_add_filter_string ( sphinx_client * client, const char * attr, const char * value, sphinx_bool exclude )
+{
+	struct st_filter * filter;
+
+	if ( !client || !attr || !value )
+	{
+		if ( !attr )				set_error ( client, "invalid arguments (attr must not be empty)" );
+		else if ( !value )			set_error ( client, "invalid arguments (value must not be empty)" );
+		else						set_error ( client, "invalid arguments" );
+		return SPH_FALSE;
+	}
+
+	filter = sphinx_add_filter_entry ( client );
+	if ( !filter )
+		return SPH_FALSE;
+
+	filter->attr = strchain ( client, attr );
+	filter->filter_type = SPH_FILTER_STRING;
+	filter->svalue = strchain ( client, value );
+	filter->exclude = exclude;
+	return SPH_TRUE;
+}
+
+
 sphinx_bool sphinx_add_filter_range ( sphinx_client * client, const char * attr, sphinx_int64_t umin, sphinx_int64_t umax, sphinx_bool exclude )
 {
 	struct st_filter * filter;
@@ -929,6 +954,12 @@ sphinx_bool sphinx_set_query_flags ( sphinx_client * client, const char * flag_n
 	} else if ( strcmp ( flag_name, "idf_plain")==0 )
 	{
 		set_bit ( &client->query_flags, 4, enabled );
+	} else if ( strcmp ( flag_name, "global_idf")==0 )
+	{
+		set_bit ( &client->query_flags, 5, enabled );
+	} else if ( strcmp ( flag_name, "tfidf_normalized")==0 )
+	{
+		set_bit ( &client->query_flags, 6, enabled );
 	} else
 	{
 		set_error ( client, "invalid arguments (unknown flag_name)" );
@@ -939,9 +970,9 @@ sphinx_bool sphinx_set_query_flags ( sphinx_client * client, const char * flag_n
 }
 
 
-void sphinx_reset_query_flag ( sphinx_client * client )
+void sphinx_reset_query_flags ( sphinx_client * client )
 {
-	client->query_flags = 0;
+	client->query_flags = 1<<6;
 	client->predicted_time = 0;
 }
 
@@ -994,6 +1025,8 @@ void sphinx_reset_filters ( sphinx_client * client )
 			unchain ( client, client->filters[i].attr );
 			if ( client->filters[i].filter_type==SPH_FILTER_VALUES )
 				unchain ( client, client->filters[i].values );
+			if ( client->filters[i].filter_type==SPH_FILTER_STRING )
+				unchain ( client, client->filters[i].svalue );
 		}
 
 		free ( client->filters );
@@ -1087,6 +1120,7 @@ static int calc_req_len ( sphinx_client * client, const char * query, const char
 			case SPH_FILTER_VALUES:		res += 4 + filter_val_size*filter->num_values; break; // int values-count; uint32/int64[] values
 			case SPH_FILTER_RANGE:		res += 2*filter_val_size; break; // uint32/int64 min-val, max-val
 			case SPH_FILTER_FLOATRANGE:	res += 8; break; // float min-val,max-val
+			case SPH_FILTER_STRING:		res += 4 + safestrlen ( filter->svalue ); break;
 		}
 	}
 
@@ -1263,6 +1297,10 @@ int sphinx_add_query ( sphinx_client * client, const char * query, const char * 
 			case SPH_FILTER_FLOATRANGE:
 				send_float ( &req, client->filters[i].fmin );
 				send_float ( &req, client->filters[i].fmax );
+				break;
+
+			case SPH_FILTER_STRING:
+				send_str ( &req, client->filters[i].svalue );
 				break;
 		}
 

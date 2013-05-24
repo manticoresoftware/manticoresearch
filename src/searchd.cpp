@@ -534,7 +534,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x11D, // 1.29
+	VER_COMMAND_SEARCH		= 0x11E, // 1.30
 	VER_COMMAND_EXCERPT		= 0x104,
 	VER_COMMAND_UPDATE		= 0x103,
 	VER_COMMAND_KEYWORDS	= 0x100,
@@ -5625,9 +5625,7 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 			case SPH_FILTER_VALUES:		iReqSize += 4 + 8*tFilter.GetNumValues (); break; // int values-count; uint64[] values
 			case SPH_FILTER_RANGE:		iReqSize += 16; break; // uint64 min-val, max-val
 			case SPH_FILTER_FLOATRANGE:	iReqSize += 8; break; // int/float min-val,max-val
-			case SPH_FILTER_STRING:
-				assert ( 0 && "internal error: string filter vs distributed indexes is not implemented" );
-				break;
+			case SPH_FILTER_STRING:		iReqSize += 4 + tFilter.m_sRefString.Length(); break;
 		}
 	}
 	if ( q.m_bGeoAnchor )
@@ -5736,7 +5734,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 				break;
 
 			case SPH_FILTER_STRING:
-				assert ( 0 && "internal error: string filter vs distributed indexes is not implemented" );
+				tOut.SendString ( tFilter.m_sRefString.cstr() );
 				break;
 		}
 		tOut.SendInt ( tFilter.m_bExclude );
@@ -6448,6 +6446,9 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 								return false;
 						}
 						break;
+					case SPH_FILTER_STRING:
+						tFilter.m_sRefString = tReq.GetString();
+						break;
 
 					default:
 						tReq.SendErrorReply ( "unknown filter type (type-id=%d)", tFilter.m_eType );
@@ -6647,8 +6648,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 		tQuery.m_bSimplify = !!( uFlags & QFLAG_SIMPLIFY );
 		tQuery.m_bPlainIDF = !!( uFlags & QFLAG_PLAIN_IDF );
 		tQuery.m_bGlobalIDF = !!( uFlags & QFLAG_GLOBAL_IDF );
-		// FIXME!!! client sends false for now, implemets tfidf* flags
-		if ( iMasterVer>0 )
+
+		if ( iMasterVer>0 || iVer==0x11E )
 			tQuery.m_bNormalizedTFIDF = !!( uFlags & QFLAG_NORMALIZED_TF );
 
 		// fetch optional stuff
@@ -6984,6 +6985,10 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 							f.m_sAttrName.cstr(), f.m_bExclude ? " NOT" : "",
 							f.m_fMinValue, f.m_fMaxValue );
 					}
+					break;
+
+				case SPH_FILTER_STRING:
+					tBuf.Appendf ( " %s%s'%s'", f.m_sAttrName.cstr(), ( f.m_bHasEqual ? "=" : "!=" ), f.m_sRefString.cstr() );
 					break;
 
 				default:

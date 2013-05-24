@@ -152,6 +152,12 @@ index json_attr
 	path=<data_path/>/json_attr
 }
 
+index dist_str
+{
+	type = distributed
+	agent = <my_address/>:json_attr
+}
+
 index rt1
 {
 	type = rt
@@ -279,6 +285,9 @@ INSERT INTO json_attr ( id, gid, json ) VALUES
 <query index="loc_field" select="bigint ( id ), j.uid, j.name" sortmode="extended" sortby="j.name asc, j.gid desc"/>
 <query index="dist_field" select="bigint ( id ), j.name, j.uid" sortmode="extended" sortby="j.name desc, j.gid asc"/>
 <query index="dist_field" select="bigint ( id ), j.name, j.34, j.179, j.uid, j.sv,  j.t6, j. f2, j.f1"/>
+<!-- string filter via distributed index -->
+<query index="dist_str" filter="json.username" filter_str="Alice"/>
+<query index="dist_str" filter="json.username" filter_str="Damon"/>
 </queries>
 
 <sphqueries>
@@ -376,6 +385,9 @@ INSERT INTO json_attr ( id, gid, json ) VALUES
 <sphinxql>select * from json_attr where json.year>=2001.0 and json.year&lt;2003.0</sphinxql>
 <sphinxql>select * from json_attr where json.year>=2000.0001 and json.year&lt;2003.0001</sphinxql>
 <sphinxql>select * from json_attr where json.year>=2000.000001 and json.year&lt;2003.000001</sphinxql>
+<!-- string filter via distributed index -->
+<sphinxql>select * from dist_str where json.username='Alice'</sphinxql>
+<sphinxql>select * from dist_str where json.username='Damon'</sphinxql>
 </sphqueries>
 
 </test>

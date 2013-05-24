@@ -31,7 +31,7 @@ SEARCHD_COMMAND_STATUS		= 5
 SEARCHD_COMMAND_FLUSHATTRS	= 7
 
 # current client-side command implementation versions
-VER_COMMAND_SEARCH		= 0x11D
+VER_COMMAND_SEARCH		= 0x11E
 VER_COMMAND_EXCERPT		= 0x104
 VER_COMMAND_UPDATE		= 0x103
 VER_COMMAND_KEYWORDS	= 0x100
@@ -77,6 +77,7 @@ SPH_SORT_EXPR			= 5
 SPH_FILTER_VALUES		= 0
 SPH_FILTER_RANGE		= 1
 SPH_FILTER_FLOATRANGE	= 2
+SPH_FILTER_STRING	= 3
 
 # known attribute types
 SPH_ATTR_NONE			= 0
@@ -146,7 +147,7 @@ class SphinxClient:
 		self._fieldweights	= {}							# per-field-name weights
 		self._overrides		= {}							# per-query attribute values overrides
 		self._select		= '*'								# select-list (attributes or expressions, with optional aliases)
-		self._query_flags	= 0							# per-query various flags
+		self._query_flags	= SetBit ( 0, 6, True )	# default idf=tfidf_normalized
 		self._predictedtime = 0							# per-query max_predicted_time
 		self._outerorderby = ''							# outer match sort by
 		self._outeroffset = 0								# outer offset
@@ -423,6 +424,18 @@ class SphinxClient:
 
 		self._filters.append ( { 'type':SPH_FILTER_VALUES, 'attr':attribute, 'exclude':exclude, 'values':values } )
 
+		
+	def SetFilterString ( self, attribute, value, exclude=0 ):
+		"""
+		Set string filter.
+		Only match records where 'attribute' value is equal
+		"""
+		assert(isinstance(attribute, str))
+		assert(isinstance(value, str))
+
+		print ( "attr='%s' val='%s' " % ( attribute, value ) )
+		self._filters.append ( { 'type':SPH_FILTER_STRING, 'attr':attribute, 'exclude':exclude, 'value':value } )
+		
 
 	def SetFilterRange (self, attribute, min_, max_, exclude=0 ):
 		"""
@@ -493,8 +506,8 @@ class SphinxClient:
 		self._select = select
 
 	def SetQueryFlag ( self, name, value ):
-		known_names = [ "reverse_scan", "sort_method", "max_predicted_time", "boolean_simplify", "idf" ]
-		flags = { "reverse_scan":[0, 1], "sort_method":["pq", "kbuffer"],"max_predicted_time":[0], "boolean_simplify":[True, False], "idf":["normalized", "plain"] }
+		known_names = [ "reverse_scan", "sort_method", "max_predicted_time", "boolean_simplify", "idf", "global_idf" ]
+		flags = { "reverse_scan":[0, 1], "sort_method":["pq", "kbuffer"],"max_predicted_time":[0], "boolean_simplify":[True, False], "idf":["normalized", "plain", "tfidf_normalized", "tfidf_unnormalized"], "global_idf":[True, False] }
 		assert ( name in known_names )
 		assert ( value in flags[name] or ( name=="max_predicted_time" and isinstance(value, (int, long)) and value>=0))
 		
@@ -507,8 +520,12 @@ class SphinxClient:
 			self._predictedtime = int(value)
 		if name=="boolean_simplify":
 			self._query_flags= SetBit ( self._query_flags, 3, value )
-		if name=="idf":
+		if name=="idf" and ( value=="plain" or value=="normalized" ) :
 			self._query_flags = SetBit ( self._query_flags, 4, value=="plain" )
+		if name=="global_idf":
+			self._query_flags= SetBit ( self._query_flags, 5, value )
+		if name=="idf" and ( value=="tfidf_normalized" or value=="tfidf_unnormalized" ) :
+			self._query_flags = SetBit ( self._query_flags, 6, value=="tfidf_normalized" )
 
 	def SetOuterSelect ( self, orderby, offset, limit ):
 		assert(isinstance(orderby, str))
@@ -544,7 +561,7 @@ class SphinxClient:
 		self._groupdistinct = ''
 
 	def ResetQueryFlag (self):
-		self._query_flags = 0
+		self._query_flags = SetBit ( 0, 6, True ) # default idf=tfidf_normalized
 		self._predictedtime = 0
 		
 	def ResetOuterSelect (self):
@@ -617,6 +634,9 @@ class SphinxClient:
 				req.append ( pack ('>2q', f['min'], f['max']))
 			elif filtertype == SPH_FILTER_FLOATRANGE:
 				req.append ( pack ('>2f', f['min'], f['max']))
+			elif filtertype == SPH_FILTER_STRING:
+				req.append ( pack ( '>L', len(f['value']) ) )
+				req.append ( f['value'] )
 			req.append ( pack ( '>L', f['exclude'] ) )
 
 		# group-by, max-matches, group-sort

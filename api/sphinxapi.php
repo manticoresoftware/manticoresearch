@@ -29,7 +29,7 @@ define ( "SEARCHD_COMMAND_STATUS",		5 );
 define ( "SEARCHD_COMMAND_FLUSHATTRS",	7 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x11D );
+define ( "VER_COMMAND_SEARCH",		0x11E );
 define ( "VER_COMMAND_EXCERPT",		0x104 );
 define ( "VER_COMMAND_UPDATE",		0x103 );
 define ( "VER_COMMAND_KEYWORDS",	0x100 );
@@ -76,6 +76,7 @@ define ( "SPH_SORT_EXPR", 			5 );
 define ( "SPH_FILTER_VALUES",		0 );
 define ( "SPH_FILTER_RANGE",		1 );
 define ( "SPH_FILTER_FLOATRANGE",	2 );
+define ( "SPH_FILTER_STRING",	3 );
 
 /// known attribute types
 define ( "SPH_ATTR_INTEGER",		1 );
@@ -481,7 +482,7 @@ class SphinxClient
 		$this->_fieldweights= array();
 		$this->_overrides 	= array();
 		$this->_select		= "*";
-		$this->_query_flags = 0;
+		$this->_query_flags = SetBit ( 0, 6, true ); // default idf=tfidf_normalized
 		$this->_predictedtime = 0;
 		$this->_outerorderby = "";
 		$this->_outeroffset = 0;
@@ -852,6 +853,15 @@ class SphinxClient
 			$this->_filters[] = array ( "type"=>SPH_FILTER_VALUES, "attr"=>$attribute, "exclude"=>$exclude, "values"=>$values );
 		}
 	}
+	
+	/// set string filter
+	/// only match records where $attribute value is equal
+	function SetFilterString ( $attribute, $value, $exclude=false )
+	{
+		assert ( is_string($attribute) );
+		assert ( is_string($value) );
+		$this->_filters[] = array ( "type"=>SPH_FILTER_STRING, "attr"=>$attribute, "exclude"=>$exclude, "value"=>$value );
+	}	
 
 	/// set range filter
 	/// only match records if $attribute value is beetwen $min and $max (inclusive)
@@ -952,13 +962,14 @@ class SphinxClient
 	
 	function SetQueryFlag ( $flag_name, $flag_value )
 	{
-		$known_names = array ( "reverse_scan", "sort_method", "max_predicted_time", "boolean_simplify", "idf" );
+		$known_names = array ( "reverse_scan", "sort_method", "max_predicted_time", "boolean_simplify", "idf", "global_idf" );
 		$flags = array (
 		"reverse_scan" => array ( 0, 1 ),
 		"sort_method" => array ( "pq", "kbuffer" ),
 		"max_predicted_time" => array ( 0 ),
 		"boolean_simplify" => array ( true, false ),
-		"idf" => array ("normalized", "plain" )
+		"idf" => array ("normalized", "plain", "tfidf_normalized", "tfidf_unnormalized" ),
+		"global_idf" => array ( true, false ),
 		);
 		
 		assert ( isset ( $flag_name, $known_names ) );
@@ -972,7 +983,9 @@ class SphinxClient
 			$this->_predictedtime = (int)$flag_value;
 		}
 		if ( $flag_name=="boolean_simplify" )	$this->_query_flags = SetBit ( $this->_query_flags, 3, $flag_value );
-		if ( $flag_name=="idf" )	$this->_query_flags = SetBit ( $this->_query_flags, 4, $flag_value=="plain" );
+		if ( $flag_name=="idf" && ( $flag_value=="normalized" || $flag_value=="plain" ) )	$this->_query_flags = SetBit ( $this->_query_flags, 4, $flag_value=="plain" );
+		if ( $flag_name=="global_idf" )	$this->_query_flags = SetBit ( $this->_query_flags, 5, $flag_value );
+		if ( $flag_name=="idf" && ( $flag_value=="tfidf_normalized" || $flag_value=="tfidf_unnormalized" ) )	$this->_query_flags = SetBit ( $this->_query_flags, 6, $flag_value=="tfidf_normalized" );
 	}
 	
 	/// set outer order by parameters
@@ -1017,7 +1030,7 @@ class SphinxClient
 	
 	function ResetQueryFlag ()
 	{
-		$this->_query_flags = 0;
+		$this->_query_flags = SetBit ( 0, 6, true ); // default idf=tfidf_normalized
 		$this->_predictedtime = 0;
 	}
 
@@ -1101,6 +1114,10 @@ class SphinxClient
 
 				case SPH_FILTER_FLOATRANGE:
 					$req .= $this->_PackFloat ( $filter["min"] ) . $this->_PackFloat ( $filter["max"] );
+					break;
+					
+				case SPH_FILTER_STRING:
+					$req .= pack ( "N", strlen($filter["value"]) ) . $filter["value"];
 					break;
 
 				default:

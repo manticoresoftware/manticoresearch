@@ -74,7 +74,8 @@ enum
 enum
 {	SPH_FILTER_VALUES		= 0,
 	SPH_FILTER_RANGE		= 1,
-	SPH_FILTER_FLOATRANGE	= 2
+	SPH_FILTER_FLOATRANGE	= 2,
+	SPH_FILTER_STRING		= 3
 };
 
 /// known attribute types
@@ -211,6 +212,7 @@ sphinx_bool					sphinx_set_index_weights		( sphinx_client * client, int num_weig
 
 sphinx_bool					sphinx_set_id_range				( sphinx_client * client, sphinx_uint64_t minid, sphinx_uint64_t maxid );
 sphinx_bool					sphinx_add_filter				( sphinx_client * client, const char * attr, int num_values, const sphinx_int64_t * values, sphinx_bool exclude );
+sphinx_bool					sphinx_add_filter_string		( sphinx_client * client, const char * attr, const char * value, sphinx_bool exclude );
 sphinx_bool					sphinx_add_filter_range			( sphinx_client * client, const char * attr, sphinx_int64_t umin, sphinx_int64_t umax, sphinx_bool exclude );
 sphinx_bool					sphinx_add_filter_float_range	( sphinx_client * client, const char * attr, float fmin, float fmax, sphinx_bool exclude );
 sphinx_bool					sphinx_set_geoanchor			( sphinx_client * client, const char * attr_latitude, const char * attr_longitude, float latitude, float longitude );

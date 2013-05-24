@@ -844,6 +844,7 @@ class SphinxConfig
 				$res["filter"] = $q->getAttribute("filter");
 				$res["filter_value"] = $q->getAttribute("filter_value" );
 				$res["filter_range"] = $this->ParseRange ( $q->getAttribute("filter_range" ) );
+				$res["filter_str"] = $q->getAttribute("filter_str");
 
 				// parse sort mode and get clause
 				$sortmode = 0;
@@ -1210,7 +1211,8 @@ class SphinxConfig
 							{
 								$range = $qinfo["filter_range"];
 								$cl->SetFilterRange ( $name, $range['min'], $range['max'] );
-							}
+							} elseif ( @$qinfo["filter_str"] )
+								$cl->SetFilterString ( $name, $qinfo["filter_str"] );
 						}
 						
 						$results = $cl->Query ( $query, $my_index, "run".(1+$this->SubtestNo()) );

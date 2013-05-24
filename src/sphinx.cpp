@@ -6860,11 +6860,17 @@ void CSphSchema::UpdateHash ( int iStartIndex, int iAddVal )
 		return;
 
 	ARRAY_FOREACH ( i, m_dAttrs )
-		if ( m_dAttrs[i].m_uNext>iStartIndex )
-			m_dAttrs[i].m_uNext = (WORD)( m_dAttrs[i].m_uNext + iAddVal );
+	{
+		WORD & uPos = m_dAttrs[i].m_uNext;
+		if ( uPos!=0xffff && uPos>iStartIndex )
+			uPos = (WORD)( uPos + iAddVal );
+	}
 	for ( int i=0; i<BUCKET_COUNT; i++ )
-		if ( m_dBuckets[i]!=0xffff && m_dBuckets[i]>iStartIndex )
-			m_dBuckets[i] = (WORD)( m_dBuckets[i] + iAddVal );
+	{
+		WORD & uPos = m_dBuckets[i];
+		if ( uPos!=0xffff && uPos>iStartIndex )
+			uPos = (WORD)( uPos + iAddVal );
+	}
 }
 
 void CSphSchema::Swap ( CSphSchema & rhs )

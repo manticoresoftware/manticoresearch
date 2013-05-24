@@ -1847,8 +1847,11 @@ class SphinxConfig
 						case "sql_attr_bigint":		$insert_types[$value] = "rt_attr_bigint"; break;
 						case "sql_attr_float":		$insert_types[$value] = "rt_attr_float"; break;
 						case "sql_attr_timestamp":	$insert_types[$value] = "rt_attr_timestamp"; break;
-						// case "sql_attr_multi" TBD
-						// case "sql_attr_string" TBD
+                        //case "sql_attr_multi":      $insert_types[$value] = "rt_attr_multi"; break;
+                        case "sql_attr_bool":       $insert_types[$value] = "rt_attr_bool"; break;
+                        case "sql_attr_json":       $insert_types[$value] = "rt_attr_json"; break;
+                        case "sql_attr_string":     $insert_types[$value] = "rt_attr_string"; break;
+                        case "sql_field_string":     $insert_types[$value] = "FIELD"; break;
 
 						case "sql_query_pre":		$sql_query_pre[] = $value; break;
 						case "sql_query":			$sql_query = $value; break;
@@ -1969,8 +1972,14 @@ class SphinxConfig
 									if ( $key != "id" && $key != "document_id" )
 									{
 										if ( array_key_exists ( $key, $schemas[$value]['types'] ) )
-											$idxbody .= "\t".$schemas[$value]['types'][$key]."\t= $key\n";
-										else
+                                        {
+                                            if ( $schemas[$value]['types'][$key] == "FIELD")
+                                            {
+                                                $idxbody .= "\trt_field\t= $key\n";
+                                                $idxbody .= "\trt_attr_string\t= $key\n";
+                                            } else
+											    $idxbody .= "\t".$schemas[$value]['types'][$key]."\t= $key\n";
+                                        } else
 											$idxbody .= "\trt_field\t= $key\n";
 									}
 								break;

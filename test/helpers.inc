@@ -2091,7 +2091,7 @@ class SphinxConfig
 				{
 					if ( $query!="" )
 						$query .=",";
-					$query .="'".$column."'";
+					$query .="'".mysql_escape_string($column)."'";
 				}
 				
 				if ( ( strlen ($accum) + strlen ($query) ) > 1024000 ) ///<checkit!

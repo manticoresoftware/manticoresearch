@@ -16253,17 +16253,21 @@ void HandleMysqlShowIndexStatus ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt
 	const int64_t * pFieldLens = pIndex->GetFieldLens();
 	if ( pFieldLens )
 	{
+		int64_t iTotalTokens = 0;
 		const CSphVector<CSphColumnInfo> & dFields = pIndex->GetMatchSchema().m_dFields;
 		ARRAY_FOREACH ( i, dFields )
 		{
 			CSphString sKey;
 			sKey.SetSprintf ( "field_tokens_%s", dFields[i].m_sName.cstr() );
 			tOut.DataTuplet ( sKey.cstr(), pFieldLens[i] );
+			iTotalTokens += pFieldLens[i];
 		}
+		tOut.DataTuplet ( "total_tokens", iTotalTokens );
 	}
 
 	CSphIndexStatus tStatus = pIndex->GetStatus();
 	tOut.DataTuplet ( "ram_bytes", tStatus.m_iRamUse );
+	tOut.DataTuplet ( "disk_bytes", tStatus.m_iDiskUse );
 
 	pServed->Unlock();
 	tOut.Eof();

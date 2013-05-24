@@ -1162,7 +1162,7 @@ protected:
 
 RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict )
 
-	: ISphRtIndex ( sIndexName, "rtindex" )
+	: ISphRtIndex ( sIndexName, sPath )
 	, m_iStride ( DOCINFO_IDSIZE + tSchema.GetRowSize() )
 	, m_dDiskChunkKlist ( 0 )
 	, m_iSoftRamLimit ( iRamSize )
@@ -7399,10 +7399,23 @@ CSphIndexStatus RtIndex_t::GetStatus () const
 
 	tRes.m_iRamUse += GetUsedRam();
 
+	tRes.m_iDiskUse = 0;
+	CSphString sError;
+	char sFile [ SPH_MAX_FILENAME_LEN ];
+	const char * sFiles[] = { ".meta", ".kill", ".ram" };
+	for ( int i=0; i<sizeof(sFiles)/sizeof(sFiles[0]); i++ )
+	{
+		snprintf ( sFile, sizeof(sFile), "%s%s", m_sFilename.cstr(), sFiles[i] );
+		CSphAutofile fdRT ( sFile, SPH_O_READ, sError );
+		int64_t iFileSize = fdRT.GetSize();
+		if ( iFileSize>0 )
+			tRes.m_iDiskUse += iFileSize;
+	}
 	ARRAY_FOREACH ( i, m_pDiskChunks )
 	{
 		CSphIndexStatus tDisk = m_pDiskChunks[i]->GetStatus();
 		tRes.m_iRamUse += tDisk.m_iRamUse;
+		tRes.m_iDiskUse += tDisk.m_iDiskUse;
 	}
 
 	Verify ( m_tRwlock.Unlock() );

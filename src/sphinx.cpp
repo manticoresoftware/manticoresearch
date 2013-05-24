@@ -18430,6 +18430,17 @@ CSphIndexStatus CSphIndex_VLN::GetStatus () const
 		+ m_pKillList.GetLength()
 		+ m_pSkiplists.GetLength()
 		+ m_dShared.GetLength();
+
+	char sFile [ SPH_MAX_FILENAME_LEN ];
+	tRes.m_iDiskUse = 0;
+	for ( int i=0; i<sphGetExtCount ( m_uVersion ); i++ )
+	{
+		snprintf ( sFile, sizeof(sFile), "%s%s", m_sFilename.cstr(), sphGetExts ( SPH_EXT_TYPE_CUR, m_uVersion )[i] );
+		struct_stat st;
+		if ( stat ( sFile, &st )==0 )
+			tRes.m_iDiskUse += st.st_size;
+	}
+
 	return tRes;
 }
 

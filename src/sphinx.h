@@ -3007,6 +3007,7 @@ struct ISphKeywordsStat
 struct CSphIndexStatus
 {
 	int64_t			m_iRamUse;
+	int64_t			m_iDiskUse;
 };
 
 

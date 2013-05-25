@@ -962,10 +962,10 @@ void sphAotLemmatize ( BYTE * pWord, int iLang )
 		return;
 
 	// handle a few most frequent 2-char, 3-char pass-through words
-	if ( iLang==AOT_EN && IsEnFreq2(pWord) || IsEnFreq3(pWord) )
+	if ( iLang==AOT_EN && ( IsEnFreq2(pWord) || IsEnFreq3(pWord) ) )
 		return;
 
-	if ( iLang==AOT_DE && IsDeFreq2(pWord) || IsDeFreq3(pWord) )
+	if ( iLang==AOT_DE && ( IsDeFreq2(pWord) || IsDeFreq3(pWord) ) )
 		return;
 
 	// do lemmatizing
@@ -1394,10 +1394,10 @@ void sphAotLemmatize ( CSphVector<CSphString> & dLemmas, const BYTE * pWord, int
 	if ( iFormLen<=1 )
 		return;
 
-	if ( iLang==AOT_EN && IsEnFreq2(sForm) || IsEnFreq3(sForm) )
+	if ( iLang==AOT_EN && ( IsEnFreq2(sForm) || IsEnFreq3(sForm) ) )
 		return;
 
-	if ( iLang==AOT_DE && IsDeFreq2(sForm) || IsDeFreq3(sForm) )
+	if ( iLang==AOT_DE && ( IsDeFreq2(sForm) || IsDeFreq3(sForm) ) )
 		return;
 
 	DWORD FindResults[12]; // max results is like 6
@@ -1485,7 +1485,7 @@ public:
 		uint64_t uHash = CSphTokenFilter::GetSettingsFNV();
 		uHash ^= (uint64_t)m_pWordforms;
 		DWORD uFlags = m_bIndexExact ? 1 : 0;
-		uHash = sphFNV64 ( (const BYTE *)uFlags, sizeof(uFlags), uHash );
+		uHash = sphFNV64 ( (const BYTE *)(uint64_t)uFlags, sizeof(uFlags), uHash );
 		return uHash;
 	}
 };
@@ -1735,8 +1735,8 @@ public:
 
 		// handle a few most frequent 2-char, 3-char pass-through words
 		// OPTIMIZE? move up?
-		if ( ( m_iLang==AOT_DE && IsDeFreq2 ( m_sForm ) || IsDeFreq3 ( m_sForm ) )
-			|| ( m_iLang==AOT_EN && IsEnFreq2 ( m_sForm ) || IsEnFreq3 ( m_sForm ) ) )
+		if ( ( m_iLang==AOT_DE && ( IsDeFreq2 ( m_sForm ) || IsDeFreq3 ( m_sForm ) ) )
+			|| ( m_iLang==AOT_EN && ( IsEnFreq2 ( m_sForm ) || IsEnFreq3 ( m_sForm ) ) ) )
 			return pToken;
 
 		// lemmatize

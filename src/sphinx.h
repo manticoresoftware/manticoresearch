@@ -1826,6 +1826,7 @@ public:
 	virtual void			SetDumpRows ( FILE * fpDumpRows ) { m_fpDumpRows = fpDumpRows; }
 
 	virtual SphRange_t		IterateFieldMVAStart ( int iAttr );
+	virtual bool			IterateFieldMVAStart ( int, CSphString & ) { assert ( 0 && "not implemented" ); return false; }
 	virtual bool			HasJoinedFields () { return m_iPlainFieldsLength!=m_tSchema.m_dFields.GetLength(); }
 
 protected:
@@ -2228,7 +2229,6 @@ private:
 private:
 	CSphString		m_sCommand;			///< my command
 
-	Tag_e			m_eTag;				///< what's our current tag
 	const char *	m_pTag;				///< tag name
 	int				m_iTagLength;		///< tag name length
 	int				m_iBufferSize;		///< buffer size

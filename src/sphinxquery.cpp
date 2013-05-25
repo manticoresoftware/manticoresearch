@@ -2060,16 +2060,6 @@ int sphMarkCommonSubtrees ( int iXQ, const XQQuery_t * pXQ )
 }
 
 
-// reset hash of tree nodes starting from pBottom node up to the root or node that has already reset hash
-static void ResetHashUpTheTree ( XQNode_t * pBottom )
-{
-	if ( !pBottom || !pBottom->ResetHash() )
-		return;
-
-	ResetHashUpTheTree ( pBottom->m_pParent );
-}
-
-
 class CSphTransformation : public ISphNoncopyable
 {
 public:

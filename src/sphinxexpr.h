@@ -114,6 +114,9 @@ public:
 
 	/// run a tree wide action
 	virtual void Command ( ESphExprCommand, void * ) {}
+
+	/// run a tree wide action
+	virtual void Command ( ESphExprCommand, void * ) const {}
 };
 
 /// string expression traits

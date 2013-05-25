@@ -182,6 +182,7 @@ int main ( int argc, char ** argv )
 			{
 				int iDummy; // to avoid gcc unused result warning
 				iDummy = fread ( sThrowaway, 1, sizeof(sThrowaway), stdin );
+				iDummy++; // to avoid gcc set but not used warning
 			}
 		}
 

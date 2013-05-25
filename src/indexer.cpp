@@ -751,7 +751,11 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 {
 	assert ( hSource["type"]=="xmlpipe" || hSource["type"]=="xmlpipe2" );
 
-	LOC_CHECK ( hSource, "xmlpipe_command", "in source '%s'.", sSourceName );
+	if (! ( hSource.Exists ( "xmlpipe_command" ) ))
+	{
+		fprintf ( stdout, "ERROR: key 'xmlpipe_command' not found in source '%s'\n", sSourceName );
+		return NULL;
+	}
 
 	CSphSource * pSrcXML = NULL;
 

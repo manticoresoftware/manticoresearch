@@ -2315,7 +2315,6 @@ public:
 
 	DWORD CopyAttr ( const BYTE * pSrc )
 	{
-		assert ( m_dDst.GetLength()>0 && m_dDst.GetLength()<( I64C(1)<<32 ) ); // should be 32 bit offset
 		return CopyPackedString ( pSrc, m_dDst );
 	}
 };
@@ -2376,7 +2375,6 @@ public:
 
 	DWORD CopyAttr ( const DWORD * pSrc )
 	{
-		assert ( m_dDst.GetLength()>0 && m_dDst.GetLength()<( I64C(1)<<32 ) ); // should be 32 bit offset
 		return CopyMva ( pSrc, m_dDst );
 	}
 };
@@ -7403,7 +7401,7 @@ CSphIndexStatus RtIndex_t::GetStatus () const
 	CSphString sError;
 	char sFile [ SPH_MAX_FILENAME_LEN ];
 	const char * sFiles[] = { ".meta", ".kill", ".ram" };
-	for ( int i=0; i<sizeof(sFiles)/sizeof(sFiles[0]); i++ )
+	for ( int i=0; i<int(sizeof(sFiles)/sizeof(sFiles[0])); i++ )
 	{
 		snprintf ( sFile, sizeof(sFile), "%s%s", m_sFilename.cstr(), sFiles[i] );
 		CSphAutofile fdRT ( sFile, SPH_O_READ, sError );

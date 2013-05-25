@@ -1319,7 +1319,6 @@ const char * sphGetExt ( ESphExtType eType, ESphExt eExt )
 		return g_pppAllExts[eType][eExt];
 	}
 
-	assert ( eType>=0 && eType<=(int)sizeof(g_pppAllExts)/(int)sizeof(g_pppAllExts[0]) );
 	assert ( eExt>=0 && eExt<=(int)sizeof(g_pppAllExts[0])/(int)sizeof(g_pppAllExts[0][0]));
 
 	return g_pppAllExts[eType][eExt];
@@ -4020,7 +4019,7 @@ bool CSphTokenizerBase::LoadSynonyms ( const char * sFilename, const CSphEmbedde
 
 		CSphAutoreader tReader;
 		if ( !tReader.Open ( sFilename, sError ) )
-			return NULL;
+			return false;
 
 		char sBuffer[1024];
 		int iLine = 0;
@@ -4334,7 +4333,7 @@ BYTE * CSphTokenizerBase2<IS_UTF8>::GetBlendedVariant ()
 
 	// case 2, caller is checking for pending variants, have we even got any?
 	if ( !m_bBlendAdd )
-		return false;
+		return NULL;
 
 	// handle trim_none
 	// this MUST be the first handler, so that we could avoid copying below, and just return the original accumulator
@@ -6175,6 +6174,7 @@ int SelectParser_t::GetToken ( YYSTYPE * lvalp )
 		char * pEnd = NULL;
 		double fDummy; // to avoid gcc unused result warning
 		fDummy = strtod ( m_pCur, &pEnd );
+		fDummy *= 2; // to avoid gcc unused variable warning
 
 		m_pCur = pEnd;
 		lvalp->m_iEnd = m_pCur-m_pStart;
@@ -18977,7 +18977,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		// do checks
 		if ( iDictDocs!=iDoclistDocs )
 			LOC_FAIL(( fp, "doc count mismatch (wordid="UINT64_FMT"(%s), dict=%d, doclist=%d, hitless=%s)",
-				uint64_t(uWordid), sWord, iDictDocs, iDoclistDocs, ( bHitless?"true":false ) ));
+				uint64_t(uWordid), sWord, iDictDocs, iDoclistDocs, ( bHitless?"true":"false" ) ));
 
 		if ( ( iDictHits!=iDoclistHits || iDictHits!=iHitlistHits ) && !bHitless )
 			LOC_FAIL(( fp, "hit count mismatch (wordid="UINT64_FMT"(%s), dict=%d, doclist=%d, hitlist=%d)",

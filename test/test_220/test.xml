@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>schema minimization, match copying/remapping, and other match/schema voodoo</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	compat_sphinxql_magics = 0
+	dist_threads = 4
+}
+
+source base
+{
+	type = mysql
+	<sql_settings/>
+}
+
+source t1 : base
+{
+	sql_query = SELECT 1 id, 'test one' title, 1 attr1, 234 attr2
+	sql_attr_bool = attr1
+	sql_attr_uint = attr2
+}
+
+source t2 : base
+{
+	sql_query = SELECT 2 id, 'test two' title, 123.0 attr1, 345 attr2
+	sql_attr_float = attr1
+	sql_attr_uint = attr2
+}
+
+index t1
+{
+	source = t1
+	path = data/t1
+}
+
+index t2
+{
+	source = t2
+	path = data/t2
+}
+</config>
+
+<sphqueries>
+<sphinxql>select * from t1</sphinxql>
+<sphinxql>select * from t2</sphinxql>
+<sphinxql>select * from t1,t2</sphinxql>
+</sphqueries>
+
+</test>

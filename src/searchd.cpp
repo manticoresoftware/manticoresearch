@@ -9581,7 +9581,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 
 			// take schema from sorter - it doesn't need it anymore
 			if ( tRes.m_iSuccesses==1 )
-				pSorter->SwapSchema ( tRes.m_tSchema );
+				pSorter->SwapOut ( tRes.m_tSchema );
 
 			if ( !tRaw.m_sWarning.IsEmpty() )
 				m_dFailuresSet[iQuery].Submit ( sLocal, tRaw.m_sWarning.cstr() );

@@ -2906,10 +2906,11 @@ public:
 	/// set string pool pointer (for string+groupby sorters)
 	virtual void		SetStringPool ( const BYTE * ) {}
 
-	/// swap schemas
-	virtual void				SetSchema ( CSphSchema & tSchema ) { SwapSchema ( tSchema ); }
+	/// set sorter schema by swapping in and (optionally) adjusting the argument
+	virtual void				SwapIn ( CSphSchema & tSchema ) { m_tSchema.Swap ( tSchema ); }
 
-	virtual void				SwapSchema ( CSphSchema & tSchema ) { m_tSchema.Swap ( tSchema ); }
+	/// swap out sorter schema
+	virtual void				SwapOut ( CSphSchema & tSchema ) { m_tSchema.Swap ( tSchema ); }
 
 	/// get incoming schema
 	virtual const CSphSchema &	GetSchema () const { return m_tSchema; }

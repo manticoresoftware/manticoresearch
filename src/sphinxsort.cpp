@@ -1556,9 +1556,9 @@ public:
 	}
 
 	/// schema setup
-	virtual void SetSchema ( CSphSchema & tSchema )
+	virtual void SwapIn ( CSphSchema & tSchema )
 	{
-		SwapSchema ( tSchema );
+		m_tSchema.Swap ( tSchema );
 		m_tGroupSorter.m_pCloner = &m_tSchema;
 
 		bool bAggrStarted = false;
@@ -2438,9 +2438,9 @@ public:
 	}
 
 	/// schema setup
-	virtual void SetSchema ( CSphSchema & tSchema )
+	virtual void SwapIn ( CSphSchema & tSchema )
 	{
-		SwapSchema ( tSchema );
+		m_tSchema.Swap ( tSchema );
 
 		bool bAggrStarted = false;
 		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
@@ -4807,7 +4807,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	assert ( pTop );
 	pTop->SetState ( tStateMatch );
 	pTop->SetGroupState ( tStateGroup );
-	pTop->SetSchema ( tSorterSchema );
+	pTop->SwapIn ( tSorterSchema );
 	pTop->m_bRandomize = bRandomize;
 
 	if ( bRandomize )

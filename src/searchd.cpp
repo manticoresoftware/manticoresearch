@@ -9580,7 +9580,8 @@ void SearchHandler_c::RunLocalSearchesMT ()
 			FlattenToRes ( pSorter, tRes, iOrderTag+iQuery-m_iStart );
 
 			// take schema from sorter - it doesn't need it anymore
-			pSorter->SwapSchema ( tRes.m_tSchema );
+			if ( tRes.m_iSuccesses==1 )
+				pSorter->SwapSchema ( tRes.m_tSchema );
 
 			if ( !tRaw.m_sWarning.IsEmpty() )
 				m_dFailuresSet[iQuery].Submit ( sLocal, tRaw.m_sWarning.cstr() );

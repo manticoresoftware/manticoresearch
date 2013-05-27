@@ -53,6 +53,8 @@ index t2
 <sphinxql>select * from t1</sphinxql>
 <sphinxql>select * from t2</sphinxql>
 <sphinxql>select * from t1,t2</sphinxql>
+<sphinxql>select *,attr1 from t1</sphinxql>
+<sphinxql>select attr1 from t1</sphinxql>
 </sphqueries>
 
 </test>

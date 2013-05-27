@@ -5871,6 +5871,11 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// start counting
 	pResult->m_iQueryTime = 0;
 	int64_t tmQueryStart = sphMicroTimer();
+	CSphQueryProfile * pProfiler = pResult->m_pProfile;
+
+	ESphQueryState eRtProfiler = SPH_QSTATE_TOTAL;
+	if ( pProfiler )
+		eRtProfiler = pProfiler->Switch ( SPH_QSTATE_DICT_SETUP );
 
 	// force ext2 mode for them
 	// FIXME! eliminate this const breakage
@@ -5893,6 +5898,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	CSphScopedPtr<CSphDict> tDictExact ( NULL );
 	pDict = SetupExactDict ( tDictExact, pDict, pTokenizer.Ptr() );
+
+	if ( pProfiler )
+		pProfiler->Switch ( eRtProfiler );
 
 	// FIXME! slow disk searches could lock out concurrent writes for too long
 	// FIXME! each result will point to its own MVA and string pools
@@ -5948,6 +5956,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		}
 
 		CSphQueryResult tChunkResult;
+		tChunkResult.m_pProfile = pResult->m_pProfile;
 		// storing index in matches tag for finding strings attrs offset later, biased against default zero and segments
 		const int iTag = m_pSegments.GetLength()+iChunk+1;
 		if ( !m_pDiskChunks[iChunk]->MultiQuery ( pQuery, &tChunkResult, iSorters, ppSorters, dCumulativeKList.GetLength() ? &dKListFilter : NULL, iIndexWeight, iTag, bFactors ) )
@@ -6000,6 +6009,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// search RAM chunk
 	////////////////////
 
+	if ( pProfiler )
+		pProfiler->Switch ( SPH_QSTATE_INIT );
+
 	// select the sorter with max schema
 	int iMaxSchemaSize = -1;
 	int iMaxSchemaIndex = -1;
@@ -6012,6 +6024,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx;
+	tCtx.m_pProfile = pProfiler;
 	if ( !tCtx.SetupCalc ( pResult, dSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, NULL ) )
 	{
 		m_tRwlock.Unlock ();
@@ -6036,6 +6049,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	tCtx.BindWeights ( pQuery, m_tSchema );
 
 	// parse query
+	if ( pProfiler )
+		pProfiler->Switch ( SPH_QSTATE_PARSE );
 	XQQuery_t tParsed;
 	if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), pTokenizer.Ptr(), &m_tSchema, pDict, m_tSettings ) )
 	{
@@ -6045,6 +6060,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	}
 
 	// transform query if needed (quorum transform, etc.)
+	if ( pProfiler )
+		pProfiler->Switch ( SPH_QSTATE_TRANSFORMS );
 	sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, pQuery->m_bSimplify, this );
 
 	// adjust stars in keywords for dict=keywords, enable_star=0 case
@@ -6083,6 +6100,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		return false;
 	}
 
+	if ( pProfiler )
+		pProfiler->Switch ( SPH_QSTATE_INIT );
+
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
 	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tParsed, pQuery, pResult, tTermSetup, tCtx ) );
@@ -6114,6 +6134,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		m_tRwlock.Unlock ();
 		return true;
 	}
+
+	if ( pProfiler )
+		pProfiler->Switch ( eRtProfiler );
 
 	// search segments no looking to max_query_time
 	// FIXME!!! move searching at segments before disk chunks as result set is safe with kill-lists
@@ -6295,6 +6318,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// coping match's attributes to external storage in result set
 	//////////////////////
 
+	if ( pProfiler )
+		pProfiler->Switch ( SPH_QSTATE_FINALIZE );
+
 	CSphVector<CSphAttrTypedLocator> dGetLoc;
 	CSphVector<CSphAttrLocator> dSetLoc;
 	int iJsonFields = 0;
@@ -6416,6 +6442,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			pResult->m_pMva = pMva;
 		}
 	}
+
+	if ( pProfiler )
+		pProfiler->Switch ( SPH_QSTATE_UNKNOWN );
 
 	// query timer
 	pResult->m_iQueryTime = int ( ( sphMicroTimer()-tmQueryStart )/1000 );

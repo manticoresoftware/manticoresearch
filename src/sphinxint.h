@@ -88,6 +88,7 @@ extern bool g_bJsonKeynamesToLowercase;
 	SPH_QUERY_STATE ( NET_READ,		"net_read" ) \
 	SPH_QUERY_STATE ( IO,			"io" ) \
 	SPH_QUERY_STATE ( DIST_CONNECT,	"dist_connect" ) \
+	SPH_QUERY_STATE ( LOCAL_SEARCH,	"local_search" ) \
 	SPH_QUERY_STATE ( SQL_PARSE,	"sql_parse" ) \
 	SPH_QUERY_STATE ( DICT_SETUP,	"dict_setup" ) \
 	SPH_QUERY_STATE ( PARSE,		"parse" ) \

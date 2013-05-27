@@ -10216,6 +10216,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// FIXME! what if the remote agents finish early, could they timeout?
 	if ( m_dLocal.GetLength() )
 	{
+		if ( m_pProfile )
+			m_pProfile->Switch ( SPH_QSTATE_LOCAL_SEARCH );
+
 		tmLocal = -sphMicroTimer();
 		RunLocalSearches ( pLocalSorter, dAgents.GetLength() ? tFirst.m_sIndexes.cstr() : NULL, bLocalFactors );
 		tmLocal += sphMicroTimer();
@@ -16281,22 +16284,41 @@ void HandleMysqlShowProfile ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p 
 	static const char * dStates [ SPH_QSTATE_TOTAL ] = { SPH_QUERY_STATES };
 	#undef SPH_QUERY_STATES
 
-	tOut.HeadBegin ( 3 );
+	tOut.HeadBegin ( 4 );
 	tOut.HeadColumn ( "Status" );
 	tOut.HeadColumn ( "Duration" );
 	tOut.HeadColumn ( "Switches" );
+	tOut.HeadColumn ( "Percent" );
 	tOut.HeadEnd();
+
+	int64_t tmTotal = 0;
+	int iCount = 0;
 	for ( int i=0; i<SPH_QSTATE_TOTAL; i++ )
 	{
 		if ( p.m_dSwitches[i]<=0 )
 			continue;
-		char sTime[32];
+		tmTotal += p.m_tmTotal[i];
+		iCount += p.m_dSwitches[i];
+	}
+
+	char sTime[32];
+	for ( int i=0; i<SPH_QSTATE_TOTAL; i++ )
+	{
+		if ( p.m_dSwitches[i]<=0 )
+			continue;
 		snprintf ( sTime, sizeof(sTime), "%d.%06d", int(p.m_tmTotal[i]/1000000), int(p.m_tmTotal[i]%1000000) );
 		tOut.PutString ( dStates[i] );
 		tOut.PutString ( sTime );
 		tOut.PutNumeric ( "%d", p.m_dSwitches[i] );
+		tOut.PutNumeric ( "%.2f", 100.0f * p.m_tmTotal[i]/tmTotal );
 		tOut.Commit();
 	}
+	snprintf ( sTime, sizeof(sTime), "%d.%06d", int(tmTotal/1000000), int(tmTotal%1000000) );
+	tOut.PutString ( "total" );
+	tOut.PutString ( sTime );
+	tOut.PutNumeric ( "%d", iCount );
+	tOut.PutString ( "0" );
+	tOut.Commit();
 	tOut.Eof();
 }
 

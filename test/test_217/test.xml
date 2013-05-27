@@ -61,6 +61,11 @@ CREATE TABLE test_table
 <sphinxql>select *, weight(), packedfactors() from test where match('idftest1 | fnord') option idf=normalized, ranker=expr('1000000+1000000*sum(sum_idf)')</sphinxql>
 <sphinxql>select *, weight(), packedfactors() from test where match('idftest1 | fnord') option idf=plain, ranker=expr('1000000+1000000*sum(sum_idf)')</sphinxql>
 <sphinxql>select *, weight(), packedfactors() from test where match('idftest1 | fnord') option idf='plain,tfidf_unnormalized', ranker=expr('1000000+1000000*sum(sum_idf)')</sphinxql>
+<!-- regression heavy factors got enabed along with packedfactors -->
+<sphinxql>select *, weight(), packedfactors() from test where match('idftest1 the') option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
+<sphinxql>select *, weight(), packedfactors() from test where match('and idftest1 the') option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
+<sphinxql>select *, weight(), packedfactors() from test where match('the idftest1') option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
+<sphinxql>select *, weight(), packedfactors() from test where match('the and idftest1') option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
 </sphqueries>
 
 </test>

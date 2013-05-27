@@ -1258,7 +1258,7 @@ public:
 
 	virtual bool InitState ( const CSphQueryContext & tCtx, CSphString & sError )
 	{
-		return m_tState.Init ( tCtx.m_iWeights, &tCtx.m_dWeights[0], this, sError );
+		return m_tState.Init ( tCtx.m_iWeights, &tCtx.m_dWeights[0], this, sError, tCtx.m_bPackedFactors );
 	}
 private:
 	virtual bool ExtraDataImpl ( ExtraData_e eType, void ** ppResult )
@@ -6097,7 +6097,7 @@ struct RankerState_Proximity_fn : public ISphExtra
 	DWORD m_uCurQposMask;
 	DWORD m_uCurPos;
 
-	bool Init ( int iFields, const int * pWeights, ExtRanker_c *, CSphString & )
+	bool Init ( int iFields, const int * pWeights, ExtRanker_c *, CSphString &, bool )
 	{
 		memset ( m_uLCS, 0, sizeof(m_uLCS) );
 		m_uCurLCS = 0;
@@ -6216,7 +6216,7 @@ struct RankerState_ProximityBM25Exact_fn : public ISphExtra
 	DWORD m_uExactHit;
 	int m_iMaxQuerypos;
 
-	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & )
+	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString &, bool )
 	{
 		memset ( m_uLCS, 0, sizeof(m_uLCS) );
 		m_uCurLCS = 0;
@@ -6292,9 +6292,9 @@ struct RankerState_ProximityPayload_fn : public RankerState_Proximity_fn<USE_BM2
 	DWORD m_uPayloadRank;
 	DWORD m_uPayloadMask;
 
-	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError )
+	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError, bool )
 	{
-		RankerState_Proximity_fn<USE_BM25,false>::Init ( iFields, pWeights, pRanker, sError );
+		RankerState_Proximity_fn<USE_BM25,false>::Init ( iFields, pWeights, pRanker, sError, false );
 		m_uPayloadRank = 0;
 		m_uPayloadMask = pRanker->m_uPayloadMask;
 		return true;
@@ -6335,9 +6335,9 @@ struct RankerState_MatchAny_fn : public RankerState_Proximity_fn<false,false>
 	int m_iPhraseK;
 	BYTE m_uMatchMask[SPH_MAX_FIELDS];
 
-	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError )
+	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError, bool )
 	{
-		RankerState_Proximity_fn<false,false>::Init ( iFields, pWeights, pRanker, sError );
+		RankerState_Proximity_fn<false,false>::Init ( iFields, pWeights, pRanker, sError, false );
 		m_iPhraseK = 0;
 		for ( int i=0; i<iFields; i++ )
 			m_iPhraseK += pWeights[i] * pRanker->m_iQwords;
@@ -6377,7 +6377,7 @@ struct RankerState_Wordcount_fn : public ISphExtra
 	int m_iFields;
 	const int * m_pWeights;
 
-	bool Init ( int iFields, const int * pWeights, ExtRanker_c *, CSphString & )
+	bool Init ( int iFields, const int * pWeights, ExtRanker_c *, CSphString &, bool )
 	{
 		m_uRank = 0;
 		m_iFields = iFields;
@@ -6404,7 +6404,7 @@ struct RankerState_Fieldmask_fn : public ISphExtra
 {
 	DWORD m_uRank;
 
-	bool Init ( int, const int *, ExtRanker_c *, CSphString & )
+	bool Init ( int, const int *, ExtRanker_c *, CSphString &, bool )
 	{
 		m_uRank = 0;
 		return true;
@@ -6766,7 +6766,7 @@ public:
 						RankerState_Expr_fn ();
 						~RankerState_Expr_fn ();
 
-	bool				Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError );
+	bool				Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError, bool bComputeHeavyFactors );
 	void				Update ( const ExtHit_t * pHlist );
 	DWORD				Finalize ( const CSphMatch & tMatch );
 
@@ -7602,7 +7602,8 @@ RankerState_Expr_fn <NEED_PACKEDFACTORS>::~RankerState_Expr_fn ()
 
 /// initialize ranker state
 template < bool NEED_PACKEDFACTORS >
-bool RankerState_Expr_fn<NEED_PACKEDFACTORS>::Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError )
+bool RankerState_Expr_fn<NEED_PACKEDFACTORS>::Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError
+													, bool bComputeHeavyFactors )
 {
 	m_iFields = iFields;
 	m_pWeights = pWeights;
@@ -7676,6 +7677,13 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS>::Init ( int iFields, const int * pW
 	{
 		sError = tHook.m_sCheckError;
 		return false;
+	}
+
+	// packedfactors() forces calculation of 'heavy' factors
+	if ( bComputeHeavyFactors )
+	{
+		m_iHaveMinWindow = m_iMaxUniqQpos;
+		m_bHaveAtc |= ( m_iMaxQpos>1 );
 	}
 
 	// all seems ok

@@ -2425,14 +2425,24 @@ public:
 
 				m_tSchema.CloneMatch ( pTo, *pMatch );
 				iLastHead = iMatch;
+
+				// now look for the next match.
+				// In this specific case (2-nd, just after the head)
+				// we have to look it in the hash, not in the linked list!
+				CSphMatch ** ppMatch = m_hGroup2Match ( pMatch->GetAttr ( m_tLocGroupby ) );
+				if ( ppMatch )
+					iMatch = *ppMatch-m_pData;
+				else
+					iMatch = -1;
 			} else
 			{
 				assert ( iLastHead>=0 && iLastHead<iMatch );
 				m_tSchema.CombineMatch ( pTo, *pMatch, m_pData[iLastHead], m_iPregroupDynamic );
+				iMatch = m_dGroupByList[iMatch];
 			}
 			if ( iTag>=0 )
 				pTo->m_iTag = iTag;
-			iMatch = m_dGroupByList[iMatch];
+
 			if ( iMatch<0 )
 				iMatch = iLastHead+1;
 		}

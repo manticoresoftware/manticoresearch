@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
+<requires>
+<id32/>
+<skip_indexer/>
+
 <name>schema minimization, match copying/remapping, and other match/schema voodoo</name>
 
 <config>

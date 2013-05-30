@@ -3,7 +3,7 @@
 
 <requires>
 <id32/>
-<skip_indexer/>
+</requires>
 
 <name>schema minimization, match copying/remapping, and other match/schema voodoo</name>
 

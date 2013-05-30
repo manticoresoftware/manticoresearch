@@ -15,4 +15,6 @@ if exist "ubertest.php" (
 
 	del /q "error*.txt" 2>nul
 	del /q "config*.conf" 2>nul
+
+	del /q "*.mdmp" 2>nul
 )

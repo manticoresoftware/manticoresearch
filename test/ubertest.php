@@ -7,6 +7,7 @@
 $sd_managed_searchd	= false;
 $sd_skip_indexer = false;
 $g_ignore_weights = false;
+$g_pick_query = -1;
 
 require_once ( "settings.inc" );
 
@@ -91,6 +92,14 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( preg_match ( "/^(\\d+)-(\\d+)$/", $arg, $range ) )
 	{
 		$test_range = array ( $range[1], $range[2] ); // from, to
+
+	} else if ( preg_match ( "/^(\\d+):(\\d+)$/", $arg, $range ) )
+	{
+		// FIXME! lockdown gen model, only keep test mode
+		// FIXME! lockdown $test_dirs from here, and check it for emptiness
+		// ie. make sure there are NO other test arguments when this syntax is in use
+		$test_dirs = array ( sprintf ( "test_%03d", $range[1] ) );
+		$g_pick_query = (int)$range[2];
 
 	} else if ( is_dir(sprintf("test_%03d", $arg)))
 	{

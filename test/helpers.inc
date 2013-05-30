@@ -1021,7 +1021,7 @@ class SphinxConfig
 		return 0;
 	}
 
-	function RunQuerySphinxQL ( &$error, $bench=false )
+	function RunQuerySphinxQL ( &$error, $bench, $pick_query=-1 )
 	{
 		global $sd_address, $sd_sphinxql_port, $action_retries, $action_wait_timeout;
 		$total = $done = 0;
@@ -1033,7 +1033,15 @@ class SphinxConfig
 		$qcount = count($this->_sphqueries);
 		if ( $bench === true )
 			$qcount *= 2;
-		for ( $n=0; $n<$qcount; $n++ )
+
+		$qmin = 0;
+		$qmax = $qcount - 1;
+		if ( $pick_query>=0 )
+		{
+			$qmin = $pick_query;
+			$qmax = $pick_query;
+		}
+		for ( $n=$qmin; $n<=$qmax; $n++ )
 		{
 			$query = 'show meta';
 			if ( $bench === false )
@@ -2360,7 +2368,8 @@ function MarkTest ( $logfile, $test_dir )
 function RunTest ( $test_dir, $skipdemo, $usemarks )
 {
 	global	$index_data_path, $agents, $sd_pid_file, $sd_managed_searchd,
-			$sd_skip_indexer, $g_id64, $windows, $g_locals, $sd_log, $sd_query_log;
+			$sd_skip_indexer, $g_id64, $windows, $g_locals, $sd_log, $sd_query_log,
+			$g_pick_query;
 
 	$model_file = $test_dir."/model.bin";
 	$conf_dir 	= $test_dir."/Conf";
@@ -2368,6 +2377,10 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 	$config = new SphinxConfig;
 	$lmodel = $config->LoadModel ( $model_file );
 	$isdemo = false;
+
+	$pick_query = -1;
+	if ( is_int($g_pick_query) && $g_pick_query>=0 )
+		$pick_query = $g_pick_query;
 
 	if ( $lmodel==-1 )
 	{
@@ -2588,7 +2601,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 		if ( $config->IsSphinxqlTest () )
 		{
 			$error = "";
-			if ( ! $config->RunQuerySphinxQL ( $error ) )
+			if ( ! $config->RunQuerySphinxQL ( $error, false, $pick_query ) )
 			{
 				if ( !HandleFailure ( $config, $report, "$error\n", $nfailed ) )
 					$log .= "\tsubtest $subtest: query error: $error\n";

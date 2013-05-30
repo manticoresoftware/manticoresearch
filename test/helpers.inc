@@ -1022,6 +1022,18 @@ class SphinxConfig
 		return 0;
 	}
 
+
+	function FixupAddresses ( $s )
+	{
+		global $agents;
+		$tr = array(
+			$agents[0]["address"].":".$agents[0]["port"] => "<AGENT0_ADDRESS/>",
+			$agents[1]["address"].":".$agents[1]["port"] => "<AGENT1_ADDRESS/>",
+			$agents[2]["address"].":".$agents[2]["port"] => "<AGENT2_ADDRESS/>" );
+		return strtr ( $s, $tr );
+	}
+
+
 	function RunQuerySphinxQL ( &$error, $bench, $pick_query=-1 )
 	{
 		global $sd_address, $sd_sphinxql_port, $action_retries, $action_wait_timeout;
@@ -1065,7 +1077,7 @@ class SphinxConfig
 					$query_result["total_affected"] = mysqli_affected_rows($connection);
 				else if ($result===false)
 				{
-					$query_result["error"] = mysqli_error( $connection );
+					$query_result["error"] = $this->FixupAddresses ( mysqli_error( $connection ) );
 					$query_result["errno"] = mysqli_errno( $connection );
 				} else
 				{

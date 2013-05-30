@@ -1049,10 +1049,10 @@ class SphinxConfig
 
 		$qmin = 0;
 		$qmax = $qcount - 1;
-		if ( $pick_query>=0 )
+		if ( $pick_query>0 )
 		{
-			$qmin = $pick_query;
-			$qmax = $pick_query;
+			$qmin = $pick_query-1;
+			$qmax = $pick_query-1;
 		}
 		for ( $n=$qmin; $n<=$qmax; $n++ )
 		{
@@ -2396,7 +2396,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 	$isdemo = false;
 
 	$pick_query = -1;
-	if ( is_int($g_pick_query) && $g_pick_query>=0 )
+	if ( is_int($g_pick_query) && $g_pick_query>0 )
 		$pick_query = $g_pick_query;
 
 	if ( $lmodel==-1 )

@@ -40,7 +40,7 @@ function mysql_wr ($q, $conn)
 function mysqli_wr ($q, $conn)
 {
 //	printf ( "$q\n");
-    return @mysqli_query ( $conn, $q );
+	return @mysqli_query ( $conn, $q );
 }
 
 
@@ -89,7 +89,7 @@ function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $skip )
 					$q .= " ENGINE=MEMORY";
 				}
 			}
-                        if ( !mysql_wr ( $q, $conn ) )
+			if ( !mysql_wr ( $q, $conn ) )
 				return false;
 		}
 
@@ -132,22 +132,22 @@ function RunIndexerOnce ( &$error, $params )
 
 function RunIndexer ( &$error, $params )
 {
-    $INDEXING_TRIES = 5;
-    $INDEXING_TICK = 1000000; // msec
+	$INDEXING_TRIES = 5;
+	$INDEXING_TICK = 1000000; // msec
 
-    $tries = 0;
+	$tries = 0;
 
-    for ( $i=0; $i<$INDEXING_TRIES; ++$i )
-    {
-        $retval = RunIndexerOnce ( $error, $params );
-        if ( empty($error) || stripos ( $error, "failed to lock")===false )
-               break;
-	usleep ( $INDEXING_TICK );
-        ++$tries;
-    }
-    if ( $tries!=0 )
-        $error = "After $tries tries: $error";
-    return $retval;
+	for ( $i=0; $i<$INDEXING_TRIES; ++$i )
+	{
+		$retval = RunIndexerOnce ( $error, $params );
+		if ( empty($error) || stripos ( $error, "failed to lock")===false )
+			break;
+		usleep ( $INDEXING_TICK );
+		++$tries;
+	}
+	if ( $tries!=0 )
+		$error = "After $tries tries: $error";
+	return $retval;
 }
 
 
@@ -329,8 +329,8 @@ function KillSearchd ( $config, $pidfile, $signal, $unlinkpid=True )
 			exec ("kill -s $signal $pid");
 			if ( $unlinkpid && file_exists ( $pidfile ) )
 			{
-			    usleep ( $action_wait_timeout );
-			    unlink ( $pidfile );
+				usleep ( $action_wait_timeout );
+				unlink ( $pidfile );
 			}
 		} else
 			StopSearchd ($config, $pidfile);
@@ -414,77 +414,77 @@ function ChildrenArray ( $node, $name="" )
 
 function NextState ( &$iter, &$limits, $ps )
 {
-    if ( $ps>count($limits) )
-        return;
-    ++$iter[$ps];
-    if ( $iter[$ps]>=$limits[$ps])
-    {
-        $iter[$ps]=0;
-        NextState ($iter,$limits,$ps+1);
-    }
+	if ( $ps>count($limits) )
+		return;
+	++$iter[$ps];
+	if ( $iter[$ps]>=$limits[$ps])
+	{
+		$iter[$ps]=0;
+		NextState ($iter,$limits,$ps+1);
+	}
 }
 
 function GetVariants ( $qnode, $enc )
 {
-    $res = array();
-    $iters = array();
-    $limits = array();
-    $pos = array();
-    $values = array();
-    $members = array();
+	$res = array();
+	$iters = array();
+	$limits = array();
+	$pos = array();
+	$values = array();
+	$members = array();
 
-    foreach ( ChildrenArray ( $qnode) as $node )
-    {
-        if ( $node->nodeType != XML_TEXT_NODE && $node->nodeType != XML_DOCUMENT_NODE
-            && strtolower ( $node->nodeName ) == "variants" )
-        {
-            $limits[] = $node->attributes->length;
-            $vals = array();
-            foreach ( AttrArray ($node) as $attr )
-                $vals[] = iconv ( 'utf-8', $enc, $attr->nodeValue );
-            $values[] = $vals;
-            $iters[] = 0;
-            $pos[] = count ($members);
-            $members[] = $vals[0];
-        } else
-          $members[] = iconv ( 'utf-8', $enc, $node->nodeValue );
-    }
+	foreach ( ChildrenArray ( $qnode) as $node )
+	{
+		if ( $node->nodeType != XML_TEXT_NODE && $node->nodeType != XML_DOCUMENT_NODE
+			&& strtolower ( $node->nodeName ) == "variants" )
+		{
+			$limits[] = $node->attributes->length;
+			$vals = array();
+			foreach ( AttrArray ($node) as $attr )
+				$vals[] = iconv ( 'utf-8', $enc, $attr->nodeValue );
+			$values[] = $vals;
+			$iters[] = 0;
+			$pos[] = count ($members);
+			$members[] = $vals[0];
+		} else
+		$members[] = iconv ( 'utf-8', $enc, $node->nodeValue );
+	}
 
-    $num_states = 1;
-    for ( $i=0; $i<count($limits); ++$i)
-        $num_states = $num_states * $limits[$i];
+	$num_states = 1;
+	for ( $i=0; $i<count($limits); ++$i)
+		$num_states = $num_states * $limits[$i];
 
-    $text=implode ( '', $members );
-    $res[] = $text;
-    for ( $i=1; $i<$num_states; ++$i)
-    {
-        NextState ( $iters, $limits, 0);
-        for ( $j=0; $j<count ($pos); ++$j)
-            $members[$pos[$j]] = $values[$j][$iters[$j]];
-        $text=implode ( ' ', $members );
-        $res[] = $text;
-    }
-    return $res;
+	$text=implode ( '', $members );
+	$res[] = $text;
+	for ( $i=1; $i<$num_states; ++$i)
+	{
+		NextState ( $iters, $limits, 0);
+		for ( $j=0; $j<count ($pos); ++$j)
+			$members[$pos[$j]] = $values[$j][$iters[$j]];
+		$text=implode ( ' ', $members );
+		$res[] = $text;
+	}
+	return $res;
 }
 
 function AttrArray ( $node, $name="" )
 {
-    $res = array ();
-    if ( !empty($node) && $node->hasAttributes() )
-        for ( $i=0; $i<$node->attributes->length; $i++ )
-        {
-            $child = $node->attributes->item ( $i );
-            if ( $name=="" || strtolower($child->nodeName)==$name )
-                $res[] = $child;
-        }
-    return $res;
+	$res = array ();
+	if ( !empty($node) && $node->hasAttributes() )
+		for ( $i=0; $i<$node->attributes->length; $i++ )
+		{
+			$child = $node->attributes->item ( $i );
+			if ( $name=="" || strtolower($child->nodeName)==$name )
+				$res[] = $child;
+		}
+	return $res;
 }
 
 function GetfirstAttr ( $node )
 {
-    if ( !empty($node) && $node->hasAttributes() )
-        return $node->attributes->item (0);
-    return NULL;
+	if ( !empty($node) && $node->hasAttributes() )
+		return $node->attributes->item (0);
+	return NULL;
 }
 
 
@@ -778,20 +778,20 @@ class SphinxConfig
 				$this->_indexer_runs [] = $run->nodeValue;
 		}
 
-        // extract meta-indexes
-        $use_meta = true;
-        $metaindexes = array();
-        foreach ( ChildrenArray ( $xml, "metaindex" ) as $meta )
-        {
-            $tmp = array();
-            foreach ( ChildrenArray ( $meta, "index") as $idx )
-                $tmp[] = iconv ( 'utf-8', $doc->encoding, $idx->nodeValue );
+		// extract meta-indexes
+		$use_meta = true;
+		$metaindexes = array();
+		foreach ( ChildrenArray ( $xml, "metaindex" ) as $meta )
+		{
+			$tmp = array();
+			foreach ( ChildrenArray ( $meta, "index") as $idx )
+				$tmp[] = iconv ( 'utf-8', $doc->encoding, $idx->nodeValue );
 
-            $name = GetFirstAttr ( $meta );
-            $metaindexes[$name->nodeValue] = $tmp;
-        }
-        if ( empty ($metaindexes) )
-            $use_meta = false;
+			$name = GetFirstAttr ( $meta );
+			$metaindexes[$name->nodeValue] = $tmp;
+		}
+		if ( empty ($metaindexes) )
+			$use_meta = false;
 
 		// extract queries
 		$qs = GetFirstChild ( $xml, "queries" );
@@ -925,11 +925,12 @@ class SphinxConfig
 			$this->GatherEntities ( GetFirstChild ( $xml, "query" ), $qs );
 			foreach ( $qs as $q )
 			{
-				$this->_queries[] = array ( "query"		=> array ( $q ),
-											"mode"		=> 0,
-											"mode_s"	=> "(default)",
-											"ranker"	=> 0,
-											"ranker_s"	=> "(default)" );
+				$this->_queries[] = array (
+					"query" => array ( $q ),
+					"mode" => 0,
+					"mode_s" => "(default)",
+					"ranker" => 0,
+					"ranker_s" => "(default)" );
 			}
 		}
 
@@ -939,32 +940,32 @@ class SphinxConfig
 		{
 			$this->_use_sphinxql = true;
 			// new and cool
-            if ( $use_meta )
-            {
-                foreach ( ChildrenArray ( $qs, "sphinxql" ) as $q )
-                {
-                    $was_replaced = false;
-                    foreach ( $metaindexes as $name=>$indexes )
-                        foreach ($indexes as $index)
-                        {
-                            $foo = 0;
-                            $res = str_replace ( $name, $index, GetVariants ( $q, $doc->encoding ), $foo );
-                            if ($foo>0)
-                            {
-                                $was_replaced = true;
-                                foreach ($res as $r)
-                                    $this->_sphqueries[]=$r;
-                            }
-                        }
-                    if (!$was_replaced) // no metaindexes; emit 'as is'
-                        foreach ( GetVariants ( $q, $doc->encoding ) as $r)
-                            $this->_sphqueries[]=$r;
-                 }
-            } else
-            {
-                foreach ( ChildrenArray ( $qs, "sphinxql" ) as $q )
-                    $this->_sphqueries[] = iconv ( 'utf-8', $doc->encoding, $q->nodeValue );
-            }
+			if ( $use_meta )
+			{
+				foreach ( ChildrenArray ( $qs, "sphinxql" ) as $q )
+				{
+					$was_replaced = false;
+					foreach ( $metaindexes as $name=>$indexes )
+						foreach ($indexes as $index)
+						{
+							$foo = 0;
+							$res = str_replace ( $name, $index, GetVariants ( $q, $doc->encoding ), $foo );
+							if ($foo>0)
+							{
+								$was_replaced = true;
+								foreach ($res as $r)
+									$this->_sphqueries[]=$r;
+							}
+						}
+					if (!$was_replaced) // no metaindexes; emit 'as is'
+						foreach ( GetVariants ( $q, $doc->encoding ) as $r)
+							$this->_sphqueries[]=$r;
+				}
+			} else
+			{
+				foreach ( ChildrenArray ( $qs, "sphinxql" ) as $q )
+					$this->_sphqueries[] = iconv ( 'utf-8', $doc->encoding, $q->nodeValue );
+			}
 		}
 
 
@@ -1026,10 +1027,10 @@ class SphinxConfig
 		global $sd_address, $sd_sphinxql_port, $action_retries, $action_wait_timeout;
 		$total = $done = 0;
 		if ($sd_address == "localhost")
-            $sd_address = "127.0.0.1";
+			$sd_address = "127.0.0.1";
 		$connection = @mysqli_connect ( $sd_address, '', '', '', $sd_sphinxql_port );
 		if ( $connection === false )
-            return false;
+			return false;
 		$qcount = count($this->_sphqueries);
 		if ( $bench === true )
 			$qcount *= 2;
@@ -1055,78 +1056,79 @@ class SphinxConfig
 			if ( $bench===false && ( stripos ( $query, 'show' )!==false ) && ( stripos ( $query, 'meta' )!==false ) )
 				$no_time = true;
 			
-            if ( strpos ($query, ";")===FALSE ) // process a single-query line
-                // FIXME! If a query contains ';' it would be false positive for such codepath.
-            {
-                $query_result["sphinxql"]=$query;
-                $result = mysqli_wr ($query,$connection);
-                if ($result===true)
-                    $query_result["total_affected"] = mysqli_affected_rows($connection);
-                else if ($result===false)
-                {
-                    $query_result["error"] = mysqli_error( $connection );
-                    $query_result["errno"] = mysqli_errno( $connection );
-                } else
-                {
-                    $query_result["total_rows"] = mysqli_num_rows($result);
-                    while ($row = mysqli_fetch_array($result, MYSQL_ASSOC))
-                    {
-                        if ( $no_time===true && array_key_exists ( 'Variable_name', $row ) && $row['Variable_name']=='time' )
-                            continue;
-                        $query_result["rows"][] = $row;
-                    }
-                    mysqli_free_result($result);
-                }
-                $this->_results[] = $query_result;
-            } else
-            {
-                $parts = explode (';',$query);
-                if ( mysqli_multi_query ($connection,$query) )
-                {
-                    $resultset_num = 0;
-                    do {
-                        if ($result = mysqli_store_result($connection))
-                        {
-                            $query_result["total_rows"] = mysqli_num_rows ($result);
-                            if (array_key_exists ("rows", $query_result) )
-                                unset ($query_result["rows"]);
-                            while ($row = mysqli_fetch_array($result, MYSQL_ASSOC))
-                            {
-                                if ( $no_time===true && array_key_exists ( 'Variable_name', $row ) && $row['Variable_name']=='time' )
-                                    continue;
-                                $query_result["rows"][] = $row;
-                            }
-                            mysqli_free_result($result);
-                        } else
-                        {
-                            if (mysqli_field_count($connection)) // there were some fields. An error occured.
-                            {
-                                $query_result["error"] = mysqli_error( $connection );
-                                $query_result["errno"] = mysqli_errno( $connection );
-                            } else
-                                $query_result["total_affected"] = mysqli_affected_rows($connection);
-                        }
-                        if ($resultset_num==0)
-                            $query_result["sphinxql"]="$query";
-                        else
-                            $query_result["sphinxql"]="$parts[$resultset_num] /* result ".($resultset_num+1)." of previous multistatement */";
-                        ++$resultset_num;
-                        $this->_results[] = $query_result;
-                        if (!mysqli_more_results($connection))
-                            break;
-                        if ( IsModelGenMode () )
-                        {
-                            $this->_results_model[$this->SubtestNo ()][] = $query_result;
-                        }
-                    } while (mysqli_next_result($connection));
-                } else
-                {
-                    $query_result["sphinxql"]=$query;
-                    $query_result["error"] = mysqli_error( $connection );
-                    $query_result["errno"] = mysqli_errno( $connection );
-                    $this->_results[] = $query_result;
-                }
-            }
+			if ( strpos ($query, ";")===FALSE ) // process a single-query line
+				// FIXME! If a query contains ';' it would be false positive for such codepath.
+			{
+				$query_result["sphinxql"]=$query;
+				$result = mysqli_wr ($query,$connection);
+				if ($result===true)
+					$query_result["total_affected"] = mysqli_affected_rows($connection);
+				else if ($result===false)
+				{
+					$query_result["error"] = mysqli_error( $connection );
+					$query_result["errno"] = mysqli_errno( $connection );
+				} else
+				{
+					$query_result["total_rows"] = mysqli_num_rows($result);
+					while ($row = mysqli_fetch_array($result, MYSQL_ASSOC))
+					{
+						if ( $no_time===true && array_key_exists ( 'Variable_name', $row ) && $row['Variable_name']=='time' )
+							continue;
+						$query_result["rows"][] = $row;
+					}
+					mysqli_free_result($result);
+				}
+				$this->_results[] = $query_result;
+			} else
+			{
+				$parts = explode (';',$query);
+				if ( mysqli_multi_query ($connection,$query) )
+				{
+					$resultset_num = 0;
+					do
+					{
+						if ($result = mysqli_store_result($connection))
+						{
+							$query_result["total_rows"] = mysqli_num_rows ($result);
+							if (array_key_exists ("rows", $query_result) )
+								unset ($query_result["rows"]);
+							while ($row = mysqli_fetch_array($result, MYSQL_ASSOC))
+							{
+								if ( $no_time===true && array_key_exists ( 'Variable_name', $row ) && $row['Variable_name']=='time' )
+									continue;
+								$query_result["rows"][] = $row;
+							}
+							mysqli_free_result($result);
+						} else
+						{
+							if (mysqli_field_count($connection)) // there were some fields. An error occured.
+							{
+								$query_result["error"] = mysqli_error( $connection );
+								$query_result["errno"] = mysqli_errno( $connection );
+							} else
+								$query_result["total_affected"] = mysqli_affected_rows($connection);
+						}
+						if ($resultset_num==0)
+							$query_result["sphinxql"]="$query";
+						else
+							$query_result["sphinxql"]="$parts[$resultset_num] /* result ".($resultset_num+1)." of previous multistatement */";
+						++$resultset_num;
+						$this->_results[] = $query_result;
+						if (!mysqli_more_results($connection))
+							break;
+						if ( IsModelGenMode () )
+						{
+							$this->_results_model[$this->SubtestNo ()][] = $query_result;
+						}
+					} while (mysqli_next_result($connection));
+				} else
+				{
+					$query_result["sphinxql"]=$query;
+					$query_result["error"] = mysqli_error( $connection );
+					$query_result["errno"] = mysqli_errno( $connection );
+					$this->_results[] = $query_result;
+				}
+			}
 			if ( IsModelGenMode () )
 			{
 				$this->_results_model[$this->SubtestNo ()][] = $query_result;
@@ -1324,10 +1326,10 @@ class SphinxConfig
 			$results = false;
 			$run_func = create_function( '$client, &$results', $this->_custom_test );
 
-			if ( !@mysql_connect ( $g_locals['db-host'].":".$g_locals['db-port'],
-								$g_locals['db-user'], $g_locals['db-password'] ) ||
-								!@mysql_select_db ( $g_locals['db-name'] ) )
-					return FALSE;
+			if ( !@mysql_connect ( $g_locals['db-host'].":".$g_locals['db-port'], $g_locals['db-user'], $g_locals['db-password'] ) )
+				return FALSE;
+			if ( !@mysql_select_db ( $g_locals['db-name'] ) )
+				return FALSE;
 
 			$GLOBALS["this_test"] = $this->_testdir;
 			$run_func ( $cl, $results );
@@ -1375,24 +1377,26 @@ class SphinxConfig
 			return $v;
 	}
 
-        function IsBigNum ( $v )
-        {
-            return is_int($v) && ( $v>2147483647 || $v<-2147483648 );
-        }
 
-        function FixSerialize64 ( $v, & $fixarr )
-        {
-            if ( is_array($v) )
-            {
-		foreach ( $v as $key=>$value )
-                {
-                    if ($this->IsBigNum($key))
-                        $fixarr[] = $key;
-                    $this->FixSerialize64 ( $value, $fixarr );
-                }
-            } else if ($this->IsBigNum($v))
-                $fixarr[] = $v;
-        }
+	function IsBigNum ( $v )
+	{
+		return is_int($v) && ( $v>2147483647 || $v<-2147483648 );
+	}
+
+
+	function FixSerialize64 ( $v, & $fixarr )
+	{
+		if ( is_array($v) )
+		{
+			foreach ( $v as $key=>$value )
+			{
+				if ($this->IsBigNum($key))
+					$fixarr[] = $key;
+				$this->FixSerialize64 ( $value, $fixarr );
+			}
+		} else if ($this->IsBigNum($v))
+			$fixarr[] = $v;
+	}
 
 
 	function LoadModel ( $filename )
@@ -1723,11 +1727,11 @@ class SphinxConfig
 
 		foreach ( $this->_results_model [ $this->SubtestNo() ] as $ref )
 		{
-            if (!array_key_exists ($nquery,$this->_results))
-            {
-                printf ( "FAILED, model has more results than current test.\n" );
-                break;
-            }
+			if (!array_key_exists ($nquery,$this->_results))
+			{
+				printf ( "FAILED, model has more results than current test.\n" );
+				break;
+			}
 
 			$cur = $this->_results[$nquery];
 			if ( $this->CompareResultSets ( $ref, $cur ) )
@@ -1855,11 +1859,11 @@ class SphinxConfig
 						case "sql_attr_bigint":		$insert_types[$value] = "rt_attr_bigint"; break;
 						case "sql_attr_float":		$insert_types[$value] = "rt_attr_float"; break;
 						case "sql_attr_timestamp":	$insert_types[$value] = "rt_attr_timestamp"; break;
-                        //case "sql_attr_multi":      $insert_types[$value] = "rt_attr_multi"; break;
-                        case "sql_attr_bool":       $insert_types[$value] = "rt_attr_bool"; break;
-                        case "sql_attr_json":       $insert_types[$value] = "rt_attr_json"; break;
-                        case "sql_attr_string":     $insert_types[$value] = "rt_attr_string"; break;
-                        case "sql_field_string":     $insert_types[$value] = "FIELD"; break;
+						//case "sql_attr_multi":	$insert_types[$value] = "rt_attr_multi"; break;
+						case "sql_attr_bool":		$insert_types[$value] = "rt_attr_bool"; break;
+						case "sql_attr_json":		$insert_types[$value] = "rt_attr_json"; break;
+						case "sql_attr_string":		$insert_types[$value] = "rt_attr_string"; break;
+						case "sql_field_string":	$insert_types[$value] = "FIELD"; break;
 
 						case "sql_query_pre":		$sql_query_pre[] = $value; break;
 						case "sql_query":			$sql_query = $value; break;
@@ -1980,14 +1984,14 @@ class SphinxConfig
 									if ( $key != "id" && $key != "document_id" )
 									{
 										if ( array_key_exists ( $key, $schemas[$value]['types'] ) )
-                                        {
-                                            if ( $schemas[$value]['types'][$key] == "FIELD")
-                                            {
-                                                $idxbody .= "\trt_field\t= $key\n";
-                                                $idxbody .= "\trt_attr_string\t= $key\n";
-                                            } else
-											    $idxbody .= "\t".$schemas[$value]['types'][$key]."\t= $key\n";
-                                        } else
+										{
+											if ( $schemas[$value]['types'][$key] == "FIELD")
+											{
+												$idxbody .= "\trt_field\t= $key\n";
+												$idxbody .= "\trt_attr_string\t= $key\n";
+											} else
+												$idxbody .= "\t".$schemas[$value]['types'][$key]."\t= $key\n";
+										} else
 											$idxbody .= "\trt_field\t= $key\n";
 									}
 								break;
@@ -2142,26 +2146,26 @@ class SphinxConfig
 	function WriteModel ( $filename )
 	{
 		if ( IsModelGenMode () )
-                {
-                    $result = serialize ( $this->_results_model );
-                    if (PHP_INT_SIZE>4)
-                    {
-                        $keys = array();
-                        $this->FixSerialize64 ( $this->_results_model, $keys );
-                        if ( sizeof($keys)>0 )
-                        {
-                            $findes=array();
-                            $replaces=array();
-                            foreach ($keys as $key)
-                            {
-                                $findes[]="i:$key";
-                                $replaces[]="s:".strlen($key).":\"$key\"";
-                            }
-                            $result = str_replace ( $findes, $replaces, $result );
-                        }
-                    }
-                    file_put_contents ( $filename, $result );
-                }
+				{
+					$result = serialize ( $this->_results_model );
+					if (PHP_INT_SIZE>4)
+					{
+						$keys = array();
+						$this->FixSerialize64 ( $this->_results_model, $keys );
+						if ( sizeof($keys)>0 )
+						{
+							$findes=array();
+							$replaces=array();
+							foreach ($keys as $key)
+							{
+								$findes[]="i:$key";
+								$replaces[]="s:".strlen($key).":\"$key\"";
+							}
+							$result = str_replace ( $findes, $replaces, $result );
+						}
+					}
+					file_put_contents ( $filename, $result );
+				}
 	}
 
 
@@ -2251,6 +2255,7 @@ class SphinxConfig
 	}
 }
 
+//////////////////////////////////////////////////////////////////////////
 
 function HandleFailure ( $config, $report, $error, &$nfailed )
 {
@@ -2554,7 +2559,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 			if ( $sd_managed_searchd )
 				$searchd_ret = 0;
 			else
-				$searchd_ret = StartSearchd ( $config_file, "error_".$agent_id.".txt", $pid_file, $error, $config->Requires ( "watchdog" ), $config->AddressAPI(), $config->Port()  );
+				$searchd_ret = StartSearchd ( $config_file, "error_".$agent_id.".txt", $pid_file, $error, $config->Requires ( "watchdog" ), $config->AddressAPI(), $config->Port() );
 
 				if ( $searchd_ret == 1 )
 				{

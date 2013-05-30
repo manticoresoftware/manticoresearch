@@ -14,6 +14,10 @@ searchd
 	<searchd_settings/>
 	compat_sphinxql_magics = 0
 	dist_threads = 4
+
+	# needed for "do not fetch too much" test below
+	max_packet_size = 128K
+	workers = threads
 }
 
 source base
@@ -36,6 +40,17 @@ source t2 : base
 	sql_attr_uint = attr2
 }
 
+source t3 : base
+{
+	# 4 rows, 10 cols, 4K/col = 160K total
+	sql_query = SELECT id, gid, title t1, title t2, title t3, title t4 FROM t3
+	sql_attr_uint = gid
+	sql_field_string = t1
+	sql_field_string = t2
+	sql_field_string = t3
+	sql_field_string = t4
+}
+
 index t1
 {
 	source = t1
@@ -47,14 +62,56 @@ index t2
 	source = t2
 	path = data/t2
 }
+
+index t3
+{
+	source = t3
+	path = data/t3
+}
+
+index dt3
+{
+	type = distributed
+	agent = <my_address/>:t3
 </config>
 
+<db_create>
+CREATE TABLE t3
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(4096) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS t3;</db_drop>
+<db_insert>INSERT INTO t3 VALUES
+( 1, 123, REPEAT('abcdefghi ', 400) ),
+( 2, 123, REPEAT('abcdefghi ', 400) ),
+( 3, 123, REPEAT('abcdefghi ', 400) ),
+( 4, 123, REPEAT('abcdefghi ', 400) ),
+( 5, 123, REPEAT('abcdefghi ', 400) ),
+( 6, 123, REPEAT('abcdefghi ', 400) ),
+( 7, 123, REPEAT('abcdefghi ', 400) ),
+( 8, 123, REPEAT('abcdefghi ', 400) ),
+( 9, 123, REPEAT('abcdefghi ', 400) ),
+( 10, 123, REPEAT('abcdefghi ', 400) )
+</db_insert>
+
 <sphqueries>
+
+<!-- test that bool/float mixing works and returns correct results -->
 <sphinxql>select * from t1</sphinxql>
 <sphinxql>select * from t2</sphinxql>
 <sphinxql>select * from t1,t2</sphinxql>
+
+<!-- test.. something -->
 <sphinxql>select *,attr1 from t1</sphinxql>
 <sphinxql>select attr1 from t1</sphinxql>
+
+<!-- test that select id,gid does NOT fetch all atributes via network (we will hit max_packet_size if we do!) -->
+<sphinxql>select * from dt3</sphinxql>
+<sphinxql>select id,gid from dt3</sphinxql>
+
 </sphqueries>
 
 </test>

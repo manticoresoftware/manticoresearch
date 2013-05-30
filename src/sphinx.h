@@ -1048,6 +1048,11 @@ struct CSphAttrLocator
 		return ( m_iBitOffset + m_iBitCount - 1 ) / ROWITEM_BITS;
 	}
 #endif
+
+	bool operator == ( const CSphAttrLocator & rhs ) const
+	{
+		return m_iBitOffset==rhs.m_iBitOffset && m_iBitCount==rhs.m_iBitCount && m_bDynamic==rhs.m_bDynamic;
+	}
 };
 
 
@@ -1466,8 +1471,10 @@ public:
 	/// WARNING, THIS IS A HACK THAT WILL LIKELY BREAK THE SCHEMA, DO NOT USE THIS UNLESS ABSOLUTELY SURE!
 	void					RemoveAttr ( int iIndex );
 
-	/// copy ptr attrs from another schema
-	void					AdoptPtrAttrs ( const CSphSchema & tSrc );
+	/// swap in a subset of current attributes, with not necessarily (!) unique names
+	/// used to create a network result set (ie. rset to be sent and then discarded)
+	/// WARNING, DO NOT USE THIS UNLESS ABSOLUTELY SURE!
+	void SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs );
 
 protected:
 	// also let the schema to clone the matches when necessary
@@ -1508,16 +1515,9 @@ protected:
 	static const int	BUCKET_COUNT	= 256;
 	WORD				m_dBuckets [ BUCKET_COUNT ];	///< uses indexes in m_dAttrs as ptrs; 0xffff is like NULL in this hash
 
-	struct PtrAttr_t
-	{
-		int			m_iOffset;
-		CSphString	m_sName;
-	};
-
-	friend void FixupPtrAttrs ( const CSphVector<PtrAttr_t> &, const CSphVector<CSphColumnInfo> &, CSphVector<PtrAttr_t> & );
-
-	CSphVector<PtrAttr_t>			m_dPtrAttrs;		///< attributes which have to be copied and deleted
-	CSphVector<PtrAttr_t>			m_dFactorAttrs;		///< these are the names and offsets of SPH_ATTR_FACTORS attributes
+protected:
+	CSphVector<CSphNamedInt>	m_dPtrAttrs;		///< attributes which have to be copied and deleted
+	CSphVector<CSphNamedInt>	m_dFactorAttrs;		///< these are the names and offsets of SPH_ATTR_FACTORS attributes
 };
 
 /// HTML stripper

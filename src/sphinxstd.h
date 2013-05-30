@@ -617,6 +617,11 @@ struct SphMemberFunctor_T
 	{
 		return (&a)->*m_pMember < (&b)->*m_pMember;
 	}
+
+	inline bool IsEq ( const CLASS & a, T b )
+	{
+		return ( (&a)->*m_pMember )==b;
+	}
 };
 
 
@@ -835,12 +840,23 @@ public:
 	bool RemoveValue ( T tValue )
 	{
 		for ( int i=0; i<m_iLength; i++ )
-		{
 			if ( m_pData[i]==tValue )
-			{
-				Remove ( i );
-				return true;
-			}
+		{
+			Remove ( i );
+			return true;
+		}
+		return false;
+	}
+
+	/// remove element by value (warning, linear O(n) search)
+	template < typename FUNCTOR, typename U >
+	bool RemoveValue ( FUNCTOR COMP, U tValue )
+	{
+		for ( int i=0; i<m_iLength; i++ )
+			if ( COMP.IsEq ( m_pData[i], tValue ) )
+		{
+			Remove ( i );
+			return true;
 		}
 		return false;
 	}
@@ -1010,6 +1026,16 @@ public:
 	{
 		for ( int i=0; i<m_iLength; i++ )
 			if ( m_pData[i]==tRef )
+				return true;
+		return false;
+	}
+
+	/// generic linear search
+	template < typename FUNCTOR, typename U >
+	bool Contains ( FUNCTOR COMP, U tValue )
+	{
+		for ( int i=0; i<m_iLength; i++ )
+			if ( COMP.IsEq ( m_pData[i], tValue ) )
 				return true;
 		return false;
 	}

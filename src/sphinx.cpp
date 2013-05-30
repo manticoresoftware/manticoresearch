@@ -6582,16 +6582,16 @@ void CSphSchema::AddAttr ( const CSphColumnInfo & tCol, bool bDynamic )
 	if ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR )
 	{
 		iBits = ROWITEMPTR_BITS;
-		PtrAttr_t & tPtrAttr = m_dPtrAttrs.Add();
-		tPtrAttr.m_iOffset = dUsed.GetLength();
-		tPtrAttr.m_sName = tCol.m_sName;
+		CSphNamedInt & t = m_dPtrAttrs.Add();
+		t.m_iValue = dUsed.GetLength();
+		t.m_sName = tCol.m_sName;
 	}
 	if ( tCol.m_eAttrType==SPH_ATTR_FACTORS )
 	{
 		iBits = ROWITEMPTR_BITS;
-		PtrAttr_t & tPtrAttr = m_dFactorAttrs.Add();
-		tPtrAttr.m_iOffset = dUsed.GetLength();
-		tPtrAttr.m_sName = tCol.m_sName;
+		CSphNamedInt & t = m_dFactorAttrs.Add();
+		t.m_iValue = dUsed.GetLength();
+		t.m_sName = tCol.m_sName;
 	}
 	tLoc.m_iBitCount = iBits;
 	if ( iBits>=ROWITEM_BITS )
@@ -6661,41 +6661,31 @@ void CSphSchema::RemoveAttr ( int iIndex )
 
 	UpdateHash ( iIndex, -1 );
 
-	ARRAY_FOREACH ( i, m_dPtrAttrs )
-		if ( m_dPtrAttrs[i].m_iOffset==iItem )
-		{
-			m_dPtrAttrs.Remove(i);
-			break;
-		}
-
-	ARRAY_FOREACH ( i, m_dFactorAttrs )
-		if ( m_dFactorAttrs[i].m_iOffset==iItem )
-		{
-			m_dFactorAttrs.Remove(i);
-			break;
-		}
+	m_dPtrAttrs.RemoveValue ( bind(&CSphNamedInt::m_iValue), iItem );
+	m_dFactorAttrs.RemoveValue ( bind(&CSphNamedInt::m_iValue), iItem );
 }
 
 
-void FixupPtrAttrs ( const CSphVector<CSphSchema::PtrAttr_t> & dSrcPtrAttrs, const CSphVector<CSphColumnInfo> & dDstAttrs, CSphVector<CSphSchema::PtrAttr_t> & dDstPtrAttrs )
+void CSphSchema::SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs )
 {
-	dDstPtrAttrs.Reset();
-	ARRAY_FOREACH ( iSrcPtrAttr, dSrcPtrAttrs )
-		ARRAY_FOREACH ( iDstAttr, dDstAttrs )
-			if ( dSrcPtrAttrs[iSrcPtrAttr].m_sName==dDstAttrs[iDstAttr].m_sName )
-			{
-				CSphSchema::PtrAttr_t & tPtrAttr = dDstPtrAttrs.Add();
-				tPtrAttr.m_iOffset = dDstAttrs[iDstAttr].m_tLocator.m_iBitOffset / ROWITEM_BITS;
-				tPtrAttr.m_sName = dDstAttrs[iDstAttr].m_sName;
-				break;
-			}
-}
-
-
-void CSphSchema::AdoptPtrAttrs ( const CSphSchema & tSrc )
-{
-	FixupPtrAttrs ( tSrc.m_dPtrAttrs, m_dAttrs, m_dPtrAttrs );
-	FixupPtrAttrs ( tSrc.m_dFactorAttrs, m_dAttrs, m_dFactorAttrs );
+#ifndef NDEBUG
+	// ensure that every incoming column has a matching original column
+	// only check locators and attribute types, because at this stage,
+	// names that are used in dAttrs are already overwritten by the aliases
+	// (example: SELECT col1 a, col2 b, count(*) c FROM test)
+	//
+	// FIXME? maybe also lockdown the schema from further swaps, adds etc from here?
+	ARRAY_FOREACH ( i, dAttrs )
+	{
+		if ( dAttrs[i].m_tLocator.IsID() )
+			continue;
+		bool bFound = ARRAY_ANY ( bFound, m_dAttrs,
+			m_dAttrs[_any].m_tLocator==dAttrs[i].m_tLocator && m_dAttrs[_any].m_eAttrType==dAttrs[i].m_eAttrType )
+		assert ( bFound );
+	}
+#endif
+	m_dAttrs.SwapData ( dAttrs );
+	RebuildHash();
 }
 
 
@@ -6730,12 +6720,12 @@ void CSphSchema::CopyPtrs ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBoun
 	if ( iUpBound<0 )
 	{
 		ARRAY_FOREACH ( i, m_dPtrAttrs )
-			*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i].m_iOffset) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i].m_iOffset)).Leak();
+			*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i].m_iValue) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i].m_iValue)).Leak();
 	} else
 	{
 		for ( ; i<m_dPtrAttrs.GetLength(); ++i )
-			if ( m_dPtrAttrs[i].m_iOffset < iUpBound )
-				*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i].m_iOffset) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i].m_iOffset)).Leak();
+			if ( m_dPtrAttrs[i].m_iValue < iUpBound )
+				*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i].m_iValue) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i].m_iValue)).Leak();
 			else
 				break;
 	}
@@ -6744,7 +6734,7 @@ void CSphSchema::CopyPtrs ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBoun
 	// but it is necessary to copy factors when combining results from several indexes via a sorter because at this moment matches are the owners of factor data
 	ARRAY_FOREACH ( i, m_dFactorAttrs )
 	{
-		int iOffset = m_dFactorAttrs[i].m_iOffset;
+		int iOffset = m_dFactorAttrs[i].m_iValue;
 		BYTE * pData = *(BYTE**)(rhs.m_pDynamic+iOffset);
 		if ( pData )
 		{
@@ -6762,9 +6752,9 @@ void CSphSchema::CombinePtrs ( CSphMatch * pDst, const CSphMatch & rhs1, const C
 {
 	ARRAY_FOREACH ( i, m_dPtrAttrs )
 	{
-		const CSphMatch & rhs = ( m_dPtrAttrs[i].m_iOffset < iUpBound ) ? rhs1 : rhs2;
+		const CSphMatch & rhs = ( m_dPtrAttrs[i].m_iValue < iUpBound ) ? rhs1 : rhs2;
 		if ( pDst!=&rhs )
-			*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i].m_iOffset) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i].m_iOffset)).Leak();
+			*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i].m_iValue) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i].m_iValue)).Leak();
 	}
 
 	// not immediately obvious: this is not needed while pushing matches to sorters; factors are held in an outer hash table
@@ -6772,7 +6762,7 @@ void CSphSchema::CombinePtrs ( CSphMatch * pDst, const CSphMatch & rhs1, const C
 	if ( pDst!=&rhs1 )
 		ARRAY_FOREACH ( i, m_dFactorAttrs )
 		{
-			int iOffset = m_dFactorAttrs[i].m_iOffset;
+			int iOffset = m_dFactorAttrs[i].m_iValue;
 			BYTE * pData = *(BYTE**)(rhs1.m_pDynamic+iOffset);
 			if ( pData )
 			{
@@ -6799,18 +6789,18 @@ void CSphSchema::FreeStringPtrs ( CSphMatch * pMatch, int iLowBound, int iUpBoun
 		{
 			ARRAY_FOREACH ( i, m_dPtrAttrs )
 			{
-				if ( m_dPtrAttrs[i].m_iOffset<iLowBound )
+				if ( m_dPtrAttrs[i].m_iValue<iLowBound )
 					continue;
-				sStr.Adopt ( (char**) (pMatch->m_pDynamic+m_dPtrAttrs[i].m_iOffset));
+				sStr.Adopt ( (char**) (pMatch->m_pDynamic+m_dPtrAttrs[i].m_iValue));
 			}
 		} else
 		{
 			ARRAY_FOREACH ( i, m_dPtrAttrs )
 			{
-				if ( m_dPtrAttrs[i].m_iOffset<iLowBound )
+				if ( m_dPtrAttrs[i].m_iValue<iLowBound )
 					continue;
-				if ( m_dPtrAttrs[i].m_iOffset<iUpBound )
-					sStr.Adopt ( (char**) (pMatch->m_pDynamic+m_dPtrAttrs[i].m_iOffset));
+				if ( m_dPtrAttrs[i].m_iValue<iUpBound )
+					sStr.Adopt ( (char**) (pMatch->m_pDynamic+m_dPtrAttrs[i].m_iValue));
 				else
 					break;
 			}
@@ -6819,7 +6809,7 @@ void CSphSchema::FreeStringPtrs ( CSphMatch * pMatch, int iLowBound, int iUpBoun
 
 	ARRAY_FOREACH ( i, m_dFactorAttrs )
 	{
-		int iOffset = m_dFactorAttrs[i].m_iOffset;
+		int iOffset = m_dFactorAttrs[i].m_iValue;
 		if ( iOffset<iLowBound )
 			continue;
 		BYTE * pData = *(BYTE**)(pMatch->m_pDynamic+iOffset);

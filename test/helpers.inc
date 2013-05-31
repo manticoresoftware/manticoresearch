@@ -1034,9 +1034,10 @@ class SphinxConfig
 	}
 
 
-	function RunQuerySphinxQL ( &$error, $bench, $pick_query=-1 )
+	function RunQuerySphinxQL ( &$error, $bench=false )
 	{
-		global $sd_address, $sd_sphinxql_port, $action_retries, $action_wait_timeout;
+		global $sd_address, $sd_sphinxql_port, $action_retries, $action_wait_timeout, $g_pick_query;
+
 		$total = $done = 0;
 		if ($sd_address == "localhost")
 			$sd_address = "127.0.0.1";
@@ -1049,10 +1050,10 @@ class SphinxConfig
 
 		$qmin = 0;
 		$qmax = $qcount - 1;
-		if ( $pick_query>0 )
+		if ( $g_pick_query>0 )
 		{
-			$qmin = $pick_query-1;
-			$qmax = $pick_query-1;
+			$qmin = $g_pick_query-1;
+			$qmax = $g_pick_query-1;
 		}
 		for ( $n=$qmin; $n<=$qmax; $n++ )
 		{
@@ -1153,7 +1154,7 @@ class SphinxConfig
 
 	function RunQuery ( $index, &$error, $benchmark = null )
 	{
-		global $sd_address, $sd_port, $action_retries, $action_wait_timeout;
+		global $sd_address, $sd_port, $action_retries, $action_wait_timeout, $g_pick_query;
 		
 		$query_results = array ();		
 		$total = $done = 0;
@@ -1182,7 +1183,23 @@ class SphinxConfig
 		if ( !$benchmark )
 			$retries = $action_retries;
 
-		for ( $n=0; $n<count($this->_queries); $n++ )
+		// tricky bit
+		// sometimes, we run some API queries and then some QL queries!
+		// so when picker points to an API query, choose it
+		// but if it points past, adjust the picker
+		$qmin = 0;
+		$qmax = count($this->_queries) - 1;
+		if ( $g_pick_query>0 )
+		{
+			if ( $g_pick_query<=$qmax )
+			{
+				$qmin = $g_pick_query-1;
+				$qmax = $g_pick_query-1;
+			} else
+				$g_pick_query -= count($this->_queries);
+		}
+
+		for ( $n=$qmin; $n<=$qmax; $n++ )
 		{
 			$qinfo = $this->_queries[$n];
 			foreach ( $qinfo['query'] as $query )
@@ -2618,7 +2635,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 		if ( $config->IsSphinxqlTest () )
 		{
 			$error = "";
-			if ( ! $config->RunQuerySphinxQL ( $error, false, $pick_query ) )
+			if ( ! $config->RunQuerySphinxQL ( $error ) )
 			{
 				if ( !HandleFailure ( $config, $report, "$error\n", $nfailed ) )
 					$log .= "\tsubtest $subtest: query error: $error\n";

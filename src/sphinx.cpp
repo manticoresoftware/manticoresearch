@@ -16815,6 +16815,8 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 			case SPH_EVAL_STATIC:
 			case SPH_EVAL_OVERRIDE:
 			{
+				// this check may significantly slow down queries with huge schema attribute count
+#ifndef NDEBUG
 				const CSphColumnInfo * pMy = tSchema.GetAttr ( tIn.m_sName.cstr() );
 				if ( !pMy )
 				{
@@ -16843,7 +16845,8 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 							sphDumpAttr(tIn).cstr(), sphDumpAttr(*pMy).cstr() );
 						return false;
 					}
-					}
+				}
+#endif
 				break;
 			}
 

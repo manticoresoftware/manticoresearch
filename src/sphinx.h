@@ -1547,7 +1547,7 @@ protected:
 	/// reset hash and re-add all attributes
 	void					RebuildHash ();
 
-	/// add iAddValto all indexes strictly greater than iStartIdx in hash structures
+	/// add iAddVal to all indexes strictly greater than iStartIdx in hash structures
 	void					UpdateHash ( int iStartIdx, int iAddVal );
 
 	/// visitor-style uber-virtual assignment implementation

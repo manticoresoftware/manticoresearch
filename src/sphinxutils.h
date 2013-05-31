@@ -229,6 +229,8 @@ void sphCheckDuplicatePaths ( const CSphConfig & hConf );
 /// set globals from the common config section
 void sphConfigureCommon ( const CSphConfig & hConf );
 
+/// detect chinese chars in a buffer
+bool sphDetectChinese ( const BYTE * szBuffer, int iLength );
 
 #endif // _sphinxutils_
 

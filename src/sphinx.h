@@ -557,7 +557,10 @@ public:
 
 #if USE_RLP
 	/// create a RLP token filter
-	static ISphTokenizer *			CreateRLPFilter ( ISphTokenizer * pTokenizer, bool bChineseRLP, const char * szRLPRoot,	const char * szRLPEnv, const char * szRLPCtx, CSphString & sError );
+	static ISphTokenizer *			CreateRLPFilter ( ISphTokenizer * pTokenizer, bool bChineseRLP, const char * szRLPRoot,	const char * szRLPEnv, const char * szRLPCtx, bool bFilterChinese, CSphString & sError );
+
+	/// create a filter to split an RLP-processed token stream into tokens
+	static ISphTokenizer *			CreateRLPResultSplitter ( ISphTokenizer * pTokenizer, const char * szRLPCtx );
 #endif
 
 	/// save tokenizer settings to a stream
@@ -618,6 +621,8 @@ public:
 	virtual bool					TokenIsBlendedPart () const { return m_bBlendedPart; }
 	virtual int						SkipBlended () { return 0; }
 
+	virtual ISphTokenizer *			GetEmbeddedTokenizer () const { return NULL; }
+
 public:
 	/// spawn a clone of my own
 	virtual ISphTokenizer *			Clone ( ESphTokenizerClone eMode ) const = 0;
@@ -645,6 +650,9 @@ public:
 
 	/// get (readonly) lowercaser
 	const CSphLowercaser &			GetLowercaser() const { return m_tLC; }
+
+	/// get an RLP context path (if any)
+	virtual const char * GetRLPContext () const { return NULL; }
 
 protected:
 	virtual bool					RemapCharacters ( const char * sConfig, DWORD uFlags, const char * sSource, bool bCanRemap, CSphString & sError );
@@ -3051,6 +3059,14 @@ enum ESphHitFormat
 };
 
 
+enum ESphRLPFilter
+{
+	SPH_RLP_NONE			= 0,	///< rlp not used
+	SPH_RLP_PLAIN			= 1,	///< rlp used to tokenize every document
+	SPH_RLP_BATCHED			= 2		///< rlp used to batch documents and tokenize several documents at once
+};
+
+
 struct CSphIndexSettings : public CSphSourceSettings
 {
 	ESphDocinfo		m_eDocinfo;
@@ -3069,7 +3085,7 @@ struct CSphIndexSettings : public CSphSourceSettings
 	CSphVector<CSphString>	m_dBigramWords;
 
 	DWORD			m_uAotFilterMask;	///< lemmatize_XX_all forces us to transform queries on the index level too
-	bool			m_bChineseRLP;	///< chinese RLP filter
+	ESphRLPFilter	m_eChineseRLP;	///< chinese RLP filter
 	CSphString		m_sRLPContext;	///< path to RLP context file
 
 					CSphIndexSettings ();
@@ -3351,6 +3367,8 @@ extern CSphString g_sLemmatizerBase;
 #if USE_RLP
 extern CSphString g_sRLPRoot;
 extern CSphString g_sRLPEnv;
+extern int g_iRLPMaxBatchSize;
+extern int g_iRLPMaxBatchDocs;
 #endif
 
 /////////////////////////////////////////////////////////////////////////////

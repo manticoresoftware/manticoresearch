@@ -497,7 +497,9 @@ static KeyDesc_t g_dKeysCommon[] =
 {
 	{ "lemmatizer_base",		0, NULL },
 	{ "rlp_root",				0, NULL },
-	{ "rlp_environment",		0, NULL }
+	{ "rlp_environment",		0, NULL },
+	{ "rlp_max_batch_size",		0, NULL },
+	{ "rlp_max_batch_docs",		0, NULL }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1369,13 +1371,22 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 			}
 	}
 
-	tSettings.m_bChineseRLP = ARRAY_ANY ( tSettings.m_bChineseRLP, dMorphs, dMorphs[_any]=="rlp_chinese" );
+	bool bPlainRLP = ARRAY_ANY ( bPlainRLP, dMorphs, dMorphs[_any]=="rlp_chinese" );
+	bool bBatchedRLP = ARRAY_ANY ( bBatchedRLP, dMorphs, dMorphs[_any]=="rlp_chinese_batched" );
+
+	if ( bPlainRLP && bBatchedRLP )
+	{
+		fprintf ( stdout, "WARNING: both rlp_chinese and rlp_chinese_batched options specified; switching to rlp_chinese\n" );
+		bBatchedRLP = false;
+	}
+
+	tSettings.m_eChineseRLP = bPlainRLP ? SPH_RLP_PLAIN : ( bBatchedRLP ? SPH_RLP_BATCHED : SPH_RLP_NONE );
 	tSettings.m_sRLPContext = hIndex.GetStr ( "rlp_context" );
 
 #if !USE_RLP
-	if ( tSettings.m_bChineseRLP || !tSettings.m_sRLPContext.IsEmpty() )
+	if ( tSettings.m_eChineseRLP!=SPH_RLP_NONE || !tSettings.m_sRLPContext.IsEmpty() )
 	{
-		tSettings.m_bChineseRLP = false;
+		tSettings.m_eChineseRLP = SPH_RLP_NONE;
 		fprintf ( stdout, "WARNING: RLP options specified, but no RLP support compiled; ignoring\n" );
 	}
 #endif
@@ -2171,8 +2182,35 @@ void sphConfigureCommon ( const CSphConfig & hConf )
 #if USE_RLP
 		g_sRLPRoot = hCommon.GetStr ( "rlp_root" );
 		g_sRLPEnv = hCommon.GetStr ( "rlp_environment" );
+		g_iRLPMaxBatchSize = hCommon.GetSize ( "rlp_max_batch_size", 2097152 );
+		g_iRLPMaxBatchDocs = hCommon.GetInt ( "rlp_max_batch_docs" );
 #endif
 	}
+}
+
+static bool IsChineseCode ( int iCode )
+{
+	return ( ( iCode>=0x2E80 && iCode<=0x2EF3 ) ||	// CJK radicals
+		( iCode>=0x2F00 && iCode<=0x2FD5 ) ||	// Kangxi radicals
+		( iCode>=0x3105 && iCode<=0x312D ) ||	// Bopomofo
+		( iCode>=0x31C0 && iCode<=0x31E3 ) ||	// CJK strokes
+		( iCode>=0x3400 && iCode<=0x4DB5 ) ||	// CJK Ideograph Extension A
+		( iCode>=0x4E00 && iCode<=0x9FCC ) ||	// Ideograph
+		( iCode>=0xF900 && iCode<=0xFAD9 ) ||	// compatibility ideographs
+		( iCode>=0x20000 && iCode<=0x2FA1D ) );	// CJK Ideograph Extensions B/C/D, and compatibility ideographs
+}
+
+bool sphDetectChinese ( const BYTE * szBuffer, int iLength )
+{
+	const BYTE * pBuffer = szBuffer;
+	while ( pBuffer<szBuffer+iLength )
+	{
+		int iCode = sphUTF8Decode ( pBuffer );
+		if ( IsChineseCode ( iCode ) )
+			return true;
+	}
+
+	return false;
 }
 
 

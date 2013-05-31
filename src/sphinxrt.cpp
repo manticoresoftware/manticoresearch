@@ -3648,7 +3648,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iC
 	tWriter.PutByte ( m_tSettings.m_eBigramIndex ); // v.32+
 	tWriter.PutString ( m_tSettings.m_sBigramWords ); // v.32+
 	tWriter.PutByte ( m_tSettings.m_bIndexFieldLens ); // v. 35+
-	tWriter.PutByte ( m_tSettings.m_bChineseRLP ? 1 : 0 ); // v. 39+
+	tWriter.PutByte ( m_tSettings.m_eChineseRLP ); // v. 39+
 	tWriter.PutString ( m_tSettings.m_sRLPContext ); // v. 39+
 
 	// tokenizer
@@ -4232,8 +4232,8 @@ void RtIndex_t::PostSetup()
 	}
 
 #if USE_RLP
-	m_pTokenizer = ISphTokenizer::CreateRLPFilter ( m_pTokenizer, m_tSettings.m_bChineseRLP, g_sRLPRoot.cstr(),
-		g_sRLPEnv.cstr(), m_tSettings.m_sRLPContext.cstr(), m_sLastError );
+	m_pTokenizer = ISphTokenizer::CreateRLPFilter ( m_pTokenizer, m_tSettings.m_eChineseRLP!=SPH_RLP_NONE, g_sRLPRoot.cstr(),
+		g_sRLPEnv.cstr(), m_tSettings.m_sRLPContext.cstr(), true, m_sLastError );
 #endif
 
 	// FIXME!!! handle error
@@ -4243,8 +4243,8 @@ void RtIndex_t::PostSetup()
 		m_pTokenizerIndexing = pIndexing;
 
 #if USE_RLP
-	m_pTokenizerIndexing = ISphTokenizer::CreateRLPFilter ( m_pTokenizerIndexing, m_tSettings.m_bChineseRLP, g_sRLPRoot.cstr(),
-		g_sRLPEnv.cstr(), m_tSettings.m_sRLPContext.cstr(), m_sLastError );
+	m_pTokenizerIndexing = ISphTokenizer::CreateRLPFilter ( m_pTokenizerIndexing, m_tSettings.m_eChineseRLP!=SPH_RLP_NONE, g_sRLPRoot.cstr(),
+		g_sRLPEnv.cstr(), m_tSettings.m_sRLPContext.cstr(), true, m_sLastError );
 #endif
 }
 

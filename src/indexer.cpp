@@ -682,7 +682,11 @@ CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * 
 
 
 #if USE_MYSQL
-CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * sSourceName )
+#if USE_RLP
+CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * sSourceName, bool bBatchedRLP )
+#else
+CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * sSourceName, bool )
+#endif
 {
 	assert ( hSource["type"]=="mysql" );
 
@@ -696,7 +700,14 @@ CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * 
 	LOC_GETS ( tParams.m_sSslCert,			"mysql_ssl_cert" );
 	LOC_GETS ( tParams.m_sSslCA,			"mysql_ssl_ca" );
 
-	CSphSource_MySQL * pSrcMySQL = new CSphSource_MySQL ( sSourceName );
+	CSphSource_MySQL * pSrcMySQL;
+#if USE_RLP
+	if ( bBatchedRLP )
+		pSrcMySQL = new CSphSource_Proxy<CSphSource_MySQL> ( sSourceName );
+	else
+#endif
+		pSrcMySQL = new CSphSource_MySQL ( sSourceName );
+
 	if ( !pSrcMySQL->Setup ( tParams ) )
 		SafeDelete ( pSrcMySQL );
 
@@ -799,7 +810,7 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 }
 
 
-CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSourceName, bool bUTF8, bool bWordDict )
+CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSourceName, bool bUTF8, bool bBatchedRLP, bool bWordDict )
 {
 	if ( !hSource.Exists ( "type" ) )
 	{
@@ -814,7 +825,7 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 
 	#if USE_MYSQL
 	if ( hSource["type"]=="mysql" )
-		return SpawnSourceMySQL ( hSource, sSourceName );
+		return SpawnSourceMySQL ( hSource, sSourceName, bBatchedRLP );
 	#endif
 
 	#if USE_ODBC
@@ -960,8 +971,11 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 			pTokenizer = sphAotCreateFilter ( pTokenizer, pDict, tSettings.m_bIndexExactWords, tSettings.m_uAotFilterMask );
 
 #if USE_RLP
-		pTokenizer = ISphTokenizer::CreateRLPFilter ( pTokenizer, tSettings.m_bChineseRLP, g_sRLPRoot.cstr(),
-			g_sRLPEnv.cstr(), tSettings.m_sRLPContext.cstr(), sError );
+		if ( tSettings.m_eChineseRLP==SPH_RLP_BATCHED )
+			pTokenizer = ISphTokenizer::CreateRLPResultSplitter ( pTokenizer, tSettings.m_sRLPContext.cstr() );
+		else
+			pTokenizer = ISphTokenizer::CreateRLPFilter ( pTokenizer, tSettings.m_eChineseRLP!=SPH_RLP_NONE, g_sRLPRoot.cstr(), g_sRLPEnv.cstr(), tSettings.m_sRLPContext.cstr(), true, sError );
+
 		if ( !pTokenizer )
 			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 #endif
@@ -1047,7 +1061,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		}
 		const CSphConfigSection & hSource = hSources [ pSourceName->cstr() ];
 
-		CSphSource * pSource = SpawnSource ( hSource, pSourceName->cstr(), pTokenizer->IsUtf8 (), tDictSettings.m_bWordDict );
+		CSphSource * pSource = SpawnSource ( hSource, pSourceName->cstr(), pTokenizer->IsUtf8 (), tSettings.m_eChineseRLP==SPH_RLP_BATCHED, tDictSettings.m_bWordDict );
 		if ( !pSource )
 		{
 			bSpawnFailed = true;

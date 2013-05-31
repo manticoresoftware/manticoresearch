@@ -1420,6 +1420,8 @@ public:
 
 	virtual void					SetBuffer ( const BYTE * sBuffer, int iLength )	{ m_pTokenizer->SetBuffer ( sBuffer, iLength ); }
 	virtual BYTE *					GetToken ()										{ return m_pTokenizer->GetToken(); }
+
+	virtual ISphTokenizer *			GetEmbeddedTokenizer () const					{ return m_pTokenizer; }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1891,6 +1893,291 @@ public:
 		return true;
 	}
 };
+
+
+#if USE_RLP
+
+struct StoredDoc_t
+{
+	CSphMatch							m_tDocInfo;
+	CSphVector<CSphString>				m_dStrAttrs;
+	CSphVector<DWORD>					m_dMva;
+	CSphTightVector<BYTE*>				m_dFields;
+	CSphTightVector<bool>				m_dChinese;
+	CSphTightVector< CSphVector<BYTE> >	m_dFieldStorage;
+};
+
+const int PROXY_DOCUMENT_START = 0xFFFA;
+const int PROXY_FIELD_START_CHINESE = 0xFFFB;
+const int PROXY_FIELD_START_NONCHINESE = 0xFFFC;
+const int PROXY_TOKENIZED = 0xFFFD;
+
+const int PROXY_MARKER_LEN = 3;
+
+#define COPY_MARKER(_ptr,_marker) \
+	*_ptr++ = _marker[0]; \
+	*_ptr++ = _marker[1]; \
+	*_ptr++ = _marker[2];
+
+#define CMP_MARKER(_ptr, _marker) \
+	( _ptr[0]==_marker[0] && _ptr[1]==_marker[1] && _ptr[2]==_marker[2] )
+
+// proxy source
+template <class T>
+class CSphSource_Proxy : public T
+{
+public:
+	explicit CSphSource_Proxy ( const char * sSourceName )
+		: T ( sSourceName )
+		, m_dBatchedDocs ( g_iRLPMaxBatchDocs )
+		, m_iDocStart ( 0 )
+		, m_iDocCount ( 0 )
+		, m_pExtraTokenizer ( NULL )
+	{
+		assert ( sphUTF8Encode ( m_pMarkerDocStart, PROXY_DOCUMENT_START )==PROXY_MARKER_LEN );
+
+		sphUTF8Encode ( m_pMarkerDocStart, PROXY_DOCUMENT_START );
+		sphUTF8Encode ( m_pMarkerChineseField, PROXY_FIELD_START_CHINESE );
+		sphUTF8Encode ( m_pMarkerNonChineseField, PROXY_FIELD_START_NONCHINESE );
+		sphUTF8Encode ( m_pMarkerTokenized, PROXY_TOKENIZED );
+	}
+
+	virtual ~CSphSource_Proxy()
+	{
+		SafeDelete ( m_pExtraTokenizer );
+	}
+
+	virtual BYTE ** NextDocument ( CSphString & sError )
+	{
+		if ( !m_pExtraTokenizer )
+		{
+			ISphTokenizer * pEmbeddedTokenizer = T::m_pTokenizer->GetEmbeddedTokenizer();
+			assert ( pEmbeddedTokenizer );
+			m_pExtraTokenizer = ISphTokenizer::CreateRLPFilter ( pEmbeddedTokenizer->Clone ( SPH_CLONE_INDEX ), true, g_sRLPRoot.cstr(),
+				g_sRLPEnv.cstr(), T::m_pTokenizer->GetRLPContext(), false, sError );
+			if ( !m_pExtraTokenizer )
+				return NULL;
+		}
+
+		if ( !IsDocCacheEmpty() )
+			return CopyDoc();
+
+		m_iDocStart = 0;
+
+		int iCachedFieldSize = 0;
+
+		while ( !IsDocCacheFull() && iCachedFieldSize < g_iRLPMaxBatchSize )
+		{
+			BYTE ** pFields = T::NextDocument ( sError );
+			if ( !pFields )
+				break;
+
+			StoredDoc_t * pDoc = PushDoc();
+			int nFields = T::m_tSchema.m_dFields.GetLength();
+			CopyDocInfo ( pDoc->m_tDocInfo, T::m_tDocInfo );
+			pDoc->m_dMva = T::m_dMva;
+			pDoc->m_dStrAttrs = T::m_dStrAttrs;
+			pDoc->m_dFields.Resize ( nFields );
+			pDoc->m_dFieldStorage.Resize ( nFields );
+			pDoc->m_dChinese.Resize ( nFields );
+
+			for ( int i = 0; i < T::m_tSchema.m_dFields.GetLength(); i++ )
+			{
+				int iFieldLen = strlen ( (const char*)pFields[i] );
+				pDoc->m_dFieldStorage[i].Resize ( iFieldLen+1 );
+				memcpy ( pDoc->m_dFieldStorage[i].Begin(), pFields[i], iFieldLen+1 );
+				pDoc->m_dFields[i] = pDoc->m_dFieldStorage[i].Begin();
+				pDoc->m_dChinese[i] = sphDetectChinese ( pDoc->m_dFieldStorage[i].Begin(), pDoc->m_dFieldStorage[i].GetLength()-1 );
+				if ( pDoc->m_dChinese[i] )
+					iCachedFieldSize += iFieldLen+1;
+			}
+		}
+
+		if ( IsDocCacheEmpty() )
+			return NULL;
+
+		const int MAX_INDEX_LEN = 8;
+		m_dDocBuffer.Resize ( m_iDocCount*(PROXY_MARKER_LEN+MAX_INDEX_LEN+2+T::m_tSchema.m_dFields.GetLength()*(PROXY_MARKER_LEN+2))+iCachedFieldSize );
+		BYTE * pCurDocPtr = m_dDocBuffer.Begin();
+
+		char szTmp [256];
+
+		for ( int i = 0; i < m_iDocCount; i++ )
+		{
+			int iCurDoc = (m_iDocStart+i) % m_dBatchedDocs.GetLength();
+			StoredDoc_t & tDoc = m_dBatchedDocs[iCurDoc];
+			bool bHaveChineseText = ARRAY_ANY ( bHaveChineseText, tDoc.m_dChinese, tDoc.m_dChinese[_any] );
+
+			if ( !bHaveChineseText )
+				continue;
+
+			// document start tag
+			COPY_MARKER ( pCurDocPtr, m_pMarkerDocStart );
+
+			// space
+			*pCurDocPtr++ = ' ';
+
+			// index in plain text
+			snprintf ( szTmp, sizeof(szTmp), "%d", iCurDoc );
+			int iLen = strlen(szTmp);
+			memcpy ( pCurDocPtr, szTmp, iLen );
+			pCurDocPtr += iLen;
+
+			// space
+			*pCurDocPtr++ = ' ';
+
+			ARRAY_FOREACH ( iField, tDoc.m_dFieldStorage )
+				if ( tDoc.m_dChinese[iField] )
+				{
+					BYTE * pCachedField = tDoc.m_dFieldStorage[iField].Begin();
+					int iCachedFieldLen = tDoc.m_dFieldStorage[iField].GetLength()-1;
+
+					COPY_MARKER ( pCurDocPtr, m_pMarkerChineseField );
+					*pCurDocPtr++ = ' ';
+
+					memcpy ( pCurDocPtr, pCachedField, iCachedFieldLen );
+					pCurDocPtr += iCachedFieldLen;
+					*pCurDocPtr++ = ' ';
+				}
+				else
+				{
+					COPY_MARKER ( pCurDocPtr, m_pMarkerNonChineseField );
+					*pCurDocPtr++ = ' ';
+				}
+		}
+
+		m_dDocBuffer.Resize ( pCurDocPtr-m_dDocBuffer.Begin() );
+
+		m_pExtraTokenizer->SetBuffer ( m_dDocBuffer.Begin(), m_dDocBuffer.GetLength() );
+		BYTE * pToken;
+
+		StoredDoc_t * pCurDoc = NULL;
+		bool bIndexNext = false;
+		int iField = -1;
+		while ( ( pToken = m_pExtraTokenizer->GetToken() ) != NULL )
+		{
+			bool bSpecial = false;
+			int iTokenLen = strlen ( (const char *)pToken );
+			if ( bIndexNext )
+			{
+				pCurDoc = &(m_dBatchedDocs[atoi ( (const char*)pToken )]);
+				bIndexNext = false;
+				iField = -1;
+			}
+			else
+			{
+				if ( iTokenLen==PROXY_MARKER_LEN )
+				{
+					if ( CMP_MARKER ( pToken, m_pMarkerDocStart ) )
+					{
+						bIndexNext = true;
+						bSpecial = true;
+					} else if ( CMP_MARKER ( pToken, m_pMarkerChineseField ) )
+					{
+						assert ( pCurDoc );
+						iField++;
+						pCurDoc->m_dFieldStorage[iField].Resize(0);
+						pCurDoc->m_dFields[iField] = pCurDoc->m_dFieldStorage[iField].Begin();
+						bSpecial = true;
+					} else if ( CMP_MARKER ( pToken, m_pMarkerNonChineseField ) )
+					{
+						iField++;
+						bSpecial = true;
+					}
+				}
+
+				// simple token; append to current field
+				if ( !bSpecial )
+				{
+					assert ( pCurDoc && iField>=0 );
+					CSphVector<BYTE> & tStorage = pCurDoc->m_dFieldStorage[iField];
+					int iStoredLen = tStorage.GetLength();
+					if ( !iStoredLen )
+					{
+						tStorage.Resize ( PROXY_MARKER_LEN+1 );
+						memcpy ( tStorage.Begin(), m_pMarkerTokenized, PROXY_MARKER_LEN );
+						iStoredLen = tStorage.GetLength();
+					}
+
+					tStorage[iStoredLen-1] = ' ';
+					tStorage.Resize ( iStoredLen+iTokenLen+1 );
+					memcpy ( tStorage.Begin()+iStoredLen, pToken, iTokenLen+1 );
+					pCurDoc->m_dFields[iField] = tStorage.Begin();
+				}
+			}
+		}
+
+		return CopyDoc ();
+	}
+
+private:
+	CSphSource_Document *	m_pSource;
+	CSphFixedVector<StoredDoc_t> m_dBatchedDocs;
+	CSphVector<BYTE>		m_dDocBuffer;
+	int						m_iDocStart;
+	int						m_iDocCount;
+	ISphTokenizer *			m_pExtraTokenizer;
+
+	BYTE					m_pMarkerDocStart[PROXY_MARKER_LEN];
+	BYTE					m_pMarkerChineseField[PROXY_MARKER_LEN];
+	BYTE					m_pMarkerNonChineseField[PROXY_MARKER_LEN];
+	BYTE					m_pMarkerTokenized[PROXY_MARKER_LEN];
+
+	bool					IsDocCacheEmpty() const	{ return !m_iDocCount; }
+	bool					IsDocCacheFull() const { return m_iDocCount==m_dBatchedDocs.GetLength(); }
+
+	StoredDoc_t * PushDoc()
+	{
+		assert ( !IsDocCacheFull() );
+
+		int iEnd = (m_iDocStart+m_iDocCount) % m_dBatchedDocs.GetLength();
+		m_iDocCount++;
+
+		return &(m_dBatchedDocs[iEnd]);
+	}
+
+	StoredDoc_t * PopDoc()
+	{
+		assert ( !IsDocCacheEmpty() );
+
+		StoredDoc_t * pDoc = &(m_dBatchedDocs[m_iDocStart]);
+		m_iDocStart = (m_iDocStart+1) % m_dBatchedDocs.GetLength();
+		m_iDocCount--;
+		return pDoc;
+	}
+
+	BYTE ** CopyDoc ()
+	{
+		StoredDoc_t * pDoc = PopDoc();
+		CopyDocInfo ( T::m_tDocInfo, pDoc->m_tDocInfo );
+		T::m_tState.m_dFields = pDoc->m_dFields.Begin();
+		T::m_dMva = pDoc->m_dMva;
+		T::m_dStrAttrs = pDoc->m_dStrAttrs;
+
+		return T::m_tState.m_dFields;
+	}
+
+	void CopyDocInfo ( CSphMatch & tTo, const CSphMatch & tFrom )
+	{
+		if ( tFrom.m_pDynamic )
+		{
+			int iDynamic = T::m_tSchema.GetRowSize();
+
+			if ( !tTo.m_pDynamic )
+				tTo.Reset ( iDynamic );
+
+			memcpy ( tTo.m_pDynamic, tFrom.m_pDynamic, iDynamic*sizeof(CSphRowitem) );
+		}
+
+		tTo.m_pStatic = NULL;
+		tTo.m_iDocID = tFrom.m_iDocID;
+		tTo.m_iWeight = tFrom.m_iWeight;
+		tTo.m_iTag = tFrom.m_iTag;
+	}
+};
+
+#endif // USE_RLP
+
 
 #endif // _sphinxint_
 

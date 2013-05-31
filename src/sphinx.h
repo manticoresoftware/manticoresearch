@@ -1147,7 +1147,9 @@ inline int sphUnpackStr ( const BYTE * pRow, const BYTE ** ppStr )
 /// search query match (document info plus weight/tag)
 class CSphMatch
 {
-	friend struct CSphSchema;
+	friend class ISphSchema;
+	friend class CSphRsetSchema;
+
 public:
 	SphDocID_t				m_iDocID;		///< document ID
 	const CSphRowitem *		m_pStatic;		///< static part (stored in and owned by the index)
@@ -1337,6 +1339,7 @@ struct CSphSourceStats
 	}
 };
 
+//////////////////////////////////////////////////////////////////////////
 
 /// known multi-valued attr sources
 enum ESphAttrSrc
@@ -1417,11 +1420,84 @@ struct CSphColumnInfo
 };
 
 
-/// source schema
-struct CSphSchema
+/// barebones schema interface
+/// everything that is needed from every implementation of a schema
+class ISphSchema
 {
-	CSphString						m_sName;		///< my human-readable name
-	CSphVector<CSphColumnInfo>		m_dFields;		///< my fulltext-searchable fields
+protected:
+	CSphVector<CSphNamedInt>		m_dPtrAttrs;		///< names and rowitems of STRINGPTR and other ptrs to copy and delete
+	CSphVector<CSphNamedInt>		m_dFactorAttrs;		///< names and rowitems of SPH_ATTR_FACTORS attributes
+
+public:
+	/// get row size (static+dynamic combined)
+	virtual int						GetRowSize() const = 0;
+
+	/// get static row part size
+	virtual int						GetStaticSize() const = 0;
+
+	/// get dynamic row part size
+	virtual int						GetDynamicSize() const = 0;
+
+	/// get attrs count
+	virtual int						GetAttrsCount() const = 0;
+
+	/// get attribute index by name, returns -1 if not found
+	virtual int						GetAttrIndex ( const char * sName ) const = 0;
+
+	/// get attr by index
+	virtual const CSphColumnInfo &	GetAttr ( int iIndex ) const = 0;
+
+	/// get attr by name
+	virtual const CSphColumnInfo *	GetAttr ( const char * sName ) const = 0;
+
+	/// assign current schema to rset schema (kind of a visitor operator)
+	virtual void					AssignTo ( class CSphRsetSchema & lhs ) const = 0;
+
+public:
+	/// full copy, for purely dynamic matches
+	void							CloneWholeMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const;
+
+	/// free the linked strings and/or just initialize the pointers with NULL
+	void							FreeStringPtrs ( CSphMatch * pMatch, int iLowBound=0, int iUpBound=-1 ) const;
+
+	/// ???
+	void							CopyPtrs ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound=-1 ) const;
+
+protected:
+	/// generic AddAttr() implementation that tracks STRINGPTR, FACTORS attribtues
+	void							AddAttr ( CSphVector<CSphColumnInfo> & dAttrs, CSphVector<int> & dUsed, const CSphColumnInfo & tCol, bool bDynamic );
+
+	/// reset my trackers
+	void							Reset();
+};
+
+
+/// plain good old schema
+/// container that actually holds and owns all the fields, columns, etc
+///
+/// NOTE that while this one can be used everywhere where we need a schema
+/// it might be huge (say 1000+ attributes) and expensive to copy, modify, etc!
+/// so for most of the online query work, consider CSphRsetSchema
+class CSphSchema : public ISphSchema
+{
+	friend class CSphRsetSchema;
+
+protected:
+	static const int			HASH_THRESH		= 32;
+	static const int			BUCKET_COUNT	= 256;
+
+public:
+	CSphString					m_sName;		///< my human-readable name
+	CSphVector<CSphColumnInfo>	m_dFields;		///< my fulltext-searchable fields
+
+
+	CSphVector<CSphColumnInfo>	m_dAttrs;		///< all my attributes
+	CSphVector<int>				m_dStaticUsed;	///< static row part map (amount of used bits in each rowitem)
+	CSphVector<int>				m_dDynamicUsed;	///< dynamic row part map
+	int							m_iStaticSize;	///< static row size (can be different from m_dStaticUsed.GetLength() because of gaps)
+
+protected:
+	WORD						m_dBuckets [ BUCKET_COUNT ];	///< uses indexes in m_dAttrs as ptrs; 0xffff is like NULL in this hash
 
 public:
 
@@ -1442,9 +1518,6 @@ public:
 
 	/// reset fields and attrs
 	void					Reset ();
-
-	/// reset attrs only
-	void					ResetAttrs ();
 
 	/// get row size (static+dynamic combined)
 	int						GetRowSize () const				{ return m_iStaticSize + m_dDynamicUsed.GetLength(); }
@@ -1467,58 +1540,73 @@ public:
 	/// add attr
 	void					AddAttr ( const CSphColumnInfo & tAttr, bool bDynamic );
 
-	/// remove static attr (but do NOT recompute locations; for overrides)
-	/// WARNING, THIS IS A HACK THAT WILL LIKELY BREAK THE SCHEMA, DO NOT USE THIS UNLESS ABSOLUTELY SURE!
-	void					RemoveAttr ( int iIndex );
+protected:
+	/// returns 0xffff if bucket list is empty and position otherwise
+	WORD &					GetBucketPos ( const char * sName );
+
+	/// reset hash and re-add all attributes
+	void					RebuildHash ();
+
+	/// add iAddValto all indexes strictly greater than iStartIdx in hash structures
+	void					UpdateHash ( int iStartIdx, int iAddVal );
+
+	/// visitor-style uber-virtual assignment implementation
+	void					AssignTo ( CSphRsetSchema & lhs ) const;
+};
+
+
+/// lightweight schema to be used in sorters, result sets, etc
+/// avoids copying of static attributes part by keeping a pointer
+/// manages the additional dynamic attributes on its own
+///
+/// NOTE that for that reason CSphRsetSchema needs the originating index to exist
+/// (in case it keeps and uses a pointer to original schema in that index)
+class CSphRsetSchema : public ISphSchema
+{
+protected:
+	const CSphSchema *			m_pIndexSchema;		///< original index schema, for the static part
+	CSphVector<CSphColumnInfo>	m_dExtraAttrs;		///< additional dynamic attributes, for the dynamic one
+	CSphVector<int>				m_dDynamicUsed;		///< dynamic row part map
+	CSphVector<int>				m_dRemoved;			///< original indexes that are suppressed from the index schema by RemoveStaticAttr()
+
+public:
+	CSphVector<CSphColumnInfo>	m_dFields;			///< standalone case (agent result set), fields container
+
+public:
+								CSphRsetSchema();
+	CSphRsetSchema &			operator = ( const ISphSchema & rhs );
+	CSphRsetSchema &			operator = ( const CSphSchema & rhs );
+	virtual void				AssignTo ( CSphRsetSchema & lhs ) const		{ lhs = *this; }
+
+public:
+	int							GetRowSize() const;
+	int							GetStaticSize() const;
+	int							GetDynamicSize() const;
+	int							GetAttrsCount() const;
+	int							GetAttrIndex ( const char * sName ) const;
+	const CSphColumnInfo &		GetAttr ( int iIndex ) const;
+	const CSphColumnInfo *		GetAttr ( const char * sName ) const;
+
+public:
+	void						AddDynamicAttr ( const CSphColumnInfo & tCol );
+	void						RemoveStaticAttr ( int iAttr );
+	void						Reset();
+
+public:
+	/// simple copy; clones either the entire dynamic part, or a part thereof
+	void CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound=-1 ) const;
+
+	/// clone low part from 1-st match, high from the 2-nd
+	/// only used in N-groupby right now
+	void CombineMatch ( CSphMatch * pDst, const CSphMatch & rhs1, const CSphMatch & rhs2, int iUpBound=-1 ) const;
 
 	/// swap in a subset of current attributes, with not necessarily (!) unique names
 	/// used to create a network result set (ie. rset to be sent and then discarded)
 	/// WARNING, DO NOT USE THIS UNLESS ABSOLUTELY SURE!
 	void SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs );
-
-protected:
-	// also let the schema to clone the matches when necessary
-	void CopyPtrs ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound=-1 ) const;
-	void CombinePtrs ( CSphMatch * pDst, const CSphMatch & rhs1, const CSphMatch & rhs2, int iUpBound ) const;
-
-public:
-	// simple copy - clone the fields, copy the whole dynamic part, or just all up to some defined bound
-	void CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound=-1 ) const;
-
-	// clone low part from 1-st match, high from the 2-nd.
-	void CombineMatch ( CSphMatch * pDst, const CSphMatch & rhs1, const CSphMatch & rhs2, int iUpBound=-1 ) const;
-
-	// full copy - for pure dynamic matches.
-	void CloneWholeMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const;
-
-	// free the linked strings and/or just initialize the pointers with NULL
-	void FreeStringPtrs ( CSphMatch * pMatch, int iLowBound=0, int iUpBound=-1 ) const;
-
-	// returns 0xffff if bucket list is empty and position otherwise
-	WORD & GetBucketPos ( const char * sName );
-
-	// reset and add all elements
-	void RebuildHash ();
-
-	// exchange dynamic part
-	void Swap ( CSphSchema & rhs );
-
-protected:
-	CSphVector<CSphColumnInfo>		m_dAttrs;			///< all my attributes
-	CSphVector<int>					m_dStaticUsed;		///< static row part map (amount of used bits in each rowitem)
-	CSphVector<int>					m_dDynamicUsed;		///< dynamic row part map
-	int								m_iStaticSize;		///< static row size (can be different from m_dStaticUsed.GetLength() because of gaps)
-
-	void UpdateHash ( int iStartIdx, int iAddVal );
-
-	static const int	HASH_THRESH		= 32;
-	static const int	BUCKET_COUNT	= 256;
-	WORD				m_dBuckets [ BUCKET_COUNT ];	///< uses indexes in m_dAttrs as ptrs; 0xffff is like NULL in this hash
-
-protected:
-	CSphVector<CSphNamedInt>	m_dPtrAttrs;		///< attributes which have to be copied and deleted
-	CSphVector<CSphNamedInt>	m_dFactorAttrs;		///< these are the names and offsets of SPH_ATTR_FACTORS attributes
 };
+
+//////////////////////////////////////////////////////////////////////////
 
 /// HTML stripper
 class CSphHTMLStripper
@@ -2653,7 +2741,7 @@ class CSphQueryResult : public CSphQueryResultMeta
 public:
 	CSphSwapVector<CSphMatch>	m_dMatches;			///< top matching documents, no more than MAX_MATCHES
 
-	CSphSchema				m_tSchema;			///< result schema
+	CSphRsetSchema			m_tSchema;			///< result schema
 	const DWORD *			m_pMva;				///< pointer to MVA storage
 	const BYTE *			m_pStrings;			///< pointer to strings storage
 
@@ -2876,7 +2964,7 @@ public:
 	CSphTightVector<SphDocID_t> m_dJustPopped;
 
 protected:
-	CSphSchema			m_tSchema;		///< sorter schema (adds dynamic attributes on top of index schema)
+	CSphRsetSchema		m_tSchema;		///< sorter schema (adds dynamic attributes on top of index schema)
 
 public:
 	/// ctor
@@ -2907,13 +2995,10 @@ public:
 	virtual void		SetStringPool ( const BYTE * ) {}
 
 	/// set sorter schema by swapping in and (optionally) adjusting the argument
-	virtual void				SwapIn ( CSphSchema & tSchema ) { m_tSchema.Swap ( tSchema ); }
-
-	/// swap out sorter schema
-	virtual void				SwapOut ( CSphSchema & tSchema ) { m_tSchema.Swap ( tSchema ); }
+	virtual void		SetSchema ( CSphRsetSchema & tSchema ) { m_tSchema = tSchema; }
 
 	/// get incoming schema
-	virtual const CSphSchema &	GetSchema () const { return m_tSchema; }
+	virtual const CSphRsetSchema &	GetSchema () const { return m_tSchema; }
 
 	/// base push
 	/// returns false if the entry was rejected as duplicate
@@ -3236,14 +3321,14 @@ void				sphSetJsonOptions ( bool bStrict, bool bAutoconvNumbers, bool bKeynamesT
 
 /// parses sort clause, using a given schema
 /// fills eFunc and tState and optionally sError, returns result code
-ESortClauseParseResult	sphParseSortClause ( const CSphQuery * pQuery, const char * sClause, const CSphSchema & tSchema,
+ESortClauseParseResult	sphParseSortClause ( const CSphQuery * pQuery, const char * sClause, const ISphSchema & tSchema,
 	ESphSortFunc & eFunc, CSphMatchComparatorState & tState, CSphString & sError );
 
 /// creates proper queue for given query
 /// may return NULL on error; in this case, error message is placed in sError
 /// if the pUpdate is given, creates the updater's queue and perform the index update
 /// instead of searching
-ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError,
+ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const ISphSchema & tSchema, CSphString & sError,
 	CSphQueryProfile * pProfiler, bool bComputeItems=true, CSphSchema * pExtra=NULL, CSphAttrUpdateEx * pUpdate=NULL, bool * pZonespanlist=NULL,
 	bool * pPackedFactors=NULL, ISphExprHook * pHook=NULL );
 

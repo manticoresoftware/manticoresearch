@@ -56,7 +56,7 @@ protected :
 	bool m_bUsesAttrs;
 };
 
-ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const CSphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError );
+ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError );
 ISphFilter * sphJoinFilters ( ISphFilter *, ISphFilter * );
 
 #endif // _sphinxfilter_

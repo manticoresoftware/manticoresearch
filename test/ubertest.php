@@ -274,6 +274,7 @@ while ( file_exists ( "config_$nfile.conf" ) )
 $nfile = 1;
 while ( file_exists ( "error_$nfile.txt" ) )
 {
+	// FIXME? not when there were actual errors?
 	@unlink ( "error_$nfile.txt" );
 	$nfile++;
 }

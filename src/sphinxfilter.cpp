@@ -1106,7 +1106,7 @@ static ISphFilter * CreateFilterJson ( const CSphColumnInfo * pAttr, ESphFilter 
 // PUBLIC FACING INTERFACE
 //////////////////////////////////////////////////////////////////////////
 
-ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const CSphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError )
+ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError )
 {
 	ISphFilter * pFilter = 0;
 	const CSphColumnInfo * pAttr = NULL;

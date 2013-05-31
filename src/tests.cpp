@@ -2478,7 +2478,8 @@ void TestRTSendVsMerge ()
 
 	pSrc->Disconnect();
 
-	pSorter->SwapOut ( tResult.m_tSchema );
+	tResult.m_tSchema = pSorter->GetSchema(); // can SwapOut
+
 	for ( int i=0; i<tResult.m_dMatches.GetLength(); i++ )
 	{
 		const SphDocID_t tID = tResult.m_dMatches[i].m_iDocID;

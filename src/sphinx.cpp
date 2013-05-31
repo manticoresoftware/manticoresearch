@@ -6370,7 +6370,7 @@ void CSphQueryStats::Add ( const CSphQueryStats & tStats )
 
 
 /////////////////////////////////////////////////////////////////////////////
-// SCHEMA
+// SCHEMAS
 /////////////////////////////////////////////////////////////////////////////
 
 static CSphString sphDumpAttr ( const CSphColumnInfo & tAttr )
@@ -6412,6 +6412,156 @@ CSphColumnInfo::CSphColumnInfo ( const char * sName, ESphAttr eType )
 	sphColumnToLowercase ( const_cast<char *>( m_sName.cstr() ) );
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+void ISphSchema::Reset()
+{
+	m_dPtrAttrs.Reset();
+	m_dFactorAttrs.Reset();
+}
+
+
+void ISphSchema::AddAttr ( CSphVector<CSphColumnInfo> & dAttrs, CSphVector<int> & dUsed, const CSphColumnInfo & tCol, bool bDynamic )
+{
+	assert ( tCol.m_eAttrType!=SPH_ATTR_NONE && !tCol.m_tLocator.IsID() ); // not via this orifice bro
+	if ( tCol.m_eAttrType==SPH_ATTR_NONE || tCol.m_tLocator.IsID() )
+		return;
+
+	dAttrs.Add ( tCol );
+	CSphAttrLocator & tLoc = dAttrs.Last().m_tLocator;
+
+	int iBits = ROWITEM_BITS;
+	if ( tLoc.m_iBitCount>0 )
+		iBits = tLoc.m_iBitCount;
+	if ( tCol.m_eAttrType==SPH_ATTR_BOOL )
+		iBits = 1;
+	if ( tCol.m_eAttrType==SPH_ATTR_BIGINT || tCol.m_eAttrType==SPH_ATTR_JSON_FIELD )
+		iBits = 64;
+	if ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR || tCol.m_eAttrType==SPH_ATTR_FACTORS )
+	{
+		assert ( bDynamic );
+		iBits = ROWITEMPTR_BITS;
+		CSphNamedInt & t = ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR )
+			? m_dPtrAttrs.Add()
+			: m_dFactorAttrs.Add();
+		t.m_iValue = dUsed.GetLength();
+		t.m_sName = tCol.m_sName;
+	}
+
+	tLoc.m_iBitCount = iBits;
+	tLoc.m_bDynamic = bDynamic;
+
+	if ( iBits>=ROWITEM_BITS )
+	{
+		tLoc.m_iBitOffset = dUsed.GetLength()*ROWITEM_BITS;
+		int iItems = (iBits+ROWITEM_BITS-1) / ROWITEM_BITS;
+		for ( int i=0; i<iItems; i++ )
+			dUsed.Add ( ROWITEM_BITS );
+	} else
+	{
+		int iItem;
+		for ( iItem=0; iItem<dUsed.GetLength(); iItem++ )
+			if ( dUsed[iItem]+iBits<=ROWITEM_BITS )
+				break;
+		if ( iItem==dUsed.GetLength() )
+			dUsed.Add ( 0 );
+		tLoc.m_iBitOffset = iItem*ROWITEM_BITS + dUsed[iItem];
+		dUsed[iItem] += iBits;
+	}
+}
+
+
+void ISphSchema::CloneWholeMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const
+{
+	assert ( pDst );
+	FreeStringPtrs ( pDst );
+	pDst->Combine ( rhs, GetRowSize() );
+	CopyPtrs ( pDst, rhs );
+}
+
+
+void ISphSchema::CopyPtrs ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound ) const
+{
+	int i = 0;
+
+	if ( iUpBound<0 )
+	{
+		ARRAY_FOREACH ( i, m_dPtrAttrs )
+			*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i].m_iValue) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i].m_iValue)).Leak();
+	} else
+	{
+		for ( ; i<m_dPtrAttrs.GetLength(); ++i )
+			if ( m_dPtrAttrs[i].m_iValue < iUpBound )
+				*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i].m_iValue) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i].m_iValue)).Leak();
+			else
+				break;
+	}
+
+	// not immediately obvious: this is not needed while pushing matches to sorters; factors are held in an outer hash table
+	// but it is necessary to copy factors when combining results from several indexes via a sorter because at this moment matches are the owners of factor data
+	ARRAY_FOREACH ( i, m_dFactorAttrs )
+	{
+		int iOffset = m_dFactorAttrs[i].m_iValue;
+		BYTE * pData = *(BYTE**)(rhs.m_pDynamic+iOffset);
+		if ( pData )
+		{
+			DWORD uDataSize = *(DWORD*)pData;
+			assert ( uDataSize );
+
+			BYTE * pCopy = new BYTE[uDataSize];
+			memcpy ( pCopy, pData, uDataSize );
+			*(BYTE**)(pDst->m_pDynamic+iOffset) = pCopy;
+		}
+	}
+}
+
+
+void ISphSchema::FreeStringPtrs ( CSphMatch * pMatch, int iLowBound, int iUpBound ) const
+{
+	assert ( pMatch );
+	if ( !pMatch->m_pDynamic )
+		return;
+
+	if ( m_dPtrAttrs.GetLength() )
+	{
+		CSphString sStr;
+		if ( iUpBound<0 )
+		{
+			ARRAY_FOREACH ( i, m_dPtrAttrs )
+			{
+				if ( m_dPtrAttrs[i].m_iValue<iLowBound )
+					continue;
+				sStr.Adopt ( (char**) (pMatch->m_pDynamic+m_dPtrAttrs[i].m_iValue));
+			}
+		} else
+		{
+			ARRAY_FOREACH ( i, m_dPtrAttrs )
+			{
+				if ( m_dPtrAttrs[i].m_iValue<iLowBound )
+					continue;
+				if ( m_dPtrAttrs[i].m_iValue<iUpBound )
+					sStr.Adopt ( (char**) (pMatch->m_pDynamic+m_dPtrAttrs[i].m_iValue));
+				else
+					break;
+			}
+		}
+	}
+
+	ARRAY_FOREACH ( i, m_dFactorAttrs )
+	{
+		int iOffset = m_dFactorAttrs[i].m_iValue;
+		if ( iOffset<iLowBound )
+			continue;
+		BYTE * pData = *(BYTE**)(pMatch->m_pDynamic+iOffset);
+		if ( pData )
+		{
+			delete [] pData;
+			*(BYTE**)(pMatch->m_pDynamic+iOffset) = NULL;
+		}
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
 
 CSphSchema::CSphSchema ( const char * sName )
 	: m_sName ( sName )
@@ -6533,34 +6683,25 @@ const CSphColumnInfo * CSphSchema::GetAttr ( const char * sName ) const
 
 void CSphSchema::Reset ()
 {
+	ISphSchema::Reset();
 	m_dFields.Reset();
-	ResetAttrs ();
-}
-
-
-void CSphSchema::ResetAttrs ()
-{
 	m_dAttrs.Reset();
 	for ( int i=0; i<BUCKET_COUNT; i++ )
 		m_dBuckets[i] = 0xffff;
 	m_dStaticUsed.Reset();
 	m_dDynamicUsed.Reset();
-	m_dPtrAttrs.Reset();
-	m_dFactorAttrs.Reset();
 	m_iStaticSize = 0;
 }
 
 
 void CSphSchema::AddAttr ( const CSphColumnInfo & tCol, bool bDynamic )
 {
-	assert ( tCol.m_eAttrType!=SPH_ATTR_NONE );
-	if ( tCol.m_eAttrType==SPH_ATTR_NONE )
-		return;
+	ISphSchema::AddAttr ( m_dAttrs, bDynamic ? m_dDynamicUsed : m_dStaticUsed, tCol, bDynamic );
 
-	m_dAttrs.Add ( tCol );
-	CSphAttrLocator & tLoc = m_dAttrs.Last().m_tLocator;
+	// update static size
+	m_iStaticSize = m_dStaticUsed.GetLength();
 
-	// hash add
+	// do hash add
 	if ( m_dAttrs.GetLength()==HASH_THRESH )
 		RebuildHash();
 	else if ( m_dAttrs.GetLength()>HASH_THRESH )
@@ -6569,264 +6710,15 @@ void CSphSchema::AddAttr ( const CSphColumnInfo & tCol, bool bDynamic )
 		m_dAttrs.Last().m_uNext = uPos;
 		uPos = (WORD)( m_dAttrs.GetLength()-1 );
 	}
-
-	if ( tLoc.IsID() )
-		return;
-
-	int iBits = ROWITEM_BITS;
-	if ( tCol.m_tLocator.m_iBitCount>0 )		iBits = tCol.m_tLocator.m_iBitCount;
-	if ( tCol.m_eAttrType==SPH_ATTR_BOOL )		iBits = 1;
-	if ( tCol.m_eAttrType==SPH_ATTR_BIGINT || tCol.m_eAttrType==SPH_ATTR_JSON_FIELD )	iBits = 64;
-	tLoc.m_bDynamic = bDynamic;
-	CSphVector<int> & dUsed = bDynamic ? m_dDynamicUsed : m_dStaticUsed;
-	if ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR )
-	{
-		iBits = ROWITEMPTR_BITS;
-		CSphNamedInt & t = m_dPtrAttrs.Add();
-		t.m_iValue = dUsed.GetLength();
-		t.m_sName = tCol.m_sName;
-	}
-	if ( tCol.m_eAttrType==SPH_ATTR_FACTORS )
-	{
-		iBits = ROWITEMPTR_BITS;
-		CSphNamedInt & t = m_dFactorAttrs.Add();
-		t.m_iValue = dUsed.GetLength();
-		t.m_sName = tCol.m_sName;
-	}
-	tLoc.m_iBitCount = iBits;
-	if ( iBits>=ROWITEM_BITS )
-	{
-		tLoc.m_iBitOffset = dUsed.GetLength()*ROWITEM_BITS;
-
-		int iItems = (iBits+ROWITEM_BITS-1) / ROWITEM_BITS;
-		for ( int i=0; i<iItems; i++ )
-		{
-			dUsed.Add ( ROWITEM_BITS );
-			if ( !bDynamic )
-				m_iStaticSize++;
-		}
-
-	} else
-	{
-		int iItem;
-		for ( iItem=0; iItem<dUsed.GetLength(); iItem++ )
-			if ( dUsed[iItem]+iBits<=ROWITEM_BITS )
-				break;
-		if ( iItem==dUsed.GetLength() )
-		{
-			dUsed.Add ( 0 );
-			if ( !bDynamic )
-				m_iStaticSize++;
-		}
-
-		tLoc.m_iBitOffset = iItem*ROWITEM_BITS + dUsed[iItem];
-		dUsed[iItem] += iBits;
-	}
 }
 
-
-void CSphSchema::RemoveAttr ( int iIndex )
-{
-	// adjust size
-	CSphAttrLocator & tLoc = m_dAttrs[iIndex].m_tLocator;
-	assert ( !tLoc.m_bDynamic );
-
-	int iItem = tLoc.m_iBitOffset / ROWITEM_BITS;
-	if ( tLoc.m_iBitCount>=ROWITEM_BITS )
-	{
-		for ( int i=0; i<tLoc.m_iBitCount/ROWITEM_BITS; i++ )
-		{
-			m_dStaticUsed[i+iItem] = 0;
-			m_iStaticSize--;
-		}
-	} else
-	{
-		m_dStaticUsed[iItem] -= tLoc.m_iBitCount;
-		assert ( m_dStaticUsed[iItem]>=0 );
-
-		if ( m_dStaticUsed[iItem]<=0 )
-			m_iStaticSize--;
-	}
-
-	// hash delete
-	if ( m_dAttrs.GetLength()>HASH_THRESH )
-	{
-		WORD & uPos = GetBucketPos ( m_dAttrs [ iIndex ].m_sName.cstr() );
-		while ( m_dAttrs [ uPos ].m_sName!=m_dAttrs [ iIndex ].m_sName )
-			uPos = m_dAttrs [ uPos ].m_uNext;
-		uPos = m_dAttrs [ uPos ].m_uNext;
-	}
-
-	m_dAttrs.Remove ( iIndex );
-
-	UpdateHash ( iIndex, -1 );
-
-	m_dPtrAttrs.RemoveValue ( bind(&CSphNamedInt::m_iValue), iItem );
-	m_dFactorAttrs.RemoveValue ( bind(&CSphNamedInt::m_iValue), iItem );
-}
-
-
-void CSphSchema::SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs )
-{
-#ifndef NDEBUG
-	// ensure that every incoming column has a matching original column
-	// only check locators and attribute types, because at this stage,
-	// names that are used in dAttrs are already overwritten by the aliases
-	// (example: SELECT col1 a, col2 b, count(*) c FROM test)
-	//
-	// FIXME? maybe also lockdown the schema from further swaps, adds etc from here?
-	ARRAY_FOREACH ( i, dAttrs )
-	{
-		if ( dAttrs[i].m_tLocator.IsID() )
-			continue;
-		bool bFound = ARRAY_ANY ( bFound, m_dAttrs,
-			m_dAttrs[_any].m_tLocator==dAttrs[i].m_tLocator && m_dAttrs[_any].m_eAttrType==dAttrs[i].m_eAttrType )
-		assert ( bFound );
-	}
-#endif
-	m_dAttrs.SwapData ( dAttrs );
-	RebuildHash();
-}
-
-
-void CSphSchema::CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound ) const
-{
-	assert ( pDst );
-	FreeStringPtrs ( pDst, 0, iUpBound );
-	pDst->Combine ( rhs, GetDynamicSize(), iUpBound );
-	CopyPtrs ( pDst, rhs, iUpBound );
-};
-
-void CSphSchema::CombineMatch ( CSphMatch * pDst, const CSphMatch & rhs1, const CSphMatch & rhs2, int iUpBound ) const
-{
-	assert ( pDst );
-	FreeStringPtrs ( pDst, (pDst==&rhs1)?iUpBound:0 );
-	pDst->Combine ( rhs1, GetDynamicSize(), iUpBound, &rhs2 );
-	CombinePtrs ( pDst, rhs1, rhs2, iUpBound );
-}
-
-void CSphSchema::CloneWholeMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const
-{
-	assert ( pDst );
-	FreeStringPtrs ( pDst );
-	pDst->Combine ( rhs, GetRowSize() );
-	CopyPtrs ( pDst, rhs );
-};
-
-void CSphSchema::CopyPtrs ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound ) const
-{
-	int i = 0;
-
-	if ( iUpBound<0 )
-	{
-		ARRAY_FOREACH ( i, m_dPtrAttrs )
-			*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i].m_iValue) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i].m_iValue)).Leak();
-	} else
-	{
-		for ( ; i<m_dPtrAttrs.GetLength(); ++i )
-			if ( m_dPtrAttrs[i].m_iValue < iUpBound )
-				*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i].m_iValue) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i].m_iValue)).Leak();
-			else
-				break;
-	}
-
-	// not immediately obvious: this is not needed while pushing matches to sorters; factors are held in an outer hash table
-	// but it is necessary to copy factors when combining results from several indexes via a sorter because at this moment matches are the owners of factor data
-	ARRAY_FOREACH ( i, m_dFactorAttrs )
-	{
-		int iOffset = m_dFactorAttrs[i].m_iValue;
-		BYTE * pData = *(BYTE**)(rhs.m_pDynamic+iOffset);
-		if ( pData )
-		{
-			DWORD uDataSize = *(DWORD*)pData;
-			assert ( uDataSize );
-
-			BYTE * pCopy = new BYTE[uDataSize];
-			memcpy ( pCopy, pData, uDataSize );
-			*(BYTE**)(pDst->m_pDynamic+iOffset) = pCopy;
-		}
-	}
-}
-
-void CSphSchema::CombinePtrs ( CSphMatch * pDst, const CSphMatch & rhs1, const CSphMatch & rhs2, int iUpBound ) const
-{
-	ARRAY_FOREACH ( i, m_dPtrAttrs )
-	{
-		const CSphMatch & rhs = ( m_dPtrAttrs[i].m_iValue < iUpBound ) ? rhs1 : rhs2;
-		if ( pDst!=&rhs )
-			*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i].m_iValue) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i].m_iValue)).Leak();
-	}
-
-	// not immediately obvious: this is not needed while pushing matches to sorters; factors are held in an outer hash table
-	// but it is necessary to copy factors when combining results from several indexes via a sorter because at this moment matches are the owners of factor data
-	if ( pDst!=&rhs1 )
-		ARRAY_FOREACH ( i, m_dFactorAttrs )
-		{
-			int iOffset = m_dFactorAttrs[i].m_iValue;
-			BYTE * pData = *(BYTE**)(rhs1.m_pDynamic+iOffset);
-			if ( pData )
-			{
-				DWORD uDataSize = *(DWORD*)pData;
-				assert ( uDataSize );
-
-				BYTE * pCopy = new BYTE[uDataSize];
-				memcpy ( pCopy, pData, uDataSize );
-				*(BYTE**)(pDst->m_pDynamic+iOffset) = pCopy;
-			}
-		}
-}
-
-void CSphSchema::FreeStringPtrs ( CSphMatch * pMatch, int iLowBound, int iUpBound ) const
-{
-	assert ( pMatch );
-	if ( !pMatch->m_pDynamic )
-		return;
-
-	if ( m_dPtrAttrs.GetLength() )
-	{
-		CSphString sStr;
-		if ( iUpBound<0 )
-		{
-			ARRAY_FOREACH ( i, m_dPtrAttrs )
-			{
-				if ( m_dPtrAttrs[i].m_iValue<iLowBound )
-					continue;
-				sStr.Adopt ( (char**) (pMatch->m_pDynamic+m_dPtrAttrs[i].m_iValue));
-			}
-		} else
-		{
-			ARRAY_FOREACH ( i, m_dPtrAttrs )
-			{
-				if ( m_dPtrAttrs[i].m_iValue<iLowBound )
-					continue;
-				if ( m_dPtrAttrs[i].m_iValue<iUpBound )
-					sStr.Adopt ( (char**) (pMatch->m_pDynamic+m_dPtrAttrs[i].m_iValue));
-				else
-					break;
-			}
-		}
-	}
-
-	ARRAY_FOREACH ( i, m_dFactorAttrs )
-	{
-		int iOffset = m_dFactorAttrs[i].m_iValue;
-		if ( iOffset<iLowBound )
-			continue;
-		BYTE * pData = *(BYTE**)(pMatch->m_pDynamic+iOffset);
-		if ( pData )
-		{
-			delete [] pData;
-			*(BYTE**)(pMatch->m_pDynamic+iOffset) = NULL;
-		}
-	}
-}
 
 WORD & CSphSchema::GetBucketPos ( const char * sName )
 {
 	DWORD uCrc = sphCRC32 ( (const BYTE*)sName );
-
 	return m_dBuckets [ uCrc % BUCKET_COUNT ];
 }
+
 
 void CSphSchema::RebuildHash ()
 {
@@ -6843,6 +6735,7 @@ void CSphSchema::RebuildHash ()
 		uPos = WORD(i);
 	}
 }
+
 
 void CSphSchema::UpdateHash ( int iStartIndex, int iAddVal )
 {
@@ -6863,22 +6756,221 @@ void CSphSchema::UpdateHash ( int iStartIndex, int iAddVal )
 	}
 }
 
-void CSphSchema::Swap ( CSphSchema & rhs )
+
+void CSphSchema::AssignTo ( CSphRsetSchema & lhs ) const
 {
-	::Swap ( m_sName, rhs.m_sName );
-	m_dFields.SwapData ( rhs.m_dFields );
-	m_dAttrs.SwapData ( rhs.m_dAttrs );
-	m_dStaticUsed.SwapData ( rhs.m_dStaticUsed );
-	m_dDynamicUsed.SwapData ( rhs.m_dDynamicUsed );
-	::Swap ( m_iStaticSize, rhs.m_iStaticSize );
+	lhs = *this;
+}
 
-	WORD dTmp [ BUCKET_COUNT ];
-	memcpy ( dTmp, m_dBuckets, sizeof(dTmp) );
-	memcpy ( m_dBuckets, rhs.m_dBuckets, sizeof(m_dBuckets) );
-	memcpy ( rhs.m_dBuckets, dTmp, sizeof(rhs.m_dBuckets) );
+//////////////////////////////////////////////////////////////////////////
 
-	m_dPtrAttrs.SwapData ( rhs.m_dPtrAttrs );
-	m_dFactorAttrs.SwapData ( rhs.m_dFactorAttrs );
+CSphRsetSchema::CSphRsetSchema()
+	: m_pIndexSchema ( NULL )
+{}
+
+
+void CSphRsetSchema::Reset ()
+{
+	ISphSchema::Reset();
+	m_pIndexSchema = NULL;
+	m_dExtraAttrs.Reset();
+	m_dDynamicUsed.Reset();
+	m_dFields.Reset();
+}
+
+
+void CSphRsetSchema::AddDynamicAttr ( const CSphColumnInfo & tCol )
+{
+	ISphSchema::AddAttr ( m_dExtraAttrs, m_dDynamicUsed, tCol, true );
+}
+
+
+int CSphRsetSchema::GetRowSize() const
+{
+	// we copy over dynamic map in case index schema has dynamic attributes
+	// (that happens in case of inline attributes, or RAM segments in RT indexes)
+	// so there is no need to add GetDynamicSize() here
+	return m_pIndexSchema
+		? m_dDynamicUsed.GetLength() + m_pIndexSchema->GetStaticSize()
+		: m_dDynamicUsed.GetLength();
+}
+
+
+int CSphRsetSchema::GetStaticSize() const
+{
+	// result set schemas additions are always dynamic
+	return m_pIndexSchema ? m_pIndexSchema->GetStaticSize() : 0;
+}
+
+
+int CSphRsetSchema::GetDynamicSize() const
+{
+	// we copy over dynamic map in case index schema has dynamic attributes
+	return m_dDynamicUsed.GetLength();
+}
+
+
+int CSphRsetSchema::GetAttrsCount() const
+{
+	return m_pIndexSchema
+		? m_dExtraAttrs.GetLength() + m_pIndexSchema->GetAttrsCount() - m_dRemoved.GetLength()
+		: m_dExtraAttrs.GetLength();
+}
+
+
+int CSphRsetSchema::GetAttrIndex ( const char * sName ) const
+{
+	ARRAY_FOREACH ( i, m_dExtraAttrs )
+		if ( m_dExtraAttrs[i].m_sName==sName )
+			return i + ( m_pIndexSchema ? m_pIndexSchema->GetAttrsCount() - m_dRemoved.GetLength() : 0 );
+
+	if ( !m_pIndexSchema )
+		return -1;
+
+	int iRes = m_pIndexSchema->GetAttrIndex(sName);
+	if ( iRes>=0 )
+	{
+		if ( m_dRemoved.Contains ( iRes ) )
+			return -1;
+		int iSub = 0;
+		ARRAY_FOREACH_COND ( i, m_dRemoved, iRes>=m_dRemoved[i] )
+			iSub++;
+		return iRes - iSub;
+	}
+	return -1;
+}
+
+
+const CSphColumnInfo & CSphRsetSchema::GetAttr ( int iIndex ) const
+{
+	if ( !m_pIndexSchema )
+		return m_dExtraAttrs[iIndex];
+
+	if ( iIndex < m_pIndexSchema->GetAttrsCount() - m_dRemoved.GetLength() )
+	{
+		ARRAY_FOREACH_COND ( i, m_dRemoved, iIndex>=m_dRemoved[i] )
+			iIndex++;
+		return m_pIndexSchema->GetAttr(iIndex);
+	}
+
+	return m_dExtraAttrs [ iIndex - m_pIndexSchema->GetAttrsCount() + m_dRemoved.GetLength() ];
+}
+
+
+const CSphColumnInfo * CSphRsetSchema::GetAttr ( const char * sName ) const
+{
+	ARRAY_FOREACH ( i, m_dExtraAttrs )
+		if ( m_dExtraAttrs[i].m_sName==sName )
+			return &m_dExtraAttrs[i];
+	if ( m_pIndexSchema )
+		return m_pIndexSchema->GetAttr ( sName );
+	return NULL;
+}
+
+
+CSphRsetSchema & CSphRsetSchema::operator = ( const ISphSchema & rhs )
+{
+	rhs.AssignTo ( *this );
+	return *this;
+}
+
+
+CSphRsetSchema & CSphRsetSchema::operator = ( const CSphSchema & rhs )
+{
+	Reset();
+	m_dFields = rhs.m_dFields; // OPTIMIZE? sad but copied
+	m_pIndexSchema = &rhs;
+
+	// copy over dynamic rowitems map
+	// so that the new attributes we might add would not overlap
+	m_dDynamicUsed = rhs.m_dDynamicUsed;
+	return *this;
+}
+
+
+void CSphRsetSchema::RemoveStaticAttr ( int iAttr )
+{
+	assert ( m_pIndexSchema );
+	assert ( iAttr>=0 );
+	assert ( iAttr<( m_pIndexSchema->GetAttrsCount() - m_dRemoved.GetLength() ) );
+
+	// map from rset indexes (adjusted for removal) to index schema indexes (the original ones)
+	ARRAY_FOREACH_COND ( i, m_dRemoved, iAttr>=m_dRemoved[i] )
+		iAttr++;
+	m_dRemoved.Add ( iAttr );
+	m_dRemoved.Uniq();
+}
+
+
+void CSphRsetSchema::SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs )
+{
+#ifndef NDEBUG
+	// ensure that every incoming column has a matching original column
+	// only check locators and attribute types, because at this stage,
+	// names that are used in dAttrs are already overwritten by the aliases
+	// (example: SELECT col1 a, col2 b, count(*) c FROM test)
+	//
+	// FIXME? maybe also lockdown the schema from further swaps, adds etc from here?
+	ARRAY_FOREACH ( i, dAttrs )
+	{
+		if ( dAttrs[i].m_tLocator.IsID() )
+			continue;
+		bool bFound1 = false;
+		if ( m_pIndexSchema )
+		{
+			const CSphVector<CSphColumnInfo> & dSrc = m_pIndexSchema->m_dAttrs;
+			bFound1 = ARRAY_ANY ( bFound1, dSrc, dSrc[_any].m_tLocator==dAttrs[i].m_tLocator && dSrc[_any].m_eAttrType==dAttrs[i].m_eAttrType )
+		}
+		bool bFound2 = ARRAY_ANY ( bFound2, m_dExtraAttrs,
+			m_dExtraAttrs[_any].m_tLocator==dAttrs[i].m_tLocator && m_dExtraAttrs[_any].m_eAttrType==dAttrs[i].m_eAttrType )
+			assert ( bFound1 || bFound2 );
+	}
+#endif
+	m_dExtraAttrs.SwapData ( dAttrs );
+	m_pIndexSchema = NULL;
+}
+
+
+void CSphRsetSchema::CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound ) const
+{
+	assert ( pDst );
+	FreeStringPtrs ( pDst, 0, iUpBound );
+	pDst->Combine ( rhs, GetDynamicSize(), iUpBound );
+	CopyPtrs ( pDst, rhs, iUpBound );
+}
+
+
+void CSphRsetSchema::CombineMatch ( CSphMatch * pDst, const CSphMatch & rhs1, const CSphMatch & rhs2, int iUpBound ) const
+{
+	assert ( pDst );
+	FreeStringPtrs ( pDst, (pDst==&rhs1)?iUpBound:0 );
+	pDst->Combine ( rhs1, GetDynamicSize(), iUpBound, &rhs2 );
+
+	// combine ptrs
+	ARRAY_FOREACH ( i, m_dPtrAttrs )
+	{
+		const CSphMatch & rhs = ( m_dPtrAttrs[i].m_iValue < iUpBound ) ? rhs1 : rhs2;
+		if ( pDst!=&rhs )
+			*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i].m_iValue) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i].m_iValue)).Leak();
+	}
+
+	// not immediately obvious: this is not needed while pushing matches to sorters; factors are held in an outer hash table
+	// but it is necessary to copy factors when combining results from several indexes via a sorter because at this moment matches are the owners of factor data
+	if ( pDst!=&rhs1 )
+		ARRAY_FOREACH ( i, m_dFactorAttrs )
+	{
+		int iOffset = m_dFactorAttrs[i].m_iValue;
+		BYTE * pData = *(BYTE**)(rhs1.m_pDynamic+iOffset);
+		if ( pData )
+		{
+			DWORD uDataSize = *(DWORD*)pData;
+			assert ( uDataSize );
+
+			BYTE * pCopy = new BYTE[uDataSize];
+			memcpy ( pCopy, pData, uDataSize );
+			*(BYTE**)(pDst->m_pDynamic+iOffset) = pCopy;
+		}
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -7684,7 +7776,6 @@ SphOffset_t CSphAutoreader::GetFilesize ()
 /////////////////////////////////////////////////////////////////////////////
 
 CSphQueryResult::CSphQueryResult ()
-	: m_tSchema ( "query_result" )
 {
 	m_iQueryTime = 0;
 	m_iRealQueryTime = 0;
@@ -16700,7 +16791,7 @@ void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema 
 }
 
 
-bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const CSphSchema & tInSchema,
+bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema & tInSchema,
 	const CSphSchema & tSchema, const DWORD * pMvaPool )
 {
 	m_dCalcFilter.Resize ( 0 );
@@ -16980,7 +17071,7 @@ bool CSphIndex_VLN::FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, CSp
 #endif
 
 
-static bool IsWeightColumn ( const CSphString & sAttr, const CSphSchema & tSchema )
+static bool IsWeightColumn ( const CSphString & sAttr, const ISphSchema & tSchema )
 {
 	if ( sAttr=="@weight" )
 		return true;
@@ -16991,7 +17082,7 @@ static bool IsWeightColumn ( const CSphString & sAttr, const CSphSchema & tSchem
 
 
 bool CSphQueryContext::CreateFilters ( bool bFullscan,
-	const CSphVector<CSphFilterSettings> * pdFilters, const CSphSchema & tSchema,
+	const CSphVector<CSphFilterSettings> * pdFilters, const ISphSchema & tSchema,
 	const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError )
 {
 	if ( !pdFilters )
@@ -17020,7 +17111,7 @@ bool CSphQueryContext::CreateFilters ( bool bFullscan,
 }
 
 
-bool CSphQueryContext::SetupOverrides ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema, const CSphSchema & tOutgoingSchema )
+bool CSphQueryContext::SetupOverrides ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema, const ISphSchema & tOutgoingSchema )
 {
 	m_pOverrides = NULL;
 	m_dOverrideIn.Resize ( pQuery->m_dOverrides.GetLength() );
@@ -25672,7 +25763,8 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 		const CSphColumnInfo & tAttr = m_tParams.m_dAttrs[i];
 		if ( ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_INT64SET ) && tAttr.m_eSrc!=SPH_ATTRSRC_FIELD )
 		{
-			CSphColumnInfo tMva = tAttr;
+			CSphColumnInfo tMva;
+			tMva = tAttr;
 			tMva.m_iIndex = m_tSchema.GetAttrsCount();
 			m_tSchema.AddAttr ( tMva, true ); // all attributes are dynamic at indexing time
 			dFound[i] = true;
@@ -30819,4 +30911,3 @@ void sphShutdownGlobalIDFs ()
 //
 // $Id$
 //
-

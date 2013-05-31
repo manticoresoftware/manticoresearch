@@ -5869,7 +5869,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 		}
 
 		// get schema
-		CSphSchema & tSchema = tRes.m_tSchema;
+		CSphRsetSchema & tSchema = tRes.m_tSchema;
 		tSchema.Reset ();
 
 		tSchema.m_dFields.Resize ( tReq.GetInt() ); // FIXME! add a sanity check
@@ -5882,7 +5882,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 			CSphColumnInfo tCol;
 			tCol.m_sName = tReq.GetString ();
 			tCol.m_eAttrType = (ESphAttr) tReq.GetDword (); // FIXME! add a sanity check
-			tSchema.AddAttr ( tCol, true ); // all attributes received from agents are dynamic
+			tSchema.AddDynamicAttr ( tCol ); // all attributes received from agents are dynamic
 		}
 
 		// get matches
@@ -6063,7 +6063,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 /////////////////////////////////////////////////////////////////////////////
 
 // returns true if incoming schema (src) is equal to existing (dst); false otherwise
-bool MinimizeSchema ( CSphSchema & tDst, const CSphSchema & tSrc )
+bool MinimizeSchema ( CSphRsetSchema & tDst, const ISphSchema & tSrc )
 {
 	// if dst is empty, result is also empty
 	if ( tDst.GetAttrsCount()==0 )
@@ -6135,9 +6135,19 @@ bool MinimizeSchema ( CSphSchema & tDst, const CSphSchema & tSrc )
 		}
 	}
 
-	tDst.ResetAttrs ();
-	ARRAY_FOREACH ( i, dDst )
-		tDst.AddAttr ( dDst[i], dDst[i].m_tLocator.m_bDynamic | !bEqual ); // force dynamic attrs on inequality
+	if ( !bEqual )
+	{
+		CSphVector<CSphColumnInfo> dFields;
+		Swap ( dFields, tDst.m_dFields );
+		tDst.Reset();
+		ARRAY_FOREACH ( i, dDst )
+			tDst.AddDynamicAttr ( dDst[i] );
+		Swap ( dFields, tDst.m_dFields );
+
+	} else
+	{
+		tDst.SwapAttrs ( dDst );
+	}
 
 	return bEqual;
 }
@@ -7157,7 +7167,7 @@ void LogSphinxqlError ( const char * sStmt, const char * sError )
 //////////////////////////////////////////////////////////////////////////
 
 // internals attributes are last no need to send them
-static int SendGetAttrCount ( const CSphSchema & tSchema )
+static int SendGetAttrCount ( const ISphSchema & tSchema )
 {
 	int iCount = tSchema.GetAttrsCount();
 	if ( iCount
@@ -7835,7 +7845,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 
 struct AggrResult_t : CSphQueryResult
 {
-	CSphVector<CSphSchema>			m_dSchemas;			///< aggregated resultsets schemas (for schema minimization)
+	CSphVector<CSphRsetSchema>		m_dSchemas;			///< aggregated resultsets schemas (for schema minimization)
 	CSphVector<int>					m_dMatchCounts;		///< aggregated resultsets lengths (for schema minimization)
 	CSphVector<const CSphIndex*>	m_dLockedAttrs;		///< indexes which are hold in the memory untill sending result
 	CSphTaggedVector				m_dTag2Pools;		///< tag to MVA and strings storage pools mapping
@@ -7894,7 +7904,7 @@ struct TaggedMatchSorter_fn : public SphAccessor_T<CSphMatch>
 };
 
 
-void RemapResult ( const CSphSchema * pTarget, AggrResult_t * pRes, bool bMultiSchema=true )
+void RemapResult ( const ISphSchema * pTarget, AggrResult_t * pRes, bool bMultiSchema=true )
 {
 	int iCur = 0;
 	CSphVector<int> dMapFrom ( pTarget->GetAttrsCount() );
@@ -7902,7 +7912,7 @@ void RemapResult ( const CSphSchema * pTarget, AggrResult_t * pRes, bool bMultiS
 	ARRAY_FOREACH ( iSchema, pRes->m_dSchemas )
 	{
 		dMapFrom.Resize ( 0 );
-		CSphSchema & dSchema = ( bMultiSchema ? pRes->m_dSchemas[iSchema] : pRes->m_tSchema );
+		CSphRsetSchema & dSchema = ( bMultiSchema ? pRes->m_dSchemas[iSchema] : pRes->m_tSchema );
 		for ( int i=0; i<pTarget->GetAttrsCount(); i++ )
 		{
 			dMapFrom.Add ( dSchema.GetAttrIndex ( pTarget->GetAttr(i).m_sName.cstr() ) );
@@ -7960,7 +7970,7 @@ void RemapResult ( const CSphSchema * pTarget, AggrResult_t * pRes, bool bMultiS
 }
 
 // rebuild the results itemlist expanding stars
-const CSphVector<CSphQueryItem> * ExpandAsterisk ( const CSphSchema & tSchema,
+const CSphVector<CSphQueryItem> * ExpandAsterisk ( const ISphSchema & tSchema,
 	const CSphVector<CSphQueryItem> & tItems, CSphVector<CSphQueryItem> * pExpanded, bool bNoID=false )
 {
 	// the result schema usually is the index schema + calculated items + @-items
@@ -8266,6 +8276,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	bool bAllEqual = true;
 	bool bRemapped = false;
 
+	// FIXME? add assert ( tRes.m_tSchema==tRes.m_dSchemas[0] );
 	for ( int i=1; i<tRes.m_dSchemas.GetLength(); i++ )
 		if ( !MinimizeSchema ( tRes.m_tSchema, tRes.m_dSchemas[i] ) )
 			bAllEqual = false;
@@ -8634,34 +8645,23 @@ bool MinimizeAggrResultCompat ( AggrResult_t & tRes, const CSphQuery & tQuery, b
 
 	if ( !bStar && tQuery.m_dItems.GetLength() )
 	{
-		CSphSchema tItems;
+		CSphRsetSchema tItems;
 		for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
 		{
 			const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
 			if ( !tCol.m_pExpr )
 			{
-				bool bAdd = false;
-
-				ARRAY_FOREACH ( i, tQuery.m_dItems )
-				{
-					const CSphQueryItem & tQueryItem = tQuery.m_dItems[i];
-					if ( ( tQueryItem.m_sExpr.cstr() && tQueryItem.m_sExpr==tCol.m_sName )
-						|| ( tQueryItem.m_sAlias.cstr() && tQueryItem.m_sAlias==tCol.m_sName ) )
-					{
-						bAdd = true;
-						break;
-					}
-				}
-
+				bool bAdd = ARRAY_ANY ( bAdd, tQuery.m_dItems,
+					tQuery.m_dItems[_any].m_sExpr==tCol.m_sName || tQuery.m_dItems[_any].m_sAlias==tCol.m_sName );
 				if ( !bAdd )
 					continue;
 			}
-			tItems.AddAttr ( tCol, true );
+			tItems.AddDynamicAttr ( tCol );
 		}
 
 		if ( tRes.m_tSchema.GetAttrsCount()!=tItems.GetAttrsCount() )
 		{
-			tRes.m_tSchema = tItems;
+			Swap ( tRes.m_tSchema, tItems );
 			bAllEqual = false;
 		}
 	}
@@ -9472,9 +9472,9 @@ void SearchHandler_c::RunLocalSearchesMT ()
 			// extract matches from sorter
 			FlattenToRes ( pSorter, tRes, iOrderTag+iQuery-m_iStart );
 
-			// take schema from sorter - it doesn't need it anymore
+			// take over the schema from sorter, it doesn't need it anymore
 			if ( tRes.m_iSuccesses==1 )
-				pSorter->SwapOut ( tRes.m_tSchema );
+				tRes.m_tSchema = pSorter->GetSchema(); // can SwapOut
 
 			if ( !tRaw.m_sWarning.IsEmpty() )
 				m_dFailuresSet[iQuery].Submit ( sLocal, tRaw.m_sWarning.cstr() );
@@ -15196,7 +15196,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 			dRows.PutNumeric ( "%u", tMatch.m_iWeight );
 		}
 
-		const CSphSchema & tSchema = tRes.m_tSchema;
+		const CSphRsetSchema & tSchema = tRes.m_tSchema;
 		for ( int i=0; i<iSchemaAttrsCount; i++ )
 		{
 			CSphAttrLocator tLoc = tSchema.GetAttr(i).m_tLocator;

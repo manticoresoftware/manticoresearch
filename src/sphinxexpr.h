@@ -20,7 +20,8 @@
 
 /// forward decls
 class CSphMatch;
-struct CSphSchema;
+class ISphSchema;
+class CSphSchema;
 struct CSphString;
 struct CSphColumnInfo;
 
@@ -184,7 +185,7 @@ struct Expr_ConstHash_c : public ISphExpr
 /// fills pUsesWeight with a flag whether match relevance is referenced in expression AST
 /// fills pEvalStage with a required (!) evaluation stage
 class CSphQueryProfile;
-ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight,
+ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight,
 	CSphString & sError, CSphQueryProfile * pProfiler, CSphSchema * pExtra=NULL, ISphExprHook * pHook=NULL,
 	bool * pZonespanlist=NULL, bool * pPackedFactors=NULL, ESphEvalStage * pEvalStage=NULL );
 

@@ -429,9 +429,9 @@ public:
 	~CSphQueryContext ();
 
 	void						BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema );
-	bool						SetupCalc ( CSphQueryResult * pResult, const CSphSchema & tInSchema, const CSphSchema & tSchema, const DWORD * pMvaPool );
-	bool						CreateFilters ( bool bFullscan, const CSphVector<CSphFilterSettings> * pdFilters, const CSphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError );
-	bool						SetupOverrides ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema, const CSphSchema & tOutgoingSchema );
+	bool						SetupCalc ( CSphQueryResult * pResult, const ISphSchema & tInSchema, const CSphSchema & tSchema, const DWORD * pMvaPool );
+	bool						CreateFilters ( bool bFullscan, const CSphVector<CSphFilterSettings> * pdFilters, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError );
+	bool						SetupOverrides ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema, const ISphSchema & tOutgoingSchema );
 
 	void						CalcFilter ( CSphMatch & tMatch ) const;
 	void						CalcSort ( CSphMatch & tMatch ) const;
@@ -1471,7 +1471,7 @@ struct ThrottleState_t
 void			SafeClose ( int & iFD );
 const BYTE *	SkipQuoted ( const BYTE * p );
 
-bool			sphSortGetStringRemap ( const CSphSchema & tSorterSchema, const CSphSchema & tIndexSchema, CSphVector<SphStringSorterRemap_t> & dAttrs );
+bool			sphSortGetStringRemap ( const ISphSchema & tSorterSchema, const ISphSchema & tIndexSchema, CSphVector<SphStringSorterRemap_t> & dAttrs );
 bool			sphIsSortStringInternal ( const char * sColumnName );
 /// make string lowercase but keep case of JSON.field
 void			sphColumnToLowercase ( char * sVal );

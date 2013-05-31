@@ -1394,7 +1394,7 @@ public:
 	{}
 
 							~ExprParser_t ();
-	ISphExpr *				Parse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError );
+	ISphExpr *				Parse ( const char * sExpr, const ISphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError );
 
 protected:
 	int						m_iParsed;	///< filled by yyparse() at the very end
@@ -1433,7 +1433,7 @@ private:
 	const char *			m_sExpr;
 	const char *			m_pCur;
 	const char *			m_pLastTokenStart;
-	const CSphSchema *		m_pSchema;
+	const ISphSchema *		m_pSchema;
 	CSphVector<ExprNode_t>	m_dNodes;
 	CSphVector<CSphString>	m_dUservars;
 	CSphVector<UdfCall_t*>	m_dUdfCalls;
@@ -4538,7 +4538,7 @@ struct HookCheck_fn
 };
 
 
-ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema,
+ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError )
 {
 	m_sLexerError = "";
@@ -4963,7 +4963,7 @@ ISphExpr * sphExprJsonField ( const CSphColumnInfo & tCol, int iAttr, const char
 //////////////////////////////////////////////////////////////////////////
 
 /// parser entry point
-ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight,
+ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight,
 	CSphString & sError, CSphQueryProfile * pProfiler, CSphSchema * pExtra, ISphExprHook * pHook, bool * pZonespanlist, bool * pPackedFactors, ESphEvalStage * pEvalStage )
 {
 	// parse into opcodes

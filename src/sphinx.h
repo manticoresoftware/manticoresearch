@@ -1477,6 +1477,9 @@ protected:
 
 	/// reset my trackers
 	void							Reset();
+
+	/// dtor
+	virtual ~ISphSchema () {}
 };
 
 
@@ -2725,7 +2728,9 @@ public:
 	CSphIOStats				m_tAgentIOStats;	///< agent IO stats (for distributed searches)
 
 	int64_t					m_iPredictedTime;		///< local predicted time
-	int64_t					m_iAgentPredictedTime;	///< distrubuted predicted time
+	int64_t					m_iAgentPredictedTime;	///< distributed predicted time
+	DWORD					m_iAgentFetchedDocs;	///< distributed fetched docs
+	DWORD					m_iAgentFetchedHits;	///< distributed fetched hits
 
 	CSphQueryStats 			m_tStats;			///< query prediction counters
 	bool					m_bHasPrediction;	///< is prediction counters set?

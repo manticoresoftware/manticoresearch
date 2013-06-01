@@ -557,7 +557,7 @@ enum SearchdStatus_e
 /// master-agent API protocol extensions version
 enum
 {
-	VER_MASTER = 6
+	VER_MASTER = 7
 };
 
 
@@ -6034,6 +6034,9 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 		if ( uStatMask & 4 )
 			tRes.m_iPredictedTime = tReq.GetUint64();
 
+		tRes.m_iAgentFetchedDocs = tReq.GetDword();
+		tRes.m_iAgentFetchedHits = tReq.GetDword();
+
 		const int iWordsCount = tReq.GetInt (); // FIXME! sanity check?
 		if ( iRetrieved!=iMatches )
 		{
@@ -7362,6 +7365,9 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphTaggedV
 		if ( tQuery.m_iMaxPredictedMsec > 0 )
 			iRespLen += 8;		// predicted time
 	}
+	// fetched_docs and fetched_hits from agent to master
+	if ( bAgentMode && iMasterVer>=7 )
+		iRespLen += 8;
 
 	if ( iVer>=0x117 && dStringPtrItems.GetLength() )
 	{
@@ -7825,6 +7831,11 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 
 		if ( bNeedPredictedTime )
 			tOut.SendUint64 ( pRes->m_iPredictedTime+pRes->m_iAgentPredictedTime );
+	}
+	if ( bAgentMode && iMasterVer>=7 )
+	{
+		tOut.SendDword ( pRes->m_tStats.m_iFetchedDocs + pRes->m_iAgentFetchedDocs );
+		tOut.SendDword ( pRes->m_tStats.m_iFetchedHits + pRes->m_iAgentFetchedHits );
 	}
 
 	tOut.SendInt ( pRes->m_hWordStats.GetLength() );
@@ -8291,7 +8302,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	CSphVector<CSphColumnInfo> dFrontend ( tItems.GetLength() );
 
 	// no select items => must be nothing in minimized schema, right?
-	assert(!( tItems.GetLength()==0 && tRes.m_tSchema.GetAttrsCount()>0 ));
+	assert ( !( tItems.GetLength()==0 && tRes.m_tSchema.GetAttrsCount()>0 ) );
 
 	// track select items that made it into the internal schema
 	CSphVector<int> dKnownItems;
@@ -8317,7 +8328,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 			// FIXME?
 			// really not sure if this is the right thing to do
 			// but it fixes a couple queries in test_163 in compaitbility mode
-			if ( bAgent && !dFrontend.Contains ( bind(&CSphColumnInfo::m_sName), tCol.m_sName ) )
+			if ( bAgent && !dFrontend.Contains ( bind ( &CSphColumnInfo::m_sName ), tCol.m_sName ) )
 			{
 				CSphColumnInfo & t = dFrontend.Add();
 				t.m_iIndex = iCol;
@@ -8332,7 +8343,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 				dFrontend[j].m_sName = tItems[j].m_sAlias;
 				dKnownItems.Add(j);
 			}
-			if ( !dFrontend.Contains ( bind(&CSphColumnInfo::m_sName), tCol.m_sName ) )
+			if ( !dFrontend.Contains ( bind ( &CSphColumnInfo::m_sName ), tCol.m_sName ) )
 			{
 				CSphColumnInfo & t = dFrontend.Add();
 				t.m_iIndex = iCol;
@@ -10191,6 +10202,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 						tRes.m_iAgentCpuTime += tRemoteResult.m_iCpuTime;
 						tRes.m_tAgentIOStats.Add ( tRemoteResult.m_tIOStats );
 						tRes.m_iAgentPredictedTime += tRemoteResult.m_iPredictedTime;
+						tRes.m_iAgentFetchedDocs += tRemoteResult.m_iAgentFetchedDocs;
+						tRes.m_iAgentFetchedHits += tRemoteResult.m_iAgentFetchedHits;
+						tRes.m_bHasPrediction |= ( m_dQueries[iRes].m_iMaxPredictedMsec>0 );
 
 						// merge this agent's words
 						MergeWordStats ( tRes, tRemoteResult.m_hWordStats, &m_dFailuresSet[iRes], tFirst.m_sIndexes.cstr() );
@@ -13276,6 +13290,10 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 			dStatus.Add().SetSprintf ( "%lld", INT64 ( tMeta.m_iPredictedTime ) );
 		if ( dStatus.MatchAdd ( "dist_predicted_time" ) )
 			dStatus.Add().SetSprintf ( "%lld", INT64 ( tMeta.m_iAgentPredictedTime ) );
+		if ( dStatus.MatchAdd ( "fetched_docs" ) )
+			dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iFetchedDocs + tMeta.m_iAgentFetchedDocs );
+		if ( dStatus.MatchAdd ( "fetched_hits" ) )
+			dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iFetchedHits + tMeta.m_iAgentFetchedHits );
 	}
 
 

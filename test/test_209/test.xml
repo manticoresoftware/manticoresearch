@@ -12,6 +12,8 @@ indexer
 searchd
 {
   <searchd_settings/>
+  workers = threads
+  predicted_time_costs = doc=100000000, hit=1000000, skip=0, match=0
 }
 
 source src
@@ -29,6 +31,61 @@ index test
   path      = <data_path/>/test
   charset_type  = utf-8
 }
+
+source srchalf1
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT 1, 11 idd, 'text goes here' text UNION SELECT 2, 11 idd, 'text goes there' text
+  sql_attr_uint   = idd
+}
+source srchalf2
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT 3, 11 idd, 'text everywhere but got text here' text UNION SELECT 4, 11 idd, 'got text hole' text
+  sql_attr_uint   = idd
+}
+
+index loc1
+{
+  source      = srchalf1
+  path      = <data_path/>/loc1
+  charset_type  = utf-8
+}
+index loc2
+{
+  source      = srchalf2
+  path      = <data_path/>/loc2
+  charset_type  = utf-8
+}
+index d1
+{
+	type = distributed
+	local = loc1
+	agent = <my_address/>:loc2
+}
+index end1
+{
+	type = distributed
+	agent = <my_address/>:loc1
+	agent = <my_address/>:loc2
+}
+index proxy1
+{
+	type = distributed
+	agent = <my_address/>:end1
+}
+index d2
+{
+	type = distributed
+	agent = <my_address/>:proxy1
+}
+index d3
+{
+	type = distributed
+	agent = <my_address/>:end1
+}
 </config>
 
 <sphqueries>
@@ -40,6 +97,26 @@ index test
 
 <sphinxql>SELECT *, GROUPBY(), COUNT(*) FROM test GROUP BY group_id, group_id2</sphinxql>
 <sphinxql>SELECT *, GROUPBY(), COUNT(*) FROM test GROUP BY group_id2, group_id, group_id2</sphinxql>
+
+<!-- regression fetched_docs, fetched_hits from (pure) distributed indexes -->
+<sphinxql>SELECT * FROM loc1 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
+<sphinxql>SHOW META LIKE '%predict%'</sphinxql>
+<sphinxql>SHOW META LIKE '%fetched%'</sphinxql>
+<sphinxql>SELECT * FROM loc2 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
+<sphinxql>SHOW META LIKE '%predict%'</sphinxql>
+<sphinxql>SHOW META LIKE '%fetched%'</sphinxql>
+<sphinxql>SELECT * FROM loc1, loc2 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
+<sphinxql>SHOW META LIKE '%predict%'</sphinxql>
+<sphinxql>SHOW META LIKE '%fetched%'</sphinxql>
+<sphinxql>SELECT * FROM d1 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
+<sphinxql>SHOW META LIKE '%predict%'</sphinxql>
+<sphinxql>SHOW META LIKE '%fetched%'</sphinxql>
+<sphinxql>SELECT * FROM d2 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
+<sphinxql>SHOW META LIKE '%predict%'</sphinxql>
+<sphinxql>SHOW META LIKE '%fetched%'</sphinxql>
+<sphinxql>SELECT * FROM d3 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
+<sphinxql>SHOW META LIKE '%predict%'</sphinxql>
+<sphinxql>SHOW META LIKE '%fetched%'</sphinxql>
 </sphqueries>
 
 <db_create>

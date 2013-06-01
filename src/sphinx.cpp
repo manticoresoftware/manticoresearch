@@ -2806,7 +2806,7 @@ public:
 		{
 			const BYTE * pBufPtr = szBuffer;
 			int iCode = sphUTF8Decode ( pBufPtr );
-			if ( iCode == PROXY_TOKENIZED )
+			if ( iCode==PROXY_TOKENIZED )
 			{
 				pBufPtr++;	// skip space
 				m_bTokenized = true;
@@ -2823,7 +2823,7 @@ public:
 	{
 		if ( m_bTokenized )
 		{
-			if ( m_iStart >= m_dBuffer.GetLength() )
+			if ( m_iStart>=m_dBuffer.GetLength() )
 				return NULL;
 
 			for ( int i = m_iStart; i < m_dBuffer.GetLength(); i++ )
@@ -20409,7 +20409,7 @@ int CSphDictCRCTraits::InitMorph ( const char * szMorph, int iLength, bool bUseU
 
 	if ( iLength==19 && !strncmp ( szMorph, "rlp_chinese_batched", iLength ) )
 		return ST_OK;
-	
+
 	sMessage.SetBinary ( szMorph, iLength );
 	sMessage.SetSprintf ( "unknown stemmer %s; skipped", sMessage.cstr() );
 	return ST_WARNING;
@@ -29954,6 +29954,8 @@ CSphQueryResultMeta::CSphQueryResultMeta ()
 , m_iAgentCpuTime ( 0 )
 , m_iPredictedTime ( 0 )
 , m_iAgentPredictedTime ( 0 )
+, m_iAgentFetchedDocs ( 0 )
+, m_iAgentFetchedHits ( 0 )
 , m_bHasPrediction ( false )
 {
 }
@@ -30027,6 +30029,8 @@ CSphQueryResultMeta & CSphQueryResultMeta::operator= ( const CSphQueryResultMeta
 	m_tAgentIOStats = tMeta.m_tAgentIOStats;
 	m_iPredictedTime = tMeta.m_iPredictedTime;
 	m_iAgentPredictedTime = tMeta.m_iAgentPredictedTime;
+	m_iAgentFetchedDocs = tMeta.m_iAgentFetchedDocs;
+	m_iAgentFetchedHits = tMeta.m_iAgentFetchedHits;
 
 	m_tStats = tMeta.m_tStats;
 	m_bHasPrediction = tMeta.m_bHasPrediction;

@@ -62,17 +62,19 @@ source src3
 
 index i1
 {
-	source		= src1
+	source			= src1
 	path			= <data_path/>/i1
 }
+
 index i2
 {
-	source		= src2
+	source			= src2
 	path			= <data_path/>/i2
 }
+
 index i3
 {
-	source		= src3
+	source			= src3
 	path			= <data_path/>/i3
 }
 
@@ -82,37 +84,41 @@ index loc
 	local			= i1
 	local			= i2
 }
+
 index dist
 {
 	type			= distributed
-	agent		= <my_address/>:i1
-	agent		= <my_address/>:i2
+	agent			= <my_address/>:i1
+	agent			= <my_address/>:i2
 }
+
 index dist1
 {
 	type			= distributed
-	agent		= <my_address/>:i1
-	agent		= <my_address/>:i2
+	agent			= <my_address/>:i1
+	agent			= <my_address/>:i2
 	local			= i3
 }
+
 index loc1
 {
 	type			= distributed
 	local			= i1
-	agent		= <my_address/>:i2
+	agent			= <my_address/>:i2
 }
 
 index loc_field
 {
 	type			= distributed
 	local			= test
-	agent		= <my_address/>:i2
+	agent			= <my_address/>:i2
 }
+
 index dist_field
 {
 	type			= distributed
 	local			= <my_address/>:i2
-	agent		= <my_address/>:test
+	agent			= <my_address/>:test
 }
 
 source src_case
@@ -126,7 +132,7 @@ source src_case
 
 index json_case
 {
-	source		= src_case
+	source			= src_case
 	path			= <data_path/>/case
 }
 
@@ -233,7 +239,11 @@ And so the teacher turned it out, but still it lingered near.",
 	f2:-7.40,
 	f3:65536.7,
 	f4:16777217.123}'),
-(15,3,'invalid json','{ this is not valid }')
+(15,3,'invalid json','{ this is not valid }'),
+(16,4,'unescaping','{nick:"One\nTwo"}'),
+(17,4,'unescaping','{nick:"One\\nTwo"}'),
+(18,4,'unescaping','{nick:"One
+Two"}')
 </db_insert>
 <db_create>CREATE TABLE `json_table` ( `id` int(11) NOT NULL, `j` varchar(8192) NOT NULL );</db_create>
 <db_drop>DROP TABLE IF EXISTS `json_table`;</db_drop>
@@ -388,6 +398,11 @@ INSERT INTO json_attr ( id, gid, json ) VALUES
 <!-- string filter via distributed index -->
 <sphinxql>select * from dist_str where json.username='Alice'</sphinxql>
 <sphinxql>select * from dist_str where json.username='Damon'</sphinxql>
+<!-- stirng filter vs escaped strings -->
+<sphinxql>select * from test where j.nick='One\nTwo'</sphinxql>
+<sphinxql>select * from test where j.nick='one\ntwo'</sphinxql>
+<sphinxql>select * from test where j.nick='One
+Two'</sphinxql>
 </sphqueries>
 
 </test>

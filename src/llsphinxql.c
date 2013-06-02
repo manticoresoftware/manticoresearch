@@ -1712,47 +1712,47 @@ case 101:
 /* rule 101 can match eol */
 YY_RULE_SETUP
 #line 135 "sphinxql.l"
-{ YYSTOREBOUNDS; SqlUnescape ( lvalp->m_sValue, yytext, yyleng ); return TOK_QUOTED_STRING; }
+{ YYSTOREBOUNDS; pParser->m_pLastTokenStart = yytext; return TOK_QUOTED_STRING; }
 	YY_BREAK
 case 102:
 YY_RULE_SETUP
 #line 137 "sphinxql.l"
-{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
+{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
 	YY_BREAK
 case 103:
 YY_RULE_SETUP
 #line 138 "sphinxql.l"
-{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
+{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
 	YY_BREAK
 case 104:
 YY_RULE_SETUP
 #line 139 "sphinxql.l"
-{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
+{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
 	YY_BREAK
 case 105:
 YY_RULE_SETUP
 #line 140 "sphinxql.l"
-{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; lvalp->m_iValue = (int64_t)strtoull ( yytext, NULL, 10 ); return TOK_CONST_INT; }
+{ YYSTOREBOUNDS; lvalp->m_iValue = (int64_t)strtoull ( yytext, NULL, 10 ); return TOK_CONST_INT; }
 	YY_BREAK
 case 106:
 YY_RULE_SETUP
 #line 142 "sphinxql.l"
-{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_ATIDENT; }
+{ YYSTOREBOUNDS; return TOK_ATIDENT; }
 	YY_BREAK
 case 107:
 YY_RULE_SETUP
 #line 143 "sphinxql.l"
-{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_ATIDENT; }
+{ YYSTOREBOUNDS; return TOK_ATIDENT; }
 	YY_BREAK
 case 108:
 YY_RULE_SETUP
 #line 144 "sphinxql.l"
-{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_ATIDENT; }
+{ YYSTOREBOUNDS; return TOK_ATIDENT; }
 	YY_BREAK
 case 109:
 YY_RULE_SETUP
 #line 145 "sphinxql.l"
-{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_IDENT; }
+{ YYSTOREBOUNDS; return TOK_IDENT; }
 	YY_BREAK
 case 110:
 YY_RULE_SETUP
@@ -1762,22 +1762,22 @@ YY_RULE_SETUP
 case 111:
 YY_RULE_SETUP
 #line 147 "sphinxql.l"
-{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_USERVAR; }
+{ YYSTOREBOUNDS; return TOK_USERVAR; }
 	YY_BREAK
 case 112:
 YY_RULE_SETUP
 #line 148 "sphinxql.l"
-{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_SYSVAR; }
+{ YYSTOREBOUNDS; return TOK_SYSVAR; }
 	YY_BREAK
 case 113:
 YY_RULE_SETUP
 #line 149 "sphinxql.l"
-{ YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; lvalp->m_sValue.SetBinary ( yytext+1, strlen(yytext)-2 ); return TOK_ID; }
+{ YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; return TOK_ID; }
 	YY_BREAK
 case 114:
 YY_RULE_SETUP
 #line 150 "sphinxql.l"
-{ YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; lvalp->m_sValue.SetBinary ( yytext+1, strlen(yytext)-2 ); return TOK_IDENT; }
+{ YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; return TOK_IDENT; }
 	YY_BREAK
 case 115:
 /* rule 115 can match eol */

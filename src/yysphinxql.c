@@ -280,8 +280,25 @@
 #endif
 
 
+
 // some helpers
 #include <float.h> // for FLT_MAX
+
+static void AddInsval ( SqlParser_c * pParser, CSphVector<SqlInsert_t> & dVec, const SqlNode_t & tNode )
+{
+	SqlInsert_t & tIns = dVec.Add();
+	tIns.m_iType = tNode.m_iType;
+	tIns.m_iVal = tNode.m_iValue; // OPTIMIZE? copy conditionally based on type?
+	tIns.m_fVal = tNode.m_fValue;
+	if ( tIns.m_iType==TOK_QUOTED_STRING )
+		pParser->ToStringUnescape ( tIns.m_sVal, tNode );
+	tIns.m_pVals = tNode.m_pValues;
+}
+
+#define TRACK_BOUNDS(_res,_left,_right) \
+	_res = _left; \
+	_res.m_iEnd = _right.m_iEnd; \
+	_res.m_iType = 0;
 
 
 
@@ -618,37 +635,37 @@ static const short yyrhs[] =
 /* YYRLINE[YYN] -- source line where rule number YYN was defined.  */
 static const unsigned short yyrline[] =
 {
-       0,   137,   137,   138,   139,   143,   144,   145,   146,   147,
-     148,   149,   150,   151,   152,   153,   154,   155,   156,   157,
-     158,   159,   160,   161,   162,   163,   164,   170,   171,   175,
-     176,   180,   181,   189,   190,   197,   199,   203,   207,   214,
-     215,   216,   220,   233,   241,   243,   248,   257,   273,   274,
-     278,   279,   282,   284,   285,   289,   290,   291,   292,   293,
-     294,   295,   296,   297,   301,   302,   305,   307,   311,   315,
-     316,   317,   321,   326,   333,   341,   349,   358,   363,   368,
-     373,   378,   383,   388,   393,   398,   403,   408,   413,   418,
-     423,   428,   433,   438,   443,   451,   455,   456,   461,   467,
-     473,   479,   488,   489,   500,   501,   505,   511,   517,   519,
-     522,   524,   531,   535,   541,   543,   547,   558,   560,   564,
-     568,   575,   576,   580,   581,   582,   585,   587,   591,   596,
-     603,   605,   609,   613,   614,   618,   623,   628,   634,   639,
-     647,   652,   659,   669,   670,   671,   672,   673,   674,   675,
-     676,   677,   678,   679,   680,   681,   682,   683,   684,   685,
-     686,   687,   688,   689,   690,   691,   692,   693,   694,   695,
-     696,   700,   701,   702,   703,   704,   705,   706,   707,   708,
-     712,   713,   717,   718,   722,   723,   729,   732,   734,   738,
-     739,   740,   741,   742,   743,   744,   749,   754,   764,   765,
-     766,   767,   768,   772,   773,   777,   782,   787,   792,   793,
-     797,   802,   810,   811,   815,   816,   817,   831,   832,   833,
-     837,   838,   844,   852,   853,   856,   858,   862,   863,   867,
-     868,   872,   876,   877,   881,   882,   883,   884,   885,   891,
-     899,   913,   921,   925,   932,   933,   940,   950,   956,   958,
-     962,   967,   971,   978,   980,   984,   985,   991,   999,  1000,
-    1006,  1012,  1020,  1021,  1025,  1029,  1033,  1037,  1047,  1048,
-    1049,  1053,  1066,  1072,  1073,  1077,  1081,  1082,  1086,  1090,
-    1097,  1104,  1110,  1111,  1112,  1116,  1117,  1118,  1119,  1125,
-    1136,  1137,  1138,  1142,  1153,  1165,  1174,  1185,  1193,  1194,
-    1203,  1214
+       0,   154,   154,   155,   156,   160,   161,   162,   163,   164,
+     165,   166,   167,   168,   169,   170,   171,   172,   173,   174,
+     175,   176,   177,   178,   179,   180,   181,   187,   188,   192,
+     193,   197,   198,   206,   207,   214,   216,   220,   224,   231,
+     232,   233,   237,   250,   257,   259,   264,   273,   288,   289,
+     293,   294,   297,   299,   300,   304,   305,   306,   307,   308,
+     309,   310,   311,   312,   316,   317,   320,   322,   326,   330,
+     331,   332,   336,   341,   348,   356,   364,   373,   378,   383,
+     388,   393,   398,   403,   408,   413,   418,   423,   428,   433,
+     438,   443,   448,   453,   458,   466,   470,   471,   476,   482,
+     488,   494,   503,   504,   515,   516,   520,   526,   532,   534,
+     537,   539,   546,   550,   556,   558,   562,   573,   575,   579,
+     583,   590,   591,   595,   596,   597,   600,   602,   606,   611,
+     618,   620,   624,   628,   629,   633,   638,   643,   649,   654,
+     662,   667,   674,   684,   685,   686,   687,   688,   689,   690,
+     691,   693,   694,   695,   696,   697,   698,   699,   700,   701,
+     702,   703,   704,   705,   706,   707,   708,   709,   710,   711,
+     712,   716,   717,   718,   719,   720,   721,   722,   723,   724,
+     728,   729,   733,   734,   738,   739,   745,   748,   750,   754,
+     755,   756,   757,   758,   759,   760,   765,   770,   780,   781,
+     782,   783,   784,   788,   789,   793,   798,   803,   808,   809,
+     813,   818,   826,   827,   831,   832,   833,   847,   848,   849,
+     853,   854,   860,   868,   869,   872,   874,   878,   879,   883,
+     884,   888,   892,   893,   897,   898,   899,   900,   901,   907,
+     915,   929,   937,   941,   948,   949,   956,   966,   972,   974,
+     978,   983,   987,   994,   996,  1000,  1001,  1007,  1015,  1016,
+    1022,  1028,  1036,  1037,  1041,  1055,  1061,  1065,  1075,  1076,
+    1077,  1081,  1094,  1100,  1101,  1105,  1109,  1110,  1114,  1118,
+    1125,  1132,  1138,  1139,  1140,  1144,  1145,  1146,  1147,  1153,
+    1164,  1165,  1166,  1170,  1181,  1193,  1202,  1213,  1221,  1222,
+    1228,  1239
 };
 #endif
 
@@ -1905,7 +1922,7 @@ yyreduce:
 
     {
 			assert ( pParser->m_pStmt->m_eStmt==STMT_SELECT ); // set by table argument
-			pParser->m_pStmt->m_sTableFunc = yyvsp[-6].m_sValue;
+			pParser->ToString ( pParser->m_pStmt->m_sTableFunc, yyvsp[-6] );
 		;}
     break;
 
@@ -1919,25 +1936,15 @@ yyreduce:
   case 37:
 
     {
-			pParser->m_pStmt->m_dTableFuncArgs.Add ( yyvsp[0].m_sValue );
+			pParser->ToString ( pParser->m_pStmt->m_dTableFuncArgs.Add(), yyvsp[0] );
 		;}
     break;
 
   case 38:
 
     {
-			pParser->m_pStmt->m_dTableFuncArgs.Add ( yyvsp[0].m_sValue );
+			pParser->ToString ( pParser->m_pStmt->m_dTableFuncArgs.Add(), yyvsp[0] );
 		;}
-    break;
-
-  case 40:
-
-    { yyval.m_sValue.SetSprintf ( "%lld", INT64(yyvsp[0].m_iValue) ); ;}
-    break;
-
-  case 41:
-
-    { yyval.m_sValue = "id"; ;}
     break;
 
   case 42:
@@ -1957,8 +1964,7 @@ yyreduce:
   case 43:
 
     {
-			pParser->m_pQuery->m_sOuterOrderBy.SetBinary ( pParser->m_pBuf+yyvsp[0].m_iStart,
-				yyvsp[0].m_iEnd-yyvsp[0].m_iStart );
+			pParser->ToString ( pParser->m_pQuery->m_sOuterOrderBy, yyvsp[0] );
 			pParser->m_pQuery->m_bHasOuter = true;
 		;}
     break;
@@ -1984,8 +1990,7 @@ yyreduce:
 
     {
 			pParser->m_pStmt->m_eStmt = STMT_SELECT;
-			pParser->m_pQuery->m_sIndexes.SetBinary ( pParser->m_pBuf+yyvsp[-6].m_iStart,
-				yyvsp[-6].m_iEnd-yyvsp[-6].m_iStart );
+			pParser->ToString ( pParser->m_pQuery->m_sIndexes, yyvsp[-6] );
 		;}
     break;
 
@@ -2051,7 +2056,7 @@ yyreduce:
 
   case 65:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 72:
@@ -2109,7 +2114,7 @@ yyreduce:
   case 77:
 
     {
-			if ( !pParser->AddUservarFilter ( yyvsp[-2].m_sValue, yyvsp[0].m_sValue, false ) )
+			if ( !pParser->AddUservarFilter ( yyvsp[-2], yyvsp[0], false ) )
 				YYERROR;
 		;}
     break;
@@ -2117,7 +2122,7 @@ yyreduce:
   case 78:
 
     {
-			if ( !pParser->AddUservarFilter ( yyvsp[-3].m_sValue, yyvsp[0].m_sValue, true ) )
+			if ( !pParser->AddUservarFilter ( yyvsp[-3], yyvsp[0], true ) )
 				YYERROR;
 		;}
     break;
@@ -2125,7 +2130,7 @@ yyreduce:
   case 79:
 
     {
-			if ( !pParser->AddIntRangeFilter ( yyvsp[-4].m_sValue, yyvsp[-2].m_iValue, yyvsp[0].m_iValue ) )
+			if ( !pParser->AddIntRangeFilter ( yyvsp[-4], yyvsp[-2].m_iValue, yyvsp[0].m_iValue ) )
 				YYERROR;
 		;}
     break;
@@ -2133,7 +2138,7 @@ yyreduce:
   case 80:
 
     {
-			if ( !pParser->AddIntFilterGreater ( yyvsp[-2].m_sValue, yyvsp[0].m_iValue, false ) )
+			if ( !pParser->AddIntFilterGreater ( yyvsp[-2], yyvsp[0].m_iValue, false ) )
 				YYERROR;
 		;}
     break;
@@ -2141,7 +2146,7 @@ yyreduce:
   case 81:
 
     {
-			if ( !pParser->AddIntFilterLesser ( yyvsp[-2].m_sValue, yyvsp[0].m_iValue, false ) )
+			if ( !pParser->AddIntFilterLesser ( yyvsp[-2], yyvsp[0].m_iValue, false ) )
 				YYERROR;
 		;}
     break;
@@ -2149,7 +2154,7 @@ yyreduce:
   case 82:
 
     {
-			if ( !pParser->AddIntFilterGreater ( yyvsp[-2].m_sValue, yyvsp[0].m_iValue, true ) )
+			if ( !pParser->AddIntFilterGreater ( yyvsp[-2], yyvsp[0].m_iValue, true ) )
 				YYERROR;
 		;}
     break;
@@ -2157,7 +2162,7 @@ yyreduce:
   case 83:
 
     {
-			if ( !pParser->AddIntFilterLesser ( yyvsp[-2].m_sValue, yyvsp[0].m_iValue, true ) )
+			if ( !pParser->AddIntFilterLesser ( yyvsp[-2], yyvsp[0].m_iValue, true ) )
 				YYERROR;
 		;}
     break;
@@ -2165,7 +2170,7 @@ yyreduce:
   case 84:
 
     {
-			if ( !pParser->AddFloatRangeFilter ( yyvsp[-2].m_sValue, yyvsp[0].m_fValue, yyvsp[0].m_fValue, true ) )
+			if ( !pParser->AddFloatRangeFilter ( yyvsp[-2], yyvsp[0].m_fValue, yyvsp[0].m_fValue, true ) )
 				YYERROR;
 		;}
     break;
@@ -2181,7 +2186,7 @@ yyreduce:
   case 86:
 
     {
-			if ( !pParser->AddFloatRangeFilter ( yyvsp[-4].m_sValue, yyvsp[-2].m_fValue, yyvsp[0].m_fValue, true ) )
+			if ( !pParser->AddFloatRangeFilter ( yyvsp[-4], yyvsp[-2].m_fValue, yyvsp[0].m_fValue, true ) )
 				YYERROR;
 		;}
     break;
@@ -2189,7 +2194,7 @@ yyreduce:
   case 87:
 
     {
-			if ( !pParser->AddFloatRangeFilter ( yyvsp[-4].m_sValue, yyvsp[-2].m_iValue, yyvsp[0].m_fValue, true ) )
+			if ( !pParser->AddFloatRangeFilter ( yyvsp[-4], yyvsp[-2].m_iValue, yyvsp[0].m_fValue, true ) )
 				YYERROR;
 		;}
     break;
@@ -2197,7 +2202,7 @@ yyreduce:
   case 88:
 
     {
-			if ( !pParser->AddFloatRangeFilter ( yyvsp[-4].m_sValue, yyvsp[-2].m_fValue, yyvsp[0].m_iValue, true ) )
+			if ( !pParser->AddFloatRangeFilter ( yyvsp[-4], yyvsp[-2].m_fValue, yyvsp[0].m_iValue, true ) )
 				YYERROR;
 		;}
     break;
@@ -2205,7 +2210,7 @@ yyreduce:
   case 89:
 
     {
-			if ( !pParser->AddFloatRangeFilter ( yyvsp[-2].m_sValue, yyvsp[0].m_fValue, FLT_MAX, false ) )
+			if ( !pParser->AddFloatRangeFilter ( yyvsp[-2], yyvsp[0].m_fValue, FLT_MAX, false ) )
 				YYERROR;
 		;}
     break;
@@ -2213,7 +2218,7 @@ yyreduce:
   case 90:
 
     {
-			if ( !pParser->AddFloatRangeFilter ( yyvsp[-2].m_sValue, -FLT_MAX, yyvsp[0].m_fValue, false ) )
+			if ( !pParser->AddFloatRangeFilter ( yyvsp[-2], -FLT_MAX, yyvsp[0].m_fValue, false ) )
 				YYERROR;
 		;}
     break;
@@ -2221,7 +2226,7 @@ yyreduce:
   case 91:
 
     {
-			if ( !pParser->AddFloatRangeFilter ( yyvsp[-2].m_sValue, yyvsp[0].m_fValue, FLT_MAX, true ) )
+			if ( !pParser->AddFloatRangeFilter ( yyvsp[-2], yyvsp[0].m_fValue, FLT_MAX, true ) )
 				YYERROR;
 		;}
     break;
@@ -2229,7 +2234,7 @@ yyreduce:
   case 92:
 
     {
-			if ( !pParser->AddFloatRangeFilter ( yyvsp[-2].m_sValue, -FLT_MAX, yyvsp[0].m_fValue, true ) )
+			if ( !pParser->AddFloatRangeFilter ( yyvsp[-2], -FLT_MAX, yyvsp[0].m_fValue, true ) )
 				YYERROR;
 		;}
     break;
@@ -2237,7 +2242,7 @@ yyreduce:
   case 93:
 
     {
-			if ( !pParser->AddStringFilter ( yyvsp[-2].m_sValue, yyvsp[0].m_sValue, false ) )
+			if ( !pParser->AddStringFilter ( yyvsp[-2], yyvsp[0], false ) )
 				YYERROR;
 		;}
     break;
@@ -2245,7 +2250,7 @@ yyreduce:
   case 94:
 
     {
-			if ( !pParser->AddStringFilter ( yyvsp[-2].m_sValue, yyvsp[0].m_sValue, true ) )
+			if ( !pParser->AddStringFilter ( yyvsp[-2], yyvsp[0], true ) )
 				YYERROR;
 		;}
     break;
@@ -2261,7 +2266,7 @@ yyreduce:
   case 98:
 
     {
-			yyval.m_sValue = "@count";
+			yyval.m_iType = SPHINXQL_TOK_COUNT;
 			if ( !pParser->SetNewSyntax() )
 				YYERROR;
 		;}
@@ -2270,7 +2275,7 @@ yyreduce:
   case 99:
 
     {
-			yyval.m_sValue = "@groupby";
+			yyval.m_iType = SPHINXQL_TOK_GROUPBY;
 			if ( !pParser->SetNewSyntax() )
 				YYERROR;
 		;}
@@ -2279,7 +2284,7 @@ yyreduce:
   case 100:
 
     {
-			yyval.m_sValue = "@weight";
+			yyval.m_iType = SPHINXQL_TOK_WEIGHT;
 			if ( !pParser->SetNewSyntax() )
 				YYERROR;
 		;}
@@ -2288,7 +2293,7 @@ yyreduce:
   case 101:
 
     {
-			yyval.m_sValue = "@id";
+			yyval.m_iType = SPHINXQL_TOK_ID;
 			if ( !pParser->SetNewSyntax() )
 				YYERROR;
 		;}
@@ -2296,13 +2301,13 @@ yyreduce:
 
   case 102:
 
-    { yyval.m_iInstype = TOK_CONST_INT; yyval.m_iValue = yyvsp[0].m_iValue; ;}
+    { yyval.m_iType = TOK_CONST_INT; yyval.m_iValue = yyvsp[0].m_iValue; ;}
     break;
 
   case 103:
 
     {
-			yyval.m_iInstype = TOK_CONST_INT;
+			yyval.m_iType = TOK_CONST_INT;
 			if ( (uint64_t)yyvsp[0].m_iValue > (uint64_t)LLONG_MAX )
 				yyval.m_iValue = LLONG_MIN;
 			else
@@ -2312,12 +2317,12 @@ yyreduce:
 
   case 104:
 
-    { yyval.m_iInstype = TOK_CONST_FLOAT; yyval.m_fValue = yyvsp[0].m_fValue; ;}
+    { yyval.m_iType = TOK_CONST_FLOAT; yyval.m_fValue = yyvsp[0].m_fValue; ;}
     break;
 
   case 105:
 
-    { yyval.m_iInstype = TOK_CONST_FLOAT; yyval.m_fValue = -yyvsp[0].m_fValue; ;}
+    { yyval.m_iType = TOK_CONST_FLOAT; yyval.m_fValue = -yyvsp[0].m_fValue; ;}
     break;
 
   case 106:
@@ -2346,14 +2351,14 @@ yyreduce:
   case 112:
 
     {
-			pParser->AddGroupBy ( yyvsp[0].m_sValue );
+			pParser->AddGroupBy ( yyvsp[0] );
 		;}
     break;
 
   case 113:
 
     {
-			pParser->AddGroupBy ( yyvsp[0].m_sValue );
+			pParser->AddGroupBy ( yyvsp[0] );
 		;}
     break;
 
@@ -2365,14 +2370,14 @@ yyreduce:
 				yyerror ( pParser, "you must specify GROUP BY element in order to use WITHIN GROUP ORDER BY clause" );
 				YYERROR;
 			}
-			pParser->m_pQuery->m_sSortBy.SetBinary ( pParser->m_pBuf+yyvsp[0].m_iStart, yyvsp[0].m_iEnd-yyvsp[0].m_iStart );
+			pParser->ToString ( pParser->m_pQuery->m_sSortBy, yyvsp[0] );
 		;}
     break;
 
   case 119:
 
     {
-			pParser->m_pQuery->m_sOrderBy.SetBinary ( pParser->m_pBuf+yyvsp[0].m_iStart, yyvsp[0].m_iEnd-yyvsp[0].m_iStart );
+			pParser->ToString ( pParser->m_pQuery->m_sOrderBy, yyvsp[0] );
 		;}
     break;
 
@@ -2385,17 +2390,17 @@ yyreduce:
 
   case 122:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 124:
 
-    { yyval = yyvsp[-1]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-1], yyvsp[0] ); ;}
     break;
 
   case 125:
 
-    { yyval = yyvsp[-1]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-1], yyvsp[0] ); ;}
     break;
 
   case 128:
@@ -2442,7 +2447,7 @@ yyreduce:
   case 138:
 
     {
-			if ( !pParser->AddOption ( yyvsp[-5], yyvsp[-2], yyvsp[-1].m_sValue ) )
+			if ( !pParser->AddOption ( yyvsp[-5], yyvsp[-3], yyvsp[-1] ) )
 				YYERROR;
 		;}
     break;
@@ -2473,7 +2478,7 @@ yyreduce:
   case 142:
 
     {
-			yyval.m_sValue = yyvsp[-2].m_sValue;
+			yyval = yyvsp[-2];
 			yyval.m_iValue = yyvsp[0].m_iValue;
 		;}
     break;
@@ -2490,167 +2495,167 @@ yyreduce:
 
   case 149:
 
-    { yyval = yyvsp[-1]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-1], yyvsp[0] ); ;}
     break;
 
   case 150:
 
-    { yyval = yyvsp[-1]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-1], yyvsp[0] ); ;}
     break;
 
   case 151:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 152:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 153:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 154:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 155:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 156:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 157:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 158:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 159:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 160:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 161:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 162:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 163:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 164:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 165:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 166:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 167:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 168:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 169:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 171:
 
-    { yyval = yyvsp[-3]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-3], yyvsp[0] ); ;}
     break;
 
   case 172:
 
-    { yyval = yyvsp[-3]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-3], yyvsp[0] ); ;}
     break;
 
   case 173:
 
-    { yyval = yyvsp[-3]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-3], yyvsp[0] ); ;}
     break;
 
   case 174:
 
-    { yyval = yyvsp[-3]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-3], yyvsp[0] ); ;}
     break;
 
   case 175:
 
-    { yyval = yyvsp[-3]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-3], yyvsp[0] ); ;}
     break;
 
   case 176:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 177:
 
-    { yyval = yyvsp[-5]; yyval.m_iEnd = yyvsp[0].m_iEnd ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-5], yyvsp[0] ); ;}
     break;
 
   case 178:
 
-    { yyval = yyvsp[-5]; yyval.m_iEnd = yyvsp[0].m_iEnd ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-5], yyvsp[0] ); ;}
     break;
 
   case 179:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 184:
 
-    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-2], yyvsp[0] ); ;}
     break;
 
   case 185:
 
-    { yyval = yyvsp[-4]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    { TRACK_BOUNDS ( yyval, yyvsp[-4], yyvsp[0] ); ;}
     break;
 
   case 188:
 
-    { pParser->m_pStmt->m_sStringParam = yyvsp[0].m_sValue; ;}
+    { pParser->ToStringUnescape ( pParser->m_pStmt->m_sStringParam, yyvsp[0] ); ;}
     break;
 
   case 189:
@@ -2687,7 +2692,7 @@ yyreduce:
 
     {
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS;
-			pParser->m_pStmt->m_sIndex = yyvsp[-2].m_sValue;
+			pParser->ToStringUnescape ( pParser->m_pStmt->m_sIndex, yyvsp[-2] );
 		;}
     break;
 
@@ -2695,7 +2700,7 @@ yyreduce:
 
     {
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS;
-			pParser->m_pStmt->m_sIndex = yyvsp[-2].m_sValue;
+			pParser->ToString ( pParser->m_pStmt->m_sIndex, yyvsp[-2] );
 		;}
     break;
 
@@ -2703,7 +2708,7 @@ yyreduce:
 
     {
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_STATUS;
-			pParser->m_pStmt->m_sIndex = yyvsp[-1].m_sValue;
+			pParser->ToString ( pParser->m_pStmt->m_sIndex, yyvsp[-1] );
 		;}
     break;
 
@@ -2719,7 +2724,7 @@ yyreduce:
 
     {
 			pParser->SetStatement ( yyvsp[-2], SET_LOCAL );
-			pParser->m_pStmt->m_sSetValue = yyvsp[0].m_sValue;
+			pParser->ToString ( pParser->m_pStmt->m_sSetValue, yyvsp[0] );
 		;}
     break;
 
@@ -2753,7 +2758,7 @@ yyreduce:
 
     {
 			pParser->SetStatement ( yyvsp[-2], SET_GLOBAL_SVAR );
-			pParser->m_pStmt->m_sSetValue = yyvsp[0].m_sValue;
+			pParser->ToString ( pParser->m_pStmt->m_sSetValue, yyvsp[0] ).Unquote();
 		;}
     break;
 
@@ -2798,7 +2803,7 @@ yyreduce:
 
     {
 			// everything else is pushed directly into parser within the rules
-			pParser->m_pStmt->m_sIndex = yyvsp[-3].m_sValue;
+			pParser->ToString ( pParser->m_pStmt->m_sIndex, yyvsp[-3] );
 		;}
     break;
 
@@ -2829,44 +2834,44 @@ yyreduce:
 
   case 232:
 
-    { AddInsval ( pParser->m_pStmt->m_dInsertValues, yyvsp[0] ); ;}
+    { AddInsval ( pParser, pParser->m_pStmt->m_dInsertValues, yyvsp[0] ); ;}
     break;
 
   case 233:
 
-    { AddInsval ( pParser->m_pStmt->m_dInsertValues, yyvsp[0] ); ;}
+    { AddInsval ( pParser, pParser->m_pStmt->m_dInsertValues, yyvsp[0] ); ;}
     break;
 
   case 234:
 
-    { yyval.m_iInstype = TOK_CONST_INT; yyval.m_iValue = yyvsp[0].m_iValue; ;}
+    { yyval.m_iType = TOK_CONST_INT; yyval.m_iValue = yyvsp[0].m_iValue; ;}
     break;
 
   case 235:
 
-    { yyval.m_iInstype = TOK_CONST_FLOAT; yyval.m_fValue = yyvsp[0].m_fValue; ;}
+    { yyval.m_iType = TOK_CONST_FLOAT; yyval.m_fValue = yyvsp[0].m_fValue; ;}
     break;
 
   case 236:
 
-    { yyval.m_iInstype = TOK_QUOTED_STRING; yyval.m_sValue = yyvsp[0].m_sValue; ;}
+    { yyval.m_iType = TOK_QUOTED_STRING; yyval.m_iStart = yyvsp[0].m_iStart; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 237:
 
-    { yyval.m_iInstype = TOK_CONST_MVA; yyval.m_pValues = yyvsp[-1].m_pValues; ;}
+    { yyval.m_iType = TOK_CONST_MVA; yyval.m_pValues = yyvsp[-1].m_pValues; ;}
     break;
 
   case 238:
 
-    { yyval.m_iInstype = TOK_CONST_MVA; ;}
+    { yyval.m_iType = TOK_CONST_MVA; ;}
     break;
 
   case 239:
 
     {
 			pParser->m_pStmt->m_eStmt = STMT_DELETE;
-			pParser->m_pStmt->m_sIndex = yyvsp[-4].m_sValue;
+			pParser->ToString ( pParser->m_pStmt->m_sIndex, yyvsp[-4] );
 			pParser->m_pStmt->m_iListStart = yyvsp[-4].m_iStart;
 			pParser->m_pStmt->m_iListEnd = yyvsp[-4].m_iEnd;
 			pParser->m_pStmt->m_dDeleteIds.Add ( yyvsp[0].m_iValue );
@@ -2877,7 +2882,7 @@ yyreduce:
 
     {
 			pParser->m_pStmt->m_eStmt = STMT_DELETE;
-			pParser->m_pStmt->m_sIndex = yyvsp[-6].m_sValue;
+			pParser->ToString ( pParser->m_pStmt->m_sIndex, yyvsp[-6] );
 			pParser->m_pStmt->m_iListStart = yyvsp[-6].m_iStart;
 			pParser->m_pStmt->m_iListEnd = yyvsp[-6].m_iEnd;
 			for ( int i=0; i<yyvsp[-1].m_pValues.Ptr()->GetLength(); i++ )
@@ -2889,28 +2894,28 @@ yyreduce:
 
     {
 			pParser->m_pStmt->m_eStmt = STMT_CALL;
-			pParser->m_pStmt->m_sCallProc = yyvsp[-4].m_sValue;
+			pParser->ToString ( pParser->m_pStmt->m_sCallProc, yyvsp[-4] );
 		;}
     break;
 
   case 242:
 
     {
-			AddInsval ( pParser->m_pStmt->m_dInsertValues, yyvsp[0] );
+			AddInsval ( pParser, pParser->m_pStmt->m_dInsertValues, yyvsp[0] );
 		;}
     break;
 
   case 243:
 
     {
-			AddInsval ( pParser->m_pStmt->m_dInsertValues, yyvsp[0] );
+			AddInsval ( pParser, pParser->m_pStmt->m_dInsertValues, yyvsp[0] );
 		;}
     break;
 
   case 245:
 
     {
-			yyval.m_iInstype = TOK_CONST_STRINGS;
+			yyval.m_iType = TOK_CONST_STRINGS;
 		;}
     break;
 
@@ -2923,14 +2928,14 @@ yyreduce:
 				yyerror ( pParser, "unexpected constant string list" );
 				YYERROR;
 			}
-			pParser->m_pStmt->m_dCallStrings.Add ( yyvsp[0].m_sValue );
+			pParser->ToStringUnescape ( pParser->m_pStmt->m_dCallStrings.Add(), yyvsp[0] );
 		;}
     break;
 
   case 247:
 
     {
-			pParser->m_pStmt->m_dCallStrings.Add ( yyvsp[0].m_sValue );
+			pParser->ToStringUnescape ( pParser->m_pStmt->m_dCallStrings.Add(), yyvsp[0] );
 		;}
     break;
 
@@ -2945,21 +2950,16 @@ yyreduce:
   case 252:
 
     {
-			pParser->m_pStmt->m_dCallOptNames.Add ( yyvsp[0].m_sValue );
-			AddInsval ( pParser->m_pStmt->m_dCallOptValues, yyvsp[-2] );
+			pParser->ToString ( pParser->m_pStmt->m_dCallOptNames.Add(), yyvsp[0] );
+			AddInsval ( pParser, pParser->m_pStmt->m_dCallOptValues, yyvsp[-2] );
 		;}
-    break;
-
-  case 256:
-
-    { yyval.m_sValue = "limit"; ;}
     break;
 
   case 257:
 
     {
 			pParser->m_pStmt->m_eStmt = STMT_DESCRIBE;
-			pParser->m_pStmt->m_sIndex = yyvsp[-1].m_sValue;
+			pParser->ToString ( pParser->m_pStmt->m_sIndex, yyvsp[-1] );
 		;}
     break;
 
@@ -2979,21 +2979,33 @@ yyreduce:
   case 264:
 
     {
-			pParser->UpdateAttr ( yyvsp[-2].m_sValue, &yyvsp[0] );
+			// it is performance-critical to forcibly inline this
+			pParser->m_pStmt->m_tUpdate.m_dPool.Add ( (DWORD)yyvsp[0].m_iValue );
+			DWORD uHi = (DWORD)( yyvsp[0].m_iValue>>32 );
+			if ( uHi )
+			{
+				pParser->m_pStmt->m_tUpdate.m_dPool.Add ( uHi );
+				pParser->AddUpdatedAttr ( yyvsp[-2], SPH_ATTR_BIGINT );
+			} else
+			{
+				pParser->AddUpdatedAttr ( yyvsp[-2], SPH_ATTR_INTEGER );
+			}
 		;}
     break;
 
   case 265:
 
     {
-			pParser->UpdateAttr ( yyvsp[-2].m_sValue, &yyvsp[0], SPH_ATTR_FLOAT);
+			// it is performance-critical to forcibly inline this
+			pParser->m_pStmt->m_tUpdate.m_dPool.Add ( sphF2DW ( yyvsp[0].m_fValue ) );
+			pParser->AddUpdatedAttr ( yyvsp[-2], SPH_ATTR_FLOAT );
 		;}
     break;
 
   case 266:
 
     {
-			pParser->UpdateMVAAttr ( yyvsp[-4].m_sValue, yyvsp[-1] );
+			pParser->UpdateMVAAttr ( yyvsp[-4], yyvsp[-1] );
 		;}
     break;
 
@@ -3001,7 +3013,7 @@ yyreduce:
 
     {
 			SqlNode_t tNoValues;
-			pParser->UpdateMVAAttr ( yyvsp[-3].m_sValue, tNoValues );
+			pParser->UpdateMVAAttr ( yyvsp[-3], tNoValues );
 		;}
     break;
 
@@ -3025,8 +3037,8 @@ yyreduce:
     {
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ALTER;
-			tStmt.m_sIndex = yyvsp[-4].m_sValue;
-			tStmt.m_sAlterAttr = yyvsp[-1].m_sValue;
+			pParser->ToString ( tStmt.m_sIndex, yyvsp[-4] );
+			pParser->ToString ( tStmt.m_sAlterAttr, yyvsp[-1] );
 			tStmt.m_eAlterColType = (ESphAttr)yyvsp[0].m_iValue;
 		;}
     break;
@@ -3064,8 +3076,8 @@ yyreduce:
     {
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CREATE_FUNCTION;
-			tStmt.m_sUdfName = yyvsp[-4].m_sValue;
-			tStmt.m_sUdfLib = yyvsp[0].m_sValue;
+			pParser->ToString ( tStmt.m_sUdfName, yyvsp[-4] );
+			pParser->ToStringUnescape ( tStmt.m_sUdfLib, yyvsp[0] );
 			tStmt.m_eUdfType = (ESphAttr) yyvsp[-2].m_iValue;
 		;}
     break;
@@ -3090,7 +3102,7 @@ yyreduce:
     {
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_DROP_FUNCTION;
-			tStmt.m_sUdfName = yyvsp[0].m_sValue;
+			pParser->ToString ( tStmt.m_sUdfName, yyvsp[0] );
 		;}
     break;
 
@@ -3099,8 +3111,8 @@ yyreduce:
     {
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ATTACH_INDEX;
-			tStmt.m_sIndex = yyvsp[-3].m_sValue;
-			tStmt.m_sStringParam = yyvsp[0].m_sValue;
+			pParser->ToString ( tStmt.m_sIndex, yyvsp[-3] );
+			pParser->ToString ( tStmt.m_sStringParam, yyvsp[0] );
 		;}
     break;
 
@@ -3109,7 +3121,7 @@ yyreduce:
     {
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_FLUSH_RTINDEX;
-			tStmt.m_sIndex = yyvsp[0].m_sValue;
+			pParser->ToString ( tStmt.m_sIndex, yyvsp[0] );
 		;}
     break;
 
@@ -3118,7 +3130,7 @@ yyreduce:
     {
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_FLUSH_RAMCHUNK;
-			tStmt.m_sIndex = yyvsp[0].m_sValue;
+			pParser->ToString ( tStmt.m_sIndex, yyvsp[0] );
 		;}
     break;
 
@@ -3126,14 +3138,7 @@ yyreduce:
 
     {
 			pParser->m_pStmt->m_eStmt = STMT_SELECT_SYSVAR;
-			pParser->m_pStmt->m_tQuery.m_sQuery = yyvsp[-1].m_sValue;
-		;}
-    break;
-
-  case 299:
-
-    {
-			yyval.m_sValue.SetSprintf ( "%s.%s", yyvsp[-2].m_sValue.cstr(), yyvsp[0].m_sValue.cstr() );
+			pParser->ToString ( pParser->m_pStmt->m_tQuery.m_sQuery, yyvsp[-1] );
 		;}
     break;
 
@@ -3142,7 +3147,7 @@ yyreduce:
     {
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_TRUNCATE_RTINDEX;
-			tStmt.m_sIndex = yyvsp[0].m_sValue;
+			pParser->ToString ( tStmt.m_sIndex, yyvsp[0] );
 		;}
     break;
 
@@ -3151,7 +3156,7 @@ yyreduce:
     {
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_OPTIMIZE_INDEX;
-			tStmt.m_sIndex = yyvsp[0].m_sValue;
+			pParser->ToString ( tStmt.m_sIndex, yyvsp[0] );
 		;}
     break;
 

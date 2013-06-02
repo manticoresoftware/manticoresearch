@@ -1715,18 +1715,20 @@ public:
 		return ( (*m_sValue)=='\0' );
 	}
 
-	void ToLower ()
+	CSphString & ToLower ()
 	{
 		if ( m_sValue )
 			for ( char * s=m_sValue; *s; s++ )
 				*s = (char) tolower ( *s );
+		return *this;
 	}
 
-	void ToUpper ()
+	CSphString & ToUpper ()
 	{
 		if ( m_sValue )
 			for ( char * s=m_sValue; *s; s++ )
 				*s = (char) toupper ( *s );
+		return *this;
 	}
 
 	void Swap ( CSphString & rhs )
@@ -1794,6 +1796,17 @@ public:
 			return !m_sValue;
 		return strcmp ( m_sValue, b.m_sValue ) < 0;
 	}
+
+	void Unquote()
+	{
+		int l = Length();
+		if ( l && m_sValue[0]=='\'' && m_sValue[l-1]=='\'' )
+		{
+			memmove ( m_sValue, m_sValue+1, l-2 );
+			m_sValue[l-2] = '\0';
+		}
+	}
+
 };
 
 /// string swapper

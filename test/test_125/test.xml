@@ -186,6 +186,14 @@ INSERT INTO cmp_table VALUES
 <!-- lets check that WEIGHT() works in expressions -->
 <sphinxql>SELECT id, WEIGHT()*10 FROM test WHERE MATCH('ohai')</sphinxql>
 
+<!-- check strings vs unescaping -->
+<sphinxql>SELECT crc32('one two'), crc32('one\ttwo'), crc32('one\ntwo') FROM test WHERE id=1</sphinxql>
+
+<!-- check misc crazy stuff -->
+<sphinxql>SELECT @@session.auto_increment_increment</sphinxql>
+<sphinxql>SHOW COLLATION</sphinxql>
+<sphinxql>SHOW CHARACTER SET</sphinxql>
+
 </sphqueries>
 
 </test>

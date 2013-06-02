@@ -9285,11 +9285,9 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 
 	// remap update schema to index schema
 	CSphVector<CSphAttrLocator> dLocators;
-	CSphVector<int> dIndexes;
 	CSphVector<bool> dFloats;
 	CSphVector<bool> dBigints;
 	dLocators.Reserve ( tUpd.m_dAttrs.GetLength() );
-	dIndexes.Reserve ( tUpd.m_dAttrs.GetLength() );
 	dFloats.Reserve ( tUpd.m_dAttrs.GetLength() );
 	dBigints.Reserve ( tUpd.m_dAttrs.GetLength() ); // bigint flags for *source* schema.
 	uint64_t uDst64 = 0;
@@ -9345,15 +9343,6 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 		}
 
 		dBigints.Add ( tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_BIGINT );
-
-		// find dupes to optimize
-		ARRAY_FOREACH ( i, dIndexes )
-			if ( dIndexes[i]==iIndex )
-			{
-				dIndexes[i] = -1;
-				break;
-			}
-		dIndexes.Add ( iIndex );
 	}
 	assert ( tUpd.m_bIgnoreNonexistent || ( dLocators.GetLength()==tUpd.m_dAttrs.GetLength() ) );
 
@@ -9368,7 +9357,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 	// storage upfront to avoid suddenly having to rollback if allocation fails later
 	int iNumMVA = 0;
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
-		if ( dIndexes[i]>=0 && ( tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT32SET || tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_INT64SET ) )
+		if ( tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT32SET || tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_INT64SET )
 			iNumMVA++;
 
 	// OPTIMIZE! execute the code below conditionally
@@ -9406,22 +9395,19 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 			iPoolPos += iNewCount;
 
 			// try to alloc
-			if ( dIndexes[iCol]>=0 )
+			int iAlloc = -1;
+			if ( iNewCount )
 			{
-				int iAlloc = -1;
-				if ( iNewCount )
-				{
-					bool bDst64 = ( uDst64 & ( U64C(1) << iCol ) )!=0;
-					assert ( (iNewCount%2)==0 );
-					int iLen = ( bDst64 ? iNewCount : iNewCount/2 );
-					iAlloc = g_MvaArena.TaggedAlloc ( m_iIndexTag, (1+iLen)*sizeof(DWORD)+sizeof(SphDocID_t) );
-					if ( iAlloc<0 )
-						bFailed = true;
-				}
-
-				// whatever the outcome, move the pointer
-				dMvaPtrs[iMvaPtr++] = iAlloc;
+				bool bDst64 = ( uDst64 & ( U64C(1) << iCol ) )!=0;
+				assert ( (iNewCount%2)==0 );
+				int iLen = ( bDst64 ? iNewCount : iNewCount/2 );
+				iAlloc = g_MvaArena.TaggedAlloc ( m_iIndexTag, (1+iLen)*sizeof(DWORD)+sizeof(SphDocID_t) );
+				if ( iAlloc<0 )
+					bFailed = true;
 			}
+
+			// whatever the outcome, move the pointer
+			dMvaPtrs[iMvaPtr++] = iAlloc;
 		}
 	}
 
@@ -9464,36 +9450,35 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 			if (!( bSrcMva32 || bSrcMva64 )) // FIXME! optimize using a prebuilt dword mask?
 			{
 				// plain update
-				if ( dIndexes[iCol]>=0 )
-				{
-					SphAttr_t uValue = dBigints[iCol] ? MVA_UPSIZE ( &tUpd.m_dPool[iPos] ) : tUpd.m_dPool[iPos];
-					sphSetRowAttr ( pEntry, dLocators[iCol], uValue );
+				SphAttr_t uValue = dBigints[iCol] ? MVA_UPSIZE ( &tUpd.m_dPool[iPos] ) : tUpd.m_dPool[iPos];
+				sphSetRowAttr ( pEntry, dLocators[iCol], uValue );
 
-					// update block and index ranges
-					for ( int i=0; i<2; i++ )
+				// update block and index ranges
+				for ( int i=0; i<2; i++ )
+				{
+					DWORD * pBlock = i ? pBlockRanges : pIndexRanges;
+					SphAttr_t uMin = sphGetRowAttr ( DOCINFO2ATTRS ( pBlock ), dLocators[iCol] );
+					SphAttr_t uMax = sphGetRowAttr ( DOCINFO2ATTRS ( pBlock+iRowStride ) , dLocators[iCol] );
+					if ( dFloats[iCol] ) // update float's indexes assumes float comparision
 					{
-						DWORD * pBlock = i ? pBlockRanges : pIndexRanges;
-						SphAttr_t uMin = sphGetRowAttr ( DOCINFO2ATTRS ( pBlock ), dLocators[iCol] );
-						SphAttr_t uMax = sphGetRowAttr ( DOCINFO2ATTRS ( pBlock+iRowStride ) , dLocators[iCol] );
-						if ( dFloats[iCol] ) // update float's indexes assumes float comparision
-						{
-							float fValue = sphDW2F ( (DWORD) uValue );
-							float fMin = sphDW2F ( (DWORD) uMin );
-							float fMax = sphDW2F ( (DWORD) uMax );
-							if ( fValue<fMin )
-								sphSetRowAttr ( DOCINFO2ATTRS ( pBlock ), dLocators[iCol], sphF2DW ( fValue ) );
-							if ( fValue>fMax )
-								sphSetRowAttr ( DOCINFO2ATTRS ( pBlock+iRowStride ), dLocators[iCol], sphF2DW ( fValue ) );
-						} else // update usual integers
-						{
-							if ( uValue<uMin )
-								sphSetRowAttr ( DOCINFO2ATTRS ( pBlock ), dLocators[iCol], uValue );
-							if ( uValue>uMax )
-								sphSetRowAttr ( DOCINFO2ATTRS ( pBlock+iRowStride ), dLocators[iCol], uValue );
-						}
+						float fValue = sphDW2F ( (DWORD) uValue );
+						float fMin = sphDW2F ( (DWORD) uMin );
+						float fMax = sphDW2F ( (DWORD) uMax );
+						if ( fValue<fMin )
+							sphSetRowAttr ( DOCINFO2ATTRS ( pBlock ), dLocators[iCol], sphF2DW ( fValue ) );
+						if ( fValue>fMax )
+							sphSetRowAttr ( DOCINFO2ATTRS ( pBlock+iRowStride ), dLocators[iCol], sphF2DW ( fValue ) );
+					} else // update usual integers
+					{
+						if ( uValue<uMin )
+							sphSetRowAttr ( DOCINFO2ATTRS ( pBlock ), dLocators[iCol], uValue );
+						if ( uValue>uMax )
+							sphSetRowAttr ( DOCINFO2ATTRS ( pBlock+iRowStride ), dLocators[iCol], uValue );
 					}
-					uUpdateMask |= ATTRS_UPDATED;
 				}
+				uUpdateMask |= ATTRS_UPDATED;
+
+				// next
 				iPos += dBigints[iCol]?2:1;
 				continue;
 			}
@@ -9505,78 +9490,76 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 			DWORD uNew = tUpd.m_dPool[iPos++];
 			const DWORD * pSrc = tUpd.m_dPool.Begin() + iPos;
 			iPos += uNew;
-			if ( dIndexes[iCol]>=0 )
+
+			int64_t iNewMin = LLONG_MAX, iNewMax = LLONG_MIN;
+			int iNewIndex = dMvaPtrs[iMvaPtr++];
+			if ( uNew )
 			{
-				int64_t iNewMin = LLONG_MAX, iNewMax = LLONG_MIN;
-				int iNewIndex = dMvaPtrs[iMvaPtr++];
-				if ( uNew )
+				assert ( iNewIndex>=0 );
+				SphDocID_t* pDocid = (SphDocID_t *)(g_pMvaArena + iNewIndex);
+				*pDocid++ = ( bRaw ? DOCINFO2ID ( tUpd.m_dRows[iUpd] ) : tUpd.m_dDocids[iUpd] );
+				iNewIndex = (DWORD *)pDocid - g_pMvaArena;
+
+				assert ( iNewIndex>=0 );
+				DWORD * pDst = g_pMvaArena + iNewIndex;
+
+				bool bDst64 = ( uDst64 & ( U64C(1) << iCol ) )!=0;
+				assert ( ( uNew%2 )==0 );
+				int iLen = ( bDst64 ? uNew : uNew/2 );
+				// setup new value (flagged index) to store within row
+				uNew = DWORD(iNewIndex) | MVA_ARENA_FLAG;
+
+				// MVA values counter first
+				*pDst++ = iLen;
+				if ( bDst64 )
 				{
-					assert ( iNewIndex>=0 );
-					SphDocID_t* pDocid = (SphDocID_t *)(g_pMvaArena + iNewIndex);
-					*pDocid++ = ( bRaw ? DOCINFO2ID ( tUpd.m_dRows[iUpd] ) : tUpd.m_dDocids[iUpd] );
-					iNewIndex = (DWORD *)pDocid - g_pMvaArena;
-
-					assert ( iNewIndex>=0 );
-					DWORD * pDst = g_pMvaArena + iNewIndex;
-
-					bool bDst64 = ( uDst64 & ( U64C(1) << iCol ) )!=0;
-					assert ( ( uNew%2 )==0 );
-					int iLen = ( bDst64 ? uNew : uNew/2 );
-					// setup new value (flagged index) to store within row
-					uNew = DWORD(iNewIndex) | MVA_ARENA_FLAG;
-
-					// MVA values counter first
-					*pDst++ = iLen;
-					if ( bDst64 )
+					while ( iLen )
 					{
-						while ( iLen )
-						{
-							int64_t uValue = MVA_UPSIZE ( pSrc );
-							iNewMin = Min ( iNewMin, uValue );
-							iNewMax = Max ( iNewMax, uValue );
-							*pDst++ = *pSrc++;
-							*pDst++ = *pSrc++;
-							iLen -= 2;
-						}
-					} else
+						int64_t uValue = MVA_UPSIZE ( pSrc );
+						iNewMin = Min ( iNewMin, uValue );
+						iNewMax = Max ( iNewMax, uValue );
+						*pDst++ = *pSrc++;
+						*pDst++ = *pSrc++;
+						iLen -= 2;
+					}
+				} else
+				{
+					while ( iLen-- )
 					{
-						while ( iLen-- )
-						{
-							DWORD uValue = *pSrc;
-							pSrc += 2;
-							*pDst++ = uValue;
-							iNewMin = Min ( iNewMin, uValue );
-							iNewMax = Max ( iNewMax, uValue );
-						}
+						DWORD uValue = *pSrc;
+						pSrc += 2;
+						*pDst++ = uValue;
+						iNewMin = Min ( iNewMin, uValue );
+						iNewMax = Max ( iNewMax, uValue );
 					}
 				}
-
-				// store new value
-				sphSetRowAttr ( pEntry, dLocators[iCol], uNew );
-
-				// update block and index ranges
-				if ( uNew )
-					for ( int i=0; i<2; i++ )
-				{
-					DWORD * pBlock = i ? pBlockRanges : pIndexRanges;
-					int64_t iMin = sphGetRowAttr ( DOCINFO2ATTRS ( pBlock ), dLocators[iCol] );
-					int64_t iMax = sphGetRowAttr ( DOCINFO2ATTRS ( pBlock+iRowStride ), dLocators[iCol] );
-					if ( iNewMin<iMin || iNewMax>iMax )
-					{
-						sphSetRowAttr ( DOCINFO2ATTRS ( pBlock ), dLocators[iCol], Min ( iMin, iNewMin ) );
-						sphSetRowAttr ( DOCINFO2ATTRS ( pBlock+iRowStride ), dLocators[iCol], Max ( iMax, iNewMax ) );
-					}
-				}
-
-				// free old storage if needed
-				if ( uOldIndex & MVA_ARENA_FLAG )
-				{
-					uOldIndex = ((DWORD*)((SphDocID_t*)(g_pMvaArena + (uOldIndex & MVA_OFFSET_MASK))-1))-g_pMvaArena;
-					g_MvaArena.TaggedFreeIndex ( m_iIndexTag, uOldIndex );
-				}
-
-				uUpdateMask |= ATTRS_MVA_UPDATED;
 			}
+
+			// store new value
+			sphSetRowAttr ( pEntry, dLocators[iCol], uNew );
+
+			// update block and index ranges
+			if ( uNew )
+				for ( int i=0; i<2; i++ )
+			{
+				DWORD * pBlock = i ? pBlockRanges : pIndexRanges;
+				int64_t iMin = sphGetRowAttr ( DOCINFO2ATTRS ( pBlock ), dLocators[iCol] );
+				int64_t iMax = sphGetRowAttr ( DOCINFO2ATTRS ( pBlock+iRowStride ), dLocators[iCol] );
+				if ( iNewMin<iMin || iNewMax>iMax )
+				{
+					sphSetRowAttr ( DOCINFO2ATTRS ( pBlock ), dLocators[iCol], Min ( iMin, iNewMin ) );
+					sphSetRowAttr ( DOCINFO2ATTRS ( pBlock+iRowStride ), dLocators[iCol], Max ( iMax, iNewMax ) );
+				}
+			}
+
+			// free old storage if needed
+			if ( uOldIndex & MVA_ARENA_FLAG )
+			{
+				uOldIndex = ((DWORD*)((SphDocID_t*)(g_pMvaArena + (uOldIndex & MVA_OFFSET_MASK))-1))-g_pMvaArena;
+				g_MvaArena.TaggedFreeIndex ( m_iIndexTag, uOldIndex );
+			}
+
+			uUpdateMask |= ATTRS_MVA_UPDATED;
 		}
 
 		iUpdated++;

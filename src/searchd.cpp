@@ -10743,16 +10743,16 @@ struct SqlInsert_t
 /// CAUTION, nodes get copied in the parser all the time, must keep assignment slim
 struct SqlNode_t
 {
-	int						m_iStart;
-	int						m_iEnd;
-	CSphString				m_sValue;
+	int						m_iStart;	///< first byte relative to m_pBuf, inclusive
+	int						m_iEnd;		///< last byte relative to m_pBuf, exclusive! thus length = end - start
 	int64_t					m_iValue;
+	int						m_iType;	///< TOK_xxx type for insert values; SPHINXQL_TOK_xxx code for special idents
 	float					m_fValue;
-	int						m_iInstype;	// REMOVE? should not we know this somehow else?
-	AttrValues_p			m_pValues; // FIXME? replace with numeric handles into parser state?
+	AttrValues_p			m_pValues;	///< filter values vector (FIXME? replace with numeric handles into parser state?)
 
 	SqlNode_t()
 		: m_iValue ( 0 )
+		, m_iType ( 0 )
 		, m_pValues ( NULL )
 	{}
 };
@@ -10862,6 +10862,17 @@ struct SqlStmt_t
 };
 
 
+/// magic codes passed via SqlNode_t::m_iStart to handle certain special tokens
+/// for instance, to fixup "count(*)" as "@count" easily
+enum
+{
+	SPHINXQL_TOK_COUNT		= -1,
+	SPHINXQL_TOK_GROUPBY	= -2,
+	SPHINXQL_TOK_WEIGHT		= -3,
+	SPHINXQL_TOK_ID			= -4
+};
+
+
 struct SqlParser_c : ISphNoncopyable
 {
 public:
@@ -10882,7 +10893,7 @@ public:
 	void			PushQuery ();
 
 	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue );
-	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue, const CSphString & sArg );
+	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue, const SqlNode_t & sArg );
 	bool			AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt> & dNamed );
 	void			AddItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc=SPH_AGGR_NONE, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
 	bool			AddItem ( const char * pToken, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
@@ -10910,25 +10921,41 @@ public:
 		}
 	}
 
-	bool			AddSchemaItem ( SqlNode_t * pNode );
-	void			SetValue ( const char * sName, const SqlNode_t& tValue );
-	bool			SetMatch ( const SqlNode_t& tValue );
-	void			AddConst ( int iList, const SqlNode_t& tValue );
-	void			SetStatement ( const SqlNode_t& tName, SqlSet_e eSet );
-	bool			AddFloatRangeFilter ( const CSphString & sAttr, float fMin, float fMax, bool bHasEqual );
-	bool			AddIntRangeFilter ( const CSphString & sAttr, int64_t iMin, int64_t iMax );
-	bool			AddIntFilterGreater ( const CSphString & sAttr, int64_t iVal, bool bHasEqual );
-	bool			AddIntFilterLesser ( const CSphString & sAttr, int64_t iVal, bool bHasEqual );
-	bool			AddUservarFilter ( const CSphString & sCol, const CSphString & sVar, bool bExclude );
-	void			AddGroupBy ( const CSphString & sGroupBy );
-	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd );
-	CSphFilterSettings *	AddFilter ( const CSphString & sCol, ESphFilter eType );
-	bool			AddStringFilter ( const CSphString & sCol, const CSphString & sVal, bool bExclude );
-
-	CSphFilterSettings * AddValuesFilter ( const SqlNode_t& sCol )
+	inline CSphString & ToString ( CSphString & sRes, const SqlNode_t & tNode ) const
 	{
-		return AddFilter ( sCol.m_sValue, SPH_FILTER_VALUES );
+		if ( tNode.m_iType>=0 )
+			sRes.SetBinary ( m_pBuf + tNode.m_iStart, tNode.m_iEnd - tNode.m_iStart );
+		else switch ( tNode.m_iType )
+		{
+			case SPHINXQL_TOK_COUNT:	sRes = "@count"; break;
+			case SPHINXQL_TOK_GROUPBY:	sRes = "@groupby"; break;
+			case SPHINXQL_TOK_WEIGHT:	sRes = "@weight"; break;
+			case SPHINXQL_TOK_ID:		sRes = "@id"; break;
+			default:					assert ( 0 && "INTERNAL ERROR: unknown parser ident code" );
+		}
+		return sRes;
 	}
+
+	inline void ToStringUnescape ( CSphString & sRes, const SqlNode_t & tNode ) const
+	{
+		assert ( tNode.m_iType>=0 );
+		SqlUnescape ( sRes, m_pBuf + tNode.m_iStart, tNode.m_iEnd - tNode.m_iStart );
+	}
+
+	bool			AddSchemaItem ( SqlNode_t * pNode );
+	bool			SetMatch ( const SqlNode_t & tValue );
+	void			AddConst ( int iList, const SqlNode_t& tValue );
+	void			SetStatement ( const SqlNode_t & tName, SqlSet_e eSet );
+	bool			AddFloatRangeFilter ( const SqlNode_t & tAttr, float fMin, float fMax, bool bHasEqual );
+	bool			AddIntRangeFilter ( const SqlNode_t & tAttr, int64_t iMin, int64_t iMax );
+	bool			AddIntFilterGreater ( const SqlNode_t & tAttr, int64_t iVal, bool bHasEqual );
+	bool			AddIntFilterLesser ( const SqlNode_t & tAttr, int64_t iVal, bool bHasEqual );
+	bool			AddUservarFilter ( const SqlNode_t & tCol, const SqlNode_t & tVar, bool bExclude );
+	void			AddGroupBy ( const SqlNode_t & sGroupBy );
+	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd );
+	CSphFilterSettings *	AddFilter ( const SqlNode_t & tCol, ESphFilter eType );
+	bool					AddStringFilter ( const SqlNode_t & tCol, const SqlNode_t & tVal, bool bExclude );
+	CSphFilterSettings *	AddValuesFilter ( const SqlNode_t & tCol ) { return AddFilter ( tCol, SPH_FILTER_VALUES ); }
 
 	inline bool		SetOldSyntax()
 	{
@@ -10952,27 +10979,18 @@ public:
 	void						FreeNamedVec ( int iIndex );
 	bool						AlterStatement ( SqlNode_t * pNode );
 	bool						UpdateStatement ( SqlNode_t * pNode );
-	void						UpdateAttr ( const CSphString&, const SqlNode_t * pValue, ESphAttr eType = SPH_ATTR_INTEGER );
-	void						UpdateMVAAttr ( const CSphString& sName, const SqlNode_t& dValues );
+
+	void						AddUpdatedAttr ( const SqlNode_t & tName, ESphAttr eType ) const;
+	void						UpdateMVAAttr ( const SqlNode_t & tName, const SqlNode_t& dValues );
 	void						SetGroupbyLimit ( int iLimit );
+
 private:
-	void			AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
-	void			AddUpdatedAttr ( const CSphString&, ESphAttr eType );
+	void						AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
 
 protected:
 	bool						m_bNamedVecBusy;
 	CSphVector<CSphNamedInt>	m_dNamedVec;
 };
-
-static void AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & tNode )
-{
-	SqlInsert_t & tIns = dVec.Add();
-	tIns.m_iType = tNode.m_iInstype;
-	tIns.m_iVal = tNode.m_iValue; // OPTIMIZE? copy conditionally based on type?
-	tIns.m_fVal = tNode.m_fValue;
-	tIns.m_sVal = tNode.m_sValue;
-	tIns.m_pVals = tNode.m_pValues;
-}
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -11126,12 +11144,12 @@ void SqlParser_c::PushQuery ()
 	m_bGotQuery = false;
 }
 
-bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue )
+
+bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue )
 {
-	CSphString sOpt = tIdent.m_sValue;
-	CSphString sVal = tValue.m_sValue;
-	sOpt.ToLower ();
-	sVal.ToLower ();
+	CSphString sOpt, sVal;
+	ToString ( sOpt, tIdent ).ToLower();
+	ToString ( sVal, tValue ).ToLower().Unquote();
 
 	if ( sOpt=="ranker" )
 	{
@@ -11183,7 +11201,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue )
 
 	} else if ( sOpt=="comment" )
 	{
-		m_pQuery->m_sComment = tValue.m_sValue;
+		ToString ( m_pQuery->m_sComment, tValue );
 
 	} else if ( sOpt=="sort_method" )
 	{
@@ -11239,7 +11257,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue )
 
 	} else
 	{
-		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", tIdent.m_sValue.cstr() );
+		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", sOpt.cstr() );
 		return false;
 	}
 
@@ -11247,12 +11265,11 @@ bool SqlParser_c::AddOption ( const SqlNode_t& tIdent, const SqlNode_t& tValue )
 }
 
 
-bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue, const CSphString & sArg )
+bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue, const SqlNode_t & tArg )
 {
-	CSphString sOpt = tIdent.m_sValue;
-	CSphString sVal = tValue.m_sValue;
-	sOpt.ToLower ();
-	sVal.ToLower ();
+	CSphString sOpt, sVal;
+	ToString ( sOpt, tIdent ).ToLower();
+	ToString ( sVal, tValue ).ToLower().Unquote();
 
 	if ( sOpt=="ranker" && ( sVal=="expr" || sVal=="export" ) )
 	{
@@ -11260,11 +11277,11 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 			m_pQuery->m_eRanker = SPH_RANK_EXPR;
 		else
 			m_pQuery->m_eRanker = SPH_RANK_EXPORT;
-		m_pQuery->m_sRankerExpr = sArg;
+		ToStringUnescape ( m_pQuery->m_sRankerExpr, tArg );
 		return true;
 	} else
 	{
-		m_pParseError->SetSprintf ( "unknown option or extra argument to '%s=%s'", tIdent.m_sValue.cstr(), tValue.m_sValue.cstr() );
+		m_pParseError->SetSprintf ( "unknown option or extra argument to '%s=%s'", sOpt.cstr(), sVal.cstr() );
 		return false;
 	}
 }
@@ -11272,8 +11289,8 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 
 bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt> & dNamed )
 {
-	CSphString sOpt = tIdent.m_sValue;
-	sOpt.ToLower ();
+	CSphString sOpt;
+	ToString ( sOpt, tIdent ).ToLower ();
 
 	if ( sOpt=="field_weights" )
 	{
@@ -11285,7 +11302,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt>
 
 	} else
 	{
-		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", tIdent.m_sValue.cstr() );
+		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", sOpt.cstr() );
 		return false;
 	}
 
@@ -11335,17 +11352,18 @@ bool SqlParser_c::AddItem ( const char * pToken, SqlNode_t * pStart, SqlNode_t *
 	return SetNewSyntax();
 }
 
-void SqlParser_c::AddGroupBy ( const CSphString & sGroupBy )
+void SqlParser_c::AddGroupBy ( const SqlNode_t & tGroupBy )
 {
 	if ( m_pQuery->m_sGroupBy.IsEmpty() )
 	{
 		m_pQuery->m_eGroupFunc = SPH_GROUPBY_ATTR;
-		m_pQuery->m_sGroupBy = sGroupBy;
+		ToString ( m_pQuery->m_sGroupBy, tGroupBy );
 		sphColumnToLowercase ( const_cast<char *>( m_pQuery->m_sGroupBy.cstr() ) );
 	} else
 	{
 		m_pQuery->m_eGroupFunc = SPH_GROUPBY_MULTIPLE;
-		CSphString sTmp = sGroupBy;
+		CSphString sTmp;
+		ToString ( sTmp, tGroupBy );
 		sphColumnToLowercase ( const_cast<char *>( sTmp.cstr() ) );
 		m_pQuery->m_sGroupBy.SetSprintf ( "%s, %s", m_pQuery->m_sGroupBy.cstr(), sTmp.cstr() );
 	}
@@ -11364,7 +11382,7 @@ bool SqlParser_c::AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNod
 		return false;
 	}
 
-	m_pQuery->m_sGroupDistinct = pNewExpr->m_sValue;
+	ToString ( m_pQuery->m_sGroupDistinct, *pNewExpr );
 	return AddItem ( "@distinct", pStart, pEnd );
 }
 
@@ -11384,8 +11402,8 @@ bool SqlParser_c::SetMatch ( const YYSTYPE& tValue )
 		return false;
 	};
 
-	m_pQuery->m_sQuery = tValue.m_sValue;
-	m_pQuery->m_sRawQuery = tValue.m_sValue;
+	ToStringUnescape ( m_pQuery->m_sQuery, tValue );
+	m_pQuery->m_sRawQuery = m_pQuery->m_sQuery;
 	return m_bGotQuery = true;
 }
 
@@ -11394,16 +11412,15 @@ void SqlParser_c::AddConst ( int iList, const YYSTYPE& tValue )
 	CSphVector<CSphNamedInt> & dVec = GetNamedVec ( iList );
 
 	dVec.Add();
-	dVec.Last().m_sName = tValue.m_sValue;
-	dVec.Last().m_sName.ToLower();
+	ToString ( dVec.Last().m_sName, tValue ).ToLower();
 	dVec.Last().m_iValue = (int) tValue.m_iValue;
 }
 
-void SqlParser_c::SetStatement ( const YYSTYPE& tName, SqlSet_e eSet )
+void SqlParser_c::SetStatement ( const YYSTYPE & tName, SqlSet_e eSet )
 {
 	m_pStmt->m_eStmt = STMT_SET;
 	m_pStmt->m_eSet = eSet;
-	m_pStmt->m_sSetName = tName.m_sValue;
+	ToString ( m_pStmt->m_sSetName, tName );
 }
 
 bool SqlParser_c::AlterStatement ( SqlNode_t * pNode )
@@ -11426,36 +11443,16 @@ bool SqlParser_c::UpdateStatement ( SqlNode_t * pNode )
 	return true;
 }
 
-void SqlParser_c::AddUpdatedAttr ( const CSphString& sName, ESphAttr eType )
+void SqlParser_c::AddUpdatedAttr ( const SqlNode_t & tName, ESphAttr eType ) const
 {
 	CSphAttrUpdate & tUpd = m_pStmt->m_tUpdate;
 	CSphColumnInfo & tAttr = tUpd.m_dAttrs.Add();
-	tAttr.m_sName = sName;
-	tAttr.m_sName.ToLower();
+	ToString ( tAttr.m_sName, tName ).ToLower();
 	tAttr.m_eAttrType = eType; // sorry, ints only for now, riding on legacy shit!
 }
 
-void SqlParser_c::UpdateAttr ( const CSphString& sName, const SqlNode_t * pValue, ESphAttr eType )
-{
-	assert ( eType==SPH_ATTR_FLOAT || eType==SPH_ATTR_INTEGER || eType==SPH_ATTR_BIGINT );
-	if ( eType==SPH_ATTR_FLOAT )
-	{
-		m_pStmt->m_tUpdate.m_dPool.Add ( *(const DWORD*)( &pValue->m_fValue ) );
 
-	} else if ( eType==SPH_ATTR_INTEGER || eType==SPH_ATTR_BIGINT )
-	{
-		m_pStmt->m_tUpdate.m_dPool.Add ( (DWORD) pValue->m_iValue );
-		DWORD uHi = (DWORD) ( pValue->m_iValue>>32 );
-		if ( uHi )
-		{
-			m_pStmt->m_tUpdate.m_dPool.Add ( uHi );
-			eType = SPH_ATTR_BIGINT;
-		}
-	}
-	AddUpdatedAttr ( sName, eType );
-}
-
-void SqlParser_c::UpdateMVAAttr ( const CSphString & sName, const SqlNode_t & dValues )
+void SqlParser_c::UpdateMVAAttr ( const SqlNode_t & tName, const SqlNode_t & dValues )
 {
 	CSphAttrUpdate & tUpd = m_pStmt->m_tUpdate;
 	ESphAttr eType = SPH_ATTR_UINT32SET;
@@ -11485,24 +11482,27 @@ void SqlParser_c::UpdateMVAAttr ( const CSphString & sName, const SqlNode_t & dV
 		tUpd.m_dPool.Add ( 0 );
 	}
 
-	AddUpdatedAttr ( sName, eType );
+	AddUpdatedAttr ( tName, eType );
 }
 
-CSphFilterSettings * SqlParser_c::AddFilter ( const CSphString & sCol, ESphFilter eType )
+CSphFilterSettings * SqlParser_c::AddFilter ( const SqlNode_t & tCol, ESphFilter eType )
 {
-	if ( sCol=="@count" || sCol=="count(*)" )
+	CSphString sCol;
+	ToString ( sCol, tCol ); // do NOT lowercase just yet, might have to retain case for JSON cols
+
+	if ( !strcasecmp ( sCol.cstr(), "@count" ) || !strcasecmp ( sCol.cstr(), "count(*)" ) )
 	{
 		yyerror ( this, "Aggregates in 'where' clause prohibited" );
 		return NULL;
 	}
 	CSphFilterSettings * pFilter = &m_pQuery->m_dFilters.Add();
-	pFilter->m_sAttrName = ( sCol=="id" ) ? "@id" : sCol;
+	pFilter->m_sAttrName = ( !strcasecmp ( sCol.cstr(), "id" ) ) ? "@id" : sCol;
 	pFilter->m_eType = eType;
 	sphColumnToLowercase ( const_cast<char *>( pFilter->m_sAttrName.cstr() ) );
 	return pFilter;
 }
 
-bool SqlParser_c::AddFloatRangeFilter ( const CSphString & sAttr, float fMin, float fMax, bool bHasEqual )
+bool SqlParser_c::AddFloatRangeFilter ( const SqlNode_t & sAttr, float fMin, float fMax, bool bHasEqual )
 {
 	CSphFilterSettings * pFilter = AddFilter ( sAttr, SPH_FILTER_FLOATRANGE );
 	if ( !pFilter )
@@ -11513,7 +11513,7 @@ bool SqlParser_c::AddFloatRangeFilter ( const CSphString & sAttr, float fMin, fl
 	return true;
 }
 
-bool SqlParser_c::AddIntRangeFilter ( const CSphString & sAttr, int64_t iMin, int64_t iMax )
+bool SqlParser_c::AddIntRangeFilter ( const SqlNode_t & sAttr, int64_t iMin, int64_t iMax )
 {
 	CSphFilterSettings * pFilter = AddFilter ( sAttr, SPH_FILTER_RANGE );
 	if ( !pFilter )
@@ -11523,32 +11523,35 @@ bool SqlParser_c::AddIntRangeFilter ( const CSphString & sAttr, int64_t iMin, in
 	return true;
 }
 
-bool SqlParser_c::AddIntFilterGreater ( const CSphString & sAttr, int64_t iVal, bool bHasEqual )
+bool SqlParser_c::AddIntFilterGreater ( const SqlNode_t & tAttr, int64_t iVal, bool bHasEqual )
 {
-	CSphFilterSettings * pFilter = AddFilter ( sAttr, SPH_FILTER_RANGE );
+	CSphFilterSettings * pFilter = AddFilter ( tAttr, SPH_FILTER_RANGE );
 	if ( !pFilter )
 		return false;
-	bool bId = ( sAttr=="@id" ) || ( sAttr=="id" );
+	bool bId = ( pFilter->m_sAttrName=="@id" ) || ( pFilter->m_sAttrName=="id" );
 	pFilter->m_iMinValue = iVal;
 	pFilter->m_iMaxValue = bId ? (SphAttr_t)ULLONG_MAX : LLONG_MAX;
 	pFilter->m_bHasEqual = bHasEqual;
 	return true;
 }
 
-bool SqlParser_c::AddIntFilterLesser ( const CSphString & sAttr, int64_t iVal, bool bHasEqual )
+bool SqlParser_c::AddIntFilterLesser ( const SqlNode_t & tAttr, int64_t iVal, bool bHasEqual )
 {
-	CSphFilterSettings * pFilter = AddFilter ( sAttr, SPH_FILTER_RANGE );
+	CSphFilterSettings * pFilter = AddFilter ( tAttr, SPH_FILTER_RANGE );
 	if ( !pFilter )
 		return false;
-	bool bId = ( sAttr=="@id" ) || ( sAttr=="id" );
+	bool bId = ( pFilter->m_sAttrName=="@id" ) || ( pFilter->m_sAttrName=="id" );
 	pFilter->m_iMinValue = bId ? 0 : LLONG_MIN;
 	pFilter->m_iMaxValue = iVal;
 	pFilter->m_bHasEqual = bHasEqual;
 	return true;
 }
 
-bool SqlParser_c::AddUservarFilter ( const CSphString & sCol, const CSphString & sVar, bool bExclude )
+bool SqlParser_c::AddUservarFilter ( const SqlNode_t & tCol, const SqlNode_t & tVar, bool bExclude )
 {
+	CSphString sVar;
+	ToString ( sVar, tVar );
+
 	CSphScopedLock<CSphMutex> tLock ( g_tUservarsMutex );
 	Uservar_t * pVar = g_hUservars ( sVar );
 	if ( !pVar )
@@ -11558,7 +11561,7 @@ bool SqlParser_c::AddUservarFilter ( const CSphString & sCol, const CSphString &
 	}
 
 	assert ( pVar->m_eType==USERVAR_INT_SET );
-	CSphFilterSettings * pFilter = AddFilter ( sCol, SPH_FILTER_VALUES );
+	CSphFilterSettings * pFilter = AddFilter ( tCol, SPH_FILTER_VALUES );
 	if ( !pFilter )
 		return false;
 	pFilter->m_bExclude = bExclude;
@@ -11577,12 +11580,12 @@ bool SqlParser_c::AddUservarFilter ( const CSphString & sCol, const CSphString &
 }
 
 
-bool SqlParser_c::AddStringFilter ( const CSphString & sCol, const CSphString & sVal, bool bExclude )
+bool SqlParser_c::AddStringFilter ( const SqlNode_t & tCol, const SqlNode_t & tVal, bool bExclude )
 {
-	CSphFilterSettings * pFilter = AddFilter ( sCol, SPH_FILTER_STRING );
+	CSphFilterSettings * pFilter = AddFilter ( tCol, SPH_FILTER_STRING );
 	if ( !pFilter )
 		return false;
-	pFilter->m_sRefString = sVal;
+	ToStringUnescape ( pFilter->m_sRefString, tVal );
 	pFilter->m_bExclude = bExclude;
 	return true;
 }

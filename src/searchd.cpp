@@ -8337,7 +8337,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		} else if ( bMagic && ( tCol.m_pExpr.Ptr() || bUsualApi ) )
 		{
 			ARRAY_FOREACH ( j, tItems )
-				if ( dFrontend[j].m_iIndex<0 && tItems[j].m_sExpr==tCol.m_sName )
+				if ( dFrontend[j].m_iIndex<0 && tCol.m_sName==GetMagicSchemaName ( tItems[j].m_sExpr ) )
 			{
 				dFrontend[j].m_iIndex = iCol;
 				dFrontend[j].m_sName = tItems[j].m_sAlias;
@@ -8357,7 +8357,8 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 				const CSphQueryItem & t = tItems[j];
 				if ( dFrontend[j].m_iIndex<0
 					&& ( ( tCol.m_sName==GetMagicSchemaName ( t.m_sExpr ) && t.m_eAggrFunc==SPH_AGGR_NONE )
-						|| tCol.m_sName==t.m_sAlias ) )
+						|| ( t.m_sAlias.cstr() && t.m_sAlias==tCol.m_sName &&
+							( tRes.m_tSchema.GetAttrIndex ( GetMagicSchemaName ( t.m_sExpr ) )==-1 || t.m_eAggrFunc!=SPH_AGGR_NONE ) ) ) )
 				{
 					// tricky bit about naming
 					//

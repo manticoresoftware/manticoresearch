@@ -3282,7 +3282,7 @@ struct MatchGeneric2_fn : public ISphMatchComparator
 	{
 		SPH_TEST_KEYPART(0);
 		SPH_TEST_KEYPART(1);
-		return false;
+		return a.m_iDocID>b.m_iDocID;
 	};
 };
 
@@ -3299,7 +3299,7 @@ struct MatchGeneric3_fn : public ISphMatchComparator
 		SPH_TEST_KEYPART(0);
 		SPH_TEST_KEYPART(1);
 		SPH_TEST_KEYPART(2);
-		return false;
+		return a.m_iDocID>b.m_iDocID;
 	};
 };
 
@@ -3317,7 +3317,7 @@ struct MatchGeneric4_fn : public ISphMatchComparator
 		SPH_TEST_KEYPART(1);
 		SPH_TEST_KEYPART(2);
 		SPH_TEST_KEYPART(3);
-		return false;
+		return a.m_iDocID>b.m_iDocID;
 	};
 };
 
@@ -3336,7 +3336,7 @@ struct MatchGeneric5_fn : public ISphMatchComparator
 		SPH_TEST_KEYPART(2);
 		SPH_TEST_KEYPART(3);
 		SPH_TEST_KEYPART(4);
-		return false;
+		return a.m_iDocID>b.m_iDocID;
 	};
 };
 

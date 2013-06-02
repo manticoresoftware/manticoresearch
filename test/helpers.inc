@@ -1196,7 +1196,10 @@ class SphinxConfig
 				$qmin = $g_pick_query-1;
 				$qmax = $g_pick_query-1;
 			} else
+			{
 				$g_pick_query -= count($this->_queries);
+				return true;
+			}
 		}
 
 		for ( $n=$qmin; $n<=$qmax; $n++ )

@@ -2780,7 +2780,8 @@ public:
 
 struct CSphAttrUpdate
 {
-	CSphVector<CSphColumnInfo>		m_dAttrs;		///< update schema (ie. what attrs to update)
+	CSphVector<char*>				m_dAttrs;		///< update schema, attr names to update
+	CSphVector<ESphAttr>			m_dTypes;		///< update schema, attr types to update
 	CSphVector<DWORD>				m_dPool;		///< update values pool
 	CSphVector<SphDocID_t>			m_dDocids;		///< document IDs vector
 	CSphVector<const CSphRowitem*>	m_dRows;		///< document attribute's vector, used instead of m_dDocids.
@@ -2789,6 +2790,12 @@ struct CSphAttrUpdate
 
 	CSphAttrUpdate() : m_bIgnoreNonexistent ( false )
 	{}
+
+	~CSphAttrUpdate()
+	{
+		ARRAY_FOREACH ( i, m_dAttrs )
+			SafeDeleteArray ( m_dAttrs[i] );
+	}
 };
 
 /////////////////////////////////////////////////////////////////////////////

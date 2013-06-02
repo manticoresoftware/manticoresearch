@@ -528,9 +528,10 @@ private:
 		if ( !m_iUsed )
 			return;
 
-		CSphAttrUpdate tSet;
+		CSphAttrUpdate tSet; // FIXME? OPTIMIZE?
 		tSet.m_bIgnoreNonexistent = m_bIgnoreNonexistent;
 		tSet.m_dAttrs = m_pUpdate->m_pUpdate->m_dAttrs;
+		tSet.m_dTypes = m_pUpdate->m_pUpdate->m_dTypes;
 		tSet.m_dPool = m_pUpdate->m_pUpdate->m_dPool;
 		tSet.m_dRowOffset.Resize ( m_iUsed );
 		if ( !DOCINFO2ID ( STATIC2DOCINFO ( m_pData->m_pStatic ) ) ) // if static attrs were copied, so, they actually dynamic
@@ -553,6 +554,8 @@ private:
 
 		m_pUpdate->m_iAffected += m_pUpdate->m_pIndex->UpdateAttributes ( tSet, -1, *m_pUpdate->m_pError );
 		m_iUsed = 0;
+
+		tSet.m_dAttrs.Resize(0); // do not free what is not yours
 	}
 public:
 	/// ctor

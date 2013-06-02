@@ -6593,7 +6593,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 	uint64_t uDst64 = 0;
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
 	{
-		int iIndex = m_tSchema.GetAttrIndex ( tUpd.m_dAttrs[i].m_sName.cstr() );
+		int iIndex = m_tSchema.GetAttrIndex ( tUpd.m_dAttrs[i] );
 		if ( iIndex>=0 )
 		{
 			// forbid updates on non-int columns
@@ -6603,22 +6603,22 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 				|| tCol.m_eAttrType==SPH_ATTR_BIGINT || tCol.m_eAttrType==SPH_ATTR_FLOAT ))
 			{
 				sError.SetSprintf ( "attribute '%s' can not be updated (must be boolean, integer, "
-					"bigint, float or timestamp or MVA)", tUpd.m_dAttrs[i].m_sName.cstr() );
+					"bigint, float or timestamp or MVA)", tUpd.m_dAttrs[i] );
 				return -1;
 			}
 
 			bool bSrcMva = ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET );
-			bool bDstMva = ( tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT32SET || tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_INT64SET );
+			bool bDstMva = ( tUpd.m_dTypes[i]==SPH_ATTR_UINT32SET || tUpd.m_dTypes[i]==SPH_ATTR_INT64SET );
 			if ( bSrcMva!=bDstMva )
 			{
-				sError.SetSprintf ( "attribute '%s' MVA flag mismatch", tUpd.m_dAttrs[i].m_sName.cstr() );
+				sError.SetSprintf ( "attribute '%s' MVA flag mismatch", tUpd.m_dAttrs[i] );
 				return -1;
 			}
 
-			if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET && tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_INT64SET )
+			if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET && tUpd.m_dTypes[i]==SPH_ATTR_INT64SET )
 			{
-				sError.SetSprintf ( "attribute '%s' MVA bits (dst=%d, src=%d) mismatch", tUpd.m_dAttrs[i].m_sName.cstr(),
-					tCol.m_eAttrType, tUpd.m_dAttrs[i].m_eAttrType );
+				sError.SetSprintf ( "attribute '%s' MVA bits (dst=%d, src=%d) mismatch", tUpd.m_dAttrs[i],
+					tCol.m_eAttrType, tUpd.m_dTypes[i] );
 				return -1;
 			}
 
@@ -6631,11 +6631,11 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 
 		} else if ( !tUpd.m_bIgnoreNonexistent )
 		{
-			sError.SetSprintf ( "attribute '%s' not found", tUpd.m_dAttrs[i].m_sName.cstr() );
+			sError.SetSprintf ( "attribute '%s' not found", tUpd.m_dAttrs[i] );
 			return -1;
 		}
 
-		dBigints.Add ( tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_BIGINT );
+		dBigints.Add ( tUpd.m_dTypes[i]==SPH_ATTR_BIGINT );
 
 		// find dupes to optimize
 		ARRAY_FOREACH ( i, dIndexes )
@@ -6702,7 +6702,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 			int iPos = tUpd.m_dRowOffset[iUpd];
 			ARRAY_FOREACH ( iCol, tUpd.m_dAttrs )
 			{
-				if ( !( tUpd.m_dAttrs[iCol].m_eAttrType==SPH_ATTR_UINT32SET || tUpd.m_dAttrs[iCol].m_eAttrType==SPH_ATTR_INT64SET ) )
+				if ( !( tUpd.m_dTypes[iCol]==SPH_ATTR_UINT32SET || tUpd.m_dTypes[iCol]==SPH_ATTR_INT64SET ) )
 				{
 					if ( dIndexes[iCol]>=0 )
 					{
@@ -7761,8 +7761,8 @@ void RtBinlog_c::BinlogUpdateAttributes ( int64_t * pTID, const char * sIndexNam
 	m_tWriter.ZipValue ( tUpd.m_dAttrs.GetLength() );
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
 	{
-		m_tWriter.PutString ( tUpd.m_dAttrs[i].m_sName.cstr() );
-		m_tWriter.ZipValue ( tUpd.m_dAttrs[i].m_eAttrType );
+		m_tWriter.PutString ( tUpd.m_dAttrs[i] );
+		m_tWriter.ZipValue ( tUpd.m_dTypes[i] );
 	}
 
 	CSphVector<SphDocID_t> dActiveDocids;
@@ -8524,8 +8524,8 @@ bool RtBinlog_c::ReplayUpdateAttributes ( int iBinlog, BinlogReader_c & tReader 
 	tUpd.m_dAttrs.Resize ( (DWORD) tReader.UnzipValue() ); // FIXME! sanity check
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
 	{
-		tUpd.m_dAttrs[i].m_sName = tReader.GetString();
-		tUpd.m_dAttrs[i].m_eAttrType = (ESphAttr) tReader.UnzipValue(); // safe, we'll crc check later
+		tUpd.m_dAttrs[i] = tReader.GetString().Leak();
+		tUpd.m_dTypes[i] = (ESphAttr) tReader.UnzipValue(); // safe, we'll crc check later
 	}
 	if ( tReader.GetErrorFlag()
 		|| !LoadVector ( tReader, tUpd.m_dPool )

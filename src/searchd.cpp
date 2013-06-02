@@ -11446,9 +11446,9 @@ bool SqlParser_c::UpdateStatement ( SqlNode_t * pNode )
 void SqlParser_c::AddUpdatedAttr ( const SqlNode_t & tName, ESphAttr eType ) const
 {
 	CSphAttrUpdate & tUpd = m_pStmt->m_tUpdate;
-	CSphColumnInfo & tAttr = tUpd.m_dAttrs.Add();
-	ToString ( tAttr.m_sName, tName ).ToLower();
-	tAttr.m_eAttrType = eType; // sorry, ints only for now, riding on legacy shit!
+	CSphString sAttr;
+	tUpd.m_dAttrs.Add ( ToString ( sAttr, tName ).ToLower().Leak() );
+	tUpd.m_dTypes.Add ( eType ); // sorry, ints only for now, riding on legacy shit!
 }
 
 
@@ -12544,7 +12544,7 @@ void UpdateRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuffe
 	int iReqSize = 4+strlen(sIndexes); // indexes string
 	iReqSize += 8; // attrs array len, data, non-existent flags
 	ARRAY_FOREACH ( i, m_tUpd.m_dAttrs )
-		iReqSize += 8 + strlen ( m_tUpd.m_dAttrs[i].m_sName.cstr() );
+		iReqSize += 8 + strlen ( m_tUpd.m_dAttrs[i] );
 	iReqSize += 4; // number of updates
 	iReqSize += 8*m_tUpd.m_dDocids.GetLength() + 4*m_tUpd.m_dPool.GetLength(); // 64bit ids, 32bit values
 
@@ -12558,8 +12558,8 @@ void UpdateRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuffe
 	tOut.SendInt ( m_tUpd.m_bIgnoreNonexistent ? 1 : 0 );
 	ARRAY_FOREACH ( i, m_tUpd.m_dAttrs )
 	{
-		tOut.SendString ( m_tUpd.m_dAttrs[i].m_sName.cstr() );
-		tOut.SendInt ( ( m_tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT32SET || m_tUpd.m_dAttrs[i].m_eAttrType==SPH_ATTR_INT64SET ) ? 1 : 0 );
+		tOut.SendString ( m_tUpd.m_dAttrs[i] );
+		tOut.SendInt ( ( m_tUpd.m_dTypes[i]==SPH_ATTR_UINT32SET || m_tUpd.m_dTypes[i]==SPH_ATTR_INT64SET ) ? 1 : 0 );
 	}
 	tOut.SendInt ( m_tUpd.m_dDocids.GetLength() );
 
@@ -12626,19 +12626,18 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq )
 	bool bMvaUpdate = false;
 
 	tUpd.m_dAttrs.Resize ( tReq.GetDword() ); // FIXME! check this
+	tUpd.m_dTypes.Resize ( tUpd.m_dAttrs.GetLength() );
 	if ( iVer>=0x103 )
 		tUpd.m_bIgnoreNonexistent = ( tReq.GetDword() & 1 )!=0;
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
 	{
-		tUpd.m_dAttrs[i].m_sName = tReq.GetString ();
-		tUpd.m_dAttrs[i].m_sName.ToLower ();
-
-		tUpd.m_dAttrs[i].m_eAttrType = SPH_ATTR_INTEGER;
+		tUpd.m_dAttrs[i] = tReq.GetString().ToLower().Leak();
+		tUpd.m_dTypes[i] = SPH_ATTR_INTEGER;
 		if ( iVer>=0x102 )
 		{
 			if ( tReq.GetDword() )
 			{
-				tUpd.m_dAttrs[i].m_eAttrType = SPH_ATTR_UINT32SET;
+				tUpd.m_dTypes[i] = SPH_ATTR_UINT32SET;
 				bMvaUpdate = true;
 			}
 		}
@@ -12658,7 +12657,7 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq )
 
 		ARRAY_FOREACH ( iAttr, tUpd.m_dAttrs )
 		{
-			if ( tUpd.m_dAttrs[iAttr].m_eAttrType==SPH_ATTR_UINT32SET )
+			if ( tUpd.m_dTypes[iAttr]==SPH_ATTR_UINT32SET )
 			{
 				DWORD uCount = tReq.GetDword ();
 				if ( !uCount )
@@ -15000,8 +14999,8 @@ void HandleMysqlUpdate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 	bool bMvaUpdate = false;
 	ARRAY_FOREACH_COND ( i, tStmt.m_tUpdate.m_dAttrs, !bMvaUpdate )
 	{
-		bMvaUpdate = ( tStmt.m_tUpdate.m_dAttrs[i].m_eAttrType==SPH_ATTR_UINT32SET
-			|| tStmt.m_tUpdate.m_dAttrs[i].m_eAttrType==SPH_ATTR_INT64SET );
+		bMvaUpdate = ( tStmt.m_tUpdate.m_dTypes[i]==SPH_ATTR_UINT32SET
+			|| tStmt.m_tUpdate.m_dTypes[i]==SPH_ATTR_INT64SET );
 	}
 
 	ARRAY_FOREACH ( iIdx, dIndexNames )

@@ -8521,7 +8521,9 @@ bool RtBinlog_c::ReplayUpdateAttributes ( int iBinlog, BinlogReader_c & tReader 
 	int64_t iTID = (int64_t) tReader.UnzipValue();
 	int64_t tmStamp = (int64_t) tReader.UnzipValue();
 
-	tUpd.m_dAttrs.Resize ( (DWORD) tReader.UnzipValue() ); // FIXME! sanity check
+	int iAttrs = (int)tReader.UnzipValue();
+	tUpd.m_dAttrs.Resize ( iAttrs ); // FIXME! sanity check
+	tUpd.m_dTypes.Resize ( iAttrs ); // FIXME! sanity check
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
 	{
 		tUpd.m_dAttrs[i] = tReader.GetString().Leak();

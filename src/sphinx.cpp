@@ -1222,6 +1222,7 @@ struct BuildHeader_t : public CSphSourceStats, public DictHeader_t
 		, m_iMinDocid ( 0 )
 		, m_iKillListSize ( 0 )
 		, m_uMinMaxIndex ( 0 )
+		, m_iTotalDups ( 0 )
 	{
 		m_iTotalDocuments = tStat.m_iTotalDocuments;
 		m_iTotalBytes = tStat.m_iTotalBytes;
@@ -1233,6 +1234,7 @@ struct BuildHeader_t : public CSphSourceStats, public DictHeader_t
 	SphDocID_t			m_iMinDocid;
 	DWORD				m_iKillListSize;
 	int64_t				m_uMinMaxIndex;
+	int					m_iTotalDups;
 };
 
 
@@ -1407,6 +1409,7 @@ private:
 	// common stuff
 	int							m_iLockFD;
 	CSphSourceStats				m_tStats;			///< my stats
+	int							m_iTotalDups;
 	CSphFixedVector<CSphRowitem>	m_dMinRow;
 	SphDocID_t						m_iMinDocid;
 	CSphFixedVector<int64_t>		m_dFieldLens;	///< total per-field lengths summed over entire indexed data, in tokens
@@ -9214,6 +9217,7 @@ CSphIndex * sphCreateIndexPhrase ( const char* szIndexName, const char * sFilena
 CSphIndex_VLN::CSphIndex_VLN ( const char* sIndexName, const char * sFilename )
 	: CSphIndex ( sIndexName, sFilename )
 	, m_iLockFD ( -1 )
+	, m_iTotalDups ( 0 )
 	, m_dMinRow ( 0 )
 	, m_dFieldLens ( SPH_MAX_FIELDS )
 	, m_bKeepAttrs ( false )
@@ -10623,6 +10627,7 @@ bool CSphIndex_VLN::WriteHeader ( const BuildHeader_t & tBuildHeader, CSphWriter
 	// index stats
 	fdInfo.PutDword ( (DWORD)tBuildHeader.m_iTotalDocuments ); // FIXME? we don't expect over 4G docs per just 1 local index
 	fdInfo.PutOffset ( tBuildHeader.m_iTotalBytes );
+	fdInfo.PutDword ( tBuildHeader.m_iTotalDups );
 
 	// index settings
 	SaveIndexSettings ( fdInfo, m_tSettings );
@@ -13523,6 +13528,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	tBuildHeader.m_pThrottle = &g_tThrottle;
 	tBuildHeader.m_iKillListSize = m_iKillListSize;
 	tBuildHeader.m_uMinMaxIndex = m_uMinMaxIndex;
+	tBuildHeader.m_iTotalDups = iDupes;
 
 	// we're done
 	if ( !BuildDone ( tBuildHeader, m_sLastError ) )
@@ -15859,6 +15865,8 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 	// index stats
 	m_tStats.m_iTotalDocuments = rdInfo.GetDword ();
 	m_tStats.m_iTotalBytes = rdInfo.GetOffset ();
+	if ( m_uVersion>=40 )
+		m_iTotalDups = rdInfo.GetDword();
 
 	LoadIndexSettings ( m_tSettings, rdInfo, m_uVersion );
 	if ( m_uVersion<9 )
@@ -16126,6 +16134,7 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 	// skipped min doc, wordlist checkpoints
 	fprintf ( fp, "total-documents: "INT64_FMT"\n", m_tStats.m_iTotalDocuments );
 	fprintf ( fp, "total-bytes: "INT64_FMT"\n", int64_t(m_tStats.m_iTotalBytes) );
+	fprintf ( fp, "total-duplicates: %d\n", m_iTotalDups );
 
 	fprintf ( fp, "min-prefix-len: %d\n", m_tSettings.m_iMinPrefixLen );
 	fprintf ( fp, "min-infix-len: %d\n", m_tSettings.m_iMinInfixLen );
@@ -19183,9 +19192,13 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				if ( uHit==EMPTY_HIT )
 					break;
 
-				if (!( uLastHit<uHit ))
+				if ( !( HITMAN::GetPos ( uLastHit )<HITMAN::GetPos ( uHit ) ) )
 					LOC_FAIL(( fp, "hit decreased (wordid="UINT64_FMT"(%s), docid="DOCID_FMT", hit=%u, last=%u)",
-						(uint64_t)uWordid, sWord, pQword->m_tDoc.m_iDocID, uHit, uLastHit ));
+						(uint64_t)uWordid, sWord, pQword->m_tDoc.m_iDocID, HITMAN::GetPos ( uHit ), HITMAN::GetPos ( uLastHit ) ));
+				if ( HITMAN::IsEnd ( uLastHit ) )
+					LOC_FAIL(( fp, "multiple tail hits (wordid="UINT64_FMT"(%s), docid="DOCID_FMT", hit=0x%x, last=0x%x)",
+					(uint64_t)uWordid, sWord, pQword->m_tDoc.m_iDocID, uHit, uLastHit ));
+
 				uLastHit = uHit;
 
 				int iField = HITMAN::GetField ( uHit );

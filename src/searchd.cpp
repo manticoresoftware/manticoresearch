@@ -14668,10 +14668,18 @@ void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 	ARRAY_FOREACH ( i, tSchema.m_dFields )
 		dCondOut.MatchDataTuplet ( tSchema.m_dFields[i].m_sName.cstr(), "field" );
 
+	char sTmp[SPH_MAX_WORD_LEN];
 	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
-		dCondOut.MatchDataTuplet ( tCol.m_sName.cstr(), sphTypeName ( tCol.m_eAttrType ) );
+		if ( tCol.m_eAttrType==SPH_ATTR_INTEGER && tCol.m_tLocator.m_iBitCount!=ROWITEM_BITS )
+		{
+			snprintf ( sTmp, sizeof(sTmp), "%s:%d", sphTypeName ( tCol.m_eAttrType ), tCol.m_tLocator.m_iBitCount );
+			dCondOut.MatchDataTuplet ( tCol.m_sName.cstr(), sTmp );
+		} else
+		{
+			dCondOut.MatchDataTuplet ( tCol.m_sName.cstr(), sphTypeName ( tCol.m_eAttrType ) );
+		}
 	}
 
 	pServed->Unlock();
@@ -18637,6 +18645,9 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 			sphWarning ( "index '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
 			return ADD_ERROR;
 		}
+
+		if ( !sError.IsEmpty() )
+			sphWarning ( "index '%s': %s", szIndexName, sError.cstr() );
 
 		// path
 		if ( !hIndex("path") )

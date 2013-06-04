@@ -61,6 +61,19 @@ index delta
 	path				= <data_path/>/test2
 	docinfo				= inline
 }
+
+index rt
+{
+	type = rt
+	rt_mem_limit = 32M
+	charset_type	= utf-8
+	rt_field = title
+	rt_attr_uint = idd10
+	rt_attr_uint = idd1:4
+	rt_attr_uint = idd2:8
+	rt_attr_uint = idd11
+	path = <data_path/>/rt1
+}
 </config>
 
 <indexer>
@@ -98,6 +111,13 @@ INSERT INTO test_table VALUES
 <sphinxql>select * from main where match('green')</sphinxql>
 <!-- regression inline docinfo vs expressoin -->
 <sphinxql>select * from main where match( ' "smallest white pieces of paper"/3 ')</sphinxql>
+
+<!--regression bitfields at RT index -->
+<sphinxql>desc rt</sphinxql>
+<sphinxql>INSERT INTO rt (id, title, idd10, idd11, idd1, idd2) VALUES (1, 'test', 2303, 65535, 16383, 8191 )</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+<sphinxql>desc main</sphinxql>
+<sphinxql>desc delta</sphinxql>
 </sphqueries>
 
 </test>

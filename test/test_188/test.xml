@@ -210,6 +210,13 @@ $results = array_merge ( $results, $query ( "show meta", $sock ) );
 $results = array_merge ( $results, $query ( "CALL KEYWORDS ( 'apple', 'rt_stem', 1 )", $sock ) );
 $results = array_merge ( $results, $query ( "SELECT * FROM rt_stem", $sock ) );
 
+// TRUNCATE vs ATTACH
+$results = array_merge ( $results, $query ( "DELETE FROM rt_stem WHERE id=1", $sock ) );
+$results = array_merge ( $results, $query ( "SELECT * FROM rt_stem", $sock ) );
+$results = array_merge ( $results, $query ( "TRUNCATE RTINDEX rt_stem", $sock ) );
+$results = array_merge ( $results, $query ( "ATTACH INDEX plain_stem TO RTINDEX rt_stem", $sock ) );
+$results = array_merge ( $results, $query ( "SELECT * FROM rt_stem", $sock ) );
+
 $close ( $sock );
 
 ]]></custom_test>

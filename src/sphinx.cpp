@@ -18043,11 +18043,12 @@ static void TransformBigrams ( XQNode_t * pNode, const CSphIndexSettings & tSett
 /// create a node from a set of lemmas
 /// WARNING, tKeyword might or might not be pointing to pNode->m_dWords[0]
 /// Called from the daemon side (searchd) in time of query
-static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tKeyword, bool bUtf8, const CSphWordforms * pWordforms, DWORD uLangMask )
+static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tKeyword, bool bUtf8, const CSphWordforms * pWordforms, const CSphIndexSettings& tSettings )
 {
 	assert ( pNode->m_dWords.GetLength()<=1 );
 	assert ( pNode->m_dChildren.GetLength()==0 );
 
+	XQNode_t * pExact = NULL;
 	if ( pWordforms )
 	{
 		// do a copy, because patching in place is not an option
@@ -18064,6 +18065,7 @@ static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tK
 	}
 
 	CSphVector<CSphString> dLemmas;
+	DWORD uLangMask = tSettings.m_uAotFilterMask;
 	for ( int i=AOT_BEGIN; i<AOT_LENGTH; ++i )
 	{
 		if ( uLangMask & (1UL<<i) )
@@ -18089,7 +18091,17 @@ static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tK
 		}
 	}
 
-	if ( dLemmas.GetLength()<=1 )
+	if ( dLemmas.GetLength() && tSettings.m_bIndexExactWords )
+	{
+		pExact = CloneKeyword ( pNode );
+		if ( !pExact->m_dWords.GetLength() )
+			pExact->m_dWords.Add ( tKeyword );
+
+		pExact->m_dWords[0].m_sWord.SetSprintf ( "=%s", tKeyword.m_sWord.cstr() );
+		pExact->m_pParent = pNode;
+	}
+
+	if ( !pExact && dLemmas.GetLength()<=1 )
 	{
 		// zero or one lemmas, update node in-place
 		if ( !pNode->m_dWords.GetLength() )
@@ -18115,6 +18127,8 @@ static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tK
 			tLemma.m_bMorphed = true;
 		}
 		pNode->m_dWords.Reset();
+		if ( pExact )
+			pNode->m_dChildren.Add ( pExact );
 	}
 }
 
@@ -18124,11 +18138,11 @@ static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tK
 /// used in lemmatize_ru_all morphology processing mode that can generate multiple guesses
 /// in other modes, there is always exactly one morph guess, and the dictionary handles it
 /// Called from the daemon side (searchd)
-void TransformAotFilter ( XQNode_t * pNode, bool bUtf8, const CSphWordforms * pWordforms, DWORD uLangMask )
+void TransformAotFilter ( XQNode_t * pNode, bool bUtf8, const CSphWordforms * pWordforms, const CSphIndexSettings& tSettings )
 {
 	// case one, regular operator (and empty nodes)
 	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		TransformAotFilter ( pNode->m_dChildren[i], bUtf8, pWordforms, uLangMask );
+		TransformAotFilter ( pNode->m_dChildren[i], bUtf8, pWordforms, tSettings );
 	if ( pNode->m_dChildren.GetLength() || pNode->m_dWords.GetLength()==0 )
 		return;
 
@@ -18145,7 +18159,7 @@ void TransformAotFilter ( XQNode_t * pNode, bool bUtf8, const CSphWordforms * pW
 			pNew->m_pParent = pNode;
 			pNew->m_iAtomPos = pNode->m_dWords[i].m_iAtomPos;
 			pNode->m_dChildren.Add ( pNew );
-			TransformAotFilterKeyword ( pNew, pNode->m_dWords[i], bUtf8, pWordforms, uLangMask );
+			TransformAotFilterKeyword ( pNew, pNode->m_dWords[i], bUtf8, pWordforms, tSettings );
 		}
 
 		pNode->m_dWords.Reset();
@@ -18155,7 +18169,7 @@ void TransformAotFilter ( XQNode_t * pNode, bool bUtf8, const CSphWordforms * pW
 
 	// case three, plain old single keyword
 	assert ( pNode->m_dWords.GetLength()==1 );
-	TransformAotFilterKeyword ( pNode, pNode->m_dWords[0], bUtf8, pWordforms, uLangMask );
+	TransformAotFilterKeyword ( pNode, pNode->m_dWords[0], bUtf8, pWordforms, tSettings );
 }
 
 
@@ -18264,7 +18278,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 
 	// this should be after keyword expansion
 	if ( m_tSettings.m_uAotFilterMask )
-		TransformAotFilter ( tParsed.m_pRoot, m_pQueryTokenizer->IsUtf8(), pDict->GetWordforms(), m_tSettings.m_uAotFilterMask );
+		TransformAotFilter ( tParsed.m_pRoot, m_pQueryTokenizer->IsUtf8(), pDict->GetWordforms(), m_tSettings );
 
 	// expanding prefix in word dictionary case
 	XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, pResult->m_sError, pResult );
@@ -18358,7 +18372,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 
 			// this should be after keyword expansion
 			if ( m_tSettings.m_uAotFilterMask )
-				TransformAotFilter ( dXQ[i].m_pRoot, m_pQueryTokenizer->IsUtf8(), pDict->GetWordforms(), m_tSettings.m_uAotFilterMask );
+				TransformAotFilter ( dXQ[i].m_pRoot, m_pQueryTokenizer->IsUtf8(), pDict->GetWordforms(), m_tSettings );
 
 			// expanding prefix in word dictionary case
 			XQNode_t * pPrefixed = ExpandPrefix ( dXQ[i].m_pRoot, ppResults[i]->m_sError, ppResults[i] );

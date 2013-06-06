@@ -44,6 +44,13 @@ index test2 : test1
 	morphology		= lemmatize_ru
 }
 
+index test3 : test1
+{
+	path			= <data_path/>/test3
+	index_exact_words = 1
+	morphology		= stem_en,lemmatize_ru_all
+}
+
 index testrt1
 {
 	type			= rt
@@ -126,8 +133,15 @@ CREATE TABLE test_table
 	( 16, 11, 'понюхал клея' ),
 	( 17, 11, 'Ё моё' ),
 	( 18, 11, 'я санктение люблю спб' ),
-	( 1000, 11, 'сталин начал курить' )
+	( 1000, 11, 'сталин начал курить' ),
+	( 1001, 11, 'Фичин баг' ),
+    ( 1002, 11, 'english text' )
 </db_insert>
+<metaindex name='META:plain'>
+<index>test1</index>
+<index>test2</index>
+<index>test3</index>
+</metaindex>
 
 <sphqueries>
 <sphinxql>SELECT * FROM test1 WHERE MATCH('сталь')</sphinxql>
@@ -181,6 +195,14 @@ CREATE TABLE test_table
 <sphinxql>SELECT * FROM test2 WHERE MATCH('клейстеру')</sphinxql>
 <sphinxql>SELECT * FROM test2 WHERE MATCH('клей')</sphinxql>
 <sphinxql>SELECT * FROM test2 WHERE MATCH('ё')</sphinxql>
+
+
+<sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('Фичин баг') option ranker=SPH04;show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('Фичин баг');show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('^Фичин баг$');show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('"Фичин баг"') option ranker=SPH04;show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('english text') option ranker=SPH04;show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('"english text"') option ranker=SPH04;show meta</sphinxql>
 
 <sphinxql>INSERT INTO testrt1 VALUES ( 1, 'они стали есть', 11 )</sphinxql>
 <sphinxql>INSERT INTO testrt1 VALUES ( 2, 'Крыса из Нержавеющей Стали', 11 )</sphinxql>

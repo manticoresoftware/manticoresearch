@@ -142,6 +142,12 @@ $reply = $client->BuildExcerpts ( $docs, 'exact', $query, $opts );
 $results [] = 'exact-blened: fast path';
 $results [] = $reply;
 
+$query = 'word1 word2';
+$docs = array ( 'Here are some word1 and word1 or word1, word1. More samples: word1, word1, word1. At the same time, there are more words like word2, word2, word2 and word2. But what should be highlighted is this: word1 or word2. Thats it.' );
+$opts = array( 'around'=> 3, 'limit'=>60 );
+$reply = $client->BuildExcerpts ( $docs, 'exact', $query, $opts );
+$results [] = 'explicit uniq qword weighting';
+$results [] = $reply;
 
 ]]></custom_test>
 

@@ -126,6 +126,27 @@ $query = ' (support ("code*" | "code test")) ';
 $results [] = $query;
 $results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query, array ( 'query_mode' => 1, 'limit' => 25 ) );
 
+$doc = 'Prinal. Onenes din Pas onatif searst ang searst searst searst searst searst searst way as inge, as kin puble difute paii (for Unitio clas reappe Impand bants to a caly prommat to deady. A cous al fonsue abcingelonhe aaa bbb ccc abcingelonhe aaa bbb ccc abcingelonhe cc pheyse but the hing fiche lochns my produr in may bects of hatest herstat everre tor Scine face.';
+$query = 'din abcingelonhe';
+$results [] = $query;
+$results [] = $client->BuildExcerpts ( array ( $doc ), 'test', $query, array ( 'limit' => 38 ) );
+
+$doc = 'тест на подсветку начала документа в утф8';
+$query = 'din';
+$results[] = $client->BuildExcerpts ( array ( $doc ), 'test', $query, array('limit' => 4) );
+$results[] = $client->BuildExcerpts ( array ( $doc ), 'test', $query, array('limit' => 5) );
+$results[] = $client->BuildExcerpts ( array ( $doc ), 'test', $query, array('limit' => 6) );
+$results[] = $client->BuildExcerpts ( array ( $doc ), 'test', $query, array('limit' => 7) );
+$results[] = $client->BuildExcerpts ( array ( $doc ), 'test', $query, array('limit' => 8) );
+
+$doc = 'text starred some begin begin begin some starred text and more in between starred some text end';
+$query = 'some starr* text';
+$results[] = $client->BuildExcerpts ( array ( $doc ), 'test', $query, array('limit' => 35) );
+
+$doc = 'begin the text right mid mid mid the right text end';
+$query = 'the the right right text text';
+$results[] = $client->BuildExcerpts ( array ( $doc ), 'test', $query, array('limit' => 30) );
+
 ]]></custom_test>
 
 </test>

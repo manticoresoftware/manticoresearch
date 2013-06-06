@@ -40,6 +40,7 @@ $results[] = $client->BuildExcerpts($docs, 'test', 'not_found', $opts );
 $results[] = $client->BuildExcerpts(array( 'test_130/empty.txt' ), 'test', 'end point', $opts );
 $results[] = $client->BuildExcerpts(array( '' ), 'test', 'not_found', $opts );
 $results[] = $client->GetLastError();
+$results[] = $client->BuildExcerpts ( array ( 'test_130/512k.xml' ), 'test', 'it builds', array ( "limit" => 100, "load_files" => true ) );
 
 ]]></custom_test>
 

@@ -1806,7 +1806,6 @@ public:
 			m_sValue[l-2] = '\0';
 		}
 	}
-
 };
 
 /// string swapper
@@ -2584,7 +2583,7 @@ public:
 	template <typename T>
 	inline T& SharedValue()
 	{
-		return *(T*)(this->m_tMutexRef.GetSharedData());
+		return *(T*)( this->m_tMutexRef.GetSharedData() );
 	}
 };
 

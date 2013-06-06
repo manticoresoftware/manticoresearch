@@ -14624,6 +14624,13 @@ bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, ISphFilter * pFi
 // THE SEARCHER
 /////////////////////////////////////////////////////////////////////////////
 
+SphWordID_t CSphDictTraits::GetWordID ( BYTE * )
+{
+	assert ( 0 && "not implemented" );
+	return 0;
+}
+
+
 SphWordID_t CSphDictStar::GetWordID ( BYTE * pWord )
 {
 	char sBuf [ 16+3*SPH_MAX_WORD_LEN ];

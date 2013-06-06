@@ -53,7 +53,7 @@ void	stem_dmetaphone ( BYTE * pWord, bool bUTF8 );
 void	sphAotSetCacheSize ( int iCacheSize );
 
 // simple order aot languages
-enum AOT_LANGS {AOT_BEGIN=0,AOT_RU=AOT_BEGIN,AOT_EN,AOT_DE,AOT_LENGTH};
+enum AOT_LANGS {AOT_BEGIN=0, AOT_RU=AOT_BEGIN, AOT_EN, AOT_DE, AOT_LENGTH};
 
 // aot lemmatize names
 extern const char* AOT_LANGUAGES [AOT_LENGTH];

@@ -1594,7 +1594,7 @@ protected:
 		if ( iCalcLengthCP==-1 )
 			iCalcLengthCP = m_pTokenizer->IsUtf8() ? sphUTF8Len ( m_pDoc+iStart, iLen ) : iLen;
 
-		bool bLengthOk = m_iResultLenCP+iCalcLengthCP <= m_iLimit;
+		bool bLengthOk = m_iResultLenCP+iCalcLengthCP<=m_iLimit;
 		if ( bLengthOk || !m_dStartResult.GetLength() )
 		{
 			ResultEmit ( m_dStartResult, m_pDoc+iStart, iLen );

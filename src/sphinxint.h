@@ -1327,7 +1327,7 @@ public:
 	virtual int			SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sMessage ) { return m_pDict->SetMorphology ( szMorph, bUseUTF8, sMessage ); }
 
 	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) { return m_pDict->GetWordID ( pWord, iLen, bFilterStops ); }
-	virtual SphWordID_t GetWordID ( BYTE * ) { assert ( 0 && "not implemented" ); return 0; }
+	virtual SphWordID_t GetWordID ( BYTE * pWord );
 
 	virtual void		Setup ( const CSphDictSettings & ) {}
 	virtual const CSphDictSettings & GetSettings () const { return m_pDict->GetSettings (); }
@@ -2038,8 +2038,7 @@ public:
 					memcpy ( pCurDocPtr, pCachedField, iCachedFieldLen );
 					pCurDocPtr += iCachedFieldLen;
 					*pCurDocPtr++ = ' ';
-				}
-				else
+				} else
 				{
 					COPY_MARKER ( pCurDocPtr, m_pMarkerNonChineseField );
 					*pCurDocPtr++ = ' ';
@@ -2054,17 +2053,17 @@ public:
 		StoredDoc_t * pCurDoc = NULL;
 		bool bIndexNext = false;
 		int iField = -1;
-		while ( ( pToken = m_pExtraTokenizer->GetToken() ) != NULL )
+		while ( ( pToken = m_pExtraTokenizer->GetToken() )!=NULL )
 		{
 			bool bSpecial = false;
 			int iTokenLen = strlen ( (const char *)pToken );
 			if ( bIndexNext )
 			{
-				pCurDoc = &(m_dBatchedDocs[atoi ( (const char*)pToken )]);
+				int iDoc = atoi ( (const char*)pToken );
+				pCurDoc = &(m_dBatchedDocs[iDoc]);
 				bIndexNext = false;
 				iField = -1;
-			}
-			else
+			} else
 			{
 				if ( iTokenLen==PROXY_MARKER_LEN )
 				{

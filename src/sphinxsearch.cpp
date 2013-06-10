@@ -6787,6 +6787,7 @@ public:
 
 		m_iQueryWordCount = 0;
 		m_tKeywordMask.Init ( m_iMaxUniqQpos+1 ); // will not be tracking dupes
+		bool bGotExpanded = false;
 		CSphVector<WORD> dQueryPos;
 		dQueryPos.Reserve ( m_iMaxQpos+1 );
 
@@ -6800,11 +6801,27 @@ public:
 				continue;
 
 			const int iPos = hQwords.IterateGet().m_iQueryPos;
+
+			bool bSamePos = m_tKeywordMask.BitGet ( iPos );
+			bGotExpanded |= bSamePos;
+			m_iQueryWordCount += ( bSamePos ? 0 : 1 ); // count only one term at that position
 			m_tKeywordMask.BitSet ( iPos ); // just to assert at early stage!
-			m_dIDF [ iPos ] = hQwords.IterateGet().m_fIDF;
-			m_iQueryWordCount++;
-			dQueryPos.Add ( (WORD)iPos );
+
+			m_dIDF [ iPos ] += hQwords.IterateGet().m_fIDF;
+			m_dTF [ iPos ]++;
+			if ( !bSamePos )
+				dQueryPos.Add ( (WORD)iPos );
 		}
+
+		// FIXME!!! average IDF for expanded terms (aot morphology or dict=keywords)
+		if ( bGotExpanded )
+			ARRAY_FOREACH ( i, m_dTF )
+			{
+				if ( m_dTF[i]>1 )
+					m_dIDF[i] /= m_dTF[i];
+			}
+
+		m_dTF.Fill ( 0 );
 
 		// set next term position for current term in query (degenerates to +1 in the simplest case)
 		dQueryPos.Sort();
@@ -6851,6 +6868,9 @@ public:
 		m_fDocBM25A = 0.0f;
 		for ( int iWord=1; iWord<=m_iQueryWordCount; iWord++ )
 		{
+			if ( !m_tKeywordMask.BitGet(iWord) )
+				continue;
+
 			float tf = (float)m_dTF[iWord]; // OPTIMIZE? remove this vector, hook into m_uMatchHits somehow?
 			float idf = m_dIDF[iWord];
 			m_fDocBM25A += tf / (tf + m_fParamK1*(1 - m_fParamB + m_fParamB*dl/m_fAvgDocLen)) * idf;
@@ -7172,6 +7192,9 @@ struct Expr_BM25F_T : public ISphExpr
 		float fRes = 0.0f;
 		for ( int iWord=1; iWord<=m_pState->m_iMaxQpos; iWord++ )
 		{
+			if ( !m_pState->m_tKeywordMask.BitGet(iWord) )
+				continue;
+
 			// compute weighted TF
 			float tf = 0.0f;
 			for ( int i=0; i<m_pState->m_iFields; i++ )

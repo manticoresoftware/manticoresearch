@@ -477,6 +477,9 @@ struct Expr_BM25F_c : public ISphExpr
 		float fRes = 0.0f;
 		for ( int iWord=0; iWord<m_tRankerState.m_iMaxQpos; iWord++ )
 		{
+			if ( !tUnpacked.term[iWord].keyword_mask )
+				continue;
+
 			// compute weighted TF
 			float tf = 0.0f;
 			for ( int i=0; i<m_tRankerState.m_iFields; i++ )
@@ -1806,6 +1809,12 @@ static inline bool IsAddSub ( const ExprNode_t * pNode )
 	return pNode->m_iToken=='+' || pNode->m_iToken=='-';
 }
 
+/// is unary operator?
+static inline bool IsUnary ( const ExprNode_t * pNode )
+{
+	return pNode->m_iToken==TOK_NEG || pNode->m_iToken==TOK_NOT;
+}
+
 /// is arithmetic?
 static inline bool IsAri ( const ExprNode_t * pNode )
 {
@@ -1840,6 +1849,37 @@ void ExprParser_t::Optimize ( int iNode )
 	ExprNode_t * pRoot = &m_dNodes[iNode];
 	ExprNode_t * pLeft = ( pRoot->m_iLeft>=0 ) ? &m_dNodes[pRoot->m_iLeft] : NULL;
 	ExprNode_t * pRight = ( pRoot->m_iRight>=0 ) ? &m_dNodes[pRoot->m_iRight] : NULL;
+
+	// unary arithmetic expression with constant
+	if ( IsUnary ( pRoot ) )
+	{
+		assert ( !pRight );
+
+		if ( IsConst ( pLeft ) )
+		{
+			if ( pLeft->m_iToken==TOK_CONST_INT )
+			{
+				switch ( pRoot->m_iToken )
+				{
+					case TOK_NEG:	pRoot->m_iConst = -pLeft->m_iConst; break;
+					case TOK_NOT:	pRoot->m_iConst = !pLeft->m_iConst; break;
+					default:		assert ( 0 && "internal error: unhandled arithmetic token during const-int optimization" );
+				}
+
+			} else
+			{
+				switch ( pRoot->m_iToken )
+				{
+					case TOK_NEG:	pRoot->m_fConst = -pLeft->m_fConst; break;
+					case TOK_NOT:	pRoot->m_fConst = !pLeft->m_fConst; break;
+					default:		assert ( 0 && "internal error: unhandled arithmetic token during const-float optimization" );
+				}
+			}
+
+			pRoot->m_iToken = pLeft->m_iToken;
+			pRoot->m_iLeft = -1;
+		}
+	}
 
 	// arithmetic expression with constants
 	if ( IsAri(pRoot) )

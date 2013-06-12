@@ -7192,20 +7192,11 @@ class CSphTaggedVector
 public:
 	const PoolPtrs_t & operator [] ( int iTag ) const
 	{
-		int iIndex = iTag & 0x7FFFFFF;
-		assert ( iIndex>=0 && iIndex<m_dPool.GetLength() );
-		return ( iIndex==iTag ? m_dPool [ iIndex ] : m_tRemote );
+		return m_dPool [ iTag & 0x7FFFFFF ];
 	}
 	PoolPtrs_t & operator [] ( int iTag )
 	{
-		int iIndex = iTag & 0x7FFFFFF;
-		assert ( iIndex>=0 && iIndex<m_dPool.GetLength() );
-		return ( iIndex==iTag ? m_dPool [ iIndex ] : m_tRemote );
-	}
-
-	void SetRemote ( const PoolPtrs_t & tRemote )
-	{
-		m_tRemote = tRemote;
+		return m_dPool [ iTag & 0x7FFFFFF ];
 	}
 
 	void Resize ( int iSize )
@@ -7215,7 +7206,6 @@ public:
 
 private:
 	CSphVector<PoolPtrs_t> m_dPool;
-	PoolPtrs_t m_tRemote;
 };
 
 static char g_sJsonNull[] = "{}";
@@ -7906,7 +7896,11 @@ struct TaggedMatchSorter_fn : public SphAccessor_T<CSphMatch>
 
 	bool IsLess ( const CSphMatch & a, const CSphMatch & b ) const
 	{
-		return ( a.m_iDocID < b.m_iDocID ) || ( a.m_iDocID==b.m_iDocID && ( a.m_iTag & 0x7FFFFFFF )>( b.m_iTag & 0x7FFFFFFF ) );
+		bool bDistA = ( ( a.m_iTag & 0x80000000 )==0x80000000 );
+		bool bDistB = ( ( b.m_iTag & 0x80000000 )==0x80000000 );
+		// sort by doc_id, dist_tag, tag
+		return ( a.m_iDocID < b.m_iDocID ) ||
+			( a.m_iDocID==b.m_iDocID && ( ( !bDistA && bDistB ) || ( ( a.m_iTag & 0x7FFFFFFF )>( b.m_iTag & 0x7FFFFFFF ) ) ) );
 	}
 
 	// inherited swap does not work on gcc
@@ -9008,6 +9002,8 @@ public:
 	CSphVector<SearchFailuresLog_c>	m_dFailuresSet;					///< failure logs for each query
 	CSphVector < CSphVector<int64_t> >	m_dAgentTimes;				///< per-agent time stats
 	CSphQueryProfile *				m_pProfile;
+	CSphVector<DWORD *>				m_dMva2Free;
+	CSphVector<BYTE *>				m_dString2Free;
 
 protected:
 	void							RunSubset ( int iStart, int iEnd );	///< run queries against index(es) from first query in the subset
@@ -9015,9 +9011,6 @@ protected:
 	void							RunLocalSearchesMT ();
 	bool							RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters, CSphQueryResult ** pResults, bool * pMulti ) const;
 	bool							HasExpresions ( int iStart, int iEnd ) const;
-
-	CSphVector<DWORD>				m_dMvaStorage;
-	CSphVector<BYTE>				m_dStringsStorage;
 
 	int								m_iStart;		///< subset start
 	int								m_iEnd;			///< subset end
@@ -9053,11 +9046,6 @@ SearchHandler_c::SearchHandler_c ( int iQueries, bool bSphinxql )
 	m_bSphinxql = bSphinxql;
 	m_pUpdates = NULL;
 
-	m_dMvaStorage.Reserve ( 1024 );
-	m_dMvaStorage.Add ( 0 ); // dummy value
-	m_dStringsStorage.Reserve ( 1024 );
-	m_dStringsStorage.Add ( 0 ); // dummy value
-
 	m_pProfile = NULL;
 	m_tHook.m_pProfiler = NULL;
 
@@ -9073,6 +9061,11 @@ SearchHandler_c::~SearchHandler_c ()
 		if ( m_hUsed.IterateGet()>0 )
 			g_pLocalIndexes->GetUnlockedEntry ( m_hUsed.IterateGetKey() ).Unlock();
 	}
+
+	ARRAY_FOREACH ( i, m_dMva2Free )
+		SafeDeleteArray ( m_dMva2Free[i] );
+	ARRAY_FOREACH ( i, m_dString2Free )
+		SafeDeleteArray ( m_dString2Free[i] );
 }
 
 
@@ -9677,10 +9670,9 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 
 		// me shortcuts
 		AggrResult_t tStats;
-		CSphQuery * pQuery = &m_dQueries[m_iStart];
+		CSphVector<CSphFilterSettings> dKlists;
 
 		// set kill-list
-		int iNumFilters = pQuery->m_dFilters.GetLength ();
 		for ( int i=iLocal+1; i<m_dLocal.GetLength (); i++ )
 		{
 			const ServedIndex_t * pServed = UseIndex ( i );
@@ -9689,9 +9681,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 
 			if ( pServed->m_pIndex->GetKillListSize () )
 			{
-				CSphFilterSettings tKillListFilter;
-				SetupKillListFilter ( tKillListFilter, pServed->m_pIndex->GetKillList (), pServed->m_pIndex->GetKillListSize () );
-				pQuery->m_dFilters.Add ( tKillListFilter );
+				SetupKillListFilter ( dKlists.Add(), pServed->m_pIndex->GetKillList (), pServed->m_pIndex->GetKillListSize () );
 				dLocked.Add ( i );
 			} else
 			{
@@ -9706,7 +9696,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 		{
 			tStats.m_tIOStats.Start();
 			bResult = pServed->m_pIndex->MultiQuery ( &m_dQueries[m_iStart], &tStats,
-				dSorters.GetLength(), dSorters.Begin(), NULL, iIndexWeight, 0, bNeedFactors );
+				dSorters.GetLength(), dSorters.Begin(), &dKlists, iIndexWeight, 0, bNeedFactors );
 			tStats.m_tIOStats.Stop();
 		} else
 		{
@@ -9717,7 +9707,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 			dResults[m_iStart]->m_tIOStats.Start();
 
 			bResult = pServed->m_pIndex->MultiQueryEx ( dSorters.GetLength(),
-				&m_dQueries[m_iStart], &dResults[m_iStart], &dSorters[0], NULL, iIndexWeight, 0, bNeedFactors );
+				&m_dQueries[m_iStart], &dResults[m_iStart], &dSorters[0], &dKlists, iIndexWeight, 0, bNeedFactors );
 
 			dResults[m_iStart]->m_tIOStats.Stop();
 		}
@@ -9771,9 +9761,6 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 				tStats.LeakStorages ( tRes );
 			}
 		}
-
-		// cleanup kill-list
-		pQuery->m_dFilters.Resize ( iNumFilters );
 
 		ARRAY_FOREACH ( i, dLocked )
 			ReleaseIndex ( dLocked[i] );
@@ -10148,72 +10135,87 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			// wait for remote queries to complete
 			if ( tDistCtrl->HasReadyAgents() )
 			{
-				SearchReplyParser_t tParser ( iStart, iEnd, m_dMvaStorage, m_dStringsStorage );
+				CSphVector<DWORD> dMvaStorage;
+				CSphVector<BYTE> dStringStorage;
+				dMvaStorage.Add ( 0 );
+				dStringStorage.Add ( 0 );
+				SearchReplyParser_t tParser ( iStart, iEnd, dMvaStorage, dStringStorage );
 				int iMsecLeft = iAgentQueryTimeout - (int)( tmLocal/1000 );
 				int iReplys = RemoteWaitForAgents ( dAgents, Max ( iMsecLeft, 0 ), tParser );
 				// check if there were valid (though might be 0-matches) replies, and merge them
 				if ( iReplys )
-					ARRAY_FOREACH ( iAgent, dAgents )
 				{
-					AgentConn_t & tAgent = dAgents[iAgent];
-					if ( !tAgent.m_bSuccess )
-						continue;
-
-					int iOrderTag = tAgent.m_iStoreTag;
-					// merge this agent's results
-					for ( int iRes=iStart; iRes<=iEnd; iRes++ )
+					DWORD * pMva = dMvaStorage.Begin();
+					BYTE * pString = dStringStorage.Begin();
+					ARRAY_FOREACH ( iAgent, dAgents )
 					{
-						const CSphQueryResult & tRemoteResult = tAgent.m_dResults[iRes-iStart];
-
-						// copy errors or warnings
-						if ( !tRemoteResult.m_sError.IsEmpty() )
-							m_dFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes.cstr(),
-								"agent %s: remote query error: %s",
-								tAgent.GetName().cstr(), tRemoteResult.m_sError.cstr() );
-						if ( !tRemoteResult.m_sWarning.IsEmpty() )
-							m_dFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes.cstr(),
-								"agent %s: remote query warning: %s",
-								tAgent.GetName().cstr(), tRemoteResult.m_sWarning.cstr() );
-
-						if ( tRemoteResult.m_iSuccesses<=0 )
+						AgentConn_t & tAgent = dAgents[iAgent];
+						if ( !tAgent.m_bSuccess )
 							continue;
 
-						AggrResult_t & tRes = m_dResults[iRes];
-						tRes.m_iSuccesses++;
-						tRes.m_tSchema = tRemoteResult.m_tSchema;
-
-						assert ( !tRes.m_dTag2Pools[iOrderTag + iRes - iStart].m_pMva && !tRes.m_dTag2Pools[iOrderTag + iRes - iStart].m_pStrings );
-
-						tRes.m_dMatches.Reserve ( tRemoteResult.m_dMatches.GetLength() );
-						ARRAY_FOREACH ( i, tRemoteResult.m_dMatches )
+						int iOrderTag = tAgent.m_iStoreTag;
+						// merge this agent's results
+						for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 						{
-							tRes.m_dMatches.Add();
-							tRemoteResult.m_tSchema.CloneWholeMatch ( &tRes.m_dMatches.Last(), tRemoteResult.m_dMatches[i] );
-							tRes.m_dMatches.Last().m_iTag = ( iOrderTag + iRes - iStart ) | 0x80000000;
+							const CSphQueryResult & tRemoteResult = tAgent.m_dResults[iRes-iStart];
+
+							// copy errors or warnings
+							if ( !tRemoteResult.m_sError.IsEmpty() )
+								m_dFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes.cstr(),
+									"agent %s: remote query error: %s",
+									tAgent.GetName().cstr(), tRemoteResult.m_sError.cstr() );
+							if ( !tRemoteResult.m_sWarning.IsEmpty() )
+								m_dFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes.cstr(),
+									"agent %s: remote query warning: %s",
+									tAgent.GetName().cstr(), tRemoteResult.m_sWarning.cstr() );
+
+							if ( tRemoteResult.m_iSuccesses<=0 )
+								continue;
+
+							AggrResult_t & tRes = m_dResults[iRes];
+							tRes.m_iSuccesses++;
+							tRes.m_tSchema = tRemoteResult.m_tSchema;
+
+							assert ( !tRes.m_dTag2Pools[iOrderTag + iRes - iStart].m_pMva && !tRes.m_dTag2Pools[iOrderTag + iRes - iStart].m_pStrings );
+
+							tRes.m_dMatches.Reserve ( tRemoteResult.m_dMatches.GetLength() );
+							ARRAY_FOREACH ( i, tRemoteResult.m_dMatches )
+							{
+								tRes.m_dMatches.Add();
+								tRemoteResult.m_tSchema.CloneWholeMatch ( &tRes.m_dMatches.Last(), tRemoteResult.m_dMatches[i] );
+								tRes.m_dMatches.Last().m_iTag = ( iOrderTag + iRes - iStart ) | 0x80000000;
+							}
+
+							tRes.m_pMva = pMva;
+							tRes.m_pStrings = pString;
+							tRes.m_dTag2Pools[iOrderTag+iRes-iStart].m_pMva = pMva;
+							tRes.m_dTag2Pools[iOrderTag+iRes-iStart].m_pStrings = pString;
+							tRes.m_dMatchCounts.Add ( tRemoteResult.m_dMatches.GetLength() );
+							tRes.m_dSchemas.Add ( tRemoteResult.m_tSchema );
+							// note how we do NOT add per-index weight here
+
+							// merge this agent's stats
+							tRes.m_iTotalMatches += tRemoteResult.m_iTotalMatches;
+							tRes.m_iQueryTime += tRemoteResult.m_iQueryTime;
+							tRes.m_iAgentCpuTime += tRemoteResult.m_iCpuTime;
+							tRes.m_tAgentIOStats.Add ( tRemoteResult.m_tIOStats );
+							tRes.m_iAgentPredictedTime += tRemoteResult.m_iPredictedTime;
+							tRes.m_iAgentFetchedDocs += tRemoteResult.m_iAgentFetchedDocs;
+							tRes.m_iAgentFetchedHits += tRemoteResult.m_iAgentFetchedHits;
+							tRes.m_bHasPrediction |= ( m_dQueries[iRes].m_iMaxPredictedMsec>0 );
+
+							// merge this agent's words
+							MergeWordStats ( tRes, tRemoteResult.m_hWordStats, &m_dFailuresSet[iRes], tFirst.m_sIndexes.cstr() );
 						}
 
-						tRes.m_dMatchCounts.Add ( tRemoteResult.m_dMatches.GetLength() );
-						tRes.m_dSchemas.Add ( tRemoteResult.m_tSchema );
-						// note how we do NOT add per-index weight here
-
-						// merge this agent's stats
-						tRes.m_iTotalMatches += tRemoteResult.m_iTotalMatches;
-						tRes.m_iQueryTime += tRemoteResult.m_iQueryTime;
-						tRes.m_iAgentCpuTime += tRemoteResult.m_iCpuTime;
-						tRes.m_tAgentIOStats.Add ( tRemoteResult.m_tIOStats );
-						tRes.m_iAgentPredictedTime += tRemoteResult.m_iPredictedTime;
-						tRes.m_iAgentFetchedDocs += tRemoteResult.m_iAgentFetchedDocs;
-						tRes.m_iAgentFetchedHits += tRemoteResult.m_iAgentFetchedHits;
-						tRes.m_bHasPrediction |= ( m_dQueries[iRes].m_iMaxPredictedMsec>0 );
-
-						// merge this agent's words
-						MergeWordStats ( tRes, tRemoteResult.m_hWordStats, &m_dFailuresSet[iRes], tFirst.m_sIndexes.cstr() );
+						// dismissed
+						tAgent.m_dResults.Reset ();
+						tAgent.m_bSuccess = false;
+						tAgent.m_sFailure = "";
 					}
 
-					// dismissed
-					tAgent.m_dResults.Reset ();
-					tAgent.m_bSuccess = false;
-					tAgent.m_sFailure = "";
+					m_dMva2Free.Add ( dMvaStorage.LeakData() );
+					m_dString2Free.Add ( dStringStorage.LeakData() );
 				}
 			}
 
@@ -10258,9 +10260,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		m_pProfile->Switch ( SPH_QSTATE_AGGREGATE );
 
 	CSphIOStats tIO;
-	PoolPtrs_t tRemotePool;
-	tRemotePool.m_pMva = m_dMvaStorage.Begin();
-	tRemotePool.m_pStrings = m_dStringsStorage.Begin();
 
 	for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 	{
@@ -10269,7 +10268,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		CSphSchemaMT * pExtraSchema = tQuery.m_bAgent ? m_dExtraSchemas.Begin() + ( bWasLocalSorter ? 0 : iRes ) : NULL;
 
 		// minimize sorters needs these pointers
-		tRes.m_dTag2Pools.SetRemote ( tRemotePool );
 		tIO.Add ( tRes.m_tIOStats );
 
 		// if there were no successful searches at all, this is an error
@@ -11865,7 +11863,7 @@ struct SnippetReplyParser_t : public IReplyParser_t
 	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const;
 
 private:
-	SnippetsRemote_t * m_pWorker;
+	const SnippetsRemote_t * m_pWorker;
 };
 
 

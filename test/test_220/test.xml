@@ -77,6 +77,43 @@ index dt3
 {
 	type = distributed
 	agent = <my_address/>:t3
+}
+
+source loc1 : base
+{
+	sql_query		= SELECT 1, 11 as idd, 'test', '1 2 3' as m, 10 as s UNION SELECT 2, 12 as idd, 'test', '4 5 6' as m, 10 as s UNION SELECT 3, 11 as idd, 'test', '7 8 9' as m, 10 as s UNION SELECT 4, 12 as idd, 'test', '10 11 12' as m, 10 as s
+	sql_attr_uint		= idd
+	sql_attr_uint		= s
+	sql_attr_multi		= uint m from field
+}
+
+source loc2 : base
+{
+	sql_query		= SELECT 101, 110 as idd, 'test', '100 200 300' as m, 100 as s UNION SELECT 102, 112 as idd, 'test', '40 50 60' as m, 100 as s UNION SELECT 103, 110 as idd, 'test', '70 80 90' as m, 100 as s UNION SELECT 104, 112 as idd, 'test', '100 110 120' as m, 100 as s
+	sql_attr_uint		= idd
+	sql_attr_uint		= s
+	sql_attr_multi		= uint m from field
+}
+
+index loc1
+{
+	source = loc1
+	path = data/loc1
+}
+
+index loc2
+{
+	source = loc2
+	path = data/loc2
+}
+
+index dist10
+{
+	type = distributed
+	local = loc2
+	agent = <my_address/>:loc1
+	agent_query_timeout = 5000
+}
 </config>
 
 <db_create>
@@ -116,6 +153,9 @@ CREATE TABLE t3
 <sphinxql>select * from dt3</sphinxql>
 <sphinxql>select id,gid from dt3</sphinxql>
 
+<!--regression distributed vs no local matches-->
+<sphinxql>select * from dist10 where s=10</sphinxql>
+<sphinxql>select * from dist10 where s=10 group by idd</sphinxql>
 </sphqueries>
 
 </test>

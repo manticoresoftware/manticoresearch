@@ -3561,7 +3561,7 @@ public:
 	{
 		// minimal probability must not fall below the original one with this coef.
 		const float fMin_coef = 0.1f;
-		DWORD uMin_value = DWORD(65535*fMin_coef/m_dAgents.GetLength());
+		DWORD uMin_value = DWORD ( 65535*fMin_coef/m_dAgents.GetLength() );
 
 		if ( m_pWeights && HostDashboard_t::IsHalfPeriodChanged ( &m_uTimestamp ) )
 		{
@@ -3590,10 +3590,9 @@ public:
 					dCoefs[i] = (float)dMin/dTimers[i];
 					if ( m_pWeights[i]*dCoefs[i] < uMin_value )
 						dCoefs[i] = (float)uMin_value/m_pWeights[i]; // restrict balancing like 1/0 into 0.9/0.1
-				}
-				else
+				} else
 					dCoefs[i] = (float)uMin_value/m_pWeights[i];
-				
+
 				fNormale += m_pWeights[i]*dCoefs[i];
 			}
 
@@ -8285,6 +8284,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 
 	// build a minimal schema over all the (potentially different) schemas
 	// that we have in our aggregated result set
+	tRes.m_tSchema = tRes.m_dSchemas[0];
 	bool bAgent = tQuery.m_bAgent;
 	bool bUsualApi = !bAgent && !bFromSphinxql;
 	bool bAllEqual = true;
@@ -9488,8 +9488,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 			FlattenToRes ( pSorter, tRes, iOrderTag+iQuery-m_iStart );
 
 			// take over the schema from sorter, it doesn't need it anymore
-			if ( tRes.m_iSuccesses==1 )
-				tRes.m_tSchema = pSorter->GetSchema(); // can SwapOut
+			tRes.m_tSchema = pSorter->GetSchema(); // can SwapOut
 
 			if ( !tRaw.m_sWarning.IsEmpty() )
 				m_dFailuresSet[iQuery].Submit ( sLocal, tRaw.m_sWarning.cstr() );
@@ -9761,8 +9760,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 
 				tRes.m_iSuccesses++;
 				// lets do this schema copy just once
-				if ( tRes.m_iSuccesses==1 )
-					tRes.m_tSchema = pSorter->GetSchema();
+				tRes.m_tSchema = pSorter->GetSchema();
 				tRes.m_iTotalMatches += pSorter->GetTotalCount();
 				tRes.m_iPredictedTime = tRes.m_bHasPrediction ? CalcPredictedTimeMsec ( tRes ) : 0;
 
@@ -10182,9 +10180,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 						AggrResult_t & tRes = m_dResults[iRes];
 						tRes.m_iSuccesses++;
-						// copy scheme once
-						if ( tRes.m_iSuccesses==1 )
-							tRes.m_tSchema = tRemoteResult.m_tSchema;
+						tRes.m_tSchema = tRemoteResult.m_tSchema;
 
 						assert ( !tRes.m_dTag2Pools[iOrderTag + iRes - iStart].m_pMva && !tRes.m_dTag2Pools[iOrderTag + iRes - iStart].m_pStrings );
 

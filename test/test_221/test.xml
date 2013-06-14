@@ -60,15 +60,15 @@ CREATE TABLE test_table
 </metaindex>
 
 <sphqueries>
-<sphinxql>select * from META:all where match ('a b c !war');show meta</sphinxql>
-<sphinxql>select * from META:all where match ('hello !war');show meta</sphinxql>
-<sphinxql>select * from META:all where match ('the !war');show meta</sphinxql>
-<sphinxql>select * from META:all where match ('!the !war');show meta</sphinxql>
-<sphinxql>select * from META:all where match ('!hello !war');show meta</sphinxql>
-<sphinxql>select * from META:all where match ('hello | (!war)');show meta</sphinxql>
-<sphinxql>select * from META:all where match ('hello | (!w)');show meta</sphinxql>
-<sphinxql>select * from META:all where match ('hallo  | (war ( a -world))');show meta</sphinxql>
-<sphinxql>select * from META:all where match ('war ( a -world)');show meta</sphinxql>
-<sphinxql>select * from META:all where match ('war | ( a -world)');show meta</sphinxql>
+<sphinxql>select * from META:all where match ('a b c !war')</sphinxql>
+<sphinxql>select * from META:all where match ('hello !war')</sphinxql>
+<sphinxql>select * from META:all where match ('the !war')</sphinxql>
+<sphinxql>select * from META:all where match ('!the !war')</sphinxql>
+<sphinxql>select * from META:all where match ('!hello !war')</sphinxql>
+<sphinxql>select * from META:all where match ('hello | (!war)')</sphinxql>
+<sphinxql>select * from META:all where match ('hello | (!w)')</sphinxql>
+<sphinxql>select * from META:all where match ('hallo  | (war ( a -world))')</sphinxql>
+<sphinxql>select * from META:all where match ('war ( a -world)')</sphinxql>
+<sphinxql>select * from META:all where match ('war | ( a -world)')</sphinxql>
 </sphqueries>
 </test>

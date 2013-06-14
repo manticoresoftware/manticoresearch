@@ -65,7 +65,8 @@ enum XQOperator_e
 	SPH_QUERY_QUORUM,
 	SPH_QUERY_NEAR,
 	SPH_QUERY_SENTENCE,
-	SPH_QUERY_PARAGRAPH
+	SPH_QUERY_PARAGRAPH,
+	SPH_QUERY_NULL
 };
 
 // the limit of field or zone or zonespan

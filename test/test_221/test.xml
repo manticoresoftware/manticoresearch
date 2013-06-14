@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>Using dummy token in expressions instead of just wiped by min_word_len or stopwords</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+}
+
+index test1 : test
+{
+	path			= <data_path/>/test1
+	stopwords				= stopwords.txt
+	min_word_len	= 2
+}
+
+
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	subject VARCHAR(50) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>INSERT INTO test_table VALUES ( 1, 'hello world' );</db_insert>
+<db_insert>INSERT INTO test_table VALUES ( 2, 'hello hallo world' );</db_insert>
+<db_insert>INSERT INTO test_table VALUES ( 3, 'a b world' );</db_insert>
+<db_insert>INSERT INTO test_table VALUES ( 4, 'a b c world' );</db_insert>
+<db_insert>INSERT INTO test_table VALUES ( 5, 'hello war' );</db_insert>
+<db_insert>INSERT INTO test_table VALUES ( 6, 'hello hallo war' );</db_insert>
+<db_insert>INSERT INTO test_table VALUES ( 7, 'a b war' );</db_insert>
+<db_insert>INSERT INTO test_table VALUES ( 8, 'a b c war' );</db_insert>
+
+<metaindex name='META:all'>
+<index>test</index>
+<index>test1</index>
+</metaindex>
+
+<sphqueries>
+<sphinxql>select * from META:all where match ('a b c !war');show meta</sphinxql>
+<sphinxql>select * from META:all where match ('hello !war');show meta</sphinxql>
+<sphinxql>select * from META:all where match ('the !war');show meta</sphinxql>
+<sphinxql>select * from META:all where match ('!the !war');show meta</sphinxql>
+<sphinxql>select * from META:all where match ('!hello !war');show meta</sphinxql>
+<sphinxql>select * from META:all where match ('hello | (!war)');show meta</sphinxql>
+<sphinxql>select * from META:all where match ('hello | (!w)');show meta</sphinxql>
+<sphinxql>select * from META:all where match ('hallo  | (war ( a -world))');show meta</sphinxql>
+<sphinxql>select * from META:all where match ('war ( a -world)');show meta</sphinxql>
+<sphinxql>select * from META:all where match ('war | ( a -world)');show meta</sphinxql>
+</sphqueries>
+</test>

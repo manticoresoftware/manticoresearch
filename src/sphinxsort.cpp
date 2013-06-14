@@ -1850,9 +1850,6 @@ protected:
 				m_dJustPopped.Add ( m_pData[i].m_iDocID );
 		}
 
-		// cut groups
-		m_iUsed = iBound;
-
 		// cleanup unused distinct stuff
 		if ( DISTINCT )
 		{
@@ -1872,6 +1869,9 @@ protected:
 		m_hGroup2Match.Reset ();
 		for ( int i=0; i<iBound; i++ )
 			m_hGroup2Match.Add ( m_pData+i, m_pData[i].GetAttr ( m_tLocGroupby ) );
+
+		// cut groups
+		m_iUsed = iBound;
 	}
 
 	/// sort groups buffer

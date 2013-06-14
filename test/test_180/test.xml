@@ -58,6 +58,10 @@ index rt1
 <sphinxql>select *, count (distinct mva2) as c from rt1 where match ('the') group by mva1 within group order by mva2 desc</sphinxql>
 <!-- checking mva aliases -->
 <sphinxql>select mva1 as somemva from rt1</sphinxql>
+
+<!-- regression crash on worst groups got cut -->
+<sphinxql>insert into rt1 (id, idd, str1, mva1, mva2, body) values ( 10, 10, '', ( 210, 211, 220),  (310, 311, 340), 'the' ),  ( 5, 5, '', ( 220, 221, 230),  (320, 321, 350), 'the' ),  ( 6, 6, '', ( 230, 231, 240),  (330, 331, 360), 'the' ),  ( 7, 7, '', ( 240, 241, 244),  (340, 341, 370), 'the' ),  ( 8, 8, '', ( 250, 251, 254),  (350, 351, 380), 'the' ),  ( 9, 9, '', ( 260, 261, 264),  (360, 361, 360), 'the' )</sphinxql>
+<sphinxql>select *, count (distinct mva1) as c from rt1 group by mva1 within group order by id asc option max_matches=2</sphinxql>
 </sphqueries>
 
 </test>

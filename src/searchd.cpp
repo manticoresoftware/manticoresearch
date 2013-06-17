@@ -557,7 +557,7 @@ enum SearchdStatus_e
 /// master-agent API protocol extensions version
 enum
 {
-	VER_MASTER = 7
+	VER_MASTER = 8
 };
 
 
@@ -6038,6 +6038,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 
 		tRes.m_iAgentFetchedDocs = tReq.GetDword();
 		tRes.m_iAgentFetchedHits = tReq.GetDword();
+		tRes.m_iAgentFetchedSkips = tReq.GetDword();
 
 		const int iWordsCount = tReq.GetInt (); // FIXME! sanity check?
 		if ( iRetrieved!=iMatches )
@@ -7359,7 +7360,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphTaggedV
 	}
 	// fetched_docs and fetched_hits from agent to master
 	if ( bAgentMode && iMasterVer>=7 )
-		iRespLen += 8;
+		iRespLen += 12;
 
 	if ( iVer>=0x117 && dStringPtrItems.GetLength() )
 	{
@@ -7828,6 +7829,8 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 	{
 		tOut.SendDword ( pRes->m_tStats.m_iFetchedDocs + pRes->m_iAgentFetchedDocs );
 		tOut.SendDword ( pRes->m_tStats.m_iFetchedHits + pRes->m_iAgentFetchedHits );
+		if ( iMasterVer>=8 )
+			tOut.SendDword ( pRes->m_tStats.m_iSkips + pRes->m_iAgentFetchedSkips );
 	}
 
 	tOut.SendInt ( pRes->m_hWordStats.GetLength() );
@@ -8858,7 +8861,7 @@ struct Expr_Snippet_c : public ISphStringExpr
 			char * szOptEnd = pWords;
 			while ( *pWords && sphIsSpace ( *pWords ) )	pWords++;
 
-			if ( *pWords++ != '=' )
+			if ( *pWords++!='=' )
 			{
 				sError.SetSprintf ( "Error parsing SNIPPET options: %s", pWords );
 				return;
@@ -8998,7 +9001,7 @@ struct ExprHook_t : public ISphExprHook
 		assert ( iID==HOOK_SNIPPET );
 		if ( pEvalStage )
 			*pEvalStage = SPH_EVAL_POSTLIMIT;
-		
+
 		ISphExpr * pRes = new Expr_Snippet_c ( pLeft, m_pIndex, m_pProfiler, sError );
 		if ( sError.Length() )
 			SafeDelete ( pRes );
@@ -10268,6 +10271,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 							tRes.m_iAgentPredictedTime += tRemoteResult.m_iPredictedTime;
 							tRes.m_iAgentFetchedDocs += tRemoteResult.m_iAgentFetchedDocs;
 							tRes.m_iAgentFetchedHits += tRemoteResult.m_iAgentFetchedHits;
+							tRes.m_iAgentFetchedSkips += tRemoteResult.m_iAgentFetchedSkips;
 							tRes.m_bHasPrediction |= ( m_dQueries[iRes].m_iMaxPredictedMsec>0 );
 
 							// merge this agent's words
@@ -13360,6 +13364,8 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 			dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iFetchedDocs + tMeta.m_iAgentFetchedDocs );
 		if ( dStatus.MatchAdd ( "fetched_hits" ) )
 			dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iFetchedHits + tMeta.m_iAgentFetchedHits );
+		if ( dStatus.MatchAdd ( "fetched_skips" ) )
+			dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iSkips + tMeta.m_iAgentFetchedSkips );
 	}
 
 

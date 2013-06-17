@@ -2731,6 +2731,7 @@ public:
 	int64_t					m_iAgentPredictedTime;	///< distributed predicted time
 	DWORD					m_iAgentFetchedDocs;	///< distributed fetched docs
 	DWORD					m_iAgentFetchedHits;	///< distributed fetched hits
+	DWORD					m_iAgentFetchedSkips;	///< distributed fetched skips
 
 	CSphQueryStats 			m_tStats;			///< query prediction counters
 	bool					m_bHasPrediction;	///< is prediction counters set?

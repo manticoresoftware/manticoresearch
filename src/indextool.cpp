@@ -1023,6 +1023,8 @@ int main ( int argc, char ** argv )
 		}
 	}
 
+	// configure common settings (as of time of this writing, AOT and RLP setup)
+	sphConfigureCommon ( hConf );
 
 	// common part for several commands, check and preload index
 	CSphIndex * pIndex = NULL;

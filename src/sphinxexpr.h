@@ -113,6 +113,9 @@ public:
 	/// get Nth arg of an arglist
 	virtual ISphExpr * GetArg ( int ) const { return NULL; }
 
+	/// get the number of args in an arglist
+	virtual int GetNumArgs() const { return 0; }
+
 	/// run a tree wide action
 	virtual void Command ( ESphExprCommand, void * ) {}
 
@@ -145,7 +148,7 @@ struct ISphExprHook
 	/// create node by OID
 	/// pEvalStage is an optional out-parameter
 	/// hook may fill it, but that is *not* required
-	virtual ISphExpr * CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage * pEvalStage ) = 0;
+	virtual ISphExpr * CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage * pEvalStage, CSphString & sError ) = 0;
 
 	/// get identifier return type by OID
 	virtual ESphAttr GetIdentType ( int iID ) = 0;

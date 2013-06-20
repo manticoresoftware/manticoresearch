@@ -53,6 +53,11 @@ function ConnectDB ()
 		print ( "ERROR: missing required mysql_connect(); add php_mysql.so (.dll on Windows) to your php.ini!\n" );
 		exit ( 1 );
 	}
+	if ( !function_exists ( "mysqli_connect" ) )
+	{
+		print ( "ERROR: missing required mysqli_connect(); add php_mysqli.so (.dll on Windows) to your php.ini!\n" );
+		exit ( 1 );
+	}
 
 	$conn = @mysql_connect (
 		$g_locals["db-host"] . ":" . $g_locals["db-port"],

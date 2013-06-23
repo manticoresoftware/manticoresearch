@@ -349,6 +349,7 @@ fi
 
 # get rid of possible garbage (like on mac os x)
 MYSQL_CFLAGS=`echo $MYSQL_CFLAGS | sed -e 's/-O[[0123sz]]//g'`
+MYSQL_CFLAGS=`echo $MYSQL_CFLAGS | sed -e 's/\-DNDEBUG//g'`
 
 dnl ---
 

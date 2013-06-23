@@ -4979,23 +4979,23 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 					// check that values are ascending
 					for ( DWORD uVal=(iItem>=iMva64 ? 2 : 1); uVal<uValues; )
 					{
-						uint64_t uPrev, uCur;
+						int64_t iPrev, iCur;
 						if ( iItem>=iMva64 )
 						{
-							uPrev = MVA_UPSIZE ( pMvaCur+uVal-2 );
-							uCur = MVA_UPSIZE ( pMvaCur+uVal );
+							iPrev = MVA_UPSIZE ( pMvaCur+uVal-2 );
+							iCur = MVA_UPSIZE ( pMvaCur+uVal );
 							uVal += 2;
 						} else
 						{
-							uPrev = pMvaCur[uVal-1];
-							uCur = pMvaCur[uVal];
+							iPrev = pMvaCur[uVal-1];
+							iCur = pMvaCur[uVal];
 							uVal++;
 						}
 
-						if ( uCur<=uPrev )
+						if ( iCur<=iPrev )
 						{
-							LOC_FAIL(( fp, "unsorted MVA values (segment=%d, row=%u, mvaattr=%d, docid="DOCID_FMT", val[%u]="UINT64_FMT", val[%u]="UINT64_FMT")",
-								iSegment, uRow, iItem, uLastID, ( iItem>=iMva64 ? uVal-2 : uVal-1 ), uPrev, uVal, uCur ));
+							LOC_FAIL(( fp, "unsorted MVA values (segment=%d, row=%u, mvaattr=%d, docid="DOCID_FMT", val[%u]="INT64_FMT", val[%u]="INT64_FMT")",
+								iSegment, uRow, iItem, uLastID, ( iItem>=iMva64 ? uVal-2 : uVal-1 ), iPrev, uVal, iCur ));
 						}
 
 						uVal += ( iItem>=iMva64 ? 2 : 1 );

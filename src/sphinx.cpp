@@ -2709,12 +2709,10 @@ private:
 		return ( iCode>=0x3000 && iCode<=0x303F ) || IsSpecialCode ( iCode ) || !m_pTokenizer->GetLowercaser().ToLower ( iCode );
 	}
 
-	bool IsJunkPOS ( const char * szPOS ) const
+	inline bool IsJunkPOS ( const char * szPOS ) const
 	{
-		if ( !szPOS )
-			return true;
-
-		return ( !strcmp ( szPOS, "EOS" ) || !strcmp ( szPOS, "PUNCT" ) );
+		// drop EOS and PUNCT
+		return !szPOS || !*szPOS || ( *szPOS=='E' && *(szPOS+1)=='O' ) || ( *szPOS=='P' && *(szPOS+1)=='U' );
 	}
 
 	void ProcessBufferRLP ( const BYTE * pBuffer, int iLength )

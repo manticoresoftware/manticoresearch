@@ -1975,8 +1975,8 @@ public:
 			StoredDoc_t * pDoc = PushDoc();
 			int nFields = T::m_tSchema.m_dFields.GetLength();
 			CopyDocInfo ( pDoc->m_tDocInfo, T::m_tDocInfo );
-			pDoc->m_dMva = T::m_dMva;
-			pDoc->m_dStrAttrs = T::m_dStrAttrs;
+			pDoc->m_dMva.SwapData ( T::m_dMva );
+			pDoc->m_dStrAttrs.SwapData ( T::m_dStrAttrs );
 			pDoc->m_dFields.Resize ( nFields );
 			pDoc->m_dFieldStorage.Resize ( nFields );
 			pDoc->m_dChinese.Resize ( nFields );
@@ -2150,8 +2150,8 @@ private:
 		StoredDoc_t * pDoc = PopDoc();
 		CopyDocInfo ( T::m_tDocInfo, pDoc->m_tDocInfo );
 		T::m_tState.m_dFields = pDoc->m_dFields.Begin();
-		T::m_dMva = pDoc->m_dMva;
-		T::m_dStrAttrs = pDoc->m_dStrAttrs;
+		T::m_dMva.SwapData ( pDoc->m_dMva );
+		T::m_dStrAttrs.SwapData ( pDoc->m_dStrAttrs );
 
 		return T::m_tState.m_dFields;
 	}

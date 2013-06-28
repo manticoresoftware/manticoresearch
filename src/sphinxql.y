@@ -31,6 +31,7 @@
 %token	TOK_BEGIN
 %token	TOK_BETWEEN
 %token	TOK_BIGINT
+%token	TOK_BOOL
 %token	TOK_BY
 %token	TOK_CALL
 %token	TOK_CHARACTER
@@ -1075,6 +1076,7 @@ alter_col_type:
 	TOK_INTEGER 	{ $$.m_iValue = SPH_ATTR_INTEGER; }
 	| TOK_BIGINT	{ $$.m_iValue = SPH_ATTR_BIGINT; }
 	| TOK_FLOAT		{ $$.m_iValue = SPH_ATTR_FLOAT; }
+	| TOK_BOOL		{ $$.m_iValue = SPH_ATTR_BOOL; }
 	;
 
 alter:

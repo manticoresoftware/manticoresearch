@@ -2912,6 +2912,120 @@ private:
 	CSphTightVector<BYTE>	m_dBuffer;
 };
 
+
+class CSphRLPQueryFilter : public CSphTokenFilter
+{
+public:
+	CSphRLPQueryFilter ( ISphTokenizer * pTokenizer, ISphTokenizer * pRLPTokenizer )
+		: CSphTokenFilter ( pTokenizer )
+		, m_bChineseToken ( false )
+		, m_pRLPTokenizer ( pRLPTokenizer )
+	{
+		assert ( pTokenizer && m_pRLPTokenizer );
+	}
+
+	virtual ~CSphRLPQueryFilter()
+	{
+		SafeDelete ( m_pRLPTokenizer );
+	}
+
+	virtual BYTE * GetToken()
+	{
+		BYTE * pRegularToken, * pRLPToken;
+
+		if ( m_bChineseToken )
+		{
+			pRLPToken = m_pRLPTokenizer->GetToken();
+			if ( pRLPToken )
+				return pRLPToken;
+			else
+				m_bChineseToken = false;
+		}
+
+		while ( ( pRegularToken = m_pTokenizer->GetToken() ) != NULL )
+		{
+			int iTokenLenBytes = strlen ( (const char *)pRegularToken );
+			if ( sphDetectChinese ( pRegularToken, iTokenLenBytes ) )
+			{
+				m_pRLPTokenizer->SetBuffer ( pRegularToken, iTokenLenBytes );
+				pRLPToken = m_pRLPTokenizer->GetToken();
+				if ( pRLPToken )
+				{
+					m_bChineseToken = true;
+					return pRLPToken;
+				}
+			}
+			else
+			{
+				m_bChineseToken = false;
+				return pRegularToken;
+			}
+		}
+
+		return NULL;
+	}
+
+	virtual ISphTokenizer * Clone ( ESphTokenizerClone eMode ) const
+	{
+		return new CSphRLPQueryFilter ( m_pTokenizer->Clone ( eMode ), m_pRLPTokenizer->Clone ( eMode ) );
+	}
+
+	virtual bool GetMorphFlag () const
+	{
+		return !m_bChineseToken;
+	}
+
+	virtual int GetLastTokenLen() const
+	{
+		return m_bChineseToken ? m_pRLPTokenizer->GetLastTokenLen() : m_pTokenizer->GetLastTokenLen();
+	}
+
+	virtual bool GetBoundary()
+	{
+		return m_bChineseToken ? m_pRLPTokenizer->GetBoundary() : m_pTokenizer->GetBoundary();
+	}
+
+	virtual bool WasTokenSpecial()
+	{
+		return m_bChineseToken ? m_pRLPTokenizer->WasTokenSpecial() : m_pTokenizer->WasTokenSpecial();
+	}
+
+	virtual int	GetOvershortCount ()
+	{
+		return m_bChineseToken ? m_pRLPTokenizer->GetOvershortCount() : m_pTokenizer->GetOvershortCount();
+	}
+
+	virtual bool TokenIsBlended () const
+	{
+		return m_bChineseToken ? m_pRLPTokenizer->TokenIsBlended() : m_pTokenizer->TokenIsBlended();
+	}
+
+	virtual bool TokenIsBlendedPart () const
+	{
+		return m_bChineseToken ? m_pRLPTokenizer->TokenIsBlendedPart() : m_pTokenizer->TokenIsBlendedPart();
+	}
+
+	virtual const char * GetTokenStart () const
+	{
+		return m_bChineseToken ? m_pRLPTokenizer->GetTokenStart() : m_pTokenizer->GetTokenStart();
+	}
+
+	virtual const char * GetTokenEnd () const
+	{
+		return m_bChineseToken ? m_pRLPTokenizer->GetTokenEnd() : m_pTokenizer->GetTokenEnd();
+	}
+
+	virtual const char * GetBufferPtr () const
+	{
+		return m_bChineseToken ? m_pRLPTokenizer->GetBufferPtr() : m_pTokenizer->GetBufferPtr();
+	}
+
+private:
+	bool				m_bChineseToken;
+	ISphTokenizer *		m_pRLPTokenizer;
+};
+
+
 #endif
 
 //////////////////////////////////////////////////////////////////////////
@@ -3977,6 +4091,20 @@ ISphTokenizer * ISphTokenizer::CreateRLPResultSplitter ( ISphTokenizer * pTokeni
 {
 	assert ( pTokenizer );
 	return new CSphRLPResultSplitter ( pTokenizer, szRLPCtx );
+}
+
+
+ISphTokenizer * ISphTokenizer::CreateRLPQueryFilter ( ISphTokenizer * pTokenizer, bool bChineseRLP, const char * szRLPRoot,	const char * szRLPEnv, const char * szRLPCtx, CSphString & sError )
+{
+	assert ( pTokenizer );
+	if ( !bChineseRLP )
+		return pTokenizer;
+	
+	ISphTokenizer * pRLPTokenizer = CreateRLPFilter ( pTokenizer, bChineseRLP, szRLPRoot, szRLPEnv, szRLPCtx, false, sError );
+	if ( !pRLPTokenizer )
+		return NULL;
+
+	return new CSphRLPQueryFilter ( pTokenizer->Clone ( SPH_CLONE_QUERY ), pRLPTokenizer );
 }
 
 #endif
@@ -15946,8 +16074,8 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 		pTokenizer = ISphTokenizer::CreateMultiformFilter ( pTokenizer, pDict->GetMultiWordforms () );
 
 #if USE_RLP
-		pTokenizer = ISphTokenizer::CreateRLPFilter ( pTokenizer, m_tSettings.m_eChineseRLP!=SPH_RLP_NONE, g_sRLPRoot.cstr(),
-			g_sRLPEnv.cstr(), m_tSettings.m_sRLPContext.cstr(), true, m_sLastError );
+		pTokenizer = ISphTokenizer::CreateRLPQueryFilter ( pTokenizer, m_tSettings.m_eChineseRLP!=SPH_RLP_NONE, g_sRLPRoot.cstr(),
+			g_sRLPEnv.cstr(), m_tSettings.m_sRLPContext.cstr(), m_sLastError );
 
 		if ( !pTokenizer )
 			return false;

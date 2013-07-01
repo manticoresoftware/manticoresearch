@@ -1684,6 +1684,17 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, int iRow
 		}
 	}
 
+	// handle index_field_lengths
+	DWORD * pFieldLens = NULL;
+	if ( m_pIndex->GetSettings().m_bIndexFieldLens )
+	{
+		int iFirst = pSchema.GetAttrsCount() - pSchema.m_dFields.GetLength();
+		assert ( pSchema.GetAttr ( iFirst ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
+		assert ( pSchema.GetAttr ( iFirst+pSchema.m_dFields.GetLength()-1 ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
+		pFieldLens = pAttrs + ( pSchema.GetAttr ( iFirst ).m_tLocator.m_iBitOffset / 32 );
+		memset ( pFieldLens, 0, sizeof(int)*pSchema.m_dFields.GetLength() );
+	}
+
 	// accumulate hits
 	int iHits = 0;
 	if ( pHits && pHits->Length() )
@@ -1701,9 +1712,16 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, int iRow
 			if ( pHit->m_iDocID==tLastHit.m_iDocID && pHit->m_iWordID==tLastHit.m_iWordID && pHit->m_iWordPos==tLastHit.m_iWordPos )
 				continue;
 
+			// update field lengths
+			if ( pFieldLens && HITMAN::GetField ( pHit->m_iWordPos ) != HITMAN::GetField ( tLastHit.m_iWordPos ) )
+				pFieldLens [ HITMAN::GetField ( tLastHit.m_iWordPos ) ] = HITMAN::GetPos ( tLastHit.m_iWordPos );
+
+			// accumulate
 			m_dAccum.Add ( *pHit );
 			tLastHit = *pHit;
 		}
+		if ( pFieldLens )
+			pFieldLens [ HITMAN::GetField ( tLastHit.m_iWordPos ) ] = HITMAN::GetPos ( tLastHit.m_iWordPos );
 	}
 	m_dPerDocHitsCount.Add ( iHits );
 

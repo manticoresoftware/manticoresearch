@@ -25138,34 +25138,39 @@ int CSphSource_Document::LoadFileField ( BYTE ** ppField, CSphString & sError )
 }
 
 
+bool AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError )
+{
+	ARRAY_FOREACH ( i, tSchema.m_dFields )
+	{
+		CSphColumnInfo tCol;
+		tCol.m_sName.SetSprintf ( "%s_len", tSchema.m_dFields[i].m_sName.cstr() );
+
+		int iGot = tSchema.GetAttrIndex ( tCol.m_sName.cstr() );
+		if ( iGot>=0 )
+		{
+			if ( tSchema.GetAttr(iGot).m_eAttrType==SPH_ATTR_TOKENCOUNT )
+			{
+				// looks like we already added these
+				assert ( tSchema.GetAttr(iGot).m_sName==tCol.m_sName );
+				return true;
+			}
+
+			sError.SetSprintf ( "attribute %s conflicts with index_field_lengths=1; remove it", tCol.m_sName.cstr() );
+			return false;
+		}
+
+		tCol.m_eAttrType = SPH_ATTR_TOKENCOUNT;
+		tSchema.AddAttr ( tCol, bDynamic ); // everything's dynamic at indexing time
+	}
+	return true;
+}
+
+
 bool CSphSource_Document::AddAutoAttrs ( CSphString & sError )
 {
 	// auto-computed length attributes
 	if ( m_bIndexFieldLens )
-	{
-		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
-		{
-			CSphColumnInfo tCol;
-			tCol.m_sName.SetSprintf ( "%s_len", m_tSchema.m_dFields[i].m_sName.cstr() );
-
-			int iGot = m_tSchema.GetAttrIndex ( tCol.m_sName.cstr() );
-			if ( iGot>=0 )
-			{
-				if ( m_tSchema.GetAttr(iGot).m_eAttrType==SPH_ATTR_TOKENCOUNT )
-				{
-					// looks like we already added these
-					assert ( m_tSchema.GetAttr(iGot).m_sName==tCol.m_sName );
-					return true;
-				}
-
-				sError.SetSprintf ( "attribute %s conflicts with index_field_lengths=1; remove it", tCol.m_sName.cstr() );
-				return false;
-			}
-
-			tCol.m_eAttrType = SPH_ATTR_TOKENCOUNT;
-			m_tSchema.AddAttr ( tCol, true ); // everything's dynamic at indexing time
-		}
-	}
+		return AddFieldLens ( m_tSchema, true, sError );
 	return true;
 }
 

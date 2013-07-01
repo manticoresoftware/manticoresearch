@@ -1503,7 +1503,9 @@ void			SaveDictionarySettings ( CSphWriter & tWriter, CSphDict * pDict, bool bFo
 void			LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings, CSphEmbeddedFiles & tEmbeddedFiles, DWORD uVersion, CSphString & sWarning );
 void			SaveFieldFilterSettings ( CSphWriter & tWriter, ISphFieldFilter * pFieldFilter );
 
-DWORD ReadVersion ( const char * sPath, CSphString & sError );
+DWORD			ReadVersion ( const char * sPath, CSphString & sError );
+bool			AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError );
+
 
 enum ESphExtType
 {
@@ -2180,7 +2182,6 @@ private:
 };
 
 #endif // USE_RLP
-
 
 #endif // _sphinxint_
 

@@ -802,11 +802,6 @@ protected:
 };
 
 
-#if USE_WINDOWS
-#pragma warning(disable:4127) // conditional expr is const for MSVC
-#endif
-
-
 /// query word from the searcher's point of view
 class DiskIndexQwordTraits_c : public ISphQword
 {
@@ -928,14 +923,14 @@ public:
 		{
 			m_bAllFieldsKnown = false;
 			m_tDoc.m_iDocID += iDelta;
-			if ( INLINE_DOCINFO )
+			if_const ( INLINE_DOCINFO )
 			{
 				assert ( pDocinfo );
 				for ( int i=0; i<m_iInlineAttrs; i++ )
 					pDocinfo[i] = m_rdDoclist.UnzipInt() + m_pInlineFixup[i];
 			}
 
-			if ( INLINE_HITS )
+			if_const ( INLINE_HITS )
 			{
 				m_uMatchHits = m_rdDoclist.UnzipInt();
 				const DWORD uFirst = m_rdDoclist.UnzipInt();
@@ -979,7 +974,7 @@ public:
 		{
 			m_uHitState = 0;
 			m_iHitPos = EMPTY_HIT;
-			if ( DISABLE_HITLIST_SEEK )
+			if_const ( DISABLE_HITLIST_SEEK )
 				assert ( m_rdHitlist.GetPos()==uOff ); // make sure we're where caller thinks we are.
 			else
 				m_rdHitlist.SeekTo ( uOff, READ_NO_SIZE_HINT );
@@ -1013,10 +1008,6 @@ public:
 		return EMPTY_HIT;
 	}
 };
-
-#if USE_WINDOWS
-#pragma warning(default:4127) // conditional expr is const for MSVC
-#endif
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -1859,9 +1850,6 @@ const DWORD * CSphMatch::GetAttrMVA ( const CSphAttrLocator & tLoc, const DWORD 
 // TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////
 
-#if USE_WINDOWS
-#pragma warning(disable:4127) // conditional expr is const for MSVC
-#endif
 inline int sphUTF8Decode ( const BYTE * & pBuf ); // forward ref for GCC
 inline int sphUTF8Encode ( BYTE * pBuf, int iCode ); // forward ref for GCC
 
@@ -1974,7 +1962,7 @@ protected:
 	/// get codepoint
 	inline int GetCodepoint ()
 	{
-		if ( IS_UTF8 )
+		if_const ( IS_UTF8 )
 		{
 			while ( m_pCur<m_pBufferMax )
 			{
@@ -1999,12 +1987,12 @@ protected:
 
 		// throw away everything which is over the token size
 		bool bFit = ( m_iAccum<SPH_MAX_WORD_LEN );
-		if ( IS_UTF8 )
+		if_const ( IS_UTF8 )
 			bFit &= ( m_pAccum-m_sAccum+SPH_MAX_UTF8_BYTES<=(int)sizeof(m_sAccum));
 
 		if ( bFit )
 		{
-			if ( IS_UTF8 )
+			if_const ( IS_UTF8 )
 				m_pAccum += sphUTF8Encode ( m_pAccum, iCode );
 			else
 				*m_pAccum++ = BYTE(iCode);
@@ -2177,11 +2165,6 @@ private:
 
 	void							FillTokenInfo ( StoredToken_t & tToken, const BYTE * sToken );
 };
-
-
-#if USE_WINDOWS
-#pragma warning(default:4127) // conditional expr is const
-#endif
 
 
 /// token filter for bigram indexing
@@ -4942,10 +4925,6 @@ static inline bool Special2Simple ( int & iCodepoint )
 }
 
 
-#if USE_WINDOWS
-#pragma warning(disable:4127) // conditional expr is const for MSVC
-#endif
-
 template < bool IS_UTF8 >
 BYTE * CSphTokenizerBase2<IS_UTF8>::GetTokenSyn ( bool bQueryMode )
 {
@@ -5301,13 +5280,13 @@ BYTE * CSphTokenizerBase2<IS_UTF8>::GetTokenSyn ( bool bQueryMode )
 				// the hottest accumulation point
 				// so do this manually, no function calls, that is quickest
 				bool bFit = ( m_iAccum<SPH_MAX_WORD_LEN );
-				if ( IS_UTF8 )
+				if_const ( IS_UTF8 )
 					bFit &= ( m_pAccum-m_sAccum+SPH_MAX_UTF8_BYTES<=(int)sizeof(m_sAccum) );
 
 				if ( bFit )
 				{
 					m_iAccum++;
-					if ( IS_UTF8 )
+					if_const ( IS_UTF8 )
 					{
 						iFolded &= MASK_CODEPOINT;
 						SPH_UTF8_ENCODE ( m_pAccum, iFolded );
@@ -5351,10 +5330,6 @@ BYTE * CSphTokenizerBase2<IS_UTF8>::GetTokenSyn ( bool bQueryMode )
 		return m_sAccum;
 	}
 }
-
-#if USE_WINDOWS
-#pragma warning(default:4127) // conditional expr is const for MSVC
-#endif
 
 
 bool ISphTokenizer::RemapCharacters ( const char * sConfig, DWORD uFlags, const char * sSource, bool bCanRemap, CSphString & sError )
@@ -5499,10 +5474,6 @@ void CSphTokenizer_SBCS<IS_QUERY>::SetBuffer ( const BYTE * sBuffer, int iLength
 }
 
 
-#if USE_WINDOWS
-#pragma warning(disable:4127) // conditional expr is const for MSVC
-#endif
-
 template < bool IS_QUERY >
 BYTE * CSphTokenizer_SBCS<IS_QUERY>::GetToken ()
 {
@@ -5537,7 +5508,7 @@ BYTE * CSphTokenizer_SBCS<IS_QUERY>::GetToken ()
 			iCode = m_tLC.ToLower ( iCodepoint );
 
 			// handle escaping
-			if ( IS_QUERY && iCodepoint=='\\' )
+			if_const ( IS_QUERY && iCodepoint=='\\' )
 			{
 				if ( m_pCur<m_pBufferMax )
 				{
@@ -5583,7 +5554,7 @@ BYTE * CSphTokenizer_SBCS<IS_QUERY>::GetToken ()
 		}
 
 		// handle all the flags..
-		if ( IS_QUERY )
+		if_const ( IS_QUERY )
 			iCode = CodepointArbitrationQ ( iCode, bWasEscaped, *m_pCur );
 		else if ( m_bDetectSentences )
 			iCode = CodepointArbitrationI ( iCode );
@@ -5712,17 +5683,12 @@ BYTE * CSphTokenizer_SBCS<IS_QUERY>::GetToken ()
 			// tricky bit
 			// heading modifiers must not (!) affected blended status
 			// eg. we want stuff like '=-' (w/o apostrophes) thrown away when pure_blend is on
-			if (!( IS_QUERY && !m_iAccum && sphIsModifier(iCode) ) )
+			if_const (!( IS_QUERY && !m_iAccum && sphIsModifier(iCode) ) )
 				m_bNonBlended = m_bNonBlended || bNoBlend;
 			m_sAccum[m_iAccum++] = (BYTE)iCode;
 		}
 	}
 }
-
-#if USE_WINDOWS
-#pragma warning(default:4127) // conditional expr is const for MSVC
-#endif
-
 
 
 template < bool IS_QUERY >
@@ -5766,10 +5732,6 @@ void CSphTokenizer_UTF8<IS_QUERY>::SetBuffer ( const BYTE * sBuffer, int iLength
 }
 
 
-#if USE_WINDOWS
-#pragma warning(disable:4127) // conditional expr is const for MSVC
-#endif
-
 template < bool IS_QUERY >
 BYTE * CSphTokenizer_UTF8<IS_QUERY>::GetToken ()
 {
@@ -5791,7 +5753,7 @@ template < bool IS_QUERY, bool IS_BLEND >
 BYTE * CSphTokenizer_UTF8_Base::DoGetToken ()
 {
 	// return pending blending variants
-	if ( IS_BLEND )
+	if_const ( IS_BLEND )
 	{
 		BYTE * pVar = GetBlendedVariant ();
 		if ( pVar )
@@ -5843,23 +5805,23 @@ BYTE * CSphTokenizer_UTF8_Base::DoGetToken ()
 					if ( m_iLastTokenLen )
 						m_iOvershortCount++;
 					m_iLastTokenLen = 0;
-					if ( IS_BLEND )
+					if_const ( IS_BLEND )
 						BlendAdjust ( pCur );
 					return NULL;
 				}
 			}
 
 			// return trailing word
-			if ( IS_BLEND && !BlendAdjust ( pCur ) )
+			if_const ( IS_BLEND && !BlendAdjust ( pCur ) )
 				return NULL;
 			m_pTokenEnd = m_pCur;
-			if ( IS_BLEND && m_bBlended )
+			if_const ( IS_BLEND && m_bBlended )
 				return GetBlendedVariant();
 			return m_sAccum;
 		}
 
 		// handle all the flags..
-		if ( IS_QUERY )
+		if_const ( IS_QUERY )
 			iCode = CodepointArbitrationQ ( iCode, bWasEscaped, *m_pCur );
 		else if ( m_bDetectSentences )
 			iCode = CodepointArbitrationI ( iCode );
@@ -5869,7 +5831,7 @@ BYTE * CSphTokenizer_UTF8_Base::DoGetToken ()
 			continue;
 
 		// handle blended characters
-		if ( IS_BLEND && ( iCode & FLAG_CODEPOINT_BLEND ) )
+		if_const ( IS_BLEND && ( iCode & FLAG_CODEPOINT_BLEND ) )
 		{
 			if ( m_pBlendEnd )
 				iCode = 0;
@@ -5914,7 +5876,7 @@ BYTE * CSphTokenizer_UTF8_Base::DoGetToken ()
 		if ( iCode==0 || m_bBoundary )
 		{
 			FlushAccum ();
-			if ( IS_BLEND && !BlendAdjust ( pCur ) )
+			if_const ( IS_BLEND && !BlendAdjust ( pCur ) )
 				continue;
 
 			if ( m_iLastTokenLen<m_tSettings.m_iMinWordLen
@@ -5926,7 +5888,7 @@ BYTE * CSphTokenizer_UTF8_Base::DoGetToken ()
 			} else
 			{
 				m_pTokenEnd = pCur;
-				if ( IS_BLEND && m_bBlended )
+				if_const ( IS_BLEND && m_bBlended )
 					return GetBlendedVariant();
 				return m_sAccum;
 			}
@@ -5963,7 +5925,7 @@ BYTE * CSphTokenizer_UTF8_Base::DoGetToken ()
 			}
 
 			FlushAccum ();
-			if ( IS_BLEND )
+			if_const ( IS_BLEND )
 			{
 				if ( !BlendAdjust ( pCur ) )
 					continue;
@@ -5979,8 +5941,8 @@ BYTE * CSphTokenizer_UTF8_Base::DoGetToken ()
 		// tricky bit
 		// heading modifiers must not (!) affected blended status
 		// eg. we want stuff like '=-' (w/o apostrophes) thrown away when pure_blend is on
-		if ( IS_BLEND )
-			if (!( IS_QUERY && !m_iAccum && sphIsModifier ( iCode & MASK_CODEPOINT ) ) )
+		if_const ( IS_BLEND )
+			if_const (!( IS_QUERY && !m_iAccum && sphIsModifier ( iCode & MASK_CODEPOINT ) ) )
 				m_bNonBlended = m_bNonBlended || !( iCode & FLAG_CODEPOINT_BLEND );
 
 		// just accumulate
@@ -5994,10 +5956,6 @@ BYTE * CSphTokenizer_UTF8_Base::DoGetToken ()
 		}
 	}
 }
-
-#if USE_WINDOWS
-#pragma warning(default:4127) // conditional expr is const for MSVC
-#endif
 
 
 void CSphTokenizer_UTF8_Base::FlushAccum ()
@@ -22049,10 +22007,6 @@ static inline int ZippedIntSize ( DWORD v )
 }
 
 
-#if USE_WINDOWS
-#pragma warning(disable:4127) // conditional expr is const for MSVC
-#endif
-
 static const char * g_sTagInfixEntries = "infix-entries";
 
 template < int SIZE >
@@ -22132,7 +22086,7 @@ void InfixBuilder_c<SIZE>::SaveEntries ( CSphWriter & wrDict )
 			const BYTE * sMax = sCur + iAppendBytes;
 
 			int iKeepChars = 0;
-			if ( SIZE==2 )
+			if_const ( SIZE==2 )
 			{
 				// SBCS path
 				while ( sCur<sMax && *sCur && *sCur==*sPrev )
@@ -22210,10 +22164,6 @@ void InfixBuilder_c<SIZE>::SaveEntries ( CSphWriter & wrDict )
 	ARRAY_FOREACH ( i, m_dBlocks )
 		m_dBlocks[i].m_sInfix = pBlockWords+m_dBlocks[i].m_iInfixOffset;
 }
-
-#if USE_WINDOWS
-#pragma warning(default:4127) // conditional expr is const for MSVC
-#endif
 
 
 static const char * g_sTagInfixBlocks = "infix-blocks";
@@ -28610,7 +28560,7 @@ static EXMLElem LookupElement ( const char * szName )
 	int iLen = strlen(szName);
 	if ( iLen>=11 && iLen<=15 )
 	{
-		char iHash = ( iLen + szName[7] ) & 15;
+		char iHash = (char)( ( iLen + szName[7] ) & 15 );
 		switch ( iHash )
 		{
 		case 1:		if ( !strcmp ( szName, "sphinx:docset" ) )		return ELEM_DOCSET;
@@ -30383,10 +30333,6 @@ static void FinalizeUpgrade ( const char ** sRenames, const char * sBanner, cons
 	fprintf ( stdout, "%s: done!\n", sBanner );
 }
 
-#if USE_WINDOWS
-#pragma warning(disable:4127) // conditional expr is const for MSVC
-#endif
-
 //////////////////////////////////////////////////////////////////////////
 // V.26 TO V.27 CONVERSION TOOL, INFIX BUILDER
 //////////////////////////////////////////////////////////////////////////
@@ -30396,7 +30342,7 @@ void sphDictBuildInfixes ( const char * sPath )
 	CSphString sFilename, sError;
 	int64_t tmStart = sphMicroTimer();
 
-	if ( INDEX_FORMAT_VERSION!=27 )
+	if_const ( INDEX_FORMAT_VERSION!=27 )
 		sphDie ( "infix upgrade: only works in v.27 builds for now; get an older indextool or contact support" );
 
 	//////////////////////////////////////////////////
@@ -30596,7 +30542,7 @@ void sphDictBuildSkiplists ( const char * sPath )
 	CSphString sFilename, sError;
 	int64_t tmStart = sphMicroTimer();
 
-	if ( INDEX_FORMAT_VERSION<31 || INDEX_FORMAT_VERSION>35 )
+	if_const ( INDEX_FORMAT_VERSION<31 || INDEX_FORMAT_VERSION>35 )
 		sphDie ( "skiplists upgrade: ony works in v.31 to v.35 builds for now; get an older indextool or contact support" );
 
 	// load (interesting parts from) the index header
@@ -31384,10 +31330,6 @@ void sphShutdownGlobalIDFs ()
 	CSphVector<CSphString> dEmptyFiles;
 	sphUpdateGlobalIDFs ( dEmptyFiles );
 }
-
-#if USE_WINDOWS
-#pragma warning(default:4127) // conditional expr is const for MSVC
-#endif
 
 //////////////////////////////////////////////////////////////////////////
 

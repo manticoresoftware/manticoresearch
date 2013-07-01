@@ -6143,10 +6143,6 @@ int ExtRanker_T<STATE>::GetMatches ()
 
 //////////////////////////////////////////////////////////////////////////
 
-#if USE_WINDOWS
-#pragma warning(disable:4127) // conditional expr is const for MSVC
-#endif
-
 template < bool USE_BM25, bool HANDLE_DUPES >
 struct RankerState_Proximity_fn : public ISphExtra
 {
@@ -6179,7 +6175,7 @@ struct RankerState_Proximity_fn : public ISphExtra
 
 	void Update ( const ExtHit_t * pHlist )
 	{
-		if ( !HANDLE_DUPES )
+		if_const ( !HANDLE_DUPES )
 		{
 			// all query keywords are unique
 			// simpler path (just do the delta)
@@ -6242,7 +6238,7 @@ struct RankerState_Proximity_fn : public ISphExtra
 		m_uCurLCS = 0;
 		m_iExpDelta = -1;
 
-		if ( HANDLE_DUPES )
+		if_const ( HANDLE_DUPES )
 		{
 			m_uLcsTailPos = 0;
 			m_uLcsTailQposMask = 0;
@@ -6260,10 +6256,6 @@ struct RankerState_Proximity_fn : public ISphExtra
 		return USE_BM25 ? tMatch.m_iWeight + uRank*SPH_BM25_SCALE : uRank;
 	}
 };
-
-#if USE_WINDOWS
-#pragma warning(default:4127) // conditional expr is const for MSVC
-#endif
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -6722,7 +6714,6 @@ struct LeanHit_t
 	}
 };
 
-
 /// ranker state that computes weight dynamically based on user supplied expression (formula)
 template < bool NEED_PACKEDFACTORS = false, bool HANDLE_DUPES = false >
 struct RankerState_Expr_fn : public ISphExtra
@@ -6988,7 +6979,7 @@ public:
 		m_iAtcHitCount = 0;
 		m_uAtcField = 0;
 
-		if ( HANDLE_DUPES )
+		if_const ( HANDLE_DUPES )
 			m_dTermsHit.Fill ( EMPTY_HIT );
 	}
 
@@ -7013,7 +7004,6 @@ private:
 	virtual bool	ExtraDataImpl ( ExtraData_e eType, void ** ppResult );
 	BYTE *			PackFactors ( int * pSize = NULL );
 };
-
 
 /// extra expression ranker node types
 enum ExprRankerNode_e
@@ -7635,9 +7625,6 @@ RankerState_Expr_fn <NEED_PACKEDFACTORS, HANDLE_DUPES>::~RankerState_Expr_fn ()
 	SafeRelease ( m_pExpr );
 }
 
-#if USE_WINDOWS
-#pragma warning(disable:4127) // conditional expr is const for MSVC
-#endif
 
 /// initialize ranker state
 template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
@@ -7721,7 +7708,7 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, 
 	if ( bComputeHeavyFactors || m_bWantGaps || m_bWantAtc )
 	{
 		int iUniq = m_iMaxQpos;
-		if ( HANDLE_DUPES )
+		if_const ( HANDLE_DUPES )
 		{
 			iUniq = 0;
 			ARRAY_FOREACH ( i, m_dTermDupes )
@@ -7816,7 +7803,7 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 	// keywords can be duplicated in the query, so we need this extra check
 	WORD uQpos = pHlist->m_uQuerypos;
 	bool bUniq = m_tKeywords.BitGet ( pHlist->m_uQuerypos );
-	if ( HANDLE_DUPES && bUniq )
+	if_const ( HANDLE_DUPES && bUniq )
 	{
 		uQpos = m_dTermDupes [ uQpos ];
 		bUniq = ( m_dTermsHit[uQpos]!=pHlist->m_uHitpos );
@@ -7882,7 +7869,7 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 	if ( bUniq && m_iHaveMinWindow>1 )
 	{
 		WORD uQpos = pHlist->m_uQuerypos;
-		if ( HANDLE_DUPES )
+		if_const ( HANDLE_DUPES )
 			uQpos = m_dTermDupes[uQpos];
 
 		switch ( m_iHaveMinWindow )
@@ -7985,7 +7972,7 @@ void RankerState_Expr_fn<PF, HANDLE_DUPES>::UpdateMinGaps ( const ExtHit_t * pHl
 	// thus, when a previously unseen keyword is added, the window is guaranteed to be minimal
 
 	WORD uQpos = pHlist->m_uQuerypos;
-	if ( HANDLE_DUPES )
+	if_const ( HANDLE_DUPES )
 		uQpos = m_dTermDupes[uQpos];
 
 	// handle field switch
@@ -8046,9 +8033,6 @@ void RankerState_Expr_fn<PF, HANDLE_DUPES>::UpdateMinGaps ( const ExtHit_t * pHl
 	m_iMinGaps[iField] = Min ( m_iMinGaps[iField], iNewGaps );
 }
 
-#if USE_WINDOWS
-#pragma warning(default:4127) // conditional expr is const for MSVC
-#endif
 
 template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
 BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::PackFactors ( int * pSize )
@@ -8142,14 +8126,10 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::PackFactors ( int 
 }
 
 
-#if USE_WINDOWS
-#pragma warning(disable:4127) // conditional expr is const for MSVC
-#endif
-
 template <bool NEED_PACKEDFACTORS, bool HANDLE_DUPES>
 bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::ExtraDataImpl ( ExtraData_e eType, void ** ppResult )
 {
-	if ( eType==EXTRA_SET_MVAPOOL || eType==EXTRA_SET_STRINGPOOL || NEED_PACKEDFACTORS )
+	if_const ( eType==EXTRA_SET_MVAPOOL || eType==EXTRA_SET_STRINGPOOL || NEED_PACKEDFACTORS )
 	{
 		switch ( eType )
 		{
@@ -8202,7 +8182,7 @@ DWORD RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Finalize ( const CS
 	FinalizeDocFactors ( tMatch );
 	UpdateATC ( true );
 
-	if ( NEED_PACKEDFACTORS )
+	if_const ( NEED_PACKEDFACTORS )
 	{
 		// pack factors
 		if ( !m_tFactorPool.IsInitialized() )
@@ -8232,7 +8212,7 @@ template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
 bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::IsTermSkipped ( int iTerm )
 {
 	assert ( iTerm>=0 && iTerm<m_iMaxQpos+1 );
-	if ( HANDLE_DUPES )
+	if_const ( HANDLE_DUPES )
 		return !m_tKeywords.BitGet ( iTerm ) || m_dTermDupes[iTerm]!=iTerm;
 	else
 		return !m_tKeywords.BitGet ( iTerm );
@@ -8358,7 +8338,7 @@ public:
 
 	virtual int GetMatches ()
 	{
-		if ( NEED_PACKEDFACTORS )
+		if_const ( NEED_PACKEDFACTORS )
 			this->m_tState.FlushMatches ();
 
 		return ExtRanker_T<RankerState_Expr_fn <NEED_PACKEDFACTORS, HANDLE_DUPES> >::GetMatches ();
@@ -8375,12 +8355,6 @@ public:
 		this->m_tState.m_dTermsHit.Fill ( EMPTY_HIT );
 	}
 };
-
-
-#if USE_WINDOWS
-#pragma warning(default:4127) // conditional expr is const for MSVC
-#endif
-
 
 //////////////////////////////////////////////////////////////////////////
 // EXPRESSION FACTORS EXPORT RANKER

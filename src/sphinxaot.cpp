@@ -476,7 +476,7 @@ bool CLemmatizer::LemmatizeWord ( BYTE * pWord, DWORD * results ) const
 	m_FormAutomat.GetInnerMorphInfos ( pWord, results );
 	if ( *results!=AOT_NOFORM )
 		return true;
-	if ( !bPredict )
+	if_const ( !bPredict )
 		return false;
 
 	// attempt prediction by keyword suffix
@@ -551,7 +551,7 @@ void CLemmatizer::PredictByDataBase ( const BYTE * pWord, int iLen, DWORD * Find
 	ARRAY_FOREACH ( j, res )
 	{
 		BYTE PartOfSpeechNo = res[j].m_PartOfSpeechNo;
-		if	( !m_bMaximalPrediction && has_nps[PartOfSpeechNo]!=-1 )
+		if_const ( !m_bMaximalPrediction && has_nps[PartOfSpeechNo]!=-1 )
 		{
 			int iOldFreq = m_ModelFreq [ AOT_MODEL_NO ( FindResults[has_nps[PartOfSpeechNo]] ) ];
 			int iNewFreq = m_ModelFreq [ m_LemmaFlexiaModel [ res[j].m_LemmaInfoNo ] ];
@@ -1428,10 +1428,6 @@ const CSphNamedInt & sphAotDictinfo ( int iLang )
 
 //////////////////////////////////////////////////////////////////////////
 
-#if USE_WINDOWS
-#pragma warning(disable:4127) // conditional expr is const for MSVC
-#endif
-
 /// token filter for AOT morphology indexing
 /// AOT may return multiple (!) morphological hypotheses for a single token
 /// we return such additional hypotheses as blended tokens
@@ -1563,7 +1559,7 @@ public:
 			return pToken;
 
 		// pass-through non-Russian words
-		if ( IS_UTF8 )
+		if_const ( IS_UTF8 )
 		{
 			if ( !IsRussianAlphaUtf8 ( pToken ) )
 				return pToken;
@@ -1574,7 +1570,7 @@ public:
 		}
 
 		// convert or copy regular tokens
-		if ( IS_UTF8 )
+		if_const ( IS_UTF8 )
 			m_iFormLen = Utf8ToWin1251 ( m_sForm, pToken );
 		else
 		{
@@ -1706,7 +1702,7 @@ public:
 			return pToken;
 
 		// pass-through non-Russian words
-		if ( IS_UTF8 && m_iLang==AOT_DE )
+		if_const ( IS_UTF8 && m_iLang==AOT_DE )
 		{
 			if ( !IsGermanAlphaUtf8 ( pToken ) )
 				return pToken;
@@ -1717,7 +1713,7 @@ public:
 		}
 
 		// convert or copy regular tokens
-		if ( IS_UTF8 && m_iLang==AOT_DE )
+		if_const ( IS_UTF8 && m_iLang==AOT_DE )
 			m_iFormLen = Utf8ToWin1252 ( m_sForm, pToken );
 		else
 		{
@@ -1775,10 +1771,6 @@ public:
 	}
 };
 
-
-#if USE_WINDOWS
-#pragma warning(default:4127) // conditional expr is const for MSVC
-#endif
 
 CSphTokenFilter * sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pDict, bool bIndexExact, DWORD uLangMask )
 {

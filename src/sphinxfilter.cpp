@@ -102,22 +102,16 @@ bool IFilter_Values::EvalBlockValues ( SphAttr_t uBlockMin, SphAttr_t uBlockMax 
 	return false;
 }
 
-#if USE_WINDOWS
-#pragma warning(disable:4127) // conditional expr is const for MSVC
-#endif
 
 template<bool HAS_EQUAL>
 bool EvalRange ( SphAttr_t uValue, SphAttr_t iMin, SphAttr_t iMax )
 {
-	if ( HAS_EQUAL )
+	if_const ( HAS_EQUAL )
 		return uValue>=iMin && uValue<=iMax;
 	else
 		return uValue>iMin && uValue<iMax;
 }
 
-#if USE_WINDOWS
-#pragma warning(default:4127) // conditional expr is const for MSVC
-#endif
 
 /// range
 struct IFilter_Range: virtual ISphFilter
@@ -235,9 +229,6 @@ struct Filter_SingleValueStatic32 : public Filter_SingleValue
 	}
 };
 
-#if USE_WINDOWS
-#pragma warning(disable:4127) // conditional expr is const for MSVC
-#endif
 
 template < bool HAS_EQUAL >
 struct Filter_Range: public IFilter_Attr, IFilter_Range
@@ -255,7 +246,7 @@ struct Filter_Range: public IFilter_Attr, IFilter_Range
 		SphAttr_t uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS ( pMinDocinfo ), m_tLocator );
 		SphAttr_t uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS ( pMaxDocinfo ), m_tLocator );
 		// not-reject
-		if ( HAS_EQUAL )
+		if_const ( HAS_EQUAL )
 			return ( m_iMaxValue>=uBlockMin && m_iMinValue<=uBlockMax );
 		else
 			return ( m_iMaxValue>uBlockMin && m_iMinValue<uBlockMax );
@@ -279,7 +270,7 @@ struct Filter_FloatRange : public IFilter_Attr
 	virtual bool Eval ( const CSphMatch & tMatch ) const
 	{
 		const float & fValue = tMatch.GetAttrFloat ( m_tLocator );
-		if ( HAS_EQUAL )
+		if_const ( HAS_EQUAL )
 			return fValue>=m_fMinValue && fValue<=m_fMaxValue;
 		else
 			return fValue>m_fMinValue && fValue<m_fMaxValue;
@@ -293,7 +284,7 @@ struct Filter_FloatRange : public IFilter_Attr
 		float fBlockMin = sphDW2F ( (DWORD)sphGetRowAttr ( DOCINFO2ATTRS ( pMinDocinfo ), m_tLocator ) );
 		float fBlockMax = sphDW2F ( (DWORD)sphGetRowAttr ( DOCINFO2ATTRS ( pMaxDocinfo ), m_tLocator ) );
 		// not-reject
-		if ( HAS_EQUAL )
+		if_const ( HAS_EQUAL )
 			return ( m_fMaxValue>=fBlockMin && m_fMinValue<=fBlockMax );
 		else
 			return ( m_fMaxValue>fBlockMin && m_fMinValue<fBlockMax );
@@ -344,7 +335,7 @@ struct Filter_IdRange: public IFilter_Range
 	virtual bool Eval ( const CSphMatch & tMatch ) const
 	{
 		const SphDocID_t uID = tMatch.m_iDocID;
-		if ( HAS_EQUAL )
+		if_const ( HAS_EQUAL )
 			return uID>=(SphDocID_t)m_iMinValue && uID<=(SphDocID_t)m_iMaxValue;
 		else
 			return uID>(SphDocID_t)m_iMinValue && uID<(SphDocID_t)m_iMaxValue;
@@ -355,7 +346,7 @@ struct Filter_IdRange: public IFilter_Range
 		const SphDocID_t uBlockMin = DOCINFO2ID ( pMinDocinfo );
 		const SphDocID_t uBlockMax = DOCINFO2ID ( pMaxDocinfo );
 		// not-reject
-		if ( HAS_EQUAL )
+		if_const ( HAS_EQUAL )
 			return ( (SphDocID_t)m_iMaxValue>=uBlockMin && (SphDocID_t)m_iMinValue<=uBlockMax );
 		else
 			return ( (SphDocID_t)m_iMaxValue>uBlockMin && (SphDocID_t)m_iMinValue<uBlockMax );
@@ -366,12 +357,6 @@ struct Filter_IdRange: public IFilter_Range
 		m_bUsesAttrs = false;
 	}
 };
-
-#if USE_WINDOWS
-#pragma warning(default:4127) // conditional expr is const for MSVC
-#endif
-
-// weight
 
 struct Filter_WeightValues: public IFilter_Values
 {
@@ -482,10 +467,6 @@ static int64_t GetMvaValue ( const int64_t * pVal )
 	return MVA_UPSIZE ( (const DWORD *)pVal );
 }
 
-#if USE_WINDOWS
-#pragma warning(disable:4127) // conditional expr is const for MSVC
-#endif
-
 template < typename T, bool HAS_EQUAL >
 struct Filter_MVARange: public IFilter_MVA, IFilter_Range
 {
@@ -520,18 +501,12 @@ struct Filter_MVARange: public IFilter_MVA, IFilter_Range
 			return false;
 
 		T iMvaL = GetMvaValue ( L );
-		if ( HAS_EQUAL )
+		if_const ( HAS_EQUAL )
 			return iMvaL<=m_iMaxValue;
 		else
 			return iMvaL<m_iMaxValue;
 	}
 };
-
-#if USE_WINDOWS
-#pragma warning(default:4127) // conditional expr is const for MSVC
-#endif
-
-// and
 
 struct Filter_And2 : public ISphFilter
 {
@@ -957,11 +932,6 @@ public:
 	}
 };
 
-
-#if USE_WINDOWS
-#pragma warning(disable:4127) // conditional expr is const for MSVC
-#endif
-
 template < bool HAS_EQUALS >
 class JsonFilterRange_c : public JsonFilter_c<IFilter_Range>
 {
@@ -983,7 +953,7 @@ public:
 			case JSON_DOUBLE:
 			{
 				double fValue = sphQW2D ( sphJsonLoadBigint ( &pValue ) );
-				if ( HAS_EQUALS )
+				if_const ( HAS_EQUALS )
 					return fValue>=m_iMinValue && fValue<=m_iMaxValue;
 				else
 					return fValue>m_iMinValue && fValue<m_iMaxValue;
@@ -1031,7 +1001,7 @@ public:
 			default:
 				return false;
 		}
-		if ( HAS_EQUALS )
+		if_const ( HAS_EQUALS )
 			return fValue>=m_fMinValue && fValue<=m_fMaxValue;
 		else
 			return fValue>m_fMinValue && fValue<m_fMaxValue;

@@ -2880,6 +2880,16 @@ public:
 	}
 };
 
+//////////////////////////////////////////////////////////////////////////
+
+#if USE_WINDOWS
+#define if_const(_arg) \
+	__pragma(warning(disable:4127)) \
+	if (_arg) \
+	__pragma(warning(default:4127))
+#else
+#define if_const(_arg) if(_arg)
+#endif
 
 #endif // _sphinxstd_
 

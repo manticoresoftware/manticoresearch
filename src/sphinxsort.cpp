@@ -113,11 +113,6 @@ public:
 	}
 };
 
-
-#if USE_WINDOWS
-#pragma warning(disable:4127) // conditional expr is const for MSVC
-#endif
-
 //////////////////////////////////////////////////////////////////////////
 // SORTING QUEUES
 //////////////////////////////////////////////////////////////////////////
@@ -149,7 +144,7 @@ public:
 	CSphMatchQueue ( int iSize, bool bUsesAttrs )
 		: CSphMatchQueueTraits ( iSize, bUsesAttrs )
 	{
-		if ( NOTIFICATIONS )
+		if_const ( NOTIFICATIONS )
 			m_dJustPopped.Reserve(1);
 	}
 
@@ -164,7 +159,7 @@ public:
 	{
 		m_iTotal++;
 
-		if ( NOTIFICATIONS )
+		if_const ( NOTIFICATIONS )
 		{
 			m_iJustPushed = 0;
 			m_dJustPopped.Resize(0);
@@ -182,7 +177,7 @@ public:
 		// do add
 		m_tSchema.CloneMatch ( m_pData+m_iUsed, tEntry );
 
-		if ( NOTIFICATIONS )
+		if_const ( NOTIFICATIONS )
 			m_iJustPushed = tEntry.m_iDocID;
 
 		int iEntry = m_iUsed++;
@@ -220,7 +215,7 @@ public:
 		Swap ( m_pData[0], m_pData[m_iUsed] );
 		m_tSchema.FreeStringPtrs ( &m_pData[m_iUsed] );
 
-		if ( NOTIFICATIONS )
+		if_const ( NOTIFICATIONS )
 		{
 			if ( m_dJustPopped.GetLength() )
 				m_dJustPopped[0] = m_pData[m_iUsed].m_iDocID;
@@ -303,11 +298,6 @@ public:
 	}
 };
 
-
-#if USE_WINDOWS
-#pragma warning(default:4127) // conditional expr is const for MSVC
-#endif
-
 //////////////////////////////////////////////////////////////////////////
 
 /// match sorting functor
@@ -357,10 +347,6 @@ struct MatchSort_fn
 };
 
 
-#if USE_WINDOWS
-#pragma warning(disable:4127) // conditional expr is const for MSVC
-#endif
-
 /// K-buffer (generalized double buffer) sorter
 /// faster worst-case but slower average-case than the heap sorter
 template < typename COMP, bool NOTIFICATIONS >
@@ -381,7 +367,7 @@ public:
 		, m_pWorst ( NULL )
 		, m_bFinalized ( false )
 	{
-		if ( NOTIFICATIONS )
+		if_const ( NOTIFICATIONS )
 			m_dJustPopped.Reserve ( m_iSize );
 
 		m_iSize /= COEFF;
@@ -396,7 +382,7 @@ public:
 	/// add entry to the queue
 	virtual bool Push ( const CSphMatch & tEntry )
 	{
-		if ( NOTIFICATIONS )
+		if_const ( NOTIFICATIONS )
 		{
 			m_iJustPushed = 0;
 			m_dJustPopped.Resize(0);
@@ -413,7 +399,7 @@ public:
 		m_iUsed++;
 		m_tSchema.CloneMatch ( m_pEnd-m_iUsed, tEntry );
 
-		if ( NOTIFICATIONS )
+		if_const ( NOTIFICATIONS )
 			m_iJustPushed = tEntry.m_iDocID;
 
 		// do the initial sort once
@@ -433,7 +419,7 @@ public:
 			MatchSort_fn<COMP> tComp ( m_tState, m_tSchema );
 			sphSort ( m_pData, m_iUsed, tComp, tComp );
 
-			if ( NOTIFICATIONS )
+			if_const ( NOTIFICATIONS )
 			{
 				for ( CSphMatch * pMatch = m_pData; pMatch < m_pEnd-m_iSize; pMatch++ )
 					m_dJustPopped.Add ( pMatch->m_iDocID );
@@ -509,11 +495,6 @@ public:
 		m_bFinalized = false;
 	}
 };
-
-
-#if USE_WINDOWS
-#pragma warning(default:4127) // conditional expr is const for MSVC
-#endif
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1235,11 +1216,6 @@ struct CSphGroupSorterSettings
 };
 
 
-#if USE_WINDOWS
-#pragma warning(disable:4127)
-#endif
-
-
 /// aggregate function interface
 class IAggrFunc
 {
@@ -1492,7 +1468,7 @@ public:
 		assert ( GROUPBY_FACTOR>1 );
 		assert ( DISTINCT==false || tSettings.m_tDistinctLoc.m_iBitOffset>=0 );
 
-		if ( NOTIFICATIONS )
+		if_const ( NOTIFICATIONS )
 			m_dJustPopped.Reserve ( m_iSize );
 	}
 
@@ -1644,7 +1620,7 @@ public:
 	/// add entry to the queue
 	virtual bool PushEx ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, bool bGrouped, bool )
 	{
-		if ( NOTIFICATIONS )
+		if_const ( NOTIFICATIONS )
 		{
 			m_iJustPushed = 0;
 			m_dJustPopped.Resize(0);
@@ -1678,7 +1654,7 @@ public:
 			// if new entry is more relevant, update from it
 			if ( m_pComp->VirtualIsLess ( *pMatch, tEntry, m_tState ) )
 			{
-				if ( NOTIFICATIONS )
+				if_const ( NOTIFICATIONS )
 				{
 					m_iJustPushed = tEntry.m_iDocID;
 					m_dJustPopped.Add ( pMatch->m_iDocID );
@@ -1690,7 +1666,7 @@ public:
 		}
 
 		// submit actual distinct value in all cases
-		if ( DISTINCT )
+		if_const ( DISTINCT )
 		{
 			int iCount = 1;
 			if ( bGrouped )
@@ -1711,14 +1687,14 @@ public:
 		CSphMatch & tNew = m_pData [ m_iUsed++ ];
 		m_tSchema.CloneMatch ( &tNew, tEntry );
 
-		if ( NOTIFICATIONS )
+		if_const ( NOTIFICATIONS )
 			m_iJustPushed = tNew.m_iDocID;
 
 		if ( !bGrouped )
 		{
 			tNew.SetAttr ( m_tLocGroupby, uGroupKey );
 			tNew.SetAttr ( m_tLocCount, 1 );
-			if ( DISTINCT )
+			if_const ( DISTINCT )
 				tNew.SetAttr ( m_tLocDistinct, 0 );
 		} else
 		{
@@ -1782,7 +1758,7 @@ public:
 		m_iTotal = 0;
 
 		m_hGroup2Match.Reset ();
-		if ( DISTINCT )
+		if_const ( DISTINCT )
 			m_tUniq.Resize ( 0 );
 	}
 
@@ -1807,7 +1783,7 @@ public:
 		m_tGroupSorter.m_iNow = tState.m_iNow;
 
 		// check whether we sort by distinct
-		if ( DISTINCT && m_tDistinctLoc.m_iBitOffset>=0 )
+		if_const ( DISTINCT && m_tDistinctLoc.m_iBitOffset>=0 )
 			for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 				if ( m_tGroupSorter.m_tLocator[i].m_iBitOffset==m_tDistinctLoc.m_iBitOffset )
 			{
@@ -1820,7 +1796,7 @@ protected:
 	/// count distinct values if necessary
 	void CountDistinct ()
 	{
-		if ( DISTINCT )
+		if_const ( DISTINCT )
 		{
 			m_tUniq.Sort ();
 			SphGroupKey_t uGroup;
@@ -1844,14 +1820,14 @@ protected:
 		SortGroups ();
 		CalcAvg ( false );
 
-		if ( NOTIFICATIONS )
+		if_const ( NOTIFICATIONS )
 		{
 			for ( int i = iBound; i < m_iUsed; ++i )
 				m_dJustPopped.Add ( m_pData[i].m_iDocID );
 		}
 
 		// cleanup unused distinct stuff
-		if ( DISTINCT )
+		if_const ( DISTINCT )
 		{
 			// build kill-list
 			CSphVector<SphGroupKey_t> dRemove;
@@ -1994,7 +1970,7 @@ public:
 		m_dGroupsLen.Resize ( m_iSize );
 		m_iSize >>= 1;
 
-		if ( NOTIFICATIONS )
+		if_const ( NOTIFICATIONS )
 			m_dJustPopped.Reserve ( m_iSize );
 
 #ifndef NDEBUG
@@ -2257,7 +2233,7 @@ public:
 		++m_ipushed;
 #endif
 		CHECKINTEGRITY();
-		if ( NOTIFICATIONS )
+		if_const ( NOTIFICATIONS )
 		{
 			m_iJustPushed = 0;
 			m_dJustPopped.Resize(0);
@@ -2310,7 +2286,7 @@ public:
 		}
 
 		// submit actual distinct value in all cases
-		if ( DISTINCT )
+		if_const ( DISTINCT )
 		{
 			int iCount = 1;
 			if ( bGrouped )
@@ -2330,14 +2306,14 @@ public:
 		m_dGroupByList [ iNew ] = -1;
 		m_dGroupsLen [ iNew ] = 1;
 
-		if ( NOTIFICATIONS )
+		if_const ( NOTIFICATIONS )
 			m_iJustPushed = tNew.m_iDocID;
 
 		if ( !bGrouped )
 		{
 			tNew.SetAttr ( m_tLocGroupby, uGroupKey );
 			tNew.SetAttr ( m_tLocCount, 1 );
-			if ( DISTINCT )
+			if_const ( DISTINCT )
 				tNew.SetAttr ( m_tLocDistinct, 0 );
 		} else
 		{
@@ -2457,7 +2433,7 @@ public:
 		m_iTails = 0;
 
 		m_hGroup2Match.Reset ();
-		if ( DISTINCT )
+		if_const ( DISTINCT )
 			m_tUniq.Resize ( 0 );
 	}
 
@@ -2482,7 +2458,7 @@ public:
 		m_tGroupSorter.m_iNow = tState.m_iNow;
 
 		// check whether we sort by distinct
-		if ( DISTINCT && m_tDistinctLoc.m_iBitOffset>=0 )
+		if_const ( DISTINCT && m_tDistinctLoc.m_iBitOffset>=0 )
 			for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 				if ( m_tGroupSorter.m_tLocator[i].m_iBitOffset==m_tDistinctLoc.m_iBitOffset )
 				{
@@ -2495,7 +2471,7 @@ protected:
 	/// count distinct values if necessary
 	void CountDistinct ()
 	{
-		if ( DISTINCT )
+		if_const ( DISTINCT )
 		{
 			m_tUniq.Sort ();
 			SphGroupKey_t uGroup;
@@ -2519,7 +2495,7 @@ protected:
 		CalcAvg ( false );
 
 		CSphVector<SphGroupKey_t> dRemove;
-		if ( DISTINCT )
+		if_const ( DISTINCT )
 			dRemove.Reserve ( m_iUsed-iBound );
 
 		int iHeadMatch = 1;
@@ -2535,10 +2511,10 @@ protected:
 					iHeadBound = ( iMatch+1==iHeadMatch ) ? iMatch : iHeadMatch;
 
 				// do the staff with matches to cut
-				if ( NOTIFICATIONS )
+				if_const ( NOTIFICATIONS )
 					m_dJustPopped.Add ( pMatch->m_iDocID );
 
-				if ( DISTINCT )
+				if_const ( DISTINCT )
 					dRemove.Add ( pMatch->GetAttr ( m_tLocGroupby ) );
 
 				if ( iMatch>=m_iSize )
@@ -2601,7 +2577,7 @@ protected:
 			}
 		}
 
-		if ( DISTINCT )
+		if_const ( DISTINCT )
 		{
 			if ( !m_bSortByDistinct )
 				m_tUniq.Sort ();
@@ -2655,14 +2631,14 @@ protected:
 		SortGroups ();
 		CalcAvg ( false );
 
-		if ( NOTIFICATIONS )
+		if_const ( NOTIFICATIONS )
 		{
 			for ( int i = iBound; i < m_iUsed; ++i )
 				m_dJustPopped.Add ( m_pData[i].m_iDocID );
 		}
 
 		// cleanup unused distinct stuff
-		if ( DISTINCT )
+		if_const ( DISTINCT )
 		{
 			// build kill-list
 			CSphVector<SphGroupKey_t> dRemove;
@@ -2817,7 +2793,7 @@ public:
 		assert ( DISTINCT==false || tSettings.m_tDistinctLoc.m_iBitOffset>=0 );
 		assert ( !pComp );
 
-		if ( NOTIFICATIONS )
+		if_const ( NOTIFICATIONS )
 			m_dJustPopped.Reserve(1);
 
 		m_dUniq.Reserve ( 16384 );
@@ -2972,7 +2948,7 @@ public:
 		m_iTotal = 0;
 		m_bDataInitialized = false;
 
-		if ( DISTINCT )
+		if_const ( DISTINCT )
 			m_dUniq.Resize(0);
 	}
 
@@ -2995,7 +2971,7 @@ protected:
 	/// add entry to the queue
 	bool PushEx ( const CSphMatch & tEntry, bool bGrouped )
 	{
-		if ( NOTIFICATIONS )
+		if_const ( NOTIFICATIONS )
 		{
 			m_iJustPushed = 0;
 			m_dJustPopped.Resize(0);
@@ -3024,7 +3000,7 @@ protected:
 			// if new entry is more relevant, update from it
 			if ( tEntry.m_iDocID<m_tData.m_iDocID )
 			{
-				if ( NOTIFICATIONS )
+				if_const ( NOTIFICATIONS )
 				{
 					m_iJustPushed = tEntry.m_iDocID;
 					m_dJustPopped.Add ( m_tData.m_iDocID );
@@ -3035,7 +3011,7 @@ protected:
 		}
 
 		// submit actual distinct value in all cases
-		if ( DISTINCT )
+		if_const ( DISTINCT )
 		{
 			int iCount = 1;
 			if ( bGrouped )
@@ -3050,14 +3026,14 @@ protected:
 		// add first
 		m_tSchema.CloneMatch ( &m_tData, tEntry );
 
-		if ( NOTIFICATIONS )
+		if_const ( NOTIFICATIONS )
 			m_iJustPushed = m_tData.m_iDocID;
 
 		if ( !bGrouped )
 		{
 			m_tData.SetAttr ( m_tLocGroupby, 1 ); // fake group number
 			m_tData.SetAttr ( m_tLocCount, 1 );
-			if ( DISTINCT )
+			if_const ( DISTINCT )
 				m_tData.SetAttr ( m_tLocDistinct, 0 );
 		} else
 		{
@@ -3073,7 +3049,7 @@ protected:
 	/// count distinct values if necessary
 	void CountDistinct ()
 	{
-		if ( DISTINCT )
+		if_const ( DISTINCT )
 		{
 			assert ( m_bDataInitialized );
 
@@ -3090,11 +3066,6 @@ protected:
 		}
 	}
 };
-
-
-#if USE_WINDOWS
-#pragma warning(default:4127)
-#endif
 
 //////////////////////////////////////////////////////////////////////////
 // PLAIN SORTING FUNCTORS

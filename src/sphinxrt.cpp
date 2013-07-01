@@ -1181,8 +1181,9 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 	MEMORY ( SPH_MEM_IDX_RT );
 
 	m_tSchema = tSchema;
-	if ( !AddFieldLens ( m_tSchema, false, m_sLastError ) )
-		sphDie ( "failed to create RT index: %s", m_sLastError.cstr() ); // !COMMIT handle this gracefully
+	if ( m_tSettings.m_bIndexFieldLens )
+		if ( !AddFieldLens ( m_tSchema, false, m_sLastError ) )
+			sphDie ( "failed to create RT index: %s", m_sLastError.cstr() ); // !COMMIT handle this gracefully
 	m_iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 
 	m_iDoubleBufferLimit = ( m_iSoftRamLimit * SPH_RT_DOUBLE_BUFFER_PERCENT ) / 100;
@@ -1358,7 +1359,7 @@ CSphSource_StringVector::CSphSource_StringVector ( int iFields, const char ** pp
 	m_iMaxHits = 0; // force all hits build
 }
 
-bool CSphSource_StringVector::Connect ( CSphString & sError )
+bool CSphSource_StringVector::Connect ( CSphString & )
 {
 	// no AddAutoAttrs() here; they should already be in the schema
 	m_tHits.m_dData.Reserve ( 1024 );

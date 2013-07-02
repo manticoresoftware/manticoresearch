@@ -32,13 +32,19 @@
      TOK_IDENT = 258,
      TOK_INT = 259,
      TOK_FLOAT = 260,
-     TOK_STRING = 261
+     TOK_STRING = 261,
+     TOK_TRUE = 262,
+     TOK_FALSE = 263,
+     TOK_NULL = 264
    };
 #endif
 #define TOK_IDENT 258
 #define TOK_INT 259
 #define TOK_FLOAT 260
 #define TOK_STRING 261
+#define TOK_TRUE 262
+#define TOK_FALSE 263
+#define TOK_NULL 264
 
 
 

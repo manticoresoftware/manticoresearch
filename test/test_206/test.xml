@@ -3,14 +3,20 @@
 
 <name>JSON attributes</name>
 
-<requires><sphinxql_keep_null/></requires>
+<requires>
+<sphinxql_keep_null/>
+</requires>
 
 <config>
+common
+{
+	on_json_attr_error		= ignore_attr
+	json_autoconv_numbers	= 1
+}
+
 indexer
 {
 	mem_limit				= 16M
-	on_json_attr_error		= ignore_attr
-	json_autoconv_numbers	= 1
 }
 
 searchd
@@ -172,6 +178,34 @@ index rt1
 	rt_attr_string = s1
 	rt_attr_json = j1
 }
+
+source json_arrays
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * from json_arrays
+	sql_attr_json	= j
+}
+
+index arrays
+{
+	source = json_arrays
+	path=<data_path/>/json_arrays
+}
+
+source json_objects
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * from json_objects
+	sql_attr_json	= j
+}
+
+index objects
+{
+	source = json_objects
+	path=<data_path/>/json_objects
+}
 </config>
 
 <db_create>
@@ -284,6 +318,36 @@ INSERT INTO json_attr ( id, gid, json ) VALUES
     ( 456, 2, '{"username":"Damon","year":2003,"floatkey": 4.44}' )
 </db_insert>
 
+<db_create>CREATE TABLE json_arrays ( id INTEGER NOT NULL, gid INTEGER NOT NULL, j VARCHAR(255) NOT NULL )</db_create>
+<db_drop>DROP TABLE IF EXISTS `json_arrays`;</db_drop>
+<db_insert>
+INSERT INTO json_arrays ( id, gid, j ) VALUES
+	( 123, 1, '{"a":[1,2,3,4], "t":["t1", "t2", "t3"]}' ),
+	( 234, 1, '{"a":[2,3,4,5], "t":["t2", "t3", "t4"]}' ),
+	( 345, 2, '{"a":[3,4,5,1], "t":["t3", "t4", "t5"]}' ),
+	( 456, 2, '{"a":["4","5","6","2"], "t":["t4", "t5", "t6"]}' )
+</db_insert>
+
+<db_create>CREATE TABLE json_objects ( id INTEGER NOT NULL, gid INTEGER NOT NULL, j VARCHAR(255) NOT NULL )</db_create>
+<db_drop>DROP TABLE IF EXISTS `json_objects`;</db_drop>
+<db_insert>
+INSERT INTO json_objects ( id, gid, j ) VALUES
+	(1,1,'[6,[6,[6,[6,6.0]]]]'),
+	(2,1,'[1, 2, 3.0, 1000000000000,["a","b","c"],{"a":"b"}]'),
+	(3,1,'{"a":"tag","b":"another tag"}'),
+	(4,1,'[1,2,3,[4,5,6,[7,8]]]'),
+	(5,1,'{"MixedCase":"passed"}'),
+	(6,2,'[1,2,3,[4,5,[6]],7,"8",{a:"b"},{},[6,6,6.0,6]]'),
+	(7,2,'[1,"x",{"y":"3","assoc":{"a1":6,"a2":5,"a3":"tag1", "a4":{"b1":1,"b2":2}}}, "123"]'),
+	(8,2,'{"a":{"c":"d"},"b":"c","e":6}'),
+	(9,2,'[false, true, null, "15\\u00f8C"]'),
+	(10,3,'{key1:{key2:{key3:"value"}}}'),
+	(11,4,'{"1234":1,"123":2,"1234a":3}'),
+	(12,4,'{}'),
+	(13,4,'[]'),
+	(14,4,'')
+</db_insert>
+
 <queries>
 <!-- json via API -->
 <query index="loc" select="*, @count" groupattr="j.uid" sortmode="extended" sortby="id asc" groupsort="id asc"/>
@@ -298,6 +362,8 @@ INSERT INTO json_attr ( id, gid, json ) VALUES
 <!-- string filter via distributed index -->
 <query index="dist_str" filter="json.username" filter_str="Alice"/>
 <query index="dist_str" filter="json.username" filter_str="Damon"/>
+<!-- check json quoting via API -->
+<query index="objects" select="j, j.key1.key2.key3" filter="j.key1.key2.key3" filter_str="value"/>
 </queries>
 
 <sphqueries>
@@ -403,6 +469,52 @@ INSERT INTO json_attr ( id, gid, json ) VALUES
 <sphinxql>select * from test where j.nick='one\ntwo'</sphinxql>
 <sphinxql>select * from test where j.nick='One
 Two'</sphinxql>
+<!-- array functions -->
+<sphinxql>select * from arrays</sphinxql>
+<sphinxql>select j.a[0] from arrays</sphinxql>
+<sphinxql>select j.a[2] from arrays where j.a[2]>2</sphinxql>
+<sphinxql>select j.a[2] from arrays order by j.a[2] desc</sphinxql>
+<sphinxql>select in(j.a,4,6) as p from arrays where p=1</sphinxql>
+<sphinxql>select j.t[2] from arrays</sphinxql>
+<sphinxql>select j.t[2] from arrays where j.t[2]='t3'</sphinxql>
+<sphinxql>select j.t[2] from arrays order by j.t[2] desc</sphinxql>
+<sphinxql>select j.t, in(j.t,'t4','t6') as p from arrays where p=1</sphinxql>
+<sphinxql>select j.a[-1], j.t[-1], j.a[5], j.t[5] from arrays</sphinxql>
+<sphinxql>select least(j.a), greatest(j.a), least(j.t), greatest(j.t) from arrays</sphinxql>
+<!-- fulljson subscript and null filter -->
+<sphinxql>select j from objects</sphinxql>
+<sphinxql>select j[0] from objects where j[0] is not null</sphinxql>
+<sphinxql>select j[1] from objects where j[1] is not null</sphinxql>
+<sphinxql>select j[2] from objects where j[2] is not null</sphinxql>
+<sphinxql>select j[2]['assoc'].a4 from objects where j[2]['assoc'].a4 is not null</sphinxql>
+<sphinxql>select j['MixedCase'], j['mixedcase'] from objects where j.MixedCase is not null</sphinxql>
+<sphinxql>select j[1][1][1][1] from objects where j[1][1][1][1] is not null</sphinxql>
+<sphinxql>select j.a[j.b] from objects where j.a[j.b] is not null</sphinxql>
+<sphinxql>select j[id] from objects where j[id] is not null</sphinxql>
+<sphinxql>select j[2*id-3] from objects where j[2*id-3] is not null</sphinxql>
+<!-- group by array elements and containers -->
+<sphinxql>select j.a from objects group by j.a</sphinxql>
+<sphinxql>select j[0] from objects group by j[0]</sphinxql>
+<sphinxql>select j[1] from objects group by j[1]</sphinxql>
+<!-- func_in for arrays and array elements -->
+<sphinxql>select j, in(j,6) as p from objects where p=1</sphinxql>
+<sphinxql>select j.a, in(j.a,'tag') as p from objects where p=1</sphinxql>
+<sphinxql>select j[0], in(j[0],1,2) as p from objects where p=1</sphinxql>
+<sphinxql>select j[2], in(j[2],2,3) as p from objects where p=1</sphinxql>
+<sphinxql>select j[3][3], in(j[3][3],7) as p from objects where p=1</sphinxql>
+<!-- numeric fields -->
+<sphinxql>select j.1234, j.123, .1234, .123 from objects where j.1234 is not null</sphinxql>
+<sphinxql>select j.1234, j.1234a from objects where j.1234a is not null</sphinxql>
+<sphinxql>select j 0.1234 as error from objects</sphinxql>
+<!-- aliases and null filter -->
+<sphinxql>select j from objects where j is not null</sphinxql>
+<sphinxql>select j as p from objects where p is not null</sphinxql>
+<sphinxql>select j[2]['assoc'].a4 as p from objects where p is not null</sphinxql>
+<!-- length function -->
+<sphinxql>select length(j) from objects</sphinxql>
+<sphinxql>select length(j[0]) from objects</sphinxql>
+<sphinxql>select length(j.a) from objects</sphinxql>
 </sphqueries>
 
 </test>
+

@@ -20,6 +20,8 @@
 %token	TOK_SYSVAR
 %token	TOK_CONST_STRINGS
 %token	TOK_BAD_NUMERIC
+%token	TOK_SUBKEY
+%token	TOK_DOT_NUMBER
 
 %token	TOK_ADD
 %token	TOK_AGENT
@@ -63,6 +65,7 @@
 %token	TOK_INT
 %token	TOK_INTEGER
 %token	TOK_INTO
+%token	TOK_IS
 %token	TOK_ISOLATION
 %token	TOK_LEVEL
 %token	TOK_LIKE
@@ -296,7 +299,7 @@ select_item:
 	;
 
 opt_alias:
-	// empty				
+	// empty
 	| TOK_IDENT							{ pParser->AliasLastItem ( &$1 ); }
 	| TOK_AS TOK_IDENT					{ pParser->AliasLastItem ( &$2 ); }
 	;
@@ -461,6 +464,16 @@ where_item:
 			if ( !pParser->AddStringFilter ( $1, $3, true ) )
 				YYERROR;
 		}
+	| expr_ident TOK_IS TOK_NULL
+		{
+			if ( !pParser->AddNullFilter ( $1, true ) )
+				YYERROR;
+		}
+	| expr_ident TOK_IS TOK_NOT TOK_NULL
+		{
+			if ( !pParser->AddNullFilter ( $1, false ) )
+				YYERROR;
+		}
 	;
 
 expr_float_unhandled:
@@ -498,6 +511,7 @@ expr_ident:
 			if ( !pParser->SetNewSyntax() )
 				YYERROR;
 		}
+	| json_field
 	;
 
 const_int:
@@ -515,6 +529,7 @@ const_int:
 const_float:
 	TOK_CONST_FLOAT			{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fValue = $1.m_fValue; }
 	| '-' TOK_CONST_FLOAT	{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fValue = -$2.m_fValue; }
+	| TOK_DOT_NUMBER		{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fValue = $1.m_fValue; }
 	;
 
 const_list:
@@ -687,6 +702,7 @@ expr:
 	| TOK_ID					{ if ( !pParser->SetNewSyntax() ) YYERROR; }
 	| TOK_CONST_INT
 	| TOK_CONST_FLOAT
+	| TOK_DOT_NUMBER
 	| TOK_USERVAR
 	| '-' expr %prec TOK_NEG	{ TRACK_BOUNDS ( $$, $1, $2 ); }
 	| TOK_NOT expr				{ TRACK_BOUNDS ( $$, $1, $2 ); }
@@ -711,6 +727,7 @@ expr:
 	| '(' expr ')'				{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| '{' consthash '}'			{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| function
+	| json_field
 	;
 
 function:
@@ -1244,6 +1261,23 @@ optimize_index:
 			tStmt.m_eStmt = STMT_OPTIMIZE_INDEX;
 			pParser->ToString ( tStmt.m_sIndex, $3 );
 		}
+	;
+
+//////////////////////////////////////////////////////////////////////////
+
+json_field:
+	TOK_IDENT subscript			{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
+
+subscript:
+	subkey
+	| subscript subkey			{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
+	;
+
+subkey:
+	TOK_SUBKEY					{ $$ = $1; $$.m_iEnd = $1.m_iEnd; }
+	| TOK_DOT_NUMBER			{ $$ = $1; $$.m_iEnd = $1.m_iEnd; }
+	| '[' expr ']'				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
+	| '[' TOK_QUOTED_STRING ']'	{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	;
 
 %%

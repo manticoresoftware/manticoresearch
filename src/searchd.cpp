@@ -5629,6 +5629,7 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 			case SPH_FILTER_RANGE:		iReqSize += 16; break; // uint64 min-val, max-val
 			case SPH_FILTER_FLOATRANGE:	iReqSize += 8; break; // int/float min-val,max-val
 			case SPH_FILTER_STRING:		iReqSize += 4 + tFilter.m_sRefString.Length(); break;
+			case SPH_FILTER_NULL:		iReqSize += 1; break; // boolean value
 		}
 	}
 	if ( q.m_bGeoAnchor )
@@ -5739,6 +5740,9 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 			case SPH_FILTER_STRING:
 				tOut.SendString ( tFilter.m_sRefString.cstr() );
 				break;
+
+			case SPH_FILTER_NULL:
+				tOut.SendByte ( tFilter.m_bHasEqual );
 		}
 		tOut.SendInt ( tFilter.m_bExclude );
 		tOut.SendInt ( tFilter.m_bHasEqual );
@@ -5985,21 +5989,10 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 							int64_t iTypeOffset = ( ( (int64_t)iOff ) | ( ( (int64_t)eJson )<<32 ) );
 							tMatch.SetAttr ( tAttr.m_tLocator, iTypeOffset );
 
-							int iLen = 4;
-							switch ( eJson )
-							{
-							case JSON_INT64:
-							case JSON_DOUBLE:
-								iLen = 8;
-								break;
-							case JSON_STRING:
-							case JSON_STRING_VECTOR:
-								iLen = tReq.GetDword();
-								break;
-							default:
-								// default size is 4, as initialized above
-								break;
-							}
+							// read node length if needed
+							int iLen = sphJsonNodeSize ( eJson, NULL );
+							if ( iLen<0 )
+								iLen = tReq.GetDword ();
 
 							m_dStringsStorage.Resize ( iOff+iLen );
 							tReq.GetBytes ( m_dStringsStorage.Begin()+iOff, iLen );
@@ -6465,6 +6458,10 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 						break;
 					case SPH_FILTER_STRING:
 						tFilter.m_sRefString = tReq.GetString();
+						break;
+
+					case SPH_FILTER_NULL:
+						tFilter.m_bHasEqual = tReq.GetByte()!=0;
 						break;
 
 					default:
@@ -7435,26 +7432,11 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphTaggedV
 				DWORD uOff = (DWORD)uTypeOffset;
 				if ( bSendJsonField )
 				{
-					// to master send raw data
-					iRespLen += 1;
 					const BYTE * pData = pStrings+uOff;
-					switch ( eJson )
-					{
-					case JSON_INT64:
-					case JSON_DOUBLE:
+					iRespLen -= 3; // JSON type as BYTE
+					iRespLen += sphJsonNodeSize ( eJson, pData );
+					if ( sphJsonNodeSize ( eJson, NULL )<0 )
 						iRespLen += 4;
-						break;
-					case JSON_STRING:
-					case JSON_STRING_VECTOR:
-						{
-							const BYTE * pPacked = pData;
-							iRespLen += sphJsonUnpackInt ( &pData );
-							iRespLen += pData-pPacked;
-						}
-						break;
-					default:
-						break;
-					}
 				} else
 				{
 					// to client send as string
@@ -7732,16 +7714,9 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 							tOut.SendByte ( (BYTE)eJson );
 
 							const BYTE * pData = pStrings+uOff;
-							int iLen = ( eJson==JSON_INT64 || eJson==JSON_DOUBLE ? 8 : 4 );
-
-							if ( eJson==JSON_STRING || eJson==JSON_STRING_VECTOR )
-							{
-								const BYTE * pPacked = pData;
-								iLen = sphJsonUnpackInt ( &pPacked ); // string(s) data len
-								iLen += pPacked-pData; // packed length
+							int iLen = sphJsonNodeSize ( eJson, pData );
+							if ( sphJsonNodeSize ( eJson, NULL )<0 )
 								tOut.SendDword ( iLen );
-							}
-
 							tOut.SendBytes ( pData, iLen );
 						} else
 						{
@@ -11024,6 +10999,7 @@ public:
 	CSphFilterSettings *	AddFilter ( const SqlNode_t & tCol, ESphFilter eType );
 	bool					AddStringFilter ( const SqlNode_t & tCol, const SqlNode_t & tVal, bool bExclude );
 	CSphFilterSettings *	AddValuesFilter ( const SqlNode_t & tCol ) { return AddFilter ( tCol, SPH_FILTER_VALUES ); }
+	bool					AddNullFilter ( const SqlNode_t & tCol, bool bEqualsNull );
 
 	inline bool		SetOldSyntax()
 	{
@@ -11656,6 +11632,16 @@ bool SqlParser_c::AddStringFilter ( const SqlNode_t & tCol, const SqlNode_t & tV
 		return false;
 	ToStringUnescape ( pFilter->m_sRefString, tVal );
 	pFilter->m_bExclude = bExclude;
+	return true;
+}
+
+
+bool SqlParser_c::AddNullFilter ( const SqlNode_t & tCol, bool bEqualsNull )
+{
+	CSphFilterSettings * pFilter = AddFilter ( tCol, SPH_FILTER_NULL );
+	if ( !pFilter )
+		return false;
+	pFilter->m_bHasEqual = bEqualsNull;
 	return true;
 }
 
@@ -15381,10 +15367,23 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 
 					if ( eAttrType==SPH_ATTR_JSON )
 					{
+						// no object at all? return NULL
+						if ( !pStr )
+						{
+							dRows.PutNULL();
+							break;
+						}
 						dTmp.Resize ( 0 );
 						sphJsonFormat ( dTmp, pStr );
 						pStr = dTmp.Begin();
 						iLen = dTmp.GetLength();
+						if ( iLen==0 )
+						{
+							// empty string (no objects) - return NULL
+							// (canonical "{}" and "[]" are handled by sphJsonFormat)
+							dRows.PutNULL();
+							break;
+						}
 					}
 
 					// send length
@@ -15405,6 +15404,12 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 					const char* pString = (const char*) tMatch.GetAttr ( tLoc );
 					if ( pString )
 						iLen = strlen ( pString );
+					else
+					{
+						// stringptr is NULL - send NULL value
+						dRows.PutNULL();
+						break;
+					}
 
 					// send length
 					dRows.Reserve ( iLen+4 );
@@ -15452,7 +15457,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 					uint64_t uTypeOffset = tMatch.GetAttr ( tLoc );
 					ESphJsonType eJson = ESphJsonType ( uTypeOffset>>32 );
 					DWORD uOff = (DWORD)uTypeOffset;
-					if ( !uOff )
+					if ( !uOff || eJson==JSON_NULL )
 					{
 						// no key found - NULL value
 						dRows.PutNULL();

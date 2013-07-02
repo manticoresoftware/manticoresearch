@@ -6474,7 +6474,7 @@ int SelectParser_t::GetToken ( YYSTYPE * lvalp )
 	if ( sphIsAttr ( m_pCur[0] ) || ( m_pCur[0]=='@' && sphIsAttr ( m_pCur[1] ) && !isdigit ( m_pCur[1] ) ) )
 	{
 		m_pCur++;
-		while ( sphIsAttr ( *m_pCur ) || *m_pCur=='.' ) m_pCur++; // json.field is valid attribute name now
+		while ( sphIsAttr ( *m_pCur ) ) m_pCur++;
 		lvalp->m_iEnd = m_pCur-m_pStart;
 
 		#define LOC_CHECK(_str,_len,_ret) \
@@ -6677,8 +6677,8 @@ void sphColumnToLowercase ( char * sVal )
 	if ( !sVal || !*sVal )
 		return;
 
-	// make all chars lowercase but only prior to '.' delimiter
-	for ( ; *sVal && *sVal!='.'; sVal++ )
+	// make all chars lowercase but only prior to '.' and '[' delimiters
+	for ( ; *sVal && *sVal!='.' && *sVal!='['; sVal++ )
 		*sVal = (char) tolower ( *sVal );
 }
 

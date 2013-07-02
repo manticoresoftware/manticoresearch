@@ -27,6 +27,15 @@ enum ESphJsonType
 	JSON_DOUBLE			= 3,
 	JSON_STRING			= 4,
 	JSON_STRING_VECTOR	= 5,
+	JSON_INT32_VECTOR	= 6,
+	JSON_INT64_VECTOR	= 7,
+	JSON_DOUBLE_VECTOR	= 8,
+	JSON_MIXED_VECTOR	= 9,
+	JSON_OBJECT			= 10,
+	JSON_TRUE			= 11,
+	JSON_FALSE			= 12,
+	JSON_NULL			= 13,
+	JSON_ROOT			= 14 // deprecated
 };
 
 
@@ -91,16 +100,34 @@ bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool
 void sphJsonFormat ( CSphVector<BYTE> & dOut, const BYTE * pData );
 
 /// convert SphinxBSON blob back to JSON document
+/// NOTE, bQuoteString==false is intended to format individual values only (and avoid quoting string values in that case)
 const BYTE * sphJsonFieldFormat ( CSphVector<BYTE> & dOut, const BYTE * pData, ESphJsonType eType, bool bQuoteString=true );
 
 /// compute key mask (for Bloom filtering) from the key name
-DWORD sphJsonKeyMask ( const char * sKey );
+DWORD sphJsonKeyMask ( const char * sKey, int iLen );
+
+/// find first value in SphinxBSON blob, return associated type
+ESphJsonType sphJsonFindFirst ( const BYTE ** ppData );
 
 /// find value by key in SphinxBSON blob, return associated type
-ESphJsonType sphJsonFindKey ( const BYTE ** ppValue, const BYTE * pData, const JsonKey_t & tKey );
+ESphJsonType sphJsonFindByKey ( ESphJsonType eType, const BYTE ** ppValue, const JsonKey_t & tKey );
+
+/// find value by index in SphinxBSON blob, return associated type
+ESphJsonType sphJsonFindByIndex ( ESphJsonType eType, const BYTE ** ppValue, int iIndex );
 
 /// split name to object and key parts, return false if not JSON name
 bool sphJsonNameSplit ( const char * sName, CSphString * sColumn, CSphString * sKey );
+
+/// compute node size, in bytes
+/// returns -1 when data itself is required to compute the size, but pData is NULL
+int sphJsonNodeSize ( ESphJsonType eType, const BYTE * pData );
+
+/// skip the current node, and update the pointer
+void sphJsonSkipNode ( ESphJsonType eType, const BYTE ** ppData );
+
+/// return object length or array length, in elements
+/// POD types return 1, empty objects return 0
+int sphJsonFieldLength ( ESphJsonType eType, const BYTE * pData );
 
 #endif // _sphinxjson_
 

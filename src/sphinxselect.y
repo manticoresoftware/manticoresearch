@@ -103,6 +103,7 @@ expr:
 	| expr TOK_OR expr			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| '(' expr ')'				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| function
+	| json_field
 	;
 
 select_atom:
@@ -138,6 +139,20 @@ comment:
 		{
 			pParser->AddOption ( &$3, &$5 );
 		}
+	;
+
+json_field:
+	SEL_TOKEN subscript			{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
+
+subscript:
+	subkey
+	| subscript subkey			{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
+	;
+
+subkey:
+	'.' SEL_TOKEN				{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
+	| '[' expr ']'				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
+	| '[' TOK_CONST_STRING ']'	{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	;
 
 %%

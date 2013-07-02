@@ -210,9 +210,6 @@ bool sphUDFDrop ( const char * szFunc, CSphString & sError );
 class CSphWriter;
 void sphUDFSaveState ( CSphWriter & tWriter );
 
-/// JSON expression wrapper
-ISphExpr * sphExprJsonField ( const CSphColumnInfo & tCol, int iAttr, const char * sField );
-
 #endif // _sphinxexpr_
 
 //

@@ -787,6 +787,7 @@ static inline ISphFilter * ReportError ( CSphString & sError, const char * sMess
 		case SPH_FILTER_RANGE:			sFilterName = "intrange"; break;
 		case SPH_FILTER_FLOATRANGE:		sFilterName = "floatrange"; break;
 		case SPH_FILTER_STRING:			sFilterName = "string"; break;
+		case SPH_FILTER_NULL:			sFilterName = "null"; break;
 		default:						sFilterName.SetSprintf ( "(filter-type-%d)", eFilterType ); break;
 	}
 
@@ -876,33 +877,34 @@ template<typename BASE>
 class JsonFilter_c : public BASE
 {
 protected:
-	CSphAttrLocator		m_tLoc;
-	const BYTE *		m_pStrings;
-	JsonKey_t			m_tKey;
+	const BYTE *				m_pStrings;
+	CSphRefcountedPtr<ISphExpr>	m_pExpr;	// OPTIMIZE? make a quicker version for simple static accesses like json.key?
 
 public:
-	JsonFilter_c ( const CSphAttrLocator & tLoc, const char * pInCol )
-		: m_tLoc ( tLoc )
-		, m_pStrings ( NULL )
-		, m_tKey ( pInCol )
+	explicit JsonFilter_c ( ISphExpr * pExpr )
+		: m_pStrings ( NULL )
+		, m_pExpr ( pExpr )
 	{}
 
 	virtual void SetStringStorage ( const BYTE * pStrings )
 	{
 		m_pStrings = pStrings;
+		if ( m_pExpr.Ptr() )
+			m_pExpr->Command ( SPH_EXPR_SET_STRING_POOL, (void*)pStrings );
 	}
 
 	ESphJsonType GetKey ( const BYTE ** ppKey, const CSphMatch & tMatch ) const
 	{
 		assert ( ppKey );
-		if ( !m_pStrings )
+		if ( !m_pExpr )
 			return JSON_EOF;
-		SphAttr_t uOff = tMatch.GetAttr ( m_tLoc );
-		if ( !uOff )
-			return JSON_EOF;
-		const BYTE * pData = m_pStrings + uOff;
-		sphUnpackStr ( pData, &pData ); // FIXME! maybe use the returned length for an extra check
-		return sphJsonFindKey ( ppKey, pData, m_tKey );
+		uint64_t uValue = m_pExpr->Int64Eval ( tMatch );
+		if ( uValue==0 ) // either no data or invalid path
+			return JSON_NULL;
+		const BYTE * pValue = m_pStrings + ( uValue & 0xffffffff );
+		ESphJsonType eRes = (ESphJsonType)( uValue >> 32 );
+		*ppKey = pValue;
+		return eRes;
 	}
 };
 
@@ -910,8 +912,8 @@ public:
 class JsonFilterValues_c : public JsonFilter_c<IFilter_Values>
 {
 public:
-	JsonFilterValues_c ( const CSphAttrLocator & tLoc, const char * pInCol )
-		: JsonFilter_c<IFilter_Values> ( tLoc, pInCol )
+	explicit JsonFilterValues_c ( ISphExpr * pExpr )
+		: JsonFilter_c<IFilter_Values> ( pExpr )
 	{}
 
 	virtual bool Eval ( const CSphMatch & tMatch ) const
@@ -936,8 +938,8 @@ template < bool HAS_EQUALS >
 class JsonFilterRange_c : public JsonFilter_c<IFilter_Range>
 {
 public:
-	JsonFilterRange_c ( const CSphAttrLocator & tLoc, const char * pInCol )
-		: JsonFilter_c<IFilter_Range> ( tLoc, pInCol )
+	explicit JsonFilterRange_c ( ISphExpr * pExpr )
+		: JsonFilter_c<IFilter_Range> ( pExpr )
 	{}
 
 	virtual bool Eval ( const CSphMatch & tMatch ) const
@@ -969,8 +971,8 @@ template < bool HAS_EQUALS >
 class JsonFilterFloatRange_c : public JsonFilter_c<IFilter_Range>
 {
 public:
-	JsonFilterFloatRange_c ( const CSphAttrLocator & tLoc, const char * pInCol )
-		: JsonFilter_c<IFilter_Range> ( tLoc, pInCol )
+	explicit JsonFilterFloatRange_c ( ISphExpr * pExpr )
+		: JsonFilter_c<IFilter_Range> ( pExpr )
 	{}
 
 	float m_fMinValue;
@@ -1016,8 +1018,8 @@ protected:
 	int			m_iRef;
 
 public:
-	JsonFilterString_c ( const CSphAttrLocator & tLoc, const char * pInCol )
-		: JsonFilter_c<ISphFilter> ( tLoc, pInCol )
+	explicit JsonFilterString_c ( ISphExpr * pExpr )
+		: JsonFilter_c<ISphFilter> ( pExpr )
 	{}
 
 	virtual void SetRefString ( const CSphString & sRef )
@@ -1034,7 +1036,6 @@ public:
 		{
 			case JSON_STRING:
 			{
-				// !COMMIT support collations
 				int iLen = sphJsonUnpackInt ( &pValue );
 				return iLen==m_iRef && iLen && memcmp ( pValue, m_sRef.cstr(), iLen )==0;
 			}
@@ -1045,27 +1046,66 @@ public:
 };
 
 
-static ISphFilter * CreateFilterJson ( const CSphColumnInfo * pAttr, ESphFilter eType, const char * pInCol, bool bRangeEq, CSphString & sError )
+class JsonFilterNull_c : public JsonFilter_c<ISphFilter>
+{
+protected:
+	bool m_bEquals;
+	CSphAttrLocator m_tLoc;
+
+public:
+	JsonFilterNull_c ( ISphExpr * pExpr, bool bEquals )
+		: JsonFilter_c<ISphFilter> ( pExpr )
+		, m_bEquals ( bEquals )
+	{}
+
+	virtual void SetLocator ( const CSphAttrLocator & tLocator )
+	{
+		m_tLoc = tLocator;
+	}
+
+	virtual bool Eval ( const CSphMatch & tMatch ) const
+	{
+		assert ( m_pStrings );
+
+		if ( !m_pExpr ) // regular attribute? check blob size
+		{
+			const BYTE * pStr = NULL;
+			DWORD uOffset = (DWORD) tMatch.GetAttr ( m_tLoc );
+			if ( uOffset )
+				sphUnpackStr ( m_pStrings+uOffset, &pStr );
+			return m_bEquals ^ ( pStr!=NULL );
+		}
+
+		const BYTE * pValue;
+		ESphJsonType eRes = GetKey ( &pValue, tMatch );
+		return m_bEquals ^ ( eRes!=JSON_NULL );
+	}
+};
+
+
+static ISphFilter * CreateFilterJson ( const CSphColumnInfo * DEBUGARG(pAttr), ISphExpr * pExpr,
+	ESphFilter eType, bool bRangeEq, CSphString & sError )
 {
 	assert ( pAttr );
-	assert ( pAttr->m_eAttrType==SPH_ATTR_JSON );
 
 	switch ( eType )
 	{
 		case SPH_FILTER_VALUES:
-			return new JsonFilterValues_c ( pAttr->m_tLocator, pInCol );
+			return new JsonFilterValues_c ( pExpr );
 		case SPH_FILTER_FLOATRANGE:
 			if ( bRangeEq )
-				return new JsonFilterFloatRange_c<true> ( pAttr->m_tLocator, pInCol );
+				return new JsonFilterFloatRange_c<true> ( pExpr );
 			else
-				return new JsonFilterFloatRange_c<false> ( pAttr->m_tLocator, pInCol );
+				return new JsonFilterFloatRange_c<false> ( pExpr );
 		case SPH_FILTER_RANGE:
 			if ( bRangeEq )
-				return new JsonFilterRange_c<true> ( pAttr->m_tLocator, pInCol );
+				return new JsonFilterRange_c<true> ( pExpr );
 			else
-				return new JsonFilterRange_c<false> ( pAttr->m_tLocator, pInCol );
+				return new JsonFilterRange_c<false> ( pExpr );
 		case SPH_FILTER_STRING:
-			return new JsonFilterString_c ( pAttr->m_tLocator, pInCol );
+			return new JsonFilterString_c ( pExpr );
+		case SPH_FILTER_NULL:
+			return new JsonFilterNull_c ( pExpr, bRangeEq );
 		default:
 			sError = "this filter type on JSON subfields is not implemented yet";
 			return NULL;
@@ -1111,7 +1151,11 @@ ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const ISphS
 			return NULL;
 		}
 
-		pFilter = CreateFilterJson ( pAttr, tSettings.m_eType, sJsonKey.cstr(), tSettings.m_bHasEqual, sError );
+		/*!COMMIT OPTIMIZE? fastpath for simple cases like j.key1?*/
+		bool bUsesWeight = false;
+		ISphExpr * pExpr = sphExprParse ( sAttrName.cstr(), tSchema, NULL, &bUsesWeight, sError, NULL );
+		pFilter = CreateFilterJson ( pAttr, pExpr, tSettings.m_eType, tSettings.m_bHasEqual, sError );
+
 		if ( !pFilter )
 			return NULL;
 	}
@@ -1133,7 +1177,14 @@ ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const ISphS
 				sError.SetSprintf ( "unsupported filter '%s' on aggregate column", sAttrName.cstr() );
 				return NULL;
 			}
-			pFilter = CreateFilter ( pAttr->m_eAttrType, tSettings.m_eType, tSettings.GetNumValues(), pAttr->m_tLocator, sError, tSettings.m_bHasEqual );
+
+			if ( pAttr->m_eAttrType==SPH_ATTR_JSON || pAttr->m_eAttrType==SPH_ATTR_JSON_FIELD )
+			{
+				if ( pAttr->m_pExpr.Ptr() )
+					pAttr->m_pExpr->AddRef(); // CreateFilterJson() uses a refcounted pointer, but does not AddRef() itself, so help it
+				pFilter = CreateFilterJson ( pAttr, pAttr->m_pExpr.Ptr(), tSettings.m_eType, tSettings.m_bHasEqual, sError );
+			} else
+				pFilter = CreateFilter ( pAttr->m_eAttrType, tSettings.m_eType, tSettings.GetNumValues(), pAttr->m_tLocator, sError, tSettings.m_bHasEqual );
 		}
 	}
 

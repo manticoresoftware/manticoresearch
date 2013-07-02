@@ -17,9 +17,10 @@
 %}
 
 DIGIT				[0-9]
-ID					[a-zA-Z_][a-zA-Z_0-9\.]*
+ID					[a-zA-Z_][a-zA-Z_0-9]*
 SPACE				[ \t\n\r]
 EXPONENT			[eE](\+|-)?{DIGIT}+
+ALPHA				[a-zA-Z_]+
 
 %option noyywrap
 %option nounput
@@ -76,6 +77,7 @@ EXPONENT			[eE](\+|-)?{DIGIT}+
 "INTEGER"			{ YYSTOREBOUNDS; return TOK_INTEGER; }
 "INT"				{ YYSTOREBOUNDS; return TOK_INT; }
 "INTO"				{ YYSTOREBOUNDS; return TOK_INTO; }
+"IS"				{ YYSTOREBOUNDS; return TOK_IS; }
 "ISOLATION"			{ YYSTOREBOUNDS; return TOK_ISOLATION; }
 "LEVEL"				{ YYSTOREBOUNDS; return TOK_LEVEL; }
 "LIKE"				{ YYSTOREBOUNDS; return TOK_LIKE; }
@@ -136,7 +138,8 @@ EXPONENT			[eE](\+|-)?{DIGIT}+
 '([^'\\]|\\.|\\\\)*'			{ YYSTOREBOUNDS; pParser->m_pLastTokenStart = yytext; return TOK_QUOTED_STRING; }
 
 {DIGIT}+\.{DIGIT}*{EXPONENT}?	{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
-\.{DIGIT}+{EXPONENT}?			{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
+\.{DIGIT}+{EXPONENT}?			{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_DOT_NUMBER; }
+\.{DIGIT}+{ID}					{ YYSTOREBOUNDS; return TOK_SUBKEY; }
 {DIGIT}+{EXPONENT}				{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
 {DIGIT}+			{ YYSTOREBOUNDS; lvalp->m_iValue = (int64_t)strtoull ( yytext, NULL, 10 ); return TOK_CONST_INT; }
 
@@ -147,10 +150,12 @@ EXPONENT			[eE](\+|-)?{DIGIT}+
 [a-zA-Z_0-9]+		{ YYSTOREBOUNDS; return TOK_BAD_NUMERIC; }
 @{ID}				{ YYSTOREBOUNDS; return TOK_USERVAR; }
 @@{ID}				{ YYSTOREBOUNDS; return TOK_SYSVAR; }
+@@{ID}\.{ID}		{ YYSTOREBOUNDS; return TOK_SYSVAR; }
 "`ID`"				{ YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; return TOK_ID; }
 `{ID}`				{ YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; return TOK_IDENT; }
 
 {SPACE}+			{ ; }
+\.{SPACE}*{ID}		{ YYSTOREBOUNDS; return TOK_SUBKEY; }
 .					{ YYSTOREBOUNDS; return yytext[0]; }
 
 %%

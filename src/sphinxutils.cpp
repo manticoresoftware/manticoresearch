@@ -428,9 +428,9 @@ static KeyDesc_t g_dKeysIndexer[] =
 	{ "max_file_field_buffer",	0, NULL },
 	{ "write_buffer",			0, NULL },
 	{ "on_file_field_error",	0, NULL },
-	{ "on_json_attr_error",		0, NULL },
-	{ "json_autoconv_numbers",	0, NULL },
-	{ "json_autoconv_keynames",	0, NULL },
+	{ "on_json_attr_error",		KEY_DEPRECATED, "on_json_attr_error in common{..} section" },
+	{ "json_autoconv_numbers",	KEY_DEPRECATED, "json_autoconv_numbers in common{..} section" },
+	{ "json_autoconv_keynames",	KEY_DEPRECATED, "json_autoconv_keynames in common{..} section" },
 	{ "lemmatizer_cache",		0, NULL },
 	{ NULL,						0, NULL }
 };
@@ -496,6 +496,9 @@ static KeyDesc_t g_dKeysSearchd[] =
 static KeyDesc_t g_dKeysCommon[] =
 {
 	{ "lemmatizer_base",		0, NULL },
+	{ "on_json_attr_error",		0, NULL },
+	{ "json_autoconv_numbers",	0, NULL },
+	{ "json_autoconv_keynames",	0, NULL },
 	{ "rlp_root",				0, NULL },
 	{ "rlp_environment",		0, NULL },
 	{ "rlp_max_batch_size",		0, NULL },
@@ -2185,6 +2188,32 @@ void sphConfigureCommon ( const CSphConfig & hConf )
 		g_iRLPMaxBatchSize = hCommon.GetSize ( "rlp_max_batch_size", 2097152 );
 		g_iRLPMaxBatchDocs = hCommon.GetInt ( "rlp_max_batch_docs" );
 #endif
+		bool bJsonStrict = false;
+		bool bJsonAutoconvNumbers = false;
+		bool bJsonKeynamesToLowercase = false;
+
+		if ( hCommon("on_json_attr_error") )
+		{
+			const CSphString & sVal = hCommon["on_json_attr_error"];
+			if ( sVal=="ignore_attr" )
+				bJsonStrict = false;
+			else if ( sVal=="fail_index" )
+				bJsonStrict = true;
+			else
+				sphDie ( "unknown on_json_attr_error value (must be one of ignore_attr, fail_index)" );
+		}
+
+		if ( hCommon("json_autoconv_keynames") )
+		{
+			const CSphString & sVal = hCommon["json_autoconv_keynames"];
+			if ( sVal=="lowercase" )
+				bJsonKeynamesToLowercase = true;
+			else
+				sphDie ( "unknown json_autoconv_keynames value (must be 'lowercase')" );
+		}
+
+		bJsonAutoconvNumbers = ( hCommon.GetInt ( "json_autoconv_numbers", 0 )!=0 );
+		sphSetJsonOptions ( bJsonStrict, bJsonAutoconvNumbers, bJsonKeynamesToLowercase );
 	}
 }
 

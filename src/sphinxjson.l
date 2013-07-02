@@ -5,7 +5,13 @@
 #pragma warning(push,1)
 #endif
 
-#define STORE_BOUNDS pParser->m_pLastToken = yytext;
+#define STORE_BOUNDS \
+	{ \
+		lvalp->m_iStart = yytext - pParser->m_pBuf; \
+		lvalp->m_iEnd = lvalp->m_iStart + yyleng; \
+		pParser->m_pLastToken = yytext; \
+	}
+
 %}
 
 DIGIT				[0-9]
@@ -25,12 +31,16 @@ SPACE				[ \t\n\r]
 <ccomment>.			{ }
 <ccomment>"\n"		{ BEGIN(INITIAL); }
 
-'([^'\\]|\\.|\\\\)*'	{ STORE_BOUNDS; lvalp->m_eType = JSON_STRING; SqlUnescape ( lvalp->m_sValue, yytext, yyleng ); return TOK_STRING; }
-\"([^"\\]|\\.|\\\\)*\"	{ STORE_BOUNDS; lvalp->m_eType = JSON_STRING; SqlUnescape ( lvalp->m_sValue, yytext, yyleng ); return TOK_STRING; }
+"true"					{ STORE_BOUNDS; lvalp->m_eType = JSON_TRUE; return TOK_TRUE; }
+"false"					{ STORE_BOUNDS; lvalp->m_eType = JSON_FALSE; return TOK_FALSE; }
+"null"					{ STORE_BOUNDS; lvalp->m_eType = JSON_NULL; return TOK_NULL; }
+
+'([^'\\]|\\.|\\\\)*'	{ STORE_BOUNDS; lvalp->m_eType = JSON_STRING; return TOK_STRING; }
+\"([^"\\]|\\.|\\\\)*\"	{ STORE_BOUNDS; lvalp->m_eType = JSON_STRING; return TOK_STRING; }
 
 -*{DIGIT}*\.{DIGIT}*	{ STORE_BOUNDS; lvalp->m_eType = JSON_DOUBLE; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_FLOAT; }
 -*{DIGIT}+				{ STORE_BOUNDS; lvalp->m_eType = JSON_INT64; lvalp->m_iValue = strtoll ( yytext, NULL, 10 ); return TOK_INT; }
-{ID}					{ STORE_BOUNDS; lvalp->m_eType = JSON_STRING; lvalp->m_sValue = yytext; return TOK_IDENT; }
+{ID}					{ STORE_BOUNDS; lvalp->m_eType = JSON_STRING; return TOK_IDENT; }
 
 {SPACE}+				{ ; }
 .						{ STORE_BOUNDS; return yytext[0]; }

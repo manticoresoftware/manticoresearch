@@ -731,35 +731,40 @@ public:
 
 
 /// lookup JSON key, group by looked up value
+/*!COMMIT benchmark, find out whether we need a specialized fastpath rather than generic expr for simpler j.key1 cases*/
 class CSphGrouperJson : public CSphGrouperString<BinaryHash_fn>
 {
 protected:
-	JsonKey_t	m_tKey;
+	ISphExpr * m_pExpr;
 
 public:
-	explicit CSphGrouperJson ( const CSphAttrLocator & tLoc, const char * sKey )
+	explicit CSphGrouperJson ( const CSphAttrLocator & tLoc, ISphExpr * pExpr )
 		: CSphGrouperString<BinaryHash_fn> ( tLoc )
-		, m_tKey ( sKey )
+		, m_pExpr ( pExpr )
 	{}
 
-	virtual SphGroupKey_t KeyFromValue ( SphAttr_t uValue ) const
+	virtual ~CSphGrouperJson ()
 	{
-		if ( !m_pStringBase || !uValue )
-			return 0;
+		SafeDelete ( m_pExpr );
+	}
 
-		const BYTE * pStr = NULL;
-		int iLen = sphUnpackStr ( m_pStringBase+uValue, &pStr );
+	virtual SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const
+	{
+		if ( !m_pExpr )
+			return SphGroupKey_t();
 
-		if ( !pStr || !iLen )
-			return 0;
-
-		const BYTE * pValue;
-		ESphJsonType eRes = sphJsonFindKey ( &pValue, pStr, m_tKey );
+		uint64_t uValue = m_pExpr->Int64Eval ( tMatch );
+		const BYTE * pValue = m_pStringBase + ( uValue & 0xffffffff );
+		ESphJsonType eRes = (ESphJsonType)( uValue >> 32 );
+		int iLen;
 
 		char sBuf[32];
 		switch ( eRes )
 		{
 			case JSON_STRING:
+			case JSON_STRING_VECTOR:
+			case JSON_OBJECT:
+			case JSON_MIXED_VECTOR:
 				iLen = sphJsonUnpackInt ( &pValue );
 				return sphFNV64 ( pValue, iLen );
 			case JSON_INT32:
@@ -773,25 +778,47 @@ public:
 			case JSON_DOUBLE:
 				snprintf ( sBuf, sizeof(sBuf), "%f", sphQW2D ( sphJsonLoadBigint ( &pValue ) ) );
 				break;
+			case JSON_INT32_VECTOR:
+				iLen = sphJsonUnpackInt ( &pValue ) * 4;
+				return sphFNV64 ( pValue, iLen );
+			case JSON_INT64_VECTOR:
+			case JSON_DOUBLE_VECTOR:
+				iLen = sphJsonUnpackInt ( &pValue ) * 8;
+				return sphFNV64 ( pValue, iLen );
 			default:
 				return 0;
 		}
 		return sphFNV64 ( (const BYTE*)sBuf );
 	}
+
+	virtual void SetStringPool ( const BYTE * pStrings )
+	{
+		m_pStringBase = pStrings;
+		if ( m_pExpr )
+			m_pExpr->Command ( SPH_EXPR_SET_STRING_POOL, (void*)pStrings );
+	}
+
+	virtual SphGroupKey_t KeyFromValue ( SphAttr_t ) const { assert(0); return SphGroupKey_t(); }
 };
+
 
 template <class PRED>
 class CSphGrouperMulti : public CSphGrouper, public PRED
 {
 public:
-	CSphGrouperMulti ( const CSphVector<CSphAttrLocator> & dLocators, const CSphVector<ESphAttr> & dAttrTypes, const CSphVector<CSphString> & dJsonKeys )
+	CSphGrouperMulti ( const CSphVector<CSphAttrLocator> & dLocators, const CSphVector<ESphAttr> & dAttrTypes, const CSphVector<ISphExpr *> & dJsonKeys )
 		: m_dLocators ( dLocators )
 		, m_dAttrTypes ( dAttrTypes )
 	{
 		assert ( m_dLocators.GetLength()>1 );
 		assert ( m_dLocators.GetLength()==m_dAttrTypes.GetLength() && m_dLocators.GetLength()==dJsonKeys.GetLength() );
-		ARRAY_FOREACH ( i, dJsonKeys )
-			m_dJsonKeys.Add ( JsonKey_t ( dJsonKeys[i].cstr() ) );
+		m_dJsonKeys = dJsonKeys;
+	}
+
+	virtual ~CSphGrouperMulti ()
+	{
+		ARRAY_FOREACH ( i, m_dJsonKeys )
+			SafeDelete ( m_dJsonKeys[i] );
 	}
 
 	virtual SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const
@@ -823,8 +850,9 @@ public:
 				if ( !pStr || !iLen )
 					continue;
 
-				const BYTE * pValue;
-				ESphJsonType eRes = sphJsonFindKey ( &pValue, pStr, m_dJsonKeys[i] );
+				uint64_t uValue = m_dJsonKeys[i]->Int64Eval ( tMatch );
+				const BYTE * pValue = m_pStringBase + ( uValue & 0xffffffff );
+				ESphJsonType eRes = (ESphJsonType)( uValue >> 32 );
 
 				int i32Val;
 				int64_t i64Val;
@@ -861,6 +889,12 @@ public:
 	virtual void SetStringPool ( const BYTE * pStrings )
 	{
 		m_pStringBase = pStrings;
+
+		ARRAY_FOREACH ( i, m_dJsonKeys )
+		{
+			if ( m_dJsonKeys[i] )
+				m_dJsonKeys[i]->Command ( SPH_EXPR_SET_STRING_POOL, (void*)pStrings );
+		}
 	}
 
 	virtual SphGroupKey_t KeyFromValue ( SphAttr_t ) const { assert(0); return SphGroupKey_t(); }
@@ -872,7 +906,7 @@ private:
 	CSphVector<CSphAttrLocator>	m_dLocators;
 	CSphVector<ESphAttr>		m_dAttrTypes;
 	const BYTE *				m_pStringBase;
-	CSphVector<JsonKey_t>		m_dJsonKeys;
+	CSphVector<ISphExpr *>		m_dJsonKeys;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -3413,7 +3447,7 @@ protected:
 	char ToLower ( char c )
 	{
 		// 0..9, A..Z->a..z, _, a..z, @, .
-		if ( ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || c=='_' || c=='@' || c=='.' )
+		if ( ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || c=='_' || c=='@' || c=='.' || c=='[' || c==']' || c=='\'' || c=='\"' )
 			return c;
 		if ( c>='A' && c<='Z' )
 			return c-'A'+'a';
@@ -3434,7 +3468,7 @@ public:
 		{
 			char cSrc = sBuffer[i];
 			char cDst = ToLower ( cSrc );
-			bJson = ( cSrc=='.' || ( bJson && cDst>0 ) ); // keep case of valid char sequence after '.' symbol
+			bJson = ( cSrc=='.' || cSrc=='[' || ( bJson && cDst>0 ) ); // keep case of valid char sequence after '.' and '[' symbols
 			m_pBuf[i] = bJson ? cSrc : cDst;
 		}
 	}
@@ -3552,7 +3586,12 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 					iAttr = tSchema.GetAttrIndex ( sJsonCol.cstr() );
 
 				if ( iAttr>=0 )
-					tState.m_tSubKeys[iField] = JsonKey_t ( sJSonKey.cstr() );
+				{
+					tState.m_tSubKeys[iField] = JsonKey_t ( sJSonKey.cstr(), sJSonKey.Length() );
+					bool bUsesWeight = false;
+					tState.m_tSubExpr[iField] = sphExprParse ( pTok, tSchema, NULL, &bUsesWeight, sError, NULL );
+				} else
+					tState.m_tSubExpr[iField] = NULL;
 			}
 
 			// try to lookup aliased count(*) in select items
@@ -3786,7 +3825,7 @@ void ExprGeodist_t::Command ( ESphExprCommand eCmd, void * pArg ) const
 
 static CSphGrouper * sphCreateGrouperString ( const CSphAttrLocator & tLoc, ESphCollation eCollation );
 static CSphGrouper * sphCreateGrouperMulti ( const CSphVector<CSphAttrLocator> & dLocators, const CSphVector<ESphAttr> & dAttrTypes,
-											const CSphVector<CSphString> & dJsonKeys, ESphCollation eCollation);
+											const CSphVector<ISphExpr *> & dJsonKeys, ESphCollation eCollation );
 
 static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & tSchema,
 	CSphGroupSorterSettings & tSettings, CSphString & sJsonColumn, CSphString & sError, bool bImplicit )
@@ -3807,7 +3846,7 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 	{
 		CSphVector<CSphAttrLocator> dLocators;
 		CSphVector<ESphAttr> dAttrTypes;
-		CSphVector<CSphString> dJsonKeys;
+		CSphVector<ISphExpr *> dJsonKeys;
 
 		CSphVector<CSphString> dGroupBy;
 		const char * a = pQuery->m_sGroupBy.cstr();
@@ -3845,7 +3884,9 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 
 			dLocators.Add ( tSchema.GetAttr ( iAttr ).m_tLocator );
 			dAttrTypes.Add ( eType );
-			dJsonKeys.Add ( bJson ? sJsonKey : "" );
+
+			bool bUsesWeight = false;
+			dJsonKeys.Add ( bJson ? sphExprParse ( dGroupBy[i].cstr(), tSchema, NULL, &bUsesWeight, sError, NULL ): NULL );
 		}
 
 		tSettings.m_pGrouper = sphCreateGrouperMulti ( dLocators, dAttrTypes, dJsonKeys, pQuery->m_eCollation );
@@ -3872,7 +3913,9 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 		}
 
 		// FIXME! handle collations here?
-		tSettings.m_pGrouper = new CSphGrouperJson ( tSchema.GetAttr(iAttr).m_tLocator, sJsonKey.cstr() );
+		bool bUsesWeight = false;
+		ISphExpr * pExpr = sphExprParse ( pQuery->m_sGroupBy.cstr(), tSchema, NULL, &bUsesWeight, sError, NULL );
+		tSettings.m_pGrouper = new CSphGrouperJson ( tSchema.GetAttr(iAttr).m_tLocator, pExpr );
 
 	} else if ( bImplicit )
 	{
@@ -4002,13 +4045,17 @@ struct ExprSortJson2StringPtr_c : public ISphExpr
 {
 	const BYTE *			m_pStrings; ///< string pool; base for offset of string attributes
 	const CSphAttrLocator	m_tJsonCol; ///< JSON attribute to fix
-	JsonKey_t				m_tJsonKey;
+	ISphExpr *				m_pExpr;
 
-	ExprSortJson2StringPtr_c ( const CSphAttrLocator & tLocator, const JsonKey_t & tJsonKey )
+	ExprSortJson2StringPtr_c ( const CSphAttrLocator & tLocator, ISphExpr * pExpr )
 		: m_pStrings ( NULL )
 		, m_tJsonCol ( tLocator )
-		, m_tJsonKey ( tJsonKey )
+		, m_pExpr ( pExpr )
+	{}
+
+	virtual ~ExprSortJson2StringPtr_c ()
 	{
+		SafeDelete ( m_pExpr );
 	}
 
 	virtual bool IsStringPtr () const { return true; }
@@ -4017,25 +4064,15 @@ struct ExprSortJson2StringPtr_c : public ISphExpr
 
 	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
 	{
-		if ( !m_pStrings )
+		if ( !m_pStrings || !m_pExpr )
 		{
 			*ppStr = NULL;
 			return 0;
 		}
 
-		SphAttr_t uOff = tMatch.GetAttr ( m_tJsonCol );
-		if ( !uOff )
-		{
-			*ppStr = NULL;
-			return 0;
-		}
-
-		const BYTE * pJsonRaw = m_pStrings + uOff;
-		sphUnpackStr ( pJsonRaw, &pJsonRaw );
-
-		const BYTE * pVal = NULL;
-		ESphJsonType eJson = sphJsonFindKey ( &pVal, pJsonRaw, m_tJsonKey );
-
+		uint64_t uValue = m_pExpr->Int64Eval ( tMatch );
+		const BYTE * pVal = m_pStrings + ( uValue & 0xffffffff );
+		ESphJsonType eJson = (ESphJsonType)( uValue >> 32 );
 		CSphString sVal;
 
 		// FIXME!!! make string length configurable for STRING and STRING_VECTOR to compare and allocate only Min(String.Length, CMP_LENGTH)
@@ -4089,8 +4126,8 @@ struct ExprSortJson2StringPtr_c : public ISphExpr
 			*ppStr = dBuf.LeakData();
 			return iStrLen;
 		}
-		case JSON_EOF:
-		break;
+		default:
+			break;
 		}
 
 		int iStriLen = sVal.Length();
@@ -4101,7 +4138,11 @@ struct ExprSortJson2StringPtr_c : public ISphExpr
 	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
 		if ( eCmd==SPH_EXPR_SET_STRING_POOL )
+		{
 			m_pStrings = (const BYTE*)pArg;
+			if ( m_pExpr )
+				m_pExpr->Command ( eCmd, pArg );
+		}
 	}
 };
 
@@ -4143,7 +4184,7 @@ static bool SetupSortRemap ( CSphRsetSchema & tSorterSchema, CSphMatchComparator
 			CSphColumnInfo tRemapCol ( sRemapCol.cstr(), bIsJson ? SPH_ATTR_STRINGPTR : SPH_ATTR_BIGINT );
 			tRemapCol.m_eStage = SPH_EVAL_PRESORT;
 			if ( bIsJson )
-				tRemapCol.m_pExpr = new ExprSortJson2StringPtr_c ( tState.m_tLocator[i], tState.m_tSubKeys[i] );
+				tRemapCol.m_pExpr = new ExprSortJson2StringPtr_c ( tState.m_tLocator[i], tState.m_tSubExpr[i] );
 			else
 				tRemapCol.m_pExpr = new ExprSortStringAttrFixup_c ( tState.m_tLocator[i] );
 
@@ -4580,7 +4621,7 @@ CSphGrouper * sphCreateGrouperString ( const CSphAttrLocator & tLoc, ESphCollati
 }
 
 CSphGrouper * sphCreateGrouperMulti ( const CSphVector<CSphAttrLocator> & dLocators, const CSphVector<ESphAttr> & dAttrTypes,
-									const CSphVector<CSphString> & dJsonKeys, ESphCollation eCollation)
+									const CSphVector<ISphExpr *> & dJsonKeys, ESphCollation eCollation )
 {
 	if ( eCollation==SPH_COLLATION_UTF8_GENERAL_CI )
 		return new CSphGrouperMulti<Utf8CIHash_fn> ( dLocators, dAttrTypes, dJsonKeys );
@@ -4804,24 +4845,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const ISphSchema & 
 		ESphEvalStage eExprStage = SPH_EVAL_FINAL;
 		bool bHasPackedFactors = false;
 
-		// FIXME!!! move JSON column to common expression parser
-		CSphString sJsonCol, sJsonFeild;
-		int iJson = -1;
-		const CSphColumnInfo * pJson = NULL;
-		bool bIsJsonField = sphJsonNameSplit ( tItem.m_sExpr.cstr(), &sJsonCol, &sJsonFeild );
-		if ( bIsJsonField )
-		{
-			iJson = tSorterSchema.GetAttrIndex ( sJsonCol.cstr() );
-			if ( iJson>=0 )
-				pJson = &tSorterSchema.GetAttr ( iJson );
-		}
-
-		if ( pJson && pJson->m_eAttrType==SPH_ATTR_JSON )
-		{
-			tExprCol.m_eAttrType = SPH_ATTR_JSON_FIELD;
-			tExprCol.m_pExpr = sphExprJsonField ( *pJson, iJson, sJsonFeild.cstr() );
-
-		} else if ( tItem.m_eAggrFunc==SPH_AGGR_CAT )
+		if ( tItem.m_eAggrFunc==SPH_AGGR_CAT )
 		{
 			CSphString sExpr2;
 			sExpr2.SetSprintf ( "TO_STRING(%s)", sExpr.cstr() );

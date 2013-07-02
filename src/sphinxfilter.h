@@ -51,8 +51,7 @@ struct ISphFilter
 
 	ISphFilter() : m_bUsesAttrs ( true ) {}
 
-protected :
-
+protected:
 	bool m_bUsesAttrs;
 };
 

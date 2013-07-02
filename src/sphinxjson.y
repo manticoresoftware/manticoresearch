@@ -14,28 +14,16 @@
 %token	TOK_INT
 %token	TOK_FLOAT
 %token	TOK_STRING
+%token	TOK_TRUE
+%token	TOK_FALSE
+%token	TOK_NULL
 
 %%
 
 json:
-	'{' opt_key_value_list '}'
-	;
-
-opt_key_value_list:
-	| key_value_list
-	;
-
-key_value_list:
-	key_value
-	| key_value_list ',' key_value
-	;
-
-key_value:
-	key ':' value
-		{
-			if ( !pParser->Add ( $1.m_sValue.cstr(), $3 ) )
-				YYERROR;
-		}
+	// empty
+	| '[' value_list ']' 		{ pParser->WriteNode ( $2 ); }
+	| '{' key_value_list '}'	{ pParser->WriteNode ( $2 ); }
 	;
 
 key:
@@ -47,21 +35,54 @@ value:
 	TOK_INT
 	| TOK_FLOAT
 	| TOK_STRING
-	| '[' string_list ']'				{ $$ = $2; }
+	| TOK_TRUE
+	| TOK_FALSE
+	| TOK_NULL
+	| '{' key_value_list '}'	{ $$=$2; }
+	| '[' value_list ']' 		{ $$=$2; }
 	;
 
-string_list:
-	TOK_STRING
+key_value_list:
+	// empty
 		{
-			$$.m_eType = JSON_STRING_VECTOR;
-			$$.m_dValue.Reset();
-			$$.m_dValue.Add ( $1.m_sValue );
+			$$.m_eType = JSON_OBJECT;
+			$$.m_iHandle = -1;
 		}
-	| string_list ',' TOK_STRING
+	| key ':' value
+		{ 
+			$$.m_eType = JSON_OBJECT;
+			$$.m_iHandle = pParser->m_dNodes.GetLength();
+			$3.m_iKeyStart = $1.m_iStart;
+			$3.m_iKeyEnd = $1.m_iEnd;
+			pParser->m_dNodes.Add().Add($3);
+		}
+	| key_value_list ',' key ':' value
+		{ 
+			$$ = $1;
+			$5.m_iKeyStart = $3.m_iStart;
+			$5.m_iKeyEnd = $3.m_iEnd;
+			pParser->m_dNodes[$$.m_iHandle].Add($5);
+		}
+	;
+
+value_list:
+	// empty
+		{
+			$$.m_eType = JSON_MIXED_VECTOR;
+			$$.m_iHandle = -1;
+		}
+	| value
+		{
+			$$.m_eType = JSON_MIXED_VECTOR;
+			$$.m_iHandle = pParser->m_dNodes.GetLength();
+			pParser->m_dNodes.Add().Add($1);
+
+
+		}
+	| value_list ',' value
 		{
 			$$ = $1;
-			$$.m_dValue.Add ( $3.m_sValue );
-			assert ( $$.m_eType==JSON_STRING_VECTOR );
+			pParser->m_dNodes[$$.m_iHandle].Add($3);
 		}
 	;
 

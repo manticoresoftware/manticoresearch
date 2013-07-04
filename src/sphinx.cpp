@@ -2133,6 +2133,7 @@ public:
 
 public:
 	virtual ISphTokenizer *			Clone ( ESphTokenizerClone eMode ) const;
+	virtual bool					IsUtf8 () const				{ return m_pTokenizer->IsUtf8 (); }
 	virtual const char *			GetTokenStart () const		{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_szTokenStart : m_pTokenizer->GetTokenStart(); }
 	virtual const char *			GetTokenEnd () const		{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_szTokenEnd : m_pTokenizer->GetTokenEnd(); }
 	virtual const char *			GetBufferPtr () const		{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_pBufferPtr : m_pTokenizer->GetBufferPtr(); }
@@ -12924,7 +12925,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 						// we're not inlining, so only flush hits, docs are flushed independently
 						dHitBlocks.Add ( tHitBuilder.cidxWriteRawVLB ( fdHits.GetFD(), dHits.Begin(), iHits,
 							NULL, 0, 0 ) );
-						m_pDict->HitblockReset ();
 
 						if ( dHitBlocks.Last()<0 )
 							return 0;
@@ -12941,6 +12941,27 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					// copy next hit
 					if ( bLastFound )
 						*pHits++ = *pHit;
+				}
+
+				// reset keywords only after all collected hits processed
+				if ( iDictSize && m_pDict->HitblockGetMemUse()>iDictSize )
+				{
+					int iHits = pHits - dHits.Begin();
+					{
+						// PROFILE ( sort_hits );
+						sphSort ( dHits.Begin(), iHits, CmpHit_fn() );
+						m_pDict->HitblockPatch ( dHits.Begin(), iHits );
+					}
+					pHits = dHits.Begin();
+					m_tProgress.m_iHitsTotal += iHits;
+					if ( iHits )
+					{
+						dHitBlocks.Add ( tHitBuilder.cidxWriteRawVLB ( fdHits.GetFD(), dHits.Begin(), iHits, NULL, 0, 0 ) );
+						if ( dHitBlocks.Last()<0 )
+							return 0;
+					}
+
+					m_pDict->HitblockReset ();
 				}
 			}
 		}
@@ -22291,7 +22312,7 @@ public:
 	virtual					~CSphDictKeywords ();
 
 	virtual void			HitblockBegin () { m_bHitblock = true; }
-	virtual void			HitblockPatch ( CSphWordHit * pHits, int iHits );
+	virtual void			HitblockPatch ( CSphWordHit * pHits, int iHits ) const;
 	virtual const char *	HitblockGetKeyword ( SphWordID_t uWordID );
 	virtual int				HitblockGetMemUse () { return m_iMemUse; }
 	virtual void			HitblockReset ();
@@ -23030,7 +23051,7 @@ struct HitblockPatchSort_fn
 };
 
 /// do hit block patching magic
-void CSphDictKeywords::HitblockPatch ( CSphWordHit * pHits, int iHits )
+void CSphDictKeywords::HitblockPatch ( CSphWordHit * pHits, int iHits ) const
 {
 	if ( !pHits || iHits<=0 )
 		return;
@@ -23150,11 +23171,13 @@ const char * CSphDictKeywords::HitblockGetKeyword ( SphWordID_t uWordID )
 		return pEntry->m_pKeyword;
 	}
 
+	assert ( m_dExceptions.GetLength() );
 	ARRAY_FOREACH ( i, m_dExceptions )
 		if ( m_dExceptions[i].m_pEntry->m_uWordid==uWordID )
 			return m_dExceptions[i].m_pEntry->m_pKeyword;
 
-	assert ( "hash missing value in operator []" );
+	sphWarning ( "hash missing value in operator [] (wordid="INT64_FMT", hash=%d)", (int64_t)uWordID, uHash );
+	assert ( 0 && "hash missing value in operator []" );
 	return "\31oops";
 }
 

@@ -874,7 +874,7 @@ public:
 	virtual void			HitblockBegin () {}
 
 	/// callback to let dictionary do hit block post-processing
-	virtual void			HitblockPatch ( CSphWordHit *, int ) {}
+	virtual void			HitblockPatch ( CSphWordHit *, int ) const {}
 
 	/// resolve temporary hit block wide wordid (!) back to keyword
 	virtual const char *	HitblockGetKeyword ( SphWordID_t ) { return NULL; }

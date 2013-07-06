@@ -764,7 +764,7 @@ ESphJsonType sphJsonFindFirst ( const BYTE ** ppData )
 }
 
 
-ESphJsonType sphJsonFindByKey ( ESphJsonType eType, const BYTE ** ppValue, const JsonKey_t & tKey )
+ESphJsonType sphJsonFindByKey ( ESphJsonType eType, const BYTE ** ppValue, const void * pKey, int iLen, DWORD uMask )
 {
 	if ( eType!=JSON_OBJECT && eType!=JSON_ROOT )
 		return JSON_EOF;
@@ -778,7 +778,7 @@ ESphJsonType sphJsonFindByKey ( ESphJsonType eType, const BYTE ** ppValue, const
 #else
 	DWORD uCols = p[0] + ( p[1]<<8 ) + ( p[2]<<16 ) + ( p[3]<<24 );
 #endif
-	if ( ( uCols & tKey.m_uMask )!=tKey.m_uMask )
+	if ( ( uCols & uMask )!=uMask )
 		return JSON_EOF;
 
 	p += 4;
@@ -789,7 +789,7 @@ ESphJsonType sphJsonFindByKey ( ESphJsonType eType, const BYTE ** ppValue, const
 			break;
 		int iStrLen = sphJsonUnpackInt ( &p );
 		p += iStrLen;
-		if ( iStrLen==tKey.m_iLen && tKey.m_uKey==sphFNV64 ( p-iStrLen, iStrLen, SPH_FNV64_SEED ) )
+		if ( iStrLen==iLen && !memcmp ( p-iStrLen, pKey, iStrLen ) )
 		{
 			*ppValue = p;
 			return eType;
@@ -1053,8 +1053,7 @@ bool sphJsonNameSplit ( const char * sName, CSphString * sColumn, CSphString * s
 
 
 JsonKey_t::JsonKey_t ()
-	: m_uKey ( 0 )
-	, m_uMask ( 0 )
+	: m_uMask ( 0 )
 	, m_iLen ( 0 )
 {}
 
@@ -1063,7 +1062,7 @@ JsonKey_t::JsonKey_t ( const char * sKey, int iLen )
 {
 	m_iLen = iLen;
 	m_uMask = sphJsonKeyMask ( sKey, m_iLen );
-	m_uKey = sphFNV64 ( (const BYTE *)sKey, m_iLen, SPH_FNV64_SEED );
+	m_sKey.SetBinary ( sKey, m_iLen );
 }
 
 

@@ -194,6 +194,30 @@ INSERT INTO cmp_table VALUES
 <sphinxql>SHOW COLLATION</sphinxql>
 <sphinxql>SHOW CHARACTER SET</sphinxql>
 
+<!-- added check of different functions against MVA attributes -->
+<sphinxql>SELECT id, IN(mva32,220,230) from cmp WHERE id=2</sphinxql>
+<!--fixme! The query below must be processed without errors -->
+<sphinxql>SELECT id, IN(mva64,-350,230) from cmp WHERE id=2</sphinxql>
+<sphinxql>SELECT id, IN(mva64,320) from cmp WHERE id=3</sphinxql>
+<sphinxql>SELECT id, to_string(mva32) from cmp WHERE id=3</sphinxql>
+<sphinxql>SELECT id, to_string(mva64) from cmp WHERE id=3</sphinxql>
+<sphinxql>SELECT id, length(mva32) from cmp WHERE id=3</sphinxql>
+<sphinxql>SELECT id, length(mva64) from cmp WHERE id=3</sphinxql>
+<!-- Not in REL21 <sphinxql>SELECT id, least(mva32) from cmp WHERE id=3</sphinxql>
+<sphinxql>SELECT id, least(mva64) from cmp WHERE id=3</sphinxql>
+<sphinxql>SELECT id, greatest(mva32) from cmp WHERE id=3</sphinxql>
+<sphinxql>SELECT id, greatest(mva64) from cmp WHERE id=3</sphinxql> -->
+
+<sphinxql>SELECT id, min(mva32) from cmp WHERE id=3</sphinxql>
+<sphinxql>SELECT id, max(mva32) from cmp WHERE id=3</sphinxql>
+
+<sphinxql>SELECT id, min(mva64) from cmp WHERE id=3</sphinxql>
+<sphinxql>SELECT id, max(mva64) from cmp WHERE id=3</sphinxql>
+
+
+<sphinxql>SELECT id, log10(mva32) from cmp WHERE id=3</sphinxql>
+<sphinxql>SELECT id, log10(mva64) from cmp WHERE id=3</sphinxql>
+
 </sphqueries>
 
 </test>

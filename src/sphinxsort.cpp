@@ -53,7 +53,7 @@ static bool HasString ( const CSphMatchComparatorState * pState )
 
 	for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 	{
-		if ( pState->m_eKeypart[i]==SPH_KEYPART_STRING || pState->m_eKeypart[i]==SPH_KEYPART_STRINGPTR || ( pState->m_tSubKeys[i].m_uKey>0 ) )
+		if ( pState->m_eKeypart[i]==SPH_KEYPART_STRING || pState->m_eKeypart[i]==SPH_KEYPART_STRINGPTR || ( pState->m_tSubKeys[i].m_sKey.cstr() ) )
 			return true;
 	}
 
@@ -4166,15 +4166,15 @@ static bool SetupSortRemap ( CSphRsetSchema & tSorterSchema, CSphMatchComparator
 	bool bUsesAtrrs = false;
 	for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 	{
-		if ( !( tState.m_eKeypart[i]==SPH_KEYPART_STRING || tState.m_tSubKeys[i].m_uKey ) )
+		if ( !( tState.m_eKeypart[i]==SPH_KEYPART_STRING || tState.m_tSubKeys[i].m_sKey.cstr() ) )
 			continue;
 
 		assert ( tState.m_dAttrs[i]>=0 && tState.m_dAttrs[i]<iColWasCount );
 
-		bool bIsJson = ( tState.m_tSubKeys[i].m_uKey>0 );
+		bool bIsJson = ( tState.m_tSubKeys[i].m_sKey.cstr() );
 		CSphString sRemapCol;
 		if ( bIsJson )
-			sRemapCol.SetSprintf ( "%s%s"UINT64_FMT, g_sIntAttrPrefix, tSorterSchema.GetAttr ( tState.m_dAttrs[i] ).m_sName.cstr(), tState.m_tSubKeys[i].m_uKey );
+			sRemapCol.SetSprintf ( "%s%s%s", g_sIntAttrPrefix, tSorterSchema.GetAttr ( tState.m_dAttrs[i] ).m_sName.cstr(), tState.m_tSubKeys[i].m_sKey.cstr() );
 		else
 			sRemapCol.SetSprintf ( "%s%s", g_sIntAttrPrefix, tSorterSchema.GetAttr ( tState.m_dAttrs[i] ).m_sName.cstr() );
 

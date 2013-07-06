@@ -110,7 +110,7 @@ DWORD sphJsonKeyMask ( const char * sKey, int iLen );
 ESphJsonType sphJsonFindFirst ( const BYTE ** ppData );
 
 /// find value by key in SphinxBSON blob, return associated type
-ESphJsonType sphJsonFindByKey ( ESphJsonType eType, const BYTE ** ppValue, const JsonKey_t & tKey );
+ESphJsonType sphJsonFindByKey ( ESphJsonType eType, const BYTE ** ppValue, const void * pKey, int iLen, DWORD uMask );
 
 /// find value by index in SphinxBSON blob, return associated type
 ESphJsonType sphJsonFindByIndex ( ESphJsonType eType, const BYTE ** ppValue, int iIndex );

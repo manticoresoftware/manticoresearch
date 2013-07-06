@@ -2903,7 +2903,7 @@ enum ESphSortKeyPart
 /// JSON key lookup stuff
 struct JsonKey_t
 {
-	uint64_t		m_uKey;		///< name hash
+	CSphString		m_sKey;		///< name string
 	DWORD			m_uMask;	///< Bloom mask for this key
 	int				m_iLen;		///< name length, in bytes
 

@@ -823,7 +823,7 @@ public:
 			case SPH_ATTR_FLOAT:	eJson = sphJsonFindByIndex ( eJson, &pVal, (int)m_dArgs[i]->Eval ( tMatch ) ); break;
 			case SPH_ATTR_STRING:
 				iLen = m_dArgs[i]->StringEval ( tMatch, &pStr );
-				eJson = sphJsonFindByKey ( eJson, &pVal, JsonKey_t ( (const char*)pStr, iLen ) );
+				eJson = sphJsonFindByKey ( eJson, &pVal, (const void *)pStr, iLen, sphJsonKeyMask ( (const char *)pStr, iLen ) );
 				break;
 			case SPH_ATTR_JSON_FIELD: // handle cases like "json.a [ json.b ]"
 				{
@@ -838,7 +838,7 @@ public:
 					case JSON_DOUBLE:	eJson = sphJsonFindByIndex ( eJson, &pVal, (int)sphQW2D ( sphJsonLoadBigint ( &p ) ) ); break;
 					case JSON_STRING:
 						iLen = sphJsonUnpackInt ( &p );
-						eJson = sphJsonFindByKey ( eJson, &pVal, JsonKey_t ( (const char*)p, iLen ) );
+						eJson = sphJsonFindByKey ( eJson, &pVal, (const void *)p, iLen, sphJsonKeyMask ( (const char *)p, iLen ) );
 						break;
 					default:
 						return 0;
@@ -4535,7 +4535,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 		ARRAY_FOREACH ( i, dRetTypes )
 		{
 			bGotString |= ( dRetTypes[i]==SPH_ATTR_STRING );
-			bGotMva |= ( dRetTypes[i]==SPH_ATTR_UINT32SET || dRetTypes[i]==SPH_ATTR_UINT32SET );
+			bGotMva |= ( dRetTypes[i]==SPH_ATTR_UINT32SET || dRetTypes[i]==SPH_ATTR_INT64SET );
 		}
 	}
 	if ( bGotString && !( eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST || eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D ) )

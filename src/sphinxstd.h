@@ -2832,7 +2832,7 @@ public:
 
 	~CSphBitvec ()
 	{
-		if ( m_pData && m_pData!=m_uStatic )
+		if ( m_pData!=m_uStatic )
 			SafeDeleteArray ( m_pData );
 	}
 
@@ -2884,9 +2884,10 @@ public:
 
 #if USE_WINDOWS
 #define if_const(_arg) \
+	__pragma(warning(push)) \
 	__pragma(warning(disable:4127)) \
 	if (_arg) \
-	__pragma(warning(default:4127))
+	__pragma(warning(pop))
 #else
 #define if_const(_arg) if(_arg)
 #endif

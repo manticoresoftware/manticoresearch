@@ -2863,7 +2863,7 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 				pEndSPZ += ( pEndSPZ+1<=pBufferEnd && ( *pEndSPZ )!='\0' ); // skip closing angle bracket, if any
 
 				assert ( pTag->m_bPara || pTag->m_bZone );
-				assert ( pTag->m_bPara || pEndSPZ[0]=='\0' || pEndSPZ[-1]=='>' ); // should be at tag's end
+				assert ( pTag->m_bPara || ( pEndSPZ && ( pEndSPZ[0]=='\0' || pEndSPZ[-1]=='>' ) ) ); // should be at tag's end
 				assert ( pEndSPZ && pEndSPZ<=pBufferEnd );
 
 				uPosition++;

@@ -6630,7 +6630,7 @@ bool CSphQuery::ParseSelectList ( CSphString & sError )
 
 	SelectParser_t tParser;
 	tParser.m_pStart = m_sSelect.cstr();
-	tParser.m_pCur = m_sSelect.cstr();
+	tParser.m_pCur = tParser.m_pStart;
 	tParser.m_pQuery = this;
 
 	yyparse ( &tParser );
@@ -7292,8 +7292,7 @@ void CSphWriter::SetBufferSize ( int iBufferSize )
 	if ( iBufferSize!=m_iBufferSize )
 	{
 		m_iBufferSize = Max ( iBufferSize, 262144 );
-		if ( m_pBuffer )
-			SafeDeleteArray ( m_pBuffer );
+		SafeDeleteArray ( m_pBuffer );
 	}
 }
 
@@ -13933,7 +13932,6 @@ public:
 			m_iHint = 0;
 			if ( m_iDocs>=DOCLIST_HINT_THRESH )
 				m_iHint = m_pReader->GetByte();
-			DoclistHintUnpack ( m_iDocs, (BYTE) m_iHint );
 			if ( m_bHasSkips && ( m_iDocs > SPH_SKIPLIST_BLOCK ) )
 				m_pReader->UnzipInt();
 
@@ -18443,13 +18441,13 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 	const CSphVector<CSphFilterSettings> * pExtraFilters, int iIndexWeight, int iTag, bool bFactors ) const
 {
 	// ensure we have multiple queries
+	assert ( ppResults );
 	if ( iQueries==1 )
 		return MultiQuery ( pQueries, ppResults[0], 1, ppSorters, pExtraFilters, iIndexWeight, iTag, bFactors );
 
 	MEMORY ( SPH_MEM_IDX_DISK_MULTY_QUERY_EX );
 
 	assert ( pQueries );
-	assert ( ppResults );
 	assert ( ppSorters );
 
 	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
@@ -19134,7 +19132,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		const CSphWordlistCheckpoint & tRefCP = dCheckpoints[i];
 		const CSphWordlistCheckpoint & tCP = m_tWordlist.m_dCheckpoints[i];
 		const int iLen = bWordDict ? strlen ( tCP.m_sWord ) : 0;
-		if ( bWordDict && ( strlen ( tRefCP.m_sWord )==0 || strlen ( tCP.m_sWord )==0 ) )
+		if ( bWordDict && ( tRefCP.m_sWord[0]=='\0' || tCP.m_sWord[0]=='\0' ) )
 		{
 			LOC_FAIL(( fp, "empty checkpoint %d (read_word=%s, read_len=%u, readpos="INT64_FMT", calc_word=%s, calc_len=%u, calcpos="INT64_FMT")",
 				i, tCP.m_sWord, (DWORD)strlen ( tCP.m_sWord ), (int64_t)tCP.m_iWordlistOffset,
@@ -19226,8 +19224,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			iDoclistOffset = rdDict.UnzipOffset();
 			iDictDocs = rdDict.UnzipInt();
 			iDictHits = rdDict.UnzipInt();
-			int iHint = ( iDictDocs>=DOCLIST_HINT_THRESH ) ? rdDict.GetByte() : 0;
-			DoclistHintUnpack ( iDictDocs, (BYTE)iHint );
+			if ( iDictDocs>=DOCLIST_HINT_THRESH ) 
+				rdDict.GetByte();
 		} else
 		{
 			// finish reading the entire entry
@@ -23605,10 +23603,10 @@ void CSphHTMLStripper::EnableParagraphs ()
 		// add if not known yet
 		if ( iTag==m_dTags.GetLength() )
 		{
-			m_dTags.Add();
-			m_dTags.Last().m_sTag = sTag;
-			m_dTags.Last().m_iTagLen = strlen(sTag);
-			m_dTags.Last().m_bPara = true;
+			StripperTag_t& dTag = m_dTags.Add();
+			dTag.m_sTag = sTag;
+			dTag.m_iTagLen = strlen(sTag);
+			dTag.m_bPara = true;
 		}
 	}
 
@@ -29344,7 +29342,6 @@ bool CSphSource_ODBC::SqlFetchRow ()
 		switch ( tCol.m_iInd )
 		{
 			case SQL_NULL_DATA:
-				tCol.m_dContents[0] = '\0';
 				tCol.m_dContents[0] = '\0';
 				break;
 

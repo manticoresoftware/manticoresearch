@@ -1622,11 +1622,11 @@ int main ( int argc, char ** argv )
 
 		} else if ( bMerge && strcasecmp ( argv[i], "--merge-dst-range" )==0 && (i+3)<argc )
 		{
-			dMergeDstFilters.Add();
-			dMergeDstFilters.Last().m_eType = SPH_FILTER_RANGE;
-			dMergeDstFilters.Last().m_sAttrName = argv[i+1];
-			dMergeDstFilters.Last().m_iMinValue = strtoll ( argv[i+2], NULL, 10 );
-			dMergeDstFilters.Last().m_iMaxValue = strtoll ( argv[i+3], NULL, 10 );
+			CSphFilterSettings& dLast = dMergeDstFilters.Add();
+			dLast.m_eType = SPH_FILTER_RANGE;
+			dLast.m_sAttrName = argv[i+1];
+			dLast.m_iMinValue = strtoll ( argv[i+2], NULL, 10 );
+			dLast.m_iMaxValue = strtoll ( argv[i+3], NULL, 10 );
 			i += 3;
 
 		} else if ( strcasecmp ( argv[i], "--buildstops" )==0 && (i+2)<argc )

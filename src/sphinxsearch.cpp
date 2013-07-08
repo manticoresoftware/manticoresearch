@@ -1348,7 +1348,7 @@ static ExtNode_i * CreateMultiNode ( const XQNode_t * pQueryNode, const ISphQwor
 	///////////////////////////////////
 	// virtually plain (expanded) node
 	///////////////////////////////////
-
+	assert ( pQueryNode );
 	if ( pQueryNode->m_dChildren.GetLength() )
 	{
 		CSphVector<ExtNode_i *> dNodes;
@@ -1402,7 +1402,6 @@ static ExtNode_i * CreateMultiNode ( const XQNode_t * pQueryNode, const ISphQwor
 	} else
 	{
 		// at least two words have hitlists, creating phrase node
-		assert ( pQueryNode );
 		assert ( pQueryNode->m_dWords.GetLength() );
 		assert ( pQueryNode->GetOp()==SPH_QUERY_PHRASE || pQueryNode->GetOp()==SPH_QUERY_PROXIMITY || pQueryNode->GetOp()==SPH_QUERY_QUORUM );
 
@@ -4824,6 +4823,7 @@ const ExtDoc_t * ExtOrder_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		for ( int i=1; i<m_dChildren.GetLength(); )
 		{
 			// skip docs with too small ids
+			assert ( m_pDocs[i] );
 			while ( m_pDocs[i]->m_uDocid < uDocid )
 				m_pDocs[i]++;
 
@@ -5287,8 +5287,8 @@ const ExtDoc_t * ExtUnit_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		// we will need document hits on both routes below
 		SkipHitsLtDocid ( &m_pHit1, uDocid, m_pArg1, m_pDocs1 );
 		SkipHitsLtDocid ( &m_pHit2, uDocid, m_pArg2, m_pDocs2 );
-		assert ( m_pHit1->m_uDocid==uDocid );
-		assert ( m_pHit2->m_uDocid==uDocid );
+		assert ( m_pHit1 && m_pHit1->m_uDocid==uDocid );
+		assert ( m_pHit2 && m_pHit2->m_uDocid==uDocid );
 
 		DWORD uSentenceEnd = 0;
 		if ( !m_pDotDoc || m_pDotDoc->m_uDocid!=uDocid )
@@ -6688,11 +6688,11 @@ void FactorPool_c::Release ( SphDocID_t iId )
 
 bool FactorPool_c::FlushEntry ( SphFactorHashEntry_t * pEntry )
 {
+	assert ( pEntry );
 	assert ( pEntry->m_iRefCount>=0 );
 	if ( pEntry->m_iRefCount )
 		return false;
 
-	assert ( pEntry );
 	if ( pEntry->m_pPrev )
 		pEntry->m_pPrev->m_pNext = pEntry->m_pNext;
 
@@ -6903,16 +6903,17 @@ public:
 			// for query_word_count, we only want to count keywords that are not (!) excluded by the query
 			// that is, in (aa NOT bb) case, we want a value of 1, not 2
 			// there might be tail excluded terms these not affected MaxQpos
-			if ( hQwords.IterateGet().m_bExcluded )
+			ExtQword_t & dCur = hQwords.IterateGet();
+			if ( dCur.m_bExcluded )
 				continue;
 
-			const int iQueryPos = hQwords.IterateGet().m_iQueryPos;
+			const int iQueryPos = dCur.m_iQueryPos;
 			bool bQposUsed = m_tKeywords.BitGet ( iQueryPos );
 			bGotExpanded |= bQposUsed;
 			m_iQueryWordCount += ( bQposUsed ? 0 : 1 ); // count only one term at that position
 			m_tKeywords.BitSet ( iQueryPos ); // just to assert at early stage!
 
-			m_dIDF [ iQueryPos ] += hQwords.IterateGet().m_fIDF;
+			m_dIDF [ iQueryPos ] += dCur.m_fIDF;
 			m_dTF [ iQueryPos ]++;
 			if ( !bQposUsed )
 				dQueryPos.Add ( (WORD)iQueryPos );
@@ -9233,7 +9234,6 @@ ExtNode_i * CSphQueryNodeCache::CreateProxy ( ExtNode_i * pChild, const XQNode_t
 		return pChild;
 
 	assert ( pRawChild );
-	assert ( pRawChild->GetOrder()>=0 );
 	return m_pPool [ pRawChild->GetOrder() ].CreateCachedWrapper ( pChild, pRawChild, tSetup );
 }
 

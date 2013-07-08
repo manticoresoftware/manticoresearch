@@ -5866,6 +5866,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> *, int iIndexWeight, int iTag, bool bFactors ) const
 {
 	assert ( ppSorters );
+	assert ( pResult );
 
 	// to avoid the checking of a ppSorters's element for NULL on every next step, just filter out all nulls right here
 	CSphVector<ISphMatchSorter*> dSorters;
@@ -5885,7 +5886,6 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	m_tRwlock.ReadLock ();
 
 	assert ( pQuery );
-	assert ( pResult );
 	assert ( iTag==0 );
 	iTag = 0; // just to avoid a compiler warning
 

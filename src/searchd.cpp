@@ -2102,13 +2102,13 @@ const int		WIN32_PIPE_BUFSIZE		= 32;
 /// on Windows, the wrapper just prevents the warnings
 void sphFDSet ( int fd, fd_set * fdset )
 {
+	#pragma warning(push) // store current warning values
 	#pragma warning(disable:4127) // conditional expr is const
 	#pragma warning(disable:4389) // signed/unsigned mismatch
 
 	FD_SET ( fd, fdset );
 
-	#pragma warning(default:4127) // conditional expr is const
-	#pragma warning(default:4389) // signed/unsigned mismatch
+	#pragma warning(pop) // restore warnings
 }
 
 #else // !USE_WINDOWS
@@ -14889,7 +14889,7 @@ void CheckPing()
 
 struct SphinxqlRequestBuilder_t : public IRequestBuilder_t
 {
-	explicit SphinxqlRequestBuilder_t ( const CSphString sQuery, const SqlStmt_t & tStmt )
+	explicit SphinxqlRequestBuilder_t ( const CSphString& sQuery, const SqlStmt_t & tStmt )
 		: m_sBegin ( sQuery.cstr(), tStmt.m_iListStart )
 		, m_sEnd ( sQuery.cstr() + tStmt.m_iListEnd, sQuery.Length() - tStmt.m_iListEnd )
 	{

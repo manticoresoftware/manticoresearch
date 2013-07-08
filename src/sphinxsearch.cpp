@@ -149,7 +149,7 @@ public:
 
 	virtual int					GetQwords ( ExtQwordsHash_t & hQwords ) = 0;
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords ) = 0;
-	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) = 0;
+	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const = 0;
 	virtual bool				GotHitless () = 0;
 	virtual int					GetDocsCount () { return INT_MAX; }
 	virtual uint64_t			GetWordID () const { return 0; }			///< for now, only used for duplicate keyword checks in quorum operator
@@ -301,7 +301,7 @@ public:
 
 	virtual int					GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
-	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes );
+	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const;
 	virtual bool				GotHitless () { return false; }
 	virtual int					GetDocsCount () { return m_pQword->m_iDocs; }
 	virtual uint64_t			GetWordID () const
@@ -631,7 +631,7 @@ public:
 	virtual void				Reset ( const ISphQwordSetup & tSetup );
 	virtual int					GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
-	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes );
+	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const;
 
 	virtual bool				GotHitless () { return m_pChildren[0]->GotHitless() || m_pChildren[1]->GotHitless(); }
 
@@ -762,7 +762,7 @@ public:
 	virtual void				Reset ( const ISphQwordSetup & tSetup );
 	virtual int					GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
-	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes );
+	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const;
 	virtual bool				GotHitless () { return false; }
 	virtual void				HintDocid ( SphDocID_t uMinID ) { m_pNode->HintDocid ( uMinID ); }
 
@@ -887,6 +887,7 @@ protected:
 	CSphVector<int>				m_dQposDelta;			///< next expected qpos delta for each existing qpos (for skipped stopwords case)
 	CSphVector<int>				m_dAtomPos;				///< lets use it as finite automata states and keep references on it
 	CSphVector<State_t>			m_dStates;				///< pointers to states of finite automata
+	DWORD						m_uQposMask;
 };
 /// exact phrase streamer
 typedef ExtNWay_c < FSMphrase > ExtPhrase_c;
@@ -920,6 +921,7 @@ protected:
 	CSphVector<int> 			m_dDeltas; // used for weight calculation
 	DWORD						m_uWords;
 	int							m_iMinQindex;
+	DWORD						m_uQposMask;
 };
 /// exact phrase streamer
 typedef ExtNWay_c<FSMproximity> ExtProximity_c;
@@ -958,6 +960,7 @@ protected:
 	CSphVector<ExtHit_t>		m_dRing;			///< ring buffer for multihit data
 	int							m_iRing;			///< the head of the ring
 	bool						m_bTwofer;			///< if we have 2- or N-way NEAR
+	bool						m_bQposMask;
 private:
 	inline int RingTail() const
 	{
@@ -990,7 +993,7 @@ public:
 
 	virtual int					GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
-	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes );
+	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const;
 
 	virtual bool				GotHitless () { return false; }
 
@@ -1067,7 +1070,7 @@ public:
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t );
 	virtual int					GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
-	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes );
+	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const;
 	virtual bool				GotHitless () { return false; }
 
 	virtual void HintDocid ( SphDocID_t uMinID )
@@ -1105,7 +1108,7 @@ public:
 	virtual void				Reset ( const ISphQwordSetup & tSetup );
 	virtual int					GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
-	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes );
+	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const;
 
 public:
 	virtual bool GotHitless ()
@@ -1547,7 +1550,7 @@ public:
 
 	virtual int						GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void					SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
-	virtual void					GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes );
+	virtual void					GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const;
 	virtual bool					GotHitless () { return false; }
 	virtual int						GetDocsCount () { return m_iUniqDocs; }
 
@@ -1801,7 +1804,7 @@ void ExtCached_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 	FillCacheIDF();
 }
 
-void ExtCached_c::GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes )
+void ExtCached_c::GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const
 {
 	if ( m_bExcluded )
 		return;
@@ -2303,7 +2306,7 @@ void ExtTerm_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 	}
 }
 
-void ExtTerm_c::GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes )
+void ExtTerm_c::GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const
 {
 	if ( m_bNotWeighted || m_pQword->m_bExcluded )
 		return;
@@ -2743,7 +2746,7 @@ void ExtTwofer_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 	m_pChildren[1]->SetQwordsIDF ( hQwords );
 }
 
-void ExtTwofer_c::GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes )
+void ExtTwofer_c::GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const
 {
 	m_pChildren[0]->GetTermDupes ( hQwords, dTermDupes );
 	m_pChildren[1]->GetTermDupes ( hQwords, dTermDupes );
@@ -3075,13 +3078,6 @@ const ExtHit_t * ExtAndZonespanned::GetHitsChunk ( const ExtDoc_t * pDocs, SphDo
 
 //////////////////////////////////////////////////////////////////////////
 
-inline int BispanLen ( const ExtHit_t * pLeft, const ExtHit_t * pRight )
-{
-	return pRight->m_uSpanlen + pRight->m_uHitpos - pLeft->m_uHitpos;
-}
-
-//////////////////////////////////////////////////////////////////////////
-
 const ExtDoc_t * ExtOr_c::GetDocsChunk ( SphDocID_t * pMaxID )
 {
 	m_uMaxID = 0;
@@ -3406,7 +3402,7 @@ void ExtNWayT::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 	m_pNode->SetQwordsIDF ( hQwords );
 }
 
-void ExtNWayT::GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes )
+void ExtNWayT::GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const
 {
 	assert ( m_pNode );
 	m_pNode->GetTermDupes ( hQwords, dTermDupes );
@@ -3662,8 +3658,24 @@ bool ExtNWay_c<FSM>::EmitTail ( int & iHit )
 
 //////////////////////////////////////////////////////////////////////////
 
-FSMphrase::FSMphrase ( const CSphVector<ExtNode_i *> & dQwords, const XQNode_t & , const ISphQwordSetup & )
+DWORD GetQposMask ( const CSphVector<ExtNode_i *> & dQwords )
+{
+	int iQposBase = dQwords[0]->m_iAtomPos;
+	DWORD uQposMask = 0;
+	for ( int i=1; i<dQwords.GetLength(); i++ )
+	{
+		int iQposDelta = dQwords[i]->m_iAtomPos - iQposBase;
+		assert ( iQposDelta<sizeof(uQposMask)*8 );
+		uQposMask |= ( 1 << iQposDelta );
+	}
+
+	return uQposMask;
+}
+
+
+FSMphrase::FSMphrase ( const CSphVector<ExtNode_i *> & dQwords, const XQNode_t & , const ISphQwordSetup & tSetup )
 	: m_dAtomPos ( dQwords.GetLength() )
+	, m_uQposMask ( 0 )
 {
 	ARRAY_FOREACH ( i, dQwords )
 		m_dAtomPos[i] = dQwords[i]->m_iAtomPos;
@@ -3674,6 +3686,9 @@ FSMphrase::FSMphrase ( const CSphVector<ExtNode_i *> & dQwords, const XQNode_t &
 		m_dQposDelta[i] = -INT_MAX;
 	for ( int i=1; i<(int)m_dAtomPos.GetLength(); i++ )
 		m_dQposDelta [ dQwords[i-1]->m_iAtomPos - dQwords[0]->m_iAtomPos ] = dQwords[i]->m_iAtomPos - dQwords[i-1]->m_iAtomPos;
+
+	if ( tSetup.m_bSetQposMask )
+		m_uQposMask = GetQposMask ( dQwords );
 }
 
 inline bool FSMphrase::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
@@ -3715,6 +3730,7 @@ int iHitpos = HITMAN::GetLCS ( pHit->m_uHitpos );
 			dTarget->m_uQuerypos = (WORD) m_dAtomPos[0];
 			dTarget->m_uMatchlen = dTarget->m_uSpanlen = (WORD)( uSpanlen + 1 );
 			dTarget->m_uWeight = m_dAtomPos.GetLength();
+			dTarget->m_uQposMask = m_uQposMask;
 			ResetFSM ();
 			return true;
 		}
@@ -3726,16 +3742,20 @@ int iHitpos = HITMAN::GetLCS ( pHit->m_uHitpos );
 
 //////////////////////////////////////////////////////////////////////////
 
-FSMproximity::FSMproximity ( const CSphVector<ExtNode_i *> & dQwords, const XQNode_t & tNode, const ISphQwordSetup & )
+FSMproximity::FSMproximity ( const CSphVector<ExtNode_i *> & dQwords, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
 	: m_iMaxDistance ( tNode.m_iOpArg )
 	, m_uWordsExpected ( dQwords.GetLength() )
 	, m_uExpPos ( 0 )
+	, m_uQposMask ( 0 )
 {
 	assert ( m_iMaxDistance>0 );
 	m_uMinQpos = dQwords[0]->m_iAtomPos;
 	m_uQLen = dQwords.Last()->m_iAtomPos - m_uMinQpos;
 	m_dProx.Resize ( m_uQLen+1 );
 	m_dDeltas.Resize ( m_uQLen+1 );
+
+	if ( tSetup.m_bSetQposMask )
+		m_uQposMask = GetQposMask ( dQwords );
 }
 
 inline bool FSMproximity::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
@@ -3810,6 +3830,7 @@ inline bool FSMproximity::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 	dTarget->m_uQuerypos = (WORD) m_uMinQpos;
 	dTarget->m_uSpanlen = dTarget->m_uMatchlen = (WORD)( uMax-m_dProx[m_iMinQindex]+1 );
 	dTarget->m_uWeight = uWeight;
+	dTarget->m_uQposMask = m_uQposMask;
 
 	// remove current min, and force recompue
 	m_dProx[m_iMinQindex] = UINT_MAX;
@@ -3821,9 +3842,10 @@ inline bool FSMproximity::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 
 //////////////////////////////////////////////////////////////////////////
 
-FSMmultinear::FSMmultinear ( const CSphVector<ExtNode_i *> & dNodes, const XQNode_t & tNode, const ISphQwordSetup & )
+FSMmultinear::FSMmultinear ( const CSphVector<ExtNode_i *> & dNodes, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
 	: m_iNear ( tNode.m_iOpArg )
 	, m_uWordsExpected ( dNodes.GetLength() )
+	, m_bQposMask ( tSetup.m_bSetQposMask )
 {
 	if ( m_uWordsExpected==2 )
 		m_bTwofer = true;
@@ -4002,6 +4024,7 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 		{
 			dTarget->m_uQuerypos = Min ( m_uFirstQpos, pHit->m_uQuerypos );
 			dTarget->m_uSpanlen = 2;
+			dTarget->m_uQposMask = ( 1 << ( Max ( m_uFirstQpos, pHit->m_uQuerypos ) - dTarget->m_uQuerypos ) );
 			m_uFirstHit = m_uLastP = uHitpos;
 			m_uWeight = pHit->m_uWeight;
 			m_uFirstQpos = pHit->m_uQuerypos;
@@ -4009,7 +4032,17 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 		{
 			dTarget->m_uQuerypos = Min ( m_uFirstQpos, pHit->m_uQuerypos );
 			dTarget->m_uSpanlen = (WORD) m_dNpos.GetLength();
+			dTarget->m_uQposMask = 0;
 			m_uLastP = 0;
+			if ( m_bQposMask && dTarget->m_uSpanlen>1 )
+			{
+				ARRAY_FOREACH ( i, m_dNpos )
+				{
+					int iQposDelta = m_dNpos[i] - dTarget->m_uQuerypos;
+					assert ( iQposDelta<sizeof(dTarget->m_uQposMask)*8 );
+					dTarget->m_uQposMask |= ( 1 << iQposDelta );
+				}
+			}
 		}
 		return true;
 	}
@@ -4135,7 +4168,7 @@ void ExtQuorum_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 		m_dChildren[i].m_pTerm->SetQwordsIDF ( hQwords );
 }
 
-void ExtQuorum_c::GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes )
+void ExtQuorum_c::GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const
 {
 	ARRAY_FOREACH ( i, m_dChildren )
 		m_dChildren[i].m_pTerm->GetTermDupes ( hQwords, dTermDupes );
@@ -4946,7 +4979,7 @@ void ExtOrder_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 		m_dChildren[i]->SetQwordsIDF ( hQwords );
 }
 
-void ExtOrder_c::GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes )
+void ExtOrder_c::GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const
 {
 	ARRAY_FOREACH ( i, m_dChildren )
 		m_dChildren[i]->GetTermDupes ( hQwords, dTermDupes );
@@ -5026,7 +5059,7 @@ void ExtUnit_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 	m_pArg2->SetQwordsIDF ( hQwords );
 }
 
-void ExtUnit_c::GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes )
+void ExtUnit_c::GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const
 {
 	m_pArg1->GetTermDupes ( hQwords, dTermDupes );
 	m_pArg2->GetTermDupes ( hQwords, dTermDupes );
@@ -6721,7 +6754,6 @@ struct RankerState_Expr_fn : public ISphExtra
 public:
 	// per-field and per-document stuff
 	BYTE				m_uLCS[SPH_MAX_FIELDS];
-	BYTE				m_uMatchMask[SPH_MAX_FIELDS];
 	BYTE				m_uCurLCS;
 	int					m_iExpDelta;
 	int					m_iFields;
@@ -6894,6 +6926,25 @@ public:
 		}
 	}
 
+	void SetTermDupes ( const ExtQwordsHash_t & hQwords, int iMaxQpos, const ExtNode_i * pRoot )
+	{
+		if ( !pRoot )
+			return;
+
+		m_dTermDupes.Resize ( iMaxQpos + 1 );
+		m_dTermsHit.Resize ( iMaxQpos + 1 );
+		m_dTermDupes.Fill ( 0 );
+		m_dTermsHit.Fill ( EMPTY_HIT );
+		pRoot->GetTermDupes ( hQwords, m_dTermDupes );
+		// reset excluded for all duplicates
+		ARRAY_FOREACH ( i, m_dTermDupes )
+		{
+			WORD uQpos = m_dTermDupes[i];
+			if ( uQpos && i!=uQpos && m_tKeywords.BitGet ( uQpos ) )
+				m_tKeywords.BitSet ( i );
+		}
+	}
+
 	/// finalize per-document factors that, well, need finalization
 	void FinalizeDocFactors ( const CSphMatch & tMatch )
 	{
@@ -6945,7 +6996,6 @@ public:
 		m_iExpDelta = -1;
 		for ( int i=0; i<m_iFields; i++ )
 		{
-			m_uMatchMask[i] = 0;
 			m_uLCS[i] = 0;
 			m_uHitCount[i] = 0;
 			m_uWordCount[i] = 0;
@@ -6999,6 +7049,7 @@ protected:
 	}
 
 	void			UpdateMinGaps ( const ExtHit_t * pHlist );
+	void			UpdateFreq ( WORD uQpos, DWORD uField );
 
 private:
 	virtual bool	ExtraDataImpl ( ExtraData_e eType, void ** ppResult );
@@ -7797,7 +7848,6 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 	}
 
 	// update other stuff
-	m_uMatchMask[uField] |= ( 1<<(pHlist->m_uQuerypos-1) );
 	m_uMatchedFields |= ( 1UL<<uField );
 
 	// keywords can be duplicated in the query, so we need this extra check
@@ -7811,27 +7861,31 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 	}
 	if ( bUniq )
 	{
-		float fIDF = m_dIDF [ uQpos ];
-		DWORD uHitPosMask = 1<<uQpos;
-
-		if ( !( m_uWordCount[uField] & uHitPosMask ) )
-			m_dSumIDF[uField] += fIDF;
-
-		if ( fIDF < m_dMinIDF[uField] )
-			m_dMinIDF[uField] = fIDF;
-
-		if ( fIDF > m_dMaxIDF[uField] )
-			m_dMaxIDF[uField] = fIDF;
-
-		m_uHitCount[uField]++;
-		m_uWordCount[uField] |= uHitPosMask;
-		m_uDocWordCount |= uHitPosMask;
-		m_dTFIDF[uField] += fIDF;
-
-		// avoid duplicate check for BM25A, BM25F though
-		// (that sort of automatically accounts for qtf factor)
-		m_dTF [ uQpos ]++;
-		m_dFieldTF [ uField*(1+m_iMaxQpos) + uQpos ]++;
+		UpdateFreq ( uQpos, uField );
+	}
+	// handle hit with multiple terms
+	if ( pHlist->m_uSpanlen>1 )
+	{
+		WORD uQposSpanned = pHlist->m_uQuerypos+1;
+		DWORD uQposMask = ( pHlist->m_uQposMask>>1 );
+		while ( uQposMask!=0 )
+		{
+			WORD uQposFixed = uQposSpanned;
+			if ( ( uQposMask & 1 )==1 )
+			{
+				bool bUniqSpanned = true;
+				if_const ( HANDLE_DUPES )
+				{
+					uQposFixed = m_dTermDupes[uQposFixed];
+					bUniqSpanned = ( m_dTermsHit[uQposFixed]!=pHlist->m_uHitpos );
+					m_dTermsHit[uQposFixed] = pHlist->m_uHitpos;
+				}
+				if ( bUniqSpanned )
+					UpdateFreq ( uQposFixed, uField );
+			}
+			uQposSpanned++;
+			uQposMask = ( uQposMask>>1 );
+		}
 	}
 
 	if ( !m_iMinHitPos[uField] )
@@ -7960,6 +8014,33 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 			break;
 		}
 	}
+}
+
+
+template < bool PF, bool HANDLE_DUPES >
+void RankerState_Expr_fn<PF, HANDLE_DUPES>::UpdateFreq ( WORD uQpos, DWORD uField )
+{
+	float fIDF = m_dIDF [ uQpos ];
+	DWORD uHitPosMask = 1<<uQpos;
+
+	if ( !( m_uWordCount[uField] & uHitPosMask ) )
+		m_dSumIDF[uField] += fIDF;
+
+	if ( fIDF < m_dMinIDF[uField] )
+		m_dMinIDF[uField] = fIDF;
+
+	if ( fIDF > m_dMaxIDF[uField] )
+		m_dMaxIDF[uField] = fIDF;
+
+	m_uHitCount[uField]++;
+	m_uWordCount[uField] |= uHitPosMask;
+	m_uDocWordCount |= uHitPosMask;
+	m_dTFIDF[uField] += fIDF;
+
+	// avoid duplicate check for BM25A, BM25F though
+	// (that sort of automatically accounts for qtf factor)
+	m_dTF [ uQpos ]++;
+	m_dFieldTF [ uField*(1+m_iMaxQpos) + uQpos ]++;
 }
 
 
@@ -8346,13 +8427,7 @@ public:
 
 	virtual void SetTermDupes ( const ExtQwordsHash_t & hQwords, int iMaxQpos )
 	{
-		if ( !this->m_pRoot )
-			return;
-
-		this->m_tState.m_dTermDupes.Resize ( iMaxQpos + 1 );
-		this->m_tState.m_dTermsHit.Resize ( iMaxQpos + 1 );
-		this->m_pRoot->GetTermDupes ( hQwords, this->m_tState.m_dTermDupes );
-		this->m_tState.m_dTermsHit.Fill ( EMPTY_HIT );
+		this->m_tState.SetTermDupes ( hQwords, iMaxQpos, m_pRoot );
 	}
 };
 
@@ -8564,6 +8639,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 		case SPH_RANK_FIELDMASK:		pRanker = new ExtRanker_T < RankerState_Fieldmask_fn > ( tXQ, tTermSetup ); break;
 		case SPH_RANK_SPH04:			pRanker = new ExtRanker_T < RankerState_ProximityBM25Exact_fn > ( tXQ, tTermSetup ); break;
 		case SPH_RANK_EXPR:
+			tTermSetup.m_bSetQposMask = tCtx.m_bPackedFactors;
 			if ( tCtx.m_bPackedFactors && bGotDupes )
 				pRanker = new ExtRanker_Expr_T <true, true> ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema() );
 			else if ( tCtx.m_bPackedFactors && !bGotDupes )
@@ -8656,11 +8732,10 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 		pResult->AddStat ( pWord->m_sDictWord, pWord->m_iDocs, pWord->m_iHits, pWord->m_bExpanded );
 	}
 
-	if ( bGotDupes )
-		pRanker->SetTermDupes ( hQwords, iMaxQpos );
-
 	pRanker->m_iMaxQpos = iMaxQpos;
 	pRanker->SetQwordsIDF ( hQwords );
+	if ( bGotDupes )
+		pRanker->SetTermDupes ( hQwords, iMaxQpos );
 	if ( !pRanker->InitState ( tCtx, pResult->m_sError ) )
 		SafeDelete ( pRanker );
 	return pRanker;
@@ -8848,7 +8923,7 @@ public:
 		}
 	}
 
-	virtual void GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes )
+	virtual void GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const
 	{
 		if ( m_pChild )
 			m_pChild->GetTermDupes ( hQwords, dTermDupes );

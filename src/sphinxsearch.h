@@ -127,6 +127,7 @@ public:
 	CSphQueryNodeCache *	m_pNodeCache;
 	mutable ISphZoneCheck *	m_pZoneChecker;
 	CSphQueryStats *		m_pStats;
+	mutable bool			m_bSetQposMask;
 
 	ISphQwordSetup ()
 		: m_pDict ( NULL )
@@ -142,6 +143,7 @@ public:
 		, m_pNodeCache ( NULL )
 		, m_pZoneChecker ( NULL )
 		, m_pStats ( NULL )
+		, m_bSetQposMask ( false )
 	{}
 	virtual ~ISphQwordSetup () {}
 

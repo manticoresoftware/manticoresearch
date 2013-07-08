@@ -4171,7 +4171,7 @@ static bool SetupSortRemap ( CSphRsetSchema & tSorterSchema, CSphMatchComparator
 
 		assert ( tState.m_dAttrs[i]>=0 && tState.m_dAttrs[i]<iColWasCount );
 
-		bool bIsJson = ( tState.m_tSubKeys[i].m_sKey.cstr() );
+		bool bIsJson = !tState.m_tSubKeys[i].m_sKey.IsEmpty();
 		CSphString sRemapCol;
 		if ( bIsJson )
 			sRemapCol.SetSprintf ( "%s%s%s", g_sIntAttrPrefix, tSorterSchema.GetAttr ( tState.m_dAttrs[i] ).m_sName.cstr(), tState.m_tSubKeys[i].m_sKey.cstr() );

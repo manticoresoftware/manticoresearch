@@ -1150,6 +1150,7 @@ struct ExtHit_t
 	WORD		m_uSpanlen;
 	WORD		m_uMatchlen;
 	DWORD		m_uWeight;
+	DWORD		m_uQposMask;
 };
 
 enum SphZoneHit_e

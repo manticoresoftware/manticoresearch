@@ -185,6 +185,11 @@ INSERT INTO test_table VALUES
 <sphinxql>select *, packedfactors() from dup where match(' what | foo | what ') ORDER by id ASC option ranker=expr('1'),  idf='plain,tfidf_unnormalized'</sphinxql>
 <sphinxql>select *, packedfactors() from dup where match(' that | was | that ') ORDER by id ASC option ranker=expr('1'),  idf='plain,tfidf_unnormalized'</sphinxql>
 <sphinxql>select *, packedfactors() from dup where match(' "that was that"~10 ') ORDER by id ASC option ranker=expr('1'),  idf='plain,tfidf_unnormalized'</sphinxql>
+
+<!-- regression proximity, phrase, NEAR vs expression ranker -->
+<sphinxql>select *, packedfactors() from dup where match(' "maybe I" | "I m" ') ORDER by id ASC option ranker=expr('1'),  idf='plain,tfidf_unnormalized'</sphinxql>
+<sphinxql>select *, packedfactors() from dup where match(' ( I NEAR/10 work) | (I NEAR/20 there) ') ORDER by id ASC option ranker=expr('1'),  idf='plain,tfidf_unnormalized'</sphinxql>
+
 </sphqueries>
 
 </test>

@@ -6182,6 +6182,7 @@ struct RankerState_Proximity_fn : public ISphExtra
 	BYTE m_uLCS[SPH_MAX_FIELDS];
 	BYTE m_uCurLCS;
 	int m_iExpDelta;
+	int m_iLastHitPos;
 	int m_iFields;
 	const int * m_pWeights;
 
@@ -6195,6 +6196,7 @@ struct RankerState_Proximity_fn : public ISphExtra
 		memset ( m_uLCS, 0, sizeof(m_uLCS) );
 		m_uCurLCS = 0;
 		m_iExpDelta = -INT_MAX;
+		m_iLastHitPos = -INT_MAX;
 		m_iFields = iFields;
 		m_pWeights = pWeights;
 
@@ -6212,16 +6214,16 @@ struct RankerState_Proximity_fn : public ISphExtra
 		{
 			// all query keywords are unique
 			// simpler path (just do the delta)
-			int iDelta = HITMAN::GetLCS ( pHlist->m_uHitpos ) - pHlist->m_uQuerypos;
-			if ( iDelta==m_iExpDelta )
-				m_uCurLCS = m_uCurLCS + BYTE(pHlist->m_uWeight);
-			else
-				m_uCurLCS = BYTE(pHlist->m_uWeight);
+			const int iLcs = HITMAN::GetLCS ( pHlist->m_uHitpos );
+			int iDelta = iLcs - pHlist->m_uQuerypos;
+			if ( iLcs>m_iLastHitPos )
+				m_uCurLCS = ( ( iDelta==m_iExpDelta ) ? m_uCurLCS : 0 ) + BYTE(pHlist->m_uWeight);
 
 			DWORD uField = HITMAN::GetField ( pHlist->m_uHitpos );
 			if ( m_uCurLCS>m_uLCS[uField] )
 				m_uLCS[uField] = m_uCurLCS;
 
+			m_iLastHitPos = iLcs;
 			m_iExpDelta = iDelta + pHlist->m_uSpanlen - 1; // !COMMIT why spanlen??
 		} else
 		{
@@ -6270,6 +6272,7 @@ struct RankerState_Proximity_fn : public ISphExtra
 	{
 		m_uCurLCS = 0;
 		m_iExpDelta = -1;
+		m_iLastHitPos = -1;
 
 		if_const ( HANDLE_DUPES )
 		{
@@ -6298,6 +6301,7 @@ struct RankerState_ProximityBM25Exact_fn : public ISphExtra
 	BYTE m_uLCS[SPH_MAX_FIELDS];
 	BYTE m_uCurLCS;
 	int m_iExpDelta;
+	int m_iLastHitPos;
 	DWORD m_uMinExpPos;
 	int m_iFields;
 	const int * m_pWeights;
@@ -6310,6 +6314,7 @@ struct RankerState_ProximityBM25Exact_fn : public ISphExtra
 		memset ( m_uLCS, 0, sizeof(m_uLCS) );
 		m_uCurLCS = 0;
 		m_iExpDelta = -INT_MAX;
+		m_iLastHitPos = -1;
 		m_uMinExpPos = 0;
 		m_iFields = iFields;
 		m_pWeights = pWeights;
@@ -6328,10 +6333,13 @@ struct RankerState_ProximityBM25Exact_fn : public ISphExtra
 	{
 		// upd LCS
 		DWORD uField = HITMAN::GetField ( pHlist->m_uHitpos );
-		int iDelta = HITMAN::GetLCS ( pHlist->m_uHitpos ) - pHlist->m_uQuerypos;
+		int iLcs = HITMAN::GetLCS ( pHlist->m_uHitpos );
+		int iDelta = iLcs - pHlist->m_uQuerypos;
+
 		if ( iDelta==m_iExpDelta && HITMAN::GetLCS ( pHlist->m_uHitpos )>=m_uMinExpPos )
 		{
-			m_uCurLCS = m_uCurLCS + BYTE(pHlist->m_uWeight);
+			if ( iLcs>m_iLastHitPos )
+				m_uCurLCS += BYTE(pHlist->m_uWeight);
 			if ( HITMAN::IsEnd ( pHlist->m_uHitpos )
 				&& (int)pHlist->m_uQuerypos==m_iMaxQuerypos
 				&& HITMAN::GetPos ( pHlist->m_uHitpos )==m_iMaxQuerypos )
@@ -6340,7 +6348,8 @@ struct RankerState_ProximityBM25Exact_fn : public ISphExtra
 			}
 		} else
 		{
-			m_uCurLCS = BYTE(pHlist->m_uWeight);
+			if ( iLcs>m_iLastHitPos )
+				m_uCurLCS = BYTE(pHlist->m_uWeight);
 			if ( HITMAN::GetPos ( pHlist->m_uHitpos )==1 )
 			{
 				m_uHeadHit |= ( 1UL << HITMAN::GetField ( pHlist->m_uHitpos ) );
@@ -6353,6 +6362,7 @@ struct RankerState_ProximityBM25Exact_fn : public ISphExtra
 			m_uLCS[uField] = m_uCurLCS;
 
 		m_iExpDelta = iDelta + pHlist->m_uSpanlen - 1;
+		m_iLastHitPos = iLcs;
 		m_uMinExpPos = HITMAN::GetLCS ( pHlist->m_uHitpos ) + 1;
 	}
 
@@ -6360,6 +6370,7 @@ struct RankerState_ProximityBM25Exact_fn : public ISphExtra
 	{
 		m_uCurLCS = 0;
 		m_iExpDelta = -1;
+		m_iLastHitPos = -1;
 
 		DWORD uRank = 0;
 		for ( int i=0; i<m_iFields; i++ )
@@ -6403,6 +6414,7 @@ struct RankerState_ProximityPayload_fn : public RankerState_Proximity_fn<USE_BM2
 		// as usual, redundant 'this' is just because gcc is stupid
 		this->m_uCurLCS = 0;
 		this->m_iExpDelta = -1;
+		this->m_iLastHitPos = -1;
 
 		DWORD uRank = m_uPayloadRank;
 		for ( int i=0; i<this->m_iFields; i++ )
@@ -6444,6 +6456,7 @@ struct RankerState_MatchAny_fn : public RankerState_Proximity_fn<false,false>
 	{
 		m_uCurLCS = 0;
 		m_iExpDelta = -1;
+		m_iLastHitPos = -1;
 
 		DWORD uRank = 0;
 		for ( int i=0; i<m_iFields; i++ )
@@ -6756,6 +6769,7 @@ public:
 	BYTE				m_uLCS[SPH_MAX_FIELDS];
 	BYTE				m_uCurLCS;
 	int					m_iExpDelta;
+	int					m_iLastHitPos;
 	int					m_iFields;
 	const int *			m_pWeights;
 	DWORD				m_uDocBM25;
@@ -6994,6 +7008,7 @@ public:
 		// OPTIMIZE? quick full wipe? (using dwords/sse/whatever)
 		m_uCurLCS = 0;
 		m_iExpDelta = -1;
+		m_iLastHitPos = -1;
 		for ( int i=0; i<m_iFields; i++ )
 		{
 			m_uLCS[i] = 0;
@@ -7783,26 +7798,31 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 {
 	const DWORD uField = HITMAN::GetField ( pHlist->m_uHitpos );
 	const int iPos = HITMAN::GetPos ( pHlist->m_uHitpos );
+	const int iLcs = HITMAN::GetLCS ( pHlist->m_uHitpos );
 
 	// update LCS
-	int iDelta = HITMAN::GetLCS ( pHlist->m_uHitpos ) - pHlist->m_uQuerypos;
+	int iDelta = iLcs - pHlist->m_uQuerypos;
 	if ( iDelta==m_iExpDelta )
 	{
-		m_uCurLCS = m_uCurLCS + BYTE(pHlist->m_uWeight);
+		if ( iLcs>m_iLastHitPos )
+			m_uCurLCS += BYTE(pHlist->m_uWeight);
 		if ( HITMAN::IsEnd ( pHlist->m_uHitpos ) && (int)pHlist->m_uQuerypos==m_iMaxQpos && iPos==m_iMaxQpos )
 			m_uExactHit |= ( 1UL << uField );
 	} else
 	{
-		m_uCurLCS = BYTE(pHlist->m_uWeight);
+		if ( iLcs>m_iLastHitPos )
+			m_uCurLCS = BYTE(pHlist->m_uWeight);
 		if ( iPos==1 && HITMAN::IsEnd ( pHlist->m_uHitpos ) && m_iMaxQpos==1 )
 			m_uExactHit |= ( 1UL << uField );
 	}
+
 	if ( m_uCurLCS>m_uLCS[uField] )
 	{
 		m_uLCS[uField] = m_uCurLCS;
 		m_iMinBestSpanPos[uField] = iPos - m_uCurLCS + 1;
 	}
 	m_iExpDelta = iDelta + pHlist->m_uSpanlen - 1;
+	m_iLastHitPos = iLcs;
 
 	// update LCCS
 	if ( m_iQueryPosLCCS==pHlist->m_uQuerypos && m_iHitPosLCCS==iPos )

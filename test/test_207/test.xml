@@ -5,7 +5,7 @@
 <lemmatizer_base/>
 </requires>
 
-<name>aot morphology</name>
+<name>aot morphology in utf-8</name>
 
 <config>
 common
@@ -200,9 +200,10 @@ CREATE TABLE test_table
 <sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('Фичин баг') option ranker=SPH04;show meta</sphinxql>
 <sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('Фичин баг');show meta</sphinxql>
 <sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('^Фичин баг$');show meta</sphinxql>
-<sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('"Фичин баг"') option ranker=SPH04;show meta</sphinxql>
-<sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('english text') option ranker=SPH04;show meta</sphinxql>
-<sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('"english text"') option ranker=SPH04;show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight(),packedfactors() as my_weight FROM META:plain WHERE MATCH('Фичин баг') option ranker=expr('sum((4*lcs+2*(min_hit_pos==1)+exact_hit)*user_weight)*1000+bm25');show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight(),packedfactors() as my_weight FROM META:plain WHERE MATCH('"Фичин баг"') option ranker=expr('sum((4*lcs+2*(min_hit_pos==1)+exact_hit)*user_weight)*1000+bm25');show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight(),packedfactors() as my_weight FROM META:plain WHERE MATCH('english text') option ranker=expr('sum((4*lcs+2*(min_hit_pos==1)+exact_hit)*user_weight)*1000+bm25');show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight(),packedfactors() as my_weight FROM META:plain WHERE MATCH('"english text"') option ranker=expr('sum((4*lcs+2*(min_hit_pos==1)+exact_hit)*user_weight)*1000+bm25');show meta</sphinxql>
 
 <sphinxql>INSERT INTO testrt1 VALUES ( 1, 'они стали есть', 11 )</sphinxql>
 <sphinxql>INSERT INTO testrt1 VALUES ( 2, 'Крыса из Нержавеющей Стали', 11 )</sphinxql>

@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<requires>
+<lemmatizer_base/>
+</requires>
+
+<name>cooperation of index_exact_word with expanding by lematizer, expand</name>
+
+<config>
+common
+{
+	lemmatizer_base	= <local>lemmatizer_base</local>
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers				= threads
+}
+
+source test1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query_pre	= set names utf8
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+}
+
+# test with wordforms
+index testw
+{
+	source			= test1
+	dict			= keywords
+	min_infix_len	= 2
+	path			= <data_path/>/testw
+	charset_type	= utf-8
+	blend_chars		= @, .
+	wordforms		= <this_test/>/wordforms.txt
+}
+
+# test with wordworms and index_exact
+index testwe : testw
+{
+	path			= <data_path/>/testwe
+	index_exact_words = 1
+}
+
+# test with crc dict
+index testc : testw
+{
+	path			= <data_path/>/testc
+	dict = crc
+}
+
+# test with crc dict and index_exact_words
+index testce : testc
+{
+	path			= <data_path/>/testce
+	index_exact_words = 1
+}
+
+# test with lemmatize_all
+index testla
+{
+	source			= test1
+	path			= <data_path/>/testla
+	charset_type	= utf-8
+	morphology		= lemmatize_ru_all
+	blend_chars		= @, .
+	wordforms		= <this_test/>/wordforms.txt
+}
+
+# test with lemmatize
+index testl : testla
+{
+	path			= <data_path/>/testl
+	morphology		= lemmatize_ru
+}
+
+# test with lemmatize_all and index_exact_words
+index testlae : testla
+{
+	path			= <data_path/>/testlae
+	index_exact_words = 1
+	morphology		= stem_en,lemmatize_ru_all
+}
+
+# test prefixed
+index testpr
+{
+	source			= test1
+	path			= <data_path/>/testpr
+	charset_type	= utf-8
+	expand_keywords	= 1
+	min_prefix_len	= 2
+	enable_star		= 1
+}
+
+# test plain expanded index
+index testple
+{
+	source			= test1
+	path			= <data_path/>/testple
+	charset_type	= utf-8
+	docinfo			= extern
+	dict			= keywords
+	expand_keywords	= 1
+	min_infix_len	= 2
+	enable_star		= 1
+}
+
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) CHARACTER SET utf8 NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
+<db_insert>SET NAMES utf8</db_insert>
+<db_insert>INSERT INTO test_table VALUES
+	( 1, 11, 'Фичин баг' ),
+	( 2, 11, 'Фичинa баг' ),
+	( 3, 11, 'Фичин багa' ),
+	( 4, 11, 'Фичинa багa' ),
+    ( 10, 11, 'english text' ),
+    ( 11, 11, 'englisha text' ),
+    ( 12, 11, 'englisha texta' ),
+    ( 13, 11, 'english texta' )
+</db_insert>
+<metaindex name='META:plain'>
+<index>testla</index>
+<index>testl</index>
+<index>testlae</index>
+<index>testwe</index>
+<index>testw</index>
+<index>testce</index>
+<index>testc</index>
+<index>testpr</index>
+<index>testple</index>
+</metaindex>
+
+<sphqueries>
+
+<sphinxql>SELECT id,gid,weight(),packedfactors() as my_weight FROM META:plain WHERE MATCH('Фичин баг') option ranker=expr('sum(exact_hit)');show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('Фичин баг') option ranker=sph04;show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight(),packedfactors() as my_weight FROM META:plain WHERE MATCH('^Фичин баг$') option ranker=expr('sum(exact_hit)');show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('^Фичин баг$') option ranker=sph04;show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight(),packedfactors() as my_weight FROM META:plain WHERE MATCH('"Фичин баг"') option ranker=expr('sum(exact_hit)');show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('"Фичин баг"') option ranker=sph04;show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight(),packedfactors() as my_weight FROM META:plain WHERE MATCH('english text') option ranker=expr('sum(exact_hit)');show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('english text') option ranker=sph04;show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight(),packedfactors() as my_weight FROM META:plain WHERE MATCH('"english text"') option ranker=expr('sum(exact_hit)');show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('"english text"') option ranker=sph04;show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('"Фичин баг"') option ranker=sph04;show meta</sphinxql>
+
+</sphqueries>
+
+</test>

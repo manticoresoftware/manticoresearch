@@ -8427,7 +8427,7 @@ public:
 
 	virtual void SetTermDupes ( const ExtQwordsHash_t & hQwords, int iMaxQpos )
 	{
-		this->m_tState.SetTermDupes ( hQwords, iMaxQpos, m_pRoot );
+		this->m_tState.SetTermDupes ( hQwords, iMaxQpos, this->m_pRoot );
 	}
 };
 

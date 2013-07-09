@@ -6339,7 +6339,7 @@ struct RankerState_ProximityBM25Exact_fn : public ISphExtra
 		if ( iDelta==m_iExpDelta && HITMAN::GetLCS ( pHlist->m_uHitpos )>=m_uMinExpPos )
 		{
 			if ( iLcs>m_iLastHitPos )
-				m_uCurLCS += BYTE(pHlist->m_uWeight);
+				m_uCurLCS = (BYTE)( m_uCurLCS + pHlist->m_uWeight );
 			if ( HITMAN::IsEnd ( pHlist->m_uHitpos )
 				&& (int)pHlist->m_uQuerypos==m_iMaxQuerypos
 				&& HITMAN::GetPos ( pHlist->m_uHitpos )==m_iMaxQuerypos )
@@ -7809,7 +7809,7 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 	if ( iDelta==m_iExpDelta )
 	{
 		if ( iLcs>m_iLastHitPos )
-			m_uCurLCS += BYTE(pHlist->m_uWeight);
+			m_uCurLCS = (BYTE)( m_uCurLCS + pHlist->m_uWeight );
 		if ( HITMAN::IsEnd ( pHlist->m_uHitpos ) && (int)pHlist->m_uQuerypos==m_iMaxQpos && iPos==m_iMaxQpos )
 			m_uExactHit |= ( 1UL << uField );
 	} else

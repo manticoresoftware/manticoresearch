@@ -753,8 +753,18 @@ arg:
 	;
 
 consthash:
-	TOK_IDENT '=' const_int						{ TRACK_BOUNDS ( $$, $1, $3 ); }
-	| consthash ',' TOK_IDENT '=' const_int		{ TRACK_BOUNDS ( $$, $1, $5 ); }
+	hash_key '=' hash_val					{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| consthash ',' hash_key '=' hash_val	{ TRACK_BOUNDS ( $$, $1, $5 ); }
+	;
+
+hash_key:
+	TOK_IDENT
+	| TOK_IN
+	;
+
+hash_val:
+	const_int
+	| TOK_IDENT
 	;
 
 //////////////////////////////////////////////////////////////////////////

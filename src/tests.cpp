@@ -2963,6 +2963,289 @@ void BenchAppendf()
 
 //////////////////////////////////////////////////////////////////////////
 
+// conversion between degrees and radians
+static const double MY_PI = 3.14159265358979323846;
+static const float TO_RADF = float ( MY_PI / 180.0 );
+static const float TO_RADF2 = float ( MY_PI / 360.0 );
+static const float TO_DEGF = float ( 180.0 / MY_PI );
+static const double TO_RADD = MY_PI / 180.0;
+static const double TO_RADD2 = MY_PI / 360.0;
+static const double TO_DEGD = 180.0 / MY_PI;
+
+static inline float GeodistVincenty ( double lat1, double lon1, double lat2, double lon2 )
+{
+	lat1 *= TO_RADD;
+	lon1 *= TO_RADD;
+	lat2 *= TO_RADD;
+	lon2 *= TO_RADD;
+	const double a = 6378137;
+	const double b = 6356752.314245;
+	double f = (a-b)/a;
+	double L = lon2 - lon1;
+	double u1 = atan ( (1-f) * tan(lat1) );
+	double u2 = atan ( (1-f) * tan(lat2) );
+	double sin_u1 = sin(u1);
+	double cos_u1 = cos(u1);
+	double sin_u2 = sin(u2);
+	double cos_u2 = cos(u2);
+	double lambda = L;
+	double lambda_pi = 2*MY_PI;
+	double sin_sigma = 0, cos_sigma = 0, sigma = 0, cos_sq_alpha = 0, cos2sigma_m = 0;
+	while ( fabs ( lambda-lambda_pi ) > 1e-12 )
+	{
+		double sin_lambda = sin(lambda);
+		double cos_lambda = cos(lambda);
+		sin_sigma = sqrt ( (cos_u2 * sin_lambda) * (cos_u2*sin_lambda) +
+			( cos_u1*sin_u2-sin_u1*cos_u2*cos_lambda ) * ( cos_u1*sin_u2-sin_u1*cos_u2*cos_lambda ) );
+		cos_sigma = sin_u1*sin_u2 + cos_u1*cos_u2*cos_lambda;
+		sigma = atan2 ( sin_sigma, cos_sigma );
+		double alpha = asin ( cos_u1 * cos_u2 * sin_lambda / sin_sigma );
+		cos_sq_alpha = cos(alpha) * cos(alpha);
+		cos2sigma_m = cos_sigma - 2*sin_u1*sin_u2/cos_sq_alpha;
+		double cc = f/16*cos_sq_alpha*(4+f*(4-3*cos_sq_alpha));
+		lambda_pi = lambda;
+		lambda = L + (1-cc) * f * sin(alpha) *
+			(sigma + cc*sin_sigma*(cos2sigma_m+cc*cos_sigma*(-1+2*cos2sigma_m*cos2sigma_m)));
+	}
+	double usq = cos_sq_alpha*(a*a-b*b)/(b*b);
+	double aa = 1 + usq/16384*(4096+usq*(-768+usq*(320-175*usq)));
+	double bb = usq/1024 * (256+usq*(-128+usq*(74-47*usq)));
+	double delta_sigma = bb*sin_sigma*(cos2sigma_m+bb/4*(cos_sigma*(-1+2*cos2sigma_m*cos2sigma_m)-
+		bb/6*cos2sigma_m*(-3+4*sin_sigma*sin_sigma)*(-3+4*cos2sigma_m*cos2sigma_m)));
+	double c = b*aa*(sigma-delta_sigma);
+	return (float)c;
+}
+
+void DestVincenty ( double lat1, double lon1, double brng, double dist, double *lat2, double *lon2 )
+{
+	double a = 6378137, b = 6356752.3142, f = 1/298.257223563; // WGS-84 ellipsiod
+	double s = dist;
+	double alpha1 = brng*TO_RADD;
+	double sinAlpha1 = sin(alpha1);
+	double cosAlpha1 = cos(alpha1);
+
+	double tanU1 = (1-f) * tan ( lat1*TO_RADD );
+	double cosU1 = 1 / sqrt ( 1 + tanU1*tanU1 ), sinU1 = tanU1*cosU1;
+	double sigma1 = atan2 ( tanU1, cosAlpha1 );
+	double sinAlpha = cosU1 * sinAlpha1;
+	double cosSqAlpha = 1 - sinAlpha*sinAlpha;
+	double uSq = cosSqAlpha * (a*a - b*b) / (b*b);
+	double A = 1 + uSq/16384*(4096+uSq*(-768+uSq*(320-175*uSq)));
+	double B = uSq/1024 * (256+uSq*(-128+uSq*(74-47*uSq)));
+
+	double sigma = s / (b*A), sigmaP = 2*MY_PI;
+	double cos2SigmaM = 0, sinSigma = 0, cosSigma = 0;
+	while ( fabs ( sigma-sigmaP ) > 1e-12 )
+	{
+		cos2SigmaM = cos ( 2*sigma1 + sigma );
+		sinSigma = sin(sigma);
+		cosSigma = cos(sigma);
+		double deltaSigma = B*sinSigma*(cos2SigmaM+B/4*(cosSigma*(-1+2*cos2SigmaM*cos2SigmaM)-
+			B/6*cos2SigmaM*(-3+4*sinSigma*sinSigma)*(-3+4*cos2SigmaM*cos2SigmaM)));
+		sigmaP = sigma;
+		sigma = s / (b*A) + deltaSigma;
+	}
+
+	double tmp = sinU1*sinSigma - cosU1*cosSigma*cosAlpha1;
+	*lat2 = atan2 ( sinU1*cosSigma + cosU1*sinSigma*cosAlpha1,
+		(1-f)*sqrt ( sinAlpha*sinAlpha + tmp*tmp ) );
+	double lambda = atan2 ( sinSigma*sinAlpha1, cosU1*cosSigma - sinU1*sinSigma*cosAlpha1 );
+	double C = f/16*cosSqAlpha*(4+f*(4-3*cosSqAlpha));
+	double L = lambda - (1-C) * f * sinAlpha *
+		(sigma + C*sinSigma*(cos2SigmaM+C*cosSigma*(-1+2*cos2SigmaM*cos2SigmaM)));
+	*lon2 = (lon1*TO_RADD+L+3*MY_PI);
+	while ( *lon2>2*MY_PI )
+		*lon2 -= 2*MY_PI;
+	*lon2 -= MY_PI;
+	*lat2 *= TO_DEGD;
+	*lon2 *= TO_DEGD;
+}
+
+static const int NFUNCS = 3;
+
+float CalcGeofunc ( int iFunc, double * t )
+{
+	switch ( iFunc )
+	{
+		case 0: return GeodistSphereDeg ( float(t[0]), float(t[1]), float(t[2]), float(t[3]) ); break;
+		case 1: return GeodistAdaptiveDeg ( float(t[0]), float(t[1]), float(t[2]), float(t[3]) ); break;
+		case 2: return GeodistFlatDeg ( float(t[0]), float(t[1]), float(t[2]), float(t[3]) ); break;
+	}
+	return 0;
+}
+
+
+class GeodistStatic
+{
+public:
+	float m_lat1;
+	float m_lon1;
+	double m_cos1d2;
+	double m_sin1;
+
+public:
+	GeodistStatic ( float lat1, float lon1 )
+	{
+		m_lat1 = lat1;
+		m_lon1 = lon1;
+		m_cos1d2 = 111415.13 * 0.5 * cos ( TO_RADD*lat1 );
+		m_sin1 = 111415.13 * sin ( TO_RADD*lat1 );
+	}
+
+	float Dist ( float lat2, float lon2 )
+	{
+		float dlat = m_lat1 - lat2;
+		float dlon = m_lon1 - lon2;
+
+		// fallback to haversine for distant enough points
+		if ( dlat>16 || dlon>16 || dlat<-16 || dlon<-16 )
+			return GeodistSphereDeg ( m_lat1, m_lon1, lat2, lon2 );
+
+		// we approximate cos() using Taylor expansions
+		// even in 2013, this is still quicker
+		// midpoint = lat1 + (lat2-lat1)/2 = lat1 + b
+		// b <= 16*pi/180 ~= 0.2792
+		// cos(midpoint) = cos(lat1)*cos(b) - sin(lat1)*sin(b)
+		// cos(b) = 1 - b^2/2 + b^4/24 ... ~= 1-b*b/2 because b^4/24 <= 0.0002
+		// sin(b) = b - b^3/6 + b^5/120 ... ~= b because b^3/6 <= 0.036
+		// cos(midpoint) ~= cos(lat1) - cos(lat1)*b*b/2 + sin(lat1)*b
+		double b = (lat2-m_lat1)*TO_RADD2;
+		double k2 = 2*m_cos1d2 - m_cos1d2*b*b - m_sin1*b; // cos(midpoint)
+		return (float)sqrt ( 111132.09*111132.09*dlat*dlat + k2*k2*dlon*dlon );
+	}
+};
+
+inline float MaxErr ( float fMax, float fRes, double fRef )
+{
+	float fErr = (float)( fabs ( fRes-fRef )*100 / fRef );
+	return fErr > fMax ? fErr : fMax;
+}
+
+void TestGeodist()
+{
+	CSphVector<double> dBench;
+	for ( int adist=10; adist<=10*1000*1000; adist*=10 )
+		for ( int dist=adist; dist<10*adist && dist<20*1000*1000; dist+=2*adist )
+	{
+		double avgerr[NFUNCS] = {0}, maxerr[NFUNCS] = {0};
+		int n = 0;
+		for ( int lat=-80; lat<=80; lat+=10 )
+		{
+			for ( int lon=-179; lon<180; lon+=3 )
+			{
+				for ( int b=0; b<360; b+=3, n++ )
+				{
+					double t[4] = { lat, lon, 0, 0 };
+					DestVincenty ( t[0], t[1], b, dist, t+2, t+3 );
+					for ( int j=0; j<4; j++ )
+						dBench.Add ( t[j] );
+					for ( int f=0; f<NFUNCS; f++ )
+					{
+						float fDist = CalcGeofunc ( f, t );
+						double err = fabs ( 100*( double(fDist) - double(dist) ) / double(dist) ); // relative error, in percents
+						avgerr[f] += err;
+						maxerr[f] = Max ( err, maxerr[f] );
+					}
+				}
+			}
+		}
+		if ( dist>=1000 )
+			printf ( "%5dkm", dist/1000 );
+		else
+			printf ( "%6dm", dist );
+		for ( int f=0; f<NFUNCS; f++ )
+			printf ( ", f%d %5.2f%% %5.2f%%", f, avgerr[f]/n, maxerr[f] );
+		printf ( "\n" );
+	}
+
+	const int RUNS = 10;
+	float fDist = 0;
+	double * tmax = dBench.Begin() + dBench.GetLength();
+	int64_t tm;
+	printf ( "%d calls in bench\n", RUNS*dBench.GetLength() );
+
+	tm = sphMicroTimer();
+	for ( int r=0; r<RUNS; r++ )
+		for ( double * t = dBench.Begin(); t<tmax; t+=4 )
+			fDist += GeodistSphereDeg ( float(t[0]), float(t[1]), float(t[2]), float(t[3]) );
+	printf ( "%d us sphere\n", sphMicroTimer()-tm );
+
+	tm = sphMicroTimer();
+	for ( int r=0; r<RUNS; r++ )
+		for ( double * t = dBench.Begin(); t<tmax; t+=4 )
+			fDist += GeodistFlatDeg ( float(t[0]), float(t[1]), float(t[2]), float(t[3]) );
+	printf ( "%d us flat\n", sphMicroTimer()-tm );
+
+	tm = sphMicroTimer();
+	for ( int r=0; r<RUNS; r++ )
+		for ( double * t = dBench.Begin(); t<tmax; t+=4 )
+			fDist += GeodistAdaptiveDeg ( float(t[0]), float(t[1]), float(t[2]), float(t[3]) );
+	printf ( "%d us adaptive\n", sphMicroTimer()-tm );
+
+	printf ( "res %f\n", fDist );
+
+#if 0
+	// coordinates from Wikimapia/Googlemaps
+	//
+	// distances by Wolfram Alpha (supposedly defaults to Vincenty method)
+	// geodistance[{51.5007788, -0.1246771}, {46.2041222, 6.1524349}]
+	//
+	// 40.6890895, -74.0446899 center of the torch of the Statue of Liberty, New York, USA
+	// 40.7041146, -74.0152399 center of The Sphere in Battery Park, New York, USA
+	// 40.7643929, -73.9997683 tip of Lockheed A-12 (SR-71) on Intrepid, NY, USA
+	// 40.7642578, -73.9994565 tail of Lockheed A-12 (SR-71) on Intrepid, NY, USA
+	// 55.7535204, 37.6195371 center of Senatskaya tower, Red Square, Moscow, Russia
+	// 51.6606654, 39.1999751 center of Lenin statue, Lenin Square, Voronezh, Russia
+	// 49.2055275, -123.2014474 NW corner of Runway 08L-26R, YVR airport, Vancouver, Canada
+	// 49.2007563, -123.1596478 NE corner of Runway 08L-26R, YVR airport, Vancouver, Canada
+	// 37.6284983, -122.3927365 N corner of L on Runway 10L-28R, SFO airport, San Francisco, USA
+	// 37.6137799, -122.3577954 S corner of R on Runway 10L-28R, SFO airport, San Francisco, USA
+	// 68.974714, 33.0611873 tip of Lenin icebreaker, Murmansk, Russia
+	// -22.9519125, -43.2105616 center of the head of Christ the Redeemer statue, Rio de Janeiro, Brazil
+	// 51.5007788, -0.1246771 tip of Big Ben tower, London, England
+	// 29.97973, 31.1342695 tip of Pyramid of Cheops, Cairo, Egypt
+	// 41.4034549, 2.1741718 tip of the southern tower of Sagrada Familia, Barcelona, Spain
+	// 42.6848586, 23.3188623 tip of National Palace of Culture, Sofia, Bulgaria
+	// 46.2041222, 6.1524349 center of the fountain in English garden, Geneva, Switzerland
+	// 37.8106517, -122.4174678 tip of SS Jeremiah O'Brien, Pier 45, San Francisco, USA
+	// 37.8114358, -122.4186279 tail of SS Jeremiah O'Brien, Pier 45, San Francisco, USA
+	// 64.1475975, -21.9224185 center of Sun Voyager in Reykjavik, Iceland
+	// 63.8079982, -19.5589042 center of Eyjafjallajokull volcano, Iceland
+	double dTest[][5] =
+	{
+		{ 40.7643929, -73.9997683, 40.7642578, -73.9994565, 30.3013 }, // Lockheed A-12 (SR-71) length (30.97m per wiki)
+		{ 37.8106517, -122.4174678, 37.8114358, -122.4186279, 134.20 }, // SS Jeremiah O'Brien length ((134.57m per wiki)
+		{ 40.6890895, -74.0446899, 40.7041146, -74.0152399, 2996.59 }, // Statue of Liberty to The Sphere
+		{ 49.2055275, -123.2014474, 49.2007563, -123.1596478, 3091.96 }, // YVR Runway 08L-26R length (3030m per wiki)
+		{ 37.6284983, -122.3927365, 37.6137799, -122.3577954, 3490.54 }, // SFO Runway 10L-28R length (3618m per wiki)
+		{ 64.1475975, -21.9224185, 63.8079982, -19.5589042, 121768.14 }, // Reykjavik to Eyjafjallajokull
+		{ 55.7535204, 37.6195371, 51.6606654, 39.1999751, 467301.55 }, // Moscow to Voronezh
+		{ 51.5007788, -0.1246771, 46.2041222, 6.1524349, 747189.88 }, // London to Geneva
+		{ 51.5007788, -0.1246771, 41.4034549, 2.1741718, 1136075.00 }, // London to Barcelona
+		{ 51.5007788, -0.1246771, 42.6848586, 23.3188623, 2019138.10 }, // London to Sofia
+		{ 51.5007788, -0.1246771, 29.97973, 31.1342695, 3513002.04 }, // London to Cairo
+		{ 68.974714, 33.0611873, -22.9519125, -43.2105616, 11833803.11 }, // Murmansk to Rio
+		{ 0, 0, 0.5, 179.5, 19936288.579 }, // antipodes, direct Vincenty killer
+		// { 0, 0, 0.5, 179.7, 19944127.421 }, // antipodes, inverse Vincenty killer
+	};
+
+	for ( int i=0; i<sizeof(dTest)/sizeof(dTest[0]); i++ )
+	{
+		double * t = dTest[i];
+		printf ( "%2d: ref %10.1f", i, t[4] );
+		for ( int iFunc=0; iFunc<NFUNCS; iFunc++ )
+		{
+			float fDist = CalcGeofunc ( iFunc, t );
+			printf ( ", f%d %5.2f%%", iFunc, 100*(fDist-t[4])/t[4] );
+		}
+		printf ( "\n" );
+	}
+	printf ( "\n" );
+#endif
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 int main ()
 {
 	// threads should be initialized before memory allocations
@@ -2973,6 +3256,8 @@ int main ()
 	printf ( "RUNNING INTERNAL LIBSPHINX TESTS\n\n" );
 
 #if 0
+	GeodistInit();
+	TestGeodist();
 	BenchSort ();
 #endif
 

@@ -318,6 +318,12 @@ inline double sphQW2D ( uint64_t d )	{ union { double f; uint64_t d; } u; u.d = 
 /// current UNIX timestamp in seconds multiplied by 1000000, plus microseconds since the beginning of current second
 int64_t		sphMicroTimer ();
 
+/// double argument squared
+inline double sqr ( double v ) { return v*v;}
+
+/// float argument squared
+inline float fsqr ( float v ) { return v*v; }
+
 //////////////////////////////////////////////////////////////////////////
 // RANDOM NUMBERS GENERATOR
 //////////////////////////////////////////////////////////////////////////

@@ -53,12 +53,14 @@
 %type <iNode>			constlist
 %type <iNode>			constlist_or_uservar
 %type <iNode>			consthash
+%type <sIdent>			hash_key
 %type <iNode>			function
 %type <sIdent>			ident
 %type <iNode>			stringlist
 %type <iNode>			json_field
 %type <iNode>			subkey
 %type <iNode>			subscript
+
 
 %left TOK_OR
 %left TOK_AND
@@ -120,22 +122,16 @@ expr:
 	;
 
 consthash:
-	ident TOK_EQ TOK_CONST_INT
-		{
-			$$ = pParser->AddNodeConsthash ( $1, $3 );
-		}
-	| TOK_ATTR_STRING TOK_EQ TOK_CONST_INT
-		{
-			$$ = pParser->AddNodeConsthash ( pParser->Attr2Ident($1), $3 );
-		}
-	| consthash ',' ident TOK_EQ TOK_CONST_INT
-		{
-			pParser->AppendToConsthash ( $$, $3, $5 );
-		}
-	| consthash ',' TOK_ATTR_STRING TOK_EQ TOK_CONST_INT
-		{
-			pParser->AppendToConsthash ( $$, pParser->Attr2Ident($3), $5 );
-		}
+	hash_key TOK_EQ TOK_CONST_INT					{ $$ = pParser->AddNodeConsthash ( $1, NULL, $3 ); }
+	| hash_key TOK_EQ TOK_IDENT						{ $$ = pParser->AddNodeConsthash ( $1, $3, 0 ); }
+	| consthash ',' hash_key TOK_EQ TOK_CONST_INT	{ pParser->AppendToConsthash ( $$, $3, NULL, $5 ); }
+	| consthash ',' hash_key TOK_EQ TOK_IDENT		{ pParser->AppendToConsthash ( $$, $3, $5, 0 ); }
+	;
+
+hash_key:
+	ident							{ $$ = $1; }
+	| TOK_ATTR_STRING				{ $$ = pParser->Attr2Ident($1); }
+	| TOK_FUNC_IN					{ $$ = strdup("in"); }
 	;
 
 arg:

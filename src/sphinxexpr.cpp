@@ -430,9 +430,9 @@ struct Expr_BM25F_c : public ISphExpr
 	float						m_fWeightedAvgDocLen;
 	CSphVector<int>				m_dWeights;		///< per field weights
 	SphFactorHash_t *			m_pHash;
-	CSphVector<CSphNamedInt>	m_dFieldWeights;
+	CSphVector<CSphNamedVariant>	m_dFieldWeights;
 
-	Expr_BM25F_c ( float k1, float b, CSphVector<CSphNamedInt> * pFieldWeights )
+	Expr_BM25F_c ( float k1, float b, CSphVector<CSphNamedVariant> * pFieldWeights )
 		: m_pHash ( NULL )
 	{
 		// bind k1, b
@@ -521,7 +521,7 @@ struct Expr_BM25F_c : public ISphExpr
 			ARRAY_FOREACH ( i, m_dFieldWeights )
 			{
 				// FIXME? report errors if field was not found?
-				CSphString & sField = m_dFieldWeights[i].m_sName;
+				CSphString & sField = m_dFieldWeights[i].m_sKey;
 				int iField = m_tRankerState.m_pSchema->GetFieldIndex ( sField.cstr() );
 				if ( iField>=0 )
 					m_dWeights[iField] = m_dFieldWeights[i].m_iValue;
@@ -1339,7 +1339,7 @@ static FuncDesc_t g_dFuncs[] =
 	{ "in",				-1, FUNC_IN,			SPH_ATTR_INTEGER },
 	{ "bitdot",			-1, FUNC_BITDOT,		SPH_ATTR_NONE },
 
-	{ "geodist",		4,	FUNC_GEODIST,		SPH_ATTR_FLOAT },
+	{ "geodist",		-4,	FUNC_GEODIST,		SPH_ATTR_FLOAT },
 	{ "exist",			2,	FUNC_EXIST,			SPH_ATTR_NONE },
 	{ "poly2d",			-1,	FUNC_POLY2D,		SPH_ATTR_POLY2D },
 	{ "geopoly2d",		-1,	FUNC_GEOPOLY2D,		SPH_ATTR_POLY2D },
@@ -1348,7 +1348,7 @@ static FuncDesc_t g_dFuncs[] =
 	{ "to_string",		1,	FUNC_TO_STRING,		SPH_ATTR_STRINGPTR },
 	{ "rankfactors",	0,	FUNC_RANKFACTORS,	SPH_ATTR_STRINGPTR },
 	{ "packedfactors",	0,	FUNC_PACKEDFACTORS, SPH_ATTR_FACTORS },
-	{ "bm25f",			-1,	FUNC_BM25F,			SPH_ATTR_FLOAT },
+	{ "bm25f",			-2,	FUNC_BM25F,			SPH_ATTR_FLOAT },
 	{ "integer",		1,	FUNC_INTEGER,		SPH_ATTR_INTEGER },
 	{ "double",			1,	FUNC_DOUBLE,		SPH_ATTR_FLOAT },
 	{ "length",			1,	FUNC_LENGTH,		SPH_ATTR_INTEGER },
@@ -1529,14 +1529,17 @@ public:
 class ConstHash_c
 {
 public:
-	CSphVector<CSphNamedInt> m_dPairs;
+	CSphVector<CSphNamedVariant> m_dPairs;
 
 public:
-	void Add ( const char * sKey, int64_t iValue )
+	void Add ( const char * sKey, const char * sValue, int64_t iValue )
 	{
-		CSphNamedInt & t = m_dPairs.Add();
-		t.m_sName = sKey;
-		t.m_iValue = (int)iValue;
+		CSphNamedVariant & t = m_dPairs.Add();
+		t.m_sKey = sKey;
+		if ( sValue )
+			t.m_sValue = sValue;
+		else
+			t.m_iValue = (int)iValue;
 	}
 };
 
@@ -1621,8 +1624,8 @@ protected:
 	int						AddNodeUservar ( int iUservar );
 	int						AddNodeHookIdent ( int iID );
 	int						AddNodeHookFunc ( int iID, int iLeft );
-	int						AddNodeConsthash ( const char * sKey, int64_t iValue );
-	void					AppendToConsthash ( int iNode, const char * sKey, int64_t iValue );
+	int						AddNodeConsthash ( const char * sKey, const char * sValue, int64_t iValue );
+	void					AppendToConsthash ( int iNode, const char * sKey, const char * sValue, int64_t iValue );
 	const char *			Attr2Ident ( uint64_t uAttrLoc );
 	int						AddNodeJsonField ( uint64_t uAttrLocator, int iLeft );
 	int						AddNodeJsonSubkey ( int64_t iValue );
@@ -2766,30 +2769,179 @@ public:
 	// FIXME! implement SetStringPool?
 };
 
+//////////////////////////////////////////////////////////////////////////
+// GEODISTANCE
+//////////////////////////////////////////////////////////////////////////
 
-static inline double sphSqr ( double v )
+// conversions between degrees and radians
+static const double PI = 3.14159265358979323846;
+static const double TO_RAD = PI / 180.0;
+static const double TO_RAD2 = PI / 360.0;
+static const double TO_DEG = 180.0 / PI;
+static const float TO_RADF = (float)( PI / 180.0 );
+static const float TO_RADF2 = (float)( PI / 360.0 );
+static const float TO_DEGF = (float)( 180.0 / PI );
+
+const int GEODIST_TABLE_COS		= 1024; // maxerr 0.00063%
+const int GEODIST_TABLE_ASIN	= 512;
+const int GEODIST_TABLE_K		= 1024;
+
+static float g_GeoCos[GEODIST_TABLE_COS+1];		///< cos(x) table
+static float g_GeoAsin[GEODIST_TABLE_ASIN+1];	///< asin(sqrt(x)) table
+static float g_GeoFlatK[GEODIST_TABLE_K+1][2];	///< GeodistAdaptive() flat ellipsoid method k1,k2 coeffs table
+
+
+void GeodistInit()
 {
-	return v * v;
+	for ( int i=0; i<=GEODIST_TABLE_COS; i++ )
+		g_GeoCos[i] = (float)cos ( 2*PI*i/GEODIST_TABLE_COS ); // [0, 2pi] -> [0, COSTABLE]
+
+	for ( int i=0; i<=GEODIST_TABLE_ASIN; i++ )
+		g_GeoAsin[i] = (float)asin ( sqrt ( double(i)/GEODIST_TABLE_ASIN ) ); // [0, 1] -> [0, ASINTABLE]
+
+	for ( int i=0; i<=GEODIST_TABLE_K; i++ )
+	{
+		double x = PI*i/GEODIST_TABLE_K - PI*0.5; // [-pi/2, pi/2] -> [0, KTABLE]
+		g_GeoFlatK[i][0] = (float) sqr ( 111132.09 - 566.05*cos(2*x) + 1.20*cos(4*x) );
+		g_GeoFlatK[i][1] = (float) sqr ( 111415.13*cos(x) - 94.55*cos(3*x) + 0.12*cos(5*x) );
+	}
 }
 
 
-static inline float CalcGeodist ( float fPointLat, float fPointLon, float fAnchorLat, float fAnchorLon )
+inline float GeodistSphereRad ( float lat1, float lon1, float lat2, float lon2 )
 {
-	const double R = 6384000;
-	double dlat = fPointLat - fAnchorLat;
-	double dlon = fPointLon - fAnchorLon;
-	double a = sphSqr ( sin ( dlat/2 ) ) + cos ( fPointLat ) * cos ( fAnchorLat ) * sphSqr ( sin ( dlon/2 ) );
-	double c = 2*asin ( Min ( 1, sqrt(a) ) );
-	return (float)(R*c);
+	static const double D = 2*6384000;
+	double dlat2 = 0.5*( lat1 - lat2 );
+	double dlon2 = 0.5*( lon1 - lon2 );
+	double a = sqr ( sin(dlat2) ) + cos(lat1)*cos(lat2)*sqr ( sin(dlon2) );
+	double c = asin ( Min ( 1, sqrt(a) ) );
+	return (float)(D*c);
+}
+
+
+inline float GeodistSphereDeg ( float lat1, float lon1, float lat2, float lon2 )
+{
+	static const double D = 2*6384000;
+	double dlat2 = TO_RAD2*( lat1 - lat2 );
+	double dlon2 = TO_RAD2*( lon1 - lon2 );
+	double a = sqr ( sin(dlat2) ) + cos ( TO_RAD*lat1 )*cos ( TO_RAD*lat2 )*sqr ( sin(dlon2) );
+	double c = asin ( Min ( 1, sqrt(a) ) );
+	return (float)(D*c);
+}
+
+
+static inline float GeodistDegDiff ( float f )
+{
+	f = fabs(f);
+	while ( f>360 )
+		f -= 360;
+	if ( f>180 )
+		f = 360-f;
+	return f;
+}
+
+
+float GeodistFlatDeg ( float fLat1, float fLon1, float fLat2, float fLon2 )
+{
+	double c1 = cos ( TO_RAD2*( fLat1+fLat2 ) );
+	double c2 = 2*c1*c1-1; // cos(2*t)
+	double c3 = c1*(2*c2-1); // cos(3*t)
+	double k1 = 111132.09 - 566.05*c2;
+	double k2 = 111415.13*c1 - 94.55*c3;
+	float dlat = GeodistDegDiff ( fLat1-fLat2 );
+	float dlon = GeodistDegDiff ( fLon1-fLon2 );
+	return (float)sqrt ( k1*k1*dlat*dlat + k2*k2*dlon*dlon );
+}
+
+
+float GeodistFlatRad ( float fLat1, float fLon1, float fLat2, float fLon2 )
+{
+	double c1 = cos ( 0.5*( fLat1+fLat2 ) );
+	double c2 = 2*c1*c1-1; // cos(2*t)
+	double c3 = c1*(2*c2-1); // cos(3*t)
+	double k1 = 111132.09 - 566.05*c2;
+	double k2 = 111415.13*c1 - 94.55*c3;
+	float dlat = GeodistDegDiff ( TO_DEGF*( fLat1-fLat2 ) );
+	float dlon = GeodistDegDiff ( TO_DEGF*( fLon1-fLon2 ) );
+	return (float)sqrt ( k1*k1*dlat*dlat + k2*k2*dlon*dlon );
+}
+
+
+static inline float GeodistFastCos ( float x )
+{
+	float y = fabs(x)*float(GEODIST_TABLE_COS/PI/2);
+	int i = int(y);
+	y -= i;
+	i &= ( GEODIST_TABLE_COS-1 );
+	return g_GeoCos[i] + ( g_GeoCos[i+1]-g_GeoCos[i] )*y;
+}
+
+
+static inline float GeodistFastSin ( float x )
+{
+	float y = fabs(x)*float(GEODIST_TABLE_COS/PI/2);
+	int i = int(y);
+	y -= i;
+	i = ( i - GEODIST_TABLE_COS/4 ) & ( GEODIST_TABLE_COS-1 ); // cos(x-pi/2)=sin(x), costable/4=pi/2
+	return g_GeoCos[i] + ( g_GeoCos[i+1]-g_GeoCos[i] )*y;
+}
+
+
+/// fast implementation of asin(sqrt(x))
+/// max error in floats 0.00369%, in doubles 0.00072%
+static inline float GeodistFastAsinSqrt ( float x )
+{
+	if ( x<0.122 )
+	{
+		// distance under 4546km, Taylor error under 0.00072%
+		float y = sqrt(x);
+		return y + x*y*0.166666666666666f + x*x*y*0.075f + x*x*x*y*0.044642857142857f;
+	}
+	if ( x<0.948 )
+	{
+		// distance under 17083km, 512-entry LUT error under 0.00072%
+		x *= GEODIST_TABLE_ASIN;
+		int i = int(x);
+		return g_GeoAsin[i] + ( g_GeoAsin[i+1] - g_GeoAsin[i] )*( x-i );
+	}
+	return asin(sqrt(x)); // distance over 17083km, just compute honestly
+}
+
+
+inline float GeodistAdaptiveDeg ( float lat1, float lon1, float lat2, float lon2 )
+{
+	float dlat = GeodistDegDiff ( lat1-lat2 );
+	float dlon = GeodistDegDiff ( lon1-lon2 );
+
+	if ( dlon<13 )
+	{
+		// points are close enough; use flat ellipsoid model
+		// interpolate sqr(k1), sqr(k2) coefficients using latitudes midpoint
+		float m = ( lat1+lat2+180 )*GEODIST_TABLE_K/360; // [-90, 90] degrees -> [0, KTABLE] indexes
+		int i = int(m);
+		i &= ( GEODIST_TABLE_K-1 );
+		float kk1 = g_GeoFlatK[i][0] + ( g_GeoFlatK[i+1][0] - g_GeoFlatK[i][0] )*( m-i );
+		float kk2 = g_GeoFlatK[i][1] + ( g_GeoFlatK[i+1][1] - g_GeoFlatK[i][1] )*( m-i );
+		return (float)sqrt ( kk1*dlat*dlat + kk2*dlon*dlon );
+	} else
+	{
+		// points too far away; use haversine
+		static const float D = 2*6371000;
+		float a = fsqr ( GeodistFastSin ( dlat*TO_RADF2 ) ) + GeodistFastCos ( lat1*TO_RADF ) * GeodistFastCos ( lat2*TO_RADF ) * fsqr ( GeodistFastSin ( dlon*TO_RADF2 ) );
+		return (float)( D*GeodistFastAsinSqrt(a) );
+	}
+}
+
+
+inline float GeodistAdaptiveRad ( float lat1, float lon1, float lat2, float lon2 )
+{
+	// cut-paste-optimize, maybe?
+	return GeodistAdaptiveDeg ( lat1*TO_DEGF, lon1*TO_DEGF, lat2*TO_DEGF, lon2*TO_DEGF );
 }
 
 
 static inline void GeoTesselate ( CSphVector<float> & dIn )
 {
-	// conversion between degrees and radians
-	static const float TO_RAD = (float)( 3.14159265358979323846 / 180.0 );
-	static const float TO_DEG = (float)( 180.0 / 3.14159265358979323846 );
-
 	// 1 minute of latitude, max
 	// (it varies from 1842.9 to 1861.57 at 0 to 90 respectively)
 	static const float LAT_MINUTE = 1861.57f;
@@ -2833,13 +2985,13 @@ static inline void GeoTesselate ( CSphVector<float> & dIn )
 
 		// convert to radians
 		// FIXME! make units configurable
-		fLat1 *= TO_RAD;
-		fLon1 *= TO_RAD;
-		fLat2 *= TO_RAD;
-		fLon2 *= TO_RAD;
+		fLat1 *= TO_RADF;
+		fLon1 *= TO_RADF;
+		fLat2 *= TO_RADF;
+		fLon2 *= TO_RADF;
 
 		// compute precise geodistance
-		d = CalcGeodist ( fLat1, fLon1, fLat2, fLon2 );
+		d = GeodistSphereRad ( fLat1, fLon1, fLat2, fLon2 );
 		if ( d<=TESSELATE_TRESH )
 			continue;
 		int iSegments = (int) ceil ( d / TESSELATE_TRESH );
@@ -2874,6 +3026,7 @@ static inline void GeoTesselate ( CSphVector<float> & dIn )
 	dIn.SwapData ( dOut );
 }
 
+//////////////////////////////////////////////////////////////////////////
 
 class Expr_ContainsConstvec_c : public Expr_Contains_c
 {
@@ -3242,11 +3395,11 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 						fK1 = Max ( fK1, 0.001f );
 						fB = Min ( Max ( fB, 0.0f ), 1.0f );
 
-						CSphVector<CSphNamedInt> * pFiledWeights = NULL;
+						CSphVector<CSphNamedVariant> * pFieldWeights = NULL;
 						if ( dArgs.GetLength()>2 )
-							pFiledWeights = &m_dNodes[dArgs[2]].m_pConsthash->m_dPairs;
+							pFieldWeights = &m_dNodes[dArgs[2]].m_pConsthash->m_dPairs;
 
-						return new Expr_BM25F_c ( fK1, fB, pFiledWeights );
+						return new Expr_BM25F_c ( fK1, fB, pFieldWeights );
 					}
 
 					case FUNC_BIGINT:
@@ -3906,12 +4059,39 @@ public:
 
 //////////////////////////////////////////////////////////////////////////
 
+enum GeoFunc_e
+{
+	GEO_HAVERSINE,
+	GEO_ADAPTIVE
+};
+
+typedef float (*Geofunc_fn)( float, float, float, float );
+
+static Geofunc_fn GeodistFn ( GeoFunc_e eFunc, bool bDeg )
+{
+	switch ( 2*eFunc+bDeg )
+	{
+		case 2*GEO_HAVERSINE:		return &GeodistSphereRad;
+		case 2*GEO_HAVERSINE+1:		return &GeodistSphereDeg;
+		case 2*GEO_ADAPTIVE:		return &GeodistAdaptiveRad;
+		case 2*GEO_ADAPTIVE+1:		return &GeodistAdaptiveDeg;
+	}
+	return NULL;
+}
+
+static float Geodist ( GeoFunc_e eFunc, bool bDeg, float lat1, float lon1, float lat2, float lon2 )
+{
+	return GeodistFn ( eFunc, bDeg ) ( lat1, lon1, lat2, lon2 );
+}
+
 /// geodist() - attr point, constant anchor
-class Expr_GeodistAttrConst_c: public ISphExpr
+class Expr_GeodistAttrConst_c : public ISphExpr
 {
 public:
-	Expr_GeodistAttrConst_c ( CSphAttrLocator tLat, CSphAttrLocator tLon, float fAnchorLat, float fAnchorLon, int iLat, int iLon )
-		: m_tLat ( tLat )
+	Expr_GeodistAttrConst_c ( Geofunc_fn pFunc, float fOut, CSphAttrLocator tLat, CSphAttrLocator tLon, float fAnchorLat, float fAnchorLon, int iLat, int iLon )
+		: m_pFunc ( pFunc )
+		, m_fOut ( fOut )
+		, m_tLat ( tLat )
 		, m_tLon ( tLon )
 		, m_fAnchorLat ( fAnchorLat )
 		, m_fAnchorLon ( fAnchorLon )
@@ -3921,7 +4101,7 @@ public:
 
 	virtual float Eval ( const CSphMatch & tMatch ) const
 	{
-		return CalcGeodist ( tMatch.GetAttrFloat ( m_tLat ), tMatch.GetAttrFloat ( m_tLon ), m_fAnchorLat, m_fAnchorLon );
+		return m_fOut*m_pFunc ( tMatch.GetAttrFloat ( m_tLat ), tMatch.GetAttrFloat ( m_tLon ), m_fAnchorLat, m_fAnchorLon );
 	}
 
 	virtual void Command ( ESphExprCommand eCmd, void * pArg ) const
@@ -3934,22 +4114,24 @@ public:
 	}
 
 private:
+	Geofunc_fn		m_pFunc;
+	float			m_fOut;
 	CSphAttrLocator	m_tLat;
 	CSphAttrLocator	m_tLon;
-
-	float		m_fAnchorLat;
-	float		m_fAnchorLon;
-
-	int			m_iLat;
-	int			m_iLon;
+	float			m_fAnchorLat;
+	float			m_fAnchorLon;
+	int				m_iLat;
+	int				m_iLon;
 };
 
 /// geodist() - expr point, constant anchor
 class Expr_GeodistConst_c: public ISphExpr
 {
 public:
-	Expr_GeodistConst_c ( ISphExpr * pLat, ISphExpr * pLon, float fAnchorLat, float fAnchorLon )
-		: m_pLat ( pLat )
+	Expr_GeodistConst_c ( Geofunc_fn pFunc, float fOut, ISphExpr * pLat, ISphExpr * pLon, float fAnchorLat, float fAnchorLon )
+		: m_pFunc ( pFunc )
+		, m_fOut ( fOut )
+		, m_pLat ( pLat )
 		, m_pLon ( pLon )
 		, m_fAnchorLat ( fAnchorLat )
 		, m_fAnchorLon ( fAnchorLon )
@@ -3963,7 +4145,7 @@ public:
 
 	virtual float Eval ( const CSphMatch & tMatch ) const
 	{
-		return CalcGeodist ( m_pLat->Eval(tMatch), m_pLon->Eval(tMatch), m_fAnchorLat, m_fAnchorLon );
+		return m_fOut*m_pFunc ( m_pLat->Eval(tMatch), m_pLon->Eval(tMatch), m_fAnchorLat, m_fAnchorLon );
 	}
 
 	virtual void Command ( ESphExprCommand eCmd, void * pArg )
@@ -3973,9 +4155,10 @@ public:
 	}
 
 private:
+	Geofunc_fn	m_pFunc;
+	float		m_fOut;
 	ISphExpr *	m_pLat;
 	ISphExpr *	m_pLon;
-
 	float		m_fAnchorLat;
 	float		m_fAnchorLon;
 };
@@ -3984,8 +4167,10 @@ private:
 class Expr_Geodist_c: public ISphExpr
 {
 public:
-	Expr_Geodist_c ( ISphExpr * pLat, ISphExpr * pLon, ISphExpr * pAnchorLat, ISphExpr * pAnchorLon )
-		: m_pLat ( pLat )
+	Expr_Geodist_c ( Geofunc_fn pFunc, float fOut, ISphExpr * pLat, ISphExpr * pLon, ISphExpr * pAnchorLat, ISphExpr * pAnchorLon )
+		: m_pFunc ( pFunc )
+		, m_fOut ( fOut )
+		, m_pLat ( pLat )
 		, m_pLon ( pLon )
 		, m_pAnchorLat ( pAnchorLat )
 		, m_pAnchorLon ( pAnchorLon )
@@ -4001,7 +4186,7 @@ public:
 
 	virtual float Eval ( const CSphMatch & tMatch ) const
 	{
-		return CalcGeodist ( m_pLat->Eval(tMatch), m_pLon->Eval(tMatch), m_pAnchorLat->Eval(tMatch), m_pAnchorLon->Eval(tMatch) );
+		return m_fOut*m_pFunc ( m_pLat->Eval(tMatch), m_pLon->Eval(tMatch), m_pAnchorLat->Eval(tMatch), m_pAnchorLon->Eval(tMatch) );
 	}
 
 	virtual void Command ( ESphExprCommand eCmd, void * pArg )
@@ -4013,9 +4198,10 @@ public:
 	}
 
 private:
+	Geofunc_fn	m_pFunc;
+	float		m_fOut;
 	ISphExpr *	m_pLat;
 	ISphExpr *	m_pLon;
-
 	ISphExpr *	m_pAnchorLat;
 	ISphExpr *	m_pAnchorLon;
 };
@@ -4209,16 +4395,57 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 {
 	CSphVector<int> dArgs;
 	GatherArgNodes ( iArgs, dArgs );
-	assert ( dArgs.GetLength()==4 );
+	assert ( dArgs.GetLength()==4 || dArgs.GetLength()==5 );
+
+	float fOut = 1.0f; // result scale, defaults to out=meters
+	bool bDeg = false; // arg units, defaults to in=radians
+	GeoFunc_e eMethod = GEO_ADAPTIVE; // geodist function to use, defaults to adaptive
+	
+	if ( dArgs.GetLength()==5 )
+	{
+		assert ( m_dNodes[dArgs[4]].m_eRetType==SPH_ATTR_CONSTHASH );
+		CSphVector<CSphNamedVariant> & dOpts = m_dNodes[dArgs[4]].m_pConsthash->m_dPairs;
+
+		// FIXME! handle errors in options somehow?
+		ARRAY_FOREACH ( i, dOpts )
+		{
+			const CSphNamedVariant & t = dOpts[i];
+			if ( t.m_sKey=="in" )
+			{
+				if ( t.m_sValue=="deg" || t.m_sValue=="degrees" )
+					bDeg = true;
+				else if ( t.m_sValue=="rad" || t.m_sValue=="radians" )
+					bDeg = false;
+
+			} else if ( t.m_sKey=="out" )
+			{
+				if ( t.m_sValue=="km" || t.m_sKey=="kilometers" )
+					fOut = 1.0f / 1000.0f;
+				else if ( t.m_sValue=="mi" || t.m_sKey=="miles" )
+					fOut = 1.0f / 1609.34f;
+				else if ( t.m_sValue=="ft" || t.m_sKey=="feet" )
+					fOut = 1.0f / 0.3048f;
+				else if ( t.m_sValue=="m" || t.m_sKey=="meters" )
+					fOut = 1.0f;
+			} else if ( t.m_sKey=="method" )
+			{
+				if ( t.m_sValue=="haversine" )
+					eMethod = GEO_HAVERSINE;
+				else if ( t.m_sValue=="adaptive" )
+					eMethod = GEO_ADAPTIVE;
+			}
+		}
+	}
 
 	bool bConst1 = ( IsConst ( &m_dNodes[dArgs[0]] ) && IsConst ( &m_dNodes[dArgs[1]] ) );
 	bool bConst2 = ( IsConst ( &m_dNodes[dArgs[2]] ) && IsConst ( &m_dNodes[dArgs[3]] ) );
 
 	if ( bConst1 && bConst2 )
 	{
-		return new Expr_GetConst_c ( CalcGeodist (
-			m_dNodes[dArgs[0]].FloatVal(), m_dNodes[dArgs[1]].FloatVal(),
-			m_dNodes[dArgs[2]].FloatVal(), m_dNodes[dArgs[3]].FloatVal() ) );
+		float t[4];
+		for ( int i=0; i<4; i++ )
+			t[i] = m_dNodes[dArgs[i]].FloatVal();
+		return new Expr_GetConst_c ( fOut*Geodist ( eMethod, bDeg, t[0], t[1], t[2], t[3] ) );
 	}
 
 	if ( bConst1 )
@@ -4234,14 +4461,14 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 		if ( m_dNodes[dArgs[0]].m_iToken==TOK_ATTR_FLOAT && m_dNodes[dArgs[1]].m_iToken==TOK_ATTR_FLOAT )
 		{
 			// attr point
-			return new Expr_GeodistAttrConst_c (
+			return new Expr_GeodistAttrConst_c ( GeodistFn ( eMethod, bDeg ), fOut,
 				m_dNodes[dArgs[0]].m_tLocator, m_dNodes[dArgs[1]].m_tLocator,
 				m_dNodes[dArgs[2]].FloatVal(), m_dNodes[dArgs[3]].FloatVal(),
 				m_dNodes[dArgs[0]].m_iLocator, m_dNodes[dArgs[1]].m_iLocator );
 		} else
 		{
 			// expr point
-			return new Expr_GeodistConst_c (
+			return new Expr_GeodistConst_c ( GeodistFn ( eMethod, bDeg ), fOut,
 				CreateTree ( dArgs[0] ), CreateTree ( dArgs[1] ),
 				m_dNodes[dArgs[2]].FloatVal(), m_dNodes[dArgs[3]].FloatVal() );
 		}
@@ -4251,7 +4478,7 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 	CSphVector<ISphExpr *> dExpr;
 	FoldArglist ( CreateTree ( iArgs ), dExpr );
 	assert ( dExpr.GetLength()==4 );
-	return new Expr_Geodist_c ( dExpr[0], dExpr[1], dExpr[2], dExpr[3] );
+	return new Expr_Geodist_c ( GeodistFn ( eMethod, bDeg ), fOut, dExpr[0], dExpr[1], dExpr[2], dExpr[3] );
 }
 
 
@@ -4645,12 +4872,13 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 			}
 		}
 	}
+
 	// check that BM25F args are float, float [, {file_name=weight}]
 	if ( eFunc==FUNC_BM25F )
 	{
-		if ( dRetTypes.GetLength()<2 || dRetTypes.GetLength()>3 )
+		if ( dRetTypes.GetLength()>3 )
 		{
-			m_sParserError.SetSprintf ( "%s() called with 2-3 args, got %d args", g_dFuncs[iFunc].m_sName, dRetTypes.GetLength() );
+			m_sParserError.SetSprintf ( "%s() called with %d args, at most 3 args expected", g_dFuncs[iFunc].m_sName, dRetTypes.GetLength() );
 			return -1;
 		}
 
@@ -4663,6 +4891,22 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 		if ( dRetTypes.GetLength()==3 && dRetTypes[2]!=SPH_ATTR_CONSTHASH )
 		{
 			m_sParserError.SetSprintf ( "%s() argument 3 must be hash", g_dFuncs[iFunc].m_sName );
+			return -1;
+		}
+	}
+
+	// check GEODIST args count, and that optional arg 5 is a consthash
+	if ( eFunc==FUNC_GEODIST )
+	{
+		if ( dRetTypes.GetLength()>5 )
+		{
+			m_sParserError.SetSprintf ( "%s() called with %d args, at most 5 args expected", g_dFuncs[iFunc].m_sName, dRetTypes.GetLength() );
+			return -1;
+		}
+
+		if ( dRetTypes.GetLength()==5 && dRetTypes[4]!=SPH_ATTR_CONSTHASH )
+		{
+			m_sParserError.SetSprintf ( "%s() argument 5 must be hash", g_dFuncs[iFunc].m_sName );
 			return -1;
 		}
 	}
@@ -4891,19 +5135,19 @@ int ExprParser_t::AddNodeHookFunc ( int iID, int iLeft )
 	return m_dNodes.GetLength()-1;
 }
 
-int ExprParser_t::AddNodeConsthash ( const char * sKey, int64_t iValue )
+int ExprParser_t::AddNodeConsthash ( const char * sKey, const char * sValue, int64_t iValue )
 {
 	ExprNode_t & tNode = m_dNodes.Add();
 	tNode.m_iToken = TOK_CONST_HASH;
 	tNode.m_pConsthash = new ConstHash_c();
-	tNode.m_pConsthash->Add ( sKey, iValue );
+	tNode.m_pConsthash->Add ( sKey, sValue, iValue );
 	tNode.m_eRetType = SPH_ATTR_CONSTHASH;
 	return m_dNodes.GetLength()-1;
 }
 
-void ExprParser_t::AppendToConsthash ( int iNode, const char * sKey, int64_t iValue )
+void ExprParser_t::AppendToConsthash ( int iNode, const char * sKey, const char * sValue, int64_t iValue )
 {
-	m_dNodes[iNode].m_pConsthash->Add ( sKey, iValue );
+	m_dNodes[iNode].m_pConsthash->Add ( sKey, sValue, iValue );
 }
 
 const char * ExprParser_t::Attr2Ident ( uint64_t uAttrLoc )

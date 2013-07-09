@@ -2563,13 +2563,33 @@ Returns the CRC32 value of a string argument. Introduced in version 2.0.1-beta.
 <varlistentry>
 <term id="expr-func-geodist">GEODIST()</term>
 <listitem><para>
-GEODIST(lat1,long1,lat2,long2) function, introduced in version 0.9.9-rc2,
+GEODIST(lat1, lon1, lat2, lon2, [...]) function, introduced in version 0.9.9-rc2,
 computes geosphere distance between two given points specified by their
-coordinates. Note that both latitudes and longitudes must be in radians
-and the result will be in meters. You can use arbitrary expression as any
+coordinates. Note that by default both latitudes and longitudes must be in <b>radians</b>
+and the result will be in <b>meters</b>. You can use arbitrary expression as any
 of the four coordinates. An optimized path will be selected when one pair
 of the arguments refers directly to a pair attributes and the other one
 is constant.
+</para><para>
+Starting with version 2.2.1-beta, GEODIST() also takes an optional 5th argument
+that lets you easily convert between input and output units, and pick the specific
+geodistance formula to use. The complete syntax and a few examples are as follows:
+<programlisting>
+GEODIST(lat1, lon1, lat2, lon2, { option=value, ... })
+
+GEODIST(40.7643929, -73.9997683, 40.7642578, -73.9994565, {in=degrees, out=feet})
+GEODIST(51.50, -0.12, 29.98, 31.13, {in=deg, out=mi}}
+</programlisting>
+The known options and their values are:
+<itemizedlist>
+<listitem><code>in = {deg | degrees | rad | radians}</code>, specifies the input units;</listitem>
+<listitem><code>out = {m | meters | km | kilometers | ft | feet | mi | miles}</code>, specifies the output units;</listitem>
+<listitem><code>method = {haversine | adaptive}</code>, specifies the geodistance calculation method.</listitem>
+</itemizedlist>
+Upto version 2.1.x (inclusive), "haversine" method was the default.
+Starting with 2.2.1-beta, the default method changed to "adaptive",
+a new, well optimized implementation that is both more precise
+<emphasis>and</emphasis> much faster at all times.
 </para></listitem>
 </varlistentry>
 

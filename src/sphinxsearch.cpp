@@ -7222,13 +7222,16 @@ struct Expr_BM25F_T : public ISphExpr
 			Expr_ConstHash_c * pConstHash = dynamic_cast<Expr_ConstHash_c*> ( pFieldWeights );
 			assert ( pConstHash );
 
-			ARRAY_FOREACH ( i, pConstHash->m_dValues )
+			CSphVector<CSphNamedVariant> & dOpts = pConstHash->m_dValues;
+			ARRAY_FOREACH ( i, dOpts )
 			{
 				// FIXME? report errors if field was not found?
-				CSphString & sField = pConstHash->m_dValues[i].m_sName;
+				if ( !dOpts[i].m_sValue.IsEmpty() )
+					continue; // weights must be int, not string
+				CSphString & sField = dOpts[i].m_sKey;
 				int iField = pState->m_pSchema->GetFieldIndex ( sField.cstr() );
 				if ( iField>=0 )
-					m_dWeights[iField] = pConstHash->m_dValues[i].m_iValue;
+					m_dWeights[iField] = dOpts[i].m_iValue;
 			}
 		}
 

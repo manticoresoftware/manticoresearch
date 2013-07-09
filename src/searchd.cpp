@@ -21603,6 +21603,7 @@ int main ( int argc, char **argv )
 	g_pUservarsHook = UservarsHook;
 	sphCollationInit ();
 	sphBacktraceSetBinaryName ( argv[0] );
+	GeodistInit();
 
 #if USE_WINDOWS
 	int iNameIndex = -1;

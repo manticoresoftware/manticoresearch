@@ -164,12 +164,25 @@ struct ISphExprHook
 	virtual void CheckExit ( int iID ) = 0;
 };
 
+
+/// named int/string variant
+/// used for named expression function arguments block
+/// ie. {..} part in, for example, BM25F(1.2, 0.8, {title=3}) call
+struct CSphNamedVariant
+{
+	CSphString		m_sKey;		///< key
+	CSphString		m_sValue;	///< value for strings, empty for ints
+	int				m_iValue;	///< value for ints
+};
+
+
 /// a container used to pass hashes of constants around the evaluation tree
+/// FIXME! rename because this is not a hash, just a vector of key-value pairs?
 struct Expr_ConstHash_c : public ISphExpr
 {
-	CSphVector<CSphNamedInt> m_dValues;
+	CSphVector<CSphNamedVariant> m_dValues;
 
-	explicit Expr_ConstHash_c ( CSphVector<CSphNamedInt> & dValues )
+	explicit Expr_ConstHash_c ( CSphVector<CSphNamedVariant> & dValues )
 	{
 		m_dValues.SwapData ( dValues );
 	}
@@ -209,6 +222,26 @@ bool sphUDFDrop ( const char * szFunc, CSphString & sError );
 /// save SphinxQL state (ie. all active functions)
 class CSphWriter;
 void sphUDFSaveState ( CSphWriter & tWriter );
+
+//////////////////////////////////////////////////////////////////////////
+
+/// init tables used by our geodistance functions
+void GeodistInit();
+
+/// haversine sphere distance, radians
+float GeodistSphereRad ( float lat1, float lon1, float lat2, float lon2 );
+
+/// haversine sphere distance, degrees
+float GeodistSphereDeg ( float lat1, float lon1, float lat2, float lon2 );
+
+/// flat ellipsoid distance, degrees
+float GeodistFlatDeg ( float fLat1, float fLon1, float fLat2, float fLon2 );
+
+/// adaptive flat/haversine distance, degrees
+float GeodistAdaptiveDeg ( float lat1, float lon1, float lat2, float lon2 );
+
+/// adaptive flat/haversine distance, radians
+float GeodistAdaptiveRad ( float lat1, float lon1, float lat2, float lon2 );
 
 #endif // _sphinxexpr_
 

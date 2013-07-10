@@ -6560,7 +6560,7 @@ void SelectParser_t::AutoAlias ( CSphQueryItem & tItem, YYSTYPE * pStart, YYSTYP
 	if ( pStart && pEnd )
 	{
 		tItem.m_sAlias.SetBinary ( m_pStart + pStart->m_iStart, pEnd->m_iEnd - pStart->m_iStart );
-		tItem.m_sAlias.ToLower();
+		sphColumnToLowercase ( const_cast<char *>( tItem.m_sAlias.cstr() ) ); // as in SqlParser_c
 	} else
 		tItem.m_sAlias = tItem.m_sExpr;
 }
@@ -6569,7 +6569,7 @@ void SelectParser_t::AddItem ( YYSTYPE * pExpr, ESphAggrFunc eAggrFunc, YYSTYPE 
 {
 	CSphQueryItem & tItem = m_pQuery->m_dItems.Add();
 	tItem.m_sExpr.SetBinary ( m_pStart + pExpr->m_iStart, pExpr->m_iEnd - pExpr->m_iStart );
-	tItem.m_sExpr.ToLower();
+	sphColumnToLowercase ( const_cast<char *>( tItem.m_sExpr.cstr() ) );
 	tItem.m_eAggrFunc = eAggrFunc;
 	AutoAlias ( tItem, pStart, pEnd );
 }
@@ -6579,7 +6579,7 @@ void SelectParser_t::AddItem ( const char * pToken, YYSTYPE * pStart, YYSTYPE * 
 	CSphQueryItem & tItem = m_pQuery->m_dItems.Add();
 	tItem.m_sExpr = pToken;
 	tItem.m_eAggrFunc = SPH_AGGR_NONE;
-	tItem.m_sExpr.ToLower();
+	sphColumnToLowercase ( const_cast<char *>( tItem.m_sExpr.cstr() ) );
 	AutoAlias ( tItem, pStart, pEnd );
 }
 

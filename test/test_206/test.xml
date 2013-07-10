@@ -206,6 +206,12 @@ index objects
 	source = json_objects
 	path=<data_path/>/json_objects
 }
+
+index dist_case
+{
+	type			= distributed
+	agent			= <my_address/>:json_case
+}
 </config>
 
 <db_create>
@@ -514,6 +520,10 @@ Two'</sphinxql>
 <sphinxql>select length(j) from objects</sphinxql>
 <sphinxql>select length(j[0]) from objects</sphinxql>
 <sphinxql>select length(j.a) from objects</sphinxql>
+<!-- mixed case for distributed index -->
+<sphinxql>select j.str from dist_case where j.str is not null order by j.str asc</sphinxql>
+<sphinxql>select j.Str from dist_case where j.Str is not null order by j.Str asc</sphinxql>
+<sphinxql>select j.STR from dist_case where j.STR is not null order by j.STR asc</sphinxql>
 </sphqueries>
 
 </test>

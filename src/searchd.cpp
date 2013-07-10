@@ -6365,7 +6365,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 	if ( iVer>=0x102 )
 	{
 		tQuery.m_sSortBy = tReq.GetString ();
-		tQuery.m_sSortBy.ToLower ();
+		sphColumnToLowercase ( const_cast<char *>( tQuery.m_sSortBy.cstr() ) );
 	}
 	tQuery.m_sRawQuery = tReq.GetString ();
 	tQuery.m_iWeights = tReq.GetDwords ( (DWORD**)&tQuery.m_pWeights, SPH_MAX_FIELDS, "invalid weight count %d (should be in 0..%d range)" );
@@ -6426,7 +6426,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 		{
 			CSphFilterSettings & tFilter = tQuery.m_dFilters[iFilter];
 			tFilter.m_sAttrName = tReq.GetString ();
-			tFilter.m_sAttrName.ToLower ();
+			sphColumnToLowercase ( const_cast<char *>( tFilter.m_sAttrName.cstr() ) );
 
 			snprintf ( sSetError, MAX_ERROR_SET_BUFFER
 				, "invalid attribute '%s'(%d) set length %s (should be in 0..%s range)", tFilter.m_sAttrName.cstr(), iFilter, "%d", "%d" );

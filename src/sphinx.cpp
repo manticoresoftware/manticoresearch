@@ -16485,7 +16485,7 @@ void CSphIndex_VLN::DebugDumpDict ( FILE * fp )
 	{
 		KeywordsBlockReader_c tCtx ( m_tWordlist.AcquireDict ( &m_tWordlist.m_dCheckpoints[i], iFD, pBuf ), m_bHaveSkips );
 		while ( tCtx.UnpackWord() )
-			printf ( "%s,%d,%d," INT64_FMT "\n", tCtx.GetWord(), tCtx.m_iDocs, tCtx.m_iHits, int64_t(tCtx.m_iDoclistOffset) );
+			fprintf ( fp, "%s,%d,%d," INT64_FMT "\n", tCtx.GetWord(), tCtx.m_iDocs, tCtx.m_iHits, int64_t(tCtx.m_iDoclistOffset) );
 	}
 }
 
@@ -31235,7 +31235,18 @@ bool CSphGlobalIDF::Preread ( const CSphString & sFilename, CSphString & sError 
 
 const DWORD CSphGlobalIDF::GetDocs ( const CSphString & sWord ) const
 {
-	uint64_t uWordID = sphFNV64 ( (BYTE*)sWord.cstr() );
+	const char * s = sWord.cstr();
+
+	// replace = to MAGIC_WORD_HEAD_NONSTEMMED for exact terms
+	char sBuf [ 3*SPH_MAX_WORD_LEN+4 ];
+	if ( *s && *s=='=' )
+	{
+		strncpy ( sBuf, sWord.cstr(), sizeof(sBuf) );
+		sBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
+		s = sBuf;
+	}
+
+	uint64_t uWordID = sphFNV64 ( (const BYTE *)s );
 
 	int64_t iStart = 0;
 	int64_t iEnd = m_iTotalWords-1;
@@ -31262,6 +31273,9 @@ float CSphGlobalIDF::GetIDF ( const CSphString & sWord, int iDocsLocal, bool bPl
 {
 	const int64_t iDocs = Max ( iDocsLocal, (int64_t)GetDocs ( sWord ) );
 	const int64_t iTotalClamped = Max ( m_iTotalDocuments, iDocs );
+
+	if ( !iDocs )
+		return 0.0f;
 
 	if ( bPlainIDF )
 	{

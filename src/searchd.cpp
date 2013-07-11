@@ -2052,7 +2052,7 @@ CrashQuery_t SphCrashLogger_c::GetQuery()
 }
 
 
-void SetSignalHandlers ()
+void SetSignalHandlers ( bool bAllowCtrlC=false )
 {
 	SphCrashLogger_c::Init();
 
@@ -2065,7 +2065,12 @@ void SetSignalHandlers ()
 	for ( ;; )
 	{
 		sa.sa_handler = sigterm;	if ( sigaction ( SIGTERM, &sa, NULL )!=0 ) break;
-		sa.sa_handler = sigterm;	if ( sigaction ( SIGINT, &sa, NULL )!=0 ) break;
+		if ( !bAllowCtrlC )
+		{
+			sa.sa_handler = sigterm;
+			if ( sigaction ( SIGINT, &sa, NULL )!=0 )
+				break;
+		}
 		sa.sa_handler = sighup;		if ( sigaction ( SIGHUP, &sa, NULL )!=0 ) break;
 		sa.sa_handler = sigusr1;	if ( sigaction ( SIGUSR1, &sa, NULL )!=0 ) break;
 		sa.sa_handler = sigchld;	if ( sigaction ( SIGCHLD, &sa, NULL )!=0 ) break;
@@ -11294,7 +11299,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 		}
 	} else if ( sOpt=="global_idf" )
 	{
-		m_pQuery->m_bGlobalIDF = true;
+		m_pQuery->m_bGlobalIDF = ( tValue.m_iValue!=0 );
 
 	} else if ( sOpt=="ignore_nonexistent_indexes" )
 	{
@@ -20793,7 +20798,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		// handle no-arg options
 		OPT ( "-h", "--help" )		{ ShowHelp(); return 0; }
 		OPT ( "-?", "--?" )			{ ShowHelp(); return 0; }
-		OPT1 ( "--console" )		{ g_eWorkers = MPM_NONE; g_bOptNoLock = true; g_bOptNoDetach = true; }
+		OPT1 ( "--console" )		{ g_eWorkers = MPM_NONE; g_bOptNoLock = true; g_bOptNoDetach = true; bTestMode = true; }
 		OPT1 ( "--stop" )			bOptStop = true;
 		OPT1 ( "--stopwait" )		{ bOptStop = true; bOptStopWait = true; }
 		OPT1 ( "--status" )			bOptStatus = true;
@@ -21145,7 +21150,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
 
 	// handle my signals
-	SetSignalHandlers ();
+	SetSignalHandlers ( g_bOptNoDetach );
 
 	// create logs
 	if ( !g_bOptNoLock )

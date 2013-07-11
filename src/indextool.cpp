@@ -369,7 +369,7 @@ bool BuildIDF ( const CSphString & sFilename, const CSphVector<CSphString> & dFi
 	// to merge duplicates, calculate total number of occurrences and process bSkipUnique
 	// this method is about 3x faster and consumes ~2x less memory than a hash based one
 
-	typedef char StringBuffer_t [ 3*SPH_MAX_WORD_LEN+16 ];
+	typedef char StringBuffer_t [ 3*SPH_MAX_WORD_LEN+16+128 ]; // { dict-keyowrd, 32bit number, 32bit number, 64bit number }
 
 	int64_t iTotalDocuments = 0;
 	int64_t iTotalWords = 0;
@@ -393,7 +393,7 @@ bool BuildIDF ( const CSphString & sFilename, const CSphVector<CSphString> & dFi
 	}
 
 	// internal state
-	StringBuffer_t * dWords = new StringBuffer_t [ iFiles ];
+	CSphFixedVector<StringBuffer_t> dWords ( iFiles );
 	CSphVector<int> dDocs ( iFiles );
 	CSphVector<bool> dFinished ( iFiles );
 	dFinished.Fill ( false );
@@ -481,7 +481,7 @@ bool BuildIDF ( const CSphString & sFilename, const CSphVector<CSphString> & dFi
 						iSkippedWords++;
 				}
 
-				strcpy ( sWord, dWords[i] ); // NOLINT
+				strncpy ( sWord, dWords[i], sizeof ( dWords[i] ) );
 				iDocs = dDocs[i];
 			}
 		}
@@ -493,8 +493,6 @@ bool BuildIDF ( const CSphString & sFilename, const CSphVector<CSphString> & dFi
 		if ( bEnd )
 			break;
 	}
-
-	SafeDeleteArray ( dWords );
 
 	fprintf ( stdout, INT64_FMT" documents, "INT64_FMT" words ("INT64_FMT" read, "INT64_FMT" merged, "INT64_FMT" skipped)\n",
 		iTotalDocuments, iTotalWords, iReadWords, iMergedWords, iSkippedWords );

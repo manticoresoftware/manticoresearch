@@ -1747,6 +1747,7 @@ int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp )
 	case SPH_ATTR_INT64SET:		iRes = TOK_ATTR_MVA64; break;
 	case SPH_ATTR_STRING:		iRes = TOK_ATTR_STRING; break;
 	case SPH_ATTR_JSON:			iRes = TOK_ATTR_JSON; break;
+	case SPH_ATTR_JSON_FIELD:	iRes = TOK_ATTR_JSON; break;
 	case SPH_ATTR_FACTORS:		iRes = TOK_ATTR_FACTORS; break;
 	case SPH_ATTR_INTEGER:
 	case SPH_ATTR_TIMESTAMP:

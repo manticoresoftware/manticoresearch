@@ -3502,6 +3502,7 @@ static inline ESphSortKeyPart Attr2Keypart ( ESphAttr eType )
 		case SPH_ATTR_FLOAT:	return SPH_KEYPART_FLOAT;
 		case SPH_ATTR_STRING:	return SPH_KEYPART_STRING;
 		case SPH_ATTR_JSON:
+		case SPH_ATTR_JSON_FIELD:
 		case SPH_ATTR_STRINGPTR: return SPH_KEYPART_STRINGPTR;
 		default:				return SPH_KEYPART_INT;
 	}
@@ -3581,17 +3582,28 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 			// try JSON attribute and use JSON attribute instead of JSON field
 			if ( iAttr<0 || ( iAttr>=0 && tSchema.GetAttr ( iAttr ).m_eAttrType==SPH_ATTR_JSON_FIELD ) )
 			{
-				CSphString sJsonCol, sJSonKey;
-				if ( sphJsonNameSplit ( pTok, &sJsonCol, &sJSonKey ) )
-					iAttr = tSchema.GetAttrIndex ( sJsonCol.cstr() );
-
 				if ( iAttr>=0 )
 				{
-					tState.m_tSubKeys[iField] = JsonKey_t ( sJSonKey.cstr(), sJSonKey.Length() );
-					bool bUsesWeight = false;
-					tState.m_tSubExpr[iField] = sphExprParse ( pTok, tSchema, NULL, &bUsesWeight, sError, NULL );
+					// aliased SPH_ATTR_JSON_FIELD, reuse existing expression
+					const CSphColumnInfo * pAttr = &tSchema.GetAttr(iAttr);
+					if ( pAttr->m_pExpr.Ptr() )
+						pAttr->m_pExpr->AddRef(); // SetupSortRemap uses refcounted pointer, but does not AddRef() itself, so help it
+					tState.m_tSubExpr[iField] = pAttr->m_pExpr.Ptr();
+					tState.m_tSubKeys[iField] = JsonKey_t ( pTok, strlen ( pTok ) );
+
 				} else
-					tState.m_tSubExpr[iField] = NULL;
+				{
+					CSphString sJsonCol, sJSonKey;
+					if ( sphJsonNameSplit ( pTok, &sJsonCol, &sJSonKey ) )
+					{
+						iAttr = tSchema.GetAttrIndex ( sJsonCol.cstr() );
+						if ( iAttr>=0 )
+						{
+							tState.m_tSubExpr[iField] = sphExprParse ( pTok, tSchema, NULL, NULL, sError, NULL );
+							tState.m_tSubKeys[iField] = JsonKey_t ( sJSonKey.cstr(), sJSonKey.Length() );
+						}
+					}
+				}
 			}
 
 			// try to lookup aliased count(*) in select items
@@ -4045,18 +4057,13 @@ struct ExprSortJson2StringPtr_c : public ISphExpr
 {
 	const BYTE *			m_pStrings; ///< string pool; base for offset of string attributes
 	const CSphAttrLocator	m_tJsonCol; ///< JSON attribute to fix
-	ISphExpr *				m_pExpr;
+	CSphRefcountedPtr<ISphExpr>	m_pExpr;
 
 	ExprSortJson2StringPtr_c ( const CSphAttrLocator & tLocator, ISphExpr * pExpr )
 		: m_pStrings ( NULL )
 		, m_tJsonCol ( tLocator )
 		, m_pExpr ( pExpr )
 	{}
-
-	virtual ~ExprSortJson2StringPtr_c ()
-	{
-		SafeDelete ( m_pExpr );
-	}
 
 	virtual bool IsStringPtr () const { return true; }
 
@@ -4140,7 +4147,7 @@ struct ExprSortJson2StringPtr_c : public ISphExpr
 		if ( eCmd==SPH_EXPR_SET_STRING_POOL )
 		{
 			m_pStrings = (const BYTE*)pArg;
-			if ( m_pExpr )
+			if ( m_pExpr.Ptr() )
 				m_pExpr->Command ( eCmd, pArg );
 		}
 	}

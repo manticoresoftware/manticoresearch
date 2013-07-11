@@ -524,6 +524,11 @@ Two'</sphinxql>
 <sphinxql>select j.str from dist_case where j.str is not null order by j.str asc</sphinxql>
 <sphinxql>select j.Str from dist_case where j.Str is not null order by j.Str asc</sphinxql>
 <sphinxql>select j.STR from dist_case where j.STR is not null order by j.STR asc</sphinxql>
+<!-- sort by aliased attribute for local and distributed indexes -->
+<sphinxql>select j.Str as p from json_case where p is not null order by p asc</sphinxql>
+<sphinxql>select j.Str as p from json_case where p is not null order by p desc</sphinxql>
+<sphinxql>select j.Str as p from dist_case where p is not null order by p asc</sphinxql>
+<sphinxql>select j.Str as p from dist_case where p is not null order by p desc</sphinxql>
 </sphqueries>
 
 </test>

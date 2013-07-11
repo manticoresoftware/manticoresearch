@@ -206,8 +206,8 @@ CSphString			g_sLemmatizerBase		= SHAREDIR;
 #if USE_RLP
 CSphString			g_sRLPRoot				= SHAREDIR;
 CSphString			g_sRLPEnv				= SHAREDIR"/rlp-environment.xml";
-int					g_iRLPMaxBatchSize		= 2097152;
-int					g_iRLPMaxBatchDocs		= 10000;
+int					g_iRLPMaxBatchSize		= 51200;
+int					g_iRLPMaxBatchDocs		= 50;
 #endif
 
 // quick hack for indexer crash reporting
@@ -2770,12 +2770,16 @@ public:
 	CSphRLPResultSplitter ( ISphTokenizer * pTok, const char * szCtxPath )
 		: CSphTokenFilter ( pTok )
 		, m_bTokenized ( false )
+		, m_bNonChineseToken ( false )
 		, m_iStart ( 0 )
 		, m_pTokenStart ( NULL )
 		, m_iTokenLenBytes ( 0 )
 		, m_sCtxPath ( szCtxPath )
 	{
 		assert ( pTok );
+
+		sphUTF8Encode ( m_pTokenizedMarker, PROXY_TOKENIZED );
+		sphUTF8Encode ( m_pNonChineseMarker, PROXY_MORPH );
 	}
 
 	virtual void SetBuffer ( const BYTE * szBuffer, int iBufferLength )
@@ -2787,13 +2791,14 @@ public:
 		if ( iBufferLength>=PROXY_MARKER_LEN+1 )
 		{
 			const BYTE * pBufPtr = szBuffer;
-			int iCode = sphUTF8Decode ( pBufPtr );
-			if ( iCode==PROXY_TOKENIZED )
+			if ( CMP_MARKER ( pBufPtr, m_pTokenizedMarker ) )
 			{
-				pBufPtr++;	// skip space
+				pBufPtr += PROXY_MARKER_LEN+1;
 				m_bTokenized = true;
-				m_dBuffer.Resize ( iBufferLength-(pBufPtr-szBuffer) );
-				memcpy ( m_dBuffer.Begin(), pBufPtr, m_dBuffer.GetLength() );
+				int iBufSize = iBufferLength-(pBufPtr-szBuffer);
+				m_dBuffer.Resize ( iBufSize+1 );
+				memcpy ( m_dBuffer.Begin(), pBufPtr, iBufSize );
+				m_dBuffer[iBufSize] = '\0';
 			}
 		}
 
@@ -2807,6 +2812,14 @@ public:
 		{
 			if ( m_iStart>=m_dBuffer.GetLength() )
 				return NULL;
+
+			// check if we have a marker
+			if ( m_dBuffer.GetLength()-m_iStart>=PROXY_MARKER_LEN && CMP_MARKER ( (m_dBuffer.Begin()+m_iStart), m_pNonChineseMarker ) )
+			{
+				m_iStart += PROXY_MARKER_LEN;
+				m_bNonChineseToken = true;
+			} else
+				m_bNonChineseToken = false;
 
 			for ( int i = m_iStart; i < m_dBuffer.GetLength(); i++ )
 				if ( m_dBuffer[i]==' ' )
@@ -2833,7 +2846,10 @@ public:
 
 	virtual bool GetMorphFlag () const
 	{
-		return !m_bTokenized;
+		if ( !m_bTokenized )
+			return true;
+
+		return m_bNonChineseToken;
 	}
 
 	virtual int GetLastTokenLen() const
@@ -2888,11 +2904,13 @@ public:
 
 private:
 	bool					m_bTokenized;
+	bool					m_bNonChineseToken;
 	int						m_iStart;
 	BYTE *					m_pTokenStart;
 	int						m_iTokenLenBytes;
 	CSphString				m_sCtxPath;
-
+	BYTE					m_pTokenizedMarker[PROXY_MARKER_LEN];
+	BYTE					m_pNonChineseMarker[PROXY_MARKER_LEN];
 	CSphTightVector<BYTE>	m_dBuffer;
 };
 
@@ -2926,7 +2944,7 @@ public:
 				m_bChineseToken = false;
 		}
 
-		while ( ( pRegularToken = m_pTokenizer->GetToken() ) != NULL )
+		while ( ( pRegularToken = m_pTokenizer->GetToken() )!=NULL )
 		{
 			int iTokenLenBytes = strlen ( (const char *)pRegularToken );
 			if ( sphDetectChinese ( pRegularToken, iTokenLenBytes ) )
@@ -2938,8 +2956,7 @@ public:
 					m_bChineseToken = true;
 					return pRLPToken;
 				}
-			}
-			else
+			} else
 			{
 				m_bChineseToken = false;
 				return pRegularToken;
@@ -4083,7 +4100,7 @@ ISphTokenizer * ISphTokenizer::CreateRLPQueryFilter ( ISphTokenizer * pTokenizer
 	assert ( pTokenizer );
 	if ( !bChineseRLP )
 		return pTokenizer;
-	
+
 	ISphTokenizer * pRLPTokenizer = CreateRLPFilter ( pTokenizer, bChineseRLP, szRLPRoot, szRLPEnv, szRLPCtx, false, sError );
 	if ( !pRLPTokenizer )
 		return NULL;
@@ -25439,6 +25456,8 @@ void CSphSource_Document::BuildRegularHits ( SphDocID_t uDocid, bool bPayload, b
 	while ( ( m_iMaxHits==0 || m_tHits.m_dData.GetLength()+BUILD_REGULAR_HITS_COUNT<m_iMaxHits )
 		&& ( sWord = m_pTokenizer->GetToken() )!=NULL )
 	{
+		m_pDict->SetApplyMorph ( m_pTokenizer->GetMorphFlag() );
+
 		iBlendedHitsStart = TrackBlendedStart ( m_pTokenizer, iBlendedHitsStart, m_tHits.Length() );
 
 		if ( !bPayload )
@@ -25560,9 +25579,6 @@ void CSphSource_Document::BuildHits ( CSphString & sError, bool bSkipEndMarker )
 
 			m_tState.m_iHitPos = HITMAN::Create ( m_tState.m_iField, m_tState.m_iStartPos );
 		}
-
-		// instead of cloning the dictionary once per document we just set and reset the flag
-		m_pDict->SetApplyMorph ( m_pTokenizer->GetMorphFlag() );
 
 		const CSphColumnInfo & tField = m_tSchema.m_dFields[m_tState.m_iField];
 

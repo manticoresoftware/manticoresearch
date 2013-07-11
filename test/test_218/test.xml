@@ -37,7 +37,7 @@ index test
 	charset_table	= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, \
 			U+2E80..U+2EF3, U+2F00..U+2FD5, U+3105..U+312D, U+31C0..U+31E3, U+3400..U+4DB5, U+4E00..U+9FCC, \
 			U+F900..U+FAD9, U+20000..U+2FA1D
-	morphology 		= rlp_chinese, stem_enru
+	morphology 		= rlp_chinese_batched, stem_enru
 	rlp_context		= ../rlp/samples/etc/rlp-chinese-context.xml
 }
 
@@ -52,7 +52,7 @@ index test2
 			U+2E80..U+2EF3, U+2F00..U+2FD5, U+3105..U+312D, U+31C0..U+31E3, U+3400..U+4DB5, U+4E00..U+9FCC, \
 			U+F900..U+FAD9, U+20000..U+2FA1D
 
-	morphology 		= rlp_chinese, stem_enru
+	morphology 		= rlp_chinese_batched, stem_enru
 	rlp_context 	= ../rlp/samples/etc/rlp-chinese-context.xml
 }
 
@@ -80,7 +80,7 @@ INSERT INTO test_table VALUES
 ( 103, '文山區長青學苑則有個十分特別的「英文歌唱班」，test' ),
 ( 104, '成員年齡均超過六十歲，tested' ),
 ( 105, '這群白髮蒼蒼，test2' ),
-( 106, '爺爺、奶奶級的學員唱起英文歌來字正腔圓，' )
+( 106, '這群白髮蒼蒼 RUINED 這群白髮蒼蒼' )
 </db_insert>
 
 <sphqueries>
@@ -92,6 +92,7 @@ INSERT INTO test_table VALUES
 <sphinxql>select * from test where match('則')</sphinxql>
 <sphinxql>select * from test where match('來')</sphinxql>
 <sphinxql>select * from test where match('這群白髮蒼蒼，')</sphinxql>
+<sphinxql>select * from test where match('ruin')</sphinxql>
 <sphinxql>insert into test2 values(10,'長青學苑英文歌唱班昨日在社教館舉行「英文懷念金曲演唱會」，',0)</sphinxql>
 <sphinxql>insert into test2 values(11,'曲目包括「大江東去」、「月河」、「真善美」等大眾耳熟能詳的英文歌曲。',1)</sphinxql>
 <sphinxql>insert into test2 values(12,'難得公開演唱，',2)</sphinxql>

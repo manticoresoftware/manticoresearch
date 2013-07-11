@@ -2185,8 +2185,8 @@ void sphConfigureCommon ( const CSphConfig & hConf )
 #if USE_RLP
 		g_sRLPRoot = hCommon.GetStr ( "rlp_root" );
 		g_sRLPEnv = hCommon.GetStr ( "rlp_environment" );
-		g_iRLPMaxBatchSize = hCommon.GetSize ( "rlp_max_batch_size", 2097152 );
-		g_iRLPMaxBatchDocs = hCommon.GetInt ( "rlp_max_batch_docs" );
+		g_iRLPMaxBatchSize = hCommon.GetSize ( "rlp_max_batch_size", 51200 );
+		g_iRLPMaxBatchDocs = hCommon.GetInt ( "rlp_max_batch_docs", 50 );
 #endif
 		bool bJsonStrict = false;
 		bool bJsonAutoconvNumbers = false;

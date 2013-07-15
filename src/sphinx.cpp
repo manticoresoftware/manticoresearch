@@ -6728,14 +6728,15 @@ void ISphSchema::Reset()
 }
 
 
-void ISphSchema::AddAttr ( CSphVector<CSphColumnInfo> & dAttrs, CSphVector<int> & dUsed, const CSphColumnInfo & tCol, bool bDynamic )
+void ISphSchema::InsertAttr ( CSphVector<CSphColumnInfo> & dAttrs, CSphVector<int> & dUsed, int iPos, const CSphColumnInfo & tCol, bool bDynamic )
 {
+	assert ( 0<=iPos && iPos<=dAttrs.GetLength() );
 	assert ( tCol.m_eAttrType!=SPH_ATTR_NONE && !tCol.m_tLocator.IsID() ); // not via this orifice bro
 	if ( tCol.m_eAttrType==SPH_ATTR_NONE || tCol.m_tLocator.IsID() )
 		return;
 
-	dAttrs.Add ( tCol );
-	CSphAttrLocator & tLoc = dAttrs.Last().m_tLocator;
+	dAttrs.Insert ( iPos, tCol );
+	CSphAttrLocator & tLoc = dAttrs [ iPos ].m_tLocator;
 
 	int iBits = ROWITEM_BITS;
 	if ( tLoc.m_iBitCount>0 )
@@ -6744,6 +6745,7 @@ void ISphSchema::AddAttr ( CSphVector<CSphColumnInfo> & dAttrs, CSphVector<int> 
 		iBits = 1;
 	if ( tCol.m_eAttrType==SPH_ATTR_BIGINT || tCol.m_eAttrType==SPH_ATTR_JSON_FIELD )
 		iBits = 64;
+
 	if ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR || tCol.m_eAttrType==SPH_ATTR_FACTORS )
 	{
 		assert ( bDynamic );
@@ -7001,9 +7003,13 @@ void CSphSchema::Reset ()
 }
 
 
-void CSphSchema::AddAttr ( const CSphColumnInfo & tCol, bool bDynamic )
+void CSphSchema::InsertAttr ( const CSphColumnInfo & tCol, int iPos, bool bDynamic )
 {
-	ISphSchema::AddAttr ( m_dAttrs, bDynamic ? m_dDynamicUsed : m_dStaticUsed, tCol, bDynamic );
+	// it's redundant in case of AddAttr
+	if ( iPos!=m_dAttrs.GetLength() )
+		UpdateHash ( iPos-1, 1 );
+
+	ISphSchema::InsertAttr ( m_dAttrs, bDynamic ? m_dDynamicUsed : m_dStaticUsed, iPos, tCol, bDynamic );
 
 	// update static size
 	m_iStaticSize = m_dStaticUsed.GetLength();
@@ -7013,10 +7019,16 @@ void CSphSchema::AddAttr ( const CSphColumnInfo & tCol, bool bDynamic )
 		RebuildHash();
 	else if ( m_dAttrs.GetLength()>HASH_THRESH )
 	{
-		WORD & uPos = GetBucketPos ( m_dAttrs.Last().m_sName.cstr() );
-		m_dAttrs.Last().m_uNext = uPos;
-		uPos = (WORD)( m_dAttrs.GetLength()-1 );
+		WORD & uPos = GetBucketPos ( m_dAttrs [ iPos ].m_sName.cstr() );
+		m_dAttrs [ iPos ].m_uNext = uPos;
+		uPos = (WORD)iPos;
 	}
+}
+
+
+void CSphSchema::AddAttr ( const CSphColumnInfo & tCol, bool bDynamic )
+{
+	InsertAttr ( tCol, m_dAttrs.GetLength(), bDynamic );
 }
 
 
@@ -7088,7 +7100,7 @@ void CSphRsetSchema::Reset ()
 
 void CSphRsetSchema::AddDynamicAttr ( const CSphColumnInfo & tCol )
 {
-	ISphSchema::AddAttr ( m_dExtraAttrs, m_dDynamicUsed, tCol, true );
+	ISphSchema::InsertAttr ( m_dExtraAttrs, m_dDynamicUsed, m_dExtraAttrs.GetLength(), tCol, true );
 }
 
 
@@ -10118,7 +10130,10 @@ bool CSphIndex_VLN::AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrT
 	int iOldStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 
 	CSphColumnInfo tInfo ( sAttrName.cstr(), eAttrType );
-	m_tSchema.AddAttr ( tInfo, false );
+	int iPos = m_tSchema.GetAttrsCount();
+	if ( m_tSettings.m_bIndexFieldLens )
+		iPos -= m_tSchema.m_dFields.GetLength();
+	m_tSchema.InsertAttr ( tInfo, iPos, false );
 
 	int iNewStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 

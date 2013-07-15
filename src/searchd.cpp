@@ -14146,6 +14146,8 @@ void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
 	// get schema, check values count
 	const CSphSchema & tSchema = pIndex->GetInternalSchema();
 	int iSchemaSz = tSchema.GetAttrsCount() + tSchema.m_dFields.GetLength() + 1;
+	if ( pIndex->GetSettings().m_bIndexFieldLens )
+		iSchemaSz -= tSchema.m_dFields.GetLength();
 	int iExp = tStmt.m_iSchemaSz;
 	int iGot = tStmt.m_dInsertValues.GetLength();
 	if ( !tStmt.m_dInsertSchema.GetLength() && ( iSchemaSz!=tStmt.m_iSchemaSz ) )
@@ -14276,7 +14278,10 @@ void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
 		dStrings.Resize ( 0 );
 		dMvas.Resize ( 0 );
 
-		for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
+		int iSchemaAttrCount = tSchema.GetAttrsCount();
+		if ( pIndex->GetSettings().m_bIndexFieldLens )
+			iSchemaAttrCount -= tSchema.m_dFields.GetLength();
+		for ( int i=0; i<iSchemaAttrCount; i++ )
 		{
 			// shortcuts!
 			const CSphColumnInfo & tCol = tSchema.GetAttr(i);
@@ -18771,6 +18776,14 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 			iRamSize = 128*1024;
 		} else if ( iRamSize<8*1024*1024 )
 			sphWarning ( "index '%s': rt_mem_limit very low (under 8 MB)", szIndexName );
+
+		// upgrading schema to store field lengths
+		if ( tSettings.m_bIndexFieldLens )
+			if ( !AddFieldLens ( tSchema, false, sError ) )
+				{
+					sphWarning ( "index '%s': failed to create field lengths attributes: %s", szIndexName, sError.cstr() );
+					return ADD_ERROR;
+				}
 
 		// index
 		ServedDesc_t tIdx;

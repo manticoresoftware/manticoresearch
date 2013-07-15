@@ -1475,8 +1475,8 @@ public:
 	void							CopyPtrs ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound=-1 ) const;
 
 protected:
-	/// generic AddAttr() implementation that tracks STRINGPTR, FACTORS attribtues
-	void							AddAttr ( CSphVector<CSphColumnInfo> & dAttrs, CSphVector<int> & dUsed, const CSphColumnInfo & tCol, bool bDynamic );
+	/// generic InsertAttr() implementation that tracks STRINGPTR, FACTORS attributes
+	void							InsertAttr (CSphVector<CSphColumnInfo> & dAttrs, CSphVector<int> & dUsed, int iPos, const CSphColumnInfo & tCol, bool dDynamic );
 
 	/// reset my trackers
 	void							Reset();
@@ -1550,6 +1550,9 @@ public:
 
 	/// get attr by name
 	const CSphColumnInfo *	GetAttr ( const char * sName ) const;
+
+	/// insert attr
+	void					InsertAttr ( const CSphColumnInfo & tAggr, int iPos, bool bDynamic );
 
 	/// add attr
 	void					AddAttr ( const CSphColumnInfo & tAttr, bool bDynamic );

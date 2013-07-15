@@ -42,6 +42,10 @@ index rt
 	rt_attr_float = data4
 
 	rt_mem_limit 	= 128
+<dynamic>
+  <variant>index_field_lengths = 0</variant>
+  <variant>index_field_lengths = 1</variant>
+</dynamic>
 }
 </config>
 

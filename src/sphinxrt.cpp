@@ -1181,9 +1181,6 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 	MEMORY ( SPH_MEM_IDX_RT );
 
 	m_tSchema = tSchema;
-	if ( m_tSettings.m_bIndexFieldLens )
-		if ( !AddFieldLens ( m_tSchema, false, m_sLastError ) )
-			sphDie ( "failed to create RT index: %s", m_sLastError.cstr() ); // !COMMIT handle this gracefully
 	m_iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 
 	m_iDoubleBufferLimit = ( m_iSoftRamLimit * SPH_RT_DOUBLE_BUFFER_PERCENT ) / 100;
@@ -7003,7 +7000,10 @@ bool RtIndex_t::AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType,
 	int iOldStride = m_iStride;
 
 	CSphColumnInfo tInfo ( sAttrName.cstr(), eAttrType );
-	m_tSchema.AddAttr ( tInfo, false );
+	int iPos = m_tSchema.GetAttrsCount();
+	if ( m_tSettings.m_bIndexFieldLens )
+		iPos -= m_tSchema.m_dFields.GetLength();
+	m_tSchema.InsertAttr ( tInfo, iPos, false );
 	const CSphColumnInfo * pNewAttr = m_tSchema.GetAttr ( sAttrName.cstr() );
 
 	m_iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();

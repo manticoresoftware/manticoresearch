@@ -1370,7 +1370,7 @@ public:
 	static bool					MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, SphDocID_t iMinID, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pForceTerminate );
 	static bool					DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, bool bMergeKillLists, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pForceTerminate );
 
-	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError );
+	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError, CSphString & sWarning );
 	virtual bool				SaveAttributes ( CSphString & sError ) const;
 	virtual DWORD				GetAttributeStatus () const;
 
@@ -6392,6 +6392,7 @@ CSphQuery::CSphQuery ()
 	, m_bReverseScan	( false )
 	, m_bIgnoreNonexistent ( false )
 	, m_bIgnoreNonexistentIndexes ( false )
+	, m_bStrict			( false )
 	, m_pTableFunc		( NULL )
 
 	, m_iSQLSelectStart	( -1 )
@@ -9403,7 +9404,7 @@ CSphIndex_VLN::~CSphIndex_VLN ()
 /////////////////////////////////////////////////////////////////////////////
 
 
-int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError )
+int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError, CSphString & sWarning )
 {
 	// check if we can
 	if ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN )
@@ -9428,23 +9429,43 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 	CSphVector<CSphAttrLocator> dLocators;
 	CSphVector<bool> dFloats;
 	CSphVector<bool> dBigints;
+	CSphVector<bool> dDoubles;
+	CSphVector<bool> dJsonFields;
+	CSphVector<int64_t> dValues;
+	CSphVector < CSphRefcountedPtr<ISphExpr> > dExpr;
 	dLocators.Reserve ( tUpd.m_dAttrs.GetLength() );
 	dFloats.Reserve ( tUpd.m_dAttrs.GetLength() );
 	dBigints.Reserve ( tUpd.m_dAttrs.GetLength() ); // bigint flags for *source* schema.
+	dDoubles.Reserve ( tUpd.m_dAttrs.GetLength() ); // double flags for *source* schema.
+	dJsonFields.Reserve ( tUpd.m_dAttrs.GetLength() );
+	dExpr.Resize ( tUpd.m_dAttrs.GetLength() );
+
 	uint64_t uDst64 = 0;
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
 	{
 		int iIndex = m_tSchema.GetAttrIndex ( tUpd.m_dAttrs[i] );
+
+		if ( iIndex<0 )
+		{
+			CSphString sJsonCol, sJsonKey;
+			if ( sphJsonNameSplit ( tUpd.m_dAttrs[i], &sJsonCol, &sJsonKey ) )
+			{
+				iIndex = m_tSchema.GetAttrIndex ( sJsonCol.cstr() );
+				if ( iIndex>=0 )
+					dExpr[i] = sphExprParse ( tUpd.m_dAttrs[i], m_tSchema, NULL, NULL, sError, NULL );
+			}
+		}
+
 		if ( iIndex>=0 )
 		{
 			// forbid updates on non-int columns
 			const CSphColumnInfo & tCol = m_tSchema.GetAttr(iIndex);
-			if (!( tCol.m_eAttrType==SPH_ATTR_BOOL || tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP
+			if ( !( tCol.m_eAttrType==SPH_ATTR_BOOL || tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP
 				|| tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET
-				|| tCol.m_eAttrType==SPH_ATTR_BIGINT || tCol.m_eAttrType==SPH_ATTR_FLOAT ))
+				|| tCol.m_eAttrType==SPH_ATTR_BIGINT || tCol.m_eAttrType==SPH_ATTR_FLOAT || tCol.m_eAttrType==SPH_ATTR_JSON ))
 			{
 				sError.SetSprintf ( "attribute '%s' can not be updated "
-					"(must be boolean, integer, bigint, float, timestamp, or MVA)",
+					"(must be boolean, integer, bigint, float, timestamp, MVA or JSON)",
 					tUpd.m_dAttrs[i] );
 				return -1;
 			}
@@ -9476,6 +9497,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 
 			dFloats.Add ( tCol.m_eAttrType==SPH_ATTR_FLOAT );
 			dLocators.Add ( tCol.m_tLocator );
+			dJsonFields.Add ( tCol.m_eAttrType==SPH_ATTR_JSON );
 
 		} else if ( !tUpd.m_bIgnoreNonexistent )
 		{
@@ -9484,6 +9506,9 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 		}
 
 		dBigints.Add ( tUpd.m_dTypes[i]==SPH_ATTR_BIGINT );
+		dDoubles.Add ( tUpd.m_dTypes[i]==SPH_ATTR_FLOAT );
+		dValues.Add ( tUpd.m_dTypes[i]==SPH_ATTR_FLOAT ? sphD2QW ( (double)sphDW2F ( tUpd.m_dPool[i] ) )
+			: tUpd.m_dTypes[i]==SPH_ATTR_BIGINT ? MVA_UPSIZE ( &tUpd.m_dPool[i] ) : tUpd.m_dPool[i] );
 	}
 	assert ( tUpd.m_bIgnoreNonexistent || ( dLocators.GetLength()==tUpd.m_dAttrs.GetLength() ) );
 
@@ -9493,6 +9518,34 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 	// do the update
 	const int iFirst = ( iIndex<0 ) ? 0 : iIndex;
 	const int iLast = ( iIndex<0 ) ? uRows : iIndex+1;
+
+	// first pass, if needed
+	if ( tUpd.m_bStrict )
+	{
+		for ( int iUpd=iFirst; iUpd<iLast; iUpd++ )
+		{
+			DWORD * pEntry = const_cast < DWORD * > ( bRaw ? tUpd.m_dRows[iUpd] : FindDocinfo ( tUpd.m_dDocids[iUpd] ) );
+			if ( !pEntry )
+				continue; // no such id
+			pEntry = DOCINFO2ATTRS(pEntry);
+			int iPos = tUpd.m_dRowOffset[iUpd];
+			ARRAY_FOREACH ( iCol, tUpd.m_dAttrs )
+				if ( dJsonFields[iCol] )
+				{
+					ESphJsonType eType = dDoubles[iCol]
+					? JSON_DOUBLE
+					: ( dBigints[iCol] ? JSON_INT64 : JSON_INT32 );
+
+					if ( !sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), m_pStrings.GetWritePtr(), pEntry, true ) )
+					{
+						sError.SetSprintf ( "attribute '%s' can not be updated (incompatible types) ", tUpd.m_dAttrs[iCol] );
+						return -1;
+					}
+
+					iPos += dBigints[iCol]?2:1;
+				}
+		}
+	}
 
 	// row update must leave it in cosistent state; so let's preallocate all the needed MVA
 	// storage upfront to avoid suddenly having to rollback if allocation fails later
@@ -9567,9 +9620,12 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 	int iRowStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 	int iUpdated = 0;
 	DWORD uUpdateMask = 0;
+	int iJsonWarnings = 0;
 
 	for ( int iUpd=iFirst; iUpd<iLast; iUpd++ )
 	{
+		bool bUpdated = false;
+
 		DWORD * pEntry = dRowPtrs[iUpd];
 		if ( !pEntry )
 			continue; // no such id
@@ -9588,7 +9644,8 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 		{
 			bool bSrcMva32 = ( tUpd.m_dTypes[iCol]==SPH_ATTR_UINT32SET );
 			bool bSrcMva64 = ( tUpd.m_dTypes[iCol]==SPH_ATTR_INT64SET );
-			if (!( bSrcMva32 || bSrcMva64 )) // FIXME! optimize using a prebuilt dword mask?
+			bool bSrcJson = ( dJsonFields[iCol] );
+			if (!( bSrcMva32 || bSrcMva64 || bSrcJson )) // FIXME! optimize using a prebuilt dword mask?
 			{
 				// plain update
 				SphAttr_t uValue = dBigints[iCol] ? MVA_UPSIZE ( &tUpd.m_dPool[iPos] ) : tUpd.m_dPool[iPos];
@@ -9617,9 +9674,29 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 							sphSetRowAttr ( DOCINFO2ATTRS ( pBlock+iRowStride ), dLocators[iCol], uValue );
 					}
 				}
+
+				bUpdated = true;
 				uUpdateMask |= ATTRS_UPDATED;
 
 				// next
+				iPos += dBigints[iCol]?2:1;
+				continue;
+			}
+
+			if ( bSrcJson )
+			{
+				ESphJsonType eType = dDoubles[iCol]
+				? JSON_DOUBLE
+				: ( dBigints[iCol] ? JSON_INT64 : JSON_INT32 );
+
+				if ( sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), m_pStrings.GetWritePtr(), pEntry, true ) )
+				{
+					bUpdated = true;
+					uUpdateMask |= ATTRS_STRINGS_UPDATED;
+
+				} else
+					iJsonWarnings++;
+
 				iPos += dBigints[iCol]?2:1;
 				continue;
 			}
@@ -9700,11 +9777,16 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 				g_MvaArena.TaggedFreeIndex ( m_iIndexTag, uOldIndex );
 			}
 
+			bUpdated = true;
 			uUpdateMask |= ATTRS_MVA_UPDATED;
 		}
 
-		iUpdated++;
+		if ( bUpdated )
+			iUpdated++;
 	}
+
+	if ( iJsonWarnings>0 )
+		sWarning.SetSprintf ( "%d incompatible attribute(s)", iJsonWarnings );
 
 	*m_pAttrsStatus |= uUpdateMask; // FIXME! add lock/atomic?
 	return iUpdated;
@@ -10021,6 +10103,18 @@ bool CSphIndex_VLN::SaveAttributes ( CSphString & sError ) const
 
 	if ( m_bBinlog && g_pBinlog )
 		g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
+
+	// save .sps file (inplace update only, no remapping/resizing)
+	if ( uAttrStatus & ATTRS_STRINGS_UPDATED )
+	{
+		CSphWriter tStrWriter;
+		if ( !tStrWriter.OpenFile ( GetIndexFileName("sps.tmpnew"), sError ) )
+			return false;
+		tStrWriter.PutBytes( m_pStrings.GetWritePtr(), m_pStrings.GetLength() );
+		tStrWriter.CloseFile();
+		if ( !JuggleFile ( "sps", sError ) )
+			return false;
+	}
 
 	if ( *m_pAttrsStatus==uAttrStatus )
 		*m_pAttrsStatus = 0;

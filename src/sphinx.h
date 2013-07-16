@@ -2658,6 +2658,7 @@ public:
 	bool			m_bReverseScan;		///< perform scan in reverse order
 	bool			m_bIgnoreNonexistent; ///< whether to warning or not about non-existent columns in select list
 	bool			m_bIgnoreNonexistentIndexes; ///< whether to error or not about non-existent indexes in index list
+	bool			m_bStrict;			///< whether to warning or not about incompatible types
 
 	ISphTableFunc *	m_pTableFunc;		///< post-query
 
@@ -2795,8 +2796,11 @@ struct CSphAttrUpdate
 	CSphVector<const CSphRowitem*>	m_dRows;		///< document attribute's vector, used instead of m_dDocids.
 	CSphVector<int>					m_dRowOffset;	///< document row offsets in the pool (1 per doc, i.e. the length is the same as of m_dDocids)
 	bool							m_bIgnoreNonexistent;	///< whether to warn about non-existen attrs, or just silently ignore them
+	bool							m_bStrict;		///< whether to check for incompatible types first, or just ignore them
 
-	CSphAttrUpdate() : m_bIgnoreNonexistent ( false )
+	CSphAttrUpdate()
+		: m_bIgnoreNonexistent ( false )
+		, m_bStrict ( false )
 	{}
 
 	~CSphAttrUpdate()
@@ -3142,7 +3146,8 @@ public:
 	enum
 	{
 		ATTRS_UPDATED			= ( 1UL<<0 ),
-		ATTRS_MVA_UPDATED		= ( 1UL<<1 )
+		ATTRS_MVA_UPDATED		= ( 1UL<<1 ),
+		ATTRS_STRINGS_UPDATED	= ( 1UL<<2 )
 	};
 
 public:
@@ -3236,7 +3241,7 @@ public:
 	/// updates memory-cached attributes in real time
 	/// returns non-negative amount of actually found and updated records on success
 	/// on failure, -1 is returned and GetLastError() contains error message
-	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError ) = 0;
+	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError, CSphString & sWarning ) = 0;
 
 	/// saves memory-cached attributes, if there were any updates to them
 	/// on failure, false is returned and GetLastError() contains error message
@@ -3333,11 +3338,13 @@ struct CSphAttrUpdateEx
 	const CSphAttrUpdate *	m_pUpdate;		///< the unchangeable update pool
 	CSphIndex *				m_pIndex;		///< the index on which the update should happen
 	CSphString *			m_pError;		///< the error, if any
+	CSphString *			m_pWarning;		///< the warning, if any
 	int						m_iAffected;	///< num of updated rows.
 	CSphAttrUpdateEx()
 		: m_pUpdate ( NULL )
 		, m_pIndex ( NULL )
 		, m_pError ( NULL )
+		, m_pWarning ( NULL )
 		, m_iAffected ( 0 )
 	{}
 };

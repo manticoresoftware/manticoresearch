@@ -11308,6 +11308,10 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 	{
 		m_pQuery->m_bIgnoreNonexistentIndexes = ( tValue.m_iValue!=0 );
 
+	} else if ( sOpt=="strict" )
+	{
+		m_pQuery->m_bStrict = ( tValue.m_iValue!=0 );
+
 	} else
 	{
 		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", sOpt.cstr() );
@@ -12647,8 +12651,8 @@ static void DoCommandUpdate ( const char * sIndex, const CSphAttrUpdate & tUpd,
 		return;
 	}
 
-	CSphString sError;
-	int iUpd = pServed->m_pIndex->UpdateAttributes ( tUpd, -1, sError );
+	CSphString sError, sWarning;
+	int iUpd = pServed->m_pIndex->UpdateAttributes ( tUpd, -1, sError, sWarning );
 
 	if ( iUpd<0 )
 	{
@@ -12658,6 +12662,8 @@ static void DoCommandUpdate ( const char * sIndex, const CSphAttrUpdate & tUpd,
 	{
 		iUpdated += iUpd;
 		iSuccesses++;
+		if ( sWarning.Length() )
+			dFails.Submit ( sIndex, sWarning.cstr() );
 	}
 }
 
@@ -14984,7 +14990,7 @@ void SphinxqlRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuf
 //////////////////////////////////////////////////////////////////////////
 static void DoExtendedUpdate ( const char * sIndex, const SqlStmt_t & tStmt,
 							int & iSuccesses, int & iUpdated, bool bCommit,
-							SearchFailuresLog_c & dFails, const ServedIndex_t * pServed )
+							SearchFailuresLog_c & dFails, const ServedIndex_t * pServed, CSphString & sWarning )
 {
 	if ( !pServed || !pServed->m_pIndex || !pServed->m_bEnabled )
 	{
@@ -15001,6 +15007,7 @@ static void DoExtendedUpdate ( const char * sIndex, const SqlStmt_t & tStmt,
 	tUpdate.m_pUpdate = &tStmt.m_tUpdate;
 	tUpdate.m_pIndex = pServed->m_pIndex;
 	tUpdate.m_pError = &sError;
+	tUpdate.m_pWarning = &sWarning;
 
 	tHandler.RunUpdates ( tStmt.m_tQuery, sIndex, &tUpdate );
 
@@ -15048,7 +15055,7 @@ static const char * ExtractDistributedIndexes ( const CSphVector<CSphString> & d
 }
 
 
-void HandleMysqlUpdate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit )
+void HandleMysqlUpdate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, CSphString & sWarning )
 {
 	CSphString sError;
 
@@ -15092,7 +15099,7 @@ void HandleMysqlUpdate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 		const ServedIndex_t * pLocked = UpdateGetLockedIndex ( sReqIndex, bMvaUpdate );
 		if ( pLocked )
 		{
-			DoExtendedUpdate ( sReqIndex, tStmt, iSuccesses, iUpdated, bCommit, dFails, pLocked );
+			DoExtendedUpdate ( sReqIndex, tStmt, iSuccesses, iUpdated, bCommit, dFails, pLocked, sWarning );
 		} else
 		{
 			assert ( dDistributed[iIdx].m_dLocal.GetLength() || dDistributed[iIdx].m_dAgents.GetLength() );
@@ -15102,7 +15109,7 @@ void HandleMysqlUpdate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 			{
 				const char * sLocal = dLocal[i].cstr();
 				const ServedIndex_t * pServed = UpdateGetLockedIndex ( sLocal, bMvaUpdate );
-				DoExtendedUpdate ( sLocal, tStmt, iSuccesses, iUpdated, bCommit, dFails, pServed );
+				DoExtendedUpdate ( sLocal, tStmt, iSuccesses, iUpdated, bCommit, dFails, pServed, sWarning );
 			}
 		}
 
@@ -16713,8 +16720,11 @@ public:
 			return true;
 
 		case STMT_UPDATE:
+			m_tLastMeta = CSphQueryResultMeta();
+			m_tLastMeta.m_sError = m_sError;
+			m_tLastMeta.m_sWarning = "";
 			StatCountCommand ( SEARCHD_COMMAND_UPDATE );
-			HandleMysqlUpdate ( tOut, *pStmt, sQuery, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction );
+			HandleMysqlUpdate ( tOut, *pStmt, sQuery, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tLastMeta.m_sWarning );
 			return true;
 
 		case STMT_DUMMY:

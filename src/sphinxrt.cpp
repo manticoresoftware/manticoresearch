@@ -1111,7 +1111,7 @@ public:
 	virtual void				PostSetup();
 	virtual bool				IsRT() const { return true; }
 
-	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError );
+	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError, CSphString & sWarning );
 	virtual bool				SaveAttributes ( CSphString & sError ) const;
 	virtual DWORD				GetAttributeStatus () const { return m_uDiskAttrStatus; }
 	virtual bool				CreateFilesWithAttr ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError );
@@ -6587,7 +6587,7 @@ bool RtIndex_t::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const cha
 }
 
 // FIXME! might be inconsistent in case disk chunk update fails
-int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError )
+int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError, CSphString & sWarning )
 {
 	// check if we have to
 
@@ -6605,25 +6605,45 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 	CSphVector<int> dIndexes;
 	CSphVector<bool> dFloats;
 	CSphVector<bool> dBigints;
+	CSphVector<bool> dDoubles;
+	CSphVector<bool> dJsonFields;
+	CSphVector<int64_t> dValues;
+	CSphVector < CSphRefcountedPtr<ISphExpr> > dExpr;
 	dLocators.Reserve ( tUpd.m_dAttrs.GetLength() );
 	dIndexes.Reserve ( tUpd.m_dAttrs.GetLength() );
 	dFloats.Reserve ( tUpd.m_dAttrs.GetLength() );
 	dBigints.Reserve ( tUpd.m_dAttrs.GetLength() ); // bigint flags for *source* schema.
+	dDoubles.Reserve ( tUpd.m_dAttrs.GetLength() ); // double flags for *source* schema.
+	dJsonFields.Reserve ( tUpd.m_dAttrs.GetLength() );
+	dExpr.Resize ( tUpd.m_dAttrs.GetLength() );
 
 	uint64_t uDst64 = 0;
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
 	{
 		int iIndex = m_tSchema.GetAttrIndex ( tUpd.m_dAttrs[i] );
+
+		if ( iIndex<0 )
+		{
+			CSphString sJsonCol, sJsonKey;
+			if ( sphJsonNameSplit ( tUpd.m_dAttrs[i], &sJsonCol, &sJsonKey ) )
+			{
+				iIndex = m_tSchema.GetAttrIndex ( sJsonCol.cstr() );
+				if ( iIndex>=0 )
+					dExpr[i] = sphExprParse ( tUpd.m_dAttrs[i], m_tSchema, NULL, NULL, sError, NULL );
+			}
+		}
+
 		if ( iIndex>=0 )
 		{
 			// forbid updates on non-int columns
 			const CSphColumnInfo & tCol = m_tSchema.GetAttr(iIndex);
 			if ( !( tCol.m_eAttrType==SPH_ATTR_BOOL || tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP
 				|| tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET
-				|| tCol.m_eAttrType==SPH_ATTR_BIGINT || tCol.m_eAttrType==SPH_ATTR_FLOAT ))
+				|| tCol.m_eAttrType==SPH_ATTR_BIGINT || tCol.m_eAttrType==SPH_ATTR_FLOAT || tCol.m_eAttrType==SPH_ATTR_JSON ))
 			{
-				sError.SetSprintf ( "attribute '%s' can not be updated (must be boolean, integer, "
-					"bigint, float or timestamp or MVA)", tUpd.m_dAttrs[i] );
+				sError.SetSprintf ( "attribute '%s' can not be updated "
+					"(must be boolean, integer, bigint, float, timestamp, MVA or JSON)",
+					tUpd.m_dAttrs[i] );
 				return -1;
 			}
 
@@ -6648,6 +6668,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 			dFloats.Add ( tCol.m_eAttrType==SPH_ATTR_FLOAT );
 			dLocators.Add ( tCol.m_tLocator );
 			bHasMva |= ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET );
+			dJsonFields.Add ( tCol.m_eAttrType==SPH_ATTR_JSON );
 
 		} else if ( !tUpd.m_bIgnoreNonexistent )
 		{
@@ -6656,6 +6677,9 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 		}
 
 		dBigints.Add ( tUpd.m_dTypes[i]==SPH_ATTR_BIGINT );
+		dDoubles.Add ( tUpd.m_dTypes[i]==SPH_ATTR_FLOAT );
+		dValues.Add ( tUpd.m_dTypes[i]==SPH_ATTR_FLOAT ? sphD2QW ( (double)sphDW2F ( tUpd.m_dPool[i] ) )
+			: tUpd.m_dTypes[i]==SPH_ATTR_BIGINT ? MVA_UPSIZE ( &tUpd.m_dPool[i] ) : tUpd.m_dPool[i] );
 
 		// find dupes to optimize
 		ARRAY_FOREACH ( i, dIndexes )
@@ -6679,12 +6703,49 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 	// do the update
 	int iUpdated = 0;
 	DWORD uUpdateMask = 0;
+	int iJsonWarnings = 0;
 
 	// bRaw do only one pass as it has pointers to actual data at segments
 	// MVA && bRaw should find appropriate segment to update storage there
 
 	int iFirst = ( iIndex<0 ) ? 0 : iIndex;
 	int iLast = ( iIndex<0 ) ? iRows : iIndex+1;
+
+	// first pass, if needed
+	if ( tUpd.m_bStrict )
+	{
+		for ( int iUpd=iFirst; iUpd<iLast; iUpd++ )
+		{
+			// search segments first
+			for ( int iSeg=0; iSeg<m_pSegments.GetLength() && ( !bRaw || !iSeg ); iSeg++ )
+			{
+				CSphRowitem * pRow = const_cast<CSphRowitem*> ( bRaw? tUpd.m_dRows[iUpd] : m_pSegments[iSeg]->FindAliveRow ( tUpd.m_dDocids[iUpd] ) );
+				if ( !pRow )
+					continue;
+
+				assert ( bRaw || ( DOCINFO2ID(pRow)==tUpd.m_dDocids[iUpd] ) );
+				pRow = DOCINFO2ATTRS(pRow);
+
+				int iPos = tUpd.m_dRowOffset[iUpd];
+				ARRAY_FOREACH ( iCol, tUpd.m_dAttrs )
+					if ( dJsonFields[iCol] )
+					{
+						ESphJsonType eType = dDoubles[iCol]
+							? JSON_DOUBLE
+							: ( dBigints[iCol] ? JSON_INT64 : JSON_INT32 );
+
+						if ( !sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), m_pSegments[iSeg]->m_dStrings.Begin(), pRow, false ) )
+						{
+							sError.SetSprintf ( "attribute '%s' can not be updated (incompatible types)", tUpd.m_dAttrs[iCol] );
+							return -1;
+						}
+
+						iPos += dBigints[iCol]?2:1;
+					}
+			}
+		}
+	}
+
 	for ( int iUpd=iFirst; iUpd<iLast; iUpd++ )
 	{
 		// search segments first
@@ -6722,11 +6783,30 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 			int iPos = tUpd.m_dRowOffset[iUpd];
 			ARRAY_FOREACH ( iCol, tUpd.m_dAttrs )
 			{
+				if ( dJsonFields[iCol] )
+				{
+					ESphJsonType eType = dDoubles[iCol]
+						? JSON_DOUBLE
+						: ( dBigints[iCol] ? JSON_INT64 : JSON_INT32 );
+
+					if ( sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), m_pSegments[iSeg]->m_dStrings.Begin(), pRow, true ) )
+					{
+						bUpdated = true;
+						uUpdateMask |= ATTRS_STRINGS_UPDATED;
+
+					} else
+						iJsonWarnings++;
+
+					iPos += dBigints[iCol]?2:1;
+					continue;
+				}
+
 				if ( !( tUpd.m_dTypes[iCol]==SPH_ATTR_UINT32SET || tUpd.m_dTypes[iCol]==SPH_ATTR_INT64SET ) )
 				{
 					if ( dIndexes[iCol]>=0 )
 					{
 						// plain update
+						bUpdated = true;
 						uUpdateMask |= ATTRS_UPDATED;
 
 						SphAttr_t uValue = dBigints[iCol] ? MVA_UPSIZE ( &tUpd.m_dPool[iPos] ) : tUpd.m_dPool[iPos];
@@ -6742,6 +6822,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 					if ( dIndexes[iCol]>=0 )
 					{
 						// MVA update
+						bUpdated = true;
 						uUpdateMask |= ATTRS_MVA_UPDATED;
 
 						if ( !iLen )
@@ -6783,8 +6864,8 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 				}
 			}
 
-			bUpdated = true;
-			iUpdated++;
+			if ( bUpdated )
+				iUpdated++;
 		}
 		if ( bUpdated )
 			continue;
@@ -6804,7 +6885,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 		{
 			// run just this update
 			// FIXME! might be inefficient in case of big batches (redundant allocs in disk update)
-			int iRes = m_pDiskChunks[iChunk]->UpdateAttributes ( tUpd, iUpd, sError );
+			int iRes = m_pDiskChunks[iChunk]->UpdateAttributes ( tUpd, iUpd, sError, sWarning );
 
 			// errors are highly unlikely at this point
 			// FIXME! maybe emit a warning to client as well?
@@ -6829,6 +6910,9 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 	g_pBinlog->BinlogUpdateAttributes ( &m_iTID, m_sIndexName.cstr(), tUpd );
 
 	m_tRwlock.Unlock();
+
+	if ( iJsonWarnings>0 )
+		sWarning.SetSprintf ( "%d incompatible attribute(s)", iJsonWarnings );
 
 	// all done
 	return iUpdated;
@@ -8580,8 +8664,8 @@ bool RtBinlog_c::ReplayUpdateAttributes ( int iBinlog, BinlogReader_c & tReader 
 			sphWarning ( "binlog: update: unexpected tid (index=%s, indextid="INT64_FMT", logtid="INT64_FMT", pos="INT64_FMT")",
 				tIndex.m_sName.cstr(), tIndex.m_pIndex->m_iTID, iTID, iTxnPos );
 
-		CSphString sError;
-		tIndex.m_pIndex->UpdateAttributes ( tUpd, -1, sError ); // FIXME! check for errors
+		CSphString sError, sWarning;
+		tIndex.m_pIndex->UpdateAttributes ( tUpd, -1, sError, sWarning ); // FIXME! check for errors
 
 		// update committed tid on replay in case of unexpected / mismatched tid
 		tIndex.m_pIndex->m_iTID = iTID;

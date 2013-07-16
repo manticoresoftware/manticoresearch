@@ -129,6 +129,9 @@ void sphJsonSkipNode ( ESphJsonType eType, const BYTE ** ppData );
 /// POD types return 1, empty objects return 0
 int sphJsonFieldLength ( ESphJsonType eType, const BYTE * pData );
 
+/// inplace JSON update, both for realtime and non-realtime indexes, returns true if update is possible
+bool sphJsonInplaceUpdate ( ESphJsonType eValueType, int64_t iValue, ISphExpr * pExpr, BYTE * pStrings, const CSphRowitem * pRow, bool bUpdate );
+
 #endif // _sphinxjson_
 
 //

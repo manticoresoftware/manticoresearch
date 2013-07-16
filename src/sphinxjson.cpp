@@ -1066,6 +1066,60 @@ JsonKey_t::JsonKey_t ( const char * sKey, int iLen )
 }
 
 
+void JsonStoreInt ( BYTE * p, int v )
+{
+	*p++ = BYTE(DWORD(v));
+	*p++ = BYTE(DWORD(v) >> 8);
+	*p++ = BYTE(DWORD(v) >> 16);
+	*p++ = BYTE(DWORD(v) >> 24);
+}
+
+
+void JsonStoreBigint ( BYTE * p, int64_t v )
+{
+	JsonStoreInt ( p, (DWORD)( v & 0xffffffffUL ) );
+	JsonStoreInt ( p+4, (int)( v>>32 ) );
+}
+
+
+bool sphJsonInplaceUpdate ( ESphJsonType eValueType, int64_t iValue, ISphExpr * pExpr, BYTE * pStrings, const CSphRowitem * pRow, bool bUpdate )
+{
+	if ( !pExpr || !pStrings )
+		return false;
+
+	pExpr->Command ( SPH_EXPR_SET_STRING_POOL, (void*)pStrings );
+
+	CSphMatch tMatch;
+	tMatch.m_pStatic = pRow;
+
+	uint64_t uPacked = pExpr->Int64Eval ( tMatch );
+	BYTE * pData = pStrings + ( uPacked & 0xffffffff );
+	ESphJsonType eType = (ESphJsonType)( uPacked >> 32 );
+
+	switch ( eType )
+	{
+	case JSON_INT32:
+		if ( eValueType==JSON_DOUBLE )
+			iValue = (int64_t)sphQW2D ( iValue );
+		if ( int64_t(int(iValue))!=iValue )
+			return false;
+		if ( bUpdate )
+			JsonStoreInt ( pData, (int)iValue );
+		break;
+	case JSON_INT64:
+		if ( bUpdate )
+			JsonStoreBigint ( pData, eValueType==JSON_DOUBLE ? (int64_t)sphQW2D ( iValue ) : iValue );
+		break;
+	case JSON_DOUBLE:
+		if ( bUpdate )
+			JsonStoreBigint ( pData, eValueType==JSON_DOUBLE ? iValue : sphD2QW ( (double)iValue ) );
+		break;
+	default:
+		return false;
+	}
+	return true;
+}
+
 //
 // $Id$
 //

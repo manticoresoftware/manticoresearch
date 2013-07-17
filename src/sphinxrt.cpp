@@ -1131,9 +1131,11 @@ public:
 	virtual const CSphSourceStats &		GetStats () const { return m_tStats; }
 	virtual CSphIndexStatus				GetStatus () const;
 
-	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iIndexWeight, int iTag, bool bFactors ) const;
-	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iIndexWeight, int iTag, bool bFactors ) const;
-	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString & sError ) const;
+	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultQueryArgs & tArgs ) const;
+	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultQueryArgs & tArgs ) const;
+	bool						DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, bool bFillOnly, CSphString * pError ) const;
+	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString * pError ) const;
+	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const;
 
 	void						CopyDocinfo ( CSphMatch & tMatch, const DWORD * pFound ) const;
 	const CSphRowitem *			FindDocinfo ( const RtSegment_t * pSeg, SphDocID_t uDocID ) const;
@@ -1694,7 +1696,7 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, int iRow
 		assert ( pSchema.GetAttr ( iFirst ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
 		assert ( pSchema.GetAttr ( iFirst+pSchema.m_dFields.GetLength()-1 ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
 		pFieldLens = pAttrs + ( pSchema.GetAttr ( iFirst ).m_tLocator.m_iBitOffset / 32 );
-		memset ( pFieldLens, 0, sizeof(int)*pSchema.m_dFields.GetLength() );
+		memset ( pFieldLens, 0, sizeof(int)*pSchema.m_dFields.GetLength() ); // NOLINT
 	}
 
 	// accumulate hits
@@ -1715,7 +1717,7 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, int iRow
 				continue;
 
 			// update field lengths
-			if ( pFieldLens && HITMAN::GetField ( pHit->m_iWordPos ) != HITMAN::GetField ( tLastHit.m_iWordPos ) )
+			if ( pFieldLens && HITMAN::GetField ( pHit->m_iWordPos )!=HITMAN::GetField ( tLastHit.m_iWordPos ) )
 				pFieldLens [ HITMAN::GetField ( tLastHit.m_iWordPos ) ] = HITMAN::GetPos ( tLastHit.m_iWordPos );
 
 			// accumulate
@@ -5868,7 +5870,7 @@ struct SphFinalArenaCopy_t : ISphMatchProcessor
 // FIXME? any chance to factor out common backend agnostic code?
 // FIXME? do we need to support pExtraFilters?
 bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters,
-	ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> *, int iIndexWeight, int iTag, bool bFactors ) const
+	ISphMatchSorter ** ppSorters, const CSphMultQueryArgs & tArgs ) const
 {
 	assert ( ppSorters );
 	assert ( pResult );
@@ -5891,8 +5893,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	m_tRwlock.ReadLock ();
 
 	assert ( pQuery );
-	assert ( iTag==0 );
-	iTag = 0; // just to avoid a compiler warning
+	assert ( tArgs.m_iTag==0 );
 
 	MEMORY ( SPH_MEM_IDX_RT_MULTY_QUERY );
 
@@ -5926,6 +5927,31 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	CSphScopedPtr<CSphDict> tDictExact ( NULL );
 	pDict = SetupExactDict ( tDictExact, pDict, pTokenizer.Ptr() );
+
+	// calculate local idf for RT with disk chunks
+	// in case of local_idf set but no external hash no full-scan query and RT has disk chunks
+	const SmallStringHash_T<int64_t> * pLocalDocs = tArgs.m_pLocalDocs;
+	SmallStringHash_T<int64_t> hLocalDocs;
+	int64_t iTotalDocs = tArgs.m_iTotalDocs;
+	bool bGotLocalDF = tArgs.m_bLocalDF;
+	if ( tArgs.m_bLocalDF && !tArgs.m_pLocalDocs && !pQuery->m_sQuery.IsEmpty() && m_pDiskChunks.GetLength() )
+	{
+		if ( pProfiler )
+			pProfiler->Switch ( SPH_QSTATE_LOCAL_DF );
+
+		CSphVector < CSphKeywordInfo > dKeywords;
+		DoGetKeywords ( dKeywords, pQuery->m_sQuery.cstr(), true, false, NULL );
+		ARRAY_FOREACH ( i, dKeywords )
+		{
+			const CSphKeywordInfo & tKw = dKeywords[i];
+			if ( !hLocalDocs.Exists ( tKw.m_sNormalized ) ) // skip dupes
+				hLocalDocs.Add ( tKw.m_iDocs, tKw.m_sNormalized );
+		}
+
+		pLocalDocs = &hLocalDocs;
+		iTotalDocs = GetStats().m_iTotalDocuments;
+		bGotLocalDF = true;
+	}
 
 	if ( pProfiler )
 		pProfiler->Switch ( eRtProfiler );
@@ -5985,9 +6011,14 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 		CSphQueryResult tChunkResult;
 		tChunkResult.m_pProfile = pResult->m_pProfile;
+		CSphMultQueryArgs tMultiArgs ( dCumulativeKList.GetLength() ? &dKListFilter : NULL, tArgs.m_iIndexWeight );
 		// storing index in matches tag for finding strings attrs offset later, biased against default zero and segments
-		const int iTag = m_pSegments.GetLength()+iChunk+1;
-		if ( !m_pDiskChunks[iChunk]->MultiQuery ( pQuery, &tChunkResult, iSorters, ppSorters, dCumulativeKList.GetLength() ? &dKListFilter : NULL, iIndexWeight, iTag, bFactors ) )
+		tMultiArgs.m_iTag = m_pSegments.GetLength()+iChunk+1;;
+		tMultiArgs.m_bFactors = tArgs.m_bFactors;
+		tMultiArgs.m_bLocalDF = bGotLocalDF;
+		tMultiArgs.m_pLocalDocs = pLocalDocs;
+		tMultiArgs.m_iTotalDocs = iTotalDocs;
+		if ( !m_pDiskChunks[iChunk]->MultiQuery ( pQuery, &tChunkResult, iSorters, ppSorters, tMultiArgs ) )
 		{
 			// FIXME? maybe handle this more gracefully (convert to a warning)?
 			pResult->m_sError = tChunkResult.m_sError;
@@ -6059,7 +6090,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		return false;
 	}
 
-	tCtx.m_bPackedFactors = bFactors;
+	tCtx.m_bPackedFactors = tArgs.m_bFactors;
+	tCtx.m_pLocalDocs = pLocalDocs;
+	tCtx.m_iTotalDocs = iTotalDocs;
 
 	// setup search terms
 	RtQwordSetup_t tTermSetup;
@@ -6204,7 +6237,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			// FIXME? OPTIMIZE? add shortcuts here too?
 			CSphMatch tMatch;
 			tMatch.Reset ( dSorters[iMaxSchemaIndex]->GetSchema().GetDynamicSize() );
-			tMatch.m_iWeight = iIndexWeight;
+			tMatch.m_iWeight = tArgs.m_iIndexWeight;
 
 			int iCutoff = pQuery->m_iCutoff;
 			if ( iCutoff<=0 )
@@ -6239,7 +6272,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 					}
 
 					if ( bRandomize )
-						tMatch.m_iWeight = ( sphRand() & 0xffff ) * iIndexWeight;
+						tMatch.m_iWeight = ( sphRand() & 0xffff ) * tArgs.m_iIndexWeight;
 
 					tCtx.CalcSort ( tMatch );
 					tCtx.CalcFinal ( tMatch ); // OPTIMIZE? could be possibly done later
@@ -6302,9 +6335,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 						if ( tCtx.m_bLookupSort )
 							CopyDocinfo ( pMatch[i], FindDocinfo ( m_pSegments[iSeg], pMatch[i].m_iDocID ) );
 
-						pMatch[i].m_iWeight *= iIndexWeight;
+						pMatch[i].m_iWeight *= tArgs.m_iIndexWeight;
 						if ( bRandomize )
-							pMatch[i].m_iWeight = ( sphRand() & 0xffff ) * iIndexWeight;
+							pMatch[i].m_iWeight = ( sphRand() & 0xffff ) * tArgs.m_iIndexWeight;
 
 						tCtx.CalcSort ( pMatch[i] );
 						tCtx.CalcFinal ( pMatch[i] ); // OPTIMIZE? could be possibly done later
@@ -6481,12 +6514,12 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 }
 
 bool RtIndex_t::MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults,
-								ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iIndexWeight, int iTag, bool bFactors ) const
+								ISphMatchSorter ** ppSorters, const CSphMultQueryArgs & tArgs ) const
 {
 	// FIXME! OPTIMIZE! implement common subtree cache here
 	bool bResult = false;
 	for ( int i=0; i<iQueries; i++ )
-		if ( MultiQuery ( &ppQueries[i], ppResults[i], 1, &ppSorters[i], pExtraFilters, iIndexWeight, iTag, bFactors ) )
+		if ( MultiQuery ( &ppQueries[i], ppResults[i], 1, &ppSorters[i], tArgs ) )
 			bResult = true;
 		else
 			ppResults[i]->m_iMultiplier = -1;
@@ -6494,15 +6527,18 @@ bool RtIndex_t::MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQu
 	return bResult;
 }
 
-bool RtIndex_t::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, bool bGetStats, CSphString & sError ) const
+
+bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, bool bGetStats, bool bFillOnly, CSphString * pError ) const
 {
-	m_tRwlock.ReadLock(); // this is actually needed only if they want stats
+	if ( !bFillOnly )
+		dKeywords.Resize ( 0 );
+
+	if ( ( bFillOnly && !dKeywords.GetLength() ) || ( !bFillOnly && ( !sQuery || !sQuery[0] ) ) )
+		return true;
 
 	RtQword_t tQword;
-	CSphString sBuffer ( sQuery );
 
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( SPH_CLONE_INDEX ) ); // avoid race
-	pTokenizer->SetBuffer ( (BYTE *)sBuffer.cstr(), sBuffer.Length() );
 
 	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
 	CSphDict * pDictBase = m_pDict;
@@ -6517,79 +6553,134 @@ bool RtIndex_t::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const cha
 	CSphScopedPtr<CSphDict> tDict2 ( NULL );
 	pDict = SetupExactDict ( tDict2, pDict, pTokenizer.Ptr() );
 
-	while ( BYTE * pToken = pTokenizer->GetToken() )
+	if ( !bFillOnly )
 	{
-		// keep tokenized form
-		CSphString sTokenized = ( const char *)pToken;
-		SphWordID_t iWord = pDict->GetWordID ( pToken );
-		if ( iWord )
+		pTokenizer->SetBuffer ( (BYTE *)sQuery, strlen ( sQuery ) );
+
+		while ( BYTE * pToken = pTokenizer->GetToken() )
 		{
-			CSphKeywordInfo & tInfo = dKeywords.Add();
-			Swap ( tInfo.m_sTokenized, sTokenized );
-			tInfo.m_sNormalized = (const char *)pToken;
-			tInfo.m_iDocs = 0;
-			tInfo.m_iHits = 0;
+			// keep tokenized form
+			CSphString sTokenized = ( const char *)pToken;
+			SphWordID_t iWord = pDict->GetWordID ( pToken );
+			if ( iWord )
+			{
+				CSphKeywordInfo & tInfo = dKeywords.Add();
+				Swap ( tInfo.m_sTokenized, sTokenized );
+				tInfo.m_sNormalized = (const char *)pToken;
+				tInfo.m_iDocs = 0;
+				tInfo.m_iHits = 0;
 
-			if ( tInfo.m_sNormalized.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
-				*(char *)tInfo.m_sNormalized.cstr() = '=';
+				if ( tInfo.m_sNormalized.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
+					*(char *)tInfo.m_sNormalized.cstr() = '=';
 
-			if ( !bGetStats )
-				continue;
+				if ( !bGetStats )
+					continue;
 
-			tQword.Reset();
-			tQword.m_iWordID = iWord;
-			tQword.m_sWord = tInfo.m_sTokenized;
-			tQword.m_sDictWord = tInfo.m_sNormalized;
-			ARRAY_FOREACH ( iSeg, m_pSegments )
-				RtQwordSetupSegment ( &tQword, m_pSegments[iSeg], false, m_bKeywordDict, m_iWordsCheckpoint );
+				tQword.Reset();
+				tQword.m_iWordID = iWord;
+				tQword.m_sWord = tInfo.m_sTokenized;
+				tQword.m_sDictWord = tInfo.m_sNormalized;
+				ARRAY_FOREACH ( iSeg, m_pSegments )
+					RtQwordSetupSegment ( &tQword, m_pSegments[iSeg], false, m_bKeywordDict, m_iWordsCheckpoint );
 
-			tInfo.m_iDocs = tQword.m_iDocs;
-			tInfo.m_iHits = tQword.m_iHits;
+				tInfo.m_iDocs = tQword.m_iDocs;
+				tInfo.m_iHits = tQword.m_iHits;
+			}
+		}
+	} else
+	{
+		BYTE sWord[SPH_MAX_KEYWORD_LEN];
+
+		ARRAY_FOREACH ( i, dKeywords )
+		{
+			CSphKeywordInfo & tInfo = dKeywords[i];
+			int iLen = tInfo.m_sTokenized.Length();
+			memcpy ( sWord, tInfo.m_sTokenized.cstr(), iLen );
+			sWord[iLen] = '\0';
+
+			SphWordID_t iWord = pDict->GetWordID ( sWord );
+			if ( iWord )
+			{
+				tQword.Reset();
+				tQword.m_iWordID = iWord;
+				tQword.m_sWord = tInfo.m_sTokenized;
+				tQword.m_sDictWord = (const char *)sWord;
+				ARRAY_FOREACH ( iSeg, m_pSegments )
+					RtQwordSetupSegment ( &tQword, m_pSegments[iSeg], false, m_bKeywordDict, m_iWordsCheckpoint );
+
+				tInfo.m_iDocs += tQword.m_iDocs;
+				tInfo.m_iHits += tQword.m_iHits;
+			}
 		}
 	}
 
 	// get stats from disk chunks too
-	if ( bGetStats )
-		ARRAY_FOREACH ( iChunk, m_pDiskChunks )
+	if ( !bGetStats )
+		return true;
+
+	bool bSame = !bFillOnly; // check only for GetKeywords path
+	ARRAY_FOREACH_COND ( iChunk, m_pDiskChunks, bSame )
 	{
-		CSphVector<CSphKeywordInfo> dKeywords2;
-		if ( !m_pDiskChunks[iChunk]->GetKeywords ( dKeywords2, sQuery, bGetStats, sError ) )
-		{
-			m_tRwlock.Unlock();
-			return false;
-		}
+		CSphIndex * pIndex = m_pDiskChunks[iChunk];
+		if ( m_pTokenizer->GetSettingsFNV()==pIndex->GetTokenizer()->GetSettingsFNV() &&
+			m_pDict->GetSettingsFNV()==pIndex->GetDictionary()->GetSettingsFNV() )
+			continue;
 
-		if ( dKeywords.GetLength()!=dKeywords2.GetLength() )
+		// handle settings difference
+		bSame = false;
+		CSphVector<CSphKeywordInfo> dKeywordsDisk;
+		if ( pError && pIndex->GetKeywords ( dKeywordsDisk, sQuery, false, pError ) )
 		{
-			sError.SetSprintf ( "INTERNAL ERROR: keyword count mismatch (ram=%d, disk[%d]=%d)",
-				dKeywords.GetLength(), iChunk, dKeywords2.GetLength() );
-			break;
-		}
+			if ( dKeywords.GetLength()!=dKeywordsDisk.GetLength() )
+				pError->SetSprintf ( "INTERNAL ERROR: keyword count mismatch (ram=%d, disk[%d]=%d)",
+					dKeywords.GetLength(), iChunk, dKeywordsDisk.GetLength() );
 
-		ARRAY_FOREACH ( i, dKeywords )
-		{
-			if ( dKeywords[i].m_sTokenized!=dKeywords2[i].m_sTokenized )
+			ARRAY_FOREACH ( i, dKeywords )
 			{
-				sError.SetSprintf ( "INTERNAL ERROR: tokenized keyword mismatch (n=%d, ram=%s, disk[%d]=%s)",
-					i, dKeywords[i].m_sTokenized.cstr(), iChunk, dKeywords2[i].m_sTokenized.cstr() );
-				break;
-			}
+				if ( dKeywords[i].m_sTokenized!=dKeywordsDisk[i].m_sTokenized )
+				{
+					pError->SetSprintf ( "INTERNAL ERROR: tokenized keyword mismatch (n=%d, ram=%s, disk[%d]=%s)",
+						i, dKeywords[i].m_sTokenized.cstr(), iChunk, dKeywordsDisk[i].m_sTokenized.cstr() );
+					break;
+				}
 
-			if ( dKeywords[i].m_sNormalized!=dKeywords2[i].m_sNormalized )
-			{
-				sError.SetSprintf ( "INTERNAL ERROR: normalized keyword mismatch (n=%d, ram=%s, disk[%d]=%s)",
-					i, dKeywords[i].m_sTokenized.cstr(), iChunk, dKeywords2[i].m_sTokenized.cstr() );
-				break;
+				if ( dKeywords[i].m_sNormalized!=dKeywordsDisk[i].m_sNormalized )
+				{
+					pError->SetSprintf ( "INTERNAL ERROR: normalized keyword mismatch (n=%d, ram=%s, disk[%d]=%s)",
+						i, dKeywords[i].m_sTokenized.cstr(), iChunk, dKeywordsDisk[i].m_sTokenized.cstr() );
+					break;
+				}
 			}
-
-			dKeywords[i].m_iDocs += dKeywords2[i].m_iDocs;
-			dKeywords[i].m_iHits += dKeywords2[i].m_iHits;
 		}
 	}
 
-	m_tRwlock.Unlock();
+	if ( !bSame && !bFillOnly )
+		return false;
+
+	ARRAY_FOREACH ( iChunk, m_pDiskChunks )
+		m_pDiskChunks[iChunk]->FillKeywords ( dKeywords );
+
 	return true;
 }
+
+
+bool RtIndex_t::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, bool bGetStats, CSphString * pError ) const
+{
+	m_tRwlock.ReadLock(); // this is actually needed only if they want stats
+	bool bGot = DoGetKeywords ( dKeywords, sQuery, bGetStats, false, pError );
+	m_tRwlock.Unlock();
+	return bGot;
+}
+
+
+bool RtIndex_t::FillKeywords ( CSphVector<CSphKeywordInfo> & dKeywords ) const
+{
+	m_tRwlock.ReadLock(); // this is actually needed only if they want stats
+	bool bGot = DoGetKeywords ( dKeywords, NULL, true, true, NULL );
+	m_tRwlock.Unlock();
+	return bGot;
+}
+
 
 // FIXME! might be inconsistent in case disk chunk update fails
 int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError, CSphString & sWarning )

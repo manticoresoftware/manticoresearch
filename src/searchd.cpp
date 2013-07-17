@@ -5675,6 +5675,7 @@ enum
 	QFLAG_PLAIN_IDF				= 1UL << 4,
 	QFLAG_GLOBAL_IDF			= 1UL << 5,
 	QFLAG_NORMALIZED_TF			= 1UL << 6,
+	QFLAG_LOCAL_DF				= 1UL << 7
 };
 
 void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_c & tOut, const CSphQuery & q, bool bAgentWeight, int iWeight ) const
@@ -5689,6 +5690,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	uFlags |= QFLAG_PLAIN_IDF * q.m_bPlainIDF;
 	uFlags |= QFLAG_GLOBAL_IDF * q.m_bGlobalIDF;
 	uFlags |= QFLAG_NORMALIZED_TF * q.m_bNormalizedTFIDF;
+	uFlags |= QFLAG_LOCAL_DF * q.m_bLocalDF;
 	tOut.SendDword ( uFlags );
 
 	// The Search Legacy
@@ -6670,6 +6672,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 		tQuery.m_bSimplify = !!( uFlags & QFLAG_SIMPLIFY );
 		tQuery.m_bPlainIDF = !!( uFlags & QFLAG_PLAIN_IDF );
 		tQuery.m_bGlobalIDF = !!( uFlags & QFLAG_GLOBAL_IDF );
+		tQuery.m_bLocalDF = !!( uFlags & QFLAG_LOCAL_DF );
 
 		if ( iMasterVer>0 || iVer==0x11E )
 			tQuery.m_bNormalizedTFIDF = !!( uFlags & QFLAG_NORMALIZED_TF );
@@ -9063,6 +9066,7 @@ protected:
 	void							RunLocalSearchesMT ();
 	bool							RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters, CSphQueryResult ** pResults, bool * pMulti ) const;
 	bool							HasExpresions ( int iStart, int iEnd ) const;
+	void							SetupLocalDF ( int iStart, int iEnd );
 
 	int								m_iStart;		///< subset start
 	int								m_iEnd;			///< subset end
@@ -9076,6 +9080,10 @@ protected:
 	mutable SmallStringHash_T<int>	m_hUsed;
 
 	mutable ExprHook_t				m_tHook;
+
+	SmallStringHash_T < int64_t >	m_hLocalDocs;
+	int64_t							m_iTotalDocs;
+	bool							m_bGotLocalDF;
 
 	const ServedIndex_t *			UseIndex ( int iLocal ) const;
 	void							ReleaseIndex ( int iLocal ) const;
@@ -9100,6 +9108,8 @@ SearchHandler_c::SearchHandler_c ( int iQueries, bool bSphinxql )
 
 	m_pProfile = NULL;
 	m_tHook.m_pProfiler = NULL;
+	m_iTotalDocs = 0;
+	m_bGotLocalDF = false;
 
 	assert ( !m_tLock.GetError() );
 }
@@ -9622,15 +9632,24 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 	int iIndexWeight = m_dLocal[iLocal].m_iWeight;
 
 	// do the query
+	CSphMultQueryArgs tMultiArgs ( &dKlists, iIndexWeight );
+	tMultiArgs.m_bFactors = bNeedFactors;
+	if ( m_bGotLocalDF )
+	{
+		tMultiArgs.m_bLocalDF = true;
+		tMultiArgs.m_pLocalDocs = &m_hLocalDocs;
+		tMultiArgs.m_iTotalDocs = m_iTotalDocs;
+	}
+
 	bool bResult = false;
 	pServed->m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
 	ppResults[0]->m_tIOStats.Start();
 	if ( *pMulti )
 	{
-		bResult = pServed->m_pIndex->MultiQuery ( &m_dQueries[m_iStart], ppResults[0], iQueries, ppSorters, &dKlists, iIndexWeight, 0, bNeedFactors );
+		bResult = pServed->m_pIndex->MultiQuery ( &m_dQueries[m_iStart], ppResults[0], iQueries, ppSorters, tMultiArgs );
 	} else
 	{
-		bResult = pServed->m_pIndex->MultiQueryEx ( iQueries, &m_dQueries[m_iStart], ppResults, ppSorters, &dKlists, iIndexWeight, 0, bNeedFactors );
+		bResult = pServed->m_pIndex->MultiQueryEx ( iQueries, &m_dQueries[m_iStart], ppResults, ppSorters, tMultiArgs );
 	}
 	ppResults[0]->m_tIOStats.Stop();
 
@@ -9742,13 +9761,21 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 		}
 
 		// do the query
+		CSphMultQueryArgs tMultiArgs ( &dKlists, iIndexWeight );
+		tMultiArgs.m_bFactors = bNeedFactors;
+		if ( m_bGotLocalDF )
+		{
+			tMultiArgs.m_bLocalDF = true;
+			tMultiArgs.m_pLocalDocs = &m_hLocalDocs;
+			tMultiArgs.m_iTotalDocs = m_iTotalDocs;
+		}
+
 		bool bResult = false;
 		pServed->m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
 		if ( m_bMultiQueue )
 		{
 			tStats.m_tIOStats.Start();
-			bResult = pServed->m_pIndex->MultiQuery ( &m_dQueries[m_iStart], &tStats,
-				dSorters.GetLength(), dSorters.Begin(), &dKlists, iIndexWeight, 0, bNeedFactors );
+			bResult = pServed->m_pIndex->MultiQuery ( &m_dQueries[m_iStart], &tStats, dSorters.GetLength(), dSorters.Begin(), tMultiArgs );
 			tStats.m_tIOStats.Stop();
 		} else
 		{
@@ -9757,10 +9784,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 				dResults[i] = &m_dResults[i];
 
 			dResults[m_iStart]->m_tIOStats.Start();
-
-			bResult = pServed->m_pIndex->MultiQueryEx ( dSorters.GetLength(),
-				&m_dQueries[m_iStart], &dResults[m_iStart], &dSorters[0], &dKlists, iIndexWeight, 0, bNeedFactors );
-
+			bResult = pServed->m_pIndex->MultiQueryEx ( dSorters.GetLength(), &m_dQueries[m_iStart], &dResults[m_iStart], &dSorters[0], tMultiArgs );
 			dResults[m_iStart]->m_tIOStats.Stop();
 		}
 
@@ -9854,6 +9878,150 @@ bool SearchHandler_c::HasExpresions ( int iStart, int iEnd ) const
 	}
 	return false;
 }
+
+
+void SearchHandler_c::SetupLocalDF ( int iStart, int iEnd )
+{
+	if ( m_dLocal.GetLength()<2 )
+		return;
+
+	if ( m_pProfile )
+		m_pProfile->Switch ( SPH_QSTATE_LOCAL_DF );
+
+	// FIXME!!! bail on index with ondisk_dict
+	bool bGlobalIDF = true;
+	ARRAY_FOREACH_COND ( i, m_dLocal, bGlobalIDF )
+	{
+		const ServedIndex_t * pIndex = UseIndex ( i );
+		if ( pIndex )
+		{
+			bGlobalIDF = !pIndex->m_sGlobalIDFPath.IsEmpty();
+			ReleaseIndex ( i );
+		}
+	}
+	// bail out on all indexes with global idf set
+	if ( bGlobalIDF )
+		return;
+
+	bool bOnlyNoneRanker = true;
+	bool bOnlyFullScan = true;
+	bool bHasLocalDF = false;
+	for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
+	{
+		const CSphQuery & tQuery = m_dQueries[iQuery];
+
+		bOnlyFullScan &= tQuery.m_sQuery.IsEmpty();
+		bHasLocalDF |= tQuery.m_bLocalDF;
+		if ( !tQuery.m_sQuery.IsEmpty() && tQuery.m_bLocalDF )
+			bOnlyNoneRanker &= ( tQuery.m_eRanker==SPH_RANK_NONE );
+	}
+	// bail out queries: full-scan, ranker=none, local_idf=0
+	if ( bOnlyFullScan || bOnlyNoneRanker || !bHasLocalDF )
+		return;
+
+	CSphVector<char> dQuery ( 512 );
+	dQuery.Resize ( 0 );
+	for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
+	{
+		const CSphQuery & tQuery = m_dQueries[iQuery];
+		if ( tQuery.m_sQuery.IsEmpty() || !tQuery.m_bLocalDF || tQuery.m_eRanker==SPH_RANK_NONE )
+			continue;
+
+		int iLen = tQuery.m_sQuery.Length();
+		int iOff = dQuery.GetLength();
+		dQuery.Resize ( iOff + iLen + 1 );
+		memcpy ( dQuery.Begin()+iOff, tQuery.m_sQuery.cstr(), iLen );
+		dQuery[iOff+iLen] = ' '; // queries delimiter
+	}
+	// bail out on empty queries
+	if ( !dQuery.GetLength() )
+		return;
+
+	dQuery.Add ( '\0' );
+
+	// order indexes by settings
+	struct IndexSettings_t
+	{
+		uint64_t	m_uHash;
+		int			m_iLocal;
+	};
+	CSphVector<IndexSettings_t> dLocal ( m_dLocal.GetLength() );
+	dLocal.Resize ( 0 );
+	ARRAY_FOREACH ( i, m_dLocal )
+	{
+		const ServedIndex_t * pIndex = UseIndex ( i );
+		if ( !pIndex )
+			continue;
+
+		dLocal.Add();
+		dLocal.Last().m_iLocal = i;
+		// TODO: cache settingsFNV on index load
+		// FIXME!!! no need to count dictionary hash
+		dLocal.Last().m_uHash = pIndex->m_pIndex->GetTokenizer()->GetSettingsFNV() ^ pIndex->m_pIndex->GetDictionary()->GetSettingsFNV();
+
+		ReleaseIndex ( i );
+	}
+	dLocal.Sort ( bind ( &IndexSettings_t::m_uHash ) );
+
+	// gather per-term docs count
+	CSphVector < CSphKeywordInfo > dKeywords;
+	ARRAY_FOREACH ( i, dLocal )
+	{
+		const ServedIndex_t * pIndex = UseIndex ( dLocal[i].m_iLocal );
+		if ( !pIndex )
+			continue;
+
+		m_iTotalDocs += pIndex->m_pIndex->GetStats().m_iTotalDocuments;
+
+		if ( i && dLocal[i].m_uHash==dLocal[i-1].m_uHash )
+		{
+			ARRAY_FOREACH ( kw, dKeywords )
+				dKeywords[kw].m_iDocs = 0;
+
+			// no need to tokenize query just fill docs count
+			pIndex->m_pIndex->FillKeywords ( dKeywords );
+		} else
+		{
+			dKeywords.Resize ( 0 );
+			pIndex->m_pIndex->GetKeywords ( dKeywords, dQuery.Begin(), true, NULL );
+
+			// FIXME!!! move duplicate removal to GetKeywords to do less QWord setup and dict searching
+			// custom uniq - got rid of word duplicates
+			dKeywords.Sort ( bind ( &CSphKeywordInfo::m_sNormalized ) );
+			if ( dKeywords.GetLength()>1 )
+			{
+				int iSrc = 1, iDst = 1;
+				while ( iSrc<dKeywords.GetLength() )
+				{
+					if ( dKeywords[iDst-1].m_sNormalized==dKeywords[iSrc].m_sNormalized )
+						iSrc++;
+					else
+					{
+						Swap ( dKeywords[iDst], dKeywords[iSrc] );
+						iDst++;
+						iSrc++;
+					}
+				}
+				dKeywords.Resize ( iDst );
+			}
+		}
+
+		ARRAY_FOREACH ( j, dKeywords )
+		{
+			const CSphKeywordInfo & tKw = dKeywords[j];
+			int64_t * pDocs = m_hLocalDocs ( tKw.m_sNormalized );
+			if ( pDocs )
+				*pDocs += tKw.m_iDocs;
+			else
+				m_hLocalDocs.Add ( tKw.m_iDocs, tKw.m_sNormalized );
+		}
+
+		ReleaseIndex ( dLocal[i].m_iLocal );
+	}
+
+	m_bGotLocalDF = true;
+}
+
 
 static int GetIndexWeight ( const char * sName, const CSphVector<CSphNamedInt> & dIndexWeights, int iDefaultWeight )
 {
@@ -10161,6 +10329,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// FIXME! what if the remote agents finish early, could they timeout?
 	if ( m_dLocal.GetLength() )
 	{
+		SetupLocalDF ( iStart, iEnd );
+
 		if ( m_pProfile )
 			m_pProfile->Switch ( SPH_QSTATE_LOCAL_SEARCH );
 
@@ -11303,6 +11473,10 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 	} else if ( sOpt=="global_idf" )
 	{
 		m_pQuery->m_bGlobalIDF = ( tValue.m_iValue!=0 );
+
+	} else if ( sOpt=="local_df" )
+	{
+		m_pQuery->m_bLocalDF = ( tValue.m_iValue!=0 );
 
 	} else if ( sOpt=="ignore_nonexistent_indexes" )
 	{
@@ -12536,7 +12710,7 @@ void HandleCommandKeywords ( int iSock, int iVer, InputBuffer_c & tReq )
 
 	CSphString sError;
 	CSphVector < CSphKeywordInfo > dKeywords;
-	if ( !pIndex->m_pIndex->GetKeywords ( dKeywords, sQuery.cstr (), bGetStats, sError ) )
+	if ( !pIndex->m_pIndex->GetKeywords ( dKeywords, sQuery.cstr (), bGetStats, &sError ) )
 	{
 		tReq.SendErrorReply ( "error generating keywords: %s", sError.cstr () );
 		pIndex->Unlock();
@@ -14636,7 +14810,7 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 
 	CSphVector<CSphKeywordInfo> dKeywords;
 	bool bStats = ( iArgs==3 && tStmt.m_dInsertValues[2].m_iVal!=0 );
-	bool bRes = pServed->m_pIndex->GetKeywords ( dKeywords, tStmt.m_dInsertValues[0].m_sVal.cstr(), bStats, sError );
+	bool bRes = pServed->m_pIndex->GetKeywords ( dKeywords, tStmt.m_dInsertValues[0].m_sVal.cstr(), bStats, &sError );
 	pServed->Unlock ();
 
 	if ( !bRes )

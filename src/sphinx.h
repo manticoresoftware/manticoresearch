@@ -1476,7 +1476,7 @@ public:
 
 protected:
 	/// generic InsertAttr() implementation that tracks STRINGPTR, FACTORS attributes
-	void							InsertAttr (CSphVector<CSphColumnInfo> & dAttrs, CSphVector<int> & dUsed, int iPos, const CSphColumnInfo & tCol, bool dDynamic );
+	void							InsertAttr ( CSphVector<CSphColumnInfo> & dAttrs, CSphVector<int> & dUsed, int iPos, const CSphColumnInfo & tCol, bool dDynamic );
 
 	/// reset my trackers
 	void							Reset();
@@ -2530,6 +2530,14 @@ struct CSphKeywordInfo
 	int				m_iHits;
 };
 
+inline void Swap ( CSphKeywordInfo & v1, CSphKeywordInfo & v2 )
+{
+	v1.m_sTokenized.Swap ( v2.m_sTokenized );
+	v1.m_sNormalized.Swap ( v2.m_sNormalized );
+	::Swap ( v1.m_iDocs, v2.m_iDocs );
+	::Swap ( v1.m_iHits, v2.m_iHits );
+}
+
 
 /// per-attribute value overrides
 class CSphAttrOverride
@@ -2618,6 +2626,7 @@ public:
 	bool			m_bPlainIDF;		///< whether to use PlainIDF=log(N/n) or NormalizedIDF=log((N-n+1)/n)
 	bool			m_bGlobalIDF;		///< whether to use local indexes or a global idf file
 	bool			m_bNormalizedTFIDF;	///< whether to scale IDFs by query word count, so that TF*IDF is normalized
+	bool			m_bLocalDF;			///< whether to use calculate DF among local indexes
 
 	CSphVector<CSphFilterSettings>	m_dFilters;	///< filters
 
@@ -3127,7 +3136,7 @@ struct ISphFilter;
 struct ISphKeywordsStat
 {
 	virtual			~ISphKeywordsStat() {}
-	virtual bool	FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, CSphString & sError ) const = 0;
+	virtual bool	FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const = 0;
 };
 
 
@@ -3135,6 +3144,20 @@ struct CSphIndexStatus
 {
 	int64_t			m_iRamUse;
 	int64_t			m_iDiskUse;
+};
+
+
+struct CSphMultQueryArgs : ISphNoncopyable
+{
+	const CSphVector<CSphFilterSettings> *	m_pExtraFilters;
+	const int								m_iIndexWeight;
+	int										m_iTag;
+	bool									m_bFactors;
+	bool									m_bLocalDF;
+	const SmallStringHash_T<int64_t> *		m_pLocalDocs;
+	int64_t									m_iTotalDocs;
+
+	CSphMultQueryArgs ( const CSphVector<CSphFilterSettings> * pExtraFilters, int iIndexWeight );
 };
 
 
@@ -3232,10 +3255,10 @@ public:
 public:
 	virtual bool				EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const = 0;
 	void						SetCacheSize ( int iMaxCachedDocs, int iMaxCachedHits );
-	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iIndexWeight, int iTag=0, bool bFactors = false ) const = 0;
-	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iIndexWeight, int iTag=0, bool bFactors = false ) const = 0;
-	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString & sError ) const = 0;
-	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & , CSphString & ) const { return false; }
+	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultQueryArgs & tArgs ) const = 0;
+	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultQueryArgs & tArgs ) const = 0;
+	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString * pError ) const = 0;
+	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const = 0;
 
 public:
 	/// updates memory-cached attributes in real time
@@ -3326,7 +3349,7 @@ protected:
 
 public:
 	void						SetGlobalIDFPath ( const CSphString & sPath ) { m_sGlobalIDFPath = sPath; }
-	float						GetGlobalIDF ( const CSphString & sWord, int iDocsLocal, bool bPlainIDF ) const;
+	float						GetGlobalIDF ( const CSphString & sWord, int64_t iDocsLocal, bool bPlainIDF ) const;
 
 protected:
 	CSphString					m_sGlobalIDFPath;

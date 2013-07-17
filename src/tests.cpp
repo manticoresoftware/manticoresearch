@@ -989,10 +989,10 @@ public:
 	virtual bool				EarlyReject ( CSphQueryContext * , CSphMatch & ) const { return false; }
 	virtual const CSphSourceStats &	GetStats () const { return g_tTmpDummyStat; }
 	virtual CSphIndexStatus			GetStatus () const { CSphIndexStatus tRes; tRes.m_iRamUse = 0; return tRes; }
-	virtual bool				MultiQuery ( const CSphQuery * , CSphQueryResult * , int , ISphMatchSorter ** , const CSphVector<CSphFilterSettings> * , int, int, bool ) const { return false; }
-	virtual bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult ** , ISphMatchSorter ** , const CSphVector<CSphFilterSettings> * , int, int, bool ) const { return false; }
-	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , bool , CSphString & ) const { return false; }
-	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, CSphString & sError ) const;
+	virtual bool				MultiQuery ( const CSphQuery * , CSphQueryResult * , int , ISphMatchSorter ** , const CSphMultQueryArgs & ) const { return false; }
+	virtual bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult ** , ISphMatchSorter ** , const CSphMultQueryArgs & ) const { return false; }
+	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , bool , CSphString * ) const { return false; }
+	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const;
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & , int , CSphString &, CSphString & ) { return -1; }
 	virtual bool				SaveAttributes ( CSphString & ) const { return false; }
 	virtual DWORD				GetAttributeStatus () const { return 0; }
@@ -1009,7 +1009,7 @@ public:
 };
 
 
-bool CSphDummyIndex::FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, CSphString & ) const
+bool CSphDummyIndex::FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const
 {
 	ARRAY_FOREACH ( i, dKeywords )
 	{
@@ -2297,11 +2297,12 @@ void TestRTWeightBoundary ()
 
 		CSphQuery tQuery;
 		CSphQueryResult tResult;
+		CSphMultQueryArgs tArgs ( NULL, 1 );
 		tQuery.m_sQuery = "@title cat";
 
 		ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, pIndex->GetMatchSchema(), tResult.m_sError, NULL, false );
 		assert ( pSorter );
-		Verify ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, NULL, 1 ) );
+		Verify ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, tArgs ) );
 		sphFlattenQueue ( pSorter, &tResult, 0 );
 		CheckRT ( tResult.m_dMatches.GetLength(), 1, "results found" );
 		CheckRT ( (int)tResult.m_dMatches[0].m_iDocID, 1, "docID" );
@@ -2450,6 +2451,7 @@ void TestRTSendVsMerge ()
 
 	CSphQuery tQuery;
 	CSphQueryResult tResult;
+	CSphMultQueryArgs tArgs ( NULL, 1 );
 	tQuery.m_sQuery = "@title cat";
 
 	ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, pIndex->GetMatchSchema(), tResult.m_sError, NULL, false );
@@ -2470,7 +2472,7 @@ void TestRTSendVsMerge ()
 		if ( pSrc->m_tDocInfo.m_iDocID==350 )
 		{
 			pIndex->Commit ();
-			Verify ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, NULL, 1 ) );
+			Verify ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, tArgs ) );
 			sphFlattenQueue ( pSorter, &tResult, 0 );
 		}
 	}

@@ -8691,7 +8691,9 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 	int iMaxQpos = pRanker->GetQwords ( hQwords );
 
 	const int iQwords = hQwords.GetLength ();
-	const CSphSourceStats & tSourceStats = pIndex->GetStats();
+	int64_t iTotalDocuments = pIndex->GetStats().m_iTotalDocuments;
+	if ( tCtx.m_pLocalDocs )
+		iTotalDocuments = tCtx.m_iTotalDocs;
 
 	CSphVector<const ExtQword_t *> dWords;
 	dWords.Reserve ( hQwords.GetLength() );
@@ -8701,16 +8703,25 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 	{
 		ExtQword_t & tWord = hQwords.IterateGet ();
 
+		int64_t iTermDocs = tWord.m_iDocs;
+		// shared docs count
+		if ( tCtx.m_pLocalDocs )
+		{
+			int64_t * pDocs = (*tCtx.m_pLocalDocs)( tWord.m_sWord );
+			if ( pDocs )
+				iTermDocs = *pDocs;
+		}
+
 		// build IDF
 		float fIDF = 0.0f;
 		if ( pQuery->m_bGlobalIDF )
-			fIDF = pIndex->GetGlobalIDF ( tWord.m_sWord, tWord.m_iDocs, pQuery->m_bPlainIDF );
-		else if ( tWord.m_iDocs )
+			fIDF = pIndex->GetGlobalIDF ( tWord.m_sWord, iTermDocs, pQuery->m_bPlainIDF );
+		else if ( iTermDocs )
 		{
 			// (word_docs > total_docs) case *is* occasionally possible
 			// because of dupes, or delayed purging in RT, etc
 			// FIXME? we don't expect over 4G docs per just 1 local index
-			const int64_t iTotalClamped = Max ( tSourceStats.m_iTotalDocuments, int64_t(tWord.m_iDocs) );
+			const int64_t iTotalClamped = Max ( iTotalDocuments, iTermDocs );
 
 			if ( !pQuery->m_bPlainIDF )
 			{
@@ -8725,7 +8736,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 				// for the record, idf = log((N-n+0.5)/(n+0.5)) in the original paper
 				// but our variant is a bit easier to compute, and has a better (symmetric) range
 				float fLogTotal = logf ( float ( 1+iTotalClamped ) );
-				fIDF = logf ( float ( iTotalClamped-tWord.m_iDocs+1 ) / float ( tWord.m_iDocs ) )
+				fIDF = logf ( float ( iTotalClamped-iTermDocs+1 ) / float ( iTermDocs ) )
 					/ ( 2*fLogTotal );
 			} else
 			{
@@ -8736,7 +8747,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 				// we prescale idfs and get weight in [0, 0.5] range
 				// then add 0.5 as our final step
 				float fLogTotal = logf ( float ( 1+iTotalClamped ) );
-				fIDF = logf ( float ( iTotalClamped ) / float ( tWord.m_iDocs ) )
+				fIDF = logf ( float ( iTotalClamped ) / float ( iTermDocs ) )
 					/ ( 2*fLogTotal );
 			}
 		}

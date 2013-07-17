@@ -88,6 +88,7 @@ extern bool g_bJsonKeynamesToLowercase;
 	SPH_QUERY_STATE ( NET_READ,		"net_read" ) \
 	SPH_QUERY_STATE ( IO,			"io" ) \
 	SPH_QUERY_STATE ( DIST_CONNECT,	"dist_connect" ) \
+	SPH_QUERY_STATE ( LOCAL_DF,		"local_df" ) \
 	SPH_QUERY_STATE ( LOCAL_SEARCH,	"local_search" ) \
 	SPH_QUERY_STATE ( SQL_PARSE,	"sql_parse" ) \
 	SPH_QUERY_STATE ( DICT_SETUP,	"dict_setup" ) \
@@ -423,6 +424,8 @@ public:
 
 	void *						m_pIndexData;			///< backend specific data
 	CSphQueryProfile *			m_pProfile;
+	const SmallStringHash_T<int64_t> *		m_pLocalDocs;
+	int64_t									m_iTotalDocs;
 
 public:
 	CSphQueryContext ();

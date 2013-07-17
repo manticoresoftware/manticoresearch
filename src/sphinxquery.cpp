@@ -2332,8 +2332,7 @@ void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t 
 	// get keywords info from index dictionary
 	if ( dKeywords.GetLength() )
 	{
-		CSphString sError;
-		m_pKeywords->FillKeywords ( dKeywords, sError );
+		m_pKeywords->FillKeywords ( dKeywords );
 		ARRAY_FOREACH ( i, dKeywords )
 		{
 			const CSphKeywordInfo & tKeyword = dKeywords[i];

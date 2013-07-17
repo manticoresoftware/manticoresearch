@@ -2266,7 +2266,12 @@ static DWORD CopyMva ( const DWORD * pSrc, CSphTightVector<DWORD> & dDst )
 	assert ( dDst.GetLength()>=1 );
 
 	DWORD uCount = *pSrc;
-	assert ( uCount );
+	// plain and rt indexes have different formats for storing empty MVA values
+	// plain stores legal offset in attribute and zero in MVA pool
+	// rt stores 0 as offset in attribute and non a single byte in MVA pool
+	// we should handle here cases where plain was ATTACHed to rt like this
+	if ( !uCount )
+		return 0;
 
 	DWORD iLen = dDst.GetLength();
 	dDst.Resize ( iLen+uCount+1 );

@@ -9880,6 +9880,12 @@ bool SearchHandler_c::HasExpresions ( int iStart, int iEnd ) const
 }
 
 
+struct IndexSettings_t
+{
+	uint64_t	m_uHash;
+	int			m_iLocal;
+};
+
 void SearchHandler_c::SetupLocalDF ( int iStart, int iEnd )
 {
 	if ( m_dLocal.GetLength()<2 )
@@ -9940,11 +9946,6 @@ void SearchHandler_c::SetupLocalDF ( int iStart, int iEnd )
 	dQuery.Add ( '\0' );
 
 	// order indexes by settings
-	struct IndexSettings_t
-	{
-		uint64_t	m_uHash;
-		int			m_iLocal;
-	};
 	CSphVector<IndexSettings_t> dLocal ( m_dLocal.GetLength() );
 	dLocal.Resize ( 0 );
 	ARRAY_FOREACH ( i, m_dLocal )

@@ -557,7 +557,7 @@ public:
 
 #if USE_RLP
 	/// create a RLP token filter
-	static ISphTokenizer *			CreateRLPFilter ( ISphTokenizer * pTokenizer, bool bChineseRLP, const char * szRLPRoot,	const char * szRLPEnv, const char * szRLPCtx, bool bFilterChinese, CSphString & sError );
+	static ISphTokenizer *			CreateRLPFilter ( ISphTokenizer * pTokenizer, bool bChineseRLP, const char * szRLPRoot,	const char * szRLPEnv, const char * szRLPCtx, bool bStandalone, CSphString & sError );
 
 	/// create a filter to split an RLP-processed token stream into tokens
 	static ISphTokenizer *			CreateRLPResultSplitter ( ISphTokenizer * pTokenizer, const char * szRLPCtx );

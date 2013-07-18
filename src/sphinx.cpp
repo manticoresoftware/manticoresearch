@@ -2147,24 +2147,7 @@ private:
 	bool				m_bBuildMultiform;
 	BYTE				m_sTokenizedMultiform [ 3*SPH_MAX_WORD_LEN+4 ];
 
-	struct StoredToken_t
-	{
-		BYTE			m_sToken [3*SPH_MAX_WORD_LEN+4];
-		// tokenized state
-		const char *	m_szTokenStart;
-		const char *	m_szTokenEnd;
-		const char *	m_pBufferPtr;
-		int				m_iTokenLen;
-		int				m_iOvershortCount;
-		bool			m_bBoundary;
-		bool			m_bSpecial;
-		bool			m_bBlended;
-		bool			m_bBlendedPart;
-	};
-
 	CSphVector<StoredToken_t>		m_dStoredTokens;
-
-	void							FillTokenInfo ( StoredToken_t & tToken, const BYTE * sToken );
 };
 
 
@@ -2390,6 +2373,22 @@ public:
 
 /////////////////////////////////////////////////////////////////////////////
 
+static void FillStoredTokenInfo ( StoredToken_t & tToken, const BYTE * sToken, ISphTokenizer * pTokenizer )
+{
+	assert ( sToken && pTokenizer );
+	strncpy ( (char *)tToken.m_sToken, (const char *)sToken, sizeof(tToken.m_sToken) );
+	tToken.m_szTokenStart = pTokenizer->GetTokenStart ();
+	tToken.m_szTokenEnd = pTokenizer->GetTokenEnd ();
+	tToken.m_iOvershortCount = pTokenizer->GetOvershortCount ();
+	tToken.m_iTokenLen = pTokenizer->GetLastTokenLen ();
+	tToken.m_pBufferPtr = pTokenizer->GetBufferPtr ();
+	tToken.m_bBoundary = pTokenizer->GetBoundary ();
+	tToken.m_bSpecial = pTokenizer->WasTokenSpecial ();
+	tToken.m_bBlended = pTokenizer->TokenIsBlended();
+	tToken.m_bBlendedPart = pTokenizer->TokenIsBlendedPart();
+}
+
+
 #if USE_RLP
 
 BT_RLP_EnvironmentC * g_pRLPEnv = NULL;
@@ -2464,7 +2463,7 @@ static void sphRLPFree ()
 class CSphRLPTokenizer : public CSphTokenFilter
 {
 public:
-	CSphRLPTokenizer ( ISphTokenizer * pTok, const char * szRootPath, const char * szEnvPath, const char * szCtxPath, bool bFilterChinese )
+	CSphRLPTokenizer ( ISphTokenizer * pTok, const char * szRootPath, const char * szEnvPath, const char * szCtxPath, bool bStandalone )
 		: CSphTokenFilter ( pTok )
 		, m_pContext ( NULL )
 		, m_pFactory ( NULL )
@@ -2473,12 +2472,15 @@ public:
 		, m_sEnvPath ( szEnvPath )
 		, m_sCtxPath ( szCtxPath )
 		, m_bChineseBuffer ( false )
-		, m_bFilterChinese ( bFilterChinese )
+		, m_bStandalone ( bStandalone )
 		, m_bInitialized ( false )
 		, m_bCloned ( false )
 		, m_iLargeSegmentOffset ( 0 )
+		, m_iCurNonChineseToken ( 0 )
+		, m_bNonChineseToken ( false )
 	{
 		assert ( pTok );
+		sphUTF8Encode ( m_pMarkerTokenSeparator, PROXY_TOKEN_SEPARATOR );
 	}
 
 	virtual ~CSphRLPTokenizer()
@@ -2533,16 +2535,16 @@ public:
 		CSphRLPTokenizer * pClone;
 		if ( eMode==SPH_CLONE_QUERY_LIGHTWEIGHT )
 		{
-			pClone = new CSphRLPTokenizer ( pTok, m_sRootPath.cstr(), m_sEnvPath.cstr(), m_sCtxPath.cstr(), m_bFilterChinese );
+			pClone = new CSphRLPTokenizer ( pTok, m_sRootPath.cstr(), m_sEnvPath.cstr(), m_sCtxPath.cstr(), m_bStandalone );
 			pClone->m_pContext = m_pContext;
 			pClone->m_pFactory = m_pFactory;
 			pClone->m_pTokenIterator = m_pTokenIterator;
-			pClone->m_bFilterChinese = m_bFilterChinese;
+			pClone->m_bStandalone = m_bStandalone;
 			pClone->m_bInitialized = true;
 			pClone->m_bCloned = true;
 		} else
 		{
-			pClone = new CSphRLPTokenizer ( pTok, m_sRootPath.cstr(), m_sEnvPath.cstr(), m_sCtxPath.cstr(), m_bFilterChinese );
+			pClone = new CSphRLPTokenizer ( pTok, m_sRootPath.cstr(), m_sEnvPath.cstr(), m_sCtxPath.cstr(), m_bStandalone );
 			CSphString sError;
 			Verify ( pClone->Init ( sError ) );
 		}
@@ -2554,7 +2556,7 @@ public:
 	{
 		assert ( m_bInitialized && g_pRLPEnv && m_pContext && m_pFactory );
 
-		m_bChineseBuffer = m_bFilterChinese ? sphDetectChinese ( szBuffer, iBufferLength ) : true;
+		m_bChineseBuffer = m_bStandalone ? sphDetectChinese ( szBuffer, iBufferLength ) : true;
 		if ( m_bChineseBuffer )
 		{
 			int iLength = iBufferLength;
@@ -2566,7 +2568,51 @@ public:
 				m_iLargeSegmentOffset = iLength;
 			}
 
-			ProcessBufferRLP ( szBuffer, iLength );
+			if ( m_bStandalone )
+			{
+				m_dDocBuffer.Resize(0);
+				m_dNonChineseTokens.Resize(0);
+				m_iCurNonChineseToken = 0;
+
+				m_pTokenizer->SetBuffer ( szBuffer, iBufferLength );
+
+				BYTE * pToken;
+				while ( ( pToken = m_pTokenizer->GetToken() )!=NULL )
+				{
+					int iTokenLen = strlen ( (const char*)pToken );
+
+					int iOldBufferLen = m_dDocBuffer.GetLength();
+					m_dDocBuffer.Resize ( iOldBufferLen+Max ( PROXY_MARKER_LEN+1, iTokenLen )+1 );
+					BYTE * pCurDocPtr = &(m_dDocBuffer[iOldBufferLen]);
+
+					if ( sphDetectChinese ( pToken, iTokenLen ) )
+					{
+						// collect it in one big chinese token buffer that will be processed by RLP
+						memcpy ( pCurDocPtr, pToken, iTokenLen );
+						pCurDocPtr += iTokenLen;
+					} else
+					{
+						StoredToken_t & tStored = m_dNonChineseTokens.Add();
+						FillStoredTokenInfo ( tStored, pToken, m_pTokenizer );
+
+						// fixup a couple of fields
+						tStored.m_pBufferPtr = (const char *)tStored.m_sToken;
+						tStored.m_szTokenStart = (const char *)tStored.m_sToken;
+						tStored.m_szTokenEnd = (const char *)tStored.m_sToken+iTokenLen;
+
+						// add a 'non-chinese token' marker to the chinese token stream
+						*pCurDocPtr++ = ' ';
+						COPY_MARKER ( pCurDocPtr, m_pMarkerTokenSeparator );
+					}
+
+					*pCurDocPtr++ = ' ';
+
+					m_dDocBuffer.Resize ( pCurDocPtr-m_dDocBuffer.Begin() );
+				}
+
+				ProcessBufferRLP ( m_dDocBuffer.Begin(), m_dDocBuffer.GetLength() );
+			} else
+				ProcessBufferRLP ( szBuffer, iBufferLength );
 		} else
 			m_pTokenizer->SetBuffer ( szBuffer, iBufferLength );
 	}
@@ -2577,9 +2623,22 @@ public:
 
 		if ( m_bChineseBuffer )
 		{
+			m_bNonChineseToken = false;
 			BYTE * pToken = GetNextTokenRLP();
 			if ( pToken )
+			{
+				if ( m_bStandalone )
+				{
+					int iTokenLen = strlen ( (const char *)pToken );
+					if ( iTokenLen==PROXY_MARKER_LEN && CMP_MARKER ( pToken, m_pMarkerTokenSeparator ) )
+					{
+						m_bNonChineseToken = true;
+						return m_dNonChineseTokens[m_iCurNonChineseToken++].m_sToken;
+					}
+				}
+
 				return pToken;
+			}
 
 			DestroyIteratorRLP();
 
@@ -2612,52 +2671,127 @@ public:
 
 	virtual bool GetMorphFlag () const
 	{
-		return !m_bChineseBuffer;
+		if ( !m_bChineseBuffer )
+			return true;
+
+		return m_bNonChineseToken;
 	}
 
 	virtual int GetLastTokenLen() const
 	{
-		return m_bChineseBuffer ? sphUTF8Len ( (const char*)m_dUTF8Buffer, sizeof ( m_dUTF8Buffer ) ) : m_pTokenizer->GetLastTokenLen();
+		if ( m_bChineseBuffer )
+		{
+			if ( m_bNonChineseToken )
+				return m_dNonChineseTokens[m_iCurNonChineseToken-1].m_iTokenLen;
+
+			return sphUTF8Len ( (const char*)m_dUTF8Buffer, sizeof ( m_dUTF8Buffer ) );
+		}
+
+		return m_pTokenizer->GetLastTokenLen();
 	}
 
 	virtual bool GetBoundary()
 	{
-		return m_bChineseBuffer ? false : m_pTokenizer->GetBoundary();
+		if ( m_bChineseBuffer )
+		{
+			if ( m_bNonChineseToken )
+				return m_dNonChineseTokens[m_iCurNonChineseToken-1].m_bBoundary;
+
+			return false;
+		}
+
+		return m_pTokenizer->GetBoundary();
 	}
 
 	virtual bool WasTokenSpecial()
 	{
-		return m_bChineseBuffer ? false : m_pTokenizer->WasTokenSpecial();
+		if ( m_bChineseBuffer )
+		{
+			if ( m_bNonChineseToken )
+				return m_dNonChineseTokens[m_iCurNonChineseToken-1].m_bSpecial;
+
+			return false;
+		}
+
+		return m_pTokenizer->WasTokenSpecial();
 	}
 
 	virtual int	GetOvershortCount ()
 	{
-		return m_bChineseBuffer ? 0 : m_pTokenizer->GetOvershortCount();
+		if ( m_bChineseBuffer )
+		{
+			if ( m_bNonChineseToken )
+				return m_dNonChineseTokens[m_iCurNonChineseToken-1].m_iOvershortCount;
+
+			return 0;
+		}
+
+		return m_pTokenizer->GetOvershortCount();
 	}
 
 	virtual bool TokenIsBlended () const
 	{
-		return m_bChineseBuffer ? false : m_pTokenizer->TokenIsBlended();
+		if ( m_bChineseBuffer )
+		{
+			if ( m_bNonChineseToken )
+				return m_dNonChineseTokens[m_iCurNonChineseToken-1].m_bBlended;
+
+			return false;
+		}
+
+		return m_pTokenizer->TokenIsBlended();
 	}
 
 	virtual bool TokenIsBlendedPart () const
 	{
-		return m_bChineseBuffer ? false : m_pTokenizer->TokenIsBlendedPart();
+		if ( m_bChineseBuffer )
+		{
+			if ( m_bNonChineseToken )
+				return m_dNonChineseTokens[m_iCurNonChineseToken-1].m_bBlendedPart;
+
+			return false;
+		}
+
+		return m_pTokenizer->TokenIsBlendedPart();
 	}
 
 	virtual const char * GetTokenStart () const
 	{
-		return m_bChineseBuffer ? (const char*)m_dUTF8Buffer : m_pTokenizer->GetTokenStart();
+		if ( m_bChineseBuffer )
+		{
+			if ( m_bNonChineseToken )
+				return m_dNonChineseTokens[m_iCurNonChineseToken-1].m_szTokenStart;
+
+			return (const char*)m_dUTF8Buffer;
+		}
+
+		return m_pTokenizer->GetTokenStart();
 	}
 
 	virtual const char * GetTokenEnd () const
 	{
-		return m_bChineseBuffer ? (const char*)m_dUTF8Buffer + strlen ( (const char*)m_dUTF8Buffer ) : m_pTokenizer->GetTokenEnd();
+		if ( m_bChineseBuffer )
+		{
+			if ( m_bNonChineseToken )
+				return m_dNonChineseTokens[m_iCurNonChineseToken-1].m_szTokenEnd;
+
+			return (const char*)m_dUTF8Buffer + strlen ( (const char*)m_dUTF8Buffer );
+		}
+
+		return m_pTokenizer->GetTokenEnd();
 	}
 
 	virtual const char * GetBufferPtr () const
 	{
-		return m_bChineseBuffer ? (const char*)m_dUTF8Buffer : m_pTokenizer->GetBufferPtr();
+		if ( m_bChineseBuffer )
+		{
+			if ( m_bNonChineseToken )
+				return m_dNonChineseTokens[m_iCurNonChineseToken-1].m_pBufferPtr;
+
+			return (const char*)m_dUTF8Buffer;
+		}
+
+		return m_pTokenizer->GetBufferPtr();
 	}
 
 	virtual const char * GetRLPContext () const
@@ -2673,14 +2807,19 @@ private:
 	CSphString				m_sEnvPath;
 	CSphString				m_sCtxPath;
 	bool					m_bChineseBuffer;
-	bool					m_bFilterChinese;
+	bool					m_bStandalone;
 	bool					m_bInitialized;
 	bool					m_bCloned;
 	static const int		MAX_CHUNK_SIZE = 10485760;
 	static const int		MAX_TOKEN_LEN = 1024;
 	CSphTightVector<BYTE>	m_dLargeBuffer;
+	CSphVector<BYTE>		m_dDocBuffer;
+	CSphTightVector<StoredToken_t> m_dNonChineseTokens;
 	int						m_iLargeSegmentOffset;
+	int						m_iCurNonChineseToken;
+	bool					m_bNonChineseToken;
 	BYTE					m_dUTF8Buffer[MAX_TOKEN_LEN];
+	BYTE					m_pMarkerTokenSeparator[PROXY_MARKER_LEN];
 
 	bool IsSpecialCode ( int iCode ) const
 	{
@@ -2913,119 +3052,6 @@ private:
 	BYTE					m_pNonChineseMarker[PROXY_MARKER_LEN];
 	CSphTightVector<BYTE>	m_dBuffer;
 };
-
-
-class CSphRLPQueryFilter : public CSphTokenFilter
-{
-public:
-	CSphRLPQueryFilter ( ISphTokenizer * pTokenizer, ISphTokenizer * pRLPTokenizer )
-		: CSphTokenFilter ( pTokenizer )
-		, m_bChineseToken ( false )
-		, m_pRLPTokenizer ( pRLPTokenizer )
-	{
-		assert ( pTokenizer && m_pRLPTokenizer );
-	}
-
-	virtual ~CSphRLPQueryFilter()
-	{
-		SafeDelete ( m_pRLPTokenizer );
-	}
-
-	virtual BYTE * GetToken()
-	{
-		BYTE * pRegularToken, * pRLPToken;
-
-		if ( m_bChineseToken )
-		{
-			pRLPToken = m_pRLPTokenizer->GetToken();
-			if ( pRLPToken )
-				return pRLPToken;
-			else
-				m_bChineseToken = false;
-		}
-
-		while ( ( pRegularToken = m_pTokenizer->GetToken() )!=NULL )
-		{
-			int iTokenLenBytes = strlen ( (const char *)pRegularToken );
-			if ( sphDetectChinese ( pRegularToken, iTokenLenBytes ) )
-			{
-				m_pRLPTokenizer->SetBuffer ( pRegularToken, iTokenLenBytes );
-				pRLPToken = m_pRLPTokenizer->GetToken();
-				if ( pRLPToken )
-				{
-					m_bChineseToken = true;
-					return pRLPToken;
-				}
-			} else
-			{
-				m_bChineseToken = false;
-				return pRegularToken;
-			}
-		}
-
-		return NULL;
-	}
-
-	virtual ISphTokenizer * Clone ( ESphTokenizerClone eMode ) const
-	{
-		return new CSphRLPQueryFilter ( m_pTokenizer->Clone ( eMode ), m_pRLPTokenizer->Clone ( eMode ) );
-	}
-
-	virtual bool GetMorphFlag () const
-	{
-		return !m_bChineseToken;
-	}
-
-	virtual int GetLastTokenLen() const
-	{
-		return m_bChineseToken ? m_pRLPTokenizer->GetLastTokenLen() : m_pTokenizer->GetLastTokenLen();
-	}
-
-	virtual bool GetBoundary()
-	{
-		return m_bChineseToken ? m_pRLPTokenizer->GetBoundary() : m_pTokenizer->GetBoundary();
-	}
-
-	virtual bool WasTokenSpecial()
-	{
-		return m_bChineseToken ? m_pRLPTokenizer->WasTokenSpecial() : m_pTokenizer->WasTokenSpecial();
-	}
-
-	virtual int	GetOvershortCount ()
-	{
-		return m_bChineseToken ? m_pRLPTokenizer->GetOvershortCount() : m_pTokenizer->GetOvershortCount();
-	}
-
-	virtual bool TokenIsBlended () const
-	{
-		return m_bChineseToken ? m_pRLPTokenizer->TokenIsBlended() : m_pTokenizer->TokenIsBlended();
-	}
-
-	virtual bool TokenIsBlendedPart () const
-	{
-		return m_bChineseToken ? m_pRLPTokenizer->TokenIsBlendedPart() : m_pTokenizer->TokenIsBlendedPart();
-	}
-
-	virtual const char * GetTokenStart () const
-	{
-		return m_bChineseToken ? m_pRLPTokenizer->GetTokenStart() : m_pTokenizer->GetTokenStart();
-	}
-
-	virtual const char * GetTokenEnd () const
-	{
-		return m_bChineseToken ? m_pRLPTokenizer->GetTokenEnd() : m_pTokenizer->GetTokenEnd();
-	}
-
-	virtual const char * GetBufferPtr () const
-	{
-		return m_bChineseToken ? m_pRLPTokenizer->GetBufferPtr() : m_pTokenizer->GetBufferPtr();
-	}
-
-private:
-	bool				m_bChineseToken;
-	ISphTokenizer *		m_pRLPTokenizer;
-};
-
 
 #endif
 
@@ -4092,20 +4118,6 @@ ISphTokenizer * ISphTokenizer::CreateRLPResultSplitter ( ISphTokenizer * pTokeni
 {
 	assert ( pTokenizer );
 	return new CSphRLPResultSplitter ( pTokenizer, szRLPCtx );
-}
-
-
-ISphTokenizer * ISphTokenizer::CreateRLPQueryFilter ( ISphTokenizer * pTokenizer, bool bChineseRLP, const char * szRLPRoot,	const char * szRLPEnv, const char * szRLPCtx, CSphString & sError )
-{
-	assert ( pTokenizer );
-	if ( !bChineseRLP )
-		return pTokenizer;
-
-	ISphTokenizer * pRLPTokenizer = CreateRLPFilter ( pTokenizer, bChineseRLP, szRLPRoot, szRLPEnv, szRLPCtx, false, sError );
-	if ( !pRLPTokenizer )
-		return NULL;
-
-	return new CSphRLPQueryFilter ( pTokenizer->Clone ( SPH_CLONE_QUERY ), pRLPTokenizer );
 }
 
 #endif
@@ -6074,22 +6086,6 @@ CSphMultiformTokenizer::~CSphMultiformTokenizer ()
 }
 
 
-void CSphMultiformTokenizer::FillTokenInfo ( StoredToken_t & tToken, const BYTE * sToken )
-{
-	assert ( sToken );
-	strncpy ( (char *)tToken.m_sToken, (const char *)sToken, sizeof(tToken.m_sToken) );
-	tToken.m_szTokenStart = m_pTokenizer->GetTokenStart ();
-	tToken.m_szTokenEnd = m_pTokenizer->GetTokenEnd ();
-	tToken.m_iOvershortCount = m_pTokenizer->GetOvershortCount ();
-	tToken.m_iTokenLen = m_pTokenizer->GetLastTokenLen ();
-	tToken.m_pBufferPtr = m_pTokenizer->GetBufferPtr ();
-	tToken.m_bBoundary = m_pTokenizer->GetBoundary ();
-	tToken.m_bSpecial = m_pTokenizer->WasTokenSpecial ();
-	tToken.m_bBlended = m_pTokenizer->TokenIsBlended();
-	tToken.m_bBlendedPart = m_pTokenizer->TokenIsBlendedPart();
-}
-
-
 BYTE * CSphMultiformTokenizer::GetToken ()
 {
 	m_sTokenizedMultiform[0] = '\0';
@@ -6103,14 +6099,14 @@ BYTE * CSphMultiformTokenizer::GetToken ()
 		if ( !pToken )
 			return NULL;
 
-		FillTokenInfo ( m_dStoredTokens.Add(), pToken );
+		FillStoredTokenInfo ( m_dStoredTokens.Add(), pToken, m_pTokenizer );
 		while ( m_dStoredTokens.Last().m_bBlended || m_dStoredTokens.Last().m_bBlendedPart )
 		{
 			const BYTE* pToken = m_pTokenizer->GetToken ();
 			if ( !pToken )
 				break;
 
-			FillTokenInfo ( m_dStoredTokens.Add(), pToken );
+			FillStoredTokenInfo ( m_dStoredTokens.Add(), pToken, m_pTokenizer );
 		}
 	}
 
@@ -6160,7 +6156,7 @@ BYTE * CSphMultiformTokenizer::GetToken ()
 					if ( !pToken )
 						break;
 
-					FillTokenInfo ( m_dStoredTokens.Add(), pToken );
+					FillStoredTokenInfo ( m_dStoredTokens.Add(), pToken, m_pTokenizer );
 				}
 
 				bool bCurBleneded = ( m_dStoredTokens[iCur].m_bBlended || m_dStoredTokens[iCur].m_bBlendedPart );
@@ -16201,8 +16197,8 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 		pTokenizer = ISphTokenizer::CreateMultiformFilter ( pTokenizer, pDict->GetMultiWordforms () );
 
 #if USE_RLP
-		pTokenizer = ISphTokenizer::CreateRLPQueryFilter ( pTokenizer, m_tSettings.m_eChineseRLP!=SPH_RLP_NONE, g_sRLPRoot.cstr(),
-			g_sRLPEnv.cstr(), m_tSettings.m_sRLPContext.cstr(), m_sLastError );
+		pTokenizer = ISphTokenizer::CreateRLPFilter ( pTokenizer, m_tSettings.m_eChineseRLP!=SPH_RLP_NONE, g_sRLPRoot.cstr(),
+			g_sRLPEnv.cstr(), m_tSettings.m_sRLPContext.cstr(), true, m_sLastError );
 
 		if ( !pTokenizer )
 			return false;

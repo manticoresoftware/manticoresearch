@@ -1267,7 +1267,7 @@ public:
 };
 
 
-struct StoredToken_t
+struct StoredExcerptToken_t
 {
 	int				m_iLengthCP;
 	BYTE			m_iWordFlag;
@@ -1292,8 +1292,8 @@ struct Passage_t
 	int					m_iCodesBetweenKeywords;	///< codepoints between m_iStartLimit and m_iEndLimit
 	int					m_iWordsBetweenKeywords;	///< words between m_iStartLimit and m_iEndLimit
 
-	CSphVector<StoredToken_t> m_dBeforeTokens;	///< stored tokens before match
-	CSphVector<StoredToken_t> m_dAfterTokens;	///< stored tokens after match
+	CSphVector<StoredExcerptToken_t> m_dBeforeTokens;	///< stored tokens before match
+	CSphVector<StoredExcerptToken_t> m_dAfterTokens;	///< stored tokens after match
 
 	void Reset ()
 	{
@@ -1719,7 +1719,7 @@ protected:
 
 			if ( iBefore+tTok.m_iWordFlag<=tPassage.m_iAroundBefore )
 			{
-				StoredToken_t & tBeforeToken = tPassage.m_dBeforeTokens.Add();
+				StoredExcerptToken_t & tBeforeToken = tPassage.m_dBeforeTokens.Add();
 				tBeforeToken.m_iWordFlag = tTok.m_iWordFlag;
 				tBeforeToken.m_iLengthCP = tTok.m_iLengthCP;
 				iBefore += tTok.m_iWordFlag;
@@ -1738,7 +1738,7 @@ protected:
 
 			if ( iAfter+iWordFlag<=tPassage.m_iAroundAfter )
 			{
-				StoredToken_t & tAfterToken = tPassage.m_dAfterTokens.Add();
+				StoredExcerptToken_t & tAfterToken = tPassage.m_dAfterTokens.Add();
 				tAfterToken.m_iWordFlag = tTok.m_iWordFlag;
 				tAfterToken.m_iLengthCP = tTok.m_iLengthCP;
 				iAfter += iWordFlag;
@@ -1881,7 +1881,7 @@ protected:
 					if ( bDropFirst )
 					{
 						// drop first
-						const StoredToken_t & tTok = tPassage.m_dBeforeTokens.Pop();
+						const StoredExcerptToken_t & tTok = tPassage.m_dBeforeTokens.Pop();
 						tPassage.m_iStart++;
 						tPassage.m_iTokens--;
 						tPassage.m_iCodes -= tTok.m_iLengthCP;
@@ -1891,7 +1891,7 @@ protected:
 					} else
 					{
 						// drop last
-						const StoredToken_t & tTok = tPassage.m_dAfterTokens.Pop();
+						const StoredExcerptToken_t & tTok = tPassage.m_dAfterTokens.Pop();
 						tPassage.m_iTokens--;
 						tPassage.m_iCodes -= tTok.m_iLengthCP;
 						iTotalCodes -= tTok.m_iLengthCP;

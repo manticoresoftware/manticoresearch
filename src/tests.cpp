@@ -996,7 +996,7 @@ public:
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & , int , CSphString &, CSphString & ) { return -1; }
 	virtual bool				SaveAttributes ( CSphString & ) const { return false; }
 	virtual DWORD				GetAttributeStatus () const { return 0; }
-	virtual bool				CreateFilesWithAttr ( const CSphString &, ESphAttr, CSphString & ) { return true; }
+	virtual bool				CreateFilesWithAttr ( int iPos, const CSphString &, ESphAttr, CSphString & ) { return true; }
 	virtual bool				AddAttribute ( const CSphString &, ESphAttr, CSphString & ) { return true; }
 	virtual void				DebugDumpHeader ( FILE *, const char *, bool ) {}
 	virtual void				DebugDumpDocids ( FILE * ) {}

@@ -1552,7 +1552,7 @@ public:
 	const CSphColumnInfo *	GetAttr ( const char * sName ) const;
 
 	/// insert attr
-	void					InsertAttr ( const CSphColumnInfo & tAggr, int iPos, bool bDynamic );
+	void					InsertAttr ( int iPos, const CSphColumnInfo & tAggr, bool bDynamic );
 
 	/// add attr
 	void					AddAttr ( const CSphColumnInfo & tAttr, bool bDynamic );
@@ -3272,7 +3272,7 @@ public:
 
 	virtual DWORD				GetAttributeStatus () const = 0;
 
-	virtual bool				CreateFilesWithAttr ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError ) = 0;
+	virtual bool				CreateFilesWithAttr ( int iPos, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError ) = 0;
 
 	virtual bool				AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError ) = 0;
 

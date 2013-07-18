@@ -1374,7 +1374,7 @@ public:
 	virtual bool				SaveAttributes ( CSphString & sError ) const;
 	virtual DWORD				GetAttributeStatus () const;
 
-	virtual bool				CreateFilesWithAttr ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError );
+	virtual bool				CreateFilesWithAttr ( int iPos, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError );
 	virtual bool				AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError );
 
 	bool						EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const;
@@ -7001,7 +7001,7 @@ void CSphSchema::Reset ()
 }
 
 
-void CSphSchema::InsertAttr ( const CSphColumnInfo & tCol, int iPos, bool bDynamic )
+void CSphSchema::InsertAttr ( int iPos, const CSphColumnInfo & tCol, bool bDynamic )
 {
 	// it's redundant in case of AddAttr
 	if ( iPos!=m_dAttrs.GetLength() )
@@ -7026,7 +7026,7 @@ void CSphSchema::InsertAttr ( const CSphColumnInfo & tCol, int iPos, bool bDynam
 
 void CSphSchema::AddAttr ( const CSphColumnInfo & tCol, bool bDynamic )
 {
-	InsertAttr ( tCol, m_dAttrs.GetLength(), bDynamic );
+	InsertAttr ( m_dAttrs.GetLength(), tCol, bDynamic );
 }
 
 
@@ -10153,7 +10153,7 @@ void CSphIndex_VLN::CopyDocinfo ( DWORD * & pDocinfo, DWORD * pTmpDocinfo, const
 	pDocinfo += iOldStride;
 }
 
-bool CSphIndex_VLN::CreateFilesWithAttr ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError )
+bool CSphIndex_VLN::CreateFilesWithAttr ( int iPos, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError )
 {
 	if ( m_tSchema.GetAttr ( sAttrName.cstr() ) )
 	{
@@ -10163,7 +10163,7 @@ bool CSphIndex_VLN::CreateFilesWithAttr ( const CSphString & sAttrName, ESphAttr
 
 	CSphSchema tNewSchema = m_tSchema;
 	CSphColumnInfo tInfo ( sAttrName.cstr(), eAttrType );
-	tNewSchema.AddAttr ( tInfo, false );
+	tNewSchema.InsertAttr ( iPos, tInfo, false );
 
 	CSphFixedVector<CSphRowitem> dMinRow ( tNewSchema.GetRowSize() );
 	int iOldStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
@@ -10240,7 +10240,7 @@ bool CSphIndex_VLN::AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrT
 	int iPos = m_tSchema.GetAttrsCount();
 	if ( m_tSettings.m_bIndexFieldLens )
 		iPos -= m_tSchema.m_dFields.GetLength();
-	m_tSchema.InsertAttr ( tInfo, iPos, false );
+	m_tSchema.InsertAttr ( iPos, tInfo, false );
 
 	int iNewStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 

@@ -16598,10 +16598,13 @@ void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 
 			CSphString sAttrToAdd = tStmt.m_sAlterAttr;
 			sAttrToAdd.ToLower();
+			int iPos = pLocal->m_pIndex->GetMatchSchema().GetAttrsCount();
+			if ( pLocal->m_pIndex->GetSettings().m_bIndexFieldLens )
+				iPos -= pLocal->m_pIndex->GetMatchSchema().m_dFields.GetLength();
 
 			if ( pLocal->m_pIndex->IsRT() )
 			{
-				if ( !pLocal->m_pIndex->CreateFilesWithAttr ( sAttrToAdd, tStmt.m_eAlterColType, sError ) )
+				if ( !pLocal->m_pIndex->CreateFilesWithAttr ( iPos, sAttrToAdd, tStmt.m_eAlterColType, sError ) )
 				{
 					dErrors.Submit ( sName, sError.cstr() );
 					pLocal->Unlock();
@@ -16611,7 +16614,7 @@ void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 				pLocal->m_pIndex->AddAttribute ( sAttrToAdd, tStmt.m_eAlterColType, sError );
 			} else
 			{
-				if ( !pLocal->m_pIndex->CreateFilesWithAttr ( sAttrToAdd, tStmt.m_eAlterColType, sError ) )
+				if ( !pLocal->m_pIndex->CreateFilesWithAttr ( iPos, sAttrToAdd, tStmt.m_eAlterColType, sError ) )
 				{
 					dErrors.Submit ( sName, sError.cstr() );
 					pLocal->Unlock();

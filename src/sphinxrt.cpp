@@ -1114,7 +1114,7 @@ public:
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError, CSphString & sWarning );
 	virtual bool				SaveAttributes ( CSphString & sError ) const;
 	virtual DWORD				GetAttributeStatus () const { return m_uDiskAttrStatus; }
-	virtual bool				CreateFilesWithAttr ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError );
+	virtual bool				CreateFilesWithAttr ( int iPos, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError );
 	virtual bool				AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError );
 
 	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig ) {}
@@ -7087,7 +7087,7 @@ bool RtIndex_t::RenameWithRollback ( const ESphExt * dExts, int nExts, ESphExtTy
 	return iFailedChunk==-1 && iFailedExt==-1;
 }
 
-bool RtIndex_t::CreateFilesWithAttr ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError )
+bool RtIndex_t::CreateFilesWithAttr ( int iPos, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError )
 {
 	// fixme: use some unified approach to these exts
 	const int NUM_EXTS_USED = 2;
@@ -7114,7 +7114,7 @@ bool RtIndex_t::CreateFilesWithAttr ( const CSphString & sAttrName, ESphAttr eAt
 
 	int iFailedChunk = -1;
 	ARRAY_FOREACH_COND ( iDiskChunk, m_pDiskChunks, iFailedChunk==-1 )
-		if ( !m_pDiskChunks[iDiskChunk]->CreateFilesWithAttr ( sAttrName.cstr(), eAttrType, sError ) )
+		if ( !m_pDiskChunks[iDiskChunk]->CreateFilesWithAttr ( iPos, sAttrName.cstr(), eAttrType, sError ) )
 			iFailedChunk = iDiskChunk;
 
 	// cleanup if failed
@@ -7183,7 +7183,7 @@ bool RtIndex_t::AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType,
 	int iPos = m_tSchema.GetAttrsCount();
 	if ( m_tSettings.m_bIndexFieldLens )
 		iPos -= m_tSchema.m_dFields.GetLength();
-	m_tSchema.InsertAttr ( tInfo, iPos, false );
+	m_tSchema.InsertAttr ( iPos, tInfo, false );
 	const CSphColumnInfo * pNewAttr = m_tSchema.GetAttr ( sAttrName.cstr() );
 
 	m_iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();

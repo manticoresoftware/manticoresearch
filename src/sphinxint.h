@@ -1919,6 +1919,8 @@ struct StoredToken_t
 	bool			m_bBlendedPart;
 };
 
+void FillStoredTokenInfo ( StoredToken_t & tToken, const BYTE * sToken, ISphTokenizer * pTokenizer );
+
 
 #if USE_RLP
 
@@ -1930,7 +1932,7 @@ struct StoredDoc_t
 	CSphTightVector<BYTE*>				m_dFields;
 	CSphTightVector<bool>				m_dChinese;
 	CSphTightVector< CSphVector<BYTE> >	m_dFieldStorage;
-	CSphTightVector< CSphVector<BYTE> >	m_dNonChineseTokens;
+	CSphTightVector< StoredToken_t >	m_dNonChineseTokens;
 };
 
 // these are used to separate text before passing it to RLP
@@ -1944,6 +1946,16 @@ const int PROXY_TOKENIZED = 0xFFFA;
 const int PROXY_MORPH = 0xFFFB;
 
 const int PROXY_MARKER_LEN = 3;
+
+enum
+{
+	PROXY_BOUNDARY_FLAG		= 1<<7,
+	PROXY_SPECIAL_FLAG		= 1<<8,
+	PROXY_BLENDED_FLAG		= 1<<9,
+	PROXY_BLENDED_PART_FLAG	= 1<<10,
+	PROXY_HAVE_OVERSHORT	= 1<<11
+};
+
 
 #define COPY_MARKER(_ptr,_marker) \
 {\
@@ -2121,9 +2133,8 @@ public:
 						} else
 						{
 							// drop it into "non-chinese" token vector
-							CSphVector<BYTE> & tChinese = pDoc->m_dNonChineseTokens.Add();
-							tChinese.Resize ( iTokenLen+1 );
-							memcpy ( tChinese.Begin(), pToken, iTokenLen+1 );
+							StoredToken_t & tStored = pDoc->m_dNonChineseTokens.Add();
+							FillStoredTokenInfo ( tStored, pToken, pEmbeddedTokenizer );
 
 							// add a 'non-chinese token' marker to the chinese token stream
 							*pCurDocPtr++ = ' ';
@@ -2181,8 +2192,43 @@ public:
 						bSpecial = true;
 					} else if ( CMP_MARKER ( pToken, m_pMarkerTokenSeparator ) )
 					{
-						// copy stored non-chinese token
-						AppendToField ( pCurDoc, iField, pCurDoc->m_dNonChineseTokens[iStoredToken].Begin(), pCurDoc->m_dNonChineseTokens[iStoredToken].GetLength()-1, m_pMarkerMorph );
+						StoredToken_t & tStored = pCurDoc->m_dNonChineseTokens[iStoredToken];
+
+						// copy stored non-chinese token && pack token data
+						AppendToField ( pCurDoc, iField, tStored.m_sToken, strlen ( (const char*)tStored.m_sToken ), m_pMarkerMorph );
+
+						// this depends on SPH_MAX_WORD_LEN being 6 bits max
+						DWORD uPacked = iTokenLen;
+
+						if ( tStored.m_bBoundary )
+							uPacked |= PROXY_BOUNDARY_FLAG;
+
+						if ( tStored.m_bSpecial )
+							uPacked |= PROXY_SPECIAL_FLAG;
+
+						if ( tStored.m_bBlended )
+							uPacked |= PROXY_BLENDED_FLAG;
+
+						if ( tStored.m_bBlendedPart )
+							uPacked |= PROXY_BLENDED_PART_FLAG;
+
+						int iTmpLen;
+						if ( tStored.m_iOvershortCount )
+						{
+							uPacked |= PROXY_HAVE_OVERSHORT;
+							iTmpLen = snprintf ( szTmp, sizeof(szTmp), " %x %x", uPacked, tStored.m_iOvershortCount );
+						} else
+							iTmpLen = snprintf ( szTmp, sizeof(szTmp), " %x", uPacked );
+
+						if ( iTmpLen < 0 )
+							iTmpLen = sizeof(szTmp);
+
+						int iStoredLen = pCurDoc->m_dFieldStorage[iField].GetLength();
+						pCurDoc->m_dFieldStorage[iField].Resize ( iStoredLen + iTmpLen );
+						memcpy ( pCurDoc->m_dFieldStorage[iField].Begin()+iStoredLen-1, szTmp, iTmpLen+1 );
+
+						pCurDoc->m_dFields[iField] = pCurDoc->m_dFieldStorage[iField].Begin();
+
 						iStoredToken++;
 						bSpecial = true;
 					}

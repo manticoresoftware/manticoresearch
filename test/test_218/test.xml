@@ -43,6 +43,7 @@ index test
 		<variant>morphology 		= rlp_chinese_batched, stem_enru</variant>
 	</dynamic>
 	
+	blend_chars		= -
 	rlp_context		= ../rlp/samples/etc/rlp-chinese-context.xml
 }
 
@@ -62,6 +63,7 @@ index test2
 		<variant>morphology 		= rlp_chinese_batched, stem_enru</variant>
 	</dynamic>
 
+	blend_chars		= -
 	rlp_context 	= ../rlp/samples/etc/rlp-chinese-context.xml
 }
 
@@ -83,10 +85,10 @@ CREATE TABLE test_table
 <db_insert>SET NAMES utf8</db_insert>
 <db_insert>
 INSERT INTO test_table VALUES
-( 100, 'this is some mixed text in english' ),
+( 100, 'this is some mixed text in english. and some blended aaa-bbb' ),
 ( 101, '許多社區長青學苑多開設有書法、插花、土風舞班，' ),
-( 102, 'а это - текст на русском. mixed in fact. test tested' ),
-( 103, '文山區長青學苑則有個十分特別的「英文歌唱班」，test' ),
+( 102, 'а это - текст на русском. mixed in fact. test tested. more blended aaa-bbb' ),
+( 103, '文山區長青學苑則有個十分特別的「英文歌唱班」，test; mixed blended aaa-bbb' ),
 ( 104, '成員年齡均超過六十歲，tested' ),
 ( 105, '這群白髮蒼蒼，test2' ),
 ( 106, '這群白髮蒼蒼 RUINED 這群白髮蒼蒼' )
@@ -102,10 +104,13 @@ INSERT INTO test_table VALUES
 <sphinxql>select * from test where match('來')</sphinxql>
 <sphinxql>select * from test where match('這群白髮蒼蒼，')</sphinxql>
 <sphinxql>select * from test where match('ruin')</sphinxql>
-<sphinxql>insert into test2 values(1,'this is some mixed text in english',10 )</sphinxql>
+<sphinxql>select * from test where match('aaa')</sphinxql>
+<sphinxql>select * from test where match('bbb')</sphinxql>
+<sphinxql>select * from test where match('aaa-bbb')</sphinxql>
+<sphinxql>insert into test2 values(1,'this is some mixed text in english. and some blended aaa-bbb',10 )</sphinxql>
 <sphinxql>insert into test2 values(2,'許多社區長青學苑多開設有書法、插花、土風舞班，',11 )</sphinxql>
-<sphinxql>insert into test2 values(3,'а это - текст на русском. mixed in fact. test tested',12 )</sphinxql>
-<sphinxql>insert into test2 values(4,'文山區長青學苑則有個十分特別的「英文歌唱班」，test', 13 )</sphinxql>
+<sphinxql>insert into test2 values(3,'а это - текст на русском. mixed in fact. test tested. more blended aaa-bbb',12 )</sphinxql>
+<sphinxql>insert into test2 values(4,'文山區長青學苑則有個十分特別的「英文歌唱班」，test; mixed blended aaa-bbb', 13 )</sphinxql>
 <sphinxql>insert into test2 values(5,'成員年齡均超過六十歲，tested', 14 )</sphinxql>
 <sphinxql>insert into test2 values(6,'這群白髮蒼蒼，test2', 15 )</sphinxql>
 <sphinxql>insert into test2 values(7,'這群白髮蒼蒼 RUINED 這群白髮蒼蒼', 16 )</sphinxql>
@@ -118,6 +123,9 @@ INSERT INTO test_table VALUES
 <sphinxql>select * from test2 where match('來')</sphinxql>
 <sphinxql>select * from test2 where match('這群白髮蒼蒼，')</sphinxql>
 <sphinxql>select * from test2 where match('ruin')</sphinxql>
+<sphinxql>select * from test where match('aaa')</sphinxql>
+<sphinxql>select * from test where match('bbb')</sphinxql>
+<sphinxql>select * from test where match('aaa-bbb')</sphinxql>
 </sphqueries>
 
 </test>

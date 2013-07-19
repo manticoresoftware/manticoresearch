@@ -125,4 +125,8 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select id, idd2, to_string(idd1) as c from rt where match ( 'the' ) order by c desc, id asc</sphinxql>
 </sphqueries>
 
+<queries>
+<!-- regression crash on sort by string attr -->
+<query mode="extended2" index="plain" sortmode="attr_desc" sortby="str1"></query>
+</queries>
 </test>

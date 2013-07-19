@@ -1,7 +1,7 @@
 <?php
 
 //
-// $Id$
+// $Id: helpers.inc 3914 2013-06-02 13:17:07Z shodan $
 //
 
 ini_set ( "display_errors", 1 );
@@ -859,6 +859,8 @@ class SphinxConfig
 					case "":			$sortmode_s = "(default)"; break;
 					case "extended":	$sortmode = SPH_SORT_EXTENDED; break;
 					case "expr":		$sortmode = SPH_SORT_EXPR; break;
+					case "attr_asc":	$sortmode = SPH_SORT_ATTR_ASC; break;
+					case "attr_desc":	$sortmode = SPH_SORT_ATTR_DESC; break;
 					default:
 						printf ( "$config_file: unknown sorting mode '%s'\n", $sortmode_s );
 						return false;
@@ -2713,5 +2715,5 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 }
 
 //
-// $Id$
+// $Id: helpers.inc 3914 2013-06-02 13:17:07Z shodan $
 //

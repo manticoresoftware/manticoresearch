@@ -29093,9 +29093,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 			if ( m_tSchema.m_dFields[i].m_sName==szName )
 				m_iCurField = i;
 
-		for ( int i = 0; i < m_tSchema.GetAttrsCount () && m_iCurAttr==-1; i++ )
-			if ( m_tSchema.GetAttr(i).m_sName==szName )
-				m_iCurAttr = i;
+		m_iCurAttr = m_tSchema.GetAttrIndex ( szName );
 
 		if ( m_iCurAttr!=-1 || m_iCurField!=-1 )
 			return;

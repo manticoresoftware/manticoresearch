@@ -10147,7 +10147,7 @@ void CSphIndex_VLN::CopyDocinfo ( DWORD * & pDocinfo, DWORD * pTmpDocinfo, const
 {
 	SphDocID_t tDocId = DOCINFO2ID ( pDocinfo );
 	DWORD * pAttrs = DOCINFO2ATTRS ( pDocinfo );
-	memcpy ( DOCINFO2ATTRS ( pTmpDocinfo ), pAttrs, m_tSchema.GetRowSize()*sizeof(CSphRowitem) );
+	memcpy ( DOCINFO2ATTRS ( pTmpDocinfo ), pAttrs, (iOldStride - DOCINFO_IDSIZE)*sizeof(DWORD) );
 	sphSetRowAttr ( DOCINFO2ATTRS ( pTmpDocinfo ), pNewAttr->m_tLocator, 0 );
 	DOCINFOSETID ( pTmpDocinfo, tDocId );
 	pDocinfo += iOldStride;

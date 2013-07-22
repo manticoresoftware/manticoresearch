@@ -27999,10 +27999,10 @@ void CSphSource_XMLPipe::CheckHitsCount ( const char * sField )
 class CSphSource_XMLPipe2 : public CSphSource_Document
 {
 public:
-					CSphSource_XMLPipe2 ( BYTE * dInitialBuf, int iBufLen, const char * sName, int iFieldBufferMax, bool bFixupUTF8 );
+	explicit			CSphSource_XMLPipe2 ( const char * sName );
 					~CSphSource_XMLPipe2 ();
 
-	bool			Setup ( FILE * pPipe, const CSphConfigSection & hSource );			///< memorize the command
+	bool			Setup ( BYTE * dInitialBuf, int iBufLen, int iFieldBufferMax, bool bFixupUTF8, FILE * pPipe, const CSphConfigSection & hSource );			///< memorize the command
 	virtual bool	Connect ( CSphString & sError );			///< run the command and open the pipe
 	virtual void	Disconnect ();								///< close the pipe
 
@@ -28198,11 +28198,12 @@ void xmlErrorHandler ( void * arg, const char * msg, xmlParserSeverities severit
 #endif
 
 
-CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( BYTE * dInitialBuf, int iBufLen, const char * sName, int iFieldBufferMax, bool bFixupUTF8 )
+CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( const char * sName )
 	: CSphSource_Document ( sName )
 	, m_pCurDocument	( NULL )
 	, m_pPipe			( NULL )
 	, m_iElementDepth	( 0 )
+	, m_pBuffer			( NULL )
 	, m_iBufferSize		( 1048576 )
 	, m_bRemoveParsed	( false )
 	, m_bInDocset		( false )
@@ -28223,22 +28224,14 @@ CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( BYTE * dInitialBuf, int iBufLen, cons
 	, m_pBufferEnd			( NULL )
 	, m_bPassedBufferEnd	( false )
 #endif
-	, m_iInitialBufSize	( iBufLen )
+	, m_iInitialBufSize	( 1024 )
+	, m_iFieldBufferMax	( 65536 )
+	, m_pFieldBuffer	( NULL )
 	, m_iFieldBufferLen	( 0 )
-	, m_bFixupUTF8		( bFixupUTF8 )
+	, m_bFixupUTF8		( false )
 	, m_iReparseStart	( 0 )
 	, m_iReparseLen		( 0 )
 {
-	assert ( m_iBufferSize > iBufLen );
-
-	m_pBuffer = new BYTE [m_iBufferSize];
-	m_iFieldBufferMax = Max ( iFieldBufferMax, 65536 );
-	m_pFieldBuffer = new BYTE [ m_iFieldBufferMax ];
-
-	if ( iBufLen )
-		memcpy ( m_pBuffer, dInitialBuf, iBufLen );
-
-	m_iInitialBufSize = iBufLen;
 }
 
 
@@ -28409,8 +28402,21 @@ void CSphSource_XMLPipe2::ConfigureFields ( const CSphVariant * pHead )
 }
 
 
-bool CSphSource_XMLPipe2::Setup ( FILE * pPipe, const CSphConfigSection & hSource )
+bool CSphSource_XMLPipe2::Setup ( BYTE * dInitialBuf, int iBufLen, int iFieldBufferMax, bool bFixupUTF8, FILE * pPipe, const CSphConfigSection & hSource )
 {
+	assert ( m_iBufferSize > iBufLen );
+	assert ( !m_pBuffer && !m_pFieldBuffer );
+
+	m_pBuffer = new BYTE [m_iBufferSize];
+	m_iFieldBufferMax = Max ( iFieldBufferMax, 65536 );
+	m_pFieldBuffer = new BYTE [ m_iFieldBufferMax ];
+
+	if ( iBufLen )
+		memcpy ( m_pBuffer, dInitialBuf, iBufLen );
+
+	m_iInitialBufSize = iBufLen;
+	m_bFixupUTF8 = bFixupUTF8;
+
 	m_pPipe = pPipe;
 
 	m_tSchema.Reset ();
@@ -28443,6 +28449,8 @@ bool CSphSource_XMLPipe2::Setup ( FILE * pPipe, const CSphConfigSection & hSourc
 
 bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 {
+	assert ( m_pBuffer && m_pFieldBuffer );
+
 	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
 	{
 		CSphColumnInfo & tCol = m_tSchema.m_dFields[i];
@@ -28701,6 +28709,8 @@ bool CSphSource_XMLPipe2::ParseNextChunk ( int iBufferLen, CSphString & sError )
 
 BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 {
+	assert ( m_pBuffer && m_pFieldBuffer );
+
 	if ( m_bRemoveParsed )
 	{
 		SafeDelete ( m_dParsedDocuments[0] );
@@ -29360,11 +29370,19 @@ void CSphSource_XMLPipe2::ProcessNode ( xmlTextReaderPtr pReader )
 #endif
 
 CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE * pPipe,
-	BYTE * dInitialBuf, int iBufLen, const char * szSourceName, int iMaxFieldLen )
+	BYTE * dInitialBuf, int iBufLen, const char * szSourceName, int iMaxFieldLen, bool RLPARG(bProxy) )
 {
-	CSphSource_XMLPipe2 * pXMLPipe = new CSphSource_XMLPipe2 ( dInitialBuf, iBufLen,
-		szSourceName, iMaxFieldLen, pSource->GetInt ( "xmlpipe_fixup_utf8", 0 )!=0 );
-	if ( !pXMLPipe->Setup ( pPipe, *pSource ) )
+	CSphSource_XMLPipe2 * pXMLPipe;
+	bool bUTF8 = pSource->GetInt ( "xmlpipe_fixup_utf8", 0 )!=0;
+
+#if USE_RLP
+	if ( bProxy )
+		pXMLPipe = new CSphSource_Proxy<CSphSource_XMLPipe2> ( szSourceName );
+	else
+#endif
+		pXMLPipe = new CSphSource_XMLPipe2 ( szSourceName );
+
+	if ( !pXMLPipe->Setup ( dInitialBuf, iBufLen, iMaxFieldLen, bUTF8, pPipe, *pSource ) )
 		SafeDelete ( pXMLPipe );
 
 	return pXMLPipe;

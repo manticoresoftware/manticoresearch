@@ -1923,6 +1923,13 @@ void FillStoredTokenInfo ( StoredToken_t & tToken, const BYTE * sToken, ISphToke
 
 
 #if USE_RLP
+#define RLPARG(_arg) _arg
+#else
+#define RLPARG(_arg)
+#endif
+
+
+#if USE_RLP
 
 struct StoredDoc_t
 {

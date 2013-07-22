@@ -29,10 +29,17 @@ source test
 	sql_file_field 		= file_field
 }
 
-index test
+source test_xml
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data.xml
+}
+
+index base
 {
 	source			= test
-	path			= <data_path/>/test
+	path			= <data_path/>/base
+
 	charset_type	= utf-8
 	charset_table	= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, \
 			U+2E80..U+2EF3, U+2F00..U+2FD5, U+3105..U+312D, U+31C0..U+31E3, U+3400..U+4DB5, U+4E00..U+9FCC, \
@@ -47,25 +54,26 @@ index test
 	rlp_context		= ../rlp/samples/etc/rlp-chinese-context.xml
 }
 
-index test2
+index test : base
+{
+	source			= test
+	path			= <data_path/>/test
+}
+
+index test2 : base
 {
 	type			= rt
 	path			= <data_path/>/test2
 	rt_field		= title
 	rt_attr_uint	= tag
-	charset_type	= utf-8
-	charset_table	= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, \
-			U+2E80..U+2EF3, U+2F00..U+2FD5, U+3105..U+312D, U+31C0..U+31E3, U+3400..U+4DB5, U+4E00..U+9FCC, \
-			U+F900..U+FAD9, U+20000..U+2FA1D
-
-	<dynamic>
-		<variant>morphology 		= rlp_chinese, stem_enru</variant>
-		<variant>morphology 		= rlp_chinese_batched, stem_enru</variant>
-	</dynamic>
-
-	blend_chars		= -
-	rlp_context 	= ../rlp/samples/etc/rlp-chinese-context.xml
 }
+
+index test_xml : base
+{
+	source			= test_xml
+	path			= <data_path/>/test_xml
+}
+
 
 common
 {
@@ -107,6 +115,20 @@ INSERT INTO test_table VALUES
 <sphinxql>select * from test where match('aaa')</sphinxql>
 <sphinxql>select * from test where match('bbb')</sphinxql>
 <sphinxql>select * from test where match('aaa-bbb')</sphinxql>
+
+<sphinxql>select * from test_xml where match('mix')</sphinxql>
+<sphinxql>select * from test_xml where match('русский')</sphinxql>
+<sphinxql>select * from test_xml where match('test')</sphinxql>
+<sphinxql>select * from test_xml where match('test2')</sphinxql>
+<sphinxql>select * from test_xml where match('許多')</sphinxql>
+<sphinxql>select * from test_xml where match('則')</sphinxql>
+<sphinxql>select * from test_xml where match('來')</sphinxql>
+<sphinxql>select * from test_xml where match('這群白髮蒼蒼，')</sphinxql>
+<sphinxql>select * from test_xml where match('ruin')</sphinxql>
+<sphinxql>select * from test_xml where match('aaa')</sphinxql>
+<sphinxql>select * from test_xml where match('bbb')</sphinxql>
+<sphinxql>select * from test_xml where match('aaa-bbb')</sphinxql>
+
 <sphinxql>insert into test2 values(1,'this is some mixed text in english. and some blended aaa-bbb',10 )</sphinxql>
 <sphinxql>insert into test2 values(2,'許多社區長青學苑多開設有書法、插花、土風舞班，',11 )</sphinxql>
 <sphinxql>insert into test2 values(3,'а это - текст на русском. mixed in fact. test tested. more blended aaa-bbb',12 )</sphinxql>

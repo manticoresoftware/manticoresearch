@@ -662,7 +662,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 
 
 #if USE_PGSQL
-CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * sSourceName )
+CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * sSourceName, bool RLPARG(bProxy) )
 {
 	assert ( hSource["type"]=="pgsql" );
 
@@ -672,7 +672,13 @@ CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * 
 
 	LOC_GETS ( tParams.m_sClientEncoding,	"sql_client_encoding" );
 
-	CSphSource_PgSQL * pSrcPgSQL = new CSphSource_PgSQL ( sSourceName );
+	CSphSource_PgSQL * pSrcPgSQL;
+#if USE_RLP
+	if ( bProxy )
+		pSrcPgSQL = new CSphSource_Proxy<CSphSource_PgSQL> ( sSourceName );
+	else
+#endif
+	pSrcPgSQL = new CSphSource_PgSQL ( sSourceName );
 	if ( !pSrcPgSQL->Setup ( tParams ) )
 		SafeDelete ( pSrcPgSQL );
 
@@ -682,11 +688,7 @@ CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * 
 
 
 #if USE_MYSQL
-#if USE_RLP
-CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * sSourceName, bool bBatchedRLP )
-#else
-CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * sSourceName, bool )
-#endif
+CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * sSourceName, bool RLPARG(bProxy) )
 {
 	assert ( hSource["type"]=="mysql" );
 
@@ -702,7 +704,7 @@ CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * 
 
 	CSphSource_MySQL * pSrcMySQL;
 #if USE_RLP
-	if ( bBatchedRLP )
+	if ( bProxy )
 		pSrcMySQL = new CSphSource_Proxy<CSphSource_MySQL> ( sSourceName );
 	else
 #endif
@@ -717,7 +719,7 @@ CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * 
 
 
 #if USE_ODBC
-CSphSource * SpawnSourceODBC ( const CSphConfigSection & hSource, const char * sSourceName )
+CSphSource * SpawnSourceODBC ( const CSphConfigSection & hSource, const char * sSourceName, bool RLPARG(bProxy) )
 {
 	assert ( hSource["type"]=="odbc" );
 
@@ -728,15 +730,21 @@ CSphSource * SpawnSourceODBC ( const CSphConfigSection & hSource, const char * s
 	LOC_GETS ( tParams.m_sOdbcDSN, "odbc_dsn" );
 	LOC_GETS ( tParams.m_sColBuffers, "sql_column_buffers" );
 
-	CSphSource_ODBC * pSrc = new CSphSource_ODBC ( sSourceName );
+	CSphSource_ODBC * pSrc;
+#if USE_RLP
+	if ( bProxy )
+		pSrc = new CSphSource_Proxy<CSphSource_ODBC> ( sSourceName );
+	else
+#endif
+	pSrc = new CSphSource_ODBC ( sSourceName );
+
 	if ( !pSrc->Setup ( tParams ) )
 		SafeDelete ( pSrc );
 
 	return pSrc;
 }
 
-
-CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * sSourceName )
+CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * sSourceName, bool RLPARG(bProxy) )
 {
 	assert ( hSource["type"]=="mssql" );
 
@@ -749,7 +757,14 @@ CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * 
 	LOC_GETS ( tParams.m_sColBuffers, "sql_column_buffers" );
 	LOC_GETS ( tParams.m_sOdbcDSN, "odbc_dsn" ); // a shortcut, may be used instead of other specific combination
 
-	CSphSource_MSSQL * pSrc = new CSphSource_MSSQL ( sSourceName );
+	CSphSource_MSSQL * pSrc;
+#if USE_RLP
+	if ( bProxy )
+		pSrc = new CSphSource_Proxy<CSphSource_MSSQL> ( sSourceName );
+	else
+#endif
+	pSrc = new CSphSource_MSSQL ( sSourceName );
+
 	if ( !pSrc->Setup ( tParams ) )
 		SafeDelete ( pSrc );
 
@@ -758,7 +773,7 @@ CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * 
 #endif // USE_ODBC
 
 
-CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool bUTF8 )
+CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool bUTF8, bool RLPARG(bProxy) )
 {
 	assert ( hSource["type"]=="xmlpipe" || hSource["type"]=="xmlpipe2" );
 
@@ -786,7 +801,11 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 	if ( bUsePipe2 )
 	{
 #if USE_LIBEXPAT || USE_LIBXML
-		pSrcXML = sphCreateSourceXmlpipe2 ( &hSource, pPipe, dBuffer, iBufSize, sSourceName, g_iMaxXmlpipe2Field );
+		#if USE_RLP
+			pSrcXML = sphCreateSourceXmlpipe2 ( &hSource, pPipe, dBuffer, iBufSize, sSourceName, g_iMaxXmlpipe2Field, bProxy );
+		#else
+			pSrcXML = sphCreateSourceXmlpipe2 ( &hSource, pPipe, dBuffer, iBufSize, sSourceName, g_iMaxXmlpipe2Field, false );
+		#endif
 
 		if ( !bUTF8 )
 		{
@@ -799,6 +818,11 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 #endif
 	} else
 	{
+#if USE_RLP
+		if ( bProxy )
+			fprintf ( stdout, "ERROR: source '%s': rlp_chinese batched is not supported by xmlpipe\n", sSourceName );
+#endif
+
 		CSphSource_XMLPipe * pXmlPipe = new CSphSource_XMLPipe ( dBuffer, iBufSize, sSourceName );
 		if ( !pXmlPipe->Setup ( pPipe, sCommand.cstr () ) )
 			SafeDelete ( pXmlPipe );
@@ -820,7 +844,7 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 
 	#if USE_PGSQL
 	if ( hSource["type"]=="pgsql" )
-		return SpawnSourcePgSQL ( hSource, sSourceName );
+		return SpawnSourcePgSQL ( hSource, sSourceName, bBatchedRLP );
 	#endif
 
 	#if USE_MYSQL
@@ -830,10 +854,10 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 
 	#if USE_ODBC
 	if ( hSource["type"]=="odbc" )
-		return SpawnSourceODBC ( hSource, sSourceName );
+		return SpawnSourceODBC ( hSource, sSourceName, bBatchedRLP );
 
 	if ( hSource["type"]=="mssql" )
-		return SpawnSourceMSSQL ( hSource, sSourceName );
+		return SpawnSourceMSSQL ( hSource, sSourceName, bBatchedRLP );
 	#endif
 
 	if ( hSource["type"]=="xmlpipe" && bWordDict )
@@ -844,7 +868,7 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 	}
 
 	if ( hSource["type"]=="xmlpipe" || hSource["type"]=="xmlpipe2" )
-		return SpawnSourceXMLPipe ( hSource, sSourceName, bUTF8 );
+		return SpawnSourceXMLPipe ( hSource, sSourceName, bUTF8, bBatchedRLP );
 
 	fprintf ( stdout, "ERROR: source '%s': unknown type '%s'; skipping.\n", sSourceName,
 		hSource["type"].cstr() );

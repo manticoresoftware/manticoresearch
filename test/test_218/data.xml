@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<sphinx:docset>
+
+<sphinx:schema>
+<sphinx:field name="content"/>
+<sphinx:attr name="gid" type="int"/>
+</sphinx:schema>
+
+<sphinx:document id="100">
+<content>this is some mixed text in english. and some blended aaa-bbb</content> <gid>1</gid>
+</sphinx:document>
+
+<sphinx:document id="101">
+<content>許多社區長青學苑多開設有書法、插花、土風舞班，</content> <gid>2</gid>
+</sphinx:document>
+
+<sphinx:document id="102">
+<content>а это - текст на русском. mixed in fact. test tested. more blended aaa-bbb</content> <gid>3</gid>
+</sphinx:document>
+
+<sphinx:document id="103">
+<content>文山區長青學苑則有個十分特別的「英文歌唱班」，test; mixed blended aaa-bbb</content> <gid>4</gid>
+</sphinx:document>
+
+<sphinx:document id="104">
+<content>成員年齡均超過六十歲，tested</content> <gid>5</gid>
+</sphinx:document>
+
+<sphinx:document id="105">
+<content>這群白髮蒼蒼，test2</content> <gid>6</gid>
+</sphinx:document>
+
+<sphinx:document id="106">
+<content>這群白髮蒼蒼 RUINED 這群白髮蒼蒼</content> <gid>7</gid>
+</sphinx:document>
+
+</sphinx:docset>

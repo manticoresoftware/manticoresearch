@@ -20921,6 +20921,8 @@ CSphDict * CSphDictCRCTraits::CloneBase ( CSphDictCRCTraits * pDict ) const
 	pDict->m_tSettings = m_tSettings;
 	pDict->m_iStopwords = m_iStopwords;
 	pDict->m_pStopwords = m_pStopwords;
+	pDict->m_dSWFileInfos = m_dSWFileInfos;
+	pDict->m_dWFFileInfos = m_dWFFileInfos;
 	pDict->m_pWordforms = m_pWordforms;
 	if ( m_pWordforms )
 		m_pWordforms->m_iRefCount++;

@@ -6641,14 +6641,14 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 				{
 					pError->SetSprintf ( "INTERNAL ERROR: tokenized keyword mismatch (n=%d, ram=%s, disk[%d]=%s)",
 						i, dKeywords[i].m_sTokenized.cstr(), iChunk, dKeywordsDisk[i].m_sTokenized.cstr() );
-					break;
+					return false;
 				}
 
 				if ( dKeywords[i].m_sNormalized!=dKeywordsDisk[i].m_sNormalized )
 				{
 					pError->SetSprintf ( "INTERNAL ERROR: normalized keyword mismatch (n=%d, ram=%s, disk[%d]=%s)",
-						i, dKeywords[i].m_sTokenized.cstr(), iChunk, dKeywordsDisk[i].m_sTokenized.cstr() );
-					break;
+						i, dKeywords[i].m_sNormalized.cstr(), iChunk, dKeywordsDisk[i].m_sNormalized.cstr() );
+					return false;
 				}
 			}
 		}

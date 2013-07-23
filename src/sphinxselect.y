@@ -17,6 +17,8 @@
 %token SEL_MAX
 %token SEL_MIN
 %token SEL_SUM
+%token SEL_GROUP_CONCAT
+%token SEL_GROUPBY
 %token SEL_COUNT
 %token SEL_WEIGHT
 %token SEL_DISTINCT
@@ -73,6 +75,8 @@ select_expr:
 	| SEL_MAX '(' expr ')' 		{ pParser->AddItem ( &$3, SPH_AGGR_MAX, &$1, &$4 ); }
 	| SEL_MIN '(' expr ')' 		{ pParser->AddItem ( &$3, SPH_AGGR_MIN, &$1, &$4 ); }
 	| SEL_SUM '(' expr ')' 		{ pParser->AddItem ( &$3, SPH_AGGR_SUM, &$1, &$4 ); }
+	| SEL_GROUP_CONCAT '(' expr ')'		{ pParser->AddItem ( &$3, SPH_AGGR_CAT, &$1, &$4 ); }
+	| SEL_GROUPBY '(' ')'		{ pParser->AddItem ( "groupby()", &$1, &$3 ); }
 	| SEL_COUNT '(' '*' ')' 	{ pParser->AddItem ( "count(*)", &$1, &$4 ); }
 	| SEL_WEIGHT '(' ')' 		{ pParser->AddItem ( "weight()", &$1, &$3 ); }
 	| SEL_COUNT '(' SEL_DISTINCT SEL_TOKEN ')' 

@@ -36,23 +36,25 @@
      SEL_MAX = 262,
      SEL_MIN = 263,
      SEL_SUM = 264,
-     SEL_COUNT = 265,
-     SEL_WEIGHT = 266,
-     SEL_DISTINCT = 267,
-     SEL_OPTION = 268,
-     SEL_COMMENT_OPEN = 269,
-     SEL_COMMENT_CLOSE = 270,
-     TOK_DIV = 271,
-     TOK_MOD = 272,
-     TOK_NEG = 273,
-     TOK_LTE = 274,
-     TOK_GTE = 275,
-     TOK_EQ = 276,
-     TOK_NE = 277,
-     TOK_CONST_STRING = 278,
-     TOK_OR = 279,
-     TOK_AND = 280,
-     TOK_NOT = 281
+     SEL_GROUP_CONCAT = 265,
+     SEL_GROUPBY = 266,
+     SEL_COUNT = 267,
+     SEL_WEIGHT = 268,
+     SEL_DISTINCT = 269,
+     SEL_OPTION = 270,
+     SEL_COMMENT_OPEN = 271,
+     SEL_COMMENT_CLOSE = 272,
+     TOK_DIV = 273,
+     TOK_MOD = 274,
+     TOK_NEG = 275,
+     TOK_LTE = 276,
+     TOK_GTE = 277,
+     TOK_EQ = 278,
+     TOK_NE = 279,
+     TOK_CONST_STRING = 280,
+     TOK_OR = 281,
+     TOK_AND = 282,
+     TOK_NOT = 283
    };
 #endif
 #define SEL_TOKEN 258
@@ -62,23 +64,25 @@
 #define SEL_MAX 262
 #define SEL_MIN 263
 #define SEL_SUM 264
-#define SEL_COUNT 265
-#define SEL_WEIGHT 266
-#define SEL_DISTINCT 267
-#define SEL_OPTION 268
-#define SEL_COMMENT_OPEN 269
-#define SEL_COMMENT_CLOSE 270
-#define TOK_DIV 271
-#define TOK_MOD 272
-#define TOK_NEG 273
-#define TOK_LTE 274
-#define TOK_GTE 275
-#define TOK_EQ 276
-#define TOK_NE 277
-#define TOK_CONST_STRING 278
-#define TOK_OR 279
-#define TOK_AND 280
-#define TOK_NOT 281
+#define SEL_GROUP_CONCAT 265
+#define SEL_GROUPBY 266
+#define SEL_COUNT 267
+#define SEL_WEIGHT 268
+#define SEL_DISTINCT 269
+#define SEL_OPTION 270
+#define SEL_COMMENT_OPEN 271
+#define SEL_COMMENT_CLOSE 272
+#define TOK_DIV 273
+#define TOK_MOD 274
+#define TOK_NEG 275
+#define TOK_LTE 276
+#define TOK_GTE 277
+#define TOK_EQ 278
+#define TOK_NE 279
+#define TOK_CONST_STRING 280
+#define TOK_OR 281
+#define TOK_AND 282
+#define TOK_NOT 283
 
 
 

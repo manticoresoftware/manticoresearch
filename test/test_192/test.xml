@@ -84,6 +84,37 @@ index wb
 	wordforms		= <this_test/>/wordforms-wb.txt
 	blend_chars		=  U+2D
 }
+
+
+source test12
+{
+	type = mysql
+	<sql_settings/>
+	sql_query_pre = SET NAMES utf8
+	sql_query = \
+		SELECT 1, 'путин-то' AS content UNION \
+		SELECT 2, 'путиными' AS content  UNION \
+		SELECT 3, 'путена' AS content
+}
+
+
+index test12
+{
+	source			= test12
+	path			= <data_path/>/test12
+
+	charset_type	= utf-8
+	wordforms		= <this_test/>/wordforms-12.txt
+	morphology		= stem_enru
+	min_prefix_len	= 3
+	enable_star		= 1
+	html_strip		= 1
+	index_exact_words	= 1
+	blend_mode		= trim_head, trim_tail, trim_both
+	blend_chars 	= +, %, -, $
+}
+
+
 </config>
 
 <db_insert>select 1;</db_insert>
@@ -138,6 +169,9 @@ index wb
 <sphinxql>SELECT * FROM wb WHERE MATCH('the-box-of-my goes-here')</sphinxql>
 <sphinxql>SELECT * FROM wb WHERE MATCH('the-box-of goes-here')</sphinxql>
 <sphinxql>SELECT * FROM wb WHERE MATCH('box-of-my goes-here')</sphinxql>
+
+<sphinxql>SELECT * FROM test12 WHERE MATCH('путин')</sphinxql>
+<sphinxql>SELECT * FROM test12 WHERE MATCH('путин-то')</sphinxql>
 </sphqueries>
 
 </test>

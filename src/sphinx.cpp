@@ -21260,7 +21260,7 @@ void CSphDictCRCTraits::AddWordform ( CSphWordforms * pContainer, char * sBuffer
 		// >right as single token
 		if ( pTokenizer->TokenIsBlended() )
 		{
-			if ( !sBlended.IsEmpty() )
+			if ( !sBlended.IsEmpty() && strncmp ( sBlended.cstr(), (const char *)pFrom, sBlended.Length() ) )
 			{
 				sphWarning ( "wordform contain multiple blended (might be 1 blended keyword) ( wordforms='%s' ). Fix your wordforms file '%s'.",
 					sBuffer, szFile );

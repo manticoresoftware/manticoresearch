@@ -47,7 +47,11 @@ INSERT INTO test_table VALUES
 ( 101, 'smoked flew' ),
 ( 102, 'simple form' ),
 ( 103, 'manuscript' ),
-( 104, 'before after' )
+( 104, 'before after' ),
+( 105, 'me walked' ),
+( 106, 'us walk' ),
+( 107, 'me run' ),
+( 108, 'us running' )
 </db_insert>
 
 <sphqueries>
@@ -58,6 +62,8 @@ INSERT INTO test_table VALUES
 <sphinxql>select * from test where match('book1')</sphinxql>
 <sphinxql>select * from test where match('book2')</sphinxql>
 <sphinxql>select * from test where match('shouldnotbe')</sphinxql>
+<sphinxql>select * from test where match('ran')</sphinxql>
+<sphinxql>select * from test where match('halt')</sphinxql>
 </sphqueries>
 
 </test>

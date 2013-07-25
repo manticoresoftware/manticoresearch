@@ -21389,7 +21389,15 @@ void CSphDictCRCTraits::AddWordform ( CSphWordforms * pContainer, char * sBuffer
 		}
 	}
 
-		const CSphString & sSourceWordform = ( bMultiform ? sTo : sFrom );
+	CSphString & sSourceWordform = ( bMultiform ? sTo : sFrom );
+
+	if ( !bMultiform && bAfterMorphology )
+	{
+		BYTE pBuf [16+3*SPH_MAX_WORD_LEN];
+		memcpy ( pBuf, sSourceWordform.cstr(), sSourceWordform.Length()+1 );
+		ApplyStemmers ( pBuf );
+		sSourceWordform = (char *)pBuf;
+	}
 
 	// check wordform that source token is a new token or has same destination token
 	int * pRefTo = pContainer->m_dHash ( sSourceWordform );

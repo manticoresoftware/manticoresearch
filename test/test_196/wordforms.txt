@@ -9,6 +9,8 @@ before >#error3
 before and #not >
 test => success#comment
 ~after #> success another comment
-~walk > mapped	# and this one is too
+~hash > mapped	# and this one is too
 drink drive > multi_before
 ~smoke > wordform
+walked > ran
+~running > halt

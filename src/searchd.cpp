@@ -8293,6 +8293,24 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	// track select items that made it into the internal schema
 	CSphVector<int> dKnownItems;
 
+	// we use this vector to reduce amount of work in next nested loop
+	// instead of looping through all dItems we FOREACH only unmapped ones
+	CSphVector<int> dUnmappedItems;
+	ARRAY_FOREACH ( i, tItems )
+	{
+		int iCol = -1;
+		if ( bFromSphinxql && tItems[i].m_sAlias.IsEmpty() )
+			iCol = tRes.m_tSchema.GetAttrIndex ( tItems[i].m_sExpr.cstr() );
+
+		if ( iCol>=0 )
+		{
+			dFrontend[i].m_sName = tItems[i].m_sExpr;
+			dFrontend[i].m_iIndex = iCol;
+			dKnownItems.Add(i);
+		} else
+			dUnmappedItems.Add(i);
+	}
+
 	// ???
 	for ( int iCol=0; iCol<tRes.m_tSchema.GetAttrsCount(); iCol++ )
 	{
@@ -8303,12 +8321,14 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 
 		if ( !bMagic && tCol.m_pExpr.Ptr() )
 		{
-			ARRAY_FOREACH ( j, tItems )
-				if ( dFrontend[j].m_iIndex<0 && tItems[j].m_sAlias==tCol.m_sName )
+			ARRAY_FOREACH ( j, dUnmappedItems )
+				if ( tItems[ dUnmappedItems[j] ].m_sAlias==tCol.m_sName )
 			{
-				dFrontend[j].m_iIndex = iCol;
-				dFrontend[j].m_sName = tItems[j].m_sAlias;
-				dKnownItems.Add(j);
+				int k = dUnmappedItems[j];
+				dFrontend[k].m_iIndex = iCol;
+				dFrontend[k].m_sName = tItems[k].m_sAlias;
+				dKnownItems.Add(k);
+				dUnmappedItems.Remove ( j-- ); // do not skip an element next to removed one!
 			}
 
 			// FIXME?
@@ -8322,12 +8342,14 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 			}
 		} else if ( bMagic && ( tCol.m_pExpr.Ptr() || bUsualApi ) )
 		{
-			ARRAY_FOREACH ( j, tItems )
-				if ( dFrontend[j].m_iIndex<0 && tCol.m_sName==GetMagicSchemaName ( tItems[j].m_sExpr ) )
+			ARRAY_FOREACH ( j, dUnmappedItems )
+				if ( tCol.m_sName==GetMagicSchemaName ( tItems[ dUnmappedItems[j] ].m_sExpr ) )
 			{
-				dFrontend[j].m_iIndex = iCol;
-				dFrontend[j].m_sName = tItems[j].m_sAlias;
-				dKnownItems.Add(j);
+				int k = dUnmappedItems[j];
+				dFrontend[k].m_iIndex = iCol;
+				dFrontend[k].m_sName = tItems[k].m_sAlias;
+				dKnownItems.Add(k);
+				dUnmappedItems.Remove ( j-- ); // do not skip an element next to removed one!
 			}
 			if ( !dFrontend.Contains ( bind ( &CSphColumnInfo::m_sName ), tCol.m_sName ) )
 			{
@@ -8338,13 +8360,13 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		} else
 		{
 			bool bAdded = false;
-			ARRAY_FOREACH ( j, tItems )
+			ARRAY_FOREACH ( j, dUnmappedItems )
 			{
-				const CSphQueryItem & t = tItems[j];
-				if ( dFrontend[j].m_iIndex<0
-					&& ( ( tCol.m_sName==GetMagicSchemaName ( t.m_sExpr ) && t.m_eAggrFunc==SPH_AGGR_NONE )
+				int k = dUnmappedItems[j];
+				const CSphQueryItem & t = tItems[k];
+				if ( ( tCol.m_sName==GetMagicSchemaName ( t.m_sExpr ) && t.m_eAggrFunc==SPH_AGGR_NONE )
 						|| ( t.m_sAlias.cstr() && t.m_sAlias==tCol.m_sName &&
-							( tRes.m_tSchema.GetAttrIndex ( GetMagicSchemaName ( t.m_sExpr ) )==-1 || t.m_eAggrFunc!=SPH_AGGR_NONE ) ) ) )
+							( tRes.m_tSchema.GetAttrIndex ( GetMagicSchemaName ( t.m_sExpr ) )==-1 || t.m_eAggrFunc!=SPH_AGGR_NONE ) ) )
 				{
 					// tricky bit about naming
 					//
@@ -8354,14 +8376,15 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 					// in agent mode, however, we need to keep the original column names in our response
 					// otherwise, queries like SELECT col1 c, count(*) c FROM dist will fail on master
 					// because it won't be able to identify the count(*) aggregate by its name
-					dFrontend[j].m_iIndex = iCol;
-					dFrontend[j].m_sName = bAgent
+					dFrontend[k].m_iIndex = iCol;
+					dFrontend[k].m_sName = bAgent
 						? tCol.m_sName
-						: ( tItems[j].m_sAlias.IsEmpty()
-							? tItems[j].m_sExpr
-							: tItems[j].m_sAlias );
-					dKnownItems.Add(j);
+						: ( tItems[k].m_sAlias.IsEmpty()
+							? tItems[k].m_sExpr
+							: tItems[k].m_sAlias );
+					dKnownItems.Add(k);
 					bAdded = true;
+					dUnmappedItems.Remove ( j-- ); // do not skip an element next to removed one!
 				}
 			}
 
@@ -8379,6 +8402,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 
 	// sanity check
 	// verify that we actually have all the queried select items
+	assert ( !dUnmappedItems.GetLength() || ( dUnmappedItems.GetLength()==1 && tItems [ dUnmappedItems[0] ].m_sExpr=="id" ) );
 	dKnownItems.Sort();
 	ARRAY_FOREACH ( i, tItems )
 		if ( !dKnownItems.BinarySearch(i) && tItems[i].m_sExpr!="id" )

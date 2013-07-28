@@ -606,7 +606,7 @@ bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool
 	yy2lex_init ( &tParser.m_pScanner );
 
 	/*!COMMIT seems redundant, sphJsonParse() is intentionally destructive; so either remove, or document why we need this*/
-	tParser.m_pBuf = (char*) malloc ( iLen );
+	tParser.m_pBuf = (char*) new char [ iLen ];
 	memcpy ( tParser.m_pBuf, sData, iLen );
 
 	YY_BUFFER_STATE tLexerBuffer = yy2_scan_buffer ( sData, iLen+2, tParser.m_pScanner );

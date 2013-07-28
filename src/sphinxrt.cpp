@@ -6655,7 +6655,10 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	}
 
 	if ( !bSame && !bFillOnly )
+	{
+		pError->SetSprintf ( "INTERNAL ERROR: different settings of disk and RAM parts of RT index" );
 		return false;
+	}
 
 	ARRAY_FOREACH ( iChunk, m_pDiskChunks )
 		m_pDiskChunks[iChunk]->FillKeywords ( dKeywords );

@@ -1717,7 +1717,7 @@ static int ParseNumeric ( YYSTYPE * lvalp, const char ** ppStr )
 
 static uint64_t sphPackAttrLocator ( const CSphAttrLocator & tLoc, int iLocator )
 {
-	assert ( iLocator>=0 && iLocator<=0xff );
+	assert ( iLocator>=0 && iLocator<=0xffff );
 	uint64_t uIndex = 0;
 	uIndex = ( tLoc.m_iBitOffset<<16 ) + tLoc.m_iBitCount + ( (uint64_t)iLocator<<32 );
 	if ( tLoc.m_bDynamic )

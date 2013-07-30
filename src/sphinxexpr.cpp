@@ -752,6 +752,7 @@ public:
 	}
 };
 
+//////////////////////////////////////////////////////////////////////////
 
 /// generic JSON value evaluation
 /// can handle arbitrary stacks of jsoncol.key1.arr2[indexexpr3].key4[keynameexpr5]
@@ -855,6 +856,72 @@ public:
 
 		// keep actual attribute type and offset to data packed
 		int64_t iPacked = ( ( (int64_t)( pVal-m_pStrings ) ) | ( ( (int64_t)eJson )<<32 ) );
+		return iPacked;
+	}
+};
+
+
+/// fastpath (instead of generic JsonField_c) for jsoncol.key access by a static key name
+struct Expr_JsonFastKey_c : public ExprLocatorTraits_t
+{
+protected:
+	const BYTE *	m_pStrings;
+	CSphString		m_sKey;
+	int				m_iKeyLen;
+	DWORD			m_uKeyBloom;
+
+public:
+	/// takes over the expressions
+	Expr_JsonFastKey_c ( const CSphAttrLocator & tLocator, int iLocator, ISphExpr * pArg )
+		: ExprLocatorTraits_t ( tLocator, iLocator )
+		, m_pStrings ( NULL )
+	{
+		assert ( ( tLocator.m_iBitOffset % ROWITEM_BITS )==0 );
+		assert ( tLocator.m_iBitCount==ROWITEM_BITS );
+
+		Expr_GetStrConst_c * pKey = dynamic_cast<Expr_GetStrConst_c*> ( pArg );
+		assert ( pKey );
+		m_sKey = pKey->m_sVal;
+		m_iKeyLen = pKey->m_iLen;
+		m_uKeyBloom = sphJsonKeyMask ( m_sKey.cstr(), m_iKeyLen );
+		SafeRelease ( pArg );
+	}
+
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
+	{
+		if ( eCmd==SPH_EXPR_SET_STRING_POOL )
+			m_pStrings = (const BYTE*)pArg;
+	}
+
+	virtual float Eval ( const CSphMatch & ) const
+	{
+		assert ( 0 && "one just does not simply evaluate a JSON as float" );
+		return 0;
+	}
+
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const
+	{
+		// get pointer to JSON blob data
+		assert ( m_pStrings );
+		DWORD uOffset = m_tLocator.m_bDynamic
+			? tMatch.m_pDynamic [ m_tLocator.m_iBitOffset>>ROWITEM_SHIFT ]
+			: tMatch.m_pStatic [ m_tLocator.m_iBitOffset>>ROWITEM_SHIFT ];
+		if ( !uOffset )
+			return 0;
+		const BYTE * pJson;
+		sphUnpackStr ( m_pStrings + uOffset, &pJson );
+
+		// all root objects start with a Bloom mask; quickly check it
+		if ( ( sphGetDword(pJson) & m_uKeyBloom )!=m_uKeyBloom )
+			return 0;
+
+		// OPTIMIZE? FindByKey does an extra (redundant) bloom check inside
+		ESphJsonType eJson = sphJsonFindByKey ( JSON_ROOT, &pJson, m_sKey.cstr(), m_iKeyLen, m_uKeyBloom );
+		if ( eJson==JSON_EOF )
+			return 0;
+
+		// keep actual attribute type and offset to data packed
+		int64_t iPacked = ( ( (int64_t)( pJson-m_pStrings ) ) | ( ( (int64_t)eJson )<<32 ) );
 		return iPacked;
 	}
 };
@@ -3432,7 +3499,13 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 			return new Expr_ConstHash_c ( tNode.m_pConsthash->m_dPairs );
 			break;
 		case TOK_ATTR_JSON:
+			if ( pLeft && m_dNodes[tNode.m_iLeft].m_iToken==TOK_SUBKEY )
 			{
+				// json key is a single static subkey, switch to fastpath
+				return new Expr_JsonFastKey_c ( tNode.m_tLocator, tNode.m_iLocator, pLeft );
+			} else
+			{
+				// json key is a generic expression, use generic catch-all JsonField
 				CSphVector<ISphExpr *> dArgs;
 				CSphVector<ESphAttr> dTypes;
 				if ( pLeft ) // may be NULL (top level array)

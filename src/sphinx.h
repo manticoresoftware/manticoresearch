@@ -328,7 +328,23 @@ void sphUnalignedWrite ( void * pPtr, const T & tVal )
 		*pDst++ = *pSrc++;
 }
 
+#endif // unalgined
+
+
+#if UNALIGNED_RAM_ACCESS && USE_LITTLE_ENDIAN
+/// get a dword from memory, intel version
+inline DWORD sphGetDword ( const BYTE * p )
+{
+	return *(const DWORD*)p;
+}
+#else
+/// get a dword from memory, non-intel version
+inline DWORD sphGetDword ( const BYTE * p )
+{
+	return p[0] + ( p[1]<<8 ) + ( p[2]<<16 ) + ( p[3]<<24 );
+}
 #endif
+
 
 int sphUTF8Len ( const char * pStr );
 

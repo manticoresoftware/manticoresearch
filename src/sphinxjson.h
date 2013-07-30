@@ -44,8 +44,7 @@ enum ESphJsonType
 /// get stored value from SphinxBSON blob
 inline int sphJsonLoadInt ( const BYTE ** pp )
 {
-	const BYTE * p = *pp;
-	DWORD uRes = p[0] + ( p[1]<<8 ) + ( p[2]<<16 ) + ( p[3]<<24 );
+	DWORD uRes = sphGetDword(*pp);
 	*pp += 4;
 	return int(uRes);
 }

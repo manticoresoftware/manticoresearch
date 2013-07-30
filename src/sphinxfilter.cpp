@@ -918,18 +918,16 @@ public:
 
 	virtual bool Eval ( const CSphMatch & tMatch ) const
 	{
-		const BYTE * pValue;
-		ESphJsonType eRes = GetKey ( &pValue, tMatch );
-		switch ( eRes )
+		assert ( this->m_pExpr.Ptr()!=NULL );
+
+		uint64_t uValue = m_pExpr->Int64Eval ( tMatch );
+		const BYTE * pValue = m_pStrings + ( uValue & 0xffffffff );
+		switch ( uValue>>32 ) // so that 0 from Eval() gets handled as eof
 		{
-			case JSON_INT32:
-				return EvalValues ( (DWORD)sphJsonLoadInt ( &pValue ) );
-			case JSON_INT64:
-				return EvalValues ( sphJsonLoadBigint ( &pValue ) );
-			case JSON_DOUBLE:
-				return EvalValues ( (SphAttr_t)sphQW2D ( sphJsonLoadBigint ( &pValue ) ) );
-			default:
-				return false;
+			case JSON_INT32:	return EvalValues ( sphGetDword ( pValue ) );
+			case JSON_INT64:	return EvalValues ( sphJsonLoadBigint ( &pValue ) );
+			case JSON_DOUBLE:	return EvalValues ( (SphAttr_t)sphQW2D ( sphJsonLoadBigint ( &pValue ) ) );
+			default:			return false;
 		}
 	}
 };
@@ -1151,7 +1149,8 @@ ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const ISphS
 			return NULL;
 		}
 
-		/*!COMMIT OPTIMIZE? fastpath for simple cases like j.key1?*/
+		// fastpath for simple cases like j.key1 is handled in the expression
+		// combined access/filter nodes are only marginally faster (eg 17.4 msec vs 18.5 msec on 457K rows)
 		bool bUsesWeight = false;
 		ISphExpr * pExpr = sphExprParse ( sAttrName.cstr(), tSchema, NULL, &bUsesWeight, sError, NULL );
 		pFilter = CreateFilterJson ( pAttr, pExpr, tSettings.m_eType, tSettings.m_bHasEqual, sError );

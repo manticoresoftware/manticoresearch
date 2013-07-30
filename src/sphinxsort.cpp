@@ -733,8 +733,32 @@ public:
 };
 
 
+template < typename T >
+inline static char * FormatInt ( char sBuf[32], T v )
+{
+	if_const ( sizeof(T)==4 && v==INT_MIN )
+		return strcpy ( sBuf, "-2147483648" );
+	if_const ( sizeof(T)==8 && v==LLONG_MIN )
+		return strcpy ( sBuf, "-9223372036854775808" );
+
+	bool s = ( v<0 );
+	if ( s )
+		v = -v;
+
+	char * p = sBuf+31;
+	*p = 0;
+	do
+	{
+		*--p = '0' + char(v % 10);
+		v /= 10;
+	} while ( v );
+	if ( s )
+		*--p = '-';
+	return p;
+}
+
+
 /// lookup JSON key, group by looked up value
-/*!COMMIT benchmark, find out whether we need a specialized fastpath rather than generic expr for simpler j.key1 cases*/
 class CSphGrouperJson : public CSphGrouperString<BinaryHash_fn>
 {
 protected:
@@ -756,6 +780,8 @@ public:
 		if ( !m_pExpr )
 			return SphGroupKey_t();
 
+		// inlining Eval() for simple cases like json.key1 does not pay off
+		// only yields marginal improvements (eg 42.8 ms vs 44.3 ms on ~457K rows)
 		uint64_t uValue = m_pExpr->Int64Eval ( tMatch );
 		const BYTE * pValue = m_pStringBase + ( uValue & 0xffffffff );
 		ESphJsonType eRes = (ESphJsonType)( uValue >> 32 );
@@ -771,16 +797,12 @@ public:
 				iLen = sphJsonUnpackInt ( &pValue );
 				return sphFNV64 ( pValue, iLen );
 			case JSON_INT32:
-				// FIXME! OPTIMIZE!
-				snprintf ( sBuf, sizeof(sBuf), "%d", sphJsonLoadInt ( &pValue ) );
-				break;
+				return sphFNV64 ( (BYTE*)FormatInt ( sBuf, (int)sphGetDword(pValue) ) );
 			case JSON_INT64:
-				// FIXME! OPTIMIZE!
-				snprintf ( sBuf, sizeof(sBuf), INT64_FMT, sphJsonLoadBigint ( &pValue ) );
-				break;
+				return sphFNV64 ( (BYTE*)FormatInt ( sBuf, (int)sphJsonLoadBigint ( &pValue ) ) );
 			case JSON_DOUBLE:
 				snprintf ( sBuf, sizeof(sBuf), "%f", sphQW2D ( sphJsonLoadBigint ( &pValue ) ) );
-				break;
+				return sphFNV64 ( (const BYTE*)sBuf );
 			case JSON_INT32_VECTOR:
 				iLen = sphJsonUnpackInt ( &pValue ) * 4;
 				return sphFNV64 ( pValue, iLen );
@@ -791,7 +813,6 @@ public:
 			default:
 				return 0;
 		}
-		return sphFNV64 ( (const BYTE*)sBuf );
 	}
 
 	virtual void SetStringPool ( const BYTE * pStrings )

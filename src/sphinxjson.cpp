@@ -605,14 +605,11 @@ bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool
 	JsonParser_c tParser ( dData, bAutoconv, bToLowercase, sError );
 	yy2lex_init ( &tParser.m_pScanner );
 
-	/*!COMMIT seems redundant, sphJsonParse() is intentionally destructive; so either remove, or document why we need this*/
-	tParser.m_pBuf = (char*) new char [ iLen ];
-	memcpy ( tParser.m_pBuf, sData, iLen );
+	tParser.m_pBuf = sData; // sphJsonParse() is intentionally destructive, no need to copy data here
 
 	YY_BUFFER_STATE tLexerBuffer = yy2_scan_buffer ( sData, iLen+2, tParser.m_pScanner );
 	if ( !tLexerBuffer )
 	{
-		SafeDelete ( tParser.m_pBuf );
 		sError = "internal error: yy_scan_buffer() failed";
 		return false;
 	}
@@ -621,7 +618,6 @@ bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool
 	yy2_delete_buffer ( tLexerBuffer, tParser.m_pScanner );
 	yy2lex_destroy ( tParser.m_pScanner );
 
-	SafeDelete ( tParser.m_pBuf );
 	tParser.Finalize();
 	return iRes==0;
 }
@@ -738,28 +734,13 @@ int sphJsonFieldLength ( ESphJsonType eType, const BYTE * pData )
 
 ESphJsonType sphJsonFindFirst ( const BYTE ** ppData )
 {
-	ESphJsonType eType;
-	const BYTE * p = *ppData;
+	// non-zero bloom mask? that is JSON_ROOT (basically a JSON_OBJECT without node header)
+	if ( sphGetDword(*ppData) )
+		return JSON_ROOT;
 
-	// maybe make a macro for this some day..
-#if UNALIGNED_RAM_ACCESS && USE_LITTLE_ENDIAN
-	DWORD uCols = *(DWORD*)p;
-#else
-	DWORD uCols = p[0] + ( p[1]<<8 ) + ( p[2]<<16 ) + ( p[3]<<24 );
-#endif
-
-	if ( uCols==0 )
-	{
-		// jump 4 bytes ahead, next byte is either JSON_EOF or any other type
-		p+=4;
-		eType = (ESphJsonType) *p++;
-	} else
-	{
-		// start from JSON_ROOT (basically a JSON_OBJECT without node header)
-		eType = JSON_ROOT;
-	}
-
-	*ppData = p;
+	// zero mask? must be followed by the type byte (typically JSON_EOF)
+	ESphJsonType eType = (ESphJsonType)((*ppData)[4]);
+	*ppData += 5;
 	return eType;
 }
 
@@ -773,12 +754,7 @@ ESphJsonType sphJsonFindByKey ( ESphJsonType eType, const BYTE ** ppValue, const
 	if ( eType==JSON_OBJECT )
 		sphJsonUnpackInt ( &p );
 
-#if UNALIGNED_RAM_ACCESS && USE_LITTLE_ENDIAN
-	DWORD uCols = *(DWORD*)p;
-#else
-	DWORD uCols = p[0] + ( p[1]<<8 ) + ( p[2]<<16 ) + ( p[3]<<24 );
-#endif
-	if ( ( uCols & uMask )!=uMask )
+	if ( ( sphGetDword(p) & uMask )!=uMask )
 		return JSON_EOF;
 
 	p += 4;

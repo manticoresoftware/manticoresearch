@@ -5140,7 +5140,13 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 
 					switch ( eType )
 					{
-					case JSON_EOF:			dStateStack.Pop(); break;
+					case JSON_EOF:
+					{
+						if ( dStateStack.GetLength() && dStateStack.Last()==JSON_OBJECT )
+							dStateStack.Pop();
+						break;
+					}
+
 					case JSON_INT32:		sphJsonLoadInt ( &p ); break;
 					case JSON_INT64:		sphJsonLoadBigint ( &p ); break;
 					case JSON_DOUBLE:		sphJsonLoadBigint ( &p ); break;

@@ -4886,6 +4886,13 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const ISphSchema & 
 			tExprCol.m_tLocator.m_iBitCount = 32;
 		}
 
+		// force explicit type conversion for JSON attributes
+		if ( tExprCol.m_eAggrFunc!=SPH_AGGR_NONE && tExprCol.m_eAttrType==SPH_ATTR_JSON_FIELD )
+		{
+			sError.SetSprintf ( "ambiguous attribute type '%s', use INTEGER(), BIGINT() or DOUBLE() conversion functions", tItem.m_sExpr.cstr() );
+			return NULL;
+		}
+
 		// force GROUP_CONCAT() to be computed as strings
 		if ( tExprCol.m_eAggrFunc==SPH_AGGR_CAT )
 		{

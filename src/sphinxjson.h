@@ -35,7 +35,9 @@ enum ESphJsonType
 	JSON_TRUE			= 11,
 	JSON_FALSE			= 12,
 	JSON_NULL			= 13,
-	JSON_ROOT			= 14 // deprecated
+	JSON_ROOT			= 14,
+
+	JSON_TOTAL
 };
 
 

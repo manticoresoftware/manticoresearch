@@ -1124,7 +1124,7 @@ public:
 #define DECLARE_UNARY_TRAITS(_classname,_expr) \
 	struct _classname : public Expr_Unary_c \
 	{ \
-		explicit _classname ( ISphExpr * pFirst ) : Expr_Unary_c ( pFirst ) {}; \
+		explicit _classname ( ISphExpr * pFirst ) : Expr_Unary_c ( pFirst ) {} \
 		virtual float Eval ( const CSphMatch & tMatch ) const { return _expr; } \
 
 #define DECLARE_UNARY_FLT(_classname,_expr) \

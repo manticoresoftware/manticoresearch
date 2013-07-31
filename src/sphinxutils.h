@@ -127,13 +127,13 @@ protected:
 	bool			ValidateKey ( const char * sKey );
 
 #if !USE_WINDOWS
-	bool			TryToExec ( char * pBuffer, char * pEnd, const char * szFilename, CSphVector<char> & dResult );
+	bool			TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult );
 #endif
 	char *			GetBufferString ( char * szDest, int iMax, const char * & szSource );
 };
 
 #if !USE_WINDOWS
-bool TryToExec ( char * pBuffer, char * pEnd, const char * szFilename, CSphVector<char> & dResult, char * sError, int iErrorLen );
+bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult, char * sError, int iErrorLen );
 #endif
 
 /////////////////////////////////////////////////////////////////////////////

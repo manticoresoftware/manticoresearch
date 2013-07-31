@@ -3143,7 +3143,7 @@ struct MatchRelevanceLt_fn : public ISphMatchComparator
 			return a.m_iWeight < b.m_iWeight;
 
 		return a.m_iDocID > b.m_iDocID;
-	};
+	}
 };
 
 
@@ -3174,7 +3174,7 @@ struct MatchAttrLt_fn : public ISphMatchComparator
 			return a.m_iWeight < b.m_iWeight;
 
 		return a.m_iDocID > b.m_iDocID;
-	};
+	}
 };
 
 
@@ -3205,7 +3205,7 @@ struct MatchAttrGt_fn : public ISphMatchComparator
 			return a.m_iWeight < b.m_iWeight;
 
 		return a.m_iDocID > b.m_iDocID;
-	};
+	}
 };
 
 
@@ -3233,7 +3233,7 @@ struct MatchTimeSegments_fn : public ISphMatchComparator
 			return aa<bb;
 
 		return a.m_iDocID > b.m_iDocID;
-	};
+	}
 
 protected:
 	static inline int GetSegment ( SphAttr_t iStamp, SphAttr_t iNow )
@@ -3315,7 +3315,7 @@ struct MatchGeneric2_fn : public ISphMatchComparator
 		SPH_TEST_KEYPART(0);
 		SPH_TEST_KEYPART(1);
 		return a.m_iDocID>b.m_iDocID;
-	};
+	}
 };
 
 
@@ -3332,7 +3332,7 @@ struct MatchGeneric3_fn : public ISphMatchComparator
 		SPH_TEST_KEYPART(1);
 		SPH_TEST_KEYPART(2);
 		return a.m_iDocID>b.m_iDocID;
-	};
+	}
 };
 
 
@@ -3350,7 +3350,7 @@ struct MatchGeneric4_fn : public ISphMatchComparator
 		SPH_TEST_KEYPART(2);
 		SPH_TEST_KEYPART(3);
 		return a.m_iDocID>b.m_iDocID;
-	};
+	}
 };
 
 
@@ -3369,7 +3369,7 @@ struct MatchGeneric5_fn : public ISphMatchComparator
 		SPH_TEST_KEYPART(3);
 		SPH_TEST_KEYPART(4);
 		return a.m_iDocID>b.m_iDocID;
-	};
+	}
 };
 
 //////////////////////////////////////////////////////////////////////////

@@ -226,7 +226,7 @@ struct Split_t
 };
 
 
-LangModel_c g_LM;
+static LangModel_c g_LM;
 
 void UrlBreakInit ( const char * sDict, bool bVerbose )
 {

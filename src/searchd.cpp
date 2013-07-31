@@ -163,7 +163,7 @@ enum ProtocolType_e
 };
 
 
-const char * g_dProtoNames[PROTO_TOTAL] =
+static const char * g_dProtoNames[PROTO_TOTAL] =
 {
 	"sphinxapi", "sphinxql"
 };
@@ -309,7 +309,7 @@ enum ThdState_e
 	THD_STATE_TOTAL
 };
 
-const char * g_dThdStates[THD_STATE_TOTAL] = {
+static const char * g_dThdStates[THD_STATE_TOTAL] = {
 	"handshake", "net_read", "net_write", "query"
 };
 
@@ -474,8 +474,8 @@ static SphThread_t							g_tRtFlushThread;
 
 // optimize thread
 static SphThread_t							g_tOptimizeThread;
-CSphMutex									g_tOptimizeQueueMutex;
-CSphVector<CSphString>						g_dOptimizeQueue;
+static CSphMutex							g_tOptimizeQueueMutex;
+static CSphVector<CSphString>				g_dOptimizeQueue;
 static ThrottleState_t						g_tRtThrottle;
 
 static StaticThreadsOnlyMutex_t				g_tDistLock;
@@ -562,7 +562,7 @@ enum
 
 
 /// command names
-const char * g_dApiCommands[SEARCHD_COMMAND_TOTAL] =
+static const char * g_dApiCommands[SEARCHD_COMMAND_TOTAL] =
 {
 	"search", "excerpt", "update", "keywords", "persist", "status", "query", "flushattrs"
 };
@@ -19115,7 +19115,7 @@ bool CheckConfigChanges ()
 
 		CSphVector<char> dContent;
 		char sError [ 1024 ];
-		if ( !TryToExec ( p, p+strlen(p), g_sConfigFile.cstr(), dContent, sError, sizeof(sError) ) )
+		if ( !TryToExec ( p, g_sConfigFile.cstr(), dContent, sError, sizeof(sError) ) )
 			return true;
 
 		uCRC32 = sphCRC32 ( (const BYTE*)dContent.Begin(), dContent.GetLength() );

@@ -231,7 +231,7 @@ public:
 
 	bool			Touch ( const CSphString & sFilename );
 	bool			Preread ( const CSphString & sFilename, CSphString & sError );
-	const DWORD		GetDocs ( const CSphString & sWord ) const;
+	DWORD			GetDocs ( const CSphString & sWord ) const;
 	float			GetIDF ( const CSphString & sWord, int64_t iDocsLocal, bool bPlainIDF );
 
 protected:
@@ -639,7 +639,7 @@ public:
 	inline int GetLength () const
 	{
 		return m_iUsed;
-	};
+	}
 
 	/// get current root
 	inline const T & Root () const
@@ -1268,7 +1268,7 @@ static const char * g_dOldExts31[] = { ".old.sph", ".old.spa", ".old.spi", ".old
 static const char * g_dCurExts31[] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm", ".spk", ".sps", ".spe", ".mvp" };
 static const char * g_dLocExts31[] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm", ".spk", ".sps", ".spe", ".spl" };
 
-const char ** g_pppAllExts[] = { g_dCurExts31, g_dNewExts31, g_dOldExts31, g_dLocExts31 };
+static const char ** g_pppAllExts[] = { g_dCurExts31, g_dNewExts31, g_dOldExts31, g_dLocExts31 };
 
 
 const char ** sphGetExts ( ESphExtType eType, DWORD uVersion )
@@ -11478,7 +11478,7 @@ struct CmpQueuedDocinfo_fn
 	static inline bool IsLess ( const int a, const int b )
 	{
 		return DOCINFO2ID ( m_pStorage + a*m_iStride ) < DOCINFO2ID ( m_pStorage + b*m_iStride );
-	};
+	}
 };
 DWORD *		CmpQueuedDocinfo_fn::m_pStorage		= NULL;
 int			CmpQueuedDocinfo_fn::m_iStride		= 1;
@@ -11515,7 +11515,7 @@ struct MvaEntryCmp_fn
 	static inline bool IsLess ( const MvaEntry_t & a, const MvaEntry_t & b )
 	{
 		return a<b;
-	};
+	}
 };
 
 
@@ -21947,12 +21947,9 @@ public:
 	union
 	{
 		DWORD			m_dData[4];
-		struct
-		{
-			int			m_iDynLen;
-			int			m_iDynLimit;
-			DWORD *		m_pDynData;
-		};
+		int				m_iDynLen;
+		int				m_iDynLimit;
+		DWORD *			m_pDynData;
 	};
 
 public:
@@ -24071,9 +24068,9 @@ static inline int HtmlEntityLookup ( const BYTE * str, int len )
 
 	static const struct HtmlEntity_t wordlist[] =
 	{
-		{""}, {""}, {""}, {""}, {""}, {""},
+		{"",0}, {"",0}, {"",0}, {"",0}, {"",0}, {"",0},
 		{"Rho", 929},
-		{""}, {""}, {""}, {""}, {""},
+		{"",0}, {"",0}, {"",0}, {"",0}, {"",0},
 		{"Chi", 935},
 		{"phi", 966},
 		{"iota", 953},
@@ -24091,7 +24088,7 @@ static inline int HtmlEntityLookup ( const BYTE * str, int len )
 		{"not", 172},
 		{"isin", 8712},
 		{"sdot", 8901},
-		{""},
+		{"",0},
 		{"prime", 8242},
 		{"prod", 8719},
 		{"trade", 8482},
@@ -24103,23 +24100,23 @@ static inline int HtmlEntityLookup ( const BYTE * str, int len )
 		{"eta", 951},
 		{"chi", 967},
 		{"Kappa", 922},
-		{""}, {""}, {""}, {""},
+		{"",0}, {"",0}, {"",0}, {"",0},
 		{"scaron", 353},
-		{""},
+		{"",0},
 		{"notin", 8713},
 		{"ndash", 8211},
-		{""},
+		{"",0},
 		{"acute", 180},
 		{"otilde", 245},
 		{"atilde", 227},
 		{"Phi", 934},
-		{""},
+		{"",0},
 		{"Psi", 936},
 		{"pound", 163},
 		{"cap", 8745},
-		{""},
+		{"",0},
 		{"otimes", 8855},
-		{""},
+		{"",0},
 		{"nbsp", 32},
 		{"rho", 961},
 		{"ntilde", 241},
@@ -24137,12 +24134,12 @@ static inline int HtmlEntityLookup ( const BYTE * str, int len )
 		{"or", 8744},
 		{"Yacute", 221},
 		{"nsub", 8836},
-		{""},
+		{"",0},
 		{"Uacute", 218},
 		{"Eta", 919},
 		{"ETH", 208},
 		{"sup", 8835},
-		{""},
+		{"",0},
 		{"supe", 8839},
 		{"Ucirc", 219},
 		{"sup1", 185},
@@ -24165,14 +24162,14 @@ static inline int HtmlEntityLookup ( const BYTE * str, int len )
 		{"oline", 8254},
 		{"sup3", 179},
 		{"nu", 957},
-		{""}, {""},
+		{"",0}, {"",0},
 		{"sube", 8838},
 		{"Eacute", 201},
 		{"thetasym", 977},
-		{""}, {""}, {""},
+		{"",0}, {"",0}, {"",0},
 		{"Omega", 937},
 		{"Ecirc", 202},
-		{""},
+		{"",0},
 		{"lowast", 8727},
 		{"iquest", 191},
 		{"lt", 60},
@@ -24190,9 +24187,9 @@ static inline int HtmlEntityLookup ( const BYTE * str, int len )
 		{"Zeta", 918},
 		{"Lambda", 923},
 		{"Gamma", 915},
-		{""},
+		{"",0},
 		{"Nu", 925},
-		{""}, {""},
+		{"",0}, {"",0},
 		{"ograve", 242},
 		{"agrave", 224},
 		{"egrave", 232},
@@ -24201,19 +24198,19 @@ static inline int HtmlEntityLookup ( const BYTE * str, int len )
 		{"ordf", 170},
 		{"Otilde", 213},
 		{"infin", 8734},
-		{""},
+		{"",0},
 		{"frac12", 189},
 		{"beta", 946},
 		{"radic", 8730},
 		{"darr", 8595},
 		{"Iacute", 205},
 		{"Ugrave", 217},
-		{""}, {""},
+		{"",0}, {"",0},
 		{"harr", 8596},
 		{"hearts", 9829},
 		{"Icirc", 206},
 		{"Oacute", 211},
-		{""},
+		{"",0},
 		{"frac34", 190},
 		{"cent", 162},
 		{"crarr", 8629},
@@ -24221,17 +24218,17 @@ static inline int HtmlEntityLookup ( const BYTE * str, int len )
 		{"Ocirc", 212},
 		{"brvbar", 166},
 		{"sect", 167},
-		{""},
+		{"",0},
 		{"ang", 8736},
 		{"ugrave", 249},
-		{""},
+		{"",0},
 		{"Beta", 914},
 		{"uarr", 8593},
 		{"dArr", 8659},
 		{"asymp", 8776},
 		{"perp", 8869},
 		{"Dagger", 8225},
-		{""},
+		{"",0},
 		{"hArr", 8660},
 		{"rang", 9002},
 		{"dagger", 8224},
@@ -24245,7 +24242,7 @@ static inline int HtmlEntityLookup ( const BYTE * str, int len )
 		{"clubs", 9827},
 		{"Xi", 926},
 		{"aring", 229},
-		{""}, {""}, {""},
+		{"",0}, {"",0}, {"",0},
 		{"copy", 169},
 		{"uArr", 8657},
 		{"ni", 8715},
@@ -24253,25 +24250,25 @@ static inline int HtmlEntityLookup ( const BYTE * str, int len )
 		{"le", 8804},
 		{"ge", 8805},
 		{"zwnj", 8204},
-		{""},
+		{"",0},
 		{"apos", 39},
 		{"macr", 175},
 		{"lang", 9001},
 		{"gamma", 947},
 		{"Delta", 916},
-		{""},
+		{"",0},
 		{"uml", 168},
 		{"alefsym", 8501},
 		{"delta", 948},
-		{""},
+		{"",0},
 		{"bdquo", 8222},
 		{"lambda", 955},
 		{"equiv", 8801},
-		{""},
+		{"",0},
 		{"Oslash", 216},
-		{""},
+		{"",0},
 		{"hellip", 8230},
-		{""},
+		{"",0},
 		{"rArr", 8658},
 		{"Atilde", 195},
 		{"larr", 8592},
@@ -24279,39 +24276,39 @@ static inline int HtmlEntityLookup ( const BYTE * str, int len )
 		{"Igrave", 204},
 		{"Pi", 928},
 		{"yacute", 253},
-		{""},
+		{"",0},
 		{"diams", 9830},
 		{"sbquo", 8218},
 		{"fnof", 402},
 		{"Ograve", 210},
 		{"plusmn", 177},
-		{""},
+		{"",0},
 		{"rceil", 8969},
 		{"Aacute", 193},
 		{"ouml", 246},
 		{"auml", 228},
 		{"euml", 235},
 		{"iuml", 239},
-		{""},
+		{"",0},
 		{"Acirc", 194},
-		{""},
+		{"",0},
 		{"rdquo", 8221},
-		{""},
+		{"",0},
 		{"lArr", 8656},
 		{"rsquo", 8217},
 		{"Yuml", 376},
-		{""},
+		{"",0},
 		{"quot", 34},
 		{"Uuml", 220},
 		{"bull", 8226},
-		{""}, {""}, {""},
+		{"",0}, {"",0}, {"",0},
 		{"real", 8476},
-		{""}, {""}, {""},
+		{"",0}, {"",0}, {"",0},
 		{"lceil", 8968},
 		{"permil", 8240},
 		{"upsih", 978},
 		{"sum", 8721},
-		{""}, {""},
+		{"",0}, {"",0},
 		{"divide", 247},
 		{"raquo", 187},
 		{"uuml", 252},
@@ -24319,79 +24316,79 @@ static inline int HtmlEntityLookup ( const BYTE * str, int len )
 		{"Alpha", 913},
 		{"szlig", 223},
 		{"lsquo", 8216},
-		{""},
+		{"",0},
 		{"Sigma", 931},
 		{"tilde", 732},
-		{""},
+		{"",0},
 		{"THORN", 222},
-		{""}, {""}, {""},
+		{"",0}, {"",0}, {"",0},
 		{"Euml", 203},
 		{"rfloor", 8971},
-		{""},
+		{"",0},
 		{"lrm", 8206},
-		{""},
+		{"",0},
 		{"sigma", 963},
 		{"iexcl", 161},
-		{""}, {""},
+		{"",0}, {"",0},
 		{"deg", 176},
 		{"middot", 183},
 		{"laquo", 171},
-		{""},
+		{"",0},
 		{"circ", 710},
-		{""}, {""}, {""}, {""},
+		{"",0}, {"",0}, {"",0}, {"",0},
 		{"frasl", 8260},
 		{"epsilon", 949},
 		{"oplus", 8853},
 		{"yen", 165},
 		{"micro", 181},
 		{"piv", 982},
-		{""}, {""},
+		{"",0}, {"",0},
 		{"lfloor", 8970},
-		{""},
+		{"",0},
 		{"Agrave", 192},
-		{""}, {""},
+		{"",0}, {"",0},
 		{"Upsilon", 933},
-		{""}, {""},
+		{"",0}, {"",0},
 		{"times", 215},
-		{""},
+		{"",0},
 		{"cedil", 184},
-		{""}, {""}, {""}, {""},
+		{"",0}, {"",0}, {"",0}, {"",0},
 		{"minus", 8722},
 		{"Iuml", 207},
-		{""}, {""}, {""}, {""}, {""},
+		{"",0}, {"",0}, {"",0}, {"",0}, {"",0},
 		{"upsilon", 965},
 		{"Ouml", 214},
-		{""}, {""},
+		{"",0}, {"",0},
 		{"rlm", 8207},
-		{""}, {""}, {""},
+		{"",0}, {"",0}, {"",0},
 		{"reg", 174},
-		{""},
+		{"",0},
 		{"forall", 8704},
-		{""}, {""},
+		{"",0}, {"",0},
 		{"Epsilon", 917},
 		{"empty", 8709},
 		{"OElig", 338},
-		{""},
+		{"",0},
 		{"shy", 173},
-		{""}, {""}, {""}, {""}, {""}, {""}, {""}, {""}, {""},
-		{""}, {""}, {""}, {""},
+		{"",0}, {"",0}, {"",0}, {"",0}, {"",0}, {"",0}, {"",0}, {"",0}, {"",0},
+		{"",0}, {"",0}, {"",0}, {"",0},
 		{"Aring", 197},
-		{""}, {""}, {""},
+		{"",0}, {"",0}, {"",0},
 		{"oelig", 339},
 		{"aelig", 230},
-		{""},
+		{"",0},
 		{"zwj", 8205},
-		{""}, {""}, {""}, {""}, {""}, {""}, {""}, {""}, {""},
-		{""}, {""}, {""}, {""}, {""},
+		{"",0}, {"",0}, {"",0}, {"",0}, {"",0}, {"",0}, {"",0}, {"",0}, {"",0},
+		{"",0}, {"",0}, {"",0}, {"",0}, {"",0},
 		{"sim", 8764},
-		{""}, {""}, {""}, {""}, {""}, {""}, {""}, {""}, {""},
-		{""}, {""}, {""}, {""}, {""}, {""},
+		{"",0}, {"",0}, {"",0}, {"",0}, {"",0}, {"",0}, {"",0}, {"",0}, {"",0},
+		{"",0}, {"",0}, {"",0}, {"",0}, {"",0}, {"",0},
 		{"yuml", 255},
 		{"sigmaf", 962},
-		{""}, {""}, {""}, {""}, {""}, {""}, {""},
+		{"",0}, {"",0}, {"",0}, {"",0}, {"",0}, {"",0}, {"",0},
 		{"Auml", 196},
-		{""}, {""}, {""}, {""}, {""}, {""}, {""}, {""}, {""},
-		{""}, {""}, {""}, {""},
+		{"",0}, {"",0}, {"",0}, {"",0}, {"",0}, {"",0}, {"",0}, {"",0}, {"",0},
+		{"",0}, {"",0}, {"",0}, {"",0},
 		{"AElig", 198}
 	};
 
@@ -31524,7 +31521,7 @@ bool CSphGlobalIDF::Preread ( const CSphString & sFilename, CSphString & sError 
 }
 
 
-const DWORD CSphGlobalIDF::GetDocs ( const CSphString & sWord ) const
+DWORD CSphGlobalIDF::GetDocs ( const CSphString & sWord ) const
 {
 	const char * s = sWord.cstr();
 

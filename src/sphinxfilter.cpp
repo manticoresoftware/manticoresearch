@@ -56,7 +56,7 @@ struct IFilter_Values: virtual ISphFilter
 		m_iValueCount = iCount;
 	}
 
-	inline const SphAttr_t GetValue ( int iIndex ) const
+	inline SphAttr_t GetValue ( int iIndex ) const
 	{
 		assert ( iIndex>=0 && iIndex<m_iValueCount );
 		return m_pValues[iIndex];

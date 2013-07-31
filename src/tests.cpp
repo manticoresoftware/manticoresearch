@@ -39,7 +39,7 @@
 
 //////////////////////////////////////////////////////////////////////////
 
-const char * g_sTmpfile = "__libsphinxtest.tmp";
+static const char * g_sTmpfile = "__libsphinxtest.tmp";
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -996,7 +996,7 @@ public:
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & , int , CSphString &, CSphString & ) { return -1; }
 	virtual bool				SaveAttributes ( CSphString & ) const { return false; }
 	virtual DWORD				GetAttributeStatus () const { return 0; }
-	virtual bool				CreateFilesWithAttr ( int iPos, const CSphString &, ESphAttr, CSphString & ) { return true; }
+	virtual bool				CreateFilesWithAttr ( int, const CSphString &, ESphAttr, CSphString & ) { return true; }
 	virtual bool				AddAttribute ( const CSphString &, ESphAttr, CSphString & ) { return true; }
 	virtual void				DebugDumpHeader ( FILE *, const char *, bool ) {}
 	virtual void				DebugDumpDocids ( FILE * ) {}
@@ -1476,8 +1476,8 @@ void BenchLocators ()
 //////////////////////////////////////////////////////////////////////////
 
 #ifndef NDEBUG
-int g_iRwlock;
-CSphRwlock g_tRwlock;
+static int g_iRwlock;
+static CSphRwlock g_tRwlock;
 
 void RwlockReader ( void * pArg )
 {
@@ -1568,7 +1568,7 @@ void TestCleanup ()
 
 //////////////////////////////////////////////////////////////////////////
 
-volatile int g_iMutexBench = 0;
+static volatile int g_iMutexBench = 0;
 
 void DummyThread ( void * )
 {}
@@ -1786,7 +1786,7 @@ struct SortDataGenDesc_t
 	const char *		m_sName;
 };
 
-SortDataGenDesc_t g_dSortDataGens[] =
+static SortDataGenDesc_t g_dSortDataGens[] =
 {
 	{ SortDataRepeat1245,	"repeat1245" },
 	{ SortDataEnd0,			"end0" },
@@ -2120,7 +2120,7 @@ void TestStridedSort ()
 
 //////////////////////////////////////////////////////////////////////////
 
-const char * g_sFieldsData[] = { "33", "1033", "If I were a cat...", "We are the greatest cat" };
+static const char * g_sFieldsData[] = { "33", "1033", "If I were a cat...", "We are the greatest cat" };
 
 class SphTestDoc_c : public CSphSource_Document
 {
@@ -2588,7 +2588,7 @@ void TestSpanSearch()
 
 //////////////////////////////////////////////////////////////////////////
 
-const char * CORPUS = "corpus.txt";
+static const char * CORPUS = "corpus.txt";
 const int POOLSIZE = 80*1048576;
 const int GAP = 4;
 

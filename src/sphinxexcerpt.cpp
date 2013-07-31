@@ -1381,9 +1381,6 @@ struct Space_t
 };
 
 
-int g_iResizes = 0;
-
-
 struct TokenSpan_t
 {
 public:

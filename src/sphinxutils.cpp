@@ -629,7 +629,7 @@ bool CSphConfigParser::ValidateKey ( const char * sKey )
 
 #if !USE_WINDOWS
 
-bool TryToExec ( char * pBuffer, char * pEnd, const char * szFilename, CSphVector<char> & dResult, char * sError, int iErrorLen )
+bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult, char * sError, int iErrorLen )
 {
 	int dPipe[2] = { -1, -1 };
 
@@ -748,9 +748,9 @@ bool TryToExec ( char * pBuffer, char * pEnd, const char * szFilename, CSphVecto
 	return true;
 }
 
-bool CSphConfigParser::TryToExec ( char * pBuffer, char * pEnd, const char * szFilename, CSphVector<char> & dResult )
+bool CSphConfigParser::TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult )
 {
-	return ::TryToExec ( pBuffer, pEnd, szFilename, dResult, m_sError, sizeof(m_sError) );
+	return ::TryToExec ( pBuffer, szFilename, dResult, m_sError, sizeof(m_sError) );
 }
 #endif
 
@@ -864,7 +864,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 				if ( !pBuffer && m_iLine==1 && p==sBuf && p[1]=='!' )
 				{
 					CSphVector<char> dResult;
-					if ( TryToExec ( p+2, pEnd, sFileName, dResult ) )
+					if ( TryToExec ( p+2, sFileName, dResult ) )
 						Parse ( sFileName, &dResult[0] );
 					break;
 				} else
@@ -1957,7 +1957,7 @@ void sphBacktrace ( int iFD, bool bSafe )
 
 		sphSafeInfo ( iFD, "Stack looks OK, attempting backtrace." );
 
-		BYTE** pNewFP;
+		BYTE** pNewFP = NULL;
 		while ( pFramePointer < (BYTE**) pMyStack )
 		{
 			pNewFP = (BYTE**) *pFramePointer;

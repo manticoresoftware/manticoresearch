@@ -34,28 +34,30 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-bool			g_bQuiet		= false;
-bool			g_bProgress		= true;
-bool			g_bPrintQueries	= false;
-bool			g_bKeepAttrs	= false;
+static bool			g_bQuiet		= false;
+static bool			g_bProgress		= true;
+static bool			g_bPrintQueries	= false;
+static bool			g_bKeepAttrs	= false;
 
-const char *	g_sBuildStops	= NULL;
-int				g_iTopStops		= 100;
-bool			g_bRotate		= false;
-bool			g_bRotateEach	= false;
-bool			g_bBuildFreqs	= false;
+static const char *	g_sBuildStops	= NULL;
+static int				g_iTopStops		= 100;
+static bool			g_bRotate		= false;
+static bool			g_bRotateEach	= false;
+static bool			g_bBuildFreqs	= false;
 
-int				g_iMemLimit				= 32*1024*1024;
-int				g_iMaxXmlpipe2Field		= 0;
-int				g_iWriteBuffer			= 0;
-int				g_iMaxFileFieldBuffer	= 1024*1024;
+static int				g_iMemLimit				= 32*1024*1024;
+static int				g_iMaxXmlpipe2Field		= 0;
+static int				g_iWriteBuffer			= 0;
+static int				g_iMaxFileFieldBuffer	= 1024*1024;
 
-ESphOnFileFieldError	g_eOnFileFieldError = FFE_IGNORE_FIELD;
+static ESphOnFileFieldError	g_eOnFileFieldError = FFE_IGNORE_FIELD;
 
-const int		EXT_COUNT = 9;
-const char *	g_dExt[EXT_COUNT] = { "sph", "spa", "spi", "spd", "spp", "spm", "spk", "sps", "spe" };
+static const int		EXT_COUNT = 9;
+static const char *	g_dExt[EXT_COUNT] = { "sph", "spa", "spi", "spd", "spp", "spm", "spk", "sps", "spe" };
 
-char			g_sMinidump[256];
+#if USE_WINDOWS
+static char			g_sMinidump[256];
+#endif
 
 #define			ROTATE_MIN_INTERVAL 100000 // rotate interval 100 ms
 
@@ -436,7 +438,7 @@ void SqlAttrsConfigure ( CSphSourceParams_SQL & tParams, const CSphVariant * pHe
 
 
 #if USE_ZLIB
-bool ConfigureUnpack ( CSphVariant * pHead, ESphUnpackFormat eFormat, CSphSourceParams_SQL & tParams, const char * sSourceName )
+bool ConfigureUnpack ( CSphVariant * pHead, ESphUnpackFormat eFormat, CSphSourceParams_SQL & tParams, const char * )
 {
 	for ( CSphVariant * pVal = pHead; pVal; pVal = pVal->m_pNext )
 	{

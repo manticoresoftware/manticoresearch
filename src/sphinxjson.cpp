@@ -231,9 +231,8 @@ protected:
 
 		if ( iPackLen!=1 )
 		{
-			BYTE * pOfs = m_dBuffer.Begin()+iOfs;
 			m_dBuffer.Resize ( iOfs+iPackLen+iSize );
-			memmove ( pOfs+iPackLen, pOfs+1, iSize );
+			memmove ( m_dBuffer.Begin()+iOfs+iPackLen, m_dBuffer.Begin()+iOfs+1, iSize );
 		}
 
 		m_dBuffer.Resize ( iOfs );

@@ -7946,7 +7946,7 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 	// update min_gaps factor
 	if ( bUniq && m_iHaveMinWindow>1 )
 	{
-		WORD uQpos = pHlist->m_uQuerypos;
+		uQpos = pHlist->m_uQuerypos;
 		if_const ( HANDLE_DUPES )
 			uQpos = m_dTermDupes[uQpos];
 
@@ -8356,7 +8356,7 @@ float RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::TermTC ( int iTerm,
 	int iFound = 0;
 	for ( int i=iStart; i!=iEnd && iFound!=m_iMaxQpos; i+=iStep )
 	{
-		int iRing = i % XRANK_ATC_BUFFER_LEN;
+		iRing = i % XRANK_ATC_BUFFER_LEN;
 		const AtcHit_t & tCur = m_dAtcHits[iRing];
 		bool bGotDup = ( uQuerypos==tCur.m_uQuerypos );
 

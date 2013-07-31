@@ -3455,19 +3455,19 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					{
 						m_bHasPackedFactors = true;
 
-						CSphVector<int> dArgs;
-						GatherArgNodes ( tNode.m_iLeft, dArgs );
+						CSphVector<int> dBM25FArgs;
+						GatherArgNodes ( tNode.m_iLeft, dBM25FArgs );
 
-						const ExprNode_t & tLeft = m_dNodes[dArgs[0]];
-						const ExprNode_t & tRight = m_dNodes[dArgs[1]];
+						const ExprNode_t & tLeft = m_dNodes[dBM25FArgs[0]];
+						const ExprNode_t & tRight = m_dNodes[dBM25FArgs[1]];
 						float fK1 = tLeft.m_fConst;
 						float fB = tRight.m_fConst;
 						fK1 = Max ( fK1, 0.001f );
 						fB = Min ( Max ( fB, 0.0f ), 1.0f );
 
 						CSphVector<CSphNamedVariant> * pFieldWeights = NULL;
-						if ( dArgs.GetLength()>2 )
-							pFieldWeights = &m_dNodes[dArgs[2]].m_pConsthash->m_dPairs;
+						if ( dBM25FArgs.GetLength()>2 )
+							pFieldWeights = &m_dNodes[dBM25FArgs[2]].m_pConsthash->m_dPairs;
 
 						return new Expr_BM25F_c ( fK1, fB, pFieldWeights );
 					}
@@ -5438,14 +5438,14 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 
 	if ( pUsesWeight )
 	{
-		WeightCheck_fn tFunctor ( pUsesWeight );
-		WalkTree ( m_iParsed, tFunctor );
+		WeightCheck_fn tWeightFunctor ( pUsesWeight );
+		WalkTree ( m_iParsed, tWeightFunctor );
 	}
 
 	if ( m_pHook )
 	{
-		HookCheck_fn tFunctor ( m_pHook );
-		WalkTree ( m_iParsed, tFunctor );
+		HookCheck_fn tHookFunctor ( m_pHook );
+		WalkTree ( m_iParsed, tHookFunctor );
 	}
 
 	return pRes;

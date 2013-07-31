@@ -2867,7 +2867,7 @@ void BenchMisc()
 	int64_t iAvg = 0;
 	for ( int i=0; i<THREADS; i++ )
 	{
-		int64_t t = tmEnd[i] - tmStart;
+		t = tmEnd[i] - tmStart;
 		iMin = Min ( iMin, t );
 		iMax = Max ( iMax, t );
 		iAvg += t;
@@ -3170,19 +3170,19 @@ void TestGeodist()
 	for ( int r=0; r<RUNS; r++ )
 		for ( double * t = dBench.Begin(); t<tmax; t+=4 )
 			fDist += GeodistSphereDeg ( float(t[0]), float(t[1]), float(t[2]), float(t[3]) );
-	printf ( "%d us sphere\n", sphMicroTimer()-tm );
+	printf ( INT64_FMT" us sphere\n", sphMicroTimer()-tm );
 
 	tm = sphMicroTimer();
 	for ( int r=0; r<RUNS; r++ )
 		for ( double * t = dBench.Begin(); t<tmax; t+=4 )
 			fDist += GeodistFlatDeg ( float(t[0]), float(t[1]), float(t[2]), float(t[3]) );
-	printf ( "%d us flat\n", sphMicroTimer()-tm );
+	printf ( INT64_FMT" us flat\n", sphMicroTimer()-tm );
 
 	tm = sphMicroTimer();
 	for ( int r=0; r<RUNS; r++ )
 		for ( double * t = dBench.Begin(); t<tmax; t+=4 )
 			fDist += GeodistAdaptiveDeg ( float(t[0]), float(t[1]), float(t[2]), float(t[3]) );
-	printf ( "%d us adaptive\n", sphMicroTimer()-tm );
+	printf ( INT64_FMT" us adaptive\n", sphMicroTimer()-tm );
 
 	printf ( "res %f\n", fDist );
 

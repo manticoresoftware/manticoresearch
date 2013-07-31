@@ -9738,9 +9738,9 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 
 				// create queue
 				m_tHook.m_pIndex = pServed->m_pIndex;
-				bool bFactors = false;
-				pSorter = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, m_pProfile, true, pExtraSchema, m_pUpdates, &tQuery.m_bZSlist, &bFactors, &m_tHook );
-				bNeedFactors |= bFactors;
+				bool bQueueFactors = false;
+				pSorter = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, m_pProfile, true, pExtraSchema, m_pUpdates, &tQuery.m_bZSlist, &bQueueFactors, &m_tHook );
+				bNeedFactors |= bQueueFactors;
 				if ( !pSorter )
 				{
 					m_dFailuresSet[iQuery].Submit ( sLocal, sError.cstr() );
@@ -9770,13 +9770,13 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 		// set kill-list
 		for ( int i=iLocal+1; i<m_dLocal.GetLength (); i++ )
 		{
-			const ServedIndex_t * pServed = UseIndex ( i );
-			if ( !pServed )
+			const ServedIndex_t * pLocServed = UseIndex ( i );
+			if ( !pLocServed )
 				continue;
 
-			if ( pServed->m_pIndex->GetKillListSize () )
+			if ( pLocServed->m_pIndex->GetKillListSize () )
 			{
-				SetupKillListFilter ( dKlists.Add(), pServed->m_pIndex->GetKillList (), pServed->m_pIndex->GetKillListSize () );
+				SetupKillListFilter ( dKlists.Add(), pLocServed->m_pIndex->GetKillList (), pLocServed->m_pIndex->GetKillListSize () );
 				dLocked.Add ( i );
 			} else
 			{
@@ -13225,9 +13225,9 @@ void BuildStatus ( VectorLike & dStatus )
 				continue;
 
 			AgentStats_t & tStats = g_pStats->m_dAgentStats.m_dItemStats[iIndex];
-			for ( int j=0; j<eMaxStat; ++j )
-				if ( dStatus.MatchAddVa ( "ag_%s_%d_%s", sIdx, i, tStats.m_sNames[j] ) )
-					dStatus.Add().SetSprintf ( FMT64, tStats.m_iStats[j] );
+			for ( int k=0; k<eMaxStat; ++k )
+				if ( dStatus.MatchAddVa ( "ag_%s_%d_%s", sIdx, i, tStats.m_sNames[k] ) )
+					dStatus.Add().SetSprintf ( FMT64, tStats.m_iStats[k] );
 		}
 	}
 	g_tDistLock.Unlock();
@@ -18080,11 +18080,11 @@ static void SphinxqlStateThreadFunc ( void * )
 		{
 			const CSphVector<SphAttr_t> & dVals = *dUservars[i].m_pVal;
 			int iLen = snprintf ( dBuf, sizeof ( dBuf ), "SET GLOBAL %s = ( "INT64_FMT, dUservars[i].m_sName.cstr(), dVals[0] );
-			for ( int i=1; i<dVals.GetLength(); i++ )
+			for ( int j=1; j<dVals.GetLength(); j++ )
 			{
-				iLen += snprintf ( dBuf+iLen, sizeof ( dBuf ), ", "INT64_FMT, dVals[i] );
+				iLen += snprintf ( dBuf+iLen, sizeof ( dBuf ), ", "INT64_FMT, dVals[j] );
 
-				if ( iLen>=iMaxString && i<dVals.GetLength()-1 )
+				if ( iLen>=iMaxString && j<dVals.GetLength()-1 )
 				{
 					iLen += snprintf ( dBuf+iLen, sizeof ( dBuf ), " \\\n" );
 					tWriter.PutBytes ( dBuf, iLen );
@@ -21517,9 +21517,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	{
 		CSphVector<CSphString> dParams;
 		sphSplit ( dParams, sLogFormat );
-		ARRAY_FOREACH ( i, dParams )
+		ARRAY_FOREACH ( j, dParams )
 		{
-			sLogFormat = dParams[i].cstr();
+			sLogFormat = dParams[j].cstr();
 			if ( !strcmp ( sLogFormat, "sphinxql" ) )
 				g_eLogFormat = LOG_FORMAT_SPHINXQL;
 			else if ( !strcmp ( sLogFormat, "plain" ) )
@@ -21791,8 +21791,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	// almost ready, time to start listening
 	int iBacklog = hSearchd.GetInt ( "listen_backlog", SEARCHD_BACKLOG );
-	ARRAY_FOREACH ( i, g_dListeners )
-		if ( listen ( g_dListeners[i].m_iSock, iBacklog )==-1 )
+	ARRAY_FOREACH ( j, g_dListeners )
+		if ( listen ( g_dListeners[j].m_iSock, iBacklog )==-1 )
 			sphFatal ( "listen() failed: %s", sphSockError() );
 
 	sphInfo ( "accepting connections" );

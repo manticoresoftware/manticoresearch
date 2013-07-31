@@ -426,10 +426,10 @@ bool BuildIDF ( const CSphString & sFilename, const CSphVector<CSphString> & dFi
 					if ( p2 )
 					{
 						*p1 = *p2 = '\0';
-						int iDocs = atoi ( p1+1 );
-						if ( iDocs )
+						int iDocuments = atoi ( p1+1 );
+						if ( iDocuments )
 						{
-							dDocs[i] = iDocs;
+							dDocs[i] = iDocuments;
 							iReadWords++;
 							break;
 						}
@@ -1118,7 +1118,7 @@ int main ( int argc, char ** argv )
 			} else
 				fprintf ( stdout, "dumping header file '%s'...\n", sDumpHeader.cstr() );
 
-			CSphIndex * pIndex = sphCreateIndexPhrase ( sIndexName.cstr(), "" );
+			pIndex = sphCreateIndexPhrase ( sIndexName.cstr(), "" );
 			pIndex->DebugDumpHeader ( stdout, sDumpHeader.cstr(), eCommand==CMD_DUMPCONFIG );
 			break;
 		}

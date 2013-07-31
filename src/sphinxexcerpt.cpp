@@ -1683,7 +1683,7 @@ protected:
 		// we do it only once because we don't need duplicate weights
 		// but m_iQwordCount will still show the total amount of qwords w/dupes
 		DWORD uWords = m_tPass.m_uQwords;
-		for ( int iWord=0; uWords; uWords >>= 1, iWord++ )
+		for ( iWord=0; uWords; uWords >>= 1, iWord++ )
 			if ( uWords & 1 )
 			{
 				m_tPass.m_iQwordsWeight += m_tContainer.GetTermWeight(iWord);

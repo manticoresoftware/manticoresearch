@@ -385,10 +385,10 @@ public:
 
 				ARRAY_FOREACH ( i, dNodes )
 				{
-					char * sKey = m_pBuf + dNodes[i].m_iKeyStart;
-					int iLen = KeyUnescape ( &sKey, dNodes[i].m_iKeyEnd-dNodes[i].m_iKeyStart );
-					WriteNode ( dNodes[i], sKey, iLen );
-					uMask |= sphJsonKeyMask ( sKey, iLen );
+					char * sObjKey = m_pBuf + dNodes[i].m_iKeyStart;
+					int iLen = KeyUnescape ( &sObjKey, dNodes[i].m_iKeyEnd-dNodes[i].m_iKeyStart );
+					WriteNode ( dNodes[i], sObjKey, iLen );
+					uMask |= sphJsonKeyMask ( sObjKey, iLen );
 				}
 				m_dBuffer.Add ( JSON_EOF );
 
@@ -490,8 +490,8 @@ public:
 				p += 4; // skip bloom table
 				for ( ;; )
 				{
-					ESphJsonType eType = (ESphJsonType) *p++;
-					if ( eType==JSON_EOF )
+					ESphJsonType eInnerType = (ESphJsonType) *p++;
+					if ( eInnerType==JSON_EOF )
 						break;
 					const int iStrLen = sphJsonUnpackInt ( &p );
 					CSphString sVal;
@@ -499,7 +499,7 @@ public:
 					DebugIndent ( iLevel+1 );
 					printf ( "\"%s\"", sVal.cstr() );
 					p += iStrLen;
-					DebugDump ( eType, &p, iLevel+1 );
+					DebugDump ( eInnerType, &p, iLevel+1 );
 				}
 				break;
 			}
@@ -511,8 +511,8 @@ public:
 				printf ( "JSON_MIXED_VECTOR [%d] (%d bytes)\n", iLen, iTotalLen );
 				for ( int i=0; i<iLen; i++ )
 				{
-					ESphJsonType eType = (ESphJsonType)*p++;
-					DebugDump ( eType, &p, iLevel+1 );
+					ESphJsonType eInnerType = (ESphJsonType)*p++;
+					DebugDump ( eInnerType, &p, iLevel+1 );
 				}
 				break;
 			}
@@ -761,7 +761,7 @@ ESphJsonType sphJsonFindByKey ( ESphJsonType eType, const BYTE ** ppValue, const
 	p += 4;
 	for ( ;; )
 	{
-		ESphJsonType eType = (ESphJsonType) *p++;
+		eType = (ESphJsonType) *p++;
 		if ( eType==JSON_EOF )
 			break;
 		int iStrLen = sphJsonUnpackInt ( &p );
@@ -994,8 +994,8 @@ const BYTE * sphJsonFieldFormat ( CSphVector<BYTE> & dOut, const BYTE * pData, E
 		case JSON_TRUE:		JsonAddStr ( dOut, bQuoteString ? "true" : "True" ); break;
 		case JSON_FALSE:	JsonAddStr ( dOut, bQuoteString ? "false" : "False" ); break;
 		case JSON_NULL:		JsonAddStr ( dOut, bQuoteString ? "null" : "" ); break;
-		case JSON_EOF:
-			break;
+		case JSON_EOF:		break;
+		case JSON_TOTAL:	break;
 	}
 
 	return p;

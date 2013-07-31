@@ -1096,7 +1096,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 			bGotAttrs = true;
 
 		// strip_html, index_html_attrs
-		CSphString sError;
 		if ( bStripOverride )
 		{
 			// apply per-index overrides
@@ -1159,7 +1158,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		CSphStopwordBuilderDict tDict;
 		ARRAY_FOREACH ( i, dSources )
 		{
-			CSphString sError;
 			dSources[i]->SetDict ( &tDict );
 			if ( !dSources[i]->Connect ( sError ) || !dSources[i]->IterateStart ( sError ) )
 			{
@@ -1879,9 +1877,9 @@ int main ( int argc, char ** argv )
 	hConf["index"].IterateStart();
 	while ( hConf["index"].IterateNext() )
 	{
-		ARRAY_FOREACH ( i, dWildIndexes )
+		ARRAY_FOREACH ( j, dWildIndexes )
 		{
-			if ( sphWildcardMatch ( hConf["index"].IterateGetKey().cstr(), dWildIndexes[i] ) )
+			if ( sphWildcardMatch ( hConf["index"].IterateGetKey().cstr(), dWildIndexes[j] ) )
 			{
 				dIndexes.Add ( hConf["index"].IterateGetKey().cstr() );
 				// do not add index twice
@@ -1923,13 +1921,13 @@ int main ( int argc, char ** argv )
 	} else
 	{
 		uint64_t tmRotated = sphMicroTimer();
-		ARRAY_FOREACH ( i, dIndexes )
+		ARRAY_FOREACH ( j, dIndexes )
 		{
-			if ( !hConf["index"](dIndexes[i]) )
-				fprintf ( stdout, "WARNING: no such index '%s', skipping.\n", dIndexes[i] );
+			if ( !hConf["index"](dIndexes[j]) )
+				fprintf ( stdout, "WARNING: no such index '%s', skipping.\n", dIndexes[j] );
 			else
 			{
-				bool bLastOk = DoIndex ( hConf["index"][dIndexes[i]], dIndexes[i], hConf["source"], bVerbose, fpDumpRows );
+				bool bLastOk = DoIndex ( hConf["index"][dIndexes[j]], dIndexes[j], hConf["source"], bVerbose, fpDumpRows );
 				bIndexedOk |= bLastOk;
 				if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && SendRotate ( hConf, false ) )
 					tmRotated = sphMicroTimer();

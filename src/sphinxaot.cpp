@@ -500,8 +500,8 @@ bool CLemmatizer::LemmatizeWord ( BYTE * pWord, DWORD * results ) const
 	}
 
 	// cancel predictions by pronouns, eg [Sem'ykin'ym]
-	for ( DWORD * p=results; *p!=AOT_NOFORM; p++ )
-		if ( m_NPSs[ AOT_MODEL_NO(*p) ]==AOT_POS_UNKNOWN )
+	for ( DWORD * pRes=results; *pRes!=AOT_NOFORM; pRes++ )
+		if ( m_NPSs[ AOT_MODEL_NO ( *pRes ) ]==AOT_POS_UNKNOWN )
 	{
 		*results = AOT_NOFORM;
 		break;

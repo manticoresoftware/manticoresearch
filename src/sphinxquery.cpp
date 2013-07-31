@@ -2343,14 +2343,14 @@ void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t 
 	// propagate cost bottom-up (from children to parents)
 	for ( int i=dChildren.GetLength()-1; i>=0; i-- )
 	{
-		XQNode_t * pNode = dChildren[i];
+		XQNode_t * pChild = dChildren[i];
 		int iCost = 0;
-		ARRAY_FOREACH ( j, pNode->m_dWords )
-			iCost += hCosts [ pNode->m_dWords[j].m_sWord ];
+		ARRAY_FOREACH ( j, pChild->m_dWords )
+			iCost += hCosts [ pChild->m_dWords[j].m_sWord ];
 
-		pNode->m_iUser += iCost;
-		if ( pNode->m_pParent )
-			pNode->m_pParent->m_iUser += pNode->m_iUser;
+		pChild->m_iUser += iCost;
+		if ( pChild->m_pParent )
+			pChild->m_pParent->m_iUser += pChild->m_iUser;
 	}
 }
 
@@ -2809,9 +2809,8 @@ void CSphTransformation::MakeTransformCommonSubTerm ( CSphVector<XQNode_t *> & d
 	// Factor out and delete/unlink similar nodes ( except weakest )
 	ARRAY_FOREACH ( i, dX )
 	{
-		XQNode_t * pX = dX[i];
-		XQNode_t * pParent = pX->m_pParent;
-		Verify ( pParent->m_dChildren.RemoveValue ( pX ) );
+		XQNode_t * pParent = dX[i]->m_pParent;
+		Verify ( pParent->m_dChildren.RemoveValue ( dX[i] ) );
 		if ( i!=iWeakestIndex )
 			SafeDelete ( dX[i] );
 
@@ -3318,10 +3317,10 @@ void CSphTransformation::MakeTransformCommonPhrase ( CSphVector<XQNode_t *> & dC
 		if ( bHeadIsCommon )
 		{
 			int iEndCommonAtom = pCommonPhrase->m_dWords.Last().m_iAtomPos+1;
-			for ( int i=iCommonLen; i<pPhrase->m_dWords.GetLength(); i++ )
+			for ( int j=iCommonLen; j<pPhrase->m_dWords.GetLength(); j++ )
 			{
-				int iTo = i-iCommonLen;
-				pPhrase->m_dWords[iTo] = pPhrase->m_dWords[i];
+				int iTo = j-iCommonLen;
+				pPhrase->m_dWords[iTo] = pPhrase->m_dWords[j];
 				pPhrase->m_dWords[iTo].m_iAtomPos = iEndCommonAtom + iTo;
 			}
 		}
@@ -3329,8 +3328,8 @@ void CSphTransformation::MakeTransformCommonPhrase ( CSphVector<XQNode_t *> & dC
 		if ( !bHeadIsCommon )
 		{
 			int iStartAtom = pCommonPhrase->m_dWords[0].m_iAtomPos - pPhrase->m_dWords.GetLength();
-			ARRAY_FOREACH ( i, pPhrase->m_dWords )
-				pPhrase->m_dWords[i].m_iAtomPos = iStartAtom + i;
+			ARRAY_FOREACH ( j, pPhrase->m_dWords )
+				pPhrase->m_dWords[j].m_iAtomPos = iStartAtom + j;
 		}
 
 		if ( pPhrase->m_dWords.GetLength()==1 )
@@ -3592,12 +3591,12 @@ bool CSphTransformation::TransformHungOperand ()
 		} else
 		{
 			assert ( pGrand->m_dChildren.Contains ( pParent ) );
-			ARRAY_FOREACH ( i, pGrand->m_dChildren )
+			ARRAY_FOREACH ( j, pGrand->m_dChildren )
 			{
-				if ( pGrand->m_dChildren[i]!=pParent )
+				if ( pGrand->m_dChildren[j]!=pParent )
 					continue;
 
-				pGrand->m_dChildren[i] = pHungNode;
+				pGrand->m_dChildren[j] = pHungNode;
 				pHungNode->m_pParent = pGrand;
 				break;
 			}

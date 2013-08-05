@@ -3947,10 +3947,6 @@ bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 		if ( !m_pTokenizer )
 			return false;
 
-		// !COMMIT implement support for multiforms, eh?
-		// ISphTokenizer * pTokenFilter = ISphTokenizer::CreateTokenFilter ( pTokenizer, pDict->GetMultiWordforms () );
-		// SetTokenizer ( pTokenFilter ? pTokenFilter : pTokenizer );
-
 		// recreate dictionary
 		SafeDelete ( m_pDict );
 		m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), m_sLastError );
@@ -3959,6 +3955,8 @@ bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 			m_sLastError.SetSprintf ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
 			return false;
 		}
+
+		m_pTokenizer = ISphTokenizer::CreateMultiformFilter ( m_pTokenizer, m_pDict->GetMultiWordforms () );
 
 		// update schema
 		m_iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();

@@ -8991,11 +8991,13 @@ ExtNode_i * NodeCacheContainer_t::CreateCachedWrapper ( ExtNode_i * pChild, cons
 
 bool NodeCacheContainer_t::WarmupCache ( ExtNode_i * pChild, int iQwords )
 {
+	assert ( pChild );
+	assert ( m_pSetup );
+
 	SphDocID_t pMaxID = 0;
 	m_iAtomPos = pChild->m_iAtomPos;
 	const ExtDoc_t * pChunk = pChild->GetDocsChunk ( &pMaxID );
 	int iStride = 0;
-	assert ( m_pSetup );
 
 	if ( pChunk && pChunk->m_pDocinfo )
 		iStride = pChild->m_iStride;

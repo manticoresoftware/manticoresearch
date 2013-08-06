@@ -6287,6 +6287,8 @@ void CheckQuery ( const CSphQuery & tQuery, CSphString & sError )
 
 void PrepareQueryEmulation ( CSphQuery * pQuery )
 {
+	assert ( pQuery && pQuery->m_sRawQuery.cstr() );
+
 	// sort filters
 	ARRAY_FOREACH ( i, pQuery->m_dFilters )
 		pQuery->m_dFilters[i].m_dValues.Sort();
@@ -6308,7 +6310,7 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 		return;
 
 	const char * szQuery = pQuery->m_sRawQuery.cstr ();
-	int iQueryLen = szQuery ? strlen(szQuery) : 0;
+	int iQueryLen = strlen(szQuery);
 
 	pQuery->m_sQuery.Reserve ( iQueryLen*2+8 );
 	char * szRes = (char*) pQuery->m_sQuery.cstr ();
@@ -8271,7 +8273,6 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	bool bAgent = tQuery.m_bAgent;
 	bool bUsualApi = !bAgent && !bFromSphinxql;
 	bool bAllEqual = true;
-	bool bRemapped = false;
 
 	// FIXME? add assert ( tRes.m_tSchema==tRes.m_dSchemas[0] );
 	for ( int i=1; i<tRes.m_dSchemas.GetLength(); i++ )
@@ -8523,7 +8524,6 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		if ( !bAllEqual )
 			RemapResult ( &tRes.m_tSchema, &tRes );
 		RemapStrings ( pSorter, tRes );
-		bRemapped = true;
 
 		// do the sort work!
 		tRes.m_iTotalMatches -= KillAllDupes ( pSorter, tRes );
@@ -11898,6 +11898,8 @@ void SqlParser_c::FreeNamedVec ( int )
 
 bool ParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation )
 {
+	assert ( sQuery );
+
 	SqlParser_c tParser ( dStmt, eCollation );
 	tParser.m_pBuf = sQuery;
 	tParser.m_pLastTokenStart = NULL;
@@ -14154,6 +14156,8 @@ public:
 
 	void PutString ( const char * sMsg )
 	{
+		assert ( sMsg );
+
 		int iLen = sMsg ? strlen ( sMsg ) : 0;
 		Reserve ( 1+iLen );
 		char * pBegin = Get();
@@ -15134,34 +15138,29 @@ struct SphinxqlReplyParser_t : public IReplyParser_t
 
 	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
 	{
-		DWORD uSize = ( tReq.GetLSBDword() & 0x00FFFFFF ) - 1;
+		DWORD uSize = ( tReq.GetLSBDword() & 0x00ffffff ) - 1;
 		BYTE uCommand = tReq.GetByte();
-		int iAffected = 0;
-		CSphString sMessage;
-		switch ( uCommand )
+
+		if ( uCommand==0 ) // ok packet
 		{
-		case 0: // ok packet
-			iAffected = MysqlUnpack ( tReq, &uSize );
+			*m_pUpdated += MysqlUnpack ( tReq, &uSize );
 			MysqlUnpack ( tReq, &uSize ); ///< int Insert_id (don't used).
-			tReq.GetLSBDword(); ///< num of warnings, but we don't use it for now.
+			*m_pWarns += tReq.GetLSBDword(); ///< num of warnings
 			uSize -= 4;
 			if ( uSize )
-				sMessage = tReq.GetRawString ( uSize );
-			break;
-
-		case 0xff: // error packet
+				tReq.GetRawString ( uSize );
+			return true;
+		}
+		if ( uCommand==0xff ) // error packet
+		{
 			tReq.GetByte();
 			tReq.GetByte(); ///< num of errors (2 bytes), we don't use it for now.
 			uSize -= 2;
 			if ( uSize )
-				sMessage = tReq.GetRawString ( uSize );
-			break;
-		default:
-			break;
+				tReq.GetRawString ( uSize );
 		}
 
-		*m_pUpdated += iAffected;
-		return true;
+		return false;
 	}
 
 protected:

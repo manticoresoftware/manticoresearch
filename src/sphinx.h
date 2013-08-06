@@ -1316,10 +1316,7 @@ public:
 	void SetAttr ( const CSphAttrLocator & tLoc, SphAttr_t uValue )
 	{
 		if ( tLoc.IsID() )
-		{
-			// m_iDocID = uValue;
 			return;
-		}
 		assert ( tLoc.m_bDynamic );
 		assert ( tLoc.GetMaxRowitem() < (int)m_pDynamic[-1] );
 		sphSetRowAttr ( m_pDynamic, tLoc, uValue );

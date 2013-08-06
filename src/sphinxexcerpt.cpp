@@ -3496,7 +3496,6 @@ void sphBuildExcerpt ( ExcerptQuery_t & tOptions, const CSphIndex * pIndex, cons
 
 	char * pData = const_cast<char*> ( tOptions.m_sSource.cstr() );
 	CSphFixedVector<char> pBuffer ( 0 );
-	int iDataLen = 0;
 
 	if ( tOptions.m_iLoadFiles )
 	{
@@ -3525,8 +3524,7 @@ void sphBuildExcerpt ( ExcerptQuery_t & tOptions, const CSphIndex * pIndex, cons
 		if ( iFileSize<0 )
 			return;
 
-		iDataLen = iFileSize+1;
-		pBuffer.Reset ( iDataLen );
+		pBuffer.Reset ( iFileSize+1 );
 		if ( !tFile.Read ( pBuffer.Begin(), iFileSize, sError ) )
 			return;
 
@@ -3542,7 +3540,7 @@ void sphBuildExcerpt ( ExcerptQuery_t & tOptions, const CSphIndex * pIndex, cons
 		pStripper = NULL;
 
 	// FIXME!!! check on real data (~100 Mb) as stripper changes len
-	iDataLen = strlen ( pData );
+	int iDataLen = strlen ( pData );
 
 	DoHighlighting ( tOptions, pIndex->GetSettings(), tExtQuery, eExtQuerySPZ, pData, iDataLen, pDict, pDocTokenizer, pStripper,
 		sWarning, sError, pQueryTokenizer, tOptions.m_dRes );

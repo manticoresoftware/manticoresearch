@@ -541,7 +541,7 @@ class TokenFunctorTraits_c : public ISphNoncopyable, public ExcerptQuery_t
 public:
 	FunctorZoneInfo_t			m_tZoneInfo;
 	CSphVector<ZonePacked_t>	m_dZones;
-	CSphVector<BYTE>			m_dResult;
+	mutable CSphVector<BYTE>	m_dResult;
 
 	SnippetsDocIndex_c &	m_tContainer;
 	ISphTokenizer *			m_pTokenizer;
@@ -583,13 +583,13 @@ public:
 	}
 
 	void ResultEmit ( const char * pSrc, int iLen, bool bHasPassageMacro=false, int iPassageId=0,
-		const char * pPost=NULL, int iPostLen=0 )
+		const char * pPost=NULL, int iPostLen=0 ) const
 	{
 		ResultEmit ( m_dResult, pSrc, iLen, bHasPassageMacro, iPassageId, pPost, iPostLen );
 	}
 
 	void ResultEmit ( CSphVector<BYTE> & dResult, const char * pSrc, int iLen, bool bHasPassageMacro=false, int iPassageId=0,
-		const char * pPost=NULL, int iPostLen=0 )
+		const char * pPost=NULL, int iPostLen=0 ) const
 	{
 		if ( iLen>0 )
 		{
@@ -2360,8 +2360,11 @@ private:
 			int iLastPost = tLast.m_iStart + tLast.m_iTokens - tLast.m_iEndLimit + 1;
 			float fLastGap = (float)Max ( iLastPre, iLastPost ) / (float)Min ( iLastPre, iLastPost );
 
+			int iWeightLast = tLast.GetWeight();
+			int iWeightPass = m_tPass.GetWeight();
 			// centered snippet wins last passage
-			if ( tLast.GetWeight()<m_tPass.GetWeight() || ( tLast.GetWeight()==m_tPass.GetWeight() && fPassGap<fLastGap ) )
+			if ( tLast.m_iUniqQwords<=m_tPass.m_iUniqQwords &&
+				( iWeightLast<iWeightPass || ( iWeightLast==iWeightPass && fPassGap<fLastGap ) ) )
 			{
 				tLast.CopyData ( m_tPass );
 				AppendBeforeAfterTokens ( tLast, m_tSpan );
@@ -2462,7 +2465,6 @@ public:
 		, m_iCurPassage	( -1 )
 		, m_iSeparatorLen ( m_sChunkSeparator.Length() )
 		, m_bLastWasSeparator ( false )
-		, m_iNextPassage ( 0 )
 		, m_pZoneInfo ( pZoneInfo )
 	{
 		if ( m_bWeightOrder )
@@ -2532,13 +2534,12 @@ private:
 	int								m_iCurPassage;
 	int								m_iSeparatorLen;
 	bool							m_bLastWasSeparator;
-	int								m_iNextPassage;
 	TokenSpan_t						m_tTmpSpan;
 	CSphVector<Space_t>				m_dSpaces;
 	const FunctorZoneInfo_t *		m_pZoneInfo;
 
 
-	void EmitZoneName ( int iStart )
+	void EmitZoneName ( int iStart ) const
 	{
 		if ( !m_bEmitZones || !m_pZoneInfo || !m_pZoneInfo->m_dZonePos.GetLength() )
 			return;
@@ -2581,24 +2582,30 @@ private:
 
 	void UpdatePassage ( int iStart )
 	{
+		const Passage_t * pPassage = m_dPassages.Begin() + m_iCurPassage;
+		const Passage_t * pNext = m_dPassages.Begin() + m_iCurPassage + 1;
 		if ( !m_bLastWasSeparator && m_iCurPassage!=-1 && !m_bWeightOrder
-			&& m_iCurToken==m_dPassages[m_iCurPassage].m_iStart+m_dPassages[m_iCurPassage].m_iTokens
-			&& !(m_iCurPassage+1 < m_dPassages.GetLength() && m_iCurToken>=m_dPassages[m_iCurPassage+1].m_iStart
-				&& m_iCurToken < m_dPassages[m_iCurPassage+1].m_iStart+m_dPassages[m_iCurPassage+1].m_iTokens ) )
+			&& m_iCurToken==( pPassage->m_iStart + pPassage->m_iTokens )
+			&& !( ( m_iCurPassage+1 )<m_dPassages.GetLength() && m_iCurToken>=pNext->m_iStart
+				&& m_iCurToken<( pNext->m_iStart + pNext->m_iTokens ) ) )
 		{
 			ResultEmit ( m_sChunkSeparator.cstr(), m_iSeparatorLen );
 			m_bLastWasSeparator = true;
 		}
 
-		if ( m_iCurPassage!=-1 && m_iCurToken>m_dPassages[m_iCurPassage].m_iStart+m_dPassages[m_iCurPassage].m_iTokens-1 )
-			m_iNextPassage = m_iCurPassage+1;
-
-		if ( m_iCurPassage==-1 || m_iCurToken<m_dPassages[m_iCurPassage].m_iStart || m_iCurToken>m_dPassages[m_iCurPassage].m_iStart+m_dPassages[m_iCurPassage].m_iTokens-1 )
+		if ( m_iCurPassage==-1 || m_iCurToken<pPassage->m_iStart || m_iCurToken>( pPassage->m_iStart + pPassage->m_iTokens - 1 ) )
 		{
+			int iNextPassage = 0;
+			if ( m_iCurPassage!=-1 && m_iCurToken>( pPassage->m_iStart + pPassage->m_iTokens - 1 ) )
+				iNextPassage = m_iCurPassage+1;
+
 			m_iCurPassage = -1;
-			for ( int i = m_iNextPassage; i<m_dPassages.GetLength() && m_iCurPassage==-1; i++ )
-				if ( m_iCurToken>=m_dPassages[i].m_iStart && m_iCurToken<=m_dPassages[i].m_iStart+m_dPassages[i].m_iTokens-1 )
+			for ( int i=iNextPassage; i<m_dPassages.GetLength(); i++ )
+				if ( m_iCurToken>=m_dPassages[i].m_iStart && m_iCurToken<=( m_dPassages[i].m_iStart + m_dPassages[i].m_iTokens - 1 ) )
+				{
 					m_iCurPassage = i;
+					break;
+				}
 		}
 
 		if ( m_iCurPassage!=-1 && m_iCurToken==m_dPassages[m_iCurPassage].m_iStart )

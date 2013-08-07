@@ -35,6 +35,16 @@ index test
 	min_infix_len = 1
 	enable_star = 1
 }
+
+index hi1
+{
+	source = test
+	path = <data_path/>/hi1
+	docinfo			= extern
+	charset_type	= utf-8
+	dict = keywords
+}
+
 </config>
 
 <db_insert>select 1;</db_insert>
@@ -146,6 +156,27 @@ $results[] = $client->BuildExcerpts ( array ( $doc ), 'test', $query, array('lim
 $doc = 'begin the text right mid mid mid the right text end';
 $query = 'the the right right text text';
 $results[] = $client->BuildExcerpts ( array ( $doc ), 'test', $query, array('limit' => 30) );
+
+// regression passage generation vs new path of snippet generation
+
+$doc = "Our company's core technology platform is based on Microsoft applications, including the Windows NT operating system and a SQL server relational database, all residing on scaleable hardware. The software is constructed using an advanced proprietary XML framework and resides on an N-tier architecture. The support of open systems allows integration with a large variety of existing commercial, proprietary and legacy applications.&#160;&#160;Other applications, which are also operational in a Microsoft NT environment, have been developed using Power Builder and are dependent on an Oracle relational database.";
+$query = 'the the right right text text';
+$results[] = $client->BuildExcerpts(
+    array($doc),
+    'hi1','microsoft & xml',
+    array('query_mode'=>true,
+        'allow_empty' => true,
+        'before_match' => '<b>',
+        'after_match' => '</b>',
+        'chunk_separator' => '...',
+        'limit' => 5000,
+		'limit_words' => 50,
+        'limit_passages' =>5,
+        'around' => 25,
+        'exact_phrase' => false,
+        'force_all_words' => false,
+    )
+);
 
 ]]></custom_test>
 

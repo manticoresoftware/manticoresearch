@@ -152,7 +152,7 @@ INSERT INTO `test_table` VALUES
 CREATE TABLE `test_ru`
 (
 	`document_id` int(11) NOT NULL default '0',
-	`body` varchar(255) NOT NULL default ''
+	`body` varchar(255) CHARACTER SET UTF8 NOT NULL default ''
 )
 </db_create>
 

@@ -12371,6 +12371,10 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	CSphVector<int> dStringAttrs;
 	CSphVector<int> dWordcountAttrs;
 
+	// chunks to partically sort string attributes
+	CSphVector<SphOffset_t> dStringChunks;
+	SphOffset_t uStringChunk = 0;
+
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tCol = m_tSchema.GetAttr(i);
@@ -12490,6 +12494,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	CSphWordHit * pHits = dHits.Begin();
 	CSphWordHit * pHitsMax = dHits.Begin() + iHitsMax;
 
+	// after finishing with hits this pool will be used to sort strings
+	int iPoolSize = dHits.GetSizeBytes();
+
 	// allocate docinfos buffer
 	CSphFixedVector<DWORD> dDocinfos ( iDocinfoMax*iDocinfoStride );
 	DWORD * pDocinfo = dDocinfos.Begin();
@@ -12557,14 +12564,19 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	CSphAutofile fdTmpFieldMVAs ( GetIndexFileName("tmp7"), SPH_O_NEW, m_sLastError, true );
 	CSphWriter tOrdWriter;
 	CSphWriter tStrWriter;
+	CSphWriter tStrFinalWriter;
 
 	CSphString sRawOrdinalsFile = GetIndexFileName("tmp4");
 	if ( bHaveOrdinals && !tOrdWriter.OpenFile ( sRawOrdinalsFile.cstr (), m_sLastError ) )
 		return 0;
 
-	if ( !tStrWriter.OpenFile ( GetIndexFileName("sps"), m_sLastError ) )
+	if ( !tStrWriter.OpenFile ( GetIndexFileName("tmps"), m_sLastError ) )
 		return 0;
 	tStrWriter.PutByte ( 0 ); // dummy byte, to reserve magic zero offset
+
+	if ( !tStrFinalWriter.OpenFile ( GetIndexFileName("sps"), m_sLastError ) )
+		return 0;
+	tStrFinalWriter.PutByte ( 0 ); // dummy byte, to reserve magic zero offset
 
 	DeleteOnFail dFileWatchdog;
 
@@ -12575,6 +12587,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	}
 
 	dFileWatchdog.AddWriter ( &tStrWriter );
+	dFileWatchdog.AddWriter ( &tStrFinalWriter );
 
 	if ( fdLock.GetFD()<0 || fdHits.GetFD()<0 || fdDocinfos.GetFD()<0 || fdTmpFieldMVAs.GetFD ()<0 )
 		return 0;
@@ -12950,6 +12963,13 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					int iLenLen = sphPackStrlen ( dPackedLen, iLen );
 					tStrWriter.PutBytes ( &dPackedLen, iLenLen );
 					tStrWriter.PutBytes ( sData, iLen );
+
+					// check if current pos is the good one for sorting
+					if ( uOff+iLenLen+iLen-uStringChunk > iPoolSize )
+					{
+						dStringChunks.Add (uOff-uStringChunk);
+						uStringChunk=uOff;
+					}
 				}
 			}
 
@@ -13298,7 +13318,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	///////////////////////////////////////
 	// collect and sort multi-valued attrs
 	///////////////////////////////////////
-
 	if ( !BuildMVA ( dSources, dHits, iHitsMax*sizeof(CSphWordHit), fdTmpFieldMVAs.GetFD (), nFieldMVAs, iMaxPoolFieldMVAs, pPrevIndex.Ptr() ) )
 		return 0;
 
@@ -13482,9 +13501,16 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		CSphFixedVector<DWORD> dMinMaxBuffer ( (int)iMinMaxSize );
 		memset ( dMinMaxBuffer.Begin(), 0, (int)iMinMaxSize*sizeof(DWORD) );
 
-		// { fixed row + dummy value ( zero offset elemination ) + mva data for that row } fixed row - for MinMaxBuilder
+		// { fixed row + dummy value ( zero offset elimination ) + mva data for that row } fixed row - for MinMaxBuilder
 		CSphVector < DWORD > dMvaPool;
 		tMinMax.Prepare ( dMinMaxBuffer.Begin(), dMinMaxBuffer.Begin() + dMinMaxBuffer.GetLength() ); // FIXME!!! for over INT_MAX blocks
+
+		// the last (or, lucky, the only, string chunk)
+		dStringChunks.Add(tStrWriter.GetPos()-uStringChunk);
+
+		tStrWriter.CloseFile();
+		if ( !dStringAttrs.GetLength() )
+			::unlink ( GetIndexFileName("tmps").cstr() );
 
 		SphDocID_t uLastDupe = 0;
 		while ( qDocinfo.GetLength() )
@@ -13584,7 +13610,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				// emit it
 				memcpy ( pDocinfo, pEntry, iDocinfoStride*sizeof(DWORD) );
 				pDocinfo += iDocinfoStride;
-
 				uLastId = DOCINFO2ID(pEntry);
 
 				if ( pDocinfo>=pDocinfoMax )
@@ -13647,6 +13672,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			if ( m_bInplaceSettings )
 				if ( !sphTruncate ( iDocinfoFD ) )
 					sphWarn ( "failed to truncate %s", fdDocinfos.GetFilename() );
+
+			iDocinfoWritePos += iLen;
 		}
 		tMinMax.FinishCollect();
 		int64_t iMinMaxRealSize = tMinMax.GetActualSize() * sizeof(DWORD);
@@ -13660,8 +13687,156 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		dBins.Reset ();
 	}
 
-	dDocinfos.Reset ( 0 );
 	pDocinfo = NULL;
+
+	// iDocinfoWritePos now contains the true size of pure attributes (without block indexes) in bytes
+	int iStringStride = dStringAttrs.GetLength();
+	SphOffset_t iNumDocs = iDocinfoWritePos/sizeof(DWORD)/iDocinfoStride;
+	SphOffset_t iNumStrings = iNumDocs*iStringStride;
+	DWORD* pDocinfoBitmap = NULL;
+	
+	// if we have more than 1 string chunks, we need several passes and bitmask to distinquish them
+	bool bUseBitmask = dStringChunks.GetLength()>1;
+	if ( bUseBitmask )
+	{
+		// FIXME! Violate memlimit!
+		dDocinfos.Reset(iNumStrings+(iNumStrings>>5)+1); // FIXME! does iNumDocs fit into int to be used in Reset?
+		// use upper part for bitmask
+		pDocinfoBitmap = &dDocinfos[iNumStrings];
+		for (int i=0; i<1+(iNumStrings>>5); ++i )
+			pDocinfoBitmap[i]=0;
+	} else
+		// FIXME! Violate memlimit!
+		dDocinfos.Reset ( iNumStrings );
+	
+	if ( iStringStride )
+	{
+		// read only string locators
+		{
+			CSphReader tAttrReader;
+			tAttrReader.SetFile ( iDocinfoFD, GetIndexFileName ( "spa" ).cstr() );
+			SphOffset_t iTo = 0;
+			CSphFixedVector<DWORD> dDocinfo ( iDocinfoStride );
+			pDocinfo = dDocinfo.Begin();
+			for ( SphOffset_t i=0; i<iNumDocs; ++i )
+			{
+				tAttrReader.GetBytes( pDocinfo, iDocinfoStride*sizeof(DWORD) );
+				CSphRowitem * pAttrs = DOCINFO2ATTRS ( pDocinfo );
+				ARRAY_FOREACH ( j, dStringAttrs )
+				{
+					const CSphAttrLocator & tLoc = m_tSchema.GetAttr ( dStringAttrs[j] ).m_tLocator;
+					dDocinfos[iTo++] = sphGetRowAttr ( pAttrs, tLoc );
+				}
+			}
+		} // the spa reader eliminates out of this scope
+
+		// now just load string chunks and resort them...
+		CSphFixedVector<BYTE> dStringPool(iPoolSize);
+		BYTE* pStringsBegin = dStringPool.Begin();
+		
+		// reopen strings for reading
+		CSphAutofile tRawStringsFile;
+		CSphReader tStrReader;
+		if ( tRawStringsFile.Open ( GetIndexFileName("tmps"), SPH_O_READ, m_sLastError, true )<0 )
+			return 0;
+		tStrReader.SetFile ( tRawStringsFile );
+
+		SphOffset_t iMinStrings = 0;
+		if ( bUseBitmask )
+		{
+			ARRAY_FOREACH ( i, dStringChunks )
+			{
+				// read the current chunk
+				SphOffset_t iMaxStrings = iMinStrings + dStringChunks[i];
+				tStrReader.GetBytes ( pStringsBegin, dStringChunks[i] );
+
+				// walk throw the attributes and put the strings in the new order
+				DWORD uMaskOff=0;
+				DWORD uMask=1;
+				for ( int k=0; k<iNumStrings; ++k )
+				{
+					if (uMask==0x80000000)
+					{
+						uMask = 1;
+						++uMaskOff;
+					} else
+						uMask<<=1;
+					DWORD& uOffset = dDocinfos[k];
+					// already processed, or hit out of the the current chunk?
+					if ( pDocinfoBitmap[uMaskOff]&uMask || !uOffset || uOffset<iMinStrings || uOffset>=iMaxStrings )
+						continue;
+
+					const BYTE * pStr = NULL;
+					int iLen = sphUnpackStr ( pStringsBegin + uOffset - iMinStrings, &pStr );
+					if ( !iLen )
+						uOffset=0;
+					else
+					{
+						uOffset = tStrFinalWriter.GetPos();
+						BYTE dPackedLen[4];
+						int iLenLen = sphPackStrlen ( dPackedLen, iLen );
+						tStrFinalWriter.PutBytes ( &dPackedLen, iLenLen );
+						tStrFinalWriter.PutBytes ( pStr, iLen );
+					}
+					pDocinfoBitmap[uMaskOff]|=uMask;
+				}
+				iMinStrings=iMaxStrings;
+			}
+		} else // only one chunk. Plain and simple!
+		{
+			SphOffset_t iStringChunk = dStringChunks[0];
+			tStrReader.GetBytes ( pStringsBegin, iStringChunk );
+
+			// walk throw the attributes and put the strings in the new order
+			for ( int k=0; k<iNumStrings; ++k )
+			{
+				DWORD& uOffset = dDocinfos[k];
+				// already processed, or hit out of the the current chunk?
+				if ( uOffset<1 || uOffset>=iStringChunk )
+					continue;
+
+				const BYTE * pStr = NULL;
+				int iLen = sphUnpackStr ( pStringsBegin + uOffset, &pStr );
+				if ( !iLen )
+					uOffset=0;
+				else
+				{
+					uOffset = tStrFinalWriter.GetPos();
+					BYTE dPackedLen[4];
+					int iLenLen = sphPackStrlen ( dPackedLen, iLen );
+					tStrFinalWriter.PutBytes ( &dPackedLen, iLenLen );
+					tStrFinalWriter.PutBytes ( pStr, iLen );
+				}
+			}
+		}
+		dStringPool.Reset(0);
+		// now save back patched string locators
+		{
+			int iDocPoolSize = iPoolSize/iDocinfoStride/sizeof(DWORD);
+			CSphFixedVector<DWORD> dDocinfoPool ( iDocPoolSize*iDocinfoStride );
+			pDocinfo = dDocinfoPool.Begin();
+			int iToRead = Min ( iDocPoolSize, iNumDocs );
+			SphOffset_t iPos = 0;
+			SphOffset_t iStr = 0;
+			while ( iToRead )
+			{
+				sphSeek ( iDocinfoFD, iPos, SEEK_SET );
+				sphRead ( iDocinfoFD, pDocinfo, iToRead*iDocinfoStride*sizeof(DWORD));
+				for ( int i=0; i<iToRead; ++i )
+				{
+					CSphRowitem * pAttrs = DOCINFO2ATTRS ( pDocinfo+i*iDocinfoStride );
+					ARRAY_FOREACH ( j, dStringAttrs )
+						sphSetRowAttr ( pAttrs,m_tSchema.GetAttr ( dStringAttrs[j] ).m_tLocator,dDocinfos[iStr++] );
+
+				}
+				sphSeek ( iDocinfoFD, iPos, SEEK_SET );
+				sphWrite ( iDocinfoFD, pDocinfo, iToRead*iDocinfoStride*sizeof(DWORD));
+				iPos+=iToRead*iDocinfoStride*sizeof(DWORD);
+				iNumDocs-=iToRead;
+				iToRead = Min ( iDocPoolSize, iNumDocs );
+			}
+		} // all temporary buffers eliminates out of this scope
+	}
 
 	// it might be zero-length, but it must exist
 	if ( m_bInplaceSettings )

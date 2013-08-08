@@ -44,6 +44,7 @@ static int				g_iTopStops		= 100;
 static bool			g_bRotate		= false;
 static bool			g_bRotateEach	= false;
 static bool			g_bBuildFreqs	= false;
+static bool			g_bSendHUP		= true;
 
 static int				g_iMemLimit				= 32*1024*1024;
 static int				g_iMaxXmlpipe2Field		= 0;
@@ -1521,7 +1522,7 @@ void SetSignalHandlers ()
 
 bool SendRotate ( const CSphConfig & hConf, bool bForce )
 {
-	if ( !( g_bRotate && ( g_bRotateEach || bForce ) ) )
+	if ( !( g_bRotate && ( g_bRotateEach || bForce ) ) || !g_bSendHUP )
 		return false;
 
 	int iPID = -1;
@@ -1668,6 +1669,9 @@ int main ( int argc, char ** argv )
 		} else if ( strcasecmp ( argv[i], "--sighup-each" )==0 )
 		{
 			g_bRotateEach = true;
+		} else if ( strcasecmp ( argv[i], "--nohup" )==0 )
+		{
+			g_bSendHUP = false;
 
 		} else if ( strcasecmp ( argv[i], "--buildfreqs" )==0 )
 		{

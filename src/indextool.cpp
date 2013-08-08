@@ -817,6 +817,7 @@ int main ( int argc, char ** argv )
 	bool bSkipUnique = false;
 	CSphString sDumpDict;
 	bool bQuiet = false;
+	bool bRotate = false;
 
 	enum
 	{
@@ -853,6 +854,7 @@ int main ( int argc, char ** argv )
 		OPT1 ( "--dumpconfig" )		{ eCommand = CMD_DUMPCONFIG; sDumpHeader = argv[++i]; }
 		OPT1 ( "--dumpdocids" )		{ eCommand = CMD_DUMPDOCIDS; sIndex = argv[++i]; }
 		OPT1 ( "--check" )			{ eCommand = CMD_CHECK; sIndex = argv[++i]; sphSetDebugCheck(); }
+		OPT1 ( "--rotate" )			{ bRotate = true; }
 		OPT1 ( "--htmlstrip" )		{ eCommand = CMD_STRIP; sIndex = argv[++i]; }
 		OPT1 ( "--build-infixes" )	{ eCommand = CMD_BUILDINFIXES; sIndex = argv[++i]; }
 		OPT1 ( "--build-skips" )	{ eCommand = CMD_BUILDSKIPS; sIndex = argv[++i]; }
@@ -1056,7 +1058,14 @@ int main ( int argc, char ** argv )
 				pIndex = sphCreateIndexRT ( tSchema, sIndex.cstr(), 32*1024*1024, hConf["index"][sIndex]["path"].cstr(), bDictKeywords );
 		} else
 		{
-			pIndex = sphCreateIndexPhrase ( sIndex.cstr(), hConf["index"][sIndex]["path"].cstr() );
+			const char * sPath = hConf["index"][sIndex]["path"].cstr();
+			CSphStringBuilder tPath;
+			if ( bRotate )
+			{
+				tPath.Appendf ( "%s.new", sPath );
+				sPath = tPath.cstr();
+			}
+			pIndex = sphCreateIndexPhrase ( sIndex.cstr(), sPath );
 		}
 
 		if ( !pIndex )

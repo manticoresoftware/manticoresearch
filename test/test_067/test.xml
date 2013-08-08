@@ -80,6 +80,48 @@ index dist3
 	local			= test
 	agent			= <agent_address/>:test2,test4
 }
+
+
+source src10
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT 1 id, 11 idd, 'ab cd'
+	sql_attr_uint	= idd
+}
+
+index i10
+{
+	source			= src10
+	path			= <data_path/>/i10
+	docinfo			= extern
+	charset_type 	= utf-8
+	dict = keywords
+	min_prefix_len = 1
+	enable_star = 1	
+}
+index i11
+{
+	source			= src10
+	path			= <data_path/>/i11
+	docinfo			= extern
+	charset_type	= utf-8
+	dict = keywords
+	min_prefix_len = 1
+	enable_star = 1
+}
+index i12
+{
+	source			= src10
+	path			= <data_path/>/i12
+	docinfo			= extern
+	charset_type	= utf-8
+	charset_table	= b..z
+	dict = keywords
+	min_prefix_len = 1
+	enable_star = 1
+}
+
 </agent0>
 <agent1>
 index test2
@@ -117,6 +159,19 @@ index testr
 <query index="test3" select="gid, sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
 <query index="test,test3" select="gid, sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
 </queries>
+
+<sphqueries>
+<sphinxql>select * from i10 where match('a* abc')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from i10, i11 where match('a* abc')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from i11, i10 where match('a* abc')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from i10, i12 where match('a* abc')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from i12, i10 where match('a* abc')</sphinxql>
+<sphinxql>show meta</sphinxql>
+</sphqueries>
 
 <db_create>
 CREATE TABLE test_table

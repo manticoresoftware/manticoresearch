@@ -1,4 +1,3 @@
-//
 // $Id$
 //
 
@@ -1486,7 +1485,6 @@ bool			sphIsSortStringInternal ( const char * sColumnName );
 /// make string lowercase but keep case of JSON.field
 void			sphColumnToLowercase ( char * sVal );
 
-void			sphCheckWordStats ( const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hDst, const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hSrc, const char * sIndex, CSphString & sWarning );
 bool			sphCheckQueryHeight ( const struct XQNode_t * pRoot, CSphString & sError );
 void			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, bool bHasBooleanOptimization, const ISphKeywordsStat * pKeywords );
 void			TransformAotFilter ( XQNode_t * pNode, bool bUtf8, const CSphWordforms * pWordforms, const CSphIndexSettings& tSettings );
@@ -1509,6 +1507,16 @@ void			SaveFieldFilterSettings ( CSphWriter & tWriter, ISphFieldFilter * pFieldF
 
 DWORD			ReadVersion ( const char * sPath, CSphString & sError );
 bool			AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError );
+
+// all indexes should produce same terms for same query
+struct SphWordStatChecker_t
+{
+	SphWordStatChecker_t () {}
+	void Set ( const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hStat );
+	void DumpDiffer ( const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hStat, const char * sIndex, CSphString & sWarning );
+
+	CSphVector<uint64_t> m_dSrcWords;
+};
 
 
 enum ESphExtType

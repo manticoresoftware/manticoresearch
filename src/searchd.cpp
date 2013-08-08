@@ -9383,6 +9383,7 @@ static void MergeWordStats ( CSphQueryResultMeta & tDstResult,
 	}
 
 	hSrc.IterateStart();
+	CSphStringBuilder tDifferWords;
 	while ( hSrc.IterateNext() )
 	{
 		const CSphQueryResultMeta::WordStat_t * pDstStat = tDstResult.m_hWordStats ( hSrc.IterateGetKey() );
@@ -9391,11 +9392,17 @@ static void MergeWordStats ( CSphQueryResultMeta & tDstResult,
 		// all indexes should produce same words from the query
 		if ( !pDstStat && !tSrcStat.m_bExpanded )
 		{
-			pLog->SubmitEx ( sIndex, "query words mismatch '%s'", hSrc.IterateGetKey().cstr() );
+			if ( !tDifferWords.Length() )
+				tDifferWords += hSrc.IterateGetKey().cstr();
+			else
+				tDifferWords.Appendf ( ", %s", hSrc.IterateGetKey().cstr() );
 		}
 
 		tDstResult.AddStat ( hSrc.IterateGetKey(), tSrcStat.m_iDocs, tSrcStat.m_iHits, tSrcStat.m_bExpanded );
 	}
+
+	if ( tDifferWords.Length() )
+		pLog->SubmitEx ( sIndex, "query word(s) mismatch: %s", tDifferWords.cstr() );
 }
 
 

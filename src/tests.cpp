@@ -536,7 +536,7 @@ void BenchTokenizer ( bool bUTF8 )
 	CSphString sError;
 	for ( int iRun=1; iRun<=2; iRun++ )
 	{
-		int iData;
+		int iData = 0;
 		char * sData = LoadFile ( "./configure", &iData, true );
 
 		ISphTokenizer * pTokenizer = bUTF8 ? sphCreateUTF8Tokenizer () : sphCreateSBCSTokenizer ();

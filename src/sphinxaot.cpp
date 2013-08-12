@@ -192,8 +192,8 @@ public:
 
 DWORD CABCEncoder::DecodeFromAlphabet ( const BYTE * sPath, int iPath ) const
 {
-	int c = 1;
-	int Result = 0;
+	DWORD c = 1;
+	DWORD Result = 0;
 	for ( const BYTE * sMax = sPath+iPath; sPath<sMax; sPath++ )
 	{
 		Result += m_Alphabet2CodeWithoutAnnotator[*sPath] * c;

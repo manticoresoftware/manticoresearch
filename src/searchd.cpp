@@ -11086,6 +11086,7 @@ struct SqlStmt_t
 		, m_bSetNull ( false )
 		, m_iListStart ( -1 )
 		, m_iListEnd ( -1 )
+		, m_eUdfType ( SPH_ATTR_NONE )
 	{
 		m_tQuery.m_eMode = SPH_MATCH_EXTENDED2; // only new and shiny matching and sorting
 		m_tQuery.m_eSort = SPH_SORT_EXTENDED;

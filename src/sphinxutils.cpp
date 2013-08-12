@@ -807,9 +807,9 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 	char * p = NULL;
 	char * pEnd = NULL;
 
-	char sBuf [ L_BUFFER ];
+	char sBuf [ L_BUFFER ] = { 0 };
 
-	char sToken [ L_TOKEN ];
+	char sToken [ L_TOKEN ] = { 0 };
 	int iToken = 0;
 	int iCh = -1;
 

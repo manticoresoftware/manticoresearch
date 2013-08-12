@@ -2351,11 +2351,15 @@ void ExprParser_t::Optimize ( int iNode )
 	}
 
 	// unary function from a constant
-	if ( pRoot->m_iToken==TOK_FUNC && g_dFuncs[pRoot->m_iFunc].m_iArgs==1 && IsConst(pLeft) )
+	if ( pRoot->m_iToken==TOK_FUNC && g_dFuncs[pRoot->m_iFunc].m_iArgs==1 )
 	{
-		float fArg = pLeft->m_iToken==TOK_CONST_FLOAT ? pLeft->m_fConst : float(pLeft->m_iConst);
-		switch ( g_dFuncs[pRoot->m_iFunc].m_eFunc )
+		assert ( pLeft );
+
+		if ( IsConst ( pLeft ) )
 		{
+			float fArg = pLeft->m_iToken==TOK_CONST_FLOAT ? pLeft->m_fConst : float(pLeft->m_iConst);
+			switch ( g_dFuncs[pRoot->m_iFunc].m_eFunc )
+			{
 			case FUNC_ABS:
 				pRoot->m_iToken = pLeft->m_iToken;
 				pRoot->m_iLeft = -1;
@@ -2374,8 +2378,9 @@ void ExprParser_t::Optimize ( int iNode )
 			case FUNC_EXP:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float(exp(fArg)); break;
 			case FUNC_SQRT:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float(sqrt(fArg)); break;
 			default:			break;
+			}
+			return;
 		}
-		return;
 	}
 
 	// constant function (such as NOW())
@@ -2387,12 +2392,16 @@ void ExprParser_t::Optimize ( int iNode )
 	}
 
 	// SINT(int-attr)
-	if ( pRoot->m_iToken==TOK_FUNC && pRoot->m_iFunc==FUNC_SINT
-		&& ( pLeft->m_iToken==TOK_ATTR_INT || pLeft->m_iToken==TOK_ATTR_BITS ) )
+	if ( pRoot->m_iToken==TOK_FUNC && pRoot->m_iFunc==FUNC_SINT )
 	{
-		pRoot->m_iToken = TOK_ATTR_SINT;
-		pRoot->m_tLocator = pLeft->m_tLocator;
-		pRoot->m_iLeft = -1;
+		assert ( pLeft );
+
+		if ( pLeft->m_iToken==TOK_ATTR_INT || pLeft->m_iToken==TOK_ATTR_BITS )
+		{
+			pRoot->m_iToken = TOK_ATTR_SINT;
+			pRoot->m_tLocator = pLeft->m_tLocator;
+			pRoot->m_iLeft = -1;
+		}
 	}
 
 	// NEG(const)

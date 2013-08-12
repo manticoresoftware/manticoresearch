@@ -900,7 +900,8 @@ public:
 	/// resize
 	void Resize ( int iNewLength )
 	{
-		if ( (unsigned int)iNewLength>=(unsigned int)m_iLength )
+		assert ( iNewLength>=0 );
+		if ( iNewLength>=m_iLength )
 			Reserve ( iNewLength );
 		m_iLength = iNewLength;
 	}
@@ -1056,18 +1057,16 @@ public:
 	/// insert into a middle
 	void Insert ( int iIndex, const T & tValue )
 	{
-		if ( iIndex==m_iLength )
-		{
-			Add ( tValue );
-			return;
-		}
+		assert ( iIndex>=0 && iIndex<=m_iLength );
 
 		if ( m_iLength>=m_iLimit )
 			Reserve ( m_iLength+1 );
 
-		memmove ( m_pData+iIndex+1, m_pData+iIndex, ( m_iLength++-iIndex ) * sizeof tValue );
-		memset ( m_pData+iIndex, 0, sizeof tValue );
+		// FIXME! this will not work for SwapVector
+		for ( int i=m_iLength-1; i>=iIndex; i-- )
+			m_pData [ i+1 ] = m_pData[i];
 		m_pData[iIndex] = tValue;
+		m_iLength++;
 	}
 
 protected:

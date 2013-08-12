@@ -5265,10 +5265,11 @@ bool sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema )
 {
 	ARRAY_FOREACH ( i, tQuery.m_dItems )
 	{
-		const CSphString & sExpr = tQuery.m_dItems[i].m_sExpr;
+		const CSphQueryItem & tItem = tQuery.m_dItems[i];
+		const CSphString & sExpr = tItem.m_sExpr;
 
 		if ( !( sExpr=="*"
-			|| ( tSchema.GetAttrIndex ( sExpr.cstr() )>=0 && tQuery.m_dItems[i].m_eAggrFunc==SPH_AGGR_NONE && tQuery.m_dItems[i].m_sAlias.IsEmpty() )
+			|| ( tSchema.GetAttrIndex ( sExpr.cstr() )>=0 && tItem.m_eAggrFunc==SPH_AGGR_NONE && ( tItem.m_sAlias.IsEmpty() || tItem.m_sAlias==sExpr ) )
 			|| IsGroupbyMagic(sExpr) ) )
 			return true;
 	}

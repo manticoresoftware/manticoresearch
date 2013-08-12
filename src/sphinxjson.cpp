@@ -35,6 +35,7 @@ struct JsonNode_t
 	int				m_iKeyEnd;		///< node name, end index (exclusive) into m_pBuf
 
 	JsonNode_t ()
+		: m_eType ( JSON_TOTAL )
 	{}
 };
 #define YYSTYPE JsonNode_t

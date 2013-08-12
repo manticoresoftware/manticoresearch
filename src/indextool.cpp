@@ -1062,7 +1062,7 @@ int main ( int argc, char ** argv )
 			CSphStringBuilder tPath;
 			if ( bRotate )
 			{
-				tPath.Appendf ( "%s.new", sPath );
+				tPath.Appendf ( "%s.tmp", sPath );
 				sPath = tPath.cstr();
 			}
 			pIndex = sphCreateIndexPhrase ( sIndex.cstr(), sPath );
@@ -1104,6 +1104,9 @@ int main ( int argc, char ** argv )
 
 		break;
 	}
+
+	int iCheckErrno = 0;
+	CSphString sNewIndex;
 
 	// do the dew
 	switch ( eCommand )
@@ -1174,7 +1177,16 @@ int main ( int argc, char ** argv )
 
 		case CMD_CHECK:
 			fprintf ( stdout, "checking index '%s'...\n", sIndex.cstr() );
-			return pIndex->DebugCheck ( stdout );
+			iCheckErrno = pIndex->DebugCheck ( stdout );
+			if ( iCheckErrno )
+				return iCheckErrno;
+			if ( bRotate )
+			{
+				sNewIndex.SetSprintf ( "%s.new", hConf["index"][sIndex]["path"].cstr() );
+				if ( !pIndex->Rename ( sNewIndex.cstr() ) )
+					sphDie ( "index '%s': rotate failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
+			}
+			return 0;
 
 		case CMD_STRIP:
 			{

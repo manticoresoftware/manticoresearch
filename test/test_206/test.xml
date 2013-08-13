@@ -608,6 +608,8 @@ Two'</sphinxql>
 <sphinxql>select * from json_inplace_rt</sphinxql>
 <sphinxql>update json_inplace_rt set j.a=15, j.c=15 where gid=3 option strict=1</sphinxql>
 <sphinxql>select * from json_inplace_rt</sphinxql>
+<!-- deadlock regression test -->
+<sphinxql>insert into json_inplace_rt (id, gid, title, j) values (666, 666, '', '{}')</sphinxql>
 </sphqueries>
 
 </test>

@@ -6939,6 +6939,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 
 						if ( !sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), m_pSegments[iSeg]->m_dStrings.Begin(), pRow, false ) )
 						{
+							m_tRwlock.Unlock();
 							sError.SetSprintf ( "attribute '%s' can not be updated (incompatible types)", tUpd.m_dAttrs[iCol] );
 							return -1;
 						}

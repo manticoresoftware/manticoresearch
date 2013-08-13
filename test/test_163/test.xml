@@ -373,6 +373,10 @@ INSERT INTO `test_table` VALUES
 
 <!--regression API count(*) vs compat -->
 <sphinxql>SELECT *, count(*) as cnt, 1 as gr FROM main GROUP BY gr</sphinxql>
+
+<!-- regression bigint function vs udf return type -->
+<sphinxql>select *, bigint(idd1) b, min( bigint(idd1)) c from main</sphinxql>
+<sphinxql>select *, bigint(idd1) b, min( bigint(idd1)) c, 1 as gr from main GROUP BY gr</sphinxql>
 </sphqueries>
 
 <queries>

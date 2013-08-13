@@ -1211,6 +1211,7 @@ create_function:
 
 udf_type:
 	TOK_INT			{ $$ = SPH_ATTR_INTEGER; }
+	| TOK_BIGINT	{ $$ = SPH_ATTR_BIGINT; }
 	| TOK_FLOAT		{ $$ = SPH_ATTR_FLOAT; }
 	| TOK_STRING	{ $$ = SPH_ATTR_STRINGPTR; }
 	;

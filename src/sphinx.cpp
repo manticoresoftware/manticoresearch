@@ -8065,7 +8065,7 @@ DWORD sphUnzipInt ( const BYTE * & pBuf )			{ SPH_VARINT_DECODE ( DWORD, *pBuf++
 SphOffset_t sphUnzipOffset ( const BYTE * & pBuf )	{ SPH_VARINT_DECODE ( SphOffset_t, *pBuf++ ); }
 
 DWORD CSphReader::UnzipInt ()			{ SPH_VARINT_DECODE ( DWORD, GetByte() ); }
-SphOffset_t CSphReader::UnzipOffset ()	{ SPH_VARINT_DECODE ( SphOffset_t, GetByte() ); }
+SphOffset_t CSphReader::UnzipOffset ()	{ SPH_VARINT_DECODE ( uint64_t, GetByte() ); }
 
 
 #if USE_64BIT

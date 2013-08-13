@@ -1257,7 +1257,11 @@ int sphFormatCurrentTime ( char * sTimeBuf, int iBufLen )
 
 /// physically emit log entry
 /// buffer must have 1 extra byte for linefeed
+#if USE_WINDOWS
 void sphLogEntry ( ESphLogLevel eLevel, char * sBuf, char * sTtyBuf )
+#else
+void sphLogEntry ( ESphLogLevel , char * sBuf, char * sTtyBuf )
+#endif
 {
 #if USE_WINDOWS
 	if ( g_bService && g_iLogFile==STDOUT_FILENO )
@@ -2135,19 +2139,22 @@ void sphFDSet ( int fd, fd_set * set )
 #endif // USE_WINDOWS
 
 
+#if USE_WINDOWS
 const char * sphSockError ( int iErr=0 )
 {
-	#if USE_WINDOWS
-		if ( iErr==0 )
-			iErr = WSAGetLastError ();
+	if ( iErr==0 )
+		iErr = WSAGetLastError ();
 
-		static char sBuf [ 256 ];
-		_snprintf ( sBuf, sizeof(sBuf), "WSA error %d", iErr );
-		return sBuf;
-	#else
-		return strerror ( errno );
-	#endif
+	static char sBuf [ 256 ];
+	_snprintf ( sBuf, sizeof(sBuf), "WSA error %d", iErr );
+	return sBuf;
 }
+#else
+const char * sphSockError ( int =0 )
+{
+	return strerror ( errno );
+}
+#endif
 
 
 int sphSockGetErrno ()

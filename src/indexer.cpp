@@ -996,17 +996,16 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		// aot filter
 		if ( tSettings.m_uAotFilterMask )
 			pTokenizer = sphAotCreateFilter ( pTokenizer, pDict, tSettings.m_bIndexExactWords, tSettings.m_uAotFilterMask );
-
-#if USE_RLP
-		if ( tSettings.m_eChineseRLP==SPH_RLP_BATCHED )
-			pTokenizer = ISphTokenizer::CreateRLPResultSplitter ( pTokenizer, tSettings.m_sRLPContext.cstr() );
-		else
-			pTokenizer = ISphTokenizer::CreateRLPFilter ( pTokenizer, tSettings.m_eChineseRLP!=SPH_RLP_NONE, g_sRLPRoot.cstr(), g_sRLPEnv.cstr(), tSettings.m_sRLPContext.cstr(), true, sError );
-
-		if ( !pTokenizer )
-			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
-#endif
 	}
+#if USE_RLP
+	if ( tSettings.m_eChineseRLP==SPH_RLP_BATCHED )
+		pTokenizer = ISphTokenizer::CreateRLPResultSplitter ( pTokenizer, tSettings.m_sRLPContext.cstr() );
+	else
+		pTokenizer = ISphTokenizer::CreateRLPFilter ( pTokenizer, tSettings.m_eChineseRLP!=SPH_RLP_NONE, g_sRLPRoot.cstr(), g_sRLPEnv.cstr(), tSettings.m_sRLPContext.cstr(), true, sError );
+
+	if ( !pTokenizer )
+		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
+#endif
 
 	ISphFieldFilter * pFieldFilter = NULL;
 	CSphFieldFilterSettings tFilterSettings;

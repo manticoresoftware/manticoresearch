@@ -778,62 +778,39 @@ CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * 
 
 CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool bUTF8, bool RLPARG(bProxy) )
 {
-	assert ( hSource["type"]=="xmlpipe" || hSource["type"]=="xmlpipe2" );
+	assert ( hSource["type"]=="xmlpipe2" );
 
+#if USE_LIBEXPAT
 	if ( !( hSource.Exists ( "xmlpipe_command" ) ))
 	{
 		fprintf ( stdout, "ERROR: key 'xmlpipe_command' not found in source '%s'\n", sSourceName );
 		return NULL;
 	}
 
-	CSphSource * pSrcXML = NULL;
-
-	CSphString sCommand = hSource["xmlpipe_command"];
-	const int MAX_BUF_SIZE = 1024;
-	BYTE dBuffer [MAX_BUF_SIZE];
-	int iBufSize = 0;
-	bool bUsePipe2 = true;
-
-	FILE * pPipe = sphDetectXMLPipe ( sCommand.cstr (), dBuffer, iBufSize, MAX_BUF_SIZE, bUsePipe2 );
-	if ( !pPipe )
+	if ( !bUTF8 )
 	{
-		fprintf ( stdout, "ERROR: xmlpipe: failed to popen '%s'", sCommand.cstr() );
+		fprintf ( stdout, "ERROR: source '%s': xmlpipe2 should only be used with charset_type=utf-8\n", sSourceName );
 		return NULL;
 	}
 
-	if ( bUsePipe2 )
+	FILE * pPipe = popen ( hSource [ "xmlpipe_command" ].cstr(), "r" );
+	if ( !pPipe )
 	{
-#if USE_LIBEXPAT || USE_LIBXML
-		#if USE_RLP
-			pSrcXML = sphCreateSourceXmlpipe2 ( &hSource, pPipe, dBuffer, iBufSize, sSourceName, g_iMaxXmlpipe2Field, bProxy );
-		#else
-			pSrcXML = sphCreateSourceXmlpipe2 ( &hSource, pPipe, dBuffer, iBufSize, sSourceName, g_iMaxXmlpipe2Field, false );
-		#endif
-
-		if ( !bUTF8 )
-		{
-			SafeDelete ( pSrcXML );
-			fprintf ( stdout, "ERROR: source '%s': xmlpipe2 should only be used with charset_type=utf-8\n", sSourceName );
-		}
-#else
-		fprintf ( stdout, "WARNING: source '%s': xmlpipe2 support NOT compiled in. To use xmlpipe2, "
-			"install missing XML libraries, reconfigure, and rebuild Sphinx\n", sSourceName );
-#endif
-	} else
-	{
-#if USE_RLP
-		if ( bProxy )
-			fprintf ( stdout, "ERROR: source '%s': rlp_chinese batched is not supported by xmlpipe\n", sSourceName );
-#endif
-
-		CSphSource_XMLPipe * pXmlPipe = new CSphSource_XMLPipe ( dBuffer, iBufSize, sSourceName );
-		if ( !pXmlPipe->Setup ( pPipe, sCommand.cstr () ) )
-			SafeDelete ( pXmlPipe );
-
-		pSrcXML = pXmlPipe;
+		fprintf ( stdout, "ERROR: xmlpipe: failed to popen '%s'", hSource [ "xmlpipe_command" ].cstr() );
+		return NULL;
 	}
 
-	return pSrcXML;
+#if USE_RLP
+	return sphCreateSourceXmlpipe2 ( &hSource, pPipe, sSourceName, g_iMaxXmlpipe2Field, bProxy );
+#else
+	return sphCreateSourceXmlpipe2 ( &hSource, pPipe, sSourceName, g_iMaxXmlpipe2Field, false );
+#endif // USE_RLP
+
+#else
+	fprintf ( stdout, "WARNING: source '%s': xmlpipe2 support NOT compiled in. To use xmlpipe2, "
+			"install missing XML libraries, reconfigure, and rebuild Sphinx\n", sSourceName );
+	return NULL;
+#endif // USE_LIBEXPAT
 }
 
 
@@ -863,14 +840,7 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 		return SpawnSourceMSSQL ( hSource, sSourceName, bBatchedRLP );
 	#endif
 
-	if ( hSource["type"]=="xmlpipe" && bWordDict )
-	{
-		fprintf ( stdout, "ERROR: source '%s': type xmlpipe incompatible with dict=keywords option;"
-			" use xmlpipe2 instead; skipping.\n", sSourceName );
-		return NULL;
-	}
-
-	if ( hSource["type"]=="xmlpipe" || hSource["type"]=="xmlpipe2" )
+	if ( hSource["type"]=="xmlpipe2" )
 		return SpawnSourceXMLPipe ( hSource, sSourceName, bUTF8, bBatchedRLP );
 
 	fprintf ( stdout, "ERROR: source '%s': unknown type '%s'; skipping.\n", sSourceName,

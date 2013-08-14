@@ -53,10 +53,6 @@
 #endif
 #endif
 
-#if USE_LIBXML
-#include <libxml/xmlreader.h>
-#endif
-
 #if USE_LIBICONV
 #include "iconv.h"
 #endif
@@ -129,11 +125,6 @@
 #if ( USE_WINDOWS && USE_LIBICONV )
 	#pragma comment(linker, "/defaultlib:iconv.lib")
 	#pragma message("Automatically linking with iconv.lib")
-#endif
-
-#if ( USE_WINDOWS && USE_LIBXML )
-	#pragma comment(linker, "/defaultlib:libxml.lib")
-	#pragma message("Automatically linking with libxml.lib")
 #endif
 
 #if ( USE_WINDOWS && USE_RE2 )
@@ -27674,501 +27665,10 @@ DWORD CSphSource_PgSQL::SqlColumnLength ( int )
 #endif // USE_PGSQL
 
 /////////////////////////////////////////////////////////////////////////////
-// XMLPIPE
-/////////////////////////////////////////////////////////////////////////////
-
-CSphSource_XMLPipe::CSphSource_XMLPipe ( BYTE * dInitialBuf, int iBufLen, const char * sName )
-	: CSphSource	( sName )
-	, m_iBufferSize	( 1048576 )
-	, m_bEOF		( false )
-	, m_bWarned		( false )
-	, m_iInitialBufLen ( iBufLen )
-	, m_bHitsReady ( false )
-{
-	assert ( m_iBufferSize > iBufLen );
-
-	m_pTag = NULL;
-	m_iTagLength = 0;
-	m_pPipe = NULL;
-	m_pBuffer = NULL;
-	m_pBufferEnd = NULL;
-	m_sBuffer = new BYTE [m_iBufferSize];
-
-	if ( iBufLen )
-		memcpy ( m_sBuffer, dInitialBuf, iBufLen );
-}
-
-
-CSphSource_XMLPipe::~CSphSource_XMLPipe ()
-{
-	Disconnect ();
-	SafeDeleteArray ( m_sBuffer );
-}
-
-
-void CSphSource_XMLPipe::Disconnect ()
-{
-	m_iInitialBufLen = 0;
-
-	m_tHits.m_dData.Reset();
-	m_tSchema.Reset ();
-
-	if ( m_pPipe )
-	{
-		pclose ( m_pPipe );
-		m_pPipe = NULL;
-	}
-}
-
-
-bool CSphSource_XMLPipe::Setup ( FILE * pPipe, const char * sCommand )
-{
-	assert ( sCommand );
-	m_pPipe = pPipe;
-	m_sCommand = sCommand;
-	return true;
-}
-
-
-bool CSphSource_XMLPipe::Connect ( CSphString & )
-{
-	m_bEOF = false;
-	m_bWarned = false;
-
-	m_tSchema.m_dFields.Reset ();
-	m_tSchema.m_dFields.Add ( CSphColumnInfo ( "title" ) );
-	m_tSchema.m_dFields.Add ( CSphColumnInfo ( "body" ) );
-
-	CSphColumnInfo tGid ( "gid", SPH_ATTR_INTEGER );
-	CSphColumnInfo tTs ( "ts", SPH_ATTR_TIMESTAMP );
-	m_tSchema.AddAttr ( tGid, true ); // all attributes are dynamic at indexing time
-	m_tSchema.AddAttr ( tTs, true ); // all attributes are dynamic at indexing time
-
-	m_tDocInfo.Reset ( m_tSchema.GetRowSize() );
-
-	m_pBuffer = m_iInitialBufLen > 0 ? m_sBuffer : NULL;
-	m_pBufferEnd = m_pBuffer ? m_pBuffer + m_iInitialBufLen : NULL;
-
-	char sBuf [ 1024 ];
-	snprintf ( sBuf, sizeof(sBuf), "xmlpipe(%s)", m_sCommand.cstr() );
-	m_tSchema.m_sName = sBuf;
-
-	m_tHits.m_dData.Reserve ( MAX_SOURCE_HITS );
-
-	return true;
-}
-
-bool CSphSource_XMLPipe::IterateDocument ( CSphString & sError )
-{
-	// PROFILE ( src_xmlpipe );
-	char sTitle [ 1024 ]; // FIXME?
-
-	assert ( m_pPipe );
-	assert ( m_pTokenizer );
-
-	m_tHits.m_dData.Resize ( 0 );
-	m_bHitsReady = false;
-
-	/////////////////////////
-	// parse document header
-	/////////////////////////
-
-	// check for eof
-	if ( !SkipWhitespace() )
-	{
-		m_tDocInfo.m_iDocID = 0;
-		return true;
-	}
-
-	// look for opening '<document>' tag
-	SetTag ( "document" );
-	if ( !SkipTag ( true, sError ) )
-		return false;
-
-	if ( !ScanInt ( "id", &m_tDocInfo.m_iDocID, sError ) )
-		return false;
-	m_tStats.m_iTotalDocuments++;
-
-	SphAttr_t uVal;
-	if ( !ScanInt ( "group", &uVal, sError ) ) uVal = 1; m_tDocInfo.SetAttr ( m_tSchema.GetAttr(0).m_tLocator, uVal );
-	if ( !ScanInt ( "timestamp", &uVal, sError ) ) uVal = 1; m_tDocInfo.SetAttr ( m_tSchema.GetAttr(1).m_tLocator, uVal );
-
-	if ( !ScanStr ( "title", sTitle, sizeof(sTitle), sError ) )
-		return false;
-
-	// index title
-	{
-		const BYTE * sTextToIndex = (BYTE *)sTitle;
-		int iLen = -1;
-		if ( m_pFieldFilter )
-		{
-			sTextToIndex = m_pFieldFilter->Apply ( sTextToIndex );
-			if ( sTextToIndex!=(BYTE *)sTitle )
-				iLen = m_pFieldFilter->GetResultLength();
-		}
-
-		if ( iLen==-1 )
-			iLen = (int)strlen ( (char *)sTextToIndex );
-
-		Hitpos_t iPos = HITMAN::Create ( 0, 1 );
-		BYTE * sWord;
-
-		m_pTokenizer->SetBuffer ( (BYTE *)sTextToIndex, iLen );
-		while ( ( sWord = m_pTokenizer->GetToken() )!=NULL && m_tHits.Length()<MAX_SOURCE_HITS )
-		{
-			m_tHits.AddHit ( m_tDocInfo.m_iDocID, m_pDict->GetWordID ( sWord ), iPos );
-			HITMAN::AddPos ( &iPos, 1 );
-		}
-	}
-
-	CheckHitsCount ( "title" );
-
-	SetTag ( "body" );
-	if ( !SkipTag ( true, sError ) )
-		return false;
-
-	m_iWordPos = 0;
-
-	/////////////////////////////
-	// parse body chunk by chunk
-	/////////////////////////////
-
-	// check for body tag end in this buffer
-	const char * szBodyEnd = "</body>";
-
-	bool bFirstPass = true;
-	bool bBodyEnd = false;
-	BYTE * p = m_pBuffer;
-
-	while ( !bBodyEnd )
-	{
-		p = m_pBuffer;
-		while ( p<m_pBufferEnd && !bBodyEnd )
-		{
-			BYTE * pBufTemp = p;
-			BYTE * pEndTemp = (BYTE *)szBodyEnd;
-			while ( pBufTemp < m_pBufferEnd && *pEndTemp && *pBufTemp==*pEndTemp )
-			{
-				++pBufTemp;
-				++pEndTemp;
-			}
-
-			if ( !*pEndTemp )
-				bBodyEnd = true;
-			else
-				p++;
-		}
-
-		if ( !bFirstPass )
-			break;
-
-		bFirstPass = false;
-
-		if ( !bBodyEnd )
-			UpdateBuffer ();
-	}
-
-	if ( !bBodyEnd )
-	{
-		if ( !m_bWarned )
-		{
-			sphWarn ( "xmlpipe: encountered body larger than %d bytes while scanning docid=" DOCID_FMT " body", m_iBufferSize, m_tDocInfo.m_iDocID );
-			m_bWarned = true;
-		}
-	}
-
-	const BYTE * sTextToIndex = m_pFieldFilter ? m_pFieldFilter->Apply ( m_pBuffer, p-m_pBuffer ) : m_pBuffer;
-
-	if ( sTextToIndex!=m_pBuffer )
-		m_pTokenizer->SetBuffer ( (BYTE*)sTextToIndex, m_pFieldFilter->GetResultLength() );
-	else
-		m_pTokenizer->SetBuffer ( m_pBuffer, p-m_pBuffer );
-
-	// tokenize
-	BYTE * sWord;
-	while ( ( sWord = m_pTokenizer->GetToken () )!=NULL && m_tHits.Length()<MAX_SOURCE_HITS )
-		m_tHits.AddHit ( m_tDocInfo.m_iDocID, m_pDict->GetWordID ( sWord ), HITMAN::Create ( 1, ++m_iWordPos ) );
-
-	CheckHitsCount ( "body" );
-
-	m_pBuffer = p;
-
-	SetTag ( "body" );
-
-	// some tag was found
-	if ( bBodyEnd )
-	{
-		// let's check if it's '</body>' which is the only allowed tag at this point
-		if ( !SkipTag ( false, sError ) )
-			return false;
-	} else
-	{
-		// search for '</body>' tag
-		bool bFound = false;
-
-		while ( !bFound )
-		{
-			while ( m_pBuffer < m_pBufferEnd && *m_pBuffer!='<' )
-				++m_pBuffer;
-
-			BYTE * pBufferTmp = m_pBuffer;
-			if ( m_pBuffer < m_pBufferEnd )
-			{
-				if ( !SkipTag ( false, sError ) )
-				{
-					if ( m_bEOF )
-						return false;
-					else
-					{
-						if ( m_pBuffer==pBufferTmp )
-							m_pBuffer = pBufferTmp + 1;
-					}
-				} else
-					bFound = true;
-			} else
-				if ( !UpdateBuffer () )
-					return false;
-		}
-	}
-
-
-	// let's check if it's '</document>' which is the only allowed tag at this point
-	SetTag ( "document" );
-	if ( !SkipTag ( false, sError ) )
-		return false;
-
-	// if it was all correct, we have to flush our hits
-	m_bHitsReady = m_tHits.Length()>0;
-	return true;
-}
-
-
-ISphHits * CSphSource_XMLPipe::IterateHits ( CSphString & )
-{
-	if ( !m_bHitsReady )
-		return NULL;
-
-	m_bHitsReady = false;
-
-	return &m_tHits;
-}
-
-
-SphRange_t	CSphSource_XMLPipe::IterateFieldMVAStart ( int )
-{
-	SphRange_t tRange;
-	tRange.m_iStart = tRange.m_iLength = 0;
-	return tRange;
-}
-
-
-void CSphSource_XMLPipe::SetTag ( const char * sTag )
-{
-	m_pTag = sTag;
-	m_iTagLength = (int)strlen ( sTag );
-}
-
-
-bool CSphSource_XMLPipe::UpdateBuffer ()
-{
-	assert ( m_pBuffer!=m_sBuffer );
-
-	int iLeft = Max ( m_pBufferEnd-m_pBuffer, 0 );
-	if ( iLeft>0 )
-		memmove ( m_sBuffer, m_pBuffer, iLeft );
-
-	size_t iLen = fread ( &m_sBuffer [ iLeft ], 1, m_iBufferSize-iLeft, m_pPipe );
-	m_tStats.m_iTotalBytes += iLen;
-
-	m_pBuffer = m_sBuffer;
-	m_pBufferEnd = m_pBuffer+iLeft+iLen;
-
-	return ( iLen!=0 );
-}
-
-
-bool CSphSource_XMLPipe::SkipWhitespace ()
-{
-	for ( ;; )
-	{
-		// suck in some data if needed
-		if ( m_pBuffer>=m_pBufferEnd )
-			if ( !UpdateBuffer() )
-				return false;
-
-		// skip whitespace
-		while ( (m_pBuffer<m_pBufferEnd) && isspace ( *m_pBuffer ) )
-			m_pBuffer++;
-
-		// did we anything non-whitspace?
-		if ( m_pBuffer<m_pBufferEnd )
-			break;
-	}
-
-	assert ( m_pBuffer<m_pBufferEnd );
-	return true;
-}
-
-
-bool CSphSource_XMLPipe::CheckTag ( bool bOpen, CSphString & sError )
-{
-	int iAdd = bOpen ? 2 : 3;
-
-	// if case the tag is at buffer boundary, try to suck in some more data
-	if ( m_pBufferEnd-m_pBuffer < m_iTagLength+iAdd )
-		UpdateBuffer ();
-
-	if ( m_pBufferEnd-m_pBuffer < m_iTagLength+iAdd )
-	{
-		m_bEOF = true;
-		sError.SetSprintf ( "xmlpipe: expected '<%s%s>', got EOF",
-			bOpen ? "" : "/", m_pTag );
-		return false;
-	}
-
-	// check tag
-	bool bOk = bOpen
-		? ( ( m_pBuffer[0]=='<' )
-			&& ( m_pBuffer[m_iTagLength+1]=='>' )
-			&& strncmp ( (char*)(m_pBuffer+1), m_pTag, m_iTagLength )==0 )
-		: ( ( m_pBuffer[0]=='<' )
-			&& ( m_pBuffer[1]=='/' )
-			&& ( m_pBuffer[m_iTagLength+2]=='>' )
-			&& strncmp ( (char*)(m_pBuffer+2), m_pTag, m_iTagLength )==0 );
-	if ( !bOk )
-	{
-		char sGot[64];
-		int iCopy = Min ( m_pBufferEnd-m_pBuffer, (int)sizeof(sGot)-1 );
-
-		strncpy ( sGot, (char*)m_pBuffer, iCopy );
-		sGot [ iCopy ] = '\0';
-
-		sError.SetSprintf ( "xmlpipe: expected '<%s%s>', got '%s'",
-			bOpen ? "" : "/", m_pTag, sGot );
-		return false;
-	}
-
-	// got tag
-	m_pBuffer += iAdd+m_iTagLength;
-	assert ( m_pBuffer<=m_pBufferEnd );
-	return true;
-}
-
-
-bool CSphSource_XMLPipe::SkipTag ( bool bOpen, CSphString & sError )
-{
-	if ( !SkipWhitespace() )
-	{
-		m_bEOF = true;
-		sError.SetSprintf ( "xmlpipe: expected '<%s%s>', got EOF",
-			bOpen ? "" : "/", m_pTag );
-		return false;
-	}
-
-	return CheckTag ( bOpen, sError );
-}
-
-
-bool CSphSource_XMLPipe::ScanInt ( const char * sTag, DWORD * pRes, CSphString & sError )
-{
-	uint64_t uRes;
-	if ( !ScanInt ( sTag, &uRes, sError ) )
-		return false;
-
-	(*pRes) = (DWORD)uRes;
-	return true;
-}
-
-
-bool CSphSource_XMLPipe::ScanInt ( const char * sTag, uint64_t * pRes, CSphString & sError )
-{
-	assert ( sTag );
-	assert ( pRes );
-
-	// scan for <sTag>
-	SetTag ( sTag );
-	if ( !SkipTag ( true, sError ) )
-		return false;
-
-	if ( !SkipWhitespace() )
-	{
-		sError.SetSprintf ( "xmlpipe: expected <%s> data, got EOF", m_pTag );
-		return false;
-	}
-
-	*pRes = 0;
-	while ( m_pBuffer<m_pBufferEnd )
-	{
-		// FIXME! could check for overflow
-		while ( isdigit ( *m_pBuffer ) && m_pBuffer<m_pBufferEnd )
-			(*pRes) = 10*(*pRes) + (int)( (*m_pBuffer++)-'0' );
-
-		if ( m_pBuffer<m_pBufferEnd )
-			break;
-		else
-			UpdateBuffer ();
-	}
-
-	// scan for </sTag>
-	if ( !SkipTag ( false, sError ) )
-		return false;
-
-	return true;
-}
-
-
-bool CSphSource_XMLPipe::ScanStr ( const char * sTag, char * pRes, int iMaxLength, CSphString & sError )
-{
-	assert ( sTag );
-	assert ( pRes );
-
-	char * pEnd = pRes+iMaxLength-1;
-
-	// scan for <sTag>
-	SetTag ( sTag );
-	if ( !SkipTag ( true, sError ) )
-		return false;
-
-	if ( !SkipWhitespace() )
-	{
-		sError.SetSprintf ( "xmlpipe: expected <%s> data, got EOF", m_pTag );
-		return false;
-	}
-
-	while ( m_pBuffer<m_pBufferEnd )
-	{
-		while ( (*m_pBuffer)!='<' && pRes<pEnd && m_pBuffer<m_pBufferEnd )
-			*pRes++ = *m_pBuffer++;
-
-		if ( m_pBuffer<m_pBufferEnd )
-			break;
-		else
-			UpdateBuffer ();
-	}
-	*pRes++ = '\0';
-
-	// scan for </sTag>
-	if ( !SkipTag ( false, sError ) )
-		return false;
-
-	return true;
-}
-
-
-void CSphSource_XMLPipe::CheckHitsCount ( const char * sField )
-{
-	if ( m_tHits.Length()>=MAX_SOURCE_HITS && m_pTokenizer->GetTokenEnd()!=m_pTokenizer->GetBufferEnd() )
-		sphWarn ( "xmlpipe: collected hits larger than %d(MAX_SOURCE_HITS) "
-			"while scanning docid=" DOCID_FMT " %s - clipped!!!",
-			MAX_SOURCE_HITS, m_tDocInfo.m_iDocID, sField );
-}
-
-
-/////////////////////////////////////////////////////////////////////////////
 // XMLPIPE (v2)
 /////////////////////////////////////////////////////////////////////////////
 
-#if USE_LIBEXPAT || USE_LIBXML
+#if USE_LIBEXPAT
 
 /// XML pipe source implementation (v2)
 class CSphSource_XMLPipe2 : public CSphSource_Document
@@ -28177,7 +27677,7 @@ public:
 	explicit			CSphSource_XMLPipe2 ( const char * sName );
 					~CSphSource_XMLPipe2 ();
 
-	bool			Setup ( BYTE * dInitialBuf, int iBufLen, int iFieldBufferMax, bool bFixupUTF8, FILE * pPipe, const CSphConfigSection & hSource );			///< memorize the command
+	bool			Setup ( int iFieldBufferMax, bool bFixupUTF8, FILE * pPipe, const CSphConfigSection & hSource );			///< memorize the command
 	virtual bool	Connect ( CSphString & sError );			///< run the command and open the pipe
 	virtual void	Disconnect ();								///< close the pipe
 
@@ -28190,15 +27690,9 @@ public:
 	virtual bool	IterateKillListStart ( CSphString & );
 	virtual bool	IterateKillListNext ( SphDocID_t & tDocId );
 
-
 	void			StartElement ( const char * szName, const char ** pAttrs );
 	void			EndElement ( const char * pName );
 	void			Characters ( const char * pCharacters, int iLen );
-
-#if USE_LIBXML
-	int				ReadBuffer ( BYTE * pBuffer, int iLen );
-	void			ProcessNode ( xmlTextReaderPtr pReader );
-#endif
 
 	void			Error ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 
@@ -28246,20 +27740,7 @@ private:
 	int				m_iCurField;
 	int				m_iCurAttr;
 
-#if USE_LIBEXPAT
 	XML_Parser		m_pParser;
-#endif
-
-#if USE_LIBXML
-	xmlTextReaderPtr m_pParser;
-
-	BYTE *			m_pBufferPtr;
-	BYTE *			m_pBufferEnd;
-	bool			m_bPassedBufferEnd;
-	CSphVector <const char *> m_dAttrs;
-#endif
-
-	int				m_iInitialBufSize;
 
 	int				m_iFieldBufferMax;
 	BYTE * 			m_pFieldBuffer;
@@ -28277,13 +27758,7 @@ private:
 	void			AddFieldToSchema ( const char * szName );
 	void			UnexpectedCharaters ( const char * pCharacters, int iLen, const char * szComment );
 
-#if USE_LIBEXPAT
 	bool			ParseNextChunk ( int iBufferLen, CSphString & sError );
-#endif
-
-#if USE_LIBXML
-	int				ParseNextChunk ( CSphString & sError );
-#endif
 
 	void DocumentError ( const char * sWhere )
 	{
@@ -28297,7 +27772,6 @@ private:
 };
 
 
-#if USE_LIBEXPAT
 // callbacks
 static void XMLCALL xmlStartElement ( void * user_data, const XML_Char * name, const XML_Char ** attrs )
 {
@@ -28352,27 +27826,6 @@ static int XMLCALL xmlUnknownEncoding ( void *, const XML_Char * name, XML_Encod
 }
 #endif
 
-#endif
-
-#if USE_LIBXML
-int	xmlReadBuffers ( void * context, char * buffer, int len )
-{
-	CSphSource_XMLPipe2 * pSource = (CSphSource_XMLPipe2 *) context;
-	return pSource->ReadBuffer ( (BYTE*)buffer, len );
-}
-
-void xmlErrorHandler ( void * arg, const char * msg, xmlParserSeverities severity, xmlTextReaderLocatorPtr locator )
-{
-	if ( severity==XML_PARSER_SEVERITY_ERROR )
-	{
-		int iLine = xmlTextReaderLocatorLineNumber ( locator );
-		CSphSource_XMLPipe2 * pSource = (CSphSource_XMLPipe2 *) arg;
-		pSource->Error ( "%s (line=%d)", msg, iLine );
-	}
-}
-#endif
-
-
 CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( const char * sName )
 	: CSphSource_Document ( sName )
 	, m_pCurDocument	( NULL )
@@ -28394,12 +27847,6 @@ CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( const char * sName )
 	, m_iCurField		( -1 )
 	, m_iCurAttr		( -1 )
 	, m_pParser			( NULL )
-#if USE_LIBXML
-	, m_pBufferPtr			( NULL )
-	, m_pBufferEnd			( NULL )
-	, m_bPassedBufferEnd	( false )
-#endif
-	, m_iInitialBufSize	( 1024 )
 	, m_iFieldBufferMax	( 65536 )
 	, m_pFieldBuffer	( NULL )
 	, m_iFieldBufferLen	( 0 )
@@ -28428,25 +27875,13 @@ void CSphSource_XMLPipe2::Disconnect ()
 		m_pPipe = NULL;
 	}
 
-#if USE_LIBEXPAT
 	if ( m_pParser )
 	{
 		XML_ParserFree ( m_pParser );
 		m_pParser = NULL;
 	}
-#endif
-
-#if USE_LIBXML
-	if ( m_pParser )
-	{
-		xmlFreeTextReader ( m_pParser );
-		m_pParser = NULL;
-	}
-#endif
 
 	m_tHits.m_dData.Reset();
-
-	m_iInitialBufSize = 0;
 }
 
 
@@ -28486,7 +27921,6 @@ const char * CSphSource_XMLPipe2::DecorateMessageVA ( const char * sTemplate, va
 	iLeft = sizeof(sBuf) - iBufLen;
 	szBufStart = sBuf + iBufLen;
 
-#if USE_LIBEXPAT
 	if ( m_pParser )
 	{
 		SphDocID_t uFailedID = 0;
@@ -28497,18 +27931,6 @@ const char * CSphSource_XMLPipe2::DecorateMessageVA ( const char * sTemplate, va
 			(int)XML_GetCurrentLineNumber ( m_pParser ), (int)XML_GetCurrentColumnNumber ( m_pParser ),
 			uFailedID );
 	}
-#endif
-
-#if USE_LIBXML
-	if ( m_pParser )
-	{
-		SphDocID_t uFailedID = 0;
-		if ( m_dParsedDocuments.GetLength() )
-			uFailedID = m_dParsedDocuments.Last()->m_iDocID;
-
-		snprintf ( szBufStart, iLeft, " (docid=" DOCID_FMT ")", uFailedID );
-	}
-#endif
 
 	return sBuf;
 }
@@ -28577,23 +27999,15 @@ void CSphSource_XMLPipe2::ConfigureFields ( const CSphVariant * pHead )
 }
 
 
-bool CSphSource_XMLPipe2::Setup ( BYTE * dInitialBuf, int iBufLen, int iFieldBufferMax, bool bFixupUTF8, FILE * pPipe, const CSphConfigSection & hSource )
+bool CSphSource_XMLPipe2::Setup ( int iFieldBufferMax, bool bFixupUTF8, FILE * pPipe, const CSphConfigSection & hSource )
 {
-	assert ( m_iBufferSize > iBufLen );
 	assert ( !m_pBuffer && !m_pFieldBuffer );
 
 	m_pBuffer = new BYTE [m_iBufferSize];
 	m_iFieldBufferMax = Max ( iFieldBufferMax, 65536 );
 	m_pFieldBuffer = new BYTE [ m_iFieldBufferMax ];
-
-	if ( iBufLen )
-		memcpy ( m_pBuffer, dInitialBuf, iBufLen );
-
-	m_iInitialBufSize = iBufLen;
 	m_bFixupUTF8 = bFixupUTF8;
-
 	m_pPipe = pPipe;
-
 	m_tSchema.Reset ();
 
 	m_sCommand = hSource["xmlpipe_command"].cstr ();
@@ -28636,7 +28050,6 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 		return false;
 	AllocDocinfo();
 
-#if USE_LIBEXPAT
 	m_pParser = XML_ParserCreate(NULL);
 	if ( !m_pParser )
 	{
@@ -28650,26 +28063,6 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 
 #if USE_LIBICONV
 	XML_SetUnknownEncodingHandler ( m_pParser, xmlUnknownEncoding, NULL );
-#endif
-
-#endif
-
-#if USE_LIBXML
-	m_pBufferPtr = m_pBuffer;
-	m_pBufferEnd = m_pBuffer + m_iInitialBufSize;
-	m_bPassedBufferEnd = false;
-
-	m_dAttrs.Reserve ( 16 );
-	m_dAttrs.Resize ( 0 );
-
-	m_pParser = xmlReaderForIO ( (xmlInputReadCallback)xmlReadBuffers, NULL, this, NULL, NULL, 0 );
-	if ( !m_pParser )
-	{
-		sError.SetSprintf ( "xmlpipe: failed to create XML parser" );
-		return false;
-	}
-
-	xmlTextReaderSetErrorHandler ( m_pParser, xmlErrorHandler, this );
 #endif
 
 	m_dKillList.Reserve ( 1024 );
@@ -28701,18 +28094,10 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 
 	m_sError = "";
 
-#if USE_LIBEXPAT
-	int iBytesRead = m_iInitialBufSize;
-	iBytesRead += fread ( m_pBuffer + m_iInitialBufSize, 1, m_iBufferSize - m_iInitialBufSize, m_pPipe );
+	int iBytesRead = fread ( m_pBuffer, 1, m_iBufferSize, m_pPipe );
 
 	if ( !ParseNextChunk ( iBytesRead, sError ) )
 		return false;
-#endif
-
-#if USE_LIBXML
-	if ( ParseNextChunk ( sError )==-1 )
-		return false;
-#endif
 
 	m_dAttrToMVA.Resize ( 0 );
 
@@ -28736,41 +28121,6 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 }
 
 
-#if USE_LIBXML
-int CSphSource_XMLPipe2::ParseNextChunk ( CSphString & sError )
-{
-	int iRet = xmlTextReaderRead ( m_pParser );
-	while ( iRet==1 )
-	{
-		ProcessNode ( m_pParser );
-		if ( !m_sError.IsEmpty () )
-		{
-			sError = m_sError;
-			m_tDocInfo.m_iDocID = 1;
-			return false;
-		}
-
-		if ( m_bPassedBufferEnd )
-			break;
-
-		iRet = xmlTextReaderRead ( m_pParser );
-	}
-
-	m_bPassedBufferEnd = false;
-
-	if ( !m_sError.IsEmpty () || iRet==-1 )
-	{
-		sError = m_sError;
-		m_tDocInfo.m_iDocID = 1;
-		return -1;
-	}
-
-	return iRet;
-}
-#endif
-
-
-#if USE_LIBEXPAT
 bool CSphSource_XMLPipe2::ParseNextChunk ( int iBufferLen, CSphString & sError )
 {
 	if ( !iBufferLen )
@@ -28879,7 +28229,6 @@ bool CSphSource_XMLPipe2::ParseNextChunk ( int iBufferLen, CSphString & sError )
 
 	return true;
 }
-#endif
 
 
 BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
@@ -28895,7 +28244,6 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 
 	int iReadResult = 0;
 
-#if USE_LIBEXPAT
 	while ( m_dParsedDocuments.GetLength()==0 )
 	{
 		// saved bytes to the front!
@@ -28911,11 +28259,6 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 		if ( !ParseNextChunk ( iReadResult+m_iReparseLen, sError ) )
 			return NULL;
 	}
-#endif
-
-#if USE_LIBXML
-	while ( m_dParsedDocuments.GetLength()==0 && ( iReadResult = ParseNextChunk ( sError ) )==1 );
-#endif
 
 	while ( m_dParsedDocuments.GetLength()!=0 )
 	{
@@ -29396,23 +28739,10 @@ void CSphSource_XMLPipe2::UnexpectedCharaters ( const char * pCharacters, int iL
 	if ( !bSpaces )
 	{
 		CSphString sWarning;
-#if USE_LIBEXPAT
 		sWarning.SetBinary ( pCharacters, Min ( iLen, MAX_WARNING_LENGTH ) );
 		sphWarn ( "source '%s': unexpected string '%s' (line=%d, pos=%d) %s",
 			m_tSchema.m_sName.cstr(), sWarning.cstr (),
 			(int)XML_GetCurrentLineNumber ( m_pParser ), (int)XML_GetCurrentColumnNumber ( m_pParser ), szComment );
-#endif
-
-#if USE_LIBXML
-		int i = 0;
-		for ( i=0; i<iLen && sphIsSpace ( pCharacters[i] ); i++ );
-		sWarning.SetBinary ( pCharacters + i, Min ( iLen - i, MAX_WARNING_LENGTH ) );
-		for ( i=iLen-i-1; i>=0 && sphIsSpace ( sWarning.cstr()[i] ); i-- );
-		if ( i>=0 )
-			( (char *)sWarning.cstr() )[i+1] = '\0';
-
-		sphWarn ( "source '%s': unexpected string '%s' %s", m_tSchema.m_sName.cstr(), sWarning.cstr(), szComment );
-#endif
 	}
 }
 
@@ -29455,97 +28785,18 @@ void CSphSource_XMLPipe2::Characters ( const char * pCharacters, int iLen )
 
 		if ( !bWarned )
 		{
-#if USE_LIBEXPAT
 			sphWarn ( "source '%s': field/attribute '%s' length exceeds max length (line=%d, pos=%d, docid=" DOCID_FMT ")",
 				m_tSchema.m_sName.cstr(), sName.cstr(),
 				(int)XML_GetCurrentLineNumber ( m_pParser ), (int)XML_GetCurrentColumnNumber ( m_pParser ),
 				m_pCurDocument->m_iDocID );
-#endif
 
-#if USE_LIBXML
-			sphWarn ( "source '%s': field/attribute '%s' length exceeds max length (docid=" DOCID_FMT ")",
-				m_tSchema.m_sName.cstr(), sName.cstr(), m_pCurDocument->m_iDocID );
-#endif
 			m_dWarned.Add ( sName );
 		}
 	}
 }
 
-
-#if USE_LIBXML
-int CSphSource_XMLPipe2::ReadBuffer ( BYTE * pBuffer, int iLen )
-{
-	int iLeft = Max ( m_pBufferEnd - m_pBufferPtr, 0 );
-	if ( iLeft < iLen )
-	{
-		memmove ( m_pBuffer, m_pBufferPtr, iLeft );
-		size_t iRead = fread ( m_pBuffer + iLeft, 1, m_iBufferSize - iLeft, m_pPipe );
-
-		m_bPassedBufferEnd = ( ( m_iBufferSize - iLeft )==int(iRead) );
-
-		m_pBufferPtr = m_pBuffer;
-		m_pBufferEnd = m_pBuffer + iLeft + iRead;
-
-		iLeft = Max ( m_pBufferEnd - m_pBuffer, 0 );
-	}
-
-	int iToCopy = Min ( iLen, iLeft );
-	memcpy ( pBuffer, m_pBufferPtr, iToCopy );
-	m_pBufferPtr += iToCopy;
-
-	return iToCopy;
-}
-
-
-void CSphSource_XMLPipe2::ProcessNode ( xmlTextReaderPtr pReader )
-{
-	int iType = xmlTextReaderNodeType ( pReader );
-	switch ( iType )
-	{
-	case XML_READER_TYPE_ELEMENT:
-		{
-			const char * szName = (char*)xmlTextReaderName ( pReader );
-
-			m_dAttrs.Resize ( 0 );
-
-			if ( xmlTextReaderHasAttributes ( pReader ) )
-			{
-				if ( xmlTextReaderMoveToFirstAttribute ( pReader )!=1 )
-					return;
-
-				do
-				{
-					int iLen = m_dAttrs.GetLength ();
-					m_dAttrs.Resize ( iLen + 2 );
-					m_dAttrs[iLen] = (char*)xmlTextReaderName ( pReader );
-					m_dAttrs[iLen+1] = (char*)xmlTextReaderValue ( pReader );
-				}
-				while ( xmlTextReaderMoveToNextAttribute ( pReader )==1 );
-			}
-
-			int iLen = m_dAttrs.GetLength ();
-			m_dAttrs.Resize ( iLen + 2 );
-			m_dAttrs[iLen] = NULL;
-			m_dAttrs[iLen+1] = NULL;
-
-			StartElement ( szName, &m_dAttrs[0] );
-		}
-		break;
-	case XML_READER_TYPE_END_ELEMENT:
-		EndElement ( (char*)xmlTextReaderName ( pReader ) );
-		break;
-	case XML_TEXT_NODE:
-		{
-			const char * szText = (char*)xmlTextReaderValue	( pReader );
-			Characters ( szText, strlen ( szText ) );
-		}
-		break;
-	}
-}
-#endif
-
 CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE * pPipe,
-	BYTE * dInitialBuf, int iBufLen, const char * szSourceName, int iMaxFieldLen, bool RLPARG(bProxy) )
+	const char * szSourceName, int iMaxFieldLen, bool RLPARG(bProxy) )
 {
 	CSphSource_XMLPipe2 * pXMLPipe;
 	bool bUTF8 = pSource->GetInt ( "xmlpipe_fixup_utf8", 0 )!=0;
@@ -29557,40 +28808,13 @@ CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE *
 #endif
 		pXMLPipe = new CSphSource_XMLPipe2 ( szSourceName );
 
-	if ( !pXMLPipe->Setup ( dInitialBuf, iBufLen, iMaxFieldLen, bUTF8, pPipe, *pSource ) )
+	if ( !pXMLPipe->Setup ( iMaxFieldLen, bUTF8, pPipe, *pSource ) )
 		SafeDelete ( pXMLPipe );
 
 	return pXMLPipe;
 }
 
 #endif
-
-
-FILE * sphDetectXMLPipe ( const char * szCommand, BYTE * dBuf, int & iBufSize, int iMaxBufSize, bool & bUsePipe2 )
-{
-	bUsePipe2 = true; // default is xmlpipe2
-
-	FILE * pPipe = popen ( szCommand, "r" );
-	if ( !pPipe )
-		return NULL;
-
-	BYTE * pStart = dBuf;
-	iBufSize = (int)fread ( dBuf, 1, iMaxBufSize, pPipe );
-	BYTE * pEnd = pStart + iBufSize;
-
-	// BOM
-	if ( iBufSize>=3 )
-		if ( !strncmp ( (char*)pStart, "\xEF\xBB\xBF", 3 ) )
-			pStart += 3;
-
-	while ( isspace ( *pStart ) && pStart < pEnd )
-		pStart++;
-
-	if ( ( pEnd - pStart)>=5 )
-		bUsePipe2 = !strncasecmp ( (char *)pStart, "<?xml", 5 );
-
-	return pPipe;
-}
 
 
 #if USE_ODBC

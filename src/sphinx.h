@@ -24,7 +24,6 @@
 	#define USE_ODBC		1	/// whether to compile ODBC support
 	#define USE_LIBEXPAT	1	/// whether to compile libexpat support
 	#define USE_LIBICONV	1	/// whether to compile iconv support
-	#define USE_LIBXML		0	/// whether to compile libxml support
 	#define	USE_LIBSTEMMER	0	/// whether to compile libstemmber support
 	#define	USE_RE2			0	/// whether to compile RE2 support
 	#define USE_RLP			0	/// whether to compile RLP support
@@ -2321,107 +2320,10 @@ struct CSphSource_MSSQL : public CSphSource_ODBC
 #endif // USE_ODBC
 
 
-/// XML pipe source implementation
-class CSphSource_XMLPipe : public CSphSource
-{
-public:
-					CSphSource_XMLPipe ( BYTE * dInitialBuf, int iBufLen, const char * sName );	///< ctor
-					~CSphSource_XMLPipe ();						///< dtor
-
-	bool			Setup ( FILE * pPipe, const char * sCommand );			///< memorize the command
-	virtual bool	Connect ( CSphString & sError );			///< run the command and open the pipe
-	virtual void	Disconnect ();								///< close the pipe
-
-	virtual bool		IterateStart ( CSphString & ) { return true; }	///< Connect() starts getting documents automatically, so this one is empty
-	virtual bool		IterateDocument ( CSphString & sError );		///< parse incoming chunk and emit document
-	virtual ISphHits *	IterateHits ( CSphString & sError );									///< parse incoming chunk and emit some hits
-
-	virtual bool	HasAttrsConfigured ()							{ return true; }	///< xmlpipe always has some attrs for now
-	virtual bool	IterateMultivaluedStart ( int, CSphString & )	{ return false; }	///< xmlpipe does not support multi-valued attrs for now
-	virtual bool	IterateMultivaluedNext ()						{ return false; }	///< xmlpipe does not support multi-valued attrs for now
-	virtual SphRange_t	IterateFieldMVAStart ( int );
-	virtual bool	IterateKillListStart ( CSphString & )			{ return false; }
-	virtual bool	IterateKillListNext ( SphDocID_t & )			{ return false; }
-
-
-private:
-	enum Tag_e
-	{
-		TAG_DOCUMENT = 0,
-		TAG_ID,
-		TAG_GROUP,
-		TAG_TITLE,
-		TAG_BODY
-	};
-
-private:
-	CSphString		m_sCommand;			///< my command
-
-	const char *	m_pTag;				///< tag name
-	int				m_iTagLength;		///< tag name length
-	int				m_iBufferSize;		///< buffer size
-	bool			m_bEOF;				///< EOF encountered
-	bool			m_bWarned;			///< warned of buffer size already
-	int				m_iInitialBufLen;	///< initial buffer len
-
-	FILE *			m_pPipe;			///< incoming stream
-	BYTE *			m_sBuffer;			///< buffer
-	BYTE *			m_pBuffer;			///< current buffer pos
-	BYTE *			m_pBufferEnd;		///< buffered end pos
-
-	int				m_iWordPos;			///< current word position
-
-	ISphHits		m_tHits;			///< my hitvector
-	bool			m_bHitsReady;
-
-private:
-	/// set current tag
-	void			SetTag ( const char * sTag );
-
-	/// read in some more data
-	/// moves everything from current ptr (m_pBuffer) to the beginng
-	/// reads in as much data as possible to the end
-	/// returns false on EOF
-	bool			UpdateBuffer ();
-
-	/// skips whitespace
-	/// does buffer updates
-	/// returns false on EOF
-	bool			SkipWhitespace ();
-
-	/// check if what's at current pos is either opening/closing current tag (m_pTag)
-	/// return false on failure
-	bool			CheckTag ( bool bOpen, CSphString & sError );
-
-	/// skips whitespace and opening/closing current tag (m_pTag)
-	/// returns false on failure
-	bool			SkipTag ( bool bOpen, CSphString & sError );
-
-	/// scan for tag with integer value
-	bool			ScanInt ( const char * sTag, DWORD * pRes, CSphString & sError );
-
-	/// scan for tag with integer value
-	bool			ScanInt ( const char * sTag, uint64_t * pRes, CSphString & sError );
-
-	/// scan for tag with integer value
-	bool			ScanInt ( const char * sTag, int64_t * pRes, CSphString & sError ) { return ScanInt ( sTag, (uint64_t*)pRes, sError ); }
-
-	/// scan for tag with string value
-	bool			ScanStr ( const char * sTag, char * pRes, int iMaxLength, CSphString & sError );
-
-	/// check for hits overun hits buffer
-	void			CheckHitsCount ( const char * sField );
-};
-
-
-#if USE_LIBEXPAT || USE_LIBXML
-
+#if USE_LIBEXPAT
 class CSphConfigSection;
-CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE * pPipe, BYTE * dInitialBuf, int iBufLen, const char * szSourceName, int iMaxFieldLen, bool bProxy );
-
+CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE * pPipe, const char * szSourceName, int iMaxFieldLen, bool bProxy );
 #endif
-
-FILE * sphDetectXMLPipe ( const char * szCommand, BYTE * dBuf, int & iBufSize, int iMaxBufSize, bool & bUsePipe2 );
 
 
 /////////////////////////////////////////////////////////////////////////////

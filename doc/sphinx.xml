@@ -477,9 +477,9 @@ This code is called <glossterm>data source driver</glossterm> (or simply
 <para>
 At the time of this writing, there are built-in drivers for
 MySQL, PostgreSQL, MS SQL (on Windows), and ODBC. There is also
-a generic driver called xmlpipe, which runs a specified command
+a generic driver called xmlpipe2, which runs a specified command
 and reads the data from its <filename>stdout</filename>.
-See <xref linkend="xmlpipe"/> section for the format description.
+See <xref linkend="xmlpipe2"/> section for the format description.
 </para>
 <para>
 There can be as many sources per index as necessary. They will be
@@ -878,67 +878,6 @@ is run immediately when Sphinx received all the documents, but further indexing
 by the time the post-index query gets executed, it is <emphasis role="bold">guaranteed</emphasis>
 that the indexing was succesful. Database connection is dropped and re-established
 because sorting phase can be very lengthy and would just timeout otherwise.
-</para>
-</sect1>
-
-
-<sect1 id="xmlpipe"><title>xmlpipe data source</title>
-<para>
-xmlpipe data source was designed to enable users to plug data into
-Sphinx without having to implement new data sources drivers themselves.
-It is limited to 2 fixed fields and 2 fixed attributes, and is deprecated
-in favor of <xref linkend="xmlpipe2"/> now. For new streams, use xmlpipe2.
-</para>
-<para>
-To use xmlpipe, configure the data source in your configuration file
-as follows:
-<programlisting>
-source example_xmlpipe_source
-{
-    type = xmlpipe
-    xmlpipe_command = perl /www/mysite.com/bin/sphinxpipe.pl
-}
-</programlisting>
-The <filename>indexer</filename> will run the command specified
-in <option><link linkend="conf-xmlpipe-command">xmlpipe_command</link></option>,
-and then read, parse and index the data it prints to <filename>stdout</filename>.
-More formally, it opens a pipe to given command and then reads
-from that pipe.
-</para>
-<para>
-indexer will expect one or more documents in custom XML format.
-Here's the example document stream, consisting of two documents:
-<example id="ex-xmlpipe-document"><title>XMLpipe document stream</title>
-<programlisting>
-&lt;document&gt;
-&lt;id&gt;123&lt;/id&gt;
-&lt;group&gt;45&lt;/group&gt;
-&lt;timestamp&gt;1132223498&lt;/timestamp&gt;
-&lt;title&gt;test title&lt;/title&gt;
-&lt;body&gt;
-this is my document body
-&lt;/body&gt;
-&lt;/document&gt;
-
-&lt;document&gt;
-&lt;id&gt;124&lt;/id&gt;
-&lt;group&gt;46&lt;/group&gt;
-&lt;timestamp&gt;1132223498&lt;/timestamp&gt;
-&lt;title&gt;another test&lt;/title&gt;
-&lt;body&gt;
-this is another document
-&lt;/body&gt;
-&lt;/document&gt;
-</programlisting>
-</example>
-</para>
-<para>
-Legacy xmlpipe legacy driver uses a builtin parser
-which is pretty fast but really strict and does not actually
-fully support XML. It requires that all the fields <emphasis>must</emphasis>
-be present, formatted <emphasis>exactly</emphasis> as in this example, and
-occur <emphasis>exactly</emphasis> in the same order. The only optional
-field is <option>timestamp</option>; it defaults to 1.
 </para>
 </sect1>
 
@@ -7976,13 +7915,13 @@ you a few additional questions about it.
 Data source type.
 Mandatory, no default value.
 Known types are <option>mysql</option>, <option>pgsql</option>, <option>mssql</option>,
-<option>xmlpipe</option> and <option>xmlpipe2</option>, and <option>odbc</option>.
+<option>xmlpipe2</option>, and <option>odbc</option>.
 </para>
 <para>
 All other per-source options depend on source type selected by this option.
 Names of the options used for SQL sources (ie. MySQL, PostgreSQL, MS SQL) start with "sql_";
-names of the ones used for xmlpipe and xmlpipe2 start with "xmlpipe_".
-All source types except <option>xmlpipe</option> are conditional; they might or might
+names of the ones used for xmlpipe2 start with "xmlpipe_".
+All source types are conditional; they might or might
 not be supported depending on your build settings, installed client libraries, etc.
 <option>mssql</option> type is currently only available on Windows.
 <option>odbc</option> type is available both on Windows natively and on
@@ -8100,7 +8039,7 @@ Added in 2.1.1-beta.
 When this option is 1, values such as "1234" will be indexed as numbers instead
 of strings; if the option is 0, such values will be indexed as strings.
 This conversion applies to any data source, that is, JSON attributes originating
-from either SQL or XMLpipe sources will all be affected.
+from either SQL or XMLpipe2 sources will all be affected.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -8120,7 +8059,7 @@ Added in 2.1.1-beta.
 When this directive is set to 'lowercase', key names within JSON attributes
 will be automatically brought to lower case when indexing.
 This conversion applies to any data source, that is, JSON attributes originating
-from either SQL or XMLpipe sources will all be affected.
+from either SQL or XMLpipe2 sources will all be affected.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -8984,9 +8923,9 @@ sql_query_info = SELECT * FROM documents WHERE id=$id
 
 <sect2 id="conf-xmlpipe-command"><title>xmlpipe_command</title>
 <para>
-Shell command that invokes xmlpipe stream producer.
+Shell command that invokes xmlpipe2 stream producer.
 Mandatory.
-Applies to <option>xmlpipe</option> and <option>xmlpipe2</option> source types only.
+Applies to <option>xmlpipe2</option> source types only.
 </para>
 <para>
 Specifies a command that will be executed and which output
@@ -10645,8 +10584,7 @@ and text forms (such as &amp;oacute; or &amp;nbsp;). All entities
 as specified by HTML4 standard are supported.
 </para>
 <para>
-Stripping does not work with <option>xmlpipe</option> source type
-(it's suggested to upgrade to xmlpipe2 anyway). It should work with
+Stripping should work with
 properly formed HTML and XHTML, but, just as most browsers, may produce
 unexpected results on malformed input (such as HTML with stray &lt;'s
 or unclosed &gt;'s).

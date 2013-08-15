@@ -354,7 +354,7 @@ MYSQL_CFLAGS=`echo $MYSQL_CFLAGS | sed -e 's/\-DNDEBUG//g'`
 dnl ---
 
 AC_MSG_CHECKING([whether to use 64-bit document/word IDs])
-sph_enable_id64=no
+sph_enable_id64=yes
 AC_ARG_ENABLE([id64],
 	[  --enable-id64           use 64-bit document and word IDs (default is no)],
 	[sph_enable_id64=$enableval])

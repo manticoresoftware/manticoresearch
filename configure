@@ -7404,7 +7404,7 @@ MYSQL_CFLAGS=`echo $MYSQL_CFLAGS | sed -e 's/\-DNDEBUG//g'`
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to use 64-bit document/word IDs" >&5
 $as_echo_n "checking whether to use 64-bit document/word IDs... " >&6; }
-sph_enable_id64=no
+sph_enable_id64=yes
 # Check whether --enable-id64 was given.
 if test "${enable_id64+set}" = set; then :
   enableval=$enable_id64; sph_enable_id64=$enableval

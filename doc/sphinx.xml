@@ -5313,7 +5313,7 @@ may be lifted in future releases, as we add the needed functionality to the
 RT indexes. The complete list is as follows.
 <itemizedlist>
 <listitem><para>Target RT index needs to be empty. (See <xref linkend="sphinxql-truncate-rtindex"/>)</para></listitem>
-<listitem><para>Source disk index needs to have index_sp=0, boundary_step=0, stopword_step=1, dict=crc settings.</para></listitem>
+<listitem><para>Source disk index needs to have index_sp=0, boundary_step=0, stopword_step=1.</para></listitem>
 <listitem><para>Source disk index needs to have an empty index_zones setting.</para></listitem>
 </itemizedlist>
 </para>
@@ -9609,7 +9609,7 @@ morphology = stem_en, libstemmer_sv
 <para>
 The keywords dictionary type.
 Known values are 'crc' and 'keywords'.
-Optional, default is 'crc'.
+Optional, default is 'keywords'.
 Introduced in version 2.0.1-beta.
 </para>
 <para>

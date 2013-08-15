@@ -1166,11 +1166,11 @@ void sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tS
 
 	if ( hIndex("dict") )
 	{
-		tSettings.m_bWordDict = false; // default to crc
-		if ( hIndex["dict"]=="keywords" )
-			tSettings.m_bWordDict = true;
-		else if ( hIndex["dict"]!="crc" )
-			fprintf ( stdout, "WARNING: unknown dict=%s, defaulting to crc\n", hIndex["dict"].cstr() );
+		tSettings.m_bWordDict = true; // default to keywords
+		if ( hIndex["dict"]=="crc" )
+			tSettings.m_bWordDict = false;
+		else if ( hIndex["dict"]!="keywords" )
+			fprintf ( stdout, "WARNING: unknown dict=%s, defaulting to keywords\n", hIndex["dict"].cstr() );
 	}
 }
 
@@ -1260,7 +1260,7 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 		return false;
 	}
 
-	bool bWordDict = ( strcmp ( hIndex.GetStr ( "dict", "" ), "keywords" )==0 );
+	bool bWordDict = ( strcmp ( hIndex.GetStr ( "dict", "keywords" ), "keywords" )==0 );
 	if ( hIndex("type") && hIndex["type"]=="rt" && ( tSettings.m_iMinInfixLen>0 || tSettings.m_iMinPrefixLen>0 ) && !bWordDict )
 	{
 		sError.SetSprintf ( "RT indexes support prefixes and infixes with only dict=keywords" );

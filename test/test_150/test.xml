@@ -97,6 +97,7 @@ index plain_sub_prefix
        min_prefix_len  = 2
        max_substring_len       = 3
        enable_star     = 1
+	   dict = crc
 }
 index plain_sub_infix
 {
@@ -106,6 +107,7 @@ index plain_sub_infix
        min_infix_len   = 2
        max_substring_len       = 3
        enable_star     = 1
+	   dict = crc
 }
 
 </config>

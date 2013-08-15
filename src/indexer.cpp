@@ -25,6 +25,7 @@
 
 #if USE_WINDOWS
 	#define snprintf	_snprintf
+	#define popen		_popen
 
 	#include <io.h>
 	#include <tlhelp32.h>

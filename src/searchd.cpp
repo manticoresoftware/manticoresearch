@@ -332,7 +332,19 @@ struct ThdDesc_t
 	{}
 };
 
-static CSphStaticMutex			g_tThdMutex;
+struct StaticThreadsOnlyMutex_t
+{
+	StaticThreadsOnlyMutex_t ();
+	~StaticThreadsOnlyMutex_t ();
+	void Lock ();
+	void Unlock ();
+
+private:
+	CSphMutex m_tLock;
+};
+
+
+static StaticThreadsOnlyMutex_t	g_tThdMutex;
 static CSphVector<ThdDesc_t*>	g_dThd;				///< existing threads table
 
 static int						g_iConnID = 0;		///< global conn-id in none/fork/threads; current conn-id in prefork
@@ -434,37 +446,15 @@ private:
 	IndexHash_c::HashEntry_t *	m_pIterator;
 };
 
-struct ThreadsOnlyMutex_t
-{
-	bool Init ();
-	void Done ();
-	void Lock ();
-	void Unlock ();
-
-private:
-	CSphMutex m_tLock;
-};
-
-struct StaticThreadsOnlyMutex_t
-{
-	StaticThreadsOnlyMutex_t ();
-	~StaticThreadsOnlyMutex_t ();
-	void Lock ();
-	void Unlock ();
-
-private:
-	CSphMutex m_tLock;
-};
-
 
 static IndexHash_c *						g_pLocalIndexes = NULL;	// served (local) indexes hash
 static CSphVector<const char *>				g_dRotating;			// names of indexes to be rotated this time
 static const char *							g_sPrereading	= NULL;	// name of index currently being preread
 static CSphIndex *							g_pPrereading	= NULL;	// rotation "buffer"
 
-static ThreadsOnlyMutex_t					g_tRotateQueueMutex;
+static StaticThreadsOnlyMutex_t				g_tRotateQueueMutex;
 static CSphVector<CSphString>				g_dRotateQueue;		// FIXME? maybe replace it with lockless ring buffer
-static ThreadsOnlyMutex_t					g_tRotateConfigMutex;
+static StaticThreadsOnlyMutex_t				g_tRotateConfigMutex;
 static SphThread_t							g_tRotateThread;
 static SphThread_t							g_tRotationServiceThread;
 static volatile bool						g_bInvokeRotationService = false;
@@ -880,7 +870,6 @@ struct FlushState_t
 
 static volatile FlushState_t *	g_pFlush		= NULL;
 static CSphSharedBuffer<FlushState_t>	g_tFlushBuffer;
-static CSphMutex g_tFlushMutex;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -902,7 +891,7 @@ struct Uservar_t
 	{}
 };
 
-static CSphMutex					g_tUservarsMutex;
+static StaticThreadsOnlyMutex_t		g_tUservarsMutex;
 static SmallStringHash_T<Uservar_t>	g_hUservars;
 
 static volatile int64_t				g_tmSphinxqlState; // last state (uservars+udfs+...) update timestamp
@@ -1173,36 +1162,10 @@ bool IndexHash_c::Exists ( const CSphString & tKey ) const
 
 //////////////////////////////////////////////////////////////////////////
 
-
-bool ThreadsOnlyMutex_t::Init ()
-{
-	if ( g_eWorkers==MPM_THREADS )
-		return m_tLock.Init();
-	else
-		return true;
-}
-
-void ThreadsOnlyMutex_t::Done ()
-{
-	if ( g_eWorkers==MPM_THREADS )
-		m_tLock.Done();
-}
-
-void ThreadsOnlyMutex_t::Lock ()
-{
-	if ( g_eWorkers==MPM_THREADS )
-		m_tLock.Lock();
-}
-
-void ThreadsOnlyMutex_t::Unlock()
-{
-	if ( g_eWorkers==MPM_THREADS )
-		m_tLock.Unlock();
-}
-
 StaticThreadsOnlyMutex_t::StaticThreadsOnlyMutex_t ()
 {
-	m_tLock.Init();
+	if ( !m_tLock.Init() )
+		sphDie ( "failed to create static mutex" );
 }
 
 StaticThreadsOnlyMutex_t::~StaticThreadsOnlyMutex_t ()
@@ -1647,12 +1610,8 @@ void Shutdown ()
 			g_tThdMutex.Lock();
 			g_dThd.Reset();
 			g_tThdMutex.Unlock();
-			g_tFlushMutex.Done();
-			g_tUservarsMutex.Done();
 			g_tOptimizeQueueMutex.Done();
 		}
-		g_tRotateQueueMutex.Done();
-		g_tRotateConfigMutex.Done();
 
 		sphThreadJoin ( &g_tRotationServiceThread );
 
@@ -11820,10 +11779,9 @@ bool SqlParser_c::AddIntFilterLesser ( const SqlNode_t & tAttr, int64_t iVal, bo
 
 bool SqlParser_c::AddUservarFilter ( const SqlNode_t & tCol, const SqlNode_t & tVar, bool bExclude )
 {
+	CSphScopedLock<StaticThreadsOnlyMutex_t> tLock ( g_tUservarsMutex );
 	CSphString sVar;
 	ToString ( sVar, tVar );
-
-	CSphScopedLock<CSphMutex> tLock ( g_tUservarsMutex );
 	Uservar_t * pVar = g_hUservars ( sVar );
 	if ( !pVar )
 	{
@@ -19540,9 +19498,7 @@ static void ThdSaveIndexes ( void * )
 	SaveIndexes ();
 
 	// we're no more flushing
-	g_tFlushMutex.Lock();
 	g_pFlush->m_bFlushing = false;
-	g_tFlushMutex.Unlock();
 }
 
 #if !USE_WINDOWS
@@ -21724,9 +21680,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		dPersNum.SharedValue<DWORD>() = 0;
 	}
 
-	if ( !g_tRotateQueueMutex.Init() || !g_tRotateConfigMutex.Init() )
-		sphDie ( "failed to init rotations mutexes" );
-
 	// in threaded mode, create a dedicated rotation thread
 	if ( g_eWorkers==MPM_THREADS )
 	{
@@ -21735,8 +21688,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 		// reserving max to keep memory consumption constant between frames
 		g_dThd.Reserve ( Max ( g_iMaxChildren*2, 64 ) );
-
-		g_tFlushMutex.Init();
 	}
 
 	// replay last binlog
@@ -21765,8 +21716,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			sphDie ( "failed to create optimize thread" );
 
 		g_tOptimizeQueueMutex.Init();
-
-		g_tUservarsMutex.Init();
 
 		g_sSphinxqlState = hSearchd.GetStr ( "sphinxql_state" );
 		if ( !g_sSphinxqlState.IsEmpty() )
@@ -21833,7 +21782,7 @@ extern UservarIntSet_c * ( *g_pUservarsHook )( const CSphString & sUservar );
 
 UservarIntSet_c * UservarsHook ( const CSphString & sUservar )
 {
-	CSphScopedLock<CSphMutex> tLock ( g_tUservarsMutex );
+	CSphScopedLock<StaticThreadsOnlyMutex_t> tLock ( g_tUservarsMutex );
 
 	Uservar_t * pVar = g_hUservars ( sUservar );
 	if ( !pVar )

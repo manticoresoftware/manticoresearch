@@ -75,6 +75,20 @@ index wild1
 	charset_table	= a..z, _, A..Z->a..z
 }
 
+source src_e
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT 1, 'life:) on mars'
+}
+
+index e
+{
+	source			= src_e
+	path			= <data_path/>/e
+	exceptions		= test_165/synonyms4.txt
+}
 </config>
 
 <db_create>
@@ -146,6 +160,10 @@ INSERT INTO `star_table` VALUES
 
 <!-- regression tokenizer produces wild chracters -->
 <sphinxql>select * from wild1 where match ('50? of 20% not 30* found')</sphinxql>
+<sphinxql>show meta</sphinxql>
+
+<!-- regression special vs synonym -->
+<sphinxql>select * from e where match ('life:\\)')</sphinxql>
 <sphinxql>show meta</sphinxql>
 </sphqueries>
 

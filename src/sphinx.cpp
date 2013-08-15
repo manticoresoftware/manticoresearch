@@ -5108,6 +5108,10 @@ BYTE * CSphTokenizerBase2<IS_UTF8>::GetTokenSyn ( bool bQueryMode )
 				{
 					iLastCodepoint = iCode;
 					continue;
+				} else if ( iLastCodepoint=='\\' && ( iFolded & FLAG_CODEPOINT_SYNONYM ) && ( iFolded & FLAG_CODEPOINT_SPECIAL ) )
+				{
+					iFolded &= ~FLAG_CODEPOINT_SPECIAL;
+
 				} else if ( iLastCodepoint=='\\' && !Special2Simple ( iFolded ) )
 				{
 					iLastCodepoint = 0;

@@ -1349,8 +1349,8 @@ public:
 	virtual void				Unlock ();
 	virtual void				PostSetup() {}
 
-	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultQueryArgs & tArgs ) const;
-	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultQueryArgs & tArgs ) const;
+	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
+	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString * pError ) const;
 	template <class Qword> bool	DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, bool bFillOnly, CSphString * pError ) const;
 	virtual bool 				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const;
@@ -1448,8 +1448,8 @@ private:
 private:
 	CSphString					GetIndexFileName ( const char * sExt ) const;
 
-	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict, const CSphMultQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache ) const;
-	bool						MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultQueryArgs & tArgs ) const;
+	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache ) const;
+	bool						MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
 	void						MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker, int iTag, int iIndexWeight ) const;
 
 	const DWORD *				FindDocinfo ( SphDocID_t uDocID ) const;
@@ -9288,7 +9288,7 @@ const char * sphArenaInit ( int iMaxBytes )
 
 //////////////////////////////////////////////////////////////////////////
 
-CSphMultQueryArgs::CSphMultQueryArgs ( const CSphVector<CSphFilterSettings> * pExtraFilters, int iIndexWeight )
+CSphMultiQueryArgs::CSphMultiQueryArgs ( const CSphVector<CSphFilterSettings> * pExtraFilters, int iIndexWeight )
 	: m_pExtraFilters ( pExtraFilters )
 	, m_iIndexWeight ( iIndexWeight )
 	, m_iTag ( 0 )
@@ -15743,7 +15743,7 @@ struct SphFinalMatchCalc_t : ISphMatchProcessor, ISphNoncopyable
 
 
 bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult,
-	int iSorters, ISphMatchSorter ** ppSorters, const CSphMultQueryArgs & tArgs ) const
+	int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const
 {
 	assert ( pQuery->m_sQuery.IsEmpty() );
 	assert ( tArgs.m_iTag>=0 );
@@ -18745,7 +18745,7 @@ struct CmpPSortersByRandom_fn
 
 /// one regular query vs many sorters
 bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult,
-	int iSorters, ISphMatchSorter ** ppSorters, const CSphMultQueryArgs & tArgs ) const
+	int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const
 {
 	assert ( pQuery );
 	CSphQueryProfile * pProfile = pResult->m_pProfile;
@@ -18847,7 +18847,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 /// many regular queries with one sorter attached to each query.
 /// returns true if at least one query succeeded. The failed queries indicated with pResult->m_iMultiplier==-1
 bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
-	CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultQueryArgs & tArgs ) const
+	CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const
 {
 	// ensure we have multiple queries
 	assert ( ppResults );
@@ -18978,7 +18978,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 
 bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult,
 	int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict,
-	const CSphMultQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache ) const
+	const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache ) const
 {
 	assert ( pQuery );
 	assert ( pResult );

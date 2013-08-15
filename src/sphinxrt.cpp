@@ -810,7 +810,7 @@ public:
 
 	void			AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, int iRowSize, const char ** ppStr, const CSphVector<DWORD> & dMvas, const CSphVector<JSONAttr_t> & dJson );
 	RtSegment_t *	CreateSegment ( int iRowSize, int iWordsCheckpoint );
-	void			CleanupDuplacates ( int iRowSize );
+	void			CleanupDuplicates ( int iRowSize );
 	void			GrabLastWarning ( CSphString & sWarning );
 };
 
@@ -1130,8 +1130,8 @@ public:
 	virtual const CSphSourceStats &		GetStats () const { return m_tStats; }
 	virtual CSphIndexStatus				GetStatus () const;
 
-	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultQueryArgs & tArgs ) const;
-	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultQueryArgs & tArgs ) const;
+	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
+	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
 	bool						DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, bool bFillOnly, CSphString * pError ) const;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString * pError ) const;
 	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const;
@@ -1893,7 +1893,7 @@ struct CmpDocHitIndex_t
 };
 
 
-void RtAccum_t::CleanupDuplacates ( int iRowSize )
+void RtAccum_t::CleanupDuplicates ( int iRowSize )
 {
 	if ( m_iAccumDocs<=1 )
 		return;
@@ -2678,7 +2678,7 @@ void RtIndex_t::Commit ( int * pDeleted )
 	// phase 0, build a new segment
 	// accum and segment are thread local; so no locking needed yet
 	// segment might be NULL if we're only killing rows this txn
-	pAcc->CleanupDuplacates ( m_tSchema.GetRowSize() );
+	pAcc->CleanupDuplicates ( m_tSchema.GetRowSize() );
 	pAcc->Sort();
 
 	RtSegment_t * pNewSeg = pAcc->CreateSegment ( m_tSchema.GetRowSize(), m_iWordsCheckpoint );
@@ -5992,7 +5992,7 @@ struct SphFinalArenaCopy_t : ISphMatchProcessor
 // FIXME? any chance to factor out common backend agnostic code?
 // FIXME? do we need to support pExtraFilters?
 bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters,
-	ISphMatchSorter ** ppSorters, const CSphMultQueryArgs & tArgs ) const
+	ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const
 {
 	assert ( ppSorters );
 	assert ( pResult );
@@ -6134,7 +6134,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 		CSphQueryResult tChunkResult;
 		tChunkResult.m_pProfile = pResult->m_pProfile;
-		CSphMultQueryArgs tMultiArgs ( dCumulativeKList.GetLength() ? &dKListFilter : NULL, tArgs.m_iIndexWeight );
+		CSphMultiQueryArgs tMultiArgs ( dCumulativeKList.GetLength() ? &dKListFilter : NULL, tArgs.m_iIndexWeight );
 		// storing index in matches tag for finding strings attrs offset later, biased against default zero and segments
 		tMultiArgs.m_iTag = m_pSegments.GetLength()+iChunk+1;;
 		tMultiArgs.m_bFactors = tArgs.m_bFactors;
@@ -6618,7 +6618,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 }
 
 bool RtIndex_t::MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults,
-								ISphMatchSorter ** ppSorters, const CSphMultQueryArgs & tArgs ) const
+								ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const
 {
 	// FIXME! OPTIMIZE! implement common subtree cache here
 	bool bResult = false;

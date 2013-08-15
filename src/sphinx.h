@@ -3072,7 +3072,7 @@ struct CSphIndexStatus
 };
 
 
-struct CSphMultQueryArgs : ISphNoncopyable
+struct CSphMultiQueryArgs : ISphNoncopyable
 {
 	const CSphVector<CSphFilterSettings> *	m_pExtraFilters;
 	const int								m_iIndexWeight;
@@ -3082,7 +3082,7 @@ struct CSphMultQueryArgs : ISphNoncopyable
 	const SmallStringHash_T<int64_t> *		m_pLocalDocs;
 	int64_t									m_iTotalDocs;
 
-	CSphMultQueryArgs ( const CSphVector<CSphFilterSettings> * pExtraFilters, int iIndexWeight );
+	CSphMultiQueryArgs ( const CSphVector<CSphFilterSettings> * pExtraFilters, int iIndexWeight );
 };
 
 
@@ -3180,8 +3180,8 @@ public:
 public:
 	virtual bool				EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const = 0;
 	void						SetCacheSize ( int iMaxCachedDocs, int iMaxCachedHits );
-	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultQueryArgs & tArgs ) const = 0;
-	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultQueryArgs & tArgs ) const = 0;
+	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const = 0;
+	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const = 0;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString * pError ) const = 0;
 	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const = 0;
 
@@ -3299,7 +3299,7 @@ struct CSphAttrUpdateEx
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// create phrase fulltext index implemntation
+/// create phrase fulltext index implementation
 CSphIndex *			sphCreateIndexPhrase ( const char* szIndexName, const char * sFilename );
 
 /// tell libsphinx to be quiet or not (logs and loglevels to come later)

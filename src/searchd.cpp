@@ -9629,7 +9629,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 	int iIndexWeight = m_dLocal[iLocal].m_iWeight;
 
 	// do the query
-	CSphMultQueryArgs tMultiArgs ( &dKlists, iIndexWeight );
+	CSphMultiQueryArgs tMultiArgs ( &dKlists, iIndexWeight );
 	tMultiArgs.m_bFactors = bNeedFactors;
 	if ( m_bGotLocalDF )
 	{
@@ -9758,7 +9758,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 		}
 
 		// do the query
-		CSphMultQueryArgs tMultiArgs ( &dKlists, iIndexWeight );
+		CSphMultiQueryArgs tMultiArgs ( &dKlists, iIndexWeight );
 		tMultiArgs.m_bFactors = bNeedFactors;
 		if ( m_bGotLocalDF )
 		{
@@ -14918,7 +14918,7 @@ void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 	tOut.HeadTuplet ( "Field", "Type" );
 
 	// data
-	dCondOut.MatchDataTuplet ( "id", USE_64BIT ? "bigint" : "integer" );
+	dCondOut.MatchDataTuplet ( "id", USE_64BIT ? "bigint" : "uint" );
 
 	const CSphSchema & tSchema = pServed->m_pIndex->GetMatchSchema();
 	ARRAY_FOREACH ( i, tSchema.m_dFields )

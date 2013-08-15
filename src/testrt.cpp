@@ -44,7 +44,7 @@ void DoSearch ( CSphIndex * pIndex )
 
 	CSphQuery tQuery;
 	CSphQueryResult tResult;
-	CSphMultQueryArgs tArgs ( NULL, 1 );
+	CSphMultiQueryArgs tArgs ( NULL, 1 );
 	tQuery.m_sQuery = "@title cat";
 
 	ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, pIndex->GetMatchSchema(), tResult.m_sError, NULL, false );

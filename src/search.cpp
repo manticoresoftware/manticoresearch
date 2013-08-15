@@ -325,7 +325,7 @@ int main ( int argc, char ** argv )
 				break;
 			}
 
-			CSphMultQueryArgs tArgs ( NULL, 1 );
+			CSphMultiQueryArgs tArgs ( NULL, 1 );
 			pResult = new CSphQueryResult();
 			if ( !pIndex->MultiQuery ( &tQuery, pResult, 1, &pTop, tArgs ) )
 			{

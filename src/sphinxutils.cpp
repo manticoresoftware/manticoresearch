@@ -1053,11 +1053,7 @@ bool sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings 
 {
 	tSettings.m_iNgramLen = Max ( hIndex.GetInt ( "ngram_len" ), 0 );
 
-	if ( !hIndex("charset_type") || hIndex["charset_type"]=="sbcs" )
-	{
-		tSettings.m_iType = TOKENIZER_SBCS;
-
-	} else if ( hIndex["charset_type"]=="utf-8" )
+	if ( !hIndex("charset_type") || hIndex["charset_type"]=="utf-8" )
 	{
 		tSettings.m_iType = TOKENIZER_UTF8;
 		if ( hIndex ( "ngram_chars" ) )
@@ -1068,6 +1064,9 @@ bool sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings 
 				sphWarning ( "ngram_chars specified, but ngram_len=0; IGNORED" );
 		}
 
+	} else if ( hIndex["charset_type"]=="sbcs" )
+	{
+		tSettings.m_iType = TOKENIZER_SBCS;
 	} else
 	{
 		sError.SetSprintf ( "unknown charset type '%s'", hIndex["charset_type"].cstr() );

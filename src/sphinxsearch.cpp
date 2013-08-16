@@ -7104,7 +7104,8 @@ enum ExprRankerNode_e
 	XRANK_BM25F,
 
 	// field aggregation functions
-	XRANK_SUM
+	XRANK_SUM,
+	XRANK_TOP
 };
 
 
@@ -7326,6 +7327,55 @@ struct Expr_Sum_T : public ISphExpr
 };
 
 
+/// aggregate max over matched fields
+template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
+struct Expr_Top_T : public ISphExpr
+{
+	RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES> * m_pState;
+	ISphExpr *				m_pArg;
+
+	Expr_Top_T ( RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES> * pState, ISphExpr * pArg )
+		: m_pState ( pState )
+		, m_pArg ( pArg )
+	{}
+
+	virtual ~Expr_Top_T()
+	{
+		SafeRelease ( m_pArg );
+	}
+
+	float Eval ( const CSphMatch & tMatch ) const
+	{
+		m_pState->m_iCurrentField = 0;
+		float fRes = FLT_MIN;
+		DWORD uMask = m_pState->m_uMatchedFields;
+		while ( uMask )
+		{
+			if ( uMask & 1 )
+				fRes = Max ( fRes, m_pArg->Eval ( tMatch ) );
+			uMask >>= 1;
+			m_pState->m_iCurrentField++;
+		}
+		return fRes;
+	}
+
+	int IntEval ( const CSphMatch & tMatch ) const
+	{
+		m_pState->m_iCurrentField = 0;
+		int iRes = INT_MIN;
+		DWORD uMask = m_pState->m_uMatchedFields;
+		while ( uMask )
+		{
+			if ( uMask & 1 )
+				iRes = Max ( iRes, m_pArg->IntEval ( tMatch ) );
+			uMask >>= 1;
+			m_pState->m_iCurrentField++;
+		}
+		return iRes;
+	}
+};
+
+
 // FIXME! cut/pasted from sphinxexpr; remove dupe
 struct Expr_GetIntConst_c : public ISphExpr
 {
@@ -7409,6 +7459,8 @@ public:
 	{
 		if ( !strcasecmp ( sFunc, "sum" ) )
 			return XRANK_SUM;
+		if ( !strcasecmp ( sFunc, "top" ) )
+			return XRANK_TOP;
 		if ( !strcasecmp ( sFunc, "max_window_hits" ) )
 			return XRANK_MAX_WINDOW_HITS;
 		if ( !strcasecmp ( sFunc, "bm25a" ) )
@@ -7484,6 +7536,7 @@ public:
 				}
 
 			case XRANK_SUM:					return new Expr_Sum_T<NEED_PACKEDFACTORS, HANDLE_DUPES> ( m_pState, pLeft );
+			case XRANK_TOP:					return new Expr_Top_T<NEED_PACKEDFACTORS, HANDLE_DUPES> ( m_pState, pLeft );
 			default:						return NULL;
 		}
 	}
@@ -7599,6 +7652,11 @@ public:
 					return SPH_ATTR_NONE;
 				return dArgs[0];
 
+			case XRANK_TOP:
+				if ( !CheckArgtypes ( dArgs, "TOP", "?", bAllConst, sError ) )
+					return SPH_ATTR_NONE;
+				return dArgs[0];
+
 			case XRANK_MAX_WINDOW_HITS:
 				if ( !CheckArgtypes ( dArgs, "MAX_WINDOW_HITS", "c:i", bAllConst, sError ) )
 					return SPH_ATTR_NONE;
@@ -7645,6 +7703,7 @@ public:
 				break;
 
 			case XRANK_SUM:
+			case XRANK_TOP:
 				if ( m_bCheckInFieldAggr )
 					m_sCheckError = "field aggregates can not be nested in ranking expression";
 				else
@@ -7659,7 +7718,7 @@ public:
 
 	void CheckExit ( int iID )
 	{
-		if ( !m_sCheckError && iID==XRANK_SUM )
+		if ( !m_sCheckError && ( iID==XRANK_SUM || iID==XRANK_TOP ) )
 		{
 			assert ( m_bCheckInFieldAggr );
 			m_bCheckInFieldAggr = false;

@@ -3061,9 +3061,7 @@ public:
 
 	virtual bool QwordSetup ( ISphQword * pQword ) const
 	{
-		SnippetsFastQword_c * pWord = dynamic_cast<SnippetsFastQword_c *> ( pQword );
-		assert ( pWord );
-
+		SnippetsFastQword_c * pWord = (SnippetsFastQword_c *)pQword;
 		pWord->Setup ( m_pHiglighter->m_tContainer.m_uLastPos );
 		return true;
 	}

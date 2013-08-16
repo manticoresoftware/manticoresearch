@@ -7219,8 +7219,7 @@ struct Expr_BM25F_T : public ISphExpr
 		m_dWeights.Fill ( 1 );
 		if ( pFieldWeights )
 		{
-			Expr_ConstHash_c * pConstHash = dynamic_cast<Expr_ConstHash_c*> ( pFieldWeights );
-			assert ( pConstHash );
+			Expr_ConstHash_c * pConstHash = (Expr_ConstHash_c*)pFieldWeights;
 
 			CSphVector<CSphNamedVariant> & dOpts = pConstHash->m_dValues;
 			ARRAY_FOREACH ( i, dOpts )

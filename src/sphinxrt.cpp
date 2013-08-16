@@ -5368,14 +5368,10 @@ ISphQword * RtQwordSetup_t::QwordSpawn ( const XQKeyword_t & ) const
 
 bool RtQwordSetup_t::QwordSetup ( ISphQword * pQword ) const
 {
-	RtQword_t * pMyWord = dynamic_cast<RtQword_t*> ( pQword );
-	if ( !pMyWord )
-		return false;
-
-	const RtIndex_t * pIndex = dynamic_cast< const RtIndex_t * > ( m_pIndex );
-	if ( !pIndex )
-		return false;
-
+	// there was two dynamic_casts here once but they're not necessary
+	// maybe it's worth to rewrite class hierarchy to avoid c-casts here?
+	RtQword_t * pMyWord = (RtQword_t*)pQword;
+	const RtIndex_t * pIndex = (const RtIndex_t *)m_pIndex;
 	return pIndex->RtQwordSetup ( pMyWord, m_pSeg );
 }
 

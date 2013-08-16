@@ -28,11 +28,11 @@ AC_ARG_WITH([debug],
 
 AC_MSG_CHECKING([whether to compile debug version])
 if test x$ac_cv_use_debug != xno; then
-	SPHINX_CFLAGS="-Wall -g -D_FILE_OFFSET_BITS=64"
+	SPHINX_CFLAGS="-fno-rtti -Wall -g -D_FILE_OFFSET_BITS=64"
 	SPHINX_INJECT_FLAGS="-D_FILE_OFFSET_BITS=64"
 	AC_MSG_RESULT([yes])
 else
-	SPHINX_CFLAGS="-Wall -g -D_FILE_OFFSET_BITS=64 -O3 -DNDEBUG"
+	SPHINX_CFLAGS="-fno-rtti -Wall -g -D_FILE_OFFSET_BITS=64 -O3 -DNDEBUG"
 	SPHINX_INJECT_FLAGS="-D_FILE_OFFSET_BITS=64 -DNDEBUG"
 	AC_MSG_RESULT([no])
 fi

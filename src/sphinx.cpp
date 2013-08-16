@@ -789,7 +789,7 @@ public:
 	virtual bool						QwordSetup ( ISphQword * ) const;
 
 protected:
-	template < class T >	bool		Setup ( ISphQword * ) const;
+	bool								Setup ( ISphQword * ) const;
 };
 
 
@@ -12537,7 +12537,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	if ( m_bKeepAttrs )
 	{
 		CSphString sWarning;
-		pPrevIndex = dynamic_cast<CSphIndex_VLN *>( sphCreateIndexPhrase ( NULL, m_sFilename.cstr() ) );
+		pPrevIndex = (CSphIndex_VLN *)sphCreateIndexPhrase ( NULL, m_sFilename.cstr() );
 		pPrevIndex->SetWordlistPreload ( false );
 		if ( !pPrevIndex->Prealloc ( false, false, sWarning ) || !pPrevIndex->Preread() )
 			pPrevIndex.Reset();
@@ -14784,7 +14784,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSett
 	}
 
 	bool bForceTerminate = false;
-	return CSphIndex_VLN::DoMerge ( this, dynamic_cast<const CSphIndex_VLN *>( pSource ),
+	return CSphIndex_VLN::DoMerge ( this, (const CSphIndex_VLN *)pSource,
 		bMergeKillLists, pFilter.Ptr(), m_sLastError, m_tProgress, &g_tThrottle, &bForceTerminate );
 }
 
@@ -15134,9 +15134,8 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, ISphFilter * pFilter,
 				CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pForceTerminate )
 {
-	const CSphIndex_VLN * pDstIndex = dynamic_cast<const CSphIndex_VLN *>( pDst );
-	const CSphIndex_VLN * pSrcIndex = dynamic_cast<const CSphIndex_VLN *> ( pSrc );
-	assert ( pDstIndex && pSrcIndex );
+	const CSphIndex_VLN * pDstIndex = (const CSphIndex_VLN *)pDst;
+	const CSphIndex_VLN * pSrcIndex = (const CSphIndex_VLN *)pSrc;
 
 	return CSphIndex_VLN::DoMerge ( pDstIndex, pSrcIndex, false, pFilter, sError, tProgress, pThrottle, pForceTerminate );
 }
@@ -15985,20 +15984,16 @@ ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & tWord ) cons
 
 bool DiskIndexQwordSetup_c::QwordSetup ( ISphQword * pWord ) const
 {
-	WITH_QWORD ( m_pIndex, false, Qword, return Setup<Qword> ( pWord ) );
+	WITH_QWORD ( m_pIndex, false, Qword, return Setup ( pWord ) );
 	return false;
 }
 
 
-template < class Qword >
 bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 {
-	Qword * pMyWord = dynamic_cast<Qword*> ( pWord );
-
-	if ( !pMyWord )
-		return false;
-
-	Qword & tWord = *pMyWord;
+	// there was a dynamic_cast here once but it's not necessary
+	// maybe it worth to rewrite class hierarchy to avoid c-cast here?
+	DiskIndexQwordTraits_c & tWord = *(DiskIndexQwordTraits_c*)pWord;
 
 	// setup attrs
 	tWord.m_tDoc.Reset ( m_iDynamicRowitems );

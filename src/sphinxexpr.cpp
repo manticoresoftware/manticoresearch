@@ -879,8 +879,7 @@ public:
 		assert ( ( tLocator.m_iBitOffset % ROWITEM_BITS )==0 );
 		assert ( tLocator.m_iBitCount==ROWITEM_BITS );
 
-		Expr_GetStrConst_c * pKey = dynamic_cast<Expr_GetStrConst_c*> ( pArg );
-		assert ( pKey );
+		Expr_GetStrConst_c * pKey = (Expr_GetStrConst_c*)pArg;
 		m_sKey = pKey->m_sVal;
 		m_iKeyLen = pKey->m_iLen;
 		m_uKeyBloom = sphJsonKeyMask ( m_sKey.cstr(), m_iKeyLen );
@@ -2458,9 +2457,7 @@ static void FoldArglist ( ISphExpr * pLeft, CSphVector<ISphExpr *> & dArgs )
 		return;
 	}
 
-	Expr_Arglist_c * pArgs = dynamic_cast<Expr_Arglist_c *> ( pLeft );
-	assert ( pLeft );
-
+	Expr_Arglist_c * pArgs = (Expr_Arglist_c *)pLeft;
 	Swap ( dArgs, pArgs->m_dArgs );
 	SafeRelease ( pLeft );
 }

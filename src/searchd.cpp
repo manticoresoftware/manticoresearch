@@ -14325,8 +14325,7 @@ void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
 		return;
 	}
 
-	ISphRtIndex * pIndex = dynamic_cast<ISphRtIndex*> ( pServed->m_pIndex ); // FIXME? remove dynamic_cast?
-	assert ( pIndex );
+	ISphRtIndex * pIndex = (ISphRtIndex*)pServed->m_pIndex;
 
 	// get schema, check values count
 	const CSphSchema & tSchema = pIndex->GetInternalSchema();
@@ -16187,8 +16186,7 @@ void HandleMysqlAttach ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 		return;
 	}
 
-	ISphRtIndex * pRtTo = dynamic_cast<ISphRtIndex*> ( pTo->m_pIndex );
-	assert ( pRtTo );
+	ISphRtIndex * pRtTo = (ISphRtIndex*)pTo->m_pIndex;
 
 	if ( !pRtTo->AttachDiskIndex ( pFrom->m_pIndex, sError ) )
 	{
@@ -16226,8 +16224,7 @@ void HandleMysqlFlushRtindex ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 		return;
 	}
 
-	ISphRtIndex * pRt = dynamic_cast<ISphRtIndex*> ( pIndex->m_pIndex );
-	assert ( pRt );
+	ISphRtIndex * pRt = (ISphRtIndex*)pIndex->m_pIndex;
 
 	pRt->ForceRamFlush();
 	pIndex->Unlock();
@@ -16248,8 +16245,7 @@ void HandleMysqlFlushRamchunk ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 		return;
 	}
 
-	ISphRtIndex * pRt = dynamic_cast<ISphRtIndex*> ( pIndex->m_pIndex );
-	assert ( pRt );
+	ISphRtIndex * pRt = (ISphRtIndex*)pIndex->m_pIndex;
 
 	pRt->ForceDiskChunk();
 	pIndex->Unlock();
@@ -16270,8 +16266,7 @@ void HandleMysqlTruncate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 		return;
 	}
 
-	ISphRtIndex * pRt = dynamic_cast<ISphRtIndex*> ( pIndex->m_pIndex );
-	assert ( pRt );
+	ISphRtIndex * pRt = (ISphRtIndex*)pIndex->m_pIndex;
 
 	CSphString sError;
 	bool bRes = pRt->Truncate ( sError );

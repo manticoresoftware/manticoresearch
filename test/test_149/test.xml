@@ -10,7 +10,6 @@ indexer
 searchd
 {
 	<searchd_settings/>
-compat_sphinxql_magics = 1
 	workers = threads
 }
 
@@ -51,10 +50,10 @@ CREATE TABLE test_table
 
 <sphqueries>
 	<sphinxql>select * from test</sphinxql>
-	<sphinxql>select * from test where @id IN (1,3,6,7)</sphinxql>
-	<sphinxql>select * from test where @id IN (1,1000,3,6,7)</sphinxql>
-	<sphinxql>select * from test where @id IN (1000,1,3,6,7)</sphinxql>
-	<sphinxql>select * from test where @id IN (1,3,6,1000,7)</sphinxql>
+	<sphinxql>select * from test where id IN (1,3,6,7)</sphinxql>
+	<sphinxql>select * from test where id IN (1,1000,3,6,7)</sphinxql>
+	<sphinxql>select * from test where id IN (1000,1,3,6,7)</sphinxql>
+	<sphinxql>select * from test where id IN (1,3,6,1000,7)</sphinxql>
 	<sphinxql>select * from test where idd IN (875,321,60,1010,20,457,20,311,20,750,70,10)</sphinxql>
 	<sphinxql>select * from test where idd NOT IN (60,1010,20,457,20,311,20,750,70,10)</sphinxql>
 	<!-- here is regression broken NOT IN @global -->

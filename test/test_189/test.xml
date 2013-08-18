@@ -8,16 +8,6 @@
 <config>
 searchd
 {
-	<agent0>
-		compat_sphinxql_magics = 0
-	</agent0>
-	<agent1>
-		compat_sphinxql_magics = 1
-	</agent1>
-	<agent2>
-		compat_sphinxql_magics = 1
-	</agent2>
-
 	<searchd_settings/>
 	workers = threads
 }

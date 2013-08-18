@@ -12,7 +12,6 @@
 searchd
 {
 	<searchd_settings/>
-compat_sphinxql_magics = 1
 	<dynamic>
 		<variant>workers = fork</variant>
 		<variant>workers = prefork</variant>

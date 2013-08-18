@@ -16,10 +16,6 @@ searchd
 {
 	<searchd_settings/>
 	workers = threads
-	<dynamic>
-		<variant>compat_sphinxql_magics = 1</variant>
-		<variant>compat_sphinxql_magics = 0</variant>
-	</dynamic>
 }
 
 source src_main

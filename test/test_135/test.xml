@@ -16,7 +16,6 @@ indexer
 searchd
 {
 	<searchd_settings/>
-compat_sphinxql_magics = 1
 	binlog_flush = 2
 	binlog_path = <data_path/>
 	workers = threads

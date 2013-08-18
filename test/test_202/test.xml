@@ -18,7 +18,6 @@ searchd
 {
 	<searchd_settings/>
 	binlog_path =
-	compat_sphinxql_magics = 0
 	<dynamic>
 		<variant>
 			workers = threads

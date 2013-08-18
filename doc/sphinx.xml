@@ -6002,13 +6002,7 @@ they would have been returned in the A, B, C order.)
 <para>
 In version 2.0.1-beta, we fixed that. SphinxQL is now more
 SQL compliant (and will be further brought in as much compliance
-with standard SQL syntax as possible). That is not yet a breaking
-change, because <filename>searchd</filename> now supports
-<link linkend="conf-compat-sphinxql-magics"><code>compat_sphinxql_magics</code></link>
-directive that flips between the old "compatibility" mode and the new
-"compliance" mode. However, the compatibility mode support is going
-to be removed in future, so it's strongly advised to update SphinxQL
-applications and switch to the compliance mode.
+with standard SQL syntax as possible).
 </para>
 <para>
 The important changes are as follows:
@@ -13037,30 +13031,6 @@ matching keywords (per each wildcard in the query).
 <bridgehead>Example:</bridgehead>
 <programlisting>
 expansion_limit = 16
-</programlisting>
-</sect2>
-
-
-<sect2 id="conf-compat-sphinxql-magics"><title>compat_sphinxql_magics</title>
-<para>
-Legacy SphinxQL quirks compatiblity mode.
-Optional, default is 0 starting with 2.1.1-beta (SQL compliance mode).
-Introduced in version 2.0.1-beta.
-</para>
-<para>
-Starting with version 2.0.1-beta, we're bringing SphinxQL in closer
-compliance with standard SQL. However, existing applications must not
-get broken, and <code>compat_sphinxql_magics</code> lets you upgrade
-safely. It defaults to 0, which acts in modern way.
-<b>SphinxQL compatibility mode is now deprecated and
-will be removed</b> once we complete bringing SphinxQL in line
-with standard SQL syntax.
-Please refer to <xref linkend="sphinxql-upgrading-magics"/>
-for the details and update instruction.
-</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-compat_sphinxql_magics = 0 # the future is now
 </programlisting>
 </sect2>
 

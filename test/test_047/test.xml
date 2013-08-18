@@ -16,7 +16,6 @@ indexer
 searchd
 {
 	<searchd_settings/>
-compat_sphinxql_magics = 1
 }
 
 source test
@@ -85,7 +84,7 @@ INSERT INTO test_table (id, text) VALUES
 </queries>
 <sphqueries>
 	<!-- regression id64 less not work -->
-	<sphinxql><![CDATA[ select * from test where @id<60000000002 ]]></sphinxql>
+	<sphinxql><![CDATA[ select * from test where id<60000000002 ]]></sphinxql>
 </sphqueries>
 
 </test>

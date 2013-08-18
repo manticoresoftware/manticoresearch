@@ -18,7 +18,6 @@ searchd
 </dynamic>
     subtree_hits_cache			= 1000
 <Searchd_Settings/>
-compat_sphinxql_magics = 1
 }
 
 source srctest

@@ -14,7 +14,6 @@ indexer
 searchd
 {
 	<searchd_settings/>
-compat_sphinxql_magics = 1
 	binlog_path = #
 	workers = threads
 	attr_flush_period = 3600 # not autoflush during test run but be able to do FlushAttributes command
@@ -266,7 +265,7 @@ $results[] = 'post update flush tag - ' . $client->FlushAttributes();
 <sphinxql>select * from idx</sphinxql>
 <!-- regression that rt deadlock on smart attributes update -->
 <sphinxql>update hung set mva1=(3,2, 1, 2) where id>2</sphinxql>
-<sphinxql>select * from hung order by @id asc</sphinxql>
+<sphinxql>select * from hung order by id asc</sphinxql>
 </sphqueries>
 
 <DB_Create>

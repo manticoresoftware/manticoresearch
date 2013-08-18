@@ -12,7 +12,6 @@ searchd
 {
 	<searchd_settings/>
 	workers = threads
-	compat_sphinxql_magics = 0
 }
 
 source test

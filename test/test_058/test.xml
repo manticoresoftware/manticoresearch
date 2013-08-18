@@ -12,7 +12,6 @@ searchd
 {
 	<searchd_settings/>
 	expansion_limit = 2
-compat_sphinxql_magics = 1
 	seamless_rotate = 0
 	<dynamic>
 		<variant>

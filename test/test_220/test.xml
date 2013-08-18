@@ -16,7 +16,6 @@ indexer
 searchd
 {
 	<searchd_settings/>
-	compat_sphinxql_magics = 0
 	dist_threads = 4
 
 	# needed for "do not fetch too much" test below

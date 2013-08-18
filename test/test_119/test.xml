@@ -13,7 +13,6 @@ indexer
 searchd
 {
 <searchd_settings/>
-compat_sphinxql_magics = 1
 	workers			= threads
 	binlog_path		=
 }
@@ -101,8 +100,8 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select *, fval+1 as f1 from test where match('test') order by f1 desc</sphinxql>
 <sphinxql>select * from test group by fval</sphinxql>
 <sphinxql>select *, ival-1 as i1 from test group by i1</sphinxql>
-<sphinxql>select *, @weight+ival as i1 from test where match('test')</sphinxql>
-<sphinxql>select *, @weight+ival as i1 from test where match('test') and i1>1315</sphinxql>
+<sphinxql>select *, weight()+ival as i1 from test where match('test')</sphinxql>
+<sphinxql>select *, weight()+ival as i1 from test where match('test') and i1>1315</sphinxql>
 <sphinxql>select *, weight() as w, w+ival as i1, i1+10 as i2 from test where match('test') and i2>1325</sphinxql>
 <sphinxql>select *, 10+ival as i1, 50+i1 as i2 from test where match('test')</sphinxql>
 <sphinxql>select *, 10+ival as i1, 50+i1 as i2 from test</sphinxql>
@@ -112,7 +111,7 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*fval as i3 from test order by i3 asc</sphinxql>
 <sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*fval as i3 from test order by i1 asc, i3 desc</sphinxql>
 <sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*fval as i3 from test group by i2</sphinxql>
-<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*@id as i3 from test group by i3</sphinxql>
+<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*id as i3 from test group by i3</sphinxql>
 
 <!-- here is going another regression from bug #800-->
 <sphinxql>select *, IN ( mva, 11 ) as cnd1 from mva where cnd1=1</sphinxql>

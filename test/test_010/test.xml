@@ -13,7 +13,6 @@ mem_limit			= 16M
 searchd
 {
 	<Searchd_Settings/>
-compat_sphinxql_magics = 1
 }
 
 source srclj

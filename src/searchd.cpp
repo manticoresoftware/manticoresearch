@@ -253,7 +253,6 @@ static bool				g_bPreopenIndexes	= false;
 static bool				g_bOnDiskDicts		= false;
 static bool				g_bWatchdog			= true;
 static int				g_iExpansionLimit	= 0;
-static bool				g_bCompatResults	= false;
 
 struct Listener_t
 {
@@ -7935,7 +7934,7 @@ void RemapResult ( const ISphSchema * pTarget, AggrResult_t * pRes, bool bMultiS
 
 // rebuild the results itemlist expanding stars
 const CSphVector<CSphQueryItem> * ExpandAsterisk ( const ISphSchema & tSchema,
-	const CSphVector<CSphQueryItem> & tItems, CSphVector<CSphQueryItem> * pExpanded, bool bNoID=false )
+	const CSphVector<CSphQueryItem> & tItems, CSphVector<CSphQueryItem> * pExpanded, bool bNoID )
 {
 	// the result schema usually is the index schema + calculated items + @-items
 	// we need to extract the index schema only - so, look at the items
@@ -8249,6 +8248,10 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	CSphVector<CSphQueryItem> tExtItems;
 	const CSphVector<CSphQueryItem> * pItems = ExpandAsterisk ( tRes.m_tSchema, tQuery.m_dItems, &tExtItems, !bFromSphinxql );
 	const CSphVector<CSphQueryItem> & tItems = *pItems;
+
+	// api + index without attributes + select * case
+	if ( !bFromSphinxql && !tItems.GetLength() )
+		return true;
 
 	// build the final schemas!
 	// ???
@@ -8589,116 +8592,6 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	// all the merging and sorting is now done
 	// replace the minimized matches schema with its subset, the result set schema
 	tRes.m_tSchema.SwapAttrs ( dFrontend );
-	return true;
-}
-
-
-bool MinimizeAggrResultCompat ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHadLocalIndexes )
-{
-	// sanity check
-	int iExpected = 0;
-	ARRAY_FOREACH ( i, tRes.m_dMatchCounts )
-		iExpected += tRes.m_dMatchCounts[i];
-
-	if ( iExpected!=tRes.m_dMatches.GetLength() )
-	{
-		tRes.m_sError.SetSprintf ( "INTERNAL ERROR: expected %d matches in combined result set, got %d",
-			iExpected, tRes.m_dMatches.GetLength() );
-		return false;
-	}
-
-	if ( !tRes.m_dMatches.GetLength() )
-		return true;
-
-	// build minimal schema
-	bool bAllEqual = true;
-	tRes.m_tSchema = tRes.m_dSchemas[0];
-	for ( int i=1; i<tRes.m_dSchemas.GetLength(); i++ )
-	{
-		if ( !MinimizeSchema ( tRes.m_tSchema, tRes.m_dSchemas[i] ) )
-			bAllEqual = false;
-	}
-
-	// apply select-items on top of that
-	bool bStar = false;
-	int iStar = 0;
-	for ( ; iStar<tQuery.m_dItems.GetLength(); iStar++ )
-	{
-		if ( tQuery.m_dItems[iStar].m_sExpr=="*" )
-		{
-			bStar = true;
-			break;
-		}
-	}
-
-	if ( !bStar && tQuery.m_dItems.GetLength() )
-	{
-		CSphRsetSchema tItems;
-		for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
-		{
-			const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
-			if ( !tCol.m_pExpr )
-			{
-				bool bAdd = ARRAY_ANY ( bAdd, tQuery.m_dItems,
-					tQuery.m_dItems[_any].m_sExpr==tCol.m_sName || tQuery.m_dItems[_any].m_sAlias==tCol.m_sName );
-				if ( !bAdd )
-					continue;
-			}
-			tItems.AddDynamicAttr ( tCol );
-		}
-
-		if ( tRes.m_tSchema.GetAttrsCount()!=tItems.GetAttrsCount() )
-		{
-			Swap ( tRes.m_tSchema, tItems );
-			bAllEqual = false;
-		}
-	}
-
-	// tricky bit
-	// in purely distributed case, all schemas are received from the wire, and miss aggregate functions info
-	// thus, we need to re-assign that info
-	if ( !bHadLocalIndexes )
-		RecoverAggregateFunctions ( tQuery, tRes );
-
-	// if there's more than one result set, we need to re-sort the matches
-	// so we need to bring matches to the schema that the *sorter* wants
-	// so we need to create the sorter before conversion
-	ISphMatchSorter * pSorter = NULL;
-	if ( tRes.m_iSuccesses!=1 )
-	{
-		// create queue
-		// at this point, we do not need to compute anything; it all must be here
-		pSorter = sphCreateQueue ( &tQuery, tRes.m_tSchema, tRes.m_sError, NULL, false );
-		if ( !pSorter )
-			return false;
-
-		// reset bAllEqual flag if sorter makes new attributes
-		if ( bAllEqual )
-		{
-			// at first we count already existed internal attributes
-			// then check if sorter makes more
-			CSphVector<SphStringSorterRemap_t> dRemapAttr;
-			sphSortGetStringRemap ( tRes.m_tSchema, tRes.m_tSchema, dRemapAttr );
-			int iRemapCount = dRemapAttr.GetLength();
-			sphSortGetStringRemap ( pSorter->GetSchema(), tRes.m_tSchema, dRemapAttr );
-
-			bAllEqual = ( dRemapAttr.GetLength()<=iRemapCount );
-		}
-
-		// sorter expects this
-		tRes.m_tSchema = pSorter->GetSchema();
-	}
-
-	// convert all matches to minimal schema
-	if ( !bAllEqual )
-		RemapResult ( &tRes.m_tSchema, &tRes );
-
-	// we do not need to re-sort if there's exactly one result set
-	if ( tRes.m_iSuccesses==1 )
-		return true;
-
-	RemapStrings ( pSorter, tRes );
-	tRes.m_iTotalMatches -= KillAllDupes ( pSorter, tRes );
 	return true;
 }
 
@@ -10505,23 +10398,13 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		// assuming here ( tRes.m_tSchema==tRes.m_dSchemas[0] )
 		if ( tRes.m_iSuccesses>1 || tQuery.m_dItems.GetLength() )
 		{
-			if ( g_bCompatResults && !tQuery.m_bAgent )
+			if ( pExtraSchema )
+				pExtraSchema->RLock();
+			UnlockOnDestroy SchemaLocker ( pExtraSchema );
+			if ( !MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength(), dAgents.GetLength(), pExtraSchema, m_pProfile, m_bSphinxql ) )
 			{
-				if ( !MinimizeAggrResultCompat ( tRes, tQuery, m_dLocal.GetLength()!=0 ) )
-				{
-					tRes.m_iSuccesses = 0;
-					return; // FIXME? really return, not just continue?
-				}
-			} else
-			{
-				if ( pExtraSchema )
-					pExtraSchema->RLock();
-				UnlockOnDestroy SchemaLocker ( pExtraSchema );
-				if ( !MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength(), dAgents.GetLength(), pExtraSchema, m_pProfile, m_bSphinxql ) )
-				{
-					tRes.m_iSuccesses = 0;
-					return; // FIXME? really return, not just continue?
-				}
+				tRes.m_iSuccesses = 0;
+				return; // FIXME? really return, not just continue?
 			}
 		}
 
@@ -11940,7 +11823,7 @@ bool ParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStm
 	if ( iRes!=0 || !dStmt.GetLength() )
 		return false;
 
-	if ( tParser.IsDeprecatedSyntax() && !g_bCompatResults )
+	if ( tParser.IsDeprecatedSyntax() )
 	{
 		sError = "Using the old-fashion @variables (@count, @weight, etc.) is deprecated";
 		return false;
@@ -12843,15 +12726,10 @@ static void DoCommandUpdate ( const char * sIndex, const CSphAttrUpdate & tUpd,
 
 static const ServedIndex_t * UpdateGetLockedIndex ( const CSphString & sName, bool bMvaUpdate )
 {
-	const ServedIndex_t * pLocked = g_pLocalIndexes->GetRlockedEntry ( sName );
-	if ( !pLocked )
-		return NULL;
-
 	// MVA updates have to be done sequentially
 	if ( !bMvaUpdate )
-		return pLocked;
+		return g_pLocalIndexes->GetRlockedEntry ( sName );
 
-	pLocked->Unlock();
 	return g_pLocalIndexes->GetWlockedEntry ( sName );
 }
 
@@ -15420,8 +15298,6 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 	{
 		iSchemaAttrsCount = SendGetAttrCount ( tRes.m_tSchema );
 		iAttrsCount = iSchemaAttrsCount;
-		if ( g_bCompatResults )
-			iAttrsCount += 2;
 	}
 
 	// result set header packet. We will attach EOF manually at the end.
@@ -15434,13 +15310,6 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 		dRows.HeadColumn ( "id", USE_64BIT ? MYSQL_COL_LONGLONG : MYSQL_COL_LONG );
 	} else
 	{
-		// send result set schema
-		if ( g_bCompatResults )
-		{
-			dRows.HeadColumn ( "id", USE_64BIT ? MYSQL_COL_LONGLONG : MYSQL_COL_LONG );
-			dRows.HeadColumn ( "weight", MYSQL_COL_LONG );
-		}
-
 		for ( int i=0; i<iSchemaAttrsCount; i++ )
 		{
 			const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
@@ -15470,12 +15339,6 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 	{
 		const CSphMatch & tMatch = tRes.m_dMatches [ iMatch ];
 
-		if ( g_bCompatResults )
-		{
-			dRows.PutNumeric<SphDocID_t> ( DOCID_FMT, tMatch.m_iDocID );
-			dRows.PutNumeric ( "%u", tMatch.m_iWeight );
-		}
-
 		const CSphRsetSchema & tSchema = tRes.m_tSchema;
 		for ( int i=0; i<iSchemaAttrsCount; i++ )
 		{
@@ -15487,15 +15350,22 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 			case SPH_ATTR_INTEGER:
 			case SPH_ATTR_TIMESTAMP:
 			case SPH_ATTR_BOOL:
-			case SPH_ATTR_BIGINT:
 			case SPH_ATTR_ORDINAL:
 			case SPH_ATTR_WORDCOUNT:
 			case SPH_ATTR_TOKENCOUNT:
-				if ( eAttrType==SPH_ATTR_BIGINT )
-					dRows.PutNumeric<SphAttr_t> ( INT64_FMT, tMatch.GetAttr(tLoc) );
-				else
-					dRows.PutNumeric<DWORD> ( "%u", (DWORD)tMatch.GetAttr(tLoc) );
+				dRows.PutNumeric<DWORD> ( "%u", (DWORD)tMatch.GetAttr(tLoc) );
 				break;
+
+			case SPH_ATTR_BIGINT:
+			{
+				const char * sName = tSchema.GetAttr(i).m_sName.cstr();
+				// how to get rid of this if?
+				if ( sName[0]=='i' && sName[1]=='d' && sName[2]=='\0' )
+					dRows.PutNumeric<SphDocID_t> ( DOCID_FMT, tMatch.m_iDocID );
+				else
+					dRows.PutNumeric<SphAttr_t> ( INT64_FMT, tMatch.GetAttr(tLoc) );
+				break;
+				}
 
 			case SPH_ATTR_FLOAT:
 				dRows.PutNumeric ( "%f", tMatch.GetAttrFloat(tLoc) );
@@ -20681,10 +20551,6 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_bOnDiskDicts = hSearchd.GetInt ( "ondisk_dict_default", (int)g_bOnDiskDicts )!=0;
 	sphSetUnlinkOld ( hSearchd.GetInt ( "unlink_old", 1 )!=0 );
 	g_iExpansionLimit = hSearchd.GetInt ( "expansion_limit", 0 );
-	g_bCompatResults = hSearchd.GetInt ( "compat_sphinxql_magics", (int)g_bCompatResults )!=0;
-
-	if ( g_bCompatResults )
-		sphWarning ( "compat_sphinxql_magics=1 is deprecated; please update your application and config" );
 
 	if ( hSearchd("max_matches") )
 	{

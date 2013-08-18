@@ -14,7 +14,6 @@ indexer
 searchd
 {
 	<searchd_settings/>
-compat_sphinxql_magics = 1
 	workers = threads
 }
 
@@ -36,8 +35,8 @@ index rt
 <sphinxql>insert into rt (id, idd, body) values ( 1, 11, 'this is cool place' )</sphinxql>
 <sphinxql>insert into rt (id, idd, body) values ( 2, 11, 'cool place is like no other' )</sphinxql>
 <sphinxql>insert into rt (id, idd, body) values ( 3, 11, 'place is cool becouse there is no things like this' )</sphinxql>
-<sphinxql>select * from rt where match ('"is cool place"/3') order by @id asc</sphinxql>
-<sphinxql>select * from rt where match ('"there things is cool place"/3') order by @id asc</sphinxql>
+<sphinxql>select * from rt where match ('"is cool place"/3') order by id asc</sphinxql>
+<sphinxql>select * from rt where match ('"there things is cool place"/3') order by id asc</sphinxql>
 </sphqueries>
 
 </test>

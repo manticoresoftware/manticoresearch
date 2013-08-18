@@ -12,7 +12,6 @@ indexer
 searchd
 {
 	<searchd_settings/>
-compat_sphinxql_magics = 1
 	workers = threads
 }
 
@@ -80,7 +79,7 @@ create table test_table
 <sphqueries>
 <sphinxql>insert into test3 ( id, title ) values ( 1, 'asdf asdf asdf' )</sphinxql>
 <sphinxql>insert into test4 ( id, title ) values ( 2, 'asdf' )</sphinxql>
-<sphinxql>select *, @weight as skey from test3, test4 where match('asdf') option ranker=wordcount, index_weights=(test3=1, test4=10)</sphinxql>
+<sphinxql>select *, weight() as skey from test3, test4 where match('asdf') option ranker=wordcount, index_weights=(test3=1, test4=10)</sphinxql>
 <sphinxql>select * from test3 option index_weights=(test3=10)</sphinxql>
 </sphqueries>
 

@@ -16,7 +16,6 @@ indexer
 searchd
 {
 <Searchd_Settings/>
-compat_sphinxql_magics = 1
 }
 
 source srctest

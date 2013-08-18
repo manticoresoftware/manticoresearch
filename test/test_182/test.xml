@@ -18,7 +18,6 @@ indexer
 searchd
 {
 	<searchd_settings/>
-compat_sphinxql_magics = 1
 	attr_flush_period = 10000
 	<dynamic>
 		<variant>workers = threads</variant>

@@ -556,7 +556,6 @@ public:
 	int		m_iDocLen;
 	int		m_iMatchesCount;
 	bool	m_bCollectExtraZoneInfo;
-	bool	m_bNeedWordIds;
 
 	explicit TokenFunctorTraits_c ( SnippetsDocIndex_c & tContainer, ISphTokenizer * pTokenizer,
 		CSphDict * pDict, const ExcerptQuery_t & tQuery, const CSphIndexSettings & tSettingsIndex,
@@ -573,7 +572,6 @@ public:
 		, m_iDocLen ( iDocLen )
 		, m_iMatchesCount ( 0 )
 		, m_bCollectExtraZoneInfo ( false )
-		, m_bNeedWordIds ( false )
 	{
 		assert ( m_pTokenizer && m_pDict );
 		ExcerptQuery_t::operator = ( tQuery );
@@ -618,9 +616,6 @@ public:
 struct TokenInfo_t;
 void CalcBlendedIds ( BYTE * sWord, TokenFunctorTraits_c & tFunctor, SphWordID_t & iBlendID, SphWordID_t & iBlendedExactID );
 void BuildWordIds ( TokenInfo_t & tTok, BYTE * sWord, int iWordLen, TokenFunctorTraits_c & tFunctor, SphWordID_t iBlendID, SphWordID_t iBlendedExactID );
-
-
-static bool g_bExcerptsFavorSpeed = true;
 
 
 struct TokenInfo_t
@@ -682,9 +677,7 @@ public:
 		, m_iLastStart ( 0 )
 		, m_iLastPos ( 0 )
 	{
-		if ( g_bExcerptsFavorSpeed )
-			m_dTokenStream.Reserve ( (iDocLen*2)/5 );
-
+		m_dTokenStream.Reserve ( (iDocLen*2)/5 );
 		m_dTokenStream.Add ( 0 );
 	}
 
@@ -788,7 +781,6 @@ public:
 		m_iLastPos = 0;
 
 		m_iReadPtr = 1;
-		BYTE sNonStemmed [ 3*SPH_MAX_WORD_LEN+3];
 		TokenInfo_t tTok;
 		bool bStop = false;
 
@@ -851,33 +843,7 @@ public:
 						tTok.m_iBlendedLen = 0;
 					}
 
-					if ( tFunctor.m_bNeedWordIds )
-					{
-						tFunctor.m_pTokenizer->SetBuffer ( (BYTE*)tFunctor.m_szDocBuffer + ( tTok.m_iBlendedLen ? tTok.m_iBlendedStart : tTok.m_iStart ), ( tTok.m_iBlendedLen ? tTok.m_iBlendedLen : tTok.m_iLen ) );
-
-						BYTE * sWord = NULL;
-						const char * pBlendedEnd = NULL;
-						SphWordID_t iBlendID = 0;
-						SphWordID_t iBlendedExactID = 0;
-
-						while ( ( sWord = tFunctor.m_pTokenizer->GetToken() )!=NULL && tFunctor.m_pTokenizer->TokenIsBlended() )
-							if ( pBlendedEnd<tFunctor.m_pTokenizer->GetTokenEnd() )
-							{
-								CalcBlendedIds ( sWord, tFunctor, iBlendID, iBlendedExactID );
-								pBlendedEnd = tFunctor.m_pTokenizer->GetTokenEnd();
-							}
-
-						int iNonStemmedLen = tTok.m_iLen;
-						if ( iNonStemmedLen+1>(int)sizeof(sNonStemmed) )
-							iNonStemmedLen = sizeof(sNonStemmed)-1;
-
-						memcpy ( sNonStemmed, sWord, iNonStemmedLen );
-						sNonStemmed[iNonStemmedLen] = '\0';
-
-						BuildWordIds ( tTok, sWord, tTok.m_iLen, tFunctor, iBlendID, iBlendedExactID );
-					}
-
-					tTok.m_sWord = tFunctor.m_bNeedWordIds ? sNonStemmed : NULL;
+					tTok.m_sWord = NULL;
 					tTok.m_bBlendedPart = uBlendAction==BLEND_CONTINUE;
 
 					bStop = !tFunctor.OnToken ( tTok );
@@ -894,25 +860,7 @@ public:
 					tTok.m_bStopWord = false;
 					tTok.m_iTermIndex = -1;
 
-					if ( tFunctor.m_bNeedWordIds )
-					{
-						tFunctor.m_pTokenizer->SetBuffer ( (BYTE*)tFunctor.m_szDocBuffer + tTok.m_iStart, tTok.m_iLen );
-						BYTE * sWord = tFunctor.m_pTokenizer->GetToken();
-
-						assert ( sWord );
-						assert ( !tFunctor.m_pTokenizer->TokenIsBlended() );
-
-						int iNonStemmedLen = tTok.m_iLen;
-						if ( iNonStemmedLen+1>(int)sizeof(sNonStemmed) )
-							iNonStemmedLen = sizeof(sNonStemmed)-1;
-
-						memcpy ( sNonStemmed, sWord, iNonStemmedLen );
-						sNonStemmed[iNonStemmedLen] = '\0';
-
-						BuildWordIds ( tTok, sWord, tTok.m_iLen, tFunctor, 0, 0 );
-					}
-
-					tTok.m_sWord = tFunctor.m_bNeedWordIds ? sNonStemmed : NULL;
+					tTok.m_sWord = NULL;
 					tTok.m_bBlendedPart = false;
 
 					bStop = !tFunctor.OnToken ( tTok );
@@ -1019,15 +967,15 @@ public:
 	SphWordID_t			m_uSentenceID;
 	SphWordID_t			m_uParagraphID;
 	DWORD				m_uFoundWords;
-	CacheStreamer_c *	m_pTokenContainer;
+	CacheStreamer_c &	m_tTokenContainer;
 
 public:
 	explicit HitCollector_c ( SnippetsDocIndex_c & tContainer, ISphTokenizer * pTokenizer,
 		CSphDict * pDict, const ExcerptQuery_t & tQuery, const CSphIndexSettings & tSettingsIndex,
-		const char * sDoc, int iDocLen, CacheStreamer_c * pTokenContainer )
+		const char * sDoc, int iDocLen, CacheStreamer_c & tTokenContainer )
 		: TokenFunctorTraits_c ( tContainer, pTokenizer, pDict, tQuery, tSettingsIndex, sDoc, iDocLen )
 		, m_uFoundWords ( 0 )
-		, m_pTokenContainer ( pTokenContainer )
+		, m_tTokenContainer ( tTokenContainer )
 	{
 		strncpy ( (char *)m_sTmpWord, MAGIC_WORD_SENTENCE, sizeof(m_sTmpWord) );
 		m_uSentenceID = pDict->GetWordID ( m_sTmpWord );
@@ -1057,8 +1005,7 @@ public:
 		m_uFoundWords |= iTermIndex==-1 ? 0 : 1 << iTermIndex;
 		tTok.m_iTermIndex = iTermIndex;
 
-		if ( m_pTokenContainer )
-			m_pTokenContainer->StoreToken ( tTok );
+		m_tTokenContainer.StoreToken ( tTok );
 
 		return true;
 	}
@@ -1085,8 +1032,7 @@ public:
 
 		m_tContainer.m_uLastPos = uPosition;
 
-		if ( m_pTokenContainer )
-			m_pTokenContainer->StoreSPZ ( iSPZ, uPosition, sZoneName, iZone );
+		m_tTokenContainer.StoreSPZ ( iSPZ, uPosition, sZoneName, iZone );
 	}
 
 	const CSphVector<int> * GetHitlist ( const XQKeyword_t & tWord ) const
@@ -1110,22 +1056,18 @@ public:
 
 	bool OnOverlap ( int iStart, int iLen, int iBoundary )
 	{
-		if ( m_pTokenContainer )
-			m_pTokenContainer->StoreOverlap ( iStart, iLen, iBoundary );
-
+		m_tTokenContainer.StoreOverlap ( iStart, iLen, iBoundary );
 		return true;
 	}
 
 	void OnSkipHtml ( int iStart, int iLen )
 	{
-		if ( m_pTokenContainer )
-			m_pTokenContainer->StoreSkipHtml ( iStart, iLen );
+		m_tTokenContainer.StoreSkipHtml ( iStart, iLen );
 	}
 
 	void OnTail ( int iStart, int iLen, int iBoundary )
 	{
-		if ( m_pTokenContainer )
-			m_pTokenContainer->StoreTail ( iStart, iLen, iBoundary );
+		m_tTokenContainer.StoreTail ( iStart, iLen, iBoundary );
 	}
 
 	void OnFinish () {}
@@ -2021,8 +1963,6 @@ public:
 		int iTermIndex = -1;
 		if ( m_pHit )
 		{
-			assert ( !m_bNeedWordIds );
-
 			// this means we've collected hits beforehand
 			while ( m_pHit<m_pHitEnd && m_pHit->m_uPosition+m_pHit->m_uSpan<=tTok.m_uPosition )
 				m_pHit++;
@@ -2033,8 +1973,6 @@ public:
 			iTermIndex = tTok.m_iTermIndex;
 		} else
 		{
-			assert ( m_bNeedWordIds );
-
 			// no collected hits beforehand
 			iTermIndex = m_tContainer.FindWord ( tTok.m_dWordIds[0], tTok.m_sWord, tTok.m_iLen );
 			for ( int i=1; i<tTok.m_iNumWordIds && iTermIndex==-1; i++ )
@@ -2098,7 +2036,6 @@ public:
 
 		if ( m_pTokenContainer )
 			m_pTokenContainer->StoreToken ( tTok );
-
 		return true;
 	}
 
@@ -2131,7 +2068,6 @@ public:
 
 		if ( m_pTokenContainer )
 			m_pTokenContainer->StoreOverlap ( iStart, iLen, iBoundary );
-
 		return true;
 	}
 
@@ -3128,7 +3064,7 @@ static void EmitPassagesOrdered ( CSphVector<BYTE> & dResult, const CSphVector<B
 }
 
 
-static void HighlightPassages ( CacheStreamer_c * pStreamer, ExtractExcerpts_c & tExtractor, ExcerptQuery_t & tFixedSettings, const CSphIndexSettings & tIndexSettings, SnippetsDocIndex_c & tContainer,
+static void HighlightPassages ( CacheStreamer_c & tStreamer, ExtractExcerpts_c & tExtractor, ExcerptQuery_t & tFixedSettings, const CSphIndexSettings & tIndexSettings, SnippetsDocIndex_c & tContainer,
 	const CSphHTMLStripper * pStripper, int iSPZ, const char * sDoc, int iDocLen, CSphDict * pDict, ISphTokenizer * pTokenizer, const CSphVector<SphHitMark_t> * dMarked, FunctorZoneInfo_t * pZoneInfo, CSphVector<BYTE> & dRes )
 {
 	tFixedSettings.m_bWeightOrder = tExtractor.m_bFixedWeightOrder;
@@ -3138,11 +3074,7 @@ static void HighlightPassages ( CacheStreamer_c * pStreamer, ExtractExcerpts_c &
 		// 3rd pass: highlight passages
 		HighlightPassages_c tHighlighter ( tContainer, pTokenizer, pDict, tFixedSettings, tIndexSettings, sDoc, iDocLen, dMarked ? dMarked : &tExtractor.m_dCollectedHits,
 			tExtractor.m_dPassages, pZoneInfo );
-
-		if ( g_bExcerptsFavorSpeed )
-			pStreamer->Tokenize ( tHighlighter );
-		else
-			TokenizeDocument ( tHighlighter, pStripper, iSPZ );
+		tStreamer.Tokenize ( tHighlighter );
 
 		if ( tFixedSettings.m_bWeightOrder )
 		{
@@ -3156,10 +3088,7 @@ static void HighlightPassages ( CacheStreamer_c * pStreamer, ExtractExcerpts_c &
 	} else if ( !tFixedSettings.m_bAllowEmpty )
 	{
 		DocStartHighlighter_c tHighlighter ( tContainer, pTokenizer, pDict, tFixedSettings, tIndexSettings, sDoc, iDocLen );
-		if ( g_bExcerptsFavorSpeed )
-			pStreamer->Tokenize ( tHighlighter );
-		else
-			TokenizeDocument ( tHighlighter, pStripper, iSPZ );
+		tStreamer.Tokenize ( tHighlighter );
 
 		dRes.SwapData ( tHighlighter.m_dStartResult );
 	}
@@ -3282,14 +3211,13 @@ static void DoHighlighting ( const ExcerptQuery_t & tQuerySettings,
 			FixupQueryLimits ( tContainer, tQuerySettings, tFixedSettings, sWarning );
 
 			CacheStreamer_c tStreamer ( iDocLen );
-			ExtractExcerpts_c tExtractor ( tContainer, pTokenizer, pDict, tFixedSettings, tIndexSettings, sDoc, iDocLen, NULL, g_bExcerptsFavorSpeed ? &tStreamer : NULL );
+			ExtractExcerpts_c tExtractor ( tContainer, pTokenizer, pDict, tFixedSettings, tIndexSettings, sDoc, iDocLen, NULL, &tStreamer );
 			tExtractor.m_bCollectExtraZoneInfo = true;
-			tExtractor.m_bNeedWordIds = true;
 
 			TokenizeDocument ( tExtractor, pStripper, iSPZ );
 
 			tStreamer.m_pZoneInfo = &tExtractor.m_tZoneInfo;
-			HighlightPassages ( g_bExcerptsFavorSpeed ? &tStreamer : NULL, tExtractor, tFixedSettings, tIndexSettings, tContainer, pStripper, iSPZ, sDoc, iDocLen, pDict, pTokenizer, NULL, &tExtractor.m_tZoneInfo, dRes );
+			HighlightPassages ( tStreamer, tExtractor, tFixedSettings, tIndexSettings, tContainer, pStripper, iSPZ, sDoc, iDocLen, pDict, pTokenizer, NULL, &tExtractor.m_tZoneInfo, dRes );
 		}
 
 		// add trailing zero, and return
@@ -3305,7 +3233,7 @@ static void DoHighlighting ( const ExcerptQuery_t & tQuerySettings,
 		CacheStreamer_c tStreamer ( iDocLen );
 
 		// do the 1st pass
-		HitCollector_c tHitCollector ( tContainer, pTokenizer, pDict, tFixedSettings, tIndexSettings, sDoc, iDocLen, g_bExcerptsFavorSpeed ? &tStreamer : NULL );
+		HitCollector_c tHitCollector ( tContainer, pTokenizer, pDict, tFixedSettings, tIndexSettings, sDoc, iDocLen, tStreamer );
 		TokenizeDocument ( tHitCollector, pStripper, iSPZ );
 
 		FunctorZoneInfo_t * pZoneInfo = &tHitCollector.m_tZoneInfo;
@@ -3412,10 +3340,7 @@ static void DoHighlighting ( const ExcerptQuery_t & tQuerySettings,
 		{
 			// 2nd pass
 			HighlightQuery_c tHighlighter ( tContainer, pTokenizer, pDict, tFixedSettings, tIndexSettings, sDoc, iDocLen, dMarked );
-			if ( g_bExcerptsFavorSpeed )
-				tStreamer.Tokenize ( tHighlighter );
-			else
-				TokenizeDocument ( tHighlighter, pStripper, iSPZ );
+			tStreamer.Tokenize ( tHighlighter );
 
 			if ( !tHighlighter.m_iMatchesCount && tFixedSettings.m_bAllowEmpty )
 				tHighlighter.m_dResult.Reset();
@@ -3428,10 +3353,7 @@ static void DoHighlighting ( const ExcerptQuery_t & tQuerySettings,
 			if ( !tFixedSettings.m_bAllowEmpty )
 			{
 				DocStartHighlighter_c tHighlighter ( tContainer, pTokenizer, pDict, tFixedSettings, tIndexSettings, sDoc, iDocLen );
-				if ( g_bExcerptsFavorSpeed )
-					tStreamer.Tokenize ( tHighlighter );
-				else
-					TokenizeDocument ( tHighlighter, pStripper, iSPZ );
+				tStreamer.Tokenize ( tHighlighter );
 
 				dRes.SwapData ( tHighlighter.m_dStartResult );
 			}
@@ -3442,12 +3364,9 @@ static void DoHighlighting ( const ExcerptQuery_t & tQuerySettings,
 			tExtractor.m_bCollectExtraZoneInfo = false;
 			tExtractor.m_uFoundWords = tHitCollector.m_uFoundWords;
 
-			if ( g_bExcerptsFavorSpeed )
-				tStreamer.Tokenize ( tExtractor );
-			else
-				TokenizeDocument ( tExtractor, pStripper, iSPZ );
+			tStreamer.Tokenize ( tExtractor );
 
-			HighlightPassages ( g_bExcerptsFavorSpeed ? &tStreamer : NULL, tExtractor, tFixedSettings, tIndexSettings, tContainer, pStripper, iSPZ, sDoc, iDocLen, pDict, pTokenizer, &dMarked, pZoneInfo, dRes );
+			HighlightPassages ( tStreamer, tExtractor, tFixedSettings, tIndexSettings, tContainer, pStripper, iSPZ, sDoc, iDocLen, pDict, pTokenizer, &dMarked, pZoneInfo, dRes );
 		}
 
 		dRes.Add(0);

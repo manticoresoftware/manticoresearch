@@ -485,7 +485,7 @@ public:
 				if ( eType==JSON_OBJECT )
 					sphJsonUnpackInt ( &p );
 
-				DWORD uMask = p[0] + ( p[1]<<8 ) + ( p[2]<<16 ) + ( p[3]<<24 );
+				DWORD uMask = sphGetDword(p);
 				printf ( "%s (bloom mask: 0x%08x)\n", eType==JSON_OBJECT ? "JSON_OBJECT" : "JSON_ROOT", uMask );
 				p += 4; // skip bloom table
 				for ( ;; )

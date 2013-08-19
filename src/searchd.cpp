@@ -14009,7 +14009,7 @@ public:
 	{
 		assert ( sMsg );
 
-		int iLen = sMsg ? strlen ( sMsg ) : 0;
+		int iLen = strlen ( sMsg );
 		Reserve ( 1+iLen );
 		char * pBegin = Get();
 		char * pStr = (char *)MysqlPack ( pBegin, iLen );

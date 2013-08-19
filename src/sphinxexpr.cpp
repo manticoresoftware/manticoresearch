@@ -903,8 +903,8 @@ public:
 		// get pointer to JSON blob data
 		assert ( m_pStrings );
 		DWORD uOffset = m_tLocator.m_bDynamic
-			? tMatch.m_pDynamic [ m_tLocator.m_iBitOffset>>ROWITEM_SHIFT ]
-			: tMatch.m_pStatic [ m_tLocator.m_iBitOffset>>ROWITEM_SHIFT ];
+			? tMatch.m_pDynamic [ m_tLocator.m_iBitOffset >> ROWITEM_SHIFT ]
+			: tMatch.m_pStatic [ m_tLocator.m_iBitOffset >> ROWITEM_SHIFT ];
 		if ( !uOffset )
 			return 0;
 		const BYTE * pJson;
@@ -1475,7 +1475,7 @@ static int FuncHashLookup ( const char * sKey )
 		74, 74, 74, 74, 74, 10, 74, 0, 15, 20,
 		20, 0, 25, 5, 74, 5, 74, 74, 0, 0,
 		0, 5, 10, 25, 0, 30, 40, 40, 74, 55,
-		15, 0,  5, 74, 74, 74, 74, 74, 74, 74,
+		15, 0, 5, 74, 74, 74, 74, 74, 74, 74,
 		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
 		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
 		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
@@ -2880,8 +2880,8 @@ void GeodistInit()
 	for ( int i=0; i<=GEODIST_TABLE_K; i++ )
 	{
 		double x = PI*i/GEODIST_TABLE_K - PI*0.5; // [-pi/2, pi/2] -> [0, KTABLE]
-		g_GeoFlatK[i][0] = (float) sqr ( 111132.09 - 566.05*cos(2*x) + 1.20*cos(4*x) );
-		g_GeoFlatK[i][1] = (float) sqr ( 111415.13*cos(x) - 94.55*cos(3*x) + 0.12*cos(5*x) );
+		g_GeoFlatK[i][0] = (float) sqr ( 111132.09 - 566.05*cos ( 2*x ) + 1.20*cos ( 4*x ) );
+		g_GeoFlatK[i][1] = (float) sqr ( 111415.13*cos(x) - 94.55*cos ( 3*x ) + 0.12*cos ( 5*x ) );
 	}
 }
 
@@ -2982,7 +2982,7 @@ static inline float GeodistFastAsinSqrt ( float x )
 		int i = int(x);
 		return g_GeoAsin[i] + ( g_GeoAsin[i+1] - g_GeoAsin[i] )*( x-i );
 	}
-	return asin(sqrt(x)); // distance over 17083km, just compute honestly
+	return asin ( sqrt(x) ); // distance over 17083km, just compute honestly
 }
 
 
@@ -3306,14 +3306,11 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		{
 		case FUNC_IN:
 		case FUNC_EXIST:
-			bSkipRight = true;
-			// no break
 		case FUNC_GEODIST:
 		case FUNC_CONTAINS:
 		case FUNC_ZONESPANLIST:
 		case FUNC_RANKFACTORS:
 		case FUNC_PACKEDFACTORS:
-			bSkipLeft = true;
 		case FUNC_BM25F:
 			bSkipLeft = true;
 			bSkipRight = true;
@@ -4485,7 +4482,7 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 	float fOut = 1.0f; // result scale, defaults to out=meters
 	bool bDeg = false; // arg units, defaults to in=radians
 	GeoFunc_e eMethod = GEO_ADAPTIVE; // geodist function to use, defaults to adaptive
-	
+
 	if ( dArgs.GetLength()==5 )
 	{
 		assert ( m_dNodes[dArgs[4]].m_eRetType==SPH_ATTR_CONSTHASH );

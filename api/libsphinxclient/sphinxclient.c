@@ -223,7 +223,7 @@ sphinx_client * sphinx_create ( sphinx_bool copy_args )
 	client->timeout					= 0.0f;
 	client->offset					= 0;
 	client->limit					= 20;
-	client->mode					= SPH_MATCH_ALL;
+	client->mode					= SPH_MATCH_EXTENDED2;
 	client->num_weights				= 0;
 	client->weights					= NULL;
 	client->sort					= SPH_SORT_RELEVANCE;

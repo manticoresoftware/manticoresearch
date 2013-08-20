@@ -104,7 +104,6 @@ for ( $i=0; $i<count($args); $i++ )
 $cl->SetServer ( $host, $port );
 $cl->SetConnectTimeout ( 1 );
 $cl->SetArrayResult ( true );
-$cl->SetWeights ( array ( 100, 1 ) );
 $cl->SetMatchMode ( $mode );
 if ( count($filtervals) )	$cl->SetFilter ( $filter, $filtervals );
 if ( $groupby )				$cl->SetGroupBy ( $groupby, SPH_GROUPBY_ATTR, $groupsort );

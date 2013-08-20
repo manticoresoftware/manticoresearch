@@ -160,7 +160,7 @@ public class SphinxClient
 
 		_offset	= 0;
 		_limit	= 20;
-		_mode	= SPH_MATCH_ALL;
+		_mode	= SPH_MATCH_EXTENDED2;
 		_sort	= SPH_SORT_RELEVANCE;
 		_sortby	= "";
 		_minId	= 0;

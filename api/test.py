@@ -77,7 +77,6 @@ while (i<len(sys.argv)):
 # do query
 cl = SphinxClient()
 cl.SetServer ( host, port )
-cl.SetWeights ( [100, 1] )
 cl.SetMatchMode ( mode )
 if filtervals:
 	cl.SetFilter ( filtercol, filtervals )

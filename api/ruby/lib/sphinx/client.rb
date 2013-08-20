@@ -181,7 +181,7 @@ module Sphinx
       # per-query settings
       @offset        = 0                       # how many records to seek from result-set start (default is 0)
       @limit         = 20                      # how many records to return from result-set starting at offset (default is 20)
-      @mode          = SPH_MATCH_ALL           # query matching mode (default is SPH_MATCH_ALL)
+      @mode          = SPH_MATCH_EXTENDED2     # query matching mode (default is SPH_MATCH_EXTENDED2)
       @weights       = []                      # per-field weights (default is 1 for all fields)
       @sort          = SPH_SORT_RELEVANCE      # match sorting mode (default is SPH_SORT_RELEVANCE)
       @sortby        = ''                      # attribute to sort by (defualt is "")

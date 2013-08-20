@@ -104,8 +104,8 @@ index exact_wf
 
 <queries>
 <query index='main'>google$com</query>
-<query index='main'>foo(bar)</query>
-<query index='main'>foo\(bar\)</query>
+<query index='main' mode="any">foo(bar)</query>
+<query index='main' mode="any">foo\(bar\)</query>
 <query index='main' mode="extended2">google$com</query>
 <query index='main' mode="extended2">foo(bar)</query>
 <query index='main' mode="extended2">foo\(bar\)</query>

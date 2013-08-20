@@ -45,7 +45,7 @@ index test2
 </config>
 
 <queries>
-<query index="test1 test2">test"</query>
+<query index="test1 test2" mode="any">test"</query>
 </queries>
 
 <db_create>

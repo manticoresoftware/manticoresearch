@@ -3013,41 +3013,31 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 	// all writers waiting double buffer done
 	CSphVector<RtSegment_t *> dSegments2Dump;
 	CSphSourceStats tStat2Dump;
-	if ( bDump )
+
+	// no need to dump or waiting for some writer
+	if ( !bDump || bDoubleBufferActive )
 	{
-		Verify ( m_tSaveOuterMutex.Lock() );
-
-		// wait writer that saved data
-		if ( bDoubleBufferActive )
-		{
-			bDump = false;
-			m_tSaveOuterMutex.Unlock();
-		} else
-		{
-			// copy stats for disk chunk
-			dSegments2Dump = m_pSegments;
-			tStat2Dump = m_tStats;
-			m_iDoubleBuffer = m_pSegments.GetLength();
-
-			m_tKlist.Flush();
-			m_dDiskChunkKlist.Reset ( m_tKlist.GetKillListSize() );
-			if ( m_tKlist.GetKillListSize() )
-			{
-				memcpy ( m_dDiskChunkKlist.Begin(), m_tKlist.GetKillList(), sizeof(SphAttr_t)*m_tKlist.GetKillListSize() );
-			}
-		}
+		// all done, enable other writers
+		Verify ( m_tWriterMutex.Unlock() );
+		return;
 	}
 
-	// all done, enable other writers
+	Verify ( m_tSaveOuterMutex.Lock() );
+	// copy stats for disk chunk
+	dSegments2Dump = m_pSegments;
+	tStat2Dump = m_tStats;
+	m_iDoubleBuffer = m_pSegments.GetLength();
+
+	m_tKlist.Flush();
+	m_dDiskChunkKlist.Reset ( m_tKlist.GetKillListSize() );
+	if ( m_tKlist.GetKillListSize() )
+		memcpy ( m_dDiskChunkKlist.Begin(), m_tKlist.GetKillList(), sizeof(SphAttr_t)*m_tKlist.GetKillListSize() );
+
+	SaveDiskChunk ( iTID, dSegments2Dump, tStat2Dump );
+	g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), iTID, false );
+
+	Verify ( m_tSaveOuterMutex.Unlock() );
 	Verify ( m_tWriterMutex.Unlock() );
-
-	if ( bDump )
-	{
-		SaveDiskChunk ( iTID, dSegments2Dump, tStat2Dump );
-		g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), iTID, false );
-
-		m_tSaveOuterMutex.Unlock();
-	}
 }
 
 void RtIndex_t::RollBack ()

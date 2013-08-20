@@ -182,7 +182,7 @@ class SphinxClient
 	var $_port;			///< searchd port (default is 9312)
 	var $_offset;		///< how many records to seek from result-set start (default is 0)
 	var $_limit;		///< how many records to return from result-set starting at offset (default is 20)
-	var $_mode;			///< query matching mode (default is SPH_MATCH_ALL)
+	var $_mode;			///< query matching mode (default is SPH_MATCH_EXTENDED2)
 	var $_weights;		///< per-field weights (default is 1 for all fields)
 	var $_sort;			///< match sorting mode (default is SPH_SORT_RELEVANCE)
 	var $_sortby;		///< attribute to sort by (defualt is "")
@@ -226,7 +226,7 @@ class SphinxClient
 		// per-query settings
 		$this->_offset		= 0;
 		$this->_limit		= 20;
-		$this->_mode		= SPH_MATCH_ALL;
+		$this->_mode		= SPH_MATCH_EXTENDED2;
 		$this->_weights		= array ();
 		$this->_sort		= SPH_SORT_RELEVANCE;
 		$this->_sortby		= "";

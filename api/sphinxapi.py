@@ -123,7 +123,7 @@ class SphinxClient:
 		self._socket		= None
 		self._offset		= 0								# how much records to seek from result-set start (default is 0)
 		self._limit			= 20							# how much records to return from result-set starting at offset (default is 20)
-		self._mode			= SPH_MATCH_ALL					# query matching mode (default is SPH_MATCH_ALL)
+		self._mode			= SPH_MATCH_EXTENDED2					# query matching mode (default is SPH_MATCH_EXTENDED2)
 		self._weights		= []							# per-field weights (default is 1 for all fields)
 		self._sort			= SPH_SORT_RELEVANCE			# match sorting mode (default is SPH_SORT_RELEVANCE)
 		self._sortby		= ''							# attribute to sort by (defualt is "")
@@ -364,17 +364,6 @@ class SphinxClient:
 		assert ( isinstance ( clause, str ) )
 		self._sort = mode
 		self._sortby = clause
-
-
-	def SetWeights (self, weights): 
-		"""
-		Set per-field weights.
-		WARNING, DEPRECATED; do not use it! use SetFieldWeights() instead
-		"""
-		assert(isinstance(weights, list))
-		for w in weights:
-			AssertUInt32 ( w )
-		self._weights = weights
 
 
 	def SetFieldWeights (self, weights):

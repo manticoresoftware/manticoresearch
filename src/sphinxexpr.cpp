@@ -3984,6 +3984,7 @@ public:
 	~Expr_JsonFieldIn_c()
 	{
 		SafeRelease ( m_pUservar );
+		SafeRelease ( m_pArg );
 	}
 
 	virtual void Command ( ESphExprCommand eCmd, void * pArg )

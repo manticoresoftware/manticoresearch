@@ -929,7 +929,7 @@ public:
 				{
 					const DWORD uField = m_rdDoclist.UnzipInt(); // field and end marker
 					m_iHitlistPos = uFirst | ( uField << 23 ) | ( U64C(1)<<63 );
-					m_dQwordFields.Unset();
+					m_dQwordFields.UnsetAll();
 					m_dQwordFields.Set ( uField >> 1 );
 					m_bAllFieldsKnown = true;
 				} else
@@ -8281,7 +8281,7 @@ void CSphBin::Init ( int iFD, SphOffset_t * pSharedOffset, const int iBinSize )
 	m_tHit.m_iDocID = 0;
 	m_tHit.m_iWordID = 0;
 	m_tHit.m_iWordPos = EMPTY_HIT;
-	m_tHit.m_dFieldMask.Unset();
+	m_tHit.m_dFieldMask.UnsetAll();
 
 	m_bError = false;
 }
@@ -8486,7 +8486,7 @@ int CSphBin::ReadHit ( CSphAggregateHit * pOut, int iRowitems, CSphRowitem * pRo
 					}
 					tHit.m_iDocID = 0;
 					tHit.m_iWordPos = EMPTY_HIT;
-					tHit.m_dFieldMask.Unset();
+					tHit.m_dFieldMask.UnsetAll();
 					m_eState = BIN_DOC;
 					break;
 
@@ -10511,7 +10511,7 @@ CSphHitBuilder::CSphHitBuilder ( const CSphIndexSettings & tSettings,
 
 	m_iLastHitlistPos = 0;
 	m_iLastHitlistDelta = 0;
-	m_dLastDocFields.Unset();
+	m_dLastDocFields.UnsetAll();
 	m_uLastDocHits = 0;
 
 	m_tWord.m_iDoclistOffset = 0;
@@ -10657,7 +10657,7 @@ void CSphHitBuilder::DoclistEndEntry ( Hitpos_t uLastPos )
 		m_wrDoclist.ZipInt ( m_dLastDocFields.GetMask32() );
 		m_wrDoclist.ZipInt ( m_uLastDocHits );
 	}
-	m_dLastDocFields.Unset();
+	m_dLastDocFields.UnsetAll();
 	m_uLastDocHits = 0;
 
 	// update keyword stats
@@ -14028,7 +14028,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		tFlush.m_iWordID = 0;
 		tFlush.m_sKeyword = NULL;
 		tFlush.m_iWordPos = EMPTY_HIT;
-		tFlush.m_dFieldMask.Unset();
+		tFlush.m_dFieldMask.UnsetAll();
 		tHitBuilder.cidxHit ( &tFlush, NULL );
 
 		if ( m_bInplaceSettings )
@@ -14469,7 +14469,7 @@ public:
 		CSphAggregateHit tHit;
 		tHit.m_iWordID = iWordID;
 		tHit.m_sKeyword = sWord;
-		tHit.m_dFieldMask.Unset();
+		tHit.m_dFieldMask.UnsetAll();
 
 		while ( CSphMerger::NextDocument ( tQword, pSourceIndex, pFilter ) && !*pForceTerminate )
 		{
@@ -14636,7 +14636,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 			CSphAggregateHit tHit;
 			tHit.m_iWordID = tDstReader.m_iWordID; // !COMMIT m_sKeyword anyone?
 			tHit.m_sKeyword = tDstReader.GetWord();
-			tHit.m_dFieldMask.Unset();
+			tHit.m_dFieldMask.UnsetAll();
 
 			bool bDstDocs = tMerger.NextDocument ( tDstQword, pDstIndex, pFilter );
 			bool bSrcDocs = true;
@@ -15112,7 +15112,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	tFlush.m_iWordID = 0;
 	tFlush.m_sKeyword = (BYTE*)""; // tricky: assertion in cidxHit calls strcmp on this in case of empty index!
 	tFlush.m_iWordPos = EMPTY_HIT;
-	tFlush.m_dFieldMask.Unset();
+	tFlush.m_dFieldMask.UnsetAll();
 	tHitBuilder.cidxHit ( &tFlush, NULL );
 
 	if ( !tHitBuilder.cidxDone ( iHitBufferSize, pDstIndex->m_tSettings.m_iMinInfixLen,
@@ -19759,7 +19759,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			// loop the hitlist
 			int iDocHits = 0;
 			CSphSmallBitvec dFieldMask;
-			dFieldMask.Unset();
+			dFieldMask.UnsetAll();
 			Hitpos_t uLastHit = EMPTY_HIT;
 
 			while ( !bHitless )

@@ -39,10 +39,16 @@
 /src/searchd
 /src/spelldump
 /src/tests
+/src/wordbreaker
 /src/Makefile
 /src/.deps
 /src/sphinxversion.h
+/src/*.o
+/src/libsphinx.a
 
 # /win/
 /win/*.user
 /win/*.filters
+
+# /doc
+/doc/Makefile

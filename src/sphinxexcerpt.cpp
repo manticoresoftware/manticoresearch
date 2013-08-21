@@ -2958,7 +2958,7 @@ public:
 
 	virtual const CSphMatch & GetNextDoc ( DWORD * )
 	{
-		m_dQwordFields.Set();
+		m_dQwordFields.SetAll();
 		m_tMatch.m_iDocID = !m_tMatch.m_iDocID && HasHits() ? 1 : 0;
 		return m_tMatch;
 	}

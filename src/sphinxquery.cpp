@@ -228,7 +228,7 @@ void XQNode_t::CopySpecs ( const XQNode_t * pSpecs )
 
 void XQNode_t::ClearFieldMask ()
 {
-	m_dSpec.m_dFieldMask.Set();
+	m_dSpec.m_dFieldMask.SetAll();
 
 	ARRAY_FOREACH ( i, m_dChildren )
 		m_dChildren[i]->ClearFieldMask();
@@ -488,7 +488,7 @@ bool XQParser_t::AddField ( CSphSmallBitvec & dFields, const char * szField, int
 /// parse fields block
 bool XQParser_t::ParseFields ( CSphSmallBitvec & dFields, int & iMaxFieldPos, bool & bIgnore )
 {
-	dFields.Unset();
+	dFields.UnsetAll();
 	iMaxFieldPos = 0;
 	bIgnore = false;
 
@@ -511,7 +511,7 @@ bool XQParser_t::ParseFields ( CSphSmallBitvec & dFields, int & iMaxFieldPos, bo
 	} else if ( *pPtr=='*' )
 	{
 		// handle @*
-		dFields.Set();
+		dFields.SetAll();
 		m_pTokenizer->SetBufferPtr ( pPtr+1 );
 		return true;
 
@@ -1503,7 +1503,7 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 		if ( !pNode->m_dSpec.m_dFieldMask.TestAll(true) )
 		{
 			CSphString sFields ( "" );
-			for ( int i=0; i<CSphSmallBitvec::iTOTALBITS; i++ )
+			for ( int i=0; i<pNode->m_dSpec.m_dFieldMask.GetBitsCount(); i++ )
 			{
 				if ( !pNode->m_dSpec.m_dFieldMask.Test(i) )
 					continue;

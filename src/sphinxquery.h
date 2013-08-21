@@ -89,7 +89,7 @@ public:
 		m_bFieldSpec = false;
 		m_iFieldMaxPos = 0;
 		m_bZoneSpan = false;
-		m_dFieldMask.Set();
+		m_dFieldMask.SetAll();
 		m_dZones.Reset();
 	}
 

@@ -85,7 +85,7 @@ public:
 		, m_iHitlistPos ( 0 )
 		, m_bAllFieldsKnown ( false )
 	{
-		m_dQwordFields.Unset();
+		m_dQwordFields.UnsetAll();
 	}
 	virtual ~ISphQword () {}
 
@@ -99,7 +99,7 @@ public:
 	{
 		m_iDocs = 0;
 		m_iHits = 0;
-		m_dQwordFields.Unset();
+		m_dQwordFields.UnsetAll();
 		m_bAllFieldsKnown = false;
 		m_uMatchHits = 0;
 		m_iHitlistPos = 0;

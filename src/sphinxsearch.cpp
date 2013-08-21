@@ -337,7 +337,7 @@ public:
 		{
 			bool bFirst = true;
 			printf ( "in: " );
-			for ( int iField = 0; iField < CSphSmallBitvec::iTOTALBITS; iField++ )
+			for ( int iField=0; iField<m_dQueriedFields.GetBitsCount(); iField++ )
 			{
 				if ( m_dQueriedFields.Test ( iField ) )
 				{
@@ -2064,8 +2064,8 @@ inline void ExtTerm_c::Init ( ISphQword * pQword, const CSphSmallBitvec & dField
 	m_dQueriedFields = dFields;
 	m_bHasWideFields = false;
 	if ( tSetup.m_pIndex && tSetup.m_pIndex->GetMatchSchema().m_dFields.GetLength()>32 )
-		for ( int i=1; i<8; i++ )
-			if ( m_dQueriedFields.m_dFieldsMask[i] )
+		for ( int i=32; i<m_dQueriedFields.GetBitsCount() && !m_bHasWideFields; i++ )
+			if ( m_dQueriedFields.Test(i) )
 				m_bHasWideFields = true;
 	m_iMaxTimer = tSetup.m_iMaxTimer;
 	m_pStats = tSetup.m_pStats;
@@ -2082,7 +2082,7 @@ ExtTerm_c::ExtTerm_c ( ISphQword * pQword, const ISphQwordSetup & tSetup )
 	m_pLastChecked = m_dDocs;
 	m_uMatchChecked = 0;
 	m_bTail = false;
-	m_dQueriedFields.Set();
+	m_dQueriedFields.SetAll();
 	m_bHasWideFields = tSetup.m_pIndex && ( tSetup.m_pIndex->GetMatchSchema().m_dFields.GetLength()>32 );
 	m_iMaxTimer = tSetup.m_iMaxTimer;
 	m_pStats = tSetup.m_pStats;
@@ -2153,7 +2153,7 @@ const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		if ( !m_bHasWideFields )
 		{
 			// fields 0-31 can be quickly checked right here, right now
-			if (!( m_pQword->m_dQwordFields.m_dFieldsMask[0] & m_dQueriedFields.m_dFieldsMask[0] ))
+			if (!( m_pQword->m_dQwordFields.GetMask32() & m_dQueriedFields.GetMask32() ))
 				continue;
 		} else
 		{
@@ -2371,7 +2371,7 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, Sph
 				break;
 		}
 
-		if ( m_uFieldPos < CSphSmallBitvec::iTOTALBITS-1 )
+		if ( m_uFieldPos<m_dQueriedFields.GetBitsCount()-1 )
 		{
 			m_uFieldPos++;
 			continue;

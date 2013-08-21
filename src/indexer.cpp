@@ -815,6 +815,31 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 }
 
 
+CSphSource * SpawnSourceTSVPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool bUTF8, bool RLPARG(bProxy) )
+{
+	assert ( hSource["type"]=="tsvpipe" );
+
+	if ( !( hSource.Exists ( "tsvpipe_command" ) ))
+	{
+		fprintf ( stdout, "ERROR: key 'tsvpipe_command' not found in source '%s'\n", sSourceName );
+		return NULL;
+	}
+
+	FILE * pPipe = popen ( hSource [ "tsvpipe_command" ].cstr(), "r" );
+	if ( !pPipe )
+	{
+		fprintf ( stdout, "ERROR: tsvpipe: failed to popen '%s'", hSource [ "tsvpipe_command" ].cstr() );
+		return NULL;
+	}
+
+#if USE_RLP
+	return sphCreateSourceTSVpipe ( &hSource, pPipe, sSourceName, bUTF8, bProxy );
+#else
+	return sphCreateSourceTSVpipe ( &hSource, pPipe, sSourceName, bUTF8, false );
+#endif
+}
+
+
 CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSourceName, bool bUTF8, bool bBatchedRLP, bool bWordDict )
 {
 	if ( !hSource.Exists ( "type" ) )
@@ -843,6 +868,9 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 
 	if ( hSource["type"]=="xmlpipe2" )
 		return SpawnSourceXMLPipe ( hSource, sSourceName, bUTF8, bBatchedRLP );
+
+	if ( hSource["type"]=="tsvpipe" )
+		return SpawnSourceTSVPipe ( hSource, sSourceName, bUTF8, bBatchedRLP );
 
 	fprintf ( stdout, "ERROR: source '%s': unknown type '%s'; skipping.\n", sSourceName,
 		hSource["type"].cstr() );

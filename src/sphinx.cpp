@@ -26048,7 +26048,7 @@ static int sphAddMva64 ( CSphVector<DWORD> & dStorage, int64_t iVal )
 }
 
 
-int CSphSource_Document::ParseFieldMVA ( CSphVector < DWORD > & dMva, const char * szValue, bool bMva64 )
+int CSphSource_Document::ParseFieldMVA ( CSphVector < DWORD > & dMva, const char * szValue, bool bMva64 ) const
 {
 	if ( !szValue )
 		return 0;
@@ -27667,10 +27667,77 @@ DWORD CSphSource_PgSQL::SqlColumnLength ( int )
 // XMLPIPE (v2)
 /////////////////////////////////////////////////////////////////////////////
 
+template < typename T >
+struct CSphSchemaConfigurator
+{
+	void ConfigureAttrs ( const CSphVariant * pHead, ESphAttr eAttrType, CSphSchema & tSchema ) const
+	{
+		for ( const CSphVariant * pCur = pHead; pCur; pCur= pCur->m_pNext )
+		{
+			CSphColumnInfo tCol ( pCur->cstr(), eAttrType );
+			char * pColon = strchr ( const_cast<char*> ( tCol.m_sName.cstr() ), ':' );
+			if ( pColon )
+			{
+				*pColon = '\0';
+
+				if ( eAttrType==SPH_ATTR_INTEGER )
+				{
+					int iBits = strtol ( pColon+1, NULL, 10 );
+					if ( iBits<=0 || iBits>ROWITEM_BITS )
+					{
+						sphWarn ( "%s", ((T*)this)->DecorateMessage ( "attribute '%s': invalid bitcount=%d (bitcount ignored)", tCol.m_sName.cstr(), iBits ) );
+						iBits = -1;
+					}
+
+					tCol.m_tLocator.m_iBitCount = iBits;
+				} else
+				{
+					sphWarn ( "%s", ((T*)this)->DecorateMessage ( "attribute '%s': bitcount is only supported for integer types", tCol.m_sName.cstr() ) );
+				}
+			}
+
+			tCol.m_iIndex = tSchema.GetAttrsCount ();
+
+			if ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET )
+			{
+				tCol.m_eAttrType = eAttrType;
+				tCol.m_eSrc = SPH_ATTRSRC_FIELD;
+			}
+
+			tSchema.AddAttr ( tCol, true ); // all attributes are dynamic at indexing time
+		}
+	}
+
+	void ConfigureFields ( const CSphVariant * pHead, bool bWordDict, CSphSchema & tSchema ) const
+	{
+		for ( const CSphVariant * pCur = pHead; pCur; pCur= pCur->m_pNext )
+		{
+			const char * sFieldName = pCur->cstr();
+
+			bool bFound = false;
+			for ( int i = 0; i < tSchema.m_dFields.GetLength () && !bFound; i++ )
+				bFound = ( tSchema.m_dFields[i].m_sName==sFieldName );
+
+			if ( bFound )
+				sphWarn ( "%s", ((T*)this)->DecorateMessage ( "duplicate field '%s'", sFieldName ) );
+			else
+				AddFieldToSchema ( sFieldName, bWordDict, tSchema );
+		}
+	}
+
+	void AddFieldToSchema ( const char * sFieldName, bool bWordDict, CSphSchema & tSchema ) const
+	{
+		CSphColumnInfo tCol ( sFieldName );
+		tCol.m_eWordpart = ((T*)this)->GetWordpart ( tCol.m_sName.cstr(), bWordDict );
+		tSchema.m_dFields.Add ( tCol );
+	}
+};
+
+
 #if USE_LIBEXPAT
 
 /// XML pipe source implementation (v2)
-class CSphSource_XMLPipe2 : public CSphSource_Document
+class CSphSource_XMLPipe2 : public CSphSource_Document, public CSphSchemaConfigurator<CSphSource_XMLPipe2>
 {
 public:
 	explicit			CSphSource_XMLPipe2 ( const char * sName );
@@ -27694,6 +27761,8 @@ public:
 	void			Characters ( const char * pCharacters, int iLen );
 
 	void			Error ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
+	const char *	DecorateMessage ( const char * sTemplate, ... ) const __attribute__ ( ( format ( printf, 2, 3 ) ) );
+	const char *	DecorateMessageVA ( const char * sTemplate, va_list ap ) const;
 
 private:
 	struct Document_t
@@ -27707,7 +27776,6 @@ private:
 	CSphVector<Document_t *>	m_dParsedDocuments;
 
 	FILE *			m_pPipe;			///< incoming stream
-	CSphString		m_sCommand;			///< my command
 	CSphString		m_sError;
 	CSphVector<CSphString> m_dDefaultAttrs;
 	CSphVector<CSphString> m_dInvalid;
@@ -27749,12 +27817,6 @@ private:
 	int				m_iReparseStart;	///< utf-8 fixerupper might need to postpone a few bytes, starting at this offset
 	int				m_iReparseLen;		///< and this much bytes (under 4)
 
-	const char *	DecorateMessage ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
-	const char *	DecorateMessageVA ( const char * sTemplate, va_list ap );
-
-	void			ConfigureAttrs ( const CSphVariant * pHead, ESphAttr eAttrType );
-	void			ConfigureFields ( const CSphVariant * pHead );
-	void			AddFieldToSchema ( const char * szName );
 	void			UnexpectedCharaters ( const char * pCharacters, int iLen, const char * szComment );
 
 	bool			ParseNextChunk ( int iBufferLen, CSphString & sError );
@@ -27896,7 +27958,7 @@ void CSphSource_XMLPipe2::Error ( const char * sTemplate, ... )
 }
 
 
-const char * CSphSource_XMLPipe2::DecorateMessage ( const char * sTemplate, ... )
+const char * CSphSource_XMLPipe2::DecorateMessage ( const char * sTemplate, ... ) const
 {
 	va_list ap;
 	va_start ( ap, sTemplate );
@@ -27906,7 +27968,7 @@ const char * CSphSource_XMLPipe2::DecorateMessage ( const char * sTemplate, ... 
 }
 
 
-const char * CSphSource_XMLPipe2::DecorateMessageVA ( const char * sTemplate, va_list ap )
+const char * CSphSource_XMLPipe2::DecorateMessageVA ( const char * sTemplate, va_list ap ) const
 {
 	static char sBuf[1024];
 
@@ -27935,69 +27997,6 @@ const char * CSphSource_XMLPipe2::DecorateMessageVA ( const char * sTemplate, va
 }
 
 
-void CSphSource_XMLPipe2::AddFieldToSchema ( const char * szName )
-{
-	CSphColumnInfo tCol ( szName );
-	tCol.m_eWordpart = GetWordpart ( tCol.m_sName.cstr(), m_pDict && m_pDict->GetSettings().m_bWordDict );
-	m_tSchema.m_dFields.Add ( tCol );
-}
-
-
-void CSphSource_XMLPipe2::ConfigureAttrs ( const CSphVariant * pHead, ESphAttr eAttrType )
-{
-	for ( const CSphVariant * pCur = pHead; pCur; pCur= pCur->m_pNext )
-	{
-		CSphColumnInfo tCol ( pCur->cstr(), eAttrType );
-		char * pColon = strchr ( const_cast<char*> ( tCol.m_sName.cstr() ), ':' );
-		if ( pColon )
-		{
-			*pColon = '\0';
-
-			if ( eAttrType==SPH_ATTR_INTEGER )
-			{
-				int iBits = strtol ( pColon+1, NULL, 10 );
-				if ( iBits<=0 || iBits>ROWITEM_BITS )
-				{
-					sphWarn ( "%s", DecorateMessage ( "attribute '%s': invalid bitcount=%d (bitcount ignored)", tCol.m_sName.cstr(), iBits ) );
-					iBits = -1;
-				}
-
-				tCol.m_tLocator.m_iBitCount = iBits;
-			} else
-				sphWarn ( "%s", DecorateMessage ( "attribute '%s': bitcount is only supported for integer types", tCol.m_sName.cstr() ) );
-		}
-
-		tCol.m_iIndex = m_tSchema.GetAttrsCount ();
-
-		if ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET )
-		{
-			tCol.m_eAttrType = eAttrType;
-			tCol.m_eSrc = SPH_ATTRSRC_FIELD;
-		}
-
-		m_tSchema.AddAttr ( tCol, true ); // all attributes are dynamic at indexing time
-	}
-}
-
-
-void CSphSource_XMLPipe2::ConfigureFields ( const CSphVariant * pHead )
-{
-	for ( const CSphVariant * pCur = pHead; pCur; pCur= pCur->m_pNext )
-	{
-		CSphString sFieldName = pCur->cstr ();
-
-		bool bFound = false;
-		for ( int i = 0; i < m_tSchema.m_dFields.GetLength () && !bFound; i++ )
-			bFound = m_tSchema.m_dFields[i].m_sName==sFieldName;
-
-		if ( bFound )
-			sphWarn ( "%s", DecorateMessage ( "duplicate field '%s'", sFieldName.cstr () ) );
-		else
-			AddFieldToSchema ( sFieldName.cstr () );
-	}
-}
-
-
 bool CSphSource_XMLPipe2::Setup ( int iFieldBufferMax, bool bFixupUTF8, FILE * pPipe, const CSphConfigSection & hSource )
 {
 	assert ( !m_pBuffer && !m_pFieldBuffer );
@@ -28008,27 +28007,26 @@ bool CSphSource_XMLPipe2::Setup ( int iFieldBufferMax, bool bFixupUTF8, FILE * p
 	m_bFixupUTF8 = bFixupUTF8;
 	m_pPipe = pPipe;
 	m_tSchema.Reset ();
+	bool bWordDict = ( m_pDict && m_pDict->GetSettings().m_bWordDict );
 
-	m_sCommand = hSource["xmlpipe_command"].cstr ();
+	ConfigureAttrs ( hSource("xmlpipe_attr_uint"),			SPH_ATTR_INTEGER,	m_tSchema );
+	ConfigureAttrs ( hSource("xmlpipe_attr_timestamp"),		SPH_ATTR_TIMESTAMP,	m_tSchema );
+	ConfigureAttrs ( hSource("xmlpipe_attr_str2ordinal"),	SPH_ATTR_ORDINAL,	m_tSchema );
+	ConfigureAttrs ( hSource("xmlpipe_attr_bool"),			SPH_ATTR_BOOL,		m_tSchema );
+	ConfigureAttrs ( hSource("xmlpipe_attr_float"),			SPH_ATTR_FLOAT,		m_tSchema );
+	ConfigureAttrs ( hSource("xmlpipe_attr_bigint"),		SPH_ATTR_BIGINT,	m_tSchema );
+	ConfigureAttrs ( hSource("xmlpipe_attr_multi"),			SPH_ATTR_UINT32SET,	m_tSchema );
+	ConfigureAttrs ( hSource("xmlpipe_attr_multi_64"),		SPH_ATTR_INT64SET,	m_tSchema );
+	ConfigureAttrs ( hSource("xmlpipe_attr_string"),		SPH_ATTR_STRING,	m_tSchema );
+	ConfigureAttrs ( hSource("xmlpipe_attr_json"),			SPH_ATTR_JSON,		m_tSchema );
+	ConfigureAttrs ( hSource("xmlpipe_attr_wordcount"),		SPH_ATTR_WORDCOUNT,	m_tSchema );
 
-	ConfigureAttrs ( hSource("xmlpipe_attr_uint"),			SPH_ATTR_INTEGER );
-	ConfigureAttrs ( hSource("xmlpipe_attr_timestamp"),		SPH_ATTR_TIMESTAMP );
-	ConfigureAttrs ( hSource("xmlpipe_attr_str2ordinal"),	SPH_ATTR_ORDINAL );
-	ConfigureAttrs ( hSource("xmlpipe_attr_bool"),			SPH_ATTR_BOOL );
-	ConfigureAttrs ( hSource("xmlpipe_attr_float"),			SPH_ATTR_FLOAT );
-	ConfigureAttrs ( hSource("xmlpipe_attr_bigint"),		SPH_ATTR_BIGINT );
-	ConfigureAttrs ( hSource("xmlpipe_attr_multi"),			SPH_ATTR_UINT32SET );
-	ConfigureAttrs ( hSource("xmlpipe_attr_multi_64"),		SPH_ATTR_INT64SET );
-	ConfigureAttrs ( hSource("xmlpipe_attr_string"),		SPH_ATTR_STRING );
-	ConfigureAttrs ( hSource("xmlpipe_attr_json"),			SPH_ATTR_JSON );
-	ConfigureAttrs ( hSource("xmlpipe_attr_wordcount"),		SPH_ATTR_WORDCOUNT );
+	ConfigureAttrs ( hSource("xmlpipe_field_string"),		SPH_ATTR_STRING,	m_tSchema );
+	ConfigureAttrs ( hSource("xmlpipe_field_wordcount"),	SPH_ATTR_WORDCOUNT,	m_tSchema );
 
-	ConfigureAttrs ( hSource("xmlpipe_field_string"),		SPH_ATTR_STRING );
-	ConfigureAttrs ( hSource("xmlpipe_field_wordcount"),	SPH_ATTR_WORDCOUNT );
-
-	ConfigureFields ( hSource("xmlpipe_field") );
-	ConfigureFields ( hSource("xmlpipe_field_string") );
-	ConfigureFields ( hSource("xmlpipe_field_wordcount") );
+	ConfigureFields ( hSource("xmlpipe_field"), bWordDict, m_tSchema );
+	ConfigureFields ( hSource("xmlpipe_field_string"), bWordDict, m_tSchema );
+	ConfigureFields ( hSource("xmlpipe_field_wordcount"), bWordDict, m_tSchema );
 
 	AllocDocinfo();
 	return true;
@@ -28444,12 +28442,13 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 		CSphColumnInfo Info;
 		CSphString sDefault;
 		bool bIsAttr = false;
+		bool bWordDict = ( m_pDict && m_pDict->GetSettings().m_bWordDict );
 
 		while ( dAttrs[0] && dAttrs[1] && dAttrs[0][0] && dAttrs[1][0] )
 		{
 			if ( !strcmp ( *dAttrs, "name" ) )
 			{
-				AddFieldToSchema ( dAttrs[1] );
+				AddFieldToSchema ( dAttrs[1], bWordDict, m_tSchema );
 				Info.m_sName = dAttrs[1];
 			} else if ( !strcmp ( *dAttrs, "attr" ) )
 			{
@@ -29259,6 +29258,451 @@ void CSphSource_MSSQL::OdbcPostConnect ()
 }
 
 #endif
+
+
+struct RemapTSV_t
+{
+	int m_iAttr;
+	int m_iField;
+};
+
+class CSphSource_TSV : public CSphSource_Document, public CSphSchemaConfigurator<CSphSource_TSV>
+{
+public:
+	explicit			CSphSource_TSV ( const char * sName );
+	~CSphSource_TSV ();
+
+	virtual bool	Connect ( CSphString & sError );				///< run the command and open the pipe
+	virtual void	Disconnect ();									///< close the pipe
+	const char *	DecorateMessage ( const char * sTemplate, ... ) const __attribute__ ( ( format ( printf, 2, 3 ) ) );
+
+	virtual bool	IterateStart ( CSphString & );					///< Connect() starts getting documents automatically, so this one is empty
+	virtual BYTE **	NextDocument ( CSphString & );					///< parse incoming chunk and emit some hits
+
+	virtual bool	HasAttrsConfigured ()							{ return ( m_tSchema.GetAttrsCount()>0 ); }
+	virtual bool	IterateMultivaluedStart ( int, CSphString & )	{ return false; }
+	virtual bool	IterateMultivaluedNext ()						{ return false; }
+	virtual bool	IterateKillListStart ( CSphString & )			{ return false; }
+	virtual bool	IterateKillListNext ( SphDocID_t & )			{ return false; }
+
+	void			Setup ( const CSphConfigSection & hSource, FILE * pPipe );
+
+private:
+	BYTE **			ReportDocumentError();
+
+	CSphVector<BYTE>			m_dBuf;
+	CSphFixedVector<char>		m_dError;
+	CSphFixedVector<int>		m_dColumnsLen;
+	CSphFixedVector<RemapTSV_t>	m_dRemap;
+
+	// output
+	CSphFixedVector<BYTE *>		m_dFields;
+	CSphVector<DWORD>			m_dMva;
+
+	FILE *						m_pPipe;			///< incoming stream
+	int							m_iDataStart;
+	int							m_iDataLeft;
+	int							m_iLine;
+	int							m_iAutoCount;
+};
+
+
+CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool , bool RLPARG(bProxy) )
+{
+	CSphSource_TSV * pTSV = NULL;
+#if USE_RLP
+	if ( bProxy )
+		pTSV = new CSphSource_Proxy<CSphSource_TSV> ( sSourceName );
+	else
+#endif
+		pTSV = new CSphSource_TSV ( sSourceName );
+
+	pTSV->Setup ( *pSource, pPipe );
+	return pTSV;
+}
+
+
+CSphSource_TSV::CSphSource_TSV ( const char * sName )
+	: CSphSource_Document ( sName )
+	, m_dError ( 1024 )
+	, m_dColumnsLen ( 0 )
+	, m_dRemap ( 0 )
+	, m_dFields ( 0 )
+	, m_iAutoCount ( 0 )
+{
+	m_iDataStart = 0;
+	m_iDataLeft = 0;
+}
+
+
+CSphSource_TSV::~CSphSource_TSV ()
+{
+	Disconnect();
+}
+
+struct SortedRemapTSV_t : public RemapTSV_t
+{
+	int m_iTag;
+};
+
+
+void CSphSource_TSV::Setup ( const CSphConfigSection & hSource, FILE * pPipe )
+{
+	m_pPipe = pPipe;
+	m_tSchema.Reset ();
+	bool bWordDict = ( m_pDict && m_pDict->GetSettings().m_bWordDict );
+
+	ConfigureAttrs ( hSource("tsvpipe_attr_uint"),			SPH_ATTR_INTEGER,	m_tSchema );
+	ConfigureAttrs ( hSource("tsvpipe_attr_timestamp"),		SPH_ATTR_TIMESTAMP,	m_tSchema );
+	ConfigureAttrs ( hSource("tsvpipe_attr_bool"),			SPH_ATTR_BOOL,		m_tSchema );
+	ConfigureAttrs ( hSource("tsvpipe_attr_float"),			SPH_ATTR_FLOAT,		m_tSchema );
+	ConfigureAttrs ( hSource("tsvpipe_attr_bigint"),		SPH_ATTR_BIGINT,	m_tSchema );
+	ConfigureAttrs ( hSource("tsvpipe_attr_multi"),			SPH_ATTR_UINT32SET,	m_tSchema );
+	ConfigureAttrs ( hSource("tsvpipe_attr_multi_64"),		SPH_ATTR_INT64SET,	m_tSchema );
+	ConfigureAttrs ( hSource("tsvpipe_attr_string"),		SPH_ATTR_STRING,	m_tSchema );
+	ConfigureAttrs ( hSource("tsvpipe_attr_json"),			SPH_ATTR_JSON,		m_tSchema );
+	ConfigureAttrs ( hSource("tsvpipe_field_string"),		SPH_ATTR_STRING,	m_tSchema );
+
+	ConfigureFields ( hSource("tsvpipe_field"), bWordDict, m_tSchema );
+	ConfigureFields ( hSource("tsvpipe_field_string"), bWordDict, m_tSchema );
+
+	m_dFields.Reset ( m_tSchema.m_dFields.GetLength() );
+
+	// build hash from schema names
+	SmallStringHash_T<SortedRemapTSV_t> hSchema;
+	SortedRemapTSV_t tElem;
+	tElem.m_iTag = -1;
+	tElem.m_iAttr = -1;
+	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+	{
+		tElem.m_iField = i;
+		hSchema.Add ( tElem, m_tSchema.m_dFields[i].m_sName );
+	}
+	tElem.m_iField = -1;
+	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
+	{
+		RemapTSV_t * pRemap = hSchema ( m_tSchema.GetAttr ( i ).m_sName );
+		if ( pRemap )
+		{
+			pRemap->m_iAttr = i;
+		} else
+		{
+			tElem.m_iAttr = i;
+			hSchema.Add ( tElem, m_tSchema.GetAttr ( i ).m_sName );
+		}
+	}
+
+	// restore order for declared columns
+	CSphString sTmp;
+	hSource.IterateStart();
+	while ( hSource.IterateNext() )
+	{
+		const CSphVariant * pVal = &hSource.IterateGet();
+		while ( pVal )
+		{
+			const char * sOptionValue = pVal->cstr();
+			// uint attribute might have bit count that should by cut off from name
+			char * pColon = strchr ( const_cast<char*> ( sOptionValue ), ':' );
+			if ( pColon )
+			{
+				sTmp.SetBinary ( sOptionValue, pColon-sOptionValue );
+				sOptionValue = sTmp.cstr();
+			}
+
+			SortedRemapTSV_t * pColumn = hSchema ( sOptionValue );
+			assert ( !pColumn || pColumn->m_iAttr>=0 || pColumn->m_iField>=0 );
+			assert ( !pColumn || pColumn->m_iTag==-1 );
+			if ( pColumn )
+				pColumn->m_iTag = pVal->m_iTag;
+
+			pVal = pVal->m_pNext;
+		}
+	}
+
+	// fields + attributes + id - auto-generated
+	m_dColumnsLen.Reset ( hSchema.GetLength() + 1 );
+	m_dRemap.Reset ( hSchema.GetLength() + 1 );
+	CSphFixedVector<SortedRemapTSV_t> dColumnsSorted ( hSchema.GetLength() );
+
+	hSchema.IterateStart();
+	for ( int i=0; hSchema.IterateNext(); i++ )
+	{
+		assert ( hSchema.IterateGet().m_iTag>=0 );
+		dColumnsSorted[i] = hSchema.IterateGet();
+	}
+
+	sphSort ( dColumnsSorted.Begin(), dColumnsSorted.GetLength(), bind ( &SortedRemapTSV_t::m_iTag ) );
+
+	// set remap incoming columns to fields \ attributes
+	// doc_id dummy filler
+	m_dRemap[0].m_iAttr = 0;
+	m_dRemap[0].m_iField = 0;
+
+	ARRAY_FOREACH ( i, dColumnsSorted )
+	{
+		assert ( !i || dColumnsSorted[i-1].m_iTag<dColumnsSorted[i].m_iTag ); // no duplicates allowed
+		m_dRemap[i+1] = dColumnsSorted[i];
+	}
+}
+
+
+bool CSphSource_TSV::Connect ( CSphString & sError )
+{
+	bool bWordDict = ( m_pDict && m_pDict->GetSettings().m_bWordDict );
+	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+	{
+		CSphColumnInfo & tCol = m_tSchema.m_dFields[i];
+		tCol.m_eWordpart = GetWordpart ( tCol.m_sName.cstr(), bWordDict );
+	}
+
+	int iAttrs = m_tSchema.GetAttrsCount();
+	if ( !AddAutoAttrs ( sError ) )
+		return false;
+
+	m_iAutoCount = m_tSchema.GetAttrsCount() - iAttrs;
+
+	AllocDocinfo();
+
+	m_tHits.m_dData.Reserve ( m_iMaxHits );
+	m_dBuf.Resize ( DEFAULT_READ_BUFFER );
+	m_dMva.Reserve ( 512 );
+
+	return true;
+}
+
+
+void CSphSource_TSV::Disconnect()
+{
+	if ( m_pPipe )
+	{
+		pclose ( m_pPipe );
+		m_pPipe = NULL;
+	}
+	m_tHits.m_dData.Reset();
+}
+
+
+const char * CSphSource_TSV::DecorateMessage ( const char * sTemplate, ... ) const
+{
+	va_list ap;
+	va_start ( ap, sTemplate );
+	vsnprintf ( m_dError.Begin(), m_dError.GetLength(), sTemplate, ap );
+	va_end ( ap );
+	return m_dError.Begin();
+}
+
+
+bool CSphSource_TSV::IterateStart ( CSphString & sError )
+{
+	if ( !m_tSchema.m_dFields.GetLength() )
+	{
+		sError.SetSprintf ( "No fields in schema - will not index" );
+		return false;
+	}
+
+	m_iLine = 0;
+	m_iDataStart = 0;
+	m_iDataLeft = 0;
+
+	// initial buffer update
+	int iRead = fread ( m_dBuf.Begin(), 1, m_dBuf.GetLength(), m_pPipe );
+	if ( !iRead )
+	{
+		sError.SetSprintf ( "source '%s': read error '%s'", m_tSchema.m_sName.cstr(), strerror(errno) );
+		return false;
+	}
+	m_iDataLeft = iRead;
+	m_iPlainFieldsLength = m_tSchema.m_dFields.GetLength();
+
+	return true;
+}
+
+BYTE ** CSphSource_TSV::ReportDocumentError ()
+{
+	m_tDocInfo.m_iDocID = 1; // 0 means legal eof
+	m_iDataStart = 0;
+	m_iDataLeft = 0;
+	return NULL;
+}
+
+
+BYTE **	CSphSource_TSV::NextDocument ( CSphString & sError )
+{
+	// move up tail to buffer head
+	if ( m_iDataLeft )
+	{
+		memmove ( m_dBuf.Begin(), m_dBuf.Begin() + m_iDataStart, m_iDataLeft );
+		m_iDataStart = 0;
+	}
+
+	int iColumns = m_dRemap.GetLength();
+	int iCol = 0;
+	int iColumnStart = 0;
+	BYTE * pData = m_dBuf.Begin();
+	const BYTE * pEnd = m_dBuf.Begin() + m_iDataLeft;
+	for ( ;; )
+	{
+		if ( iCol>=iColumns )
+		{
+			sError.SetSprintf ( "source '%s': too many columns found (found=%d, declared=%d, line=%d, pos=%d, docid=" DOCID_FMT ")",
+				m_tSchema.m_sName.cstr(), iCol, iColumns+m_iAutoCount, m_iLine, (int)( pData - m_dBuf.Begin() ), m_tDocInfo.m_iDocID );
+			return ReportDocumentError();
+		}
+
+		// move to next control symbol
+		while ( pData<pEnd && *pData && *pData!='\t' && *pData!='\r' && *pData!='\n' )
+			pData++;
+
+		if ( pData<pEnd )
+		{
+			assert ( *pData=='\t' || !*pData || *pData=='\r' || *pData=='\n' );
+			bool bNull = !*pData;
+			bool bEOL = ( *pData=='\r' || *pData=='\n' );
+
+			int iLen = pData - m_dBuf.Begin() - iColumnStart;
+			assert ( iLen>=0 );
+			m_dColumnsLen[iCol] = iLen;
+			*pData++ = '\0';
+			iCol++;
+
+			if ( bNull )
+			{
+				// null terminated string found
+				m_iDataStart = 0;
+				m_iDataLeft = 0;
+				break;
+			} else if ( bEOL )
+			{
+				// end of document found
+				// skip all EOL characters
+				while ( pData<pEnd && *pData && ( *pData=='\r' || *pData=='\n' ) )
+					pData++;
+				break;
+			}
+
+			// column separator found
+			iColumnStart = pData - m_dBuf.Begin();
+			continue;
+		}
+
+		int iOff = pData - m_dBuf.Begin();
+
+		// full buffer got resized to collect whole document
+		if ( iOff==m_dBuf.GetLength() )
+			m_dBuf.Resize ( m_dBuf.GetLength()*2 );
+
+		int iGot = fread ( m_dBuf.Begin() + iOff, 1, m_dBuf.GetLength() - iOff, m_pPipe );
+		if ( !iGot )
+		{
+			if ( !iCol )
+			{
+				// normal file termination - no pending columns and documents
+				m_iDataStart = 0;
+				m_iDataLeft = 0;
+				m_tDocInfo.m_iDocID = 0;
+				return NULL;
+			}
+
+			// error in case no data left in middle of data stream
+			sError.SetSprintf ( "source '%s': read error '%s' (line=%d, pos=%d, docid=" DOCID_FMT ")",
+				m_tSchema.m_sName.cstr(), strerror(errno), m_iLine, iOff, m_tDocInfo.m_iDocID );
+			return ReportDocumentError();
+		}
+
+		// fix-up pointers due of buffer resize
+		pData = m_dBuf.Begin() + iOff;
+		pEnd = m_dBuf.Begin() + iOff + iGot;
+	}
+
+	// all columns presence check
+	if ( iCol!=iColumns )
+	{
+		sError.SetSprintf ( "source '%s': not all columns found (found=%d, total=%d, line=%d, pos=%d, docid=" DOCID_FMT ")",
+			m_tSchema.m_sName.cstr(), iCol, iColumns, m_iLine, (int)( pData - m_dBuf.Begin() ), m_tDocInfo.m_iDocID );
+		return ReportDocumentError();
+	}
+
+	// tail data
+	assert ( pData<=pEnd );
+	m_iDataStart = pData - m_dBuf.Begin();
+	m_iDataLeft = pEnd - pData;
+
+	// check doc_id
+	if ( !m_dColumnsLen[0] )
+	{
+		sError.SetSprintf ( "source '%s': not doc_id found (line=%d, pos=%d, docid=" DOCID_FMT ")",
+			m_tSchema.m_sName.cstr(), m_iLine, (int)( pData - m_dBuf.Begin() ), m_tDocInfo.m_iDocID );
+		return ReportDocumentError();
+	}
+
+	// parse doc_id
+	m_tDocInfo.m_iDocID = sphToDocid ( (const char *)m_dBuf.Begin() );
+
+	// check doc_id
+	if ( m_tDocInfo.m_iDocID==0 )
+	{
+		sError.SetSprintf ( "source '%s': invalid doc_id found (line=%d, pos=%d, docid=" DOCID_FMT ")",
+			m_tSchema.m_sName.cstr(), m_iLine, (int)( pData - m_dBuf.Begin() ), m_tDocInfo.m_iDocID );
+		return ReportDocumentError();
+	}
+
+	// parse columns
+	int iOff = m_dColumnsLen[0] + 1;
+	m_dMva.Resize ( 0 );
+	for ( int iCol=1; iCol<iColumns; iCol++ )
+	{
+		// if+if for field-string attribute case
+		const RemapTSV_t & tRemap = m_dRemap[iCol];
+
+		// field column
+		if ( tRemap.m_iField!=-1 )
+			m_dFields[tRemap.m_iField] = m_dBuf.Begin() + iOff;
+
+		// attribute column
+		if ( tRemap.m_iAttr!=-1 )
+		{
+			const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( tRemap.m_iAttr );
+			const char * sVal = (const char *)m_dBuf.Begin() + iOff;
+
+			switch ( tAttr.m_eAttrType )
+			{
+			case SPH_ATTR_ORDINAL:
+			case SPH_ATTR_STRING:
+			case SPH_ATTR_JSON:
+			case SPH_ATTR_WORDCOUNT:
+				m_dStrAttrs[tRemap.m_iAttr] = sVal;
+				m_tDocInfo.SetAttr ( tAttr.m_tLocator, 0 );
+				break;
+
+			case SPH_ATTR_FLOAT:
+				m_tDocInfo.SetAttrFloat ( tAttr.m_tLocator, sphToFloat ( sVal ) );
+				break;
+
+			case SPH_ATTR_BIGINT:
+				m_tDocInfo.SetAttr ( tAttr.m_tLocator, sphToInt64 ( sVal ) );
+				break;
+
+			case SPH_ATTR_UINT32SET:
+			case SPH_ATTR_INT64SET:
+				m_tDocInfo.SetAttr ( tAttr.m_tLocator, ParseFieldMVA ( m_dMva, sVal, ( tAttr.m_eAttrType==SPH_ATTR_INT64SET ) ) );
+				break;
+
+			case SPH_ATTR_TOKENCOUNT:
+				m_tDocInfo.SetAttr ( tAttr.m_tLocator, 0 );
+				break;
+
+			default:
+				m_tDocInfo.SetAttr ( tAttr.m_tLocator, sphToDword ( sVal ) );
+				break;
+			}
+		}
+
+		iOff += m_dColumnsLen[iCol] + 1; // length of value plus null-terminator
+	}
+
+	m_iLine++;
+	return m_dFields.Begin();
+}
 
 
 /////////////////////////////////////////////////////////////////////////////

@@ -20007,7 +20007,7 @@ void QueryStatus ( CSphVariant * v )
 	if ( !v )
 	{
 		snprintf ( sListen, sizeof ( sListen ), "127.0.0.1:%d:sphinx", SPHINXAPI_PORT );
-		tListen = CSphVariant ( sListen );
+		tListen = CSphVariant ( sListen, 0 );
 		v = &tListen;
 	}
 

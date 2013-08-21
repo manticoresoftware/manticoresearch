@@ -1928,6 +1928,7 @@ struct StoredToken_t
 };
 
 void FillStoredTokenInfo ( StoredToken_t & tToken, const BYTE * sToken, ISphTokenizer * pTokenizer );
+CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool bUTF8, bool bProxy );
 
 
 #if USE_RLP

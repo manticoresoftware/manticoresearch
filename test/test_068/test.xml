@@ -70,6 +70,21 @@ index embedded
 	charset_type = utf-8
 }
 
+source src_tsv1
+{
+	type = tsvpipe
+	tsvpipe_command = cat <this_test/>/data1.tsv
+	tsvpipe_field = title
+	tsvpipe_field = content
+	tsvpipe_attr_uint = gid
+}
+
+index tsv1
+{
+	source = src_tsv1
+	path = <data_path/>/tsv1
+	charset_type = utf-8
+}
 
 </config>
 
@@ -83,6 +98,10 @@ index embedded
 <query index="idx1" mode="extended2">aaa bbb ccc</query>
 <query index="idx1" mode="extended2">^aaa ccc$</query>
 <query index="idx1" mode="extended2">^bbb | ^ccc | aaa$ | bbb$</query>
+<query index="tsv1">test</query>
+<query index="tsv1" mode="extended2">aaa bbb</query>
+<query index="tsv1" mode="extended2">^aaa ccc$</query>
+<query index="tsv1" mode="extended2">^bbb | ^ccc | aaa$ | bbb$</query>
 </queries>
 
 </test>

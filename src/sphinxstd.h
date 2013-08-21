@@ -2000,6 +2000,7 @@ protected:
 public:
 	CSphVariant *	m_pNext;
 	bool			m_bTag;
+	int				m_iTag;
 
 public:
 	/// default ctor
@@ -2010,16 +2011,19 @@ public:
 		, m_fValue ( 0.0f )
 		, m_pNext ( NULL )
 		, m_bTag ( false )
+		, m_iTag ( 0 )
 	{
 	}
 
 	/// ctor from C string
-	CSphVariant ( const char * sString ) // NOLINT desired implicit conversion
+	CSphVariant ( const char * sString, int iTag )
 		: CSphString ( sString )
 		, m_iValue ( m_sValue ? atoi ( m_sValue ) : 0 )
 		, m_i64Value ( m_sValue ? (int64_t)strtoull ( m_sValue, NULL, 10 ) : 0 )
 		, m_fValue ( m_sValue ? (float)atof ( m_sValue ) : 0.0f )
 		, m_pNext ( NULL )
+		, m_bTag ( false )
+		, m_iTag ( iTag )
 	{
 	}
 
@@ -2070,6 +2074,8 @@ public:
 		m_iValue = rhs.m_iValue;
 		m_i64Value = rhs.m_i64Value;
 		m_fValue = rhs.m_fValue;
+		m_bTag = rhs.m_bTag;
+		m_iTag = rhs.m_iTag;
 
 		return *this;
 	}

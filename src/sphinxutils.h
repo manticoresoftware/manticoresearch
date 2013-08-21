@@ -64,6 +64,10 @@ bool sphWildcardMatch ( const char * sSstring, const char * sPattern );
 class CSphConfigSection : public SmallStringHash_T < CSphVariant >
 {
 public:
+	CSphConfigSection ()
+		: m_iTag ( 0 )
+	{}
+
 	/// get integer option value by key and default value
 	int GetInt ( const char * sKey, int iDefault=0 ) const
 	{
@@ -88,6 +92,8 @@ public:
 	/// get size option (plain int, or with K/M prefix) value by key and default value
 	int		GetSize ( const char * sKey, int iDefault ) const;
 	int64_t GetSize64 ( const char * sKey, int64_t iDefault ) const;
+
+	int m_iTag;
 };
 
 /// config section type (hash of sections)

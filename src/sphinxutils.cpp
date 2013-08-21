@@ -336,6 +336,18 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "hook_connect",			KEY_HIDDEN, NULL },
 	{ "hook_query_range",		KEY_HIDDEN, NULL },
 	{ "hook_post_index",		KEY_HIDDEN, NULL },
+	{ "tsvpipe_command",		0, NULL },
+	{ "tsvpipe_field",			KEY_LIST, NULL },
+	{ "tsvpipe_attr_uint",		KEY_LIST, NULL },
+	{ "tsvpipe_attr_timestamp",	KEY_LIST, NULL },
+	{ "tsvpipe_attr_bool",		KEY_LIST, NULL },
+	{ "tsvpipe_attr_float",		KEY_LIST, NULL },
+	{ "tsvpipe_attr_bigint",	KEY_LIST, NULL },
+	{ "tsvpipe_attr_multi",		KEY_LIST, NULL },
+	{ "tsvpipe_attr_multi_64",	KEY_LIST, NULL },
+	{ "tsvpipe_attr_string",	KEY_LIST, NULL },
+	{ "tsvpipe_attr_json",		KEY_LIST, NULL },
+	{ "tsvpipe_field_string",	KEY_LIST, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -557,13 +569,15 @@ void CSphConfigParser::AddKey ( const char * sKey, char * sValue )
 
 	sValue = trim ( sValue );
 	CSphConfigSection & tSec = m_tConf[m_sSectionType][m_sSectionName];
+	int iTag = tSec.m_iTag;
+	tSec.m_iTag++;
 	if ( tSec(sKey) )
 	{
 		if ( tSec[sKey].m_bTag )
 		{
 			// override value or list with a new value
 			SafeDelete ( tSec[sKey].m_pNext ); // only leave the first array element
-			tSec[sKey] = sValue; // update its value
+			tSec[sKey] = CSphVariant ( sValue, iTag ); // update its value
 			tSec[sKey].m_bTag = false; // mark it as overridden
 
 		} else
@@ -572,13 +586,13 @@ void CSphConfigParser::AddKey ( const char * sKey, char * sValue )
 			CSphVariant * pTail = &tSec[sKey];
 			while ( pTail->m_pNext )
 				pTail = pTail->m_pNext;
-			pTail->m_pNext = new CSphVariant ( sValue );
+			pTail->m_pNext = new CSphVariant ( sValue, iTag );
 		}
 
 	} else
 	{
 		// just add
-		tSec.Add ( sValue, sKey ); // FIXME! be paranoid, verify that it returned true
+		tSec.Add ( CSphVariant ( sValue, iTag ), sKey ); // FIXME! be paranoid, verify that it returned true
 	}
 }
 

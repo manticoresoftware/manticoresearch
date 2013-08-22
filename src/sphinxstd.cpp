@@ -444,6 +444,7 @@ void operator delete [] ( void * pPtr )						{ sphDebugDelete ( pPtr ); }
 
 //////////////////////////////////////////////////////////////////////////////
 // MEMORY STATISTICS
+//////////////////////////////////////////////////////////////////////////////
 
 /// TLS key of memory category stack
 SphThreadKey_t g_tTLSMemCategory;
@@ -981,6 +982,13 @@ const char * CSphProcessSharedMutex::GetError() const
 // THREADING FUNCTIONS
 //////////////////////////////////////////////////////////////////////////
 
+// This is a working context for a thread wrapper. It wraps every thread to
+// store information about it's stack size, cleanup threads and something else.
+// This struct always should be allocated in the heap, cause wrapper need
+// to see it all the time and it frees it out of the heap by itself. Wrapper thread function
+// receives as an argument a pointer to ThreadCall_t with one function pointer to
+// a main thread function. Afterwards, thread can set up one or more cleanup functions
+// which will be executed by a wrapper in the linked list order after it dies.
 struct ThreadCall_t
 {
 	void			( *m_pCall )( void * pArg );
@@ -1004,7 +1012,12 @@ static SphThreadKey_t g_tMyThreadStack;
 
 SPH_THDFUNC sphThreadProcWrapper ( void * pArg )
 {
-	// this is the first local variable in the new thread. So, it's address is the top of the stack.
+	// This is the first local variable in the new thread. So, its address is the top of the stack.
+	// We need to know thread stack size for both expression and query evaluating engines.
+	// We store expressions as a linked tree of structs and execution is a calls of mutually
+	// recursive methods. Before executing we compute tree height and multiply it by a constant
+	// with experimentally measured value to check whether we have enough stack to execute current query.
+	// The check is not ideal and do not work for all compilers and compiler settings.
 	char	cTopOfMyStack;
 	assert ( sphThreadGet ( g_tThreadCleanupKey )==NULL );
 	assert ( sphThreadGet ( g_tMyThreadStack )==NULL );
@@ -1110,8 +1123,8 @@ void sphThreadDone ( int )
 
 bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg, bool bDetached )
 {
-	// we can not merely put this on current stack
-	// as it might get destroyed before wrapper sees it
+	// we can not put this on current stack because wrapper need to see
+	// it all the time and it will destroy this data from heap by itself
 	ThreadCall_t * pCall = new ThreadCall_t;
 	pCall->m_pCall = fnThread;
 	pCall->m_pArg = pArg;
@@ -1167,7 +1180,10 @@ bool sphThreadJoin ( SphThread_t * pThread )
 #endif
 }
 
-
+// Adds a function call (a new task for a wrapper) to a linked list
+// of thread contexts. They will be executed one by one right after
+// the main thread ends its execution. This is a way for a wrapper
+// to free local resources allocated by its main thread.
 void sphThreadOnExit ( void (*fnCleanup)(void*), void * pArg )
 {
 	ThreadCall_t * pCleanup = new ThreadCall_t;
@@ -1221,10 +1237,7 @@ int64_t sphGetStackUsed()
 	if ( !pStackTop )
 		return 0;
 	int64_t iHeight = pStackTop - &cStack;
-	if ( iHeight>=0 )
-		return iHeight;
-	else
-		return -iHeight;
+	return ( iHeight>=0 ) ? iHeight : -iHeight;
 }
 
 void sphSetMyStackSize ( int iStackSize )
@@ -1405,7 +1418,7 @@ bool CSphAutoEvent::WaitEvent ()
 		return true;
 	pthread_mutex_lock ( m_pMutex );
 	if ( !m_bSent )
-	pthread_cond_wait ( &m_tCond, m_pMutex );
+		pthread_cond_wait ( &m_tCond, m_pMutex );
 	m_bSent = false;
 	pthread_mutex_unlock ( m_pMutex );
 	return true;
@@ -1560,7 +1573,7 @@ bool CSphRwlock::Init ( bool bProcessShared )
 #ifdef __FreeBSD__
 	if ( bProcessShared )
 	{
-		m_sError = "process shared rwlock not supported by FreeBSD";
+		m_sError = "process shared rwlock is not supported by FreeBSD";
 		return false;
 	}
 #endif

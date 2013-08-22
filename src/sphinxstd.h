@@ -2002,6 +2002,7 @@ private:
 /////////////////////////////////////////////////////////////////////////////
 
 /// immutable string/int/float variant list proxy
+/// used in config parsing
 struct CSphVariant : public CSphString
 {
 protected:
@@ -2011,8 +2012,9 @@ protected:
 
 public:
 	CSphVariant *	m_pNext;
-	bool			m_bTag;
-	int				m_iTag;
+	// tags are used for handling multiple same keys
+	bool			m_bTag; // 'true' means override - no multi-valued; 'fal'se' means multi-valued key
+	int				m_iTag; // stores order like in config file
 
 public:
 	/// default ctor
@@ -2780,8 +2782,8 @@ public:
 		if ( iBits>=GetBitsCount() )
 			return;
 
-		int iMaskPos = iBits / 32;
-		DWORD uMask = ( 1UL << ( iBits % 32 ) ) - 1;
+		int iMaskPos = iBits/32;
+		DWORD uMask = ( 1UL << ( iBits%32 ) ) - 1;
 		m_dFieldsMask [ iMaskPos++ ] &= uMask;
 		for ( ; iMaskPos < IELEMENTS; iMaskPos++ )
 			m_dFieldsMask [ iMaskPos ] = 0;

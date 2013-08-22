@@ -52,3 +52,8 @@
 
 # /doc
 /doc/Makefile
+
+# /test
+/test/test_*/report.txt
+/test/test_*/Conf
+/test/data

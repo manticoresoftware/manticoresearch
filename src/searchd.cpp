@@ -21559,6 +21559,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	if ( g_eWorkers==MPM_THREADS )
 		sphReplayBinlog ( hIndexes, uReplayFlags, DumpMemStat );
+	hIndexes.Reset();
 
 	if ( !g_bOptNoDetach )
 		g_bLogStdout = false;

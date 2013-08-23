@@ -22087,12 +22087,16 @@ bool Infix_t<5>::operator == ( const Infix_t<5> & rhs ) const
 struct InfixIntvec_t
 {
 public:
+	// do not change the order of fields in this union - it matters a lot
 	union
 	{
 		DWORD			m_dData[4];
-		int				m_iDynLen;
-		int				m_iDynLimit;
-		DWORD *			m_pDynData;
+		struct
+		{
+			int				m_iDynLen;
+			int				m_iDynLimit;
+			DWORD *			m_pDynData;
+		};
 	};
 
 public:

@@ -29277,7 +29277,6 @@ private:
 
 	// output
 	CSphFixedVector<BYTE *>		m_dFields;
-	CSphVector<DWORD>			m_dMva;
 
 	FILE *						m_pPipe;			///< incoming stream
 	int							m_iDataStart;

@@ -2243,6 +2243,9 @@ static bool IsChineseCode ( int iCode )
 
 bool sphDetectChinese ( const BYTE * szBuffer, int iLength )
 {
+	if ( !szBuffer || !iLength )
+		return false;
+
 	const BYTE * pBuffer = szBuffer;
 	while ( pBuffer<szBuffer+iLength )
 	{

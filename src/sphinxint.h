@@ -2082,7 +2082,7 @@ public:
 			int iTotalFieldLen = 0;
 			for ( int i = 0; i < T::m_tSchema.m_dFields.GetLength(); i++ )
 			{
-				m_dFieldLengths[i] = strlen ( (const char*)pFields[i] );
+				m_dFieldLengths[i] = pFields[i] ? strlen ( (const char*)pFields[i] ) : 0;
 				iTotalFieldLen += PROXY_MARKER_LEN+m_dFieldLengths[i]+2;
 			}
 
@@ -2126,7 +2126,11 @@ public:
 					// no chinese? just save the field storage without tokenizing it
 					// it will be tokenized later in the splitter
 					pDoc->m_dFieldStorage[i].Resize ( iFieldLen+1 );
-					memcpy ( pDoc->m_dFieldStorage[i].Begin(), pFields[i], iFieldLen+1 );
+					if ( pFields[i] )
+						memcpy ( pDoc->m_dFieldStorage[i].Begin(), pFields[i], iFieldLen+1 );
+					else
+						pDoc->m_dFieldStorage[i][0] = 0;
+
 					pDoc->m_dFields[i] = pDoc->m_dFieldStorage[i].Begin();
 
 					COPY_MARKER ( pCurDocPtr, m_pMarkerNonChineseField );

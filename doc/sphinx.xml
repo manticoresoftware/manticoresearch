@@ -3591,13 +3591,6 @@ events. That is useful to diagnose and fix problems with
 SQL sources.
 </para></listitem>
 
-<listitem><para><option>--print-queries</option> prints out
-SQL queries that <filename>indexer</filename> sends to
-the database, along with SQL connection and disconnection
-events. That is useful to diagnose and fix problems with
-SQL sources.
-</para></listitem>
-
 </itemizedlist>
 </para>
 </sect1>

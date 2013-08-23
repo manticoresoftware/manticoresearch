@@ -29920,11 +29920,13 @@ bool CWordlist::ReadCP ( CSphAutofile & tFile, DWORD uVersion, bool bWordDict, C
 	}
 
 	// set wordlist end
-	assert ( !m_iInfixCodepointBytes || !m_iInfixBlocksOffset || m_dInfixBlocks.GetLength() );
 	m_iWordsEnd = m_iDictCheckpointsOffset;
 	if ( m_iInfixCodepointBytes && m_iInfixBlocksOffset )
 	{
-		m_iWordsEnd = m_dInfixBlocks.Begin()->m_iOffset - strlen ( g_sTagInfixEntries );
+		if ( m_dInfixBlocks.GetLength() )
+			m_iWordsEnd = m_dInfixBlocks.Begin()->m_iOffset - strlen ( g_sTagInfixEntries );
+		else
+			m_iWordsEnd -= strlen ( g_sTagInfixEntries );
 	}
 
 	// TODO: count m_dInfixBlocks too while make on_disk_dict work with dict=keywords + infix

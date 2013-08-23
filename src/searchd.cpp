@@ -9697,6 +9697,9 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 
 				// this one seems OK
 				AggrResult_t & tRes = m_dResults[iQuery];
+				// this is a temporal hack
+				if ( m_dQueries [ iQuery ].m_sSortBy=="@custom" )
+					tRes.m_sWarning = "@custom is deprecated and will be removed soon";
 				// multi-queue only returned one result set meta, so we need to replicate it
 				if ( m_bMultiQueue )
 				{

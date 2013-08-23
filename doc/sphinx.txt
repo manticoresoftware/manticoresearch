@@ -3629,9 +3629,6 @@ performed. These options are:
    * --print-queries prints out SQL queries that indexer sends to the
      database, along with SQL connection and disconnection events. That is
      useful to diagnose and fix problems with SQL sources.
-   * --print-queries prints out SQL queries that indexer sends to the
-     database, along with SQL connection and disconnection events. That is
-     useful to diagnose and fix problems with SQL sources.
 
 6.2. searchd command reference
 ==============================

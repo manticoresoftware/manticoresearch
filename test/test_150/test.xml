@@ -109,6 +109,24 @@ index plain_sub_infix
 	   dict = crc
 }
 
+source kw_infix
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, '1' title, 100 as idd
+	sql_attr_uint	= idd
+}
+
+index kw_infix
+{
+	source	= kw_infix
+	path	= <data_path/>/kw_infix
+	docinfo	= extern
+	charset_type = utf-8
+	enable_star = 1
+	min_infix_len = 3
+	dict = keywords	
+}
 </config>
 
 <db_create>
@@ -154,6 +172,9 @@ create table test_table
 <sphinxql>select * from plain_sub_infix where match('*45')</sphinxql>
 <sphinxql>select * from plain_sub_infix where match('*345')</sphinxql>
 <sphinxql>select * from plain_sub_infix where match('*2345')</sphinxql>
+
+<!--regression no infix collected at dict=keywords -->
+<sphinxql>select * from kw_infix where match('1')</sphinxql>
 </sphqueries>
 
 </test>

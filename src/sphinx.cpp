@@ -7590,8 +7590,6 @@ void CSphWriter::ZipOffsets ( CSphVector<SphOffset_t> * pData )
 
 void CSphWriter::Flush ()
 {
-	// PROFILE ( write_hits );
-
 	if ( m_pSharedOffset && *m_pSharedOffset!=m_iWritten )
 		sphSeek ( m_iFD, m_iWritten, SEEK_SET );
 
@@ -8299,7 +8297,6 @@ int CSphBin::ReadByte ()
 
 	if ( !m_iLeft )
 	{
-		// PROFILE ( read_hits );
 		if ( *m_pFilePos!=m_iFilePos )
 		{
 			sphSeek ( m_iFile, m_iFilePos, SEEK_SET );
@@ -11075,8 +11072,6 @@ inline int encodeKeyword ( BYTE * pBuf, const char * pKeyword )
 
 int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWORD * pDocinfo, int iDocinfos, int iStride )
 {
-	// PROFILE ( write_hits );
-
 	assert ( pHit );
 	assert ( iHits>0 );
 
@@ -12626,9 +12621,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	ARRAY_FOREACH ( i, m_dMinRow )
 		m_dMinRow[i] = ROWITEM_MAX;
 
-	// build raw log
-	// PROFILE_BEGIN ( collect_hits );
-
 	m_tStats.Reset ();
 	m_tProgress.m_ePhase = CSphIndexProgress::PHASE_COLLECT;
 	m_tProgress.m_iAttrs = 0;
@@ -13026,7 +13018,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				// sort hits
 				int iHits = pHits - dHits.Begin();
 				{
-					// PROFILE ( sort_hits );
 					sphSort ( dHits.Begin(), iHits, CmpHit_fn() );
 					m_pDict->HitblockPatch ( dHits.Begin(), iHits );
 				}
@@ -13160,7 +13151,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 						// sort hits
 						int iHits = pHits - dHits.Begin();
 						{
-							// PROFILE ( sort_hits );
 							sphSort ( dHits.Begin(), iHits, CmpHit_fn() );
 							m_pDict->HitblockPatch ( dHits.Begin(), iHits );
 						}
@@ -13193,7 +13183,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				{
 					int iHits = pHits - dHits.Begin();
 					{
-						// PROFILE ( sort_hits );
 						sphSort ( dHits.Begin(), iHits, CmpHit_fn() );
 						m_pDict->HitblockPatch ( dHits.Begin(), iHits );
 					}
@@ -13244,7 +13233,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	{
 		int iHits = pHits - dHits.Begin();
 		{
-			// PROFILE ( sort_hits );
 			sphSort ( dHits.Begin(), iHits, CmpHit_fn() );
 			m_pDict->HitblockPatch ( dHits.Begin(), iHits );
 		}
@@ -13308,8 +13296,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	m_tProgress.m_iDocuments = m_tStats.m_iTotalDocuments;
 	m_tProgress.m_iBytes = m_tStats.m_iTotalBytes;
 	m_tProgress.Show ( true );
-
-	// PROFILE_END ( collect_hits );
 
 	///////////////////////////////////////
 	// collect and sort multi-valued attrs
@@ -13862,8 +13848,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	// sort and write compressed index
 	///////////////////////////////////
 
-	// PROFILE_BEGIN ( invert_hits );
-
 	// initialize readers
 	assert ( dBins.GetLength()==0 );
 	dBins.Reserve ( dHitBlocks.GetLength() );
@@ -14041,8 +14025,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	if ( iDupes )
 		sphWarn ( "%d duplicate document id pairs found", iDupes );
-
-	// PROFILE_END ( invert_hits );
 
 	BuildHeader_t tBuildHeader ( m_tStats );
 	if ( !tHitBuilder.cidxDone ( iMemoryLimit, m_tSettings.m_iMinInfixLen, m_pTokenizer->GetMaxCodepointLength(), &tBuildHeader ) )
@@ -25417,7 +25399,6 @@ bool CSphSource_Document::IterateDocument ( CSphString & sError )
 {
 	assert ( m_pTokenizer );
 	assert ( !m_tState.m_bProcessingHits );
-	// PROFILE ( src_document );
 
 	m_tHits.m_dData.Resize ( 0 );
 
@@ -26694,7 +26675,6 @@ void CSphSource_SQL::Disconnect ()
 
 BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 {
-	// PROFILE ( src_sql );
 	assert ( m_bSqlConnected );
 
 	// get next non-zero-id row

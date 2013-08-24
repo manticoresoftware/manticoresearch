@@ -112,7 +112,7 @@ typedef union YYSTYPE {
 	} tInt;
 	struct							// field spec
 	{
-		CSphSmallBitvec		dMask;			// acceptable fields mask
+		FieldMask_t	dMask;			// acceptable fields mask
 		int			iMaxPos;		// max allowed position within field
 	} tFieldLimit;
 	int				iZoneVec;

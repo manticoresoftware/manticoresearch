@@ -670,7 +670,7 @@ struct CSphAggregateHit
 	SphWordID_t		m_iWordID;		///< word ID in current dictionary
 	BYTE *			m_sKeyword;		///< word itself (in keywords dictionary case only)
 	Hitpos_t		m_iWordPos;		///< word position in current document, or hit count in case of aggregate hit
-	CSphSmallBitvec	m_dFieldMask;	///< mask of fields containing this word, 0 for regular hits, non-0 for aggregate hits
+	FieldMask_t	m_dFieldMask;	///< mask of fields containing this word, 0 for regular hits, non-0 for aggregate hits
 
 	CSphAggregateHit()
 		: m_iDocID ( 0 )
@@ -10478,7 +10478,7 @@ private:
 
 	SphOffset_t					m_iLastHitlistPos;		///< doclist entry
 	SphOffset_t					m_iLastHitlistDelta;	///< doclist entry
-	CSphSmallBitvec				m_dLastDocFields;		///< doclist entry
+	FieldMask_t				m_dLastDocFields;		///< doclist entry
 	DWORD						m_uLastDocHits;			///< doclist entry
 
 	CSphDictEntry				m_tWord;				///< dictionary entry
@@ -10801,7 +10801,8 @@ void CSphHitBuilder::cidxHit ( CSphAggregateHit * pHit, const CSphRowitem * pAtt
 		assert ( !pHit->m_dFieldMask.TestAll(false) );
 
 		m_uLastDocHits += iHitCount;
-		m_dLastDocFields |= pHit->m_dFieldMask;
+		for ( int i=0; i<FieldMask_t::SIZE; i++ )
+			m_dLastDocFields[i] |= pHit->m_dFieldMask[i];
 		m_tWord.m_iHits += iHitCount;
 
 		if ( m_eHitless==SPH_HITLESS_SOME )
@@ -14675,7 +14676,8 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 						while ( tDstQword.m_bHasHitlist && tDstQword.GetNextHit()!=EMPTY_HIT );
 						while ( tSrcQword.m_bHasHitlist && tSrcQword.GetNextHit()!=EMPTY_HIT );
 
-						tHit.m_dFieldMask = tDstQword.m_dQwordFields | tSrcQword.m_dQwordFields;
+						for ( int i=0; i<FieldMask_t::SIZE; i++ )
+							tHit.m_dFieldMask[i] = tDstQword.m_dQwordFields[i] | tSrcQword.m_dQwordFields[i];
 						tHit.SetAggrCount ( tDstQword.m_uMatchHits + tSrcQword.m_uMatchHits );
 						pHitBuilder->cidxHit ( &tHit, tMerger.GetInline() );
 
@@ -19740,7 +19742,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 			// loop the hitlist
 			int iDocHits = 0;
-			CSphSmallBitvec dFieldMask;
+			FieldMask_t dFieldMask;
 			dFieldMask.UnsetAll();
 			Hitpos_t uLastHit = EMPTY_HIT;
 
@@ -19794,7 +19796,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 					(uint64_t)uWordid, sWord, pQword->m_tDoc.m_iDocID, pQword->m_uMatchHits, iDocHits ));
 
 			// check the mask
-			if ( dFieldMask!=pQword->m_dQwordFields && !bHitless )
+			if ( memcmp ( dFieldMask.m_dMask, pQword->m_dQwordFields.m_dMask, sizeof(dFieldMask.m_dMask) ) && !bHitless )
 				LOC_FAIL(( fp, "field mask mismatch (wordid="UINT64_FMT"(%s), docid="DOCID_FMT")",
 					(uint64_t)uWordid, sWord, pQword->m_tDoc.m_iDocID ));
 

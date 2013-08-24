@@ -73,7 +73,7 @@ enum XQOperator_e
 struct XQLimitSpec_t
 {
 	bool					m_bFieldSpec;	///< whether field spec was already explicitly set
-	CSphSmallBitvec			m_dFieldMask;	///< fields mask (spec part)
+	FieldMask_t			m_dFieldMask;	///< fields mask (spec part)
 	int						m_iFieldMaxPos;	///< max position within field (spec part)
 	CSphVector<int>			m_dZones;		///< zone indexes in per-query zones list
 	bool					m_bZoneSpan;	///< if we need to hits within only one span
@@ -121,7 +121,7 @@ public:
 	}
 public:
 	void SetZoneSpec ( const CSphVector<int> & dZones, bool bZoneSpan );
-	void SetFieldSpec ( const CSphSmallBitvec& uMask, int iMaxPos );
+	void SetFieldSpec ( const FieldMask_t& uMask, int iMaxPos );
 };
 
 /// extended query node
@@ -167,7 +167,7 @@ public:
 	}
 
 	/// setup field limits
-	void SetFieldSpec ( const CSphSmallBitvec& uMask, int iMaxPos );
+	void SetFieldSpec ( const FieldMask_t& uMask, int iMaxPos );
 
 	/// setup zone limits
 	void SetZoneSpec ( const CSphVector<int> & dZones, bool bZoneSpan=false );

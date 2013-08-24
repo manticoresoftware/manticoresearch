@@ -153,7 +153,6 @@ public:
 	virtual bool				GotHitless () = 0;
 	virtual int					GetDocsCount () { return INT_MAX; }
 	virtual uint64_t			GetWordID () const { return 0; }			///< for now, only used for duplicate keyword checks in quorum operator
-	virtual bool				HasHitConstrain () const { return false; }	///< for now, only used for duplicate keyword checks in quorum operator
 
 	void DebugIndent ( int iLevel )
 	{
@@ -286,7 +285,7 @@ public:
 class ExtTerm_c : public ExtNode_i, ISphNoncopyable
 {
 public:
-	ExtTerm_c ( ISphQword * pQword, const CSphSmallBitvec& uFields, const ISphQwordSetup & tSetup, bool bNotWeighted );
+	ExtTerm_c ( ISphQword * pQword, const FieldMask_t& uFields, const ISphQwordSetup & tSetup, bool bNotWeighted );
 	ExtTerm_c ( ISphQword * pQword, const ISphQwordSetup & tSetup );
 	ExtTerm_c () {} ///< to be used in pair with Init()
 	~ExtTerm_c ()
@@ -294,7 +293,7 @@ public:
 		SafeDelete ( m_pQword );
 	}
 
-	void						Init ( ISphQword * pQword, const CSphSmallBitvec& uFields, const ISphQwordSetup & tSetup, bool bNotWeighted );
+	void						Init ( ISphQword * pQword, const FieldMask_t& uFields, const ISphQwordSetup & tSetup, bool bNotWeighted );
 	virtual void				Reset ( const ISphQwordSetup & tSetup );
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
@@ -310,11 +309,6 @@ public:
 			return m_pQword->m_iWordID;
 		else
 			return sphFNV64 ( (const BYTE *)m_pQword->m_sDictWord.cstr() );
-	}
-	virtual bool				HasHitConstrain() const
-	{
-		// whatever any field fit
-		return !m_dQueriedFields.TestAll ( true );
 	}
 
 	virtual void HintDocid ( SphDocID_t uMinID )
@@ -337,7 +331,7 @@ public:
 		{
 			bool bFirst = true;
 			printf ( "in: " );
-			for ( int iField=0; iField<m_dQueriedFields.GetBitsCount(); iField++ )
+			for ( int iField=0; iField<SPH_MAX_FIELDS; iField++ )
 			{
 				if ( m_dQueriedFields.Test ( iField ) )
 				{
@@ -353,7 +347,7 @@ public:
 
 protected:
 	ISphQword *					m_pQword;
-	CSphSmallBitvec				m_dQueriedFields;	///< accepted fields mask
+	FieldMask_t				m_dQueriedFields;	///< accepted fields mask
 	bool						m_bHasWideFields;	///< whether fields mask for this term refer to fields 32+
 	float						m_fIDF;				///< IDF for this term (might be 0.0f for non-1st occurences in query)
 	int64_t						m_iMaxTimer;		///< work until this timestamp
@@ -387,7 +381,7 @@ volatile bool ExtTerm_c::m_bInterruptNow = false;
 class ExtTermHitless_c : public ExtTerm_c
 {
 public:
-	ExtTermHitless_c ( ISphQword * pQword, const CSphSmallBitvec& uFields, const ISphQwordSetup & tSetup, bool bNotWeighted )
+	ExtTermHitless_c ( ISphQword * pQword, const FieldMask_t& uFields, const ISphQwordSetup & tSetup, bool bNotWeighted )
 		: ExtTerm_c ( pQword, uFields, tSetup, bNotWeighted )
 		, m_uFieldPos ( 0 )
 	{}
@@ -572,7 +566,6 @@ public:
 
 private:
 	virtual bool				ExtraDataImpl ( ExtraData_e eData, void ** ppResult );
-	virtual bool				HasHitConstrain () const { return ExtBase::HasHitConstrain(); }
 };
 
 /// single keyword streamer, with term position filtering
@@ -605,19 +598,6 @@ bool ExtConditional<T,ExtBase>::ExtraDataImpl ( ExtraData_e, void ** )
 {
 	return false;
 }
-
-template<>
-bool ExtConditional<TERM_POS_ZONES>::HasHitConstrain () const
-{
-	return ( m_dZones.GetLength()>0 || ExtTerm_c::HasHitConstrain() );
-}
-
-template<>
-bool ExtConditional<TERM_POS_ZONESPAN>::HasHitConstrain () const
-{
-	return ( m_dZones.GetLength()>0 || ExtTerm_c::HasHitConstrain() );
-}
-
 
 /// multi-node binary-operation streamer traits
 class ExtTwofer_c : public ExtNode_i
@@ -1024,7 +1004,6 @@ private:
 	CSphVector<TermTuple_t>		m_dChildren;
 	SphDocID_t					m_uMatchedDocid;			///< tial docid for hitlist emission
 	int							m_iThresh;					///< keyword count threshold
-	bool						m_bHasHitConstrain;			///< should we analize hits on docs collecting
 	bool						m_bHasDupes;				///< should we analize hits on docs collecting
 
 	// check for hits that matches and return flag that docs might be advanced
@@ -1100,7 +1079,7 @@ protected:
 class ExtUnit_c : public ExtNode_i
 {
 public:
-	ExtUnit_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const CSphSmallBitvec& dFields, const ISphQwordSetup & tSetup, const char * sUnit );
+	ExtUnit_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const FieldMask_t& dFields, const ISphQwordSetup & tSetup, const char * sUnit );
 	~ExtUnit_c ();
 
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
@@ -1531,7 +1510,7 @@ class ExtCached_c : public ExtNode_i
 protected:
 	CSphVector<ExtCacheEntry_t>		m_dCache;
 	CSphFixedVector<ExtCachedKeyword_t>	m_dWords;
-	CSphSmallBitvec					m_dFieldMask;
+	FieldMask_t					m_dFieldMask;
 	bool							m_bExcluded;
 
 	int		m_iUniqDocs;
@@ -2052,7 +2031,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 
 //////////////////////////////////////////////////////////////////////////
 
-inline void ExtTerm_c::Init ( ISphQword * pQword, const CSphSmallBitvec & dFields, const ISphQwordSetup & tSetup, bool bNotWeighted )
+inline void ExtTerm_c::Init ( ISphQword * pQword, const FieldMask_t & dFields, const ISphQwordSetup & tSetup, bool bNotWeighted )
 {
 	m_pQword = pQword;
 	m_pWarning = tSetup.m_pWarning;
@@ -2064,8 +2043,8 @@ inline void ExtTerm_c::Init ( ISphQword * pQword, const CSphSmallBitvec & dField
 	m_dQueriedFields = dFields;
 	m_bHasWideFields = false;
 	if ( tSetup.m_pIndex && tSetup.m_pIndex->GetMatchSchema().m_dFields.GetLength()>32 )
-		for ( int i=32; i<m_dQueriedFields.GetBitsCount() && !m_bHasWideFields; i++ )
-			if ( m_dQueriedFields.Test(i) )
+		for ( int i=1; i<FieldMask_t::SIZE && !m_bHasWideFields; i++ )
+			if ( m_dQueriedFields[i] )
 				m_bHasWideFields = true;
 	m_iMaxTimer = tSetup.m_iMaxTimer;
 	m_pStats = tSetup.m_pStats;
@@ -2090,7 +2069,7 @@ ExtTerm_c::ExtTerm_c ( ISphQword * pQword, const ISphQwordSetup & tSetup )
 	AllocDocinfo ( tSetup );
 }
 
-ExtTerm_c::ExtTerm_c ( ISphQword * pQword, const CSphSmallBitvec & dFields, const ISphQwordSetup & tSetup, bool bNotWeighted )
+ExtTerm_c::ExtTerm_c ( ISphQword * pQword, const FieldMask_t & dFields, const ISphQwordSetup & tSetup, bool bNotWeighted )
 {
 	Init ( pQword, dFields, tSetup, bNotWeighted );
 }
@@ -2159,7 +2138,10 @@ const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		{
 			// fields 32+ need to be checked with CollectHitMask() and stuff
 			m_pQword->CollectHitMask();
-			if (!( m_pQword->m_dQwordFields.Test ( m_dQueriedFields ) ))
+			bool bHasSameFields = false;
+			for ( int i=0; i<FieldMask_t::SIZE && !bHasSameFields; i++ )
+				bHasSameFields = m_pQword->m_dQwordFields[i] & m_dQueriedFields[i];
+			if ( !bHasSameFields )
 				continue;
 		}
 
@@ -2371,7 +2353,7 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, Sph
 				break;
 		}
 
-		if ( m_uFieldPos<m_dQueriedFields.GetBitsCount()-1 )
+		if ( m_uFieldPos<SPH_MAX_FIELDS-1 )
 		{
 			m_uFieldPos++;
 			continue;
@@ -4075,7 +4057,6 @@ ExtQuorum_c::ExtQuorum_c ( CSphVector<ExtNode_i*> & dQwords, const XQNode_t & tN
 	m_iThresh = Max ( m_iThresh, 1 );
 	m_iMyHitCount = 0;
 	m_iMyLast = 0;
-	m_bHasHitConstrain = false;
 	m_bHasDupes = false;
 
 	assert ( dQwords.GetLength()>1 ); // use TERM instead
@@ -4086,7 +4067,6 @@ ExtQuorum_c::ExtQuorum_c ( CSphVector<ExtNode_i*> & dQwords, const XQNode_t & tN
 	if ( dQwords.GetLength()>0 )
 	{
 		m_iAtomPos = dQwords[0]->m_iAtomPos;
-		m_bHasHitConstrain = dQwords[0]->HasHitConstrain();
 
 		// compute duplicate keywords mask (aka dupe mask)
 		// FIXME! will (likely) now fail with quorum+expand+dupes, need a new test?
@@ -4987,7 +4967,7 @@ void ExtOrder_c::GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtUnit_c::ExtUnit_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const CSphSmallBitvec& uFields,
+ExtUnit_c::ExtUnit_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const FieldMask_t& uFields,
 	const ISphQwordSetup & tSetup, const char * sUnit )
 {
 	m_pArg1 = pFirst;

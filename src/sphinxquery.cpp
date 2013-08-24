@@ -42,8 +42,8 @@ public:
 	bool			Error ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 	void			Warning ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 
-	bool			AddField ( CSphSmallBitvec & dFields, const char * szField, int iLen );
-	bool			ParseFields ( CSphSmallBitvec & uFields, int & iMaxFieldPos, bool & bIgnore );
+	bool			AddField ( FieldMask_t & dFields, const char * szField, int iLen );
+	bool			ParseFields ( FieldMask_t & uFields, int & iMaxFieldPos, bool & bIgnore );
 	int				ParseZone ( const char * pZone );
 
 	bool			IsSpecial ( char c );
@@ -60,7 +60,7 @@ public:
 	void			FixupNulls ( XQNode_t * pNode );
 	void			DeleteNodesWOFields ( XQNode_t * pNode );
 
-	inline void SetFieldSpec ( const CSphSmallBitvec& uMask, int iMaxPos )
+	inline void SetFieldSpec ( const FieldMask_t& uMask, int iMaxPos )
 	{
 		FixRefSpec();
 		m_dStateSpec.Last()->SetFieldSpec ( uMask, iMaxPos );
@@ -144,7 +144,7 @@ void yyerror ( XQParser_t * pParser, const char * sMessage )
 
 //////////////////////////////////////////////////////////////////////////
 
-void XQLimitSpec_t::SetFieldSpec ( const CSphSmallBitvec& uMask, int iMaxPos )
+void XQLimitSpec_t::SetFieldSpec ( const FieldMask_t& uMask, int iMaxPos )
 {
 	m_bFieldSpec = true;
 	m_dFieldMask = uMask;
@@ -183,7 +183,7 @@ XQNode_t::~XQNode_t ()
 }
 
 
-void XQNode_t::SetFieldSpec ( const CSphSmallBitvec& uMask, int iMaxPos )
+void XQNode_t::SetFieldSpec ( const FieldMask_t& uMask, int iMaxPos )
 {
 	// set it, if we do not yet have one
 	if ( !m_dSpec.m_bFieldSpec )
@@ -461,7 +461,7 @@ bool XQParser_t::IsSpecial ( char c )
 
 
 /// lookup field and add it into mask
-bool XQParser_t::AddField ( CSphSmallBitvec & dFields, const char * szField, int iLen )
+bool XQParser_t::AddField ( FieldMask_t & dFields, const char * szField, int iLen )
 {
 	CSphString sField;
 	sField.SetBinary ( szField, iLen );
@@ -486,7 +486,7 @@ bool XQParser_t::AddField ( CSphSmallBitvec & dFields, const char * szField, int
 
 
 /// parse fields block
-bool XQParser_t::ParseFields ( CSphSmallBitvec & dFields, int & iMaxFieldPos, bool & bIgnore )
+bool XQParser_t::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, bool & bIgnore )
 {
 	dFields.UnsetAll();
 	iMaxFieldPos = 0;
@@ -899,9 +899,6 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 
 				if ( bIgnore )
 					continue;
-
-				if ( m_pSchema->m_dFields.GetLength()!=SPH_MAX_FIELDS )
-					m_tPendingToken.tFieldLimit.dMask.LimitBits ( m_pSchema->m_dFields.GetLength() );
 
 				m_iPendingType = TOK_FIELDLIMIT;
 				break;
@@ -1503,7 +1500,7 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 		if ( !pNode->m_dSpec.m_dFieldMask.TestAll(true) )
 		{
 			CSphString sFields ( "" );
-			for ( int i=0; i<pNode->m_dSpec.m_dFieldMask.GetBitsCount(); i++ )
+			for ( int i=0; i<SPH_MAX_FIELDS; i++ )
 			{
 				if ( !pNode->m_dSpec.m_dFieldMask.Test(i) )
 					continue;

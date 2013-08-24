@@ -64,7 +64,7 @@ public:
 	CSphVector<SkiplistEntry_t>		m_dSkiplist;	///< skiplist for quicker document list seeks
 
 	// iterator state
-	CSphSmallBitvec m_dQwordFields;	///< current match fields
+	FieldMask_t m_dQwordFields;	///< current match fields
 	DWORD			m_uMatchHits;	///< current match hits count
 	SphOffset_t		m_iHitlistPos;	///< current position in hitlist, from doclist
 

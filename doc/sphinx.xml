@@ -5,7 +5,7 @@
 ]>
 <book lang="en">
 
-<title>Sphinx 2.1.1-beta reference manual</title>
+<title>Sphinx 2.2.1-beta reference manual</title>
 <subtitle>Free open-source SQL full-text search engine</subtitle>
 
 <bookinfo>
@@ -1801,7 +1801,9 @@ since "hello" and "world" do not occur within the same span.
 
 
 <sect1 id="weighting"><title>Search results ranking</title>
-<bridgehead>Ranking overview</bridgehead>
+
+
+<sect2 id="ranking-overview"><title>Ranking overview</title>
 <para>
 Ranking (aka weighting) of the search results can be defined
 as a process of computing a so-called relevance (aka weight)
@@ -1845,7 +1847,10 @@ the unified syntax anyway. When you use one of those modes, Sphinx just
 internally adjusts the query and sets the associated ranker, then
 executes the query using the very same unified code path.
 </para>
-<bridgehead>Available rankers</bridgehead>
+</sect2>
+
+
+<sect2 id="builtin-rankers"><title>Available builtin rankers</title>
 <para>
 Sphinx ships with a number of built-in rankers suited for different
 purposes. A number of them uses two factors, phrase proximity (aka LCS)
@@ -1934,7 +1939,10 @@ Legacy matching modes automatically select a ranker as follows:
 <listitem><para>SPH_MATCH_BOOLEAN uses SPH_RANK_NONE ranker.</para></listitem>
 </itemizedlist>
 </para>
-<bridgehead id="expression-ranker">Expression based ranker (SPH_RANK_EXPR)</bridgehead>
+</sect2>
+
+
+<sect2 id="expression-ranker"><title>Expression based ranker (SPH_RANK_EXPR)</title>
 <para>
 Expression ranker, added in version 2.0.2-beta, lets you change the ranking
 formula on the fly, on a per-query basis. For a quick kickoff, this is how you
@@ -1955,6 +1963,177 @@ in <xref linkend="expressions"/>), and also a few ranking-specific things
 that are only accessible in a ranking formula. Namely, those are field
 aggregation functions, field-level, and document-level ranking factors.
 </para>
+</sect2>
+
+
+<sect2 id="ranking-factors"><title>Quick summary of the ranking factors</title>
+<para>
+<table frame="all" id="ranking-factors-table">
+<tgroup cols="3">
+<colspec colname="name"/>
+<colspec colname="level"/>
+<colspec colname="type"/>
+<colspec colname="summary"/>
+<thead>
+<row>
+	<entry>Name</entry>
+	<entry>Level</entry>
+	<entry>Type</entry>
+	<entry>Summary</entry></row>
+</thead>
+<tbody>
+
+<!-- query level -->
+<row>
+	<entry>max_lcs</entry>
+	<entry>query</entry>
+	<entry>int</entry>
+	<entry>maximum possible LCS value for the current query</entry>
+</row>
+
+<!-- document level -->
+<row>
+	<entry>bm25</entry>
+	<entry>document</entry>
+	<entry>int</entry>
+	<entry>quick estimate of BM25(1.2, 0) without syntax support</entry>
+</row>
+<row>
+	<entry>bm25a(k1, b)</entry>
+	<entry>document</entry>
+	<entry>int</entry>
+	<entry>precise BM25() value with configurable K1, B constants and syntax support</entry>
+</row>
+<row>
+	<entry>bm25f(k1, b, {field=weight, ...})</entry>
+	<entry>document</entry>
+	<entry>int</entry>
+	<entry>precise BM25F() value with extra configurable field weights</entry>
+</row>
+<row>
+	<entry>field_mask</entry>
+	<entry>document</entry>
+	<entry>int</entry>
+	<entry>bit mask of matched fields</entry>
+</row>
+<row>
+	<entry>query_word_count</entry>
+	<entry>document</entry>
+	<entry>int</entry>
+	<entry>number of unique inclusive keywords in a query</entry>
+</row>
+<row>
+	<entry>doc_word_count</entry>
+	<entry>document</entry>
+	<entry>int</entry>
+	<entry>number of unique keywords matched in the document</entry>
+</row>
+
+<!-- field level -->
+<row>
+	<entry>lcs</entry>
+	<entry>field</entry>
+	<entry>int</entry>
+	<entry>Longest Common Subsequence between query and document, in words</entry>
+</row>
+<row>
+	<entry>user_weight</entry>
+	<entry>field</entry>
+	<entry>int</entry>
+	<entry>user field weight</entry>
+</row>
+<row>
+	<entry>hit_count</entry>
+	<entry>field</entry>
+	<entry>int</entry>
+	<entry>total number of keyword occurrences</entry>
+</row>
+<row>
+	<entry>word_count</entry>
+	<entry>field</entry>
+	<entry>int</entry>
+	<entry>number of unique matched keywords</entry>
+</row>
+<row>
+	<entry>tf_idf</entry>
+	<entry>field</entry>
+	<entry>float</entry>
+	<entry>sum(tf*idf) over matched keywords == sum(idf) over occurrences</entry>
+</row>
+<row>
+	<entry>min_hit_pos</entry>
+	<entry>field</entry>
+	<entry>int</entry>
+	<entry>first matched occurrence position, in words, 1-based</entry>
+</row>
+<row>
+	<entry>min_best_span_pos</entry>
+	<entry>field</entry>
+	<entry>int</entry>
+	<entry>first maximum LCS span position, in words, 1-based</entry>
+</row>
+<row>
+	<entry>exact_hit</entry>
+	<entry>field</entry>
+	<entry>bool</entry>
+	<entry>whether query == field</entry>
+</row>
+<row>
+	<entry>min_idf</entry>
+	<entry>field</entry>
+	<entry>float</entry>
+	<entry>min(idf) over matched keywords</entry>
+</row>
+<row>
+	<entry>max_idf</entry>
+	<entry>field</entry>
+	<entry>float</entry>
+	<entry>max(idf) over matched keywords</entry>
+</row>
+<row>
+	<entry>sum_idf</entry>
+	<entry>field</entry>
+	<entry>float</entry>
+	<entry>sum(idf) over matched keywords</entry>
+</row>
+<row>
+	<entry>exact_order</entry>
+	<entry>field</entry>
+	<entry>bool</entry>
+	<entry>whether all query keywords were a) matched and b) in query order</entry>
+</row>
+<row>
+	<entry>min_gaps</entry>
+	<entry>field</entry>
+	<entry>int</entry>
+	<entry>minimum number of gaps between the matched keywords over the matching spans</entry>
+</row>
+<row>
+	<entry>lccs</entry>
+	<entry>field</entry>
+	<entry>int</entry>
+	<entry>Longest Common Contiguous Subsequence between query and document, in words</entry>
+</row>
+<row>
+	<entry>wlccs</entry>
+	<entry>field</entry>
+	<entry>float</entry>
+	<entry>Weighted Longest Common Contiguous Subsequence, sum(idf) over contiguous keyword spans</entry>
+</row>
+<row>
+	<entry>atc</entry>
+	<entry>field</entry>
+	<entry>float</entry>
+	<entry>Aggregate Term Closeness, log(1+sum(idf1*idf2*pow(distance, -1.75)) over the best pairs of keywords</entry>
+</row>
+</tbody>
+</tgroup>
+</table>
+</para>
+</sect2>
+
+
+<sect2 id="document-factors"><title>Document-level ranking factors</title>
 <para>
 A <b>document-level factor</b> is a numeric value computed by the ranking
 engine for every matched document with regards to the current query.
@@ -1992,6 +2171,10 @@ matched in the entire document.
 </para></listitem>
 </itemizedlist>
 </para>
+</sect2>
+
+
+<sect2 id="field-factors"><title>Field-level ranking factors</title>
 <para>
 A <b>field-level factor</b> is a numeric value computed by the ranking
 engine for every matched in-document text field with regards to the
@@ -2074,14 +2257,124 @@ will be 13. Note how for the single keyword queries
 <code>exact_hit</code> (boolean), whether a query was an exact match
 of the entire current field. Used in the SPH04 ranker.
 </para></listitem>
-<listitem>
-<para>min_idf, max_idf, and sum_idx were added in version 2.1.1-beta. These
-factors respectively represent the min(idf), max(idf) and sum(idf) over all the
-keywords that were matched.
-</para>
-</listitem>
+<listitem><para>
+<code>min_idf</code>, <code>max_idf</code>, and <code>sum_idf</code> (float),
+added in version 2.1.1-beta. These factors respectively represent the min(idf),
+max(idf) and sum(idf) over all keywords that were matched in the field.
+</para></listitem>
+<listitem><para>
+<code>exact_order</code> (boolean), added in version 2.2.1-beta. Whether all of the
+query keywords were matched in the field in the exact query order. For example,
+<code>(microsoft office)</code> query would yield exact_order=1 in a field with the
+following contents: <code>(We use Microsoft software in our office.)</code>.
+However, the very same query in a <code>(Our office is Microsoft free.)</code>
+field would yield exact_order=0.
+</para></listitem>
+<listitem><para>
+<code>min_gaps</code> (integer), added in version 2.2.1-beta, the minimum number
+of positional gaps between (just) the keywords matched in field. Always 0 when less
+than 2 keywords match; always greater or equal than 0 otherwise.
+</para><para>
+For example, with a <code>[big wolf]</code> query, <code>[big bad wolf]</code> field
+would yield min_gaps=1; <code>[big bad hairy wolf]</code> field would yield min_gaps=2;
+<code>[the wolf was scary and big]</code> field would yield min_gaps=3; etc.
+However, a field like <code>[i heard a wolf howl]</code> would yield min_gaps=0,
+because only one keyword would be matching in that field, and, naturally, there
+would be no gaps between the <emphasis>matched</emphasis>keywords.
+</para><para>
+Therefore, this is a rather low-level, "raw" factor that you would most likely
+want to <emphasis>adjust</emphasis> before actually using for ranking. Specific
+adjustments depend heavily on your data and the resulting formula, but here are
+a few ideas you can start with: (a) any min_gaps based boosts could be simply ignored
+when word_count&lt;2; (b) non-trivial min_gaps values (i.e. when word_count&gt;=2)
+could be clamped with a certain "worst case" constant while trivial values
+(i.e. when min_gaps=0 and word_count&lt;2) could be replaced by that constant;
+(c) a transfer function like 1/(1+min_gaps) could be applied (so that better,
+smaller min_gaps values would maximize it and worse, bigger min_gaps values
+would fall off slowly); and so on.
+</para></listitem>
+<listitem><para>
+<code>lccs</code> (integer), added in version 2.2.1-beta. Longest Common Contiguous
+Subsequence. A length of the longest subphrase that is common between the query and
+the document, computed in keywords.
+</para><para>
+LCCS factor is rather similar to LCS but more restrictive, in a sense. While LCS could
+be greater than 1 though no two query words are matched next to each other, LCCS
+would only get greater than 1 if there are <emphasis>exact</emphasis>, contiguous
+query subphrases in the document. For example, (one two three four five) query
+vs (one hundred three hundred five hundred) document would yield lcs=3, but lccs=1,
+because even though mutual dispositions of 3 keywords (one, three, five) match between
+the query and the document, no 2 matching positions are actually next to each other.
+</para><para>
+Note that LCCS still does not differentiate between the frequent and rare keywords;
+for that, see WLCS and WLLCS.
+</para></listitem>
+<listitem><para>
+<code>wlccs</code> (float), added in version 2.2.1-beta. Weighted Longest Common Contiguous
+Subsequence. A sum of IDFs of the keywords of the longest subphrase that is common
+between the query and the document.
+</para><para>
+WLCCS is computed very similarly to LCCS, but every "suitable" keyword occurrence
+increases it by the keyword IDF rather than just by 1 (which is the case with LCS and
+LCCS). That lets us rank sequences of more rare and important keywords higher than
+sequences of frequent keywords, even if the latter are longer. For example, a query
+<code>(Zanzibar bed and breakfast)</code> would yield lccs=1 for a
+<code>(hotels of Zanzibar)</code> document, but lccs=3 against
+<code>(London bed and breakfast)</code>, even though "Zanzibar" is actually
+somewhat more rare than the entire "bed and breakfast" phrase. WLCCS factor alleviates
+that problem by using the keyword frequencies.
+</para></listitem>
+<listitem><para>
+<code>atc</code> (float), added in version 2.2.1-beta. Aggregate Term Closeness.
+A proximity based measure that grows higher when the document contains more groups
+of more closely located and more important (rare) query keywords. <b>WARNING:</b>
+you should use ATC with OPTION idf='plain,tfidf_unnormalized'; otherwise you would
+get unexpected results.
+</para><para>
+ATC basically works as follows. For every keyword <emphasis>occurrence</emphasis>
+in the document, we compute the so called <emphasis>term closeness</emphasis>. For that,
+we examine all the other closest occurrences of all the query keywords (keyword itself
+included too) to the left and to the right of the subject occurence, compute a distance
+dampening coefficient as k = pow(distance, -1.75) for those occurrences, and sum the
+dampened IDFs. Thus for every occurrence of every keyword, we get a "closeness" value
+that describes the "neighbours" of that occurrence. We then multiply those per-occurrence
+closenesses by their respective subject keyword IDF, sum them all, and finally,
+compute a logarithm of that sum.
+</para><para>
+Or in other words, we process the best (closest) matched keyword pairs in the document,
+and compute pairwise "closenesses" as the product of their IDFs scaled by the distance
+coefficient:
+<programlisting>
+pair_tc = idf(pair_word1) * idf(pair_word2) * pow(pair_distance, -1.75)
+</programlisting>
+We then sum such closenesess, and compute the final, log-dampened ATC value:
+<programlisting>
+atc = log(1+sum(pair_tc))
+</programlisting>
+Note that this final dampening logarithm is exactly the reason you should use
+OPTION idf=plain, because without it, the expression inside the log() could be negative.
+</para><para>
+Having closer keyword occurrences actually contributes <emphasis>much</emphasis> more 
+to ATC than having more frequent keywords. Indeed, when the keywords are right next to
+each other, distance=1 and k=1; when there just one word in between them, distance=2 and
+k=0.297, with two words between, distance=3 and k=0.146, and so on. At the same time
+IDF attenuates somewhat slower. For example, in a 1 million document collection, the IDF
+values for keywords that match in 10, 100, and 1000 documents would be respectively
+0.833, 0.667, and 0.500. So a keyword pair with two rather rare keywords that occur
+in just 10 documents each but with 2 other words in between would yield pair_tc = 0.101
+and thus just barely outweigh a pair with a 100-doc and a 1000-doc keyword with 1 other
+word between them and pair_tc = 0.099. Moreover, a pair of two <emphasis>unique</emphasis>,
+1-doc keywords with 3 words between them would get a pair_tc = 0.088 and lose to a pair of
+two 1000-doc keywords located right next to each other and yielding a pair_tc = 0.25.
+So, basically, while ATC does combine both keyword frequency and proximity, it is still
+somewhat favoring the proximity.
+</para></listitem>
 </itemizedlist>
 </para>
+</sect2>
+
+
+<sect2 id="factor-aggr-functions"><title>Ranking factor aggregation functions</title>
 <para>
 A <b>field aggregation function</b> is a single argument function
 that takes an expression with field-level factors, iterates it over
@@ -2095,7 +2388,10 @@ of matched fields.
 </para></listitem>
 </itemizedlist>
 </para>
-<bridgehead>Expressions for the built-in rankers</bridgehead>
+</sect2>
+
+
+<sect2 id="formulas-for-builtin-rankers"><title>Formula expressions for all the built-in rankers</title>
 <para>
 Most of the other rankers can actually be emulated with the expression
 based ranker. You just need to pass a proper expression. Such emulation is,
@@ -2130,6 +2426,9 @@ SPH_RANK_FIELDMASK = field_mask
 SPH_RANK_SPH04 = sum((4*lcs+2*(min_hit_pos==1)+exact_hit)*user_weight)*1000+bm25
 </para></listitem>
 </itemizedlist>
+</sect2>
+
+
 </sect1>
 
 
@@ -4461,8 +4760,14 @@ Known flags are:
 <itemizedlist>
 <listitem><para>normalized: BM25 variant, idf = log((N-n+1)/n), as per Robertson et al</para></listitem>
 <listitem><para>plain: plain variant, idf = log(N/n), as per Sparck-Jones</para></listitem>
-<listitem><para>tfidf_normalized (added in 2.2.1-beta): additionally divide IDF by query word count, so that TF*IDF fits into [0, 1] range</para></listitem>
-<listitem><para>tfidf_unnormalized (added in 2.2.1-beta): do not additionally divide IDF by query word count</para></listitem>
+<listitem><para>tfidf_normalized (added in 2.2.1-beta): additionally divide IDF
+by query word count, so that TF*IDF fits into [0, 1] range</para></listitem>
+<listitem><para>tfidf_unnormalized (added in 2.2.1-beta): do not additionally
+divide IDF by query word count</para></listitem>
+<listitem><para>local_df (added in 2.2.1-beta): automatically sum DFs over all the
+local parts of a distributed index, so that the IDF is consistent (and precise) over
+a locally sharded index.
+</para></listitem>
 </itemizedlist>
 where <b>N</b> is the collection size and <b>n</b> is the number of matched
 documents.
@@ -9524,17 +9829,25 @@ crafted phonetic codes that are equal even when the words original
 are different, but phonetically close.
 </listitem>
 </itemizedlist>
-The morphology processors that are implemented
-in Sphinx itself include Russian lemmatizer, English stemmer,
-Russian stemmer (that supports UTF-8 and Windows-1251 encodings),
-Czech stemmer, Arabic stemmer, and Soundex and Metaphone phonetic
-algorithms. Also, you can link with libstemmer library for even
-more stemmers.
+The morphology processors that come with our own built-in Sphinx
+implementations are:
+<itemizedlist>
+<listitem><para>English, Russian, and German lemmatizers;</para></listitem>
+<listitem><para>English, Russian, Arabic, and Czech stemmers;</para></listitem>
+<listitem><para>SoundEx and MetaPhone phonetic algorithms.</para></listitem>
+</itemizedlist>
+You can also link with <b>libstemmer</b> library for even more
+stemmers (see details below). With libstemmer, Sphinx also supports
+morphological processing for more than 15 other languages. Binary
+packages should come prebuilt with libstemmer support, too.
 </para>
 <para>
 Lemmatizer support was added in version 2.1.1-beta, starting with
-a Russian lemmatizer. (English lemmatizer support is also planned
-in the future.) Lemmatizers require a dictionary that needs to be
+a Russian lemmatizer. English and German lemmatizers were then added
+in version 2.2.1-beta.
+</para>
+<para>
+Lemmatizers require a dictionary that needs to be
 additionally downloaded from the Sphinx website. That dictionary
 needs to be installed in a directory specified by
 <link linkend="conf-lemmatizer-base">lemmatizer_base</link>
@@ -9562,7 +9875,11 @@ option are as follows:
 <itemizedlist>
 <listitem><para>none - do not perform any morphology processing;</para></listitem>
 <listitem><para>lemmatize_ru - apply Russian lemmatizer and pick a single root form (added in 2.1.1-beta);</para></listitem>
+<listitem><para>lemmatize_en - apply English lemmatizer and pick a single root form (added in 2.2.1-beta);</para></listitem>
+<listitem><para>lemmatize_de - apply German lemmatizer and pick a single root form (added in 2.2.1-beta);</para></listitem>
 <listitem><para>lemmatize_ru_all - apply Russian lemmatizer and index all possible root forms (added in 2.1.1-beta);</para></listitem>
+<listitem><para>lemmatize_en_all - apply Russian lemmatizer and index all possible root forms (added in 2.2.1-beta);</para></listitem>
+<listitem><para>lemmatize_de_all - apply Russian lemmatizer and index all possible root forms (added in 2.2.1-beta);</para></listitem>
 <listitem><para>stem_en - apply Porter's English stemmer;</para></listitem>
 <listitem><para>stem_ru - apply Porter's Russian stemmer;</para></listitem>
 <listitem><para>stem_enru - apply Porter's English and Russian stemmers;</para></listitem>

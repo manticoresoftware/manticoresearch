@@ -1,4 +1,4 @@
-Sphinx 2.1.1-beta reference manual
+Sphinx 2.2.1-beta reference manual
 ==================================
 
 Free open-source SQL full-text search engine
@@ -54,6 +54,15 @@ Table of Contents
    5.2. Boolean query syntax
    5.3. Extended query syntax
    5.4. Search results ranking
+      5.4.1. Ranking overview
+      5.4.2. Available builtin rankers
+      5.4.3. Expression based ranker (SPH_RANK_EXPR)
+      5.4.4. Quick summary of the ranking factors
+      5.4.5. Document-level ranking factors
+      5.4.6. Field-level ranking factors
+      5.4.7. Ranking factor aggregation functions
+      5.4.8. Formula expressions for all the built-in rankers
+
    5.5. Expressions, functions, and operators
       5.5.1. Operators
       5.5.2. Numeric functions
@@ -108,15 +117,17 @@ Table of Contents
    7.23. UPDATE syntax
    7.24. ATTACH INDEX syntax
    7.25. FLUSH RTINDEX syntax
-   7.26. TRUNCATE RTINDEX syntax
-   7.27. SHOW AGENT STATUS
-   7.28. SHOW PROFILE syntax
-   7.29. SHOW INDEX STATUS syntax
-   7.30. OPTIMIZE INDEX syntax
-   7.31. Multi-statement queries
-   7.32. Comment syntax
-   7.33. List of SphinxQL reserved keywords
-   7.34. SphinxQL upgrade notes, version 2.0.1-beta
+   7.26. FLUSH RAMCHUNK syntax
+   7.27. TRUNCATE RTINDEX syntax
+   7.28. SHOW AGENT STATUS
+   7.29. SHOW PROFILE syntax
+   7.30. SHOW INDEX STATUS syntax
+   7.31. OPTIMIZE INDEX syntax
+   7.32. SHOW PLAN syntax
+   7.33. Multi-statement queries
+   7.34. Comment syntax
+   7.35. List of SphinxQL reserved keywords
+   7.36. SphinxQL upgrade notes, version 2.0.1-beta
 
 8. API reference
    8.1. General API functions
@@ -379,23 +390,29 @@ Table of Contents
 
 A. Sphinx revision history
    A.1. Version 2.1.1-beta, 20 feb 2013
-   A.2. Version 2.0.6-release, 22 oct 2012
-   A.3. Version 2.0.5-release, 28 jul 2012
-   A.4. Version 2.0.4-release, 02 mar 2012
-   A.5. Version 2.0.3-release, 23 dec 2011
-   A.6. Version 2.0.2-beta, 15 nov 2011
-   A.7. Version 2.0.1-beta, 22 apr 2011
-   A.8. Version 1.10-beta, 19 jul 2010
-   A.9. Version 0.9.9-release, 02 dec 2009
-   A.10. Version 0.9.9-rc2, 08 apr 2009
-   A.11. Version 0.9.9-rc1, 17 nov 2008
-   A.12. Version 0.9.8.1, 30 oct 2008
-   A.13. Version 0.9.8, 14 jul 2008
-   A.14. Version 0.9.7, 02 apr 2007
-   A.15. Version 0.9.7-rc2, 15 dec 2006
-   A.16. Version 0.9.7-rc1, 26 oct 2006
-   A.17. Version 0.9.6, 24 jul 2006
-   A.18. Version 0.9.6-rc1, 26 jun 2006
+   A.2. Version 2.0.8-release, 26 apr 2013
+   A.3. Version 2.0.7-release, 26 mar 2013
+   A.4. Version 2.0.6-release, 22 oct 2012
+   A.5. Version 2.0.5-release, 28 jul 2012
+   A.6. Version 2.0.4-release, 02 mar 2012
+   A.7. Version 2.0.3-release, 23 dec 2011
+   A.8. Version 2.0.2-beta, 15 nov 2011
+   A.9. Version 2.0.1-beta, 22 apr 2011
+   A.10. Version 1.10-beta, 19 jul 2010
+   A.11. Version 0.9.9-release, 02 dec 2009
+   A.12. Version 0.9.9-rc2, 08 apr 2009
+   A.13. Version 0.9.9-rc1, 17 nov 2008
+   A.14. Version 0.9.8.1, 30 oct 2008
+   A.15. Version 0.9.8, 14 jul 2008
+   A.16. Version 0.9.7, 02 apr 2007
+   A.17. Version 0.9.7-rc2, 15 dec 2006
+   A.18. Version 0.9.7-rc1, 26 oct 2006
+   A.19. Version 0.9.6, 24 jul 2006
+   A.20. Version 0.9.6-rc1, 26 jun 2006
+
+List of Tables
+
+5.1.
 
 List of Examples
 
@@ -1808,6 +1825,15 @@ Table of Contents
 5.2. Boolean query syntax
 5.3. Extended query syntax
 5.4. Search results ranking
+   5.4.1. Ranking overview
+   5.4.2. Available builtin rankers
+   5.4.3. Expression based ranker (SPH_RANK_EXPR)
+   5.4.4. Quick summary of the ranking factors
+   5.4.5. Document-level ranking factors
+   5.4.6. Field-level ranking factors
+   5.4.7. Ranking factor aggregation functions
+   5.4.8. Formula expressions for all the built-in rankers
+
 5.5. Expressions, functions, and operators
    5.5.1. Operators
    5.5.2. Numeric functions
@@ -2189,8 +2215,8 @@ since "hello" and "world" do not occur within the same span.
 5.4. Search results ranking
 ===========================
 
-Ranking overview
-----------------
+5.4.1. Ranking overview
+-----------------------
 
 Ranking (aka weighting) of the search results can be defined as a process
 of computing a so-called relevance (aka weight) for every given matched
@@ -2225,8 +2251,8 @@ unified syntax anyway. When you use one of those modes, Sphinx just
 internally adjusts the query and sets the associated ranker, then executes
 the query using the very same unified code path.
 
-Available rankers
------------------
+5.4.2. Available builtin rankers
+--------------------------------
 
 Sphinx ships with a number of built-in rankers suited for different
 purposes. A number of them uses two factors, phrase proximity (aka LCS) and
@@ -2287,8 +2313,6 @@ omitted and the ranker name is case insensitive. Example:
    | mysql_query ( "SELECT ... OPTION ranker=sph04" );
 
 Legacy matching modes rankers
------------------------------
-
 Legacy matching modes automatically select a ranker as follows:
 
    * SPH_MATCH_ALL uses SPH_RANK_PROXIMITY ranker;
@@ -2296,8 +2320,8 @@ Legacy matching modes automatically select a ranker as follows:
    * SPH_MATCH_PHRASE uses SPH_RANK_PROXIMITY ranker;
    * SPH_MATCH_BOOLEAN uses SPH_RANK_NONE ranker.
 
-Expression based ranker (SPH_RANK_EXPR)
----------------------------------------
+5.4.3. Expression based ranker (SPH_RANK_EXPR)
+----------------------------------------------
 
 Expression ranker, added in version 2.0.2-beta, lets you change the ranking
 formula on the fly, on a per-query basis. For a quick kickoff, this is how
@@ -2317,6 +2341,55 @@ in Section 5.5, <<Expressions, functions, and operators>>), and also a few
 ranking-specific things that are only accessible in a ranking formula.
 Namely, those are field aggregation functions, field-level, and
 document-level ranking factors.
+
+5.4.4. Quick summary of the ranking factors
+-------------------------------------------
+
+Table 5.1. 
+
++-------------------+----------+-------+----------------------------------------------------+
+| Name              | Level    | Type  | Summary                                            |
++-------------------+----------+-------+----------------------------------------------------+
+| max_lcs           | query    | int   | maximum possible LCS value for the current query   |
+| bm25              | document | int   | quick estimate of BM25(1.2, 0) without syntax      |
+|                   |          |       | support                                            |
+| bm25a(k1, b)      | document | int   | precise BM25() value with configurable K1, B       |
+|                   |          |       | constants and syntax support                       |
+| bm25f(k1, b,      | document | int   | precise BM25F() value with extra configurable      |
+| {field=weight,    |          |       | field weights                                      |
+| ...})             |          |       |                                                    |
+| field_mask        | document | int   | bit mask of matched fields                         |
+| query_word_count  | document | int   | number of unique inclusive keywords in a query     |
+| doc_word_count    | document | int   | number of unique keywords matched in the document  |
+| lcs               | field    | int   | Longest Common Subsequence between query and       |
+|                   |          |       | document, in words                                 |
+| user_weight       | field    | int   | user field weight                                  |
+| hit_count         | field    | int   | total number of keyword occurrences                |
+| word_count        | field    | int   | number of unique matched keywords                  |
+| tf_idf            | field    | float | sum(tf*idf) over matched keywords == sum(idf) over |
+|                   |          |       | occurrences                                        |
+| min_hit_pos       | field    | int   | first matched occurrence position, in words,       |
+|                   |          |       | 1-based                                            |
+| min_best_span_pos | field    | int   | first maximum LCS span position, in words, 1-based |
+| exact_hit         | field    | bool  | whether query == field                             |
+| min_idf           | field    | float | min(idf) over matched keywords                     |
+| max_idf           | field    | float | max(idf) over matched keywords                     |
+| sum_idf           | field    | float | sum(idf) over matched keywords                     |
+| exact_order       | field    | bool  | whether all query keywords were a) matched and b)  |
+|                   |          |       | in query order                                     |
+| min_gaps          | field    | int   | minimum number of gaps between the matched         |
+|                   |          |       | keywords over the matching spans                   |
+| lccs              | field    | int   | Longest Common Contiguous Subsequence between      |
+|                   |          |       | query and document, in words                       |
+| wlccs             | field    | float | Weighted Longest Common Contiguous Subsequence,    |
+|                   |          |       | sum(idf) over contiguous keyword spans             |
+| atc               | field    | float | Aggregate Term Closeness,                          |
+|                   |          |       | log(1+sum(idf1*idf2*pow(distance, -1.75)) over the |
+|                   |          |       | best pairs of keywords                             |
++-------------------+----------+-------+----------------------------------------------------+
+
+5.4.5. Document-level ranking factors
+-------------------------------------
 
 A document-level factor is a numeric value computed by the ranking engine
 for every matched document with regards to the current query. (So it
@@ -2340,6 +2413,9 @@ factors are:
    * doc_word_count (integer), the number of unique keywords matched in the
      entire document.
 
+5.4.6. Field-level ranking factors
+----------------------------------
+
 A field-level factor is a numeric value computed by the ranking engine for
 every matched in-document text field with regards to the current query. As
 more than one field can be matched by a query, but the final weight needs
@@ -2353,13 +2429,13 @@ and then adds bm25 to that per-field sum. Currently implemented field-level
 factors are:
 
    * lcs (integer), the length of a maximum verbatim match between the
-     document and the query, coutned in words. LCS stands for Longest
+     document and the query, counted in words. LCS stands for Longest
      Common Subsequence (or Subset). Takes a minimum value of 1 when only
      stray keywords were matched in a field, and a maximum value of query
      keywords count when the entire query was matched in a field verbatim
      (in the exact query keywords order). For example, if the query is
      'hello world' and the field contains these two words quoted from the
-     query (that is, adjacent to each other, and exaclty in the query
+     query (that is, adjacent to each other, and exactly in the query
      order), lcs will be 2. For example, if the query is 'hello world
      program' and the field contains 'hello world', lcs will be 2. Note
      that any subset of the query keyword works, not just a subset of
@@ -2368,7 +2444,7 @@ factors are:
      well, because both 'hello' and 'program' matched in the same
      respective positions as they were in the query. Finally, if the query
      is 'hello world program' and the field contains 'hello world program',
-     lcs will be 3. (Hopefully that is unsurpising at this point.)
+     lcs will be 3. (Hopefully that is unsurprising at this point.)
    * user_weight (integer), the user specified per-field weight (refer to
      SetFieldWeights() in SphinxAPI and OPTION field_weights in SphinxQL
      respectively). The weights default to 1 if not specified explicitly.
@@ -2401,9 +2477,124 @@ factors are:
      always equal min_hit_pos.
    * exact_hit (boolean), whether a query was an exact match of the entire
      current field. Used in the SPH04 ranker.
-   * min_idf, max_idf, and sum_idx were added in version 2.1.1-beta. These
-     factors respectively represent the min(idf), max(idf) and sum(idf)
-     over all the keywords that were matched.
+   * min_idf, max_idf, and sum_idf (float), added in version 2.1.1-beta.
+     These factors respectively represent the min(idf), max(idf) and
+     sum(idf) over all keywords that were matched in the field.
+   * exact_order (boolean), added in version 2.2.1-beta. Whether all of the
+     query keywords were matched in the field in the exact query order. For
+     example, (microsoft office) query would yield exact_order=1 in a field
+     with the following contents: (We use Microsoft software in our
+     office.). However, the very same query in a (Our office is Microsoft
+     free.) field would yield exact_order=0.
+   * min_gaps (integer), added in version 2.2.1-beta, the minimum number of
+     positional gaps between (just) the keywords matched in field. Always
+     0 when less than 2 keywords match; always greater or equal than
+     0 otherwise.
+
+     For example, with a [big wolf] query, [big bad wolf] field would yield
+     min_gaps=1; [big bad hairy wolf] field would yield min_gaps=2; [the
+     wolf was scary and big] field would yield min_gaps=3; etc. However,
+     a field like [i heard a wolf howl] would yield min_gaps=0, because
+     only one keyword would be matching in that field, and, naturally,
+     there would be no gaps between the matchedkeywords.
+
+     Therefore, this is a rather low-level, "raw" factor that you would
+     most likely want to adjust before actually using for ranking. Specific
+     adjustments depend heavily on your data and the resulting formula, but
+     here are a few ideas you can start with: (a) any min_gaps based boosts
+     could be simply ignored when word_count<2; (b) non-trivial min_gaps
+     values (i.e. when word_count>=2) could be clamped with a certain
+     "worst case" constant while trivial values (i.e. when min_gaps=0 and
+     word_count<2) could be replaced by that constant; (c) a transfer
+     function like 1/(1+min_gaps) could be applied (so that better, smaller
+     min_gaps values would maximize it and worse, bigger min_gaps values
+     would fall off slowly); and so on.
+
+   * lccs (integer), added in version 2.2.1-beta. Longest Common Contiguous
+     Subsequence. A length of the longest subphrase that is common between
+     the query and the document, computed in keywords.
+
+     LCCS factor is rather similar to LCS but more restrictive, in a sense.
+     While LCS could be greater than 1 though no two query words are
+     matched next to each other, LCCS would only get greater than 1 if
+     there are exact, contiguous query subphrases in the document. For
+     example, (one two three four five) query vs (one hundred three hundred
+     five hundred) document would yield lcs=3, but lccs=1, because even
+     though mutual dispositions of 3 keywords (one, three, five) match
+     between the query and the document, no 2 matching positions are
+     actually next to each other.
+
+     Note that LCCS still does not differentiate between the frequent and
+     rare keywords; for that, see WLCS and WLLCS.
+
+   * wlccs (float), added in version 2.2.1-beta. Weighted Longest Common
+     Contiguous Subsequence. A sum of IDFs of the keywords of the longest
+     subphrase that is common between the query and the document.
+
+     WLCCS is computed very similarly to LCCS, but every "suitable" keyword
+     occurrence increases it by the keyword IDF rather than just by
+     1 (which is the case with LCS and LCCS). That lets us rank sequences
+     of more rare and important keywords higher than sequences of frequent
+     keywords, even if the latter are longer. For example, a query
+     (Zanzibar bed and breakfast) would yield lccs=1 for a (hotels of
+     Zanzibar) document, but lccs=3 against (London bed and breakfast),
+     even though "Zanzibar" is actually somewhat more rare than the entire
+     "bed and breakfast" phrase. WLCCS factor alleviates that problem by
+     using the keyword frequencies.
+
+   * atc (float), added in version 2.2.1-beta. Aggregate Term Closeness.
+     A proximity based measure that grows higher when the document contains
+     more groups of more closely located and more important (rare) query
+     keywords. WARNING: you should use ATC with OPTION
+     idf='plain,tfidf_unnormalized'; otherwise you would get unexpected
+     results.
+
+     ATC basically works as follows. For every keyword occurrence in the
+     document, we compute the so called term closeness. For that, we
+     examine all the other closest occurrences of all the query keywords
+     (keyword itself included too) to the left and to the right of the
+     subject occurence, compute a distance dampening coefficient as k =
+     pow(distance, -1.75) for those occurrences, and sum the dampened IDFs.
+     Thus for every occurrence of every keyword, we get a "closeness" value
+     that describes the "neighbours" of that occurrence. We then multiply
+     those per-occurrence closenesses by their respective subject keyword
+     IDF, sum them all, and finally, compute a logarithm of that sum.
+
+     Or in other words, we process the best (closest) matched keyword pairs
+     in the document, and compute pairwise "closenesses" as the product of
+     their IDFs scaled by the distance coefficient:
+
+      | pair_tc = idf(pair_word1) * idf(pair_word2) * pow(pair_distance, -1.75)
+
+     We then sum such closenesess, and compute the final, log-dampened ATC
+     value:
+
+      | atc = log(1+sum(pair_tc))
+
+     Note that this final dampening logarithm is exactly the reason you
+     should use OPTION idf=plain, because without it, the expression inside
+     the log() could be negative.
+
+     Having closer keyword occurrences actually contributes much more to
+     ATC than having more frequent keywords. Indeed, when the keywords are
+     right next to each other, distance=1 and k=1; when there just one word
+     in between them, distance=2 and k=0.297, with two words between,
+     distance=3 and k=0.146, and so on. At the same time IDF attenuates
+     somewhat slower. For example, in a 1 million document collection, the
+     IDF values for keywords that match in 10, 100, and 1000 documents
+     would be respectively 0.833, 0.667, and 0.500. So a keyword pair with
+     two rather rare keywords that occur in just 10 documents each but with
+     2 other words in between would yield pair_tc = 0.101 and thus just
+     barely outweigh a pair with a 100-doc and a 1000-doc keyword with
+     1 other word between them and pair_tc = 0.099. Moreover, a pair of two
+     unique, 1-doc keywords with 3 words between them would get a pair_tc =
+     0.088 and lose to a pair of two 1000-doc keywords located right next
+     to each other and yielding a pair_tc = 0.25. So, basically, while ATC
+     does combine both keyword frequency and proximity, it is still
+     somewhat favoring the proximity.
+
+5.4.7. Ranking factor aggregation functions
+-------------------------------------------
 
 A field aggregation function is a single argument function that takes an
 expression with field-level factors, iterates it over all the matched
@@ -2413,8 +2604,8 @@ aggregation functions are:
    * sum, sums the argument expression over all matched fields. For
      instance, sum(1) should return a number of matched fields.
 
-Expressions for the built-in rankers
-------------------------------------
+5.4.8. Formula expressions for all the built-in rankers
+-------------------------------------------------------
 
 Most of the other rankers can actually be emulated with the expression
 based ranker. You just need to pass a proper expression. Such emulation is,
@@ -2696,13 +2887,36 @@ CRC32()
    2.0.1-beta.
 
 GEODIST()
-   GEODIST(lat1,long1,lat2,long2) function, introduced in version
+   GEODIST(lat1, lon1, lat2, lon2, [...]) function, introduced in version
    0.9.9-rc2, computes geosphere distance between two given points
-   specified by their coordinates. Note that both latitudes and longitudes
-   must be in radians and the result will be in meters. You can use
-   arbitrary expression as any of the four coordinates. An optimized path
-   will be selected when one pair of the arguments refers directly to
+   specified by their coordinates. Note that by default both latitudes and
+   longitudes must be in radians and the result will be in meters. You can
+   use arbitrary expression as any of the four coordinates. An optimized
+   path will be selected when one pair of the arguments refers directly to
    a pair attributes and the other one is constant.
+
+   Starting with version 2.2.1-beta, GEODIST() also takes an optional 5th
+   argument that lets you easily convert between input and output units,
+   and pick the specific geodistance formula to use. The complete syntax
+   and a few examples are as follows:
+
+      | GEODIST(lat1, lon1, lat2, lon2, { option=value, ... })
+      | 
+      | GEODIST(40.7643929, -73.9997683, 40.7642578, -73.9994565, {in=degrees, out=feet})
+      | GEODIST(51.50, -0.12, 29.98, 31.13, {in=deg, out=mi}}
+
+   The known options and their values are:
+
+      * in = {deg | degrees | rad | radians}, specifies the input units;
+      * out = {m | meters | km | kilometers | ft | feet | mi | miles},
+        specifies the output units;
+      * method = {haversine | adaptive}, specifies the geodistance
+        calculation method.
+
+   Upto version 2.1.x (inclusive), "haversine" method was the default.
+   Starting with 2.2.1-beta, the default method changed to "adaptive",
+   a new, well optimized implementation that is both more precise and much
+   faster at all times.
 
 PACKEDFACTORS()
    PACKEDFACTORS(), introduced in version 2.1.1-beta, can be used in
@@ -3143,7 +3357,7 @@ one go (more formally, one network request).
 
 Two API methods that implement multi-query mechanism are AddQuery() and
 RunQueries(). You can also run multiple queries with SphinxQL, see
-Section 7.31, <<Multi-statement queries>>. (In fact, regular Query() call
+Section 7.33, <<Multi-statement queries>>. (In fact, regular Query() call
 is internally implemented as a single AddQuery() call immediately followed
 by RunQueries() call.) AddQuery() captures the current state of all the
 query settings set by previous API calls, and memorizes the query.
@@ -4174,15 +4388,17 @@ Table of Contents
 7.23. UPDATE syntax
 7.24. ATTACH INDEX syntax
 7.25. FLUSH RTINDEX syntax
-7.26. TRUNCATE RTINDEX syntax
-7.27. SHOW AGENT STATUS
-7.28. SHOW PROFILE syntax
-7.29. SHOW INDEX STATUS syntax
-7.30. OPTIMIZE INDEX syntax
-7.31. Multi-statement queries
-7.32. Comment syntax
-7.33. List of SphinxQL reserved keywords
-7.34. SphinxQL upgrade notes, version 2.0.1-beta
+7.26. FLUSH RAMCHUNK syntax
+7.27. TRUNCATE RTINDEX syntax
+7.28. SHOW AGENT STATUS
+7.29. SHOW PROFILE syntax
+7.30. SHOW INDEX STATUS syntax
+7.31. OPTIMIZE INDEX syntax
+7.32. SHOW PLAN syntax
+7.33. Multi-statement queries
+7.34. Comment syntax
+7.35. List of SphinxQL reserved keywords
+7.36. SphinxQL upgrade notes, version 2.0.1-beta
 
 SphinxQL is our SQL dialect that exposes all of the search daemon
 functionality using a standard SQL syntax with a few Sphinx-specific
@@ -4369,23 +4585,51 @@ omissions (such as (currently) missing support for JOINs). Specifically,
       * 'global_idf' - use global statistics (frequencies) from the
         global_idf file for IDF computations, rather than the local index
         statistics. Added in version 2.1.1-beta.
-      * 'idf' - either 'normalized' (default) or 'plain'. Added in version
-        2.1.1-beta. The standard IDF (Inverse Document Frequency)
-        calculation may cause undesired keyword penalization effects in the
-        BM25 weighting functions. For instance, if you search for [the |
-        something] and [the] occurs in more than 50% of the documents, then
-        documents with both keywords [the] and [something] will get less
-        weight than documents with just one keyword [something]. Using
-        OPTION idf=plain avoids this.
+      * 'idf' - a quoted, comma-separated list of IDF computation flags.
+        Added in version 2.1.1-beta. Known flags are:
 
-         * idf=normalized: bm25 variant, idf = log((N-n+1)/n), as per
-           Robertson et al
-         * idf=plain: plain variant, idf=log(N/n), as per Sparck-Jones
+         * normalized: BM25 variant, idf = log((N-n+1)/n), as per Robertson
+           et al
+         * plain: plain variant, idf = log(N/n), as per Sparck-Jones
+         * tfidf_normalized (added in 2.2.1-beta): additionally divide IDF
+           by query word count, so that TF*IDF fits into [0, 1] range
+         * tfidf_unnormalized (added in 2.2.1-beta): do not additionally
+           divide IDF by query word count
+         * local_df (added in 2.2.1-beta): automatically sum DFs over all
+           the local parts of a distributed index, so that the IDF is
+           consistent (and precise) over a locally sharded index.
 
       where N is the collection size and n is the number of matched
-      documents. Hence plain IDF varies in [0, log(N)] range, and keywords
-      are never penalized; while the normalized IDF varies in [-log(N),
-      log(N)] range, and too frequent keywords are penalized.
+      documents.
+
+      The historically default IDF (Inverse Document Frequency) in Sphinx
+      is equivalent to OPTION idf='normalized,tfidf_normalized', and those
+      normalizations may cause several undesired effects.
+
+      First, idf=normalized causes keyword penalization. For instance, if
+      you search for [the | something] and [the] occurs in more than 50% of
+      the documents, then documents with both keywords [the] and
+      [something] will get less weight than documents with just one keyword
+      [something]. Using OPTION idf=plain avoids this. Plain IDF varies in
+      [0, log(N)] range, and keywords are never penalized; while the
+      normalized IDF varies in [-log(N), log(N)] range, and too frequent
+      keywords are penalized.
+
+      Second, idf=tfidf_normalized causes IDF drift over queries.
+      Historically, we additionally divided IDF by query keyword count, so
+      that the entire sum(tf*idf) over all keywords would still fit into
+      [0,1] range. However, that means that queries [word1] and [word1 |
+      nonmatchingword2] would assign different weights to the exactly same
+      result set, because the IDFs for both "word1" and "nonmatchingword2"
+      would be divided by 2. OPTION idf=tfidf_unnormalized fixes that. Note
+      that BM25, BM25A, BM25F() ranking factors will be scale accordingly
+      once you disable this normalization.
+
+      IDF flags can be mixed; 'plain' and 'normalized' are mutually
+      exclusive; 'tfidf_unnormalized' and 'tfidf_normalized' are mutually
+      exclusive; and unspecified flags in such a mututally exclusive group
+      take their defaults. That means that OPTION idf=plain is equivalent
+      to a complete OPTION idf='plain,tfidf_normalized' specification.
 
       * 'index_weights' - a named integer list (per-index user weights for
         ranking)
@@ -4691,7 +4935,7 @@ SQL_MODE = value
 
 PROFILING = {0 | 1}
    Enables query profiling in the current session. Defaults to 0. See also
-   Section 7.28, <<SHOW PROFILE syntax>>. Introduced in version 2.1.1-beta.
+   Section 7.29, <<SHOW PROFILE syntax>>. Introduced in version 2.1.1-beta.
 
 Known global server variables are:
 
@@ -5038,7 +5282,7 @@ ATTACH INDEX a one-time conversion operation only. Those restrictions may
 be lifted in future releases, as we add the needed functionality to the RT
 indexes. The complete list is as follows.
 
-   * Target RT index needs to be empty. (See Section 7.26, <<TRUNCATE
+   * Target RT index needs to be empty. (See Section 7.27, <<TRUNCATE
      RTINDEX syntax>>)
    * Source disk index needs to have index_sp=0, boundary_step=0,
      stopword_step=1, dict=crc settings.
@@ -5122,7 +5366,28 @@ instant.
    | mysql> FLUSH RTINDEX rt;
    | Query OK, 0 rows affected (0.05 sec)
 
-7.26. TRUNCATE RTINDEX syntax
+7.26. FLUSH RAMCHUNK syntax
+===========================
+
+   | FLUSH RAMCHUNK rtindex
+
+FLUSH RAMCHUNK statement, added in version 2.1.2-beta, forcibly creates
+a new disk chunk in a RT index.
+
+Normally, RT index would flush and convert the contents of the RAM chunk
+into a new disk chunk automatically, once the RAM chunk reaches the maximum
+allowed rt_mem_limit size. However, for debugging and testing it might be
+useful to forcibly create a new disk chunk, and FLUSH RAMCHUNK statement
+does exactly that.
+
+Note that using FLUSH RAMCHUNK increases RT index fragmentation. Most
+likely, you want to use FLUSH RTINDEX instead. We suggest that you abstain
+from using this statement unless you're absolutely sure what you're doing.
+
+   | mysql> FLUSH RAMCHUNK rt;
+   | Query OK, 0 rows affected (0.05 sec)
+
+7.27. TRUNCATE RTINDEX syntax
 =============================
 
    | TRUNCATE RTINDEX rtindex
@@ -5139,7 +5404,7 @@ files; when you build the main index, you need to wipe the delta index, and
 thus TRUNCATE RTINDEX. You also need to use this command before attaching
 an index; see Section 7.24, <<ATTACH INDEX syntax>>.
 
-7.27. SHOW AGENT STATUS
+7.28. SHOW AGENT STATUS
 =======================
 
    | SHOW AGENT ['agent'|'index'|index] STATUS [ LIKE pattern ]
@@ -5267,7 +5532,7 @@ when one of the weighted-probability strategies is in effect).
    | +--------------------------------------+--------------------------------+
    | 13 rows in set (0.00 sec)
 
-7.28. SHOW PROFILE syntax
+7.29. SHOW PROFILE syntax
 =========================
 
    | SHOW PROFILE
@@ -5365,7 +5630,7 @@ Here's a brief description of the currently profiled states.
    * aggregate, aggregating multiple result sets.
    * net_write, writing the result set to the network.
 
-7.29. SHOW INDEX STATUS syntax
+7.30. SHOW INDEX STATUS syntax
 ==============================
 
    | SHOW INDEX index_name STATUS
@@ -5394,7 +5659,7 @@ Currently, those include:
    | +----------------------+------------+
    | 6 rows in set (0.00 sec)
 
-7.30. OPTIMIZE INDEX syntax
+7.31. OPTIMIZE INDEX syntax
 ===========================
 
    | OPTIMIZE INDEX index_name
@@ -5429,7 +5694,49 @@ be optimized automatically. That might change in the future releases.
    | mysql> OPTIMIZE INDEX rt;
    | Query OK, 0 rows affected (0.00 sec)
 
-7.31. Multi-statement queries
+7.32. SHOW PLAN syntax
+======================
+
+   | SHOW PLAN
+
+SHOW PLAN statement, added in 2.1.2-beta, displays the execution plan of
+the previous SELECT statment. The plan gets generated and stored during the
+actual execution, so profiling must be enabled in the current session
+before running that statement. That can be done with a SET profiling=1
+statement.
+
+Here's a complete instrumentation example:
+
+   | mysql> SET profiling=1 \G
+   | Query OK, 0 rows affected (0.00 sec)
+   | 
+   | mysql> SELECT id FROM lj WHERE MATCH('the i') LIMIT 1 \G
+   | *************************** 1. row ***************************
+   | id: 39815
+   | 1 row in set (1.53 sec)
+   | 
+   | mysql> SHOW PLAN \G
+   | *************************** 1. row ***************************
+   | Variable: transformed_tree
+   |    Value: AND(
+   |   AND(KEYWORD(the, querypos=1)),
+   |   AND(KEYWORD(i, querypos=2)))
+   | 1 row in set (0.00 sec)
+
+And here's a less trivial example that shows how the actually evaluated
+query tree can be rather different from the original one because of
+expansions and other transformations:
+
+   | mysql> SELECT * FROM test WHERE MATCH('@title abc* @body hey') \G SHOW PLAN \G
+   | ...
+   | *************************** 1. row ***************************
+   | Variable: transformed_tree
+   |    Value: AND(
+   |   OR(fields=(title), KEYWORD(abcx, querypos=1, expanded), KEYWORD(abcm, querypos=1, expanded)),
+   |   AND(fields=(body), KEYWORD(hey, querypos=2)))
+   | 1 row in set (0.00 sec)
+
+7.33. Multi-statement queries
 =============================
 
 Starting version 2.0.1-beta, SphinxQL supports multi-statement queries, or
@@ -5487,7 +5794,7 @@ WARNINGS, SHOW STATUS, and SHOW META. Arbitrary sequence of these
 statements are allowed. The results sets returned should match those that
 would be returned if the batched queries were sent one by one.
 
-7.32. Comment syntax
+7.34. Comment syntax
 ====================
 
 Since version 2.0.1-beta, SphinxQL supports C-style comment syntax.
@@ -5500,7 +5807,7 @@ between Sphinx and MySQL.)
 
    | SELECT /*! SQL_CALC_FOUND_ROWS */ col1 FROM table1 WHERE ...
 
-7.33. List of SphinxQL reserved keywords
+7.35. List of SphinxQL reserved keywords
 ========================================
 
 A complete alphabetical list of keywords that are currently reserved in
@@ -5559,7 +5866,7 @@ SphinxQL syntax (and therefore can not be used as identifiers).
    | WHERE
    | WITHIN
 
-7.34. SphinxQL upgrade notes, version 2.0.1-beta
+7.36. SphinxQL upgrade notes, version 2.0.1-beta
 ================================================
 
 This section only applies to existing applications that use SphinxQL
@@ -6945,7 +7252,7 @@ number of options can be specified. Available options are:
 
       | ... WHERE query='test;cutoff=10000;';
 
-   * maxquerytme - maximum allowed query time (in milliseconds), as in
+   * maxquerytime - maximum allowed query time (in milliseconds), as in
      SetMaxQueryTime() API call:
 
       | ... WHERE query='test;maxquerytime=1000;';
@@ -8794,14 +9101,22 @@ lemmatizers, stemmers, and phonetic algorithms.
      codes that are equal even when the words original are different, but
      phonetically close.
 
-The morphology processors that are implemented in Sphinx itself include
-Russian lemmatizer, English stemmer, Russian stemmer (that supports UTF-8
-and Windows-1251 encodings), Czech stemmer, Arabic stemmer, and Soundex and
-Metaphone phonetic algorithms. Also, you can link with libstemmer library
-for even more stemmers.
+The morphology processors that come with our own built-in Sphinx
+implementations are:
+
+   * English, Russian, and German lemmatizers;
+   * English, Russian, Arabic, and Czech stemmers;
+   * SoundEx and MetaPhone phonetic algorithms.
+
+You can also link with libstemmer library for even more stemmers (see
+details below). With libstemmer, Sphinx also supports morphological
+processing for more than 15 other languages. Binary packages should come
+prebuilt with libstemmer support, too.
 
 Lemmatizer support was added in version 2.1.1-beta, starting with a Russian
-lemmatizer. (English lemmatizer support is also planned in the future.)
+lemmatizer. English and German lemmatizers were then added in version
+2.2.1-beta.
+
 Lemmatizers require a dictionary that needs to be additionally downloaded
 from the Sphinx website. That dictionary needs to be installed in
 a directory specified by lemmatizer_base directive. Also, there is
@@ -8824,8 +9139,16 @@ follows:
    * none - do not perform any morphology processing;
    * lemmatize_ru - apply Russian lemmatizer and pick a single root form
      (added in 2.1.1-beta);
+   * lemmatize_en - apply English lemmatizer and pick a single root form
+     (added in 2.2.1-beta);
+   * lemmatize_de - apply German lemmatizer and pick a single root form
+     (added in 2.2.1-beta);
    * lemmatize_ru_all - apply Russian lemmatizer and index all possible
      root forms (added in 2.1.1-beta);
+   * lemmatize_en_all - apply Russian lemmatizer and index all possible
+     root forms (added in 2.2.1-beta);
+   * lemmatize_de_all - apply Russian lemmatizer and index all possible
+     root forms (added in 2.2.1-beta);
    * stem_en - apply Porter's English stemmer;
    * stem_ru - apply Porter's Russian stemmer;
    * stem_enru - apply Porter's English and Russian stemmers;
@@ -11646,7 +11969,7 @@ compliance with standard SQL. However, existing applications must not get
 broken, and compat_sphinxql_magics lets you upgrade safely. It defaults to
 0, which acts in modern way. SphinxQL compatibility mode is now deprecated
 and will be removed once we complete bringing SphinxQL in line with
-standard SQL syntax. Please refer to Section 7.34, <<SphinxQL upgrade
+standard SQL syntax. Please refer to Section 7.36, <<SphinxQL upgrade
 notes, version 2.0.1-beta>> for the details and update instruction.
 
 Example:
@@ -11865,23 +12188,25 @@ Appendix A. Sphinx revision history
 Table of Contents
 
 A.1. Version 2.1.1-beta, 20 feb 2013
-A.2. Version 2.0.6-release, 22 oct 2012
-A.3. Version 2.0.5-release, 28 jul 2012
-A.4. Version 2.0.4-release, 02 mar 2012
-A.5. Version 2.0.3-release, 23 dec 2011
-A.6. Version 2.0.2-beta, 15 nov 2011
-A.7. Version 2.0.1-beta, 22 apr 2011
-A.8. Version 1.10-beta, 19 jul 2010
-A.9. Version 0.9.9-release, 02 dec 2009
-A.10. Version 0.9.9-rc2, 08 apr 2009
-A.11. Version 0.9.9-rc1, 17 nov 2008
-A.12. Version 0.9.8.1, 30 oct 2008
-A.13. Version 0.9.8, 14 jul 2008
-A.14. Version 0.9.7, 02 apr 2007
-A.15. Version 0.9.7-rc2, 15 dec 2006
-A.16. Version 0.9.7-rc1, 26 oct 2006
-A.17. Version 0.9.6, 24 jul 2006
-A.18. Version 0.9.6-rc1, 26 jun 2006
+A.2. Version 2.0.8-release, 26 apr 2013
+A.3. Version 2.0.7-release, 26 mar 2013
+A.4. Version 2.0.6-release, 22 oct 2012
+A.5. Version 2.0.5-release, 28 jul 2012
+A.6. Version 2.0.4-release, 02 mar 2012
+A.7. Version 2.0.3-release, 23 dec 2011
+A.8. Version 2.0.2-beta, 15 nov 2011
+A.9. Version 2.0.1-beta, 22 apr 2011
+A.10. Version 1.10-beta, 19 jul 2010
+A.11. Version 0.9.9-release, 02 dec 2009
+A.12. Version 0.9.9-rc2, 08 apr 2009
+A.13. Version 0.9.9-rc1, 17 nov 2008
+A.14. Version 0.9.8.1, 30 oct 2008
+A.15. Version 0.9.8, 14 jul 2008
+A.16. Version 0.9.7, 02 apr 2007
+A.17. Version 0.9.7-rc2, 15 dec 2006
+A.18. Version 0.9.7-rc1, 26 oct 2006
+A.19. Version 0.9.6, 24 jul 2006
+A.20. Version 0.9.6-rc1, 26 jun 2006
 
 A.1. Version 2.1.1-beta, 20 feb 2013
 ====================================
@@ -11981,7 +12306,123 @@ Major behavior changes and optimizations
    * optimized filtering and scan in several frequent cases (single-value,
      2-arg, 3-arg WHERE clauses)
 
-A.2. Version 2.0.6-release, 22 oct 2012
+A.2. Version 2.0.8-release, 26 apr 2013
+=======================================
+
+Bug fixes
+---------
+
+   * fixed #1515, log strings over 2KB were clipped when
+     query_log_format=plain
+   * fixed #1514, RT index disk chunk lose attribute update on daemon
+     restart
+   * fixed #1512, crash while formatting log messages
+   * fixed #1511, crash on indexing PostgreSQL data source with MVA
+     attributes
+   * fixed #1509, blend_chars vs incomplete multi-form and overshort
+   * fixed #1504, RT binlog replay vs descending tid on update
+   * fixed #1499, sql_field_str2wordcount actually is int, not string
+   * fixed #1498, now working with exceptions starting with number too
+   * fixed #1496, multiple destination keywords in wordform
+   * fixed #1494, lost 'mod', '%' operations in select list. Also corrected
+     few typers in the doc.
+   * fixed #1490, expand_keywords vs prefix
+   * fixed #1487, `id` in expression fixed
+   * fixed #1483, snippets limits fix
+   * fixed #1481, shebang config changes check on rotation
+   * fixed #1479, port handling in PHP Sphinx API
+   * fixed #1474, daemon crash at SphinxQL packet overflows max_packet_size
+   * fixed #1472, crash on loading index to indextool for check
+   * fixed #1465, expansion_limit got lost in index rotation
+   * fixed #1427, #1506, utf8 3 and 4-bytes codepoints
+   * fixed #1405, between with mixed int float values
+
+A.3. Version 2.0.7-release, 26 mar 2013
+=======================================
+
+Bug fixes
+---------
+
+   * fixed #1475, memory leak in the expression parser
+   * fixed #1457, error messages over 2KB were clipped
+   * fixed #1454, searchd did not display an error message when the binlog
+     path did not exist
+   * fixed #1441, SHOW META in a query batch was returning the last
+     non-batch error
+   * fixed #1435, typo in the documentation
+   * fixed #1430, rt_flush_period now works even with a disabled binlog
+   * fixed #1427, overlong 4-byte UTF-8 codes in source text could cause
+     indexer crashes or index corruption
+   * fixed #1418, warnings from local index searches were lost with
+     dist_threads>0
+   * fixed #1417, crash handler now works on searchd startup stage, too
+     (eg. to report index load time crashes)
+   * fixed #1410, bad numerics like '123abc' now result in a proper
+     SphinxQL error message
+   * fixed #1404, a tiny memory leak in shared mutex
+   * fixed #1394, race in --iostats caused incorrect I/O statistics in
+     threaded modes
+   * fixed #1391, QUORUM operator vs docinfo=inline returned wrong
+     attribute values
+   * fixed #1389, edge case in the ORDER operator caused occasionaly
+     searchd crashes
+   * fixed #1382, query parts with field limits but without real keywords
+     (like '@name {') are now simply ignored and no longer cause a query
+     syntax error
+   * fixed #1370, Windows indexer builds failed to fetch rows from MSSQL
+     2012
+   * fixed #1368, ORDER BY RAND() did not work in RT indexes
+   * fixed #1364, queries with hitless words could occasionally crash
+     searchd
+   * fixed #1363, '*' in charset_table was causing query syntax errors with
+     enable_star=1
+   * fixed #1353, added filtering by 'id' syntax (in addition to '@id') to
+     SphinxSE
+   * fixed #1346, fixed NEAR operator behavior vs duplicated keywords
+   * fixed #1345, invalid PROXIMITY operator threshold now causes a query
+     syntax error rather than unexpected search behavior
+   * fixed #1343, misconfigured indexes with 0 full text fields are now
+     explicitly forbidden
+   * fixed #1342, specific error messages (from the preload stage) went
+     missing when failing to load the indexes
+   * fixed #1339, no warning on inconsistent word statistics
+   * fixed #1335, typo in searchd help screen
+   * fixed #1334, typo in SELECT documentation
+   * fixed #1316, PHRASE operator did not match in a rare self-repeating
+     document/query case
+   * fixed #1297, letting queries complete gracefully instead of killing
+     them off in seamless_rotate=1, workers=prefork case
+   * fixed #1295, mentioned index naming requirements (proper identifier)
+     in the FROM clause docs
+   * fixed #1221, incorrect results when using @groupby in select list via
+     SphinxAPI with compat_sphinxql_magics=0
+   * fixed #1180, special SPZ chars occasionally leaking into snippets
+   * fixed #1171, preforked children did not reload logs on SIGUSR1
+   * fixed #1150, added support for `id` syntax in DELETE and parents in
+     WHERE
+   * fixed #1135, crashes when using MVA/strings attributes in expression
+     ranker
+   * fixed #1124, corrupted attributes after merging with an empty index
+   * fixed #1090, SphinxSE snippets UDF updated to support MySQL 5.5
+   * fixed #1041, added initial support for MVA updates (and other mutex
+     protected things) on FreeBSD
+   * fixed #999, fullscan returned empty result sets in mixed batches of
+     fullscan and fulltext queries
+   * fixed #921, document count/bytes 32bit overflow in indexer progress
+     output
+   * fixed #539, added processing suffix rules with dots in .affix file to
+     spelldump
+   * fixed #481, rotation did not work on Windows with preopen=1
+   * fixed #268, added warnings about duplicate elements in xmlpipe2
+   * fixed CSphStaticMutex (double initialization issue)
+   * fixed documentation typo in SQL data sources
+   * fixed too-late initialization of mutex at daemon
+   * fixed that an instance of searchd resurrected by watchdog could leak
+     resources and/or crash
+   * added a console message about crashes during index loading at startup
+   * added more debug info about failed index loading
+
+A.4. Version 2.0.6-release, 22 oct 2012
 =======================================
 
 Bug fixes
@@ -12052,7 +12493,7 @@ Bug fixes
    * fixed sample config file
    * fixed x64 configurations for libstemmer
 
-A.3. Version 2.0.5-release, 28 jul 2012
+A.5. Version 2.0.5-release, 28 jul 2012
 =======================================
 
 Bug fixes
@@ -12159,7 +12600,7 @@ Bug fixes
      parser
    * fixed missing command-line switches documentation
 
-A.4. Version 2.0.4-release, 02 mar 2012
+A.6. Version 2.0.4-release, 02 mar 2012
 =======================================
 
 Bug fixes
@@ -12214,7 +12655,7 @@ Bug fixes
    * fixed #1120, negative total_found, docs and hits counter on huge
      indexes
 
-A.5. Version 2.0.3-release, 23 dec 2011
+A.7. Version 2.0.3-release, 23 dec 2011
 =======================================
 
 Bug fixes
@@ -12244,7 +12685,7 @@ Bug fixes
    * fixed build of SphinxSE with MySQL 5.1
    * fixed crash log for 'fork' and 'prefork' workers
 
-A.6. Version 2.0.2-beta, 15 nov 2011
+A.8. Version 2.0.2-beta, 15 nov 2011
 ====================================
 
 Major new features
@@ -12415,7 +12856,7 @@ Bug fixes
    * fixed that field/zone conditions were not propagated to expanded
      keywords with dict=keywords
 
-A.7. Version 2.0.1-beta, 22 apr 2011
+A.9. Version 2.0.1-beta, 22 apr 2011
 ====================================
 
 New general features
@@ -12592,8 +13033,8 @@ Bug fixes
    * fixed libsphinxclient SIGPIPE handling
    * fixed libsphinxclient vs VS2003 compiler bug
 
-A.8. Version 1.10-beta, 19 jul 2010
-===================================
+A.10. Version 1.10-beta, 19 jul 2010
+====================================
 
    * added RT indexes support (Chapter 4, Real-time indexes)
    * added prefork and threads support (workers directives)
@@ -12681,8 +13122,8 @@ A.8. Version 1.10-beta, 19 jul 2010
      etc)
    * fixed #509, indexing ranged results from stored procedures
 
-A.9. Version 0.9.9-release, 02 dec 2009
-=======================================
+A.11. Version 0.9.9-release, 02 dec 2009
+========================================
 
    * added Open, Close, Status calls to libsphinxclient (C API)
    * added automatic persistent connection reopening to PHP, Python APIs
@@ -12744,7 +13185,7 @@ A.9. Version 0.9.9-release, 02 dec 2009
    * fixed #344 (invalid checkpoints after merge)
    * fixed #326 (missing CLOCK_xxx on FreeBSD)
 
-A.10. Version 0.9.9-rc2, 08 apr 2009
+A.12. Version 0.9.9-rc2, 08 apr 2009
 ====================================
 
    * added IsConnectError(), Open(), Close() calls to Java API (bug #240)
@@ -12843,7 +13284,7 @@ A.10. Version 0.9.9-rc2, 08 apr 2009
      static
    * fixed parser vs @field -keyword, foo|@field bar, "" queries (bug #310)
 
-A.11. Version 0.9.9-rc1, 17 nov 2008
+A.13. Version 0.9.9-rc1, 17 nov 2008
 ====================================
 
    * added min_stemming_len directive
@@ -12906,7 +13347,7 @@ A.11. Version 0.9.9-rc1, 17 nov 2008
    * fixed backslash escaping, added backslash to EscapeString()
    * fixed handling of over-2GB dictionary files (.spi)
 
-A.12. Version 0.9.8.1, 30 oct 2008
+A.14. Version 0.9.8.1, 30 oct 2008
 ==================================
 
    * added configure script to libsphinxclient
@@ -12943,7 +13384,7 @@ A.12. Version 0.9.8.1, 30 oct 2008
    * fixed default ID range (that filtered out all 64-bit values) in Java
      and Python APIs
 
-A.13. Version 0.9.8, 14 jul 2008
+A.15. Version 0.9.8, 14 jul 2008
 ================================
 
 Indexing
@@ -13123,7 +13564,7 @@ Changes and fixes since 0.9.8-rc2
      reusable sorter issue
    * fixed sorting of negative floats in SPH_SORT_EXTENDED mode
 
-A.14. Version 0.9.7, 02 apr 2007
+A.16. Version 0.9.7, 02 apr 2007
 ================================
 
    * added support for sql_str2ordinal_column
@@ -13173,7 +13614,7 @@ A.14. Version 0.9.7, 02 apr 2007
    * fixed wrong assertion in SBCS encoder
    * fixed crashes with no-attribute indexes after rotate
 
-A.15. Version 0.9.7-rc2, 15 dec 2006
+A.17. Version 0.9.7-rc2, 15 dec 2006
 ====================================
 
    * added support for extended matching mode (query language)
@@ -13195,7 +13636,7 @@ A.15. Version 0.9.7-rc2, 15 dec 2006
      paths)
    * fixes for 64-bit platforms
 
-A.16. Version 0.9.7-rc1, 26 oct 2006
+A.18. Version 0.9.7-rc1, 26 oct 2006
 ====================================
 
    * added alpha index merging code
@@ -13224,7 +13665,7 @@ A.16. Version 0.9.7-rc1, 26 oct 2006
    * fixed line numbering in config parser
    * fixed some issues with index rotation
 
-A.17. Version 0.9.6, 24 jul 2006
+A.19. Version 0.9.6, 24 jul 2006
 ================================
 
    * added support for empty indexes
@@ -13233,7 +13674,7 @@ A.17. Version 0.9.6, 24 jul 2006
    * fixed configure issues with --without-mysql and --with-pgsql options
    * fixed building on Solaris 9
 
-A.18. Version 0.9.6-rc1, 26 jun 2006
+A.20. Version 0.9.6-rc1, 26 jun 2006
 ====================================
 
    * added boolean queries support (experimental, beta version)

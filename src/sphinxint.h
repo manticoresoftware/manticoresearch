@@ -2055,10 +2055,10 @@ public:
 		assert ( pEmbeddedTokenizer );
 
 		// do not run the stripper twice
-		if ( m_bStripHTML )
+		if ( CSphSource_Proxy<T>::m_bStripHTML )
 		{
 			m_bProxyStripHTML = true;
-			m_bStripHTML = false;
+			CSphSource_Proxy<T>::m_bStripHTML = false;
 		}
 
 		if ( !m_pExtraTokenizer )
@@ -2131,7 +2131,7 @@ public:
 
 				if ( m_bProxyStripHTML )
 				{
-					m_pStripper->Strip ( pFields[i] );
+					CSphSource_Proxy<T>::m_pStripper->Strip ( pFields[i] );
 					m_dFieldLengths[i] = strlen ( (const char *)pFields[i] );
 				}
 

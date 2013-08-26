@@ -67,12 +67,18 @@ index test2 : base
 	rt_attr_uint	= tag
 }
 
+index test_stripped : base
+{
+	source			= test
+	path			= <data_path/>/test_stripped
+	html_strip		= 1
+}
+
 index test_xml : base
 {
 	source			= test_xml
 	path			= <data_path/>/test_xml
 }
-
 
 common
 {
@@ -98,7 +104,8 @@ INSERT INTO test_table VALUES
 ( 103, '文山區長青學苑則有個十分特別的「英文歌唱班」，test; mixed blended aaa-bbb' ),
 ( 104, '成員年齡均超過六十歲，tested' ),
 ( 105, '這群白髮蒼蒼，test2' ),
-( 106, '這群白髮蒼蒼 RUINED 這群白髮蒼蒼' )
+( 106, '這群白髮蒼蒼 RUINED 這群白髮蒼蒼' ),
+( 107, '&lt;div class="msgCnt"&gt;说说&lt;a href="http://k.t.qq.com/k/%E4%BB%8A%E5%A4%A9%E7%9A%84%E5%BF%83%E6%83%85"&gt;#今天的心情#&lt;/a&gt;：&lt;/div&gt;' )
 </db_insert>
 
 <sphqueries>
@@ -114,6 +121,8 @@ INSERT INTO test_table VALUES
 <sphinxql>select * from test where match('aaa')</sphinxql>
 <sphinxql>select * from test where match('bbb')</sphinxql>
 <sphinxql>select * from test where match('aaa-bbb')</sphinxql>
+<sphinxql>select * from test where match('msgCnt')</sphinxql>
+<sphinxql>select * from test where match('今天的心情')</sphinxql>
 
 <sphinxql>select * from test_xml where match('mix')</sphinxql>
 <sphinxql>select * from test_xml where match('русский')</sphinxql>
@@ -127,6 +136,8 @@ INSERT INTO test_table VALUES
 <sphinxql>select * from test_xml where match('aaa')</sphinxql>
 <sphinxql>select * from test_xml where match('bbb')</sphinxql>
 <sphinxql>select * from test_xml where match('aaa-bbb')</sphinxql>
+<sphinxql>select * from test_xml where match('msgCnt')</sphinxql>
+<sphinxql>select * from test_xml where match('今天的心情')</sphinxql>
 
 <sphinxql>insert into test2 values(1,'this is some mixed text in english. and some blended aaa-bbb',10 )</sphinxql>
 <sphinxql>insert into test2 values(2,'許多社區長青學苑多開設有書法、插花、土風舞班，',11 )</sphinxql>
@@ -135,6 +146,7 @@ INSERT INTO test_table VALUES
 <sphinxql>insert into test2 values(5,'成員年齡均超過六十歲，tested', 14 )</sphinxql>
 <sphinxql>insert into test2 values(6,'這群白髮蒼蒼，test2', 15 )</sphinxql>
 <sphinxql>insert into test2 values(7,'這群白髮蒼蒼 RUINED 這群白髮蒼蒼', 16 )</sphinxql>
+<sphinxql>insert into test2 values(8,'&lt;div class="msgCnt"&gt;说说&lt;a href="http://k.t.qq.com/k/%E4%BB%8A%E5%A4%A9%E7%9A%84%E5%BF%83%E6%83%85"&gt;#今天的心情#&lt;/a&gt;：&lt;/div&gt;', 17 )</sphinxql>
 <sphinxql>select * from test2 where match('mix')</sphinxql>
 <sphinxql>select * from test2 where match('русский')</sphinxql>
 <sphinxql>select * from test2 where match('test')</sphinxql>
@@ -144,9 +156,15 @@ INSERT INTO test_table VALUES
 <sphinxql>select * from test2 where match('來')</sphinxql>
 <sphinxql>select * from test2 where match('這群白髮蒼蒼，')</sphinxql>
 <sphinxql>select * from test2 where match('ruin')</sphinxql>
-<sphinxql>select * from test where match('aaa')</sphinxql>
-<sphinxql>select * from test where match('bbb')</sphinxql>
-<sphinxql>select * from test where match('aaa-bbb')</sphinxql>
+<sphinxql>select * from test2 where match('aaa')</sphinxql>
+<sphinxql>select * from test2 where match('bbb')</sphinxql>
+<sphinxql>select * from test2 where match('aaa-bbb')</sphinxql>
+<sphinxql>select * from test2 where match('msgCnt')</sphinxql>
+<sphinxql>select * from test2 where match('今天的心情')</sphinxql>
+
+<sphinxql>select * from test_stripped where match('msgCnt')</sphinxql>
+<sphinxql>select * from test_stripped where match('今天的心情')</sphinxql>
+
 </sphqueries>
 
 </test>

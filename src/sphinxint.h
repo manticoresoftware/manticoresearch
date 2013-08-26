@@ -1995,6 +1995,7 @@ public:
 		, m_iDocStart ( 0 )
 		, m_iDocCount ( 0 )
 		, m_pExtraTokenizer ( NULL )
+		, m_bProxyStripHTML ( false )
 	{
 		assert ( sphUTF8Encode ( m_pMarkerDocStart, PROXY_DOCUMENT_START )==PROXY_MARKER_LEN );
 
@@ -2052,6 +2053,13 @@ public:
 	{
 		ISphTokenizer * pEmbeddedTokenizer = T::m_pTokenizer->GetEmbeddedTokenizer();
 		assert ( pEmbeddedTokenizer );
+
+		// do not run the stripper twice
+		if ( m_bStripHTML )
+		{
+			m_bProxyStripHTML = true;
+			m_bStripHTML = false;
+		}
 
 		if ( !m_pExtraTokenizer )
 		{
@@ -2119,9 +2127,16 @@ public:
 
 			for ( int i = 0; i < T::m_tSchema.m_dFields.GetLength(); i++ )
 			{
-				int iFieldLen = m_dFieldLengths[i];
-				pDoc->m_dChinese[i] = sphDetectChinese ( pFields[i], iFieldLen );
+				pDoc->m_dChinese[i] = sphDetectChinese ( pFields[i], m_dFieldLengths[i] );
 
+				if ( m_bProxyStripHTML )
+				{
+					m_pStripper->Strip ( pFields[i] );
+					m_dFieldLengths[i] = strlen ( (const char *)pFields[i] );
+				}
+
+				int iFieldLen = m_dFieldLengths[i];
+				
 				if ( !pDoc->m_dChinese[i] )
 				{
 					// no chinese? just save the field storage without tokenizing it
@@ -2272,6 +2287,7 @@ private:
 	int						m_iDocStart;
 	int						m_iDocCount;
 	ISphTokenizer *			m_pExtraTokenizer;
+	bool					m_bProxyStripHTML;
 
 	BYTE					m_pMarkerDocStart[PROXY_MARKER_LEN];
 	BYTE					m_pMarkerChineseField[PROXY_MARKER_LEN];

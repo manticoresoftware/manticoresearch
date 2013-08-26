@@ -897,7 +897,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		const CSphString & sType = hIndex["type"];
 		bPlain = ( sType=="plain" );
 
-		if ( sType!="plain" && sType!="distributed" && sType!="rt" )
+		if ( sType!="plain" && sType!="distributed" && sType!="rt" && sType!="template" )
 		{
 			fprintf ( stdout, "ERROR: index '%s': unknown type '%s'; fix your config file.\n", sIndexName, sType.cstr() );
 			fflush ( stdout );

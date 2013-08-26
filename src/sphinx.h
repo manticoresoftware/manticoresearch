@@ -944,6 +944,9 @@ protected:
 };
 
 
+/// traits dictionary factory (no storage, only tokenizing, lemmatizing, etc.)
+CSphDict * sphCreateDictionaryTemplate ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError );
+
 /// CRC32/FNV64 dictionary factory
 CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError );
 
@@ -1098,7 +1101,7 @@ struct FieldMask_t
 	bool Test ( int iIdx ) const
 	{
 		assert ( iIdx>=0 && iIdx<(int)sizeof(m_dMask)*8 );
-		return m_dMask [ iIdx/32 ] & ( 1 << ( iIdx%32 ) );
+		return ( m_dMask [ iIdx/32 ] & ( 1 << ( iIdx%32 ) ) )!=0;
 	}
 
 	// test if all bits are set or unset
@@ -3386,6 +3389,9 @@ struct CSphAttrUpdateEx
 
 /// create phrase fulltext index implementation
 CSphIndex *			sphCreateIndexPhrase ( const char* szIndexName, const char * sFilename );
+
+/// create template (tokenizer) index implementation
+CSphIndex *			sphCreateIndexTemplate ( );
 
 /// tell libsphinx to be quiet or not (logs and loglevels to come later)
 void				sphSetQuiet ( bool bQuiet );

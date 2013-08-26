@@ -2140,7 +2140,7 @@ const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 			m_pQword->CollectHitMask();
 			bool bHasSameFields = false;
 			for ( int i=0; i<FieldMask_t::SIZE && !bHasSameFields; i++ )
-				bHasSameFields = m_pQword->m_dQwordFields[i] & m_dQueriedFields[i];
+				bHasSameFields = ( m_pQword->m_dQwordFields[i] & m_dQueriedFields[i] )!=0;
 			if ( !bHasSameFields )
 				continue;
 		}

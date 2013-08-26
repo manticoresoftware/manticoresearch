@@ -1411,7 +1411,7 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 }
 
 
-bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError )
+bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError, bool bTemplateDict )
 {
 	bool bTokenizerSpawned = false;
 
@@ -1431,13 +1431,21 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 	if ( !pIndex->GetDictionary () )
 	{
+		CSphDict * pDict = NULL;
 		CSphDictSettings tSettings;
-		if ( pIndex->m_bId32to64 )
-			tSettings.m_bCrc32 = true;
-		sphConfDictionary ( hIndex, tSettings );
-		CSphDict * pDict = tSettings.m_bWordDict
-			? sphCreateDictionaryKeywords ( tSettings, NULL, pIndex->GetTokenizer (), pIndex->GetName(), sError )
-			: sphCreateDictionaryCRC ( tSettings, NULL, pIndex->GetTokenizer (), pIndex->GetName(), sError );
+		if ( bTemplateDict )
+		{
+			sphConfDictionary ( hIndex, tSettings );
+			pDict = sphCreateDictionaryTemplate ( tSettings, NULL, pIndex->GetTokenizer (), pIndex->GetName(), sError );
+		} else
+		{
+			if ( pIndex->m_bId32to64 )
+				tSettings.m_bCrc32 = true;
+			sphConfDictionary ( hIndex, tSettings );
+			pDict = tSettings.m_bWordDict
+				? sphCreateDictionaryKeywords ( tSettings, NULL, pIndex->GetTokenizer (), pIndex->GetName(), sError )
+				: sphCreateDictionaryCRC ( tSettings, NULL, pIndex->GetTokenizer (), pIndex->GetName(), sError );
+		}
 		if ( !pDict )
 		{
 			sphWarning ( "index '%s': %s", pIndex->GetName(), sError.cstr() );

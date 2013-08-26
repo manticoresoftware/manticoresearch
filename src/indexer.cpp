@@ -840,7 +840,7 @@ CSphSource * SpawnSourceTSVPipe ( const CSphConfigSection & hSource, const char 
 }
 
 
-CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSourceName, bool bUTF8, bool bBatchedRLP, bool bWordDict )
+CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSourceName, bool bUTF8, bool bBatchedRLP )
 {
 	if ( !hSource.Exists ( "type" ) )
 	{
@@ -1086,7 +1086,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		}
 		const CSphConfigSection & hSource = hSources [ pSourceName->cstr() ];
 
-		CSphSource * pSource = SpawnSource ( hSource, pSourceName->cstr(), pTokenizer->IsUtf8 (), tSettings.m_eChineseRLP==SPH_RLP_BATCHED, tDictSettings.m_bWordDict );
+		CSphSource * pSource = SpawnSource ( hSource, pSourceName->cstr(), pTokenizer->IsUtf8 (), tSettings.m_eChineseRLP==SPH_RLP_BATCHED );
 		if ( !pSource )
 		{
 			bSpawnFailed = true;

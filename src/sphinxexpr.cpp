@@ -1461,6 +1461,8 @@ static inline BYTE FuncHashLower ( BYTE u )
 
 static int FuncHashLookup ( const char * sKey )
 {
+	assert ( sKey && sKey[0] );
+
 	static BYTE dAsso[] =
 	{
 		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
@@ -1534,8 +1536,6 @@ static int FuncHashCheck()
 		if ( FuncHashLookup ( sKey.cstr() )!=i )
 			sphDie ( "INTERNAL ERROR: lookup for %s() failed, rebuild function hash", sKey.cstr() );
 	}
-	if ( FuncHashLookup("")!=-1 )
-		sphDie ( "INTERNAL ERROR: lookup for empty-func-name succeeded, rebuild function hash" );
 	if ( FuncHashLookup("A")!=-1 )
 		sphDie ( "INTERNAL ERROR: lookup for A() succeeded, rebuild function hash" );
 	return 1;

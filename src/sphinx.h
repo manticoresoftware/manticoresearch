@@ -752,7 +752,7 @@ struct CSphDictSettings
 
 	CSphDictSettings ()
 		: m_iMinStemmingLen ( 1 )
-		, m_bWordDict ( false )
+		, m_bWordDict ( true )
 		, m_bCrc32 ( !USE_64BIT )
 		, m_bStopwordsUnstemmed ( false )
 	{}
@@ -948,7 +948,7 @@ protected:
 CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError );
 
 /// keyword-storing dictionary factory
-CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError );
+CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError );
 
 /// clear wordform cache
 void sphShutdownWordforms ();
@@ -1072,7 +1072,7 @@ struct FieldMask_t
 	// set n-th bit
 	void Set ( int iIdx )
 	{
-		assert ( 0<=iIdx && iIdx<sizeof(m_dMask)*8 );
+		assert ( 0<=iIdx && iIdx<(int)sizeof(m_dMask)*8 );
 		m_dMask [ iIdx/32 ] |= 1 << ( iIdx%32 );
 	}
 
@@ -1085,7 +1085,7 @@ struct FieldMask_t
 	// unset n-th bit, or all
 	void Unset ( int iIdx )
 	{
-		assert ( 0<=iIdx && iIdx<sizeof(m_dMask)*8 );
+		assert ( 0<=iIdx && iIdx<(int)sizeof(m_dMask)*8 );
 		m_dMask [ iIdx/32 ] &= ~(1 << ( iIdx%32 ));
 	}
 
@@ -1097,7 +1097,7 @@ struct FieldMask_t
 	// test if n-th bit is set
 	bool Test ( int iIdx ) const
 	{
-		assert ( iIdx>=0 && iIdx<sizeof(m_dMask)*8 );
+		assert ( iIdx>=0 && iIdx<(int)sizeof(m_dMask)*8 );
 		return m_dMask [ iIdx/32 ] & ( 1 << ( iIdx%32 ) );
 	}
 

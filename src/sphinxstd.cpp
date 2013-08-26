@@ -1406,9 +1406,8 @@ void CSphAutoEvent::SetEvent ()
 {
 	if ( !m_bInitialized )
 		return;
-// pthread_mutex_lock ( m_pMutex ); // locking is done from outside
-	pthread_cond_signal ( &m_tCond );
-// pthread_mutex_unlock ( m_pMutex );
+
+	pthread_cond_signal ( &m_tCond ); // locking is done from outside
 	m_bSent = true;
 }
 

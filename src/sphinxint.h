@@ -1341,6 +1341,7 @@ public:
 	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () { return m_pDict->GetStopwordsFileInfos (); }
 	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () { return m_pDict->GetWordformsFileInfos (); }
 	virtual const CSphMultiformContainer * GetMultiWordforms () const { return m_pDict->GetMultiWordforms (); }
+	virtual const CSphWordforms * GetWordforms () { return m_pDict->GetWordforms(); }
 
 	virtual bool		IsStopWord ( const BYTE * pWord ) const { return m_pDict->IsStopWord ( pWord ); }
 	virtual uint64_t	GetSettingsFNV () const { return m_pDict->GetSettingsFNV(); }

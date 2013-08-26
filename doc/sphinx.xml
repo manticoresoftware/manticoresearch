@@ -10704,7 +10704,7 @@ infix_fields = url, domain
 <sect2 id="conf-enable-star"><title>enable_star</title>
 <para>
 Enables star-syntax (or wildcard syntax) when searching through prefix/infix indexes.
-Optional, default is is 0 (do not use wildcard syntax), for compatibility with 0.9.7.
+Optional, default is is 1 (use wildcard syntax).
 Known values are 0 and 1.
 </para>
 <para>
@@ -10714,12 +10714,12 @@ It only affects searching; so it can be changed without reindexing
 by simply restarting <filename>searchd</filename>.
 </para>
 <para>
-The default value is 0, that means to disable star-syntax
+The default value 1 means that star ('*') can be used at the start
+and/or the end of the keyword. The star will match zero or more characters.
+Value 0 means to disable star-syntax
 and treat all keywords as prefixes or infixes respectively,
 depending on indexing-time <link linkend="conf-min-prefix-len">min_prefix_len</link>
 and <link linkend="conf-min-infix-len">min_infix_len settings</link>.
-The value of 1 means that star ('*') can be used at the start
-and/or the end of the keyword. The star will match zero or more characters.
 </para>
 <para>
 For example, assume that the index was built with infixes and

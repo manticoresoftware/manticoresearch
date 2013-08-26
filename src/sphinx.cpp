@@ -6563,9 +6563,7 @@ int SelectParser_t::GetToken ( YYSTYPE * lvalp )
 	if ( isdigit ( *m_pCur ) )
 	{
 		char * pEnd = NULL;
-		double fDummy; // to avoid gcc unused result warning
-		fDummy = strtod ( m_pCur, &pEnd );
-		fDummy *= 2; // to avoid gcc unused variable warning
+		strtod ( m_pCur, &pEnd );
 
 		m_pCur = pEnd;
 		lvalp->m_iEnd = m_pCur-m_pStart;
@@ -14228,7 +14226,7 @@ public:
 		, m_iDoclistOffset ( 0 )
 		, m_iHint ( 0 )
 		, m_iMaxPos ( 0 )
-		, m_bWordDict ( false )
+		, m_bWordDict ( true )
 		, m_iCheckpoint ( 1 )
 		, m_bHasSkips ( false )
 	{
@@ -22051,16 +22049,6 @@ struct Infix_t
 	}
 
 	bool operator == ( const Infix_t<SIZE> & rhs ) const;
-
-#if 0
-	bool operator == ( const Infix_t<SIZE> & rhs ) const
-	{
-		for ( int i=0; i<SIZE; i++ )
-			if ( m_Data[i]!=rhs.m_Data[i] )
-				return false;
-		return true;
-	}
-#endif
 };
 
 
@@ -22470,15 +22458,6 @@ void InfixBuilder_c<SIZE>::SaveEntries ( CSphWriter & wrDict )
 	InfixHashCmp_fn<SIZE> fnCmp ( m_dArena.Begin() );
 	dIndex.Sort ( fnCmp );
 
-	const int iMaxChars = 1+sizeof ( Infix_t<SIZE> );
-	const BYTE * sLast[iMaxChars];
-	InfixIntvec_t * pLast[iMaxChars];
-	for ( int i=0; i<iMaxChars; i++ )
-	{
-		sLast[i] = (const BYTE*) "";
-		pLast[i] = NULL;
-	}
-
 	m_dBlocksWords.Reserve ( m_dArena.GetLength()/INFIX_BLOCK_SIZE*sizeof(DWORD)*SIZE );
 	int iBlock = 0;
 	int iPrevKey = -1;
@@ -22489,21 +22468,7 @@ void InfixBuilder_c<SIZE>::SaveEntries ( CSphWriter & wrDict )
 		int iChars = ( SIZE==2 )
 			? strnlen ( (const char*)sKey, sizeof(DWORD)*SIZE )
 			: sphUTF8Len ( (const char*)sKey, sizeof(DWORD)*SIZE );
-		assert ( iChars>=2 && iChars<iMaxChars );
-
-#if 0
-		// fight them redundancies
-		// FIXME! is this right, or is it better to save everyone, so that nonexistent (!) lookups are instant?
-		bool bSkip = false;
-		for ( int i=iLen-1; i>=2 && !bSkip; i-- )
-			if ( IsPrefix ( sLast[i], sKey ) && dData==*pLast[i] )
-				bSkip = true;
-		if ( bSkip )
-			continue;
-#endif
-
-		sLast[iChars] = sKey;
-		pLast[iChars] = &dData;
+		assert ( iChars>=2 && iChars<int(1 + sizeof ( Infix_t<SIZE> ) ) );
 
 		// keep track of N-infix blocks
 		int iAppendBytes = strnlen ( (const char*)sKey, sizeof(DWORD)*SIZE );
@@ -23781,7 +23746,7 @@ CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings,
 
 
 CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings,
-	const CSphEmbeddedFiles * pFiles, ISphTokenizer * pTokenizer, const char * sIndex,
+	const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex,
 	CSphString & sError )
 {
 	CSphDict * pDict = new CSphDictKeywords();

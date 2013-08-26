@@ -3646,7 +3646,7 @@ DWORD GetQposMask ( const CSphVector<ExtNode_i *> & dQwords )
 	for ( int i=1; i<dQwords.GetLength(); i++ )
 	{
 		int iQposDelta = dQwords[i]->m_iAtomPos - iQposBase;
-		assert ( iQposDelta<sizeof(uQposMask)*8 );
+		assert ( iQposDelta<(int)sizeof(uQposMask)*8 );
 		uQposMask |= ( 1 << iQposDelta );
 	}
 
@@ -4020,7 +4020,7 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 				ARRAY_FOREACH ( i, m_dNpos )
 				{
 					int iQposDelta = m_dNpos[i] - dTarget->m_uQuerypos;
-					assert ( iQposDelta<sizeof(dTarget->m_uQposMask)*8 );
+					assert ( iQposDelta<(int)sizeof(dTarget->m_uQposMask)*8 );
 					dTarget->m_uQposMask |= ( 1 << iQposDelta );
 				}
 			}

@@ -3065,7 +3065,7 @@ static void EmitPassagesOrdered ( CSphVector<BYTE> & dResult, const CSphVector<B
 
 
 static void HighlightPassages ( CacheStreamer_c & tStreamer, ExtractExcerpts_c & tExtractor, ExcerptQuery_t & tFixedSettings, const CSphIndexSettings & tIndexSettings, SnippetsDocIndex_c & tContainer,
-	const CSphHTMLStripper * pStripper, int iSPZ, const char * sDoc, int iDocLen, CSphDict * pDict, ISphTokenizer * pTokenizer, const CSphVector<SphHitMark_t> * dMarked, FunctorZoneInfo_t * pZoneInfo, CSphVector<BYTE> & dRes )
+	const char * sDoc, int iDocLen, CSphDict * pDict, ISphTokenizer * pTokenizer, const CSphVector<SphHitMark_t> * dMarked, FunctorZoneInfo_t * pZoneInfo, CSphVector<BYTE> & dRes )
 {
 	tFixedSettings.m_bWeightOrder = tExtractor.m_bFixedWeightOrder;
 
@@ -3217,7 +3217,7 @@ static void DoHighlighting ( const ExcerptQuery_t & tQuerySettings,
 			TokenizeDocument ( tExtractor, pStripper, iSPZ );
 
 			tStreamer.m_pZoneInfo = &tExtractor.m_tZoneInfo;
-			HighlightPassages ( tStreamer, tExtractor, tFixedSettings, tIndexSettings, tContainer, pStripper, iSPZ, sDoc, iDocLen, pDict, pTokenizer, NULL, &tExtractor.m_tZoneInfo, dRes );
+			HighlightPassages ( tStreamer, tExtractor, tFixedSettings, tIndexSettings, tContainer, sDoc, iDocLen, pDict, pTokenizer, NULL, &tExtractor.m_tZoneInfo, dRes );
 		}
 
 		// add trailing zero, and return
@@ -3366,7 +3366,7 @@ static void DoHighlighting ( const ExcerptQuery_t & tQuerySettings,
 
 			tStreamer.Tokenize ( tExtractor );
 
-			HighlightPassages ( tStreamer, tExtractor, tFixedSettings, tIndexSettings, tContainer, pStripper, iSPZ, sDoc, iDocLen, pDict, pTokenizer, &dMarked, pZoneInfo, dRes );
+			HighlightPassages ( tStreamer, tExtractor, tFixedSettings, tIndexSettings, tContainer, sDoc, iDocLen, pDict, pTokenizer, &dMarked, pZoneInfo, dRes );
 		}
 
 		dRes.Add(0);

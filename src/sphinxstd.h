@@ -2013,7 +2013,7 @@ protected:
 public:
 	CSphVariant *	m_pNext;
 	// tags are used for handling multiple same keys
-	bool			m_bTag; // 'true' means override - no multi-valued; 'fal'se' means multi-valued key
+	bool			m_bTag; // 'true' means override - no multi-valued; 'false' means multi-valued - chain them
 	int				m_iTag; // stores order like in config file
 
 public:
@@ -2714,6 +2714,8 @@ public:
 		if ( m_pData!=m_uStatic )
 			SafeDeleteArray ( m_pData );
 	}
+
+	// huh, no copy ctor and operator= ?
 
 	void Init ( int iElements )
 	{

@@ -463,7 +463,7 @@ static SphThread_t							g_tRtFlushThread;
 
 // optimize thread
 static SphThread_t							g_tOptimizeThread;
-static CSphMutex							g_tOptimizeQueueMutex;
+static StaticThreadsOnlyMutex_t				g_tOptimizeQueueMutex;
 static CSphVector<CSphString>				g_dOptimizeQueue;
 static ThrottleState_t						g_tRtThrottle;
 
@@ -1609,7 +1609,6 @@ void Shutdown ()
 			g_tThdMutex.Lock();
 			g_dThd.Reset();
 			g_tThdMutex.Unlock();
-			g_tOptimizeQueueMutex.Done();
 		}
 
 		sphThreadJoin ( &g_tRotationServiceThread );
@@ -18354,7 +18353,9 @@ void CheckPipes ()
 void ConfigureLocalIndex ( ServedDesc_t & tIdx, const CSphConfigSection & hIndex )
 {
 	tIdx.m_bMlock = ( hIndex.GetInt ( "mlock", 0 )!=0 ) && !g_bOptNoLock;
-	tIdx.m_bStar = ( hIndex.GetInt ( "enable_star", 0 )!=0 );
+	if ( hIndex.Exists ( "enable_star" ) )
+		sphWarning ( "enable_star is deprecated, use its default (enable_star=1) value" );
+	tIdx.m_bStar = ( hIndex.GetInt ( "enable_star", 1 )!=0 );
 	tIdx.m_bExpand = ( hIndex.GetInt ( "expand_keywords", 0 )!=0 );
 	tIdx.m_bPreopen = ( hIndex.GetInt ( "preopen", 0 )!=0 );
 	tIdx.m_bOnDiskDict = ( hIndex.GetInt ( "ondisk_dict", 0 )!=0 );
@@ -20742,8 +20743,6 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const CSphVector<const char
 
 	InitPersistentPool();
 
-
-
 	tmLoad += sphMicroTimer();
 	if ( !iValidIndexes )
 		sphFatal ( "no valid indexes to serve" );
@@ -21580,8 +21579,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( !sphThreadCreate ( &g_tOptimizeThread, OptimizeThreadFunc, 0 ) )
 			sphDie ( "failed to create optimize thread" );
 
-		g_tOptimizeQueueMutex.Init();
-
 		g_sSphinxqlState = hSearchd.GetStr ( "sphinxql_state" );
 		if ( !g_sSphinxqlState.IsEmpty() )
 		{
@@ -21615,7 +21612,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	}
 
 	if ( !sphThreadCreate ( &g_tRotationServiceThread, RotationServiceThreadFunc, 0 ) )
-			sphDie ( "failed to create rotation service thread" );
+		sphDie ( "failed to create rotation service thread" );
 
 	// almost ready, time to start listening
 	int iBacklog = hSearchd.GetInt ( "listen_backlog", SEARCHD_BACKLOG );

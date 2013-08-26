@@ -31,30 +31,35 @@ index v14
 {
 	source	= test
 	path	= <this_test/>/refdata/v14
+	dict	= crc
 }
 
 index v19
 {
 	source	= test
 	path	= <this_test/>/refdata/v19
+	dict	= crc
 }
 
 index v19noattrs
 {
 	source	= test
 	path	= <this_test/>/refdata/v19noattrs
+	dict	= crc
 }
 
 index v20
 {
 	source	= test
 	path	= <this_test/>/refdata/v20
+	dict	= crc
 }
 
 index v8
 {
 	source	= test
 	path	= <this_test/>/refdata/v8
+	dict	= crc
 }
 </config>
 

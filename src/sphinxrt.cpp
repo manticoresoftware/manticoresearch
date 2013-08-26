@@ -1096,8 +1096,8 @@ public:
 	virtual int					GetKillListSize () const			{ return 0; }
 	virtual bool				HasDocid ( SphDocID_t ) const		{ assert ( 0 ); return false; }
 
-	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer ) { return 0; }
-	virtual bool				Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists ) { return false; }
+	virtual int					Build ( const CSphVector<CSphSource*> & , int , int ) { return 0; }
+	virtual bool				Merge ( CSphIndex * , const CSphVector<CSphFilterSettings> & , bool ) { return false; }
 
 	virtual bool				Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarning );
 	virtual void				Dealloc () {}
@@ -1119,7 +1119,7 @@ public:
 	virtual void				DebugDumpHeader ( FILE * , const char * , bool ) {}
 	virtual void				DebugDumpDocids ( FILE * ) {}
 	virtual void				DebugDumpHitlist ( FILE * , const char * , bool ) {}
-	virtual void				DebugDumpDict ( FILE * fp ) {}
+	virtual void				DebugDumpDict ( FILE * ) {}
 	virtual int					DebugCheck ( FILE * fp );
 #if USE_WINDOWS
 #pragma warning(pop)

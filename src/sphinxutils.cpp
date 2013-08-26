@@ -1435,7 +1435,9 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		if ( pIndex->m_bId32to64 )
 			tSettings.m_bCrc32 = true;
 		sphConfDictionary ( hIndex, tSettings );
-		CSphDict * pDict = sphCreateDictionaryCRC ( tSettings, NULL, pIndex->GetTokenizer (), pIndex->GetName(), sError );
+		CSphDict * pDict = tSettings.m_bWordDict
+			? sphCreateDictionaryKeywords ( tSettings, NULL, pIndex->GetTokenizer (), pIndex->GetName(), sError )
+			: sphCreateDictionaryCRC ( tSettings, NULL, pIndex->GetTokenizer (), pIndex->GetName(), sError );
 		if ( !pDict )
 		{
 			sphWarning ( "index '%s': %s", pIndex->GetName(), sError.cstr() );

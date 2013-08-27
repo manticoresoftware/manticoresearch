@@ -356,6 +356,7 @@ public:
 	int			GetFD () { return m_iFD; }
 };
 
+
 //////////////////////////////////////////////////////////////////////////
 
 /// generic COM-like uids
@@ -1478,7 +1479,6 @@ struct ThrottleState_t
 	{}
 };
 
-void			SafeClose ( int & iFD );
 const BYTE *	SkipQuoted ( const BYTE * p );
 
 bool			sphSortGetStringRemap ( const ISphSchema & tSorterSchema, const ISphSchema & tIndexSchema, CSphVector<SphStringSorterRemap_t> & dAttrs );
@@ -2136,7 +2136,7 @@ public:
 				}
 
 				int iFieldLen = m_dFieldLengths[i];
-				
+
 				if ( !pDoc->m_dChinese[i] )
 				{
 					// no chinese? just save the field storage without tokenizing it

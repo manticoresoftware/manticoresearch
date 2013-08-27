@@ -122,6 +122,8 @@ struct ServedDesc_t
 	bool				m_bRT;
 	bool				m_bAlterEnabled;
 	CSphString			m_sGlobalIDFPath;
+	bool				m_bOnDiskAttrs;
+	bool				m_bOnDiskPools;
 
 						ServedDesc_t ();
 						~ServedDesc_t ();
@@ -254,6 +256,8 @@ static bool				g_bPreopenIndexes	= false;
 static bool				g_bOnDiskDicts		= false;
 static bool				g_bWatchdog			= true;
 static int				g_iExpansionLimit	= 0;
+static bool				g_bOnDiskAttrs		= false;
+static bool				g_bOnDiskPools		= false;
 
 struct Listener_t
 {
@@ -954,6 +958,8 @@ ServedDesc_t::ServedDesc_t ()
 	m_bOnlyNew = false;
 	m_bRT = false;
 	m_bAlterEnabled = true;
+	m_bOnDiskAttrs = false;
+	m_bOnDiskPools = false;
 }
 
 ServedDesc_t::~ServedDesc_t ()
@@ -17515,6 +17521,14 @@ static bool CheckServedEntry ( const ServedIndex_t * pEntry, const char * sIndex
 	return true;
 }
 
+
+static void SetEnableOndiskAttributes ( const ServedDesc_t & tDesc, CSphIndex * pIndex )
+{
+	if ( tDesc.m_bOnDiskAttrs || g_bOnDiskAttrs || tDesc.m_bOnDiskPools || g_bOnDiskPools )
+		pIndex->SetEnableOndiskAttributes ( tDesc.m_bOnDiskPools || g_bOnDiskPools );
+}
+
+
 #define SPH_RT_AUTO_FLUSH_CHECK_PERIOD ( 5000000 )
 
 static void RtFlushThreadFunc ( void * )
@@ -17588,6 +17602,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	tNewIndex.m_pIndex->SetPreopen ( pRotating->m_bPreopen || g_bPreopenIndexes );
 	tNewIndex.m_pIndex->SetWordlistPreload ( !pRotating->m_bOnDiskDict && !g_bOnDiskDicts );
 	tNewIndex.m_pIndex->SetGlobalIDFPath ( pRotating->m_sGlobalIDFPath );
+	SetEnableOndiskAttributes ( tNewIndex, tNewIndex.m_pIndex );
 
 	// rebase new index
 	char sNewPath [ SPH_MAX_FILENAME_LEN ];
@@ -17799,6 +17814,7 @@ void SeamlessTryToForkPrereader ()
 	g_pPrereading->SetPreopen ( tServed.m_bPreopen || g_bPreopenIndexes );
 	g_pPrereading->SetWordlistPreload ( !tServed.m_bOnDiskDict && !g_bOnDiskDicts );
 	g_pPrereading->SetGlobalIDFPath ( tServed.m_sGlobalIDFPath );
+	SetEnableOndiskAttributes ( tServed, tServed.m_pIndex );
 
 	// rebase buffer index
 	char sNewPath [ SPH_MAX_FILENAME_LEN ];
@@ -18410,6 +18426,8 @@ void ConfigureLocalIndex ( ServedDesc_t & tIdx, const CSphConfigSection & hIndex
 	tIdx.m_bPreopen = ( hIndex.GetInt ( "preopen", 0 )!=0 );
 	tIdx.m_bOnDiskDict = ( hIndex.GetInt ( "ondisk_dict", 0 )!=0 );
 	tIdx.m_sGlobalIDFPath = hIndex.GetStr ( "global_idf" );
+	tIdx.m_bOnDiskAttrs = ( hIndex.GetInt ( "ondisk_attrs", 0 )==1 );
+	tIdx.m_bOnDiskPools = ( strcmp ( hIndex.GetStr ( "ondisk_attrs", "" ), "pool" )==0 );
 }
 
 
@@ -18796,6 +18814,7 @@ void PreCreatePlainIndex ( ServedDesc_t & tServed, const char * sName )
 	tServed.m_pIndex->SetPreopen ( tServed.m_bPreopen || g_bPreopenIndexes );
 	tServed.m_pIndex->SetWordlistPreload ( !tServed.m_bOnDiskDict && !g_bOnDiskDicts );
 	tServed.m_pIndex->SetGlobalIDFPath ( tServed.m_sGlobalIDFPath );
+	SetEnableOndiskAttributes ( tServed, tServed.m_pIndex );
 	tServed.m_bEnabled = false;
 }
 
@@ -18922,6 +18941,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		tIdx.m_pIndex->SetPreopen ( tIdx.m_bPreopen || g_bPreopenIndexes );
 		tIdx.m_pIndex->SetWordlistPreload ( !tIdx.m_bOnDiskDict && !g_bOnDiskDicts );
 		tIdx.m_pIndex->SetGlobalIDFPath ( tIdx.m_sGlobalIDFPath );
+		SetEnableOndiskAttributes ( tIdx, tIdx.m_pIndex );
 
 		tIdx.m_pIndex->Setup ( tSettings );
 
@@ -20672,6 +20692,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_bOnDiskDicts = hSearchd.GetInt ( "ondisk_dict_default", (int)g_bOnDiskDicts )!=0;
 	sphSetUnlinkOld ( hSearchd.GetInt ( "unlink_old", 1 )!=0 );
 	g_iExpansionLimit = hSearchd.GetInt ( "expansion_limit", 0 );
+	g_bOnDiskAttrs = ( hSearchd.GetInt ( "ondisk_attrs_default", 0 )==1 );
+	g_bOnDiskPools = ( strcmp ( hSearchd.GetStr ( "ondisk_attrs_default", "" ), "pool" )==0 );
 
 	if ( hSearchd("max_matches") )
 	{

@@ -427,6 +427,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "stopwords_unstemmed",	0, NULL },
 	{ "global_idf",				0, NULL },
 	{ "rlp_context",			0, NULL },
+	{ "ondisk_attrs",			0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -500,6 +501,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "ha_period_karma",		0, NULL },
 	{ "predicted_time_costs",	0, NULL },
 	{ "persistent_connections_limit",	0, NULL },
+	{ "ondisk_attrs_default",	0, NULL },
 	{ NULL,						0, NULL }
 };
 

@@ -3255,6 +3255,9 @@ public:
 	/// relock shared RAM (only on daemonization)
 	virtual bool				Mlock () = 0;
 
+	/// keep attributes on disk and map them via file memory mapping
+	virtual void				SetEnableOndiskAttributes ( bool ) {}
+
 	/// called when index is loaded and prepared to work
 	virtual void				PostSetup() = 0;
 

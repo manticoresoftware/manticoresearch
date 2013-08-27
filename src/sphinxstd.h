@@ -2200,21 +2200,87 @@ protected:
 // parent process for forked children
 extern bool g_bHeadProcess;
 void sphWarn ( const char *, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) );
+void SafeClose ( int & iFD );
+
+/// open file for reading
+int				sphOpenFile ( const char * sFile, CSphString & sError );
+
+/// return size of file descriptor
+int64_t			sphGetFileSize ( int iFD, CSphString & sError );
+
+
+/// buffer trait that neither own buffer nor clean-up it on destroy
+template < typename T >
+class CSphBufferTrait : public ISphNoncopyable
+{
+public:
+	/// ctor
+	CSphBufferTrait ()
+		: m_pData ( NULL )
+		, m_iCount ( 0 )
+	{ }
+
+	/// dtor
+	virtual ~CSphBufferTrait () {}
+
+	/// accessor
+	inline const T & operator [] ( int64_t iIndex ) const
+	{
+		assert ( iIndex>=0 && iIndex<m_iCount );
+		return m_pData[iIndex];
+	}
+
+	/// get write address
+	T * GetWritePtr () const
+	{
+		return m_pData;
+	}
+
+	/// check if i'm empty
+	bool IsEmpty () const
+	{
+		return ( m_pData==NULL );
+	}
+
+	/// get length in bytes
+	size_t GetLengthBytes () const
+	{
+		return sizeof(T) * (size_t)m_iCount;
+	}
+
+	/// get length in entries
+	int64_t GetNumEntries () const
+	{
+		return m_iCount;
+	}
+
+	void Set ( T * pData, int64_t iCount )
+	{
+		m_pData = pData;
+		m_iCount = iCount;
+	}
+
+protected:
+	T *			m_pData;
+	int64_t		m_iCount;
+};
+
+
+//////////////////////////////////////////////////////////////////////////
 
 /// in-memory buffer shared between processes
-template < typename T > class CSphSharedBuffer
+template < typename T >
+class CSphSharedBuffer : public CSphBufferTrait < T >
 {
 public:
 	/// ctor
 	CSphSharedBuffer ()
-		: m_pData ( NULL )
-		, m_iLength ( 0 )
-		, m_iEntries ( 0 )
-		, m_bMlock ( false )
-	{}
+	{
+		m_bMlock = false;
+	}
 
 	/// dtor
-	~CSphSharedBuffer ()
+	virtual ~CSphSharedBuffer ()
 	{
 		Reset ();
 	}
@@ -2233,46 +2299,44 @@ public:
 	bool Alloc ( int64_t iEntries, CSphString & sError, CSphString & sWarning )
 #endif
 	{
-		assert ( !m_pData );
+		assert ( !this->GetWritePtr() );
 
 		int64_t uCheck = sizeof(T);
 		uCheck *= iEntries;
 
-		m_iLength = (size_t)uCheck;
-		if ( uCheck!=(int64_t)m_iLength )
+		int64_t iLength = (size_t)uCheck;
+		if ( uCheck!=iLength )
 		{
 			sError.SetSprintf ( "impossible to mmap() over 4 GB on 32-bit system" );
-			m_iLength = 0;
 			return false;
 		}
 
 #if USE_WINDOWS
-		m_pData = new T [ (size_t)iEntries ];
+		T * pData = new T [ (size_t)iEntries ];
 #else
-		m_pData = (T *) mmap ( NULL, m_iLength, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0 );
-		if ( m_pData==MAP_FAILED )
+		T * pData = (T *) mmap ( NULL, iLength, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0 );
+		if ( pData==MAP_FAILED )
 		{
-			if ( m_iLength>0x7fffffffUL )
+			if ( iLength>(int64_t)0x7fffffffUL )
 				sError.SetSprintf ( "mmap() failed: %s (length="INT64_FMT" is over 2GB, impossible on some 32-bit systems)",
-					strerror(errno), (int64_t)m_iLength );
+					strerror(errno), iLength );
 			else
-				sError.SetSprintf ( "mmap() failed: %s (length="INT64_FMT")", strerror(errno), (int64_t)m_iLength );
-			m_iLength = 0;
+				sError.SetSprintf ( "mmap() failed: %s (length="INT64_FMT")", strerror(errno), iLength );
 			return false;
 		}
 
 		if ( m_bMlock )
-			if ( -1==mlock ( m_pData, m_iLength ) )
+			if ( -1==mlock ( pData, iLength ) )
 				sWarning.SetSprintf ( "mlock() failed: %s", strerror(errno) );
 
 #if SPH_ALLOCS_PROFILER
-		sphMemStatMMapAdd ( m_iLength );
+		sphMemStatMMapAdd ( iLength );
 #endif
 
 #endif // USE_WINDOWS
 
-		assert ( m_pData );
-		m_iEntries = (size_t)iEntries;
+		assert ( pData );
+		this->Set ( pData, iEntries );
 		return true;
 	}
 
@@ -2289,13 +2353,13 @@ public:
 		if ( !m_bMlock )
 			return true;
 
-		if ( mlock ( m_pData, m_iLength )!=-1 )
+		if ( mlock ( this->GetWritePtr(), this->GetLengthBytes() )!=-1 )
 			return true;
 
 		if ( sError.IsEmpty() )
-			sError.SetSprintf ( "%s mlock() failed: bytes="INT64_FMT", error=%s", sPrefix, (int64_t)m_iLength, strerror(errno) );
+			sError.SetSprintf ( "%s mlock() failed: bytes="INT64_FMT", error=%s", sPrefix, (int64_t)this->GetLengthBytes(), strerror(errno) );
 		else
-			sError.SetSprintf ( "%s; %s mlock() failed: bytes="INT64_FMT", error=%s", sError.cstr(), sPrefix, (int64_t)m_iLength, strerror(errno) );
+			sError.SetSprintf ( "%s; %s mlock() failed: bytes="INT64_FMT", error=%s", sError.cstr(), sPrefix, (int64_t)this->GetLengthBytes(), strerror(errno) );
 		return false;
 	}
 #endif
@@ -2304,75 +2368,165 @@ public:
 	/// deallocate storage
 	void Reset ()
 	{
-		if ( !m_pData )
+		if ( !this->GetWritePtr() )
 			return;
 
 #if USE_WINDOWS
-		delete [] m_pData;
+		delete [] this->GetWritePtr();
 #else
 		if ( g_bHeadProcess )
 		{
-			int iRes = munmap ( m_pData, m_iLength );
+			int iRes = munmap ( this->GetWritePtr(), this->GetLengthBytes() );
 			if ( iRes )
 				sphWarn ( "munmap() failed: %s", strerror(errno) );
 
 #if SPH_ALLOCS_PROFILER
-			sphMemStatMMapDel ( m_iLength );
+			sphMemStatMMapDel ( this->GetLengthBytes() );
 #endif
 		}
 #endif // USE_WINDOWS
 
-		m_pData = NULL;
-		m_iLength = 0;
-		m_iEntries = 0;
+		this->Set ( NULL, 0 );
 	}
 
 public:
-	/// accessor
-	inline const T & operator [] ( int64_t iIndex ) const
-	{
-		assert ( iIndex>=0 && iIndex<(int64_t)m_iEntries );
-		return m_pData[iIndex];
-	}
-
-	/// get write address
-	T * GetWritePtr () const
-	{
-		return m_pData;
-	}
-
-	/// check if i'm empty
-	bool IsEmpty () const
-	{
-		return m_pData==NULL;
-	}
-
-	/// get length in bytes
-	size_t GetLength () const
-	{
-		return m_iLength;
-	}
-
-	/// get length in entries
-	size_t GetNumEntries () const
-	{
-		return m_iEntries;
-	}
-
 	void Swap ( CSphSharedBuffer & tBuf )
 	{
-		::Swap ( m_pData, tBuf.m_pData );
-		::Swap ( m_iLength, tBuf.m_iLength );
-		::Swap ( m_iEntries, tBuf.m_iEntries );
+		::Swap ( this->m_pData, tBuf.m_pData );
+		::Swap ( this->m_iCount, tBuf.m_iCount );
 		::Swap ( m_bMlock, tBuf.m_bMlock );
 	}
 
 protected:
-	T *					m_pData;	///< data storage
-	size_t				m_iLength;	///< data length, bytes
-	size_t				m_iEntries;	///< data length, entries
 	bool				m_bMlock;	///< whether to lock data in RAM
 };
+
+
+//////////////////////////////////////////////////////////////////////////
+
+template < typename T >
+class CSphMappedBuffer : public CSphBufferTrait < T >
+{
+public:
+	/// ctor
+	CSphMappedBuffer ()
+	{
+#if USE_WINDOWS
+		m_iFD = INVALID_HANDLE_VALUE;
+#else
+		m_iFD = -1;
+#endif
+	}
+
+	/// dtor
+	virtual ~CSphMappedBuffer ()
+	{
+		Close();
+	}
+
+	bool Setup ( const char * sFile, CSphString & sError )
+	{
+#if USE_WINDOWS
+		assert ( m_iFD==INVALID_HANDLE_VALUE );
+#else
+		assert ( m_iFD==-1 );
+#endif
+		assert ( !this->GetWritePtr() && !this->GetNumEntries() );
+
+		T * pData = NULL;
+		int64_t iCount = 0;
+
+#if USE_WINDOWS
+		HANDLE iFD = CreateFile ( sFile, GENERIC_READ, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0 );
+		if ( iFD==INVALID_HANDLE_VALUE )
+		{
+			sError.SetSprintf ( "failed to open file '%s' (errno %d)", sFile, ::GetLastError() );
+			return false;
+		}
+		m_iFD = iFD;
+
+		LARGE_INTEGER tLen;
+		if ( GetFileSizeEx ( iFD, &tLen )==0 )
+		{
+			sError.SetSprintf ( "failed to fstat file '%s' (errno %d)", sFile, ::GetLastError() );
+			Close();
+			return false;
+		}
+
+		// FIXME!!! report abount tail, ie m_iLen*sizeof(T)!=tLen.QuadPart
+		iCount = tLen.QuadPart / sizeof(T);
+
+		// mmap fails to map zero-size file
+		if ( tLen.QuadPart>0 )
+		{
+			HANDLE hFile = ::CreateFileMapping ( iFD, NULL, PAGE_READONLY, 0, 0, NULL );
+			pData = (T *)::MapViewOfFile ( hFile, FILE_MAP_READ, 0, 0, 0 );
+			if ( !pData )
+			{
+				sError.SetSprintf ( "failed to map file '%s': (errno %d, length="INT64_FMT")", sFile, ::GetLastError(), (int64_t)tLen.QuadPart );
+				Close();
+				return false;
+			}
+		}
+#else
+
+		int iFD = sphOpenFile ( sFile, sError );
+		if ( iFD<0 )
+			return false;
+		m_iFD = iFD;
+
+		int64_t iFileSize = sphGetFileSize ( iFD, sError );
+		if ( iFileSize<0 )
+			return false;
+
+		// FIXME!!! report abount tail, ie m_iLen*sizeof(T)!=st.st_size
+		iCount = iFileSize / sizeof(T);
+
+		// mmap fails to map zero-size file
+		if ( iFileSize>0 )
+		{
+			pData = (T *)mmap ( NULL, iFileSize, PROT_READ, MAP_PRIVATE, iFD, 0 );
+			if ( pData==MAP_FAILED )
+			{
+				sError.SetSprintf ( "failed to mmap file '%s': %s (length="INT64_FMT")", sFile, strerror(errno), iFileSize );
+				Close();
+				return false;
+			}
+		}
+#endif
+
+		this->Set ( pData, iCount );
+		return true;
+	}
+
+	void		Close ()
+	{
+#if USE_WINDOWS
+		if ( this->GetWritePtr() )
+			::UnmapViewOfFile ( this->GetWritePtr() );
+
+		if ( m_iFD!=INVALID_HANDLE_VALUE )
+			::CloseHandle ( m_iFD );
+
+		m_iFD = INVALID_HANDLE_VALUE;
+#else
+		if ( this->GetWritePtr() )
+			::munmap ( this->GetWritePtr(), this->GetLengthBytes() );
+
+		SafeClose ( m_iFD );
+#endif
+
+		this->Set ( NULL, 0 );
+	}
+
+private:
+#if USE_WINDOWS
+	HANDLE		m_iFD;
+#else
+	int			m_iFD;
+#endif
+};
+
 
 //////////////////////////////////////////////////////////////////////////
 

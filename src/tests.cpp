@@ -906,6 +906,7 @@ void TestQueryParser ()
 	sphSetupQueryTokenizer ( pTokenizer.Ptr() );
 
 	CSphDictSettings tDictSettings;
+	tDictSettings.m_bWordDict = false;
 	CSphScopedPtr<CSphDict> pDict ( sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer.Ptr(), "query", sError ) );
 
 	assert ( pTokenizer.Ptr() );
@@ -1030,6 +1031,7 @@ void TestQueryTransforms ()
 
 	CSphString sError;
 	CSphDictSettings tDictSettings;
+	tDictSettings.m_bWordDict = false;
 	CSphScopedPtr<ISphTokenizer> pBase ( sphCreateSBCSTokenizer () );
 	CSphScopedPtr<CSphDict> pDict ( sphCreateDictionaryCRC ( tDictSettings, NULL, pBase.Ptr(), "query", sError ) );
 	assert ( pBase.Ptr() );
@@ -2227,6 +2229,7 @@ void TestRTWeightBoundary ()
 
 		CSphString sError, sWarning;
 		CSphDictSettings tDictSettings;
+		tDictSettings.m_bWordDict = false;
 
 		ISphTokenizer * pTok = sphCreateUTF8Tokenizer();
 		CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "weight", sError );
@@ -2403,6 +2406,7 @@ void TestRTSendVsMerge ()
 
 	CSphString sError, sWarning;
 	CSphDictSettings tDictSettings;
+	tDictSettings.m_bWordDict = false;
 
 	ISphTokenizer * pTok = sphCreateUTF8Tokenizer();
 	CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", sError );

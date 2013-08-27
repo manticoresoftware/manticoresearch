@@ -185,6 +185,7 @@ int main ( int argc, char ** argv )
 
 	CSphString sError;
 	CSphDictSettings tDictSettings;
+	tDictSettings.m_bWordDict = false;
 
 	ISphTokenizer * pTok = sphCreateUTF8Tokenizer();
 	CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt1", sError );

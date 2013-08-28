@@ -6865,10 +6865,25 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 			return -1;
 		}
 
+		// this is a hack
+		// Query parser tries to detect an attribute type. And this is wrong because, we should
+		// take attribute type from schema. Probably we'll rewrite updates in future but
+		// for now this fix just works.
+		// Fixes cases like UPDATE float_attr=1 WHERE id=1;
+		if ( tUpd.m_dTypes[i]==SPH_ATTR_INTEGER && m_tSchema.GetAttr(iIdx).m_eAttrType==SPH_ATTR_FLOAT )
+		{
+			const_cast<CSphAttrUpdate &>(tUpd).m_dTypes[i] = SPH_ATTR_FLOAT;
+			const_cast<CSphAttrUpdate &>(tUpd).m_dPool[i] = sphF2DW ( (float)tUpd.m_dPool[i] );
+		}
+
 		dBigints.Add ( tUpd.m_dTypes[i]==SPH_ATTR_BIGINT );
 		dDoubles.Add ( tUpd.m_dTypes[i]==SPH_ATTR_FLOAT );
-		dValues.Add ( tUpd.m_dTypes[i]==SPH_ATTR_FLOAT ? sphD2QW ( (double)sphDW2F ( tUpd.m_dPool[i] ) )
-			: tUpd.m_dTypes[i]==SPH_ATTR_BIGINT ? MVA_UPSIZE ( &tUpd.m_dPool[i] ) : tUpd.m_dPool[i] );
+		switch ( tUpd.m_dTypes[i] )
+		{
+		case SPH_ATTR_FLOAT:	dValues.Add ( sphD2QW ( (double)sphDW2F ( tUpd.m_dPool[i] ) ) ); break;
+		case SPH_ATTR_BIGINT:	dValues.Add ( MVA_UPSIZE ( &tUpd.m_dPool[i] ) ); break;
+		default:				dValues.Add ( tUpd.m_dPool[i] ); break;
+		}
 
 		// find dupes to optimize
 		ARRAY_FOREACH ( j, dIndexes )

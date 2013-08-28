@@ -938,6 +938,11 @@ public:
 		, m_pArg ( pArg )
 	{}
 
+	~Expr_JsonFieldConv_c()
+	{
+		SafeRelease ( m_pArg );
+	}
+
 	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
 		if ( eCmd==SPH_EXPR_SET_STRING_POOL )

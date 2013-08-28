@@ -51,6 +51,13 @@ index test3 : test1
 	morphology		= stem_en,lemmatize_ru_all
 }
 
+index test4 : test1
+{
+	path			= <data_path/>/test4
+	index_exact_words = 1
+	morphology		= lemmatize_en_all, stem_ru
+}
+
 index testrt1
 {
 	type			= rt
@@ -299,6 +306,12 @@ CREATE TABLE test_table
 <sphinxql>SELECT * FROM stalin_rt WHERE MATCH('стали')</sphinxql>
 <sphinxql>SELECT * FROM stalin_plain WHERE MATCH('стали')</sphinxql>
 <sphinxql>SELECT * FROM stalin_plain WHERE MATCH('стали') ORDER BY id ASC, gid ASC</sphinxql>
+
+<!--regression exact form vs missed lemma -->
+<sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('=english =text') option ranker=sph04;show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight() as my_weight FROM test4 WHERE MATCH('клея') option ranker=sph04;show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight() as my_weight FROM test4 WHERE MATCH('=клея') option ranker=sph04;show meta</sphinxql>
+
 </sphqueries>
 
 </test>

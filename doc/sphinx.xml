@@ -13683,6 +13683,33 @@ predicted_time_costs = doc=128, hit=96, skip=4096, match=128
 </itemizedlist>
 </sect1>
 
+<sect1 id="rel209"><title>Version 2.0.9-release, 26 aug 2013</title>
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+<listitem><para>fixed #1655, special characters like ()?* were not processed correctly by exceptions</para></listitem>
+<listitem><para>fixed #1651, <link linkend="sphinxql-create-function">CREATE FUNCTION</link> can now be used with BIGINT return type</para></listitem>
+<listitem><para>fixed #1649, incorrect warning message (about statistics mismatch) was returned when mixing wildcards and regular keywords</para></listitem>
+<listitem><para>fixed #1603, passing MVA64 arguments to non-MVA functions caused unpredicted behaviour and crashes (now explicitly forbidden)</para></listitem>
+<listitem><para>fixed #1601, negative numbers in <link linkend="expr-func-in">IN()</link> clause caused a syntax error</para></listitem>
+<listitem><para>fixed #1581, <link linkend="conf-dict">dict=keywords</link> and <link linkend="conf-sql-joined-field">sql_joined_field</link> occasionally caused <filename>indexer</filename> to build corrupted indexes</para></listitem>
+<listitem><para>fixed #1546, file descriptor leaked on index rotation (that eventually prevented <filename>searchd</filename> to reload indexes)</para></listitem>
+<listitem><para>fixed #1537, <code>COUNT(*)</code> and <link linkend="conf-compat-sphinxql-magics">compat_sphinxql_magics=0</link> via SphinxAPI caused an incorrect error message</para></listitem>
+<listitem><para>fixed #1531, #1589, several matching and highlighting issues when using both <link linkend="conf-blend-chars">blend_chars</link> and multi-wordforms</para></listitem>
+<listitem><para>fixed #1521, <filename>indextool --check</filename> did not handle empty RT MVA and gave an incorrect warning</para></listitem>
+<listitem><para>fixed #1392, SphinxSE builds with MySQL 5.6 now</para></listitem>
+<listitem><para>fixed #1346, <link linkend="extended-syntax">NEAR</link> handles duplicated keywords properly now</para></listitem>
+<listitem><para>fixed #757, wordforms shared between multiple indexes with different tokenizer settings failed to load (they now load with a warning)</para></listitem>
+<listitem><para>fixed that batch queries did not batch in some cases (because of internal expression alias issues)</para></listitem>
+<listitem><para>fixed that <link linkend="sphinxql-call-keywords">CALL KEYWORDS</link> occasionally gave incorrect error messages</para></listitem>
+<listitem><para>fixed searchd crashes on <link linkend="sphinxql-attach-index">ATTACHing</link> plain indexes with MVAs</para></listitem>
+<listitem><para>fixed several deadlocks and other threading issues</para></listitem>
+<listitem><para>fixed incorrect sorting order with <link linkend="collations">utf8_general_ci</link></para></listitem>
+<listitem><para>fixed that in some cases incorrect attribute values were returned when using expression aliases</para></listitem>
+<listitem><para>optimized <link linkend="xmlpipe2">xmlpipe2</link> indexing</para></listitem>
+<listitem><para>added a warning for missed stopwords, exception, wordforms files on index load and in <filename>indextool --check</filename></para></listitem>
+</itemizedlist>
+</sect1>
+
 <sect1 id="rel208"><title>Version 2.0.8-release, 26 apr 2013</title>
 <bridgehead>Bug fixes</bridgehead>
 <itemizedlist>

@@ -1507,7 +1507,7 @@ public:
 
 	BYTE * GetToken()
 	{
-		m_eTokenMorph = SPH_TOKEN_MORPH_GUESS;
+		m_eTokenMorph = SPH_TOKEN_MORPH_RAW;
 
 		// any pending lemmas left?
 		if ( m_iCurrent>=0 )
@@ -1537,6 +1537,7 @@ public:
 			if ( m_pWordforms && m_pWordforms->m_bHavePostMorphNF )
 				m_pWordforms->ToNormalForm ( m_sToken, false );
 
+			m_eTokenMorph = SPH_TOKEN_MORPH_GUESS;
 			return m_sToken;
 		}
 
@@ -1623,6 +1624,7 @@ public:
 		if ( m_pWordforms && m_pWordforms->m_bHavePostMorphNF )
 			m_pWordforms->ToNormalForm ( pToken, false );
 
+		m_eTokenMorph = SPH_TOKEN_MORPH_GUESS;
 		return pToken;
 	}
 };
@@ -1650,7 +1652,7 @@ public:
 
 	BYTE * GetToken()
 	{
-		m_eTokenMorph = SPH_TOKEN_MORPH_GUESS;
+		m_eTokenMorph = SPH_TOKEN_MORPH_RAW;
 
 		// any pending lemmas left?
 		if ( m_iCurrent>=0 )
@@ -1680,6 +1682,7 @@ public:
 			if ( m_pWordforms && m_pWordforms->m_bHavePostMorphNF )
 				m_pWordforms->ToNormalForm ( m_sToken, false );
 
+			m_eTokenMorph = SPH_TOKEN_MORPH_GUESS;
 			return m_sToken;
 		}
 
@@ -1767,6 +1770,7 @@ public:
 		if ( m_pWordforms && m_pWordforms->m_bHavePostMorphNF )
 			m_pWordforms->ToNormalForm ( pToken, false );
 
+		m_eTokenMorph = SPH_TOKEN_MORPH_GUESS;
 		return pToken;
 	}
 };

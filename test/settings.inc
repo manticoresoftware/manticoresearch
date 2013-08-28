@@ -147,6 +147,16 @@ function PublishLocals ( $locals, $benchmark )
 	}
 	
 	$text = @file_get_contents ( getenv('HOME') . '/.sphinx' );
+	if ( !$text )
+	{
+		$path = '';
+		if ( $windows )
+			$path = $benchmark ? '..\\bin\\release\\' : '..\\bin\\debug\\';
+		else
+			$path = '../src/';
+	
+		$text = @file_get_contents ( $path . '/.sphinx' );
+	}
 	if ( $text )
 	{
 		eval('$init = array ' . $text . ';');

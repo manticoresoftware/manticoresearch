@@ -15,11 +15,11 @@ perl -npe "s/\(size_t\) num_to_read/num_to_read/" -i.bak llsphinxjson.c
 patch -s -p0 -i yysphinxql.patch
 
 # fix buffer overflows in generated files
-for f in yysphinx*.c
-do
-	echo $f
-	sed -i 's/(yycheck\[yyx + yyn\]/(yyx+yyn<int(sizeof(yycheck)\/sizeof(yycheck\[0\])) \&\& yycheck\[yyx + yyn\]/g' $f
-done
+perl -npe "s/if \(yycheck/if \(yyx\+yyn<int\(sizeof\(yycheck\)\/sizeof\(yycheck\[0\]\)\) && yycheck/" -i.bak yysphinxexpr.c
+perl -npe "s/if \(yycheck/if \(yyx\+yyn<int\(sizeof\(yycheck\)\/sizeof\(yycheck\[0\]\)\) && yycheck/" -i.bak yysphinxselect.c
+perl -npe "s/if \(yycheck/if \(yyx\+yyn<int\(sizeof\(yycheck\)\/sizeof\(yycheck\[0\]\)\) && yycheck/" -i.bak yysphinxquery.c
+perl -npe "s/if \(yycheck/if \(yyx\+yyn<int\(sizeof\(yycheck\)\/sizeof\(yycheck\[0\]\)\) && yycheck/" -i.bak yysphinxql.c
+perl -npe "s/if \(yycheck/if \(yyx\+yyn<int\(sizeof\(yycheck\)\/sizeof\(yycheck\[0\]\)\) && yycheck/" -i.bak yysphinxjson.c
 
 del /q *.bak 2>nul
 del /q yysphinxql.c.orig 2>nul

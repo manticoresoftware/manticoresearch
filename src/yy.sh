@@ -14,5 +14,12 @@ perl -npe "s/(#include <unistd.h>)/#if !USE_WINDOWS\n\1\n#endif/;s/\(size_t\) nu
 perl -npe "s/\(size_t\) num_to_read/num_to_read/" -i.bak llsphinxjson.c
 patch -s -p0 -i yysphinxql.patch
 
+# fix buffer overflows in generated files
+for f in yysphinx*.c
+do
+	echo $f
+	sed -i 's/(yycheck\[yyx + yyn\]/(yyx+yyn<int(sizeof(yycheck)\/sizeof(yycheck\[0\])) \&\& yycheck\[yyx + yyn\]/g' $f
+done
+
 del /q *.bak 2>nul
 del /q yysphinxql.c.orig 2>nul

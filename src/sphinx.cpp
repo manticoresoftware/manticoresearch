@@ -14368,12 +14368,13 @@ static void CopyRowMVA ( const DWORD * pBase, const CSphVector<CSphAttrLocator> 
 
 static const int DOCLIST_HINT_THRESH = 256;
 
-static int DoclistHintUnpack ( int iDocs, BYTE uHint )
+// let uDocs be DWORD here to prevent int overflow in case of hitless word (highest bit is 1)
+static int DoclistHintUnpack ( DWORD uDocs, BYTE uHint )
 {
-	if ( iDocs<DOCLIST_HINT_THRESH )
-		return 8*iDocs;
+	if ( uDocs<DOCLIST_HINT_THRESH )
+		return 8*uDocs;
 	else
-		return 4*iDocs + (int)( int64_t(iDocs)*uHint/64 );
+		return 4*uDocs + (DWORD)( uint64_t(uDocs)*uHint/64 );
 }
 
 BYTE sphDoclistHintPack ( SphOffset_t iDocs, SphOffset_t iLen )

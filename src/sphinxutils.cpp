@@ -502,6 +502,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "predicted_time_costs",	0, NULL },
 	{ "persistent_connections_limit",	0, NULL },
 	{ "ondisk_attrs_default",	0, NULL },
+	{ "shutdown_timeout",		0, NULL },
 	{ NULL,						0, NULL }
 };
 

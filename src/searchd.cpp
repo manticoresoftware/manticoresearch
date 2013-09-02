@@ -258,6 +258,7 @@ static bool				g_bWatchdog			= true;
 static int				g_iExpansionLimit	= 0;
 static bool				g_bOnDiskAttrs		= false;
 static bool				g_bOnDiskPools		= false;
+static int				g_iShutdownTimeout	= 3000000; // default timeout on daemon shutdown and stopwait is 3 seconds
 
 struct Listener_t
 {
@@ -1590,8 +1591,6 @@ void Shutdown ()
 		}
 #endif
 
-		const int iShutWaitPeriod = 3000000;
-
 		if ( g_eWorkers==MPM_THREADS )
 		{
 			// tell flush-rt thread to shutdown, and wait until it does
@@ -1610,8 +1609,8 @@ void Shutdown ()
 			sphThreadJoin ( &g_tOptimizeThread );
 
 			int64_t tmShutStarted = sphMicroTimer();
-			// stop search threads; up to 3 seconds long
-			while ( g_dThd.GetLength() > 0 && ( sphMicroTimer()-tmShutStarted )<iShutWaitPeriod )
+			// stop search threads; up to shutdown_timeout seconds
+			while ( g_dThd.GetLength() > 0 && ( sphMicroTimer()-tmShutStarted )<g_iShutdownTimeout )
 				sphSleepMsec ( 50 );
 
 			g_tThdMutex.Lock();
@@ -1632,8 +1631,8 @@ void Shutdown ()
 			}
 
 			int64_t tmShutStarted = sphMicroTimer();
-			// stop search children; up to 3 seconds long
-			while ( g_dChildren.GetLength()>0 && ( sphMicroTimer()-tmShutStarted )<iShutWaitPeriod )
+			// stop search threads; up to shutdown_timeout seconds
+			while ( g_dChildren.GetLength()>0 && ( sphMicroTimer()-tmShutStarted )<g_iShutdownTimeout )
 			{
 				UpdateAliveChildrenList ( g_dChildren );
 				sphSleepMsec ( 50 );
@@ -20767,6 +20766,13 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	if ( hSearchd("predicted_time_costs") )
 		ParsePredictedTimeCosts ( hSearchd["predicted_time_costs"].cstr() );
 
+	if ( hSearchd("shutdown_timeout") )
+	{
+		int iTimeout = hSearchd.GetInt ( "shutdown_timeout", 0 );
+		if ( iTimeout )
+			g_iShutdownTimeout = iTimeout * 1000000;
+	}
+
 	//////////////////////////////////////////////////
 	// prebuild MySQL wire protocol handshake packets
 	//////////////////////////////////////////////////
@@ -21147,6 +21153,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( iPid<=0 )
 			sphFatal ( "stop: failed to read valid pid from '%s'", sPid );
 
+		int iWaitTimeout = g_iShutdownTimeout + 100000;
+
 #if USE_WINDOWS
 		bool bTerminatedOk = false;
 
@@ -21167,7 +21175,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 					break;
 				}
 
-				if ( !WaitNamedPipe ( szPipeName, 1000 ) )
+				if ( !WaitNamedPipe ( szPipeName, iWaitTimeout/1000 ) )
 				{
 					fprintf ( stdout, "WARNING: could not open pipe (GetLastError()=%d)\n", GetLastError () );
 					break;
@@ -21220,7 +21228,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		bool bHandshake = true;
 		while ( bOptStopWait && fdPipe>=0 )
 		{
-			int iReady = sphPoll ( fdPipe, 500000 );
+			int iReady = sphPoll ( fdPipe, iWaitTimeout );
 
 			// error on wait
 			if ( iReady<0 )

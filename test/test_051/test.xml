@@ -148,6 +148,10 @@ $reply = $client->BuildExcerpts ( $docs, 'exact', $query, $opts );
 $results [] = 'explicit uniq qword weighting';
 $results [] = $reply;
 
+$results [] = $client->BuildExcerpts ( array('=welcome home'), 'exact', '=welcome', array('query_mode'=>1) );
+$results [] = $client->BuildExcerpts ( array('=welcome home'), 'exact', '\=welcome', array('query_mode'=>1) );
+$results [] = $client->BuildExcerpts ( array('=welcome home'), 'exact', '\=welcome', array('query_mode'=>0) );
+
 ]]></custom_test>
 
 </test>

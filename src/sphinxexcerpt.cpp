@@ -27,7 +27,6 @@
 /////////////////////////////////////////////////////////////////////////////
 
 static const int MAX_HIGHLIGHT_WORDS = 256;
-static const int MAX_TOKEN_IDS = 4;
 
 #define UINT32_MASK 0xffffffffUL
 #define UINT16_MASK 0xffff
@@ -353,13 +352,15 @@ void SnippetsDocIndex_c::ParseQuery ( const char * sQuery, ISphTokenizer * pToke
 		while ( ( sWord = pTokenizer->GetToken() )!=NULL && ( m_dTerms.GetLength() + m_dStars.GetLength() )<MAX_HIGHLIGHT_WORDS )
 		{
 			SphWordID_t uWordID = pDict->GetWordID ( sWord );
-			if ( !uWordID )
-				continue;
-
-			if ( sWord[0]=='*' || sWord [ strlen ( (const char*)sWord )-1 ]=='*' )
-				AddWordStar ( (const char *)sWord, pTokenizer->GetLastTokenLen() );
-			else
-				AddWord ( uWordID, pTokenizer->GetLastTokenLen() );
+			if ( uWordID )
+			{
+				if ( sWord[0]=='*' || sWord [ strlen ( (const char*)sWord )-1 ]=='*' )
+					AddWordStar ( (const char *)sWord, pTokenizer->GetLastTokenLen() );
+				else
+					AddWord ( uWordID, pTokenizer->GetLastTokenLen() );
+			}
+			if ( pTokenizer->TokenIsBlended() )
+				pTokenizer->SkipBlended();
 		}
 	} else
 	{
@@ -613,11 +614,6 @@ public:
 
 //////////////////////////////////////////////////////////////////////////
 
-struct TokenInfo_t;
-void CalcBlendedIds ( BYTE * sWord, TokenFunctorTraits_c & tFunctor, SphWordID_t & iBlendID, SphWordID_t & iBlendedExactID );
-void BuildWordIds ( TokenInfo_t & tTok, BYTE * sWord, int iWordLen, TokenFunctorTraits_c & tFunctor, SphWordID_t iBlendID, SphWordID_t iBlendedExactID );
-
-
 struct TokenInfo_t
 {
 	int				m_iStart;
@@ -627,12 +623,8 @@ struct TokenInfo_t
 	bool			m_bWord;
 	bool			m_bStopWord;
 	int				m_iTermIndex;
-	int				m_iBlendedStart;
-	int				m_iBlendedLen;
-	bool			m_bBlendedPart;
 
-	int				m_iNumWordIds;
-	SphWordID_t		m_dWordIds [ MAX_TOKEN_IDS ];
+	SphWordID_t		m_uWordId;
 };
 
 
@@ -653,13 +645,6 @@ private:
 		TYPE_TOTAL
 	};
 	STATIC_ASSERT ( TYPE_TOTAL<=15, OUT_OF_TYPECODES );
-
-	enum
-	{
-		BLEND_NONE = 0,
-		BLEND_CONTINUE,
-		BLEND_START
-	};
 
 public:
 	FunctorZoneInfo_t *		m_pZoneInfo;
@@ -728,8 +713,7 @@ public:
 		m_iLastPos = tTok.m_uPosition;
 
 		if ( iDstart==0 && iDpos==1 && tTok.m_iLen<16
-			&& tTok.m_bWord && !tTok.m_bStopWord && tTok.m_iTermIndex==-1
-			&& !tTok.m_iBlendedLen && !tTok.m_bBlendedPart )
+			&& tTok.m_bWord && !tTok.m_bStopWord && tTok.m_iTermIndex==-1 )
 		{
 			// TOKEN1, most frequent path
 			m_dTokenStream.Add ( (BYTE)( ( TYPE_TOKEN1<<4 ) + tTok.m_iLen ) );
@@ -737,8 +721,7 @@ public:
 		}
 
 		// TOKEN, stupid generic uncompressed path (can optimize with deltas, if needed)
-		BYTE uBlendAction = BYTE ( tTok.m_iBlendedLen ? BLEND_START : ( tTok.m_bBlendedPart ? BLEND_CONTINUE : BLEND_NONE ) );
-		BYTE * p = StoreEntry ( 14 + ( tTok.m_iBlendedLen ? 5 : 0 ) );
+		BYTE * p = StoreEntry ( 13 );
 
 		p[0] = ( TYPE_TOKEN<<4 );
 		sphUnalignedWrite ( p+1, tTok.m_iStart );
@@ -746,12 +729,6 @@ public:
 		sphUnalignedWrite ( p+6, tTok.m_uPosition );
 		p[10] = ( tTok.m_bWord<<1 ) + tTok.m_bStopWord;
 		sphUnalignedWrite ( p+11, (WORD)(tTok.m_iTermIndex+1) );
-		p[13] = uBlendAction;
-		if ( uBlendAction==BLEND_START )
-		{
-			sphUnalignedWrite ( p+14, tTok.m_iBlendedStart );
-			p[18] = BYTE(tTok.m_iBlendedLen);
-		}
 	}
 
 	void StoreSPZ ( BYTE iSPZ, DWORD uPosition, const char *, int iZone )
@@ -783,6 +760,7 @@ public:
 		m_iReadPtr = 1;
 		TokenInfo_t tTok;
 		bool bStop = false;
+		CSphVector<SphWordID_t> dTmp;
 
 		while ( m_iReadPtr < m_dTokenStream.GetLength() )
 		{
@@ -826,27 +804,14 @@ public:
 					tTok.m_bWord = ( p[10] & 2 )!=0;
 					tTok.m_bStopWord = ( p[10] & 1 )!=0;
 					tTok.m_iTermIndex = (int)sphUnalignedRead ( *(WORD*)(p+11) ) - 1;
-					DWORD uBlendAction = p[13];
-					m_iReadPtr += 14;
+					m_iReadPtr += 13;
 
 					m_iLastStart = tTok.m_iStart + tTok.m_iLen;
 					m_iLastPos = tTok.m_uPosition;
 
-					if ( uBlendAction==BLEND_START )
-					{
-						tTok.m_iBlendedStart = sphUnalignedRead ( *(DWORD*)(p+14) );
-						tTok.m_iBlendedLen = p[18];
-						m_iReadPtr += 5;
-					} else
-					{
-						tTok.m_iBlendedStart = 0;
-						tTok.m_iBlendedLen = 0;
-					}
-
 					tTok.m_sWord = NULL;
-					tTok.m_bBlendedPart = uBlendAction==BLEND_CONTINUE;
 
-					bStop = !tFunctor.OnToken ( tTok );
+					bStop = !tFunctor.OnToken ( tTok, dTmp );
 				}
 				break;
 
@@ -861,9 +826,8 @@ public:
 					tTok.m_iTermIndex = -1;
 
 					tTok.m_sWord = NULL;
-					tTok.m_bBlendedPart = false;
 
-					bStop = !tFunctor.OnToken ( tTok );
+					bStop = !tFunctor.OnToken ( tTok, dTmp );
 				}
 				break;
 
@@ -986,21 +950,28 @@ public:
 		m_bCollectExtraZoneInfo = true;
 	}
 
-	bool OnToken ( TokenInfo_t & tTok )
+	bool OnToken ( TokenInfo_t & tTok, const CSphVector<SphWordID_t> & dTokens )
 	{
 		bool bReal = false;
-		for ( int i=0; i<tTok.m_iNumWordIds; i++ )
-			if ( tTok.m_dWordIds[i] )
+		if ( tTok.m_uWordId )
+		{
+			m_tContainer.AddHits ( tTok.m_uWordId, tTok.m_sWord, tTok.m_iLen, tTok.m_uPosition );
+			bReal = true;
+		}
+		ARRAY_FOREACH ( i, dTokens )
+		{
+			if ( dTokens[i] )
 			{
-				m_tContainer.AddHits ( tTok.m_dWordIds[i], tTok.m_sWord, tTok.m_iLen, tTok.m_uPosition );
+				m_tContainer.AddHits ( dTokens[i], tTok.m_sWord, tTok.m_iLen, tTok.m_uPosition );
 				bReal = true;
 			}
+		}
 
 		m_tContainer.m_uLastPos = bReal ? tTok.m_uPosition : m_tContainer.m_uLastPos;
 
-		int iTermIndex = m_tContainer.FindWord ( tTok.m_dWordIds[0], tTok.m_sWord, tTok.m_iLen );
-		for ( int i=1; i<tTok.m_iNumWordIds && iTermIndex==-1; i++ )
-			iTermIndex = m_tContainer.FindWord ( tTok.m_dWordIds[i], NULL, 0 );
+		int iTermIndex = m_tContainer.FindWord ( tTok.m_uWordId, tTok.m_sWord, tTok.m_iLen );
+		ARRAY_FOREACH_COND ( i, dTokens, iTermIndex==-1 )
+			iTermIndex = m_tContainer.FindWord ( dTokens[i], NULL, 0 );
 
 		m_uFoundWords |= iTermIndex==-1 ? 0 : 1 << iTermIndex;
 		tTok.m_iTermIndex = iTermIndex;
@@ -1111,15 +1082,14 @@ public:
 		ResultEmit ( m_pDoc+iStart, iLen );
 	}
 
-	bool OnToken ( TokenInfo_t & tTok )
+	bool OnToken ( TokenInfo_t & tTok, const CSphVector<SphWordID_t> & dTokens )
 	{
 		assert ( m_pDoc );
 		assert ( tTok.m_iStart>=0 && m_pDoc+tTok.m_iStart+tTok.m_iLen<=m_pDocMax );
 
-		bool bMatch = m_tContainer.FindWord ( tTok.m_dWordIds[0], tTok.m_sWord , tTok.m_iLen )!=-1; // the primary one; need this for star matching
-		for ( int i=1; i<tTok.m_iNumWordIds && !bMatch; i++ )
-			if ( m_tContainer.FindWord ( tTok.m_dWordIds[i], NULL, 0 )!=-1 )
-				bMatch = true;
+		bool bMatch = m_tContainer.FindWord ( tTok.m_uWordId, tTok.m_sWord , tTok.m_iLen )!=-1; // the primary one; need this for star matching
+		ARRAY_FOREACH_COND ( i, dTokens, !bMatch )
+			bMatch = ( m_tContainer.FindWord ( dTokens[i], NULL, 0 )!=-1 );
 
 		if ( bMatch )
 		{
@@ -1179,7 +1149,7 @@ public:
 		, m_pHitEnd ( dHits.Begin()+dHits.GetLength() )
 	{}
 
-	bool OnToken ( TokenInfo_t & tTok )
+	bool OnToken ( TokenInfo_t & tTok, const CSphVector<SphWordID_t> & )
 	{
 		assert ( m_pDoc );
 		assert ( tTok.m_iStart>=0 && m_pDoc+tTok.m_iStart+tTok.m_iLen<=m_pDocMax );
@@ -1914,7 +1884,7 @@ public:
 		assert ( !m_bAllowEmpty );
 	}
 
-	bool OnToken ( TokenInfo_t & tTok )
+	bool OnToken ( TokenInfo_t & tTok, const CSphVector<SphWordID_t> & )
 	{
 		CollectStartTokens ( tTok.m_iStart, tTok.m_iLen );
 		return !m_bCollectionStopped;
@@ -1954,7 +1924,7 @@ public:
 	{
 	}
 
-	bool OnToken ( TokenInfo_t & tTok )
+	bool OnToken ( TokenInfo_t & tTok, const CSphVector<SphWordID_t> & dTokens )
 	{
 		assert ( m_pDoc );
 		assert ( tTok.m_iStart>=0 && m_pDoc+tTok.m_iStart+tTok.m_iLen<=m_pDocMax );
@@ -1974,9 +1944,9 @@ public:
 		} else
 		{
 			// no collected hits beforehand
-			iTermIndex = m_tContainer.FindWord ( tTok.m_dWordIds[0], tTok.m_sWord, tTok.m_iLen );
-			for ( int i=1; i<tTok.m_iNumWordIds && iTermIndex==-1; i++ )
-				iTermIndex = m_tContainer.FindWord ( tTok.m_dWordIds[i], NULL, 0 );
+			iTermIndex = m_tContainer.FindWord ( tTok.m_uWordId, tTok.m_sWord, tTok.m_iLen );
+			ARRAY_FOREACH_COND ( i, dTokens, iTermIndex==-1 )
+				iTermIndex = m_tContainer.FindWord ( dTokens[i], NULL, 0 );
 
 			bQWord = iTermIndex!=-1;
 			m_uFoundWords |= iTermIndex==-1 ? 0 : 1 << iTermIndex;
@@ -2407,7 +2377,7 @@ public:
 			m_dPassageHeads.Reserve(1024);
 	}
 
-	bool OnToken ( TokenInfo_t & tTok )
+	bool OnToken ( TokenInfo_t & tTok, const CSphVector<SphWordID_t> & )
 	{
 		assert ( m_pDoc );
 		assert ( tTok.m_iStart>=0 && m_pDoc+tTok.m_iStart+tTok.m_iLen<=m_pDocMax );
@@ -2660,52 +2630,16 @@ static int AddZone ( const char * pStart, const char * pEnd, int uPosition, Toke
 }
 
 
-void BuildWordIds ( TokenInfo_t & tTok, BYTE * sWord, int iWordLen, TokenFunctorTraits_c & tFunctor, SphWordID_t iBlendID, SphWordID_t iBlendedExactID )
+static void CopyString ( BYTE * sDst, const BYTE * sSrc, int iLen )
 {
-	// build wordids vector
-	// (exact form, blended, substrings all yield multiple ids)
-	// TODO! only doing exact currently; add everything else (star) here too
-	tTok.m_iNumWordIds = 1; // index 0 will be fixed up later with "primary" wordid
-
-	if ( tFunctor.m_bHighlightQuery && tFunctor.m_bIndexExactWords )
-	{
-		static BYTE sBuf [ 3*SPH_MAX_WORD_LEN+4 ];
-		int iBytes = Min ( iWordLen, (int)( sizeof(sBuf)-2 ) );
-		memcpy ( sBuf + 1, sWord, iBytes );
-		sBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
-		sBuf[iBytes+1] = '\0';
-		tTok.m_dWordIds [ tTok.m_iNumWordIds++ ] = tFunctor.m_pDict->GetWordIDNonStemmed ( sBuf );
-	}
-
-	if ( iBlendID )
-		tTok.m_dWordIds [ tTok.m_iNumWordIds++ ] = iBlendID;
-
-	if ( iBlendedExactID )
-		tTok.m_dWordIds [ tTok.m_iNumWordIds++ ] = iBlendedExactID;
-
-	// must be last because it can change (stem) sWord
-	tTok.m_dWordIds[0] = tFunctor.m_pDict->GetWordID ( sWord );
-	assert ( tTok.m_iNumWordIds<=MAX_TOKEN_IDS );
-}
-
-
-void CalcBlendedIds ( BYTE * sWord, TokenFunctorTraits_c & tFunctor, SphWordID_t & iBlendID, SphWordID_t & iBlendedExactID )
-{
-	static BYTE sBuf [ 3*SPH_MAX_WORD_LEN+4 ];
-
-	iBlendID = tFunctor.m_pDict->GetWordID ( sWord );
-	iBlendedExactID = 0;
-
-	if ( tFunctor.m_bHighlightQuery && tFunctor.m_bIndexExactWords )
-	{
-		int iLen = strlen ( (const char *)sWord );
-		if ( iLen+2>(int)sizeof(sBuf) )
-			iLen = (int)sizeof(sBuf)-2;
-		memcpy ( sBuf + 1, sWord, iLen );
-		sBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
-		sBuf[iLen+1] = '\0';
-		iBlendedExactID = tFunctor.m_pDict->GetWordIDNonStemmed ( sBuf );
-	}
+	const int MAX_WORD_BYTES = 3*SPH_MAX_WORD_LEN;
+	int iBackup = ( iLen > MAX_WORD_BYTES ) ? MAX_WORD_BYTES : iLen;
+	int iBackup2 = ( iBackup+3 )>>2;
+	DWORD * d = (DWORD*)sDst;
+	DWORD * s = (DWORD*)sSrc;
+	while ( iBackup2-->0 )
+		*d++ = *s++;
+	sDst[iBackup] = '\0';
 }
 
 
@@ -2721,24 +2655,20 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 	const char * pBufferEnd = pTokenizer->GetBufferEnd();
 	assert ( pStartPtr && pLastTokenEnd );
 
-	BYTE sNonStemmed [ 3*SPH_MAX_WORD_LEN+3];
+	BYTE sNonStemmed [ 3*SPH_MAX_WORD_LEN+4];
 
 	TokenInfo_t tTok;
 	tTok.m_iStart = 0;
 	tTok.m_uPosition = 0;
-	tTok.m_iBlendedStart = 0;
-	tTok.m_iBlendedLen = 0;
 	tTok.m_sWord = sNonStemmed;
 	tTok.m_bStopWord = false;
-	tTok.m_bBlendedPart = false;
 	tTok.m_iTermIndex = -1;
 
 	bool bRetainHtml = tFunctor.m_sStripMode=="retain";
 	BYTE * sWord = NULL;
 	DWORD uPosition = 0;
-	SphWordID_t iBlendID = 0;
-	SphWordID_t iBlendedExactID = 0;
 	const char * pBlendedEnd = NULL;
+	CSphVector<SphWordID_t> dMultiToken;
 
 	CSphVector<int> dZoneStack;
 	CSphVector<char> dZoneName ( 16+3*SPH_MAX_WORD_LEN );
@@ -2749,22 +2679,32 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 
 	while ( ( sWord = pTokenizer->GetToken() )!=NULL )
 	{
+		const char * pTokenStart = pTokenizer->GetTokenStart ();
+
+		if ( pBlendedEnd<pTokenStart )
+			dMultiToken.Resize ( 0 );
+
+		// handle only blended parts
 		if ( pTokenizer->TokenIsBlended() )
 		{
 			if ( pBlendedEnd<pTokenizer->GetTokenEnd() )
 			{
-				CalcBlendedIds ( sWord, tFunctor, iBlendID, iBlendedExactID );
-				pBlendedEnd = pTokenizer->GetTokenEnd();
-				tTok.m_iBlendedLen = pBlendedEnd-pTokenizer->GetTokenStart ();
-				tTok.m_iBlendedStart = pTokenizer->GetTokenStart() - pStartPtr;
+				if ( tFunctor.m_bIndexExactWords && pTokenizer->GetTokenMorph()!=SPH_TOKEN_MORPH_GUESS )
+				{
+					BYTE sTmpBuf [ 3*SPH_MAX_WORD_LEN+4];
+					sTmpBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
+					CopyString ( sTmpBuf+1, sWord, pTokenizer->GetTokenEnd() - pTokenStart );
+					dMultiToken.Add ( tFunctor.m_pDict->GetWordIDNonStemmed ( sTmpBuf ) );
+				}
+				// must be last because it can change (stem) sWord
+				dMultiToken.Add ( tFunctor.m_pDict->GetWordID ( sWord ) );
+				pBlendedEnd = Max ( pBlendedEnd, pTokenizer->GetTokenEnd() );
 			}
 
 			continue;
 		}
 
 		uPosition += pTokenizer->GetOvershortCount();
-
-		const char * pTokenStart = pTokenizer->GetTokenStart ();
 
 		if ( pTokenStart>pLastTokenEnd )
 		{
@@ -2860,26 +2800,20 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 		pLastTokenEnd = pTokenizer->GetTokenEnd ();
 		int iWordLen = pLastTokenEnd - pTokenStart;
 
-		// backup the token
-		// this manual dword copying is quicker than memcpy
-		const int MAX_WORD_BYTES = 3*SPH_MAX_WORD_LEN;
-		int iBackup = ( iWordLen > MAX_WORD_BYTES ) ? MAX_WORD_BYTES : iWordLen;
-		int iBackup2 = ( iBackup+3 )>>2;
-		DWORD * d = (DWORD*)sNonStemmed;
-		DWORD * s = (DWORD*)sWord;
-		while ( iBackup2-->0 )
-			*d++ = *s++;
-		sNonStemmed[iBackup] = '\0';
-
-		if ( !pTokenizer->TokenIsBlendedPart() )
+		bool bPopExactMulti = false;
+		if ( tFunctor.m_bIndexExactWords )
 		{
-			iBlendID = 0;
-			iBlendedExactID = 0;
+			BYTE sTmpBuf [ 3*SPH_MAX_WORD_LEN+4];
+			sTmpBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
+			CopyString ( sTmpBuf+1, sWord, iWordLen );
+			dMultiToken.Add ( tFunctor.m_pDict->GetWordIDNonStemmed ( sTmpBuf ) );
+			bPopExactMulti = true;
 		}
 
-		BuildWordIds ( tTok, sWord, iWordLen, tFunctor, iBlendID, iBlendedExactID );
-
-		SphWordID_t iWord = tTok.m_dWordIds[0];
+		// must be last because it can change (stem) sWord
+		CopyString ( sNonStemmed, sWord, iWordLen );
+		SphWordID_t iWord = tFunctor.m_pDict->GetWordID ( sWord );
+		tTok.m_uWordId = iWord;
 
 		// compute position
 		if ( pTokenizer->GetBoundary() )
@@ -2889,28 +2823,24 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 		if ( !iWord )
 			tTok.m_bStopWord = pDict->IsStopWord ( sWord );
 
-		if ( iWord || tTok.m_bStopWord )
+		if ( ( iWord || tTok.m_bStopWord ) && !pTokenizer->TokenIsBlended() )
 			uPosition += tTok.m_bStopWord ? tFunctor.m_iStopwordStep : 1;
 
 		tTok.m_uPosition = ( iWord || tTok.m_bStopWord ) ? uPosition : 0;
 		tTok.m_iStart = pTokenStart - pStartPtr;
 		tTok.m_iLen = iWordLen;
-		tTok.m_bBlendedPart = pTokenizer->TokenIsBlendedPart();
 		tTok.m_bWord = !!iWord;
 
 		// match & emit
 		// star match needs non-stemmed word
-		if ( !tFunctor.OnToken ( tTok ) )
+		if ( !tFunctor.OnToken ( tTok, dMultiToken ) )
 		{
 			tFunctor.OnFinish();
 			return;
 		}
 
-		if ( tTok.m_iBlendedLen && !pTokenizer->TokenIsBlended() )
-		{
-			tTok.m_iBlendedLen = 0;
-			tTok.m_iBlendedStart = 0;
-		}
+		if ( bPopExactMulti )
+			dMultiToken.Pop();
 	}
 
 	// last space if any
@@ -3153,6 +3083,7 @@ static void DoHighlighting ( const ExcerptQuery_t & tQuerySettings,
 	CSphDict * pDict, ISphTokenizer * pTokenizer, const CSphHTMLStripper * pStripper,
 	CSphString & sWarning, CSphString & sError, ISphTokenizer * pQueryTokenizer, CSphVector<BYTE> & dRes )
 {
+	assert ( !tIndexSettings.m_uAotFilterMask || ( !tQuerySettings.m_bExactPhrase && tQuerySettings.m_bHighlightQuery ) );
 	ExcerptQuery_t tFixedSettings ( tQuerySettings );
 
 	// exact_phrase emulation

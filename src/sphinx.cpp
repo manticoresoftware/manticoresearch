@@ -6080,10 +6080,12 @@ BYTE * CSphTokenizer_UTF8_Base::DoGetToken ()
 				}
 			}
 
+			// keep token end here as BlendAdjust might change m_pCur
+			m_pTokenEnd = m_pCur;
+
 			// return trailing word
 			if_const ( IS_BLEND && !BlendAdjust ( pCur ) )
 				return NULL;
-			m_pTokenEnd = m_pCur;
 			if_const ( IS_BLEND && m_bBlended )
 				return GetBlendedVariant();
 			return m_sAccum;
@@ -18958,7 +18960,7 @@ static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tK
 /// used in lemmatize_ru_all morphology processing mode that can generate multiple guesses
 /// in other modes, there is always exactly one morph guess, and the dictionary handles it
 /// Called from the daemon side (searchd)
-void TransformAotFilter ( XQNode_t * pNode, bool bUtf8, const CSphWordforms * pWordforms, const CSphIndexSettings& tSettings )
+void TransformAotFilter ( XQNode_t * pNode, bool bUtf8, const CSphWordforms * pWordforms, const CSphIndexSettings & tSettings )
 {
 	// case one, regular operator (and empty nodes)
 	ARRAY_FOREACH ( i, pNode->m_dChildren )

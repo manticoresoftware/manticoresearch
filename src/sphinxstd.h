@@ -753,7 +753,7 @@ public:
 	}
 
 	/// ctor with initial size
-	CSphVector ( int iCount )
+	explicit CSphVector ( int iCount )
 		: m_iLength	( 0 )
 		, m_iLimit	( 0 )
 		, m_pData	( NULL )

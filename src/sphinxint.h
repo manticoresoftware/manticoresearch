@@ -1799,15 +1799,13 @@ public:
 		SafeDelete ( m_pQueryTokenizer );
 	}
 
-	static CSphDict * SetupExactDict ( const CSphIndexSettings & tSettings, const ExcerptQuery_t & q,
-		CSphScopedPtr<CSphDict> & tExact, CSphDict * pDict, ISphTokenizer * pTok )
+	static CSphDict * SetupExactDict ( const CSphIndexSettings & tSettings, CSphScopedPtr<CSphDict> & tExact, CSphDict * pDict )
 	{
 		// handle index_exact_words
-		if ( !( q.m_bHighlightQuery && tSettings.m_bIndexExactWords ) )
+		if ( !tSettings.m_bIndexExactWords )
 			return pDict;
 
 		tExact = new CSphDictExact ( pDict );
-		pTok->AddPlainChar ( '=' );
 		return tExact.Ptr();
 	}
 
@@ -1879,16 +1877,45 @@ public:
 		m_pDict = pIndex->GetDictionary();
 		if ( m_pDict->HasState() )
 			m_tDictCloned = m_pDict = m_pDict->Clone();
-		m_tTokenizer = pIndex->GetTokenizer()->Clone ( SPH_CLONE_INDEX ); // OPTIMIZE! do a lightweight indexing clone here
-		m_pQueryTokenizer = pIndex->GetQueryTokenizer()->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT );
+
+		// AOT tokenizer works only with query mode
+		if ( pIndex->GetSettings().m_uAotFilterMask &&
+			( !tSettings.m_bHighlightQuery || tSettings.m_bExactPhrase ) )
+		{
+			if ( !tSettings.m_bHighlightQuery )
+				sError.SetSprintf ( "failed to setup AOT with query_mode=0, use query_mode=1" );
+			else
+				sError.SetSprintf ( "failed to setup AOT with exact_phrase, use phrase search operator with query_mode=1" );
+			return false;
+		}
+
+		// OPTIMIZE! do a lightweight indexing clone here
+		if ( tSettings.m_bHighlightQuery && pIndex->GetSettings().m_uAotFilterMask )
+			m_tTokenizer = sphAotCreateFilter ( pIndex->GetTokenizer()->Clone ( SPH_CLONE_INDEX ), m_pDict, pIndex->GetSettings().m_bIndexExactWords, pIndex->GetSettings().m_uAotFilterMask );
+		else
+			m_tTokenizer = pIndex->GetTokenizer()->Clone ( SPH_CLONE_INDEX );
+
+		m_pQueryTokenizer = NULL;
+		if ( tSettings.m_bHighlightQuery || tSettings.m_bExactPhrase )
+		{
+			m_pQueryTokenizer =	pIndex->GetQueryTokenizer()->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT );
+		} else
+		{
+			// legacy query mode should handle exact form modifier and star wildcard
+			m_pQueryTokenizer = pIndex->GetTokenizer()->Clone ( SPH_CLONE_INDEX );
+			if ( pIndex->IsStarDict() )
+				m_pQueryTokenizer->AddPlainChar ( '*' );
+			if ( pIndex->GetSettings().m_bIndexExactWords )
+				m_pQueryTokenizer->AddPlainChar ( '=' );
+		}
 
 		// setup exact dictionary if needed
-		m_pDict = SetupExactDict ( pIndex->GetSettings(), tSettings, m_tExactDict, m_pDict, m_tTokenizer.Ptr() );
+		m_pDict = SetupExactDict ( pIndex->GetSettings(), m_tExactDict, m_pDict );
 
 		if ( tSettings.m_bHighlightQuery )
 		{
 			// OPTIMIZE? double lightweight clone here? but then again it's lightweight
-			if ( !sphParseExtendedQuery ( m_tExtQuery, tSettings.m_sWords.cstr(), pIndex->GetQueryTokenizer(),
+			if ( !sphParseExtendedQuery ( m_tExtQuery, tSettings.m_sWords.cstr(), m_pQueryTokenizer,
 				&pIndex->GetMatchSchema(), m_pDict, pIndex->GetSettings() ) )
 			{
 				sError = m_tExtQuery.m_sParseError;
@@ -1901,6 +1928,9 @@ public:
 			m_eExtQuerySPZ |= CollectQuerySPZ ( m_tExtQuery.m_pRoot );
 			if ( m_tExtQuery.m_dZones.GetLength() )
 				m_eExtQuerySPZ |= SPH_SPZ_ZONE;
+
+			if ( pIndex->GetSettings().m_uAotFilterMask )
+				TransformAotFilter ( m_tExtQuery.m_pRoot, m_pQueryTokenizer->IsUtf8(), m_pDict->GetWordforms(), pIndex->GetSettings() );
 		}
 
 		bool bSetupSPZ = ( tSettings.m_ePassageSPZ!=SPH_SPZ_NONE || m_eExtQuerySPZ!=SPH_SPZ_NONE ||

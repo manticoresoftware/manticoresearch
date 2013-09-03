@@ -129,6 +129,11 @@ index aot_exact
 	<index>testrt2red</index>
 </metaindex>
 
+<metaindex name='META:aot'>
+	<index>aot_plain</index>
+	<index>aot_exact</index>
+</metaindex>
+
 <db_create>
 CREATE TABLE test_table
 (
@@ -175,20 +180,13 @@ CREATE TABLE test_table
 <sphinxql>SELECT * FROM META:all WHERE MATCH('knew markierte'); SHOW META</sphinxql>
 
 <!-- regressoin aot lemmas at excerpt -->
-<sphinxql>CALL SNIPPETS ('молоко такое же молока и так же молоком но не ком', 'aot_plain', 'молоком', 1 as query_mode)</sphinxql>
-<sphinxql>CALL SNIPPETS ('молоко такое же молока и так же молоком но не ком', 'aot_exact', 'молоком', 1 as query_mode)</sphinxql>
-<sphinxql>CALL SNIPPETS ('молоко такое же молока и так же молоком но не ком', 'aot_plain', '=молоком', 1 as query_mode)</sphinxql>
-<sphinxql>CALL SNIPPETS ('молоко такое же молока и так же молоком но не ком', 'aot_exact', '=молоком', 1 as query_mode)</sphinxql>
-<sphinxql>CALL SNIPPETS ('молоко такое же молока и так же молоком но не ком', 'aot_plain', 'молоко', 1 as query_mode)</sphinxql>
-<sphinxql>CALL SNIPPETS ('молоко такое же молока и так же молоком но не ком', 'aot_exact', 'молоко', 1 as query_mode)</sphinxql>
-<sphinxql>CALL SNIPPETS ('молоко такое же молока и так же молоком но не ком', 'aot_plain', '=молоко', 1 as query_mode)</sphinxql>
-<sphinxql>CALL SNIPPETS ('молоко такое же молока и так же молоком но не ком', 'aot_exact', '=молоко', 1 as query_mode)</sphinxql>
-<sphinxql>CALL SNIPPETS ('молоко такое же молока и так же молоком но не ком', 'aot_plain', '=молока', 1 as query_mode)</sphinxql>
-<sphinxql>CALL SNIPPETS ('молоко такое же молока и так же молоком но не ком', 'aot_exact', '=молока', 1 as query_mode)</sphinxql>
-<sphinxql>CALL SNIPPETS ('молочная ферма', 'aot_plain', 'молок*', 1 as query_mode)</sphinxql>
-<sphinxql>CALL SNIPPETS ('молочная ферма', 'aot_exact', 'молок*', 1 as query_mode)</sphinxql>
-<sphinxql>CALL SNIPPETS ('молоко такое же молока и так же молоком но не ком', 'aot_plain', 'мол*', 1 as query_mode)</sphinxql>
-<sphinxql>CALL SNIPPETS ('молоко такое же молока и так же молоком но не ком', 'aot_exact', 'мол*', 1 as query_mode)</sphinxql>
+<sphinxql>CALL SNIPPETS ('молоко такое же молока и так же молоком но не ком', 'META:aot', 'молоком', 1 as query_mode)</sphinxql>
+<sphinxql>CALL SNIPPETS ('молоко такое же молока и так же молоком но не ком', 'META:aot', '=молоком', 1 as query_mode)</sphinxql>
+<sphinxql>CALL SNIPPETS ('молоко такое же молока и так же молоком но не ком', 'META:aot', 'молоко', 1 as query_mode)</sphinxql>
+<sphinxql>CALL SNIPPETS ('молоко такое же молока и так же молоком но не ком', 'META:aot', '=молоко', 1 as query_mode)</sphinxql>
+<sphinxql>CALL SNIPPETS ('молоко такое же молока и так же молоком но не ком', 'META:aot', '=молока', 1 as query_mode)</sphinxql>
+<sphinxql>CALL SNIPPETS ('молочная ферма', 'META:aot', 'молок*', 1 as query_mode)</sphinxql>
+<sphinxql>CALL SNIPPETS ('молоко такое же молока и так же молоком но не ком', 'META:aot', 'мол*', 1 as query_mode)</sphinxql>
 </sphqueries>
 
 </test>

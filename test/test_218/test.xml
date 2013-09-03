@@ -123,6 +123,7 @@ INSERT INTO test_table VALUES
 <sphinxql>select * from test where match('aaa-bbb')</sphinxql>
 <sphinxql>select * from test where match('msgCnt')</sphinxql>
 <sphinxql>select * from test where match('今天的心情')</sphinxql>
+<sphinxql>select * from test where match('@content 則')</sphinxql>
 
 <sphinxql>select * from test_xml where match('mix')</sphinxql>
 <sphinxql>select * from test_xml where match('русский')</sphinxql>
@@ -138,6 +139,7 @@ INSERT INTO test_table VALUES
 <sphinxql>select * from test_xml where match('aaa-bbb')</sphinxql>
 <sphinxql>select * from test_xml where match('msgCnt')</sphinxql>
 <sphinxql>select * from test_xml where match('今天的心情')</sphinxql>
+<sphinxql>select * from test_xml where match('@content 則')</sphinxql>
 
 <sphinxql>insert into test2 values(1,'this is some mixed text in english. and some blended aaa-bbb',10 )</sphinxql>
 <sphinxql>insert into test2 values(2,'許多社區長青學苑多開設有書法、插花、土風舞班，',11 )</sphinxql>
@@ -161,6 +163,7 @@ INSERT INTO test_table VALUES
 <sphinxql>select * from test2 where match('aaa-bbb')</sphinxql>
 <sphinxql>select * from test2 where match('msgCnt')</sphinxql>
 <sphinxql>select * from test2 where match('今天的心情')</sphinxql>
+<sphinxql>select * from test2 where match('@title 則')</sphinxql>
 
 <sphinxql>select * from test_stripped where match('msgCnt')</sphinxql>
 <sphinxql>select * from test_stripped where match('今天的心情')</sphinxql>

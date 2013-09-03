@@ -2740,7 +2740,7 @@ public:
 						FillStoredTokenInfo ( tStored, pToken, m_pTokenizer );
 
 						// fixup a couple of fields
-						tStored.m_pBufferPtr = (const char *)tStored.m_sToken;
+						tStored.m_pBufferPtr = m_pTokenizer->GetBufferPtr();
 						tStored.m_szTokenStart = (const char *)tStored.m_sToken;
 						tStored.m_szTokenEnd = (const char *)tStored.m_sToken+iTokenLen;
 
@@ -2925,6 +2925,15 @@ public:
 		return m_pTokenizer->GetTokenEnd();
 	}
 
+	virtual void SetBufferPtr ( const char * sNewPtr )
+	{
+		// we'll handle it as a complete re-tokenization
+		DestroyIteratorRLP ();
+		m_iCurNonChineseToken = 0;
+		m_bNonChineseToken = false;
+		SetBuffer ( (const BYTE*)sNewPtr, strlen ( sNewPtr ) );
+	}
+
 	virtual const char * GetBufferPtr () const
 	{
 		if ( m_bChineseBuffer )
@@ -2936,6 +2945,19 @@ public:
 		}
 
 		return m_pTokenizer->GetBufferPtr();
+	}
+
+	virtual const char * GetBufferEnd () const
+	{
+		if ( m_bChineseBuffer )
+		{
+			if ( m_bNonChineseToken )
+				return m_pTokenizer->GetBufferEnd();
+
+			return (const char*)m_dUTF8Buffer;
+		}
+
+		return m_pTokenizer->GetBufferEnd ();
 	}
 
 	virtual const char * GetRLPContext () const

@@ -368,8 +368,6 @@ int stem_ru_table_i ( LOC_CHAR_TYPE * word, int len, LOC_TABLE_ENTRY * table, LO
 			while ( m-- )
 			{
 				i++;
-				if ( i>=icount ) // avoid buffer overflow
-					return 0;
 				j = table[i].len;
 				k = len;
 				if ( j>k )
@@ -521,7 +519,7 @@ void LOC_PREFIX(stem_ru) ( LOC_CHAR_TYPE * word )
 		break;
 	}
 
-	if ( len>=1 && ( W(1,RUS::IY) || W(1,RUS::I) ) )
+	if ( len && ( W(1,RUS::IY) || W(1,RUS::I) ) )
 		len--;
 
 	if ( len-r2>=3 && XSUFF3 ( RUS::O, RUS::S, RUS::T ) )
@@ -537,7 +535,7 @@ void LOC_PREFIX(stem_ru) ( LOC_CHAR_TYPE * word )
 	if ( len>=2 && XSUFF2 ( RUS::N, RUS::N ) )
 		len--;
 
-	if ( len>=1 && W(1,RUS::MYA) )
+	if ( len && W(1,RUS::MYA) )
 		len--;
 
 	*((unsigned char*)(word+len)) = '\0';

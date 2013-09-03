@@ -93,7 +93,8 @@ source test12
 	sql_query = \
 		SELECT 1, 'путин-то' AS content UNION \
 		SELECT 2, 'путиными' AS content  UNION \
-		SELECT 3, 'путена' AS content
+		SELECT 3, 'путена' AS content UNION \
+		SELECT 4, 'Военно-промышленная комиссия превратилась в авторитетную площадку диалога' AS content
 }
 
 
@@ -171,6 +172,7 @@ index test12
 
 <sphinxql>SELECT * FROM test12 WHERE MATCH('путин')</sphinxql>
 <sphinxql>SELECT * FROM test12 WHERE MATCH('путин-то')</sphinxql>
+<sphinxql>SELECT * FROM test12 WHERE MATCH('"Военно-промышленная комиссия"')</sphinxql>
 </sphqueries>
 
 </test>

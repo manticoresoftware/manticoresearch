@@ -6524,7 +6524,7 @@ int CSphMultiformTokenizer::SkipBlended ()
 	for ( int iTok=m_iStart+1; iTok<m_dStoredTokens.GetLength() && m_dStoredTokens[iTok].m_bBlendedPart && !m_dStoredTokens[iTok].m_bBlended; iTok++ )
 		m_iStart = iTok;
 
-	return ( m_iStart-iWasStart+1 );
+	return m_iStart-iWasStart;
 }
 
 

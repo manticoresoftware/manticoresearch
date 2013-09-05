@@ -34,6 +34,78 @@ index idx
     docinfo			= extern
 }
 
+index rt1
+{
+	type = rt
+	stopwords = <this_test/>/stopwords.txt
+	path			=<data_path/>/rt1
+	stopword_step = 0
+	docinfo = extern
+	morphology = stem_en
+	charset_type = utf-8
+	min_word_len = 1
+	enable_star = 1
+	min_prefix_len = 0
+	rt_attr_uint	= idd
+	rt_field		= text
+	dict = keywords
+}
+
+index rt2
+{
+	type = rt
+	stopwords = <this_test/>/stopwords.txt
+	path			=<data_path/>/rt2
+	stopword_step = 0
+	docinfo = extern
+	morphology = stem_en
+	charset_type = utf-8
+	min_word_len = 1
+	enable_star = 1
+	min_prefix_len = 0
+	rt_attr_uint	= idd
+	rt_field		= text
+	dict = crc
+}
+
+source src1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT id, text, idd FROM stem_table
+	sql_attr_uint	= idd
+}
+
+index i1
+{
+	source			= src1
+	stopwords = <this_test/>/stopwords.txt
+	path			=<data_path/>/i1
+	stopword_step = 0
+	docinfo = extern
+	morphology = stem_en
+	charset_type = utf-8
+	min_word_len = 1
+	enable_star = 1
+	min_prefix_len = 0
+	dict = keywords
+}
+
+index i2
+{
+	source			= src1
+	stopwords = <this_test/>/stopwords.txt
+	path			=<data_path/>/i2
+	stopword_step = 0
+	docinfo = extern
+	morphology = stem_en
+	charset_type = utf-8
+	min_word_len = 1
+	enable_star = 1
+	min_prefix_len = 0
+	dict = crc
+}
+
 </config>
 
 <custom_test><![CDATA[
@@ -74,6 +146,19 @@ $query = create_function ( '$q, $sock','
 	return $results;
 ');
 
+$stop_stem = create_function ( '$q, $sock, $match','
+	$results = array( $q );
+	$results = array_merge ( $results, $q ( "SELECT * FROM rt1 WHERE MATCH ( $match );", $sock ) );
+	$results = array_merge ( $results, $q ( "SHOW META", $sock ) );
+	$results = array_merge ( $results, $q ( "SELECT * FROM rt2 WHERE MATCH ( $match );", $sock ) );
+	$results = array_merge ( $results, $q ( "SHOW META", $sock ) );
+	$results = array_merge ( $results, $q ( "SELECT * FROM i1 WHERE MATCH ( $match );", $sock ) );
+	$results = array_merge ( $results, $q ( "SHOW META", $sock ) );
+	$results = array_merge ( $results, $q ( "SELECT * FROM i2 WHERE MATCH ( $match );", $sock ) );
+	$results = array_merge ( $results, $q ( "SHOW META", $sock ) );
+	return $results;
+');
+
 global $sd_address, $sd_sphinxql_port;
 $sockStr = "$sd_address:$sd_sphinxql_port";
 if ($sd_address == "localhost")
@@ -84,6 +169,10 @@ if ( $sock === false )
 	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
 	return;
 }
+
+$results = array_merge ( $results, $query ( " insert into rt1 values(1,'this is the test', 11), (2,'this is thes test', 22) ", $sock ) );
+$results = array_merge ( $results, $query ( " insert into rt2 values(1,'this is the test', 11), (2,'this is thes test', 22) ", $sock ) );
+$results = array_merge ( $results, $stop_stem ( $query, $sock, " 'the test' " ) );
 
 $results = array_merge ( $results, $query ( "SET GLOBAL @filter1 = ( 101 )", $sock ) );
 @mysql_close($sock);
@@ -118,6 +207,15 @@ for ( $i = 102; $i < 104; $i++)
 		$results[] = sprintf("start.err=%d local=%s client=%s", $startSta, $error, $client->GetLastError());
 	}
 }
+
+$sock = @mysql_connect ($sockStr,'','',	true );
+if ( $sock === false )
+{
+	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+	return;
+}
+$results = array_merge ( $results, $stop_stem ( $query, $sock, " 'the test' " ) );
+
 ]]></custom_test>
 
   <DB_Create>
@@ -139,5 +237,15 @@ INSERT INTO `test_table` (`id`, `text`, `idd`) VALUES
 (3, 'test3', 103 ),
 (4, 'test4', 104 );
   </DB_Insert>
+
+<DB_Create>
+CREATE TABLE `stem_table` (
+  `id` int(11) DEFAULT NULL,
+  `text` varchar (255) NOT NULL,
+  `idd` int(11) DEFAULT NULL
+)
+</DB_Create>
+<DB_Drop>DROP TABLE IF EXISTS `stem_table`</DB_Drop>  
+<DB_Insert>INSERT INTO `stem_table` (`id`, `text`, `idd`) VALUES (1, 'this is the test', 11 ), (2, 'this is thes test', 22 );</DB_Insert>  
   
 </test>

@@ -1445,9 +1445,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 			if ( pIndex->m_bId32to64 )
 				tSettings.m_bCrc32 = true;
 			sphConfDictionary ( hIndex, tSettings );
-			pDict = tSettings.m_bWordDict
-				? sphCreateDictionaryKeywords ( tSettings, NULL, pIndex->GetTokenizer (), pIndex->GetName(), sError )
-				: sphCreateDictionaryCRC ( tSettings, NULL, pIndex->GetTokenizer (), pIndex->GetName(), sError );
+			pDict = sphCreateDictionaryCRC ( tSettings, NULL, pIndex->GetTokenizer (), pIndex->GetName(), sError );
 		}
 		if ( !pDict )
 		{

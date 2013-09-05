@@ -520,6 +520,8 @@ void sphSort ( T * pData, int iCount, U COMP, V ACC )
 		return;
 
 	typedef T * P;
+	// st0 and st1 are stacks with left and right bounds of array-part.
+	// They allow us to avoid recursion in quicksort implementation.
 	P st0[32], st1[32], a, b, i, j;
 	typename V::MEDIAN_TYPE x;
 	int k;
@@ -565,6 +567,8 @@ void sphSort ( T * pData, int iCount, U COMP, V ACC )
 			continue;
 		}
 
+		// ATTENTION! This copy can lead to memleaks if your CopyKey
+		// copies something which is not freed by objects destructor.
 		ACC.CopyKey ( &x, ACC.Add ( a, iLen/2 ) );
 		while ( a<b )
 		{
@@ -582,6 +586,8 @@ void sphSort ( T * pData, int iCount, U COMP, V ACC )
 				}
 			}
 
+			// Not so obvious optimization. We put smaller array-parts
+			// to the top of stack. That reduces peak stack size.
 			if ( ACC.Sub ( j, a )>=ACC.Sub ( b, i ) )
 			{
 				if ( a<j ) { st0[k] = a; st1[k] = j; k++; }

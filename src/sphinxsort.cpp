@@ -3131,7 +3131,7 @@ protected:
 			int iCount = 0;
 			ARRAY_FOREACH ( i, m_dUniq )
 			{
-				if ( i>0 && !( m_dUniq[i-1]==m_dUniq[i] ) )
+				if ( i>0 && m_dUniq[i-1]==m_dUniq[i] )
 					continue;
 				iCount += m_dUniq[i].m_iCount;
 			}

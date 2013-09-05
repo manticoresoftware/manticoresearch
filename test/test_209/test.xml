@@ -117,6 +117,8 @@ index d3
 <sphinxql>SELECT * FROM d3 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
 <sphinxql>SHOW META LIKE '%predict%'</sphinxql>
 <sphinxql>SHOW META LIKE '%fetched%'</sphinxql>
+<sphinxql>SELECT COUNT(*) FROM test</sphinxql>
+<sphinxql>SELECT id id1, COUNT(DISTINCT id1) FROM test</sphinxql>
 </sphqueries>
 
 <db_create>

@@ -909,6 +909,7 @@ private:
 class BinlogReader_c : protected CSphAutoreader
 {
 public:
+					BinlogReader_c ();
 	bool			Open ( const CSphString & sFilename, CSphString & sError )		{ return CSphAutoreader::Open ( sFilename, sError ); }
 	void			Close ()														{ CSphAutoreader::Close(); }
 	SphOffset_t		GetFilesize ()													{ return CSphAutoreader::GetFilesize(); }
@@ -7889,6 +7890,11 @@ void BinlogWriter_c::Fsync ()
 }
 
 //////////////////////////////////////////////////////////////////////////
+
+BinlogReader_c::BinlogReader_c()
+{
+	ResetCrc ();
+}
 
 void BinlogReader_c::ResetCrc ()
 {

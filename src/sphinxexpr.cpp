@@ -85,7 +85,7 @@ struct UdfCall_t
 	UdfFunc_t *			m_pUdf;
 	SPH_UDF_INIT		m_tInit;
 	SPH_UDF_ARGS		m_tArgs;
-	CSphVector<int>		m_dArrgs2Free; // these args should be freed explicitly
+	CSphVector<int>		m_dArgs2Free; // these args should be freed explicitly
 
 	UdfCall_t();
 	~UdfCall_t();
@@ -2497,7 +2497,7 @@ public:
 		tArgs.arg_values = new char * [ tArgs.arg_count ];
 		tArgs.str_lengths = new int [ tArgs.arg_count ];
 
-		m_dArgs2Free = pCall->m_dArrgs2Free;
+		m_dArgs2Free = pCall->m_dArgs2Free;
 		m_dArgvals.Resize ( tArgs.arg_count );
 		ARRAY_FOREACH ( i, m_dArgvals )
 			tArgs.arg_values[i] = (char*) &m_dArgvals[i];
@@ -5065,7 +5065,7 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 				const ExprNode_t & tNode = m_dNodes[iCur];
 				if ( tNode.m_iToken==TOK_FUNC &&
 					( g_dFuncs[tNode.m_iFunc].m_eFunc==FUNC_PACKEDFACTORS || g_dFuncs[tNode.m_iFunc].m_eFunc==FUNC_RANKFACTORS ) )
-					pCall->m_dArrgs2Free.Add ( dArgTypes.GetLength() );
+					pCall->m_dArgs2Free.Add ( dArgTypes.GetLength() );
 				dArgTypes.Add ( tNode.m_eRetType );
 				break;
 			}
@@ -5077,7 +5077,7 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 				assert ( tNode.m_iToken!=',' );
 				if ( tNode.m_iToken==TOK_FUNC &&
 					( g_dFuncs[tNode.m_iFunc].m_eFunc==FUNC_PACKEDFACTORS || g_dFuncs[tNode.m_iFunc].m_eFunc==FUNC_RANKFACTORS ) )
-					pCall->m_dArrgs2Free.Add ( dArgTypes.GetLength() );
+					pCall->m_dArgs2Free.Add ( dArgTypes.GetLength() );
 				dArgTypes.Add ( tNode.m_eRetType );
 			}
 
@@ -5127,8 +5127,8 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 			}
 		}
 
-		ARRAY_FOREACH ( i, pCall->m_dArrgs2Free )
-			pCall->m_dArrgs2Free[i] = tArgs.arg_count - 1 - pCall->m_dArrgs2Free[i];
+		ARRAY_FOREACH ( i, pCall->m_dArgs2Free )
+			pCall->m_dArgs2Free[i] = tArgs.arg_count - 1 - pCall->m_dArgs2Free[i];
 	}
 
 	// init

@@ -5429,10 +5429,16 @@ static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const 
 		const XQLimitSpec_t & s = pNode->m_dSpec;
 		if ( s.m_bFieldSpec && !s.m_dFieldMask.TestAll ( true ) )
 		{
-			tRes.Appendf ( "fields=(" ).ResetSeparator();
+			tRes.Appendf ( "fields=(" );
+			bool bNeedComma = false;
 			ARRAY_FOREACH ( i, tSchema.m_dFields )
 				if ( s.m_dFieldMask.Test(i) )
-					tRes.AppendSeparator ( ", " ).Appendf ( "%s", tSchema.m_dFields[i].m_sName.cstr() );
+				{
+					if ( bNeedComma )
+						tRes.Appendf ( ", " );
+					bNeedComma = true;
+					tRes.Appendf ( "%s", tSchema.m_dFields[i].m_sName.cstr() );
+				}
 			tRes.Appendf ( "), " );
 		}
 
@@ -5441,9 +5447,15 @@ static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const 
 
 		if ( s.m_dZones.GetLength() )
 		{
-			tRes.Appendf ( s.m_bZoneSpan ? "zonespans=(" : "zones=(" ).ResetSeparator();
+			tRes.Appendf ( s.m_bZoneSpan ? "zonespans=(" : "zones=(" );
+			bool bNeedComma = false;
 			ARRAY_FOREACH ( i, s.m_dZones )
-				tRes.AppendSeparator ( ", " ).Appendf ( "%s", dZones [ s.m_dZones[i] ].cstr() );
+			{
+				if ( bNeedComma )
+					tRes.Appendf ( ", " );
+				bNeedComma = true;
+				tRes.Appendf ( "%s", dZones [ s.m_dZones[i] ].cstr() );
+			}
 			tRes.Appendf ( "), " );
 		}
 	}

@@ -1847,7 +1847,6 @@ protected:
 	char *	m_sBuffer;
 	int		m_iSize;
 	int		m_iUsed;
-	bool	m_bFirstSeparator;
 
 public:
 	CSphStringBuilder ()
@@ -1866,7 +1865,6 @@ public:
 		m_iUsed = 0;
 		m_sBuffer = new char [ m_iSize ];
 		m_sBuffer[0] = '\0';
-		m_bFirstSeparator = true;
 	}
 
 	CSphStringBuilder & Appendf ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) )
@@ -1903,19 +1901,6 @@ public:
 		return *this;
 	}
 
-	void ResetSeparator ()
-	{
-		m_bFirstSeparator = true;
-	}
-
-	CSphStringBuilder & AppendSeparator ( const char * sSep )
-	{
-		if ( !m_bFirstSeparator )
-			*this += sSep;
-		m_bFirstSeparator = false;
-		return *this;
-	}
-
 	const char * cstr() const
 	{
 		return m_sBuffer;
@@ -1947,7 +1932,6 @@ public:
 		{
 			m_iUsed = rhs.m_iUsed;
 			m_iSize = rhs.m_iSize;
-			m_bFirstSeparator = rhs.m_bFirstSeparator;
 			SafeDeleteArray ( m_sBuffer );
 			m_sBuffer = new char [ m_iSize ];
 			memcpy ( m_sBuffer, rhs.m_sBuffer, m_iUsed+1 );

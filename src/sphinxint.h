@@ -1201,6 +1201,53 @@ struct SphExtraDataRankerState_t
 };
 
 
+struct MatchSortAccessor_t
+{
+	typedef CSphMatch T;
+	typedef CSphMatch * MEDIAN_TYPE;
+
+	CSphMatch m_tMedian;
+
+	MatchSortAccessor_t () {}
+	MatchSortAccessor_t ( const MatchSortAccessor_t & ) {}
+
+	virtual ~MatchSortAccessor_t()
+	{
+		m_tMedian.m_pDynamic = NULL; // not yours
+	}
+
+	MEDIAN_TYPE Key ( CSphMatch * a ) const
+	{
+		return a;
+	}
+
+	void CopyKey ( MEDIAN_TYPE * pMed, CSphMatch * pVal )
+	{
+		*pMed = &m_tMedian;
+		m_tMedian.m_iDocID = pVal->m_iDocID;
+		m_tMedian.m_iWeight = pVal->m_iWeight;
+		m_tMedian.m_pStatic = pVal->m_pStatic;
+		m_tMedian.m_pDynamic = pVal->m_pDynamic;
+		m_tMedian.m_iTag = pVal->m_iTag;
+	}
+
+	void Swap ( T * a, T * b ) const
+	{
+		::Swap ( *a, *b );
+	}
+
+	T * Add ( T * p, int i ) const
+	{
+		return p+i;
+	}
+
+	int Sub ( T * b, T * a ) const
+	{
+		return (int)(b-a);
+	}
+};
+
+
 //////////////////////////////////////////////////////////////////////////
 // INLINES, MISC
 //////////////////////////////////////////////////////////////////////////

@@ -302,50 +302,17 @@ public:
 
 /// match sorting functor
 template < typename COMP >
-struct MatchSort_fn
+struct MatchSort_fn : public MatchSortAccessor_t
 {
-	typedef CSphMatch MEDIAN_TYPE;
-
 	CSphMatchComparatorState	m_tState;
 
 	explicit MatchSort_fn ( const CSphMatchComparatorState & tState )
 		: m_tState ( tState )
 	{}
 
-	bool IsLess ( const CSphMatch & a, const CSphMatch & b )
+	bool IsLess ( const MEDIAN_TYPE a, const MEDIAN_TYPE b )
 	{
-		return COMP::IsLess ( a, b, m_tState );
-	}
-
-	CSphMatch & Key ( CSphMatch * a ) const
-	{
-		return *a;
-	}
-
-	// Do not deep copy here. It is not only requires more time but furthermore leads to memleaks.
-	// SPH_ATTR_STRINGPTR needs to be freed by FreeStringPtrs(), which ~CSphMatch() does not call.
-	// Refer to the code of sphSort() and look at pivot variable x. It is a potential memleak.
-	void CopyKey ( CSphMatch * pMed, CSphMatch * pVal ) const
-	{
-		pMed->m_iDocID = pVal->m_iDocID;
-		pMed->m_iWeight = pVal->m_iWeight;
-		pMed->m_pStatic = pVal->m_pStatic;
-		pMed->m_pDynamic = pVal->m_pDynamic;
-	}
-
-	void Swap ( CSphMatch * a, CSphMatch * b ) const
-	{
-		::Swap ( *a, *b );
-	}
-
-	CSphMatch * Add ( CSphMatch * p, int i ) const
-	{
-		return p+i;
-	}
-
-	int Sub ( CSphMatch * b, CSphMatch * a ) const
-	{
-		return (int)(b-a);
+		return COMP::IsLess ( *a, *b, m_tState );
 	}
 };
 
@@ -1465,41 +1432,11 @@ public:
 
 /// group sorting functor
 template < typename COMPGROUP >
-struct GroupSorter_fn : public CSphMatchComparatorState, public SphAccessor_T<CSphMatch>
+struct GroupSorter_fn : public CSphMatchComparatorState, public MatchSortAccessor_t
 {
-	typedef CSphMatch MEDIAN_TYPE;
-
-	CSphMatch & Key ( CSphMatch * a )
+	bool IsLess ( const MEDIAN_TYPE a, const MEDIAN_TYPE b ) const
 	{
-		return *a;
-	}
-
-	void CopyKey ( MEDIAN_TYPE * pMed, CSphMatch * pVal ) const
-	{
-		pMed->m_iDocID = pVal->m_iDocID;
-		pMed->m_iWeight = pVal->m_iWeight;
-		pMed->m_pStatic = pVal->m_pStatic;
-		pMed->m_pDynamic = pVal->m_pDynamic;
-	}
-
-	bool IsLess ( const CSphMatch & a, const CSphMatch & b ) const
-	{
-		return COMPGROUP::IsLess ( b, a, *this );
-	}
-
-	void Swap ( CSphMatch * a, CSphMatch * b ) const
-	{
-		::Swap ( *a, *b );
-	}
-
-	CSphMatch * Add ( CSphMatch * p, int i ) const
-	{
-		return p+i;
-	}
-
-	int Sub ( CSphMatch * b, CSphMatch * a ) const
-	{
-		return (int)(b-a);
+		return COMPGROUP::IsLess ( *b, *a, *this );
 	}
 };
 

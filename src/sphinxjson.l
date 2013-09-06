@@ -16,6 +16,7 @@
 
 DIGIT				[0-9]
 ID					[a-zA-Z_][a-zA-Z_0-9]*
+EXPONENT			[eE](\+|-)?{DIGIT}+
 SPACE				[ \t\n\r]
 
 %option noyywrap
@@ -38,7 +39,10 @@ SPACE				[ \t\n\r]
 '([^'\\]|\\.|\\\\)*'	{ STORE_BOUNDS; lvalp->m_eType = JSON_STRING; return TOK_STRING; }
 \"([^"\\]|\\.|\\\\)*\"	{ STORE_BOUNDS; lvalp->m_eType = JSON_STRING; return TOK_STRING; }
 
+-*{DIGIT}+\.{DIGIT}*{EXPONENT}?	{ STORE_BOUNDS; lvalp->m_eType = JSON_DOUBLE; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_FLOAT; }
+-*\.{DIGIT}+{EXPONENT}?	{ STORE_BOUNDS; lvalp->m_eType = JSON_DOUBLE; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_FLOAT; }
 -*{DIGIT}*\.{DIGIT}*	{ STORE_BOUNDS; lvalp->m_eType = JSON_DOUBLE; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_FLOAT; }
+-*{DIGIT}+{EXPONENT}	{ STORE_BOUNDS; lvalp->m_eType = JSON_DOUBLE; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_FLOAT; }
 -*{DIGIT}+				{ STORE_BOUNDS; lvalp->m_eType = JSON_INT64; lvalp->m_iValue = strtoll ( yytext, NULL, 10 ); return TOK_INT; }
 {ID}					{ STORE_BOUNDS; lvalp->m_eType = JSON_STRING; return TOK_IDENT; }
 

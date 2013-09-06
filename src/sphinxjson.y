@@ -76,8 +76,6 @@ value_list:
 			$$.m_eType = JSON_MIXED_VECTOR;
 			$$.m_iHandle = pParser->m_dNodes.GetLength();
 			pParser->m_dNodes.Add().Add($1);
-
-
 		}
 	| value_list ',' value
 		{

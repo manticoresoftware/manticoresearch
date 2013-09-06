@@ -283,7 +283,7 @@ static const unsigned char yyrline[] =
 {
        0,    23,    23,    25,    26,    30,    31,    35,    36,    37,
       38,    39,    40,    41,    42,    47,    51,    59,    70,    74,
-      82
+      80
 };
 #endif
 
@@ -1057,8 +1057,6 @@ yyreduce:
 			yyval.m_eType = JSON_MIXED_VECTOR;
 			yyval.m_iHandle = pParser->m_dNodes.GetLength();
 			pParser->m_dNodes.Add().Add(yyvsp[0]);
-
-
 		;}
     break;
 

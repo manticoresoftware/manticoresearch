@@ -609,7 +609,14 @@ Two'</sphinxql>
 <sphinxql>select * from json_inplace_rt</sphinxql>
 <!-- deadlock regression test -->
 <sphinxql>insert into json_inplace_rt (id, gid, title, j) values (666, 666, '', '{}')</sphinxql>
+<!-- scientific notation -->
+<sphinxql>insert into rt (id, data) values (4, '{"f": 1e-5}')</sphinxql>
+<sphinxql>insert into rt (id, data) values (5, '{"f": 1e5}')</sphinxql>
+<sphinxql>insert into rt (id, data) values (6, '{"f": -1e-5}')</sphinxql>
+<sphinxql>insert into rt (id, data) values (7, '{"f": -1e5}')</sphinxql>
+<sphinxql>insert into rt (id, data) values (8, '{"f": 6.022e+3}')</sphinxql>
+<sphinxql>insert into rt (id, data) values (9, '{"f": 1.4738223E-1}')</sphinxql>
+<sphinxql>select * from rt where id&gt;=4 and id&lt;=9</sphinxql>
 </sphqueries>
-
 </test>
 

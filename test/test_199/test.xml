@@ -147,7 +147,7 @@ $query = create_function ( '$q, $sock','
 ');
 
 $stop_stem = create_function ( '$q, $sock, $match','
-	$results = array( $q );
+	$results = array ();
 	$results = array_merge ( $results, $q ( "SELECT * FROM rt1 WHERE MATCH ( $match );", $sock ) );
 	$results = array_merge ( $results, $q ( "SHOW META", $sock ) );
 	$results = array_merge ( $results, $q ( "SELECT * FROM rt2 WHERE MATCH ( $match );", $sock ) );

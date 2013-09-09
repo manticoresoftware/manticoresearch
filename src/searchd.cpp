@@ -953,7 +953,7 @@ ServedDesc_t::ServedDesc_t ()
 	m_bMlock = false;
 	m_bPreopen = false;
 	m_bOnDiskDict = false;
-	m_bStar = false;
+	m_bStar = true;
 	m_bExpand = false;
 	m_bToDelete = false;
 	m_bOnlyNew = false;
@@ -18365,7 +18365,7 @@ void ConfigureTemplateIndex ( ServedDesc_t & tIdx, const CSphConfigSection & hIn
 {
 	if ( hIndex.Exists ( "enable_star" ) )
 		sphWarning ( "enable_star is deprecated, use its default (enable_star=1) value" );
-	tIdx.m_bStar = ( hIndex.GetInt ( "enable_star", 0 )!=0 );
+	tIdx.m_bStar = ( hIndex.GetInt ( "enable_star", 1 )!=0 );
 	tIdx.m_bExpand = ( hIndex.GetInt ( "expand_keywords", 0 )!=0 );
 }
 

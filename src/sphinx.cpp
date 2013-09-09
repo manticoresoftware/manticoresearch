@@ -9491,7 +9491,7 @@ CSphIndex::CSphIndex ( const char * sIndexName, const char * sFilename )
 	, m_bPreloadWordlist ( true )
 	, m_bBinlog ( true )
 	, m_bStripperInited ( true )
-	, m_bEnableStar ( false )
+	, m_bEnableStar ( true )
 	, m_bId32to64 ( false )
 	, m_pFieldFilter ( NULL )
 	, m_pTokenizer ( NULL )
@@ -13131,7 +13131,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 						char * pData = const_cast<char*>(sData);
 						pData[iLen+1] = '\0';
 
-						dBson.Resize (0);
+						dBson.Resize ( 0 );
 						if ( !sphJsonParse ( dBson, pData, g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase, m_sLastError ) )
 						{
 							m_sLastError.SetSprintf ( "document " DOCID_FMT ", attribute %s: JSON error: %s",

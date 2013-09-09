@@ -930,7 +930,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 
 	bool bInfix = hIndex.GetInt ( "min_infix_len", 0 ) > 0;
 	if ( ( hIndex.GetInt ( "min_prefix_len", 0 ) > 0 || bInfix )
-		&& hIndex.GetInt ( "enable_star" )==0 )
+		&& hIndex.GetInt ( "enable_star", 1 )==0 )
 	{
 		const char * szMorph = hIndex.GetStr ( "morphology", "" );
 		if ( szMorph && *szMorph && strcmp ( szMorph, "none" ) )

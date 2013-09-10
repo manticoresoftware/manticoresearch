@@ -27309,7 +27309,10 @@ bool CSphSource_SQL::IterateMultivaluedNext ()
 			sphDie ( "sql_fetch_row: %s", SqlError() ); // FIXME! this should be reported
 
 		if ( tAttr.m_eSrc!=SPH_ATTRSRC_RANGEDQUERY )
+		{
+			SqlDismissResult();
 			return false;
+		}
 
 		CSphString sTmp;
 		if ( !RunQueryStep ( tAttr.m_sQuery.cstr(), sTmp ) ) // FIXME! this should be reported

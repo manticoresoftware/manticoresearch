@@ -18882,6 +18882,8 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		// index
 		ServedDesc_t tIdx;
 		bool bWordDict = strcmp ( hIndex.GetStr ( "dict", "keywords" ), "keywords" )==0;
+		if ( !bWordDict )
+			sphWarning ( "dict=crc deprecated, use dict=keywords instead" );
 		tIdx.m_pIndex = sphCreateIndexRT ( tSchema, szIndexName, iRamSize, hIndex["path"].cstr(), bWordDict );
 		tIdx.m_bEnabled = false;
 		tIdx.m_sIndexPath = hIndex["path"];

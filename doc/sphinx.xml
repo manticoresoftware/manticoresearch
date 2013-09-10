@@ -9913,6 +9913,7 @@ morphology = stem_en, libstemmer_sv
 <para>
 The keywords dictionary type.
 Known values are 'crc' and 'keywords'.
+'crc' is DEPRECATED. Use 'keywords' instead.
 Optional, default is 'keywords'.
 Introduced in version 2.0.1-beta.
 </para>

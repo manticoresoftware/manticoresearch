@@ -3983,7 +3983,11 @@ void LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings
 
 	tSettings.m_bWordDict = false; // default to crc for old indexes
 	if ( uVersion>=21 )
+	{
 		tSettings.m_bWordDict = ( tReader.GetByte()!=0 );
+		if ( !tSettings.m_bWordDict )
+			sphWarning ( "dict=crc deprecated, use dict=keywords instead" );
+	}
 
 	if ( uVersion>=36 )
 		tSettings.m_bStopwordsUnstemmed = ( tReader.GetByte()!=0 );

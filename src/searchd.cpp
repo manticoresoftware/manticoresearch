@@ -20933,6 +20933,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( !g_bService )
 		fprintf ( stdout, SPHINX_BANNER );
 
+	if ( sizeof(SphDocID_t)==4 )
+		sphWarning ( "32-bit IDs are deprecated, rebuild your binaries with --enable-id64" );
+
 	//////////////////////
 	// parse command line
 	//////////////////////

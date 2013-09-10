@@ -1737,6 +1737,9 @@ int main ( int argc, char ** argv )
 	if ( !g_bQuiet )
 		fprintf ( stdout, SPHINX_BANNER );
 
+	if ( sizeof(SphDocID_t)==4 )
+		sphWarning ( "32-bit IDs are deprecated, rebuild your binaries with --enable-id64" );
+
 	if ( !isatty ( fileno(stdout) ) )
 		g_bProgress = false;
 

@@ -297,6 +297,7 @@ struct Expr_GetZonespanlist_c : public ISphStringExpr
 	CSphString m_sVal;
 	int m_iLen;
 	CSphVector<int> * m_pData;
+	mutable CSphStringBuilder m_sBuilder;
 
 	explicit Expr_GetZonespanlist_c ()
 		: m_iLen ( 0 )
@@ -311,16 +312,16 @@ struct Expr_GetZonespanlist_c : public ISphStringExpr
 			*ppStr = NULL;
 			return 0;
 		}
-		CSphString sValue = "";
+		m_sBuilder.Clear();
 		const int* pValues = &(*m_pData)[tMatch.m_iTag];
 		int iSize = *pValues++;
 		for ( int i=0; i<(iSize/2); ++i )
 		{
-			sValue.SetSprintf ( "%s %d:%d", sValue.cstr(), pValues[0]+1, pValues[1]+1 );
+			m_sBuilder.Appendf ( " %d:%d", pValues[0]+1, pValues[1]+1 );
 			pValues+=2;
 		}
-		*ppStr = (const BYTE *) sValue.Leak();
-		return sValue.Length();
+		*ppStr = (const BYTE *) CSphString ( m_sBuilder.cstr() ).Leak();
+		return m_sBuilder.Length();
 	}
 
 	virtual void Command ( ESphExprCommand eCmd, void * pArg )
@@ -680,6 +681,7 @@ struct Expr_ToString_c : public Expr_Unary_c
 {
 protected:
 	ESphAttr	m_eArg;
+	mutable CSphStringBuilder m_sBuilder;
 
 public:
 	Expr_ToString_c ( ISphExpr * pArg, ESphAttr eArg )
@@ -695,12 +697,12 @@ public:
 
 	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
 	{
-		CSphString sBuf;
+		m_sBuilder.Clear();
 		switch ( m_eArg )
 		{
-			case SPH_ATTR_INTEGER:	sBuf.SetSprintf ( "%u", m_pFirst->IntEval ( tMatch ) ); break;
-			case SPH_ATTR_BIGINT:	sBuf.SetSprintf ( INT64_FMT, m_pFirst->Int64Eval ( tMatch ) ); break;
-			case SPH_ATTR_FLOAT:	sBuf.SetSprintf ( "%f", m_pFirst->Eval ( tMatch ) ); break;
+			case SPH_ATTR_INTEGER:	m_sBuilder.Appendf ( "%u", m_pFirst->IntEval ( tMatch ) ); break;
+			case SPH_ATTR_BIGINT:	m_sBuilder.Appendf ( INT64_FMT, m_pFirst->Int64Eval ( tMatch ) ); break;
+			case SPH_ATTR_FLOAT:	m_sBuilder.Appendf ( "%f", m_pFirst->Eval ( tMatch ) ); break;
 			case SPH_ATTR_UINT32SET:
 			case SPH_ATTR_INT64SET:
 				{
@@ -716,19 +718,17 @@ public:
 					{
 						while ( nValues-- )
 						{
-							if ( sBuf.cstr() )
-								sBuf.SetSprintf ( "%s,%u", sBuf.cstr(), *pValues++ );
-							else
-								sBuf.SetSprintf ( "%u", *pValues++ );
+							if ( m_sBuilder.Length() )
+								m_sBuilder += ",";
+							m_sBuilder.Appendf ( "%u", *pValues++ );
 						}
 					} else
 					{
 						for ( ; nValues; nValues-=2, pValues+=2 )
 						{
-							if ( sBuf.cstr() )
-								sBuf.SetSprintf ( "%s,"INT64_FMT, sBuf.cstr(), MVA_UPSIZE ( pValues ) );
-							else
-								sBuf.SetSprintf ( INT64_FMT, MVA_UPSIZE ( pValues ) );
+							if ( m_sBuilder.Length() )
+								m_sBuilder += ",";
+							m_sBuilder.Appendf ( INT64_FMT, MVA_UPSIZE ( pValues ) );
 						}
 					}
 				}
@@ -737,13 +737,13 @@ public:
 				assert ( 0 && "unhandled arg type in TO_STRING()" );
 				break;
 		}
-		if ( sBuf.IsEmpty() )
+		if ( !m_sBuilder.Length() )
 		{
 			*ppStr = NULL;
 			return 0;
 		}
-		*ppStr = (const BYTE *) sBuf.Leak();
-		return strlen ( (const char*) *ppStr );
+		*ppStr = (const BYTE *) CSphString ( m_sBuilder.cstr() ).Leak();
+		return m_sBuilder.Length();
 	}
 
 	virtual bool IsStringPtr() const
@@ -1075,7 +1075,7 @@ public:
 
 						sBuf.SetBinary ( pRes, iResLen );
 						*ppStr = (const BYTE *) sBuf.Leak();
-						return strlen ( (const char*) *ppStr );
+						return iResLen;
 					}
 				default:
 					return 0;

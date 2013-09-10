@@ -1862,9 +1862,14 @@ public:
 	void Reset ()
 	{
 		m_iSize = 256;
-		m_iUsed = 0;
 		m_sBuffer = new char [ m_iSize ];
+		Clear ();
+	}
+
+	void Clear ()
+	{
 		m_sBuffer[0] = '\0';
+		m_iUsed = 0;
 	}
 
 	CSphStringBuilder & Appendf ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) )
@@ -1939,6 +1944,7 @@ public:
 		return *this;
 	}
 
+	// FIXME? move escaping to another place
 	void AppendEscaped ( const char * sText, bool bEscape=true, bool bFixupSpace=true )
 	{
 		if ( !sText || !*sText )

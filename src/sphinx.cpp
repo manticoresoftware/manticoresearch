@@ -22816,20 +22816,6 @@ struct InfixHashCmp_fn
 };
 
 
-/// is first arg a prefix of second arg
-static inline bool IsPrefix ( const char * a, const char * b )
-{
-	if ( !*a )
-		return false;
-	while ( *a==*b )
-	{
-		a++;
-		b++;
-	}
-	return !*a;
-}
-
-
 static inline int ZippedIntSize ( DWORD v )
 {
 	if ( v < (1UL<<7) )

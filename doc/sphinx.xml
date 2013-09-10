@@ -10399,7 +10399,8 @@ min_word_len = 4
 <sect2 id="conf-charset-type"><title>charset_type</title>
 <para>
 Character set encoding type.
-Optional, default is 'sbcs'.
+Optional, default is 'utf-8'.
+'sbcs' is DEPRECATED. Use 'utf-8' instead.
 Known values are 'sbcs' and 'utf-8'.
 </para>
 <para>

@@ -3850,7 +3850,7 @@ CSphEmbeddedFiles::CSphEmbeddedFiles ()
 
 
 CSphTokenizerSettings::CSphTokenizerSettings ()
-	: m_iType				( TOKENIZER_SBCS )
+	: m_iType				( TOKENIZER_UTF8 )
 	, m_iMinWordLen			( 1 )
 	, m_iNgramLen			( 0 )
 {

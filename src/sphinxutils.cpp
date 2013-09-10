@@ -1082,6 +1082,7 @@ bool sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings 
 
 	} else if ( hIndex["charset_type"]=="sbcs" )
 	{
+		sphWarning ( "charset_type=sbcs is deprecated, use charset_type=utf-8" );
 		tSettings.m_iType = TOKENIZER_SBCS;
 	} else
 	{

@@ -995,7 +995,7 @@ XML elements (tags) recognized by xmlpipe2 (and their attributes where applicabl
         Known attributes are:
         <itemizedlist>
         <listitem><para>"name", specifies the element name that should be treated as an attribute in the subsequent documents.</para></listitem>
-        <listitem><para>"type", specifies the attribute type. Possible values are "int", "timestamp", "str2ordinal", "bool", "float" and "multi".</para></listitem>
+        <listitem><para>"type", specifies the attribute type. Possible values are "int", "timestamp", "str2ordinal", "bool", "float", "multi" and "json".</para></listitem>
         <listitem><para>"bits", specifies the bit size for "int" attribute type. Valid values are 1 to 32.</para></listitem>
         <listitem><para>"default", specifies the default value for this attribute that should be used if the attribute's element is not present in the document.</para></listitem>
         </itemizedlist>
@@ -2462,6 +2462,7 @@ Here's the complete reference list for quick access.
 <listitem><para><link linkend="expr-func-if">IF()</link></para></listitem>
 <listitem><para><link linkend="expr-func-in">IN()</link></para></listitem>
 <listitem><para><link linkend="expr-func-interval">INTERVAL()</link></para></listitem>
+<listitem><para><link linkend="expr-func-length">LENGTH()</link></para></listitem>
 <listitem><para><link linkend="expr-func-ln">LN()</link></para></listitem>
 <listitem><para><link linkend="expr-func-log10">LOG10()</link></para></listitem>
 <listitem><para><link linkend="expr-func-log2">LOG2()</link></para></listitem>
@@ -2909,6 +2910,15 @@ is simply formatted as plain text, which can be used to manually assess the rank
 factors. Note that this feature is not currently supported by the Sphinx API.
 </para>	
 </listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-length">LENGTH()</term>
+<listitem><para>
+LENGTH(attr_mva) function, introduced in version 2.1.2-stable,
+returns amount of elements in MVA set. It works with both 32-bit and
+64-bit MVA attributes.
+</para></listitem>
 </varlistentry>
 	
 </variablelist>
@@ -4399,12 +4409,14 @@ Its general usage is:
 indextool &lt;command&gt; [options]
 </programlisting>
 <para>
-The only currently available option applies to all commands
-and lets you specify the configuration file:
+Options apply to all commands:
 <itemizedlist>
 <listitem><para><option>--config &lt;file&gt;</option> (<option>-c &lt;file&gt;</option> for short)
 overrides the built-in config file names.
 </para></listitem>
+<listitem><para><option>--quiet</option> (<option>-q</option> for short)
+keep indextool quiet - it will not output banner, etc.
+</para>
 </itemizedlist>
 </para>
 <para>
@@ -4451,6 +4463,12 @@ specified as text.
 <listitem><para><option>--dumphitlist INDEXNAME --wordid ID</option> dumps all
 the hits (occurences) of a given keyword in a given index, with keyword
 specified as internal numeric ID.
+</para></listitem>
+<listitem><para><option>--fold INDEXNAME OPTFILE</option>
+This options is useful too see how actually tokenizer proceeds input.
+You can feed indextool with text from file if specified or from stdin otherwise.
+The output will contain spaces instead of separators (accordingly to your
+charset_table settings) and lowercased letters in words.
 </para></listitem>
 <listitem><para><option>--htmlstrip INDEXNAME</option> filters stdin using
 HTML stripper settings for a given index, and prints the filtering
@@ -4547,7 +4565,7 @@ SELECT
     select_expr [, select_expr ...]
     FROM index [, index2 ...]
     [WHERE where_condition]
-    [GROUP BY {col_name | expr_alias}]
+    [GROUP BY {col_name | expr_alias} [, {sol_name | expr_alias}]]
     [WITHIN GROUP ORDER BY {col_name | expr_alias} {ASC | DESC}]
     [ORDER BY {col_name | expr_alias} {ASC | DESC} [, ...]]
     [LIMIT [offset,] row_count]
@@ -4628,10 +4646,17 @@ There must be at most one MATCH() in the clause. Starting with version
 condition syntax is supported. (Refer to <xref linkend="sphinxql-set"/>
 for a discussion of global user variables.)
 </para></listitem>
-<listitem><para>GROUP BY clause. Currently only supports grouping by a single
-column. The column however can be a computed expression:
+<listitem><para>GROUP BY clause. Supports grouping by multiple columns
+or computed expressions:
 <programlisting>
 SELECT *, group_id*1000+article_type AS gkey FROM example GROUP BY gkey
+SELECT id FROM products GROUP BY region, price
+</programlisting>
+Implicit grouping supported when using aggregate functions without
+specifiying a GROUP BY clause. Consider these two queries:
+<programlisting>
+SELECT MAX(id), MIN(id), COUNT(*) FROM books
+SELECT MAX(id), MIN(id), COUNT(*), 1 AS grp FROM books GROUP BY grp
 </programlisting>
 Aggregate functions (AVG(), MIN(), MAX(), SUM()) in column list
 clause are supported. Arguments to aggregate functions can be either
@@ -5709,7 +5734,7 @@ Query OK, 0 rows affected (0.05 sec)
 FLUSH RAMCHUNK rtindex
 </programlisting>
 <para>
-FLUSH RAMCHUNK statement, added in version 2.1.2-beta, forcibly
+FLUSH RAMCHUNK statement, added in version 2.1.2-release, forcibly
 creates a new disk chunk in a RT index.
 </para>
 <para>
@@ -6088,7 +6113,7 @@ Query OK, 0 rows affected (0.00 sec)
 SHOW PLAN
 </programlisting>
 <para>
-SHOW PLAN statement, added in 2.1.2-beta, displays the execution plan
+SHOW PLAN statement, added in 2.1.2-release, displays the execution plan
 of the previous SELECT statment. The plan gets generated and stored
 during the actual execution, so profiling must be enabled in the current
 session <b>before</b> running that statement. That can be done
@@ -8833,6 +8858,7 @@ sql_attr_timestamp = added_ts
 
 <sect2 id="conf-sql-attr-str2ordinal"><title>sql_attr_str2ordinal</title>
 <para>
+Deprecated.
 Ordinal string number <link linkend="attributes">attribute</link> declaration.
 Multi-value (there might be multiple attributes declared), optional.
 Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
@@ -9011,6 +9037,7 @@ sql_attr_json = properties
 
 <sect2 id="conf-sql-attr-str2wordcount"><title>sql_attr_str2wordcount</title>
 <para>
+Deprecated.
 Word-count attribute declaration.
 Multi-value (ie. there may be more than one such attribute declared), optional.
 Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
@@ -9090,6 +9117,7 @@ sql_field_string = title # will be both indexed and stored
 
 <sect2 id="conf-sql-field-str2wordcount"><title>sql_field_str2wordcount</title>
 <para>
+Deprecated.
 Combined word-count attribute and full-text field declaration.
 Multi-value (ie. there may be more than one such attribute declared), optional.
 Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
@@ -9339,6 +9367,7 @@ xmlpipe_attr_timestamp = published
 
 <sect2 id="conf-xmlpipe-attr-str2ordinal"><title>xmlpipe_attr_str2ordinal</title>
 <para>
+Deprecated.
 xmlpipe string ordinal attribute declaration.
 Multi-value, optional.
 Applies to <option>xmlpipe2</option> source type only.
@@ -11702,6 +11731,19 @@ Introduced in version 1.10-beta.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 rt_attr_uint = gid
+</programlisting>
+</sect2>
+
+<sect2 id="conf-rt-attr-bool"><title>rt_attr_bool</title>
+<para>
+Boolean attribute declaration.
+Multi-value (there might be multiple attributes declared), optional.
+Declares a 1-bit unsigned integer attribute.
+Introduced in version 2.1.2-release.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+rt_attr_bool = available
 </programlisting>
 </sect2>
 

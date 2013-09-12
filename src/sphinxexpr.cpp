@@ -3974,7 +3974,7 @@ public:
 			static_cast < CSphVector<int>* > ( pArg )->Add ( m_iLocator );
 	}
 
-	virtual float	Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
+	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
 };
 
 

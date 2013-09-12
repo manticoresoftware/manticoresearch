@@ -3,8 +3,8 @@
 //
 
 //
-// Copyright (c) 2011, Andrew Aksyonoff
-// Copyright (c) 2011, Sphinx Technologies Inc
+// Copyright (c) 2011-2013, Andrew Aksyonoff
+// Copyright (c) 2011-2013, Sphinx Technologies Inc
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify

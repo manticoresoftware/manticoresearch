@@ -635,7 +635,13 @@ private:
 	enum
 	{
 		TYPE_TOKEN1 = 0,	///< 1-byte token (4-bit code, and 4-bit len payload)
+		TYPE_TOKEN2,		///< 2-byte token (4-bit code, and 8-bit len payload)
 		TYPE_OVERLAP1,		///< 1-byte overlap (4-bit code, and 4-bit len payload)
+		TYPE_TOKOVER1,		///< 1-byte token/overlap combo (4-bit code, 4-bit token len (overlap len is always 1))
+		TYPE_TOKOVER2,		///< 1-byte token/overlap combo (4-bit code, 4-bit token len (overlap len is always 2))
+		TYPE_TOKOVER3,		///< 1-byte token/overlap combo (4-bit code, 4-bit token len (overlap len is always 3))
+		TYPE_TOKOVER4,		///< 1-byte token/overlap combo (4-bit code, 4-bit token len (overlap len is always 4))
+		TYPE_TOKOVER5,		///< 1-byte token/overlap combo (4-bit code, 3-bit token len, 1-bit overlap len)
 		TYPE_TOKEN,			///< generic fat token
 		TYPE_OVERLAP,		///< generic fat overlap
 		TYPE_SKIPHTML,
@@ -654,6 +660,7 @@ private:
 	int						m_iReadPtr;
 	int						m_iLastStart;	///< last delta coded token offset, in bytes
 	int						m_iLastPos;		///< last delta coded token number, in tokens
+	int						m_eLastStored;
 
 public:
 	explicit CacheStreamer_c ( int iDocLen )
@@ -661,6 +668,7 @@ public:
 		, m_iReadPtr ( 0 )
 		, m_iLastStart ( 0 )
 		, m_iLastPos ( 0 )
+		, m_eLastStored ( TYPE_TOTAL )
 	{
 		m_dTokenStream.Reserve ( (iDocLen*2)/5 );
 		m_dTokenStream.Add ( 0 );
@@ -674,16 +682,37 @@ public:
 
 	void StoreOverlap ( int iStart, int iLen, int iBoundary )
 	{
-		assert ( iLen<=USHRT_MAX );
+		assert ( iLen>0 && iLen<=USHRT_MAX );
 
 		int iDstart = iStart - m_iLastStart;
 		m_iLastStart = iStart + iLen;
 
 		if ( iDstart==0 && iLen<16 && iBoundary<0 )
 		{
+			// try to store a token+overlap combo
+			if ( m_eLastStored==TYPE_TOKEN1 ) 
+			{
+				int iTokLen = m_dTokenStream.Last() & 15;
+				assert ( iTokLen > 0 );
+
+				if ( iLen<=4 && iTokLen<=16 )
+				{
+					BYTE uType = (BYTE)(TYPE_TOKOVER1+iLen-1);
+					m_dTokenStream.Last() = ( uType<<4 )+ (BYTE)iTokLen-1;
+					m_eLastStored = uType;
+					return;
+				} else if ( iLen>=5 && iLen<=6 && iTokLen<=8 )
+				{
+					m_dTokenStream.Last() = (BYTE)( ( TYPE_TOKOVER5<<4 ) + ( ( iTokLen-1 ) << 1 ) + iLen-5 );
+					m_eLastStored = TYPE_TOKOVER5;
+					return;
+				}
+			}
+
 			// OVERLAP1, most frequent path
 			// delta_start is 0, boundary is -1, length fits in 4 bits, so just 1 byte
 			m_dTokenStream.Add ( (BYTE)( ( TYPE_OVERLAP1<<4 ) + iLen ) );
+			m_eLastStored = TYPE_OVERLAP1;
 			return;
 		}
 
@@ -693,6 +722,7 @@ public:
 		sphUnalignedWrite ( p+1, iStart );
 		sphUnalignedWrite ( p+5, WORD(iLen) );
 		sphUnalignedWrite ( p+7, iBoundary );
+		m_eLastStored = TYPE_OVERLAP;
 	}
 
 	void StoreSkipHtml ( int iStart, int iLen )
@@ -700,11 +730,13 @@ public:
 		m_dTokenStream.Add ( TYPE_SKIPHTML<<4 );
 		ZipInt ( iStart );
 		ZipInt ( iLen );
+		m_eLastStored = TYPE_SKIPHTML;
 	}
 
 	void StoreToken ( const TokenInfo_t & tTok )
 	{
 		assert ( tTok.m_iTermIndex < USHRT_MAX );
+		assert ( tTok.m_iLen <= 255 );
 
 		int iDstart = tTok.m_iStart - m_iLastStart;
 		int iDpos = tTok.m_uPosition - m_iLastPos;
@@ -712,12 +744,22 @@ public:
 		m_iLastStart = tTok.m_iStart + tTok.m_iLen;
 		m_iLastPos = tTok.m_uPosition;
 
-		if ( iDstart==0 && iDpos==1 && tTok.m_iLen<16
-			&& tTok.m_bWord && !tTok.m_bStopWord && tTok.m_iTermIndex==-1 )
+		if ( iDstart==0 && iDpos==1 && tTok.m_bWord && !tTok.m_bStopWord && tTok.m_iTermIndex==-1 )
 		{
-			// TOKEN1, most frequent path
-			m_dTokenStream.Add ( (BYTE)( ( TYPE_TOKEN1<<4 ) + tTok.m_iLen ) );
-			return;
+			if ( tTok.m_iLen<16 )
+			{
+				// TOKEN1, most frequent path
+				m_dTokenStream.Add ( (BYTE)( ( TYPE_TOKEN1<<4 ) + tTok.m_iLen ) );
+				m_eLastStored = TYPE_TOKEN1;
+				return;
+			} else
+			{
+				// TOKEN2, 2nd most frequent path
+				m_dTokenStream.Add ( (BYTE)( TYPE_TOKEN2<<4 ) );
+				m_dTokenStream.Add ( (BYTE) tTok.m_iLen );
+				m_eLastStored = TYPE_TOKEN2;
+				return;
+			}
 		}
 
 		// TOKEN, stupid generic uncompressed path (can optimize with deltas, if needed)
@@ -729,6 +771,7 @@ public:
 		sphUnalignedWrite ( p+6, tTok.m_uPosition );
 		p[10] = ( tTok.m_bWord<<1 ) + tTok.m_bStopWord;
 		sphUnalignedWrite ( p+11, (WORD)(tTok.m_iTermIndex+1) );
+		m_eLastStored = TYPE_TOKEN;
 	}
 
 	void StoreSPZ ( BYTE iSPZ, DWORD uPosition, const char *, int iZone )
@@ -739,6 +782,8 @@ public:
 		ZipInt ( iZone==-1 ? 0 : 1 );
 		if ( iZone!=-1 )
 			ZipInt ( iZone );
+
+		m_eLastStored = TYPE_SPZ;
 	}
 
 	void StoreTail ( int iStart, int iLen, int iBoundary )
@@ -749,6 +794,8 @@ public:
 		ZipInt ( iBoundary==-1 ? 0 : 1 );
 		if ( iBoundary!=-1 )
 			ZipInt ( iBoundary );
+
+		m_eLastStored = TYPE_TAIL;
 	}
 
 	template < typename T >
@@ -828,6 +875,76 @@ public:
 					tTok.m_sWord = NULL;
 
 					bStop = !tFunctor.OnToken ( tTok, dTmp );
+				}
+				break;
+
+			case TYPE_TOKEN2:
+				{
+					tTok.m_iStart = m_iLastStart;
+					tTok.m_iLen = m_dTokenStream [ ++m_iReadPtr ];
+					m_iReadPtr++;
+					m_iLastStart += tTok.m_iLen;
+					tTok.m_uPosition = ++m_iLastPos;
+					tTok.m_bWord = true;
+					tTok.m_bStopWord = false;
+					tTok.m_iTermIndex = -1;
+
+					tTok.m_sWord = NULL;
+
+					bStop = !tFunctor.OnToken ( tTok, dTmp );
+				}
+				break;
+
+			case TYPE_TOKOVER1:
+			case TYPE_TOKOVER2:
+			case TYPE_TOKOVER3:
+			case TYPE_TOKOVER4:
+				{
+					BYTE iStored = m_dTokenStream [ m_iReadPtr++ ];
+					int iLen = ( iStored>>4 ) - TYPE_TOKOVER1 + 1;
+
+					tTok.m_iStart = m_iLastStart;
+					tTok.m_iLen = ( iStored & 15 ) + 1;
+					m_iLastStart += tTok.m_iLen;
+					tTok.m_uPosition = ++m_iLastPos;
+					tTok.m_bWord = true;
+					tTok.m_bStopWord = false;
+					tTok.m_iTermIndex = -1;
+
+					tTok.m_sWord = NULL;
+
+					bStop = !tFunctor.OnToken ( tTok, dTmp );
+
+					if ( bStop )
+						break;
+
+					bStop = !tFunctor.OnOverlap ( m_iLastStart, iLen, -1 );
+					m_iLastStart += iLen;
+				}
+				break;
+
+			case TYPE_TOKOVER5:
+				{
+					BYTE iStored = m_dTokenStream [ m_iReadPtr++ ];
+
+					tTok.m_iStart = m_iLastStart;
+					tTok.m_iLen = ( ( iStored >> 1 ) & 7 ) + 1;
+					m_iLastStart += tTok.m_iLen;
+					tTok.m_uPosition = ++m_iLastPos;
+					tTok.m_bWord = true;
+					tTok.m_bStopWord = false;
+					tTok.m_iTermIndex = -1;
+
+					tTok.m_sWord = NULL;
+
+					bStop = !tFunctor.OnToken ( tTok, dTmp );
+
+					if ( bStop )
+						break;
+
+					int iLen = ( iStored & 1 ) + 5;
+					bStop = !tFunctor.OnOverlap ( m_iLastStart, iLen, -1 );
+					m_iLastStart += iLen;
 				}
 				break;
 

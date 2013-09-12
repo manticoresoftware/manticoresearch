@@ -156,6 +156,11 @@ void localtime_r ( const time_t * clock, struct tm * res )
 {
 	*res = *localtime ( clock );
 }
+
+void gmtime_r ( const time_t * clock, struct tm * res )
+{
+	*res = *gmtime ( clock );
+}
 #endif
 
 // forward decl

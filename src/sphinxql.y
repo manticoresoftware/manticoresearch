@@ -180,6 +180,7 @@ statement:
 	| flush_ramchunk
 	| set_transaction
 	| select_sysvar
+	| select_dual
 	| truncate
 	| optimize_index
 	| alter
@@ -1270,6 +1271,14 @@ select_sysvar:
 sysvar_name:
 	TOK_SYSVAR
 	| TOK_SYSVAR '.' TOK_IDENT
+	;
+
+select_dual:
+	TOK_SELECT expr
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SELECT_DUAL;
+			pParser->ToString ( pParser->m_pStmt->m_tQuery.m_sQuery, $2 );
+		}
 	;
 
 //////////////////////////////////////////////////////////////////////////

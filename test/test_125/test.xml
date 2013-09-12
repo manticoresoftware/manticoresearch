@@ -217,6 +217,8 @@ INSERT INTO cmp_table VALUES
 <sphinxql>SELECT id, log10(mva32) from cmp WHERE id=3</sphinxql>
 <sphinxql>SELECT id, log10(mva64) from cmp WHERE id=3</sphinxql>
 
+<!-- .NET connector uses "select timediff(curtime(),utc_time());" -->
+<sphinxql>SELECT bigint(timediff(curtime(),utc_time())) % 15</sphinxql>
 </sphqueries>
 
 </test>

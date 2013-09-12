@@ -1765,6 +1765,7 @@ const char *		sphArenaInit ( int iMaxBytes );
 
 #if USE_WINDOWS
 void localtime_r ( const time_t * clock, struct tm * res );
+void gmtime_r ( const time_t * clock, struct tm * res );
 #endif
 
 struct InfixBlock_t

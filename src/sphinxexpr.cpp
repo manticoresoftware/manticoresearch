@@ -1111,6 +1111,79 @@ public:
 };
 
 
+struct Expr_Time_c : public ISphExpr
+{
+	bool m_bUTC;
+
+	explicit Expr_Time_c ( bool bUTC )
+		: m_bUTC ( bUTC )
+	{}
+
+	virtual int IntEval ( const CSphMatch & ) const
+	{
+		struct tm s; // can't get non-UTC timestamp without mktime
+		time_t t = time ( NULL );
+		if ( m_bUTC )
+			gmtime_r ( &t, &s );
+		else
+			localtime_r ( &t, &s );
+		return (int) mktime ( &s );
+	}
+
+	virtual int StringEval ( const CSphMatch &, const BYTE ** ppStr ) const
+	{
+		CSphString sVal;
+		struct tm s;
+		time_t t = time ( NULL );
+		if ( m_bUTC )
+			gmtime_r ( &t, &s );
+		else
+			localtime_r ( &t, &s );
+		sVal.SetSprintf ( "%02d:%02d:%02d", s.tm_hour, s.tm_min, s.tm_sec );
+		*ppStr = (const BYTE*) sVal.Leak();
+		return sVal.Length();
+	}
+
+	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)IntEval ( tMatch ); }
+};
+
+
+struct Expr_TimeDiff_c : public ISphExpr
+{
+	ISphExpr * m_pFirst;
+	ISphExpr * m_pSecond;
+
+	Expr_TimeDiff_c ( ISphExpr * pFirst, ISphExpr * pSecond )
+		: m_pFirst ( pFirst )
+		, m_pSecond ( pSecond )
+	{}
+
+	~Expr_TimeDiff_c()
+	{
+		SafeDelete ( m_pFirst );
+		SafeDelete ( m_pSecond );
+	}
+
+	virtual int IntEval ( const CSphMatch & tMatch ) const
+	{
+		return ( m_pFirst && m_pSecond ) ? m_pFirst->IntEval ( tMatch ) - m_pSecond->IntEval ( tMatch ) : 0;
+	}
+
+	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
+	{
+		int iVal = IntEval ( tMatch );
+		CSphString sVal;
+		int t = iVal<0 ? -iVal : iVal;
+		sVal.SetSprintf ( "%s%02d:%02d:%02d", iVal<0 ? "-" : "", t/60/60, (t/60)%60, t%60 );
+		*ppStr = (const BYTE*) sVal.Leak();
+		return sVal.Length();
+	}
+
+	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)IntEval ( tMatch ); }
+};
+
 //////////////////////////////////////////////////////////////////////////
 
 #define FIRST	m_pFirst->Eval(tMatch)
@@ -1360,7 +1433,11 @@ enum Func_e
 	FUNC_LENGTH,
 	FUNC_LEAST,
 	FUNC_GREATEST,
-	FUNC_UINT
+	FUNC_UINT,
+
+	FUNC_CURTIME,
+	FUNC_UTC_TIME,
+	FUNC_TIMEDIFF
 };
 
 
@@ -1426,14 +1503,18 @@ static FuncDesc_t g_dFuncs[] =
 	{ "length",			1,	FUNC_LENGTH,		SPH_ATTR_INTEGER },
 	{ "least",			1,	FUNC_LEAST,			SPH_ATTR_STRINGPTR },
 	{ "greatest",		1,	FUNC_GREATEST,		SPH_ATTR_STRINGPTR },
-	{ "uint",			1,	FUNC_UINT,			SPH_ATTR_INTEGER }
+	{ "uint",			1,	FUNC_UINT,			SPH_ATTR_INTEGER },
+
+	{ "curtime",		0,	FUNC_CURTIME,		SPH_ATTR_STRINGPTR },
+	{ "utc_time",		0,	FUNC_UTC_TIME,		SPH_ATTR_STRINGPTR },
+	{ "timediff",		2,	FUNC_TIMEDIFF,		SPH_ATTR_STRINGPTR }
 };
 
 
 // helper to generate input data for gperf
 // run this, run gperf, that will generate a C program
 // copy dAsso from asso_values in that C source
-// modify iHash calculation according to the hash function in that C source
+// modify iHash switch according to that C source, if needed
 // copy dIndexes from the program output
 #if 0
 int HashGen()
@@ -1470,32 +1551,32 @@ static int FuncHashLookup ( const char * sKey )
 
 	static BYTE dAsso[] =
 	{
-		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
-		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
-		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
-		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
-		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
-		0, 74, 74, 74, 74, 74, 74, 74, 74, 74,
-		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
-		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
-		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
-		74, 74, 74, 74, 74, 10, 74, 0, 15, 20,
-		20, 0, 25, 5, 74, 5, 74, 74, 0, 0,
-		0, 5, 10, 25, 0, 30, 40, 40, 74, 55,
-		15, 0, 5, 74, 74, 74, 74, 74, 74, 74,
-		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
-		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
-		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
-		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
-		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
-		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
-		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
-		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
-		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
-		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
-		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
-		74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
-		74, 74, 74, 74, 74, 74
+		89, 89, 89, 89, 89, 89, 89, 89, 89, 89,
+		89, 89, 89, 89, 89, 89, 89, 89, 89, 89,
+		89, 89, 89, 89, 89, 89, 89, 89, 89, 89,
+		89, 89, 89, 89, 89, 89, 89, 89, 89, 89,
+		89, 89, 89, 89, 89, 89, 89, 89, 89, 89,
+		0, 89, 89, 89, 89, 89, 89, 89, 89, 89,
+		89, 89, 89, 89, 89, 89, 89, 89, 89, 89,
+		89, 89, 89, 89, 89, 89, 89, 89, 89, 89,
+		89, 89, 89, 89, 89, 89, 89, 89, 89, 89,
+		89, 89, 89, 89, 89, 5, 89, 5, 0, 10,
+		55, 15, 0, 10, 89, 0, 89, 89, 10, 0,
+		15, 0, 25, 20, 5, 50, 0, 25, 89, 56,
+		40, 25, 10, 89, 89, 89, 89, 89, 89, 89,
+		89, 89, 89, 89, 89, 89, 89, 89, 89, 89,
+		89, 89, 89, 89, 89, 89, 89, 89, 89, 89,
+		89, 89, 89, 89, 89, 89, 89, 89, 89, 89,
+		89, 89, 89, 89, 89, 89, 89, 89, 89, 89,
+		89, 89, 89, 89, 89, 89, 89, 89, 89, 89,
+		89, 89, 89, 89, 89, 89, 89, 89, 89, 89,
+		89, 89, 89, 89, 89, 89, 89, 89, 89, 89,
+		89, 89, 89, 89, 89, 89, 89, 89, 89, 89,
+		89, 89, 89, 89, 89, 89, 89, 89, 89, 89,
+		89, 89, 89, 89, 89, 89, 89, 89, 89, 89,
+		89, 89, 89, 89, 89, 89, 89, 89, 89, 89,
+		89, 89, 89, 89, 89, 89, 89, 89, 89, 89,
+		89, 89, 89, 89, 89, 89
 	};
 
 	const BYTE * s = (const BYTE*) sKey;
@@ -1509,14 +1590,15 @@ static int FuncHashLookup ( const char * sKey )
 
 	static int dIndexes[] =
 	{
-		-1, -1, 6, -1, 17, 43, 42, 28, 20, 18,
-		16, 37, 19, 44, 7, 8, -1, 30, 21, 33,
-		39, 32, 35, 15, 25, 31, -1, -1, 9, 2,
-		-1, 11, 24, 34, 23, 3, -1, -1, 4, 12,
-		-1, -1, -1, 38, 26, 13, -1, -1, 1, 45,
-		-1, -1, 40, 27, 14, -1, -1, -1, 5, 10,
-		-1, -1, -1, 0, 36, -1, 29, -1, -1, -1,
-		-1, 41, -1, 22
+		-1, -1, 24, -1, -1, 39, 29, -1, 48, 14,
+		-1, -1, -1, -1, 36, 3, 11, 28, 20, -1,
+		16, -1, 40, 27, 7, 8, -1, 6, -1, 2,
+		13, -1, 30, 34, 33, 43, 37, 35, 44, 26,
+		-1, 32, -1, 47, 45, -1, 42, 46, 21, 17,
+		-1, -1, -1, 38, 18, -1, -1, 19, 1, 23,
+		31, -1, -1, 5, 25, -1, -1, -1, 4, 12,
+		-1, -1, -1, -1, 0, -1, -1, -1, -1, 10,
+		-1, -1, -1, 9, 22, -1, 41, -1, 15
 	};
 
 	if ( iHash<0 || iHash>=(int)(sizeof(dIndexes)/sizeof(dIndexes[0])) )
@@ -3317,6 +3399,8 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case FUNC_RANKFACTORS:
 		case FUNC_PACKEDFACTORS:
 		case FUNC_BM25F:
+		case FUNC_CURTIME:
+		case FUNC_UTC_TIME:
 			bSkipLeft = true;
 			bSkipRight = true;
 		default:
@@ -3492,6 +3576,10 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 
 					case FUNC_LEAST:	return CreateAggregateNode ( tNode, SPH_AGGR_MIN, dArgs[0] );
 					case FUNC_GREATEST:	return CreateAggregateNode ( tNode, SPH_AGGR_MAX, dArgs[0] );
+
+					case FUNC_CURTIME:	return new Expr_Time_c ( false ); break;
+					case FUNC_UTC_TIME: return new Expr_Time_c ( true ); break;
+					case FUNC_TIMEDIFF: return new Expr_TimeDiff_c ( dArgs[0], dArgs[1] ); break;
 
 					default: // just make gcc happy
 						break;

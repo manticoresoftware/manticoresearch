@@ -1722,12 +1722,6 @@ struct ExprNode_t
 
 	ExprNode_t () : m_iToken ( 0 ), m_eRetType ( SPH_ATTR_NONE ), m_eArgType ( SPH_ATTR_NONE ),
 		m_iLocator ( -1 ), m_iLeft ( -1 ), m_iRight ( -1 ) {}
-
-	float FloatVal() const
-	{
-		assert ( m_iToken==TOK_CONST_INT || m_iToken==TOK_CONST_FLOAT );
-		return ( m_iToken==TOK_CONST_INT ) ? (float)m_iConst : m_fConst;
-	}
 };
 
 
@@ -1845,7 +1839,7 @@ static int ParseNumeric ( YYSTYPE * lvalp, const char ** ppStr )
 	float fRes = (float) strtod ( *ppStr, &pEnd );
 
 	// try int route
-	int64_t iRes = 0;
+	uint64_t iRes = 0;
 	bool bInt = true;
 	for ( const char * p=(*ppStr); p<pEnd; p++ && bInt )
 	{
@@ -1859,7 +1853,7 @@ static int ParseNumeric ( YYSTYPE * lvalp, const char ** ppStr )
 	*ppStr = pEnd;
 	if ( bInt )
 	{
-		lvalp->iConst = iRes;
+		lvalp->iConst = (int64_t)iRes;
 		return TOK_CONST_INT;
 	} else
 	{
@@ -1924,11 +1918,6 @@ int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp )
 }
 
 
-static inline bool IsDigit ( char c )
-{
-	return c>='0' && c<='9';
-}
-
 /// a lexer of my own
 /// returns token id and fills lvalp on success
 /// returns -1 and fills sError on failure
@@ -1940,7 +1929,7 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 	if ( !*m_pCur ) return 0;
 
 	// check for constant
-	if ( IsDigit ( m_pCur[0] ) )
+	if ( isdigit ( m_pCur[0] ) )
 		return ParseNumeric ( lvalp, &m_pCur );
 
 	// check for field, function, or magic name
@@ -2102,7 +2091,7 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		case '.':
 			{
 				int iBeg = (int)( m_pCur-m_sExpr+1 );
-				bool bDigit = IsDigit ( m_pCur[1] );
+				bool bDigit = isdigit ( m_pCur[1] );
 
 				// handle dots followed by a digit
 				// aka, a float value without leading zero
@@ -2212,37 +2201,6 @@ void ExprParser_t::Optimize ( int iNode )
 	ExprNode_t * pRoot = &m_dNodes[iNode];
 	ExprNode_t * pLeft = ( pRoot->m_iLeft>=0 ) ? &m_dNodes[pRoot->m_iLeft] : NULL;
 	ExprNode_t * pRight = ( pRoot->m_iRight>=0 ) ? &m_dNodes[pRoot->m_iRight] : NULL;
-
-	// unary arithmetic expression with constant
-	if ( IsUnary ( pRoot ) )
-	{
-		assert ( pLeft && !pRight );
-
-		if ( IsConst ( pLeft ) )
-		{
-			if ( pLeft->m_iToken==TOK_CONST_INT )
-			{
-				switch ( pRoot->m_iToken )
-				{
-					case TOK_NEG:	pRoot->m_iConst = -pLeft->m_iConst; break;
-					case TOK_NOT:	pRoot->m_iConst = !pLeft->m_iConst; break;
-					default:		assert ( 0 && "internal error: unhandled arithmetic token during const-int optimization" );
-				}
-
-			} else
-			{
-				switch ( pRoot->m_iToken )
-				{
-					case TOK_NEG:	pRoot->m_fConst = -pLeft->m_fConst; break;
-					case TOK_NOT:	pRoot->m_fConst = !pLeft->m_fConst; break;
-					default:		assert ( 0 && "internal error: unhandled arithmetic token during const-float optimization" );
-				}
-			}
-
-			pRoot->m_iToken = pLeft->m_iToken;
-			pRoot->m_iLeft = -1;
-		}
-	}
 
 	// arithmetic expression with constants
 	if ( IsAri(pRoot) )
@@ -2490,14 +2448,35 @@ void ExprParser_t::Optimize ( int iNode )
 		}
 	}
 
-	// NEG(const)
-	if ( pRoot->m_iToken==TOK_NEG && IsConst(pLeft) )
+	// unary arithmetic expression with constant
+	if ( IsUnary ( pRoot ) )
 	{
-		pRoot->m_iToken = pLeft->m_iToken;
-		if ( pRoot->m_iToken==TOK_CONST_INT )
-			pRoot->m_iConst = -pLeft->m_iConst;
-		else
-			pRoot->m_fConst = -pLeft->m_fConst;
+		assert ( pLeft && !pRight );
+
+		if ( IsConst ( pLeft ) )
+		{
+			if ( pLeft->m_iToken==TOK_CONST_INT )
+			{
+				switch ( pRoot->m_iToken )
+				{
+					case TOK_NEG:	pRoot->m_iConst = -pLeft->m_iConst; break;
+					case TOK_NOT:	pRoot->m_iConst = !pLeft->m_iConst; break;
+					default:		assert ( 0 && "internal error: unhandled arithmetic token during const-int optimization" );
+				}
+
+			} else
+			{
+				switch ( pRoot->m_iToken )
+				{
+					case TOK_NEG:	pRoot->m_fConst = -pLeft->m_fConst; break;
+					case TOK_NOT:	pRoot->m_fConst = !pLeft->m_fConst; break;
+					default:		assert ( 0 && "internal error: unhandled arithmetic token during const-float optimization" );
+				}
+			}
+
+			pRoot->m_iToken = pLeft->m_iToken;
+			pRoot->m_iLeft = -1;
+		}
 	}
 }
 
@@ -2589,10 +2568,6 @@ public:
 	{
 		if ( m_pCall->m_pUdf->m_fnDeinit )
 			m_pCall->m_pUdf->m_fnDeinit ( &m_pCall->m_tInit );
-		SafeDeleteArray ( m_pCall->m_tArgs.arg_names );
-		SafeDeleteArray ( m_pCall->m_tArgs.arg_types );
-		SafeDeleteArray ( m_pCall->m_tArgs.arg_values );
-		SafeDeleteArray ( m_pCall->m_tArgs.str_lengths );
 		SafeDelete ( m_pCall );
 
 		ARRAY_FOREACH ( i, m_dArgs )
@@ -3211,7 +3186,7 @@ public:
 		m_dPoly.Resize ( dNodes.GetLength() );
 
 		ARRAY_FOREACH ( i, dNodes )
-			m_dPoly[i] = pNodes[dNodes[i]].FloatVal();
+			m_dPoly[i] = FloatVal ( &pNodes[dNodes[i]] );
 
 		// handle (huge) geosphere polygons
 		if ( bGeoTesselate )
@@ -4620,7 +4595,7 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 	{
 		float t[4];
 		for ( int i=0; i<4; i++ )
-			t[i] = m_dNodes[dArgs[i]].FloatVal();
+			t[i] = FloatVal ( &m_dNodes[dArgs[i]] );
 		return new Expr_GetConst_c ( fOut*Geodist ( eMethod, bDeg, t[0], t[1], t[2], t[3] ) );
 	}
 
@@ -4639,14 +4614,14 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 			// attr point
 			return new Expr_GeodistAttrConst_c ( GeodistFn ( eMethod, bDeg ), fOut,
 				m_dNodes[dArgs[0]].m_tLocator, m_dNodes[dArgs[1]].m_tLocator,
-				m_dNodes[dArgs[2]].FloatVal(), m_dNodes[dArgs[3]].FloatVal(),
+				FloatVal ( &m_dNodes[dArgs[2]] ), FloatVal ( &m_dNodes[dArgs[3]] ),
 				m_dNodes[dArgs[0]].m_iLocator, m_dNodes[dArgs[1]].m_iLocator );
 		} else
 		{
 			// expr point
 			return new Expr_GeodistConst_c ( GeodistFn ( eMethod, bDeg ), fOut,
 				CreateTree ( dArgs[0] ), CreateTree ( dArgs[1] ),
-				m_dNodes[dArgs[2]].FloatVal(), m_dNodes[dArgs[3]].FloatVal() );
+				FloatVal ( &m_dNodes[dArgs[2]] ), FloatVal ( &m_dNodes[dArgs[3]] ) );
 		}
 	}
 

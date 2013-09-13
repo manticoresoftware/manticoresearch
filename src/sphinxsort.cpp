@@ -3326,87 +3326,6 @@ struct MatchGeneric5_fn : public ISphMatchComparator
 };
 
 //////////////////////////////////////////////////////////////////////////
-
-struct MatchCustom_fn : public ISphMatchComparator
-{
-	virtual bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t ) const
-	{
-		return IsLess ( a, b, t );
-	}
-
-	// setup sorting state
-	static bool SetupAttr ( const ISphSchema & tSchema, CSphMatchComparatorState & tState, CSphString & sError, int iIdx, const char * sAttr )
-	{
-		if ( iIdx>=CSphMatchComparatorState::MAX_ATTRS )
-		{
-			sError.SetSprintf ( "custom sort: too many attributes declared" );
-			return false;
-		}
-
-		int iAttr = tSchema.GetAttrIndex(sAttr);
-		if ( iAttr<0 )
-		{
-			sError.SetSprintf ( "custom sort: attr '%s' not found in schema", sAttr );
-			return false;
-		}
-
-		const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
-		tState.m_eKeypart[iIdx] = tAttr.m_eAttrType==SPH_ATTR_FLOAT ? SPH_KEYPART_FLOAT : SPH_KEYPART_INT;
-		tState.m_tLocator[iIdx] = tAttr.m_tLocator;
-		return true;
-	}
-
-	// setup sorting state
-	static bool Setup ( const ISphSchema & tSchema, CSphMatchComparatorState & tState, CSphString & sError )
-	{
-		float fTmp;
-		int iAttr = 0;
-
-#define MATCH_FUNCTION				fTmp
-#define MATCH_WEIGHT				1.0f
-#define MATCH_NOW					1.0f
-#define MATCH_ATTR(_idx)			1.0f
-#define MATCH_DECLARE_ATTR(_name)	if ( !SetupAttr ( tSchema, tState, sError, iAttr++, _name ) ) return false;
-#include "sphinxcustomsort.inl"
-; // NOLINT
-
-		return true;
-	}
-
-	// calc function and compare matches
-	// OPTIMIZE? could calc once per match on submit
-	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
-	{
-#undef MATCH_DECLARE_ATTR
-#undef MATCH_WEIGHT
-#undef MATCH_NOW
-#undef MATCH_ATTR
-#define MATCH_DECLARE_ATTR(_name)	; // NOLINT
-#define MATCH_WEIGHT				float(MATCH_VAR.m_iWeight)
-#define MATCH_NOW					float(t.m_iNow)
-#define MATCH_ATTR(_idx)			float(MATCH_VAR.GetAttr(t.m_tLocator[_idx]))
-
-		float aa, bb;
-
-#undef MATCH_FUNCTION
-#undef MATCH_VAR
-#define MATCH_FUNCTION aa
-#define MATCH_VAR a
-#include "sphinxcustomsort.inl" // NOLINT
-; // NOLINT
-
-#undef MATCH_FUNCTION
-#undef MATCH_VAR
-#define MATCH_FUNCTION bb
-#define MATCH_VAR b
-#include "sphinxcustomsort.inl" // NOLINT
-; // NOLINT
-
-		return aa<bb;
-	}
-};
-
-//////////////////////////////////////////////////////////////////////////
 // SORT CLAUSE PARSER
 //////////////////////////////////////////////////////////////////////////
 
@@ -3505,13 +3424,6 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 		// special case, sort by random
 		if ( iField==0 && bField && strcmp ( pTok, "@random" )==0 )
 			return SORT_CLAUSE_RANDOM;
-
-		// special case, sort by custom
-		if ( iField==0 && bField && strcmp ( pTok, "@custom" )==0 )
-		{
-			eFunc = FUNC_CUSTOM;
-			return MatchCustom_fn::Setup ( tSchema, tState, sError ) ? SORT_CLAUSE_OK : SORT_CLAUSE_ERROR;
-		}
 
 		// handle sort order
 		if ( !bField )
@@ -3695,7 +3607,6 @@ static ISphMatchSorter * sphCreateSorter2nd ( ESphSortFunc eGroupFunc, const ISp
 		case FUNC_GENERIC3:		return sphCreateSorter3rd<MatchGeneric3_fn>	( pComp, pQuery, tSettings, bHasPackedFactors ); break;
 		case FUNC_GENERIC4:		return sphCreateSorter3rd<MatchGeneric4_fn>	( pComp, pQuery, tSettings, bHasPackedFactors ); break;
 		case FUNC_GENERIC5:		return sphCreateSorter3rd<MatchGeneric5_fn>	( pComp, pQuery, tSettings, bHasPackedFactors ); break;
-		case FUNC_CUSTOM:		return sphCreateSorter3rd<MatchCustom_fn>	( pComp, pQuery, tSettings, bHasPackedFactors ); break;
 		case FUNC_EXPR:			return sphCreateSorter3rd<MatchExpr_fn>		( pComp, pQuery, tSettings, bHasPackedFactors ); break;
 		default:				return NULL;
 	}
@@ -3719,7 +3630,6 @@ static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, ESphSortF
 		case FUNC_GENERIC3:		pComp = new MatchGeneric3_fn(); break;
 		case FUNC_GENERIC4:		pComp = new MatchGeneric4_fn(); break;
 		case FUNC_GENERIC5:		pComp = new MatchGeneric5_fn(); break;
-		case FUNC_CUSTOM:		pComp = new MatchCustom_fn(); break;
 		case FUNC_EXPR:			pComp = new MatchExpr_fn(); break; // only for non-bitfields, obviously
 	}
 
@@ -4650,7 +4560,6 @@ static ISphMatchSorter * CreatePlainSorter ( ESphSortFunc eMatchFunc, bool bKbuf
 		case FUNC_GENERIC3:		return CreatePlainSorter<MatchGeneric3_fn>		( bKbuffer, iMaxMatches, bUsesAttrs, bFactors ); break;
 		case FUNC_GENERIC4:		return CreatePlainSorter<MatchGeneric4_fn>		( bKbuffer, iMaxMatches, bUsesAttrs, bFactors ); break;
 		case FUNC_GENERIC5:		return CreatePlainSorter<MatchGeneric5_fn>		( bKbuffer, iMaxMatches, bUsesAttrs, bFactors ); break;
-		case FUNC_CUSTOM:		return CreatePlainSorter<MatchCustom_fn>		( bKbuffer, iMaxMatches, bUsesAttrs, bFactors ); break;
 		case FUNC_EXPR:			return CreatePlainSorter<MatchExpr_fn>			( bKbuffer, iMaxMatches, bUsesAttrs, bFactors ); break;
 		default:				return NULL;
 	}

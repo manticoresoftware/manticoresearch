@@ -1438,7 +1438,7 @@ public:
 	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer );
 	virtual	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn pfnProgress ) { m_tProgress.m_fnProgress = pfnProgress; }
 
-	virtual bool				LoadHeader ( const char * sHeaderName, bool bStripPath, CSphString & sWarning );
+	virtual bool				LoadHeader ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning );
 	virtual bool				WriteHeader ( const BuildHeader_t & tBuildHeader, CSphWriter & fdInfo ) const;
 
 	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig );
@@ -3851,6 +3851,16 @@ CSphEmbeddedFiles::CSphEmbeddedFiles ()
 	, m_bEmbeddedStopwords	( false )
 	, m_bEmbeddedWordforms	( false )
 {
+}
+
+
+void CSphEmbeddedFiles::Reset()
+{
+	m_dSynonyms.Reset();
+	m_dStopwordFiles.Reset();
+	m_dStopwords.Reset();
+	m_dWordforms.Reset();
+	m_dWordformFiles.Reset();
 }
 
 
@@ -16549,7 +16559,7 @@ void LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DW
 }
 
 
-bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSphString & sWarning )
+bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning )
 {
 	const int MAX_HEADER_SIZE = 32768;
 	CSphFixedVector<BYTE> dCacheInfo ( MAX_HEADER_SIZE );
@@ -16659,8 +16669,6 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 
 	if ( m_uVersion>=9 )
 	{
-		CSphEmbeddedFiles tEmbeddedFiles;
-
 		// tokenizer stuff
 		CSphTokenizerSettings tSettings;
 		LoadTokenizerSettings ( rdInfo, tSettings, tEmbeddedFiles, m_uVersion, sWarning );
@@ -16776,8 +16784,9 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 
 void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig )
 {
+	CSphEmbeddedFiles tEmbeddedFiles;
 	CSphString sWarning;
-	if ( !LoadHeader ( sHeaderName, false, sWarning ) )
+	if ( !LoadHeader ( sHeaderName, false, tEmbeddedFiles, sWarning ) )
 	{
 		fprintf ( fp, "FATAL: failed to load header: %s.\n", m_sLastError.cstr() );
 		return;
@@ -16947,6 +16956,14 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 		fprintf ( fp, "tokenizer-ignore-chars: %s\n", tSettings.m_sIgnoreChars.cstr () );
 		fprintf ( fp, "tokenizer-blend-chars: %s\n", tSettings.m_sBlendChars.cstr () );
 		fprintf ( fp, "tokenizer-blend-mode: %s\n", tSettings.m_sBlendMode.cstr () );
+
+		fprintf ( fp, "tokenizer-exceptions: %s\n", tSettings.m_sSynonymsFile.cstr () );
+		fprintf ( fp, "dictionary-embedded-exceptions: %d\n", tEmbeddedFiles.m_bEmbeddedSynonyms ? 1 : 0 );
+		if ( tEmbeddedFiles.m_bEmbeddedSynonyms )
+		{
+			ARRAY_FOREACH ( i, tEmbeddedFiles.m_dSynonyms )
+				fprintf ( fp, "\tdictionary-embedded-exception [%d]: %s\n", i, tEmbeddedFiles.m_dSynonyms[i].cstr () );
+		}
 	}
 
 	if ( m_pDict )
@@ -16954,9 +16971,25 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 		const CSphDictSettings & tSettings = m_pDict->GetSettings ();
 		fprintf ( fp, "dict: %s\n", tSettings.m_bWordDict ? "keywords" : "crc" );
 		fprintf ( fp, "dictionary-morphology: %s\n", tSettings.m_sMorphology.cstr () );
-		fprintf ( fp, "dictionary-stopwords: %s\n", tSettings.m_sStopwords.cstr () );
+
+		fprintf ( fp, "dictionary-stopwords-file: %s\n", tSettings.m_sStopwords.cstr () );
+		fprintf ( fp, "dictionary-embedded-stopwords: %d\n", tEmbeddedFiles.m_bEmbeddedStopwords ? 1 : 0 );
+		if ( tEmbeddedFiles.m_bEmbeddedStopwords )
+		{
+			ARRAY_FOREACH ( i, tEmbeddedFiles.m_dStopwords )
+				fprintf ( fp, "\tdictionary-embedded-stopword ["DOCID_FMT"]: %s\n", i, tEmbeddedFiles.m_dStopwords[i] );
+		}
+
 		ARRAY_FOREACH ( i, tSettings.m_dWordforms )
-			fprintf ( fp, "\tdictionary-wordforms [%d]: %s\n", i, tSettings.m_dWordforms[i].cstr () );
+			fprintf ( fp, "dictionary-wordform-file [%d]: %s\n", i, tSettings.m_dWordforms[i].cstr () );
+
+		fprintf ( fp, "dictionary-embedded-wordforms: %d\n", tEmbeddedFiles.m_bEmbeddedWordforms ? 1 : 0 );
+		if ( tEmbeddedFiles.m_bEmbeddedWordforms )
+		{
+			ARRAY_FOREACH ( i, tEmbeddedFiles.m_dWordforms )
+				fprintf ( fp, "\tdictionary-embedded-wordform [%d]: %s\n", i, tEmbeddedFiles.m_dWordforms[i].cstr () );
+		}
+		
 		fprintf ( fp, "min-stemming-len: %d\n", tSettings.m_iMinStemmingLen );
 	}
 
@@ -17168,9 +17201,13 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 	m_pKillList.SetMlock ( bMlock );
 	m_pSkiplists.SetMlock ( bMlock );
 
+	CSphEmbeddedFiles tEmbeddedFiles;
+
 	// preload schema
-	if ( !LoadHeader ( GetIndexFileName("sph").cstr(), bStripPath, sWarning ) )
+	if ( !LoadHeader ( GetIndexFileName("sph").cstr(), bStripPath, tEmbeddedFiles, sWarning ) )
 		return false;
+
+	tEmbeddedFiles.Reset();
 
 	// verify that data files are readable
 	if ( !sphIsReadable ( GetIndexFileName("spd").cstr(), &m_sLastError ) )

@@ -474,6 +474,8 @@ struct CSphEmbeddedFiles
 	CSphVector<CSphSavedFile>	m_dWordformFiles;
 
 								CSphEmbeddedFiles ();
+
+	void						Reset();
 };
 
 

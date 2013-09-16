@@ -16977,7 +16977,7 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 		if ( tEmbeddedFiles.m_bEmbeddedStopwords )
 		{
 			ARRAY_FOREACH ( i, tEmbeddedFiles.m_dStopwords )
-				fprintf ( fp, "\tdictionary-embedded-stopword ["DOCID_FMT"]: %s\n", i, tEmbeddedFiles.m_dStopwords[i] );
+				fprintf ( fp, "\tdictionary-embedded-stopword [%d]: "DOCID_FMT"\n", i, tEmbeddedFiles.m_dStopwords[i] );
 		}
 
 		ARRAY_FOREACH ( i, tSettings.m_dWordforms )

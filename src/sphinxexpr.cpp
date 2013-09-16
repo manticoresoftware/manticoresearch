@@ -5450,7 +5450,6 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 
 	// deduce return type
 	ESphAttr eAttrType = m_dNodes[m_iParsed].m_eRetType;
-// assert ( IsNumeric ( eAttrType ) );
 
 	// check expression stack
 	if ( m_dNodes.GetLength()>100 )

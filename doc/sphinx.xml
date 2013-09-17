@@ -6392,6 +6392,75 @@ GROUP BY gid ORDER BY q DESC
 </para>
 </sect1>
 
+<sect1 id="sphinx-deprecations-defaults">
+<title>Sphinx deprecations and changes in default configuration</title>
+<para>
+In 2.2.1-beta version we decided to start removing some old features. All
+of them was 'unofficially' deprecated for some time. And we're informing
+you now about it.
+</para>
+<para>
+Changes are as follows:
+<itemizedlist>
+<listitem><para>32-bit document IDs are now deprecated. Our binary releases
+are now all built with 64-bit IDs by default. Note that they can still
+load older indexes with 32-bit IDs, but that support will eventually be
+removed. In fact, that was deprecated awhile ago, but now we just want to
+make it clear: we don't see any sense in trying to save your server's RAM
+this way.</para></listitem>
+<listitem><para>dict=crc is now deprecated. It has a bunch of limitations,
+the most important ones being keyword collisions, and no (good) wildcard
+matching support. You can read more about those limitations in our
+documentation.</para></listitem>
+<listitem><para>charset_type=sbcs is now deprecated, we're slowly switching
+to UTF-only. Even if your database is SBCS (likely for legacy reasons
+too, eh?), this should be absolutely trivial to workaround, just add a
+pre-query to fetch your data in UTF-8 and you're all set. Also, in fact,
+our current UTF-8 tokenizer is even faster than the SBCS one.</para></listitem>
+<listitem><para>custom sort (@custom) is now removed from Sphinx. This
+feature was introduced long before sort by expression became a reality
+and it has been deprecated for a very long time.</para></listitem>
+<listitem><para>enable_star is deprecated now. Previous default mode was
+enable_star=0 which was due to compatibility with a very old Sphinx
+version. Such implicit star search isn't very intuitive. So, we've decided
+to eventually remove it and have marked it as deprecated just recently. We plan
+to totally remove this configuration key in the 2.2.X branch.</para></listitem>
+<listitem><para>str2ordinal attributes are deprecated. This feature allows
+you to perform sorting by a string. But it's also possible to do this with
+ordinary string attributes, which is much easier to use. str2ordinal only
+covers a small part of this functionality and is not needed now.</para></listitem>
+<listitem><para>str2wordcount attributes are deprecated.
+<link linkend="conf-index-field-lengths">index_field_lengths=1</link>
+will create an integer attribute with field length set automatically and we
+recommend to use this configuration key when you need to store field
+lengths. Also, index_field_lengths=1 allows you to use new ranking formulas
+like BM25F().</para></listitem>
+<listitem><para>hit_format is deprecated. This is a hidden configuration
+key - it's not mentioned in our documentation. But, it's there and it's
+possible that someone may use it. And now we're urging you: don't use it.
+The default value is 'inline' and it's a new standard. 'plain' hit_format
+is obsolete and will be removed in the near future.</para></listitem>
+<listitem><para>docinfo=inline is deprecated. You can now use
+ondisk_attrs(link here) or ondisk_attrs_default(link here) instead.</para>
+</listitem>
+</itemizedlist>
+</para>
+<para>None of the different querying methods are deprecated, but as of
+version 2.2.1-beta, SphinxQL is the most advanced method. We plan to
+remove SphinxAPI and Sphinx SE someday so it would be a good idea to
+start using SphinxQL.</para>
+<para>
+<itemizedlist>
+<listitem><para>The SetWeights() API call has been deprecated for a long
+time and has now been removed from official APIs.</para></listitem>
+<listitem><para>The default matching mode for the API is now 'extended'.
+Actually, all other modes are deprecated. We recommend using the
+<link linkend="extended-syntax">extended query syntax</link> instead.
+</para></listitem>
+<listitem><para></para></listitem>
+</itemizedlist>
+</para>
+</sect1>
 
 </chapter>
 <chapter id="api-reference"><title>API reference</title>

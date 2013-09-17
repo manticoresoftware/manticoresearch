@@ -5555,7 +5555,7 @@ are supported.
 </para>
 <para>
 As of version 2.0.2-beta, all atributes types (int, bigint, float, MVA)
-except for strings can be updated. Previously, some of the types were not
+except for strings and JSONs can be updated. Previously, some of the types were not
 supported.
 </para>
 <para>
@@ -5601,6 +5601,48 @@ ignore any warnings about trying to update a column which is not exists in curre
 </listitem>
 </itemizedlist>
 </para>
+</sect1>
+
+<sect1 id="sphinxql-attach"><title>ALTER syntax</title>
+<programlisting>
+ALTER TABLE index ADD COLUMN new_column {INTEGER|BIGINT|FLOAT|BOOL}
+</programlisting>
+<para>
+ALTER statement was added in version 2.2.1-beta. As of 2.2.1-beta it supports adding one
+attribute at a time and both plain and RT indexes. Attribute types int, bigint, float and bool
+are supported. Attribute removing is not possible (yet).
+</para>
+<para>
+Implementation details. As of 2.2.1-beta querying of index is impossible while adding a column.
+This may change in future. Newly created attribute values are set to 0.
+</para>
+<programlisting>
+mysql> desc plain;
++------------+-----------+
+| Field      | Type      |
++------------+-----------+
+| id         | bigint    |
+| text       | field     |
+| group_id   | uint      |
+| date_added | timestamp |
++------------+-----------+
+4 rows in set (0.01 sec)
+
+mysql> alter table plain add column test integer;
+Query OK, 0 rows affected (0.04 sec)
+
+mysql> desc plain;
++------------+-----------+
+| Field      | Type      |
++------------+-----------+
+| id         | bigint    |
+| text       | field     |
+| group_id   | uint      |
+| date_added | timestamp |
+| test       | uint      |
++------------+-----------+
+5 rows in set (0.00 sec)
+</programlisting>
 </sect1>
 
 

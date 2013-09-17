@@ -5554,9 +5554,9 @@ and values can be specified in a single statement. Both RT and disk indexes
 are supported.
 </para>
 <para>
-As of version 2.0.2-beta, all atributes types (int, bigint, float, MVA)
-except for strings and JSONs can be updated. Previously, some of the types were not
-supported.
+As of version 2.0.2-beta, all atributes types (int, bigint, float, MVA),
+except for strings and JSON attributes, can be dynamically updated.
+Previously, some of these types were not supported.
 </para>
 <para>
 <code>where_condition</code> (also added in 2.0.2-beta) has the same syntax
@@ -5608,13 +5608,15 @@ ignore any warnings about trying to update a column which is not exists in curre
 ALTER TABLE index ADD COLUMN new_column {INTEGER|BIGINT|FLOAT|BOOL}
 </programlisting>
 <para>
-ALTER statement was added in version 2.2.1-beta. As of 2.2.1-beta it supports adding one
-attribute at a time and both plain and RT indexes. Attribute types int, bigint, float and bool
-are supported. Attribute removing is not possible (yet).
+The ALTER statement was added in version 2.2.1-beta. As of 2.2.1-beta, it supports adding one
+attribute at a time for both plain and RT indexes. The int, bigint, float and bool attribute types
+are supported. Removing attributes is not possible (yet).
 </para>
 <para>
-Implementation details. As of 2.2.1-beta querying of index is impossible while adding a column.
-This may change in future. Newly created attribute values are set to 0.
+Implementation details. As of 2.2.1-beta, the querying of an index is
+impossible (because of a write lock) while adding a column. This may change
+in the future. The newly created attribute values are set to 0. ALTER will
+not work for distributed indexes and indexes without any attributes.
 </para>
 <programlisting>
 mysql> desc plain;

@@ -14000,7 +14000,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				}
 				iMinStrings = iMaxStrings;
 			}
-		} else // only one chunk. Plain and simple!
+		} else if ( dStringChunks.GetLength()==1 ) // only one chunk. Plain and simple!
 		{
 			DWORD iStringChunk = dStringChunks[0];
 			tStrReader.GetBytes ( pStringsBegin, iStringChunk );

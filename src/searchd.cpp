@@ -10410,6 +10410,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				m_pProfile->Switch ( SPH_QSTATE_TABLE_FUNC );
 			if ( !tQuery.m_pTableFunc->Process ( &tRes, tRes.m_sError ) )
 				tRes.m_iSuccesses = 0;
+			// we don't need it anymore
+			SafeDelete ( tQuery.m_pTableFunc ); // FIXME? find more obvious way to delete
 		}
 	}
 

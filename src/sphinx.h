@@ -2684,7 +2684,7 @@ public:
 	bool			m_bIgnoreNonexistentIndexes; ///< whether to error or not about non-existent indexes in index list
 	bool			m_bStrict;			///< whether to warning or not about incompatible types
 
-	ISphTableFunc *	m_pTableFunc;		///< post-query
+	ISphTableFunc *	m_pTableFunc;		///< post-query NOT OWNED, WILL NOT BE FREED in dtor.
 
 public:
 	int				m_iSQLSelectStart;	///< SQL parser helper

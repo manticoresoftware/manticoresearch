@@ -3779,6 +3779,10 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 			{
 				sError.SetSprintf ( "MVA values can't be used in multiple group-by" );
 				return false;
+			} else if ( !bJson && eType==SPH_ATTR_JSON )
+			{
+				sError.SetSprintf ( "JSON blob can't be used in multiple group-by" );
+				return false;
 			}
 
 			dLocators.Add ( tSchema.GetAttr ( iAttr ).m_tLocator );
@@ -3839,10 +3843,14 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 			case SPH_GROUPBY_MONTH:		tSettings.m_pGrouper = new CSphGrouperMonth ( tLoc ); break;
 			case SPH_GROUPBY_YEAR:		tSettings.m_pGrouper = new CSphGrouperYear ( tLoc ); break;
 			case SPH_GROUPBY_ATTR:
-				if ( eType!=SPH_ATTR_STRING )
-					tSettings.m_pGrouper = new CSphGrouperAttr ( tLoc );
-				else
+				if ( eType==SPH_ATTR_JSON )
+				{
+					sError.SetSprintf ( "invalid group-by value - JSON blob" );
+					return false;
+				} else if ( eType==SPH_ATTR_STRING )
 					tSettings.m_pGrouper = sphCreateGrouperString ( tLoc, pQuery->m_eCollation );
+				else
+					tSettings.m_pGrouper = new CSphGrouperAttr ( tLoc );
 				break;
 			default:
 				sError.SetSprintf ( "invalid group-by mode (mode=%d)", pQuery->m_eGroupFunc );

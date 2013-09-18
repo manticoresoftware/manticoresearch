@@ -617,6 +617,8 @@ Two'</sphinxql>
 <sphinxql>insert into rt (id, data) values (8, '{"f": 6.022e+3}')</sphinxql>
 <sphinxql>insert into rt (id, data) values (9, '{"f": 1.4738223E-1}')</sphinxql>
 <sphinxql>select * from rt where id&gt;=4 and id&lt;=9</sphinxql>
+<sphinxql>select * from json_inplace_rt group by j</sphinxql>
+<sphinxql>select * from json_inplace_rt group by title, j</sphinxql>
 </sphqueries>
 </test>
 

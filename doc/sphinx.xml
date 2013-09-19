@@ -3269,6 +3269,10 @@ one are as follows.
 <!-- FIXME! more examples with ios, kbs, agents etc; comment stuff reference?-->
 </para>
 <para>
+Use sphinxql:compact_in to shorten your IN() clauses in log if you have
+too much values in it.
+</para>
+<para>
 Every request (including both SphinxAPI and SphinxQL) request
 must result in exactly one log line. All request types, including
 INSERT, CALL SNIPPETS, etc will eventually get logged, though as of

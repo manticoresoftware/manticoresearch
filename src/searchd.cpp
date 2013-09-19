@@ -240,7 +240,7 @@ static CSphString		g_sLogFile;							// log file name
 static bool				g_bLogTty		= false;			// cached isatty(g_iLogFile)
 static LogFormat_e		g_eLogFormat	= LOG_FORMAT_PLAIN;
 static bool				g_bShortenIn	= false;			// whether to cut list in IN() clauses.
-static int				g_iShortenInLimit = 128;			// how many values will be pushed into log uncutted
+static const int		SHORTEN_IN_LIMIT = 128;			// how many values will be pushed into log uncutted
 
 static int				g_iReadTimeout		= 5;	// sec
 static int				g_iWriteTimeout		= 5;
@@ -6919,10 +6919,10 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 						else
 							tBuf.Appendf ( " %s IN (", f.m_sAttrName.cstr() );
 
-						if ( g_bShortenIn && ( g_iShortenInLimit+1<f.m_dValues.GetLength() ) )
+						if ( g_bShortenIn && ( SHORTEN_IN_LIMIT+1<f.m_dValues.GetLength() ) )
 						{
 							// for really long IN-lists optionally format them as N,N,N,N,...N,N,N, with ellipsis inside.
-							int iLimit = g_iShortenInLimit-3;
+							int iLimit = SHORTEN_IN_LIMIT-3;
 							for ( int j=0; j<iLimit; ++j )
 							{
 								if ( j )

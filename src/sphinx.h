@@ -80,7 +80,7 @@ typedef off_t				SphOffset_t;
 /////////////////////////////////////////////////////////////////////////////
 
 #ifndef USE_64BIT
-#define USE_64BIT 0
+#define USE_64BIT 1
 #endif
 
 #if USE_64BIT

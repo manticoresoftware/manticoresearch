@@ -4616,8 +4616,8 @@ to highlight, and a query. Starting with 2.2-1-beta it's possible to pass
 <link linkend="api-func-buildexcerpts">options</link> to function.
 The intended use is as follows:
 <programlisting>
-SELECT id, SNIPPET(myUdf(id), "my.query")
-FROM myIndex WHERE MATCH("my.query")
+SELECT id, SNIPPET(myUdf(id), 'my.query', 'limit=100')
+FROM myIndex WHERE MATCH('my.query')
 </programlisting>
 where myUdf() would be a UDF that fetches a document by its ID from
 some external storage. This enables applications to fetch the entire

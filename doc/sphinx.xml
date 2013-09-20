@@ -4611,8 +4611,10 @@ SELECT *, EXIST('gid', 6) as cnd FROM i1, i2 WHERE cnd>5
 <listitem>
 <para>SNIPPET() function (added in version 2.1.1-beta) is supported.
 This is a wrapper around the snippets functionality, similar to what is
-available via CALL SNIPPETS. This function takes two arguments: the text
-to highlight, and a query. The intended use is as follows:
+available via CALL SNIPPETS. The first two arguments are: the text
+to highlight, and a query. Starting with 2.2-1-beta it's possible to pass
+<link linkend="api-func-buildexcerpts">options</link> to function.
+The intended use is as follows:
 <programlisting>
 SELECT id, SNIPPET(myUdf(id), "my.query")
 FROM myIndex WHERE MATCH("my.query")
@@ -9950,7 +9952,7 @@ both searches the same.
 There are 3 different morphology preprocessors that Sphinx implements:
 lemmatizers, stemmers, and phonetic algorithms.
 <itemizedlist>
-<listitem>Lemmatizer reduces a keyword form to a so-called lemma,
+<listitem><para>Lemmatizer reduces a keyword form to a so-called lemma,
 a proper normal form, or in other words, a valid natural language
 root word. For example, "running" could be reduced to "run",
 the infinitive verb form, and "octopi" would be reduced to "octopus",
@@ -9960,8 +9962,8 @@ multiple corresponding root words. For instance, by looking at
 of "dive" the verb as in "He dove into a pool.", or "dove" the noun
 as in "White dove flew over the cuckoo's nest." In this case
 lemmatizer can generate all the possible root forms.
-</listitem>
-<listitem>Stemmer reduces a keyword form to a so-called stem
+</para></listitem>
+<listitem><para>Stemmer reduces a keyword form to a so-called stem
 by removing and/or replacing certain well-known suffixes.
 The resulting stem is however <b>not</b>guaranteed to be
 a valid word on itself. For instance, with a Porter English
@@ -9970,11 +9972,11 @@ but "business" would reduce to "busi", which is not a word,
 and "octopi" would not reduce at all. Stemmers are essentially
 (much) simpler but still pretty good replacements of full-blown
 lemmatizers.
-</listitem>
-<listitem>Phonetic algorithms replace the words with specially
+</para></listitem>
+<listitem><para>Phonetic algorithms replace the words with specially
 crafted phonetic codes that are equal even when the words original
 are different, but phonetically close.
-</listitem>
+</para></listitem>
 </itemizedlist>
 The morphology processors that come with our own built-in Sphinx
 implementations are:

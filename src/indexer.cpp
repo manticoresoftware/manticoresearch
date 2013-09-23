@@ -47,7 +47,7 @@ static bool			g_bRotateEach	= false;
 static bool			g_bBuildFreqs	= false;
 static bool			g_bSendHUP		= true;
 
-static int				g_iMemLimit				= 32*1024*1024;
+static int				g_iMemLimit				= 128*1024*1024;
 static int				g_iMaxXmlpipe2Field		= 0;
 static int				g_iWriteBuffer			= 0;
 static int				g_iMaxFileFieldBuffer	= 1024*1024;

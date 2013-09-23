@@ -6494,6 +6494,10 @@ is obsolete and will be removed in the near future.</para></listitem>
 <listitem><para>docinfo=inline is deprecated. You can now use
 ondisk_attrs(link here) or ondisk_attrs_default(link here) instead.</para>
 </listitem>
+<listitem><para>workers=threads is a new default for all OS now.
+We're gonna get rid of other modes in future.</para></listitem>
+<listitem><para>mem_limit=128M is a new default.</para></listitem>
+<listitem><para>rt_mem_limit=128M is a new default.</para></listitem>
 </itemizedlist>
 </para>
 <para>None of the different querying methods are deprecated, but as of
@@ -11793,7 +11797,7 @@ blend_mode = trim_tail, skip_pure
 <sect2 id="conf-rt-mem-limit"><title>rt_mem_limit</title>
 <para>
 RAM chunk size limit.
-Optional, default is empty.
+Optional, default is 128M.
 Introduced in version 1.10-beta.
 </para>
 <para>
@@ -12286,7 +12290,7 @@ global_idf = /usr/local/sphinx/var/global.idf
 <sect2 id="conf-mem-limit"><title>mem_limit</title>
 <para>
 Indexing RAM usage limit.
-Optional, default is 32M.
+Optional, default is 128M.
 </para>
 <para>
 Enforced memory usage limit that the <filename>indexer</filename>
@@ -13115,7 +13119,7 @@ subtree_hits_cache = 16M
 <para>
 Multi-processing mode (MPM).
 Optional; allowed values are none, fork, prefork, and threads.
-Default is fork on Unix based systems, and threads on Windows.
+Default is threads.
 Introduced in version 1.10-beta.
 </para>
 <para>
@@ -13131,7 +13135,7 @@ concurrent requests. The possible values are:
 <varlistentry>
     <term>fork</term>
     <listitem><para>A new child process will be forked to handle every
-        incoming request. Historically, this is the default mode.
+        incoming request.
     </para></listitem>
 </varlistentry>
 <varlistentry>
@@ -13145,7 +13149,7 @@ concurrent requests. The possible values are:
     <term>threads</term>
     <listitem><para>A new thread will be created to handle every
         incoming request. This is the only mode compatible with
-        RT indexing backend.
+        RT indexing backend. This is a default value.
     </para></listitem>
 </varlistentry>
 </variablelist>

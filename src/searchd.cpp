@@ -295,7 +295,7 @@ enum Mpm_e
 	MPM_THREADS		///< create a worker thread for each query
 };
 
-static Mpm_e			g_eWorkers			= USE_WINDOWS ? MPM_THREADS : MPM_FORK;
+static Mpm_e			g_eWorkers			= MPM_THREADS;
 
 static int				g_iPreforkChildren	= 10;		// how much workers to keep
 static CSphVector<int>	g_dChildren;
@@ -18947,7 +18947,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		}
 
 		// RAM chunk size
-		int64_t iRamSize = hIndex.GetSize64 ( "rt_mem_limit", 32*1024*1024 );
+		int64_t iRamSize = hIndex.GetSize64 ( "rt_mem_limit", 128*1024*1024 );
 		if ( iRamSize<128*1024 )
 		{
 			sphWarning ( "index '%s': rt_mem_limit extremely low, using 128K instead", szIndexName );

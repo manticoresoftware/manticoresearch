@@ -10774,6 +10774,7 @@ enum SqlStmt_e
 	STMT_ALTER,
 	STMT_SHOW_PLAN,
 	STMT_SELECT_DUAL,
+	STMT_SHOW_DATABASES,
 
 	STMT_TOTAL
 };
@@ -14879,6 +14880,15 @@ void HandleMysqlShowTables ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 	tOut.Eof();
 }
 
+// MySQL Workbench (and maybe other clients) crashes without it
+void HandleMysqlShowDatabases ( SqlRowBuffer_c & tOut, SqlStmt_t & )
+{
+	tOut.HeadBegin ( 1 );
+	tOut.HeadColumn ( "Databases" );
+	tOut.HeadEnd();
+	tOut.Eof();
+}
+
 // The pinger
 struct PingRequestBuilder_t : public IRequestBuilder_t
 {
@@ -15934,6 +15944,7 @@ void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & 
 			}
 		} else if ( tStmt.m_sSetName=="character_set_results"
 			|| tStmt.m_sSetName=="sql_auto_is_null"
+			|| tStmt.m_sSetName=="sql_safe_updates"
 			|| tStmt.m_sSetName=="sql_mode" )
 		{
 			// per-session CHARACTER_SET_RESULTS et al; just ignore for now
@@ -16322,24 +16333,41 @@ static const char * LogLevelName ( ESphLogLevel eLevel )
 }
 
 
-void HandleMysqlShowVariables ( SqlRowBuffer_c & tOut, SessionVars_t & tVars )
+void HandleMysqlShowVariables ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt, SessionVars_t & tVars )
 {
+	VectorLike dStatus ( tStmt.m_sStringParam );
+
+	if ( dStatus.MatchAdd ( "autocommit" ) )
+		dStatus.Add ( tVars.m_bAutoCommit ? "1" : "0" );
+
+	if ( dStatus.MatchAdd ( "collation_connection" ) )
+		dStatus.Add ( sphCollationToName ( tVars.m_eCollation ) );
+
+	if ( dStatus.MatchAdd ( "query_log_format" ) )
+		dStatus.Add ( g_eLogFormat==LOG_FORMAT_PLAIN ? "plain" : "sphinxql" );
+
+	if ( dStatus.MatchAdd ( "log_level" ) )
+		dStatus.Add ( LogLevelName ( g_eLogLevel ) );
+
+	if ( dStatus.MatchAdd ( "max_allowed_packet" ) )
+		dStatus.Add().SetSprintf ( "%d", g_iMaxPacketSize );
+
+	// .NET connector requires character_set_* vars
+	if ( dStatus.MatchAdd ( "character_set_client" ) )
+		dStatus.Add ( "utf8" );
+
+	if ( dStatus.MatchAdd ( "character_set_connection" ) )
+		dStatus.Add ( "utf8" );
+
 	// result set header packet
-	tOut.HeadTuplet ( "Variable_name", "Value" );
+	dRows.HeadTuplet ( "Variable_name", "Value" );
 
-	// sessions vars
-	tOut.DataTuplet ( "autocommit", tVars.m_bAutoCommit ? "1" : "0" );
-	tOut.DataTuplet ( "collation_connection", sphCollationToName ( tVars.m_eCollation ) );
-
-	// server vars
-	tOut.DataTuplet ( "query_log_format", g_eLogFormat==LOG_FORMAT_PLAIN ? "plain" : "sphinxql" );
-	tOut.DataTuplet ( "log_level", LogLevelName ( g_eLogLevel ) );
-	tOut.DataTuplet ( "max_allowed_packet", g_iMaxPacketSize );
-	tOut.DataTuplet ( "character_set_client", "utf8" );
-	tOut.DataTuplet ( "character_set_connection", "utf8" );
+	// send rows
+	for ( int iRow=0; iRow<dStatus.GetLength(); iRow+=2 )
+		dRows.DataTuplet ( dStatus[iRow+0].cstr(), dStatus[iRow+1].cstr() );
 
 	// cleanup
-	tOut.Eof();
+	dRows.Eof();
 }
 
 
@@ -16851,7 +16879,7 @@ public:
 			return true;
 
 		case STMT_SHOW_VARIABLES:
-			HandleMysqlShowVariables ( tOut, m_tVars );
+			HandleMysqlShowVariables ( tOut, *pStmt, m_tVars );
 			return true;
 
 		case STMT_TRUNCATE_RTINDEX:
@@ -16892,6 +16920,10 @@ public:
 
 		case STMT_SELECT_DUAL:
 			HandleMysqlSelectDual ( tOut, *pStmt );
+			return true;
+
+		case STMT_SHOW_DATABASES:
+			HandleMysqlShowDatabases ( tOut, *pStmt );
 			return true;
 
 		default:

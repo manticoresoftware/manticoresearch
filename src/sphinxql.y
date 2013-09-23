@@ -43,6 +43,7 @@
 %token	TOK_COMMITTED
 %token	TOK_COUNT
 %token	TOK_CREATE
+%token	TOK_DATABASES
 %token	TOK_DELETE
 %token	TOK_DESC
 %token	TOK_DESCRIBE
@@ -169,6 +170,7 @@ statement:
 	| call_proc
 	| describe
 	| show_tables
+	| show_databases
 	| update
 	| show_variables
 	| show_collation
@@ -836,6 +838,7 @@ set_stmt:
 		}
 	| TOK_SET TOK_NAMES set_value		{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	| TOK_SET TOK_SYSVAR '=' set_value	{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
+	| TOK_SET TOK_CHARACTER TOK_SET set_value { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	;
 
 set_global_stmt:
@@ -1051,6 +1054,10 @@ show_tables:
 	TOK_SHOW TOK_TABLES like_filter		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_TABLES; }
 	;
 
+show_databases:
+	TOK_SHOW TOK_DATABASES like_filter { pParser->m_pStmt->m_eStmt = STMT_SHOW_DATABASES; }
+	;
+
 //////////////////////////////////////////////////////////////////////////
 
 update:
@@ -1144,6 +1151,11 @@ show_variables:
 	TOK_SHOW opt_scope TOK_VARIABLES opt_show_variables_where
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_VARIABLES;
+		}
+	| TOK_SHOW opt_scope TOK_VARIABLES TOK_LIKE TOK_QUOTED_STRING
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_VARIABLES;
+			pParser->ToStringUnescape ( pParser->m_pStmt->m_sStringParam, $5 );
 		}
 	;
 

@@ -219,6 +219,15 @@ INSERT INTO cmp_table VALUES
 
 <!-- .NET connector uses "select timediff(curtime(),utc_time());" -->
 <sphinxql>SELECT bigint(timediff(curtime(),utc_time())) % 15</sphinxql>
+
+<!-- MySQL Workbench 6.0 and above -->
+<sphinxql>SHOW SESSION VARIABLES LIKE 'lower_case_table_names'</sphinxql>
+<sphinxql>SELECT current_user()</sphinxql>
+<sphinxql>SELECT connection_id()</sphinxql>
+<sphinxql>SET CHARACTER SET utf8</sphinxql>
+<sphinxql>SET SQL_SAFE_UPDATES=1</sphinxql>
+<sphinxql>SHOW SESSION VARIABLES LIKE 'sql_mode'</sphinxql>
+<sphinxql>SHOW DATABASES</sphinxql>
 </sphqueries>
 
 </test>

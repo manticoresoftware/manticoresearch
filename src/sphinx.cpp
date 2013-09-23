@@ -4487,10 +4487,8 @@ bool CSphTokenizerBase::SetCaseFolding ( const char * sConfig, CSphString & sErr
 bool CSphTokenizerBase::SetBlendChars ( const char * sConfig, CSphString & sError )
 {
 	assert ( m_eMode!=SPH_CLONE_QUERY_LIGHTWEIGHT );
-	bool bRes = ISphTokenizer::SetBlendChars ( sConfig, sError );
-	if ( bRes )
-		m_bHasBlend = true;
-	return bRes;
+	m_bHasBlend = ISphTokenizer::SetBlendChars ( sConfig, sError );
+	return m_bHasBlend;
 }
 
 
@@ -5698,7 +5696,7 @@ bool ISphTokenizer::SetIgnoreChars ( const char * sConfig, CSphString & sError )
 
 bool ISphTokenizer::SetBlendChars ( const char * sConfig, CSphString & sError )
 {
-	return RemapCharacters ( sConfig, FLAG_CODEPOINT_BLEND, "blend", true, sError );
+	return sConfig ? RemapCharacters ( sConfig, FLAG_CODEPOINT_BLEND, "blend", true, sError ) : false;
 }
 
 
@@ -16989,7 +16987,7 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 			ARRAY_FOREACH ( i, tEmbeddedFiles.m_dWordforms )
 				fprintf ( fp, "\tdictionary-embedded-wordform [%d]: %s\n", i, tEmbeddedFiles.m_dWordforms[i].cstr () );
 		}
-		
+
 		fprintf ( fp, "min-stemming-len: %d\n", tSettings.m_iMinStemmingLen );
 	}
 
@@ -20846,7 +20844,7 @@ private:
 	int					InitMorph ( const char * szMorph, int iLength, bool bUseUTF8, CSphString & sError );
 	int					AddMorph ( int iMorph ); ///< helper that always returns ST_OK
 	bool				StemById ( BYTE * pWord, int iStemmer );
-	void				AddWordform ( CSphWordforms * pContainer, char * sBuffer, int iLen, ISphTokenizer * pTokenizer, const char * szFile );
+	void				AddWordform ( CSphWordforms * pContainer, char * sBuffer, int iLen, ISphTokenizer * pTokenizer, const char * szFile, const CSphVector<char> & dBlended );
 };
 
 CSphVector<CSphWordforms*> CSphTemplateDictTraits::m_dWordformContainers;
@@ -21820,223 +21818,119 @@ CSphWordforms * CSphTemplateDictTraits::GetWordformContainer ( const CSphVector<
 
 
 void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sBuffer, int iLen,
-	ISphTokenizer * pTokenizer, const char * szFile )
+	ISphTokenizer * pTokenizer, const char * szFile, const CSphVector<char> & dBlended )
 {
-	CSphString sFrom;
-	CSphVector<CSphString> dKeys;
+	static CSphVector<CSphString> dTokens;
 	bool bSeparatorFound = false;
-	const char * pStart = sBuffer;
-	while ( *pStart && sphIsSpace(*pStart) )
-		pStart++;
-	bool bAfterMorphology = *pStart=='~';
-	if ( bAfterMorphology )
-		pStart++;
+	bool bAfterMorphology = false;
 
 	// parse the line
-	pTokenizer->SetBuffer ( (BYTE*)pStart, iLen-(pStart-sBuffer) );
+	pTokenizer->SetBuffer ( (BYTE*)sBuffer, iLen );
 
-	CSphString sKey;
-	CSphString sBlended;
+	bool bFirstToken = true;
 	bool bStopwordsPresent = false;
-	bool bMultiform = false;
-	dKeys.Resize ( 0 );
+	dTokens.Resize ( 0 );
 
 	BYTE * pFrom = NULL;
 	while ( ( pFrom = pTokenizer->GetToken () )!=NULL )
 	{
-		if ( *pFrom=='#' && pTokenizer->GetLastTokenLen()==1 )
+		if ( *pFrom=='#' )
 			break;
 
-		// blended got tokenized
-		// left> as separate parts and whole blended
-		// >right as single token
-		if ( pTokenizer->TokenIsBlended() )
+		if ( *pFrom=='~' && bFirstToken )
 		{
-			if ( !sBlended.IsEmpty() && ( sBlended!=(const char *)pFrom ) )
-			{
-				sphWarning ( "wordform contain multiple blended (might be 1 blended keyword) ( wordforms='%s' ). Fix your wordforms file '%s'.",
-					sBuffer, szFile );
-				break;
-			}
-
-			sBlended = (const char*)pFrom;
+			bAfterMorphology = true;
+			bFirstToken = false;
 			continue;
 		}
 
-		const BYTE * pCur = (const BYTE *) pTokenizer->GetBufferPtr ();
+		bFirstToken = false;
 
-		while ( isspace(*pCur) ) pCur++;
-		if ( *pCur=='#' )
-			break;
-
-		if ( *pCur=='>' || ( *pCur=='=' && *(pCur+1)=='>' ) )
+		if ( *pFrom=='>' )
 		{
-			sFrom = (const char*)pFrom;
 			bSeparatorFound = true;
-			pTokenizer->SetBufferPtr ( (const char*) pCur+(*pCur=='=' ? 2 : 1) );
 			break;
-		} else
-		{
-			bMultiform = true;
-			if ( sKey.IsEmpty() )
-			{
-				sKey = (const char*)pFrom;
-			} else
-			{
-					dKeys.Add ( (const char*)pFrom );
-					if ( !bStopwordsPresent && !GetWordID ( pFrom, dKeys.Last().Length(), true ) )
-						bStopwordsPresent = true;
-			}
 		}
+
+		if ( *pFrom=='=' && *pTokenizer->GetBufferPtr()=='>' )
+		{
+			pTokenizer->GetToken();
+			bSeparatorFound = true;
+			break;
+		}
+
+		if ( GetWordID ( pFrom, strlen ( (const char*)pFrom ), true ) )
+			dTokens.Add ( (const char*)pFrom );
+		else
+			bStopwordsPresent = true;
 	}
 
-	if ( !pFrom || *pFrom=='#' )
+	if ( !dTokens.GetLength() )
+	{
+		sphWarning ( "index '%s': all source tokens are stopwords (wordform='%s', file='%s'). IGNORED.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
 		return;
+	}
 
 	if ( !bSeparatorFound )
 	{
-		sphWarning ( "index '%s': no wordform separator found ( wordform='%s' ). Fix your wordforms file '%s'.",
-			pContainer->m_sIndexName.cstr(), sBuffer, szFile );
+		sphWarning ( "index '%s': no wordform separator found (wordform='%s', file='%s'). IGNORED.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
 		return;
 	}
 
 	BYTE * pTo = pTokenizer->GetToken ();
+	int iToTokenLenCP = pTokenizer->GetLastTokenLen();
 	if ( !pTo )
 	{
-		sphWarning ( "index '%s': no destination token found ( wordform='%s' ). Fix your wordforms file '%s'.",
-			pContainer->m_sIndexName.cstr(), sBuffer, szFile );
+		sphWarning ( "index '%s': no destination token found (wordform='%s', file='%s'). IGNORED.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
 		return;
 	}
 
 	if ( *pTo=='#' )
 	{
-		sphWarning ( "index '%s': misplaced comment ( wordform='%s' ). Fix your wordforms file '%s'.",
-			pContainer->m_sIndexName.cstr(), sBuffer, szFile );
+		sphWarning ( "index '%s': misplaced comment (wordform='%s', file='%s'). IGNORED.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
 		return;
 	}
 
 	CSphString sTo ( (const char *)pTo );
-
-	int iLastTokenLen = pTokenizer->GetLastTokenLen();
-	if ( !pTokenizer->TokenIsBlended () && pTokenizer->GetToken () )
+	if ( !GetWordID ( pTo, sTo.Length(), true ) )
 	{
-		sphWarning ( "invalid mapping (must be exactly 1 destination keyword) ( wordforms='%s' ). Fix your wordforms file '%s'.",
-					sBuffer, szFile );
-	}
-
-	if ( bMultiform )
-	{
-		if ( bAfterMorphology )
-		{
-			sphWarning ( "index '%s': '~' modifier is incompatible with wordforms "
-				"that have several source words ( wordform='%s' ). Fix your wordforms file '%s'.",
-				pContainer->m_sIndexName.cstr(), sBuffer, szFile );
-			return;
-		}
-
-		dKeys.Add ( sFrom );
-
-		bool bToIsStopword = !GetWordID ( pTo, sTo.Length(), true );
-		bool bKeyIsStopword = !GetWordID ( (BYTE *)sKey.cstr(), sKey.Length(), true );
-
-		if ( bToIsStopword || bStopwordsPresent || bKeyIsStopword )
-		{
-			const char * szStopwordReport = ConcatReportStrings ( dKeys );
-			sphWarning ( "index '%s': wordforms contain stopwords ( wordform='%s %s> %s' ). Fix your wordforms file '%s'.",
-				pContainer->m_sIndexName.cstr(), sKey.cstr(), szStopwordReport, sTo.cstr(), szFile );
-		}
-
-		if ( bToIsStopword )
-			return;
-
-		if ( bStopwordsPresent )
-			ARRAY_FOREACH ( i, dKeys )
-			if ( !GetWordID ( (BYTE *)( dKeys[i].cstr() ), dKeys[i].Length(), true ) )
-			{
-				dKeys.Remove(i);
-				i--;
-			}
-
-			if ( bKeyIsStopword )
-			{
-				if ( dKeys.GetLength() )
-				{
-					sKey.Swap ( dKeys[0] );
-					dKeys.Remove(0);
-				} else
-					return;
-			}
-
-			if ( !dKeys.GetLength() )
-			{
-				sFrom = sKey;
-			}
-	} else
-	{
-		if ( !GetWordID ( (BYTE *)sFrom.cstr(), sFrom.Length(), true ) || !GetWordID ( pTo, sTo.Length(), true ) )
-		{
-			sphWarning ( "index '%s': wordforms contain stopwords ( wordform='%s' ). Fix your wordforms file '%s'.",
-				pContainer->m_sIndexName.cstr(), sBuffer, szFile );
-			return;
-		}
-	}
-
-	CSphString & sSourceWordform = ( bMultiform ? sTo : sFrom );
-
-	if ( !bMultiform && bAfterMorphology )
-	{
-		BYTE pBuf [16+3*SPH_MAX_WORD_LEN];
-		memcpy ( pBuf, sSourceWordform.cstr(), sSourceWordform.Length()+1 );
-		ApplyStemmers ( pBuf );
-		sSourceWordform = (char *)pBuf;
-	}
-
-	// check wordform that source token is a new token or has same destination token
-	int * pRefTo = pContainer->m_dHash ( sSourceWordform );
-	assert ( !pRefTo || ( *pRefTo>=0 && *pRefTo<pContainer->m_dNormalForms.GetLength() ) );
-	if ( !bMultiform && pRefTo )
-	{
-		// replace with a new wordform
-		if ( pContainer->m_dNormalForms[*pRefTo].m_sWord!=sTo || pContainer->m_dNormalForms[*pRefTo].m_bAfterMorphology!=bAfterMorphology )
-		{
-			CSphStoredNF & tRefTo = pContainer->m_dNormalForms[*pRefTo];
-			sphWarning ( "index '%s': duplicate wordform found - overridden ( current='%s', old='%s%s > %s' ). Fix your wordforms file '%s'.",
-				pContainer->m_sIndexName.cstr(), sBuffer, tRefTo.m_bAfterMorphology ? "~" : "", sSourceWordform.cstr(), tRefTo.m_sWord.cstr(), szFile );
-
-			tRefTo.m_sWord = sTo;
-			tRefTo.m_bAfterMorphology = bAfterMorphology;
-			pContainer->m_bHavePostMorphNF |= bAfterMorphology;
-		} else
-			sphWarning ( "index '%s': duplicate wordform found ( '%s' ). Fix your wordforms file '%s'.",
-				pContainer->m_sIndexName.cstr(), sBuffer, szFile );
-
+		sphWarning ( "index '%s': destination token is a stopwords (wordform='%s', file='%s'). IGNORED.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
 		return;
 	}
 
-	if ( !pRefTo && !bMultiform )
-	{
-		CSphStoredNF tForm;
-		tForm.m_sWord = sTo;
-		tForm.m_bAfterMorphology = bAfterMorphology;
-		pContainer->m_bHavePostMorphNF |= bAfterMorphology;
-		if ( !pContainer->m_dNormalForms.GetLength()
-			|| pContainer->m_dNormalForms.Last().m_sWord!=sTo
-			|| pContainer->m_dNormalForms.Last().m_bAfterMorphology!=bAfterMorphology)
-				pContainer->m_dNormalForms.Add ( tForm );
+	// what if we have more than one word in the right part?
+	bool bMultipleDests = false;
+	while ( pTokenizer->GetToken() )
+		bMultipleDests = true;
 
-		pContainer->m_dHash.Add ( pContainer->m_dNormalForms.GetLength()-1, sSourceWordform );
+	if ( bMultipleDests )
+	{
+		sphWarning ( "invalid mapping (must be exactly 1 destination keyword) (wordform='%s', file='%s'). IGNORED.", sBuffer, szFile );
+		return;
 	}
 
-	if ( bMultiform )
+	// we disabled all blended, so we need to filter them manually
+	bool bBlendedPresent = false;
+	for ( int i = 0; i < sTo.Length() && !bBlendedPresent; i++ )
+		ARRAY_FOREACH_COND ( j, dBlended, !bBlendedPresent )
+			bBlendedPresent = sTo.cstr()[i]==dBlended[j];
+
+	if ( bBlendedPresent )
+		sphWarning ( "invalid mapping (destination contains blended characters) (wordform='%s'). Fix your wordforms file '%s'.", sBuffer, szFile );
+
+	if ( dTokens.GetLength()>1 )
 	{
 		CSphMultiform * pMultiWordform = new CSphMultiform;
 		pMultiWordform->m_sNormalForm = sTo;
-		pMultiWordform->m_iNormalTokenLen = iLastTokenLen;
-		pMultiWordform->m_dTokens = dKeys;
+		pMultiWordform->m_iNormalTokenLen = iToTokenLenCP;
+
+		for ( int i = 1; i < dTokens.GetLength(); i++ )
+			pMultiWordform->m_dTokens.Add ( dTokens[i] );
+
 		if ( !pContainer->m_pMultiWordforms )
 			pContainer->m_pMultiWordforms = new CSphMultiformContainer;
 
-		CSphMultiforms ** pWordforms = pContainer->m_pMultiWordforms->m_Hash ( sKey );
+		CSphMultiforms ** pWordforms = pContainer->m_pMultiWordforms->m_Hash ( dTokens[0] );
 		if ( pWordforms )
 		{
 			ARRAY_FOREACH ( iMultiform, (*pWordforms)->m_pForms )
@@ -22053,7 +21947,7 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 					{
 						const char * szStoredTokens = ConcatReportStrings ( pStoredMF->m_dTokens );
 						sphWarning ( "index '%s': duplicate wordform found - overridden ( current='%s', old='%s %s > %s' ). Fix your wordforms file '%s'.",
-							pContainer->m_sIndexName.cstr(), sBuffer, sKey.cstr(), szStoredTokens, pStoredMF->m_sNormalForm.cstr(), szFile );
+							pContainer->m_sIndexName.cstr(), sBuffer, dTokens[0], szStoredTokens, pStoredMF->m_sNormalForm.cstr(), szFile );
 
 						pStoredMF->m_iNormalTokenLen = pMultiWordform->m_iNormalTokenLen;
 						pStoredMF->m_sNormalForm = pMultiWordform->m_sNormalForm;
@@ -22077,35 +21971,47 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 			pNewWordforms->m_iMinTokens = pMultiWordform->m_dTokens.GetLength ();
 			pNewWordforms->m_iMaxTokens = pMultiWordform->m_dTokens.GetLength ();
 			pContainer->m_pMultiWordforms->m_iMaxTokens = Max ( pContainer->m_pMultiWordforms->m_iMaxTokens, pNewWordforms->m_iMaxTokens );
-			pContainer->m_pMultiWordforms->m_Hash.Add ( pNewWordforms, sKey );
+			pContainer->m_pMultiWordforms->m_Hash.Add ( pNewWordforms, dTokens[0] );
+		}
+	} else
+	{
+		if ( bAfterMorphology )
+		{
+			BYTE pBuf [16+3*SPH_MAX_WORD_LEN];
+			memcpy ( pBuf, dTokens[0].cstr(), dTokens[0].Length()+1 );
+			ApplyStemmers ( pBuf );
+			dTokens[0] = (char *)pBuf;
 		}
 
-		if ( !sBlended.IsEmpty() )
+		// check wordform that source token is a new token or has same destination token
+		int * pRefTo = pContainer->m_dHash ( dTokens[0] );
+		assert ( !pRefTo || ( *pRefTo>=0 && *pRefTo<pContainer->m_dNormalForms.GetLength() ) );
+		if ( pRefTo )
 		{
-			pMultiWordform = new CSphMultiform;
-			pMultiWordform->m_sNormalForm = sTo;
-			pMultiWordform->m_iNormalTokenLen = iLastTokenLen;
-			pMultiWordform->m_dTokens.Reserve ( dKeys.GetLength()+1 );
-			pMultiWordform->m_dTokens.Add ( sKey );
-			ARRAY_FOREACH ( i, dKeys )
-				pMultiWordform->m_dTokens.Add ( dKeys[i] );
+			// replace with a new wordform
+			if ( pContainer->m_dNormalForms[*pRefTo].m_sWord!=sTo || pContainer->m_dNormalForms[*pRefTo].m_bAfterMorphology!=bAfterMorphology )
+			{
+				CSphStoredNF & tRefTo = pContainer->m_dNormalForms[*pRefTo];
+				sphWarning ( "index '%s': duplicate wordform found - overridden ( current='%s', old='%s%s > %s' ). Fix your wordforms file '%s'.",
+					pContainer->m_sIndexName.cstr(), sBuffer, tRefTo.m_bAfterMorphology ? "~" : "", dTokens[0].cstr(), tRefTo.m_sWord.cstr(), szFile );
 
-			pWordforms = pContainer->m_pMultiWordforms->m_Hash ( sBlended );
-			if ( pWordforms )
-			{
-				(*pWordforms)->m_pForms.Add ( pMultiWordform );
-				(*pWordforms)->m_iMinTokens = Min ( (*pWordforms)->m_iMinTokens, pMultiWordform->m_dTokens.GetLength () );
-				(*pWordforms)->m_iMaxTokens = Max ( (*pWordforms)->m_iMaxTokens, pMultiWordform->m_dTokens.GetLength () );
-				pContainer->m_pMultiWordforms->m_iMaxTokens = Max ( pContainer->m_pMultiWordforms->m_iMaxTokens, (*pWordforms)->m_iMaxTokens );
+				tRefTo.m_sWord = sTo;
+				tRefTo.m_bAfterMorphology = bAfterMorphology;
+				pContainer->m_bHavePostMorphNF |= bAfterMorphology;
 			} else
-			{
-				CSphMultiforms * pNewWordforms = new CSphMultiforms;
-				pNewWordforms->m_pForms.Add ( pMultiWordform );
-				pNewWordforms->m_iMinTokens = pMultiWordform->m_dTokens.GetLength ();
-				pNewWordforms->m_iMaxTokens = pMultiWordform->m_dTokens.GetLength ();
-				pContainer->m_pMultiWordforms->m_iMaxTokens = Max ( pContainer->m_pMultiWordforms->m_iMaxTokens, pNewWordforms->m_iMaxTokens );
-				pContainer->m_pMultiWordforms->m_Hash.Add ( pNewWordforms, sBlended );
-			}
+				sphWarning ( "index '%s': duplicate wordform found ( '%s' ). Fix your wordforms file '%s'.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
+		} else
+		{
+			CSphStoredNF tForm;
+			tForm.m_sWord = sTo;
+			tForm.m_bAfterMorphology = bAfterMorphology;
+			pContainer->m_bHavePostMorphNF |= bAfterMorphology;
+			if ( !pContainer->m_dNormalForms.GetLength()
+				|| pContainer->m_dNormalForms.Last().m_sWord!=sTo
+				|| pContainer->m_dNormalForms.Last().m_bAfterMorphology!=bAfterMorphology)
+				pContainer->m_dNormalForms.Add ( tForm );
+
+			pContainer->m_dHash.Add ( pContainer->m_dNormalForms.GetLength()-1, dTokens[0] );
 		}
 	}
 }
@@ -22120,9 +22026,40 @@ CSphWordforms * CSphTemplateDictTraits::LoadWordformContainer ( const CSphVector
 	pContainer->m_uTokenizerFNV = pTokenizer->GetSettingsFNV();
 	pContainer->m_sIndexName = sIndex;
 
-	// my tokenizer
 	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone ( SPH_CLONE_INDEX ) );
-	pMyTokenizer->AddSpecials ( "#=>" );
+	const CSphTokenizerSettings & tSettings = pMyTokenizer->GetSettings();
+	CSphVector<char> dBlended;
+
+	// get a list of blend chars and set add them to the tokenizer as simple chars
+	if ( tSettings.m_sBlendChars.Length() )
+	{
+		CSphVector<char> dNewCharset;
+		dNewCharset.Resize ( tSettings.m_sCaseFolding.Length() );
+		memcpy ( dNewCharset.Begin(), tSettings.m_sCaseFolding.cstr(), dNewCharset.GetLength() );
+
+		CSphVector<CSphRemapRange> dRemaps;
+		CSphCharsetDefinitionParser tParser;
+		if ( tParser.Parse ( tSettings.m_sBlendChars.cstr(), dRemaps ) )
+			ARRAY_FOREACH ( i, dRemaps )
+				for ( int j = dRemaps[i].m_iStart; j<=dRemaps[i].m_iEnd; j++ )
+				{
+					dNewCharset.Add ( ',' );
+					dNewCharset.Add ( ' ' );
+					dNewCharset.Add ( char(j) );
+					dBlended.Add ( char(j) );
+				}
+
+		dNewCharset.Add(0);
+
+		CSphString sError;
+		pMyTokenizer->SetCaseFolding ( dNewCharset.Begin(), sError );
+
+		// disable blend chars
+		pMyTokenizer->SetBlendChars ( NULL, sError );
+	}
+
+	// add wordform-specific specials
+	pMyTokenizer->AddSpecials ( "#=>~" );
 
 	if ( pEmbeddedWordforms )
 	{
@@ -22135,7 +22072,7 @@ CSphWordforms * CSphTemplateDictTraits::LoadWordformContainer ( const CSphVector
 
 		ARRAY_FOREACH ( i, (*pEmbeddedWordforms) )
 			AddWordform ( pContainer, (char*)(*pEmbeddedWordforms)[i].cstr(),
-				(*pEmbeddedWordforms)[i].Length(), pMyTokenizer.Ptr(), sAllFiles.cstr() );
+				(*pEmbeddedWordforms)[i].Length(), pMyTokenizer.Ptr(), sAllFiles.cstr(), dBlended );
 	} else
 	{
 		char sBuffer [ 6*SPH_MAX_WORD_LEN + 512 ]; // enough to hold 2 UTF-8 words, plus some whitespace overhead
@@ -22153,7 +22090,7 @@ CSphWordforms * CSphTemplateDictTraits::LoadWordformContainer ( const CSphVector
 
 			int iLen;
 			while ( ( iLen = rdWordforms.GetLine ( sBuffer, sizeof(sBuffer) ) )>=0 )
-				AddWordform ( pContainer, sBuffer, iLen, pMyTokenizer.Ptr(), szFile );
+				AddWordform ( pContainer, sBuffer, iLen, pMyTokenizer.Ptr(), szFile, dBlended );
 		}
 	}
 

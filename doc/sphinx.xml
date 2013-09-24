@@ -6502,6 +6502,8 @@ We're gonna get rid of other modes in future.</para></listitem>
 </listitem>
 <listitem><para>ondisk_dict_default is deprecated. No need to save RAM this way.
 </para></listitem>
+<listitem><para>compat_sphinxql_magics is removed. Now you can't use an old
+result format and SphinxQL always looks more like ANSI SQL.</para></listitem>
 </itemizedlist>
 </para>
 <para>None of the different querying methods are deprecated, but as of

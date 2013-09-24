@@ -6498,6 +6498,10 @@ ondisk_attrs(link here) or ondisk_attrs_default(link here) instead.</para>
 We're gonna get rid of other modes in future.</para></listitem>
 <listitem><para>mem_limit=128M is a new default.</para></listitem>
 <listitem><para>rt_mem_limit=128M is a new default.</para></listitem>
+<listitem><para>ondisk_dict is deprecated. No need to save RAM this way.</para>
+</listitem>
+<listitem><para>ondisk_dict_default is deprecated. No need to save RAM this way.
+</para></listitem>
 </itemizedlist>
 </para>
 <para>None of the different querying methods are deprecated, but as of
@@ -11404,6 +11408,7 @@ preopen = 1
 Whether to keep the dictionary file (.spi) for this index on disk, or precache it in RAM.
 Optional, default is 0 (precache in RAM).
 Introduced in version 0.9.9-rc1.
+DEPRECATED
 </para>
 <para>
 The dictionary (.spi) can be either kept on RAM or on disk. The default
@@ -12912,6 +12917,7 @@ attr_flush_period = 900 # persist updates to disk every 15 minutes
 Instance-wide defaults for <link linkend="conf-ondisk-dict">ondisk_dict</link> directive.
 Optional, default it 0 (precache dictionaries in RAM).
 Introduced in version 0.9.9-rc1.
+DEPRECATED
 </para>
 <para>
 This directive lets you specify the default value of

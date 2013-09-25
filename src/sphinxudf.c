@@ -156,6 +156,127 @@ int sphinx_factors_deinit ( SPH_UDF_FACTORS * out )
 	return 0;
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+static const unsigned int * skip_fields ( const unsigned int * in, int n )
+{
+	in += 8; // skip heading document factors
+	while ( n-->0 )
+		in += ( in[0]>0 ) ? 15 : 1; // skip 15 ints per matched field, or 1 per unmatched
+	return in;
+}
+
+
+static const unsigned int * skip_terms ( const unsigned int * in, int n )
+{
+	in += 1; // skip max_uniq_qpos
+	while ( n-->0 )
+		in += ( in[0]>0 ) ? 4 : 1; // skip 4 ints per matched term, or 1 per unmatched
+	return in;
+}
+
+
+const unsigned int * sphinx_get_field_factors ( const unsigned int * in, int field )
+{
+	if ( !in || field<0 || field>=(int)in[5] )
+		return NULL; // blob[5] is num_fields, do a sanity check
+	in = skip_fields ( in, field );
+	if ( !in[0] )
+		return NULL; // no hits, no fun
+	if ( (int)in[1]!=field )
+		return NULL; // field[1] is field_id, do a sanity check
+	return in; // all good
+}
+
+
+const unsigned int * sphinx_get_term_factors ( const unsigned int * in, int term )
+{
+	if ( !in || term<0 )
+		return NULL;
+	in = skip_fields ( in, in[5] ); // skip all fields
+	if ( term>=(int)in[0] )
+		return NULL; // sanity check vs max_uniq_qpos
+	in = skip_terms ( in, term-1);
+	if ( !in[0] )
+		return NULL; // unmatched term
+	if ( (int)in[1]!=term )
+		return NULL; // term[1] is keyword_id, sanity check failed
+	return in;
+}
+
+
+int sphinx_get_doc_factor_int ( const unsigned int * in, enum sphinx_doc_factor f )
+{
+	switch ( f )
+	{
+		case SPH_DOCF_BM25:				return (int)in[1];
+		case SPH_DOCF_BM25A:			return (int)in[2];
+		case SPH_DOCF_MATCHED_FIELDS:	return (int)in[3];
+		case SPH_DOCF_DOC_WORD_COUNT:	return (int)in[4];
+		case SPH_DOCF_NUM_FIELDS:		return (int)in[5];
+		case SPH_DOCF_MAX_UNIQ_QPOS:
+			in = skip_fields ( in, in[5] );
+			return (int)in[0];
+		case SPH_DOCF_EXACT_HIT_MASK:	return (int)in[6];
+		case SPH_DOCF_EXACT_ORDER_MASK:	return (int)in[7];
+	}
+	return 0;
+}
+
+
+int sphinx_get_field_factor_int ( const unsigned int * in, enum sphinx_field_factor f )
+{
+	if ( !in )
+		return 0;
+	// in[1] is id
+	switch ( f )
+	{
+		case SPH_FIELDF_HIT_COUNT:			return (int)in[0];
+		case SPH_FIELDF_LCS:				return (int)in[2];
+		case SPH_FIELDF_WORD_COUNT:			return (int)in[3];
+		case SPH_FIELDF_TF_IDF:				return (int)in[4];
+		case SPH_FIELDF_MIN_IDF:			return (int)in[5];
+		case SPH_FIELDF_MAX_IDF:			return (int)in[6];
+		case SPH_FIELDF_SUM_IDF:			return (int)in[7];
+		case SPH_FIELDF_MIN_HIT_POS:		return (int)in[8];
+		case SPH_FIELDF_MIN_BEST_SPAN_POS:	return (int)in[9];
+		case SPH_FIELDF_MAX_WINDOW_HITS:	return (int)in[10];
+		case SPH_FIELDF_MIN_GAPS:			return (int)in[11];
+		case SPH_FIELDF_ATC:				return (int)in[12];
+		case SPH_FIELDF_LCCS:				return (int)in[13];
+		case SPH_FIELDF_WLCCS:				return (int)in[14];
+	}
+	return 0;
+}
+
+
+int sphinx_get_term_factor_int ( const unsigned int * in, enum sphinx_term_factor f )
+{
+	if ( !in )
+		return 0;
+	switch ( f )
+	{
+		case SPH_TERMF_KEYWORD_MASK:		return (int)in[0];
+		case SPH_TERMF_TF:					return (int)in[2];
+		case SPH_TERMF_IDF:					return (int)in[3];
+	}
+	return 0;
+}
+
+
+float sphinx_get_field_factor_float ( const unsigned int * in, enum sphinx_field_factor f )
+{
+	int r = sphinx_get_field_factor_int ( in, f );
+	return *(float*)&r;
+}
+
+
+float sphinx_get_term_factor_float ( const unsigned int * in, enum sphinx_term_factor f )
+{
+	int r = sphinx_get_term_factor_int ( in, f );
+	return *(float*)&r;
+}
+
 //
 // $Id$
 //

@@ -4571,7 +4571,7 @@ SELECT
     [WHERE where_condition]
     [GROUP BY {col_name | expr_alias} [, {sol_name | expr_alias}]]
     [WITHIN GROUP ORDER BY {col_name | expr_alias} {ASC | DESC}]
-    [ORDER BY {col_name | expr_alias} {ASC | DESC} [, ...]]
+    [ORDER [N] BY {col_name | expr_alias} {ASC | DESC} [, ...]]
     [LIMIT [offset,] row_count]
     [OPTION opt_name = opt_value [, ...]]
 </programlisting>
@@ -4687,6 +4687,11 @@ GROUP BY vendorid
 Starting with 2.0.1-beta, GROUP BY on a string attribute is supported,
 with respect for current collation (see <xref linkend="collations"/>).
 </para>
+<para>Starting with 2.2.1-beta, you can query Sphinx to return (no more than)
+N top matches for each group accordingly to WITHIN GROUP ORDER BY.</para>
+<programlisting>
+SELECT id FROM products GROUP 3 BY category
+</programlisting>
 <para>
 You can sort the result set by (an alias of) the aggregate value.
 <programlisting>

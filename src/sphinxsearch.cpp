@@ -612,6 +612,12 @@ public:
 	virtual int					GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const;
+	virtual uint64_t			GetWordID () const
+	{
+		// this will fail in case of similar sum of different fnv64 hash pairs
+		// but probability is very-very small, so let this code live
+		return m_pChildren[0]->GetWordID()+m_pChildren[1]->GetWordID();
+	}
 
 	virtual bool				GotHitless () { return m_pChildren[0]->GotHitless() || m_pChildren[1]->GotHitless(); }
 
@@ -1339,8 +1345,6 @@ static ExtNode_i * CreateMultiNode ( const XQNode_t * pQueryNode, const ISphQwor
 
 		// FIXME! tricky combo again
 		// quorum+expand used KeywordsEqual() path to drill down until actual nodes
-		// that path is no longer and quorum+expand+dupes might probably fail now
-		// the proper solution would be to have dNodes return proper wordids somehow
 		ExtNode_i * pResult = new T ( dNodes, *pQueryNode, tSetup );
 		if ( pQueryNode->GetCount() )
 			return tSetup.m_pNodeCache->CreateProxy ( pResult, pQueryNode, tSetup );
@@ -4069,7 +4073,6 @@ ExtQuorum_c::ExtQuorum_c ( CSphVector<ExtNode_i*> & dQwords, const XQNode_t & tN
 		m_iAtomPos = dQwords[0]->m_iAtomPos;
 
 		// compute duplicate keywords mask (aka dupe mask)
-		// FIXME! will (likely) now fail with quorum+expand+dupes, need a new test?
 		// FIXME! will fail with wordforms and stuff; sorry, no wordforms vs expand vs quorum support for now!
 		CSphFixedVector<QuorumDupeNodeHash_t> dHashes ( dQwords.GetLength() );
 		ARRAY_FOREACH ( i, dQwords )

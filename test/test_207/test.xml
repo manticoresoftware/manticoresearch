@@ -312,6 +312,10 @@ CREATE TABLE test_table
 <sphinxql>SELECT id,gid,weight() as my_weight FROM test4 WHERE MATCH('клея') option ranker=sph04;show meta</sphinxql>
 <sphinxql>SELECT id,gid,weight() as my_weight FROM test4 WHERE MATCH('=клея') option ranker=sph04;show meta</sphinxql>
 
+<!-- expand+remove quorum dupes test -->
+<sphinxql>SELECT id FROM stalin_plain WHERE MATCH('"один два три"/0.5') limit 1</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+
 </sphqueries>
 
 </test>

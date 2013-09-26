@@ -5630,6 +5630,10 @@ MVA values sets for updating (and also for INSERT or REPLACE, refer
 to <xref linkend="sphinxql-insert"/>) must be specificed as comma-separated
 lists in parentheses. To erase the MVA value, just assign () to it.
 </para>
+<para>
+Starting from 2.2.1-beta version UPDATE can be used to update integer and float
+values in JSON array. No strings, arrays and other types yet.
+</para>
 <programlisting>
 mysql> UPDATE myindex SET enabled=0 WHERE id=123;
 Query OK, 1 rows affected (0.00 sec)
@@ -5654,6 +5658,10 @@ statement you can use these options:
 <listitem><para>'ignore_nonexistent_columns' - this option, added in version 2.1.1-beta, points that the update will silently
 ignore any warnings about trying to update a column which is not exists in current index schema.
           </para>
+<para>'strict' - this option is used while updating JSON attributes. As of
+2.2.1-beta, it's possible to update just some types in JSON. And if you
+try to update, for example, array type you'll get error with 'strict' option
+on and warning otherwise.
 </listitem>
 </itemizedlist>
 </para>

@@ -8499,65 +8499,6 @@ sql_sock = /tmp/mysql.sock
 </sect2>
 
 
-<sect2 id="conf-json-autoconv-numbers"><title>json_autoconv_numbers</title>
-<para>
-Automatically detect and convert possible JSON
-strings that represent numbers, into numeric attributes.
-Optional, defalt value is 0 (do not convert strings into numbers).
-Added in 2.1.1-beta.
-</para>
-<para>
-When this option is 1, values such as "1234" will be indexed as numbers instead
-of strings; if the option is 0, such values will be indexed as strings.
-This conversion applies to any data source, that is, JSON attributes originating
-from either SQL or XMLpipe2 sources will all be affected.
-</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-json_autoconv_numbers = 1
-</programlisting>
-</sect2>
-
-
-<sect2 id="conf-json-autoconv-keynames"><title>json_autoconv_keynames</title>
-<para>
-Whether and how to auto-convert key names within JSON attributes.
-Known value is 'lowercase'.
-Optional, defalt value is unspecified (do not convert anything).
-Added in 2.1.1-beta.
-</para>
-<para>
-When this directive is set to 'lowercase', key names within JSON attributes
-will be automatically brought to lower case when indexing.
-This conversion applies to any data source, that is, JSON attributes originating
-from either SQL or XMLpipe2 sources will all be affected.
-</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-json_autoconv_keynames = lowercase
-</programlisting>
-</sect2>
-
-
-<sect2 id="conf-on-json-attr-error"><title>on_json_attr_error</title>
-<para>
-What to do if JSON format errors are found. 
-Optional, default value is <option>ignore_attr</option> (ignore errors).
-Applies only to <option>sql_attr_json</option> attributes.
-Added in 2.1.1-beta.
-</para>
-<para>
-By default, JSON format errors are ignored (<option>ignore_attr</option>) and
-the indexer tool will just show a warning. Setting this option to <option>fail_index</option>
-will rather make indexing fail at the first JSON format error.
-</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-on_json_attr_error = ignore_attr
-</programlisting>
-</sect2>
-
-
 <sect2 id="conf-mysql-connect-flags"><title>mysql_connect_flags</title>
 <para>
 MySQL client connection flags.
@@ -12501,26 +12442,6 @@ on_file_field_errors = skip_document
 </sect2>
 
 
-<sect2 id="conf-lemmatizer-base"><title>lemmatizer_base</title>
-<para>
-Lemmatizer dictionaries base path.
-Optional, defaut is /usr/local/share (as in --datadir switch to ./configure script).
-Added in version 2.1.1-beta.
-</para>
-<para>
-Our lemmatizer implementation (see <xref linkend="conf-morphology"/> for a discussion
-of what lemmatizers are) is dictionary driven. lemmatizer_base directive configures
-the base dictionary path. File names are hardcoded and specific to a given lemmatizer;
-the Russian lemmatizer uses ru.pak dictionary file. The dictionaries can be obtained
-from the Sphinx website.
-</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-lemmatizer_base = /usr/local/share/sphinx/dicts/
-</programlisting>
-</sect2>
-
-
 <sect2 id="conf-lemmatizer-cache"><title>lemmatizer_cache</title>
 <para>
 Lemmatizer cache size.
@@ -13783,6 +13704,86 @@ to specify all of them, for readability.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 predicted_time_costs = doc=128, hit=96, skip=4096, match=128
+</programlisting>
+</sect2>
+</sect1>
+
+<sect1 id="confgroup-common"><title>Common section configuration options</title>
+
+<sect2 id="conf-lemmatizer-base"><title>lemmatizer_base</title>
+<para>
+Lemmatizer dictionaries base path.
+Optional, defaut is /usr/local/share (as in --datadir switch to ./configure script).
+Added in version 2.1.1-beta.
+</para>
+<para>
+Our lemmatizer implementation (see <xref linkend="conf-morphology"/> for a discussion
+of what lemmatizers are) is dictionary driven. lemmatizer_base directive configures
+the base dictionary path. File names are hardcoded and specific to a given lemmatizer;
+the Russian lemmatizer uses ru.pak dictionary file. The dictionaries can be obtained
+from the Sphinx website.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+lemmatizer_base = /usr/local/share/sphinx/dicts/
+</programlisting>
+</sect2>
+
+<sect2 id="conf-on-json-attr-error"><title>on_json_attr_error</title>
+<para>
+What to do if JSON format errors are found.
+Optional, default value is <option>ignore_attr</option> (ignore errors).
+Applies only to <option>sql_attr_json</option> attributes.
+Added in 2.1.1-beta.
+</para>
+<para>
+By default, JSON format errors are ignored (<option>ignore_attr</option>) and
+the indexer tool will just show a warning. Setting this option to <option>fail_index</option>
+will rather make indexing fail at the first JSON format error.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+on_json_attr_error = ignore_attr
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-json-autoconv-numbers"><title>json_autoconv_numbers</title>
+<para>
+Automatically detect and convert possible JSON
+strings that represent numbers, into numeric attributes.
+Optional, defalt value is 0 (do not convert strings into numbers).
+Added in 2.1.1-beta.
+</para>
+<para>
+When this option is 1, values such as "1234" will be indexed as numbers instead
+of strings; if the option is 0, such values will be indexed as strings.
+This conversion applies to any data source, that is, JSON attributes originating
+from either SQL or XMLpipe2 sources will all be affected.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+json_autoconv_numbers = 1
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-json-autoconv-keynames"><title>json_autoconv_keynames</title>
+<para>
+Whether and how to auto-convert key names within JSON attributes.
+Known value is 'lowercase'.
+Optional, defalt value is unspecified (do not convert anything).
+Added in 2.1.1-beta.
+</para>
+<para>
+When this directive is set to 'lowercase', key names within JSON attributes
+will be automatically brought to lower case when indexing.
+This conversion applies to any data source, that is, JSON attributes originating
+from either SQL or XMLpipe2 sources will all be affected.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+json_autoconv_keynames = lowercase
 </programlisting>
 </sect2>
 

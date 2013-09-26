@@ -3922,6 +3922,11 @@ completing the work on each index. (The default behavior
 is to send a single SIGHUP after all the indexes were built.)
 </para></listitem>
 
+<listitem><para><option>--nohup</option> is useful when you want to check your
+index with indextool before actually rotating it. indexer won't send
+SIGHUP if this option is on.
+</para></listitem>
+
 <listitem><para><option>--print-queries</option> prints out
 SQL queries that <filename>indexer</filename> sends to
 the database, along with SQL connection and disconnection
@@ -4523,6 +4528,10 @@ is a one-off optimization intended for rather old RT indexes, created
 by development versions prior to 1.10-beta release. As of 1.10-beta
 releases, this kill list optimization (purging) should happen
 automatically, and there should never be a need to use this option.
+</para></listitem>
+<listitem><para><option>--rotate<option> works only with --check and defines
+whether to check index waiting for rotation, i.e. with .new extension. This
+is useful when you want to check your index before actually using it.
 </para></listitem>
 </itemizedlist>
 </sect1>

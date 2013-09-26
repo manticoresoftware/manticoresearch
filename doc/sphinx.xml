@@ -4631,6 +4631,25 @@ snippets is postponed not just until the entire final result set is ready,
 but even after the LIMIT clause is applied. For example, with a LIMIT 20,10
 clause, SNIPPET() will be called at most 10 times.
 </para>
+<para>
+Table functions is a mechanism of post-query result set processing. It was
+added in 2.2.1-beta. Table functions take an arbitrary result set as their
+input, and return a new, processed set as their output. The first argument
+should be the input result set, but a table function can optionally take
+and handle more arguments. Table functions can completely change the result
+set, including the schema. For now, only built in table functions are
+supported. UDFs are planned when the internal call interface is stabilized.
+Table functions work for both outer SELECT and nested SELECT.
+<itemizedlist>
+<listitem>
+<para>REMOVE_REPEATS ( result_set, column, offset, limit ) - removes repeated
+adjusted rows with the same 'column' value.</para>
+</listitem>
+</itemizedlist>
+<programlisting>
+SELECT REMOVE_REPEATS((SELECT * FROM dist1), gid, 0, 10)
+</programlisting>
+</para>
 </listitem>
 
 <listitem>

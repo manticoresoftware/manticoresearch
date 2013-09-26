@@ -2458,10 +2458,12 @@ Here's the complete reference list for quick access.
 <listitem><para><link linkend="expr-func-floor">FLOOR()</link></para></listitem>
 <listitem><para><link linkend="expr-func-geodist">GEODIST()</link></para></listitem>
 <listitem><para><link linkend="expr-func-geopoly2d">GEOPOLY2D()</link></para></listitem>
+<listitem><para><link linkend="expr-func-greatest">GREATEST()</link></para></listitem>
 <listitem><para><link linkend="expr-func-idiv">IDIV()</link></para></listitem>
 <listitem><para><link linkend="expr-func-if">IF()</link></para></listitem>
 <listitem><para><link linkend="expr-func-in">IN()</link></para></listitem>
 <listitem><para><link linkend="expr-func-interval">INTERVAL()</link></para></listitem>
+<listitem><para><link linkend="expr-func-least">LEAST()</link></para></listitem>
 <listitem><para><link linkend="expr-func-length">LENGTH()</link></para></listitem>
 <listitem><para><link linkend="expr-func-ln">LN()</link></para></listitem>
 <listitem><para><link linkend="expr-func-log10">LOG10()</link></para></listitem>
@@ -2769,7 +2771,8 @@ will be very quick. Starting with 0.9.9-rc2, first argument can also be
 a MVA attribute. In that case, IN() will return 1 if any of the MVA values
 is equal to any of the other arguments. Starting with 2.0.1-beta, IN() also
 supports <code>IN(expr,@uservar)</code> syntax to check whether the value
-belongs to the list in the given global user variable.
+belongs to the list in the given global user variable. First argument can be
+JSON attribute since 2.2.1-beta.
 </para></listitem>
 </varlistentry>
 
@@ -2918,6 +2921,28 @@ factors. Note that this feature is not currently supported by the Sphinx API.
 LENGTH(attr_mva) function, introduced in version 2.1.2-stable,
 returns amount of elements in MVA set. It works with both 32-bit and
 64-bit MVA attributes.
+LENGTH(attr_json) was introduced in version 2.2.1-beta. It returns length of
+a field in JSON. Return value depends on type of a field.
+For example LENGTH(json_attr.some_int) always returns 1 and
+LENGTH(json_attr.some_array) returns number of elements in array.
+</para></listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-least">LEAST()</term>
+<listitem><para>
+LEAST(attr_json.some_array) was introduced in version 2.2.1-beta. First argument
+is JSON array and return value is the least value in that array.
+Also works for MVA.
+</para></listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-greatest">GREATEST()</term>
+<listitem><para>
+GREATEST(attr_json.some_array) was introduced in version 2.2.1-beta. First argument
+is JSON array and return value is the greatest value in that array.
+Also works for MVA.
 </para></listitem>
 </varlistentry>
 	
@@ -9100,8 +9125,8 @@ Introduced in version 2.1.1-beta.
 </para>
 <para>
 When indexing JSON attributes, Sphinx expects a text field
-with JSON formatted data. Currently, only one level JSON objects are supported.
-Integer, float, strings, and string array values are accepted. 
+with JSON formatted data. As of 2.2.1-beta JSON attributes supports arbitrary
+JSON data with no limitation in nested levels or types.
 <programlisting>
 {
     "id": 1,
@@ -9111,6 +9136,10 @@ Integer, float, strings, and string array values are accepted.
         "tag1",
         "tag2",
         "tag3"
+		{
+			"one": "two",
+			"three": [4, 5]
+		}
     ]
 }
 </programlisting>
@@ -9120,8 +9149,8 @@ that don't include the key will simply be ignored.
 </para>
 <para>
 You can read more on JSON attributes in <ulink
-url="http://sphinxsearch.com/blog/2013/02/07/sphinx-2-1-json-attributes/">
-http://sphinxsearch.com/blog/2013/02/07/sphinx-2-1-json-attributes/</ulink>.
+url="http://sphinxsearch.com/blog/2013/08/08/full-json-support-in-trunk/">
+http://sphinxsearch.com/blog/2013/08/08/full-json-support-in-trunk/</ulink>.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>

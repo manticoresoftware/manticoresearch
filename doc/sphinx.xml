@@ -2386,6 +2386,10 @@ Currently implemented field aggregation functions are:
 fields. For instance, <code>sum(1)</code> should return a number
 of matched fields.
 </para></listitem>
+<listitem><para>
+<code>top</code>, returns the greatest value of the argument over all
+matched fields.
+</para></listitem>
 </itemizedlist>
 </para>
 </sect2>

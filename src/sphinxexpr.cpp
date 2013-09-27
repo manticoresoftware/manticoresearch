@@ -2967,7 +2967,7 @@ inline float GeodistSphereRad ( float lat1, float lon1, float lat2, float lon2 )
 	double dlat2 = 0.5*( lat1 - lat2 );
 	double dlon2 = 0.5*( lon1 - lon2 );
 	double a = sqr ( sin(dlat2) ) + cos(lat1)*cos(lat2)*sqr ( sin(dlon2) );
-	double c = asin ( Min ( 1, sqrt(a) ) );
+	double c = asin ( Min ( 1.0, sqrt(a) ) );
 	return (float)(D*c);
 }
 
@@ -2978,7 +2978,7 @@ inline float GeodistSphereDeg ( float lat1, float lon1, float lat2, float lon2 )
 	double dlat2 = TO_RAD2*( lat1 - lat2 );
 	double dlon2 = TO_RAD2*( lon1 - lon2 );
 	double a = sqr ( sin(dlat2) ) + cos ( TO_RAD*lat1 )*cos ( TO_RAD*lat2 )*sqr ( sin(dlon2) );
-	double c = asin ( Min ( 1, sqrt(a) ) );
+	double c = asin ( Min ( 1.0, sqrt(a) ) );
 	return (float)(D*c);
 }
 

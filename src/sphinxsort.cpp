@@ -3705,7 +3705,7 @@ float ExprGeodist_t::Eval ( const CSphMatch & tMatch ) const
 	double dlat = plat - m_fGeoAnchorLat;
 	double dlon = plon - m_fGeoAnchorLong;
 	double a = sphSqr ( sin ( dlat/2 ) ) + cos(plat)*cos(m_fGeoAnchorLat)*sphSqr(sin(dlon/2));
-	double c = 2*asin ( Min ( 1, sqrt(a) ) );
+	double c = 2*asin ( Min ( 1.0, sqrt(a) ) );
 	return (float)(R*c);
 }
 

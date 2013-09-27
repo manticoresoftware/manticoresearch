@@ -505,8 +505,8 @@ bool CSphAutofile::Read ( void * pBuf, int64_t iCount, CSphString & sError )
 	while ( iToRead>0 )
 	{
 		int64_t iToReadOnce = ( m_pStat )
-			? Min ( SPH_READ_PROGRESS_CHUNK, iToRead )
-			: Min ( SPH_READ_NOPROGRESS_CHUNK, iToRead );
+			? Min ( iToRead, SPH_READ_PROGRESS_CHUNK )
+			: Min ( iToRead, SPH_READ_NOPROGRESS_CHUNK );
 		int64_t iGot = (int64_t) sphRead ( GetFD(), pCur, (size_t)iToReadOnce );
 		if ( iGot<=0 )
 			break;
@@ -1642,7 +1642,7 @@ static inline void sphThrottleSleep ( ThrottleState_t * pState )
 	if ( pState->m_iMaxIOps>0 )
 	{
 		int64_t tmTimer = sphMicroTimer();
-		int64_t tmSleep = Max ( 0, pState->m_tmLastIOTime + 1000000/pState->m_iMaxIOps - tmTimer );
+		int64_t tmSleep = Max ( pState->m_tmLastIOTime + 1000000/pState->m_iMaxIOps - tmTimer, 0 );
 		sphSleepMsec ( (int)(tmSleep/1000) );
 		pState->m_tmLastIOTime = tmTimer + tmSleep;
 	}
@@ -4744,7 +4744,7 @@ uint64_t CSphTokenizerBase::GetSettingsFNV () const
 void CSphTokenizerBase::SetBufferPtr ( const char * sNewPtr )
 {
 	assert ( (BYTE*)sNewPtr>=m_pBuffer && (BYTE*)sNewPtr<=m_pBufferMax );
-	m_pCur = Min ( m_pBufferMax, Max ( m_pBuffer, (BYTE*)sNewPtr ) );
+	m_pCur = Min ( m_pBufferMax, Max ( m_pBuffer, (const BYTE*)sNewPtr ) );
 	m_iAccum = 0;
 	m_pAccum = m_sAccum;
 	m_pTokenStart = m_pTokenEnd = NULL;
@@ -11360,7 +11360,7 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWO
 	SphDocID_t d2, l2 = 0;
 	DWORD d3, l3 = 0; // !COMMIT must be wide enough
 
-	int iGap = Max ( 128, 16*sizeof(DWORD) + iStride*sizeof(DWORD) + ( m_pDict->GetSettings().m_bWordDict ? MAX_KEYWORD_BYTES : 0 ) );
+	int iGap = Max ( 16*sizeof(DWORD) + iStride*sizeof(DWORD) + ( m_pDict->GetSettings().m_bWordDict ? MAX_KEYWORD_BYTES : 0 ), 128u );
 	pBuf = m_dWriteBuffer.Begin();
 	maxP = m_dWriteBuffer.Begin() + m_dWriteBuffer.GetLength() - iGap;
 
@@ -12687,7 +12687,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	// book memory to store at least 64K attribute rows
 	const int iDocinfoStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
-	int iDocinfoMax = Max ( 65536, iMemoryLimit/16/iDocinfoStride/sizeof(DWORD) );
+	int iDocinfoMax = Max ( iMemoryLimit/16/iDocinfoStride/sizeof(DWORD), 65536ul );
 	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_NONE )
 		iDocinfoMax = 1;
 

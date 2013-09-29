@@ -367,6 +367,10 @@ enum ExtraData_e
 	EXTRA_GET_DATA_RANKFACTORS,
 	EXTRA_GET_DATA_PACKEDFACTORS,
 	EXTRA_GET_DATA_RANKER_STATE,
+
+	EXTRA_GET_QUEUE_WORST,
+	EXTRA_GET_QUEUE_SORTVAL,
+
 	EXTRA_SET_MVAPOOL,
 	EXTRA_SET_STRINGPOOL,
 	EXTRA_SET_MAXMATCHES,
@@ -389,6 +393,10 @@ private:
 		return false;
 	}
 };
+
+
+class ISphRanker;
+class ISphMatchSorter;
 
 
 /// per-query search context
@@ -448,7 +456,7 @@ public:
 	void						ExprCommand ( ESphExprCommand eCmd, void * pArg );
 	void						SetStringPool ( const BYTE * pStrings );
 	void						SetMVAPool ( const DWORD * pMva );
-	void						SetupExtraData ( ISphExtra * pData );
+	void						SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * pSorter );
 };
 
 //////////////////////////////////////////////////////////////////////////

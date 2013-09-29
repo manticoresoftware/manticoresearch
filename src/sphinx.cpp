@@ -15862,9 +15862,70 @@ void CSphQueryContext::SetMVAPool ( const DWORD * pMva )
 }
 
 
-void CSphQueryContext::SetupExtraData ( ISphExtra * pData )
+/// FIXME, perhaps
+/// this rather crappy helper class really serves exactly 1 (one) simple purpose
+///
+/// it passes a sorting queue internals (namely, weight and float sortkey, if any,
+/// of the current-worst queue element) to the MIN_TOP_WORST() and MIN_TOP_SORTVAL()
+/// expression classes that expose those to the cruel outside world
+///
+/// all the COM-like EXTRA_xxx message back and forth is needed because expressions
+/// are currently parsed and created earlier than the sorting queue
+///
+/// that also is the reason why we mischievously return 0 instead of clearly failing
+/// with an error when the sortval is not a dynamic float; by the time we are parsing
+/// expressions, we do not *yet* know that; but by the time we create a sorting queue,
+/// we do not *want* to leak select expression checks into it
+///
+/// alternatively, we probably want to refactor this and introduce Bind(), to parse
+/// expressions once, then bind them to actual searching contexts (aka index or segment,
+/// and ranker, and sorter, and whatever else might be referenced by the expressions)
+struct ContextExtra : public ISphExtra
 {
-	ExprCommand ( SPH_EXPR_SET_EXTRA_DATA, pData );
+	ISphRanker * m_pRanker;
+	ISphMatchSorter * m_pSorter;
+
+	virtual bool ExtraDataImpl ( ExtraData_e eData, void ** ppArg )
+	{
+		if ( eData==EXTRA_GET_QUEUE_WORST || eData==EXTRA_GET_QUEUE_SORTVAL )
+		{
+			if ( !m_pSorter )
+				return false;
+			const CSphMatch * pWorst = m_pSorter->GetWorst();
+			if ( !pWorst )
+				return false;
+			if ( eData==EXTRA_GET_QUEUE_WORST )
+			{
+				*ppArg = (void*)pWorst;
+				return true;
+			} else
+			{
+				assert ( eData==EXTRA_GET_QUEUE_SORTVAL );
+				const CSphMatchComparatorState & tCmp = m_pSorter->GetState();
+				if ( tCmp.m_eKeypart[0]==SPH_KEYPART_FLOAT && tCmp.m_tLocator[0].m_bDynamic
+					&& tCmp.m_tLocator[0].m_iBitCount==32 && ( tCmp.m_tLocator[0].m_iBitOffset%32==0 )
+					&& tCmp.m_eKeypart[1]==SPH_KEYPART_ID && tCmp.m_dAttrs[1]==-1 )
+				{
+					*(int*)ppArg = tCmp.m_tLocator[0].m_iBitOffset/32;
+					return true;
+				} else
+				{
+					// min_top_sortval() only works with order by float_expr for now
+					return false;
+				}
+			}
+		}
+		return m_pRanker->ExtraData ( eData, ppArg );
+	}
+};
+
+
+void CSphQueryContext::SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * pSorter )
+{
+	ContextExtra tExtra;
+	tExtra.m_pRanker = pRanker;
+	tExtra.m_pSorter = pSorter;
+	ExprCommand ( SPH_EXPR_SET_EXTRA_DATA, &tExtra );
 }
 
 
@@ -19447,7 +19508,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	if ( tArgs.m_bFactors && pQuery->m_eRanker!=SPH_RANK_EXPR )
 		pResult->m_sWarning.SetSprintf ( "packedfactors() and bm25f() requires using an expression ranker" );
 
-	tCtx.SetupExtraData ( pRanker.Ptr() );
+	tCtx.SetupExtraData ( pRanker.Ptr(), iSorters==1 ? ppSorters[0] : NULL );
 
 	pRanker->ExtraData ( EXTRA_SET_MVAPOOL, (void**)m_tMva.GetWritePtr() );
 	pRanker->ExtraData ( EXTRA_SET_STRINGPOOL, (void**)m_tString.GetWritePtr() );

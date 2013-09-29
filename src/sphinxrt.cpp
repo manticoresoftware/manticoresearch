@@ -3184,7 +3184,14 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSe
 	tMvaWriter.OpenFile ( sName.cstr(), sError );
 	tMvaWriter.PutDword ( 0 ); // dummy dword, to reserve magic zero offset
 
+#if USE_WINDOWS
+#pragma warning(push,1)
+#pragma warning(disable:4310)
+#endif
 	DOCID iMinDocID = (DOCID)DOCID_MAX;
+#if USE_WINDOWS
+#pragma warning(pop)
+#endif
 	CSphRowitem * pFixedRow = new CSphRowitem[iStride];
 
 #ifndef NDEBUG
@@ -3228,8 +3235,15 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSe
 		// collect min-max data
 		Verify ( tMinMaxBuilder.Collect ( pRow, pSegment->m_dMvas.Begin(), pSegment->m_dMvas.GetLength(), sError, false ) );
 
+#if USE_WINDOWS
+#pragma warning(push,1)
+#pragma warning(disable:4310)
+#endif
 		if ( iMinDocID==(DOCID)DOCID_MAX )
 			iMinDocID = DOCINFO2ID_T<DOCID> ( pRows[iMinRow] );
+#if USE_WINDOWS
+#pragma warning(pop)
+#endif
 
 		if ( pSegment->m_dStrings.GetLength()>1 || pSegment->m_dMvas.GetLength()>1 ) // should be more then dummy zero elements
 		{
@@ -6277,7 +6291,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		return false;
 	}
 
-	tCtx.SetupExtraData ( pRanker.Ptr() );
+	tCtx.SetupExtraData ( pRanker.Ptr(), iSorters==1 ? ppSorters[0] : NULL );
 
 	// check terms inconsistency disk chunks vs rt vs previous indexes
 	tDiskStat.DumpDiffer ( pResult->m_hWordStats, m_sIndexName.cstr(), pResult->m_sWarning );

@@ -1186,6 +1186,58 @@ struct Expr_TimeDiff_c : public ISphExpr
 
 //////////////////////////////////////////////////////////////////////////
 
+struct Expr_MinTopWeight : public ISphExpr
+{
+	int * m_pWeight;
+
+	Expr_MinTopWeight() : m_pWeight ( NULL ) {}
+
+	virtual int IntEval ( const CSphMatch & ) const			{ return m_pWeight ? *m_pWeight : 0; }
+	virtual float Eval ( const CSphMatch & ) const			{ return m_pWeight ? (float)*m_pWeight : 0; }
+	virtual int64_t Int64Eval ( const CSphMatch & ) const	{ return m_pWeight ? *m_pWeight : 0; }
+
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
+	{
+		CSphMatch * pWorst;
+		if ( eCmd!=SPH_EXPR_SET_EXTRA_DATA )
+			return;
+		if ( static_cast<ISphExtra*>(pArg)->ExtraData ( EXTRA_GET_QUEUE_WORST, (void**)&pWorst ) )
+			m_pWeight = &pWorst->m_iWeight;
+	}
+};
+
+struct Expr_MinTopSortval : public ISphExpr
+{
+	CSphMatch *		m_pWorst;
+	int				m_iSortval;
+
+	Expr_MinTopSortval()
+		: m_pWorst ( NULL )
+		, m_iSortval ( -1 )
+	{}
+
+	virtual float Eval ( const CSphMatch & ) const
+	{
+		if ( m_pWorst && m_pWorst->m_pDynamic && m_iSortval>=0 )
+			return *(float*)( m_pWorst->m_pDynamic + m_iSortval );
+		return 0.0f;
+	}
+
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
+	{
+		if ( eCmd!=SPH_EXPR_SET_EXTRA_DATA )
+			return;
+		ISphExtra * p = (ISphExtra*)pArg;
+		if ( !p->ExtraData ( EXTRA_GET_QUEUE_WORST, (void**)&m_pWorst )
+			|| !p->ExtraData ( EXTRA_GET_QUEUE_SORTVAL, (void**)&m_iSortval ) )
+		{
+			m_pWorst = NULL;
+		}
+	}
+};
+
+//////////////////////////////////////////////////////////////////////////
+
 #define FIRST	m_pFirst->Eval(tMatch)
 #define SECOND	m_pSecond->Eval(tMatch)
 #define THIRD	m_pThird->Eval(tMatch)
@@ -1439,7 +1491,10 @@ enum Func_e
 	FUNC_UTC_TIME,
 	FUNC_TIMEDIFF,
 	FUNC_CURRENT_USER,
-	FUNC_CONNECTION_ID
+	FUNC_CONNECTION_ID,
+
+	FUNC_MIN_TOP_WEIGHT,
+	FUNC_MIN_TOP_SORTVAL
 };
 
 
@@ -1511,7 +1566,10 @@ static FuncDesc_t g_dFuncs[] =
 	{ "utc_time",		0,	FUNC_UTC_TIME,		SPH_ATTR_STRINGPTR },
 	{ "timediff",		2,	FUNC_TIMEDIFF,		SPH_ATTR_STRINGPTR },
 	{ "current_user",	0,	FUNC_CURRENT_USER,	SPH_ATTR_INTEGER },
-	{ "connection_id",	0,	FUNC_CONNECTION_ID,	SPH_ATTR_INTEGER }
+	{ "connection_id",	0,	FUNC_CONNECTION_ID,	SPH_ATTR_INTEGER },
+
+	{ "min_top_weight",		0,	FUNC_MIN_TOP_WEIGHT,	SPH_ATTR_INTEGER },
+	{ "min_top_sortval",	0,	FUNC_MIN_TOP_SORTVAL,	SPH_ATTR_FLOAT },
 };
 
 
@@ -1564,10 +1622,10 @@ static int FuncHashLookup ( const char * sKey )
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
-		94, 94, 94, 94, 94, 50, 94, 5, 0, 0,
-		25, 0, 45, 0, 94, 10, 94, 94, 0, 25,
-		0, 0, 5, 15, 10, 40, 15, 5, 94, 21,
-		60, 30, 5, 94, 94, 94, 94, 94, 94, 94,
+		94, 94, 94, 94, 94, 10, 94,  5, 20, 15,
+		40, 20, 45,  0, 94,  0, 94, 94,  5,  0,
+		10,  0, 55,  0, 30, 55, 35,  5, 94, 21,
+		15, 30,  0, 94, 94, 94, 94, 94, 94, 94,
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
@@ -1594,16 +1652,16 @@ static int FuncHashLookup ( const char * sKey )
 
 	static int dIndexes[] =
 	{
-		-1, -1, 6, -1, 7, 8, 42, 30, 34, 33,
-		43, 32, 28, 50, 2, 13, 11, 35, 44, 45,
-		-1, -1, 46, 38, 0, -1, 37, 49, 47, 22,
-		16, 29, 40, 27, 26, 39, 41, -1, 20, 17,
-		-1, -1, -1, 5, 18, -1, -1, 19, 1, 23,
-		3, -1, -1, 4, 12, -1, -1, 24, 48, 25,
-		-1, -1, -1, 15, 14, -1, -1, -1, 9, 10,
-		-1, -1, -1, -1, 36, 31, -1, -1, -1, -1,
-		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-		-1, -1, -1, 21
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, 7,
+		8, -1, 28, 20, 26, 16, -1, 6, -1, 45,
+		-1, -1, 35, 21, 51, 52, 11, 30, -1, 33,
+		39, -1, -1, 34, 0, 43, -1, -1, 50, 2,
+		31, 42, -1, 48, 23, -1, -1, 24, -1, 25,
+		-1, 41, 40, 27, 36, 3, 37, 46, 44, 17,
+		-1, 29, 49, 47, 18, 13, 32, 19, 4, 12,
+		-1, -1, -1, 5, 14, -1, -1, -1, 15, 22,
+		-1, -1, -1, 1, -1, -1, -1, -1, 38, 10,
+		-1, -1, -1, 9
 	};
 
 	if ( iHash<0 || iHash>=(int)(sizeof(dIndexes)/sizeof(dIndexes[0])) )
@@ -2096,7 +2154,7 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		case '.':
 			{
 				int iBeg = (int)( m_pCur-m_sExpr+1 );
-				bool bDigit = isdigit ( m_pCur[1] );
+				bool bDigit = isdigit ( m_pCur[1] )!=0;
 
 				// handle dots followed by a digit
 				// aka, a float value without leading zero
@@ -3389,8 +3447,11 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case FUNC_BM25F:
 		case FUNC_CURTIME:
 		case FUNC_UTC_TIME:
+		case FUNC_MIN_TOP_WEIGHT:
+		case FUNC_MIN_TOP_SORTVAL:
 			bSkipLeft = true;
 			bSkipRight = true;
+			break;
 		default:
 			break;
 		}
@@ -3569,6 +3630,14 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_UTC_TIME: return new Expr_Time_c ( true ); break;
 					case FUNC_TIMEDIFF: return new Expr_TimeDiff_c ( dArgs[0], dArgs[1] ); break;
 
+					case FUNC_MIN_TOP_WEIGHT:
+						m_eEvalStage = SPH_EVAL_PRESORT;
+						return new Expr_MinTopWeight();
+						break;
+					case FUNC_MIN_TOP_SORTVAL:
+						m_eEvalStage = SPH_EVAL_PRESORT;
+						return new Expr_MinTopSortval();
+						break;
 					default: // just make gcc happy
 						break;
 				}

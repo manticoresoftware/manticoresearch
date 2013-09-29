@@ -3020,7 +3020,8 @@ public:
 	CSphTightVector<SphDocID_t> m_dJustPopped;
 
 protected:
-	CSphRsetSchema		m_tSchema;		///< sorter schema (adds dynamic attributes on top of index schema)
+	CSphRsetSchema				m_tSchema;		///< sorter schema (adds dynamic attributes on top of index schema)
+	CSphMatchComparatorState	m_tState;		///< protected to set m_iNow automatically on SetState() calls
 
 public:
 	/// ctor
@@ -3039,7 +3040,10 @@ public:
 	virtual bool		IsGroupby () const = 0;
 
 	/// set match comparator state
-	virtual void		SetState ( const CSphMatchComparatorState & ) = 0;
+	virtual void		SetState ( const CSphMatchComparatorState & tState );
+
+	/// get match comparator stat
+	virtual CSphMatchComparatorState &	GetState() { return m_tState; }
 
 	/// set group comparator state
 	virtual void		SetGroupState ( const CSphMatchComparatorState & ) {}
@@ -3080,6 +3084,9 @@ public:
 	/// entries are stored in properly sorted order,
 	/// if iTag is non-negative, entries are also tagged; otherwise, their tag's unchanged
 	virtual void		Flatten ( CSphMatch * pTo, int iTag ) = 0;
+
+	/// get a pointer to the worst element, NULL if there is no fixed location
+	virtual const CSphMatch *	GetWorst() const { return NULL; }
 };
 
 

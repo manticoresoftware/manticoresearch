@@ -29,6 +29,13 @@
 // TRAITS
 //////////////////////////////////////////////////////////////////////////
 
+void ISphMatchSorter::SetState ( const CSphMatchComparatorState & tState )
+{
+	m_tState = tState;
+	m_tState.m_iNow = (DWORD) time ( NULL );
+}
+
+
 /// groupby key type
 typedef int64_t				SphGroupKey_t;
 
@@ -69,8 +76,6 @@ protected:
 	CSphMatch *					m_pData;
 	int							m_iUsed;
 	int							m_iSize;
-
-	CSphMatchComparatorState	m_tState;
 	const bool					m_bUsesAttrs;
 
 private:
@@ -102,8 +107,7 @@ public:
 	}
 
 public:
-	void		SetState ( const CSphMatchComparatorState & tState )	{ m_tState = tState; m_tState.m_iNow = (DWORD) time ( NULL ); }
-	bool		UsesAttrs () const										{ return m_bUsesAttrs; }
+	bool			UsesAttrs () const										{ return m_bUsesAttrs; }
 	virtual int			GetLength () const										{ return m_iUsed; }
 	virtual int			GetDataLength () const									{ return m_iDataLength; }
 
@@ -152,6 +156,11 @@ public:
 	virtual bool IsGroupby () const
 	{
 		return false;
+	}
+
+	virtual const CSphMatch * GetWorst() const
+	{
+		return m_pData;
 	}
 
 	/// add entry to the queue
@@ -2898,10 +2907,6 @@ public:
 					break;
 			}
 		}
-	}
-
-	void SetState ( const CSphMatchComparatorState & )
-	{
 	}
 
 	int GetDataLength () const

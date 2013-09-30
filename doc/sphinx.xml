@@ -6574,6 +6574,9 @@ We're gonna get rid of other modes in future.</para></listitem>
 </para></listitem>
 <listitem><para>compat_sphinxql_magics is removed. Now you can't use an old
 result format and SphinxQL always looks more like ANSI SQL.</para></listitem>
+<listitem><para>Completely removed xmlpipe. This was a very old ad hoc solution
+for a particular customer. xmlpipe2 surpasses it in every single aspect.</para>
+</listitem>
 </itemizedlist>
 </para>
 <para>None of the different querying methods are deprecated, but as of
@@ -6588,7 +6591,6 @@ time and has now been removed from official APIs.</para></listitem>
 Actually, all other modes are deprecated. We recommend using the
 <link linkend="extended-syntax">extended query syntax</link> instead.
 </para></listitem>
-<listitem><para></para></listitem>
 </itemizedlist>
 </para>
 </sect1>

@@ -2073,6 +2073,9 @@ protected:
 	int						m_iPlainFieldsLength;
 	DWORD *					m_pFieldLengthAttrs;	///< pointer into the part of m_tDocInfo where field lengths are stored
 
+	CSphVector<SphDocID_t>	m_dAllIds;				///< used for joined fields FIXME! unlimited RAM use
+	bool					m_bIdsSorted;			///< we sort array to use binary search
+
 protected:
 	struct CSphBuildHitsState_t
 	{

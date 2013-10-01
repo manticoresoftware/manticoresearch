@@ -59,6 +59,23 @@ index test
     phrase_boundary_step	= 2
 	stopwords				= <this_test/>/stopwords.txt
 }
+
+source ignore_absent_joined_ids
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = SELECT 1, 'one two three'
+	sql_joined_field = test from query; SELECT 2, 'пыля безопастн'
+
+}
+
+index ignore_absent_joined_ids
+{
+	source = ignore_absent_joined_ids
+	path = <data_path/>/ignore_absent_joined_ids
+}
+
 </config>
 
 <db_create>

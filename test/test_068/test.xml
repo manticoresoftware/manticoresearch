@@ -76,6 +76,7 @@ source src_tsv1
 	tsvpipe_command = cat <this_test/>/data1.tsv
 	tsvpipe_field = title
 	tsvpipe_field = content
+	tsvpipe_attr_multi = tags
 	tsvpipe_attr_uint = gid
 }
 

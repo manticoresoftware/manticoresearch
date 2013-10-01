@@ -1679,7 +1679,6 @@ bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char 
 		int iToWrite = iChunkSize;
 		if ( iCount<iChunkSize )
 			iToWrite = (int)iCount;
-
 		int iWritten = ::write ( iFD, p, iToWrite );
 
 		if ( pIOStats )
@@ -30046,7 +30045,6 @@ BYTE **	CSphSource_TSV::NextDocument ( CSphString & sError )
 
 	// parse columns
 	int iOff = m_dColumnsLen[0] + 1;
-	m_dMva.Resize ( 0 );
 	for ( int iCol=1; iCol<iColumns; iCol++ )
 	{
 		// if+if for field-string attribute case

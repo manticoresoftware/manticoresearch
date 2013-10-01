@@ -480,6 +480,8 @@ MySQL, PostgreSQL, MS SQL (on Windows), and ODBC. There is also
 a generic driver called xmlpipe2, which runs a specified command
 and reads the data from its <filename>stdout</filename>.
 See <xref linkend="xmlpipe2"/> section for the format description.
+In 2.2.1-beta was added a tsvpipe (Tab Separated Values) data source.
+You can get more info here <xref linkend="tsvpipe"/>.
 </para>
 <para>
 There can be as many sources per index as necessary. They will be
@@ -1019,6 +1021,37 @@ XML elements (tags) recognized by xmlpipe2 (and their attributes where applicabl
 </varlistentry>
 </variablelist>
 </para>
+</sect1>
+
+
+<sect1 id="tsvpipe"><title>tsvpipe (Tab Separated Values) data source</title>
+<para>
+This is a simplest way to pass a data to an indexer. It was created due to
+xmlpipe2 limitations. Namely, indexer must map each attribute and field tag
+in XML file to corresponding schema element. This mapping requires some time.
+And time increases with increasing the number of fields and attributes in
+schema. There is no such issue in tsvpipe because each field and attribute
+is a particular column in TSV file. So, in some cases tsvpipe could work
+slightly faster than xmlpipe2.
+</para>
+<para>
+The first column in TSV file must be a document ID. The rest ones must mirror
+the declaration of fields and attributes in schema definition.
+</para>
+<programlisting>
+source tsv_test
+{
+	type = tsvpipe
+	tsvpipe_command = cat /tmp/rock_bands.tsv
+	tsvpipe_attr_field = name
+	tsvpipe_attr_multi = genre_tags
+}
+</programlisting>
+<programlisting>
+1	Led Zeppelin	35,23,16
+2	Deep Purple	35,92
+3	Frank Zappa	35,23,16,92,33,24
+</programlisting>
 </sect1>
 
 
@@ -6572,7 +6605,7 @@ We're gonna get rid of other modes in future.</para></listitem>
 </listitem>
 <listitem><para>ondisk_dict_default is deprecated. No need to save RAM this way.
 </para></listitem>
-<listitem><para>compat_sphinxql_magics is removed. Now you can't use an old
+<listitem><para>compat_sphinxql_magics was removed. Now you can't use an old
 result format and SphinxQL always looks more like ANSI SQL.</para></listitem>
 <listitem><para>Completely removed xmlpipe. This was a very old ad hoc solution
 for a particular customer. xmlpipe2 surpasses it in every single aspect.</para>

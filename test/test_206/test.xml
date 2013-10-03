@@ -236,6 +236,14 @@ index json_inplace_rt
 	rt_attr_json = j
 }
 
+index json_search
+{
+	type = rt
+	path = <data_path/>/json_search
+	rt_attr_json = j
+	rt_field = text
+}
+
 </config>
 
 <db_create>
@@ -619,6 +627,20 @@ Two'</sphinxql>
 <sphinxql>select * from rt where id&gt;=4 and id&lt;=9</sphinxql>
 <sphinxql>select * from json_inplace_rt group by j</sphinxql>
 <sphinxql>select * from json_inplace_rt group by title, j</sphinxql>
+<!-- search in arrays -->
+<sphinxql>insert into json_search (id, j) values
+	(1, '{"array":[{gid:1,name:"a1"},{gid:2,name:"a2"},{gid:3,name:"a3"}], "intarray":[1,2,3]}'),
+	(2, '{"array":[{gid:4,name:"a4"},{gid:5,name:"a5"},{gid:6,name:"a6"}], "intarray":[4,5,6]}'),
+	(3, '{"array":[{gid:7,name:"a7"},{gid:8,name:"a8"},{gid:9,name:"a9"}], "intarray":[7,8,9]}')
+</sphinxql>
+<sphinxql>select all(x&gt;3 and x&lt;7 for x in j.intarray) from json_search</sphinxql>
+<sphinxql>select any(x&gt;1 and x&lt;3 for x in j.intarray) from json_search</sphinxql>
+<sphinxql>select indexof(x&gt;2 and x&lt;4 for x in j.intarray) from json_search</sphinxql>
+<sphinxql>select all(x&gt;5 for x in j.intarray) from json_search</sphinxql>
+<sphinxql>select all(1+x.gid+1&gt;5 for x in j.array) from json_search</sphinxql>
+<sphinxql>select indexof(x.gid=any(y.gid=x.gid for y in j.array) for x in j.array) from json_search</sphinxql>
+<sphinxql>select id, j.array[indexof(1+x.gid=2 for x in j.array)].name as p from json_search where p is not null</sphinxql>
+<sphinxql>select all(z.gid=1 for x in j.array) as error_unknown_column_z from json_search</sphinxql>
 </sphqueries>
 </test>
 

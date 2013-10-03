@@ -797,23 +797,10 @@ public:
 		return 0;
 	}
 
-	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const
+	virtual int64_t DoEval ( ESphJsonType eJson, const BYTE * pVal, const CSphMatch & tMatch ) const
 	{
-		if ( !m_pStrings )
-			return 0;
-
-		uint64_t uOffset = tMatch.GetAttr ( m_tLocator );
-		if ( !uOffset )
-			return 0;
-
-		const BYTE * pVal = NULL;
-		sphUnpackStr ( m_pStrings + uOffset, &pVal );
-		if ( !pVal )
-			return 0;
-
 		int iLen;
 		const BYTE * pStr;
-		ESphJsonType eJson = sphJsonFindFirst ( &pVal );
 
 		ARRAY_FOREACH ( i, m_dRetTypes )
 		{
@@ -857,6 +844,24 @@ public:
 		// keep actual attribute type and offset to data packed
 		int64_t iPacked = ( ( (int64_t)( pVal-m_pStrings ) ) | ( ( (int64_t)eJson )<<32 ) );
 		return iPacked;
+	}
+
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const
+	{
+		if ( !m_pStrings )
+			return 0;
+
+		uint64_t uOffset = tMatch.GetAttr ( m_tLocator );
+		if ( !uOffset )
+			return 0;
+
+		const BYTE * pVal = NULL;
+		sphUnpackStr ( m_pStrings + uOffset, &pVal );
+		if ( !pVal )
+			return 0;
+
+		ESphJsonType eJson = sphJsonFindFirst ( &pVal );
+		return DoEval ( eJson, pVal, tMatch );
 	}
 };
 
@@ -1184,6 +1189,143 @@ struct Expr_TimeDiff_c : public ISphExpr
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)IntEval ( tMatch ); }
 };
 
+
+struct Expr_Iterator_c : Expr_JsonField_c
+{
+	SphAttr_t * m_pData;
+
+	Expr_Iterator_c ( const CSphAttrLocator & tLocator, int iLocator, CSphVector<ISphExpr*> & dArgs, CSphVector<ESphAttr> & dRetTypes, SphAttr_t * pData )
+		: Expr_JsonField_c ( tLocator, iLocator, dArgs, dRetTypes )
+		, m_pData ( pData )
+	{}
+
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const
+	{
+		uint64_t uValue = *m_pData;
+		const BYTE * p = m_pStrings + ( uValue & 0xffffffff );
+		ESphJsonType eType = (ESphJsonType)( uValue >> 32 );
+		return DoEval ( eType, p, tMatch );
+	}
+};
+
+
+struct Expr_ForIn_c : public Expr_JsonFieldConv_c
+{
+	ISphExpr * m_pExpr;
+	bool m_bStrict;
+	bool m_bIndex;
+	mutable uint64_t m_uData;
+
+	Expr_ForIn_c ( ISphExpr * pArg, bool bStrict, bool bIndex )
+		: Expr_JsonFieldConv_c ( pArg )
+		, m_pExpr ( NULL )
+		, m_bStrict ( bStrict )
+		, m_bIndex ( bIndex )
+	{}
+
+	~Expr_ForIn_c ()
+	{
+		SafeDelete ( m_pExpr );
+	}
+
+	SphAttr_t * GetRef ()
+	{
+		return (SphAttr_t*)&m_uData;
+	}
+
+	void SetExpr ( ISphExpr * pExpr )
+	{
+		m_pExpr = pExpr;
+	}
+
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
+	{
+		Expr_JsonFieldConv_c::Command ( eCmd, pArg );
+		if ( m_pExpr )
+			m_pExpr->Command ( eCmd, pArg );
+	}
+
+	bool ExprEval ( int * pResult, const CSphMatch & tMatch, int iIndex, ESphJsonType eType, const BYTE * pVal ) const
+	{
+		m_uData = ( ( (int64_t)( pVal-m_pStrings ) ) | ( ( (int64_t)eType )<<32 ) );
+		int iResult = m_pExpr->Eval ( tMatch )!=0 ? 1 : 0; // uses pointer to m_uData
+
+		if ( m_bStrict ) // ALL()
+		{
+			if ( *pResult!=-1 && iResult!=*pResult )
+			{
+				*pResult = 0;
+				return false; // stop
+			}
+			*pResult = iResult;
+			return true; // continue
+
+		} else if ( m_bIndex ) // INDEXOF()
+		{
+			if ( iResult )
+			{
+				*pResult = iIndex;
+				return false;
+			}
+			return true;
+
+		} else // ANY()
+		{
+			*pResult = iResult;
+			return iResult ? false : true;
+		}
+	}
+
+	virtual int IntEval ( const CSphMatch & tMatch ) const
+	{
+		if ( !m_pExpr )
+			return m_bIndex ? -1 : 0;
+
+		int iResult = -1;
+		const BYTE * p = NULL;
+		ESphJsonType eJson = GetKey ( &p, tMatch );
+
+		switch ( eJson )
+		{
+		case JSON_INT32_VECTOR:
+		case JSON_INT64_VECTOR:
+		case JSON_DOUBLE_VECTOR:
+			{
+				int iSize = eJson==JSON_INT32_VECTOR ? 4 : 8;
+				ESphJsonType eType = eJson==JSON_INT32_VECTOR ? JSON_INT32
+					: eJson==JSON_INT64_VECTOR ? JSON_INT64
+					: JSON_DOUBLE;
+				int iLen = sphJsonUnpackInt ( &p );
+				for ( int i=0; i<iLen; i++, p+=iSize )
+					if ( !ExprEval ( &iResult, tMatch, i, eType, p ) )
+						break;
+				break;
+			}
+		case JSON_MIXED_VECTOR:
+			{
+				sphJsonUnpackInt ( &p );
+				int iLen = sphJsonUnpackInt ( &p );
+				for ( int i=0; i<iLen; i++ )
+				{
+					ESphJsonType eType = (ESphJsonType)*p++;
+					if ( !ExprEval ( &iResult, tMatch, i, eType, p ) )
+						break;
+					sphJsonSkipNode ( eType, &p );
+				}
+				break;
+			}
+		default:
+			return m_bIndex ? -1 : 0;
+			break;
+		}
+
+		return iResult;
+	}
+
+	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)IntEval ( tMatch ); }
+};
+
 //////////////////////////////////////////////////////////////////////////
 
 struct Expr_MinTopWeight : public ISphExpr
@@ -1492,6 +1634,9 @@ enum Func_e
 	FUNC_TIMEDIFF,
 	FUNC_CURRENT_USER,
 	FUNC_CONNECTION_ID,
+	FUNC_ALL,
+	FUNC_ANY,
+	FUNC_INDEXOF,
 
 	FUNC_MIN_TOP_WEIGHT,
 	FUNC_MIN_TOP_SORTVAL
@@ -1567,6 +1712,9 @@ static FuncDesc_t g_dFuncs[] =
 	{ "timediff",		2,	FUNC_TIMEDIFF,		SPH_ATTR_STRINGPTR },
 	{ "current_user",	0,	FUNC_CURRENT_USER,	SPH_ATTR_INTEGER },
 	{ "connection_id",	0,	FUNC_CONNECTION_ID,	SPH_ATTR_INTEGER },
+	{ "all",			-1,	FUNC_ALL,			SPH_ATTR_INTEGER },
+	{ "any",			-1,	FUNC_ANY,			SPH_ATTR_INTEGER },
+	{ "indexof",		-1,	FUNC_INDEXOF,		SPH_ATTR_BIGINT },
 
 	{ "min_top_weight",		0,	FUNC_MIN_TOP_WEIGHT,	SPH_ATTR_INTEGER },
 	{ "min_top_sortval",	0,	FUNC_MIN_TOP_SORTVAL,	SPH_ATTR_FLOAT },
@@ -1618,14 +1766,14 @@ static int FuncHashLookup ( const char * sKey )
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
-		5, 94, 94, 94, 94, 94, 94, 94, 94, 94,
+		15, 94, 94, 94, 94, 94, 94, 94, 94, 94,
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
-		94, 94, 94, 94, 94, 10, 94,  5, 20, 15,
-		40, 20, 45,  0, 94,  0, 94, 94,  5,  0,
-		10,  0, 55,  0, 30, 55, 35,  5, 94, 21,
-		15, 30,  0, 94, 94, 94, 94, 94, 94, 94,
+		94, 94, 94, 94, 94, 45, 94, 0, 0, 20,
+		35, 0, 23, 10, 94, 5, 94, 94, 0, 0,
+		5, 0, 20, 20, 0, 55, 30, 30, 94, 0,
+		51, 55, 5, 94, 94, 94, 94, 94, 94, 94,
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
@@ -1652,16 +1800,16 @@ static int FuncHashLookup ( const char * sKey )
 
 	static int dIndexes[] =
 	{
-		-1, -1, -1, -1, -1, -1, -1, -1, -1, 7,
-		8, -1, 28, 20, 26, 16, -1, 6, -1, 45,
-		-1, -1, 35, 21, 51, 52, 11, 30, -1, 33,
-		39, -1, -1, 34, 0, 43, -1, -1, 50, 2,
-		31, 42, -1, 48, 23, -1, -1, 24, -1, 25,
-		-1, 41, 40, 27, 36, 3, 37, 46, 44, 17,
-		-1, 29, 49, 47, 18, 13, 32, 19, 4, 12,
-		-1, -1, -1, 5, 14, -1, -1, -1, 15, 22,
-		-1, -1, -1, 1, -1, -1, -1, -1, 38, 10,
-		-1, -1, -1, 9
+		-1, -1, -1, 51, -1, 43, -1, 6, 0, -1,
+		16, 42, 28, 20, 7, 8, 37, 30, 44, 33,
+		39, 11, 35, 22, 54, 55, 32, -1, 3, 2,
+		24, -1, -1, 34, 26, -1, -1, 14, 50, 25,
+		-1, 29, -1, 48, 45, 13, -1, 40, 27, 23,
+		-1, -1, 53, 38, 21, -1, -1, 46, 1, 17,
+		-1, 31, 49, 52, 18, -1, -1, 19, 4, 12,
+		-1, 41, -1, -1, 9, -1, -1, -1, 5, 10,
+		-1, -1, -1, -1, 36, -1, -1, -1, 47, -1,
+		-1, -1, -1, 15
 	};
 
 	if ( iHash<0 || iHash>=(int)(sizeof(dIndexes)/sizeof(dIndexes[0])) )
@@ -1779,6 +1927,8 @@ struct ExprNode_t
 		int				m_iArgs;		///< args count, for arglist (token==',') type
 		ConstList_c *	m_pConsts;		///< constants list, for TOK_CONST_LIST type
 		ConstHash_c *	m_pConsthash;	///< constants hash (name to const), for TOK_CONST_HASH type
+		const char	*	m_sIdent;		///< pointer to const char, for TOK_IDENT type
+		SphAttr_t	*	m_pAttr;		///< pointer to 64-bit value, for TOK_ITERATOR type
 	};
 	int				m_iLeft;
 	int				m_iRight;
@@ -1842,6 +1992,7 @@ protected:
 	int						AddNodeJsonField ( uint64_t uAttrLocator, int iLeft );
 	int						AddNodeJsonSubkey ( int64_t iValue );
 	int						AddNodeDotNumber ( int64_t iValue );
+	int						AddNodeIdent ( const char * sKey, int iLeft );
 
 private:
 	const char *			m_sExpr;
@@ -1852,9 +2003,7 @@ private:
 	CSphVector<CSphString>	m_dUservars;
 	CSphVector<UdfCall_t*>	m_dUdfCalls;
 	CSphVector<char*>		m_dIdents;
-
 	CSphSchema *			m_pExtra;
-
 	int						m_iConstNow;
 
 public:
@@ -1888,6 +2037,8 @@ private:
 	ISphExpr *				CreateExistNode ( const ExprNode_t & tNode );
 	ISphExpr *				CreateContainsNode ( const ExprNode_t & tNode );
 	ISphExpr *				CreateAggregateNode ( const ExprNode_t & tNode, ESphAggrFunc eFunc, ISphExpr * pLeft );
+	ISphExpr *				CreateForInNode ( int iNode );
+	void					FixupIterators ( int iNode, const char * sKey, SphAttr_t * pAttr );
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2042,6 +2193,7 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		if ( sTok=="not" )		{ return TOK_NOT; }
 		if ( sTok=="div" )		{ return TOK_DIV; }
 		if ( sTok=="mod" )		{ return TOK_MOD; }
+		if ( sTok=="for" )		{ return TOK_FOR; }
 
 		if ( sTok=="count" )
 		{
@@ -3447,6 +3599,9 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case FUNC_BM25F:
 		case FUNC_CURTIME:
 		case FUNC_UTC_TIME:
+		case FUNC_ALL:
+		case FUNC_ANY:
+		case FUNC_INDEXOF:
 		case FUNC_MIN_TOP_WEIGHT:
 		case FUNC_MIN_TOP_SORTVAL:
 			bSkipLeft = true;
@@ -3630,6 +3785,11 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_UTC_TIME: return new Expr_Time_c ( true ); break;
 					case FUNC_TIMEDIFF: return new Expr_TimeDiff_c ( dArgs[0], dArgs[1] ); break;
 
+					case FUNC_ALL:
+					case FUNC_ANY:
+					case FUNC_INDEXOF:
+						return CreateForInNode ( iNode );
+
 					case FUNC_MIN_TOP_WEIGHT:
 						m_eEvalStage = SPH_EVAL_PRESORT;
 						return new Expr_MinTopWeight();
@@ -3671,6 +3831,24 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 				return new Expr_JsonField_c ( tNode.m_tLocator, tNode.m_iLocator, dArgs, dTypes );
 			}
 			break;
+		case TOK_ITERATOR:
+			{
+				// iterator, e.g. handles "x.gid" in SELECT ALL(x.gid=1 FOR x IN json.array)
+				CSphVector<ISphExpr *> dArgs;
+				CSphVector<ESphAttr> dTypes;
+				if ( pLeft )
+				{
+					FoldArglist ( pLeft, dArgs );
+					GatherArgRetTypes ( tNode.m_iLeft, dTypes );
+				}
+				return new Expr_JsonFieldConv_c ( new Expr_Iterator_c ( tNode.m_tLocator, tNode.m_iLocator, dArgs, dTypes, tNode.m_pAttr ) );
+			}
+		case TOK_IDENT:
+		{
+			m_sCreateError.SetSprintf ( "unknown column: %s", tNode.m_sIdent );
+			return NULL;
+		}
+
 		default:				assert ( 0 && "unhandled token type" ); break;
 	}
 
@@ -4741,6 +4919,42 @@ ISphExpr * ExprParser_t::CreateAggregateNode ( const ExprNode_t & tNode, ESphAgg
 	}
 }
 
+
+void ExprParser_t::FixupIterators ( int iNode, const char * sKey, SphAttr_t * pAttr )
+{
+	if ( iNode==-1 )
+		return;
+
+	ExprNode_t & tNode = m_dNodes[iNode];
+
+	if ( tNode.m_iToken==TOK_IDENT && !strcmp ( sKey, tNode.m_sIdent ) )
+	{
+		tNode.m_iToken = TOK_ITERATOR;
+		tNode.m_pAttr = pAttr;
+	}
+
+	FixupIterators ( tNode.m_iLeft, sKey, pAttr );
+	FixupIterators ( tNode.m_iRight, sKey, pAttr );
+}
+
+
+ISphExpr * ExprParser_t::CreateForInNode ( int iNode )
+{
+	ExprNode_t & tNode = m_dNodes[iNode];
+
+	int iFunc = tNode.m_iFunc;
+	int iExprNode = tNode.m_iLeft;
+	int iNameNode = tNode.m_iRight;
+	int iDataNode = m_dNodes[iNameNode].m_iLeft;
+
+	Expr_ForIn_c * pFunc = new Expr_ForIn_c ( CreateTree ( iDataNode ), iFunc==FUNC_ALL, iFunc==FUNC_INDEXOF );
+
+	FixupIterators ( iExprNode, m_dNodes[iNameNode].m_sIdent, pFunc->GetRef() );
+	pFunc->SetExpr ( CreateTree ( iExprNode ) );
+
+	return pFunc;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 int yylex ( YYSTYPE * lvalp, ExprParser_t * pParser )
@@ -5420,6 +5634,17 @@ int ExprParser_t::AddNodeDotNumber ( int64_t iValue )
 	tNode.m_eRetType = SPH_ATTR_FLOAT;
 	const char * pCur = m_sExpr + (int)( iValue>>32 );
 	tNode.m_fConst = (float) strtod ( pCur-1, NULL );
+	return m_dNodes.GetLength()-1;
+}
+
+
+int ExprParser_t::AddNodeIdent ( const char * sKey, int iLeft )
+{
+	ExprNode_t & tNode = m_dNodes.Add ();
+	tNode.m_sIdent = sKey;
+	tNode.m_iLeft = iLeft;
+	tNode.m_iToken = TOK_IDENT;
+	tNode.m_eRetType = SPH_ATTR_FLOAT;
 	return m_dNodes.GetLength()-1;
 }
 

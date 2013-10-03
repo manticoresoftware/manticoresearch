@@ -44,6 +44,8 @@
 %token	TOK_CONST_LIST
 %token	TOK_ATTR_SINT
 %token	TOK_CONST_HASH
+%token	TOK_FOR
+%token	TOK_ITERATOR
 
 
 %type <iNode>			attr
@@ -60,6 +62,8 @@
 %type <iNode>			json_field
 %type <iNode>			subkey
 %type <iNode>			subscript
+%type <iNode>			for_loop
+%type <iNode>			iterator
 
 
 %left TOK_OR
@@ -72,6 +76,7 @@
 %left '*' '/' '%' TOK_DIV TOK_MOD
 %nonassoc TOK_NOT
 %nonassoc TOK_NEG
+
 
 %%
 
@@ -119,6 +124,7 @@ expr:
 	| expr TOK_OR expr				{ $$ = pParser->AddNodeOp ( TOK_OR, $1, $3 ); if ( $$<0 ) YYERROR; }
 	| '(' expr ')'					{ $$ = $2; }
 	| json_field
+	| iterator
 	;
 
 consthash:
@@ -183,6 +189,7 @@ function:
 	| TOK_UDF '(' ')'				{ $$ = pParser->AddNodeUdf ( $1, -1 ); if ( $$<0 ) YYERROR; }
 	| TOK_FUNC_IN '(' arg ',' constlist_or_uservar ')'{ $$ = pParser->AddNodeFunc ( $1, $3, $5 ); }
 	| TOK_HOOK_FUNC '(' arglist ')' { $$ = pParser->AddNodeHookFunc ( $1, $3 ); if ( $$<0 ) YYERROR; }
+	| TOK_FUNC '(' arg for_loop ')' { $$ = pParser->AddNodeFunc ( $1, $3, $4 ); }
 	;
 
 json_field:
@@ -199,6 +206,15 @@ subkey:
 	| TOK_DOT_NUMBER				{ $$ = pParser->AddNodeJsonSubkey ( $1 ); }
 	| '[' TOK_CONST_STRING ']'		{ $$ = pParser->AddNodeString ( $2 ); }
 	| '[' TOK_ATTR_STRING ']'		{ $$ = pParser->AddNodeAttr ( TOK_ATTR_STRING, $2 ); }
+	;
+
+for_loop:
+	TOK_FOR TOK_IDENT TOK_FUNC_IN json_field { $$ = pParser->AddNodeIdent ( $2, $4 ); }
+	;
+
+iterator:
+	TOK_IDENT						{ $$ = pParser->AddNodeIdent ( $1, -1 ); }
+	| TOK_IDENT subscript			{ $$ = pParser->AddNodeIdent ( $1, $2 ); }
 	;
 
 %%

@@ -53,6 +53,7 @@
 %token	TOK_FALSE
 %token	TOK_FLOAT
 %token	TOK_FLUSH
+%token	TOK_FOR
 %token	TOK_FROM
 %token	TOK_FUNCTION
 %token	TOK_GLOBAL
@@ -743,6 +744,7 @@ function:
 	| TOK_MIN '(' expr ',' expr ')'	{ TRACK_BOUNDS ( $$, $1, $6 ); } // handle clash with aggregate functions
 	| TOK_MAX '(' expr ',' expr ')'	{ TRACK_BOUNDS ( $$, $1, $6 ); }
 	| TOK_WEIGHT '(' ')'			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| TOK_IDENT '(' expr TOK_FOR TOK_IDENT TOK_IN json_field ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
 	;
 	
 arglist:

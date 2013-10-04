@@ -21877,6 +21877,7 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 	pTokenizer->SetBuffer ( (BYTE*)sBuffer, iLen );
 
 	bool bFirstToken = true;
+	bool bStopwordsPresent = false;
 	dTokens.Resize ( 0 );
 
 	BYTE * pFrom = NULL;
@@ -21909,6 +21910,8 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 
 		if ( GetWordID ( pFrom, strlen ( (const char*)pFrom ), true ) )
 			dTokens.Add ( (const char*)pFrom );
+		else
+			bStopwordsPresent = true;
 	}
 
 	if ( !dTokens.GetLength() )
@@ -21951,10 +21954,13 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 
 	if ( bMultipleDests )
 	{
-		sphWarning ( "invalid mapping (must be exactly 1 destination keyword) (wordform='%s', file='%s'). IGNORED.", sBuffer, szFile );
+		sphWarning ( "index '%s': invalid mapping (must be exactly 1 destination keyword) (wordform='%s', file='%s'). IGNORED.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
 		return;
 	}
 
+	if ( bStopwordsPresent )
+		sphWarning ( "index '%s': wordform contains stopwords (wordform='%s'). Fix your wordforms file '%s'.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
+	
 	// we disabled all blended, so we need to filter them manually
 	bool bBlendedPresent = false;
 	for ( int i = 0; i < sTo.Length() && !bBlendedPresent; i++ )

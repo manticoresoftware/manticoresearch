@@ -64,6 +64,8 @@
 %type <iNode>			subscript
 %type <iNode>			for_loop
 %type <iNode>			iterator
+%type <iNode>			cond
+%type <iNode>			strval
 
 
 %left TOK_OR
@@ -189,7 +191,7 @@ function:
 	| TOK_UDF '(' ')'				{ $$ = pParser->AddNodeUdf ( $1, -1 ); if ( $$<0 ) YYERROR; }
 	| TOK_FUNC_IN '(' arg ',' constlist_or_uservar ')'{ $$ = pParser->AddNodeFunc ( $1, $3, $5 ); }
 	| TOK_HOOK_FUNC '(' arglist ')' { $$ = pParser->AddNodeHookFunc ( $1, $3 ); if ( $$<0 ) YYERROR; }
-	| TOK_FUNC '(' arg for_loop ')' { $$ = pParser->AddNodeFunc ( $1, $3, $4 ); }
+	| TOK_FUNC '(' cond for_loop ')' { $$ = pParser->AddNodeFunc ( $1, $3, $4 ); }
 	;
 
 json_field:
@@ -216,5 +218,14 @@ iterator:
 	TOK_IDENT						{ $$ = pParser->AddNodeIdent ( $1, -1 ); }
 	| TOK_IDENT subscript			{ $$ = pParser->AddNodeIdent ( $1, $2 ); }
 	;
+
+cond:
+	expr
+	| expr TOK_EQ strval			{ $$ = pParser->AddNodeOp ( TOK_EQ, $1, $3 ); }
+	;
+
+strval:
+	TOK_CONST_STRING				{ $$ = pParser->AddNodeString ( $1 ); }
+	| TOK_ATTR_STRING				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_STRING, $1 ); }
 
 %%

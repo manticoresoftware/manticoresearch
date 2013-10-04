@@ -984,6 +984,12 @@ protected:
 	}
 
 public:
+	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
+	{
+		const BYTE * pVal = NULL;
+		ESphJsonType eJson = GetKey ( &pVal, tMatch );
+		return ( eJson==JSON_STRING ) ? sphUnpackStr ( pVal, ppStr ) : 0;
+	}
 	virtual float Eval ( const CSphMatch & tMatch ) const { return DoEval<float> ( tMatch ); }
 	virtual int IntEval ( const CSphMatch & tMatch ) const { return DoEval<int> ( tMatch ); }
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return DoEval<int64_t> ( tMatch ); }
@@ -1248,40 +1254,18 @@ struct Expr_ForIn_c : public Expr_JsonFieldConv_c
 	bool ExprEval ( int * pResult, const CSphMatch & tMatch, int iIndex, ESphJsonType eType, const BYTE * pVal ) const
 	{
 		m_uData = ( ( (int64_t)( pVal-m_pStrings ) ) | ( ( (int64_t)eType )<<32 ) );
-		int iResult = m_pExpr->Eval ( tMatch )!=0 ? 1 : 0; // uses pointer to m_uData
-
-		if ( m_bStrict ) // ALL()
-		{
-			if ( *pResult!=-1 && iResult!=*pResult )
-			{
-				*pResult = 0;
-				return false; // stop
-			}
-			*pResult = iResult;
-			return true; // continue
-
-		} else if ( m_bIndex ) // INDEXOF()
-		{
-			if ( iResult )
-			{
-				*pResult = iIndex;
-				return false;
-			}
-			return true;
-
-		} else // ANY()
-		{
-			*pResult = iResult;
-			return iResult ? false : true;
-		}
+		bool bMatch = m_pExpr->Eval ( tMatch )!=0;
+		*pResult = bMatch ? ( m_bIndex ? iIndex : 1 ) : ( m_bIndex ? -1 : 0 );
+		return m_bStrict ? bMatch : !bMatch;
 	}
 
 	virtual int IntEval ( const CSphMatch & tMatch ) const
 	{
-		if ( !m_pExpr )
-			return m_bIndex ? -1 : 0;
+		int iResult = m_bIndex ? -1 : 0;
 
-		int iResult = -1;
+		if ( !m_pExpr )
+			return iResult;
+
 		const BYTE * p = NULL;
 		ESphJsonType eJson = GetKey ( &p, tMatch );
 
@@ -1315,11 +1299,41 @@ struct Expr_ForIn_c : public Expr_JsonFieldConv_c
 				break;
 			}
 		default:
-			return m_bIndex ? -1 : 0;
 			break;
 		}
 
 		return iResult;
+	}
+
+	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)IntEval ( tMatch ); }
+};
+
+
+struct Expr_StrEq_c : public ISphExpr
+{
+	ISphExpr * m_pLeft;
+	ISphExpr * m_pRight;
+
+	Expr_StrEq_c ( ISphExpr * pLeft, ISphExpr * pRight )
+		: m_pLeft ( pLeft )
+		, m_pRight ( pRight )
+	{}
+
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
+	{
+		assert ( m_pLeft && m_pRight );
+		m_pLeft->Command ( eCmd, pArg );
+		m_pRight->Command ( eCmd, pArg );
+	}
+
+	virtual int IntEval ( const CSphMatch & tMatch ) const
+	{
+		const BYTE * pLeft;
+		const BYTE * pRight;
+		int iLeft = m_pLeft->StringEval ( tMatch, &pLeft );
+		int iRight = m_pRight->StringEval ( tMatch, &pRight );
+		return ( iLeft==iRight && memcmp ( pLeft, pRight, iLeft )==0 ) ? 1 : 0;
 	}
 
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
@@ -3662,7 +3676,10 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case '>':				LOC_SPAWN_POLY ( Expr_Gt ); break;
 		case TOK_LTE:			LOC_SPAWN_POLY ( Expr_Lte ); break;
 		case TOK_GTE:			LOC_SPAWN_POLY ( Expr_Gte ); break;
-		case TOK_EQ:			LOC_SPAWN_POLY ( Expr_Eq ); break;
+		case TOK_EQ:			if ( m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_STRING
+									&& m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRING )
+									return new Expr_StrEq_c ( pLeft, pRight );
+								LOC_SPAWN_POLY ( Expr_Eq ); break;
 		case TOK_NE:			LOC_SPAWN_POLY ( Expr_Ne ); break;
 		case TOK_AND:			LOC_SPAWN_POLY ( Expr_And ); break;
 		case TOK_OR:			LOC_SPAWN_POLY ( Expr_Or ); break;
@@ -5163,6 +5180,13 @@ int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 		if ( iLeft>=0 )		tNode.m_iArgs += ( m_dNodes[iLeft].m_iToken==',' ) ? m_dNodes[iLeft].m_iArgs : 1;
 		if ( iRight>=0 )	tNode.m_iArgs += ( m_dNodes[iRight].m_iToken==',' ) ? m_dNodes[iRight].m_iArgs : 1;
 	}
+
+	if ( iRight>=0 && m_dNodes[iRight].m_eRetType==SPH_ATTR_STRING )
+	{
+		if ( iLeft>=0 && m_dNodes[iLeft].m_iToken==TOK_IDENT )
+			m_dNodes[iLeft].m_eRetType = SPH_ATTR_STRING;
+	}
+
 	tNode.m_iLeft = iLeft;
 	tNode.m_iRight = iRight;
 	return m_dNodes.GetLength()-1;

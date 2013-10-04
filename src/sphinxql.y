@@ -745,6 +745,7 @@ function:
 	| TOK_MAX '(' expr ',' expr ')'	{ TRACK_BOUNDS ( $$, $1, $6 ); }
 	| TOK_WEIGHT '(' ')'			{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| TOK_IDENT '(' expr TOK_FOR TOK_IDENT TOK_IN json_field ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
+	| TOK_IDENT '(' expr '=' TOK_QUOTED_STRING TOK_FOR TOK_IDENT TOK_IN json_field ')' { TRACK_BOUNDS ( $$, $1, $10 ); }
 	;
 	
 arglist:

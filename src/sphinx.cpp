@@ -9849,7 +9849,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 
 					if ( !sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), m_tString.GetWritePtr(), pEntry, true ) )
 					{
-						sError.SetSprintf ( "attribute '%s' can not be updated (incompatible types) ", tUpd.m_dAttrs[iCol] );
+						sError.SetSprintf ( "attribute '%s' can not be updated (not found or incompatible types) ", tUpd.m_dAttrs[iCol] );
 						return -1;
 					}
 
@@ -10097,7 +10097,14 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 	}
 
 	if ( iJsonWarnings>0 )
-		sWarning.SetSprintf ( "%d incompatible attribute(s)", iJsonWarnings );
+	{
+		sWarning.SetSprintf ( "%d attribute(s) can not be updated (not found or incompatible types)", iJsonWarnings );
+		if ( iUpdated==0 )
+		{
+			sError=sWarning;
+			return -1;
+		}
+	}
 
 	*m_pAttrsStatus |= uUpdateMask; // FIXME! add lock/atomic?
 	return iUpdated;

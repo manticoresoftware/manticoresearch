@@ -6956,7 +6956,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 						if ( !sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), m_pSegments[iSeg]->m_dStrings.Begin(), pRow, false ) )
 						{
 							m_tRwlock.Unlock();
-							sError.SetSprintf ( "attribute '%s' can not be updated (incompatible types)", tUpd.m_dAttrs[iCol] );
+							sError.SetSprintf ( "attribute '%s' can not be updated (not found or incompatible types)", tUpd.m_dAttrs[iCol] );
 							return -1;
 						}
 
@@ -7132,7 +7132,14 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 	m_tRwlock.Unlock();
 
 	if ( iJsonWarnings>0 )
-		sWarning.SetSprintf ( "%d incompatible attribute(s)", iJsonWarnings );
+	{
+		sWarning.SetSprintf ( "%d attribute(s) can not be updated (not found or incompatible types)", iJsonWarnings );
+		if ( iUpdated==0 )
+		{
+			sError = sWarning;
+			return -1;
+		}
+	}
 
 	// all done
 	return iUpdated;

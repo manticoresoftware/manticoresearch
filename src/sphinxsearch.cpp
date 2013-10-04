@@ -1008,7 +1008,7 @@ private:
 	int							m_iMyLast;					///< hits processed so far
 	CSphVector<TermTuple_t>		m_dInitialChildren;			///< my children nodes (simply ExtTerm_c for now)
 	CSphVector<TermTuple_t>		m_dChildren;
-	SphDocID_t					m_uMatchedDocid;			///< tial docid for hitlist emission
+	SphDocID_t					m_uMatchedDocid;			///< tail docid for hitlist emission
 	int							m_iThresh;					///< keyword count threshold
 	bool						m_bHasDupes;				///< should we analize hits on docs collecting
 
@@ -1291,10 +1291,10 @@ static inline void CopyExtDoc ( ExtDoc_t & tDst, const ExtDoc_t & tSrc, CSphRowi
 }
 
 ExtNode_i::ExtNode_i ()
-	: m_iAtomPos(0)
-	, m_uMaxID(0)
-	, m_iStride(0)
-	, m_pDocinfo(NULL)
+	: m_iAtomPos ( 0 )
+	, m_uMaxID ( 0 )
+	, m_iStride ( 0 )
+	, m_pDocinfo ( NULL )
 {
 	m_dDocs[0].m_uDocid = DOCID_MAX;
 	m_dHits[0].m_uDocid = DOCID_MAX;
@@ -2215,6 +2215,11 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t
 			// no more hits; get next acceptable document
 			pDoc++;
 			m_pLastChecked = pDoc;
+
+			// we don't want to return hits for documents we haven't find yet
+			if ( uMaxID<m_pLastChecked->m_uDocid )
+				break;
+
 			do
 			{
 				while ( pDoc->m_uDocid < pMatched->m_uDocid ) pDoc++;
@@ -3222,8 +3227,9 @@ const ExtHit_t * ExtOr_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMax
 		// warmup if needed
 		if ( !pCur0 || pCur0->m_uDocid==DOCID_MAX ) pCur0 = m_pChildren[0]->GetHitsChunk ( pDocs, uMaxID );
 		if ( !pCur1 || pCur1->m_uDocid==DOCID_MAX ) pCur1 = m_pChildren[1]->GetHitsChunk ( pDocs, uMaxID );
+		if ( !pCur0 && !pCur1 )
+			break;
 
-		if ( !pCur0 && !pCur1 ) break;
 		m_uMatchedDocid = ( pCur0 && pCur1 )
 			? Min ( pCur0->m_uDocid, pCur1->m_uDocid )
 			: ( pCur0 ? pCur0->m_uDocid : pCur1->m_uDocid );
@@ -4159,7 +4165,6 @@ void ExtQuorum_c::GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WOR
 const ExtDoc_t * ExtQuorum_c::GetDocsChunk ( SphDocID_t * pMaxID )
 {
 	// warmup
-	int iQuorumLeft = CountQuorum ( true );
 	ARRAY_FOREACH ( i, m_dChildren )
 	{
 		TermTuple_t & tElem = m_dChildren[i];
@@ -4173,18 +4178,7 @@ const ExtDoc_t * ExtQuorum_c::GetDocsChunk ( SphDocID_t * pMaxID )
 
 		m_dChildren.RemoveFast ( i );
 		i--;
-
-		iQuorumLeft = CountQuorum ( true );
-		if ( iQuorumLeft<m_iThresh )
-		{
-			m_dChildren.Resize ( 0 );
-			break;
-		}
 	}
-
-	// early out
-	if ( !m_dChildren.GetLength() )
-		return NULL;
 
 	// main loop
 	int iDoc = 0;
@@ -4192,6 +4186,7 @@ const ExtDoc_t * ExtQuorum_c::GetDocsChunk ( SphDocID_t * pMaxID )
 	bool bProceed2HitChunk = false;
 	m_iMyHitCount = 0;
 	m_iMyLast = 0;
+	int iQuorumLeft = CountQuorum ( true );
 	while ( iDoc<MAX_DOCS-1 && ( !m_bHasDupes || m_iMyHitCount+iQuorumLeft<MAX_HITS ) && iQuorumLeft>=m_iThresh && !bProceed2HitChunk )
 	{
 		// find min document ID, count occurrences
@@ -4398,18 +4393,12 @@ const ExtHit_t * ExtQuorum_c::GetHitsChunkDupes ( const ExtDoc_t * pDocs, SphDoc
 const ExtHit_t * ExtQuorum_c::GetHitsChunkSimple ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
 {
 	// warmup
-	bool bHasHits = false;
 	ARRAY_FOREACH ( i, m_dChildren )
 	{
 		TermTuple_t & tElem = m_dChildren[i];
 		if ( !tElem.m_pCurHit || tElem.m_pCurHit->m_uDocid==DOCID_MAX )
 			tElem.m_pCurHit = tElem.m_pTerm->GetHitsChunk ( pDocs, uMaxID );
-
-		bHasHits |= ( tElem.m_pCurHit!=NULL );
 	}
-
-	if ( !bHasHits )
-		return ReturnHitsChunk ( 0 );
 
 	// main loop
 	int iHit = 0;
@@ -6062,7 +6051,7 @@ int ExtRanker_T<STATE>::GetMatches ()
 	const ExtHit_t * pHitBase = m_pHitBase;
 	const ExtDoc_t * pDocs = m_pDoclist;
 	m_dZonespans.Resize(1);
-	int		iLastZoneData = 0;
+	int	iLastZoneData = 0;
 
 	bool bZSlist = m_bZSlist;
 	CSphVector<int> dSpans;

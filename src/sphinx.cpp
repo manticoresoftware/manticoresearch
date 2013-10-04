@@ -21877,7 +21877,6 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 	pTokenizer->SetBuffer ( (BYTE*)sBuffer, iLen );
 
 	bool bFirstToken = true;
-	bool bStopwordsPresent = false;
 	dTokens.Resize ( 0 );
 
 	BYTE * pFrom = NULL;
@@ -21910,8 +21909,6 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 
 		if ( GetWordID ( pFrom, strlen ( (const char*)pFrom ), true ) )
 			dTokens.Add ( (const char*)pFrom );
-		else
-			bStopwordsPresent = true;
 	}
 
 	if ( !dTokens.GetLength() )

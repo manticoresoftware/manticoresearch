@@ -21302,7 +21302,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			} else
 			{
 				iExitCode = ( uStatus==1 ? 0 : 2 ); // uStatus == 1 - AttributeSave - ok, other values - error
-		}
+			}
 
 			if ( !bHandshake )
 				break;

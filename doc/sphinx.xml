@@ -13795,6 +13795,26 @@ to specify all of them, for readability.
 predicted_time_costs = doc=128, hit=96, skip=4096, match=128
 </programlisting>
 </sect2>
+
+<sect2 id="conf-shutdown-timeout"><title>shutdown_timeout</title>
+<para>
+searchd --stopwait wait time, in seconds.
+Optional, default is 3 seconds.
+Added in 2.2.1-beta.
+</para>
+<para>
+When you run searchd --stopwait your daemon needs to perform some
+activities before stopping like finishing queries, flushing RT RAM chunk,
+flushing attributes and updating binlog. And it requires some time.
+searchd --stopwait will wait up to shutdown_time seconds for daemon to
+finish its jobs. Suitable time depends on your index size and load.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+shutdown_timeout = 5 # wait for up to 5 seconds
+</programlisting>
+</sect2>
+
 </sect1>
 
 <sect1 id="confgroup-common"><title>Common section configuration options</title>

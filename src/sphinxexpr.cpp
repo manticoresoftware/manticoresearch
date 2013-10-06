@@ -1320,6 +1320,12 @@ struct Expr_StrEq_c : public ISphExpr
 		, m_pRight ( pRight )
 	{}
 
+	~Expr_StrEq_c ()
+	{
+		SafeRelease ( m_pLeft );
+		SafeRelease ( m_pRight );
+	}
+
 	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
 		assert ( m_pLeft && m_pRight );
@@ -3863,6 +3869,8 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_IDENT:
 		{
 			m_sCreateError.SetSprintf ( "unknown column: %s", tNode.m_sIdent );
+			SafeRelease ( pLeft );
+			SafeRelease ( pRight );
 			return NULL;
 		}
 

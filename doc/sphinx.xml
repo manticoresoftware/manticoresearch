@@ -9805,7 +9805,7 @@ unpack_mysqlcompress_maxsize = 1M
 <sect2 id="conf-index-type"><title>type</title>
 <para>
 Index type.
-Known values are 'plain', 'distributed', and 'rt'.
+Known values are 'plain', 'distributed', 'rt' and 'template'.
 Optional, default is 'plain' (plain local index).
 </para>
 <para>
@@ -9820,6 +9820,10 @@ are also stored and processed locally, but additionally allow
 for on-the-fly updates of the full-text index (see <xref linkend="rt-indexes"/>).
 Note that <emphasis>attributes</emphasis> can be updated on-the-fly using
 either plain local indexes or RT ones.
+In 2.2.1-beta template indexes was introduced. They are actually a
+pseudo-indexes because they do not store any data. That means they do not create
+any files on your hard drive. But you can use them for keywords and snippets
+generation, which may be useful in some cases.
 </para>
 <para>
 Index type setting lets you choose the needed type.

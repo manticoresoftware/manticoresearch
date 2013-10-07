@@ -732,6 +732,7 @@ expr:
 	| '{' consthash '}'			{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| function
 	| json_field
+	| streq
 	;
 
 function:
@@ -745,7 +746,6 @@ function:
 	| TOK_MAX '(' expr ',' expr ')'	{ TRACK_BOUNDS ( $$, $1, $6 ); }
 	| TOK_WEIGHT '(' ')'			{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| TOK_IDENT '(' expr TOK_FOR TOK_IDENT TOK_IN json_field ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
-	| TOK_IDENT '(' expr '=' TOK_QUOTED_STRING TOK_FOR TOK_IDENT TOK_IN json_field ')' { TRACK_BOUNDS ( $$, $1, $10 ); }
 	;
 	
 arglist:
@@ -1333,6 +1333,15 @@ subkey:
 	| TOK_DOT_NUMBER			{ $$ = $1; $$.m_iEnd = $1.m_iEnd; }
 	| '[' expr ']'				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| '[' TOK_QUOTED_STRING ']'	{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
+	;
+
+streq:
+	expr '=' strval				{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| strval '=' expr			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	;
+
+strval:
+	TOK_QUOTED_STRING
 	;
 
 %%

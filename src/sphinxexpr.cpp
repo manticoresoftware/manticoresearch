@@ -5189,10 +5189,12 @@ int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 		if ( iRight>=0 )	tNode.m_iArgs += ( m_dNodes[iRight].m_iToken==',' ) ? m_dNodes[iRight].m_iArgs : 1;
 	}
 
-	if ( iRight>=0 && m_dNodes[iRight].m_eRetType==SPH_ATTR_STRING )
+	if ( iLeft>=0 && iRight>=0 )
 	{
-		if ( iLeft>=0 && m_dNodes[iLeft].m_iToken==TOK_IDENT )
+		if ( m_dNodes[iRight].m_eRetType==SPH_ATTR_STRING && m_dNodes[iLeft].m_iToken==TOK_IDENT )
 			m_dNodes[iLeft].m_eRetType = SPH_ATTR_STRING;
+		else if ( m_dNodes[iLeft].m_eRetType==SPH_ATTR_STRING && m_dNodes[iRight].m_iToken==TOK_IDENT )
+			m_dNodes[iRight].m_eRetType = SPH_ATTR_STRING;
 	}
 
 	tNode.m_iLeft = iLeft;

@@ -16153,14 +16153,21 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	{
 		// do scan
 		DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
-		int64_t iStart = pQuery->m_bReverseScan ? ( m_iDocinfoIndex-1 ) : 0;
-		int iStep = pQuery->m_bReverseScan ? -1 : 1;
+		int64_t iStart = 0;
+		int64_t iEnd = m_iDocinfoIndex;
+		int iStep = 1;
+		if ( pQuery->m_bReverseScan )
+		{
+			iStart = m_iDocinfoIndex-1;
+			iEnd = -1;
+			iStep = -1;
+		}
 
 		int iCutoff = pQuery->m_iCutoff;
 		if ( iCutoff<=0 )
 			iCutoff = -1;
 
-		for ( int64_t iIndexEntry=iStart; iIndexEntry<m_iDocinfoIndex; iIndexEntry+=iStep )
+		for ( int64_t iIndexEntry=iStart; iIndexEntry!=iEnd; iIndexEntry+=iStep )
 		{
 			// block-level filtering
 			const DWORD * pMin = &m_pDocinfoIndex[ iIndexEntry*uStride*2 ];
@@ -16232,7 +16239,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 					// handle cutoff
 					if ( bNewMatch && --iCutoff==0 )
 					{
-						iIndexEntry = m_iDocinfoIndex; // outer break
+						iIndexEntry = iEnd - iStep; // outer break
 						break;
 					}
 				}

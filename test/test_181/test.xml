@@ -55,6 +55,21 @@ index test4
 	path			= <data_path/>/test4
 	rt_field		= title
 }
+
+source test_rs
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= attr
+}
+
+index test_rs
+{
+	source			= test_rs
+	path			= <data_path/>/test_rs
+	docinfo = extern
+}
 </config>
 
 <db_create>
@@ -70,7 +85,7 @@ create table test_table
 <db_insert>insert into test_table values ( 2, 'asdf', 22 );</db_insert>
 
 <queries>
-<query mode="extended2" ranker="wordcount" sortmode="expr" sortby="@weight" index_weights="test1:10 test2:1">asdf</query>
+<query mode="extended2" index="test1 test2" ranker="wordcount" sortmode="expr" sortby="@weight" index_weights="test1:10 test2:1">asdf</query>
 <query mode="extended2" index="test1" index_weights="test1:11"></query>
 <query mode="fullscan" index="test1" index_weights="test1:11"></query>
 <query mode="fullscan" index="test1" index_weights="test1:11">something</query>
@@ -81,6 +96,11 @@ create table test_table
 <sphinxql>insert into test4 ( id, title ) values ( 2, 'asdf' )</sphinxql>
 <sphinxql>select *, weight() as skey from test3, test4 where match('asdf') option ranker=wordcount, index_weights=(test3=1, test4=10)</sphinxql>
 <sphinxql>select * from test3 option index_weights=(test3=10)</sphinxql>
+<!-- regression crash on reverse_scan -->
+<sphinxql>select * from test_rs option reverse_scan=1</sphinxql>
+<sphinxql>select * from test_rs where attr=22 option reverse_scan=1</sphinxql>
+<sphinxql>select * from test_rs option reverse_scan=1, cutoff=1</sphinxql>
+<sphinxql>select * from test_rs option cutoff=1</sphinxql>
 </sphqueries>
 
 </test>

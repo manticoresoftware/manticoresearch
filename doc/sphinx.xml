@@ -997,7 +997,7 @@ XML elements (tags) recognized by xmlpipe2 (and their attributes where applicabl
         Known attributes are:
         <itemizedlist>
         <listitem><para>"name", specifies the element name that should be treated as an attribute in the subsequent documents.</para></listitem>
-        <listitem><para>"type", specifies the attribute type. Possible values are "int", "timestamp", "str2ordinal", "bool", "float", "multi" and "json".</para></listitem>
+        <listitem><para>"type", specifies the attribute type. Possible values are "int", "bigint", "timestamp", "str2ordinal", "bool", "float", "multi" and "json".</para></listitem>
         <listitem><para>"bits", specifies the bit size for "int" attribute type. Valid values are 1 to 32.</para></listitem>
         <listitem><para>"default", specifies the default value for this attribute that should be used if the attribute's element is not present in the document.</para></listitem>
         </itemizedlist>
@@ -4488,6 +4488,7 @@ overrides the built-in config file names.
 <listitem><para><option>--quiet</option> (<option>-q</option> for short)
 keep indextool quiet - it will not output banner, etc.
 </para>
+</listitem>
 </itemizedlist>
 </para>
 <para>
@@ -13919,6 +13920,87 @@ json_autoconv_keynames = lowercase
 -->
 
 <appendix id="changelog"><title>Sphinx revision history</title>
+
+<sect1 id="rel212"><title>Version 2.1.2-release, XX oct 2013</title>
+<bridgehead>New features</bridgehead>
+<itemizedlist>
+  <listitem><para>added <link linkend="sphinxql-flush-ramchunk">FLUSH RAMCHUNK</link> statement</para></listitem>
+  <listitem><para>added <link linkend="sphinxql-show-plan">SHOW PLAN</link> statement</para></listitem>
+  <listitem><para>added support for <link linkend="sphinxql-select">GROUP BY</link> on multiple attributes</para></listitem>
+  <listitem><para>added <link linkend="expression-ranker">BM25F()</link> function to <code>SELECT</code> expressions (now works with the expression based ranker)</para></listitem>
+  <listitem><para>added <link linkend="ref-indextool">indextool</link> <option>--fold</option> command and <option>-q</option> switch</para></listitem>
+  <listitem><para>added JSON debug check for RT index RAM chunk</para></listitem>
+  <listitem><para>added <link linkend="expr-func-length">LENGTH()</link> function for MVA</para></listitem>
+  <listitem><para>added missing <link linkend="conf-rt-attr-bool">rt_attr_bool</link> directive</para></listitem> 
+  <listitem><para>added support for selecting over 250 columns via SphinxQL</para></listitem>
+  <listitem><para>deprecated custom sort mode, and <link linkend="conf-sql-attr-str2ordinal">str2ordinal</link> and <link linkend="conf-sql-attr-str2wordcount">str2wordcount</link> attribute types</para></listitem>
+  <listitem><para>optimized <code>SELECT</code>, <code>UPDATE</code> for indexes with many attributes (up to 3.5x speedup in extreme cases)</para></listitem>
+  <listitem><para><code>JSON</code> attributes (up to 5-20% faster <code>SELECTs</code> using JSON objects)</para></listitem>
+  <listitem><para>optimized <link linkend="xmlpipe2">xmlpipe2</link> indexing (up to 9 times faster on some schemas)</para></listitem>
+</itemizedlist>
+
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+  <listitem><para>fixed #1684, <link linkend="sphinxql-select">COUNT(DISTINCT smth)</link> with implicit <code>GROUP BY</code> returns correct value now</para></listitem>
+  <listitem><para>fixed #1672, exact token AOT vs lemma (<filename>indexer</filename> skips exact form of token that passed AOT through tokenizer)</para></listitem>
+  <listitem><para>fixed #1659, fail while loading empty infix dictionary with <link linkend="conf-dict">dict=keywords</link></para></listitem>
+  <listitem><para>fixed #1638, force explicit JSON type conversion for aggregate functions</para></listitem>
+  <listitem><para>fixed #1628, <link linkend="sphinxql-select">GROUP_CONCAT()</link> and <link linkend="sphinxql-select">GROUPBY()</link> support for distributed agents</para></listitem>
+  <listitem><para>fixed #1619, <code>INTEGER()</code> conversion function doesn't support signed integers</para></listitem>
+  <listitem><para>fixed #1615, global IDF vs exact term (=term) fixed global IDF for missed terms fixed SphinxQL <link linkend="conf-global-idf">global_idf=0 option</link></para></listitem>
+  <listitem><para>fixed #1607, now ignoring binlog when running daemon with <option>--console</option> flag</para></listitem>
+  <listitem><para>fixed #1606, hard interruption of the daemon by Ctrl+C (SIGINT) signal</para></listitem>
+  <listitem><para>fixed #1592, duplicates vs expression ranker</para></listitem>
+  <listitem><para>fixed #1578, <link linkend="sorting-modes">SORT BY</link> string attribute via API <option>attr_asc</option> \ <option>attr_desc</option></para></listitem>
+  <listitem><para>fixed #1575, crash of daemon on MVA receive from agents with <link linkend="conf-dist-threads">dist_threads</link> enabled</para></listitem>
+  <listitem><para>fixed #1574, agent got kill list of local indexes of distributed index</para></listitem>
+  <listitem><para>fixed #1573, ranker expression vs expanded terms</para></listitem>
+  <listitem><para>fixed #1572, <code>BM25F</code> vs negative terms</para></listitem>
+  <listitem><para>fixed #1550, float got cut at full-text part of a query</para></listitem>
+  <listitem><para>fixed #1541, <code>BM25F</code> expression in distributes indexes</para></listitem>
+  <listitem><para>fixed #1508, <ulink url="http://sphinxsearch.com/bugs/view.php?id=1522">#1522</ulink>, distributed index query lasts up to <link linkend="conf-agent-connect-timeout">agent_connect_timeout</link> with epoll path</para></listitem>
+  <listitem><para>fixed #1508, master failed to connect waiting agents up to <link linkend="conf-agent-connect-timeout">agent_connect_timeout</link> time</para></listitem>
+  <listitem><para>fixed #1489, filtering by integer field in JSON using floating point precision</para></listitem>
+  <listitem><para>fixed #1485, <link linkend="conf-index-exact-words">index_exact_words</link> vs keyword dict with infix</para></listitem>
+  <listitem><para>fixed #1484, <link linkend="sphinxql-insert">INSERT</link> into RT vs no JSON attribute</para></listitem>
+  <listitem><para>fixed #1478, memory leaks at daemon <link linkend="misc-functions">PACKEDFACTORS()</link> as UDF argument, index query tokenizer, expression ranker SUM()</para></listitem>
+  <listitem><para>fixed #1470, broken UDF unpack (since r3738 UDF version 2)</para></listitem>
+  <listitem><para>fixed #1468, multiple conditions in <code>WHERE</code> for JSON attributes</para></listitem>
+  <listitem><para>fixed #1466, <link linkend="conf-index-field-lengths">index_field_lengths</link> vs XML data source</para></listitem>
+  <listitem><para>fixed #1463, daemon shutdown vs RT index optimize (added forced terminate of long merging operation)</para></listitem>
+  <listitem><para>fixed #1460, <link linkend="sphinxql-select">aggregate functions</link> <code>AVG()</code>, <code>MAX()</code>, <code>MIN()</code>, <code>SUM()</code> do not work for JSON attributes</para></listitem>
+  <listitem><para>fixed #1459, <code>BM25F</code> doesn't work with <link linkend="conf-sql-field-string">field_string</link> fields</para></listitem>
+  <listitem><para>fixed #1458, factors to copy <code>field_tf</code> at UDF</para></listitem>
+  <listitem><para>fixed #1450, garbage in JSON fields when selecting them from a RT index</para></listitem>
+  <listitem><para>fixed #1449, broken build on Mac OS X</para></listitem>
+  <listitem><para>fixed #1446, <link linkend="weighting">WEIGHT()</link> did not work in <code>SELECT</code> expressions</para></listitem>
+  <listitem><para>fixed #1445, field-start/field-end modifiers did not work for star-expanded keywords</para></listitem>
+  <listitem><para>fixed #1443, <link linkend="conf-morphology">morphology=lemmatizer_ru_all</link> now works with <link linkend="conf-index-exact-words">index_exact_words=1</link> (exact forms can be matches)</para></listitem>
+  <listitem><para>fixed #1442, incorrect <code>COUNT(*)</code> value in queries to distributed indexes with implicit <code>GROUP BY</code></para></listitem>
+  <listitem><para>fixed #1439, filters on float values in JSON issue, string values quoting issue</para></listitem>
+  <listitem><para>fixed #1399, filter error message on string attribute</para></listitem>
+  <listitem><para>fixed #1384, added possibility to define any own DSN line with <link linkend="confgroup-source">source=mssql</link> (like as in <code>source=odbc</code>)</para></listitem>
+  <listitem><para>fixed <link linkend="sphinxql-attach-index">ATTACH</link> vs wordforms or stopwords; after daemon was restarted this setting was getting lost in RT indexes</para></listitem>  
+  <listitem><para>fixed balancing of agents in HA</para></listitem>
+  <listitem><para>fixed co-working of <code>index_exact_word</code> + AOT lemmatizer</para></listitem>
+  <listitem><para>fixed epoll invoking and turned on by default</para></listitem>
+  <listitem><para>fixed incorrect handling of wildcards in tokenizer</para></listitem>
+  <listitem><para>fixed infix indexing with <option>dict=keywords</option></para></listitem>
+  <listitem><para>fixed <link linkend="sphinxql-select">max_predicted_time</link> integer overflows</para></listitem>
+  <listitem><para>fixed memory error in tokenizer</para></listitem>
+  <listitem><para>fixed several memory leaks</para></listitem>
+  <listitem><para>fixed <code>PACKEDFACTORS()</code> to work in different <code>GROUP BY</code> queries</para></listitem>
+  <listitem><para>fixed preprocessor definitions for <link linkend="conf-regexp-filter">RE2</link> in VS solution</para></listitem>
+  <listitem><para>fixed rotation of global IDF for <option>workers=threads</option> and <option>seamless_rotate=1</option></para></listitem>
+  <listitem><para>fixed rotation of old indexes</para></listitem>
+  <listitem><para>fixed RT kill list survives <code>TRUNCATE</code> and works in newly <code>ATTACH</code>ed index</para></listitem>
+  <listitem><para>fixed saving id32 RT index with id64 daemon</para></listitem>  
+  <listitem><para>fixed stemmer vs RT index <code>INSERT</code></para></listitem>
+  <listitem><para>fixed string case error with JSON attributes in select list of a query</para></listitem>
+  <listitem><para>fixed <code>TOP_COUNT</code> usage in <filename>misc/suggest</filename> and updated to PHP 5.3 and UTF-8</para></listitem>
+</itemizedlist>
+</sect1>
+
 
 <sect1 id="rel211"><title>Version 2.1.1-beta, 20 feb 2013</title>
 <bridgehead>Major new features</bridgehead>

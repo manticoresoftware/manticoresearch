@@ -2507,6 +2507,8 @@ Here's the complete reference list for quick access.
 <listitem><para><link linkend="expr-func-log2">LOG2()</link></para></listitem>
 <listitem><para><link linkend="expr-func-max">MAX()</link></para></listitem>
 <listitem><para><link linkend="expr-func-min">MIN()</link></para></listitem>
+<listitem><para><link linkend="expr-func-min-top-sortval">MIN_TOP_SORTVAL()</link></para></listitem>
+<listitem><para><link linkend="expr-func-min-top-weight">MIN_TOP_WEIGHT()</link></para></listitem>
 <listitem><para><link linkend="expr-func-month">MONTH()</link></para></listitem>
 <listitem><para><link linkend="expr-func-now">NOW()</link></para></listitem>
 <listitem><para><link linkend="expr-func-poly2d">POLY2D()</link></para></listitem>
@@ -2672,6 +2674,16 @@ of an integer type.
 <varlistentry>
 <term id="expr-func-min">MIN()</term>
 <listitem><para>Returns the smaller of two arguments.</para></listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-min-top-sortval">MIN_TOP_SORTVAL()</term>
+<listitem><para>Returns sort key value of the worst found element in the current top-N matches if sort key is float and 0 otherwise.</para></listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-min-top-weight">MIN_TOP_WEIGHT()</term>
+<listitem><para>Returns weight of the worst found element in the current top-N matches.</para></listitem>
 </varlistentry>
 
 <varlistentry>

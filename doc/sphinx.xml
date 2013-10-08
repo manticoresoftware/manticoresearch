@@ -796,13 +796,6 @@ to be non-letters and will be treated as word separators when indexing
 or searching through this index.
 </para>
 <para>
-Note that while default tables do not include space character
-(ASCII code 0x20, Unicode U+0020) as a letter, it's in fact
-<emphasis>perfectly legal</emphasis> to do so. This can be
-useful, for instance, for indexing tag clouds, so that space-separated
-word sets would index as a <emphasis>single</emphasis> search query term.
-</para>
-<para>
 Default tables currently include English and Russian characters.
 Please do submit your tables for other languages!
 </para>
@@ -6824,7 +6817,7 @@ Introduced in version 0.9.9-rc1.
 
 
 <sect2 id="api-func-setlimits"><title>SetLimits</title>
-<para><b>Prototype:</b> function SetLimits ( $offset, $limit, $max_matches=0, $cutoff=0 )</para>
+<para><b>Prototype:</b> function SetLimits ( $offset, $limit, $max_matches=1000, $cutoff=0 )</para>
 <para>
 Sets offset into server-side result set (<code>$offset</code>) and amount of matches
 to return to client starting from that offset (<code>$limit</code>). Can additionally
@@ -10782,7 +10775,7 @@ charset_table = 0..9, A..Z-&gt;a..z, _, a..z, \
 
 # 'utf-8' defaults for English and Russian
 charset_table = 0..9, A..Z-&gt;a..z, _, a..z, \
-    U+410..U+42F-&gt;U+430..U+44F, U+430..U+44F
+    U+410..U+42F-&gt;U+430..U+44F, U+430..U+44F, U+401->U+451, U+451
 </programlisting>
 </sect2>
 

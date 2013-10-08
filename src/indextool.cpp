@@ -1047,9 +1047,9 @@ int main ( int argc, char ** argv )
 
 		// preload that index
 		CSphString sError;
-		bool bDictKeywords = false;
+		bool bDictKeywords = true;
 		if ( hConf["index"][sIndex].Exists ( "dict" ) )
-			bDictKeywords = ( hConf["index"][sIndex]["dict"]=="keywords" );
+			bDictKeywords = ( hConf["index"][sIndex]["dict"]!="crc" );
 
 		if ( hConf["index"][sIndex]("type") && hConf["index"][sIndex]["type"]=="rt" )
 		{

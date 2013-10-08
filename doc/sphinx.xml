@@ -2484,6 +2484,8 @@ Here's the complete reference list for quick access.
 <listitem><para><link linkend="expr-bool-ops">Boolean operators: AND, OR, NOT</link></para></listitem>
 <listitem><para><link linkend="expr-bitwise-ops">Bitwise operators: &amp;, |</link></para></listitem>
 <listitem><para><link linkend="expr-func-abs">ABS()</link></para></listitem>
+<listitem><para><link linkend="expr-func-all">ALL()</link></para></listitem>
+<listitem><para><link linkend="expr-func-any">ANY()</link></para></listitem>
 <listitem><para><link linkend="expr-func-bigint">BIGINT()</link></para></listitem>
 <listitem><para><link linkend="expr-func-ceil">CEIL()</link></para></listitem>
 <listitem><para><link linkend="expr-func-contains">CONTAINS()</link></para></listitem>
@@ -2499,6 +2501,7 @@ Here's the complete reference list for quick access.
 <listitem><para><link linkend="expr-func-idiv">IDIV()</link></para></listitem>
 <listitem><para><link linkend="expr-func-if">IF()</link></para></listitem>
 <listitem><para><link linkend="expr-func-in">IN()</link></para></listitem>
+<listitem><para><link linkend="expr-func-indexof">INDEXOF()</link></para></listitem>
 <listitem><para><link linkend="expr-func-interval">INTERVAL()</link></para></listitem>
 <listitem><para><link linkend="expr-func-least">LEAST()</link></para></listitem>
 <listitem><para><link linkend="expr-func-length">LENGTH()</link></para></listitem>
@@ -2677,16 +2680,6 @@ of an integer type.
 </varlistentry>
 
 <varlistentry>
-<term id="expr-func-min-top-sortval">MIN_TOP_SORTVAL()</term>
-<listitem><para>Returns sort key value of the worst found element in the current top-N matches if sort key is float and 0 otherwise.</para></listitem>
-</varlistentry>
-
-<varlistentry>
-<term id="expr-func-min-top-weight">MIN_TOP_WEIGHT()</term>
-<listitem><para>Returns weight of the worst found element in the current top-N matches.</para></listitem>
-</varlistentry>
-
-<varlistentry>
 <term id="expr-func-poly2d">POLY2D()</term>
 <listitem><para>POLY2D(x1,y1,x2,y2,x3,y3...) produces a polygon to be used with the <link linkend="expr-func-contains">CONTAINS()</link> function.
 This polygon assumes a flat Earth, so it should not be too large; see the <link linkend="expr-func-poly2d">POLY2D()</link> function.
@@ -2845,6 +2838,28 @@ to work correctly.
 <variablelist>
 
 <varlistentry>
+<term id="expr-func-all">ALL()</term>
+<listitem>
+<para>ALL(cond FOR var IN json.array) function was introduced in 2.2.1-beta. It
+applies to JSON arrays and returns 1 if condition is true for all elements in
+array and 0 otherwise. 'cond' is a general expression which additionally can use
+'var' as current value of an array element within itself.</para>
+<para><programlisting>
+SELECT ALL(x>3 AND x<7 FOR x IN j.intarray) FROM test;
+</programlisting></para>
+</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-any">ANY()</term>
+<listitem>
+<para>ANY(cond FOR var IN json.array) function was introduced in 2.2.1-beta.
+It works similar to <link linkend="expr-func-all">ALL()</link> except for it
+returns 1 if condition is true for any element in array.
+</listitem>
+</varlistentry>
+
+<varlistentry>
 <term id="expr-func-crc32">CRC32()</term>
 <listitem><para>
 Returns the CRC32 value of a string argument. Introduced in version 2.0.1-beta.
@@ -2882,6 +2897,59 @@ Starting with 2.2.1-beta, the default method changed to "adaptive",
 a new, well optimized implementation that is both more precise
 <emphasis>and</emphasis> much faster at all times.
 </para></listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-greatest">GREATEST()</term>
+<listitem><para>
+GREATEST(attr_json.some_array) was introduced in version 2.2.1-beta. First argument
+is JSON array and return value is the greatest value in that array.
+Also works for MVA.
+</para></listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-indexof">INDEXOF()</term>
+<listitem>
+<para>INDEXOF(cond FOR var IN json.array) function was introduced in 2.2.1-beta. It
+iterates through all elements in array and returns index of first element for which
+'cond' is true and -1 if 'cond' is false for every element in array.</para>
+<para><programlisting>
+SELECT INDEXOF(name='John' FOR name IN j.peoples) FROM test;
+</programlisting></para>
+</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-least">LEAST()</term>
+<listitem><para>
+LEAST(attr_json.some_array) was introduced in version 2.2.1-beta. First argument
+is JSON array and return value is the least value in that array.
+Also works for MVA.
+</para></listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-length">LENGTH()</term>
+<listitem><para>
+LENGTH(attr_mva) function, introduced in version 2.1.2-stable,
+returns amount of elements in MVA set. It works with both 32-bit and
+64-bit MVA attributes.
+LENGTH(attr_json) was introduced in version 2.2.1-beta. It returns length of
+a field in JSON. Return value depends on type of a field.
+For example LENGTH(json_attr.some_int) always returns 1 and
+LENGTH(json_attr.some_array) returns number of elements in array.
+</para></listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-min-top-sortval">MIN_TOP_SORTVAL()</term>
+<listitem><para>Returns sort key value of the worst found element in the current top-N matches if sort key is float and 0 otherwise.</para></listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-min-top-weight">MIN_TOP_WEIGHT()</term>
+<listitem><para>Returns weight of the worst found element in the current top-N matches.</para></listitem>
 </varlistentry>
 
 <varlistentry>
@@ -2964,37 +3032,6 @@ factors. Note that this feature is not currently supported by the Sphinx API.
 </listitem>
 </varlistentry>
 
-<varlistentry>
-<term id="expr-func-length">LENGTH()</term>
-<listitem><para>
-LENGTH(attr_mva) function, introduced in version 2.1.2-stable,
-returns amount of elements in MVA set. It works with both 32-bit and
-64-bit MVA attributes.
-LENGTH(attr_json) was introduced in version 2.2.1-beta. It returns length of
-a field in JSON. Return value depends on type of a field.
-For example LENGTH(json_attr.some_int) always returns 1 and
-LENGTH(json_attr.some_array) returns number of elements in array.
-</para></listitem>
-</varlistentry>
-
-<varlistentry>
-<term id="expr-func-least">LEAST()</term>
-<listitem><para>
-LEAST(attr_json.some_array) was introduced in version 2.2.1-beta. First argument
-is JSON array and return value is the least value in that array.
-Also works for MVA.
-</para></listitem>
-</varlistentry>
-
-<varlistentry>
-<term id="expr-func-greatest">GREATEST()</term>
-<listitem><para>
-GREATEST(attr_json.some_array) was introduced in version 2.2.1-beta. First argument
-is JSON array and return value is the greatest value in that array.
-Also works for MVA.
-</para></listitem>
-</varlistentry>
-	
 </variablelist>
 </sect2>
 

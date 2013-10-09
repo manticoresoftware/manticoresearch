@@ -14108,7 +14108,7 @@ json_autoconv_keynames = lowercase
 <bridgehead>Major behavior changes and optimizations</bridgehead>
 <itemizedlist>
 <listitem><para>changed that UDFs are now allowed in fork/prefork modes via <link linkend="conf-sphinxql-state">sphinxql_state</link> startup script</para></listitem>
-<listitem><para>changed that <link linkend="conf-compat-sphinxql-magics">compat_sphinxql_magics</link> now defaults to 0</para></listitem>
+<listitem><para>changed that compat_sphinxql_magics now defaults to 0</para></listitem>
 <listitem><para>changed that small enough exceptions, wordforms, stopwords files are now embedded into the index header</para></listitem>
 <listitem><para>changed that <link linkend="conf-rt-mem-limit">rt_mem_limit</link> can now be over 2 GB (bug #1059)</para></listitem>
 <listitem><para>optimized tokenizer (upto 1.25x indexing and snippets speedup)</para></listitem>
@@ -14127,7 +14127,7 @@ json_autoconv_keynames = lowercase
 <listitem><para>fixed #1601, negative numbers in <link linkend="expr-func-in">IN()</link> clause caused a syntax error</para></listitem>
 <listitem><para>fixed #1581, <link linkend="conf-dict">dict=keywords</link> and <link linkend="conf-sql-joined-field">sql_joined_field</link> occasionally caused <filename>indexer</filename> to build corrupted indexes</para></listitem>
 <listitem><para>fixed #1546, file descriptor leaked on index rotation (that eventually prevented <filename>searchd</filename> to reload indexes)</para></listitem>
-<listitem><para>fixed #1537, <code>COUNT(*)</code> and <link linkend="conf-compat-sphinxql-magics">compat_sphinxql_magics=0</link> via SphinxAPI caused an incorrect error message</para></listitem>
+<listitem><para>fixed #1537, <code>COUNT(*)</code> and compat_sphinxql_magics=0 via SphinxAPI caused an incorrect error message</para></listitem>
 <listitem><para>fixed #1531, #1589, several matching and highlighting issues when using both <link linkend="conf-blend-chars">blend_chars</link> and multi-wordforms</para></listitem>
 <listitem><para>fixed #1521, <filename>indextool --check</filename> did not handle empty RT MVA and gave an incorrect warning</para></listitem>
 <listitem><para>fixed #1392, SphinxSE builds with MySQL 5.6 now</para></listitem>
@@ -14318,7 +14318,7 @@ json_autoconv_keynames = lowercase
 <listitem><para>fixed #1167, nested parentheses in a full-text query could mistakenly reset preceding field or zone limit operator</para></listitem>
 <listitem><para>fixed #1158, float range filters were not supported in a multi-query batch optimizer</para></listitem>
 <listitem><para>fixed #1157, broken gcc-4.7 build</para></listitem>
-<listitem><para>fixed #1156, empty result set instead of an error message when querying distributed indexes with <link linkend="conf-compat-sphinxql-magics">compat_sphinxql_magic=1</link> and hitting an error</para></listitem>
+<listitem><para>fixed #1156, empty result set instead of an error message when querying distributed indexes with compat_sphinxql_magic=1 and hitting an error</para></listitem>
 <listitem><para>fixed #1143, dash after a number incorrectly parsed as an operator <code>NOT</code></para></listitem>
 <listitem><para>fixed #1137, <filename>searchd</filename> <link linkend="ref-searchd">--stopwait</link> hanged when the running instance crashed during shutdown</para></listitem>
 <listitem><para>fixed #1136, high idle CPU load on systems without <code>pthread_timed_lock()</code></para></listitem>
@@ -14549,7 +14549,7 @@ json_autoconv_keynames = lowercase
 </itemizedlist>
 <bridgehead>New SphinxQL features</bridgehead>
 <itemizedlist>
-<listitem><para>added new, more SQL compliant SphinxQL syntax; and a <link linkend="conf-compat-sphinxql-magics">compat_sphinxql_magics</link> directive</para></listitem>
+<listitem><para>added new, more SQL compliant SphinxQL syntax; and a compat_sphinxql_magics directive</para></listitem>
 <listitem><para>added <link linkend="expr-func-crc32">CRC32()</link>, <link linkend="expr-func-day">DAY()</link>, <link linkend="expr-func-month">MONTH()</link>, <link linkend="expr-func-year">YEAR()</link>, <link linkend="expr-func-yearmonth">YEARMONTH()</link>, <link linkend="expr-func-yearmonthday">YEARMONTHDAY()</link> functions</para></listitem>
 <listitem><para>added <link linkend="expr-ari-ops">DIV, MOD, and % operators</link></para></listitem>
 <listitem><para>added <link linkend="sphinxql-select">reverse_scan=(0|1)</link> option to SELECT</para></listitem>

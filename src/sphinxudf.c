@@ -24,6 +24,8 @@
 
 #define SPH_UDF_MAX_FIELD_FACTORS	256
 #define SPH_UDF_MAX_TERM_FACTORS	2048
+/// maximal size to store bitmask for 256 fields
+#define SPH_UDF_MAX_FIELD_SIZE 8
 
 
 /// helper function that must be called to initialize the SPH_UDF_FACTORS structure 
@@ -39,6 +41,7 @@ int sphinx_factors_init ( SPH_UDF_FACTORS * out )
 	return 0;
 }
 
+
 /// helper function that unpacks PACKEDFACTORS() blob into SPH_UDF_FACTORS structure
 /// MUST be in sync with PackFactors() method in sphinxsearch.cpp
 /// returns 0 on success
@@ -48,8 +51,8 @@ int sphinx_factors_unpack ( const unsigned int * in, SPH_UDF_FACTORS * out )
 	const unsigned int * pack = in;
 	SPH_UDF_FIELD_FACTORS * f;
 	SPH_UDF_TERM_FACTORS * t;
-	int i, size, fields;
-	unsigned int exact_hit_mask, exact_order_mask;
+	int i, size, fields, fields_size;
+	unsigned int exact_hit_mask[SPH_UDF_MAX_FIELD_SIZE], exact_order_mask[SPH_UDF_MAX_FIELD_SIZE];
 
 	if ( !in || !out )
 		return 1;
@@ -69,8 +72,16 @@ int sphinx_factors_unpack ( const unsigned int * in, SPH_UDF_FACTORS * out )
 	if ( out->num_fields > SPH_UDF_MAX_FIELD_FACTORS )
 		return 1;
 
-	exact_hit_mask = *in++;
-	exact_order_mask = *in++;
+	fields_size = ( out->num_fields + 31 ) / 32;
+
+	for ( i=0; i<fields_size; i++ )
+	{
+		exact_hit_mask[i] = *in++;
+	}
+	for ( i=0; i<fields_size; i++ )
+	{
+		exact_order_mask[i] = *in++;
+	}
 
 	if ( out->num_fields > 0 )
 	{
@@ -100,8 +111,8 @@ int sphinx_factors_unpack ( const unsigned int * in, SPH_UDF_FACTORS * out )
 			f->atc = *(float*)in++;
 			f->lccs = *in++;
 			f->wlccs = *(float*)in++;
-			f->exact_hit = (char)( ( exact_hit_mask >> i ) & 1 );
-			f->exact_order = (char)( ( exact_order_mask >> i ) & 1 );
+			f->exact_hit = (char)( ( exact_hit_mask [ i>>5 ] & ( 1UL<<( i&31 ) ) )!=0 );
+			f->exact_order = (char)( ( exact_order_mask [ i>>5 ] & ( 1UL<<( i&31 ) ) )!=0 );
 		} else
 		{
 			// everything else is already zeroed out by memset() above

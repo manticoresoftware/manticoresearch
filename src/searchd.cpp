@@ -15276,7 +15276,7 @@ static void FormatFactors ( CSphVector<BYTE> & dOut, const SPH_UDF_FACTORS & tFa
 				i,
 				f.lcs, f.hit_count, f.word_count,
 				f.tf_idf, f.min_idf, f.max_idf, f.sum_idf,
-				f.min_hit_pos, f.min_best_span_pos, ( f.exact_hit>>i ) & 1, f.max_window_hits,
+				f.min_hit_pos, f.min_best_span_pos, f.exact_hit, f.max_window_hits,
 				f.min_gaps, f.exact_order, f.lccs, f.wlccs, f.atc );
 		dOut.Resize ( iOff+iLen );
 	}

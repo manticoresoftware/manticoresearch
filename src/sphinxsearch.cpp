@@ -6768,8 +6768,8 @@ public:
 	float				m_dSumIDF[SPH_MAX_FIELDS];
 	int					m_iMinHitPos[SPH_MAX_FIELDS];
 	int					m_iMinBestSpanPos[SPH_MAX_FIELDS];
-	DWORD				m_uExactHit;
-	DWORD				m_uExactOrder;
+	CSphBitvec			m_tExactHit;
+	CSphBitvec			m_tExactOrder;
 	CSphBitvec			m_tKeywords;
 	DWORD				m_uDocWordCount;
 	int					m_iMaxWindowHits[SPH_MAX_FIELDS];
@@ -7012,8 +7012,8 @@ public:
 		m_dTF.Fill ( 0 );
 		m_dFieldTF.Fill ( 0 ); // OPTIMIZE? make conditional?
 		m_tMatchedFields.Clear();
-		m_uExactHit = 0;
-		m_uExactOrder = 0;
+		m_tExactHit.Clear();
+		m_tExactOrder.Clear();
 		m_uDocWordCount = 0;
 		m_dWindow.Resize ( 0 );
 		m_fDocBM25A = 0;
@@ -7141,7 +7141,6 @@ struct Expr_FieldFactor_c<bool> : public ISphExpr
 };
 
 
-
 /// generic per-document int factor
 struct Expr_IntPtr_c : public ISphExpr
 {
@@ -7180,6 +7179,30 @@ struct Expr_FieldMask_c : public ISphExpr
 	int IntEval ( const CSphMatch & ) const
 	{
 		return (int)*m_tFieldMask.Begin();
+	}
+};
+
+
+/// bitvec field factor specialization
+template<>
+struct Expr_FieldFactor_c<CSphBitvec> : public ISphExpr
+{
+	const int *		m_pIndex;
+	const CSphBitvec & m_tField;
+
+	Expr_FieldFactor_c ( const int * pIndex, const CSphBitvec  & tField )
+		: m_pIndex ( pIndex )
+		, m_tField ( tField )
+	{}
+
+	float Eval ( const CSphMatch & ) const
+	{
+		return (float)( m_tField.BitGet ( *m_pIndex ) );
+	}
+
+	int IntEval ( const CSphMatch & ) const
+	{
+		return (int)( m_tField.BitGet ( *m_pIndex ) );
 	}
 };
 
@@ -7502,8 +7525,8 @@ public:
 			case XRANK_SUM_IDF:				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dSumIDF );
 			case XRANK_MIN_HIT_POS:			return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinHitPos );
 			case XRANK_MIN_BEST_SPAN_POS:	return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinBestSpanPos );
-			case XRANK_EXACT_HIT:			return new Expr_FieldFactor_c<bool> ( pCF, &m_pState->m_uExactHit );
-			case XRANK_EXACT_ORDER:			return new Expr_FieldFactor_c<bool> ( pCF, &m_pState->m_uExactOrder );
+			case XRANK_EXACT_HIT:			return new Expr_FieldFactor_c<CSphBitvec> ( pCF, m_pState->m_tExactHit );
+			case XRANK_EXACT_ORDER:			return new Expr_FieldFactor_c<CSphBitvec> ( pCF, m_pState->m_tExactOrder );
 			case XRANK_MAX_WINDOW_HITS:
 				{
 					CSphMatch tDummy;
@@ -7780,6 +7803,8 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, 
 	m_pWeights = pWeights;
 	m_uDocBM25 = 0;
 	m_tMatchedFields.Init ( iFields );
+	m_tExactHit.Init ( iFields );
+	m_tExactOrder.Init ( iFields );
 	m_iCurrentField = 0;
 	m_iMaxQpos = pRanker->m_iMaxQpos; // already copied in SetQwords, but anyway
 	m_iWindowSize = 1;
@@ -7887,13 +7912,13 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 		if ( iLcs>m_iLastHitPos )
 			m_uCurLCS = (BYTE)( m_uCurLCS + pHlist->m_uWeight );
 		if ( HITMAN::IsEnd ( pHlist->m_uHitpos ) && (int)pHlist->m_uQuerypos==m_iMaxQpos && iPos==m_iMaxQpos )
-			m_uExactHit |= ( 1UL << uField );
+			m_tExactHit.BitSet ( uField );
 	} else
 	{
 		if ( iLcs>m_iLastHitPos )
 			m_uCurLCS = BYTE(pHlist->m_uWeight);
 		if ( iPos==1 && HITMAN::IsEnd ( pHlist->m_uHitpos ) && m_iMaxQpos==1 )
-			m_uExactHit |= ( 1UL << uField );
+			m_tExactHit.BitSet ( uField );
 	}
 
 	if ( m_uCurLCS>m_uLCS[uField] )
@@ -8015,7 +8040,7 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 	if ( pHlist->m_uQuerypos==m_iLastQuerypos+1 )
 	{
 		if ( ++m_iExactOrderWords==m_iQueryWordCount )
-			m_uExactOrder |= ( 1UL << uField );
+			m_tExactOrder.BitSet ( uField );
 		m_iLastQuerypos++;
 	}
 
@@ -8234,6 +8259,7 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::PackFactors ( int 
 
 	// leave space for size
 	pPack++;
+	assert ( m_tMatchedFields.GetSize()==m_tExactHit.GetSize() && m_tExactHit.GetSize()==m_tExactOrder.GetSize() );
 
 	// document level factors
 	*pPack++ = m_uDocBM25;
@@ -8243,8 +8269,11 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::PackFactors ( int 
 
 	// field level factors
 	*pPack++ = (DWORD)m_iFields;
-	*pPack++ = m_uExactHit; // added in v.4 (made exact_hit a mask instead of pre-v.4 per-field int)
-	*pPack++ = m_uExactOrder; // added in v.4
+	// v.6 set these depends on number of fields
+	for ( int i=0; i<m_tExactHit.GetSize(); i++ )
+		*pPack++ = *( m_tExactHit.Begin() + i );
+	for ( int i=0; i<m_tExactOrder.GetSize(); i++ )
+		*pPack++ = *( m_tExactOrder.Begin() + i );
 
 	for ( int i=0; i<m_iFields; i++ )
 	{
@@ -8568,7 +8597,7 @@ public:
 				i,
 				m_uLCS[i], m_uHitCount[i], m_uWordCount[i],
 				m_dTFIDF[i], m_dMinIDF[i], m_dMaxIDF[i], m_dSumIDF[i],
-				m_iMinHitPos[i], m_iMinBestSpanPos[i], ( m_uExactHit>>i ) & 1, m_iMaxWindowHits[i] );
+				m_iMinHitPos[i], m_iMinBestSpanPos[i], m_tExactHit.BitGet ( i ), m_iMaxWindowHits[i] );
 
 			int iValLen = strlen ( dVal.Begin() );
 			int iTotalLen = iValLen+strlen(sTmp);

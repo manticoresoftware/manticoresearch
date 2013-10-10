@@ -19370,6 +19370,9 @@ void CheckRotate ()
 
 	sphLogDebug ( "CheckRotate invoked" );
 
+	if ( g_eWorkers==MPM_PREFORK )
+		sphUDFReinit();
+
 	/////////////////////
 	// RAM-greedy rotate
 	/////////////////////

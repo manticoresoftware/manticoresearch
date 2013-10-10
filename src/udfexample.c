@@ -38,6 +38,13 @@ DLLEXPORT int udfexample_ver ()
 }
 
 
+/// UDF re-initialization func
+/// gets called on sighup (workers=prefork only)
+DLLEXPORT void udfexample_reinit ()
+{
+}
+
+
 /// UDF initialization
 /// gets called on every query, when query begins
 /// args are filled with values for a particular query

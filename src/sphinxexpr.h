@@ -223,6 +223,9 @@ bool sphUDFDrop ( const char * szFunc, CSphString & sError );
 class CSphWriter;
 void sphUDFSaveState ( CSphWriter & tWriter );
 
+/// call reinit func in every UDF lib
+void sphUDFReinit();
+
 //////////////////////////////////////////////////////////////////////////
 
 /// init tables used by our geodistance functions

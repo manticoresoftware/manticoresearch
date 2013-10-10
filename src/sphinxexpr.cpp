@@ -55,6 +55,7 @@ extern "C"
 typedef int ( *UdfVer_fn ) ();
 typedef int ( *UdfInit_fn ) ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error );
 typedef void ( *UdfDeinit_fn ) ( SPH_UDF_INIT * init );
+typedef void ( *UdfReinit_fn ) ();
 
 
 /// loaded UDF library
@@ -62,6 +63,7 @@ struct UdfLib_t
 {
 	void *				m_pHandle;	///< handle from dlopen()
 	int					m_iFuncs;	///< number of registered functions from this library
+	UdfReinit_fn		m_fnReinit;	///< per-library reinitialization func (for prefork), optional
 };
 
 
@@ -6053,6 +6055,7 @@ bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, 
 		UdfLib_t tLib;
 		tLib.m_iFuncs = 1;
 		tLib.m_pHandle = pHandle;
+		tLib.m_fnReinit = (UdfReinit_fn) dlsym ( pHandle, sName.SetSprintf ( "%s_reinit", sBasename.cstr() ).cstr() );
 		Verify ( g_hUdfLibs.Add ( tLib, szLib ) );
 		tFunc.m_pLib = g_hUdfLibs ( szLib );
 	} else
@@ -6168,6 +6171,20 @@ void sphUDFSaveState ( CSphWriter & tWriter )
 				sName.cstr(), UdfReturnType ( tDesc.m_eRetType ), tDesc.m_pLibName->cstr() );
 			tWriter.PutBytes ( sBuf.cstr(), sBuf.Length() );
 		}
+	}
+	g_tUdfMutex.Unlock();
+}
+
+
+void sphUDFReinit()
+{
+	g_tUdfMutex.Lock();
+	g_hUdfLibs.IterateStart();
+	while ( g_hUdfLibs.IterateNext() )
+	{
+		const UdfLib_t & tLib = g_hUdfLibs.IterateGet();
+		if ( tLib.m_fnReinit )
+			tLib.m_fnReinit();
 	}
 	g_tUdfMutex.Unlock();
 }

@@ -2883,7 +2883,7 @@ public:
 		m_iElements = iElements;
 		if ( iElements > int(sizeof(m_uStatic)*8) )
 		{
-			int iSize = (m_iElements+31)/32;
+			int iSize = GetSize();
 			m_pData = new DWORD [ iSize ];
 		} else
 		{
@@ -2894,7 +2894,7 @@ public:
 
 	void Clear ()
 	{
-		int iSize = (m_iElements+31)/32;
+		int iSize = GetSize();
 		memset ( m_pData, 0, sizeof(DWORD)*iSize );
 	}
 
@@ -2918,6 +2918,25 @@ public:
 		assert ( iIndex>=0 );
 		assert ( iIndex<m_iElements );
 		m_pData [ iIndex>>5 ] &= ~( 1UL<<( iIndex&31 ) ); // NOLINT
+	}
+
+	const DWORD * Begin () const
+	{
+		return m_pData;
+	}
+
+	int GetSize() const
+	{
+		return (m_iElements+31)/32;
+	}
+
+	int BitCount () const
+	{
+		int iBitSet = 0;
+		for ( int i=0; i<GetSize(); i++ )
+			iBitSet += sphBitCount ( m_pData[i] );
+
+		return iBitSet;
 	}
 };
 

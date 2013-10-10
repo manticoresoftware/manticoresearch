@@ -6757,7 +6757,7 @@ public:
 	int					m_iFields;
 	const int *			m_pWeights;
 	DWORD				m_uDocBM25;
-	DWORD				m_uMatchedFields;
+	CSphBitvec			m_tMatchedFields;
 	int					m_iCurrentField;
 	DWORD				m_uHitCount[SPH_MAX_FIELDS];
 	DWORD				m_uWordCount[SPH_MAX_FIELDS];
@@ -7011,7 +7011,7 @@ public:
 		}
 		m_dTF.Fill ( 0 );
 		m_dFieldTF.Fill ( 0 ); // OPTIMIZE? make conditional?
-		m_uMatchedFields = 0;
+		m_tMatchedFields.Clear();
 		m_uExactHit = 0;
 		m_uExactOrder = 0;
 		m_uDocWordCount = 0;
@@ -7163,6 +7163,27 @@ struct Expr_IntPtr_c : public ISphExpr
 };
 
 
+/// per-document field mask factor
+struct Expr_FieldMask_c : public ISphExpr
+{
+	const CSphBitvec & m_tFieldMask;
+
+	explicit Expr_FieldMask_c ( const CSphBitvec & tFieldMask )
+		: m_tFieldMask ( tFieldMask )
+	{}
+
+	float Eval ( const CSphMatch & ) const
+	{
+		return (float)*m_tFieldMask.Begin();
+	}
+
+	int IntEval ( const CSphMatch & ) const
+	{
+		return (int)*m_tFieldMask.Begin();
+	}
+};
+
+
 /// generic per-document float factor
 struct Expr_FloatPtr_c : public ISphExpr
 {
@@ -7283,12 +7304,15 @@ struct Expr_Sum_T : public ISphExpr
 	{
 		m_pState->m_iCurrentField = 0;
 		float fRes = 0;
-		DWORD uMask = m_pState->m_uMatchedFields;
-		while ( uMask )
+		const CSphBitvec & tFields = m_pState->m_tMatchedFields;
+		int iBits = tFields.BitCount();
+		while ( iBits )
 		{
-			if ( uMask & 1 )
+			if ( tFields.BitGet ( m_pState->m_iCurrentField ) )
+			{
 				fRes += m_pArg->Eval ( tMatch );
-			uMask >>= 1;
+				iBits--;
+			}
 			m_pState->m_iCurrentField++;
 		}
 		return fRes;
@@ -7298,12 +7322,15 @@ struct Expr_Sum_T : public ISphExpr
 	{
 		m_pState->m_iCurrentField = 0;
 		int iRes = 0;
-		DWORD uMask = m_pState->m_uMatchedFields;
-		while ( uMask )
+		const CSphBitvec & tFields = m_pState->m_tMatchedFields;
+		int iBits = tFields.BitCount();
+		while ( iBits )
 		{
-			if ( uMask & 1 )
+			if ( tFields.BitGet ( m_pState->m_iCurrentField ) )
+			{
 				iRes += m_pArg->IntEval ( tMatch );
-			uMask >>= 1;
+				iBits--;
+			}
 			m_pState->m_iCurrentField++;
 		}
 		return iRes;
@@ -7332,12 +7359,15 @@ struct Expr_Top_T : public ISphExpr
 	{
 		m_pState->m_iCurrentField = 0;
 		float fRes = FLT_MIN;
-		DWORD uMask = m_pState->m_uMatchedFields;
-		while ( uMask )
+		const CSphBitvec & tFields = m_pState->m_tMatchedFields;
+		int iBits = tFields.BitCount();
+		while ( iBits )
 		{
-			if ( uMask & 1 )
+			if ( tFields.BitGet ( m_pState->m_iCurrentField ) )
+			{
 				fRes = Max ( fRes, m_pArg->Eval ( tMatch ) );
-			uMask >>= 1;
+				iBits--;
+			}
 			m_pState->m_iCurrentField++;
 		}
 		return fRes;
@@ -7347,12 +7377,15 @@ struct Expr_Top_T : public ISphExpr
 	{
 		m_pState->m_iCurrentField = 0;
 		int iRes = INT_MIN;
-		DWORD uMask = m_pState->m_uMatchedFields;
-		while ( uMask )
+		const CSphBitvec & tFields = m_pState->m_tMatchedFields;
+		int iBits = tFields.BitCount();
+		while ( iBits )
 		{
-			if ( uMask & 1 )
+			if ( tFields.BitGet ( m_pState->m_iCurrentField ) )
+			{
 				iRes = Max ( iRes, m_pArg->IntEval ( tMatch ) );
-			uMask >>= 1;
+				iBits--;
+			}
 			m_pState->m_iCurrentField++;
 		}
 		return iRes;
@@ -7490,7 +7523,7 @@ public:
 
 			case XRANK_BM25:				return new Expr_IntPtr_c ( &m_pState->m_uDocBM25 );
 			case XRANK_MAX_LCS:				return new Expr_GetIntConst_c ( m_pState->m_iMaxLCS );
-			case XRANK_FIELD_MASK:			return new Expr_IntPtr_c ( &m_pState->m_uMatchedFields );
+			case XRANK_FIELD_MASK:			return new Expr_FieldMask_c ( m_pState->m_tMatchedFields );
 			case XRANK_QUERY_WORD_COUNT:	return new Expr_GetIntConst_c ( m_pState->m_iQueryWordCount );
 			case XRANK_DOC_WORD_COUNT:		return new Expr_IntPtr_c ( &m_pState->m_uDocWordCount );
 			case XRANK_BM25A:
@@ -7746,6 +7779,7 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, 
 	m_iFields = iFields;
 	m_pWeights = pWeights;
 	m_uDocBM25 = 0;
+	m_tMatchedFields.Init ( iFields );
 	m_iCurrentField = 0;
 	m_iMaxQpos = pRanker->m_iMaxQpos; // already copied in SetQwords, but anyway
 	m_iWindowSize = 1;
@@ -7914,7 +7948,7 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 	}
 
 	// update other stuff
-	m_uMatchedFields |= ( 1UL<<uField );
+	m_tMatchedFields.BitSet ( uField );
 
 	// keywords can be duplicated in the query, so we need this extra check
 	WORD uQpos = pHlist->m_uQuerypos;
@@ -8204,7 +8238,7 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::PackFactors ( int 
 	// document level factors
 	*pPack++ = m_uDocBM25;
 	*pPack++ = *(DWORD*)&m_fDocBM25A;
-	*pPack++ = m_uMatchedFields;
+	*pPack++ = *m_tMatchedFields.Begin();
 	*pPack++ = m_uDocWordCount;
 
 	// field level factors
@@ -8519,7 +8553,7 @@ public:
 		CSphVector<char> dVal;
 		dVal.Resize ( MAX_STR_LEN );
 		snprintf ( dVal.Begin(), dVal.GetLength(), "bm25=%d, bm25a=%f, field_mask=%d, doc_word_count=%d",
-			m_uDocBM25, m_fDocBM25A, m_uMatchedFields, m_uDocWordCount );
+			m_uDocBM25, m_fDocBM25A, *m_tMatchedFields.Begin(), m_uDocWordCount );
 
 		char sTmp[MAX_STR_LEN];
 

@@ -91,6 +91,20 @@ index dup
 }
 
 
+
+source src_fields
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data_fields.xml
+}
+
+index fields
+{
+	source				= src_fields
+	path				= <data_path/>/fields
+	charset_type		= utf-8
+	docinfo				= extern
+}
 </config>
 
 <db_create>
@@ -188,6 +202,9 @@ INSERT INTO test_table VALUES
 <!-- regression proximity, phrase, NEAR vs expression ranker -->
 <sphinxql>select *, packedfactors() from dup where match(' "maybe I" | "I m" ') ORDER by id ASC option ranker=expr('1'),  idf='plain,tfidf_unnormalized'</sphinxql>
 <sphinxql>select *, packedfactors() from dup where match(' ( I NEAR/10 work) | (I NEAR/20 there) ') ORDER by id ASC option ranker=expr('1'),  idf='plain,tfidf_unnormalized'</sphinxql>
+
+<!-- hits from over 32 field  -->
+<sphinxql>select *, weight() as w, packedfactors() from fields where match(' test ') option ranker=expr('sum(lcs)')</sphinxql>
 
 </sphqueries>
 

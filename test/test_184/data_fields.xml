@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<sphinx:docset>
+
+<sphinx:schema>
+<sphinx:field name="f1"/>
+<sphinx:field name="f2"/>
+<sphinx:field name="f3"/>
+<sphinx:field name="f4"/>
+<sphinx:field name="f5"/>
+<sphinx:field name="f6"/>
+<sphinx:field name="f7"/>
+<sphinx:field name="f8"/>
+<sphinx:field name="f9"/>
+<sphinx:field name="f10"/>
+<sphinx:field name="f11"/>
+<sphinx:field name="f12"/>
+<sphinx:field name="f13"/>
+<sphinx:field name="f14"/>
+<sphinx:field name="f15"/>
+<sphinx:field name="f16"/>
+<sphinx:field name="f17"/>
+<sphinx:field name="f18"/>
+<sphinx:field name="f19"/>
+<sphinx:field name="f20"/>
+<sphinx:field name="f21"/>
+<sphinx:field name="f22"/>
+<sphinx:field name="f23"/>
+<sphinx:field name="f24"/>
+<sphinx:field name="f25"/>
+<sphinx:field name="f26"/>
+<sphinx:field name="f27"/>
+<sphinx:field name="f28"/>
+<sphinx:field name="f29"/>
+<sphinx:field name="f30"/>
+<sphinx:field name="f31"/>
+<sphinx:field name="f32"/>
+<sphinx:field name="f33"/>
+<sphinx:field name="f34"/>
+<sphinx:field name="f35"/>
+<sphinx:attr name="idd" type="int" default="11"/>
+</sphinx:schema>
+
+<sphinx:document id="100">
+<f1>test</f1>
+<f2>test</f2>
+<f34>test</f34>
+<f35>test</f35>
+</sphinx:document>
+
+</sphinx:docset>

@@ -10101,7 +10101,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 		sWarning.SetSprintf ( "%d attribute(s) can not be updated (not found or incompatible types)", iJsonWarnings );
 		if ( iUpdated==0 )
 		{
-			sError=sWarning;
+			sError = sWarning;
 			return -1;
 		}
 	}
@@ -13370,7 +13370,19 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		// fetch joined fields
 		if ( bGotJoined )
 		{
-			SphDocID_t uLastID = 0;
+			// flush tail of regular hits
+			int iHits = pHits - dHits.Begin();
+			if ( iDictSize && m_pDict->HitblockGetMemUse() && iHits )
+			{
+				sphSort ( dHits.Begin(), iHits, CmpHit_fn() );
+				m_pDict->HitblockPatch ( dHits.Begin(), iHits );
+				pHits = dHits.Begin();
+				m_tProgress.m_iHitsTotal += iHits;
+				dHitBlocks.Add ( tHitBuilder.cidxWriteRawVLB ( fdHits.GetFD(), dHits.Begin(), iHits, NULL, 0, 0 ) );
+				if ( dHitBlocks.Last()<0 )
+					return 0;
+				m_pDict->HitblockReset ();
+			}
 
 			for ( ;; )
 			{
@@ -13390,57 +13402,26 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				if ( !pSource->m_tDocInfo.m_iDocID )
 					break;
 
-				// filter and store hits
-				for ( const CSphWordHit * pHit = pJoinedHits->First(); pHit<=pJoinedHits->Last(); pHit++ )
-				{
-					// flush if needed
-					if ( pHits>=pHitsMax )
-					{
-						// sort hits
-						int iHits = pHits - dHits.Begin();
-						{
-							sphSort ( dHits.Begin(), iHits, CmpHit_fn() );
-							m_pDict->HitblockPatch ( dHits.Begin(), iHits );
-						}
-						pHits = dHits.Begin();
-						m_tProgress.m_iHitsTotal += iHits;
+				int iJoinedHits = pJoinedHits->Length();
+				memcpy ( pHits, pJoinedHits->First(), iJoinedHits*sizeof(CSphWordHit) );
+				pHits += iJoinedHits;
 
-						// we're not inlining, so only flush hits, docs are flushed independently
-						dHitBlocks.Add ( tHitBuilder.cidxWriteRawVLB ( fdHits.GetFD(), dHits.Begin(), iHits,
-							NULL, 0, 0 ) );
+				// check if we need to flush
+				if ( pHits<pHitsMax && !( iDictSize && m_pDict->HitblockGetMemUse() > iDictSize ) )
+					continue;
 
-						if ( dHitBlocks.Last()<0 )
-							return 0;
-					}
+				// store hits
+				int iHits = pHits - dHits.Begin();
+				sphSort ( dHits.Begin(), iHits, CmpHit_fn() );
+				m_pDict->HitblockPatch ( dHits.Begin(), iHits );
 
-					// filter
-					SphDocID_t uHitID = pHit->m_iDocID;
-					if ( uHitID!=uLastID )
-						uLastID = uHitID;
+				pHits = dHits.Begin();
+				m_tProgress.m_iHitsTotal += iHits;
 
-					// copy next hit
-					*pHits++ = *pHit;
-				}
-
-				// reset keywords only after all collected hits processed
-				if ( iDictSize && m_pDict->HitblockGetMemUse()>iDictSize )
-				{
-					int iHits = pHits - dHits.Begin();
-					{
-						sphSort ( dHits.Begin(), iHits, CmpHit_fn() );
-						m_pDict->HitblockPatch ( dHits.Begin(), iHits );
-					}
-					pHits = dHits.Begin();
-					m_tProgress.m_iHitsTotal += iHits;
-					if ( iHits )
-					{
-						dHitBlocks.Add ( tHitBuilder.cidxWriteRawVLB ( fdHits.GetFD(), dHits.Begin(), iHits, NULL, 0, 0 ) );
-						if ( dHitBlocks.Last()<0 )
-							return 0;
-					}
-
-					m_pDict->HitblockReset ();
-				}
+				dHitBlocks.Add ( tHitBuilder.cidxWriteRawVLB ( fdHits.GetFD(), dHits.Begin(), iHits, NULL, 0, 0 ) );
+				if ( dHitBlocks.Last()<0 )
+					return 0;
+				m_pDict->HitblockReset ();
 			}
 		}
 
@@ -21983,7 +21964,7 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 
 	if ( bStopwordsPresent )
 		sphWarning ( "index '%s': wordform contains stopwords (wordform='%s'). Fix your wordforms file '%s'.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
-	
+
 	// we disabled all blended, so we need to filter them manually
 	bool bBlendedPresent = false;
 	for ( int i = 0; i < sTo.Length() && !bBlendedPresent; i++ )

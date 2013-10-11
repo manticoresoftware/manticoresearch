@@ -13963,7 +13963,7 @@ json_autoconv_keynames = lowercase
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 
-<sect1 id="rel212"><title>Version 2.1.2-release, XX oct 2013</title>
+<sect1 id="rel212"><title>Version 2.1.2-release, 10 oct 2013</title>
 <bridgehead>New features</bridgehead>
 <itemizedlist>
   <listitem><para>added <link linkend="sphinxql-flush-ramchunk">FLUSH RAMCHUNK</link> statement</para></listitem>

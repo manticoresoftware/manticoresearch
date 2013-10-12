@@ -45,7 +45,7 @@ static LOC_TABLE_INDEX LOC_PREFIX(ru_adj_i)[] =
 	{ RUS::U,	2 },
 	{ RUS::H,	2 },
 	{ RUS::YU,	4 },
-	{ RUS::YA,	4 },
+	{ RUS::YA,	2 },
 };
 
 
@@ -519,7 +519,7 @@ void LOC_PREFIX(stem_ru) ( LOC_CHAR_TYPE * word )
 		break;
 	}
 
-	if ( len && ( W(1,RUS::IY) || W(1,RUS::I) ) )
+	if ( len>0 && ( W(1,RUS::IY) || W(1,RUS::I) ) )
 		len--;
 
 	if ( len-r2>=3 && XSUFF3 ( RUS::O, RUS::S, RUS::T ) )
@@ -535,7 +535,7 @@ void LOC_PREFIX(stem_ru) ( LOC_CHAR_TYPE * word )
 	if ( len>=2 && XSUFF2 ( RUS::N, RUS::N ) )
 		len--;
 
-	if ( len && W(1,RUS::MYA) )
+	if ( len>0 && W(1,RUS::MYA) )
 		len--;
 
 	*((unsigned char*)(word+len)) = '\0';

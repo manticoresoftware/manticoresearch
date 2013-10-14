@@ -10114,6 +10114,25 @@ indexing) by spending more RAM for, basically, an uncompressed
 cache of a dictionary.
 </para>
 <para>
+Chinese segmentation using Rosette Linguistics Platform was added in 2.2.1-beta.
+It is a much more precise but slower way (compared to n-grams) to segment chinese documents.
+<option><link linkend="conf-charset-table">charset_table</link></option> must contain all chinese charaters except
+chinese punctuation marks because incoming documents are first processed by sphinx tokenizer and then the result
+is processed by RLP. Sphinx performs per-token language detection on the incoming documents. If token language is
+identified as chinese, it will only be processed the RLP, even if multiple morphology processors are specified.
+Otherwise, it will be processed by all the morphology processors specified in the "morphology" option. Rosette
+Linguistics Platform must be installed and configured and sphinx must be built with a --with-rlp switch. See also
+<option><link linkend="conf-rlp-root">rlp_root</link></option>,
+<option><link linkend="conf-rlp-environment">rlp_environment</link></option> and
+<option><link linkend="conf-rlp-context">rlp_context</link></option> options.
+A batched version of RLP segmentation is also available (<option>rlp_chinese_batched</option>). It provides the
+same functionality as the basic <option>rlp_chinese</option> segmentation, but enables batching documents before
+processing them by the RLP. Processing several documents at once can result in a substantial indexing speedup if
+the documents are small (for example, less than 1k). See also
+<option><link linkend="conf-rlp-max-batch-size">rlp_max_batch_size</link></option> and
+<option><link linkend="conf-rlp-max-batch-docs">rlp_max_batch_docs</link></option> options.
+</para>
+<para>
 Additional stemmers provided by <ulink url="http://snowball.tartarus.org/">Snowball</ulink>
 project <ulink url="http://snowball.tartarus.org/dist/libstemmer_c.tgz">libstemmer</ulink> library
 can be enabled at compile time using <option>--with-libstemmer</option> <filename>configure</filename> option.
@@ -10143,6 +10162,8 @@ option are as follows:
 <listitem><para>stem_ar - apply Arabic stemmer (added in 2.1.1-beta);</para></listitem>
 <listitem><para>soundex - replace keywords with their SOUNDEX code;</para></listitem>
 <listitem><para>metaphone - replace keywords with their METAPHONE code.</para></listitem>
+<listitem><para>rlp_chinese - apply chinese text segmentation using Rosette Linguistics Platform</para></listitem>
+<listitem><para>rlp_chinese_batched - apply chinese text segmentation using Rosette Linguistics Platform with document batching</para></listitem>
 </itemizedlist>
 Additional values provided by libstemmer are in 'libstemmer_XXX' format,
 where XXX is libstemmer algorithm codename (refer to
@@ -12386,6 +12407,16 @@ global_idf = /usr/local/sphinx/var/global.idf
 </programlisting>
 </sect2>
 
+<sect2 id="conf-rlp-context"><title>rlp_context</title>
+<para>
+RLP context configuration file. Mandatory if RLP is used.
+Added in 2.2.1-beta.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+rlp_context = /home/myuser/RLP/rlp-context.xml
+</programlisting>
+</sect2>
 
 </sect1>
 <sect1 id="confgroup-indexer"><title><filename>indexer</filename> program configuration options</title>
@@ -13939,6 +13970,52 @@ json_autoconv_keynames = lowercase
 </programlisting>
 </sect2>
 
+<sect2 id="conf-rlp-root"><title>rlp_root</title>
+<para>
+Path to the RLP root folder. Mandatory if RLP is used.
+Added in 2.2.1-beta.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+rlp_root = /home/myuser/RLP
+</programlisting>
+</sect2>
+
+<sect2 id="conf-rlp-environment"><title>rlp_environment</title>
+<para>
+RLP environment configuration file. Mandatory if RLP is used.
+Added in 2.2.1-beta.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+rlp_environment = /home/myuser/RLP/rlp-environment.xml
+</programlisting>
+</sect2>
+
+<sect2 id="conf-rlp-max-batch-size"><title>rlp_max_batch_size</title>
+<para>
+Maximum total size of documents batched before processing them by the RLP. Optional, default is 51200.
+Do not set this value to more than 10Mb because sphinx splits large documents to 10Mb chunks before processing them by the RLP.
+This option has effect only if <option>morphology = rlp_chinese_batched</option> is specified.
+Added in 2.2.1-beta.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+rlp_max_batch_size = 100k
+</programlisting>
+</sect2>
+
+<sect2 id="conf-rlp-max-batch-docs"><title>rlp_max_batch_docs</title>
+<para>
+Maximum number of documents batched before processing them by the RLP. Optional, default is 50.
+This option has effect only if <option>morphology = rlp_chinese_batched</option> is specified.
+Added in 2.2.1-beta.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+rlp_max_batch_docs = 100
+</programlisting>
+</sect2>
 
 </sect1>
 </chapter>

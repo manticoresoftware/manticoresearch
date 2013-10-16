@@ -2,12 +2,12 @@
 .\"     Title: searchd
 .\"    Author: [see the "Author" section]
 .\" Generator: DocBook XSL Stylesheets v1.75.2 <http://docbook.sf.net/>
-.\"      Date: 07/27/2012
+.\"      Date: 10/16/2013
 .\"    Manual: Sphinxsearch
-.\"    Source: 2.1.0
+.\"    Source: 2.1.1
 .\"  Language: English
 .\"
-.TH "SEARCHD" "1" "03/02/2012" "2\&.1\&.0" "Sphinxsearch"
+.TH "SEARCHD" "1" "10/16/2013" "2\&.1\&.1" "Sphinxsearch"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -56,7 +56,7 @@ These programs follow the usual GNU command line syntax, with long options start
 .PP
 The options available to searchd on all builds are:
 .PP
-\fB\-\-config\fR \fICONFIGFILE\fR, \fB\-c\fR \fICONFIGFILE\fR
+\fB\-\-config\fR\fICONFIGFILE\fR, \fB\-c\fR\fICONFIGFILE\fR
 .RS 4
 Tell
 \fBsearchd\fR
@@ -166,6 +166,11 @@ and
 points to \*(Aqverbose\*(Aq and \*(Aqvery verbose\*(Aq debug info\&. The last could really flood your logfile\&.
 .RE
 .PP
+\fB\-\-nodetach\fR
+.RS 4
+Do not \*(Aqdaemonize\*(Aq, or, do not detach into background\&. Apart debug purposes, this switch is useful when you manage sphinx with upstart init daemon\&. In this case actual \*(Aqdaemonizing\*(Aq will be done by upstart itself, and also all tasks like starting, stopping, reloading the config and respawning on crash will be done by the system, not the sphinx\&.
+.RE
+.PP
 \fB\-\-pidfile\fR \fIPIDFILE\fR
 .RS 4
 Explicitly state a PID file, where the process information is stored regarding
@@ -185,6 +190,34 @@ Example:
 .\}
 .nf
 $ searchd \-\-config /home/myuser/sphinx\&.conf \-\-pidfile /home/myuser/sphinx\&.pid
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+\fB\-\-replay\-flags\fR\ \&\fIOPTIONS\fR
+.RS 4
+Specify a list of extra binary log replay options\&. The supported options are:
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+\fBaccept\-desc\-timestamp\fR, ignore descending transaction timestamps and replay such transactions anyway (the default behavior is to exit with an error)\&.
+.RE
+.sp
+Example:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ searchd \-\-replay\-flags=accept\-desc\-timestamp
 .fi
 .if n \{\
 .RE

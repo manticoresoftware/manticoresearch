@@ -1968,10 +1968,9 @@ class ExprParser_t
 	friend void				yyerror ( ExprParser_t * pParser, const char * sMessage );
 
 public:
-	ExprParser_t ( CSphSchema * pExtra, ISphExprHook * pHook, CSphQueryProfile * pProfiler )
+	ExprParser_t ( ISphExprHook * pHook, CSphQueryProfile * pProfiler )
 		: m_pHook ( pHook )
 		, m_pProfiler ( pProfiler )
-		, m_pExtra ( pExtra )
 		, m_bHasZonespanlist ( false )
 		, m_bHasPackedFactors ( false )
 		, m_eEvalStage ( SPH_EVAL_FINAL )
@@ -2025,7 +2024,6 @@ private:
 	CSphVector<CSphString>	m_dUservars;
 	CSphVector<UdfCall_t*>	m_dUdfCalls;
 	CSphVector<char*>		m_dIdents;
-	CSphSchema *			m_pExtra;
 	int						m_iConstNow;
 
 public:
@@ -2147,8 +2145,6 @@ int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp )
 		return -1;
 	}
 
-	if ( m_pExtra )
-		m_pExtra->AddAttr ( tCol, true );
 	lvalp->iAttrLocator = sphPackAttrLocator ( tCol.m_tLocator, iAttr );
 	return iRes;
 }
@@ -6205,10 +6201,10 @@ void sphUDFReinit()
 
 /// parser entry point
 ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight,
-	CSphString & sError, CSphQueryProfile * pProfiler, CSphSchema * pExtra, ISphExprHook * pHook, bool * pZonespanlist, bool * pPackedFactors, ESphEvalStage * pEvalStage )
+	CSphString & sError, CSphQueryProfile * pProfiler, ISphExprHook * pHook, bool * pZonespanlist, bool * pPackedFactors, ESphEvalStage * pEvalStage )
 {
 	// parse into opcodes
-	ExprParser_t tParser ( pExtra, pHook, pProfiler );
+	ExprParser_t tParser ( pHook, pProfiler );
 	ISphExpr * bRes = tParser.Parse ( sExpr, tSchema, pAttrType, pUsesWeight, sError );
 	if ( pZonespanlist )
 		*pZonespanlist = tParser.m_bHasZonespanlist;

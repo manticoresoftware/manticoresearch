@@ -10412,7 +10412,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			if ( !tQuery.m_pTableFunc->Process ( &tRes, tRes.m_sError ) )
 				tRes.m_iSuccesses = 0;
 			// we don't need it anymore
-			SafeDelete ( tQuery.m_pTableFunc ); // FIXME? find more obvious way to delete
+			SafeDelete ( tQuery.m_pTableFunc ); // FIXME? find more obvious place to delete
 		}
 	}
 

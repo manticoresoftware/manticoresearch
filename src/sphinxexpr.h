@@ -202,7 +202,7 @@ struct Expr_ConstHash_c : public ISphExpr
 /// fills pEvalStage with a required (!) evaluation stage
 class CSphQueryProfile;
 ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight,
-	CSphString & sError, CSphQueryProfile * pProfiler, CSphSchema * pExtra=NULL, ISphExprHook * pHook=NULL,
+	CSphString & sError, CSphQueryProfile * pProfiler, ISphExprHook * pHook=NULL,
 	bool * pZonespanlist=NULL, bool * pPackedFactors=NULL, ESphEvalStage * pEvalStage=NULL );
 
 //////////////////////////////////////////////////////////////////////////

@@ -2838,7 +2838,7 @@ applies to JSON arrays and returns 1 if condition is true for all elements in
 array and 0 otherwise. 'cond' is a general expression which additionally can use
 'var' as current value of an array element within itself.</para>
 <para><programlisting>
-SELECT ALL(x>3 AND x<7 FOR x IN j.intarray) FROM test;
+SELECT ALL(x&gt;3 AND x&lt;7 FOR x IN j.intarray) FROM test;
 </programlisting></para>
 </listitem>
 </varlistentry>
@@ -2848,7 +2848,7 @@ SELECT ALL(x>3 AND x<7 FOR x IN j.intarray) FROM test;
 <listitem>
 <para>ANY(cond FOR var IN json.array) function was introduced in 2.2.1-beta.
 It works similar to <link linkend="expr-func-all">ALL()</link> except for it
-returns 1 if condition is true for any element in array.
+returns 1 if condition is true for any element in array.</para>
 </listitem>
 </varlistentry>
 
@@ -4609,7 +4609,7 @@ by development versions prior to 1.10-beta release. As of 1.10-beta
 releases, this kill list optimization (purging) should happen
 automatically, and there should never be a need to use this option.
 </para></listitem>
-<listitem><para><option>--rotate<option> works only with --check and defines
+<listitem><para><option>--rotate</option> works only with <option>--check</option> and defines
 whether to check index waiting for rotation, i.e. with .new extension. This
 is useful when you want to check your index before actually using it.
 </para></listitem>
@@ -5750,7 +5750,7 @@ ignore any warnings about trying to update a column which is not exists in curre
 <para>'strict' - this option is used while updating JSON attributes. As of
 2.2.1-beta, it's possible to update just some types in JSON. And if you
 try to update, for example, array type you'll get error with 'strict' option
-on and warning otherwise.
+on and warning otherwise.</para>
 </listitem>
 </itemizedlist>
 </para>

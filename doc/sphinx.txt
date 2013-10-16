@@ -8777,8 +8777,8 @@ Shell command that invokes xmlpipe2 stream producer. Mandatory. Applies to
 xmlpipe2 source types only.
 
 Specifies a command that will be executed and which output will be parsed
-for documents. Refer to ??? or Section 3.9, <<xmlpipe2 data source>> for
-specific format description.
+for documents. Refer to Section 3.9, <<xmlpipe2 data source>> for specific
+format description.
 
 Example:
 

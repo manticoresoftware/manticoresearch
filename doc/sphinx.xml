@@ -9472,8 +9472,7 @@ Applies to <option>xmlpipe2</option> source types only.
 </para>
 <para>
 Specifies a command that will be executed and which output
-will be parsed for documents. Refer to <xref linkend="xmlpipe"/>
-or <xref linkend="xmlpipe2"/> for specific format description.
+will be parsed for documents. Refer to <xref linkend="xmlpipe2"/> for specific format description.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>

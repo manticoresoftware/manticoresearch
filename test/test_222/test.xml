@@ -158,6 +158,7 @@ CREATE TABLE test_table
 <sphinxql>SELECT id,gid,weight(),packedfactors() as my_weight FROM META:plain WHERE MATCH('"english text"') option ranker=expr('sum(exact_hit)');show meta</sphinxql>
 <sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('"english text"') option ranker=sph04;show meta</sphinxql>
 <sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('"Фичин баг"') option ranker=sph04;show meta</sphinxql>
+<sphinxql>SELECT GROUPBY() FROM testw</sphinxql>
 
 </sphqueries>
 

@@ -4610,6 +4610,9 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const ISphSchema & 
 
 	CSphVector<uint64_t> dQueryAttrs;
 
+	// we need this to perform a sanity check
+	bool bHasGroupByExpr = false;
+
 	// setup overrides, detach them into dynamic part
 	ARRAY_FOREACH ( i, pQuery->m_dOverrides )
 	{
@@ -4709,8 +4712,10 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const ISphSchema & 
 				}
 			}
 		}
-		if ( bPlainAttr || IsGroupby(sExpr) || bIsCount )
+
+		if ( bPlainAttr || IsGroupby ( sExpr ) || bIsCount )
 		{
+			bHasGroupByExpr = IsGroupby ( sExpr );
 			continue;
 		}
 
@@ -4886,6 +4891,12 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const ISphSchema & 
 
 	const bool bGotGroupby = !pQuery->m_sGroupBy.IsEmpty() || tSettings.m_bImplicit; // or else, check in SetupGroupbySettings() would already fail
 	const bool bGotDistinct = ( tSettings.m_tDistinctLoc.m_iBitOffset>=0 );
+
+	if ( bHasGroupByExpr && !bGotGroupby )
+	{
+		sError = "GROUPBY() is allowed only in GROUP BY queries";
+		return NULL;
+	}
 
 	// now lets add @groupby etc if needed
 	if ( bGotGroupby && tSorterSchema.GetAttrIndex ( "@groupby" )<0 )

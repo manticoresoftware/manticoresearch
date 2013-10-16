@@ -1847,8 +1847,10 @@ typedef bool CopyQuery_fn ( QueryCopyState_t & tState );
 const char		g_sCrashedBannerAPI[] = "\n--- crashed SphinxAPI request dump ---\n";
 const char		g_sCrashedBannerMySQL[] = "\n--- crashed SphinxQL request dump ---\n";
 const char		g_sCrashedBannerTail[] = "\n--- request dump end ---\n";
+#if USE_WINDOWS
 const char		g_sMinidumpBanner[] = "minidump located at: ";
 const char		g_sMemoryStatBanner[] = "\n--- memory statistics ---\n";
+#endif
 static BYTE		g_dCrashQueryBuff [4096];
 static char		g_sCrashInfo [SPH_TIME_PID_MAX_SIZE] = "[][]\n";
 static int		g_iCrashInfoLen = 0;
@@ -2080,10 +2082,9 @@ void SetSignalHandlers ( bool bAllowCtrlC=false )
 // NETWORK STUFF
 /////////////////////////////////////////////////////////////////////////////
 
-const int		WIN32_PIPE_BUFSIZE		= 32;
-
-
 #if USE_WINDOWS
+
+const int		WIN32_PIPE_BUFSIZE		= 32;
 
 /// on Windows, the wrapper just prevents the warnings
 void sphFDSet ( int fd, fd_set * fdset )

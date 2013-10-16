@@ -2065,7 +2065,7 @@ private:
 
 //////////////////////////////////////////////////////////////////////////
 
-/// parse that numeric constant
+/// parse that numeric constant (e.g. "123", ".03")
 static int ParseNumeric ( YYSTYPE * lvalp, const char ** ppStr )
 {
 	assert ( lvalp && ppStr && *ppStr );
@@ -2075,12 +2075,12 @@ static int ParseNumeric ( YYSTYPE * lvalp, const char ** ppStr )
 	float fRes = (float) strtod ( *ppStr, &pEnd );
 
 	// try int route
-	uint64_t iRes = 0;
+	uint64_t uRes = 0; // unsigned overflow is better than signed overflow
 	bool bInt = true;
 	for ( const char * p=(*ppStr); p<pEnd; p++ && bInt )
 	{
 		if ( isdigit(*p) )
-			iRes = iRes*10 + (int)( (*p)-'0' ); // FIXME! missing overflow check, missing octal/hex handling
+			uRes = uRes*10 + (int)( (*p)-'0' ); // FIXME! missing overflow check, missing octal/hex handling
 		else
 			bInt = false;
 	}
@@ -2089,7 +2089,7 @@ static int ParseNumeric ( YYSTYPE * lvalp, const char ** ppStr )
 	*ppStr = pEnd;
 	if ( bInt )
 	{
-		lvalp->iConst = (int64_t)iRes;
+		lvalp->iConst = (int64_t)uRes;
 		return TOK_CONST_INT;
 	} else
 	{
@@ -5686,6 +5686,8 @@ int ExprParser_t::AddNodeIdent ( const char * sKey, int iLeft )
 
 //////////////////////////////////////////////////////////////////////////
 
+// performs simple semantic analysis
+// checks operand types for some arithmetic operators
 struct TypeCheck_fn
 {
 	bool * m_pRes;
@@ -5720,6 +5722,7 @@ struct TypeCheck_fn
 };
 
 
+// checks whether we have a weight() in expression
 struct WeightCheck_fn
 {
 	bool * m_pRes;
@@ -5741,7 +5744,8 @@ struct WeightCheck_fn
 	{}
 };
 
-
+// checks whether expression has functions defined not in this file like
+// searchd-level function or ranker-level functions
 struct HookCheck_fn
 {
 	ISphExprHook * m_pHook;
@@ -5779,7 +5783,7 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	// setup constant functions
 	m_iConstNow = (int) time ( NULL );
 
-	// build tree
+	// build abstract syntax tree
 	m_iParsed = -1;
 	yyparse ( this );
 
@@ -5794,7 +5798,9 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	// deduce return type
 	ESphAttr eAttrType = m_dNodes[m_iParsed].m_eRetType;
 
-	// check expression stack
+	// Check expression stack to fit for mutual recursive function calls.
+	// This check is an approximation, because different compilers with
+	// different settings produce code which requires different stack size.
 	if ( m_dNodes.GetLength()>100 )
 	{
 		CSphVector<int> dNodes;
@@ -5823,12 +5829,13 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 		}
 	}
 
-	// perform optimizations
+	// perform optimizations (tree transformations)
 	Optimize ( m_iParsed );
 #if 0
 	Dump ( m_iParsed );
 #endif
 
+	// simple semantic analysis
 	bool bTypeMismatch;
 	TypeCheck_fn tFunctor ( &bTypeMismatch );
 	WalkTree ( m_iParsed, tFunctor );

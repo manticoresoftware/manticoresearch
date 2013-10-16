@@ -1577,6 +1577,7 @@ private:
 };
 
 /// very popular and so, moved here
+/// use integer values as hash values (like document IDs, for example)
 struct IdentityHash_fn
 {
 	template <typename INT>

@@ -1151,8 +1151,7 @@ ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const ISphS
 
 		// fastpath for simple cases like j.key1 is handled in the expression
 		// combined access/filter nodes are only marginally faster (eg 17.4 msec vs 18.5 msec on 457K rows)
-		bool bUsesWeight = false;
-		ISphExpr * pExpr = sphExprParse ( sAttrName.cstr(), tSchema, NULL, &bUsesWeight, sError, NULL );
+		ISphExpr * pExpr = sphExprParse ( sAttrName.cstr(), tSchema, NULL, NULL, sError, NULL );
 		pFilter = CreateFilterJson ( pAttr, pExpr, tSettings.m_eType, tSettings.m_bHasEqual, sError );
 
 		if ( !pFilter )

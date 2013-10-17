@@ -6053,9 +6053,8 @@ int ExtRanker_T<STATE>::GetMatches ()
 	m_dZonespans.Resize(1);
 	int	iLastZoneData = 0;
 
-	bool bZSlist = m_bZSlist;
 	CSphVector<int> dSpans;
-	if ( bZSlist )
+	if ( m_bZSlist )
 	{
 		dSpans.Resize ( m_dZones.GetLength() );
 		ARRAY_FOREACH ( i, dSpans )
@@ -6086,7 +6085,7 @@ int ExtRanker_T<STATE>::GetMatches ()
 		while ( pHlist->m_uDocid==uCurDocid )
 		{
 			m_tState.Update ( pHlist );
-			if ( bZSlist )
+			if ( m_bZSlist )
 			{
 				int * pZones = m_pZones->GetZVec ( pHlist-pHitBase );
 				ARRAY_FOREACH ( i, m_dZones )
@@ -6115,7 +6114,7 @@ int ExtRanker_T<STATE>::GetMatches ()
 			assert ( uCurDocid==pDoc->m_uDocid );
 			Swap ( m_dMatches[iMatches], m_dMyMatches[pDoc-m_dMyDocs] );
 			m_dMatches[iMatches].m_iWeight = m_tState.Finalize ( m_dMatches[iMatches] );
-			if ( bZSlist )
+			if ( m_bZSlist )
 			{
 				m_dZonespans[iLastZoneData] = m_dZonespans.GetLength()-iLastZoneData-1;
 				m_dMatches[iMatches].m_iTag = iLastZoneData;

@@ -2096,6 +2096,7 @@ static int ParseNumeric ( YYSTYPE * lvalp, const char ** ppStr )
 	}
 }
 
+// useful to store in 8 bytes in Bison lvalp variable
 static uint64_t sphPackAttrLocator ( const CSphAttrLocator & tLoc, int iLocator )
 {
 	assert ( iLocator>=0 && iLocator<=0xffff );
@@ -2213,6 +2214,7 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		if ( sTok=="mod" )		{ return TOK_MOD; }
 		if ( sTok=="for" )		{ return TOK_FOR; }
 
+		// in case someone used 'count' as a name for an attribute
 		if ( sTok=="count" )
 		{
 			int iAttr = m_pSchema->GetAttrIndex ( "count" );
@@ -5119,18 +5121,6 @@ int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 	tNode.m_eRetType = SPH_ATTR_FLOAT; // default to float
 	if ( iOp==TOK_NEG )
 	{
-		// special case, NEG(const)
-		ExprNode_t & tArg = m_dNodes[iLeft];
-		if ( tArg.m_iToken==TOK_CONST_INT || tArg.m_iToken==TOK_CONST_FLOAT )
-		{
-			if ( tArg.m_iToken==TOK_CONST_INT )
-				tArg.m_iConst = -tArg.m_iConst;
-			else
-				tArg.m_fConst = -tArg.m_fConst;
-			m_dNodes.Pop();
-			return iLeft;
-		}
-
 		// NEG just inherits the type
 		tNode.m_eArgType = m_dNodes[iLeft].m_eRetType;
 		tNode.m_eRetType = tNode.m_eArgType;

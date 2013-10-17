@@ -2958,6 +2958,7 @@ public:
 			m_dAggregates[j]->Finalize ( &m_tData );
 
 		m_tSchema.CloneMatch ( pTo, m_tData );
+		m_tSchema.FreeStringPtrs ( &m_tData );
 		if ( iTag>=0 )
 			pTo->m_iTag = iTag;
 

@@ -19902,14 +19902,14 @@ void ShowHelp ()
 
 
 template<typename T>
-T * InitSharedBuffer ( CSphSharedBuffer<T> & tBuffer, int iLen )
+T * InitSharedBuffer ( CSphSharedBuffer<T> & tBuffer )
 {
 	CSphString sError, sWarning;
-	if ( !tBuffer.Alloc ( iLen, sError, sWarning ) )
+	if ( !tBuffer.Alloc ( 1, sError, sWarning ) )
 		sphDie ( "failed to allocate shared buffer (msg=%s)", sError.cstr() );
 
 	T * pRes = tBuffer.GetWritePtr();
-	memset ( pRes, 0, iLen*sizeof(T) ); // reset
+	memset ( pRes, 0, sizeof(T) ); // reset
 	return pRes;
 }
 
@@ -19952,7 +19952,7 @@ int PreforkChild ()
 // returns 'true' only once - at the very start, to show it beatiful way.
 bool SetWatchDog ( int iDevNull )
 {
-	InitSharedBuffer ( g_bDaemonAtShutdown, 1 );
+	InitSharedBuffer ( g_bDaemonAtShutdown );
 
 	// Fork #1 - detach from controlling terminal
 	switch ( fork() )
@@ -21439,8 +21439,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	// shared stuff (perf counters, flushing) startup
 	//////////////////////////////////////////////////
 
-	g_pStats = InitSharedBuffer ( g_tStatsBuffer, 1 );
-	g_pFlush = InitSharedBuffer ( g_tFlushBuffer, 1 );
+	g_pStats = InitSharedBuffer ( g_tStatsBuffer );
+	g_pFlush = InitSharedBuffer ( g_tFlushBuffer );
 	g_pStats->m_uStarted = (DWORD)time(NULL);
 
 	// g_pConnId for prefork will be initialized later, together with mutex

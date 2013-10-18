@@ -4685,6 +4685,7 @@ SELECT
     [WHERE where_condition]
     [GROUP BY {col_name | expr_alias} [, {sol_name | expr_alias}]]
     [WITHIN GROUP ORDER BY {col_name | expr_alias} {ASC | DESC}]
+	[HAVING having_condition]
     [ORDER [N] BY {col_name | expr_alias} {ASC | DESC} [, ...]]
     [LIMIT [offset,] row_count]
     [OPTION opt_name = opt_value [, ...]]
@@ -4697,12 +4698,10 @@ Specifically,
 <itemizedlist>
 <listitem><para>Column list clause. Column names, arbitrary expressions,
 and star ('*') are all allowed (ie.
-<code>SELECT @id, group_id*123+456 AS expr1 FROM test1</code>
+<code>SELECT id, group_id*123+456 AS expr1 FROM test1</code>
 will work). Unlike in regular SQL, all computed expressions must be aliased
 with a valid identifier. Starting with version 2.0.1-beta, <code>AS</code>
-is optional. Special names such as @id and @weight should currently
-be used with leading at-sign. This at-sign requirement will be lifted in
-the future.
+is optional.
 </para>
 </listitem>
 
@@ -4785,6 +4784,7 @@ There must be at most one MATCH() in the clause. Starting with version
 condition syntax is supported. (Refer to <xref linkend="sphinxql-set"/>
 for a discussion of global user variables.)
 </para></listitem>
+
 <listitem><para>GROUP BY clause. Supports grouping by multiple columns
 or computed expressions:
 <programlisting>
@@ -4832,9 +4832,6 @@ SELECT group_id, MAX(id) AS max_id
 FROM my_index WHERE MATCH('the')
 GROUP BY group_id ORDER BY max_id DESC
 </programlisting>
-However you can not use aggregate values in the WHERE clause.
-(HAVING clause would be required for that, just as in standard SQL,
-and that is not yet supported.)
 </para>
 </listitem>
 
@@ -4869,14 +4866,23 @@ extension that lets you control how the best row within a group
 will to be selected. The syntax matches that of regular ORDER BY
 clause:
 <programlisting>
-SELECT *, INTERVAL(posted,NOW()-7*86400,NOW()-86400) AS timeseg
+SELECT *, INTERVAL(posted,NOW()-7*86400,NOW()-86400) AS timeseg, WEIGHT() AS w
 FROM example WHERE MATCH('my search query')
 GROUP BY siteid
-WITHIN GROUP ORDER BY @weight DESC
-ORDER BY timeseg DESC, @weight DESC
+WITHIN GROUP ORDER BY w DESC
+ORDER BY timeseg DESC, w DESC
 </programlisting>
 Starting with 2.0.1-beta, WITHIN GROUP ORDER BY on a string attribute is supported,
 with respect for current collation (see <xref linkend="collations"/>).
+</para></listitem>
+
+<listitem><para>
+HAVING clause. This is used to filter on GROUP BY values. It was added in
+2.2.1-beta. Currently supports only one filtering condition.
+<programlisting>
+SELECT id FROM plain GROUP BY title HAVING group_id=16;
+SELECT id FROM plain GROUP BY attribute HAVING COUNT(*)>1;
+</programlisting>
 </para></listitem>
 
 <listitem><para>ORDER BY clause. Unlike in regular SQL, only column names
@@ -4884,7 +4890,7 @@ with respect for current collation (see <xref linkend="collations"/>).
 The columns however can be computed expressions:
 </para>
 <programlisting>
-SELECT *, @weight*10+docboost AS skey FROM example ORDER BY skey
+SELECT *, WEIGHT()*10+docboost AS skey FROM example ORDER BY skey
 </programlisting>
 <para>
 Starting with 2.1.1-beta, you can use subqueries to speed up specific searches, which involve reranking, by postponing hard (slow) calculations as

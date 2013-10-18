@@ -1933,6 +1933,7 @@ public:
 
 
 /// expression tree node
+/// used to build an AST (Abstract Syntax Tree)
 struct ExprNode_t
 {
 	int				m_iToken;	///< token type, including operators
@@ -1948,7 +1949,7 @@ struct ExprNode_t
 		int				m_iFunc;		///< built-in function id, for TOK_FUNC type
 		int				m_iArgs;		///< args count, for arglist (token==',') type
 		ConstList_c *	m_pConsts;		///< constants list, for TOK_CONST_LIST type
-		ConstHash_c *	m_pConsthash;	///< constants hash (name to const), for TOK_CONST_HASH type
+		ConstHash_c *	m_pConsthash;	///< constants hash (maps name to const), for TOK_CONST_HASH type
 		const char	*	m_sIdent;		///< pointer to const char, for TOK_IDENT type
 		SphAttr_t	*	m_pAttr;		///< pointer to 64-bit value, for TOK_ITERATOR type
 	};
@@ -1996,7 +1997,6 @@ protected:
 	int						AddNodeAttr ( int iTokenType, uint64_t uAttrLocator );
 	int						AddNodeID ();
 	int						AddNodeWeight ();
-	int						AddNodeGroupby ();
 	int						AddNodeOp ( int iOp, int iLeft, int iRight );
 	int						AddNodeFunc ( int iFunc, int iLeft, int iRight=-1 );
 	int						AddNodeUdf ( int iCall, int iArg );
@@ -5104,14 +5104,6 @@ int ExprParser_t::AddNodeWeight ()
 	return m_dNodes.GetLength()-1;
 }
 
-int ExprParser_t::AddNodeGroupby ()
-{
-	ExprNode_t & tNode = m_dNodes.Add ();
-	tNode.m_iToken = TOK_GROUPBY;
-	tNode.m_eRetType = SPH_ATTR_INTEGER; /// will be corrected later, using context.
-	return m_dNodes.GetLength()-1;
-}
-
 int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 {
 	ExprNode_t & tNode = m_dNodes.Add ();
@@ -5708,7 +5700,7 @@ struct TypeCheck_fn
 };
 
 
-// checks whether we have a weight() in expression
+// checks whether we have a WEIGHT() in expression
 struct WeightCheck_fn
 {
 	bool * m_pRes;

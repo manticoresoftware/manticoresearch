@@ -115,6 +115,8 @@ INSERT INTO test_table (id, attr1, mva1, mva2, str1, str2, text, idx) VALUES
 <sphinxql>select attr1, groupby() from ld where match ('some') group by mva2</sphinxql>
 <sphinxql>select attr1, groupby() from dd where match ('some') group by mva1</sphinxql>
 <sphinxql>select attr1, groupby() from dd where match ('some') group by mva2</sphinxql>
+
+<sphinxql>select mva1, least(mva1), greatest(mva1) from i1</sphinxql>
 </sphqueries>
 
 </test>

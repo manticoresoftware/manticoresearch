@@ -304,6 +304,71 @@ static int				g_iDistThreads		= 0;
 static int				g_iPingInterval		= 0;		// by default ping HA agents every 1 second
 static DWORD			g_uHAPeriodKarma	= 60;		// by default use the last 1 minute statistic to determine the best HA agent
 
+
+struct ListNode_t
+{
+	ListNode_t * m_pPrev;
+	ListNode_t * m_pNext;
+	ListNode_t ()
+		: m_pPrev ( NULL )
+		, m_pNext ( NULL )
+	{ }
+};
+
+
+class List_t
+{
+public:
+	List_t ()
+	{
+		m_tStub.m_pPrev = &m_tStub;
+		m_tStub.m_pNext = &m_tStub;
+		m_iCount = 0;
+	}
+
+	void Add ( ListNode_t * pNode )
+	{
+		assert ( !pNode->m_pNext && !pNode->m_pPrev );
+		pNode->m_pNext = m_tStub.m_pNext;
+		pNode->m_pPrev = &m_tStub;
+		m_tStub.m_pNext->m_pPrev = pNode;
+		m_tStub.m_pNext = pNode;
+
+		m_iCount++;
+	}
+
+	void Remove ( ListNode_t * pNode )
+	{
+		assert ( pNode->m_pNext && pNode->m_pPrev );
+		pNode->m_pNext->m_pPrev = pNode->m_pPrev;
+		pNode->m_pPrev->m_pNext = pNode->m_pNext;
+		pNode->m_pNext = NULL;
+		pNode->m_pPrev = NULL;
+
+		m_iCount--;
+	}
+
+	int GetLength () const
+	{
+		return m_iCount;
+	}
+
+	const ListNode_t * Begin () const
+	{
+		return m_tStub.m_pNext;
+	}
+
+	const ListNode_t * End () const
+	{
+		return &m_tStub;
+	}
+
+private:
+	ListNode_t	m_tStub;	// stub node
+	int			m_iCount;	// elements counter
+};
+
+
 enum ThdState_e
 {
 	THD_HANDSHAKE,
@@ -318,7 +383,7 @@ static const char * g_dThdStates[THD_STATE_TOTAL] = {
 	"handshake", "net_read", "net_write", "query"
 };
 
-struct ThdDesc_t
+struct ThdDesc_t : public ListNode_t
 {
 	SphThread_t		m_tThd;
 	ProtocolType_e	m_eProto;
@@ -350,7 +415,7 @@ private:
 
 
 static StaticThreadsOnlyMutex_t	g_tThdMutex;
-static CSphVector<ThdDesc_t*>	g_dThd;				///< existing threads table
+static List_t					g_dThd;				///< existing threads table
 
 static int						g_iConnID = 0;		///< global conn-id in none/fork/threads; current conn-id in prefork
 static SphThreadKey_t			g_tConnKey;			///< current conn-id TLS in threads
@@ -1612,10 +1677,6 @@ void Shutdown ()
 			// stop search threads; up to shutdown_timeout seconds
 			while ( g_dThd.GetLength() > 0 && ( sphMicroTimer()-tmShutStarted )<g_iShutdownTimeout )
 				sphSleepMsec ( 50 );
-
-			g_tThdMutex.Lock();
-			g_dThd.Reset();
-			g_tThdMutex.Unlock();
 		}
 
 		sphThreadJoin ( &g_tRotationServiceThread );
@@ -1979,14 +2040,18 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 	{
 		// FIXME? should we try to lock threads table somehow?
 		sphSafeInfo ( g_iLogFile, "--- %d active threads ---", g_dThd.GetLength() );
-		ARRAY_FOREACH ( iThd, g_dThd )
+		const ListNode_t * pIt = g_dThd.Begin();
+		int iThd = 0;
+		while ( pIt!=g_dThd.End() )
 		{
-			ThdDesc_t * pThd = g_dThd[iThd];
+			ThdDesc_t * pThd = (ThdDesc_t *)pIt;
 			sphSafeInfo ( g_iLogFile, "thd %d, proto %s, state %s, command %s",
 				iThd,
 				g_dProtoNames[pThd->m_eProto],
 				g_dThdStates[pThd->m_eThdState],
 				pThd->m_sCommand ? pThd->m_sCommand : "-" );
+			pIt = pIt->m_pNext;
+			iThd++;
 		}
 	}
 
@@ -20541,30 +20606,14 @@ void HandlerThread ( void * pArg )
 	sphSockClose ( pThd->m_iClientSock );
 
 	// done; remove myself from the table
+#if USE_WINDOWS
+	// FIXME? this is sort of automatic on UNIX (pthread_exit() gets implicitly called on return)
+	CloseHandle ( pThd->m_tThd );
+#endif
 	g_tThdMutex.Lock ();
-	ARRAY_FOREACH ( i, g_dThd )
-		if ( g_dThd[i]==pThd )
-	{
-#if USE_WINDOWS
-		// FIXME? this is sort of automatic on UNIX (pthread_exit() gets implicitly called on return)
-		CloseHandle ( pThd->m_tThd );
-#endif
-		SafeDelete ( pThd );
-		g_dThd.RemoveFast(i);
-		break;
-	}
+	g_dThd.Remove ( pThd );
 	g_tThdMutex.Unlock ();
-
-	// something went wrong while removing; report
-	if ( pThd )
-	{
-		sphWarning ( "thread missing from thread table" );
-#if USE_WINDOWS
-		// FIXME? this is sort of automatic on UNIX (pthread_exit() gets implicitly called on return)
-		CloseHandle ( pThd->m_tThd );
-#endif
-		SafeDelete ( pThd );
-	}
+	SafeDelete ( pThd );
 }
 
 
@@ -20660,18 +20709,19 @@ void TickHead ( bool bDontListen )
 		pThd->m_sClientName = sClientName;
 		pThd->m_iConnID = g_iConnID;
 
-		g_tThdMutex.Lock ();
-		g_dThd.Add ( pThd );
 		if ( !sphThreadCreate ( &pThd->m_tThd, HandlerThread, pThd, true ) )
 		{
 			int iErr = errno;
-			g_dThd.Pop();
 			SafeDelete ( pThd );
 
 			FailClient ( iClientSock, SEARCHD_RETRY, "failed to create worker thread" );
 			sphWarning ( "failed to create worker thread, threads(%d), error[%d] %s", g_dThd.GetLength(), iErr, strerror(iErr) );
+		} else
+		{
+			g_tThdMutex.Lock ();
+			g_dThd.Add ( pThd );
+			g_tThdMutex.Unlock ();
 		}
-		g_tThdMutex.Unlock ();
 		return;
 	}
 
@@ -21062,7 +21112,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( !g_bService )
 		fprintf ( stdout, SPHINX_BANNER );
 
-	if ( sizeof(SphDocID_t)==4 )
+	if_const ( sizeof(SphDocID_t)==4 )
 		sphWarning ( "32-bit IDs are deprecated, rebuild your binaries with --enable-id64" );
 
 	//////////////////////
@@ -21787,9 +21837,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	{
 		if ( g_bSeamlessRotate && !sphThreadCreate ( &g_tRotateThread, RotationThreadFunc, 0 ) )
 			sphDie ( "failed to create rotation thread" );
-
-		// reserving max to keep memory consumption constant between frames
-		g_dThd.Reserve ( Max ( g_iMaxChildren*2, 64 ) );
 	}
 
 	// replay last binlog

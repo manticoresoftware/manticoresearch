@@ -47,7 +47,9 @@ void DoSearch ( CSphIndex * pIndex )
 	CSphMultiQueryArgs tArgs ( NULL, 1 );
 	tQuery.m_sQuery = "@title cat";
 
-	ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, pIndex->GetMatchSchema(), tResult.m_sError, NULL, false );
+	SphQueueSettings_t tQueueSettings ( tQuery, pIndex->GetMatchSchema(), tResult.m_sError, NULL );
+	tQueueSettings.m_bComputeItems = false;
+	ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings );
 	if ( !pSorter )
 	{
 		printf ( "failed to create sorter; error=%s", tResult.m_sError.cstr() );

@@ -60,6 +60,7 @@
 %token	TOK_GROUP
 %token	TOK_GROUPBY
 %token	TOK_GROUP_CONCAT
+%token	TOK_HAVING
 %token	TOK_ID
 %token	TOK_IN
 %token	TOK_INDEX
@@ -283,6 +284,7 @@ select_from:
 	opt_where_clause
 	opt_group_clause
 	opt_group_order_clause
+	opt_having_clause
 	opt_order_clause
 	opt_limit_clause
 	opt_option_clause
@@ -346,7 +348,11 @@ where_item:
 			if ( !pParser->SetMatch($3) )
 				YYERROR;
 		}
-	| expr_ident '=' const_int
+	| filter_item
+	;
+	
+filter_item:	
+	expr_ident '=' const_int
 		{
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
@@ -573,6 +579,14 @@ group_items_list:
 		}
 	;
 
+opt_having_clause:
+	// empty
+	| TOK_HAVING filter_item
+		{
+			pParser->AddHaving();
+		}
+	;
+	
 opt_group_order_clause:
 	// empty
 	| group_order_clause

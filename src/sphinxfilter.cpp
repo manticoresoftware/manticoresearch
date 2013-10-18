@@ -1114,21 +1114,20 @@ static ISphFilter * CreateFilterJson ( const CSphColumnInfo * DEBUGARG(pAttr), I
 // PUBLIC FACING INTERFACE
 //////////////////////////////////////////////////////////////////////////
 
-ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError )
+static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const CSphString & sAttrName, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError, bool bHaving )
 {
 	ISphFilter * pFilter = 0;
 	const CSphColumnInfo * pAttr = NULL;
 
 	// try to create a filter on a special attribute
-	const CSphString & sAttrName = tSettings.m_sAttrName;
+	if ( sAttrName.Begins("@") && !bHaving && ( sAttrName=="@groupby" || sAttrName=="@count" || sAttrName=="@distinct" ) )
+	{
+		sError.SetSprintf ( "unsupported filter column '%s'", sAttrName.cstr() );
+		return NULL;
+	}
+
 	if ( sAttrName.Begins("@") )
 	{
-		// HAVING is not implemented yet
-		if ( sAttrName=="@groupby" || sAttrName=="@count" || sAttrName=="@distinct" )
-		{
-			sError.SetSprintf ( "unsupported filter column '%s'", sAttrName.cstr() );
-			return NULL;
-		}
 		pFilter = CreateSpecialFilter ( sAttrName, tSettings.m_eType, tSettings.m_bHasEqual );
 	}
 
@@ -1169,9 +1168,8 @@ ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const ISphS
 		} else
 		{
 			pAttr = &tSchema.GetAttr(iAttr);
-			if ( pAttr->m_eAggrFunc!=SPH_AGGR_NONE )
+			if ( !bHaving && pAttr->m_eAggrFunc!=SPH_AGGR_NONE )
 			{
-				// HAVING is not implemented yet
 				sError.SetSprintf ( "unsupported filter '%s' on aggregate column", sAttrName.cstr() );
 				return NULL;
 			}
@@ -1219,6 +1217,19 @@ ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const ISphS
 	}
 
 	return pFilter;
+}
+
+
+ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError )
+{
+	return CreateFilter ( tSettings, tSettings.m_sAttrName, tSchema, pMvaPool, pStrings, sError, false );
+}
+
+
+ISphFilter * sphCreateAggrFilter ( const CSphFilterSettings * pSettings, const CSphString & sAttrName, const ISphSchema & tSchema, CSphString & sError )
+{
+	assert ( pSettings );
+	return CreateFilter ( *pSettings, sAttrName, tSchema, NULL, NULL, sError, true );
 }
 
 

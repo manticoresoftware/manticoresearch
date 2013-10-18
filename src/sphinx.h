@@ -2688,6 +2688,7 @@ public:
 	bool			m_bStrict;			///< whether to warning or not about incompatible types
 
 	ISphTableFunc *	m_pTableFunc;		///< post-query NOT OWNED, WILL NOT BE FREED in dtor.
+	CSphFilterSettings	m_tHaving;		///< post aggregate filtering (got applied only on master)
 
 public:
 	int				m_iSQLSelectStart;	///< SQL parser helper
@@ -3071,7 +3072,7 @@ public:
 	/// submit pre-grouped match. bNewSet indicates that the match begins the bunch of matches got from one source
 	virtual bool		PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) = 0;
 
-	/// get entries count
+	/// get	rough entries count, due of aggregate filtering phase
 	virtual int			GetLength () const = 0;
 
 	/// get internal buffer length
@@ -3086,7 +3087,8 @@ public:
 	/// store all entries into specified location and remove them from the queue
 	/// entries are stored in properly sorted order,
 	/// if iTag is non-negative, entries are also tagged; otherwise, their tag's unchanged
-	virtual void		Flatten ( CSphMatch * pTo, int iTag ) = 0;
+	/// return sored entries count, might be less than length due of aggregate filtering phase
+	virtual int			Flatten ( CSphMatch * pTo, int iTag ) = 0;
 
 	/// get a pointer to the worst element, NULL if there is no fixed location
 	virtual const CSphMatch *	GetWorst() const { return NULL; }
@@ -3399,6 +3401,35 @@ struct CSphAttrUpdateEx
 	{}
 };
 
+struct SphQueueSettings_t : public ISphNoncopyable
+{
+	const CSphQuery &			m_tQuery;
+	const ISphSchema &			m_tSchema;
+	CSphString &				m_sError;
+	CSphQueryProfile *			m_pProfiler;
+	bool						m_bComputeItems;
+	CSphSchema *				m_pExtra;
+	CSphAttrUpdateEx *			m_pUpdate;
+	bool						m_bZonespanlist;
+	bool						m_bPackedFactors;
+	ISphExprHook *				m_pHook;
+	const CSphFilterSettings *	m_pAggrFilter;
+
+	SphQueueSettings_t ( const CSphQuery & tQuery, const ISphSchema & tSchema, CSphString & sError, CSphQueryProfile * pProfiler )
+		: m_tQuery ( tQuery )
+		, m_tSchema ( tSchema )
+		, m_sError ( sError )
+		, m_pProfiler ( pProfiler )
+		, m_bComputeItems ( true )
+		, m_pExtra ( NULL )
+		, m_pUpdate ( NULL )
+		, m_bZonespanlist ( false )
+		, m_bPackedFactors ( false )
+		, m_pHook ( NULL )
+		, m_pAggrFilter ( NULL )
+	{ }
+};
+
 /////////////////////////////////////////////////////////////////////////////
 
 /// create phrase fulltext index implementation
@@ -3425,12 +3456,10 @@ ESortClauseParseResult	sphParseSortClause ( const CSphQuery * pQuery, const char
 /// may return NULL on error; in this case, error message is placed in sError
 /// if the pUpdate is given, creates the updater's queue and perform the index update
 /// instead of searching
-ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const ISphSchema & tSchema, CSphString & sError,
-	CSphQueryProfile * pProfiler, bool bComputeItems=true, CSphSchema * pExtra=NULL, CSphAttrUpdateEx * pUpdate=NULL, bool * pZonespanlist=NULL,
-	bool * pPackedFactors=NULL, ISphExprHook * pHook=NULL );
+ISphMatchSorter *	sphCreateQueue ( SphQueueSettings_t & tQueue );
 
 /// convert queue to sorted array, and add its entries to result's matches array
-void				sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag );
+int					sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag );
 
 /// setup per-keyword read buffer sizes
 void				sphSetReadBuffers ( int iReadBuffer, int iReadUnhinted );

@@ -8180,7 +8180,7 @@ struct AggregateColumnSort_fn
 /// merges multiple result sets, remaps columns, does reorder for outer selects
 /// query is only (!) non-const to tweak order vs reorder clauses
 bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, int iAgents,
-	CSphSchema * pExtraSchema, CSphQueryProfile * pProfiler, bool bFromSphinxql )
+	CSphSchema * pExtraSchema, CSphQueryProfile * pProfiler, bool bFromSphinxql, const CSphFilterSettings * pAggrFilter )
 {
 	// sanity check
 	// verify that the match counts are consistent
@@ -8221,7 +8221,8 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	const CSphVector<CSphQueryItem> & tItems = *pItems;
 
 	// api + index without attributes + select * case
-	if ( !bFromSphinxql && !tItems.GetLength() )
+	// can not skip aggregate filtering
+	if ( !bFromSphinxql && !tItems.GetLength() && !pAggrFilter )
 		return true;
 
 	// build the final schemas!
@@ -8394,7 +8395,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	// if there's more than one result set,
 	// we now have to merge and order all the matches
 	// this is a good time to apply outer order clause, too
-	if ( tRes.m_iSuccesses>1 )
+	if ( tRes.m_iSuccesses>1 || pAggrFilter )
 	{
 		ESphSortOrder eQuerySort = ( tQuery.m_sOuterOrderBy.IsEmpty() ? SPH_SORT_RELEVANCE : SPH_SORT_EXTENDED );
 		// got outer order? gotta do a couple things
@@ -8431,7 +8432,10 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		//
 		// create queue
 		// at this point, we do not need to compute anything; it all must be here
-		ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, tRes.m_tSchema, tRes.m_sError, NULL, false );
+		SphQueueSettings_t tQueueSettings ( tQuery, tRes.m_tSchema, tRes.m_sError, NULL );
+		tQueueSettings.m_bComputeItems = false;
+		tQueueSettings.m_pAggrFilter = pAggrFilter;
+		ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings );
 
 		// restore outer order related patches, or it screws up the query log
 		if ( tQuery.m_bHasOuter )
@@ -8900,7 +8904,7 @@ class SearchHandler_c
 	friend void LocalSearchThreadFunc ( void * pArg );
 
 public:
-	explicit						SearchHandler_c ( int iQueries, bool bSphinxql=false );
+	explicit						SearchHandler_c ( int iQueries, bool bSphinxql, bool bMaster );
 	~SearchHandler_c();
 	void							RunQueries ();					///< run all queries, get all results
 	void							RunUpdates ( const CSphQuery & tQuery, const CSphString & sIndex, CSphAttrUpdateEx * pUpdates ); ///< run Update command instead of Search
@@ -8938,6 +8942,7 @@ protected:
 	SmallStringHash_T < int64_t >	m_hLocalDocs;
 	int64_t							m_iTotalDocs;
 	bool							m_bGotLocalDF;
+	bool							m_bMaster;
 
 	const ServedIndex_t *			UseIndex ( int iLocal ) const;
 	void							ReleaseIndex ( int iLocal ) const;
@@ -8946,7 +8951,7 @@ protected:
 };
 
 
-SearchHandler_c::SearchHandler_c ( int iQueries, bool bSphinxql )
+SearchHandler_c::SearchHandler_c ( int iQueries, bool bSphinxql, bool bMaster )
 {
 	m_iStart = 0;
 	m_iEnd = 0;
@@ -8964,6 +8969,7 @@ SearchHandler_c::SearchHandler_c ( int iQueries, bool bSphinxql )
 	m_tHook.m_pProfiler = NULL;
 	m_iTotalDocs = 0;
 	m_bGotLocalDF = false;
+	m_bMaster = bMaster;
 
 	assert ( !m_tLock.GetError() );
 }
@@ -9255,13 +9261,13 @@ static void FlattenToRes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, int i
 
 	if ( pSorter->GetLength() )
 	{
-		tRes.m_dMatchCounts.Add ( pSorter->GetLength() );
 		tRes.m_dSchemas.Add ( pSorter->GetSchema() );
 		PoolPtrs_t & tPoolPtrs = tRes.m_dTag2Pools[iTag];
 		assert ( !tPoolPtrs.m_pMva && !tPoolPtrs.m_pStrings );
 		tPoolPtrs.m_pMva = tRes.m_pMva;
 		tPoolPtrs.m_pStrings = tRes.m_pStrings;
-		sphFlattenQueue ( pSorter, &tRes, iTag );
+		int iCopied = sphFlattenQueue ( pSorter, &tRes, iTag );
+		tRes.m_dMatchCounts.Add ( iCopied );
 
 		// clean up for next index search
 		tRes.m_pMva = NULL;
@@ -9447,15 +9453,17 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 		UnlockOnDestroy dSchemaLock ( pExtraSchemaMT );
 
 		assert ( !tQuery.m_iOldVersion || tQuery.m_iOldVersion>=0x102 );
-		m_tHook.m_pIndex = pServed->m_pIndex;
-		bool bFactors = false;
-		ppSorters[i] = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError,
-			m_pProfile, // FIXME!!! race here
-			true, pExtraSchemaMT, m_pUpdates,
-			NULL, // FIXME??? really NULL???
-			&bFactors, &m_tHook );
 
-		bNeedFactors |= bFactors;
+		m_tHook.m_pIndex = pServed->m_pIndex;
+		SphQueueSettings_t tQueueSettings ( tQuery, pServed->m_pIndex->GetMatchSchema(), sError, m_pProfile );
+		tQueueSettings.m_bComputeItems = true;
+		tQueueSettings.m_pExtra = pExtraSchemaMT;
+		tQueueSettings.m_pUpdate = m_pUpdates;
+		tQueueSettings.m_pHook = &m_tHook;
+
+		ppSorters[i] = sphCreateQueue ( tQueueSettings );
+
+		bNeedFactors |= tQueueSettings.m_bPackedFactors;
 
 		if ( ppSorters[i] )
 			iValidSorters++;
@@ -9575,9 +9583,16 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 
 				// create queue
 				m_tHook.m_pIndex = pServed->m_pIndex;
-				bool bQueueFactors = false;
-				pSorter = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError, m_pProfile, true, pExtraSchema, m_pUpdates, &tQuery.m_bZSlist, &bQueueFactors, &m_tHook );
-				bNeedFactors |= bQueueFactors;
+				SphQueueSettings_t tQueueSettings ( tQuery, pServed->m_pIndex->GetMatchSchema(), sError, m_pProfile );
+				tQueueSettings.m_bComputeItems = true;
+				tQueueSettings.m_pExtra = pExtraSchema;
+				tQueueSettings.m_pUpdate = m_pUpdates;
+				tQueueSettings.m_pHook = &m_tHook;
+
+				pSorter = sphCreateQueue ( tQueueSettings );
+
+				bNeedFactors |= tQueueSettings.m_bPackedFactors;
+				tQuery.m_bZSlist = tQueueSettings.m_bZonespanlist;
 				if ( !pSorter )
 				{
 					m_dFailuresSet[iQuery].Submit ( sLocal, sError.cstr() );
@@ -10145,10 +10160,16 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		{
 			CSphSchemaMT * pExtraSchemaMT = m_dQueries[iStart].m_bAgent?m_dExtraSchemas[iStart].GetVirgin():NULL;
 			UnlockOnDestroy ExtraLocker ( pExtraSchemaMT );
+
 			m_tHook.m_pIndex = pFirstIndex->m_pIndex;
-			pLocalSorter = sphCreateQueue ( &m_dQueries[iStart], tFirstSchema, sError, m_pProfile, true, pExtraSchemaMT, NULL,
-				NULL, // FIXME??? really NULL?
-				&bLocalFactors, &m_tHook );
+			SphQueueSettings_t tQueueSettings ( m_dQueries[iStart], tFirstSchema, sError, m_pProfile );
+			tQueueSettings.m_bComputeItems = true;
+			tQueueSettings.m_pExtra = pExtraSchemaMT;
+			tQueueSettings.m_pHook = &m_tHook;
+
+			pLocalSorter = sphCreateQueue ( tQueueSettings );
+
+			bLocalFactors = tQueueSettings.m_bPackedFactors;
 		}
 
 		ReleaseIndex ( 0 );
@@ -10367,12 +10388,17 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 		// minimize schema and remove dupes
 		// assuming here ( tRes.m_tSchema==tRes.m_dSchemas[0] )
-		if ( tRes.m_iSuccesses>1 || tQuery.m_dItems.GetLength() )
+		const CSphFilterSettings * pAggrFilter = NULL;
+		if ( m_bMaster && !tQuery.m_tHaving.m_sAttrName.IsEmpty() )
+			pAggrFilter = &tQuery.m_tHaving;
+
+		if ( tRes.m_iSuccesses>1 || tQuery.m_dItems.GetLength() || pAggrFilter )
 		{
 			if ( pExtraSchema )
 				pExtraSchema->RLock();
 			UnlockOnDestroy SchemaLocker ( pExtraSchema );
-			if ( !MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength(), dAgents.GetLength(), pExtraSchema, m_pProfile, m_bSphinxql ) )
+
+			if ( !MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength(), dAgents.GetLength(), pExtraSchema, m_pProfile, m_bSphinxql, pAggrFilter ) )
 			{
 				tRes.m_iSuccesses = 0;
 				return; // FIXME? really return, not just continue?
@@ -10582,7 +10608,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		return;
 	}
 
-	SearchHandler_c tHandler ( iQueries );
+	SearchHandler_c tHandler ( iQueries, false, ( iMasterVer==0 ) );
 	ARRAY_FOREACH ( i, tHandler.m_dQueries )
 		if ( !ParseSearchQuery ( tReq, tHandler.m_dQueries[i], iVer, iMasterVer ) )
 			return;
@@ -11035,6 +11061,7 @@ public:
 	bool					AddStringFilter ( const SqlNode_t & tCol, const SqlNode_t & tVal, bool bExclude );
 	CSphFilterSettings *	AddValuesFilter ( const SqlNode_t & tCol ) { return AddFilter ( tCol, SPH_FILTER_VALUES ); }
 	bool					AddNullFilter ( const SqlNode_t & tCol, bool bEqualsNull );
+	void			AddHaving ();
 
 	inline bool		SetOldSyntax()
 	{
@@ -11578,11 +11605,6 @@ CSphFilterSettings * SqlParser_c::AddFilter ( const SqlNode_t & tCol, ESphFilter
 	CSphString sCol;
 	ToString ( sCol, tCol ); // do NOT lowercase just yet, might have to retain case for JSON cols
 
-	if ( !strcasecmp ( sCol.cstr(), "@count" ) || !strcasecmp ( sCol.cstr(), "count(*)" ) )
-	{
-		yyerror ( this, "Aggregates in 'where' clause prohibited" );
-		return NULL;
-	}
 	CSphFilterSettings * pFilter = &m_pQuery->m_dFilters.Add();
 	pFilter->m_sAttrName = ( !strcasecmp ( sCol.cstr(), "id" ) ) ? "@id" : sCol;
 	pFilter->m_eType = eType;
@@ -11685,6 +11707,12 @@ bool SqlParser_c::AddNullFilter ( const SqlNode_t & tCol, bool bEqualsNull )
 		return false;
 	pFilter->m_bHasEqual = bEqualsNull;
 	return true;
+}
+
+void SqlParser_c::AddHaving ()
+{
+	assert ( m_pQuery->m_dFilters.GetLength() );
+	m_pQuery->m_tHaving = m_pQuery->m_dFilters.Pop();
 }
 
 
@@ -11792,6 +11820,17 @@ bool ParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStm
 				return false;
 			}
 			tQuery.m_pTableFunc = pFunc;
+		}
+
+		// validate filters
+		ARRAY_FOREACH ( i, tQuery.m_dFilters )
+		{
+			const CSphString & sCol = tQuery.m_dFilters[i].m_sAttrName;
+			if ( !strcasecmp ( sCol.cstr(), "@count" ) || !strcasecmp ( sCol.cstr(), "count(*)" ) )
+			{
+				sError.SetSprintf ( "sphinxql: Aggregates in 'where' clause prohibited, use 'having'" );
+				return false;
+			}
 		}
 	}
 
@@ -15063,7 +15102,7 @@ static void DoExtendedUpdate ( const char * sIndex, const SqlStmt_t & tStmt,
 		return;
 	}
 
-	SearchHandler_c tHandler ( 1, true ); // handler unlocks index at destructor - no need to do it manually
+	SearchHandler_c tHandler ( 1, true, false ); // handler unlocks index at destructor - no need to do it manually
 	CSphAttrUpdateEx tUpdate;
 	CSphString sError;
 
@@ -15790,7 +15829,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	StatCountCommand ( SEARCHD_COMMAND_SEARCH, iSelect );
 
 	// setup query for searching
-	SearchHandler_c tHandler ( iSelect, true );
+	SearchHandler_c tHandler ( iSelect, true, true );
 	iSelect = 0;
 	ARRAY_FOREACH ( i, dStmt )
 	{
@@ -16735,7 +16774,7 @@ public:
 				MEMORY ( SPH_MEM_SELECT_SQL );
 
 				StatCountCommand ( SEARCHD_COMMAND_SEARCH );
-				SearchHandler_c tHandler ( 1, true );
+				SearchHandler_c tHandler ( 1, true, true );
 				tHandler.m_dQueries[0] = dStmt.Begin()->m_tQuery;
 				if ( m_tVars.m_bProfile )
 					tHandler.m_pProfile = &m_tProfile;

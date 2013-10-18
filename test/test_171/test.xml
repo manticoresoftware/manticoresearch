@@ -415,6 +415,22 @@ index dist_just1
 <!-- same, not using deprecated syntax -->
 <sphinxql>SELECT * FROM ( SELECT id, weight() as wgt FROM sub_dist_loc WHERE MATCH ( 'test ( my | of )' ) ORDER BY wgt asc, id desc LIMIT 15 ) ORDER BY wgt desc, id asc LIMIT 0, 5</sphinxql>
 
+<!-- having -->
+<sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist2 GROUP BY gr HAVING COUNT(*)&gt;=1</sphinxql>
+<sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist_no GROUP BY gr HAVING COUNT(*)&gt;=1</sphinxql>
+<sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist2 GROUP BY gr HAVING cc&lt;3</sphinxql>
+<sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist_no GROUP BY gr HAVING cc&lt;3</sphinxql>
+<sphinxql>SELECT id, COUNT(DISTINCT tag) cc, GROUPBY() gg FROM dist2 GROUP BY gr HAVING gg IN ( 1,2,3,10)</sphinxql>
+<sphinxql>SELECT id, COUNT(DISTINCT tag) cc, GROUPBY() gg FROM dist_no GROUP BY gr HAVING gg IN ( 1,2,3,10)</sphinxql>
+<sphinxql>SELECT id, MIN(gr) aa, COUNT(*) cc, GROUPBY() gg  FROM dist2 GROUP BY tag HAVING aa=2</sphinxql>
+<sphinxql>SELECT id, MIN(gr) aa, COUNT(*) cc, GROUPBY() gg  FROM dist_no GROUP BY tag HAVING aa=2</sphinxql>
+<sphinxql>SELECT id, MAX(gr) aa, COUNT(*) cc, GROUPBY() gg   FROM dist2 GROUP BY tag HAVING aa=3</sphinxql>
+<sphinxql>SELECT id, MAX(gr) aa, COUNT(*) cc, GROUPBY() gg   FROM dist_no GROUP BY tag HAVING aa=3</sphinxql>
+<sphinxql>SELECT id, SUM(gr) aa, COUNT(*) cc, GROUPBY() gg   FROM dist2 GROUP BY tag HAVING aa&gt;5</sphinxql>
+<sphinxql>SELECT id, SUM(gr) aa, COUNT(*) cc, GROUPBY() gg   FROM dist_no GROUP BY tag HAVING aa>5</sphinxql>
+<sphinxql>select id, MIN(tag)  aa, COUNT(*) cc, GROUPBY() gg FROM dist2 GROUP 8  BY gr HAVING COUNT(*)=2</sphinxql>
+<sphinxql>select id, SUM(tag)  aa, COUNT(*) cc, GROUPBY() gg FROM dist2 GROUP 8  BY gr HAVING aa=4</sphinxql>
+
 </sphqueries>
 
 <db_create>

@@ -318,7 +318,8 @@ int main ( int argc, char ** argv )
 			}
 
 			// do querying
-			ISphMatchSorter * pTop = sphCreateQueue ( &tQuery, pIndex->GetMatchSchema(), sError, NULL );
+			SphQueueSettings_t tQueueSettings ( tQuery, pIndex->GetMatchSchema(), sError, NULL );
+			ISphMatchSorter * pTop = sphCreateQueue ( tQueueSettings );
 			if ( !pTop )
 			{
 				sError.SetSprintf ( "failed to create sorting queue: %s", sError.cstr() );

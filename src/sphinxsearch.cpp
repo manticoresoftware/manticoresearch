@@ -7189,7 +7189,7 @@ struct Expr_FieldFactor_c<CSphBitvec> : public ISphExpr
 	const int *		m_pIndex;
 	const CSphBitvec & m_tField;
 
-	Expr_FieldFactor_c ( const int * pIndex, const CSphBitvec  & tField )
+	Expr_FieldFactor_c ( const int * pIndex, const CSphBitvec & tField )
 		: m_pIndex ( pIndex )
 		, m_tField ( tField )
 	{}

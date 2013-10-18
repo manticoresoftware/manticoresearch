@@ -2303,7 +2303,9 @@ void TestRTWeightBoundary ()
 		CSphMultiQueryArgs tArgs ( NULL, 1 );
 		tQuery.m_sQuery = "@title cat";
 
-		ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, pIndex->GetMatchSchema(), tResult.m_sError, NULL, false );
+		SphQueueSettings_t tQueueSettings ( tQuery, pIndex->GetMatchSchema(), tResult.m_sError, NULL );
+		tQueueSettings.m_bComputeItems = false;
+		ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings );
 		assert ( pSorter );
 		Verify ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, tArgs ) );
 		sphFlattenQueue ( pSorter, &tResult, 0 );
@@ -2458,7 +2460,9 @@ void TestRTSendVsMerge ()
 	CSphMultiQueryArgs tArgs ( NULL, 1 );
 	tQuery.m_sQuery = "@title cat";
 
-	ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, pIndex->GetMatchSchema(), tResult.m_sError, NULL, false );
+	SphQueueSettings_t tQueueSettings ( tQuery, pIndex->GetMatchSchema(), tResult.m_sError, NULL );
+	tQueueSettings.m_bComputeItems = false;
+	ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings );
 	assert ( pSorter );
 
 	CSphVector<DWORD> dMvas;

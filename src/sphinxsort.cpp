@@ -259,10 +259,11 @@ public:
 	}
 
 	/// store all entries into specified location in sorted order, and remove them from queue
-	void Flatten ( CSphMatch * pTo, int iTag )
+	int Flatten ( CSphMatch * pTo, int iTag )
 	{
 		assert ( m_iUsed>=0 );
 		pTo += m_iUsed;
+		int iCopied = m_iUsed;
 		while ( m_iUsed>0 )
 		{
 			--pTo;
@@ -273,6 +274,7 @@ public:
 			Pop ();
 		}
 		m_iTotal = 0;
+		return iCopied;
 	}
 
 	void Finalize ( ISphMatchProcessor & tProcessor, bool bCallProcessInResultSetOrder )
@@ -448,8 +450,10 @@ public:
 	}
 
 	/// store all entries into specified location in sorted order, and remove them from queue
-	void Flatten ( CSphMatch * pTo, int iTag )
+	int Flatten ( CSphMatch * pTo, int iTag )
 	{
+		const CSphMatch * pBegin = pTo;
+
 		// ensure we are sorted
 		if ( m_iUsed )
 		{
@@ -472,6 +476,8 @@ public:
 		m_iUsed = 0;
 		m_iSize = 0;
 		m_bFinalized = false;
+
+		return ( pTo-pBegin );
 	}
 };
 
@@ -555,11 +561,12 @@ public:
 	}
 
 	/// store all entries into specified location in sorted order, and remove them from queue
-	void Flatten ( CSphMatch *, int )
+	int Flatten ( CSphMatch *, int )
 	{
 		assert ( m_iUsed>=0 );
 		DoUpdate();
 		m_iTotal = 0;
+		return 0;
 	}
 
 	virtual void Finalize ( ISphMatchProcessor & tProcessor, bool )
@@ -716,9 +723,9 @@ template < typename T >
 inline static char * FormatInt ( char sBuf[32], T v )
 {
 	if_const ( sizeof(T)==4 && v==INT_MIN )
-		return strcpy ( sBuf, "-2147483648" );
+		return strncpy ( sBuf, "-2147483648", 32 );
 	if_const ( sizeof(T)==8 && v==LLONG_MIN )
-		return strcpy ( sBuf, "-9223372036854775808" );
+		return strncpy ( sBuf, "-9223372036854775808", 32 );
 
 	bool s = ( v<0 );
 	if ( s )
@@ -728,7 +735,7 @@ inline static char * FormatInt ( char sBuf[32], T v )
 	*p = 0;
 	do
 	{
-		*--p = '0' + char(v % 10);
+		*--p = '0' + char ( v % 10 );
 		v /= 10;
 	} while ( v );
 	if ( s )
@@ -1242,6 +1249,7 @@ struct CSphGroupSorterSettings
 	bool				m_bMva64;
 	CSphGrouper *		m_pGrouper;			///< group key calculator
 	bool				m_bImplicit;		///< for queries with aggregate functions but without group by clause
+	const ISphFilter *	m_pAggrFilterTrait; ///< aggregate filter that got owned by grouper
 
 	CSphGroupSorterSettings ()
 		: m_bDistinct ( false )
@@ -1249,6 +1257,7 @@ struct CSphGroupSorterSettings
 		, m_bMva64 ( false )
 		, m_pGrouper ( NULL )
 		, m_bImplicit ( false )
+		, m_pAggrFilterTrait ( NULL )
 	{}
 };
 
@@ -1471,6 +1480,7 @@ protected:
 	CSphVector<IAggrFunc *>		m_dAggregates;
 	CSphVector<IAggrFunc *>		m_dAvgs;
 	int							m_iPregroupDynamic;	///< how much dynamic attributes are computed by the index (before groupby sorter)
+	const ISphFilter *			m_pAggrFilter; ///< aggregate filter for matches on flatten
 
 	static const int			GROUPBY_FACTOR = 4;	///< allocate this times more storage when doing group-by (k, as in k-buffer)
 
@@ -1486,6 +1496,7 @@ public:
 		, m_bSortByDistinct ( false )
 		, m_pComp ( pComp )
 		, m_iPregroupDynamic ( 0 )
+		, m_pAggrFilter ( tSettings.m_pAggrFilterTrait )
 	{
 		assert ( GROUPBY_FACTOR>1 );
 		assert ( DISTINCT==false || tSettings.m_tDistinctLoc.m_iBitOffset>=0 );
@@ -1595,6 +1606,7 @@ public:
 	{
 		SafeDelete ( m_pComp );
 		SafeDelete ( m_pGrouper );
+		SafeDelete ( m_pAggrFilter );
 		ARRAY_FOREACH ( i, m_dAggregates )
 			SafeDelete ( m_dAggregates[i] );
 	}
@@ -1749,7 +1761,7 @@ public:
 	}
 
 	/// store all entries into specified location in sorted order, and remove them from queue
-	void Flatten ( CSphMatch * pTo, int iTag )
+	int Flatten ( CSphMatch * pTo, int iTag )
 	{
 		CountDistinct ();
 
@@ -1764,15 +1776,24 @@ public:
 				dAggrs.RemoveValue ( m_dAvgs[i] );
 		}
 
+		// FIXME!!! we should provide up-to max_matches to output buffer
+		const CSphMatch * pBegin = pTo;
 		int iLen = GetLength ();
-		for ( int i=0; i<iLen; ++i, pTo++ )
+		for ( int i=0; i<iLen; ++i )
 		{
+			CSphMatch & tMatch = m_pData[i];
 			ARRAY_FOREACH ( j, dAggrs )
-				dAggrs[j]->Finalize ( &m_pData[i] );
+				dAggrs[j]->Finalize ( &tMatch );
 
-			m_tSchema.CloneMatch ( pTo, m_pData[i] );
+			// having filtering
+			if ( m_pAggrFilter && !m_pAggrFilter->Eval ( tMatch ) )
+				continue;
+
+			m_tSchema.CloneMatch ( pTo, tMatch );
 			if ( iTag>=0 )
 				pTo->m_iTag = iTag;
+
+			pTo++;
 		}
 
 		m_iUsed = 0;
@@ -1781,6 +1802,8 @@ public:
 		m_hGroup2Match.Reset ();
 		if_const ( DISTINCT )
 			m_tUniq.Resize ( 0 );
+
+		return ( pTo-pBegin );
 	}
 
 	/// get entries count
@@ -1924,6 +1947,7 @@ protected:
 	CSphVector<IAggrFunc *>		m_dAggregates;
 	CSphVector<IAggrFunc *>		m_dAvgs;
 	int							m_iPregroupDynamic;	///< how much dynamic attributes are computed by the index (before groupby sorter)
+	const ISphFilter *			m_pAggrFilter; ///< aggregate filter for matches on flatten
 
 	static const int			GROUPBY_FACTOR = 4;	///< allocate this times more storage when doing group-by (k, as in k-buffer)
 
@@ -1979,6 +2003,7 @@ public:
 		, m_bSortByDistinct ( false )
 		, m_pComp ( pComp )
 		, m_iPregroupDynamic ( 0 )
+		, m_pAggrFilter ( tSettings.m_pAggrFilterTrait )
 	{
 		assert ( GROUPBY_FACTOR>1 );
 		assert ( DISTINCT==false || tSettings.m_tDistinctLoc.m_iBitOffset>=0 );
@@ -2107,6 +2132,7 @@ public:
 	{
 		SafeDelete ( m_pComp );
 		SafeDelete ( m_pGrouper );
+		SafeDelete ( m_pAggrFilter );
 		ARRAY_FOREACH ( i, m_dAggregates )
 			SafeDelete ( m_dAggregates[i] );
 	}
@@ -2394,7 +2420,7 @@ public:
 
 
 	/// store all entries into specified location in sorted order, and remove them from queue
-	void Flatten ( CSphMatch * pTo, int iTag )
+	int Flatten ( CSphMatch * pTo, int iTag )
 	{
 		CountDistinct ();
 		CalcAvg ( true );
@@ -2410,40 +2436,48 @@ public:
 				dAggrs.RemoveValue ( m_dAvgs[i] );
 		}
 
-		int iLen = GetLength ();
+		const CSphMatch * pBegin = pTo;
+		int iTotal = GetLength ();
+		int iTopGroupMatch = 0;
+		int iEntry = 0;
 
-		int iLastHead = -1;
-		int iMatch = 0;
-		for ( int i=0; i<iLen; ++i, pTo++ )
+		while ( iEntry<iTotal )
 		{
-			CSphMatch * pMatch = m_pData + iMatch;
-			if ( iMatch < m_iSize ) // this is head match
-			{
-				ARRAY_FOREACH ( j, dAggrs )
-					dAggrs[j]->Finalize ( pMatch );
+			CSphMatch * pMatch = m_pData + iTopGroupMatch;
+			ARRAY_FOREACH ( j, dAggrs )
+				dAggrs[j]->Finalize ( pMatch );
 
+			bool bTopPassed = ( !m_pAggrFilter || m_pAggrFilter->Eval ( *pMatch ) );
+
+			// copy top group match
+			if ( bTopPassed )
+			{
 				m_tSchema.CloneMatch ( pTo, *pMatch );
-				iLastHead = iMatch;
-
-				// now look for the next match.
-				// In this specific case (2-nd, just after the head)
-				// we have to look it in the hash, not in the linked list!
-				CSphMatch ** ppMatch = m_hGroup2Match ( pMatch->GetAttr ( m_tLocGroupby ) );
-				if ( ppMatch )
-					iMatch = *ppMatch-m_pData;
-				else
-					iMatch = -1;
-			} else
-			{
-				assert ( iLastHead>=0 && iLastHead<iMatch );
-				m_tSchema.CombineMatch ( pTo, *pMatch, m_pData[iLastHead], m_iPregroupDynamic );
-				iMatch = m_dGroupByList[iMatch];
+				if ( iTag>=0 )
+					pTo->m_iTag = iTag;
+				pTo++;
 			}
-			if ( iTag>=0 )
-				pTo->m_iTag = iTag;
+			iEntry++;
+			iTopGroupMatch++;
 
-			if ( iMatch<0 )
-				iMatch = iLastHead+1;
+			// now look for the next match.
+			// In this specific case (2-nd, just after the head)
+			// we have to look it in the hash, not in the linked list!
+			CSphMatch ** ppMatch = m_hGroup2Match ( pMatch->GetAttr ( m_tLocGroupby ) );
+			int iNext = ( ppMatch ? *ppMatch-m_pData : -1 );
+			while ( iNext>=0 )
+			{
+				// copy rest group matches
+				if ( bTopPassed )
+				{
+					m_tSchema.CombineMatch ( pTo, m_pData[iNext], *pMatch, m_iPregroupDynamic );
+					if ( iTag>=0 )
+						pTo->m_iTag = iTag;
+					pTo++;
+				}
+				iEntry++;
+				iNext = m_dGroupByList[iNext];
+			}
 		}
 
 		m_iHeads = m_iUsed = 0;
@@ -2455,6 +2489,8 @@ public:
 		m_hGroup2Match.Reset ();
 		if_const ( DISTINCT )
 			m_tUniq.Resize ( 0 );
+
+		return ( pTo-pBegin );
 	}
 
 	/// get entries count
@@ -2802,6 +2838,7 @@ protected:
 
 	CSphVector<IAggrFunc *>		m_dAggregates;
 	int				m_iPregroupDynamic;				///< how much dynamic attributes are computed by the index (before groupby sorter)
+	const ISphFilter * m_pAggrFilter;				///< aggregate filter for matches on flatten
 
 public:
 	/// ctor
@@ -2809,6 +2846,7 @@ public:
 		: CSphGroupSorterSettings ( tSettings )
 		, m_bDataInitialized ( false )
 		, m_iPregroupDynamic ( 0 )
+		, m_pAggrFilter ( tSettings.m_pAggrFilterTrait )
 	{
 		assert ( DISTINCT==false || tSettings.m_tDistinctLoc.m_iBitOffset>=0 );
 		assert ( !pComp );
@@ -2822,6 +2860,7 @@ public:
 	/// dtor
 	~CSphImplicitGroupSorter ()
 	{
+		SafeDelete ( m_pAggrFilter );
 		ARRAY_FOREACH ( i, m_dAggregates )
 			SafeDelete ( m_dAggregates[i] );
 	}
@@ -2948,7 +2987,7 @@ public:
 	}
 
 	/// store all entries into specified location in sorted order, and remove them from queue
-	virtual void Flatten ( CSphMatch * pTo, int iTag )
+	virtual int Flatten ( CSphMatch * pTo, int iTag )
 	{
 		assert ( m_bDataInitialized );
 
@@ -2957,16 +2996,23 @@ public:
 		ARRAY_FOREACH ( j, m_dAggregates )
 			m_dAggregates[j]->Finalize ( &m_tData );
 
-		m_tSchema.CloneMatch ( pTo, m_tData );
+		int iCopied = 0;
+		if ( !m_pAggrFilter || m_pAggrFilter->Eval ( m_tData ) )
+		{
+			iCopied = 1;
+			m_tSchema.CloneMatch ( pTo, m_tData );
 		m_tSchema.FreeStringPtrs ( &m_tData );
-		if ( iTag>=0 )
-			pTo->m_iTag = iTag;
+			if ( iTag>=0 )
+				pTo->m_iTag = iTag;
+		}
 
 		m_iTotal = 0;
 		m_bDataInitialized = false;
 
 		if_const ( DISTINCT )
 			m_dUniq.Resize(0);
+
+		return iCopied;
 	}
 
 	/// finalize, perform final sort/cut as needed
@@ -4587,13 +4633,18 @@ static void ExtraAddSortkeys ( CSphSchema * pExtra, const ISphSchema & tSorterSc
 }
 
 
-ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const ISphSchema & tSchema,
-	CSphString & sError, CSphQueryProfile * pProfiler, bool bComputeItems, CSphSchema * pExtra, CSphAttrUpdateEx * pUpdate, bool * pZonespanlist,
-	bool * pPackedFactors, ISphExprHook * pHook )
+ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 {
 	// prepare for descent
 	ISphMatchSorter * pTop = NULL;
 	CSphMatchComparatorState tStateMatch, tStateGroup;
+
+	// short-cuts
+	const CSphQuery * pQuery = &tQueue.m_tQuery;
+	const ISphSchema & tSchema = tQueue.m_tSchema;
+	CSphString & sError = tQueue.m_sError;
+	CSphQueryProfile * pProfiler = tQueue.m_pProfiler;
+	CSphSchema * pExtra = tQueue.m_pExtra;
 
 	sError = "";
 	bool bHasZonespanlist = false;
@@ -4675,7 +4726,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const ISphSchema & 
 
 	bool bHasCount = false;
 
-	if ( bComputeItems )
+	if ( tQueue.m_bComputeItems )
 		ARRAY_FOREACH ( iItem, pQuery->m_dItems )
 	{
 		const CSphQueryItem & tItem = pQuery->m_dItems[iItem];
@@ -4760,11 +4811,11 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const ISphSchema & 
 			CSphString sExpr2;
 			sExpr2.SetSprintf ( "TO_STRING(%s)", sExpr.cstr() );
 			tExprCol.m_pExpr = sphExprParse ( sExpr2.cstr(), tSorterSchema, &tExprCol.m_eAttrType,
-				&tExprCol.m_bWeight, sError, pProfiler, pHook, &bHasZonespanlist, &bHasPackedFactors, &eExprStage );
+				&tExprCol.m_bWeight, sError, pProfiler, tQueue.m_pHook, &bHasZonespanlist, &bHasPackedFactors, &eExprStage );
 		} else
 		{
 			tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), tSorterSchema, &tExprCol.m_eAttrType,
-				&tExprCol.m_bWeight, sError, pProfiler, pHook, &bHasZonespanlist, &bHasPackedFactors, &eExprStage );
+				&tExprCol.m_bWeight, sError, pProfiler, tQueue.m_pHook, &bHasZonespanlist, &bHasPackedFactors, &eExprStage );
 		}
 
 		bNeedPackedFactors |= bHasPackedFactors;
@@ -4896,6 +4947,13 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const ISphSchema & 
 	if ( bHasGroupByExpr && !bGotGroupby )
 	{
 		sError = "GROUPBY() is allowed only in GROUP BY queries";
+		return NULL;
+	}
+
+	// check for HAVING constrains
+	if ( tQueue.m_pAggrFilter && !tQueue.m_pAggrFilter->m_sAttrName.IsEmpty() && !bGotGroupby )
+	{
+		sError.SetSprintf ( "can not use HAVING without group by" );
 		return NULL;
 	}
 
@@ -5074,14 +5132,46 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const ISphSchema & 
 		SetupSortRemap ( tSorterSchema, tStateGroup );
 	}
 
+	// set up aggregate filter for grouper
+	if ( bGotGroupby && tQueue.m_pAggrFilter && !tQueue.m_pAggrFilter->m_sAttrName.IsEmpty() )
+	{
+		if ( tSorterSchema.GetAttr ( tQueue.m_pAggrFilter->m_sAttrName.cstr() ) )
+		{
+			tSettings.m_pAggrFilterTrait = sphCreateAggrFilter ( tQueue.m_pAggrFilter, tQueue.m_pAggrFilter->m_sAttrName, tSorterSchema, sError );
+		} else
+		{
+			// having might reference aliased attributes but @* attributes got stored without alias in sorter schema
+			CSphString sHaving;
+			ARRAY_FOREACH ( i, pQuery->m_dItems )
+			{
+				const CSphQueryItem & tItem = pQuery->m_dItems[i];
+				if ( tItem.m_sAlias==tQueue.m_pAggrFilter->m_sAttrName )
+				{
+					sHaving = tItem.m_sExpr;
+					break;
+				}
+			}
+
+			if ( sHaving=="groupby()" )
+				sHaving = "@groupby";
+			else if ( sHaving=="count(*)" )
+				sHaving = "@count";
+
+			tSettings.m_pAggrFilterTrait = sphCreateAggrFilter ( tQueue.m_pAggrFilter, sHaving, tSorterSchema, sError );
+		}
+
+		if ( !tSettings.m_pAggrFilterTrait )
+			return NULL;
+	}
+
 	///////////////////
 	// spawn the queue
 	///////////////////
 
 	if ( !bGotGroupby )
 	{
-		if ( pUpdate )
-			pTop = new CSphUpdateQueue ( pQuery->m_iMaxMatches, pUpdate, pQuery->m_bIgnoreNonexistent, pQuery->m_bStrict );
+		if ( tQueue.m_pUpdate )
+			pTop = new CSphUpdateQueue ( pQuery->m_iMaxMatches, tQueue.m_pUpdate, pQuery->m_bIgnoreNonexistent, pQuery->m_bStrict );
 		else
 			pTop = CreatePlainSorter ( eMatchFunc, pQuery->m_bSortKbuffer, pQuery->m_iMaxMatches, bUsesAttrs, bNeedPackedFactors );
 	} else
@@ -5125,24 +5215,23 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const ISphSchema & 
 	if ( bRandomize )
 		sphAutoSrand ();
 
-	if ( pZonespanlist )
-		*pZonespanlist = bNeedZonespanlist;
-
-	if ( pPackedFactors )
-		*pPackedFactors = bNeedPackedFactors;
+	tQueue.m_bZonespanlist = bNeedZonespanlist;
+	tQueue.m_bPackedFactors = bNeedPackedFactors;
 
 	return pTop;
 }
 
 
-void sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag )
+int sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag )
 {
-	if ( pQueue && pQueue->GetLength() )
-	{
-		int iOffset = pResult->m_dMatches.GetLength ();
-		pResult->m_dMatches.Resize ( iOffset + pQueue->GetLength() );
-		pQueue->Flatten ( &pResult->m_dMatches[iOffset], iTag );
-	}
+	if ( !pQueue || !pQueue->GetLength() )
+		return 0;
+
+	int iOffset = pResult->m_dMatches.GetLength ();
+	pResult->m_dMatches.Resize ( iOffset + pQueue->GetLength() );
+	int iCopied = pQueue->Flatten ( pResult->m_dMatches.Begin() + iOffset, iTag );
+	pResult->m_dMatches.Resize ( iOffset + iCopied );
+	return iCopied;
 }
 
 

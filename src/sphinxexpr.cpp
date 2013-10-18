@@ -1913,8 +1913,10 @@ public:
 };
 
 
-/// hash of constants
-class ConstHash_c
+/// {title=2, body=1}
+/// {in=deg, out=mi}
+/// argument to functions like BM25F() and GEODIST()
+class MapArg_c
 {
 public:
 	CSphVector<CSphNamedVariant> m_dPairs;
@@ -1949,7 +1951,7 @@ struct ExprNode_t
 		int				m_iFunc;		///< built-in function id, for TOK_FUNC type
 		int				m_iArgs;		///< args count, for arglist (token==',') type
 		ConstList_c *	m_pConsts;		///< constants list, for TOK_CONST_LIST type
-		ConstHash_c *	m_pConsthash;	///< constants hash (maps name to const), for TOK_CONST_HASH type
+		MapArg_c	*	m_pMapArg;		///< map argument (maps name to const or name to expr), for TOK_MAP_ARG type
 		const char	*	m_sIdent;		///< pointer to const char, for TOK_IDENT type
 		SphAttr_t	*	m_pAttr;		///< pointer to 64-bit value, for TOK_ITERATOR type
 	};
@@ -2007,8 +2009,8 @@ protected:
 	int						AddNodeUservar ( int iUservar );
 	int						AddNodeHookIdent ( int iID );
 	int						AddNodeHookFunc ( int iID, int iLeft );
-	int						AddNodeConsthash ( const char * sKey, const char * sValue, int64_t iValue );
-	void					AppendToConsthash ( int iNode, const char * sKey, const char * sValue, int64_t iValue );
+	int						AddNodeMapArg ( const char * sKey, const char * sValue, int64_t iValue );
+	void					AppendToMapArg ( int iNode, const char * sKey, const char * sValue, int64_t iValue );
 	const char *			Attr2Ident ( uint64_t uAttrLoc );
 	int						AddNodeJsonField ( uint64_t uAttrLocator, int iLeft );
 	int						AddNodeJsonSubkey ( int64_t iValue );
@@ -3779,8 +3781,8 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 						CSphVector<int> dBM25FArgs;
 						GatherArgNodes ( tNode.m_iLeft, dBM25FArgs );
 
-						const ExprNode_t & tLeft = m_dNodes[dBM25FArgs[0]];
-						const ExprNode_t & tRight = m_dNodes[dBM25FArgs[1]];
+						const ExprNode_t & tLeft = m_dNodes [ dBM25FArgs[0] ];
+						const ExprNode_t & tRight = m_dNodes [ dBM25FArgs[1] ];
 						float fK1 = tLeft.m_fConst;
 						float fB = tRight.m_fConst;
 						fK1 = Max ( fK1, 0.001f );
@@ -3788,7 +3790,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 
 						CSphVector<CSphNamedVariant> * pFieldWeights = NULL;
 						if ( dBM25FArgs.GetLength()>2 )
-							pFieldWeights = &m_dNodes[dBM25FArgs[2]].m_pConsthash->m_dPairs;
+							pFieldWeights = &m_dNodes [ dBM25FArgs[2] ].m_pMapArg->m_dPairs;
 
 						return new Expr_BM25F_c ( fK1, fB, pFieldWeights );
 					}
@@ -3831,10 +3833,10 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_UDF:			return CreateUdfNode ( tNode.m_iFunc, pLeft ); break;
 		case TOK_HOOK_IDENT:	return m_pHook->CreateNode ( tNode.m_iFunc, NULL, NULL, m_sCreateError ); break;
 		case TOK_HOOK_FUNC:		return m_pHook->CreateNode ( tNode.m_iFunc, pLeft, &m_eEvalStage, m_sCreateError ); break;
-		case TOK_CONST_HASH:
+		case TOK_MAP_ARG:
 			// tricky bit
 			// data gets moved (!) from node to ISphExpr at this point
-			return new Expr_ConstHash_c ( tNode.m_pConsthash->m_dPairs );
+			return new Expr_MapArg_c ( tNode.m_pMapArg->m_dPairs );
 			break;
 		case TOK_ATTR_JSON:
 			if ( pLeft && m_dNodes[tNode.m_iLeft].m_iToken==TOK_SUBKEY )
@@ -4696,7 +4698,7 @@ bool ExprParser_t::CheckForConstSet ( int iArgsNode, int iSkip )
 	GatherArgTypes ( iArgsNode, dTypes );
 
 	for ( int i=iSkip; i<dTypes.GetLength(); i++ )
-		if ( dTypes[i]!=TOK_CONST_INT && dTypes[i]!=TOK_CONST_FLOAT && dTypes[i]!=TOK_CONST_HASH )
+		if ( dTypes[i]!=TOK_CONST_INT && dTypes[i]!=TOK_CONST_FLOAT && dTypes[i]!=TOK_MAP_ARG )
 			return false;
 	return true;
 }
@@ -4839,8 +4841,8 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 
 	if ( dArgs.GetLength()==5 )
 	{
-		assert ( m_dNodes[dArgs[4]].m_eRetType==SPH_ATTR_CONSTHASH );
-		CSphVector<CSphNamedVariant> & dOpts = m_dNodes[dArgs[4]].m_pConsthash->m_dPairs;
+		assert ( m_dNodes [ dArgs[4] ].m_eRetType==SPH_ATTR_MAPARG );
+		CSphVector<CSphNamedVariant> & dOpts = m_dNodes [ dArgs[4] ].m_pMapArg->m_dPairs;
 
 		// FIXME! handle errors in options somehow?
 		ARRAY_FOREACH ( i, dOpts )
@@ -5006,20 +5008,20 @@ void yyerror ( ExprParser_t * pParser, const char * sMessage )
 
 ExprParser_t::~ExprParser_t ()
 {
-	// i kinda own those const*
+	// i kinda own those things
 	ARRAY_FOREACH ( i, m_dNodes )
 	{
 		if ( m_dNodes[i].m_iToken==TOK_CONST_LIST )
 			SafeDelete ( m_dNodes[i].m_pConsts );
-		if ( m_dNodes[i].m_iToken==TOK_CONST_HASH )
-			SafeDelete ( m_dNodes[i].m_pConsthash );
+		if ( m_dNodes[i].m_iToken==TOK_MAP_ARG )
+			SafeDelete ( m_dNodes[i].m_pMapArg );
 	}
 
 	// free any UDF calls that weren't taken over
 	ARRAY_FOREACH ( i, m_dUdfCalls )
 		SafeDelete ( m_dUdfCalls[i] );
 
-	// free temp const hash storage
+	// free temp map arguments storage
 	ARRAY_FOREACH ( i, m_dIdents )
 		SafeDeleteArray ( m_dIdents[i] );
 }
@@ -5349,14 +5351,14 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 			return -1;
 		}
 
-		if ( dRetTypes.GetLength()==3 && dRetTypes[2]!=SPH_ATTR_CONSTHASH )
+		if ( dRetTypes.GetLength()==3 && dRetTypes[2]!=SPH_ATTR_MAPARG )
 		{
-			m_sParserError.SetSprintf ( "%s() argument 3 must be hash", g_dFuncs[iFunc].m_sName );
+			m_sParserError.SetSprintf ( "%s() argument 3 must be map", g_dFuncs[iFunc].m_sName );
 			return -1;
 		}
 	}
 
-	// check GEODIST args count, and that optional arg 5 is a consthash
+	// check GEODIST args count, and that optional arg 5 is a map argument
 	if ( eFunc==FUNC_GEODIST )
 	{
 		if ( dRetTypes.GetLength()>5 )
@@ -5365,9 +5367,9 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 			return -1;
 		}
 
-		if ( dRetTypes.GetLength()==5 && dRetTypes[4]!=SPH_ATTR_CONSTHASH )
+		if ( dRetTypes.GetLength()==5 && dRetTypes[4]!=SPH_ATTR_MAPARG )
 		{
-			m_sParserError.SetSprintf ( "%s() argument 5 must be hash", g_dFuncs[iFunc].m_sName );
+			m_sParserError.SetSprintf ( "%s() argument 5 must be map", g_dFuncs[iFunc].m_sName );
 			return -1;
 		}
 	}
@@ -5596,19 +5598,19 @@ int ExprParser_t::AddNodeHookFunc ( int iID, int iLeft )
 	return m_dNodes.GetLength()-1;
 }
 
-int ExprParser_t::AddNodeConsthash ( const char * sKey, const char * sValue, int64_t iValue )
+int ExprParser_t::AddNodeMapArg ( const char * sKey, const char * sValue, int64_t iValue )
 {
 	ExprNode_t & tNode = m_dNodes.Add();
-	tNode.m_iToken = TOK_CONST_HASH;
-	tNode.m_pConsthash = new ConstHash_c();
-	tNode.m_pConsthash->Add ( sKey, sValue, iValue );
-	tNode.m_eRetType = SPH_ATTR_CONSTHASH;
+	tNode.m_iToken = TOK_MAP_ARG;
+	tNode.m_pMapArg = new MapArg_c();
+	tNode.m_pMapArg->Add ( sKey, sValue, iValue );
+	tNode.m_eRetType = SPH_ATTR_MAPARG;
 	return m_dNodes.GetLength()-1;
 }
 
-void ExprParser_t::AppendToConsthash ( int iNode, const char * sKey, const char * sValue, int64_t iValue )
+void ExprParser_t::AppendToMapArg ( int iNode, const char * sKey, const char * sValue, int64_t iValue )
 {
-	m_dNodes[iNode].m_pConsthash->Add ( sKey, sValue, iValue );
+	m_dNodes[iNode].m_pMapArg->Add ( sKey, sValue, iValue );
 }
 
 const char * ExprParser_t::Attr2Ident ( uint64_t uAttrLoc )

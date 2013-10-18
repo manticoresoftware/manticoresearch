@@ -50,7 +50,7 @@ enum ESphAttr
 
 	// these types are runtime only
 	// used as intermediate types in the expression engine
-	SPH_ATTR_CONSTHASH	= 1000,
+	SPH_ATTR_MAPARG		= 1000,
 	SPH_ATTR_FACTORS	= 1001,			///< packed search factors (binary, in-memory, pooled)
 	SPH_ATTR_JSON_FIELD	= 1002			///< points to particular field in JSON column subset
 };
@@ -176,13 +176,12 @@ struct CSphNamedVariant
 };
 
 
-/// a container used to pass hashes of constants around the evaluation tree
-/// FIXME! rename because this is not a hash, just a vector of key-value pairs?
-struct Expr_ConstHash_c : public ISphExpr
+/// a container used to pass maps of constants/variables around the evaluation tree
+struct Expr_MapArg_c : public ISphExpr
 {
 	CSphVector<CSphNamedVariant> m_dValues;
 
-	explicit Expr_ConstHash_c ( CSphVector<CSphNamedVariant> & dValues )
+	explicit Expr_MapArg_c ( CSphVector<CSphNamedVariant> & dValues )
 	{
 		m_dValues.SwapData ( dValues );
 	}

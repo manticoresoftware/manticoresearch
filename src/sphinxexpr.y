@@ -43,7 +43,7 @@
 %token	TOK_DISTINCT
 %token	TOK_CONST_LIST
 %token	TOK_ATTR_SINT
-%token	TOK_CONST_HASH
+%token	TOK_MAP_ARG
 %token	TOK_FOR
 %token	TOK_ITERATOR
 
@@ -54,8 +54,8 @@
 %type <iNode>			arglist
 %type <iNode>			constlist
 %type <iNode>			constlist_or_uservar
-%type <iNode>			consthash
-%type <sIdent>			hash_key
+%type <iNode>			maparg
+%type <sIdent>			map_key
 %type <iNode>			function
 %type <sIdent>			ident
 %type <iNode>			stringlist
@@ -129,14 +129,14 @@ expr:
 	| streq
 	;
 
-consthash:
-	hash_key TOK_EQ TOK_CONST_INT					{ $$ = pParser->AddNodeConsthash ( $1, NULL, $3 ); }
-	| hash_key TOK_EQ TOK_IDENT						{ $$ = pParser->AddNodeConsthash ( $1, $3, 0 ); }
-	| consthash ',' hash_key TOK_EQ TOK_CONST_INT	{ pParser->AppendToConsthash ( $$, $3, NULL, $5 ); }
-	| consthash ',' hash_key TOK_EQ TOK_IDENT		{ pParser->AppendToConsthash ( $$, $3, $5, 0 ); }
+maparg:
+	map_key TOK_EQ TOK_CONST_INT					{ $$ = pParser->AddNodeMapArg ( $1, NULL, $3 ); }
+	| map_key TOK_EQ TOK_IDENT						{ $$ = pParser->AddNodeMapArg ( $1, $3, 0 ); }
+	| maparg ',' map_key TOK_EQ TOK_CONST_INT		{ pParser->AppendToMapArg ( $$, $3, NULL, $5 ); }
+	| maparg ',' map_key TOK_EQ TOK_IDENT			{ pParser->AppendToMapArg ( $$, $3, $5, 0 ); }
 	;
 
-hash_key:
+map_key:
 	ident							{ $$ = $1; }
 	| TOK_ATTR_STRING				{ $$ = pParser->Attr2Ident($1); }
 	| TOK_FUNC_IN					{ $$ = strdup("in"); }
@@ -144,7 +144,7 @@ hash_key:
 
 arg:
 	expr
-	| '{' consthash '}'				{ $$ = $2; }
+	| '{' maparg '}'				{ $$ = $2; }
 	| TOK_ATTR_STRING				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_STRING, $1 ); }
 	| TOK_ATTR_MVA32				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA32, $1 ); }
 	| TOK_ATTR_MVA64				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA64, $1 ); }

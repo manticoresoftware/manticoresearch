@@ -82,7 +82,7 @@
      TOK_DISTINCT = 284,
      TOK_CONST_LIST = 285,
      TOK_ATTR_SINT = 286,
-     TOK_CONST_HASH = 287,
+     TOK_MAP_ARG = 287,
      TOK_FOR = 288,
      TOK_ITERATOR = 289,
      TOK_OR = 290,
@@ -126,7 +126,7 @@
 #define TOK_DISTINCT 284
 #define TOK_CONST_LIST 285
 #define TOK_ATTR_SINT 286
-#define TOK_CONST_HASH 287
+#define TOK_MAP_ARG 287
 #define TOK_FOR 288
 #define TOK_ITERATOR 289
 #define TOK_OR 290
@@ -414,12 +414,12 @@ static const char *const yytname[] =
   "TOK_USERVAR", "TOK_UDF", "TOK_HOOK_IDENT", "TOK_HOOK_FUNC", 
   "TOK_IDENT", "TOK_ATTR_JSON", "TOK_ATID", "TOK_ATWEIGHT", "TOK_ID", 
   "TOK_GROUPBY", "TOK_WEIGHT", "TOK_COUNT", "TOK_DISTINCT", 
-  "TOK_CONST_LIST", "TOK_ATTR_SINT", "TOK_CONST_HASH", "TOK_FOR", 
+  "TOK_CONST_LIST", "TOK_ATTR_SINT", "TOK_MAP_ARG", "TOK_FOR", 
   "TOK_ITERATOR", "TOK_OR", "TOK_AND", "'|'", "'&'", "TOK_NE", "TOK_EQ", 
   "'<'", "'>'", "TOK_GTE", "TOK_LTE", "'+'", "'-'", "'*'", "'/'", "'%'", 
   "TOK_MOD", "TOK_DIV", "TOK_NOT", "TOK_NEG", "'('", "')'", "','", "'{'", 
-  "'}'", "'['", "']'", "$accept", "exprline", "attr", "expr", "consthash", 
-  "hash_key", "arg", "arglist", "constlist", "stringlist", 
+  "'}'", "'['", "']'", "$accept", "exprline", "attr", "expr", "maparg", 
+  "map_key", "arg", "arglist", "constlist", "stringlist", 
   "constlist_or_uservar", "ident", "function", "json_field", "subscript", 
   "subkey", "for_loop", "iterator", "streq", "strval", 0
 };
@@ -1414,22 +1414,22 @@ yyreduce:
 
   case 40:
 
-    { yyval.iNode = pParser->AddNodeConsthash ( yyvsp[-2].sIdent, NULL, yyvsp[0].iConst ); ;}
+    { yyval.iNode = pParser->AddNodeMapArg ( yyvsp[-2].sIdent, NULL, yyvsp[0].iConst ); ;}
     break;
 
   case 41:
 
-    { yyval.iNode = pParser->AddNodeConsthash ( yyvsp[-2].sIdent, yyvsp[0].sIdent, 0 ); ;}
+    { yyval.iNode = pParser->AddNodeMapArg ( yyvsp[-2].sIdent, yyvsp[0].sIdent, 0 ); ;}
     break;
 
   case 42:
 
-    { pParser->AppendToConsthash ( yyval.iNode, yyvsp[-2].sIdent, NULL, yyvsp[0].iConst ); ;}
+    { pParser->AppendToMapArg ( yyval.iNode, yyvsp[-2].sIdent, NULL, yyvsp[0].iConst ); ;}
     break;
 
   case 43:
 
-    { pParser->AppendToConsthash ( yyval.iNode, yyvsp[-2].sIdent, yyvsp[0].sIdent, 0 ); ;}
+    { pParser->AppendToMapArg ( yyval.iNode, yyvsp[-2].sIdent, yyvsp[0].sIdent, 0 ); ;}
     break;
 
   case 44:

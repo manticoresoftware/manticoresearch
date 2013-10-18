@@ -58,7 +58,7 @@
      TOK_DISTINCT = 284,
      TOK_CONST_LIST = 285,
      TOK_ATTR_SINT = 286,
-     TOK_CONST_HASH = 287,
+     TOK_MAP_ARG = 287,
      TOK_FOR = 288,
      TOK_ITERATOR = 289,
      TOK_OR = 290,
@@ -102,7 +102,7 @@
 #define TOK_DISTINCT 284
 #define TOK_CONST_LIST 285
 #define TOK_ATTR_SINT 286
-#define TOK_CONST_HASH 287
+#define TOK_MAP_ARG 287
 #define TOK_FOR 288
 #define TOK_ITERATOR 289
 #define TOK_OR 290

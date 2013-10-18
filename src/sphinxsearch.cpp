@@ -7247,9 +7247,9 @@ struct Expr_BM25F_T : public ISphExpr
 		m_dWeights.Fill ( 1 );
 		if ( pFieldWeights )
 		{
-			Expr_ConstHash_c * pConstHash = (Expr_ConstHash_c*)pFieldWeights;
+			Expr_MapArg_c * pMapArg = (Expr_MapArg_c*)pFieldWeights;
 
-			CSphVector<CSphNamedVariant> & dOpts = pConstHash->m_dValues;
+			CSphVector<CSphNamedVariant> & dOpts = pMapArg->m_dValues;
 			ARRAY_FOREACH ( i, dOpts )
 			{
 				// FIXME? report errors if field was not found?
@@ -7663,9 +7663,9 @@ public:
 					}
 					break;
 				case 'h':
-					if ( dArgs[i]!=SPH_ATTR_CONSTHASH )
+					if ( dArgs[i]!=SPH_ATTR_MAPARG )
 					{
-						sError.SetSprintf ( "argument %d to %s() must be a hash of constants", i, sFuncname );
+						sError.SetSprintf ( "argument %d to %s() must be a map of constants", i, sFuncname );
 						return false;
 					}
 					break;

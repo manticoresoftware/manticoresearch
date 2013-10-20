@@ -74,7 +74,7 @@ enum ESphExprCommand
 	SPH_EXPR_SET_MVA_POOL,
 	SPH_EXPR_SET_STRING_POOL,
 	SPH_EXPR_SET_EXTRA_DATA,
-	SPH_EXPR_GET_DEPENDENT_COLS,
+	SPH_EXPR_GET_DEPENDENT_COLS, ///< used to determine proper evaluating stage
 	SPH_EXPR_GET_UDF
 };
 
@@ -93,7 +93,10 @@ public:
 	/// evaluate this expression for that match, using int64 math
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { assert ( 0 ); return (int64_t) Eval ( tMatch ); }
 
-	/// evaluate string attr
+	/// Evaluate string attr.
+	/// Note, that sometimes this method returns pointer to a static buffer
+	/// and sometimes it allocates a new buffer, so aware of memory leaks.
+	/// IsStringPtr() returns true if this method allocates a new buffer and false otherwise.
 	virtual int StringEval ( const CSphMatch &, const BYTE ** ppStr ) const { *ppStr = NULL; return 0; }
 
 	/// evaluate MVA attr

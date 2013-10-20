@@ -649,6 +649,7 @@ Two'</sphinxql>
 <sphinxql>select indexof(x.name=title for x in j.array) from json_search</sphinxql>
 <sphinxql>select indexof('a2'=x.name for x in j.array) from json_search</sphinxql>
 <sphinxql>select indexof(title=x.name for x in j.array) from json_search</sphinxql>
+<sphinxql>select indexof(to_string(1)=to_string(1) for x in j.array) from json_search</sphinxql>
 </sphqueries>
 </test>
 

@@ -647,7 +647,10 @@ struct Expr_Crc32_c : public Expr_Unary_c
 	{
 		const BYTE * pStr;
 		int iLen = m_pFirst->StringEval ( tMatch, &pStr );
-		return sphCRC32 ( pStr, iLen );
+		DWORD uCrc = sphCRC32 ( pStr, iLen );
+		if ( m_pFirst->IsStringPtr() )
+			SafeDeleteArray ( pStr );
+		return uCrc;
 	}
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return IntEval ( tMatch ); }
 };
@@ -812,6 +815,10 @@ public:
 			case SPH_ATTR_BIGINT:	eJson = sphJsonFindByIndex ( eJson, &pVal, (int)m_dArgs[i]->Int64Eval ( tMatch ) ); break;
 			case SPH_ATTR_FLOAT:	eJson = sphJsonFindByIndex ( eJson, &pVal, (int)m_dArgs[i]->Eval ( tMatch ) ); break;
 			case SPH_ATTR_STRING:
+				// is this assert will fail someday it's ok
+				// just remove it and add this code instead to handle possible memory leak
+				// if ( m_dArgv[i]->IsStringPtr() ) SafeDeleteArray ( pStr );
+				assert ( !m_dArgs[i]->IsStringPtr() );
 				iLen = m_dArgs[i]->StringEval ( tMatch, &pStr );
 				eJson = sphJsonFindByKey ( eJson, &pVal, (const void *)pStr, iLen, sphJsonKeyMask ( (const char *)pStr, iLen ) );
 				break;
@@ -1159,6 +1166,7 @@ struct Expr_Time_c : public ISphExpr
 
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)IntEval ( tMatch ); }
+	virtual bool IsStringPtr () const { return true; }
 };
 
 
@@ -1174,13 +1182,14 @@ struct Expr_TimeDiff_c : public ISphExpr
 
 	~Expr_TimeDiff_c()
 	{
-		SafeDelete ( m_pFirst );
-		SafeDelete ( m_pSecond );
+		SafeRelease ( m_pFirst );
+		SafeRelease ( m_pSecond );
 	}
 
 	virtual int IntEval ( const CSphMatch & tMatch ) const
 	{
-		return ( m_pFirst && m_pSecond ) ? m_pFirst->IntEval ( tMatch ) - m_pSecond->IntEval ( tMatch ) : 0;
+		assert ( m_pFirst && m_pSecond );
+		return m_pFirst->IntEval ( tMatch )-m_pSecond->IntEval ( tMatch );
 	}
 
 	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
@@ -1195,6 +1204,7 @@ struct Expr_TimeDiff_c : public ISphExpr
 
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)IntEval ( tMatch ); }
+	virtual bool IsStringPtr () const { return true; }
 };
 
 
@@ -1341,7 +1351,10 @@ struct Expr_StrEq_c : public ISphExpr
 		const BYTE * pRight;
 		int iLeft = m_pLeft->StringEval ( tMatch, &pLeft );
 		int iRight = m_pRight->StringEval ( tMatch, &pRight );
-		return ( iLeft==iRight && memcmp ( pLeft, pRight, iLeft )==0 ) ? 1 : 0;
+		bool eq = ( iLeft==iRight ) && memcmp ( pLeft, pRight, iLeft )==0;
+		if ( m_pLeft->IsStringPtr() )	SafeDeleteArray ( pLeft );
+		if ( m_pRight->IsStringPtr() )	SafeDeleteArray ( pRight );
+		return (int)eq;
 	}
 
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
@@ -3533,6 +3546,7 @@ public:
 	virtual int IntEval ( const CSphMatch & tMatch ) const
 	{
 		const char * pStr;
+		assert ( !m_pStr->IsStringPtr() ); // aware of mem leaks caused by some StringEval implementations
 		int iLen = m_pStr->StringEval ( tMatch, (const BYTE **)&pStr );
 
 		CSphVector<float> dPoly;
@@ -3684,8 +3698,10 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case '>':				LOC_SPAWN_POLY ( Expr_Gt ); break;
 		case TOK_LTE:			LOC_SPAWN_POLY ( Expr_Lte ); break;
 		case TOK_GTE:			LOC_SPAWN_POLY ( Expr_Gte ); break;
-		case TOK_EQ:			if ( m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_STRING
-									&& m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRING )
+		case TOK_EQ:			if ( ( m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_STRING ||
+									m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_STRINGPTR ) &&
+									( m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRING ||
+									m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRINGPTR ) )
 									return new Expr_StrEq_c ( pLeft, pRight );
 								LOC_SPAWN_POLY ( Expr_Eq ); break;
 		case TOK_NE:			LOC_SPAWN_POLY ( Expr_Ne ); break;

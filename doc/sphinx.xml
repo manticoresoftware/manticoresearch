@@ -7278,8 +7278,9 @@ Currently, the comment is limited to 128 characters.
 <para>
 Default value for <code>$index</code> is <code>"*"</code> that means
 to query all local indexes. Characters allowed in index names include
-Latin letters (a-z), numbers (0-9), minus sign (-), and underscore (_);
-everything else is considered a separator. Therefore, all of the
+Latin letters (a-z), numbers (0-9) and underscore (_);
+everything else is considered a separator. Note that index name should
+not start with underscore character. Therefore, all of the
 following samples calls are valid and will search the same
 two indexes:
 <programlisting>
@@ -12266,7 +12267,7 @@ Optional, default is 0 (do not compute and store).
 Added in 2.1.1-beta.
 </para>
 <para>
-When <code>index_fields_lengths</code> is set to 1, <filename>indexer</filename>
+When <code>index_field_lengths</code> is set to 1, <filename>indexer</filename>
 will 1) create a respective length attribute for every full-text field,
 sharing the same name; 2) compute a field length (counted in keywords) for
 every document and store in to a respective attribute; 3) compute the per-index
@@ -12276,7 +12277,7 @@ accessible.
 </para>
 <para>
 BM25A() and BM25F() functions in the expression ranker are based
-on these lengths and require <code>index_fields_lengths</code> to be enabled.
+on these lengths and require <code>index_field_lengths</code> to be enabled.
 Historically, Sphinx used a simplified, stripped-down variant of BM25 that,
 unlike the complete function, did <b>not</b> account for document length.
 (We later realized that it should have been called BM15 from the start.)

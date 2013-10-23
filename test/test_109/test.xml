@@ -64,37 +64,37 @@ source src_2
 	sql_attr_uint	= idd
 }
 
-index i1-crc
+index i1_crc
 {
 	source			= src_1
-	path			= <data_path/>/i1-crc
+	path			= <data_path/>/i1_crc
 	docinfo			= extern
 	charset_type	= utf-8
 	dict = crc	
 }
 
-index i2-crc
+index i2_crc
 {
 	source			= src_2
-	path			= <data_path/>/i2-crc
+	path			= <data_path/>/i2_crc
 	docinfo			= extern
 	charset_type	= utf-8
 	dict = crc	
 }
 
-index i1-kw
+index i1_kw
 {
 	source			= src_1
-	path			= <data_path/>/i1-kw
+	path			= <data_path/>/i1_kw
 	docinfo			= extern
 	charset_type	= utf-8
 	dict = keywords
 }
 
-index i2-kw
+index i2_kw
 {
 	source			= src_2
-	path			= <data_path/>/i2-kw
+	path			= <data_path/>/i2_kw
 	docinfo			= extern
 	charset_type	= utf-8
 	dict = keywords	
@@ -125,8 +125,8 @@ DROP TABLE IF EXISTS test_table;
 
 global $g_locals, $sd_address, $sd_sphinxql_port;
 
-RunIndexer ( $errors, '--rotate --merge i1-crc i2-crc' );
-RunIndexer ( $errors, '--rotate --merge i1-kw i2-kw' );
+RunIndexer ( $errors, '--rotate --merge i1_crc i2_crc' );
+RunIndexer ( $errors, '--rotate --merge i1_kw i2_kw' );
 usleep ( 100000 );
 
 $results = array();
@@ -227,8 +227,8 @@ $result = $client->Query ( $words, $idx );	if ( $result ) { unset ( $result["tim
 usleep ( 100000 );
 $client->SetLimits ( 0, 1 );
 $results[] = "merge+rotate and merge of indexes v31";
-$results[] = $queryAPI ( $client, ' dummy ', 'i1-crc' );
-$results[] = $queryAPI ( $client, ' dummy ', 'i1-kw' );
+$results[] = $queryAPI ( $client, ' dummy ', 'i1_crc' );
+$results[] = $queryAPI ( $client, ' dummy ', 'i1_kw' );
 
 @mysql_close($sock);
 	

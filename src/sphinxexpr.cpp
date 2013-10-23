@@ -1243,7 +1243,7 @@ struct Expr_ForIn_c : public Expr_JsonFieldConv_c
 
 	~Expr_ForIn_c ()
 	{
-		SafeDelete ( m_pExpr );
+		SafeRelease ( m_pExpr );
 	}
 
 	SphAttr_t * GetRef ()

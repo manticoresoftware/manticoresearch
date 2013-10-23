@@ -6276,12 +6276,17 @@ void ParseIndexList ( const CSphString & sIndexes, CSphVector<CSphString> & dOut
 	while ( *p )
 	{
 		// skip non-alphas
-		while ( (*p) && !sphIsAlpha(*p) ) p++;
+		while ( *p && !isalpha ( *p ) && !isdigit ( *p ) && *p!='_' ) p++;
 		if ( !(*p) ) break;
+
+		// FIXME?
+		// We no not check that index name shouldn't start with '_'.
+		// That means it's de facto allowed for API queries.
+		// But not for SphinxQL ones.
 
 		// this is my next index name
 		const char * sNext = p;
-		while ( sphIsAlpha(*p) ) p++;
+		while ( isalpha ( *p ) || isdigit ( *p ) || *p=='_' ) p++;
 
 		assert ( sNext!=p );
 		if ( *p ) *p++ = '\0'; // if it was not the end yet, we'll continue from next char

@@ -57,6 +57,7 @@ index snip2
 <sphinxql>select id, SNIPPET('', '') as s from snip2 where match ('silver')</sphinxql>
 <sphinxql>select id, SNIPPET('body as las void', 'las') as s from snip2 where match ('las')</sphinxql>
 <sphinxql>select id, SNIPPET(body, 'las') as s from snip2 where match ('las')</sphinxql>
+<sphinxql>select id, SNIPPET('something', snip2) from snip2</sphinxql>
 
 </sphqueries>
 

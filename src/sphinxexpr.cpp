@@ -5187,7 +5187,9 @@ int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 		if ( iRight>=0 )	tNode.m_iArgs += ( m_dNodes[iRight].m_iToken==',' ) ? m_dNodes[iRight].m_iArgs : 1;
 	}
 
-	if ( iLeft>=0 && iRight>=0 )
+	// argument type conversion for functions like INDEXOF(), ALL() and ANY()
+	// we need no conversion for operands of comma!
+	if ( iOp!=',' && iLeft>=0 && iRight>=0 )
 	{
 		if ( m_dNodes[iRight].m_eRetType==SPH_ATTR_STRING && m_dNodes[iLeft].m_iToken==TOK_IDENT )
 			m_dNodes[iLeft].m_eRetType = SPH_ATTR_STRING;

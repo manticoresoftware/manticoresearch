@@ -8755,11 +8755,13 @@ struct Expr_Snippet_c : public ISphStringExpr
 
 		CSphMatch tDummy;
 		char * pWords;
+		assert ( !pArglist->GetArg(1)->IsStringPtr() ); // aware of memleaks potentially caused by StringEval()
 		pArglist->GetArg(1)->StringEval ( tDummy, (const BYTE**)&pWords );
 		m_tHighlight.m_sWords = pWords;
 
 		for ( int i = 2; i < pArglist->GetNumArgs(); i++ )
 		{
+			assert ( !pArglist->GetArg(i)->IsStringPtr() ); // aware of memleaks potentially caused by StringEval()
 			pArglist->GetArg(i)->StringEval ( tDummy, (const BYTE**)&pWords );
 			if ( !pWords )
 				continue;
@@ -8838,7 +8840,8 @@ struct Expr_Snippet_c : public ISphStringExpr
 
 		if ( !iLen )
 		{
-			SafeDeleteArray ( sSource );
+			if ( m_pText->IsStringPtr() )
+				SafeDeleteArray ( sSource );
 			if ( m_pProfiler )
 				m_pProfiler->Switch ( eOld );
 			return 0;

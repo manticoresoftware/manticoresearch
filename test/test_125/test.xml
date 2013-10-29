@@ -12,6 +12,7 @@ searchd
 {
 	<searchd_settings/>
 	workers = threads
+	thread_stack = 256K
 }
 
 source test

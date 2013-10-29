@@ -1785,7 +1785,7 @@ public:
 			ARRAY_FOREACH ( j, dAggrs )
 				dAggrs[j]->Finalize ( &tMatch );
 
-			// having filtering
+			// HAVING filtering
 			if ( m_pAggrFilter && !m_pAggrFilter->Eval ( tMatch ) )
 				continue;
 
@@ -3699,7 +3699,7 @@ public:
 						ExprGeodist_t () {}
 	bool				Setup ( const CSphQuery * pQuery, const ISphSchema & tSchema, CSphString & sError );
 	virtual float		Eval ( const CSphMatch & tMatch ) const;
-	virtual void		Command ( ESphExprCommand eCmd, void * pArg ) const;
+	virtual void		Command ( ESphExprCommand eCmd, void * pArg );
 
 protected:
 	CSphAttrLocator		m_tGeoLatLoc;
@@ -3761,7 +3761,7 @@ float ExprGeodist_t::Eval ( const CSphMatch & tMatch ) const
 	return (float)(R*c);
 }
 
-void ExprGeodist_t::Command ( ESphExprCommand eCmd, void * pArg ) const
+void ExprGeodist_t::Command ( ESphExprCommand eCmd, void * pArg )
 {
 	if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS )
 	{
@@ -3927,7 +3927,7 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 	return true;
 }
 
-
+// move expressions used in ORDER BY or WITHIN GROUP ORDER BY to presort phase
 static bool FixupDependency ( ISphSchema & tSchema, const int * pAttrs, int iAttrCount )
 {
 	assert ( pAttrs );
@@ -4771,12 +4771,8 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 			continue;
 		}
 
-		// not an attribute? must be an expression, and must be aliased
-		if ( tItem.m_sAlias.IsEmpty() )
-		{
-			sError.SetSprintf ( "expression '%s' must be aliased (use 'expr AS alias' syntax)", tItem.m_sExpr.cstr() );
-			return NULL;
-		}
+		// not an attribute? must be an expression, and must be aliased by query parser
+		assert ( !tItem.m_sAlias.IsEmpty() );
 
 		// tricky part
 		// we might be fed with precomputed matches, but it's all or nothing
@@ -4796,6 +4792,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 
 		// a new and shiny expression, lets parse
 		CSphColumnInfo tExprCol ( tItem.m_sAlias.cstr(), SPH_ATTR_NONE );
+		bool bHasPackedFactors = false;
 
 		// tricky bit
 		// GROUP_CONCAT() adds an implicit TO_STRING() conversion on top of its argument
@@ -4803,19 +4800,16 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		// ideally, we would instead pass ownership of the expression to G_C() implementation
 		// and also the original expression type, and let the string conversion happen in G_C() itself
 		// but that ideal route seems somewhat more complicated in the current architecture
-		ESphEvalStage eExprStage = SPH_EVAL_FINAL;
-		bool bHasPackedFactors = false;
-
 		if ( tItem.m_eAggrFunc==SPH_AGGR_CAT )
 		{
 			CSphString sExpr2;
 			sExpr2.SetSprintf ( "TO_STRING(%s)", sExpr.cstr() );
 			tExprCol.m_pExpr = sphExprParse ( sExpr2.cstr(), tSorterSchema, &tExprCol.m_eAttrType,
-				&tExprCol.m_bWeight, sError, pProfiler, tQueue.m_pHook, &bHasZonespanlist, &bHasPackedFactors, &eExprStage );
+				&tExprCol.m_bWeight, sError, pProfiler, tQueue.m_pHook, &bHasZonespanlist, &bHasPackedFactors, &tExprCol.m_eStage );
 		} else
 		{
 			tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), tSorterSchema, &tExprCol.m_eAttrType,
-				&tExprCol.m_bWeight, sError, pProfiler, tQueue.m_pHook, &bHasZonespanlist, &bHasPackedFactors, &eExprStage );
+				&tExprCol.m_bWeight, sError, pProfiler, tQueue.m_pHook, &bHasZonespanlist, &bHasPackedFactors, &tExprCol.m_eStage );
 		}
 
 		bNeedPackedFactors |= bHasPackedFactors;
@@ -4851,19 +4845,15 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		// postpone aggregates, add non-aggregates
 		if ( tExprCol.m_eAggrFunc==SPH_AGGR_NONE )
 		{
-			// tricky bit
-			// by default, lets be lazy and compute expressions as late as possible
-			// but stringptr functions like ZONESPANLIST() or RANKFACTORS() that capture and
-			// store evanescent current ranker state gotta be evaluated somewhat earlier
-			// that gets reported from sphExprParse() a bit above
-			tExprCol.m_eStage = eExprStage;
-
 			// is this expression used in filter?
 			// OPTIMIZE? hash filters and do hash lookups?
 			if ( tExprCol.m_eAttrType!=SPH_ATTR_JSON_FIELD )
 			ARRAY_FOREACH ( i, pQuery->m_dFilters )
 				if ( pQuery->m_dFilters[i].m_sAttrName==tExprCol.m_sName )
 			{
+				// is this a hack?
+				// m_bWeight is computed after EarlyReject() get called
+				// that means we can't evaluate expressions with WEIGHT() in prefilter phase
 				if ( tExprCol.m_bWeight )
 				{
 					tExprCol.m_eStage = SPH_EVAL_PRESORT; // special, weight filter ( short cut )
@@ -4871,7 +4861,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 				}
 
 				// so we are about to add a filter condition
-				// but it might depend on some preceding columns
+				// but it might depend on some preceding columns (e.g. SELECT 1+attr f1 ... WHERE f1>5)
 				// lets detect those and move them to prefilter \ presort phase too
 				CSphVector<int> dCur;
 				tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
@@ -4886,6 +4876,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 						tExprCol.m_eStage = SPH_EVAL_PRESORT;
 						tExprCol.m_bWeight = true;
 					}
+					// handle chains of dependencies (e.g. SELECT 1+attr f1, f1-1 f2 ... WHERE f2>5)
 					if ( tCol.m_pExpr.Ptr() )
 					{
 						tCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
@@ -4906,7 +4897,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 			// NOTE, "final" stage might need to be fixed up later
 			// we'll do that when parsing sorting clause
 			tSorterSchema.AddDynamicAttr ( tExprCol );
-		} else
+		} else // some aggregate
 		{
 			tExprCol.m_eStage = SPH_EVAL_PRESORT; // sorter expects computed expression
 			dAggregates.Add ( tExprCol );

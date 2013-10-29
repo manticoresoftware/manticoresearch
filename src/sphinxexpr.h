@@ -60,7 +60,7 @@ enum ESphEvalStage
 {
 	SPH_EVAL_STATIC = 0,		///< static data, no real evaluation needed
 	SPH_EVAL_OVERRIDE,			///< static but possibly overridden
-	SPH_EVAL_PREFILTER,			///< expression needed for full-text candidate matches filtering
+	SPH_EVAL_PREFILTER,			///< expression needed for candidate matches filtering
 	SPH_EVAL_PRESORT,			///< expression needed for final matches sorting
 	SPH_EVAL_SORTER,			///< expression evaluated by sorter object
 	SPH_EVAL_FINAL,				///< expression not (!) used in filters/sorting; can be postponed until final result set cooking
@@ -120,10 +120,8 @@ public:
 	virtual int GetNumArgs() const { return 0; }
 
 	/// run a tree wide action
-	virtual void Command ( ESphExprCommand, void * ) {}
-
-	/// run a tree wide action
-	virtual void Command ( ESphExprCommand, void * ) const {}
+	/// usually sets something into ISphExpr like string pool or gets something from it like dependent columns
+	virtual void Command ( ESphExprCommand /* eCmd */, void * /* pArg */ ) {}
 };
 
 /// string expression traits

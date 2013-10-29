@@ -150,7 +150,7 @@ UdfCall_t::~UdfCall_t ()
 struct ExprLocatorTraits_t : public ISphExpr
 {
 	CSphAttrLocator m_tLocator;
-	int m_iLocator;
+	int m_iLocator; // used by SPH_EXPR_GET_DEPENDENT_COLS
 
 	ExprLocatorTraits_t ( const CSphAttrLocator & tLocator, int iLocator ) : m_tLocator ( tLocator ), m_iLocator ( iLocator ) {}
 
@@ -1989,7 +1989,7 @@ public:
 		, m_pProfiler ( pProfiler )
 		, m_bHasZonespanlist ( false )
 		, m_bHasPackedFactors ( false )
-		, m_eEvalStage ( SPH_EVAL_FINAL )
+		, m_eEvalStage ( SPH_EVAL_FINAL ) // be default compute as late as possible
 	{}
 
 							~ExprParser_t ();
@@ -2111,7 +2111,7 @@ static int ParseNumeric ( YYSTYPE * lvalp, const char ** ppStr )
 	}
 }
 
-// useful to store in 8 bytes in Bison lvalp variable
+// used to store in 8 bytes in Bison lvalp variable
 static uint64_t sphPackAttrLocator ( const CSphAttrLocator & tLoc, int iLocator )
 {
 	assert ( iLocator>=0 && iLocator<=0xffff );
@@ -3951,7 +3951,6 @@ class Expr_ArgVsConstSet_c : public Expr_ArgVsSet_c<T>
 {
 protected:
 	CSphVector<T> m_dValues;
-	CSphString m_sExpr;
 
 public:
 	/// take ownership of arg, pre-evaluate and dismiss turn points
@@ -3983,7 +3982,6 @@ public:
 			ARRAY_FOREACH ( i, pConsts->m_dInts )
 				m_dValues.Add ( (T)pConsts->m_dInts[i] );
 		}
-		m_sExpr = pConsts->m_sExpr;
 	}
 };
 
@@ -4150,7 +4148,7 @@ public:
 
 protected:
 	CSphAttrLocator		m_tLocator;
-	int					m_iLocator;
+	int					m_iLocator; // used by SPH_EXPR_GET_DEPENDENT_COLS
 	const DWORD *		m_pMvaPool;
 	UservarIntSet_c *	m_pUservar;
 };
@@ -4224,7 +4222,7 @@ class Expr_MVALength_c : public ISphExpr
 {
 protected:
 	CSphAttrLocator		m_tLocator;
-	int					m_iLocator;
+	int					m_iLocator; // used by SPH_EXPR_GET_DEPENDENT_COLS
 	const DWORD *		m_pMvaPool;
 
 public:
@@ -4293,7 +4291,7 @@ public:
 
 protected:
 	CSphAttrLocator		m_tLocator;
-	int					m_iLocator;
+	int					m_iLocator; // used by SPH_EXPR_GET_DEPENDENT_COLS
 	const DWORD *		m_pMvaPool;
 	ESphAggrFunc		m_eFunc;
 };
@@ -4341,6 +4339,7 @@ protected:
 	UservarIntSet_c *	m_pUservar;
 	const BYTE *		m_pStrings;
 	ISphExpr *			m_pArg;
+	CSphString			m_sExpr;
 
 public:
 	Expr_JsonFieldIn_c ( ConstList_c * pConsts, UservarIntSet_c * pUservar, ISphExpr * pArg )
@@ -4350,6 +4349,8 @@ public:
 		, m_pArg ( pArg )
 	{
 		assert ( !pConsts || !pUservar );
+		if ( pConsts )
+			m_sExpr = pConsts->m_sExpr;
 	}
 
 	~Expr_JsonFieldIn_c()
@@ -4453,6 +4454,10 @@ protected:
 //////////////////////////////////////////////////////////////////////////
 
 /// generic BITDOT() evaluator
+/// first argument is a bit mask and the rest ones are bit weights
+/// function returns sum of bits multiplied by their weights
+/// BITDOT(5, 11, 33, 55) => 1*11 + 0*33 + 1*55 = 66
+/// BITDOT(4, 11, 33, 55) => 0*11 + 0*33 + 1*55 = 55
 template < typename T >
 class Expr_Bitdot_c : public Expr_ArgVsSet_c<T>
 {
@@ -4462,7 +4467,7 @@ protected:
 public:
 	/// take ownership of arg and turn points
 	explicit Expr_Bitdot_c ( const CSphVector<ISphExpr *> & dArgs )
-		: Expr_ArgVsSet_c<T> ( dArgs[0] )
+			: Expr_ArgVsSet_c<T> ( dArgs[0] )
 	{
 		for ( int i=1; i<dArgs.GetLength(); i++ )
 			m_dBitWeights.Add ( dArgs[i] );
@@ -4558,7 +4563,7 @@ public:
 		return m_fOut*m_pFunc ( tMatch.GetAttrFloat ( m_tLat ), tMatch.GetAttrFloat ( m_tLon ), m_fAnchorLat, m_fAnchorLon );
 	}
 
-	virtual void Command ( ESphExprCommand eCmd, void * pArg ) const
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
 		if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS )
 		{

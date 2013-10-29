@@ -18988,7 +18988,7 @@ static void TransformBigrams ( XQNode_t * pNode, const CSphIndexSettings & tSett
 /// create a node from a set of lemmas
 /// WARNING, tKeyword might or might not be pointing to pNode->m_dWords[0]
 /// Called from the daemon side (searchd) in time of query
-static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tKeyword, bool bUtf8, const CSphWordforms * pWordforms, const CSphIndexSettings& tSettings )
+static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tKeyword, bool bUtf8, const CSphWordforms * pWordforms, const CSphIndexSettings & tSettings )
 {
 	assert ( pNode->m_dWords.GetLength()<=1 );
 	assert ( pNode->m_dChildren.GetLength()==0 );
@@ -21129,7 +21129,7 @@ bool CSphWordforms::ToNormalForm ( BYTE * pWord, bool bBefore ) const
 	if ( bBefore==m_dNormalForms[*pIndex].m_bAfterMorphology )
 		return false;
 
-	if ( m_dNormalForms [*pIndex].m_sWord.IsEmpty () )
+	if ( m_dNormalForms[*pIndex].m_sWord.IsEmpty () )
 		return false;
 
 	strcpy ( (char *)pWord, m_dNormalForms[*pIndex].m_sWord.cstr() ); // NOLINT

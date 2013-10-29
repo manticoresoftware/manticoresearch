@@ -2537,71 +2537,6 @@ private:
 
 //////////////////////////////////////////////////////////////////////////
 
-/// process-shared mutex that survives fork
-class CSphProcessSharedMutex
-{
-public:
-	explicit CSphProcessSharedMutex ( int iExtraSize=0 );
-	~CSphProcessSharedMutex(); // not virtual for now.
-	void	Lock () const;
-	void	Unlock () const;
-	bool	TimedLock ( int tmSpin ) const; // wait at least tmSpin microseconds the lock will available
-	const char * GetError () const;
-	BYTE *	GetSharedData() const;
-
-protected:
-#if !USE_WINDOWS
-	CSphSharedBuffer<BYTE>		m_pStorage;
-#ifdef __FreeBSD__
-	sem_t *						m_pMutex;
-#else
-	pthread_mutex_t *			m_pMutex;
-#endif
-	CSphString					m_sError;
-#endif
-};
-
-#if !USE_WINDOWS
-/// process-shared mutex variable that survives fork
-template < typename T > class CSphProcessSharedVariable : protected CSphProcessSharedMutex, public ISphNoncopyable
-{
-public:
-
-	explicit CSphProcessSharedVariable ( const T& tInitValue )
-		: CSphProcessSharedMutex ( sizeof(T) )
-		, m_pValue ( NULL )
-	{
-		if ( m_pMutex )
-		{
-			m_pValue = reinterpret_cast<T*> ( GetSharedData() );
-			*m_pValue = tInitValue;
-		}
-	}
-	T ReadValue() const
-	{
-		if ( !m_pValue )
-			return 0;
-		Lock();
-		T val = *m_pValue;
-		Unlock();
-		return val;
-	}
-	void WriteValue ( const T& tNewValue )
-	{
-		if ( !m_pValue )
-			return;
-		Lock();
-		*m_pValue = tNewValue;
-		Unlock();
-	}
-
-protected:
-	T *		m_pValue;
-};
-#endif // #if !USE_WINDOWS
-
-//////////////////////////////////////////////////////////////////////////
-
 extern int g_iThreadStackSize;
 
 /// my thread handle and thread func magic
@@ -2842,6 +2777,72 @@ private:
 	pthread_rwlock_t	m_tLock;
 #endif
 };
+
+
+/// process-shared mutex that survives fork
+class CSphProcessSharedMutex
+{
+public:
+	explicit CSphProcessSharedMutex ( int iExtraSize=0 );
+	~CSphProcessSharedMutex(); // not virtual for now.
+	void	Lock ();
+	void	Unlock ();
+	bool	TimedLock ( int tmSpin ) const; // wait at least tmSpin microseconds the lock will available
+	const char * GetError () const;
+	BYTE *	GetSharedData() const;
+
+protected:
+#if !USE_WINDOWS
+	CSphSharedBuffer<BYTE>		m_pStorage;
+#ifdef __FreeBSD__
+	sem_t *						m_pMutex;
+#else
+	pthread_mutex_t *			m_pMutex;
+#endif
+	CSphString					m_sError;
+#else
+	CSphMutex					m_tLock;
+#endif
+};
+
+#if !USE_WINDOWS
+/// process-shared mutex variable that survives fork
+template < typename T > class CSphProcessSharedVariable : protected CSphProcessSharedMutex, public ISphNoncopyable
+{
+public:
+
+	explicit CSphProcessSharedVariable ( const T& tInitValue )
+		: CSphProcessSharedMutex ( sizeof(T) )
+		, m_pValue ( NULL )
+	{
+		if ( m_pMutex )
+		{
+			m_pValue = reinterpret_cast<T*> ( GetSharedData() );
+			*m_pValue = tInitValue;
+		}
+	}
+	T ReadValue()
+	{
+		if ( !m_pValue )
+			return 0;
+		Lock();
+		T val = *m_pValue;
+		Unlock();
+		return val;
+	}
+	void WriteValue ( const T& tNewValue )
+	{
+		if ( !m_pValue )
+			return;
+		Lock();
+		*m_pValue = tNewValue;
+		Unlock();
+	}
+
+protected:
+	T *		m_pValue;
+};
+#endif // #if !USE_WINDOWS
 
 
 #if USE_WINDOWS

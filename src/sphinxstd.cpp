@@ -863,13 +863,18 @@ CSphProcessSharedMutex::~CSphProcessSharedMutex()
 }
 #else
 CSphProcessSharedMutex::CSphProcessSharedMutex ( int )
-{}
+{
+	m_tLock.Init();
+}
+
 CSphProcessSharedMutex::~CSphProcessSharedMutex()
-{}
+{
+	m_tLock.Done();
+}
 #endif
 
 
-void CSphProcessSharedMutex::Lock () const
+void CSphProcessSharedMutex::Lock ()
 {
 #if !USE_WINDOWS
 #ifdef __FreeBSD__
@@ -879,11 +884,13 @@ void CSphProcessSharedMutex::Lock () const
 	if ( m_pMutex )
 		pthread_mutex_lock ( m_pMutex );
 #endif
+#else
+	m_tLock.Lock();
 #endif
 }
 
 
-void CSphProcessSharedMutex::Unlock () const
+void CSphProcessSharedMutex::Unlock ()
 {
 #if !USE_WINDOWS
 #ifdef __FreeBSD__
@@ -893,6 +900,8 @@ void CSphProcessSharedMutex::Unlock () const
 	if ( m_pMutex )
 		pthread_mutex_unlock ( m_pMutex );
 #endif
+#else
+	m_tLock.Unlock();
 #endif
 }
 

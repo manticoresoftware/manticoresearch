@@ -13499,23 +13499,26 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 
 	if ( tMeta.m_bHasPrediction )
 	{
-		if ( dStatus.MatchAdd ( "prediction_fetched_docs" ) )
+		if ( dStatus.MatchAdd ( "local_fetched_docs" ) )
 			dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iFetchedDocs );
-		if ( dStatus.MatchAdd ( "prediction_fetched_hits" ) )
+		if ( dStatus.MatchAdd ( "local_fetched_hits" ) )
 			dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iFetchedHits );
-		if ( dStatus.MatchAdd ( "prediction_skips" ) )
+		if ( dStatus.MatchAdd ( "local_fetched_skips" ) )
 			dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iSkips );
 
 		if ( dStatus.MatchAdd ( "predicted_time" ) )
 			dStatus.Add().SetSprintf ( "%lld", INT64 ( tMeta.m_iPredictedTime ) );
 		if ( dStatus.MatchAdd ( "dist_predicted_time" ) )
 			dStatus.Add().SetSprintf ( "%lld", INT64 ( tMeta.m_iAgentPredictedTime ) );
-		if ( dStatus.MatchAdd ( "fetched_docs" ) )
-			dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iFetchedDocs + tMeta.m_iAgentFetchedDocs );
-		if ( dStatus.MatchAdd ( "fetched_hits" ) )
-			dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iFetchedHits + tMeta.m_iAgentFetchedHits );
-		if ( dStatus.MatchAdd ( "fetched_skips" ) )
-			dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iSkips + tMeta.m_iAgentFetchedSkips );
+		if ( tMeta.m_iAgentFetchedDocs || tMeta.m_iAgentFetchedHits || tMeta.m_iAgentFetchedSkips )
+		{
+			if ( dStatus.MatchAdd ( "dist_fetched_docs" ) )
+				dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iFetchedDocs + tMeta.m_iAgentFetchedDocs );
+			if ( dStatus.MatchAdd ( "dist_fetched_hits" ) )
+				dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iFetchedHits + tMeta.m_iAgentFetchedHits );
+			if ( dStatus.MatchAdd ( "dist_fetched_skips" ) )
+				dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iSkips + tMeta.m_iAgentFetchedSkips );
+		}
 	}
 
 

@@ -100,23 +100,29 @@ index d3
 
 <!-- regression fetched_docs, fetched_hits from (pure) distributed indexes -->
 <sphinxql>SELECT * FROM loc1 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
+<sphinxql>SHOW META LIKE 'local%'</sphinxql>
+<sphinxql>SHOW META LIKE 'dist%'</sphinxql>
 <sphinxql>SHOW META LIKE '%predict%'</sphinxql>
-<sphinxql>SHOW META LIKE '%fetched%'</sphinxql>
 <sphinxql>SELECT * FROM loc2 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
+<sphinxql>SHOW META LIKE 'local%'</sphinxql>
+<sphinxql>SHOW META LIKE 'dist%'</sphinxql>
 <sphinxql>SHOW META LIKE '%predict%'</sphinxql>
-<sphinxql>SHOW META LIKE '%fetched%'</sphinxql>
 <sphinxql>SELECT * FROM loc1, loc2 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
+<sphinxql>SHOW META LIKE 'local%'</sphinxql>
+<sphinxql>SHOW META LIKE 'dist%'</sphinxql>
 <sphinxql>SHOW META LIKE '%predict%'</sphinxql>
-<sphinxql>SHOW META LIKE '%fetched%'</sphinxql>
 <sphinxql>SELECT * FROM d1 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
+<sphinxql>SHOW META LIKE 'local%'</sphinxql>
+<sphinxql>SHOW META LIKE 'dist%'</sphinxql>
 <sphinxql>SHOW META LIKE '%predict%'</sphinxql>
-<sphinxql>SHOW META LIKE '%fetched%'</sphinxql>
 <sphinxql>SELECT * FROM d2 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
+<sphinxql>SHOW META LIKE 'local%'</sphinxql>
+<sphinxql>SHOW META LIKE 'dist%'</sphinxql>
 <sphinxql>SHOW META LIKE '%predict%'</sphinxql>
-<sphinxql>SHOW META LIKE '%fetched%'</sphinxql>
 <sphinxql>SELECT * FROM d3 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
+<sphinxql>SHOW META LIKE 'local%'</sphinxql>
+<sphinxql>SHOW META LIKE 'dist%'</sphinxql>
 <sphinxql>SHOW META LIKE '%predict%'</sphinxql>
-<sphinxql>SHOW META LIKE '%fetched%'</sphinxql>
 <sphinxql>SELECT COUNT(*) FROM test</sphinxql>
 <sphinxql>SELECT id id1, COUNT(DISTINCT id1) FROM test</sphinxql>
 </sphqueries>

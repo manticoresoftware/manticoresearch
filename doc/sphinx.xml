@@ -4979,7 +4979,7 @@ to a complete <code>OPTION idf='plain,tfidf_normalized'</code> specification.
 <listitem><para>'index_weights' - a named integer list (per-index user weights for ranking)</para></listitem>
 <listitem><para>'max_matches' - integer (per-query max matches value)</para></listitem>
 <listitem><para>'max_query_time' - integer (max search time threshold, msec)</para></listitem>
-<listitem><para>'max_predicted_time' - integer (max predicted search time, see <link linkend="conf-predicted-time-costs"></link>)</para></listitem>
+<listitem><para>'max_predicted_time' - integer (max predicted search time, see <xref linkend="conf-predicted-time-costs"/>)</para></listitem>
 <listitem><para>'ranker' - any of 'proximity_bm25', 'bm25', 'none', 'wordcount', 'proximity',
 	'matchany', 'fieldmask', 'sph04', 'expr', or 'export' (refer to <xref linkend="weighting"/>
 	for more details on each ranker)</para></listitem>

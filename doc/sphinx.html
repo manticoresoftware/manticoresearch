@@ -4212,6 +4212,7 @@ SELECT
     [WHERE where_condition]
     [GROUP BY {col_name | expr_alias} [, {sol_name | expr_alias}]]
     [WITHIN GROUP ORDER BY {col_name | expr_alias} {ASC | DESC}]
+	[HAVING having_condition]
     [ORDER [N] BY {col_name | expr_alias} {ASC | DESC} [, ...]]
     [LIMIT [offset,] row_count]
     [OPTION opt_name = opt_value [, ...]]
@@ -4222,12 +4223,10 @@ extensions and has a few omissions (such as (currently) missing support for JOIN
 Specifically,
 </p><div class="itemizedlist"><ul type="disc"><li>Column list clause. Column names, arbitrary expressions,
 and star ('*') are all allowed (ie.
-<code class="code">SELECT @id, group_id*123+456 AS expr1 FROM test1</code>
+<code class="code">SELECT id, group_id*123+456 AS expr1 FROM test1</code>
 will work). Unlike in regular SQL, all computed expressions must be aliased
 with a valid identifier. Starting with version 2.0.1-beta, <code class="code">AS</code>
-is optional. Special names such as @id and @weight should currently
-be used with leading at-sign. This at-sign requirement will be lifted in
-the future.
+is optional.
 </li>
 <li><p>EXIST() function (added in version 2.1.1-beta) is supported.
 EXIST ( "attr-name", default-value )
@@ -4336,9 +4335,6 @@ SELECT group_id, MAX(id) AS max_id
 FROM my_index WHERE MATCH('the')
 GROUP BY group_id ORDER BY max_id DESC
 </pre><p>
-However you can not use aggregate values in the WHERE clause.
-(HAVING clause would be required for that, just as in standard SQL,
-and that is not yet supported.)
 </p></li>
 <li><p>GROUP_CONCAT() function is supported, starting with version 2.1.1-beta.
 When you group by an attribute, the result set only shows attributes from a single document representing the whole group.
@@ -4361,20 +4357,28 @@ extension that lets you control how the best row within a group
 will to be selected. The syntax matches that of regular ORDER BY
 clause:
 </p><pre class="programlisting">
-SELECT *, INTERVAL(posted,NOW()-7*86400,NOW()-86400) AS timeseg
+SELECT *, INTERVAL(posted,NOW()-7*86400,NOW()-86400) AS timeseg, WEIGHT() AS w
 FROM example WHERE MATCH('my search query')
 GROUP BY siteid
-WITHIN GROUP ORDER BY @weight DESC
-ORDER BY timeseg DESC, @weight DESC
+WITHIN GROUP ORDER BY w DESC
+ORDER BY timeseg DESC, w DESC
 </pre><p>
 Starting with 2.0.1-beta, WITHIN GROUP ORDER BY on a string attribute is supported,
 with respect for current collation (see <a href="#collations" title="5.12.&nbsp;Collations">Section&nbsp;5.12, &#8220;Collations&#8221;</a>).
+</p></li>
+<li><p>
+HAVING clause. This is used to filter on GROUP BY values. It was added in
+2.2.1-beta. Currently supports only one filtering condition.
+</p><pre class="programlisting">
+SELECT id FROM plain GROUP BY title HAVING group_id=16;
+SELECT id FROM plain GROUP BY attribute HAVING COUNT(*)&gt;1;
+</pre><p>
 </p></li>
 <li><p>ORDER BY clause. Unlike in regular SQL, only column names
 (not expressions) are allowed and explicit ASC and DESC are required.
 The columns however can be computed expressions:
 </p><pre class="programlisting">
-SELECT *, @weight*10+docboost AS skey FROM example ORDER BY skey
+SELECT *, WEIGHT()*10+docboost AS skey FROM example ORDER BY skey
 </pre><p>
 Starting with 2.1.1-beta, you can use subqueries to speed up specific searches, which involve reranking, by postponing hard (slow) calculations as
 late as possible. For example, SELECT id,a_slow_expression() AS cond FROM an_index ORDER BY id ASC, cond DESC LIMIT 100; could be
@@ -4458,7 +4462,7 @@ to a complete <code class="code">OPTION idf='plain,tfidf_normalized'</code> spec
 <li>'index_weights' - a named integer list (per-index user weights for ranking)</li>
 <li>'max_matches' - integer (per-query max matches value)</li>
 <li>'max_query_time' - integer (max search time threshold, msec)</li>
-<li>'max_predicted_time' - integer (max predicted search time, see <a href="#conf-predicted-time-costs" title="11.4.49.&nbsp;predicted_time_costs">???</a>)</li>
+<li>'max_predicted_time' - integer (max predicted search time, see <a href="#conf-predicted-time-costs" title="11.4.49.&nbsp;predicted_time_costs">Section&nbsp;11.4.49, &#8220;predicted_time_costs&#8221;</a>)</li>
 <li>'ranker' - any of 'proximity_bm25', 'bm25', 'none', 'wordcount', 'proximity',
 	'matchany', 'fieldmask', 'sph04', 'expr', or 'export' (refer to <a href="#weighting" title="5.4.&nbsp;Search results ranking">Section&nbsp;5.4, &#8220;Search results ranking&#8221;</a>
 	for more details on each ranker)</li>
@@ -6396,8 +6400,9 @@ Currently, the comment is limited to 128 characters.
 </p><p>
 Default value for <code class="code">$index</code> is <code class="code">"*"</code> that means
 to query all local indexes. Characters allowed in index names include
-Latin letters (a-z), numbers (0-9), minus sign (-), and underscore (_);
-everything else is considered a separator. Therefore, all of the
+Latin letters (a-z), numbers (0-9) and underscore (_);
+everything else is considered a separator. Note that index name should
+not start with underscore character. Therefore, all of the
 following samples calls are valid and will search the same
 two indexes:
 </p><pre class="programlisting">
@@ -10468,7 +10473,7 @@ average per-index values) into the index.
 Optional, default is 0 (do not compute and store).
 Added in 2.1.1-beta.
 </p><p>
-When <code class="code">index_fields_lengths</code> is set to 1, <code class="filename">indexer</code>
+When <code class="code">index_field_lengths</code> is set to 1, <code class="filename">indexer</code>
 will 1) create a respective length attribute for every full-text field,
 sharing the same name; 2) compute a field length (counted in keywords) for
 every document and store in to a respective attribute; 3) compute the per-index
@@ -10477,7 +10482,7 @@ values are in fact regular 32-bit integeres, and their values are generally
 accessible.
 </p><p>
 BM25A() and BM25F() functions in the expression ranker are based
-on these lengths and require <code class="code">index_fields_lengths</code> to be enabled.
+on these lengths and require <code class="code">index_field_lengths</code> to be enabled.
 Historically, Sphinx used a simplified, stripped-down variant of BM25 that,
 unlike the complete function, did <span class="bold"><strong>not</strong></span> account for document length.
 (We later realized that it should have been called BM15 from the start.)

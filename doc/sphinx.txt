@@ -4473,6 +4473,7 @@ statements syntax.
    |     [WHERE where_condition]
    |     [GROUP BY {col_name | expr_alias} [, {sol_name | expr_alias}]]
    |     [WITHIN GROUP ORDER BY {col_name | expr_alias} {ASC | DESC}]
+   | 	[HAVING having_condition]
    |     [ORDER [N] BY {col_name | expr_alias} {ASC | DESC} [, ...]]
    |     [LIMIT [offset,] row_count]
    |     [OPTION opt_name = opt_value [, ...]]
@@ -4482,12 +4483,10 @@ upon regular SQL but adds several Sphinx-specific extensions and has a few
 omissions (such as (currently) missing support for JOINs). Specifically,
 
    * Column list clause. Column names, arbitrary expressions, and star
-     ('*') are all allowed (ie. SELECT @id, group_id*123+456 AS expr1 FROM
+     ('*') are all allowed (ie. SELECT id, group_id*123+456 AS expr1 FROM
      test1 will work). Unlike in regular SQL, all computed expressions must
      be aliased with a valid identifier. Starting with version 2.0.1-beta,
-     AS is optional. Special names such as @id and @weight should currently
-     be used with leading at-sign. This at-sign requirement will be lifted
-     in the future.
+     AS is optional.
    * EXIST() function (added in version 2.1.1-beta) is supported. EXIST (
      "attr-name", default-value ) replaces non-existent columns with
      default values. It returns either a value of an attribute specified by
@@ -4591,10 +4590,6 @@ omissions (such as (currently) missing support for JOINs). Specifically,
       | FROM my_index WHERE MATCH('the')
       | GROUP BY group_id ORDER BY max_id DESC
 
-     However you can not use aggregate values in the WHERE clause. (HAVING
-     clause would be required for that, just as in standard SQL, and that
-     is not yet supported.)
-
    * GROUP_CONCAT() function is supported, starting with version
      2.1.1-beta. When you group by an attribute, the result set only shows
      attributes from a single document representing the whole group.
@@ -4615,21 +4610,27 @@ omissions (such as (currently) missing support for JOINs). Specifically,
      lets you control how the best row within a group will to be selected.
      The syntax matches that of regular ORDER BY clause:
 
-      | SELECT *, INTERVAL(posted,NOW()-7*86400,NOW()-86400) AS timeseg
+      | SELECT *, INTERVAL(posted,NOW()-7*86400,NOW()-86400) AS timeseg, WEIGHT() AS w
       | FROM example WHERE MATCH('my search query')
       | GROUP BY siteid
-      | WITHIN GROUP ORDER BY @weight DESC
-      | ORDER BY timeseg DESC, @weight DESC
+      | WITHIN GROUP ORDER BY w DESC
+      | ORDER BY timeseg DESC, w DESC
 
      Starting with 2.0.1-beta, WITHIN GROUP ORDER BY on a string attribute
      is supported, with respect for current collation (see Section 5.12,
      <<Collations>>).
 
+   * HAVING clause. This is used to filter on GROUP BY values. It was added
+     in 2.2.1-beta. Currently supports only one filtering condition.
+
+      | SELECT id FROM plain GROUP BY title HAVING group_id=16;
+      | SELECT id FROM plain GROUP BY attribute HAVING COUNT(*)>1;
+
    * ORDER BY clause. Unlike in regular SQL, only column names (not
      expressions) are allowed and explicit ASC and DESC are required. The
      columns however can be computed expressions:
 
-      | SELECT *, @weight*10+docboost AS skey FROM example ORDER BY skey
+      | SELECT *, WEIGHT()*10+docboost AS skey FROM example ORDER BY skey
 
      Starting with 2.1.1-beta, you can use subqueries to speed up specific
      searches, which involve reranking, by postponing hard (slow)
@@ -4721,7 +4722,8 @@ omissions (such as (currently) missing support for JOINs). Specifically,
         ranking)
       * 'max_matches' - integer (per-query max matches value)
       * 'max_query_time' - integer (max search time threshold, msec)
-      * 'max_predicted_time' - integer (max predicted search time, see ???)
+      * 'max_predicted_time' - integer (max predicted search time, see
+        Section 11.4.49, <<predicted_time_costs>>)
       * 'ranker' - any of 'proximity_bm25', 'bm25', 'none', 'wordcount',
         'proximity', 'matchany', 'fieldmask', 'sph04', 'expr', or 'export'
         (refer to Section 5.4, <<Search results ranking>> for more details
@@ -6729,9 +6731,10 @@ limited to 128 characters.
 
 Default value for $index is "*" that means to query all local indexes.
 Characters allowed in index names include Latin letters (a-z), numbers
-(0-9), minus sign (-), and underscore (_); everything else is considered
-a separator. Therefore, all of the following samples calls are valid and
-will search the same two indexes:
+(0-9) and underscore (_); everything else is considered a separator. Note
+that index name should not start with underscore character. Therefore, all
+of the following samples calls are valid and will search the same two
+indexes:
 
    | $cl->Query ( "test query", "main delta" );
    | $cl->Query ( "test query", "main;delta" );
@@ -11053,7 +11056,7 @@ Enables computing and storing of field lengths (both per-document and
 average per-index values) into the index. Optional, default is 0 (do not
 compute and store). Added in 2.1.1-beta.
 
-When index_fields_lengths is set to 1, indexer will 1) create a respective
+When index_field_lengths is set to 1, indexer will 1) create a respective
 length attribute for every full-text field, sharing the same name; 2)
 compute a field length (counted in keywords) for every document and store
 in to a respective attribute; 3) compute the per-index averages. The
@@ -11062,13 +11065,13 @@ are in fact regular 32-bit integeres, and their values are generally
 accessible.
 
 BM25A() and BM25F() functions in the expression ranker are based on these
-lengths and require index_fields_lengths to be enabled. Historically,
-Sphinx used a simplified, stripped-down variant of BM25 that, unlike the
-complete function, did not account for document length. (We later realized
-that it should have been called BM15 from the start.) Starting with
-2.1.1-beta, we added support for both a complete variant of BM25, and its
-extension towards multiple fields, called BM25F. They require per-document
-length and per-field lengths, respectively. Hence the additional directive.
+lengths and require index_field_lengths to be enabled. Historically, Sphinx
+used a simplified, stripped-down variant of BM25 that, unlike the complete
+function, did not account for document length. (We later realized that it
+should have been called BM15 from the start.) Starting with 2.1.1-beta, we
+added support for both a complete variant of BM25, and its extension
+towards multiple fields, called BM25F. They require per-document length and
+per-field lengths, respectively. Hence the additional directive.
 
 Example:
 

@@ -45,7 +45,7 @@
 <dt><span class="sect1"><a href="#extended-syntax">5.3. Extended query syntax</a></span></dt>
 <dt><span class="sect1"><a href="#weighting">5.4. Search results ranking</a></span></dt>
 <dd><dl><dt><span class="sect2"><a href="#ranking-overview">5.4.1. Ranking overview</a></span></dt>
-<dt><span class="sect2"><a href="#builtin-rankers">5.4.2. Available builtin rankers</a></span></dt>
+<dt><span class="sect2"><a href="#builtin-rankers">5.4.2. Available built-in rankers</a></span></dt>
 <dt><span class="sect2"><a href="#expression-ranker">5.4.3. Expression based ranker (SPH_RANK_EXPR)</a></span></dt>
 <dt><span class="sect2"><a href="#ranking-factors">5.4.4. Quick summary of the ranking factors</a></span></dt>
 <dt><span class="sect2"><a href="#document-factors">5.4.5. Document-level ranking factors</a></span></dt>
@@ -560,7 +560,7 @@ which would meet my requirements. Actually, each and every important aspect was 
 <p>
 </p></li>
 <li><p>moderate disk and CPU requirements when indexing
-</p><div class="itemizedlist"><ul type="circle"><li>important in shared hosting enivronment, not to mention the indexing speed.</li>
+</p><div class="itemizedlist"><ul type="circle"><li>important in shared hosting environment, not to mention the indexing speed.</li>
 </ul></div>
 <p>
 </p></li>
@@ -740,7 +740,7 @@ $&nbsp;/usr/local/sphinx/bin/searchd</code></strong></p></div>
     </p></li>
 <li><p>
         Run the attached PHP API test script (to ensure that the daemon
-        was succesfully started and is ready to serve the queries):
+        was successfully started and is ready to serve the queries):
         </p><div class="literallayout"><p><strong class="userinput"><code>$&nbsp;cd&nbsp;sphinx/api<br>
 $&nbsp;php&nbsp;test.php&nbsp;test</code></strong></p></div>
 <p>
@@ -792,7 +792,7 @@ In 2.2.1-beta was added a tsvpipe (Tab Separated Values) data source.
 You can get more info here <a href="#tsvpipe" title="3.10.&nbsp;tsvpipe (Tab Separated Values) data source">Section&nbsp;3.10, &#8220;tsvpipe (Tab Separated Values) data source&#8221;</a>.
 </p><p>
 There can be as many sources per index as necessary. They will be
-sequentially processed in the very same order which was specifed in
+sequentially processed in the very same order which was specified in
 index definition. All the documents coming from those sources
 will be merged as if they were coming from a single source.
 </p></div>
@@ -897,7 +897,7 @@ Currently supported attribute types are:
 The complete set of per-document attribute values is sometimes
 referred to as <em class="glossterm">docinfo</em>. Docinfos can either be
 </p><div class="itemizedlist"><ul type="disc"><li>stored separately from the main full-text index data ("extern" storage, in <code class="filename">.spa</code> file), or</li>
-<li>attached to each occurence of document ID in full-text index data ("inline" storage, in <code class="filename">.spd</code> file).</li>
+<li>attached to each occurrence of document ID in full-text index data ("inline" storage, in <code class="filename">.spd</code> file).</li>
 </ul></div>
 <p>
 </p><p>
@@ -987,7 +987,7 @@ indexes.)
 </p><p>
 This "rebuild only" limitation might look as a big constraint
 at a first glance. But in reality, it can very frequently be worked
-around rather easily by setting up muiltiple disk indexes, searching
+around rather easily by setting up multiple disk indexes, searching
 through them all, and only rebuilding the one with a fraction
 of the most recently changed data.
 See <a href="#live-updates" title="3.11.&nbsp;Live index updates">Section&nbsp;3.11, &#8220;Live index updates&#8221;</a> for details.
@@ -1116,7 +1116,7 @@ The difference between post-query and post-index query is in that post-query
 is run immediately when Sphinx received all the documents, but further indexing
 <span class="bold"><strong>may</strong></span> still fail for some other reason. On the contrary,
 by the time the post-index query gets executed, it is <span class="bold"><strong>guaranteed</strong></span>
-that the indexing was succesful. Database connection is dropped and re-established
+that the indexing was successful. Database connection is dropped and re-established
 because sorting phase can be very lengthy and would just timeout otherwise.
 </p></div>
 <div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="xmlpipe2"></a>3.9.&nbsp;xmlpipe2 data source</h2></div></div></div>
@@ -1384,7 +1384,7 @@ indexer --merge main delta --merge-dst-range deleted 0 0
 </pre><p>
 This switch lets you apply filters to the destination index along with merging.
 There can be several filters; all of their conditions must be met in order
-to include the document in the resulting mergid index. In the example above,
+to include the document in the resulting merged index. In the example above,
 the filter passes only those records where 'deleted' is 0, eliminating all
 records that were flagged as deleted (for instance, using
 <a href="#api-func-updateatttributes" title="8.7.2.&nbsp;UpdateAttributes">UpdateAttributes()</a> call).
@@ -1649,7 +1649,7 @@ frequency at which the <span class="emphasis"><em>checks</em></span> happen.
 There are no <span class="emphasis"><em>guarantees</em></span> that the
 particular RAM chunk will get saved. For instance, it does
 not make sense to regularly re-save a huge RAM chunk that
-only gets a few rows worh of updates. The search daemon
+only gets a few rows worth of updates. The search daemon
 determine whether to actually perform the flush with a few
 heuristics.
 </p></div></div>
@@ -1659,7 +1659,7 @@ heuristics.
 <dt><span class="sect1"><a href="#extended-syntax">5.3. Extended query syntax</a></span></dt>
 <dt><span class="sect1"><a href="#weighting">5.4. Search results ranking</a></span></dt>
 <dd><dl><dt><span class="sect2"><a href="#ranking-overview">5.4.1. Ranking overview</a></span></dt>
-<dt><span class="sect2"><a href="#builtin-rankers">5.4.2. Available builtin rankers</a></span></dt>
+<dt><span class="sect2"><a href="#builtin-rankers">5.4.2. Available built-in rankers</a></span></dt>
 <dt><span class="sect2"><a href="#expression-ranker">5.4.3. Expression based ranker (SPH_RANK_EXPR)</a></span></dt>
 <dt><span class="sect2"><a href="#ranking-factors">5.4.4. Quick summary of the ranking factors</a></span></dt>
 <dt><span class="sect2"><a href="#document-factors">5.4.5. Document-level ranking factors</a></span></dt>
@@ -1845,7 +1845,7 @@ option at the very beginning of the query:
 This can be helpful when searching through heterogeneous indexes with
 different schemas.
 </p><p>
-Field position limit, introduced in version 0.9.9-rc1, additionaly restricts the searching
+Field position limit, introduced in version 0.9.9-rc1, additionally restricts the searching
 to first N position within given field (or fields). For example, "@body[50] hello" will
 <span class="bold"><strong>not</strong></span> match the documents where the keyword 'hello' occurs at position 51 and below
 in the body.
@@ -1878,7 +1878,7 @@ ie. this is a valid query:
 </pre><p>
 </p><p>
 Exact form keyword modifier, introduced in version 0.9.9-rc1, will match the document only if the keyword occurred
-in exactly the specified form. The default behaviour is to match the document
+in exactly the specified form. The default behavior is to match the document
 if the stemmed keyword matches. For instance, "runs" query will match both
 the document that contains "runs" <span class="emphasis"><em>and</em></span> the document that
 contains "running", because both forms stem to just "run" - while "=runs"
@@ -1908,7 +1908,7 @@ aaa | -bbb
 </p><p>
 <span class="bold"><strong>NEAR operator</strong></span>, added in 2.0.1-beta, is a generalized version
 of a proximity operator. The syntax is <code class="code">NEAR/N</code>, it is
-case-sensitive, and no spaces are allowed beetwen the NEAR keyword,
+case-sensitive, and no spaces are allowed between the NEAR keyword,
 the slash sign, and the distance value.
 </p><p>
 The original proximity operator only worked on sets of keywords.
@@ -2009,7 +2009,7 @@ the unified syntax anyway. When you use one of those modes, Sphinx just
 internally adjusts the query and sets the associated ranker, then
 executes the query using the very same unified code path.
 </p></div>
-<div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="builtin-rankers"></a>5.4.2.&nbsp;Available builtin rankers</h3></div></div></div>
+<div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="builtin-rankers"></a>5.4.2.&nbsp;Available built-in rankers</h3></div></div></div>
 <p>
 Sphinx ships with a number of built-in rankers suited for different
 purposes. A number of them uses two factors, phrase proximity (aka LCS)
@@ -2046,12 +2046,12 @@ value as a result. This mode is internally used to emulate SPH_MATCH_ALL queries
 </li>
 <li>
 SPH_RANK_MATCHANY, added in version 0.9.9-rc1, returns rank as it was computed
-in SPH_MATCH_ANY mode ealier, and is internally used to emulate SPH_MATCH_ANY queries.
+in SPH_MATCH_ANY mode earlier, and is internally used to emulate SPH_MATCH_ANY queries.
 </li>
 <li>
 SPH_RANK_FIELDMASK, added in version 0.9.9-rc2, returns a 32-bit mask with
 N-th bit corresponding to N-th fulltext field, numbering from 0. The bit will
-only be set when the respective field has any keyword occurences satisfiying
+only be set when the respective field has any keyword occurrences satisfying
 the query.
 </li>
 <li>
@@ -2136,7 +2136,7 @@ keyword occurrence filtering).
 the sum(lcs*user_weight) expression can ever take. This can be
 useful for weight boost scaling. For instance, MATCHANY ranker
 formula uses this to guarantee that a full phrase match in any
-field rankes higher than any combination of partial matches
+field ranks higher than any combination of partial matches
 in all fields.
 </li>
 <li>
@@ -2218,7 +2218,7 @@ between 0 and 1 that describes how frequent is the keywords (basically,
 keyword that occurs in just a single document). TF is the Term Frequency,
 the number of matched keyword occurrences in the field. As a side note,
 <code class="code">tf_idf</code> is actually computed by summing IDF over all matched
-occurences. That's by construction equivalent to summing TF*IDF over
+occurrences. That's by construction equivalent to summing TF*IDF over
 all matched keywords.
 </li>
 <li>
@@ -2316,10 +2316,10 @@ get unexpected results.
 ATC basically works as follows. For every keyword <span class="emphasis"><em>occurrence</em></span>
 in the document, we compute the so called <span class="emphasis"><em>term closeness</em></span>. For that,
 we examine all the other closest occurrences of all the query keywords (keyword itself
-included too) to the left and to the right of the subject occurence, compute a distance
+included too) to the left and to the right of the subject occurrence, compute a distance
 dampening coefficient as k = pow(distance, -1.75) for those occurrences, and sum the
 dampened IDFs. Thus for every occurrence of every keyword, we get a "closeness" value
-that describes the "neighbours" of that occurrence. We then multiply those per-occurrence
+that describes the "neighbors" of that occurrence. We then multiply those per-occurrence
 closenesses by their respective subject keyword IDF, sum them all, and finally,
 compute a logarithm of that sum.
 </p><p>
@@ -2329,7 +2329,7 @@ coefficient:
 </p><pre class="programlisting">
 pair_tc = idf(pair_word1) * idf(pair_word2) * pow(pair_distance, -1.75)
 </pre><p>
-We then sum such closenesess, and compute the final, log-dampened ATC value:
+We then sum such closenesses, and compute the final, log-dampened ATC value:
 </p><pre class="programlisting">
 atc = log(1+sum(pair_tc))
 </pre><p>
@@ -2502,7 +2502,7 @@ must be of an integer types. Introduced in version 1.10-beta.
 and returns 1 if true, or 0 if false. The polygon has to be specified using either the <a href="#expr-func-poly2d">POLY2D()</a> function
 or the <a href="#expr-func-poly2d">GEOPOLY2D()</a> function. The former function is intended for "small" polygons, meaning less than
 500 km (300 miles) a side, and it doesn't take into account the Earth's curvature for speed. For larger
-distances, you should use GEOPOLY2D, which tesselates the given polygon in smaller parts, accounting
+distances, you should use GEOPOLY2D, which tessellates the given polygon in smaller parts, accounting
 for the Earth's curvature.
 These functions were added in version 2.1.1-beta.
 </p></dd><dt><span class="term"><a name="expr-func-cos"></a>COS()</span></dt>
@@ -2515,7 +2515,7 @@ integer math and thus numbers 48th and up will be returned modulo 2^32.
 </p></dd><dt><span class="term"><a name="expr-func-floor"></a>FLOOR()</span></dt>
 <dd><p>Returns the largest integer value lesser or equal to the argument.</p></dd><dt><span class="term"><a name="expr-func-geopoly2d"></a>GEOPOLY2D()</span></dt>
 <dd><p>GEOPOLY2D(x1,y1,x2,y2,x3,y3...) produces a polygon to be used with the <a href="#expr-func-contains">CONTAINS()</a> function.
-This function takes into account the Earth's curvature by tesellating the polygon into smaller ones,
+This function takes into account the Earth's curvature by tessellating the polygon into smaller ones,
 and should be used for larger areas; see the <a href="#expr-func-poly2d">POLY2D()</a> function.
 </p></dd><dt><span class="term"><a name="expr-func-idiv"></a>IDIV()</span></dt>
 <dd><p>
@@ -2817,7 +2817,7 @@ in a separate section, <a href="#expressions" title="5.5.&nbsp;Expressions, func
 <p>
 Sometimes it could be useful to group (or in other terms, cluster)
 search results and/or count per-group match counts - for instance,
-to draw a nice graph of how much maching blog posts were there per
+to draw a nice graph of how much matching blog posts were there per
 each month; or to group Web search results by site; or to group
 matching forum posts by author; etc.
 </p><p>
@@ -2889,7 +2889,7 @@ need to search through huge amounts data (ie. billions of records
 and terabytes of text).
 </p><p>
 The key idea is to horizontally partition (HP) searched data
-accross search nodes and then process it in parallel.
+across search nodes and then process it in parallel.
 </p><p>
 Partitioning is done manually. You should
 </p><div class="itemizedlist"><ul type="disc"><li>setup several instances
@@ -2912,7 +2912,7 @@ it does the following:
 <li>sequentially searches configured local indexes (while the remote agents are searching);</li>
 <li>retrieves remote agents' search results;</li>
 <li>merges all the results together, removing the duplicates;</li>
-<li>sends the merged resuls to client.</li>
+<li>sends the merged results to client.</li>
 </ol></div>
 <p>
 </p><p>
@@ -2933,7 +2933,7 @@ masters to achieve a kind of HA (high availability) in case any of the nodes fai
 </li>
 <li>
 if running within a single multi-CPU or multi-core machine, there
-would be only 1 searchd instance quering itself as an agent and thus
+would be only 1 searchd instance querying itself as an agent and thus
 utilizing all CPUs/core.
 </li>
 </ol></div>
@@ -2957,7 +2957,7 @@ format alleviates that. It aims to be complete and automatable,
 even though at the cost of brevity and readability.
 </p><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="plain-log-format"></a>5.9.1.&nbsp;Plain log format</h3></div></div></div>
 <p>
-By default, <code class="filename">searchd</code> logs all succesfully executed search queries
+By default, <code class="filename">searchd</code> logs all successfully executed search queries
 into a query log file. Here's an example:
 </p><pre class="programlisting">
 [Fri Jun 29 21:17:58 2007] 0.004 sec [all/0/rel 35254 (0,20)] [lj] test
@@ -2999,7 +2999,7 @@ component, the bulk of this time is the I/O operation time).
 <p>
 This is a new log format introduced in 2.0.1-beta, with the goals
 begin logging everything and then some, and in a format easy to automate
-(for insance, automatically replay). New format can either be enabled
+(for instance, automatically replay). New format can either be enabled
 via the <a href="#conf-query-log-format" title="11.4.6.&nbsp;query_log_format">query_log_format</a>
 directive in the configuration file, or switched back and forth
 on the fly with the
@@ -3155,7 +3155,7 @@ query optimization will trigger, and greatly improve performance.
 <span class="bold"><strong>Common subtree optimization</strong></span> is even more interesting.
 It lets <code class="filename">searchd</code> exploit similarities between
 batched full-text queries. It identifies common full-text query parts
-(subtress) in all queries, and caches them between queries. For instance,
+(subtrees) in all queries, and caches them between queries. For instance,
 look at the following query batch:
 </p><pre class="programlisting">
 barack obama president
@@ -3167,7 +3167,7 @@ only once, then cached and shared across the queries. And common subtree
 optimization does just that. Per-query cache size is strictly controlled
 by <a href="#conf-subtree-docs-cache" title="11.4.26.&nbsp;subtree_docs_cache">subtree_docs_cache</a>
 and <a href="#conf-subtree-hits-cache" title="11.4.27.&nbsp;subtree_hits_cache">subtree_hits_cache</a>
-directives (so that caching <span class="emphasis"><em>all</em></span> sxiteen gazillions
+directives (so that caching <span class="emphasis"><em>all</em></span> sixteen gazillions
 of documents that match "i am" does not exhaust the RAM and instantly
 kill your server).
 </p><p>
@@ -3225,7 +3225,7 @@ becomes quite ambiguous.
 First, single-byte (ASCII, or ISO-8859-1, or Windows-1251) strings
 need to be processed differently that the UTF-8 ones that may encode
 every character with a variable number of bytes. So we need to know
-what is the character set type to interepret the raw bytes as meaningful
+what is the character set type to interpret the raw bytes as meaningful
 characters properly.
 </p><p>
 Second, we additionally need to know the language-specific
@@ -3239,7 +3239,7 @@ and 'i' to be mixed arbitrarily.
 Third, but not least, we might need case-sensitive sorting in some
 scenarios and case-insensitive sorting in some others.
 </p><p>
-Collations combine all of the above: the character set, the lanugage rules,
+Collations combine all of the above: the character set, the language rules,
 and the case sensitivity. Sphinx currently provides the following four
 collations.
 </p><div class="orderedlist"><ol type="1"><li><code class="option">libc_ci</code></li>
@@ -3292,7 +3292,7 @@ built-in into Sphinx. The first one is a generic collation for UTF-8 data
 <code class="option">utf8_general_ci</code> collation in MySQL. The second one
 is a simple bytewise comparison.
 </p><p>
-Collation can be overriden via SphinxQL on a per-session basis using
+Collation can be overridden via SphinxQL on a per-session basis using
 <code class="code">SET collation_connection</code> statement. All subsequent SphinxQL
 queries will use this collation. SphinxAPI and SphinxSE queries will use
 the server default collation, as specified in
@@ -3325,7 +3325,7 @@ reside in a directory specified by
 <a href="#conf-plugin-dir" title="11.4.36.&nbsp;plugin_dir">plugin_dir</a> directive, and the
 server must be configured to use <code class="option">workers = threads</code> mode.
 Relative paths to the library files are not allowed. Once the library
-is succesfully built and copied to the trusted location, you can then
+is successfully built and copied to the trusted location, you can then
 dynamically install and deinstall the functions using
 <a href="#sphinxql-create-function" title="7.18.&nbsp;CREATE FUNCTION syntax">CREATE FUNCTION</a> and
 <a href="#sphinxql-drop-function" title="7.19.&nbsp;DROP FUNCTION syntax">DROP FUNCTION</a> statements
@@ -3589,7 +3589,7 @@ is off, and problem summaries may be reported instead.
 rebuilding many big indexes, and want each one rotated into
 <code class="filename">searchd</code> as soon as possible. With
 <code class="option">--sighup-each</code>, <code class="filename">indexer</code>
-will send a SIGHUP signal to searchd after succesfully
+will send a SIGHUP signal to searchd after successfully
 completing the work on each index. (The default behavior
 is to send a single SIGHUP after all the indexes were built.)
 </li>
@@ -3693,7 +3693,7 @@ debugging options, they pollute the log a lot, and thus they should
 these is to enable them temporarily on request, to assist with some
 particularly complicated debugging session.)
 </p></li>
-<li><p><code class="option">--iostats</code> is used in conjuction with the
+<li><p><code class="option">--iostats</code> is used in conjunction with the
 logging options (the <code class="option">query_log</code> will need to have been
 activated in <code class="filename">sphinx.conf</code>) to provide more detailed
 information on a per-query basis as to the input/output operations
@@ -3868,7 +3868,7 @@ search [OPTIONS] word1 [word2 [word3 [...]]]
 </pre><p>When calling <code class="filename">search</code>, it is not necessary
 to have <code class="filename">searchd</code> running; simply make sure that
 the account running the <code class="filename">search</code> program has read
-access to the configuration file and the index files.</p><p>The default behaviour is to apply a search for word1 (AND word2 AND
+access to the configuration file and the index files.</p><p>The default behavior is to apply a search for word1 (AND word2 AND
 word3... as specified) to all fields in all indexes as given in the
 configuration file. If constructing the equivalent in the API, this would
 be the equivalent to passing <code class="option">SPH_MATCH_ALL</code> to
@@ -4017,7 +4017,7 @@ spelldump ru.dict ru.aff ru.txt ru_RU.CP1251
 spelldump ru.dict ru.aff ru.txt .1251
 </pre><p>The results file will contain a list of all the words in the
 dictionary in alphabetical order, output in the format of a wordforms file,
-which you can use to customise for your specific circumstances. An example
+which you can use to customize for your specific circumstances. An example
 of the result file:</p><pre class="programlisting">
 zone &gt; zone
 zoned &gt; zoned
@@ -4079,11 +4079,11 @@ by index name. It takes the data from attribute (.spa) file and therefore
 requires docinfo=extern to work.
 </li>
 <li><code class="option">--dumphitlist INDEXNAME KEYWORD</code> dumps all
-the hits (occurences) of a given keyword in a given index, with keyword
+the hits (occurrences) of a given keyword in a given index, with keyword
 specified as text.
 </li>
 <li><code class="option">--dumphitlist INDEXNAME --wordid ID</code> dumps all
-the hits (occurences) of a given keyword in a given index, with keyword
+the hits (occurrences) of a given keyword in a given index, with keyword
 specified as internal numeric ID.
 </li>
 <li><code class="option">--fold INDEXNAME OPTFILE</code>
@@ -4455,7 +4455,7 @@ once you disable this normalization.
 </p><p>
 IDF flags can be mixed; 'plain' and 'normalized' are mutually exclusive;
 'tfidf_unnormalized' and 'tfidf_normalized' are mutually exclusive;
-and unspecified flags in such a mututally exclusive group take their
+and unspecified flags in such a mutually exclusive group take their
 defaults. That means that <code class="code">OPTION idf=plain</code> is equivalent
 to a complete <code class="code">OPTION idf='plain,tfidf_normalized'</code> specification.
 </p></li>
@@ -4658,7 +4658,7 @@ Expressions are not currently supported in INSERT and values should be explicitl
 specified.
 </p><p>
 Multiple rows can be inserted using a single INSERT statement by providing
-several comma-separated, parens-enclosed lists of rows values.
+several comma-separated, parentheses-enclosed lists of rows values.
 </p></div>
 <div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="sphinxql-replace"></a>7.7.&nbsp;REPLACE syntax</h2></div></div></div>
 <pre class="programlisting">
@@ -4819,7 +4819,7 @@ transaction, making all its changes permanent. ROLLBACK statement rolls back the
 current transaction, canceling all its changes. SET AUTOCOMMIT controls the
 autocommit mode in the active session.
 </p><p>
-AUTOCOMMIT is set to 1 by default, meaning that every statement that perfoms
+AUTOCOMMIT is set to 1 by default, meaning that every statement that performs
 any changes on any index is implicitly wrapped in BEGIN and COMMIT.
 </p><p>
 Transactions are limited to a single RT index, and also limited in size.
@@ -5047,7 +5047,7 @@ UPDATE statement was added in version 2.0.1-beta. Multiple attributes
 and values can be specified in a single statement. Both RT and disk indexes
 are supported.
 </p><p>
-As of version 2.0.2-beta, all atributes types (int, bigint, float, MVA),
+As of version 2.0.2-beta, all attributes types (int, bigint, float, MVA),
 except for strings and JSON attributes, can be dynamically updated.
 Previously, some of these types were not supported.
 </p><p>
@@ -5061,7 +5061,7 @@ the value of 1 will actually be stored, because the lower 32 bits of
 4294967297 (0x100000001 in hex) amount to 1 (0x00000001 in hex).
 </p><p>
 MVA values sets for updating (and also for INSERT or REPLACE, refer
-to <a href="#sphinxql-insert" title="7.6.&nbsp;INSERT and REPLACE syntax">Section&nbsp;7.6, &#8220;INSERT and REPLACE syntax&#8221;</a>) must be specificed as comma-separated
+to <a href="#sphinxql-insert" title="7.6.&nbsp;INSERT and REPLACE syntax">Section&nbsp;7.6, &#8220;INSERT and REPLACE syntax&#8221;</a>) must be specified as comma-separated
 lists in parentheses. To erase the MVA value, just assign () to it.
 </p><p>
 Starting from 2.2.1-beta version UPDATE can be used to update integer and float
@@ -5383,7 +5383,7 @@ mysql&gt; SHOW AGENT '192.168.0.202:6714' STATUS LIKE '%15periods%';
 distributed index. It can be done with a SHOW AGENT index STATUS statement.
 That statement shows the index HA status (ie. whether or not it uses
 agent mirrors at all), and then the mirror information (specifically:
-address, blackhole and persisent flags, and the mirror selection
+address, blackhole and persistent flags, and the mirror selection
 probability used when one of the
 <a href="#conf-ha-strategy" title="11.2.63.&nbsp;ha_strategy">weighted-probability strategies</a>
 is in effect).
@@ -5499,7 +5499,7 @@ really belong in any other state, but are too small to deserve their own state.
 <li><span class="bold"><strong>rank</strong></span>, computing the relevance rank.</li>
 <li><span class="bold"><strong>sort</strong></span>, sorting the matches.</li>
 <li><span class="bold"><strong>finalize</strong></span>, finalizing the per-index search result set (last stage expressions, etc).</li>
-<li><span class="bold"><strong>dist_wait</strong></span>, waiting for the remote results from the agents in the distrbuted index case.</li>
+<li><span class="bold"><strong>dist_wait</strong></span>, waiting for the remote results from the agents in the distributed index case.</li>
 <li><span class="bold"><strong>aggregate</strong></span>, aggregating multiple result sets.</li>
 <li><span class="bold"><strong>net_write</strong></span>, writing the result set to the network.</li>
 </ul></div>
@@ -5554,7 +5554,7 @@ a special background thread, and the OPTIMIZE statement simply
 adds a job to its queue. Currently, there is no way to check
 the index or queue status (that might be added in the future
 to the SHOW INDEX STATUS and SHOW STATUS statements respectively).
-The optimization thread cen be IO-throttled, you can control the
+The optimization thread can be IO-throttled, you can control the
 maximum number of IOs per second and the maximum IO size
 with <a href="#conf-rt-merge-iops" title="11.4.47.&nbsp;rt_merge_iops">rt_merge_iops</a>
 and <a href="#conf-rt-merge-maxiosize" title="11.4.48.&nbsp;rt_merge_maxiosize">rt_merge_maxiosize</a>
@@ -5564,7 +5564,7 @@ on daemon crash.
 The RT index being optimized stays online and available
 for both searching and updates at (almost) all times during
 the optimization. It gets locked (very) briefly every time
-that a pair of disk chunks is merged succesfully, to rename
+that a pair of disk chunks is merged successfully, to rename
 the old and the new files, and update the index header.
 </p><p>
 At the moment, OPTIMIZE needs to be issued manually,
@@ -5579,7 +5579,7 @@ Query OK, 0 rows affected (0.00 sec)
 SHOW PLAN
 </pre><p>
 SHOW PLAN statement, added in 2.1.2-release, displays the execution plan
-of the previous SELECT statment. The plan gets generated and stored
+of the previous SELECT statement. The plan gets generated and stored
 during the actual execution, so profiling must be enabled in the current
 session <span class="bold"><strong>before</strong></span> running that statement. That can be done
 with a <code class="code">SET profiling=1</code> statement.
@@ -5687,7 +5687,7 @@ can not nest, and should not get logged. MySQL specific
 <code class="code">/*! ... */</code> comments are also currently ignored.
 (As the comments support was rather added for better compatibility
 with <code class="filename">mysqldump</code> produced dumps, rather than
-improving generaly query interoperability between Sphinx and MySQL.)
+improving general query interoperability between Sphinx and MySQL.)
 </p><pre class="programlisting">
 SELECT /*! SQL_CALC_FOUND_ROWS */ col1 FROM table1 WHERE ...
 </pre><p>
@@ -5798,7 +5798,7 @@ SELECT id, WEIGHT() `weight` FROM myindex WHERE MATCH('test')
 </p></li>
 <li>
 The column order is now different and should now match the
-one expliclitly defined in the query. So if you are accessing
+one explicitly defined in the query. So if you are accessing
 columns based on their position in the result set rather than
 the name (for instance, by using <code class="code">mysql_fetch_row()</code>
 rather than <code class="code">mysql_fetch_assoc()</code> in PHP),
@@ -5990,7 +5990,7 @@ If there were no warnings during the previous API call, empty string is returned
 You should call it to verify whether your request
 (such as <a href="#api-func-query" title="8.6.1.&nbsp;Query">Query()</a>) was completed but with warnings.
 For instance, search query against a distributed index might complete
-succesfully even if several remote agents timed out. In that case,
+successfully even if several remote agents timed out. In that case,
 a warning message would be produced.
 </p><p>
 The warning message is <span class="emphasis"><em>not</em></span> reset by this call; so you can safely
@@ -6091,7 +6091,7 @@ once <code class="code">$cutoff</code> matches had been found and processed.
 <div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="api-func-setmaxquerytime"></a>8.2.2.&nbsp;SetMaxQueryTime</h3></div></div></div>
 <p><span class="bold"><strong>Prototype:</strong></span> function SetMaxQueryTime ( $max_query_time )</p><p>
 Sets maximum search query time, in milliseconds. Parameter must be
-a non-negative integer. Default valus is 0 which means "do not limit".
+a non-negative integer. Default value is 0 which means "do not limit".
 </p><p>Similar to <code class="code">$cutoff</code> setting from <a href="#api-func-setlimits" title="8.2.1.&nbsp;SetLimits">SetLimits()</a>,
 but limits elapsed query time instead of processed matches count. Local search queries
 will be stopped once that much time has elapsed. Note that if you're performing
@@ -6317,7 +6317,7 @@ are floats that specify anchor point latitude and longitude, in radians.
 </p><p>
 Once an anchor point is set, you can use magic <code class="code">"@geodist"</code> attribute
 name in your filters and/or sorting expressions. Sphinx will compute geosphere distance
-between the given anchor point and a point specified by latitude and lognitude
+between the given anchor point and a point specified by latitude and longitude
 attributes from each full-text match, and attach this value to the resulting match.
 The latitude and longitude values both in <code class="code">SetGeoAnchor</code> and the index
 attribute data are expected to be in radians. The result will be returned in meters,
@@ -6429,15 +6429,15 @@ of hash) with the following keys and values:
 <dd><p>Total amount of matches retrieved <span class="emphasis"><em>on server</em></span> (ie. to the server side result set) by this query.
         You can retrieve up to this amount of matches from server for this query text with current query settings.
     </p></dd><dt><span class="term">"total_found":</span></dt>
-<dd><p>Total amount of matching documents in index (that were found and procesed on server).</p></dd><dt><span class="term">"words":</span></dt>
-<dd><p>Hash which maps query keywords (case-folded, stemmed, and otherwise processed) to a small hash with per-keyword statitics ("docs", "hits").</p></dd><dt><span class="term">"error":</span></dt>
+<dd><p>Total amount of matching documents in index (that were found and processed on server).</p></dd><dt><span class="term">"words":</span></dt>
+<dd><p>Hash which maps query keywords (case-folded, stemmed, and otherwise processed) to a small hash with per-keyword statistics ("docs", "hits").</p></dd><dt><span class="term">"error":</span></dt>
 <dd><p>Query error message reported by <code class="filename">searchd</code> (string, human readable). Empty if there were no errors.</p></dd><dt><span class="term">"warning":</span></dt>
 <dd><p>Query warning message reported by <code class="filename">searchd</code> (string, human readable). Empty if there were no warnings.</p></dd></dl></div>
 <p>
 </p><p>
 It should be noted that <code class="code">Query()</code> carries out the same actions as
 <code class="code">AddQuery()</code> and <code class="code">RunQueries()</code> without the intermediate steps;
-it is analoguous to a single <code class="code">AddQuery()</code> call, followed by a corresponding
+it is analogous to a single <code class="code">AddQuery()</code> call, followed by a corresponding
 <code class="code">RunQueries()</code>, then returning the first array element of matches
 (from the first, and only, query.)
 </p></div>
@@ -6466,7 +6466,7 @@ search results but also some per-category counts, such as the amount of
 products grouped by vendor. Without multi-query, you would have to run several
 queries which perform essentially the same search and retrieve the
 same matches, but create result sets differently. With multi-query,
-you simply pass all these querys in a single batch and Sphinx
+you simply pass all these queries in a single batch and Sphinx
 optimizes the redundant full-text search internally.
 </p><p>
 <code class="code">AddQuery()</code> internally saves full current settings state
@@ -6503,7 +6503,7 @@ current query settings.
 that will be returned from <code class="code">RunQueries()</code> call. It is simply
 a sequentially increasing 0-based integer, ie. first call will return 0,
 second will return 1, and so on. Just a small helper so you won't have
-to track the indexes manualy if you need then.
+to track the indexes manually if you need then.
 </p></div>
 <div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="api-func-runqueries"></a>8.6.3.&nbsp;RunQueries</h3></div></div></div>
 <p><span class="bold"><strong>Prototype:</strong></span> function RunQueries ()</p><p>
@@ -6515,7 +6515,7 @@ of result sets on success.
 Each result set in the returned array is exactly the same as
 the result set returned from <a href="#api-func-query" title="8.6.1.&nbsp;Query"><code class="code">Query()</code></a>.
 </p><p>
-Note that the batch query request itself almost always succeds -
+Note that the batch query request itself almost always succeeds -
 unless there's a network error, blocking index rotation in progress,
 or another general failure which prevents the whole request from being
 processed.
@@ -6524,7 +6524,7 @@ However individual queries within the batch might very well fail.
 In this case their respective result sets will contain non-empty <code class="code">"error"</code> message,
 but no matches or query statistics. In the extreme case all queries within the batch
 could fail. There still will be no general error reported, because API was able to
-succesfully connect to <code class="filename">searchd</code>, submit the batch, and receive
+successfully connect to <code class="filename">searchd</code>, submit the batch, and receive
 the results - but every result set will have a specific error message.
 </p></div>
 <div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="api-func-resetfilters"></a>8.6.4.&nbsp;ResetFilters</h3></div></div></div>
@@ -6575,7 +6575,7 @@ Starting with version 0.9.9-rc1, keywords can contain wildcards, that work simil
 <dd><p>Maximum snippet size, in symbols (codepoints). Integer, default is 256.</p></dd><dt><span class="term">"around":</span></dt>
 <dd><p>How much words to pick around each matching keywords block. Integer, default is 5.</p></dd><dt><span class="term">"exact_phrase":</span></dt>
 <dd><p>Whether to highlight exact query phrase matches only instead of individual keywords. Boolean, default is false.</p></dd><dt><span class="term">"use_boundaries":</span></dt>
-<dd><p>Whether to additionaly break passages by phrase
+<dd><p>Whether to additionally break passages by phrase
     boundary characters, as configured in index settings with
     <a href="#conf-phrase-boundary" title="11.2.27.&nbsp;phrase_boundary">phrase_boundary</a>
     directive. Boolean, default is false.
@@ -6628,7 +6628,7 @@ Starting with version 0.9.9-rc1, keywords can contain wildcards, that work simil
     </p><p>If the "load_files" is also set, the request will return the error in case if any of the files is not available anywhere. Otherwise (if "load_files" is not set)
     it will just return the empty strings for all absent files. The master instance reset this flag when distributes the snippets among agents. So, for agents the absence of a file
     is not critical error, but for the master it might be so. If you want to be sure that all snippets are actually created, set both "load_files_scattered" and "load_files". If the
-    absense of some snippets caused by some agents is not critical for you - set just "load_files_scattered", leaving "load_files" not set.
+    absence of some snippets caused by some agents is not critical for you - set just "load_files_scattered", leaving "load_files" not set.
     </p></dd><dt><span class="term">"html_strip_mode":</span></dt>
 <dd><p>Added in version 1.10-beta. HTML stripping mode setting.
     Defaults to "index", which means that index settings will be used.
@@ -6659,7 +6659,7 @@ Snippets extraction algorithm currently favors better passages
 (with closer phrase matches), and then passages with keywords not
 yet in snippet. Generally, it will try to highlight the best match
 with the query, and it will also to highlight all the query keywords,
-as made possible by the limtis. In case the document does not match
+as made possible by the limits. In case the document does not match
 the query, beginning of the document trimmed down according to the
 limits will be return by default. Starting with 1.10-beta, you can
 also return an empty snippet instead case by setting "allow_empty"
@@ -6797,7 +6797,7 @@ Closes previously opened persistent connection.
 <div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="sphinxse-overview"></a>9.1.&nbsp;SphinxSE overview</h2></div></div></div>
 <p>
 SphinxSE is MySQL storage engine which can be compiled
-into MySQL server 5.x using its pluggable architecure.
+into MySQL server 5.x using its pluggable architecture.
 It is not available for MySQL 4.x series. It also requires
 MySQL 5.0.22 or higher in 5.0.x series, or MySQL 5.1.12
 or higher in 5.1.x series.
@@ -6810,7 +6810,7 @@ searching happen outside MySQL.
 </p><p>
 Obvious SphinxSE applications include:
 </p><div class="itemizedlist"><ul type="disc"><li>easier porting of MySQL FTS applications to Sphinx;</li>
-<li>allowing Sphinx use with progamming languages for which native APIs are not available yet;</li>
+<li>allowing Sphinx use with programming languages for which native APIs are not available yet;</li>
 <li>optimizations when additional Sphinx result set processing on MySQL side is required
     (eg. JOINs with original document tables, additional MySQL-side filtering, etc).</li>
 </ul></div>
@@ -6897,7 +6897,7 @@ make install
 </ol></div></div>
 <div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="sphinxse-checking"></a>9.2.3.&nbsp;Checking SphinxSE installation</h3></div></div></div>
 <p>
-To check whether SphinxSE has been succesfully compiled
+To check whether SphinxSE has been successfully compiled
 into MySQL, launch newly built servers, run mysql client and
 issue <code class="code">SHOW ENGINES</code> query. You should see a list
 of all available engines. Sphinx should be present and "Support"
@@ -7147,7 +7147,7 @@ idf=0.259532)
 </pre></li>
 <li><p>geoanchor - geodistance anchor, as in
 <a href="#api-func-setgeoanchor" title="8.4.5.&nbsp;SetGeoAnchor">SetGeoAnchor()</a> API call.
-Takes 4 parameters which are latitude and longiture attribute names,
+Takes 4 parameters which are latitude and longitude attribute names,
 and anchor point coordinates respectively:
 </p><pre class="programlisting">
 ... WHERE query='test;geoanchor=latattr,lonattr,0.123,0.456';
@@ -7222,7 +7222,7 @@ mysql&gt; SHOW ENGINE SPHINX STATUS;
 Starting with version 0.9.9-rc2, SphinxSE also includes a UDF function
 that lets you create snippets through MySQL. The functionality is fully
 similar to <a href="#api-func-buildexcerpts" title="8.7.1.&nbsp;BuildExcerpts">BuildExcerprts</a>
-API call but accesible through MySQL+SphinxSE.
+API call but accessible through MySQL+SphinxSE.
 </p><p>
 The binary that provides the UDF is named <code class="filename">sphinx.so</code>
 and should be automatically built and installed to proper location
@@ -7734,7 +7734,7 @@ Applies to SQL source types (<code class="option">mysql</code>, <code class="opt
 </p><p>
 Multi-value means that you can specify several pre-queries.
 They are executed before <a href="#conf-sql-query" title="11.1.12.&nbsp;sql_query">the main fetch query</a>,
-and they will be exectued exactly in order of appeareance in the configuration file.
+and they will be executed exactly in order of appearance in the configuration file.
 Pre-query results are ignored.
 </p><p>
 Pre-queries are useful in a lot of ways. They are used to setup encoding,
@@ -7742,7 +7742,7 @@ mark records that are going to be indexed, update internal counters,
 set various per-connection SQL server options and variables, and so on.
 </p><p>
 Perhaps the most frequent pre-query usage is to specify the encoding
-that the server will use for the rows it returnes. It <span class="bold"><strong>must</strong></span> match
+that the server will use for the rows it returns. It <span class="bold"><strong>must</strong></span> match
 the encoding that Sphinx expects (as specified by <a href="#conf-charset-type" title="11.2.16.&nbsp;charset_type">charset_type</a>
 and <a href="#conf-charset-table" title="11.2.17.&nbsp;charset_table">charset_table</a> options).
 Two MySQL specific examples of setting the encoding are:
@@ -7807,12 +7807,12 @@ of values to index. (Added in version 2.0.1-beta.)</li>
 <span class="bold"><strong>Joined fields</strong></span> let you avoid JOIN and/or GROUP_CONCAT statements in the main
 document fetch query (sql_query). This can be useful when SQL-side JOIN is slow,
 or needs to be offloaded on Sphinx side, or simply to emulate MySQL-specific
-GROUP_CONCAT funcionality in case your database server does not support it.
+GROUP_CONCAT functionality in case your database server does not support it.
 </p><p>
 The query must return exactly 2 columns: document ID, and text to append
 to a joined field. Document IDs can be duplicate, but they <span class="bold"><strong>must</strong></span> be
 in ascending order. All the text rows fetched for a given ID will be
-concatented together, and the concatenation result will be indexed
+concatenated together, and the concatenation result will be indexed
 as the entire contents of a joined field. Rows will be concatenated
 in the order returned from the query, and separating whitespace
 will be inserted between them. For instance, if joined field query
@@ -7856,7 +7856,7 @@ Currently, the only method to account for payloads is to use
 SPH_RANK_PROXIMITY_BM25 ranker. On indexes with payload fields,
 it will automatically switch to a variant that matches keywords
 in those fields, computes a sum of matched payloads multiplied
-by field wieghts, and adds that sum to the final rank.
+by field weights, and adds that sum to the final rank.
 </p><h4>Example:</h4><pre class="programlisting">
 sql_joined_field = \
     tagstext from query; \
@@ -8209,7 +8209,7 @@ need to be allocated upfront, and their sizes have to be determined.
 When the driver does not report the column length at all, Sphinx
 allocates default 1 KB buffers for each non-char column, and 1 MB
 buffers for each char column. Driver-reported column length
-also gets clamped by an upper limie of 8 MB, so in case the
+also gets clamped by an upper limit of 8 MB, so in case the
 driver reports (almost) a 2 GB column length, it will be clamped
 and a 8 MB buffer will be allocated instead for that column.
 These hard-coded limits can be overridden using the
@@ -8290,7 +8290,7 @@ Post-index query.
 Optional, default value is empty.
 Applies to SQL source types (<code class="option">mysql</code>, <code class="option">pgsql</code>, <code class="option">mssql</code>) only.
 </p><p>
-This query is executed when indexing is fully and succesfully completed.
+This query is executed when indexing is fully and successfully completed.
 If this query produces errors, they are reported as warnings,
 but indexing is <span class="bold"><strong>not</strong></span> terminated. It's result set is ignored.
 <code class="code">$maxid</code> macro can be used in its text; it will be
@@ -8579,7 +8579,7 @@ Optional, default value is 16M.
 Introduced in version 0.9.9-rc1.
 </p><p>
 When using <a href="#conf-unpack-mysqlcompress" title="11.1.54.&nbsp;unpack_mysqlcompress">unpack_mysqlcompress</a>,
-due to implementation intrincacies it is not possible to deduce the required buffer size
+due to implementation intricacies it is not possible to deduce the required buffer size
 from the compressed data. So the buffer must be preallocated in advance, and unpacked
 data can not go over the buffer size. This option lets you control the buffer size,
 both to limit <code class="filename">indexer</code> memory use, and to enable unpacking
@@ -8696,7 +8696,7 @@ For reference, different index files store the following data:
 <li><code class="filename">.spi</code> stores word lists (word IDs and pointers to <code class="filename">.spd</code> file);</li>
 <li><code class="filename">.spk</code> stores kill-lists;</li>
 <li><code class="filename">.spm</code> stores MVA data;</li>
-<li><code class="filename">.spp</code> stores hit (aka posting, aka word occurence) lists for each word ID;</li>
+<li><code class="filename">.spp</code> stores hit (aka posting, aka word occurrence) lists for each word ID;</li>
 <li><code class="filename">.sps</code> stores string attribute data.</li>
 </ul></div>
 <p>
@@ -8817,11 +8817,11 @@ indexing) by spending more RAM for, basically, an uncompressed
 cache of a dictionary.
 </p><p>
 Chinese segmentation using Rosette Linguistics Platform was added in 2.2.1-beta.
-It is a much more precise but slower way (compared to n-grams) to segment chinese documents.
-<code class="option"><a href="#conf-charset-table" title="11.2.17.&nbsp;charset_table">charset_table</a></code> must contain all chinese charaters except
-chinese punctuation marks because incoming documents are first processed by sphinx tokenizer and then the result
+It is a much more precise but slower way (compared to n-grams) to segment Chinese documents.
+<code class="option"><a href="#conf-charset-table" title="11.2.17.&nbsp;charset_table">charset_table</a></code> must contain all Chinese characters except
+Chinese punctuation marks because incoming documents are first processed by sphinx tokenizer and then the result
 is processed by RLP. Sphinx performs per-token language detection on the incoming documents. If token language is
-identified as chinese, it will only be processed the RLP, even if multiple morphology processors are specified.
+identified as Chinese, it will only be processed the RLP, even if multiple morphology processors are specified.
 Otherwise, it will be processed by all the morphology processors specified in the "morphology" option. Rosette
 Linguistics Platform must be installed and configured and sphinx must be built with a --with-rlp switch. See also
 <code class="option"><a href="#conf-rlp-root" title="11.5.5.&nbsp;rlp_root">rlp_root</a></code>,
@@ -8860,8 +8860,8 @@ option are as follows:
 <li>stem_ar - apply Arabic stemmer (added in 2.1.1-beta);</li>
 <li>soundex - replace keywords with their SOUNDEX code;</li>
 <li>metaphone - replace keywords with their METAPHONE code.</li>
-<li>rlp_chinese - apply chinese text segmentation using Rosette Linguistics Platform</li>
-<li>rlp_chinese_batched - apply chinese text segmentation using Rosette Linguistics Platform with document batching</li>
+<li>rlp_chinese - apply Chinese text segmentation using Rosette Linguistics Platform</li>
+<li>rlp_chinese_batched - apply Chinese text segmentation using Rosette Linguistics Platform with document batching</li>
 </ul></div>
 <p>
 Additional values provided by libstemmer are in 'libstemmer_XXX' format,
@@ -8890,7 +8890,7 @@ Introduced in version 2.0.1-beta.
 CRC dictionary mode (dict=crc) is the default dictionary type
 in Sphinx, and the only one available until version 2.0.1-beta.
 Keywords dictionary mode (dict=keywords) was added in 2.0.1-beta,
-primarly to (greatly) reduce indexing impact and enable substring
+primarily to (greatly) reduce indexing impact and enable substring
 searches on huge collections. They also eliminate the chance of
 CRC32 collisions. In 2.0.1-beta, that mode was only supported
 for disk indexes. Starting with 2.0.2-beta, RT indexes are
@@ -8931,7 +8931,7 @@ per-keyword statistics for all the actually matched keywords
 would now also be reported.
 </p><p>
 Version 2.1.1-beta introduced extended wildcards support, now special
-symbos like '?' and '%' are supported along with substring (infix) search (e.g. "t?st*", "run%", "*abc*").
+symbols like '?' and '%' are supported along with substring (infix) search (e.g. "t?st*", "run%", "*abc*").
 Note, however, these wildcards work only with dict=keywords, and not elsewhere.
 </p><p>
 Indexing with keywords dictionary should be 1.1x to 1.3x slower
@@ -8974,11 +8974,11 @@ by specifying <code class="code">html_strip = 1</code>. Both types of boundaries
 are detected based on a few built-in rules enumerated just below.
 </p><p>
 Sentence boundary detection rules are as follows.
-</p><div class="itemizedlist"><ul type="disc"><li>Question and excalamation signs (? and !) are always a sentence boundary.</li>
+</p><div class="itemizedlist"><ul type="disc"><li>Question and exclamation signs (? and !) are always a sentence boundary.</li>
 <li><p>Trailing dot (.) is a sentence boundary, except:
     </p><div class="itemizedlist"><ul type="circle"><li>When followed by a letter. That's considered a part of an abbreviation (as in "S.T.A.L.K.E.R" or "Goldman Sachs S.p.A.").</li>
 <li>When followed by a comma. That's considered an abbreviation followed by a comma (as in "Telecom Italia S.p.A., founded in 1994").</li>
-<li>When followed by a space and a small letter. That's considered an abbreviation within a sentence (as in "News Corp. announced in Februrary").</li>
+<li>When followed by a space and a small letter. That's considered an abbreviation within a sentence (as in "News Corp. announced in February").</li>
 <li>When preceded by a space and a capital letter, and followed by a space. That's considered a middle initial (as in "John D. Doe").</li>
 </ul></div>
 <p>
@@ -9093,7 +9093,7 @@ Optional, default is empty.
 </p><p>
 Word forms are applied after tokenizing the incoming text
 by <a href="#conf-charset-table" title="11.2.17.&nbsp;charset_table">charset_table</a> rules.
-They essentialy let you replace one word with another. Normally,
+They essentially let you replace one word with another. Normally,
 that would be used to bring different word forms to a single
 normal form (eg. to normalize all the variants such as "walks",
 "walked", "walking" to the normal form "walk"). It can also be used
@@ -9232,7 +9232,7 @@ the example exceptions file above, "At&amp;t" text will be tokenized as two
 keywords "at" and "t", because of lowercase letters. On the other hand,
 "AT&amp;T" will match exactly and produce single "AT&amp;T" keyword.
 </p><p>
-Note that this map-to keyword is a) always interpereted
+Note that this map-to keyword is a) always interpreted
 as a <span class="emphasis"><em>single</em></span> word, and b) is both case and space
 sensitive! In our sample, "ms windows" query will <span class="emphasis"><em>not</em></span>
 match the document with "MS Windows" text. The query will be interpreted
@@ -9308,7 +9308,7 @@ Accepted characters table, with case folding rules.
 Optional, default value depends on <a href="#conf-charset-type" title="11.2.16.&nbsp;charset_type">charset_type</a> value.
 </p><p>
 charset_table is the main workhorse of Sphinx tokenizing process,
-ie. the process of extracting keywords from document text or query txet.
+ie. the process of extracting keywords from document text or query text.
 It controls what characters are accepted as valid and what are not,
 and how the accepted characters should be transformed (eg. should
 the case be removed or not).
@@ -9435,7 +9435,7 @@ Optional, default is 0 (do not index infixes).
 </p><p>
 Infix indexing allows to implement wildcard searching by 'start*', '*end', and '*middle*' wildcards
 (refer to <a href="#conf-enable-star" title="11.2.24.&nbsp;enable_star">enable_star</a> option for details on wildcard syntax).
-When mininum infix length is set to a positive number, indexer will index all the possible keyword infixes
+When minimum infix length is set to a positive number, indexer will index all the possible keyword infixes
 (ie. substrings) in addition to the keywords themselves. Too short infixes
 (below the minimum allowed length) will not be indexed. For instance,
 indexing a keyword "test" with min_infix_len=2 will result in indexing
@@ -9479,10 +9479,10 @@ much disk space depending on the settings:
 So in this test limiting the max substring length saved us
 10-15% on the index size.
 </p><p>
-There is no performance impact associtated with substring length
+There is no performance impact associated with substring length
 when using dict=keywords mode, so this directive is not applicable
 and intentionally forbidden in that case. If required, you can still
-limit the length of a subtring that you search for in the application
+limit the length of a substring that you search for in the application
 code.
 </p><h4>Example:</h4><pre class="programlisting">
 max_substring_len = 12
@@ -9570,7 +9570,7 @@ will be split this way; other ones will not be affected.
 </p><p>
 Note that if search query is segmented, ie. there are separators between
 individual words, then wrapping the words in quotes and using extended mode
-will resut in proper matches being found even if the text was <span class="bold"><strong>not</strong></span>
+will result in proper matches being found even if the text was <span class="bold"><strong>not</strong></span>
 segmented. For instance, assume that the original query is BC&nbsp;DEF.
 After wrapping in quotes on the application side, it should look
 like "BC"&nbsp;"DEF" (<span class="emphasis"><em>with</em></span> quotes). This query
@@ -9754,7 +9754,7 @@ and square braces [] designate an optional clause.
 </p><p>
 In other words, you can point every single agent to one or more remote
 indexes, residing on one or more networked servers. There are absolutely
-no restrictions on the pointers. To point out a couple importang things,
+no restrictions on the pointers. To point out a couple important things,
 the host can be localhost, and the remote index can be a distributed
 index in turn, all that is legal. That enables a bunch of very different
 usage modes:
@@ -9843,7 +9843,7 @@ agent = box1:9312|box2:9312:chunk1
 </pre></div>
 <div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="conf-agent-persistent"></a>11.2.34.&nbsp;agent_persistent</h3></div></div></div>
 <p>
-Persistenly connected remote agent declaration.
+Persistently connected remote agent declaration.
 Multi-value, optional, default is empty.
 Introduced in version 2.1.1-beta.
 </p><p>
@@ -9892,7 +9892,7 @@ Optional, default is 1000 (ie. 1 second).
 </p><p>
 When connecting to remote agents, <code class="filename">searchd</code>
 will wait at most this much time for connect() call to complete
-succesfully. If the timeout is reached but connect() does not complete,
+successfully. If the timeout is reached but connect() does not complete,
 and <a href="#api-func-setretries" title="8.1.4.&nbsp;SetRetries">retries</a> are enabled,
 retry will be initiated.
 </p><h4>Example:</h4><pre class="programlisting">
@@ -10124,7 +10124,7 @@ Expanded queries take naturally longer to complete, but can possibly
 improve the search quality, as the documents with exact form matches
 should be ranked generally higher than documents with stemmed or infix matches.
 </p><p>
-Note that the existing query syntax does not allowe to emulate this
+Note that the existing query syntax does not allow to emulate this
 kind of expansion, because internal expansion works on keyword level and
 expands keywords within phrase or quorum operators too (which is not
 possible through the query syntax).
@@ -10152,7 +10152,7 @@ no <code class="option">blend_chars</code> specified at all. An additional token
 mixes blended and non-blended characters will be put at the starting position.
 For instance, if the field contents are "AT&amp;T company" occurs in the very
 beginning of the text field, "at" will be given position 1, "t" position 2,
-"company" positin 3, and "AT&amp;T" will also be given position 1 ("blending"
+"company" position 3, and "AT&amp;T" will also be given position 1 ("blending"
 with the opening regular keyword). Thus, querying for either AT&amp;T or just
 AT will match that document, and querying for "AT T" as a phrase also match it.
 Last but not least, phrase query for "AT&amp;T company" will <span class="emphasis"><em>also</em></span>
@@ -10355,8 +10355,8 @@ That is, equal selection probability are assigned to every mirror. Kind of simil
 to round-robin (RR), but unlike RR, does not impose a strict selection order.
 </p><h4>Adaptive randomized balancing</h4><p>
 The default simple random strategy does not take mirror status, error rate,
-and, most importantly, actual response latencies into account. So to accomodate
-for heterogenous clusters and/or temporary spikes in agent node load, we have
+and, most importantly, actual response latencies into account. So to accommodate
+for heterogeneous clusters and/or temporary spikes in agent node load, we have
 a group of balancing strategies that dynamically adjusts the probabilities
 based on the actual query latencies observed by the master.
 </p><p>
@@ -10478,7 +10478,7 @@ will 1) create a respective length attribute for every full-text field,
 sharing the same name; 2) compute a field length (counted in keywords) for
 every document and store in to a respective attribute; 3) compute the per-index
 averages. The lengths attributes will have a special TOKENCOUNT type, but their
-values are in fact regular 32-bit integeres, and their values are generally
+values are in fact regular 32-bit integers, and their values are generally
 accessible.
 </p><p>
 BM25A() and BM25F() functions in the expression ranker are based
@@ -10640,7 +10640,7 @@ I/O throttling helps to do that. It works by enforcing a minimum guaranteed
 delay between subsequent disk I/O operations performed by <code class="filename">indexer</code>.
 Modern SATA HDDs are able to perform up to 70-100+ I/O operations per second
 (that's mostly limited by disk heads seek time). Limiting indexing I/O
-to a fraction of that can help reduce search performance dedgradation
+to a fraction of that can help reduce search performance degradation
 caused by indexing.
 </p><h4>Example:</h4><pre class="programlisting">
 max_iops = 40
@@ -10737,7 +10737,7 @@ on_file_field_errors = skip_document
 <div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="conf-lemmatizer-cache"></a>11.3.8.&nbsp;lemmatizer_cache</h3></div></div></div>
 <p>
 Lemmatizer cache size.
-Optional, defaut is 256K.
+Optional, default is 256K.
 Added in version 2.1.1-beta.
 </p><p>
 Our lemmatizer implementation (see <a href="#conf-morphology" title="11.2.6.&nbsp;morphology">Section&nbsp;11.2.6, &#8220;morphology&#8221;</a>
@@ -10970,7 +10970,7 @@ At the moment, <code class="filename">.spa</code>, <code class="filename">.spi</
 MVA data, and keyword index, respectively.)
 Without seamless rotate, rotating an index tries to use as little RAM
 as possible and works as follows:
-</p><div class="orderedlist"><ol type="1"><li>new queries are temporarly rejected (with "retry" error code);</li>
+</p><div class="orderedlist"><ol type="1"><li>new queries are temporarily rejected (with "retry" error code);</li>
 <li><code class="filename">searchd</code> waits for all currently running queries to finish;</li>
 <li>old index is deallocated and its files are renamed;</li>
 <li>new index files are renamed and required RAM is allocated;</li>
@@ -10980,7 +10980,7 @@ as possible and works as follows:
 <p>
 </p><p>
 However, if there's a lot of attribute or dictionary data, then preloading step
-could take noticeble time - up to several minutes in case of preloading 1-5+ GB files.
+could take noticeable time - up to several minutes in case of preloading 1-5+ GB files.
 </p><p>
 With seamless rotate enabled, rotation works as follows:
 </p><div class="orderedlist"><ol type="1"><li>new index RAM storage is allocated;</li>
@@ -11023,7 +11023,7 @@ preopen_indexes = 1
 </pre></div>
 <div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="conf-unlink-old"></a>11.4.14.&nbsp;unlink_old</h3></div></div></div>
 <p>
-Whether to unlink .old index copies on succesful rotation.
+Whether to unlink .old index copies on successful rotation.
 Optional, default is 1 (do unlink).
 </p><h4>Example:</h4><pre class="programlisting">
 unlink_old = 0
@@ -11280,7 +11280,7 @@ Introduced in version 1.10-beta.
 </p><p>
 Binary logs are used for crash recovery of RT index data, and also of
 attributes updates of plain disk indices that
-would otherwise only be stored in RAM untill flush.  When logging is enabled,
+would otherwise only be stored in RAM until flush.  When logging is enabled,
 every transaction COMMIT-ted into RT index gets written into
 a log file.  Logs are then automatically replayed on startup
 after an unclean shutdown, recovering the logged changes.
@@ -11364,7 +11364,7 @@ agents will not be affected by the master's setting. They will however be affect
 by the agent's own settings.
 </p><p>
 This might be useful, for instance, when the document storage locations
-(be those local storage or NAS mountpoints) are incosistent across the servers.
+(be those local storage or NAS mountpoints) are inconsistent across the servers.
 </p><h4>Example:</h4><pre class="programlisting">
 snippets_file_prefix = /mnt/common/server1/
 </pre></div>
@@ -11575,7 +11575,7 @@ ha_period_karma = 120
 </pre></div>
 <div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="conf-persistent-connections-limit"></a>11.4.46.&nbsp;persistent_connections_limit</h3></div></div></div>
 <p>
-The maxinum # of simultaneos persistent connections to remote <a href="#conf-agent-persistent" title="11.2.34.&nbsp;agent_persistent">persistent agents</a>.
+The maximum # of simultaneous persistent connections to remote <a href="#conf-agent-persistent" title="11.2.34.&nbsp;agent_persistent">persistent agents</a>.
 Each time connecting agent defined under 'agent_persistent' we try to reuse existing connection (if any), or connect and save the connection for the future.
 However we can't hold unlimited # of such persistent connections, since each one holds a worker on agent size (and finally we'll receive the 'maxed out' error,
 when all of them are busy). This very directive limits the number. It affects the num of connections to each agent's host, across all distributed indexes.
@@ -11623,7 +11623,7 @@ Added in 2.1.1-beta.
 Terminating queries before completion based on their execution time
 (via either <a href="#api-func-setmaxquerytime" title="8.2.2.&nbsp;SetMaxQueryTime">SetMaxQueryTime()</a>
 API call, or <a href="#sphinxql-select" title="7.1.&nbsp;SELECT syntax">SELECT ... OPTION max_query_time</a>
-SphinxQL satement) is a nice safety net, but it comes with an inborn drawback:
+SphinxQL statement) is a nice safety net, but it comes with an inborn drawback:
 indeterministic (unstable) results. That is, if you repeat the very same (complex)
 search query with a time limit several times, the time limit will get hit
 at different stages, and you will get <span class="emphasis"><em>different</em></span> result sets.
@@ -11682,7 +11682,7 @@ shutdown_timeout = 5 # wait for up to 5 seconds
 <div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="conf-lemmatizer-base"></a>11.5.1.&nbsp;lemmatizer_base</h3></div></div></div>
 <p>
 Lemmatizer dictionaries base path.
-Optional, defaut is /usr/local/share (as in --datadir switch to ./configure script).
+Optional, default is /usr/local/share (as in --datadir switch to ./configure script).
 Added in version 2.1.1-beta.
 </p><p>
 Our lemmatizer implementation (see <a href="#conf-morphology" title="11.2.6.&nbsp;morphology">Section&nbsp;11.2.6, &#8220;morphology&#8221;</a> for a discussion
@@ -11710,7 +11710,7 @@ on_json_attr_error = ignore_attr
 <p>
 Automatically detect and convert possible JSON
 strings that represent numbers, into numeric attributes.
-Optional, defalt value is 0 (do not convert strings into numbers).
+Optional, default value is 0 (do not convert strings into numbers).
 Added in 2.1.1-beta.
 </p><p>
 When this option is 1, values such as "1234" will be indexed as numbers instead
@@ -11724,7 +11724,7 @@ json_autoconv_numbers = 1
 <p>
 Whether and how to auto-convert key names within JSON attributes.
 Known value is 'lowercase'.
-Optional, defalt value is unspecified (do not convert anything).
+Optional, default value is unspecified (do not convert anything).
 Added in 2.1.1-beta.
 </p><p>
 When this directive is set to 'lowercase', key names within JSON attributes
@@ -11870,7 +11870,7 @@ rlp_max_batch_docs = 100
 <li>added initial subselects support, SELECT * FROM (SELECT ... ORDER BY cond1 LIMIT X) ORDER BY cond2 LIMIT Y</li>
 <li>added bigram indexing, and phrase searching with bigrams (<a href="#conf-bigram-index" title="11.2.65.&nbsp;bigram_index">bigram_index</a>, <a href="#conf-bigram-freq-words" title="11.2.64.&nbsp;bigram_freq_words">bigram_freq_words</a> directives)</li>
 <li>added HA/LB support, ha_strategy and agent_persistent directives, SHOW AGENT STATUS statement</li>
-<li>added RT index optimiation (<a href="#sphinxql-optimize-index" title="7.32.&nbsp;OPTIMIZE INDEX syntax">OPTIMIZE INDEX</a> statement, <a href="#conf-rt-merge-iops" title="11.4.47.&nbsp;rt_merge_iops">rt_merge_iops</a> and <a href="#conf-rt-merge-maxiosize" title="11.4.48.&nbsp;rt_merge_maxiosize">rt_merge_maxiosize</a> directives)</li>
+<li>added RT index optimization (<a href="#sphinxql-optimize-index" title="7.32.&nbsp;OPTIMIZE INDEX syntax">OPTIMIZE INDEX</a> statement, <a href="#conf-rt-merge-iops" title="11.4.47.&nbsp;rt_merge_iops">rt_merge_iops</a> and <a href="#conf-rt-merge-maxiosize" title="11.4.48.&nbsp;rt_merge_maxiosize">rt_merge_maxiosize</a> directives)</li>
 <li>added wildcards support to <a href="#conf-dict" title="11.2.7.&nbsp;dict">dict=keywords</a> (eg. "t?st*")</li>
 <li>added substring search support (min_infix_len=2 and above) to <a href="#conf-dict" title="11.2.7.&nbsp;dict">dict=keywords</a></li>
 </ul></div>
@@ -11929,7 +11929,7 @@ rlp_max_batch_docs = 100
 <h3>Bug fixes</h3><div class="itemizedlist"><ul type="disc"><li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=1655" target="_top">#1655</a>, special characters like ()?* were not processed correctly by exceptions</li>
 <li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=1651" target="_top">#1651</a>, <a href="#sphinxql-create-function" title="7.18.&nbsp;CREATE FUNCTION syntax">CREATE FUNCTION</a> can now be used with BIGINT return type</li>
 <li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=1649" target="_top">#1649</a>, incorrect warning message (about statistics mismatch) was returned when mixing wildcards and regular keywords</li>
-<li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=1603" target="_top">#1603</a>, passing MVA64 arguments to non-MVA functions caused unpredicted behaviour and crashes (now explicitly forbidden)</li>
+<li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=1603" target="_top">#1603</a>, passing MVA64 arguments to non-MVA functions caused unpredicted behavior and crashes (now explicitly forbidden)</li>
 <li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=1601" target="_top">#1601</a>, negative numbers in <a href="#expr-func-in">IN()</a> clause caused a syntax error</li>
 <li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=1581" target="_top">#1581</a>, <a href="#conf-dict" title="11.2.7.&nbsp;dict">dict=keywords</a> and <a href="#conf-sql-joined-field" title="11.1.13.&nbsp;sql_joined_field">sql_joined_field</a> occasionally caused <code class="filename">indexer</code> to build corrupted indexes</li>
 <li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=1546" target="_top">#1546</a>, file descriptor leaked on index rotation (that eventually prevented <code class="filename">searchd</code> to reload indexes)</li>
@@ -11984,7 +11984,7 @@ rlp_max_batch_docs = 100
 <li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=1404" target="_top">#1404</a>, a tiny memory leak in shared mutex</li>
 <li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=1394" target="_top">#1394</a>, race in --iostats caused incorrect I/O statistics in threaded modes</li>
 <li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=1391" target="_top">#1391</a>, QUORUM operator vs docinfo=inline returned wrong attribute values</li>
-<li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=1389" target="_top">#1389</a>, edge case in the ORDER operator caused occasionaly searchd crashes</li>
+<li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=1389" target="_top">#1389</a>, edge case in the ORDER operator caused occasionally searchd crashes</li>
 <li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=1382" target="_top">#1382</a>, query parts with field limits but without real keywords (like '@name {') are now simply ignored and no longer cause a query syntax error</li>
 <li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=1370" target="_top">#1370</a>, Windows indexer builds failed to fetch rows from MSSQL 2012</li>
 <li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=1368" target="_top">#1368</a>, ORDER BY RAND() did not work in RT indexes</li>

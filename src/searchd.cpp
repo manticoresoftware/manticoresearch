@@ -2068,7 +2068,8 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 
 void SphCrashLogger_c::SetLastQuery ( const CrashQuery_t & tQuery )
 {
-	m_tForkQuery = tQuery;
+	if ( g_eWorkers==MPM_PREFORK || g_eWorkers==MPM_FORK )
+		m_tForkQuery = tQuery;
 	SphCrashLogger_c * pCrashLogger = (SphCrashLogger_c *)sphThreadGet ( m_tLastQueryTLS );
 	if ( pCrashLogger )
 	{
@@ -9584,7 +9585,6 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 	}
 
 	bool bResult = false;
-	pServed->m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
 	ppResults[0]->m_tIOStats.Start();
 	if ( *pMulti )
 	{
@@ -9720,7 +9720,6 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 		}
 
 		bool bResult = false;
-		pServed->m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
 		if ( m_bMultiQueue )
 		{
 			tStats.m_tIOStats.Start();
@@ -19099,6 +19098,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		SetEnableOndiskAttributes ( tIdx, tIdx.m_pIndex );
 
 		tIdx.m_pIndex->Setup ( tSettings );
+		tIdx.m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
 
 		// hash it
 		if ( !g_pLocalIndexes->Add ( tIdx, szIndexName ) )
@@ -19140,6 +19140,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		// try to create index
 		tIdx.m_sIndexPath = hIndex["path"];
 		PreCreatePlainIndex ( tIdx, szIndexName );
+		tIdx.m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
 
 		// done
 		if ( !g_pLocalIndexes->Add ( tIdx, szIndexName ) )
@@ -20720,18 +20721,20 @@ void TickHead ( bool bDontListen )
 		pThd->m_sClientName = sClientName;
 		pThd->m_iConnID = g_iConnID;
 
+		g_tThdMutex.Lock ();
+		g_dThd.Add ( pThd );
+		g_tThdMutex.Unlock ();
+
 		if ( !sphThreadCreate ( &pThd->m_tThd, HandlerThread, pThd, true ) )
 		{
 			int iErr = errno;
+			g_tThdMutex.Lock ();
+			g_dThd.Remove ( pThd );
+			g_tThdMutex.Unlock ();
 			SafeDelete ( pThd );
 
 			FailClient ( iClientSock, SEARCHD_RETRY, "failed to create worker thread" );
 			sphWarning ( "failed to create worker thread, threads(%d), error[%d] %s", g_dThd.GetLength(), iErr, strerror(iErr) );
-		} else
-		{
-			g_tThdMutex.Lock ();
-			g_dThd.Add ( pThd );
-			g_tThdMutex.Unlock ();
 		}
 		return;
 	}

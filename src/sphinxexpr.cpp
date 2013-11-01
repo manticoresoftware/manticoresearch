@@ -3714,7 +3714,11 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 				return new Expr_NotInt_c ( pLeft );
 			break;
 
-		case ',':				return ( pLeft && pRight ) ? new Expr_Arglist_c ( pLeft, pRight ) : NULL; break;
+		case ',':
+			if ( pLeft && pRight )
+				return new Expr_Arglist_c ( pLeft, pRight );
+			break;
+
 		case TOK_NEG:			assert ( pRight==NULL ); return new Expr_Neg_c ( pLeft ); break;
 		case TOK_FUNC:
 			{

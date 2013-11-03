@@ -12627,12 +12627,14 @@ Optimizations, behavior changes, and removals
 Bug fixes
 ---------
 
-   * fixed #1549, OPTIONidf=tfidf_normalized was ignored for distributed
-     queries
-   * fixed #1648, #1644, when using AOT lemmas with snippet generation, not
-     all the forms got highlighted
+   * fixed #1734, unquoted literal in json subscript could cause a crash,
+     returns 'unknown column' now.
    * fixed #1683, under certain conditions stopwords were not taken into
      account in RT indexes
+   * fixed #1648, #1644, when using AOT lemmas with snippet generation, not
+     all the forms got highlighted
+   * fixed #1549, OPTIONidf=tfidf_normalized was ignored for distributed
+     queries
    * fixed that ORDER BY RAND() was not affected by index_weights
    * fixed that float updates with integer values in SphinxQL mistakenly
      set the float to 0

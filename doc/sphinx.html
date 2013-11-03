@@ -11845,9 +11845,10 @@ rlp_max_batch_docs = 100
 <li>disallowed dashes in index names in API requests (just like in SphinxQL)</li>
 <li>removed legacy <code class="option">xmlpipe</code> data source v1, <code class="option">compat_sphinxql_magics</code> directive, <code class="option">SetWeights()</code> SphinxAPI call, and SPH_SORT_CUSTOM SphinxAPI mode</li>
 </ul></div>
-<h3>Bug fixes</h3><div class="itemizedlist"><ul type="disc"><li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=1549" target="_top">#1549</a>, <a href="#sphinxql-select" title="7.1.&nbsp;SELECT syntax">OPTION</a><code class="option">idf=tfidf_normalized</code> was ignored for distributed queries</li>
-<li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=1648" target="_top">#1648</a>, #1644, when using AOT lemmas with snippet generation, not all the forms got highlighted</li>
+<h3>Bug fixes</h3><div class="itemizedlist"><ul type="disc"><li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=1734" target="_top">#1734</a>, unquoted literal in json subscript could cause a crash, returns 'unknown column' now.</li>
 <li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=1683" target="_top">#1683</a>, under certain conditions <a href="#conf-stopwords" title="11.2.11.&nbsp;stopwords">stopwords</a> were not taken into account in RT indexes</li>
+<li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=1648" target="_top">#1648</a>, #1644, when using AOT lemmas with snippet generation, not all the forms got highlighted</li>
+<li>fixed <a href="http://sphinxsearch.com/bugs/view.php?id=1549" target="_top">#1549</a>, <a href="#sphinxql-select" title="7.1.&nbsp;SELECT syntax">OPTION</a><code class="option">idf=tfidf_normalized</code> was ignored for distributed queries</li>
 <li>fixed that <a href="#sphinxql-select" title="7.1.&nbsp;SELECT syntax">ORDER BY RAND()</a> was not affected by <code class="option">index_weights</code></li>
 <li>fixed that float updates with integer values in SphinxQL mistakenly set the float to 0</li>
 <li>fixed that <code class="option">predicted_time</code> was not accumulated with <a href="#conf-dist-threads" title="11.4.29.&nbsp;dist_threads">dist_threads</a></li>

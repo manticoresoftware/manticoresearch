@@ -14112,9 +14112,10 @@ rlp_max_batch_docs = 100
 </itemizedlist>
 <bridgehead>Bug fixes</bridgehead>
 <itemizedlist>
-<listitem>fixed #1549, <link linkend="sphinxql-select">OPTION</link> <option>idf=tfidf_normalized</option> was ignored for distributed queries</listitem>
-<listitem>fixed #1648, #1644, when using AOT lemmas with snippet generation, not all the forms got highlighted</listitem>
+<listitem>fixed #1734, unquoted literal in json subscript could cause a crash, returns 'unknown column' now.</listitem>
 <listitem>fixed #1683, under certain conditions <link linkend="conf-stopwords">stopwords</link> were not taken into account in RT indexes</listitem>
+<listitem>fixed #1648, #1644, when using AOT lemmas with snippet generation, not all the forms got highlighted</listitem>
+<listitem>fixed #1549, <link linkend="sphinxql-select">OPTION</link> <option>idf=tfidf_normalized</option> was ignored for distributed queries</listitem>
 <listitem>fixed that <link linkend="sphinxql-select">ORDER BY RAND()</link> was not affected by <option>index_weights</option></listitem>
 <listitem>fixed that float updates with integer values in SphinxQL mistakenly set the float to 0</listitem>
 <listitem>fixed that <option>predicted_time</option> was not accumulated with <link linkend="conf-dist-threads">dist_threads</link></listitem>

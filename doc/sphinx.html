@@ -421,12 +421,12 @@ the data, and to be easily accessed by scripting languages. However, Sphinx
 does not depend on nor require any specific database to function.
 </p><p>
 Applications can access Sphinx search daemon (searchd) using any of
-the three different access methods: a) via native search API (SphinxAPI),
-b) via Sphinx own implementation of MySQL network protocol (using a small
-SQL subset called SphinxQL), or c) via MySQL server with a pluggable
+the three different access methods: a) via Sphinx own implementation of MySQL 
+network protocol (using a small SQL subset called SphinxQL), b) via native 
+search API (SphinxAPI) or c) via MySQL server with a pluggable
 storage engine (SphinxSE).
 </p><p>
-Official native SphinxAPI implementations for PHP, Perl, Ruby, and Java
+Official native SphinxAPI implementations for PHP, Perl, Python, Ruby and Java 
 are included within the distribution package. API is very lightweight
 so porting it to a new language is known to take a few hours or days.
 Third party API ports and plugins exist for Perl, C#, Haskell,
@@ -440,8 +440,8 @@ allow for online full-text index updates. Previous versions only
 supported disk indexes.
 </p><p>
 Data can be loaded into disk indexes using a so-called data source.
-Built-in sources can fetch data directly from MySQL, PostgreSQL, ODBC
-compliant database (MS SQL, Oracle, etc), or a pipe in a custom XML format.
+Built-in sources can fetch data directly from MySQL, PostgreSQL, MSSQL, ODBC
+compliant database (Oracle, etc) or a pipe in TSV or a custom XML format.
 Adding new data sources drivers (eg. to natively support other DBMSes)
 is designed to be as easy as possible. RT indexes, as of 1.10-beta,
 can only be populated using SphinxQL.
@@ -528,11 +528,21 @@ Sphinx initial author (and a benevolent dictator ever since):
 </p><h3>Team</h3><p>
 Past and present employees of Sphinx Technologies Inc who should be
 noted on their work on Sphinx (in alphabetical order):
-</p><div class="itemizedlist"><ul type="disc"><li>Alexander Klimenko</li>
+</p><div class="itemizedlist"><ul type="disc"><li>Adam Rice</li>
+<li>Adrian Nuta</li>
+<li>Alexander Klimenko</li>
 <li>Alexey Dvoichenkov</li>
 <li>Alexey Vinogradov</li>
+<li>Anton Tsitlionok</li>
+<li>Eugene Kosov</li>
+<li>Gloria Vinogradova</li>
 <li>Ilya Kuznetsov</li>
+<li>Kirill Shmatov</li>
+<li>Rich Kelm</li>
 <li>Stanislav Klinov</li>
+<li>Steven Barker</li>
+<li>Vladimir Fedorkov</li>
+<li>Yuri Schapov</li>
 </ul></div>
 <p>
 </p><h3>Contributors</h3><p>People who contributed to Sphinx and their contributions (in no particular order):
@@ -591,7 +601,7 @@ to compile and run Sphinx without any modifications.
 </p><p>
 Currently known systems Sphinx has been successfully running on are:
 </p><div class="itemizedlist"><ul type="disc"><li>Linux 2.4.x, 2.6.x, 3.x (many various distributions)</li>
-<li>Windows 2000, XP, 7</li>
+<li>Windows 2000, XP, 7, 8</li>
 <li>FreeBSD 4.x, 5.x, 6.x, 7.x, 8.x</li>
 <li>NetBSD 1.6, 3.0</li>
 <li>Solaris 9, 11</li>
@@ -7599,11 +7609,11 @@ you a few additional questions about it.
 Data source type.
 Mandatory, no default value.
 Known types are <code class="option">mysql</code>, <code class="option">pgsql</code>, <code class="option">mssql</code>,
-<code class="option">xmlpipe2</code>, and <code class="option">odbc</code>.
+<code class="option">xmlpipe2</code>, tsvpipe, and <code class="option">odbc</code>.
 </p><p>
 All other per-source options depend on source type selected by this option.
 Names of the options used for SQL sources (ie. MySQL, PostgreSQL, MS SQL) start with "sql_";
-names of the ones used for xmlpipe2 start with "xmlpipe_".
+names of the ones used for xmlpipe2 or tsvpipe start with "xmlpipe_" and "tsvpipe_" correspondingly.
 All source types are conditional; they might or might
 not be supported depending on your build settings, installed client libraries, etc.
 <code class="option">mssql</code> type is currently only available on Windows.

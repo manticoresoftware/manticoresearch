@@ -367,13 +367,13 @@ void sphAssert ( const char * sExpr, const char * sFile, int iLine );
 template <typename T> T Min ( T a, T b ) { return a<b ? a : b; }
 template <typename T, typename U> T Min ( T a, U b )
 {
-	STATIC_ASSERT(sizeof(U)<=sizeof(T), WIDEST_ARG_FIRST);
+	STATIC_ASSERT ( sizeof(U)<=sizeof(T), WIDEST_ARG_FIRST );
 	return a<b ? a : b;
 }
 template <typename T> T Max ( T a, T b ) { return a<b ? b : a; }
 template <typename T, typename U> T Max ( T a, U b )
 {
-	STATIC_ASSERT(sizeof(U)<=sizeof(T), WIDEST_ARG_FIRST);
+	STATIC_ASSERT ( sizeof(U)<=sizeof(T), WIDEST_ARG_FIRST );
 	return a<b ? b : a;
 }
 #define SafeDelete(_x)		{ if (_x) { delete (_x); (_x) = NULL; } }
@@ -921,7 +921,7 @@ public:
 	void Resize ( int iNewLength )
 	{
 		assert ( iNewLength>=0 );
-		if ( iNewLength>=m_iLength )
+		if ( (unsigned int)iNewLength>(unsigned int)m_iLength )
 			Reserve ( iNewLength );
 		m_iLength = iNewLength;
 	}
@@ -2946,12 +2946,13 @@ public:
 
 #if USE_WINDOWS
 #define if_const(_arg) \
-	__pragma(warning(push)) \
-	__pragma(warning(disable:4127)) \
-	if (_arg) \
-	__pragma(warning(pop))
+	__pragma ( warning ( push ) ) \
+	__pragma ( warning ( disable:4127 ) ) \
+	if ( _arg ) \
+	__pragma ( warning ( pop ) )
 #else
-#define if_const(_arg) if(_arg)
+#define if_const(_arg) \
+	if ( _arg )
 #endif
 
 #endif // _sphinxstd_

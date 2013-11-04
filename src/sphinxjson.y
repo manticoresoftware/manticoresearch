@@ -22,8 +22,8 @@
 
 json:
 	// empty
-	| '[' value_list ']' 		{ pParser->WriteNode ( $2 ); }
-	| '{' key_value_list '}'	{ pParser->WriteNode ( $2 ); }
+	| '{' key_value_list '}'	{ if ( !pParser->WriteNode ( $2 ) ) YYERROR; }
+	| '[' value_list ']' 		{ if ( !pParser->WriteNode ( $2 ) ) YYERROR; }
 	;
 
 key:

@@ -1187,8 +1187,8 @@ void sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tS
 		{
 			sphWarning ( "dict=crc deprecated, use dict=keywords instead" );
 			tSettings.m_bWordDict = false;
-		}
-		else if ( hIndex["dict"]!="keywords" )
+
+		} else if ( hIndex["dict"]!="keywords" )
 			fprintf ( stdout, "WARNING: unknown dict=%s, defaulting to keywords\n", hIndex["dict"].cstr() );
 	}
 }

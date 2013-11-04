@@ -1339,7 +1339,7 @@ public:
 	virtual void				PostSetup() {}
 	virtual bool				EarlyReject ( CSphQueryContext * , CSphMatch & ) const { return false; }
 	virtual const CSphSourceStats &	GetStats () const { return g_tTmpDummyStat; }
-	virtual CSphIndexStatus			GetStatus () const { CSphIndexStatus tRes; tRes.m_iRamUse = 0; return tRes; }
+	virtual CSphIndexStatus			GetStatus () const { CSphIndexStatus tRes; tRes.m_iDiskUse = 0; tRes.m_iRamUse = 0; return tRes; }
 	virtual bool				MultiQuery ( const CSphQuery * , CSphQueryResult * , int , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const { return false; }
 	virtual bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult ** , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const { return false; }
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , bool , CSphString * ) const;
@@ -6756,7 +6756,9 @@ int SelectParser_t::GetToken ( YYSTYPE * lvalp )
 	if ( isdigit ( *m_pCur ) )
 	{
 		char * pEnd = NULL;
-		strtod ( m_pCur, &pEnd );
+		double fDummy; // to avoid gcc unused result warning
+		fDummy = strtod ( m_pCur, &pEnd );
+		fDummy *= 2; // to avoid gcc unused variable warning
 
 		m_pCur = pEnd;
 		lvalp->m_iEnd = m_pCur-m_pStart;
@@ -14401,7 +14403,7 @@ static const int DOCLIST_HINT_THRESH = 256;
 // let uDocs be DWORD here to prevent int overflow in case of hitless word (highest bit is 1)
 static int DoclistHintUnpack ( DWORD uDocs, BYTE uHint )
 {
-	if ( uDocs<DOCLIST_HINT_THRESH )
+	if ( uDocs<(DWORD)DOCLIST_HINT_THRESH )
 		return 8*uDocs;
 	else
 		return 4*uDocs + (DWORD)( uint64_t(uDocs)*uHint/64 );

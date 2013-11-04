@@ -311,7 +311,7 @@ public:
 		}
 	}
 
-	void WriteNode ( JsonNode_t & tNode, const char * sKey=NULL, int iKeyLen=0 )
+	bool WriteNode ( JsonNode_t & tNode, const char * sKey=NULL, int iKeyLen=0 )
 	{
 		// convert int64 to int32, strings to numbers if needed
 		NumericFixup ( tNode, m_bAutoconv );
@@ -442,8 +442,9 @@ public:
 			}
 		default:
 			assert ( 0 && "internal error: unhandled type" );
-			break;
+			return false;
 		}
+		return true;
 	}
 
 	void DebugIndent ( int iLevel )

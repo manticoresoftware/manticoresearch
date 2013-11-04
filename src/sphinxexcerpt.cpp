@@ -690,7 +690,7 @@ public:
 		if ( iDstart==0 && iLen<16 && iBoundary<0 )
 		{
 			// try to store a token+overlap combo
-			if ( m_eLastStored==TYPE_TOKEN1 ) 
+			if ( m_eLastStored==TYPE_TOKEN1 )
 			{
 				int iTokLen = m_dTokenStream.Last() & 15;
 				assert ( iTokLen > 0 );
@@ -735,8 +735,8 @@ public:
 
 	void StoreToken ( const TokenInfo_t & tTok )
 	{
-		assert ( tTok.m_iTermIndex < USHRT_MAX );
-		assert ( tTok.m_iLen <= 255 );
+		assert ( tTok.m_iTermIndex<USHRT_MAX );
+		assert ( tTok.m_iLen<=255 );
 
 		int iDstart = tTok.m_iStart - m_iLastStart;
 		int iDpos = tTok.m_uPosition - m_iLastPos;

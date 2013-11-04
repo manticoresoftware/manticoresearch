@@ -3888,13 +3888,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 				}
 				return new Expr_JsonFieldConv_c ( new Expr_Iterator_c ( tNode.m_tLocator, tNode.m_iLocator, dArgs, dTypes, tNode.m_pAttr ) );
 			}
-		case TOK_IDENT:
-		{
-			m_sCreateError.SetSprintf ( "unknown column: %s", tNode.m_sIdent );
-			SafeRelease ( pLeft );
-			SafeRelease ( pRight );
-			return NULL;
-		}
+		case TOK_IDENT:			m_sCreateError.SetSprintf ( "unknown column: %s", tNode.m_sIdent ); break;
 
 		default:				assert ( 0 && "unhandled token type" ); break;
 	}

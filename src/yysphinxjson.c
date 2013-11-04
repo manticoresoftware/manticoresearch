@@ -237,10 +237,10 @@ static const unsigned char yytranslate[] =
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
-       2,    10,     2,    11,     2,     2,     2,     2,     2,     2,
+       2,    12,     2,    13,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
-       2,     2,     2,    12,     2,    13,     2,     2,     2,     2,
+       2,     2,     2,    10,     2,    11,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
@@ -270,10 +270,10 @@ static const unsigned char yyprhs[] =
 /* YYRHS -- A `-1'-separated list of the rules' RHS. */
 static const yysigned_char yyrhs[] =
 {
-      17,     0,    -1,    -1,    10,    21,    11,    -1,    12,    20,
+      17,     0,    -1,    -1,    10,    20,    11,    -1,    12,    21,
       13,    -1,     6,    -1,     3,    -1,     4,    -1,     5,    -1,
-       6,    -1,     7,    -1,     8,    -1,     9,    -1,    12,    20,
-      13,    -1,    10,    21,    11,    -1,    -1,    18,    14,    19,
+       6,    -1,     7,    -1,     8,    -1,     9,    -1,    10,    20,
+      11,    -1,    12,    21,    13,    -1,    -1,    18,    14,    19,
       -1,    20,    15,    18,    14,    19,    -1,    -1,    19,    -1,
       21,    15,    19,    -1
 };
@@ -293,8 +293,8 @@ static const unsigned char yyrline[] =
 static const char *const yytname[] =
 {
   "$end", "error", "$undefined", "TOK_IDENT", "TOK_INT", "TOK_FLOAT", 
-  "TOK_STRING", "TOK_TRUE", "TOK_FALSE", "TOK_NULL", "'['", "']'", "'{'", 
-  "'}'", "':'", "','", "$accept", "json", "key", "value", 
+  "TOK_STRING", "TOK_TRUE", "TOK_FALSE", "TOK_NULL", "'{'", "'}'", "'['", 
+  "']'", "':'", "','", "$accept", "json", "key", "value", 
   "key_value_list", "value_list", 0
 };
 #endif
@@ -305,7 +305,7 @@ static const char *const yytname[] =
 static const unsigned short yytoknum[] =
 {
        0,   256,   257,   258,   259,   260,   261,   262,   263,   264,
-      91,    93,   123,   125,    58,    44
+     123,   125,    91,    93,    58,    44
 };
 # endif
 
@@ -330,33 +330,33 @@ static const unsigned char yyr2[] =
    means the default is an error.  */
 static const unsigned char yydefact[] =
 {
-       2,    18,    15,     0,     7,     8,     9,    10,    11,    12,
-      18,    15,    19,     0,     6,     5,     0,     0,     1,     0,
-       0,     3,     0,     0,     4,     0,    14,    13,    20,    16,
-       0,     0,    17
+       2,    15,    18,     0,     6,     5,     0,     0,     7,     8,
+       9,    10,    11,    12,    15,    18,    19,     0,     1,     0,
+       3,     0,     0,     0,     4,     0,    16,     0,    13,    14,
+      20,     0,    17
 };
 
 /* YYDEFGOTO[NTERM-NUM]. */
 static const yysigned_char yydefgoto[] =
 {
-      -1,     3,    16,    12,    17,    13
+      -1,     3,     6,    16,     7,    17
 };
 
 /* YYPACT[STATE-NUM] -- Index in YYTABLE of the portion describing
    STATE-NUM.  */
-#define YYPACT_NINF -23
+#define YYPACT_NINF -20
 static const yysigned_char yypact[] =
 {
-       8,    -2,    11,    13,   -23,   -23,   -23,   -23,   -23,   -23,
-      -2,    11,   -23,     0,   -23,   -23,    12,     6,   -23,     1,
-       9,   -23,    -2,    -2,   -23,    11,   -23,   -23,   -23,   -23,
-      14,    -2,   -23
+      10,     5,     9,    23,   -20,   -20,    -5,   -10,   -20,   -20,
+     -20,   -20,   -20,   -20,     5,     9,   -20,   -11,   -20,     9,
+     -20,     5,    -8,    11,   -20,     9,   -20,    -4,   -20,   -20,
+     -20,     9,   -20
 };
 
 /* YYPGOTO[NTERM-NUM].  */
 static const yysigned_char yypgoto[] =
 {
-     -23,   -23,     2,   -22,    18,    15
+     -20,   -20,     4,   -19,    13,    14
 };
 
 /* YYTABLE[YYPACT[STATE-NUM]].  What to do in state STATE-NUM.  If
@@ -366,26 +366,26 @@ static const yysigned_char yypgoto[] =
 #define YYTABLE_NINF -1
 static const unsigned char yytable[] =
 {
-      28,    29,     4,     5,     6,     7,     8,     9,    10,    32,
-      11,    21,    26,    18,    14,    22,    22,    15,     1,    24,
-       2,    25,    27,     0,    25,    19,    23,    30,    31,    20
+      26,    20,    24,    28,    25,    21,    30,    21,     4,    19,
+      31,     5,    32,     8,     9,    10,    11,    12,    13,    14,
+       1,    15,     2,    18,    29,    27,    25,    22,     0,    23
 };
 
 static const yysigned_char yycheck[] =
 {
-      22,    23,     4,     5,     6,     7,     8,     9,    10,    31,
-      12,    11,    11,     0,     3,    15,    15,     6,    10,    13,
-      12,    15,    13,    -1,    15,    10,    14,    25,    14,    11
+      19,    11,    13,    11,    15,    15,    25,    15,     3,    14,
+      14,     6,    31,     4,     5,     6,     7,     8,     9,    10,
+      10,    12,    12,     0,    13,    21,    15,    14,    -1,    15
 };
 
 /* YYSTOS[STATE-NUM] -- The (internal number of the) accessing
    symbol of state STATE-NUM.  */
 static const unsigned char yystos[] =
 {
-       0,    10,    12,    17,     4,     5,     6,     7,     8,     9,
-      10,    12,    19,    21,     3,     6,    18,    20,     0,    21,
-      20,    11,    15,    14,    13,    15,    11,    13,    19,    19,
-      18,    14,    19
+       0,    10,    12,    17,     3,     6,    18,    20,     4,     5,
+       6,     7,     8,     9,    10,    12,    19,    21,     0,    14,
+      11,    15,    20,    21,    13,    15,    19,    18,    11,    13,
+      19,    14,    19
 };
 
 #if ! defined (YYSIZE_T) && defined (__SIZE_TYPE__)
@@ -996,12 +996,12 @@ yyreduce:
     {
         case 3:
 
-    { pParser->WriteNode ( yyvsp[-1] ); ;}
+    { if ( !pParser->WriteNode ( yyvsp[-1] ) ) YYERROR; ;}
     break;
 
   case 4:
 
-    { pParser->WriteNode ( yyvsp[-1] ); ;}
+    { if ( !pParser->WriteNode ( yyvsp[-1] ) ) YYERROR; ;}
     break;
 
   case 13:

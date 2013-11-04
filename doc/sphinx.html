@@ -15,10 +15,13 @@
 <dt><span class="sect1"><a href="#history">1.6. History</a></span></dt>
 </dl></dd><dt><span class="chapter"><a href="#installation">2. Installation</a></span></dt>
 <dd><dl><dt><span class="sect1"><a href="#supported-system">2.1. Supported systems</a></span></dt>
-<dt><span class="sect1"><a href="#required-tools">2.2. Required tools</a></span></dt>
-<dt><span class="sect1"><a href="#installing">2.3. Installing Sphinx on Linux</a></span></dt>
-<dt><span class="sect1"><a href="#installing-windows">2.4. Installing Sphinx on Windows</a></span></dt>
-<dt><span class="sect1"><a href="#install-problems">2.5. Known installation issues</a></span></dt>
+<dt><span class="sect1"><a href="#compiling-from-source">2.2. Compiling Sphinx from source</a></span></dt>
+<dd><dl><dt><span class="sect2"><a href="#required-tools">2.2.1. Required tools</a></span></dt>
+<dt><span class="sect2"><a href="#compiling-source-linux">2.2.2. Compiling on Linux</a></span></dt>
+<dt><span class="sect2"><a href="#compiling-source-problems">2.2.3. Known compilation issues</a></span></dt>
+</dl></dd><dt><span class="sect1"><a href="#installing-debian">2.3. Installing Sphinx packages on Debian and Ubuntu</a></span></dt>
+<dt><span class="sect1"><a href="#installing-redhat">2.4. Installing Sphinx packages on RedHat and CentOS</a></span></dt>
+<dt><span class="sect1"><a href="#installing-windows">2.5. Installing Sphinx on Windows</a></span></dt>
 <dt><span class="sect1"><a href="#quick-tour">2.6. Quick Sphinx usage tour</a></span></dt>
 </dl></dd><dt><span class="chapter"><a href="#indexing">3. Indexing</a></span></dt>
 <dd><dl><dt><span class="sect1"><a href="#sources">3.1. Data sources</a></span></dt>
@@ -588,15 +591,19 @@ during last years, the obvious decision is to continue developing Sphinx
 </p></div></div>
 <div class="chapter" lang="en"><div class="titlepage"><div><div><h2 class="title"><a name="installation"></a>Chapter&nbsp;2.&nbsp;Installation</h2></div></div></div>
 <div class="toc"><p><b>Table of Contents</b></p><dl><dt><span class="sect1"><a href="#supported-system">2.1. Supported systems</a></span></dt>
-<dt><span class="sect1"><a href="#required-tools">2.2. Required tools</a></span></dt>
-<dt><span class="sect1"><a href="#installing">2.3. Installing Sphinx on Linux</a></span></dt>
-<dt><span class="sect1"><a href="#installing-windows">2.4. Installing Sphinx on Windows</a></span></dt>
-<dt><span class="sect1"><a href="#install-problems">2.5. Known installation issues</a></span></dt>
+<dt><span class="sect1"><a href="#compiling-from-source">2.2. Compiling Sphinx from source</a></span></dt>
+<dd><dl><dt><span class="sect2"><a href="#required-tools">2.2.1. Required tools</a></span></dt>
+<dt><span class="sect2"><a href="#compiling-source-linux">2.2.2. Compiling on Linux</a></span></dt>
+<dt><span class="sect2"><a href="#compiling-source-problems">2.2.3. Known compilation issues</a></span></dt>
+</dl></dd><dt><span class="sect1"><a href="#installing-debian">2.3. Installing Sphinx packages on Debian and Ubuntu</a></span></dt>
+<dt><span class="sect1"><a href="#installing-redhat">2.4. Installing Sphinx packages on RedHat and CentOS</a></span></dt>
+<dt><span class="sect1"><a href="#installing-windows">2.5. Installing Sphinx on Windows</a></span></dt>
 <dt><span class="sect1"><a href="#quick-tour">2.6. Quick Sphinx usage tour</a></span></dt>
 </dl></div>
 <div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="supported-system"></a>2.1.&nbsp;Supported systems</h2></div></div></div>
 <p>
-Most modern UNIX systems with a C++ compiler should be able
+Sphinx can be compiled either from source or installed using prebuilt 
+packages. Most modern UNIX systems with a C++ compiler should be able 
 to compile and run Sphinx without any modifications.
 </p><p>
 Currently known systems Sphinx has been successfully running on are:
@@ -619,7 +626,8 @@ worked for you!
 All platforms are production quality. There are no principal functional
 limitations on any platform.
 </p></div>
-<div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="required-tools"></a>2.2.&nbsp;Required tools</h2></div></div></div>
+<div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="compiling-from-source"></a>2.2.&nbsp;Compiling Sphinx from source</h2></div></div></div>
+<div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="required-tools"></a>2.2.1.&nbsp;Required tools</h3></div></div></div>
 <p>
 On UNIX, you will need the following tools to build
 and install Sphinx:
@@ -633,13 +641,13 @@ Other compilers/environments will probably work as well, but for the
 time being, you will have to build makefile (or other environment
 specific project files) manually.
 </p></div>
-<div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="installing"></a>2.3.&nbsp;Installing Sphinx on Linux</h2></div></div></div>
+<div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="compiling-source-linux"></a>2.2.2.&nbsp;Compiling on Linux</h3></div></div></div>
 <div class="orderedlist"><ol type="1"><li><p>
     Extract everything from the distribution tarball (haven't you already?)
     and go to the <code class="filename">sphinx</code> subdirectory. (We are using
-    version 2.0.1-beta here for the sake of example only; be sure to change this
+    version 2.2.1-beta here for the sake of example only; be sure to change this
     to a specific version you're using.)
-    </p><div class="literallayout"><p><strong class="userinput"><code>$&nbsp;tar&nbsp;xzvf&nbsp;sphinx-2.0.1-beta.tar.gz<br>
+    </p><div class="literallayout"><p><strong class="userinput"><code>$&nbsp;tar&nbsp;xzvf&nbsp;sphinx-2.2.1-beta.tar.gz<br>
 $&nbsp;cd&nbsp;sphinx<br>
 </code></strong></p></div></li>
 <li><p>Run the configuration program:</p><div class="literallayout"><p><strong class="userinput"><code>$&nbsp;./configure</code></strong></p></div>
@@ -659,31 +667,7 @@ $&nbsp;cd&nbsp;sphinx<br>
     (defaults to <code class="filename">/usr/local/bin/</code> on *nix systems,
     but is overridden with <code class="option">configure --prefix</code>)</p><div class="literallayout"><p><strong class="userinput"><code>$&nbsp;make&nbsp;install</code></strong></p></div></li>
 </ol></div></div>
-<div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="installing-windows"></a>2.4.&nbsp;Installing Sphinx on Windows</h2></div></div></div>
-<p>Installing Sphinx on a Windows server is often easier than installing on a Linux environment;
-unless you are preparing code patches, you can use the pre-compiled binary files from the Downloads
-area on the website.</p><div class="orderedlist"><ol type="1"><li><p>Extract everything from the .zip file you have downloaded -
-    <code class="filename">sphinx-2.0.1-beta-win32.zip</code>,
-    or <code class="filename">sphinx-2.0.1-beta-win32-pgsql.zip</code> if you need PostgresSQL support as well.
-    (We are using version 2.0.1-beta here for the sake of example only;
-    be sure to change this to a specific version you're using.)
-    You can use Windows Explorer in Windows XP and up to extract the files,
-    or a freeware package like 7Zip to open the archive.</p><p>For the remainder of this guide, we will assume that the folders are unzipped into <code class="filename">C:\Sphinx</code>,
-    such that <code class="filename">searchd.exe</code> can be found in <code class="filename">C:\Sphinx\bin\searchd.exe</code>. If you decide
-    to use any different location for the folders or configuration file, please change it accordingly.</p></li>
-<li>Edit the contents of sphinx.conf.in - specifically entries relating to @CONFDIR@ - to paths suitable for your system.</li>
-<li><p>Install the <code class="filename">searchd</code> system as a Windows service:</p><p><strong class="userinput"><code>C:\Sphinx\bin&gt; C:\Sphinx\bin\searchd --install --config C:\Sphinx\sphinx.conf.in --servicename SphinxSearch</code></strong></p></li>
-<li><p>The <code class="filename">searchd</code> service will now be listed in the Services panel
-    within the Management Console, available from Administrative Tools. It will not have been
-    started, as you will need to configure it and build your indexes with <code class="filename">indexer</code>
-    before starting the service. A guide to do this can be found under
-    <a href="#quick-tour" title="2.6.&nbsp;Quick Sphinx usage tour">Quick tour</a>.</p><p>During the next steps of the install (which involve running indexer pretty much as
-    you would on Linux) you may find that you get an error relating to libmysql.dll not being found.
-    If you have MySQL installed, you should find a copy of this library in your Windows directory,
-    or sometimes in Windows\System32, or failing that in the MySQL core directories. If you
-    do receive an error please copy libmysql.dll into the bin directory.</p></li>
-</ol></div></div>
-<div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="install-problems"></a>2.5.&nbsp;Known installation issues</h2></div></div></div>
+<div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="compiling-source-problems"></a>2.2.3.&nbsp;Known compilation issues</h3></div></div></div>
 <p>
 If <code class="filename">configure</code> fails to locate MySQL headers and/or libraries,
 try checking for and installing <code class="filename">mysql-devel</code> package. On some systems,
@@ -711,7 +695,45 @@ compiler/OS details, so I could properly fix them in next releases.
 </p><p>
 If you keep getting any other error, or the suggestions above
 do not seem to help you, please don't hesitate to contact me.
-</p></div>
+</p></div></div>
+<div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="installing-debian"></a>2.3.&nbsp;Installing Sphinx packages on Debian and Ubuntu</h2></div></div></div>
+<p>There are two ways of getting Sphinx for Ubuntu: regular deb packages and the Launchpad PPA repository.</p><p>Deb packages:</p><div class="orderedlist"><ol type="1"><li><p>Sphinx requires a few libraries to be installed on Debian/Ubuntu. Use apt-get to download and install these dependencies:</p><strong class="userinput"><code>$ sudo apt-get install mysql-client unixodbc libpq5</code></strong></li>
+<li><p>Now you can install Sphinx:</p><strong class="userinput"><code>$ sudo dpkg -i sphinxsearch_2.2.1-beta-0ubuntu11~precise_amd64.deb</code></strong></li>
+</ol></div>
+<p>PPA repository (Ubuntu only).</p><p>Installing Sphinx is much easier from Sphinxsearch PPA repository, because you will get all dependencies and can also update Sphinx to the latest version with the same command.</p><div class="orderedlist"><ol type="1"><li><p>First, add Sphinxsearch repository and update the list of packages:</p><p><strong class="userinput"><code>$ sudo add-apt-repository ppa:builds/sphinxsearch-daily</code></strong></p><p><strong class="userinput"><code>$ sudo apt-get update</code></strong></p></li>
+<li><p>Install/update sphinxsearch package:</p><p><strong class="userinput"><code>$ sudo apt-get install sphinxsearch</code></strong></p></li>
+</ol></div>
+<p>Sphinx <code class="filename">searchd</code> daemon can be started/stopped using service command:</p><p><strong class="userinput"><code>$ sudo service sphinxsearch start</code></strong></p></div>
+<div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="installing-redhat"></a>2.4.&nbsp;Installing Sphinx packages on RedHat and CentOS</h2></div></div></div>
+<p>Currently we distribute Sphinx RPMS and SRPMS on our website for both 5.x and 6.x 
+versions of Red Hat Enterprise Linux, but they can be installed on CentOS as well.</p><div class="orderedlist"><ol type="1"><li><p>Before installation make sure you have these packages installed:</p><p><strong class="userinput"><code>$ yum install postgresql-libs unixODBC</code></strong></p></li>
+<li><p>Download RedHat RPM from Sphinx website and install it:</p><p><strong class="userinput"><code>$ rpm -Uhv sphinx-2.2.1-1.rhel6.x86_64.rpm</code></strong></p></li>
+<li><p>After preparing configuration file (see <a href="#quick-tour" title="2.6.&nbsp;Quick Sphinx usage tour">Quick tour</a>), you can start searchd daemon:</p><p><strong class="userinput"><code>$ service searchd start</code></strong></p></li>
+</ol></div></div>
+<div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="installing-windows"></a>2.5.&nbsp;Installing Sphinx on Windows</h2></div></div></div>
+<p>Installing Sphinx on a Windows server is often easier than installing on a Linux environment;
+unless you are preparing code patches, you can use the pre-compiled binary files from the Downloads
+area on the website.</p><div class="orderedlist"><ol type="1"><li><p>Extract everything from the .zip file you have downloaded -
+    <code class="filename">sphinx-2.2.1-beta-win32.zip</code>,
+    or <code class="filename">sphinx-2.2.1-beta-win32-pgsql.zip</code> if you need PostgresSQL support as well.
+    (We are using version 2.2.1-beta here for the sake of example only;
+    be sure to change this to a specific version you're using.)
+    You can use Windows Explorer in Windows XP and up to extract the files,
+    or a freeware package like 7Zip to open the archive.</p><p>For the remainder of this guide, we will assume that the folders are unzipped into <code class="filename">C:\Sphinx</code>,
+    such that <code class="filename">searchd.exe</code> can be found in <code class="filename">C:\Sphinx\bin\searchd.exe</code>. If you decide
+    to use any different location for the folders or configuration file, please change it accordingly.</p></li>
+<li>Edit the contents of sphinx.conf.in - specifically entries relating to @CONFDIR@ - to paths suitable for your system.</li>
+<li><p>Install the <code class="filename">searchd</code> system as a Windows service:</p><p><strong class="userinput"><code>C:\Sphinx\bin&gt; C:\Sphinx\bin\searchd --install --config C:\Sphinx\sphinx.conf.in --servicename SphinxSearch</code></strong></p></li>
+<li><p>The <code class="filename">searchd</code> service will now be listed in the Services panel
+    within the Management Console, available from Administrative Tools. It will not have been
+    started, as you will need to configure it and build your indexes with <code class="filename">indexer</code>
+    before starting the service. A guide to do this can be found under
+    <a href="#quick-tour" title="2.6.&nbsp;Quick Sphinx usage tour">Quick tour</a>.</p><p>During the next steps of the install (which involve running indexer pretty much as
+    you would on Linux) you may find that you get an error relating to libmysql.dll not being found.
+    If you have MySQL installed, you should find a copy of this library in your Windows directory,
+    or sometimes in Windows\System32, or failing that in the MySQL core directories. If you
+    do receive an error please copy libmysql.dll into the bin directory.</p></li>
+</ol></div></div>
 <div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="quick-tour"></a>2.6.&nbsp;Quick Sphinx usage tour</h2></div></div></div>
 <p>
 All the example commands below assume that you installed Sphinx

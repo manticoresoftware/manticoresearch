@@ -22,10 +22,14 @@ Table of Contents
 
 2. Installation
    2.1. Supported systems
-   2.2. Required tools
-   2.3. Installing Sphinx on Linux
-   2.4. Installing Sphinx on Windows
-   2.5. Known installation issues
+   2.2. Compiling Sphinx from source
+      2.2.1. Required tools
+      2.2.2. Compiling on Linux
+      2.2.3. Known compilation issues
+
+   2.3. Installing Sphinx packages on Debian and Ubuntu
+   2.4. Installing Sphinx packages on RedHat and CentOS
+   2.5. Installing Sphinx on Windows
    2.6. Quick Sphinx usage tour
 
 3. Indexing
@@ -665,17 +669,22 @@ Chapter 2. Installation
 Table of Contents
 
 2.1. Supported systems
-2.2. Required tools
-2.3. Installing Sphinx on Linux
-2.4. Installing Sphinx on Windows
-2.5. Known installation issues
+2.2. Compiling Sphinx from source
+   2.2.1. Required tools
+   2.2.2. Compiling on Linux
+   2.2.3. Known compilation issues
+
+2.3. Installing Sphinx packages on Debian and Ubuntu
+2.4. Installing Sphinx packages on RedHat and CentOS
+2.5. Installing Sphinx on Windows
 2.6. Quick Sphinx usage tour
 
 2.1. Supported systems
 ======================
 
-Most modern UNIX systems with a C++ compiler should be able to compile and
-run Sphinx without any modifications.
+Sphinx can be compiled either from source or installed using prebuilt
+packages. Most modern UNIX systems with a C++ compiler should be able to
+compile and run Sphinx without any modifications.
 
 Currently known systems Sphinx has been successfully running on are:
 
@@ -696,8 +705,11 @@ for you!
 All platforms are production quality. There are no principal functional
 limitations on any platform.
 
-2.2. Required tools
-===================
+2.2. Compiling Sphinx from source
+=================================
+
+2.2.1. Required tools
+---------------------
 
 On UNIX, you will need the following tools to build and install Sphinx:
 
@@ -709,15 +721,15 @@ Other compilers/environments will probably work as well, but for the time
 being, you will have to build makefile (or other environment specific
 project files) manually.
 
-2.3. Installing Sphinx on Linux
-===============================
+2.2.2. Compiling on Linux
+-------------------------
 
    1. Extract everything from the distribution tarball (haven't you
       already?) and go to the sphinx subdirectory. (We are using version
-      2.0.1-beta here for the sake of example only; be sure to change this
+      2.2.1-beta here for the sake of example only; be sure to change this
       to a specific version you're using.)
 
-      | $ tar xzvf sphinx-2.0.1-beta.tar.gz
+      | $ tar xzvf sphinx-2.2.1-beta.tar.gz
       | $ cd sphinx
 
    2. Run the configuration program:
@@ -748,7 +760,93 @@ project files) manually.
 
       | $ make install
 
-2.4. Installing Sphinx on Windows
+2.2.3. Known compilation issues
+-------------------------------
+
+If configure fails to locate MySQL headers and/or libraries, try checking
+for and installing mysql-devel package. On some systems, it is not
+installed by default.
+
+If make fails with a message which look like
+
+   | /bin/sh: g++: command not found
+   | make[1]: *** [libsphinx_a-sphinx.o] Error 127
+
+try checking for and installing gcc-c++ package.
+
+If you are getting compile-time errors which look like
+
+   | sphinx.cpp:67: error: invalid application of `sizeof' to
+   |     incomplete type `Private::SizeError<false>'
+
+this means that some compile-time type size check failed. The most probable
+reason is that off_t type is less than 64-bit on your system. As a quick
+hack, you can edit sphinx.h and replace off_t with DWORD in a typedef for
+SphOffset_t, but note that this will prohibit you from using full-text
+indexes larger than 2 GB. Even if the hack helps, please report such
+issues, providing the exact error message and compiler/OS details, so
+I could properly fix them in next releases.
+
+If you keep getting any other error, or the suggestions above do not seem
+to help you, please don't hesitate to contact me.
+
+2.3. Installing Sphinx packages on Debian and Ubuntu
+====================================================
+
+There are two ways of getting Sphinx for Ubuntu: regular deb packages and
+the Launchpad PPA repository.
+
+Deb packages:
+
+   1. Sphinx requires a few libraries to be installed on Debian/Ubuntu. Use
+      apt-get to download and install these dependencies:
+
+      $ sudo apt-get install mysql-client unixodbc libpq5
+   2. Now you can install Sphinx:
+
+      $ sudo dpkg -i sphinxsearch_2.2.1-beta-0ubuntu11~precise_amd64.deb
+
+PPA repository (Ubuntu only).
+
+Installing Sphinx is much easier from Sphinxsearch PPA repository, because
+you will get all dependencies and can also update Sphinx to the latest
+version with the same command.
+
+   1. First, add Sphinxsearch repository and update the list of packages:
+
+      $ sudo add-apt-repository ppa:builds/sphinxsearch-daily
+
+      $ sudo apt-get update
+
+   2. Install/update sphinxsearch package:
+
+      $ sudo apt-get install sphinxsearch
+
+Sphinx searchd daemon can be started/stopped using service command:
+
+$ sudo service sphinxsearch start
+
+2.4. Installing Sphinx packages on RedHat and CentOS
+====================================================
+
+Currently we distribute Sphinx RPMS and SRPMS on our website for both 5.x
+and 6.x versions of Red Hat Enterprise Linux, but they can be installed on
+CentOS as well.
+
+   1. Before installation make sure you have these packages installed:
+
+      $ yum install postgresql-libs unixODBC
+
+   2. Download RedHat RPM from Sphinx website and install it:
+
+      $ rpm -Uhv sphinx-2.2.1-1.rhel6.x86_64.rpm
+
+   3. After preparing configuration file (see Quick tour), you can start
+      searchd daemon:
+
+      $ service searchd start
+
+2.5. Installing Sphinx on Windows
 =================================
 
 Installing Sphinx on a Windows server is often easier than installing on
@@ -756,9 +854,9 @@ a Linux environment; unless you are preparing code patches, you can use the
 pre-compiled binary files from the Downloads area on the website.
 
    1. Extract everything from the .zip file you have downloaded -
-      sphinx-2.0.1-beta-win32.zip, or sphinx-2.0.1-beta-win32-pgsql.zip if
+      sphinx-2.2.1-beta-win32.zip, or sphinx-2.2.1-beta-win32-pgsql.zip if
       you need PostgresSQL support as well. (We are using version
-      2.0.1-beta here for the sake of example only; be sure to change this
+      2.2.1-beta here for the sake of example only; be sure to change this
       to a specific version you're using.) You can use Windows Explorer in
       Windows XP and up to extract the files, or a freeware package like
       7Zip to open the archive.
@@ -789,36 +887,6 @@ pre-compiled binary files from the Downloads area on the website.
       directory, or sometimes in Windows\System32, or failing that in the
       MySQL core directories. If you do receive an error please copy
       libmysql.dll into the bin directory.
-
-2.5. Known installation issues
-==============================
-
-If configure fails to locate MySQL headers and/or libraries, try checking
-for and installing mysql-devel package. On some systems, it is not
-installed by default.
-
-If make fails with a message which look like
-
-   | /bin/sh: g++: command not found
-   | make[1]: *** [libsphinx_a-sphinx.o] Error 127
-
-try checking for and installing gcc-c++ package.
-
-If you are getting compile-time errors which look like
-
-   | sphinx.cpp:67: error: invalid application of `sizeof' to
-   |     incomplete type `Private::SizeError<false>'
-
-this means that some compile-time type size check failed. The most probable
-reason is that off_t type is less than 64-bit on your system. As a quick
-hack, you can edit sphinx.h and replace off_t with DWORD in a typedef for
-SphOffset_t, but note that this will prohibit you from using full-text
-indexes larger than 2 GB. Even if the hack helps, please report such
-issues, providing the exact error message and compiler/OS details, so
-I could properly fix them in next releases.
-
-If you keep getting any other error, or the suggestions above do not seem
-to help you, please don't hesitate to contact me.
 
 2.6. Quick Sphinx usage tour
 ============================

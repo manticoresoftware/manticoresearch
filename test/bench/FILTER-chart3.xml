@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>filter</name>
+
+<config>
+indexer
+{
+	mem_limit = 128M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source fullscan
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = select id, value as a1, value as a2, value as a3, id as b1, id as b2, id as b3, text, mva, j, gid, tag, s1 as s1raw, CRC32(s1) as s1folded from fullscan
+	sql_attr_uint = a1
+	sql_attr_uint = a2
+	sql_attr_uint = a3
+	sql_attr_uint = b1
+	sql_attr_uint = b2
+	sql_attr_uint = b3
+	sql_attr_multi = uint mva from field
+	sql_attr_json	= j
+	sql_attr_uint = gid
+	sql_attr_uint = tag
+	sql_attr_string = s1raw
+	sql_attr_uint = s1folded
+}
+
+index fullscan
+{
+	source	= fullscan
+	path	= <local>data</local>/filter
+	docinfo	= extern
+}
+</config>
+
+<sphqueries>
+<!-- group by vs N group -->
+<sphinxql>select id from fullscan group by gid OPTION comment = 'group N1 attr'</sphinxql>
+<sphinxql>select id from fullscan group 2 by gid OPTION comment = 'group N2 attr'</sphinxql>
+<sphinxql>select id from fullscan group 5 by gid OPTION comment = 'group N5 attr'</sphinxql>
+<sphinxql>select id from fullscan group by j.gid OPTION comment = 'group N1 json'</sphinxql>
+<sphinxql>select id from fullscan group 2 by j.gid OPTION comment = 'group N2 json'</sphinxql>
+<sphinxql>select id from fullscan group 5 by j.gid OPTION comment = 'group N5 json'</sphinxql>
+
+<!-- group crc32 vs string vs json  -->
+<sphinxql>select id from fullscan group by s1folded OPTION comment = 'crc32 group'</sphinxql>
+<sphinxql>select id from fullscan group by s1raw OPTION comment = 'str group'</sphinxql>
+<sphinxql>select id from fullscan group by j.s1 OPTION comment = 'json group'</sphinxql>
+
+</sphqueries>
+
+</test>

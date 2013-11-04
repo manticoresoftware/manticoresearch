@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>filter</name>
+
+<config>
+indexer
+{
+	mem_limit = 128M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source fullscan
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = select id, value as a1, value as a2, value as a3, id as b1, id as b2, id as b3, text, mva, j, gid, tag, s1 as s1raw, CRC32(s1) as s1folded from fullscan
+	sql_attr_uint = a1
+	sql_attr_uint = a2
+	sql_attr_uint = a3
+	sql_attr_uint = b1
+	sql_attr_uint = b2
+	sql_attr_uint = b3
+	sql_attr_multi = uint mva from field
+	sql_attr_json	= j
+	sql_attr_uint = gid
+	sql_attr_uint = tag
+	sql_attr_string = s1raw
+	sql_attr_uint = s1folded
+}
+
+index fullscan
+{
+	source	= fullscan
+	path	= <local>data</local>/filter
+	docinfo	= extern
+}
+</config>
+
+<sphqueries>
+<!-- and block filter vs no block expression -->
+<sphinxql tag="attr1 no block filter">select id from fullscan where a1=3 OPTION comment='filter attr1'</sphinxql>
+<sphinxql tag="attr1 no block filter">select id, a1=3 as cnd from fullscan where cnd=1 OPTION comment ='expr attr1'</sphinxql>
+<sphinxql tag="attr1 block filter">select id from fullscan where b1&lt;10000 OPTION comment = 'filter attr1 block'</sphinxql>
+<sphinxql tag="attr1 block filter">select id, b1&lt;6000 as cnd from fullscan where cnd=1 OPTION comment = 'expr attr1 block'</sphinxql>
+
+<!-- and2 block filter vs no block expression -->
+<sphinxql tag="attr2 no block filter">select id from fullscan where a1=3 and a2=3 OPTION comment = 'filter attr2'</sphinxql>
+<sphinxql tag="attr2 no block filter">select id, a1=3 and a2=3 as cnd from fullscan where cnd=1 OPTION comment = 'expr attr2'</sphinxql>
+<sphinxql tag="attr2 block filter">select id from fullscan where b1&lt;10000 and b2&lt;20000 OPTION comment = 'filter attr2 block'</sphinxql>
+<sphinxql tag="attr2 block filter">select id, b1&lt;10000 and b2&lt;20000 as cnd from fullscan where cnd=1 OPTION comment = 'expr attr2 block'</sphinxql>
+
+<!-- and3 block filter vs no block expression -->
+<sphinxql>select id from fullscan where a1=3 and a2=3 and a3=3 OPTION comment = 'filter attr3'</sphinxql>
+<sphinxql>select id, a1=3 and a2=3 and a3=3 as cnd from fullscan where cnd=1 OPTION comment = 'expr attr3'</sphinxql>
+<sphinxql>select id from fullscan where b1&lt;10000 and b2&lt;20000 and b3&lt;30000 OPTION comment = 'filter attr3 block'</sphinxql>
+<sphinxql>select id, b1&lt;10000 and b2&lt;20000 and b3&lt;30000 as cnd from fullscan where cnd=1 OPTION comment = 'expr attr3 block'</sphinxql>
+
+</sphqueries>
+
+</test>

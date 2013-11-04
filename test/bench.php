@@ -18,11 +18,8 @@ function Fatal ( $message )
 
 function sphCompareTime ( $a, $b )
 {
-	if ( abs ( $a - $b ) < 0.01 )
-		return sprintf ( "%.3f", $a );
-
-	$p = $a ? sprintf ( " %+.1f%%", ( $b / $a - 1 ) * 100 ) : '';
-	return sprintf ( "%.2f / %.2f%s", $a, $b, $p );
+	$p = $a ? sprintf ( "%.1f", ( $b / $a - 1 ) * 100 ) : '0.0';
+	return $p;
 }
 
 function sphCompareKeys ( $sets, $i, $key )
@@ -44,12 +41,14 @@ function sphCompareSets ( $sets )
 			$tag = $sets[0][$i]['tag'];
 			$report[] = array ( $tag );
 		}
- 		$report[] = array (
- 			sphCompareKeys ( $sets, $i, 'query' ),
- 			sphCompareTime ( $sets[0][$i]['time'], $sets[1][$i]['time'] ),
- 			sphCompareKeys ( $sets, $i, 'total' ),
- 			sphCompareKeys ( $sets, $i, 'total_found' )
-		);
+		$report[] = array (
+				sphCompareKeys ( $sets, $i, 'query' ),
+				sprintf ( "%.3f", $sets[0][$i]['time'] ),
+				sprintf ( "%.3f", $sets[1][$i]['time'] ),
+				sphCompareTime ( $sets[0][$i]['time'] ,$sets[1][$i]['time'] ),
+				sphCompareKeys ( $sets, $i, 'total' ),
+				sphCompareKeys ( $sets, $i, 'total_found' )
+			);
 	}
 	return $report;
 }
@@ -124,14 +123,14 @@ function sphTextReport ( $report )
 	$mode = $g_locals['mode'];
 	
 	$width = array ();
-	$header = array ( 'query', 'time', 'total', 'total found' );
+	$header = array ( 'query', basename ( $report['sources'][0], '.bin' ) , basename ( $report['sources'][1], '.bin' ), '%', 'total', 'total found' );
 
 	foreach ( $header as $title )
 		$width[] = strlen($title);
 	foreach ( $report[$mode] as $row )
 	{
 		if ( count($row)==1 ) continue;
-		for ( $i=0; $i<4; $i++ )
+		for ( $i=0; $i<count($row); $i++ )
 		{
 			$len = min ( strlen($row[$i]), 40 );
 			$width[$i] = max ( $width[$i], $len );
@@ -157,24 +156,22 @@ function sphTextReport ( $report )
 		}
 		if ( $restart )
 		{
-			for ( $i=0; $i<4; $i++ )
+			for ( $i=0; $i<count($header); $i++ )
 				printf ( ' %s', str_pad ( $header[$i], $width[$i] + 2, ' ', STR_PAD_BOTH ) );
 			printf("\n");
-			for ( $i=0; $i<4; $i++ )
+			for ( $i=0; $i<count($header); $i++ )
 				printf ( ' %s', str_repeat ( '-', $width[$i] + 2 ) );
 			$restart = false;
 			printf("\n");
 		}
-		if ( count($row)==4 )
-			for ( $i=0; $i<4; $i++ )
-			{
-				$text = $row[$i];
-				if ( strlen($text) > 40 )
-					$text = substr ( $text, 0, 37 ) . '...';
-				if ( $i>1 )
-					$text = number_format ( $text, 0, '', ' ' );
-				printf ( ' %s', str_pad ( $text, $width[$i] + 2, ' ', STR_PAD_LEFT ) );
-			}
+		$i = 0;
+		foreach ( $row as $text )
+		{
+			if ( strlen($text) > 40 )
+				$text = substr ( $text, 0, 37 ) . '...';
+			printf ( '%s |', str_pad ( $text, $width[$i] + 2, ' ', STR_PAD_LEFT ) );
+			$i++;
+		}
 		printf("\n");
 	}
 
@@ -229,8 +226,6 @@ function sphBenchmark ( $name, $locals, $force_reindex )
 
 	// grab index names and paths
 	$msg = '';
-	if ( !$config->IsRt() ) // enable only in non rt-mode
-		$config->EnableCompat098 ();
 	$config->WriteConfig ( 'config.conf', 'all', $msg );
 	$indexes = array();
 	$text = file_get_contents('config.conf');
@@ -304,7 +299,9 @@ function sphBenchmark ( $name, $locals, $force_reindex )
 			'hash' => $hash,
 			'version' => GetVersion()
 		);
-		$i = 0; $q = null; $last = '';
+		$i = 0; $q = null;
+		$lastQuery = '';
+		$lastTag = '';
 		foreach ( $config->Results() as $result )
 		{
 			if ( $config->IsSphinxqlTest () )
@@ -315,10 +312,18 @@ function sphBenchmark ( $name, $locals, $force_reindex )
 						array ( 'total'			=> $result['rows'][0]['Value'],
 								'total_found'	=> $result['rows'][1]['Value'],
 								'time'			=> $result['rows'][2]['Value'],
-								'query'			=> $last,
-								'tag'			=> $last );
+								'query'			=> $lastQuery,
+								'tag'			=> $lastTag );
+				} else
+				{
+					$lastQuery = $result['sphinxql'];
+					$lastTag = $lastQuery;
+					$matches = array();
+					if ( preg_match_all ( "/comment.*=.*\'(.*)\'/", $lastQuery, $matches ) )
+					{
+						$lastTag = $matches[1][0];
+					}
 				}
-				$last = $result['sphinxql'];
 			} else
 			{
 				if ( $result[0] !== $q )

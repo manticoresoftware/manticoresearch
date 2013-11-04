@@ -40,6 +40,12 @@ index lj
 	<query index="lj" source="bench/ljq1k.txt" mode="all" tag="match_all" />
 	<query index="lj" source="bench/ljq1k.txt" mode="any" tag="match_any" />
 	<query index="lj" source="bench/ljq1k.txt" mode="extended2" tag="extended2" />
+	<query index="lj" mode="extended2" tag="or">one|two|three|four</query>
+	<query index="lj" mode="extended2" tag="or">nine|ten</query>
+	<query index="lj" mode="extended2" tag="or">five|six|seven|eight</query>
+	<query index="lj" mode="extended2" tag="quorum">"one two three four"/1</query>
+	<query index="lj" mode="extended2" tag="quorum">"nine ten"/1</query>
+	<query index="lj" mode="extended2" tag="quorum">"five six seven eight"/1</query>
 </queries>
 
 </test>

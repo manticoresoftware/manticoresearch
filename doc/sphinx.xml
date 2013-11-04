@@ -2539,6 +2539,7 @@ Here's the complete reference list for quick access.
 <listitem><para><link linkend="expr-func-cos">COS()</link></para></listitem>
 <listitem><para><link linkend="expr-func-crc32">CRC32()</link></para></listitem>
 <listitem><para><link linkend="expr-func-day">DAY()</link></para></listitem>
+<listitem><para><link linkend="expr-func-double">DOUBLE()</link></para></listitem>
 <listitem><para><link linkend="expr-func-exp">EXP()</link></para></listitem>
 <listitem><para><link linkend="expr-func-fibonacci">FIBONACCI()</link></para></listitem>
 <listitem><para><link linkend="expr-func-floor">FLOOR()</link></para></listitem>
@@ -2549,6 +2550,7 @@ Here's the complete reference list for quick access.
 <listitem><para><link linkend="expr-func-if">IF()</link></para></listitem>
 <listitem><para><link linkend="expr-func-in">IN()</link></para></listitem>
 <listitem><para><link linkend="expr-func-indexof">INDEXOF()</link></para></listitem>
+<listitem><para><link linkend="expr-func-integer">INTEGER()</link></para></listitem>
 <listitem><para><link linkend="expr-func-interval">INTERVAL()</link></para></listitem>
 <listitem><para><link linkend="expr-func-least">LEAST()</link></para></listitem>
 <listitem><para><link linkend="expr-func-length">LENGTH()</link></para></listitem>
@@ -2566,6 +2568,7 @@ Here's the complete reference list for quick access.
 <listitem><para><link linkend="expr-func-sin">SIN()</link></para></listitem>
 <listitem><para><link linkend="expr-func-sint">SINT()</link></para></listitem>
 <listitem><para><link linkend="expr-func-sqrt">SQRT()</link></para></listitem>
+<listitem><para><link linkend="expr-func-uint">UINT()</link></para></listitem>
 <listitem><para><link linkend="expr-func-year">YEAR()</link></para></listitem>
 <listitem><para><link linkend="expr-func-yearmonth">YEARMONTH()</link></para></listitem>
 <listitem><para><link linkend="expr-func-yearmonthday">YEARMONTHDAY()</link></para></listitem>
@@ -2665,6 +2668,11 @@ These functions were added in version 2.1.1-beta.
 </varlistentry>
 
 <varlistentry>
+<term id="expr-func-double">DOUBLE()</term>
+<listitem><para>Forcibly promotes given argument to floating point type. Intended to help enforce evaluation of numeric JSON fields. Introduced in version 2.2.1-beta.</para></listitem>
+</varlistentry>
+
+<varlistentry>
 <term id="expr-func-exp">EXP()</term>
 <listitem><para>Returns the exponent of the argument (e=2.718... to the power of the argument).</para></listitem>
 </varlistentry>
@@ -2749,6 +2757,11 @@ This polygon assumes a flat Earth, so it should not be too large; see the <link 
 <listitem><para>Returns the square root of the argument.</para></listitem>
 </varlistentry>
 
+<varlistentry>
+<term id="expr-func-uint">UINT()</term>
+<listitem><para>Forcibly reinterprets given argument to 64-bit unsigned type. Introduced in version 2.2.1-beta.</para></listitem>
+</varlistentry>
+
 </variablelist>
 </sect2>
 
@@ -2804,6 +2817,13 @@ of certain expressions (such as <code>a*b</code>) in 64-bit mode even though all
 are 32-bit.
 Introduced in version 0.9.9-rc1.
 </para></listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-integer">INTEGER()</term>
+<listitem>
+<para>Forcibly promotes given argument to 64-bit signed type. Intended to help enforce evaluation of numeric JSON fields. Introduced in version 2.2.1-beta.</para>
+</listitem>
 </varlistentry>
 
 <varlistentry>
@@ -14146,7 +14166,7 @@ rlp_max_batch_docs = 100
 <listitem>added scientific notation support for JSON attributes (as per <ulink url="http://www.ietf.org/rfc/rfc4627.txt">RFC 4627</ulink>)</listitem>
 <listitem>added several SphinxQL statements to fix MySQL Workbench connection issues (LIKE for session variables, etc.)</listitem>
 <listitem>added <link linkend="conf-shutdown-timeout">shutdown_timeout</link> directive to <filename>searchd</filename> config section</listitem>
-<listitem>added signed values support for <link linkend="">INTEGER()</link> and <link linkend="">UINT()</link> function</listitem>
+<listitem>added signed values support for <link linkend="expr-func-integer">INTEGER()</link> and <link linkend="expr-func-uint">UINT()</link> function</listitem>
 <listitem>added snippet generation options to <link linkend="sphinxql-select">SNIPPET()</link> function</listitem>
 <listitem>added string filter support in distributed queries, SphinxAPI, SphinxQL query log</listitem>
 <listitem>added support for mixed distributed and local index queries (SELECT * FROM dist1,dist2,local3), and <option>index_weights</option> option for that case</listitem>

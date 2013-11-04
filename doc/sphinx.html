@@ -2459,6 +2459,7 @@ Here's the complete reference list for quick access.
 <li><a href="#expr-func-cos">COS()</a></li>
 <li><a href="#expr-func-crc32">CRC32()</a></li>
 <li><a href="#expr-func-day">DAY()</a></li>
+<li><a href="#expr-func-double">DOUBLE()</a></li>
 <li><a href="#expr-func-exp">EXP()</a></li>
 <li><a href="#expr-func-fibonacci">FIBONACCI()</a></li>
 <li><a href="#expr-func-floor">FLOOR()</a></li>
@@ -2469,6 +2470,7 @@ Here's the complete reference list for quick access.
 <li><a href="#expr-func-if">IF()</a></li>
 <li><a href="#expr-func-in">IN()</a></li>
 <li><a href="#expr-func-indexof">INDEXOF()</a></li>
+<li><a href="#expr-func-integer">INTEGER()</a></li>
 <li><a href="#expr-func-interval">INTERVAL()</a></li>
 <li><a href="#expr-func-least">LEAST()</a></li>
 <li><a href="#expr-func-length">LENGTH()</a></li>
@@ -2486,6 +2488,7 @@ Here's the complete reference list for quick access.
 <li><a href="#expr-func-sin">SIN()</a></li>
 <li><a href="#expr-func-sint">SINT()</a></li>
 <li><a href="#expr-func-sqrt">SQRT()</a></li>
+<li><a href="#expr-func-uint">UINT()</a></li>
 <li><a href="#expr-func-year">YEAR()</a></li>
 <li><a href="#expr-func-yearmonth">YEARMONTH()</a></li>
 <li><a href="#expr-func-yearmonthday">YEARMONTHDAY()</a></li>
@@ -2539,7 +2542,8 @@ distances, you should use GEOPOLY2D, which tessellates the given polygon in smal
 for the Earth's curvature.
 These functions were added in version 2.1.1-beta.
 </p></dd><dt><span class="term"><a name="expr-func-cos"></a>COS()</span></dt>
-<dd><p>Returns the cosine of the argument.</p></dd><dt><span class="term"><a name="expr-func-exp"></a>EXP()</span></dt>
+<dd><p>Returns the cosine of the argument.</p></dd><dt><span class="term"><a name="expr-func-double"></a>DOUBLE()</span></dt>
+<dd><p>Forcibly promotes given argument to floating point type. Intended to help enforce evaluation of numeric JSON fields. Introduced in version 2.2.1-beta.</p></dd><dt><span class="term"><a name="expr-func-exp"></a>EXP()</span></dt>
 <dd><p>Returns the exponent of the argument (e=2.718... to the power of the argument).</p></dd><dt><span class="term"><a name="expr-func-fibonacci"></a>FIBONACCI()</span></dt>
 <dd><p>Returns the N-th Fibonacci number, where N is the integer
 argument. That is, arguments of 0 and up will generate the values 0, 1, 1,
@@ -2566,7 +2570,8 @@ This polygon assumes a flat Earth, so it should not be too large; see the <a hre
 </p></dd><dt><span class="term"><a name="expr-func-pow"></a>POW()</span></dt>
 <dd><p>Returns the first argument raised to the power of the second argument.</p></dd><dt><span class="term"><a name="expr-func-sin"></a>SIN()</span></dt>
 <dd><p>Returns the sine of the argument.</p></dd><dt><span class="term"><a name="expr-func-sqrt"></a>SQRT()</span></dt>
-<dd><p>Returns the square root of the argument.</p></dd></dl></div></div>
+<dd><p>Returns the square root of the argument.</p></dd><dt><span class="term"><a name="expr-func-uint"></a>UINT()</span></dt>
+<dd><p>Forcibly reinterprets given argument to 64-bit unsigned type. Introduced in version 2.2.1-beta.</p></dd></dl></div></div>
 <div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="date-time-functions"></a>5.5.3.&nbsp;Date and time functions</h3></div></div></div>
 <div class="variablelist"><dl><dt><span class="term"><a name="expr-func-day"></a>DAY()</span></dt>
 <dd><p>Returns the integer day of month (in 1..31 range) from a timestamp argument, according to the current timezone. Introduced in version 2.0.1-beta.</p></dd><dt><span class="term"><a name="expr-func-month"></a>MONTH()</span></dt>
@@ -2583,7 +2588,8 @@ and does nothing on floating point argument. It's intended to help enforce evalu
 of certain expressions (such as <code class="code">a*b</code>) in 64-bit mode even though all the arguments
 are 32-bit.
 Introduced in version 0.9.9-rc1.
-</p></dd><dt><span class="term"><a name="expr-func-sint"></a>SINT()</span></dt>
+</p></dd><dt><span class="term"><a name="expr-func-integer"></a>INTEGER()</span></dt>
+<dd><p>Forcibly promotes given argument to 64-bit signed type. Intended to help enforce evaluation of numeric JSON fields. Introduced in version 2.2.1-beta.</p></dd><dt><span class="term"><a name="expr-func-sint"></a>SINT()</span></dt>
 <dd><p>
 Forcibly reinterprets its
 32-bit unsigned integer argument as signed, and also expands it to 64-bit type
@@ -11861,7 +11867,7 @@ rlp_max_batch_docs = 100
 <li>added scientific notation support for JSON attributes (as per <a href="http://www.ietf.org/rfc/rfc4627.txt" target="_top">RFC 4627</a>)</li>
 <li>added several SphinxQL statements to fix MySQL Workbench connection issues (LIKE for session variables, etc.)</li>
 <li>added <a href="#conf-shutdown-timeout" title="11.4.50.&nbsp;shutdown_timeout">shutdown_timeout</a> directive to <code class="filename">searchd</code> config section</li>
-<li>added signed values support for <a href="#">INTEGER()</a> and <a href="#">UINT()</a> function</li>
+<li>added signed values support for <a href="#expr-func-integer">INTEGER()</a> and <a href="#expr-func-uint">UINT()</a> function</li>
 <li>added snippet generation options to <a href="#sphinxql-select" title="7.1.&nbsp;SELECT syntax">SNIPPET()</a> function</li>
 <li>added string filter support in distributed queries, SphinxAPI, SphinxQL query log</li>
 <li>added support for mixed distributed and local index queries (SELECT * FROM dist1,dist2,local3), and <code class="option">index_weights</code> option for that case</li>

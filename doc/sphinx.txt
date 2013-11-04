@@ -2709,6 +2709,7 @@ and functions. Here's the complete reference list for quick access.
    * COS()
    * CRC32()
    * DAY()
+   * DOUBLE()
    * EXP()
    * FIBONACCI()
    * FLOOR()
@@ -2719,6 +2720,7 @@ and functions. Here's the complete reference list for quick access.
    * IF()
    * IN()
    * INDEXOF()
+   * INTEGER()
    * INTERVAL()
    * LEAST()
    * LENGTH()
@@ -2736,6 +2738,7 @@ and functions. Here's the complete reference list for quick access.
    * SIN()
    * SINT()
    * SQRT()
+   * UINT()
    * YEAR()
    * YEARMONTH()
    * YEARMONTHDAY()
@@ -2805,6 +2808,11 @@ CONTAINS()
 COS()
    Returns the cosine of the argument.
 
+DOUBLE()
+   Forcibly promotes given argument to floating point type. Intended to
+   help enforce evaluation of numeric JSON fields. Introduced in version
+   2.2.1-beta.
+
 EXP()
    Returns the exponent of the argument (e=2.718... to the power of the
    argument).
@@ -2858,6 +2866,10 @@ SIN()
 SQRT()
    Returns the square root of the argument.
 
+UINT()
+   Forcibly reinterprets given argument to 64-bit unsigned type. Introduced
+   in version 2.2.1-beta.
+
 5.5.3. Date and time functions
 ------------------------------
 
@@ -2897,6 +2909,11 @@ BIGINT()
    on floating point argument. It's intended to help enforce evaluation of
    certain expressions (such as a*b) in 64-bit mode even though all the
    arguments are 32-bit. Introduced in version 0.9.9-rc1.
+
+INTEGER()
+   Forcibly promotes given argument to 64-bit signed type. Intended to help
+   enforce evaluation of numeric JSON fields. Introduced in version
+   2.2.1-beta.
 
 SINT()
    Forcibly reinterprets its 32-bit unsigned integer argument as signed,

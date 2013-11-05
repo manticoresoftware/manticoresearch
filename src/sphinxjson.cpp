@@ -992,8 +992,8 @@ const BYTE * sphJsonFieldFormat ( CSphVector<BYTE> & dOut, const BYTE * pData, E
 				dOut.Add ( '}' );
 				break;
 			}
-		case JSON_TRUE:		JsonAddStr ( dOut, bQuoteString ? "true" : "True" ); break;
-		case JSON_FALSE:	JsonAddStr ( dOut, bQuoteString ? "false" : "False" ); break;
+		case JSON_TRUE:		JsonAddStr ( dOut, bQuoteString ? "true" : "1" ); break;
+		case JSON_FALSE:	JsonAddStr ( dOut, bQuoteString ? "false" : "0" ); break;
 		case JSON_NULL:		JsonAddStr ( dOut, bQuoteString ? "null" : "" ); break;
 		case JSON_EOF:		break;
 		case JSON_TOTAL:	break;

@@ -751,6 +751,8 @@ expr:
 	| function
 	| json_field
 	| streq
+	| json_field TOK_IS TOK_NULL			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| json_field TOK_IS TOK_NOT TOK_NULL	{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	;
 
 function:

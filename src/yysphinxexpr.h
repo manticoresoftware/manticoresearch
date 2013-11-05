@@ -61,16 +61,20 @@
      TOK_MAP_ARG = 287,
      TOK_FOR = 288,
      TOK_ITERATOR = 289,
-     TOK_OR = 290,
-     TOK_AND = 291,
-     TOK_NE = 292,
-     TOK_EQ = 293,
-     TOK_GTE = 294,
-     TOK_LTE = 295,
-     TOK_MOD = 296,
-     TOK_DIV = 297,
-     TOK_NOT = 298,
-     TOK_NEG = 299
+     TOK_IS = 290,
+     TOK_NULL = 291,
+     TOK_IS_NULL = 292,
+     TOK_IS_NOT_NULL = 293,
+     TOK_OR = 294,
+     TOK_AND = 295,
+     TOK_NE = 296,
+     TOK_EQ = 297,
+     TOK_GTE = 298,
+     TOK_LTE = 299,
+     TOK_MOD = 300,
+     TOK_DIV = 301,
+     TOK_NOT = 302,
+     TOK_NEG = 303
    };
 #endif
 #define TOK_CONST_INT 258
@@ -105,16 +109,20 @@
 #define TOK_MAP_ARG 287
 #define TOK_FOR 288
 #define TOK_ITERATOR 289
-#define TOK_OR 290
-#define TOK_AND 291
-#define TOK_NE 292
-#define TOK_EQ 293
-#define TOK_GTE 294
-#define TOK_LTE 295
-#define TOK_MOD 296
-#define TOK_DIV 297
-#define TOK_NOT 298
-#define TOK_NEG 299
+#define TOK_IS 290
+#define TOK_NULL 291
+#define TOK_IS_NULL 292
+#define TOK_IS_NOT_NULL 293
+#define TOK_OR 294
+#define TOK_AND 295
+#define TOK_NE 296
+#define TOK_EQ 297
+#define TOK_GTE 298
+#define TOK_LTE 299
+#define TOK_MOD 300
+#define TOK_DIV 301
+#define TOK_NOT 302
+#define TOK_NEG 303
 
 
 

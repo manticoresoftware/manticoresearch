@@ -46,6 +46,10 @@
 %token	TOK_MAP_ARG
 %token	TOK_FOR
 %token	TOK_ITERATOR
+%token	TOK_IS
+%token	TOK_NULL
+%token	TOK_IS_NULL
+%token	TOK_IS_NOT_NULL
 
 
 %type <iNode>			attr
@@ -127,6 +131,8 @@ expr:
 	| json_field
 	| iterator
 	| streq
+	| json_field TOK_IS TOK_NULL			{ $$ = pParser->AddNodeOp ( TOK_IS_NULL, $1, -1); }
+	| json_field TOK_IS TOK_NOT TOK_NULL	{ $$ = pParser->AddNodeOp ( TOK_IS_NOT_NULL, $1, -1); }
 	;
 
 maparg:

@@ -1361,6 +1361,27 @@ struct Expr_StrEq_c : public ISphExpr
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)IntEval ( tMatch ); }
 };
 
+
+struct Expr_JsonFieldIsNull_c : public Expr_JsonFieldConv_c
+{
+	bool m_bEquals;
+
+	explicit Expr_JsonFieldIsNull_c ( ISphExpr * pArg, bool bEquals )
+		: Expr_JsonFieldConv_c ( pArg )
+		, m_bEquals ( bEquals )
+	{}
+
+	virtual int IntEval ( const CSphMatch & tMatch ) const
+	{
+		const BYTE * pVal = NULL;
+		ESphJsonType eJson = GetKey ( &pVal, tMatch );
+		return m_bEquals ^ ( eJson!=JSON_EOF && eJson!=JSON_NULL );
+	}
+
+	virtual float	Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)IntEval ( tMatch ); }
+};
+
 //////////////////////////////////////////////////////////////////////////
 
 struct Expr_MinTopWeight : public ISphExpr
@@ -2228,6 +2249,8 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		if ( sTok=="div" )		{ return TOK_DIV; }
 		if ( sTok=="mod" )		{ return TOK_MOD; }
 		if ( sTok=="for" )		{ return TOK_FOR; }
+		if ( sTok=="is" )		{ return TOK_IS; }
+		if ( sTok=="null" )		{ return TOK_NULL; }
 
 		// in case someone used 'count' as a name for an attribute
 		if ( sTok=="count" )
@@ -3890,6 +3913,10 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 			}
 		case TOK_IDENT:			m_sCreateError.SetSprintf ( "unknown column: %s", tNode.m_sIdent ); break;
 
+		case TOK_IS_NULL:
+		case TOK_IS_NOT_NULL:
+			return new Expr_JsonFieldIsNull_c ( pLeft, tNode.m_iToken==TOK_IS_NULL );
+
 		default:				assert ( 0 && "unhandled token type" ); break;
 	}
 
@@ -5152,7 +5179,8 @@ int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 	} else if ( iOp==TOK_LTE || iOp==TOK_GTE || iOp==TOK_EQ || iOp==TOK_NE
 		|| iOp=='<' || iOp=='>' || iOp==TOK_AND || iOp==TOK_OR
 		|| iOp=='+' || iOp=='-' || iOp=='*' || iOp==','
-		|| iOp=='&' || iOp=='|' || iOp=='%' )
+		|| iOp=='&' || iOp=='|' || iOp=='%'
+		|| iOp==TOK_IS_NULL || iOp==TOK_IS_NOT_NULL )
 	{
 		tNode.m_eArgType = GetWidestRet ( iLeft, iRight );
 

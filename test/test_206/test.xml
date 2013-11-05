@@ -670,6 +670,8 @@ Two'</sphinxql>
 <sphinxql>select j.d from json_order order by double(j.d) asc</sphinxql>
 <sphinxql>select j.b from json_order order by j.b asc</sphinxql>
 <sphinxql>select j.b from json_order order by bigint(j.b) asc</sphinxql>
+<!-- is null expression -->
+<sphinxql>select j[0] is null, if(j[0] is null,0,1), j[0] is not null, if(j[0] is not null,0,1) from objects</sphinxql>
 </sphqueries>
 </test>
 

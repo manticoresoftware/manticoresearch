@@ -2534,6 +2534,7 @@ Here's the complete reference list for quick access.
 <listitem><para><link linkend="expr-func-all">ALL()</link></para></listitem>
 <listitem><para><link linkend="expr-func-any">ANY()</link></para></listitem>
 <listitem><para><link linkend="expr-func-bigint">BIGINT()</link></para></listitem>
+<listitem><para><link linkend="expr-func-bitdot">BITDOT()</link></para></listitem>
 <listitem><para><link linkend="expr-func-ceil">CEIL()</link></para></listitem>
 <listitem><para><link linkend="expr-func-contains">CONTAINS()</link></para></listitem>
 <listitem><para><link linkend="expr-func-cos">COS()</link></para></listitem>
@@ -2641,6 +2642,12 @@ must be of an integer types. Introduced in version 1.10-beta.
 <varlistentry>
 <term id="expr-func-abs">ABS()</term>
 <listitem><para>Returns the absolute value of the argument.</para></listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-bitdot">BITDOT()</term>
+<listitem><para>BITDOT(mask, w0, w1, ...) returns the sum of products of an each bit of a mask multiplied with its weight.
+<code>bit0*w0 + bit1*w1 + ...</code></para></listitem>
 </varlistentry>
 
 <varlistentry>

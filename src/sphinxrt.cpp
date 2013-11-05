@@ -1908,10 +1908,7 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 
 	dDocHits.Sort ( CmpDocHitIndex_t() );
 
-	bool bHasDups = false;;
-	for ( int i=0; i<dDocHits.GetLength()-1 && !bHasDups; i++ )
-		bHasDups = ( dDocHits[i].m_uDocid==dDocHits[i+1].m_uDocid );
-
+	bool bHasDups = ARRAY_ANY ( bHasDups, dDocHits, ( _any>0 ) && ( dDocHits[_any-1].m_uDocid==dDocHits[_any].m_uDocid ) );
 	if ( !bHasDups )
 		return;
 
@@ -3794,6 +3791,13 @@ void RtIndex_t::SaveDiskChunk ( int64_t iTID, const CSphVector<RtSegment_t *> & 
 	m_dNewSegmentKlist.Reset();
 	m_dDiskChunkKlist.Reset ( 0 );
 
+	// abandon .ram file
+	CSphString sChunk;
+	sChunk.SetSprintf ( "%s.ram", m_sPath.cstr() );
+	if ( ::unlink ( sChunk.cstr() ) )
+		sphWarning ( "failed to unlink ram chunk (file=%s, errno=%d, error=%s)",
+		sChunk.cstr(), errno, strerror(errno) );
+
 	m_iDoubleBuffer = 0;
 	m_iSavedTID = iTID;
 	m_iSavedRam = 0;
@@ -4201,8 +4205,32 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 		LoadVector ( rdChunk, pSeg->m_dHits );
 		pSeg->m_iRows = rdChunk.GetDword();
 		pSeg->m_iAliveRows = rdChunk.GetDword();
+		// warning! m_dRows saved in id32 is NOT consistent for id64!
+		// (the Stride for id32 is 1 DWORD shorter than for id64)
+		// the only usage of this BLOB is to save id32 disk-chunk.
 		LoadVector ( rdChunk, pSeg->m_dRows );
-		LoadVector ( rdChunk, pSeg->m_dKlist );
+		if (!m_bId32to64)
+		{	
+			LoadVector ( rdChunk, pSeg->m_dKlist );
+ 		} else
+ 		{
+			// shrink Klist from id32 to id64 on-the-fly
+ 			pSeg->m_dKlist.Resize ( rdChunk.GetDword() );
+ 			if ( pSeg->m_dKlist.GetLength() )
+ 			{
+ 				// init 1-st elem with zero - if we load only 1 dword, the high part of id64 will be defined anyway
+ 				pSeg->m_dKlist[0] = 0;
+ 				// yes, we load tight (id32) array into wide (id64) vector, filling exactly half of it
+				rdChunk.GetBytes ( pSeg->m_dKlist.Begin(), pSeg->m_dKlist.GetLength()*sizeof(DWORD) );
+ 				// now we have to expand n ID32s into n ID64s
+ 				DWORD* dId32s = (DWORD*)pSeg->m_dKlist.Begin();
+ 				for ( int i=pSeg->m_dKlist.GetLength()-1; i>0; --i ) /// i>0 since for i=0 id is already in place
+ 				{
+ 					pSeg->m_dKlist[i] = dId32s[i];
+ 					dId32s[i] = 0;
+ 				}
+ 			}
+ 		}
 		LoadVector ( rdChunk, pSeg->m_dStrings );
 		if ( uVersion>=3 )
 			LoadVector ( rdChunk, pSeg->m_dMvas );

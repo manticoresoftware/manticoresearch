@@ -1873,8 +1873,7 @@ class ISphFieldFilter
 public:
 	virtual					~ISphFieldFilter () {}
 
-	virtual	const BYTE *	Apply ( const BYTE * sField, int iLength = 0 ) = 0;
-	virtual int				GetResultLength () const = 0;
+	virtual	int				Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage ) = 0;
 	virtual	void			GetSettings ( CSphFieldFilterSettings & tSettings ) const = 0;
 };
 

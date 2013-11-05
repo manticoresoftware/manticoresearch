@@ -32,6 +32,13 @@ index test
 	path			= <data_path/>/test
 }
 
+index test_lengths
+{
+	source			= srctest
+	path			= <data_path/>/test_lengths
+	index_field_lengths = 1
+}
+
 source src_mva
 {
 	type			= mysql
@@ -126,6 +133,10 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select * from test where fval&gt;10.0</sphinxql>
 <sphinxql>select * from test where fval=10.0</sphinxql>
 <sphinxql>select * from test where fval&lt;&gt;10.0</sphinxql>
+
+<!-- regression: filters vs field lengths  -->
+<sphinxql>select * from test_lengths where title_len=0</sphinxql>
+<sphinxql>select * from test_lengths where title_len=2</sphinxql>
 
 </sphqueries>
 

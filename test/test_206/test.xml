@@ -245,6 +245,14 @@ index json_search
 	rt_field = text
 }
 
+index json_order
+{
+	type = rt
+	path = <data_path/>/json_order
+	rt_attr_json = j
+	rt_field = text
+}
+
 </config>
 
 <db_create>
@@ -650,6 +658,18 @@ Two'</sphinxql>
 <sphinxql>select indexof('a2'=x.name for x in j.array) from json_search</sphinxql>
 <sphinxql>select indexof(title=x.name for x in j.array) from json_search</sphinxql>
 <sphinxql>select indexof(to_string(1)=to_string(1) for x in j.array) from json_search</sphinxql>
+<!-- type conversion in the order by clause -->
+<sphinxql>insert into json_order (id, j) values
+	(1, '{i:123,d:123.0,b:12300000000}'),
+	(2, '{i:23,d:23.0,b:2300000000}'),
+	(3, '{i:3,d:3.0,b:300000000}')
+</sphinxql>
+<sphinxql>select j.i from json_order order by j.i asc</sphinxql>
+<sphinxql>select j.i from json_order order by integer(j.i) asc</sphinxql>
+<sphinxql>select j.d from json_order order by j.d asc</sphinxql>
+<sphinxql>select j.d from json_order order by double(j.d) asc</sphinxql>
+<sphinxql>select j.b from json_order order by j.b asc</sphinxql>
+<sphinxql>select j.b from json_order order by bigint(j.b) asc</sphinxql>
 </sphqueries>
 </test>
 

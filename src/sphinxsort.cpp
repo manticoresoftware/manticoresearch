@@ -3395,7 +3395,7 @@ protected:
 	char ToLower ( char c )
 	{
 		// 0..9, A..Z->a..z, _, a..z, @, .
-		if ( ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || c=='_' || c=='@' || c=='.' || c=='[' || c==']' || c=='\'' || c=='\"' )
+		if ( ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || c=='_' || c=='@' || c=='.' || c=='[' || c==']' || c=='\'' || c=='\"' || c=='(' || c==')' )
 			return c;
 		if ( c>='A' && c<='Z' )
 			return c-'A'+'a';
@@ -3560,6 +3560,21 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 					else if ( tItem.m_sExpr=="count(*)" )
 						iAttr = tSchema.GetAttrIndex ( "@count" );
 					break; // break in any case; because we did match the alias
+				}
+			}
+
+			// try json conversion functions
+			if ( iAttr<0 )
+			{
+				ESphAttr eAttrType;
+				ISphExpr * pExpr = sphExprParse ( pTok, tSchema, &eAttrType, NULL, sError, NULL );
+				if ( pExpr )
+				{
+					tState.m_tSubExpr[iField] = pExpr;
+					tState.m_tSubKeys[iField] = JsonKey_t ( pTok, strlen(pTok) );
+					tState.m_tSubKeys[iField].m_uMask = 0;
+					tState.m_tSubType[iField] = eAttrType;
+					iAttr = 0; // will be remapped in SetupSortRemap
 				}
 			}
 
@@ -4123,6 +4138,7 @@ static void SetupSortRemap ( CSphRsetSchema & tSorterSchema, CSphMatchComparator
 		assert ( tState.m_dAttrs[i]>=0 && tState.m_dAttrs[i]<iColWasCount );
 
 		bool bIsJson = !tState.m_tSubKeys[i].m_sKey.IsEmpty();
+		bool bIsFunc = bIsJson && tState.m_tSubKeys[i].m_uMask==0;
 		CSphString sRemapCol;
 		if ( bIsJson )
 			sRemapCol.SetSprintf ( "%s%s%s", g_sIntAttrPrefix, tSorterSchema.GetAttr ( tState.m_dAttrs[i] ).m_sName.cstr(), tState.m_tSubKeys[i].m_sKey.cstr() );
@@ -4135,9 +4151,15 @@ static void SetupSortRemap ( CSphRsetSchema & tSorterSchema, CSphMatchComparator
 			CSphColumnInfo tRemapCol ( sRemapCol.cstr(), bIsJson ? SPH_ATTR_STRINGPTR : SPH_ATTR_BIGINT );
 			tRemapCol.m_eStage = SPH_EVAL_PRESORT;
 			if ( bIsJson )
-				tRemapCol.m_pExpr = new ExprSortJson2StringPtr_c ( tState.m_tLocator[i], tState.m_tSubExpr[i] );
+				tRemapCol.m_pExpr = bIsFunc ? tState.m_tSubExpr[i] : new ExprSortJson2StringPtr_c ( tState.m_tLocator[i], tState.m_tSubExpr[i] );
 			else
 				tRemapCol.m_pExpr = new ExprSortStringAttrFixup_c ( tState.m_tLocator[i] );
+
+			if ( bIsFunc )
+			{
+				tRemapCol.m_eAttrType = tState.m_tSubType[i];
+				tState.m_eKeypart[i] = Attr2Keypart ( tState.m_tSubType[i] );
+			}
 
 			iRemap = tSorterSchema.GetAttrsCount();
 			tSorterSchema.AddDynamicAttr ( tRemapCol );

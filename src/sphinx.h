@@ -2955,7 +2955,8 @@ struct CSphMatchComparatorState
 	ESphSortKeyPart		m_eKeypart[MAX_ATTRS];		///< sort-by key part type
 	CSphAttrLocator		m_tLocator[MAX_ATTRS];		///< sort-by attr locator
 	JsonKey_t			m_tSubKeys[MAX_ATTRS];		///< sort-by attr sub-locator
-	ISphExpr *			m_tSubExpr[MAX_ATTRS];		///< sort-by attr sub-locator
+	ISphExpr *			m_tSubExpr[MAX_ATTRS];		///< sort-by attr expression
+	ESphAttr			m_tSubType[MAX_ATTRS];		///< sort-by expression type
 	int					m_dAttrs[MAX_ATTRS];		///< sort-by attr index
 
 	DWORD				m_uAttrDesc;				///< sort order mask (if i-th bit is set, i-th attr order is DESC)

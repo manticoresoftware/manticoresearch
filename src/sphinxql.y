@@ -49,6 +49,7 @@
 %token	TOK_DESCRIBE
 %token	TOK_DISTINCT
 %token	TOK_DIV
+%token	TOK_DOUBLE
 %token	TOK_DROP
 %token	TOK_FALSE
 %token	TOK_FLOAT
@@ -522,6 +523,9 @@ expr_ident:
 				YYERROR;
 		}
 	| json_field
+	| TOK_INTEGER '(' json_field ')'
+	| TOK_DOUBLE '(' json_field ')'
+	| TOK_BIGINT '(' json_field ')'
 	;
 
 const_int:
@@ -755,6 +759,7 @@ function:
 	| TOK_INTEGER '(' arglist ')'	{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	| TOK_BIGINT '(' arglist ')'	{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	| TOK_FLOAT '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
+	| TOK_DOUBLE '(' arglist ')'	{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	| TOK_IDENT '(' ')'				{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| TOK_MIN '(' expr ',' expr ')'	{ TRACK_BOUNDS ( $$, $1, $6 ); } // handle clash with aggregate functions
 	| TOK_MAX '(' expr ',' expr ')'	{ TRACK_BOUNDS ( $$, $1, $6 ); }

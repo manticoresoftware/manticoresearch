@@ -534,8 +534,8 @@ MySQL, PostgreSQL, MS SQL (on Windows), and ODBC. There is also
 a generic driver called xmlpipe2, which runs a specified command
 and reads the data from its <filename>stdout</filename>.
 See <xref linkend="xmlpipe2"/> section for the format description.
-In 2.2.1-beta was added a tsvpipe (Tab Separated Values) data source.
-You can get more info here <xref linkend="tsvpipe"/>.
+In 2.2.1-beta a tsvpipe (Tab Separated Values) data source was added.
+You can get more information here <xref linkend="tsvpipe"/>.
 </para>
 <para>
 There can be as many sources per index as necessary. They will be
@@ -1073,7 +1073,7 @@ XML elements (tags) recognized by xmlpipe2 (and their attributes where applicabl
 
 <sect1 id="tsvpipe"><title>tsvpipe (Tab Separated Values) data source</title>
 <para>
-This is a simplest way to pass a data to an indexer. It was created due to
+This is the simplest way to pass data to the indexer. It was created due to
 xmlpipe2 limitations. Namely, indexer must map each attribute and field tag
 in XML file to corresponding schema element. This mapping requires some time.
 And time increases with increasing the number of fields and attributes in

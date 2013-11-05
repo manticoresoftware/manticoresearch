@@ -821,8 +821,8 @@ MySQL, PostgreSQL, MS SQL (on Windows), and ODBC. There is also
 a generic driver called xmlpipe2, which runs a specified command
 and reads the data from its <code class="filename">stdout</code>.
 See <a href="#xmlpipe2" title="3.9.&nbsp;xmlpipe2 data source">Section&nbsp;3.9, &#8220;xmlpipe2 data source&#8221;</a> section for the format description.
-In 2.2.1-beta was added a tsvpipe (Tab Separated Values) data source.
-You can get more info here <a href="#tsvpipe" title="3.10.&nbsp;tsvpipe (Tab Separated Values) data source">Section&nbsp;3.10, &#8220;tsvpipe (Tab Separated Values) data source&#8221;</a>.
+In 2.2.1-beta a tsvpipe (Tab Separated Values) data source was added.
+You can get more information here <a href="#tsvpipe" title="3.10.&nbsp;tsvpipe (Tab Separated Values) data source">Section&nbsp;3.10, &#8220;tsvpipe (Tab Separated Values) data source&#8221;</a>.
 </p><p>
 There can be as many sources per index as necessary. They will be
 sequentially processed in the very same order which was specified in
@@ -1266,7 +1266,7 @@ XML elements (tags) recognized by xmlpipe2 (and their attributes where applicabl
 </p></div>
 <div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="tsvpipe"></a>3.10.&nbsp;tsvpipe (Tab Separated Values) data source</h2></div></div></div>
 <p>
-This is a simplest way to pass a data to an indexer. It was created due to
+This is the simplest way to pass data to the indexer. It was created due to
 xmlpipe2 limitations. Namely, indexer must map each attribute and field tag
 in XML file to corresponding schema element. This mapping requires some time.
 And time increases with increasing the number of fields and attributes in

@@ -840,6 +840,31 @@ CSphSource * SpawnSourceTSVPipe ( const CSphConfigSection & hSource, const char 
 }
 
 
+CSphSource * SpawnSourceCSVPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool bUTF8, bool RLPARG(bProxy) )
+{
+	assert ( hSource["type"]=="csvpipe" );
+
+	if ( !( hSource.Exists ( "csvpipe_command" ) ))
+	{
+		fprintf ( stdout, "ERROR: key 'csvpipe_command' not found in source '%s'\n", sSourceName );
+		return NULL;
+	}
+
+	FILE * pPipe = popen ( hSource [ "csvpipe_command" ].cstr(), "r" );
+	if ( !pPipe )
+	{
+		fprintf ( stdout, "ERROR: csvpipe: failed to popen '%s'", hSource [ "csvpipe_command" ].cstr() );
+		return NULL;
+	}
+
+#if USE_RLP
+	return sphCreateSourceCSVpipe ( &hSource, pPipe, sSourceName, bUTF8, bProxy );
+#else
+	return sphCreateSourceCSVpipe ( &hSource, pPipe, sSourceName, bUTF8, false );
+#endif
+}
+
+
 CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSourceName, bool bUTF8, bool bBatchedRLP )
 {
 	if ( !hSource.Exists ( "type" ) )
@@ -871,6 +896,9 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 
 	if ( hSource["type"]=="tsvpipe" )
 		return SpawnSourceTSVPipe ( hSource, sSourceName, bUTF8, bBatchedRLP );
+
+	if ( hSource["type"]=="csvpipe" )
+		return SpawnSourceCSVPipe ( hSource, sSourceName, bUTF8, bBatchedRLP );
 
 	fprintf ( stdout, "ERROR: source '%s': unknown type '%s'; skipping.\n", sSourceName,
 		hSource["type"].cstr() );

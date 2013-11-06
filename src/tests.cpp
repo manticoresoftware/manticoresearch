@@ -3254,6 +3254,89 @@ void TestGeodist()
 #endif
 }
 
+void TestSource ()
+{
+	int iWriteStride = 7;
+	const char * dTest[] = {
+		"1,\"a,b \"\" c\",\"d \"\"a\"\" c\",\"the\tdox\n fox\",tmp,tmp,tmp,11\n",
+		"a,b \" c", "d \"a\" c", "the\tdox\n fox", "tmp", "tmp", "tmp",
+
+		"2,\"abc, defghijk. \"Lmnopqrs, \"tuv,\"\" wxyz.\",...,tmp,tmp,tmp,11\n",
+		"abc, defghijk. Lmnopqrs", " tuv,\" wxyz.", "...", "tmp", "tmp", "tmp",
+
+		"3,\",\",\"\",tmp,tmp,tmp,tmp,11\n",
+		",", "", "tmp", "tmp", "tmp", "tmp",
+
+		"4,\"Sup, \"\"puper\"\", duper\",tmp,tmp,tmp,tmp,tmp,11\n",
+		"Sup, \"puper\", duper", "tmp", "tmp", "tmp", "tmp", "tmp",
+
+		"5,\"Sup, \"\"puper\"\" duper\",tmp,tmp,tmp,tmp,tmp,11\n",
+		"Sup, \"puper\" duper", "tmp", "tmp", "tmp", "tmp", "tmp",
+
+		"6,\"Sup, \"\"puper\"\"\","",tmp,tmp,tmp,tmp,11\n",
+		"Sup, \"puper\"", "", "tmp", "tmp", "tmp", "tmp",
+
+		"7,\"Sup, \"\"puper, duper\"\"\",,tmp,tmp,tmp,tmp,11\n",
+		"Sup, \"puper, duper\"", "", "tmp", "tmp", "tmp", "tmp",
+
+		"8,cool,so far,\"Sup\n extra, duper,\",tmp,tmp,tmp,11\n",
+		"cool", "so far", "Sup\n extra, duper,", "tmp", "tmp", "tmp",
+
+		NULL };
+
+	// write csv file
+	FILE * fp = fopen ( g_sTmpfile, "wb" );
+	for ( int iTest=0; dTest[iTest]!=NULL; iTest+=iWriteStride )
+		fwrite ( dTest[iTest], 1, strlen ( dTest[iTest] ), fp );
+	fclose ( fp );
+
+	// open csv pipe
+	fp = fopen ( g_sTmpfile, "rb" );
+
+	// make config for 6 fields and attribute
+	CSphConfigSection tConf;
+	Verify ( tConf.Add ( CSphVariant ( "f0", 0 ), "csvpipe_field" ) );
+	CSphVariant & tTail = tConf["csvpipe_field"];
+	tTail.m_pNext = new CSphVariant ( "f1", 1 );
+	tTail.m_pNext->m_pNext = new CSphVariant ( "f2", 2 );
+	tTail.m_pNext->m_pNext->m_pNext = new CSphVariant ( "f3", 3 );
+	tTail.m_pNext->m_pNext->m_pNext->m_pNext = new CSphVariant ( "f4", 4 );
+	tTail.m_pNext->m_pNext->m_pNext->m_pNext->m_pNext = new CSphVariant ( "f5", 5 );
+	Verify ( tConf.Add ( CSphVariant ( "gid", 6 ), "csvpipe_attr_uint" ) );
+
+	// setup source
+	CSphSource_Document * pCSV = (CSphSource_Document *)sphCreateSourceCSVpipe ( &tConf, fp, "csv", false, false );
+	CSphString sError;
+	Verify ( pCSV->Connect ( sError ) );
+	Verify ( pCSV->IterateStart ( sError ) );
+
+	// verify that config matches to source schema
+	CSphSchema tSchema;
+	Verify ( pCSV->UpdateSchema ( &tSchema, sError ) );
+	int iColumns = tSchema.m_dFields.GetLength();
+
+	// check parsed fields
+	for ( int iTest=1; ; )
+	{
+		BYTE ** pFields = pCSV->NextDocument ( sError );
+		Verify ( pFields || pCSV->m_tDocInfo.m_iDocID==0 );
+		if ( pCSV->m_tDocInfo.m_iDocID==0 )
+			break;
+
+		for ( int i=0; i<iColumns;i++ )
+		{
+			CSphString sTmp ( (const char *)pFields[i] );
+			Verify ( sTmp==dTest[iTest+i] );
+		}
+
+		iTest += iWriteStride;
+	}
+
+	// clean up
+	SafeDelete ( pCSV );
+	fclose ( fp );
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 int main ()
@@ -3300,6 +3383,7 @@ int main ()
 	TestWildcards();
 	TestLog2();
 	TestArabicStemmer();
+	TestSource ();
 #endif
 
 	unlink ( g_sTmpfile );

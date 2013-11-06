@@ -348,6 +348,19 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "tsvpipe_attr_string",	KEY_LIST, NULL },
 	{ "tsvpipe_attr_json",		KEY_LIST, NULL },
 	{ "tsvpipe_field_string",	KEY_LIST, NULL },
+	{ "csvpipe_command",		0, NULL },
+	{ "csvpipe_field",			KEY_LIST, NULL },
+	{ "csvpipe_attr_uint",		KEY_LIST, NULL },
+	{ "csvpipe_attr_timestamp",	KEY_LIST, NULL },
+	{ "csvpipe_attr_bool",		KEY_LIST, NULL },
+	{ "csvpipe_attr_float",		KEY_LIST, NULL },
+	{ "csvpipe_attr_bigint",	KEY_LIST, NULL },
+	{ "csvpipe_attr_multi",		KEY_LIST, NULL },
+	{ "csvpipe_attr_multi_64",	KEY_LIST, NULL },
+	{ "csvpipe_attr_string",	KEY_LIST, NULL },
+	{ "csvpipe_attr_json",		KEY_LIST, NULL },
+	{ "csvpipe_field_string",	KEY_LIST, NULL },
+	{ "csvpipe_delimiter",		0, NULL },
 	{ NULL,						0, NULL }
 };
 

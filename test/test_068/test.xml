@@ -87,6 +87,41 @@ index tsv1
 	charset_type = utf-8
 }
 
+source src_csv1
+{
+	type = csvpipe
+	csvpipe_command = cat <this_test/>/data1.csv
+	csvpipe_field = title
+	csvpipe_field = content
+	csvpipe_attr_multi = tags
+	csvpipe_attr_uint = gid
+}
+
+index csv1
+{
+	source = src_csv1
+	path = <data_path/>/csv1
+	charset_type = utf-8
+}
+
+source src_csv2
+{
+	type = csvpipe
+	csvpipe_command = cat <this_test/>/data2.csv
+	csvpipe_delimiter =  +  
+	csvpipe_field = title
+	csvpipe_field = content
+	csvpipe_attr_multi = tags
+	csvpipe_attr_uint = gid
+}
+
+index csv2
+{
+	source = src_csv2
+	path = <data_path/>/csv2
+	charset_type = utf-8
+}
+
 </config>
 
 <queries>
@@ -103,6 +138,27 @@ index tsv1
 <query index="tsv1" mode="extended2">aaa bbb</query>
 <query index="tsv1" mode="extended2">^aaa ccc$</query>
 <query index="tsv1" mode="extended2">^bbb | ^ccc | aaa$ | bbb$</query>
+<query index="csv1">test</query>
+<query index="csv1" mode="extended2">aaa bbb</query>
+<query index="csv1" mode="extended2">^aaa ccc$</query>
+<query index="csv1" mode="extended2">^bbb | ^ccc | aaa$ | bbb$</query>
+<query index="csv1" mode="extended2">^bbb | ^ccc | aaa$ | bbb$</query>
+<query index="csv1" filter_value="2" filter="tags"></query>
+<query index="csv1" filter_value="4" filter="tags"></query>
+<query index="csv1" filter_value="5" filter="gid"></query>
+<query index="csv1">two</query>
+<query index="csv1">another</query>
+<query index="csv1">my</query>
+<query index="csv2">test</query>
+<query index="csv2" mode="extended2">aaa bbb</query>
+<query index="csv2" mode="extended2">^aaa ccc$</query>
+<query index="csv2" mode="extended2">^bbb | ^ccc | aaa$ | bbb$</query>
+<query index="csv2" filter_value="2" filter="tags"></query>
+<query index="csv2" filter_value="4" filter="tags"></query>
+<query index="csv2" filter_value="5" filter="gid"></query>
+<query index="csv2">two</query>
+<query index="csv2">another</query>
+<query index="csv2">my</query>
 </queries>
 
 </test>

@@ -29682,17 +29682,18 @@ void CSphSource_MSSQL::OdbcPostConnect ()
 #endif
 
 
-struct RemapTSV_t
+struct RemapXSV_t
 {
 	int m_iAttr;
 	int m_iField;
 };
 
-class CSphSource_TSV : public CSphSource_Document, public CSphSchemaConfigurator<CSphSource_TSV>
+
+class CSphSource_BaseSV : public CSphSource_Document, public CSphSchemaConfigurator<CSphSource_BaseSV>
 {
 public:
-	explicit			CSphSource_TSV ( const char * sName );
-	~CSphSource_TSV ();
+	explicit			CSphSource_BaseSV ( const char * sName );
+	~CSphSource_BaseSV ();
 
 	virtual bool	Connect ( CSphString & sError );				///< run the command and open the pipe
 	virtual void	Disconnect ();									///< close the pipe
@@ -29709,13 +29710,22 @@ public:
 
 	void			Setup ( const CSphConfigSection & hSource, FILE * pPipe );
 
-private:
-	BYTE **			ReportDocumentError();
+protected:
+	enum ESphParseResult
+	{
+		PARSING_FAILED,
+		GOT_DOCUMENT,
+		DATA_OVER
+	};
+
+	BYTE **					ReportDocumentError();
+	virtual void			SetupSchema ( const CSphConfigSection & hSource, bool bWordDict ) = 0;
+	virtual ESphParseResult	SplitColumns ( CSphString & ) = 0;
 
 	CSphVector<BYTE>			m_dBuf;
 	CSphFixedVector<char>		m_dError;
 	CSphFixedVector<int>		m_dColumnsLen;
-	CSphFixedVector<RemapTSV_t>	m_dRemap;
+	CSphFixedVector<RemapXSV_t>	m_dRemap;
 
 	// output
 	CSphFixedVector<BYTE *>		m_dFields;
@@ -29725,6 +29735,31 @@ private:
 	int							m_iDataLeft;
 	int							m_iLine;
 	int							m_iAutoCount;
+};
+
+
+class CSphSource_TSV : public CSphSource_BaseSV
+{
+public:
+	explicit CSphSource_TSV ( const char * sName );
+	virtual ~CSphSource_TSV();
+
+	virtual ESphParseResult	SplitColumns ( CSphString & sError );					///< parse incoming chunk and emit some hits
+	virtual void			SetupSchema ( const CSphConfigSection & hSource, bool bWordDict );
+};
+
+
+class CSphSource_CSV : public CSphSource_BaseSV
+{
+public:
+	CSphSource_CSV ( const char * sName, const char * sDelimiter );
+	virtual ~CSphSource_CSV();
+
+	virtual ESphParseResult	SplitColumns ( CSphString & sError );					///< parse incoming chunk and emit some hits
+	virtual void			SetupSchema ( const CSphConfigSection & hSource, bool bWordDict );
+
+private:
+	BYTE			m_iDelimiter;
 };
 
 
@@ -29743,7 +29778,24 @@ CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * 
 }
 
 
-CSphSource_TSV::CSphSource_TSV ( const char * sName )
+CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool , bool RLPARG(bProxy) )
+{
+	CSphSource_CSV * pCSV = NULL;
+	const char * sDelimiter = pSource->GetStr ( "csvpipe_delimiter", "" );
+
+#if USE_RLP
+	if ( bProxy )
+		pCSV = new CSphSource_Proxy<CSphSource_CSV> ( sSourceName, sDelimiter );
+	else
+#endif
+		pCSV = new CSphSource_CSV ( sSourceName, sDelimiter );
+
+	pCSV->Setup ( *pSource, pPipe );
+	return pCSV;
+}
+
+
+CSphSource_BaseSV::CSphSource_BaseSV ( const char * sName )
 	: CSphSource_Document ( sName )
 	, m_dError ( 1024 )
 	, m_dColumnsLen ( 0 )
@@ -29756,42 +29808,30 @@ CSphSource_TSV::CSphSource_TSV ( const char * sName )
 }
 
 
-CSphSource_TSV::~CSphSource_TSV ()
+CSphSource_BaseSV::~CSphSource_BaseSV ()
 {
 	Disconnect();
 }
 
-struct SortedRemapTSV_t : public RemapTSV_t
+struct SortedRemapXSV_t : public RemapXSV_t
 {
 	int m_iTag;
 };
 
 
-void CSphSource_TSV::Setup ( const CSphConfigSection & hSource, FILE * pPipe )
+void CSphSource_BaseSV::Setup ( const CSphConfigSection & hSource, FILE * pPipe )
 {
 	m_pPipe = pPipe;
 	m_tSchema.Reset ();
 	bool bWordDict = ( m_pDict && m_pDict->GetSettings().m_bWordDict );
 
-	ConfigureAttrs ( hSource("tsvpipe_attr_uint"),			SPH_ATTR_INTEGER,	m_tSchema );
-	ConfigureAttrs ( hSource("tsvpipe_attr_timestamp"),		SPH_ATTR_TIMESTAMP,	m_tSchema );
-	ConfigureAttrs ( hSource("tsvpipe_attr_bool"),			SPH_ATTR_BOOL,		m_tSchema );
-	ConfigureAttrs ( hSource("tsvpipe_attr_float"),			SPH_ATTR_FLOAT,		m_tSchema );
-	ConfigureAttrs ( hSource("tsvpipe_attr_bigint"),		SPH_ATTR_BIGINT,	m_tSchema );
-	ConfigureAttrs ( hSource("tsvpipe_attr_multi"),			SPH_ATTR_UINT32SET,	m_tSchema );
-	ConfigureAttrs ( hSource("tsvpipe_attr_multi_64"),		SPH_ATTR_INT64SET,	m_tSchema );
-	ConfigureAttrs ( hSource("tsvpipe_attr_string"),		SPH_ATTR_STRING,	m_tSchema );
-	ConfigureAttrs ( hSource("tsvpipe_attr_json"),			SPH_ATTR_JSON,		m_tSchema );
-	ConfigureAttrs ( hSource("tsvpipe_field_string"),		SPH_ATTR_STRING,	m_tSchema );
-
-	ConfigureFields ( hSource("tsvpipe_field"), bWordDict, m_tSchema );
-	ConfigureFields ( hSource("tsvpipe_field_string"), bWordDict, m_tSchema );
+	SetupSchema ( hSource, bWordDict );
 
 	m_dFields.Reset ( m_tSchema.m_dFields.GetLength() );
 
 	// build hash from schema names
-	SmallStringHash_T<SortedRemapTSV_t> hSchema;
-	SortedRemapTSV_t tElem;
+	SmallStringHash_T<SortedRemapXSV_t> hSchema;
+	SortedRemapXSV_t tElem;
 	tElem.m_iTag = -1;
 	tElem.m_iAttr = -1;
 	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
@@ -29802,7 +29842,7 @@ void CSphSource_TSV::Setup ( const CSphConfigSection & hSource, FILE * pPipe )
 	tElem.m_iField = -1;
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 	{
-		RemapTSV_t * pRemap = hSchema ( m_tSchema.GetAttr ( i ).m_sName );
+		RemapXSV_t * pRemap = hSchema ( m_tSchema.GetAttr ( i ).m_sName );
 		if ( pRemap )
 		{
 			pRemap->m_iAttr = i;
@@ -29830,7 +29870,7 @@ void CSphSource_TSV::Setup ( const CSphConfigSection & hSource, FILE * pPipe )
 				sOptionValue = sTmp.cstr();
 			}
 
-			SortedRemapTSV_t * pColumn = hSchema ( sOptionValue );
+			SortedRemapXSV_t * pColumn = hSchema ( sOptionValue );
 			assert ( !pColumn || pColumn->m_iAttr>=0 || pColumn->m_iField>=0 );
 			assert ( !pColumn || pColumn->m_iTag==-1 );
 			if ( pColumn )
@@ -29843,7 +29883,7 @@ void CSphSource_TSV::Setup ( const CSphConfigSection & hSource, FILE * pPipe )
 	// fields + attributes + id - auto-generated
 	m_dColumnsLen.Reset ( hSchema.GetLength() + 1 );
 	m_dRemap.Reset ( hSchema.GetLength() + 1 );
-	CSphFixedVector<SortedRemapTSV_t> dColumnsSorted ( hSchema.GetLength() );
+	CSphFixedVector<SortedRemapXSV_t> dColumnsSorted ( hSchema.GetLength() );
 
 	hSchema.IterateStart();
 	for ( int i=0; hSchema.IterateNext(); i++ )
@@ -29852,7 +29892,7 @@ void CSphSource_TSV::Setup ( const CSphConfigSection & hSource, FILE * pPipe )
 		dColumnsSorted[i] = hSchema.IterateGet();
 	}
 
-	sphSort ( dColumnsSorted.Begin(), dColumnsSorted.GetLength(), bind ( &SortedRemapTSV_t::m_iTag ) );
+	sphSort ( dColumnsSorted.Begin(), dColumnsSorted.GetLength(), bind ( &SortedRemapXSV_t::m_iTag ) );
 
 	// set remap incoming columns to fields \ attributes
 	// doc_id dummy filler
@@ -29867,7 +29907,7 @@ void CSphSource_TSV::Setup ( const CSphConfigSection & hSource, FILE * pPipe )
 }
 
 
-bool CSphSource_TSV::Connect ( CSphString & sError )
+bool CSphSource_BaseSV::Connect ( CSphString & sError )
 {
 	bool bWordDict = ( m_pDict && m_pDict->GetSettings().m_bWordDict );
 	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
@@ -29892,7 +29932,7 @@ bool CSphSource_TSV::Connect ( CSphString & sError )
 }
 
 
-void CSphSource_TSV::Disconnect()
+void CSphSource_BaseSV::Disconnect()
 {
 	if ( m_pPipe )
 	{
@@ -29903,7 +29943,7 @@ void CSphSource_TSV::Disconnect()
 }
 
 
-const char * CSphSource_TSV::DecorateMessage ( const char * sTemplate, ... ) const
+const char * CSphSource_BaseSV::DecorateMessage ( const char * sTemplate, ... ) const
 {
 	va_list ap;
 	va_start ( ap, sTemplate );
@@ -29913,7 +29953,7 @@ const char * CSphSource_TSV::DecorateMessage ( const char * sTemplate, ... ) con
 }
 
 
-bool CSphSource_TSV::IterateStart ( CSphString & sError )
+bool CSphSource_BaseSV::IterateStart ( CSphString & sError )
 {
 	if ( !m_tSchema.m_dFields.GetLength() )
 	{
@@ -29938,7 +29978,7 @@ bool CSphSource_TSV::IterateStart ( CSphString & sError )
 	return true;
 }
 
-BYTE ** CSphSource_TSV::ReportDocumentError ()
+BYTE ** CSphSource_BaseSV::ReportDocumentError ()
 {
 	m_tDocInfo.m_iDocID = 1; // 0 means legal eof
 	m_iDataStart = 0;
@@ -29947,112 +29987,21 @@ BYTE ** CSphSource_TSV::ReportDocumentError ()
 }
 
 
-BYTE **	CSphSource_TSV::NextDocument ( CSphString & sError )
+BYTE **	CSphSource_BaseSV::NextDocument ( CSphString & sError )
 {
-	// move up tail to buffer head
-	if ( m_iDataLeft )
-	{
-		memmove ( m_dBuf.Begin(), m_dBuf.Begin() + m_iDataStart, m_iDataLeft );
-		m_iDataStart = 0;
-	}
-
-	int iColumns = m_dRemap.GetLength();
-	int iCol = 0;
-	int iColumnStart = 0;
-	BYTE * pData = m_dBuf.Begin();
-	const BYTE * pEnd = m_dBuf.Begin() + m_iDataLeft;
-	for ( ;; )
-	{
-		if ( iCol>=iColumns )
-		{
-			sError.SetSprintf ( "source '%s': too many columns found (found=%d, declared=%d, line=%d, pos=%d, docid=" DOCID_FMT ")",
-				m_tSchema.m_sName.cstr(), iCol, iColumns+m_iAutoCount, m_iLine, (int)( pData - m_dBuf.Begin() ), m_tDocInfo.m_iDocID );
-			return ReportDocumentError();
-		}
-
-		// move to next control symbol
-		while ( pData<pEnd && *pData && *pData!='\t' && *pData!='\r' && *pData!='\n' )
-			pData++;
-
-		if ( pData<pEnd )
-		{
-			assert ( *pData=='\t' || !*pData || *pData=='\r' || *pData=='\n' );
-			bool bNull = !*pData;
-			bool bEOL = ( *pData=='\r' || *pData=='\n' );
-
-			int iLen = pData - m_dBuf.Begin() - iColumnStart;
-			assert ( iLen>=0 );
-			m_dColumnsLen[iCol] = iLen;
-			*pData++ = '\0';
-			iCol++;
-
-			if ( bNull )
-			{
-				// null terminated string found
-				m_iDataStart = 0;
-				m_iDataLeft = 0;
-				break;
-			} else if ( bEOL )
-			{
-				// end of document found
-				// skip all EOL characters
-				while ( pData<pEnd && *pData && ( *pData=='\r' || *pData=='\n' ) )
-					pData++;
-				break;
-			}
-
-			// column separator found
-			iColumnStart = pData - m_dBuf.Begin();
-			continue;
-		}
-
-		int iOff = pData - m_dBuf.Begin();
-
-		// full buffer got resized to collect whole document
-		if ( iOff==m_dBuf.GetLength() )
-			m_dBuf.Resize ( m_dBuf.GetLength()*2 );
-
-		int iGot = fread ( m_dBuf.Begin() + iOff, 1, m_dBuf.GetLength() - iOff, m_pPipe );
-		if ( !iGot )
-		{
-			if ( !iCol )
-			{
-				// normal file termination - no pending columns and documents
-				m_iDataStart = 0;
-				m_iDataLeft = 0;
-				m_tDocInfo.m_iDocID = 0;
-				return NULL;
-			}
-
-			// error in case no data left in middle of data stream
-			sError.SetSprintf ( "source '%s': read error '%s' (line=%d, pos=%d, docid=" DOCID_FMT ")",
-				m_tSchema.m_sName.cstr(), strerror(errno), m_iLine, iOff, m_tDocInfo.m_iDocID );
-			return ReportDocumentError();
-		}
-
-		// fix-up pointers due of buffer resize
-		pData = m_dBuf.Begin() + iOff;
-		pEnd = m_dBuf.Begin() + iOff + iGot;
-	}
-
-	// all columns presence check
-	if ( iCol!=iColumns )
-	{
-		sError.SetSprintf ( "source '%s': not all columns found (found=%d, total=%d, line=%d, pos=%d, docid=" DOCID_FMT ")",
-			m_tSchema.m_sName.cstr(), iCol, iColumns, m_iLine, (int)( pData - m_dBuf.Begin() ), m_tDocInfo.m_iDocID );
+	ESphParseResult eRes = SplitColumns ( sError );
+	if ( eRes==PARSING_FAILED )
 		return ReportDocumentError();
-	}
+	else if ( eRes==DATA_OVER )
+		return NULL;
 
-	// tail data
-	assert ( pData<=pEnd );
-	m_iDataStart = pData - m_dBuf.Begin();
-	m_iDataLeft = pEnd - pData;
+	assert ( eRes==GOT_DOCUMENT );
 
 	// check doc_id
 	if ( !m_dColumnsLen[0] )
 	{
 		sError.SetSprintf ( "source '%s': not doc_id found (line=%d, pos=%d, docid=" DOCID_FMT ")",
-			m_tSchema.m_sName.cstr(), m_iLine, (int)( pData - m_dBuf.Begin() ), m_tDocInfo.m_iDocID );
+			m_tSchema.m_sName.cstr(), m_iLine, m_iDataStart, m_tDocInfo.m_iDocID );
 		return ReportDocumentError();
 	}
 
@@ -30063,16 +30012,17 @@ BYTE **	CSphSource_TSV::NextDocument ( CSphString & sError )
 	if ( m_tDocInfo.m_iDocID==0 )
 	{
 		sError.SetSprintf ( "source '%s': invalid doc_id found (line=%d, pos=%d, docid=" DOCID_FMT ")",
-			m_tSchema.m_sName.cstr(), m_iLine, (int)( pData - m_dBuf.Begin() ), m_tDocInfo.m_iDocID );
+			m_tSchema.m_sName.cstr(), m_iLine, m_iDataStart, m_tDocInfo.m_iDocID );
 		return ReportDocumentError();
 	}
 
-	// parse columns
+	// parse column data
 	int iOff = m_dColumnsLen[0] + 1;
+	int iColumns = m_dRemap.GetLength();
 	for ( int iCol=1; iCol<iColumns; iCol++ )
 	{
 		// if+if for field-string attribute case
-		const RemapTSV_t & tRemap = m_dRemap[iCol];
+		const RemapXSV_t & tRemap = m_dRemap[iCol];
 
 		// field column
 		if ( tRemap.m_iField!=-1 )
@@ -30122,6 +30072,314 @@ BYTE **	CSphSource_TSV::NextDocument ( CSphString & sError )
 
 	m_iLine++;
 	return m_dFields.Begin();
+}
+
+
+CSphSource_TSV::CSphSource_TSV ( const char * sName )
+: CSphSource_BaseSV ( sName )
+{
+}
+
+CSphSource_TSV::~CSphSource_TSV()
+{
+}
+
+
+CSphSource_BaseSV::ESphParseResult CSphSource_TSV::SplitColumns ( CSphString & sError )
+{
+	// move up tail to buffer head
+	if ( m_iDataLeft && m_iDataStart )
+	{
+		memmove ( m_dBuf.Begin(), m_dBuf.Begin() + m_iDataStart, m_iDataLeft );
+		m_iDataStart = 0;
+	}
+
+	int iColumns = m_dRemap.GetLength();
+	int iCol = 0;
+	int iColumnStart = 0;
+	BYTE * pData = m_dBuf.Begin();
+	const BYTE * pEnd = m_dBuf.Begin() + m_iDataLeft;
+
+	for ( ;; )
+	{
+		if ( iCol>=iColumns )
+		{
+			sError.SetSprintf ( "source '%s': too many columns found (found=%d, declared=%d, line=%d, pos=%d, docid=" DOCID_FMT ")",
+				m_tSchema.m_sName.cstr(), iCol, iColumns+m_iAutoCount, m_iLine, (int)( pData - m_dBuf.Begin() ), m_tDocInfo.m_iDocID );
+			return CSphSource_BaseSV::PARSING_FAILED;
+		}
+
+		// move to next control symbol
+		while ( pData<pEnd && *pData && *pData!='\t' && *pData!='\r' && *pData!='\n' )
+			pData++;
+
+		if ( pData<pEnd )
+		{
+			assert ( *pData=='\t' || !*pData || *pData=='\r' || *pData=='\n' );
+			bool bNull = !*pData;
+			bool bEOL = ( *pData=='\r' || *pData=='\n' );
+
+			int iLen = pData - m_dBuf.Begin() - iColumnStart;
+			assert ( iLen>=0 );
+			m_dColumnsLen[iCol] = iLen;
+			*pData++ = '\0';
+			iCol++;
+
+			if ( bNull )
+			{
+				// null terminated string found
+				m_iDataStart = m_iDataLeft = 0;
+				break;
+			} else if ( bEOL )
+			{
+				// end of document found
+				// skip all EOL characters
+				while ( pData<pEnd && *pData && ( *pData=='\r' || *pData=='\n' ) )
+					pData++;
+				break;
+			}
+
+			// column separator found
+			iColumnStart = pData - m_dBuf.Begin();
+			continue;
+		}
+
+		int iOff = pData - m_dBuf.Begin();
+
+		// full buffer got resized to collect whole document
+		if ( iOff==m_dBuf.GetLength() )
+			m_dBuf.Resize ( m_dBuf.GetLength()*2 );
+
+		int iGot = fread ( m_dBuf.Begin() + iOff, 1, m_dBuf.GetLength() - iOff, m_pPipe );
+		if ( !iGot )
+		{
+			if ( !iCol )
+			{
+				// normal file termination - no pending columns and documents
+				m_iDataStart = m_iDataLeft = 0;
+				m_tDocInfo.m_iDocID = 0;
+				return CSphSource_BaseSV::DATA_OVER;
+			}
+
+			// error in case no data left in middle of data stream
+			sError.SetSprintf ( "source '%s': read error '%s' (line=%d, pos=%d, docid=" DOCID_FMT ")",
+				m_tSchema.m_sName.cstr(), strerror(errno), m_iLine, iOff, m_tDocInfo.m_iDocID );
+			return CSphSource_BaseSV::PARSING_FAILED;
+		}
+
+		// fix-up pointers due of buffer resize
+		pData = m_dBuf.Begin() + iOff;
+		pEnd = m_dBuf.Begin() + iOff + iGot;
+	}
+
+	// all columns presence check
+	if ( iCol!=iColumns )
+	{
+		sError.SetSprintf ( "source '%s': not all columns found (found=%d, total=%d, line=%d, pos=%d, docid=" DOCID_FMT ")",
+			m_tSchema.m_sName.cstr(), iCol, iColumns, m_iLine, (int)( pData - m_dBuf.Begin() ), m_tDocInfo.m_iDocID );
+		return CSphSource_BaseSV::PARSING_FAILED;
+	}
+
+	// tail data
+	assert ( pData<=pEnd );
+	m_iDataStart = pData - m_dBuf.Begin();
+	m_iDataLeft = pEnd - pData;
+	return CSphSource_BaseSV::GOT_DOCUMENT;
+}
+
+
+void CSphSource_TSV::SetupSchema ( const CSphConfigSection & hSource, bool bWordDict )
+{
+	ConfigureAttrs ( hSource("tsvpipe_attr_uint"),			SPH_ATTR_INTEGER,	m_tSchema );
+	ConfigureAttrs ( hSource("tsvpipe_attr_timestamp"),		SPH_ATTR_TIMESTAMP,	m_tSchema );
+	ConfigureAttrs ( hSource("tsvpipe_attr_bool"),			SPH_ATTR_BOOL,		m_tSchema );
+	ConfigureAttrs ( hSource("tsvpipe_attr_float"),			SPH_ATTR_FLOAT,		m_tSchema );
+	ConfigureAttrs ( hSource("tsvpipe_attr_bigint"),		SPH_ATTR_BIGINT,	m_tSchema );
+	ConfigureAttrs ( hSource("tsvpipe_attr_multi"),			SPH_ATTR_UINT32SET,	m_tSchema );
+	ConfigureAttrs ( hSource("tsvpipe_attr_multi_64"),		SPH_ATTR_INT64SET,	m_tSchema );
+	ConfigureAttrs ( hSource("tsvpipe_attr_string"),		SPH_ATTR_STRING,	m_tSchema );
+	ConfigureAttrs ( hSource("tsvpipe_attr_json"),			SPH_ATTR_JSON,		m_tSchema );
+	ConfigureAttrs ( hSource("tsvpipe_field_string"),		SPH_ATTR_STRING,	m_tSchema );
+
+	ConfigureFields ( hSource("tsvpipe_field"), bWordDict, m_tSchema );
+	ConfigureFields ( hSource("tsvpipe_field_string"), bWordDict, m_tSchema );
+}
+
+
+CSphSource_CSV::CSphSource_CSV ( const char * sName, const char * sDelimiter )
+	: CSphSource_BaseSV ( sName )
+{
+	m_iDelimiter = BYTE ( ',' );
+	if ( sDelimiter && *sDelimiter )
+		m_iDelimiter = *sDelimiter;
+}
+
+CSphSource_CSV::~CSphSource_CSV()
+{
+}
+
+
+CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & sError )
+{
+	// move up tail to buffer head
+	if ( m_iDataLeft && m_iDataStart )
+	{
+		memmove ( m_dBuf.Begin(), m_dBuf.Begin() + m_iDataStart, m_iDataLeft );
+		m_iDataStart = 0;
+	}
+
+	int iColumns = m_dRemap.GetLength();
+	int iCol = 0;
+	int iColumnStart = 0;
+	int iQuoteCount = 0;
+	int iQuoteStart = -1;
+	int	iEscapeStart = -1;
+	const BYTE * pDst = m_dBuf.Begin();
+	BYTE * pSrc = m_dBuf.Begin();
+	const BYTE * pEnd = m_dBuf.Begin() + m_iDataLeft;
+
+	for ( ;; )
+	{
+		assert ( pSrc<=pDst );
+		// move to next control symbol
+		while ( pDst<pEnd && *pDst && *pDst!=m_iDelimiter && *pDst!='"' && *pDst!='\\' && *pDst!='\r' && *pDst!='\n' )
+			*pSrc++ = *pDst++;
+
+		if ( pDst<pEnd )
+		{
+			assert ( !*pDst || *pDst==m_iDelimiter || *pDst=='"' || *pDst=='\\' || *pDst=='\r' || *pDst=='\n' );
+			bool bNull = !*pDst;
+			bool bEOL = ( *pDst=='\r' || *pDst=='\n' );
+			bool bDelimiter = ( *pDst==m_iDelimiter );
+			bool bQuot = ( *pDst=='"' );
+			bool bEscape = ( *pDst=='\\' );
+			int iOff = pDst-m_dBuf.Begin();
+
+			// [ " ... " ]
+			// [ " ... "" ... " ]
+			// [ " ... """ ]
+			// [ " ... """" ... " ]
+			if ( bQuot || ( iQuoteCount%2 )==1 ) // quotation
+			{
+				// order of operations with quotation counter and offset matter
+				if ( bQuot )
+					iQuoteCount++;
+
+				// any symbol inside quotation proceed as regular
+				// but not quotation itself
+				// but quoted quotation proceed as regular symbol
+				bool bOdd = ( ( iQuoteCount%2 )==1 );
+				if ( bOdd && ( !bQuot || ( iQuoteStart!=-1 && iQuoteStart+1==iOff ) ) ) // regular symbol inside quotation or quoted quotation
+				{
+						*pSrc++ = *pDst;
+				}
+				pDst++;
+
+				if ( bQuot )
+					iQuoteStart = iOff;
+
+				continue;
+			}
+
+			if ( bEscape ) // not quoted escape symbol
+			{
+				if ( iEscapeStart>=0 && iEscapeStart+1==iOff ) // next to escape symbol proceed as regular
+				{
+					*pSrc++ = *pDst;
+				} else // escape just started
+				{
+					iEscapeStart = iOff;
+					pDst++;
+				}
+				continue;
+			}
+
+			int iLen = pSrc - m_dBuf.Begin() - iColumnStart;
+			assert ( iLen>=0 );
+			m_dColumnsLen[iCol] = iLen;
+			*pSrc++ = '\0';
+			pDst++;
+			iCol++;
+
+			if ( bNull ) // null terminated string found
+			{
+				m_iDataStart = m_iDataLeft = 0;
+				break;
+			} else if ( bEOL ) // end of document found
+			{
+				// skip all EOL characters
+				while ( pDst<pEnd && *pDst && ( *pDst=='\r' || *pDst=='\n' ) )
+					pDst++;
+				break;
+			}
+
+			assert ( bDelimiter );
+			// column separator found
+			iColumnStart = pSrc - m_dBuf.Begin();
+			continue;
+		}
+
+		int iDstOff = pDst - m_dBuf.Begin();
+		int iSrcOff = pSrc - m_dBuf.Begin();
+
+		// full buffer got resized to collect whole document
+		if ( iDstOff==m_dBuf.GetLength() )
+			m_dBuf.Resize ( m_dBuf.GetLength()*2 );
+
+		int iGot = fread ( m_dBuf.Begin() + iDstOff, 1, m_dBuf.GetLength() - iDstOff, m_pPipe );
+		if ( !iGot )
+		{
+			if ( !iCol )
+			{
+				// normal file termination - no pending columns and documents
+				m_iDataStart = m_iDataLeft = 0;
+				m_tDocInfo.m_iDocID = 0;
+				return CSphSource_BaseSV::DATA_OVER;
+			}
+
+			// error in case no data left in middle of data stream
+			sError.SetSprintf ( "source '%s': read error '%s' (line=%d, pos=%d, docid=" DOCID_FMT ")",
+				m_tSchema.m_sName.cstr(), strerror(errno), m_iLine, iDstOff, m_tDocInfo.m_iDocID );
+			return CSphSource_BaseSV::PARSING_FAILED;
+		}
+
+		// fix-up pointers due of buffer resize
+		pDst = m_dBuf.Begin() + iDstOff;
+		pSrc = m_dBuf.Begin() + iSrcOff;
+		pEnd = m_dBuf.Begin() + iDstOff + iGot;
+	}
+
+	// all columns presence check
+	if ( iCol!=iColumns )
+	{
+		sError.SetSprintf ( "source '%s': not all columns found (found=%d, total=%d, line=%d, pos=%d, docid=" DOCID_FMT ")",
+			m_tSchema.m_sName.cstr(), iCol, iColumns, m_iLine, (int)( pDst - m_dBuf.Begin() ), m_tDocInfo.m_iDocID );
+		return CSphSource_BaseSV::PARSING_FAILED;
+	}
+
+	// tail data
+	assert ( pDst<=pEnd );
+	m_iDataStart = pDst - m_dBuf.Begin();
+	m_iDataLeft = pEnd - pDst;
+	return CSphSource_BaseSV::GOT_DOCUMENT;
+}
+
+
+void CSphSource_CSV::SetupSchema ( const CSphConfigSection & hSource, bool bWordDict )
+{
+	ConfigureAttrs ( hSource("csvpipe_attr_uint"),			SPH_ATTR_INTEGER,	m_tSchema );
+	ConfigureAttrs ( hSource("csvpipe_attr_timestamp"),		SPH_ATTR_TIMESTAMP,	m_tSchema );
+	ConfigureAttrs ( hSource("csvpipe_attr_bool"),			SPH_ATTR_BOOL,		m_tSchema );
+	ConfigureAttrs ( hSource("csvpipe_attr_float"),			SPH_ATTR_FLOAT,		m_tSchema );
+	ConfigureAttrs ( hSource("csvpipe_attr_bigint"),		SPH_ATTR_BIGINT,	m_tSchema );
+	ConfigureAttrs ( hSource("csvpipe_attr_multi"),			SPH_ATTR_UINT32SET,	m_tSchema );
+	ConfigureAttrs ( hSource("csvpipe_attr_multi_64"),		SPH_ATTR_INT64SET,	m_tSchema );
+	ConfigureAttrs ( hSource("csvpipe_attr_string"),		SPH_ATTR_STRING,	m_tSchema );
+	ConfigureAttrs ( hSource("csvpipe_attr_json"),			SPH_ATTR_JSON,		m_tSchema );
+	ConfigureAttrs ( hSource("csvpipe_field_string"),		SPH_ATTR_STRING,	m_tSchema );
+
+	ConfigureFields ( hSource("csvpipe_field"), bWordDict, m_tSchema );
+	ConfigureFields ( hSource("csvpipe_field_string"), bWordDict, m_tSchema );
 }
 
 

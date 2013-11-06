@@ -7530,6 +7530,7 @@ public:
 				{
 					CSphMatch tDummy;
 					m_pState->m_iWindowSize = pLeft->IntEval ( tDummy ); // must be constant; checked in GetReturnType()
+					SafeRelease ( pLeft );
 					return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMaxWindowHits );
 				}
 			case XRANK_MIN_GAPS:

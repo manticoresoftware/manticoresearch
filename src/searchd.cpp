@@ -66,6 +66,7 @@ extern "C"
 	#define sphSockSend(_sock,_buf,_len)	::send(_sock,_buf,_len,0)
 	#define sphSockClose(_sock)				::closesocket(_sock)
 
+	#define sphSeek		_lseeki64
 	#define stat		_stat
 
 #else
@@ -96,7 +97,7 @@ extern "C"
 	#define sphSockRecv(_sock,_buf,_len)	::recv(_sock,_buf,_len,MSG_NOSIGNAL)
 	#define sphSockSend(_sock,_buf,_len)	::send(_sock,_buf,_len,MSG_NOSIGNAL)
 	#define sphSockClose(_sock)				::close(_sock)
-
+	#define sphSeek		lseek
 #endif
 
 #if USE_SYSLOG
@@ -1337,7 +1338,7 @@ void sphLogEntry ( ESphLogLevel , char * sBuf, char * sTtyBuf )
 	{
 		strcat ( sBuf, "\n" ); // NOLINT
 
-		lseek ( g_iLogFile, 0, SEEK_END );
+		sphSeek ( g_iLogFile, 0, SEEK_END );
 		if ( g_bLogTty )
 			sphWrite ( g_iLogFile, sTtyBuf, strlen(sTtyBuf) );
 		else
@@ -1944,7 +1945,7 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 		CRASH_EXIT;
 
 	// log [time][pid]
-	lseek ( g_iLogFile, 0, SEEK_END );
+	sphSeek ( g_iLogFile, 0, SEEK_END );
 	sphWrite ( g_iLogFile, g_sCrashInfo, g_iCrashInfoLen );
 
 	// log query
@@ -6883,7 +6884,7 @@ void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 	// line feed
 	tBuf += "\n";
 
-	lseek ( g_iQueryLogFile, 0, SEEK_END );
+	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
 	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.Length() );
 
 #if USE_SYSLOG
@@ -7197,7 +7198,7 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 	// line feed
 	tBuf += "\n";
 
-	lseek ( g_iQueryLogFile, 0, SEEK_END );
+	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
 	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.Length() );
 }
 
@@ -7229,7 +7230,7 @@ void LogSphinxqlError ( const char * sStmt, const char * sError )
 	tBuf += sTimeBuf;
 	tBuf.Appendf ( " conn %d *""/ %s # error=%s\n", iCid, sStmt, sError );
 
-	lseek ( g_iQueryLogFile, 0, SEEK_END );
+	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
 	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.Length() );
 }
 
@@ -17606,7 +17607,7 @@ void CheckLeaks ()
 
 	if ( g_dThd.GetLength()==0 && !g_iRotateCount && iHeadAllocs!=sphAllocsCount() )
 	{
-		lseek ( g_iLogFile, 0, SEEK_END );
+		sphSeek ( g_iLogFile, 0, SEEK_END );
 		sphAllocsDump ( g_iLogFile, iHeadCheckpoint );
 
 		iHeadAllocs = sphAllocsCount ();
@@ -21740,7 +21741,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		snprintf ( sPid, sizeof(sPid), "%d\n", (int)getpid() );
 		int iPidLen = strlen(sPid);
 
-		lseek ( g_iPidFD, 0, SEEK_SET );
+		sphSeek ( g_iPidFD, 0, SEEK_SET );
 		if ( !sphWrite ( g_iPidFD, sPid, iPidLen ) )
 			sphFatal ( "failed to write to pid file '%s' (errno=%d, msg=%s)", g_sPidFile,
 				errno, strerror(errno) );

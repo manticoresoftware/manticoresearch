@@ -2777,9 +2777,6 @@ public:
 	CSphQueryResultMeta ();													///< ctor
 	virtual					~CSphQueryResultMeta () {}						///< dtor
 	void					AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits, bool bExpanded );
-
-	CSphQueryResultMeta ( const CSphQueryResultMeta & tMeta );				///< copy ctor
-	CSphQueryResultMeta & operator= ( const CSphQueryResultMeta & tMeta );	///< copy
 };
 
 

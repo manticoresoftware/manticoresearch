@@ -16038,6 +16038,10 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 		return false;
 	}
 
+	// we count documents only (before filters)
+	if ( pQuery->m_iMaxPredictedMsec )
+		pResult->m_bHasPrediction = true;
+
 	if ( tArgs.m_bFactors )
 		pResult->m_sWarning.SetSprintf ( "packedfactors() will not work with a fullscan; you need to specify a query" );
 
@@ -16122,6 +16126,9 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 		{
 			SphDocID_t uDocid = (SphDocID_t) pQuery->m_dFilters[0].GetValue(i);
 			const DWORD * pRow = FindDocinfo ( uDocid );
+
+			pResult->m_tStats.m_iFetchedDocs++;
+
 			if ( !pRow )
 				continue;
 
@@ -16181,6 +16188,9 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 				{
 					tMatch.m_iDocID = DOCINFO2ID ( pDocinfo );
 					tMatch.m_pStatic = DOCINFO2ATTRS ( pDocinfo );
+
+					pResult->m_tStats.m_iFetchedDocs++;
+
 					if ( !tCtx.m_pFilter->Eval ( tMatch ) )
 					{
 						tCtx.FreeStrFilter ( tMatch );
@@ -16205,6 +16215,8 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 						tMatch.m_pStatic = DOCINFO2ATTRS ( pDocinfo );
 					else
 						CopyDocinfo ( &tCtx, tMatch, pDocinfo );
+
+					pResult->m_tStats.m_iFetchedDocs++;
 
 					// early filter only (no late filters in full-scan because of no @weight)
 					tCtx.CalcFilter ( tMatch );
@@ -31040,19 +31052,19 @@ void SphWordStatChecker_t::DumpDiffer ( const SmallStringHash_T<CSphQueryResultM
 //////////////////////////////////////////////////////////////////////////
 
 CSphQueryResultMeta::CSphQueryResultMeta ()
-: m_iQueryTime ( 0 )
-, m_iRealQueryTime ( 0 )
-, m_iCpuTime ( 0 )
-, m_iMultiplier ( 1 )
-, m_iMatches ( 0 )
-, m_iTotalMatches ( 0 )
-, m_iAgentCpuTime ( 0 )
-, m_iPredictedTime ( 0 )
-, m_iAgentPredictedTime ( 0 )
-, m_iAgentFetchedDocs ( 0 )
-, m_iAgentFetchedHits ( 0 )
-, m_iAgentFetchedSkips ( 0 )
-, m_bHasPrediction ( false )
+	: m_iQueryTime ( 0 )
+	, m_iRealQueryTime ( 0 )
+	, m_iCpuTime ( 0 )
+	, m_iMultiplier ( 1 )
+	, m_iMatches ( 0 )
+	, m_iTotalMatches ( 0 )
+	, m_iAgentCpuTime ( 0 )
+	, m_iPredictedTime ( 0 )
+	, m_iAgentPredictedTime ( 0 )
+	, m_iAgentFetchedDocs ( 0 )
+	, m_iAgentFetchedHits ( 0 )
+	, m_iAgentFetchedSkips ( 0 )
+	, m_bHasPrediction ( false )
 {
 }
 
@@ -31105,39 +31117,6 @@ void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int64_t iDocs, int
 	}
 }
 
-
-CSphQueryResultMeta::CSphQueryResultMeta ( const CSphQueryResultMeta & tMeta )
-{
-	*this = tMeta;
-}
-
-
-CSphQueryResultMeta & CSphQueryResultMeta::operator= ( const CSphQueryResultMeta & tMeta )
-{
-	m_iQueryTime = tMeta.m_iQueryTime;
-	m_iRealQueryTime = tMeta.m_iRealQueryTime;
-	m_iCpuTime = tMeta.m_iCpuTime;
-	m_iMultiplier = tMeta.m_iMultiplier;
-	m_iMatches = tMeta.m_iMatches;
-	m_iTotalMatches = tMeta.m_iTotalMatches;
-	m_tIOStats = tMeta.m_tIOStats;
-	m_iAgentCpuTime = tMeta.m_iAgentCpuTime;
-	m_tAgentIOStats = tMeta.m_tAgentIOStats;
-	m_iPredictedTime = tMeta.m_iPredictedTime;
-	m_iAgentPredictedTime = tMeta.m_iAgentPredictedTime;
-	m_iAgentFetchedDocs = tMeta.m_iAgentFetchedDocs;
-	m_iAgentFetchedHits = tMeta.m_iAgentFetchedHits;
-
-	m_tStats = tMeta.m_tStats;
-	m_bHasPrediction = tMeta.m_bHasPrediction;
-
-	m_sError = tMeta.m_sError;
-	m_sWarning = tMeta.m_sWarning;
-
-	m_hWordStats = tMeta.m_hWordStats;
-
-	return *this;
-}
 
 //////////////////////////////////////////////////////////////////////////
 // CONVERSION TOOLS HELPERS

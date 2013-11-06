@@ -2975,9 +2975,6 @@ void BenchAppendf()
 
 // conversion between degrees and radians
 static const double MY_PI = 3.14159265358979323846;
-static const float TO_RADF = float ( MY_PI / 180.0 );
-static const float TO_RADF2 = float ( MY_PI / 360.0 );
-static const float TO_DEGF = float ( 180.0 / MY_PI );
 static const double TO_RADD = MY_PI / 180.0;
 static const double TO_RADD2 = MY_PI / 360.0;
 static const double TO_DEGD = 180.0 / MY_PI;

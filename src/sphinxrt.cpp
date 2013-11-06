@@ -212,7 +212,7 @@ private:
 public:
 	RtDiskKlist_t() { m_tLock.Init(); }
 	virtual ~RtDiskKlist_t() { m_tLock.Done(); }
-	void Reset ();
+	void Reset();
 	void Flush()
 	{
 		if ( m_hSmallKlist.GetLength()==0 )
@@ -232,9 +232,8 @@ public:
 		if ( m_hSmallKlist.GetLength()+iCount>=MAX_SMALL_SIZE )
 		{
 			int iOff = m_dLargeKlist.GetLength();
-			// 1st resize for new data with hashed data
-			// 2nd resize for new data copying
-			m_dLargeKlist.Resize ( iOff + iCount + m_hSmallKlist.GetLength() );
+			// so Reserve() inside NakedFlush will do no unnecessary allocations in m_dLargeKlist
+			m_dLargeKlist.Reserve ( iOff + iCount + m_hSmallKlist.GetLength() );
 			m_dLargeKlist.Resize ( iOff + iCount );
 
 			// can not just use memcpy as SphAttr_t(always 64bits) != SphDocID_t(might be 32 or 64 bits)
@@ -249,8 +248,8 @@ public:
 				m_hSmallKlist.Add ( true, *pDocs++ );
 		}
 	}
-	inline const SphAttr_t * GetKillList () const { return m_dLargeKlist.Begin(); }
-	inline int	GetKillListSize () const { return m_dLargeKlist.GetLength(); }
+	inline const SphAttr_t * GetKillList() const { return m_dLargeKlist.Begin(); }
+	inline int	GetKillListSize() const { return m_dLargeKlist.GetLength(); }
 	bool Exists ( SphDocID_t uDoc )
 	{
 		return ( m_hSmallKlist.Exists ( uDoc ) || m_dLargeKlist.BinarySearch ( SphAttr_t(uDoc))!=NULL );
@@ -324,7 +323,7 @@ void RtDiskKlist_t::SaveToFile ( const char * sFilename )
 		uLastDocID = ( SphDocID_t ) m_dLargeKlist[i];
 	};
 	m_tLock.Unlock();
-	wrKlist.CloseFile ();
+	wrKlist.CloseFile();
 }
 
 struct RtSegment_t
@@ -429,8 +428,7 @@ const CSphRowitem * RtSegment_t::FindAliveRow ( SphDocID_t uDocid ) const
 {
 	if ( m_dKlist.BinarySearch ( uDocid ) )
 		return NULL;
-	else
-		return FindRow ( uDocid );
+	return FindRow ( uDocid );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -532,7 +530,7 @@ struct RtWordWriter_t
 {
 	CSphTightVector<BYTE> *				m_pWords;
 	CSphVector<RtWordCheckpoint_t> *	m_pCheckpoints;
-	CSphVector<BYTE> *					m_dKeywordCheckpoints;
+	CSphVector<BYTE> *					m_pKeywordCheckpoints;
 
 	CSphKeywordDeltaWriter				m_tLastKeyword;
 	SphWordID_t							m_uLastWordID;
@@ -545,7 +543,7 @@ struct RtWordWriter_t
 	RtWordWriter_t ( RtSegment_t * pSeg, bool bKeywordDict, int iWordsCheckpoint )
 		: m_pWords ( &pSeg->m_dWords )
 		, m_pCheckpoints ( &pSeg->m_dWordCheckpoints )
-		, m_dKeywordCheckpoints ( &pSeg->m_dKeywordCheckpoints )
+		, m_pKeywordCheckpoints ( &pSeg->m_dKeywordCheckpoints )
 		, m_uLastWordID ( 0 )
 		, m_uLastDoc ( 0 )
 		, m_iWords ( 0 )
@@ -554,7 +552,7 @@ struct RtWordWriter_t
 	{
 		assert ( !m_pWords->GetLength() );
 		assert ( !m_pCheckpoints->GetLength() );
-		assert ( !m_dKeywordCheckpoints->GetLength() );
+		assert ( !m_pKeywordCheckpoints->GetLength() );
 	}
 
 	void ZipWord ( const RtWord_t & tWord )
@@ -570,8 +568,8 @@ struct RtWordWriter_t
 			{
 				int iLen = tWord.m_sWord[0];
 				assert ( iLen && iLen-1<SPH_MAX_KEYWORD_LEN );
-				tCheckpoint.m_iWordID = sphPutBytes ( m_dKeywordCheckpoints, tWord.m_sWord+1, iLen+1 );
-				m_dKeywordCheckpoints->Last() = '\0'; // checkpoint is NULL terminating string
+				tCheckpoint.m_iWordID = sphPutBytes ( m_pKeywordCheckpoints, tWord.m_sWord+1, iLen+1 );
+				m_pKeywordCheckpoints->Last() = '\0'; // checkpoint is NULL terminating string
 
 				// reset keywords delta encoding
 				m_tLastKeyword.Reset();
@@ -3601,8 +3599,7 @@ void RtIndex_t::SaveDiskData ( const char * sFilename, const CSphVector<RtSegmen
 {
 	if ( m_bId32to64 )
 		return SaveDiskDataImpl<DWORD,DWORD> ( sFilename, dSegments, tStats );
-	else
-		return SaveDiskDataImpl<SphDocID_t,SphWordID_t> ( sFilename, dSegments, tStats );
+	return SaveDiskDataImpl<SphDocID_t,SphWordID_t> ( sFilename, dSegments, tStats );
 }
 
 
@@ -5782,17 +5779,6 @@ bool RtIndex_t::RtQwordSetup ( RtQword_t * pQword, const RtSegment_t * pSeg ) co
 	return bFound;
 }
 
-static void AddKillListFilter ( CSphFilterSettings * pFilter, const SphAttr_t * pKillList, int nEntries )
-{
-	assert ( nEntries && pKillList && pFilter );
-	pFilter->m_bExclude = true;
-	pFilter->m_eType = SPH_FILTER_VALUES;
-	pFilter->m_iMinValue = pKillList[0];
-	pFilter->m_iMaxValue = pKillList[nEntries-1];
-	pFilter->m_sAttrName = "@id";
-	pFilter->SetExternalValues ( pKillList, nEntries );
-}
-
 
 CSphDict * RtIndex_t::SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer * pTokenizer ) const
 {
@@ -6148,8 +6134,14 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		CSphVector<CSphFilterSettings> dKListFilter;
 		if ( dCumulativeKList.GetLength() )
 		{
+			assert ( dCumulativeKList.GetLength() );
 			CSphFilterSettings & tKListFilter = dKListFilter.Add();
-			AddKillListFilter ( &tKListFilter, dCumulativeKList.Begin(), dCumulativeKList.GetLength() );
+			tKListFilter.m_bExclude = true;
+			tKListFilter.m_eType = SPH_FILTER_VALUES;
+			tKListFilter.m_iMinValue = dCumulativeKList[0];
+			tKListFilter.m_iMaxValue = dCumulativeKList.Last();
+			tKListFilter.m_sAttrName = "@id";
+			tKListFilter.SetExternalValues ( dCumulativeKList.Begin(), dCumulativeKList.GetLength() );
 		}
 
 		CSphQueryResult tChunkResult;
@@ -8142,8 +8134,6 @@ void RtBinlog_c::BinlogUpdateAttributes ( int64_t * pTID, const char * sIndexNam
 	SaveVector ( m_tWriter, dBinlogDocids );
 	dActiveDocids.Reset();
 	SaveVector ( m_tWriter, tUpd.m_dRowOffset );
-
-
 
 	// checksum
 	m_tWriter.WriteCrc ();

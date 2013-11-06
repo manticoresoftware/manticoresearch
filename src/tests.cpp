@@ -3256,6 +3256,8 @@ void TestGeodist()
 
 void TestSource ()
 {
+	printf ( "testing csv data source... " );
+
 	int iWriteStride = 7;
 	const char * dTest[] = {
 		"1,\"a,b \"\" c\",\"d \"\"a\"\" c\",\"the\tdox\n fox\",tmp,tmp,tmp,11\n",
@@ -3334,7 +3336,8 @@ void TestSource ()
 
 	// clean up
 	SafeDelete ( pCSV );
-	fclose ( fp );
+
+	printf ( "ok\n" );
 }
 
 //////////////////////////////////////////////////////////////////////////

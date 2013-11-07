@@ -858,7 +858,7 @@ bool operator < ( SphDocID_t a, const SkiplistEntry_t & b )		{ return a<b.m_iBas
 
 
 /// query word from the searcher's point of view
-template < bool INLINE_HITS, bool INLINE_DOCINFO, bool DISABLE_HITLIST_SEEK >
+template < bool INLINE_HITS, bool INLINE_DOCINFO, bool DISABLE_HITLIST_SEEK, bool DO_DEBUG_CHECK >
 class DiskIndexQword_c : public DiskIndexQwordTraits_c
 {
 public:
@@ -932,9 +932,14 @@ public:
 				const DWORD uFirst = m_rdDoclist.UnzipInt();
 				if ( m_uMatchHits==1 && m_bHasHitlist )
 				{
-					const DWORD uField = m_rdDoclist.UnzipInt(); // field and end marker
+					DWORD uField = m_rdDoclist.UnzipInt(); // field and end marker
 					m_iHitlistPos = uFirst | ( uField << 23 ) | ( U64C(1)<<63 );
 					m_dQwordFields.UnsetAll();
+					if_const ( DO_DEBUG_CHECK )
+					{
+						if ( ( uField>>1 )>=SPH_MAX_FIELDS )
+							uField = ( (DWORD)SPH_MAX_FIELDS-1 )<<1;
+					}
 					m_dQwordFields.Set ( uField >> 1 );
 					m_bAllFieldsKnown = true;
 				} else
@@ -1015,10 +1020,10 @@ public:
 																									\
 	switch ( ( INDEX##uInlineHits<<1 ) | INDEX##uInlineDocinfo )													\
 	{																								\
-		case 0: { typedef DiskIndexQword_c < false, false, NO_SEEK > NAME; ACTION; break; }			\
-		case 1: { typedef DiskIndexQword_c < false, true, NO_SEEK > NAME; ACTION; break; }			\
-		case 2: { typedef DiskIndexQword_c < true, false, NO_SEEK > NAME; ACTION; break; }			\
-		case 3: { typedef DiskIndexQword_c < true, true, NO_SEEK > NAME; ACTION; break; }			\
+		case 0: { typedef DiskIndexQword_c < false, false, NO_SEEK, false > NAME; ACTION; break; }			\
+		case 1: { typedef DiskIndexQword_c < false, true, NO_SEEK, false > NAME; ACTION; break; }			\
+		case 2: { typedef DiskIndexQword_c < true, false, NO_SEEK, false > NAME; ACTION; break; }			\
+		case 3: { typedef DiskIndexQword_c < true, true, NO_SEEK, false > NAME; ACTION; break; }			\
 		default:																					\
 			sphDie ( "INTERNAL ERROR: impossible qword settings" );									\
 	}																								\
@@ -19717,7 +19722,7 @@ size_t strnlen ( const char * s, size_t iMaxLen )
 int CSphIndex_VLN::DebugCheck ( FILE * fp )
 {
 	int64_t tmCheck = sphMicroTimer();
-	int iFails = 0;
+	int64_t iFails = 0;
 	int iFailsPrinted = 0;
 	const int FAILS_THRESH = 100;
 
@@ -20095,7 +20100,17 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 		// create and manually setup doclist reader
 		DiskIndexQwordTraits_c * pQword = NULL;
-		WITH_QWORD ( this, false, T, pQword = new T ( false, false ) );
+		DWORD uInlineHits = ( m_tSettings.m_eHitFormat==SPH_HIT_FORMAT_INLINE );
+		DWORD uInlineDocinfo = ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE );
+		switch ( ( uInlineHits<<1 ) | uInlineDocinfo )
+		{
+		case 0: { typedef DiskIndexQword_c < false, false, false, true > T; pQword = new T ( false, false ); break; }
+		case 1: { typedef DiskIndexQword_c < false, true, false, true > T; pQword = new T ( false, false ); break; }
+		case 2: { typedef DiskIndexQword_c < true, false, false, true > T; pQword = new T ( false, false ); break; }
+		case 3: { typedef DiskIndexQword_c < true, true, false, true > T; pQword = new T ( false, false ); break; }
+		}
+		if ( !pQword )
+			sphDie ( "INTERNAL ERROR: impossible qword settings" );
 
 		pQword->m_tDoc.Reset ( m_tSchema.GetDynamicSize() );
 		pQword->m_iMinID = m_iMinDocid;
@@ -20225,9 +20240,11 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				{
 					LOC_FAIL(( fp, "hit field out of schema (wordid="UINT64_FMT"(%s), docid="DOCID_FMT", field=%d)",
 						(uint64_t)uWordid, sWord, pQword->m_tDoc.m_iDocID, iField ));
+				} else
+				{
+					dFieldMask.Set(iField);
 				}
 
-				dFieldMask.Set(iField);
 				iDocHits++; // to check doclist entry
 				iHitlistHits++; // to check dictionary entry
 			}
@@ -20800,12 +20817,12 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	if ( !iFails )
 		fprintf ( fp, "check passed" );
 	else if ( iFails!=iFailsPrinted )
-		fprintf ( fp, "check FAILED, %d of %d failures reported", iFailsPrinted, iFails );
+		fprintf ( fp, "check FAILED, %d of "INT64_FMT" failures reported", iFailsPrinted, iFails );
 	else
-		fprintf ( fp, "check FAILED, %d failures reported", iFails );
+		fprintf ( fp, "check FAILED, "INT64_FMT" failures reported", iFails );
 	fprintf ( fp, ", %d.%d sec elapsed\n", (int)(tmCheck/1000000), (int)((tmCheck/100000)%10) );
 
-	return Min ( iFails, 255 ); // this is the exitcode; so cap it
+	return (int)Min ( iFails, 255 ); // this is the exitcode; so cap it
 } // NOLINT function length
 
 

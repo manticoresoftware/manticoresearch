@@ -587,6 +587,7 @@ enum SearchdCommand_e
 	SEARCHD_COMMAND_FLUSHATTRS	= 7,
 	SEARCHD_COMMAND_SPHINXQL	= 8,
 	SEARCHD_COMMAND_PING		= 9,
+	SEARCHD_COMMAND_DELETE		= 10,
 
 	SEARCHD_COMMAND_TOTAL
 };
@@ -8983,6 +8984,7 @@ public:
 	~SearchHandler_c();
 	void							RunQueries ();					///< run all queries, get all results
 	void							RunUpdates ( const CSphQuery & tQuery, const CSphString & sIndex, CSphAttrUpdateEx * pUpdates ); ///< run Update command instead of Search
+	void							RunDeletes ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, CSphVector<SphDocID_t>* ); ///< run Delete command instead of Search
 
 public:
 	CSphVector<CSphQuery>			m_dQueries;						///< queries which i need to search
@@ -9008,6 +9010,7 @@ protected:
 	mutable CSphVector<CSphSchemaMT>		m_dExtraSchemas; ///< the extra fields for agents
 	bool							m_bSphinxql;	///< if the query get from sphinxql - to avoid applying sphinxql magick for others
 	CSphAttrUpdateEx *				m_pUpdates;		///< holder for updates
+	CSphVector<SphDocID_t> *		m_pDelete;		///< this query is for deleting
 
 	mutable CSphProcessSharedMutex	m_tLock;
 	mutable SmallStringHash_T<int>	m_hUsed;
@@ -9039,6 +9042,7 @@ SearchHandler_c::SearchHandler_c ( int iQueries, bool bSphinxql, bool bMaster )
 	m_dAgentTimes.Resize ( iQueries );
 	m_bSphinxql = bSphinxql;
 	m_pUpdates = NULL;
+	m_pDelete = NULL;
 
 	m_pProfile = NULL;
 	m_tHook.m_pProfiler = NULL;
@@ -9116,7 +9120,6 @@ void SearchHandler_c::ReleaseIndex ( int iLocal ) const
 	m_tLock.Unlock();
 }
 
-
 void SearchHandler_c::RunUpdates ( const CSphQuery & tQuery, const CSphString & sIndex, CSphAttrUpdateEx * pUpdates )
 {
 	m_pUpdates = pUpdates;
@@ -9178,6 +9181,67 @@ void SearchHandler_c::RunUpdates ( const CSphQuery & tQuery, const CSphString & 
 
 	LogQuery ( m_dQueries[0], m_dResults[0], m_dAgentTimes[0] );
 };
+
+void SearchHandler_c::RunDeletes ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, CSphVector<SphDocID_t>* pValues )
+{
+	m_pDelete = pValues;
+	m_dQueries[0] = tQuery;
+	m_dQueries[0].m_sIndexes = sIndex;
+
+	// lets add index to prevent deadlock
+	// as index already w-locked at this point
+	m_dLocal.Add().m_sName = sIndex;
+	m_hUsed.Add ( 1, sIndex );
+	m_dResults[0].m_dTag2Pools.Resize ( 1 );
+
+	CheckQuery ( tQuery, *pErrors );
+	if ( !pErrors->IsEmpty() )
+		return;
+
+	int64_t tmLocal = -sphMicroTimer();
+
+	RunLocalSearches ( NULL, NULL, false );
+	tmLocal += sphMicroTimer();
+
+	OnRunFinished();
+
+	CSphQueryResult & tRes = m_dResults[0];
+
+	tRes.m_iOffset = tQuery.m_iOffset;
+	tRes.m_iCount = Max ( Min ( tQuery.m_iLimit, tRes.m_dMatches.GetLength()-tQuery.m_iOffset ), 0 );
+
+	tRes.m_iQueryTime += (int)(tmLocal/1000);
+	tRes.m_iCpuTime += tmLocal;
+
+	if ( !tRes.m_iSuccesses )
+	{
+		CSphStringBuilder sFailures;
+		m_dFailuresSet[0].BuildReport ( sFailures );
+		*pErrors = sFailures.cstr();
+
+	} else if ( !tRes.m_sError.IsEmpty() )
+	{
+		CSphStringBuilder sFailures;
+		m_dFailuresSet[0].BuildReport ( sFailures );
+		tRes.m_sWarning = sFailures.cstr(); // FIXME!!! commit warnings too
+	}
+
+	if ( g_pStats )
+	{
+		const CSphIOStats & tIO = tRes.m_tIOStats;
+
+		g_tStatsMutex.Lock();
+		g_pStats->m_iQueries += 1;
+		g_pStats->m_iQueryTime += tmLocal;
+		g_pStats->m_iQueryCpuTime += tmLocal;
+		g_pStats->m_iDiskReads += tIO.m_iReadOps;
+		g_pStats->m_iDiskReadTime += tIO.m_iReadTime;
+		g_pStats->m_iDiskReadBytes += tIO.m_iReadBytes;
+		g_tStatsMutex.Unlock();
+	}
+
+	LogQuery ( m_dQueries[0], m_dResults[0], m_dAgentTimes[0] );
+}
 
 void SearchHandler_c::RunQueries()
 {
@@ -9534,6 +9598,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 		tQueueSettings.m_bComputeItems = true;
 		tQueueSettings.m_pExtra = pExtraSchemaMT;
 		tQueueSettings.m_pUpdate = m_pUpdates;
+		tQueueSettings.m_pDeletes = m_pDelete;
 		tQueueSettings.m_pHook = &m_tHook;
 
 		ppSorters[i] = sphCreateQueue ( tQueueSettings );
@@ -9661,6 +9726,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 				tQueueSettings.m_bComputeItems = true;
 				tQueueSettings.m_pExtra = pExtraSchema;
 				tQueueSettings.m_pUpdate = m_pUpdates;
+				tQueueSettings.m_pDeletes = m_pDelete;
 				tQueueSettings.m_pHook = &m_tHook;
 
 				pSorter = sphCreateQueue ( tQueueSettings );
@@ -10965,9 +11031,6 @@ struct SqlStmt_t
 	CSphVector<CSphString>	m_dInsertSchema;
 	int						m_iSchemaSz;
 
-	// DELETE specific
-	CSphVector<SphDocID_t>	m_dDeleteIds;
-
 	// SET specific
 	CSphString				m_sSetName;		// reused by ATTACH
 	SqlSet_e				m_eSet;
@@ -11158,6 +11221,7 @@ public:
 	void						FreeNamedVec ( int iIndex );
 	bool						AlterStatement ( SqlNode_t * pNode );
 	bool						UpdateStatement ( SqlNode_t * pNode );
+	bool						DeleteStatement ( SqlNode_t * pNode );
 
 	void						AddUpdatedAttr ( const SqlNode_t & tName, ESphAttr eType ) const;
 	void						UpdateMVAAttr ( const SqlNode_t & tName, const SqlNode_t& dValues );
@@ -11165,6 +11229,7 @@ public:
 
 private:
 	void						AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
+	void						GenericStatement ( SqlNode_t * pNode, SqlStmt_e iStmt );
 
 protected:
 	bool						m_bNamedVecBusy;
@@ -11611,23 +11676,31 @@ void SqlParser_c::SetStatement ( const YYSTYPE & tName, SqlSet_e eSet )
 	ToString ( m_pStmt->m_sSetName, tName );
 }
 
-bool SqlParser_c::AlterStatement ( SqlNode_t * pNode )
+void SqlParser_c::GenericStatement ( SqlNode_t * pNode, SqlStmt_e iStmt )
 {
-	m_pStmt->m_eStmt = STMT_ALTER;
+	m_pStmt->m_eStmt = iStmt;
 	m_pStmt->m_iListStart = pNode->m_iStart;
 	m_pStmt->m_iListEnd = pNode->m_iEnd;
-	m_pStmt->m_sIndex.SetBinary ( m_pBuf + pNode->m_iStart, pNode->m_iEnd - pNode->m_iStart );
+	ToString ( m_pStmt->m_sIndex, *pNode );
+}
+
+bool SqlParser_c::AlterStatement ( SqlNode_t * pNode )
+{
+	GenericStatement ( pNode, STMT_ALTER );
 	m_pStmt->m_tUpdate.m_dRowOffset.Add ( 0 );
 	return true;
 }
 
 bool SqlParser_c::UpdateStatement ( SqlNode_t * pNode )
 {
-	m_pStmt->m_eStmt = STMT_UPDATE;
-	m_pStmt->m_iListStart = pNode->m_iStart;
-	m_pStmt->m_iListEnd = pNode->m_iEnd;
-	m_pStmt->m_sIndex.SetBinary ( m_pBuf + pNode->m_iStart, pNode->m_iEnd - pNode->m_iStart );
+	GenericStatement ( pNode, STMT_UPDATE );
 	m_pStmt->m_tUpdate.m_dRowOffset.Add ( 0 );
+	return true;
+}
+
+bool SqlParser_c::DeleteStatement ( SqlNode_t * pNode )
+{
+	GenericStatement ( pNode, STMT_DELETE );
 	return true;
 }
 
@@ -13144,6 +13217,8 @@ void BuildStatus ( VectorLike & dStatus )
 		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_EXCERPT] );
 	if ( dStatus.MatchAdd ( "command_update" ) )
 		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_UPDATE] );
+	if ( dStatus.MatchAdd ( "command_delete" ) )
+		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_DELETE] );
 	if ( dStatus.MatchAdd ( "command_keywords" ) )
 		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_KEYWORDS] );
 	if ( dStatus.MatchAdd ( "command_persist" ) )
@@ -15753,12 +15828,14 @@ void HandleMysqlMeta ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt, const CS
 }
 
 
-static int LocalIndexDoDeleteDocuments ( const char * sName, const SphDocID_t * pDocs, int iCount,
+static int LocalIndexDoDeleteDocuments ( const char * sName, const SqlStmt_t & tStmt, const SphDocID_t * pDocs, int iCount,
 											const ServedIndex_t * pLocked, SearchFailuresLog_c & dErrors, bool bCommit )
 {
-	if ( !pLocked )
+	if ( !pLocked || !pLocked->m_pIndex )
 	{
-		dErrors.Submit ( sName, "no such index" );
+		if ( pLocked )
+			pLocked->Unlock();
+		dErrors.Submit ( sName, "index not available" );
 		return 0;
 	}
 
@@ -15768,12 +15845,27 @@ static int LocalIndexDoDeleteDocuments ( const char * sName, const SphDocID_t * 
 	{
 		sError.SetSprintf ( "does not support DELETE (enabled=%d)", pLocked->m_bEnabled );
 		dErrors.Submit ( sName, sError.cstr() );
+		pLocked->Unlock();
 		return 0;
+	}
+
+	SearchHandler_c * pHandler = NULL;
+	CSphVector<SphDocID_t> dValues;
+	if ( !pDocs ) // needs to be deleted via query
+	{
+		pHandler = new SearchHandler_c ( 1, true, false ); // handler unlocks index at destructor - no need to do it manually
+		pHandler->RunDeletes ( tStmt.m_tQuery, sName, &sError, &dValues );
+		pDocs = dValues.Begin();
+		iCount = dValues.GetLength();
 	}
 
 	if ( !pIndex->DeleteDocument ( pDocs, iCount, sError ) )
 	{
 		dErrors.Submit ( sName, sError.cstr() );
+		if ( pHandler )
+			delete pHandler;
+		else
+			pLocked->Unlock();
 		return 0;
 	}
 
@@ -15781,6 +15873,10 @@ static int LocalIndexDoDeleteDocuments ( const char * sName, const SphDocID_t * 
 	if ( bCommit )
 		pIndex->Commit ( &iAffected );
 
+	if ( pHandler )
+		delete pHandler;
+	else
+		pLocked->Unlock();
 	return iAffected;
 }
 
@@ -15823,21 +15919,47 @@ void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 		}
 	}
 
+	const SphDocID_t * pDocs = NULL;
+	int iDocsCount = 0;
+	CSphVector<SphDocID_t> dDeleteIds;
+
+	// now check the short path - if we have clauses 'id=smth' or 'id in (xx,yy)' or 'id in @uservar' - we know
+	// all the values list immediatelly and don't have to run the heavy query here.
+	const CSphQuery& tQuery = tStmt.m_tQuery; // shortcut
+
+	if ( tQuery.m_sQuery.IsEmpty() && tQuery.m_dFilters.GetLength()==1 )
+	{
+		const CSphFilterSettings* pFilter = tQuery.m_dFilters.Begin();
+		if ( pFilter->m_bHasEqual && pFilter->m_eType==SPH_FILTER_VALUES
+			&& pFilter->m_sAttrName=="@id" && !pFilter->m_bExclude )
+		{
+			if_const ( sizeof(SphAttr_t)==sizeof(SphDocID_t) ) // avoid copying in this case
+			{
+				pDocs = (SphDocID_t*)pFilter->GetValueArray();
+				iDocsCount = pFilter->GetNumValues();
+			} else
+			{
+				const SphAttr_t* pA = pFilter->GetValueArray();
+				for ( int i=0; i<pFilter->GetNumValues(); ++i )
+					dDeleteIds.Add ( pA[i] );
+				pDocs = dDeleteIds.Begin();
+				iDocsCount = dDeleteIds.GetLength();
+			}
+		}
+	}
+
 	// do delete
 	SearchFailuresLog_c dErrors;
-	const SphDocID_t * pDocs = tStmt.m_dDeleteIds.Begin();
-	int iDocsCount = tStmt.m_dDeleteIds.GetLength();
 	int iAffected = 0;
 
 	// delete for local indexes
 	ARRAY_FOREACH ( iIdx, dNames )
 	{
 		const char * sName = dNames[iIdx].cstr();
-		const ServedIndex_t * pLocal = g_pLocalIndexes->GetRlockedEntry ( sName );
+		const ServedIndex_t * pLocal = g_pLocalIndexes->GetWlockedEntry ( sName );
 		if ( pLocal )
 		{
-			iAffected += LocalIndexDoDeleteDocuments ( sName, pDocs, iDocsCount, pLocal, dErrors, bCommit );
-			pLocal->Unlock();
+			iAffected += LocalIndexDoDeleteDocuments ( sName, tStmt, pDocs, iDocsCount, pLocal, dErrors, bCommit );
 		} else
 		{
 			assert ( dDistributed[iIdx].m_dLocal.GetLength() || dDistributed[iIdx].m_dAgents.GetLength() );
@@ -15847,9 +15969,7 @@ void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 			{
 				const char * sDistLocal = dDistLocal[i].cstr();
 				const ServedIndex_t * pDistLocal = g_pLocalIndexes->GetRlockedEntry ( sDistLocal );
-				iAffected += LocalIndexDoDeleteDocuments ( sDistLocal, pDocs, iDocsCount, pDistLocal, dErrors, bCommit );
-				if ( pDistLocal )
-					pDistLocal->Unlock();
+				iAffected += LocalIndexDoDeleteDocuments ( sDistLocal, tStmt, pDocs, iDocsCount, pDistLocal, dErrors, bCommit );
 			}
 		}
 
@@ -16891,6 +17011,10 @@ public:
 			return true;
 
 		case STMT_DELETE:
+			m_tLastMeta = CSphQueryResultMeta();
+			m_tLastMeta.m_sError = m_sError;
+			m_tLastMeta.m_sWarning = "";
+			StatCountCommand ( SEARCHD_COMMAND_DELETE );
 			HandleMysqlDelete ( tOut, *pStmt, sQuery, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction );
 			return true;
 

@@ -585,6 +585,86 @@ public:
 };
 
 //////////////////////////////////////////////////////////////////////////
+
+/// collector for DELETE statement
+class CSphDeleteQueue : public CSphMatchQueueTraits
+{
+	CSphVector<SphDocID_t>* m_pValues;
+private:
+	void DoDelete()
+	{
+		if ( !m_iUsed )
+			return;
+
+		if ( !DOCINFO2ID ( STATIC2DOCINFO ( m_pData->m_pStatic ) ) ) // if static attrs were copied, so, they actually dynamic
+		{
+			for ( int i=0; i<m_iUsed; ++i )
+				m_pValues->Add ( m_pData[i].m_iDocID );
+		} else // static attrs points to the active indexes - so, no lookup, 5 times faster search.
+		{
+			for ( int i=0; i<m_iUsed; ++i )
+				m_pValues->Add ( DOCINFO2ID ( m_pData[i].m_pStatic - ( sizeof(SphDocID_t) / sizeof(CSphRowitem) )));
+		}
+		m_iUsed = 0;
+	}
+public:
+	/// ctor
+	CSphDeleteQueue ( int iSize, CSphVector<SphDocID_t>* pDeletes )
+		: CSphMatchQueueTraits ( iSize, true )
+		, m_pValues ( pDeletes )
+	{}
+
+	/// check if this sorter does groupby
+	virtual bool IsGroupby () const
+	{
+		return false;
+	}
+
+	/// add entry to the queue
+	virtual bool Push ( const CSphMatch & tEntry )
+	{
+		m_iTotal++;
+
+		if ( m_iUsed==m_iSize )
+			DoDelete();
+
+		// do add
+		m_tSchema.CloneMatch ( &m_pData[m_iUsed++], tEntry );
+		return true;
+	}
+
+	/// add grouped entry (must not happen)
+	virtual bool PushGrouped ( const CSphMatch &, bool )
+	{
+		assert ( 0 );
+		return false;
+	}
+
+	/// store all entries into specified location in sorted order, and remove them from queue
+	int Flatten ( CSphMatch *, int )
+	{
+		assert ( m_iUsed>=0 );
+		DoDelete();
+		m_iTotal = 0;
+		return 0;
+	}
+
+	virtual void Finalize ( ISphMatchProcessor & tProcessor, bool )
+	{
+		if ( !GetLength() )
+			return;
+
+		// just evaluate in heap order
+		CSphMatch * pCur = m_pData;
+		const CSphMatch * pEnd = m_pData + m_iUsed;
+		while ( pCur<pEnd )
+		{
+			tProcessor.Process ( pCur++ );
+		}
+	}
+};
+
+//////////////////////////////////////////////////////////////////////////
 // SORTING+GROUPING QUEUE
 //////////////////////////////////////////////////////////////////////////
 
@@ -5185,6 +5265,8 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	{
 		if ( tQueue.m_pUpdate )
 			pTop = new CSphUpdateQueue ( pQuery->m_iMaxMatches, tQueue.m_pUpdate, pQuery->m_bIgnoreNonexistent, pQuery->m_bStrict );
+		else if ( tQueue.m_pDeletes )
+			pTop = new CSphDeleteQueue ( pQuery->m_iMaxMatches, tQueue.m_pDeletes );
 		else
 			pTop = CreatePlainSorter ( eMatchFunc, pQuery->m_bSortKbuffer, pQuery->m_iMaxMatches, bUsesAttrs, bNeedPackedFactors );
 	} else

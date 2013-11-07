@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>Smart attribute deletes</name>
+
+<skip_indexer/>
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+	binlog_path = #
+}
+
+index rt
+{
+	type = rt
+	path			= <data_path/>/rt
+	charset_type 	= utf-8
+	docinfo			= extern
+
+	rt_field			= body
+	rt_attr_multi	= mva1
+	rt_attr_uint	= gid
+	rt_attr_multi	= mva2
+}
+
+index rt1 : rt
+{
+	path			= <data_path/>/rt1
+}
+
+index rt2 : rt
+{
+	path			= <data_path/>/rt2
+}
+
+
+index rtd0
+{
+	type					= distributed
+	local					= rt
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index rtd1
+{
+	type					= distributed
+	local					= rt1
+	local					= rt2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index rtd2
+{
+	type					= distributed
+	agent					= <my_address/>:rt1
+	local					= rt2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index rtd3
+{
+	type					= distributed
+	local					= rt1
+	agent					= <my_address/>:rt2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index rtd4
+{
+	type					= distributed
+	agent					= <my_address/>:rt1
+	agent					= <my_address/>:rt2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index rtd5
+{
+	type					= distributed
+	agent					= <my_address/>:rt
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+
+</config>
+
+<metaindex name='META:all'>
+<index>rt</index>
+<index>rt1</index>
+<index>rt2</index>
+<index>rtd0</index>
+<index>rtd1</index>
+<index>rtd2</index>
+<index>rtd3</index>
+<index>rtd4</index>
+<index>rtd5</index>
+</metaindex>
+
+<sphqueries>
+<sphinxql>insert into rt (id, gid, mva1, mva2, body) values (1, 11, (1, 1), (2), 'dummy'), (2, 22, (2, 2), (23), 'dummy2')</sphinxql>
+<sphinxql>insert into rt (id, gid, mva1, mva2, body) values (3, 33, (3, 3), (32), 'dummy3'), (4, 44, (4, 4), (43), 'dummy4')</sphinxql>
+<sphinxql>insert into rt (id, gid, mva1, mva2, body) values (5, 55, (5, 5), (52), 'dummy5'), (6, 66, (6, 6), (63), 'dummy6')</sphinxql>
+<sphinxql>insert into rt (id, gid, mva1, mva2, body) values (100, 1000, (100, 201), (100), 'dumy'), (101, 1001, (101, 202), (101), 'dumy'), (102, 1002, (102, 203), (102), 'dumy'), (103, 1003, (103, 204), (103), 'dumy'), (104, 1004, (104, 204, 205), (104), 'dumy'), (105, 1005, (105, 206), (105), 'dumy'), (106, 1006, (106, 207), (106), 'dumy'), (107, 1007, (107, 208), (107), 'dumy')</sphinxql>
+<sphinxql>insert into rt1 (id, gid, mva1, mva2, body) values (7, 77, (17, 17), (17), 'dummy7'), (8, 88, (8, 8), (18), 'dummy8')</sphinxql>
+<sphinxql>insert into rt1 (id, gid, mva1, mva2, body) values (9, 99, (9, 9), (9), 'dummy9'), (10, 1010, (10, 10), (10), 'dummy10')</sphinxql>
+<sphinxql>insert into rt2 (id, gid, mva1, mva2, body) values (7, 77, (27, 27), (27), 'dummy7'), (8, 88, (8, 8), (28), 'dummy8')</sphinxql>
+<sphinxql>insert into rt2 (id, gid, mva1, mva2, body) values (11, 1111, (11, 11), (11), 'dummy11'), (12, 1212, (12, 12), (12), 'dummy12')</sphinxql>
+<sphinxql>select * from META:all</sphinxql>
+
+<sphinxql>delete from rt where id=1</sphinxql>
+<sphinxql>delete from rt where gid=22</sphinxql>
+<sphinxql>select * from META:all</sphinxql>
+<sphinxql>delete from rtd0 where id=3</sphinxql>
+<sphinxql>select * from META:all</sphinxql>
+<sphinxql>delete from rtd5 where gid=44</sphinxql>
+<sphinxql>select * from META:all</sphinxql>
+<sphinxql>delete from rtd1 where id=7</sphinxql>
+<sphinxql>select * from META:all</sphinxql>
+<sphinxql>delete from rtd4 where gid=88</sphinxql>
+<sphinxql>select * from META:all</sphinxql>
+<sphinxql>delete from rtd2 where id=9</sphinxql>
+<sphinxql>select * from META:all</sphinxql>
+<sphinxql>delete from rtd2 where gid=1010</sphinxql>
+<sphinxql>select * from META:all</sphinxql>
+<!-- OPTION clause will cause error. That is ok -->
+<sphinxql>delete from rtd3 where match ('dummy11') option ignore_nonexistent_columns=1</sphinxql>
+<sphinxql>select * from META:all</sphinxql>
+<sphinxql>delete from rt where mva1=204</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+<!-- One more non-working statement with OPTION clause. That is ok -->
+<sphinxql>delete from rt where match ('dumy') option max_matches=2</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+<sphinxql>delete from rtd4 where id=12</sphinxql>
+<sphinxql>select * from META:all</sphinxql>
+</sphqueries>
+
+</test>

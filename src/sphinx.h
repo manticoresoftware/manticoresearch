@@ -3407,6 +3407,7 @@ struct SphQueueSettings_t : public ISphNoncopyable
 	bool						m_bComputeItems;
 	CSphSchema *				m_pExtra;
 	CSphAttrUpdateEx *			m_pUpdate;
+	CSphVector<SphDocID_t> *	m_pDeletes;
 	bool						m_bZonespanlist;
 	bool						m_bPackedFactors;
 	ISphExprHook *				m_pHook;
@@ -3420,6 +3421,7 @@ struct SphQueueSettings_t : public ISphNoncopyable
 		, m_bComputeItems ( true )
 		, m_pExtra ( NULL )
 		, m_pUpdate ( NULL )
+		, m_pDeletes ( NULL )
 		, m_bZonespanlist ( false )
 		, m_bPackedFactors ( false )
 		, m_pHook ( NULL )

@@ -14191,12 +14191,13 @@ rlp_max_batch_docs = 100
 <listitem>added <link linkend="sphinxql-select">HAVING</link> support to SELECT statement, filtering on aggregate values is now possible</listitem>
 <listitem>added <link linkend="sphinxql-select">N-best GROUP BY</link> extension to return more than 1 row per group</listitem>
 <listitem>added RT index support for <link linkend="conf-index-field-lengths">index_field_lengths=1</link>, bitfield attributes, and multiforms</listitem>
-<listitem>added <link linkend="tsvpipe">TSV</link> data source</listitem>
+<listitem>added CSV, <link linkend="tsvpipe">TSV</link> data sources</listitem>
 <listitem>added full <link linkend="conf-sql-attr-json">JSON</link> attributes support, arbitrary JSON documents (with subobjects etc) can now be stored</listitem>
 <listitem>added in-place JSON updates for scalar values</listitem>
 <listitem>added index <link linkend="conf-index-type">type=template</link> directive (allows CALL KEYWORDS, CALL SNIPPETS)</listitem>
 <listitem>added <link linkend="conf-ondisk-attrs">ondisk_attrs</link>, <link linkend="conf-ondisk-attrs-default">ondisk_attrs_default</link> directives that keep attributes on disk</listitem>
 <listitem>added table functions mechanism, and <link linkend="sphinxql-select">REMOVE_REPEATS()</link> table function</listitem>
+<listitem>added support for arbitrary expressions in WHERE for DELETE queries</listitem>
 </itemizedlist>
 <bridgehead>Ranking related features</bridgehead>
 <itemizedlist>

@@ -199,6 +199,8 @@ struct RtWordCheckpoint_t
 	int							m_iOffset;
 };
 
+// More than just sorted vector.
+// OrderedHash is for fast (without sorting potentially big vector) inserts.
 class RtDiskKlist_t : public ISphNoncopyable
 {
 private:
@@ -224,7 +226,7 @@ public:
 	}
 	void LoadFromFile ( const char * sFilename );
 	void SaveToFile ( const char * sFilename );
-	inline void Delete ( SphDocID_t * pDocs, int iCount )
+	inline void Add ( SphDocID_t * pDocs, int iCount )
 	{
 		if ( !iCount )
 			return;
@@ -2720,11 +2722,11 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 	// safe despite the readers, flag must only be used by writer
 	if ( dAccKlist.GetLength() )
 		for ( int i=m_iDoubleBuffer; i<m_pSegments.GetLength(); i++ )
-	{
-		// OPTIMIZE? only need to set the flag if TLS K-list *actually* affects segment
-		assert ( m_pSegments[i]->m_bTlsKlist==false );
-		m_pSegments[i]->m_bTlsKlist = true;
-	}
+		{
+			// OPTIMIZE? only need to set the flag if TLS K-list *actually* affects segment
+			assert ( m_pSegments[i]->m_bTlsKlist==false );
+			m_pSegments[i]->m_bTlsKlist = true;
+		}
 
 	// prepare new segments vector
 	// create more new segments by merging as needed
@@ -2847,9 +2849,9 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 			const SphDocID_t uDocid = dAccKlist[i];
 
 			// check RAM chunk
-			bool bRamKilled = false;
-			for ( int j=m_iDoubleBuffer; j<m_pSegments.GetLength() && !bRamKilled; j++ )
-				bRamKilled = ( m_pSegments[j]->FindAliveRow ( uDocid )!=NULL );
+			bool bRamAlive = false;
+			for ( int j=m_iDoubleBuffer; j<m_pSegments.GetLength() && !bRamAlive; j++ )
+				bRamAlive = ( m_pSegments[j]->FindAliveRow ( uDocid )!=NULL );
 
 			bool bDiskKilled = false;
 			if ( !m_iDoubleBuffer )
@@ -2857,7 +2859,7 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 
 			// check disk chunks
 			bool bKeep = false;
-			if ( !bRamKilled || !bDiskKilled )
+			if ( !bRamAlive || !bDiskKilled )
 			{
 				// check saving segments first (will be recent disk chunk)
 				for ( int j=0; j<m_iDoubleBuffer && !bKeep; j++ )
@@ -2887,7 +2889,7 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 				}
 			}
 
-			if ( bRamKilled || bKeep )
+			if ( bRamAlive || bKeep )
 				iTotalKilled++;
 
 			if ( bDiskKilled || !bKeep )
@@ -2943,7 +2945,7 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 
 		// update disk K-list
 		// after iDiskLiveKLen are ids already stored on disk - just skip them
-		m_tKlist.Delete ( dAccKlist.Begin(), iDiskLiveKLen );
+		m_tKlist.Add ( dAccKlist.Begin(), iDiskLiveKLen );
 
 		// collect kill-list for new segments
 		if ( m_iDoubleBuffer )
@@ -3784,7 +3786,7 @@ void RtIndex_t::SaveDiskChunk ( int64_t iTID, const CSphVector<RtSegment_t *> & 
 
 	// clean up kill-list
 	m_tKlist.Reset();
-	m_tKlist.Delete ( m_dNewSegmentKlist.Begin(), m_dNewSegmentKlist.GetLength() );
+	m_tKlist.Add ( m_dNewSegmentKlist.Begin(), m_dNewSegmentKlist.GetLength() );
 	m_dNewSegmentKlist.Reset();
 	m_dDiskChunkKlist.Reset ( 0 );
 

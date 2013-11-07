@@ -12559,6 +12559,34 @@ rlp_context = /home/myuser/RLP/rlp-context.xml
 </programlisting>
 </sect2>
 
+<sect2 id="conf-ondisk-attrs"><title>ondisk_attrs</title>
+<para>
+Allows for fine-grain control over how attributes are loaded into memory
+when using plain indexes with external storage. It is now possible (since
+version 2.2.1-beta) to keep attributes on disk. Although, the daemon does
+map them to memory and the OS loads small chunks of data on demand. This
+allows use of docinfo = extern instead of docinfo = inline, but still
+leaves plenty of free memory for cases when you have large collections
+of pooled attributes (string/JSON/MVA) or when you're using many indexes
+per daemon that don't consume memory. It is not possible to update
+attributes left on disk when this option is enabled and the constraint
+of 4Gb of entries per pool is still in effect.
+
+Possible values:
+0 - disabled and default value, all attributes are loaded in memory
+(the normal behaviour of docinfo = extern)
+1 - all attributes stay on disk. Daemon loads no files (spa, spm, sps).
+This is the most memory conserving mode, however it is also the slowest
+as the whole doc-id-list and block index doesn't load.
+pool - only pooled attributes stay on disk. Pooled attributes are string,
+MVA, and JSON attributes (sps, spm files). Scalar attributes stored in
+docinfo (spa file) load as usual.
+
+This option does not affect indexing in any way, it only requires daemon
+restart.
+</para>
+</sect2>
+
 </sect1>
 <sect1 id="confgroup-indexer"><title><filename>indexer</filename> program configuration options</title>
 
@@ -14028,6 +14056,16 @@ finish its jobs. Suitable time depends on your index size and load.
 <programlisting>
 shutdown_timeout = 5 # wait for up to 5 seconds
 </programlisting>
+</sect2>
+
+<sect2 id="conf-ondisk-attrs-default"><title>ondisk_attrs_default</title>
+<para>
+Instance-wide defaults for <link linkend="conf-ondisk-attrs">ondisk_attrs</link>
+directive. Optional, default is 0 (all attributes are loaded in memory). This
+directive lets you specify the default value of ondisk_attrs for all indexes
+served by this copy of searchd. Per-index directives take precedence, and will
+overwrite this instance-wide default value, allowing for fine-grain control.
+</para>
 </sect2>
 
 </sect1>

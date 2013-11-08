@@ -7073,6 +7073,10 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 					tBuf.Appendf ( " %s%s'%s'", f.m_sAttrName.cstr(), ( f.m_bHasEqual ? "=" : "!=" ), f.m_sRefString.cstr() );
 					break;
 
+				case SPH_FILTER_NULL:
+					tBuf.Appendf ( " %s %s", f.m_sAttrName.cstr(), ( f.m_bHasEqual ? "IS NULL" : "IS NOT NULL" ) );
+					break;
+
 				default:
 					tBuf += " 1 /""* oops, unknown filter type *""/";
 					break;

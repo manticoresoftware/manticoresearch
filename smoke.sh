@@ -50,7 +50,7 @@ do
 	cmd "cd ./src; ./tests" "$BANNER: unit tests failed" 
 	cd ..
 	
-	cmd "cd ./api/libsphinxclient; ./smoke_test.sh" "$BANNER: C API tests failed"
+	cmd "cd ./api/libsphinxclient; ./smoke_test.sh" "$BANNER: C API tests failed" "pwd; cat smoke_diff.txt"
 	cd ../../ 
 done
 unset CXX

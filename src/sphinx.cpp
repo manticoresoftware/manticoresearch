@@ -6586,11 +6586,11 @@ CSphFilterSettings::CSphFilterSettings ()
 {}
 
 
-CSphFilterSettings::CSphFilterSettings ( const CSphFilterSettings & rhs )
-{
-	assert ( 0 );
-	(*this) = rhs;
-}
+//CSphFilterSettings::CSphFilterSettings ( const CSphFilterSettings & rhs )
+//{
+//	assert ( 0 );
+//	(*this) = rhs;
+//}
 
 
 void CSphFilterSettings::SetExternalValues ( const SphAttr_t * pValues, int nValues )

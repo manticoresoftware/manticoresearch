@@ -728,7 +728,7 @@ When grouping by MVA attribute, a document will contribute to as
 many groups as there are different MVA values associated with that document.
 For instance, if the collection contains exactly 1 document having a 'tag' MVA
 with values 5, 7, and 11, grouping on 'tag' will produce 3 groups with
-'@count' equal to 1 and '@groupby' key values of 5, 7, and 11 respectively.
+'COUNT(*)' equal to 1 and 'GROUPBY()' key values of 5, 7, and 11 respectively.
 Also note that grouping by MVA might lead to duplicate documents in the result set:
 because each document can participate in many groups, it can be chosen as the best
 one in in more than one group, leading to duplicate IDs. PHP API historically
@@ -4880,16 +4880,13 @@ SELECT MAX(id), MIN(id), COUNT(*), 1 AS grp FROM books GROUP BY grp
 </programlisting>
 Aggregate functions (AVG(), MIN(), MAX(), SUM()) in column list
 clause are supported. Arguments to aggregate functions can be either
-plain attributes or arbitrary expressions. COUNT(*) is implicitly
-supported as using GROUP BY will add @count column to result set.
-Explicit support might be added in the future. COUNT(DISTINCT attr)
-is supported. Currently there can be at most one COUNT(DISTINCT)
-per query and an argument needs to be an attribute. Both current
-restrictions on COUNT(DISTINCT) might be lifted in the future.
-A special GROUPBY() function is also supported. It returns the
-GROUP BY key (and replaces the deprecated @groupby magic variable).
-That is particularly useful when grouping by an MVA value, in order
-to pick the specific value that was used to create the current group.
+plain attributes or arbitrary expressions. COUNT(*), COUNT(DISTINCT attr)
+are supported. Currently there can be at most one COUNT(DISTINCT) per
+query and an argument needs to be an attribute. Both current restrictions
+on COUNT(DISTINCT) might be lifted in the future. A special GROUPBY()
+function is also supported. It returns the GROUP BY key. That is
+particularly useful when grouping by an MVA value, in order to pick the
+specific value that was used to create the current group.
 <programlisting>
 SELECT *, AVG(price) AS avgprice, COUNT(DISTINCT storeid), GROUPBY()
 FROM products

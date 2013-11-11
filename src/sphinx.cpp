@@ -29781,11 +29781,13 @@ public:
 class CSphSource_CSV : public CSphSource_BaseSV
 {
 public:
-	CSphSource_CSV ( const char * sName, const char * sDelimiter );
+	explicit CSphSource_CSV ( const char * sName, const char * sDelimiter = NULL );
 	virtual ~CSphSource_CSV();
 
 	virtual ESphParseResult	SplitColumns ( CSphString & sError );					///< parse incoming chunk and emit some hits
 	virtual void			SetupSchema ( const CSphConfigSection & hSource, bool bWordDict );
+
+	void					SetDelimiter ( const char * sDelimiter );
 
 private:
 	BYTE			m_iDelimiter;
@@ -29814,7 +29816,10 @@ CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * 
 
 #if USE_RLP
 	if ( bProxy )
-		pCSV = new CSphSource_Proxy<CSphSource_CSV> ( sSourceName, sDelimiter );
+	{
+		pCSV = new CSphSource_Proxy<CSphSource_CSV> ( sSourceName );
+		pCSV->SetDelimiter ( sDelimiter );
+	}
 	else
 #endif
 		pCSV = new CSphSource_CSV ( sSourceName, sDelimiter );
@@ -30239,8 +30244,7 @@ CSphSource_CSV::CSphSource_CSV ( const char * sName, const char * sDelimiter )
 	: CSphSource_BaseSV ( sName )
 {
 	m_iDelimiter = BYTE ( ',' );
-	if ( sDelimiter && *sDelimiter )
-		m_iDelimiter = *sDelimiter;
+	SetDelimiter ( sDelimiter );
 }
 
 CSphSource_CSV::~CSphSource_CSV()
@@ -30409,6 +30413,13 @@ void CSphSource_CSV::SetupSchema ( const CSphConfigSection & hSource, bool bWord
 
 	ConfigureFields ( hSource("csvpipe_field"), bWordDict, m_tSchema );
 	ConfigureFields ( hSource("csvpipe_field_string"), bWordDict, m_tSchema );
+}
+
+
+void CSphSource_CSV::SetDelimiter ( const char * sDelimiter )
+{
+	if ( sDelimiter && *sDelimiter )
+		m_iDelimiter = *sDelimiter;
 }
 
 

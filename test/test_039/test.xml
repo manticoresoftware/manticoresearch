@@ -23,13 +23,14 @@ source src1
 	type			= mysql
 	<sql_settings/>
 
-	sql_query		= SELECT id, group_id, title FROM test_table
+	sql_query		= SELECT id, group_id, title, mva FROM test_table
 	sql_attr_uint	= group_id
+	sql_attr_multi = uint mva from field
 }
 
 source src2 : src1
 {
-	sql_query		= SELECT 10+id, group_id, title FROM test_table
+	sql_query		= SELECT 10+id, group_id, title, mva FROM test_table
 }
 
 <agent0>
@@ -99,6 +100,13 @@ unset ( $res["time"] );
 $results[] = $res;
 
 $res = $client->UpdateAttributes ( "dist", array("group_id"), array(11=>array(123)) );
+if ( $res===false )
+{
+	$results[] = $client->GetLastError();
+	return;
+}
+$results[] = $res;
+$res = $client->UpdateAttributes ( "dist", array("mva"), array ( 4=>array(array(1001, 1002)), 11=>array(array(1011, 1012)) ), true );
 if ( $res===false )
 {
 	$results[] = $client->GetLastError();
@@ -205,7 +213,8 @@ CREATE TABLE test_table
 (
 	id			INTEGER PRIMARY KEY NOT NULL AUTO_INCREMENT,
 	group_id	INTEGER NOT NULL,
-	title		VARCHAR(255) NOT NULL
+	title		VARCHAR(255) NOT NULL,
+	mva		VARCHAR(255) NOT NULL
 );
 </db_create>
 
@@ -214,11 +223,11 @@ DROP TABLE IF EXISTS test_table;
 </db_drop>
 
 <db_insert>
-INSERT INTO test_table ( id, group_id, title ) VALUES 
-( 1, 1, 'test one' ),
-( 2, 1, 'test two' ),
-( 3, 2, 'test three' ),
-( 4, 2, 'test four' )
+INSERT INTO test_table ( id, group_id, title, mva ) VALUES 
+( 1, 1, 'test one', '10 11' ),
+( 2, 1, 'test two', '10 11' ),
+( 3, 2, 'test three', '10 11' ),
+( 4, 2, 'test four', '10 11' )
 </db_insert>
 
 </test>

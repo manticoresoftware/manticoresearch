@@ -14299,6 +14299,19 @@ rlp_max_batch_docs = 100
 </itemizedlist>
 </sect1>
 
+<sect1 id="rel213"><title>Version 2.1.3-release, 12 nov 2013</title>
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+  <listitem><para>fixed #1753, path to re2 sources could not be set using <option>--with-re2</option>, options <option>--with-re2-libs</option> and <option>--with-re2-includes</option> added to <filename>configure</filename></para></listitem>
+  <listitem><para>fixed #1739, erroneous conversion of RAM chunk into disk chunk when loading id32 index with id64 binary</para></listitem>
+  <listitem><para>fixed #1738, unlinking RAM chunk when converting it to disk chunk</para></listitem>
+  <listitem><para>fixed #1710, unable to filter by attributes created by index_field_lenghts=1</para></listitem>
+  <listitem><para>fixed #1716, random crash with with multiple running threads</para></listitem>
+  <listitem><para>fixed crash while querying index with lemmatizer and wordforms</para></listitem>
+</itemizedlist>
+</sect1>
+
+
 <sect1 id="rel212"><title>Version 2.1.2-release, 10 oct 2013</title>
 <bridgehead>New features</bridgehead>
 <itemizedlist>

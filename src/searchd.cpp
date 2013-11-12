@@ -12844,7 +12844,37 @@ void UpdateRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuffe
 	ARRAY_FOREACH ( i, m_tUpd.m_dAttrs )
 		iReqSize += 8 + strlen ( m_tUpd.m_dAttrs[i] );
 	iReqSize += 4; // number of updates
-	iReqSize += 8*m_tUpd.m_dDocids.GetLength() + 4*m_tUpd.m_dPool.GetLength(); // 64bit ids, 32bit values
+	iReqSize += 8 * m_tUpd.m_dDocids.GetLength() + 4 * m_tUpd.m_dPool.GetLength(); // 64bit ids, 32bit values
+
+	bool bMva = false;
+	ARRAY_FOREACH ( i, m_tUpd.m_dTypes )
+	{
+		assert ( m_tUpd.m_dTypes[i]!=SPH_ATTR_INT64SET ); // mva64 goes only via SphinxQL (SphinxqlRequestBuilder_t)
+		bMva |= ( m_tUpd.m_dTypes[i]==SPH_ATTR_UINT32SET );
+	}
+
+	if ( bMva )
+	{
+		int iMvaCount = 0;
+		ARRAY_FOREACH ( iDoc, m_tUpd.m_dDocids )
+		{
+			const DWORD * pPool = m_tUpd.m_dPool.Begin() + m_tUpd.m_dRowOffset[iDoc];
+			ARRAY_FOREACH ( iAttr, m_tUpd.m_dTypes )
+			{
+				if ( m_tUpd.m_dTypes[iAttr]==SPH_ATTR_UINT32SET )
+				{
+					DWORD uVal = *pPool++;
+					iMvaCount += uVal;
+					pPool += uVal;
+				} else
+				{
+					pPool++;
+				}
+			}
+		}
+
+		iReqSize -= ( iMvaCount * 4 / 2 ); // mva64 only via SphinxQL
+	}
 
 	// header
 	tOut.SendWord ( SEARCHD_COMMAND_UPDATE );
@@ -12857,18 +12887,53 @@ void UpdateRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuffe
 	ARRAY_FOREACH ( i, m_tUpd.m_dAttrs )
 	{
 		tOut.SendString ( m_tUpd.m_dAttrs[i] );
-		tOut.SendInt ( ( m_tUpd.m_dTypes[i]==SPH_ATTR_UINT32SET || m_tUpd.m_dTypes[i]==SPH_ATTR_INT64SET ) ? 1 : 0 );
+		tOut.SendInt ( ( m_tUpd.m_dTypes[i]==SPH_ATTR_UINT32SET ) ? 1 : 0 );
 	}
 	tOut.SendInt ( m_tUpd.m_dDocids.GetLength() );
 
-	ARRAY_FOREACH ( i, m_tUpd.m_dDocids )
+	if ( !bMva )
 	{
-		int iHead = m_tUpd.m_dRowOffset[i];
-		int iTail = ( (i+1)<m_tUpd.m_dDocids.GetLength() ) ? m_tUpd.m_dRowOffset[i+1] : m_tUpd.m_dPool.GetLength ();
+		ARRAY_FOREACH ( iDoc, m_tUpd.m_dDocids )
+		{
+			tOut.SendUint64 ( m_tUpd.m_dDocids[iDoc] );
+			int iHead = m_tUpd.m_dRowOffset[iDoc];
+			int iTail = m_tUpd.m_dPool.GetLength ();
+			if ( (iDoc+1)<m_tUpd.m_dDocids.GetLength() )
+				iTail = m_tUpd.m_dRowOffset[iDoc+1];
 
-		tOut.SendUint64 ( m_tUpd.m_dDocids[i] );
-		for ( int j=iHead; j<iTail; j++ )
-			tOut.SendDword ( m_tUpd.m_dPool[j] );
+			for ( int j=iHead; j<iTail; j++ )
+				tOut.SendDword ( m_tUpd.m_dPool[j] );
+		}
+	} else
+	{
+		// size down in case of MVA
+		// MVA stored as mva64 in pool but API could handle only mva32 due to HandleCommandUpdate
+		// SphinxQL only could work either mva32 or mva64 and only SphinxQL could receive mva64 updates
+		// SphinxQL master communicate to agent via SphinxqlRequestBuilder_t
+
+		ARRAY_FOREACH ( iDoc, m_tUpd.m_dDocids )
+		{
+			tOut.SendUint64 ( m_tUpd.m_dDocids[iDoc] );
+
+			const DWORD * pPool = m_tUpd.m_dPool.Begin() + m_tUpd.m_dRowOffset[iDoc];
+			ARRAY_FOREACH ( iAttr, m_tUpd.m_dTypes )
+			{
+				DWORD uVal = *pPool++;
+				if ( m_tUpd.m_dTypes[iAttr]!=SPH_ATTR_UINT32SET )
+				{
+					tOut.SendDword ( uVal );
+				} else
+				{
+					const DWORD * pEnd = pPool + uVal;
+					tOut.SendDword ( uVal/2 );
+					while ( pPool<pEnd )
+					{
+						tOut.SendDword ( *pPool );
+						pPool += 2;
+					}
+				}
+			}
+		}
 	}
 }
 

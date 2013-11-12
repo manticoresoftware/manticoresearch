@@ -466,7 +466,11 @@ else
 fi
 AM_CONDITIONAL(USE_RLP, test x$ac_cv_use_rlp != xno)
 
+
 dnl ---
+
+# we can now set preprocessor flags for both C and C++ compilers
+CPPFLAGS="$CPPFLAGS $MYSQL_CFLAGS $PGSQL_CFLAGS $LIBRE2_CFLAGS"
 
 got_expat=0
 AC_MSG_CHECKING([for libexpat])

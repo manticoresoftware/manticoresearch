@@ -5,7 +5,7 @@ LIBSTEMMER_DIRS =
 endif
 
 if USE_RE2
-LIBRE2_DIRS = libre2
+LIBRE2_DIRS = $(LIBRE2_PATH)
 else
 LIBRE2_DIRS =
 endif

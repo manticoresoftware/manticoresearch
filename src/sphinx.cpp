@@ -2631,6 +2631,7 @@ public:
 		, m_iLargeSegmentOffset ( 0 )
 		, m_iCurNonChineseToken ( 0 )
 		, m_bNonChineseToken ( false )
+		, m_iNextCompoundComponent ( -1 )
 	{
 		assert ( pTok );
 		sphUTF8Encode ( m_pMarkerTokenSeparator, PROXY_TOKEN_SEPARATOR );
@@ -2675,6 +2676,8 @@ public:
 			sError = "Unable to create RLP token iterator factory";
 			return false;
 		}
+
+		BT_RLP_TokenIteratorFactory_SetReturnCompoundComponents ( m_pFactory, true );
 
 		m_bInitialized = true;
 
@@ -2993,6 +2996,7 @@ private:
 	int						m_iLargeSegmentOffset;
 	int						m_iCurNonChineseToken;
 	bool					m_bNonChineseToken;
+	int						m_iNextCompoundComponent;
 	BYTE					m_dUTF8Buffer[MAX_TOKEN_LEN];
 	BYTE					m_pMarkerTokenSeparator[PROXY_MARKER_LEN];
 
@@ -3032,15 +3036,37 @@ private:
 		if ( !m_pTokenIterator )
 			return NULL;
 
+		if ( m_iNextCompoundComponent!=-1 )
+		{
+			if ( m_iNextCompoundComponent>=(int)BT_RLP_TokenIterator_GetNumberOfCompoundComponents ( m_pTokenIterator ) )
+				m_iNextCompoundComponent = -1;
+			else
+			{
+				const BT_Char16 * pToken = BT_RLP_TokenIterator_GetCompoundComponent ( m_pTokenIterator, m_iNextCompoundComponent++ );
+				assert ( pToken );
+				bt_xutf16toutf8 ( (char*)m_dUTF8Buffer, pToken, sizeof(m_dUTF8Buffer) );
+
+				return &(m_dUTF8Buffer[0]);
+			}
+		}
+
 		while ( BT_RLP_TokenIterator_Next ( m_pTokenIterator ) )
 		{
-			const BT_Char16 * pToken = BT_RLP_TokenIterator_GetToken ( m_pTokenIterator );
 			const char * szPartOfSpeech = BT_RLP_TokenIterator_GetPartOfSpeech ( m_pTokenIterator );
-			assert ( pToken );
 
 			if ( IsJunkPOS ( szPartOfSpeech ) )
 				continue;
 
+			const BT_Char16 * pToken;
+			int nCC = BT_RLP_TokenIterator_GetNumberOfCompoundComponents ( m_pTokenIterator );
+			if ( nCC>0 )
+			{
+				m_iNextCompoundComponent = 0;
+				pToken = BT_RLP_TokenIterator_GetCompoundComponent ( m_pTokenIterator, m_iNextCompoundComponent++ );
+			} else
+				pToken = BT_RLP_TokenIterator_GetToken ( m_pTokenIterator );
+
+			assert ( pToken );
 			bt_xutf16toutf8 ( (char*)m_dUTF8Buffer, pToken, sizeof(m_dUTF8Buffer) );
 
 			return &(m_dUTF8Buffer[0]);

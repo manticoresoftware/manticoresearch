@@ -329,6 +329,7 @@ Table of Contents
       11.2.68. stopwords_unstemmed
       11.2.69. global_idf
       11.2.70. rlp_context
+      11.2.71. ondisk_attrs
 
    11.3. indexer program configuration options
       11.3.1. mem_limit
@@ -391,6 +392,7 @@ Table of Contents
       11.4.48. rt_merge_maxiosize
       11.4.49. predicted_time_costs
       11.4.50. shutdown_timeout
+      11.4.51. ondisk_attrs_default
 
    11.5. Common section configuration options
       11.5.1. lemmatizer_base
@@ -404,28 +406,29 @@ Table of Contents
 
 A. Sphinx revision history
    A.1. Version 2.2.1-beta, XX nov 2013
-   A.2. Version 2.1.2-release, 10 oct 2013
-   A.3. Version 2.1.1-beta, 20 feb 2013
-   A.4. Version 2.0.9-release, 26 aug 2013
-   A.5. Version 2.0.8-release, 26 apr 2013
-   A.6. Version 2.0.7-release, 26 mar 2013
-   A.7. Version 2.0.6-release, 22 oct 2012
-   A.8. Version 2.0.5-release, 28 jul 2012
-   A.9. Version 2.0.4-release, 02 mar 2012
-   A.10. Version 2.0.3-release, 23 dec 2011
-   A.11. Version 2.0.2-beta, 15 nov 2011
-   A.12. Version 2.0.1-beta, 22 apr 2011
-   A.13. Version 1.10-beta, 19 jul 2010
-   A.14. Version 0.9.9-release, 02 dec 2009
-   A.15. Version 0.9.9-rc2, 08 apr 2009
-   A.16. Version 0.9.9-rc1, 17 nov 2008
-   A.17. Version 0.9.8.1, 30 oct 2008
-   A.18. Version 0.9.8, 14 jul 2008
-   A.19. Version 0.9.7, 02 apr 2007
-   A.20. Version 0.9.7-rc2, 15 dec 2006
-   A.21. Version 0.9.7-rc1, 26 oct 2006
-   A.22. Version 0.9.6, 24 jul 2006
-   A.23. Version 0.9.6-rc1, 26 jun 2006
+   A.2. Version 2.1.3-release, 12 nov 2013
+   A.3. Version 2.1.2-release, 10 oct 2013
+   A.4. Version 2.1.1-beta, 20 feb 2013
+   A.5. Version 2.0.9-release, 26 aug 2013
+   A.6. Version 2.0.8-release, 26 apr 2013
+   A.7. Version 2.0.7-release, 26 mar 2013
+   A.8. Version 2.0.6-release, 22 oct 2012
+   A.9. Version 2.0.5-release, 28 jul 2012
+   A.10. Version 2.0.4-release, 02 mar 2012
+   A.11. Version 2.0.3-release, 23 dec 2011
+   A.12. Version 2.0.2-beta, 15 nov 2011
+   A.13. Version 2.0.1-beta, 22 apr 2011
+   A.14. Version 1.10-beta, 19 jul 2010
+   A.15. Version 0.9.9-release, 02 dec 2009
+   A.16. Version 0.9.9-rc2, 08 apr 2009
+   A.17. Version 0.9.9-rc1, 17 nov 2008
+   A.18. Version 0.9.8.1, 30 oct 2008
+   A.19. Version 0.9.8, 14 jul 2008
+   A.20. Version 0.9.7, 02 apr 2007
+   A.21. Version 0.9.7-rc2, 15 dec 2006
+   A.22. Version 0.9.7-rc1, 26 oct 2006
+   A.23. Version 0.9.6, 24 jul 2006
+   A.24. Version 0.9.6-rc1, 26 jun 2006
 
 List of Tables
 
@@ -1155,14 +1158,14 @@ through exclude filters will not contain any of the forbidden values.) When
 grouping by MVA attribute, a document will contribute to as many groups as
 there are different MVA values associated with that document. For instance,
 if the collection contains exactly 1 document having a 'tag' MVA with
-values 5, 7, and 11, grouping on 'tag' will produce 3 groups with '@count'
-equal to 1 and '@groupby' key values of 5, 7, and 11 respectively. Also
-note that grouping by MVA might lead to duplicate documents in the result
-set: because each document can participate in many groups, it can be chosen
-as the best one in in more than one group, leading to duplicate IDs. PHP
-API historically uses ordered hash on the document ID for the resulting
-rows; so you'll also need to use SetArrayResult() in order to employ
-group-by on MVA with PHP API.
+values 5, 7, and 11, grouping on 'tag' will produce 3 groups with
+'COUNT(*)' equal to 1 and 'GROUPBY()' key values of 5, 7, and 11
+respectively. Also note that grouping by MVA might lead to duplicate
+documents in the result set: because each document can participate in many
+groups, it can be chosen as the best one in in more than one group, leading
+to duplicate IDs. PHP API historically uses ordered hash on the document ID
+for the resulting rows; so you'll also need to use SetArrayResult() in
+order to employ group-by on MVA with PHP API.
 
 3.5. Indexes
 ============
@@ -2704,6 +2707,7 @@ and functions. Here's the complete reference list for quick access.
    * ALL()
    * ANY()
    * BIGINT()
+   * BITDOT()
    * CEIL()
    * CONTAINS()
    * COS()
@@ -2790,6 +2794,10 @@ Bitwise operators: &, |
 
 ABS()
    Returns the absolute value of the argument.
+
+BITDOT()
+   BITDOT(mask, w0, w1, ...) returns the sum of products of an each bit of
+   a mask multiplied with its weight. bit0*w0 + bit1*w1 + ...
 
 CEIL()
    Returns the smallest integer value greater or equal to the argument.
@@ -4655,16 +4663,14 @@ omissions (such as (currently) missing support for JOINs). Specifically,
 
      Aggregate functions (AVG(), MIN(), MAX(), SUM()) in column list clause
      are supported. Arguments to aggregate functions can be either plain
-     attributes or arbitrary expressions. COUNT(*) is implicitly supported
-     as using GROUP BY will add @count column to result set. Explicit
-     support might be added in the future. COUNT(DISTINCT attr) is
-     supported. Currently there can be at most one COUNT(DISTINCT) per
+     attributes or arbitrary expressions. COUNT(*), COUNT(DISTINCT attr)
+     are supported. Currently there can be at most one COUNT(DISTINCT) per
      query and an argument needs to be an attribute. Both current
      restrictions on COUNT(DISTINCT) might be lifted in the future.
      A special GROUPBY() function is also supported. It returns the GROUP
-     BY key (and replaces the deprecated @groupby magic variable). That is
-     particularly useful when grouping by an MVA value, in order to pick
-     the specific value that was used to create the current group.
+     BY key. That is particularly useful when grouping by an MVA value, in
+     order to pick the specific value that was used to create the current
+     group.
 
       | SELECT *, AVG(price) AS avgprice, COUNT(DISTINCT storeid), GROUPBY()
       | FROM products
@@ -5035,18 +5041,71 @@ Section 7.6, <<INSERT and REPLACE syntax>>.
 7.8. DELETE syntax
 ==================
 
-   | DELETE FROM index WHERE {id = value | id IN (val1 [, val2 [, ...]])}
+   | DELETE FROM index WHERE where_condition
 
 DELETE statement, introduced in version 1.10-beta, is only supported for RT
-indexes. It deletes existing rows (documents) from an existing index based
-on ID.
+indexes and for distributed which contains only RT indexes as agents It
+deletes existing rows (documents) from an existing index based on ID.
 
-index is the name of RT index from which the row should be deleted. value
-is the row ID to be deleted. Support for batch id IN (2,3,5) syntax was
-added in version 2.0.1-beta.
+index is the name of RT index from which the row should be deleted.
 
-Additional types of WHERE conditions (such as conditions on attributes,
-etc) are planned, but not supported yet as of 1.10-beta.
+where_condition has the same syntax as in the SELECT statement (see
+Section 7.1, <<SELECT syntax>> for details).
+
+   | mysql> select * from rt;
+   | +------+------+-------------+------+
+   | | id   | gid  | mva1        | mva2 |
+   | +------+------+-------------+------+
+   | |  100 | 1000 | 100,201     | 100  |
+   | |  101 | 1001 | 101,202     | 101  |
+   | |  102 | 1002 | 102,203     | 102  |
+   | |  103 | 1003 | 103,204     | 103  |
+   | |  104 | 1004 | 104,204,205 | 104  |
+   | |  105 | 1005 | 105,206     | 105  |
+   | |  106 | 1006 | 106,207     | 106  |
+   | |  107 | 1007 | 107,208     | 107  |
+   | +------+------+-------------+------+
+   | 8 rows in set (0.00 sec)
+   | 
+   | mysql> delete from rt where match ('dumy') and mva1>206;
+   | Query OK, 2 rows affected (0.00 sec)
+   | 
+   | mysql> select * from rt;
+   | +------+------+-------------+------+
+   | | id   | gid  | mva1        | mva2 |
+   | +------+------+-------------+------+
+   | |  100 | 1000 | 100,201     | 100  |
+   | |  101 | 1001 | 101,202     | 101  |
+   | |  102 | 1002 | 102,203     | 102  |
+   | |  103 | 1003 | 103,204     | 103  |
+   | |  104 | 1004 | 104,204,205 | 104  |
+   | |  105 | 1005 | 105,206     | 105  |
+   | +------+------+-------------+------+
+   | 6 rows in set (0.00 sec)
+   | 
+   | mysql> delete from rt where id in (100,104,105);
+   | Query OK, 3 rows affected (0.01 sec)
+   | 
+   | mysql> select * from rt;
+   | +------+------+---------+------+
+   | | id   | gid  | mva1    | mva2 |
+   | +------+------+---------+------+
+   | |  101 | 1001 | 101,202 | 101  |
+   | |  102 | 1002 | 102,203 | 102  |
+   | |  103 | 1003 | 103,204 | 103  |
+   | +------+------+---------+------+
+   | 3 rows in set (0.00 sec)
+   | 
+   | mysql> delete from rt where mva1 in (102,204);
+   | Query OK, 2 rows affected (0.01 sec)
+   | 
+   | mysql> select * from rt;
+   | +------+------+---------+------+
+   | | id   | gid  | mva1    | mva2 |
+   | +------+------+---------+------+
+   | |  101 | 1001 | 101,202 | 101  |
+   | +------+------+---------+------+
+   | 1 row in set (0.00 sec)
 
 7.9. SET syntax
 ===============
@@ -8008,6 +8067,7 @@ Table of Contents
    11.2.68. stopwords_unstemmed
    11.2.69. global_idf
    11.2.70. rlp_context
+   11.2.71. ondisk_attrs
 
 11.3. indexer program configuration options
    11.3.1. mem_limit
@@ -8070,6 +8130,7 @@ Table of Contents
    11.4.48. rt_merge_maxiosize
    11.4.49. predicted_time_costs
    11.4.50. shutdown_timeout
+   11.4.51. ondisk_attrs_default
 
 11.5. Common section configuration options
    11.5.1. lemmatizer_base
@@ -11282,6 +11343,28 @@ Example:
 
    | rlp_context = /home/myuser/RLP/rlp-context.xml
 
+11.2.71. ondisk_attrs
+---------------------
+
+Allows for fine-grain control over how attributes are loaded into memory
+when using plain indexes with external storage. It is now possible (since
+version 2.2.1-beta) to keep attributes on disk. Although, the daemon does
+map them to memory and the OS loads small chunks of data on demand. This
+allows use of docinfo = extern instead of docinfo = inline, but still
+leaves plenty of free memory for cases when you have large collections of
+pooled attributes (string/JSON/MVA) or when you're using many indexes per
+daemon that don't consume memory. It is not possible to update attributes
+left on disk when this option is enabled and the constraint of 4Gb of
+entries per pool is still in effect. Possible values: 0 - disabled and
+default value, all attributes are loaded in memory (the normal behaviour of
+docinfo = extern) 1 - all attributes stay on disk. Daemon loads no files
+(spa, spm, sps). This is the most memory conserving mode, however it is
+also the slowest as the whole doc-id-list and block index doesn't load.
+pool - only pooled attributes stay on disk. Pooled attributes are string,
+MVA, and JSON attributes (sps, spm files). Scalar attributes stored in
+docinfo (spa file) load as usual. This option does not affect indexing in
+any way, it only requires daemon restart.
+
 11.3. indexer program configuration options
 ===========================================
 
@@ -12479,6 +12562,15 @@ Example:
 
    | shutdown_timeout = 5 # wait for up to 5 seconds
 
+11.4.51. ondisk_attrs_default
+-----------------------------
+
+Instance-wide defaults for ondisk_attrs directive. Optional, default is
+0 (all attributes are loaded in memory). This directive lets you specify
+the default value of ondisk_attrs for all indexes served by this copy of
+searchd. Per-index directives take precedence, and will overwrite this
+instance-wide default value, allowing for fine-grain control.
+
 11.5. Common section configuration options
 ==========================================
 
@@ -12596,28 +12688,29 @@ Appendix A. Sphinx revision history
 Table of Contents
 
 A.1. Version 2.2.1-beta, XX nov 2013
-A.2. Version 2.1.2-release, 10 oct 2013
-A.3. Version 2.1.1-beta, 20 feb 2013
-A.4. Version 2.0.9-release, 26 aug 2013
-A.5. Version 2.0.8-release, 26 apr 2013
-A.6. Version 2.0.7-release, 26 mar 2013
-A.7. Version 2.0.6-release, 22 oct 2012
-A.8. Version 2.0.5-release, 28 jul 2012
-A.9. Version 2.0.4-release, 02 mar 2012
-A.10. Version 2.0.3-release, 23 dec 2011
-A.11. Version 2.0.2-beta, 15 nov 2011
-A.12. Version 2.0.1-beta, 22 apr 2011
-A.13. Version 1.10-beta, 19 jul 2010
-A.14. Version 0.9.9-release, 02 dec 2009
-A.15. Version 0.9.9-rc2, 08 apr 2009
-A.16. Version 0.9.9-rc1, 17 nov 2008
-A.17. Version 0.9.8.1, 30 oct 2008
-A.18. Version 0.9.8, 14 jul 2008
-A.19. Version 0.9.7, 02 apr 2007
-A.20. Version 0.9.7-rc2, 15 dec 2006
-A.21. Version 0.9.7-rc1, 26 oct 2006
-A.22. Version 0.9.6, 24 jul 2006
-A.23. Version 0.9.6-rc1, 26 jun 2006
+A.2. Version 2.1.3-release, 12 nov 2013
+A.3. Version 2.1.2-release, 10 oct 2013
+A.4. Version 2.1.1-beta, 20 feb 2013
+A.5. Version 2.0.9-release, 26 aug 2013
+A.6. Version 2.0.8-release, 26 apr 2013
+A.7. Version 2.0.7-release, 26 mar 2013
+A.8. Version 2.0.6-release, 22 oct 2012
+A.9. Version 2.0.5-release, 28 jul 2012
+A.10. Version 2.0.4-release, 02 mar 2012
+A.11. Version 2.0.3-release, 23 dec 2011
+A.12. Version 2.0.2-beta, 15 nov 2011
+A.13. Version 2.0.1-beta, 22 apr 2011
+A.14. Version 1.10-beta, 19 jul 2010
+A.15. Version 0.9.9-release, 02 dec 2009
+A.16. Version 0.9.9-rc2, 08 apr 2009
+A.17. Version 0.9.9-rc1, 17 nov 2008
+A.18. Version 0.9.8.1, 30 oct 2008
+A.19. Version 0.9.8, 14 jul 2008
+A.20. Version 0.9.7, 02 apr 2007
+A.21. Version 0.9.7-rc2, 15 dec 2006
+A.22. Version 0.9.7-rc1, 26 oct 2006
+A.23. Version 0.9.6, 24 jul 2006
+A.24. Version 0.9.6-rc1, 26 jun 2006
 
 A.1. Version 2.2.1-beta, XX nov 2013
 ====================================
@@ -12636,7 +12729,7 @@ Major new features
    * added N-best GROUP BY extension to return more than 1 row per group
    * added RT index support for index_field_lengths=1, bitfield attributes,
      and multiforms
-   * added TSV data source
+   * added CSV, TSV data sources
    * added full JSON attributes support, arbitrary JSON documents (with
      subobjects etc) can now be stored
    * added in-place JSON updates for scalar values
@@ -12645,6 +12738,7 @@ Major new features
    * added ondisk_attrs, ondisk_attrs_default directives that keep
      attributes on disk
    * added table functions mechanism, and REMOVE_REPEATS() table function
+   * added support for arbitrary expressions in WHERE for DELETE queries
 
 Ranking related features
 ------------------------
@@ -12746,7 +12840,23 @@ Bug fixes
      expansion (expand_keywords or lemmatize) occurred
    * fixed a crash while creating indexes with sql_joined_field
 
-A.2. Version 2.1.2-release, 10 oct 2013
+A.2. Version 2.1.3-release, 12 nov 2013
+=======================================
+
+Bug fixes
+---------
+
+   * fixed #1753, path to re2 sources could not be set using --with-re2,
+     options --with-re2-libs and --with-re2-includes added to configure
+   * fixed #1739, erroneous conversion of RAM chunk into disk chunk when
+     loading id32 index with id64 binary
+   * fixed #1738, unlinking RAM chunk when converting it to disk chunk
+   * fixed #1710, unable to filter by attributes created by
+     index_field_lenghts=1
+   * fixed #1716, random crash with with multiple running threads
+   * fixed crash while querying index with lemmatizer and wordforms
+
+A.3. Version 2.1.2-release, 10 oct 2013
 =======================================
 
 New features
@@ -12852,7 +12962,7 @@ Bug fixes
    * fixed string case error with JSON attributes in select list of a query
    * fixed TOP_COUNT usage in misc/suggest and updated to PHP 5.3 and UTF-8
 
-A.3. Version 2.1.1-beta, 20 feb 2013
+A.4. Version 2.1.1-beta, 20 feb 2013
 ====================================
 
 Major new features
@@ -12950,7 +13060,7 @@ Major behavior changes and optimizations
    * optimized filtering and scan in several frequent cases (single-value,
      2-arg, 3-arg WHERE clauses)
 
-A.4. Version 2.0.9-release, 26 aug 2013
+A.5. Version 2.0.9-release, 26 aug 2013
 =======================================
 
 Bug fixes
@@ -12990,7 +13100,7 @@ Bug fixes
    * added a warning for missed stopwords, exception, wordforms files on
      index load and in indextool --check
 
-A.5. Version 2.0.8-release, 26 apr 2013
+A.6. Version 2.0.8-release, 26 apr 2013
 =======================================
 
 Bug fixes
@@ -13021,7 +13131,7 @@ Bug fixes
    * fixed #1427, #1506, utf8 3 and 4-bytes codepoints
    * fixed #1405, between with mixed int float values
 
-A.6. Version 2.0.7-release, 26 mar 2013
+A.7. Version 2.0.7-release, 26 mar 2013
 =======================================
 
 Bug fixes
@@ -13106,7 +13216,7 @@ Bug fixes
    * added a console message about crashes during index loading at startup
    * added more debug info about failed index loading
 
-A.7. Version 2.0.6-release, 22 oct 2012
+A.8. Version 2.0.6-release, 22 oct 2012
 =======================================
 
 Bug fixes
@@ -13177,7 +13287,7 @@ Bug fixes
    * fixed sample config file
    * fixed x64 configurations for libstemmer
 
-A.8. Version 2.0.5-release, 28 jul 2012
+A.9. Version 2.0.5-release, 28 jul 2012
 =======================================
 
 Bug fixes
@@ -13284,8 +13394,8 @@ Bug fixes
      parser
    * fixed missing command-line switches documentation
 
-A.9. Version 2.0.4-release, 02 mar 2012
-=======================================
+A.10. Version 2.0.4-release, 02 mar 2012
+========================================
 
 Bug fixes
 ---------
@@ -13339,7 +13449,7 @@ Bug fixes
    * fixed #1120, negative total_found, docs and hits counter on huge
      indexes
 
-A.10. Version 2.0.3-release, 23 dec 2011
+A.11. Version 2.0.3-release, 23 dec 2011
 ========================================
 
 Bug fixes
@@ -13369,7 +13479,7 @@ Bug fixes
    * fixed build of SphinxSE with MySQL 5.1
    * fixed crash log for 'fork' and 'prefork' workers
 
-A.11. Version 2.0.2-beta, 15 nov 2011
+A.12. Version 2.0.2-beta, 15 nov 2011
 =====================================
 
 Major new features
@@ -13540,7 +13650,7 @@ Bug fixes
    * fixed that field/zone conditions were not propagated to expanded
      keywords with dict=keywords
 
-A.12. Version 2.0.1-beta, 22 apr 2011
+A.13. Version 2.0.1-beta, 22 apr 2011
 =====================================
 
 New general features
@@ -13717,7 +13827,7 @@ Bug fixes
    * fixed libsphinxclient SIGPIPE handling
    * fixed libsphinxclient vs VS2003 compiler bug
 
-A.13. Version 1.10-beta, 19 jul 2010
+A.14. Version 1.10-beta, 19 jul 2010
 ====================================
 
    * added RT indexes support (Chapter 4, Real-time indexes)
@@ -13806,7 +13916,7 @@ A.13. Version 1.10-beta, 19 jul 2010
      etc)
    * fixed #509, indexing ranged results from stored procedures
 
-A.14. Version 0.9.9-release, 02 dec 2009
+A.15. Version 0.9.9-release, 02 dec 2009
 ========================================
 
    * added Open, Close, Status calls to libsphinxclient (C API)
@@ -13869,7 +13979,7 @@ A.14. Version 0.9.9-release, 02 dec 2009
    * fixed #344 (invalid checkpoints after merge)
    * fixed #326 (missing CLOCK_xxx on FreeBSD)
 
-A.15. Version 0.9.9-rc2, 08 apr 2009
+A.16. Version 0.9.9-rc2, 08 apr 2009
 ====================================
 
    * added IsConnectError(), Open(), Close() calls to Java API (bug #240)
@@ -13968,7 +14078,7 @@ A.15. Version 0.9.9-rc2, 08 apr 2009
      static
    * fixed parser vs @field -keyword, foo|@field bar, "" queries (bug #310)
 
-A.16. Version 0.9.9-rc1, 17 nov 2008
+A.17. Version 0.9.9-rc1, 17 nov 2008
 ====================================
 
    * added min_stemming_len directive
@@ -14031,7 +14141,7 @@ A.16. Version 0.9.9-rc1, 17 nov 2008
    * fixed backslash escaping, added backslash to EscapeString()
    * fixed handling of over-2GB dictionary files (.spi)
 
-A.17. Version 0.9.8.1, 30 oct 2008
+A.18. Version 0.9.8.1, 30 oct 2008
 ==================================
 
    * added configure script to libsphinxclient
@@ -14068,7 +14178,7 @@ A.17. Version 0.9.8.1, 30 oct 2008
    * fixed default ID range (that filtered out all 64-bit values) in Java
      and Python APIs
 
-A.18. Version 0.9.8, 14 jul 2008
+A.19. Version 0.9.8, 14 jul 2008
 ================================
 
 Indexing
@@ -14248,7 +14358,7 @@ Changes and fixes since 0.9.8-rc2
      reusable sorter issue
    * fixed sorting of negative floats in SPH_SORT_EXTENDED mode
 
-A.19. Version 0.9.7, 02 apr 2007
+A.20. Version 0.9.7, 02 apr 2007
 ================================
 
    * added support for sql_str2ordinal_column
@@ -14298,7 +14408,7 @@ A.19. Version 0.9.7, 02 apr 2007
    * fixed wrong assertion in SBCS encoder
    * fixed crashes with no-attribute indexes after rotate
 
-A.20. Version 0.9.7-rc2, 15 dec 2006
+A.21. Version 0.9.7-rc2, 15 dec 2006
 ====================================
 
    * added support for extended matching mode (query language)
@@ -14320,7 +14430,7 @@ A.20. Version 0.9.7-rc2, 15 dec 2006
      paths)
    * fixes for 64-bit platforms
 
-A.21. Version 0.9.7-rc1, 26 oct 2006
+A.22. Version 0.9.7-rc1, 26 oct 2006
 ====================================
 
    * added alpha index merging code
@@ -14349,7 +14459,7 @@ A.21. Version 0.9.7-rc1, 26 oct 2006
    * fixed line numbering in config parser
    * fixed some issues with index rotation
 
-A.22. Version 0.9.6, 24 jul 2006
+A.23. Version 0.9.6, 24 jul 2006
 ================================
 
    * added support for empty indexes
@@ -14358,7 +14468,7 @@ A.22. Version 0.9.6, 24 jul 2006
    * fixed configure issues with --without-mysql and --with-pgsql options
    * fixed building on Solaris 9
 
-A.23. Version 0.9.6-rc1, 26 jun 2006
+A.24. Version 0.9.6-rc1, 26 jun 2006
 ====================================
 
    * added boolean queries support (experimental, beta version)

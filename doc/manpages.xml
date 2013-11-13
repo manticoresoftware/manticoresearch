@@ -12,7 +12,7 @@
 
       <refmiscinfo class="manual">Sphinxsearch</refmiscinfo>
 
-      <refmiscinfo class="version">2.2.1</refmiscinfo>
+      <refmiscinfo class="version">2.2.1-beta</refmiscinfo>
     </refmeta>
 
     <refnamediv>
@@ -467,7 +467,7 @@ $ indexer mysmallindex mybigindex</programlisting>
 
       <refmiscinfo class="manual">Sphinxsearch</refmiscinfo>
 
-      <refmiscinfo class="version">2.2.1</refmiscinfo>
+      <refmiscinfo class="version">2.2.1-beta</refmiscinfo>
     </refmeta>
 
     <refnamediv>
@@ -932,7 +932,7 @@ $ searchd --config /home/myuser/sphinx.conf --status</programlisting>
 
       <refmiscinfo class="manual">Sphinxsearch</refmiscinfo>
 
-      <refmiscinfo class="version">2.2.1</refmiscinfo>
+      <refmiscinfo class="version">2.2.1-beta</refmiscinfo>
     </refmeta>
 
     <refnamediv>
@@ -1321,7 +1321,7 @@ $ searchd --config /home/myuser/sphinx.conf --status</programlisting>
 
       <refmiscinfo class="manual">Sphinxsearch</refmiscinfo>
 
-      <refmiscinfo class="version">2.2.1</refmiscinfo>
+      <refmiscinfo class="version">2.2.1-beta</refmiscinfo>
     </refmeta>
 
     <refnamediv>
@@ -1440,7 +1440,7 @@ zoning &gt; zoning </programlisting></para>
 
       <refmiscinfo class="manual">Sphinxsearch</refmiscinfo>
 
-      <refmiscinfo class="version">2.2.1</refmiscinfo>
+      <refmiscinfo class="version">2.2.1-beta</refmiscinfo>
     </refmeta>
 
     <refnamediv>

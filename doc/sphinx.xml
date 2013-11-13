@@ -14216,7 +14216,7 @@ rlp_max_batch_docs = 100
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 
-<sect1 id="rel221"><title>Version 2.2.1-beta, XX nov 2013</title>
+<sect1 id="rel221"><title>Version 2.2.1-beta, 13 nov 2013</title>
 <bridgehead>Major new features</bridgehead>
 <itemizedlist>
 <listitem>added <link linkend="sphinxql-attach">ALTER TABLE</link> that can add attributes to disk and RT indexes on the fly</listitem>

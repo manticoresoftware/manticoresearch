@@ -6807,6 +6807,13 @@ Actually, all other modes are deprecated. We recommend using the
 </para></listitem>
 </itemizedlist>
 </para>
+<para>
+Changes for 2.2.2-beta:
+<itemizedlist>
+<listitem><para>Removed deprecated "address" and "port" directives.
+Use "listen" instead.</para></listitem>
+</itemizedlist>
+</para>
 </sect1>
 
 </chapter>
@@ -12870,38 +12877,6 @@ for details) and should therefore be available.
 <para>
 Unix-domain sockets are not supported on Windows.
 </para>
-</sect2>
-
-
-<sect2 id="conf-address"><title>address</title>
-<para>
-Interface IP address to bind on.
-Optional, default is 0.0.0.0 (ie. listen on all interfaces).
-<b>DEPRECATED</b>, use <link linkend="conf-listen">listen</link> instead.
-</para>
-<para>
-<code>address</code> setting lets you specify which network interface
-<filename>searchd</filename> will bind to, listen on, and accept incoming
-network connections on. The default value is 0.0.0.0 which means to listen
-on all interfaces. At the time, you can <b>not</b> specify multiple interfaces.
-</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-address = 192.168.0.1
-</programlisting>
-</sect2>
-
-
-<sect2 id="conf-port"><title>port</title>
-<para>
-<filename>searchd</filename> TCP port number.
-<b>DEPRECATED</b>, use <link linkend="conf-listen">listen</link> instead.
-Used to be mandatory. Default port number is 9312.
-</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-port = 9312
-</programlisting>
 </sect2>
 
 

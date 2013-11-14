@@ -21775,20 +21775,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		for ( CSphVariant * v = hSearchd("listen"); v; v = v->m_pNext )
 			AddListener ( *v );
 
-		// handle deprecated directives
-		if ( hSearchd("port") )
-		{
-			DWORD uAddr = hSearchd.Exists("address") ?
-				sphGetAddress ( hSearchd["address"].cstr(), GETADDR_STRICT ) : htonl ( INADDR_ANY );
-
-			int iPort = hSearchd["port"].intval();
-			CheckPort(iPort);
-
-			tListener.m_iSock = sphCreateInetSocket ( uAddr, iPort );
-			g_dListeners.Add ( tListener );
-		}
-
-		// still nothing? default is to listen on our two ports
+		// default is to listen on our two ports
 		if ( !g_dListeners.GetLength() )
 		{
 			tListener.m_iSock = sphCreateInetSocket ( htonl ( INADDR_ANY ), SPHINXAPI_PORT );

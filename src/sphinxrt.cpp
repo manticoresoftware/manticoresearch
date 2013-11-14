@@ -201,7 +201,7 @@ struct RtWordCheckpoint_t
 
 // More than just sorted vector.
 // OrderedHash is for fast (without sorting potentially big vector) inserts.
-class RtDiskKlist_t : public ISphNoncopyable
+class CSphKilllist : public ISphNoncopyable
 {
 private:
 	static const int				MAX_SMALL_SIZE = 512;
@@ -212,8 +212,8 @@ private:
 	void NakedFlush();				// flush without lockers
 
 public:
-	RtDiskKlist_t() { m_tLock.Init(); }
-	virtual ~RtDiskKlist_t() { m_tLock.Done(); }
+	CSphKilllist() { m_tLock.Init(); }
+	virtual ~CSphKilllist() { m_tLock.Done(); }
 	void Reset();
 	void Flush()
 	{
@@ -258,13 +258,13 @@ public:
 	}
 };
 
-void RtDiskKlist_t::Reset()
+void CSphKilllist::Reset()
 {
 	m_dLargeKlist.Reset();
 	m_hSmallKlist.Reset();
 }
 
-void RtDiskKlist_t::NakedFlush()
+void CSphKilllist::NakedFlush()
 {
 	if ( m_hSmallKlist.GetLength()==0 )
 		return;
@@ -278,7 +278,7 @@ void RtDiskKlist_t::NakedFlush()
 }
 
 // is already id32<>id64 safe
-void RtDiskKlist_t::LoadFromFile ( const char * sFilename )
+void CSphKilllist::LoadFromFile ( const char * sFilename )
 {
 	// FIXME!!! got rid of locks here
 	m_tLock.Lock();
@@ -306,7 +306,7 @@ void RtDiskKlist_t::LoadFromFile ( const char * sFilename )
 	m_tLock.Unlock();
 }
 
-void RtDiskKlist_t::SaveToFile ( const char * sFilename )
+void CSphKilllist::SaveToFile ( const char * sFilename )
 {
 	// FIXME!!! got rid of locks here
 	m_tLock.Lock();
@@ -328,6 +328,8 @@ void RtDiskKlist_t::SaveToFile ( const char * sFilename )
 	wrKlist.CloseFile();
 }
 
+// this is what actually stores index data
+// RAM chunk consists of such segments
 struct RtSegment_t
 {
 protected:
@@ -1013,17 +1015,20 @@ private:
 
 private:
 	int							m_iStride;
-	CSphVector<RtSegment_t*>	m_pSegments;
+	CSphVector<RtSegment_t*>	m_dSegments;
 
 	CSphMutex					m_tWriterMutex;
 	mutable CSphRwlock			m_tRwlock;
 
-	/// double buffer
+	/// double buffer stuff (allows to work with RAM chunk while future disk is being saved)
+	/// m_dSegments consists of two parts
+	/// segments with indexes < m_iDoubleBuffer are being saved now as a disk chunk
+	/// segments with indexes >= m_iDoubleBuffer are RAM chunk
 	CSphMutex					m_tSaveInnerMutex;
 	CSphMutex					m_tSaveOuterMutex;
 	int							m_iDoubleBuffer;
-	CSphVector<SphDocID_t>		m_dNewSegmentKlist;					///< raw doc-id container
-	CSphFixedVector<SphAttr_t>	m_dDiskChunkKlist;					///< well ordered SphAttr_t kill-list
+	CSphVector<SphDocID_t>		m_dNewSegmentKlist;					///< raw docid container
+	CSphFixedVector<SphAttr_t>	m_dDiskChunkKlist;					///< ordered SphAttr_t kill list
 
 	int64_t						m_iSoftRamLimit;
 	int64_t						m_iDoubleBufferLimit;
@@ -1031,7 +1036,7 @@ private:
 	bool						m_bPathStripped;
 	CSphVector<CSphIndex*>		m_pDiskChunks;
 	int							m_iLockFD;
-	mutable RtDiskKlist_t		m_tKlist;
+	mutable CSphKilllist		m_tKlist;							///< kill list for disk chunks and saved chunks
 	int							m_iDiskBase;
 	bool						m_bOptimizing;
 
@@ -1217,8 +1222,8 @@ RtIndex_t::~RtIndex_t ()
 	Verify ( m_tRwlock.Done() );
 	Verify ( m_tWriterMutex.Done() );
 
-	ARRAY_FOREACH ( i, m_pSegments )
-		SafeDelete ( m_pSegments[i] );
+	ARRAY_FOREACH ( i, m_dSegments )
+		SafeDelete ( m_dSegments[i] );
 
 	ARRAY_FOREACH ( i, m_pDiskChunks )
 		SafeDelete ( m_pDiskChunks[i] );
@@ -1294,8 +1299,8 @@ void RtIndex_t::ForceRamFlush ( bool bPeriodic )
 int64_t RtIndex_t::GetUsedRam () const
 {
 	int64_t iTotal = 0;
-	ARRAY_FOREACH ( i, m_pSegments )
-		iTotal += m_pSegments[i]->GetUsedRam();
+	ARRAY_FOREACH ( i, m_dSegments )
+		iTotal += m_dSegments[i]->GetUsedRam();
 
 	return iTotal;
 }
@@ -1375,14 +1380,13 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 	if ( !bReplace )
 	{
 		m_tRwlock.ReadLock ();
-		ARRAY_FOREACH ( i, m_pSegments )
-			if ( FindDocinfo ( m_pSegments[i], tDoc.m_iDocID )
-				&& !m_pSegments[i]->m_dKlist.BinarySearch ( tDoc.m_iDocID ) )
-		{
-			m_tRwlock.Unlock ();
-			sError.SetSprintf ( "duplicate id '"UINT64_FMT"'", (uint64_t)tDoc.m_iDocID );
-			return false; // already exists and not deleted; INSERT fails
-		}
+		ARRAY_FOREACH ( i, m_dSegments )
+			if ( FindDocinfo ( m_dSegments[i], tDoc.m_iDocID ) && !m_dSegments[i]->m_dKlist.BinarySearch ( tDoc.m_iDocID ) )
+			{
+				m_tRwlock.Unlock ();
+				sError.SetSprintf ( "duplicate id '"UINT64_FMT"'", (uint64_t)tDoc.m_iDocID );
+				return false; // already exists and not deleted; INSERT fails
+			}
 		m_tRwlock.Unlock ();
 	}
 
@@ -2721,11 +2725,11 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 	// let merger know that existing segments are subject to additional, TLS K-list filter
 	// safe despite the readers, flag must only be used by writer
 	if ( dAccKlist.GetLength() )
-		for ( int i=m_iDoubleBuffer; i<m_pSegments.GetLength(); i++ )
+		for ( int i=m_iDoubleBuffer; i<m_dSegments.GetLength(); i++ )
 		{
 			// OPTIMIZE? only need to set the flag if TLS K-list *actually* affects segment
-			assert ( m_pSegments[i]->m_bTlsKlist==false );
-			m_pSegments[i]->m_bTlsKlist = true;
+			assert ( m_dSegments[i]->m_bTlsKlist==false );
+			m_dSegments[i]->m_bTlsKlist = true;
 		}
 
 	// prepare new segments vector
@@ -2734,10 +2738,10 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 	CSphVector<RtSegment_t*> dSegments;
 	CSphVector<RtSegment_t*> dToKill;
 
-	dSegments.Reserve ( m_pSegments.GetLength() - m_iDoubleBuffer + 1 );
-	for ( int i=m_iDoubleBuffer; i<m_pSegments.GetLength(); i++ )
+	dSegments.Reserve ( m_dSegments.GetLength() - m_iDoubleBuffer + 1 );
+	for ( int i=m_iDoubleBuffer; i<m_dSegments.GetLength(); i++ )
 	{
-		dSegments.Add ( m_pSegments[i] );
+		dSegments.Add ( m_dSegments[i] );
 	}
 	if ( pNewSeg )
 		dSegments.Add ( pNewSeg );
@@ -2833,67 +2837,59 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 	int iTotalKilled = 0;
 	if ( dAccKlist.GetLength() )
 	{
-#ifndef NDEBUG
-#if PARANOID
-		// check that klist is sorted and unique
-		for ( int i=1; i<dAccKlist.GetLength(); i++ )
-			assert ( dAccKlist[i-1] < dAccKlist[i] );
-#endif
-#endif
-
 		// update totals
 		// work the original (!) segments, and before (!) updating their K-lists
 		int iDiskLiveKLen = dAccKlist.GetLength();
 		for ( int i=0; i<iDiskLiveKLen; i++ )
 		{
-			const SphDocID_t uDocid = dAccKlist[i];
+			SphDocID_t uDocid = dAccKlist[i];
+			SphAttr_t uRef = uDocid; // for sphBinarySearch()
 
-			// check RAM chunk
+			// the most recent part of RT index is its RAM chunk, so first search it
+			// then search chunk which is saving right now
+			// after that search disk chunks in order from younger to older ones
+			// if doc is killed in younger index part then it's really killed - no need to search older parts
 			bool bRamAlive = false;
-			for ( int j=m_iDoubleBuffer; j<m_pSegments.GetLength() && !bRamAlive; j++ )
-				bRamAlive = ( m_pSegments[j]->FindAliveRow ( uDocid )!=NULL );
-
-			bool bDiskKilled = false;
-			if ( !m_iDoubleBuffer )
-				bDiskKilled = m_tKlist.Exists ( uDocid );
-
-			// check disk chunks
-			bool bKeep = false;
-			if ( !bRamAlive || !bDiskKilled )
+			bool bSavedOrDiskAlive = false;
+			bool bAlreadyKilled = false;
+			for ( ;; )
 			{
-				// check saving segments first (will be recent disk chunk)
-				for ( int j=0; j<m_iDoubleBuffer && !bKeep; j++ )
+				for ( int j=m_dSegments.GetLength()-1; j>=m_iDoubleBuffer && !bRamAlive; --j )
+					bRamAlive = (bool)m_dSegments[j]->FindAliveRow ( uDocid );
+				if ( bRamAlive )
+					break;
+
+				// killed in saved or one of disk chunks?
+				if ( (bAlreadyKilled = m_tKlist.Exists ( uDocid ) ) )
+					break;
+
+				for ( int j=m_iDoubleBuffer-1; j>=0 && !bSavedOrDiskAlive; --j )
+					bSavedOrDiskAlive = (bool)m_dSegments[j]->FindAliveRow ( uDocid );
+				if ( bSavedOrDiskAlive )
+					break;
+
+				// killed in one of disk chunks?
+				if ( (bool)sphBinarySearch ( m_dDiskChunkKlist.Begin(), m_dDiskChunkKlist.Begin()+m_dDiskChunkKlist.GetLength()-1, uRef ) )
+					break;
+
+				for ( int j=m_pDiskChunks.GetLength()-1; j>=0 && !bSavedOrDiskAlive; --j )
 				{
-					bKeep = ( m_pSegments[j]->FindAliveRow ( uDocid )!=NULL );
+					// killed in this disk chunk?
+					if ( (bool)sphBinarySearch ( m_pDiskChunks[j]->GetKillList(), m_pDiskChunks[j]->GetKillList()+m_pDiskChunks[j]->GetKillListSize()-1, uRef ) )
+						break;
+					bSavedOrDiskAlive = m_pDiskChunks[j]->HasDocid ( uDocid );
 				}
 
-				// then disk chunks
-				for ( int j=m_pDiskChunks.GetLength()-1; j>=0 && !bKeep; j-- )
-				{
-					if ( m_pDiskChunks[j]->HasDocid ( uDocid ) )
-					{
-						// we just found the most recent chunk with our suspect docid
-						// let's check whether it's already killed by subsequent chunks, or gets killed now
-						SphAttr_t uRef = uDocid;
-						bKeep = true;
-						for ( int k=j+1; k<m_pDiskChunks.GetLength() && bKeep; k++ )
-						{
-							const CSphIndex * pIndex = m_pDiskChunks[k];
-							bKeep = ( sphBinarySearch ( pIndex->GetKillList(), pIndex->GetKillList() + pIndex->GetKillListSize() - 1, uRef )==NULL );
-						}
-
-						// might be last disk chunk that saving now
-						if ( bKeep && m_iDoubleBuffer )
-							bKeep = ( sphBinarySearch ( m_dDiskChunkKlist.Begin(), m_dDiskChunkKlist.Begin() + m_dDiskChunkKlist.GetLength() - 1, uRef )==NULL );
-					}
-				}
+				break;
 			}
 
-			if ( bRamAlive || bKeep )
+			if ( bRamAlive || bSavedOrDiskAlive )
 				iTotalKilled++;
 
-			if ( bDiskKilled || !bKeep )
+			if ( bAlreadyKilled || !bSavedOrDiskAlive )
 			{
+				// we can't just RemoveFast() elements from vector
+				// because we'll use its values with indexes >=iDiskLiveKLen in segments kill lists just below
 				Swap ( dAccKlist[i], dAccKlist[iDiskLiveKLen-1] );
 				iDiskLiveKLen--;
 				i--;
@@ -2943,8 +2939,8 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 			pSeg->m_bTlsKlist = false;
 		}
 
-		// update disk K-list
-		// after iDiskLiveKLen are ids already stored on disk - just skip them
+		// update saved chunk and disk chunks kill list
+		// after iDiskLiveKLen IDs are already killed or don't exist - just skip them
 		m_tKlist.Add ( dAccKlist.Begin(), iDiskLiveKLen );
 
 		// collect kill-list for new segments
@@ -2973,9 +2969,9 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 
 	// go live!
 	// got rid of 'old' double-buffer segments then add 'new' onces
-	m_pSegments.Resize ( m_iDoubleBuffer );
+	m_dSegments.Resize ( m_iDoubleBuffer );
 	ARRAY_FOREACH ( i, dSegments )
-		m_pSegments.Add ( dSegments[i] );
+		m_dSegments.Add ( dSegments[i] );
 
 	// tell about DELETE affected_rows
 	if ( pTotalKilled )
@@ -3013,9 +3009,9 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 
 	Verify ( m_tSaveOuterMutex.Lock() );
 	// copy stats for disk chunk
-	dSegments2Dump = m_pSegments;
+	dSegments2Dump = m_dSegments;
 	tStat2Dump = m_tStats;
-	m_iDoubleBuffer = m_pSegments.GetLength();
+	m_iDoubleBuffer = m_dSegments.GetLength();
 
 	m_tKlist.Flush();
 	m_dDiskChunkKlist.Reset ( m_tKlist.GetKillListSize() );
@@ -3083,7 +3079,7 @@ void RtIndex_t::ForceDiskChunk ()
 {
 	MEMORY ( SPH_MEM_IDX_RT );
 
-	if ( !m_pSegments.GetLength() )
+	if ( !m_dSegments.GetLength() )
 		return;
 
 	Verify ( m_tWriterMutex.Lock() );
@@ -3095,7 +3091,7 @@ void RtIndex_t::ForceDiskChunk ()
 	memcpy ( m_dDiskChunkKlist.Begin(), m_tKlist.GetKillList(), sizeof(SphAttr_t)*m_tKlist.GetKillListSize() );
 	Verify ( m_tRwlock.Unlock() );
 
-	SaveDiskChunk ( m_iTID, m_pSegments, m_tStats );
+	SaveDiskChunk ( m_iTID, m_dSegments, m_tStats );
 
 	Verify ( m_tSaveOuterMutex.Unlock() );
 	Verify ( m_tWriterMutex.Unlock() );
@@ -3322,16 +3318,16 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSe
 				( ( !m_bKeywordDict && pWords[i]->m_uWordID==pWord->m_uWordID )
 				|| ( m_bKeywordDict &&
 				sphDictCmpStrictly ( (const char *)pWords[i]->m_sWord+1, *pWords[i]->m_sWord, (const char *)pWord->m_sWord+1, *pWord->m_sWord )==0 ) ) )
-		{
-			pSegments.Add ( dSegments[i] );
-			pDocReaders.Add ( new RtDocReader_T<DOCID> ( dSegments[i], *pWords[i] ) );
+			{
+				pSegments.Add ( dSegments[i] );
+				pDocReaders.Add ( new RtDocReader_T<DOCID> ( dSegments[i], *pWords[i] ) );
 
-			const RTDOC * pDoc = pDocReaders.Last()->UnzipDoc();
-			while ( pDoc && dSegments[i]->m_dKlist.BinarySearch ( pDoc->m_uDocID ) )
-				pDoc = pDocReaders.Last()->UnzipDoc();
+				const RTDOC * pDoc = pDocReaders.Last()->UnzipDoc();
+				while ( pDoc && dSegments[i]->m_dKlist.BinarySearch ( pDoc->m_uDocID ) )
+					pDoc = pDocReaders.Last()->UnzipDoc();
 
-			pDocs.Add ( pDoc );
-		}
+				pDocs.Add ( pDoc );
+			}
 
 		// loop documents
 		SphOffset_t uDocpos = wrDocs.GetPos();
@@ -3774,15 +3770,15 @@ void RtIndex_t::SaveDiskChunk ( int64_t iTID, const CSphVector<RtSegment_t *> & 
 	Verify ( m_tSaveInnerMutex.Lock() );
 	Verify ( m_tRwlock.WriteLock() );
 
-	int iOldSegmentsCount = ( m_iDoubleBuffer ? m_iDoubleBuffer : m_pSegments.GetLength() );
+	int iOldSegmentsCount = ( m_iDoubleBuffer ? m_iDoubleBuffer : m_dSegments.GetLength() );
 	for ( int i=0; i<iOldSegmentsCount; i++ )
-		SafeDelete ( m_pSegments[i] );
+		SafeDelete ( m_dSegments[i] );
 
 	// swap double buffer data
-	int iNewSegmentsCount = ( m_iDoubleBuffer ? m_pSegments.GetLength() - m_iDoubleBuffer : 0 );
+	int iNewSegmentsCount = ( m_iDoubleBuffer ? m_dSegments.GetLength() - m_iDoubleBuffer : 0 );
 	for ( int i=0; i<iNewSegmentsCount; i++ )
-		m_pSegments[i] = m_pSegments[i+m_iDoubleBuffer];
-	m_pSegments.Resize ( iNewSegmentsCount );
+		m_dSegments[i] = m_dSegments[i+m_iDoubleBuffer];
+	m_dSegments.Resize ( iNewSegmentsCount );
 
 	// clean up kill-list
 	m_tKlist.Reset();
@@ -3795,7 +3791,7 @@ void RtIndex_t::SaveDiskChunk ( int64_t iTID, const CSphVector<RtSegment_t *> & 
 	sChunk.SetSprintf ( "%s.ram", m_sPath.cstr() );
 	if ( ::unlink ( sChunk.cstr() ) )
 		sphWarning ( "failed to unlink ram chunk (file=%s, errno=%d, error=%s)",
-		sChunk.cstr(), errno, strerror(errno) );
+					sChunk.cstr(), errno, strerror(errno) );
 
 	m_iDoubleBuffer = 0;
 	m_iSavedTID = iTID;
@@ -4088,12 +4084,12 @@ bool RtIndex_t::SaveRamChunk ()
 
 	wrChunk.PutDword ( USE_64BIT );
 	wrChunk.PutDword ( RtSegment_t::m_iSegments );
-	wrChunk.PutDword ( m_pSegments.GetLength() );
+	wrChunk.PutDword ( m_dSegments.GetLength() );
 
 	// no locks here, because it's only intended to be called from dtor
-	ARRAY_FOREACH ( iSeg, m_pSegments )
+	ARRAY_FOREACH ( iSeg, m_dSegments )
 	{
-		const RtSegment_t * pSeg = m_pSegments[iSeg];
+		const RtSegment_t * pSeg = m_dSegments[iSeg];
 		wrChunk.PutDword ( pSeg->m_iTag );
 		SaveVector ( wrChunk, pSeg->m_dWords );
 		if ( m_bKeywordDict )
@@ -4172,12 +4168,12 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 	}
 
 	int iSegmentSeq = rdChunk.GetDword();
-	m_pSegments.Resize ( rdChunk.GetDword() ); // FIXME? sanitize
+	m_dSegments.Resize ( rdChunk.GetDword() ); // FIXME? sanitize
 
-	ARRAY_FOREACH ( iSeg, m_pSegments )
+	ARRAY_FOREACH ( iSeg, m_dSegments )
 	{
 		RtSegment_t * pSeg = new RtSegment_t ();
-		m_pSegments[iSeg] = pSeg;
+		m_dSegments[iSeg] = pSeg;
 
 		pSeg->m_iTag = rdChunk.GetDword ();
 		LoadVector ( rdChunk, pSeg->m_dWords );
@@ -4208,28 +4204,28 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 		// (the Stride for id32 is 1 DWORD shorter than for id64)
 		// the only usage of this BLOB is to save id32 disk-chunk.
 		LoadVector ( rdChunk, pSeg->m_dRows );
-		if (!m_bId32to64)
-		{	
+		if ( !m_bId32to64 )
+		{
 			LoadVector ( rdChunk, pSeg->m_dKlist );
- 		} else
- 		{
+		} else
+		{
 			// shrink Klist from id32 to id64 on-the-fly
- 			pSeg->m_dKlist.Resize ( rdChunk.GetDword() );
- 			if ( pSeg->m_dKlist.GetLength() )
- 			{
- 				// init 1-st elem with zero - if we load only 1 dword, the high part of id64 will be defined anyway
- 				pSeg->m_dKlist[0] = 0;
- 				// yes, we load tight (id32) array into wide (id64) vector, filling exactly half of it
+			pSeg->m_dKlist.Resize ( rdChunk.GetDword() );
+			if ( pSeg->m_dKlist.GetLength() )
+			{
+				// init 1-st elem with zero - if we load only 1 dword, the high part of id64 will be defined anyway
+				pSeg->m_dKlist[0] = 0;
+				// yes, we load tight (id32) array into wide (id64) vector, filling exactly half of it
 				rdChunk.GetBytes ( pSeg->m_dKlist.Begin(), pSeg->m_dKlist.GetLength()*sizeof(DWORD) );
- 				// now we have to expand n ID32s into n ID64s
- 				DWORD* dId32s = (DWORD*)pSeg->m_dKlist.Begin();
- 				for ( int i=pSeg->m_dKlist.GetLength()-1; i>0; --i ) /// i>0 since for i=0 id is already in place
- 				{
- 					pSeg->m_dKlist[i] = dId32s[i];
- 					dId32s[i] = 0;
- 				}
- 			}
- 		}
+				// now we have to expand n ID32s into n ID64s
+				DWORD* dId32s = (DWORD*)pSeg->m_dKlist.Begin();
+				for ( int i=pSeg->m_dKlist.GetLength()-1; i>0; --i ) /// i>0 since for i=0 id is already in place
+				{
+					pSeg->m_dKlist[i] = dId32s[i];
+					dId32s[i] = 0;
+				}
+			}
+		}
 		LoadVector ( rdChunk, pSeg->m_dStrings );
 		if ( uVersion>=3 )
 			LoadVector ( rdChunk, pSeg->m_dMvas );
@@ -4259,7 +4255,7 @@ void RtIndex_t::PostSetup()
 		{
 			memcpy ( m_dDiskChunkKlist.Begin(), m_tKlist.GetKillList(), sizeof(SphAttr_t)*m_tKlist.GetKillListSize() );
 		}
-		SaveDiskChunk ( m_iTID, m_pSegments, m_tStats );
+		SaveDiskChunk ( m_iTID, m_dSegments, m_tStats );
 		// since the RAM chunk is just stored as id32, we are no more in compat mode
 		m_bId32to64 = false;
 	}
@@ -4341,17 +4337,17 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 	if ( m_iWordsCheckpoint!=RTDICT_CHECKPOINT_V3 && m_iWordsCheckpoint!=RTDICT_CHECKPOINT_V5 )
 		LOC_FAIL(( fp, "unexpected number of words per checkpoint (expected 1024 or 48, got %d)", m_iWordsCheckpoint ));
 
-	ARRAY_FOREACH ( iSegment, m_pSegments )
+	ARRAY_FOREACH ( iSegment, m_dSegments )
 	{
-		fprintf ( fp, "checking RT segment %d(%d)...\n", iSegment, m_pSegments.GetLength() );
+		fprintf ( fp, "checking RT segment %d(%d)...\n", iSegment, m_dSegments.GetLength() );
 
-		if ( !m_pSegments[iSegment] )
+		if ( !m_dSegments[iSegment] )
 		{
 			LOC_FAIL(( fp, "missing RT segment (segment=%d)", iSegment ));
 			continue;
 		}
 
-		RtSegment_t & tSegment = *m_pSegments[iSegment];
+		RtSegment_t & tSegment = *m_dSegments[iSegment];
 		if ( tSegment.m_bTlsKlist )
 			LOC_FAIL(( fp, "TLS k-list flag on: index is being commited (segment=%d)", iSegment ));
 
@@ -5567,9 +5563,9 @@ void RtIndex_t::GetPrefixedWords ( const char * sWord, int iWordLen, const char 
 {
 	const int iSkipMagic = ( BYTE(*sWord)<0x20 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
 	SmallStringHash_T<DocHitPair_t> hPrefixedWords;
-	ARRAY_FOREACH ( i, m_pSegments )
+	ARRAY_FOREACH ( i, m_dSegments )
 	{
-		RtSegment_t * pCurSeg = m_pSegments[i];
+		RtSegment_t * pCurSeg = m_dSegments[i];
 		RtWordReader_t tReader ( pCurSeg, true, m_iWordsCheckpoint );
 
 		// find initial checkpoint or check words prior to 1st checkpoint
@@ -5696,9 +5692,9 @@ void RtIndex_t::GetInfixedWords ( const char * sInfix, int iBytes, const char * 
 	CSphVector<int> dPoints;
 
 	SmallStringHash_T<DocHitPair_t> hWords;
-	ARRAY_FOREACH ( iSeg, m_pSegments )
+	ARRAY_FOREACH ( iSeg, m_dSegments )
 	{
-		RtSegment_t * pSeg = m_pSegments[iSeg];
+		RtSegment_t * pSeg = m_dSegments[iSeg];
 		if ( !pSeg->m_dWords.GetLength() )
 			continue;
 
@@ -5767,14 +5763,14 @@ bool RtIndex_t::RtQwordSetup ( RtQword_t * pQword, const RtSegment_t * pSeg ) co
 	assert ( !pSeg );
 	pQword->m_iDocs = 0;
 	pQword->m_iHits = 0;
-	if ( !m_pSegments.GetLength() )
+	if ( !m_dSegments.GetLength() )
 		return true;
 
 	// we care about the results anyway though
 	// because if all (!) segments miss this word, we must notify the caller, right?
 	bool bFound = false;
-	ARRAY_FOREACH ( i, m_pSegments )
-		bFound |= RtQwordSetupSegment ( pQword, m_pSegments[i], false, m_bKeywordDict, m_iWordsCheckpoint );
+	ARRAY_FOREACH ( i, m_dSegments )
+		bFound |= RtQwordSetupSegment ( pQword, m_dSegments[i], false, m_bKeywordDict, m_iWordsCheckpoint );
 
 	// sanity check
 	assert (!( bFound==true && pQword->m_iDocs==0 ) );
@@ -5873,7 +5869,7 @@ struct SphFinalMatchCopy_t : ISphMatchProcessor
 
 struct SphFinalArenaCopy_t : ISphMatchProcessor
 {
-	const CSphVector<RtSegment_t *> & m_pSegments;
+	const CSphVector<RtSegment_t *> & m_dSegments;
 	const CSphVector<const BYTE *> & m_dDiskStrings;
 	const CSphVector<const DWORD *> & m_dDiskMva;
 	const CSphVector<CSphAttrTypedLocator> & m_dGetLoc;
@@ -5886,10 +5882,10 @@ struct SphFinalArenaCopy_t : ISphMatchProcessor
 	CSphTightVector<BYTE> m_dStorageString;
 	CSphTightVector<DWORD> m_dStorageMva;
 
-	SphFinalArenaCopy_t ( const CSphVector<RtSegment_t *> & pSegments, const CSphVector<const BYTE *> & dDiskStrings,
+	SphFinalArenaCopy_t ( const CSphVector<RtSegment_t *> & dSegments, const CSphVector<const BYTE *> & dDiskStrings,
 		const CSphVector<const DWORD *> & dDiskMva, const CSphVector<CSphAttrTypedLocator> & dGetLoc, const CSphVector<CSphAttrLocator> & dSetLoc,
 		int iJsonFields )
-		: m_pSegments ( pSegments )
+		: m_dSegments ( dSegments )
 		, m_dDiskStrings ( dDiskStrings )
 		, m_dDiskMva ( dDiskMva )
 		, m_dGetLoc ( dGetLoc )
@@ -5904,13 +5900,13 @@ struct SphFinalArenaCopy_t : ISphMatchProcessor
 
 	virtual void Process ( CSphMatch * pMatch )
 	{
-		assert ( pMatch->m_iTag>=1 && pMatch->m_iTag<m_pSegments.GetLength()+m_dDiskStrings.GetLength()+1 );
+		assert ( pMatch->m_iTag>=1 && pMatch->m_iTag<m_dSegments.GetLength()+m_dDiskStrings.GetLength()+1 );
 
-		const int iSegCount = m_pSegments.GetLength();
+		const int iSegCount = m_dSegments.GetLength();
 		const int iStorageSrc = pMatch->m_iTag-1;
 		bool bSegmentMatch = ( iStorageSrc<iSegCount );
-		const BYTE * pBaseString = bSegmentMatch ? m_pSegments[iStorageSrc]->m_dStrings.Begin() : m_dDiskStrings[ iStorageSrc-iSegCount ];
-		const DWORD * pBaseMva = bSegmentMatch ? m_pSegments[iStorageSrc]->m_dMvas.Begin() : m_dDiskMva[ iStorageSrc-iSegCount ];
+		const BYTE * pBaseString = bSegmentMatch ? m_dSegments[iStorageSrc]->m_dStrings.Begin() : m_dDiskStrings[ iStorageSrc-iSegCount ];
+		const DWORD * pBaseMva = bSegmentMatch ? m_dSegments[iStorageSrc]->m_dMvas.Begin() : m_dDiskMva[ iStorageSrc-iSegCount ];
 
 		int iJson = 0;
 		m_dOriginalJson.Resize ( 0 );
@@ -5930,7 +5926,7 @@ struct SphFinalArenaCopy_t : ISphMatchProcessor
 				if ( uOff>0 )
 				{
 					assert ( uOff<( I64C(1)<<32 ) ); // should be 32 bit offset
-					assert ( !bSegmentMatch || (int)uOff<m_pSegments[iStorageSrc]->m_dStrings.GetLength() );
+					assert ( !bSegmentMatch || (int)uOff<m_dSegments[iStorageSrc]->m_dStrings.GetLength() );
 					DWORD uRebased = CopyPackedString ( pBaseString + uOff, m_dStorageString );
 					iAttr = uRebased;
 					// store the map of full jsons in order to map json fields
@@ -5950,7 +5946,7 @@ struct SphFinalArenaCopy_t : ISphMatchProcessor
 				if ( pMva )
 				{
 					assert ( ( pMatch->GetAttr ( tLoc ) & MVA_ARENA_FLAG )<( I64C(1)<<32 ) ); // should be 32 bit offset
-					assert ( !bSegmentMatch || (int)pMatch->GetAttr ( tLoc )<m_pSegments[iStorageSrc]->m_dMvas.GetLength() );
+					assert ( !bSegmentMatch || (int)pMatch->GetAttr ( tLoc )<m_dSegments[iStorageSrc]->m_dMvas.GetLength() );
 					iAttr = CopyMva ( pMva, m_dStorageMva );
 				}
 			}
@@ -6150,7 +6146,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		tChunkResult.m_pProfile = pResult->m_pProfile;
 		CSphMultiQueryArgs tMultiArgs ( dCumulativeKList.GetLength() ? &dKListFilter : NULL, tArgs.m_iIndexWeight );
 		// storing index in matches tag for finding strings attrs offset later, biased against default zero and segments
-		tMultiArgs.m_iTag = m_pSegments.GetLength()+iChunk+1;;
+		tMultiArgs.m_iTag = m_dSegments.GetLength()+iChunk+1;;
 		tMultiArgs.m_bFactors = tArgs.m_bFactors;
 		tMultiArgs.m_bLocalDF = bGotLocalDF;
 		tMultiArgs.m_pLocalDocs = pLocalDocs;
@@ -6311,7 +6307,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	tStat.DumpDiffer ( pResult->m_hWordStats, m_sIndexName.cstr(), pResult->m_sWarning );
 
 	// empty index, empty result
-	if ( !m_pSegments.GetLength() && !m_pDiskChunks.GetLength() )
+	if ( !m_dSegments.GetLength() && !m_pDiskChunks.GetLength() )
 	{
 		pResult->m_iQueryTime = 0;
 		m_tRwlock.Unlock ();
@@ -6323,7 +6319,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	// search segments no looking to max_query_time
 	// FIXME!!! move searching at segments before disk chunks as result set is safe with kill-lists
-	if ( m_pSegments.GetLength() )
+	if ( m_dSegments.GetLength() )
 	{
 		// setup filters
 		// FIXME! setup filters MVA pool
@@ -6361,18 +6357,18 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			tMatch.Reset ( dSorters[iMaxSchemaIndex]->GetSchema().GetDynamicSize() );
 			tMatch.m_iWeight = tArgs.m_iIndexWeight;
 
-			ARRAY_FOREACH ( iSeg, m_pSegments )
+			ARRAY_FOREACH ( iSeg, m_dSegments )
 			{
 				// set string pool for string on_sort expression fix up
-				tCtx.SetStringPool ( m_pSegments[iSeg]->m_dStrings.Begin() );
-				tCtx.SetMVAPool ( m_pSegments[iSeg]->m_dMvas.Begin() );
+				tCtx.SetStringPool ( m_dSegments[iSeg]->m_dStrings.Begin() );
+				tCtx.SetMVAPool ( m_dSegments[iSeg]->m_dMvas.Begin() );
 				ARRAY_FOREACH ( i, dSorters )
 				{
-					dSorters[i]->SetStringPool ( m_pSegments[iSeg]->m_dStrings.Begin() );
-					dSorters[i]->SetMVAPool ( m_pSegments[iSeg]->m_dMvas.Begin() );
+					dSorters[i]->SetStringPool ( m_dSegments[iSeg]->m_dStrings.Begin() );
+					dSorters[i]->SetMVAPool ( m_dSegments[iSeg]->m_dMvas.Begin() );
 				}
 
-				RtRowIterator_t tIt ( m_pSegments[iSeg], m_iStride, false, NULL );
+				RtRowIterator_t tIt ( m_dSegments[iSeg], m_iStride, false, NULL );
 				for ( ;; )
 				{
 					const CSphRowitem * pRow = tIt.GetNextAliveRow();
@@ -6420,24 +6416,24 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		} else
 		{
 			// query matching
-			ARRAY_FOREACH ( iSeg, m_pSegments )
+			ARRAY_FOREACH ( iSeg, m_dSegments )
 			{
-				tTermSetup.m_pSeg = m_pSegments[iSeg];
+				tTermSetup.m_pSeg = m_dSegments[iSeg];
 				pRanker->Reset ( tTermSetup );
 
 				// for lookups to work
-				tCtx.m_pIndexData = m_pSegments[iSeg];
+				tCtx.m_pIndexData = m_dSegments[iSeg];
 
 				// set string pool for string on_sort expression fix up
-				tCtx.SetStringPool ( m_pSegments[iSeg]->m_dStrings.Begin() );
-				tCtx.SetMVAPool ( m_pSegments[iSeg]->m_dMvas.Begin() );
+				tCtx.SetStringPool ( m_dSegments[iSeg]->m_dStrings.Begin() );
+				tCtx.SetMVAPool ( m_dSegments[iSeg]->m_dMvas.Begin() );
 				ARRAY_FOREACH ( i, dSorters )
 				{
-					dSorters[i]->SetStringPool ( m_pSegments[iSeg]->m_dStrings.Begin() );
-					dSorters[i]->SetMVAPool ( m_pSegments[iSeg]->m_dMvas.Begin() );
+					dSorters[i]->SetStringPool ( m_dSegments[iSeg]->m_dStrings.Begin() );
+					dSorters[i]->SetMVAPool ( m_dSegments[iSeg]->m_dMvas.Begin() );
 				}
-				pRanker->ExtraData ( EXTRA_SET_MVAPOOL, (void**)m_pSegments[iSeg]->m_dMvas.Begin() );
-				pRanker->ExtraData ( EXTRA_SET_STRINGPOOL, (void**)m_pSegments[iSeg]->m_dStrings.Begin() );
+				pRanker->ExtraData ( EXTRA_SET_MVAPOOL, (void**)m_dSegments[iSeg]->m_dMvas.Begin() );
+				pRanker->ExtraData ( EXTRA_SET_STRINGPOOL, (void**)m_dSegments[iSeg]->m_dStrings.Begin() );
 
 				CSphMatch * pMatch = pRanker->GetMatchesBuffer();
 				for ( ;; )
@@ -6448,10 +6444,10 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 					for ( int i=0; i<iMatches; i++ )
 					{
-						assert ( !tCtx.m_bLookupSort || FindDocinfo ( m_pSegments[iSeg], pMatch[i].m_iDocID ) );
+						assert ( !tCtx.m_bLookupSort || FindDocinfo ( m_dSegments[iSeg], pMatch[i].m_iDocID ) );
 
 						if ( tCtx.m_bLookupSort )
-							CopyDocinfo ( pMatch[i], FindDocinfo ( m_pSegments[iSeg], pMatch[i].m_iDocID ) );
+							CopyDocinfo ( pMatch[i], FindDocinfo ( m_dSegments[iSeg], pMatch[i].m_iDocID ) );
 
 						pMatch[i].m_iWeight *= tArgs.m_iIndexWeight;
 						if ( bRandomize )
@@ -6485,7 +6481,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 					if ( iCutoff==0 )
 					{
-						iSeg = m_pSegments.GetLength();
+						iSeg = m_dSegments.GetLength();
 						break;
 					}
 				}
@@ -6541,7 +6537,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// result set has arena attributes (STRING and MVA) (all these attrs should be at one pool)
 	bool bOptimizing = m_bOptimizing;
 	bool bHasArenaAttrs = ( dSetLoc.GetLength()>0 );
-	const int iSegmentsTotal = m_pSegments.GetLength();
+	const int iSegmentsTotal = m_dSegments.GetLength();
 	bool bSegmentMatchesFixup = ( m_tSchema.GetStaticSize()>0 && iSegmentsTotal>0 );
 	if ( bSegmentMatchesFixup || bHasArenaAttrs || bOptimizing )
 	{
@@ -6600,7 +6596,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	if ( bHasArenaAttrs || bOptimizing )
 	{
 		assert ( !pResult->m_pStrings && !pResult->m_pMva );
-		SphFinalArenaCopy_t fnArena ( m_pSegments, dDiskStrings, dDiskMva, dGetLoc, dSetLoc, iJsonFields );
+		SphFinalArenaCopy_t fnArena ( m_dSegments, dDiskStrings, dDiskMva, dGetLoc, dSetLoc, iJsonFields );
 
 		ARRAY_FOREACH ( iSorter, dSorters )
 		{
@@ -6698,8 +6694,8 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 				tQword.m_iWordID = iWord;
 				tQword.m_sWord = tInfo.m_sTokenized;
 				tQword.m_sDictWord = tInfo.m_sNormalized;
-				ARRAY_FOREACH ( iSeg, m_pSegments )
-					RtQwordSetupSegment ( &tQword, m_pSegments[iSeg], false, m_bKeywordDict, m_iWordsCheckpoint );
+				ARRAY_FOREACH ( iSeg, m_dSegments )
+					RtQwordSetupSegment ( &tQword, m_dSegments[iSeg], false, m_bKeywordDict, m_iWordsCheckpoint );
 
 				tInfo.m_iDocs = tQword.m_iDocs;
 				tInfo.m_iHits = tQword.m_iHits;
@@ -6723,8 +6719,8 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 				tQword.m_iWordID = iWord;
 				tQword.m_sWord = tInfo.m_sTokenized;
 				tQword.m_sDictWord = (const char *)sWord;
-				ARRAY_FOREACH ( iSeg, m_pSegments )
-					RtQwordSetupSegment ( &tQword, m_pSegments[iSeg], false, m_bKeywordDict, m_iWordsCheckpoint );
+				ARRAY_FOREACH ( iSeg, m_dSegments )
+					RtQwordSetupSegment ( &tQword, m_dSegments[iSeg], false, m_bKeywordDict, m_iWordsCheckpoint );
 
 				tInfo.m_iDocs += tQword.m_iDocs;
 				tInfo.m_iHits += tQword.m_iHits;
@@ -6925,7 +6921,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 	assert ( tUpd.m_bIgnoreNonexistent || ( dLocators.GetLength()==tUpd.m_dAttrs.GetLength() ) );
 
 	// check if we are empty
-	if ( !m_pSegments.GetLength() && !m_pDiskChunks.GetLength() )
+	if ( !m_dSegments.GetLength() && !m_pDiskChunks.GetLength() )
 	{
 		return true;
 	}
@@ -6949,9 +6945,9 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 		for ( int iUpd=iFirst; iUpd<iLast; iUpd++ )
 		{
 			// search segments first
-			for ( int iSeg=0; iSeg<m_pSegments.GetLength() && ( !bRaw || !iSeg ); iSeg++ )
+			for ( int iSeg=0; iSeg<m_dSegments.GetLength() && ( !bRaw || !iSeg ); iSeg++ )
 			{
-				CSphRowitem * pRow = const_cast<CSphRowitem*> ( bRaw? tUpd.m_dRows[iUpd] : m_pSegments[iSeg]->FindAliveRow ( tUpd.m_dDocids[iUpd] ) );
+				CSphRowitem * pRow = const_cast<CSphRowitem*> ( bRaw? tUpd.m_dRows[iUpd] : m_dSegments[iSeg]->FindAliveRow ( tUpd.m_dDocids[iUpd] ) );
 				if ( !pRow )
 					continue;
 
@@ -6966,7 +6962,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 							? JSON_DOUBLE
 							: ( dBigints[iCol] ? JSON_INT64 : JSON_INT32 );
 
-						if ( !sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), m_pSegments[iSeg]->m_dStrings.Begin(), pRow, false ) )
+						if ( !sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), m_dSegments[iSeg]->m_dStrings.Begin(), pRow, false ) )
 						{
 							m_tRwlock.Unlock();
 							sError.SetSprintf ( "attribute '%s' can not be updated (not found or incompatible types)", tUpd.m_dAttrs[iCol] );
@@ -6983,9 +6979,9 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 	{
 		// search segments first
 		bool bUpdated = false;
-		for ( int iSeg=0; iSeg<m_pSegments.GetLength() && ( !bRaw || !iSeg ); iSeg++ )
+		for ( int iSeg=0; iSeg<m_dSegments.GetLength() && ( !bRaw || !iSeg ); iSeg++ )
 		{
-			CSphRowitem * pRow = const_cast<CSphRowitem*> ( bRaw? tUpd.m_dRows[iUpd] : m_pSegments[iSeg]->FindAliveRow ( tUpd.m_dDocids[iUpd] ) );
+			CSphRowitem * pRow = const_cast<CSphRowitem*> ( bRaw? tUpd.m_dRows[iUpd] : m_dSegments[iSeg]->FindAliveRow ( tUpd.m_dDocids[iUpd] ) );
 			if ( !pRow )
 				continue;
 
@@ -6997,15 +6993,15 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 			{
 				if ( !bRaw )
 				{
-					pStorageMVA = &m_pSegments[iSeg]->m_dMvas;
+					pStorageMVA = &m_dSegments[iSeg]->m_dMvas;
 				} else
 				{
-					ARRAY_FOREACH ( iMva, m_pSegments )
+					ARRAY_FOREACH ( iMva, m_dSegments )
 					{
-						const CSphTightVector<CSphRowitem> & dSegRows = m_pSegments[iMva]->m_dRows;
+						const CSphTightVector<CSphRowitem> & dSegRows = m_dSegments[iMva]->m_dRows;
 						if ( dSegRows.Begin()<=pRow && pRow<dSegRows.Begin()+dSegRows.GetLength() )
 						{
-							pStorageMVA = &m_pSegments[iMva]->m_dMvas;
+							pStorageMVA = &m_dSegments[iMva]->m_dMvas;
 							break;
 						}
 					}
@@ -7022,7 +7018,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 						? JSON_DOUBLE
 						: ( dBigints[iCol] ? JSON_INT64 : JSON_INT32 );
 
-					if ( sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), m_pSegments[iSeg]->m_dStrings.Begin(), pRow, true ) )
+					if ( sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), m_dSegments[iSeg]->m_dStrings.Begin(), pRow, true ) )
 					{
 						bUpdated = true;
 						uUpdateMask |= ATTRS_STRINGS_UPDATED;
@@ -7339,9 +7335,9 @@ bool RtIndex_t::AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType,
 			sphWarning ( "adding attribute to %s.%d: %s", m_sPath.cstr(), iDiskChunk+m_iDiskBase, sError.cstr() );
 
 	// now modify the ramchunk
-	ARRAY_FOREACH ( iSegment, m_pSegments )
+	ARRAY_FOREACH ( iSegment, m_dSegments )
 	{
-		RtSegment_t * pSeg = m_pSegments[iSegment];
+		RtSegment_t * pSeg = m_dSegments[iSegment];
 		assert ( pSeg );
 		CSphTightVector<CSphRowitem> dNewRows;
 		dNewRows.Resize ( pSeg->m_dRows.GetLength() / iOldStride * m_iStride );
@@ -7382,7 +7378,7 @@ bool RtIndex_t::AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType,
 
 bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 {
-	bool bEmptyRT = ( !m_pSegments.GetLength() && !m_pDiskChunks.GetLength() );
+	bool bEmptyRT = ( !m_dSegments.GetLength() && !m_pDiskChunks.GetLength() );
 
 	// safeguards
 	// we do not support some of the disk index features in RT just yet
@@ -7437,7 +7433,7 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 		m_dDiskChunkKlist.Reset ( m_tKlist.GetKillListSize() );
 		memcpy ( m_dDiskChunkKlist.Begin(), m_tKlist.GetKillList(), sizeof(SphAttr_t)*m_tKlist.GetKillListSize() );
 
-		SaveDiskChunk ( m_iTID, m_pSegments, m_tStats );
+		SaveDiskChunk ( m_iTID, m_dSegments, m_tStats );
 
 		// kill-list drying up
 		for ( int iIndex=m_pDiskChunks.GetLength()-1; iIndex>=0 && iCount; iIndex-- )
@@ -7573,9 +7569,9 @@ bool RtIndex_t::Truncate ( CSphString & )
 		SafeDelete ( m_pDiskChunks[i] );
 	m_pDiskChunks.Reset();
 
-	ARRAY_FOREACH ( i, m_pSegments )
-		SafeDelete ( m_pSegments[i] );
-	m_pSegments.Reset();
+	ARRAY_FOREACH ( i, m_dSegments )
+		SafeDelete ( m_dSegments[i] );
+	m_dSegments.Reset();
 
 	// we don't want kill list to work if we perform ATTACH right after this TRUNCATE
 	m_tKlist.Reset();
@@ -7768,8 +7764,8 @@ CSphIndexStatus RtIndex_t::GetStatus () const
 	Verify ( m_tRwlock.ReadLock() );
 
 	tRes.m_iRamUse = sizeof(RtIndex_t)
-		+ m_pSegments.GetSizeBytes()
-		+ m_pSegments.GetLength()*int(sizeof(RtSegment_t))
+		+ m_dSegments.GetSizeBytes()
+		+ m_dSegments.GetLength()*int(sizeof(RtSegment_t))
 		+ m_dNewSegmentKlist.GetSizeBytes()
 		+ m_dDiskChunkKlist.GetSizeBytes()
 		+ m_pDiskChunks.GetSizeBytes();

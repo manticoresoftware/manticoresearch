@@ -1078,7 +1078,7 @@ in XML file to corresponding schema element. This mapping requires some time.
 And time increases with increasing the number of fields and attributes in
 schema. There is no such issue in tsvpipe because each field and attribute
 is a particular column in TSV file. So, in some cases tsvpipe could work
-slightly faster than xmlpipe2.
+slightly faster than xmlpipe2. Added in 2.2.1-beta.
 </para>
 <para>
 The first column in TSV file must be a document ID. The rest ones must mirror
@@ -5016,10 +5016,6 @@ Known flags are:
 by query word count, so that TF*IDF fits into [0, 1] range</para></listitem>
 <listitem><para>tfidf_unnormalized (added in 2.2.1-beta): do not additionally
 divide IDF by query word count</para></listitem>
-<listitem><para>local_df (added in 2.2.1-beta): automatically sum DFs over all the
-local parts of a distributed index, so that the IDF is consistent (and precise) over
-a locally sharded index.
-</para></listitem>
 </itemizedlist>
 where <b>N</b> is the collection size and <b>n</b> is the number of matched
 documents.
@@ -5052,6 +5048,10 @@ IDF flags can be mixed; 'plain' and 'normalized' are mutually exclusive;
 and unspecified flags in such a mutually exclusive group take their
 defaults. That means that <code>OPTION idf=plain</code> is equivalent
 to a complete <code>OPTION idf='plain,tfidf_normalized'</code> specification.
+</para></listitem>
+<listitem><para>local_df (added in 2.2.1-beta):  0 or 1,automatically sum DFs over all the
+local parts of a distributed index, so that the IDF is consistent (and precise) over
+a locally sharded index.
 </para></listitem>
 <listitem><para>'index_weights' - a named integer list (per-index user weights for ranking)</para></listitem>
 <listitem><para>'max_matches' - integer (per-query max matches value)</para></listitem>
@@ -5098,6 +5098,8 @@ SHOW META [ LIKE pattern ]
 </programlisting>
 <para><b>SHOW META</b> shows additional meta-information about the latest
 query such as query time and keyword statistics. IO and CPU counters will only be available if searchd was started with --iostats and --cpustats switches respectively.
+Additional predicted_time, dist_predicted_time, [{local|dist}]_fetched_[{docs|hits|skips}] counters will only be available if searchd was configured with  
+<link  linkend="conf-predicted-time-costs">predicted time costs</link> and query  had  predicted_time in OPTION clause.
 <programlisting>
 mysql> SELECT * FROM test1 WHERE MATCH('test|one|two');
 +------+--------+----------+------------+
@@ -6371,7 +6373,7 @@ those include:
 the documents indexed and their text size in bytes, respectively.</listitem>
 <listitem><b>field_tokens_XXX</b>, sums of per-field lengths (in tokens)
 over the entire index (that is used internally in BM25A and BM25F functions
-for ranking purposes). Only available for indexes built with index_field_lenghts=1.</listitem>
+for ranking purposes). Only available for indexes built with index_field_lengths=1.</listitem>
 <listitem><b>ram_bytes</b>, total size (in bytes) of the RAM-resident
 index portion.
 </listitem>
@@ -6379,17 +6381,19 @@ index portion.
 </para>
 <programlisting>
 mysql&gt; SHOW INDEX lj STATUS;
-+----------------------+------------+
-| Variable_name        | Value      |
-+----------------------+------------+
-| index_type           | disk       |
-| indexed_documents    | 999944     |
-| indexed_bytes        | 1115085501 |
-| field_tokens_title   | 2473915    |
-| field_tokens_content | 191050669  |
-| ram_bytes            | 64705411   |
-+----------------------+------------+
-6 rows in set (0.00 sec)
++--------------------+-------------+
+| Variable_name      | Value       |
++--------------------+-------------+
+| index_type         | disk        |
+| indexed_documents  | 2495219     |
+| indexed_bytes      | 10380483879 |
+| field_tokens_title | 6999145     |
+| field_tokens_body  | 1501825050  |
+| total_tokens       | 1508824195  |
+| ram_bytes          | 305963599   |
+| disk_bytes         | 5455804365  |
++--------------------+-------------+
+8 rows in set (0.00 sec)
 </programlisting>
 </sect1>
 
@@ -12430,20 +12434,33 @@ of pooled attributes (string/JSON/MVA) or when you're using many indexes
 per daemon that don't consume memory. It is not possible to update
 attributes left on disk when this option is enabled and the constraint
 of 4Gb of entries per pool is still in effect.
-
-Possible values:
+</para>
+<bridgehead>Possible values:</bridgehead>
+<itemizedlist>
+<listitem>
 0 - disabled and default value, all attributes are loaded in memory
 (the normal behaviour of docinfo = extern)
+</listitem>
+<listitem>
 1 - all attributes stay on disk. Daemon loads no files (spa, spm, sps).
 This is the most memory conserving mode, however it is also the slowest
 as the whole doc-id-list and block index doesn't load.
+</listitem>
+<listitem>
 pool - only pooled attributes stay on disk. Pooled attributes are string,
 MVA, and JSON attributes (sps, spm files). Scalar attributes stored in
 docinfo (spa file) load as usual.
-
+</listitem>
+</itemizedlist>
+<para>
 This option does not affect indexing in any way, it only requires daemon
 restart.
 </para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+ondisk_attrs = pool #keep pooled attributes on disk
+</programlisting>
+
 </sect2>
 
 </sect1>
@@ -14135,7 +14152,7 @@ rlp_max_batch_docs = 100
   <listitem><para>fixed #1753, path to re2 sources could not be set using <option>--with-re2</option>, options <option>--with-re2-libs</option> and <option>--with-re2-includes</option> added to <filename>configure</filename></para></listitem>
   <listitem><para>fixed #1739, erroneous conversion of RAM chunk into disk chunk when loading id32 index with id64 binary</para></listitem>
   <listitem><para>fixed #1738, unlinking RAM chunk when converting it to disk chunk</para></listitem>
-  <listitem><para>fixed #1710, unable to filter by attributes created by index_field_lenghts=1</para></listitem>
+  <listitem><para>fixed #1710, unable to filter by attributes created by index_field_lengths=1</para></listitem>
   <listitem><para>fixed #1716, random crash with with multiple running threads</para></listitem>
   <listitem><para>fixed crash while querying index with lemmatizer and wordforms</para></listitem>
 </itemizedlist>

@@ -1050,47 +1050,6 @@ struct CSphWordlistCheckpoint_v10
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// ordinals accumulation and sorting
-struct Ordinal_t
-{
-	SphDocID_t	m_uDocID;	///< doc id
-	CSphString	m_sValue;	///< string value
-};
-
-
-struct OrdinalEntry_t : public Ordinal_t
-{
-	int	m_iTag;
-};
-
-
-struct OrdinalId_t
-{
-	SphDocID_t	m_uDocID;
-	DWORD		m_uId;
-};
-
-
-struct OrdinalIdEntry_t : public OrdinalId_t
-{
-	int	m_iTag;
-};
-
-void Swap ( Ordinal_t & a, Ordinal_t & b )
-{
-	Swap ( a.m_uDocID, b.m_uDocID );
-	Swap ( a.m_sValue, b.m_sValue );
-}
-
-void Swap ( OrdinalEntry_t & a, OrdinalEntry_t & b )
-{
-	Swap ( a.m_uDocID, b.m_uDocID );
-	Swap ( a.m_sValue, b.m_sValue );
-	Swap ( a.m_iTag, b.m_iTag );
-}
-
-//////////////////////////////////////////////////////////////////////////
-
 static void ReadFileInfo ( CSphReader & tReader, const char * szFilename, CSphSavedFile & tFile, CSphString * sWarning )
 {
 	tFile.m_uSize = tReader.GetOffset ();
@@ -1595,14 +1554,6 @@ private:
 	bool						PrecomputeMinMax();
 
 private:
-	static const int MAX_ORDINAL_STR_LEN	= 4096;	///< maximum ordinal string length in bytes
-	static const int ORDINAL_READ_SIZE		= 262144;	///< sorted ordinal id read buffer size in bytes
-
-	ESphBinRead					ReadOrdinal ( CSphBin & Reader, Ordinal_t & Ordinal );
-	SphOffset_t					DumpOrdinals ( CSphWriter & Writer, CSphVector<Ordinal_t> & dOrdinals );
-	bool						SortOrdinals ( const char * szToFile, int iFromFD, int iArenaSize, int iOrdinalsInPool, CSphVector< CSphVector<SphOffset_t> > & dOrdBlockSize, bool bWarnOfMem );
-	bool						SortOrdinalIds ( const char * szToFile, int iFromFD, int iArenaSize, CSphVector < CSphVector < SphOffset_t > > & dOrdBlockSize, bool bWarnOfMem );
-
 	bool						LoadPersistentMVA ( CSphString & sError );
 
 	bool						JuggleFile ( const char* szExt, CSphString & sError, bool bNeedOrigin=true ) const;
@@ -12046,31 +11997,6 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphFix
 }
 
 
-struct CmpOrdinalsValue_fn
-{
-	inline bool IsLess ( const Ordinal_t & a, const Ordinal_t & b ) const
-	{
-		return strcmp ( a.m_sValue.cstr(), b.m_sValue.cstr() )<0;
-	}
-};
-
-struct CmpOrdinalsEntry_fn
-{
-	static inline bool IsLess ( const OrdinalEntry_t & a, const OrdinalEntry_t & b )
-	{
-		return strcmp ( a.m_sValue.cstr(), b.m_sValue.cstr() )<0;
-	}
-};
-
-struct CmpOrdinalsDocid_fn
-{
-	inline bool IsLess ( const OrdinalId_t & a, const OrdinalId_t & b ) const
-	{
-		return a.m_uDocID < b.m_uDocID;
-	}
-};
-
-
 struct CmpMvaEntries_fn
 {
 	inline bool IsLess ( const MvaEntry_t & a, const MvaEntry_t & b ) const
@@ -12078,316 +12004,6 @@ struct CmpMvaEntries_fn
 		return a<b;
 	}
 };
-
-struct CmpOrdinalIdEntry_fn
-{
-	static inline bool IsLess ( const OrdinalIdEntry_t & a, const OrdinalIdEntry_t & b )
-	{
-		return a.m_uDocID < b.m_uDocID;
-	}
-};
-
-
-SphOffset_t CSphIndex_VLN::DumpOrdinals ( CSphWriter & Writer, CSphVector<Ordinal_t> & dOrdinals )
-{
-	SphOffset_t uSize = ( sizeof ( SphDocID_t ) + sizeof ( DWORD ) ) * dOrdinals.GetLength ();
-
-	ARRAY_FOREACH ( i, dOrdinals )
-	{
-		Ordinal_t & Ord = dOrdinals[i];
-
-		DWORD uValueLen = Ord.m_sValue.cstr () ? strlen ( Ord.m_sValue.cstr () ) : 0;
-		Writer.PutBytes ( &(Ord.m_uDocID), sizeof ( Ord.m_uDocID ) );
-		Writer.PutBytes ( &uValueLen, sizeof ( uValueLen ) );
-		Writer.PutBytes ( Ord.m_sValue.cstr (), uValueLen );
-		uSize += uValueLen;
-
-		if ( Writer.IsError () )
-			return 0;
-	}
-
-	return uSize;
-}
-
-
-ESphBinRead CSphIndex_VLN::ReadOrdinal ( CSphBin & Reader, Ordinal_t & Ordinal )
-{
-	ESphBinRead eRes = Reader.ReadBytes ( &Ordinal.m_uDocID, sizeof ( Ordinal.m_uDocID ) );
-	if ( eRes!=BIN_READ_OK )
-		return eRes;
-
-	DWORD uStrLen;
-	eRes = Reader.ReadBytes ( &uStrLen, sizeof ( DWORD ) );
-	if ( eRes!=BIN_READ_OK )
-		return eRes;
-
-	if ( uStrLen>=(DWORD)MAX_ORDINAL_STR_LEN )
-		return BIN_READ_ERROR;
-
-	char dBuffer [MAX_ORDINAL_STR_LEN];
-
-	if ( uStrLen > 0 )
-	{
-		eRes = Reader.ReadBytes ( dBuffer, uStrLen );
-		if ( eRes!=BIN_READ_OK )
-			return eRes;
-	}
-
-	dBuffer [uStrLen] = '\0';
-	Ordinal.m_sValue = dBuffer;
-
-	return BIN_READ_OK;
-}
-
-
-bool CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iArenaSize,
-	int iOrdinalsInPool, CSphVector < CSphVector < SphOffset_t > > & dOrdBlockSize, bool bWarnOfMem )
-{
-	int nAttrs = dOrdBlockSize.GetLength ();
-	int nBlocks = dOrdBlockSize[0].GetLength ();
-
-	CSphWriter Writer;
-	if ( !Writer.OpenFile ( szToFile, m_sLastError ) )
-		return false;
-
-	int iBinSize = CSphBin::CalcBinSize ( iArenaSize, nBlocks, "ordinals", bWarnOfMem );
-	SphOffset_t iSharedOffset = -1;
-
-	CSphQueue < OrdinalEntry_t, CmpOrdinalsEntry_fn > qOrdinals ( Max ( 1, nBlocks ) );
-	OrdinalEntry_t tOrdinalEntry;
-	DWORD uOrdinalId = 0;
-
-	CSphVector < OrdinalId_t > dOrdinalIdPool;
-	dOrdinalIdPool.Reserve ( nBlocks );
-
-	CSphVector < CSphVector < SphOffset_t > > dStarts;
-	dStarts.Resize ( nAttrs );
-	ARRAY_FOREACH ( i, dStarts )
-		dStarts[i].Resize ( nBlocks );
-
-	SphOffset_t uStart = 0;
-	for ( int iBlock = 0; iBlock < nBlocks; iBlock++ )
-		for ( int iAttr = 0; iAttr < nAttrs; iAttr++ )
-		{
-			dStarts [iAttr][iBlock] = uStart;
-			uStart += dOrdBlockSize [iAttr][iBlock];
-		}
-
-	for ( int iAttr = 0; iAttr < nAttrs; iAttr++ )
-	{
-		CSphVector < CSphBin > dBins;
-		dBins.Resize ( nBlocks );
-
-		ARRAY_FOREACH ( i, dBins )
-		{
-			dBins[i].m_iFileLeft = (int)dOrdBlockSize[iAttr][i];
-			dBins[i].m_iFilePos = dStarts[iAttr][i];
-			dBins[i].Init ( iFromFD, &iSharedOffset, iBinSize );
-		}
-
-		dOrdBlockSize [iAttr].Resize ( 0 );
-
-		for ( int iBlock = 0; iBlock < nBlocks; iBlock++ )
-		{
-			if ( ReadOrdinal ( dBins [iBlock], tOrdinalEntry )!=BIN_READ_OK )
-			{
-				m_sLastError = "sort_ordinals: warmup failed (io error?)";
-				return false;
-			}
-
-			tOrdinalEntry.m_iTag = iBlock;
-			qOrdinals.Push ( tOrdinalEntry );
-		}
-
-		SphDocID_t uCurID = 0;
-
-		CSphString sLastOrdValue;
-		int iMyBlock = 0;
-
-		for ( ;; )
-		{
-			if ( !qOrdinals.GetLength () || qOrdinals.Root ().m_uDocID!=uCurID )
-			{
-				if ( uCurID )
-				{
-					OrdinalId_t tId;
-					tId.m_uDocID = uCurID;
-					tId.m_uId = uOrdinalId;
-					dOrdinalIdPool.Add ( tId );
-
-					if ( qOrdinals.GetLength () > 0 )
-					{
-						if ( sLastOrdValue.cstr()[0]!=qOrdinals.Root ().m_sValue.cstr()[0] )
-							uOrdinalId++;
-						else
-							if ( strcmp ( sLastOrdValue.cstr (), qOrdinals.Root ().m_sValue.cstr () ) )
-								uOrdinalId++;
-					}
-
-					if ( dOrdinalIdPool.GetLength()==iOrdinalsInPool )
-					{
-						dOrdinalIdPool.Sort ( CmpOrdinalsDocid_fn () );
-						Writer.PutBytes ( &dOrdinalIdPool[0], sizeof(OrdinalId_t)*dOrdinalIdPool.GetLength() );
-						if ( Writer.IsError () )
-						{
-							m_sLastError = "sort_ordinals: io error";
-							return false;
-						}
-
-						dOrdBlockSize [iAttr].Add ( dOrdinalIdPool.GetLength () * sizeof ( OrdinalId_t ) );
-						dOrdinalIdPool.Resize ( 0 );
-					}
-				}
-
-				if ( !qOrdinals.GetLength () )
-					break;
-
-				uCurID = qOrdinals.Root().m_uDocID;
-				const_cast < CSphString & > ( qOrdinals.Root ().m_sValue ).Swap ( sLastOrdValue );
-			}
-
-			// get next entry
-			iMyBlock = qOrdinals.Root().m_iTag;
-			qOrdinals.Pop ();
-
-			ESphBinRead eRes = ReadOrdinal ( dBins [iMyBlock], tOrdinalEntry );
-			tOrdinalEntry.m_iTag = iMyBlock;
-			if ( eRes==BIN_READ_OK )
-				qOrdinals.Push ( tOrdinalEntry );
-
-			if ( eRes==BIN_READ_ERROR )
-			{
-				m_sLastError = "sort_ordinals: read error";
-				return false;
-			}
-		}
-
-		// flush last ordinal ids
-		if ( dOrdinalIdPool.GetLength () )
-		{
-			dOrdinalIdPool.Sort ( CmpOrdinalsDocid_fn () );
-			Writer.PutBytes ( &dOrdinalIdPool[0], sizeof(OrdinalId_t)*dOrdinalIdPool.GetLength () );
-			if ( Writer.IsError () )
-			{
-				m_sLastError = "sort_ordinals: io error";
-				return false;
-			}
-
-			dOrdBlockSize [iAttr].Add ( dOrdinalIdPool.GetLength()*sizeof(OrdinalId_t) );
-			dOrdinalIdPool.Resize ( 0 );
-		}
-	}
-
-	Writer.CloseFile ();
-	if ( Writer.IsError () )
-		return false;
-
-	return true;
-}
-
-
-bool CSphIndex_VLN::SortOrdinalIds ( const char * szToFile, int iFromFD, int iArenaSize,
-	CSphVector < CSphVector < SphOffset_t > > & dOrdBlockSize, bool bWarnOfMem )
-{
-	int nAttrs = dOrdBlockSize.GetLength ();
-	int nMaxBlocks = 0;
-	ARRAY_FOREACH ( i, dOrdBlockSize )
-		if ( dOrdBlockSize[i].GetLength () > nMaxBlocks )
-			nMaxBlocks = dOrdBlockSize[i].GetLength ();
-
-	CSphWriter Writer;
-	if ( !Writer.OpenFile ( szToFile, m_sLastError ) )
-		return false;
-
-	int iBinSize = CSphBin::CalcBinSize ( iArenaSize, nMaxBlocks, "ordinals", bWarnOfMem );
-
-	SphOffset_t uStart = 0;
-	OrdinalIdEntry_t tOrdinalIdEntry;
-	OrdinalId_t tOrdinalId;
-
-	for ( int iAttr = 0; iAttr < nAttrs; ++iAttr )
-	{
-		int nBlocks = dOrdBlockSize [iAttr].GetLength ();
-		CSphQueue < OrdinalIdEntry_t, CmpOrdinalIdEntry_fn > qOrdinalIds ( Max ( 1, nBlocks ) );
-		CSphVector < CSphBin > dBins;
-		dBins.Resize ( nBlocks );
-
-		SphOffset_t iSharedOffset = -1;
-
-		ARRAY_FOREACH ( i, dBins )
-		{
-			dBins[i].m_iFileLeft = (int)dOrdBlockSize [iAttr][i];
-			dBins[i].m_iFilePos = uStart;
-			dBins[i].Init ( iFromFD, &iSharedOffset, iBinSize );
-
-			uStart += dBins[i].m_iFileLeft;
-		}
-
-		for ( int iBlock = 0; iBlock < nBlocks; iBlock++ )
-		{
-			if ( dBins[iBlock].ReadBytes ( &tOrdinalId, sizeof ( tOrdinalId ) )!=BIN_READ_OK )
-			{
-				m_sLastError = "sort_ordinals: warmup failed (io error?)";
-				return false;
-			}
-
-			tOrdinalIdEntry.m_uDocID = tOrdinalId.m_uDocID;
-			tOrdinalIdEntry.m_uId = tOrdinalId.m_uId;
-			tOrdinalIdEntry.m_iTag = iBlock;
-			qOrdinalIds.Push ( tOrdinalIdEntry );
-		}
-
-		OrdinalId_t tCachedId;
-		tCachedId.m_uDocID = 0;
-
-		SphOffset_t uResultSize = 0;
-
-		for ( ;; )
-		{
-			if ( !qOrdinalIds.GetLength () || qOrdinalIds.Root ().m_uDocID!=tCachedId.m_uDocID )
-			{
-				if ( tCachedId.m_uDocID )
-				{
-					uResultSize += sizeof ( OrdinalId_t );
-					Writer.PutBytes ( &tCachedId, sizeof ( OrdinalId_t ) );
-					if ( Writer.IsError () )
-					{
-						m_sLastError = "sort_ordinals: io error";
-						return false;
-					}
-				}
-
-				if ( !qOrdinalIds.GetLength () )
-					break;
-
-				tCachedId.m_uDocID = qOrdinalIds.Root().m_uDocID;
-				tCachedId.m_uId = qOrdinalIds.Root ().m_uId;
-			}
-
-			// get next entry
-			int iBlock = qOrdinalIds.Root().m_iTag;
-			qOrdinalIds.Pop ();
-
-			ESphBinRead eRes = dBins [iBlock].ReadBytes ( &tOrdinalId, sizeof ( tOrdinalId ) );
-			tOrdinalIdEntry.m_uDocID = tOrdinalId.m_uDocID;
-			tOrdinalIdEntry.m_uId = tOrdinalId.m_uId;
-			tOrdinalIdEntry.m_iTag = iBlock;
-			if ( eRes==BIN_READ_OK )
-				qOrdinalIds.Push ( tOrdinalIdEntry );
-
-			if ( eRes==BIN_READ_ERROR )
-			{
-				m_sLastError = "sort_ordinals: read error";
-				return false;
-			}
-		}
-
-		dOrdBlockSize [iAttr].Resize ( 0 );
-		dOrdBlockSize [iAttr].Add ( uResultSize );
-	}
-
-	return true;
-}
 
 struct FieldMVARedirect_t
 {
@@ -12614,8 +12230,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	CSphVector<int> dMvaIndexes;
 	CSphVector<CSphAttrLocator> dMvaLocators;
 
-	// ordinals and strings storage
-	CSphVector<int> dOrdinalAttrs;
+	// strings storage
 	CSphVector<int> dStringAttrs;
 
 	// chunks to partically sort string attributes
@@ -12636,10 +12251,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					bHaveFieldMVAs = true;
 				dMvaIndexes.Add ( i );
 				dMvaLocators.Add ( tCol.m_tLocator );
-				break;
-			case SPH_ATTR_ORDINAL:
-				if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN )
-					dOrdinalAttrs.Add ( i );
 				break;
 			case SPH_ATTR_STRING:
 			case SPH_ATTR_JSON:
@@ -12677,13 +12288,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		return 0;
 	}
 
-	bool bHaveOrdinals = ( dOrdinalAttrs.GetLength() > 0 );
-	if ( bHaveOrdinals && m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN )
-	{
-		m_sLastError.SetSprintf ( "ordinal string attributes require docinfo=extern (fix your config file)" );
-		return 0;
-	}
-
 	if ( dStringAttrs.GetLength() && m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN )
 	{
 		m_sLastError.SetSprintf ( "string attributes require docinfo=extern (fix your config file)" );
@@ -12708,11 +12312,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_NONE )
 		iDocinfoMax = 1;
 
-	// book at least 32 KB for ordinals, if needed
-	int iOrdinalPoolSize = Max ( 32768, iMemoryLimit/8 );
-	if ( !bHaveOrdinals )
-		iOrdinalPoolSize = 0;
-
 	// book at least 32 KB for field MVAs, if needed
 	int iFieldMVAPoolSize = Max ( 32768, iMemoryLimit/16 );
 	if ( bHaveFieldMVAs==0 )
@@ -12726,7 +12325,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	// do we have enough left for hits?
 	int iHitsMax = 1048576;
 
-	iMemoryLimit -= iDocinfoMax*iDocinfoStride*sizeof(DWORD) + iOrdinalPoolSize + iFieldMVAPoolSize + iDictSize;
+	iMemoryLimit -= iDocinfoMax*iDocinfoStride*sizeof(DWORD) + iFieldMVAPoolSize + iDictSize;
 	if ( iMemoryLimit < iHitsMax*(int)sizeof(CSphWordHit) )
 	{
 		iMemoryLimit = iOldLimit + iHitsMax*sizeof(CSphWordHit) - iMemoryLimit;
@@ -12754,22 +12353,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		pDocinfo = NULL;
 		pDocinfoMax = NULL;
 	}
-
-	int nOrdinals = 0;
-	SphOffset_t uMaxOrdinalAttrBlockSize = 0;
-	int iCurrentBlockSize = 0;
-
-	CSphVector < CSphVector < Ordinal_t > > dOrdinals;
-	dOrdinals.Resize ( dOrdinalAttrs.GetLength() );
-	ARRAY_FOREACH ( i, dOrdinals )
-		dOrdinals[i].Reserve ( 65536 );
-
-	CSphVector < CSphVector<SphOffset_t> > dOrdBlockSize;
-	dOrdBlockSize.Resize ( dOrdinalAttrs.GetLength () );
-	ARRAY_FOREACH ( i, dOrdBlockSize )
-		dOrdBlockSize[i].Reserve ( 8192 );
-
-	int iMaxOrdLen = 0;
 
 	CSphVector < MvaEntry_t > dFieldMVAs;
 	dFieldMVAs.Reserve ( 16384 );
@@ -12810,13 +12393,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	CSphAutofile fdHits ( GetIndexFileName ( m_bInplaceSettings ? "spp" : "tmp1" ), SPH_O_NEW, m_sLastError, !m_bInplaceSettings );
 	CSphAutofile fdDocinfos ( GetIndexFileName ( m_bInplaceSettings ? "spa" : "tmp2" ), SPH_O_NEW, m_sLastError, !m_bInplaceSettings );
 	CSphAutofile fdTmpFieldMVAs ( GetIndexFileName("tmp7"), SPH_O_NEW, m_sLastError, true );
-	CSphWriter tOrdWriter;
 	CSphWriter tStrWriter;
 	CSphWriter tStrFinalWriter;
-
-	CSphString sRawOrdinalsFile = GetIndexFileName("tmp4");
-	if ( bHaveOrdinals && !tOrdWriter.OpenFile ( sRawOrdinalsFile.cstr (), m_sLastError ) )
-		return 0;
 
 	if ( !tStrWriter.OpenFile ( GetIndexFileName("tmps"), m_sLastError ) )
 		return 0;
@@ -13043,58 +12621,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 							nFieldMVAs += iMaxPoolFieldMVAs;
 						}
-					}
-				}
-			}
-
-			// store ordinals
-			iCurrentBlockSize += ( sizeof ( SphOffset_t ) + sizeof ( DWORD ) ) * dOrdinalAttrs.GetLength ();
-
-			ARRAY_FOREACH ( i, dOrdinalAttrs )
-			{
-				CSphVector<Ordinal_t> & dCol = dOrdinals[i];
-				dCol.Add();
-
-				Ordinal_t & tLastOrd = dCol.Last();
-				tLastOrd.m_uDocID = pSource->m_tDocInfo.m_iDocID;
-				Swap ( tLastOrd.m_sValue, pSource->m_dStrAttrs[dOrdinalAttrs[i]] );
-				int iOrdStrLen = strlen ( tLastOrd.m_sValue.cstr () );
-				if ( iOrdStrLen > MAX_ORDINAL_STR_LEN )
-				{
-					iMaxOrdLen = iOrdStrLen;
-
-					// truncate
-					iOrdStrLen = MAX_ORDINAL_STR_LEN;
-					tLastOrd.m_sValue = tLastOrd.m_sValue.SubString ( 0, iOrdStrLen - 1 );
-				}
-
-				iCurrentBlockSize += iOrdStrLen;
-			}
-
-			if ( bHaveOrdinals )
-			{
-				if ( iCurrentBlockSize>=iOrdinalPoolSize )
-				{
-					iCurrentBlockSize = 0;
-
-					nOrdinals += dOrdinals[0].GetLength ();
-
-					ARRAY_FOREACH ( i, dOrdinalAttrs )
-					{
-						CSphVector<Ordinal_t> & dCol = dOrdinals[i];
-						dCol.Sort ( CmpOrdinalsValue_fn() );
-						SphOffset_t uSize = DumpOrdinals ( tOrdWriter, dCol );
-						if ( !uSize )
-						{
-							m_sLastError = "dump ordinals: io error";
-							return 0;
-						}
-
-						if ( uSize > uMaxOrdinalAttrBlockSize )
-							uMaxOrdinalAttrBlockSize = uSize;
-
-						dOrdBlockSize[i].Add ( uSize );
-						dCol.Resize ( 0 );
 					}
 				}
 			}
@@ -13486,31 +13012,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		dFieldMVAs.Reset ();
 	}
 
-	// flush last ordinals block
-	if ( bHaveOrdinals && dOrdinals[0].GetLength () )
-	{
-		nOrdinals += dOrdinals[0].GetLength ();
-
-		ARRAY_FOREACH ( i, dOrdinalAttrs )
-		{
-			CSphVector<Ordinal_t> & dCol = dOrdinals[i];
-			dCol.Sort ( CmpOrdinalsValue_fn() );
-
-			SphOffset_t uSize = DumpOrdinals ( tOrdWriter, dCol );
-			if ( !uSize )
-			{
-				m_sLastError = "dump ordinals: io error";
-				return 0;
-			}
-
-			if ( uSize > uMaxOrdinalAttrBlockSize )
-				uMaxOrdinalAttrBlockSize = uSize;
-
-			dOrdBlockSize[i].Add ( uSize );
-			dCol.Reset ();
-		}
-	}
-
 	m_tProgress.m_iDocuments = m_tStats.m_iTotalDocuments;
 	m_tProgress.m_iBytes = m_tStats.m_iTotalBytes;
 	m_tProgress.Show ( true );
@@ -13534,57 +13035,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	/////////////////
 	// sort docinfos
 	/////////////////
-
-	tOrdWriter.CloseFile ();
-	if ( tOrdWriter.IsError () )
-		return 0;
-
-	CSphString sSortedOrdinalIdFile = GetIndexFileName("tmp6");
-
-	// sort ordinals
-	if ( bHaveOrdinals && !dOrdBlockSize[0].GetLength () )
-	{
-		bHaveOrdinals = false;
-		::unlink ( sRawOrdinalsFile.cstr () );
-	}
-
-	if ( bHaveOrdinals )
-	{
-		if ( iMaxOrdLen > MAX_ORDINAL_STR_LEN )
-			sphWarn ( "some ordinal attributes are too long (len=%d,max=%d)", iMaxOrdLen, MAX_ORDINAL_STR_LEN );
-
-		CSphString sUnsortedIdFile = GetIndexFileName("tmp5");
-
-		CSphAutofile fdRawOrdinals ( sRawOrdinalsFile.cstr (), SPH_O_READ, m_sLastError, true );
-		if ( fdRawOrdinals.GetFD () < 0 )
-			return 0;
-
-		const float ARENA_PERCENT = 0.5f;
-		int nBlocks = dOrdBlockSize[0].GetLength ();
-
-		SphOffset_t uMemNeededForReaders = SphOffset_t ( nBlocks ) * uMaxOrdinalAttrBlockSize;
-		SphOffset_t uMemNeededForSorting = sizeof ( OrdinalId_t ) * nOrdinals;
-
-		int iArenaSize = (int) Min ( SphOffset_t ( iMemoryLimit * ARENA_PERCENT ), uMemNeededForReaders );
-		iArenaSize = Max ( CSphBin::MIN_SIZE * nBlocks, iArenaSize );
-
-		int iOrdinalsInPool = (int)Min ( (SphOffset_t)( iMemoryLimit*( 1.0f-ARENA_PERCENT ) ), uMemNeededForSorting )/sizeof(OrdinalId_t);
-
-		if ( !SortOrdinals ( sUnsortedIdFile.cstr (), fdRawOrdinals.GetFD(),
-			iArenaSize, iOrdinalsInPool, dOrdBlockSize, iArenaSize < uMemNeededForReaders ) )
-				return 0;
-
-		CSphAutofile fdUnsortedId ( sUnsortedIdFile.cstr (), SPH_O_READ, m_sLastError, true );
-		if ( fdUnsortedId.GetFD () < 0 )
-			return 0;
-
-		iArenaSize = Min ( iMemoryLimit, (int)uMemNeededForSorting );
-		iArenaSize = Max ( CSphBin::MIN_SIZE * ( nOrdinals / iOrdinalsInPool + 1 ), iArenaSize );
-
-		if ( !SortOrdinalIds ( sSortedOrdinalIdFile.cstr (), fdUnsortedId.GetFD(),
-			iArenaSize, dOrdBlockSize, iArenaSize < uMemNeededForSorting ) )
-			return 0;
-	}
 
 	// initialize MVA reader
 	CSphAutoreader rdMva;
@@ -13662,29 +13112,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			qDocinfo.Push ( i );
 		}
 
-		CSphVector < CSphBin > dOrdReaders;
-		SphOffset_t iSharedOrdOffset = -1;
-
-		CSphAutofile fdTmpSortedIds ( sSortedOrdinalIdFile.cstr (), SPH_O_READ, m_sLastError, true );
-
-		if ( bHaveOrdinals )
-		{
-			if ( fdTmpSortedIds.GetFD () < 0 )
-				return 0;
-
-			dOrdReaders.Resize ( dOrdinalAttrs.GetLength () );
-			SphOffset_t uStart = 0;
-			ARRAY_FOREACH ( i, dOrdReaders )
-			{
-				dOrdReaders[i].m_iFileLeft = (int)dOrdBlockSize [i][0];
-				dOrdReaders[i].m_iFilePos = uStart;
-				dOrdReaders[i].Init ( fdTmpSortedIds.GetFD(), &iSharedOrdOffset, ORDINAL_READ_SIZE );
-				uStart += dOrdReaders[i].m_iFileLeft;
-			}
-		}
-
 		// while the queue has data for us
-		int iOrd = 0;
 		pDocinfo = dDocinfos.Begin();
 		SphDocID_t uLastId = 0;
 		m_uMinMaxIndex = 0;
@@ -13738,20 +13166,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			} else
 			{
 				// new unique document, handle it
-				// update ordinals
-				ARRAY_FOREACH ( i, dOrdinalAttrs )
-				{
-					OrdinalId_t Id;
-					if ( dOrdReaders[i].ReadBytes ( &Id, sizeof(Id) )!=BIN_READ_OK )
-					{
-						m_sLastError = "update ordinals: io error";
-						return 0;
-					}
-
-					assert ( Id.m_uDocID==DOCINFO2ID(pEntry) );
-					sphSetRowAttr ( DOCINFO2ATTRS(pEntry), m_tSchema.GetAttr(dOrdinalAttrs[i]).m_tLocator, Id.m_uId );
-				}
-				iOrd++;
 				m_uMinMaxIndex += iDocinfoStride;
 
 				CSphRowitem * pCollectibleRow = pEntry;
@@ -27223,7 +26637,6 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 
 		switch ( tAttr.m_eAttrType )
 		{
-			case SPH_ATTR_ORDINAL:
 			case SPH_ATTR_STRING:
 			case SPH_ATTR_JSON:
 				// memorize string, fixup NULLs
@@ -28457,7 +27870,6 @@ bool CSphSource_XMLPipe2::Setup ( int iFieldBufferMax, bool bFixupUTF8, FILE * p
 
 	ConfigureAttrs ( hSource("xmlpipe_attr_uint"),			SPH_ATTR_INTEGER,	m_tSchema );
 	ConfigureAttrs ( hSource("xmlpipe_attr_timestamp"),		SPH_ATTR_TIMESTAMP,	m_tSchema );
-	ConfigureAttrs ( hSource("xmlpipe_attr_str2ordinal"),	SPH_ATTR_ORDINAL,	m_tSchema );
 	ConfigureAttrs ( hSource("xmlpipe_attr_bool"),			SPH_ATTR_BOOL,		m_tSchema );
 	ConfigureAttrs ( hSource("xmlpipe_attr_float"),			SPH_ATTR_FLOAT,		m_tSchema );
 	ConfigureAttrs ( hSource("xmlpipe_attr_bigint"),		SPH_ATTR_BIGINT,	m_tSchema );
@@ -28743,7 +28155,6 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 
 			switch ( tAttr.m_eAttrType )
 			{
-				case SPH_ATTR_ORDINAL:
 				case SPH_ATTR_STRING:
 				case SPH_ATTR_JSON:
 					m_dStrAttrs[i] = sAttrValue.cstr ();
@@ -28944,7 +28355,6 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 				const char * szType = dAttrs[1];
 				if ( !strcmp ( szType, "int" ) )				Info.m_eAttrType = SPH_ATTR_INTEGER;
 				else if ( !strcmp ( szType, "timestamp" ) )		Info.m_eAttrType = SPH_ATTR_TIMESTAMP;
-				else if ( !strcmp ( szType, "str2ordinal" ) )	Info.m_eAttrType = SPH_ATTR_ORDINAL;
 				else if ( !strcmp ( szType, "bool" ) )			Info.m_eAttrType = SPH_ATTR_BOOL;
 				else if ( !strcmp ( szType, "float" ) )			Info.m_eAttrType = SPH_ATTR_FLOAT;
 				else if ( !strcmp ( szType, "bigint" ) )		Info.m_eAttrType = SPH_ATTR_BIGINT;
@@ -30057,7 +29467,6 @@ BYTE **	CSphSource_BaseSV::NextDocument ( CSphString & sError )
 
 			switch ( tAttr.m_eAttrType )
 			{
-			case SPH_ATTR_ORDINAL:
 			case SPH_ATTR_STRING:
 			case SPH_ATTR_JSON:
 				m_dStrAttrs[tRemap.m_iAttr] = sVal;

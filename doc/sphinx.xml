@@ -655,7 +655,6 @@ Currently supported attribute types are:
 <listitem><para>unsigned integers (1-bit to 32-bit wide);</para></listitem>
 <listitem><para>UNIX timestamps;</para></listitem>
 <listitem><para>floating point values (32-bit, IEEE 754 single precision);</para></listitem>
-<listitem><para>string ordinals (specially computed integers);</para></listitem>
 <listitem><para><link linkend="conf-sql-attr-string">strings</link> (since 1.10-beta);</para></listitem>
 <listitem><para><link linkend="conf-sql-attr-json">JSON</link> (since 2.1.1-beta);</para></listitem>
 <listitem><para><link linkend="mva">MVA</link>, multi-value attributes (variable-length lists of 32-bit unsigned integers).</para></listitem>
@@ -1044,7 +1043,7 @@ XML elements (tags) recognized by xmlpipe2 (and their attributes where applicabl
         Known attributes are:
         <itemizedlist>
         <listitem><para>"name", specifies the element name that should be treated as an attribute in the subsequent documents.</para></listitem>
-        <listitem><para>"type", specifies the attribute type. Possible values are "int", "bigint", "timestamp", "str2ordinal", "bool", "float", "multi" and "json".</para></listitem>
+        <listitem><para>"type", specifies the attribute type. Possible values are "int", "bigint", "timestamp", "bool", "float", "multi" and "json".</para></listitem>
         <listitem><para>"bits", specifies the bit size for "int" attribute type. Valid values are 1 to 32.</para></listitem>
         <listitem><para>"default", specifies the default value for this attribute that should be used if the attribute's element is not present in the document.</para></listitem>
         </itemizedlist>
@@ -6815,6 +6814,8 @@ Use "listen" instead.</para></listitem>
 <listitem><para>Removed str2wordcount attributes.
 Use <link linkend="conf-index-field-lengths">index_field_lengths=1</link>
 instead.</para></listitem>
+<listitem><para>Removed str2ordinal attributes. Use string attributes
+for sorting.</para></listitem>
 </itemizedlist>
 </para>
 </sect1>
@@ -9224,61 +9225,6 @@ sql_attr_timestamp = added_ts
 </sect2>
 
 
-<sect2 id="conf-sql-attr-str2ordinal"><title>sql_attr_str2ordinal</title>
-<para>
-Deprecated.
-Ordinal string number <link linkend="attributes">attribute</link> declaration.
-Multi-value (there might be multiple attributes declared), optional.
-Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
-</para>
-<para>
-This attribute type (so-called ordinal, for brevity) is intended
-to allow sorting by string values, but without storing the strings
-themselves. When indexing ordinals, string values are fetched from
-database, temporarily stored, sorted, and then replaced by their
-respective ordinal numbers in the array of sorted strings.
-So, the ordinal number is an integer such that sorting by it
-produces the same result as if lexicographically sorting by original strings.
-by string values lexicographically.
-</para>
-<para>
-Earlier versions could consume a lot of RAM for indexing ordinals.
-Starting with revision r1112, ordinals accumulation and sorting
-also runs in fixed memory (at the cost of using additional temporary
-disk space), and honors
-<link linkend="conf-mem-limit">mem_limit</link> settings.
-</para>
-<para>
-Ideally the strings should be sorted differently, depending
-on the encoding and locale. For instance, if the strings are known
-to be Russian text in KOI8R encoding, sorting the bytes 0xE0, 0xE1,
-and 0xE2 should produce 0xE1, 0xE2 and 0xE0, because in KOI8R
-value 0xE0 encodes a character that is (noticeably) after
-characters encoded by 0xE1 and 0xE2. Unfortunately, Sphinx
-does not support that at the moment and will simply sort
-the strings bytewise.
-</para>
-<para>
-Note that the ordinals are by construction local to each index,
-and it's therefore impossible to merge ordinals while retaining
-the proper order. The processed strings are replaced by their
-sequential number in the index they occurred in, but different
-indexes have different sets of strings. For instance, if 'main' index
-contains strings "aaa", "bbb", "ccc", and so on up to "zzz",
-they'll be assigned numbers 1, 2, 3, and so on up to 26,
-respectively. But then if 'delta' only contains "zzz" the assigned
-number will be 1. And after the merge, the order will be broken.
-Unfortunately, this is impossible to workaround without storing
-the original strings (and once Sphinx supports storing the
-original strings, ordinals will not be necessary any more).
-</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-sql_attr_str2ordinal = author_name
-</programlisting>
-</sect2>
-
-
 <sect2 id="conf-sql-attr-float"><title>sql_attr_float</title>
 <para>
 Floating point <link linkend="attributes">attribute</link> declaration.
@@ -9673,21 +9619,6 @@ Syntax fully matches that of <link linkend="conf-sql-attr-timestamp">sql_attr_ti
 <bridgehead>Example:</bridgehead>
 <programlisting>
 xmlpipe_attr_timestamp = published
-</programlisting>
-</sect2>
-
-
-<sect2 id="conf-xmlpipe-attr-str2ordinal"><title>xmlpipe_attr_str2ordinal</title>
-<para>
-Deprecated.
-xmlpipe string ordinal attribute declaration.
-Multi-value, optional.
-Applies to <option>xmlpipe2</option> source type only.
-Syntax fully matches that of <link linkend="conf-sql-attr-str2ordinal">sql_attr_str2ordinal</link>.
-</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-xmlpipe_attr_str2ordinal = author_sort
 </programlisting>
 </sect2>
 

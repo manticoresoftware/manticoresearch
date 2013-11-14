@@ -5308,7 +5308,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 		int iExistRight = m_dNodes[iLeft].m_iRight;
 		bool bIsLeftGood = ( m_dNodes[iExistLeft].m_eRetType==SPH_ATTR_STRING );
 		ESphAttr eRight = m_dNodes[iExistRight].m_eRetType;
-		bool bIsRightGood = ( eRight==SPH_ATTR_INTEGER || eRight==SPH_ATTR_TIMESTAMP || eRight==SPH_ATTR_ORDINAL || eRight==SPH_ATTR_BOOL
+		bool bIsRightGood = ( eRight==SPH_ATTR_INTEGER || eRight==SPH_ATTR_TIMESTAMP || eRight==SPH_ATTR_BOOL
 			|| eRight==SPH_ATTR_FLOAT || eRight==SPH_ATTR_BIGINT );
 
 		if ( !bIsLeftGood || !bIsRightGood )
@@ -5521,7 +5521,6 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 			{
 				case SPH_ATTR_INTEGER:
 				case SPH_ATTR_TIMESTAMP:
-				case SPH_ATTR_ORDINAL:
 				case SPH_ATTR_BOOL:
 					eRes = SPH_UDF_TYPE_UINT32;
 					break;
@@ -5743,7 +5742,7 @@ struct TypeCheck_fn
 
 	bool IsNumericNode ( const ExprNode_t & tNode )
 	{
-		return tNode.m_eRetType==SPH_ATTR_INTEGER || tNode.m_eRetType==SPH_ATTR_ORDINAL || tNode.m_eRetType==SPH_ATTR_BOOL || tNode.m_eRetType==SPH_ATTR_FLOAT ||
+		return tNode.m_eRetType==SPH_ATTR_INTEGER || tNode.m_eRetType==SPH_ATTR_BOOL || tNode.m_eRetType==SPH_ATTR_FLOAT ||
 			tNode.m_eRetType==SPH_ATTR_BIGINT || tNode.m_eRetType==SPH_ATTR_TOKENCOUNT || tNode.m_eRetType==SPH_ATTR_TIMESTAMP;
 	}
 };

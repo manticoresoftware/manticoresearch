@@ -34,7 +34,7 @@ enum ESphAttr
 	SPH_ATTR_NONE		= 0,			///< not an attribute at all
 	SPH_ATTR_INTEGER	= 1,			///< unsigned 32-bit integer
 	SPH_ATTR_TIMESTAMP	= 2,			///< this attr is a timestamp
-	SPH_ATTR_ORDINAL	= 3,			///< this attr is an ordinal string number (integer at search time, specially handled at indexing time)
+	// there was SPH_ATTR_ORDINAL=3 once
 	SPH_ATTR_BOOL		= 4,			///< this attr is a boolean bit field
 	SPH_ATTR_FLOAT		= 5,			///< floating point number (IEEE 32-bit)
 	SPH_ATTR_BIGINT		= 6,			///< signed 64-bit integer

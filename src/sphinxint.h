@@ -1268,7 +1268,6 @@ inline const char * sphTypeName ( ESphAttr eType )
 		case SPH_ATTR_NONE:			return "none";
 		case SPH_ATTR_INTEGER:		return "uint";
 		case SPH_ATTR_TIMESTAMP:	return "timestamp";
-		case SPH_ATTR_ORDINAL:		return "ordinal";
 		case SPH_ATTR_BOOL:			return "bool";
 		case SPH_ATTR_FLOAT:		return "float";
 		case SPH_ATTR_BIGINT:		return "bigint";
@@ -1290,7 +1289,6 @@ inline const char * sphTypeDirective ( ESphAttr eType )
 		case SPH_ATTR_NONE:			return "???";
 		case SPH_ATTR_INTEGER:		return "sql_attr_uint";
 		case SPH_ATTR_TIMESTAMP:	return "sql_attr_timestamp";
-		case SPH_ATTR_ORDINAL:		return "sql_attr_str2ordinal";
 		case SPH_ATTR_BOOL:			return "sql_attr_bool";
 		case SPH_ATTR_FLOAT:		return "sql_attr_float";
 		case SPH_ATTR_BIGINT:		return "sql_attr_bigint";

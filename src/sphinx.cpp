@@ -6612,13 +6612,6 @@ CSphFilterSettings::CSphFilterSettings ()
 {}
 
 
-//CSphFilterSettings::CSphFilterSettings ( const CSphFilterSettings & rhs )
-//{
-//	assert ( 0 );
-//	(*this) = rhs;
-//}
-
-
 void CSphFilterSettings::SetExternalValues ( const SphAttr_t * pValues, int nValues )
 {
 	m_pValues = pValues;
@@ -20466,19 +20459,22 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				const DWORD * pMvaSpaFixed = NULL;
 				const CSphRowitem * pAttrs = DOCINFO2ATTRS(pRow);
 				bool bHasValues = false;
+				bool bHasArena = false;
 				ARRAY_FOREACH ( iItem, dMvaItems )
 				{
 					const DWORD uOffset = pAttrs[dMvaItems[iItem]];
-					bHasValues |= uOffset!=0;
+					bHasValues |= ( uOffset!=0 );
+					bool bArena = ( ( uOffset & MVA_ARENA_FLAG )!=0 );
+					bHasArena |= bArena;
 
-					if ( uOffset && pMvaBase+uOffset>=pMvaMax )
+					if ( uOffset && !bArena && pMvaBase+uOffset>=pMvaMax )
 					{
 						bIsSpaValid = false;
 						LOC_FAIL(( fp, "MVA index out of bounds (row="INT64_FMT", mvaattr=%d, docid="DOCID_FMT", index=%u)",
 							iRow, iItem, uLastID, uOffset ));
 					}
 
-					if ( uOffset && pMvaBase+uOffset<pMvaMax && !pMvaSpaFixed )
+					if ( uOffset && !bArena && pMvaBase+uOffset<pMvaMax && !pMvaSpaFixed )
 						pMvaSpaFixed = pMvaBase + uOffset - sizeof(SphDocID_t) / sizeof(DWORD);
 				}
 
@@ -20502,17 +20498,24 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 						LOC_FAIL(( fp, "MVA docid decreased (row="INT64_FMT", spa docid="DOCID_FMT", last MVA docid="DOCID_FMT", MVA docid="DOCID_FMT", index=%u)",
 							iRow, uLastID, uLastMvaID, uMvaID, (DWORD)(pMva-pMvaBase) ));
 
-					bool bIsMvaCorrect = uLastMvaID<=uMvaID && uMvaID<=uLastID;
+					bool bIsMvaCorrect = ( uLastMvaID<=uMvaID && uMvaID<=uLastID );
 					uLastMvaID = uMvaID;
+					bool bWasArena = false;
 
 					// loop MVAs
 					ARRAY_FOREACH_COND ( iItem, dMvaItems, bIsMvaCorrect )
 					{
 						const DWORD uSpaOffset = pAttrs[dMvaItems[iItem]];
+						bool bArena = ( ( uSpaOffset & MVA_ARENA_FLAG )!=0 );
+						bWasArena |= bArena;
 
 						// zero offset means empty MVA in rt index
-						if ( !uSpaOffset )
+						if ( !uSpaOffset || bArena )
 							continue;
+
+						if ( bWasArena )
+							pMva = pMvaBase+uSpaOffset;
+						bWasArena = false;
 
 						// check offset (index)
 						if ( uMvaID==uLastID && bIsSpaValid && pMva!=pMvaBase+uSpaOffset )
@@ -20582,7 +20585,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 					bLastIDChecked |= uLastID==uMvaID;
 				}
 
-				if ( !bLastIDChecked && bHasValues )
+				if ( !bLastIDChecked && bHasValues && !bHasArena )
 					LOC_FAIL(( fp, "missed or damaged MVA (row="INT64_FMT", docid expected="DOCID_FMT")",
 						iRow, uLastID ));
 			}
@@ -29845,8 +29848,7 @@ CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * 
 	{
 		pCSV = new CSphSource_Proxy<CSphSource_CSV> ( sSourceName );
 		pCSV->SetDelimiter ( sDelimiter );
-	}
-	else
+	} else
 #endif
 		pCSV = new CSphSource_CSV ( sSourceName, sDelimiter );
 

@@ -976,6 +976,16 @@ int main ( int argc, char ** argv )
 	///////////
 	// action!
 	///////////
+	int iMvaDefault = 1048576;
+	if ( hConf.Exists ( "searchd" ) && hConf["searchd"].Exists ( "searchd" ) )
+	{
+		const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
+		iMvaDefault = hSearchd.GetSize ( "mva_updates_pool", iMvaDefault );
+	}
+	const char * sArenaError = sphArenaInit ( iMvaDefault );
+	if ( sArenaError )
+		sphWarning ( "process shared mutex unsupported, persist MVA disabled ( %s )", sArenaError );
+
 
 	if ( eCommand==CMD_CHECKCONFIG )
 	{

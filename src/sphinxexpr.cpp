@@ -2173,7 +2173,6 @@ int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp )
 	case SPH_ATTR_TIMESTAMP:
 	case SPH_ATTR_BOOL:
 	case SPH_ATTR_BIGINT:
-	case SPH_ATTR_WORDCOUNT:
 	case SPH_ATTR_TOKENCOUNT:
 		iRes = tCol.m_tLocator.IsBitfield() ? TOK_ATTR_BITS : TOK_ATTR_INT;
 		break;
@@ -5310,7 +5309,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 		bool bIsLeftGood = ( m_dNodes[iExistLeft].m_eRetType==SPH_ATTR_STRING );
 		ESphAttr eRight = m_dNodes[iExistRight].m_eRetType;
 		bool bIsRightGood = ( eRight==SPH_ATTR_INTEGER || eRight==SPH_ATTR_TIMESTAMP || eRight==SPH_ATTR_ORDINAL || eRight==SPH_ATTR_BOOL
-			|| eRight==SPH_ATTR_FLOAT || eRight==SPH_ATTR_BIGINT || eRight==SPH_ATTR_WORDCOUNT );
+			|| eRight==SPH_ATTR_FLOAT || eRight==SPH_ATTR_BIGINT );
 
 		if ( !bIsLeftGood || !bIsRightGood )
 		{
@@ -5524,7 +5523,6 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 				case SPH_ATTR_TIMESTAMP:
 				case SPH_ATTR_ORDINAL:
 				case SPH_ATTR_BOOL:
-				case SPH_ATTR_WORDCOUNT:
 					eRes = SPH_UDF_TYPE_UINT32;
 					break;
 				case SPH_ATTR_FLOAT:
@@ -5746,7 +5744,7 @@ struct TypeCheck_fn
 	bool IsNumericNode ( const ExprNode_t & tNode )
 	{
 		return tNode.m_eRetType==SPH_ATTR_INTEGER || tNode.m_eRetType==SPH_ATTR_ORDINAL || tNode.m_eRetType==SPH_ATTR_BOOL || tNode.m_eRetType==SPH_ATTR_FLOAT ||
-			tNode.m_eRetType==SPH_ATTR_BIGINT || tNode.m_eRetType==SPH_ATTR_WORDCOUNT || tNode.m_eRetType==SPH_ATTR_TOKENCOUNT || tNode.m_eRetType==SPH_ATTR_TIMESTAMP;
+			tNode.m_eRetType==SPH_ATTR_BIGINT || tNode.m_eRetType==SPH_ATTR_TOKENCOUNT || tNode.m_eRetType==SPH_ATTR_TIMESTAMP;
 	}
 };
 

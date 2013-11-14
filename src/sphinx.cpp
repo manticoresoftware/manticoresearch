@@ -7206,11 +7206,6 @@ bool CSphSchema::CompareTo ( const CSphSchema & rhs, CSphString & sError, bool b
 		{
 			ESphAttr eAttr1 = tAttr1.m_eAttrType;
 			ESphAttr eAttr2 = tAttr2.m_eAttrType;
-			if ( eAttr1==SPH_ATTR_WORDCOUNT )
-				eAttr1 = SPH_ATTR_INTEGER;
-
-			if ( eAttr2==SPH_ATTR_WORDCOUNT )
-				eAttr2 = SPH_ATTR_INTEGER;
 
 			bMismatch = tAttr1.m_sName!=tAttr2.m_sName || eAttr1!=eAttr2 || tAttr1.m_eWordpart!=tAttr2.m_eWordpart ||
 				tAttr1.m_bIndexed!=tAttr2.m_bIndexed ||	tAttr1.m_tLocator.m_iBitCount!=tAttr2.m_tLocator.m_iBitCount ||
@@ -11146,8 +11141,6 @@ static void WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInfo & tCol
 	fdInfo.PutBytes ( tCol.m_sName.cstr(), iLen );
 
 	ESphAttr eAttrType = tCol.m_eAttrType;
-	if ( eAttrType==SPH_ATTR_WORDCOUNT )
-		eAttrType = SPH_ATTR_INTEGER;
 	fdInfo.PutDword ( eAttrType );
 
 	fdInfo.PutDword ( tCol.m_tLocator.CalcRowitem() ); // for backwards compatibility
@@ -12461,19 +12454,6 @@ bool CSphIndex_VLN::RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSi
 }
 
 
-static int CountWords ( const CSphString & sData, ISphTokenizer * pTokenizer )
-{
-	BYTE * sField = (BYTE*) sData.cstr();
-	if ( !sField )
-		return 0;
-
-	int iCount = 0;
-	pTokenizer->SetBuffer ( sField, (int)strlen ( (char*)sField ) );
-	while ( pTokenizer->GetToken() )
-		iCount++;
-	return iCount;
-}
-
 bool CSphIndex_VLN::LoadHitlessWords ( CSphVector<SphWordID_t> & dHitlessWords )
 {
 	assert ( dHitlessWords.GetLength()==0 );
@@ -12637,7 +12617,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	// ordinals and strings storage
 	CSphVector<int> dOrdinalAttrs;
 	CSphVector<int> dStringAttrs;
-	CSphVector<int> dWordcountAttrs;
 
 	// chunks to partically sort string attributes
 	CSphVector<DWORD> dStringChunks;
@@ -12665,9 +12644,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			case SPH_ATTR_STRING:
 			case SPH_ATTR_JSON:
 				dStringAttrs.Add ( i );
-				break;
-			case SPH_ATTR_WORDCOUNT:
-				dWordcountAttrs.Add ( i );
 				break;
 			case SPH_ATTR_TOKENCOUNT:
 				if ( iFieldLens<0 )
@@ -13237,15 +13213,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					}
 				}
 			}
-
-			// count words
-			if ( !pPrevDocinfo )
-				ARRAY_FOREACH ( i, dWordcountAttrs )
-				{
-					int iAttr = dWordcountAttrs[i];
-					int iNumWords = CountWords ( pSource->m_dStrAttrs[iAttr], m_pTokenizer );
-					pSource->m_tDocInfo.SetAttr ( m_tSchema.GetAttr(iAttr).m_tLocator, iNumWords );
-				}
 
 			// docinfo=inline might be flushed while collecting hits
 			if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
@@ -27259,7 +27226,6 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 			case SPH_ATTR_ORDINAL:
 			case SPH_ATTR_STRING:
 			case SPH_ATTR_JSON:
-			case SPH_ATTR_WORDCOUNT:
 				// memorize string, fixup NULLs
 				m_dStrAttrs[i] = SqlColumn ( tAttr.m_iIndex );
 				if ( !m_dStrAttrs[i].cstr() )
@@ -28499,14 +28465,11 @@ bool CSphSource_XMLPipe2::Setup ( int iFieldBufferMax, bool bFixupUTF8, FILE * p
 	ConfigureAttrs ( hSource("xmlpipe_attr_multi_64"),		SPH_ATTR_INT64SET,	m_tSchema );
 	ConfigureAttrs ( hSource("xmlpipe_attr_string"),		SPH_ATTR_STRING,	m_tSchema );
 	ConfigureAttrs ( hSource("xmlpipe_attr_json"),			SPH_ATTR_JSON,		m_tSchema );
-	ConfigureAttrs ( hSource("xmlpipe_attr_wordcount"),		SPH_ATTR_WORDCOUNT,	m_tSchema );
 
 	ConfigureAttrs ( hSource("xmlpipe_field_string"),		SPH_ATTR_STRING,	m_tSchema );
-	ConfigureAttrs ( hSource("xmlpipe_field_wordcount"),	SPH_ATTR_WORDCOUNT,	m_tSchema );
 
 	ConfigureFields ( hSource("xmlpipe_field"), bWordDict, m_tSchema );
 	ConfigureFields ( hSource("xmlpipe_field_string"), bWordDict, m_tSchema );
-	ConfigureFields ( hSource("xmlpipe_field_wordcount"), bWordDict, m_tSchema );
 
 	AllocDocinfo();
 	return true;
@@ -28783,7 +28746,6 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 				case SPH_ATTR_ORDINAL:
 				case SPH_ATTR_STRING:
 				case SPH_ATTR_JSON:
-				case SPH_ATTR_WORDCOUNT:
 					m_dStrAttrs[i] = sAttrValue.cstr ();
 					if ( !m_dStrAttrs[i].cstr() )
 						m_dStrAttrs[i] = "";
@@ -28937,8 +28899,6 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 					Info.m_eAttrType = SPH_ATTR_STRING;
 				else if ( !strcmp ( dAttrs[1], "json" ) )
 					Info.m_eAttrType = SPH_ATTR_JSON;
-				else if ( !strcmp ( dAttrs[1], "wordcount" ) )
-					Info.m_eAttrType = SPH_ATTR_WORDCOUNT;
 
 			} else if ( !strcmp ( *dAttrs, "default" ) )
 				sDefault = dAttrs[1];
@@ -28990,7 +28950,6 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 				else if ( !strcmp ( szType, "bigint" ) )		Info.m_eAttrType = SPH_ATTR_BIGINT;
 				else if ( !strcmp ( szType, "string" ) )		Info.m_eAttrType = SPH_ATTR_STRING;
 				else if ( !strcmp ( szType, "json" ) )			Info.m_eAttrType = SPH_ATTR_JSON;
-				else if ( !strcmp ( szType, "wordcount" ) )		Info.m_eAttrType = SPH_ATTR_WORDCOUNT;
 				else if ( !strcmp ( szType, "multi" ) )
 				{
 					Info.m_eAttrType = SPH_ATTR_UINT32SET;
@@ -30101,7 +30060,6 @@ BYTE **	CSphSource_BaseSV::NextDocument ( CSphString & sError )
 			case SPH_ATTR_ORDINAL:
 			case SPH_ATTR_STRING:
 			case SPH_ATTR_JSON:
-			case SPH_ATTR_WORDCOUNT:
 				m_dStrAttrs[tRemap.m_iAttr] = sVal;
 				m_tDocInfo.SetAttr ( tAttr.m_tLocator, 0 );
 				break;

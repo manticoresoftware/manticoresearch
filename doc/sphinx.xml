@@ -1034,7 +1034,7 @@ XML elements (tags) recognized by xmlpipe2 (and their attributes where applicabl
         Known attributes are:
         <itemizedlist>
         <listitem><para>"name", specifies the XML element name that will be treated as a full-text field in the subsequent documents.</para></listitem>
-        <listitem><para>"attr", specifies whether to also index this field as a string or word count attribute. Possible values are "string" and "wordcount". Introduced in version 1.10-beta.</para></listitem>
+        <listitem><para>"attr", specifies whether to also index this field as a string. Possible value is "string". Introduced in version 1.10-beta.</para></listitem>
         </itemizedlist>
     </para></listitem>
 </varlistentry>
@@ -6812,6 +6812,9 @@ Changes for 2.2.2-beta:
 <itemizedlist>
 <listitem><para>Removed deprecated "address" and "port" directives.
 Use "listen" instead.</para></listitem>
+<listitem><para>Removed str2wordcount attributes.
+Use <link linkend="conf-index-field-lengths">index_field_lengths=1</link>
+instead.</para></listitem>
 </itemizedlist>
 </para>
 </sect1>
@@ -9404,28 +9407,6 @@ sql_attr_json = properties
 </sect2>
 
 
-<sect2 id="conf-sql-attr-str2wordcount"><title>sql_attr_str2wordcount</title>
-<para>
-Deprecated.
-Word-count attribute declaration.
-Multi-value (ie. there may be more than one such attribute declared), optional.
-Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
-Introduced in version 1.10-beta.
-</para>
-<para>
-Word-count attribute takes a string column, tokenizes it according
-to index settings, and stores the resulting number of tokens in an attribute.
-This number of tokens ("word count") is a normal integer that can be later
-used, for instance, in custom ranking expressions (boost shorter titles,
-help identify exact field matches, etc).
-</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-sql_attr_str2wordcount = title_wc
-</programlisting>
-</sect2>
-
-
 <sect2 id="conf-sql-column-buffers"><title>sql_column_buffers</title>
 <para>
 Per-column buffer sizes.
@@ -9480,25 +9461,6 @@ exactly that. Both the field and the attribute will be named the same.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 sql_field_string = title # will be both indexed and stored
-</programlisting>
-</sect2>
-
-
-<sect2 id="conf-sql-field-str2wordcount"><title>sql_field_str2wordcount</title>
-<para>
-Deprecated.
-Combined word-count attribute and full-text field declaration.
-Multi-value (ie. there may be more than one such attribute declared), optional.
-Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
-Introduced in version 1.10-beta.
-</para>
-<para><link linkend="conf-sql-attr-str2wordcount">sql_attr_str2wordcount</link> only stores the column
-word count but does not full-text index it.  In some cases it might be desired to both full-text
-index the column and also have the count.  <option>sql_field_str2wordcount</option> lets you do
-exactly that. Both the field and the attribute will be named the same.</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-sql_field_str2wordcount = title # will be indexed, and counted/stored
 </programlisting>
 </sect2>
 
@@ -9659,24 +9621,6 @@ xmlpipe_field_string = subject
 </sect2>
 
 
-<sect2 id="conf-xmlpipe-field-wordcount"><title>xmlpipe_field_wordcount</title>
-<para>
-xmlpipe field and word count attribute declaration.
-Multi-value, optional.
-Applies to <option>xmlpipe2</option> source type only. Refer to <xref linkend="xmlpipe2"/>.
-Introduced in version 1.10-beta.
-</para>
-<para>
-Makes the specified XML element indexed as both a full-text field and a word count attribute.
-Equivalent to <![CDATA[<sphinx:field name="field" attr="wordcount"/>]]> declaration within the XML file.
-</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-xmlpipe_field_wordcount = subject
-</programlisting>
-</sect2>
-
-
 <sect2 id="conf-xmlpipe-attr-uint"><title>xmlpipe_attr_uint</title>
 <para>
 xmlpipe integer attribute declaration.
@@ -9815,26 +9759,6 @@ The contents of the specified tag will be parsed and stored as a string value.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 xmlpipe_attr_string = subject
-</programlisting>
-</sect2>
-
-
-<sect2 id="conf-xmlpipe-attr-wordcount"><title>xmlpipe_attr_wordcount</title>
-<para>
-Word-count attribute declaration.
-Multi-value (ie. there may be more than one such attribute declared), optional.
-Introduced in version 1.10-beta.
-</para>
-<para>
-Word-count attribute takes a string column, tokenizes it according
-to index settings, and stores the resulting number of tokens in an attribute.
-This number of tokens ("word count") is a normal integer that can be later
-used, for instance, in custom ranking expressions (boost shorter titles,
-help identify exact field matches, etc).
-</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-xmlpipe_attr_wordcount = title_wc
 </programlisting>
 </sect2>
 

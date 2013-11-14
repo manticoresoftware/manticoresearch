@@ -22,9 +22,7 @@ source src
 	xmlpipe_field = content
 	xmlpipe_attr_uint = gid
 	xmlpipe_attr_string = sgid
-	xmlpipe_attr_wordcount = ordd
 	xmlpipe_field_string = sgidf
-	xmlpipe_field_wordcount = orddf
 }
 
 source src2

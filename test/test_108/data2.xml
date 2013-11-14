@@ -6,26 +6,20 @@
 <sphinx:field name="content"/>
 <sphinx:attr name="gid" type="int" default="1"/>
 <sphinx:attr name="sgid" type="string" default=""/>
-<sphinx:attr name="ordd" type="wordcount" default=""/>
 <sphinx:field name="sgidf" attr="string"/>
-<sphinx:field name="orddf" attr="wordcount"/>
 </sphinx:schema>
 
 <sphinx:document id="1">
 <title>test one</title>
 <sgid>here is string attribute</sgid>
-<ordd>ord1 two three</ordd>
 <sgidf>test1 is attr</sgidf>
-<orddf>ordd field</orddf>
 <content>this is my test document number one. also checking search within phrases.</content>
 </sphinx:document>
 
 <sphinx:document id="2">
 <title>test one</title>
 <sgid>here is the second string attribute</sgid>
-<ordd>ord2 bka ss cc</ordd>
 <sgidf>test2 is attr</sgidf>
-<orddf>orddf field</orddf>
 <content>this is my test document number two. also checking search within phrases.</content>
 </sphinx:document>
 

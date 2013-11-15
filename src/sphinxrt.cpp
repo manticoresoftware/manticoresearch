@@ -6799,17 +6799,51 @@ bool RtIndex_t::FillKeywords ( CSphVector<CSphKeywordInfo> & dKeywords ) const
 }
 
 
+static RtSegment_t * UpdateFindSegment ( const CSphVector<RtSegment_t *> & dSegments, CSphRowitem ** ppRow, SphDocID_t uDocID )
+{
+	assert ( ppRow && ( ( *ppRow!=NULL ) ^ ( uDocID!=0 ) ) );
+
+	CSphRowitem * pRow = *ppRow;
+	*ppRow = NULL;
+
+	if ( uDocID )
+	{
+		ARRAY_FOREACH ( i, dSegments )
+		{
+			pRow = const_cast<CSphRowitem *> ( dSegments[i]->FindAliveRow ( uDocID ) );
+			if ( !pRow )
+				continue;
+
+			*ppRow = pRow;
+			return dSegments[i];
+		}
+	} else
+	{
+		ARRAY_FOREACH ( i, dSegments )
+		{
+			const CSphTightVector<CSphRowitem> & dRows = dSegments[i]->m_dRows;
+			if ( dRows.Begin()<=pRow && pRow<dRows.Begin()+ dRows.GetLength() )
+			{
+				*ppRow = pRow;
+				return dSegments[i];
+			}
+		}
+	}
+
+	return NULL;
+}
+
+
 // FIXME! might be inconsistent in case disk chunk update fails
 int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError, CSphString & sWarning )
 {
 	// check if we have to
 
-	assert ( tUpd.m_dDocids.GetLength()==0 || tUpd.m_dRows.GetLength()==0 );
-	int iRows = Max ( tUpd.m_dDocids.GetLength(), tUpd.m_dRows.GetLength() );
-	bool bRaw = tUpd.m_dDocids.GetLength()==0;
+	assert ( tUpd.m_dDocids.GetLength()==tUpd.m_dRows.GetLength() );
+	assert ( tUpd.m_dDocids.GetLength()==tUpd.m_dRowOffset.GetLength() );
+	int iRows = tUpd.m_dDocids.GetLength();
 	bool bHasMva = false;
 
-	assert ( iRows==(int)tUpd.m_dRowOffset.GetLength() );
 	if ( !iRows )
 		return 0;
 
@@ -6944,33 +6978,34 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 	{
 		for ( int iUpd=iFirst; iUpd<iLast; iUpd++ )
 		{
-			// search segments first
-			for ( int iSeg=0; iSeg<m_dSegments.GetLength() && ( !bRaw || !iSeg ); iSeg++ )
+			CSphRowitem * pRow = const_cast<CSphRowitem*> ( tUpd.m_dRows[iUpd] );
+			SphDocID_t uDocid = tUpd.m_dDocids[iUpd];
+
+			RtSegment_t * pSegment = UpdateFindSegment ( m_dSegments, &pRow, uDocid );
+			if ( !pRow )
+				continue;
+
+			assert ( !uDocid || DOCINFO2ID(pRow)==uDocid );
+			pRow = DOCINFO2ATTRS(pRow);
+
+			int iPos = tUpd.m_dRowOffset[iUpd];
+			ARRAY_FOREACH ( iCol, tUpd.m_dAttrs )
 			{
-				CSphRowitem * pRow = const_cast<CSphRowitem*> ( bRaw? tUpd.m_dRows[iUpd] : m_dSegments[iSeg]->FindAliveRow ( tUpd.m_dDocids[iUpd] ) );
-				if ( !pRow )
+				if ( !dJsonFields[iCol] )
 					continue;
 
-				assert ( bRaw || ( DOCINFO2ID(pRow)==tUpd.m_dDocids[iUpd] ) );
-				pRow = DOCINFO2ATTRS(pRow);
+				ESphJsonType eType = dDoubles[iCol]
+					? JSON_DOUBLE
+					: ( dBigints[iCol] ? JSON_INT64 : JSON_INT32 );
 
-				int iPos = tUpd.m_dRowOffset[iUpd];
-				ARRAY_FOREACH ( iCol, tUpd.m_dAttrs )
-					if ( dJsonFields[iCol] )
-					{
-						ESphJsonType eType = dDoubles[iCol]
-							? JSON_DOUBLE
-							: ( dBigints[iCol] ? JSON_INT64 : JSON_INT32 );
+				if ( !sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), pSegment->m_dStrings.Begin(), pRow, false ) )
+				{
+					m_tRwlock.Unlock();
+					sError.SetSprintf ( "attribute '%s' can not be updated (not found or incompatible types)", tUpd.m_dAttrs[iCol] );
+					return -1;
+				}
 
-						if ( !sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), m_dSegments[iSeg]->m_dStrings.Begin(), pRow, false ) )
-						{
-							m_tRwlock.Unlock();
-							sError.SetSprintf ( "attribute '%s' can not be updated (not found or incompatible types)", tUpd.m_dAttrs[iCol] );
-							return -1;
-						}
-
-						iPos += dBigints[iCol]?2:1;
-					}
+				iPos += dBigints[iCol] ? 2 : 1;
 			}
 		}
 	}
@@ -6979,35 +7014,18 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 	{
 		// search segments first
 		bool bUpdated = false;
-		for ( int iSeg=0; iSeg<m_dSegments.GetLength() && ( !bRaw || !iSeg ); iSeg++ )
+		for ( ;; )
 		{
-			CSphRowitem * pRow = const_cast<CSphRowitem*> ( bRaw? tUpd.m_dRows[iUpd] : m_dSegments[iSeg]->FindAliveRow ( tUpd.m_dDocids[iUpd] ) );
+			CSphRowitem * pRow = const_cast<CSphRowitem*> ( tUpd.m_dRows[iUpd] );
+			SphDocID_t uDocid = tUpd.m_dDocids[iUpd];
+
+			RtSegment_t * pSegment = UpdateFindSegment ( m_dSegments, &pRow, uDocid );
 			if ( !pRow )
-				continue;
+				break;
 
-			assert ( bRaw || ( DOCINFO2ID(pRow)==tUpd.m_dDocids[iUpd] ) );
+			assert ( pSegment );
+			assert ( !uDocid || ( DOCINFO2ID(pRow)==uDocid ) );
 			pRow = DOCINFO2ATTRS(pRow);
-
-			CSphTightVector<DWORD> * pStorageMVA = NULL;
-			if ( bHasMva )
-			{
-				if ( !bRaw )
-				{
-					pStorageMVA = &m_dSegments[iSeg]->m_dMvas;
-				} else
-				{
-					ARRAY_FOREACH ( iMva, m_dSegments )
-					{
-						const CSphTightVector<CSphRowitem> & dSegRows = m_dSegments[iMva]->m_dRows;
-						if ( dSegRows.Begin()<=pRow && pRow<dSegRows.Begin()+dSegRows.GetLength() )
-						{
-							pStorageMVA = &m_dSegments[iMva]->m_dMvas;
-							break;
-						}
-					}
-				}
-			}
-			assert ( !bHasMva || pStorageMVA );
 
 			int iPos = tUpd.m_dRowOffset[iUpd];
 			ARRAY_FOREACH ( iCol, tUpd.m_dAttrs )
@@ -7018,7 +7036,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 						? JSON_DOUBLE
 						: ( dBigints[iCol] ? JSON_INT64 : JSON_INT32 );
 
-					if ( sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), m_dSegments[iSeg]->m_dStrings.Begin(), pRow, true ) )
+					if ( sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), pSegment->m_dStrings.Begin(), pRow, true ) )
 					{
 						bUpdated = true;
 						uUpdateMask |= ATTRS_STRINGS_UPDATED;
@@ -7064,14 +7082,15 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 						assert ( ( iLen%2 )==0 );
 						DWORD uCount = ( bDst64 ? iLen : iLen/2 );
 
+						CSphTightVector<DWORD> & dStorageMVA = pSegment->m_dMvas;
 						DWORD uMvaOff = MVA_DOWNSIZE ( sphGetRowAttr ( pRow, dLocators[iCol] ) );
-						assert ( uMvaOff<(DWORD)pStorageMVA->GetLength() );
-						DWORD * pDst = pStorageMVA->Begin() + uMvaOff;
+						assert ( uMvaOff<(DWORD)dStorageMVA.GetLength() );
+						DWORD * pDst = dStorageMVA.Begin() + uMvaOff;
 						if ( uCount>(*pDst) )
 						{
-							uMvaOff = pStorageMVA->GetLength();
-							pStorageMVA->Resize ( uMvaOff+uCount+1 );
-							pDst = pStorageMVA->Begin()+uMvaOff;
+							uMvaOff = dStorageMVA.GetLength();
+							dStorageMVA.Resize ( uMvaOff+uCount+1 );
+							pDst = dStorageMVA.Begin()+uMvaOff;
 							sphSetRowAttr ( pRow, dLocators[iCol], uMvaOff );
 						}
 
@@ -7095,6 +7114,8 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 
 			if ( bUpdated )
 				iUpdated++;
+
+			break;
 		}
 		if ( bUpdated )
 			continue;
@@ -7104,7 +7125,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 		{
 			m_tKlist.Flush(); // no need to lock here as it got protected here by writer locks
 		}
-		const SphAttr_t uRef = bRaw ? DOCINFO2ID ( tUpd.m_dRows[iUpd] ) : tUpd.m_dDocids[iUpd];
+		const SphAttr_t uRef = ( tUpd.m_dRows[iUpd] ? DOCINFO2ID ( tUpd.m_dRows[iUpd] ) : tUpd.m_dDocids[iUpd] );
 		bUpdated = ( sphBinarySearch ( m_tKlist.GetKillList(), m_tKlist.GetKillList() + m_tKlist.GetKillListSize() - 1, uRef )!=NULL );
 		if ( bUpdated )
 			continue;
@@ -8902,6 +8923,9 @@ bool RtBinlog_c::ReplayUpdateAttributes ( int iBinlog, BinlogReader_c & tReader 
 		if ( iTID!=tIndex.m_pIndex->m_iTID+1 )
 			sphWarning ( "binlog: update: unexpected tid (index=%s, indextid="INT64_FMT", logtid="INT64_FMT", pos="INT64_FMT")",
 				tIndex.m_sName.cstr(), tIndex.m_pIndex->m_iTID, iTID, iTxnPos );
+
+		tUpd.m_dRows.Resize ( tUpd.m_dDocids.GetLength() );
+		ARRAY_FOREACH ( i, tUpd.m_dRows ) tUpd.m_dRows[i] = NULL;
 
 		CSphString sError, sWarning;
 		tIndex.m_pIndex->UpdateAttributes ( tUpd, -1, sError, sWarning ); // FIXME! check for errors

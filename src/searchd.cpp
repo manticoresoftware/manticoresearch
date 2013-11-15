@@ -13092,6 +13092,8 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq )
 	SearchFailuresLog_c dFails;
 	int iSuccesses = 0;
 	int iUpdated = 0;
+	tUpd.m_dRows.Resize ( tUpd.m_dDocids.GetLength() );
+	ARRAY_FOREACH ( i, tUpd.m_dRows ) tUpd.m_dRows[i] = NULL;
 
 	ARRAY_FOREACH ( iIdx, dIndexNames )
 	{

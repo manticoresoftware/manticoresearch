@@ -1530,7 +1530,7 @@ private:
 	bool						m_bHaveSkips;			///< whether we have skiplists
 
 	int							m_iIndexTag;			///< my ids for MVA updates pool
-	static int					m_iIndexTagSeq;			///< static ids sequence
+	static volatile int			m_iIndexTagSeq;			///< static ids sequence
 
 	bool						m_bIsEmpty;				///< do we have actually indexed documents (m_iTotalDocuments is just fetched documents, not indexed!)
 
@@ -1564,7 +1564,7 @@ private:
 	bool						BuildDone ( const BuildHeader_t & tBuildHeader, CSphString & sError ) const;
 };
 
-int CSphIndex_VLN::m_iIndexTagSeq = 0;
+volatile int CSphIndex_VLN::m_iIndexTagSeq = 0;
 
 /////////////////////////////////////////////////////////////////////////////
 // UTILITY FUNCTIONS
@@ -9681,12 +9681,11 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 		return -1;
 	}
 
-	assert ( tUpd.m_dDocids.GetLength()==0 || tUpd.m_dRows.GetLength()==0 );
-	DWORD uRows = Max ( tUpd.m_dDocids.GetLength(), tUpd.m_dRows.GetLength() );
-	bool bRaw = tUpd.m_dDocids.GetLength()==0;
+	assert ( tUpd.m_dDocids.GetLength()==tUpd.m_dRows.GetLength() );
+	assert ( tUpd.m_dDocids.GetLength()==tUpd.m_dRowOffset.GetLength() );
+	DWORD uRows = tUpd.m_dDocids.GetLength();
 
 	// check if we have to
-	assert ( (int)uRows==tUpd.m_dRowOffset.GetLength() );
 	if ( !m_iDocinfo || !uRows )
 		return 0;
 
@@ -9807,9 +9806,17 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 	{
 		for ( int iUpd=iFirst; iUpd<iLast; iUpd++ )
 		{
-			DWORD * pEntry = const_cast < DWORD * > ( bRaw ? tUpd.m_dRows[iUpd] : FindDocinfo ( tUpd.m_dDocids[iUpd] ) );
+			const DWORD * pEntry = ( tUpd.m_dRows[iUpd] ? tUpd.m_dRows[iUpd] : FindDocinfo ( tUpd.m_dDocids[iUpd] ) );
 			if ( !pEntry )
 				continue; // no such id
+
+			// raw row might be from RT (another RAM segment or disk chunk)
+			const DWORD * pRows = m_tAttr.GetWritePtr();
+			const DWORD * pRowsEnd = pRows + m_tAttr.GetNumEntries();
+			bool bValidRow = ( pRows<=pEntry && pEntry<pRowsEnd );
+			if ( !bValidRow )
+				continue;
+
 			pEntry = DOCINFO2ATTRS(pEntry);
 			int iPos = tUpd.m_dRowOffset[iUpd];
 			ARRAY_FOREACH ( iCol, tUpd.m_dAttrs )
@@ -9825,7 +9832,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 						return -1;
 					}
 
-					iPos += dBigints[iCol]?2:1;
+					iPos += dBigints[iCol] ? 2 : 1;
 				}
 		}
 	}
@@ -9849,9 +9856,19 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 	bool bFailed = false;
 	for ( int iUpd=iFirst; iUpd<iLast && !bFailed; iUpd++ )
 	{
-		dRowPtrs[iUpd] = const_cast < DWORD * > ( bRaw ? tUpd.m_dRows[iUpd] : FindDocinfo ( tUpd.m_dDocids[iUpd] ) );
-		if ( !dRowPtrs[iUpd] )
+		dRowPtrs[iUpd] = NULL;
+		DWORD * pEntry = const_cast < DWORD * > ( tUpd.m_dRows[iUpd] ? tUpd.m_dRows[iUpd] : FindDocinfo ( tUpd.m_dDocids[iUpd] ) );
+		if ( !pEntry )
 			continue; // no such id
+
+		// raw row might be from RT (another RAM segment or disk chunk) or another index from same update query
+		const DWORD * pRows = m_tAttr.GetWritePtr();
+		const DWORD * pRowsEnd = pRows + m_tAttr.GetNumEntries();
+		bool bValidRow = ( pRows<=pEntry && pEntry<pRowsEnd );
+		if ( !bValidRow )
+			continue;
+
+		dRowPtrs[iUpd] = pEntry;
 
 		int iPoolPos = tUpd.m_dRowOffset[iUpd];
 		int iMvaPtr = iUpd*iNumMVA;
@@ -9918,7 +9935,6 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 		DWORD * pIndexRanges = const_cast < DWORD * > ( &m_pDocinfoIndex[m_iDocinfoIndex*iRowStride*2] );
 		assert ( iBlock>=0 && iBlock<m_iDocinfoIndex );
 
-		assert ( bRaw || ( DOCINFO2ID(pEntry)==tUpd.m_dDocids[iUpd] ) );
 		pEntry = DOCINFO2ATTRS(pEntry);
 
 		int iPos = tUpd.m_dRowOffset[iUpd];
@@ -9962,7 +9978,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 				uUpdateMask |= ATTRS_UPDATED;
 
 				// next
-				iPos += dBigints[iCol]?2:1;
+				iPos += dBigints[iCol] ? 2 : 1;
 				continue;
 			}
 
@@ -9998,7 +10014,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 			{
 				assert ( iNewIndex>=0 );
 				SphDocID_t* pDocid = (SphDocID_t *)(g_pMvaArena + iNewIndex);
-				*pDocid++ = ( bRaw ? DOCINFO2ID ( tUpd.m_dRows[iUpd] ) : tUpd.m_dDocids[iUpd] );
+				*pDocid++ = ( tUpd.m_dRows[iUpd] ? DOCINFO2ID ( tUpd.m_dRows[iUpd] ) : tUpd.m_dDocids[iUpd] );
 				iNewIndex = (DWORD *)pDocid - g_pMvaArena;
 
 				assert ( iNewIndex>=0 );

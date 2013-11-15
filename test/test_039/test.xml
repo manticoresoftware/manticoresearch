@@ -16,6 +16,7 @@ searchd
 	max_packet_size 	= 18M
 	dist_threads			= 4
 	read_timeout			= 1
+	workers = threads
 }
 
 source src1
@@ -33,6 +34,21 @@ source src2 : src1
 	sql_query		= SELECT 10+id, group_id, title, mva FROM test_table
 }
 
+source src_i1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT id, title, group_id as gid FROM test_table
+	sql_attr_uint	= gid
+}
+
+source src_i2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT id + 100, title, group_id as gid FROM test_table
+	sql_attr_uint	= gid
+}
 <agent0>
 index block1
 {
@@ -80,6 +96,33 @@ index dist2
 	agent					= <agent_address/>:dist_agent_2
 	agent_connect_timeout	= 1000
 	agent_query_timeout		= 3000
+}
+
+index i1
+{
+	source			= src_i1
+	path			= <data_path/>/i1
+    charset_type 	= utf-8
+    docinfo			= extern
+}
+
+index i2
+{
+	source			= src_i2
+	path			= <data_path/>/i2
+    charset_type 	= utf-8
+    docinfo			= extern
+}
+
+index rt
+{
+	type = rt
+	path			= <data_path/>/rt
+	docinfo = extern
+	charset_type = utf-8
+	rt_mem_limit = 128k
+	rt_field		= title
+	rt_attr_uint	= gid
 }
 </agent0>
 </config>
@@ -174,6 +217,9 @@ $query = create_function ( '&$results, $q, $sock,$vars', '
 			foreach ( $vars as $v )
 				$has_key |=  in_array ( $v, $row );
 			
+			if ( count ( $vars )==0 )
+				$has_key = true;
+			
 			if ( !$has_key )
 				continue;
 			
@@ -204,6 +250,33 @@ $sock = $make_sock( $results );
 if ( $sock === false )
 	return;
 $query ( $results, "show status", $sock, $vars );
+
+// regression crash on update of RT index that matches documents from different disk chunks
+for ( $i=1000; $i<1660; $i++ )
+{
+	$title = '';
+	for ( $w=0; $w<30; $w++ )
+		$title .= "term" . $i . $w . " ";
+		
+	$query ( $results, "INSERT INTO rt ( id, gid, title) VALUES ($i, 11, '$title')", $sock, array('none') );
+	array_pop ( $results );
+}
+$query ( $results, "UPDATE i1, i2 SET gid=333 WHERE id IN ( 2, 102 )", $sock, array() );
+$query ( $results, "UPDATE i1, rt SET gid=333 WHERE id IN ( 3, 1003, 1333 )", $sock, array() );
+$query ( $results, "SELECT * FROM i1, i2, rt WHERE id IN ( 1,2,3,4, 101,102,103,104, 1001,1002,1003,1004, 1331,1332,1333,1334, 2001, 2002, 2003, 2004 )", $sock, array() );
+
+for ( $i=2000; $i<2010; $i++ )
+{
+	$title = '';
+	for ( $w=0; $w<30; $w++ )
+		$title .= "term" . $i . $w . " ";
+		
+	$query ( $results, "INSERT INTO rt ( id, gid, title) VALUES ($i, 11, '$title')", $sock, array('none') );
+	array_pop ( $results );
+}
+$query ( $results, "UPDATE rt SET gid=444 WHERE id IN ( 3, 1003, 1333, 2003 )", $sock, array() );
+$query ( $results, "SELECT * FROM i1, i2, rt WHERE id IN ( 1,2,3,4, 101,102,103,104, 1001,1002,1003,1004, 1331,1332,1333,1334, 2001, 2002, 2003, 2004 )", $sock, array() );
+
 
 ]]>
 </custom_test>

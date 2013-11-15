@@ -383,7 +383,7 @@ function sphFixUint ( $value )
 	}
 }
 
-function SetBit ( $flag, $bit, $on )
+function sphSetBit ( $flag, $bit, $on )
 {
 	if ( $on )
 	{
@@ -482,7 +482,7 @@ class SphinxClient
 		$this->_fieldweights= array();
 		$this->_overrides 	= array();
 		$this->_select		= "*";
-		$this->_query_flags = SetBit ( 0, 6, true ); // default idf=tfidf_normalized
+		$this->_query_flags = sphSetBit ( 0, 6, true ); // default idf=tfidf_normalized
 		$this->_predictedtime = 0;
 		$this->_outerorderby = "";
 		$this->_outeroffset = 0;
@@ -971,17 +971,17 @@ class SphinxClient
 		assert ( isset ( $flag_name, $known_names ) );
 		assert ( in_array( $flag_value, $flags[$flag_name], true ) || ( $flag_name=="max_predicted_time" && is_int ( $flag_value ) && $flag_value>=0 ) );
 		
-		if ( $flag_name=="reverse_scan" )	$this->_query_flags = SetBit ( $this->_query_flags, 0, $flag_value==1 );
-		if ( $flag_name=="sort_method" )	$this->_query_flags = SetBit ( $this->_query_flags, 1, $flag_value=="kbuffer" );
+		if ( $flag_name=="reverse_scan" )	$this->_query_flags = sphSetBit ( $this->_query_flags, 0, $flag_value==1 );
+		if ( $flag_name=="sort_method" )	$this->_query_flags = sphSetBit ( $this->_query_flags, 1, $flag_value=="kbuffer" );
 		if ( $flag_name=="max_predicted_time" )
 		{
-			$this->_query_flags = SetBit ( $this->_query_flags, 2, $flag_value>0 );
+			$this->_query_flags = sphSetBit ( $this->_query_flags, 2, $flag_value>0 );
 			$this->_predictedtime = (int)$flag_value;
 		}
-		if ( $flag_name=="boolean_simplify" )	$this->_query_flags = SetBit ( $this->_query_flags, 3, $flag_value );
-		if ( $flag_name=="idf" && ( $flag_value=="normalized" || $flag_value=="plain" ) )	$this->_query_flags = SetBit ( $this->_query_flags, 4, $flag_value=="plain" );
-		if ( $flag_name=="global_idf" )	$this->_query_flags = SetBit ( $this->_query_flags, 5, $flag_value );
-		if ( $flag_name=="idf" && ( $flag_value=="tfidf_normalized" || $flag_value=="tfidf_unnormalized" ) )	$this->_query_flags = SetBit ( $this->_query_flags, 6, $flag_value=="tfidf_normalized" );
+		if ( $flag_name=="boolean_simplify" )	$this->_query_flags = sphSetBit ( $this->_query_flags, 3, $flag_value );
+		if ( $flag_name=="idf" && ( $flag_value=="normalized" || $flag_value=="plain" ) )	$this->_query_flags = sphSetBit ( $this->_query_flags, 4, $flag_value=="plain" );
+		if ( $flag_name=="global_idf" )	$this->_query_flags = sphSetBit ( $this->_query_flags, 5, $flag_value );
+		if ( $flag_name=="idf" && ( $flag_value=="tfidf_normalized" || $flag_value=="tfidf_unnormalized" ) )	$this->_query_flags = sphSetBit ( $this->_query_flags, 6, $flag_value=="tfidf_normalized" );
 	}
 	
 	/// set outer order by parameters
@@ -1026,7 +1026,7 @@ class SphinxClient
 	
 	function ResetQueryFlag ()
 	{
-		$this->_query_flags = SetBit ( 0, 6, true ); // default idf=tfidf_normalized
+		$this->_query_flags = sphSetBit ( 0, 6, true ); // default idf=tfidf_normalized
 		$this->_predictedtime = 0;
 	}
 

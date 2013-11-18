@@ -26,7 +26,6 @@ index test
 {
 	source			= srctest
 	path			= <data_path/>/test
-    charset_type 	= sbcs
 	enable_star		= 1
 
     <Dynamic>

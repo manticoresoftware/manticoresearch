@@ -33,14 +33,12 @@ index main
 {
 	source			= srcmain
 	path			= <data_path/>/main
-    charset_type 	= utf-8
 }
 
 index delta
 {
 	source			= srcdelta
 	path			= <data_path/>/delta
-    charset_type 	= utf-8
 }
 
 source srcm1
@@ -63,21 +61,18 @@ index m1
 {
 	source			= srcm1
 	path			= <data_path/>/m1
-    charset_type 	= utf-8
 }
 
 index d1
 {
 	source			= srcd1
 	path			= <data_path/>/d1
-    charset_type 	= utf-8
 }
 
 index mmk
 {
 	source			= srcm1
 	path			= <data_path/>/mmk
-    charset_type 	= utf-8
 }
 
 </config>

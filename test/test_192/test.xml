@@ -25,7 +25,6 @@ index test
 	source			= test
 	path			= <data_path/>/test
 
-	charset_type	= utf-8
 	wordforms		= <this_test/>/wordforms.txt
 	blend_chars		= +, U+2D, @
     min_word_len	= 2
@@ -43,7 +42,6 @@ index test10
 	source			= test1
 	path			= <data_path/>/test10
 
-	charset_type	= utf-8
 	charset_table	= 0..9, A..Z->a..z, _, a..z
 	blend_chars		= +
 	min_word_len	= 2
@@ -54,7 +52,6 @@ index test11
 	source			= test1
 	path			= <data_path/>/test11
 
-	charset_type	= utf-8
 	charset_table	= 0..9, A..Z->a..z, _, a..z
 	blend_chars		= +
 	min_word_len	= 2
@@ -79,7 +76,6 @@ index wb
 	source			= wb
 	path			= <data_path/>/wb
 
-	charset_type	= utf-8
 	wordforms		= <this_test/>/wordforms-wb.txt
 	blend_chars		=  U+2D
 }
@@ -103,7 +99,6 @@ index test12
 	source			= test12
 	path			= <data_path/>/test12
 
-	charset_type	= utf-8
 	wordforms		= <this_test/>/wordforms-12.txt
 	morphology		= stem_enru
 	min_prefix_len	= 3

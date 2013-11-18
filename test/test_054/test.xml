@@ -77,7 +77,6 @@ index rt_infix
 	type	 = rt
 	path	= <data_path/>/rt-infix
 
-	charset_type	= utf-8
 	dict					= keywords
 	min_infix_len	= 3
 	enable_star		= 1
@@ -97,7 +96,6 @@ index num2t
 {
 	source	= num1
 	path	= <data_path/>/num1
-	charset_type	= utf-8
 	charset_table	= 0..9, A..Z->a..z, _, a..z
 }
 
@@ -105,7 +103,6 @@ index num1t
 {
 	source	= num1
 	path	= <data_path/>/num2
-	charset_type	= utf-8
 	charset_table	= 0..9, A..Z->a..z, _, a..z, U+2E
 }
 

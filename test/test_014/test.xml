@@ -29,7 +29,6 @@ index lj
 {
 	source			= srclj
 	path			= </Static><Data_Path/><Static>/lj
-	charset_type	= utf-8
 	charset_table	= 0..9, A..Z->a..z, _, a..z
 	ngram_chars		= U+410..U+42F->U+430..U+44F, U+430..U+44F
 	ngram_len 		= 1

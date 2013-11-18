@@ -43,7 +43,6 @@ index main
 {
 	source			= srcmain
 	path			= <data_path/>/main140
-    charset_type 	= utf-8
 }
 
 source src_mva_64
@@ -60,7 +59,6 @@ index mva_64
 {
 	source			= src_mva_64
 	path			= <data_path/>/mva_64
-	charset_type 	= utf-8
 }
 
 source src_groupby_64
@@ -77,7 +75,6 @@ index groupby_64
 {
 	source			= src_groupby_64
 	path			= <data_path/>/groupby_64
-	charset_type 	= utf-8
 }
 
 </config>

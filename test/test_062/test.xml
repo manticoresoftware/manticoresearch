@@ -26,7 +26,6 @@ index test
 {
 	source = test
 	path = <data_path/>/test
-	charset_type = utf-8
 
 	phrase_boundary = U+002C
 	phrase_boundary_step = 100
@@ -40,7 +39,6 @@ index hi1
 	source = test
 	path = <data_path/>/hi1
 	docinfo			= extern
-	charset_type	= utf-8
 	dict = keywords
 }
 

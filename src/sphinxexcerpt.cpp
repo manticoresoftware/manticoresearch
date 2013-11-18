@@ -510,7 +510,7 @@ void SnippetsDocIndex_c::ExtractWords ( XQNode_t * pNode, ISphTokenizer * pToken
 	{
 		const XQKeyword_t & tWord = pNode->m_dWords[i];
 
-		int iLenCP = pTokenizer->IsUtf8() ? sphUTF8Len ( tWord.m_sWord.cstr() ) : tWord.m_sWord.Length();
+		int iLenCP = sphUTF8Len ( tWord.m_sWord.cstr() );
 		if ( HasStars ( tWord ) )
 			AddWordStar ( tWord.m_sWord.cstr(), iLenCP );
 		else
@@ -1505,7 +1505,7 @@ public:
 };
 
 
-static void SplitSpaceIntoTokens ( CSphVector<Space_t> & dSpaces, const char * pDoc, bool bUTF8, int iStart, int iLen, int iBoundary = -1 )
+static void SplitSpaceIntoTokens ( CSphVector<Space_t> & dSpaces, const char * pDoc, int iStart, int iLen, int iBoundary = -1 )
 {
 	// most frequent case
 	if ( sphIsSpace ( pDoc[iStart] ) && iLen==1 )
@@ -1532,7 +1532,7 @@ static void SplitSpaceIntoTokens ( CSphVector<Space_t> & dSpaces, const char * p
 			Space_t & tLastSpace = dSpaces.Add();
 			tLastSpace.m_iStartBytes = iGapStart;
 			tLastSpace.m_iLengthBytes = i-iGapStart;
-			tLastSpace.m_iLengthCP = bUTF8 ? sphUTF8Len ( pDoc+tLastSpace.m_iStartBytes, tLastSpace.m_iLengthBytes ) : tLastSpace.m_iLengthBytes;
+			tLastSpace.m_iLengthCP = sphUTF8Len ( pDoc+tLastSpace.m_iStartBytes, tLastSpace.m_iLengthBytes );
 
 			bWasSpace = bSpace;
 			bWasBoundary = bBoundary;
@@ -1545,7 +1545,7 @@ static void SplitSpaceIntoTokens ( CSphVector<Space_t> & dSpaces, const char * p
 		Space_t & tLastSpace = dSpaces.Add();
 		tLastSpace.m_iStartBytes = iGapStart;
 		tLastSpace.m_iLengthBytes = iStart+iLen-iGapStart;
-		tLastSpace.m_iLengthCP = bUTF8 ? sphUTF8Len ( pDoc+tLastSpace.m_iStartBytes, tLastSpace.m_iLengthBytes ) : tLastSpace.m_iLengthBytes;
+		tLastSpace.m_iLengthCP = sphUTF8Len ( pDoc+tLastSpace.m_iStartBytes, tLastSpace.m_iLengthBytes );
 	}
 }
 
@@ -1618,7 +1618,7 @@ protected:
 
 		int iCalcLengthCP = iLenghCP;
 		if ( iCalcLengthCP==-1 )
-			iCalcLengthCP = m_pTokenizer->IsUtf8() ? sphUTF8Len ( m_pDoc+iStart, iLen ) : iLen;
+			iCalcLengthCP = sphUTF8Len ( m_pDoc+iStart, iLen );
 
 		bool bLengthOk = m_iResultLenCP+iCalcLengthCP<=m_iLimit;
 		if ( bLengthOk || !m_dStartResult.GetLength() )
@@ -2009,14 +2009,14 @@ public:
 
 	bool OnOverlap ( int iStart, int iLen, int )
 	{
-		SplitSpaceIntoTokens ( m_dSpaces, m_pDoc, m_pTokenizer->IsUtf8(), iStart, iLen );
+		SplitSpaceIntoTokens ( m_dSpaces, m_pDoc, iStart, iLen );
 		CollectStartSpaces ();
 		return !m_bCollectionStopped;
 	}
 
 	void OnTail ( int iStart, int iLen, int )
 	{
-		SplitSpaceIntoTokens ( m_dSpaces, m_pDoc, m_pTokenizer->IsUtf8(), iStart, iLen );
+		SplitSpaceIntoTokens ( m_dSpaces, m_pDoc, iStart, iLen );
 		CollectStartSpaces ();
 	}
 
@@ -2077,7 +2077,7 @@ public:
 			}
 		}
 
-		int iLengthCP = m_pTokenizer->IsUtf8() ? sphUTF8Len ( m_pDoc+tTok.m_iStart, tTok.m_iLen ) : tTok.m_iLen;
+		int iLengthCP = sphUTF8Len ( m_pDoc+tTok.m_iStart, tTok.m_iLen );
 
 		switch ( m_eState )
 		{
@@ -2149,7 +2149,7 @@ public:
 				OnSPZ ( MAGIC_CODE_SENTENCE, 0, NULL, -1 );
 		} else
 		{
-			SplitSpaceIntoTokens ( m_dSpaces, m_pDoc, m_pTokenizer->IsUtf8(), iStart, iLen, iBoundary );
+			SplitSpaceIntoTokens ( m_dSpaces, m_pDoc, iStart, iLen, iBoundary );
 			AddSpaces ( iBoundary );
 		}
 
@@ -2196,7 +2196,7 @@ public:
 
 	void OnTail ( int iStart, int iLen, int iBoundary )
 	{
-		SplitSpaceIntoTokens ( m_dSpaces, m_pDoc, m_pTokenizer->IsUtf8(), iStart, iLen, iBoundary );
+		SplitSpaceIntoTokens ( m_dSpaces, m_pDoc, iStart, iLen, iBoundary );
 		AddSpaces ( iBoundary );
 		ShrinkSpanHead();
 		WeightAndSubmit();
@@ -2591,7 +2591,7 @@ private:
 		assert ( m_pDoc );
 		assert ( iStart>=0 && m_pDoc+iStart+iLen<=m_pDocMax );
 
-		SplitSpaceIntoTokens ( m_dSpaces, m_pDoc, m_pTokenizer->IsUtf8(), iStart, iLen, iBoundary );
+		SplitSpaceIntoTokens ( m_dSpaces, m_pDoc, iStart, iLen, iBoundary );
 		ARRAY_FOREACH ( i, m_dSpaces )
 		{
 			UpdatePassage ( iStart );

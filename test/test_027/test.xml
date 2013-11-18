@@ -50,7 +50,6 @@ index main
 {
 	source			= srcmain
 	path			= <data_path/>/main
-    charset_type 	= utf-8
 
     <Dynamic>
       <Variant>	docinfo	= inline </Variant>
@@ -62,7 +61,6 @@ index delta
 {
 	source			= srcdelta
 	path			= <data_path/>/delta
-    charset_type 	= utf-8
     <Dynamic>
       <Variant>	docinfo	= inline </Variant>
       <Variant>	docinfo	= extern </Variant>

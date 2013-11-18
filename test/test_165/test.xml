@@ -26,7 +26,6 @@ index test
 {
 	source			= srctest
 	path			= <data_path/>/test
-    charset_type 	= utf-8
 	exceptions		= <this_test/>/synonyms.txt
 }
 
@@ -42,7 +41,6 @@ index star
 {
 	source			= srcstar
 	path			= <data_path/>/star
-    charset_type 	= utf-8
 	charset_table	= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, *, %, ?
 	exceptions		= <this_test/>/synonyms2.txt
 	enable_star = 1
@@ -53,7 +51,6 @@ index snip
 {
 	source			= srctest
 	path			= <data_path/>/snip
-	charset_type 	= utf-8
 	exceptions		= <this_test/>/synonyms3.txt
 }
 
@@ -70,7 +67,6 @@ index wild1
 {
 	source				= src_wild1
 	path					= <data_path/>/wild1
-	charset_type 	= utf-8
 	charset_table	= a..z, _, A..Z->a..z
 }
 

@@ -39,7 +39,6 @@ index base
 	source			= test
 	path			= <data_path/>/base
 
-	charset_type	= utf-8
 	charset_table	= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, \
 			U+2E80..U+2EF3, U+2F00..U+2FD5, U+3105..U+312D, U+31C0..U+31E3, U+3400..U+4DB5, U+4E00..U+9FCC, \
 			U+F900..U+FAD9, U+20000..U+2FA1D

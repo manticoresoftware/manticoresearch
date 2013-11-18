@@ -19,7 +19,6 @@ index rt1
 {
 	type			= rt
     docinfo			= extern
-    charset_type	= sbcs
 	path			= <data_path/>/rt1
 
 	rt_attr_uint	= idd

@@ -42,7 +42,6 @@ index utf1
 	source	= utf1
 	path	= <data_path/>/utf1
 	docinfo	= extern
-	charset_type = utf-8
 	enable_star = 1
 	min_infix_len = 3
 	dict = keywords	

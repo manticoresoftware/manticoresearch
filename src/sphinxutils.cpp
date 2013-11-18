@@ -285,7 +285,6 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "mysql_ssl_cert",			0, NULL }, // check.pl mysql_ssl
 	{ "mysql_ssl_ca",			0, NULL }, // check.pl mysql_ssl
 	{ "mssql_winauth",			0, NULL },
-	{ "mssql_unicode",			0, NULL },
 	{ "sql_query_pre",			KEY_LIST, NULL },
 	{ "sql_query",				0, NULL },
 	{ "sql_query_range",		0, NULL },
@@ -371,7 +370,6 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "wordforms",				KEY_LIST, NULL },
 	{ "embedded_limit",			0, NULL },
 	{ "min_word_len",			0, NULL },
-	{ "charset_type",			0, NULL },
 	{ "charset_table",			0, NULL },
 	{ "ignore_chars",			0, NULL },
 	{ "min_prefix_len",			0, NULL },
@@ -1067,29 +1065,16 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 
 /////////////////////////////////////////////////////////////////////////////
 
-bool sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings & tSettings, CSphString & sError )
+void sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings & tSettings )
 {
 	tSettings.m_iNgramLen = Max ( hIndex.GetInt ( "ngram_len" ), 0 );
 
-	if ( !hIndex("charset_type") || hIndex["charset_type"]=="utf-8" )
+	if ( hIndex ( "ngram_chars" ) )
 	{
-		tSettings.m_iType = TOKENIZER_UTF8;
-		if ( hIndex ( "ngram_chars" ) )
-		{
-			if ( tSettings.m_iNgramLen )
-				tSettings.m_iType = TOKENIZER_NGRAM;
-			else
-				sphWarning ( "ngram_chars specified, but ngram_len=0; IGNORED" );
-		}
-
-	} else if ( hIndex["charset_type"]=="sbcs" )
-	{
-		sphWarning ( "charset_type=sbcs is deprecated, use charset_type=utf-8" );
-		tSettings.m_iType = TOKENIZER_SBCS;
-	} else
-	{
-		sError.SetSprintf ( "unknown charset type '%s'", hIndex["charset_type"].cstr() );
-		return false;
+		if ( tSettings.m_iNgramLen )
+			tSettings.m_iType = TOKENIZER_NGRAM;
+		else
+			sphWarning ( "ngram_chars specified, but ngram_len=0; IGNORED" );
 	}
 
 	tSettings.m_sCaseFolding = hIndex.GetStr ( "charset_table" );
@@ -1106,8 +1091,6 @@ bool sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings 
 	int iBoundaryStep = Max ( hIndex.GetInt ( "phrase_boundary_step" ), -1 );
 	if ( iBoundaryStep!=0 )
 		tSettings.m_sBoundary = hIndex.GetStr ( "phrase_boundary" );
-
-	return true;
 }
 
 void sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tSettings )
@@ -1433,8 +1416,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 	if ( !pIndex->GetTokenizer () )
 	{
 		CSphTokenizerSettings tSettings;
-		if ( !sphConfTokenizer ( hIndex, tSettings, sError ) )
-			return false;
+		sphConfTokenizer ( hIndex, tSettings );
 
 		ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tSettings, NULL, sError );
 		if ( !pTokenizer )

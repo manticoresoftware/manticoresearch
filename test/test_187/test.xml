@@ -62,7 +62,6 @@ index plain
 {
 	source			= src_plain
 	path			= <data_path/>/plain
-	charset_type	= utf-8
 }
 
 index rt_arena
@@ -75,7 +74,6 @@ index rt_arena
 	rt_attr_multi = mva1
 	rt_attr_uint	= gid
 	
-	charset_type	= utf-8
 } 
 
 source src_a1
@@ -90,7 +88,6 @@ index a1
 {
 	source			= src_a1
 	path			= <data_path/>/a1
-	charset_type	= utf-8
 }
 
 index rt1
@@ -100,7 +97,6 @@ index rt1
 	rt_field		= title
 	rt_field		= body
 	rt_attr_uint	= gid
-	charset_type	= utf-8
 } 
 
 </config>

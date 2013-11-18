@@ -64,7 +64,6 @@ index plain_stem
 	source			= plain_stem_src
 	path			= <data_path/>/plain_stem
 	docinfo			= extern
-	charset_type	= utf-8
 	morphology = stem_en
 	dict			= crc
 }
@@ -74,7 +73,6 @@ index rt_stem
 	path			= <data_path/>/rt_stem
 	rt_attr_uint	= gid
 	rt_field		= title
-	charset_type	= utf-8
 	morphology = stem_en
 	dict			= crc
 } 

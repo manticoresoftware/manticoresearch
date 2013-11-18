@@ -33,14 +33,12 @@ index test1
 {
 	source			= srctest1
 	path			= <data_path/>/test1
-    charset_type 	= utf-8
 }
 
 index test2
 {
 	source			= srctest2
 	path			= <data_path/>/test2
-    charset_type 	= utf-8
 }
 </config>
 

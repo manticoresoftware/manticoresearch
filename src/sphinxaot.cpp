@@ -1269,30 +1269,15 @@ void sphAotLemmatizeDeUTF8 ( BYTE * pWord )
 	Win1252ToLowercaseUtf8 ( pWord, sBuf );
 }
 
-void sphAotLemmatizeRu ( CSphVector<CSphString> & dLemmas, const BYTE * pWord, bool bUtf8 )
+void sphAotLemmatizeRu ( CSphVector<CSphString> & dLemmas, const BYTE * pWord )
 {
 	assert ( g_pLemmatizers[AOT_RU] );
-	if ( bUtf8 )
-	{
-		if ( !IsRussianAlphaUtf8(pWord) )
-			return;
-	} else
-	{
-		if ( !IsAlpha1251(*pWord) )
-			return;
-	}
+	if ( !IsRussianAlphaUtf8(pWord) )
+		return;
 
 	BYTE sForm [ SPH_MAX_WORD_LEN+4 ];
 	int iFormLen = 0;
-	if ( bUtf8 )
-	{
-		iFormLen = Utf8ToWin1251 ( sForm, pWord );
-	} else
-	{
-		while ( *pWord )
-			sForm [ iFormLen++ ] = *pWord++;
-		sForm [ iFormLen ] = '\0';
-	}
+	iFormLen = Utf8ToWin1251 ( sForm, pWord );
 
 	if ( iFormLen<2 || IsRuFreq2(sForm) )
 		return;
@@ -1310,11 +1295,8 @@ void sphAotLemmatizeRu ( CSphVector<CSphString> & dLemmas, const BYTE * pWord, b
 		const CMorphForm & F = M [ AOT_ITEM_NO ( FindResults[i] ) ];
 
 		BYTE sRes [ 3*SPH_MAX_WORD_LEN+4 ];
-		if ( bUtf8 )
-			CreateLemma<EMIT_UTF8RU> ( sRes, sForm, iFormLen, bFound, M, F );
-		else
-			CreateLemma<EMIT_1BYTE> ( sRes, sForm, iFormLen, bFound, M, F );
 
+		CreateLemma<EMIT_UTF8RU> ( sRes, sForm, iFormLen, bFound, M, F );
 		dLemmas.Add ( (const char*)sRes );
 	}
 
@@ -1322,30 +1304,16 @@ void sphAotLemmatizeRu ( CSphVector<CSphString> & dLemmas, const BYTE * pWord, b
 	dLemmas.Uniq();
 }
 
-void sphAotLemmatizeDe ( CSphVector<CSphString> & dLemmas, const BYTE * pWord, bool bUtf8 )
+void sphAotLemmatizeDe ( CSphVector<CSphString> & dLemmas, const BYTE * pWord )
 {
 	assert ( g_pLemmatizers[AOT_DE] );
-	if ( bUtf8 )
-	{
-		if ( !IsGermanAlphaUtf8(pWord) )
-			return;
-	} else
-	{
-		if ( !IsGermanAlpha1252(*pWord) )
-			return;
-	}
+	if ( !IsGermanAlphaUtf8(pWord) )
+		return;
 
 	BYTE sForm [ SPH_MAX_WORD_LEN+4 ];
 	int iFormLen = 0;
-	if ( bUtf8 )
-	{
-		iFormLen = Utf8ToWin1252 ( sForm, pWord );
-	} else
-	{
-		while ( *pWord )
-			sForm [ iFormLen++ ] = *pWord++;
-		sForm [ iFormLen ] = '\0';
-	}
+	iFormLen = Utf8ToWin1252 ( sForm, pWord );
+
 	if ( iFormLen<=1 )
 		return;
 
@@ -1363,11 +1331,8 @@ void sphAotLemmatizeDe ( CSphVector<CSphString> & dLemmas, const BYTE * pWord, b
 		const CMorphForm & F = M [ AOT_ITEM_NO ( FindResults[i] ) ];
 
 		BYTE sRes [ 3*SPH_MAX_WORD_LEN+4 ];
-		if ( bUtf8 )
-			CreateLemma<EMIT_UTF8> ( sRes, sForm, iFormLen, bFound, M, F );
-		else
-			CreateLemma<EMIT_1BYTE> ( sRes, sForm, iFormLen, bFound, M, F );
 
+		CreateLemma<EMIT_UTF8> ( sRes, sForm, iFormLen, bFound, M, F );
 		dLemmas.Add ( (const char*)sRes );
 	}
 
@@ -1486,7 +1451,6 @@ public:
 	}
 };
 
-template < bool IS_UTF8 >
 class CSphAotTokenizerRu : public CSphAotTokenizerTmpl
 {
 public:
@@ -1499,7 +1463,7 @@ public:
 		// this token filter must NOT be created as escaped
 		// it must only be used during indexing time, NEVER in searching time
 		assert ( eMode==SPH_CLONE_INDEX );
-		CSphAotTokenizerRu<IS_UTF8> * pClone = new CSphAotTokenizerRu ( m_pTokenizer->Clone ( eMode ), NULL, m_bIndexExact );
+		CSphAotTokenizerRu * pClone = new CSphAotTokenizerRu ( m_pTokenizer->Clone ( eMode ), NULL, m_bIndexExact );
 		if ( m_pWordforms )
 			pClone->m_pWordforms = m_pWordforms;
 		return pClone;
@@ -1528,7 +1492,7 @@ public:
 			// generate that lemma
 			const CFlexiaModel & M = g_pLemmatizers[AOT_RU]->m_FlexiaModels [ AOT_MODEL_NO ( m_FindResults [ m_iCurrent ] ) ];
 			const CMorphForm & F = M [ AOT_ITEM_NO ( m_FindResults [ m_iCurrent ] ) ];
-			CreateLemma<IS_UTF8?EMIT_UTF8RU:EMIT_1BYTE> ( m_sToken, m_sForm, m_iFormLen, m_bFound, M, F );
+			CreateLemma<EMIT_UTF8RU> ( m_sToken, m_sForm, m_iFormLen, m_bFound, M, F );
 
 			// is this the last one? gotta tag it non-blended
 			if ( m_FindResults [ m_iCurrent+1 ]==AOT_NOFORM )
@@ -1556,32 +1520,15 @@ public:
 			return pToken;
 
 		// pass-through 1-char "words"
-		if ( pToken [ 1+IS_UTF8 ]=='\0' )
+		if ( pToken[2]=='\0' )
 			return pToken;
 
 		// pass-through non-Russian words
-		if_const ( IS_UTF8 )
-		{
-			if ( !IsRussianAlphaUtf8 ( pToken ) )
-				return pToken;
-		} else
-		{
-			if ( !IsAlpha1251 ( pToken[0] ) )
-				return pToken;
-		}
+		if ( !IsRussianAlphaUtf8 ( pToken ) )
+			return pToken;
 
 		// convert or copy regular tokens
-		if_const ( IS_UTF8 )
-			m_iFormLen = Utf8ToWin1251 ( m_sForm, pToken );
-		else
-		{
-			// manual strlen and memcpy; faster this way
-			BYTE * p = pToken;
-			m_iFormLen = 0;
-			while ( *p )
-				m_sForm [ m_iFormLen++ ] = *p++;
-			m_sForm [ m_iFormLen ] = '\0';
-		}
+		m_iFormLen = Utf8ToWin1251 ( m_sForm, pToken );
 
 		// do nothing with one-char words
 		if ( m_iFormLen<=1 )
@@ -1614,7 +1561,7 @@ public:
 		// in any event, prepare the first lemma for return
 		const CFlexiaModel & M = g_pLemmatizers[AOT_RU]->m_FlexiaModels [ AOT_MODEL_NO ( m_FindResults[0] ) ];
 		const CMorphForm & F = M [ AOT_ITEM_NO ( m_FindResults[0] ) ];
-		CreateLemma<IS_UTF8?EMIT_UTF8RU:EMIT_1BYTE> ( pToken, m_sForm, m_iFormLen, m_bFound, M, F );
+		CreateLemma<EMIT_UTF8RU> ( pToken, m_sForm, m_iFormLen, m_bFound, M, F );
 
 		// schedule lemmas 2+ for return
 		if ( m_FindResults[1]!=AOT_NOFORM )
@@ -1629,7 +1576,6 @@ public:
 	}
 };
 
-template < bool IS_UTF8 >
 class CSphAotTokenizer : public CSphAotTokenizerTmpl
 {
 	AOT_LANGS		m_iLang;
@@ -1644,7 +1590,7 @@ public:
 		// this token filter must NOT be created as escaped
 		// it must only be used during indexing time, NEVER in searching time
 		assert ( eMode==SPH_CLONE_INDEX );
-		CSphAotTokenizer * pClone = new CSphAotTokenizer<IS_UTF8> ( m_pTokenizer->Clone ( eMode ), NULL, m_bIndexExact, m_iLang );
+		CSphAotTokenizer * pClone = new CSphAotTokenizer ( m_pTokenizer->Clone ( eMode ), NULL, m_bIndexExact, m_iLang );
 		if ( m_pWordforms )
 			pClone->m_pWordforms = m_pWordforms;
 		return pClone;
@@ -1673,7 +1619,7 @@ public:
 			// generate that lemma
 			const CFlexiaModel & M = g_pLemmatizers[m_iLang]->m_FlexiaModels [ AOT_MODEL_NO ( m_FindResults [ m_iCurrent ] ) ];
 			const CMorphForm & F = M [ AOT_ITEM_NO ( m_FindResults [ m_iCurrent ] ) ];
-			CreateLemma<IS_UTF8?EMIT_UTF8:EMIT_1BYTE> ( m_sToken, m_sForm, m_iFormLen, m_bFound, M, F );
+			CreateLemma<EMIT_UTF8> ( m_sToken, m_sForm, m_iFormLen, m_bFound, M, F );
 
 			// is this the last one? gotta tag it non-blended
 			if ( m_FindResults [ m_iCurrent+1 ]==AOT_NOFORM )
@@ -1701,11 +1647,11 @@ public:
 			return pToken;
 
 		// pass-through 1-char "words"
-		if ( pToken [ 1+IS_UTF8 ]=='\0' )
+		if ( pToken[2]=='\0' )
 			return pToken;
 
 		// pass-through non-Russian words
-		if_const ( IS_UTF8 && m_iLang==AOT_DE )
+		if ( m_iLang==AOT_DE )
 		{
 			if ( !IsGermanAlphaUtf8 ( pToken ) )
 				return pToken;
@@ -1716,7 +1662,7 @@ public:
 		}
 
 		// convert or copy regular tokens
-		if_const ( IS_UTF8 && m_iLang==AOT_DE )
+		if ( m_iLang==AOT_DE )
 			m_iFormLen = Utf8ToWin1252 ( m_sForm, pToken );
 		else
 		{
@@ -1760,7 +1706,7 @@ public:
 		// in any event, prepare the first lemma for return
 		const CFlexiaModel & M = g_pLemmatizers[m_iLang]->m_FlexiaModels [ AOT_MODEL_NO ( m_FindResults[0] ) ];
 		const CMorphForm & F = M [ AOT_ITEM_NO ( m_FindResults[0] ) ];
-		CreateLemma<IS_UTF8?EMIT_UTF8:EMIT_1BYTE> ( pToken, m_sForm, m_iFormLen, m_bFound, M, F );
+		CreateLemma<EMIT_UTF8> ( pToken, m_sForm, m_iFormLen, m_bFound, M, F );
 
 		// schedule lemmas 2+ for return
 		if ( m_FindResults[1]!=AOT_NOFORM )
@@ -1785,18 +1731,9 @@ CSphTokenFilter * sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pD
 		if ( uLangMask & (1UL<<i) )
 		{
 			if ( i==AOT_RU )
-			{
-				if ( pTokenizer->IsUtf8() )
-					pDerivedTokenizer = new CSphAotTokenizerRu<true> ( pTokenizer, pDict, bIndexExact );
-				else
-					pDerivedTokenizer = new CSphAotTokenizerRu<false> ( pTokenizer, pDict, bIndexExact );
-			} else
-			{
-				if ( pTokenizer->IsUtf8() )
-					pDerivedTokenizer = new CSphAotTokenizer<true> ( pTokenizer, pDict, bIndexExact, i);
-				else
-					pDerivedTokenizer = new CSphAotTokenizer<false> ( pTokenizer, pDict, bIndexExact, i );
-			}
+				pDerivedTokenizer = new CSphAotTokenizerRu ( pTokenizer, pDict, bIndexExact );
+			else
+				pDerivedTokenizer = new CSphAotTokenizer ( pTokenizer, pDict, bIndexExact, i);
 			pTokenizer = pDerivedTokenizer;
 		}
 	}

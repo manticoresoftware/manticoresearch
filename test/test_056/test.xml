@@ -29,7 +29,6 @@ index index_utf8
 	phrase_boundary = .
 	phrase_boundary_step = 100
 
-	charset_type = utf-8
 }
 </config>
 

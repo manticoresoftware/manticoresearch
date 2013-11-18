@@ -35,7 +35,6 @@ index test_idx
 {
 	source			= srctest
 	path			= <Data_Path/>/test
-    charset_type	= utf-8
 }
 </Config>
 <DB_Create>

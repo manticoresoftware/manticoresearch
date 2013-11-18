@@ -79,9 +79,7 @@ index block1
 	source			= src1
 	path			= </Static><Data_Path/><Static>/block1
 	docinfo			= extern
-	charset_type	= utf-8
 	min_word_len	= 1
-	charset_type	= sbcs
 }
 
 index block2
@@ -89,9 +87,7 @@ index block2
 	source			= src2
 	path			= </Static><Data_Path/><Static>/block2
 	docinfo			= extern
-	charset_type	= utf-8
 	min_word_len	= 1
-	charset_type	= sbcs
 }
 
 index block3
@@ -99,9 +95,7 @@ index block3
 	source			= src3
 	path			= </Static><Data_Path/><Static>/block3
 	docinfo			= extern
-	charset_type	= utf-8
 	min_word_len	= 1
-	charset_type	= sbcs
 }
 
 index block4
@@ -109,9 +103,7 @@ index block4
 	source			= src4
 	path			= </Static><Data_Path/><Static>/block4
 	docinfo			= extern
-	charset_type	= utf-8
 	min_word_len	= 1
-	charset_type	= sbcs
 }
 
 index dist

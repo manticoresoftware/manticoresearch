@@ -29,7 +29,6 @@ index test
 {
   source      = src
   path      = <data_path/>/test
-  charset_type  = utf-8
 }
 
 source srchalf1
@@ -51,13 +50,11 @@ index loc1
 {
   source      = srchalf1
   path      = <data_path/>/loc1
-  charset_type  = utf-8
 }
 index loc2
 {
   source      = srchalf2
   path      = <data_path/>/loc2
-  charset_type  = utf-8
 }
 index d1
 {

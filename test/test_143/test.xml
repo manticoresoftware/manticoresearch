@@ -21,7 +21,6 @@ index test
 	source			= test
 	path			= <data_path/>/test
 
-	charset_type	= utf-8
 	wordforms = <this_test/>/wordforms.txt
 	blend_chars = +
 }
@@ -40,7 +39,6 @@ index snip2
 {
 	source			= src_snip
 	path			= <data_path/>/snip2
-	charset_type 	= utf-8
 }
 </config>
 

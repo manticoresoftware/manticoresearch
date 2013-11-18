@@ -146,7 +146,7 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 
 enum
 {
-	TOKENIZER_SBCS		= 1,
+	// where was TOKENIZER_SBCS=1 once
 	TOKENIZER_UTF8		= 2,
 	TOKENIZER_NGRAM	= 3
 };
@@ -155,7 +155,7 @@ enum
 const char *	sphLoadConfig ( const char * sOptConfig, bool bQuiet, CSphConfigParser & cp );
 
 /// configure tokenizer from index definition section
-bool			sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings & tSettings, CSphString & sError );
+void			sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings & tSettings );
 
 /// configure dictionary from index definition section
 void			sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tSettings );

@@ -39,7 +39,6 @@ index wf1
 	source			= src_wf
 	path			= <data_path/>/wf1
 	morphology			= stem_en
-	charset_type		= utf-8
 	charset_table	= 0..9, A..Z->a..z, a..z,
 	wordforms = <this_test/>/wordforms.txt
 }
@@ -49,7 +48,6 @@ index wf2
 	source			= src_wf
 	path			= <data_path/>/wf2
 	morphology			= stem_en
-	charset_type		= utf-8
 	charset_table	= 0..9, A..Z->a..z, a..z, -
 	wordforms = <this_test/>/wordforms.txt
 }
@@ -67,7 +65,6 @@ index wf3
 	source			= src_wf3
 	path			= <data_path/>/wf3
 	morphology			= stem_en
-	charset_type		= utf-8
 	charset_table 	= -, 0..9, A..Z->a..z, _, a..z
 	wordforms = <this_test/>/wf3.txt
 }
@@ -80,7 +77,6 @@ index rt
 	rt_field = title
 	rt_attr_uint=gid
 	dict = keywords
-	charset_type		= utf-8
 	min_prefix_len = 1
 	enable_star = 1
 	morphology = stem_en
@@ -92,7 +88,6 @@ index exact_wf
 	source			= src_wf3
 	path			= <data_path/>/exact_wf
 	dict = crc
-	charset_type		= utf-8
 	min_prefix_len = 1
 	enable_star = 1
 	morphology = stem_en

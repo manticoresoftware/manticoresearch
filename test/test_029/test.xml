@@ -58,7 +58,6 @@ index test1
 {
 	source			= srctest1
 	path			= <data_path/>/test1
-    charset_type 	= utf-8
 	min_prefix_len	= 1
 }
 
@@ -66,7 +65,6 @@ index test2
 {
 	source			= srctest2
 	path			= <data_path/>/test2
-    charset_type 	= utf-8
 	min_prefix_len	= 1
 }
 
@@ -74,7 +72,6 @@ index test3
 {
 	source			= srctest3
 	path			= <data_path/>/test3
-    charset_type 	= utf-8
 	min_prefix_len	= 1
 }
 
@@ -82,7 +79,6 @@ index test4
 {
 	source			= srctest4
 	path			= <data_path/>/test4
-    charset_type 	= utf-8
 	min_prefix_len	= 1
 }
 

@@ -171,7 +171,6 @@ static bool sphTruncate ( int iFD );
 // GLOBALS
 /////////////////////////////////////////////////////////////////////////////
 
-const char *		SPHINX_DEFAULT_SBCS_TABLE	= "0..9, A..Z->a..z, _, a..z, U+A8->U+B8, U+B8, U+C0..U+DF->U+E0..U+FF, U+E0..U+FF";
 const char *		SPHINX_DEFAULT_UTF8_TABLE	= "0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451";
 
 const char *		MAGIC_WORD_SENTENCE		= "\3sentence";		// emitted from source on sentence boundary, stored in dictionary
@@ -1962,7 +1961,6 @@ struct CSphSynonym
 };
 
 
-/// base that is completely identical in both SBCS and UTF8 tokenizers
 class CSphTokenizerBase : public ISphTokenizer
 {
 public:
@@ -2046,30 +2044,21 @@ protected:
 };
 
 
-/// methods taht get specialized with regards to charset type
+/// methods that get specialized with regards to charset type
 /// aka GetCodepoint() decoder and everything that depends on it
-template < bool IS_UTF8 >
 class CSphTokenizerBase2 : public CSphTokenizerBase
 {
 protected:
 	/// get codepoint
 	inline int GetCodepoint ()
 	{
-		if_const ( IS_UTF8 )
+		while ( m_pCur<m_pBufferMax )
 		{
-			while ( m_pCur<m_pBufferMax )
-			{
-				int iCode = sphUTF8Decode ( m_pCur );
-				if ( iCode>=0 )
-					return iCode; // succesful decode
-			}
-			return -1; // eof
-		} else
-		{
-			return m_pCur>=m_pBufferMax
-				? -1
-				: int ( *m_pCur++ );
+			int iCode = sphUTF8Decode ( m_pCur );
+			if ( iCode>=0 )
+				return iCode; // successful decode
 		}
+		return -1; // eof
 	}
 
 	/// accum codepoint
@@ -2080,17 +2069,12 @@ protected:
 
 		// throw away everything which is over the token size
 		bool bFit = ( m_iAccum<SPH_MAX_WORD_LEN );
-		if_const ( IS_UTF8 )
-			bFit &= ( m_pAccum-m_sAccum+SPH_MAX_UTF8_BYTES<=(int)sizeof(m_sAccum));
+		bFit &= ( m_pAccum-m_sAccum+SPH_MAX_UTF8_BYTES<=(int)sizeof(m_sAccum));
 
 		if ( bFit )
 		{
-			if_const ( IS_UTF8 )
-				m_pAccum += sphUTF8Encode ( m_pAccum, iCode );
-			else
-				*m_pAccum++ = BYTE(iCode);
+			m_pAccum += sphUTF8Encode ( m_pAccum, iCode );
 			assert ( m_pAccum>=m_sAccum && m_pAccum<m_sAccum+sizeof(m_sAccum) );
-
 			m_iAccum++;
 		}
 	}
@@ -2099,41 +2083,19 @@ protected:
 	BYTE *			GetTokenSyn ( bool bQueryMode );
 	BYTE *			GetBlendedVariant ();
 
+	template < bool IS_QUERY, bool IS_BLEND >
+	BYTE *						DoGetToken();
+
+	void						FlushAccum ();
+
 public:
 	virtual int		SkipBlended ();
 };
 
 
-/// single-byte charset tokenizer
-template < bool IS_QUERY >
-class CSphTokenizer_SBCS : public CSphTokenizerBase2<false>
-{
-public:
-								CSphTokenizer_SBCS ();
-
-	virtual void				SetBuffer ( const BYTE * sBuffer, int iLength );
-	virtual BYTE *				GetToken ();
-	virtual ISphTokenizer *		Clone ( ESphTokenizerClone eMode ) const;
-	virtual bool				IsUtf8 () const { return false; }
-	virtual int					GetCodepointLength ( int ) const { return 1; }
-	virtual int					GetMaxCodepointLength () const { return 1; }
-};
-
-
-/// templated UTF-8 implementation of GetToken
-class CSphTokenizer_UTF8_Base : public CSphTokenizerBase2<true>
-{
-protected:
-	template < bool IS_QUERY, bool IS_BLEND >
-	BYTE *						DoGetToken();
-
-	void						FlushAccum ();
-};
-
-
 /// UTF-8 tokenizer
 template < bool IS_QUERY >
-class CSphTokenizer_UTF8 : public CSphTokenizer_UTF8_Base
+class CSphTokenizer_UTF8 : public CSphTokenizerBase2
 {
 public:
 								CSphTokenizer_UTF8 ();
@@ -2226,7 +2188,6 @@ public:
 
 public:
 	virtual ISphTokenizer *			Clone ( ESphTokenizerClone eMode ) const;
-	virtual bool					IsUtf8 () const				{ return m_pTokenizer->IsUtf8 (); }
 	virtual const char *			GetTokenStart () const		{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_szTokenStart : m_pTokenizer->GetTokenStart(); }
 	virtual const char *			GetTokenEnd () const		{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_szTokenEnd : m_pTokenizer->GetTokenEnd(); }
 	virtual const char *			GetBufferPtr () const		{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_pBufferPtr : m_pTokenizer->GetBufferPtr(); }
@@ -3289,12 +3250,6 @@ private:
 
 //////////////////////////////////////////////////////////////////////////
 
-ISphTokenizer * sphCreateSBCSTokenizer ()
-{
-	return new CSphTokenizer_SBCS<false> ();
-}
-
-
 ISphTokenizer * sphCreateUTF8Tokenizer ()
 {
 	return new CSphTokenizer_UTF8<false> ();
@@ -3842,13 +3797,19 @@ CSphTokenizerSettings::CSphTokenizerSettings ()
 }
 
 
-void LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings & tSettings,
+bool LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings & tSettings,
 	CSphEmbeddedFiles & tEmbeddedFiles, DWORD uVersion, CSphString & sWarning )
 {
 	if ( uVersion<9 )
-		return;
+		return true;
 
 	tSettings.m_iType = tReader.GetByte ();
+	if ( tSettings.m_iType!=TOKENIZER_UTF8 && tSettings.m_iType!=TOKENIZER_NGRAM )
+	{
+		sWarning = "can't load an old index with SBCS tokenizer";
+		return false;
+	}
+
 	tSettings.m_sCaseFolding = tReader.GetString ();
 	tSettings.m_iMinWordLen = tReader.GetDword ();
 	tEmbeddedFiles.m_bEmbeddedSynonyms = false;
@@ -3875,6 +3836,8 @@ void LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings & tSett
 		tSettings.m_sBlendChars = tReader.GetString ();
 	if ( uVersion>=24 )
 		tSettings.m_sBlendMode = tReader.GetString();
+
+	return true;
 }
 
 
@@ -4042,7 +4005,7 @@ void LoadFieldFilterSettings ( CSphReader & tReader, CSphFieldFilterSettings & t
 	ARRAY_FOREACH ( i, tFieldFilterSettings.m_dRegexps )
 		tFieldFilterSettings.m_dRegexps[i] = tReader.GetString();
 
-	tFieldFilterSettings.m_bUTF8 = !!tReader.GetByte();
+	tReader.GetByte(); // deprecated utf-8 flag
 }
 
 
@@ -4061,7 +4024,7 @@ void SaveFieldFilterSettings ( CSphWriter & tWriter, ISphFieldFilter * pFieldFil
 	ARRAY_FOREACH ( i, tSettings.m_dRegexps )
 		tWriter.PutString ( tSettings.m_dRegexps[i] );
 
-	tWriter.PutByte ( tSettings.m_bUTF8 ? 1 : 0 );
+	tWriter.PutByte(1); // deprecated utf8 flag
 }
 
 
@@ -4160,7 +4123,7 @@ void ISphTokenizer::AddSpecials ( const char * sSpecials )
 }
 
 
-static int TokenizeOnWhitespace ( CSphVector<CSphString> & dTokens, const BYTE * sFrom, bool bUtf8 )
+static int TokenizeOnWhitespace ( CSphVector<CSphString> & dTokens, const BYTE * sFrom )
 {
 	BYTE sAccum [ 3*SPH_MAX_WORD_LEN+16 ];
 	BYTE * pAccum = sAccum;
@@ -4168,7 +4131,7 @@ static int TokenizeOnWhitespace ( CSphVector<CSphString> & dTokens, const BYTE *
 
 	for ( ;; )
 	{
-		int iCode = bUtf8 ? sphUTF8Decode(sFrom) : *sFrom++;
+		int iCode = sphUTF8Decode(sFrom);
 
 		// eof or whitespace?
 		if ( !iCode || sphIsSpace(iCode) )
@@ -4191,7 +4154,7 @@ static int TokenizeOnWhitespace ( CSphVector<CSphString> & dTokens, const BYTE *
 			// accumulate everything else
 			if ( iAccum<SPH_MAX_WORD_LEN )
 			{
-				if ( bUtf8 && ( pAccum-sAccum+SPH_MAX_UTF8_BYTES<=(int)sizeof(sAccum) ) )
+				if ( ( pAccum-sAccum+SPH_MAX_UTF8_BYTES )<=(int)sizeof(sAccum) )
 				{
 					pAccum += sphUTF8Encode ( pAccum, iCode );
 					iAccum++;
@@ -4243,7 +4206,6 @@ ISphTokenizer * ISphTokenizer::Create ( const CSphTokenizerSettings & tSettings,
 
 	switch ( tSettings.m_iType )
 	{
-		case TOKENIZER_SBCS:	pTokenizer = sphCreateSBCSTokenizer (); break;
 		case TOKENIZER_UTF8:	pTokenizer = sphCreateUTF8Tokenizer (); break;
 		case TOKENIZER_NGRAM:	pTokenizer = sphCreateUTF8NgramTokenizer (); break;
 		default:
@@ -4481,7 +4443,7 @@ bool CSphTokenizerBase::LoadSynonym ( char * sBuffer, const char * sFilename,
 	*sSplit = '\0';
 
 	// tokenize map-from
-	if ( !TokenizeOnWhitespace ( dFrom, sFrom, IsUtf8() ) )
+	if ( !TokenizeOnWhitespace ( dFrom, sFrom ) )
 	{
 		sError.SetSprintf ( "%s line %d: empty map-from part", sFilename, iLine );
 		return false;
@@ -4498,7 +4460,7 @@ bool CSphTokenizerBase::LoadSynonym ( char * sBuffer, const char * sFilename,
 	// check lengths
 	ARRAY_FOREACH ( i, dFrom )
 	{
-		int iFromLen = IsUtf8() ? sphUTF8Len ( dFrom[i].cstr() ) : strlen ( dFrom[i].cstr() );
+		int iFromLen = sphUTF8Len ( dFrom[i].cstr() );
 		if ( iFromLen>SPH_MAX_WORD_LEN )
 		{
 			sError.SetSprintf ( "%s line %d: map-from token too long (over %d bytes)", sFilename, iLine, SPH_MAX_WORD_LEN );
@@ -4506,7 +4468,7 @@ bool CSphTokenizerBase::LoadSynonym ( char * sBuffer, const char * sFilename,
 		}
 	}
 
-	int iToLen = IsUtf8() ? sphUTF8Len ( (const char*)sTo ) : strlen ( (const char*)sTo );
+	int iToLen = sphUTF8Len ( (const char*)sTo );
 	if ( iToLen>SPH_MAX_WORD_LEN )
 	{
 		sError.SetSprintf ( "%s line %d: map-to token too long (over %d bytes)", sFilename, iLine, SPH_MAX_WORD_LEN );
@@ -4545,7 +4507,7 @@ bool CSphTokenizerBase::LoadSynonym ( char * sBuffer, const char * sFilename,
 	// track synonym-only codepoints in map-from
 	for ( ;; )
 	{
-		int iCode = IsUtf8() ? sphUTF8Decode(sFrom) : *sFrom++;
+		int iCode =sphUTF8Decode(sFrom);
 		if ( !iCode )
 			break;
 		if ( iCode>0 && !sphIsSpace(iCode) && !m_tLC.ToLower(iCode) )
@@ -4722,8 +4684,7 @@ void CSphTokenizerBase::SetBufferPtr ( const char * sNewPtr )
 }
 
 
-template < bool IS_UTF8 >
-int CSphTokenizerBase2<IS_UTF8>::SkipBlended()
+int CSphTokenizerBase2::SkipBlended()
 {
 	if ( !m_pBlendEnd )
 		return 0;
@@ -4815,8 +4776,7 @@ static inline void CopySubstring ( BYTE * pDst, const BYTE * pSrc, int iLen )
 }
 
 
-template < bool IS_UTF8 >
-BYTE * CSphTokenizerBase2<IS_UTF8>::GetBlendedVariant ()
+BYTE * CSphTokenizerBase2::GetBlendedVariant ()
 {
 	// we can get called on several occasions
 	// case 1, a new blended token was just accumulated
@@ -4835,9 +4795,7 @@ BYTE * CSphTokenizerBase2<IS_UTF8>::GetBlendedVariant ()
 		while ( *p )
 		{
 			int iLast = (int)( p-m_sAccum );
-			int iCode = IS_UTF8
-				? sphUTF8Decode ( p )
-				: *p++;
+			int iCode = sphUTF8Decode(p);
 			if (!( m_tLC.ToLower ( iCode ) & FLAG_CODEPOINT_BLEND ))
 			{
 				m_iBlendNormalEnd = (int)( p-m_sAccum );
@@ -5199,8 +5157,7 @@ static inline bool Special2Simple ( int & iCodepoint )
 }
 
 
-template < bool IS_UTF8 >
-BYTE * CSphTokenizerBase2<IS_UTF8>::GetTokenSyn ( bool bQueryMode )
+BYTE * CSphTokenizerBase2::GetTokenSyn ( bool bQueryMode )
 {
 	assert ( m_dSynonyms.GetLength() );
 
@@ -5238,7 +5195,7 @@ BYTE * CSphTokenizerBase2<IS_UTF8>::GetTokenSyn ( bool bQueryMode )
 			int iFolded;
 			if ( pCur<m_pBufferMax && *pCur<128 )
 			{
-				// fastpath, ascii7 is identical in both SBCS and UTF8 encodings
+				// fastpath (ascii7)
 				iCode = *m_pCur++;
 				iFolded = m_tLC.m_pChunk[0][iCode];
 			} else
@@ -5355,16 +5312,7 @@ BYTE * CSphTokenizerBase2<IS_UTF8>::GetTokenSyn ( bool bQueryMode )
 					iTest = 2;
 				}
 			} else
-			{
-				if ( IsUtf8() )
-				{
-					iTest = sphUTF8Encode ( sTest, iMasked );
-				} else
-				{
-					iTest = 1;
-					sTest[0] = BYTE(iMasked);
-				}
-			}
+				iTest = sphUTF8Encode ( sTest, iMasked );
 
 			// refine synonyms range
 			#define LOC_RETURN_SYNONYM(_idx) \
@@ -5521,7 +5469,7 @@ BYTE * CSphTokenizerBase2<IS_UTF8>::GetTokenSyn ( bool bQueryMode )
 				int iFolded;
 				if ( pCur<m_pBufferMax && *pCur<128 )
 				{
-					// fastpath, ascii7 is identical in both SBCS and UTF8 encodings
+					// fastpath (ascii7)
 					iCode = *m_pCur++;
 					iFolded = m_tLC.m_pChunk[0][iCode];
 				} else
@@ -5558,18 +5506,13 @@ BYTE * CSphTokenizerBase2<IS_UTF8>::GetTokenSyn ( bool bQueryMode )
 				// the hottest accumulation point
 				// so do this manually, no function calls, that is quickest
 				bool bFit = ( m_iAccum<SPH_MAX_WORD_LEN );
-				if_const ( IS_UTF8 )
-					bFit &= ( m_pAccum-m_sAccum+SPH_MAX_UTF8_BYTES<=(int)sizeof(m_sAccum) );
+				bFit &= ( m_pAccum-m_sAccum+SPH_MAX_UTF8_BYTES<=(int)sizeof(m_sAccum) );
 
 				if ( bFit )
 				{
 					m_iAccum++;
-					if_const ( IS_UTF8 )
-					{
-						iFolded &= MASK_CODEPOINT;
-						SPH_UTF8_ENCODE ( m_pAccum, iFolded );
-					} else
-						*m_pAccum++ = BYTE(iFolded);
+					iFolded &= MASK_CODEPOINT;
+					SPH_UTF8_ENCODE ( m_pAccum, iFolded );
 				}
 			}
 		} else
@@ -5727,263 +5670,6 @@ bool ISphTokenizer::SetBlendMode ( const char * sMode, CSphString & sError )
 /////////////////////////////////////////////////////////////////////////////
 
 template < bool IS_QUERY >
-CSphTokenizer_SBCS<IS_QUERY>::CSphTokenizer_SBCS ()
-{
-	CSphString sTmp;
-	SetCaseFolding ( SPHINX_DEFAULT_SBCS_TABLE, sTmp );
-}
-
-
-template < bool IS_QUERY >
-void CSphTokenizer_SBCS<IS_QUERY>::SetBuffer ( const BYTE * sBuffer, int iLength )
-{
-	// check that old one is over and that new length is sane
-	assert ( iLength>=0 );
-
-	// set buffer
-	m_pBuffer = sBuffer;
-	m_pBufferMax = sBuffer + iLength;
-	m_pCur = sBuffer;
-	m_pTokenStart = m_pTokenEnd = NULL;
-	m_pBlendStart = m_pBlendEnd = NULL;
-
-	m_iOvershortCount = 0;
-	m_bBoundary = m_bTokenBoundary = false;
-}
-
-
-template < bool IS_QUERY >
-BYTE * CSphTokenizer_SBCS<IS_QUERY>::GetToken ()
-{
-	m_bWasSpecial = false;
-	m_bBlended = false;
-	m_iOvershortCount = 0;
-	m_bTokenBoundary = false;
-
-	if ( m_dSynonyms.GetLength() )
-		return GetTokenSyn ( IS_QUERY );
-
-	// return pending blending variants
-	BYTE * pVar = GetBlendedVariant ();
-	if ( pVar )
-		return pVar;
-	m_bBlendedPart = ( m_pBlendEnd!=NULL );
-
-	for ( ;; )
-	{
-		// memorize buffer start
-		const BYTE * pCur = m_pCur;
-
-		// get next codepoint, real or virtual
-		int iCodepoint = 0;
-		int iCode = 0;
-
-		bool bWasEscaped = false; // whether current char was escaped
-		if ( m_pCur<m_pBufferMax )
-		{
-			// get next codepoint
-			iCodepoint = *m_pCur++;
-			iCode = m_tLC.ToLower ( iCodepoint );
-
-			// handle escaping
-			if_const ( IS_QUERY && iCodepoint=='\\' )
-			{
-				if ( m_pCur<m_pBufferMax )
-				{
-					// fetch, fold, and then forcibly demote special
-					iCodepoint = *m_pCur++;
-					iCode = m_tLC.ToLower ( iCodepoint );
-					if ( !Special2Simple ( iCode ) )
-						iCode = 0;
-					bWasEscaped = true;
-
-				} else
-				{
-					// stray slash on a buffer end
-					// handle it as a separator
-					iCode = 0;
-				}
-			}
-
-		} else
-		{
-			// out of buffer
-			// but still need to handle short tokens
-			if ( m_iAccum<m_tSettings.m_iMinWordLen )
-			{
-				bool bShortToken = false;
-				if ( m_bShortTokenFilter )
-				{
-					m_sAccum[m_iAccum] = '\0';
-					if ( ShortTokenFilter ( m_sAccum, m_iAccum ) )
-						bShortToken = true;
-				}
-
-				if ( !bShortToken )
-				{
-					if ( m_iAccum )
-						m_iOvershortCount++;
-					m_iAccum = 0;
-					m_iLastTokenLen = 0;
-					BlendAdjust ( pCur );
-					return NULL;
-				}
-			}
-		}
-
-		// handle all the flags..
-		if_const ( IS_QUERY )
-			iCode = CodepointArbitrationQ ( iCode, bWasEscaped, *m_pCur );
-		else if ( m_bDetectSentences )
-			iCode = CodepointArbitrationI ( iCode );
-
-		// handle ignored chars
-		if ( iCode & FLAG_CODEPOINT_IGNORE )
-			continue;
-
-		// handle blended characters
-		if ( iCode & FLAG_CODEPOINT_BLEND )
-		{
-			if ( m_pBlendEnd )
-				iCode = 0;
-			else
-			{
-				m_bBlended = true;
-				m_pBlendStart = m_iAccum ? m_pTokenStart : pCur;
-			}
-		}
-
-		// handle whitespace and boundary
-		if ( m_bBoundary && ( iCode==0 ) )
-		{
-			m_bTokenBoundary = true;
-			m_iBoundaryOffset = pCur - m_pBuffer - 1;
-		}
-		m_bBoundary = ( iCode & FLAG_CODEPOINT_BOUNDARY )!=0;
-		if ( iCode==0 || m_bBoundary )
-		{
-			if ( m_iAccum<m_tSettings.m_iMinWordLen )
-			{
-				bool bShortToken = false;
-				if ( m_bShortTokenFilter )
-				{
-					m_sAccum[m_iAccum] = '\0';
-					if ( ShortTokenFilter ( m_sAccum, m_iAccum ) )
-						bShortToken = true;
-				}
-
-				if ( !bShortToken )
-				{
-					if ( m_iAccum )
-						m_iOvershortCount++;
-
-					m_iAccum = 0;
-					BlendAdjust ( pCur );
-					continue;
-				}
-			}
-
-			m_iLastTokenLen = m_iAccum;
-			m_sAccum[m_iAccum] = '\0';
-			m_iAccum = 0;
-			m_pTokenEnd = pCur>=m_pBufferMax ? m_pCur : pCur;
-			if ( !BlendAdjust ( pCur ) )
-				continue;
-			if ( m_bBlended )
-				return GetBlendedVariant();
-			return m_sAccum;
-		}
-
-		// handle specials
-		bool bSpecial = ( iCode & FLAG_CODEPOINT_SPECIAL )!=0;
-		bool bNoBlend = !( iCode & FLAG_CODEPOINT_BLEND );
-		iCode &= MASK_CODEPOINT;
-		if ( bSpecial )
-		{
-			// skip short words
-			if ( m_iAccum<m_tSettings.m_iMinWordLen )
-			{
-				if ( m_iAccum )
-					m_iOvershortCount++;
-
-				bool bShortToken = false;
-				if ( m_bShortTokenFilter )
-				{
-					m_sAccum[m_iAccum] = '\0';
-					if ( ShortTokenFilter ( m_sAccum, m_iAccum ) )
-						bShortToken = true;
-				}
-
-				if ( !bShortToken )
-				{
-					if ( m_iAccum )
-						m_iOvershortCount++;
-
-					m_iAccum = 0;
-				}
-			}
-
-			m_pTokenEnd = m_pCur;
-
-			if ( m_iAccum==0 )
-			{
-				// nice standalone special
-				m_iLastTokenLen = 1;
-				m_sAccum[0] = (BYTE)iCode;
-				m_sAccum[1] = '\0';
-				m_pTokenStart = pCur;
-				m_bWasSpecial = true;
-
-			} else
-			{
-				// flush prev accum and redo this special
-				m_iLastTokenLen = m_iAccum;
-				m_sAccum[m_iAccum] = '\0';
-				m_pCur--;
-				m_pTokenEnd--;
-			}
-
-			m_iAccum = 0;
-			if ( !BlendAdjust ( pCur ) )
-				continue;
-			if ( m_bBlended )
-				return GetBlendedVariant();
-			return m_sAccum;
-		}
-
-		// just accumulate
-		assert ( iCode>0 );
-		if ( m_iAccum<SPH_MAX_WORD_LEN )
-		{
-			if ( m_iAccum==0 )
-				m_pTokenStart = pCur;
-
-			// tricky bit
-			// heading modifiers must not (!) affected blended status
-			// eg. we want stuff like '=-' (w/o apostrophes) thrown away when pure_blend is on
-			if_const (!( IS_QUERY && !m_iAccum && sphIsModifier(iCode) ) )
-				m_bNonBlended = m_bNonBlended || bNoBlend;
-			m_sAccum[m_iAccum++] = (BYTE)iCode;
-		}
-	}
-}
-
-
-template < bool IS_QUERY >
-ISphTokenizer * CSphTokenizer_SBCS<IS_QUERY>::Clone ( ESphTokenizerClone eMode ) const
-{
-	CSphTokenizerBase * pClone;
-	if ( eMode!=SPH_CLONE_INDEX )
-		pClone = new CSphTokenizer_SBCS<true>();
-	else
-		pClone = new CSphTokenizer_SBCS<false>();
-	pClone->CloneBase ( this, eMode );
-	return pClone;
-}
-
-/////////////////////////////////////////////////////////////////////////////
-
-template < bool IS_QUERY >
 CSphTokenizer_UTF8<IS_QUERY>::CSphTokenizer_UTF8 ()
 {
 	CSphString sTmp;
@@ -6028,7 +5714,7 @@ BYTE * CSphTokenizer_UTF8<IS_QUERY>::GetToken ()
 
 
 template < bool IS_QUERY, bool IS_BLEND >
-BYTE * CSphTokenizer_UTF8_Base::DoGetToken ()
+BYTE * CSphTokenizerBase2::DoGetToken ()
 {
 	// return pending blending variants
 	if_const ( IS_BLEND )
@@ -6238,7 +5924,7 @@ BYTE * CSphTokenizer_UTF8_Base::DoGetToken ()
 }
 
 
-void CSphTokenizer_UTF8_Base::FlushAccum ()
+void CSphTokenizerBase2::FlushAccum ()
 {
 	assert ( m_pAccum-m_sAccum < (int)sizeof(m_sAccum) );
 	m_iLastTokenLen = m_iAccum;
@@ -16143,7 +15829,8 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 	{
 		// tokenizer stuff
 		CSphTokenizerSettings tSettings;
-		LoadTokenizerSettings ( rdInfo, tSettings, tEmbeddedFiles, m_uVersion, sWarning );
+		if ( !LoadTokenizerSettings ( rdInfo, tSettings, tEmbeddedFiles, m_uVersion, m_sLastError ) )
+			return false;
 
 		if ( bStripPath )
 			StripPath ( tSettings.m_sSynonymsFile );
@@ -16330,7 +16017,9 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 		if ( m_pTokenizer )
 		{
 			const CSphTokenizerSettings & tSettings = m_pTokenizer->GetSettings ();
-			fprintf ( fp, "\tcharset_type = %s\n", tSettings.m_iType==TOKENIZER_SBCS ? "sbcs" : "utf-8" );
+			fprintf ( fp, "\tcharset_type = %s\n", ( tSettings.m_iType==TOKENIZER_UTF8 || tSettings.m_iType==TOKENIZER_NGRAM )
+					? "utf-8"
+					: "unknown tokenizer (deprecated sbcs?)" );
 			fprintf ( fp, "\tcharset_table = %s\n", tSettings.m_sCaseFolding.cstr () );
 			if ( tSettings.m_iMinWordLen>1 )
 				fprintf ( fp, "\tmin_word_len = %d\n", tSettings.m_iMinWordLen );
@@ -16473,7 +16162,6 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 	{
 		CSphFieldFilterSettings tSettings;
 		m_pFieldFilter->GetSettings ( tSettings );
-		fprintf ( fp, "field-filter-utf8: %d\n", tSettings.m_bUTF8 ? 1 : 0 );
 		ARRAY_FOREACH ( i, tSettings.m_dRegexps )
 			fprintf ( fp, "field-filter-regexp [%d]: %s\n", i, tSettings.m_dRegexps[i].cstr() );
 	}
@@ -18345,7 +18033,7 @@ static void TransformBigrams ( XQNode_t * pNode, const CSphIndexSettings & tSett
 /// create a node from a set of lemmas
 /// WARNING, tKeyword might or might not be pointing to pNode->m_dWords[0]
 /// Called from the daemon side (searchd) in time of query
-static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tKeyword, bool bUtf8, const CSphWordforms * pWordforms, const CSphIndexSettings & tSettings )
+static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tKeyword, const CSphWordforms * pWordforms, const CSphIndexSettings & tSettings )
 {
 	assert ( pNode->m_dWords.GetLength()<=1 );
 	assert ( pNode->m_dChildren.GetLength()==0 );
@@ -18375,9 +18063,9 @@ static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tK
 		if ( uLangMask & (1UL<<i) )
 		{
 			if ( i==AOT_RU )
-				sphAotLemmatizeRu ( dLemmas, (BYTE*)tKeyword.m_sWord.cstr(), bUtf8 );
+				sphAotLemmatizeRu ( dLemmas, (BYTE*)tKeyword.m_sWord.cstr() );
 			else if ( i==AOT_DE )
-				sphAotLemmatizeDe ( dLemmas, (BYTE*)tKeyword.m_sWord.cstr(), bUtf8 );
+				sphAotLemmatizeDe ( dLemmas, (BYTE*)tKeyword.m_sWord.cstr() );
 			else
 				sphAotLemmatize ( dLemmas, (BYTE*)tKeyword.m_sWord.cstr(), i );
 		}
@@ -18442,11 +18130,11 @@ static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tK
 /// used in lemmatize_ru_all morphology processing mode that can generate multiple guesses
 /// in other modes, there is always exactly one morph guess, and the dictionary handles it
 /// Called from the daemon side (searchd)
-void TransformAotFilter ( XQNode_t * pNode, bool bUtf8, const CSphWordforms * pWordforms, const CSphIndexSettings & tSettings )
+void TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, const CSphIndexSettings & tSettings )
 {
 	// case one, regular operator (and empty nodes)
 	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		TransformAotFilter ( pNode->m_dChildren[i], bUtf8, pWordforms, tSettings );
+		TransformAotFilter ( pNode->m_dChildren[i], pWordforms, tSettings );
 	if ( pNode->m_dChildren.GetLength() || pNode->m_dWords.GetLength()==0 )
 		return;
 
@@ -18463,7 +18151,7 @@ void TransformAotFilter ( XQNode_t * pNode, bool bUtf8, const CSphWordforms * pW
 			pNew->m_pParent = pNode;
 			pNew->m_iAtomPos = pNode->m_dWords[i].m_iAtomPos;
 			pNode->m_dChildren.Add ( pNew );
-			TransformAotFilterKeyword ( pNew, pNode->m_dWords[i], bUtf8, pWordforms, tSettings );
+			TransformAotFilterKeyword ( pNew, pNode->m_dWords[i], pWordforms, tSettings );
 		}
 
 		pNode->m_dWords.Reset();
@@ -18473,7 +18161,7 @@ void TransformAotFilter ( XQNode_t * pNode, bool bUtf8, const CSphWordforms * pW
 
 	// case three, plain old single keyword
 	assert ( pNode->m_dWords.GetLength()==1 );
-	TransformAotFilterKeyword ( pNode, pNode->m_dWords[0], bUtf8, pWordforms, tSettings );
+	TransformAotFilterKeyword ( pNode, pNode->m_dWords[0], pWordforms, tSettings );
 }
 
 
@@ -18582,7 +18270,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 
 	// this should be after keyword expansion
 	if ( m_tSettings.m_uAotFilterMask )
-		TransformAotFilter ( tParsed.m_pRoot, m_pQueryTokenizer->IsUtf8(), pDict->GetWordforms(), m_tSettings );
+		TransformAotFilter ( tParsed.m_pRoot, pDict->GetWordforms(), m_tSettings );
 
 	// expanding prefix in word dictionary case
 	XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, pResult );
@@ -18675,7 +18363,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 
 			// this should be after keyword expansion
 			if ( m_tSettings.m_uAotFilterMask )
-				TransformAotFilter ( dXQ[i].m_pRoot, m_pQueryTokenizer->IsUtf8(), pDict->GetWordforms(), m_tSettings );
+				TransformAotFilter ( dXQ[i].m_pRoot, pDict->GetWordforms(), m_tSettings );
 
 			// expanding prefix in word dictionary case
 			XQNode_t * pPrefixed = ExpandPrefix ( dXQ[i].m_pRoot, ppResults[i] );
@@ -19128,7 +18816,6 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	rdDict.SeekTo ( 1, READ_NO_SIZE_HINT );
 	SphOffset_t iWordsEnd = m_tWordlist.m_iWordsEnd;
 	bool bCheckInfixes = bWordDict && m_tWordlist.m_iInfixCodepointBytes && m_tWordlist.m_dInfixBlocks.GetLength();
-	bool bUtf8 = ( m_pTokenizer && m_pTokenizer->IsUtf8() );
 	CSphVector<int> dInfix2CP;
 
 	while ( rdDict.GetPos()!=iWordsEnd && !m_bIsEmpty )
@@ -19269,7 +18956,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		if ( bCheckInfixes )
 		{
 			int iWordBytes = strnlen ( sWord, sizeof(sWord) );
-			int iWordCodepoints = bUtf8 ? sphUTF8Len ( sWord ) : iWordBytes;
+			int iWordCodepoints = sphUTF8Len ( sWord );
 
 			if ( iWordCodepoints>=m_tSettings.m_iMinInfixLen )
 			{
@@ -20174,18 +19861,14 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 enum
 {
 	SPH_MORPH_STEM_EN,
-	SPH_MORPH_STEM_RU_CP1251,
 	SPH_MORPH_STEM_RU_UTF8,
 	SPH_MORPH_STEM_CZ,
 	SPH_MORPH_STEM_AR_UTF8,
 	SPH_MORPH_SOUNDEX,
-	SPH_MORPH_METAPHONE_SBCS,
 	SPH_MORPH_METAPHONE_UTF8,
-	SPH_MORPH_AOTLEMMER_RU_CP1251,
 	SPH_MORPH_AOTLEMMER_BASE,
 	SPH_MORPH_AOTLEMMER_RU_UTF8 = SPH_MORPH_AOTLEMMER_BASE,
 	SPH_MORPH_AOTLEMMER_EN,
-	SPH_MORPH_AOTLEMMER_DE_CP1252,
 	SPH_MORPH_AOTLEMMER_DE_UTF8,
 	SPH_MORPH_AOTLEMMER_BASE_ALL,
 	SPH_MORPH_AOTLEMMER_RU_ALL = SPH_MORPH_AOTLEMMER_BASE_ALL,
@@ -20222,7 +19905,7 @@ struct CSphTemplateDictTraits : CSphDict
 	virtual void		WriteWordforms ( CSphWriter & tWriter );
 	virtual const CSphWordforms *	GetWordforms() { return m_pWordforms; }
 	virtual void		DisableWordforms() { m_bDisableWordforms = true; }
-	virtual int			SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sMessage );
+	virtual int			SetMorphology ( const char * szMorph, CSphString & sMessage );
 	virtual bool		HasMorphology() const;
 	virtual void		ApplyStemmers ( BYTE * pWord );
 
@@ -20239,12 +19922,7 @@ protected:
 	CSphVector < int >	m_dMorph;
 #if USE_LIBSTEMMER
 	CSphVector < sb_stemmer * >	m_dStemmers;
-	struct DescStemmer_t
-	{
-		CSphString m_sAlgo;
-		CSphString m_sEnc;
-	};
-	CSphVector<DescStemmer_t> m_dDescStemmers;
+	CSphVector<CSphString> m_dDescStemmers;
 #endif
 
 	int					m_iStopwords;	///< stopwords count
@@ -20253,7 +19931,7 @@ protected:
 	bool				m_bApplyMorph;
 
 protected:
-	int					ParseMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError );
+	int					ParseMorphology ( const char * szMorph, CSphString & sError );
 	SphWordID_t			FilterStopword ( SphWordID_t uID ) const;	///< filter ID against stopwords list
 	CSphDict *			CloneBase ( CSphTemplateDictTraits * pDict ) const;
 	virtual bool		HasState () const;
@@ -20271,7 +19949,7 @@ private:
 	CSphWordforms *		GetWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos, const CSphVector<CSphString> * pEmbeddedWordforms, const ISphTokenizer * pTokenizer, const char * sIndex );
 	CSphWordforms *		LoadWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos, const CSphVector<CSphString> * pEmbeddedWordforms, const ISphTokenizer * pTokenizer, const char * sIndex );
 
-	int					InitMorph ( const char * szMorph, int iLength, bool bUseUTF8, CSphString & sError );
+	int					InitMorph ( const char * szMorph, int iLength, CSphString & sError );
 	int					AddMorph ( int iMorph ); ///< helper that always returns ST_OK
 	bool				StemById ( BYTE * pWord, int iStemmer );
 	void				AddWordform ( CSphWordforms * pContainer, char * sBuffer, int iLen, ISphTokenizer * pTokenizer, const char * szFile, const CSphVector<char> & dBlended );
@@ -20568,7 +20246,7 @@ SphWordID_t CSphTemplateDictTraits::FilterStopword ( SphWordID_t uID ) const
 }
 
 
-int CSphTemplateDictTraits::ParseMorphology ( const char * sMorph, bool bUseUTF8, CSphString & sMessage )
+int CSphTemplateDictTraits::ParseMorphology ( const char * sMorph, CSphString & sMessage )
 {
 	int iRes = ST_OK;
 	for ( const char * sStart=sMorph; ; )
@@ -20584,7 +20262,7 @@ int CSphTemplateDictTraits::ParseMorphology ( const char * sMorph, bool bUseUTF8
 
 		if ( sStart > sWordStart )
 		{
-			switch ( InitMorph ( sWordStart, sStart - sWordStart, bUseUTF8, sMessage ) )
+			switch ( InitMorph ( sWordStart, sStart - sWordStart, sMessage ) )
 			{
 				case ST_ERROR:		return ST_ERROR;
 				case ST_WARNING:	iRes = ST_WARNING;
@@ -20596,7 +20274,7 @@ int CSphTemplateDictTraits::ParseMorphology ( const char * sMorph, bool bUseUTF8
 }
 
 
-int CSphTemplateDictTraits::InitMorph ( const char * szMorph, int iLength, bool bUseUTF8, CSphString & sMessage )
+int CSphTemplateDictTraits::InitMorph ( const char * szMorph, int iLength, CSphString & sMessage )
 {
 	if ( iLength==0 )
 		return ST_OK;
@@ -20624,7 +20302,7 @@ int CSphTemplateDictTraits::InitMorph ( const char * szMorph, int iLength, bool 
 
 	if ( iLength==7 && !strncmp ( szMorph, "stem_ru", iLength ) )
 	{
-		if ( m_dMorph.Contains ( SPH_MORPH_AOTLEMMER_RU_CP1251 ) || m_dMorph.Contains ( SPH_MORPH_AOTLEMMER_RU_UTF8 ) )
+		if ( m_dMorph.Contains ( SPH_MORPH_AOTLEMMER_RU_UTF8 ) )
 		{
 			sMessage.SetSprintf ( "stem_ru and lemmatize_ru clash" );
 			return ST_ERROR;
@@ -20637,7 +20315,7 @@ int CSphTemplateDictTraits::InitMorph ( const char * szMorph, int iLength, bool 
 		}
 
 		stem_ru_init ();
-		return AddMorph ( bUseUTF8 ? SPH_MORPH_STEM_RU_UTF8 : SPH_MORPH_STEM_RU_CP1251 );
+		return AddMorph ( SPH_MORPH_STEM_RU_UTF8 );
 	}
 
 	for ( int j=0; j<AOT_LENGTH; ++j )
@@ -20649,7 +20327,7 @@ int CSphTemplateDictTraits::InitMorph ( const char * szMorph, int iLength, bool 
 
 		if ( iLength==12 && !strncmp ( szMorph, buf, iLength ) )
 		{
-			if ( j==AOT_RU && ( m_dMorph.Contains ( SPH_MORPH_STEM_RU_CP1251 ) || m_dMorph.Contains ( SPH_MORPH_STEM_RU_UTF8 ) ) )
+			if ( j==AOT_RU && m_dMorph.Contains ( SPH_MORPH_STEM_RU_UTF8 ) )
 			{
 				sMessage.SetSprintf ( "stem_ru and lemmatize_ru clash" );
 				return ST_ERROR;
@@ -20677,9 +20355,9 @@ int CSphTemplateDictTraits::InitMorph ( const char * szMorph, int iLength, bool 
 			// add manually instead of AddMorph(), because we need to update that fingerprint
 			int iMorph = j + SPH_MORPH_AOTLEMMER_BASE;
 			if ( j==AOT_RU )
-				iMorph = bUseUTF8 ? SPH_MORPH_AOTLEMMER_RU_UTF8 : SPH_MORPH_AOTLEMMER_RU_CP1251;
+				iMorph = SPH_MORPH_AOTLEMMER_RU_UTF8;
 			else if ( j==AOT_DE )
-				iMorph = bUseUTF8 ? SPH_MORPH_AOTLEMMER_DE_UTF8 : SPH_MORPH_AOTLEMMER_DE_CP1252;
+				iMorph = SPH_MORPH_AOTLEMMER_DE_UTF8;
 
 			if ( !m_dMorph.Contains ( iMorph ) )
 			{
@@ -20699,7 +20377,7 @@ int CSphTemplateDictTraits::InitMorph ( const char * szMorph, int iLength, bool 
 
 		if ( iLength==16 && !strncmp ( szMorph, buf_all, iLength ) )
 		{
-			if ( j==AOT_RU && ( m_dMorph.Contains ( SPH_MORPH_STEM_RU_CP1251 ) || m_dMorph.Contains ( SPH_MORPH_STEM_RU_UTF8 ) ) )
+			if ( j==AOT_RU && ( m_dMorph.Contains ( SPH_MORPH_STEM_RU_UTF8 ) ) )
 			{
 				sMessage.SetSprintf ( "stem_ru and lemmatize_ru_all clash" );
 				return ST_ERROR;
@@ -20727,28 +20405,21 @@ int CSphTemplateDictTraits::InitMorph ( const char * szMorph, int iLength, bool 
 	}
 
 	if ( iLength==7 && !strncmp ( szMorph, "stem_ar", iLength ) )
-	{
-		if ( !bUseUTF8 )
-		{
-			sMessage.SetSprintf ( "stem_ar only supports charset_type = utf-8" );
-			return ST_ERROR;
-		}
 		return AddMorph ( SPH_MORPH_STEM_AR_UTF8 );
-	}
 
 	if ( iLength==9 && !strncmp ( szMorph, "stem_enru", iLength ) )
 	{
 		stem_en_init ();
 		stem_ru_init ();
 		AddMorph ( SPH_MORPH_STEM_EN );
-		return AddMorph ( bUseUTF8 ? SPH_MORPH_STEM_RU_UTF8 : SPH_MORPH_STEM_RU_CP1251 );
+		return AddMorph ( SPH_MORPH_STEM_RU_UTF8 );
 	}
 
 	if ( iLength==7 && !strncmp ( szMorph, "soundex", iLength ) )
 		return AddMorph ( SPH_MORPH_SOUNDEX );
 
 	if ( iLength==9 && !strncmp ( szMorph, "metaphone", iLength ) )
-		return AddMorph ( bUseUTF8 ? SPH_MORPH_METAPHONE_UTF8 : SPH_MORPH_METAPHONE_SBCS );
+		return AddMorph ( SPH_MORPH_METAPHONE_UTF8 );
 
 #if USE_LIBSTEMMER
 	const int LIBSTEMMER_LEN = 11;
@@ -20756,37 +20427,15 @@ int CSphTemplateDictTraits::InitMorph ( const char * szMorph, int iLength, bool 
 	if ( iLength > LIBSTEMMER_LEN && iLength - LIBSTEMMER_LEN < MAX_ALGO_LENGTH && !strncmp ( szMorph, "libstemmer_", LIBSTEMMER_LEN ) )
 	{
 		CSphString sAlgo;
-		CSphString sEnc;
 		sAlgo.SetBinary ( szMorph+LIBSTEMMER_LEN, iLength - LIBSTEMMER_LEN );
 
 		sb_stemmer * pStemmer = NULL;
 
-		if ( bUseUTF8 )
-		{
-			sEnc = "UTF_8";
-			pStemmer = sb_stemmer_new ( sAlgo.cstr(), sEnc.cstr() );
-		} else
-		{
-			sEnc = "ISO_8859_1";
-			pStemmer = sb_stemmer_new ( sAlgo.cstr(), sEnc.cstr() );
-
-			if ( !pStemmer )
-			{
-				sEnc = "ISO_8859_2";
-				pStemmer = sb_stemmer_new ( sAlgo.cstr(), sEnc.cstr() );
-			}
-
-			if ( !pStemmer )
-			{
-				sEnc = "KOI8_R";
-				pStemmer = sb_stemmer_new ( sAlgo.cstr(), sEnc.cstr() );
-			}
-		}
+		pStemmer = sb_stemmer_new ( sAlgo.cstr(), "UTF_8" );
 
 		if ( !pStemmer )
 		{
-			sMessage.SetSprintf ( "unknown %s stemmer libstemmer_%s; skipped",
-				bUseUTF8 ? "UTF-8" : "SBCS", sAlgo.cstr() );
+			sMessage.SetSprintf ( "unknown stemmer libstemmer_%s; skipped", sAlgo.cstr() );
 			return ST_WARNING;
 		}
 
@@ -20801,9 +20450,7 @@ int CSphTemplateDictTraits::InitMorph ( const char * szMorph, int iLength, bool 
 		}
 
 		m_dStemmers.Add ( pStemmer );
-		DescStemmer_t & tDesc = m_dDescStemmers.Add();
-		tDesc.m_sAlgo.Swap ( sAlgo );
-		tDesc.m_sEnc.Swap ( sEnc );
+		m_dDescStemmers.Add ( sAlgo );
 		return ST_OK;
 	}
 #endif
@@ -20876,10 +20523,7 @@ uint64_t CSphTemplateDictTraits::GetSettingsFNV () const
 	uHash = sphFNV64 ( (const BYTE *)m_dMorph.Begin(), m_dMorph.GetLength()*sizeof(m_dMorph[0]), uHash );
 #if USE_LIBSTEMMER
 	ARRAY_FOREACH ( i, m_dDescStemmers )
-	{
-		uHash = sphFNV64 ( (const BYTE *)m_dDescStemmers[i].m_sAlgo.cstr(), m_dDescStemmers[i].m_sAlgo.Length(), uHash );
-		uHash = sphFNV64 ( (const BYTE *)m_dDescStemmers[i].m_sEnc.cstr(), m_dDescStemmers[i].m_sEnc.Length(), uHash );
-	}
+		uHash = sphFNV64 ( (const BYTE *)m_dDescStemmers[i].cstr(), m_dDescStemmers[i].Length(), uHash );
 #endif
 
 	return uHash;
@@ -20903,7 +20547,7 @@ CSphDict * CSphTemplateDictTraits::CloneBase ( CSphTemplateDictTraits * pDict ) 
 	pDict->m_dDescStemmers = m_dDescStemmers;
 	ARRAY_FOREACH ( i, m_dDescStemmers )
 	{
-		pDict->m_dStemmers.Add ( sb_stemmer_new ( m_dDescStemmers[i].m_sAlgo.cstr(), m_dDescStemmers[i].m_sEnc.cstr() ) );
+		pDict->m_dStemmers.Add ( sb_stemmer_new ( m_dDescStemmers[i].cstr(), "UTF_8" ) );
 		assert ( pDict->m_dStemmers.Last() );
 	}
 #endif
@@ -21625,7 +21269,7 @@ void CSphTemplateDictTraits::WriteWordforms ( CSphWriter & tWriter )
 }
 
 
-int CSphTemplateDictTraits::SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sMessage )
+int CSphTemplateDictTraits::SetMorphology ( const char * szMorph, CSphString & sMessage )
 {
 	m_dMorph.Reset ();
 #if USE_LIBSTEMMER
@@ -21641,7 +21285,7 @@ int CSphTemplateDictTraits::SetMorphology ( const char * szMorph, bool bUseUTF8,
 	sOption.ToLower ();
 
 	CSphString sError;
-	int iRes = ParseMorphology ( sOption.cstr(), bUseUTF8, sMessage );
+	int iRes = ParseMorphology ( sOption.cstr(), sMessage );
 	if ( iRes==ST_WARNING && sMessage.IsEmpty() )
 		sMessage.SetSprintf ( "invalid morphology option %s; skipped", sOption.cstr() );
 	return iRes;
@@ -21678,10 +21322,6 @@ bool CSphTemplateDictTraits::StemById ( BYTE * pWord, int iStemmer )
 		stem_en ( pWord, iLen );
 		break;
 
-	case SPH_MORPH_STEM_RU_CP1251:
-		stem_ru_cp1251 ( pWord );
-		break;
-
 	case SPH_MORPH_STEM_RU_UTF8:
 		// skip stemming in case of SBC at the end of the word
 		if ( pLastSBS && ( pLastSBS-pWord+1 )>=iLen )
@@ -21709,16 +21349,8 @@ bool CSphTemplateDictTraits::StemById ( BYTE * pWord, int iStemmer )
 		stem_soundex ( pWord );
 		break;
 
-	case SPH_MORPH_METAPHONE_SBCS:
-		stem_dmetaphone ( pWord, false );
-		break;
-
 	case SPH_MORPH_METAPHONE_UTF8:
-		stem_dmetaphone ( pWord, true );
-		break;
-
-	case SPH_MORPH_AOTLEMMER_RU_CP1251:
-		sphAotLemmatizeRu1251 ( pWord );
+		stem_dmetaphone ( pWord );
 		break;
 
 	case SPH_MORPH_AOTLEMMER_RU_UTF8:
@@ -21731,10 +21363,6 @@ bool CSphTemplateDictTraits::StemById ( BYTE * pWord, int iStemmer )
 
 	case SPH_MORPH_AOTLEMMER_DE_UTF8:
 		sphAotLemmatizeDeUTF8 ( pWord );
-		break;
-
-	case SPH_MORPH_AOTLEMMER_DE_CP1252:
-		sphAotLemmatizeDe1252 ( pWord );
 		break;
 
 	case SPH_MORPH_AOTLEMMER_RU_ALL:
@@ -23492,7 +23120,7 @@ public:
 	virtual void WriteStopwords ( CSphWriter & tWriter ) { m_pBase->WriteStopwords ( tWriter ); }
 	virtual bool LoadWordforms ( const CSphVector<CSphString> & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) { return m_pBase->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
 	virtual void WriteWordforms ( CSphWriter & tWriter ) { m_pBase->WriteWordforms ( tWriter ); }
-	virtual int SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sMessage ) { return m_pBase->SetMorphology ( szMorph, bUseUTF8, sMessage ); }
+	virtual int SetMorphology ( const char * szMorph, CSphString & sMessage ) { return m_pBase->SetMorphology ( szMorph, sMessage ); }
 	virtual void Setup ( const CSphDictSettings & tSettings ) { m_pBase->Setup ( tSettings ); }
 	virtual const CSphDictSettings & GetSettings () const { return m_pBase->GetSettings(); }
 	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () { return m_pBase->GetStopwordsFileInfos(); }
@@ -23523,7 +23151,7 @@ static CSphDict * SetupDictionary ( CSphDict * pDict, const CSphDictSettings & t
 	assert ( pDict );
 
 	pDict->Setup ( tSettings );
-	int iRet = pDict->SetMorphology ( tSettings.m_sMorphology.cstr (), pTokenizer->IsUtf8(), sError );
+	int iRet = pDict->SetMorphology ( tSettings.m_sMorphology.cstr (), sError );
 	if ( iRet==CSphDict::ST_ERROR )
 	{
 		SafeDelete ( pDict );
@@ -24813,7 +24441,6 @@ bool CSphHTMLStripper::IsValidTagStart ( int iCh ) const
 class CSphFieldRegExps : public ISphFieldFilter
 {
 public:
-	explicit				CSphFieldRegExps ( bool bUTF8 );
 	virtual					~CSphFieldRegExps ();
 
 	virtual	int				Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage );
@@ -24831,14 +24458,8 @@ private:
 	};
 
 	CSphVector<RegExp_t>	m_dRegexps;
-	bool					m_bUTF8;
 };
 
-
-CSphFieldRegExps::CSphFieldRegExps ( bool bUTF8 )
-	: m_bUTF8 ( bUTF8 )
-{
-}
 
 CSphFieldRegExps::~CSphFieldRegExps ()
 {
@@ -24871,7 +24492,6 @@ int CSphFieldRegExps::Apply ( const BYTE * sField, int iLength, CSphVector<BYTE>
 
 void CSphFieldRegExps::GetSettings ( CSphFieldFilterSettings & tSettings ) const
 {
-	tSettings.m_bUTF8 = m_bUTF8;
 	tSettings.m_dRegexps.Resize ( m_dRegexps.GetLength() );
 	ARRAY_FOREACH ( i, m_dRegexps )
 		tSettings.m_dRegexps[i].SetSprintf ( "%s => %s", m_dRegexps[i].m_sFrom.cstr(), m_dRegexps[i].m_sTo.cstr() );
@@ -24899,7 +24519,7 @@ bool CSphFieldRegExps::AddRegExp ( const char * sRegExp, CSphString & sError )
 	tRegExp.m_sTo.Trim();
 
 	RE2::Options tOptions;
-	tOptions.set_utf8 ( m_bUTF8 );
+	tOptions.set_utf8 ( true );
 	tRegExp.m_pRE2 = new RE2 ( tRegExp.m_sFrom.cstr(), tOptions );
 
 	std::string sRE2Error;
@@ -24918,7 +24538,7 @@ bool CSphFieldRegExps::AddRegExp ( const char * sRegExp, CSphString & sError )
 #if USE_RE2
 ISphFieldFilter * sphCreateFieldFilter ( const CSphFieldFilterSettings & tFilterSettings, CSphString & sError )
 {
-	CSphFieldRegExps * pFilter = new CSphFieldRegExps ( tFilterSettings.m_bUTF8 );
+	CSphFieldRegExps * pFilter = new CSphFieldRegExps();
 	ARRAY_FOREACH ( i, tFilterSettings.m_dRegexps )
 		pFilter->AddRegExp ( tFilterSettings.m_dRegexps[i].cstr(), sError );
 
@@ -28600,7 +28220,6 @@ CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE *
 
 CSphSourceParams_ODBC::CSphSourceParams_ODBC ()
 	: m_bWinAuth	( false )
-	, m_bUnicode	( false )
 {
 }
 
@@ -28608,7 +28227,6 @@ CSphSourceParams_ODBC::CSphSourceParams_ODBC ()
 CSphSource_ODBC::CSphSource_ODBC ( const char * sName )
 	: CSphSource_SQL	( sName )
 	, m_bWinAuth		( false )
-	, m_bUnicode		( false )
 	, m_hEnv			( NULL )
 	, m_hDBC			( NULL )
 	, m_hStmt			( NULL )
@@ -28691,7 +28309,7 @@ bool CSphSource_ODBC::SqlQuery ( const char * sQuery )
 		tCol.m_dRaw.Resize ( iBuffLen + MS_SQL_BUFFER_GAP );
 		tCol.m_iInd = 0;
 		tCol.m_iBufferSize = iBuffLen;
-		tCol.m_bUnicode = m_bUnicode && ( iDataType==SQL_WCHAR || iDataType==SQL_WVARCHAR || iDataType==SQL_WLONGVARCHAR );
+		tCol.m_bUnicode = iDataType==SQL_WCHAR || iDataType==SQL_WVARCHAR || iDataType==SQL_WLONGVARCHAR;
 		tCol.m_bTruncated = false;
 		iTotalBuffer += iBuffLen;
 
@@ -28962,7 +28580,6 @@ bool CSphSource_ODBC::Setup ( const CSphSourceParams_ODBC & tParams )
 	// ODBC specific params
 	m_sOdbcDSN = tParams.m_sOdbcDSN;
 	m_bWinAuth = tParams.m_bWinAuth;
-	m_bUnicode = tParams.m_bUnicode;
 
 	// build and store DSN for error reporting
 	char sBuf [ 1024 ];
@@ -29124,7 +28741,7 @@ private:
 };
 
 
-CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool , bool RLPARG(bProxy) )
+CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool RLPARG(bProxy) )
 {
 	CSphSource_TSV * pTSV = NULL;
 #if USE_RLP
@@ -29139,7 +28756,7 @@ CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * 
 }
 
 
-CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool , bool RLPARG(bProxy) )
+CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool RLPARG(bProxy) )
 {
 	CSphSource_CSV * pCSV = NULL;
 	const char * sDelimiter = pSource->GetStr ( "csvpipe_delimiter", "" );
@@ -30550,7 +30167,8 @@ void sphDictBuildInfixes ( const char * sPath )
 	tStats.m_iTotalDocuments = rdHeader.GetDword ();
 	tStats.m_iTotalBytes = rdHeader.GetOffset ();
 	LoadIndexSettings ( tIndexSettings, rdHeader, uVersion );
-	LoadTokenizerSettings ( rdHeader, tTokenizerSettings, tEmbeddedFiles, uVersion, sError );
+	if ( !LoadTokenizerSettings ( rdHeader, tTokenizerSettings, tEmbeddedFiles, uVersion, sError ) )
+		sphDie ( "infix updrade: failed to load tokenizer settings: '%s'", sError.cstr() );
 	LoadDictionarySettings ( rdHeader, tDictSettings, tEmbeddedFiles, uVersion, sError );
 	int iKillListSize = rdHeader.GetDword();
 	DWORD uMinMaxIndex = rdHeader.GetDword();
@@ -30759,7 +30377,8 @@ void sphDictBuildSkiplists ( const char * sPath )
 	tStats.m_iTotalDocuments = rdHeader.GetDword ();
 	tStats.m_iTotalBytes = rdHeader.GetOffset ();
 	LoadIndexSettings ( tIndexSettings, rdHeader, uVersion );
-	LoadTokenizerSettings ( rdHeader, tTokenizerSettings, tEmbeddedFiles, uVersion, sError );
+	if ( !LoadTokenizerSettings ( rdHeader, tTokenizerSettings, tEmbeddedFiles, uVersion, sError ) )
+		sphDie ( "skiplists upgrade: failed to load tokenizer settings: '%s'", sError.cstr() );
 	LoadDictionarySettings ( rdHeader, tDictSettings, tEmbeddedFiles, uVersion, sError );
 	int iKillListSize = rdHeader.GetDword();
 

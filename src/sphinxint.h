@@ -704,15 +704,15 @@ void AttrIndexBuilder_t<DOCID>::UpdateMinMaxDocids ( DOCID uDocID )
 
 template < typename DOCID >
 AttrIndexBuilder_t<DOCID>::AttrIndexBuilder_t ( const CSphSchema & tSchema )
-: m_uStride ( DWSIZEOF(DOCID) + tSchema.GetRowSize() )
-, m_uElements ( 0 )
-, m_iLoop ( 0 )
-, m_pOutBuffer ( NULL )
-, m_pOutMax ( NULL )
-, m_uStart ( 0 )
-, m_uLast ( 0 )
-, m_uIndexStart ( 0 )
-, m_uIndexLast ( 0 )
+	: m_uStride ( DWSIZEOF(DOCID) + tSchema.GetRowSize() )
+	, m_uElements ( 0 )
+	, m_iLoop ( 0 )
+	, m_pOutBuffer ( NULL )
+	, m_pOutMax ( NULL )
+	, m_uStart ( 0 )
+	, m_uLast ( 0 )
+	, m_uIndexStart ( 0 )
+	, m_uIndexLast ( 0 )
 {
 	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
 	{
@@ -1090,27 +1090,28 @@ inline int sphUTF8Encode ( BYTE * pBuf, int iCode )
 	{
 		pBuf[0] = (BYTE)( iCode & 0x7F );
 		return 1;
+	}
 
-	} else if ( iCode<0x800 )
+	if ( iCode<0x800 )
 	{
 		pBuf[0] = (BYTE)( ( (iCode>>6) & 0x1F ) | 0xC0 );
 		pBuf[1] = (BYTE)( ( iCode & 0x3F ) | 0x80 );
 		return 2;
+	}
 
-	} else if ( iCode<0x10000 )
+	if ( iCode<0x10000 )
 	{
 		pBuf[0] = (BYTE)( ( (iCode>>12) & 0x0F ) | 0xE0 );
 		pBuf[1] = (BYTE)( ( (iCode>>6) & 0x3F ) | 0x80 );
 		pBuf[2] = (BYTE)( ( iCode & 0x3F ) | 0x80 );
 		return 3;
-	} else
-	{
-		pBuf[0] = (BYTE)( ( (iCode>>18) & 0x0F ) | 0xF0 );
-		pBuf[1] = (BYTE)( ( (iCode>>12) & 0x3F ) | 0x80 );
-		pBuf[2] = (BYTE)( ( (iCode>>6) & 0x3F ) | 0x80 );
-		pBuf[3] = (BYTE)( ( iCode & 0x3F ) | 0x80 );
-		return 4;
 	}
+
+	pBuf[0] = (BYTE)( ( (iCode>>18) & 0x0F ) | 0xF0 );
+	pBuf[1] = (BYTE)( ( (iCode>>12) & 0x3F ) | 0x80 );
+	pBuf[2] = (BYTE)( ( (iCode>>6) & 0x3F ) | 0x80 );
+	pBuf[3] = (BYTE)( ( iCode & 0x3F ) | 0x80 );
+	return 4;
 }
 
 
@@ -1384,7 +1385,7 @@ public:
 	virtual void		WriteStopwords ( CSphWriter & tWriter ) { m_pDict->WriteStopwords ( tWriter ); }
 	virtual bool		LoadWordforms ( const CSphVector<CSphString> & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) { return m_pDict->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
 	virtual void		WriteWordforms ( CSphWriter & tWriter ) { m_pDict->WriteWordforms ( tWriter ); }
-	virtual int			SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sMessage ) { return m_pDict->SetMorphology ( szMorph, bUseUTF8, sMessage ); }
+	virtual int			SetMorphology ( const char * szMorph, CSphString & sMessage ) { return m_pDict->SetMorphology ( szMorph, sMessage ); }
 
 	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) { return m_pDict->GetWordID ( pWord, iLen, bFilterStops ); }
 	virtual SphWordID_t GetWordID ( BYTE * pWord );
@@ -1471,7 +1472,6 @@ public:
 	virtual int						GetCodepointLength ( int iCode ) const		{ return m_pTokenizer->GetCodepointLength ( iCode ); }
 	virtual int						GetMaxCodepointLength () const				{ return m_pTokenizer->GetMaxCodepointLength(); }
 
-	virtual bool					IsUtf8 () const								{ return m_pTokenizer->IsUtf8 (); }
 	virtual const char *			GetTokenStart () const						{ return m_pTokenizer->GetTokenStart(); }
 	virtual const char *			GetTokenEnd () const						{ return m_pTokenizer->GetTokenEnd(); }
 	virtual const char *			GetBufferPtr () const						{ return m_pTokenizer->GetBufferPtr(); }
@@ -1540,7 +1540,7 @@ void			sphColumnToLowercase ( char * sVal );
 
 bool			sphCheckQueryHeight ( const struct XQNode_t * pRoot, CSphString & sError );
 void			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, bool bHasBooleanOptimization, const ISphKeywordsStat * pKeywords );
-void			TransformAotFilter ( XQNode_t * pNode, bool bUtf8, const CSphWordforms * pWordforms, const CSphIndexSettings& tSettings );
+void			TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, const CSphIndexSettings& tSettings );
 bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pForceTerminate );
 CSphString		sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema );
 
@@ -1553,7 +1553,7 @@ void			ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema, DWORD uVersion,
 void			SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & m_tSettings );
 void			LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion );
 void			SaveTokenizerSettings ( CSphWriter & tWriter, ISphTokenizer * pTokenizer, int iEmbeddedLimit );
-void			LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings & tSettings, CSphEmbeddedFiles & tEmbeddedFiles, DWORD uVersion, CSphString & sWarning );
+bool			LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings & tSettings, CSphEmbeddedFiles & tEmbeddedFiles, DWORD uVersion, CSphString & sWarning );
 void			SaveDictionarySettings ( CSphWriter & tWriter, CSphDict * pDict, bool bForceWordDict, int iEmbeddedLimit );
 void			LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings, CSphEmbeddedFiles & tEmbeddedFiles, DWORD uVersion, CSphString & sWarning );
 void			SaveFieldFilterSettings ( CSphWriter & tWriter, ISphFieldFilter * pFieldFilter );
@@ -1983,7 +1983,7 @@ public:
 				m_eExtQuerySPZ |= SPH_SPZ_ZONE;
 
 			if ( pIndex->GetSettings().m_uAotFilterMask )
-				TransformAotFilter ( m_tExtQuery.m_pRoot, m_pQueryTokenizer->IsUtf8(), m_pDict->GetWordforms(), pIndex->GetSettings() );
+				TransformAotFilter ( m_tExtQuery.m_pRoot, m_pDict->GetWordforms(), pIndex->GetSettings() );
 		}
 
 		bool bSetupSPZ = ( tSettings.m_ePassageSPZ!=SPH_SPZ_NONE || m_eExtQuerySPZ!=SPH_SPZ_NONE ||
@@ -2012,8 +2012,8 @@ struct StoredToken_t
 };
 
 void FillStoredTokenInfo ( StoredToken_t & tToken, const BYTE * sToken, ISphTokenizer * pTokenizer );
-CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool bUTF8, bool bProxy );
-CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool bUTF8, bool bProxy );
+CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool bProxy );
+CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool bProxy );
 
 
 #if USE_RLP

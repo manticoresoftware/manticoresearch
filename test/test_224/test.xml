@@ -21,7 +21,6 @@ index rt
 {
 	type = rt
 	path			= <data_path/>/rt
-	charset_type 	= utf-8
 	docinfo			= extern
 
 	rt_field			= body

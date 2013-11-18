@@ -34,10 +34,6 @@ index test
 		<variant>blend_mode = trim_tail</variant>
 		<variant>blend_mode = trim_head, trim_tail</variant>
 	</dynamic>
-	<dynamic>
-		<variant>charset_type = sbcs</variant>
-		<variant>charset_type = utf-8</variant>
-	</dynamic>
 }
 </config>
 

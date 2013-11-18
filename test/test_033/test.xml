@@ -26,7 +26,6 @@ index test
 {
 	source			= srctest
 	path			= <data_path/>/test
-    charset_type 	= utf-8
 
     <Dynamic>
       <Variant>	ignore_chars = U+002D </Variant>

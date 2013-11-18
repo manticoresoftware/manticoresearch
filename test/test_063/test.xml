@@ -33,11 +33,6 @@ index test
 	path	= <data_path/>/test
 
 	blend_chars = @, |, +, ., *, !, (, ), [, ], {, }
-
-	<dynamic>
-		<variant>charset_type = utf-8</variant>
-		<variant>charset_type = sbcs</variant>
-	</dynamic>
 }
 
 source test1
@@ -53,7 +48,6 @@ index test1
 	path	= <data_path/>/test1
 
 	blend_chars = ., @,
-	charset_type = utf-8
 	min_word_len = 2
 }
 
@@ -70,7 +64,6 @@ index test2
 	path	= <data_path/>/test2
 
 	blend_chars = -, @,
-	charset_type = utf-8
 }
 
 index star
@@ -79,7 +72,6 @@ index star
 	path	= <data_path/>/star
 
 	blend_chars = @, ., !, (, ), [, ], {, }
-	charset_type = utf-8
 	min_infix_len = 1
 	enable_star = 1
 }
@@ -97,10 +89,6 @@ index test3
 	path	= <data_path/>/test3
 
 	blend_chars = -, @, "
-	<dynamic>
-		<variant>charset_type = utf-8</variant>
-		<variant>charset_type = sbcs</variant>
-	</dynamic>
 }
 
 index rt
@@ -109,7 +97,6 @@ index rt
 	path	= <data_path/>/rt
 
 	blend_chars = @
-	charset_type = utf-8
 
 	rt_field	 = text
 	rt_attr_uint	 = idd

@@ -368,7 +368,6 @@ inline int sphIsAttr ( int c )
 // TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////
 
-extern const char *		SPHINX_DEFAULT_SBCS_TABLE;
 extern const char *		SPHINX_DEFAULT_UTF8_TABLE;
 
 /////////////////////////////////////////////////////////////////////////////
@@ -406,7 +405,7 @@ class CSphLowercaser
 	friend class ISphTokenizer;
 	friend class CSphTokenizerBase;
 	friend class CSphTokenizer_UTF8_Base;
-	template<bool> friend class CSphTokenizerBase2;
+	friend class CSphTokenizerBase2;
 
 public:
 				CSphLowercaser ();
@@ -542,7 +541,7 @@ public:
 	/// add additional character as valid (with folding to itself)
 	virtual void					AddPlainChar ( char c );
 
-	/// add special chars to translation table (SBCS only, for now)
+	/// add special chars to translation table
 	/// updates lowercaser so that these remap to -1
 	virtual void					AddSpecials ( const char * sSpecials );
 
@@ -657,9 +656,6 @@ public:
 	/// spawn a clone of my own
 	virtual ISphTokenizer *			Clone ( ESphTokenizerClone eMode ) const = 0;
 
-	/// SBCS or UTF-8?
-	virtual bool					IsUtf8 () const = 0;
-
 	/// start buffer point of last token
 	virtual const char *			GetTokenStart () const = 0;
 
@@ -727,9 +723,6 @@ public:
 
 /// parse charset table
 bool					sphParseCharset ( const char * sCharset, CSphVector<CSphRemapRange> & dRemaps );
-
-/// create SBCS tokenizer
-ISphTokenizer *			sphCreateSBCSTokenizer ();
 
 /// create UTF-8 tokenizer
 ISphTokenizer *			sphCreateUTF8Tokenizer ();
@@ -870,7 +863,7 @@ public:
 
 	/// set morphology
 	/// returns 0 on success, 1 on hard error, 2 on a warning (see ST_xxx constants)
-	virtual int			SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sMessage ) = 0;
+	virtual int			SetMorphology ( const char * szMorph, CSphString & sMessage ) = 0;
 
 	/// are there any morphological processors?
 	virtual bool		HasMorphology () const { return false; }
@@ -1863,7 +1856,6 @@ struct SphRange_t
 
 struct CSphFieldFilterSettings
 {
-	bool					m_bUTF8;
 	CSphVector<CSphString>	m_dRegexps;
 };
 
@@ -2343,7 +2335,6 @@ struct CSphSourceParams_ODBC: CSphSourceParams_SQL
 	CSphString	m_sOdbcDSN;			///< ODBC DSN
 	CSphString	m_sColBuffers;		///< column buffer sizes (eg "col1=2M, col2=4M")
 	bool		m_bWinAuth;			///< auth type (MS SQL only)
-	bool		m_bUnicode;			///< whether to ask for Unicode or SBCS (C char) data (MS SQL only)
 
 				CSphSourceParams_ODBC ();
 };
@@ -2372,7 +2363,6 @@ protected:
 protected:
 	CSphString				m_sOdbcDSN;
 	bool					m_bWinAuth;
-	bool					m_bUnicode;
 
 	SQLHENV					m_hEnv;
 	SQLHDBC					m_hDBC;

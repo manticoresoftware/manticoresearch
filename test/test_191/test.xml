@@ -69,7 +69,6 @@ index rt
 {
 	type = rt
 	rt_mem_limit = 32M
-	charset_type	= utf-8
 	rt_field = title
 	rt_attr_uint = idd10
 	rt_attr_uint = idd1:4

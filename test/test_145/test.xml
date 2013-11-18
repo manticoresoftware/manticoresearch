@@ -21,7 +21,6 @@ index test
 	source			= test
 	path			= <data_path/>/test
 
-	charset_type	= utf-8
 	stopwords		= <this_test/>/stopwords.txt
 	morphology		= stem_en
 	

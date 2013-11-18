@@ -203,7 +203,7 @@ public:
 	virtual void		WriteStopwords ( CSphWriter & ) {}
 	virtual bool		LoadWordforms ( const CSphVector<CSphString> &, const CSphEmbeddedFiles *, const ISphTokenizer *, const char * ) { return true; }
 	virtual void		WriteWordforms ( CSphWriter & ) {}
-	virtual int			SetMorphology ( const char *, bool, CSphString & ) { return ST_OK; }
+	virtual int			SetMorphology ( const char *, CSphString & ) { return ST_OK; }
 
 	virtual void		Setup ( const CSphDictSettings & tSettings ) { m_tSettings = tSettings; }
 	virtual const CSphDictSettings & GetSettings () const { return m_tSettings; }
@@ -753,7 +753,6 @@ CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * 
 		return NULL;
 
 	LOC_GETB ( tParams.m_bWinAuth, "mssql_winauth" );
-	LOC_GETB ( tParams.m_bUnicode, "mssql_unicode" );
 	LOC_GETS ( tParams.m_sColBuffers, "sql_column_buffers" );
 	LOC_GETS ( tParams.m_sOdbcDSN, "odbc_dsn" ); // a shortcut, may be used instead of other specific combination
 
@@ -773,7 +772,7 @@ CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * 
 #endif // USE_ODBC
 
 
-CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool bUTF8, bool RLPARG(bProxy) )
+CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool RLPARG(bProxy) )
 {
 	assert ( hSource["type"]=="xmlpipe2" );
 
@@ -781,12 +780,6 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 	if ( !( hSource.Exists ( "xmlpipe_command" ) ))
 	{
 		fprintf ( stdout, "ERROR: key 'xmlpipe_command' not found in source '%s'\n", sSourceName );
-		return NULL;
-	}
-
-	if ( !bUTF8 )
-	{
-		fprintf ( stdout, "ERROR: source '%s': xmlpipe2 should only be used with charset_type=utf-8\n", sSourceName );
 		return NULL;
 	}
 
@@ -811,7 +804,7 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 }
 
 
-CSphSource * SpawnSourceTSVPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool bUTF8, bool RLPARG(bProxy) )
+CSphSource * SpawnSourceTSVPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool RLPARG(bProxy) )
 {
 	assert ( hSource["type"]=="tsvpipe" );
 
@@ -829,14 +822,14 @@ CSphSource * SpawnSourceTSVPipe ( const CSphConfigSection & hSource, const char 
 	}
 
 #if USE_RLP
-	return sphCreateSourceTSVpipe ( &hSource, pPipe, sSourceName, bUTF8, bProxy );
+	return sphCreateSourceTSVpipe ( &hSource, pPipe, sSourceName, bProxy );
 #else
-	return sphCreateSourceTSVpipe ( &hSource, pPipe, sSourceName, bUTF8, false );
+	return sphCreateSourceTSVpipe ( &hSource, pPipe, sSourceName, false );
 #endif
 }
 
 
-CSphSource * SpawnSourceCSVPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool bUTF8, bool RLPARG(bProxy) )
+CSphSource * SpawnSourceCSVPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool RLPARG(bProxy) )
 {
 	assert ( hSource["type"]=="csvpipe" );
 
@@ -854,14 +847,14 @@ CSphSource * SpawnSourceCSVPipe ( const CSphConfigSection & hSource, const char 
 	}
 
 #if USE_RLP
-	return sphCreateSourceCSVpipe ( &hSource, pPipe, sSourceName, bUTF8, bProxy );
+	return sphCreateSourceCSVpipe ( &hSource, pPipe, sSourceName, bProxy );
 #else
-	return sphCreateSourceCSVpipe ( &hSource, pPipe, sSourceName, bUTF8, false );
+	return sphCreateSourceCSVpipe ( &hSource, pPipe, sSourceName, false );
 #endif
 }
 
 
-CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSourceName, bool bUTF8, bool bBatchedRLP )
+CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSourceName, bool bBatchedRLP )
 {
 	if ( !hSource.Exists ( "type" ) )
 	{
@@ -888,13 +881,13 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 	#endif
 
 	if ( hSource["type"]=="xmlpipe2" )
-		return SpawnSourceXMLPipe ( hSource, sSourceName, bUTF8, bBatchedRLP );
+		return SpawnSourceXMLPipe ( hSource, sSourceName, bBatchedRLP );
 
 	if ( hSource["type"]=="tsvpipe" )
-		return SpawnSourceTSVPipe ( hSource, sSourceName, bUTF8, bBatchedRLP );
+		return SpawnSourceTSVPipe ( hSource, sSourceName, bBatchedRLP );
 
 	if ( hSource["type"]=="csvpipe" )
-		return SpawnSourceCSVPipe ( hSource, sSourceName, bUTF8, bBatchedRLP );
+		return SpawnSourceCSVPipe ( hSource, sSourceName, bBatchedRLP );
 
 	fprintf ( stdout, "ERROR: source '%s': unknown type '%s'; skipping.\n", sSourceName,
 		hSource["type"].cstr() );
@@ -976,8 +969,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	///////////////////
 
 	CSphTokenizerSettings tTokSettings;
-	if ( !sphConfTokenizer ( hIndex, tTokSettings, sError ) )
-		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
+	sphConfTokenizer ( hIndex, tTokSettings );
 
 	ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tTokSettings, NULL, sError );
 	if ( !pTokenizer )
@@ -1034,7 +1026,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	CSphFieldFilterSettings tFilterSettings;
 	if ( sphConfFieldFilter ( hIndex, tFilterSettings, sError ) )
 	{
-		tFilterSettings.m_bUTF8 = tTokSettings.m_iType!=TOKENIZER_SBCS;
 		pFieldFilter = sphCreateFieldFilter ( tFilterSettings, sError );
 	}
 
@@ -1110,7 +1101,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		}
 		const CSphConfigSection & hSource = hSources [ pSourceName->cstr() ];
 
-		CSphSource * pSource = SpawnSource ( hSource, pSourceName->cstr(), pTokenizer->IsUtf8 (), tSettings.m_eChineseRLP==SPH_RLP_BATCHED );
+		CSphSource * pSource = SpawnSource ( hSource, pSourceName->cstr(), tSettings.m_eChineseRLP==SPH_RLP_BATCHED );
 		if ( !pSource )
 		{
 			bSpawnFailed = true;

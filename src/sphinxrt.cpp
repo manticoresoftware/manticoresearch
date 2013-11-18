@@ -2660,7 +2660,6 @@ void RtIndex_t::Commit ( int * pDeleted )
 	if ( !pAcc->m_iAccumDocs && !pAcc->m_dAccumKlist.GetLength() )
 	{
 		pAcc->m_pIndex = NULL;
-		pAcc->m_iAccumDocs = 0;
 		pAcc->m_dAccumRows.Resize ( 0 );
 		pAcc->m_dStrings.Resize ( 1 );
 		pAcc->m_dPerDocHitsCount.Resize ( 0 );
@@ -3916,7 +3915,8 @@ bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 		DWORD uSettingsVer = rdMeta.GetDword();
 		ReadSchema ( rdMeta, m_tSchema, uSettingsVer, false );
 		LoadIndexSettings ( m_tSettings, rdMeta, uSettingsVer );
-		LoadTokenizerSettings ( rdMeta, tTokenizerSettings, tEmbeddedFiles, uSettingsVer, sWarning );
+		if ( !LoadTokenizerSettings ( rdMeta, tTokenizerSettings, tEmbeddedFiles, uSettingsVer, m_sLastError ) )
+			return false;
 		LoadDictionarySettings ( rdMeta, tDictSettings, tEmbeddedFiles, uSettingsVer, sWarning );
 
 		// meta v.5 dictionary
@@ -6263,7 +6263,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	// this should be after keyword expansion
 	if ( m_tSettings.m_uAotFilterMask )
-		TransformAotFilter ( tParsed.m_pRoot, pTokenizer->IsUtf8(), pDict->GetWordforms(), m_tSettings );
+		TransformAotFilter ( tParsed.m_pRoot, pDict->GetWordforms(), m_tSettings );
 
 	// expanding prefix in word dictionary case
 	if ( m_bEnableStar && m_bKeywordDict )

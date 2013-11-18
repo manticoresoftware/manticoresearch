@@ -32,7 +32,6 @@ index test1
 {
 	source			= test1
 	path			= <data_path/>/test1
-	charset_type	= utf-8
 	morphology		= lemmatize_ru_all
 	blend_chars		= @, .
 	wordforms		= <this_test/>/wordforms.txt
@@ -62,7 +61,6 @@ index testrt1
 {
 	type			= rt
 	path			= <data_path/>/testrt1
-	charset_type	= utf-8
 	morphology		= lemmatize_ru_all
 	blend_chars		= @, .
 	wordforms		= <this_test/>/wordforms.txt
@@ -89,7 +87,6 @@ index stalin_plain
 {
 	source			= stalin_src
 	path			= <data_path/>/stalin_plain
-	charset_type	= utf-8
 	morphology		= lemmatize_ru
 	enable_star		= 1
 	min_infix_len	= 2
@@ -100,7 +97,6 @@ index stalin_rt
 {
 	type			= rt
 	path			= <data_path/>/stalin_rt
-	charset_type	= utf-8
 	morphology		= lemmatize_ru_all
 	dict			= keywords
 	enable_star		= 1
@@ -116,7 +112,6 @@ index crash_idx
 	path			= <data_path/>/crash_idx
 	rt_field		= query
 	rt_attr_bigint	= rating
-	charset_type	= utf-8
 	morphology		= stem_en, lemmatize_ru_all
 	wordforms		= <this_test/>/wordforms2.txt
 }

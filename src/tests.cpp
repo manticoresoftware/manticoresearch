@@ -75,11 +75,10 @@ bool CreateSynonymsFile ( const char * sMagic )
 const DWORD TOK_EXCEPTIONS		= 1;
 const DWORD TOK_NO_DASH			= 2;
 
-ISphTokenizer * CreateTestTokenizer ( bool bUTF8, DWORD uMode )
+ISphTokenizer * CreateTestTokenizer ( DWORD uMode )
 {
 	CSphString sError;
 	CSphTokenizerSettings tSettings;
-	tSettings.m_iType = bUTF8 ? TOKENIZER_UTF8 : TOKENIZER_SBCS;
 	tSettings.m_iMinWordLen = 2;
 
 	ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tSettings, NULL, sError );
@@ -107,22 +106,18 @@ ISphTokenizer * CreateTestTokenizer ( bool bUTF8, DWORD uMode )
 }
 
 
-void TestTokenizer ( bool bUTF8 )
+void TestTokenizer()
 {
-	const char * sPrefix = bUTF8
-		? "testing UTF8 tokenizer"
-		: "testing SBCS tokenizer";
+	const char * sPrefix = "testing tokenizer";
 
 	for ( int iRun=1; iRun<=3; iRun++ )
 	{
 		// simple "one-line" tests
-		const char * sMagic = bUTF8
-			? "\xD1\x82\xD0\xB5\xD1\x81\xD1\x82\xD1\x82\xD1\x82" // valid UTF-8
-			: "\xC0\xC1\xF5\xF6"; // valid SBCS but invalid UTF-8
+		const char * sMagic = "\xD1\x82\xD0\xB5\xD1\x81\xD1\x82\xD1\x82\xD1\x82";
 
 		assert ( CreateSynonymsFile ( sMagic ) );
 		bool bExceptions = ( iRun>=2 );
-		ISphTokenizer * pTokenizer = CreateTestTokenizer ( bUTF8, bExceptions*TOK_EXCEPTIONS );
+		ISphTokenizer * pTokenizer = CreateTestTokenizer ( bExceptions*TOK_EXCEPTIONS );
 
 		const char * dTests[] =
 		{
@@ -188,15 +183,14 @@ void TestTokenizer ( bool bUTF8 )
 			iCur++;
 		}
 
-		// test misc SBCS-only and UTF8-only one-liners
+		// test misc one-liners
 		const char * dTests2[] =
 		{
-			"0", "\x80\x81\x82",				"\x80\x81\x82", NULL,
-			"1", "\xC2\x80\xC2\x81\xC2\x82",	"\xC2\x80\xC2\x81\xC2\x82", NULL,
+			"\xC2\x80\xC2\x81\xC2\x82",	"\xC2\x80\xC2\x81\xC2\x82", NULL,
 			NULL
 		};
 
-		for ( int iCur=0; dTests2[iCur] && atoi ( dTests2[iCur++] )==int(bUTF8); )
+		for ( int iCur=0; dTests2[iCur]; )
 		{
 			printf ( "%s, run=%d, line=%s\n", sPrefix, iRun, dTests2[iCur] );
 			pTokenizer->SetBuffer ( (BYTE*)dTests2[iCur], strlen ( dTests2[iCur] ) );
@@ -213,15 +207,12 @@ void TestTokenizer ( bool bUTF8 )
 		}
 
 
-		// test that decoder does not go over the buffer boundary on errors in UTF-8
-		if ( bUTF8 )
-		{
-			printf ( "%s for proper UTF-8 error handling\n", sPrefix );
-			const char * sLine3 = "hi\xd0\xffh";
+		// test that decoder does not go over the buffer boundary on errors
+		printf ( "%s for proper UTF-8 error handling\n", sPrefix );
+		const char * sLine3 = "hi\xd0\xffh";
 
-			pTokenizer->SetBuffer ( (BYTE*)sLine3, 4 );
-			assert ( !strcmp ( (char*)pTokenizer->GetToken(), "hi" ) );
-		}
+		pTokenizer->SetBuffer ( (BYTE*)sLine3, 4 );
+		assert ( !strcmp ( (char*)pTokenizer->GetToken(), "hi" ) );
 
 		// test uberlong tokens
 		printf ( "%s for uberlong token handling\n", sPrefix );
@@ -354,7 +345,7 @@ void TestTokenizer ( bool bUTF8 )
 	printf ( "%s vs escaping vs blend_chars edge cases\n", sPrefix );
 
 	CSphString sError;
-	ISphTokenizer * pTokenizer = CreateTestTokenizer ( bUTF8, 0 );
+	ISphTokenizer * pTokenizer = CreateTestTokenizer ( 0 );
 	assert ( pTokenizer->SetBlendChars ( "., @", sError ) );
 	pTokenizer->AddSpecials ( "()!-\"@" );
 
@@ -437,7 +428,7 @@ void TestTokenizer ( bool bUTF8 )
 
 	// blended/special vs query mode vs modifier.. hell, this is complicated
 	SafeDelete ( pTokenizer );
-	pTokenizer = CreateTestTokenizer ( bUTF8, TOK_NO_DASH );
+	pTokenizer = CreateTestTokenizer ( TOK_NO_DASH );
 	assert ( pTokenizer->SetBlendChars ( "., -", sError ) );
 	pTokenizer->AddSpecials ( "-" );
 	pTokenizer->AddPlainChar ( '=' );
@@ -524,9 +515,9 @@ char * LoadFile ( const char * sName, int * pLen, bool bReportErrors )
 }
 
 
-void BenchTokenizer ( bool bUTF8 )
+void BenchTokenizer ()
 {
-	printf ( "benchmarking %s tokenizer\n", bUTF8 ? "UTF8" : "SBCS" );
+	printf ( "benchmarking tokenizer\n" );
 	if ( !CreateSynonymsFile ( NULL ) )
 	{
 		printf ( "benchmark failed: error writing temp synonyms file\n" );
@@ -539,7 +530,7 @@ void BenchTokenizer ( bool bUTF8 )
 		int iData = 0;
 		char * sData = LoadFile ( "./configure", &iData, true );
 
-		ISphTokenizer * pTokenizer = bUTF8 ? sphCreateUTF8Tokenizer () : sphCreateSBCSTokenizer ();
+		ISphTokenizer * pTokenizer = sphCreateUTF8Tokenizer ();
 		pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z", sError );
 		if ( iRun==2 )
 			pTokenizer->LoadSynonyms ( g_sTmpfile, NULL, sError );
@@ -563,9 +554,6 @@ void BenchTokenizer ( bool bUTF8 )
 			(int)(tmTime/1000), (int)(tmTime%1000), float(iData)/tmTime );
 		SafeDeleteArray ( sData );
 	}
-
-	if ( !bUTF8 )
-		return;
 
 	int iData;
 	char * sData = LoadFile ( "./utf8.txt", &iData, false );
@@ -894,7 +882,7 @@ void TestQueryParser ()
 	tCol.m_sName = "title"; tSchema.m_dFields.Add ( tCol );
 	tCol.m_sName = "body"; tSchema.m_dFields.Add ( tCol );
 
-	CSphScopedPtr<ISphTokenizer> pBase ( sphCreateSBCSTokenizer () );
+	CSphScopedPtr<ISphTokenizer> pBase ( sphCreateUTF8Tokenizer () );
 	CSphTokenizerSettings tTokenizerSetup;
 	tTokenizerSetup.m_iMinWordLen = 2;
 	tTokenizerSetup.m_sSynonymsFile = g_sTmpfile;
@@ -1032,7 +1020,7 @@ void TestQueryTransforms ()
 	CSphString sError;
 	CSphDictSettings tDictSettings;
 	tDictSettings.m_bWordDict = false;
-	CSphScopedPtr<ISphTokenizer> pBase ( sphCreateSBCSTokenizer () );
+	CSphScopedPtr<ISphTokenizer> pBase ( sphCreateUTF8Tokenizer () );
 	CSphScopedPtr<CSphDict> pDict ( sphCreateDictionaryCRC ( tDictSettings, NULL, pBase.Ptr(), "query", sError ) );
 	assert ( pBase.Ptr() );
 	assert ( pDict.Ptr() );
@@ -2517,7 +2505,6 @@ void TestSentenceTokenizer()
 	printf ( "testing sentence detection in tokenizer... " );
 
 	CSphTokenizerSettings tSettings;
-	tSettings.m_iType = TOKENIZER_SBCS;
 	tSettings.m_iMinWordLen = 1;
 
 	CSphString sError;
@@ -2627,7 +2614,7 @@ void BenchStemmer ()
 	printf ( "read %d bytes\n", iLen );
 	fclose ( fp );
 
-	ISphTokenizer * pTok = sphCreateSBCSTokenizer();
+	ISphTokenizer * pTok = sphCreateUTF8Tokenizer();
 	if ( !pTok->SetCaseFolding ( "A..Z->a..z, a..z", sError ) )
 		sphDie ( "oops: %s", sError.cstr() );
 
@@ -3304,7 +3291,7 @@ void TestSource ()
 	Verify ( tConf.Add ( CSphVariant ( "gid", 6 ), "csvpipe_attr_uint" ) );
 
 	// setup source
-	CSphSource_Document * pCSV = (CSphSource_Document *)sphCreateSourceCSVpipe ( &tConf, fp, "csv", false, false );
+	CSphSource_Document * pCSV = (CSphSource_Document *)sphCreateSourceCSVpipe ( &tConf, fp, "csv", false );
 	CSphString sError;
 	Verify ( pCSV->Connect ( sError ) );
 	Verify ( pCSV->IterateStart ( sError ) );
@@ -3358,8 +3345,7 @@ int main ()
 	BenchAppendf();
 	BenchMisc();
 	BenchStripper ();
-	BenchTokenizer ( false );
-	BenchTokenizer ( true );
+	BenchTokenizer ();
 	BenchExpr ();
 	BenchLocators ();
 	BenchThreads ();
@@ -3368,8 +3354,7 @@ int main ()
 	TestQueryParser ();
 	TestQueryTransforms ();
 	TestStripper ();
-	TestTokenizer ( false );
-	TestTokenizer ( true );
+	TestTokenizer ();
 	TestExpr ();
 	TestMisc ();
 	TestRwlock ();

@@ -27,7 +27,6 @@ index test0doc
 {
 	source			= src0doc
 	path			= <data_path/>/test0doc
-    charset_type 	= utf-8
 	docinfo	= extern
 }
 
@@ -44,7 +43,6 @@ index test1doc
 {
 	source			= src1doc
 	path			= <data_path/>/test1doc
-    charset_type 	= utf-8
 	docinfo	= extern
 }
 </config>

@@ -15,6 +15,7 @@
 searchd
 {
 	<searchd_settings/>
+	binlog_path = #
 }
 
 indexer

@@ -32,7 +32,6 @@ index tmpl_wf
 	type			= template
 	dict			= keywords
 	min_infix_len	= 2
-	charset_type	= utf-8
 	blend_chars		= @, .
 	wordforms		= <this_test/>/wordforms.txt
 }
@@ -59,7 +58,6 @@ index tmpl_crc_exact : tmpl_crc
 index tmpl_lemmatize_all
 {
 	type			= template
-	charset_type	= utf-8
 	morphology		= lemmatize_ru_all
 	blend_chars		= @, .
 	wordforms		= <this_test/>/wordforms.txt
@@ -82,7 +80,6 @@ index tmpl_lemmatize_exact : tmpl_lemmatize_all
 index tmpl_prefixed
 {
 	type			= template
-	charset_type	= utf-8
 	expand_keywords	= 1
 	min_prefix_len	= 2
 	enable_star		= 1
@@ -92,7 +89,6 @@ index tmpl_prefixed
 index tmpl_expanded
 {
 	type			= template
-	charset_type	= utf-8
 	docinfo			= extern
 	dict			= keywords
 	expand_keywords	= 1

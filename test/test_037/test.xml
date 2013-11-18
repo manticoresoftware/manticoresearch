@@ -31,7 +31,6 @@ index test
 {
 	source			= srctest
 	path			= <data_path/>/test
-    charset_type 	= utf-8
 	morphology		= stem_ru, stem_en
 	charset_table	= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F
 }
@@ -40,7 +39,6 @@ index test2
 {
 	source			= srctest2
 	path			= <data_path/>/test2
-    charset_type 	= utf-8
 }
 </config>
 

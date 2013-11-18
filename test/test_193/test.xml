@@ -28,7 +28,6 @@ index test
 	path				= <data_path/>/test
 	stopwords			= <this_test/>/stopwords.txt
 	wordforms			= <this_test/>/wordforms.txt
-	charset_type		= sbcs
 }
 
 source test2
@@ -43,7 +42,6 @@ index test2
 {
        source                          = test2
        path                            = <data_path/>/test2
-       charset_type            = utf-8
 }
 </config>
 

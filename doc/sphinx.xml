@@ -99,7 +99,7 @@ To expand a bit, Sphinx:
 <listitem><para>supports stopwords;</para></listitem>
 <listitem><para>supports morphological word forms dictionaries;</para></listitem>
 <listitem><para>supports tokenizing exceptions;</para></listitem>
-<listitem><para>supports both single-byte encodings and UTF-8;</para></listitem>
+<listitem><para>supports UTF-8 encoding;</para></listitem>
 <listitem><para>supports stemming (stemmers for English, Russian, Czech and Arabic are built-in; and stemmers for
 French, Spanish, Portuguese, Italian, Romanian, German, Dutch, Swedish, Norwegian, Danish, Finnish, Hungarian,
 are available by building third party <ulink url="http://snowball.tartarus.org/">libstemmer library</ulink>);</para></listitem>
@@ -833,15 +833,12 @@ as the same word (or, to be pedantic, <glossterm>term</glossterm>).
 <para>
 To do that properly, Sphinx needs to know
 <itemizedlist>
-<listitem><para>what encoding is the source text in;</para></listitem>
+<listitem><para>what encoding is the source text in (and this encoding should always be UTF-8);</para></listitem>
 <listitem><para>what characters are letters and what are not;</para></listitem>
 <listitem><para>what letters should be folded to what letters.</para></listitem>
 </itemizedlist>
 This should be configured on a per-index basis using
-<option><link linkend="conf-charset-type">charset_type</link></option> and
-<option><link linkend="conf-charset-table">charset_table</link></option> options.
-<option><link linkend="conf-charset-type">charset_type</link></option>
-specifies whether the document encoding is single-byte (SBCS) or UTF-8.
+<option><link linkend="conf-charset-table">charset_table</link></option> option.
 <option><link linkend="conf-charset-table">charset_table</link></option>
 specifies the table that maps letter characters to their case
 folded versions. The characters that are not in the table are considered
@@ -6822,6 +6819,8 @@ instead.</para></listitem>
 for sorting.</para></listitem>
 <listitem><para>ondisk_dict and ondisk_dict_default was removed.
 </para></listitem>
+<listitem><para>Removed charset_type and mssql_unicode - we now support
+only UTF-8 encoding.</para></listitem>
 </itemizedlist>
 </para>
 </sect1>
@@ -8869,12 +8868,11 @@ set various per-connection SQL server options and variables, and so on.
 </para>
 <para>
 Perhaps the most frequent pre-query usage is to specify the encoding
-that the server will use for the rows it returns. It <b>must</b> match
-the encoding that Sphinx expects (as specified by <link linkend="conf-charset-type">charset_type</link>
-and <link linkend="conf-charset-table">charset_table</link> options).
+that the server will use for the rows it returns. Note that Sphinx accepts
+only UTF-8 texts.
 Two MySQL specific examples of setting the encoding are:
 <programlisting>
-sql_query_pre = SET CHARACTER_SET_RESULTS=cp1251
+sql_query_pre = SET CHARACTER_SET_RESULTS=utf8
 sql_query_pre = SET NAMES utf8
 </programlisting>
 Also specific to MySQL sources, it is useful to disable query cache
@@ -9762,28 +9760,6 @@ mssql_winauth = 1
 </sect2>
 
 
-<sect2 id="conf-mssql-unicode"><title>mssql_unicode</title>
-<para>
-MS SQL encoding type flag.
-Boolean, optional, default value is 0 (false).
-Applies to <option>mssql</option> source type only.
-Introduced in version 0.9.9-rc1.
-</para>
-<para>
-Whether to ask for Unicode or single-byte data when querying MS SQL Server.
-This flag <b>must</b> be in sync with <link linkend="conf-charset-type">charset_type</link> directive;
-that is, to index Unicode data, you must set both <option>charset_type</option> in the index
-(to 'utf-8') and <option>mssql_unicode</option> in the source (to 1).
-For reference, MS SQL will actually return data in UCS-2 encoding instead of UTF-8,
-but Sphinx will automatically handle that.
-</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-mssql_unicode = 1
-</programlisting>
-</sect2>
-
-
 <sect2 id="conf-unpack-zlib"><title>unpack_zlib</title>
 <para>
 Columns to unpack using zlib (aka deflate, aka gunzip).
@@ -10409,7 +10385,7 @@ much value to search results but consume a lot of resources to process.
 <para>
 You can specify several file names, separated by spaces. All the files
 will be loaded. Stopwords file format is simple plain text. The encoding
-must match index encoding specified in <link linkend="conf-charset-type">charset_type</link>.
+must be UTF-8.
 File data will be tokenized with respect to <link linkend="conf-charset-table">charset_table</link>
 settings, so you can use the same separators as in the indexed data.
 </para>
@@ -10481,8 +10457,7 @@ RAM usage will be about 50 MB.
 </para>
 <para>
 Dictionary file should be in a simple plain text format. Each line
-should contain source and destination word forms, in exactly the same
-encoding as specified in <link linkend="conf-charset-type">charset_type</link>,
+should contain source and destination word forms, in UTF-8 encoding,
 separated by "greater" sign. Rules from the
 <link linkend="conf-charset-table">charset_table</link> will be
 applied when the file is loaded. So basically it's as case sensitive
@@ -10680,41 +10655,10 @@ min_word_len = 4
 </sect2>
 
 
-<sect2 id="conf-charset-type"><title>charset_type</title>
-<para>
-Character set encoding type.
-Optional, default is 'utf-8'.
-'sbcs' is DEPRECATED. Use 'utf-8' instead.
-Known values are 'sbcs' and 'utf-8'.
-</para>
-<para>
-Different encodings have different methods for mapping their internal
-characters codes into specific byte sequences. Two most common methods
-in use today are single-byte encoding and UTF-8. Their corresponding
-charset_type values are 'sbcs' (stands for Single Byte Character Set)
-and 'utf-8'. The selected encoding type will be used everywhere where
-the index is used: when indexing the data, when parsing the query
-against this index, when generating snippets, etc.
-</para>
-<para>
-Note that while 'utf-8' implies that the decoded values must be treated
-as Unicode codepoint numbers, there's a family of 'sbcs' encodings that
-may in turn treat different byte values differently, and that should be
-properly reflected in your <link linkend="conf-charset-table">charset_table</link> settings.
-For example, the same byte value of 224 (0xE0 hex) maps to different Russian letters
-depending on whether koi-8r or windows-1251 encoding is used.
-</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-charset_type = utf-8
-</programlisting>
-</sect2>
-
-
 <sect2 id="conf-charset-table"><title>charset_table</title>
 <para>
 Accepted characters table, with case folding rules.
-Optional, default value depends on <link linkend="conf-charset-type">charset_type</link> value.
+Optional, default value are latin and cyrillic characters.
 </para>
 <para>
 charset_table is the main workhorse of Sphinx tokenizing process,
@@ -10725,13 +10669,12 @@ the case be removed or not).
 </para>
 <para>
 You can think of charset_table as of a big table that has a mapping
-for each and every of 100K+ characters in Unicode (or as of a small
-256-character table if you're using SBCS). By default, every character
-maps to 0, which means that it does not occur within keywords and
-should be treated as a separator. Once mentioned in the table,
-character is mapped to some other character (most frequently,
-either to itself or to a lowercase letter), and is treated
-as a valid keyword part.
+for each and every of 100K+ characters in Unicode. By default,
+every character maps to 0, which means that it does not occur
+within keywords and should be treated as a separator. Once
+mentioned in the table, character is mapped to some other
+character (most frequently, either to itself or to a lowercase
+letter), and is treated as a valid keyword part.
 </para>
 <para>
 The expected value format is a commas-separated list of mappings.
@@ -10796,11 +10739,7 @@ encode space, U+2E to encode dot, U+2C to encode comma.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
-# 'sbcs' defaults for English and Russian
-charset_table = 0..9, A..Z-&gt;a..z, _, a..z, \
-    U+A8-&gt;U+B8, U+B8, U+C0..U+DF-&gt;U+E0..U+FF, U+E0..U+FF
-
-# 'utf-8' defaults for English and Russian
+# default are English and Russian letters
 charset_table = 0..9, A..Z-&gt;a..z, _, a..z, \
     U+410..U+42F-&gt;U+430..U+44F, U+430..U+44F, U+401->U+451, U+451
 </programlisting>
@@ -15042,7 +14981,7 @@ rlp_max_batch_docs = 100
 <listitem><para>added <link linkend="conf-max-filters">max_filters</link>, <link linkend="conf-max-filter-values">max_filter_values</link> directives (were hardcoded before)</para></listitem>
 <listitem><para>added int64 expression evaluation path, automatic inference, and BIGINT() enforcer function</para></listitem>
 <listitem><para>added crash handler for debugging (<link linkend="conf-crash-log-path">crash_log_path</link> directive)</para></listitem>
-<listitem><para>added MS SQL (aka SQL Server) source support (Windows only, <link linkend="conf-mssql-winauth">mssql_winauth</link> and <link linkend="conf-mssql-unicode">mssql_unicode</link> directives)</para></listitem>
+<listitem><para>added MS SQL (aka SQL Server) source support (Windows only, <link linkend="conf-mssql-winauth">mssql_winauth</link> and mssql_unicode directives)</para></listitem>
 <listitem><para>added indexer-side column unpacking feature (<link linkend="conf-unpack-zlib">unpack_zlib</link>, <link linkend="conf-unpack-mysqlcompress">unpack_mysqlcompress</link> directives)</para></listitem>
 <listitem><para>added nested brackers and NOTs support to <link linkend="extended-syntax">query language</link>, rewritten query parser</para></listitem>
 <listitem><para>added persistent connections support (<link linkend="api-func-open">Open()</link> and <link linkend="api-func-close">Close()</link> API calls)</para></listitem>

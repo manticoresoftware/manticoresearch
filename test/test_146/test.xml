@@ -33,7 +33,6 @@ index pure
 	source	= pure
 	path	= <data_path/>/pure
 
-    charset_type			= utf-8
     docinfo					= extern
 }
 
@@ -52,7 +51,6 @@ index test
 	source	= test
 	path	= <data_path/>/test
 
-    charset_type			= utf-8
     docinfo					= extern
 	
     phrase_boundary			= .

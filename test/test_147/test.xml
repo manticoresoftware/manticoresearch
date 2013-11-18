@@ -98,7 +98,6 @@ index i1
 	source			= src_1
 	path			= <data_path/>/i1
 	docinfo			= extern
-	charset_type 	= utf-8
 	
 }
 
@@ -107,7 +106,6 @@ index i2
 	source			= src_2
 	path			= <data_path/>/i2
 	docinfo			= extern
-	charset_type 	= utf-8
 	
 }
 
@@ -116,7 +114,6 @@ index i3
 	source			= src_3
 	path			= <data_path/>/i3
 	docinfo			= extern
-	charset_type 	= utf-8
 	
 }
 </config>

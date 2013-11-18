@@ -32,7 +32,6 @@ index test1
 {
 	source			= test1
 	path			= <data_path/>/testen1
-	charset_type	= utf-8
 	morphology		= lemmatize_en_all
 	blend_chars		= @, .
 	wordforms		= <this_test/>/wordforms.txt
@@ -61,7 +60,6 @@ index testrt1
 {
 	type			= rt
 	path			= <data_path/>/testenrt1
-	charset_type	= utf-8
 	morphology		= lemmatize_en_all
 	blend_chars		= @, .
 	wordforms		= <this_test/>/wordforms.txt
@@ -94,7 +92,6 @@ index aot_plain
 	source			= test1
 	path			= <data_path/>/aot_plain
 	docinfo			= extern
-	charset_type	= utf-8
 	morphology = lemmatize_ru_all
 }
 
@@ -103,7 +100,6 @@ index aot_exact
 	source			= test1
 	path			= <data_path/>/aot_exact
 	docinfo			= extern
-	charset_type	= utf-8
 	morphology = lemmatize_ru_all
 	index_exact_words = 1
 	min_prefix_len = 1

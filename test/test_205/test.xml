@@ -36,7 +36,6 @@ index i1
 	source			= src_1
 	path			= <data_path/>/i1
 	docinfo			= extern
-	charset_type 	= utf-8
 	
 }
 
@@ -45,7 +44,6 @@ index i2
 	source			= src_2
 	path			= <data_path/>/i2
 	docinfo			= extern
-	charset_type 	= utf-8
 	
 }
 
@@ -68,7 +66,6 @@ index kw
 	source			= src_kw
 	path			= <data_path/>/kw
 	docinfo			= extern
-	charset_type 	= utf-8
 	min_prefix_len = 1
 	dict = keywords
 }
@@ -90,7 +87,6 @@ index l1
 	source			= src_l1
 	path			= <data_path/>/l1
 	docinfo			= extern
-	charset_type 	= utf-8
 }
 
 index l2
@@ -98,7 +94,6 @@ index l2
 	source			= src_l2
 	path			= <data_path/>/l2
 	docinfo			= extern
-	charset_type 	= utf-8
 }
 
 index dl

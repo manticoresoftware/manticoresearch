@@ -38,7 +38,6 @@ index idx_131
 {
 	source			= src
 	path			= <data_path/>/idx_131
-    charset_type 	= utf-8
     docinfo			= extern
 }
 

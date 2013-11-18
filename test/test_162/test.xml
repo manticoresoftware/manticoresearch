@@ -29,7 +29,6 @@ index plain
 {
 	source			= src
     docinfo			= extern
-    charset_type	= sbcs
 	path			= <data_path/>/plain
 }
 </config>

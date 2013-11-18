@@ -69,7 +69,6 @@ index i1_crc
 	source			= src_1
 	path			= <data_path/>/i1_crc
 	docinfo			= extern
-	charset_type	= utf-8
 	dict = crc	
 }
 
@@ -78,7 +77,6 @@ index i2_crc
 	source			= src_2
 	path			= <data_path/>/i2_crc
 	docinfo			= extern
-	charset_type	= utf-8
 	dict = crc	
 }
 
@@ -87,7 +85,6 @@ index i1_kw
 	source			= src_1
 	path			= <data_path/>/i1_kw
 	docinfo			= extern
-	charset_type	= utf-8
 	dict = keywords
 }
 
@@ -96,7 +93,6 @@ index i2_kw
 	source			= src_2
 	path			= <data_path/>/i2_kw
 	docinfo			= extern
-	charset_type	= utf-8
 	dict = keywords	
 }
 

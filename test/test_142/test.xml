@@ -26,7 +26,6 @@ index crc
 {
 	type	= rt
 	path	= data/crc
-	charset_type = utf-8
 	
 	rt_field = content
 	rt_attr_uint = idd
@@ -38,7 +37,6 @@ index kw
 {
 	type	= rt
 	path	= data/kw
-	charset_type = utf-8
 	
 	rt_field = content
 	rt_attr_uint = idd
@@ -59,7 +57,6 @@ index test
 {
 	source			= src_test
 	path			= <data_path/>/test
-    charset_type 	= utf-8
     docinfo			= extern
 	dict = crc
 }

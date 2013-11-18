@@ -21,7 +21,6 @@ index test
 	source			= test
 	path			= <data_path/>/test
 
-	charset_type	= utf-8
 	blend_chars 		= +, -, ., U+23,U+40
 }
 </config>

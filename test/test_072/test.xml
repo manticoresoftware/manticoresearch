@@ -27,7 +27,6 @@ index test_idx
 {
 	source			= srctest
 	path			= <Data_Path/>/test
-    charset_type	= utf-8
 }
 
 source src_str
@@ -44,7 +43,6 @@ index str
 {
 	source			= src_str
 	path			= <Data_Path/>/str
-    charset_type	= utf-8
 	docinfo			= extern
 }
 

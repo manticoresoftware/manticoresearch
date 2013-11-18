@@ -21,7 +21,6 @@ index test
 	source			= test
 	path			= <data_path/>/test
 
-	charset_type		= utf-8
 	morphology			= stem_en
 	index_exact_words	= 1
 }

@@ -108,10 +108,6 @@ void CharsetFold ( CSphIndex * pIndex, FILE * fp )
 	CSphVector<BYTE> sBuf1 ( 16384 );
 	CSphVector<BYTE> sBuf2 ( 16384 );
 
-	bool bUtf = pIndex->GetTokenizer()->IsUtf8();
-	if ( !bUtf )
-		sphDie ( "sorry, --fold vs SBCS is not supported just yet" );
-
 	CSphLowercaser tLC = pIndex->GetTokenizer()->GetLowercaser();
 
 #if USE_WINDOWS

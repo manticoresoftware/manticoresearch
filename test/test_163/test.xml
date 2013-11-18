@@ -59,7 +59,6 @@ index main
 {
 	source			= src_main
     docinfo			= extern
-    charset_type	= sbcs
 	path			= <data_path/>/main
 }
 
@@ -67,7 +66,6 @@ index delta1
 {
 	source			= src_delta1
     docinfo			= extern
-    charset_type	= sbcs
 	path			= <data_path/>/delta1
 }
 
@@ -75,7 +73,6 @@ index delta2
 {
 	source			= src_delta2
     docinfo			= extern
-    charset_type	= sbcs
 	path			= <data_path/>/delta2
 }
 
@@ -267,7 +264,6 @@ index agent1_main
 {
 	source			= src_main
     docinfo			= extern
-    charset_type	= sbcs
 	path			= <data_path/>/agent1_main
 }
 
@@ -275,7 +271,6 @@ index agent1_delta2
 {
 	source			= src_delta2
     docinfo			= extern
-    charset_type	= sbcs
 	path			= <data_path/>/agent1_delta2
 }
 </agent1>
@@ -285,7 +280,6 @@ index agent2_delta1
 {
 	source			= src_delta1
     docinfo			= extern
-    charset_type	= sbcs
 	path			= <data_path/>/agent2_delta1
 }
 </agent2>

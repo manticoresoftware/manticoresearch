@@ -61,7 +61,6 @@ index xml_ext
 {
 	source				= src_ext
 	path				= <data_path/>/xml_ext
-	charset_type		= utf-8
 	docinfo				= extern
 	index_field_lengths = 1
 }
@@ -70,7 +69,6 @@ index xml_int
 {
 	source				= src_int
 	path				= <data_path/>/xml_int
-	charset_type		= utf-8
 	docinfo				= extern
 	index_field_lengths = 1
 }
@@ -102,7 +100,6 @@ index fields
 {
 	source				= src_fields
 	path				= <data_path/>/fields
-	charset_type		= utf-8
 	docinfo				= extern
 }
 </config>

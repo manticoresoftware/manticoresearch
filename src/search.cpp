@@ -273,7 +273,6 @@ int main ( int argc, char ** argv )
 
 		CSphIndex * pIndex = sphCreateIndexPhrase ( sIndexName, hIndex["path"].cstr() );
 		pIndex->SetEnableStar ( hIndex.GetInt("enable_star")!=0 );
-		pIndex->SetWordlistPreload ( hIndex.GetInt("ondisk_dict")==0 );
 		pIndex->SetGlobalIDFPath ( hIndex.GetStr ( "global_idf" ) );
 
 		CSphString sWarning;

@@ -765,29 +765,18 @@ class DiskIndexQwordSetup_c : public ISphQwordSetup
 public:
 	const CSphAutofile &	m_tDoclist;
 	const CSphAutofile &	m_tHitlist;
-	const CSphAutofile &	m_tWordlist;
 	bool					m_bSetupReaders;
 	const BYTE *			m_pSkips;
-	BYTE *					m_pDictBuf;
 	CSphQueryProfile *		m_pProfile;
 
 public:
-	DiskIndexQwordSetup_c ( const CSphAutofile & tDoclist, const CSphAutofile & tHitlist, const CSphAutofile & tWordlist, int iDictBufSize, const BYTE * pSkips, CSphQueryProfile * pProfile )
+	DiskIndexQwordSetup_c ( const CSphAutofile & tDoclist, const CSphAutofile & tHitlist, const BYTE * pSkips, CSphQueryProfile * pProfile )
 		: m_tDoclist ( tDoclist )
 		, m_tHitlist ( tHitlist )
-		, m_tWordlist ( tWordlist )
 		, m_bSetupReaders ( false )
 		, m_pSkips ( pSkips )
-		, m_pDictBuf ( NULL )
 		, m_pProfile ( pProfile )
 	{
-		if ( iDictBufSize>0 )
-			m_pDictBuf = new BYTE [iDictBufSize];
-	}
-
-	virtual ~DiskIndexQwordSetup_c()
-	{
-		SafeDeleteArray ( m_pDictBuf );
 	}
 
 	virtual ISphQword *					QwordSpawn ( const XQKeyword_t & tWord ) const;
@@ -1152,8 +1141,8 @@ public:
 	const CSphWordlistCheckpoint *		FindCheckpoint ( const char * sWord, int iWordLen, SphWordID_t iWordID, bool bStarMode ) const;
 	bool								GetWord ( const BYTE * pBuf, SphWordID_t iWordID, CSphDictEntry & tWord ) const;
 
-	const BYTE *						AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint, int iFD, BYTE * pDictBuf ) const;
-	virtual void						GetPrefixedWords ( const char * sPrefix, int iPrefixLen, const char * sWildcard, CSphVector<CSphNamedInt> & dExpanded, BYTE * pDictBuf, int iFD ) const;
+	const BYTE *						AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint ) const;
+	virtual void						GetPrefixedWords ( const char * sPrefix, int iPrefixLen, const char * sWildcard, CSphVector<CSphNamedInt> & dExpanded ) const;
 	virtual void						GetInfixedWords ( const char * sInfix, int iInfix, const char * sWildcard, CSphVector<CSphNamedInt> & dPrefixedWords ) const;
 
 private:
@@ -1557,7 +1546,7 @@ private:
 	bool						LoadPersistentMVA ( CSphString & sError );
 
 	bool						JuggleFile ( const char* szExt, CSphString & sError, bool bNeedOrigin=true ) const;
-	XQNode_t *					ExpandPrefix ( XQNode_t * pNode, CSphString & sError, CSphQueryResultMeta * pResult ) const;
+	XQNode_t *					ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta * pResult ) const;
 
 	const CSphRowitem *			CopyRow ( const CSphRowitem * pDocinfo, DWORD * pTmpDocinfo, const CSphColumnInfo * pNewAttr, int iOldStride ) const;
 
@@ -9476,7 +9465,6 @@ CSphIndex::CSphIndex ( const char * sIndexName, const char * sFilename )
 	, m_fRelocFactor ( 0.0f )
 	, m_fWriteFactor ( 0.0f )
 	, m_bKeepFilesOpen ( false )
-	, m_bPreloadWordlist ( true )
 	, m_bBinlog ( true )
 	, m_bStripperInited ( true )
 	, m_bEnableStar ( true )
@@ -12389,7 +12377,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	{
 		CSphString sWarning;
 		pPrevIndex = (CSphIndex_VLN *)sphCreateIndexPhrase ( NULL, m_sFilename.cstr() );
-		pPrevIndex->SetWordlistPreload ( false );
 		if ( !pPrevIndex->Prealloc ( false, false, sWarning ) || !pPrevIndex->Preread() )
 			pPrevIndex.Reset();
 		else
@@ -15740,7 +15727,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 
 	// binary search through checkpoints for a one whose range matches word ID
 	assert ( pIndex->m_pPreread && *pIndex->m_pPreread );
-	assert ( !pIndex->m_bPreloadWordlist || !pIndex->m_tWordlist.m_pBuf.IsEmpty() );
+	assert ( !pIndex->m_tWordlist.m_pBuf.IsEmpty() );
 
 	// empty index?
 	if ( !pIndex->m_tWordlist.m_dCheckpoints.GetLength() )
@@ -15780,7 +15767,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 		return false;
 
 	// decode wordlist chunk
-	const BYTE * pBuf = pIndex->m_tWordlist.AcquireDict ( pCheckpoint, m_tWordlist.GetFD(), m_pDictBuf );
+	const BYTE * pBuf = pIndex->m_tWordlist.AcquireDict ( pCheckpoint );
 	assert ( pBuf );
 
 	CSphDictEntry tRes;
@@ -15903,8 +15890,7 @@ void CSphIndex_VLN::Unlock()
 bool CSphIndex_VLN::Mlock ()
 {
 	bool bRes = true;
-	if ( m_bPreloadWordlist )
-		bRes &= m_tWordlist.m_pBuf.Mlock ( "wordlist", m_sLastError );
+	bRes &= m_tWordlist.m_pBuf.Mlock ( "wordlist", m_sLastError );
 
 	if ( m_bOndiskAllAttr )
 		return bRes;
@@ -16565,18 +16551,15 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 	}
 
 	// open files
-	CSphAutofile tDoclist, tHitlist, tWordlist;
+	CSphAutofile tDoclist, tHitlist;
 	if ( tDoclist.Open ( GetIndexFileName("spd"), SPH_O_READ, m_sLastError ) < 0 )
 		sphDie ( "failed to open doclist: %s", m_sLastError.cstr() );
 
 	if ( tHitlist.Open ( GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), SPH_O_READ, m_sLastError ) < 0 )
 		sphDie ( "failed to open hitlist: %s", m_sLastError.cstr() );
 
-	if ( tWordlist.Open ( GetIndexFileName ( "spi" ), SPH_O_READ, m_sLastError ) < 0 )
-		sphDie ( "failed to open wordlist: %s", m_sLastError.cstr() );
-
 	// aim
-	DiskIndexQwordSetup_c tTermSetup ( tDoclist, tHitlist, tWordlist, m_bPreloadWordlist ? 0 : m_tWordlist.m_iMaxChunk, m_pSkiplists.GetWritePtr(), NULL );
+	DiskIndexQwordSetup_c tTermSetup ( tDoclist, tHitlist, m_pSkiplists.GetWritePtr(), NULL );
 	tTermSetup.m_pDict = m_pDict;
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
@@ -16629,33 +16612,10 @@ void CSphIndex_VLN::DebugDumpDict ( FILE * fp )
 		return;
 	}
 
-	// thread safe outer storage for dictionaries chunks and file
-	// FIXME! cut-n-paste
-	CSphString sError;
-	BYTE * pBuf = NULL;
-	int iFD = -1;
-	CSphAutofile rdWordlist;
-	if ( !m_bPreloadWordlist )
-	{
-		if ( m_bKeepFilesOpen )
-			iFD = m_tWordlist.m_tFile.GetFD();
-		else
-		{
-			iFD = rdWordlist.Open ( GetIndexFileName ( "spi" ), SPH_O_READ, sError );
-			if ( iFD<0 )
-			{
-				fprintf ( fp, "ERROR: %s\n", sError.cstr() );
-				return;
-			}
-		}
-		if ( m_tWordlist.m_iMaxChunk>0 )
-			pBuf = new BYTE [ m_tWordlist.m_iMaxChunk ];
-	}
-
 	fprintf ( fp, "keyword,docs,hits,offset\n" );
 	ARRAY_FOREACH ( i, m_tWordlist.m_dCheckpoints )
 	{
-		KeywordsBlockReader_c tCtx ( m_tWordlist.AcquireDict ( &m_tWordlist.m_dCheckpoints[i], iFD, pBuf ), m_bHaveSkips );
+		KeywordsBlockReader_c tCtx ( m_tWordlist.AcquireDict ( &m_tWordlist.m_dCheckpoints[i] ), m_bHaveSkips );
 		while ( tCtx.UnpackWord() )
 			fprintf ( fp, "%s,%d,%d," INT64_FMT "\n", tCtx.GetWord(), tCtx.m_iDocs, tCtx.m_iHits, int64_t(tCtx.m_iDoclistOffset) );
 	}
@@ -16738,9 +16698,8 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 
 	// prealloc wordlist upto checkpoints
 	// (keyword blocks aka checkpoints, infix blocks etc will be loaded separately)
-	if ( m_bPreloadWordlist )
-		if ( !m_tWordlist.m_pBuf.Alloc ( m_tWordlist.m_iDictCheckpointsOffset, m_sLastError, sWarning ) )
-			return false;
+	if ( !m_tWordlist.m_pBuf.Alloc ( m_tWordlist.m_iDictCheckpointsOffset, m_sLastError, sWarning ) )
+		return false;
 
 	// preopen
 	if ( m_bKeepFilesOpen )
@@ -16749,9 +16708,6 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 			return false;
 
 		if ( m_tHitlistFile.Open ( GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), SPH_O_READ, m_sLastError ) < 0 )
-			return false;
-
-		if ( !m_bPreloadWordlist && m_tWordlist.m_tFile.Open ( GetIndexFileName("spi"), SPH_O_READ, m_sLastError ) < 0 )
 			return false;
 	}
 
@@ -17031,8 +16987,7 @@ bool CSphIndex_VLN::Preread ()
 	if ( !m_bOndiskAllAttr && !m_bOndiskPoolAttr )
 		m_tProgress.m_iBytesTotal += m_tMva.GetLengthBytes() + m_tString.GetLengthBytes();
 
-	if ( m_bPreloadWordlist )
-		m_tProgress.m_iBytesTotal += m_tWordlist.m_pBuf.GetLengthBytes();
+	m_tProgress.m_iBytesTotal += m_tWordlist.m_pBuf.GetLengthBytes();
 
 	int64_t iExpected = ( m_uVersion<20 ? m_iDocinfo * ( ( m_bId32to64 ? 1 : DOCINFO_IDSIZE ) + m_tSchema.GetRowSize() ) * sizeof(DWORD) : 0 );
 	int64_t iOffset = ( m_bId32to64 ? ( m_iDocinfo + 2 + m_iDocinfoIndex * 2 ) : 0 );
@@ -17062,12 +17017,9 @@ bool CSphIndex_VLN::Preread ()
 
 	// preload wordlist
 	// FIXME! OPTIMIZE! can skip checkpoints
-	if ( m_bPreloadWordlist )
-	{
-		sphLogDebug ( "Prereading .spi" );
-		if ( !PrereadSharedBuffer ( m_tWordlist.m_pBuf, "spi" ) )
-			return false;
-	}
+	sphLogDebug ( "Prereading .spi" );
+	if ( !PrereadSharedBuffer ( m_tWordlist.m_pBuf, "spi" ) )
+		return false;
 
 	m_tProgress.Show ( true );
 
@@ -17534,18 +17486,9 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	// FIXME!!! missed bigram, aot transform, FieldFilter
 
 	// prepare for setup
-	CSphAutofile tDummy1, tDummy2, tDummy3, tWordlist;
+	CSphAutofile tDummy1, tDummy2;
 
-	if ( !m_bKeepFilesOpen )
-	{
-		CSphString sTmp;
-		if ( tWordlist.Open ( GetIndexFileName ( "spi" ), SPH_O_READ, ( pError ? *pError : sTmp ) ) < 0 )
-			return false;
-	}
-
-	DiskIndexQwordSetup_c tTermSetup ( tDummy1, tDummy2
-		, m_bPreloadWordlist ? tDummy3 : ( m_bKeepFilesOpen ? m_tWordlist.m_tFile : tWordlist )
-		, m_bPreloadWordlist ? 0 : m_tWordlist.m_iMaxChunk, m_pSkiplists.GetWritePtr(), NULL );
+	DiskIndexQwordSetup_c tTermSetup ( tDummy1, tDummy2, m_pSkiplists.GetWritePtr(), NULL );
 	tTermSetup.m_pDict = pDict;
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
@@ -18160,7 +18103,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 			iPrefix++;
 		}
 
-		tCtx.m_pWordlist->GetPrefixedWords ( sPrefix, iPrefix, sWildcard, dExpanded, tCtx.m_pBuf, tCtx.m_iFD );
+		tCtx.m_pWordlist->GetPrefixedWords ( sPrefix, iPrefix, sWildcard, dExpanded );
 
 	} else
 	{
@@ -18226,38 +18169,17 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 	return pNode;
 }
 
-XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphString & sError, CSphQueryResultMeta * pResult ) const
+XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta * pResult ) const
 {
 	if ( !pNode || !m_pDict->GetSettings().m_bWordDict || ( m_tSettings.m_iMinPrefixLen<=0 && m_tSettings.m_iMinInfixLen<=0 ) )
 		return pNode;
 
-	// thread safe outer storage for dictionaries chunks and file
-	BYTE * pBuf = NULL;
-	int iFD = -1;
-	CSphAutofile rdWordlist;
-	if ( !m_bPreloadWordlist )
-	{
-		if ( m_bKeepFilesOpen )
-			iFD = m_tWordlist.m_tFile.GetFD();
-		else
-		{
-			iFD = rdWordlist.Open ( GetIndexFileName ( "spi" ), SPH_O_READ, sError );
-			if ( iFD<0 )
-				return NULL;
-		}
-
-		if ( m_tWordlist.m_iMaxChunk>0 )
-			pBuf = new BYTE [ m_tWordlist.m_iMaxChunk ];
-	}
-
 	assert ( m_pPreread && *m_pPreread );
-	assert ( !m_bPreloadWordlist || !m_tWordlist.m_pBuf.IsEmpty() );
+	assert ( !m_tWordlist.m_pBuf.IsEmpty() );
 
 	ExpansionContext_t tCtx;
 	tCtx.m_pWordlist = &m_tWordlist;
-	tCtx.m_pBuf = pBuf;
 	tCtx.m_pResult = pResult;
-	tCtx.m_iFD = iFD;
 	tCtx.m_iMinPrefixLen = m_tSettings.m_iMinPrefixLen;
 	tCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
 	tCtx.m_iExpansionLimit = m_iExpansionLimit;
@@ -18266,7 +18188,6 @@ XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphString & sError, 
 
 	pNode = sphExpandXQNode ( pNode, tCtx );
 	pNode->Check ( true );
-	SafeDeleteArray ( pBuf );
 
 	return pNode;
 }
@@ -18664,7 +18585,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 		TransformAotFilter ( tParsed.m_pRoot, m_pQueryTokenizer->IsUtf8(), pDict->GetWordforms(), m_tSettings );
 
 	// expanding prefix in word dictionary case
-	XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, pResult->m_sError, pResult );
+	XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, pResult );
 	if ( !pPrefixed )
 		return false;
 	tParsed.m_pRoot = pPrefixed;
@@ -18757,7 +18678,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 				TransformAotFilter ( dXQ[i].m_pRoot, m_pQueryTokenizer->IsUtf8(), pDict->GetWordforms(), m_tSettings );
 
 			// expanding prefix in word dictionary case
-			XQNode_t * pPrefixed = ExpandPrefix ( dXQ[i].m_pRoot, ppResults[i]->m_sError, ppResults[i] );
+			XQNode_t * pPrefixed = ExpandPrefix ( dXQ[i].m_pRoot, ppResults[i] );
 			if ( pPrefixed )
 			{
 				dXQ[i].m_pRoot = pPrefixed;
@@ -18870,7 +18791,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	tCtx.m_bPackedFactors = tArgs.m_bFactors;
 
 	// open files
-	CSphAutofile tDoclist, tHitlist, tWordlist, tDummy;
+	CSphAutofile tDoclist, tHitlist;
 	if ( !m_bKeepFilesOpen )
 	{
 		if ( pProfile )
@@ -18881,9 +18802,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 		if ( tHitlist.Open ( GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), SPH_O_READ, pResult->m_sError ) < 0 )
 			return false;
-
-		if ( tWordlist.Open ( GetIndexFileName ( "spi" ), SPH_O_READ, pResult->m_sError ) < 0 )
-			return false;
 	}
 
 	if ( pProfile )
@@ -18892,8 +18810,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	// setup search terms
 	DiskIndexQwordSetup_c tTermSetup ( m_bKeepFilesOpen ? m_tDoclistFile : tDoclist,
 		m_bKeepFilesOpen ? m_tHitlistFile : tHitlist,
-		m_bPreloadWordlist ? tDummy : ( m_bKeepFilesOpen ? m_tWordlist.m_tFile : tWordlist ),
-		m_bPreloadWordlist ? 0 : m_tWordlist.m_iMaxChunk,
 		m_pSkiplists.GetWritePtr(), pProfile );
 
 	tTermSetup.m_pDict = pDict;
@@ -30220,36 +30136,16 @@ bool CWordlist::GetWord ( const BYTE * pBuf, SphWordID_t iWordID, CSphDictEntry 
 	}
 }
 
-const BYTE * CWordlist::AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint, int iFD, BYTE * pDictBuf ) const
+const BYTE * CWordlist::AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint ) const
 {
 	assert ( pCheckpoint );
 	assert ( m_dCheckpoints.GetLength() );
 	assert ( pCheckpoint>=m_dCheckpoints.Begin() && pCheckpoint<=&m_dCheckpoints.Last() );
 	assert ( pCheckpoint->m_iWordlistOffset>0 && pCheckpoint->m_iWordlistOffset<=m_iSize );
 	assert ( m_pBuf.IsEmpty() || pCheckpoint->m_iWordlistOffset<(int64_t)m_pBuf.GetLengthBytes() );
+	assert ( !m_pBuf.IsEmpty() );
 
-	// TODO: implement on_disk_dict = 1 for dict=keywords + infix
-	const BYTE * pBuf = NULL;
-
-	if ( !m_pBuf.IsEmpty() )
-		pBuf = m_pBuf.GetWritePtr()+pCheckpoint->m_iWordlistOffset;
-	else
-	{
-		assert ( pDictBuf );
-		SphOffset_t iChunkLength = 0;
-
-		// not the end?
-		if ( pCheckpoint < &m_dCheckpoints.Last() )
-			iChunkLength = pCheckpoint[1].m_iWordlistOffset - pCheckpoint->m_iWordlistOffset;
-		else
-			iChunkLength = m_iWordsEnd - pCheckpoint->m_iWordlistOffset;
-
-		assert ( iChunkLength<=m_iMaxChunk );
-		if ( (int)sphPread ( iFD, pDictBuf, (size_t)iChunkLength, pCheckpoint->m_iWordlistOffset )==iChunkLength )
-			pBuf = pDictBuf;
-	}
-
-	return pBuf;
+	return m_pBuf.GetWritePtr()+pCheckpoint->m_iWordlistOffset;
 }
 
 
@@ -30273,7 +30169,7 @@ static inline void AddExpansion ( CSphVector<CSphNamedInt> & dExpanded, const Ke
 
 
 void CWordlist::GetPrefixedWords ( const char * sPrefix, int iPrefixLen, const char * sWildcard,
-	CSphVector<CSphNamedInt> & dExpanded, BYTE * pDictBuf, int iFD ) const
+	CSphVector<CSphNamedInt> & dExpanded ) const
 {
 	assert ( sPrefix && *sPrefix && iPrefixLen>0 );
 	assert ( sWildcard && *sWildcard );
@@ -30287,7 +30183,7 @@ void CWordlist::GetPrefixedWords ( const char * sPrefix, int iPrefixLen, const c
 	while ( pCheckpoint )
 	{
 		// decode wordlist chunk
-		KeywordsBlockReader_c tCtx ( AcquireDict ( pCheckpoint, iFD, pDictBuf ), m_bHaveSkips );
+		KeywordsBlockReader_c tCtx ( AcquireDict ( pCheckpoint ), m_bHaveSkips );
 		while ( tCtx.UnpackWord() )
 		{
 			// block is sorted

@@ -1081,10 +1081,6 @@ int main ( int argc, char ** argv )
 		if ( !pIndex )
 			sphDie ( "index '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
 
-		// don't need any long load operations
-		// but not for dict=keywords + infix
-		pIndex->SetWordlistPreload ( bDictKeywords );
-
 		CSphString sWarn;
 		if ( !pIndex->Prealloc ( false, bStripPath, sWarn ) )
 			sphDie ( "index '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
@@ -1167,8 +1163,6 @@ int main ( int argc, char ** argv )
 				CSphString sError;
 				if ( !pIndex )
 					sphDie ( "index '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
-
-				pIndex->SetWordlistPreload ( true );
 
 				CSphString sWarn;
 				if ( !pIndex->Prealloc ( false, bStripPath, sWarn ) )

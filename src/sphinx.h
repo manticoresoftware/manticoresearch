@@ -3207,7 +3207,6 @@ public:
 	virtual	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn pfnProgress ) = 0;
 	virtual void				SetInplaceSettings ( int iHitGap, int iDocinfoGap, float fRelocFactor, float fWriteFactor );
 	virtual void				SetPreopen ( bool bValue ) { m_bKeepFilesOpen = bValue; }
-	virtual void				SetWordlistPreload ( bool bValue ) { m_bPreloadWordlist = bValue; }
 	void						SetFieldFilter ( ISphFieldFilter * pFilter );
 	void						SetTokenizer ( ISphTokenizer * pTokenizer );
 	void						SetupQueryTokenizer();
@@ -3351,7 +3350,6 @@ protected:
 	float						m_fWriteFactor;
 
 	bool						m_bKeepFilesOpen;		///< keep files open to avoid race on seamless rotation
-	bool						m_bPreloadWordlist;		///< preload wordlists or keep them on disk
 	bool						m_bBinlog;
 
 	bool						m_bStripperInited;		///< was stripper initialized (old index version (<9) handling)

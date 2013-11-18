@@ -1088,7 +1088,7 @@ private:
 	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes );
 	bool						SaveRamChunk ();
 
-	virtual void				GetPrefixedWords ( const char * sPrefix, int iPrefix, const char * sWildcard, CSphVector<CSphNamedInt> & dPrefixedWords, BYTE * pDictBuf, int iFD ) const;
+	virtual void				GetPrefixedWords ( const char * sPrefix, int iPrefix, const char * sWildcard, CSphVector<CSphNamedInt> & dPrefixedWords ) const;
 	virtual void				GetInfixedWords ( const char * sInfix, int iInfix, const char * sWildcard, CSphVector<CSphNamedInt> & dPrefixedWords ) const;
 
 	bool						RenameWithRollback ( const ESphExt * dExts, int nExts, ESphExtType eExtTypeFrom, ESphExtType eExtTypeTo, CSphString & sError );
@@ -3817,7 +3817,6 @@ CSphIndex * RtIndex_t::LoadDiskChunk ( const char * sChunk, CSphString & sError 
 		return NULL;
 	}
 
-	pDiskChunk->SetWordlistPreload ( m_bPreloadWordlist );
 	pDiskChunk->m_iExpansionLimit = m_iExpansionLimit;
 	pDiskChunk->SetBinlog ( false );
 	pDiskChunk->SetEnableStar ( m_bEnableStar );
@@ -5559,7 +5558,7 @@ struct DocHitPair_t
 
 
 void RtIndex_t::GetPrefixedWords ( const char * sWord, int iWordLen, const char * sWildcard,
-	CSphVector<CSphNamedInt> & dPrefixedWords, BYTE *, int ) const
+	CSphVector<CSphNamedInt> & dPrefixedWords ) const
 {
 	const int iSkipMagic = ( BYTE(*sWord)<0x20 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
 	SmallStringHash_T<DocHitPair_t> hPrefixedWords;

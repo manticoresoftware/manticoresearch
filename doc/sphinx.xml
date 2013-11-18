@@ -6820,6 +6820,8 @@ Use <link linkend="conf-index-field-lengths">index_field_lengths=1</link>
 instead.</para></listitem>
 <listitem><para>Removed str2ordinal attributes. Use string attributes
 for sorting.</para></listitem>
+<listitem><para>ondisk_dict and ondisk_dict_default was removed.
+</para></listitem>
 </itemizedlist>
 </para>
 </sect1>
@@ -11527,31 +11529,6 @@ preopen = 1
 </sect2>
 
 
-<sect2 id="conf-ondisk-dict"><title>ondisk_dict</title>
-<para>
-Whether to keep the dictionary file (.spi) for this index on disk, or precache it in RAM.
-Optional, default is 0 (precache in RAM).
-Introduced in version 0.9.9-rc1.
-DEPRECATED
-</para>
-<para>
-The dictionary (.spi) can be either kept on RAM or on disk. The default
-is to fully cache it in RAM. That improves performance, but might cause
-too much RAM pressure, especially if prefixes or infixes were used.
-Enabling <option>ondisk_dict</option> results in 1 additional disk IO
-per keyword per query, but reduces memory footprint.
-</para>
-<para>
-This directive does not affect <filename>indexer</filename> in any way,
-it only affects <filename>searchd</filename>.
-</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-ondisk_dict = 1
-</programlisting>
-</sect2>
-
-
 <sect2 id="conf-inplace-enable"><title>inplace_enable</title>
 <para>
 Whether to enable in-place index inversion.
@@ -13031,27 +13008,6 @@ still occur at normal shut-down.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 attr_flush_period = 900 # persist updates to disk every 15 minutes
-</programlisting>
-</sect2>
-
-
-<sect2 id="conf-ondisk-dict-default"><title>ondisk_dict_default</title>
-<para>
-Instance-wide defaults for <link linkend="conf-ondisk-dict">ondisk_dict</link> directive.
-Optional, default it 0 (precache dictionaries in RAM).
-Introduced in version 0.9.9-rc1.
-DEPRECATED
-</para>
-<para>
-This directive lets you specify the default value of
-<link linkend="conf-ondisk-dict">ondisk_dict</link> for all the indexes
-served by this copy of <filename>searchd</filename>. Per-index directive
-take precedence, and will overwrite this instance-wide default value,
-allowing for fine-grain control.
-</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-ondisk_dict_default = 1 # keep all dictionaries on disk
 </programlisting>
 </sect2>
 
@@ -15106,7 +15062,7 @@ rlp_max_batch_docs = 100
 <listitem><para>added <link linkend="api-func-setrankingmode">legacy rankers</link> (MATCH_ALL/MATCH_ANY/etc), removed legacy matching code (everything runs on V2 engine now)</para></listitem>
 <listitem><para>added <link linkend="extended-syntax">field position limit</link> modifier to field operator (syntax: @title[50] hello world)</para></listitem>
 <listitem><para>added killlist support (<link linkend="conf-sql-query-killlist">sql_query_killlist</link> directive, --merge-killlists switch)</para></listitem>
-<listitem><para>added on-disk SPI support (<link linkend="conf-ondisk-dict">ondisk_dict</link> directive)</para></listitem>
+<listitem><para>added on-disk SPI support (ondisk_dict directive)</para></listitem>
 <listitem><para>added indexer IO stats</para></listitem>
 <listitem><para>added periodic .spa flush (<link linkend="conf-attr-flush-period">attr_flush_period</link> directive)</para></listitem>
 <listitem><para>added config reload on SIGHUP</para></listitem>

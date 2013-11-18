@@ -1368,9 +1368,6 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 		return false;
 	}
 
-	pSrc->SetWordlistPreload ( hSrc.GetInt ( "ondisk_dict" )==0 );
-	pDst->SetWordlistPreload ( hDst.GetInt ( "ondisk_dict" )==0 );
-
 	if ( !pSrc->Lock() && !bRotate )
 	{
 		fprintf ( stdout, "ERROR: index '%s' is already locked; lock: %s\n", sSrc, pSrc->GetLastError().cstr() );

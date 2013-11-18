@@ -115,7 +115,6 @@ struct ServedDesc_t
 	bool				m_bEnabled;		///< to disable index in cases when rotation fails
 	bool				m_bMlock;
 	bool				m_bPreopen;
-	bool				m_bOnDiskDict;
 	bool				m_bStar;
 	bool				m_bExpand;
 	bool				m_bToDelete;
@@ -254,7 +253,6 @@ static bool				g_bPreopenIndexes	= true;
 #else
 static bool				g_bPreopenIndexes	= false;
 #endif
-static bool				g_bOnDiskDicts		= false;
 static bool				g_bWatchdog			= true;
 static int				g_iExpansionLimit	= 0;
 static bool				g_bOnDiskAttrs		= false;
@@ -1019,7 +1017,6 @@ ServedDesc_t::ServedDesc_t ()
 	m_bEnabled = true;
 	m_bMlock = false;
 	m_bPreopen = false;
-	m_bOnDiskDict = false;
 	m_bStar = true;
 	m_bExpand = false;
 	m_bToDelete = false;
@@ -9913,7 +9910,6 @@ void SearchHandler_c::SetupLocalDF ( int iStart, int iEnd )
 	if ( m_pProfile )
 		m_pProfile->Switch ( SPH_QSTATE_LOCAL_DF );
 
-	// FIXME!!! bail on index with ondisk_dict
 	bool bGlobalIDF = true;
 	ARRAY_FOREACH_COND ( i, m_dLocal, bGlobalIDF )
 	{
@@ -17945,7 +17941,6 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	tNewIndex.m_pIndex->m_bExpandKeywords = pRotating->m_bExpand;
 	tNewIndex.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 	tNewIndex.m_pIndex->SetPreopen ( pRotating->m_bPreopen || g_bPreopenIndexes );
-	tNewIndex.m_pIndex->SetWordlistPreload ( !pRotating->m_bOnDiskDict && !g_bOnDiskDicts );
 	tNewIndex.m_pIndex->SetGlobalIDFPath ( pRotating->m_sGlobalIDFPath );
 	SetEnableOndiskAttributes ( tNewIndex, tNewIndex.m_pIndex );
 
@@ -18157,7 +18152,6 @@ void SeamlessTryToForkPrereader ()
 	g_pPrereading->m_bExpandKeywords = tServed.m_bExpand;
 	g_pPrereading->m_iExpansionLimit = g_iExpansionLimit;
 	g_pPrereading->SetPreopen ( tServed.m_bPreopen || g_bPreopenIndexes );
-	g_pPrereading->SetWordlistPreload ( !tServed.m_bOnDiskDict && !g_bOnDiskDicts );
 	g_pPrereading->SetGlobalIDFPath ( tServed.m_sGlobalIDFPath );
 	SetEnableOndiskAttributes ( tServed, tServed.m_pIndex );
 
@@ -18769,7 +18763,6 @@ void ConfigureLocalIndex ( ServedDesc_t & tIdx, const CSphConfigSection & hIndex
 	tIdx.m_bStar = ( hIndex.GetInt ( "enable_star", 1 )!=0 );
 	tIdx.m_bExpand = ( hIndex.GetInt ( "expand_keywords", 0 )!=0 );
 	tIdx.m_bPreopen = ( hIndex.GetInt ( "preopen", 0 )!=0 );
-	tIdx.m_bOnDiskDict = ( hIndex.GetInt ( "ondisk_dict", 0 )!=0 );
 	tIdx.m_sGlobalIDFPath = hIndex.GetStr ( "global_idf" );
 	tIdx.m_bOnDiskAttrs = ( hIndex.GetInt ( "ondisk_attrs", 0 )==1 );
 	tIdx.m_bOnDiskPools = ( strcmp ( hIndex.GetStr ( "ondisk_attrs", "" ), "pool" )==0 );
@@ -19157,7 +19150,6 @@ void PreCreatePlainIndex ( ServedDesc_t & tServed, const char * sName )
 	tServed.m_pIndex->m_bExpandKeywords = tServed.m_bExpand;
 	tServed.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 	tServed.m_pIndex->SetPreopen ( tServed.m_bPreopen || g_bPreopenIndexes );
-	tServed.m_pIndex->SetWordlistPreload ( !tServed.m_bOnDiskDict && !g_bOnDiskDicts );
 	tServed.m_pIndex->SetGlobalIDFPath ( tServed.m_sGlobalIDFPath );
 	SetEnableOndiskAttributes ( tServed, tServed.m_pIndex );
 	tServed.m_bEnabled = false;
@@ -19286,7 +19278,6 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		tIdx.m_pIndex->m_bExpandKeywords = tIdx.m_bExpand;
 		tIdx.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 		tIdx.m_pIndex->SetPreopen ( tIdx.m_bPreopen || g_bPreopenIndexes );
-		tIdx.m_pIndex->SetWordlistPreload ( !tIdx.m_bOnDiskDict && !g_bOnDiskDicts );
 		tIdx.m_pIndex->SetGlobalIDFPath ( tIdx.m_sGlobalIDFPath );
 		SetEnableOndiskAttributes ( tIdx, tIdx.m_pIndex );
 
@@ -21028,7 +21019,6 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 		g_iPersistentPoolSize = hSearchd["persistent_connections_limit"].intval();
 
 	g_bPreopenIndexes = hSearchd.GetInt ( "preopen_indexes", (int)g_bPreopenIndexes )!=0;
-	g_bOnDiskDicts = hSearchd.GetInt ( "ondisk_dict_default", (int)g_bOnDiskDicts )!=0;
 	sphSetUnlinkOld ( hSearchd.GetInt ( "unlink_old", 1 )!=0 );
 	g_iExpansionLimit = hSearchd.GetInt ( "expansion_limit", 0 );
 	g_bOnDiskAttrs = ( hSearchd.GetInt ( "ondisk_attrs_default", 0 )==1 );

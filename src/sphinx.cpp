@@ -2102,7 +2102,6 @@ public:
 	virtual void				SetBuffer ( const BYTE * sBuffer, int iLength );
 	virtual BYTE *				GetToken ();
 	virtual ISphTokenizer *		Clone ( ESphTokenizerClone eMode ) const;
-	virtual bool				IsUtf8 () const { return true; }
 	virtual int					GetCodepointLength ( int iCode ) const;
 	virtual int					GetMaxCodepointLength () const { return m_tLC.GetMaxCodepointLength(); }
 };
@@ -4306,13 +4305,6 @@ ISphTokenizer * ISphTokenizer::CreateRLPFilter ( ISphTokenizer * pTokenizer, boo
 	assert ( pTokenizer );
 	if ( !bChineseRLP )
 		return pTokenizer;
-
-	if ( !pTokenizer->IsUtf8() )
-	{
-		sError.SetSprintf ( "both rlp_chinese and rlp_chinese_batched require UTF-8" );
-		SafeDelete ( pTokenizer );
-		return NULL;
-	}
 
 	CSphRLPTokenizer * pRLP = new CSphRLPTokenizer ( pTokenizer, szRLPRoot, szRLPEnv, szRLPCtx, bFilterChinese );
 	if ( !pRLP->Init ( sError ) )

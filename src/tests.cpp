@@ -3333,6 +3333,8 @@ int main ()
 	sphThreadInit();
 	MemorizeStack ( &cTopOfMainStack );
 
+	setvbuf(stdout, NULL, _IONBF, 0);
+
 	printf ( "RUNNING INTERNAL LIBSPHINX TESTS\n\n" );
 
 #if 0

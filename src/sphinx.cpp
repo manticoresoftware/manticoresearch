@@ -9145,7 +9145,6 @@ CSphIndex::CSphIndex ( const char * sIndexName, const char * sFilename )
 	, m_bKeepFilesOpen ( false )
 	, m_bBinlog ( true )
 	, m_bStripperInited ( true )
-	, m_bEnableStar ( true )
 	, m_bId32to64 ( false )
 	, m_pFieldFilter ( NULL )
 	, m_pTokenizer ( NULL )
@@ -15414,7 +15413,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 	const char * sWord = tWord.m_sDictWord.cstr();
 	const bool bWordDict = pIndex->m_pDict->GetSettings().m_bWordDict;
 	int iWordLen = sWord ? strlen ( sWord ) : 0;
-	if ( pIndex->m_bEnableStar && bWordDict && tWord.m_sWord.Ends("*") )
+	if ( bWordDict && tWord.m_sWord.Ends("*") )
 	{
 		iWordLen = Max ( iWordLen-1, 0 );
 
@@ -15431,7 +15430,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 	}
 
 	// leading special symbols trimming
-	if ( pIndex->m_bEnableStar && bWordDict && tWord.m_sDictWord.Begins("*") )
+	if ( bWordDict && tWord.m_sDictWord.Begins("*") )
 	{
 		sWord++;
 		iWordLen = Max ( iWordLen-1, 0 );
@@ -17081,8 +17080,8 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 bool CSphIndex_VLN::IsStarDict () const
 {
 	return (
-		( m_uVersion>=7 && ( m_tSettings.m_iMinPrefixLen>0 || m_tSettings.m_iMinInfixLen>0 ) && m_bEnableStar ) || // v.7 added mangling to infixes
-		( m_uVersion==6 && ( m_tSettings.m_iMinPrefixLen>0 ) && m_bEnableStar ) ); // v.6 added mangling to prefixes
+		( m_uVersion>=7 && ( m_tSettings.m_iMinPrefixLen>0 || m_tSettings.m_iMinInfixLen>0 ) ) || // v.7 added mangling to infixes
+		( m_uVersion==6 && ( m_tSettings.m_iMinPrefixLen>0 ) ) ); // v.6 added mangling to prefixes
 }
 
 
@@ -17408,14 +17407,14 @@ static XQNode_t * CloneKeyword ( const XQNode_t * pNode )
 }
 
 
-static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tSettings, bool bStarEnabled )
+static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tSettings )
 {
 	assert ( pNode );
 
 	XQNode_t * pExpand = new XQNode_t ( pNode->m_dSpec );
 	pExpand->SetOp ( SPH_QUERY_OR, pNode );
 
-	if ( tSettings.m_iMinInfixLen>0 && bStarEnabled )
+	if ( tSettings.m_iMinInfixLen>0 )
 	{
 		assert ( pNode->m_dChildren.GetLength()==0 );
 		assert ( pNode->m_dWords.GetLength()==1 );
@@ -17446,7 +17445,7 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 	return pExpand;
 }
 
-XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & tSettings, bool bStarEnabled )
+XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & tSettings )
 {
 	// only if expansion makes sense at all
 	if ( tSettings.m_iMinInfixLen<=0 && tSettings.m_iMinPrefixLen<=0 && !tSettings.m_bIndexExactWords )
@@ -17457,7 +17456,7 @@ XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & 
 	{
 		ARRAY_FOREACH ( i, pNode->m_dChildren )
 		{
-			pNode->m_dChildren[i] = sphQueryExpandKeywords ( pNode->m_dChildren[i], tSettings, bStarEnabled );
+			pNode->m_dChildren[i] = sphQueryExpandKeywords ( pNode->m_dChildren[i], tSettings );
 			pNode->m_dChildren[i]->m_pParent = pNode;
 		}
 		return pNode;
@@ -17471,7 +17470,7 @@ XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & 
 		{
 			XQNode_t * pWord = new XQNode_t ( pNode->m_dSpec );
 			pWord->m_dWords.Add ( pNode->m_dWords[i] );
-			pNode->m_dChildren.Add ( ExpandKeyword ( pWord, tSettings, bStarEnabled ) );
+			pNode->m_dChildren.Add ( ExpandKeyword ( pWord, tSettings ) );
 			pNode->m_dChildren.Last()->m_iAtomPos = pNode->m_dWords[i].m_iAtomPos;
 			pNode->m_dChildren.Last()->m_pParent = pNode;
 		}
@@ -17496,41 +17495,7 @@ XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & 
 	}
 
 	// do the expansion
-	return ExpandKeyword ( pNode, tSettings, bStarEnabled );
-}
-
-
-void sphQueryAdjustStars ( XQNode_t * pNode, const CSphIndexSettings & tSettings )
-{
-	if ( pNode->m_dChildren.GetLength() )
-	{
-		ARRAY_FOREACH ( i, pNode->m_dChildren )
-			sphQueryAdjustStars ( pNode->m_dChildren[i], tSettings );
-		return;
-	}
-
-	ARRAY_FOREACH ( i, pNode->m_dWords )
-	{
-		CSphString & sWord = pNode->m_dWords[i].m_sWord;
-
-		// trim all wildcards
-		const char * s = sWord.cstr();
-		int iLen = sWord.Length();
-		while ( iLen>0 && sphIsWild ( s[iLen-1] ) )
-			iLen--;
-		while ( iLen>0 && sphIsWild(*s) )
-		{
-			s++;
-			iLen--;
-		}
-		sWord = sWord.SubString ( (int)( s-sWord.cstr() ), iLen );
-
-		// and now append stars if needed
-		if ( tSettings.m_iMinPrefixLen>0 && iLen>=tSettings.m_iMinPrefixLen )
-			sWord = sWord.SetSprintf ( "%s*", sWord.cstr() );
-		else if ( tSettings.m_iMinInfixLen>0 && iLen>=tSettings.m_iMinInfixLen )
-			sWord = sWord.SetSprintf ( "*%s*", sWord.cstr() );
-	}
+	return ExpandKeyword ( pNode, tSettings );
 }
 
 
@@ -18250,13 +18215,9 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 		pProfile->Switch ( SPH_QSTATE_TRANSFORMS );
 	sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, pQuery->m_bSimplify, this );
 
-	// adjust stars in keywords for dict=keywords, enable_star=0 case
-	if ( pDict->GetSettings().m_bWordDict && !m_bEnableStar && ( m_tSettings.m_iMinPrefixLen>0 || m_tSettings.m_iMinInfixLen>0 ) )
-		sphQueryAdjustStars ( tParsed.m_pRoot, m_tSettings );
-
 	if ( m_bExpandKeywords )
 	{
-		tParsed.m_pRoot = sphQueryExpandKeywords ( tParsed.m_pRoot, m_tSettings, m_bEnableStar );
+		tParsed.m_pRoot = sphQueryExpandKeywords ( tParsed.m_pRoot, m_tSettings );
 		tParsed.m_pRoot->Check ( true );
 	}
 
@@ -18343,13 +18304,9 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 			// transform query if needed (quorum transform, keyword expansion, etc.)
 			sphTransformExtendedQuery ( &dXQ[i].m_pRoot, m_tSettings, pQueries[i].m_bSimplify, this );
 
-			// adjust stars in keywords for dict=keywords, enable_star=0 case
-			if ( pDict->GetSettings().m_bWordDict && !m_bEnableStar && ( m_tSettings.m_iMinPrefixLen>0 || m_tSettings.m_iMinInfixLen>0 ) )
-				sphQueryAdjustStars ( dXQ[i].m_pRoot, m_tSettings );
-
 			if ( m_bExpandKeywords )
 			{
-				dXQ[i].m_pRoot = sphQueryExpandKeywords ( dXQ[i].m_pRoot, m_tSettings, m_bEnableStar );
+				dXQ[i].m_pRoot = sphQueryExpandKeywords ( dXQ[i].m_pRoot, m_tSettings );
 				dXQ[i].m_pRoot->Check ( true );
 			}
 
@@ -21497,14 +21454,14 @@ template<>
 bool Infix_t<2>::operator == ( const Infix_t<2> & rhs ) const
 {
 	return m_Data[0]==rhs.m_Data[0] && m_Data[1]==rhs.m_Data[1];
-};
+}
 
 
 template<>
 bool Infix_t<3>::operator == ( const Infix_t<3> & rhs ) const
 {
 	return m_Data[0]==rhs.m_Data[0] && m_Data[1]==rhs.m_Data[1] && m_Data[2]==rhs.m_Data[2];
-};
+}
 
 
 template<>
@@ -21512,7 +21469,7 @@ bool Infix_t<5>::operator == ( const Infix_t<5> & rhs ) const
 {
 	return m_Data[0]==rhs.m_Data[0] && m_Data[1]==rhs.m_Data[1] && m_Data[2]==rhs.m_Data[2]
 		&& m_Data[3]==rhs.m_Data[3] && m_Data[4]==rhs.m_Data[4];
-};
+}
 
 
 struct InfixIntvec_t

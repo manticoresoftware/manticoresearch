@@ -37,7 +37,6 @@ index morph0
 
 	dict			= keywords
 	min_prefix_len	= 1
-	enable_star	= 1
 }
 
 index morph1
@@ -47,7 +46,6 @@ index morph1
 
 	dict			= keywords
 	min_prefix_len	= 1
-	enable_star	= 1
 	morphology = stem_en
 }
 

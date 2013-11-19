@@ -707,7 +707,7 @@ bool AotInit ( const CSphString & sDictFile, CSphString & sError, int iLang )
 bool sphAotInit ( const CSphString & sDictFile, CSphString & sError, int iLang )
 {
 	return AotInit ( sDictFile, sError, iLang );
-};
+}
 
 static inline bool IsAlpha1251 ( BYTE c )
 {

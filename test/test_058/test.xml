@@ -91,7 +91,6 @@ index expand
 	path = <data_path/>/expand
 	dict = keywords
 	min_prefix_len = 1
-	enable_star = 1
 }
 </config>
 

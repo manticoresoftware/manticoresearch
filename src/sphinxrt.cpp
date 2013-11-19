@@ -1155,7 +1155,6 @@ public:
 	virtual const CSphSchema &	GetInternalSchema () const { return m_tSchema; }
 	int64_t						GetUsedRam () const;
 
-	virtual void				SetEnableStar ( bool bEnableStar );
 	bool						IsWordDict () const { return m_bKeywordDict; }
 	void						BuildSegmentInfixes ( RtSegment_t * pSeg ) const;
 
@@ -3819,7 +3818,6 @@ CSphIndex * RtIndex_t::LoadDiskChunk ( const char * sChunk, CSphString & sError 
 
 	pDiskChunk->m_iExpansionLimit = m_iExpansionLimit;
 	pDiskChunk->SetBinlog ( false );
-	pDiskChunk->SetEnableStar ( m_bEnableStar );
 
 	CSphString sWarning;
 	if ( !pDiskChunk->Prealloc ( false, m_bPathStripped, sWarning ) )
@@ -5269,13 +5267,6 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 	return iFails + iFailsPlain;
 } // NOLINT function length
 
-void RtIndex_t::SetEnableStar ( bool bEnableStar )
-{
-	m_bEnableStar = bEnableStar;
-	ARRAY_FOREACH ( i, m_pDiskChunks )
-		m_pDiskChunks[i]->SetEnableStar ( bEnableStar );
-}
-
 //////////////////////////////////////////////////////////////////////////
 // SEARCHING
 //////////////////////////////////////////////////////////////////////////
@@ -5794,7 +5785,7 @@ CSphDict * RtIndex_t::SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSp
 CSphDict * RtIndex_t::SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer * pTokenizer ) const
 {
 	assert ( pTokenizer );
-	if ( !m_bEnableStar || !m_bKeywordDict )
+	if ( !m_bKeywordDict )
 		return pPrevDict;
 
 	tContainer = new CSphDictStarV8 ( pPrevDict, false, true );
@@ -5992,7 +5983,6 @@ struct SphFinalArenaCopy_t : ISphMatchProcessor
 
 
 // FIXME! missing MVA, index_exact_words support
-// FIXME? missing enable_star, legacy match modes support
 // FIXME? any chance to factor out common backend agnostic code?
 // FIXME? do we need to support pExtraFilters?
 bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters,
@@ -6252,13 +6242,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		pProfiler->Switch ( SPH_QSTATE_TRANSFORMS );
 	sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, pQuery->m_bSimplify, this );
 
-	// adjust stars in keywords for dict=keywords, enable_star=0 case
-	if ( pDict->GetSettings().m_bWordDict && !m_bEnableStar && ( m_tSettings.m_iMinPrefixLen>0 || m_tSettings.m_iMinInfixLen>0 ) )
-		sphQueryAdjustStars ( tParsed.m_pRoot, m_tSettings );
-
 	if ( m_bExpandKeywords )
 	{
-		tParsed.m_pRoot = sphQueryExpandKeywords ( tParsed.m_pRoot, m_tSettings, m_bEnableStar );
+		tParsed.m_pRoot = sphQueryExpandKeywords ( tParsed.m_pRoot, m_tSettings );
 		tParsed.m_pRoot->Check ( true );
 	}
 
@@ -6267,7 +6253,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		TransformAotFilter ( tParsed.m_pRoot, pDict->GetWordforms(), m_tSettings );
 
 	// expanding prefix in word dictionary case
-	if ( m_bEnableStar && m_bKeywordDict )
+	if ( m_bKeywordDict )
 	{
 		ExpansionContext_t tExpCtx;
 		tExpCtx.m_pWordlist = this;

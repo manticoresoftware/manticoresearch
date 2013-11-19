@@ -185,7 +185,7 @@ struct Word_t
 inline bool operator < ( const Word_t & a, const Word_t & b)
 {
 	return a.m_iCount < b.m_iCount;
-};
+}
 
 
 class CSphStopwordBuilderDict : public CSphDict
@@ -943,18 +943,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	{
 		fprintf ( stdout, "ERROR: index '%s': key 'path' not found.\n", sIndexName );
 		return false;
-	}
-
-	bool bInfix = hIndex.GetInt ( "min_infix_len", 0 ) > 0;
-	if ( ( hIndex.GetInt ( "min_prefix_len", 0 ) > 0 || bInfix )
-		&& hIndex.GetInt ( "enable_star", 1 )==0 )
-	{
-		const char * szMorph = hIndex.GetStr ( "morphology", "" );
-		if ( szMorph && *szMorph && strcmp ( szMorph, "none" ) )
-		{
-			fprintf ( stdout, "ERROR: index '%s': infixes and morphology are enabled, enable_star=0\n", sIndexName );
-			return false;
-		}
 	}
 
 	// configure early

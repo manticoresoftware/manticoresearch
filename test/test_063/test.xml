@@ -73,7 +73,6 @@ index star
 
 	blend_chars = @, ., !, (, ), [, ], {, }
 	min_infix_len = 1
-	enable_star = 1
 }
 
 source test3

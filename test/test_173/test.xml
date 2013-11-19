@@ -60,7 +60,6 @@ index warn1
 	source			= src_warn
 	path			= <data_path/>/warn1
 	min_prefix_len = 5
-	enable_star =1
 }
 
 index warn2
@@ -68,7 +67,6 @@ index warn2
 	source			= src_warn
 	path			= <data_path/>/warn2
 	min_prefix_len = 5
-	enable_star =1
 }
 
 index dist_warn

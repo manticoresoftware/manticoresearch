@@ -92,7 +92,6 @@ index testpr
 	path			= <data_path/>/testpr
 	expand_keywords	= 1
 	min_prefix_len	= 2
-	enable_star		= 1
 }
 
 # test plain expanded index
@@ -104,7 +103,6 @@ index testple
 	dict			= keywords
 	expand_keywords	= 1
 	min_infix_len	= 2
-	enable_star		= 1
 }
 
 </config>

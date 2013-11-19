@@ -43,7 +43,6 @@ index star
 	path			= <data_path/>/star
 	charset_table	= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, *, %, ?
 	exceptions		= <this_test/>/synonyms2.txt
-	enable_star = 1
 	min_prefix_len = 1
 }
 

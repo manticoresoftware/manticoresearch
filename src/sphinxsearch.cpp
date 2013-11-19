@@ -1448,7 +1448,7 @@ static ExtNode_i * CreateOrderNode ( const XQNode_t * pNode, const ISphQwordSetu
 ExtNode_i * ExtNode_i::Create ( const XQKeyword_t & tWord, const XQNode_t * pNode, const ISphQwordSetup & tSetup )
 {
 	return Create ( CreateQueryWord ( tWord, tSetup ), pNode, tSetup );
-};
+}
 
 ExtNode_i * ExtNode_i::Create ( ISphQword * pQword, const XQNode_t * pNode, const ISphQwordSetup & tSetup )
 {
@@ -3333,7 +3333,7 @@ const ExtDoc_t * ExtAndNot_c::GetDocsChunk ( SphDocID_t * pMaxID )
 const ExtHit_t * ExtAndNot_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
 {
 	return m_pChildren[0]->GetHitsChunk ( pDocs, uMaxID );
-};
+}
 
 void ExtAndNot_c::Reset ( const ISphQwordSetup & tSetup )
 {
@@ -5540,7 +5540,7 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup 
 
 	CSphDict * pZonesDict = NULL;
 	// workaround for a particular case with following conditions
-	if ( m_pIndex->IsStarEnabled() && !m_pIndex->GetDictionary()->GetSettings().m_bWordDict && m_dZones.GetLength() )
+	if ( !m_pIndex->GetDictionary()->GetSettings().m_bWordDict && m_dZones.GetLength() )
 		pZonesDict = m_pIndex->GetDictionary()->Clone();
 
 	ARRAY_FOREACH ( i, m_dZones )
@@ -6777,7 +6777,7 @@ bool FactorPool_c::FlushEntry ( SphFactorHashEntry_t * pEntry )
 	Free ( pEntry->m_pData );
 
 	return true;
-};
+}
 
 
 void FactorPool_c::Flush()
@@ -8757,9 +8757,9 @@ public:
 // RANKER FACTORY
 //////////////////////////////////////////////////////////////////////////
 
-static void CheckQueryWord ( const char * szWord, CSphQueryResult * pResult, const CSphIndexSettings & tSettings, bool bStar )
+static void CheckQueryWord ( const char * szWord, CSphQueryResult * pResult, const CSphIndexSettings & tSettings )
 {
-	if ( ( !tSettings.m_iMinPrefixLen && !tSettings.m_iMinInfixLen ) || !bStar || !szWord )
+	if ( ( !tSettings.m_iMinPrefixLen && !tSettings.m_iMinInfixLen ) || !szWord )
 		return;
 
 	int iLen = strlen ( szWord );
@@ -8777,13 +8777,13 @@ static void CheckQueryWord ( const char * szWord, CSphQueryResult * pResult, con
 }
 
 
-static void CheckExtendedQuery ( const XQNode_t * pNode, CSphQueryResult * pResult, const CSphIndexSettings & tSettings, bool bStar )
+static void CheckExtendedQuery ( const XQNode_t * pNode, CSphQueryResult * pResult, const CSphIndexSettings & tSettings )
 {
 	ARRAY_FOREACH ( i, pNode->m_dWords )
-		CheckQueryWord ( pNode->m_dWords[i].m_sWord.cstr(), pResult, tSettings, bStar );
+		CheckQueryWord ( pNode->m_dWords[i].m_sWord.cstr(), pResult, tSettings );
 
 	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		CheckExtendedQuery ( pNode->m_dChildren[i], pResult, tSettings, bStar );
+		CheckExtendedQuery ( pNode->m_dChildren[i], pResult, tSettings );
 }
 
 
@@ -8822,7 +8822,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 	const CSphIndex * pIndex = tTermSetup.m_pIndex;
 
 	// check the keywords
-	CheckExtendedQuery ( tXQ.m_pRoot, pResult, pIndex->GetSettings(), pIndex->IsStarEnabled() );
+	CheckExtendedQuery ( tXQ.m_pRoot, pResult, pIndex->GetSettings() );
 
 	// fill payload mask
 	DWORD uPayloadMask = 0;

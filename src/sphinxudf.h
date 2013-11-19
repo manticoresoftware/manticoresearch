@@ -168,7 +168,7 @@ enum sphinx_doc_factor
 	SPH_DOCF_NUM_FIELDS				= 5,	///< int
 	SPH_DOCF_MAX_UNIQ_QPOS			= 6,	///< int
 	SPH_DOCF_EXACT_HIT_MASK			= 7,	///< unsigned int
-	SPH_DOCF_EXACT_ORDER_MASK		= 8,	///< v.4, unsigned int
+	SPH_DOCF_EXACT_ORDER_MASK		= 8		///< v.4, unsigned int
 };
 
 enum sphinx_field_factor
@@ -186,14 +186,14 @@ enum sphinx_field_factor
 	SPH_FIELDF_MIN_GAPS				= 11,	///< v.3, int
 	SPH_FIELDF_ATC					= 12,	///< v.4, float
 	SPH_FIELDF_LCCS					= 13,	///< v.5, int
-	SPH_FIELDF_WLCCS				= 14,	///< v.5, float
+	SPH_FIELDF_WLCCS				= 14	///< v.5, float
 };
 
 enum sphinx_term_factor
 {
 	SPH_TERMF_KEYWORD_MASK			= 1,	///< unsigned int
 	SPH_TERMF_TF					= 2,	///< int
-	SPH_TERMF_IDF					= 3,	///< float
+	SPH_TERMF_IDF					= 3		///< float
 };
 
 /// returns a pointer to the field factors, or NULL for a non-matched field index

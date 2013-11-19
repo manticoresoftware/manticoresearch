@@ -35,7 +35,6 @@ index test
 
 	dict			= keywords
 	min_prefix_len	= 2
-	enable_star	= 1
 }
 
 index rt
@@ -47,7 +46,6 @@ index rt
 	rt_attr_uint		= idd
 	dict			= keywords
 	min_prefix_len	= 1
-	enable_star	= 1
 }
 
 source plain_prefix
@@ -65,7 +63,6 @@ index plain_prefix
 
 	dict			= keywords
 	min_prefix_len	= 1
-	enable_star	= 1
 }
 index rt_prefix
 {
@@ -76,7 +73,6 @@ index rt_prefix
 	rt_attr_uint		= idd
 	dict			= keywords
 	min_prefix_len	= 1
-	enable_star	= 1
 }
 
 source plain_substring
@@ -93,7 +89,6 @@ index plain_sub_prefix
 
        min_prefix_len  = 2
        max_substring_len       = 3
-       enable_star     = 1
 	   dict = crc
 }
 index plain_sub_infix
@@ -103,7 +98,6 @@ index plain_sub_infix
 
        min_infix_len   = 2
        max_substring_len       = 3
-       enable_star     = 1
 	   dict = crc
 }
 
@@ -120,7 +114,6 @@ index kw_infix
 	source	= kw_infix
 	path	= <data_path/>/kw_infix
 	docinfo	= extern
-	enable_star = 1
 	min_infix_len = 3
 	dict = keywords	
 }

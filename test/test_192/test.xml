@@ -56,7 +56,6 @@ index test11
 	blend_chars		= +
 	min_word_len	= 2
 	min_prefix_len = 2
-	enable_star = 1
 }
 
 source wb
@@ -102,7 +101,6 @@ index test12
 	wordforms		= <this_test/>/wordforms-12.txt
 	morphology		= stem_enru
 	min_prefix_len	= 3
-	enable_star		= 1
 	html_strip		= 1
 	index_exact_words	= 1
 	blend_mode		= trim_head, trim_tail, trim_both

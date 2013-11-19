@@ -27,7 +27,6 @@ index test_idx
 	path			= <data_path/>/test
 	min_word_len	= 1
 	min_infix_len	= 1
-	enable_star		= 1
 }
 
 </config>

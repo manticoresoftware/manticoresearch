@@ -28,7 +28,6 @@ index test
 	index_sp		= 1
 	index_zones		= zone*
 	min_infix_len	= 1
-	enable_star		= 1
 }
 
 index multiform
@@ -38,7 +37,6 @@ index multiform
 
 	wordforms		= <this_test/>/multiwordorms.txt
 	min_infix_len	= 1
-	enable_star		= 1
 }
 
 </config>

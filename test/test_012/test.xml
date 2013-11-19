@@ -43,10 +43,6 @@ index lj
       <Variant>	min_infix_len	= 0</Variant>
       <Variant>	min_infix_len	= 3</Variant>
     </Dynamic>
-    <Dynamic>
-      <Variant>	enable_star		= 0</Variant>
-      <Variant>	enable_star		= 1</Variant>
-    </Dynamic>
     <Static>}</Static>
   </Config>
   <Query>

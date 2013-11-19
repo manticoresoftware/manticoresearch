@@ -82,7 +82,6 @@ index tmpl_prefixed
 	type			= template
 	expand_keywords	= 1
 	min_prefix_len	= 2
-	enable_star		= 1
 }
 
 # test plain expanded index
@@ -93,7 +92,6 @@ index tmpl_expanded
 	dict			= keywords
 	expand_keywords	= 1
 	min_infix_len	= 2
-	enable_star		= 1
 }
 
 </config>

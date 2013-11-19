@@ -50,7 +50,6 @@ index main_kw
 	path			= <data_path/>/main_kw
 	dict				= keywords
 	min_infix_len = 3
-	enable_star = 1
 }
 
 index delta_kw
@@ -59,7 +58,6 @@ index delta_kw
 	path			= <data_path/>/delta_kw
 	dict				= keywords
 	min_infix_len = 3
-	enable_star = 1
 }
 
 </config>

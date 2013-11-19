@@ -979,7 +979,7 @@ protected:
 		FIELD_OFF		= 32 - FIELD_BITS,
 		FIELDEND_OFF	= 31 - FIELD_BITS,
 		FIELDEND_MASK	= (1UL << POS_BITS),
-		POS_MASK		= (1UL << POS_BITS) - 1,
+		POS_MASK		= (1UL << POS_BITS) - 1
 	};
 
 public:
@@ -3098,14 +3098,14 @@ enum ESphHitless
 {
 	SPH_HITLESS_NONE		= 0,	///< all hits are present
 	SPH_HITLESS_SOME		= 1,	///< some of the hits might be omitted (check the flag bit)
-	SPH_HITLESS_ALL			= 2,	///< no hits in this index
+	SPH_HITLESS_ALL			= 2	///< no hits in this index
 };
 
 
 enum ESphHitFormat
 {
 	SPH_HIT_FORMAT_PLAIN	= 0,	///< all hits are stored in hitlist
-	SPH_HIT_FORMAT_INLINE	= 1,	///< hits can be split and inlined into doclist (aka 9-23)
+	SPH_HIT_FORMAT_INLINE	= 1	///< hits can be split and inlined into doclist (aka 9-23)
 };
 
 
@@ -3220,9 +3220,7 @@ public:
 	void						SetBinlog ( bool bBinlog ) { m_bBinlog = bBinlog; }
 	virtual int64_t *			GetFieldLens() const { return NULL; }
 
-	virtual bool				IsStarDict() const { return m_bEnableStar; } // disk index overrides this to support super-old legacy formats
-	virtual void				SetEnableStar ( bool bEnableStar ) { m_bEnableStar = bEnableStar; }
-	bool						IsStarEnabled () const { return m_bEnableStar; }
+	virtual bool				IsStarDict() const { return true; }
 
 public:
 	/// build index by indexing given sources
@@ -3346,7 +3344,6 @@ protected:
 	bool						m_bBinlog;
 
 	bool						m_bStripperInited;		///< was stripper initialized (old index version (<9) handling)
-	bool						m_bEnableStar;			///< enable star-syntax
 
 public:
 	bool						m_bId32to64;			///< did we convert id32 to id64 on startup

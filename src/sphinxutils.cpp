@@ -257,7 +257,7 @@ enum
 {
 	KEY_DEPRECATED		= 1UL<<0,
 	KEY_LIST			= 1UL<<1,
-	KEY_HIDDEN			= 1UL<<2,
+	KEY_HIDDEN			= 1UL<<2
 };
 
 /// key descriptor for validation purposes
@@ -377,7 +377,6 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "max_substring_len",		0, NULL },
 	{ "prefix_fields",			0, NULL },
 	{ "infix_fields",			0, NULL },
-	{ "enable_star",			0, NULL },
 	{ "ngram_len",				0, NULL },
 	{ "ngram_chars",			0, NULL },
 	{ "phrase_boundary",		0, NULL },

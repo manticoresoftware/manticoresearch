@@ -29,7 +29,6 @@ index test
 
 	dict			= keywords
 	min_prefix_len	= 2
-	enable_star		= 1
 }
 </config>
 

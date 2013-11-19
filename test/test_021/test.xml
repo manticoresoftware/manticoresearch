@@ -32,7 +32,6 @@ index test
 	path			= <data_path/>/test
 	min_word_len	= 1
 	min_prefix_len	= 1
-	enable_star		= 1
 }
 </config>
 

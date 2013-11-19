@@ -30,7 +30,6 @@ index test
 	<Variant></Variant>
 	<Variant>exceptions	= synonyms.txt</Variant>
 	</Dynamic>
-	enable_star		= 1
 
     <Dynamic>
       <Variant>	min_word_len = 3 </Variant>

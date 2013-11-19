@@ -78,7 +78,6 @@ index rt
 	rt_attr_uint=gid
 	dict = keywords
 	min_prefix_len = 1
-	enable_star = 1
 	morphology = stem_en
 	index_exact_words = 1
 }
@@ -89,7 +88,6 @@ index exact_wf
 	path			= <data_path/>/exact_wf
 	dict = crc
 	min_prefix_len = 1
-	enable_star = 1
 	morphology = stem_en
 	index_exact_words = 1
 }

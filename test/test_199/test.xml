@@ -42,7 +42,6 @@ index rt1
 	docinfo = extern
 	morphology = stem_en
 	min_word_len = 1
-	enable_star = 1
 	min_prefix_len = 0
 	rt_attr_uint	= idd
 	rt_field		= text
@@ -58,7 +57,6 @@ index rt2
 	docinfo = extern
 	morphology = stem_en
 	min_word_len = 1
-	enable_star = 1
 	min_prefix_len = 0
 	rt_attr_uint	= idd
 	rt_field		= text
@@ -82,7 +80,6 @@ index i1
 	docinfo = extern
 	morphology = stem_en
 	min_word_len = 1
-	enable_star = 1
 	min_prefix_len = 0
 	dict = keywords
 }
@@ -96,7 +93,6 @@ index i2
 	docinfo = extern
 	morphology = stem_en
 	min_word_len = 1
-	enable_star = 1
 	min_prefix_len = 0
 	dict = crc
 }

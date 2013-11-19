@@ -6821,6 +6821,8 @@ for sorting.</para></listitem>
 </para></listitem>
 <listitem><para>Removed charset_type and mssql_unicode - we now support
 only UTF-8 encoding.</para></listitem>
+<listitem><para>Removed deprecated enable_star. Now always work as
+with enable_star=1.</para></listitem>
 </itemizedlist>
 </para>
 </sect1>
@@ -7639,7 +7641,7 @@ morphology, wordforms) from given index will be used.
 be processed with respect to index settings. For instance, if English stemming
 is enabled in the index, "shoes" will be highlighted even if keyword is "shoe".
 Starting with version 0.9.9-rc1, keywords can contain wildcards, that work similarly to
-<link linkend="conf-enable-star">star-syntax</link> available in queries.
+star-syntax available in queries.
 <code>$opts</code> is a hash which contains additional optional highlighting parameters:
 <variablelist>
 <varlistentry>
@@ -10777,8 +10779,7 @@ Minimum word prefix length to index.
 Optional, default is 0 (do not index prefixes).
 </para>
 <para>
-Prefix indexing allows to implement wildcard searching by 'wordstart*' wildcards
-(refer to <link linkend="conf-enable-star">enable_star</link> option for details on wildcard syntax).
+Prefix indexing allows to implement wildcard searching by 'wordstart*' wildcards.
 When mininum prefix length is set to a positive number, indexer will index
 all the possible keyword prefixes (ie. word beginnings) in addition to the keywords
 themselves. Too short prefixes (below the minimum allowed length) will not
@@ -10798,13 +10799,8 @@ There's no automatic way to rank perfect word matches higher
 in a prefix index, but there's a number of tricks to achieve that.
 First, you can setup two indexes, one with prefix indexing and one
 without it, search through both, and use <link linkend="api-func-setindexweights">SetIndexWeights()</link>
-call to combine weights. Second, you can enable star-syntax and rewrite
-your extended-mode queries:
+call to combine weights. Second, you can rewriteyour extended-mode queries:
 <programlisting>
-# in sphinx.conf
-enable_star = 1
-
-// in query
 $cl->Query ( "( keyword | keyword* ) other keywords" );
 </programlisting>
 </para>
@@ -10821,8 +10817,7 @@ Minimum infix prefix length to index.
 Optional, default is 0 (do not index infixes).
 </para>
 <para>
-Infix indexing allows to implement wildcard searching by 'start*', '*end', and '*middle*' wildcards
-(refer to <link linkend="conf-enable-star">enable_star</link> option for details on wildcard syntax).
+Infix indexing allows to implement wildcard searching by 'start*', '*end', and '*middle*' wildcards.
 When minimum infix length is set to a positive number, indexer will index all the possible keyword infixes
 (ie. substrings) in addition to the keywords themselves. Too short infixes
 (below the minimum allowed length) will not be indexed. For instance,
@@ -10921,49 +10916,6 @@ but lets you limit infix-indexing to given fields.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 infix_fields = url, domain
-</programlisting>
-</sect2>
-
-
-<sect2 id="conf-enable-star"><title>enable_star</title>
-<para>
-Enables star-syntax (or wildcard syntax) when searching through prefix/infix indexes.
-Optional, default is is 1 (use wildcard syntax).
-Known values are 0 and 1.
-</para>
-<para>
-This feature enables "star-syntax", or wildcard syntax, when searching
-through indexes which were created with prefix or infix indexing enabled.
-It only affects searching; so it can be changed without reindexing
-by simply restarting <filename>searchd</filename>.
-</para>
-<para>
-The default value 1 means that star ('*') can be used at the start
-and/or the end of the keyword. The star will match zero or more characters.
-Value 0 means to disable star-syntax
-and treat all keywords as prefixes or infixes respectively,
-depending on indexing-time <link linkend="conf-min-prefix-len">min_prefix_len</link>
-and <link linkend="conf-min-infix-len">min_infix_len settings</link>.
-</para>
-<para>
-For example, assume that the index was built with infixes and
-that enable_star is 1. Searching should work as follows:
-<orderedlist>
-<listitem><para>"abcdef" query will match only those documents that contain the exact "abcdef" word in them.</para></listitem>
-<listitem><para>"abc*" query will match those documents that contain
-any words starting with "abc" (including the documents which
-contain the exact "abc" word only);</para></listitem>
-<listitem><para>"*cde*" query will match those documents that contain
-any words which have "cde" characters in any part of the word
-(including the documents which contain the exact "cde" word only).</para></listitem>
-<listitem><para>"*def" query will match those documents that contain
-any words ending with "def" (including the documents that
-contain the exact "def" word only).</para></listitem>
-</orderedlist>
-</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-enable_star = 1
 </programlisting>
 </sect2>
 
@@ -15089,7 +15041,7 @@ rlp_max_batch_docs = 100
 <listitem><para>added quorum searching support to query language (V2 engine only; example: "any three of all these words"/3)</para></listitem>
 <listitem><para>added query escaping support to query language, and <link linkend="api-func-escapestring">EscapeString()</link> API call</para></listitem>
 <listitem><para>added multi-field syntax support to query language (example: "@(field1,field2) something"), and @@relaxed field checks option</para></listitem>
-<listitem><para>added optional star-syntax ('word*') support in keywords, <link linkend="conf-enable-star">enable_star</link> directive (for prefix/infix indexes only)</para></listitem>
+<listitem><para>added optional star-syntax ('word*') support in keywords, enable_star directive (for prefix/infix indexes only)</para></listitem>
 <listitem><para>added full-scan support (query must be fully empty; can perform block-reject optimization)</para></listitem>
 <listitem><para>added COUNT(DISTINCT(attr)) calculation support, <link linkend="api-func-setgroupdistinct">SetGroupDistinct()</link> API call</para></listitem>
 <listitem><para>added group-by on MVA support, <link linkend="api-func-setarrayresult">SetArrayResult()</link> PHP API call</para></listitem>

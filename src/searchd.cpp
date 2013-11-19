@@ -115,7 +115,6 @@ struct ServedDesc_t
 	bool				m_bEnabled;		///< to disable index in cases when rotation fails
 	bool				m_bMlock;
 	bool				m_bPreopen;
-	bool				m_bStar;
 	bool				m_bExpand;
 	bool				m_bToDelete;
 	bool				m_bOnlyNew;
@@ -1017,7 +1016,6 @@ ServedDesc_t::ServedDesc_t ()
 	m_bEnabled = true;
 	m_bMlock = false;
 	m_bPreopen = false;
-	m_bStar = true;
 	m_bExpand = false;
 	m_bToDelete = false;
 	m_bOnlyNew = false;
@@ -9170,7 +9168,7 @@ void SearchHandler_c::RunUpdates ( const CSphQuery & tQuery, const CSphString & 
 	}
 
 	LogQuery ( m_dQueries[0], m_dResults[0], m_dAgentTimes[0] );
-};
+}
 
 void SearchHandler_c::RunDeletes ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, CSphVector<SphDocID_t>* pValues )
 {
@@ -17847,25 +17845,6 @@ void CheckLeaks ()
 #endif
 }
 
-bool CheckIndex ( const CSphIndex * pIndex, CSphString & sError )
-{
-	const CSphIndexSettings & tSettings = pIndex->GetSettings ();
-
-	if ( ( tSettings.m_iMinPrefixLen>0 || tSettings.m_iMinInfixLen>0 ) && !pIndex->IsStarEnabled() )
-	{
-		CSphDict * pDict = pIndex->GetDictionary ();
-		assert ( pDict );
-		if ( pDict->HasMorphology () )
-		{
-			sError = "infixes and morphology are enabled, enable_star=0";
-			return false;
-		}
-	}
-
-	return true;
-}
-
-
 static bool CheckServedEntry ( const ServedIndex_t * pEntry, const char * sIndex )
 {
 	if ( !pEntry )
@@ -17963,7 +17942,6 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	tNewIndex.m_bOnlyNew = pRotating->m_bOnlyNew;
 
 	tNewIndex.m_pIndex = sphCreateIndexPhrase ( sIndex.cstr(), NULL );
-	tNewIndex.m_pIndex->SetEnableStar ( pRotating->m_bStar );
 	tNewIndex.m_pIndex->m_bExpandKeywords = pRotating->m_bExpand;
 	tNewIndex.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 	tNewIndex.m_pIndex->SetPreopen ( pRotating->m_bPreopen || g_bPreopenIndexes );
@@ -18007,12 +17985,6 @@ static void RotateIndexMT ( const CSphString & sIndex )
 		}
 	}
 	g_tRotateConfigMutex.Unlock();
-
-	if ( !CheckIndex ( tNewIndex.m_pIndex, sError ) )
-	{
-		sphWarning ( "rotating index '%s': check: %s; using old index", sIndex.cstr(), sError.cstr() );
-		return;
-	}
 
 	if ( !tNewIndex.m_pIndex->Preread() )
 	{
@@ -18174,7 +18146,6 @@ void SeamlessTryToForkPrereader ()
 	else
 		g_pPrereading->SetName ( sPrereading );
 
-	g_pPrereading->SetEnableStar ( tServed.m_bStar );
 	g_pPrereading->m_bExpandKeywords = tServed.m_bExpand;
 	g_pPrereading->m_iExpansionLimit = g_iExpansionLimit;
 	g_pPrereading->SetPreopen ( tServed.m_bPreopen || g_bPreopenIndexes );
@@ -18212,12 +18183,6 @@ void SeamlessTryToForkPrereader ()
 			sphWarning ( "rotating index '%s': fixup: %s; using old index", sPrereading, sError.cstr() );
 			return;
 		}
-
-	if ( !CheckIndex ( g_pPrereading, sError ) )
-	{
-		sphWarning ( "rotating index '%s': check: %s; using old index", sPrereading, sError.cstr() );
-		return;
-	}
 
 	// fork async reader
 	sphLogDebug ( "fork async reader" );
@@ -18775,18 +18740,12 @@ void CheckPipes ()
 
 void ConfigureTemplateIndex ( ServedDesc_t & tIdx, const CSphConfigSection & hIndex )
 {
-	if ( hIndex.Exists ( "enable_star" ) )
-		sphWarning ( "enable_star is deprecated, use its default (enable_star=1) value" );
-	tIdx.m_bStar = ( hIndex.GetInt ( "enable_star", 1 )!=0 );
 	tIdx.m_bExpand = ( hIndex.GetInt ( "expand_keywords", 0 )!=0 );
 }
 
 void ConfigureLocalIndex ( ServedDesc_t & tIdx, const CSphConfigSection & hIndex )
 {
 	tIdx.m_bMlock = ( hIndex.GetInt ( "mlock", 0 )!=0 ) && !g_bOptNoLock;
-	if ( hIndex.Exists ( "enable_star" ) )
-		sphWarning ( "enable_star is deprecated, use its default (enable_star=1) value" );
-	tIdx.m_bStar = ( hIndex.GetInt ( "enable_star", 1 )!=0 );
 	tIdx.m_bExpand = ( hIndex.GetInt ( "expand_keywords", 0 )!=0 );
 	tIdx.m_bPreopen = ( hIndex.GetInt ( "preopen", 0 )!=0 );
 	tIdx.m_sGlobalIDFPath = hIndex.GetStr ( "global_idf" );
@@ -19160,7 +19119,6 @@ void FreeAgentStats ( DistributedIndex_t & tIndex )
 void PreCreateTemplateIndex ( ServedDesc_t & tServed, const CSphConfigSection & hIndex )
 {
 	tServed.m_pIndex = sphCreateIndexTemplate ( );
-	tServed.m_pIndex->SetEnableStar ( tServed.m_bStar );
 	tServed.m_pIndex->m_bExpandKeywords = tServed.m_bExpand;
 	tServed.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 	tServed.m_bEnabled = false;
@@ -19172,7 +19130,6 @@ void PreCreateTemplateIndex ( ServedDesc_t & tServed, const CSphConfigSection & 
 void PreCreatePlainIndex ( ServedDesc_t & tServed, const char * sName )
 {
 	tServed.m_pIndex = sphCreateIndexPhrase ( sName, tServed.m_sIndexPath.cstr() );
-	tServed.m_pIndex->SetEnableStar ( tServed.m_bStar );
 	tServed.m_pIndex->m_bExpandKeywords = tServed.m_bExpand;
 	tServed.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 	tServed.m_pIndex->SetPreopen ( tServed.m_bPreopen || g_bPreopenIndexes );
@@ -19300,7 +19257,6 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		tIdx.m_bRT = true;
 
 		ConfigureLocalIndex ( tIdx, hIndex );
-		tIdx.m_pIndex->SetEnableStar ( tIdx.m_bStar );
 		tIdx.m_pIndex->m_bExpandKeywords = tIdx.m_bExpand;
 		tIdx.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 		tIdx.m_pIndex->SetPreopen ( tIdx.m_bPreopen || g_bPreopenIndexes );
@@ -19588,10 +19544,6 @@ void ReloadIndexSettings ( CSphConfigParser & tCP )
 					tIndex.m_bOnlyNew = false;
 					if ( PrereadNewIndex ( tIndex, hIndex, sIndexName ) )
 						tIndex.m_bEnabled = true;
-
-					CSphString sError;
-					if ( tIndex.m_bEnabled && !CheckIndex ( tIndex.m_pIndex, sError ) )
-						tIndex.m_bEnabled = false;
 				}
 			}
 		}
@@ -19737,12 +19689,6 @@ void CheckRotate ()
 				{
 					CSphString sError;
 					if ( !sphFixupIndexSettings ( tIndex.m_pIndex, hConf [sIndex], sError ) )
-					{
-						sphWarning ( "index '%s': %s - NOT SERVING", sIndex, sError.cstr() );
-						tIndex.m_bEnabled = false;
-					}
-
-					if ( tIndex.m_bEnabled && !CheckIndex ( tIndex.m_pIndex, sError ) )
 					{
 						sphWarning ( "index '%s': %s - NOT SERVING", sIndex, sError.cstr() );
 						tIndex.m_bEnabled = false;
@@ -21223,16 +21169,10 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const CSphVector<const char
 					tIndex.m_bEnabled = true;
 			}
 
-			CSphString sError;
-			if ( tIndex.m_bEnabled && !CheckIndex ( tIndex.m_pIndex, sError ) )
-			{
-				sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, sError.cstr() );
-				tIndex.m_bEnabled = false;
-			}
-
 			if ( !tIndex.m_bEnabled )
 				continue;
 
+			CSphString sError;
 			if ( !tIndex.m_sGlobalIDFPath.IsEmpty() )
 				if ( !sphPrereadGlobalIDF ( tIndex.m_sGlobalIDFPath, sError ) )
 					sphWarning ( "index '%s': global IDF unavailable - IGNORING", sIndexName );

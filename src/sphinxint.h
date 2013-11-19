@@ -1709,8 +1709,7 @@ struct ExpansionContext_t
 
 XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx );
 int sphGetExpansionMagic ( int iDocs, int iHits );
-void sphQueryAdjustStars ( XQNode_t * pNode, const CSphIndexSettings & tSettings );
-XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & tSettings, bool bStarEnabled );
+XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & tSettings );
 
 
 class CSphKeywordDeltaWriter

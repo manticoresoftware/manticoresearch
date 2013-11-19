@@ -28,7 +28,6 @@ index lj
 	source			= srclj
 	path			= </Static><Data_Path/><Static>/lj
 	min_word_len	= 0
-	enable_star		= 1
 </Static>
 	<Dynamic>
 	  <Variant>	min_infix_len	= 0

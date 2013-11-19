@@ -88,7 +88,6 @@ index stalin_plain
 	source			= stalin_src
 	path			= <data_path/>/stalin_plain
 	morphology		= lemmatize_ru
-	enable_star		= 1
 	min_infix_len	= 2
 	expand_keywords	= 1	
 }
@@ -99,7 +98,6 @@ index stalin_rt
 	path			= <data_path/>/stalin_rt
 	morphology		= lemmatize_ru_all
 	dict			= keywords
-	enable_star		= 1
 	min_infix_len	= 2
 	expand_keywords	= 1
 	rt_field		= text

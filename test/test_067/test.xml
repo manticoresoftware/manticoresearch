@@ -96,7 +96,6 @@ index i10
 	docinfo			= extern
 	dict = keywords
 	min_prefix_len = 1
-	enable_star = 1	
 }
 index i11
 {
@@ -105,7 +104,6 @@ index i11
 	docinfo			= extern
 	dict = keywords
 	min_prefix_len = 1
-	enable_star = 1
 }
 index i12
 {
@@ -115,7 +113,6 @@ index i12
 	charset_table	= b..z
 	dict = keywords
 	min_prefix_len = 1
-	enable_star = 1
 }
 
 </agent0>

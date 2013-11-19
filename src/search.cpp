@@ -272,7 +272,6 @@ int main ( int argc, char ** argv )
 		CSphQueryResult * pResult = NULL;
 
 		CSphIndex * pIndex = sphCreateIndexPhrase ( sIndexName, hIndex["path"].cstr() );
-		pIndex->SetEnableStar ( hIndex.GetInt("enable_star")!=0 );
 		pIndex->SetGlobalIDFPath ( hIndex.GetStr ( "global_idf" ) );
 
 		CSphString sWarning;

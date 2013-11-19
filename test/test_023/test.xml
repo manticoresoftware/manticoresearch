@@ -26,7 +26,6 @@ index test
 {
 	source			= srctest
 	path			= <data_path/>/test
-	enable_star		= 1
 
     <Dynamic>
       <Variant>	min_word_len = 3 </Variant>

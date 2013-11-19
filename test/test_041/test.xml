@@ -57,7 +57,6 @@ index rt_fix
 	min_infix_len = 1
 	dict = keywords
 	morphology = stem_en
-	enable_star = 1	
 }
 </config>
 

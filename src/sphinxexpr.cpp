@@ -1498,8 +1498,8 @@ DECLARE_UNARY_FLT ( Expr_Log10_c,	float(log(FIRST)*M_LOG10E) )
 DECLARE_UNARY_FLT ( Expr_Exp_c,		float(exp(FIRST)) )
 DECLARE_UNARY_FLT ( Expr_Sqrt_c,	float(sqrt(FIRST)) )
 
-DECLARE_UNARY_INT ( Expr_NotInt_c,		(float)(INTFIRST?0:1),		INTFIRST?0:1,	INTFIRST?0:1 );
-DECLARE_UNARY_INT ( Expr_NotInt64_c,	(float)(INT64FIRST?0:1),	INT64FIRST?0:1,	INT64FIRST?0:1 );
+DECLARE_UNARY_INT ( Expr_NotInt_c,		(float)(INTFIRST?0:1),		INTFIRST?0:1,	INTFIRST?0:1 )
+DECLARE_UNARY_INT ( Expr_NotInt64_c,	(float)(INT64FIRST?0:1),	INT64FIRST?0:1,	INT64FIRST?0:1 )
 DECLARE_UNARY_INT ( Expr_Sint_c,		(float)(INTFIRST),			INTFIRST,		INTFIRST )
 
 //////////////////////////////////////////////////////////////////////////
@@ -1636,11 +1636,11 @@ DECLARE_TERNARY ( Expr_Mul3_c,	FIRST*SECOND*THIRD,					INTFIRST*INTSECOND*INTTHI
 		} \
 	};
 
-DECLARE_TIMESTAMP ( Expr_Day_c,				s.tm_mday );
-DECLARE_TIMESTAMP ( Expr_Month_c,			s.tm_mon+1 );
-DECLARE_TIMESTAMP ( Expr_Year_c,			s.tm_year+1900 );
-DECLARE_TIMESTAMP ( Expr_YearMonth_c,		(s.tm_year+1900)*100+s.tm_mon+1 );
-DECLARE_TIMESTAMP ( Expr_YearMonthDay_c,	(s.tm_year+1900)*10000+(s.tm_mon+1)*100+s.tm_mday );
+DECLARE_TIMESTAMP ( Expr_Day_c,				s.tm_mday )
+DECLARE_TIMESTAMP ( Expr_Month_c,			s.tm_mon+1 )
+DECLARE_TIMESTAMP ( Expr_Year_c,			s.tm_year+1900 )
+DECLARE_TIMESTAMP ( Expr_YearMonth_c,		(s.tm_year+1900)*100+s.tm_mon+1 )
+DECLARE_TIMESTAMP ( Expr_YearMonthDay_c,	(s.tm_year+1900)*10000+(s.tm_mon+1)*100+s.tm_mday )
 
 //////////////////////////////////////////////////////////////////////////
 // PARSER INTERNALS

@@ -45,7 +45,6 @@ index prefix
 	path			= <data_path/>/prefix
 	expand_keywords	= 1
 	min_prefix_len = 2
-	enable_star = 1
 }
 
 index expanded_plain
@@ -56,7 +55,6 @@ index expanded_plain
 	dict = keywords
 	expand_keywords	= 1
 	min_infix_len = 3
-	enable_star = 1
 }
 
 index expanded_rt
@@ -66,7 +64,6 @@ index expanded_rt
 	dict = keywords
 	expand_keywords	= 1
 	min_infix_len = 3
-	enable_star = 1
 	rt_field = title
 	rt_attr_uint = idd	
 }
@@ -105,7 +102,6 @@ index plain_inline
 	docinfo = inline
 	dict = keywords
 	min_prefix_len = 1
-	enable_star = 1
 }
 
 </config>

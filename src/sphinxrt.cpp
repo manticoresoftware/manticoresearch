@@ -2854,27 +2854,28 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 			for ( ;; )
 			{
 				for ( int j=m_dSegments.GetLength()-1; j>=m_iDoubleBuffer && !bRamAlive; --j )
-					bRamAlive = (bool)m_dSegments[j]->FindAliveRow ( uDocid );
+					bRamAlive = !!m_dSegments[j]->FindAliveRow ( uDocid );
 				if ( bRamAlive )
 					break;
 
 				// killed in saved or one of disk chunks?
-				if ( (bAlreadyKilled = m_tKlist.Exists ( uDocid ) ) )
+				bAlreadyKilled = m_tKlist.Exists ( uDocid );
+				if ( bAlreadyKilled )
 					break;
 
 				for ( int j=m_iDoubleBuffer-1; j>=0 && !bSavedOrDiskAlive; --j )
-					bSavedOrDiskAlive = (bool)m_dSegments[j]->FindAliveRow ( uDocid );
+					bSavedOrDiskAlive = !!m_dSegments[j]->FindAliveRow ( uDocid );
 				if ( bSavedOrDiskAlive )
 					break;
 
 				// killed in one of disk chunks?
-				if ( (bool)sphBinarySearch ( m_dDiskChunkKlist.Begin(), m_dDiskChunkKlist.Begin()+m_dDiskChunkKlist.GetLength()-1, uRef ) )
+				if ( sphBinarySearch ( m_dDiskChunkKlist.Begin(), m_dDiskChunkKlist.Begin()+m_dDiskChunkKlist.GetLength()-1, uRef ) )
 					break;
 
 				for ( int j=m_pDiskChunks.GetLength()-1; j>=0 && !bSavedOrDiskAlive; --j )
 				{
 					// killed in this disk chunk?
-					if ( (bool)sphBinarySearch ( m_pDiskChunks[j]->GetKillList(), m_pDiskChunks[j]->GetKillList()+m_pDiskChunks[j]->GetKillListSize()-1, uRef ) )
+					if ( sphBinarySearch ( m_pDiskChunks[j]->GetKillList(), m_pDiskChunks[j]->GetKillList()+m_pDiskChunks[j]->GetKillListSize()-1, uRef ) )
 						break;
 					bSavedOrDiskAlive = m_pDiskChunks[j]->HasDocid ( uDocid );
 				}

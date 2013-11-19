@@ -11394,7 +11394,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 	if ( sOpt=="ranker" )
 	{
 		m_pQuery->m_eRanker = SPH_RANK_TOTAL;
-		for ( int iRanker = SPH_RANK_PROXIMITY_BM25; iRanker < SPH_RANK_SPH04; iRanker++ )
+		for ( int iRanker = SPH_RANK_PROXIMITY_BM25; iRanker <= SPH_RANK_SPH04; iRanker++ )
 			if ( sVal==sphGetRankerName ( ESphRankMode ( iRanker ) ) )
 			{
 				m_pQuery->m_eRanker = ESphRankMode ( iRanker );

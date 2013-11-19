@@ -7115,20 +7115,9 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 
 	if ( q.m_eRanker!=SPH_RANK_DEFAULT )
 	{
-		const char * sRanker = "proximity_bm25";
-		switch ( q.m_eRanker )
-		{
-			case SPH_RANK_BM25:			sRanker = "bm25"; break;
-			case SPH_RANK_NONE:			sRanker = "none"; break;
-			case SPH_RANK_WORDCOUNT:	sRanker = "wordcount"; break;
-			case SPH_RANK_PROXIMITY:	sRanker = "proximity"; break;
-			case SPH_RANK_MATCHANY:		sRanker = "matchany"; break;
-			case SPH_RANK_FIELDMASK:	sRanker = "fieldmask"; break;
-			case SPH_RANK_SPH04:		sRanker = "sph04"; break;
-			case SPH_RANK_EXPR:			sRanker = "expr"; break;
-			case SPH_RANK_EXPORT:		sRanker = "export";
-			default:					break;
-		}
+		const char * sRanker = sphGetRankerName ( q.m_eRanker );
+		if ( !sRanker )
+			sRanker = sphGetRankerName ( SPH_RANK_DEFAULT );
 
 		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
 		tBuf.Appendf ( "ranker=%s", sRanker );
@@ -10925,6 +10914,8 @@ enum SqlStmt_e
 	STMT_UPDATE,
 	STMT_CREATE_FUNCTION,
 	STMT_DROP_FUNCTION,
+	STMT_CREATE_RANKER,
+	STMT_DROP_RANKER,
 	STMT_ATTACH_INDEX,
 	STMT_FLUSH_RTINDEX,
 	STMT_FLUSH_RAMCHUNK,
@@ -11054,6 +11045,10 @@ struct SqlStmt_t
 	CSphString				m_sUdfName;
 	CSphString				m_sUdfLib;
 	ESphAttr				m_eUdfType;
+
+	// CREATE/DROP RANKER specific
+	CSphString				m_sUdrName;
+	CSphString				m_sUdrLib;
 
 	// ALTER specific
 	CSphString				m_sAlterAttr;
@@ -11398,24 +11393,29 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 
 	if ( sOpt=="ranker" )
 	{
-		if ( sVal=="proximity_bm25" )	m_pQuery->m_eRanker = SPH_RANK_PROXIMITY_BM25;
-		else if ( sVal=="bm25" )		m_pQuery->m_eRanker = SPH_RANK_BM25;
-		else if ( sVal=="none" )		m_pQuery->m_eRanker = SPH_RANK_NONE;
-		else if ( sVal=="wordcount" )	m_pQuery->m_eRanker = SPH_RANK_WORDCOUNT;
-		else if ( sVal=="proximity" )	m_pQuery->m_eRanker = SPH_RANK_PROXIMITY;
-		else if ( sVal=="matchany" )	m_pQuery->m_eRanker = SPH_RANK_MATCHANY;
-		else if ( sVal=="fieldmask" )	m_pQuery->m_eRanker = SPH_RANK_FIELDMASK;
-		else if ( sVal=="sph04" )		m_pQuery->m_eRanker = SPH_RANK_SPH04;
-		else if ( sVal=="expr" || sVal=="export" )
+		m_pQuery->m_eRanker = SPH_RANK_TOTAL;
+		for ( int iRanker = SPH_RANK_PROXIMITY_BM25; iRanker < SPH_RANK_SPH04; iRanker++ )
+			if ( sVal==sphGetRankerName ( ESphRankMode ( iRanker ) ) )
+			{
+				m_pQuery->m_eRanker = ESphRankMode ( iRanker );
+				break;
+			}
+
+		if ( m_pQuery->m_eRanker==SPH_RANK_TOTAL )
 		{
-			m_pParseError->SetSprintf ( "missing ranker expression (use OPTION ranker=expr('1+2') for example)" );
-			return false;
-		} else
-		{
+			if ( sVal==sphGetRankerName ( SPH_RANK_EXPR ) || sVal==sphGetRankerName ( SPH_RANK_EXPORT ) )
+			{
+				m_pParseError->SetSprintf ( "missing ranker expression (use OPTION ranker=expr('1+2') for example)" );
+				return false;
+			} else if ( sphUDRFind ( sVal.cstr() ) )
+			{
+				m_pQuery->m_eRanker = SPH_RANK_PLUGIN;
+				m_pQuery->m_sUDRanker = sVal;
+			}
+
 			m_pParseError->SetSprintf ( "unknown ranker '%s'", sVal.cstr() );
 			return false;
 		}
-
 	} else if ( sOpt=="max_matches" )
 	{
 		m_pQuery->m_iMaxMatches = (int)tValue.m_iValue;
@@ -11524,19 +11524,28 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 	ToString ( sOpt, tIdent ).ToLower();
 	ToString ( sVal, tValue ).ToLower().Unquote();
 
-	if ( sOpt=="ranker" && ( sVal=="expr" || sVal=="export" ) )
+	if ( sOpt=="ranker" )
 	{
-		if ( sVal=="expr" )
-			m_pQuery->m_eRanker = SPH_RANK_EXPR;
-		else
-			m_pQuery->m_eRanker = SPH_RANK_EXPORT;
-		ToStringUnescape ( m_pQuery->m_sRankerExpr, tArg );
-		return true;
-	} else
-	{
-		m_pParseError->SetSprintf ( "unknown option or extra argument to '%s=%s'", sOpt.cstr(), sVal.cstr() );
-		return false;
+		bool bUDR = !!sphUDRFind ( sVal.cstr() );
+		if ( sVal=="expr" || sVal=="export" || bUDR )
+		{
+			if ( bUDR )
+			{
+				m_pQuery->m_eRanker = SPH_RANK_PLUGIN;
+				m_pQuery->m_sUDRanker = sVal;
+				ToStringUnescape ( m_pQuery->m_sUDRankerOpts, tArg );
+			} else
+			{
+				m_pQuery->m_eRanker = sVal=="expr" ? SPH_RANK_EXPR : SPH_RANK_EXPORT;
+				ToStringUnescape ( m_pQuery->m_sRankerExpr, tArg );
+			}
+
+			return true;
+		}
 	}
+
+	m_pParseError->SetSprintf ( "unknown option or extra argument to '%s=%s'", sOpt.cstr(), sVal.cstr() );
+	return false;
 }
 
 
@@ -17170,6 +17179,23 @@ public:
 			g_tmSphinxqlState = sphMicroTimer();
 			return true;
 
+		case STMT_CREATE_RANKER:
+			if ( !sphUDRCreate ( pStmt->m_sUdrLib.cstr(), pStmt->m_sUdrName.cstr(), m_sError ) )
+				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
+			else
+				tOut.Ok();
+			g_tmSphinxqlState = sphMicroTimer();
+			return true;
+
+		case STMT_DROP_RANKER:
+			if ( !sphUDRDrop ( pStmt->m_sUdrName.cstr(), m_sError ) )
+				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
+			else
+				tOut.Ok();
+			g_tmSphinxqlState = sphMicroTimer();
+			return true;
+
+
 		case STMT_ATTACH_INDEX:
 			HandleMysqlAttach ( tOut, *pStmt );
 			return true;
@@ -18287,7 +18313,7 @@ static void SphinxqlStateThreadFunc ( void * )
 		// save UDFs
 		/////////////
 
-		sphUDFSaveState ( tWriter );
+		sphPluginsSaveState ( tWriter );
 
 		/////////////////
 		// save uservars
@@ -21737,9 +21763,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			sphFatal ( "failed to create TLS for connection ID" );
 	}
 
-	// UDFs can now be loaded on startup in both threads and prefork mode
+	// Plugins can now be loaded on startup in both threads and prefork mode
 	// however, dynamic CREATE/DROP will only work in threads (we forbid them later)
-	sphUDFInit ( hSearchd.GetStr ( "plugin_dir" ) );
+	sphPluginInit ( hSearchd.GetStr ( "plugin_dir" ) );
 
 	////////////////////
 	// network startup
@@ -22072,13 +22098,13 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	}
 
 	// fork/prefork mode
-	// load UDFs from sphinxql state, then disable dynamic CREATE/DROP FUNCTION
+	// load plugins from sphinxql state, then disable dynamic CREATE/DROP FUNCTION/RANKER
 	if ( g_eWorkers==MPM_FORK || g_eWorkers==MPM_PREFORK )
 	{
 		g_sSphinxqlState = hSearchd.GetStr ( "sphinxql_state" );
 		if ( !g_sSphinxqlState.IsEmpty() )
 			SphinxqlStateRead ( g_sSphinxqlState );
-		sphUDFLock ( true );
+		sphPluginLock ( true );
 	}
 
 	if ( !sphThreadCreate ( &g_tRotationServiceThread, RotationServiceThreadFunc, 0 ) )

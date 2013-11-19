@@ -207,21 +207,31 @@ ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, ESphAt
 
 //////////////////////////////////////////////////////////////////////////
 
-/// initialize UDF manager
-void sphUDFInit ( const char * sUdfDir );
+/// initialize plugin manager
+void sphPluginInit ( const char * sDir );
 
 /// enable/disable dynamic CREATE/DROP
-void sphUDFLock ( bool bLocked );
+void sphPluginLock ( bool bLocked );
 
 /// load UDF function
 bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, CSphString & sError );
 
-/// unload UDF function
+/// unload a user-defined function
 bool sphUDFDrop ( const char * szFunc, CSphString & sError );
+
+/// load a user-defined ranker
+bool sphUDRCreate ( const char * szLib, const char * szRanker, CSphString & sError );
+
+/// unload a user-defined ranker
+bool sphUDRDrop ( const char * szRanker, CSphString & sError );
+
+/// search for a ranker
+struct UDRankerFuncs_t;
+UDRankerFuncs_t * sphUDRFind ( const char * szRanker );
 
 /// save SphinxQL state (ie. all active functions)
 class CSphWriter;
-void sphUDFSaveState ( CSphWriter & tWriter );
+void sphPluginsSaveState ( CSphWriter & tWriter );
 
 /// call reinit func in every UDF lib
 void sphUDFReinit();

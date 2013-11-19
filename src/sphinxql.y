@@ -88,6 +88,7 @@
 %token	TOK_PROFILE
 %token	TOK_RAND
 %token	TOK_RAMCHUNK
+%token	TOK_RANKER
 %token	TOK_READ
 %token	TOK_REPEATABLE
 %token	TOK_REPLACE
@@ -180,6 +181,8 @@ statement:
 	| show_character_set
 	| create_function
 	| drop_function
+	| create_ranker
+	| drop_ranker
 	| attach_index
 	| flush_rtindex
 	| flush_ramchunk
@@ -673,6 +676,12 @@ option_item:
 			if ( !pParser->AddOption ( $1, $3 ) )
 				YYERROR;
 		}
+	| TOK_RANKER '=' TOK_IDENT
+		{
+			if ( !pParser->AddOption ( $1, $3 ) )
+				YYERROR;
+		}
+
 	| TOK_IDENT '=' TOK_CONST_INT
 		{
 			if ( !pParser->AddOption ( $1, $3 ) )
@@ -689,7 +698,17 @@ option_item:
 			if ( !pParser->AddOption ( $1, $3, $5 ) )
 				YYERROR;
 		}
+	| TOK_RANKER '=' TOK_IDENT '(' TOK_QUOTED_STRING ')'
+		{
+			if ( !pParser->AddOption ( $1, $3, $5 ) )
+				YYERROR;
+		}
 	| TOK_IDENT '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddOption ( $1, $3 ) )
+				YYERROR;
+		}
+	| TOK_RANKER '=' TOK_QUOTED_STRING
 		{
 			if ( !pParser->AddOption ( $1, $3 ) )
 				YYERROR;
@@ -1239,6 +1258,25 @@ udf_type:
 	| TOK_BIGINT	{ $$ = SPH_ATTR_BIGINT; }
 	| TOK_FLOAT		{ $$ = SPH_ATTR_FLOAT; }
 	| TOK_STRING	{ $$ = SPH_ATTR_STRINGPTR; }
+	;
+
+create_ranker:
+	TOK_CREATE TOK_RANKER TOK_IDENT TOK_SONAME TOK_QUOTED_STRING
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_CREATE_RANKER;
+			pParser->ToString ( tStmt.m_sUdrName, $3 );
+			pParser->ToStringUnescape ( tStmt.m_sUdrLib, $5 );
+		}
+	;
+
+drop_ranker:
+	TOK_DROP TOK_RANKER TOK_IDENT
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_DROP_RANKER;
+			pParser->ToString ( tStmt.m_sUdrName, $3 );
+		}
 	;
 
 drop_function:

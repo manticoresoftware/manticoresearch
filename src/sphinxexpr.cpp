@@ -57,20 +57,27 @@ typedef int ( *UdfInit_fn ) ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * e
 typedef void ( *UdfDeinit_fn ) ( SPH_UDF_INIT * init );
 typedef void ( *UdfReinit_fn ) ();
 
+enum PluginComponent_e
+{
+	COMPONENT_FUNCTION = 0,
+	COMPONENT_RANKER,
+	COMPONENT_TOTAL
+};
 
-/// loaded UDF library
-struct UdfLib_t
+
+/// loaded plugin library
+struct PluginLib_t
 {
 	void *				m_pHandle;	///< handle from dlopen()
-	int					m_iFuncs;	///< number of registered functions from this library
+	int					m_dNumComponents[COMPONENT_TOTAL]; ///< number of registered components from this library
 	UdfReinit_fn		m_fnReinit;	///< per-library reinitialization func (for prefork), optional
 };
 
 
-/// registered UDF function
-struct UdfFunc_t
+/// registered user-defined function
+struct UdFunc_t
 {
-	UdfLib_t *			m_pLib;			///< library descriptor (pointer to library hash value)
+	PluginLib_t *		m_pLib;			///< library descriptor (pointer to library hash value)
 	const CSphString *	m_pLibName;		///< library name (pointer to library hash key; filename only, no path!)
 	ESphAttr			m_eRetType;		///< function type, currently FLOAT or INT
 	UdfInit_fn			m_fnInit;		///< per-query init function, mandatory
@@ -81,10 +88,21 @@ struct UdfFunc_t
 };
 
 
+/// registered user-defined ranker
+struct UdRanker_t
+{
+	PluginLib_t *		m_pLib;			///< library descriptor (pointer to library hash value)
+	const CSphString *	m_pLibName;		///< library name (pointer to library hash key; filename only, no path!)
+	UDRankerFuncs_t		m_tFuncs;		///< all the functions this ranker implements
+	int					m_iUserCount;	///< number of active users currently using this ranker
+	bool				m_bToDrop;		///< scheduled for DROP; do not use
+};
+
+
 /// UDF call site
 struct UdfCall_t
 {
-	UdfFunc_t *			m_pUdf;
+	UdFunc_t *			m_pUdf;
 	SPH_UDF_INIT		m_tInit;
 	SPH_UDF_ARGS		m_tArgs;
 	CSphVector<int>		m_dArgs2Free; // these args should be freed explicitly
@@ -100,12 +118,13 @@ struct UdfCall_t
 // hack hack hack
 UservarIntSet_c * ( *g_pUservarsHook )( const CSphString & sUservar );
 
-static bool								g_bUdfEnabled = false;		///< is there any UDF support all?
-static bool								g_bUdfLocked = false;		///< do we allow CREATE/DROP at this point?
-static CSphString						g_sUdfDir;
-static CSphStaticMutex					g_tUdfMutex;
-static SmallStringHash_T<UdfLib_t>		g_hUdfLibs;					///< key is the filename (no path)
-static SmallStringHash_T<UdfFunc_t>		g_hUdfFuncs;				///< key is the function name
+static bool								g_bPluginsEnabled = false;	///< is there any plugin support all?
+static bool								g_bPluginsLocked = false;	///< do we allow CREATE/DROP at this point?
+static CSphString						g_sPluginDir;
+static CSphStaticMutex					g_tPluginMutex;				///< common plugin mutex (access to lib, func and ranker hashes)
+static SmallStringHash_T<PluginLib_t>	g_hPluginLibs;				///< key is the filename (no path)
+static SmallStringHash_T<UdFunc_t>		g_hUDFuncs;					///< key is the function name
+static SmallStringHash_T<UdRanker_t>	g_hUDRankers;				///< ranker name to ranker hash
 
 //////////////////////////////////////////////////////////////////////////
 // UDF CALL SITE
@@ -133,9 +152,9 @@ UdfCall_t::~UdfCall_t ()
 {
 	if ( m_pUdf )
 	{
-		g_tUdfMutex.Lock ();
+		g_tPluginMutex.Lock ();
 		m_pUdf->m_iUserCount--;
-		g_tUdfMutex.Unlock ();
+		g_tPluginMutex.Unlock ();
 	}
 	SafeDeleteArray ( m_tArgs.arg_types );
 	SafeDeleteArray ( m_tArgs.arg_values );
@@ -2298,24 +2317,24 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		}
 
 		// check for UDF
-		if ( g_bUdfEnabled )
+		if ( g_bPluginsEnabled )
 		{
-			g_tUdfMutex.Lock();
-			UdfFunc_t * pUdf = g_hUdfFuncs ( sTok );
+			g_tPluginMutex.Lock();
+			UdFunc_t * pUdf = g_hUDFuncs ( sTok );
 			if ( pUdf )
 			{
 				if ( pUdf->m_bToDrop )
 					pUdf = NULL; // DROP in progress, can not use
 				else
 					pUdf->m_iUserCount++; // protection against concurrent DROP (decrements in ~UdfCall_t())
-				g_tUdfMutex.Unlock();
+				g_tPluginMutex.Unlock();
 
 				lvalp->iNode = m_dUdfCalls.GetLength();
 				m_dUdfCalls.Add ( new UdfCall_t() );
 				m_dUdfCalls.Last()->m_pUdf = pUdf;
 				return TOK_UDF;
 			}
-			g_tUdfMutex.Unlock();
+			g_tPluginMutex.Unlock();
 		}
 
 		// arbitrary identifier, then
@@ -5938,95 +5957,172 @@ const char * dlerror()
 
 #if !HAVE_DLOPEN
 
-void sphUDFInit ( const char * )
+void sphPluginInit ( const char * )
 {
 	return;
 }
 
-void sphUDFLock ( bool bLocked )
+void sphPluginLock ( bool bLocked )
 {
-	g_bUdfLocked = bLocked;
+	g_bPluginsLocked = bLocked;
 }
 
 bool sphUDFCreate ( const char *, const char *, ESphAttr, CSphString & sError )
 {
-	sError = "no dlopen(); UDF support disabled";
+	sError = "no dlopen(); plugin support disabled";
+	return false;
+}
+
+bool sphUDRCreate ( const char *, const char *, CSphString & sError )
+{
+	sError = "no dlopen(); plugin support disabled";
 	return false;
 }
 
 bool sphUDFDrop ( const char *, CSphString & sError )
 {
-	sError = "no dlopen(); UDF support disabled";
+	sError = "no dlopen(); plugin support disabled";
 	return false;
 }
 
+bool sphUDRDrop ( const char *, CSphString & sError )
+{
+	sError = "no dlopen(); plugin support disabled";
+	return false;
+}
+
+UDRankerFuncs_t * sphUDRFind ( const char * )
+{
+	return NULL;
+}
+
+
 #else
 
-void sphUDFInit ( const char * sUdfDir )
+void sphPluginInit ( const char * sDir )
 {
-	if ( !sUdfDir || !*sUdfDir )
+	if ( !sDir || !*sDir )
 		return;
 
-	g_sUdfDir = sUdfDir;
-	g_bUdfEnabled = true;
-	g_bUdfLocked = false;
+	g_sPluginDir = sDir;
+	g_bPluginsEnabled = true;
+	g_bPluginsLocked = false;
 }
 
 
-void sphUDFLock ( bool bLocked )
+void sphPluginLock ( bool bLocked )
 {
-	g_bUdfLocked = bLocked;
+	g_bPluginsLocked = bLocked;
 }
 
 
-bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, CSphString & sError )
+bool PluginCheckFunctionName ( const CSphString &, CSphString & )
 {
-	if ( !g_bUdfEnabled )
+	return true;
+}
+
+
+bool PluginCheckRankerName ( const CSphString & sName, CSphString & sError )
+{
+	for ( int iRanker = SPH_RANK_PROXIMITY_BM25; iRanker < SPH_RANK_TOTAL; iRanker++ )
 	{
-		sError = "UDF support disabled (requires a valid plugin_dir)";
+		const char * szRanker = sphGetRankerName ( ESphRankMode ( iRanker ) );
+		if ( szRanker && sName==szRanker )
+		{
+			sError.SetSprintf ( "%s is a reserved ranker name", szRanker );
+			return false;
+		}
+	}
+
+	return true;
+}
+
+
+bool PluginLoadFunctionSymbols ( UdFunc_t & tFunc, const char * szLib, void * pHandle, const CSphString & sFunc, CSphString & sError )
+{
+	CSphString sTmp;
+	tFunc.m_fnFunc = dlsym ( pHandle, sFunc.cstr() );
+	tFunc.m_fnInit = (UdfInit_fn) dlsym ( pHandle, sTmp.SetSprintf ( "%s_init", sFunc.cstr() ).cstr() );
+	tFunc.m_fnDeinit = (UdfDeinit_fn) dlsym ( pHandle, sTmp.SetSprintf ( "%s_deinit", sFunc.cstr() ).cstr() );
+
+	if ( !tFunc.m_fnFunc || !tFunc.m_fnInit )
+	{
+		sError.SetSprintf ( "symbol '%s%s' not found in '%s'", sFunc.cstr(), tFunc.m_fnFunc ? "_init" : "", szLib );
 		return false;
 	}
-	if ( g_bUdfLocked )
+
+	return true;
+}
+
+bool PluginLoadRankerSymbols ( UdRanker_t & tRanker, const char * szLib, void * pHandle, const CSphString & sRanker, CSphString & sError )
+{
+	CSphString sTmp;
+	tRanker.m_tFuncs.m_fnInit = (UdrInit_fn) dlsym ( pHandle, sTmp.SetSprintf ( "%s_rs_init", sRanker.cstr() ).cstr() );
+	tRanker.m_tFuncs.m_fnUpdate = (UdrUpdate_fn) dlsym ( pHandle, sTmp.SetSprintf ( "%s_rs_update", sRanker.cstr() ).cstr() );
+	tRanker.m_tFuncs.m_fnFinalize = (UdrFinalize_fn) dlsym ( pHandle, sTmp.SetSprintf ( "%s_rs_finalize", sRanker.cstr() ).cstr() );
+	tRanker.m_tFuncs.m_fnDeinit = (UdrDeinit_fn) dlsym ( pHandle, sTmp.SetSprintf ( "%s_rs_deinit", sRanker.cstr() ).cstr() );
+
+	// _rs_finalize is the only mandatory symbol
+	if ( !tRanker.m_tFuncs.m_fnFinalize )
 	{
-		sError = "CREATE FUNCTION is disabled (fully dynamic UDFs require workers=threads)";
+		sError.SetSprintf ( "symbol '%s%s' not found in '%s'", sRanker.cstr(), "_rs_finalize", szLib );
+		return false;
+	}
+
+	return true;
+}
+
+template <typename HASHENTRY, typename CHECKNAME, typename LOADSYMBOLS>
+bool PluginCreateComponent ( const char * szLib, const char * szName, SmallStringHash_T<HASHENTRY> & tHash, HASHENTRY & tEntry, PluginComponent_e eType, CHECKNAME fnCheckName, LOADSYMBOLS fnLoadSymbols, CSphString & sError )
+{
+	if ( !g_bPluginsEnabled )
+	{
+		sError = "Plugin support disabled (requires a valid plugin_dir)";
+		return false;
+	}
+
+	if ( g_bPluginsLocked )
+	{
+		sError = "CREATE is disabled (fully dynamic plugins require workers=threads)";
 		return false;
 	}
 
 	// validate library name
 	for ( const char * p = szLib; *p; p++ )
 		if ( *p=='/' || *p=='\\' )
+		{
+			sError = "restricted character (path delimiter) in a library file name";
+			return false;
+		}
+
+	// from here, we need a lock (we intend to update respective component hash)
+	g_tPluginMutex.Lock();
+
+	// validate function name
+	CSphString sName ( szName );
+	sName.ToLower();
+
+	if ( tHash ( sName ) )
 	{
-		sError = "restricted character (path delimiter) in a library file name";
+		sError.SetSprintf ( "Component '%s' already exists", sName.cstr() );
+		g_tPluginMutex.Unlock();
 		return false;
 	}
 
-	// from here, we need a lock (we intend to update UDF hash)
-	g_tUdfMutex.Lock();
-
-	// validate function name
-	CSphString sFunc ( szFunc );
-	sFunc.ToLower();
-
-	if ( g_hUdfFuncs ( sFunc ) )
+	if ( fnCheckName && !fnCheckName ( sName, sError ) )
 	{
-		sError.SetSprintf ( "UDF '%s' already exists", sFunc.cstr() );
-		g_tUdfMutex.Unlock();
+		g_tPluginMutex.Unlock();
 		return false;
 	}
 
 	// lookup or load library
 	CSphString sLibfile;
-	sLibfile.SetSprintf ( "%s/%s", g_sUdfDir.cstr(), szLib );
-
-	UdfFunc_t tFunc;
-	tFunc.m_eRetType = eRetType;
-	tFunc.m_iUserCount = 0;
-	tFunc.m_bToDrop = false;
+	sLibfile.SetSprintf ( "%s/%s", g_sPluginDir.cstr(), szLib );
 
 	bool bLoaded = false;
 	void * pHandle = NULL;
-	tFunc.m_pLib = g_hUdfLibs ( szLib );
-	if ( !tFunc.m_pLib )
+	tEntry.m_pLib = g_hPluginLibs ( szLib );
+	if ( !tEntry.m_pLib )
 	{
 		bLoaded = true;
 		pHandle = dlopen ( sLibfile.cstr(), RTLD_LAZY | RTLD_LOCAL );
@@ -6034,29 +6130,22 @@ bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, 
 		{
 			const char * sDlerror = dlerror();
 			sError.SetSprintf ( "dlopen() failed: %s", sDlerror ? sDlerror : "(null)" );
-			g_tUdfMutex.Unlock();
+			g_tPluginMutex.Unlock();
 			return false;
 		}
 		sphLogDebug ( "dlopen(%s)=%p", sLibfile.cstr(), pHandle );
 
 	} else
-	{
-		pHandle = tFunc.m_pLib->m_pHandle;
-	}
+		pHandle = tEntry.m_pLib->m_pHandle;
+
 	assert ( pHandle );
 
-	// lookup and check function symbols
-	CSphString sName;
-	tFunc.m_fnFunc = dlsym ( pHandle, sFunc.cstr() );
-	tFunc.m_fnInit = (UdfInit_fn) dlsym ( pHandle, sName.SetSprintf ( "%s_init", sFunc.cstr() ).cstr() );
-	tFunc.m_fnDeinit = (UdfDeinit_fn) dlsym ( pHandle, sName.SetSprintf ( "%s_deinit", sFunc.cstr() ).cstr() );
-
-	if ( !tFunc.m_fnFunc || !tFunc.m_fnInit )
+	if ( !fnLoadSymbols ( tEntry, szLib, pHandle, sName, sError ) )
 	{
-		sError.SetSprintf ( "symbol '%s%s' not found in '%s'", sFunc.cstr(), tFunc.m_fnFunc ? "_init" : "", szLib );
 		if ( bLoaded )
 			dlclose ( pHandle );
-		g_tUdfMutex.Unlock();
+
+		g_tPluginMutex.Unlock();
 		return false;
 	}
 
@@ -6068,12 +6157,13 @@ bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, 
 		if ( pDot )
 			sBasename = sBasename.SubString ( 0, pDot-sBasename.cstr() );
 
-		UdfVer_fn fnVer = (UdfVer_fn) dlsym ( pHandle, sName.SetSprintf ( "%s_ver", sBasename.cstr() ).cstr() );
+		CSphString sTmp;
+		UdfVer_fn fnVer = (UdfVer_fn) dlsym ( pHandle, sTmp.SetSprintf ( "%s_ver", sBasename.cstr() ).cstr() );
 		if ( !fnVer )
 		{
 			sError.SetSprintf ( "symbol '%s_ver' not found in '%s': update your UDF implementation", sBasename.cstr(), szLib );
 			dlclose ( pHandle );
-			g_tUdfMutex.Unlock();
+			g_tPluginMutex.Unlock();
 			return false;
 		}
 
@@ -6081,99 +6171,157 @@ bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, 
 		{
 			sError.SetSprintf ( "library '%s' was compiled using an older version of sphinxudf.h; it needs to be recompiled", szLib );
 			dlclose ( pHandle );
-			g_tUdfMutex.Unlock();
+			g_tPluginMutex.Unlock();
 			return false;
 		}
 
-		UdfLib_t tLib;
-		tLib.m_iFuncs = 1;
+		PluginLib_t tLib;
+		memset ( tLib.m_dNumComponents, 0, sizeof(tLib.m_dNumComponents) );
+		tLib.m_dNumComponents[eType] = 1;
 		tLib.m_pHandle = pHandle;
-		tLib.m_fnReinit = (UdfReinit_fn) dlsym ( pHandle, sName.SetSprintf ( "%s_reinit", sBasename.cstr() ).cstr() );
-		Verify ( g_hUdfLibs.Add ( tLib, szLib ) );
-		tFunc.m_pLib = g_hUdfLibs ( szLib );
+		tLib.m_fnReinit = (UdfReinit_fn) dlsym ( pHandle, sTmp.SetSprintf ( "%s_reinit", sBasename.cstr() ).cstr() );
+		Verify ( g_hPluginLibs.Add ( tLib, szLib ) );
+		tEntry.m_pLib = g_hPluginLibs ( szLib );
 	} else
-	{
-		tFunc.m_pLib->m_iFuncs++;
-	}
-	tFunc.m_pLibName = g_hUdfLibs.GetKeyPtr ( szLib );
-	assert ( tFunc.m_pLib );
+		tEntry.m_pLib->m_dNumComponents[eType]++;
+
+	tEntry.m_pLibName = g_hPluginLibs.GetKeyPtr ( szLib );
+	assert ( tEntry.m_pLib );
 
 	// add function
-	Verify ( g_hUdfFuncs.Add ( tFunc, sFunc ) );
+	Verify ( tHash.Add ( tEntry, sName ) );
 
 	// all ok
-	g_tUdfMutex.Unlock();
+	g_tPluginMutex.Unlock();
 	return true;
+}
+
+
+
+template <typename HASHENTRY>
+bool PluginDropComponent ( const char * szName, SmallStringHash_T<HASHENTRY> & tHash, PluginComponent_e eType, CSphString & sError )
+{
+	CSphString sName ( szName );
+	sName.ToLower();
+
+	g_tPluginMutex.Lock();
+	HASHENTRY * pComponent = tHash ( sName );
+	if ( !pComponent || pComponent->m_bToDrop ) // handle concurrent drop in progress as "not exists"
+	{
+		sError.SetSprintf ( "Component '%s' does not exist", sName.cstr() );
+		g_tPluginMutex.Unlock();
+		return false;
+	}
+
+	static const int UDF_DROP_TIMEOUT_SEC = 30; // in seconds
+	int64_t tmEnd = sphMicroTimer() + UDF_DROP_TIMEOUT_SEC*1000000;
+
+	// mark for deletion, to prevent new users
+	pComponent->m_bToDrop = true;
+	if ( pComponent->m_iUserCount )
+		for ( ;; )
+		{
+			// release lock and wait
+			// so that concurrent users could complete and release the component
+			g_tPluginMutex.Unlock();
+			sphSleepMsec ( 50 );
+
+			// re-acquire lock
+			g_tPluginMutex.Lock();
+
+			// everyone out? proceed with dropping
+			assert ( pComponent->m_iUserCount>=0 );
+			if ( pComponent->m_iUserCount<=0 )
+				break;
+
+			// timed out? clear deletion flag, and bail
+			if ( sphMicroTimer() > tmEnd )
+			{
+				pComponent->m_bToDrop = false;
+				g_tPluginMutex.Unlock();
+
+				sError.SetSprintf ( "DROP timed out in (still got %d users after waiting for %d seconds); please retry",
+					pComponent->m_iUserCount, UDF_DROP_TIMEOUT_SEC );
+				return false;
+			}
+		}
+
+	PluginLib_t * pLib = pComponent->m_pLib;
+	const CSphString * pLibName = pComponent->m_pLibName;
+
+	Verify ( tHash.Delete ( sName ) );
+	pLib->m_dNumComponents[eType]--;
+
+	bool bCanDrop = true;
+	for ( int i = 0; i < COMPONENT_TOTAL && bCanDrop; i++ )
+		if ( pLib->m_dNumComponents[i]>0 )
+			bCanDrop = false;
+
+	if ( bCanDrop )
+	{
+		// FIXME! running queries might be using this function/ranker
+		int iRes = dlclose ( pLib->m_pHandle );
+		sphLogDebug ( "dlclose(%s)=%d", pLibName->cstr(), iRes );
+		Verify ( g_hPluginLibs.Delete ( *pLibName ) );
+	}
+
+	g_tPluginMutex.Unlock();
+
+	return true;
+}
+
+
+bool sphUDFCreate ( const char * szLib, const char * szFunc, ESphAttr eRetType, CSphString & sError )
+{
+	UdFunc_t tFunc;
+	tFunc.m_eRetType = eRetType;
+	tFunc.m_iUserCount = 0;
+	tFunc.m_bToDrop = false;
+
+	return PluginCreateComponent ( szLib, szFunc, g_hUDFuncs, tFunc, COMPONENT_FUNCTION, PluginCheckFunctionName, PluginLoadFunctionSymbols, sError );
+}
+
+bool sphUDRCreate ( const char * szLib, const char * szRanker, CSphString & sError )
+{
+	UdRanker_t tRanker;
+	tRanker.m_iUserCount = 0;
+	tRanker.m_bToDrop = false;
+
+	return PluginCreateComponent ( szLib, szRanker, g_hUDRankers, tRanker, COMPONENT_RANKER, PluginCheckRankerName, PluginLoadRankerSymbols, sError );
 }
 
 
 bool sphUDFDrop ( const char * szFunc, CSphString & sError )
 {
-	if ( g_bUdfLocked )
+	if ( g_bPluginsLocked )
 	{
-		sError = "DROP FUNCTION is disabled (fully dynamic UDFs require workers=threads)";
+		sError = "DROP FUNCTION is disabled (fully dynamic plugins require workers=threads)";
 		return false;
 	}
 
-	CSphString sFunc ( szFunc );
-	sFunc.ToLower();
+	return PluginDropComponent ( szFunc, g_hUDFuncs, COMPONENT_FUNCTION, sError );
+}
 
-	g_tUdfMutex.Lock();
-	UdfFunc_t * pFunc = g_hUdfFuncs ( sFunc );
-	if ( !pFunc || pFunc->m_bToDrop ) // handle concurrent drop in progress as "not exists"
+
+bool sphUDRDrop ( const char * szRanker, CSphString & sError )
+{
+	if ( g_bPluginsLocked )
 	{
-		sError.SetSprintf ( "UDF '%s' does not exist", sFunc.cstr() );
-		g_tUdfMutex.Unlock();
+		sError = "DROP RANKER is disabled (fully dynamic plugins require workers=threads)";
 		return false;
 	}
 
-	const int UDF_DROP_TIMEOUT_SEC = 30; // in seconds
-	int64_t tmEnd = sphMicroTimer() + UDF_DROP_TIMEOUT_SEC*1000000;
+	return PluginDropComponent ( szRanker, g_hUDRankers, COMPONENT_RANKER, sError );
+}
 
-	// mark function for deletion, to prevent new users
-	pFunc->m_bToDrop = true;
-	if ( pFunc->m_iUserCount )
-		for ( ;; )
-	{
-		// release lock and wait
-		// so that concurrent users could complete and release the function
-		g_tUdfMutex.Unlock();
-		sphSleepMsec ( 50 );
 
-		// re-acquire lock
-		g_tUdfMutex.Lock();
+UDRankerFuncs_t * sphUDRFind ( const char * szRanker )
+{
+	UdRanker_t * pUdRanker = g_hUDRankers ( szRanker );
+	if ( !pUdRanker )
+		return NULL;
 
-		// everyone out? proceed with dropping
-		assert ( pFunc->m_iUserCount>=0 );
-		if ( pFunc->m_iUserCount<=0 )
-			break;
-
-		// timed out? clear deletion flag, and bail
-		if ( sphMicroTimer() > tmEnd )
-		{
-			pFunc->m_bToDrop = false;
-			g_tUdfMutex.Unlock();
-
-			sError.SetSprintf ( "DROP timed out in (still got %d users after waiting for %d seconds); please retry",
-				pFunc->m_iUserCount, UDF_DROP_TIMEOUT_SEC );
-			return false;
-		}
-	}
-
-	UdfLib_t * pLib = pFunc->m_pLib;
-	const CSphString * pLibName = pFunc->m_pLibName;
-
-	Verify ( g_hUdfFuncs.Delete ( sFunc ) );
-	if ( --pLib->m_iFuncs<=0 )
-	{
-		// FIXME! running queries might be using this function
-		int iRes = dlclose ( pLib->m_pHandle );
-		sphLogDebug ( "dlclose(%s)=%d", pLibName->cstr(), iRes );
-		Verify ( g_hUdfLibs.Delete ( *pLibName ) );
-	}
-
-	g_tUdfMutex.Unlock();
-	return true;
+	return &(pUdRanker->m_tFuncs);
 }
 
 
@@ -6189,14 +6337,14 @@ static const char * UdfReturnType ( ESphAttr eType )
 }
 
 
-void sphUDFSaveState ( CSphWriter & tWriter )
+void sphPluginsSaveState ( CSphWriter & tWriter )
 {
-	g_tUdfMutex.Lock();
-	g_hUdfFuncs.IterateStart();
-	while ( g_hUdfFuncs.IterateNext() )
+	g_tPluginMutex.Lock();
+	g_hUDFuncs.IterateStart();
+	while ( g_hUDFuncs.IterateNext() )
 	{
-		const CSphString & sName = g_hUdfFuncs.IterateGetKey();
-		const UdfFunc_t & tDesc = g_hUdfFuncs.IterateGet();
+		const CSphString & sName = g_hUDFuncs.IterateGetKey();
+		const UdFunc_t & tDesc = g_hUDFuncs.IterateGet();
 		if ( !tDesc.m_bToDrop )
 		{
 			CSphString sBuf;
@@ -6205,21 +6353,36 @@ void sphUDFSaveState ( CSphWriter & tWriter )
 			tWriter.PutBytes ( sBuf.cstr(), sBuf.Length() );
 		}
 	}
-	g_tUdfMutex.Unlock();
+
+	while ( g_hUDRankers.IterateNext() )
+	{
+		const CSphString & sName = g_hUDRankers.IterateGetKey();
+		const UdRanker_t & tDesc = g_hUDRankers.IterateGet();
+		if ( !tDesc.m_bToDrop )
+		{
+			CSphString sBuf;
+			sBuf.SetSprintf ( "CREATE RANKER %s SONAME '%s';\n", sName.cstr(), tDesc.m_pLibName->cstr() );
+			tWriter.PutBytes ( sBuf.cstr(), sBuf.Length() );
+		}
+	}
+
+	g_tPluginMutex.Unlock();
 }
 
 
 void sphUDFReinit()
 {
-	g_tUdfMutex.Lock();
-	g_hUdfLibs.IterateStart();
-	while ( g_hUdfLibs.IterateNext() )
+	g_tPluginMutex.Lock();
+
+	g_hPluginLibs.IterateStart();
+	while ( g_hPluginLibs.IterateNext() )
 	{
-		const UdfLib_t & tLib = g_hUdfLibs.IterateGet();
+		const PluginLib_t & tLib = g_hPluginLibs.IterateGet();
 		if ( tLib.m_fnReinit )
 			tLib.m_fnReinit();
 	}
-	g_tUdfMutex.Unlock();
+
+	g_tPluginMutex.Unlock();
 }
 
 #endif // HAVE_DLOPEN

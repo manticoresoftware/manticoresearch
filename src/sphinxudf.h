@@ -217,6 +217,37 @@ int sphinx_get_term_factor_int ( const unsigned int * in, enum sphinx_term_facto
 /// returns a term factor value, interpreted as float
 float sphinx_get_term_factor_float ( const unsigned int * in, enum sphinx_term_factor f );
 
+/// a structure that represents a hit
+typedef struct st_plugin_hit
+{
+	sphinx_uint64_t		docid;
+	unsigned int		hitpos;
+	unsigned short		querypos;
+	unsigned short		nodepos;
+	unsigned short		spanlen;
+	unsigned short		matchlen;
+	unsigned int		weight;
+	unsigned int		qposmask;
+} SPH_PLUGIN_HIT;
+
+
+/// a structure that represents a match
+typedef struct st_plugin_match
+{
+	sphinx_uint64_t		docid;
+	int					weight;
+} SPH_PLUGIN_MATCH;
+
+
+// ranker info (used by user-defined rankers)
+typedef struct st_plugin_rankerinfo
+{
+	unsigned int		payload_mask;
+	int					qwords;
+	int					max_qpos;
+} SPH_PLUGIN_RANKERINFO;
+
+
 #ifdef __cplusplus
 }
 #endif

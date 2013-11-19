@@ -6510,6 +6510,98 @@ struct RankerState_Fieldmask_fn : public ISphExtra
 
 //////////////////////////////////////////////////////////////////////////
 
+struct RankerState_Plugin_fn : public ISphExtra
+{
+	~RankerState_Plugin_fn()
+	{
+		if ( m_tRankerFuncs.m_fnDeinit )
+			m_tRankerFuncs.m_fnDeinit ( &m_pData );
+	}
+
+	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError, bool )
+	{
+		if ( !m_tRankerFuncs.m_fnInit )
+			return true;
+
+		SPH_PLUGIN_RANKERINFO tRankerInfo;
+		tRankerInfo.payload_mask = pRanker->m_uPayloadMask;
+		tRankerInfo.qwords = pRanker->m_iQwords;
+		tRankerInfo.max_qpos = pRanker->m_iMaxQpos;
+
+		char szError [ SPH_UDF_ERROR_LEN ];
+		if ( !m_tRankerFuncs.m_fnInit ( iFields, const_cast<int*>(pWeights), m_sOptions.cstr(), &tRankerInfo, &m_pData, szError ) )
+		{
+			sError = szError;
+			return false;
+		}
+
+		return true;
+	}
+
+	void Update ( const ExtHit_t * pHlist )
+	{
+		if ( !m_tRankerFuncs.m_fnUpdate )
+			return;
+
+		SPH_PLUGIN_HIT tHit;
+		tHit.docid = pHlist->m_uDocid;
+		tHit.hitpos = pHlist->m_uHitpos;
+		tHit.querypos = pHlist->m_uQuerypos;
+		tHit.nodepos = pHlist->m_uNodepos;
+		tHit.spanlen = pHlist->m_uSpanlen;
+		tHit.matchlen = pHlist->m_uMatchlen;
+		tHit.weight = pHlist->m_uWeight;
+		tHit.qposmask = pHlist->m_uQposMask;
+
+		m_tRankerFuncs.m_fnUpdate ( &tHit, &m_pData );
+	}
+
+	DWORD Finalize ( const CSphMatch & tMatch )
+	{
+		assert ( m_tRankerFuncs.m_fnFinalize );
+		SPH_PLUGIN_MATCH tIntMatch;
+		tIntMatch.docid = tMatch.m_iDocID;
+		tIntMatch.weight = tMatch.m_iWeight;
+
+		return m_tRankerFuncs.m_fnFinalize ( &tIntMatch, &m_pData );
+	}
+
+private:
+	void *			m_pData;
+	UDRankerFuncs_t	m_tRankerFuncs;
+	CSphString		m_sOptions;
+
+	virtual bool ExtraDataImpl ( ExtraData_e eType, void ** ppResult )
+	{
+		switch ( eType )
+		{
+		case EXTRA_SET_UDR_OPTIONS:
+			m_sOptions = (char*)*ppResult;
+			return true;
+
+		case EXTRA_SET_UDR_INIT:
+			m_tRankerFuncs.m_fnInit = (UdrInit_fn)*ppResult;
+			return true;
+
+		case EXTRA_SET_UDR_UPDATE:
+			m_tRankerFuncs.m_fnUpdate = (UdrUpdate_fn)*ppResult;
+			return true;
+
+		case EXTRA_SET_UDR_FINALIZE:
+			m_tRankerFuncs.m_fnFinalize = (UdrFinalize_fn)*ppResult;
+			return true;
+
+		case EXTRA_SET_UDR_DEINIT:
+			m_tRankerFuncs.m_fnDeinit = (UdrDeinit_fn)*ppResult;
+			return true;
+		}
+
+		return false;
+	}
+};
+
+//////////////////////////////////////////////////////////////////////////
+
 class FactorPool_c
 {
 public:
@@ -8786,6 +8878,19 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 				pRanker = new ExtRanker_T < RankerState_Proximity_fn<true,true> > ( tXQ, tTermSetup );
 			else
 				pRanker = new ExtRanker_T < RankerState_Proximity_fn<true,false> > ( tXQ, tTermSetup );
+			break;
+		case SPH_RANK_PLUGIN:
+			{
+				UDRankerFuncs_t * pUDRFuncs = sphUDRFind ( pQuery->m_sUDRanker.cstr() );
+				assert ( pUDRFuncs );
+				pRanker = new ExtRanker_T < RankerState_Plugin_fn > ( tXQ, tTermSetup );
+				const char * szOptions = pQuery->m_sUDRankerOpts.cstr();
+				pRanker->ExtraData ( EXTRA_SET_UDR_OPTIONS, (void**)&szOptions );
+				pRanker->ExtraData ( EXTRA_SET_UDR_INIT, (void**)&(pUDRFuncs->m_fnInit) );
+				pRanker->ExtraData ( EXTRA_SET_UDR_UPDATE, (void**)&(pUDRFuncs->m_fnUpdate) );
+				pRanker->ExtraData ( EXTRA_SET_UDR_FINALIZE, (void**)&(pUDRFuncs->m_fnFinalize) );
+				pRanker->ExtraData ( EXTRA_SET_UDR_DEINIT, (void**)&(pUDRFuncs->m_fnDeinit) );
+			}
 			break;
 	}
 	assert ( pRanker );

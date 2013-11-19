@@ -20,6 +20,7 @@
 #include "sphinxrt.h"
 #include "sphinxquery.h"
 #include "sphinxexcerpt.h"
+#include "sphinxudf.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -375,7 +376,13 @@ enum ExtraData_e
 	EXTRA_SET_STRINGPOOL,
 	EXTRA_SET_MAXMATCHES,
 	EXTRA_SET_MATCHPUSHED,
-	EXTRA_SET_MATCHPOPPED
+	EXTRA_SET_MATCHPOPPED,
+
+	EXTRA_SET_UDR_OPTIONS,
+	EXTRA_SET_UDR_INIT,
+	EXTRA_SET_UDR_UPDATE,
+	EXTRA_SET_UDR_FINALIZE,
+	EXTRA_SET_UDR_DEINIT
 };
 
 /// generic COM-like interface
@@ -2014,6 +2021,27 @@ struct StoredToken_t
 void FillStoredTokenInfo ( StoredToken_t & tToken, const BYTE * sToken, ISphTokenizer * pTokenizer );
 CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool bProxy );
 CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool bProxy );
+
+typedef int ( *UdrInit_fn ) ( int nfieldweights, int * fieldweights, const char * szOptions, SPH_PLUGIN_RANKERINFO * ranker, void ** data, char * error );
+typedef void ( *UdrUpdate_fn ) ( SPH_PLUGIN_HIT * hit, void ** data );
+typedef unsigned int ( *UdrFinalize_fn ) ( SPH_PLUGIN_MATCH * match, void ** data );
+typedef int ( *UdrDeinit_fn ) ( void ** data );
+
+struct UDRankerFuncs_t
+{
+	UDRankerFuncs_t()
+		: m_fnInit ( NULL )
+		, m_fnUpdate ( NULL )
+		, m_fnFinalize ( NULL )
+		, m_fnDeinit ( NULL )
+	{
+	}
+
+	UdrInit_fn		m_fnInit;		///< init function (called once when ranker is created), optional
+	UdrUpdate_fn	m_fnUpdate;		///< per-hit update function, optional
+	UdrFinalize_fn	m_fnFinalize;	///< per-document finalize function, mandatory
+	UdrDeinit_fn	m_fnDeinit;		///< deinit function (called once when ranker is destroyed), optional
+};
 
 
 #if USE_RLP

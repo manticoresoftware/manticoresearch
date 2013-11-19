@@ -2263,6 +2263,31 @@ bool sphDetectChinese ( const BYTE * szBuffer, int iLength )
 }
 
 
+static const char * g_dRankerNames[] =
+{
+	"proximity_bm25",
+	"bm25",
+	"none",
+	"wordcount",
+	"proximity",
+	"matchany",
+	"fieldmask",
+	"sph04",
+	"expr",
+	"export",
+	NULL
+};
+
+
+const char * sphGetRankerName ( ESphRankMode eRanker )
+{
+	if ( eRanker<SPH_RANK_PROXIMITY_BM25 || eRanker>=SPH_RANK_TOTAL )
+		return NULL;
+
+	return g_dRankerNames[eRanker];
+}
+
+
 //
 // $Id$
 //

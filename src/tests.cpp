@@ -487,6 +487,7 @@ void TestTokenizer()
 	pTokenizer = sphCreateUTF8Tokenizer();
 	pTokenizer->SetBuffer ( (BYTE*)sTest21, sizeof(sTest21) );
 	assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "\xF4\x80\x80\x80\x32\x34" ) );
+	delete pTokenizer;
 }
 
 
@@ -2264,6 +2265,7 @@ void TestRTWeightBoundary ()
 		// so for simplicity i just clone them
 		pIndex->SetTokenizer ( pTok->Clone ( SPH_CLONE_INDEX ) );
 		pIndex->SetDictionary ( pDict->Clone() );
+		pIndex->PostSetup();
 		Verify ( pIndex->Prealloc ( false, false, sError ) );
 
 		ISphHits * pHits;
@@ -2305,6 +2307,7 @@ void TestRTWeightBoundary ()
 
 		SafeDelete ( pDict );
 		SafeDelete ( pTok );
+		SafeDelete ( pSrc );
 		sphRTDone ();
 
 		printf ( "ok\n" );
@@ -2336,6 +2339,7 @@ void TestWriter()
 		tWr.PutByte ( 0xff );
 	}
 	unlink ( sTmpWriteout.cstr() );
+	delete [] pData;
 	printf ( "ok\n" );
 }
 
@@ -2441,6 +2445,7 @@ void TestRTSendVsMerge ()
 
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( pDict );
+	pIndex->PostSetup();
 	Verify ( pIndex->Prealloc ( false, false, sError ) );
 
 	CSphQuery tQuery;
@@ -2488,6 +2493,7 @@ void TestRTSendVsMerge ()
 	}
 	SafeDelete ( pSorter );
 	SafeDelete ( pIndex );
+	SafeDelete ( pSrc );
 
 	sphRTDone ();
 

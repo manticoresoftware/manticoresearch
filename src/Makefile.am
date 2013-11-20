@@ -6,12 +6,11 @@ SRC_SPHINX = sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp \
 noinst_LIBRARIES = libsphinx.a
 libsphinx_a_SOURCES = $(SRC_SPHINX)
 
-bin_PROGRAMS = indexer searchd search spelldump indextool wordbreaker
+bin_PROGRAMS = indexer searchd spelldump indextool wordbreaker
 noinst_PROGRAMS = tests
 
 indexer_SOURCES = indexer.cpp
 searchd_SOURCES = searchd.cpp
-search_SOURCES = search.cpp
 spelldump_SOURCES = spelldump.cpp
 indextool_SOURCES = indextool.cpp
 tests_SOURCES = tests.cpp

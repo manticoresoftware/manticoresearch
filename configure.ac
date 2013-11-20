@@ -57,7 +57,7 @@ AC_PROG_CC
 AC_PROG_CXX
 AC_PROG_RANLIB
 
-AC_COMPILE_IFELSE([
+AC_COMPILE_IFELSE([AC_LANG_SOURCE([
 #ifdef __GNUC__
 #if __GNUC__ > 3 || (__GNUC__ == 3 && __GNUC_MINOR__ > 3)
 int main() {}
@@ -65,7 +65,7 @@ int main() {}
 syntax error
 #endif
 #endif
-], [], [AC_MSG_ERROR([Gcc version error. Minspec is 3.4])])
+])], [], [AC_MSG_ERROR([Gcc version error. Minspec is 3.4])])
 
 AC_DEFINE_UNQUOTED([COMPILER],"$CC `$CC -dumpversion`",[Define to be the name of the compiler.])
 AC_DEFINE_UNQUOTED([OS_UNAME],"`uname -a`",[Full name OS])
@@ -186,7 +186,7 @@ if test x$cross_compiling = xno ; then
 		$1
 	fi
 else
-	AC_COMPILE_IFELSE($pthread_prog, [pthreads_try_compile=yes], [pthreads_try_compile=no], [pthreads_try_compile=no])
+	AC_COMPILE_IFELSE([AC_LANG_SOURCE($pthread_prog)], [pthreads_try_compile=yes], [pthreads_try_compile=no], [pthreads_try_compile=no])
 	if test x$pthreads_try_compile = xyes ; then
 		$1
 	fi
@@ -201,7 +201,7 @@ if test x$cross_compiling = xno ; then
 		$1
 	fi
 else
-	AC_LINK_IFELSE($pthread_prog, [pthreads_try_link=yes], [pthreads_try_link=no], [pthreads_try_link=no])
+	AC_LINK_IFELSE([AC_LANG_SOURCE($pthread_prog)], [pthreads_try_link=yes], [pthreads_try_link=no], [pthreads_try_link=no])
 	if test x$pthreads_try_link = xyes ; then
 		$1
 	fi
@@ -356,7 +356,7 @@ dnl ---
 AC_MSG_CHECKING([whether to use 64-bit document/word IDs])
 sph_enable_id64=yes
 AC_ARG_ENABLE([id64],
-	[  --enable-id64           use 64-bit document and word IDs (default is no)],
+	[  --enable-id64           use 64-bit document and word IDs (default is yes)],
 	[sph_enable_id64=$enableval])
 if test x$sph_enable_id64 != xno; then
 	AC_DEFINE(USE_64BIT, 1, [64-bit document and word IDs])
@@ -568,7 +568,7 @@ dnl ---
 AC_MSG_CHECKING([whether to enable c++ memory routines override])
 sph_enable_mem_override=yes
 AC_ARG_ENABLE([mem-override],
-    [  --enable-mem-override        enable to override std c++ mem routines in production build (default is yes). Disabling may help in some rare cases as statically linking with mysql on Mac OS X Lion.],
+    [ --enable-mem-override   enable to override std c++ mem routines in production build (default is yes). Disabling may help in some rare cases as statically linking with mysql on Mac OS X Lion.],
     [sph_enable_mem_override=$enableval])
 if test x$sph_enable_mem_override = xyes; then
     AC_MSG_RESULT([yes])

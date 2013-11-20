@@ -118,7 +118,6 @@ are available by building third party <ulink url="http://snowball.tartarus.org/"
 <para>Currently, Sphinx distribution tarball includes the following software:
 <itemizedlist>
 <listitem><para><filename>indexer</filename>: an utility which creates fulltext indexes;</para></listitem>
-<listitem><para><filename>search</filename>: a simple command-line (CLI) test utility which searches through fulltext indexes;</para></listitem>
 <listitem><para><filename>searchd</filename>: a daemon which enables external software (eg. Web applications) to search through fulltext indexes;</para></listitem>
 <listitem><para><filename>sphinxapi</filename>: a set of searchd client API libraries for popular Web scripting languages (PHP, Python, Perl, Ruby).</para></listitem>
 <listitem><para><filename>spelldump</filename>: a simple command-line tool to extract the items from an <filename>ispell</filename> or <filename>MySpell</filename>
@@ -474,11 +473,6 @@ $ /usr/local/sphinx/bin/indexer --all</userinput></literallayout></para></listit
 <listitem>
     <para>Query your newly created index!</para></listitem>
 </orderedlist>
-<para>
-To query the index from command line, use <filename>search</filename> utility:
-</para>
-<para><literallayout><userinput>$ cd /usr/local/sphinx/etc
-$ /usr/local/sphinx/bin/search test</userinput></literallayout></para>
 <para>
 To query the index from your PHP scripts, you need to:
 </para>
@@ -4380,174 +4374,6 @@ Last but not least, as every other daemon, <filename>searchd</filename> supports
 </sect1>
 
 
-<sect1 id="ref-search"><title><filename>search</filename> command reference</title>
-<para><filename>search</filename> is one of the helper tools within the
-Sphinx package. Whereas <filename>searchd</filename> is responsible for
-searches in a server-type environment, <filename>search</filename> is
-aimed at testing the index from the command line, and testing the index
-quickly without building a framework to make the connection to the server
-and process its response.</para>
-<para>Note: <filename>search</filename> is not intended to be deployed as
-part of a client application; it is strongly recommended you do not write
-an interface to <filename>search</filename> instead of
-<filename>searchd</filename>, and none of the bundled client APIs support
-this method. (In any event, <filename>search</filename> will reload files
-each time, whereas <filename>searchd</filename> will cache them in memory
-for performance.)</para>
-<para>That said, many types of query that you could build in the APIs
-could also be made with <filename>search</filename>, however for very
-complex searches it may be easier to construct them using a small script
-and the corresponding API. Additionally, some newer features may be
-available in the <filename>searchd</filename> system that have not yet
-been brought into <filename>search</filename>.</para>
-<para>The calling syntax for <filename>search</filename> is as
-follows:</para>
-<programlisting>
-search [OPTIONS] word1 [word2 [word3 [...]]]
-</programlisting>
-<para>When calling <filename>search</filename>, it is not necessary
-to have <filename>searchd</filename> running; simply make sure that
-the account running the <filename>search</filename> program has read
-access to the configuration file and the index files.</para>
-<para>The default behavior is to apply a search for word1 (AND word2 AND
-word3... as specified) to all fields in all indexes as given in the
-configuration file. If constructing the equivalent in the API, this would
-be the equivalent to passing <option>SPH_MATCH_ALL</option> to
-<code>SetMatchMode</code>, and specifying <option>*</option> as the
-indexes to query as part of <code>Query</code>.</para>
-<para>There are many options available to <filename>search</filename>.
-Firstly, the general options:
-<itemizedlist>
-<listitem><para><option>--config &lt;file&gt;</option> (<option>-c
-&lt;file&gt;</option> for short) tells <filename>search</filename> to use
-the given file as its configuration, just as with
-<filename>indexer</filename> above.</para></listitem>
-<listitem><para><option>--index &lt;index&gt;</option> (<option>-i
-&lt;index&gt;</option> for short) tells <filename>search</filename> to
-limit searching to the specified index only; normally it would attempt to
-search all of the physical indexes listed in
-<filename>sphinx.conf</filename>, not any distributed ones.</para></listitem>
-<listitem><para><option>--stdin</option> tells <filename>search</filename> to
-accept the query from the standard input, rather than the command line.
-This can be useful for testing purposes whereby you could feed input via
-pipes and from scripts.</para></listitem>
-</itemizedlist>
-</para>
-<para>Options for setting matches:
-<itemizedlist>
-<listitem><para><option>--any</option> (<option>-a</option> for short) changes
-the matching mode to match any of the words as part of the query (word1 OR
-word2 OR word3). In the API this would be equivalent to passing
-<option>SPH_MATCH_ANY</option> to <code>SetMatchMode</code>.</para></listitem>
-<listitem><para><option>--phrase</option> (<option>-p</option> for short)
-changes the matching mode to match all of the words as part of the query,
-and do so in the phrase given (not including punctuation). In the API this
-would be equivalent to passing <option>SPH_MATCH_PHRASE</option> to
-<code>SetMatchMode</code>.</para></listitem>
-<listitem><para><option>--boolean</option> (<option>-b</option> for short)
-changes the matching mode to <link linkend="boolean-syntax">Boolean
-matching</link>. Note if using Boolean syntax matching on the command
-line, you may need to escape the symbols (with a backslash) to avoid the
-shell/command line processor applying them, such as ampersands being
-escaped on a Unix/Linux system to avoid it forking to the
-<filename>search</filename> process, although this can be resolved by
-using <option>--stdin</option>, as below. In the API this would be
-equivalent to passing <option>SPH_MATCH_BOOLEAN</option> to
-<code>SetMatchMode</code>.</para></listitem>
-<listitem><para><option>--ext</option> (<option>-e</option> for short) changes
-the matching mode to <link linkend="extended-syntax">extended
-matching</link> which provides various text querying operators.
-In the API this would be equivalent to passing
-<option>SPH_MATCH_EXTENDED</option> to <code>SetMatchMode</code>.
-</para></listitem>
-<listitem><para><option>--filter &lt;attr&gt; &lt;v&gt;</option> (<option>-f
-&lt;attr&gt; &lt;v&gt;</option> for short) filters the results such that
-only documents where the attribute given (attr) matches the value given
-(v). For example, <option>--filter deleted 0</option> only matches
-documents with an attribute called 'deleted' where its value is 0. You can
-also add multiple filters on the command line, by specifying multiple
-<option>--filter</option> multiple times, however if you apply a second
-filter to an attribute it will override the first defined
-filter.</para></listitem>
-</itemizedlist>
-</para>
-<para>Options for handling the results:
-<itemizedlist>
-<listitem><para><option>--limit &lt;count&gt;</option> (<option>-l
-count</option> for short) limits the total number of matches back to the
-number given. If a 'group' is specified, this will be the number of
-grouped results. This defaults to 20 results if not specified (as do the
-APIs)</para></listitem>
-<listitem><para><option>--offset &lt;count&gt;</option> (<option>-o
-&lt;count&gt;</option> for short) offsets the result list by the number of
-places set by the count; this would be used for pagination through
-results, where if you have 20 results per 'page', the second page would
-begin at offset 20, the third page at offset 40, etc.</para></listitem>
-<listitem><para><option>--group &lt;attr&gt;</option> (<option>-g
-&lt;attr&gt;</option> for short) specifies that results should be grouped
-together based on the attribute specified. Like the GROUP BY clause in
-SQL, it will combine all results where the attribute given matches, and
-returns a set of results where each returned result is the best from each
-group. Unless otherwise specified, this will be the best match on
-relevance.</para></listitem>
-<listitem><para><option>--groupsort &lt;expr&gt;</option> (<option>-gs
-&lt;expr&gt;</option> for short) instructs that when results are grouped
-with <option>--group</option>, the expression given in &lt;expr&gt; shall
-determine the order of the groups. Note, this does not specify which is
-the best item within the group, only the order in which the groups
-themselves shall be returned.</para></listitem>
-<listitem><para><option>--sortby &lt;clause&gt;</option> (<option>-s
-&lt;clause&gt;</option> for short) specifies that results should be sorted
-in the order listed in &lt;clause&gt;. This allows you to specify the
-order you wish results to be presented in, ordering by different columns.
-For example, you could say <option>--sortby "@weight DESC entrytime
-DESC"</option> to sort entries first by weight (or relevance) and where
-two or more entries have the same weight, to then sort by the time with
-the highest time (newest) first. You will usually need to put the items in
-quotes (<option>--sortby "@weight DESC"</option>) or use commas
-(<option>--sortby @weight,DESC</option>) to avoid the items being treated
-separately. Additionally, like the regular sorting modes, if
-<option>--group</option> (grouping) is being used, this will state how to
-establish the best match within each group.</para></listitem>
-<listitem><para><option>--sortexpr expr</option> (<option>-S expr</option> for
-short) specifies that the search results should be presented in an order
-determined by an arithmetic expression, stated in expr. For example:
-<option>--sortexpr "@weight + ( user_karma + ln(pageviews) )*0.1"</option>
-(again noting that this will have to be quoted to avoid the shell dealing
-with the asterisk). Extended sort mode is discussed in more detail under
-the <option>SPH_SORT_EXTENDED</option> entry under the <link
-linkend="sorting-modes">Sorting modes</link> section of the
-manual.</para></listitem>
-<listitem><para><option>--sort=date</option> specifies that the results should
-be sorted by descending (i.e. most recent first) date. This requires that
-there is an attribute in the index that is set as a timestamp.</para></listitem>
-<listitem><para><option>--rsort=date</option> specifies that the results should
-be sorted by ascending (i.e. oldest first) date. This requires that there
-is an attribute in the index that is set as a timestamp.</para></listitem>
-<listitem><para><option>--sort=ts</option> specifies that the results should be
-sorted by timestamp in groups; it will return all of the documents whose
-timestamp is within the last hour, then sorted within that bracket for
-relevance. After, it would return the documents from the last day, sorted
-by relevance, then the last week and then the last month. It is discussed
-in more detail under the <option>SPH_SORT_TIME_SEGMENTS</option> entry
-under the <link linkend="sorting-modes">Sorting modes</link> section of
-the manual.</para></listitem>
-</itemizedlist>
-</para>
-<para>Other options:
-<itemizedlist>
-<listitem><para><option>--noinfo</option> (<option>-q</option> for short)
-instructs <filename>search</filename> not to look-up data in your SQL
-database. Specifically, for debugging with MySQL and
-<filename>search</filename>, you can provide it with a query to look up
-the full article based on the returned document ID. It is explained in
-more detail under the <link
-linkend="conf-sql-query-info">sql_query_info</link> directive.</para></listitem>
-</itemizedlist>
-</para>
-</sect1>
-
-
 <sect1 id="ref-spelldump"><title><filename>spelldump</filename> command reference</title>
 <para><filename>spelldump</filename> is one of the helper tools within the Sphinx package.</para>
 <para>It is used to extract the contents of a dictionary file that uses
@@ -4629,7 +4455,7 @@ This option was added in version 2.1.1-beta.
 the provided index header file without touching any other index files
 or even the configuration file. The report provides a breakdown of
 all the index settings, in particular the entire attribute and
-field list. Prior to 0.9.9-rc2, this command was present in
+field list. Prior to 0.9.9-rc2, this command was present in now removed
 CLI search utility.
 </para></listitem>
 <listitem><para><option>--dumpconfig FILENAME.sph</option> dumps
@@ -6823,6 +6649,8 @@ for sorting.</para></listitem>
 only UTF-8 encoding.</para></listitem>
 <listitem><para>Removed deprecated enable_star. Now always work as
 with enable_star=1.</para></listitem>
+<listitem><para>Removed CLI search which confused people instead of
+helping them and sql_query_info.</para></listitem>
 </itemizedlist>
 </para>
 </sect1>
@@ -9500,26 +9328,6 @@ and is performed before the fetch query.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 sql_ranged_throttle = 1000 # sleep for 1 sec before each query step
-</programlisting>
-</sect2>
-
-
-<sect2 id="conf-sql-query-info"><title>sql_query_info</title>
-<para>
-Document info query.
-Optional, default is empty.
-Applies to <option>mysql</option> source type only.
-</para>
-<para>
-Only used by CLI search to fetch and display document information,
-only works with MySQL at the moment, and only intended for debugging purposes.
-This query fetches the row that will be displayed by CLI search utility
-for each document ID. It is required to contain <code>$id</code> macro
-that expands to the queried document ID.
-</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-sql_query_info = SELECT * FROM documents WHERE id=$id
 </programlisting>
 </sect2>
 

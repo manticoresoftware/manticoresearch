@@ -299,7 +299,6 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "sql_query_post",			KEY_LIST, NULL },
 	{ "sql_query_post_index",	KEY_LIST, NULL },
 	{ "sql_ranged_throttle",	0, NULL },
-	{ "sql_query_info",			0, NULL },
 	{ "xmlpipe_command",		0, NULL },
 	{ "xmlpipe_field",			KEY_LIST, NULL },
 	{ "xmlpipe_attr_uint",		KEY_LIST, NULL },

@@ -337,7 +337,7 @@ protected:
 
 public:
 	static CSphStaticMutex		m_tSegmentSeq;
-	static int					m_iSegments;	///< age tag sequence generator
+	static int					m_iSegments;	///< age tag sequence generator (guarded by m_tSegmentSeq)
 	int							m_iTag;			///< segment age tag
 
 	CSphTightVector<BYTE>			m_dWords;
@@ -4081,7 +4081,9 @@ bool RtIndex_t::SaveRamChunk ()
 		return false;
 
 	wrChunk.PutDword ( USE_64BIT );
+	RtSegment_t::m_tSegmentSeq.Lock();
 	wrChunk.PutDword ( RtSegment_t::m_iSegments );
+	RtSegment_t::m_tSegmentSeq.Unlock();
 	wrChunk.PutDword ( m_dSegments.GetLength() );
 
 	// no locks here, because it's only intended to be called from dtor
@@ -4237,7 +4239,9 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 		}
 	}
 
+	RtSegment_t::m_tSegmentSeq.Lock();
 	RtSegment_t::m_iSegments = iSegmentSeq;
+	RtSegment_t::m_tSegmentSeq.Unlock();
 	if ( rdChunk.GetErrorFlag() )
 		return false;
 	return true;

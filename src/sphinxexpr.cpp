@@ -757,6 +757,9 @@ public:
 					}
 				}
 				break;
+			case SPH_ATTR_STRINGPTR:
+				return m_pFirst->StringEval ( tMatch, ppStr );
+
 			default:
 				assert ( 0 && "unhandled arg type in TO_STRING()" );
 				break;

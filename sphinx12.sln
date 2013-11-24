@@ -1,10 +1,8 @@
-Microsoft Visual Studio Solution File, Format Version 11.00
-# Visual Studio 2010
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2012
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "indexer", "win\indexer12.vcxproj", "{405619C7-CC22-4FB8-9237-B196CB897355}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libsphinx", "win\libsphinx12.vcxproj", "{6A1685DE-0265-4243-965F-96CB53EBBCA6}"
-EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "search", "win\search12.vcxproj", "{571DC41A-2665-476C-ABED-3899324E19AB}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "searchd", "win\searchd12.vcxproj", "{0BBD34CB-5891-477F-B665-3D7C9FC22A02}"
 EndProject
@@ -40,14 +38,6 @@ Global
 		{6A1685DE-0265-4243-965F-96CB53EBBCA6}.Release|Win32.Build.0 = Release|Win32
 		{6A1685DE-0265-4243-965F-96CB53EBBCA6}.Release|x64.ActiveCfg = Release|x64
 		{6A1685DE-0265-4243-965F-96CB53EBBCA6}.Release|x64.Build.0 = Release|x64
-		{571DC41A-2665-476C-ABED-3899324E19AB}.Debug|Win32.ActiveCfg = Debug|Win32
-		{571DC41A-2665-476C-ABED-3899324E19AB}.Debug|Win32.Build.0 = Debug|Win32
-		{571DC41A-2665-476C-ABED-3899324E19AB}.Debug|x64.ActiveCfg = Debug|x64
-		{571DC41A-2665-476C-ABED-3899324E19AB}.Debug|x64.Build.0 = Debug|x64
-		{571DC41A-2665-476C-ABED-3899324E19AB}.Release|Win32.ActiveCfg = Release|Win32
-		{571DC41A-2665-476C-ABED-3899324E19AB}.Release|Win32.Build.0 = Release|Win32
-		{571DC41A-2665-476C-ABED-3899324E19AB}.Release|x64.ActiveCfg = Release|x64
-		{571DC41A-2665-476C-ABED-3899324E19AB}.Release|x64.Build.0 = Release|x64
 		{0BBD34CB-5891-477F-B665-3D7C9FC22A02}.Debug|Win32.ActiveCfg = Debug|Win32
 		{0BBD34CB-5891-477F-B665-3D7C9FC22A02}.Debug|Win32.Build.0 = Debug|Win32
 		{0BBD34CB-5891-477F-B665-3D7C9FC22A02}.Debug|x64.ActiveCfg = Debug|x64

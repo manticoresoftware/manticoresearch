@@ -6946,6 +6946,31 @@ void CSphSchema::AddAttr ( const CSphColumnInfo & tCol, bool bDynamic )
 }
 
 
+bool CSphSchema::IsReserved ( const char * szToken )
+{
+	static const char * dReserved[] =
+	{
+		"AGENT", "ALTER", "ADD", "AND", "AS", "ASC", "ATTACH", "AVG", "BEGIN", "BETWEEN", "BIGINT", "BOOL", "BY", "CALL", "CHARACTER",
+		"COLLATION", "COLUMN", "COMMIT", "COMMITTED", "COUNT", "CREATE", "DATABASES", "DELETE", "DESC", "DESCRIBE", "DISTINCT", "DIV",
+		"DOUBLE", "DROP", "FALSE", "FLOAT", "FLUSH", "FOR", "FROM", "FUNCTION", "GLOBAL", "GROUP", "GROUPBY", "GROUP_CONCAT", "HAVING",
+		"ID", "IN", "INDEX", "INSERT", "INTEGER", "INT", "INTO", "IS", "ISOLATION", "LEVEL", "LIKE", "LIMIT", "MATCH", "MAX", "META",
+		"MIN", "MOD", "NAMES", "NOT", "NULL", "OPTION", "OPTIMIZE", "OR", "ORDER", "PLAN", "PROFILE", "RAMCHUNK", "RANKER", "RAND",
+		"READ", "REPEATABLE", "REPLACE", "RETURNS", "ROLLBACK", "RTINDEX", "SELECT", "SERIALIZABLE", "SET", "SESSION", "SHOW", "SONAME",
+		"START", "STATUS", "STRING", "SUM", "TABLE", "TABLES", "TO", "TRANSACTION", "TRUE", "TRUNCATE", "UNCOMMITTED", "UPDATE",
+		"VALUES", "VARIABLES", "WARNINGS", "WEIGHT", "WHERE", "WITHIN"
+	};
+
+	CSphString sToken ( szToken );
+	sToken.ToUpper();
+
+	for ( unsigned int i = 0; i < sizeof(dReserved)/sizeof(dReserved[0]); i++ )
+		if ( sToken==dReserved[i] )
+			return true;
+
+	return false;
+}
+
+
 WORD & CSphSchema::GetBucketPos ( const char * sName )
 {
 	DWORD uCrc = sphCRC32 ( (const BYTE*)sName );
@@ -25940,7 +25965,12 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 		}
 
 		if ( tCol.m_eAttrType!=SPH_ATTR_NONE )
+		{
+			if ( CSphSchema::IsReserved ( tCol.m_sName.cstr() ) )
+				LOC_ERROR ( "%s is not a valid attribute name", tCol.m_sName.cstr() );
+
 			m_tSchema.AddAttr ( tCol, true ); // all attributes are dynamic at indexing time
+		}
 	}
 
 	// map multi-valued attrs
@@ -25952,6 +25982,10 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 			CSphColumnInfo tMva;
 			tMva = tAttr;
 			tMva.m_iIndex = m_tSchema.GetAttrsCount();
+
+			if ( CSphSchema::IsReserved ( tMva.m_sName.cstr() ) )
+				LOC_ERROR ( "%s is not a valid attribute name", tMva.m_sName.cstr() );
+
 			m_tSchema.AddAttr ( tMva, true ); // all attributes are dynamic at indexing time
 			dFound[i] = true;
 		}
@@ -27030,7 +27064,7 @@ DWORD CSphSource_PgSQL::SqlColumnLength ( int )
 template < typename T >
 struct CSphSchemaConfigurator
 {
-	void ConfigureAttrs ( const CSphVariant * pHead, ESphAttr eAttrType, CSphSchema & tSchema ) const
+	bool ConfigureAttrs ( const CSphVariant * pHead, ESphAttr eAttrType, CSphSchema & tSchema, CSphString & sError ) const
 	{
 		for ( const CSphVariant * pCur = pHead; pCur; pCur= pCur->m_pNext )
 		{
@@ -27064,8 +27098,16 @@ struct CSphSchemaConfigurator
 				tCol.m_eSrc = SPH_ATTRSRC_FIELD;
 			}
 
+			if ( CSphSchema::IsReserved ( tCol.m_sName.cstr() ) )
+			{
+				sError.SetSprintf ( "%s is not a valid attribute name", tCol.m_sName.cstr() );
+				return false;
+			}
+
 			tSchema.AddAttr ( tCol, true ); // all attributes are dynamic at indexing time
 		}
+
+		return true;
 	}
 
 	void ConfigureFields ( const CSphVariant * pHead, bool bWordDict, CSphSchema & tSchema ) const
@@ -27103,7 +27145,7 @@ public:
 	explicit			CSphSource_XMLPipe2 ( const char * sName );
 					~CSphSource_XMLPipe2 ();
 
-	bool			Setup ( int iFieldBufferMax, bool bFixupUTF8, FILE * pPipe, const CSphConfigSection & hSource );			///< memorize the command
+	bool			Setup ( int iFieldBufferMax, bool bFixupUTF8, FILE * pPipe, const CSphConfigSection & hSource, CSphString & sError );			///< memorize the command
 	virtual bool	Connect ( CSphString & sError );			///< run the command and open the pipe
 	virtual void	Disconnect ();								///< close the pipe
 
@@ -27357,7 +27399,7 @@ const char * CSphSource_XMLPipe2::DecorateMessageVA ( const char * sTemplate, va
 }
 
 
-bool CSphSource_XMLPipe2::Setup ( int iFieldBufferMax, bool bFixupUTF8, FILE * pPipe, const CSphConfigSection & hSource )
+bool CSphSource_XMLPipe2::Setup ( int iFieldBufferMax, bool bFixupUTF8, FILE * pPipe, const CSphConfigSection & hSource, CSphString & sError )
 {
 	assert ( !m_pBuffer && !m_pFieldBuffer );
 
@@ -27368,18 +27410,22 @@ bool CSphSource_XMLPipe2::Setup ( int iFieldBufferMax, bool bFixupUTF8, FILE * p
 	m_pPipe = pPipe;
 	m_tSchema.Reset ();
 	bool bWordDict = ( m_pDict && m_pDict->GetSettings().m_bWordDict );
+	bool bOk = true;
 
-	ConfigureAttrs ( hSource("xmlpipe_attr_uint"),			SPH_ATTR_INTEGER,	m_tSchema );
-	ConfigureAttrs ( hSource("xmlpipe_attr_timestamp"),		SPH_ATTR_TIMESTAMP,	m_tSchema );
-	ConfigureAttrs ( hSource("xmlpipe_attr_bool"),			SPH_ATTR_BOOL,		m_tSchema );
-	ConfigureAttrs ( hSource("xmlpipe_attr_float"),			SPH_ATTR_FLOAT,		m_tSchema );
-	ConfigureAttrs ( hSource("xmlpipe_attr_bigint"),		SPH_ATTR_BIGINT,	m_tSchema );
-	ConfigureAttrs ( hSource("xmlpipe_attr_multi"),			SPH_ATTR_UINT32SET,	m_tSchema );
-	ConfigureAttrs ( hSource("xmlpipe_attr_multi_64"),		SPH_ATTR_INT64SET,	m_tSchema );
-	ConfigureAttrs ( hSource("xmlpipe_attr_string"),		SPH_ATTR_STRING,	m_tSchema );
-	ConfigureAttrs ( hSource("xmlpipe_attr_json"),			SPH_ATTR_JSON,		m_tSchema );
+	bOk &= ConfigureAttrs ( hSource("xmlpipe_attr_uint"),		SPH_ATTR_INTEGER,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("xmlpipe_attr_timestamp"),	SPH_ATTR_TIMESTAMP,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("xmlpipe_attr_bool"),		SPH_ATTR_BOOL,		m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("xmlpipe_attr_float"),		SPH_ATTR_FLOAT,		m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("xmlpipe_attr_bigint"),		SPH_ATTR_BIGINT,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("xmlpipe_attr_multi"),		SPH_ATTR_UINT32SET,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("xmlpipe_attr_multi_64"),	SPH_ATTR_INT64SET,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("xmlpipe_attr_string"),		SPH_ATTR_STRING,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("xmlpipe_attr_json"),		SPH_ATTR_JSON,		m_tSchema, sError );
 
-	ConfigureAttrs ( hSource("xmlpipe_field_string"),		SPH_ATTR_STRING,	m_tSchema );
+	bOk &= ConfigureAttrs ( hSource("xmlpipe_field_string"),	SPH_ATTR_STRING,	m_tSchema, sError );
+
+	if ( !bOk )
+		return false;
 
 	ConfigureFields ( hSource("xmlpipe_field"), bWordDict, m_tSchema );
 	ConfigureFields ( hSource("xmlpipe_field_string"), bWordDict, m_tSchema );
@@ -27820,6 +27866,12 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 
 		if ( bIsAttr )
 		{
+			if ( CSphSchema::IsReserved ( Info.m_sName.cstr() ) )
+			{
+				Error ( "%s is not a valid attribute name", Info.m_sName.cstr() );
+				return;
+			}
+
 			Info.m_iIndex = m_tSchema.GetAttrsCount ();
 			m_tSchema.AddAttr ( Info, true ); // all attributes are dynamic at indexing time
 			m_dDefaultAttrs.Add ( sDefault );
@@ -27881,6 +27933,12 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 
 		if ( !bError )
 		{
+			if ( CSphSchema::IsReserved ( Info.m_sName.cstr() ) )
+			{
+				Error ( "%s is not a valid attribute name", Info.m_sName.cstr() );
+				return;
+			}
+
 			Info.m_iIndex = m_tSchema.GetAttrsCount ();
 			m_tSchema.AddAttr ( Info, true ); // all attributes are dynamic at indexing time
 			m_dDefaultAttrs.Add ( sDefault );
@@ -28144,7 +28202,7 @@ void CSphSource_XMLPipe2::Characters ( const char * pCharacters, int iLen )
 }
 
 CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE * pPipe,
-	const char * szSourceName, int iMaxFieldLen, bool RLPARG(bProxy) )
+	const char * szSourceName, int iMaxFieldLen, bool RLPARG(bProxy), CSphString & sError )
 {
 	CSphSource_XMLPipe2 * pXMLPipe;
 	bool bUTF8 = pSource->GetInt ( "xmlpipe_fixup_utf8", 0 )!=0;
@@ -28156,7 +28214,7 @@ CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE *
 #endif
 		pXMLPipe = new CSphSource_XMLPipe2 ( szSourceName );
 
-	if ( !pXMLPipe->Setup ( iMaxFieldLen, bUTF8, pPipe, *pSource ) )
+	if ( !pXMLPipe->Setup ( iMaxFieldLen, bUTF8, pPipe, *pSource, sError ) )
 		SafeDelete ( pXMLPipe );
 
 	return pXMLPipe;
@@ -28633,7 +28691,7 @@ public:
 	virtual bool	IterateKillListStart ( CSphString & )			{ return false; }
 	virtual bool	IterateKillListNext ( SphDocID_t & )			{ return false; }
 
-	void			Setup ( const CSphConfigSection & hSource, FILE * pPipe );
+	bool			Setup ( const CSphConfigSection & hSource, FILE * pPipe, CSphString & sError );
 
 protected:
 	enum ESphParseResult
@@ -28644,7 +28702,7 @@ protected:
 	};
 
 	BYTE **					ReportDocumentError();
-	virtual void			SetupSchema ( const CSphConfigSection & hSource, bool bWordDict ) = 0;
+	virtual bool			SetupSchema ( const CSphConfigSection & hSource, bool bWordDict, CSphString & sError ) = 0;
 	virtual ESphParseResult	SplitColumns ( CSphString & ) = 0;
 
 	CSphVector<BYTE>			m_dBuf;
@@ -28670,7 +28728,7 @@ public:
 	virtual ~CSphSource_TSV();
 
 	virtual ESphParseResult	SplitColumns ( CSphString & sError );					///< parse incoming chunk and emit some hits
-	virtual void			SetupSchema ( const CSphConfigSection & hSource, bool bWordDict );
+	virtual bool			SetupSchema ( const CSphConfigSection & hSource, bool bWordDict, CSphString & sError );
 };
 
 
@@ -28681,7 +28739,7 @@ public:
 	virtual ~CSphSource_CSV();
 
 	virtual ESphParseResult	SplitColumns ( CSphString & sError );					///< parse incoming chunk and emit some hits
-	virtual void			SetupSchema ( const CSphConfigSection & hSource, bool bWordDict );
+	virtual bool			SetupSchema ( const CSphConfigSection & hSource, bool bWordDict, CSphString & sError );
 
 	void					SetDelimiter ( const char * sDelimiter );
 
@@ -28700,7 +28758,13 @@ CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * 
 #endif
 		pTSV = new CSphSource_TSV ( sSourceName );
 
-	pTSV->Setup ( *pSource, pPipe );
+	CSphString sError;
+	if ( !pTSV->Setup ( *pSource, pPipe, sError ) )
+	{
+		SafeDelete ( pTSV );
+		fprintf ( stdout, "ERROR: tsvpipe: %s", sError.cstr() );
+	}
+
 	return pTSV;
 }
 
@@ -28719,7 +28783,13 @@ CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * 
 #endif
 		pCSV = new CSphSource_CSV ( sSourceName, sDelimiter );
 
-	pCSV->Setup ( *pSource, pPipe );
+	CSphString sError;
+	if ( !pCSV->Setup ( *pSource, pPipe, sError ) )
+	{
+		SafeDelete ( pCSV );
+		fprintf ( stdout, "ERROR: csvpipe: %s", sError.cstr() );
+	}
+
 	return pCSV;
 }
 
@@ -28748,13 +28818,14 @@ struct SortedRemapXSV_t : public RemapXSV_t
 };
 
 
-void CSphSource_BaseSV::Setup ( const CSphConfigSection & hSource, FILE * pPipe )
+bool CSphSource_BaseSV::Setup ( const CSphConfigSection & hSource, FILE * pPipe, CSphString & sError )
 {
 	m_pPipe = pPipe;
 	m_tSchema.Reset ();
 	bool bWordDict = ( m_pDict && m_pDict->GetSettings().m_bWordDict );
 
-	SetupSchema ( hSource, bWordDict );
+	if ( !SetupSchema ( hSource, bWordDict, sError ) )
+		return false;
 
 	m_dFields.Reset ( m_tSchema.m_dFields.GetLength() );
 
@@ -28833,6 +28904,8 @@ void CSphSource_BaseSV::Setup ( const CSphConfigSection & hSource, FILE * pPipe 
 		assert ( !i || dColumnsSorted[i-1].m_iTag<dColumnsSorted[i].m_iTag ); // no duplicates allowed
 		m_dRemap[i+1] = dColumnsSorted[i];
 	}
+
+	return true;
 }
 
 
@@ -29115,21 +29188,27 @@ CSphSource_BaseSV::ESphParseResult CSphSource_TSV::SplitColumns ( CSphString & s
 }
 
 
-void CSphSource_TSV::SetupSchema ( const CSphConfigSection & hSource, bool bWordDict )
+bool CSphSource_TSV::SetupSchema ( const CSphConfigSection & hSource, bool bWordDict, CSphString & sError )
 {
-	ConfigureAttrs ( hSource("tsvpipe_attr_uint"),			SPH_ATTR_INTEGER,	m_tSchema );
-	ConfigureAttrs ( hSource("tsvpipe_attr_timestamp"),		SPH_ATTR_TIMESTAMP,	m_tSchema );
-	ConfigureAttrs ( hSource("tsvpipe_attr_bool"),			SPH_ATTR_BOOL,		m_tSchema );
-	ConfigureAttrs ( hSource("tsvpipe_attr_float"),			SPH_ATTR_FLOAT,		m_tSchema );
-	ConfigureAttrs ( hSource("tsvpipe_attr_bigint"),		SPH_ATTR_BIGINT,	m_tSchema );
-	ConfigureAttrs ( hSource("tsvpipe_attr_multi"),			SPH_ATTR_UINT32SET,	m_tSchema );
-	ConfigureAttrs ( hSource("tsvpipe_attr_multi_64"),		SPH_ATTR_INT64SET,	m_tSchema );
-	ConfigureAttrs ( hSource("tsvpipe_attr_string"),		SPH_ATTR_STRING,	m_tSchema );
-	ConfigureAttrs ( hSource("tsvpipe_attr_json"),			SPH_ATTR_JSON,		m_tSchema );
-	ConfigureAttrs ( hSource("tsvpipe_field_string"),		SPH_ATTR_STRING,	m_tSchema );
+	bool bOk = true;
+	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_uint"),		SPH_ATTR_INTEGER,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_timestamp"),	SPH_ATTR_TIMESTAMP,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_bool"),		SPH_ATTR_BOOL,		m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_float"),		SPH_ATTR_FLOAT,		m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_bigint"),		SPH_ATTR_BIGINT,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_multi"),		SPH_ATTR_UINT32SET,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_multi_64"),	SPH_ATTR_INT64SET,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_string"),		SPH_ATTR_STRING,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_json"),		SPH_ATTR_JSON,		m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("tsvpipe_field_string"),	SPH_ATTR_STRING,	m_tSchema, sError );
+
+	if ( !bOk )
+		return false;
 
 	ConfigureFields ( hSource("tsvpipe_field"), bWordDict, m_tSchema );
 	ConfigureFields ( hSource("tsvpipe_field_string"), bWordDict, m_tSchema );
+
+	return true;
 }
 
 
@@ -29291,21 +29370,28 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 }
 
 
-void CSphSource_CSV::SetupSchema ( const CSphConfigSection & hSource, bool bWordDict )
+bool CSphSource_CSV::SetupSchema ( const CSphConfigSection & hSource, bool bWordDict, CSphString & sError )
 {
-	ConfigureAttrs ( hSource("csvpipe_attr_uint"),			SPH_ATTR_INTEGER,	m_tSchema );
-	ConfigureAttrs ( hSource("csvpipe_attr_timestamp"),		SPH_ATTR_TIMESTAMP,	m_tSchema );
-	ConfigureAttrs ( hSource("csvpipe_attr_bool"),			SPH_ATTR_BOOL,		m_tSchema );
-	ConfigureAttrs ( hSource("csvpipe_attr_float"),			SPH_ATTR_FLOAT,		m_tSchema );
-	ConfigureAttrs ( hSource("csvpipe_attr_bigint"),		SPH_ATTR_BIGINT,	m_tSchema );
-	ConfigureAttrs ( hSource("csvpipe_attr_multi"),			SPH_ATTR_UINT32SET,	m_tSchema );
-	ConfigureAttrs ( hSource("csvpipe_attr_multi_64"),		SPH_ATTR_INT64SET,	m_tSchema );
-	ConfigureAttrs ( hSource("csvpipe_attr_string"),		SPH_ATTR_STRING,	m_tSchema );
-	ConfigureAttrs ( hSource("csvpipe_attr_json"),			SPH_ATTR_JSON,		m_tSchema );
-	ConfigureAttrs ( hSource("csvpipe_field_string"),		SPH_ATTR_STRING,	m_tSchema );
+	bool bOk = true;
+
+	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_uint"),		SPH_ATTR_INTEGER,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_timestamp"),	SPH_ATTR_TIMESTAMP,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_bool"),		SPH_ATTR_BOOL,		m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_float"),		SPH_ATTR_FLOAT,		m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_bigint"),		SPH_ATTR_BIGINT,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_multi"),		SPH_ATTR_UINT32SET,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_multi_64"),	SPH_ATTR_INT64SET,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_string"),		SPH_ATTR_STRING,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_json"),		SPH_ATTR_JSON,		m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("csvpipe_field_string"),	SPH_ATTR_STRING,	m_tSchema, sError );
+
+	if ( !bOk )
+		return false;
 
 	ConfigureFields ( hSource("csvpipe_field"), bWordDict, m_tSchema );
 	ConfigureFields ( hSource("csvpipe_field_string"), bWordDict, m_tSchema );
+
+	return true;
 }
 
 

@@ -85,6 +85,23 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select * from test where match ('four')</sphinxql>
 <sphinxql>select * from test where match ('doc') and gid=2</sphinxql>
 <sphinxql>select * from test where match ('fixup')</sphinxql>
+
+<sphinxql>alter table test add column mva multi</sphinxql>
+<sphinxql>select * from test</sphinxql>
+<sphinxql>update test set mva=(1,2,3) where id=3</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test add column mva64 multi64</sphinxql>
+<sphinxql>select * from test</sphinxql>
+<sphinxql>update test set mva64=(4,5,6) where id=4</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test add column json1 json</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test add column str1 string</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
 </sphqueries>
 
 </test>

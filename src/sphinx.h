@@ -1662,6 +1662,8 @@ public:
 	/// add attr
 	void					AddAttr ( const CSphColumnInfo & tAttr, bool bDynamic );
 
+	static bool				IsReserved ( const char * szToken );
+
 protected:
 	/// returns 0xffff if bucket list is empty and position otherwise
 	WORD &					GetBucketPos ( const char * sName );
@@ -2404,7 +2406,7 @@ struct CSphSource_MSSQL : public CSphSource_ODBC
 
 #if USE_LIBEXPAT
 class CSphConfigSection;
-CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE * pPipe, const char * szSourceName, int iMaxFieldLen, bool bProxy );
+CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE * pPipe, const char * szSourceName, int iMaxFieldLen, bool bProxy, CSphString & sError );
 #endif
 
 

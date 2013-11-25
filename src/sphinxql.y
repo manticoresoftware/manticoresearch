@@ -71,6 +71,7 @@
 %token	TOK_INTO
 %token	TOK_IS
 %token	TOK_ISOLATION
+%token	TOK_JSON
 %token	TOK_LEVEL
 %token	TOK_LIKE
 %token	TOK_LIMIT
@@ -79,6 +80,8 @@
 %token	TOK_META
 %token	TOK_MIN
 %token	TOK_MOD
+%token	TOK_MULTI
+%token	TOK_MULTI64
 %token	TOK_NAMES
 %token	TOK_NULL
 %token	TOK_OPTION
@@ -1163,6 +1166,10 @@ alter_col_type:
 	| TOK_BIGINT	{ $$.m_iValue = SPH_ATTR_BIGINT; }
 	| TOK_FLOAT		{ $$.m_iValue = SPH_ATTR_FLOAT; }
 	| TOK_BOOL		{ $$.m_iValue = SPH_ATTR_BOOL; }
+	| TOK_MULTI		{ $$.m_iValue = SPH_ATTR_UINT32SET; }
+	| TOK_MULTI64	{ $$.m_iValue = SPH_ATTR_INT64SET; }
+	| TOK_JSON		{ $$.m_iValue = SPH_ATTR_JSON; }
+	| TOK_STRING	{ $$.m_iValue = SPH_ATTR_STRING; }
 	;
 
 alter:

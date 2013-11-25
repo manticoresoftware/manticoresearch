@@ -790,12 +790,19 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 		return NULL;
 	}
 
+	CSphSource * pResult = NULL;
+	CSphString sError;
+
 #if USE_RLP
-	return sphCreateSourceXmlpipe2 ( &hSource, pPipe, sSourceName, g_iMaxXmlpipe2Field, bProxy );
+	pResult = sphCreateSourceXmlpipe2 ( &hSource, pPipe, sSourceName, g_iMaxXmlpipe2Field, bProxy, sError );
 #else
-	return sphCreateSourceXmlpipe2 ( &hSource, pPipe, sSourceName, g_iMaxXmlpipe2Field, false );
+	pResult = sphCreateSourceXmlpipe2 ( &hSource, pPipe, sSourceName, g_iMaxXmlpipe2Field, false, sError );
 #endif // USE_RLP
 
+	if ( !pResult )
+		fprintf ( stdout, "ERROR: xmlpipe: %s", sError.cstr() );
+
+	return pResult;
 #else
 	fprintf ( stdout, "WARNING: source '%s': xmlpipe2 support NOT compiled in. To use xmlpipe2, "
 			"install missing XML libraries, reconfigure, and rebuild Sphinx\n", sSourceName );

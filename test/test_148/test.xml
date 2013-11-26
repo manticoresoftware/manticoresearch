@@ -47,6 +47,25 @@ index start_end
 	path			= <data_path/>/start_end
 	docinfo			= extern
 }
+
+source src_1
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1 as id, 'Footpath' as title, 'Republic of Ireland' as country
+	sql_field_string	= title
+	sql_field_string	= country
+}
+
+index i1
+{
+	source			= src_1
+	path			= <data_path/>/i1
+	docinfo			= extern
+	min_word_len = 1
+	morphology = stem_en
+	index_exact_words = 1
+}
 </config>
 
 <db_create>
@@ -80,6 +99,13 @@ CREATE TABLE start_end_table
 	<sphinxql>select * from start_end where match ('@body ^ABB') group by idd</sphinxql>
 	<sphinxql>select * from start_end where match ('@body ABB$') group by idd</sphinxql>
 	<sphinxql>select * from start_end where match ('@body ^ABB$') group by idd</sphinxql>
+	<!-- regression of field end marker at exact term -->
+	<sphinxql>select * from i1 where match (' "=Republic =of =Ireland" ')</sphinxql>
+	<sphinxql>select * from i1 where match (' "^=Republic =of =Ireland" ')</sphinxql>
+	<sphinxql>select * from i1 where match (' "=Republic =of =Ireland$" ')</sphinxql>
+	<sphinxql>select * from i1 where match (' "^=Republic =of =Ireland$" ')</sphinxql>
+	<sphinxql>select * from i1 where match (' =Footpath$ ')</sphinxql>
+	<sphinxql>select * from i1 where match (' ^=Footpath$ ')</sphinxql>
 </sphqueries>
 
 <custom_insert><![CDATA[

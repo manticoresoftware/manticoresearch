@@ -126,6 +126,20 @@ index rt40
  rt_attr_uint = attr1
 }
 
+source src_many_attr
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data_embedded.xml
+	xmlpipe_fixup_utf8 = 1
+}
+
+index many_attr
+{
+	source = src_many_attr
+	path = <data_path/>/src_many_attr
+}
+
+
 </config>
 
 <!-- NOTE: the test model is made wrong, since we postponed a feature.
@@ -233,6 +247,16 @@ values (124,222,
 
 <sphinxql>select * from rt40 where match('@field39 badger') limit 40</sphinxql>
 <sphinxql>show meta</sphinxql>
+
+<!--regression sort \ group by on expr at column over 255 -->
+<sphinxql>select id, idd265 from many_attr order by idd265 desc</sphinxql>
+<sphinxql>select id, idd265 i from many_attr order by i desc</sphinxql>
+<sphinxql>select id, idd265 + 1 as i from many_attr order by i desc</sphinxql>
+<sphinxql>select id, idd265 + 1 as i, i as i1, i1 as i2 from many_attr order by i2 desc</sphinxql>
+<sphinxql>select id, idd265 from many_attr group by idd265</sphinxql>
+<sphinxql>select id, idd265 as i from many_attr group by i</sphinxql>
+<sphinxql>select id, ( ( idd265 - 1000 ) mod  3 ) as i from many_attr group by i</sphinxql>
+<sphinxql>select id, ( ( idd265 - 1000 ) mod  3 ) as i, i as i1, i1 as i2 from many_attr group by i2</sphinxql>
 
 </sphqueries>
 

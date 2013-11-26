@@ -2018,6 +2018,12 @@ struct ExprNode_t
 		m_iLocator ( -1 ), m_iLeft ( -1 ), m_iRight ( -1 ) {}
 };
 
+struct StackNode_t
+{
+	int m_iNode;
+	int m_iLeft;
+	int m_iRight;
+};
 
 /// expression parser
 class ExprParser_t
@@ -2033,7 +2039,9 @@ public:
 		, m_bHasZonespanlist ( false )
 		, m_bHasPackedFactors ( false )
 		, m_eEvalStage ( SPH_EVAL_FINAL ) // be default compute as late as possible
-	{}
+	{
+		m_dGatherStack.Reserve ( 64 );
+	}
 
 							~ExprParser_t ();
 	ISphExpr *				Parse ( const char * sExpr, const ISphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError );
@@ -2083,6 +2091,7 @@ private:
 	CSphVector<UdfCall_t*>	m_dUdfCalls;
 	CSphVector<char*>		m_dIdents;
 	int						m_iConstNow;
+	CSphVector<StackNode_t>	m_dGatherStack;
 
 public:
 	bool					m_bHasZonespanlist;
@@ -2095,6 +2104,8 @@ private:
 	void					GatherArgTypes ( int iNode, CSphVector<int> & dTypes );
 	void					GatherArgNodes ( int iNode, CSphVector<int> & dNodes );
 	void					GatherArgRetTypes ( int iNode, CSphVector<ESphAttr> & dTypes );
+	template < typename T >
+	void					GatherArgT ( int iNode, T & FUNCTOR );
 
 	bool					CheckForConstSet ( int iArgsNode, int iSkip );
 	int						ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp );
@@ -2157,7 +2168,7 @@ static int ParseNumeric ( YYSTYPE * lvalp, const char ** ppStr )
 // used to store in 8 bytes in Bison lvalp variable
 static uint64_t sphPackAttrLocator ( const CSphAttrLocator & tLoc, int iLocator )
 {
-	assert ( iLocator>=0 && iLocator<=0xffff );
+	assert ( iLocator>=0 && iLocator<=0x7fff );
 	uint64_t uIndex = 0;
 	uIndex = ( tLoc.m_iBitOffset<<16 ) + tLoc.m_iBitCount + ( (uint64_t)iLocator<<32 );
 	if ( tLoc.m_bDynamic )
@@ -2173,7 +2184,7 @@ static void sphUnpackAttrLocator ( uint64_t uIndex, ExprNode_t * pNode )
 	pNode->m_tLocator.m_iBitCount = (int)( uIndex & 0xffff );
 	pNode->m_tLocator.m_bDynamic = ( ( uIndex & ( U64C(1)<<63 ) )!=0 );
 
-	pNode->m_iLocator = (int)( ( uIndex>>32 ) & 0xff );
+	pNode->m_iLocator = (int)( ( uIndex>>32 ) & 0x7fff );
 }
 
 int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp )
@@ -4713,49 +4724,106 @@ private:
 
 //////////////////////////////////////////////////////////////////////////
 
+struct GatherArgTypes_t : ISphNoncopyable
+{
+	CSphVector<int> & m_dTypes;
+	explicit GatherArgTypes_t ( CSphVector<int> & dTypes )
+		: m_dTypes ( dTypes )
+	{}
+	void Collect ( int , const ExprNode_t & tNode )
+	{
+		m_dTypes.Add ( tNode.m_iToken );
+	}
+};
+
 void ExprParser_t::GatherArgTypes ( int iNode, CSphVector<int> & dTypes )
 {
-	if ( iNode<0 )
-		return;
-
-	const ExprNode_t & tNode = m_dNodes[iNode];
-	if ( tNode.m_iToken==',' )
-	{
-		GatherArgTypes ( tNode.m_iLeft, dTypes );
-		GatherArgTypes ( tNode.m_iRight, dTypes );
-	} else
-	{
-		dTypes.Add ( tNode.m_iToken );
-	}
+	GatherArgTypes_t tCollector ( dTypes );
+	GatherArgT ( iNode, tCollector );
 }
+
+struct GatherArgNodes_t : ISphNoncopyable
+{
+	CSphVector<int> & m_dNodes;
+	explicit GatherArgNodes_t ( CSphVector<int> & dNodes )
+		: m_dNodes ( dNodes )
+	{}
+	void Collect ( int iNode, const ExprNode_t & )
+	{
+		m_dNodes.Add ( iNode );
+	}
+};
 
 void ExprParser_t::GatherArgNodes ( int iNode, CSphVector<int> & dNodes )
 {
-	if ( iNode<0 )
-		return;
-
-	const ExprNode_t & tNode = m_dNodes[iNode];
-	if ( tNode.m_iToken==',' )
-	{
-		GatherArgNodes ( tNode.m_iLeft, dNodes );
-		GatherArgNodes ( tNode.m_iRight, dNodes );
-	} else
-		dNodes.Add ( iNode );
+	GatherArgNodes_t tCollector ( dNodes );
+	GatherArgT ( iNode, tCollector );
 }
 
+struct GatherArgReturnTypes_t : ISphNoncopyable
+{
+	CSphVector<ESphAttr> & m_dTypes;
+	explicit GatherArgReturnTypes_t ( CSphVector<ESphAttr> & dTypes )
+		: m_dTypes ( dTypes )
+	{}
+	void Collect ( int , const ExprNode_t & tNode )
+	{
+		m_dTypes.Add ( tNode.m_eRetType );
+	}
+};
+
 void ExprParser_t::GatherArgRetTypes ( int iNode, CSphVector<ESphAttr> & dTypes )
+{
+	GatherArgReturnTypes_t tCollector ( dTypes );
+	GatherArgT ( iNode, tCollector );
+}
+
+template < typename T >
+void ExprParser_t::GatherArgT ( int iNode, T & FUNCTOR )
 {
 	if ( iNode<0 )
 		return;
 
+	m_dGatherStack.Resize ( 0 );
+	StackNode_t & tInitial = m_dGatherStack.Add();
 	const ExprNode_t & tNode = m_dNodes[iNode];
-	if ( tNode.m_iToken==',' )
+	tInitial.m_iNode = iNode;
+	tInitial.m_iLeft = tNode.m_iLeft;
+	tInitial.m_iRight = tNode.m_iRight;
+
+	while ( m_dGatherStack.GetLength()>0 )
 	{
-		GatherArgRetTypes ( tNode.m_iLeft, dTypes );
-		GatherArgRetTypes ( tNode.m_iRight, dTypes );
-	} else
-	{
-		dTypes.Add ( tNode.m_eRetType );
+		StackNode_t & tCur = m_dGatherStack.Last();
+		const ExprNode_t & tNode = m_dNodes[tCur.m_iNode];
+		if ( tNode.m_iToken!=',' )
+		{
+			FUNCTOR.Collect ( tCur.m_iNode, tNode );
+			m_dGatherStack.Pop();
+			continue;
+		}
+		if ( tCur.m_iLeft==-1 && tCur.m_iRight==-1 )
+		{
+			m_dGatherStack.Pop();
+			continue;
+		}
+
+		int iChild = -1;
+		if ( tCur.m_iLeft>=0 )
+		{
+			iChild = tCur.m_iLeft;
+			tCur.m_iLeft = -1;
+		} else if ( tCur.m_iRight>=0 )
+		{
+			iChild = tCur.m_iRight;
+			tCur.m_iRight = -1;
+		}
+
+		assert ( iChild>=0 );
+		const ExprNode_t & tChild = m_dNodes[iChild];
+		StackNode_t & tNext = m_dGatherStack.Add();
+		tNext.m_iNode = iChild;
+		tNext.m_iLeft = tChild.m_iLeft;
+		tNext.m_iRight = tChild.m_iRight;
 	}
 }
 

@@ -10316,13 +10316,13 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	///////////////////////////////////////////////////////////
 
 	// connect to remote agents and query them, if required
-	if ( m_pProfile )
-		m_pProfile->Switch ( SPH_QSTATE_DIST_CONNECT );
-
 	CSphScopedPtr<SearchRequestBuilder_t> tReqBuilder ( NULL );
 	CSphScopedPtr<CSphRemoteAgentsController> tDistCtrl ( NULL );
 	if ( dAgents.GetLength() )
 	{
+		if ( m_pProfile )
+			m_pProfile->Switch ( SPH_QSTATE_DIST_CONNECT );
+
 		int iRetryCount = Min ( Max ( tFirst.m_iRetryCount, 0 ), MAX_RETRY_COUNT ); // paranoid clamp
 
 		tReqBuilder = new SearchRequestBuilder_t ( m_dQueries, iStart, iEnd, iDivideLimits );
@@ -10352,12 +10352,12 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// poll remote queries
 	///////////////////////
 
-	if ( m_pProfile )
-		m_pProfile->Switch ( SPH_QSTATE_DIST_WAIT );
-
 	bool bDistDone = false;
 	if ( dAgents.GetLength() )
 	{
+		if ( m_pProfile )
+			m_pProfile->Switch ( SPH_QSTATE_DIST_WAIT );
+
 		while ( !bDistDone )
 		{
 			// don't forget to check incoming replies after send was over

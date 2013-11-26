@@ -15223,6 +15223,9 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	tMatch.m_iWeight = tArgs.m_iIndexWeight;
 	tMatch.m_iTag = tCtx.m_dCalcFinal.GetLength() ? -1 : tArgs.m_iTag;
 
+	if ( pResult->m_pProfile )
+		pResult->m_pProfile->Switch ( SPH_QSTATE_FULLSCAN );
+
 	// optimize direct lookups by id
 	// run full scan with block and row filtering for everything else
 	if ( pQuery->m_dFilters.GetLength()==1
@@ -25231,8 +25234,9 @@ void CSphSource_Document::BuildRegularHits ( SphDocID_t uDocid, bool bPayload, b
 	BYTE * sWord = NULL;
 	BYTE sBuf [ 16+3*SPH_MAX_WORD_LEN ];
 
-	// FIELDEND_MASK at blended token stream should be set for HEAD token too
+	// FIELDEND_MASK at last token stream should be set for HEAD token too
 	int iBlendedHitsStart = -1;
+	int iLastTokenStart = -1;
 
 	// index words only
 	while ( ( m_iMaxHits==0 || m_tHits.m_dData.GetLength()+BUILD_REGULAR_HITS_COUNT<m_iMaxHits )
@@ -25241,6 +25245,7 @@ void CSphSource_Document::BuildRegularHits ( SphDocID_t uDocid, bool bPayload, b
 		m_pDict->SetApplyMorph ( m_pTokenizer->GetMorphFlag() );
 
 		int iLastBlendedStart = TrackBlendedStart ( m_pTokenizer, iBlendedHitsStart, m_tHits.Length() );
+		iLastTokenStart = m_tHits.Length();
 
 
 		if ( !bPayload )
@@ -25311,6 +25316,10 @@ void CSphSource_Document::BuildRegularHits ( SphDocID_t uDocid, bool bPayload, b
 			assert ( iBlendedHitsStart>=0 && iBlendedHitsStart<m_tHits.Length() );
 			CSphWordHit * pBlendedHit = const_cast < CSphWordHit * > ( m_tHits.First() + iBlendedHitsStart );
 			HITMAN::SetEndMarker ( &pBlendedHit->m_iWordPos );
+		} else if ( iLastTokenStart>=0 && iLastTokenStart+1<m_tHits.Length() )
+		{
+			CSphWordHit * pHit = const_cast < CSphWordHit * > ( m_tHits.First() + iLastTokenStart );
+			HITMAN::SetEndMarker ( &pHit->m_iWordPos );
 		}
 	}
 }

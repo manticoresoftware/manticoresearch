@@ -1220,10 +1220,11 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 
 		tSettings.m_bVerbose = bVerbose;
 
-		if ( tSettings.m_bIndexExactWords && !pDict->HasMorphology () )
+		bool bNeedExact = ( pDict->HasMorphology() || pDict->GetWordformsFileInfos().GetLength() );
+		if ( tSettings.m_bIndexExactWords && !bNeedExact )
 		{
 			tSettings.m_bIndexExactWords = false;
-			fprintf ( stdout, "WARNING: index '%s': no morphology, index_exact_words=1 has no effect, ignoring\n", sIndexName );
+			fprintf ( stdout, "WARNING: index '%s': no morphology or wordforms, index_exact_words=1 has no effect, ignoring\n", sIndexName );
 		}
 
 		if ( tDictSettings.m_bWordDict && pDict->HasMorphology() && tSettings.m_iMinPrefixLen && !tSettings.m_bIndexExactWords )

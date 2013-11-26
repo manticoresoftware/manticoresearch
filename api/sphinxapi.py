@@ -1182,7 +1182,7 @@ class SphinxClient:
 		self._socket = None
 	
 	def EscapeString(self, string):
-		return re.sub(r"([=\(\)|\-!@~\"&/\\\^\$\=])", r"\\\1", string)
+		return re.sub(r"([=\(\)|\-!@~\"&/\\\^\$\=\<])", r"\\\1", string)
 
 
 	def FlushAttributes(self):

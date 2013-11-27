@@ -592,17 +592,25 @@ AC_ARG_WITH([unixodbc],
 	AC_HELP_STRING([--with-unixodbc], [compile with UnixODBC support (default is autodetect)]),
 	[ac_cv_use_unixodbc=$withval], [ac_cv_use_unixodbc=yes]
 )
-
+dl_odbc=0
 AC_MSG_CHECKING([for UnixODBC])
 if test x$ac_cv_use_unixodbc = xyes; then
 	have_libodbc=no
+	FOOLIBS="$LIBS"
 	if test x$have_sql_h = xyes; then
 		AC_SEARCH_LIBS([SQLDriverConnect],[odbc iodbc],[have_libodbc=yes])
 	fi
 
 	if test x$have_libodbc = xyes; then
-		AC_MSG_RESULT([found])
+		if test x$sph_usedl == xyes ; then
+			AC_MSG_RESULT([runtime dynamic])
+			LIBS="$FOOLIBS"
+			dl_odbc=1
+		else
+			AC_MSG_RESULT([found])
+		fi
 		AC_DEFINE([USE_ODBC],1,[define to use ODBC library])
+		AC_DEFINE_UNQUOTED(DL_UNIXODBC,$dl_odbc,[Define to 1 if you want runtime load odbc/iodbc using dlopen])
 	else
 		AC_MSG_RESULT([not found])
 		AC_MSG_WARN([ODBC source support will NOT be available])

@@ -28753,6 +28753,197 @@ CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE *
 
 
 #if USE_ODBC
+#if DL_UNIXODBC
+// ODBC lib might be libodbc.so or libiodbc.so
+#define ODBC_NUM_FUNCS (13)
+
+/* Just a list of names - for c/p
+SQLFreeHandle
+SQLDisconnect
+SQLCloseCursor
+SQLGetDiagRec
+SQLSetEnvAttr
+SQLAllocHandle
+SQLFetch
+SQLExecDirect
+SQLNumResultCols
+SQLDescribeCol
+SQLBindCol
+SQLDrivers
+SQLDriverConnect
+*/
+
+#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC) || defined(__ECC) || defined(__GNUC__)
+
+// use non-standard compiler extension __typeof__
+// it allow to declare pointer to the function without using it's declaration
+typedef __typeof__ ( SQLFreeHandle ) *xSQLFreeHandle;
+typedef __typeof__ ( SQLDisconnect ) *xSQLDisconnect;
+typedef __typeof__ ( SQLCloseCursor ) *xSQLCloseCursor;
+typedef __typeof__ ( SQLGetDiagRec ) *xSQLGetDiagRec;
+typedef __typeof__ ( SQLSetEnvAttr ) *xSQLSetEnvAttr;
+typedef __typeof__ ( SQLAllocHandle ) *xSQLAllocHandle;
+typedef __typeof__ ( SQLFetch ) *xSQLFetch;
+typedef __typeof__ ( SQLExecDirect ) *xSQLExecDirect;
+typedef __typeof__ ( SQLNumResultCols ) *xSQLNumResultCols;
+typedef __typeof__ ( SQLDescribeCol ) *xSQLDescribeCol;
+typedef __typeof__ ( SQLBindCol ) *xSQLBindCol;
+typedef __typeof__ ( SQLDrivers ) *xSQLDrivers;
+typedef __typeof__ ( SQLDriverConnect ) *xSQLDriverConnect;
+
+#else // compilers which are not known about __typeof__ support
+// declarations below are directly copy-pasted from expat.h,
+// and then (*x...) is placed around the function names.
+// In mostly cases this code will not be used, and the declarations
+// from previous block will be used instead.
+#warning Be sure that the unixodbc function signatures are the same \
+as in sql.h and sqlext.h Correct the code below if this is not so.
+typedef SQLRETURN  SQL_API (*xSQLFreeHandle)(SQLSMALLINT HandleType, SQLHANDLE Handle) //NOLINT
+typedef SQLRETURN  SQL_API (*xSQLDisconnect)(SQLHDBC ConnectionHandle); //NOLINT
+typedef SQLRETURN  SQL_API (*xSQLCloseCursor)(SQLHSTMT StatementHandle); //NOLINT
+typedef SQLRETURN  SQL_API (*xSQLGetDiagRec)(SQLSMALLINT HandleType, SQLHANDLE Handle, //NOLINT
+                                     SQLSMALLINT RecNumber, SQLCHAR *Sqlstate, //NOLINT
+                                     SQLINTEGER *NativeError, SQLCHAR *MessageText, //NOLINT
+                                     SQLSMALLINT BufferLength, SQLSMALLINT *TextLength); //NOLINT
+typedef SQLRETURN  SQL_API (*xSQLSetEnvAttr)(SQLHENV EnvironmentHandle, //NOLINT
+                                     SQLINTEGER Attribute, SQLPOINTER Value, //NOLINT
+                                     SQLINTEGER StringLength); //NOLINT
+typedef SQLRETURN  SQL_API (*xSQLAllocHandle)(SQLSMALLINT HandleType, //NOLINT
+                                      SQLHANDLE InputHandle, SQLHANDLE *OutputHandle); //NOLINT
+typedef SQLRETURN  SQL_API (*xSQLFetch)(SQLHSTMT StatementHandle); //NOLINT
+typedef SQLRETURN  SQL_API (*xSQLExecDirect)(SQLHSTMT StatementHandle, //NOLINT
+                                     SQLCHAR *StatementText, SQLINTEGER TextLength); //NOLINT
+typedef SQLRETURN  SQL_API (*xSQLNumResultCols)(SQLHSTMT StatementHandle, //NOLINT
+                                        SQLSMALLINT *ColumnCount); //NOLINT
+typedef SQLRETURN  SQL_API (*xSQLDescribeCol)(SQLHSTMT StatementHandle, //NOLINT
+                                      SQLUSMALLINT ColumnNumber, SQLCHAR *ColumnName, //NOLINT
+                                      SQLSMALLINT BufferLength, SQLSMALLINT *NameLength, //NOLINT
+                                      SQLSMALLINT *DataType, SQLULEN *ColumnSize, //NOLINT
+                                      SQLSMALLINT *DecimalDigits, SQLSMALLINT *Nullable); //NOLINT
+typedef SQLRETURN  SQL_API (*xSQLBindCol)(SQLHSTMT StatementHandle, //NOLINT
+                                  SQLUSMALLINT ColumnNumber, SQLSMALLINT TargetType, //NOLINT
+                                  SQLPOINTER TargetValue, SQLLEN BufferLength, //NOLINT
+                                  SQLLEN *StrLen_or_Ind); //NOLINT
+// these two from sqlext.h
+typedef SQLRETURN SQL_API (*xSQLDrivers)( //NOLINT
+    SQLHENV            henv, //NOLINT
+    SQLUSMALLINT       fDirection, //NOLINT
+    SQLCHAR 		  *szDriverDesc, //NOLINT
+    SQLSMALLINT        cbDriverDescMax, //NOLINT
+    SQLSMALLINT 	  *pcbDriverDesc, //NOLINT
+    SQLCHAR 		  *szDriverAttributes, //NOLINT
+    SQLSMALLINT        cbDrvrAttrMax, //NOLINT
+    SQLSMALLINT 	  *pcbDrvrAttr); //NOLINT
+typedef SQLRETURN SQL_API (*xSQLDriverConnect)( //NOLINT
+    SQLHDBC            hdbc, //NOLINT
+    SQLHWND            hwnd, //NOLINT
+    SQLCHAR 		  *szConnStrIn, //NOLINT
+    SQLSMALLINT        cbConnStrIn, //NOLINT
+    SQLCHAR           *szConnStrOut, //NOLINT
+    SQLSMALLINT        cbConnStrOutMax, //NOLINT
+    SQLSMALLINT 	  *pcbConnStrOut, //NOLINT
+    SQLUSMALLINT       fDriverCompletion); //NOLINT
+#endif
+
+class CODBC : public CSphDynamicLibrary
+{
+	static const char* sFuncs[ODBC_NUM_FUNCS];
+	static void** pFuncs[ODBC_NUM_FUNCS];
+
+public:
+	bool Init()
+	{
+		if ( ( !CSphDynamicLibrary::Init ( "libodbc.so", true ) )
+			&& ( !CSphDynamicLibrary::Init ( "libiodbc.so", true ) ) )
+				return false;
+		if ( !LoadSymbols ( sFuncs, pFuncs, ODBC_NUM_FUNCS ) )
+			return false;
+		return true;
+	}
+	static void 	Stub()
+	{
+		sphLogDebug ( "Error! Odbc func is null!" );
+	}
+
+static xSQLFreeHandle m_pSQLFreeHandle;
+static xSQLDisconnect m_pSQLDisconnect;
+static xSQLCloseCursor m_pSQLCloseCursor;
+static xSQLGetDiagRec m_pSQLGetDiagRec;
+static xSQLSetEnvAttr m_pSQLSetEnvAttr;
+static xSQLAllocHandle m_pSQLAllocHandle;
+static xSQLFetch m_pSQLFetch;
+static xSQLExecDirect m_pSQLExecDirect;
+static xSQLNumResultCols m_pSQLNumResultCols;
+static xSQLDescribeCol m_pSQLDescribeCol;
+static xSQLBindCol m_pSQLBindCol;
+static xSQLDrivers m_pSQLDrivers;
+static xSQLDriverConnect m_pSQLDriverConnect;
+};
+
+#define sph_SQLFreeHandle (*CODBC::m_pSQLFreeHandle)
+#define sph_SQLDisconnect (*CODBC::m_pSQLDisconnect)
+#define sph_SQLCloseCursor (*CODBC::m_pSQLCloseCursor)
+#define sph_SQLGetDiagRec (*CODBC::m_pSQLGetDiagRec)
+#define sph_SQLSetEnvAttr (*CODBC::m_pSQLSetEnvAttr)
+#define sph_SQLAllocHandle (*CODBC::m_pSQLAllocHandle)
+#define sph_SQLFetch (*CODBC::m_pSQLFetch)
+#define sph_SQLExecDirect (*CODBC::m_pSQLExecDirect)
+#define sph_SQLNumResultCols (*CODBC::m_pSQLNumResultCols)
+#define sph_SQLDescribeCol (*CODBC::m_pSQLDescribeCol)
+#define sph_SQLBindCol (*CODBC::m_pSQLBindCol)
+#define sph_SQLDrivers (*CODBC::m_pSQLDrivers)
+#define sph_SQLDriverConnect (*CODBC::m_pSQLDriverConnect)
+
+const char* CODBC::sFuncs[] = {"SQLFreeHandle", "SQLDisconnect",
+	"SQLCloseCursor", "SQLGetDiagRec", "SQLSetEnvAttr", "SQLAllocHandle",
+	"SQLFetch", "SQLExecDirect", "SQLNumResultCols", "SQLDescribeCol",
+	"SQLBindCol", "SQLDrivers", "SQLDriverConnect" };
+void** CODBC::pFuncs[] = {(void**)&m_pSQLFreeHandle, (void**)&m_pSQLDisconnect,
+	(void**)&m_pSQLCloseCursor, (void**)&m_pSQLGetDiagRec, (void**)&m_pSQLSetEnvAttr,
+	(void**)&m_pSQLAllocHandle, (void**)&m_pSQLFetch, (void**)&m_pSQLExecDirect,
+	(void**)&m_pSQLNumResultCols, (void**)&m_pSQLDescribeCol, (void**)&m_pSQLBindCol,
+	(void**)&m_pSQLDrivers, (void**)&m_pSQLDriverConnect };
+
+xSQLFreeHandle CODBC::m_pSQLFreeHandle = (xSQLFreeHandle)CODBC::Stub;
+xSQLDisconnect CODBC::m_pSQLDisconnect = (xSQLDisconnect)CODBC::Stub;
+xSQLCloseCursor CODBC::m_pSQLCloseCursor = (xSQLCloseCursor)CODBC::Stub;
+xSQLGetDiagRec CODBC::m_pSQLGetDiagRec = (xSQLGetDiagRec)CODBC::Stub;
+xSQLSetEnvAttr CODBC::m_pSQLSetEnvAttr = (xSQLSetEnvAttr)CODBC::Stub;
+xSQLAllocHandle CODBC::m_pSQLAllocHandle = (xSQLAllocHandle)CODBC::Stub;
+xSQLFetch CODBC::m_pSQLFetch = (xSQLFetch)CODBC::Stub;
+xSQLExecDirect CODBC::m_pSQLExecDirect = (xSQLExecDirect)CODBC::Stub;
+xSQLNumResultCols CODBC::m_pSQLNumResultCols = (xSQLNumResultCols)CODBC::Stub;
+xSQLDescribeCol CODBC::m_pSQLDescribeCol = (xSQLDescribeCol)CODBC::Stub;
+xSQLBindCol CODBC::m_pSQLBindCol = (xSQLBindCol)CODBC::Stub;
+xSQLDrivers CODBC::m_pSQLDrivers = (xSQLDrivers)CODBC::Stub;
+xSQLDriverConnect CODBC::m_pSQLDriverConnect = (xSQLDriverConnect)CODBC::Stub;
+
+CODBC MyOdbcHolder;
+
+bool InitDynamicOdbc()
+{
+	return MyOdbcHolder.Init();
+}
+
+#else // !DL_UNIXODBC
+
+#define sph_SQLFreeHandle SQLFreeHandle
+#define sph_SQLDisconnect SQLDisconnect
+#define sph_SQLCloseCursor SQLCloseCursor
+#define sph_SQLGetDiagRec SQLGetDiagRec
+#define sph_SQLSetEnvAttr SQLSetEnvAttr
+#define sph_SQLAllocHandle SQLAllocHandle
+#define sph_SQLFetch SQLFetch
+#define sph_SQLExecDirect SQLExecDirect
+#define sph_SQLNumResultCols SQLNumResultCols
+#define sph_SQLDescribeCol SQLDescribeCol
+#define sph_SQLBindCol SQLBindCol
+#define sph_SQLDrivers SQLDrivers
+#define sph_SQLDriverConnect SQLDriverConnect
+#define InitDynamicOdbc() (true)
+
+#endif // DL_UNIXODBC
+
 
 CSphSourceParams_ODBC::CSphSourceParams_ODBC ()
 	: m_bWinAuth	( false )
@@ -28775,8 +28966,8 @@ void CSphSource_ODBC::SqlDismissResult ()
 {
 	if ( m_hStmt )
 	{
-		SQLCloseCursor ( m_hStmt );
-		SQLFreeHandle ( SQL_HANDLE_STMT, m_hStmt );
+		sph_SQLCloseCursor ( m_hStmt );
+		sph_SQLFreeHandle ( SQL_HANDLE_STMT, m_hStmt );
 		m_hStmt = NULL;
 	}
 }
@@ -28787,14 +28978,14 @@ void CSphSource_ODBC::SqlDismissResult ()
 
 bool CSphSource_ODBC::SqlQuery ( const char * sQuery )
 {
-	if ( SQLAllocHandle ( SQL_HANDLE_STMT, m_hDBC, &m_hStmt )==SQL_ERROR )
+	if ( sph_SQLAllocHandle ( SQL_HANDLE_STMT, m_hDBC, &m_hStmt )==SQL_ERROR )
 	{
 		if ( m_tParams.m_bPrintQueries )
 			fprintf ( stdout, "SQL-QUERY: %s: FAIL (SQLAllocHandle failed)\n", sQuery );
 		return false;
 	}
 
-	if ( SQLExecDirect ( m_hStmt, (SQLCHAR *)sQuery, SQL_NTS )==SQL_ERROR )
+	if ( sph_SQLExecDirect ( m_hStmt, (SQLCHAR *)sQuery, SQL_NTS )==SQL_ERROR )
 	{
 		GetSqlError ( SQL_HANDLE_STMT, m_hStmt );
 		if ( m_tParams.m_bPrintQueries )
@@ -28806,7 +28997,7 @@ bool CSphSource_ODBC::SqlQuery ( const char * sQuery )
 
 	SQLSMALLINT nCols = 0;
 	m_nResultCols = 0;
-	if ( SQLNumResultCols ( m_hStmt, &nCols )==SQL_ERROR )
+	if ( sph_SQLNumResultCols ( m_hStmt, &nCols )==SQL_ERROR )
 		return false;
 
 	m_nResultCols = nCols;
@@ -28823,7 +29014,7 @@ bool CSphSource_ODBC::SqlQuery ( const char * sQuery )
 		SQLULEN uColSize = 0;
 		SQLSMALLINT iNameLen = 0;
 		SQLSMALLINT iDataType = 0;
-		if ( SQLDescribeCol ( m_hStmt, (SQLUSMALLINT)(i+1), (SQLCHAR*)szColumnName,
+		if ( sph_SQLDescribeCol ( m_hStmt, (SQLUSMALLINT)(i+1), (SQLCHAR*)szColumnName,
 			MAX_NAME_LEN, &iNameLen, &iDataType, &uColSize, NULL, NULL )==SQL_ERROR )
 				return false;
 
@@ -28849,7 +29040,7 @@ bool CSphSource_ODBC::SqlQuery ( const char * sQuery )
 		tCol.m_bTruncated = false;
 		iTotalBuffer += iBuffLen;
 
-		if ( SQLBindCol ( m_hStmt, (SQLUSMALLINT)(i+1),
+		if ( sph_SQLBindCol ( m_hStmt, (SQLUSMALLINT)(i+1),
 			tCol.m_bUnicode ? SQL_UNICODE : SQL_C_CHAR,
 			tCol.m_bUnicode ? tCol.m_dRaw.Begin() : tCol.m_dContents.Begin(),
 			iBuffLen, &(tCol.m_iInd) )==SQL_ERROR )
@@ -28877,16 +29068,23 @@ const char * CSphSource_ODBC::SqlError ()
 
 bool CSphSource_ODBC::SqlConnect ()
 {
-	if ( SQLAllocHandle ( SQL_HANDLE_ENV, NULL, &m_hEnv )==SQL_ERROR )
+	if ( !InitDynamicOdbc() )
+	{
+		if ( m_tParams.m_bPrintQueries )
+			fprintf ( stdout, "SQL-CONNECT: FAIL (NO ODBC CLIENT LIB)\n" );
+		return false;
+	}
+
+	if ( sph_SQLAllocHandle ( SQL_HANDLE_ENV, NULL, &m_hEnv )==SQL_ERROR )
 	{
 		if ( m_tParams.m_bPrintQueries )
 			fprintf ( stdout, "SQL-CONNECT: FAIL\n" );
 		return false;
 	}
 
-	SQLSetEnvAttr ( m_hEnv, SQL_ATTR_ODBC_VERSION, (void*) SQL_OV_ODBC3, SQL_IS_INTEGER );
+	sph_SQLSetEnvAttr ( m_hEnv, SQL_ATTR_ODBC_VERSION, (void*) SQL_OV_ODBC3, SQL_IS_INTEGER );
 
-	if ( SQLAllocHandle ( SQL_HANDLE_DBC, m_hEnv, &m_hDBC )==SQL_ERROR )
+	if ( sph_SQLAllocHandle ( SQL_HANDLE_DBC, m_hEnv, &m_hDBC )==SQL_ERROR )
 	{
 		if ( m_tParams.m_bPrintQueries )
 			fprintf ( stdout, "SQL-CONNECT: FAIL\n" );
@@ -28897,7 +29095,7 @@ bool CSphSource_ODBC::SqlConnect ()
 
 	char szOutConn [2048];
 	SQLSMALLINT iOutConn = 0;
-	if ( SQLDriverConnect ( m_hDBC, NULL, (SQLTCHAR*) m_sOdbcDSN.cstr(), SQL_NTS,
+	if ( sph_SQLDriverConnect ( m_hDBC, NULL, (SQLTCHAR*) m_sOdbcDSN.cstr(), SQL_NTS,
 		(SQLCHAR*)szOutConn, sizeof(szOutConn), &iOutConn, SQL_DRIVER_NOPROMPT )==SQL_ERROR )
 	{
 		GetSqlError ( SQL_HANDLE_DBC, m_hDBC );
@@ -28918,16 +29116,16 @@ void CSphSource_ODBC::SqlDisconnect ()
 		fprintf ( stdout, "SQL-DISCONNECT\n" );
 
 	if ( m_hStmt!=NULL )
-		SQLFreeHandle ( SQL_HANDLE_STMT, m_hStmt );
+		sph_SQLFreeHandle ( SQL_HANDLE_STMT, m_hStmt );
 
 	if ( m_hDBC )
 	{
-		SQLDisconnect ( m_hDBC );
-		SQLFreeHandle ( SQL_HANDLE_DBC, m_hDBC );
+		sph_SQLDisconnect ( m_hDBC );
+		sph_SQLFreeHandle ( SQL_HANDLE_DBC, m_hDBC );
 	}
 
 	if ( m_hEnv )
-		SQLFreeHandle ( SQL_HANDLE_ENV, m_hEnv );
+		sph_SQLFreeHandle ( SQL_HANDLE_ENV, m_hEnv );
 }
 
 
@@ -28945,7 +29143,7 @@ bool CSphSource_ODBC::SqlFetchRow ()
 	if ( !m_hStmt )
 		return false;
 
-	SQLRETURN iRet = SQLFetch ( m_hStmt );
+	SQLRETURN iRet = sph_SQLFetch ( m_hStmt );
 	if ( iRet==SQL_ERROR || iRet==SQL_INVALID_HANDLE || iRet==SQL_NO_DATA )
 	{
 		GetSqlError ( SQL_HANDLE_STMT, m_hStmt );
@@ -29138,7 +29336,7 @@ void CSphSource_ODBC::GetSqlError ( SQLSMALLINT iHandleType, SQLHANDLE hHandle )
 	char szMessageText[1024] = "";
 	SQLINTEGER iError;
 	SQLSMALLINT iLen;
-	SQLGetDiagRec ( iHandleType, hHandle, 1, (SQLCHAR*)szState, &iError, (SQLCHAR*)szMessageText, 1024, &iLen );
+	sph_SQLGetDiagRec ( iHandleType, hHandle, 1, (SQLCHAR*)szState, &iError, (SQLCHAR*)szMessageText, 1024, &iLen );
 	m_sError = szMessageText;
 }
 
@@ -29146,6 +29344,9 @@ void CSphSource_ODBC::GetSqlError ( SQLSMALLINT iHandleType, SQLHANDLE hHandle )
 
 void CSphSource_MSSQL::OdbcPostConnect ()
 {
+	if ( !m_sOdbcDSN.IsEmpty() )
+		return;
+
 	const int MAX_LEN = 1024;
 	char szDriver[MAX_LEN];
 	char szDriverAttrs[MAX_LEN];
@@ -29156,7 +29357,7 @@ void CSphSource_MSSQL::OdbcPostConnect ()
 	CSphString sDriver;
 	for ( ;; )
 	{
-		SQLRETURN iRet = SQLDrivers ( m_hEnv, iDir, (SQLCHAR*)szDriver, MAX_LEN, &iDescLen, (SQLCHAR*)szDriverAttrs, MAX_LEN, &iAttrLen );
+		SQLRETURN iRet = sph_SQLDrivers ( m_hEnv, iDir, (SQLCHAR*)szDriver, MAX_LEN, &iDescLen, (SQLCHAR*)szDriverAttrs, MAX_LEN, &iAttrLen );
 		if ( iRet==SQL_NO_DATA )
 			break;
 
@@ -29172,22 +29373,19 @@ void CSphSource_MSSQL::OdbcPostConnect ()
 	if ( sDriver.IsEmpty() )
 		sDriver = "SQL Server";
 
-	if ( m_sOdbcDSN.IsEmpty() )
+	if ( m_bWinAuth && m_tParams.m_sUser.IsEmpty () )
 	{
-		if ( m_bWinAuth && m_tParams.m_sUser.IsEmpty () )
-		{
-			m_sOdbcDSN.SetSprintf ( "DRIVER={%s};SERVER={%s};Database={%s};Trusted_Connection=yes",
-				sDriver.cstr (), m_tParams.m_sHost.cstr (), m_tParams.m_sDB.cstr () );
+		m_sOdbcDSN.SetSprintf ( "DRIVER={%s};SERVER={%s};Database={%s};Trusted_Connection=yes",
+			sDriver.cstr (), m_tParams.m_sHost.cstr (), m_tParams.m_sDB.cstr () );
 
-		} else if ( m_bWinAuth )
-		{
-			m_sOdbcDSN.SetSprintf ( "DRIVER={%s};SERVER={%s};UID={%s};PWD={%s};Database={%s};Trusted_Connection=yes",
-				sDriver.cstr (), m_tParams.m_sHost.cstr (), m_tParams.m_sUser.cstr (), m_tParams.m_sPass.cstr (), m_tParams.m_sDB.cstr () );
-		} else
-		{
-			m_sOdbcDSN.SetSprintf ( "DRIVER={%s};SERVER={%s};UID={%s};PWD={%s};Database={%s}",
-				sDriver.cstr (), m_tParams.m_sHost.cstr (), m_tParams.m_sUser.cstr (), m_tParams.m_sPass.cstr (), m_tParams.m_sDB.cstr () );
-		}
+	} else if ( m_bWinAuth )
+	{
+		m_sOdbcDSN.SetSprintf ( "DRIVER={%s};SERVER={%s};UID={%s};PWD={%s};Database={%s};Trusted_Connection=yes",
+			sDriver.cstr (), m_tParams.m_sHost.cstr (), m_tParams.m_sUser.cstr (), m_tParams.m_sPass.cstr (), m_tParams.m_sDB.cstr () );
+	} else
+	{
+		m_sOdbcDSN.SetSprintf ( "DRIVER={%s};SERVER={%s};UID={%s};PWD={%s};Database={%s}",
+			sDriver.cstr (), m_tParams.m_sHost.cstr (), m_tParams.m_sUser.cstr (), m_tParams.m_sPass.cstr (), m_tParams.m_sDB.cstr () );
 	}
 }
 

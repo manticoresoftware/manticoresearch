@@ -8455,11 +8455,12 @@ else
 
 fi
 
-
+dl_odbc=0
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for UnixODBC" >&5
 $as_echo_n "checking for UnixODBC... " >&6; }
 if test x$ac_cv_use_unixodbc = xyes; then
 	have_libodbc=no
+	FOOLIBS="$LIBS"
 	if test x$have_sql_h = xyes; then
 		{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing SQLDriverConnect" >&5
 $as_echo_n "checking for library containing SQLDriverConnect... " >&6; }
@@ -8520,10 +8521,22 @@ fi
 	fi
 
 	if test x$have_libodbc = xyes; then
-		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: found" >&5
+		if test x$sph_usedl == xyes ; then
+			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: runtime dynamic" >&5
+$as_echo "runtime dynamic" >&6; }
+			LIBS="$FOOLIBS"
+			dl_odbc=1
+		else
+			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: found" >&5
 $as_echo "found" >&6; }
+		fi
 
 $as_echo "#define USE_ODBC 1" >>confdefs.h
+
+
+cat >>confdefs.h <<_ACEOF
+#define DL_UNIXODBC $dl_odbc
+_ACEOF
 
 	else
 		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: not found" >&5

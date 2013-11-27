@@ -4,7 +4,7 @@
 <name>bitfields vs inline docinfo vs merge</name>
 
 <requires>
-<id32/> <!-- otherwise, 'DESC rt' mismatches between builds -->
+<id64/> <!-- otherwise, 'DESC rt' mismatches between builds -->
 </requires>
 
 <config>
@@ -24,8 +24,8 @@ source test1
 	type				= mysql
 	<sql_settings/>
 	sql_query_pre 		= set time_zone='+0:00'
-	sql_query			= select id, content, status, category, kind, UNIX_TIMESTAMP(timestamp) as date, class, price, code, surface from test_table WHERE id=100 or id=101
-	sql_attr_uint		= status:3
+	sql_query			= select id, content, status st, category, kind, UNIX_TIMESTAMP(timestamp) as date, class, price, code, surface from test_table WHERE id=100 or id=101
+	sql_attr_uint		= st:3
 	sql_attr_uint		= category:2
 	sql_attr_uint		= kind:8
 	sql_attr_timestamp	= date
@@ -40,8 +40,8 @@ source test2
 	type				= mysql
 	<sql_settings/>
 	sql_query_pre 		= set time_zone='+0:00'
-	sql_query			= select id, content, status, category, kind, UNIX_TIMESTAMP(timestamp) as date, class, price, code, surface from test_table WHERE id=102 or id=103
-	sql_attr_uint		= status:3
+	sql_query			= select id, content, status st, category, kind, UNIX_TIMESTAMP(timestamp) as date, class, price, code, surface from test_table WHERE id=102 or id=103
+	sql_attr_uint		= st:3
 	sql_attr_uint		= category:2
 	sql_attr_uint		= kind:8
 	sql_attr_timestamp	= date

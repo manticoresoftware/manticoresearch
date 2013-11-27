@@ -356,15 +356,24 @@ AC_ARG_WITH([static-pgsql],
 AC_MSG_CHECKING([whether to compile with PostgreSQL support])
 if test x$ac_cv_use_static_pgsql != xno -o x$ac_cv_use_pgsql != xno
 then
+	dl_pgsql=0
 	if test x$ac_cv_use_static_pgsql != xno ; then
 		AC_MSG_RESULT([static])
 		AC_CHECK_PGSQL([$ac_cv_use_static_pgsql])
 		PGSQL_LIBS=`echo $PGSQL_LIBS | sed -e "sX-lpqX$PGSQL_PKGLIBDIR/libpq.aXg"`
 	else
-		AC_MSG_RESULT([dynamic])
-		AC_CHECK_PGSQL([ac_cv_use_pgsql])
+		if test x$sph_usedl == xyes ; then
+			AC_MSG_RESULT([runtime dynamic])
+			AC_CHECK_PGSQL([ac_cv_use_pgsql])
+			PGSQL_LIBS=""
+			dl_pgsql=1
+		else
+			AC_MSG_RESULT([dynamic])
+			AC_CHECK_PGSQL([ac_cv_use_pgsql])
+		fi
 	fi
     AC_DEFINE(USE_PGSQL,1,[Define to 1 if you want to compile with PostgreSQL support])
+	AC_DEFINE_UNQUOTED(DL_PGSQL,$dl_pgsql,[Define to 1 if runtime load PosgreSQL using dlopen])
     AC_SUBST([PGSQL_LIBS])
     AC_SUBST([PGSQL_CFLAGS])
 else

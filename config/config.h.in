@@ -9,6 +9,9 @@
 /* Define to 1 if you want runtime load mysql using dlopen */
 #undef DL_MYSQL
 
+/* Define to 1 if runtime load PosgreSQL using dlopen */
+#undef DL_PGSQL
+
 /* Define to 1 if you have the `backtrace' function. */
 #undef HAVE_BACKTRACE
 

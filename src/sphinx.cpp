@@ -27066,6 +27066,175 @@ bool CSphSource_MySQL::Setup ( const CSphSourceParams_MySQL & tParams )
 /////////////////////////////////////////////////////////////////////////////
 
 #if USE_PGSQL
+#if DL_PGSQL
+#define POSGRESQL_LIB "libpq.so"
+#define POSTRESQL_NUM_FUNCS (12)
+
+/* Just a list of names - for c/p
+
+PQgetvalue
+PQclear
+PQsetdbLogin
+PQstatus
+PQsetClientEncoding
+PQexec
+PQresultStatus
+PQntuples
+PQfname
+PQnfields
+PQfinish
+PQerrorMessage
+*/
+
+#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC) || defined(__ECC) || defined(__GNUC__)
+
+// use non-standard compiler extension __typeof__
+// it allow to declare pointer to the function without using it's declaration
+typedef __typeof__ ( PQgetvalue ) *xPQgetvalue;
+typedef __typeof__ ( PQclear ) *xPQclear;
+typedef __typeof__ ( PQsetdbLogin ) *xPQsetdbLogin;
+typedef __typeof__ ( PQstatus ) *xPQstatus;
+typedef __typeof__ ( PQsetClientEncoding ) *xPQsetClientEncoding;
+typedef __typeof__ ( PQexec ) *xPQexec;
+typedef __typeof__ ( PQresultStatus ) *xPQresultStatus;
+typedef __typeof__ ( PQntuples ) *xPQntuples;
+typedef __typeof__ ( PQfname ) *xPQfname;
+typedef __typeof__ ( PQnfields ) *xPQnfields;
+typedef __typeof__ ( PQfinish ) *xPQfinish;
+typedef __typeof__ ( PQerrorMessage ) *xPQerrorMessage;
+
+#else // compilers which are not known about __typeof__ support
+// declarations below are directly copy-pasted from libpq-fe.h,
+// and then (*x...) is placed around the function names.
+// In mostly cases this code will not be used, and the declarations
+// from previous block will be used instead.
+#warning Be sure that the posgresql function signatures are the same \
+as in libpq-fe.h. Correct the code below if this is not so.
+
+typedef char* (*xPQgetvalue)(const PGresult *res, int tup_num, int field_num); //NOLINT
+typedef void (*xPQclear)(PGresult *res); //NOLINT
+typedef PGconn *(*xPQsetdbLogin)(const char *pghost, const char *pgport, //NOLINT
+			 const char *pgoptions, const char *pgtty, //NOLINT
+			 const char *dbName, //NOLINT
+			 const char *login, const char *pwd); //NOLINT
+typedef ConnStatusType (*xPQstatus)(const PGconn *conn); //NOLINT
+typedef int	(*xPQsetClientEncoding)(PGconn *conn, const char *encoding); //NOLINT
+typedef PGresult *(*xPQexec)(PGconn *conn, const char *query); //NOLINT
+typedef ExecStatusType (*xPQresultStatus)(const PGresult *res); //NOLINT
+typedef int	(*xPQntuples)(const PGresult *res); //NOLINT
+typedef char *(*xPQfname)(const PGresult *res, int field_num); //NOLINT
+typedef int	(*xPQnfields)(const PGresult *res); //NOLINT
+typedef void (*xPQfinish)(PGconn *conn); //NOLINT
+typedef char *(*xPQerrorMessage)(const PGconn *conn); //NOLINT
+#endif
+
+class CPosgresql : public CSphDynamicLibrary
+{
+	static const char* sFuncs[POSTRESQL_NUM_FUNCS];
+	static void** pFuncs[POSTRESQL_NUM_FUNCS];
+
+public:
+	bool Init()
+	{
+		if ( !CSphDynamicLibrary::Init ( POSGRESQL_LIB, true ) )
+			return false;
+		if ( !LoadSymbols ( sFuncs, pFuncs, POSTRESQL_NUM_FUNCS ) )
+			return false;
+		return true;
+	}
+	static void 	Stub()
+	{
+		sphLogDebug ( "Error! Posgresql func is null!" );
+	}
+
+	static xPQgetvalue m_pPQgetvalue;
+	static xPQclear m_pPQclear;
+	static xPQsetdbLogin m_pPQsetdbLogin;
+	static xPQstatus m_pPQstatus;
+	static xPQsetClientEncoding m_pPQsetClientEncoding;
+	static xPQexec m_pPQexec;
+	static xPQresultStatus m_pPQresultStatus;
+	static xPQntuples m_pPQntuples;
+	static xPQfname m_pPQfname;
+	static xPQnfields m_pPQnfields;
+	static xPQfinish m_pPQfinish;
+	static xPQerrorMessage m_pPQerrorMessage;
+};
+
+#define sph_PQgetvalue (*CPosgresql::m_pPQgetvalue)
+#define sph_PQclear (*CPosgresql::m_pPQclear)
+#define sph_PQsetdbLogin (*CPosgresql::m_pPQsetdbLogin)
+#define sph_PQstatus (*CPosgresql::m_pPQstatus)
+#define sph_PQsetClientEncoding (*CPosgresql::m_pPQsetClientEncoding)
+#define sph_PQexec (*CPosgresql::m_pPQexec)
+#define sph_PQresultStatus (*CPosgresql::m_pPQresultStatus)
+#define sph_PQntuples (*CPosgresql::m_pPQntuples)
+#define sph_PQfname (*CPosgresql::m_pPQfname)
+#define sph_PQnfields (*CPosgresql::m_pPQnfields)
+#define sph_PQfinish (*CPosgresql::m_pPQfinish)
+#define sph_PQerrorMessage (*CPosgresql::m_pPQerrorMessage)
+
+const char* CPosgresql::sFuncs[POSTRESQL_NUM_FUNCS] = {"PQgetvalue", "PQclear",
+	"PQsetdbLogin", "PQstatus", "PQsetClientEncoding", "PQexec",
+	"PQresultStatus", "PQntuples", "PQfname", "PQnfields",
+	"PQfinish", "PQerrorMessage" };
+void** CPosgresql::pFuncs[] = {(void**)&m_pPQgetvalue, (void**)&m_pPQclear,
+	(void**)&m_pPQsetdbLogin, (void**)&m_pPQstatus, (void**)&m_pPQsetClientEncoding,
+	(void**)&m_pPQexec, (void**)&m_pPQresultStatus, (void**)&m_pPQntuples,
+	(void**)&m_pPQfname, (void**)&m_pPQnfields, (void**)&m_pPQfinish,
+	(void**)&m_pPQerrorMessage};
+/*
+xPQgetvalue PQgetvalue
+xPQclear PQclear
+xPQsetdbLogin PQsetdbLogin
+xPQstatus PQstatus
+xPQsetClientEncoding PQsetClientEncoding
+xPQexec PQexec
+xPQresultStatus PQresultStatus
+xPQntuples PQntuples
+xPQfname PQfname
+xPQnfields PQnfields
+xPQfinish PQfinish
+xPQerrorMessage PQerrorMessage
+*/
+
+xPQgetvalue CPosgresql::m_pPQgetvalue = (xPQgetvalue)CPosgresql::Stub;
+xPQclear CPosgresql::m_pPQclear = (xPQclear)CPosgresql::Stub;
+xPQsetdbLogin CPosgresql::m_pPQsetdbLogin = (xPQsetdbLogin)CPosgresql::Stub;
+xPQstatus CPosgresql::m_pPQstatus = (xPQstatus)CPosgresql::Stub;
+xPQsetClientEncoding CPosgresql::m_pPQsetClientEncoding = (xPQsetClientEncoding)CPosgresql::Stub;
+xPQexec CPosgresql::m_pPQexec = (xPQexec)CPosgresql::Stub;
+xPQresultStatus CPosgresql::m_pPQresultStatus = (xPQresultStatus)CPosgresql::Stub;
+xPQntuples CPosgresql::m_pPQntuples = (xPQntuples)CPosgresql::Stub;
+xPQfname CPosgresql::m_pPQfname = (xPQfname)CPosgresql::Stub;
+xPQnfields CPosgresql::m_pPQnfields = (xPQnfields)CPosgresql::Stub;
+xPQfinish CPosgresql::m_pPQfinish = (xPQfinish)CPosgresql::Stub;
+xPQerrorMessage CPosgresql::m_pPQerrorMessage = (xPQerrorMessage)CPosgresql::Stub;
+
+CPosgresql MyPosgreSqlHolder;
+
+bool InitDynamicPosgresql()
+{
+	return MyPosgreSqlHolder.Init();
+}
+
+#else // !DL_PGSQL
+
+#define sph_PQgetvalue PQgetvalue
+#define sph_PQclear PQclear
+#define sph_PQsetdbLogin PQsetdbLogin
+#define sph_PQstatus PQstatus
+#define sph_PQsetClientEncoding PQsetClientEncoding
+#define sph_PQexec PQexec
+#define sph_PQresultStatus PQresultStatus
+#define sph_PQntuples PQntuples
+#define sph_PQfname PQfname
+#define sph_PQnfields PQnfields
+#define sph_PQfinish PQfinish
+#define sph_PQerrorMessage PQerrorMessage
+#define InitDynamicPosgresql() (true)
+
+#endif // DL_PGSQL
 
 CSphSourceParams_PgSQL::CSphSourceParams_PgSQL ()
 {
@@ -27091,7 +27260,7 @@ bool CSphSource_PgSQL::SqlIsError ()
 
 const char * CSphSource_PgSQL::SqlError ()
 {
-	return PQerrorMessage ( m_tPgDriver );
+	return sph_PQerrorMessage ( m_tPgDriver );
 }
 
 
@@ -27139,12 +27308,19 @@ bool CSphSource_PgSQL::IterateStart ( CSphString & sError )
 
 bool CSphSource_PgSQL::SqlConnect ()
 {
+	if ( !InitDynamicPosgresql() )
+	{
+		if ( m_tParams.m_bPrintQueries )
+			fprintf ( stdout, "SQL-CONNECT: FAIL (NO POSGRES CLIENT LIB)\n" );
+		return false;
+	}
+
 	char sPort[64];
 	snprintf ( sPort, sizeof(sPort), "%d", m_tParams.m_iPort );
-	m_tPgDriver = PQsetdbLogin ( m_tParams.m_sHost.cstr(), sPort, NULL, NULL,
+	m_tPgDriver = sph_PQsetdbLogin ( m_tParams.m_sHost.cstr(), sPort, NULL, NULL,
 		m_tParams.m_sDB.cstr(), m_tParams.m_sUser.cstr(), m_tParams.m_sPass.cstr() );
 
-	if ( PQstatus ( m_tPgDriver )==CONNECTION_BAD )
+	if ( sph_PQstatus ( m_tPgDriver )==CONNECTION_BAD )
 	{
 		if ( m_tParams.m_bPrintQueries )
 			fprintf ( stdout, "SQL-CONNECT: FAIL\n" );
@@ -27153,7 +27329,7 @@ bool CSphSource_PgSQL::SqlConnect ()
 
 	// set client encoding
 	if ( !m_sPgClientEncoding.IsEmpty() )
-		if ( -1==PQsetClientEncoding ( m_tPgDriver, m_sPgClientEncoding.cstr() ) )
+		if ( -1==sph_PQsetClientEncoding ( m_tPgDriver, m_sPgClientEncoding.cstr() ) )
 	{
 		SqlDisconnect ();
 		if ( m_tParams.m_bPrintQueries )
@@ -27172,7 +27348,7 @@ void CSphSource_PgSQL::SqlDisconnect ()
 	if ( m_tParams.m_bPrintQueries )
 		fprintf ( stdout, "SQL-DISCONNECT\n" );
 
-	PQfinish ( m_tPgDriver );
+	sph_PQfinish ( m_tPgDriver );
 }
 
 
@@ -27181,9 +27357,9 @@ bool CSphSource_PgSQL::SqlQuery ( const char * sQuery )
 	m_iPgRow = -1;
 	m_iPgRows = 0;
 
-	m_pPgResult = PQexec ( m_tPgDriver, sQuery );
+	m_pPgResult = sph_PQexec ( m_tPgDriver, sQuery );
 
-	ExecStatusType eRes = PQresultStatus ( m_pPgResult );
+	ExecStatusType eRes = sph_PQresultStatus ( m_pPgResult );
 	if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
 	{
 		if ( m_tParams.m_bPrintQueries )
@@ -27193,7 +27369,7 @@ bool CSphSource_PgSQL::SqlQuery ( const char * sQuery )
 	if ( m_tParams.m_bPrintQueries )
 		fprintf ( stdout, "SQL-QUERY: %s: ok\n", sQuery );
 
-	m_iPgRows = PQntuples ( m_pPgResult );
+	m_iPgRows = sph_PQntuples ( m_pPgResult );
 	return true;
 }
 
@@ -27203,7 +27379,7 @@ void CSphSource_PgSQL::SqlDismissResult ()
 	if ( !m_pPgResult )
 		return;
 
-	PQclear ( m_pPgResult );
+	sph_PQclear ( m_pPgResult );
 	m_pPgResult = NULL;
 }
 
@@ -27213,7 +27389,7 @@ int CSphSource_PgSQL::SqlNumFields ()
 	if ( !m_pPgResult )
 		return -1;
 
-	return PQnfields ( m_pPgResult );
+	return sph_PQnfields ( m_pPgResult );
 }
 
 
@@ -27222,7 +27398,7 @@ const char * CSphSource_PgSQL::SqlColumn ( int iIndex )
 	if ( !m_pPgResult )
 		return NULL;
 
-	const char * szValue = PQgetvalue ( m_pPgResult, m_iPgRow, iIndex );
+	const char * szValue = sph_PQgetvalue ( m_pPgResult, m_iPgRow, iIndex );
 	if ( m_dIsColumnBool.GetLength() && m_dIsColumnBool[iIndex] && szValue[0]=='t' && !szValue[1] )
 		return "1";
 
@@ -27235,7 +27411,7 @@ const char * CSphSource_PgSQL::SqlFieldName ( int iIndex )
 	if ( !m_pPgResult )
 		return NULL;
 
-	return PQfname ( m_pPgResult, iIndex );
+	return sph_PQfname ( m_pPgResult, iIndex );
 }
 
 

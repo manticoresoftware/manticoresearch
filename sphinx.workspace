@@ -8,10 +8,7 @@
 		<Project filename="codeblocks/indextool.cbp">
 			<Depends filename="codeblocks/libsphinx.cbp" />
 		</Project>
-		<Project filename="codeblocks/search.cbp">
-			<Depends filename="codeblocks/libsphinx.cbp" />
-		</Project>
-		<Project filename="codeblocks/searchd.cbp" active="1">
+		<Project filename="codeblocks/searchd.cbp">
 			<Depends filename="codeblocks/libsphinx.cbp" />
 		</Project>
 		<Project filename="codeblocks/spelldump.cbp">

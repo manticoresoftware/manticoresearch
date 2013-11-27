@@ -6128,15 +6128,15 @@ bool PluginLoadFunctionSymbols ( UdFunc_t & tFunc, const char * szLib, void * pH
 bool PluginLoadRankerSymbols ( UdRanker_t & tRanker, const char * szLib, void * pHandle, const CSphString & sRanker, CSphString & sError )
 {
 	CSphString sTmp;
-	tRanker.m_tFuncs.m_fnInit = (UdrInit_fn) dlsym ( pHandle, sTmp.SetSprintf ( "%s_rs_init", sRanker.cstr() ).cstr() );
-	tRanker.m_tFuncs.m_fnUpdate = (UdrUpdate_fn) dlsym ( pHandle, sTmp.SetSprintf ( "%s_rs_update", sRanker.cstr() ).cstr() );
-	tRanker.m_tFuncs.m_fnFinalize = (UdrFinalize_fn) dlsym ( pHandle, sTmp.SetSprintf ( "%s_rs_finalize", sRanker.cstr() ).cstr() );
-	tRanker.m_tFuncs.m_fnDeinit = (UdrDeinit_fn) dlsym ( pHandle, sTmp.SetSprintf ( "%s_rs_deinit", sRanker.cstr() ).cstr() );
+	tRanker.m_tFuncs.m_fnInit = (UdrInit_fn) dlsym ( pHandle, sTmp.SetSprintf ( "%s_init", sRanker.cstr() ).cstr() );
+	tRanker.m_tFuncs.m_fnUpdate = (UdrUpdate_fn) dlsym ( pHandle, sTmp.SetSprintf ( "%s_update", sRanker.cstr() ).cstr() );
+	tRanker.m_tFuncs.m_fnFinalize = (UdrFinalize_fn) dlsym ( pHandle, sTmp.SetSprintf ( "%s_finalize", sRanker.cstr() ).cstr() );
+	tRanker.m_tFuncs.m_fnDeinit = (UdrDeinit_fn) dlsym ( pHandle, sTmp.SetSprintf ( "%s_deinit", sRanker.cstr() ).cstr() );
 
-	// _rs_finalize is the only mandatory symbol
+	// _finalize is the only mandatory symbol
 	if ( !tRanker.m_tFuncs.m_fnFinalize )
 	{
-		sError.SetSprintf ( "symbol '%s%s' not found in '%s'", sRanker.cstr(), "_rs_finalize", szLib );
+		sError.SetSprintf ( "symbol '%s%s' not found in '%s'", sRanker.cstr(), "_finalize", szLib );
 		return false;
 	}
 

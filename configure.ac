@@ -146,14 +146,35 @@ SPHINX_CHECK_DEFINE(F_SETLKW,fcntl.h)
 # check for dlopen
 # FIXME! technically, only needed in searchd
 # but as UDF manager is curently in libsphinx, we link everything
-AC_CHECK_LIB(dl,dlopen)
+AC_SEARCH_LIBS([dlopen],[dl dld],[],[])
 AC_CHECK_FUNCS(dlopen dlerror)
 
 dnl --------------------------------------------------------------------------
 
 SPHINX_CONFIGURE_PART([configuring Sphinx])
 
-dnl ---
+dnl -----------
+dnl Whether we use runtime dlopen for loading dynamic external libs like mysql, posgres, etc.
+dnl instead of hard linking on build.
+
+AC_MSG_CHECKING([Whether to use dl lib to load mysql, posgres and other libs])
+sph_usedl=no
+AC_ARG_ENABLE([dl],
+    [  --enable-dl             dynamically load the libs like mysql, posgresql and may be others instead of linking them with binary during the build.],
+    [ac_cv_use_dl_libs=$enableval])
+
+if test x$ac_cv_use_dl_libs == xyes ; then
+	if test x$ac_cv_func_dlopen == xyes ; then
+	    AC_MSG_RESULT([yes])
+		sph_usedl=yes
+	else
+		AC_MSG_RESULT([not possible (no dlopen)])
+	fi
+else
+    AC_MSG_RESULT([no])
+fi
+
+dnl --- 
 
 # check for pthreads
 

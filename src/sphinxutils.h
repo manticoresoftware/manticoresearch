@@ -241,6 +241,33 @@ bool sphDetectChinese ( const BYTE * szBuffer, int iLength );
 /// returns ranker name as string
 const char * sphGetRankerName ( ESphRankMode eRanker );
 
+class CSphDynamicLibrary : public ISphNoncopyable
+{
+	bool		m_bReady; // whether the lib is valid or not
+	void *		m_pLibrary; // internal handle
+
+public:
+	CSphDynamicLibrary()
+		: m_bReady ( false )
+		, m_pLibrary ( NULL )
+		, m_sError ("")
+		{}
+	virtual ~CSphDynamicLibrary()
+	{}
+
+	bool		Init ( const char* sPath, bool bGlobal=true );
+	bool		LoadSymbol ( const char* sName, void** ppFunc );
+	bool		LoadSymbols ( const char** sNames, void*** pppFuncs, int iNum );
+
+public:
+	CSphString	m_sError;
+
+private:
+	void		FillError ( const char* sMessage=NULL );
+};
+
+
+
 #endif // _sphinxutils_
 
 //

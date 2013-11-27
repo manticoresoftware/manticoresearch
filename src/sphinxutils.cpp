@@ -35,6 +35,15 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <glob.h>
+
+#ifdef HAVE_DLOPEN
+#include <dlfcn.h>
+#endif // HAVE_DLOPEN
+
+#ifndef HAVE_DLERROR
+#define dlerror() ""
+#endif // HAVE_DLERROR
+
 #endif
 
 //////////////////////////////////////////////////////////////////////////
@@ -2285,6 +2294,88 @@ const char * sphGetRankerName ( ESphRankMode eRanker )
 
 	return g_dRankerNames[eRanker];
 }
+
+void CSphDynamicLibrary::FillError ( const char* sMessage )
+{
+	const char* sDlerror = dlerror();
+	if ( sMessage )
+		m_sError.SetSprintf ( "%s: %s", sMessage, sDlerror ? sDlerror : "(null)" );
+	else
+		m_sError.SetSprintf ( "%s", sDlerror ? sDlerror : "(null)" );
+}
+
+bool CSphDynamicLibrary::Init ( const char* sPath, bool bGlobal )
+{
+#if HAVE_DLOPEN
+	if ( m_pLibrary )
+		return true;
+	int iFlags = bGlobal?(RTLD_NOW | RTLD_GLOBAL):(RTLD_LAZY|RTLD_LOCAL);
+	m_pLibrary = dlopen ( sPath, iFlags );
+	if ( !m_pLibrary )
+	{
+		FillError ( "dlopen() failed" );
+		return false;
+	}
+	sphLogDebug ( "dlopen(%s)=%p", sPath, m_pLibrary );
+	m_bReady = true;
+	return m_bReady;
+#else
+	return false;
+#endif
+}
+bool CSphDynamicLibrary::LoadSymbol ( const char* sName, void** ppFunc )
+{
+#if HAVE_DLOPEN
+	if ( !m_pLibrary )
+		return false;
+
+	if ( !m_bReady )
+		return false;
+
+	void* pResult = dlsym ( m_pLibrary, sName );
+	if ( !pResult )
+	{
+		FillError ( "Symbol not found" );
+		return false;
+	}
+	*ppFunc = pResult;
+	return true;
+#else
+	return false;
+#endif
+}
+
+bool CSphDynamicLibrary::LoadSymbols ( const char** sNames, void*** pppFuncs, int iNum )
+{
+#if HAVE_DLOPEN
+	if ( !m_pLibrary )
+		return false;
+
+	if ( !m_bReady )
+		return false;
+
+	for ( int i=0; i<iNum; ++i )
+	{
+		void* pResult = dlsym ( m_pLibrary, sNames[i] );
+		if ( !pResult )
+		{
+			FillError ( "Symbol not found" );
+			return false;
+		}
+		// yes, it is void*** - triple pointer.
+		// void* is the legacy pointer (to the function, in this case).
+		// void** is the variable where we store the pointer to the function.
+		// that is to cast all different pointers to legacy void*.
+		// we put the addresses to these variables into array, and it adds
+		// one more level of indirection. void*** actually is void**[]
+		*pppFuncs[i] = pResult;
+	}
+
+	return true;
+#else
+	return false;
+#endif
+};
 
 
 //

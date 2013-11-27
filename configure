@@ -727,6 +727,7 @@ enable_option_checking
 enable_maintainer_mode
 with_debug
 enable_dependency_tracking
+enable_dl
 with_mysql
 with_static_mysql
 with_mysql_includes
@@ -1379,6 +1380,7 @@ Optional Features:
 			  (and sometimes confusing) to the casual installer
   --disable-dependency-tracking  speeds up one-time build
   --enable-dependency-tracking   do not reject slow dependency extractors
+  --enable-dl             dynamically load the libs like mysql, posgresql and may be others instead of linking them with binary during the build.
   --enable-id64           use 64-bit document and word IDs (default is yes)
  --enable-mem-override   enable to override std c++ mem routines in production build (default is yes). Disabling may help in some rare cases as statically linking with mysql on Mac OS X Lion.
 
@@ -6253,13 +6255,12 @@ $as_echo "#define HAVE_F_SETLKW 1" >>confdefs.h
 # check for dlopen
 # FIXME! technically, only needed in searchd
 # but as UDF manager is curently in libsphinx, we link everything
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for dlopen in -ldl" >&5
-$as_echo_n "checking for dlopen in -ldl... " >&6; }
-if ${ac_cv_lib_dl_dlopen+:} false; then :
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing dlopen" >&5
+$as_echo_n "checking for library containing dlopen... " >&6; }
+if ${ac_cv_search_dlopen+:} false; then :
   $as_echo_n "(cached) " >&6
 else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-ldl  $LIBS"
+  ac_func_search_save_LIBS=$LIBS
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -6278,23 +6279,35 @@ return dlopen ();
   return 0;
 }
 _ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_lib_dl_dlopen=yes
-else
-  ac_cv_lib_dl_dlopen=no
+for ac_lib in '' dl dld; do
+  if test -z "$ac_lib"; then
+    ac_res="none required"
+  else
+    ac_res=-l$ac_lib
+    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
+  fi
+  if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_search_dlopen=$ac_res
 fi
 rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
+    conftest$ac_exeext
+  if ${ac_cv_search_dlopen+:} false; then :
+  break
 fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_dl_dlopen" >&5
-$as_echo "$ac_cv_lib_dl_dlopen" >&6; }
-if test "x$ac_cv_lib_dl_dlopen" = xyes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBDL 1
-_ACEOF
+done
+if ${ac_cv_search_dlopen+:} false; then :
 
-  LIBS="-ldl $LIBS"
+else
+  ac_cv_search_dlopen=no
+fi
+rm conftest.$ac_ext
+LIBS=$ac_func_search_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_dlopen" >&5
+$as_echo "$ac_cv_search_dlopen" >&6; }
+ac_res=$ac_cv_search_dlopen
+if test "$ac_res" != no; then :
+  test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
 
 fi
 
@@ -6323,6 +6336,30 @@ $as_echo "$TMP" >&6; }
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: " >&5
 $as_echo "" >&6; }
 
+
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking Whether to use dl lib to load mysql, posgres and other libs" >&5
+$as_echo_n "checking Whether to use dl lib to load mysql, posgres and other libs... " >&6; }
+sph_usedl=no
+# Check whether --enable-dl was given.
+if test "${enable_dl+set}" = set; then :
+  enableval=$enable_dl; ac_cv_use_dl_libs=$enableval
+fi
+
+
+if test x$ac_cv_use_dl_libs == xyes ; then
+	if test x$ac_cv_func_dlopen == xyes ; then
+	    { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+		sph_usedl=yes
+	else
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: not possible (no dlopen)" >&5
+$as_echo "not possible (no dlopen)" >&6; }
+	fi
+else
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
 
 
 # check for pthreads

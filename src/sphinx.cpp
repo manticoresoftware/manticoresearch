@@ -4499,7 +4499,7 @@ bool CSphTokenizerBase::LoadSynonym ( char * sBuffer, const char * sFilename,
 	// track synonym-only codepoints in map-from
 	for ( ;; )
 	{
-		int iCode =sphUTF8Decode(sFrom);
+		int iCode = sphUTF8Decode ( sFrom );
 		if ( !iCode )
 			break;
 		if ( iCode>0 && !sphIsSpace(iCode) && !m_tLC.ToLower(iCode) )

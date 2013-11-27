@@ -3165,9 +3165,9 @@ struct CSphIndexStatus
 };
 
 
-struct CSphMultiQueryArgs : ISphNoncopyable
+struct CSphMultiQueryArgs
 {
-	const CSphVector<CSphFilterSettings> *	m_pExtraFilters;
+	const CSphVector<SphDocID_t> &			m_dKillList;
 	const int								m_iIndexWeight;
 	int										m_iTag;
 	bool									m_bFactors;
@@ -3175,7 +3175,7 @@ struct CSphMultiQueryArgs : ISphNoncopyable
 	const SmallStringHash_T<int64_t> *		m_pLocalDocs;
 	int64_t									m_iTotalDocs;
 
-	CSphMultiQueryArgs ( const CSphVector<CSphFilterSettings> * pExtraFilters, int iIndexWeight );
+	CSphMultiQueryArgs ( const CSphVector<SphDocID_t> & dKillList, int iIndexWeight );
 };
 
 
@@ -3273,8 +3273,8 @@ public:
 public:
 	virtual bool				EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const = 0;
 	void						SetCacheSize ( int iMaxCachedDocs, int iMaxCachedHits );
-	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const = 0;
-	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const = 0;
+	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, CSphMultiQueryArgs tArgs ) const = 0;
+	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, CSphMultiQueryArgs tArgs ) const = 0;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString * pError ) const = 0;
 	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const = 0;
 

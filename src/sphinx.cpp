@@ -1292,8 +1292,8 @@ public:
 	virtual bool				EarlyReject ( CSphQueryContext * , CSphMatch & ) const { return false; }
 	virtual const CSphSourceStats &	GetStats () const { return g_tTmpDummyStat; }
 	virtual CSphIndexStatus			GetStatus () const { CSphIndexStatus tRes; tRes.m_iDiskUse = 0; tRes.m_iRamUse = 0; return tRes; }
-	virtual bool				MultiQuery ( const CSphQuery * , CSphQueryResult * , int , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const { return false; }
-	virtual bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult ** , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const { return false; }
+	virtual bool				MultiQuery ( const CSphQuery * , CSphQueryResult * , int , ISphMatchSorter ** , CSphMultiQueryArgs ) const { return false; }
+	virtual bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult ** , ISphMatchSorter ** , CSphMultiQueryArgs ) const { return false; }
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , bool , CSphString * ) const;
 	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const { return true; }
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & , int , CSphString & , CSphString & ) { return -1; }
@@ -1415,8 +1415,8 @@ public:
 	virtual void				Unlock ();
 	virtual void				PostSetup() {}
 
-	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
-	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
+	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, CSphMultiQueryArgs tArgs ) const;
+	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, CSphMultiQueryArgs tArgs ) const;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString * pError ) const;
 	template <class Qword> bool	DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, bool bFillOnly, CSphString * pError ) const;
 	virtual bool 				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const;
@@ -1525,9 +1525,9 @@ private:
 private:
 	CSphString					GetIndexFileName ( const char * sExt ) const;
 
-	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache ) const;
-	bool						MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
-	void						MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker, int iTag, int iIndexWeight ) const;
+	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict, CSphMultiQueryArgs tArgs, CSphQueryNodeCache * pNodeCache ) const;
+	bool						MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, CSphMultiQueryArgs tArgs ) const;
+	void						MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker, int iTag, int iIndexWeight, const CSphVector<SphDocID_t> & dKillList ) const;
 
 	const DWORD *				FindDocinfo ( SphDocID_t uDocID ) const;
 	void						CopyDocinfo ( const CSphQueryContext * pCtx, CSphMatch & tMatch, const DWORD * pFound ) const;
@@ -9140,8 +9140,8 @@ const char * sphArenaInit ( int iMaxBytes )
 
 //////////////////////////////////////////////////////////////////////////
 
-CSphMultiQueryArgs::CSphMultiQueryArgs ( const CSphVector<CSphFilterSettings> * pExtraFilters, int iIndexWeight )
-	: m_pExtraFilters ( pExtraFilters )
+CSphMultiQueryArgs::CSphMultiQueryArgs ( const CSphVector<SphDocID_t> & dKillList, int iIndexWeight )
+	: m_dKillList ( dKillList )
 	, m_iIndexWeight ( iIndexWeight )
 	, m_iTag ( 0 )
 	, m_bFactors ( false )
@@ -10281,17 +10281,13 @@ bool CSphIndex_VLN::AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrT
 
 /////////////////////////////////////////////////////////////////////////////
 
-#define SPH_CMPHIT_LESS(a,b) \
-	( a.m_iWordID<b.m_iWordID || \
-	( a.m_iWordID==b.m_iWordID && a.m_iDocID<b.m_iDocID ) || \
-	( a.m_iWordID==b.m_iWordID && a.m_iDocID==b.m_iDocID && a.m_iWordPos<b.m_iWordPos ) )
-
-
 struct CmpHit_fn
 {
 	inline bool IsLess ( const CSphWordHit & a, const CSphWordHit & b ) const
 	{
-		return SPH_CMPHIT_LESS ( a, b );
+		return ( a.m_iWordID<b.m_iWordID ) ||
+				( a.m_iWordID==b.m_iWordID && a.m_iDocID<b.m_iDocID ) ||
+				( a.m_iWordID==b.m_iWordID && a.m_iDocID==b.m_iDocID && a.m_iWordPos<b.m_iWordPos );
 	}
 };
 
@@ -14831,14 +14827,14 @@ void CSphIndex_VLN::CopyDocinfo ( const CSphQueryContext * pCtx, CSphMatch & tMa
 	// patch if necessary
 	if ( pCtx->m_pOverrides )
 		ARRAY_FOREACH ( i, (*pCtx->m_pOverrides) )
-	{
-		const CSphAttrOverride & tOverride = (*pCtx->m_pOverrides)[i]; // shortcut
-		const CSphAttrOverride::IdValuePair_t * pEntry = tOverride.m_dValues.BinarySearch (
-			bind ( &CSphAttrOverride::IdValuePair_t::m_uDocID ), tMatch.m_iDocID );
-		tMatch.SetAttr ( pCtx->m_dOverrideOut[i], pEntry
-			? pEntry->m_uValue
-			: sphGetRowAttr ( tMatch.m_pStatic, pCtx->m_dOverrideIn[i] ) );
-	}
+		{
+			const CSphAttrOverride & tOverride = (*pCtx->m_pOverrides)[i]; // shortcut
+			const CSphAttrOverride::IdValuePair_t * pEntry = tOverride.m_dValues.BinarySearch (
+				bind ( &CSphAttrOverride::IdValuePair_t::m_uDocID ), tMatch.m_iDocID );
+			tMatch.SetAttr ( pCtx->m_dOverrideOut[i], pEntry
+							? pEntry->m_uValue
+							: sphGetRowAttr ( tMatch.m_pStatic, pCtx->m_dOverrideIn[i] ) );
+		}
 }
 
 
@@ -15026,8 +15022,8 @@ void CSphQueryContext::SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * 
 }
 
 
-void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery,
-	int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker, int iTag, int iIndexWeight ) const
+void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters,
+									ISphRanker * pRanker, int iTag, int iIndexWeight, const CSphVector<SphDocID_t> & dKillList ) const
 {
 	CSphQueryProfile * pProfile = pCtx->m_pProfile;
 
@@ -15037,6 +15033,8 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 
 	// do searching
 	CSphMatch * pMatch = pRanker->GetMatchesBuffer();
+	int iKillIdx = 0;
+	SphDocID_t uKillDocID = dKillList [ iKillIdx ];
 	for ( ;; )
 	{
 		// ranker does profile switches internally
@@ -15048,6 +15046,11 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 			pProfile->Switch ( SPH_QSTATE_SORT );
 		for ( int i=0; i<iMatches; i++ )
 		{
+			while ( uKillDocID<pMatch[i].m_iDocID )
+				uKillDocID = dKillList [ ++iKillIdx ];
+			if ( uKillDocID==pMatch[i].m_iDocID )
+				continue;
+
 			if ( pCtx->m_bLookupSort )
 				CopyDocinfo ( pCtx, pMatch[i], FindDocinfo ( pMatch[i].m_iDocID ) );
 
@@ -15129,7 +15132,7 @@ struct SphFinalMatchCalc_t : ISphMatchProcessor, ISphNoncopyable
 
 
 bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult,
-	int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const
+	int iSorters, ISphMatchSorter ** ppSorters, CSphMultiQueryArgs tArgs ) const
 {
 	assert ( pQuery->m_sQuery.IsEmpty() );
 	assert ( tArgs.m_iTag>=0 );
@@ -15183,8 +15186,6 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	// setup filters
 	if ( !tCtx.CreateFilters ( true, &pQuery->m_dFilters, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tMva.GetWritePtr(), m_tString.GetWritePtr(), pResult->m_sError ) )
 		return false;
-	if ( !tCtx.CreateFilters ( true, tArgs.m_pExtraFilters, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tMva.GetWritePtr(), m_tString.GetWritePtr(), pResult->m_sError ) )
-		return false;
 
 	// check if we can early reject the whole index
 	if ( tCtx.m_pFilter && m_iDocinfoIndex )
@@ -15232,15 +15233,14 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 		&& pQuery->m_dFilters[0].m_eType==SPH_FILTER_VALUES
 		&& pQuery->m_dFilters[0].m_bExclude==false
 		&& pQuery->m_dFilters[0].m_sAttrName=="@id"
-		&& !tArgs.m_pExtraFilters )
+		&& tArgs.m_dKillList.GetLength()==2 )
 	{
 		// run id lookups
 		for ( int i=0; i<pQuery->m_dFilters[0].GetNumValues(); i++ )
 		{
+			pResult->m_tStats.m_iFetchedDocs++;
 			SphDocID_t uDocid = (SphDocID_t) pQuery->m_dFilters[0].GetValue(i);
 			const DWORD * pRow = FindDocinfo ( uDocid );
-
-			pResult->m_tStats.m_iFetchedDocs++;
 
 			if ( !pRow )
 				continue;
@@ -15263,73 +15263,91 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 		}
 	} else
 	{
-		// do scan
+		bool bReverse = pQuery->m_bReverseScan; // shortcut
+		int iCutoff = ( pQuery->m_iCutoff<=0 ) ? -1 : pQuery->m_iCutoff;
+
+		int iKillIdx = bReverse ? tArgs.m_dKillList.GetLength()-1 : 0;
+		SphDocID_t uKillDocID = tArgs.m_dKillList [ iKillIdx ];
+
 		DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
-		int64_t iStart = 0;
-		int64_t iEnd = m_iDocinfoIndex;
-		int iStep = 1;
-		if ( pQuery->m_bReverseScan )
-		{
-			iStart = m_iDocinfoIndex-1;
-			iEnd = -1;
-			iStep = -1;
-		}
-
-		int iCutoff = pQuery->m_iCutoff;
-		if ( iCutoff<=0 )
-			iCutoff = -1;
-
+		int64_t iStart = bReverse ? m_iDocinfoIndex-1 : 0;
+		int64_t iEnd = bReverse ? -1 : m_iDocinfoIndex;
+		int64_t iStep = bReverse ? -1 : 1;
 		for ( int64_t iIndexEntry=iStart; iIndexEntry!=iEnd; iIndexEntry+=iStep )
 		{
 			// block-level filtering
 			const DWORD * pMin = &m_pDocinfoIndex[ iIndexEntry*uStride*2 ];
 			const DWORD * pMax = pMin + uStride;
-
-			// check applicable filters
 			if ( tCtx.m_pFilter && !tCtx.m_pFilter->EvalBlock ( pMin, pMax ) )
 				continue;
 
 			// row-level filtering
 			const DWORD * pBlockStart = m_tAttr.GetWritePtr() + ( iIndexEntry*uStride*DOCINFO_INDEX_FREQ );
-			const DWORD * pBlockEnd = m_tAttr.GetWritePtr() + ( ( Min ( ( iIndexEntry+1 )*DOCINFO_INDEX_FREQ, m_iDocinfo ) - 1 ) * uStride );
+			const DWORD * pBlockEnd = m_tAttr.GetWritePtr() + ( Min ( ( iIndexEntry+1 )*DOCINFO_INDEX_FREQ, m_iDocinfo )*uStride );
+			if ( bReverse )
+			{
+				pBlockStart = m_tAttr.GetWritePtr() + ( ( Min ( ( iIndexEntry+1 )*DOCINFO_INDEX_FREQ, m_iDocinfo ) - 1 ) * uStride );
+				pBlockEnd = m_tAttr.GetWritePtr() + uStride*( iIndexEntry*DOCINFO_INDEX_FREQ-1 );
+			}
+			int iDocinfoStep = bReverse ? -(int)uStride : (int)uStride;
 
-			if ( !tCtx.m_pOverrides && tCtx.m_pFilter && !pQuery->m_iCutoff
-				&& !tCtx.m_dCalcFilter.GetLength() && !tCtx.m_dCalcSort.GetLength() )
+			// 0 and DOCID_MAX default values are needed to avoid one branch in loop.
+			assert ( tArgs.m_dKillList[0]==0 && tArgs.m_dKillList.Last()==DOCID_MAX );
+			if ( !tCtx.m_pOverrides && tCtx.m_pFilter && !pQuery->m_iCutoff && !tCtx.m_dCalcFilter.GetLength() && !tCtx.m_dCalcSort.GetLength() )
 			{
 				// kinda fastpath
-				for ( const DWORD * pDocinfo=pBlockStart; pDocinfo<=pBlockEnd; pDocinfo+=uStride )
+				for ( const DWORD * pDocinfo=pBlockStart; pDocinfo!=pBlockEnd; pDocinfo+=iDocinfoStep )
 				{
+					pResult->m_tStats.m_iFetchedDocs++;
 					tMatch.m_iDocID = DOCINFO2ID ( pDocinfo );
+
+					// Kill list filtering. This works much faster in some and not slower in other cases
+					// than creating an ISphFilter.
+					if ( !pQuery->m_bReverseScan )
+					{
+						while ( uKillDocID<tMatch.m_iDocID )
+							uKillDocID = tArgs.m_dKillList [ ++iKillIdx ];
+					} else
+					{
+						while ( uKillDocID>tMatch.m_iDocID )
+							uKillDocID = tArgs.m_dKillList [ --iKillIdx ];
+					}
+					if ( uKillDocID==tMatch.m_iDocID )
+						continue;
+
 					tMatch.m_pStatic = DOCINFO2ATTRS ( pDocinfo );
 
-					pResult->m_tStats.m_iFetchedDocs++;
-
-					if ( !tCtx.m_pFilter->Eval ( tMatch ) )
+					if ( tCtx.m_pFilter->Eval ( tMatch ) )
 					{
-						tCtx.FreeStrFilter ( tMatch );
-						continue;
+						if ( bRandomize )
+							tMatch.m_iWeight = ( sphRand() & 0xffff ) * tArgs.m_iIndexWeight;
+						for ( int iSorter=0; iSorter<iSorters; iSorter++ )
+							ppSorters[iSorter]->Push ( tMatch );
 					}
-
-					if ( bRandomize )
-						tMatch.m_iWeight = ( sphRand() & 0xffff ) * tArgs.m_iIndexWeight;
-					for ( int iSorter=0; iSorter<iSorters; iSorter++ )
-						ppSorters[iSorter]->Push ( tMatch );
-
 					// stringptr expressions should be duplicated (or taken over) at this point
 					tCtx.FreeStrFilter ( tMatch );
 				}
 			} else
 			{
 				// generic path
-				for ( const DWORD * pDocinfo=pBlockStart; pDocinfo<=pBlockEnd; pDocinfo+=uStride )
+				for ( const DWORD * pDocinfo=pBlockStart; pDocinfo!=pBlockEnd; pDocinfo+=iDocinfoStep )
 				{
-					tMatch.m_iDocID = DOCINFO2ID ( pDocinfo );
-					if ( !tCtx.m_pOverrides )
-						tMatch.m_pStatic = DOCINFO2ATTRS ( pDocinfo );
-					else
-						CopyDocinfo ( &tCtx, tMatch, pDocinfo );
-
 					pResult->m_tStats.m_iFetchedDocs++;
+					tMatch.m_iDocID = DOCINFO2ID ( pDocinfo );
+
+					if ( !pQuery->m_bReverseScan )
+					{
+						while ( uKillDocID<tMatch.m_iDocID )
+							uKillDocID = tArgs.m_dKillList [ ++iKillIdx ];
+					} else
+					{
+						while ( uKillDocID>tMatch.m_iDocID )
+							uKillDocID = tArgs.m_dKillList [ --iKillIdx ];
+					}
+					if ( uKillDocID==tMatch.m_iDocID )
+						continue;
+
+					CopyDocinfo ( &tCtx, tMatch, pDocinfo );
 
 					// early filter only (no late filters in full-scan because of no @weight)
 					tCtx.CalcFilter ( tMatch );
@@ -18180,7 +18198,7 @@ struct CmpPSortersByRandom_fn
 
 /// one regular query vs many sorters
 bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult,
-	int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const
+	int iSorters, ISphMatchSorter ** ppSorters, CSphMultiQueryArgs tArgs ) const
 {
 	assert ( pQuery );
 	CSphQueryProfile * pProfile = pResult->m_pProfile;
@@ -18279,7 +18297,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 /// many regular queries with one sorter attached to each query.
 /// returns true if at least one query succeeded. The failed queries indicated with pResult->m_iMultiplier==-1
 bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
-	CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const
+	CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, CSphMultiQueryArgs tArgs ) const
 {
 	// ensure we have multiple queries
 	assert ( ppResults );
@@ -18406,7 +18424,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 
 bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult,
 	int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict,
-	const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache ) const
+	CSphMultiQueryArgs tArgs, CSphQueryNodeCache * pNodeCache ) const
 {
 	assert ( pQuery );
 	assert ( pResult );
@@ -18539,8 +18557,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	// setup filters
 	if ( !tCtx.CreateFilters ( pQuery->m_sQuery.IsEmpty(), &pQuery->m_dFilters, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tMva.GetWritePtr(), m_tString.GetWritePtr(), pResult->m_sError ) )
 		return false;
-	if ( !tCtx.CreateFilters ( pQuery->m_sQuery.IsEmpty(), tArgs.m_pExtraFilters, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tMva.GetWritePtr(), m_tString.GetWritePtr(), pResult->m_sError ) )
-		return false;
 
 	// check if we can early reject the whole index
 	if ( tCtx.m_pFilter && m_iDocinfoIndex )
@@ -18593,7 +18609,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 		case SPH_MATCH_EXTENDED:
 		case SPH_MATCH_EXTENDED2:
 		case SPH_MATCH_BOOLEAN:
-			MatchExtended ( &tCtx, pQuery, iSorters, ppSorters, pRanker.Ptr(), iMyTag, tArgs.m_iIndexWeight );
+			MatchExtended ( &tCtx, pQuery, iSorters, ppSorters, pRanker.Ptr(), iMyTag, tArgs.m_iIndexWeight, tArgs.m_dKillList );
 			break;
 
 		default:

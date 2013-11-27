@@ -1136,8 +1136,8 @@ public:
 	virtual const CSphSourceStats &		GetStats () const { return m_tStats; }
 	virtual CSphIndexStatus				GetStatus () const;
 
-	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
-	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
+	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, CSphMultiQueryArgs tArgs ) const;
+	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, CSphMultiQueryArgs tArgs ) const;
 	bool						DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, bool bFillOnly, CSphString * pError ) const;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString * pError ) const;
 	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const;
@@ -5990,7 +5990,7 @@ struct SphFinalArenaCopy_t : ISphMatchProcessor
 // FIXME? any chance to factor out common backend agnostic code?
 // FIXME? do we need to support pExtraFilters?
 bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters,
-	ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const
+	ISphMatchSorter ** ppSorters, CSphMultiQueryArgs tArgs ) const
 {
 	assert ( ppSorters );
 	assert ( pResult );
@@ -6094,7 +6094,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	if ( pQuery->m_uMaxQueryMsec>0 )
 		tmMaxTimer = sphMicroTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
 
-	CSphVector<SphAttr_t> dCumulativeKList;
+	CSphVector<SphDocID_t> dCumulativeKList;
+	dCumulativeKList.Add(0);
+	dCumulativeKList.Add ( DOCID_MAX );
 	CSphVector<const BYTE *> dDiskStrings ( m_pDiskChunks.GetLength() );
 	CSphVector<const DWORD *> dDiskMva ( m_pDiskChunks.GetLength() );
 	for ( int iChunk = m_pDiskChunks.GetLength()-1; iChunk>=0; iChunk-- )
@@ -6123,22 +6125,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			dCumulativeKList.Sort();
 		}
 
-		CSphVector<CSphFilterSettings> dKListFilter;
-		if ( dCumulativeKList.GetLength() )
-		{
-			assert ( dCumulativeKList.GetLength() );
-			CSphFilterSettings & tKListFilter = dKListFilter.Add();
-			tKListFilter.m_bExclude = true;
-			tKListFilter.m_eType = SPH_FILTER_VALUES;
-			tKListFilter.m_iMinValue = dCumulativeKList[0];
-			tKListFilter.m_iMaxValue = dCumulativeKList.Last();
-			tKListFilter.m_sAttrName = "@id";
-			tKListFilter.SetExternalValues ( dCumulativeKList.Begin(), dCumulativeKList.GetLength() );
-		}
-
 		CSphQueryResult tChunkResult;
 		tChunkResult.m_pProfile = pResult->m_pProfile;
-		CSphMultiQueryArgs tMultiArgs ( dCumulativeKList.GetLength() ? &dKListFilter : NULL, tArgs.m_iIndexWeight );
+		CSphMultiQueryArgs tMultiArgs ( dCumulativeKList, tArgs.m_iIndexWeight );
 		// storing index in matches tag for finding strings attrs offset later, biased against default zero and segments
 		tMultiArgs.m_iTag = m_dSegments.GetLength()+iChunk+1;;
 		tMultiArgs.m_bFactors = tArgs.m_bFactors;
@@ -6618,7 +6607,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 }
 
 bool RtIndex_t::MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults,
-								ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const
+								ISphMatchSorter ** ppSorters, CSphMultiQueryArgs tArgs ) const
 {
 	// FIXME! OPTIMIZE! implement common subtree cache here
 	bool bResult = false;

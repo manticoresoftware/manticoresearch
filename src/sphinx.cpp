@@ -27510,6 +27510,156 @@ struct CSphSchemaConfigurator
 
 
 #if USE_LIBEXPAT
+#if DL_EXPAT
+#define EXPAT_LIB "libexpat.so"
+#define EXPAT_NUM_FUNCS (11)
+
+/* Just a list of names - for c/p
+XML_ParserFree
+XML_Parse
+XML_GetCurrentColumnNumber
+XML_GetCurrentLineNumber
+XML_GetErrorCode
+XML_ErrorString
+XML_ParserCreate
+XML_SetUserData
+XML_SetElementHandler
+XML_SetCharacterDataHandler
+XML_SetUnknownEncodingHandler
+*/
+
+#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC) || defined(__ECC) || defined(__GNUC__)
+
+// use non-standard compiler extension __typeof__
+// it allow to declare pointer to the function without using it's declaration
+typedef __typeof__ ( XML_ParserFree ) *xXML_ParserFree;
+typedef __typeof__ ( XML_Parse ) *xXML_Parse;
+typedef __typeof__ ( XML_GetCurrentColumnNumber ) *xXML_GetCurrentColumnNumber;
+typedef __typeof__ ( XML_GetCurrentLineNumber ) *xXML_GetCurrentLineNumber;
+typedef __typeof__ ( XML_GetErrorCode ) *xXML_GetErrorCode;
+typedef __typeof__ ( XML_ErrorString ) *xXML_ErrorString;
+typedef __typeof__ ( XML_ParserCreate ) *xXML_ParserCreate;
+typedef __typeof__ ( XML_SetUserData ) *xXML_SetUserData;
+typedef __typeof__ ( XML_SetElementHandler ) *xXML_SetElementHandler;
+typedef __typeof__ ( XML_SetCharacterDataHandler ) *xXML_SetCharacterDataHandler;
+typedef __typeof__ ( XML_SetUnknownEncodingHandler ) *xXML_SetUnknownEncodingHandler;
+
+#else // compilers which are not known about __typeof__ support
+// declarations below are directly copy-pasted from expat.h,
+// and then (*x...) is placed around the function names.
+// In mostly cases this code will not be used, and the declarations
+// from previous block will be used instead.
+#warning Be sure that the expat function signatures are the same \
+as in expat.h. Correct the code below if this is not so.
+typedef XMLPARSEAPI(void) (*xXML_ParserFree)(XML_Parser); //NOLINT
+typedef XMLPARSEAPI(enum XML_Status) (*xXML_Parse)(XML_Parser, const char *, int, int); //NOLINT
+typedef XMLPARSEAPI(XML_Size) (*xXML_GetCurrentColumnNumber)(XML_Parser); //NOLINT
+typedef XMLPARSEAPI(XML_Size) (*xXML_GetCurrentLineNumber)(XML_Parser); //NOLINT
+typedef XMLPARSEAPI(enum XML_Error) (*xXML_GetErrorCode)(XML_Parser); //NOLINT
+typedef XMLPARSEAPI(const XML_LChar *) (*xXML_ErrorString)(enum XML_Error code); //NOLINT
+typedef XMLPARSEAPI(XML_Parser) (*xXML_ParserCreate)(const XML_Char *encoding); //NOLINT
+typedef XMLPARSEAPI(void) (*xXML_SetUserData)(XML_Parser, void *); //NOLINT
+typedef XMLPARSEAPI(void) (*xXML_SetElementHandler)(XML_Parser, //NOLINT
+                      XML_StartElementHandler, //NOLINT
+                      XML_EndElementHandler); //NOLINT
+typedef XMLPARSEAPI(void) (*xXML_SetCharacterDataHandler)(XML_Parser, //NOLINT
+                            XML_CharacterDataHandler); //NOLINT
+typedef XMLPARSEAPI(void) (*xXML_SetUnknownEncodingHandler)(XML_Parser, //NOLINT
+                              XML_UnknownEncodingHandler, //NOLINT
+                              void *); //NOLINT
+#endif
+
+class CExpat : public CSphDynamicLibrary
+{
+	static const char* sFuncs[EXPAT_NUM_FUNCS];
+	static void** pFuncs[EXPAT_NUM_FUNCS];
+
+public:
+	bool Init()
+	{
+		if ( !CSphDynamicLibrary::Init ( EXPAT_LIB, true ) )
+			return false;
+		if ( !LoadSymbols ( sFuncs, pFuncs, EXPAT_NUM_FUNCS ) )
+			return false;
+		return true;
+	}
+	static void 	Stub()
+	{
+		sphLogDebug ( "Error! Expat func is null!" );
+	}
+
+	static xXML_ParserFree m_pXML_ParserFree;
+	static xXML_Parse m_pXML_Parse;
+	static xXML_GetCurrentColumnNumber m_pXML_GetCurrentColumnNumber;
+	static xXML_GetCurrentLineNumber m_pXML_GetCurrentLineNumber;
+	static xXML_GetErrorCode m_pXML_GetErrorCode;
+	static xXML_ErrorString m_pXML_ErrorString;
+	static xXML_ParserCreate m_pXML_ParserCreate;
+	static xXML_SetUserData m_pXML_SetUserData;
+	static xXML_SetElementHandler m_pXML_SetElementHandler;
+	static xXML_SetCharacterDataHandler m_pXML_SetCharacterDataHandler;
+	static xXML_SetUnknownEncodingHandler m_pXML_SetUnknownEncodingHandler;
+};
+
+#define sph_XML_ParserFree (*CExpat::m_pXML_ParserFree)
+#define sph_XML_Parse (*CExpat::m_pXML_Parse)
+#define sph_XML_GetCurrentColumnNumber (*CExpat::m_pXML_GetCurrentColumnNumber)
+#define sph_XML_GetCurrentLineNumber (*CExpat::m_pXML_GetCurrentLineNumber)
+#define sph_XML_GetErrorCode (*CExpat::m_pXML_GetErrorCode)
+#define sph_XML_ErrorString (*CExpat::m_pXML_ErrorString)
+#define sph_XML_ParserCreate (*CExpat::m_pXML_ParserCreate)
+#define sph_XML_SetUserData (*CExpat::m_pXML_SetUserData)
+#define sph_XML_SetElementHandler (*CExpat::m_pXML_SetElementHandler)
+#define sph_XML_SetCharacterDataHandler (*CExpat::m_pXML_SetCharacterDataHandler)
+#define sph_XML_SetUnknownEncodingHandler (*CExpat::m_pXML_SetUnknownEncodingHandler)
+
+const char* CExpat::sFuncs[] = {"XML_ParserFree", "XML_Parse",
+	"XML_GetCurrentColumnNumber", "XML_GetCurrentLineNumber", "XML_GetErrorCode", "XML_ErrorString",
+	"XML_ParserCreate", "XML_SetUserData", "XML_SetElementHandler", "XML_SetCharacterDataHandler",
+	"XML_SetUnknownEncodingHandler" };
+void** CExpat::pFuncs[] = {(void**)&m_pXML_ParserFree, (void**)&m_pXML_Parse,
+	(void**)&m_pXML_GetCurrentColumnNumber, (void**)&m_pXML_GetCurrentLineNumber,
+	(void**)&m_pXML_GetErrorCode, (void**)&m_pXML_ErrorString,
+	(void**)&m_pXML_ParserCreate, (void**)&m_pXML_SetUserData,
+	(void**)&m_pXML_SetElementHandler, (void**)&m_pXML_SetCharacterDataHandler,
+	(void**)&m_pXML_SetUnknownEncodingHandler};
+
+
+xXML_ParserFree CExpat::m_pXML_ParserFree = (xXML_ParserFree)CExpat::Stub;
+xXML_Parse CExpat::m_pXML_Parse = (xXML_Parse)CExpat::Stub;
+xXML_GetCurrentColumnNumber CExpat::m_pXML_GetCurrentColumnNumber = (xXML_GetCurrentColumnNumber)CExpat::Stub;
+xXML_GetCurrentLineNumber CExpat::m_pXML_GetCurrentLineNumber = (xXML_GetCurrentLineNumber)CExpat::Stub;
+xXML_GetErrorCode CExpat::m_pXML_GetErrorCode = (xXML_GetErrorCode)CExpat::Stub;
+xXML_ErrorString CExpat::m_pXML_ErrorString = (xXML_ErrorString)CExpat::Stub;
+xXML_ParserCreate CExpat::m_pXML_ParserCreate = (xXML_ParserCreate)CExpat::Stub;
+xXML_SetUserData CExpat::m_pXML_SetUserData = (xXML_SetUserData)CExpat::Stub;
+xXML_SetElementHandler CExpat::m_pXML_SetElementHandler = (xXML_SetElementHandler)CExpat::Stub;
+xXML_SetCharacterDataHandler CExpat::m_pXML_SetCharacterDataHandler = (xXML_SetCharacterDataHandler)CExpat::Stub;
+xXML_SetUnknownEncodingHandler CExpat::m_pXML_SetUnknownEncodingHandler = (xXML_SetUnknownEncodingHandler)CExpat::Stub;
+
+CExpat MyExpatHolder;
+
+bool InitDynamicExpat()
+{
+	return MyExpatHolder.Init();
+}
+
+#else // !DL_EXPAT
+
+#define sph_XML_ParserFree XML_ParserFree
+#define sph_XML_Parse XML_Parse
+#define sph_XML_GetCurrentColumnNumber XML_GetCurrentColumnNumber
+#define sph_XML_GetCurrentLineNumber XML_GetCurrentLineNumber
+#define sph_XML_GetErrorCode XML_GetErrorCode
+#define sph_XML_ErrorString XML_ErrorString
+#define sph_XML_ParserCreate XML_ParserCreate
+#define sph_XML_SetUserData XML_SetUserData
+#define sph_XML_SetElementHandler XML_SetElementHandler
+#define sph_XML_SetCharacterDataHandler XML_SetCharacterDataHandler
+#define sph_XML_SetUnknownEncodingHandler XML_SetUnknownEncodingHandler
+#define InitDynamicExpat() (true)
+
+#endif // DL_EXPAT
 
 /// XML pipe source implementation (v2)
 class CSphSource_XMLPipe2 : public CSphSource_Document, public CSphSchemaConfigurator<CSphSource_XMLPipe2>
@@ -27713,7 +27863,7 @@ void CSphSource_XMLPipe2::Disconnect ()
 
 	if ( m_pParser )
 	{
-		XML_ParserFree ( m_pParser );
+		sph_XML_ParserFree ( m_pParser );
 		m_pParser = NULL;
 	}
 
@@ -27764,7 +27914,7 @@ const char * CSphSource_XMLPipe2::DecorateMessageVA ( const char * sTemplate, va
 			uFailedID = m_dParsedDocuments.Last()->m_iDocID;
 
 		snprintf ( szBufStart, iLeft, " (line=%d, pos=%d, docid=" DOCID_FMT ")",
-			(int)XML_GetCurrentLineNumber ( m_pParser ), (int)XML_GetCurrentColumnNumber ( m_pParser ),
+			(int)sph_XML_GetCurrentLineNumber ( m_pParser ), (int)sph_XML_GetCurrentColumnNumber ( m_pParser ),
 			uFailedID );
 	}
 
@@ -27812,6 +27962,12 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 {
 	assert ( m_pBuffer && m_pFieldBuffer );
 
+	if ( !InitDynamicExpat() )
+	{
+		sError.SetSprintf ( "xmlpipe: failed to load libexpat library" );
+		return false;
+	}
+
 	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
 	{
 		CSphColumnInfo & tCol = m_tSchema.m_dFields[i];
@@ -27822,19 +27978,19 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 		return false;
 	AllocDocinfo();
 
-	m_pParser = XML_ParserCreate(NULL);
+	m_pParser = sph_XML_ParserCreate(NULL);
 	if ( !m_pParser )
 	{
 		sError.SetSprintf ( "xmlpipe: failed to create XML parser" );
 		return false;
 	}
 
-	XML_SetUserData ( m_pParser, this );
-	XML_SetElementHandler ( m_pParser, xmlStartElement, xmlEndElement );
-	XML_SetCharacterDataHandler ( m_pParser, xmlCharacters );
+	sph_XML_SetUserData ( m_pParser, this );
+	sph_XML_SetElementHandler ( m_pParser, xmlStartElement, xmlEndElement );
+	sph_XML_SetCharacterDataHandler ( m_pParser, xmlCharacters );
 
 #if USE_LIBICONV
-	XML_SetUnknownEncodingHandler ( m_pParser, xmlUnknownEncoding, NULL );
+	sph_XML_SetUnknownEncodingHandler ( m_pParser, xmlUnknownEncoding, NULL );
 #endif
 
 	m_dKillList.Reserve ( 1024 );
@@ -27978,15 +28134,15 @@ bool CSphSource_XMLPipe2::ParseNextChunk ( int iBufferLen, CSphString & sError )
 		}
 	}
 
-	if ( XML_Parse ( m_pParser, (const char*) m_pBuffer, iBufferLen, bLast )!=XML_STATUS_OK )
+	if ( sph_XML_Parse ( m_pParser, (const char*) m_pBuffer, iBufferLen, bLast )!=XML_STATUS_OK )
 	{
 		SphDocID_t uFailedID = 0;
 		if ( m_dParsedDocuments.GetLength() )
 			uFailedID = m_dParsedDocuments.Last()->m_iDocID;
 
 		sError.SetSprintf ( "source '%s': XML parse error: %s (line=%d, pos=%d, docid=" DOCID_FMT ")",
-			m_tSchema.m_sName.cstr(), XML_ErrorString ( XML_GetErrorCode ( m_pParser ) ),
-			(int)XML_GetCurrentLineNumber ( m_pParser ), (int)XML_GetCurrentColumnNumber ( m_pParser ),
+			m_tSchema.m_sName.cstr(), sph_XML_ErrorString ( sph_XML_GetErrorCode ( m_pParser ) ),
+			(int)sph_XML_GetCurrentLineNumber ( m_pParser ), (int)sph_XML_GetCurrentColumnNumber ( m_pParser ),
 			uFailedID );
 		m_tDocInfo.m_iDocID = 1;
 		return false;
@@ -28521,7 +28677,7 @@ void CSphSource_XMLPipe2::UnexpectedCharaters ( const char * pCharacters, int iL
 		sWarning.SetBinary ( pCharacters, Min ( iLen, MAX_WARNING_LENGTH ) );
 		sphWarn ( "source '%s': unexpected string '%s' (line=%d, pos=%d) %s",
 			m_tSchema.m_sName.cstr(), sWarning.cstr (),
-			(int)XML_GetCurrentLineNumber ( m_pParser ), (int)XML_GetCurrentColumnNumber ( m_pParser ), szComment );
+			(int)sph_XML_GetCurrentLineNumber ( m_pParser ), (int)sph_XML_GetCurrentColumnNumber ( m_pParser ), szComment );
 	}
 }
 
@@ -28566,7 +28722,7 @@ void CSphSource_XMLPipe2::Characters ( const char * pCharacters, int iLen )
 		{
 			sphWarn ( "source '%s': field/attribute '%s' length exceeds max length (line=%d, pos=%d, docid=" DOCID_FMT ")",
 				m_tSchema.m_sName.cstr(), sName.cstr(),
-				(int)XML_GetCurrentLineNumber ( m_pParser ), (int)XML_GetCurrentColumnNumber ( m_pParser ),
+				(int)sph_XML_GetCurrentLineNumber ( m_pParser ), (int)sph_XML_GetCurrentColumnNumber ( m_pParser ),
 				m_pCurDocument->m_iDocID );
 
 			m_dWarned.Add ( sName );

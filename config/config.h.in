@@ -6,6 +6,9 @@
 /* Flags used to configure me */
 #undef CONFIGURE_FLAGS
 
+/* Define to 1 if you want runtime load libexpat using dlopen */
+#undef DL_EXPAT
+
 /* Define to 1 if you want runtime load mysql using dlopen */
 #undef DL_MYSQL
 

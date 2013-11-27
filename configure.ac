@@ -509,12 +509,21 @@ AM_CONDITIONAL(USE_RLP, test x$ac_cv_use_rlp != xno)
 dnl ---
 
 got_expat=0
+dl_expat=0
 AC_MSG_CHECKING([for libexpat])
 if test x$ac_cv_use_expat = xyes -a x$have_expat_h = xyes; then
+	FOOLIBS="$LIBS"
 	AC_SEARCH_LIBS([XML_Parse],[expat],[got_expat=1])
 	if test $got_expat -eq 1; then
+		if test x$sph_usedl == xyes ; then
+			AC_MSG_RESULT([runtime dynamic])
+			LIBS="$FOOLIBS"
+			dl_expat=1
+		else
+			AC_MSG_RESULT([found])
+		fi
 		AC_DEFINE([USE_LIBEXPAT],1,[define to use expat XML library])
-		AC_MSG_RESULT([found])
+		AC_DEFINE_UNQUOTED(DL_EXPAT,$dl_expat,[Define to 1 if you want runtime load libexpat using dlopen])
 	else
 		AC_MSG_RESULT([not found])
 		AC_MSG_WARN([xmlpipe2 will NOT be available])

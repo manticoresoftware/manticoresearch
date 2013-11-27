@@ -8200,9 +8200,11 @@ fi
 
 
 got_expat=0
+dl_expat=0
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for libexpat" >&5
 $as_echo_n "checking for libexpat... " >&6; }
 if test x$ac_cv_use_expat = xyes -a x$have_expat_h = xyes; then
+	FOOLIBS="$LIBS"
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing XML_Parse" >&5
 $as_echo_n "checking for library containing XML_Parse... " >&6; }
 if ${ac_cv_search_XML_Parse+:} false; then :
@@ -8260,11 +8262,23 @@ if test "$ac_res" != no; then :
 fi
 
 	if test $got_expat -eq 1; then
+		if test x$sph_usedl == xyes ; then
+			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: runtime dynamic" >&5
+$as_echo "runtime dynamic" >&6; }
+			LIBS="$FOOLIBS"
+			dl_expat=1
+		else
+			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: found" >&5
+$as_echo "found" >&6; }
+		fi
 
 $as_echo "#define USE_LIBEXPAT 1" >>confdefs.h
 
-		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: found" >&5
-$as_echo "found" >&6; }
+
+cat >>confdefs.h <<_ACEOF
+#define DL_EXPAT $dl_expat
+_ACEOF
+
 	else
 		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: not found" >&5
 $as_echo "not found" >&6; }

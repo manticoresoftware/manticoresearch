@@ -26693,8 +26693,190 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 /////////////////////////////////////////////////////////////////////////////
 // MYSQL SOURCE
 /////////////////////////////////////////////////////////////////////////////
-
 #if USE_MYSQL
+#if DL_MYSQL
+
+#define MYSQL_LIB "libmysqlclient.so"
+#define MYSQL_NUM_FUNCS (15)
+
+/* Just a list of names - for c/p
+mysql_free_result
+mysql_next_result
+mysql_use_result
+mysql_num_rows
+mysql_query
+mysql_errno
+mysql_error
+mysql_init
+mysql_ssl_set
+mysql_real_connect
+mysql_close
+mysql_num_fields
+mysql_fetch_row
+mysql_fetch_fields
+mysql_fetch_lengths
+*/
+
+#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC) || defined(__ECC) || defined(__GNUC__)
+
+// use non-standard compiler extension __typeof__
+// it allow to declare pointer to the function without using it's declaration
+typedef __typeof__ ( mysql_free_result ) *xmysql_free_result;
+typedef __typeof__ ( mysql_next_result ) *xmysql_next_result;
+typedef __typeof__ ( mysql_use_result ) *xmysql_use_result;
+typedef __typeof__ ( mysql_num_rows ) *xmysql_num_rows;
+typedef __typeof__ ( mysql_query ) *xmysql_query;
+typedef __typeof__ ( mysql_errno ) *xmysql_errno;
+typedef __typeof__ ( mysql_error ) *xmysql_error;
+typedef __typeof__ ( mysql_init ) *xmysql_init;
+typedef __typeof__ ( mysql_ssl_set ) *xmysql_ssl_set;
+typedef __typeof__ ( mysql_real_connect ) *xmysql_real_connect;
+typedef __typeof__ ( mysql_close ) *xmysql_close;
+typedef __typeof__ ( mysql_num_fields ) *xmysql_num_fields;
+typedef __typeof__ ( mysql_fetch_row ) *xmysql_fetch_row;
+typedef __typeof__ ( mysql_fetch_fields ) *xmysql_fetch_fields;
+typedef __typeof__ ( mysql_fetch_lengths ) *xmysql_fetch_lengths;
+
+#else // compilers which are not known about __typeof__ support
+
+// declarations below are directly copy-pasted from mysql.h,
+// and then (*x...) is placed around the function names.
+// In mostly cases this code will not be used, and the declarations
+// from previous block will be used instead.
+#warning Be sure that the mysql function signatures are the same \
+as in mysql.h. Correct the code below if this is not so.
+
+typedef void STDCALL (*xmysql_free_result)(MYSQL_RES *result); //NOLINT
+typedef int STDCALL (*xmysql_next_result)(MYSQL *mysql); //NOLINT
+typedef MYSQL_RES * STDCALL (*xmysql_use_result)(MYSQL *mysql); //NOLINT
+typedef my_ulonglong STDCALL (*xmysql_num_rows)(MYSQL_RES *res); //NOLINT
+typedef int     STDCALL (*xmysql_query)(MYSQL *mysql, const char *q); //NOLINT
+typedef unsigned int STDCALL (*xmysql_errno)(MYSQL *mysql); //NOLINT
+typedef const char * STDCALL (*xmysql_error)(MYSQL *mysql); //NOLINT
+typedef MYSQL *		STDCALL (*xmysql_init)(MYSQL *mysql); //NOLINT
+typedef my_bool		STDCALL (*xmysql_ssl_set)(MYSQL *mysql, const char *key, //NOLINT
+				      const char *cert, const char *ca, //NOLINT
+				      const char *capath, const char *cipher); //NOLINT
+typedef MYSQL *     STDCALL (*xmysql_real_connect)(MYSQL *mysql, const char *host, //NOLINT
+                      const char *user, //NOLINT
+                      const char *passwd, //NOLINT
+                      const char *db, //NOLINT
+                      unsigned int port, //NOLINT
+                      const char *unix_socket, //NOLINT
+                      unsigned long clientflag); //NOLINT
+typedef void STDCALL (*xmysql_close)(MYSQL *sock); //NOLINT
+typedef unsigned int STDCALL (*xmysql_num_fields)(MYSQL_RES *res); //NOLINT
+typedef MYSQL_ROW   STDCALL (*xmysql_fetch_row)(MYSQL_RES *result); //NOLINT
+typedef MYSQL_FIELD * STDCALL (*xmysql_fetch_fields)(MYSQL_RES *res); //NOLINT
+typedef unsigned long * STDCALL (*xmysql_fetch_lengths)(MYSQL_RES *result); //NOLINT
+#endif
+
+class CMysql : public CSphDynamicLibrary
+{
+	static const char* sFuncs[MYSQL_NUM_FUNCS];
+	static void** pFuncs[MYSQL_NUM_FUNCS];
+
+public:
+	bool Init()
+	{
+		if ( !CSphDynamicLibrary::Init ( MYSQL_LIB, true ) )
+			return false;
+		if ( !LoadSymbols ( sFuncs, pFuncs, MYSQL_NUM_FUNCS ) )
+			return false;
+		return true;
+	}
+	static void 	STDCALL	Stub()
+	{
+		sphLogDebug ( "Error! Mysql func is null!" );
+	}
+	static xmysql_free_result m_pmysql_free_result;
+	static xmysql_next_result m_pmysql_next_result;
+	static xmysql_use_result m_pmysql_use_result;
+	static xmysql_num_rows m_pmysql_num_rows;
+	static xmysql_query m_pmysql_query;
+	static xmysql_errno m_pmysql_errno;
+	static xmysql_error m_pmysql_error;
+	static xmysql_init m_pmysql_init;
+	static xmysql_ssl_set m_pmysql_ssl_set;
+	static xmysql_real_connect m_pmysql_real_connect;
+	static xmysql_close m_pmysql_close;
+	static xmysql_num_fields m_pmysql_num_fields;
+	static xmysql_fetch_row m_pmysql_fetch_row;
+	static xmysql_fetch_fields m_pmysql_fetch_fields;
+	static xmysql_fetch_lengths m_pmysql_fetch_lengths;
+};
+
+#define sph_mysql_free_result (*CMysql::m_pmysql_free_result)
+#define sph_mysql_next_result (*CMysql::m_pmysql_next_result)
+#define sph_mysql_use_result (*CMysql::m_pmysql_use_result)
+#define sph_mysql_num_rows (*CMysql::m_pmysql_num_rows)
+#define sph_mysql_query (*CMysql::m_pmysql_query)
+#define sph_mysql_errno (*CMysql::m_pmysql_errno)
+#define sph_mysql_error (*CMysql::m_pmysql_error)
+#define sph_mysql_init (*CMysql::m_pmysql_init)
+#define sph_mysql_ssl_set (*CMysql::m_pmysql_ssl_set)
+#define sph_mysql_real_connect (*CMysql::m_pmysql_real_connect)
+#define sph_mysql_close (*CMysql::m_pmysql_close)
+#define sph_mysql_num_fields (*CMysql::m_pmysql_num_fields)
+#define sph_mysql_fetch_row (*CMysql::m_pmysql_fetch_row)
+#define sph_mysql_fetch_fields (*CMysql::m_pmysql_fetch_fields)
+#define sph_mysql_fetch_lengths (*CMysql::m_pmysql_fetch_lengths)
+
+const char* CMysql::sFuncs[MYSQL_NUM_FUNCS] = {"mysql_free_result", "mysql_next_result",
+	"mysql_use_result", "mysql_num_rows", "mysql_query", "mysql_errno",
+	"mysql_error", "mysql_init", "mysql_ssl_set", "mysql_real_connect",
+	"mysql_close", "mysql_num_fields", "mysql_fetch_row", "mysql_fetch_fields",
+	"mysql_fetch_lengths"};
+void** CMysql::pFuncs[] = {(void**)&m_pmysql_free_result, (void**)&m_pmysql_next_result,
+	(void**)&m_pmysql_use_result, (void**)&m_pmysql_num_rows, (void**)&m_pmysql_query,
+	(void**)&m_pmysql_errno, (void**)&m_pmysql_error, (void**)&m_pmysql_init,
+	(void**)&m_pmysql_ssl_set, (void**)&m_pmysql_real_connect, (void**)&m_pmysql_close,
+	(void**)&m_pmysql_num_fields, (void**)&m_pmysql_fetch_row, (void**)&m_pmysql_fetch_fields,
+	(void**)&m_pmysql_fetch_lengths};
+
+xmysql_free_result CMysql::m_pmysql_free_result = (xmysql_free_result)CMysql::Stub;
+xmysql_next_result CMysql::m_pmysql_next_result = (xmysql_next_result)CMysql::Stub;
+xmysql_use_result CMysql::m_pmysql_use_result = (xmysql_use_result)CMysql::Stub;
+xmysql_num_rows CMysql::m_pmysql_num_rows = (xmysql_num_rows)CMysql::Stub;
+xmysql_query CMysql::m_pmysql_query = (xmysql_query)CMysql::Stub;
+xmysql_errno CMysql::m_pmysql_errno = (xmysql_errno)CMysql::Stub;
+xmysql_error CMysql::m_pmysql_error = (xmysql_error)CMysql::Stub;
+xmysql_init CMysql::m_pmysql_init = (xmysql_init)CMysql::Stub;
+xmysql_ssl_set CMysql::m_pmysql_ssl_set = (xmysql_ssl_set)CMysql::Stub;
+xmysql_real_connect CMysql::m_pmysql_real_connect = (xmysql_real_connect)CMysql::Stub;
+xmysql_close CMysql::m_pmysql_close = (xmysql_close)CMysql::Stub;
+xmysql_num_fields CMysql::m_pmysql_num_fields = (xmysql_num_fields)CMysql::Stub;
+xmysql_fetch_row CMysql::m_pmysql_fetch_row = (xmysql_fetch_row)CMysql::Stub;
+xmysql_fetch_fields CMysql::m_pmysql_fetch_fields = (xmysql_fetch_fields)CMysql::Stub;
+xmysql_fetch_lengths CMysql::m_pmysql_fetch_lengths = (xmysql_fetch_lengths)CMysql::Stub;
+
+CMysql MysqlHoder;
+
+bool InitDynamicMysql()
+{
+	return MysqlHoder.Init();
+}
+
+#else // !DL_MYSQL
+
+#define sph_mysql_free_result mysql_free_result
+#define sph_mysql_next_result mysql_next_result
+#define sph_mysql_use_result mysql_use_result
+#define sph_mysql_num_rows mysql_num_rows
+#define sph_mysql_query mysql_query
+#define sph_mysql_errno mysql_errno
+#define sph_mysql_error mysql_error
+#define sph_mysql_init mysql_init
+#define sph_mysql_ssl_set mysql_ssl_set
+#define sph_mysql_real_connect mysql_real_connect
+#define sph_mysql_close mysql_close
+#define sph_mysql_num_fields mysql_num_fields
+#define sph_mysql_fetch_row mysql_fetch_row
+#define sph_mysql_fetch_fields mysql_fetch_fields
+#define sph_mysql_fetch_lengths mysql_fetch_lengths
+#define InitDynamicMysql() (true)
+
+#endif // DL_MYSQL
 
 CSphSourceParams_MySQL::CSphSourceParams_MySQL ()
 	: m_iFlags ( 0 )
@@ -26721,18 +26903,18 @@ void CSphSource_MySQL::SqlDismissResult ()
 
 	while ( m_pMysqlResult )
 	{
-		mysql_free_result ( m_pMysqlResult );
+		sph_mysql_free_result ( m_pMysqlResult );
 		m_pMysqlResult = NULL;
 
 		// stored procedures might return multiple result sets
 		// FIXME? we might want to index all of them
 		// but for now, let's simply dismiss additional result sets
-		if ( mysql_next_result ( &m_tMysqlDriver )==0 )
+		if ( sph_mysql_next_result ( &m_tMysqlDriver )==0 )
 		{
-			m_pMysqlResult = mysql_use_result ( &m_tMysqlDriver );
+			m_pMysqlResult = sph_mysql_use_result ( &m_tMysqlDriver );
 
 			static bool bOnce = false;
-			if ( !bOnce && m_pMysqlResult && mysql_num_rows ( m_pMysqlResult ) )
+			if ( !bOnce && m_pMysqlResult && sph_mysql_num_rows ( m_pMysqlResult ) )
 			{
 				sphWarn ( "indexing of multiple result sets is not supported yet; some results sets were dismissed!" );
 				bOnce = true;
@@ -26747,7 +26929,7 @@ void CSphSource_MySQL::SqlDismissResult ()
 
 bool CSphSource_MySQL::SqlQuery ( const char * sQuery )
 {
-	if ( mysql_query ( &m_tMysqlDriver, sQuery ) )
+	if ( sph_mysql_query ( &m_tMysqlDriver, sQuery ) )
 	{
 		if ( m_tParams.m_bPrintQueries )
 			fprintf ( stdout, "SQL-QUERY: %s: FAIL\n", sQuery );
@@ -26756,7 +26938,7 @@ bool CSphSource_MySQL::SqlQuery ( const char * sQuery )
 	if ( m_tParams.m_bPrintQueries )
 		fprintf ( stdout, "SQL-QUERY: %s: ok\n", sQuery );
 
-	m_pMysqlResult = mysql_use_result ( &m_tMysqlDriver );
+	m_pMysqlResult = sph_mysql_use_result ( &m_tMysqlDriver );
 	m_pMysqlFields = NULL;
 	return true;
 }
@@ -26764,25 +26946,31 @@ bool CSphSource_MySQL::SqlQuery ( const char * sQuery )
 
 bool CSphSource_MySQL::SqlIsError ()
 {
-	return mysql_errno ( &m_tMysqlDriver )!=0;
+	return sph_mysql_errno ( &m_tMysqlDriver )!=0;
 }
 
 
 const char * CSphSource_MySQL::SqlError ()
 {
-	return mysql_error ( &m_tMysqlDriver );
+	return sph_mysql_error ( &m_tMysqlDriver );
 }
 
 
 bool CSphSource_MySQL::SqlConnect ()
 {
-	mysql_init ( &m_tMysqlDriver );
+	if ( !InitDynamicMysql() )
+	{
+		if ( m_tParams.m_bPrintQueries )
+			fprintf ( stdout, "SQL-CONNECT: FAIL (NO MYSQL CLIENT LIB)\n" );
+		return false;
+	}
 
+	sph_mysql_init ( &m_tMysqlDriver );
 	if ( !m_sSslKey.IsEmpty() || !m_sSslCert.IsEmpty() || !m_sSslCA.IsEmpty() )
-		mysql_ssl_set ( &m_tMysqlDriver, m_sSslKey.cstr(), m_sSslCert.cstr(), m_sSslCA.cstr(), NULL, NULL );
+		sph_mysql_ssl_set ( &m_tMysqlDriver, m_sSslKey.cstr(), m_sSslCert.cstr(), m_sSslCA.cstr(), NULL, NULL );
 
 	m_iMysqlConnectFlags |= CLIENT_MULTI_RESULTS; // we now know how to handle this
-	bool bRes = ( NULL!=mysql_real_connect ( &m_tMysqlDriver,
+	bool bRes = ( NULL!=sph_mysql_real_connect ( &m_tMysqlDriver,
 		m_tParams.m_sHost.cstr(), m_tParams.m_sUser.cstr(), m_tParams.m_sPass.cstr(),
 		m_tParams.m_sDB.cstr(), m_tParams.m_iPort, m_sMysqlUsock.cstr(), m_iMysqlConnectFlags ) );
 	if ( m_tParams.m_bPrintQueries )
@@ -26796,7 +26984,7 @@ void CSphSource_MySQL::SqlDisconnect ()
 	if ( m_tParams.m_bPrintQueries )
 		fprintf ( stdout, "SQL-DISCONNECT\n" );
 
-	mysql_close ( &m_tMysqlDriver );
+	sph_mysql_close ( &m_tMysqlDriver );
 }
 
 
@@ -26805,7 +26993,7 @@ int CSphSource_MySQL::SqlNumFields ()
 	if ( !m_pMysqlResult )
 		return -1;
 
-	return mysql_num_fields ( m_pMysqlResult );
+	return sph_mysql_num_fields ( m_pMysqlResult );
 }
 
 
@@ -26814,7 +27002,7 @@ bool CSphSource_MySQL::SqlFetchRow ()
 	if ( !m_pMysqlResult )
 		return false;
 
-	m_tMysqlRow = mysql_fetch_row ( m_pMysqlResult );
+	m_tMysqlRow = sph_mysql_fetch_row ( m_pMysqlResult );
 	return m_tMysqlRow!=NULL;
 }
 
@@ -26834,7 +27022,7 @@ const char * CSphSource_MySQL::SqlFieldName ( int iIndex )
 		return NULL;
 
 	if ( !m_pMysqlFields )
-		m_pMysqlFields = mysql_fetch_fields ( m_pMysqlResult );
+		m_pMysqlFields = sph_mysql_fetch_fields ( m_pMysqlResult );
 
 	return m_pMysqlFields[iIndex].name;
 }
@@ -26846,7 +27034,7 @@ DWORD CSphSource_MySQL::SqlColumnLength ( int iIndex )
 		return 0;
 
 	if ( !m_pMysqlLengths )
-		m_pMysqlLengths = mysql_fetch_lengths ( m_pMysqlResult );
+		m_pMysqlLengths = sph_mysql_fetch_lengths ( m_pMysqlResult );
 
 	return m_pMysqlLengths[iIndex];
 }

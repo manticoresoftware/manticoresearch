@@ -300,15 +300,24 @@ AC_ARG_WITH([static-mysql],
 AC_MSG_CHECKING([whether to compile with MySQL support])
 if test  x$ac_cv_use_static_mysql != xno -o x$ac_cv_use_mysql != xno
 then
+	dl_mysql=0
 	if test x$ac_cv_use_static_mysql != xno ; then
 		AC_MSG_RESULT([static])
     	AC_CHECK_MYSQL([$ac_cv_use_static_mysql])
 		MYSQL_LIBS=`echo $MYSQL_LIBS | sed -e "sX-lmysqlclientX\$MYSQL_PKGLIBDIR/libmysqlclient.aXg"`
 	else
-		AC_MSG_RESULT([dynamic])
-		AC_CHECK_MYSQL([$ac_cv_use_mysql])
+		if test x$sph_usedl == xyes ; then
+			AC_MSG_RESULT([runtime dynamic])
+			AC_CHECK_MYSQL([$ac_cv_use_mysql])
+			MYSQL_LIBS=""
+			dl_mysql=1
+		else
+			AC_MSG_RESULT([dynamic])
+			AC_CHECK_MYSQL([$ac_cv_use_mysql])
+		fi
 	fi
     AC_DEFINE(USE_MYSQL,1,[Define to 1 if you want to compile with MySQL support])
+	AC_DEFINE_UNQUOTED(DL_MYSQL,$dl_mysql,[Define to 1 if you want runtime load mysql using dlopen])
     AC_SUBST([MYSQL_LIBS])
     AC_SUBST([MYSQL_CFLAGS])
 else

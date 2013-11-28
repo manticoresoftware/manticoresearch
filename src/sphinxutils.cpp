@@ -2295,7 +2295,9 @@ const char * sphGetRankerName ( ESphRankMode eRanker )
 	return g_dRankerNames[eRanker];
 }
 
-void CSphDynamicLibrary::FillError ( const char* sMessage )
+#if HAVE_DLOPEN
+
+void CSphDynamicLibrary::FillError ( const char * sMessage )
 {
 	const char* sDlerror = dlerror();
 	if ( sMessage )
@@ -2304,9 +2306,8 @@ void CSphDynamicLibrary::FillError ( const char* sMessage )
 		m_sError.SetSprintf ( "%s", sDlerror ? sDlerror : "(null)" );
 }
 
-bool CSphDynamicLibrary::Init ( const char* sPath, bool bGlobal )
+bool CSphDynamicLibrary::Init ( const char * sPath, bool bGlobal )
 {
-#if HAVE_DLOPEN
 	if ( m_pLibrary )
 		return true;
 	int iFlags = bGlobal?(RTLD_NOW | RTLD_GLOBAL):(RTLD_LAZY|RTLD_LOCAL);
@@ -2319,20 +2320,17 @@ bool CSphDynamicLibrary::Init ( const char* sPath, bool bGlobal )
 	sphLogDebug ( "dlopen(%s)=%p", sPath, m_pLibrary );
 	m_bReady = true;
 	return m_bReady;
-#else
-	return false;
-#endif
 }
+
 bool CSphDynamicLibrary::LoadSymbol ( const char* sName, void** ppFunc )
 {
-#if HAVE_DLOPEN
 	if ( !m_pLibrary )
 		return false;
 
 	if ( !m_bReady )
 		return false;
 
-	void* pResult = dlsym ( m_pLibrary, sName );
+	void * pResult = dlsym ( m_pLibrary, sName );
 	if ( !pResult )
 	{
 		FillError ( "Symbol not found" );
@@ -2340,14 +2338,10 @@ bool CSphDynamicLibrary::LoadSymbol ( const char* sName, void** ppFunc )
 	}
 	*ppFunc = pResult;
 	return true;
-#else
-	return false;
-#endif
 }
 
 bool CSphDynamicLibrary::LoadSymbols ( const char** sNames, void*** pppFuncs, int iNum )
 {
-#if HAVE_DLOPEN
 	if ( !m_pLibrary )
 		return false;
 
@@ -2372,11 +2366,16 @@ bool CSphDynamicLibrary::LoadSymbols ( const char** sNames, void*** pppFuncs, in
 	}
 
 	return true;
-#else
-	return false;
-#endif
 };
 
+#else
+
+void CSphDynamicLibrary::FillError ( const char * e ) { m_sError = e; }
+bool CSphDynamicLibrary::Init ( const char *, bool ) { return false; }
+bool CSphDynamicLibrary::LoadSymbol ( const char *, void ** ) { return false; }
+bool CSphDynamicLibrary::LoadSymbols ( const char **, void ***, int ) { return false; }
+
+#endif
 
 //
 // $Id$

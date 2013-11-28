@@ -3165,7 +3165,7 @@ struct CSphIndexStatus
 };
 
 
-struct CSphMultiQueryArgs
+struct CSphMultiQueryArgs : public ISphNoncopyable
 {
 	const CSphVector<SphDocID_t> &			m_dKillList;
 	const int								m_iIndexWeight;
@@ -3273,8 +3273,8 @@ public:
 public:
 	virtual bool				EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const = 0;
 	void						SetCacheSize ( int iMaxCachedDocs, int iMaxCachedHits );
-	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, CSphMultiQueryArgs tArgs ) const = 0;
-	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, CSphMultiQueryArgs tArgs ) const = 0;
+	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const = 0;
+	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const = 0;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString * pError ) const = 0;
 	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const = 0;
 

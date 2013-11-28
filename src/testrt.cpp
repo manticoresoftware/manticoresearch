@@ -44,7 +44,8 @@ void DoSearch ( CSphIndex * pIndex )
 
 	CSphQuery tQuery;
 	CSphQueryResult tResult;
-	CSphMultiQueryArgs tArgs ( NULL, 1 );
+	CSphVector<SphDocID_t> dDummyKlist;
+	CSphMultiQueryArgs tArgs ( dDummyKlist, 1 );
 	tQuery.m_sQuery = "@title cat";
 
 	SphQueueSettings_t tQueueSettings ( tQuery, pIndex->GetMatchSchema(), tResult.m_sError, NULL );

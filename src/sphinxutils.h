@@ -266,8 +266,6 @@ private:
 	void		FillError ( const char* sMessage=NULL );
 };
 
-
-
 #endif // _sphinxutils_
 
 //

@@ -199,6 +199,30 @@ statement:
 
 //////////////////////////////////////////////////////////////////////////
 
+// many known keywords are also allowed as column or index names
+//
+// FROM conflicts with select_expr opt_alias
+// NAMES, TRANSACTION conflicts with SET
+
+ident_set:
+	TOK_IDENT
+	| TOK_AGENT | TOK_ATTACH | TOK_AVG | TOK_BEGIN | TOK_BOOL
+	| TOK_COLLATION | TOK_COUNT | TOK_FLUSH | TOK_FUNCTION
+	| TOK_GLOBAL | TOK_GROUP | TOK_GROUPBY | TOK_GROUP_CONCAT | TOK_ISOLATION
+	| TOK_LEVEL | TOK_LIKE | TOK_MATCH | TOK_MAX | TOK_META
+	| TOK_PLAN | TOK_PROFILE | TOK_RAMCHUNK | TOK_RAND | TOK_READ
+	| TOK_REPEATABLE | TOK_RETURNS | TOK_ROLLBACK | TOK_RTINDEX
+	| TOK_SERIALIZABLE | TOK_SESSION | TOK_START | TOK_STATUS | TOK_STRING
+	| TOK_SUM | TOK_TABLES  | TOK_TRUNCATE | TOK_UNCOMMITTED
+	| TOK_VARIABLES | TOK_WARNINGS | TOK_WEIGHT | TOK_WITHIN
+	;
+
+ident:
+	ident_set | TOK_NAMES | TOK_TRANSACTION
+	;
+
+//////////////////////////////////////////////////////////////////////////
+
 multi_stmt_list:
 	multi_stmt							{ pParser->PushQuery(); }
 	| multi_stmt_list ';' multi_stmt	{ pParser->PushQuery(); }
@@ -244,7 +268,7 @@ tablefunc_args_list:
 	;
 
 tablefunc_arg:
-	TOK_IDENT
+	ident
 	| TOK_CONST_INT
 	| TOK_ID
 	;
@@ -313,8 +337,8 @@ select_item:
 
 opt_alias:
 	// empty
-	| TOK_IDENT							{ pParser->AliasLastItem ( &$1 ); }
-	| TOK_AS TOK_IDENT					{ pParser->AliasLastItem ( &$2 ); }
+	| ident								{ pParser->AliasLastItem ( &$1 ); }
+	| TOK_AS ident						{ pParser->AliasLastItem ( &$2 ); }
 	;
 
 select_expr:
@@ -326,12 +350,12 @@ select_expr:
 	| TOK_GROUP_CONCAT '(' expr ')'		{ pParser->AddItem ( &$3, SPH_AGGR_CAT, &$1, &$4 ); }
 	| TOK_COUNT '(' '*' ')'				{ if ( !pParser->AddItem ( "count(*)", &$1, &$4 ) ) YYERROR; }
 	| TOK_GROUPBY '(' ')'				{ if ( !pParser->AddItem ( "groupby()", &$1, &$3 ) ) YYERROR; }
-	| TOK_COUNT '(' TOK_DISTINCT TOK_IDENT ')' 	{ if ( !pParser->AddDistinct ( &$4, &$1, &$5 ) ) YYERROR; }
+	| TOK_COUNT '(' TOK_DISTINCT ident')' 	{ if ( !pParser->AddDistinct ( &$4, &$1, &$5 ) ) YYERROR; }
 	;
 
 ident_list:
-	TOK_IDENT
-	| ident_list ',' TOK_IDENT			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	ident
+	| ident_list ',' ident				{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	;
 
 opt_where_clause:
@@ -498,7 +522,7 @@ expr_float_unhandled:
 	;
 
 expr_ident:
-	TOK_IDENT
+	ident
 	| TOK_ATIDENT
 		{
 			if ( !pParser->SetOldSyntax() )
@@ -674,39 +698,39 @@ option_list:
 	;
 
 option_item:
-	TOK_IDENT '=' TOK_IDENT
+	ident '=' ident
 		{
 			if ( !pParser->AddOption ( $1, $3 ) )
 				YYERROR;
 		}
-	| TOK_RANKER '=' TOK_IDENT
+	| TOK_RANKER '=' ident
 		{
 			if ( !pParser->AddOption ( $1, $3 ) )
 				YYERROR;
 		}
 
-	| TOK_IDENT '=' TOK_CONST_INT
+	| ident '=' TOK_CONST_INT
 		{
 			if ( !pParser->AddOption ( $1, $3 ) )
 				YYERROR;
 		}
-	| TOK_IDENT '=' '(' named_const_list ')'
+	| ident '=' '(' named_const_list ')'
 		{
 			if ( !pParser->AddOption ( $1, pParser->GetNamedVec ( $4 ) ) )
 				YYERROR;
 			pParser->FreeNamedVec ( $4 );
 		}
-	| TOK_IDENT '=' TOK_IDENT '(' TOK_QUOTED_STRING ')'
+	| ident '=' ident '(' TOK_QUOTED_STRING ')'
 		{
 			if ( !pParser->AddOption ( $1, $3, $5 ) )
 				YYERROR;
 		}
-	| TOK_RANKER '=' TOK_IDENT '(' TOK_QUOTED_STRING ')'
+	| TOK_RANKER '=' ident '(' TOK_QUOTED_STRING ')'
 		{
 			if ( !pParser->AddOption ( $1, $3, $5 ) )
 				YYERROR;
 		}
-	| TOK_IDENT '=' TOK_QUOTED_STRING
+	| ident '=' TOK_QUOTED_STRING
 		{
 			if ( !pParser->AddOption ( $1, $3 ) )
 				YYERROR;
@@ -731,7 +755,7 @@ named_const_list:
 	;
 
 named_const:
-	TOK_IDENT '=' const_int
+	ident '=' const_int
 		{
 			$$ = $1;
 			$$.m_iValue = $3.m_iValue;
@@ -741,7 +765,7 @@ named_const:
 //////////////////////////////////////////////////////////////////////////
 
 expr:
-	TOK_IDENT
+	ident
 	| TOK_ATIDENT				{ if ( !pParser->SetOldSyntax() ) YYERROR; }
 	| TOK_ID					{ if ( !pParser->SetNewSyntax() ) YYERROR; }
 	| TOK_CONST_INT
@@ -788,7 +812,7 @@ function:
 	| TOK_MIN '(' expr ',' expr ')'	{ TRACK_BOUNDS ( $$, $1, $6 ); } // handle clash with aggregate functions
 	| TOK_MAX '(' expr ',' expr ')'	{ TRACK_BOUNDS ( $$, $1, $6 ); }
 	| TOK_WEIGHT '(' ')'			{ TRACK_BOUNDS ( $$, $1, $3 ); }
-	| TOK_IDENT '(' expr TOK_FOR TOK_IDENT TOK_IN json_field ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
+	| TOK_IDENT '(' expr TOK_FOR ident TOK_IN json_field ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
 	;
 	
 arglist:
@@ -807,13 +831,13 @@ consthash:
 	;
 
 hash_key:
-	TOK_IDENT
+	ident
 	| TOK_IN
 	;
 
 hash_val:
 	const_int
-	| TOK_IDENT
+	| ident
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -839,12 +863,12 @@ show_what:
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS;
 			pParser->ToStringUnescape ( pParser->m_pStmt->m_sIndex, $2 );
 		}
-	| TOK_AGENT TOK_IDENT TOK_STATUS like_filter
+	| TOK_AGENT ident TOK_STATUS like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $2 );
 		}
-	| TOK_INDEX TOK_IDENT TOK_STATUS
+	| TOK_INDEX ident TOK_STATUS
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_STATUS;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $2 );
@@ -853,31 +877,18 @@ show_what:
 
 //////////////////////////////////////////////////////////////////////////
 
-simple_set_value:
-	TOK_IDENT
-	| TOK_NULL
-	| TOK_QUOTED_STRING
-	| TOK_CONST_INT
-	| TOK_CONST_FLOAT
-	;
-
-set_value:
-	simple_set_value
-	| set_value '-' simple_set_value
-	;
-
 set_stmt:
-	TOK_SET TOK_IDENT '=' boolean_value
+	TOK_SET ident_set '=' boolean_value
 		{
 			pParser->SetStatement ( $2, SET_LOCAL );
 			pParser->m_pStmt->m_iSetValue = $4.m_iValue;
 		}
-	| TOK_SET TOK_IDENT '=' set_string_value
+	| TOK_SET ident_set '=' set_string_value
 		{
 			pParser->SetStatement ( $2, SET_LOCAL );
 			pParser->ToString ( pParser->m_pStmt->m_sSetValue, $4 );
 		}
-	| TOK_SET TOK_IDENT '=' TOK_NULL
+	| TOK_SET ident_set '=' TOK_NULL
 		{
 			pParser->SetStatement ( $2, SET_LOCAL );
 			pParser->m_pStmt->m_bSetNull = true;
@@ -893,7 +904,7 @@ set_global_stmt:
 			pParser->SetStatement ( $3, SET_GLOBAL_UVAR );
 			pParser->m_pStmt->m_dSetValues = *$6.m_pValues.Ptr();
 		}
-	| TOK_SET TOK_GLOBAL TOK_IDENT '=' set_string_value
+	| TOK_SET TOK_GLOBAL ident_set '=' set_string_value
 		{
 			pParser->SetStatement ( $3, SET_GLOBAL_SVAR );
 			pParser->ToString ( pParser->m_pStmt->m_sSetValue, $5 ).Unquote();
@@ -901,7 +912,7 @@ set_global_stmt:
 	;
 
 set_string_value:
-	TOK_IDENT
+	ident
 	| TOK_QUOTED_STRING
 	;
 
@@ -919,6 +930,20 @@ boolean_value:
 		}
 	;
 
+set_value:
+	simple_set_value
+	| set_value '-' simple_set_value
+	;
+
+simple_set_value:
+	ident
+	| TOK_NULL
+	| TOK_QUOTED_STRING
+	| TOK_CONST_INT
+	| TOK_CONST_FLOAT
+	;
+
+
 //////////////////////////////////////////////////////////////////////////
 
 transact_op:
@@ -935,7 +960,7 @@ start_transaction:
 //////////////////////////////////////////////////////////////////////////
 
 insert_into:
-	insert_or_replace TOK_INTO TOK_IDENT opt_column_list TOK_VALUES insert_rows_list
+	insert_or_replace TOK_INTO ident opt_column_list TOK_VALUES insert_rows_list
 		{
 			// everything else is pushed directly into parser within the rules
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3 );
@@ -953,8 +978,8 @@ opt_column_list:
 	;
 
 column_list:
-	expr_ident							{ if ( !pParser->AddSchemaItem ( &$1 ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } }
-	| column_list ',' expr_ident		{ if ( !pParser->AddSchemaItem ( &$3 ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } }
+	ident						{ if ( !pParser->AddSchemaItem ( &$1 ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } }
+	| column_list ',' ident		{ if ( !pParser->AddSchemaItem ( &$3 ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } }
 	;
 
 insert_rows_list:
@@ -992,7 +1017,7 @@ delete_from:
 //////////////////////////////////////////////////////////////////////////
 
 call_proc:
-	TOK_CALL TOK_IDENT '(' call_args_list opt_call_opts_list ')'
+	TOK_CALL ident '(' call_args_list opt_call_opts_list ')'
 		{
 			pParser->m_pStmt->m_eStmt = STMT_CALL;
 			pParser->ToString ( pParser->m_pStmt->m_sCallProc, $2 );
@@ -1063,14 +1088,14 @@ opt_as:
 	;
 
 call_opt_name:
-	TOK_IDENT
+	ident
 	| TOK_LIMIT
 	;
 
 //////////////////////////////////////////////////////////////////////////
 
 describe:
-	describe_tok TOK_IDENT like_filter
+	describe_tok ident like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_DESCRIBE;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $2 );
@@ -1108,7 +1133,7 @@ update_items_list:
 	;
 
 update_item:
-	TOK_IDENT '=' const_int
+	ident '=' const_int
 		{
 			// it is performance-critical to forcibly inline this
 			pParser->m_pStmt->m_tUpdate.m_dPool.Add ( (DWORD)$3.m_iValue );
@@ -1122,22 +1147,22 @@ update_item:
 				pParser->AddUpdatedAttr ( $1, SPH_ATTR_INTEGER );
 			}
 		}
-	| TOK_IDENT '=' const_float
+	| ident '=' const_float
 		{
 			// it is performance-critical to forcibly inline this
 			pParser->m_pStmt->m_tUpdate.m_dPool.Add ( sphF2DW ( $3.m_fValue ) );
 			pParser->AddUpdatedAttr ( $1, SPH_ATTR_FLOAT );
 		}
-	| TOK_IDENT '='  '(' const_list ')'
+	| ident '='  '(' const_list ')'
 		{
 			pParser->UpdateMVAAttr ( $1, $4 );
 		}
-	| TOK_IDENT '='  '(' ')' // special case () means delete mva
+	| ident '='  '(' ')' // special case () means delete mva
 		{
 			SqlNode_t tNoValues;
 			pParser->UpdateMVAAttr ( $1, tNoValues );
 		}
-	| json_field '=' const_int // duplicate TOK_IDENT code (avoiding s/r conflict)
+	| json_field '=' const_int // duplicate ident code (avoiding s/r conflict)
 		{
 			// it is performance-critical to forcibly inline this
 			pParser->m_pStmt->m_tUpdate.m_dPool.Add ( (DWORD)$3.m_iValue );
@@ -1173,7 +1198,7 @@ alter_col_type:
 	;
 
 alter:
-	TOK_ALTER TOK_TABLE TOK_IDENT TOK_ADD TOK_COLUMN TOK_IDENT alter_col_type
+	TOK_ALTER TOK_TABLE ident TOK_ADD TOK_COLUMN ident alter_col_type
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ALTER;
@@ -1211,7 +1236,7 @@ show_variables_where_list:
 	;
 
 show_variables_where_entry:
-	TOK_IDENT '=' TOK_QUOTED_STRING // for example, Variable_name = 'character_set'
+	ident '=' TOK_QUOTED_STRING // for example, Variable_name = 'character_set'
 	;
 
 show_collation:
@@ -1250,7 +1275,7 @@ isolation_level:
 //////////////////////////////////////////////////////////////////////////
 
 create_function:
-	TOK_CREATE TOK_FUNCTION TOK_IDENT TOK_RETURNS udf_type TOK_SONAME TOK_QUOTED_STRING
+	TOK_CREATE TOK_FUNCTION ident TOK_RETURNS udf_type TOK_SONAME TOK_QUOTED_STRING
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CREATE_FUNCTION;
@@ -1268,7 +1293,7 @@ udf_type:
 	;
 
 create_ranker:
-	TOK_CREATE TOK_RANKER TOK_IDENT TOK_SONAME TOK_QUOTED_STRING
+	TOK_CREATE TOK_RANKER ident TOK_SONAME TOK_QUOTED_STRING
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CREATE_RANKER;
@@ -1278,7 +1303,7 @@ create_ranker:
 	;
 
 drop_ranker:
-	TOK_DROP TOK_RANKER TOK_IDENT
+	TOK_DROP TOK_RANKER ident
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_DROP_RANKER;
@@ -1287,7 +1312,7 @@ drop_ranker:
 	;
 
 drop_function:
-	TOK_DROP TOK_FUNCTION TOK_IDENT
+	TOK_DROP TOK_FUNCTION ident
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_DROP_FUNCTION;
@@ -1298,7 +1323,7 @@ drop_function:
 ////////////////////////////////////////////////////////////
 
 attach_index:
-	TOK_ATTACH TOK_INDEX TOK_IDENT TOK_TO TOK_RTINDEX TOK_IDENT
+	TOK_ATTACH TOK_INDEX ident TOK_TO TOK_RTINDEX ident
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ATTACH_INDEX;
@@ -1310,7 +1335,7 @@ attach_index:
 //////////////////////////////////////////////////////////////////////////
 
 flush_rtindex:
-	TOK_FLUSH TOK_RTINDEX TOK_IDENT
+	TOK_FLUSH TOK_RTINDEX ident
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_FLUSH_RTINDEX;
@@ -1319,7 +1344,7 @@ flush_rtindex:
 	;
 
 flush_ramchunk:
-	TOK_FLUSH TOK_RAMCHUNK TOK_IDENT
+	TOK_FLUSH TOK_RAMCHUNK ident
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_FLUSH_RAMCHUNK;
@@ -1339,7 +1364,7 @@ select_sysvar:
 	
 sysvar_name:
 	TOK_SYSVAR
-	| TOK_SYSVAR '.' TOK_IDENT
+	| TOK_SYSVAR '.' ident
 	;
 
 select_dual:
@@ -1353,7 +1378,7 @@ select_dual:
 //////////////////////////////////////////////////////////////////////////
 
 truncate:
-	TOK_TRUNCATE TOK_RTINDEX TOK_IDENT
+	TOK_TRUNCATE TOK_RTINDEX ident
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_TRUNCATE_RTINDEX;
@@ -1364,7 +1389,7 @@ truncate:
 //////////////////////////////////////////////////////////////////////////
 
 optimize_index:
-	TOK_OPTIMIZE TOK_INDEX TOK_IDENT
+	TOK_OPTIMIZE TOK_INDEX ident
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_OPTIMIZE_INDEX;
@@ -1375,7 +1400,7 @@ optimize_index:
 //////////////////////////////////////////////////////////////////////////
 
 json_field:
-	TOK_IDENT subscript			{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
+	ident subscript				{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
 
 subscript:
 	subkey

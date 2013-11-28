@@ -6951,23 +6951,18 @@ bool CSphSchema::IsReserved ( const char * szToken )
 {
 	static const char * dReserved[] =
 	{
-		"AGENT", "ALTER", "ADD", "AND", "AS", "ASC", "ATTACH", "AVG", "BEGIN", "BETWEEN", "BIGINT", "BOOL", "BY", "CALL", "CHARACTER",
-		"COLLATION", "COLUMN", "COMMIT", "COMMITTED", "COUNT", "CREATE", "DATABASES", "DELETE", "DESC", "DESCRIBE", "DISTINCT", "DIV",
-		"DOUBLE", "DROP", "FALSE", "FLOAT", "FLUSH", "FOR", "FROM", "FUNCTION", "GLOBAL", "GROUP", "GROUPBY", "GROUP_CONCAT", "HAVING",
-		"ID", "IN", "INDEX", "INSERT", "INTEGER", "INT", "INTO", "IS", "ISOLATION", "LEVEL", "LIKE", "LIMIT", "MATCH", "MAX", "META",
-		"MIN", "MOD", "NAMES", "NOT", "NULL", "OPTION", "OPTIMIZE", "OR", "ORDER", "PLAN", "PROFILE", "RAMCHUNK", "RANKER", "RAND",
-		"READ", "REPEATABLE", "REPLACE", "RETURNS", "ROLLBACK", "RTINDEX", "SELECT", "SERIALIZABLE", "SET", "SESSION", "SHOW", "SONAME",
-		"START", "STATUS", "STRING", "SUM", "TABLE", "TABLES", "TO", "TRANSACTION", "TRUE", "TRUNCATE", "UNCOMMITTED", "UPDATE",
-		"VALUES", "VARIABLES", "WARNINGS", "WEIGHT", "WHERE", "WITHIN"
+		"ALTER", "ADD", "AND", "AS", "ASC", "BETWEEN", "BIGINT", "BY", "CALL", "CHARACTER",
+		"COLUMN", "COMMIT", "COMMITTED", "CREATE", "DATABASES", "DELETE", "DESC", "DESCRIBE",
+		"DISTINCT", "DIV", "DOUBLE", "DROP", "FALSE", "FLOAT", "FOR", "FROM", "HAVING", "ID",
+		"IN", "INDEX", "INSERT", "INTEGER", "INT", "INTO", "IS", "LIMIT", "MIN", "MOD", "NOT",
+		"NULL", "OPTION", "OPTIMIZE", "OR", "ORDER", "RANKER", "REPLACE", "SELECT", "SET",
+		"SHOW", "SONAME", "TABLE", "TO", "TRUE", "UPDATE", "VALUES", "WHERE", NULL
 	};
 
-	CSphString sToken ( szToken );
-	sToken.ToUpper();
-
-	for ( unsigned int i = 0; i < sizeof(dReserved)/sizeof(dReserved[0]); i++ )
-		if ( sToken==dReserved[i] )
+	const char ** p = dReserved;
+	while ( *p )
+		if ( strcasecmp ( szToken, *p++ )==0 )
 			return true;
-
 	return false;
 }
 

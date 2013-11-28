@@ -4068,6 +4068,7 @@ ExtQuorum_c::ExtQuorum_c ( CSphVector<ExtNode_i*> & dQwords, const XQNode_t & tN
 	m_iMyHitCount = 0;
 	m_iMyLast = 0;
 	m_bHasDupes = false;
+	memset ( m_dQuorumHits, 0, sizeof(m_dQuorumHits) );
 
 	assert ( dQwords.GetLength()>1 ); // use TERM instead
 	assert ( dQwords.GetLength()<=256 ); // internal masks are upto 256 bits

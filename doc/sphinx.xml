@@ -39,9 +39,9 @@ does not depend on nor require any specific database to function.
 <para>
 Applications can access Sphinx search daemon (searchd) using any of
 the three different access methods: a) via Sphinx own implementation of MySQL 
-network protocol (using a small SQL subset called SphinxQL), b) via native 
-search API (SphinxAPI) or c) via MySQL server with a pluggable
-storage engine (SphinxSE).
+network protocol (using a small SQL subset called SphinxQL, this is recommended
+way), b) via native search API (SphinxAPI) or c) via MySQL server with a
+pluggable storage engine (SphinxSE).
 </para>
 <para>
 Official native SphinxAPI implementations for PHP, Perl, Python, Ruby and Java 
@@ -51,7 +51,7 @@ Third party API ports and plugins exist for Perl, C#, Haskell,
 Ruby-on-Rails, and possibly other languages and frameworks.
 </para>
 <para>
-Starting version 1.10-beta, Sphinx supports two different indexing
+Starting from version 1.10-beta, Sphinx supports two different indexing
 backends: "disk" index backend, and "realtime" (RT) index backend.
 Disk indexes support online full-text index rebuilds, but online updates
 can only be done on non-text (attribute) data.  RT indexes additionally
@@ -79,9 +79,9 @@ Key Sphinx features are:
 <itemizedlist>
 <listitem><para>high indexing and searching performance;</para></listitem>
 <listitem><para>advanced indexing and querying tools (flexible and feature-rich text tokenizer, querying language, several different ranking modes, etc);</para></listitem>
-<listitem><para>advanced result set post-processing (SELECT with expressions, WHERE, ORDER BY, GROUP BY etc over text search results);</para></listitem>
+<listitem><para>advanced result set post-processing (SELECT with expressions, WHERE, ORDER BY, GROUP BY, HAVING etc over text search results);</para></listitem>
 <listitem><para>proven scalability up to billions of documents, terabytes of data, and thousands of queries per second;</para></listitem>
-<listitem><para>easy integration with SQL and XML data sources, and SphinxAPI, SphinxQL, or SphinxSE search interfaces;</para></listitem>
+<listitem><para>easy integration with SQL and XML data sources, and SphinxQL, SphinxAPI, or SphinxSE search interfaces;</para></listitem>
 <listitem><para>easy scaling with distributed searches.</para></listitem>
 </itemizedlist>
 To expand a bit, Sphinx:
@@ -92,7 +92,7 @@ To expand a bit, Sphinx:
 <listitem><para>provides good relevance ranking through combination of phrase proximity ranking and statistical (BM25) ranking;</para></listitem>
 <listitem><para>provides distributed searching capabilities;</para></listitem>
 <listitem><para>provides document excerpts (snippets) generation;</para></listitem>
-<listitem><para>provides searching from within application with SphinxAPI or SphinxQL interfaces, and from within MySQL with pluggable SphinxSE storage engine;</para></listitem>
+<listitem><para>provides searching from within application with SphinxQL or SphinxAPI interfaces, and from within MySQL with pluggable SphinxSE storage engine;</para></listitem>
 <listitem><para>supports boolean, phrase, word proximity and other types of queries;</para></listitem>
 <listitem><para>supports multiple full-text fields per document (upto 32 by default);</para></listitem>
 <listitem><para>supports multiple additional attributes per document (ie. groups, timestamps, etc);</para></listitem>
@@ -106,7 +106,7 @@ are available by building third party <ulink url="http://snowball.tartarus.org/"
 <listitem><para>supports MySQL natively (all types of tables, including MyISAM, InnoDB, NDB, Archive, etc are supported);</para></listitem>
 <listitem><para>supports PostgreSQL natively;</para></listitem>
 <listitem><para>supports ODBC compliant databases (MS SQL, Oracle, etc) natively;</para></listitem>
-<listitem><para>...has 50+ other features not listed here, refer to API and configuration manual!</para></listitem>
+<listitem><para>...has 50+ other features not listed here, refer configuration manual!</para></listitem>
 </itemizedlist>
 </para>
 </sect1>
@@ -273,7 +273,7 @@ limitations on any platform.
 On UNIX, you will need the following tools to build
 and install Sphinx:
 <itemizedlist>
-<listitem><para>a working C++ compiler. GNU gcc is known to work.</para></listitem>
+<listitem><para>a working C++ compiler. GNU gcc and clang are known to work.</para></listitem>
 <listitem><para>a good make program. GNU make is known to work.</para></listitem>
 </itemizedlist>
 </para>

@@ -18,8 +18,6 @@ source src1
 
 	sql_attr_uint		= group_id
 	sql_attr_timestamp	= date_added
-
-	sql_query_info		= SELECT * FROM documents WHERE id=$id
 }
 
 
@@ -27,18 +25,15 @@ index test1
 {
 	source			= src1
 	path			= @CONFDIR@/data/test1
-	docinfo			= extern
-	charset_type		= sbcs
 }
 
 
 index testrt
 {
 	type			= rt
-	rt_mem_limit		= 32M
+	rt_mem_limit		= 128M
 
 	path			= @CONFDIR@/data/testrt
-	charset_type		= utf-8
 
 	rt_field		= title
 	rt_field		= content
@@ -48,7 +43,7 @@ index testrt
 
 indexer
 {
-	mem_limit		= 32M
+	mem_limit		= 128M
 }
 
 

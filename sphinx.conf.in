@@ -54,12 +54,6 @@ source src1
 	# mssql_winauth		= 1 # use currently logged on user credentials
 
 
-	# MS SQL specific Unicode indexing flag
-	# optional, default is 0 (request SBCS data)
-	#
-	# mssql_unicode		= 1 # request Unicode data from server
-
-
 	# ODBC specific DSN (data source name)
 	# mandatory for odbc source type, no default value
 	#
@@ -163,13 +157,6 @@ source src1
 	# sql_attr_timestamp	= last_edited_ts
 	sql_attr_timestamp	= date_added
 
-	# string ordinal attribute declaration
-	# multi-value (an arbitrary number of attributes is allowed), optional
-	# sorts strings (bytewise), and stores their indexes in the sorted list
-	# sorting by this attr is equivalent to sorting by the original strings
-	#
-	# sql_attr_str2ordinal	= author_name
-
 
 	# floating point attribute declaration
 	# multi-value (an arbitrary number of attributes is allowed), optional
@@ -202,13 +189,6 @@ source src1
 	# sql_attr_string		= stitle
 
 
-	# wordcount attribute declaration
-	# multi-value (an arbitrary number of these is allowed), optional
-	# lets you count the words at indexing time
-	#
-	# sql_attr_str2wordcount	= stitle
-
-
 	# JSON attribute declaration
 	# multi-value (an arbitrary number of these is allowed), optional
 	# lets you store a JSON document as an (in-memory) attribute for later use
@@ -220,7 +200,6 @@ source src1
 	# stores column as an attribute, but also indexes it as a full-text field
 	#
 	# sql_field_string	= author
-	# sql_field_str2wordcount	= title
 
 	
 	# post-query, executed on sql_query completion
@@ -312,17 +291,14 @@ source src1
 	#
 	# xmlpipe_attr_timestamp	= published
 	# xmlpipe_attr_uint	= author_id
-	# xmlpipe_attr_str2ordinal= author
 	# xmlpipe_attr_bool	= is_enabled
 	# xmlpipe_attr_float	= latitude
 	# xmlpipe_attr_bigint	= guid
 	# xmlpipe_attr_multi	= tags
 	# xmlpipe_attr_multi_64	= tags64
 	# xmlpipe_attr_string	= title
-	# xmlpipe_attr_wordcount	= title_num_words
 	# xmlpipe_attr_json	= extra_data
 	# xmlpipe_field_string	= content
-	# xmlpipe_field_wordcount	= content_num_words
 
 
 	# perform UTF-8 validation, and filter out incorrect codes
@@ -379,7 +355,7 @@ index test1
 	# (because all substrings are pre-extracted as individual keywords)
 	# keywords is much faster to index with substrings, and index is much (3-10x) smaller
 	# keywords supports wildcards, crc does not, and never will
-	# optional, default is 'crc'
+	# optional, default is 'keywords'
 	dict			= keywords
 
 	# memory locking for cached data (.spa and .spi), to prevent swapping
@@ -440,24 +416,6 @@ index test1
 	# default is 1 (index everything)
 	min_word_len		= 1
 
-	# charset encoding type
-	# optional, default is 'sbcs'
-	# known types are 'sbcs' (Single Byte CharSet) and 'utf-8'
-	charset_type		= sbcs
-
-	# charset definition and case folding rules "table"
-	# optional, default value depends on charset_type
-	#
-	# defaults are configured to include English and Russian characters only
-	# you need to change the table to include additional ones
-	# this behavior MAY change in future versions
-	#
-	# 'sbcs' default value is
-	# charset_table		= 0..9, A..Z->a..z, _, a..z, U+A8->U+B8, U+B8, U+C0..U+DF->U+E0..U+FF, U+E0..U+FF
-	#
-	# 'utf-8' default value is
-	# charset_table		= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F
-
 
 	# ignored characters list
 	# optional, default value is empty
@@ -488,13 +446,6 @@ index test1
 	#
 	# prefix_fields		= filename
 	# infix_fields		= url, domain
-
-
-	# enable star-syntax (wildcards) when searching prefix/infix indexes
-	# search-time only, does not affect indexing, can be 0 or 1
-	# optional, default is 0 (do not use wildcard syntax)
-	#
-	# enable_star		= 1
 
 
 	# expand keywords with exact forms and/or stars when searching fit indexes
@@ -566,12 +517,6 @@ index test1
 	# optional, default is 0 (do not preopen), searchd-only
 	#
 	# preopen			= 1
-
-
-	# whether to keep dictionary (.spi) on disk, or cache it in RAM
-	# optional, default is 0 (cache in RAM), searchd-only
-	#
-	# ondisk_dict		= 1
 
 
 	# whether to enable in-place inversion (2x less disk, 90-95% speed)
@@ -771,7 +716,7 @@ index rt
 
 	# RAM chunk size limit
 	# RT index will keep at most this much data in RAM, then flush to disk
-	# optional, default is 32M
+	# optional, default is 128M
 	#
 	# rt_mem_limit		= 512M
 
@@ -804,8 +749,8 @@ index rt
 indexer
 {
 	# memory limit, in bytes, kiloytes (16384K) or megabytes (256M)
-	# optional, default is 32M, max is 2047M, recommended is 256M to 1024M
-	mem_limit		= 32M
+	# optional, default is 128M, max is 2047M, recommended is 256M to 1024M
+	mem_limit		= 128M
 
 	# maximum IO calls per second (for I/O throttling)
 	# optional, default is 0 (unlimited)
@@ -947,12 +892,6 @@ searchd
 	# attr_flush_period	= 900
 
 
-	# instance-wide ondisk_dict defaults (per-index value take precedence)
-	# optional, default is 0 (precache all dictionaries in RAM)
-	#
-	# ondisk_dict_default	= 1
-
-
 	# MVA updates pool size
 	# shared between all instances of searchd, disables attr flushes!
 	# optional, default size is 1M
@@ -962,13 +901,6 @@ searchd
 	# limits both query packets from clients, and responses from agents
 	# optional, default size is 8M
 	max_packet_size		= 8M
-
-	# crash log path
-	# searchd will (try to) log crashed query to 'crash_log_path.PID' file
-	# optional, default is empty (do not create crash logs)
-	#
-	# crash_log_path		= @CONFDIR@/log/crash
-
 
 	# max allowed per-query filter count
 	# optional, default is 256
@@ -1017,7 +949,7 @@ searchd
 	# multi-processing mode (MPM)
 	# known values are none, fork, prefork, and threads
 	# threads is required for RT backend to work
-	# optional, default is fork
+	# optional, default is threads
 	workers			= threads # for RT to work
 
 
@@ -1104,12 +1036,6 @@ searchd
 	# watchdog				= 1
 
 	
-	# SphinxQL compatibility mode (legacy columns and their names)
-	# optional, default is 1 (old-style)
-	#
-	# compat_sphinxql_magics	= 1
-
-
 	# costs for max_predicted_time model, in (imaginary) nanoseconds
 	# optional, default is "doc=64, hit=48, skip=2048, match=64"
 	#

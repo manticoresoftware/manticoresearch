@@ -281,8 +281,6 @@ struct KeyDesc_t
 static KeyDesc_t g_dKeysSource[] =
 {
 	{ "type",					0, NULL },
-	{ "strip_html",				KEY_DEPRECATED, "html_strip (per-index)" },
-	{ "index_html_attrs",		KEY_DEPRECATED, "html_index_attrs (per-index)" },
 	{ "sql_host",				0, NULL },
 	{ "sql_user",				0, NULL },
 	{ "sql_pass",				0, NULL },
@@ -321,8 +319,6 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "xmlpipe_attr_json",		KEY_LIST, NULL },
 	{ "xmlpipe_field_string",	KEY_LIST, NULL },
 	{ "xmlpipe_fixup_utf8",		0, NULL },
-	{ "sql_group_column",		KEY_LIST | KEY_DEPRECATED, "sql_attr_uint" },
-	{ "sql_date_column",		KEY_LIST | KEY_DEPRECATED, "sql_attr_timestamp" },
 	{ "unpack_zlib",			KEY_LIST, NULL },
 	{ "unpack_mysqlcompress",	KEY_LIST, NULL },
 	{ "unpack_mysqlcompress_maxsize", 0, NULL },
@@ -373,7 +369,6 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "mlock",					0, NULL },
 	{ "morphology",				0, NULL },
 	{ "stopwords",				0, NULL },
-	{ "synonyms",				KEY_DEPRECATED, "exceptions" },
 	{ "exceptions",				0, NULL },
 	{ "wordforms",				KEY_LIST, NULL },
 	{ "embedded_limit",			0, NULL },
@@ -475,7 +470,6 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "attr_flush_period",		0, NULL },
 	{ "max_packet_size",		0, NULL },
 	{ "mva_updates_pool",		0, NULL },
-	{ "crash_log_path",			KEY_DEPRECATED, NULL },
 	{ "max_filters",			0, NULL },
 	{ "max_filter_values",		0, NULL },
 	{ "listen_backlog",			0, NULL },
@@ -1088,8 +1082,6 @@ void sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings 
 	tSettings.m_iMinWordLen = Max ( hIndex.GetInt ( "min_word_len", 1 ), 1 );
 	tSettings.m_sNgramChars = hIndex.GetStr ( "ngram_chars" );
 	tSettings.m_sSynonymsFile = hIndex.GetStr ( "exceptions" ); // new option name
-	if ( tSettings.m_sSynonymsFile.IsEmpty() )
-		tSettings.m_sSynonymsFile = hIndex.GetStr ( "synonyms" ); // deprecated option name
 	tSettings.m_sIgnoreChars = hIndex.GetStr ( "ignore_chars" );
 	tSettings.m_sBlendChars = hIndex.GetStr ( "blend_chars" );
 	tSettings.m_sBlendMode = hIndex.GetStr ( "blend_mode" );

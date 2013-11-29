@@ -592,9 +592,6 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 
 	LOC_GETI ( tParams.m_iRangedThrottle,	"sql_ranged_throttle" );
 
-	SqlAttrsConfigure ( tParams,	hSource("sql_group_column"),		SPH_ATTR_INTEGER,	sSourceName );
-	SqlAttrsConfigure ( tParams,	hSource("sql_date_column"),			SPH_ATTR_TIMESTAMP,	sSourceName );
-
 	SqlAttrsConfigure ( tParams,	hSource("sql_attr_uint"),			SPH_ATTR_INTEGER,	sSourceName );
 	SqlAttrsConfigure ( tParams,	hSource("sql_attr_timestamp"),		SPH_ATTR_TIMESTAMP,	sSourceName );
 	SqlAttrsConfigure ( tParams,	hSource("sql_attr_bool"),			SPH_ATTR_BOOL,		sSourceName );
@@ -1061,15 +1058,11 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	// spawn datasources
 	/////////////////////
 
-	// check for per-index HTML stipping override
-	bool bStripOverride = false;
-
 	bool bHtmlStrip = false;
 	CSphString sHtmlIndexAttrs, sHtmlRemoveElements;
 
 	if ( hIndex("html_strip") )
 	{
-		bStripOverride = true;
 		bHtmlStrip = hIndex.GetInt ( "html_strip" )!=0;
 		sHtmlIndexAttrs = hIndex.GetStr ( "html_index_attrs" );
 		sHtmlRemoveElements = hIndex.GetStr ( "html_remove_elements" );
@@ -1106,23 +1099,9 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		if ( pSource->HasAttrsConfigured() )
 			bGotAttrs = true;
 
-		// strip_html, index_html_attrs
-		if ( bStripOverride )
+		if ( bHtmlStrip )
 		{
-			// apply per-index overrides
-			if ( bHtmlStrip )
-			{
-				if ( !pSource->SetStripHTML ( sHtmlIndexAttrs.cstr(), sHtmlRemoveElements.cstr(), bIndexSP, hIndex.GetStr("index_zones"), sError ) )
-				{
-					fprintf ( stdout, "ERROR: source '%s': %s.\n", pSourceName->cstr(), sError.cstr() );
-					return false;
-				}
-			}
-
-		} else if ( hSource.GetInt ( "strip_html" ) )
-		{
-			// apply deprecated per-source settings if there are no overrides
-			if ( !pSource->SetStripHTML ( hSource.GetStr ( "index_html_attrs" ), "", false, NULL, sError ) )
+			if ( !pSource->SetStripHTML ( sHtmlIndexAttrs.cstr(), sHtmlRemoveElements.cstr(), bIndexSP, hIndex.GetStr("index_zones"), sError ) )
 			{
 				fprintf ( stdout, "ERROR: source '%s': %s.\n", pSourceName->cstr(), sError.cstr() );
 				return false;

@@ -1412,9 +1412,9 @@ struct Expr_MinTopWeight : public ISphExpr
 
 	Expr_MinTopWeight() : m_pWeight ( NULL ) {}
 
-	virtual int IntEval ( const CSphMatch & ) const			{ return m_pWeight ? *m_pWeight : 0; }
-	virtual float Eval ( const CSphMatch & ) const			{ return m_pWeight ? (float)*m_pWeight : 0; }
-	virtual int64_t Int64Eval ( const CSphMatch & ) const	{ return m_pWeight ? *m_pWeight : 0; }
+	virtual int IntEval ( const CSphMatch & ) const			{ return m_pWeight ? *m_pWeight : -INT_MAX; }
+	virtual float Eval ( const CSphMatch & ) const			{ return m_pWeight ? (float)*m_pWeight : -FLT_MAX; }
+	virtual int64_t Int64Eval ( const CSphMatch & ) const	{ return m_pWeight ? *m_pWeight : -LLONG_MAX; }
 
 	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
@@ -1440,7 +1440,7 @@ struct Expr_MinTopSortval : public ISphExpr
 	{
 		if ( m_pWorst && m_pWorst->m_pDynamic && m_iSortval>=0 )
 			return *(float*)( m_pWorst->m_pDynamic + m_iSortval );
-		return 0.0f;
+		return -FLT_MAX;
 	}
 
 	virtual void Command ( ESphExprCommand eCmd, void * pArg )

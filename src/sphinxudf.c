@@ -171,7 +171,7 @@ int sphinx_factors_deinit ( SPH_UDF_FACTORS * out )
 
 static const unsigned int * skip_fields ( const unsigned int * in, int n )
 {
-	in += 8; // skip heading document factors
+	in += 6 + ( ( in[5] + 31 ) / 32 ) * 2; // skip heading document factors and 2 exact masks
 	while ( n-->0 )
 		in += ( in[0]>0 ) ? 15 : 1; // skip 15 ints per matched field, or 1 per unmatched
 	return in;
@@ -218,6 +218,7 @@ const unsigned int * sphinx_get_term_factors ( const unsigned int * in, int term
 
 int sphinx_get_doc_factor_int ( const unsigned int * in, enum sphinx_doc_factor f )
 {
+	int fields_size;
 	switch ( f )
 	{
 		case SPH_DOCF_BM25:				return (int)in[1];
@@ -229,7 +230,7 @@ int sphinx_get_doc_factor_int ( const unsigned int * in, enum sphinx_doc_factor 
 			in = skip_fields ( in, in[5] );
 			return (int)in[0];
 		case SPH_DOCF_EXACT_HIT_MASK:	return (int)in[6];
-		case SPH_DOCF_EXACT_ORDER_MASK:	return (int)in[7];
+		case SPH_DOCF_EXACT_ORDER_MASK:	fields_size = ( (int)in[5] + 31 ) / 32; return (int)in[6+fields_size];
 	}
 	return 0;
 }

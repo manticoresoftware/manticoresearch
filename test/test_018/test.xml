@@ -34,7 +34,7 @@ index test_idx
       <Variant>	</Variant>
     </Dynamic>
     <Dynamic>
-      <Variant>	synonyms		= synonyms.txt </Variant>
+      <Variant>	exceptions		= synonyms.txt </Variant>
       <Variant>	</Variant>
     </Dynamic>
 
@@ -94,7 +94,7 @@ $opts = array
     "chunk_separator" => " ... ",
     "limit" => 50,
     "around" => 2
-);
+	);
 
 $results [] = $opts;
 $res = $client->BuildExcerpts ( $docs, "test_idx", $words, $opts );

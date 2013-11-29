@@ -215,6 +215,7 @@ ident_set:
 	| TOK_SERIALIZABLE | TOK_SESSION | TOK_START | TOK_STATUS | TOK_STRING
 	| TOK_SUM | TOK_TABLES  | TOK_TRUNCATE | TOK_UNCOMMITTED
 	| TOK_VARIABLES | TOK_WARNINGS | TOK_WEIGHT | TOK_WITHIN
+	| TOK_JSON
 	;
 
 ident:
@@ -977,9 +978,14 @@ opt_column_list:
 	| '(' column_list ')'
 	;
 
+column_ident:
+	ident
+	| TOK_ID
+	;
+
 column_list:
-	ident						{ if ( !pParser->AddSchemaItem ( &$1 ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } }
-	| column_list ',' ident		{ if ( !pParser->AddSchemaItem ( &$3 ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } }
+	column_ident					{ if ( !pParser->AddSchemaItem ( &$1 ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } }
+	| column_list ',' column_ident	{ if ( !pParser->AddSchemaItem ( &$3 ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } }
 	;
 
 insert_rows_list:

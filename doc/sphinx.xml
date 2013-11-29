@@ -473,29 +473,23 @@ $ /usr/local/sphinx/bin/indexer --all</userinput></literallayout></para></listit
 <listitem>
     <para>Query your newly created index!</para></listitem>
 </orderedlist>
-<para>
-To query the index from your PHP scripts, you need to:
-</para>
-<orderedlist>
-    <listitem>
-        <para>Run the search daemon which your script will talk to:</para>
-<para><literallayout><userinput>$ cd /usr/local/sphinx/etc
-$ /usr/local/sphinx/bin/searchd</userinput></literallayout>
-    </para></listitem>
-    <listitem>
-        <para>
-        Run the attached PHP API test script (to ensure that the daemon
-        was successfully started and is ready to serve the queries):
-        </para>
-<para><literallayout><userinput>$ cd sphinx/api
-$ php test.php test</userinput></literallayout>
-    </para></listitem>
-    <listitem>
-        <para>
-        Include the API (it's located in <filename>api/sphinxapi.php</filename>)
-        into your own scripts and use it.
-    </para></listitem>
-</orderedlist>
+<para>Now query your indexes!</para>
+<para>Connect to server:</para>
+<para><literallayout><userinput>$ mysql -h0 -P9306
+</userinput></literallayout></para>
+<para><literallayout><userinput>SELECT * FROM test1 WHERE MATCH('my document');
+</userinput></literallayout></para>
+<para><literallayout><userinput>
+INSERT INTO rt VALUES (1, 'this is a sample text', 11);
+</userinput></literallayout></para>
+<para><literallayout><userinput>
+INSERT INTO rt VALUES (2, 'some more text here', 22);
+</userinput></literallayout></para>
+<para><literallayout><userinput>
+SELECT gid/11 FROM rt WHERE MATCH('text') GROUP BY gid;
+</userinput></literallayout></para>
+<para><literallayout><userinput>SELECT * FROM rt ORDER BY gid DESC;
+</userinput></literallayout></para>
 <para>
 Happy searching!
 </para>

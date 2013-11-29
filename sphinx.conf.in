@@ -221,10 +221,6 @@ source src1
 	# enforces given delay before each query step
 	sql_ranged_throttle	= 0
 
-	# document info query, ONLY for CLI search (ie. testing and debugging)
-	# optional, default is empty
-	# must contain $id macro and must fetch the document by that id
-	sql_query_info		= SELECT * FROM documents WHERE id=$id
 
 	# kill-list query, fetches the document IDs for kill-list
 	# k-list will suppress matches from preceding indexes in the same query

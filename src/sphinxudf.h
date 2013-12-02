@@ -205,6 +205,9 @@ const unsigned int * sphinx_get_term_factors ( const unsigned int * in, int term
 /// returns a document factor value, interpreted as integer
 int sphinx_get_doc_factor_int ( const unsigned int * in, enum sphinx_doc_factor f );
 
+/// returns a document factor value, interpreted as float
+float sphinx_get_doc_factor_float ( const unsigned int * in, enum sphinx_doc_factor f );
+
 /// returns a field factor value, interpreted as integer
 int sphinx_get_field_factor_int ( const unsigned int * in, enum sphinx_field_factor f );
 

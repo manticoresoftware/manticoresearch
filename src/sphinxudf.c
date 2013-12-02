@@ -205,8 +205,8 @@ const unsigned int * sphinx_get_term_factors ( const unsigned int * in, int term
 	if ( !in || term<0 )
 		return NULL;
 	in = skip_fields ( in, in[5] ); // skip all fields
-	if ( term>=(int)in[0] )
-		return NULL; // sanity check vs max_uniq_qpos
+	if ( term>(int)in[0] )
+		return NULL; // sanity check vs max_uniq_qpos ( qpos and terms range - [1, max_uniq_qpos]
 	in = skip_terms ( in, term-1);
 	if ( !in[0] )
 		return NULL; // unmatched term
@@ -233,6 +233,14 @@ int sphinx_get_doc_factor_int ( const unsigned int * in, enum sphinx_doc_factor 
 		case SPH_DOCF_EXACT_ORDER_MASK:	fields_size = ( (int)in[5] + 31 ) / 32; return (int)in[6+fields_size];
 	}
 	return 0;
+}
+
+float sphinx_get_doc_factor_float ( const unsigned int * in, enum sphinx_doc_factor f )
+{
+	if ( f==SPH_DOCF_BM25A )
+		return *(float*)&in[2];
+	else
+		return 0.0f;
 }
 
 

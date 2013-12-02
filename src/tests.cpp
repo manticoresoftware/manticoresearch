@@ -2111,26 +2111,29 @@ void TestStridedSort ()
 
 //////////////////////////////////////////////////////////////////////////
 
-static const char * g_sFieldsData[] = { "33", "1033", "If I were a cat...", "We are the greatest cat" };
-
 class SphTestDoc_c : public CSphSource_Document
 {
 public:
-	explicit SphTestDoc_c ( const CSphSchema & tSchema ) : CSphSource_Document ( "test_doc" )
+	explicit SphTestDoc_c ( const CSphSchema & tSchema, BYTE ** ppDocs, int iDocs, int iFields )
+		: CSphSource_Document ( "test_doc" )
 	{
 		m_tSchema = tSchema;
+		m_ppDocs = ppDocs;
+		m_iDocCount = iDocs;
+		m_iFields = iFields;
 	}
 
 	virtual BYTE ** NextDocument ( CSphString & )
 	{
-		if ( m_tDocInfo.m_iDocID )
+		if ( m_tDocInfo.m_iDocID>=m_iDocCount )
 		{
 			m_tDocInfo.m_iDocID = 0;
 			return NULL;
 		}
 
+		int iDoc = (int)m_tDocInfo.m_iDocID;
 		m_tDocInfo.m_iDocID++;
-		return (BYTE **) &g_sFieldsData[2];
+		return m_ppDocs + iDoc * m_iFields;
 	}
 
 	bool Connect ( CSphString & ) { return true; }
@@ -2143,6 +2146,11 @@ public:
 	bool IterateFieldMVANext () { return false; }
 	bool IterateKillListStart ( CSphString & ) { return false; }
 	bool IterateKillListNext ( SphDocID_t & ) { return false; }
+
+private:
+	int m_iDocCount;
+	int m_iFields;
+	BYTE ** m_ppDocs;
 };
 
 
@@ -2239,7 +2247,9 @@ void TestRTWeightBoundary ()
 		tCol.m_sName = "content";
 		tSrcSchema.m_dFields.Add ( tCol );
 
-		SphTestDoc_c * pSrc = new SphTestDoc_c ( tSrcSchema );
+
+		char * dFields[] = { "If I were a cat...", "We are the greatest cat" };
+		SphTestDoc_c * pSrc = new SphTestDoc_c ( tSrcSchema, (BYTE **)dFields, 1, 2 );
 
 		pSrc->SetTokenizer ( pTok );
 		pSrc->SetDict ( pDict );
@@ -2491,6 +2501,193 @@ void TestRTSendVsMerge ()
 		assert ( (SphDocID_t)tTag1==tID+1000 );
 		assert ( tTag2==1313 );
 	}
+	SafeDelete ( pSorter );
+	SafeDelete ( pIndex );
+	SafeDelete ( pSrc );
+
+	sphRTDone ();
+
+	printf ( "ok\n" );
+
+	DeleteIndexFiles ( RT_INDEX_FILE_NAME );
+}
+
+void TestRankerFactors ()
+{
+	char * dFields[] = {
+		"Seven lies multiplied by seven", "",
+		"Multiplied by seven again", "",
+		"Seven lies multiplied by seven", "Multiplied by seven again",
+
+		"Mary vs Lamb", "Mary had a little lamb little lamb little lamb",
+		"Mary vs Lamb 2: Return of The Lamb", "...whose fleece was white as snow",
+		"Mary vs Lamb 3: The Resurrection", "Snow! Bloody snow!",
+
+		"the who", "what the foo"
+	};
+	char * dQueries[] = {
+		"seven !(angels !by)", // matched by 0-2
+		"Mary lamb", // matched by 3-5
+		"(the who) | (the foo)", // matched by 6
+	};
+
+	DeleteIndexFiles ( RT_INDEX_FILE_NAME );
+	printf ( "testing ranker factors... " );
+
+	TestRTInit ();
+
+	CSphString sError, sWarning;
+	CSphDictSettings tDictSettings;
+	tDictSettings.m_bWordDict = false;
+
+	ISphTokenizer * pTok = sphCreateUTF8Tokenizer();
+	CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", sError );
+
+	CSphColumnInfo tCol;
+	CSphSchema tSrcSchema;
+
+	CSphSourceSettings tParams;
+	tSrcSchema.Reset();
+
+	tCol.m_sName = "title";
+	tSrcSchema.m_dFields.Add ( tCol );
+
+	tCol.m_sName = "content";
+	tSrcSchema.m_dFields.Add ( tCol );
+
+	tCol.m_sName = "idd";
+	tCol.m_eAttrType = SPH_ATTR_INTEGER;
+	tSrcSchema.AddAttr ( tCol, true );
+
+	CSphSource * pSrc = new SphTestDoc_c ( tSrcSchema, (BYTE **)dFields, sizeof(dFields)/sizeof(dFields[0])/2, 2 );
+
+	pSrc->SetTokenizer ( pTok );
+	pSrc->SetDict ( pDict );
+
+	pSrc->Setup ( tParams );
+	Verify ( pSrc->Connect ( sError ) );
+	Verify ( pSrc->IterateStart ( sError ) );
+
+	Verify ( pSrc->UpdateSchema ( &tSrcSchema, sError ) );
+
+	CSphSchema tSchema; // source schema must be all dynamic attrs; but index ones must be static
+	tSchema.m_dFields = tSrcSchema.m_dFields;
+	for ( int i=0; i<tSrcSchema.GetAttrsCount(); i++ )
+		tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
+
+	ISphRtIndex * pIndex = sphCreateIndexRT ( tSchema, "testrt", 128*1024, RT_INDEX_FILE_NAME, false );
+
+	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
+	pIndex->SetDictionary ( pDict );
+	pIndex->PostSetup();
+	Verify ( pIndex->Prealloc ( false, false, sError ) );
+
+	CSphVector<DWORD> dMvas;
+	for ( ;; )
+	{
+		Verify ( pSrc->IterateDocument ( sError ) );
+		if ( !pSrc->m_tDocInfo.m_iDocID )
+			break;
+
+		ISphHits * pHits = pSrc->IterateHits ( sError );
+		if ( !pHits )
+			break;
+
+		pIndex->AddDocument ( pHits, pSrc->m_tDocInfo, NULL, dMvas, sError, sWarning );
+	}
+	pIndex->Commit ();
+	pSrc->Disconnect();
+
+	CSphQuery tQuery;
+	CSphQueryItem & tFactor = tQuery.m_dItems.Add();
+	tFactor.m_sExpr = "packedfactors()";
+	tFactor.m_sAlias = "pf";
+	tQuery.m_sRankerExpr = "1";
+	tQuery.m_eRanker = SPH_RANK_EXPR;
+	tQuery.m_eMode = SPH_MATCH_EXTENDED2;
+	tQuery.m_eSort = SPH_SORT_EXTENDED;
+	tQuery.m_sSortBy = "@weight desc";
+	tQuery.m_sOrderBy = "@weight desc";
+	CSphQueryResult tResult;
+	CSphMultiQueryArgs tArgs ( CSphVector<SphDocID_t>(), 1 );
+	SphQueueSettings_t tQueueSettings ( tQuery, pIndex->GetMatchSchema(), tResult.m_sError, NULL );
+	tQueueSettings.m_bComputeItems = true;
+	tArgs.m_bFactors = true;
+
+	ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings );
+	assert ( pSorter );
+
+	for ( int iQuery=0; iQuery<sizeof(dQueries)/sizeof(dQueries[0]); iQuery++ )
+	{
+		tQuery.m_sQuery = dQueries[iQuery];
+
+		Verify ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, tArgs ) );
+		sphFlattenQueue ( pSorter, &tResult, 0 );
+
+		tResult.m_tSchema = pSorter->GetSchema(); // can SwapOut
+		const CSphAttrLocator & tLoc = tResult.m_tSchema.GetAttr ( "pf" )->m_tLocator;
+
+		for ( int iMatch=0; iMatch<tResult.m_dMatches.GetLength(); iMatch++ )
+		{
+			const unsigned int * pFactors = (const unsigned int *)tResult.m_dMatches[iMatch].GetAttr ( tLoc );
+			assert ( pFactors );
+
+			SPH_UDF_FACTORS tUnpacked;
+			sphinx_factors_init ( &tUnpacked );
+			sphinx_factors_unpack ( pFactors, &tUnpacked );
+
+			// doc level factors
+			assert ( tUnpacked.doc_bm25==sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_BM25 ) );
+			assert ( tUnpacked.doc_bm25a==sphinx_get_doc_factor_float ( pFactors, SPH_DOCF_BM25A ) );
+			assert ( (int)tUnpacked.matched_fields==sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_MATCHED_FIELDS ) );
+			assert ( tUnpacked.doc_word_count==sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_DOC_WORD_COUNT ) );
+			assert ( tUnpacked.num_fields==sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_NUM_FIELDS ) );
+			assert ( tUnpacked.max_uniq_qpos==sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_MAX_UNIQ_QPOS ) );
+
+			// field level factors
+			for ( int iField=0; iField<tUnpacked.num_fields; iField++ )
+			{
+				if ( !tUnpacked.field[iField].hit_count )
+					continue;
+
+				const unsigned int * pField = sphinx_get_field_factors ( pFactors, iField );
+				assert ( pField );
+				assert ( (int)tUnpacked.field[iField].hit_count==sphinx_get_field_factor_int ( pField, SPH_FIELDF_HIT_COUNT ) );
+				assert ( (int)tUnpacked.field[iField].lcs==sphinx_get_field_factor_int ( pField, SPH_FIELDF_LCS ) );
+				assert ( (int)tUnpacked.field[iField].word_count==sphinx_get_field_factor_int ( pField, SPH_FIELDF_WORD_COUNT ) );
+				assert ( tUnpacked.field[iField].tf_idf==sphinx_get_field_factor_float ( pField, SPH_FIELDF_TF_IDF ) );
+				assert ( tUnpacked.field[iField].min_idf==sphinx_get_field_factor_float ( pField, SPH_FIELDF_MIN_IDF ) );
+				assert ( tUnpacked.field[iField].max_idf==sphinx_get_field_factor_float ( pField, SPH_FIELDF_MAX_IDF ) );
+				assert ( tUnpacked.field[iField].sum_idf==sphinx_get_field_factor_float ( pField, SPH_FIELDF_SUM_IDF ) );
+				assert ( tUnpacked.field[iField].min_hit_pos==sphinx_get_field_factor_int ( pField, SPH_FIELDF_MIN_HIT_POS ) );
+				assert ( tUnpacked.field[iField].min_best_span_pos==sphinx_get_field_factor_int ( pField, SPH_FIELDF_MIN_BEST_SPAN_POS ) );
+				assert ( tUnpacked.field[iField].max_window_hits==sphinx_get_field_factor_int ( pField, SPH_FIELDF_MAX_WINDOW_HITS ) );
+				assert ( tUnpacked.field[iField].min_gaps==sphinx_get_field_factor_int ( pField, SPH_FIELDF_MIN_GAPS ) );
+				assert ( tUnpacked.field[iField].atc==sphinx_get_field_factor_float ( pField, SPH_FIELDF_ATC ) );
+				assert ( tUnpacked.field[iField].lccs==sphinx_get_field_factor_int ( pField, SPH_FIELDF_LCCS ) );
+				assert ( tUnpacked.field[iField].wlccs==sphinx_get_field_factor_float ( pField, SPH_FIELDF_WLCCS ) );
+				bool bExactHitSame = ( ( ( tUnpacked.field[iField].exact_hit << iField ) & sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_EXACT_HIT_MASK ) )!=0 );
+				assert ( tUnpacked.field[iField].exact_hit==0 || bExactHitSame );
+				bool bExactOrderSame = ( ( ( tUnpacked.field[iField].exact_order << iField ) & sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_EXACT_ORDER_MASK ) )!=0 );
+				assert ( tUnpacked.field[iField].exact_order==0 || bExactOrderSame );
+			}
+
+			// term level factors
+			for ( int iWord=0; iWord<tUnpacked.max_uniq_qpos; iWord++ )
+			{
+				if ( !tUnpacked.term[iWord].keyword_mask )
+					continue;
+
+				const unsigned int * pTerm = sphinx_get_term_factors ( pFactors, iWord+1 );
+				assert ( pTerm );
+				assert ( tUnpacked.term[iWord].tf==sphinx_get_term_factor_int ( pTerm, SPH_TERMF_TF ) );
+				assert ( tUnpacked.term[iWord].idf==sphinx_get_term_factor_float ( pTerm, SPH_TERMF_IDF ) );
+			}
+
+			sphinx_factors_deinit ( &tUnpacked );
+		}
+	}
+
 	SafeDelete ( pSorter );
 	SafeDelete ( pIndex );
 	SafeDelete ( pSrc );
@@ -3339,7 +3536,7 @@ int main ()
 	sphThreadInit();
 	MemorizeStack ( &cTopOfMainStack );
 
-	setvbuf(stdout, NULL, _IONBF, 0);
+	setvbuf ( stdout, NULL, _IONBF, 0 );
 
 	printf ( "RUNNING INTERNAL LIBSPHINX TESTS\n\n" );
 
@@ -3377,6 +3574,7 @@ int main ()
 	TestLog2();
 	TestArabicStemmer();
 	TestSource ();
+	TestRankerFactors ();
 #endif
 
 	unlink ( g_sTmpfile );

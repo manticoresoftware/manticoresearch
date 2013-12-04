@@ -3836,6 +3836,7 @@ inline bool FSMproximity::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 FSMmultinear::FSMmultinear ( const CSphVector<ExtNode_i *> & dNodes, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
 	: m_iNear ( tNode.m_iOpArg )
 	, m_uWordsExpected ( dNodes.GetLength() )
+	, m_uFirstQpos ( 65535 )
 	, m_bQposMask ( tSetup.m_bSetQposMask )
 {
 	if ( m_uWordsExpected==2 )
@@ -3849,7 +3850,7 @@ FSMmultinear::FSMmultinear ( const CSphVector<ExtNode_i *> & dNodes, const XQNod
 	assert ( m_iNear>0 );
 }
 
-inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
+inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* pTarget )
 {
 	// walk through the hitlist and update context
 	DWORD uHitpos = HITMAN::GetLCS ( pHit->m_uHitpos );
@@ -4005,33 +4006,33 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 	// warning: we don't support overlapping in generic chains.
 	if ( m_bTwofer || (int)m_uWordsExpected==m_dNpos.GetLength() )
 	{
-		dTarget->m_uDocid = pHit->m_uDocid;
-		dTarget->m_uHitpos = Hitpos_t ( m_uFirstHit ); // !COMMIT strictly speaking this is creation from LCS not value
-		dTarget->m_uMatchlen = (WORD)( uHitpos - m_uFirstHit + m_uLastML );
-		dTarget->m_uWeight = m_uWeight;
+		pTarget->m_uDocid = pHit->m_uDocid;
+		pTarget->m_uHitpos = Hitpos_t ( m_uFirstHit ); // !COMMIT strictly speaking this is creation from LCS not value
+		pTarget->m_uMatchlen = (WORD)( uHitpos - m_uFirstHit + m_uLastML );
+		pTarget->m_uWeight = m_uWeight;
 		m_uPrelastP = 0;
 
 		if ( m_bTwofer ) // for exactly 2 words allow overlapping - so, just shift the chain, not reset it
 		{
-			dTarget->m_uQuerypos = Min ( m_uFirstQpos, pHit->m_uQuerypos );
-			dTarget->m_uSpanlen = 2;
-			dTarget->m_uQposMask = ( 1 << ( Max ( m_uFirstQpos, pHit->m_uQuerypos ) - dTarget->m_uQuerypos ) );
+			pTarget->m_uQuerypos = Min ( m_uFirstQpos, pHit->m_uQuerypos );
+			pTarget->m_uSpanlen = 2;
+			pTarget->m_uQposMask = ( 1 << ( Max ( m_uFirstQpos, pHit->m_uQuerypos ) - pTarget->m_uQuerypos ) );
 			m_uFirstHit = m_uLastP = uHitpos;
 			m_uWeight = pHit->m_uWeight;
 			m_uFirstQpos = pHit->m_uQuerypos;
 		} else
 		{
-			dTarget->m_uQuerypos = Min ( m_uFirstQpos, pHit->m_uQuerypos );
-			dTarget->m_uSpanlen = (WORD) m_dNpos.GetLength();
-			dTarget->m_uQposMask = 0;
+			pTarget->m_uQuerypos = Min ( m_uFirstQpos, pHit->m_uQuerypos );
+			pTarget->m_uSpanlen = (WORD) m_dNpos.GetLength();
+			pTarget->m_uQposMask = 0;
 			m_uLastP = 0;
-			if ( m_bQposMask && dTarget->m_uSpanlen>1 )
+			if ( m_bQposMask && pTarget->m_uSpanlen>1 )
 			{
 				ARRAY_FOREACH ( i, m_dNpos )
 				{
-					int iQposDelta = m_dNpos[i] - dTarget->m_uQuerypos;
-					assert ( iQposDelta<(int)sizeof(dTarget->m_uQposMask)*8 );
-					dTarget->m_uQposMask |= ( 1 << iQposDelta );
+					int iQposDelta = m_dNpos[i] - pTarget->m_uQuerypos;
+					assert ( iQposDelta<(int)sizeof(pTarget->m_uQposMask)*8 );
+					pTarget->m_uQposMask |= ( 1 << iQposDelta );
 				}
 			}
 		}

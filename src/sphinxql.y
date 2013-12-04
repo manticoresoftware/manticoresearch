@@ -910,6 +910,11 @@ set_global_stmt:
 			pParser->SetStatement ( $3, SET_GLOBAL_SVAR );
 			pParser->ToString ( pParser->m_pStmt->m_sSetValue, $5 ).Unquote();
 		}
+	| TOK_SET TOK_GLOBAL ident_set '=' set_value
+		{
+			pParser->m_pStmt->m_iSetValue = $5.m_iValue;
+			pParser->SetStatement ( $3, SET_GLOBAL_SVAR );
+		}
 	;
 
 set_string_value:

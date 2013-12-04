@@ -239,7 +239,8 @@ static CSphString		g_sLogFile;							// log file name
 static bool				g_bLogTty		= false;			// cached isatty(g_iLogFile)
 static LogFormat_e		g_eLogFormat	= LOG_FORMAT_PLAIN;
 static bool				g_bShortenIn	= false;			// whether to cut list in IN() clauses.
-static const int		SHORTEN_IN_LIMIT = 128;			// how many values will be pushed into log uncutted
+static const int		SHORTEN_IN_LIMIT = 128;				// how many values will be pushed into log uncutted
+static int				g_iQueryLogMinMs	= 0;				// log 'slow' threshold for query
 
 static int				g_iReadTimeout		= 5;	// sec
 static int				g_iWriteTimeout		= 5;
@@ -7194,6 +7195,9 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 
 void LogQuery ( const CSphQuery & q, const CSphQueryResult & tRes, const CSphVector<int64_t> & dAgentTimes )
 {
+	if ( g_iQueryLogMinMs && tRes.m_iQueryTime<g_iQueryLogMinMs )
+		return;
+
 	switch ( g_eLogFormat )
 	{
 		case LOG_FORMAT_PLAIN:		LogQueryPlain ( q, tRes ); break;
@@ -16341,6 +16345,9 @@ void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & 
 				tOut.Error ( tStmt.m_sStmt, "Unknown log_level value (must be one of info, debug, debugv, debugvv)" );
 				return;
 			}
+		} else if ( tStmt.m_sSetName=="query_log_min_msec" )
+		{
+			g_iQueryLogMinMs = tStmt.m_iSetValue;
 		} else
 		{
 			sError.SetSprintf ( "Unknown system variable '%s'", tStmt.m_sSetName.cstr() );
@@ -21054,6 +21061,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_tRtThrottle.m_iMaxIOSize = hSearchd.GetSize ( "rt_merge_maxiosize", 0 );
 	g_iPingInterval = hSearchd.GetInt ( "ha_ping_interval", 1000 );
 	g_uHAPeriodKarma = hSearchd.GetInt ( "ha_period_karma", 60 );
+	g_iQueryLogMinMs = hSearchd.GetInt ( "query_log_min_msec", g_iQueryLogMinMs );
 
 	if ( hSearchd ( "collation_libc_locale" ) )
 	{

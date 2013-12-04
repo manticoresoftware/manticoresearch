@@ -11409,7 +11409,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 	if ( sOpt=="ranker" )
 	{
 		m_pQuery->m_eRanker = SPH_RANK_TOTAL;
-		for ( int iRanker = SPH_RANK_PROXIMITY_BM25; iRanker <= SPH_RANK_SPH04; iRanker++ )
+		for ( int iRanker = SPH_RANK_PROXIMITY_BM25; iRanker<=SPH_RANK_SPH04; iRanker++ )
 			if ( sVal==sphGetRankerName ( ESphRankMode ( iRanker ) ) )
 			{
 				m_pQuery->m_eRanker = ESphRankMode ( iRanker );
@@ -13674,7 +13674,7 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 
 		if ( dStatus.MatchAdd ( "predicted_time" ) )
 			dStatus.Add().SetSprintf ( "%lld", INT64 ( tMeta.m_iPredictedTime ) );
-		if ( dStatus.MatchAdd ( "dist_predicted_time" ) )
+		if ( tMeta.m_iAgentPredictedTime && dStatus.MatchAdd ( "dist_predicted_time" ) )
 			dStatus.Add().SetSprintf ( "%lld", INT64 ( tMeta.m_iAgentPredictedTime ) );
 		if ( tMeta.m_iAgentFetchedDocs || tMeta.m_iAgentFetchedHits || tMeta.m_iAgentFetchedSkips )
 		{
@@ -19268,6 +19268,8 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		bool bWordDict = strcmp ( hIndex.GetStr ( "dict", "keywords" ), "keywords" )==0;
 		if ( !bWordDict )
 			sphWarning ( "dict=crc deprecated, use dict=keywords instead" );
+		if ( bWordDict && ( tSettings.m_dPrefixFields.GetLength() || tSettings.m_dInfixFields.GetLength() ) )
+			sphWarning ( "WARNING: index '%s': prefix_fields and infix_fields has no effect with dict=keywords, ignoring\n", szIndexName );
 		tIdx.m_pIndex = sphCreateIndexRT ( tSchema, szIndexName, iRamSize, hIndex["path"].cstr(), bWordDict );
 		tIdx.m_bEnabled = false;
 		tIdx.m_sIndexPath = hIndex["path"];

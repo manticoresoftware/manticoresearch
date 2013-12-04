@@ -1218,6 +1218,11 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 			exit ( 1 );
 		}
 
+		if ( pDict->GetSettings().m_bWordDict && ( tSettings.m_dPrefixFields.GetLength() || tSettings.m_dInfixFields.GetLength() ) )
+		{
+			fprintf ( stdout, "WARNING: index '%s': prefix_fields and infix_fields has no effect with dict=keywords, ignoring\n", sIndexName );
+		}
+
 		pIndex->SetProgressCallback ( ShowProgress );
 		if ( bInplaceEnable )
 		{

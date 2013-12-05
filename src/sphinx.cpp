@@ -9379,19 +9379,16 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 		g_pBinlog->BinlogUpdateAttributes ( &m_iTID, m_sIndexName.cstr(), tUpd );
 
 	// remap update schema to index schema
-	CSphVector<CSphAttrLocator> dLocators;
-	CSphVector<bool> dFloats;
-	CSphVector<bool> dBigints;
-	CSphVector<bool> dDoubles;
-	CSphVector<bool> dJsonFields;
-	CSphVector<int64_t> dValues;
-	CSphVector < CSphRefcountedPtr<ISphExpr> > dExpr;
-	dLocators.Reserve ( tUpd.m_dAttrs.GetLength() );
-	dFloats.Reserve ( tUpd.m_dAttrs.GetLength() );
-	dBigints.Reserve ( tUpd.m_dAttrs.GetLength() ); // bigint flags for *source* schema.
-	dDoubles.Reserve ( tUpd.m_dAttrs.GetLength() ); // double flags for *source* schema.
-	dJsonFields.Reserve ( tUpd.m_dAttrs.GetLength() );
-	dExpr.Resize ( tUpd.m_dAttrs.GetLength() );
+	int iUpdLen = tUpd.m_dAttrs.GetLength();
+	CSphVector<CSphAttrLocator> dLocators ( iUpdLen );
+	CSphBitvec dFloats ( iUpdLen );
+	CSphBitvec dBigints ( iUpdLen );
+	CSphBitvec dDoubles ( iUpdLen );
+	CSphBitvec dJsonFields ( iUpdLen );
+	CSphVector<int64_t> dValues ( iUpdLen );
+	CSphVector < CSphRefcountedPtr<ISphExpr> > dExpr ( iUpdLen );
+	memset ( dLocators.Begin(), 0, dLocators.GetSizeBytes() );
+	memset ( dValues.Begin(), 0, dValues.GetSizeBytes() );
 
 	uint64_t uDst64 = 0;
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
@@ -9448,11 +9445,15 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 			if ( tCol.m_eAttrType==SPH_ATTR_INT64SET )
 				uDst64 |= ( U64C(1)<<i );
 
-			dFloats.Add ( tCol.m_eAttrType==SPH_ATTR_FLOAT );
-			dLocators.Add ( tCol.m_tLocator );
-			dJsonFields.Add ( tCol.m_eAttrType==SPH_ATTR_JSON );
-
-		} else if ( !tUpd.m_bIgnoreNonexistent )
+			if ( tCol.m_eAttrType==SPH_ATTR_FLOAT )
+				dFloats.BitSet(i);
+			else if ( tCol.m_eAttrType==SPH_ATTR_JSON )
+				dJsonFields.BitSet(i);
+			dLocators[i] = ( tCol.m_tLocator );
+		} else if ( tUpd.m_bIgnoreNonexistent )
+		{
+			continue;
+		} else
 		{
 			sError.SetSprintf ( "attribute '%s' not found", tUpd.m_dAttrs[i] );
 			return -1;
@@ -9463,22 +9464,24 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 		// take attribute type from schema. Probably we'll rewrite updates in future but
 		// for now this fix just works.
 		// Fixes cases like UPDATE float_attr=1 WHERE id=1;
+		assert ( iIdx>=0 );
 		if ( tUpd.m_dTypes[i]==SPH_ATTR_INTEGER && m_tSchema.GetAttr(iIdx).m_eAttrType==SPH_ATTR_FLOAT )
 		{
 			const_cast<CSphAttrUpdate &>(tUpd).m_dTypes[i] = SPH_ATTR_FLOAT;
 			const_cast<CSphAttrUpdate &>(tUpd).m_dPool[i] = sphF2DW ( (float)tUpd.m_dPool[i] );
 		}
 
-		dBigints.Add ( tUpd.m_dTypes[i]==SPH_ATTR_BIGINT );
-		dDoubles.Add ( tUpd.m_dTypes[i]==SPH_ATTR_FLOAT );
+		if ( tUpd.m_dTypes[i]==SPH_ATTR_BIGINT )
+			dBigints.BitSet(i);
+		else if ( tUpd.m_dTypes[i]==SPH_ATTR_FLOAT )
+			dDoubles.BitSet(i);
 		switch ( tUpd.m_dTypes[i] )
 		{
-		case SPH_ATTR_FLOAT:	dValues.Add ( sphD2QW ( (double)sphDW2F ( tUpd.m_dPool[i] ) ) ); break;
-		case SPH_ATTR_BIGINT:	dValues.Add ( MVA_UPSIZE ( &tUpd.m_dPool[i] ) ); break;
-		default:				dValues.Add ( tUpd.m_dPool[i] ); break;
+			case SPH_ATTR_FLOAT:	dValues[i] = ( sphD2QW ( (double)sphDW2F ( tUpd.m_dPool[i] ) ) ); break;
+			case SPH_ATTR_BIGINT:	dValues[i] = ( MVA_UPSIZE ( &tUpd.m_dPool[i] ) ); break;
+			default:				dValues[i] = ( tUpd.m_dPool[i] ); break;
 		}
 	}
-	assert ( tUpd.m_bIgnoreNonexistent || ( dLocators.GetLength()==tUpd.m_dAttrs.GetLength() ) );
 
 	// FIXME! FIXME! FIXME! overwriting just-freed blocks might hurt concurrent searchers;
 	// should implement a simplistic MVCC-style delayed-free to avoid that
@@ -9506,11 +9509,11 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 			pEntry = DOCINFO2ATTRS(pEntry);
 			int iPos = tUpd.m_dRowOffset[iUpd];
 			ARRAY_FOREACH ( iCol, tUpd.m_dAttrs )
-				if ( dJsonFields[iCol] )
+				if ( dJsonFields.BitGet ( iCol ) )
 				{
-					ESphJsonType eType = dDoubles[iCol]
-					? JSON_DOUBLE
-					: ( dBigints[iCol] ? JSON_INT64 : JSON_INT32 );
+					ESphJsonType eType = dDoubles.BitGet ( iCol )
+						? JSON_DOUBLE
+						: ( dBigints.BitGet ( iCol ) ? JSON_INT64 : JSON_INT32 );
 
 					if ( !sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), m_tString.GetWritePtr(), pEntry, true ) )
 					{
@@ -9518,7 +9521,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 						return -1;
 					}
 
-					iPos += dBigints[iCol] ? 2 : 1;
+					iPos += dBigints.BitGet ( iCol ) ? 2 : 1;
 				}
 		}
 	}
@@ -9565,7 +9568,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 			if (!( bSrcMva32 || bSrcMva64 )) // FIXME! optimize using a prebuilt dword mask?
 			{
 				iPoolPos++;
-				if ( dBigints[iCol] )
+				if ( dBigints.BitGet ( iCol ) )
 					iPoolPos++;
 				continue;
 			}
@@ -9629,11 +9632,11 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 		{
 			bool bSrcMva32 = ( tUpd.m_dTypes[iCol]==SPH_ATTR_UINT32SET );
 			bool bSrcMva64 = ( tUpd.m_dTypes[iCol]==SPH_ATTR_INT64SET );
-			bool bSrcJson = ( dJsonFields[iCol] );
+			bool bSrcJson = dJsonFields.BitGet ( iCol );
 			if (!( bSrcMva32 || bSrcMva64 || bSrcJson )) // FIXME! optimize using a prebuilt dword mask?
 			{
 				// plain update
-				SphAttr_t uValue = dBigints[iCol] ? MVA_UPSIZE ( &tUpd.m_dPool[iPos] ) : tUpd.m_dPool[iPos];
+				SphAttr_t uValue = dBigints.BitGet ( iCol ) ? MVA_UPSIZE ( &tUpd.m_dPool[iPos] ) : tUpd.m_dPool[iPos];
 				sphSetRowAttr ( pEntry, dLocators[iCol], uValue );
 
 				// update block and index ranges
@@ -9642,7 +9645,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 					DWORD * pBlock = i ? pBlockRanges : pIndexRanges;
 					SphAttr_t uMin = sphGetRowAttr ( DOCINFO2ATTRS ( pBlock ), dLocators[iCol] );
 					SphAttr_t uMax = sphGetRowAttr ( DOCINFO2ATTRS ( pBlock+iRowStride ) , dLocators[iCol] );
-					if ( dFloats[iCol] ) // update float's indexes assumes float comparision
+					if ( dFloats.BitGet ( iCol ) ) // update float's indexes assumes float comparision
 					{
 						float fValue = sphDW2F ( (DWORD) uValue );
 						float fMin = sphDW2F ( (DWORD) uMin );
@@ -9664,15 +9667,15 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 				uUpdateMask |= ATTRS_UPDATED;
 
 				// next
-				iPos += dBigints[iCol] ? 2 : 1;
+				iPos += dBigints.BitGet ( iCol ) ? 2 : 1;
 				continue;
 			}
 
 			if ( bSrcJson )
 			{
-				ESphJsonType eType = dDoubles[iCol]
-				? JSON_DOUBLE
-				: ( dBigints[iCol] ? JSON_INT64 : JSON_INT32 );
+				ESphJsonType eType = dDoubles.BitGet ( iCol )
+					? JSON_DOUBLE
+					: ( dBigints.BitGet ( iCol ) ? JSON_INT64 : JSON_INT32 );
 
 				if ( sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), m_tString.GetWritePtr(), pEntry, true ) )
 				{
@@ -9682,7 +9685,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 				} else
 					iJsonWarnings++;
 
-				iPos += dBigints[iCol]?2:1;
+				iPos += dBigints.BitGet ( iCol ) ? 2 : 1;
 				continue;
 			}
 

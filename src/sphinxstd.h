@@ -2871,6 +2871,11 @@ public:
 		, m_iElements ( 0 )
 	{}
 
+	explicit CSphBitvec ( int iElements )
+	{
+		Init ( iElements );
+	}
+
 	~CSphBitvec ()
 	{
 		if ( m_pData!=m_uStatic )

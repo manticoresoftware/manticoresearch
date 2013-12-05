@@ -60,6 +60,8 @@ index rt1
 <!-- regression crash on worst groups got cut -->
 <sphinxql>insert into rt1 (id, idd, str1, mva1, mva2, body) values ( 10, 10, '', ( 210, 211, 220),  (310, 311, 340), 'the' ),  ( 5, 5, '', ( 220, 221, 230),  (320, 321, 350), 'the' ),  ( 6, 6, '', ( 230, 231, 240),  (330, 331, 360), 'the' ),  ( 7, 7, '', ( 240, 241, 244),  (340, 341, 370), 'the' ),  ( 8, 8, '', ( 250, 251, 254),  (350, 351, 380), 'the' ),  ( 9, 9, '', ( 260, 261, 264),  (360, 361, 360), 'the' )</sphinxql>
 <sphinxql>select *, count (distinct mva1) as c from rt1 group by mva1 within group order by id asc option max_matches=2</sphinxql>
+
+<sphinxql>update rt1 set nonexistent=1.1, mva1=(210,211,220)  where id=10 option ignore_nonexistent_columns=1</sphinxql>
 </sphqueries>
 
 </test>

@@ -6827,21 +6827,16 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 		return 0;
 
 	// remap update schema to index schema
-	CSphVector<CSphAttrLocator> dLocators;
-	CSphVector<int> dIndexes;
-	CSphVector<bool> dFloats;
-	CSphVector<bool> dBigints;
-	CSphVector<bool> dDoubles;
-	CSphVector<bool> dJsonFields;
-	CSphVector<int64_t> dValues;
-	CSphVector < CSphRefcountedPtr<ISphExpr> > dExpr;
-	dLocators.Reserve ( tUpd.m_dAttrs.GetLength() );
-	dIndexes.Reserve ( tUpd.m_dAttrs.GetLength() );
-	dFloats.Reserve ( tUpd.m_dAttrs.GetLength() );
-	dBigints.Reserve ( tUpd.m_dAttrs.GetLength() ); // bigint flags for *source* schema.
-	dDoubles.Reserve ( tUpd.m_dAttrs.GetLength() ); // double flags for *source* schema.
-	dJsonFields.Reserve ( tUpd.m_dAttrs.GetLength() );
-	dExpr.Resize ( tUpd.m_dAttrs.GetLength() );
+	int iUpdLen = tUpd.m_dAttrs.GetLength();
+	CSphVector<CSphAttrLocator> dLocators ( iUpdLen );
+	CSphBitvec dFloats ( iUpdLen );
+	CSphBitvec dBigints ( iUpdLen );
+	CSphBitvec dDoubles ( iUpdLen );
+	CSphBitvec dJsonFields ( iUpdLen );
+	CSphVector<int64_t> dValues ( iUpdLen );
+	CSphVector < CSphRefcountedPtr<ISphExpr> > dExpr ( iUpdLen );
+	memset ( dLocators.Begin(), 0, dLocators.GetSizeBytes() );
+	memset ( dValues.Begin(), 0, dValues.GetSizeBytes() );
 
 	uint64_t uDst64 = 0;
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
@@ -6891,12 +6886,16 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 			if ( tCol.m_eAttrType==SPH_ATTR_INT64SET )
 				uDst64 |= ( U64C(1)<<i );
 
-			dFloats.Add ( tCol.m_eAttrType==SPH_ATTR_FLOAT );
-			dLocators.Add ( tCol.m_tLocator );
+			if ( tCol.m_eAttrType==SPH_ATTR_FLOAT )
+				dFloats.BitSet(i);
+			else if ( tCol.m_eAttrType==SPH_ATTR_JSON )
+				dJsonFields.BitSet(i);
+			dLocators[i] = tCol.m_tLocator;
 			bHasMva |= ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET );
-			dJsonFields.Add ( tCol.m_eAttrType==SPH_ATTR_JSON );
-
-		} else if ( !tUpd.m_bIgnoreNonexistent )
+		} else if ( tUpd.m_bIgnoreNonexistent )
+		{
+			continue;
+		} else
 		{
 			sError.SetSprintf ( "attribute '%s' not found", tUpd.m_dAttrs[i] );
 			return -1;
@@ -6907,31 +6906,24 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 		// take attribute type from schema. Probably we'll rewrite updates in future but
 		// for now this fix just works.
 		// Fixes cases like UPDATE float_attr=1 WHERE id=1;
+		assert ( iIdx>=0 );
 		if ( tUpd.m_dTypes[i]==SPH_ATTR_INTEGER && m_tSchema.GetAttr(iIdx).m_eAttrType==SPH_ATTR_FLOAT )
 		{
 			const_cast<CSphAttrUpdate &>(tUpd).m_dTypes[i] = SPH_ATTR_FLOAT;
 			const_cast<CSphAttrUpdate &>(tUpd).m_dPool[i] = sphF2DW ( (float)tUpd.m_dPool[i] );
 		}
 
-		dBigints.Add ( tUpd.m_dTypes[i]==SPH_ATTR_BIGINT );
-		dDoubles.Add ( tUpd.m_dTypes[i]==SPH_ATTR_FLOAT );
+		if ( tUpd.m_dTypes[i]==SPH_ATTR_BIGINT )
+			dBigints.BitSet(i);
+		else if ( tUpd.m_dTypes[i]==SPH_ATTR_FLOAT )
+			dDoubles.BitSet(i);
 		switch ( tUpd.m_dTypes[i] )
 		{
-		case SPH_ATTR_FLOAT:	dValues.Add ( sphD2QW ( (double)sphDW2F ( tUpd.m_dPool[i] ) ) ); break;
-		case SPH_ATTR_BIGINT:	dValues.Add ( MVA_UPSIZE ( &tUpd.m_dPool[i] ) ); break;
-		default:				dValues.Add ( tUpd.m_dPool[i] ); break;
+			case SPH_ATTR_FLOAT:	dValues[i] = sphD2QW ( (double)sphDW2F ( tUpd.m_dPool[i] ) ); break;
+			case SPH_ATTR_BIGINT:	dValues[i] = MVA_UPSIZE ( &tUpd.m_dPool[i] ); break;
+			default:				dValues[i] = tUpd.m_dPool[i]; break;
 		}
-
-		// find dupes to optimize
-		ARRAY_FOREACH ( j, dIndexes )
-			if ( dIndexes[j]==iIdx )
-			{
-				dIndexes[j] = -1;
-				break;
-			}
-		dIndexes.Add ( iIdx );
 	}
-	assert ( tUpd.m_bIgnoreNonexistent || ( dLocators.GetLength()==tUpd.m_dAttrs.GetLength() ) );
 
 	// check if we are empty
 	if ( !m_dSegments.GetLength() && !m_pDiskChunks.GetLength() )
@@ -6970,12 +6962,12 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 			int iPos = tUpd.m_dRowOffset[iUpd];
 			ARRAY_FOREACH ( iCol, tUpd.m_dAttrs )
 			{
-				if ( !dJsonFields[iCol] )
+				if ( !dJsonFields.BitGet ( iCol ) )
 					continue;
 
-				ESphJsonType eType = dDoubles[iCol]
+				ESphJsonType eType = dDoubles.BitGet ( iCol )
 					? JSON_DOUBLE
-					: ( dBigints[iCol] ? JSON_INT64 : JSON_INT32 );
+					: ( dBigints.BitGet ( iCol ) ? JSON_INT64 : JSON_INT32 );
 
 				if ( !sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), pSegment->m_dStrings.Begin(), pRow, false ) )
 				{
@@ -6984,7 +6976,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 					return -1;
 				}
 
-				iPos += dBigints[iCol] ? 2 : 1;
+				iPos += dBigints.BitGet ( iCol ) ? 2 : 1;
 			}
 		}
 	}
@@ -7009,11 +7001,11 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 			int iPos = tUpd.m_dRowOffset[iUpd];
 			ARRAY_FOREACH ( iCol, tUpd.m_dAttrs )
 			{
-				if ( dJsonFields[iCol] )
+				if ( dJsonFields.BitGet ( iCol ) )
 				{
-					ESphJsonType eType = dDoubles[iCol]
+					ESphJsonType eType = dDoubles.BitGet ( iCol )
 						? JSON_DOUBLE
-						: ( dBigints[iCol] ? JSON_INT64 : JSON_INT32 );
+						: ( dBigints.BitGet ( iCol ) ? JSON_INT64 : JSON_INT32 );
 
 					if ( sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), pSegment->m_dStrings.Begin(), pRow, true ) )
 					{
@@ -7023,69 +7015,63 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 					} else
 						iJsonWarnings++;
 
-					iPos += dBigints[iCol]?2:1;
+					iPos += dBigints.BitGet ( iCol ) ? 2 : 1;
 					continue;
 				}
 
 				if ( !( tUpd.m_dTypes[iCol]==SPH_ATTR_UINT32SET || tUpd.m_dTypes[iCol]==SPH_ATTR_INT64SET ) )
 				{
-					if ( dIndexes[iCol]>=0 )
-					{
-						// plain update
-						bUpdated = true;
-						uUpdateMask |= ATTRS_UPDATED;
+					// plain update
+					bUpdated = true;
+					uUpdateMask |= ATTRS_UPDATED;
 
-						SphAttr_t uValue = dBigints[iCol] ? MVA_UPSIZE ( &tUpd.m_dPool[iPos] ) : tUpd.m_dPool[iPos];
-						sphSetRowAttr ( pRow, dLocators[iCol], uValue );
-						iPos += dBigints[iCol]?2:1;
-					}
+					SphAttr_t uValue = dBigints.BitGet ( iCol ) ? MVA_UPSIZE ( &tUpd.m_dPool[iPos] ) : tUpd.m_dPool[iPos];
+					sphSetRowAttr ( pRow, dLocators[iCol], uValue );
+					iPos += dBigints.BitGet ( iCol ) ? 2 : 1;
 				} else
 				{
 					const DWORD * pSrc = tUpd.m_dPool.Begin()+iPos;
 					DWORD iLen = *pSrc;
 					iPos += iLen+1;
 
-					if ( dIndexes[iCol]>=0 )
+					// MVA update
+					bUpdated = true;
+					uUpdateMask |= ATTRS_MVA_UPDATED;
+
+					if ( !iLen )
 					{
-						// MVA update
-						bUpdated = true;
-						uUpdateMask |= ATTRS_MVA_UPDATED;
+						sphSetRowAttr ( pRow, dLocators[iCol], 0 );
+						continue;
+					}
 
-						if ( !iLen )
-						{
-							sphSetRowAttr ( pRow, dLocators[iCol], 0 );
-							continue;
-						}
+					bool bDst64 = ( ( uDst64 & ( U64C(1) << iCol ) )!=0 );
+					assert ( ( iLen%2 )==0 );
+					DWORD uCount = ( bDst64 ? iLen : iLen/2 );
 
-						bool bDst64 = ( ( uDst64 & ( U64C(1) << iCol ) )!=0 );
-						assert ( ( iLen%2 )==0 );
-						DWORD uCount = ( bDst64 ? iLen : iLen/2 );
+					CSphTightVector<DWORD> & dStorageMVA = pSegment->m_dMvas;
+					DWORD uMvaOff = MVA_DOWNSIZE ( sphGetRowAttr ( pRow, dLocators[iCol] ) );
+					assert ( uMvaOff<(DWORD)dStorageMVA.GetLength() );
+					DWORD * pDst = dStorageMVA.Begin() + uMvaOff;
+					if ( uCount>(*pDst) )
+					{
+						uMvaOff = dStorageMVA.GetLength();
+						dStorageMVA.Resize ( uMvaOff+uCount+1 );
+						pDst = dStorageMVA.Begin()+uMvaOff;
+						sphSetRowAttr ( pRow, dLocators[iCol], uMvaOff );
+					}
 
-						CSphTightVector<DWORD> & dStorageMVA = pSegment->m_dMvas;
-						DWORD uMvaOff = MVA_DOWNSIZE ( sphGetRowAttr ( pRow, dLocators[iCol] ) );
-						assert ( uMvaOff<(DWORD)dStorageMVA.GetLength() );
-						DWORD * pDst = dStorageMVA.Begin() + uMvaOff;
-						if ( uCount>(*pDst) )
+					if ( bDst64 )
+					{
+						memcpy ( pDst, pSrc, sizeof(DWORD)*(uCount+1) );
+					} else
+					{
+						*pDst++ = uCount; // MVA values counter first
+						pSrc++;
+						while ( uCount-- )
 						{
-							uMvaOff = dStorageMVA.GetLength();
-							dStorageMVA.Resize ( uMvaOff+uCount+1 );
-							pDst = dStorageMVA.Begin()+uMvaOff;
-							sphSetRowAttr ( pRow, dLocators[iCol], uMvaOff );
-						}
-
-						if ( bDst64 )
-						{
-							memcpy ( pDst, pSrc, sizeof(DWORD)*(uCount+1) );
-						} else
-						{
-							*pDst++ = uCount; // MVA values counter first
-							pSrc++;
-							while ( uCount-- )
-							{
-								*pDst = *pSrc;
-								pDst++;
-								pSrc+=2;
-							}
+							*pDst = *pSrc;
+							pDst++;
+							pSrc+=2;
 						}
 					}
 				}

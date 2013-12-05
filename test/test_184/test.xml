@@ -203,6 +203,7 @@ INSERT INTO test_table VALUES
 <!-- hits from over 32 field  -->
 <sphinxql>select *, weight() as w, packedfactors() from fields where match(' test ') option ranker=expr('sum(lcs)')</sphinxql>
 
+<sphinxql>update test set nonexistent=1.1, gid=1 where id=100 option ignore_nonexistent_columns=1</sphinxql>
 </sphqueries>
 
 </test>

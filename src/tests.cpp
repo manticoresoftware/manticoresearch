@@ -708,7 +708,7 @@ void TestExpr ()
 		pRow[i] = 1+i;
 
 	CSphMatch tMatch;
-	tMatch.m_iDocID = 123;
+	tMatch.m_uDocID = 123;
 	tMatch.m_iWeight = 456;
 	tMatch.m_pStatic = pRow;
 
@@ -812,7 +812,7 @@ void BenchExpr ()
 		pRow[i] = 1+i;
 
 	CSphMatch tMatch;
-	tMatch.m_iDocID = 123;
+	tMatch.m_uDocID = 123;
 	tMatch.m_iWeight = 456;
 	tMatch.m_pStatic = pRow;
 
@@ -1814,9 +1814,9 @@ struct SortPayload_t
 inline bool operator < ( const CSphWordHit & a, const CSphWordHit & b )
 {
 	return
-		( a.m_iWordID<b.m_iWordID || \
-		( a.m_iWordID==b.m_iWordID && a.m_iDocID<b.m_iDocID ) || \
-		( a.m_iWordID==b.m_iWordID && a.m_iDocID==b.m_iDocID && a.m_iWordPos<b.m_iWordPos ) );
+		( a.m_uWordID<b.m_uWordID || \
+		( a.m_uWordID==b.m_uWordID && a.m_uDocID<b.m_uDocID ) || \
+		( a.m_uWordID==b.m_uWordID && a.m_uDocID==b.m_uDocID && a.m_uWordPos<b.m_uWordPos ) );
 }
 
 template < typename T >
@@ -2125,14 +2125,14 @@ public:
 
 	virtual BYTE ** NextDocument ( CSphString & )
 	{
-		if ( m_tDocInfo.m_iDocID>=m_iDocCount )
+		if ( m_tDocInfo.m_uDocID>=(SphDocID_t)m_iDocCount )
 		{
-			m_tDocInfo.m_iDocID = 0;
+			m_tDocInfo.m_uDocID = 0;
 			return NULL;
 		}
 
-		int iDoc = (int)m_tDocInfo.m_iDocID;
-		m_tDocInfo.m_iDocID++;
+		int iDoc = (int)m_tDocInfo.m_uDocID;
+		m_tDocInfo.m_uDocID++;
 		return m_ppDocs + iDoc * m_iFields;
 	}
 
@@ -2248,7 +2248,7 @@ void TestRTWeightBoundary ()
 		tSrcSchema.m_dFields.Add ( tCol );
 
 
-		char * dFields[] = { "If I were a cat...", "We are the greatest cat" };
+		const char * dFields[] = { "If I were a cat...", "We are the greatest cat" };
 		SphTestDoc_c * pSrc = new SphTestDoc_c ( tSrcSchema, (BYTE **)dFields, 1, 2 );
 
 		pSrc->SetTokenizer ( pTok );
@@ -2283,7 +2283,7 @@ void TestRTWeightBoundary ()
 		for ( ;; )
 		{
 			Verify ( pSrc->IterateDocument ( sError ) );
-			if ( !pSrc->m_tDocInfo.m_iDocID )
+			if ( !pSrc->m_tDocInfo.m_uDocID )
 				break;
 
 			pHits = pSrc->IterateHits ( sError );
@@ -2310,7 +2310,7 @@ void TestRTWeightBoundary ()
 		Verify ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, tArgs ) );
 		sphFlattenQueue ( pSorter, &tResult, 0 );
 		CheckRT ( tResult.m_dMatches.GetLength(), 1, "results found" );
-		CheckRT ( (int)tResult.m_dMatches[0].m_iDocID, 1, "docID" );
+		CheckRT ( (int)tResult.m_dMatches[0].m_uDocID, 1, "docID" );
 		CheckRT ( tResult.m_dMatches[0].m_iWeight, g_iWeights[iPass], "weight" );
 		SafeDelete ( pSorter );
 		SafeDelete ( pIndex );
@@ -2369,15 +2369,15 @@ public:
 
 	virtual BYTE ** NextDocument ( CSphString & )
 	{
-		if ( m_tDocInfo.m_iDocID>800 )
+		if ( m_tDocInfo.m_uDocID>800 )
 		{
-			m_tDocInfo.m_iDocID = 0;
+			m_tDocInfo.m_uDocID = 0;
 			return NULL;
 		}
 
-		m_tDocInfo.m_iDocID++;
+		m_tDocInfo.m_uDocID++;
 
-		m_tDocInfo.SetAttr ( m_tSchema.GetAttr(0).m_tLocator, m_tDocInfo.m_iDocID+1000 );
+		m_tDocInfo.SetAttr ( m_tSchema.GetAttr(0).m_tLocator, m_tDocInfo.m_uDocID+1000 );
 		m_tDocInfo.SetAttr ( m_tSchema.GetAttr(1).m_tLocator, 1313 );
 
 		snprintf ( m_dFields[0], m_iMaxFieldLen, "cat title%d title%d title%d title%d title%d"
@@ -2472,7 +2472,7 @@ void TestRTSendVsMerge ()
 	for ( ;; )
 	{
 		Verify ( pSrc->IterateDocument ( sError ) );
-		if ( !pSrc->m_tDocInfo.m_iDocID )
+		if ( !pSrc->m_tDocInfo.m_uDocID )
 			break;
 
 		ISphHits * pHits = pSrc->IterateHits ( sError );
@@ -2480,7 +2480,7 @@ void TestRTSendVsMerge ()
 			break;
 
 		pIndex->AddDocument ( pHits, pSrc->m_tDocInfo, NULL, dMvas, sError, sWarning );
-		if ( pSrc->m_tDocInfo.m_iDocID==350 )
+		if ( pSrc->m_tDocInfo.m_uDocID==350 )
 		{
 			pIndex->Commit ();
 			Verify ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, tArgs ) );
@@ -2495,10 +2495,10 @@ void TestRTSendVsMerge ()
 
 	for ( int i=0; i<tResult.m_dMatches.GetLength(); i++ )
 	{
-		const SphDocID_t tID = tResult.m_dMatches[i].m_iDocID;
+		const SphDocID_t uID = tResult.m_dMatches[i].m_uDocID;
 		const SphAttr_t tTag1 = tResult.m_dMatches[i].GetAttr ( tResult.m_tSchema.GetAttr ( 0 ).m_tLocator );
 		const SphAttr_t tTag2 = tResult.m_dMatches[i].GetAttr ( tResult.m_tSchema.GetAttr ( 1 ).m_tLocator );
-		assert ( (SphDocID_t)tTag1==tID+1000 );
+		assert ( (SphDocID_t)tTag1==uID+1000 );
 		assert ( tTag2==1313 );
 	}
 	SafeDelete ( pSorter );
@@ -2514,7 +2514,7 @@ void TestRTSendVsMerge ()
 
 void TestRankerFactors ()
 {
-	char * dFields[] = {
+	const char * dFields[] = {
 		"Seven lies multiplied by seven", "",
 		"Multiplied by seven again", "",
 		"Seven lies multiplied by seven", "Multiplied by seven again",
@@ -2525,7 +2525,7 @@ void TestRankerFactors ()
 
 		"the who", "what the foo"
 	};
-	char * dQueries[] = {
+	const char * dQueries[] = {
 		"seven !(angels !by)", // matched by 0-2
 		"Mary lamb", // matched by 3-5
 		"(the who) | (the foo)", // matched by 6
@@ -2586,7 +2586,7 @@ void TestRankerFactors ()
 	for ( ;; )
 	{
 		Verify ( pSrc->IterateDocument ( sError ) );
-		if ( !pSrc->m_tDocInfo.m_iDocID )
+		if ( !pSrc->m_tDocInfo.m_uDocID )
 			break;
 
 		ISphHits * pHits = pSrc->IterateHits ( sError );
@@ -2617,7 +2617,7 @@ void TestRankerFactors ()
 	ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings );
 	assert ( pSorter );
 
-	for ( int iQuery=0; iQuery<sizeof(dQueries)/sizeof(dQueries[0]); iQuery++ )
+	for ( int iQuery=0; (uint64_t)iQuery<sizeof(dQueries)/sizeof(dQueries[0]); iQuery++ )
 	{
 		tQuery.m_sQuery = dQueries[iQuery];
 
@@ -3508,8 +3508,8 @@ void TestSource ()
 	for ( int iTest=1; ; )
 	{
 		BYTE ** pFields = pCSV->NextDocument ( sError );
-		Verify ( pFields || pCSV->m_tDocInfo.m_iDocID==0 );
-		if ( pCSV->m_tDocInfo.m_iDocID==0 )
+		Verify ( pFields || pCSV->m_tDocInfo.m_uDocID==0 );
+		if ( pCSV->m_tDocInfo.m_uDocID==0 )
 			break;
 
 		for ( int i=0; i<iColumns;i++ )

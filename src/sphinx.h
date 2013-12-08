@@ -1119,9 +1119,9 @@ struct FieldMask_t
 /// hit info
 struct CSphWordHit
 {
-	SphDocID_t		m_iDocID;		///< document ID
-	SphWordID_t		m_iWordID;		///< word ID in current dictionary
-	Hitpos_t		m_iWordPos;		///< word position in current document
+	SphDocID_t		m_uDocID;		///< document ID
+	SphWordID_t		m_uWordID;		///< word ID in current dictionary
+	Hitpos_t		m_uWordPos;		///< word position in current document
 };
 
 
@@ -1270,7 +1270,7 @@ class CSphMatch
 	friend class CSphRsetSchema;
 
 public:
-	SphDocID_t				m_iDocID;		///< document ID
+	SphDocID_t				m_uDocID;		///< document ID
 	const CSphRowitem *		m_pStatic;		///< static part (stored in and owned by the index)
 	CSphRowitem *			m_pDynamic;		///< dynamic part (computed per query; owned by the match)
 	int						m_iWeight;		///< my computed weight
@@ -1279,7 +1279,7 @@ public:
 public:
 	/// ctor. clears everything
 	CSphMatch ()
-		: m_iDocID ( 0 )
+		: m_uDocID ( 0 )
 		, m_pStatic ( NULL )
 		, m_pDynamic ( NULL )
 		, m_iWeight ( 0 )
@@ -1314,7 +1314,7 @@ public:
 		assert ( iDynamic>=0 );
 		assert ( !m_pDynamic || iDynamic==(int)m_pDynamic[-1] );
 
-		m_iDocID = 0;
+		m_uDocID = 0;
 		if ( !m_pDynamic && iDynamic )
 		{
 #ifndef NDEBUG
@@ -1341,7 +1341,7 @@ private:
 
 		if ( this!=&rhs )
 		{
-			m_iDocID = rhs.m_iDocID;
+			m_uDocID = rhs.m_uDocID;
 			m_iWeight = rhs.m_iWeight;
 			m_pStatic = rhs.m_pStatic;
 			m_iTag = rhs.m_iTag;
@@ -1383,7 +1383,7 @@ public:
 		if ( tLoc.m_iBitOffset>=0 )
 			return sphGetRowAttr ( tLoc.m_bDynamic ? m_pDynamic : m_pStatic, tLoc );
 		if ( tLoc.IsID() )
-			return m_iDocID;
+			return m_uDocID;
 		assert ( false && "Unknown negative-bitoffset locator" );
 		return 0;
 	}
@@ -1427,7 +1427,7 @@ private:
 /// specialized swapper
 inline void Swap ( CSphMatch & a, CSphMatch & b )
 {
-	Swap ( a.m_iDocID, b.m_iDocID );
+	Swap ( a.m_uDocID, b.m_uDocID );
 	Swap ( a.m_pStatic, b.m_pStatic );
 	Swap ( a.m_pDynamic, b.m_pDynamic );
 	Swap ( a.m_iWeight, b.m_iWeight );
@@ -1839,9 +1839,9 @@ public:
 		if ( uWordid )
 		{
 			CSphWordHit & tHit = m_dData.Add();
-			tHit.m_iDocID = uDocid;
-			tHit.m_iWordID = uWordid;
-			tHit.m_iWordPos = uPos;
+			tHit.m_uDocID = uDocid;
+			tHit.m_uWordID = uWordid;
+			tHit.m_uWordPos = uPos;
 		}
 	}
 
@@ -1948,7 +1948,7 @@ public:
 	/// to be implemented by descendants
 	/// returns false on error
 	/// returns true and fills m_tDocInfo on success
-	/// returns true and sets m_tDocInfo.m_iDocID to 0 on eof
+	/// returns true and sets m_tDocInfo.m_uDocID to 0 on eof
 	virtual bool						IterateDocument ( CSphString & sError ) = 0;
 
 	/// get next hits chunk for current document
@@ -1980,7 +1980,7 @@ public:
 	virtual bool						IterateKillListStart ( CSphString & sError ) = 0;
 
 	/// get next kill list doc id
-	virtual bool						IterateKillListNext ( SphDocID_t & tDocId ) = 0;
+	virtual bool						IterateKillListNext ( SphDocID_t & uDocId ) = 0;
 
 	/// post-index callback
 	/// gets called when the indexing is succesfully (!) over

@@ -376,7 +376,7 @@ struct Expr_GetRankFactors_c : public ISphStringExpr
 			return 0;
 		}
 
-		CSphString * sVal = (*m_pFactors) ( tMatch.m_iDocID );
+		CSphString * sVal = (*m_pFactors) ( tMatch.m_uDocID );
 		if ( !sVal )
 		{
 			*ppStr = NULL;
@@ -384,7 +384,7 @@ struct Expr_GetRankFactors_c : public ISphStringExpr
 		}
 		int iLen = sVal->Length();
 		*ppStr = (const BYTE*)sVal->Leak();
-		m_pFactors->Delete ( tMatch.m_iDocID );
+		m_pFactors->Delete ( tMatch.m_uDocID );
 		return iLen;
 	}
 
@@ -414,10 +414,10 @@ struct Expr_GetPackedFactors_c : public ISphStringExpr
 		if ( !m_pHash || !m_pHash->GetLength() )
 			return NULL;
 
-		SphFactorHashEntry_t * pEntry = (*m_pHash)[ (int)( tMatch.m_iDocID % m_pHash->GetLength() ) ];
+		SphFactorHashEntry_t * pEntry = (*m_pHash)[ (int)( tMatch.m_uDocID % m_pHash->GetLength() ) ];
 		assert ( pEntry );
 
-		while ( pEntry && pEntry->m_iId!=tMatch.m_iDocID )
+		while ( pEntry && pEntry->m_iId!=tMatch.m_uDocID )
 			pEntry = pEntry->m_pNext;
 
 		if ( !pEntry )
@@ -469,10 +469,10 @@ struct Expr_BM25F_c : public ISphExpr
 		if ( !m_pHash || !m_pHash->GetLength() )
 			return 0.0f;
 
-		SphFactorHashEntry_t * pEntry = (*m_pHash)[ (int)( tMatch.m_iDocID % m_pHash->GetLength() ) ];
+		SphFactorHashEntry_t * pEntry = (*m_pHash)[ (int)( tMatch.m_uDocID % m_pHash->GetLength() ) ];
 		assert ( pEntry );
 
-		while ( pEntry && pEntry->m_iId!=tMatch.m_iDocID )
+		while ( pEntry && pEntry->m_iId!=tMatch.m_uDocID )
 			pEntry = pEntry->m_pNext;
 
 		if ( !pEntry )
@@ -565,9 +565,9 @@ struct Expr_BM25F_c : public ISphExpr
 
 struct Expr_GetId_c : public ISphExpr
 {
-	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)tMatch.m_iDocID; }
-	virtual int IntEval ( const CSphMatch & tMatch ) const { return (int)tMatch.m_iDocID; }
-	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)tMatch.m_iDocID; }
+	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)tMatch.m_uDocID; }
+	virtual int IntEval ( const CSphMatch & tMatch ) const { return (int)tMatch.m_uDocID; }
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)tMatch.m_uDocID; }
 };
 
 

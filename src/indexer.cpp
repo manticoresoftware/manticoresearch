@@ -1155,7 +1155,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 					fprintf ( stdout, "ERROR: index '%s': %s\n", sIndexName, sError.cstr() );
 				continue;
 			}
-			while ( dSources[i]->IterateDocument ( sError ) && dSources[i]->m_tDocInfo.m_iDocID )
+			while ( dSources[i]->IterateDocument ( sError ) && dSources[i]->m_tDocInfo.m_uDocID )
 			{
 				while ( dSources[i]->IterateHits ( sError ) )
 				{

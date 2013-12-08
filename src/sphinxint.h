@@ -1242,7 +1242,7 @@ struct MatchSortAccessor_t
 	void CopyKey ( MEDIAN_TYPE * pMed, CSphMatch * pVal )
 	{
 		*pMed = &m_tMedian;
-		m_tMedian.m_iDocID = pVal->m_iDocID;
+		m_tMedian.m_uDocID = pVal->m_uDocID;
 		m_tMedian.m_iWeight = pVal->m_iWeight;
 		m_tMedian.m_pStatic = pVal->m_pStatic;
 		m_tMedian.m_pDynamic = pVal->m_pDynamic;
@@ -1609,8 +1609,8 @@ int sphCheckpointCmp ( const char * sWord, int iLen, SphWordID_t iWordID, bool b
 		return sphDictCmp ( sWord, iLen, tCP.m_sWord, strlen ( tCP.m_sWord ) );
 
 	int iRes = 0;
-	iRes = iWordID<tCP.m_iWordID ? -1 : iRes;
-	iRes = iWordID>tCP.m_iWordID ? 1 : iRes;
+	iRes = iWordID<tCP.m_uWordID ? -1 : iRes;
+	iRes = iWordID>tCP.m_uWordID ? 1 : iRes;
 	return iRes;
 }
 
@@ -1621,8 +1621,8 @@ int sphCheckpointCmpStrictly ( const char * sWord, int iLen, SphWordID_t iWordID
 		return sphDictCmpStrictly ( sWord, iLen, tCP.m_sWord, strlen ( tCP.m_sWord ) );
 
 	int iRes = 0;
-	iRes = iWordID<tCP.m_iWordID ? -1 : iRes;
-	iRes = iWordID>tCP.m_iWordID ? 1 : iRes;
+	iRes = iWordID<tCP.m_uWordID ? -1 : iRes;
+	iRes = iWordID>tCP.m_uWordID ? 1 : iRes;
 	return iRes;
 }
 
@@ -2456,7 +2456,7 @@ private:
 		}
 
 		tTo.m_pStatic = NULL;
-		tTo.m_iDocID = tFrom.m_iDocID;
+		tTo.m_uDocID = tFrom.m_uDocID;
 		tTo.m_iWeight = tFrom.m_iWeight;
 		tTo.m_iTag = tFrom.m_iTag;
 	}

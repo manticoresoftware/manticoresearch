@@ -297,7 +297,7 @@ struct Filter_IdValues: public IFilter_Values
 {
 	virtual bool Eval ( const CSphMatch & tMatch ) const
 	{
-		return EvalValues ( tMatch.m_iDocID );
+		return EvalValues ( tMatch.m_uDocID );
 	}
 
 	bool EvalBlockValues ( SphAttr_t uBlockMin, SphAttr_t uBlockMax ) const
@@ -334,7 +334,7 @@ struct Filter_IdRange: public IFilter_Range
 
 	virtual bool Eval ( const CSphMatch & tMatch ) const
 	{
-		const SphDocID_t uID = tMatch.m_iDocID;
+		const SphDocID_t uID = tMatch.m_uDocID;
 		if_const ( HAS_EQUAL )
 			return uID>=(SphDocID_t)m_iMinValue && uID<=(SphDocID_t)m_iMaxValue;
 		else

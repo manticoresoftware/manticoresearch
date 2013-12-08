@@ -51,7 +51,7 @@ public:
 	// setup by query parser
 	CSphString		m_sWord;		///< my copy of word
 	CSphString		m_sDictWord;	///< word after being processed by dict (eg. stemmed)
-	SphWordID_t		m_iWordID;		///< word ID, from dictionary
+	SphWordID_t		m_uWordID;		///< word ID, from dictionary
 	int				m_iTermPos;
 	int				m_iAtomPos;		///< word position, from query
 	bool			m_bExpanded;	///< added by prefix expansion
@@ -73,7 +73,7 @@ protected:
 
 public:
 	ISphQword ()
-		: m_iWordID ( 0 )
+		: m_uWordID ( 0 )
 		, m_iTermPos ( 0 )
 		, m_iAtomPos ( 0 )
 		, m_bExpanded ( false )
@@ -118,7 +118,7 @@ public:
 	const CSphIndex *		m_pIndex;
 	ESphDocinfo				m_eDocinfo;
 	const CSphRowitem *		m_pMinRow;
-	SphDocID_t				m_iMinDocid;
+	SphDocID_t				m_uMinDocid;
 	int						m_iInlineRowitems;		///< inline rowitems count
 	int						m_iDynamicRowitems;		///< dynamic rowitems counts (including (!) inline)
 	int64_t					m_iMaxTimer;
@@ -134,7 +134,7 @@ public:
 		, m_pIndex ( NULL )
 		, m_eDocinfo ( SPH_DOCINFO_NONE )
 		, m_pMinRow ( NULL )
-		, m_iMinDocid ( 0 )
+		, m_uMinDocid ( 0 )
 		, m_iInlineRowitems ( 0 )
 		, m_iDynamicRowitems ( 0 )
 		, m_iMaxTimer ( 0 )

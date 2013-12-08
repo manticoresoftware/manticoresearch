@@ -305,8 +305,8 @@ public:
 	virtual int					GetDocsCount () { return m_pQword->m_iDocs; }
 	virtual uint64_t			GetWordID () const
 	{
-		if ( m_pQword->m_iWordID )
-			return m_pQword->m_iWordID;
+		if ( m_pQword->m_uWordID )
+			return m_pQword->m_uWordID;
 		else
 			return sphFNV64 ( (const BYTE *)m_pQword->m_sDictWord.cstr() );
 	}
@@ -1310,7 +1310,7 @@ static ISphQword * CreateQueryWord ( const XQKeyword_t & tWord, const ISphQwordS
 	ISphQword * pWord = tSetup.QwordSpawn ( tWord );
 	pWord->m_sWord = tWord.m_sWord;
 	CSphDict * pDict = pZonesDict ? pZonesDict : tSetup.m_pDict;
-	pWord->m_iWordID = tWord.m_bMorphed
+	pWord->m_uWordID = tWord.m_bMorphed
 		? pDict->GetWordIDNonStemmed ( sTmp )
 		: pDict->GetWordID ( sTmp );
 	pWord->m_sDictWord = (char*)sTmp;
@@ -1502,7 +1502,7 @@ struct ExtCacheEntry_t
 struct ExtCachedKeyword_t : public XQKeyword_t
 {
 	CSphString	m_sDictWord;
-	SphWordID_t	m_iWordID;
+	SphWordID_t	m_uWordID;
 	float		m_fIDF;
 	int			m_iDocs;
 	int			m_iHits;
@@ -1578,7 +1578,7 @@ ExtCached_c::ExtCached_c ( const XQNode_t * pNode, const ISphQwordSetup & tSetup
 		sTmpWord[sizeof(sTmpWord)-1] = '\0';
 
 		// setup keyword disk reader
-		tWord.m_iWordID = tSetup.m_pDict->GetWordID ( sTmpWord );
+		tWord.m_uWordID = tSetup.m_pDict->GetWordID ( sTmpWord );
 		tWord.m_sDictWord = (const char *)sTmpWord;
 	}
 
@@ -1593,7 +1593,7 @@ void ExtCached_c::PopulateCache ( const ISphQwordSetup & tSetup, bool bFillStat 
 		const ExtCachedKeyword_t & tWord = m_dWords[i];
 		ISphQword * pQword = tSetup.QwordSpawn ( tWord );
 		pQword->m_sWord = tWord.m_sWord;
-		pQword->m_iWordID = tWord.m_iWordID;
+		pQword->m_uWordID = tWord.m_uWordID;
 		pQword->m_sDictWord = tWord.m_sDictWord;
 		pQword->m_bExpanded = true;
 
@@ -1618,7 +1618,7 @@ void ExtCached_c::PopulateCache ( const ISphQwordSetup & tSetup, bool bFillStat 
 		for ( ;; )
 		{
 			const CSphMatch & tMatch = pQword->GetNextDoc ( NULL );
-			if ( !tMatch.m_iDocID )
+			if ( !tMatch.m_uDocID )
 				break;
 
 			pQword->SeekHitlist ( pQword->m_iHitlistPos );
@@ -1638,7 +1638,7 @@ void ExtCached_c::PopulateCache ( const ISphQwordSetup & tSetup, bool bFillStat 
 
 				// ok, this hit works, copy it
 				ExtCacheEntry_t & tEntry = m_dCache.Add ();
-				tEntry.m_uDocid = tMatch.m_iDocID;
+				tEntry.m_uDocid = tMatch.m_uDocID;
 				tEntry.m_uHitpos = uHit;
 				tEntry.m_iQword = i;
 			}
@@ -2127,7 +2127,7 @@ const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 	while ( iDoc<MAX_DOCS-1 )
 	{
 		const CSphMatch & tMatch = m_pQword->GetNextDoc ( pDocinfo );
-		if ( !tMatch.m_iDocID )
+		if ( !tMatch.m_uDocID )
 		{
 			m_pQword->m_iDocs = 0;
 			break;
@@ -2150,7 +2150,7 @@ const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		}
 
 		ExtDoc_t & tDoc = m_dDocs[iDoc++];
-		tDoc.m_uDocid = tMatch.m_iDocID;
+		tDoc.m_uDocid = tMatch.m_uDocID;
 		tDoc.m_pDocinfo = pDocinfo;
 		tDoc.m_uHitlistOffset = m_pQword->m_iHitlistPos;
 		tDoc.m_uDocFields = m_pQword->m_dQwordFields.GetMask32() & m_dQueriedFields.GetMask32(); // OPTIMIZE: only needed for phrase node
@@ -5616,7 +5616,7 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 		int iDocs = 0;
 		while ( pCand->m_uDocid!=DOCID_MAX )
 		{
-			m_tTestMatch.m_iDocID = pCand->m_uDocid;
+			m_tTestMatch.m_uDocID = pCand->m_uDocid;
 			if ( pCand->m_pDocinfo )
 				memcpy ( m_tTestMatch.m_pDynamic, pCand->m_pDocinfo, m_iInlineRowitems*sizeof(CSphRowitem) );
 
@@ -6562,7 +6562,7 @@ struct RankerState_Plugin_fn : public ISphExtra
 	{
 		assert ( m_tRankerFuncs.m_fnFinalize );
 		SPH_PLUGIN_MATCH tIntMatch;
-		tIntMatch.docid = tMatch.m_iDocID;
+		tIntMatch.docid = tMatch.m_uDocID;
 		tIntMatch.weight = tMatch.m_iWeight;
 
 		return m_tRankerFuncs.m_fnFinalize ( &tIntMatch, &m_pData );
@@ -6614,9 +6614,9 @@ public:
 	void			Free ( BYTE * pPtr );
 	int				GetElementSize() const;
 	int				GetIntElementSize () const;
-	void			AddToHash ( SphDocID_t iId, BYTE * pPacked );
-	void			AddRef ( SphDocID_t iId );
-	void			Release ( SphDocID_t iId );
+	void			AddToHash ( SphDocID_t uId, BYTE * pPacked );
+	void			AddRef ( SphDocID_t uId );
+	void			Release ( SphDocID_t uId );
 	void			Flush ();
 
 	bool			IsInitialized() const;
@@ -6630,8 +6630,8 @@ private:
 	CSphTightVector<int>	m_dFree;
 	SphFactorHash_t			m_dHash;
 
-	SphFactorHashEntry_t * Find ( SphDocID_t iId ) const;
-	inline DWORD	HashFunc ( SphDocID_t iId ) const;
+	SphFactorHashEntry_t * Find ( SphDocID_t uId ) const;
+	inline DWORD	HashFunc ( SphDocID_t uId ) const;
 	bool			FlushEntry ( SphFactorHashEntry_t * pEntry );
 };
 
@@ -6696,12 +6696,12 @@ int	FactorPool_c::GetElementSize() const
 }
 
 
-void FactorPool_c::AddToHash ( SphDocID_t iId, BYTE * pPacked )
+void FactorPool_c::AddToHash ( SphDocID_t uId, BYTE * pPacked )
 {
 	SphFactorHashEntry_t * pNew = (SphFactorHashEntry_t *)(pPacked+m_iElementSize);
 	memset ( pNew, 0, sizeof(SphFactorHashEntry_t) );
 
-	DWORD uKey = HashFunc(iId);
+	DWORD uKey = HashFunc ( uId );
 	if ( m_dHash[uKey] )
 	{
 		SphFactorHashEntry_t * pStart = m_dHash[uKey];
@@ -6711,20 +6711,20 @@ void FactorPool_c::AddToHash ( SphDocID_t iId, BYTE * pPacked )
 	}
 
 	pNew->m_pData = pPacked;
-	pNew->m_iId = iId;
+	pNew->m_iId = uId;
 	m_dHash[uKey] = pNew;
 }
 
 
-SphFactorHashEntry_t * FactorPool_c::Find ( SphDocID_t iId ) const
+SphFactorHashEntry_t * FactorPool_c::Find ( SphDocID_t uId ) const
 {
-	DWORD uKey = HashFunc(iId);
+	DWORD uKey = HashFunc ( uId );
 	if ( m_dHash[uKey] )
 	{
 		SphFactorHashEntry_t * pEntry = m_dHash[uKey];
 		while ( pEntry )
 		{
-			if ( pEntry->m_iId==iId )
+			if ( pEntry->m_iId==uId )
 				return pEntry;
 
 			pEntry = pEntry->m_pNext;
@@ -6735,30 +6735,30 @@ SphFactorHashEntry_t * FactorPool_c::Find ( SphDocID_t iId ) const
 }
 
 
-void FactorPool_c::AddRef ( SphDocID_t iId )
+void FactorPool_c::AddRef ( SphDocID_t uId )
 {
-	if ( !iId )
+	if ( !uId )
 		return;
 
-	SphFactorHashEntry_t * pEntry = Find ( iId );
+	SphFactorHashEntry_t * pEntry = Find ( uId );
 	if ( pEntry )
 		pEntry->m_iRefCount++;
 }
 
 
-void FactorPool_c::Release ( SphDocID_t iId )
+void FactorPool_c::Release ( SphDocID_t uId )
 {
-	if ( !iId )
+	if ( !uId )
 		return;
 
-	SphFactorHashEntry_t * pEntry = Find ( iId );
+	SphFactorHashEntry_t * pEntry = Find ( uId );
 	if ( pEntry )
 	{
 		pEntry->m_iRefCount--;
 		bool bHead = !pEntry->m_pPrev;
 		SphFactorHashEntry_t * pNext = pEntry->m_pNext;
 		if ( FlushEntry ( pEntry ) && bHead )
-			m_dHash[HashFunc(iId)] = pNext;
+			m_dHash [ HashFunc ( uId ) ] = pNext;
 	}
 }
 
@@ -6800,9 +6800,9 @@ void FactorPool_c::Flush()
 }
 
 
-inline DWORD FactorPool_c::HashFunc ( SphDocID_t iId ) const
+inline DWORD FactorPool_c::HashFunc ( SphDocID_t uId ) const
 {
-	return (int)( iId % m_dHash.GetLength() );
+	return (DWORD)( uId % m_dHash.GetLength() );
 }
 
 
@@ -8496,7 +8496,7 @@ DWORD RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Finalize ( const CS
 			m_tFactorPool.Prealloc ( iPoolElementSize, m_iMaxMatches+ExtNode_i::MAX_DOCS );
 		}
 
-		m_tFactorPool.AddToHash ( tMatch.m_iDocID, PackFactors() );
+		m_tFactorPool.AddToHash ( tMatch.m_uDocID, PackFactors() );
 	}
 
 	// compute expression
@@ -8715,7 +8715,7 @@ public:
 		}
 
 		// export factors
-		m_hFactors.Add ( dVal.Begin(), tMatch.m_iDocID );
+		m_hFactors.Add ( dVal.Begin(), tMatch.m_uDocID );
 
 		// compute sorting expression now
 		DWORD uRes = ( m_eExprType==SPH_ATTR_INTEGER )
@@ -9206,9 +9206,9 @@ bool NodeCacheContainer_t::WarmupCache ( ExtNode_i * pChild, int iQwords )
 	assert ( pChild );
 	assert ( m_pSetup );
 
-	SphDocID_t pMaxID = 0;
+	SphDocID_t uMaxID = 0;
 	m_iAtomPos = pChild->m_iAtomPos;
-	const ExtDoc_t * pChunk = pChild->GetDocsChunk ( &pMaxID );
+	const ExtDoc_t * pChunk = pChild->GetDocsChunk ( &uMaxID );
 	int iStride = 0;
 
 	if ( pChunk && pChunk->m_pDocinfo )
@@ -9256,7 +9256,7 @@ bool NodeCacheContainer_t::WarmupCache ( ExtNode_i * pChild, int iQwords )
 			m_pSetup = NULL;
 			return false;
 		}
-		pChunk = pChild->GetDocsChunk ( &pMaxID );
+		pChunk = pChild->GetDocsChunk ( &uMaxID );
 	}
 
 	if ( iStride )

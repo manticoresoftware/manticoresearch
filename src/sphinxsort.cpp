@@ -187,7 +187,7 @@ public:
 		m_tSchema.CloneMatch ( m_pData+m_iUsed, tEntry );
 
 		if_const ( NOTIFICATIONS )
-			m_iJustPushed = tEntry.m_iDocID;
+			m_iJustPushed = tEntry.m_uDocID;
 
 		int iEntry = m_iUsed++;
 
@@ -227,9 +227,9 @@ public:
 		if_const ( NOTIFICATIONS )
 		{
 			if ( m_dJustPopped.GetLength() )
-				m_dJustPopped[0] = m_pData[m_iUsed].m_iDocID;
+				m_dJustPopped[0] = m_pData[m_iUsed].m_uDocID;
 			else
-				m_dJustPopped.Add ( m_pData[m_iUsed].m_iDocID );
+				m_dJustPopped.Add ( m_pData[m_iUsed].m_uDocID );
 		}
 
 		// sift down if needed
@@ -381,7 +381,7 @@ public:
 		m_tSchema.CloneMatch ( m_pEnd-m_iUsed, tEntry );
 
 		if_const ( NOTIFICATIONS )
-			m_iJustPushed = tEntry.m_iDocID;
+			m_iJustPushed = tEntry.m_uDocID;
 
 		// do the initial sort once
 		if ( m_iTotal==m_iSize )
@@ -403,7 +403,7 @@ public:
 			if_const ( NOTIFICATIONS )
 			{
 				for ( CSphMatch * pMatch = m_pData; pMatch < m_pEnd-m_iSize; pMatch++ )
-					m_dJustPopped.Add ( pMatch->m_iDocID );
+					m_dJustPopped.Add ( pMatch->m_uDocID );
 			}
 
 			m_iUsed = m_iSize;
@@ -509,7 +509,7 @@ private:
 			m_tWorkSet.m_dRows[i] = NULL;
 			if ( !DOCINFO2ID ( STATIC2DOCINFO ( m_pData[i].m_pStatic ) ) ) // if static attributes were copied, so, they actually dynamic
 			{
-				m_tWorkSet.m_dDocids[i] = m_pData[i].m_iDocID;
+				m_tWorkSet.m_dDocids[i] = m_pData[i].m_uDocID;
 			} else // static attributes points to the active indexes - so, no lookup, 5 times faster update.
 			{
 				m_tWorkSet.m_dRows[i] = m_pData[i].m_pStatic - ( sizeof(SphDocID_t) / sizeof(CSphRowitem) );
@@ -611,7 +611,7 @@ private:
 		if ( !DOCINFO2ID ( STATIC2DOCINFO ( m_pData->m_pStatic ) ) ) // if static attrs were copied, so, they actually dynamic
 		{
 			for ( int i=0; i<m_iUsed; ++i )
-				m_pValues->Add ( m_pData[i].m_iDocID );
+				m_pValues->Add ( m_pData[i].m_uDocID );
 		} else // static attrs points to the active indexes - so, no lookup, 5 times faster search.
 		{
 			for ( int i=0; i<m_iUsed; ++i )
@@ -1781,8 +1781,8 @@ public:
 			{
 				if_const ( NOTIFICATIONS )
 				{
-					m_iJustPushed = tEntry.m_iDocID;
-					m_dJustPopped.Add ( pMatch->m_iDocID );
+					m_iJustPushed = tEntry.m_uDocID;
+					m_dJustPopped.Add ( pMatch->m_uDocID );
 				}
 
 				// clone the low part of the match
@@ -1813,7 +1813,7 @@ public:
 		m_tSchema.CloneMatch ( &tNew, tEntry );
 
 		if_const ( NOTIFICATIONS )
-			m_iJustPushed = tNew.m_iDocID;
+			m_iJustPushed = tNew.m_uDocID;
 
 		if ( !bGrouped )
 		{
@@ -1959,7 +1959,7 @@ protected:
 		if_const ( NOTIFICATIONS )
 		{
 			for ( int i = iBound; i < m_iUsed; ++i )
-				m_dJustPopped.Add ( m_pData[i].m_iDocID );
+				m_dJustPopped.Add ( m_pData[i].m_uDocID );
 		}
 
 		// cleanup unused distinct stuff
@@ -2445,7 +2445,7 @@ public:
 		m_dGroupsLen [ iNew ] = 1;
 
 		if_const ( NOTIFICATIONS )
-			m_iJustPushed = tNew.m_iDocID;
+			m_iJustPushed = tNew.m_uDocID;
 
 		if ( !bGrouped )
 		{
@@ -2660,7 +2660,7 @@ protected:
 
 				// do the staff with matches to cut
 				if_const ( NOTIFICATIONS )
-					m_dJustPopped.Add ( pMatch->m_iDocID );
+					m_dJustPopped.Add ( pMatch->m_uDocID );
 
 				if_const ( DISTINCT )
 					dRemove.Add ( pMatch->GetAttr ( m_tLocGroupby ) );
@@ -2782,7 +2782,7 @@ protected:
 		if_const ( NOTIFICATIONS )
 		{
 			for ( int i = iBound; i < m_iUsed; ++i )
-				m_dJustPopped.Add ( m_pData[i].m_iDocID );
+				m_dJustPopped.Add ( m_pData[i].m_uDocID );
 		}
 
 		// cleanup unused distinct stuff
@@ -3153,12 +3153,12 @@ protected:
 				m_dAggregates[i]->Update ( &m_tData, &tEntry, bGrouped );
 
 			// if new entry is more relevant, update from it
-			if ( tEntry.m_iDocID<m_tData.m_iDocID )
+			if ( tEntry.m_uDocID<m_tData.m_uDocID )
 			{
 				if_const ( NOTIFICATIONS )
 				{
-					m_iJustPushed = tEntry.m_iDocID;
-					m_dJustPopped.Add ( m_tData.m_iDocID );
+					m_iJustPushed = tEntry.m_uDocID;
+					m_dJustPopped.Add ( m_tData.m_uDocID );
 				}
 
 				m_tSchema.CloneMatch ( &m_tData, tEntry, m_iPregroupDynamic );
@@ -3182,7 +3182,7 @@ protected:
 		m_tSchema.CloneMatch ( &m_tData, tEntry );
 
 		if_const ( NOTIFICATIONS )
-			m_iJustPushed = m_tData.m_iDocID;
+			m_iJustPushed = m_tData.m_uDocID;
 
 		if ( !bGrouped )
 		{
@@ -3239,7 +3239,7 @@ struct MatchRelevanceLt_fn : public ISphMatchComparator
 		if ( a.m_iWeight!=b.m_iWeight )
 			return a.m_iWeight < b.m_iWeight;
 
-		return a.m_iDocID > b.m_iDocID;
+		return a.m_uDocID > b.m_uDocID;
 	}
 };
 
@@ -3270,7 +3270,7 @@ struct MatchAttrLt_fn : public ISphMatchComparator
 		if ( a.m_iWeight!=b.m_iWeight )
 			return a.m_iWeight < b.m_iWeight;
 
-		return a.m_iDocID > b.m_iDocID;
+		return a.m_uDocID > b.m_uDocID;
 	}
 };
 
@@ -3301,7 +3301,7 @@ struct MatchAttrGt_fn : public ISphMatchComparator
 		if ( a.m_iWeight!=b.m_iWeight )
 			return a.m_iWeight < b.m_iWeight;
 
-		return a.m_iDocID > b.m_iDocID;
+		return a.m_uDocID > b.m_uDocID;
 	}
 };
 
@@ -3329,7 +3329,7 @@ struct MatchTimeSegments_fn : public ISphMatchComparator
 		if ( aa!=bb )
 			return aa<bb;
 
-		return a.m_iDocID > b.m_iDocID;
+		return a.m_uDocID > b.m_uDocID;
 	}
 
 protected:
@@ -3359,7 +3359,7 @@ struct MatchExpr_fn : public ISphMatchComparator
 		float bb = b.GetAttrFloat ( t.m_tLocator[0] );
 		if ( aa!=bb )
 			return aa<bb;
-		return a.m_iDocID>b.m_iDocID;
+		return a.m_uDocID>b.m_uDocID;
 	}
 };
 
@@ -3373,7 +3373,7 @@ struct MatchExpr_fn : public ISphMatchComparator
 #define SPH_TEST_KEYPART(_idx) \
 	switch ( t.m_eKeypart[_idx] ) \
 	{ \
-		case SPH_KEYPART_ID:		SPH_TEST_PAIR ( a.m_iDocID, b.m_iDocID, _idx ); break; \
+		case SPH_KEYPART_ID:		SPH_TEST_PAIR ( a.m_uDocID, b.m_uDocID, _idx ); break; \
 		case SPH_KEYPART_WEIGHT:	SPH_TEST_PAIR ( a.m_iWeight, b.m_iWeight, _idx ); break; \
 		case SPH_KEYPART_INT: \
 		{ \
@@ -3411,7 +3411,7 @@ struct MatchGeneric2_fn : public ISphMatchComparator
 	{
 		SPH_TEST_KEYPART(0);
 		SPH_TEST_KEYPART(1);
-		return a.m_iDocID>b.m_iDocID;
+		return a.m_uDocID>b.m_uDocID;
 	}
 };
 
@@ -3428,7 +3428,7 @@ struct MatchGeneric3_fn : public ISphMatchComparator
 		SPH_TEST_KEYPART(0);
 		SPH_TEST_KEYPART(1);
 		SPH_TEST_KEYPART(2);
-		return a.m_iDocID>b.m_iDocID;
+		return a.m_uDocID>b.m_uDocID;
 	}
 };
 
@@ -3446,7 +3446,7 @@ struct MatchGeneric4_fn : public ISphMatchComparator
 		SPH_TEST_KEYPART(1);
 		SPH_TEST_KEYPART(2);
 		SPH_TEST_KEYPART(3);
-		return a.m_iDocID>b.m_iDocID;
+		return a.m_uDocID>b.m_uDocID;
 	}
 };
 
@@ -3465,7 +3465,7 @@ struct MatchGeneric5_fn : public ISphMatchComparator
 		SPH_TEST_KEYPART(2);
 		SPH_TEST_KEYPART(3);
 		SPH_TEST_KEYPART(4);
-		return a.m_iDocID>b.m_iDocID;
+		return a.m_uDocID>b.m_uDocID;
 	}
 };
 

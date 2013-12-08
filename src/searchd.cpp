@@ -5969,7 +5969,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 			{
 				CSphMatch & tMatch = tRes.m_dMatches[i];
 				tMatch.Reset ( tSchema.GetRowSize() );
-				tMatch.m_iDocID = bAgent64 ? (SphDocID_t)tReq.GetUint64() : tReq.GetDword();
+				tMatch.m_uDocID = bAgent64 ? (SphDocID_t)tReq.GetUint64() : tReq.GetDword();
 				tMatch.m_iWeight = tReq.GetInt ();
 				for ( int j=0; j<tSchema.GetAttrsCount(); j++ )
 				{
@@ -7614,10 +7614,10 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 		const CSphMatch & tMatch = pRes->m_dMatches [ pRes->m_iOffset+i ];
 #if USE_64BIT
 		if ( iVer>=0x108 )
-			tOut.SendUint64 ( tMatch.m_iDocID );
+			tOut.SendUint64 ( tMatch.m_uDocID );
 		else
 #endif
-			tOut.SendDword ( (DWORD)tMatch.m_iDocID );
+			tOut.SendDword ( (DWORD)tMatch.m_uDocID );
 
 		if ( iVer<=0x101 )
 		{
@@ -7928,7 +7928,7 @@ struct TaggedMatchSorter_fn : public SphAccessor_T<CSphMatch>
 {
 	void CopyKey ( CSphMatch * pMed, CSphMatch * pVal ) const
 	{
-		pMed->m_iDocID = pVal->m_iDocID;
+		pMed->m_uDocID = pVal->m_uDocID;
 		pMed->m_iTag = pVal->m_iTag;
 	}
 
@@ -7937,8 +7937,8 @@ struct TaggedMatchSorter_fn : public SphAccessor_T<CSphMatch>
 		bool bDistA = ( ( a.m_iTag & 0x80000000 )==0x80000000 );
 		bool bDistB = ( ( b.m_iTag & 0x80000000 )==0x80000000 );
 		// sort by doc_id, dist_tag, tag
-		return ( a.m_iDocID < b.m_iDocID ) ||
-			( a.m_iDocID==b.m_iDocID && ( ( !bDistA && bDistB ) || ( ( a.m_iTag & 0x7FFFFFFF )>( b.m_iTag & 0x7FFFFFFF ) ) ) );
+		return ( a.m_uDocID < b.m_uDocID ) ||
+			( a.m_uDocID==b.m_uDocID && ( ( !bDistA && bDistB ) || ( ( a.m_iTag & 0x7FFFFFFF )>( b.m_iTag & 0x7FFFFFFF ) ) ) );
 	}
 
 	// inherited swap does not work on gcc
@@ -7976,7 +7976,7 @@ void RemapResult ( const ISphSchema * pTarget, AggrResult_t * pRes, bool bMultiS
 			// create new and shiny (and properly sized) match
 			CSphMatch tRow;
 			tRow.Reset ( pTarget->GetDynamicSize() );
-			tRow.m_iDocID = tMatch.m_iDocID;
+			tRow.m_uDocID = tMatch.m_uDocID;
 			tRow.m_iWeight = tMatch.m_iWeight;
 			tRow.m_iTag = tMatch.m_iTag;
 
@@ -8123,7 +8123,7 @@ static int KillAllDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes )
 		// by default, simply remove dupes (select first by tag)
 		ARRAY_FOREACH ( i, tRes.m_dMatches )
 		{
-			if ( i==0 || tRes.m_dMatches[i].m_iDocID!=tRes.m_dMatches[i-1].m_iDocID )
+			if ( i==0 || tRes.m_dMatches[i].m_uDocID!=tRes.m_dMatches[i-1].m_uDocID )
 				pSorter->Push ( tRes.m_dMatches[i] );
 			else
 				iDupes++;
@@ -8170,9 +8170,9 @@ struct GenericMatchSort_fn : public CSphMatchComparatorState
 			switch ( m_eKeypart[i] )
 		{
 			case SPH_KEYPART_ID:
-				if ( a->m_iDocID==b->m_iDocID )
+				if ( a->m_uDocID==b->m_uDocID )
 					continue;
-				return ( ( m_uAttrDesc>>i ) & 1 ) ^ ( a->m_iDocID < b->m_iDocID );
+				return ( ( m_uAttrDesc>>i ) & 1 ) ^ ( a->m_uDocID < b->m_uDocID );
 
 			case SPH_KEYPART_WEIGHT:
 				if ( a->m_iWeight==b->m_iWeight )
@@ -14606,7 +14606,7 @@ void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
 
 		CSphMatchVariant tDoc;
 		tDoc.Reset ( tSchema.GetRowSize() );
-		tDoc.m_iDocID = (SphDocID_t)CSphMatchVariant::ToDocid ( tStmt.m_dInsertValues[iIdIndex + c * iExp] );
+		tDoc.m_uDocID = (SphDocID_t)CSphMatchVariant::ToDocid ( tStmt.m_dInsertValues[iIdIndex + c * iExp] );
 		dStrings.Resize ( 0 );
 		dMvas.Resize ( 0 );
 
@@ -15658,7 +15658,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 				const char * sName = tSchema.GetAttr(i).m_sName.cstr();
 				// how to get rid of this if?
 				if ( sName[0]=='i' && sName[1]=='d' && sName[2]=='\0' )
-					dRows.PutNumeric<SphDocID_t> ( DOCID_FMT, tMatch.m_iDocID );
+					dRows.PutNumeric<SphDocID_t> ( DOCID_FMT, tMatch.m_uDocID );
 				else
 					dRows.PutNumeric<SphAttr_t> ( INT64_FMT, tMatch.GetAttr(tLoc) );
 				break;

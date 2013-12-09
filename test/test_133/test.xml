@@ -63,6 +63,26 @@ index rt
 }
 
 
+index sp10
+{
+	source			= test
+	path			= <data_path/>/sp10
+	html_strip		= 1
+	index_sp		= 1
+	morphology = none
+	dict = crc
+	min_prefix_len = 1
+}
+index sp11
+{
+	source			= test
+	path			= <data_path/>/sp11
+	html_strip		= 1
+	index_sp		= 1
+	morphology = none
+	dict = keywords
+	min_prefix_len = 1
+}
 </config>
 
 <db_create>

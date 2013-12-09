@@ -117,6 +117,25 @@ index kw_infix
 	min_infix_len = 3
 	dict = keywords	
 }
+
+source kw_infix_morph
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'running star' title, 100 as idd UNION SELECT 2, 'run off', 100 as idd
+	sql_attr_uint	= idd
+}
+
+index kw_infix_morph
+{
+	source	= kw_infix_morph
+	path	= <data_path/>/kw_infix_morph
+	docinfo	= extern
+	min_infix_len = 1
+	dict = keywords
+	morphology = stem_en
+}
+
 </config>
 
 <db_create>
@@ -165,6 +184,9 @@ create table test_table
 
 <!--regression no infix collected at dict=keywords -->
 <sphinxql>select * from kw_infix where match('1')</sphinxql>
+<!--regression exact form vs infix -->
+<sphinxql>select * from kw_infix_morph where match('r*')</sphinxql>
+
 </sphqueries>
 
 </test>

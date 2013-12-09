@@ -113,6 +113,33 @@ index crash_idx
 	morphology		= stem_en, lemmatize_ru_all
 	wordforms		= <this_test/>/wordforms2.txt
 }
+
+source test_wf
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query_pre	= set names utf8
+	sql_query		= select 1 id, 11 gid, 'камеди full source' UNION select 2 id, 11 gid, 'comedi central' UNION select 3 id, 11 gid, 'pop idol'
+	sql_attr_uint	= gid
+}
+
+index test_wf1
+{
+	source			= test_wf
+	path			= <data_path/>/test_wf1
+	morphology		= stem_en, lemmatize_ru_all
+	wordforms		= <this_test/>/wordforms3.txt
+	dict                = keywords
+	min_prefix_len 		= 2
+}
+index test_wf2
+{
+	source			= test_wf
+	path			= <data_path/>/test_wf2
+	morphology		= stem_en, lemmatize_ru_all
+	wordforms		= <this_test/>/wordforms3.txt
+	dict                = keywords
+}
 </config>
 
 <db_create>
@@ -321,6 +348,14 @@ CREATE TABLE test_table
 <sphinxql>SHOW META</sphinxql>
 
 <sphinxql>SELECT id FROM crash_idx WHERE MATCH('"DOG 13"')</sphinxql>
+
+<!--regression wordforms at different stages vs AOT -->
+<sphinxql>SELECT id,gid,weight() w FROM test_wf1 WHERE MATCH('камеди');show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight() w FROM test_wf2 WHERE MATCH('камеди');show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight() w FROM test_wf1 WHERE MATCH('comedi');show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight() w FROM test_wf2 WHERE MATCH('comedi');show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight() w FROM test_wf1 WHERE MATCH('pop');show meta</sphinxql>
+<sphinxql>SELECT id,gid,weight() w FROM test_wf2 WHERE MATCH('pop');show meta</sphinxql>
 
 </sphqueries>
 

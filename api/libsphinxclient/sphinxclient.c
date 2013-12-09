@@ -13,6 +13,11 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
+// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+//							WARNING
+// We strongly recommend you to use SphinxQL instead of an API
+// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 #ifdef _WIN32
 #if _MSC_VER>=1400
 // VS 2005 and above

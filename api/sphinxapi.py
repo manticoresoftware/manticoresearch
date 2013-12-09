@@ -14,6 +14,11 @@
 # did not, you can find it at http://www.gnu.org/
 #
 
+# !!!!!!!!!!!!!!!!!!!!!!!!!
+# WARNING
+# We strongly recommend you to use SphinxQL instead of an API
+# !!!!!!!!!!!!!!!!!!!!!!!!!
+
 import sys
 import select
 import socket

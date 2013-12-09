@@ -1580,6 +1580,7 @@ protected:
 		: TokenFunctorTraits_c ( tContainer, pTokenizer, pDict, tQuery, tSettingsIndex, sDoc, iDocLen )
 		, m_bFixedWeightOrder ( m_bWeightOrder )
 		, m_uFoundWords	( 0 )
+		, m_iThresh ( 0 )
 		, m_uPassagesQwords ( 0 )
 		, m_pHit ( dHits ? dHits->Begin() : NULL )
 		, m_pHitEnd ( dHits ? dHits->Begin()+dHits->GetLength() : NULL )

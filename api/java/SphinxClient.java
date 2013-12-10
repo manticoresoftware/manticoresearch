@@ -492,9 +492,10 @@ public class SphinxClient
 		_maxQueryTime = maxTime;
 	}
 
-	/** Set matching mode. */
+	/** Set matching mode. DEPRECATED */
 	public void SetMatchMode(int mode) throws SphinxException
 	{
+		System.out.println ( "DEPRECATED: Do not call this method or, even better, use SphinxQL instead of an API\n" );
 		myAssert (
 			mode==SPH_MATCH_ALL ||
 			mode==SPH_MATCH_ANY ||

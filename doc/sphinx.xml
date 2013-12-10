@@ -1559,13 +1559,13 @@ but that is for compatibility reasons only.
 <para>
 There are the following matching modes available:
 <itemizedlist>
-<listitem><para>SPH_MATCH_ALL, matches all query words (default mode);</para></listitem>
+<listitem><para>SPH_MATCH_ALL, matches all query words;</para></listitem>
 <listitem><para>SPH_MATCH_ANY, matches any of the query words;</para></listitem>
 <listitem><para>SPH_MATCH_PHRASE, matches query as a phrase, requiring perfect match;</para></listitem>
 <listitem><para>SPH_MATCH_BOOLEAN, matches query as a boolean expression (see <xref linkend="boolean-syntax"/>);</para></listitem>
 <listitem><para>SPH_MATCH_EXTENDED, matches query as an expression in Sphinx internal query language
     (see <xref linkend="extended-syntax"/>);</para></listitem>
-<listitem><para>SPH_MATCH_EXTENDED2, an alias for SPH_MATCH_EXTENDED;</para></listitem>
+<listitem><para>SPH_MATCH_EXTENDED2, an alias for SPH_MATCH_EXTENDED (default mode);</para></listitem>
 <listitem><para>SPH_MATCH_FULLSCAN, matches query, forcibly using the "full scan" mode as below.
     NB, any query terms will be ignored, such that filters, filter-ranges and grouping
     will still be applied, but no text-matching.</para></listitem>
@@ -6645,6 +6645,7 @@ only UTF-8 encoding.</para></listitem>
 with enable_star=1.</para></listitem>
 <listitem><para>Removed CLI search which confused people instead of
 helping them and sql_query_info.</para></listitem>
+<listitem><para>Deprecated SetMatchMode() API call</para></listitem>
 </itemizedlist>
 </para>
 </sect1>
@@ -6918,6 +6919,7 @@ $cl->SetSelect ( "*, AVG(price) AS avgprice" );
 
 
 <sect2 id="api-func-setmatchmode"><title>SetMatchMode</title>
+<para><b>DEPRECATED</b></para>
 <para><b>Prototype:</b> function SetMatchMode ( $mode )</para>
 <para>
 Sets full-text query matching mode, as described in <xref linkend="matching-modes"/>.
@@ -12741,16 +12743,6 @@ not as a persistent storage mechanism.
 <programlisting>
 mva_updates_pool = 16M
 </programlisting>
-</sect2>
-
-
-<sect2 id="conf-crash-log-path"><title>crash_log_path</title>
-<para>
-Deprecated debugging setting, path (formally prefix) for crash log files.
-Introduced in version 0.9.9-rc1. Deprecated in version 2.0.1-beta,
-as crash debugging information now gets logged into searchd.log
-in text form, and separate binary crash logs are no longer needed.
-</para>
 </sect2>
 
 

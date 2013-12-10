@@ -14,10 +14,10 @@
 # did not, you can find it at http://www.gnu.org/
 #
 
-# !!!!!!!!!!!!!!!!!!!!!!!!!
-# WARNING
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#			WARNING
 # We strongly recommend you to use SphinxQL instead of an API
-# !!!!!!!!!!!!!!!!!!!!!!!!!
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 import sys
 import select
@@ -348,6 +348,7 @@ class SphinxClient:
 		"""
 		Set matching mode.
 		"""
+		print >> sys.stderr, 'DEPRECATED: Do not call this method or, even better, use SphinxQL instead of an API'
 		assert(mode in [SPH_MATCH_ALL, SPH_MATCH_ANY, SPH_MATCH_PHRASE, SPH_MATCH_BOOLEAN, SPH_MATCH_EXTENDED, SPH_MATCH_FULLSCAN, SPH_MATCH_EXTENDED2])
 		self._mode = mode
 

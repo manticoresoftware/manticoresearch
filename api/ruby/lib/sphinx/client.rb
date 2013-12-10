@@ -256,8 +256,9 @@ module Sphinx
       @maxquerytime = max
     end
     
-    # Set matching mode.
+    # Set matching mode. DEPRECATED
     def SetMatchMode(mode)
+      $stderr.puts "DEPRECATED: Do not call this method or, even better, use SphinxQL instead of an API\n"
       assert { mode == SPH_MATCH_ALL \
             || mode == SPH_MATCH_ANY \
             || mode == SPH_MATCH_PHRASE \

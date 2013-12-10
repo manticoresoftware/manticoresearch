@@ -760,6 +760,7 @@ class SphinxClient
 	/// set matching mode
 	function SetMatchMode ( $mode )
 	{
+		trigger_error ( 'DEPRECATED: Do not call this method or, even better, use SphinxQL instead of an API', E_USER_DEPRECATED );
 		assert ( $mode==SPH_MATCH_ALL
 			|| $mode==SPH_MATCH_ANY
 			|| $mode==SPH_MATCH_PHRASE

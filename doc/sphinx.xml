@@ -6645,7 +6645,9 @@ only UTF-8 encoding.</para></listitem>
 with enable_star=1.</para></listitem>
 <listitem><para>Removed CLI search which confused people instead of
 helping them and sql_query_info.</para></listitem>
-<listitem><para>Deprecated SetMatchMode() API call</para></listitem>
+<listitem><para>Deprecated SetMatchMode() API call.</para></listitem>
+<listitem><para>Changed default <link linkend="conf-thread-stack">thread_stack
+</link> value to 1M.</para></listitem>
 </itemizedlist>
 </para>
 </sect1>
@@ -13230,15 +13232,15 @@ rt_flush_period = 3600
 <sect2 id="conf-thread-stack"><title>thread_stack</title>
 <para>
 Per-thread stack size.
-Optional, default is 64K.
+Optional, default is 1M.
 Introduced in version 2.0.1-beta.
 </para>
 <para>
 In the <code>workers = threads</code> mode, every request is processed
-with a separate thread that needs its own stack space. By default, 64K per
+with a separate thread that needs its own stack space. By default, 1M per
 thread are allocated for stack. However, extremely complex search requests
 might eventually exhaust the default stack and require more. For instance,
-a query that matches a few thousand keywords (either directly or through
+a query that matches a thousands of keywords (either directly or through
 term expansion) can eventually run out of stack. Previously, that resulted
 in crashes. Starting with 2.0.1-beta, <filename>searchd</filename> attempts
 to estimate the expected stack use, and blocks the potentially dangerous
@@ -13248,7 +13250,7 @@ by using the <code>thread_stack</code> directive (or switch to a different
 </para>
 <para>
 A query with N levels of nesting is estimated to require approximately
-30+0.12*N KB of stack, meaning that the default 64K is enough for queries
+30+0.12*N KB of stack, meaning that the 64K is enough for queries
 with upto 300 levels, 150K for upto 1000 levels, etc. If the stack size limit
 is not met, <filename>searchd</filename> fails the query and reports
 the required stack size in the error message.

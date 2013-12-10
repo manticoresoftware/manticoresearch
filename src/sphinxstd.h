@@ -2113,6 +2113,13 @@ struct CSphNamedInt
 	CSphNamedInt () : m_iValue ( 0 ) {}
 };
 
+inline void Swap ( CSphNamedInt & a, CSphNamedInt & b )
+{
+	a.m_sName.Swap ( b.m_sName );
+	Swap ( a.m_iValue, b.m_iValue );
+}
+
+
 /////////////////////////////////////////////////////////////////////////////
 
 /// string hash function

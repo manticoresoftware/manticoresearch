@@ -17684,17 +17684,24 @@ static void BuildExpandedTree ( const XQKeyword_t & tRootWord, CSphVector<CSphNa
 	}
 }
 
-void Swap ( CSphNamedInt & a, CSphNamedInt & b )
-{
-	a.m_sName.Swap ( b.m_sName );
-	Swap ( a.m_iValue, b.m_iValue );
-}
 
-struct WordDocsGreaterOp_t
+struct WordDocsGreaterOp_t : public SphAccessor_T<CSphNamedInt>
 {
+	typedef CSphNamedInt MEDIAN_TYPE;
+	void CopyKey ( MEDIAN_TYPE * pMed, CSphNamedInt * pVal ) const
+	{
+		pMed->m_iValue = pVal->m_iValue;
+	}
+
 	inline bool IsLess ( const CSphNamedInt & a, const CSphNamedInt & b )
 	{
 		return a.m_iValue > b.m_iValue;
+	}
+
+	// inherited swap does not work on gcc
+	void Swap ( CSphNamedInt * a, CSphNamedInt * b ) const
+	{
+		::Swap ( *a, *b );
 	}
 };
 
@@ -17842,7 +17849,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 
 	// sort expansions by frequency desc
 	// clip the less frequent ones if needed, as they are likely misspellings
-	dExpanded.Sort ( WordDocsGreaterOp_t() );
+	sphSort ( dExpanded.Begin(), dExpanded.GetLength(), WordDocsGreaterOp_t(), WordDocsGreaterOp_t() );
 	if ( tCtx.m_iExpansionLimit && tCtx.m_iExpansionLimit<dExpanded.GetLength() )
 		dExpanded.Resize ( tCtx.m_iExpansionLimit );
 
@@ -24006,7 +24013,7 @@ void CSphHTMLStripper::Strip ( BYTE * sData ) const
 				s += 2;
 				while ( isdigit(*s) )
 					uCode = uCode*10 + (*s++) - '0';
-				uCode %= 0x110000; // there is no uniode codepoints bigger than this value
+				uCode = uCode % 0x110000; // there is no uniode codepoints bigger than this value
 
 				if ( uCode<=0x1f || *s!=';' ) // 0-31 are reserved codes
 					continue;
@@ -30107,7 +30114,7 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 	if ( iCol!=iColumns )
 	{
 		sError.SetSprintf ( "source '%s': not all columns found (found=%d, total=%d, line=%d, pos=%d, docid=" DOCID_FMT ")",
-			m_tSchema.m_sName.cstr(), iCol, iColumns, m_iLine, (int)( pDst - m_dBuf.Begin() ), m_tDocInfo.m_uDocID  );
+			m_tSchema.m_sName.cstr(), iCol, iColumns, m_iLine, (int)( pDst - m_dBuf.Begin() ), m_tDocInfo.m_uDocID );
 		return CSphSource_BaseSV::PARSING_FAILED;
 	}
 

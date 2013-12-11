@@ -1088,8 +1088,8 @@ private:
 	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes );
 	bool						SaveRamChunk ();
 
-	virtual void				GetPrefixedWords ( const char * sPrefix, int iPrefix, const char * sWildcard, CSphVector<CSphNamedInt> & dPrefixedWords ) const;
-	virtual void				GetInfixedWords ( const char * sInfix, int iInfix, const char * sWildcard, CSphVector<CSphNamedInt> & dPrefixedWords ) const;
+	virtual void				GetPrefixedWords ( const char * sPrefix, int iPrefix, const char * sWildcard, CSphVector<SphExpanded_t> & dPrefixedWords ) const;
+	virtual void				GetInfixedWords ( const char * sInfix, int iInfix, const char * sWildcard, CSphVector<SphExpanded_t> & dPrefixedWords ) const;
 
 	bool						RenameWithRollback ( const ESphExt * dExts, int nExts, ESphExtType eExtTypeFrom, ESphExtType eExtTypeTo, CSphString & sError );
 
@@ -5554,7 +5554,7 @@ struct DocHitPair_t
 
 
 void RtIndex_t::GetPrefixedWords ( const char * sWord, int iWordLen, const char * sWildcard,
-	CSphVector<CSphNamedInt> & dPrefixedWords ) const
+	CSphVector<SphExpanded_t> & dPrefixedWords ) const
 {
 	const int iSkipMagic = ( BYTE(*sWord)<0x20 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
 	SmallStringHash_T<DocHitPair_t> hPrefixedWords;
@@ -5617,10 +5617,12 @@ void RtIndex_t::GetPrefixedWords ( const char * sWord, int iWordLen, const char 
 	hPrefixedWords.IterateStart();
 	while ( hPrefixedWords.IterateNext() )
 	{
-		CSphNamedInt & tExpanded = dPrefixedWords.Add ();
+		SphExpanded_t & tExpanded = dPrefixedWords.Add ();
 		tExpanded.m_sName = hPrefixedWords.IterateGetKey();
 		const DocHitPair_t & tPair = hPrefixedWords.IterateGet();
 		tExpanded.m_iValue = sphGetExpansionMagic ( tPair.m_iDocs, tPair.m_iHits );
+		tExpanded.m_iDocs = tPair.m_iDocs;
+		tExpanded.m_iHits = tPair.m_iHits;
 	}
 }
 
@@ -5677,7 +5679,7 @@ static bool ExtractInfixCheckpoints ( const char * sInfix, int iBytes, int iMaxC
 }
 
 
-void RtIndex_t::GetInfixedWords ( const char * sInfix, int iBytes, const char * sWildcard, CSphVector<CSphNamedInt> & dExpanded ) const
+void RtIndex_t::GetInfixedWords ( const char * sInfix, int iBytes, const char * sWildcard, CSphVector<SphExpanded_t> & dExpanded ) const
 {
 	// sanity checks
 	if ( !sInfix || iBytes<=0 )
@@ -5739,10 +5741,12 @@ void RtIndex_t::GetInfixedWords ( const char * sInfix, int iBytes, const char * 
 	hWords.IterateStart();
 	while ( hWords.IterateNext() )
 	{
-		CSphNamedInt & tExpanded = dExpanded.Add ();
+		SphExpanded_t & tExpanded = dExpanded.Add ();
 		tExpanded.m_sName = hWords.IterateGetKey();
 		DocHitPair_t & tPair = hWords.IterateGet();
 		tExpanded.m_iValue = sphGetExpansionMagic ( tPair.m_iDocs, tPair.m_iHits );
+		tExpanded.m_iDocs = tPair.m_iDocs;
+		tExpanded.m_iHits = tPair.m_iHits;
 	}
 }
 
@@ -6152,7 +6156,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			{
 				const CSphQueryResultMeta::WordStat_t * pDstStat = hDstStats ( pResult->m_hWordStats.IterateGetKey() );
 				if ( pDstStat )
-					pResult->AddStat ( pResult->m_hWordStats.IterateGetKey(), pDstStat->m_iDocs, pDstStat->m_iHits, pDstStat->m_bExpanded );
+					pResult->AddStat ( pResult->m_hWordStats.IterateGetKey(), pDstStat->m_iDocs, pDstStat->m_iHits );
 			}
 		} else
 		{

@@ -64,7 +64,7 @@ void DoSearch ( CSphIndex * pIndex )
 		sphFlattenQueue ( pSorter, &tResult, 0 );
 		printf ( "%d results found in %d.%03d sec!\n", tResult.m_dMatches.GetLength(), tResult.m_iQueryTime/1000, tResult.m_iQueryTime%1000 );
 		ARRAY_FOREACH ( i, tResult.m_dMatches )
-			printf ( "%d. id=" DOCID_FMT ", weight=%d\n", 1+i, tResult.m_dMatches[i].m_iDocID, tResult.m_dMatches[i].m_iWeight );
+			printf ( "%d. id=" DOCID_FMT ", weight=%d\n", 1+i, tResult.m_dMatches[i].m_uDocID, tResult.m_dMatches[i].m_iWeight );
 	}
 
 	SafeDelete ( pSorter );
@@ -86,7 +86,7 @@ void DoIndexing ( CSphSource * pSrc, ISphRtIndex * pIndex )
 		if ( !pSrc->IterateDocument ( sError ) )
 			sphDie ( "iterate-document failed: %s", sError.cstr() );
 
-		if ( pSrc->m_tDocInfo.m_iDocID )
+		if ( pSrc->m_tDocInfo.m_uDocID )
 		{
 			ISphHits * pHitsNext = pSrc->IterateHits ( sError );
 			if ( !sError.IsEmpty() )
@@ -94,7 +94,7 @@ void DoIndexing ( CSphSource * pSrc, ISphRtIndex * pIndex )
 			pIndex->AddDocument ( pHitsNext, pSrc->m_tDocInfo, NULL, dMvas, sError, sWarning );
 		}
 
-		if ( ( pSrc->GetStats().m_iTotalDocuments % COMMIT_STEP )==0 || !pSrc->m_tDocInfo.m_iDocID )
+		if ( ( pSrc->GetStats().m_iTotalDocuments % COMMIT_STEP )==0 || !pSrc->m_tDocInfo.m_uDocID )
 		{
 			int64_t tmCommit = sphMicroTimer();
 			pIndex->Commit ();
@@ -104,7 +104,7 @@ void DoIndexing ( CSphSource * pSrc, ISphRtIndex * pIndex )
 			tmAvgCommit += tmCommit;
 			tmMaxCommit = Max ( tmMaxCommit, tmCommit );
 
-			if ( !pSrc->m_tDocInfo.m_iDocID )
+			if ( !pSrc->m_tDocInfo.m_uDocID )
 			{
 				tmAvgCommit /= iCommits;
 				break;

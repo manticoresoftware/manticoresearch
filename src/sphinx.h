@@ -2740,12 +2740,10 @@ public:
 	{
 		int64_t					m_iDocs;			///< document count for this term
 		int64_t					m_iHits;			///< hit count for this term
-		bool				m_bExpanded;		///< is this term from query itself or was expanded
 
 		WordStat_t()
 			: m_iDocs ( 0 )
 			, m_iHits ( 0 )
-			, m_bExpanded ( false )
 		{}
 	};
 	SmallStringHash_T<WordStat_t>	m_hWordStats; ///< hash of i-th search term (normalized word form)
@@ -2771,7 +2769,7 @@ public:
 
 	CSphQueryResultMeta ();													///< ctor
 	virtual					~CSphQueryResultMeta () {}						///< dtor
-	void					AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits, bool bExpanded );
+	void					AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits );
 };
 
 

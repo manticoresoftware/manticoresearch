@@ -9015,7 +9015,8 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 	ARRAY_FOREACH ( i, dWords )
 	{
 		const ExtQword_t * pWord = dWords[i];
-		pResult->AddStat ( pWord->m_sDictWord, pWord->m_iDocs, pWord->m_iHits, pWord->m_bExpanded );
+		if ( !pWord->m_bExpanded )
+			pResult->AddStat ( pWord->m_sDictWord, pWord->m_iDocs, pWord->m_iHits );
 	}
 
 	pRanker->m_iMaxQpos = iMaxQpos;

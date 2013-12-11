@@ -6102,9 +6102,9 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 			const CSphString sWord = tReq.GetString ();
 			const int64_t iDocs = (unsigned int)tReq.GetInt ();
 			const int64_t iHits = (unsigned int)tReq.GetInt ();
-			const bool bExpanded = ( tReq.GetByte()!=0 ); // agents always send expanded flag to master
+			tReq.GetByte(); // statistics have no expanded terms for now
 
-			tRes.AddStat ( sWord, iDocs, iHits, bExpanded );
+			tRes.AddStat ( sWord, iDocs, iHits );
 		}
 
 		// mark this result as ok
@@ -7878,7 +7878,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 		tOut.SendAsDword ( tStat.m_iDocs );
 		tOut.SendAsDword ( tStat.m_iHits );
 		if ( bAgentMode )
-			tOut.SendByte ( tStat.m_bExpanded );
+			tOut.SendByte ( false ); // statistics have no expanded terms for now
 	}
 }
 
@@ -9336,27 +9336,19 @@ static void MergeWordStats ( CSphQueryResultMeta & tDstResult,
 		return;
 	}
 
+	CSphString sDiff;
+	SphWordStatChecker_t tDiff;
+	tDiff.Set ( hSrc );
+	tDiff.DumpDiffer ( tDstResult.m_hWordStats, NULL, sDiff );
+	if ( !sDiff.IsEmpty() )
+		pLog->SubmitEx ( sIndex, "%s", sDiff.cstr() );
+
 	hSrc.IterateStart();
-	CSphStringBuilder tDifferWords;
 	while ( hSrc.IterateNext() )
 	{
-		const CSphQueryResultMeta::WordStat_t * pDstStat = tDstResult.m_hWordStats ( hSrc.IterateGetKey() );
 		const CSphQueryResultMeta::WordStat_t & tSrcStat = hSrc.IterateGet();
-
-		// all indexes should produce same words from the query
-		if ( !pDstStat && !tSrcStat.m_bExpanded )
-		{
-			if ( !tDifferWords.Length() )
-				tDifferWords += hSrc.IterateGetKey().cstr();
-			else
-				tDifferWords.Appendf ( ", %s", hSrc.IterateGetKey().cstr() );
-		}
-
-		tDstResult.AddStat ( hSrc.IterateGetKey(), tSrcStat.m_iDocs, tSrcStat.m_iHits, tSrcStat.m_bExpanded );
+		tDstResult.AddStat ( hSrc.IterateGetKey(), tSrcStat.m_iDocs, tSrcStat.m_iHits );
 	}
-
-	if ( tDifferWords.Length() )
-		pLog->SubmitEx ( sIndex, "query word(s) mismatch: %s", tDifferWords.cstr() );
 }
 
 

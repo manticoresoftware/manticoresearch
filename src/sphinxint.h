@@ -1574,7 +1574,7 @@ struct SphWordStatChecker_t
 {
 	SphWordStatChecker_t () {}
 	void Set ( const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hStat );
-	void DumpDiffer ( const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hStat, const char * sIndex, CSphString & sWarning );
+	void DumpDiffer ( const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hStat, const char * sIndex, CSphString & sWarning ) const;
 
 	CSphVector<uint64_t> m_dSrcWords;
 };
@@ -1685,13 +1685,18 @@ public:
 
 ISphRtDictWraper * sphCreateRtKeywordsDictionaryWrapper ( CSphDict * pBase );
 
+struct SphExpanded_t : public CSphNamedInt
+{
+	int m_iDocs;
+	int m_iHits;
+};
 
 class ISphWordlist
 {
 public:
 	virtual ~ISphWordlist () {}
-	virtual void GetPrefixedWords ( const char * sPrefix, int iPrefix, const char * sWildcard, CSphVector<CSphNamedInt> & dPrefixedWords ) const = 0;
-	virtual void GetInfixedWords ( const char * sInfix, int iInfix, const char * sWildcard, CSphVector<CSphNamedInt> & dPrefixedWords ) const = 0;
+	virtual void GetPrefixedWords ( const char * sPrefix, int iPrefix, const char * sWildcard, CSphVector<SphExpanded_t> & dPrefixedWords ) const = 0;
+	virtual void GetInfixedWords ( const char * sInfix, int iInfix, const char * sWildcard, CSphVector<SphExpanded_t> & dPrefixedWords ) const = 0;
 };
 
 struct ExpansionContext_t

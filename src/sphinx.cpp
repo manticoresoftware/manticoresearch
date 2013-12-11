@@ -1141,8 +1141,8 @@ public:
 	bool								GetWord ( const BYTE * pBuf, SphWordID_t iWordID, CSphDictEntry & tWord ) const;
 
 	const BYTE *						AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint ) const;
-	virtual void						GetPrefixedWords ( const char * sPrefix, int iPrefixLen, const char * sWildcard, CSphVector<CSphNamedInt> & dExpanded ) const;
-	virtual void						GetInfixedWords ( const char * sInfix, int iInfix, const char * sWildcard, CSphVector<CSphNamedInt> & dPrefixedWords ) const;
+	virtual void						GetPrefixedWords ( const char * sPrefix, int iPrefixLen, const char * sWildcard, CSphVector<SphExpanded_t> & dExpanded ) const;
+	virtual void						GetInfixedWords ( const char * sInfix, int iInfix, const char * sWildcard, CSphVector<SphExpanded_t> & dPrefixedWords ) const;
 
 private:
 	bool								m_bWordDict;
@@ -1526,7 +1526,7 @@ private:
 private:
 	CSphString					GetIndexFileName ( const char * sExt ) const;
 
-	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache ) const;
+	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, const SphWordStatChecker_t & tStatDiff ) const;
 	bool						MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
 	void						MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker, int iTag, int iIndexWeight, const CSphVector<SphDocID_t> & dKillList ) const;
 
@@ -17576,7 +17576,7 @@ struct BinaryNode_t
 	int m_iHi;
 };
 
-static void BuildExpandedTree ( const XQKeyword_t & tRootWord, CSphVector<CSphNamedInt> & dWordSrc, XQNode_t * pRoot, bool bMergeSingles )
+static void BuildExpandedTree ( const XQKeyword_t & tRootWord, CSphVector<SphExpanded_t> & dWordSrc, XQNode_t * pRoot, bool bMergeSingles )
 {
 	assert ( dWordSrc.GetLength() );
 	pRoot->m_dWords.Reset();
@@ -17685,23 +17685,26 @@ static void BuildExpandedTree ( const XQKeyword_t & tRootWord, CSphVector<CSphNa
 }
 
 
-struct WordDocsGreaterOp_t : public SphAccessor_T<CSphNamedInt>
+struct WordDocsGreaterOp_t : public SphAccessor_T<SphExpanded_t>
 {
-	typedef CSphNamedInt MEDIAN_TYPE;
-	void CopyKey ( MEDIAN_TYPE * pMed, CSphNamedInt * pVal ) const
+	typedef SphExpanded_t MEDIAN_TYPE;
+	void CopyKey ( MEDIAN_TYPE * pMed, SphExpanded_t * pVal ) const
 	{
 		pMed->m_iValue = pVal->m_iValue;
 	}
 
-	inline bool IsLess ( const CSphNamedInt & a, const CSphNamedInt & b )
+	inline bool IsLess ( const SphExpanded_t & a, const SphExpanded_t & b )
 	{
 		return a.m_iValue > b.m_iValue;
 	}
 
 	// inherited swap does not work on gcc
-	void Swap ( CSphNamedInt * a, CSphNamedInt * b ) const
+	void Swap ( SphExpanded_t * a, SphExpanded_t * b ) const
 	{
-		::Swap ( *a, *b );
+		a->m_sName.Swap ( b->m_sName );
+		::Swap ( a->m_iValue, b->m_iValue );
+		::Swap ( a->m_iDocs, b->m_iDocs );
+		::Swap ( a->m_iHits, b->m_iHits );
 	}
 };
 
@@ -17768,7 +17771,8 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 	if ( !iWilds || iWilds==iLen )
 		return pNode;
 
-	CSphVector<CSphNamedInt> dExpanded;
+	CSphVector<SphExpanded_t> dExpanded;
+	dExpanded.Reserve ( 512 );
 	if ( !sphIsWild(*sFull) || tCtx.m_iMinInfixLen==0 )
 	{
 		// do prefix expansion
@@ -17843,6 +17847,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 	// mark source word as expanded to prevent warning on terms mismatch in statistics
 	if ( !dExpanded.GetLength() )
 	{
+		tCtx.m_pResult->AddStat ( pNode->m_dWords.Begin()->m_sWord, 0, 0 );
 		pNode->m_dWords.Begin()->m_bExpanded = true;
 		return pNode;
 	}
@@ -17855,8 +17860,14 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 
 	// mark new words as expanded to skip theirs check on merge
 	// (expanded words differ across indexes)
+	int iDocs = 0;
+	int iHits = 0;
 	ARRAY_FOREACH ( i, dExpanded )
-		tCtx.m_pResult->AddStat ( dExpanded[i].m_sName, 0, 0, true );
+	{
+		iDocs += dExpanded[i].m_iDocs;
+		iHits += dExpanded[i].m_iHits;
+	}
+	tCtx.m_pResult->AddStat ( pNode->m_dWords.Begin()->m_sWord, iDocs, iHits );
 
 	// replace MAGIC_WORD_HEAD_NONSTEMMED symbol to '='
 	if ( tCtx.m_bHasMorphology )
@@ -18283,6 +18294,9 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	if ( m_tSettings.m_uAotFilterMask )
 		TransformAotFilter ( tParsed.m_pRoot, pDict->GetWordforms(), m_tSettings );
 
+	SphWordStatChecker_t tStatDiff;
+	tStatDiff.Set ( pResult->m_hWordStats );
+
 	// expanding prefix in word dictionary case
 	XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, pResult );
 	if ( !pPrefixed )
@@ -18300,7 +18314,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	tParsed.m_bNeedSZlist = pQuery->m_bZSlist;
 
 	CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
-	bool bResult = ParsedMultiQuery ( pQuery, pResult, iSorters, &dSorters[0], tParsed, pDict, tArgs, &tNodeCache );
+	bool bResult = ParsedMultiQuery ( pQuery, pResult, iSorters, &dSorters[0], tParsed, pDict, tArgs, &tNodeCache, tStatDiff );
 
 	return bResult;
 }
@@ -18333,6 +18347,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 	pDict = SetupExactDict ( tDict2, pDict );
 
 	CSphFixedVector<XQQuery_t> dXQ ( iQueries );
+	CSphFixedVector<SphWordStatChecker_t> dStatChecker ( iQueries );
 	bool bResult = false;
 	bool bResultScan = false;
 	for ( int i=0; i<iQueries; i++ )
@@ -18371,6 +18386,8 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 			// this should be after keyword expansion
 			if ( m_tSettings.m_uAotFilterMask )
 				TransformAotFilter ( dXQ[i].m_pRoot, pDict->GetWordforms(), m_tSettings );
+
+			dStatChecker[i].Set ( ppResults[i]->m_hWordStats );
 
 			// expanding prefix in word dictionary case
 			XQNode_t * pPrefixed = ExpandPrefix ( dXQ[i].m_pRoot, ppResults[i] );
@@ -18418,7 +18435,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 			ppResults[j]->m_tIOStats.Start();
 
 			if ( dXQ[j].m_pRoot && ppSorters[j]
-					&& ParsedMultiQuery ( &pQueries[j], ppResults[j], 1, &ppSorters[j], dXQ[j], pDict, tArgs, &tNodeCache ) )
+					&& ParsedMultiQuery ( &pQueries[j], ppResults[j], 1, &ppSorters[j], dXQ[j], pDict, tArgs, &tNodeCache, dStatChecker[j] ) )
 			{
 				bResult = true;
 				ppResults[j]->m_iMultiplier = iCommonSubtrees ? iQueries : 1;
@@ -18436,7 +18453,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 
 bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult,
 	int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict,
-	const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache ) const
+	const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, const SphWordStatChecker_t & tStatDiff ) const
 {
 	assert ( pQuery );
 	assert ( pResult );
@@ -18535,9 +18552,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	// bind weights
 	tCtx.BindWeights ( pQuery, m_tSchema );
-
-	SphWordStatChecker_t tStatDiff;
-	tStatDiff.Set ( pResult->m_hWordStats );
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
@@ -30566,18 +30580,20 @@ int sphGetExpansionMagic ( int iDocs, int iHits )
 }
 
 
-static inline void AddExpansion ( CSphVector<CSphNamedInt> & dExpanded, const KeywordsBlockReader_c & tCtx )
+static inline void AddExpansion ( CSphVector<SphExpanded_t> & dExpanded, const KeywordsBlockReader_c & tCtx )
 {
 	assert ( tCtx.GetWordLen() );
 
-	CSphNamedInt & tRes = dExpanded.Add();
+	SphExpanded_t & tRes = dExpanded.Add();
 	tRes.m_sName = tCtx.GetWord();
+	tRes.m_iDocs = tCtx.m_iDocs;
+	tRes.m_iHits = tCtx.m_iHits;
 	tRes.m_iValue = sphGetExpansionMagic ( tCtx.m_iDocs, tCtx.m_iHits );
 }
 
 
 void CWordlist::GetPrefixedWords ( const char * sPrefix, int iPrefixLen, const char * sWildcard,
-	CSphVector<CSphNamedInt> & dExpanded ) const
+	CSphVector<SphExpanded_t> & dExpanded ) const
 {
 	assert ( sPrefix && *sPrefix && iPrefixLen>0 );
 	assert ( sWildcard && *sWildcard );
@@ -30718,7 +30734,7 @@ int sphGetInfixLength ( const char * sInfix, int iBytes, int iInfixCodepointByte
 }
 
 
-void CWordlist::GetInfixedWords ( const char * sInfix, int iBytes, const char * sWildcard, CSphVector<CSphNamedInt> & dExpanded ) const
+void CWordlist::GetInfixedWords ( const char * sInfix, int iBytes, const char * sWildcard, CSphVector<SphExpanded_t> & dExpanded ) const
 {
 	// dict must be of keywords type, and fully cached
 	// mmap()ed in the worst case, should we ever banish it to disk again
@@ -30753,41 +30769,39 @@ void SphWordStatChecker_t::Set ( const SmallStringHash_T<CSphQueryResultMeta::Wo
 	hStat.IterateStart();
 	while ( hStat.IterateNext() )
 	{
-		if ( hStat.IterateGet().m_bExpanded )
-			continue;
-
 		m_dSrcWords.Add ( sphFNV64 ( (const BYTE*)hStat.IterateGetKey().cstr() ) );
 	}
 	m_dSrcWords.Sort();
 }
 
 
-void SphWordStatChecker_t::DumpDiffer ( const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hStat, const char * sIndex, CSphString & sWarning )
+void SphWordStatChecker_t::DumpDiffer ( const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hStat, const char * sIndex, CSphString & sWarning ) const
 {
 	if ( !m_dSrcWords.GetLength() )
 		return;
 
-	bool bGotHead = false;
-
+	CSphStringBuilder tWarningBuilder;
 	hStat.IterateStart();
 	while ( hStat.IterateNext() )
 	{
-		if ( hStat.IterateGet().m_bExpanded )
-			continue;
-
 		uint64_t uHash = sphFNV64 ( (const BYTE *)hStat.IterateGetKey().cstr() );
 		if ( !m_dSrcWords.BinarySearch ( uHash ) )
 		{
-			if ( !bGotHead )
+			if ( !tWarningBuilder.Length() )
 			{
-				sWarning.SetSprintf ( "index '%s': query word(s) mismatch: %s", sIndex, hStat.IterateGetKey().cstr() );
-				bGotHead = true;
+				if ( sIndex )
+					tWarningBuilder.Appendf ( "index '%s': ", sIndex );
+
+				tWarningBuilder.Appendf ( "query word(s) mismatch: %s", hStat.IterateGetKey().cstr() );
 			} else
 			{
-				sWarning.SetSprintf ( "%s, %s", sWarning.cstr(), hStat.IterateGetKey().cstr() );
+				tWarningBuilder.Appendf ( ", %s", hStat.IterateGetKey().cstr() );
 			}
 		}
 	}
+
+	if ( tWarningBuilder.Length() )
+		sWarning = tWarningBuilder.cstr();
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -30812,7 +30826,7 @@ CSphQueryResultMeta::CSphQueryResultMeta ()
 }
 
 
-void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits, bool bExpanded )
+void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits )
 {
 	CSphString sFixed;
 	const CSphString * pFixed = &sWord;
@@ -30823,16 +30837,9 @@ void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int64_t iDocs, int
 		pFixed = &sFixed;
 	} else if ( sWord.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
 	{
-		if ( !bExpanded )
-		{
-			sFixed = sWord;
-			*(char *)( sFixed.cstr() ) = '=';
-			pFixed = &sFixed;
-		} else
-		{
-			sFixed = sWord.SubString ( 1, sWord.Length()-1 );
-			pFixed = &sFixed;
-		}
+		sFixed = sWord;
+		*(char *)( sFixed.cstr() ) = '=';
+		pFixed = &sFixed;
 	} else
 	{
 		const char * p = strchr ( sWord.cstr(), MAGIC_WORD_BIGRAM );
@@ -30844,20 +30851,9 @@ void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int64_t iDocs, int
 		}
 	}
 
-	WordStat_t * pStats = m_hWordStats ( *pFixed );
-	if ( !pStats )
-	{
-		CSphQueryResultMeta::WordStat_t tStats;
-		tStats.m_iDocs = iDocs;
-		tStats.m_iHits = iHits;
-		tStats.m_bExpanded = bExpanded;
-		m_hWordStats.Add ( tStats, *pFixed );
-	} else
-	{
-		pStats->m_iDocs += iDocs;
-		pStats->m_iHits += iHits;
-		pStats->m_bExpanded |= bExpanded;
-	}
+	WordStat_t & tStats = m_hWordStats.AddUnique ( *pFixed );
+	tStats.m_iDocs += iDocs;
+	tStats.m_iHits += iHits;
 }
 
 

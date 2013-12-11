@@ -152,7 +152,7 @@ public:
 	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const = 0;
 	virtual bool				GotHitless () = 0;
 	virtual int					GetDocsCount () { return INT_MAX; }
-	virtual uint64_t			GetWordID () const { return 0; }			///< for now, only used for duplicate keyword checks in quorum operator
+	virtual uint64_t			GetWordID () const = 0;			///< for now, only used for duplicate keyword checks in quorum operator
 
 	void DebugIndent ( int iLevel )
 	{
@@ -612,12 +612,6 @@ public:
 	virtual int					GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const;
-	virtual uint64_t			GetWordID () const
-	{
-		// this will fail in case of similar sum of different fnv64 hash pairs
-		// but probability is very-very small, so let this code live
-		return m_pChildren[0]->GetWordID()+m_pChildren[1]->GetWordID();
-	}
 
 	virtual bool				GotHitless () { return m_pChildren[0]->GotHitless() || m_pChildren[1]->GotHitless(); }
 
@@ -640,6 +634,11 @@ public:
 	{
 		m_pChildren[0]->HintDocid ( uMinID );
 		m_pChildren[1]->HintDocid ( uMinID );
+	}
+
+	virtual uint64_t GetWordID () const
+	{
+		return m_pChildren[0]->GetWordID() ^ m_pChildren[1]->GetWordID();
 	}
 
 protected:
@@ -751,6 +750,7 @@ public:
 	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const;
 	virtual bool				GotHitless () { return false; }
 	virtual void				HintDocid ( SphDocID_t uMinID ) { m_pNode->HintDocid ( uMinID ); }
+	virtual uint64_t			GetWordID () const;
 
 protected:
 	ExtNode_i *					m_pNode;				///< my and-node for all the terms
@@ -980,6 +980,7 @@ public:
 	virtual int					GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const;
+	virtual uint64_t			GetWordID () const;
 
 	virtual bool				GotHitless () { return false; }
 
@@ -996,7 +997,7 @@ private:
 
 	struct TermTuple_t
 	{
-		ExtNode_i *			m_pTerm;		///< my children nodes (simply ExtTerm_c for now)
+		ExtNode_i *			m_pTerm;		///< my children nodes (simply ExtTerm_c for now, not true anymore)
 		const ExtDoc_t *	m_pCurDoc;		///< current positions into children doclists
 		const ExtHit_t *	m_pCurHit;		///< current positions into children hitlists
 		int					m_iCount;		///< terms count in case of dupes
@@ -1010,7 +1011,8 @@ private:
 	CSphVector<TermTuple_t>		m_dChildren;
 	SphDocID_t					m_uMatchedDocid;			///< tail docid for hitlist emission
 	int							m_iThresh;					///< keyword count threshold
-	bool						m_bHasDupes;				///< should we analize hits on docs collecting
+	// FIXME!!! also skip hits processing for children w\o constrains ( zones or field limit )
+	bool						m_bHasDupes;				///< should we analyze hits on docs collecting
 
 	// check for hits that matches and return flag that docs might be advanced
 	bool						CollectMatchingHits ( SphDocID_t uDocid, int iQuorum );
@@ -1057,6 +1059,7 @@ public:
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const;
 	virtual bool				GotHitless () { return false; }
+	virtual uint64_t			GetWordID () const;
 
 	virtual void HintDocid ( SphDocID_t uMinID )
 	{
@@ -1094,6 +1097,7 @@ public:
 	virtual int					GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const;
+	virtual uint64_t			GetWordID () const;
 
 public:
 	virtual bool GotHitless ()
@@ -1522,6 +1526,7 @@ protected:
 	int		m_iCurDocsBegin;	///< start of the last docs chunk returned, inclusive, ie [begin,end)
 	int		m_iCurDocsEnd;		///< end of the last docs chunk returned, exclusive, ie [begin,end)
 	int		m_iCurHit;			///< end of the last hits chunk (within the last docs chunk) returned, exclusive
+	uint64_t m_uWordID;
 
 public:
 	explicit						ExtCached_c ( const XQNode_t * pNode, const ISphQwordSetup & tSetup );
@@ -1535,6 +1540,7 @@ public:
 	virtual void					GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const;
 	virtual bool					GotHitless () { return false; }
 	virtual int						GetDocsCount () { return m_iUniqDocs; }
+	virtual uint64_t				GetWordID () const { return m_uWordID; }
 
 	void							FillCacheIDF ();
 	void							PopulateCache ( const ISphQwordSetup & tSetup, bool bFillStat );
@@ -1561,6 +1567,7 @@ ExtCached_c::ExtCached_c ( const XQNode_t * pNode, const ISphQwordSetup & tSetup
 	m_dFieldMask = pNode->m_dSpec.m_dFieldMask;
 	m_bExcluded = pNode->m_bNotWeighted;
 	m_dCache.Reserve ( pNode->m_dWords.GetLength() );
+	m_uWordID = 0;
 
 	// copy all the keywords
 	BYTE sTmpWord [ 3*SPH_MAX_WORD_LEN + 16 ];
@@ -1580,6 +1587,7 @@ ExtCached_c::ExtCached_c ( const XQNode_t * pNode, const ISphQwordSetup & tSetup
 		// setup keyword disk reader
 		tWord.m_uWordID = tSetup.m_pDict->GetWordID ( sTmpWord );
 		tWord.m_sDictWord = (const char *)sTmpWord;
+		m_uWordID ^= tWord.m_uWordID;
 	}
 
 	PopulateCache ( tSetup, true );
@@ -1633,7 +1641,7 @@ void ExtCached_c::PopulateCache ( const ISphQwordSetup & tSetup, bool bFillStat 
 				// apply field-start/field-end modifiers
 				if ( tWord.m_bFieldStart && HITMAN::GetPos(uHit)!=1 )
 					continue;
-				if ( tWord.m_bFieldEnd && HITMAN::IsEnd(uHit) )
+				if ( tWord.m_bFieldEnd && !HITMAN::IsEnd(uHit) )
 					continue;
 
 				// ok, this hit works, copy it
@@ -3399,6 +3407,12 @@ void ExtNWayT::GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> 
 	m_pNode->GetTermDupes ( hQwords, dTermDupes );
 }
 
+uint64_t ExtNWayT::GetWordID() const
+{
+	assert ( m_pNode );
+	return m_pNode->GetWordID();
+}
+
 template < class FSM >
 const ExtDoc_t * ExtNWay_c<FSM>::GetDocsChunk ( SphDocID_t * pMaxID )
 {
@@ -4162,6 +4176,15 @@ void ExtQuorum_c::GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WOR
 {
 	ARRAY_FOREACH ( i, m_dChildren )
 		m_dChildren[i].m_pTerm->GetTermDupes ( hQwords, dTermDupes );
+}
+
+uint64_t ExtQuorum_c::GetWordID() const
+{
+	uint64_t uHash = 0;
+	ARRAY_FOREACH ( i, m_dChildren )
+		uHash ^= m_dChildren[i].m_pTerm->GetWordID();
+
+	return uHash;
 }
 
 const ExtDoc_t * ExtQuorum_c::GetDocsChunk ( SphDocID_t * pMaxID )
@@ -4959,6 +4982,16 @@ void ExtOrder_c::GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD
 		m_dChildren[i]->GetTermDupes ( hQwords, dTermDupes );
 }
 
+uint64_t ExtOrder_c::GetWordID () const
+{
+	uint64_t uHash = 0;
+	ARRAY_FOREACH ( i, m_dChildren )
+		uHash ^= m_dChildren[i]->GetWordID();
+
+	return uHash;
+}
+
+
 //////////////////////////////////////////////////////////////////////////
 
 ExtUnit_c::ExtUnit_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const FieldMask_t& uFields,
@@ -5039,6 +5072,12 @@ void ExtUnit_c::GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD>
 	m_pArg2->GetTermDupes ( hQwords, dTermDupes );
 }
 
+uint64_t ExtUnit_c::GetWordID() const
+{
+	uint64_t uHash = m_pArg1->GetWordID();
+	uHash ^= m_pArg2->GetWordID();
+	return uHash;
+}
 
 /// skips hits until their docids are less than the given limit
 static inline void SkipHitsLtDocid ( const ExtHit_t * (*ppHits), SphDocID_t uMatch, ExtNode_i * pNode, const ExtDoc_t * pDocs )
@@ -9181,6 +9220,14 @@ public:
 		return ( m_pChild )
 			? m_pChild->GotHitless()
 			: false;
+	}
+
+	virtual uint64_t GetWordID() const
+	{
+		if ( m_pChild )
+			return m_pChild->GetWordID();
+		else
+			return 0;
 	}
 };
 

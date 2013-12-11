@@ -140,6 +140,24 @@ index test_wf2
 	wordforms		= <this_test/>/wordforms3.txt
 	dict                = keywords
 }
+
+source test_quorum
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query_pre	= set names utf8
+	sql_query		= select 1 id, 11 gid,'1' docid,  'Иван Иванович меняет песенка' text UNION select 2 id, 11 gid, '1' docid,  'Иванович песенка' text
+	sql_attr_uint	= gid
+}
+
+index test_quorum
+{
+	source			= test_quorum
+	path			= <data_path/>/test_quorum
+	morphology		= lemmatize_ru_all
+	dict                = keywords
+	index_exact_words = 1
+}
 </config>
 
 <db_create>
@@ -356,6 +374,9 @@ CREATE TABLE test_table
 <sphinxql>SELECT id,gid,weight() w FROM test_wf2 WHERE MATCH('comedi');show meta</sphinxql>
 <sphinxql>SELECT id,gid,weight() w FROM test_wf1 WHERE MATCH('pop');show meta</sphinxql>
 <sphinxql>SELECT id,gid,weight() w FROM test_wf2 WHERE MATCH('pop');show meta</sphinxql>
+
+<!--regression quorum vs AOT -->
+<sphinxql>SELECT id  FROM test_quorum WHERE MATCH(' "меняет песенка Иван"/2 (@docid 1)');show meta</sphinxql>
 
 </sphqueries>
 

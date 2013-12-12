@@ -2871,12 +2871,14 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 				if ( sphBinarySearch ( m_dDiskChunkKlist.Begin(), m_dDiskChunkKlist.Begin()+m_dDiskChunkKlist.GetLength()-1, uRef ) )
 					break;
 
-				for ( int j=m_pDiskChunks.GetLength()-1; j>=0 && !bSavedOrDiskAlive; --j )
+				for ( int j=m_pDiskChunks.GetLength()-1; j>=0; --j )
 				{
-					// killed in this disk chunk?
+					bSavedOrDiskAlive = m_pDiskChunks[j]->HasDocid ( uDocid );
+					if ( bSavedOrDiskAlive )
+						break;
+					// killed in previous disk chunks?
 					if ( sphBinarySearch ( m_pDiskChunks[j]->GetKillList(), m_pDiskChunks[j]->GetKillList()+m_pDiskChunks[j]->GetKillListSize()-1, uRef ) )
 						break;
-					bSavedOrDiskAlive = m_pDiskChunks[j]->HasDocid ( uDocid );
 				}
 
 				break;
@@ -3788,7 +3790,7 @@ void RtIndex_t::SaveDiskChunk ( int64_t iTID, const CSphVector<RtSegment_t *> & 
 	// abandon .ram file
 	CSphString sChunk;
 	sChunk.SetSprintf ( "%s.ram", m_sPath.cstr() );
-	if ( ::unlink ( sChunk.cstr() ) )
+	if ( sphIsReadable ( sChunk.cstr() ) && ::unlink ( sChunk.cstr() ) )
 		sphWarning ( "failed to unlink ram chunk (file=%s, errno=%d, error=%s)",
 					sChunk.cstr(), errno, strerror(errno) );
 
@@ -6256,7 +6258,6 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		tExpCtx.m_pWordlist = this;
 		tExpCtx.m_pBuf = NULL;
 		tExpCtx.m_pResult = pResult;
-		tExpCtx.m_iFD = -1;
 		tExpCtx.m_iMinPrefixLen = m_tSettings.m_iMinPrefixLen;
 		tExpCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
 		tExpCtx.m_iExpansionLimit = m_iExpansionLimit;

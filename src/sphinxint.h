@@ -1704,7 +1704,6 @@ struct ExpansionContext_t
 	const ISphWordlist * m_pWordlist;
 	BYTE * m_pBuf;
 	CSphQueryResultMeta * m_pResult;
-	int m_iFD;
 	int m_iMinPrefixLen;
 	int m_iMinInfixLen;
 	int m_iExpansionLimit;

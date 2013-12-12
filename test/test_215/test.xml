@@ -62,6 +62,14 @@ index dist2
 	agent = <my_address/>:test1
 	agent = <my_address/>:test2
 }
+
+index rt_killlist
+{
+	type = rt
+	path = <data_path/>/rt_killlist
+	rt_field = text
+	rt_attr_uint = gid
+}
 </config>
 
 <db_create>
@@ -96,6 +104,15 @@ CREATE TABLE test_table
 <sphinxql>select remove_repeats((select * from dist2 where match('one|three|four|five') order by id asc), iid, 0, 2)</sphinxql>
 <sphinxql>select * from (select *, weight() w from dist2 where match('test') order by id asc) order by w desc</sphinxql>
 <sphinxql>select remove_repeats((select * from (select *, weight() w from dist2 where match('test') order by id asc) order by w desc), iid, 0, 2)</sphinxql>
+
+<!-- incorrect kill list handling (duplicates in result set) test -->
+<sphinxql>REPLACE INTO rt_killlist VALUES (1, 'asdf', 11)</sphinxql>
+<sphinxql>FLUSH RAMCHUNK rt_killlist</sphinxql>
+<sphinxql>REPLACE INTO rt_killlist VALUES (1, 'asdf', 11)</sphinxql>
+<sphinxql>FLUSH RAMCHUNK rt_killlist</sphinxql>
+<sphinxql>REPLACE INTO rt_killlist VALUES (1, 'asdf', 11)</sphinxql>
+<sphinxql>FLUSH RAMCHUNK rt_killlist</sphinxql>
+<sphinxql>SELECT * FROM rt_killlist</sphinxql>
 </sphqueries>
 
 </test>

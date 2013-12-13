@@ -497,24 +497,23 @@ struct RtDocReader_T
 		const BYTE * pIn = m_pDocs;
 		SphDocID_t uDeltaID;
 		pIn = UnzipDocid ( &uDeltaID, pIn );
-		RTDOC & mtDoc = *(RTDOC*)&m_tDoc;
-		mtDoc.m_uDocID += (DOCID) uDeltaID;
+		m_tDoc.m_uDocID += (DOCID) uDeltaID;
 		DWORD uField;
 		pIn = UnzipDword ( &uField, pIn );
 		m_tDoc.m_uDocFields = uField;
-		pIn = UnzipDword ( &mtDoc.m_uHits, pIn );
-		if ( mtDoc.m_uHits==1 )
+		pIn = UnzipDword ( &m_tDoc.m_uHits, pIn );
+		if ( m_tDoc.m_uHits==1 )
 		{
 			DWORD a, b;
 			pIn = UnzipDword ( &a, pIn );
 			pIn = UnzipDword ( &b, pIn );
-			mtDoc.m_uHit = a + ( b<<24 );
+			m_tDoc.m_uHit = a + ( b<<24 );
 		} else
-			pIn = UnzipDword ( &mtDoc.m_uHit, pIn );
+			pIn = UnzipDword ( &m_tDoc.m_uHit, pIn );
 		m_pDocs = pIn;
 
 		m_iLeft--;
-		return &mtDoc;
+		return &m_tDoc;
 	}
 };
 
@@ -1034,7 +1033,7 @@ private:
 	int64_t						m_iDoubleBufferLimit;
 	CSphString					m_sPath;
 	bool						m_bPathStripped;
-	CSphVector<CSphIndex*>		m_pDiskChunks;
+	CSphVector<CSphIndex*>		m_dDiskChunks;
 	int							m_iLockFD;
 	mutable CSphKilllist		m_tKlist;							///< kill list for disk chunks and saved chunks
 	int							m_iDiskBase;
@@ -1213,7 +1212,7 @@ RtIndex_t::~RtIndex_t ()
 	if ( bValid )
 	{
 		SaveRamChunk ();
-		SaveMeta ( m_pDiskChunks.GetLength(), m_iTID );
+		SaveMeta ( m_dDiskChunks.GetLength(), m_iTID );
 	}
 
 	Verify ( m_tSaveInnerMutex.Done() );
@@ -1224,8 +1223,8 @@ RtIndex_t::~RtIndex_t ()
 	ARRAY_FOREACH ( i, m_dSegments )
 		SafeDelete ( m_dSegments[i] );
 
-	ARRAY_FOREACH ( i, m_pDiskChunks )
-		SafeDelete ( m_pDiskChunks[i] );
+	ARRAY_FOREACH ( i, m_dDiskChunks )
+		SafeDelete ( m_dDiskChunks[i] );
 
 	SafeDelete ( m_pTokenizerIndexing );
 
@@ -1273,7 +1272,7 @@ void RtIndex_t::ForceRamFlush ( bool bPeriodic )
 		Verify ( m_tRwlock.Unlock() );
 		return;
 	}
-	SaveMeta ( m_pDiskChunks.GetLength(), m_iTID );
+	SaveMeta ( m_dDiskChunks.GetLength(), m_iTID );
 	g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
 
 	int64_t iWasTID = m_iSavedTID;
@@ -1477,12 +1476,12 @@ bool RtIndex_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, const ch
 	{
 		CSphVector<JSONAttr_t> dJsonData;
 
-		const CSphSchema & pSchema = GetInternalSchema();
+		const CSphSchema & tSchema = GetInternalSchema();
 		int iAttr = 0;
 
-		for ( int i=0; i<pSchema.GetAttrsCount(); i++ )
+		for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
 		{
-			const CSphColumnInfo & tColumn = pSchema.GetAttr(i);
+			const CSphColumnInfo & tColumn = tSchema.GetAttr(i);
 			if ( tColumn.m_eAttrType==SPH_ATTR_JSON )
 			{
 				const char * pStr = ppStr ? ppStr[iAttr] : NULL;
@@ -1626,13 +1625,13 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, int iRow
 
 	int iMva = 0;
 
-	const CSphSchema & pSchema = m_pIndex->GetInternalSchema();
+	const CSphSchema & tSchema = m_pIndex->GetInternalSchema();
 	int iAttr = 0;
 	int iJsonAttr = 0;
-	for ( int i=0; i<pSchema.GetAttrsCount(); i++ )
+	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
 	{
 		bool bJsonCleanup = false;
-		const CSphColumnInfo & tColumn = pSchema.GetAttr(i);
+		const CSphColumnInfo & tColumn = tSchema.GetAttr(i);
 		if ( tColumn.m_eAttrType==SPH_ATTR_STRING || tColumn.m_eAttrType==SPH_ATTR_JSON )
 		{
 			const char * pStr = ppStr ? ppStr[iAttr++] : NULL;
@@ -1686,11 +1685,11 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, int iRow
 	DWORD * pFieldLens = NULL;
 	if ( m_pIndex->GetSettings().m_bIndexFieldLens )
 	{
-		int iFirst = pSchema.GetAttrsCount() - pSchema.m_dFields.GetLength();
-		assert ( pSchema.GetAttr ( iFirst ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
-		assert ( pSchema.GetAttr ( iFirst+pSchema.m_dFields.GetLength()-1 ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
-		pFieldLens = pAttrs + ( pSchema.GetAttr ( iFirst ).m_tLocator.m_iBitOffset / 32 );
-		memset ( pFieldLens, 0, sizeof(int)*pSchema.m_dFields.GetLength() ); // NOLINT
+		int iFirst = tSchema.GetAttrsCount() - tSchema.m_dFields.GetLength();
+		assert ( tSchema.GetAttr ( iFirst ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
+		assert ( tSchema.GetAttr ( iFirst+tSchema.m_dFields.GetLength()-1 ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
+		pFieldLens = pAttrs + ( tSchema.GetAttr ( iFirst ).m_tLocator.m_iBitOffset / 32 );
+		memset ( pFieldLens, 0, sizeof(int)*tSchema.m_dFields.GetLength() ); // NOLINT
 	}
 
 	// accumulate hits
@@ -2871,13 +2870,13 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 				if ( sphBinarySearch ( m_dDiskChunkKlist.Begin(), m_dDiskChunkKlist.Begin()+m_dDiskChunkKlist.GetLength()-1, uRef ) )
 					break;
 
-				for ( int j=m_pDiskChunks.GetLength()-1; j>=0; --j )
+				for ( int j=m_dDiskChunks.GetLength()-1; j>=0; --j )
 				{
-					bSavedOrDiskAlive = m_pDiskChunks[j]->HasDocid ( uDocid );
+					bSavedOrDiskAlive = m_dDiskChunks[j]->HasDocid ( uDocid );
 					if ( bSavedOrDiskAlive )
 						break;
 					// killed in previous disk chunks?
-					if ( sphBinarySearch ( m_pDiskChunks[j]->GetKillList(), m_pDiskChunks[j]->GetKillList()+m_pDiskChunks[j]->GetKillListSize()-1, uRef ) )
+					if ( sphBinarySearch ( m_dDiskChunks[j]->GetKillList(), m_dDiskChunks[j]->GetKillList()+m_dDiskChunks[j]->GetKillListSize()-1, uRef ) )
 						break;
 				}
 
@@ -3754,7 +3753,7 @@ void RtIndex_t::SaveDiskChunk ( int64_t iTID, const CSphVector<RtSegment_t *> & 
 
 	// dump it
 	CSphString sNewChunk;
-	sNewChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), m_pDiskChunks.GetLength()+m_iDiskBase );
+	sNewChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), m_dDiskChunks.GetLength()+m_iDiskBase );
 	SaveDiskData ( sNewChunk.cstr(), dSegments, tStats );
 
 	// bring new disk chunk online
@@ -3763,7 +3762,7 @@ void RtIndex_t::SaveDiskChunk ( int64_t iTID, const CSphVector<RtSegment_t *> & 
 		sphDie ( "%s", m_sLastError.cstr() );
 
 	// save updated meta
-	SaveMeta ( m_pDiskChunks.GetLength()+1, iTID );
+	SaveMeta ( m_dDiskChunks.GetLength()+1, iTID );
 
 	// FIXME! add binlog cleanup here once we have binlogs
 
@@ -3799,7 +3798,7 @@ void RtIndex_t::SaveDiskChunk ( int64_t iTID, const CSphVector<RtSegment_t *> & 
 	m_iSavedRam = 0;
 	m_tmSaved = sphMicroTimer();
 
-	m_pDiskChunks.Add ( pDiskChunk );
+	m_dDiskChunks.Add ( pDiskChunk );
 
 	Verify ( m_tRwlock.Unlock() );
 	Verify ( m_tSaveInnerMutex.Unlock() );
@@ -3993,7 +3992,7 @@ bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 		if ( !pIndex )
 			sphDie ( "%s", m_sLastError.cstr() );
 
-		m_pDiskChunks.Add ( pIndex );
+		m_dDiskChunks.Add ( pIndex );
 
 		// tricky bit
 		// outgoing match schema on disk chunk should be identical to our internal (!) schema
@@ -5254,10 +5253,10 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 				iSegment, nCalcAliveRows, tSegment.m_iAliveRows ));
 	}
 
-	ARRAY_FOREACH ( i, m_pDiskChunks )
+	ARRAY_FOREACH ( i, m_dDiskChunks )
 	{
-		fprintf ( fp, "checking disk chunk %d(%d)...\n", i, m_pDiskChunks.GetLength() );
-		iFailsPlain += m_pDiskChunks[i]->DebugCheck ( fp );
+		fprintf ( fp, "checking disk chunk %d(%d)...\n", i, m_dDiskChunks.GetLength() );
+		iFailsPlain += m_dDiskChunks[i]->DebugCheck ( fp );
 	}
 
 	tmCheck = sphMicroTimer() - tmCheck;
@@ -6060,7 +6059,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	SmallStringHash_T<int64_t> hLocalDocs;
 	int64_t iTotalDocs = tArgs.m_iTotalDocs;
 	bool bGotLocalDF = tArgs.m_bLocalDF;
-	if ( tArgs.m_bLocalDF && !tArgs.m_pLocalDocs && !pQuery->m_sQuery.IsEmpty() && m_pDiskChunks.GetLength() )
+	if ( tArgs.m_bLocalDF && !tArgs.m_pLocalDocs && !pQuery->m_sQuery.IsEmpty() && m_dDiskChunks.GetLength() )
 	{
 		if ( pProfiler )
 			pProfiler->Switch ( SPH_QSTATE_LOCAL_DF );
@@ -6103,20 +6102,20 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	CSphVector<SphDocID_t> dCumulativeKList;
 	dCumulativeKList.Add(0);
 	dCumulativeKList.Add ( DOCID_MAX );
-	CSphVector<const BYTE *> dDiskStrings ( m_pDiskChunks.GetLength() );
-	CSphVector<const DWORD *> dDiskMva ( m_pDiskChunks.GetLength() );
-	for ( int iChunk = m_pDiskChunks.GetLength()-1; iChunk>=0; iChunk-- )
+	CSphVector<const BYTE *> dDiskStrings ( m_dDiskChunks.GetLength() );
+	CSphVector<const DWORD *> dDiskMva ( m_dDiskChunks.GetLength() );
+	for ( int iChunk = m_dDiskChunks.GetLength()-1; iChunk>=0; iChunk-- )
 	{
 		// collect & sort cumulative killlist for this chunk
 		const SphAttr_t * pKlist = NULL;
 		int iKlistEntries = 0;
-		if ( iChunk==m_pDiskChunks.GetLength()-1 )
+		if ( iChunk==m_dDiskChunks.GetLength()-1 )
 		{
 			pKlist = m_tKlist.GetKillList();
 			iKlistEntries = m_tKlist.GetKillListSize();
 		} else
 		{
-			const CSphIndex * pDiskChunk = m_pDiskChunks[iChunk+1];
+			const CSphIndex * pDiskChunk = m_dDiskChunks[iChunk+1];
 			pKlist = pDiskChunk->GetKillList();
 			iKlistEntries = pDiskChunk->GetKillListSize();
 		}
@@ -6140,7 +6139,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		tMultiArgs.m_bLocalDF = bGotLocalDF;
 		tMultiArgs.m_pLocalDocs = pLocalDocs;
 		tMultiArgs.m_iTotalDocs = iTotalDocs;
-		if ( !m_pDiskChunks[iChunk]->MultiQuery ( pQuery, &tChunkResult, iSorters, ppSorters, tMultiArgs ) )
+		if ( !m_dDiskChunks[iChunk]->MultiQuery ( pQuery, &tChunkResult, iSorters, ppSorters, tMultiArgs ) )
 		{
 			// FIXME? maybe handle this more gracefully (convert to a warning)?
 			pResult->m_sError = tChunkResult.m_sError;
@@ -6165,7 +6164,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			pResult->m_hWordStats = hDstStats;
 		}
 		// keep last chunk statistics to check vs rt settings
-		if ( iChunk==m_pDiskChunks.GetLength()-1 )
+		if ( iChunk==m_dDiskChunks.GetLength()-1 )
 			tDiskStat.Set ( hDstStats );
 		if ( !iChunk )
 			tStat.Set ( hDstStats );
@@ -6291,7 +6290,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	tStat.DumpDiffer ( pResult->m_hWordStats, m_sIndexName.cstr(), pResult->m_sWarning );
 
 	// empty index, empty result
-	if ( !m_dSegments.GetLength() && !m_pDiskChunks.GetLength() )
+	if ( !m_dSegments.GetLength() && !m_dDiskChunks.GetLength() )
 	{
 		pResult->m_iQueryTime = 0;
 		m_tRwlock.Unlock ();
@@ -6717,9 +6716,9 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 		return true;
 
 	bool bSame = !bFillOnly; // check only for GetKeywords path
-	ARRAY_FOREACH_COND ( iChunk, m_pDiskChunks, bSame )
+	ARRAY_FOREACH_COND ( iChunk, m_dDiskChunks, bSame )
 	{
-		CSphIndex * pIndex = m_pDiskChunks[iChunk];
+		CSphIndex * pIndex = m_dDiskChunks[iChunk];
 		if ( m_pTokenizer->GetSettingsFNV()==pIndex->GetTokenizer()->GetSettingsFNV() &&
 			m_pDict->GetSettingsFNV()==pIndex->GetDictionary()->GetSettingsFNV() )
 			continue;
@@ -6758,8 +6757,8 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 		return false;
 	}
 
-	ARRAY_FOREACH ( iChunk, m_pDiskChunks )
-		m_pDiskChunks[iChunk]->FillKeywords ( dKeywords );
+	ARRAY_FOREACH ( iChunk, m_dDiskChunks )
+		m_dDiskChunks[iChunk]->FillKeywords ( dKeywords );
 
 	return true;
 }
@@ -6931,7 +6930,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 	}
 
 	// check if we are empty
-	if ( !m_dSegments.GetLength() && !m_pDiskChunks.GetLength() )
+	if ( !m_dSegments.GetLength() && !m_dDiskChunks.GetLength() )
 	{
 		return true;
 	}
@@ -7101,11 +7100,11 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 			continue;
 
 		// finally, try disk chunks
-		for ( int iChunk = m_pDiskChunks.GetLength()-1; iChunk>=0; iChunk-- )
+		for ( int iChunk = m_dDiskChunks.GetLength()-1; iChunk>=0; iChunk-- )
 		{
 			// run just this update
 			// FIXME! might be inefficient in case of big batches (redundant allocs in disk update)
-			int iRes = m_pDiskChunks[iChunk]->UpdateAttributes ( tUpd, iUpd, sError, sWarning );
+			int iRes = m_dDiskChunks[iChunk]->UpdateAttributes ( tUpd, iUpd, sError, sWarning );
 
 			// errors are highly unlikely at this point
 			// FIXME! maybe emit a warning to client as well?
@@ -7117,7 +7116,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 
 			// update stats
 			iUpdated += iRes;
-			m_uDiskAttrStatus |= m_pDiskChunks[iChunk]->GetAttributeStatus();
+			m_uDiskAttrStatus |= m_dDiskChunks[iChunk]->GetAttributeStatus();
 
 			// we only need to update the most fresh chunk
 			if ( iRes>0 )
@@ -7148,15 +7147,15 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 
 bool RtIndex_t::SaveAttributes ( CSphString & sError ) const
 {
-	if ( !m_pDiskChunks.GetLength() )
+	if ( !m_dDiskChunks.GetLength() )
 		return true;
 
 	DWORD uStatus = m_uDiskAttrStatus;
 	bool bAllSaved = true;
 	m_tRwlock.ReadLock();
-	ARRAY_FOREACH ( i, m_pDiskChunks )
+	ARRAY_FOREACH ( i, m_dDiskChunks )
 	{
-		bAllSaved &= m_pDiskChunks[i]->SaveAttributes ( sError );
+		bAllSaved &= m_dDiskChunks[i]->SaveAttributes ( sError );
 	}
 	m_tRwlock.Unlock();
 	if ( uStatus==m_uDiskAttrStatus )
@@ -7192,7 +7191,7 @@ bool RtIndex_t::RenameWithRollback ( const ESphExt * dExts, int nExts, ESphExtTy
 	CSphString sChunk;
 	int iFailedChunk = -1;
 	int iFailedExt = -1;
-	ARRAY_FOREACH_COND ( iDiskChunk, m_pDiskChunks, iFailedChunk==-1 )
+	ARRAY_FOREACH_COND ( iDiskChunk, m_dDiskChunks, iFailedChunk==-1 )
 	{
 		sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), iDiskChunk+m_iDiskBase );
 		for ( int iExt = 0; iExt < nExts&& iFailedExt==-1; iExt++ )
@@ -7224,7 +7223,7 @@ bool RtIndex_t::CreateFilesWithAttr ( int iPos, const CSphString & sAttrName, ES
 	const int NUM_EXTS_USED = 2;
 	const ESphExt dExtsUsed[NUM_EXTS_USED] = { SPH_EXT_SPH, SPH_EXT_SPA };
 
-	if ( !m_pDiskChunks.GetLength() )
+	if ( !m_dDiskChunks.GetLength() )
 		return true;
 
 	// disk chunks must have attributes
@@ -7244,8 +7243,8 @@ bool RtIndex_t::CreateFilesWithAttr ( int iPos, const CSphString & sAttrName, ES
 	}
 
 	int iFailedChunk = -1;
-	ARRAY_FOREACH_COND ( iDiskChunk, m_pDiskChunks, iFailedChunk==-1 )
-		if ( !m_pDiskChunks[iDiskChunk]->CreateFilesWithAttr ( iPos, sAttrName.cstr(), eAttrType, sError ) )
+	ARRAY_FOREACH_COND ( iDiskChunk, m_dDiskChunks, iFailedChunk==-1 )
+		if ( !m_dDiskChunks[iDiskChunk]->CreateFilesWithAttr ( iPos, sAttrName.cstr(), eAttrType, sError ) )
 			iFailedChunk = iDiskChunk;
 
 	// cleanup if failed
@@ -7279,7 +7278,7 @@ bool RtIndex_t::CreateFilesWithAttr ( int iPos, const CSphString & sAttrName, ES
 	}
 
 	// unlink old
-	ARRAY_FOREACH ( iDiskChunk, m_pDiskChunks )
+	ARRAY_FOREACH ( iDiskChunk, m_dDiskChunks )
 		for ( int iExt = 0; iExt < NUM_EXTS_USED; iExt++ )
 		{
 			snprintf ( sFileName, sizeof(sFileName), "%s.%d%s", m_sPath.cstr(), iDiskChunk+m_iDiskBase, sphGetExt ( SPH_EXT_TYPE_OLD, dExtsUsed[iExt] ) );
@@ -7300,7 +7299,7 @@ bool RtIndex_t::AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType,
 		return false;
 	}
 
-	if ( m_pDiskChunks.GetLength() && !m_tSchema.GetAttrsCount() )
+	if ( m_dDiskChunks.GetLength() && !m_tSchema.GetAttrsCount() )
 	{
 		sError = "index must already have attributes";
 		return false;
@@ -7321,8 +7320,8 @@ bool RtIndex_t::AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType,
 
 	// modify the in-memory data of disk chunks
 	// fixme: we can't rollback in-memory changes, so we just show errors here for now
-	ARRAY_FOREACH ( iDiskChunk, m_pDiskChunks )
-		if ( !m_pDiskChunks[iDiskChunk]->AddAttribute ( sAttrName, eAttrType, sError ) )
+	ARRAY_FOREACH ( iDiskChunk, m_dDiskChunks )
+		if ( !m_dDiskChunks[iDiskChunk]->AddAttribute ( sAttrName, eAttrType, sError ) )
 			sphWarning ( "adding attribute to %s.%d: %s", m_sPath.cstr(), iDiskChunk+m_iDiskBase, sError.cstr() );
 
 	// now modify the ramchunk
@@ -7353,7 +7352,7 @@ bool RtIndex_t::AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType,
 	// fixme: we can't rollback at this point
 	Verify ( SaveRamChunk () );
 
-	SaveMeta ( m_pDiskChunks.GetLength(), m_iTID );
+	SaveMeta ( m_dDiskChunks.GetLength(), m_iTID );
 
 	// fixme: notify that it was ALTER that caused the flush
 	g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
@@ -7369,7 +7368,7 @@ bool RtIndex_t::AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType,
 
 bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 {
-	bool bEmptyRT = ( !m_dSegments.GetLength() && !m_pDiskChunks.GetLength() );
+	bool bEmptyRT = ( !m_dSegments.GetLength() && !m_dDiskChunks.GetLength() );
 
 	// safeguards
 	// we do not support some of the disk index features in RT just yet
@@ -7427,9 +7426,9 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 		SaveDiskChunk ( m_iTID, m_dSegments, m_tStats );
 
 		// kill-list drying up
-		for ( int iIndex=m_pDiskChunks.GetLength()-1; iIndex>=0 && iCount; iIndex-- )
+		for ( int iIndex=m_dDiskChunks.GetLength()-1; iIndex>=0 && iCount; iIndex-- )
 		{
-			const CSphIndex * pDiskIndex = m_pDiskChunks[iIndex];
+			const CSphIndex * pDiskIndex = m_dDiskChunks[iIndex];
 			for ( int i=0; i<iCount; i++ )
 			{
 				SphAttr_t uDocid = pCombined[i];
@@ -7439,9 +7438,9 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 				// we just found the most recent chunk with our suspect docid
 				// let's check whether it's already killed by subsequent chunks, or gets killed now
 				bool bKeep = true;
-				for ( int k=i+1; k<m_pDiskChunks.GetLength() && bKeep; k++ )
+				for ( int k=i+1; k<m_dDiskChunks.GetLength() && bKeep; k++ )
 				{
-					const CSphIndex * pKilled = m_pDiskChunks[k];
+					const CSphIndex * pKilled = m_dDiskChunks[k];
 					bKeep = ( sphBinarySearch ( pKilled->GetKillList(), pKilled->GetKillList() + pKilled->GetKillListSize() - 1, uDocid )==NULL );
 				}
 
@@ -7478,7 +7477,7 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 
 	// rename that source index to our last chunk
 	CSphString sChunk;
-	sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), m_pDiskChunks.GetLength()+m_iDiskBase );
+	sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), m_dDiskChunks.GetLength()+m_iDiskBase );
 	if ( !pIndex->Rename ( sChunk.cstr() ) )
 	{
 		sError.SetSprintf ( "ATTACH failed, %s", pIndex->GetLastError().cstr() );
@@ -7503,15 +7502,15 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 	m_pDict = pIndex->GetDictionary()->Clone ();
 	PostSetup();
 	CSphString sName;
-	sName.SetSprintf ( "%s_%d", m_sIndexName.cstr(), m_pDiskChunks.GetLength() );
+	sName.SetSprintf ( "%s_%d", m_sIndexName.cstr(), m_dDiskChunks.GetLength() );
 	pIndex->SetName ( sName.cstr() );
 	pIndex->SetBinlog ( false );
 
 	// FIXME? what about copying m_TID etc?
 
 	// recreate disk chunk list, resave header file
-	m_pDiskChunks.Add ( pIndex );
-	SaveMeta ( m_pDiskChunks.GetLength(), m_iTID );
+	m_dDiskChunks.Add ( pIndex );
+	SaveMeta ( m_dDiskChunks.GetLength(), m_iTID );
 
 	// FIXME? do something about binlog too?
 	// g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
@@ -7549,16 +7548,16 @@ bool RtIndex_t::Truncate ( CSphString & )
 			sphWarning ( "rt: truncate failed to unlink %s: %s", sFile.cstr(), strerror(errno) );
 
 	// kill all disk chunks files
-	ARRAY_FOREACH ( i, m_pDiskChunks )
+	ARRAY_FOREACH ( i, m_dDiskChunks )
 	{
 		sFile.SetSprintf ( "%s.%d", m_sPath.cstr(), i );
 		sphUnlinkIndex ( sFile.cstr(), false );
 	}
 
 	// kill in-memory data, reset stats
-	ARRAY_FOREACH ( i, m_pDiskChunks )
-		SafeDelete ( m_pDiskChunks[i] );
-	m_pDiskChunks.Reset();
+	ARRAY_FOREACH ( i, m_dDiskChunks )
+		SafeDelete ( m_dDiskChunks[i] );
+	m_dDiskChunks.Reset();
 
 	ARRAY_FOREACH ( i, m_dSegments )
 		SafeDelete ( m_dSegments[i] );
@@ -7583,11 +7582,11 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 {
 	assert ( pForceTerminate && pThrottle );
 	int64_t tmStart = sphMicroTimer();
-	int iChunks = m_pDiskChunks.GetLength();
+	int iChunks = m_dDiskChunks.GetLength();
 	CSphSchema tSchema = m_tSchema;
 	CSphString sError;
 
-	while ( m_pDiskChunks.GetLength()>1 && !*pForceTerminate )
+	while ( m_dDiskChunks.GetLength()>1 && !*pForceTerminate )
 	{
 		m_bOptimizing = true;
 		CSphTightVector<SphAttr_t> dKlist;
@@ -7600,12 +7599,12 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 		memcpy ( dKlist.Begin(), m_tKlist.GetKillList(), sizeof(SphAttr_t)*m_tKlist.GetKillListSize() );
 
 		// add disk chunks kill-lists
-		for ( int iChunk=1; iChunk<m_pDiskChunks.GetLength(); iChunk++ )
+		for ( int iChunk=1; iChunk<m_dDiskChunks.GetLength(); iChunk++ )
 		{
 			if ( *pForceTerminate )
 				break;
 
-			const CSphIndex * pIndex = m_pDiskChunks[iChunk];
+			const CSphIndex * pIndex = m_dDiskChunks[iChunk];
 			if ( !pIndex->GetKillListSize() )
 				continue;
 
@@ -7621,8 +7620,8 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 		// to got rid of keeping actual kill-list
 		// however 'merged' got placed at 'older' position and 'merged' renamed to 'older' name
 
-		const CSphIndex * pOldest = m_pDiskChunks[0];
-		const CSphIndex * pOlder = m_pDiskChunks[1];
+		const CSphIndex * pOldest = m_dDiskChunks[0];
+		const CSphIndex * pOlder = m_dDiskChunks[1];
 
 		CSphString sOlder, sOldest, sRename, sMerged;
 		sOlder.SetSprintf ( "%s", pOlder->GetFilename() );
@@ -7705,11 +7704,11 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 			break;
 		}
 
-		m_pDiskChunks[1] = pMerged.LeakPtr();
-		m_pDiskChunks.Remove ( 0 );
+		m_dDiskChunks[1] = pMerged.LeakPtr();
+		m_dDiskChunks.Remove ( 0 );
 		m_iDiskBase++;
 
-		SaveMeta ( m_pDiskChunks.GetLength(), m_iTID );
+		SaveMeta ( m_dDiskChunks.GetLength(), m_iTID );
 
 		Verify ( m_tRwlock.Unlock() );
 		Verify ( m_tSaveOuterMutex.Unlock() );
@@ -7737,11 +7736,11 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 	if ( *pForceTerminate )
 	{
 		sphWarning ( "rt: index %s: optimization terminated chunk(s) %d ( of %d ) in %d.%03d sec",
-			m_sIndexName.cstr(), iChunks-m_pDiskChunks.GetLength(), iChunks, (int)(tmPass/1000000), (int)((tmPass/1000)%1000) );
+			m_sIndexName.cstr(), iChunks-m_dDiskChunks.GetLength(), iChunks, (int)(tmPass/1000000), (int)((tmPass/1000)%1000) );
 	} else
 	{
 		sphInfo ( "rt: index %s: optimized chunk(s) %d ( of %d ) in %d.%03d sec",
-			m_sIndexName.cstr(), iChunks-m_pDiskChunks.GetLength(), iChunks, (int)(tmPass/1000000), (int)((tmPass/1000)%1000) );
+			m_sIndexName.cstr(), iChunks-m_dDiskChunks.GetLength(), iChunks, (int)(tmPass/1000000), (int)((tmPass/1000)%1000) );
 	}
 }
 
@@ -7759,7 +7758,7 @@ CSphIndexStatus RtIndex_t::GetStatus () const
 		+ m_dSegments.GetLength()*int(sizeof(RtSegment_t))
 		+ m_dNewSegmentKlist.GetSizeBytes()
 		+ m_dDiskChunkKlist.GetSizeBytes()
-		+ m_pDiskChunks.GetSizeBytes();
+		+ m_dDiskChunks.GetSizeBytes();
 
 	tRes.m_iRamUse += GetUsedRam();
 
@@ -7775,9 +7774,9 @@ CSphIndexStatus RtIndex_t::GetStatus () const
 		if ( iFileSize>0 )
 			tRes.m_iDiskUse += iFileSize;
 	}
-	ARRAY_FOREACH ( i, m_pDiskChunks )
+	ARRAY_FOREACH ( i, m_dDiskChunks )
 	{
-		CSphIndexStatus tDisk = m_pDiskChunks[i]->GetStatus();
+		CSphIndexStatus tDisk = m_dDiskChunks[i]->GetStatus();
 		tRes.m_iRamUse += tDisk.m_iRamUse;
 		tRes.m_iDiskUse += tDisk.m_iDiskUse;
 	}

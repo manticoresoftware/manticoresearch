@@ -2114,6 +2114,9 @@ private:
 	void					WalkTree ( int iRoot, T & FUNCTOR );
 
 	void					Optimize ( int iNode );
+	void					CanonizePass ( int iNode );
+	void					ConstantFoldPass ( int iNode );
+	void					VariousOptimizationsPass ( int iNode );
 	void					Dump ( int iNode );
 
 	ISphExpr *				CreateTree ( int iNode );
@@ -2494,26 +2497,144 @@ static inline float FloatVal ( const ExprNode_t * pNode )
 		: pNode->m_fConst;
 }
 
-/// optimize subtree
-void ExprParser_t::Optimize ( int iNode )
+void ExprParser_t::CanonizePass ( int iNode )
 {
 	if ( iNode<0 )
 		return;
 
-	Optimize ( m_dNodes[iNode].m_iLeft );
-	Optimize ( m_dNodes[iNode].m_iRight );
+	CanonizePass ( m_dNodes [ iNode ].m_iLeft );
+	CanonizePass ( m_dNodes [ iNode ].m_iRight );
 
-	ExprNode_t * pRoot = &m_dNodes[iNode];
-	ExprNode_t * pLeft = ( pRoot->m_iLeft>=0 ) ? &m_dNodes[pRoot->m_iLeft] : NULL;
-	ExprNode_t * pRight = ( pRoot->m_iRight>=0 ) ? &m_dNodes[pRoot->m_iRight] : NULL;
+	ExprNode_t * pRoot = &m_dNodes [ iNode ];
+	ExprNode_t * pLeft = ( pRoot->m_iLeft>=0 ) ? &m_dNodes [ pRoot->m_iLeft ] : NULL;
+	ExprNode_t * pRight = ( pRoot->m_iRight>=0 ) ? &m_dNodes [ pRoot->m_iRight ] : NULL;
+
+	// canonize (expr op const), move const to the left
+	assert ( IsAri ( pRoot ) && pLeft && pRight || true );
+	if ( IsAri ( pRoot ) && !IsConst ( pLeft ) && IsConst ( pRight ) )
+	{
+		Swap ( pRoot->m_iLeft, pRoot->m_iRight );
+		Swap ( pLeft, pRight );
+
+		// fixup (expr-const) to ((-const)+expr)
+		if ( pRoot->m_iToken=='-' )
+		{
+			pRoot->m_iToken = '+';
+			if ( pLeft->m_iToken==TOK_CONST_INT )
+				pLeft->m_iConst *= -1;
+			else
+				pLeft->m_fConst *= -1;
+		}
+
+		// fixup (expr/const) to ((1/const)*expr)
+		if ( pRoot->m_iToken=='/' )
+		{
+			pRoot->m_iToken = '*';
+			pLeft->m_fConst = 1.0f / FloatVal ( pLeft );
+			pLeft->m_iToken = TOK_CONST_FLOAT;
+		}
+	}
+
+	// promote children constants
+	if ( IsAri ( pRoot ) && IsAri ( pLeft ) && IsAddSub ( pLeft )==IsAddSub ( pRoot ) &&
+		IsConst ( &m_dNodes [ pLeft->m_iLeft ] ) )
+	{
+		// ((const op lr) op2 right) gets replaced with (const op (lr op2/op right))
+		// constant gets promoted one level up
+		int iConst = pLeft->m_iLeft;
+		pLeft->m_iLeft = pLeft->m_iRight;
+		pLeft->m_iRight = pRoot->m_iRight; // (c op lr) -> (lr ... r)
+
+		switch ( pLeft->m_iToken )
+		{
+		case '+':
+		case '*':
+			// (c + lr) op r -> c + (lr op r)
+			// (c * lr) op r -> c * (lr op r)
+			Swap ( pLeft->m_iToken, pRoot->m_iToken );
+			break;
+
+		case '-':
+			// (c - lr) + r -> c - (lr - r)
+			// (c - lr) - r -> c - (lr + r)
+			pLeft->m_iToken = ( pRoot->m_iToken=='+' ? '-' : '+' );
+			pRoot->m_iToken = '-';
+			break;
+
+		case '/':
+			// (c / lr) * r -> c * (r / lr)
+			// (c / lr) / r -> c / (r * lr)
+			Swap ( pLeft->m_iLeft, pLeft->m_iRight );
+			pLeft->m_iToken = ( pRoot->m_iToken=='*' ) ? '/' : '*';
+			break;
+
+		default:
+			assert ( 0 && "internal error: unhandled op in left-const promotion" );
+		}
+
+		pRoot->m_iRight = pRoot->m_iLeft;
+		pRoot->m_iLeft = iConst;
+
+		pLeft = &m_dNodes [ pRoot->m_iLeft ];
+		pRight = &m_dNodes [ pRoot->m_iRight ];
+	}
+
+	// MySQL Workbench fixup
+	if ( pRoot->m_iToken==TOK_FUNC && ( pRoot->m_iFunc==FUNC_CURRENT_USER || pRoot->m_iFunc==FUNC_CONNECTION_ID ) )
+	{
+		pRoot->m_iToken = TOK_CONST_INT;
+		pRoot->m_iConst = 0;
+		return;
+	}
+}
+
+void ExprParser_t::ConstantFoldPass ( int iNode )
+{
+	if ( iNode<0 )
+		return;
+
+	ConstantFoldPass ( m_dNodes [ iNode ].m_iLeft );
+	ConstantFoldPass ( m_dNodes [ iNode ].m_iRight );
+
+	ExprNode_t * pRoot = &m_dNodes [ iNode ];
+	ExprNode_t * pLeft = ( pRoot->m_iLeft>=0 ) ? &m_dNodes [ pRoot->m_iLeft ] : NULL;
+	ExprNode_t * pRight = ( pRoot->m_iRight>=0 ) ? &m_dNodes [ pRoot->m_iRight ] : NULL;
+
+	// unary arithmetic expression with constant
+	assert ( IsUnary ( pRoot ) && pLeft && !pRight || true );
+	if ( IsUnary ( pRoot ) && IsConst ( pLeft ) )
+	{
+		if ( pLeft->m_iToken==TOK_CONST_INT )
+		{
+			switch ( pRoot->m_iToken )
+			{
+				case TOK_NEG:	pRoot->m_iConst = -pLeft->m_iConst; break;
+				case TOK_NOT:	pRoot->m_iConst = !pLeft->m_iConst; break;
+				default:		assert ( 0 && "internal error: unhandled arithmetic token during const-int optimization" );
+			}
+
+		} else
+		{
+			switch ( pRoot->m_iToken )
+			{
+				case TOK_NEG:	pRoot->m_fConst = -pLeft->m_fConst; break;
+				case TOK_NOT:	pRoot->m_fConst = !pLeft->m_fConst; break;
+				default:		assert ( 0 && "internal error: unhandled arithmetic token during const-float optimization" );
+			}
+		}
+
+		pRoot->m_iToken = pLeft->m_iToken;
+		pRoot->m_iLeft = -1;
+		return;
+	}
 
 	// arithmetic expression with constants
-	if ( IsAri(pRoot) )
+	if ( IsAri ( pRoot ) )
 	{
 		assert ( pLeft && pRight );
 
 		// optimize fully-constant expressions
-		if ( IsConst(pLeft) && IsConst(pRight) )
+		if ( IsConst ( pLeft ) && IsConst ( pRight ) )
 		{
 			if ( pLeft->m_iToken==TOK_CONST_INT && pRight->m_iToken==TOK_CONST_INT && pRoot->m_iToken!='/' )
 			{
@@ -2528,8 +2649,8 @@ void ExprParser_t::Optimize ( int iNode )
 
 			} else
 			{
-				float fLeft = FloatVal(pLeft);
-				float fRight = FloatVal(pRight);
+				float fLeft = FloatVal ( pLeft );
+				float fRight = FloatVal ( pRight );
 				switch ( pRoot->m_iToken )
 				{
 					case '+':	pRoot->m_fConst = fLeft + fRight; break;
@@ -2545,41 +2666,16 @@ void ExprParser_t::Optimize ( int iNode )
 			return;
 		}
 
-		// canonize (expr op const), move const to the left
-		if ( IsConst(pRight) )
-		{
-			assert ( !IsConst(pLeft) );
-			Swap ( pRoot->m_iLeft, pRoot->m_iRight );
-			Swap ( pLeft, pRight );
-
-			// fixup (expr-const) to ((-const)+expr)
-			if ( pRoot->m_iToken=='-' )
-			{
-				pRoot->m_iToken = '+';
-				if ( pLeft->m_iToken==TOK_CONST_INT )
-					pLeft->m_iConst *= -1;
-				else
-					pLeft->m_fConst *= -1;
-			}
-
-			// fixup (expr/const) to ((1/const)*expr)
-			if ( pRoot->m_iToken=='/' )
-			{
-				pRoot->m_iToken = '*';
-				pLeft->m_fConst = 1.0f / FloatVal(pLeft);
-				pLeft->m_iToken = TOK_CONST_FLOAT;
-			}
-		}
-
 		// optimize compatible operations with constants
-		if ( IsConst(pLeft) && IsAri(pRight) && IsAddSub(pRoot)==IsAddSub(pRight) && IsConst ( &m_dNodes[pRight->m_iLeft] ) )
+		if ( IsConst ( pLeft ) && IsAri ( pRight ) && IsAddSub ( pRoot )==IsAddSub ( pRight ) &&
+			IsConst ( &m_dNodes [ pRight->m_iLeft ] ) )
 		{
-			ExprNode_t * pConst = &m_dNodes[pRight->m_iLeft];
-			ExprNode_t * pExpr = &m_dNodes[pRight->m_iRight];
-			assert ( !IsConst(pExpr) ); // must had been optimized
+			ExprNode_t * pConst = &m_dNodes [ pRight->m_iLeft ];
+			ExprNode_t * pExpr = &m_dNodes [ pRight->m_iRight ];
+			assert ( !IsConst ( pExpr ) ); // must had been optimized
 
 			// optimize (left op (const op2 expr)) to ((left op const) op*op2 expr)
-			if ( IsAddSub(pRoot) )
+			if ( IsAddSub ( pRoot ) )
 			{
 				// fold consts
 				int iSign = ( ( pRoot->m_iToken=='+' ) ? 1 : -1 );
@@ -2588,7 +2684,7 @@ void ExprParser_t::Optimize ( int iNode )
 					pLeft->m_iConst += iSign*pConst->m_iConst;
 				} else
 				{
-					pLeft->m_fConst = FloatVal(pLeft) + iSign*FloatVal(pConst);
+					pLeft->m_fConst = FloatVal ( pLeft ) + iSign*FloatVal ( pConst );
 					pLeft->m_iToken = TOK_CONST_FLOAT;
 				}
 
@@ -2604,9 +2700,9 @@ void ExprParser_t::Optimize ( int iNode )
 				} else
 				{
 					if ( pRoot->m_iToken=='*' )
-						pLeft->m_fConst = FloatVal(pLeft) * FloatVal(pConst);
+						pLeft->m_fConst = FloatVal ( pLeft ) * FloatVal ( pConst );
 					else
-						pLeft->m_fConst = FloatVal(pLeft) / FloatVal(pConst);
+						pLeft->m_fConst = FloatVal ( pLeft ) / FloatVal ( pConst );
 					pLeft->m_iToken = TOK_CONST_FLOAT;
 				}
 
@@ -2618,50 +2714,56 @@ void ExprParser_t::Optimize ( int iNode )
 			pRoot->m_iRight = pRight->m_iRight;
 			pRight = pExpr;
 		}
-
-		// promote children constants
-		if ( IsAri(pLeft) && IsAddSub(pLeft)==IsAddSub(pRoot) && IsConst ( &m_dNodes[pLeft->m_iLeft] ) )
-		{
-			// ((const op lr) op2 right) gets replaced with (const op (lr op2/op right))
-			// constant gets promoted one level up
-			int iConst = pLeft->m_iLeft;
-			pLeft->m_iLeft = pLeft->m_iRight;
-			pLeft->m_iRight = pRoot->m_iRight; // (c op lr) -> (lr ... r)
-
-			switch ( pLeft->m_iToken )
-			{
-				case '+':
-				case '*':
-					// (c + lr) op r -> c + (lr op r)
-					// (c * lr) op r -> c * (lr op r)
-					Swap ( pLeft->m_iToken, pRoot->m_iToken );
-					break;
-
-				case '-':
-					// (c - lr) + r -> c - (lr - r)
-					// (c - lr) - r -> c - (lr + r)
-					pLeft->m_iToken = ( pRoot->m_iToken=='+' ? '-' : '+' );
-					pRoot->m_iToken = '-';
-					break;
-
-				case '/':
-					// (c / lr) * r -> c * (r / lr)
-					// (c / lr) / r -> c / (r * lr)
-					Swap ( pLeft->m_iLeft, pLeft->m_iRight );
-					pLeft->m_iToken = ( pRoot->m_iToken=='*' ) ? '/' : '*';
-					break;
-
-				default:
-					assert ( 0 && "internal error: unhandled op in left-const promotion" );
-			}
-
-			pRoot->m_iRight = pRoot->m_iLeft;
-			pRoot->m_iLeft = iConst;
-
-			pLeft = &m_dNodes[pRoot->m_iLeft];
-			pRight = &m_dNodes[pRoot->m_iRight];
-		}
 	}
+
+	// unary function from a constant
+	assert ( pRoot->m_iToken==TOK_FUNC && g_dFuncs [ pRoot->m_iFunc ].m_iArgs==1 && pLeft || true );
+	if ( pRoot->m_iToken==TOK_FUNC && g_dFuncs [ pRoot->m_iFunc ].m_iArgs==1 && IsConst ( pLeft ) )
+	{
+		float fArg = pLeft->m_iToken==TOK_CONST_FLOAT ? pLeft->m_fConst : float ( pLeft->m_iConst );
+		switch ( g_dFuncs [ pRoot->m_iFunc ].m_eFunc )
+		{
+			case FUNC_ABS:
+				pRoot->m_iToken = pLeft->m_iToken;
+				pRoot->m_iLeft = -1;
+				if ( pLeft->m_iToken==TOK_CONST_INT )
+					pRoot->m_iConst = IABS ( pLeft->m_iConst );
+				else
+					pRoot->m_fConst = fabs ( fArg );
+				break;
+			case FUNC_CEIL:		pRoot->m_iToken = TOK_CONST_INT; pRoot->m_iLeft = -1; pRoot->m_iConst = (int)ceil ( fArg ); break;
+			case FUNC_FLOOR:	pRoot->m_iToken = TOK_CONST_INT; pRoot->m_iLeft = -1; pRoot->m_iConst = (int)floor ( fArg ); break;
+			case FUNC_SIN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( sin ( fArg) ); break;
+			case FUNC_COS:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( cos ( fArg ) ); break;
+			case FUNC_LN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( log ( fArg ) ); break;
+			case FUNC_LOG2:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( log ( fArg )*M_LOG2E ); break;
+			case FUNC_LOG10:	pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( log ( fArg )*M_LOG10E ); break;
+			case FUNC_EXP:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( exp ( fArg ) ); break;
+			case FUNC_SQRT:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( sqrt ( fArg ) ); break;
+			default:			break;
+		}
+		return;
+	}
+
+	// constant function (such as NOW())
+	if ( pRoot->m_iToken==TOK_FUNC && pRoot->m_iFunc==FUNC_NOW )
+	{
+		pRoot->m_iToken = TOK_CONST_INT;
+		pRoot->m_iConst = m_iConstNow;
+	}
+}
+
+void ExprParser_t::VariousOptimizationsPass ( int iNode )
+{
+	if ( iNode<0 )
+		return;
+
+	VariousOptimizationsPass ( m_dNodes [ iNode ].m_iLeft );
+	VariousOptimizationsPass ( m_dNodes [ iNode ].m_iRight );
+
+	ExprNode_t * pRoot = &m_dNodes [ iNode ];
+	ExprNode_t * pLeft = ( pRoot->m_iLeft>=0 ) ? &m_dNodes [ pRoot->m_iLeft ] : NULL;
+	ExprNode_t * pRight = ( pRoot->m_iRight>=0 ) ? &m_dNodes [ pRoot->m_iRight ] : NULL;
 
 	// madd, mul3
 	// FIXME! separate pass for these? otherwise (2+(a*b))+3 won't get const folding
@@ -2699,54 +2801,6 @@ void ExprParser_t::Optimize ( int iNode )
 		return;
 	}
 
-	// unary function from a constant
-	if ( pRoot->m_iToken==TOK_FUNC && g_dFuncs[pRoot->m_iFunc].m_iArgs==1 )
-	{
-		assert ( pLeft );
-
-		if ( IsConst ( pLeft ) )
-		{
-			float fArg = pLeft->m_iToken==TOK_CONST_FLOAT ? pLeft->m_fConst : float(pLeft->m_iConst);
-			switch ( g_dFuncs[pRoot->m_iFunc].m_eFunc )
-			{
-			case FUNC_ABS:
-				pRoot->m_iToken = pLeft->m_iToken;
-				pRoot->m_iLeft = -1;
-				if ( pLeft->m_iToken==TOK_CONST_INT )
-					pRoot->m_iConst = IABS ( pLeft->m_iConst );
-				else
-					pRoot->m_fConst = fabs(fArg);
-				break;
-			case FUNC_CEIL:		pRoot->m_iToken = TOK_CONST_INT; pRoot->m_iLeft = -1; pRoot->m_iConst = (int)ceil(fArg); break;
-			case FUNC_FLOOR:	pRoot->m_iToken = TOK_CONST_INT; pRoot->m_iLeft = -1; pRoot->m_iConst = (int)floor(fArg); break;
-			case FUNC_SIN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float(sin(fArg)); break;
-			case FUNC_COS:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float(cos(fArg)); break;
-			case FUNC_LN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float(log(fArg)); break;
-			case FUNC_LOG2:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float(log(fArg)*M_LOG2E); break;
-			case FUNC_LOG10:	pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float(log(fArg)*M_LOG10E); break;
-			case FUNC_EXP:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float(exp(fArg)); break;
-			case FUNC_SQRT:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float(sqrt(fArg)); break;
-			default:			break;
-			}
-			return;
-		}
-	}
-
-	// constant function (such as NOW())
-	if ( pRoot->m_iToken==TOK_FUNC && pRoot->m_iFunc==FUNC_NOW )
-	{
-		pRoot->m_iToken = TOK_CONST_INT;
-		pRoot->m_iConst = m_iConstNow;
-		return;
-	}
-
-	// MySQL Workbench fixup
-	if ( pRoot->m_iToken==TOK_FUNC && ( pRoot->m_iFunc==FUNC_CURRENT_USER || pRoot->m_iFunc==FUNC_CONNECTION_ID ) )
-	{
-		pRoot->m_iToken = TOK_CONST_INT;
-		pRoot->m_iConst = 0;
-		return;
-	}
 
 	// SINT(int-attr)
 	if ( pRoot->m_iToken==TOK_FUNC && pRoot->m_iFunc==FUNC_SINT )
@@ -2760,37 +2814,14 @@ void ExprParser_t::Optimize ( int iNode )
 			pRoot->m_iLeft = -1;
 		}
 	}
+}
 
-	// unary arithmetic expression with constant
-	if ( IsUnary ( pRoot ) )
-	{
-		assert ( pLeft && !pRight );
-
-		if ( IsConst ( pLeft ) )
-		{
-			if ( pLeft->m_iToken==TOK_CONST_INT )
-			{
-				switch ( pRoot->m_iToken )
-				{
-					case TOK_NEG:	pRoot->m_iConst = -pLeft->m_iConst; break;
-					case TOK_NOT:	pRoot->m_iConst = !pLeft->m_iConst; break;
-					default:		assert ( 0 && "internal error: unhandled arithmetic token during const-int optimization" );
-				}
-
-			} else
-			{
-				switch ( pRoot->m_iToken )
-				{
-					case TOK_NEG:	pRoot->m_fConst = -pLeft->m_fConst; break;
-					case TOK_NOT:	pRoot->m_fConst = !pLeft->m_fConst; break;
-					default:		assert ( 0 && "internal error: unhandled arithmetic token during const-float optimization" );
-				}
-			}
-
-			pRoot->m_iToken = pLeft->m_iToken;
-			pRoot->m_iLeft = -1;
-		}
-	}
+/// optimize subtree
+void ExprParser_t::Optimize ( int iNode )
+{
+	CanonizePass ( iNode );
+	ConstantFoldPass ( iNode );
+	VariousOptimizationsPass ( iNode );
 }
 
 
@@ -5947,8 +5978,9 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 
 	// perform optimizations (tree transformations)
 	Optimize ( m_iParsed );
-#if 0
+#if 1
 	Dump ( m_iParsed );
+	fflush ( stdout );
 #endif
 
 	// simple semantic analysis

@@ -5978,7 +5978,7 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 
 	// perform optimizations (tree transformations)
 	Optimize ( m_iParsed );
-#if 1
+#if 0
 	Dump ( m_iParsed );
 	fflush ( stdout );
 #endif

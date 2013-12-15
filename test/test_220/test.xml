@@ -155,6 +155,9 @@ CREATE TABLE t3
 <!--regression distributed vs no local matches-->
 <sphinxql>select * from dist10 where s=10</sphinxql>
 <sphinxql>select * from dist10 where s=10 group by idd</sphinxql>
+
+<!--GROUP BY id should work-->
+<sphinxql>select id from t1 group by id</sphinxql>
 </sphqueries>
 
 </test>

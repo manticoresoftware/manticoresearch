@@ -11630,13 +11630,13 @@ void SqlParser_c::AddGroupBy ( const SqlNode_t & tGroupBy )
 	if ( m_pQuery->m_sGroupBy.IsEmpty() )
 	{
 		m_pQuery->m_eGroupFunc = SPH_GROUPBY_ATTR;
-		ToString ( m_pQuery->m_sGroupBy, tGroupBy );
+		m_pQuery->m_sGroupBy.SetBinary ( m_pBuf + tGroupBy.m_iStart, tGroupBy.m_iEnd - tGroupBy.m_iStart );
 		sphColumnToLowercase ( const_cast<char *>( m_pQuery->m_sGroupBy.cstr() ) );
 	} else
 	{
 		m_pQuery->m_eGroupFunc = SPH_GROUPBY_MULTIPLE;
 		CSphString sTmp;
-		ToString ( sTmp, tGroupBy );
+		sTmp.SetBinary ( m_pBuf + tGroupBy.m_iStart, tGroupBy.m_iEnd - tGroupBy.m_iStart );
 		sphColumnToLowercase ( const_cast<char *>( sTmp.cstr() ) );
 		m_pQuery->m_sGroupBy.SetSprintf ( "%s, %s", m_pQuery->m_sGroupBy.cstr(), sTmp.cstr() );
 	}

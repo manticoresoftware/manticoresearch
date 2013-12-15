@@ -16,7 +16,7 @@
 
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 #			WARNING
-# We strongly recommend you to use SphinxQL instead of an API
+# We strongly recommend you to use SphinxQL instead of the API
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 import sys

@@ -24,6 +24,12 @@
 #   docs = posts.map(&:body)
 #   excerpts = sphinx.BuildExcerpts(docs, 'index', 'test')
 
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#							WARNING
+# We strongly recommend you to use SphinxQL instead of the API
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
 require 'socket'
 
 module Sphinx

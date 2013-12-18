@@ -88,10 +88,11 @@
 %token	TOK_ORDER
 %token	TOK_OPTIMIZE
 %token	TOK_PLAN
+%token	TOK_PLUGIN
+%token	TOK_PLUGINS
 %token	TOK_PROFILE
 %token	TOK_RAND
 %token	TOK_RAMCHUNK
-%token	TOK_RANKER
 %token	TOK_READ
 %token	TOK_REPEATABLE
 %token	TOK_REPLACE
@@ -114,6 +115,7 @@
 %token	TOK_TRANSACTION
 %token	TOK_TRUE
 %token	TOK_TRUNCATE
+%token	TOK_TYPE
 %token	TOK_UNCOMMITTED
 %token	TOK_UPDATE
 %token	TOK_VALUES
@@ -184,8 +186,6 @@ statement:
 	| show_character_set
 	| create_function
 	| drop_function
-	| create_ranker
-	| drop_ranker
 	| attach_index
 	| flush_rtindex
 	| flush_ramchunk
@@ -195,6 +195,8 @@ statement:
 	| truncate
 	| optimize_index
 	| alter
+	| create_plugin
+	| drop_plugin
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -210,10 +212,10 @@ ident_set:
 	| TOK_COLLATION | TOK_COUNT | TOK_FLUSH | TOK_FUNCTION
 	| TOK_GLOBAL | TOK_GROUP | TOK_GROUPBY | TOK_GROUP_CONCAT | TOK_ISOLATION
 	| TOK_LEVEL | TOK_LIKE | TOK_MATCH | TOK_MAX | TOK_META
-	| TOK_PLAN | TOK_PROFILE | TOK_RAMCHUNK | TOK_RAND | TOK_READ
+	| TOK_PLAN | TOK_PLUGIN | TOK_PLUGINS | TOK_PROFILE | TOK_RAMCHUNK | TOK_RAND | TOK_READ
 	| TOK_REPEATABLE | TOK_RETURNS | TOK_ROLLBACK | TOK_RTINDEX
 	| TOK_SERIALIZABLE | TOK_SESSION | TOK_START | TOK_STATUS | TOK_STRING
-	| TOK_SUM | TOK_TABLES  | TOK_TRUNCATE | TOK_UNCOMMITTED
+	| TOK_SUM | TOK_TABLES  | TOK_TRUNCATE | TOK_TYPE | TOK_UNCOMMITTED
 	| TOK_VARIABLES | TOK_WARNINGS | TOK_WEIGHT | TOK_WITHIN
 	| TOK_JSON
 	;
@@ -704,12 +706,6 @@ option_item:
 			if ( !pParser->AddOption ( $1, $3 ) )
 				YYERROR;
 		}
-	| TOK_RANKER '=' ident
-		{
-			if ( !pParser->AddOption ( $1, $3 ) )
-				YYERROR;
-		}
-
 	| ident '=' TOK_CONST_INT
 		{
 			if ( !pParser->AddOption ( $1, $3 ) )
@@ -726,17 +722,7 @@ option_item:
 			if ( !pParser->AddOption ( $1, $3, $5 ) )
 				YYERROR;
 		}
-	| TOK_RANKER '=' ident '(' TOK_QUOTED_STRING ')'
-		{
-			if ( !pParser->AddOption ( $1, $3, $5 ) )
-				YYERROR;
-		}
 	| ident '=' TOK_QUOTED_STRING
-		{
-			if ( !pParser->AddOption ( $1, $3 ) )
-				YYERROR;
-		}
-	| TOK_RANKER '=' TOK_QUOTED_STRING
 		{
 			if ( !pParser->AddOption ( $1, $3 ) )
 				YYERROR;
@@ -859,6 +845,7 @@ show_what:
 	| TOK_AGENT TOK_STATUS like_filter	{ pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS; }
 	| TOK_PROFILE						{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PROFILE; }
 	| TOK_PLAN							{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLAN; }
+	| TOK_PLUGINS						{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLUGINS; }
 	| TOK_AGENT TOK_QUOTED_STRING TOK_STATUS like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS;
@@ -912,8 +899,8 @@ set_global_stmt:
 		}
 	| TOK_SET TOK_GLOBAL ident_set '=' TOK_CONST_INT
 		{
-			pParser->m_pStmt->m_iSetValue = $5.m_iValue;
 			pParser->SetStatement ( $3, SET_GLOBAL_SVAR );
+			pParser->m_pStmt->m_iSetValue = $5.m_iValue;
 		}
 	;
 
@@ -966,7 +953,7 @@ start_transaction:
 //////////////////////////////////////////////////////////////////////////
 
 insert_into:
-	insert_or_replace TOK_INTO ident opt_column_list TOK_VALUES insert_rows_list
+	insert_or_replace TOK_INTO ident opt_column_list TOK_VALUES insert_rows_list opt_insert_options
 		{
 			// everything else is pushed directly into parser within the rules
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3 );
@@ -1013,6 +1000,19 @@ insert_val:
 	| TOK_QUOTED_STRING		{ $$.m_iType = TOK_QUOTED_STRING; $$.m_iStart = $1.m_iStart; $$.m_iEnd = $1.m_iEnd; }
 	| '(' const_list ')'	{ $$.m_iType = TOK_CONST_MVA; $$.m_pValues = $2.m_pValues; }
 	| '(' ')'				{ $$.m_iType = TOK_CONST_MVA; }
+	;
+
+opt_insert_options:
+	| TOK_OPTION insert_options_list
+	;
+
+insert_options_list:
+	insert_option
+	| insert_options_list ',' insert_option
+	;
+
+insert_option:
+	TOK_IDENT '=' TOK_QUOTED_STRING		{ if ( !pParser->AddInsertOption ( $1, $3 ) ) YYERROR; }
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -1303,24 +1303,6 @@ udf_type:
 	| TOK_STRING	{ $$ = SPH_ATTR_STRINGPTR; }
 	;
 
-create_ranker:
-	TOK_CREATE TOK_RANKER ident TOK_SONAME TOK_QUOTED_STRING
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_CREATE_RANKER;
-			pParser->ToString ( tStmt.m_sUdrName, $3 );
-			pParser->ToStringUnescape ( tStmt.m_sUdrLib, $5 );
-		}
-	;
-
-drop_ranker:
-	TOK_DROP TOK_RANKER ident
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_DROP_RANKER;
-			pParser->ToString ( tStmt.m_sUdrName, $3 );
-		}
-	;
 
 drop_function:
 	TOK_DROP TOK_FUNCTION ident
@@ -1408,6 +1390,28 @@ optimize_index:
 		}
 	;
 
+//////////////////////////////////////////////////////////////////////////
+
+create_plugin:
+	TOK_CREATE TOK_PLUGIN ident TOK_TYPE TOK_QUOTED_STRING TOK_SONAME TOK_QUOTED_STRING
+		{
+			SqlStmt_t & s = *pParser->m_pStmt;
+			s.m_eStmt = STMT_CREATE_PLUGIN;
+			pParser->ToString ( s.m_sUdfName, $3 );
+			pParser->ToStringUnescape ( s.m_sStringParam, $5 );
+			pParser->ToStringUnescape ( s.m_sUdfLib, $7 );
+		}
+	;
+
+drop_plugin:
+	TOK_DROP TOK_PLUGIN ident TOK_TYPE TOK_QUOTED_STRING
+		{
+			SqlStmt_t & s = *pParser->m_pStmt;
+			s.m_eStmt = STMT_DROP_PLUGIN;
+			pParser->ToString ( s.m_sUdfName, $3 );
+			pParser->ToStringUnescape ( s.m_sStringParam, $5 );
+		}
+	;
 //////////////////////////////////////////////////////////////////////////
 
 json_field:

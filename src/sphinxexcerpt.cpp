@@ -3216,7 +3216,7 @@ static void DoHighlighting ( const ExcerptQuery_t & tQuerySettings,
 		tFixedSettings.m_bHighlightQuery = true;
 
 		CSphSchema tSchema;
-		if ( !sphParseExtendedQuery ( tExactPhraseQuery, tFixedSettings.m_sWords.cstr(), pQueryTokenizer, &tSchema, pDict, tIndexSettings ) )
+		if ( !sphParseExtendedQuery ( tExactPhraseQuery, tFixedSettings.m_sWords.cstr(), NULL, pQueryTokenizer, &tSchema, pDict, tIndexSettings ) )
 		{
 			sError = tExactPhraseQuery.m_sParseError;
 			return;

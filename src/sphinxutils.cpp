@@ -19,6 +19,8 @@
 #include "sphinx.h"
 #include "sphinxutils.h"
 #include "sphinxint.h"
+#include "sphinxplugin.h"
+
 #include <ctype.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -95,6 +97,26 @@ void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn )
 			p++;
 		if ( sNext!=p )
 			dOut.Add().SetBinary ( sNext, p-sNext );
+	}
+}
+
+
+void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn, const char * sBounds )
+{
+	if ( !sIn )
+		return;
+
+	const char * p = (char*)sIn;
+	while ( *p )
+	{
+		// skip until the first non-boundary character
+		const char * sNext = p;
+		while ( *p && !strchr ( sBounds, *p ) )
+			p++;
+
+		// add the token, skip the char
+		dOut.Add().SetBinary ( sNext, p-sNext );
+		p++;
 	}
 }
 
@@ -433,6 +455,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "global_idf",				0, NULL },
 	{ "rlp_context",			0, NULL },
 	{ "ondisk_attrs",			0, NULL },
+	{ "index_token_filter",		0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -489,7 +512,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "rt_flush_period",		0, NULL },
 	{ "query_log_format",		0, NULL },
 	{ "mysql_version_string",	0, NULL },
-	{ "plugin_dir",				0, NULL },
+	{ "plugin_dir",				KEY_DEPRECATED, "plugin_dir in common{..} section" },
 	{ "collation_server",		0, NULL },
 	{ "collation_libc_locale",	0, NULL },
 	{ "watchdog",				0, NULL },
@@ -518,7 +541,8 @@ static KeyDesc_t g_dKeysCommon[] =
 	{ "rlp_root",				0, NULL },
 	{ "rlp_environment",		0, NULL },
 	{ "rlp_max_batch_size",		0, NULL },
-	{ "rlp_max_batch_docs",		0, NULL }
+	{ "rlp_max_batch_docs",		0, NULL },
+	{ "plugin_dir",				0, NULL }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1086,6 +1110,7 @@ void sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings 
 	tSettings.m_sIgnoreChars = hIndex.GetStr ( "ignore_chars" );
 	tSettings.m_sBlendChars = hIndex.GetStr ( "blend_chars" );
 	tSettings.m_sBlendMode = hIndex.GetStr ( "blend_mode" );
+	tSettings.m_sIndexingPlugin = hIndex.GetStr ( "index_token_filter" );
 
 	// phrase boundaries
 	int iBoundaryStep = Max ( hIndex.GetInt ( "phrase_boundary_step" ), -1 );
@@ -1210,6 +1235,7 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 	tSettings.m_iStopwordStep = Min ( Max ( hIndex.GetInt ( "stopword_step", 1 ), 0 ), 1 );
 	tSettings.m_iEmbeddedLimit = hIndex.GetSize ( "embedded_limit", 16384 );
 	tSettings.m_bIndexFieldLens = hIndex.GetInt ( "index_field_lengths" )!=0;
+	tSettings.m_sIndexTokenFilter = hIndex.GetStr ( "index_token_filter" );
 
 	// prefix/infix fields
 	CSphString sFields;
@@ -2196,43 +2222,46 @@ void sphCheckDuplicatePaths ( const CSphConfig & hConf )
 
 void sphConfigureCommon ( const CSphConfig & hConf )
 {
-	if ( hConf("common") && hConf["common"]("common") )
-	{
-		CSphConfigSection & hCommon = hConf["common"]["common"];
-		g_sLemmatizerBase = hCommon.GetStr ( "lemmatizer_base" );
+	if ( !hConf("common") || !hConf["common"]("common") )
+		return;
+
+	CSphConfigSection & hCommon = hConf["common"]["common"];
+	g_sLemmatizerBase = hCommon.GetStr ( "lemmatizer_base" );
 #if USE_RLP
-		g_sRLPRoot = hCommon.GetStr ( "rlp_root" );
-		g_sRLPEnv = hCommon.GetStr ( "rlp_environment" );
-		g_iRLPMaxBatchSize = hCommon.GetSize ( "rlp_max_batch_size", 51200 );
-		g_iRLPMaxBatchDocs = hCommon.GetInt ( "rlp_max_batch_docs", 50 );
+	g_sRLPRoot = hCommon.GetStr ( "rlp_root" );
+	g_sRLPEnv = hCommon.GetStr ( "rlp_environment" );
+	g_iRLPMaxBatchSize = hCommon.GetSize ( "rlp_max_batch_size", 51200 );
+	g_iRLPMaxBatchDocs = hCommon.GetInt ( "rlp_max_batch_docs", 50 );
 #endif
-		bool bJsonStrict = false;
-		bool bJsonAutoconvNumbers = false;
-		bool bJsonKeynamesToLowercase = false;
+	bool bJsonStrict = false;
+	bool bJsonAutoconvNumbers = false;
+	bool bJsonKeynamesToLowercase = false;
 
-		if ( hCommon("on_json_attr_error") )
-		{
-			const CSphString & sVal = hCommon["on_json_attr_error"];
-			if ( sVal=="ignore_attr" )
-				bJsonStrict = false;
-			else if ( sVal=="fail_index" )
-				bJsonStrict = true;
-			else
-				sphDie ( "unknown on_json_attr_error value (must be one of ignore_attr, fail_index)" );
-		}
-
-		if ( hCommon("json_autoconv_keynames") )
-		{
-			const CSphString & sVal = hCommon["json_autoconv_keynames"];
-			if ( sVal=="lowercase" )
-				bJsonKeynamesToLowercase = true;
-			else
-				sphDie ( "unknown json_autoconv_keynames value (must be 'lowercase')" );
-		}
-
-		bJsonAutoconvNumbers = ( hCommon.GetInt ( "json_autoconv_numbers", 0 )!=0 );
-		sphSetJsonOptions ( bJsonStrict, bJsonAutoconvNumbers, bJsonKeynamesToLowercase );
+	if ( hCommon("on_json_attr_error") )
+	{
+		const CSphString & sVal = hCommon["on_json_attr_error"];
+		if ( sVal=="ignore_attr" )
+			bJsonStrict = false;
+		else if ( sVal=="fail_index" )
+			bJsonStrict = true;
+		else
+			sphDie ( "unknown on_json_attr_error value (must be one of ignore_attr, fail_index)" );
 	}
+
+	if ( hCommon("json_autoconv_keynames") )
+	{
+		const CSphString & sVal = hCommon["json_autoconv_keynames"];
+		if ( sVal=="lowercase" )
+			bJsonKeynamesToLowercase = true;
+		else
+			sphDie ( "unknown json_autoconv_keynames value (must be 'lowercase')" );
+	}
+
+	bJsonAutoconvNumbers = ( hCommon.GetInt ( "json_autoconv_numbers", 0 )!=0 );
+	sphSetJsonOptions ( bJsonStrict, bJsonAutoconvNumbers, bJsonKeynamesToLowercase );
+
+	if ( hCommon("plugin_dir") )
+		sphPluginInit ( hCommon["plugin_dir"].cstr() );
 }
 
 static bool IsChineseCode ( int iCode )

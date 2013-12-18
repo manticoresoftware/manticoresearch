@@ -55,6 +55,9 @@ inline bool sphIsWild ( char c )
 /// string splitter, extracts sequences of alphas (as in sphIsAlpha)
 void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn );
 
+/// string splitter, splits by the given boundaries
+void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn, const char * sBounds );
+
 /// string wildcard matching (case-sensitive, supports * and ? patterns)
 bool sphWildcardMatch ( const char * sSstring, const char * sPattern );
 

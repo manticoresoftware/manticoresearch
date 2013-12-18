@@ -16,6 +16,7 @@
 #include "sphinx.h"
 #include "sphinxquery.h"
 #include "sphinxutils.h"
+#include "sphinxplugin.h"
 #include <stdarg.h>
 
 //////////////////////////////////////////////////////////////////////////
@@ -37,7 +38,7 @@ public:
 					~XQParser_t ();
 
 public:
-	bool			Parse ( XQQuery_t & tQuery, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings );
+	bool			Parse ( XQQuery_t & tQuery, const char * sQuery, const CSphQuery * pQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings );
 
 	bool			Error ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 	void			Warning ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
@@ -89,6 +90,8 @@ public:
 	}
 
 public:
+	static const int MAX_TOKEN_BYTES = 3*SPH_MAX_WORD_LEN + 16;
+
 	XQQuery_t *				m_pParsed;
 
 	BYTE *					m_sQuery;
@@ -119,6 +122,9 @@ public:
 
 	int						m_iQuorumQuote;
 	int						m_iQuorumFSlash;
+
+	const PluginQueryTokenFilter_c * m_pPlugin;
+	void *					m_pPluginData;
 
 	CSphVector<CSphString>	m_dIntTokens;
 
@@ -388,6 +394,8 @@ XQParser_t::XQParser_t ()
 	, m_bEmptyStopword ( false )
 	, m_iQuorumQuote ( -1 )
 	, m_iQuorumFSlash ( -1 )
+	, m_pPlugin ( NULL )
+	, m_pPluginData ( NULL )
 {
 	m_dSpecPool.Add ( new XQLimitSpec_t() );
 	m_dStateSpec.Add ( m_dSpecPool.Last() );
@@ -951,13 +959,27 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 
 		// check for stopword, and create that node
 		// temp buffer is required, because GetWordID() might expand (!) the keyword in-place
-		const int MAX_BYTES = 3*SPH_MAX_WORD_LEN + 16;
-		BYTE sTmp [ MAX_BYTES ];
+		BYTE sTmp [ MAX_TOKEN_BYTES ];
 
-		strncpy ( (char*)sTmp, sToken, MAX_BYTES );
-		sTmp[MAX_BYTES-1] = '\0';
+		strncpy ( (char*)sTmp, sToken, MAX_TOKEN_BYTES );
+		sTmp[MAX_TOKEN_BYTES-1] = '\0';
 
-		if ( !m_pDict->GetWordID ( sTmp ) )
+		int iStopWord = 0;
+		if ( m_pPlugin && m_pPlugin->m_fnPreMorph )
+			m_pPlugin->m_fnPreMorph ( m_pPluginData, (char*)sTmp, &iStopWord );
+
+		SphWordID_t uWordId = iStopWord ? 0 : m_pDict->GetWordID ( sTmp );	
+
+		if ( uWordId && m_pPlugin && m_pPlugin->m_fnPostMorph )
+		{
+			int iRes = m_pPlugin->m_fnPostMorph ( m_pPluginData, (char*)sTmp, &iStopWord );
+			if ( iStopWord )
+				uWordId = 0;
+			else if ( iRes )
+				uWordId = m_pDict->GetWordIDNonStemmed ( sTmp );
+		}
+
+		if ( !uWordId )
 		{
 			sToken = NULL;
 			// stopwords with step=0 must not affect pos
@@ -1327,7 +1349,7 @@ static void FixupDegenerates ( XQNode_t * pNode )
 }
 
 
-bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer,
+bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const ISphTokenizer * pTokenizer,
 	const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings )
 {
 	// FIXME? might wanna verify somehow that pTokenizer has all the specials etc from sphSetupQueryTokenizer
@@ -1347,6 +1369,28 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTok
 		m_bStopOnInvalid = false;
 	}
 
+	m_pPlugin = NULL;
+	m_pPluginData = NULL;
+
+	if ( pQuery && pQuery->m_sQueryTokenFilterName.cstr() )
+	{
+		CSphString sError;
+		m_pPlugin = static_cast < PluginQueryTokenFilter_c * > ( sphPluginAcquire ( pQuery->m_sQueryTokenFilterLib.cstr(),
+			PLUGIN_QUERY_TOKEN_FILTER, pQuery->m_sQueryTokenFilterName.cstr(), tParsed.m_sParseError ) );
+		if ( !m_pPlugin )
+			return false;
+
+		char szError [ SPH_UDF_ERROR_LEN ];
+		if ( m_pPlugin->m_fnInit && m_pPlugin->m_fnInit ( MAX_TOKEN_BYTES, pQuery->m_sQueryTokenFilterOpts.cstr(), &m_pPluginData, szError )!=0 )
+		{
+			tParsed.m_sParseError = sError;
+			m_pPlugin->Release();
+			m_pPlugin = NULL;
+			m_pPluginData = NULL;
+			return false;
+		}
+	}
+	
 	// setup parser
 	m_pParsed = &tParsed;
 	m_sQuery = (BYTE*) sQuery;
@@ -1365,6 +1409,16 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTok
 
 	m_pTokenizer->SetBuffer ( m_sQuery, m_iQueryLen );
 	int iRes = yyparse ( this );
+
+	if ( m_pPlugin )
+	{
+		if ( m_pPlugin->m_fnDeinit )
+			m_pPlugin->m_fnDeinit ( m_pPluginData );
+
+		m_pPlugin->Release();
+		m_pPlugin = NULL;
+		m_pPluginData = NULL;
+	}
 
 	if ( ( iRes || !m_pParsed->m_sParseError.IsEmpty() ) && !m_bEmpty )
 	{
@@ -1554,11 +1608,11 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 }
 
 
-bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer,
+bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const ISphTokenizer * pTokenizer,
 	const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings )
 {
 	XQParser_t qp;
-	bool bRes = qp.Parse ( tParsed, sQuery, pTokenizer, pSchema, pDict, tSettings );
+	bool bRes = qp.Parse ( tParsed, sQuery, pQuery, pTokenizer, pSchema, pDict, tSettings );
 
 #ifndef NDEBUG
 	if ( bRes && tParsed.m_pRoot )

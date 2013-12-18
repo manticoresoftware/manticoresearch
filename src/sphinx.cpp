@@ -22,6 +22,7 @@
 #include "sphinxint.h"
 #include "sphinxsearch.h"
 #include "sphinxjson.h"
+#include "sphinxplugin.h"
 
 #include <ctype.h>
 #include <fcntl.h>
@@ -4299,6 +4300,164 @@ ISphTokenizer * ISphTokenizer::CreateBigramFilter ( ISphTokenizer * pTokenizer, 
 }
 
 
+class PluginFilterTokenizer_c : public CSphTokenFilter
+{
+protected:
+	const PluginTokenFilter_c *	m_pFilter;		///< plugin descriptor
+	CSphString					m_sOptions;		///< options string for the plugin init()
+	void *						m_pUserdata;	///< userdata returned from by the plugin init()
+	bool						m_bGotExtra;	///< are we looping through extra tokens?
+	int							m_iPosDelta;	///< position delta for the current token, see comments in GetToken()
+	bool						m_bWasBlended;	///< whether the last raw token was blended
+
+public:
+	PluginFilterTokenizer_c ( ISphTokenizer * pTok, const PluginTokenFilter_c * pFilter, const char * sOptions )
+		: CSphTokenFilter ( pTok )
+		, m_pFilter ( pFilter )
+		, m_sOptions ( sOptions )
+		, m_pUserdata ( NULL )
+		, m_bGotExtra ( false )
+		, m_iPosDelta ( 0 )
+		, m_bWasBlended ( false )
+	{
+		assert ( m_pTokenizer );
+		assert ( m_pFilter );
+	}
+
+	~PluginFilterTokenizer_c()
+	{
+		if ( m_pFilter->m_fnDeinit )
+			m_pFilter->m_fnDeinit ( m_pUserdata );
+		m_pFilter->Release();
+	}
+
+	ISphTokenizer * Clone ( ESphTokenizerClone eMode ) const
+	{
+		ISphTokenizer * pTok = m_pTokenizer->Clone ( eMode );
+		return new PluginFilterTokenizer_c ( pTok, m_pFilter, m_sOptions.cstr() );
+	}
+
+	virtual bool SetFilterSchema ( const CSphSchema & s, CSphString & sError )
+	{
+		CSphVector<const char*> dFields;
+		ARRAY_FOREACH ( i, s.m_dFields )
+			dFields.Add ( s.m_dFields[i].m_sName.cstr() );
+
+		char sErrBuf[SPH_UDF_ERROR_LEN+1];
+		if ( m_pFilter->m_fnInit ( dFields.GetLength(), dFields.Begin(), m_sOptions.cstr(), &m_pUserdata, sErrBuf )==0 )
+			return true;
+		sError = sErrBuf;
+		return false;
+	}
+
+	virtual bool SetFilterOptions ( const char * sOptions, CSphString & sError )
+	{
+		char sErrBuf[SPH_UDF_ERROR_LEN+1];
+		if ( m_pFilter->m_fnBeginDocument ( m_pUserdata, sOptions, sErrBuf )==0 )
+			return true;
+		sError = sErrBuf;
+		return false;
+	}
+
+	virtual void BeginField ( int iField )
+	{
+		if ( m_pFilter->m_fnBeginField )
+			m_pFilter->m_fnBeginField ( m_pUserdata, iField );
+	}
+
+	virtual BYTE * GetToken ()
+	{
+		// we have two principal states here
+		// a) have pending extra tokens, keep looping and returning those
+		// b) no extras, keep pushing until plugin returns anything
+		//
+		// we also have to handle position deltas, and that story is a little tricky
+		// positions are not assigned in the tokenizer itself (we might wanna refactor that)
+		// however, tokenizer has some (partial) control over the keyword positions, too
+		// when it skips some too-short tokens, it returns a non-zero value via GetOvershortCount()
+		// when it returns a blended token, it returns true via TokenIsBlended()
+		// so while the default position delta is 1, overshorts can increase it by N,
+		// and blended flag can decrease it by 1, and that's under tokenizer's control
+		//
+		// so for the plugins, we simplify (well i hope!) this complexity a little
+		// we compute a proper position delta here, pass it, and let the plugin modify it
+		// we report all tokens as regular, and return the delta via GetOvershortCount()
+
+		// state (a), just loop the pending extras
+		if ( m_bGotExtra )
+		{
+			m_iPosDelta = 1; // default delta is 1
+			BYTE * pTok = (BYTE*) m_pFilter->m_fnGetExtraToken ( m_pUserdata, &m_iPosDelta );
+			if ( pTok )
+				return pTok;
+			m_bGotExtra = false;
+		}
+
+		// state (b), push raw tokens, return results
+		for ( ;; )
+		{
+			// get next raw token, handle field end
+			BYTE * pRaw = m_pTokenizer->GetToken();
+			if ( !pRaw )
+			{
+				// no more hits? notify plugin of a field end,
+				// and check if there are pending tokens
+				m_bGotExtra = 0;
+				if ( m_pFilter->m_fnEndField )
+					if ( !m_pFilter->m_fnEndField ( m_pUserdata ) )
+						return NULL;
+
+				// got them, start fetching
+				m_bGotExtra = true;
+				return (BYTE*)m_pFilter->m_fnGetExtraToken ( m_pUserdata, &m_iPosDelta );
+			}
+
+			// compute proper position delta
+			m_iPosDelta = ( m_bWasBlended ? 0 : 1 ) + m_pTokenizer->GetOvershortCount();
+			m_bWasBlended = m_pTokenizer->TokenIsBlended();
+
+			// push raw token to plugin, return a processed one, if any
+			int iExtra = 0;
+			BYTE * pTok = (BYTE*)m_pFilter->m_fnPushToken ( m_pUserdata, (const char*)pRaw, &iExtra, &m_iPosDelta );
+			m_bGotExtra = ( iExtra!=0 );
+			if ( pTok )
+				return pTok;
+		}
+	}
+
+	virtual int GetOvershortCount()
+	{
+		return m_iPosDelta-1;
+	}
+
+	virtual bool TokenIsBlended() const
+	{
+		return false;
+	}
+};
+
+
+ISphTokenizer * ISphTokenizer::CreatePluginFilter ( ISphTokenizer * pTokenizer, const CSphString & sSpec, CSphString & sError )
+{
+	CSphVector<CSphString> dPlugin; // dll, filtername, options
+	if ( !sphPluginParseSpec ( sSpec, dPlugin, sError ) )
+		return NULL;
+
+	if ( !dPlugin.GetLength() )
+		return pTokenizer;
+
+	if ( !sphPluginCreate ( dPlugin[0].cstr(), PLUGIN_INDEX_TOKEN_FILTER, dPlugin[1].cstr(), SPH_ATTR_NONE, sError ) )
+		return NULL;
+	const PluginDesc_c * p = sphPluginGet ( PLUGIN_INDEX_TOKEN_FILTER, dPlugin[1].cstr() );
+	if ( !p )
+	{
+		sError.SetSprintf ( "INTERNAL ERROR: plugin %s:%s loaded ok but lookup fails", dPlugin[0].cstr(), dPlugin[1].cstr() );
+		return NULL;
+	}
+	return new PluginFilterTokenizer_c ( pTokenizer, (const PluginTokenFilter_c *)p, dPlugin[2].cstr() );
+}
+
+
 #if USE_RLP
 ISphTokenizer * ISphTokenizer::CreateRLPFilter ( ISphTokenizer * pTokenizer, bool bChineseRLP, const char * szRLPRoot,
 												const char * szRLPEnv, const char * szRLPCtx, bool bFilterChinese, CSphString & sError )
@@ -6214,7 +6373,6 @@ int CSphMultiformTokenizer::SkipBlended ()
 
 	return m_iStart-iWasStart;
 }
-
 
 /////////////////////////////////////////////////////////////////////////////
 // FILTER
@@ -10838,6 +10996,7 @@ void SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettin
 	tWriter.PutByte ( tSettings.m_bIndexFieldLens );
 	tWriter.PutByte ( tSettings.m_eChineseRLP );
 	tWriter.PutString ( tSettings.m_sRLPContext );
+	tWriter.PutString ( tSettings.m_sIndexTokenFilter );
 }
 
 
@@ -11994,6 +12153,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		m_sLastError.SetSprintf ( "string attributes require docinfo=extern (fix your config file)" );
 		return 0;
 	}
+
+	if ( !m_pTokenizer->SetFilterSchema ( m_tSchema, m_sLastError ) )
+		return 0;
 
 	CSphHitBuilder tHitBuilder ( m_tSettings, dHitlessWords, false, iHitBuilderBufferSize, m_pDict, &m_sLastError );
 
@@ -15756,6 +15918,9 @@ void LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DW
 		tSettings.m_eChineseRLP = (ESphRLPFilter)tReader.GetByte();
 		tSettings.m_sRLPContext = tReader.GetString();
 	}
+
+	if ( uVersion>=41 )
+		tSettings.m_sIndexTokenFilter = tReader.GetString();
 }
 
 
@@ -18272,7 +18437,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 		pProfile->Switch ( SPH_QSTATE_PARSE );
 
 	XQQuery_t tParsed;
-	if ( !sphParseExtendedQuery ( tParsed, (const char*)sModifiedQuery, m_pQueryTokenizer, &m_tSchema, pDict, m_tSettings ) )
+	if ( !sphParseExtendedQuery ( tParsed, (const char*)sModifiedQuery, pQuery, m_pQueryTokenizer, &m_tSchema, pDict, m_tSettings ) )
 	{
 		// FIXME? might wanna reset profile to unknown state
 		pResult->m_sError = tParsed.m_sParseError;
@@ -18372,7 +18537,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 		ppResults[i]->m_tIOStats.Start();
 
 		// parse query
-		if ( sphParseExtendedQuery ( dXQ[i], pQueries[i].m_sQuery.cstr(), m_pQueryTokenizer, &m_tSchema, pDict, m_tSettings ) )
+		if ( sphParseExtendedQuery ( dXQ[i], pQueries[i].m_sQuery.cstr(), &(pQueries[i]), m_pQueryTokenizer, &m_tSchema, pDict, m_tSettings ) )
 		{
 			// transform query if needed (quorum transform, keyword expansion, etc.)
 			sphTransformExtendedQuery ( &dXQ[i].m_pRoot, m_tSettings, pQueries[i].m_bSimplify, this );
@@ -25290,7 +25455,6 @@ void CSphSource_Document::BuildRegularHits ( SphDocID_t uDocid, bool bPayload, b
 		int iLastBlendedStart = TrackBlendedStart ( m_pTokenizer, iBlendedHitsStart, m_tHits.Length() );
 		iLastTokenStart = m_tHits.Length();
 
-
 		if ( !bPayload )
 		{
 			HITMAN::AddPos ( &m_tState.m_iHitPos, m_tState.m_iBuildLastStep + m_pTokenizer->GetOvershortCount()*m_iOvershortStep );
@@ -25418,6 +25582,7 @@ void CSphSource_Document::BuildHits ( CSphString & sError, bool bSkipEndMarker )
 			// tokenize and build hits
 			m_tStats.m_iTotalBytes += iFieldBytes;
 
+			m_pTokenizer->BeginField ( m_tState.m_iField );
 			m_pTokenizer->SetBuffer ( (BYTE*)sTextToIndex, iFieldBytes );
 
 			m_tState.m_iHitPos = HITMAN::Create ( m_tState.m_iField, m_tState.m_iStartPos );
@@ -27001,7 +27166,7 @@ const char * CSphSource_MySQL::SqlError ()
 
 bool CSphSource_MySQL::SqlConnect ()
 {
-	if ( !InitDynamicMysql() )
+	if_const ( !InitDynamicMysql() )
 	{
 		if ( m_tParams.m_bPrintQueries )
 			fprintf ( stdout, "SQL-CONNECT: FAIL (NO MYSQL CLIENT LIB)\n" );
@@ -28005,7 +28170,7 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 {
 	assert ( m_pBuffer && m_pFieldBuffer );
 
-	if ( !InitDynamicExpat() )
+	if_const ( !InitDynamicExpat() )
 	{
 		sError.SetSprintf ( "xmlpipe: failed to load libexpat library" );
 		return false;
@@ -29111,7 +29276,7 @@ const char * CSphSource_ODBC::SqlError ()
 
 bool CSphSource_ODBC::SqlConnect ()
 {
-	if ( !InitDynamicOdbc() )
+	if_const ( !InitDynamicOdbc() )
 	{
 		if ( m_tParams.m_bPrintQueries )
 			fprintf ( stdout, "SQL-CONNECT: FAIL (NO ODBC CLIENT LIB)\n" );

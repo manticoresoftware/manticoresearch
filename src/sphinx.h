@@ -490,6 +490,7 @@ struct CSphTokenizerSettings
 	CSphString			m_sNgramChars;
 	CSphString			m_sBlendChars;
 	CSphString			m_sBlendMode;
+	CSphString			m_sIndexingPlugin;	///< this tokenizer wants an external plugin to process its raw output
 
 						CSphTokenizerSettings ();
 };
@@ -581,6 +582,10 @@ public:
 	/// create a token filter
 	static ISphTokenizer *			CreateBigramFilter ( ISphTokenizer * pTokenizer, ESphBigram eBigramIndex, const CSphString & sBigramWords, CSphString & sError );
 
+	/// create a plugin filter
+	/// sSspec is a library, name, and options specification string, eg "myplugins.dll:myfilter1:arg1=123"
+	static ISphTokenizer *			CreatePluginFilter ( ISphTokenizer * pTokenizer, const CSphString & sSpec, CSphString & sError );
+
 #if USE_RLP
 	/// create a RLP token filter
 	static ISphTokenizer *			CreateRLPFilter ( ISphTokenizer * pTokenizer, bool bChineseRLP, const char * szRLPRoot,	const char * szRLPEnv, const char * szRLPCtx, bool bStandalone, CSphString & sError );
@@ -601,6 +606,15 @@ public:
 public:
 	/// pass next buffer
 	virtual void					SetBuffer ( const BYTE * sBuffer, int iLength ) = 0;
+
+	/// set current index schema (only intended for the token filter plugins)
+	virtual bool					SetFilterSchema ( const CSphSchema &, CSphString & ) { return true; }
+
+	/// set per-document options from INSERT
+	virtual bool					SetFilterOptions ( const char *, CSphString & ) { return true; }
+
+	/// notify tokenizer that we now begin indexing a field with a given number (only intended for the token filter plugins)
+	virtual void					BeginField ( int ) {}
 
 	/// get next token
 	virtual BYTE *					GetToken () = 0;
@@ -2704,6 +2718,10 @@ public:
 	ESphCollation				m_eCollation;	///< ORDER BY collation
 	bool						m_bAgent;		///< agent mode (may need extra cols on output)
 
+	CSphString		m_sQueryTokenFilterLib;		///< token filter library name
+	CSphString		m_sQueryTokenFilterName;	///< token filter name
+	CSphString		m_sQueryTokenFilterOpts;	///< token filter options
+	
 public:
 					CSphQuery ();		///< ctor, fills defaults
 					~CSphQuery ();		///< dtor, frees owned stuff
@@ -3134,9 +3152,11 @@ struct CSphIndexSettings : public CSphSourceSettings
 	CSphString				m_sBigramWords;
 	CSphVector<CSphString>	m_dBigramWords;
 
-	DWORD			m_uAotFilterMask;	///< lemmatize_XX_all forces us to transform queries on the index level too
-	ESphRLPFilter	m_eChineseRLP;	///< chinese RLP filter
-	CSphString		m_sRLPContext;	///< path to RLP context file
+	DWORD			m_uAotFilterMask;		///< lemmatize_XX_all forces us to transform queries on the index level too
+	ESphRLPFilter	m_eChineseRLP;			///< chinese RLP filter
+	CSphString		m_sRLPContext;			///< path to RLP context file
+
+	CSphString		m_sIndexTokenFilter;	///< indexing time token filter spec string (pretty useless for disk, vital for RT)
 
 					CSphIndexSettings ();
 };

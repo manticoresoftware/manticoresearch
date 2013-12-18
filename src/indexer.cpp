@@ -17,6 +17,8 @@
 #include "sphinxint.h"
 #include "sphinxutils.h"
 #include "sphinxstem.h"
+#include "sphinxplugin.h"
+
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <ctype.h>
@@ -981,9 +983,17 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	CSphDict * pDict = NULL;
 	CSphDictSettings tDictSettings;
 
-	// setup filters
+	// setup tokenization filters
 	if ( !g_sBuildStops )
 	{
+		// plugin filter
+		if ( !tSettings.m_sIndexTokenFilter.IsEmpty() )
+		{
+			pTokenizer = ISphTokenizer::CreatePluginFilter ( pTokenizer, tSettings.m_sIndexTokenFilter, sError );
+			if ( !pTokenizer )
+				sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
+		}
+
 		// multiforms filter
 		sphConfDictionary ( hIndex, tDictSettings );
 

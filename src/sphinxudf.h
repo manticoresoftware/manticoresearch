@@ -14,9 +14,9 @@
 //
 
 //
-// Sphinx UDF interface header
+// Sphinx plugin interface header
 //
-// This file will be included by UDF implementations, so it should be
+// This file will be included by plugin implementations, so it should be
 // portable plain C, stay standalone, and change as rarely as possible.
 //
 
@@ -32,6 +32,50 @@ extern "C" {
 
 /// error buffer size
 #define SPH_UDF_ERROR_LEN 256
+
+//////////////////////////////////////////////////////////////////////////
+// UDF PLUGINS
+//////////////////////////////////////////////////////////////////////////
+
+/// UDF (User Defined Function) plugins let you add functions to use
+/// in the SELECT expressions, like this:
+///
+/// SELECT id, attr1, myudf(attr2, attr3+attr4) ...
+///
+/// They can be loaded and unloaded dynamically using CREATE FUNCTION
+/// and DROP FUNCTION statements, respectively.
+///
+/// The workflow is as follows:
+///
+/// 1) XXX_init() gets called once per query, in the very beginning.
+/// It receives a list of argument types (and optional names, if any)
+/// for validation. Init() can raise an error; the query will then
+/// not be processed any further.
+///
+/// 2) XXX() gets called every time when Sphinx needs to actually
+/// compute an UDF value.
+///
+/// 3) XXX_deinit() gets called once per query, in the very end.
+///
+/// Depending on the query, UDFs can be called very frequently or very
+/// rarely. Indeed, when the UDF result is used for filtering or sorting,
+/// Sphinx computes it for every single matched document, as it should.
+/// However, when the UDF result is only needed in the final result set,
+/// Sphinx can postpone that computation.
+///
+/// The possible uses are pretty wide: implementing fast custom math
+/// calculations; or complex ranking functions; or fetching documents
+/// contents from the database, etc.
+///
+/// UDFs can return integers, floats, or strings. In the latter case,
+/// the return values need to be C strings, and they MUST be allocated
+/// using the provided SPH_UDF_ARGS::fn_malloc() function.
+///
+/// To access PACKEDFACTORS() arguments from within the UDF, you will
+/// need to use one of the two provided helper function sets, see below.
+/// Basically, sphinx_factors_YYY() functions are slow, but easier to use;
+/// sphinx_get_ZZZ_factor() functions are the faster streamlined interface.
+
 
 /// UDF argument and result value types
 enum sphinx_udf_argtype
@@ -219,6 +263,38 @@ int sphinx_get_term_factor_int ( const unsigned int * in, enum sphinx_term_facto
 
 /// returns a term factor value, interpreted as float
 float sphinx_get_term_factor_float ( const unsigned int * in, enum sphinx_term_factor f );
+
+
+//////////////////////////////////////////////////////////////////////////
+// RANKER PLUGINS
+//////////////////////////////////////////////////////////////////////////
+
+/// Ranker plugins let you implement a custom ranker that receives
+/// all the occurrences of the keywords matched in the document, and
+/// computes a WEIGHT() value.
+///
+/// Custom rankers can be used like this:
+/// SELECT id, attr1 FROM test WHERE match('hello') OPTION ranker=myranker('option1=1');
+///
+/// Rankers should be loaded before use with CREATE RANKER statement.
+/// They can be unloaded using the DROP RANKER statement.
+///
+/// The workflow is as follows:
+///
+/// 1) XXX_init() gets called once per query in the very beginning.
+/// A few query-wide options are passed to it, as well as the userdata
+/// pointer, so that a stateful ranker plugin could store its state.
+///
+/// 2) XXX_update() gets called multiple times per matched document,
+/// with every matched keyword occurrence passed as its parameter.
+/// The occurrences are guaranteed to be in the "hitpos asc" order.
+///
+/// 3) XXX_finalize() gets called once per matched document, once there
+/// are no more keyword occurrences. It must return the WEIGHT() value.
+/// It is the only mandatory function for a custom ranker.
+///
+/// 4) XXX_deinit() gets called once per query in the very end.
+
 
 /// a structure that represents a hit
 typedef struct st_plugin_hit

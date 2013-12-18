@@ -17,6 +17,7 @@
 #include "sphinxsearch.h"
 #include "sphinxquery.h"
 #include "sphinxint.h"
+#include "sphinxplugin.h"
 
 #include <math.h>
 
@@ -6553,15 +6554,22 @@ struct RankerState_Fieldmask_fn : public ISphExtra
 
 struct RankerState_Plugin_fn : public ISphExtra
 {
+	RankerState_Plugin_fn()
+		: m_pData ( NULL )
+		, m_pPlugin ( NULL )
+	{}
+
 	~RankerState_Plugin_fn()
 	{
-		if ( m_tRankerFuncs.m_fnDeinit )
-			m_tRankerFuncs.m_fnDeinit ( &m_pData );
+		assert ( m_pPlugin );
+		if ( m_pPlugin->m_fnDeinit )
+			m_pPlugin->m_fnDeinit ( m_pData );
+		m_pPlugin->Release();
 	}
 
 	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError, bool )
 	{
-		if ( !m_tRankerFuncs.m_fnInit )
+		if ( !m_pPlugin->m_fnInit )
 			return true;
 
 		SPH_PLUGIN_RANKERINFO tRankerInfo;
@@ -6570,7 +6578,7 @@ struct RankerState_Plugin_fn : public ISphExtra
 		tRankerInfo.max_qpos = pRanker->m_iMaxQpos;
 
 		char szError [ SPH_UDF_ERROR_LEN ];
-		if ( !m_tRankerFuncs.m_fnInit ( iFields, const_cast<int*>(pWeights), m_sOptions.cstr(), &tRankerInfo, &m_pData, szError ) )
+		if ( !m_pPlugin->m_fnInit ( iFields, const_cast<int*>(pWeights), m_sOptions.cstr(), &tRankerInfo, &m_pData, szError ) )
 		{
 			sError = szError;
 			return false;
@@ -6581,7 +6589,7 @@ struct RankerState_Plugin_fn : public ISphExtra
 
 	void Update ( const ExtHit_t * pHlist )
 	{
-		if ( !m_tRankerFuncs.m_fnUpdate )
+		if ( !m_pPlugin->m_fnUpdate )
 			return;
 
 		SPH_PLUGIN_HIT tHit;
@@ -6594,50 +6602,33 @@ struct RankerState_Plugin_fn : public ISphExtra
 		tHit.weight = pHlist->m_uWeight;
 		tHit.qposmask = pHlist->m_uQposMask;
 
-		m_tRankerFuncs.m_fnUpdate ( &tHit, &m_pData );
+		m_pPlugin->m_fnUpdate ( &tHit, &m_pData );
 	}
 
 	DWORD Finalize ( const CSphMatch & tMatch )
 	{
-		assert ( m_tRankerFuncs.m_fnFinalize );
+		assert ( m_pPlugin->m_fnFinalize );
 		SPH_PLUGIN_MATCH tIntMatch;
 		tIntMatch.docid = tMatch.m_uDocID;
 		tIntMatch.weight = tMatch.m_iWeight;
 
-		return m_tRankerFuncs.m_fnFinalize ( &tIntMatch, &m_pData );
+		return m_pPlugin->m_fnFinalize ( &tIntMatch, &m_pData );
 	}
 
 private:
-	void *			m_pData;
-	UDRankerFuncs_t	m_tRankerFuncs;
-	CSphString		m_sOptions;
+	void *					m_pData;
+	const PluginRanker_c *	m_pPlugin;
+	CSphString				m_sOptions;
 
 	virtual bool ExtraDataImpl ( ExtraData_e eType, void ** ppResult )
 	{
 		switch ( eType )
 		{
-		case EXTRA_SET_UDR_OPTIONS:
-			m_sOptions = (char*)*ppResult;
-			return true;
-
-		case EXTRA_SET_UDR_INIT:
-			m_tRankerFuncs.m_fnInit = (UdrInit_fn)*ppResult;
-			return true;
-
-		case EXTRA_SET_UDR_UPDATE:
-			m_tRankerFuncs.m_fnUpdate = (UdrUpdate_fn)*ppResult;
-			return true;
-
-		case EXTRA_SET_UDR_FINALIZE:
-			m_tRankerFuncs.m_fnFinalize = (UdrFinalize_fn)*ppResult;
-			return true;
-
-		case EXTRA_SET_UDR_DEINIT:
-			m_tRankerFuncs.m_fnDeinit = (UdrDeinit_fn)*ppResult;
-			return true;
+			case EXTRA_SET_RANKER_PLUGIN:		m_pPlugin = (const PluginRanker_c*)ppResult; break;
+			case EXTRA_SET_RANKER_PLUGIN_OPTS:	m_sOptions = (char*)ppResult; break;
+			default:							return false;
 		}
-
-		return false;
+		return true;
 	}
 };
 
@@ -8922,15 +8913,11 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 			break;
 		case SPH_RANK_PLUGIN:
 			{
-				UDRankerFuncs_t * pUDRFuncs = sphUDRFind ( pQuery->m_sUDRanker.cstr() );
-				assert ( pUDRFuncs );
+				const PluginRanker_c * p = (const PluginRanker_c *) sphPluginGet ( PLUGIN_RANKER, pQuery->m_sUDRanker.cstr() );
+				assert ( p );
 				pRanker = new ExtRanker_T < RankerState_Plugin_fn > ( tXQ, tTermSetup );
-				const char * szOptions = pQuery->m_sUDRankerOpts.cstr();
-				pRanker->ExtraData ( EXTRA_SET_UDR_OPTIONS, (void**)&szOptions );
-				pRanker->ExtraData ( EXTRA_SET_UDR_INIT, (void**)&(pUDRFuncs->m_fnInit) );
-				pRanker->ExtraData ( EXTRA_SET_UDR_UPDATE, (void**)&(pUDRFuncs->m_fnUpdate) );
-				pRanker->ExtraData ( EXTRA_SET_UDR_FINALIZE, (void**)&(pUDRFuncs->m_fnFinalize) );
-				pRanker->ExtraData ( EXTRA_SET_UDR_DEINIT, (void**)&(pUDRFuncs->m_fnDeinit) );
+				pRanker->ExtraData ( EXTRA_SET_RANKER_PLUGIN, (void**)p );
+				pRanker->ExtraData ( EXTRA_SET_RANKER_PLUGIN_OPTS, (void**)pQuery->m_sUDRankerOpts.cstr() );
 			}
 			break;
 	}

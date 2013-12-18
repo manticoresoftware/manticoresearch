@@ -20,6 +20,7 @@
 #include "sphinxint.h"
 #include "sphinxquery.h"
 #include "sphinxjson.h"
+#include "sphinxplugin.h"
 
 extern "C"
 {
@@ -10925,8 +10926,6 @@ enum SqlStmt_e
 	STMT_UPDATE,
 	STMT_CREATE_FUNCTION,
 	STMT_DROP_FUNCTION,
-	STMT_CREATE_RANKER,
-	STMT_DROP_RANKER,
 	STMT_ATTACH_INDEX,
 	STMT_FLUSH_RTINDEX,
 	STMT_FLUSH_RAMCHUNK,
@@ -10943,6 +10942,9 @@ enum SqlStmt_e
 	STMT_SHOW_PLAN,
 	STMT_SELECT_DUAL,
 	STMT_SHOW_DATABASES,
+	STMT_CREATE_PLUGIN,
+	STMT_DROP_PLUGIN,
+	STMT_SHOW_PLUGINS,
 
 	STMT_TOTAL
 };
@@ -11052,20 +11054,20 @@ struct SqlStmt_t
 	int						m_iListStart; // < the position of start and end of index's definition in original query.
 	int						m_iListEnd;
 
-	// CREATE/DROP FUNCTION specific
-	CSphString				m_sUdfName;
+	// CREATE/DROP FUNCTION, INSTALL PLUGIN specific
+	CSphString				m_sUdfName; // FIXME! move to arg1?
 	CSphString				m_sUdfLib;
 	ESphAttr				m_eUdfType;
-
-	// CREATE/DROP RANKER specific
-	CSphString				m_sUdrName;
-	CSphString				m_sUdrLib;
 
 	// ALTER specific
 	CSphString				m_sAlterAttr;
 	ESphAttr				m_eAlterColType;
 
-	// Generic params
+	// generic parameter, different meanings in different statements
+	// filter pattern in DESCRIBE, SHOW TABLES / META / VARIABLES
+	// target index name in ATTACH
+	// token filter options in INSERT
+	// plugin type in INSTALL PLUGIN
 	CSphString				m_sStringParam;
 
 	SqlStmt_t ()
@@ -11141,6 +11143,7 @@ public:
 	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue );
 	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue, const SqlNode_t & sArg );
 	bool			AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt> & dNamed );
+	bool			AddInsertOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue );
 	void			AddItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc=SPH_AGGR_NONE, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
 	bool			AddItem ( const char * pToken, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
 	void			AliasLastItem ( SqlNode_t * pAlias );
@@ -11418,16 +11421,31 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 			{
 				m_pParseError->SetSprintf ( "missing ranker expression (use OPTION ranker=expr('1+2') for example)" );
 				return false;
-			} else if ( sphUDRFind ( sVal.cstr() ) )
+			} else if ( sphPluginExists ( PLUGIN_RANKER, sVal.cstr() ) )
 			{
 				m_pQuery->m_eRanker = SPH_RANK_PLUGIN;
 				m_pQuery->m_sUDRanker = sVal;
 			}
-
 			m_pParseError->SetSprintf ( "unknown ranker '%s'", sVal.cstr() );
 			return false;
 		}
-	} else if ( sOpt=="max_matches" )
+	} else if ( sOpt=="token_filter" )	// tokfilter = hello.dll:hello:some_opts
+	{
+		CSphVector<CSphString> dParams;
+		if ( !sphPluginParseSpec ( sVal, dParams, *m_pParseError ) )
+			return false;
+
+		if ( !dParams.GetLength() )
+		{
+			m_pParseError->SetSprintf ( "missing token filter spec string" );
+			return false;
+		}
+		
+		m_pQuery->m_sQueryTokenFilterLib = dParams[0];
+		m_pQuery->m_sQueryTokenFilterName = dParams[1];
+		m_pQuery->m_sQueryTokenFilterOpts = dParams[2];
+	}
+	else if ( sOpt=="max_matches" )
 	{
 		m_pQuery->m_iMaxMatches = (int)tValue.m_iValue;
 
@@ -11537,7 +11555,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 
 	if ( sOpt=="ranker" )
 	{
-		bool bUDR = !!sphUDRFind ( sVal.cstr() );
+		bool bUDR = sphPluginExists ( PLUGIN_RANKER, sVal.cstr() );
 		if ( sVal=="expr" || sVal=="export" || bUDR )
 		{
 			if ( bUDR )
@@ -11581,6 +11599,25 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt>
 
 	return true;
 }
+
+
+bool SqlParser_c::AddInsertOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue )
+{
+	CSphString sOpt, sVal;
+	ToString ( sOpt, tIdent ).ToLower();
+	ToString ( sVal, tValue ).Unquote();
+
+	if ( sOpt=="token_filter_options" )
+	{
+		m_pStmt->m_sStringParam = sVal;
+	} else
+	{
+		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", sOpt.cstr() );
+		return false;
+	}
+	return true;
+}
+
 
 void SqlParser_c::AliasLastItem ( SqlNode_t * pAlias )
 {
@@ -14442,7 +14479,7 @@ public:
 };
 
 void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
-						bool bReplace, bool bCommit, CSphString & sWarning )
+	bool bReplace, bool bCommit, CSphString & sWarning )
 {
 	MEMORY ( SPH_MEM_INSERT_SQL );
 
@@ -14709,7 +14746,9 @@ void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
 			break;
 
 		// do add
-		pIndex->AddDocument ( dFields.GetLength(), dFields.Begin(), tDoc, bReplace, dStrings.Begin(), dMvas, sError, sWarning );
+		pIndex->AddDocument ( dFields.GetLength(), dFields.Begin(), tDoc,
+			bReplace, tStmt.m_sStringParam,
+			dStrings.Begin(), dMvas, sError, sWarning );
 
 		if ( !sError.IsEmpty() )
 			break;
@@ -15166,6 +15205,34 @@ void HandleMysqlShowDatabases ( SqlRowBuffer_c & tOut, SqlStmt_t & )
 	tOut.HeadEnd();
 	tOut.Eof();
 }
+
+
+void HandleMysqlShowPlugins ( SqlRowBuffer_c & tOut, SqlStmt_t & )
+{
+	CSphVector<PluginInfo_t> dPlugins;
+	sphPluginList ( dPlugins );
+
+	tOut.HeadBegin ( 5 );
+	tOut.HeadColumn ( "Type" );
+	tOut.HeadColumn ( "Name" );
+	tOut.HeadColumn ( "Library" );
+	tOut.HeadColumn ( "Users" );
+	tOut.HeadColumn ( "Extra" );
+	tOut.HeadEnd();
+
+	ARRAY_FOREACH ( i, dPlugins )
+	{
+		const PluginInfo_t & p = dPlugins[i];
+		tOut.PutString ( g_dPluginTypes[p.m_eType] );
+		tOut.PutString ( p.m_sName.cstr() );
+		tOut.PutString ( p.m_sLib.cstr() );
+		tOut.PutNumeric ( "%d", p.m_iUsers );
+		tOut.PutString ( p.m_sExtra.cstr() ? p.m_sExtra.cstr() : "" );
+		tOut.Commit();
+	}
+	tOut.Eof();
+}
+
 
 // The pinger
 struct PingRequestBuilder_t : public IRequestBuilder_t
@@ -17178,7 +17245,7 @@ public:
 			return true;
 
 		case STMT_CREATE_FUNCTION:
-			if ( !sphUDFCreate ( pStmt->m_sUdfLib.cstr(), pStmt->m_sUdfName.cstr(), pStmt->m_eUdfType, m_sError ) )
+			if ( !sphPluginCreate ( pStmt->m_sUdfLib.cstr(), PLUGIN_FUNCTION, pStmt->m_sUdfName.cstr(), pStmt->m_eUdfType, m_sError ) )
 				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
 			else
 				tOut.Ok();
@@ -17186,28 +17253,39 @@ public:
 			return true;
 
 		case STMT_DROP_FUNCTION:
-			if ( !sphUDFDrop ( pStmt->m_sUdfName.cstr(), m_sError ) )
+			if ( !sphPluginDrop ( PLUGIN_FUNCTION, pStmt->m_sUdfName.cstr(), m_sError ) )
 				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
 			else
 				tOut.Ok();
 			g_tmSphinxqlState = sphMicroTimer();
 			return true;
 
-		case STMT_CREATE_RANKER:
-			if ( !sphUDRCreate ( pStmt->m_sUdrLib.cstr(), pStmt->m_sUdrName.cstr(), m_sError ) )
-				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
-			else
-				tOut.Ok();
-			g_tmSphinxqlState = sphMicroTimer();
-			return true;
+		case STMT_CREATE_PLUGIN:
+		case STMT_DROP_PLUGIN:
+			{
+				// convert plugin type string to enum
+				PluginType_e eType = sphPluginGetType ( pStmt->m_sStringParam );
+				if ( eType==PLUGIN_TOTAL )
+				{
+					tOut.Error ( "unknown plugin type '%s'", pStmt->m_sStringParam.cstr() );
+					break;
+				}
 
-		case STMT_DROP_RANKER:
-			if ( !sphUDRDrop ( pStmt->m_sUdrName.cstr(), m_sError ) )
-				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
-			else
-				tOut.Ok();
-			g_tmSphinxqlState = sphMicroTimer();
-			return true;
+				// action!
+				bool bRes;
+				if ( eStmt==STMT_CREATE_PLUGIN )
+					bRes = sphPluginCreate ( pStmt->m_sUdfLib.cstr(), eType, pStmt->m_sUdfName.cstr(), SPH_ATTR_NONE, m_sError );
+				else
+					bRes = sphPluginDrop ( eType, pStmt->m_sUdfName.cstr(), m_sError );
+
+				// report
+				if ( !bRes )
+					tOut.Error ( sQuery.cstr(), m_sError.cstr() );
+				else
+					tOut.Ok();
+				g_tmSphinxqlState = sphMicroTimer();
+				return true;
+			}
 
 
 		case STMT_ATTACH_INDEX:
@@ -17270,11 +17348,16 @@ public:
 			HandleMysqlShowDatabases ( tOut, *pStmt );
 			return true;
 
+		case STMT_SHOW_PLUGINS:
+			HandleMysqlShowPlugins ( tOut, *pStmt );
+			return true;
+
 		default:
 			m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );
 			tOut.Error ( sQuery.cstr(), m_sError.cstr() );
 			return true;
 		} // switch
+		return true; // for cases that break early
 	}
 };
 
@@ -18294,7 +18377,7 @@ static void SphinxqlStateThreadFunc ( void * )
 		// save UDFs
 		/////////////
 
-		sphPluginsSaveState ( tWriter );
+		sphPluginSaveState ( tWriter );
 
 		/////////////////
 		// save uservars
@@ -18397,12 +18480,16 @@ static bool SphinxqlStateLine ( CSphVector<char> & dLine, CSphString * sError )
 			}
 		} else if ( tStmt.m_eStmt==STMT_CREATE_FUNCTION )
 		{
-			if ( !sphUDFCreate ( tStmt.m_sUdfLib.cstr(), tStmt.m_sUdfName.cstr(), tStmt.m_eUdfType, *sError ) )
-				bOk = false;
+			bOk &= sphPluginCreate ( tStmt.m_sUdfLib.cstr(), PLUGIN_FUNCTION, tStmt.m_sUdfName.cstr(), tStmt.m_eUdfType, *sError );
+
+		} else if ( tStmt.m_eStmt==STMT_CREATE_PLUGIN )
+		{
+			bOk &= sphPluginCreate ( tStmt.m_sUdfLib.cstr(), sphPluginGetType ( tStmt.m_sStringParam ),
+				tStmt.m_sUdfName.cstr(), SPH_ATTR_NONE, *sError );
 		} else
 		{
 			bOk = false;
-			sError->SetSprintf ( "unsupported statement (must be one of SET GLOBAL, CREATE FUNCTION)" );
+			sError->SetSprintf ( "unsupported statement (must be one of SET GLOBAL, CREATE FUNCTION, CREATE PLUGIN)" );
 		}
 	}
 
@@ -19668,7 +19755,7 @@ void CheckRotate ()
 	sphLogDebug ( "CheckRotate invoked" );
 
 	if ( g_eWorkers==MPM_PREFORK )
-		sphUDFReinit();
+		sphPluginReinit();
 
 	/////////////////////
 	// RAM-greedy rotate
@@ -21608,7 +21695,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	/////////////////////
 
 	ConfigureSearchd ( hConf, bOptPIDFile );
-	sphConfigureCommon ( hConf );
+	sphConfigureCommon ( hConf ); // this also inits plugins now
 
 	g_bWatchdog = hSearchdpre.GetInt ( "watchdog", g_bWatchdog )!=0;
 
@@ -21721,10 +21808,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( !sphThreadKeyCreate ( &g_tConnKey ) )
 			sphFatal ( "failed to create TLS for connection ID" );
 	}
-
-	// Plugins can now be loaded on startup in both threads and prefork mode
-	// however, dynamic CREATE/DROP will only work in threads (we forbid them later)
-	sphPluginInit ( hSearchd.GetStr ( "plugin_dir" ) );
 
 	////////////////////
 	// network startup

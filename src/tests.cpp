@@ -949,7 +949,7 @@ void TestQueryParser ()
 		printf ( "testing query parser, test %d/%d... ", i+1, nTests );
 
 		XQQuery_t tQuery;
-		sphParseExtendedQuery ( tQuery, dTest[i].m_sQuery, pTokenizer.Ptr(), &tSchema, pDict.Ptr(), tTmpSettings );
+		sphParseExtendedQuery ( tQuery, dTest[i].m_sQuery, NULL, pTokenizer.Ptr(), &tSchema, pDict.Ptr(), tTmpSettings );
 		CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
 		assert ( sReconst==dTest[i].m_sReconst );
 
@@ -1367,7 +1367,7 @@ void TestQueryTransforms ()
 		printf ( "testing query transformations, test %d/%d... ", (int)( pTest-dTest+1 ), (int)( sizeof(dTest)/sizeof(dTest[0])-1 ) );
 
 		XQQuery_t tQuery;
-		sphParseExtendedQuery ( tQuery, pTest->m_sQuery, pTokenizer.Ptr(), &tSchema, pDict.Ptr(), tTmpSettings );
+		sphParseExtendedQuery ( tQuery, pTest->m_sQuery, NULL, pTokenizer.Ptr(), &tSchema, pDict.Ptr(), tTmpSettings );
 
 		CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
 

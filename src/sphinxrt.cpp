@@ -19,6 +19,7 @@
 #include "sphinxsearch.h"
 #include "sphinxutils.h"
 #include "sphinxjson.h"
+#include "sphinxplugin.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -1053,7 +1054,7 @@ public:
 	explicit					RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
 	virtual						~RtIndex_t ();
 
-	virtual bool				AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning );
+	virtual bool				AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning );
 	virtual bool				AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning );
 	virtual bool				DeleteDocument ( const SphDocID_t * pDocs, int iDocs, CSphString & sError );
 	virtual void				Commit ( int * pDeleted=NULL );
@@ -1365,7 +1366,8 @@ void CSphSource_StringVector::Disconnect ()
 }
 
 bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc,
-	bool bReplace, const char ** ppStr, const CSphVector<DWORD> & dMvas,
+	bool bReplace, const CSphString & sTokenFilterOptions,
+	const char ** ppStr, const CSphVector<DWORD> & dMvas,
 	CSphString & sError, CSphString & sWarning )
 {
 	assert ( g_bRTChangesAllowed );
@@ -1393,8 +1395,27 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 		return false;
 
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ) ); // avoid race
+
+	// OPTIMIZE? do not create filter on each(!) INSERT
+	if ( !m_tSettings.m_sIndexTokenFilter.IsEmpty() )
+	{
+		ISphTokenizer * p = pTokenizer.LeakPtr();
+		pTokenizer = ISphTokenizer::CreatePluginFilter ( p, m_tSettings.m_sIndexTokenFilter, sError );
+		if ( !pTokenizer.Ptr() )
+		{
+			SafeDelete(p);
+			return false;
+		}
+		if ( !pTokenizer->SetFilterSchema ( m_tSchema, sError ) )
+			return false;
+		if ( !sTokenFilterOptions.IsEmpty() )
+			if ( !pTokenizer->SetFilterOptions ( sTokenFilterOptions.cstr(), sError ) )
+				return false;
+	}
+
+	// OPTIMIZE? do not create filter on each(!) INSERT
 	if ( m_tSettings.m_uAotFilterMask )
-		pTokenizer = sphAotCreateFilter ( pTokenizer.LeakPtr(), m_pDict, m_tSettings.m_bIndexExactWords, m_tSettings.m_uAotFilterMask ); // OPTIMIZE? do not create filter on each(!) INSERT
+		pTokenizer = sphAotCreateFilter ( pTokenizer.LeakPtr(), m_pDict, m_tSettings.m_bIndexExactWords, m_tSettings.m_uAotFilterMask );
 
 	CSphSource_StringVector tSrc ( iFields, ppFields, m_tSchema );
 
@@ -6228,7 +6249,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	if ( pProfiler )
 		pProfiler->Switch ( SPH_QSTATE_PARSE );
 	XQQuery_t tParsed;
-	if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), pTokenizer.Ptr(), &m_tSchema, pDict, m_tSettings ) )
+	if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), pQuery, pTokenizer.Ptr(), &m_tSchema, pDict, m_tSettings ) )
 	{
 		pResult->m_sError = tParsed.m_sParseError;
 		m_tRwlock.Unlock ();

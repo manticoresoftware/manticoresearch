@@ -297,7 +297,8 @@ void	sphSetupQueryTokenizer ( ISphTokenizer * pTokenizer );
 /// lots of arguments here instead of simply the index pointer, because
 /// a) we do not always have an actual real index class, and
 /// b) might need to tweak stuff even we do
-bool	sphParseExtendedQuery ( XQQuery_t & tQuery, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings );
+/// FIXME! remove either pQuery or sQuery
+bool	sphParseExtendedQuery ( XQQuery_t & tQuery, const char * sQuery, const CSphQuery * pQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings );
 
 // perform boolean optimization on tree
 void	sphOptimizeBoolean ( XQNode_t ** pXQ, const ISphKeywordsStat * pKeywords );

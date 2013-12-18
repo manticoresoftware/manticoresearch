@@ -209,6 +209,10 @@ static bool PluginLoadSymbols ( void * pDesc, const SymbolDesc_t * pSymbol, void
 #endif // HAVE_DLOPEN
 }
 
+#if !USE_WINDOWS
+#define offsetof(T, M) \
+	(reinterpret_cast<char*>(&(((T*)1000)->M)) - reinterpret_cast<char*>(1000))
+#endif
 
 static SymbolDesc_t g_dSymbolsUDF[] =
 {
@@ -607,7 +611,7 @@ void sphPluginList ( CSphVector<PluginInfo_t> & dResult )
 		p.m_sLib = v->m_pLibName->cstr();
 		p.m_iUsers = v->m_iUserCount;
 		if ( p.m_eType==PLUGIN_FUNCTION )
-			p.m_sExtra.SetSprintf ( UdfReturnType ( ((PluginUDF_c*)v)->m_eRetType ) );
+			p.m_sExtra = UdfReturnType ( ((PluginUDF_c*)v)->m_eRetType );
 	}
 }
 

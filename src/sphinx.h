@@ -221,15 +221,15 @@ extern int64_t g_iIndexerPoolStartHit;
 
 /// Sphinx CRC32 implementation
 extern DWORD	g_dSphinxCRC32 [ 256 ];
-DWORD			sphCRC32 ( const BYTE * pString );
-DWORD			sphCRC32 ( const BYTE * pString, int iLen );
-DWORD			sphCRC32 ( const BYTE * pString, int iLen, DWORD uPrevCRC );
+DWORD			sphCRC32 ( const void * pString );
+DWORD			sphCRC32 ( const void * pString, int iLen );
+DWORD			sphCRC32 ( const void * pString, int iLen, DWORD uPrevCRC );
 
 /// Sphinx FNV64 implementation
 const uint64_t	SPH_FNV64_SEED = 0xcbf29ce484222325ULL;
-uint64_t		sphFNV64 ( const BYTE * pString );
-uint64_t		sphFNV64 ( const BYTE * s, int iLen, uint64_t uPrev = SPH_FNV64_SEED );
-uint64_t		sphFNV64cont ( const BYTE * pString, uint64_t uPrev );
+uint64_t		sphFNV64 ( const void * pString );
+uint64_t		sphFNV64 ( const void * s, int iLen, uint64_t uPrev = SPH_FNV64_SEED );
+uint64_t		sphFNV64cont ( const void * pString, uint64_t uPrev );
 
 /// calculate file crc32
 bool			sphCalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 );

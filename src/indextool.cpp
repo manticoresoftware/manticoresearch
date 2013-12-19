@@ -470,7 +470,7 @@ bool BuildIDF ( const CSphString & sFilename, const CSphVector<CSphString> & dFi
 					if ( !bSkipUnique || iDocs>1 )
 					{
 						IDFWord_t & tEntry = dEntries.Add ();
-						tEntry.m_uWordID = sphFNV64 ( (BYTE*)sWord );
+						tEntry.m_uWordID = sphFNV64 ( sWord );
 						tEntry.m_iDocs = iDocs;
 						iTotalWords++;
 					} else

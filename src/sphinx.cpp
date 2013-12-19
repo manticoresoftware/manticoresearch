@@ -3428,7 +3428,7 @@ const CSphLowercaser & CSphLowercaser::operator = ( const CSphLowercaser & rhs )
 uint64_t CSphLowercaser::GetFNV () const
 {
 	int iLen = ( sizeof(int) * m_iChunks * CHUNK_SIZE ) / sizeof(BYTE); // NOLINT
-	return sphFNV64 ( (BYTE *)m_pData, iLen );
+	return sphFNV64 ( m_pData, iLen );
 }
 
 int CSphLowercaser::GetMaxCodepointLength () const
@@ -4527,12 +4527,12 @@ uint64_t ISphTokenizer::GetSettingsFNV () const
 		uFlags |= 1<<1;
 	if ( m_bShortTokenFilter )
 		uFlags |= 1<<2;
-	uHash = sphFNV64 ( (const BYTE *)&uFlags, sizeof(uFlags), uHash );
-	uHash = sphFNV64 ( (const BYTE *)&m_uBlendVariants, sizeof(m_uBlendVariants), uHash );
+	uHash = sphFNV64 ( &uFlags, sizeof(uFlags), uHash );
+	uHash = sphFNV64 ( &m_uBlendVariants, sizeof(m_uBlendVariants), uHash );
 
-	uHash = sphFNV64 ( (const BYTE *)&m_tSettings.m_iType, sizeof(m_tSettings.m_iType), uHash );
-	uHash = sphFNV64 ( (const BYTE *)&m_tSettings.m_iMinWordLen, sizeof(m_tSettings.m_iMinWordLen), uHash );
-	uHash = sphFNV64 ( (const BYTE *)&m_tSettings.m_iNgramLen, sizeof(m_tSettings.m_iNgramLen), uHash );
+	uHash = sphFNV64 ( &m_tSettings.m_iType, sizeof(m_tSettings.m_iType), uHash );
+	uHash = sphFNV64 ( &m_tSettings.m_iMinWordLen, sizeof(m_tSettings.m_iMinWordLen), uHash );
+	uHash = sphFNV64 ( &m_tSettings.m_iNgramLen, sizeof(m_tSettings.m_iNgramLen), uHash );
 
 	return uHash;
 }
@@ -4819,7 +4819,7 @@ uint64_t CSphTokenizerBase::GetSettingsFNV () const
 	DWORD uFlags = 0;
 	if ( m_bHasBlend )
 		uFlags |= 1<<0;
-	uHash = sphFNV64 ( (const BYTE *)&uFlags, sizeof(uFlags), uHash );
+	uHash = sphFNV64 ( &uFlags, sizeof(uFlags), uHash );
 
 	return uHash;
 }
@@ -7038,7 +7038,7 @@ int CSphSchema::GetAttrIndex ( const char * sName ) const
 
 	if ( m_dAttrs.GetLength()>=HASH_THRESH )
 	{
-		DWORD uCrc = sphCRC32 ( (const BYTE*)sName );
+		DWORD uCrc = sphCRC32 ( sName );
 		DWORD uPos = m_dBuckets [ uCrc%BUCKET_COUNT ];
 		while ( uPos!=0xffff && m_dAttrs [ uPos ].m_sName!=sName )
 			uPos = m_dAttrs [ uPos ].m_uNext;
@@ -7127,7 +7127,7 @@ bool CSphSchema::IsReserved ( const char * szToken )
 
 WORD & CSphSchema::GetBucketPos ( const char * sName )
 {
-	DWORD uCrc = sphCRC32 ( (const BYTE*)sName );
+	DWORD uCrc = sphCRC32 ( sName );
 	return m_dBuckets [ uCrc % BUCKET_COUNT ];
 }
 
@@ -20204,19 +20204,20 @@ struct CSphDictTemplate : public CSphTemplateDictTraits, CCRCEngine<false> // ba
 
 /////////////////////////////////////////////////////////////////////////////
 
-uint64_t sphFNV64 ( const BYTE * s )
+uint64_t sphFNV64 ( const void * s )
 {
 	return sphFNV64cont ( s, SPH_FNV64_SEED );
 }
 
 
-uint64_t sphFNV64 ( const BYTE * s, int iLen, uint64_t uPrev )
+uint64_t sphFNV64 ( const void * s, int iLen, uint64_t uPrev )
 {
+	const BYTE * p = (const BYTE*)s;
 	uint64_t hval = uPrev;
 	for ( ; iLen>0; iLen-- )
 	{
 		// xor the bottom with the current octet
-		hval ^= (uint64_t)*s++;
+		hval ^= (uint64_t)*p++;
 
 		// multiply by the 64 bit FNV magic prime mod 2^64
 		hval += (hval << 1) + (hval << 4) + (hval << 5) + (hval << 7) + (hval << 8) + (hval << 40); // gcc optimization
@@ -20225,13 +20226,14 @@ uint64_t sphFNV64 ( const BYTE * s, int iLen, uint64_t uPrev )
 }
 
 
-uint64_t sphFNV64cont ( const BYTE * s, uint64_t uPrev )
+uint64_t sphFNV64cont ( const void * s, uint64_t uPrev )
 {
+	const BYTE * p = (const BYTE*)s;
 	uint64_t hval = uPrev;
-	while ( *s )
+	while ( *p )
 	{
 		// xor the bottom with the current octet
-		hval ^= (uint64_t)*s++;
+		hval ^= (uint64_t)*p++;
 
 		// multiply by the 64 bit FNV magic prime mod 2^64
 		hval += (hval << 1) + (hval << 4) + (hval << 5) + (hval << 7) + (hval << 8) + (hval << 40); // gcc optimization
@@ -20692,9 +20694,9 @@ uint64_t CSphTemplateDictTraits::GetSettingsFNV () const
 	uint64_t uHash = (uint64_t)m_pWordforms;
 
 	if ( m_pStopwords )
-		uHash = sphFNV64 ( (const BYTE *)m_pStopwords, m_iStopwords*sizeof(*m_pStopwords), uHash );
+		uHash = sphFNV64 ( m_pStopwords, m_iStopwords*sizeof(*m_pStopwords), uHash );
 
-	uHash = sphFNV64 ( (const BYTE *)&m_tSettings.m_iMinStemmingLen, sizeof(m_tSettings.m_iMinStemmingLen), uHash );
+	uHash = sphFNV64 ( &m_tSettings.m_iMinStemmingLen, sizeof(m_tSettings.m_iMinStemmingLen), uHash );
 	DWORD uFlags = 0;
 	if ( m_tSettings.m_bWordDict )
 		uFlags |= 1<<0;
@@ -20702,12 +20704,12 @@ uint64_t CSphTemplateDictTraits::GetSettingsFNV () const
 		uFlags |= 1<<1;
 	if ( m_tSettings.m_bStopwordsUnstemmed )
 		uFlags |= 1<<2;
-	uHash = sphFNV64 ( (const BYTE *)&uFlags, sizeof(uFlags), uHash );
+	uHash = sphFNV64 ( &uFlags, sizeof(uFlags), uHash );
 
-	uHash = sphFNV64 ( (const BYTE *)m_dMorph.Begin(), m_dMorph.GetLength()*sizeof(m_dMorph[0]), uHash );
+	uHash = sphFNV64 ( m_dMorph.Begin(), m_dMorph.GetLength()*sizeof(m_dMorph[0]), uHash );
 #if USE_LIBSTEMMER
 	ARRAY_FOREACH ( i, m_dDescStemmers )
-		uHash = sphFNV64 ( (const BYTE *)m_dDescStemmers[i].cstr(), m_dDescStemmers[i].Length(), uHash );
+		uHash = sphFNV64 ( m_dDescStemmers[i].cstr(), m_dDescStemmers[i].Length(), uHash );
 #endif
 
 	return uHash;
@@ -22436,7 +22438,7 @@ SphWordID_t CSphDictKeywords::HitblockGetID ( const char * sWord, int iLen, SphW
 
 		sWord = m_sClippedWord;
 		iLen = MAX_KEYWORD_BYTES-4;
-		uCRC = sphCRC32 ( (const BYTE *)m_sClippedWord, MAX_KEYWORD_BYTES-4 );
+		uCRC = sphCRC32 ( m_sClippedWord, MAX_KEYWORD_BYTES-4 );
 	}
 
 	// is this a known one? find it
@@ -30934,7 +30936,7 @@ void SphWordStatChecker_t::Set ( const SmallStringHash_T<CSphQueryResultMeta::Wo
 	hStat.IterateStart();
 	while ( hStat.IterateNext() )
 	{
-		m_dSrcWords.Add ( sphFNV64 ( (const BYTE*)hStat.IterateGetKey().cstr() ) );
+		m_dSrcWords.Add ( sphFNV64 ( hStat.IterateGetKey().cstr() ) );
 	}
 	m_dSrcWords.Sort();
 }
@@ -30949,7 +30951,7 @@ void SphWordStatChecker_t::DumpDiffer ( const SmallStringHash_T<CSphQueryResultM
 	hStat.IterateStart();
 	while ( hStat.IterateNext() )
 	{
-		uint64_t uHash = sphFNV64 ( (const BYTE *)hStat.IterateGetKey().cstr() );
+		uint64_t uHash = sphFNV64 ( hStat.IterateGetKey().cstr() );
 		if ( !m_dSrcWords.BinarySearch ( uHash ) )
 		{
 			if ( !tWarningBuilder.Length() )
@@ -31954,7 +31956,7 @@ DWORD CSphGlobalIDF::GetDocs ( const CSphString & sWord ) const
 		s = sBuf;
 	}
 
-	uint64_t uWordID = sphFNV64 ( (const BYTE *)s );
+	uint64_t uWordID = sphFNV64(s);
 
 	int64_t iStart = 0;
 	int64_t iEnd = m_iTotalWords-1;

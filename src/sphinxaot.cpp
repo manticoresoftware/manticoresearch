@@ -1446,7 +1446,7 @@ public:
 		uint64_t uHash = CSphTokenFilter::GetSettingsFNV();
 		uHash ^= (uint64_t)m_pWordforms;
 		DWORD uFlags = m_bIndexExact ? 1 : 0;
-		uHash = sphFNV64 ( (const BYTE *)(uint64_t)uFlags, sizeof(uFlags), uHash );
+		uHash = sphFNV64 ( &uFlags, sizeof(uFlags), uHash );
 		return uHash;
 	}
 };

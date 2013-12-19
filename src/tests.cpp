@@ -1914,8 +1914,6 @@ void BenchSort ()
 
 //////////////////////////////////////////////////////////////////////////
 
-extern DWORD sphCRC32 ( const BYTE * pString, int iLen );
-
 struct TestAccCmp_fn
 {
 	typedef DWORD MEDIAN_TYPE;
@@ -1967,7 +1965,7 @@ struct TestAccCmp_fn
 
 	DWORD GenerateKey ( const DWORD * pData ) const
 	{
-		return m_iStride > 1 ? sphCRC32 ( ( ( const BYTE * ) ( pData + 1 ) ), ( m_iStride - 1 ) * 4 ) : ( *pData );
+		return m_iStride > 1 ? sphCRC32 ( pData+1, ( m_iStride-1 )*4 ) : ( *pData );
 	}
 };
 

@@ -46,7 +46,7 @@ struct QwordsHash_fn
 {
 	static inline int Hash ( const CSphString & sKey )
 	{
-		return sphCRC32 ( (const BYTE *)sKey.cstr() );
+		return sphCRC32 ( sKey.cstr() );
 	}
 };
 
@@ -309,7 +309,7 @@ public:
 		if ( m_pQword->m_uWordID )
 			return m_pQword->m_uWordID;
 		else
-			return sphFNV64 ( (const BYTE *)m_pQword->m_sDictWord.cstr() );
+			return sphFNV64 ( m_pQword->m_sDictWord.cstr() );
 	}
 
 	virtual void HintDocid ( SphDocID_t uMinID )

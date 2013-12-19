@@ -290,11 +290,11 @@ uint64_t XQNode_t::GetHash () const
 	dZeroOp[1] = (XQOperator_e) 0;
 
 	ARRAY_FOREACH ( i, m_dWords )
-		m_iMagicHash = 100 + ( m_iMagicHash ^ sphFNV64 ( (const BYTE*)m_dWords[i].m_sWord.cstr() ) ); ///< +100 to make it non-transitive
+		m_iMagicHash = 100 + ( m_iMagicHash ^ sphFNV64 ( m_dWords[i].m_sWord.cstr() ) ); // +100 to make it non-transitive
 	ARRAY_FOREACH ( j, m_dChildren )
-		m_iMagicHash = 100 + ( m_iMagicHash ^ m_dChildren[j]->GetHash() ); ///< +100 to make it non-transitive
-	m_iMagicHash += 1000000; ///< to immerse difference between parents and children
-	m_iMagicHash ^= sphFNV64 ( (const BYTE*)dZeroOp );
+		m_iMagicHash = 100 + ( m_iMagicHash ^ m_dChildren[j]->GetHash() ); // +100 to make it non-transitive
+	m_iMagicHash += 1000000; // to immerse difference between parents and children
+	m_iMagicHash ^= sphFNV64 ( dZeroOp );
 
 	return m_iMagicHash;
 }
@@ -310,11 +310,11 @@ uint64_t XQNode_t::GetFuzzyHash () const
 	dZeroOp[1] = (XQOperator_e) 0;
 
 	ARRAY_FOREACH ( i, m_dWords )
-		m_iFuzzyHash = 100 + ( m_iFuzzyHash ^ sphFNV64 ( (const BYTE*)m_dWords[i].m_sWord.cstr() ) ); ///< +100 to make it non-transitive
+		m_iFuzzyHash = 100 + ( m_iFuzzyHash ^ sphFNV64 ( m_dWords[i].m_sWord.cstr() ) ); // +100 to make it non-transitive
 	ARRAY_FOREACH ( j, m_dChildren )
-		m_iFuzzyHash = 100 + ( m_iFuzzyHash ^ m_dChildren[j]->GetFuzzyHash () ); ///< +100 to make it non-transitive
-	m_iFuzzyHash += 1000000; ///< to immerse difference between parents and children
-	m_iFuzzyHash ^= sphFNV64 ( (const BYTE*)dZeroOp );
+		m_iFuzzyHash = 100 + ( m_iFuzzyHash ^ m_dChildren[j]->GetFuzzyHash () ); // +100 to make it non-transitive
+	m_iFuzzyHash += 1000000; // to immerse difference between parents and children
+	m_iFuzzyHash ^= sphFNV64 ( dZeroOp );
 
 	return m_iFuzzyHash;
 }
@@ -2950,7 +2950,7 @@ static uint64_t sphHashPhrase ( const XQNode_t * pNode )
 	{
 		if ( i )
 			uHash = sphFNV64 ( g_sPhraseDelimiter, sizeof(g_sPhraseDelimiter), uHash );
-		uHash = sphFNV64cont ( (BYTE *)pNode->m_dWords[i].m_sWord.cstr(), uHash );
+		uHash = sphFNV64cont ( pNode->m_dWords[i].m_sWord.cstr(), uHash );
 	}
 
 	return uHash;
@@ -2968,7 +2968,7 @@ static void sphHashSubphrases ( XQNode_t * pNode, BigramHash_t & hBirgam )
 	int iLen = dWords.GetLength();
 	for ( int i=0; i<iLen; i++ )
 	{
-		uint64_t uSubPhrase = sphFNV64cont ( (BYTE *)dWords[i].m_sWord.cstr(), SPH_FNV64_SEED );
+		uint64_t uSubPhrase = sphFNV64cont ( dWords[i].m_sWord.cstr(), SPH_FNV64_SEED );
 		sphBigramAddNode ( pNode, uSubPhrase, hBirgam );
 
 		// skip whole phrase
@@ -2976,7 +2976,7 @@ static void sphHashSubphrases ( XQNode_t * pNode, BigramHash_t & hBirgam )
 		for ( int j=i+1; j<iSubLen; j++ )
 		{
 			uSubPhrase = sphFNV64 ( g_sPhraseDelimiter, sizeof(g_sPhraseDelimiter), uSubPhrase );
-			uSubPhrase = sphFNV64cont ( (BYTE *)dWords[j].m_sWord.cstr(), uSubPhrase );
+			uSubPhrase = sphFNV64cont ( dWords[j].m_sWord.cstr(), uSubPhrase );
 			sphBigramAddNode ( pNode, uSubPhrase, hBirgam );
 		}
 	}
@@ -3179,13 +3179,13 @@ bool CSphTransformation::TransformCommonPhrase ()
 				assert ( dWords.GetLength()>=2 );
 				dNodes[iPhrase]->m_iAtomPos = dWords.Begin()->m_iAtomPos;
 
-				uint64_t uHead = sphFNV64cont ( (const BYTE *)dWords[0].m_sWord.cstr(), SPH_FNV64_SEED );
-				uint64_t uTail = sphFNV64cont ( (const BYTE *)dWords [ dWords.GetLength() - 1 ].m_sWord.cstr(), SPH_FNV64_SEED );
+				uint64_t uHead = sphFNV64cont ( dWords[0].m_sWord.cstr(), SPH_FNV64_SEED );
+				uint64_t uTail = sphFNV64cont ( dWords [ dWords.GetLength() - 1 ].m_sWord.cstr(), SPH_FNV64_SEED );
 				uHead = sphFNV64 ( g_sPhraseDelimiter, sizeof(g_sPhraseDelimiter), uHead );
-				uHead = sphFNV64cont ( (const BYTE *)dWords[1].m_sWord.cstr(), uHead );
+				uHead = sphFNV64cont ( dWords[1].m_sWord.cstr(), uHead );
 
 				uTail = sphFNV64 ( g_sPhraseDelimiter, sizeof(g_sPhraseDelimiter), uTail );
-				uTail = sphFNV64cont ( (const BYTE *)dWords[dWords.GetLength()-2].m_sWord.cstr(), uTail );
+				uTail = sphFNV64cont ( dWords[dWords.GetLength()-2].m_sWord.cstr(), uTail );
 
 				int iHeadLen = sphBigramAddNode ( dNodes[iPhrase], uHead, tBigramHead );
 				int iTailLen = sphBigramAddNode ( dNodes[iPhrase], uTail, tBigramTail );
@@ -3239,7 +3239,7 @@ bool CSphTransformation::TransformCommonPhrase ()
 						break;
 
 					int iWordRef = ( bHead ? iCount-1 : dPhrases[0]->m_dWords.GetLength() - iCount );
-					uint64_t uHash = sphFNV64 ( (const BYTE *)dPhrases[0]->m_dWords[iWordRef].m_sWord.cstr() );
+					uint64_t uHash = sphFNV64 ( dPhrases[0]->m_dWords[iWordRef].m_sWord.cstr() );
 
 					bool bPhrasesMatch = false;
 					bool bSomePhraseOver = false;
@@ -3250,7 +3250,7 @@ bool CSphTransformation::TransformCommonPhrase ()
 							break;
 
 						int iWord = ( bHead ? iCount-1 : dPhrases[iPhrase]->m_dWords.GetLength() - iCount );
-						bPhrasesMatch = ( uHash==sphFNV64 ( (const BYTE *)dPhrases[iPhrase]->m_dWords[iWord].m_sWord.cstr() ) );
+						bPhrasesMatch = ( uHash==sphFNV64 ( dPhrases[iPhrase]->m_dWords[iWord].m_sWord.cstr() ) );
 						if ( !bPhrasesMatch )
 							break;
 					}

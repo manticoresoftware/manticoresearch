@@ -875,12 +875,12 @@ public:
 				iLen = sphJsonUnpackInt ( &pValue );
 				return sphFNV64 ( pValue, iLen );
 			case JSON_INT32:
-				return sphFNV64 ( (BYTE*)FormatInt ( sBuf, (int)sphGetDword(pValue) ) );
+				return sphFNV64 ( FormatInt ( sBuf, (int)sphGetDword(pValue) ) );
 			case JSON_INT64:
-				return sphFNV64 ( (BYTE*)FormatInt ( sBuf, (int)sphJsonLoadBigint ( &pValue ) ) );
+				return sphFNV64 ( FormatInt ( sBuf, (int)sphJsonLoadBigint ( &pValue ) ) );
 			case JSON_DOUBLE:
 				snprintf ( sBuf, sizeof(sBuf), "%f", sphQW2D ( sphJsonLoadBigint ( &pValue ) ) );
-				return sphFNV64 ( (const BYTE*)sBuf );
+				return sphFNV64 ( sBuf );
 			case JSON_INT32_VECTOR:
 				iLen = sphJsonUnpackInt ( &pValue ) * 4;
 				return sphFNV64 ( pValue, iLen );
@@ -967,22 +967,22 @@ public:
 					break;
 				case JSON_INT32:
 					i32Val = sphJsonLoadInt ( &pValue );
-					tKey = sphFNV64 ( (const BYTE *)&i32Val, sizeof(i32Val), tKey );
+					tKey = sphFNV64 ( &i32Val, sizeof(i32Val), tKey );
 					break;
 				case JSON_INT64:
 					i64Val = sphJsonLoadBigint ( &pValue );
-					tKey = sphFNV64 ( (const BYTE *)&i64Val, sizeof(i64Val), tKey );
+					tKey = sphFNV64 ( &i64Val, sizeof(i64Val), tKey );
 					break;
 				case JSON_DOUBLE:
 					fVal = sphQW2D ( sphJsonLoadBigint ( &pValue ) );
-					tKey = sphFNV64 ( (const BYTE *)&fVal, sizeof(fVal), tKey );
+					tKey = sphFNV64 ( &fVal, sizeof(fVal), tKey );
 					break;
 				default:
 					break;
 				}
 
 			} else
-				tKey = sphFNV64 ( (const BYTE *)&tAttr, sizeof(SphAttr_t), tKey );
+				tKey = sphFNV64 ( &tAttr, sizeof(SphAttr_t), tKey );
 		}
 
 		return tKey;
@@ -4642,7 +4642,7 @@ public:
 		while ( iLen-- )
 		{
 			int iChar = tolower ( *pStr++ );
-			uAcc = sphFNV64 ( (const BYTE *)&iChar, 4, uAcc );
+			uAcc = sphFNV64 ( &iChar, 4, uAcc );
 		}
 
 		return uAcc;
@@ -4663,7 +4663,7 @@ public:
 			const BYTE * pCur = pStr++;
 			int iCode = sphUTF8Decode ( pCur );
 			iCode = CollateUTF8CI ( iCode );
-			uAcc = sphFNV64 ( (const BYTE *)&iCode, 4, uAcc );
+			uAcc = sphFNV64 ( &iCode, 4, uAcc );
 		}
 
 		return uAcc;
@@ -4799,7 +4799,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 			pExtra->AddAttr ( tCol, true );
 		tSorterSchema.RemoveStaticAttr ( iIndex );
 
-		dQueryAttrs.Add ( sphFNV64 ( (const BYTE *)tCol.m_sName.cstr() ) );
+		dQueryAttrs.Add ( sphFNV64 ( tCol.m_sName.cstr() ) );
 	}
 
 	// setup @geodist
@@ -4818,7 +4818,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		if ( pExtra )
 			pExtra->AddAttr ( tCol, true );
 
-		dQueryAttrs.Add ( sphFNV64 ( (const BYTE *)tCol.m_sName.cstr() ) );
+		dQueryAttrs.Add ( sphFNV64 ( tCol.m_sName.cstr() ) );
 	}
 
 	// setup @expr
@@ -4832,7 +4832,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		tCol.m_eStage = SPH_EVAL_PRESORT;
 		tSorterSchema.AddDynamicAttr ( tCol );
 
-		dQueryAttrs.Add ( sphFNV64 ( (const BYTE *)tCol.m_sName.cstr() ) );
+		dQueryAttrs.Add ( sphFNV64 ( tCol.m_sName.cstr() ) );
 	}
 
 	// expressions from select items
@@ -4851,7 +4851,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		if ( sExpr=="*" )
 		{
 			for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
-				dQueryAttrs.Add ( sphFNV64 ( (const BYTE *)tSchema.GetAttr ( i ).m_sName.cstr() ) );
+				dQueryAttrs.Add ( sphFNV64 ( tSchema.GetAttr(i).m_sName.cstr() ) );
 		}
 
 		// for now, just always pass "plain" attrs from index to sorter; they will be filtered on searchd level
@@ -4894,7 +4894,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		int iSorterAttr = tSorterSchema.GetAttrIndex ( tItem.m_sAlias.cstr() );
 		if ( iSorterAttr>=0 )
 		{
-			if ( dQueryAttrs.Contains ( sphFNV64 ( (const BYTE *)tItem.m_sAlias.cstr() ) ) )
+			if ( dQueryAttrs.Contains ( sphFNV64 ( tItem.m_sAlias.cstr() ) ) )
 			{
 				sError.SetSprintf ( "alias '%s' must be unique (conflicts with another alias)", tItem.m_sAlias.cstr() );
 				return NULL;

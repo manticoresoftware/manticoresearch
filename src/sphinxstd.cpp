@@ -1713,7 +1713,7 @@ int64_t sphMicroTimer()
 
 int CSphStrHashFunc::Hash ( const CSphString & sKey )
 {
-	return sKey.IsEmpty() ? 0 : sphCRC32 ( (const BYTE *)sKey.cstr() );
+	return sKey.IsEmpty() ? 0 : sphCRC32 ( sKey.cstr() );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1787,30 +1787,34 @@ DWORD g_dSphinxCRC32 [ 256 ] =
 };
 
 
-DWORD sphCRC32 ( const BYTE * pString )
+DWORD sphCRC32 ( const void * s )
 {
 	// calc CRC
 	DWORD crc = ~((DWORD)0);
-	for ( const BYTE * p=pString; *p; p++ )
+	for ( const BYTE * p=(const BYTE*)s; *p; p++ )
 		crc = (crc >> 8) ^ g_dSphinxCRC32 [ (crc ^ (*p)) & 0xff ];
 	return ~crc;
 }
 
-DWORD sphCRC32 ( const BYTE * pString, int iLen )
+DWORD sphCRC32 ( const void * s, int iLen )
 {
 	// calc CRC
 	DWORD crc = ~((DWORD)0);
-	for ( int i=0; i<iLen; i++ )
-		crc = (crc >> 8) ^ g_dSphinxCRC32 [ (crc ^ pString[i]) & 0xff ];
+	const BYTE * p = (const BYTE*)s;
+	const BYTE * pMax = p + iLen;
+	while ( p<pMax )
+		crc = (crc >> 8) ^ g_dSphinxCRC32 [ (crc ^ *p++) & 0xff ];
 	return ~crc;
 }
 
-DWORD sphCRC32 ( const BYTE * pString, int iLen, DWORD uPrevCRC )
+DWORD sphCRC32 ( const void * s, int iLen, DWORD uPrevCRC )
 {
 	// calc CRC
 	DWORD crc = ~((DWORD)uPrevCRC);
-	for ( int i=0; i<iLen; i++ )
-		crc = (crc >> 8) ^ g_dSphinxCRC32 [ (crc ^ pString[i]) & 0xff ];
+	const BYTE * p = (const BYTE*)s;
+	const BYTE * pMax = p + iLen;
+	while ( p<pMax )
+		crc = (crc >> 8) ^ g_dSphinxCRC32 [ (crc ^ *p++) & 0xff ];
 	return ~crc;
 }
 

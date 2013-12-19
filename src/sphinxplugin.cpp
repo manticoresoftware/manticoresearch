@@ -61,8 +61,8 @@ struct PluginKey_t
 
 	static int Hash ( const PluginKey_t & v )
 	{
-		return sphCRC32 ( (const BYTE*)v.m_sName.cstr(), v.m_sName.Length(),
-			sphCRC32 ( (const BYTE*)&v.m_eType, sizeof(v.m_eType) ) );
+		return sphCRC32 ( v.m_sName.cstr(), v.m_sName.Length(),
+			sphCRC32 ( &v.m_eType, sizeof(v.m_eType) ) );
 	}
 
 	bool operator == ( const PluginKey_t & rhs )

@@ -628,7 +628,7 @@ bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool
 
 DWORD sphJsonKeyMask ( const char * sKey, int iLen )
 {
-	DWORD uCrc = sphCRC32 ( (const BYTE*)sKey, iLen );
+	DWORD uCrc = sphCRC32 ( sKey, iLen );
 	return
 		( 1UL<<( uCrc & 31 ) ) +
 		( 1UL<<( ( uCrc>>8 ) & 31 ) );

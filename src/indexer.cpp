@@ -222,7 +222,7 @@ protected:
 	{
 		static inline DWORD Hash ( const char * sKey )
 		{
-			return sphCRC32 ( (const BYTE*)sKey );
+			return sphCRC32 ( sKey );
 		}
 	};
 

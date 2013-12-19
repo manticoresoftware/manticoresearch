@@ -1400,7 +1400,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 		vsnprintf ( sBuf+iLen, sizeof(sBuf)-iLen-1, sFmt, ap );
 
 	// catch dupes
-	DWORD uEntry = sFmt ? sphCRC32 ( (const BYTE*)( sBuf+iLen ) ) : 0;
+	DWORD uEntry = sFmt ? sphCRC32 ( sBuf+iLen ) : 0;
 	int64_t tmNow = sphMicroTimer();
 
 	// accumulate while possible
@@ -19500,7 +19500,7 @@ bool CheckConfigChanges ()
 		if ( !TryToExec ( p, g_sConfigFile.cstr(), dContent, sError, sizeof(sError) ) )
 			return true;
 
-		uCRC32 = sphCRC32 ( (const BYTE*)dContent.Begin(), dContent.GetLength() );
+		uCRC32 = sphCRC32 ( dContent.Begin(), dContent.GetLength() );
 	} else
 		sphCalcFileCRC32 ( g_sConfigFile.cstr (), uCRC32 );
 #else

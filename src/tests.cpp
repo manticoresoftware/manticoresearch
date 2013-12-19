@@ -3506,14 +3506,14 @@ void TestSource ()
 	for ( int iTest=1; ; )
 	{
 		BYTE ** pFields = pCSV->NextDocument ( sError );
-		Verify ( pFields || pCSV->m_tDocInfo.m_uDocID==0 );
+		assert ( pFields || pCSV->m_tDocInfo.m_uDocID==0 );
 		if ( pCSV->m_tDocInfo.m_uDocID==0 )
 			break;
 
 		for ( int i=0; i<iColumns;i++ )
 		{
 			CSphString sTmp ( (const char *)pFields[i] );
-			Verify ( sTmp==dTest[iTest+i] );
+			assert ( sTmp==dTest[iTest+i] );
 		}
 
 		iTest += iWriteStride;

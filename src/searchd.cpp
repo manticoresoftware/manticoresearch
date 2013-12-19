@@ -8373,7 +8373,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 				int k = dUnmappedItems[j];
 				const CSphQueryItem & t = tItems[k];
 				if ( ( tCol.m_sName==GetMagicSchemaName ( t.m_sExpr ) && t.m_eAggrFunc==SPH_AGGR_NONE )
-						|| ( t.m_sAlias.cstr() && t.m_sAlias==tCol.m_sName &&
+						|| ( t.m_sAlias==tCol.m_sName &&
 							( tRes.m_tSchema.GetAttrIndex ( GetMagicSchemaName ( t.m_sExpr ) )==-1 || t.m_eAggrFunc!=SPH_AGGR_NONE ) ) )
 				{
 					// tricky bit about naming

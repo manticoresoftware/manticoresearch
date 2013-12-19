@@ -5076,7 +5076,6 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		tCount.m_eStage = SPH_EVAL_SORTER;
 		tDistinct.m_eStage = SPH_EVAL_SORTER;
 
-
 		tSorterSchema.AddDynamicAttr ( tGroupby );
 		tSorterSchema.AddDynamicAttr ( tCount );
 		if ( pExtra )

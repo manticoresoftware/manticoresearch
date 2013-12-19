@@ -494,7 +494,7 @@ PluginDesc_c * sphPluginAcquire ( const char * szLib, PluginType_e eType, const 
 	if ( !pDesc )
 	{
 		if ( !sphPluginCreate ( szLib, eType, szName, SPH_ATTR_NONE, sError ) )
-			return false;
+			return NULL;
 		return sphPluginGet ( eType, szName );
 	}
 

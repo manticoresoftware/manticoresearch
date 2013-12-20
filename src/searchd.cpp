@@ -6209,66 +6209,6 @@ bool MinimizeSchema ( CSphRsetSchema & tDst, const ISphSchema & tSrc )
 }
 
 
-bool FixupQuery ( CSphQuery * pQuery, const CSphSchema * pSchema, const char * sIndexName, CSphString & sError )
-{
-	// already?
-	if ( !pQuery->m_iOldVersion )
-		return true;
-
-	if ( pQuery->m_iOldGroups>0 || pQuery->m_iOldMinGID!=0 || pQuery->m_iOldMaxGID!=UINT_MAX )
-	{
-		int iAttr = -1;
-		for ( int i=0; i<pSchema->GetAttrsCount(); i++ )
-			if ( pSchema->GetAttr(i).m_eAttrType==SPH_ATTR_INTEGER )
-		{
-			iAttr = i;
-			break;
-		}
-
-		if ( iAttr<0 )
-		{
-			sError.SetSprintf ( "index '%s': no group attribute found", sIndexName );
-			return false;
-		}
-
-		CSphFilterSettings tFilter;
-		tFilter.m_sAttrName = pSchema->GetAttr(iAttr).m_sName;
-		tFilter.m_dValues.Resize ( pQuery->m_iOldGroups );
-		ARRAY_FOREACH ( i, tFilter.m_dValues )
-			tFilter.m_dValues[i] = pQuery->m_pOldGroups[i];
-		tFilter.m_iMinValue = pQuery->m_iOldMinGID;
-		tFilter.m_iMaxValue = pQuery->m_iOldMaxGID;
-		pQuery->m_dFilters.Add ( tFilter );
-	}
-
-	if ( pQuery->m_iOldMinTS!=0 || pQuery->m_iOldMaxTS!=UINT_MAX )
-	{
-		int iAttr = -1;
-		for ( int i=0; i<pSchema->GetAttrsCount(); i++ )
-			if ( pSchema->GetAttr(i).m_eAttrType==SPH_ATTR_TIMESTAMP )
-		{
-			iAttr = i;
-			break;
-		}
-
-		if ( iAttr<0 )
-		{
-			sError.SetSprintf ( "index '%s': no timestamp attribute found", sIndexName );
-			return false;
-		}
-
-		CSphFilterSettings tFilter;
-		tFilter.m_sAttrName = pSchema->GetAttr(iAttr).m_sName;
-		tFilter.m_iMinValue = pQuery->m_iOldMinTS;
-		tFilter.m_iMaxValue = pQuery->m_iOldMaxTS;
-		pQuery->m_dFilters.Add ( tFilter );
-	}
-
-	pQuery->m_iOldVersion = 0;
-	return true;
-}
-
-
 void ParseIndexList ( const CSphString & sIndexes, CSphVector<CSphString> & dOut )
 {
 	CSphString sSplit = sIndexes;
@@ -6406,8 +6346,6 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 
 bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int iMasterVer )
 {
-	tQuery.m_iOldVersion = iVer;
-
 	// v.1.27+ flags come first
 	DWORD uFlags = 0;
 	if ( iVer>=0x11B )
@@ -6424,8 +6362,6 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 			tQuery.m_sRankerExpr = tReq.GetString();
 	}
 	tQuery.m_eSort = (ESphSortOrder) tReq.GetInt ();
-	if ( iVer<=0x101 )
-		tQuery.m_iOldGroups = tReq.GetDwords ( &tQuery.m_pOldGroups, g_iMaxFilterValues, "invalid group count %d (should be in 0..%d range)" );
 	if ( iVer>=0x102 )
 	{
 		tQuery.m_sSortBy = tReq.GetString ();
@@ -6458,20 +6394,6 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 
 	if ( uMaxID==0 )
 		uMaxID = DOCID_MAX;
-
-	// v.1.0, v.1.1
-	if ( iVer<=0x101 )
-	{
-		tQuery.m_iOldMinTS = tReq.GetDword ();
-		tQuery.m_iOldMaxTS = tReq.GetDword ();
-	}
-
-	// v.1.1 specific
-	if ( iVer==0x101 )
-	{
-		tQuery.m_iOldMinGID = tReq.GetDword ();
-		tQuery.m_iOldMaxGID = tReq.GetDword ();
-	}
 
 	// v.1.2
 	if ( iVer>=0x102 )
@@ -9563,8 +9485,6 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 		CSphSchemaMT * pExtraSchemaMT = tQuery.m_bAgent?m_dExtraSchemas[i+m_iStart].GetVirgin():NULL;
 		UnlockOnDestroy dSchemaLock ( pExtraSchemaMT );
 
-		assert ( !tQuery.m_iOldVersion || tQuery.m_iOldVersion>=0x102 );
-
 		m_tHook.m_pIndex = pServed->m_pIndex;
 		SphQueueSettings_t tQueueSettings ( tQuery, pServed->m_pIndex->GetMatchSchema(), sError, m_pProfile );
 		tQueueSettings.m_bComputeItems = true;
@@ -9700,13 +9620,6 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 			ISphMatchSorter * pSorter = pLocalSorter;
 			if ( !pLocalSorter )
 			{
-				// fixup old queries
-				if ( !FixupQuery ( &tQuery, &pServed->m_pIndex->GetMatchSchema(), sLocal, sError ) )
-				{
-					m_dFailuresSet[iQuery].Submit ( sLocal, sError.cstr() );
-					continue;
-				}
-
 				// create queue
 				m_tHook.m_pIndex = pServed->m_pIndex;
 				SphQueueSettings_t tQueueSettings ( tQuery, pServed->m_pIndex->GetMatchSchema(), sError, m_pProfile );
@@ -10296,7 +10209,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		}
 
 		// we can reuse the very same sorter
-		if ( bAllEqual && FixupQuery ( &m_dQueries[iStart], &tFirstSchema, "local-sorter", sError ) )
+		if ( bAllEqual )
 		{
 			CSphSchemaMT * pExtraSchemaMT = m_dQueries[iStart].m_bAgent?m_dExtraSchemas[iStart].GetVirgin():NULL;
 			UnlockOnDestroy ExtraLocker ( pExtraSchemaMT );

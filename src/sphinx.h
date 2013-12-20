@@ -2705,15 +2705,6 @@ public:
 	int				m_iGroupbyLimit;	///< number of elems within group
 
 public:
-	int				m_iOldVersion;		///< version, to fixup old queries
-	int				m_iOldGroups;		///< 0.9.6 group filter values count
-	DWORD *			m_pOldGroups;		///< 0.9.6 group filter values
-	DWORD			m_iOldMinTS;		///< 0.9.6 min timestamp
-	DWORD			m_iOldMaxTS;		///< 0.9.6 max timestamp
-	DWORD			m_iOldMinGID;		///< 0.9.6 min group id
-	DWORD			m_iOldMaxGID;		///< 0.9.6 max group id
-
-public:
 	CSphVector<CSphQueryItem>	m_dItems;		///< parsed select-list
 	ESphCollation				m_eCollation;	///< ORDER BY collation
 	bool						m_bAgent;		///< agent mode (may need extra cols on output)

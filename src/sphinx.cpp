@@ -6476,14 +6476,6 @@ CSphQuery::CSphQuery ()
 	, m_iSQLSelectEnd	( -1 )
 	, m_iGroupbyLimit	( 1 )
 
-	, m_iOldVersion		( 0 )
-	, m_iOldGroups		( 0 )
-	, m_pOldGroups		( NULL )
-	, m_iOldMinTS		( 0 )
-	, m_iOldMaxTS		( UINT_MAX )
-	, m_iOldMinGID		( 0 )
-	, m_iOldMaxGID		( UINT_MAX )
-
 	, m_eCollation		( SPH_COLLATION_DEFAULT )
 	, m_bAgent			( false )
 {}

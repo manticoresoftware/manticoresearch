@@ -6136,19 +6136,42 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			iKlistEntries = m_tKlist.GetKillListSize();
 		} else
 		{
-			const CSphIndex * pDiskChunk = m_dDiskChunks[iChunk+1];
+			const CSphIndex * pDiskChunk = m_dDiskChunks  [ iChunk+1 ];
 			pKlist = pDiskChunk->GetKillList();
 			iKlistEntries = pDiskChunk->GetKillListSize();
 		}
 
 		if ( iKlistEntries )
 		{
-			int iKListLength = dCumulativeKList.GetLength();
-			dCumulativeKList.Resize ( iKListLength+iKlistEntries );
-			for ( int i = 0; i < iKlistEntries; i++ )
-				dCumulativeKList[iKListLength+i] = pKlist[i];
+			// merging two kill lists, assuming they have sorted data
+			const SphDocID_t * pSrc1 = dCumulativeKList.Begin();
+			const SphDocID_t * pSrc2 = reinterpret_cast<const SphDocID_t *> ( pKlist );
+			const SphDocID_t * pEnd1 = pSrc1 + dCumulativeKList.GetLength();
+			const SphDocID_t * pEnd2 = pSrc2 + iKlistEntries;
+			CSphVector<SphDocID_t> dNewCumulative ( ( pEnd1-pSrc1 )+( pEnd2-pSrc2 ) );
+			SphDocID_t * pDst = dNewCumulative.Begin();
 
-			dCumulativeKList.Sort();
+			while ( pSrc1!=pEnd1 && pSrc2!=pEnd2 )
+			{
+				if ( *pSrc1<*pSrc2 )
+					*pDst = *pSrc1++;
+				else if ( *pSrc2<*pSrc1 )
+					*pDst = *pSrc2++;
+				else
+				{
+					*pDst = *pSrc1++;
+					// handle duplicates
+					while ( *pDst==*pSrc1 ) pSrc1++;
+					while ( *pDst==*pSrc2 ) pSrc2++;
+				}
+				pDst++;
+			}
+			while ( pSrc1!=pEnd1 ) *pDst++ = *pSrc1++;
+			while ( pSrc2!=pEnd2 ) *pDst++ = *pSrc2++;
+			assert ( pDst<=( dNewCumulative.Begin()+dNewCumulative.GetLength() ) );
+			dNewCumulative.Resize ( pDst-dNewCumulative.Begin() );
+
+			dNewCumulative.SwapData ( dCumulativeKList );
 		}
 
 		CSphQueryResult tChunkResult;

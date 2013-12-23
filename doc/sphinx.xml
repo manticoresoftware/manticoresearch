@@ -3855,6 +3855,241 @@ early, neither behavior is currently guaranteed.
 
 
 </chapter>
+<chapter id="extending-sphinx"><title>Extending Sphinx</title>
+
+
+<sect1 id="sphinx-udfs"><title>Sphinx UDFs (User Defined Functions)</title>
+<para>
+Our expression engine can be extended with user defined functions,
+or UDFs for short. Those have a wide variety of uses, for instance:
+<itemizedlist>
+<listitem><para>adding custom mathematical or string functions;</para></listitem>
+<listitem><para>accessing the database or files from within Sphinx;</para></listitem>
+<listitem><para>implementing complex ranking functions.</para></listitem>
+</itemizedlist>
+</para>
+<para>
+UDFs reside in the external dynamic libraries (.so files on UNIX and .dll
+on Windows systems). You can load and unload them dynamically into searchd
+with <link linkend="sphinxql-create-function">CREATE FUNCTION</link> and
+<link linkend="sphinxql-drop-function">DROP FUNCTION</link> SphinxQL statements
+respectively. Sphinx keeps track of the currently loaded functions, that is,
+every time you create or drop a functions, <filename>searchd</filename> writes
+its state to the <link linkend="conf-sphinxql-state">sphinxql_state</link> file
+as a plain good old SQL script.
+</para>
+<para>
+Once you successfully load an UDF, you can use it in your SELECT or other
+statements just as well as any of the builtin functions:
+<programlisting>
+SELECT id, MYCUSTOMFUNC(groupid, authorname), ... FROM myindex
+</programlisting>
+</para>
+<para>
+UDFs are completely supported in <link linkend="conf-workers">workers=threads</link>
+mode only. They are partially supported in workers=prefork mode too: namely, CREATEs
+from the sphinxql_state startup script will work and those UDFs will be accessible.
+However, DROPs will not be available. UDFs are not supported in workers=fork mode.
+</para>
+<para>
+Multiple UDFs (and other plugins) may reside in a single library. That library
+will only be loaded once. It gets automatically unloaded once all the UDFs and
+plugins from it are dropped.
+</para>
+<para>
+In theory you can write an UDF in any language as long as its compiler
+is able to import standard C header, and emit standard dynamic libraries with
+properly exported functions. Of course, the path of least resistance is to write
+in either C++ or plain C. We provide an example UDF library written in plain C
+and implementing several functions (demonstrating a few different techniques)
+along with our source code, see <filename>src/udfexample.c</filename>. That
+example includes <filename>src/sphinxudf.h</filename> header file for the
+definitions of a few UDF related structures and types. And for most real-world
+UDFs and plugins, just including <filename>src/sphinxudf.h</filename> should be
+completely sufficient, too. However, if you're writing a ranking function and
+need to access the ranking signals (factors) data from within the UDF, you will
+also need to compile and link with <filename>src/sphinxudf.c</filename> (also
+available in our source code), because the <emphasis>implementations</emphasis>
+of the fuctions that let you access the signal data from within the UDF reside
+in that file.
+</para>
+<para>
+Within your UDF, you <b>must</b> implement and export only a couple functions,
+literally. First, for UDF interface version control, you <b>must</b> define
+a function <code>int LIBRARYNAME_ver()</code>, where LIBRARYNAME is the name
+of your library file, and you must return <code>SPH_UDF_VERSION</code> (a value
+defined in <filename>sphinxudf.h</filename>) from it. Here's an example.
+<programlisting>
+#include &lt;sphinxudf.h&gt;
+
+// our library will be called udfexample.so, thus, so it must define
+// a version function named udfexample_ver()
+int udfexample_ver()
+{
+    return SPH_UDF_VERSION;
+}
+</programlisting>
+That protects you from accidentally loading a library with a mismatching
+UDF interface version into a newer or older <filename>searchd</filename>.
+Second, yout <b>must</b> implement the actual function, too.
+<code>
+sphinx_int64_t testfunc ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args,
+    char * error_flag )
+{
+    return 123;
+}
+</code>
+The first argument, a pointer to SPH_UDF_INIT structure, is essentially
+a pointer to our function state. It is option. In the example just above
+the function is stateless, it simply returns 123 every time it gets called.
+So we do not have to define an initialization function, and we can simply
+ignore that argument.
+</para>
+<para>
+The second argument, a pointer to SPH_UDF_ARGS, is the most important one.
+All the actual call arguments are passed to your UDF via this structure;
+it contians the call argument count, names, types, etc. So whether your
+function gets called like <code>SELECT id, testfunc(1)</code> or like
+<code>SELECT id, testfunc('abc', 1000*id+gid, WEIGHT())</code> or anyhow
+else, it will receive the very same SPH_UDF_ARGS structure in all of these
+cases. However, the data passed in the <code>args</code> structure will be
+different. In the first example <code>args-&gt;arg_count</code> will be set to 1,
+in the second example it will be set to 3, <code>args-&gt;arg_types</code> array
+will contain different type data, and so on.
+</para>
+<para>
+Finally, the third argument is an error flag. UDF can raise it to indicate
+that some kinda of an internal error happened, the UDF can not continue, and
+the query should terminate early. You should <b>not</b> use this for argument
+type checks or for any other error reporting that is likely to happen during
+normal use. This flag is designed to report sudden critical runtime errors,
+such as running out of memory.
+</para>
+<para>
+If we wanted to, say, allocate temporary storage for our function to use,
+or check upfront whether the arguments are of the supported types, then
+we would need to add two more functions, with UDF initialization and deinitialization,
+respectively.
+<programlisting>
+int testfunc_init ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args,
+    char * error_message )
+{
+    // allocate and initialize a little bit of temporary storage
+    init->func_data = malloc ( sizeof(int) );
+    *(int*)init->func_data = 123;
+
+    // return a success code
+    return 0;
+}
+
+void testfunc_deinit ( SPH_UDF_INIT * init )
+{
+    // free up our temporary storage
+    free ( init->func_data );
+}
+</programlisting>
+Note how <code>testfunc_init()</code> also receives the call arguments
+structure. By the time it is called it does not receive any actual values,
+so the <code>args-&gt;arg_values</code> will be NULL. But the argument
+names and types are known and will be passed. You can check them in
+the initialization function and return an error if they are of an
+unsupported type.
+</para>
+<para>
+UDFs can receive arguments of pretty much any valid internal Sphinx type.
+Refer to <code>sphinx_udf_argtype</code> enumeration in <filename>sphinxudf.h</filename>
+for a full list. Most of the types map straightforwardly to the respective C types.
+The most notable exception is the SPH_UDF_TYPE_FACTORS argument type.
+You get that type by calling your UDF with a
+<link linkend="expr-func-packedfactors">PACKEDFACTOR()</link> argument.
+It's data is a binary blob in a certain internal format, and to extract
+individual ranking signals from that blob, you need to use either of the
+two <code>sphinx_factors_XXX()</code> or <code>sphinx_get_YYY_factor()</code>
+families of functions. The first family consists of just 3 functions,
+<code>sphinx_factors_init()</code> that initializes the unpacked
+SPH_UDF_FACTORS structure, <code>sphinx_factors_unpack()</code> that
+unpacks a binary blob into it, and <code>sphinx_factors_deinit()</code>
+that cleans up an deallocates the SPH_UDF_FACTORS. So you need to call
+init() and unpack(), then you can use the SPH_UDF_FACTORS fields, and
+then you need to cleanup with deinit(). That is simple, but results
+in a bunch of memory allocations per each processed document, and might
+be slow. The other interface, consisting of a bunch of
+<code>sphinx_get_YYY_factor()</code> functions, is a little more wordy
+to use, but accesses the blob data directly and guarantees that there
+will be zero allocations. So for top-notch ranking UDF performance,
+you want to use that one.
+</para>
+<para>
+As for the return types, UDFs can currently return a signle INT, BIGINT,
+FLOAT, or STRING value. The C function return type should be sphinx_int64_t,
+sphinx_int64_t, double, or char* respectively. In the last case you <b>must</b>
+use <code>args-&gt;fn_malloc</code> function to allocate the returned
+string values. Internally in your UDF you can use whatever you want,
+so the <code>testfunc_init()</code> example above is correct code
+even though it uses malloc() directly: you manage that pointer yourself,
+it gets freed up using a matching free() call, and all is well. However,
+the returned strings values are managed by Sphinx and we have our own
+allocator, so for the return values specifically, you need to use it too.
+</para>
+<para>
+Depending on how your UDFs are used in the query, they might be evaluated
+in a different volume and order. Specifically,
+<itemizedlist>
+<listitem><para>UDFs referenced in WHERE, ORDER BY, or GROUP BY clauses
+must and will be evaluated for every matched document. They will be called
+in the natural matching order.
+</para></listitem>
+<listitem><para>without subselects, UDFs that can be evaluated at the very
+last stage over the final result set will be evaluated that way, but before
+applying the LIMIT clause. They will be called in the result set order.
+</para></listitem>
+<listitem><para>with subselects, such UDFs will also be evaluated after
+applying the inner LIMIT clause.
+</para></listitem>
+</itemizedlist>
+</para>
+<para>
+As of 2.2.2-beta, we do not yet support aggregation functions. In other words,
+your UDFs will be called for just a single document at a time and are expected
+to return some value for that document. Writing a function that can compute an
+aggregate value like AVG() over the entire group of documents that share the same
+GROUP BY key is not yet possible. However, you can use UDFs within the builtin
+aggregate functions: that is, even though MYCUSTOMAVG() is not supported yet,
+AVG(MYCUSTOMFUNC()) should work alright!
+</para>
+<para>
+UDFs are local. In order to use them on a cluster, you have to put the same
+library on all its nodes and run CREATEs on all the nodes too. This might change
+in the future versions.
+</para>
+</sect1>
+
+
+<!--
+<sect1 id="sphinx-plugins"><title>Sphinx plugins</title>
+<para>
+??? how to write a plugin, generally
+</para>
+<para>
+??? function names and types
+</para>
+<para>
+??? versioning
+</para>
+<para>
+??? ranker plugins
+</para>
+<para>
+??? index token filter plugins
+</para>
+<para>
+??? query token filter plugins
+</para>
+</sect1>
+-->
+
+
+</chapter>
 <chapter id="command-line-tools"><title>Command line tools reference</title>
 
 
@@ -6309,6 +6544,85 @@ Variable: transformed_tree
 </para>
 </sect1>
 
+
+<sect1 id="sphinxql-show-databases"><title>SHOW DATABASES syntax</title>
+<programlisting>
+SHOW DATABASES
+</programlisting>
+<para>
+Added in 2.2.1-beta. This is a dummy statement to support MySQL Workbench
+and other clients that require it. Currently, it does absolutely nothing.
+</para>
+</sect1>
+
+
+<sect1 id="sphinxql-create-plugin"><title>CREATE PLUGIN syntax</title>
+<programlisting>
+CREATE PLUGIN plugin_name TYPE 'plugin_type' SONAME 'plugin_library'
+</programlisting>
+<para>
+Added in 2.2.2-beta. Loads the given library (if it is not loaded yet) and loads
+the specified plugin from it. As of 2.2.2-beta, the known plugin types are:
+<itemizedlist>
+<listitem><para>ranker</para></listitem>
+<listitem><para>index_token_filter</para></listitem>
+<listitem><para>query_token_filter</para></listitem>
+</itemizedlist>
+Refer to <xref linkend="sphinx-plugins"/> for more information regarding
+writing the plugins.
+</para>
+<programlisting>
+mysql> CREATE PLUGIN myranker TYPE 'ranker' SONAME 'myplugins.so';
+Query OK, 0 rows affected (0.00 sec)
+</programlisting>
+</sect1>
+
+
+<sect1 id="sphinxql-drop-plugin"><title>DROP PLUGIN syntax</title>
+<programlisting>
+DROP PLUGIN plugin_name TYPE 'plugin_type'
+</programlisting>
+<para>
+Added in 2.2.2-beta. Markes the specified plugin for unloading.
+The unloading is <b>not</b> immediate, because the concurrent queries
+might be using it. However, after a DROP new queries will not be able
+to use it. Then, once all the currently executing queries using it
+are completed, the plugin will be unloaded. Once all the plugins
+from the given library are unloaded, the library is also automatically
+unloaded.
+</para>
+<programlisting>
+mysql> DROP PLUGIN myranker TYPE 'ranker';
+Query OK, 0 rows affected (0.00 sec)
+</programlisting>
+</sect1>
+
+
+<sect1 id="sphinxql-show-plugins"><title>SHOW PLUGINS syntax</title>
+<programlisting>
+SHOW PLUGINS
+</programlisting>
+<para>
+Added in 2.2.2-beta. Displays all the loaded plugins and UDFs.
+"Type" column should be one of the udf, ranker, index_token_filter,
+or query_token_filter. "Users" column is the number of thread that
+are currently using that plugin in a query. "Extra" column is intended
+for various additional plugin-type specific information; currently,
+it shows the return type for the UDFs and is empty for all the other
+plugin types.
+</para>
+<programlisting>
+mysql> SHOW PLUGINS;
++------+----------+----------------+-------+-------+
+| Type | Name     | Library        | Users | Extra |
++------+----------+----------------+-------+-------+
+| udf  | sequence | udfexample.dll | 0     | INT   |
++------+----------+----------------+-------+-------+
+1 row in set (0.00 sec)
+</programlisting>
+</sect1>
+
+<!-- add new statement sections above this, and other SphinxQL related sections below -->
 
 <sect1 id="sphinxql-multi-queries">
 <title>Multi-statement queries</title>

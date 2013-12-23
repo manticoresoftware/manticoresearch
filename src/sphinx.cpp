@@ -1292,7 +1292,7 @@ public:
 	virtual void				PostSetup() {}
 	virtual bool				EarlyReject ( CSphQueryContext * , CSphMatch & ) const { return false; }
 	virtual const CSphSourceStats &	GetStats () const { return g_tTmpDummyStat; }
-	virtual CSphIndexStatus			GetStatus () const { CSphIndexStatus tRes; tRes.m_iDiskUse = 0; tRes.m_iRamUse = 0; return tRes; }
+	virtual void			GetStatus ( CSphIndexStatus* pRes ) const { assert (pRes); if ( pRes ) { pRes->m_iDiskUse = 0; pRes->m_iRamUse = 0;}}
 	virtual bool				MultiQuery ( const CSphQuery * , CSphQueryResult * , int , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const { return false; }
 	virtual bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult ** , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const { return false; }
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , bool , CSphString * ) const;
@@ -1446,7 +1446,7 @@ public:
 
 	virtual const CSphSourceStats &		GetStats () const { return m_tStats; }
 	virtual int64_t *					GetFieldLens() const { return m_tSettings.m_bIndexFieldLens ? m_dFieldLens.Begin() : NULL; }
-	virtual CSphIndexStatus				GetStatus () const;
+	virtual void				GetStatus ( CSphIndexStatus* ) const;
 	virtual bool 				BuildDocList ( SphAttr_t ** ppDocList, int64_t * pCount, CSphString * pError ) const;
 	virtual bool				ReplaceKillist ( const SphAttr_t * pKillist, int iCount );
 
@@ -18855,10 +18855,12 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 // INDEX STATUS
 //////////////////////////////////////////////////////////////////////////
 
-CSphIndexStatus CSphIndex_VLN::GetStatus () const
+void CSphIndex_VLN::GetStatus ( CSphIndexStatus* pRes ) const
 {
-	CSphIndexStatus tRes;
-	tRes.m_iRamUse = sizeof(CSphIndex_VLN)
+	assert ( pRes );
+	if ( !pRes )
+		return;
+	pRes->m_iRamUse = sizeof(CSphIndex_VLN)
 		+ m_dMinRow.GetSizeBytes()
 		+ m_dFieldLens.GetSizeBytes()
 
@@ -18872,16 +18874,14 @@ CSphIndexStatus CSphIndex_VLN::GetStatus () const
 		+ m_dShared.GetLengthBytes();
 
 	char sFile [ SPH_MAX_FILENAME_LEN ];
-	tRes.m_iDiskUse = 0;
+	pRes->m_iDiskUse = 0;
 	for ( int i=0; i<sphGetExtCount ( m_uVersion ); i++ )
 	{
 		snprintf ( sFile, sizeof(sFile), "%s%s", m_sFilename.cstr(), sphGetExts ( SPH_EXT_TYPE_CUR, m_uVersion )[i] );
 		struct_stat st;
 		if ( stat ( sFile, &st )==0 )
-			tRes.m_iDiskUse += st.st_size;
+			pRes->m_iDiskUse += st.st_size;
 	}
-
-	return tRes;
 }
 
 //////////////////////////////////////////////////////////////////////////

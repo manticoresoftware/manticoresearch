@@ -149,6 +149,38 @@ SPHINX_CHECK_DEFINE(F_SETLKW,fcntl.h)
 AC_SEARCH_LIBS([dlopen],[dl dld],[],[])
 AC_CHECK_FUNCS(dlopen dlerror)
 
+
+# check for interlocked increment in linux
+
+dnl helper that runs a test program and checks for success
+interlocked_prog="
+
+int interlocked_routine ( )
+{
+	volatile int ia=0;
+    __sync_fetch_and_add( &ia, 1 ); // atomic increment
+}
+
+int main ()
+{
+	int m = interlocked_routine();
+	return 0;
+}
+"
+
+# check the availability of needed function
+AC_CACHE_CHECK([for interlocked builtins], [sphinx_cv_interlocked],
+[
+	AC_TRY_RUN($interlocked_prog, [sphinx_cv_interlocked=yes], [sphinx_cv_interlocked=no], [
+		AC_COMPILE_IFELSE([AC_LANG_SOURCE($interlocked_prog)], [sphinx_cv_interlocked=yes], [sphinx_cv_interlocked=no])
+	])
+])
+
+# final check
+if test x$sphinx_cv_interlocked = xyes; then
+    AC_DEFINE(HAVE_SYNC_FETCH_AND_ADD,1,[Whether we have internal atomic functions])
+fi
+
 dnl --------------------------------------------------------------------------
 
 SPHINX_CONFIGURE_PART([configuring Sphinx])
@@ -175,6 +207,8 @@ else
 fi
 
 dnl --- 
+
+
 
 # check for pthreads
 

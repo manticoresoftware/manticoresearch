@@ -1134,7 +1134,7 @@ public:
 public:
 	virtual bool						EarlyReject ( CSphQueryContext * pCtx, CSphMatch & ) const;
 	virtual const CSphSourceStats &		GetStats () const { return m_tStats; }
-	virtual CSphIndexStatus				GetStatus () const;
+	virtual void				GetStatus ( CSphIndexStatus* ) const;
 
 	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
 	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
@@ -7792,21 +7792,24 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 // STATUS
 //////////////////////////////////////////////////////////////////////////
 
-CSphIndexStatus RtIndex_t::GetStatus () const
+void RtIndex_t::GetStatus ( CSphIndexStatus* pRes ) const
 {
-	CSphIndexStatus tRes;
+	assert ( pRes );
+	if ( !pRes )
+		return;
 	Verify ( m_tRwlock.ReadLock() );
 
-	tRes.m_iRamUse = sizeof(RtIndex_t)
+	pRes->m_iRamChunkSize = GetUsedRam()
 		+ m_dSegments.GetSizeBytes()
 		+ m_dSegments.GetLength()*int(sizeof(RtSegment_t))
-		+ m_dNewSegmentKlist.GetSizeBytes()
+		+ m_dNewSegmentKlist.GetSizeBytes();
+
+	pRes->m_iRamUse = sizeof(RtIndex_t)
 		+ m_dDiskChunkKlist.GetSizeBytes()
-		+ m_dDiskChunks.GetSizeBytes();
+		+ m_dDiskChunks.GetSizeBytes()
+		+ pRes->m_iRamChunkSize;
 
-	tRes.m_iRamUse += GetUsedRam();
-
-	tRes.m_iDiskUse = 0;
+	pRes->m_iDiskUse = 0;
 	CSphString sError;
 	char sFile [ SPH_MAX_FILENAME_LEN ];
 	const char * sFiles[] = { ".meta", ".kill", ".ram" };
@@ -7816,17 +7819,19 @@ CSphIndexStatus RtIndex_t::GetStatus () const
 		CSphAutofile fdRT ( sFile, SPH_O_READ, sError );
 		int64_t iFileSize = fdRT.GetSize();
 		if ( iFileSize>0 )
-			tRes.m_iDiskUse += iFileSize;
+			pRes->m_iDiskUse += iFileSize;
 	}
+	CSphIndexStatus tDisk;
 	ARRAY_FOREACH ( i, m_dDiskChunks )
 	{
-		CSphIndexStatus tDisk = m_dDiskChunks[i]->GetStatus();
-		tRes.m_iRamUse += tDisk.m_iRamUse;
-		tRes.m_iDiskUse += tDisk.m_iDiskUse;
+		m_dDiskChunks[i]->GetStatus(&tDisk);
+		pRes->m_iRamUse += tDisk.m_iRamUse;
+		pRes->m_iDiskUse += tDisk.m_iDiskUse;
 	}
 
+	pRes->m_iNumChunks = m_dDiskChunks.GetLength();
+
 	Verify ( m_tRwlock.Unlock() );
-	return tRes;
 }
 
 //////////////////////////////////////////////////////////////////////////

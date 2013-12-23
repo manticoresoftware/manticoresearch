@@ -159,6 +159,9 @@
 /* Define to 1 if you have the `strtol' function. */
 #undef HAVE_STRTOL
 
+/* Whether we have internal atomic functions */
+#undef HAVE_SYNC_FETCH_AND_ADD
+
 /* Define to 1 if you have the <sys/epoll.h> header file. */
 #undef HAVE_SYS_EPOLL_H
 

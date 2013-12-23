@@ -3171,6 +3171,15 @@ struct CSphIndexStatus
 {
 	int64_t			m_iRamUse;
 	int64_t			m_iDiskUse;
+	int64_t			m_iRamChunkSize; // not used for plain
+	int				m_iNumChunks; // not used for plain
+
+	CSphIndexStatus()
+		: m_iRamUse(0)
+		, m_iDiskUse(0)
+		, m_iRamChunkSize(0)
+		, m_iNumChunks(0)
+	{}
 };
 
 
@@ -3277,7 +3286,7 @@ public:
 	virtual const CSphSourceStats &		GetStats () const = 0;
 
 	/// return additional index info
-	virtual CSphIndexStatus				GetStatus () const = 0;
+	virtual void				GetStatus ( CSphIndexStatus* ) const = 0;
 
 public:
 	virtual bool				EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const = 0;

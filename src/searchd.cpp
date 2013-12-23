@@ -124,6 +124,7 @@ struct ServedDesc_t
 	CSphString			m_sGlobalIDFPath;
 	bool				m_bOnDiskAttrs;
 	bool				m_bOnDiskPools;
+	int64_t				m_iMass; // relative weight (by access speed) of the index
 
 						ServedDesc_t ();
 						~ServedDesc_t ();
@@ -488,6 +489,7 @@ public:
 	const ServedIndex_t *	GetRlockedEntry ( const CSphString & tKey ) const;
 	ServedIndex_t *			GetWlockedEntry ( const CSphString & tKey ) const;
 	ServedIndex_t &			GetUnlockedEntry ( const CSphString & tKey ) const;
+	ServedIndex_t *			GetUnlockedEntryP ( const CSphString & tKey ) const;
 	bool					Exists ( const CSphString & tKey ) const;
 
 protected:
@@ -1013,19 +1015,19 @@ void ReleaseTTYFlag()
 }
 
 ServedDesc_t::ServedDesc_t ()
-{
-	m_pIndex = NULL;
-	m_bEnabled = true;
-	m_bMlock = false;
-	m_bPreopen = false;
-	m_bExpand = false;
-	m_bToDelete = false;
-	m_bOnlyNew = false;
-	m_bRT = false;
-	m_bAlterEnabled = true;
-	m_bOnDiskAttrs = false;
-	m_bOnDiskPools = false;
-}
+	: m_pIndex ( NULL )
+	, m_bEnabled ( true )
+	, m_bMlock ( false )
+	, m_bPreopen ( false )
+	, m_bExpand ( false )
+	, m_bToDelete ( false )
+	, m_bOnlyNew ( false )
+	, m_bRT ( false )
+	, m_bAlterEnabled ( true )
+	, m_bOnDiskAttrs ( false )
+	, m_bOnDiskPools ( false )
+	, m_iMass ( 0 )
+{}
 
 ServedDesc_t::~ServedDesc_t ()
 {
@@ -1222,6 +1224,15 @@ ServedIndex_t & IndexHash_c::GetUnlockedEntry ( const CSphString & tKey ) const
 	Unlock();
 	return tRes;
 }
+
+ServedIndex_t * IndexHash_c::GetUnlockedEntryP ( const CSphString & tKey ) const
+{
+	Rlock();
+	ServedIndex_t * pRes = BASE::operator() ( tKey );
+	Unlock();
+	return pRes;
+}
+
 
 
 bool IndexHash_c::Exists ( const CSphString & tKey ) const
@@ -8870,6 +8881,7 @@ struct LocalIndex_t
 	CSphString	m_sName;
 	int			m_iOrderTag;
 	int			m_iWeight;
+	int64_t		m_iMass;
 	LocalIndex_t ()
 		: m_iOrderTag ( 0 )
 		, m_iWeight ( 1 )
@@ -9216,6 +9228,7 @@ struct LocalSearch_t
 	ISphMatchSorter **	m_ppSorters;
 	CSphQueryResult **	m_ppResults;
 	bool				m_bResult;
+	int64_t				m_iMass;
 };
 
 
@@ -9223,8 +9236,17 @@ struct LocalSearchThreadContext_t
 {
 	SphThread_t					m_tThd;
 	SearchHandler_c *			m_pHandler;
-	CSphVector<LocalSearch_t*>	m_pSearches;
 	CrashQuery_t				m_tCrashQuery;
+	int							m_iSearches;
+	LocalSearch_t *				m_pSearches;
+	CSphAtomic<long> *			m_pCurSearch;
+
+	LocalSearchThreadContext_t()
+		: m_pHandler ( NULL )
+		, m_iSearches ( 0 )
+		, m_pSearches ( NULL )
+		, m_pCurSearch ( NULL )
+	{}
 };
 
 
@@ -9237,9 +9259,15 @@ void LocalSearchThreadFunc ( void * pArg )
 	tQueryTLS.SetupTLS ();
 	SphCrashLogger_c::SetLastQuery ( pContext->m_tCrashQuery );
 
-	ARRAY_FOREACH ( i, pContext->m_pSearches )
+	for ( ;; )
 	{
-		LocalSearch_t * pCall = pContext->m_pSearches[i];
+		if ( (*pContext->m_pCurSearch)()>=pContext->m_iSearches)
+			return;
+
+		long iCurSearch = pContext->m_pCurSearch->Inc();
+		if ( iCurSearch >= pContext->m_iSearches )
+			return;
+		LocalSearch_t * pCall = pContext->m_pSearches + iCurSearch;
 		pCall->m_bResult = pContext->m_pHandler->RunLocalSearch ( pCall->m_iLocal,
 			pCall->m_ppSorters, pCall->m_ppResults, &pContext->m_pHandler->m_bMultiQueue );
 	}
@@ -9308,6 +9336,14 @@ static void FlattenToRes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, int i
 	}
 }
 
+struct MassLocalSorter_fn
+{
+	bool IsLess ( const LocalSearch_t & a, const LocalSearch_t & b ) const
+	{
+		return ( a.m_iMass < b.m_iMass );
+	}
+};
+
 
 void SearchHandler_c::RunLocalSearchesMT ()
 {
@@ -9315,7 +9351,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 
 	// setup local searches
 	const int iQueries = m_iEnd-m_iStart+1;
-	CSphVector<LocalSearch_t> dLocals ( m_dLocal.GetLength() );
+	CSphVector<LocalSearch_t> dWorks ( m_dLocal.GetLength() );
 	CSphVector<CSphQueryResult> dResults ( m_dLocal.GetLength()*iQueries );
 	CSphVector<ISphMatchSorter*> pSorters ( m_dLocal.GetLength()*iQueries );
 	CSphVector<CSphQueryResult*> pResults ( m_dLocal.GetLength()*iQueries );
@@ -9325,22 +9361,15 @@ void SearchHandler_c::RunLocalSearchesMT ()
 
 	ARRAY_FOREACH ( i, m_dLocal )
 	{
-		dLocals[i].m_iLocal = i;
-		dLocals[i].m_ppSorters = &pSorters [ i*iQueries ];
-		dLocals[i].m_ppResults = &pResults [ i*iQueries ];
+		dWorks[i].m_iLocal = i;
+		dWorks[i].m_iMass = -m_dLocal[i].m_iMass; // minus for reverse order
+		dWorks[i].m_ppSorters = &pSorters [ i*iQueries ];
+		dWorks[i].m_ppResults = &pResults [ i*iQueries ];
 	}
+	dWorks.Sort ( MassLocalSorter_fn() );
 
 	// setup threads
-	// FIXME! implement better than naive index:thread mapping
-	// FIXME! maybe implement a thread-shared jobs queue
-	CSphVector<LocalSearchThreadContext_t> dThreads ( Min ( g_iDistThreads, dLocals.GetLength() ) );
-	int iCurThread = 0;
-
-	ARRAY_FOREACH ( i, dLocals )
-	{
-		dThreads[iCurThread].m_pSearches.Add ( &dLocals[i] );
-		iCurThread = ( iCurThread+1 ) % g_iDistThreads;
-	}
+	CSphVector<LocalSearchThreadContext_t> dThreads ( Min ( g_iDistThreads, dWorks.GetLength() ) );
 
 	// prepare for multithread extra schema processing
 	for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
@@ -9348,10 +9377,16 @@ void SearchHandler_c::RunLocalSearchesMT ()
 
 	CrashQuery_t tCrashQuery = SphCrashLogger_c::GetQuery(); // transfer query info for crash logger to new thread
 	// fire searcher threads
+
+	CSphAtomic<long> iaCursor;
 	ARRAY_FOREACH ( i, dThreads )
 	{
-		dThreads[i].m_pHandler = this;
-		dThreads[i].m_tCrashQuery = tCrashQuery;
+		LocalSearchThreadContext_t & t = dThreads[i];
+		t.m_pHandler = this;
+		t.m_tCrashQuery = tCrashQuery;
+		t.m_pCurSearch = &iaCursor;
+		t.m_iSearches = dWorks.GetLength();
+		t.m_pSearches = dWorks.Begin();
 		sphThreadCreate ( &dThreads[i].m_tThd, LocalSearchThreadFunc, (void*)&dThreads[i] ); // FIXME! check result
 	}
 
@@ -9360,9 +9395,9 @@ void SearchHandler_c::RunLocalSearchesMT ()
 		sphThreadJoin ( &dThreads[i].m_tThd );
 
 	// now merge the results
-	ARRAY_FOREACH ( iLocal, dLocals )
+	ARRAY_FOREACH ( iLocal, dWorks )
 	{
-		bool bResult = dLocals[iLocal].m_bResult;
+		bool bResult = dWorks[iLocal].m_bResult;
 		const char * sLocal = m_dLocal[iLocal].m_sName.cstr();
 		int iOrderTag = m_dLocal[iLocal].m_iOrderTag;
 
@@ -9966,6 +10001,19 @@ static int GetIndexWeight ( const char * sName, const CSphVector<CSphNamedInt> &
 	return iDefaultWeight;
 }
 
+static uint64_t CalculateMass ( const CSphIndexStatus & dStats )
+{
+	return dStats.m_iNumChunks * 1000000 + dStats.m_iRamUse + dStats.m_iDiskUse * 10;
+}
+
+static uint64_t GetIndexMass ( const char * sName )
+{
+	ServedIndex_t * pIdx = g_pLocalIndexes->GetUnlockedEntryP ( sName );
+	if ( pIdx )
+		return pIdx->m_iMass;
+	return 0;
+}
+
 struct TaggedLocalSorter_fn
 {
 	bool IsLess ( const LocalIndex_t & a, const LocalIndex_t & b ) const
@@ -10055,6 +10103,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				m_dLocal.Add().m_sName = it.GetKey();
 				m_dLocal.Last().m_iOrderTag = iTagsCount;
 				m_dLocal.Last().m_iWeight = GetIndexWeight ( it.GetKey().cstr(), tFirst.m_dIndexWeights, 1 );
+				m_dLocal.Last().m_iMass = it.Get().m_iMass;
 				iTagsCount += iTagStep;
 			}
 	} else
@@ -10076,6 +10125,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				m_dLocal.Add().m_sName = dLocal[i];
 				m_dLocal.Last().m_iOrderTag = iTagsCount;
 				m_dLocal.Last().m_iWeight = GetIndexWeight ( sIndex.cstr(), tFirst.m_dIndexWeights, 1 );
+				m_dLocal.Last().m_iMass = GetIndexMass ( sIndex.cstr() );
 				iTagsCount += iTagStep;
 
 			} else
@@ -10102,6 +10152,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					if ( iWeight!=-1 )
 						m_dLocal.Last().m_iWeight = iWeight;
 					iTagsCount += iTagStep;
+					m_dLocal.Last().m_iMass = GetIndexMass ( pDist->m_dLocal[j].cstr() );
 				}
 
 				bDevideRemote |= pDist->m_bDivideRemoteRanges;
@@ -16710,9 +16761,15 @@ void HandleMysqlShowIndexStatus ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt
 		tOut.DataTuplet ( "total_tokens", iTotalTokens );
 	}
 
-	CSphIndexStatus tStatus = pIndex->GetStatus();
+	CSphIndexStatus tStatus;
+	pIndex->GetStatus ( &tStatus );
 	tOut.DataTuplet ( "ram_bytes", tStatus.m_iRamUse );
 	tOut.DataTuplet ( "disk_bytes", tStatus.m_iDiskUse );
+	if ( pIndex->IsRT() )
+	{
+		tOut.DataTuplet ( "ram_chunk", tStatus.m_iRamChunkSize );
+		tOut.DataTuplet ( "disk_chunks", tStatus.m_iNumChunks );
+	}
 
 	pServed->Unlock();
 	tOut.Eof();
@@ -18004,6 +18061,10 @@ static void RotateIndexMT ( const CSphString & sIndex )
 		return;
 	}
 
+	CSphIndexStatus tStatus;
+	tNewIndex.m_pIndex->GetStatus ( &tStatus );
+	tNewIndex.m_iMass = CalculateMass ( tStatus );
+
 	//////////////////////
 	// activate new index
 	//////////////////////
@@ -18806,6 +18867,9 @@ bool PrereadNewIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex, c
 		return false;
 	}
 
+	CSphIndexStatus tStatus;
+	tIdx.m_pIndex->GetStatus ( &tStatus );
+	tIdx.m_iMass = CalculateMass ( tStatus );
 	return true;
 }
 
@@ -19284,6 +19348,10 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		tIdx.m_pIndex->Setup ( tSettings );
 		tIdx.m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
 
+		CSphIndexStatus tStatus;
+		tIdx.m_pIndex->GetStatus ( &tStatus );
+		tIdx.m_iMass = CalculateMass ( tStatus );
+
 		// hash it
 		if ( !g_pLocalIndexes->Add ( tIdx, szIndexName ) )
 		{
@@ -19325,6 +19393,9 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		tIdx.m_sIndexPath = hIndex["path"];
 		PreCreatePlainIndex ( tIdx, szIndexName );
 		tIdx.m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
+		CSphIndexStatus tStatus;
+		tIdx.m_pIndex->GetStatus ( &tStatus );
+		tIdx.m_iMass = CalculateMass ( tStatus );
 
 		// done
 		if ( !g_pLocalIndexes->Add ( tIdx, szIndexName ) )
@@ -19359,6 +19430,9 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		// try to create index
 		PreCreateTemplateIndex ( tIdx, hIndex );
 		tIdx.m_bEnabled = true;
+		CSphIndexStatus tStatus;
+		tIdx.m_pIndex->GetStatus ( &tStatus );
+		tIdx.m_iMass = CalculateMass ( tStatus );
 
 		// done
 		if ( !g_pTemplateIndexes->Add ( tIdx, szIndexName ) )

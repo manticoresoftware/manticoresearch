@@ -1818,6 +1818,14 @@ DWORD sphCRC32 ( const void * s, int iLen, DWORD uPrevCRC )
 	return ~crc;
 }
 
+#if USE_WINDOWS
+template<>
+long CSphAtomic<long>::Inc()
+{
+	return InterlockedIncrement ( &m_uValue );
+}
+#endif
+
 //
 // $Id$
 //

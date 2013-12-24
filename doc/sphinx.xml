@@ -6054,12 +6054,15 @@ on and warning otherwise.</para>
 
 <sect1 id="sphinxql-attach"><title>ALTER syntax</title>
 <programlisting>
-ALTER TABLE index ADD COLUMN new_column {INTEGER|BIGINT|FLOAT|BOOL}
+ALTER TABLE index ADD COLUMN new_column {INTEGER|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING}
 </programlisting>
 <para>
 The ALTER statement was added in version 2.2.1-beta. As of 2.2.1-beta, it supports adding one
-attribute at a time for both plain and RT indexes. The int, bigint, float and bool attribute types
-are supported. Removing attributes is not possible (yet).
+attribute at a time for both plain and RT indexes. The int, bigint, float, bool, multi-valued,
+multi-valued 64bit, json and string attribute types are supported. Support for multi, multi64,
+json and string attributes was added in 2.2.2-beta. As of 2.2.2-beta, you can add json and
+string attributes, but you cannot modify their values. Removing attributes is not possible
+(yet).
 </para>
 <para>
 Implementation details. As of 2.2.1-beta, the querying of an index is

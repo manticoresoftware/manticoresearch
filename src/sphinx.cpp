@@ -2935,6 +2935,8 @@ private:
 
 	BYTE * GetNextTokenRLP()
 	{
+		static const char * RPL_SPECIAL_STOPWORD = "rlpspecialstopword";
+
 		if ( !m_pTokenIterator )
 			return NULL;
 
@@ -2945,8 +2947,13 @@ private:
 			else
 			{
 				const BT_Char16 * pToken = BT_RLP_TokenIterator_GetCompoundComponent ( m_pTokenIterator, m_iNextCompoundComponent++ );
-				assert ( pToken );
-				bt_xutf16toutf8 ( (char*)m_dUTF8Buffer, pToken, sizeof(m_dUTF8Buffer) );
+				if ( BT_RLP_TokenIterator_IsStopword ( m_pTokenIterator ) )
+					strncpy ( (char*)m_dUTF8Buffer, RPL_SPECIAL_STOPWORD, MAX_TOKEN_LEN );
+				else
+				{
+					assert ( pToken );
+					bt_xutf16toutf8 ( (char*)m_dUTF8Buffer, pToken, sizeof(m_dUTF8Buffer) );
+				}
 
 				return &(m_dUTF8Buffer[0]);
 			}
@@ -2968,8 +2975,13 @@ private:
 			} else
 				pToken = BT_RLP_TokenIterator_GetToken ( m_pTokenIterator );
 
-			assert ( pToken );
-			bt_xutf16toutf8 ( (char*)m_dUTF8Buffer, pToken, sizeof(m_dUTF8Buffer) );
+			if ( BT_RLP_TokenIterator_IsStopword ( m_pTokenIterator ) )
+				strncpy ( (char*)m_dUTF8Buffer, RPL_SPECIAL_STOPWORD, MAX_TOKEN_LEN );
+			else
+			{
+				assert ( pToken );
+				bt_xutf16toutf8 ( (char*)m_dUTF8Buffer, pToken, sizeof(m_dUTF8Buffer) );
+			}
 
 			return &(m_dUTF8Buffer[0]);
 		}

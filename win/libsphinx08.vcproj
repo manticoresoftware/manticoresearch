@@ -443,6 +443,14 @@
 				>
 			</File>
 			<File
+				RelativePath="..\src\sphinxplugin.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\src\sphinxplugin.h"
+				>
+			</File>
+			<File
 				RelativePath="..\src\sphinxquery.h"
 				>
 			</File>

@@ -4171,28 +4171,122 @@ in the future versions.
 </sect1>
 
 
-<!--
 <sect1 id="sphinx-plugins"><title>Sphinx plugins</title>
 <para>
-??? how to write a plugin, generally
+Starting with version 2.2.2-beta, we generalized our dynamic plugin
+system, and added a few more types of dynamic plugins. Here's the complete
+plugin type list.
+<itemizedlist>
+<listitem><para>UDF plugins;</para></listitem>
+<listitem><para>ranker plugins;</para></listitem>
+<listitem><para>indexing-time token filter plugins;</para></listitem>
+<listitem><para>query-time token filter plugins.</para></listitem>
+</itemizedlist>
+This section discusses writing and managing plugins in general;
+things specific to writing this or that type of a plugin are then
+discussed in their respective subsections.
 </para>
 <para>
-??? function names and types
+So, how do you write and use a plugin? Three-line crash course
+goes as follows:
+<itemizedlist>
+<listitem><para>create a dynamic library (either .so or.dll),
+most likely in C or C++;</para></listitem>
+<listitem><para>load that plugin into searchd using
+<link linkend="sphinxql-create-plugin">CREATE PLUGIN</link>;
+</para></listitem>
+<listitem><para>invoke it using the plugin specific calls
+(typically using this or that OPTION).
+</para></listitem>
+</itemizedlist>
+Note that while UDFs are first-class plugins they are nevertheless
+installed using a separate
+<link linkend="sphinxql-create-function">CREATE FUNCTION</link>
+statement. It lets you specify the return type neatly so there was
+especially little reason to ruin backwards compatibility <emphasis>and</emphasis>
+change the syntax.
 </para>
 <para>
-??? versioning
+Dynamic plugins are supported in <link linkend="conf-workers">workers=threads</link>
+mode only. Multiple plugins (and/or UDFs) may reside in a single library file.
+So you might choose to either put all your project-specific plugins in a single
+common uber-library; or you might choose to have a separate library for every
+UDF and plugin; that is up to you.
 </para>
 <para>
-??? ranker plugins
+Just as with UDFs, you want to include <filename>src/sphinxudf.h</filename>
+header file. At the very least, you will need the SPH_UDF_VERSION
+constant to implement a proper version function. Depending on the specific
+plugin type, you might or might not need to link your plugin with
+<filename>src/sphinxudf.c</filename>. However, as of 2.2.2-beta all
+the functions implemented in <filename>sphinxudf.c</filename> are about
+unpacking the PACKEDFACTORS() blob, and no plugin types are exposed to that
+kind of data. So currently, you would never need to link with the C-file,
+just the header would be sufficient. (In fact, if you copy over the
+UDF version number, then for some of the plugin types you would not
+even need the header file.)
 </para>
 <para>
-??? index token filter plugins
+Formally, plugins are just sets of C functions that follow a certain
+naming parttern. You are typically required to define just one key function
+that does the most important work, but you may define a bunch of other
+functions, too. For example, to implement a ranker called "myrank",
+you must define <code>myrank_finalize()</code> function that actually returns
+the rank value, however, you might also define <code>myrank_init()</code>,
+<code>myrank_update()</code>, and <code>myrank_deinit()</code> functions.
+Specific sets of well-known suffixes and the call arguments do differ
+based on the plugin type, but _init() and _deinit() are generic, every
+plugin has those. Protip: for a quick reference on the known suffixes and
+their argument types, refer to <filename>sphinxplugin.h</filename>,
+we define the call prototoypes in the very beginning of that file.
 </para>
 <para>
-??? query token filter plugins
+Despite having the public interface defined in ye good olde good pure C,
+our plugins essentially follow the object-oriented model. All the functions
+that you can define will have a "userdata" parameter, that is supposed to be
+filled out by the _init() function and gets passed to all the other ones.
+So you can think of a plugin as <emphasis>class</emphasis> that gets instantiated
+every time an object of that class is needed to handle a request: the userdata
+parameter would be its state, the functions would be its methods, and the
+<code>_init()</code> and <code>_deinit()</code> functions would be the constructor and destructor
+respectively.
+</para>
+<para>
+Why this (minor) OOP-in-C complication? Well, plugins run in a multi-threaded
+environment, and some of them have to be stateful. You can't keep that state in
+a global variable in your plugin. So we have to pass around a userdata parameter
+anyway to let you keep that state. And that naturally brings us to the OOP model.
+And if you've got a simple, stateless plugin, the interface lets you omit the
+<code>_init()</code> and <code>_deinit()</code> and whatever other functions
+just as well.
+</para>
+<para>
+To summarize, here goes the simplest complete ranker plugin, in just
+3 lines of C code.
+<programlisting>
+// gcc -fPIC -shared -o myrank.so myrank.c
+#include "sphinxudf.h"
+int myrank_ver() { return SPH_UDF_VERSION; }
+int myrank_finalize(SPH_PLUGIN_MATCH* m, void** u) { return 123; }
+</programlisting>
+And this is how you use it:
+<programlisting>
+mysql&gt; CREATE PLUGIN myrank TYPE 'ranker' SONAME 'myrank.dll';
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&gt; SELECT id, weight() FROM test1 WHERE MATCH('test')
+    -&gt; OPTION ranker=myrank('');
++------+----------+
+| id   | weight() |
++------+----------+
+|    1 |      123 |
+|    2 |      123 |
++------+----------+
+2 rows in set (0.01 sec)
+</programlisting>
 </para>
 </sect1>
--->
+<!-- discuss ranker, index_token_filter, query_token_filter plugins in more details? -->
 
 
 </chapter>

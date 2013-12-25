@@ -595,6 +595,7 @@ SELECT gid/11 FROM rt WHERE MATCH('text') GROUP BY gid;
 </userinput></literallayout></para>
 <para><literallayout><userinput>SELECT * FROM rt ORDER BY gid DESC;
 </userinput></literallayout></para>
+<para>Also check queries.sql in sphinx sources.</para>
 <para>
 Happy searching!
 </para>

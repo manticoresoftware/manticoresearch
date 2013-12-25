@@ -3240,19 +3240,6 @@ float GeodistFlatDeg ( float fLat1, float fLon1, float fLat2, float fLon2 )
 }
 
 
-float GeodistFlatRad ( float fLat1, float fLon1, float fLat2, float fLon2 )
-{
-	double c1 = cos ( 0.5*( fLat1+fLat2 ) );
-	double c2 = 2*c1*c1-1; // cos(2*t)
-	double c3 = c1*(2*c2-1); // cos(3*t)
-	double k1 = 111132.09 - 566.05*c2;
-	double k2 = 111415.13*c1 - 94.55*c3;
-	float dlat = GeodistDegDiff ( TO_DEGF*( fLat1-fLat2 ) );
-	float dlon = GeodistDegDiff ( TO_DEGF*( fLon1-fLon2 ) );
-	return (float)sqrt ( k1*k1*dlat*dlat + k2*k2*dlon*dlon );
-}
-
-
 static inline float GeodistFastCos ( float x )
 {
 	float y = fabs(x)*float(GEODIST_TABLE_COS/PI/2);

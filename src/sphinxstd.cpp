@@ -1822,7 +1822,7 @@ DWORD sphCRC32 ( const void * s, int iLen, DWORD uPrevCRC )
 template<>
 long CSphAtomic<long>::Inc()
 {
-	return InterlockedIncrement ( &m_uValue );
+	return InterlockedIncrement ( &m_uValue )-1;
 }
 #endif
 

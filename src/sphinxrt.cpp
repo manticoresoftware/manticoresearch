@@ -483,10 +483,17 @@ struct RtDocReader_T
 	RTDOC			m_tDoc;
 
 	template < typename RTWORD >
-	explicit RtDocReader_T ( const RtSegment_t * pSeg, const RTWORD & tWord )
+	RtDocReader_T ( const RtSegment_t * pSeg, const RTWORD & tWord )
 	{
 		m_pDocs = ( pSeg->m_dDocs.Begin() ? pSeg->m_dDocs.Begin() + tWord.m_uDoc : NULL );
 		m_iLeft = tWord.m_uDocs;
+		m_tDoc.m_uDocID = 0;
+	}
+
+	RtDocReader_T ()
+	{
+		m_pDocs = NULL;
+		m_iLeft = 0;
 		m_tDoc.m_uDocID = 0;
 	}
 
@@ -728,7 +735,7 @@ struct RtHitReader_t
 	template < typename RTDOC >
 	explicit RtHitReader_t ( const RtSegment_t * pSeg, const RTDOC * pDoc )
 	{
-		m_pCur = &pSeg->m_dHits [ pDoc->m_uHit ];
+		m_pCur = pSeg->m_dHits.Begin() + pDoc->m_uHit;
 		m_iLeft = pDoc->m_uHits;
 		m_uLast = 0;
 	}
@@ -1088,8 +1095,8 @@ private:
 	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes );
 	bool						SaveRamChunk ();
 
-	virtual void				GetPrefixedWords ( const char * sPrefix, int iPrefix, const char * sWildcard, CSphVector<SphExpanded_t> & dPrefixedWords ) const;
-	virtual void				GetInfixedWords ( const char * sInfix, int iInfix, const char * sWildcard, CSphVector<SphExpanded_t> & dPrefixedWords ) const;
+	virtual void				GetPrefixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const;
+	virtual void				GetInfixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const;
 
 	bool						RenameWithRollback ( const ESphExt * dExts, int nExts, ESphExtType eExtTypeFrom, ESphExtType eExtTypeTo, CSphString & sError );
 
@@ -5297,52 +5304,42 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 // SEARCHING
 //////////////////////////////////////////////////////////////////////////
 
-struct RtQword_t : public ISphQword
+
+struct RtQwordTraits_t : public ISphQword
 {
-	friend struct RtIndex_t;
-	friend struct RtQwordSetup_t;
+public:
+	virtual bool Setup ( const RtIndex_t * pIndex, const RtSegment_t * pSegment, int iSegment ) = 0;
+};
 
-protected:
-	RtDocReader_t *		m_pDocReader;
-	CSphMatch			m_tMatch;
 
-	DWORD				m_uNextHit;
-	RtHitReader2_t		m_tHitReader;
+//////////////////////////////////////////////////////////////////////////
 
-	const RtSegment_t *	m_pSeg;
-
+struct RtQword_t : public RtQwordTraits_t
+{
 public:
 	RtQword_t ()
-		: m_pDocReader ( NULL )
-		, m_uNextHit ( 0 )
-		, m_pSeg ( NULL )
+		: m_uNextHit ( 0 )
+		, m_pKlist ( NULL )
 	{
 		m_tMatch.Reset ( 0 );
 	}
 
 	virtual ~RtQword_t ()
 	{
-		SafeDelete ( m_pDocReader );
 	}
 
 	virtual const CSphMatch & GetNextDoc ( DWORD * )
 	{
-		if ( !m_pDocReader )
-		{
-			m_tMatch.m_uDocID = 0;
-			return m_tMatch;
-		}
-
 		for ( ;; )
 		{
-			const RtDoc_t * pDoc = m_pDocReader->UnzipDoc();
+			const RtDoc_t * pDoc = m_tDocReader.UnzipDoc();
 			if ( !pDoc )
 			{
 				m_tMatch.m_uDocID = 0;
 				return m_tMatch;
 			}
 
-			if ( m_pSeg->m_dKlist.BinarySearch ( pDoc->m_uDocID ) )
+			if ( m_pKlist->BinarySearch ( pDoc->m_uDocID ) )
 				continue;
 
 			m_tMatch.m_uDocID = pDoc->m_uDocID;
@@ -5384,21 +5381,194 @@ public:
 			return Hitpos_t ( uRes );
 		}
 	}
+
+	virtual bool Setup ( const RtIndex_t * pIndex, const RtSegment_t * pSegment, int )
+	{
+		return pIndex->RtQwordSetup ( this, pSegment );
+	}
+
+	void SetupReader ( const RtSegment_t * pSeg, const RtWord_t & tWord )
+	{
+		m_tDocReader = RtDocReader_t ( pSeg, tWord );
+		m_tHitReader.m_pBase = pSeg->m_dHits.Begin();
+		m_pKlist = &pSeg->m_dKlist;
+	}
+
+private:
+	RtDocReader_t		m_tDocReader;
+	CSphMatch			m_tMatch;
+
+	DWORD				m_uNextHit;
+	RtHitReader2_t		m_tHitReader;
+
+	const CSphVector<SphDocID_t> * m_pKlist;
 };
 
 
-struct RtQwordSetup_t : ISphQwordSetup
-{
-	RtSegment_t *		m_pSeg;
+//////////////////////////////////////////////////////////////////////////
 
+struct Slice_t
+{
+	DWORD				m_uOff;
+	DWORD				m_uLen;
+};
+
+
+struct RtSubstringPayload_t : public ISphSubstringPayload
+{
+	RtSubstringPayload_t ( int iSegmentCount, int iDoclists )
+		: m_dSegment2Doclists ( iSegmentCount )
+		, m_dDoclist ( iDoclists )
+		, m_iDocsTotal ( 0 )
+		, m_iHitsTotal ( 0 )
+	{}
+	CSphFixedVector<Slice_t>	m_dSegment2Doclists;
+	CSphFixedVector<Slice_t>	m_dDoclist;
+	int							m_iDocsTotal;
+	int							m_iHitsTotal;
+};
+
+
+struct RtQwordPayload_t : public RtQwordTraits_t
+{
+public:
+	explicit RtQwordPayload_t ( const RtSubstringPayload_t * pPayload )
+		: m_pPayload ( pPayload )
+	{
+		m_tMatch.Reset ( 0 );
+		m_iDocs = m_pPayload->m_iDocsTotal;
+		m_iHits = m_pPayload->m_iHitsTotal;
+
+		m_uDoclist = 0;
+		m_uDoclistLeft = 0;
+		m_pSegment = NULL;
+		m_uHitEmbeded = EMPTY_HIT;
+	}
+
+	virtual ~RtQwordPayload_t ()
+	{}
+
+	virtual const CSphMatch & GetNextDoc ( DWORD * )
+	{
+		m_iHits = 0;
+		for ( ;; )
+		{
+			const RtDoc_t * pDoc = m_tDocReader.UnzipDoc();
+			if ( !pDoc && !m_uDoclistLeft )
+			{
+				m_tMatch.m_uDocID = 0;
+				return m_tMatch;
+			}
+
+			if ( !pDoc && m_uDoclistLeft )
+			{
+				SetupReader();
+				pDoc = m_tDocReader.UnzipDoc();
+				assert ( pDoc );
+			}
+
+			if ( m_pSegment->m_dKlist.BinarySearch ( pDoc->m_uDocID ) )
+				continue;
+
+			m_tMatch.m_uDocID = pDoc->m_uDocID;
+			m_dQwordFields.Assign32 ( pDoc->m_uDocFields );
+			m_bAllFieldsKnown = false;
+
+			m_iHits = pDoc->m_uHits;
+			m_uHitEmbeded = pDoc->m_uHit;
+			m_tHitReader = RtHitReader_t ( m_pSegment, pDoc );
+
+			return m_tMatch;
+		}
+	}
+
+	virtual void SeekHitlist ( SphOffset_t )
+	{}
+
+	virtual Hitpos_t GetNextHit ()
+	{
+		if ( m_iHits>1 )
+			return Hitpos_t ( m_tHitReader.UnzipHit() );
+		else if ( m_iHits==1 )
+		{
+			Hitpos_t tHit ( m_uHitEmbeded );
+			m_uHitEmbeded = EMPTY_HIT;
+			return tHit;
+		} else
+		{
+			return EMPTY_HIT;
+		}
+	}
+
+	virtual bool Setup ( const RtIndex_t *, const RtSegment_t * pSegment, int iSegment )
+	{
+		m_uDoclist = 0;
+		m_uDoclistLeft = 0;
+		m_tDocReader = RtDocReader_t();
+		m_pSegment = pSegment;
+
+		if ( !pSegment )
+			return false;
+
+		m_uDoclist = m_pPayload->m_dSegment2Doclists[iSegment].m_uOff;
+		m_uDoclistLeft = m_pPayload->m_dSegment2Doclists[iSegment].m_uLen;
+
+		if ( !m_uDoclistLeft )
+			return false;
+
+		SetupReader();
+		return true;
+	}
+
+private:
+	void SetupReader ()
+	{
+		assert ( m_uDoclistLeft );
+		RtWord_t tWord;
+		tWord.m_uDoc = m_pPayload->m_dDoclist[m_uDoclist].m_uOff;
+		tWord.m_uDocs = m_pPayload->m_dDoclist[m_uDoclist].m_uLen;
+		m_tDocReader = RtDocReader_t ( m_pSegment, tWord );
+		m_uDoclist++;
+		m_uDoclistLeft--;
+	}
+
+	const RtSubstringPayload_t *	m_pPayload;
+	CSphMatch					m_tMatch;
+	RtDocReader_t				m_tDocReader;
+	RtHitReader_t				m_tHitReader;
+	const RtSegment_t *			m_pSegment;
+
+	DWORD						m_uDoclist;
+	DWORD						m_uDoclistLeft;
+	DWORD						m_uHitEmbeded;
+};
+
+
+//////////////////////////////////////////////////////////////////////////
+
+class RtQwordSetup_t : public ISphQwordSetup
+{
+public:
 	virtual ISphQword *	QwordSpawn ( const XQKeyword_t & ) const;
 	virtual bool		QwordSetup ( ISphQword * pQword ) const;
+	void				SetSegment ( const RtSegment_t * pSegment, int iSegment )
+	{
+		m_pSeg = pSegment;
+		m_iSeg = iSegment;
+	}
+
+private:
+	const RtSegment_t *	m_pSeg;
+	int					m_iSeg;
 };
 
 
-ISphQword * RtQwordSetup_t::QwordSpawn ( const XQKeyword_t & ) const
+ISphQword * RtQwordSetup_t::QwordSpawn ( const XQKeyword_t & tWord ) const
 {
-	return new RtQword_t ();
+	if ( !tWord.m_pPayload )
+		return new RtQword_t ();
+	else
+		return new RtQwordPayload_t ( (const RtSubstringPayload_t *)tWord.m_pPayload );
 }
 
 
@@ -5406,9 +5576,9 @@ bool RtQwordSetup_t::QwordSetup ( ISphQword * pQword ) const
 {
 	// there was two dynamic_casts here once but they're not necessary
 	// maybe it's worth to rewrite class hierarchy to avoid c-casts here?
-	RtQword_t * pMyWord = (RtQword_t*)pQword;
+	RtQwordTraits_t * pMyWord = (RtQwordTraits_t*)pQword;
 	const RtIndex_t * pIndex = (const RtIndex_t *)m_pIndex;
-	return pIndex->RtQwordSetup ( pMyWord, m_pSeg );
+	return pMyWord->Setup ( pIndex, m_pSeg, m_iSeg );
 }
 
 
@@ -5551,14 +5721,8 @@ bool RtIndex_t::RtQwordSetupSegment ( RtQword_t * pQword, const RtSegment_t * pC
 			pQword->m_iDocs += pWord->m_uDocs;
 			pQword->m_iHits += pWord->m_uHits;
 			if ( bSetup )
-			{
-				SafeDelete ( pQword->m_pDocReader );
-				pQword->m_pDocReader = new RtDocReader_t ( pCurSeg, *pWord );
-				pQword->m_tHitReader.m_pBase = NULL;
-				if ( pCurSeg->m_dHits.GetLength() )
-					pQword->m_tHitReader.m_pBase = pCurSeg->m_dHits.Begin();
-				pQword->m_pSeg = pCurSeg;
-			}
+				pQword->SetupReader ( pCurSeg, *pWord );
+
 			return true;
 
 		} else if ( iCmp>0 )
@@ -5567,28 +5731,226 @@ bool RtIndex_t::RtQwordSetupSegment ( RtQword_t * pQword, const RtSegment_t * pC
 	return false;
 }
 
-
-struct DocHitPair_t
+struct RtExpandedEntry_t
 {
-	int m_iDocs;
-	int m_iHits;
+	DWORD	m_uHash;
+	int		m_iNameOff;
+	int		m_iDocs;
+	int		m_iHits;
+};
+
+struct RtExpandedPayload_t
+{
+	int		m_iDocs;
+	int		m_iHits;
+	DWORD	m_uDoclistOff;
+};
+
+struct RtExpandedTraits_fn
+{
+	inline bool IsLess ( const RtExpandedEntry_t & a, const RtExpandedEntry_t & b ) const
+	{
+		assert ( m_sBase );
+		if ( a.m_uHash!=b.m_uHash )
+		{
+			return a.m_uHash<b.m_uHash;
+		} else
+		{
+			const BYTE * pA = m_sBase + a.m_iNameOff;
+			const BYTE * pB = m_sBase + b.m_iNameOff;
+			if ( pA[0]!=pB[0] )
+				return pA[0]<pB[0];
+
+			return ( sphDictCmp ( (const char *)pA+1, pA[0], (const char *)pB+1, pB[0] )<0 );
+		}
+	}
+
+	inline bool IsEqual ( const RtExpandedEntry_t * a, const RtExpandedEntry_t * b ) const
+	{
+		assert ( m_sBase );
+		if ( a->m_uHash!=b->m_uHash )
+			return false;
+
+		const BYTE * pA = m_sBase + a->m_iNameOff;
+		const BYTE * pB = m_sBase + b->m_iNameOff;
+		if ( pA[0]!=pB[0] )
+			return false;
+
+		return ( sphDictCmp ( (const char *)pA+1, pA[0], (const char *)pB+1, pB[0] )==0 );
+	}
+
+	explicit RtExpandedTraits_fn ( const BYTE * sBase )
+		: m_sBase ( sBase )
+	{ }
+	const BYTE * m_sBase;
 };
 
 
-void RtIndex_t::GetPrefixedWords ( const char * sWord, int iWordLen, const char * sWildcard,
-	CSphVector<SphExpanded_t> & dPrefixedWords ) const
+struct DictEntryRtPayload_t
 {
-	const int iSkipMagic = ( BYTE(*sWord)<0x20 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
-	SmallStringHash_T<DocHitPair_t> hPrefixedWords;
-	ARRAY_FOREACH ( i, m_dSegments )
+	DictEntryRtPayload_t ( bool bPayload, int iSegments )
 	{
-		RtSegment_t * pCurSeg = m_dSegments[i];
+		m_bPayload = bPayload;
+		if ( bPayload )
+		{
+			m_dWordPayload.Reserve ( 1000 );
+			m_dSeg.Resize ( iSegments );
+			ARRAY_FOREACH ( i, m_dSeg )
+			{
+				m_dSeg[i].m_uOff = 0;
+				m_dSeg[i].m_uLen = 0;
+			}
+		}
+
+		m_dWordExpand.Reserve ( 1000 );
+		m_dWordBuf.Reserve ( 8096 );
+	}
+
+	void Add ( const RtWord_t * pWord, int iSegment )
+	{
+		if ( !m_bPayload || !sphIsExpandedPayload ( pWord->m_uDocs, pWord->m_uHits ) )
+		{
+			RtExpandedEntry_t & tExpand = m_dWordExpand.Add();
+
+			int iOff = m_dWordBuf.GetLength();
+			int iWordLen = pWord->m_sWord[0] + 1;
+			tExpand.m_uHash = sphCRC32 ( pWord->m_sWord, iWordLen );
+			tExpand.m_iNameOff = iOff;
+			tExpand.m_iDocs = pWord->m_uDocs;
+			tExpand.m_iHits = pWord->m_uHits;
+			m_dWordBuf.Resize ( iOff + iWordLen );
+			memcpy ( m_dWordBuf.Begin() + iOff, pWord->m_sWord, iWordLen );
+		} else
+		{
+			RtExpandedPayload_t & tExpand = m_dWordPayload.Add();
+			tExpand.m_iDocs = pWord->m_uDocs;
+			tExpand.m_iHits = pWord->m_uHits;
+			tExpand.m_uDoclistOff = pWord->m_uDoc;
+
+			m_dSeg[iSegment].m_uOff = m_dWordPayload.GetLength();
+			m_dSeg[iSegment].m_uLen++;
+		}
+	}
+
+	void Convert ( ISphWordlist::Args_t & tArgs )
+	{
+		if ( !m_dWordExpand.GetLength() && !m_dWordPayload.GetLength() )
+			return;
+
+		int iTotalDocs = 0;
+		int iTotalHits = 0;
+		if ( m_dWordExpand.GetLength() )
+		{
+			int iRtExpansionLimit = tArgs.m_iExpansionLimit * m_dSeg.GetLength();
+			if ( tArgs.m_iExpansionLimit && m_dWordExpand.GetLength()>iRtExpansionLimit )
+			{
+				// sort expansions by frequency desc
+				// clip the less frequent ones if needed, as they are likely misspellings
+				sphSort ( m_dWordExpand.Begin(), m_dWordExpand.GetLength(), ExpandedOrderDesc_T<RtExpandedEntry_t>() );
+				m_dWordExpand.Resize ( iRtExpansionLimit );
+			}
+
+			// lets merge statistics for same words from different segments as hash produce a lot tiny allocations here
+			const BYTE * sBase = m_dWordBuf.Begin();
+			RtExpandedTraits_fn fnCmp ( sBase );
+			sphSort ( m_dWordExpand.Begin(), m_dWordExpand.GetLength(), fnCmp );
+
+			const RtExpandedEntry_t * pLast = m_dWordExpand.Begin();
+			tArgs.AddExpanded ( sBase+pLast->m_iNameOff+1, sBase[pLast->m_iNameOff], pLast->m_iDocs, pLast->m_iHits );
+			for ( int i=1; i<m_dWordExpand.GetLength(); i++ )
+			{
+				const RtExpandedEntry_t * pCur = m_dWordExpand.Begin() + i;
+
+				if ( fnCmp.IsEqual ( pLast, pCur ) )
+				{
+					tArgs.m_dExpanded.Last().m_iDocs += pCur->m_iDocs;
+					tArgs.m_dExpanded.Last().m_iHits += pCur->m_iHits;
+				} else
+				{
+					tArgs.AddExpanded ( sBase + pCur->m_iNameOff + 1, sBase[pCur->m_iNameOff], pCur->m_iDocs, pCur->m_iHits );
+					pLast = pCur;
+				}
+				iTotalDocs += pCur->m_iDocs;
+				iTotalHits += pCur->m_iHits;
+			}
+		}
+
+		if ( m_dWordPayload.GetLength() )
+		{
+			DWORD uExpansionLimit = tArgs.m_iExpansionLimit;
+			int iPayloads = 0;
+			ARRAY_FOREACH ( i, m_dSeg )
+			{
+				Slice_t & tSeg = m_dSeg[i];
+
+				// reverse per segment offset to payload doc-list as offset was the end instead of start
+				assert ( tSeg.m_uOff>=tSeg.m_uLen );
+				tSeg.m_uOff = tSeg.m_uOff - tSeg.m_uLen;
+
+				// per segment expansion limit clip
+				if ( uExpansionLimit && tSeg.m_uLen>uExpansionLimit )
+				{
+					// sort expansions by frequency desc
+					// per segment clip the less frequent ones if needed, as they are likely misspellings
+					sphSort ( m_dWordPayload.Begin()+tSeg.m_uOff, tSeg.m_uLen, ExpandedOrderDesc_T<RtExpandedPayload_t>() );
+					tSeg.m_uLen = uExpansionLimit;
+				}
+
+				iPayloads += tSeg.m_uLen;
+				// sort by ascending doc-list offset
+				sphSort ( m_dWordPayload.Begin()+tSeg.m_uOff, tSeg.m_uLen, bind ( &RtExpandedPayload_t::m_uDoclistOff ) );
+			}
+
+			RtSubstringPayload_t * pPayload = new RtSubstringPayload_t ( m_dSeg.GetLength(), iPayloads );
+
+			Slice_t * pDst = pPayload->m_dDoclist.Begin();
+			ARRAY_FOREACH ( i, m_dSeg )
+			{
+				const Slice_t & tSeg = m_dSeg[i];
+				const RtExpandedPayload_t * pSrc = m_dWordPayload.Begin() + tSeg.m_uOff;
+				const RtExpandedPayload_t * pEnd = pSrc + tSeg.m_uLen;
+				pPayload->m_dSegment2Doclists[i].m_uOff = pDst - pPayload->m_dDoclist.Begin();
+				pPayload->m_dSegment2Doclists[i].m_uLen = tSeg.m_uLen;
+				while ( pSrc!=pEnd )
+				{
+					pDst->m_uOff = pSrc->m_uDoclistOff;
+					pDst->m_uLen = pSrc->m_iDocs;
+					iTotalDocs += pSrc->m_iDocs;
+					iTotalHits += pSrc->m_iHits;
+					pDst++;
+					pSrc++;
+				}
+			}
+			pPayload->m_iDocsTotal = iTotalDocs;
+			pPayload->m_iHitsTotal = iTotalHits;
+			tArgs.m_pPayload = pPayload;
+		}
+
+		tArgs.m_iTotalDocs = iTotalDocs;
+		tArgs.m_iTotalHits = iTotalHits;
+	}
+
+	bool							m_bPayload;
+	CSphVector<RtExpandedEntry_t>	m_dWordExpand;
+	CSphVector<RtExpandedPayload_t>	m_dWordPayload;
+	CSphVector<BYTE>				m_dWordBuf;
+	CSphVector<Slice_t>				m_dSeg;
+};
+
+
+void RtIndex_t::GetPrefixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const
+{
+	DictEntryRtPayload_t tDict2Payload ( tArgs.m_bPayload, m_dSegments.GetLength() );
+	const int iSkipMagic = ( BYTE(*sSubstring)<0x20 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
+	ARRAY_FOREACH ( iSeg, m_dSegments )
+	{
+		RtSegment_t * pCurSeg = m_dSegments[iSeg];
 		RtWordReader_t tReader ( pCurSeg, true, m_iWordsCheckpoint );
 
 		// find initial checkpoint or check words prior to 1st checkpoint
 		if ( pCurSeg->m_dWordCheckpoints.GetLength() )
 		{
-			const RtWordCheckpoint_t * pCurCheckpoint = sphSearchCheckpoint ( sWord, iWordLen, 0, true, true
+			const RtWordCheckpoint_t * pCurCheckpoint = sphSearchCheckpoint ( sSubstring, iSubLen, 0, true, true
 				, pCurSeg->m_dWordCheckpoints.Begin(), &pCurSeg->m_dWordCheckpoints.Last() );
 
 			if ( pCurCheckpoint )
@@ -5596,7 +5958,7 @@ void RtIndex_t::GetPrefixedWords ( const char * sWord, int iWordLen, const char 
 				// there could be valid data prior 1st checkpoint that should be unpacked and checked
 				int iCheckpointNameLen = strlen ( pCurCheckpoint->m_sWord );
 				if ( pCurCheckpoint!=pCurSeg->m_dWordCheckpoints.Begin()
-					|| ( sphDictCmp ( sWord, iWordLen, pCurCheckpoint->m_sWord, iCheckpointNameLen )==0 && iWordLen==iCheckpointNameLen ) )
+					|| ( sphDictCmp ( sSubstring, iSubLen, pCurCheckpoint->m_sWord, iCheckpointNameLen )==0 && iSubLen==iCheckpointNameLen ) )
 				{
 					tReader.m_pCur = pCurSeg->m_dWords.Begin() + pCurCheckpoint->m_iOffset;
 				}
@@ -5607,45 +5969,20 @@ void RtIndex_t::GetPrefixedWords ( const char * sWord, int iWordLen, const char 
 		const RtWord_t * pWord = NULL;
 		while ( ( pWord = tReader.UnzipWord() )!=NULL )
 		{
-			int iCmp = sphDictCmp ( sWord, iWordLen, (const char *)pWord->m_sWord+1, pWord->m_sWord[0] );
+			int iCmp = sphDictCmp ( sSubstring, iSubLen, (const char *)pWord->m_sWord+1, pWord->m_sWord[0] );
 			if ( iCmp<0 )
 			{
 				break;
-			} else if ( iCmp==0 && iWordLen<=pWord->m_sWord[0] && sphWildcardMatch ( (const char *)pWord->m_sWord+1+iSkipMagic, sWildcard ) )
+			} else if ( iCmp==0 && iSubLen<=pWord->m_sWord[0] && sphWildcardMatch ( (const char *)pWord->m_sWord+1+iSkipMagic, sWildcard ) )
 			{
-				CSphString sExpandedWord;
-				sExpandedWord.SetBinary ( (const char *)pWord->m_sWord+1, pWord->m_sWord[0] );
-				DocHitPair_t * pPair = hPrefixedWords ( sExpandedWord );
-				if ( pPair )
-				{
-					// FIXME!!! in case of REPLACED data docs\hits grows a lot and ExtCached caches less words
-					// keep track of alive docs?
-					pPair->m_iDocs += pWord->m_uDocs;
-					pPair->m_iHits += pWord->m_uHits;
-				} else
-				{
-					DocHitPair_t tPair;
-					tPair.m_iDocs = pWord->m_uDocs;
-					tPair.m_iHits = pWord->m_uHits;
-					hPrefixedWords.Add ( tPair, sExpandedWord );
-				}
+				tDict2Payload.Add ( pWord, iSeg );
 			}
 			// FIXME!!! same case 'boxi*' matches 'box' document at plain index
 			// but masked by a checkpoint search
 		}
 	}
 
-	dPrefixedWords.Reserve ( dPrefixedWords.GetLength() + hPrefixedWords.GetLength() );
-	hPrefixedWords.IterateStart();
-	while ( hPrefixedWords.IterateNext() )
-	{
-		SphExpanded_t & tExpanded = dPrefixedWords.Add ();
-		tExpanded.m_sName = hPrefixedWords.IterateGetKey();
-		const DocHitPair_t & tPair = hPrefixedWords.IterateGet();
-		tExpanded.m_iValue = sphGetExpansionMagic ( tPair.m_iDocs, tPair.m_iHits );
-		tExpanded.m_iDocs = tPair.m_iDocs;
-		tExpanded.m_iHits = tPair.m_iHits;
-	}
+	tDict2Payload.Convert ( tArgs );
 }
 
 
@@ -5701,16 +6038,16 @@ static bool ExtractInfixCheckpoints ( const char * sInfix, int iBytes, int iMaxC
 }
 
 
-void RtIndex_t::GetInfixedWords ( const char * sInfix, int iBytes, const char * sWildcard, CSphVector<SphExpanded_t> & dExpanded ) const
+void RtIndex_t::GetInfixedWords ( const char * sSubstring, int iSubLen, const char * , Args_t & tArgs ) const
 {
 	// sanity checks
-	if ( !sInfix || iBytes<=0 )
+	if ( !sSubstring || iSubLen<=0 )
 		return;
 
 	// find those prefixes
 	CSphVector<int> dPoints;
 
-	SmallStringHash_T<DocHitPair_t> hWords;
+	DictEntryRtPayload_t tDict2Payload ( tArgs.m_bPayload, m_dSegments.GetLength() );
 	ARRAY_FOREACH ( iSeg, m_dSegments )
 	{
 		RtSegment_t * pSeg = m_dSegments[iSeg];
@@ -5718,7 +6055,7 @@ void RtIndex_t::GetInfixedWords ( const char * sInfix, int iBytes, const char * 
 			continue;
 
 		dPoints.Resize ( 0 );
-		if ( !ExtractInfixCheckpoints ( sInfix, iBytes, m_iMaxCodepointLength, pSeg->m_dWordCheckpoints.GetLength(), pSeg->m_dInfixFilterCP, dPoints ) )
+		if ( !ExtractInfixCheckpoints ( sSubstring, iSubLen, m_iMaxCodepointLength, pSeg->m_dWordCheckpoints.GetLength(), pSeg->m_dInfixFilterCP, dPoints ) )
 			continue;
 
 		// walk those checkpoints, check all their words
@@ -5732,44 +6069,20 @@ void RtIndex_t::GetInfixedWords ( const char * sInfix, int iBytes, const char * 
 			if ( iNext<pSeg->m_dWordCheckpoints.GetLength() )
 				tReader.m_pMax = pSeg->m_dWords.Begin() + pSeg->m_dWordCheckpoints[iNext].m_iOffset;
 
-			int iMatches = 0;
 			const RtWord_t * pWord = NULL;
 			while ( ( pWord = tReader.UnzipWord() )!=NULL )
 			{
 				// check it
-				if ( !sphWildcardMatch ( (const char*)pWord->m_sWord+1, sWildcard ) )
+				if ( !sphWildcardMatch ( (const char*)pWord->m_sWord+1, sSubstring ) )
 					continue;
 
-				iMatches++;
 				// matched, lets add
-				CSphString sWord ( (const char*)pWord->m_sWord+1, pWord->m_sWord[0] );
-				DocHitPair_t * pPair = hWords ( sWord );
-				if ( pPair )
-				{
-					pPair->m_iDocs += pWord->m_uDocs;
-					pPair->m_iHits += pWord->m_uHits;
-				} else
-				{
-					DocHitPair_t tPair;
-					tPair.m_iDocs = pWord->m_uDocs;
-					tPair.m_iHits = pWord->m_uHits;
-					hWords.Add ( tPair, sWord );
-				}
+				tDict2Payload.Add ( pWord, iSeg );
 			}
 		}
 	}
 
-	dExpanded.Reserve ( dExpanded.GetLength() + hWords.GetLength() );
-	hWords.IterateStart();
-	while ( hWords.IterateNext() )
-	{
-		SphExpanded_t & tExpanded = dExpanded.Add ();
-		tExpanded.m_sName = hWords.IterateGetKey();
-		DocHitPair_t & tPair = hWords.IterateGet();
-		tExpanded.m_iValue = sphGetExpansionMagic ( tPair.m_iDocs, tPair.m_iHits );
-		tExpanded.m_iDocs = tPair.m_iDocs;
-		tExpanded.m_iHits = tPair.m_iHits;
-	}
+	tDict2Payload.Convert ( tArgs );
 }
 
 
@@ -6262,7 +6575,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	if ( pQuery->m_uMaxQueryMsec>0 )
 		tTermSetup.m_iMaxTimer = sphMicroTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
 	tTermSetup.m_pWarning = &pResult->m_sWarning;
-	tTermSetup.m_pSeg = NULL;
+	tTermSetup.SetSegment ( NULL, 0 );
 	tTermSetup.m_pCtx = &tCtx;
 
 	// bind weights
@@ -6295,6 +6608,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		TransformAotFilter ( tParsed.m_pRoot, pDict->GetWordforms(), m_tSettings );
 
 	// expanding prefix in word dictionary case
+	CSphScopedPayload tPayloads;
 	if ( m_bKeywordDict )
 	{
 		ExpansionContext_t tExpCtx;
@@ -6306,6 +6620,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		tExpCtx.m_iExpansionLimit = m_iExpansionLimit;
 		tExpCtx.m_bHasMorphology = m_pDict->HasMorphology();
 		tExpCtx.m_bMergeSingles = true;
+		tExpCtx.m_pPayloads = &tPayloads;
 		tParsed.m_pRoot = sphExpandXQNode ( tParsed.m_pRoot, tExpCtx );
 	}
 
@@ -6445,7 +6760,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			// query matching
 			ARRAY_FOREACH ( iSeg, m_dSegments )
 			{
-				tTermSetup.m_pSeg = m_dSegments[iSeg];
+				tTermSetup.SetSegment ( m_dSegments[iSeg], iSeg );
 				pRanker->Reset ( tTermSetup );
 
 				// for lookups to work

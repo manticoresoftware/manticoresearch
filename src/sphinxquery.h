@@ -30,6 +30,7 @@ struct XQKeyword_t
 	bool				m_bExpanded;	///< added by prefix expansion
 	bool				m_bExcluded;	///< excluded by query (rval to operator NOT)
 	bool				m_bMorphed;		///< morphology processing (wordforms, stemming etc) already done
+	void *				m_pPayload;
 
 	XQKeyword_t ()
 		: m_iAtomPos ( -1 )
@@ -38,6 +39,7 @@ struct XQKeyword_t
 		, m_bExpanded ( false )
 		, m_bExcluded ( false )
 		, m_bMorphed ( false )
+		, m_pPayload ( NULL )
 	{}
 
 	XQKeyword_t ( const char * sWord, int iPos )
@@ -48,6 +50,7 @@ struct XQKeyword_t
 		, m_bExpanded ( false )
 		, m_bExcluded ( false )
 		, m_bMorphed ( false )
+		, m_pPayload ( NULL )
 	{}
 };
 

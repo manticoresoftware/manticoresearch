@@ -2540,8 +2540,6 @@ public:
 protected:
 	const SphAttr_t *	m_pValues;		///< external value array
 	int					m_nValues;		///< external array size
-
-//						CSphFilterSettings ( const CSphFilterSettings & rhs );
 };
 
 

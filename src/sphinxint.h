@@ -900,7 +900,7 @@ void AttrIndexBuilder_t<DOCID>::FinishCollect ()
 	DWORD * pMaxEntry = pMinEntry + m_uStride;
 	CSphRowitem * pMinAttrs = DOCINFO2ATTRS_T<DOCID> ( pMinEntry );
 	CSphRowitem * pMaxAttrs = pMinAttrs + m_uStride;
-	
+
 	assert ( pMaxEntry+m_uStride<=m_pOutMax );
 	assert ( pMaxAttrs+m_uStride-DWSIZEOF(DOCID)<=m_pOutMax );
 
@@ -1682,19 +1682,63 @@ public:
 
 ISphRtDictWraper * sphCreateRtKeywordsDictionaryWrapper ( CSphDict * pBase );
 
-struct SphExpanded_t : public CSphNamedInt
+struct SphExpanded_t
 {
+	int m_iNameOff;
 	int m_iDocs;
 	int m_iHits;
 };
 
+struct ISphSubstringPayload
+{
+	ISphSubstringPayload () {}
+	virtual ~ISphSubstringPayload() {}
+};
+
+
 class ISphWordlist
 {
 public:
+	struct Args_t : public ISphNoncopyable
+	{
+		CSphVector<SphExpanded_t>	m_dExpanded;
+		const bool					m_bPayload;
+		int							m_iExpansionLimit;
+
+		ISphSubstringPayload *		m_pPayload;
+		int							m_iTotalDocs;
+		int							m_iTotalHits;
+
+		Args_t ( bool bPayload, int iExpansionLimit );
+		~Args_t ();
+		void AddExpanded ( const BYTE * sWord, int iLen, int iDocs, int iHits );
+		const char * GetWordExpanded ( int iIndex ) const;
+
+	private:
+		CSphVector<char> m_sBuf;
+	};
+
 	virtual ~ISphWordlist () {}
-	virtual void GetPrefixedWords ( const char * sPrefix, int iPrefix, const char * sWildcard, CSphVector<SphExpanded_t> & dPrefixedWords ) const = 0;
-	virtual void GetInfixedWords ( const char * sInfix, int iInfix, const char * sWildcard, CSphVector<SphExpanded_t> & dPrefixedWords ) const = 0;
+	virtual void GetPrefixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const = 0;
+	virtual void GetInfixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const = 0;
 };
+
+
+class CSphScopedPayload
+{
+public:
+	CSphScopedPayload () {}
+	~CSphScopedPayload ()
+	{
+		ARRAY_FOREACH ( i, m_dPayloads )
+			SafeDelete ( m_dPayloads[i] );
+	}
+	void Add ( ISphSubstringPayload * pPayload ) { m_dPayloads.Add ( pPayload ); }
+
+private:
+	CSphVector<ISphSubstringPayload *> m_dPayloads;
+};
+
 
 struct ExpansionContext_t
 {
@@ -1706,12 +1750,30 @@ struct ExpansionContext_t
 	int m_iExpansionLimit;
 	bool m_bHasMorphology;
 	bool m_bMergeSingles;
+	CSphScopedPayload * m_pPayloads;
 };
 
 
 XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx );
-int sphGetExpansionMagic ( int iDocs, int iHits );
 XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & tSettings );
+inline int sphGetExpansionMagic ( int iDocs, int iHits )
+{
+	return ( iHits<=256 ? 1 : iDocs + 1 ); // magic threshold; mb make this configurable?
+}
+inline bool sphIsExpandedPayload ( int iDocs, int iHits )
+{
+	return ( iHits<=256 || iDocs<32 ); // magic threshold; mb make this configurable?
+}
+
+
+template<typename T>
+struct ExpandedOrderDesc_T
+{
+	bool IsLess ( const T & a, const T & b )
+	{
+		return ( sphGetExpansionMagic ( a.m_iDocs, a.m_iHits )>sphGetExpansionMagic ( b.m_iDocs, b.m_iHits ) );
+	}
+};
 
 
 class CSphKeywordDeltaWriter

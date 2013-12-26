@@ -782,7 +782,6 @@ public:
 	virtual ISphQword *					QwordSpawn ( const XQKeyword_t & tWord ) const;
 	virtual bool						QwordSetup ( ISphQword * ) const;
 
-protected:
 	bool								Setup ( ISphQword * ) const;
 };
 
@@ -800,8 +799,6 @@ public:
 	SphOffset_t		m_uHitPosition;
 	Hitpos_t		m_uInlinedHit;
 	DWORD			m_uHitState;
-
-	bool			m_bDupe;		///< whether the word occurs only once in current query
 
 	CSphMatch		m_tDoc;			///< current match (partial)
 	Hitpos_t		m_iHitPos;		///< current hit postition, from hitlist
@@ -824,7 +821,6 @@ public:
 	explicit DiskIndexQwordTraits_c ( bool bUseMini, bool bExcluded )
 		: m_uHitPosition ( 0 )
 		, m_uHitState ( 0 )
-		, m_bDupe ( false )
 		, m_iHitPos ()
 		, m_rdDoclist ( bUseMini ? m_dDoclistBuf : NULL, bUseMini ? MINIBUFFER_LEN : 0 )
 		, m_rdHitlist ( bUseMini ? m_dHitlistBuf : NULL, bUseMini ? MINIBUFFER_LEN : 0 )
@@ -838,6 +834,18 @@ public:
 		m_iHitPos = EMPTY_HIT;
 		m_bExcluded = bExcluded;
 	}
+
+	void ResetDecoderState ()
+	{
+		ISphQword::Reset();
+		m_uHitPosition = 0;
+		m_uInlinedHit = 0;
+		m_uHitState = 0;
+		m_tDoc.m_uDocID = m_iMinID;
+		m_iHitPos = EMPTY_HIT;
+	}
+
+	virtual bool Setup ( const DiskIndexQwordSetup_c * pSetup ) = 0;
 };
 
 
@@ -851,19 +859,16 @@ template < bool INLINE_HITS, bool INLINE_DOCINFO, bool DISABLE_HITLIST_SEEK, boo
 class DiskIndexQword_c : public DiskIndexQwordTraits_c
 {
 public:
-	explicit DiskIndexQword_c ( bool bUseMinibuffer, bool bExcluded )
+	DiskIndexQword_c ( bool bUseMinibuffer, bool bExcluded )
 		: DiskIndexQwordTraits_c ( bUseMinibuffer, bExcluded )
 	{}
 
 	virtual void Reset ()
 	{
-		m_uHitPosition = 0;
-		m_uHitState = 0;
 		m_rdDoclist.Reset ();
 		m_rdDoclist.Reset ();
-		ISphQword::Reset();
-		m_iHitPos = EMPTY_HIT;
 		m_iInlineAttrs = 0;
+		ResetDecoderState();
 	}
 
 	void GetHitlistEntry ()
@@ -997,6 +1002,11 @@ public:
 		sphDie ( "INTERNAL ERROR: impossible hit emitter state" );
 		return EMPTY_HIT;
 	}
+
+	bool Setup ( const DiskIndexQwordSetup_c * pSetup )
+	{
+		return pSetup->Setup ( this );
+	}
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1017,6 +1027,95 @@ public:
 			sphDie ( "INTERNAL ERROR: impossible qword settings" );									\
 	}																								\
 }
+
+/////////////////////////////////////////////////////////////////////////////
+
+
+struct Slice64_t
+{
+	uint64_t	m_uOff;
+	int			m_iLen;
+};
+
+struct DiskSubstringPayload_t : public ISphSubstringPayload
+{
+	explicit DiskSubstringPayload_t ( int iDoclists )
+		: m_dDoclist ( iDoclists )
+		, m_iTotalDocs ( 0 )
+		, m_iTotalHits ( 0 )
+	{}
+	CSphFixedVector<Slice64_t>	m_dDoclist;
+	int							m_iTotalDocs;
+	int							m_iTotalHits;
+};
+
+
+template < bool INLINE_HITS >
+class DiskPayloadQword_c : public DiskIndexQword_c<INLINE_HITS, false, false, false>
+{
+	typedef DiskIndexQword_c<INLINE_HITS, false, false, false> BASE;
+
+public:
+	explicit DiskPayloadQword_c ( const DiskSubstringPayload_t * pPayload, bool bExcluded,
+		const CSphAutofile & tDoclist, const CSphAutofile & tHitlist, CSphQueryProfile * pProfile )
+		: BASE ( true, bExcluded )
+	{
+		m_pPayload = pPayload;
+		this->m_iDocs = m_pPayload->m_iTotalDocs;
+		this->m_iHits = m_pPayload->m_iTotalHits;
+		m_iDoclist = 0;
+
+		this->m_rdDoclist.SetFile ( tDoclist );
+		this->m_rdDoclist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
+		this->m_rdDoclist.m_pProfile = pProfile;
+		this->m_rdDoclist.m_eProfileState = SPH_QSTATE_READ_DOCS;
+
+		this->m_rdHitlist.SetFile ( tHitlist );
+		this->m_rdHitlist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
+		this->m_rdHitlist.m_pProfile = pProfile;
+		this->m_rdHitlist.m_eProfileState = SPH_QSTATE_READ_HITS;
+	}
+
+	virtual const CSphMatch & GetNextDoc ( DWORD * pDocinfo )
+	{
+		const CSphMatch & tMatch = BASE::GetNextDoc ( pDocinfo );
+		assert ( &tMatch==&this->m_tDoc );
+		if ( !tMatch.m_uDocID && m_iDoclist<m_pPayload->m_dDoclist.GetLength() )
+		{
+			BASE::ResetDecoderState();
+			SetupReader();
+			BASE::GetNextDoc ( pDocinfo );
+			assert ( this->m_tDoc.m_uDocID );
+		}
+
+		return this->m_tDoc;
+	}
+
+	bool Setup ( const DiskIndexQwordSetup_c * )
+	{
+		if ( m_iDoclist>=m_pPayload->m_dDoclist.GetLength() )
+			return false;
+
+		SetupReader();
+		return true;
+	}
+
+private:
+	void SetupReader ()
+	{
+		uint64_t uDocOff = m_pPayload->m_dDoclist[m_iDoclist].m_uOff;
+		int iHint = m_pPayload->m_dDoclist[m_iDoclist].m_iLen;
+		m_iDoclist++;
+
+		this->m_rdDoclist.SeekTo ( uDocOff, iHint );
+	}
+
+	const DiskSubstringPayload_t *	m_pPayload;
+	int								m_iDoclist;
+};
+
+/////////////////////////////////////////////////////////////////////////////
+
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -1142,8 +1241,8 @@ public:
 	bool								GetWord ( const BYTE * pBuf, SphWordID_t iWordID, CSphDictEntry & tWord ) const;
 
 	const BYTE *						AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint ) const;
-	virtual void						GetPrefixedWords ( const char * sPrefix, int iPrefixLen, const char * sWildcard, CSphVector<SphExpanded_t> & dExpanded ) const;
-	virtual void						GetInfixedWords ( const char * sInfix, int iInfix, const char * sWildcard, CSphVector<SphExpanded_t> & dPrefixedWords ) const;
+	virtual void						GetPrefixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const;
+	virtual void						GetInfixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const;
 
 private:
 	bool								m_bWordDict;
@@ -1547,7 +1646,7 @@ private:
 	bool						LoadPersistentMVA ( CSphString & sError );
 
 	bool						JuggleFile ( const char* szExt, CSphString & sError, bool bNeedOrigin=true ) const;
-	XQNode_t *					ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta * pResult ) const;
+	XQNode_t *					ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta * pResult, CSphScopedPayload * pPayloads ) const;
 
 	const CSphRowitem *			CopyRow ( const CSphRowitem * pDocinfo, DWORD * pTmpDocinfo, const CSphColumnInfo * pNewAttr, int iOldStride ) const;
 
@@ -15575,15 +15674,33 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & tWord ) const
 {
-	WITH_QWORD ( m_pIndex, false, Qword, return new Qword ( tWord.m_bExpanded, tWord.m_bExcluded ) );
+	if ( !tWord.m_pPayload )
+	{
+		WITH_QWORD ( m_pIndex, false, Qword, return new Qword ( tWord.m_bExpanded, tWord.m_bExcluded ) );
+	} else
+	{
+		if ( m_pIndex->GetSettings().m_eHitFormat==SPH_HIT_FORMAT_INLINE )
+		{
+			return new DiskPayloadQword_c<true> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_tDoclist, m_tHitlist, m_pProfile );
+		} else
+		{
+			return new DiskPayloadQword_c<false>  ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_tDoclist, m_tHitlist, m_pProfile );
+		}
+	}
 	return NULL;
 }
 
 
 bool DiskIndexQwordSetup_c::QwordSetup ( ISphQword * pWord ) const
 {
-	WITH_QWORD ( m_pIndex, false, Qword, return Setup ( pWord ) );
-	return false;
+	DiskIndexQwordTraits_c * pMyWord = (DiskIndexQwordTraits_c*)pWord;
+
+	// setup attrs
+	pMyWord->m_tDoc.Reset ( m_iDynamicRowitems );
+	pMyWord->m_iMinID = m_uMinDocid;
+	pMyWord->m_tDoc.m_uDocID = m_uMinDocid;
+
+	return pMyWord->Setup ( this );
 }
 
 
@@ -15592,11 +15709,6 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 	// there was a dynamic_cast here once but it's not necessary
 	// maybe it worth to rewrite class hierarchy to avoid c-cast here?
 	DiskIndexQwordTraits_c & tWord = *(DiskIndexQwordTraits_c*)pWord;
-
-	// setup attrs
-	tWord.m_tDoc.Reset ( m_iDynamicRowitems );
-	tWord.m_iMinID = m_uMinDocid;
-	tWord.m_tDoc.m_uDocID = m_uMinDocid;
 
 	if ( m_eDocinfo==SPH_DOCINFO_INLINE )
 	{
@@ -17745,64 +17857,20 @@ struct BinaryNode_t
 	int m_iHi;
 };
 
-static void BuildExpandedTree ( const XQKeyword_t & tRootWord, CSphVector<SphExpanded_t> & dWordSrc, XQNode_t * pRoot, bool bMergeSingles )
+static void BuildExpandedTree ( const XQKeyword_t & tRootWord, ISphWordlist::Args_t & dWordSrc, XQNode_t * pRoot )
 {
-	assert ( dWordSrc.GetLength() );
+	assert ( dWordSrc.m_dExpanded.GetLength() );
 	pRoot->m_dWords.Reset();
-
-	// put all tiny enough expansions in a single node
-	int iTinyStart = 0;
-	if ( pRoot->m_dSpec.m_dZones.GetLength() || !bMergeSingles )
-	{
-		// OPTIMIZE
-		// ExtCached_c only supports field filtering but not zone filtering for now
-		// so we skip tiny expansions optimizations in that case; we also do that in RT case
-		// FIXME!!! why not in RT case??? check that case and perf
-		iTinyStart = dWordSrc.GetLength();
-	} else
-	{
-		// lookup where those start, relying on that dWordSrc should be reverse sorted
-		while ( iTinyStart<dWordSrc.GetLength() && dWordSrc[iTinyStart].m_iValue>1 )
-			iTinyStart++;
-	}
-
-	XQNode_t * pTiny = NULL;
-	if ( iTinyStart!=dWordSrc.GetLength() )
-	{
-		if ( iTinyStart==0 )
-			pTiny = pRoot;
-		else
-			pTiny = new XQNode_t ( pRoot->m_dSpec );
-
-		pTiny->SetOp ( SPH_QUERY_OR );
-		for ( int i=iTinyStart; i<dWordSrc.GetLength(); i++ )
-		{
-			XQKeyword_t & tWord = pTiny->m_dWords.Add();
-			tWord.m_sWord = dWordSrc[i].m_sName;
-			tWord.m_iAtomPos = tRootWord.m_iAtomPos;
-			tWord.m_bExpanded = true;
-			tWord.m_bFieldStart = tRootWord.m_bFieldStart;
-			tWord.m_bFieldEnd = tRootWord.m_bFieldEnd;
-		}
-
-		// if we created a new node, we have to propagate field/zone specs there
-		if ( pTiny!=pRoot )
-			pTiny->CopySpecs ( pRoot );
-
-		if ( iTinyStart==0 )
-			return;
-		dWordSrc.Resize ( iTinyStart );
-	}
 
 	// build a binary tree from all the other expansions
 	CSphVector<BinaryNode_t> dNodes;
-	dNodes.Reserve ( dWordSrc.GetLength() );
+	dNodes.Reserve ( dWordSrc.m_dExpanded.GetLength() );
 
 	XQNode_t * pCur = pRoot;
 
 	dNodes.Add();
 	dNodes.Last().m_iLo = 0;
-	dNodes.Last().m_iHi = ( dWordSrc.GetLength()-1 );
+	dNodes.Last().m_iHi = ( dWordSrc.m_dExpanded.GetLength()-1 );
 
 	while ( dNodes.GetLength() )
 	{
@@ -17832,9 +17900,9 @@ static void BuildExpandedTree ( const XQKeyword_t & tRootWord, CSphVector<SphExp
 
 		XQNode_t * pChild = CloneKeyword ( pRoot );
 		pChild->m_dWords.Add ( tRootWord );
-		pChild->m_dWords.Last().m_sWord.Swap ( dWordSrc[iMid].m_sName );
+		pChild->m_dWords.Last().m_sWord = dWordSrc.GetWordExpanded ( iMid );
 		pChild->m_dWords.Last().m_bExpanded = true;
-		pChild->m_bNotWeighted = ( dWordSrc[iMid].m_iValue==0 );
+		pChild->m_bNotWeighted = pRoot->m_bNotWeighted;
 
 		pChild->m_pParent = pCur;
 		pCur->m_dChildren.Add ( pChild );
@@ -17842,40 +17910,7 @@ static void BuildExpandedTree ( const XQKeyword_t & tRootWord, CSphVector<SphExp
 
 		pCur = pChild;
 	}
-
-	if ( pTiny )
-	{
-		assert ( pRoot->GetOp()==SPH_QUERY_OR );
-		assert ( pRoot->m_dChildren.GetLength() );
-		assert ( pRoot!=pTiny );
-		pRoot->m_dChildren.Add ( pTiny );
-		pTiny->m_pParent = pRoot;
-	}
 }
-
-
-struct WordDocsGreaterOp_t : public SphAccessor_T<SphExpanded_t>
-{
-	typedef SphExpanded_t MEDIAN_TYPE;
-	void CopyKey ( MEDIAN_TYPE * pMed, SphExpanded_t * pVal ) const
-	{
-		pMed->m_iValue = pVal->m_iValue;
-	}
-
-	inline bool IsLess ( const SphExpanded_t & a, const SphExpanded_t & b )
-	{
-		return a.m_iValue > b.m_iValue;
-	}
-
-	// inherited swap does not work on gcc
-	void Swap ( SphExpanded_t * a, SphExpanded_t * b ) const
-	{
-		a->m_sName.Swap ( b->m_sName );
-		::Swap ( a->m_iValue, b->m_iValue );
-		::Swap ( a->m_iDocs, b->m_iDocs );
-		::Swap ( a->m_iHits, b->m_iHits );
-	}
-};
 
 
 /// do wildcard expansion for keywords dictionary
@@ -17940,8 +17975,8 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 	if ( !iWilds || iWilds==iLen )
 		return pNode;
 
-	CSphVector<SphExpanded_t> dExpanded;
-	dExpanded.Reserve ( 512 );
+	ISphWordlist::Args_t tWordlist ( tCtx.m_bMergeSingles, tCtx.m_iExpansionLimit );
+
 	if ( !sphIsWild(*sFull) || tCtx.m_iMinInfixLen==0 )
 	{
 		// do prefix expansion
@@ -17979,7 +18014,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 			iPrefix++;
 		}
 
-		tCtx.m_pWordlist->GetPrefixedWords ( sPrefix, iPrefix, sWildcard, dExpanded );
+		tCtx.m_pWordlist->GetPrefixedWords ( sPrefix, iPrefix, sWildcard, tWordlist );
 
 	} else
 	{
@@ -18009,50 +18044,62 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 			return pNode;
 
 		// ignore heading star
-		tCtx.m_pWordlist->GetInfixedWords ( sMaxInfix, iMaxInfix, sFull, dExpanded );
+		tCtx.m_pWordlist->GetInfixedWords ( sMaxInfix, iMaxInfix, sFull, tWordlist );
 	}
 
 	// no real expansions?
 	// mark source word as expanded to prevent warning on terms mismatch in statistics
-	if ( !dExpanded.GetLength() )
+	if ( !tWordlist.m_dExpanded.GetLength() && !tWordlist.m_pPayload )
 	{
 		tCtx.m_pResult->AddStat ( pNode->m_dWords.Begin()->m_sWord, 0, 0 );
 		pNode->m_dWords.Begin()->m_bExpanded = true;
 		return pNode;
 	}
 
-	// sort expansions by frequency desc
-	// clip the less frequent ones if needed, as they are likely misspellings
-	sphSort ( dExpanded.Begin(), dExpanded.GetLength(), WordDocsGreaterOp_t(), WordDocsGreaterOp_t() );
-	if ( tCtx.m_iExpansionLimit && tCtx.m_iExpansionLimit<dExpanded.GetLength() )
-		dExpanded.Resize ( tCtx.m_iExpansionLimit );
-
-	// mark new words as expanded to skip theirs check on merge
-	// (expanded words differ across indexes)
-	int iDocs = 0;
-	int iHits = 0;
-	ARRAY_FOREACH ( i, dExpanded )
-	{
-		iDocs += dExpanded[i].m_iDocs;
-		iHits += dExpanded[i].m_iHits;
-	}
-	tCtx.m_pResult->AddStat ( pNode->m_dWords.Begin()->m_sWord, iDocs, iHits );
-
-	// replace MAGIC_WORD_HEAD_NONSTEMMED symbol to '='
-	if ( tCtx.m_bHasMorphology )
-		ARRAY_FOREACH ( i, dExpanded )
-			if ( dExpanded[i].m_sName.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
-				( (char *)dExpanded[i].m_sName.cstr() )[0] = '=';
-
 	// copy the original word (iirc it might get overwritten),
-	// and build a binary tree of all the expansions
 	const XQKeyword_t tRootWord = pNode->m_dWords[0];
-	BuildExpandedTree ( tRootWord, dExpanded, pNode, tCtx.m_bMergeSingles );
+	tCtx.m_pResult->AddStat ( tRootWord.m_sWord, tWordlist.m_iTotalDocs, tWordlist.m_iTotalHits );
+
+	// and build a binary tree of all the expansions
+	if ( tWordlist.m_dExpanded.GetLength() )
+	{
+		BuildExpandedTree ( tRootWord, tWordlist, pNode );
+	}
+
+	if ( tWordlist.m_pPayload )
+	{
+		ISphSubstringPayload * pPayload = tWordlist.m_pPayload;
+		tWordlist.m_pPayload = NULL;
+		tCtx.m_pPayloads->Add ( pPayload );
+
+		if ( pNode->m_dWords.GetLength() )
+		{
+			// all expanded fit to single payload
+			pNode->m_dWords.Begin()->m_bExpanded = true;
+			pNode->m_dWords.Begin()->m_pPayload = pPayload;
+		} else
+		{
+			// payload added to expanded binary tree
+			assert ( pNode->GetOp()==SPH_QUERY_OR );
+			assert ( pNode->m_dChildren.GetLength() );
+
+			XQNode_t * pSubstringNode = new XQNode_t ( pNode->m_dSpec );
+			pSubstringNode->SetOp ( SPH_QUERY_OR );
+
+			XQKeyword_t tSubstringWord = tRootWord;
+			tSubstringWord.m_bExpanded = true;
+			tSubstringWord.m_pPayload = pPayload;
+			pSubstringNode->m_dWords.Add ( tSubstringWord );
+
+			pNode->m_dChildren.Add ( pSubstringNode );
+			pSubstringNode->m_pParent = pNode;
+		}
+	}
 
 	return pNode;
 }
 
-XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta * pResult ) const
+XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta * pResult, CSphScopedPayload * pPayloads ) const
 {
 	if ( !pNode || !m_pDict->GetSettings().m_bWordDict || ( m_tSettings.m_iMinPrefixLen<=0 && m_tSettings.m_iMinInfixLen<=0 ) )
 		return pNode;
@@ -18068,6 +18115,7 @@ XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta *
 	tCtx.m_iExpansionLimit = m_iExpansionLimit;
 	tCtx.m_bHasMorphology = m_pDict->HasMorphology();
 	tCtx.m_bMergeSingles = ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_INLINE );
+	tCtx.m_pPayloads = pPayloads;
 
 	pNode = sphExpandXQNode ( pNode, tCtx );
 	pNode->Check ( true );
@@ -18467,7 +18515,8 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	tStatDiff.Set ( pResult->m_hWordStats );
 
 	// expanding prefix in word dictionary case
-	XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, pResult );
+	CSphScopedPayload tPayloads;
+	XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, pResult, &tPayloads );
 	if ( !pPrefixed )
 		return false;
 	tParsed.m_pRoot = pPrefixed;
@@ -18517,6 +18566,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 
 	CSphFixedVector<XQQuery_t> dXQ ( iQueries );
 	CSphFixedVector<SphWordStatChecker_t> dStatChecker ( iQueries );
+	CSphScopedPayload tPayloads;
 	bool bResult = false;
 	bool bResultScan = false;
 	for ( int i=0; i<iQueries; i++ )
@@ -18559,7 +18609,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 			dStatChecker[i].Set ( ppResults[i]->m_hWordStats );
 
 			// expanding prefix in word dictionary case
-			XQNode_t * pPrefixed = ExpandPrefix ( dXQ[i].m_pRoot, ppResults[i] );
+			XQNode_t * pPrefixed = ExpandPrefix ( dXQ[i].m_pRoot, ppResults[i], &tPayloads );
 			if ( pPrefixed )
 			{
 				dXQ[i].m_pRoot = pPrefixed;
@@ -30625,6 +30675,7 @@ KeywordsBlockReader_c::KeywordsBlockReader_c ( const BYTE * pBuf, bool bSkips )
 	m_sWord[0] = '\0';
 	m_iLen = 0;
 	m_bHaveSkips = bSkips;
+	m_sKeyword = m_sWord;
 }
 
 
@@ -30742,63 +30793,200 @@ const BYTE * CWordlist::AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint
 }
 
 
-int sphGetExpansionMagic ( int iDocs, int iHits )
+ISphWordlist::Args_t::Args_t ( bool bPayload, int iExpansionLimit )
+	: m_bPayload ( bPayload )
+	, m_iExpansionLimit ( iExpansionLimit )
 {
-	if ( iHits<=256 ) // magic threshold; mb make this configurable?
-		return 1;
-	else
-		return iDocs + 1;
+	m_sBuf.Reserve ( 2048 * SPH_MAX_WORD_LEN * 3 );
+	m_dExpanded.Reserve ( 2048 );
+	m_pPayload = NULL;
+	m_iTotalDocs = 0;
+	m_iTotalHits = 0;
 }
 
 
-static inline void AddExpansion ( CSphVector<SphExpanded_t> & dExpanded, const KeywordsBlockReader_c & tCtx )
+ISphWordlist::Args_t::~Args_t ()
 {
-	assert ( tCtx.GetWordLen() );
-
-	SphExpanded_t & tRes = dExpanded.Add();
-	tRes.m_sName = tCtx.GetWord();
-	tRes.m_iDocs = tCtx.m_iDocs;
-	tRes.m_iHits = tCtx.m_iHits;
-	tRes.m_iValue = sphGetExpansionMagic ( tCtx.m_iDocs, tCtx.m_iHits );
+	SafeDelete ( m_pPayload );
 }
 
 
-void CWordlist::GetPrefixedWords ( const char * sPrefix, int iPrefixLen, const char * sWildcard,
-	CSphVector<SphExpanded_t> & dExpanded ) const
+void ISphWordlist::Args_t::AddExpanded ( const BYTE * sName, int iLen, int iDocs, int iHits )
 {
-	assert ( sPrefix && *sPrefix && iPrefixLen>0 );
-	assert ( sWildcard && *sWildcard );
+	SphExpanded_t & tExpanded = m_dExpanded.Add();
+	tExpanded.m_iDocs = iDocs;
+	tExpanded.m_iHits = iHits;
+	int iOff = m_sBuf.GetLength();
+	tExpanded.m_iNameOff = iOff;
+
+	m_sBuf.Resize ( iOff + iLen + 1 );
+	memcpy ( m_sBuf.Begin()+iOff, sName, iLen );
+	m_sBuf[iOff+iLen] = '\0';
+}
+
+
+const char * ISphWordlist::Args_t::GetWordExpanded ( int iIndex ) const
+{
+	assert ( m_dExpanded[iIndex].m_iNameOff<m_sBuf.GetLength() );
+	return (const char *)m_sBuf.Begin() + m_dExpanded[iIndex].m_iNameOff;
+}
+
+
+struct DiskExpandedEntry_t
+{
+	int		m_iNameOff;
+	int		m_iDocs;
+	int		m_iHits;
+};
+
+struct DiskExpandedPayload_t
+{
+	int			m_iDocs;
+	int			m_iHits;
+	uint64_t	m_uDoclistOff;
+	int			m_iDoclistHint;
+};
+
+
+struct DictEntryDiskPayload_t
+{
+	explicit DictEntryDiskPayload_t ( bool bPayload )
+	{
+		m_bPayload = bPayload;
+		if ( bPayload )
+			m_dWordPayload.Reserve ( 1000 );
+
+		m_dWordExpand.Reserve ( 1000 );
+		m_dWordBuf.Reserve ( 8096 );
+	}
+
+	void Add ( const CSphDictEntry & tWord, int iWordLen )
+	{
+		if ( !m_bPayload || !sphIsExpandedPayload ( tWord.m_iDocs, tWord.m_iHits ) )
+		{
+			DiskExpandedEntry_t & tExpand = m_dWordExpand.Add();
+
+			int iOff = m_dWordBuf.GetLength();
+			tExpand.m_iNameOff = iOff;
+			tExpand.m_iDocs = tWord.m_iDocs;
+			tExpand.m_iHits = tWord.m_iHits;
+			m_dWordBuf.Resize ( iOff + iWordLen + 1 );
+			memcpy ( m_dWordBuf.Begin() + iOff + 1, tWord.m_sKeyword, iWordLen );
+			m_dWordBuf[iOff] = (BYTE)iWordLen;
+
+		} else
+		{
+			DiskExpandedPayload_t & tExpand = m_dWordPayload.Add();
+			tExpand.m_iDocs = tWord.m_iDocs;
+			tExpand.m_iHits = tWord.m_iHits;
+			tExpand.m_uDoclistOff = tWord.m_iDoclistOffset;
+			tExpand.m_iDoclistHint = tWord.m_iDoclistHint;
+		}
+	}
+
+	void Convert ( ISphWordlist::Args_t & tArgs )
+	{
+		if ( !m_dWordExpand.GetLength() && !m_dWordPayload.GetLength() )
+			return;
+
+		int iTotalDocs = 0;
+		int iTotalHits = 0;
+		if ( m_dWordExpand.GetLength() )
+		{
+			LimitExpanded ( tArgs.m_iExpansionLimit, m_dWordExpand );
+
+			const BYTE * sBase = m_dWordBuf.Begin();
+			ARRAY_FOREACH ( i, m_dWordExpand )
+			{
+				const DiskExpandedEntry_t & tCur = m_dWordExpand[i];
+				tArgs.AddExpanded ( sBase + tCur.m_iNameOff + 1, sBase[tCur.m_iNameOff], tCur.m_iDocs, tCur.m_iHits );
+
+				iTotalDocs += tCur.m_iDocs;
+				iTotalHits += tCur.m_iHits;
+			}
+		}
+
+		if ( m_dWordPayload.GetLength() )
+		{
+			LimitExpanded ( tArgs.m_iExpansionLimit, m_dWordPayload );
+
+			DiskSubstringPayload_t * pPayload = new DiskSubstringPayload_t ( m_dWordPayload.GetLength() );
+			// sorting by ascending doc-list offset gives some (15%) speed-up too
+			sphSort ( m_dWordPayload.Begin(), m_dWordPayload.GetLength(), bind ( &DiskExpandedPayload_t::m_uDoclistOff ) );
+
+			ARRAY_FOREACH ( i, m_dWordPayload )
+			{
+				iTotalDocs += m_dWordPayload[i].m_iDocs;
+				iTotalHits += m_dWordPayload[i].m_iHits;
+				pPayload->m_dDoclist[i].m_uOff = m_dWordPayload[i].m_uDoclistOff;
+				pPayload->m_dDoclist[i].m_iLen = m_dWordPayload[i].m_iDoclistHint;
+			}
+
+			pPayload->m_iTotalDocs = iTotalDocs;
+			pPayload->m_iTotalHits = iTotalHits;
+			tArgs.m_pPayload = pPayload;
+		}
+		tArgs.m_iTotalDocs = iTotalDocs;
+		tArgs.m_iTotalHits = iTotalHits;
+	}
+
+	// sort expansions by frequency desc
+	// clip the less frequent ones if needed, as they are likely misspellings
+	template < typename T >
+	void LimitExpanded ( int iExpansionLimit, CSphVector<T> & dVec ) const
+	{
+		if ( !iExpansionLimit || dVec.GetLength()<=iExpansionLimit )
+			return;
+
+		sphSort ( dVec.Begin(), dVec.GetLength(), ExpandedOrderDesc_T<T>() );
+		dVec.Resize ( iExpansionLimit );
+	}
+
+	bool								m_bPayload;
+	CSphVector<DiskExpandedEntry_t>		m_dWordExpand;
+	CSphVector<DiskExpandedPayload_t>	m_dWordPayload;
+	CSphVector<BYTE>					m_dWordBuf;
+};
+
+
+void CWordlist::GetPrefixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const
+{
+	assert ( sSubstring && *sSubstring && iSubLen>0 );
 
 	// empty index?
 	if ( !m_dCheckpoints.GetLength() )
 		return;
 
-	const CSphWordlistCheckpoint * pCheckpoint = FindCheckpoint ( sPrefix, iPrefixLen, 0, true );
-	const int iSkipMagic = ( BYTE(*sPrefix)<0x20 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
+	DictEntryDiskPayload_t tDict2Payload ( tArgs.m_bPayload );
+
+	const CSphWordlistCheckpoint * pCheckpoint = FindCheckpoint ( sSubstring, iSubLen, 0, true );
+	const int iSkipMagic = ( BYTE(*sSubstring)<0x20 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
 	while ( pCheckpoint )
 	{
 		// decode wordlist chunk
-		KeywordsBlockReader_c tCtx ( AcquireDict ( pCheckpoint ), m_bHaveSkips );
-		while ( tCtx.UnpackWord() )
+		KeywordsBlockReader_c tDictReader ( AcquireDict ( pCheckpoint ), m_bHaveSkips );
+		while ( tDictReader.UnpackWord() )
 		{
 			// block is sorted
 			// so once keywords are greater than the prefix, no more matches
-			int iCmp = sphDictCmp ( sPrefix, iPrefixLen, tCtx.GetWord(), tCtx.GetWordLen() );
+			int iCmp = sphDictCmp ( sSubstring, iSubLen, (const char *)tDictReader.m_sKeyword, tDictReader.GetWordLen() );
 			if ( iCmp<0 )
 				break;
 
 			// does it match the prefix *and* the entire wildcard?
-			if ( iCmp==0 && sphWildcardMatch ( tCtx.GetWord() + iSkipMagic, sWildcard ) )
-				AddExpansion ( dExpanded, tCtx );
+			if ( iCmp==0 && sphWildcardMatch ( (const char *)tDictReader.m_sKeyword + iSkipMagic, sWildcard ) )
+				tDict2Payload.Add ( tDictReader, tDictReader.GetWordLen() );
 		}
 
 		pCheckpoint++;
 		if ( pCheckpoint > &m_dCheckpoints.Last() )
 			break;
 
-		if ( sphDictCmp ( sPrefix, iPrefixLen, pCheckpoint->m_sWord, strlen ( pCheckpoint->m_sWord ) )<0 )
+		if ( sphDictCmp ( sSubstring, iSubLen, pCheckpoint->m_sWord, strlen ( pCheckpoint->m_sWord ) )<0 )
 			break;
 	}
+
+	tDict2Payload.Convert ( tArgs );
 }
 
 bool operator < ( const InfixBlock_t & a, const char * b )
@@ -30905,7 +31093,7 @@ int sphGetInfixLength ( const char * sInfix, int iBytes, int iInfixCodepointByte
 }
 
 
-void CWordlist::GetInfixedWords ( const char * sInfix, int iBytes, const char * sWildcard, CSphVector<SphExpanded_t> & dExpanded ) const
+void CWordlist::GetInfixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const
 {
 	// dict must be of keywords type, and fully cached
 	// mmap()ed in the worst case, should we ever banish it to disk again
@@ -30913,23 +31101,27 @@ void CWordlist::GetInfixedWords ( const char * sInfix, int iBytes, const char * 
 		return;
 
 	// extract key1, upto 6 chars from infix start
-	int iBytes1 = sphGetInfixLength ( sInfix, iBytes, m_iInfixCodepointBytes );
+	int iBytes1 = sphGetInfixLength ( sSubstring, iSubLen, m_iInfixCodepointBytes );
 
 	// lookup key1
 	// OPTIMIZE? maybe lookup key2 and reduce checkpoint set size, if possible?
 	CSphVector<int> dPoints;
-	if ( !sphLookupInfixCheckpoints ( sInfix, iBytes1, m_pBuf.GetWritePtr(), m_dInfixBlocks, m_iInfixCodepointBytes, dPoints ) )
+	if ( !sphLookupInfixCheckpoints ( sSubstring, iBytes1, m_pBuf.GetWritePtr(), m_dInfixBlocks, m_iInfixCodepointBytes, dPoints ) )
 		return;
+
+	DictEntryDiskPayload_t tDict2Payload ( tArgs.m_bPayload );
 
 	// walk those checkpoints, check all their words
 	ARRAY_FOREACH ( i, dPoints )
 	{
 		// OPTIMIZE? add a quicker path than a generic wildcard for "*infix*" case?
-		KeywordsBlockReader_c tCtx ( m_pBuf.GetWritePtr() + m_dCheckpoints[dPoints[i]-1].m_iWordlistOffset, m_bHaveSkips );
-		while ( tCtx.UnpackWord() )
-			if ( sphWildcardMatch ( tCtx.GetWord(), sWildcard ) )
-				AddExpansion ( dExpanded, tCtx );
+		KeywordsBlockReader_c tDictReader ( m_pBuf.GetWritePtr() + m_dCheckpoints[dPoints[i]-1].m_iWordlistOffset, m_bHaveSkips );
+		while ( tDictReader.UnpackWord() )
+			if ( sphWildcardMatch ( (const char *)tDictReader.m_sKeyword, sWildcard ) )
+				tDict2Payload.Add ( tDictReader, tDictReader.GetWordLen() );
 	}
+
+	tDict2Payload.Convert ( tArgs );
 }
 
 

@@ -1399,8 +1399,8 @@ public:
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & , int , CSphString & , CSphString & ) { return -1; }
 	virtual bool				SaveAttributes ( CSphString & ) const { return false; }
 	virtual DWORD				GetAttributeStatus () const { return 0; }
-	virtual bool				CreateFilesWithAttr ( int , const CSphString & , ESphAttr , CSphString & ) { return true; }
-	virtual bool				AddAttribute ( const CSphString &, ESphAttr, CSphString & ) { return true; }
+	virtual bool				CreateModifiedFiles ( bool , const CSphString & , ESphAttr , int , CSphString & ) { return true; }
+	virtual bool				AddRemoveAttribute ( bool, const CSphString &, ESphAttr, int, CSphString & ) { return true; }
 	virtual void				DebugDumpHeader ( FILE *, const char *, bool ) {}
 	virtual void				DebugDumpDocids ( FILE * ) {}
 	virtual void				DebugDumpHitlist ( FILE * , const char * , bool ) {}
@@ -1532,8 +1532,8 @@ public:
 	virtual bool				SaveAttributes ( CSphString & sError ) const;
 	virtual DWORD				GetAttributeStatus () const;
 
-	virtual bool				CreateFilesWithAttr ( int iPos, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError );
-	virtual bool				AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError );
+	virtual bool				CreateModifiedFiles ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, int iPos, CSphString & sError );
+	virtual bool				AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, int iPos, CSphString & sError );
 
 	bool						EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const;
 
@@ -7202,6 +7202,31 @@ void CSphSchema::InsertAttr ( int iPos, const CSphColumnInfo & tCol, bool bDynam
 }
 
 
+void CSphSchema::RemoveAttr ( const char * szAttr, bool bDynamic )
+{
+	int iIndex = GetAttrIndex ( szAttr );
+	if ( iIndex<0 )
+		return;
+
+	CSphVector<CSphColumnInfo> dBackup = m_dAttrs;
+
+	if ( bDynamic )
+		m_dDynamicUsed.Reset();
+	else
+	{
+		m_dStaticUsed.Reset();
+		m_iStaticSize = 0;
+	}
+
+	ISphSchema::Reset();
+	m_dAttrs.Reset();
+
+	ARRAY_FOREACH ( i, dBackup )
+		if ( i!=iIndex )
+			AddAttr ( dBackup[i], bDynamic );
+}
+
+
 void CSphSchema::AddAttr ( const CSphColumnInfo & tCol, bool bDynamic )
 {
 	InsertAttr ( m_dAttrs.GetLength(), tCol, bDynamic );
@@ -10393,6 +10418,7 @@ DWORD CSphIndex_VLN::GetAttributeStatus () const
 	return *m_pAttrsStatus;
 }
 
+
 const CSphRowitem * CSphIndex_VLN::CopyRow ( const CSphRowitem * pDocinfo, DWORD * pTmpDocinfo, const CSphColumnInfo * pNewAttr, int iOldStride ) const
 {
 	SphDocID_t uDocId = DOCINFO2ID ( pDocinfo );
@@ -10403,23 +10429,51 @@ const CSphRowitem * CSphIndex_VLN::CopyRow ( const CSphRowitem * pDocinfo, DWORD
 	return pDocinfo + iOldStride;
 }
 
-bool CSphIndex_VLN::CreateFilesWithAttr ( int iPos, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError )
-{
-	if ( m_tSchema.GetAttr ( sAttrName.cstr() ) )
-	{
-		sError.SetSprintf ( "'%s' attribute already in schema", sAttrName.cstr() );
-		return false;
-	}
 
+static const CSphRowitem * CopyRowAttrByAttr ( const CSphRowitem * pDocinfo, DWORD * pTmpDocinfo, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, int iAttrToRemove, const CSphVector<int> & dAttrMap, int iOldStride )
+{
+	DOCINFOSETID ( pTmpDocinfo, DOCINFO2ID ( pDocinfo ) );
+
+	for ( int iAttr = 0; iAttr < tOldSchema.GetAttrsCount(); iAttr++ )
+		if ( iAttr!=iAttrToRemove )
+		{
+			SphAttr_t tValue = sphGetRowAttr ( DOCINFO2ATTRS ( pDocinfo ), tOldSchema.GetAttr ( iAttr ).m_tLocator );
+			sphSetRowAttr ( DOCINFO2ATTRS ( pTmpDocinfo ), tNewSchema.GetAttr ( dAttrMap[iAttr] ).m_tLocator, tValue );
+		}
+
+	return pDocinfo + iOldStride;
+}
+
+
+static void CreateAttrMap ( CSphVector<int> & dAttrMap, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, int iAttrToRemove )
+{
+	dAttrMap.Resize ( tOldSchema.GetAttrsCount() );
+	for ( int iAttr = 0; iAttr < tOldSchema.GetAttrsCount(); iAttr++ )
+		if ( iAttr!=iAttrToRemove )
+		{
+			dAttrMap[iAttr] = tNewSchema.GetAttrIndex ( tOldSchema.GetAttr ( iAttr ).m_sName.cstr() );
+			assert ( dAttrMap[iAttr]>=0 );
+		} else
+			dAttrMap[iAttr] = -1;
+}
+
+
+bool CSphIndex_VLN::CreateModifiedFiles ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, int iPos, CSphString & sError )
+{
 	if ( m_bOndiskAllAttr || m_bOndiskPoolAttr )
 	{
-		sError.SetSprintf ( "ondisk_attrs enabled; adding attribute is not (yet) possible" );
+		sError.SetSprintf ( "ondisk_attrs enabled; adding and removing attributes is not (yet) possible" );
 		return false;
 	}
 
 	CSphSchema tNewSchema = m_tSchema;
-	CSphColumnInfo tInfo ( sAttrName.cstr(), eAttrType );
-	tNewSchema.InsertAttr ( iPos, tInfo, false );
+
+	if ( bAddAttr )
+	{
+		CSphColumnInfo tInfo ( sAttrName.cstr(), eAttrType );
+		tNewSchema.InsertAttr ( iPos, tInfo, false );
+	} else
+		tNewSchema.RemoveAttr ( sAttrName.cstr(), false );
 
 	CSphFixedVector<CSphRowitem> dMinRow ( tNewSchema.GetRowSize() );
 	int iOldStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
@@ -10463,13 +10517,29 @@ bool CSphIndex_VLN::CreateFilesWithAttr ( int iPos, const CSphString & sAttrName
 	CSphFixedVector<DWORD> dTmpDocinfos ( iNewStride );
 	DWORD * pTmpDocinfo = dTmpDocinfos.Begin();
 
-	const CSphColumnInfo * pNewAttr = tNewSchema.GetAttr ( sAttrName.cstr() );
-	assert ( pNewAttr );
-
-	for ( int i = 0; i < m_iDocinfo + (m_iDocinfoIndex+1)*2 && !tSPAWriter.IsError(); i++ )
+	if ( bAddAttr )
 	{
-		pDocinfo = CopyRow ( pDocinfo, pTmpDocinfo, pNewAttr, iOldStride );
-		tSPAWriter.PutBytes ( pTmpDocinfo, iNewStride*sizeof(DWORD) );
+		const CSphColumnInfo * pNewAttr = tNewSchema.GetAttr ( sAttrName.cstr() );
+		assert ( pNewAttr );
+
+		for ( int i = 0; i < m_iDocinfo + (m_iDocinfoIndex+1)*2 && !tSPAWriter.IsError(); i++ )
+		{
+			pDocinfo = CopyRow ( pDocinfo, pTmpDocinfo, pNewAttr, iOldStride );
+			tSPAWriter.PutBytes ( pTmpDocinfo, iNewStride*sizeof(DWORD) );
+		}
+	} else
+	{
+		int iAttrToRemove = tOldSchema.GetAttrIndex ( sAttrName.cstr() );
+		assert ( iAttrToRemove>=0 );
+
+		CSphVector<int> dAttrMap;
+		CreateAttrMap ( dAttrMap, tOldSchema, tNewSchema, iAttrToRemove );
+
+		for ( int i = 0; i < m_iDocinfo + (m_iDocinfoIndex+1)*2 && !tSPAWriter.IsError(); i++ )
+		{
+			pDocinfo = CopyRowAttrByAttr ( pDocinfo, pTmpDocinfo, tOldSchema, tNewSchema, iAttrToRemove, dAttrMap, iOldStride );
+			tSPAWriter.PutBytes ( pTmpDocinfo, iNewStride*sizeof(DWORD) );
+		}
 	}
 
 	if ( tSPAWriter.IsError() )
@@ -10482,14 +10552,8 @@ bool CSphIndex_VLN::CreateFilesWithAttr ( int iPos, const CSphString & sAttrName
 }
 
 
-bool CSphIndex_VLN::AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError )
+bool CSphIndex_VLN::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, int iPos, CSphString & sError )
 {
-	if ( m_tSchema.GetAttr ( sAttrName.cstr() ) )
-	{
-		sError.SetSprintf ( "'%s' attribute already in schema", sAttrName.cstr() );
-		return false;
-	}
-
 	if ( m_bOndiskAllAttr || m_bOndiskPoolAttr )
 	{
 		sError.SetSprintf ( "ondisk_attrs enabled; adding attribute is not (yet) possible" );
@@ -10497,21 +10561,20 @@ bool CSphIndex_VLN::AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrT
 	}
 
 	int iOldStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+	CSphSchema tOldSchema = m_tSchema;
 
-	CSphColumnInfo tInfo ( sAttrName.cstr(), eAttrType );
-	int iPos = m_tSchema.GetAttrsCount();
-	if ( m_tSettings.m_bIndexFieldLens )
-		iPos -= m_tSchema.m_dFields.GetLength();
-	m_tSchema.InsertAttr ( iPos, tInfo, false );
+	if ( bAdd )
+	{
+		CSphColumnInfo tInfo ( sAttrName.cstr(), eAttrType );
+		m_tSchema.InsertAttr ( iPos, tInfo, false );
+
+		if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_NONE )
+			m_tSettings.m_eDocinfo = SPH_DOCINFO_EXTERN;
+	} else
+		m_tSchema.RemoveAttr ( sAttrName.cstr(), false );
 
 	int iNewStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
-
 	m_uMinMaxIndex = m_iDocinfo*iNewStride;
-	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_NONE )
-		m_tSettings.m_eDocinfo = SPH_DOCINFO_EXTERN;
-
-	const CSphColumnInfo * pNewAttr = m_tSchema.GetAttr ( sAttrName.cstr() );
-	assert ( pNewAttr );
 
 	CSphString sWarning;
 	const CSphRowitem * pDocinfo = m_dAttrShared.GetWritePtr();
@@ -10524,10 +10587,29 @@ bool CSphIndex_VLN::AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrT
 	DWORD * pNewDocinfos = pNewDocinfo.GetWritePtr();
 	assert ( pNewDocinfos );
 
-	for ( int i = 0; i < m_iDocinfo + (m_iDocinfoIndex+1)*2; i++ )
+	if ( bAdd )
 	{
-		pDocinfo = CopyRow ( pDocinfo, pNewDocinfos, pNewAttr, iOldStride );
-		pNewDocinfos += iNewStride;
+		const CSphColumnInfo * pNewAttr = m_tSchema.GetAttr ( sAttrName.cstr() );
+		assert ( pNewAttr );
+
+		for ( int i = 0; i < m_iDocinfo + (m_iDocinfoIndex+1)*2; i++ )
+		{
+			pDocinfo = CopyRow ( pDocinfo, pNewDocinfos, pNewAttr, iOldStride );
+			pNewDocinfos += iNewStride;
+		}
+	} else
+	{
+		int iAttrToRemove = tOldSchema.GetAttrIndex ( sAttrName.cstr() );
+		assert ( iAttrToRemove>=0 );
+
+		CSphVector<int> dAttrMap;
+		CreateAttrMap ( dAttrMap, tOldSchema, m_tSchema, iAttrToRemove );
+
+		for ( int i = 0; i < m_iDocinfo + (m_iDocinfoIndex+1)*2; i++ )
+		{
+			pDocinfo = CopyRowAttrByAttr ( pDocinfo, pNewDocinfos, tOldSchema, m_tSchema, iAttrToRemove, dAttrMap, iOldStride );
+			pNewDocinfos += iNewStride;
+		}
 	}
 
 	m_dAttrShared.Swap ( pNewDocinfo );

@@ -10902,7 +10902,8 @@ enum SqlStmt_e
 	STMT_SHOW_AGENT_STATUS,
 	STMT_SHOW_INDEX_STATUS,
 	STMT_SHOW_PROFILE,
-	STMT_ALTER,
+	STMT_ALTER_ADD,
+	STMT_ALTER_DROP,
 	STMT_SHOW_PLAN,
 	STMT_SELECT_DUAL,
 	STMT_SHOW_DATABASES,
@@ -10922,7 +10923,8 @@ static const char * g_dSqlStmts[STMT_TOTAL] =
 	"desc", "show_tables", "update", "create_func", "drop_func", "attach_index",
 	"flush_rtindex", "flush_ramchunk", "show_variables", "truncate_rtindex", "select_sysvar",
 	"show_collation", "show_character_set", "optimize_index", "show_agent_status",
-	"show_index_status", "show_profile", "show_plan"
+	"show_index_status", "show_profile", "alter_add", "alter_drop", "show_plan",
+	"select_dual", "show_databases", "create_plugin", "drop_plugin", "show_plugins"
 };
 
 
@@ -11192,7 +11194,6 @@ public:
 	int							AllocNamedVec ();
 	CSphVector<CSphNamedInt> &	GetNamedVec ( int iIndex );
 	void						FreeNamedVec ( int iIndex );
-	bool						AlterStatement ( SqlNode_t * pNode );
 	bool						UpdateStatement ( SqlNode_t * pNode );
 	bool						DeleteStatement ( SqlNode_t * pNode );
 
@@ -11404,12 +11405,11 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 			m_pParseError->SetSprintf ( "missing token filter spec string" );
 			return false;
 		}
-		
+
 		m_pQuery->m_sQueryTokenFilterLib = dParams[0];
 		m_pQuery->m_sQueryTokenFilterName = dParams[1];
 		m_pQuery->m_sQueryTokenFilterOpts = dParams[2];
-	}
-	else if ( sOpt=="max_matches" )
+	} else if ( sOpt=="max_matches" )
 	{
 		m_pQuery->m_iMaxMatches = (int)tValue.m_iValue;
 
@@ -11703,13 +11703,6 @@ void SqlParser_c::GenericStatement ( SqlNode_t * pNode, SqlStmt_e iStmt )
 	m_pStmt->m_iListStart = pNode->m_iStart;
 	m_pStmt->m_iListEnd = pNode->m_iEnd;
 	ToString ( m_pStmt->m_sIndex, *pNode );
-}
-
-bool SqlParser_c::AlterStatement ( SqlNode_t * pNode )
-{
-	GenericStatement ( pNode, STMT_ALTER );
-	m_pStmt->m_tUpdate.m_dRowOffset.Add ( 0 );
-	return true;
 }
 
 bool SqlParser_c::UpdateStatement ( SqlNode_t * pNode )
@@ -16823,15 +16816,126 @@ void HandleMysqlShowProfile ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p 
 
 bool TryRename ( const char * sIndex, const char * sPrefix, const char * sFromPostfix, const char * sToPostfix, const char * sAction, bool bFatal, bool bCheckExist=true );
 
+bool RenameWithRollback ( const ServedIndex_t * pLocal )
+{
+	const char * szIndexName = pLocal->m_pIndex->GetName();
+	const char * szIndexPath = pLocal->m_sIndexPath.cstr();
 
-void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+	// current to old
+	const int NUM_EXTS_USED = 2;
+	const ESphExt dExtsUsed[NUM_EXTS_USED] = { SPH_EXT_SPH, SPH_EXT_SPA };
+	const char * szAction = "removing attribute from";
+	int iFailed = -1;
+	for ( int iExt = 0; iExt < NUM_EXTS_USED && iFailed==-1; iExt++ )
+		if ( !TryRename ( szIndexName, szIndexPath, sphGetExt ( SPH_EXT_TYPE_CUR, dExtsUsed[iExt] ), sphGetExt ( SPH_EXT_TYPE_OLD, dExtsUsed[iExt] ), szAction, false ) )
+			iFailed = iExt;
+
+	// failed? rollback
+	if ( iFailed!=-1 )
+	{
+		for ( int iExt = iFailed; iExt>=0; iExt-- )
+			TryRename ( szIndexName, szIndexPath, sphGetExt ( SPH_EXT_TYPE_OLD, dExtsUsed[iExt] ), sphGetExt ( SPH_EXT_TYPE_CUR, dExtsUsed[iExt] ), szAction, true );
+
+		sphWarning ( "adding attribute to index '%s': rename to .old failed; using old index", szIndexName );
+		return false;
+	}
+
+	// new to cur
+	for ( int iExt = 0; iExt < NUM_EXTS_USED && iFailed==-1; iExt++ )
+		if ( !TryRename ( szIndexName, szIndexPath, sphGetExt ( SPH_EXT_TYPE_NEW, dExtsUsed[iExt] ), sphGetExt ( SPH_EXT_TYPE_CUR, dExtsUsed[iExt] ), szAction, false ) )
+			iFailed = iExt;
+
+	// rollback
+	if ( iFailed!=-1 )
+	{
+		for ( int iExt = iFailed; iExt>=0; iExt-- )
+			TryRename ( szIndexName, szIndexPath, sphGetExt ( SPH_EXT_TYPE_CUR, dExtsUsed[iExt] ), sphGetExt ( SPH_EXT_TYPE_NEW, dExtsUsed[iExt] ), szAction, true );
+
+		sphWarning ( "adding attribute to index '%s': .new rename failed; using old index", szIndexName );
+
+		// rollback again
+		for ( int iExt = 0; iExt < NUM_EXTS_USED; iExt++ )
+			TryRename ( szIndexName, szIndexPath, sphGetExt ( SPH_EXT_TYPE_OLD, dExtsUsed[iExt] ), sphGetExt ( SPH_EXT_TYPE_CUR, dExtsUsed[iExt] ), szAction, true );
+
+		return false;
+	}
+
+	// unlink old
+	char sFileName[SPH_MAX_FILENAME_LEN];
+	for ( int iExt = 0; iExt < NUM_EXTS_USED; iExt++ )
+	{
+		snprintf ( sFileName, sizeof(sFileName), "%s%s", szIndexPath, sphGetExt ( SPH_EXT_TYPE_OLD, dExtsUsed[iExt] ) );
+		if ( ::unlink ( sFileName ) && errno!=ENOENT )
+			sphWarning ( "unlink failed (file '%s', error '%s'", sFileName, strerror(errno) );
+	}
+
+	return true;
+}
+
+
+void ModifyIndexAttrs ( const ServedIndex_t * pLocal, bool bAdd, CSphString & sAttrName, ESphAttr eAttrType, int iPos, CSphString & sError )
+{
+	if ( !pLocal->m_pIndex->CreateModifiedFiles ( bAdd, sAttrName, eAttrType, iPos, sError ) )
+		return;
+
+	if ( pLocal->m_pIndex->IsRT() )
+		pLocal->m_pIndex->AddRemoveAttribute ( bAdd, sAttrName, eAttrType, iPos, sError );
+	else
+	{
+		if ( RenameWithRollback ( pLocal ) )
+			pLocal->m_pIndex->AddRemoveAttribute ( bAdd, sAttrName, eAttrType, iPos, sError );
+	}
+}
+
+
+void AddAttrToIndex ( const SqlStmt_t & tStmt, const ServedIndex_t * pLocal, CSphString & sError )
+{
+	CSphString sAttrToAdd = tStmt.m_sAlterAttr;
+	sAttrToAdd.ToLower();
+
+	if ( pLocal->m_pIndex->GetMatchSchema().GetAttr ( sAttrToAdd.cstr() ) )
+	{
+		sError.SetSprintf ( "'%s' attribute already in schema", sAttrToAdd.cstr() );
+		return;
+	}
+
+	int iPos = pLocal->m_pIndex->GetMatchSchema().GetAttrsCount();
+	if ( pLocal->m_pIndex->GetSettings().m_bIndexFieldLens )
+		iPos -= pLocal->m_pIndex->GetMatchSchema().m_dFields.GetLength();
+
+	ModifyIndexAttrs ( pLocal, true, sAttrToAdd, tStmt.m_eAlterColType, iPos, sError );
+}
+
+
+void RemoveAttrFromIndex ( const SqlStmt_t & tStmt, const ServedIndex_t * pLocal, CSphString & sError )
+{
+	CSphString sAttrToRemove = tStmt.m_sAlterAttr;
+	sAttrToRemove.ToLower();
+
+	if ( !pLocal->m_pIndex->GetMatchSchema().GetAttr ( sAttrToRemove.cstr() ) )
+	{
+		sError.SetSprintf ( "attribute '%s' does not exist", sAttrToRemove.cstr() );
+		return;
+	}
+
+	if ( pLocal->m_pIndex->GetMatchSchema().GetAttrsCount()==1 )
+	{
+		sError.SetSprintf ( "unable to remove last attribute '%s'", sAttrToRemove.cstr() );
+		return;
+	}
+
+	ModifyIndexAttrs ( pLocal, false, sAttrToRemove, SPH_ATTR_NONE, -1, sError );
+}
+
+
+void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, bool bAdd )
 {
 	MEMORY ( SPH_MEM_ALTER_SQL );
 
 	SearchFailuresLog_c dErrors;
 	CSphString sError;
 
-	if ( tStmt.m_eAlterColType==SPH_ATTR_NONE )
+	if ( bAdd && tStmt.m_eAlterColType==SPH_ATTR_NONE )
 	{
 		sError.SetSprintf ( "unsupported attribute type '%d'", tStmt.m_eAlterColType );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -16897,88 +17001,15 @@ void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 				continue;
 			}
 
-			CSphString sAttrToAdd = tStmt.m_sAlterAttr;
-			sAttrToAdd.ToLower();
-			int iPos = pLocal->m_pIndex->GetMatchSchema().GetAttrsCount();
-			if ( pLocal->m_pIndex->GetSettings().m_bIndexFieldLens )
-				iPos -= pLocal->m_pIndex->GetMatchSchema().m_dFields.GetLength();
+			CSphString sAddError;
 
-			if ( pLocal->m_pIndex->IsRT() )
-			{
-				if ( !pLocal->m_pIndex->CreateFilesWithAttr ( iPos, sAttrToAdd, tStmt.m_eAlterColType, sError ) )
-				{
-					dErrors.Submit ( sName, sError.cstr() );
-					pLocal->Unlock();
-					continue;
-				}
+			if ( bAdd )
+				AddAttrToIndex ( tStmt, pLocal, sAddError );
+			else
+				RemoveAttrFromIndex ( tStmt, pLocal, sAddError );
 
-				pLocal->m_pIndex->AddAttribute ( sAttrToAdd, tStmt.m_eAlterColType, sError );
-			} else
-			{
-				if ( !pLocal->m_pIndex->CreateFilesWithAttr ( iPos, sAttrToAdd, tStmt.m_eAlterColType, sError ) )
-				{
-					dErrors.Submit ( sName, sError.cstr() );
-					pLocal->Unlock();
-					continue;
-				}
-
-				const char * szIndexName = pLocal->m_pIndex->GetName();
-				const char * szIndexPath = pLocal->m_sIndexPath.cstr();
-
-				// current to old
-				const int NUM_EXTS_USED = 2;
-				const ESphExt dExtsUsed[NUM_EXTS_USED] = { SPH_EXT_SPH, SPH_EXT_SPA };
-				const char * szAction = "adding attribute to";
-				int iFailed = -1;
-				for ( int iExt = 0; iExt < NUM_EXTS_USED && iFailed==-1; iExt++ )
-					if ( !TryRename ( szIndexName, szIndexPath, sphGetExt ( SPH_EXT_TYPE_CUR, dExtsUsed[iExt] ), sphGetExt ( SPH_EXT_TYPE_OLD, dExtsUsed[iExt] ), szAction, false ) )
-						iFailed = iExt;
-
-				// failed? rollback
-				if ( iFailed!=-1 )
-				{
-					for ( int iExt = iFailed; iExt>=0; iExt-- )
-						TryRename ( szIndexName, szIndexPath, sphGetExt ( SPH_EXT_TYPE_OLD, dExtsUsed[iExt] ), sphGetExt ( SPH_EXT_TYPE_CUR, dExtsUsed[iExt] ), szAction, true );
-
-					sphWarning ( "adding attribute to index '%s': rename to .old failed; using old index", szIndexName );
-
-					pLocal->Unlock();
-					continue;
-				}
-
-				// new to cur
-				for ( int iExt = 0; iExt < NUM_EXTS_USED && iFailed==-1; iExt++ )
-					if ( !TryRename ( szIndexName, szIndexPath, sphGetExt ( SPH_EXT_TYPE_NEW, dExtsUsed[iExt] ), sphGetExt ( SPH_EXT_TYPE_CUR, dExtsUsed[iExt] ), szAction, false ) )
-						iFailed = iExt;
-
-				// rollback
-				if ( iFailed!=-1 )
-				{
-					for ( int iExt = iFailed; iExt>=0; iExt-- )
-						TryRename ( szIndexName, szIndexPath, sphGetExt ( SPH_EXT_TYPE_CUR, dExtsUsed[iExt] ), sphGetExt ( SPH_EXT_TYPE_NEW, dExtsUsed[iExt] ), szAction, true );
-
-					sphWarning ( "adding attribute to index '%s': .new rename failed; using old index", szIndexName );
-
-					// rollback again
-					for ( int iExt = 0; iExt < NUM_EXTS_USED; iExt++ )
-						TryRename ( szIndexName, szIndexPath, sphGetExt ( SPH_EXT_TYPE_OLD, dExtsUsed[iExt] ), sphGetExt ( SPH_EXT_TYPE_CUR, dExtsUsed[iExt] ), szAction, true );
-
-					pLocal->Unlock();
-					continue;
-				}
-
-				// unlink old
-				char sFileName[SPH_MAX_FILENAME_LEN];
-				for ( int iExt = 0; iExt < NUM_EXTS_USED; iExt++ )
-				{
-					snprintf ( sFileName, sizeof(sFileName), "%s%s", szIndexPath, sphGetExt ( SPH_EXT_TYPE_OLD, dExtsUsed[iExt] ) );
-					if ( ::unlink ( sFileName ) && errno!=ENOENT )
-						sphWarning ( "unlink failed (file '%s', error '%s'", sFileName, strerror(errno) );
-				}
-
-				// modify the in-memory version
-				pLocal->m_pIndex->AddAttribute ( sAttrToAdd, tStmt.m_eAlterColType, sError );
-			}
+			if ( sAddError.Length() )
+				dErrors.Submit ( sName, sAddError.cstr() );
 
 			pLocal->Unlock();
 		}
@@ -17302,8 +17333,12 @@ public:
 			HandleMysqlShowProfile ( tOut, m_tLastProfile );
 			return false; // do not profile this call, keep last query profile
 
-		case STMT_ALTER:
-			HandleMysqlAlter ( tOut, *pStmt );
+		case STMT_ALTER_ADD:
+			HandleMysqlAlter ( tOut, *pStmt, true );
+			return true;
+
+		case STMT_ALTER_DROP:
+			HandleMysqlAlter ( tOut, *pStmt, false );
 			return true;
 
 		case STMT_SHOW_PLAN:

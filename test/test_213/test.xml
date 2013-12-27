@@ -102,6 +102,36 @@ INSERT INTO `test_table` VALUES
 <sphinxql>alter table test add column str1 string</sphinxql>
 <sphinxql>select * from test</sphinxql>
 
+<sphinxql>alter table test drop column str1</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test drop column str1</sphinxql>
+<sphinxql>alter table test drop column str0</sphinxql>
+
+<sphinxql>alter table test drop column json1</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test drop column mva64</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test drop column mva</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test drop column add1</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test drop column add2</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test drop column add3</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test drop column gid</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test add column add1 integer</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
 </sphqueries>
 
 </test>

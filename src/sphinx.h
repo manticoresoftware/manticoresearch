@@ -1676,6 +1676,9 @@ public:
 	/// add attr
 	void					AddAttr ( const CSphColumnInfo & tAttr, bool bDynamic );
 
+	/// remove attr
+	void					RemoveAttr ( const char * szAttr, bool bDynamic );
+
 	static bool				IsReserved ( const char * szToken );
 
 protected:
@@ -3306,9 +3309,9 @@ public:
 
 	virtual DWORD				GetAttributeStatus () const = 0;
 
-	virtual bool				CreateFilesWithAttr ( int iPos, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError ) = 0;
+	virtual bool				CreateModifiedFiles ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, int iPos, CSphString & sError ) = 0;
 
-	virtual bool				AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError ) = 0;
+	virtual bool				AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, int iPos, CSphString & sError ) = 0;
 
 public:
 	/// internal debugging hook, DO NOT USE

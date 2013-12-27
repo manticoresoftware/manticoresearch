@@ -1126,8 +1126,8 @@ public:
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError, CSphString & sWarning );
 	virtual bool				SaveAttributes ( CSphString & sError ) const;
 	virtual DWORD				GetAttributeStatus () const { return m_uDiskAttrStatus; }
-	virtual bool				CreateFilesWithAttr ( int iPos, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError );
-	virtual bool				AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError );
+	virtual bool				CreateModifiedFiles ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, int iPos, CSphString & sError );
+	virtual bool				AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, int iPos, CSphString & sError );
 
 	virtual void				DebugDumpHeader ( FILE * , const char * , bool ) {}
 	virtual void				DebugDumpDocids ( FILE * ) {}
@@ -6449,7 +6449,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			iKlistEntries = m_tKlist.GetKillListSize();
 		} else
 		{
-			const CSphIndex * pDiskChunk = m_dDiskChunks  [ iChunk+1 ];
+			const CSphIndex * pDiskChunk = m_dDiskChunks [ iChunk+1 ];
 			pKlist = pDiskChunk->GetKillList();
 			iKlistEntries = pDiskChunk->GetKillListSize();
 		}
@@ -7576,7 +7576,8 @@ bool RtIndex_t::RenameWithRollback ( const ESphExt * dExts, int nExts, ESphExtTy
 	return iFailedChunk==-1 && iFailedExt==-1;
 }
 
-bool RtIndex_t::CreateFilesWithAttr ( int iPos, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError )
+
+bool RtIndex_t::CreateModifiedFiles ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, int iPos, CSphString & sError )
 {
 	// fixme: use some unified approach to these exts
 	const int NUM_EXTS_USED = 2;
@@ -7594,16 +7595,9 @@ bool RtIndex_t::CreateFilesWithAttr ( int iPos, const CSphString & sAttrName, ES
 
 	m_tRwlock.ReadLock();
 
-	if ( m_tSchema.GetAttr ( sAttrName.cstr() ) )
-	{
-		sError.SetSprintf ( "'%s' attribute already in schema", sAttrName.cstr() );
-		m_tRwlock.Unlock();
-		return false;
-	}
-
 	int iFailedChunk = -1;
 	ARRAY_FOREACH_COND ( iDiskChunk, m_dDiskChunks, iFailedChunk==-1 )
-		if ( !m_dDiskChunks[iDiskChunk]->CreateFilesWithAttr ( iPos, sAttrName.cstr(), eAttrType, sError ) )
+		if ( !m_dDiskChunks[iDiskChunk]->CreateModifiedFiles ( bAddAttr, sAttrName.cstr(), eAttrType, iPos, sError ) )
 			iFailedChunk = iDiskChunk;
 
 	// cleanup if failed
@@ -7650,14 +7644,9 @@ bool RtIndex_t::CreateFilesWithAttr ( int iPos, const CSphString & sAttrName, ES
 	return true;
 }
 
-bool RtIndex_t::AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError )
-{
-	if ( m_tSchema.GetAttr ( sAttrName.cstr() ) )
-	{
-		sError.SetSprintf ( "'%s' attribute already in schema", sAttrName.cstr() );
-		return false;
-	}
 
+bool RtIndex_t::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, int iPos, CSphString & sError )
+{
 	if ( m_dDiskChunks.GetLength() && !m_tSchema.GetAttrsCount() )
 	{
 		sError = "index must already have attributes";
@@ -7667,21 +7656,24 @@ bool RtIndex_t::AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType,
 	m_tRwlock.WriteLock();
 
 	int iOldStride = m_iStride;
+	const CSphColumnInfo * pNewAttr = NULL;
+	CSphSchema tOldSchema = m_tSchema;
 
-	CSphColumnInfo tInfo ( sAttrName.cstr(), eAttrType );
-	int iPos = m_tSchema.GetAttrsCount();
-	if ( m_tSettings.m_bIndexFieldLens )
-		iPos -= m_tSchema.m_dFields.GetLength();
-	m_tSchema.InsertAttr ( iPos, tInfo, false );
-	const CSphColumnInfo * pNewAttr = m_tSchema.GetAttr ( sAttrName.cstr() );
+	if ( bAdd )
+	{
+		CSphColumnInfo tInfo ( sAttrName.cstr(), eAttrType );
+		m_tSchema.InsertAttr ( iPos, tInfo, false );
+		pNewAttr = m_tSchema.GetAttr ( sAttrName.cstr() );
+	} else
+		m_tSchema.RemoveAttr ( sAttrName.cstr(), false );
 
 	m_iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 
 	// modify the in-memory data of disk chunks
 	// fixme: we can't rollback in-memory changes, so we just show errors here for now
 	ARRAY_FOREACH ( iDiskChunk, m_dDiskChunks )
-		if ( !m_dDiskChunks[iDiskChunk]->AddAttribute ( sAttrName, eAttrType, sError ) )
-			sphWarning ( "adding attribute to %s.%d: %s", m_sPath.cstr(), iDiskChunk+m_iDiskBase, sError.cstr() );
+		if ( !m_dDiskChunks[iDiskChunk]->AddRemoveAttribute ( bAdd, sAttrName, eAttrType, iPos, sError ) )
+			sphWarning ( "%s attribute to %s.%d: %s", bAdd ? "adding" : "removing", m_sPath.cstr(), iDiskChunk+m_iDiskBase, sError.cstr() );
 
 	// now modify the ramchunk
 	ARRAY_FOREACH ( iSegment, m_dSegments )
@@ -7694,15 +7686,49 @@ bool RtIndex_t::AddAttribute ( const CSphString & sAttrName, ESphAttr eAttrType,
 		CSphRowitem * pOldDocinfoEnd = pOldDocinfo+pSeg->m_dRows.GetLength();
 		CSphRowitem * pNewDocinfo = dNewRows.Begin();
 
-		while ( pOldDocinfo < pOldDocinfoEnd )
+		if ( bAdd )
 		{
-			SphDocID_t uDocId = DOCINFO2ID ( pOldDocinfo );
-			DWORD * pAttrs = DOCINFO2ATTRS ( pOldDocinfo );
-			memcpy ( DOCINFO2ATTRS ( pNewDocinfo ), pAttrs, m_tSchema.GetRowSize()*sizeof(CSphRowitem) );
-			sphSetRowAttr ( DOCINFO2ATTRS ( pNewDocinfo ), pNewAttr->m_tLocator, 0 );
-			DOCINFOSETID ( pNewDocinfo, uDocId );
-			pOldDocinfo += iOldStride;
-			pNewDocinfo += m_iStride;
+			while ( pOldDocinfo < pOldDocinfoEnd )
+			{
+				SphDocID_t uDocId = DOCINFO2ID ( pOldDocinfo );
+				DWORD * pAttrs = DOCINFO2ATTRS ( pOldDocinfo );
+				memcpy ( DOCINFO2ATTRS ( pNewDocinfo ), pAttrs, m_tSchema.GetRowSize()*sizeof(CSphRowitem) );
+				sphSetRowAttr ( DOCINFO2ATTRS ( pNewDocinfo ), pNewAttr->m_tLocator, 0 );
+				DOCINFOSETID ( pNewDocinfo, uDocId );
+				pOldDocinfo += iOldStride;
+				pNewDocinfo += m_iStride;
+			}
+		} else
+		{
+			int iAttrToRemove = tOldSchema.GetAttrIndex ( sAttrName.cstr() );
+
+			CSphVector<int> dAttrMap;
+			dAttrMap.Resize ( tOldSchema.GetAttrsCount() );
+			for ( int iAttr = 0; iAttr < tOldSchema.GetAttrsCount(); iAttr++ )
+				if ( iAttr!=iAttrToRemove )
+				{
+					dAttrMap[iAttr] = m_tSchema.GetAttrIndex ( tOldSchema.GetAttr ( iAttr ).m_sName.cstr() );
+					assert ( dAttrMap[iAttr]>=0 );
+				} else
+					dAttrMap[iAttr] = -1;
+
+			while ( pOldDocinfo < pOldDocinfoEnd )
+			{
+				DWORD * pOldAttrs = DOCINFO2ATTRS ( pOldDocinfo );
+				DWORD * pNewAttrs = DOCINFO2ATTRS ( pNewDocinfo );
+
+				for ( int iAttr = 0; iAttr < tOldSchema.GetAttrsCount(); iAttr++ )
+					if ( iAttr!=iAttrToRemove )
+					{
+						SphAttr_t tValue = sphGetRowAttr ( pOldAttrs, tOldSchema.GetAttr ( iAttr ).m_tLocator );
+						sphSetRowAttr ( pNewAttrs, m_tSchema.GetAttr ( dAttrMap[iAttr] ).m_tLocator, tValue );
+					}
+
+				DOCINFOSETID ( pNewDocinfo, DOCINFO2ID ( pOldDocinfo ) );
+
+				pOldDocinfo += iOldStride;
+				pNewDocinfo += m_iStride;
+			}
 		}
 
 		pSeg->m_dRows.SwapData ( dNewRows );

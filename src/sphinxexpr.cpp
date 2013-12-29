@@ -2044,6 +2044,8 @@ private:
 	ISphExpr *				CreateAggregateNode ( const ExprNode_t & tNode, ESphAggrFunc eFunc, ISphExpr * pLeft );
 	ISphExpr *				CreateForInNode ( int iNode );
 	void					FixupIterators ( int iNode, const char * sKey, SphAttr_t * pAttr );
+
+	bool					GetError () const { return !( m_sLexerError.IsEmpty() && m_sParserError.IsEmpty() && m_sCreateError.IsEmpty() ); }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -3588,7 +3590,7 @@ ISphExpr * ExprParser_t::CreateContainsNode ( const ExprNode_t & tNode )
 /// fold nodes subtree into opcodes
 ISphExpr * ExprParser_t::CreateTree ( int iNode )
 {
-	if ( iNode<0 )
+	if ( iNode<0 || GetError() )
 		return NULL;
 
 	const ExprNode_t & tNode = m_dNodes[iNode];
@@ -3625,6 +3627,13 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 
 	ISphExpr * pLeft = bSkipLeft ? NULL : CreateTree ( tNode.m_iLeft );
 	ISphExpr * pRight = bSkipRight ? NULL : CreateTree ( tNode.m_iRight );
+
+	if ( GetError() )
+	{
+		SafeRelease ( pLeft );
+		SafeRelease ( pRight );
+		return NULL;
+	}
 
 #define LOC_SPAWN_POLY(_classname) \
 	if ( m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_JSON_FIELD && m_dNodes[tNode.m_iLeft].m_iToken==TOK_ATTR_JSON ) \

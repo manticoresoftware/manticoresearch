@@ -911,10 +911,10 @@ public:
 	CSphGrouperMulti ( const CSphVector<CSphAttrLocator> & dLocators, const CSphVector<ESphAttr> & dAttrTypes, const CSphVector<ISphExpr *> & dJsonKeys )
 		: m_dLocators ( dLocators )
 		, m_dAttrTypes ( dAttrTypes )
+		, m_dJsonKeys ( dJsonKeys )
 	{
 		assert ( m_dLocators.GetLength()>1 );
 		assert ( m_dLocators.GetLength()==m_dAttrTypes.GetLength() && m_dLocators.GetLength()==dJsonKeys.GetLength() );
-		m_dJsonKeys = dJsonKeys;
 	}
 
 	virtual ~CSphGrouperMulti ()
@@ -3596,7 +3596,8 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 
 		if ( !strcasecmp ( pTok, "@relevance" )
 			|| !strcasecmp ( pTok, "@rank" )
-			|| !strcasecmp ( pTok, "@weight" ) )
+			|| !strcasecmp ( pTok, "@weight" )
+			|| !strcasecmp ( pTok, "weight()" ) )
 		{
 			tState.m_eKeypart[iField] = SPH_KEYPART_WEIGHT;
 
@@ -3886,7 +3887,7 @@ static CSphGrouper * sphCreateGrouperMulti ( const CSphVector<CSphAttrLocator> &
 											const CSphVector<ISphExpr *> & dJsonKeys, ESphCollation eCollation );
 
 static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & tSchema,
-	CSphGroupSorterSettings & tSettings, CSphString & sJsonColumn, CSphString & sError, bool bImplicit )
+								CSphGroupSorterSettings & tSettings, CSphVector<int> & dGroupColumns, CSphString & sError, bool bImplicit )
 {
 	tSettings.m_tDistinctLoc.m_iBitOffset = -1;
 
@@ -3899,6 +3900,7 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 		return false;
 	}
 
+	CSphString sJsonColumn;
 	CSphString sJsonKey;
 	if ( pQuery->m_eGroupFunc==SPH_GROUPBY_MULTIPLE )
 	{
@@ -3921,15 +3923,20 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 		}
 		dGroupBy.Uniq();
 
-		for ( int i=0; i<dGroupBy.GetLength(); i++ )
+		ARRAY_FOREACH ( i, dGroupBy )
 		{
-			bool bJson = sphJsonNameSplit ( dGroupBy[i].cstr(), &sJsonColumn, &sJsonKey );
-			const CSphString & sGroupBy = bJson ? sJsonColumn : dGroupBy[i];
+			CSphString sJsonExpr;
+			dJsonKeys.Add ( NULL );
+			if ( sphJsonNameSplit ( dGroupBy[i].cstr(), &sJsonColumn, &sJsonKey ) )
+			{
+				sJsonExpr = dGroupBy[i];
+				dGroupBy[i] = sJsonColumn;
+			}
 
-			const int iAttr = tSchema.GetAttrIndex ( sGroupBy.cstr() );
+			const int iAttr = tSchema.GetAttrIndex ( dGroupBy[i].cstr() );
 			if ( iAttr<0 )
 			{
-				sError.SetSprintf ( "group-by attribute '%s' not found", sGroupBy.cstr() );
+				sError.SetSprintf ( "group-by attribute '%s' not found", dGroupBy[i].cstr() );
 				return false;
 			}
 
@@ -3938,7 +3945,7 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 			{
 				sError.SetSprintf ( "MVA values can't be used in multiple group-by" );
 				return false;
-			} else if ( !bJson && eType==SPH_ATTR_JSON )
+			} else if ( sJsonExpr.IsEmpty() && eType==SPH_ATTR_JSON )
 			{
 				sError.SetSprintf ( "JSON blob can't be used in multiple group-by" );
 				return false;
@@ -3946,8 +3953,10 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 
 			dLocators.Add ( tSchema.GetAttr ( iAttr ).m_tLocator );
 			dAttrTypes.Add ( eType );
+			dGroupColumns.Add ( iAttr );
 
-			dJsonKeys.Add ( bJson ? sphExprParse ( dGroupBy[i].cstr(), tSchema, NULL, NULL, sError, NULL ): NULL );
+			if ( !sJsonExpr.IsEmpty() )
+				dJsonKeys.Last() = sphExprParse ( sJsonExpr.cstr(), tSchema, NULL, NULL, sError, NULL );
 		}
 
 		tSettings.m_pGrouper = sphCreateGrouperMulti ( dLocators, dAttrTypes, dJsonKeys, pQuery->m_eCollation );
@@ -3972,6 +3981,8 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 			sError.SetSprintf ( "groupby: legacy groupby modes are not supported on JSON attributes" );
 			return false;
 		}
+
+		dGroupColumns.Add ( iAttr );
 
 		// FIXME! handle collations here?
 		ISphExpr * pExpr = sphExprParse ( pQuery->m_sGroupBy.cstr(), tSchema, NULL, NULL, sError, NULL );
@@ -4016,6 +4027,7 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 
 		tSettings.m_bMVA = ( eType==SPH_ATTR_UINT32SET || eType==SPH_ATTR_INT64SET );
 		tSettings.m_bMva64 = ( eType==SPH_ATTR_INT64SET );
+		dGroupColumns.Add ( iGroupBy );
 	}
 
 	// setup distinct attr
@@ -5032,7 +5044,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	// setup groupby settings, create shortcuts
 	////////////////////////////////////////////
 
-	CSphString sJsonColumn;
+	CSphVector<int> dGroupColumns;
 	CSphGroupSorterSettings tSettings;
 	bool bImplicit = false;
 
@@ -5043,7 +5055,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 			bImplicit = ( t.m_eAggrFunc!=SPH_AGGR_NONE ) || t.m_sExpr=="count(*)" || t.m_sExpr=="@distinct";
 		}
 
-	if ( !SetupGroupbySettings ( pQuery, tSorterSchema, tSettings, sJsonColumn, sError, bImplicit ) )
+	if ( !SetupGroupbySettings ( pQuery, tSorterSchema, tSettings, dGroupColumns, sError, bImplicit ) )
 		return NULL;
 
 	const bool bGotGroupby = !pQuery->m_sGroupBy.IsEmpty() || tSettings.m_bImplicit; // or else, check in SetupGroupbySettings() would already fail
@@ -5216,20 +5228,25 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 
 		ExtraAddSortkeys ( pExtra, tSorterSchema, tStateGroup.m_dAttrs );
 
-		enum { E_CREATE_GROUP_BY = 0, E_CREATE_DISTINCT = 1, E_CREATE_COUNT = 2 };
-		int dGroupAttrs[E_CREATE_COUNT];
-		dGroupAttrs[E_CREATE_GROUP_BY] = tSorterSchema.GetAttrIndex ( sJsonColumn.IsEmpty() ? pQuery->m_sGroupBy.cstr() : sJsonColumn.cstr() );
+		assert ( dGroupColumns.GetLength() || tSettings.m_bImplicit );
 		if ( pExtra && !tSettings.m_bImplicit )
-			pExtra->AddAttr ( tSorterSchema.GetAttr ( dGroupAttrs[E_CREATE_GROUP_BY] ), true );
+		{
+			ARRAY_FOREACH ( i, dGroupColumns )
+				pExtra->AddAttr ( tSorterSchema.GetAttr ( dGroupColumns[i] ), true );
+		}
 
 		if ( bGotDistinct )
 		{
-			dGroupAttrs[E_CREATE_DISTINCT] = tSorterSchema.GetAttrIndex ( pQuery->m_sGroupDistinct.cstr() );
+			dGroupColumns.Add ( tSorterSchema.GetAttrIndex ( pQuery->m_sGroupDistinct.cstr() ) );
+			assert ( dGroupColumns.Last()>=0 );
 			if ( pExtra )
-				pExtra->AddAttr ( tSorterSchema.GetAttr ( dGroupAttrs[E_CREATE_DISTINCT] ), true );
+				pExtra->AddAttr ( tSorterSchema.GetAttr ( dGroupColumns.Last() ), true );
 		}
 
-		FixupDependency ( tSorterSchema, dGroupAttrs, bGotDistinct ? 2 : 1 );
+		if ( dGroupColumns.GetLength() ) // implicit case
+		{
+			FixupDependency ( tSorterSchema, dGroupColumns.Begin(), dGroupColumns.GetLength() );
+		}
 		FixupDependency ( tSorterSchema, tStateGroup.m_dAttrs, CSphMatchComparatorState::MAX_ATTRS );
 
 		// GroupSortBy str attributes setup
@@ -5348,9 +5365,12 @@ bool sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema )
 		const CSphQueryItem & tItem = tQuery.m_dItems[i];
 		const CSphString & sExpr = tItem.m_sExpr;
 
+		// all expressions that come from parser are automatically aliased
+		assert ( !tItem.m_sAlias.IsEmpty() );
+
 		if ( !( sExpr=="*"
-			|| ( tSchema.GetAttrIndex ( sExpr.cstr() )>=0 && tItem.m_eAggrFunc==SPH_AGGR_NONE && ( tItem.m_sAlias.IsEmpty() || tItem.m_sAlias==sExpr ) )
-			|| IsGroupbyMagic(sExpr) ) )
+			|| ( tSchema.GetAttrIndex ( sExpr.cstr() )>=0 && tItem.m_eAggrFunc==SPH_AGGR_NONE && tItem.m_sAlias==sExpr )
+			|| IsGroupbyMagic ( sExpr ) ) )
 			return true;
 	}
 

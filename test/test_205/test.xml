@@ -167,6 +167,8 @@ INSERT INTO test_table VALUES
 <sphinxql>select *, weight() from l1,l2 where match('blow')</sphinxql>
 <sphinxql>select *, weight() from dl where match('blow') option local_df=1</sphinxql>
 <sphinxql>select *, weight() from dl where match('blow')</sphinxql>
+
+<sphinxql>select id from kw order by weight() asc</sphinxql>
 </sphqueries>
 
 </test>

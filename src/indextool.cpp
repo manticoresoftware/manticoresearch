@@ -958,12 +958,8 @@ int main ( int argc, char ** argv )
 		if ( eCommand==CMD_BUILDIDF || eCommand==CMD_MERGEIDF )
 			break;
 
-		if ( eCommand==CMD_DUMPDICT )
-		{
-			if ( sDumpDict.Ends ( ".spi" ) )
-				break;
-			sIndex = sDumpDict;
-		}
+		if ( eCommand==CMD_DUMPDICT && !sDumpDict.Ends ( ".spi" ) )
+				sIndex = sDumpDict;
 
 		sphLoadConfig ( sOptConfig, bQuiet, cp );
 		break;
@@ -1233,7 +1229,7 @@ int main ( int argc, char ** argv )
 		{
 			CSphString sError;
 			if ( !BuildIDF ( sOut, dFiles, sError, bSkipUnique ) )
-				fprintf ( stdout, "ERROR: %s\n", sError.cstr() );
+				sphDie ( "ERROR: %s\n", sError.cstr() );
 			break;
 		}
 
@@ -1241,7 +1237,7 @@ int main ( int argc, char ** argv )
 		{
 			CSphString sError;
 			if ( !MergeIDF ( sOut, dFiles, sError, bSkipUnique ) )
-				fprintf ( stdout, "ERROR: %s\n", sError.cstr() );
+				sphDie ( "ERROR: %s\n", sError.cstr() );
 			break;
 		}
 

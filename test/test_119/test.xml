@@ -138,6 +138,9 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select * from test_lengths where title_len=0</sphinxql>
 <sphinxql>select * from test_lengths where title_len=2</sphinxql>
 
+<!-- regression bad complex expression -->
+<sphinxql>select 50+ival*10 as ii1, 50+bad*10 from test</sphinxql>
+
 </sphqueries>
 
 </test>

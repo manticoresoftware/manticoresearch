@@ -14202,6 +14202,19 @@ rlp_max_batch_docs = 100
 </itemizedlist>
 </sect1>
 
+<sect1 id="rel214"><title>Version 2.1.4-release, 18 dec 2013</title>
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+  <listitem><para>fixed #1778, indexes with more than 255 attributes</para></listitem>
+  <listitem><para>fixed #1777, <link linkend="sphinxql-select">ORDER BY WEIGHT()</link></para></listitem>
+  <listitem><para>fixed #1796, missing results in queries with quorum operator of indexes with some lemmatizer</para></listitem>
+  <listitem><para>fixed #1780, incorrect results while querying indexes with wordforms, some lemmatizer and enable_star=1</para></listitem>
+  <listitem><para>fixed, SHOW PROFILE for fullscan queries</para></listitem>
+  <listitem><para>fixed, --with-re2 check</para></listitem>
+</itemizedlist>
+</sect1>
+
+
 <sect1 id="rel213"><title>Version 2.1.3-release, 12 nov 2013</title>
 <bridgehead>Bug fixes</bridgehead>
 <itemizedlist>

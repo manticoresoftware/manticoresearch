@@ -15734,6 +15734,9 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 		}
 	}
 
+	if ( pResult->m_pProfile )
+		pResult->m_pProfile->Switch ( SPH_QSTATE_FINALIZE );
+
 	// do final expression calculations
 	if ( tCtx.m_dCalcFinal.GetLength() )
 	{

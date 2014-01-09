@@ -3634,7 +3634,6 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iC
 	SphOffset_t iCheckpointsPosition, int iInfixBlocksOffset, int iInfixCheckpointWordsSize, DWORD uKillListSize, uint64_t uMinMaxSize,
 	const CSphSourceStats & tStats, bool bForceID32 ) const
 {
-	static const DWORD INDEX_MAGIC_HEADER	= 0x58485053;	///< my magic 'SPHX' header
 	static const DWORD INDEX_FORMAT_VERSION	= 39;			///< my format version
 
 	CSphWriter tWriter;

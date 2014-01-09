@@ -2085,6 +2085,17 @@ void FillStoredTokenInfo ( StoredToken_t & tToken, const BYTE * sToken, ISphToke
 CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool bProxy );
 CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool bProxy );
 
+inline void FlipEndianess ( DWORD* pData )
+{
+	BYTE* pB = (BYTE*)pData;
+	BYTE a = pB[0];
+	pB[0] = pB[3];
+	pB[3] = a;
+	a = pB[1];
+	pB[1] = pB[2];
+	pB[2] = a;
+};
+
 
 #if USE_RLP
 #define RLPARG(_arg) _arg

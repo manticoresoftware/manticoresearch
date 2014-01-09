@@ -1276,6 +1276,22 @@ struct BuildHeader_t : public CSphSourceStats, public DictHeader_t
 	int					m_iTotalDups;
 };
 
+const char* CheckFmtMagic ( DWORD uHeader )
+{
+	if ( uHeader!=INDEX_MAGIC_HEADER )
+	{
+		FlipEndianess ( &uHeader );
+		if ( uHeader==INDEX_MAGIC_HEADER )
+#if USE_LITTLE_ENDIAN
+			return "This instance is working on little-endian platform, but %s seems built on big-endian host.";
+#else
+			return "This instance is working on big-endian platform, but %s seems built on little-endian host.";
+#endif
+		else
+			return "%s is invalid header file (too old index version?)";
+	}
+	return NULL;
+}
 
 DWORD ReadVersion ( const char * sPath, CSphString & sError )
 {
@@ -1288,13 +1304,15 @@ DWORD ReadVersion ( const char * sPath, CSphString & sError )
 	if ( !rdHeader.Open ( sHeaderName, sError ) )
 		return 0;
 
-	DWORD uHeader = rdHeader.GetDword();
-	if ( uHeader!=INDEX_MAGIC_HEADER )
+	// check magic header
+	const char* sMsg = CheckFmtMagic ( rdHeader.GetDword() );
+	if ( sMsg )
 	{
-		sError.SetSprintf ( "%s is invalid header file (too old index version?)", sHeaderName );
+		sError.SetSprintf ( sMsg, sHeaderName );
 		return 0;
 	}
 
+	// get version
 	DWORD uVersion = rdHeader.GetDword();
 	if ( uVersion==0 || uVersion>INDEX_FORMAT_VERSION )
 	{
@@ -15769,7 +15787,7 @@ ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & tWord ) cons
 			return new DiskPayloadQword_c<true> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_tDoclist, m_tHitlist, m_pProfile );
 		} else
 		{
-			return new DiskPayloadQword_c<false>  ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_tDoclist, m_tHitlist, m_pProfile );
+			return new DiskPayloadQword_c<false> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_tDoclist, m_tHitlist, m_pProfile );
 		}
 	}
 	return NULL;
@@ -16134,14 +16152,15 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 	if ( !rdInfo.Open ( sHeaderName, m_sLastError ) )
 		return false;
 
-	// version
-	DWORD uHeader = rdInfo.GetDword ();
-	if ( uHeader!=INDEX_MAGIC_HEADER )
+	// magic header
+	const char* sFmt = CheckFmtMagic ( rdInfo.GetDword () );
+	if ( sFmt )
 	{
-		m_sLastError.SetSprintf ( "%s is invalid header file (too old index version?)", sHeaderName );
+		m_sLastError.SetSprintf ( sFmt, sHeaderName );
 		return false;
 	}
 
+	// version
 	m_uVersion = rdInfo.GetDword();
 	if ( m_uVersion==0 || m_uVersion>INDEX_FORMAT_VERSION )
 	{

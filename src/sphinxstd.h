@@ -908,7 +908,9 @@ public:
 
 		// realloc
 		// FIXME! optimize for POD case
-		T * pNew = new T [ m_iLimit ];
+		T * pNew = NULL;
+		if ( m_iLimit )
+			pNew = new T [ m_iLimit ];
 		__analysis_assume ( m_iLength<=m_iLimit );
 
 		POLICY::Copy ( pNew, m_pData, m_iLength );
@@ -1008,7 +1010,8 @@ public:
 
 		m_iLength = rhs.m_iLength;
 		m_iLimit = rhs.m_iLimit;
-		m_pData = new T [ m_iLimit ];
+		if ( m_iLimit )
+			m_pData = new T [ m_iLimit ];
 		__analysis_assume ( m_iLength<=m_iLimit );
 		for ( int i=0; i<rhs.m_iLength; i++ )
 			m_pData[i] = rhs.m_pData[i];
@@ -1289,6 +1292,7 @@ public:
 	/// reset
 	void Reset ()
 	{
+		assert ( ( m_pFirstByOrder && m_iLength ) || ( !m_pFirstByOrder && !m_iLength ) );
 		HashEntry_t * pKill = m_pFirstByOrder;
 		while ( pKill )
 		{

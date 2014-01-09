@@ -6149,21 +6149,22 @@ on and warning otherwise.</para>
 
 <sect1 id="sphinxql-attach"><title>ALTER syntax</title>
 <programlisting>
-ALTER TABLE index ADD COLUMN new_column {INTEGER|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING}
+ALTER TABLE index {ADD|DROP} COLUMN column_name [{INTEGER|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING}]
 </programlisting>
 <para>
 The ALTER statement was added in version 2.2.1-beta. As of 2.2.1-beta, it supports adding one
 attribute at a time for both plain and RT indexes. The int, bigint, float, bool, multi-valued,
 multi-valued 64bit, json and string attribute types are supported. Support for multi, multi64,
 json and string attributes was added in 2.2.2-beta. As of 2.2.2-beta, you can add json and
-string attributes, but you cannot modify their values. Removing attributes is not possible
-(yet).
+string attributes, but you cannot modify their values. The ability to remove attributes was
+added in 2.2.2-beta.
 </para>
 <para>
 Implementation details. As of 2.2.1-beta, the querying of an index is
 impossible (because of a write lock) while adding a column. This may change
 in the future. The newly created attribute values are set to 0. ALTER will
-not work for distributed indexes and indexes without any attributes.
+not work for distributed indexes and indexes without any attributes. 
+DROP COLUMN will fail if an index has only one attribute.
 </para>
 <programlisting>
 mysql> desc plain;
@@ -6191,6 +6192,21 @@ mysql> desc plain;
 | test       | uint      |
 +------------+-----------+
 5 rows in set (0.00 sec)
+
+mysql> alter table plain drop column group_id;
+Query OK, 0 rows affected (0.01 sec)
+
+mysql> desc plain;
++------------+-----------+
+| Field      | Type      |
++------------+-----------+
+| id         | bigint    |
+| text       | field     |
+| date_added | timestamp |
+| test       | uint      |
++------------+-----------+
+4 rows in set (0.00 sec)
+
 </programlisting>
 </sect1>
 

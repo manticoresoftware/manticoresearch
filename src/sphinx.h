@@ -225,6 +225,9 @@ DWORD			sphCRC32 ( const void * pString );
 DWORD			sphCRC32 ( const void * pString, int iLen );
 DWORD			sphCRC32 ( const void * pString, int iLen, DWORD uPrevCRC );
 
+/// Fast check if our endianess is correct
+const char*		sphCheckEndian();
+
 /// Sphinx FNV64 implementation
 const uint64_t	SPH_FNV64_SEED = 0xcbf29ce484222325ULL;
 uint64_t		sphFNV64 ( const void * pString );

@@ -1826,6 +1826,32 @@ long CSphAtomic<long>::Inc()
 }
 #endif
 
+// fast check if we are built with right endianess settings
+const char*		sphCheckEndian()
+{
+	const char* sErrorMsg = "Oops! It seems that sphinx was built with wrong endianess (cross-compiling?)\n"
+#if USE_LITTLE_ENDIAN
+		"either reconfigure and rebuild, defining ac_cv_c_bigendian=yes in the environment of ./configure script,\n"
+		"either ensure that '#define USE_LITTLE_ENDIAN = 0' in config/config.h\n";
+#else
+		"either reconfigure and rebuild, defining ac_cv_c_bigendian=no in the environment of ./configure script,\n"
+		"either ensure that '#define USE_LITTLE_ENDIAN = 1' in config/config.h\n";
+#endif
+
+	char sMagic[] = "\x01\x02\x03\x04\x05\x06\x07\x08";
+	unsigned long *pMagic;
+	unsigned long uResult;
+	pMagic = (unsigned long*)sMagic;
+	uResult = (*pMagic);
+#if USE_LITTLE_ENDIAN
+	if ( uResult==0x01020304 || uResult==0x0102030405060708 )
+#else
+	if ( uResult==0x08070605 || uResult==0x0807060504030201 )
+#endif
+		return sErrorMsg;
+	return NULL;
+}
+
 //
 // $Id$
 //

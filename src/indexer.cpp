@@ -1739,6 +1739,13 @@ int main ( int argc, char ** argv )
 	if ( !g_bQuiet )
 		fprintf ( stdout, SPHINX_BANNER );
 
+	const char* sEndian = sphCheckEndian();
+	if ( sEndian )
+	{
+		fprintf ( stdout, "%s", sEndian );
+		return 1;
+	}
+
 	if ( !g_bQuiet && sizeof(SphDocID_t)==4 )
 		fprintf ( stdout, "32-bit IDs are deprecated, rebuild your binaries with --enable-id64" );
 

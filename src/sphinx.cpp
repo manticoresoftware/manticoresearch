@@ -25118,22 +25118,32 @@ static void FormatEscaped ( FILE * fp, const char * sLine )
 }
 
 CSphSource_Document::CSphBuildHitsState_t::CSphBuildHitsState_t ()
-	: m_bProcessingHits ( false )
-	, m_bDocumentDone ( false )
-	, m_dFields ( NULL )
-	, m_iStartPos ( 0 )
-	, m_iHitPos ( 0 )
-	, m_iField ( 0 )
-	, m_iStartField ( 0 )
-	, m_iEndField ( 0 )
-	, m_iBuildLastStep ( 1 )
 {
+	Reset();
 }
 
 CSphSource_Document::CSphBuildHitsState_t::~CSphBuildHitsState_t ()
 {
+	Reset();
+}
+
+void CSphSource_Document::CSphBuildHitsState_t::Reset ()
+{
+	m_bProcessingHits = false;
+	m_bDocumentDone = false;
+	m_dFields = NULL;
+	m_iStartPos = 0;
+	m_iHitPos = 0;
+	m_iField = 0;
+	m_iStartField = 0;
+	m_iEndField = 0;
+	m_iBuildLastStep = 1;
+
 	ARRAY_FOREACH ( i, m_dTmpFieldStorage )
 		SafeDeleteArray ( m_dTmpFieldStorage[i] );
+
+	m_dTmpFieldStorage.Resize(0);
+	m_dTmpFieldPtrs.Resize(0);
 }
 
 CSphSource_Document::CSphSource_Document ( const char * sName )
@@ -25158,15 +25168,19 @@ bool CSphSource_Document::IterateDocument ( CSphString & sError )
 
 	m_tHits.m_dData.Resize ( 0 );
 
-	m_tState = CSphBuildHitsState_t();
+	m_tState.Reset();
 	m_tState.m_iEndField = m_iPlainFieldsLength;
-	m_tState.m_dTmpFieldPtrs.Resize ( m_tState.m_iEndField );
-	m_tState.m_dTmpFieldStorage.Resize ( m_tState.m_iEndField );
 
-	ARRAY_FOREACH ( i, m_tState.m_dTmpFieldPtrs )
+	if ( m_pFieldFilter )
 	{
-		m_tState.m_dTmpFieldPtrs[i] = NULL;
-		m_tState.m_dTmpFieldStorage[i] = NULL;
+		m_tState.m_dTmpFieldPtrs.Resize ( m_tState.m_iEndField );
+		m_tState.m_dTmpFieldStorage.Resize ( m_tState.m_iEndField );
+
+		ARRAY_FOREACH ( i, m_tState.m_dTmpFieldPtrs )
+		{
+			m_tState.m_dTmpFieldPtrs[i] = NULL;
+			m_tState.m_dTmpFieldStorage[i] = NULL;
+		}
 	}
 
 	m_dMva.Resize ( 1 ); // must not have zero offset
@@ -25209,10 +25223,6 @@ bool CSphSource_Document::IterateDocument ( CSphString & sError )
 
 		if ( m_pFieldFilter )
 		{
-			// new field strings may be longer than original, that's why we need temporary storage
-			ARRAY_FOREACH ( i, m_tState.m_dTmpFieldStorage )
-				SafeDeleteArray ( m_tState.m_dTmpFieldStorage[i] );
-
 			bool bHaveModifiedFields = false;
 			for ( int iField=0; iField<m_tState.m_iEndField; iField++ )
 			{

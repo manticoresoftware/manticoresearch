@@ -2110,6 +2110,8 @@ protected:
 
 		CSphBuildHitsState_t ();
 		~CSphBuildHitsState_t ();
+
+		void Reset ();
 	};
 
 	CSphBuildHitsState_t	m_tState;

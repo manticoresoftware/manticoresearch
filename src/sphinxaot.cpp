@@ -73,7 +73,6 @@ public:
 	DWORD		DecodeFromAlphabet ( const BYTE * sPath, int iPath ) const;
 };
 
-
 /// morphology automaton node, 1:31
 /// 1 bit for "final or not" flag
 /// 31 bits for index to relations (pointer to the first child)
@@ -265,6 +264,14 @@ bool CMorphAutomat::LoadPak ( CSphReader & rd, int iCacheSize )
 		return false;
 
 	m_pNodes [ m_NodesCount ].m_Data = m_RelationsCount;
+
+#if !USE_LITTLE_ENDIAN
+	for ( int i=0; i< m_NodesCount; ++i )
+		FlipEndianess ( &m_pNodes[i].m_Data );
+	for ( int i=0; i< m_RelationsCount; ++i )
+		FlipEndianess ( &m_pRelations[i].m_Data );
+#endif
+
 	BuildChildrenCache ( iCacheSize );
 	return true;
 }
@@ -1733,7 +1740,7 @@ CSphTokenFilter * sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pD
 			if ( i==AOT_RU )
 				pDerivedTokenizer = new CSphAotTokenizerRu ( pTokenizer, pDict, bIndexExact );
 			else
-				pDerivedTokenizer = new CSphAotTokenizer ( pTokenizer, pDict, bIndexExact, i);
+				pDerivedTokenizer = new CSphAotTokenizer ( pTokenizer, pDict, bIndexExact, i );
 			pTokenizer = pDerivedTokenizer;
 		}
 	}

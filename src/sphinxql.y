@@ -111,6 +111,7 @@
 %token	TOK_SUM
 %token	TOK_TABLE
 %token	TOK_TABLES
+%token	TOK_THREADS
 %token	TOK_TO
 %token	TOK_TRANSACTION
 %token	TOK_TRUE
@@ -861,6 +862,12 @@ show_what:
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_STATUS;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $2 );
 		}
+	| TOK_THREADS						{ pParser->m_pStmt->m_eStmt = STMT_SHOW_THREADS; }
+	| TOK_THREADS const_int
+	{
+		pParser->m_pStmt->m_iSetValue = $2.m_iValue;
+		pParser->m_pStmt->m_eStmt = STMT_SHOW_THREADS;
+	}
 	;
 
 //////////////////////////////////////////////////////////////////////////

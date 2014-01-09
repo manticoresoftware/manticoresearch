@@ -129,26 +129,27 @@
      TOK_SUM = 355,
      TOK_TABLE = 356,
      TOK_TABLES = 357,
-     TOK_TO = 358,
-     TOK_TRANSACTION = 359,
-     TOK_TRUE = 360,
-     TOK_TRUNCATE = 361,
-     TOK_TYPE = 362,
-     TOK_UNCOMMITTED = 363,
-     TOK_UPDATE = 364,
-     TOK_VALUES = 365,
-     TOK_VARIABLES = 366,
-     TOK_WARNINGS = 367,
-     TOK_WEIGHT = 368,
-     TOK_WHERE = 369,
-     TOK_WITHIN = 370,
-     TOK_OR = 371,
-     TOK_AND = 372,
-     TOK_NE = 373,
-     TOK_GTE = 374,
-     TOK_LTE = 375,
-     TOK_NOT = 376,
-     TOK_NEG = 377
+     TOK_THREADS = 358,
+     TOK_TO = 359,
+     TOK_TRANSACTION = 360,
+     TOK_TRUE = 361,
+     TOK_TRUNCATE = 362,
+     TOK_TYPE = 363,
+     TOK_UNCOMMITTED = 364,
+     TOK_UPDATE = 365,
+     TOK_VALUES = 366,
+     TOK_VARIABLES = 367,
+     TOK_WARNINGS = 368,
+     TOK_WEIGHT = 369,
+     TOK_WHERE = 370,
+     TOK_WITHIN = 371,
+     TOK_OR = 372,
+     TOK_AND = 373,
+     TOK_NE = 374,
+     TOK_GTE = 375,
+     TOK_LTE = 376,
+     TOK_NOT = 377,
+     TOK_NEG = 378
    };
 #endif
 #define TOK_IDENT 258
@@ -251,26 +252,27 @@
 #define TOK_SUM 355
 #define TOK_TABLE 356
 #define TOK_TABLES 357
-#define TOK_TO 358
-#define TOK_TRANSACTION 359
-#define TOK_TRUE 360
-#define TOK_TRUNCATE 361
-#define TOK_TYPE 362
-#define TOK_UNCOMMITTED 363
-#define TOK_UPDATE 364
-#define TOK_VALUES 365
-#define TOK_VARIABLES 366
-#define TOK_WARNINGS 367
-#define TOK_WEIGHT 368
-#define TOK_WHERE 369
-#define TOK_WITHIN 370
-#define TOK_OR 371
-#define TOK_AND 372
-#define TOK_NE 373
-#define TOK_GTE 374
-#define TOK_LTE 375
-#define TOK_NOT 376
-#define TOK_NEG 377
+#define TOK_THREADS 358
+#define TOK_TO 359
+#define TOK_TRANSACTION 360
+#define TOK_TRUE 361
+#define TOK_TRUNCATE 362
+#define TOK_TYPE 363
+#define TOK_UNCOMMITTED 364
+#define TOK_UPDATE 365
+#define TOK_VALUES 366
+#define TOK_VARIABLES 367
+#define TOK_WARNINGS 368
+#define TOK_WEIGHT 369
+#define TOK_WHERE 370
+#define TOK_WITHIN 371
+#define TOK_OR 372
+#define TOK_AND 373
+#define TOK_NE 374
+#define TOK_GTE 375
+#define TOK_LTE 376
+#define TOK_NOT 377
+#define TOK_NEG 378
 
 
 

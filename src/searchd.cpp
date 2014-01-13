@@ -19320,7 +19320,8 @@ static void ConfigureDistributedIndex ( DistributedIndex_t * pIdx, const char * 
 	CSphVector<CSphString> dLocs;
 	for ( CSphVariant * pLocal = hIndex("local"); pLocal; pLocal = pLocal->m_pNext )
 	{
-		sphSplit ( dLocs, pLocal->cstr() );
+		dLocs.Resize(0);
+		sphSplit ( dLocs, pLocal->cstr(), " \t," );
 		ARRAY_FOREACH ( i, dLocs )
 		{
 			if ( !g_pLocalIndexes->Exists ( dLocs[i] ) )

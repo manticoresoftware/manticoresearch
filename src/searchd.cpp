@@ -19325,7 +19325,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t * pIdx, const char * 
 		{
 			if ( !g_pLocalIndexes->Exists ( dLocs[i] ) )
 			{
-				sphWarning ( "index '%s': no such local index '%s', SKIPPED", szIndexName, dLocs[i] );
+				sphWarning ( "index '%s': no such local index '%s', SKIPPED", szIndexName, dLocs[i].cstr() );
 				continue;
 			}
 			tIdx.m_dLocal.Add ( dLocs[i] );

@@ -19317,15 +19317,19 @@ static void ConfigureDistributedIndex ( DistributedIndex_t * pIdx, const char * 
 	DistributedIndex_t& tIdx = *pIdx;
 
 	// add local agents
+	CSphVector<CSphString> dLocs;
 	for ( CSphVariant * pLocal = hIndex("local"); pLocal; pLocal = pLocal->m_pNext )
 	{
-		if ( !g_pLocalIndexes->Exists ( pLocal->cstr() ) )
+		sphSplit ( dLocs, pLocal->cstr() );
+		ARRAY_FOREACH ( i, dLocs )
 		{
-			sphWarning ( "index '%s': no such local index '%s' - SKIPPING LOCAL INDEX",
-				szIndexName, pLocal->cstr() );
-			continue;
+			if ( !g_pLocalIndexes->Exists ( dLocs[i] ) )
+			{
+				sphWarning ( "index '%s': no such local index '%s', SKIPPED", szIndexName, dLocs[i] );
+				continue;
+			}
+			tIdx.m_dLocal.Add ( dLocs[i] );
 		}
-		tIdx.m_dLocal.Add ( pLocal->cstr() );
 	}
 
 	bool bHaveHA = false;

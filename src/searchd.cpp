@@ -18249,6 +18249,8 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	tNewIndex.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 	tNewIndex.m_pIndex->SetPreopen ( pRotating->m_bPreopen || g_bPreopenIndexes );
 	tNewIndex.m_pIndex->SetGlobalIDFPath ( pRotating->m_sGlobalIDFPath );
+	tNewIndex.m_bOnDiskAttrs = pRotating->m_bOnDiskAttrs;
+	tNewIndex.m_bOnDiskPools = pRotating->m_bOnDiskPools;
 	SetEnableOndiskAttributes ( tNewIndex, tNewIndex.m_pIndex );
 
 	// rebase new index

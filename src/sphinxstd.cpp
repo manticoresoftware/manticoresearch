@@ -1842,11 +1842,11 @@ const char*		sphCheckEndian()
 	unsigned long *pMagic;
 	unsigned long uResult;
 	pMagic = (unsigned long*)sMagic;
-	uResult = (*pMagic);
+	uResult = 0xFFFFFFFF & (*pMagic);
 #if USE_LITTLE_ENDIAN
-	if ( uResult==0x01020304 || uResult==0x0102030405060708 )
+	if ( uResult==0x01020304 || uResult==0x05060708 )
 #else
-	if ( uResult==0x08070605 || uResult==0x0807060504030201 )
+	if ( uResult==0x08070605 || uResult==0x04030201 )
 #endif
 		return sErrorMsg;
 	return NULL;

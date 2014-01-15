@@ -288,7 +288,8 @@ enum
 {
 	KEY_DEPRECATED		= 1UL<<0,
 	KEY_LIST			= 1UL<<1,
-	KEY_HIDDEN			= 1UL<<2
+	KEY_HIDDEN			= 1UL<<2,
+	KEY_REMOVED			= 1UL<<3
 };
 
 /// key descriptor for validation purposes
@@ -314,6 +315,7 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "mysql_ssl_cert",			0, NULL }, // check.pl mysql_ssl
 	{ "mysql_ssl_ca",			0, NULL }, // check.pl mysql_ssl
 	{ "mssql_winauth",			0, NULL },
+	{ "mssql_unicode",			KEY_REMOVED, NULL },
 	{ "sql_query_pre",			KEY_LIST, NULL },
 	{ "sql_query",				0, NULL },
 	{ "sql_query_range",		0, NULL },
@@ -322,32 +324,40 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "sql_attr_uint",			KEY_LIST, NULL },
 	{ "sql_attr_bool",			KEY_LIST, NULL },
 	{ "sql_attr_timestamp",		KEY_LIST, NULL },
+	{ "sql_attr_str2ordinal",	KEY_REMOVED | KEY_LIST, NULL },
 	{ "sql_attr_float",			KEY_LIST, NULL },
 	{ "sql_attr_bigint",		KEY_LIST, NULL },
 	{ "sql_attr_multi",			KEY_LIST, NULL },
 	{ "sql_query_post",			KEY_LIST, NULL },
 	{ "sql_query_post_index",	KEY_LIST, NULL },
 	{ "sql_ranged_throttle",	0, NULL },
+	{ "sql_query_info",			KEY_REMOVED, NULL },
 	{ "xmlpipe_command",		0, NULL },
 	{ "xmlpipe_field",			KEY_LIST, NULL },
 	{ "xmlpipe_attr_uint",		KEY_LIST, NULL },
 	{ "xmlpipe_attr_timestamp",	KEY_LIST, NULL },
+	{ "xmlpipe_attr_str2ordinal", KEY_REMOVED | KEY_LIST, NULL },
 	{ "xmlpipe_attr_bool",		KEY_LIST, NULL },
 	{ "xmlpipe_attr_float",		KEY_LIST, NULL },
 	{ "xmlpipe_attr_bigint",	KEY_LIST, NULL },
 	{ "xmlpipe_attr_multi",		KEY_LIST, NULL },
 	{ "xmlpipe_attr_multi_64",	KEY_LIST, NULL },
 	{ "xmlpipe_attr_string",	KEY_LIST, NULL },
+	{ "xmlpipe_attr_wordcount", KEY_REMOVED | KEY_LIST, NULL },
 	{ "xmlpipe_attr_json",		KEY_LIST, NULL },
 	{ "xmlpipe_field_string",	KEY_LIST, NULL },
+	{ "xmlpipe_field_wordcount", KEY_REMOVED | KEY_LIST, NULL },
 	{ "xmlpipe_fixup_utf8",		0, NULL },
+	{ "sql_str2ordinal_column", KEY_LIST | KEY_REMOVED, NULL },
 	{ "unpack_zlib",			KEY_LIST, NULL },
 	{ "unpack_mysqlcompress",	KEY_LIST, NULL },
 	{ "unpack_mysqlcompress_maxsize", 0, NULL },
 	{ "odbc_dsn",				0, NULL },
 	{ "sql_joined_field",		KEY_LIST, NULL },
 	{ "sql_attr_string",		KEY_LIST, NULL },
+	{ "sql_attr_str2wordcount", KEY_REMOVED | KEY_LIST, NULL },
 	{ "sql_field_string",		KEY_LIST, NULL },
+	{ "sql_field_str2wordcount", KEY_REMOVED | KEY_LIST, NULL },
 	{ "sql_file_field",			KEY_LIST, NULL },
 	{ "sql_column_buffers",		0, NULL },
 	{ "sql_attr_json",			KEY_LIST, NULL },
@@ -395,6 +405,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "wordforms",				KEY_LIST, NULL },
 	{ "embedded_limit",			0, NULL },
 	{ "min_word_len",			0, NULL },
+	{ "charset_type",			KEY_REMOVED, NULL },
 	{ "charset_table",			0, NULL },
 	{ "ignore_chars",			0, NULL },
 	{ "min_prefix_len",			0, NULL },
@@ -402,10 +413,12 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "max_substring_len",		0, NULL },
 	{ "prefix_fields",			0, NULL },
 	{ "infix_fields",			0, NULL },
+	{ "enable_star",			KEY_REMOVED, NULL },
 	{ "ngram_len",				0, NULL },
 	{ "ngram_chars",			0, NULL },
 	{ "phrase_boundary",		0, NULL },
 	{ "phrase_boundary_step",	0, NULL },
+	{ "ondisk_dict",			KEY_REMOVED, NULL },
 	{ "type",					0, NULL },
 	{ "local",					KEY_LIST, NULL },
 	{ "agent",					KEY_LIST, NULL },
@@ -479,6 +492,8 @@ static KeyDesc_t g_dKeysIndexer[] =
 /// allowed keys for searchd section
 static KeyDesc_t g_dKeysSearchd[] =
 {
+	{ "address",				KEY_REMOVED, NULL },
+	{ "port",					KEY_REMOVED, NULL },
 	{ "listen",					KEY_LIST, NULL },
 	{ "log",					0, NULL },
 	{ "query_log",				0, NULL },
@@ -490,6 +505,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "seamless_rotate",		0, NULL },
 	{ "preopen_indexes",		0, NULL },
 	{ "unlink_old",				0, NULL },
+	{ "ondisk_dict_default",	KEY_REMOVED, NULL },
 	{ "attr_flush_period",		0, NULL },
 	{ "max_packet_size",		0, NULL },
 	{ "mva_updates_pool",		0, NULL },
@@ -665,6 +681,10 @@ bool CSphConfigParser::ValidateKey ( const char * sKey )
 			if ( ++m_iWarnings<=WARNS_THRESH )
 				fprintf ( stdout, "WARNING: key '%s' is not multi-value; value in %s line %d will be ignored.\n", sKey, m_sFileName.cstr(), m_iLine );
 	}
+
+	if ( pDesc->m_iFlags & KEY_REMOVED )
+		if ( ++m_iWarnings<=WARNS_THRESH )
+			fprintf ( stdout, "WARNING: key '%s' was permanently removed from Sphinx configuration. Refer to documentation for details.\n", sKey );
 
 	return true;
 }

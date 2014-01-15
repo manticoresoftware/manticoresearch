@@ -8954,7 +8954,7 @@ $as_echo "#define USE_LITTLE_ENDIAN 0" >>confdefs.h
 $as_echo "#define USE_LITTLE_ENDIAN 1" >>confdefs.h
  ;; #(
    universal)
-     as_fn_error $? "universial endianess not supported" "$LINENO" 5
+     as_fn_error $? "universal endianess not supported" "$LINENO" 5
 
      ;; #(
    *)

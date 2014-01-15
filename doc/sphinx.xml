@@ -580,22 +580,21 @@ $ /usr/local/sphinx/bin/indexer --all</userinput></literallayout></para></listit
 </orderedlist>
 <para>Now query your indexes!</para>
 <para>Connect to server:</para>
-<para><literallayout><userinput>$ mysql -h0 -P9306
-</userinput></literallayout></para>
-<para><literallayout><userinput>SELECT * FROM test1 WHERE MATCH('my document');
-</userinput></literallayout></para>
-<para><literallayout><userinput>
-INSERT INTO rt VALUES (1, 'this is a sample text', 11);
-</userinput></literallayout></para>
-<para><literallayout><userinput>
-INSERT INTO rt VALUES (2, 'some more text here', 22);
-</userinput></literallayout></para>
-<para><literallayout><userinput>
-SELECT gid/11 FROM rt WHERE MATCH('text') GROUP BY gid;
-</userinput></literallayout></para>
-<para><literallayout><userinput>SELECT * FROM rt ORDER BY gid DESC;
-</userinput></literallayout></para>
-<para>Also check queries.sql in sphinx sources.</para>
+<para><literallayout><userinput>$ mysql -h0 -P9306</userinput></literallayout></para>
+<para><literallayout><userinput>SELECT * FROM test1 WHERE MATCH('my document');</userinput></literallayout></para>
+<para><literallayout><userinput>INSERT INTO rt VALUES (1, 'this is a sample text', 11);</userinput></literallayout></para>
+<para><literallayout><userinput>INSERT INTO rt VALUES (2, 'some more text here', 22);</userinput></literallayout></para>
+<para><literallayout><userinput>SELECT gid/11 FROM rt WHERE MATCH('text') GROUP BY gid;</userinput></literallayout></para>
+<para><literallayout><userinput>SELECT * FROM rt ORDER BY gid DESC;</userinput></literallayout></para>
+<para><literallayout><userinput>SHOW TABLES;</userinput></literallayout></para>
+<para><literallayout><userinput>SELECT *, WEIGHT() FROM test1 WHERE MATCH('"document one"/1');SHOW META;</userinput></literallayout></para>
+<para><literallayout><userinput>SET profiling=1;SELECT * FROM test1 WHERE id IN (1,2,4);SHOW PROFILE;</userinput></literallayout></para>
+<para><literallayout><userinput>SELECT id, id%3 idd FROM test1 WHERE MATCH('this is | nothing') GROUP BY idd;SHOW PROFILE;</userinput></literallayout></para>
+<para><literallayout><userinput>SELECT id FROM test1 WHERE MATCH('is this a good plan?');SHOW PLAN;</userinput></literallayout></para>
+<para><literallayout><userinput>SELECT COUNT(*) c, id%3 idd FROM test1 GROUP BY idd HAVING COUNT(*)>1;</userinput></literallayout></para>
+<para><literallayout><userinput>SELECT COUNT(*) FROM test1;</userinput></literallayout></para>
+<para><literallayout><userinput>CALL KEYWORDS ('one two three', 'test1');</userinput></literallayout></para>
+<para><literallayout><userinput>CALL KEYWORDS ('one two three', 'test1', 1);</userinput></literallayout></para>
 <para>
 Happy searching!
 </para>
